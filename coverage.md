@@ -28,7 +28,7 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | SC-88Pro tones | 774 | 442 | 57% | 298 | 141 | 3 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
 | SC-8850 tones | 1262 | 451 | 36% | 307 | 141 | 3 | 0 | 0 |
-| SC-8850 drum sets | 37 | 25 | 68% | | | | | |
+| SC-8850 drum sets | 37 | 23 | 62% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
 
@@ -70,9 +70,9 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 
 | rating | notes | share |
 |---|---|---|
-| 2 specific, theory | 4 | 3% |
-| 3 specific, theory + ear | 4 | 3% |
-| 4 specific, validated against a target | 107 | 93% |
+| 2 specific, theory | 5 | 4% |
+| 3 specific, theory + ear | 5 | 4% |
+| 4 specific, validated against a target | 105 | 91% |
 
 | # | note | class | | notes |
 |---|---|---|---|---|
@@ -186,8 +186,8 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 | 120 | TR-808 Snare 2 | `SnareDrum2` | **2** | SC-88 Pro's TR-808 Snare 2: set 25's key 40 |
 | 121 | TR-909 Snare 1 | `TR909Snare` | **4** | SC-88 Pro's TR-909 Snare 1: set 30's key 38 |
 | 122 | TR-909 Snare 2 | `TR909Snare2` | **4** | SC-88 Pro's TR-909 Snare 2: set 30's key 40 |
-| 123 | Rap Snare | `RapSnare` | **4** | SC-88 Pro's Rap Snare: set 9's key 38 |
-| 124 | Jungle Snare 1 | `JungleSnare1` | **4** | SC-88 Pro's Jungle Snare 1: set 10's key 38 |
+| 123 | Rap Snare | `LoFiSnare1` | **3** | SC-88 Pro's Rap Snare: set 9's key 38 |
+| 124 | Jungle Snare 1 | `RapSnare` | **2** | SC-88 Pro's Jungle Snare 1: set 10's key 38 |
 | 125 | House Snare 1 | `TR909Snare` | **4** | SC-88 Pro's House Snare 1: set 30's key 38 |
 | 126 | [88] House Snare | `TR909Snare` | **4** | SC-88 Pro's [88] House Snare: set 30's key 38 |
 | 127 | House Snare 2 | `TR909Snare2` | **4** | SC-88 Pro's House Snare 2: set 30's key 40 |
@@ -205,41 +205,41 @@ Standard. THE GOAL: every one built.
 |---|---|---|---|---|---|---|---|
 | 1 | STANDARD 1 | STANDARD 1 | STANDARD 1 | STANDARD | built: the note map above | 115 | **4** |
 | 2 | STANDARD 2 | STANDARD 2 | STANDARD 2 | -- | built: 10 keys of its own | 10 | **4** |
-| 3 | STANDARD L/R | STANDARD 3 | -- | -- | built: 12 keys of its own | 12 | **4** |
-| 9 | ROOM | ROOM | ROOM | ROOM | built: 6 keys of its own | 6 | **4** |
-| 10 | HIP HOP | HIP HOP | -- | -- | built: 29 keys of its own | 29 | **4** |
-| 11 | JUNGLE | JUNGLE | -- | -- | built: 29 keys of its own | 29 | **4** |
-| 12 | TECHNO | TECHNO | -- | -- | built: 35 keys of its own | 35 | **4** |
-| 13 | ROOM L/R | -- | -- | -- | **not built: plays Standard** |  |  |
-| 14 | HOUSE | -- | -- | -- | **not built: plays Standard** |  |  |
+| 3 | STANDARD L/R | STANDARD 3 | -- | -- | partial: 9 of 17 keys (8 Standard's drum) | 12 | **4** |
+| 9 | ROOM | ROOM | ROOM | ROOM | partial: 15 of 20 keys (5 Standard's drum) | 8 | **4** |
+| 10 | HIP HOP | HIP HOP | -- | -- | built: 39 keys of its own | 39 | **4** |
+| 11 | JUNGLE | JUNGLE | -- | -- | built: 40 keys of its own | 40 | **4** |
+| 12 | TECHNO | TECHNO | -- | -- | built: 45 keys of its own | 45 | **4** |
+| 13 | ROOM L/R | -- | -- | -- | partial: 18 of 21 keys (3 Standard's drum) | 10 | **4** |
+| 14 | HOUSE | -- | -- | -- | built: 46 keys of its own | 46 | **4** |
 | 17 | POWER | POWER | POWER | POWER | built: 10 keys of its own | 10 | **4** |
 | 25 | ELECTRONIC | ELECTRONIC | ELECTRONIC | ELECTRONIC | built: 14 keys of its own | 14 | **4** |
 | 26 | TR-808 | TR-808 | TR-808/909 | TR-808 | built: 30 keys of its own | 30 | **4** |
-| 27 | DANCE | DANCE | DANCE | -- | built: 27 keys of its own | 27 | **4** |
+| 27 | DANCE | DANCE | DANCE | -- | built: 38 keys of its own | 38 | **4** |
 | 28 | CR-78 | CR-78 | -- | -- | built: 34 keys of its own | 34 | **4** |
 | 29 | TR-606 | TR-606 | -- | -- | built: 34 keys of its own | 34 | **4** |
 | 30 | TR-707 | TR-707 | -- | -- | built: 23 keys of its own | 23 | **4** |
 | 31 | TR-909 | TR-909 | -- | -- | built: 23 keys of its own | 23 | **4** |
-| 33 | JAZZ | JAZZ | JAZZ | JAZZ | built: 9 keys of its own | 9 | **4** |
-| 34 | JAZZ L/R | -- | -- | -- | **not built: plays Standard** |  |  |
+| 33 | JAZZ | JAZZ | JAZZ | JAZZ | partial: 12 of 20 keys (8 Standard's drum) | 9 | **4** |
+| 34 | JAZZ L/R | -- | -- | -- | partial: 12 of 22 keys (10 Standard's drum) | 9 | **4** |
 | 41 | BRUSH | BRUSH | BRUSH | BRUSH | built: 17 keys of its own | 17 | **4** |
-| 42 | BRUSH 2 | -- | -- | -- | **not built: plays Standard** |  |  |
-| 43 | BRUSH 2 L/R | -- | -- | -- | **not built: plays Standard** |  |  |
+| 42 | BRUSH 2 | -- | -- | -- | built: 20 keys of its own | 18 | **4** |
+| 43 | BRUSH 2 L/R | -- | -- | -- | partial: 20 of 22 keys (2 Standard's drum) | 18 | **4** |
 | 49 | ORCHESTRA | ORCHESTRA | ORCHESTRA | ORCHESTRA | built: 25 keys of its own | 25 | **4** |
 | 50 | ETHNIC | ETHNIC | ETHNIC | -- | built: 75 keys of its own | 75 | **4** |
 | 51 | KICK & SNARE | KICK & SNARE | KICK & SNARE | -- | built: 75 keys of its own | 75 | **4** |
-| 52 | KICK & SNARE 2 | -- | -- | -- | **not built: plays Standard** |  |  |
-| 53 | ASIA | ASIA | -- | -- | built: 64 keys of its own | 60 | **3** |
+| 52 | KICK & SNARE 2 | -- | -- | -- | partial: 69 of 72 keys (3 silent) | 69 | **4** |
+| 53 | ASIA | ASIA | -- | -- | partial: 64 of 66 keys (2 silent) | 60 | **3** |
 | 54 | CYMBAL&CLAPS | CYMBAL&CLAPS | -- | -- | built: 65 keys of its own | 65 | **4** |
-| 55 | GAMELAN 1 | -- | -- | -- | **not built: plays Standard** |  |  |
-| 56 | GAMELAN 2 | -- | -- | -- | **not built: plays Standard** |  |  |
+| 55 | GAMELAN 1 | -- | -- | -- | partial: 0 of 53 keys (53 silent) |  |  |
+| 56 | GAMELAN 2 | -- | -- | -- | partial: 0 of 53 keys (53 silent) |  |  |
 | 57 | SFX | SFX | SFX | SFX | built: 74 keys of its own | 74 | **4** |
 | 58 | RHYTHM FX | RHYTHM FX | RHYTHM FX | -- | built: 53 keys of its own | 53 | **4** |
 | 59 | RHYTHM FX 2 | RHYTHM FX 2 | -- | -- | built: 56 keys of its own | 56 | **4** |
-| 60 | RHYTHM FX 3 | -- | -- | -- | **not built: plays Standard** |  |  |
-| 61 | SFX 2 | -- | -- | -- | **not built: plays Standard** |  |  |
-| 62 | VOICE | -- | -- | -- | **not built: plays Standard** |  |  |
-| 63 | CYM&CLAPS 2 | -- | -- | -- | **not built: plays Standard** |  |  |
+| 60 | RHYTHM FX 3 | -- | -- | -- | partial: 3 of 75 keys (72 silent) | 3 | **4** |
+| 61 | SFX 2 | -- | -- | -- | partial: 3 of 60 keys (57 silent) | 3 | **3** |
+| 62 | VOICE | -- | -- | -- | partial: 13 of 53 keys (40 silent) | 13 | **3** |
+| 63 | CYM&CLAPS 2 | -- | -- | -- | partial: 40 of 65 keys (25 silent) | 40 | **4** |
 | 128 | -- | -- | -- | CM-64/32L | built: 67 keys of its own | 67 | **4** |
 
 ### 1 Standard 2
@@ -284,6 +284,8 @@ Standard. THE GOAL: every one built.
 | 47 | Room Mid Tom 1 | `RoomTom` | **4** | as 45 |
 | 48 | Room Hi Tom 2 | `RoomHighTom` | **4** | ROOM HI TOM 2: Standard's high tom in the live room (as 41) |
 | 50 | Room Hi Tom 1 | `RoomHighTom` | **4** | as 48 |
+| 95 | Standard 1 Snare 1 | `AcousticSnare` | **4** | Standard 1 Snare 1: Standard's key 38 |
+| 96 | Standard 1 Snare 2 | `SnareDrum2` | **4** | Standard 1 Snare 2: Standard's key 40 |
 
 ### 9 Hip-Hop
 
@@ -294,8 +296,9 @@ Standard. THE GOAL: every one built.
 | 35 | Hip-Hop Kick 2 | `HipHopKick2` | **4** | Hip-Hop Kick 2, the HipHopKick2 at 56 Hz |
 | 36 | Hip-Hop Kick 1 | `HipHopKick1` | **4** | Hip-Hop Kick 1, the HipHopKick1 at 37 Hz |
 | 37 | TR-808 Rim Shot | `TR808RimShot` | **4** | TR-808 Rim Shot: set 25's key 37 |
-| 38 | Rap Snare | `RapSnare` | **4** | Rap Snare, the RapSnare at 174 Hz |
-| 40 | Hip-Hop Snare 2 | `HipHopSnare2` | **4** | Hip-Hop Snare 2, the HipHopSnare2 at 131 Hz |
+| 38 | LoFi Snare 1 | `LoFiSnare1` | **3** | LoFi Snare 1, the LoFiSnare1 at 195 Hz |
+| 39 | TR-707 Claps | `TR707Clap` | **4** | TR-707 Claps: set 29's key 39 |
+| 40 | LoFi Snare 2 | `LoFiSnare2` | **3** | LoFi Snare 2, the LoFiSnare2 at 165 Hz |
 | 41 | TR-909 Low Tom 2 | `TR909Tom` | **4** | TR-909 Low Tom 2: set 30's key 41 |
 | 42 | Room Closed Hi-Hat | `ClosedHiHat` | **2** | Room Closed Hi-Hat: Standard's key 42 -- the nearest we have, not the sound |
 | 43 | TR-909 Low Tom 1 | `TR909LowTom1` | **4** | TR-909 Low Tom 1: set 30's key 43 |
@@ -307,6 +310,7 @@ Standard. THE GOAL: every one built.
 | 49 | TR-909 Crash Cymbal | `TR909Crash` | **4** | TR-909 Crash Cymbal: set 30's key 49 |
 | 50 | TR-909 High Tom 1 | `TR909HiTom1` | **4** | TR-909 High Tom 1: set 30's key 50 |
 | 52 | Reverse Cymbal | `ReverseCymbal` | **4** | Reverse Cymbal: set 24's key 52 |
+| 53 | Ride Bell | `RideBell` | **4** | Ride Bell: Standard's key 53 |
 | 54 | Shake Tambourine | `Tambourine` | **2** | Shake Tambourine: Standard's key 54 -- the nearest we have, not the sound |
 | 56 | TR-808 Cowbell | `TR808Cowbell` | **4** | TR-808 Cowbell: set 25's key 56 |
 | 70 | TR-808 Maracas | `TR808Maracas` | **4** | TR-808 Maracas: set 25's key 70 |
@@ -314,10 +318,18 @@ Standard. THE GOAL: every one built.
 | 75 | TR-808 Claves | `TR808Claves` | **4** | TR-808 Claves: set 25's key 75 |
 | 78 | High Hoo | `Hoo` | **4** | High Hoo, the Hoo at 1000 Hz |
 | 79 | Low Hoo | `Hoo` | **4** | Low Hoo, the Hoo at 1000 Hz |
-| 80 | Mute Triangle | `Triangle` | **4** | Mute Triangle: Standard's key 80 |
-| 81 | Open Triangle | `Triangle` | **4** | Open Triangle: Standard's key 81 |
-| 82 | TR-626 Shaker | `Shaker` | **2** | TR-626 Shaker: Standard's key 82 -- the nearest we have, not the sound |
+| 80 | Electric Mute Triangle | `Triangle` | **2** | Electric Mute Triangle: Standard's key 80 -- the nearest we have, not the sound |
+| 81 | Electric Open Triangle | `Triangle` | **2** | Electric Open Triangle: Standard's key 81 -- the nearest we have, not the sound |
+| 82 | Shaker 2 | `RndShaker` | **4** | Shaker 2: Standard's key 82, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 88 | Small Club 1 | `SmallClub` | **4** | Small Club 1, the SmallClub at 440 Hz |
+| 89 | Hip-Hop Snare 2 | `HipHopSnare2` | **4** | Hip-Hop Snare 2, the HipHopSnare2 at 131 Hz |
+| 90 | LoFi Snare Rim | `LoFiRim` | **3** | LoFi Snare Rim, the LoFiRim at 195 Hz |
+| 91 | Hip-Hop Claps | `HipHopClaps` | **3** | Hip-Hop Claps, the HipHopClaps at 310 Hz |
+| 92 | Standard 1 Snare 1 | `AcousticSnare` | **4** | Standard 1 Snare 1: Standard's key 38 |
+| 93 | Standard 1 Snare 2 | `SnareDrum2` | **4** | Standard 1 Snare 2: Standard's key 40 |
+| 94 | Room Snare 1 | `AcousticSnare` | **2** | Room Snare 1: Standard's key 38 -- the nearest we have, not the sound |
+| 95 | Room Snare 2 | `SnareDrum2` | **2** | Room Snare 2: Standard's key 40 -- the nearest we have, not the sound |
+| 96 | Dance Snare 1 | `TR909Snare` | **2** | Dance Snare 1: set 30's key 38 -- the nearest we have, not the sound |
 
 ### 10 Jungle
 
@@ -327,9 +339,10 @@ Standard. THE GOAL: every one built.
 | 30 | Scratch Pull 2 | `SfxScratchPull` | **2** | Scratch Pull 2: Standard's key 30 -- the nearest we have, not the sound |
 | 35 | Jungle Kick 2 | `JungleKick2` | **4** | Jungle Kick 2, the JungleKick2 at 42 Hz |
 | 36 | Jungle Kick 1 | `JungleKick1` | **4** | Jungle Kick 1, the JungleKick1 at 53 Hz |
-| 38 | Jungle Snare 1 | `JungleSnare1` | **4** | Jungle Snare 1, the JungleSnare1 at 246 Hz |
-| 39 | Hand Clap 2 | `HandClap` | **2** | Hand Clap 2: Standard's key 39 -- the nearest we have, not the sound |
-| 40 | Jungle Snare 2 | `JungleSnare2` | **4** | Jungle Snare 2, the JungleSnare2 at 220 Hz |
+| 37 | Jungle Snare Rim | `JungleRim` | **3** | Jungle Snare Rim, the JungleRim at 195 Hz |
+| 38 | HipHop Snare 1 | `RapSnare` | **2** | HipHop Snare 1, the RapSnare at 174 Hz -- the nearest we have, not the sound |
+| 39 | R&B Claps | `RnBClaps` | **3** | R&B Claps, the RnBClaps at 310 Hz |
+| 40 | Jungle Snare | `JungleSnare1` | **2** | Jungle Snare, the JungleSnare1 at 246 Hz -- the nearest we have, not the sound |
 | 41 | TR-909 Low Tom 2 | `TR909Tom` | **4** | TR-909 Low Tom 2: set 30's key 41 |
 | 42 | TR-606 Closed Hi-Hat | `TR606ClosedHat` | **4** | TR-606 Closed Hi-Hat: set 28's key 42 |
 | 43 | TR-909 Low Tom 1 | `TR909LowTom1` | **4** | TR-909 Low Tom 1: set 30's key 43 |
@@ -338,9 +351,11 @@ Standard. THE GOAL: every one built.
 | 46 | TR-606 Open Hi-Hat | `TR606OpenHat` | **4** | TR-606 Open Hi-Hat: set 28's key 46 |
 | 47 | TR-909 Mid Tom 1 | `TR909MidTom1` | **4** | TR-909 Mid Tom 1: set 30's key 47 |
 | 48 | TR-909 High Tom 2 | `TR909HiTom` | **4** | TR-909 High Tom 2: set 30's key 48 |
-| 49 | TR-808 Crash Cymbal | `TR808Cymbal` | **4** | TR-808 Crash Cymbal: set 25's key 49 |
+| 49 | Jungle Crash | `JungleCrash` | **3** | Jungle Crash, the JungleCrash at 288 Hz |
 | 50 | TR-909 High Tom 1 | `TR909HiTom1` | **4** | TR-909 High Tom 1: set 30's key 50 |
+| 51 | Ride Cymbal 1 | `RideCymbal` | **4** | Ride Cymbal 1: Standard's key 51 |
 | 52 | Reverse Cymbal | `ReverseCymbal` | **4** | Reverse Cymbal: set 24's key 52 |
+| 53 | Ride Bell | `RideBell` | **4** | Ride Bell: Standard's key 53 |
 | 54 | Shake Tambourine | `Tambourine` | **2** | Shake Tambourine: Standard's key 54 -- the nearest we have, not the sound |
 | 56 | TR-808 Cowbell | `TR808Cowbell` | **4** | TR-808 Cowbell: set 25's key 56 |
 | 70 | TR-808 Maracas | `TR808Maracas` | **4** | TR-808 Maracas: set 25's key 70 |
@@ -348,10 +363,18 @@ Standard. THE GOAL: every one built.
 | 75 | TR-808 Claves | `TR808Claves` | **4** | TR-808 Claves: set 25's key 75 |
 | 78 | High Hoo | `Hoo` | **4** | High Hoo, the Hoo at 1000 Hz |
 | 79 | Low Hoo | `Hoo` | **4** | Low Hoo, the Hoo at 1000 Hz |
-| 80 | Mute Triangle | `Triangle` | **4** | Mute Triangle: Standard's key 80 |
-| 81 | Open Triangle | `Triangle` | **4** | Open Triangle: Standard's key 81 |
-| 82 | TR-626 Shaker | `Shaker` | **2** | TR-626 Shaker: Standard's key 82 -- the nearest we have, not the sound |
+| 80 | Electric Mute Triangle | `Triangle` | **2** | Electric Mute Triangle: Standard's key 80 -- the nearest we have, not the sound |
+| 81 | Electric Open Triangle | `Triangle` | **2** | Electric Open Triangle: Standard's key 81 -- the nearest we have, not the sound |
+| 82 | Jungle Shaker | `JungleShaker` | **3** | Jungle Shaker, the JungleShaker at 386 Hz |
 | 88 | Small Club 1 | `SmallClub` | **4** | Small Club 1, the SmallClub at 440 Hz |
+| 89 | Jungle Kick Roll | `JungleKick1` | **4** | Jungle Kick Roll, the JungleKick1 at 53 Hz |
+| 90 | Jungle Snare Roll | `JungleSnare1` | **4** | Jungle Snare Roll, the JungleSnare1 at 246 Hz |
+| 91 | TR-606 Snare 2 | `TR606Snare2` | **4** | TR-606 Snare 2: set 28's key 40 |
+| 92 | Dance Snare 1 | `TR909Snare` | **2** | Dance Snare 1: set 30's key 38 -- the nearest we have, not the sound |
+| 93 | Techno Snare | `TechnoSnare1` | **2** | Techno Snare, the TechnoSnare1 at 120 Hz -- the nearest we have, not the sound |
+| 94 | House Snare | `TR909Snare` | **2** | House Snare: set 30's key 38 -- the nearest we have, not the sound |
+| 95 | Rock Snare Dry | `AcousticSnare` | **2** | Rock Snare Dry, the AcousticSnare at 195 Hz -- the nearest we have, not the sound |
+| 96 | LoFi Snare 1 | `LoFiSnare1` | **3** | LoFi Snare 1, the LoFiSnare1 at 195 Hz |
 
 ### 11 Techno
 
@@ -359,23 +382,25 @@ Standard. THE GOAL: every one built.
 |---|---|---|---|---|
 | 29 | Scratch Push 2 | `SfxScratchPush` | **2** | Scratch Push 2: Standard's key 29 -- the nearest we have, not the sound |
 | 30 | Scratch Pull 2 | `SfxScratchPull` | **2** | Scratch Pull 2: Standard's key 30 -- the nearest we have, not the sound |
-| 35 | Techno Kick 2 | `TechnoKick2` | **4** | Techno Kick 2, the TechnoKick2 at 50 Hz |
+| 35 | Techno TR-808 Kick | `TechnoTR808Kick` | **4** | Techno TR-808 Kick, the TechnoTR808Kick at 50 Hz |
 | 36 | Techno Kick 1 | `TechnoKick1` | **4** | Techno Kick 1, the TechnoKick1 at 44 Hz |
-| 37 | TR-808 Rim Shot | `TR808RimShot` | **4** | TR-808 Rim Shot: set 25's key 37 |
-| 38 | Techno Snare 1 | `TechnoSnare1` | **4** | Techno Snare 1, the TechnoSnare1 at 120 Hz |
-| 39 | TR-707 Hand Clap | `TR707Clap` | **4** | TR-707 Hand Clap: set 29's key 39 |
-| 40 | Techno Snare 2 | `TechnoSnare2` | **4** | Techno Snare 2, the TechnoSnare2 at 234 Hz |
-| 41 | TR-808 Low Tom 2 | `TR808Tom` | **4** | TR-808 Low Tom 2: set 25's key 41 |
+| 37 | TR-909 Snare Rim | `TR909Rim` | **4** | TR-909 Snare Rim: set 30's key 37 |
+| 38 | Techno TR-606 Snare 2 | `TechnoTR606Snare` | **4** | Techno TR-606 Snare 2, the TechnoTR606Snare at 204 Hz |
+| 39 | TR-909 Claps | `TR909Clap` | **3** | TR-909 Claps, the TR909Clap at 1000 Hz |
+| 40 | Techno Snare | `TechnoSnare1` | **2** | Techno Snare, the TechnoSnare1 at 120 Hz -- the nearest we have, not the sound |
+| 41 | TR-606 Low Tom 2 | `TR606Tom` | **4** | TR-606 Low Tom 2: set 28's key 41 |
 | 42 | TR-707 Closed Hi-Hat | `TR707ClosedHat` | **4** | TR-707 Closed Hi-Hat: set 29's key 42 |
-| 43 | TR-808 Low Tom 1 | `TR808Tom` | **4** | TR-808 Low Tom 1: set 25's key 43 |
+| 43 | TR-606 Low Tom 1 | `TR606Tom` | **4** | TR-606 Low Tom 1: set 28's key 43 |
 | 44 | CR-78 Closed Hi-Hat | `CR78ClosedHat` | **4** | CR-78 Closed Hi-Hat: set 27's key 42 |
-| 45 | TR-808 Mid Tom 2 | `TR808MidTom` | **4** | TR-808 Mid Tom 2: set 25's key 45 |
+| 45 | TR-606 Mid Tom 2 | `TR606Tom` | **4** | TR-606 Mid Tom 2: set 28's key 45 |
 | 46 | TR-909 Open Hi-Hat | `TR909OpenHat` | **4** | TR-909 Open Hi-Hat: set 30's key 46 |
-| 47 | TR-808 Mid Tom 1 | `TR808MidTom` | **4** | TR-808 Mid Tom 1: set 25's key 47 |
-| 48 | TR-808 High Tom 2 | `TR808HiTom` | **4** | TR-808 High Tom 2: set 25's key 48 |
+| 47 | TR-606 Mid Tom 1 | `TR606HiTom` | **4** | TR-606 Mid Tom 1: set 28's key 47 |
+| 48 | TR-606 High Tom 2 | `TR606HiTom` | **4** | TR-606 High Tom 2: set 28's key 48 |
 | 49 | TR-909 Crash Cymbal | `TR909Crash` | **4** | TR-909 Crash Cymbal: set 30's key 49 |
-| 50 | TR-808 High Tom 1 | `TR808HiTom` | **4** | TR-808 High Tom 1: set 25's key 50 |
+| 50 | TR-606 High Tom 1 | `TR606HiTom` | **4** | TR-606 High Tom 1: set 28's key 50 |
+| 51 | Ride Cymbal 1 | `RideCymbal` | **4** | Ride Cymbal 1: Standard's key 51 |
 | 52 | Reverse Cymbal | `ReverseCymbal` | **4** | Reverse Cymbal: set 24's key 52 |
+| 53 | Ride Bell | `RideBell` | **4** | Ride Bell: Standard's key 53 |
 | 54 | Shake Tambourine | `Tambourine` | **2** | Shake Tambourine: Standard's key 54 -- the nearest we have, not the sound |
 | 56 | TR-808 Cowbell | `TR808Cowbell` | **4** | TR-808 Cowbell: set 25's key 56 |
 | 57 | TR-909 Crash Cymbal | `TR909Crash` | **4** | TR-909 Crash Cymbal: set 30's key 49 |
@@ -389,9 +414,83 @@ Standard. THE GOAL: every one built.
 | 75 | TR-808 Claves | `TR808Claves` | **4** | TR-808 Claves: set 25's key 75 |
 | 78 | High Hoo | `Hoo` | **4** | High Hoo, the Hoo at 1000 Hz |
 | 79 | Low Hoo | `Hoo` | **4** | Low Hoo, the Hoo at 1000 Hz |
-| 80 | Mute Triangle | `Triangle` | **4** | Mute Triangle: Standard's key 80 |
-| 81 | Open Triangle | `Triangle` | **4** | Open Triangle: Standard's key 81 |
+| 80 | Electric Mute Triangle | `Triangle` | **2** | Electric Mute Triangle: Standard's key 80 -- the nearest we have, not the sound |
+| 81 | Electric Open Triangle | `Triangle` | **2** | Electric Open Triangle: Standard's key 81 -- the nearest we have, not the sound |
 | 82 | TR-626 Shaker | `Shaker` | **2** | TR-626 Shaker: Standard's key 82 -- the nearest we have, not the sound |
+| 89 | Dance Snare 1 | `TR909Snare` | **2** | Dance Snare 1: set 30's key 38 -- the nearest we have, not the sound |
+| 90 | House Snare | `TR909Snare` | **2** | House Snare: set 30's key 38 -- the nearest we have, not the sound |
+| 91 | Rock Snare Dry | `AcousticSnare` | **2** | Rock Snare Dry, the AcousticSnare at 195 Hz -- the nearest we have, not the sound |
+| 92 | Jungle Snare | `JungleSnare1` | **2** | Jungle Snare, the JungleSnare1 at 246 Hz -- the nearest we have, not the sound |
+| 93 | LoFi Snare 1 | `LoFiSnare1` | **3** | LoFi Snare 1, the LoFiSnare1 at 195 Hz |
+| 94 | LoFi Snare 2 | `LoFiSnare2` | **3** | LoFi Snare 2, the LoFiSnare2 at 165 Hz |
+| 95 | HipHop Snare 1 | `RapSnare` | **2** | HipHop Snare 1, the RapSnare at 174 Hz -- the nearest we have, not the sound |
+| 96 | HipHop Snare 2 | `HipHopSnare2` | **4** | HipHop Snare 2, the HipHopSnare2 at 131 Hz |
+
+### 12 Room L/R
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 26 | Finger Snap | `FingerSnap` | **4** | Finger Snap: Standard's key 26 |
+| 35 | [RND] Room Kick 2 | `RndKickDrum` | **4** | [RND] Room Kick 2: Standard's key 35, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 36 | [RND] Room Kick 1 | `RndKickDrum` | **4** | [RND] Room Kick 1: Standard's key 36, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 38 | [RND] Room Snare 1 | `RndAcousticSnare` | **4** | [RND] Room Snare 1: Standard's key 38, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 39 | Hand Clap | `HandClap` | **4** | Hand Clap: Standard's key 39 |
+| 40 | [RND] Room Snare 2 | `RndSnareDrum2` | **4** | [RND] Room Snare 2: Standard's key 40, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 42 | [RND] Room Closed Hi-Hat | `RndClosedHiHat` | **4** | [RND] Room Closed Hi-Hat: Standard's key 42, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
+| 46 | [RND] Room Open Hi-Hat | `RndOpenHiHat` | **4** | [RND] Room Open Hi-Hat: Standard's key 46, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 55 | Splash Cymbal | `SplashCymbal` | **4** | Splash Cymbal: Standard's key 55 |
+
+### 13 House
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 29 | Scratch Push 2 | `SfxScratchPush` | **2** | Scratch Push 2: Standard's key 29 -- the nearest we have, not the sound |
+| 30 | Scratch Pull 2 | `SfxScratchPull` | **2** | Scratch Pull 2: Standard's key 30 -- the nearest we have, not the sound |
+| 35 | TR-909 Kick 2 | `TR909Kick2` | **4** | TR-909 Kick 2: set 30's key 35 |
+| 36 | TR-909 Kick 1 | `TR909Kick` | **4** | TR-909 Kick 1: set 30's key 36 |
+| 37 | House Snare Rim | `TR909Rim` | **4** | House Snare Rim: set 30's key 37 |
+| 38 | House Snare 1 | `TR909Snare` | **4** | House Snare 1: set 30's key 38 |
+| 39 | TR-909 Claps | `TR909Clap` | **3** | TR-909 Claps, the TR909Clap at 1000 Hz |
+| 40 | House Snare 2 | `TR909Snare2` | **4** | House Snare 2: set 30's key 40 |
+| 41 | TR-909 Low Tom 2 | `TR909Tom` | **4** | TR-909 Low Tom 2: set 30's key 41 |
+| 42 | Room Closed Hi-Hat | `ClosedHiHat` | **2** | Room Closed Hi-Hat: Standard's key 42 -- the nearest we have, not the sound |
+| 43 | TR-909 Low Tom 1 | `TR909LowTom1` | **4** | TR-909 Low Tom 1: set 30's key 43 |
+| 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
+| 45 | TR-909 Mid Tom 2 | `TR909MidTom` | **4** | TR-909 Mid Tom 2: set 30's key 45 |
+| 46 | Room Open Hi-Hat | `OpenHiHat` | **2** | Room Open Hi-Hat: Standard's key 46 -- the nearest we have, not the sound |
+| 47 | TR-909 Mid Tom 1 | `TR909MidTom1` | **4** | TR-909 Mid Tom 1: set 30's key 47 |
+| 48 | TR-909 High Tom 2 | `TR909HiTom` | **4** | TR-909 High Tom 2: set 30's key 48 |
+| 49 | TR-909 Crash Cymbal | `TR909Crash` | **4** | TR-909 Crash Cymbal: set 30's key 49 |
+| 50 | TR-909 High Tom 1 | `TR909HiTom1` | **4** | TR-909 High Tom 1: set 30's key 50 |
+| 51 | TR-909 Ride Cymbal | `TR909Ride` | **4** | TR-909 Ride Cymbal: set 30's key 51 |
+| 52 | Reverse Cymbal | `ReverseCymbal` | **4** | Reverse Cymbal: set 24's key 52 |
+| 53 | Ride Bell | `RideBell` | **4** | Ride Bell: Standard's key 53 |
+| 54 | Shake Tambourine | `Tambourine` | **2** | Shake Tambourine: Standard's key 54 -- the nearest we have, not the sound |
+| 56 | TR-808 Cowbell | `TR808Cowbell` | **4** | TR-808 Cowbell: set 25's key 56 |
+| 57 | TR-909 Crash Cymbal | `TR909Crash` | **4** | TR-909 Crash Cymbal: set 30's key 49 |
+| 60 | CR-78 High Bongo | `CR78HiBongo` | **4** | CR-78 High Bongo: set 27's key 60 |
+| 61 | CR-78 Low Bongo | `CR78LowBongo` | **4** | CR-78 Low Bongo: set 27's key 61 |
+| 62 | TR-808 High Conga | `TR808HiConga` | **4** | TR-808 High Conga: set 25's key 62 |
+| 63 | TR-808 Mute Conga | `TR808MidConga` | **4** | TR-808 Mute Conga: set 25's key 63 |
+| 64 | TR-808 Low Conga | `TR808Conga` | **4** | TR-808 Low Conga: set 25's key 64 |
+| 70 | TR-808 Maracas | `TR808Maracas` | **4** | TR-808 Maracas: set 25's key 70 |
+| 74 | CR-78 Guiro | `CR78Guiro` | **4** | CR-78 Guiro: set 27's key 74 |
+| 75 | TR-808 Claves | `TR808Claves` | **4** | TR-808 Claves: set 25's key 75 |
+| 78 | High Hoo | `Hoo` | **4** | High Hoo, the Hoo at 1000 Hz |
+| 79 | Low Hoo | `Hoo` | **4** | Low Hoo, the Hoo at 1000 Hz |
+| 80 | Electric Mute Triangle | `Triangle` | **2** | Electric Mute Triangle: Standard's key 80 -- the nearest we have, not the sound |
+| 81 | Electric Open Triangle | `Triangle` | **2** | Electric Open Triangle: Standard's key 81 -- the nearest we have, not the sound |
+| 82 | TR-626 Shaker | `Shaker` | **2** | TR-626 Shaker: Standard's key 82 -- the nearest we have, not the sound |
+| 88 | Small Club 1 | `SmallClub` | **4** | Small Club 1, the SmallClub at 440 Hz |
+| 89 | TR-606 Snare 2 | `TR606Snare2` | **4** | TR-606 Snare 2: set 28's key 40 |
+| 90 | Dance Snare 1 | `TR909Snare` | **2** | Dance Snare 1: set 30's key 38 -- the nearest we have, not the sound |
+| 91 | Techno Snare | `TechnoSnare1` | **2** | Techno Snare, the TechnoSnare1 at 120 Hz -- the nearest we have, not the sound |
+| 92 | Rock Snare Dry | `AcousticSnare` | **2** | Rock Snare Dry, the AcousticSnare at 195 Hz -- the nearest we have, not the sound |
+| 93 | Hip-Hop Snare 1 | `RapSnare` | **2** | Hip-Hop Snare 1, the RapSnare at 174 Hz -- the nearest we have, not the sound |
+| 94 | LoFi Snare 1 | `LoFiSnare1` | **3** | LoFi Snare 1, the LoFiSnare1 at 195 Hz |
+| 95 | LoFi Snare 2 | `LoFiSnare2` | **3** | LoFi Snare 2, the LoFiSnare2 at 165 Hz |
+| 96 | Jungle Snare | `JungleSnare1` | **2** | Jungle Snare, the JungleSnare1 at 246 Hz -- the nearest we have, not the sound |
 
 ### 16 Power
 
@@ -469,10 +568,12 @@ Standard. THE GOAL: every one built.
 | 26 | Finger Snap 2 | `FingerSnap` | **4** | Finger Snap 2: Standard's key 26 |
 | 29 | Scratch Push 2 | `SfxScratchPush` | **2** | Scratch Push 2: Standard's key 29 -- the nearest we have, not the sound |
 | 30 | Scratch Pull 2 | `SfxScratchPull` | **2** | Scratch Pull 2: Standard's key 30 -- the nearest we have, not the sound |
-| 35 | TR-909 Comp Kick | `TR909CompKick` | **3** | TR-909 Comp Kick, the TR909CompKick at 50 Hz |
-| 36 | Electric Kick 2 | `ElectronicKick` | **2** | Electric Kick 2: set 24's key 36 -- the nearest we have, not the sound |
-| 38 | House Snare | `TR909Snare` | **2** | House Snare: set 30's key 38 -- the nearest we have, not the sound |
-| 40 | Dance Snare 2 | `TR909Snare2` | **2** | Dance Snare 2: set 30's key 40 -- the nearest we have, not the sound |
+| 35 | Fat Kick | `FatKick` | **3** | Fat Kick, the FatKick at 42 Hz |
+| 36 | Dance Kick | `TR909Kick` | **2** | Dance Kick: set 30's key 36 -- the nearest we have, not the sound |
+| 37 | Dance Rim Shot | `TR909Rim` | **4** | Dance Rim Shot: set 30's key 37 |
+| 38 | Dance Snare 1 | `TR909Snare` | **2** | Dance Snare 1: set 30's key 38 -- the nearest we have, not the sound |
+| 39 | Comp Claps 2 | `CompClaps2` | **3** | Comp Claps 2, the CompClaps2 at 310 Hz |
+| 40 | Rock SD Dry | `AcousticSnare` | **2** | Rock SD Dry, the AcousticSnare at 195 Hz -- the nearest we have, not the sound |
 | 41 | Electric Low Tom 2 | `ElectronicTom41` | **4** | Electric Low Tom 2: set 24's key 41 |
 | 42 | CR-78 Closed Hi-Hat | `CR78ClosedHat` | **4** | CR-78 Closed Hi-Hat: set 27's key 42 |
 | 43 | Electric Low Tom 1 | `ElectronicTom43` | **4** | Electric Low Tom 1: set 24's key 43 |
@@ -485,14 +586,23 @@ Standard. THE GOAL: every one built.
 | 50 | Electric High Tom 1 | `ElectronicTom50` | **4** | Electric High Tom 1: set 24's key 50 |
 | 51 | TR-606 Ride Cymbal | `TR606Cymbal` | **4** | TR-606 Ride Cymbal: set 28's key 51 |
 | 52 | Reverse Cymbal | `ReverseCymbal` | **4** | Reverse Cymbal: set 24's key 52 |
+| 53 | Ride Bell | `RideBell` | **4** | Ride Bell: Standard's key 53 |
 | 54 | Shake Tambourine | `Tambourine` | **2** | Shake Tambourine: Standard's key 54 -- the nearest we have, not the sound |
 | 56 | TR-808 Cowbell | `TR808Cowbell` | **4** | TR-808 Cowbell: set 25's key 56 |
 | 78 | High Hoo | `Hoo` | **4** | High Hoo, the Hoo at 1000 Hz |
 | 79 | Low Hoo | `Hoo` | **4** | Low Hoo, the Hoo at 1000 Hz |
-| 80 | Mute Triangle | `Triangle` | **4** | Mute Triangle: Standard's key 80 |
-| 81 | Open Triangle | `Triangle` | **4** | Open Triangle: Standard's key 81 |
+| 80 | Electric Mute Triangle | `Triangle` | **2** | Electric Mute Triangle: Standard's key 80 -- the nearest we have, not the sound |
+| 81 | Electric Open Triangle | `Triangle` | **2** | Electric Open Triangle: Standard's key 81 -- the nearest we have, not the sound |
 | 82 | TR-626 Shaker | `Shaker` | **2** | TR-626 Shaker: Standard's key 82 -- the nearest we have, not the sound |
 | 88 | Small Club 1 | `SmallClub` | **4** | Small Club 1, the SmallClub at 440 Hz |
+| 89 | TR-606 Snare 2 | `TR606Snare2` | **4** | TR-606 Snare 2: set 28's key 40 |
+| 90 | Techno Snare | `TechnoSnare1` | **2** | Techno Snare, the TechnoSnare1 at 120 Hz -- the nearest we have, not the sound |
+| 91 | House Snare | `TR909Snare` | **2** | House Snare: set 30's key 38 -- the nearest we have, not the sound |
+| 92 | Jungle Snare | `JungleSnare1` | **2** | Jungle Snare, the JungleSnare1 at 246 Hz -- the nearest we have, not the sound |
+| 93 | LoFi Snare 1 | `LoFiSnare1` | **3** | LoFi Snare 1, the LoFiSnare1 at 195 Hz |
+| 94 | LoFi Snare 2 | `LoFiSnare2` | **3** | LoFi Snare 2, the LoFiSnare2 at 165 Hz |
+| 95 | HipHop Snare 1 | `RapSnare` | **2** | HipHop Snare 1, the RapSnare at 174 Hz -- the nearest we have, not the sound |
+| 96 | Hip-Hop Snare 2 | `HipHopSnare2` | **4** | Hip-Hop Snare 2, the HipHopSnare2 at 131 Hz |
 
 ### 27 CR-78
 
@@ -642,6 +752,20 @@ Standard. THE GOAL: every one built.
 | 59 | Ride Cymbal Edge | `RideEdge` | **4** | Ride Cymbal Edge, the RideEdge at 148 Hz |
 | 88 | Applause | `OrchestraApplause` | **4** | Applause: set 48's key 88 |
 
+### 33 Jazz L/R
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 26 | Finger Snap 2 | `FingerSnap` | **4** | Finger Snap 2: Standard's key 26 |
+| 35 | [RND] Jazz Kick 2 | `RndJazzKick2` | **4** | [RND] Jazz Kick 2: set 32's key 35, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 36 | [RND] Jazz Kick 1 | `RndJazzKick` | **4** | [RND] Jazz Kick 1: set 32's key 36, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 38 | [RND] Jazz Snare 1 | `RndJazzSnare` | **4** | [RND] Jazz Snare 1: set 32's key 38, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 39 | Hand Clap 2 | `HandClap` | **2** | Hand Clap 2: Standard's key 39 -- the nearest we have, not the sound |
+| 40 | [RND] Jazz Snare 2 | `RndJazzSnare2` | **4** | [RND] Jazz Snare 2: set 32's key 40, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
+| 59 | Ride Cymbal Edge | `RideEdge` | **4** | Ride Cymbal Edge, the RideEdge at 148 Hz |
+| 88 | Applause | `OrchestraApplause` | **4** | Applause: set 48's key 88 |
+
 ### 40 Brush
 
 | # | note | class | | notes |
@@ -661,6 +785,52 @@ Standard. THE GOAL: every one built.
 | 49 | Brush Crash Cymbal | `BrushCrash` | **4** | Brush Crash Cymbal, the BrushCrash at 288 Hz |
 | 50 | Brush High Tom 1 | `BrushTomHigh` | **4** | Brush High Tom 1, the BrushTomHigh at 175 Hz |
 | 51 | Ride Cymbal Inner | `RideCymbal` | **4** | Ride Cymbal Inner, the RideCymbal at 148 Hz |
+| 59 | Ride Cymbal Edge | `RideEdge` | **4** | Ride Cymbal Edge, the RideEdge at 148 Hz |
+| 88 | Applause | `OrchestraApplause` | **4** | Applause: set 48's key 88 |
+
+### 41 Brush 2
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 26 | Finger Snap 2 | `FingerSnap` | **4** | Finger Snap 2: Standard's key 26 |
+| 38 | Brush Tap 2 | `BrushTap` | **4** | Brush Tap 2: set 40's key 38 |
+| 39 | Brush Slap 2 | `BrushSlap` | **4** | Brush Slap 2: set 40's key 39 |
+| 40 | Brush Swirl 1 | `BrushSwirl` | **4** | Brush Swirl 1: set 40's key 40 |
+| 41 | Brush Low Tom 2 | `BrushTomLow` | **4** | Brush Low Tom 2, the BrushTomLow at 87 Hz |
+| 42 | Brush Closed Hi-Hat | `BrushClosedHat` | **4** | Brush Closed Hi-Hat, the BrushClosedHat at 248 Hz |
+| 43 | Brush Low Tom 1 | `BrushTomLow` | **4** | Brush Low Tom 1, the BrushTomLow at 98 Hz |
+| 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
+| 45 | Brush Mid Tom 2 | `BrushTomMid` | **4** | Brush Mid Tom 2, the BrushTomMid at 110 Hz |
+| 46 | Brush Open Hi-Hat | `BrushOpenHat` | **4** | Brush Open Hi-Hat, the BrushOpenHat at 248 Hz |
+| 47 | Brush Mid Tom 1 | `BrushTomMid` | **4** | Brush Mid Tom 1, the BrushTomMid at 130 Hz |
+| 48 | Brush High Tom 2 | `BrushTomHigh` | **4** | Brush High Tom 2, the BrushTomHigh at 150 Hz |
+| 49 | Brush Crash Cymbal | `BrushCrash` | **4** | Brush Crash Cymbal, the BrushCrash at 288 Hz |
+| 50 | Brush High Tom 1 | `BrushTomHigh` | **4** | Brush High Tom 1, the BrushTomHigh at 175 Hz |
+| 51 | Brush Ride Cymbal | `RideCymbal` | **2** | Brush Ride Cymbal: Standard's key 51 -- the nearest we have, not the sound |
+| 53 | Brush Ride Bell | `RideBell` | **2** | Brush Ride Bell: Standard's key 53 -- the nearest we have, not the sound |
+| 59 | Ride Cymbal Edge | `RideEdge` | **4** | Ride Cymbal Edge, the RideEdge at 148 Hz |
+| 88 | Applause | `OrchestraApplause` | **4** | Applause: set 48's key 88 |
+
+### 42 Brush 2 L/R
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 26 | Finger Snap 2 | `FingerSnap` | **4** | Finger Snap 2: Standard's key 26 |
+| 38 | [RND] Brush Tap 2 | `RndBrushTap` | **4** | [RND] Brush Tap 2: set 40's key 38, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 39 | [RND] Brush Slap 2 | `RndBrushSlap` | **4** | [RND] Brush Slap 2: set 40's key 39, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 40 | Brush Swirl 1 | `BrushSwirl` | **4** | Brush Swirl 1: set 40's key 40 |
+| 41 | Brush Low Tom 2 | `BrushTomLow` | **4** | Brush Low Tom 2, the BrushTomLow at 87 Hz |
+| 42 | Brush Closed Hi-Hat | `BrushClosedHat` | **4** | Brush Closed Hi-Hat, the BrushClosedHat at 248 Hz |
+| 43 | Brush Low Tom 1 | `BrushTomLow` | **4** | Brush Low Tom 1, the BrushTomLow at 98 Hz |
+| 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
+| 45 | Brush Mid Tom 2 | `BrushTomMid` | **4** | Brush Mid Tom 2, the BrushTomMid at 110 Hz |
+| 46 | Brush Open Hi-Hat | `BrushOpenHat` | **4** | Brush Open Hi-Hat, the BrushOpenHat at 248 Hz |
+| 47 | Brush Mid Tom 1 | `BrushTomMid` | **4** | Brush Mid Tom 1, the BrushTomMid at 130 Hz |
+| 48 | Brush High Tom 2 | `BrushTomHigh` | **4** | Brush High Tom 2, the BrushTomHigh at 150 Hz |
+| 49 | Brush Crash Cymbal | `BrushCrash` | **4** | Brush Crash Cymbal, the BrushCrash at 288 Hz |
+| 50 | Brush High Tom 1 | `BrushTomHigh` | **4** | Brush High Tom 1, the BrushTomHigh at 175 Hz |
+| 51 | [RND] Brush Ride Cymbal | `RndRideCymbal` | **4** | [RND] Brush Ride Cymbal: Standard's key 51, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 53 | [RND] Brush Ride Bell | `RndRideBell` | **4** | [RND] Brush Ride Bell: Standard's key 53, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 59 | Ride Cymbal Edge | `RideEdge` | **4** | Ride Cymbal Edge, the RideEdge at 148 Hz |
 | 88 | Applause | `OrchestraApplause` | **4** | Applause: set 48's key 88 |
 
@@ -854,6 +1024,80 @@ Standard. THE GOAL: every one built.
 | 98 | Jungle Snare 2 | `JungleSnare2` | **4** | Jungle Snare 2, the JungleSnare2 at 220 Hz |
 | 99 | Techno Snare 1 | `TechnoSnare1` | **4** | Techno Snare 1, the TechnoSnare1 at 120 Hz |
 
+### 51 Kick & Snare 2
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 25 | CR-78 Kick 1 | `CR78Kick` | **4** | CR-78 Kick 1: set 27's key 36 |
+| 26 | CR-78 Kick 2 | `CR78Kick2` | **4** | CR-78 Kick 2: set 27's key 35 |
+| 27 | TR-606 Kick | `TR606Kick` | **4** | TR-606 Kick: set 28's key 36 |
+| 28 | TR-707 Kick | `TR707Kick` | **4** | TR-707 Kick: set 29's key 36 |
+| 29 | TR-808 Kick 1 | `TR808Kick` | **4** | TR-808 Kick 1: set 25's key 36 |
+| 30 | TR-909 Kick 1 | `TR909Kick` | **4** | TR-909 Kick 1: set 30's key 36 |
+| 31 | TR-909 Kick 2 | `TR909Kick2` | **4** | TR-909 Kick 2: set 30's key 35 |
+| 32 | Hip-Hop Kick 2 | `HipHopKick2` | **4** | Hip-Hop Kick 2, the HipHopKick2 at 56 Hz |
+| 33 | Hip-Hop Kick 1 | `HipHopKick1` | **4** | Hip-Hop Kick 1, the HipHopKick1 at 37 Hz |
+| 34 | Jungle Kick 2 | `JungleKick2` | **4** | Jungle Kick 2, the JungleKick2 at 42 Hz |
+| 35 | Jungle Kick 1 | `JungleKick1` | **4** | Jungle Kick 1, the JungleKick1 at 53 Hz |
+| 36 | Techno Kick 2 | `TechnoKick2` | **4** | Techno Kick 2, the TechnoKick2 at 50 Hz |
+| 37 | Techno Kick 1 | `TechnoKick1` | **4** | Techno Kick 1, the TechnoKick1 at 44 Hz |
+| 38 | Standard 1 Kick 2 | `KickDrum` | **4** | Standard 1 Kick 2: Standard's key 35 |
+| 39 | Standard 1 Kick 1 | `KickDrum` | **4** | Standard 1 Kick 1: Standard's key 36 |
+| 40 | Standard 1 Kick 2 | `KickDrum` | **4** | Standard 1 Kick 2: Standard's key 35 |
+| 41 | Standard 1 Kick 1 | `KickDrum` | **4** | Standard 1 Kick 1: Standard's key 36 |
+| 44 | Jazz Kick 2 | `JazzKick2` | **4** | Jazz Kick 2: set 32's key 35 |
+| 45 | Jazz Kick 1 | `JazzKick` | **4** | Jazz Kick 1: set 32's key 36 |
+| 46 | Hip-Hop Kick 2 | `HipHopKick2` | **4** | Hip-Hop Kick 2, the HipHopKick2 at 56 Hz |
+| 47 | Hip-Hop Kick 1 | `HipHopKick1` | **4** | Hip-Hop Kick 1, the HipHopKick1 at 37 Hz |
+| 49 | Concert BD 1 | `ConcertBassDrum` | **4** | Concert BD 1: set 48's key 36 |
+| 50 | Room Kick 2 | `KickDrum` | **2** | Room Kick 2: Standard's key 35 -- the nearest we have, not the sound |
+| 51 | Room Kick 1 | `KickDrum` | **2** | Room Kick 1: Standard's key 36 -- the nearest we have, not the sound |
+| 52 | Jungle Kick 2 | `JungleKick2` | **4** | Jungle Kick 2, the JungleKick2 at 42 Hz |
+| 53 | Jungle Kick 1 | `JungleKick1` | **4** | Jungle Kick 1, the JungleKick1 at 53 Hz |
+| 54 | Jungle Kick Roll | `JungleKick1` | **4** | Jungle Kick Roll, the JungleKick1 at 53 Hz |
+| 55 | Fat Kick | `FatKick` | **3** | Fat Kick, the FatKick at 42 Hz |
+| 56 | Dance Kick | `TR909Kick` | **2** | Dance Kick: set 30's key 36 -- the nearest we have, not the sound |
+| 57 | TR-808 Kick 1 | `TR808Kick` | **4** | TR-808 Kick 1: set 25's key 36 |
+| 58 | TR-909 Kick 2 | `TR909Kick2` | **4** | TR-909 Kick 2: set 30's key 35 |
+| 59 | TR-909 Kick 1 | `TR909Kick` | **4** | TR-909 Kick 1: set 30's key 36 |
+| 60 | Standard 1 Snare 1 | `AcousticSnare` | **4** | Standard 1 Snare 1: Standard's key 38 |
+| 61 | Standard 1 Snare 2 | `SnareDrum2` | **4** | Standard 1 Snare 2: Standard's key 40 |
+| 62 | Standard 2 Snare 1 | `AcousticSnare` | **2** | Standard 2 Snare 1: Standard's key 38 -- the nearest we have, not the sound |
+| 63 | Standard 2 Snare 2 | `SnareDrum2` | **2** | Standard 2 Snare 2: Standard's key 40 -- the nearest we have, not the sound |
+| 64 | Tight Snare | `SnareDrum2` | **4** | Tight Snare: Standard's key 40 |
+| 65 | Concert Snare | `ConcertSnare` | **4** | Concert Snare: set 48's key 38 |
+| 66 | Jazz Snare 1 | `JazzSnare` | **4** | Jazz Snare 1: set 32's key 38 |
+| 67 | Jazz Snare 2 | `JazzSnare2` | **4** | Jazz Snare 2: set 32's key 40 |
+| 68 | Room Snare 1 | `AcousticSnare` | **2** | Room Snare 1: Standard's key 38 -- the nearest we have, not the sound |
+| 69 | Room Snare 2 | `SnareDrum2` | **2** | Room Snare 2: Standard's key 40 -- the nearest we have, not the sound |
+| 70 | LoFi Snare 1 | `LoFiSnare1` | **3** | LoFi Snare 1, the LoFiSnare1 at 195 Hz |
+| 71 | LoFi Snare 2 | `LoFiSnare2` | **3** | LoFi Snare 2, the LoFiSnare2 at 165 Hz |
+| 72 | Gated Snare | `GatedSnare` | **4** | Gated Snare: set 16's key 38 |
+| 73 | LoFi Snare Rim | `LoFiRim` | **3** | LoFi Snare Rim, the LoFiRim at 195 Hz |
+| 74 | Dance Snare 2 | `TR909Snare2` | **2** | Dance Snare 2: set 30's key 40 -- the nearest we have, not the sound |
+| 75 | HipHop Snare 1 | `RapSnare` | **2** | HipHop Snare 1, the RapSnare at 174 Hz -- the nearest we have, not the sound |
+| 76 | HipHop Snare 2 | `HipHopSnare2` | **4** | HipHop Snare 2, the HipHopSnare2 at 131 Hz |
+| 77 | Dance Snare 1 | `TR909Snare` | **2** | Dance Snare 1: set 30's key 38 -- the nearest we have, not the sound |
+| 78 | TR-606 Snare 2 | `TR606Snare2` | **4** | TR-606 Snare 2: set 28's key 40 |
+| 79 | Techno Snare | `TechnoSnare1` | **2** | Techno Snare, the TechnoSnare1 at 120 Hz -- the nearest we have, not the sound |
+| 80 | House Snare | `TR909Snare` | **2** | House Snare: set 30's key 38 -- the nearest we have, not the sound |
+| 81 | Rock Snare Dry | `AcousticSnare` | **2** | Rock Snare Dry, the AcousticSnare at 195 Hz -- the nearest we have, not the sound |
+| 82 | Jungle Snare | `JungleSnare1` | **2** | Jungle Snare, the JungleSnare1 at 246 Hz -- the nearest we have, not the sound |
+| 83 | Jungle Snare Roll | `JungleSnare1` | **4** | Jungle Snare Roll, the JungleSnare1 at 246 Hz |
+| 84 | Brush Tap 1 | `BrushTap` | **4** | Brush Tap 1: set 40's key 38 |
+| 85 | Brush Tap 2 | `BrushTap` | **4** | Brush Tap 2: set 40's key 38 |
+| 86 | Brush Tap 2 | `BrushTap` | **4** | Brush Tap 2: set 40's key 38 |
+| 87 | Brush Slap 2 | `BrushSlap` | **4** | Brush Slap 2: set 40's key 39 |
+| 88 | Brush Slap 3 | `BrushSlap` | **4** | Brush Slap 3: set 40's key 39 |
+| 89 | Brush Swirl 1 | `BrushSwirl` | **4** | Brush Swirl 1: set 40's key 40 |
+| 90 | Brush Swirl 2 | `BrushSwirl` | **4** | Brush Swirl 2: set 40's key 40 |
+| 91 | Brush Long Swirl | `BrushSwirl` | **4** | Brush Long Swirl: set 40's key 40 |
+| 92 | Standard 1 Snare 1 | `AcousticSnare` | **4** | Standard 1 Snare 1: Standard's key 38 |
+| 93 | Standard 1 Snare 2 | `SnareDrum2` | **4** | Standard 1 Snare 2: Standard's key 40 |
+| 94 | Standard 1 Snare 3 | `AcousticSnare` | **4** | Standard 1 Snare 3: Standard's key 38 |
+| 95 | Rap Snare | `RapSnare` | **4** | Rap Snare, the RapSnare at 174 Hz |
+| 96 | Hip-Hop Snare 2 | `HipHopSnare2` | **4** | Hip-Hop Snare 2, the HipHopSnare2 at 131 Hz |
+
 ### 52 Asia
 
 | # | note | class | | notes |
@@ -988,6 +1232,16 @@ Standard. THE GOAL: every one built.
 | 94 | Hand Clap | `HandClap` | **4** | Hand Clap: Standard's key 39 |
 | 95 | Hand Clap 2 | `HandClap` | **2** | Hand Clap 2: Standard's key 39 -- the nearest we have, not the sound |
 | 96 | TR-707 Hand Clap | `TR707Clap` | **4** | TR-707 Hand Clap: set 29's key 39 |
+
+### 54 Gamelan 1
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+
+### 55 Gamelan 2
+
+| # | note | class | | notes |
+|---|---|---|---|---|
 
 ### 56 SFX
 
@@ -1187,6 +1441,85 @@ Standard. THE GOAL: every one built.
 | 89 | Emergency ! | `RfxSquareTone` | **3** | Emergency !, the RfxSquareTone at 960 Hz |
 | 90 | Calculating... | `RfxMorse` | **3** | Calculating..., the RfxMorse at 700 Hz |
 | 91 | Saw LFO Saw | `RfxSawSweep` | **3** | Saw LFO Saw, the RfxSawSweep at 220 Hz |
+
+### 59 Rhythm Fx 3
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 49 | Reverse Jungle Kick 2 | `ReverseJungleKick2` | **4** | Reverse Jungle Kick 2: set 10's key 35, played backwards |
+| 53 | Reverse TR-909 Kick 1 | `ReverseTR909Kick` | **4** | Reverse TR-909 Kick 1: set 30's key 36, played backwards |
+| 72 | Reverse Dance Snare | `ReverseTR909Snare` | **4** | Reverse Dance Snare: set 30's key 38, played backwards |
+
+### 60 Sfx 2
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 80 | Frog Voice | `RfxFrog` | **3** | Frog Voice, the RfxFrog at 1000 Hz |
+| 87 | Noise Attack | `RfxNoiseAttack` | **3** | Noise Attack, the RfxNoiseAttack at 1000 Hz |
+| 88 | Bounce | `RfxBounce` | **3** | Bounce, the RfxBounce at 600 Hz |
+
+### 61 Voice
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 41 | Reverse Voice One | `RfxVoiceOneRev` | **4** | Reverse Voice One, the RfxVoiceOneRev at 1000 Hz |
+| 42 | Reverse Voice Two | `RfxVoiceTwoRev` | **4** | Reverse Voice Two, the RfxVoiceTwoRev at 1000 Hz |
+| 43 | Reverse Voice Three | `RfxVoiceThreeRev` | **4** | Reverse Voice Three, the RfxVoiceThreeRev at 1000 Hz |
+| 44 | Reverse Voice Tah | `RfxVoiceTahRev` | **3** | Reverse Voice Tah, the RfxVoiceTahRev at 1000 Hz |
+| 51 | Reverse Yyoo Dude | `RfxKakegoeRev` | **3** | Reverse Yyoo Dude, the RfxKakegoeRev at 1000 Hz |
+| 59 | Voice One | `RfxVoiceOne` | **4** | Voice One, the RfxVoiceOne at 1000 Hz |
+| 60 | Voice Two | `RfxVoiceTwo` | **4** | Voice Two, the RfxVoiceTwo at 1000 Hz |
+| 61 | Voice Three | `RfxVoiceThree` | **4** | Voice Three, the RfxVoiceThree at 1000 Hz |
+| 62 | Voice Tah | `RfxVoiceTah` | **3** | Voice Tah, the RfxVoiceTah at 1000 Hz |
+| 72 | Frog Voice | `RfxFrog` | **3** | Frog Voice, the RfxFrog at 1000 Hz |
+| 73 | Yyoo Dude | `RfxKakegoe` | **3** | Yyoo Dude, the RfxKakegoe at 1000 Hz |
+| 74 | Voice Ou | `RfxVoiceOu` | **3** | Voice Ou, the RfxVoiceOu at 1000 Hz |
+| 75 | Voice Au | `RfxVoiceAu` | **3** | Voice Au, the RfxVoiceAu at 1000 Hz |
+
+### 62 Cym&Claps 2
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 37 | Room Closed Hi-Hat | `ClosedHiHat` | **2** | Room Closed Hi-Hat: Standard's key 42 -- the nearest we have, not the sound |
+| 39 | Brush Closed Hi-Hat | `BrushClosedHat` | **4** | Brush Closed Hi-Hat, the BrushClosedHat at 248 Hz |
+| 40 | TR-707 Closed Hi-Hat | `TR707ClosedHat` | **4** | TR-707 Closed Hi-Hat: set 29's key 42 |
+| 41 | TR-606 Closed Hi-Hat | `TR606ClosedHat` | **4** | TR-606 Closed Hi-Hat: set 28's key 42 |
+| 42 | TR-808 Closed Hi-Hat | `TR808ClosedHat` | **4** | TR-808 Closed Hi-Hat: set 25's key 42 |
+| 43 | CR-78 Closed Hi-Hat | `CR78ClosedHat` | **4** | CR-78 Closed Hi-Hat: set 27's key 42 |
+| 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
+| 45 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
+| 46 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
+| 47 | Half-Open Hi-Hat 1 | `OpenHiHat` | **4** | Half-Open Hi-Hat 1, the OpenHiHat at 248 Hz |
+| 48 | Half-Open Hi-Hat 2 | `OpenHiHat` | **4** | Half-Open Hi-Hat 2, the OpenHiHat at 248 Hz |
+| 50 | Room Open Hi-Hat | `OpenHiHat` | **2** | Room Open Hi-Hat: Standard's key 46 -- the nearest we have, not the sound |
+| 52 | Brush Open Hi-Hat | `BrushOpenHat` | **4** | Brush Open Hi-Hat, the BrushOpenHat at 248 Hz |
+| 53 | TR-909 Open Hi-Hat | `TR909OpenHat` | **4** | TR-909 Open Hi-Hat: set 30's key 46 |
+| 54 | TR-707 Open Hi-Hat | `TR707OpenHat` | **4** | TR-707 Open Hi-Hat: set 29's key 46 |
+| 55 | TR-606 Open Hi-Hat | `TR606OpenHat` | **4** | TR-606 Open Hi-Hat: set 28's key 46 |
+| 56 | TR-808 Open Hi-Hat | `TR808OpenHat` | **4** | TR-808 Open Hi-Hat: set 25's key 46 |
+| 57 | CR-78 Open Hi-Hat | `CR78OpenHat` | **4** | CR-78 Open Hi-Hat: set 27's key 46 |
+| 61 | Brush Crash Cymbal | `BrushCrash` | **4** | Brush Crash Cymbal, the BrushCrash at 288 Hz |
+| 62 | Hard Crash Cymbal | `CrashCymbal1` | **2** | Hard Crash Cymbal: Standard's key 49 -- the nearest we have, not the sound |
+| 63 | TR-909 Crash Cymbal | `TR909Crash` | **4** | TR-909 Crash Cymbal: set 30's key 49 |
+| 64 | Jungle Crash Cymbal | `JungleCrash` | **3** | Jungle Crash Cymbal, the JungleCrash at 288 Hz |
+| 65 | TR-808 Crash Cymbal | `TR808Cymbal` | **4** | TR-808 Crash Cymbal: set 25's key 49 |
+| 70 | Mute Crash Cymbal 1 | `CrashCymbal1` | **4** | Mute Crash Cymbal 1, the CrashCymbal1 at 288 Hz |
+| 71 | Mute Crash Cymbal 2 | `CrashCymbal2` | **4** | Mute Crash Cymbal 2, the CrashCymbal2 at 334 Hz |
+| 76 | Splash Cymbal | `SplashCymbal` | **4** | Splash Cymbal: Standard's key 55 |
+| 80 | Brush Ride Bell | `RideBell` | **2** | Brush Ride Bell: Standard's key 53 -- the nearest we have, not the sound |
+| 84 | Brush Ride Cymbal | `RideCymbal` | **2** | Brush Ride Cymbal: Standard's key 51 -- the nearest we have, not the sound |
+| 85 | TR-606 Ride Cymbal | `TR606Cymbal` | **4** | TR-606 Ride Cymbal: set 28's key 51 |
+| 86 | TR-808 Ride Cymbal | `TR808Cymbal` | **2** | TR-808 Ride Cymbal: set 25's key 49 -- the nearest we have, not the sound |
+| 87 | Chinese Cymbal | `ChineseCymbal` | **4** | Chinese Cymbal: Standard's key 52 |
+| 88 | Chinese Cymbal 2 | `ChineseCymbal` | **2** | Chinese Cymbal 2: Standard's key 52 -- the nearest we have, not the sound |
+| 89 | TR-707 Claps | `TR707Clap` | **4** | TR-707 Claps: set 29's key 39 |
+| 90 | Hip-Hop Claps | `HipHopClaps` | **3** | Hip-Hop Claps, the HipHopClaps at 310 Hz |
+| 91 | R&B Claps | `RnBClaps` | **3** | R&B Claps, the RnBClaps at 310 Hz |
+| 92 | TR-909 Claps | `TR909Clap` | **3** | TR-909 Claps, the TR909Clap at 1000 Hz |
+| 93 | Comp Claps 2 | `CompClaps2` | **3** | Comp Claps 2, the CompClaps2 at 310 Hz |
+| 94 | Hand Clap | `HandClap` | **4** | Hand Clap: Standard's key 39 |
+| 95 | Hand Clap 2 | `HandClap` | **2** | Hand Clap 2: Standard's key 39 -- the nearest we have, not the sound |
+| 96 | TR-707 Hand Clap | `TR707Clap` | **4** | TR-707 Hand Clap: set 29's key 39 |
 
 ### 127 CM-64/32L
 
@@ -2331,7 +2664,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-607 classes.
+627 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -2401,49 +2734,50 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `RfxStrum` -- set 56 26 Chord Stroke Down (3), set 56 27 Chord Stroke Up (3)
     - `Percussion`
       - `Cymbal` [NoisyPercussionMixin]
-        - `ChineseCymbal` -- 52 Chinese Cymbal (4), set 53 89 Chinese Cymbal (4), set 53 90 Chinese Cymbal 2 (2)
+        - `ChineseCymbal` -- 52 Chinese Cymbal (4), set 53 89 Chinese Cymbal (4), set 53 90 Chinese Cymbal 2 (2), set 62 87 Chinese Cymbal (4), set 62 88 Chinese Cymbal 2 (2)
           - `RfxNaobo` -- set 52 87 Nao Bo (4), set 52 88 Xiao Bo (4)
-        - `CrashCymbal1` -- 49 Crash Cymbal 1 (4), set 49 28 Crash Cymbal 1 (4), set 53 61 Crash Cymbal 1 (4), set 53 65 Hard Crash Cymbal (2), set 53 68 Mute Crash Cymbal 1 (4), set 127 49 Crash Cymbal (4)
-          - `BrushCrash` -- set 40 49 Brush Crash Cymbal (4), set 53 64 Brush Crash Cymbal (4)
+        - `CrashCymbal1` -- 49 Crash Cymbal 1 (4), set 49 28 Crash Cymbal 1 (4), set 53 61 Crash Cymbal 1 (4), set 53 65 Hard Crash Cymbal (2), set 53 68 Mute Crash Cymbal 1 (4), set 62 62 Hard Crash Cymbal (2), set 62 70 Mute Crash Cymbal 1 (4), set 127 49 Crash Cymbal (4)
+          - `BrushCrash` -- set 40 49 Brush Crash Cymbal (4), set 41 49 Brush Crash Cymbal (4), set 42 49 Brush Crash Cymbal (4), set 53 64 Brush Crash Cymbal (4), set 62 61 Brush Crash Cymbal (4)
           - `CengCeng` -- set 49 49 Rama Cymbal (4), set 52 45 Rama Cymbal Low (4), set 52 46 Rama Cymbal High (4)
           - `ConcertCymbal1` -- set 48 59 Concert Cymbal 1 (4), set 49 31 Concert Cymbal (4)
+          - `JungleCrash` [JungleBreak] -- set 10 49 Jungle Crash (3), set 62 64 Jungle Crash Cymbal (3)
           - `ReverseCrashCymbal1` -- set 53 70 Reverse Crash Cymbal 1 (4), set 57 50 Reverse Cymbal 1 (4)
-          - `ReverseCymbal` -- GM 119 Reverse Cymbal (4), set 9 52 Reverse Cymbal (4), set 10 52 Reverse Cymbal (4), set 11 52 Reverse Cymbal (4), set 24 52 Reverse Cymbal (4), set 26 52 Reverse Cymbal (4), set 282 52 Reverse Cymbal (4)
+          - `ReverseCymbal` -- GM 119 Reverse Cymbal (4), set 9 52 Reverse Cymbal (4), set 10 52 Reverse Cymbal (4), set 11 52 Reverse Cymbal (4), set 13 52 Reverse Cymbal (4), set 24 52 Reverse Cymbal (4), set 26 52 Reverse Cymbal (4), set 282 52 Reverse Cymbal (4)
           - `RndCrashCymbal1` [RandomStrike] -- set 2 49 [RND] Crash Cymbal (4)
-          - `TR909Crash` [RomMetalMixin] -- set 9 49 TR-909 Crash Cymbal (4), set 11 49 TR-909 Crash Cymbal (4), set 11 57 TR-909 Crash Cymbal (4), set 25 57 TR-909 Crash Cymbal (4), set 27 57 909 Crash (4), set 28 57 909 Crash (4), set 29 49 909 Crash (4), set 30 49 909 Crash (4), set 53 66 TR-909 Crash Cymbal (4)
+          - `TR909Crash` [RomMetalMixin] -- set 9 49 TR-909 Crash Cymbal (4), set 11 49 TR-909 Crash Cymbal (4), set 11 57 TR-909 Crash Cymbal (4), set 13 49 TR-909 Crash Cymbal (4), set 13 57 TR-909 Crash Cymbal (4), set 25 57 TR-909 Crash Cymbal (4), set 27 57 909 Crash (4), set 28 57 909 Crash (4), set 29 49 909 Crash (4), set 30 49 909 Crash (4), set 53 66 TR-909 Crash Cymbal (4), set 62 63 TR-909 Crash Cymbal (4)
             - `ReverseTR909Crash` -- set 53 73 Reverse TR-909 Crash Cymbal (4), set 58 64 Reverse TR-707 Crash Cymbal (2)
-        - `CrashCymbal2` -- 57 Crash Cymbal 2 (4), set 53 62 Crash Cymbal 2 (4), set 53 63 Crash Cymbal 3 (2), set 53 69 Mute Crash Cymbal 2 (4)
+        - `CrashCymbal2` -- 57 Crash Cymbal 2 (4), set 53 62 Crash Cymbal 2 (4), set 53 63 Crash Cymbal 3 (2), set 53 69 Mute Crash Cymbal 2 (4), set 62 71 Mute Crash Cymbal 2 (4)
           - `ConcertCymbal2` -- set 48 57 Concert Cymbal 2 (4)
           - `ReverseCrashCymbal2` -- set 53 71 Reverse Crash Cymbal 2 (4), set 53 72 Reverse Crash Cymbal 3 (2), set 57 51 Reverse Cymbal 2 (4)
         - `CrashRide` -- 59 Ride Cymbal 2 (4), set 53 79 Ride Cymbal 2 (4)
           - `RndCrashRide` [RandomStrike] -- set 2 59 [RND] Ride Cymbal 2 (4)
         - `HiHat`
-          - `ClosedHiHat` -- 42 Closed Hi-Hat (4), set 1 42 Closed Hi-Hat (4), set 9 42 Room Closed Hi-Hat (2), set 48 27 Closed Hi-Hat (4), set 53 36 Closed Hi-Hat (4), set 53 38 Closed Hi-Hat 3 (2), set 53 39 Closed Hi-Hat 4 (2), set 53 40 Closed Hi-Hat (4), set 127 42 Closed High Hat (4)
-            - `BrushClosedHat` -- set 40 42 Brush Closed Hi-Hat (4)
+          - `ClosedHiHat` -- 42 Closed Hi-Hat (4), set 1 42 Closed Hi-Hat (4), set 9 42 Room Closed Hi-Hat (2), set 13 42 Room Closed Hi-Hat (2), set 48 27 Closed Hi-Hat (4), set 53 36 Closed Hi-Hat (4), set 53 38 Closed Hi-Hat 3 (2), set 53 39 Closed Hi-Hat 4 (2), set 53 40 Closed Hi-Hat (4), set 62 37 Room Closed Hi-Hat (2), set 127 42 Closed High Hat (4)
+            - `BrushClosedHat` -- set 40 42 Brush Closed Hi-Hat (4), set 41 42 Brush Closed Hi-Hat (4), set 42 42 Brush Closed Hi-Hat (4), set 62 39 Brush Closed Hi-Hat (4)
             - `JungleHiHat` [JungleBreak] -- set 10 44 Jungle Hi-Hat (4), set 53 35 Jungle Hi-Hat (4)
               - `ReverseJungleHiHat` -- set 58 56 Reverse Jungle Hi-Hat (4)
             - `ReverseClosedHiHat` -- set 53 33 Reverse Closed Hi-Hat 1 (4), set 57 55 Reverse Closed Hi-Hat (4), set 58 52 Reverse Closed Hi-Hat (4)
-            - `RndClosedHiHat` [RandomStrike] -- set 2 42 [RND] Closed Hi-Hat (4), set 24 42 Closed Hi-Hat 2 (4), set 32 42 Closed Hi-Hat 2 (4), set 53 37 Closed Hi-Hat 2 (4)
-            - `TR707ClosedHat` [RomMetalMixin] -- set 11 42 TR-707 Closed Hi-Hat (4), set 29 42 707 CHH (4), set 29 44 707 CHH (4), set 30 42 707 CHH (4), set 30 44 707 CHH (4), set 53 41 TR-707 Closed Hi-Hat (4)
+            - `RndClosedHiHat` [RandomStrike] -- set 2 42 [RND] Closed Hi-Hat (4), set 12 42 [RND] Room Closed Hi-Hat (4), set 24 42 Closed Hi-Hat 2 (4), set 32 42 Closed Hi-Hat 2 (4), set 53 37 Closed Hi-Hat 2 (4)
+            - `TR707ClosedHat` [RomMetalMixin] -- set 11 42 TR-707 Closed Hi-Hat (4), set 29 42 707 CHH (4), set 29 44 707 CHH (4), set 30 42 707 CHH (4), set 30 44 707 CHH (4), set 53 41 TR-707 Closed Hi-Hat (4), set 62 40 TR-707 Closed Hi-Hat (4)
               - `ReverseTR707ClosedHat` -- set 58 54 Reverse TR-707 Closed Hi-Hat (4)
-          - `OpenHiHat` -- 46 Open Hi-Hat (4), set 1 46 Open Hi-Hat (4), set 9 46 Room Open Hi-Hat (2), set 48 29 Open Hi-Hat (4), set 53 49 Half-Open Hi-Hat 1 (4), set 53 50 Half-Open Hi-Hat 2 (4), set 53 51 Open Hi Hat (4), set 53 53 Open Hi-Hat 3 (2), set 127 44 Open High Hat 2 (4), set 127 46 Open High Hat 1 (4)
-            - `BrushOpenHat` -- set 40 46 Brush Open Hi-Hat (4)
+          - `OpenHiHat` -- 46 Open Hi-Hat (4), set 1 46 Open Hi-Hat (4), set 9 46 Room Open Hi-Hat (2), set 13 46 Room Open Hi-Hat (2), set 48 29 Open Hi-Hat (4), set 53 49 Half-Open Hi-Hat 1 (4), set 53 50 Half-Open Hi-Hat 2 (4), set 53 51 Open Hi Hat (4), set 53 53 Open Hi-Hat 3 (2), set 62 47 Half-Open Hi-Hat 1 (4), set 62 48 Half-Open Hi-Hat 2 (4), set 62 50 Room Open Hi-Hat (2), set 127 44 Open High Hat 2 (4), set 127 46 Open High Hat 1 (4)
+            - `BrushOpenHat` -- set 40 46 Brush Open Hi-Hat (4), set 41 46 Brush Open Hi-Hat (4), set 42 46 Brush Open Hi-Hat (4), set 62 52 Brush Open Hi-Hat (4)
             - `ReverseOpenHiHat` -- set 53 32 Reverse Open Hi-Hat (4), set 57 52 Reverse Open Hi-Hat (4), set 58 61 Reverse Open Hi-Hat (4)
-            - `RndOpenHiHat` [RandomStrike] -- set 2 46 [RND] Open Hi-Hat (4), set 24 46 Open Hi-Hat 2 (4), set 32 46 Open Hi-Hat 2 (4), set 53 52 Open Hi-Hat 2 (4), set 53 54 Open Hi-Hat 2 (4)
-            - `TR707OpenHat` [RomMetalMixin] -- set 29 46 707 OHH (4), set 53 56 TR-707 Open Hi-Hat (4)
+            - `RndOpenHiHat` [RandomStrike] -- set 2 46 [RND] Open Hi-Hat (4), set 12 46 [RND] Room Open Hi-Hat (4), set 24 46 Open Hi-Hat 2 (4), set 32 46 Open Hi-Hat 2 (4), set 53 52 Open Hi-Hat 2 (4), set 53 54 Open Hi-Hat 2 (4)
+            - `TR707OpenHat` [RomMetalMixin] -- set 29 46 707 OHH (4), set 53 56 TR-707 Open Hi-Hat (4), set 62 54 TR-707 Open Hi-Hat (4)
               - `ReverseTR707OpenHat` -- set 58 60 Reverse TR-707 Open Hi-Hat (4)
-            - `TR909OpenHat` [RomMetalMixin] -- set 11 46 TR-909 Open Hi-Hat (4), set 30 46 909 OHH (4), set 53 55 TR-909 Open Hi-Hat (4)
-          - `PedalHiHat` -- 44 Pedal Hi-Hat (4), set 1 44 Pedal Hi-Hat (4), set 9 44 Pedal Hi-Hat (4), set 48 28 Pedal Hi-Hat (4), set 53 46 Pedal Hi-Hat (4), set 53 47 Pedal Hi-Hat (4), set 53 48 Pedal Hi-Hat (4)
+            - `TR909OpenHat` [RomMetalMixin] -- set 11 46 TR-909 Open Hi-Hat (4), set 30 46 909 OHH (4), set 53 55 TR-909 Open Hi-Hat (4), set 62 53 TR-909 Open Hi-Hat (4)
+          - `PedalHiHat` -- 44 Pedal Hi-Hat (4), set 1 44 Pedal Hi-Hat (4), set 9 44 Pedal Hi-Hat (4), set 12 44 Pedal Hi-Hat (4), set 13 44 Pedal Hi-Hat (4), set 33 44 Pedal Hi-Hat (4), set 41 44 Pedal Hi-Hat (4), set 42 44 Pedal Hi-Hat (4), set 48 28 Pedal Hi-Hat (4), set 53 46 Pedal Hi-Hat (4), set 53 47 Pedal Hi-Hat (4), set 53 48 Pedal Hi-Hat (4), set 62 44 Pedal Hi-Hat (4), set 62 45 Pedal Hi-Hat (4), set 62 46 Pedal Hi-Hat (4)
             - `ReversePedalHiHat` -- set 53 34 Reverse Closed Hi-Hat 2 (2)
             - `RndPedalHiHat` [RandomStrike] -- set 2 44 [RND] Pedal Hi-Hat (4)
-        - `RideBell` -- 53 Ride Bell (4), set 53 76 Ride Bell (4), set 53 77 Brush Ride Bell (2)
-          - `RndRideBell` [RandomStrike] -- set 2 53 [RND] Ride Bell 1 (4)
-        - `RideCymbal` -- 51 Ride Cymbal 1 (4), set 32 51 Ride Cymbal Inner (4), set 40 51 Ride Cymbal Inner (4), set 48 30 Ride Cymbal (4), set 53 78 Ride Cymbal 1 (4), set 53 80 Brush Ride Cymbal (2), set 53 81 Ride Cymbal Low Inner (4), set 53 82 Ride Cymbal Mid Inner (4), set 53 83 Ride Cymbal High Inner (4), set 127 51 Ride Cymbal (4)
+        - `RideBell` -- 53 Ride Bell (4), set 9 53 Ride Bell (4), set 10 53 Ride Bell (4), set 11 53 Ride Bell (4), set 13 53 Ride Bell (4), set 26 53 Ride Bell (4), set 41 53 Brush Ride Bell (2), set 53 76 Ride Bell (4), set 53 77 Brush Ride Bell (2), set 62 80 Brush Ride Bell (2)
+          - `RndRideBell` [RandomStrike] -- set 2 53 [RND] Ride Bell 1 (4), set 42 53 [RND] Brush Ride Bell (4)
+        - `RideCymbal` -- 51 Ride Cymbal 1 (4), set 10 51 Ride Cymbal 1 (4), set 11 51 Ride Cymbal 1 (4), set 32 51 Ride Cymbal Inner (4), set 40 51 Ride Cymbal Inner (4), set 41 51 Brush Ride Cymbal (2), set 48 30 Ride Cymbal (4), set 53 78 Ride Cymbal 1 (4), set 53 80 Brush Ride Cymbal (2), set 53 81 Ride Cymbal Low Inner (4), set 53 82 Ride Cymbal Mid Inner (4), set 53 83 Ride Cymbal High Inner (4), set 62 84 Brush Ride Cymbal (2), set 127 51 Ride Cymbal (4)
           - `ReverseRideCymbal` -- set 57 53 Reverse Ride Cymbal (4)
-          - `RideEdge` -- set 27 59 Ride Cymbal Edge (4), set 28 59 Ride Cymbal Edge (4), set 29 59 Ride Cymbal Edge (4), set 30 59 Ride Cymbal Edge (4), set 32 59 Ride Cymbal Edge (4), set 40 59 Ride Cymbal Edge (4), set 53 84 Ride Cymbal Low Edge (4), set 53 85 Ride Cymbal Mid Edge (4), set 53 86 Ride Cymbal High Edge (4)
-          - `RndRideCymbal` [RandomStrike] -- set 2 51 [RND] Ride Cymbal 1 (4)
-          - `TR909Ride` [RomMetalMixin] -- set 29 51 909 Ride (4), set 30 51 909 Ride (4)
-        - `SplashCymbal` -- 55 Splash Cymbal (4), set 53 74 Splash Cymbal (4), set 53 75 Splash Cymbal (4)
+          - `RideEdge` -- set 27 59 Ride Cymbal Edge (4), set 28 59 Ride Cymbal Edge (4), set 29 59 Ride Cymbal Edge (4), set 30 59 Ride Cymbal Edge (4), set 32 59 Ride Cymbal Edge (4), set 33 59 Ride Cymbal Edge (4), set 40 59 Ride Cymbal Edge (4), set 41 59 Ride Cymbal Edge (4), set 42 59 Ride Cymbal Edge (4), set 53 84 Ride Cymbal Low Edge (4), set 53 85 Ride Cymbal Mid Edge (4), set 53 86 Ride Cymbal High Edge (4)
+          - `RndRideCymbal` [RandomStrike] -- set 2 51 [RND] Ride Cymbal 1 (4), set 42 51 [RND] Brush Ride Cymbal (4)
+          - `TR909Ride` [RomMetalMixin] -- set 13 51 TR-909 Ride Cymbal (4), set 29 51 909 Ride (4), set 30 51 909 Ride (4)
+        - `SplashCymbal` -- 55 Splash Cymbal (4), set 12 55 Splash Cymbal (4), set 53 74 Splash Cymbal (4), set 53 75 Splash Cymbal (4), set 62 76 Splash Cymbal (4)
         - `TamTam` [ModeDecays]
           - `TamTam22` -- set 49 46 Small Gong (4)
           - `TamTam28` -- set 49 48 Thai Gong (2)
@@ -2454,37 +2788,48 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `SfxMachinegun` -- set 56 73 Machinegun (4), set 127 97 Machinegun (4)
       - `MembraneDrum`
         - `KitDrum`
-          - `AcousticSnare` [NoisyPercussionMixin] -- 25 Snare Roll (4), 38 Acoustic Snare (4), 97 Std 1 Snare 1 (4), 99 Std 2 Snare 1 (4), 102 Std 1 Snare 1 (4), 104 Std 1 Snare 3 (4), 107 Room Snare 1 (4), set 1 38 Standard 2 Snare 1 (2), set 49 29 Snare Roll (4), set 50 60 Standard 1 Snare 1 (4), set 50 62 Standard 2 Snare 1 (2), set 50 68 Room Snare 1 (2), set 50 92 Standard 1 Snare 1 (4), set 50 94 Standard 1 Snare 3 (4), set 127 38 Acoustic Snare Drum (4)
-            - `JazzSnare2` -- 106 Jazz Snare 2 (4), set 32 40 Jazz Snare 2 (4), set 50 67 Jazz Snare 2 (4)
-            - `JazzSnare` -- 105 Jazz Snare 1 (4), set 32 38 Jazz Snare 1 (4), set 50 66 Jazz Snare 1 (4)
-              - `HipHopSnare2` [SampledBreak, LiveRoom] -- set 9 40 Hip-Hop Snare 2 (4), set 50 96 Hip-Hop Snare 2 (4)
+          - `AcousticSnare` [NoisyPercussionMixin] -- 25 Snare Roll (4), 38 Acoustic Snare (4), 97 Std 1 Snare 1 (4), 99 Std 2 Snare 1 (4), 102 Std 1 Snare 1 (4), 104 Std 1 Snare 3 (4), 107 Room Snare 1 (4), set 1 38 Standard 2 Snare 1 (2), set 8 95 Standard 1 Snare 1 (4), set 9 92 Standard 1 Snare 1 (4), set 9 94 Room Snare 1 (2), set 10 95 Rock Snare Dry (2), set 11 91 Rock Snare Dry (2), set 13 92 Rock Snare Dry (2), set 26 40 Rock SD Dry (2), set 49 29 Snare Roll (4), set 50 60 Standard 1 Snare 1 (4), set 50 62 Standard 2 Snare 1 (2), set 50 68 Room Snare 1 (2), set 50 92 Standard 1 Snare 1 (4), set 50 94 Standard 1 Snare 3 (4), set 51 60 Standard 1 Snare 1 (4), set 51 62 Standard 2 Snare 1 (2), set 51 68 Room Snare 1 (2), set 51 81 Rock Snare Dry (2), set 51 92 Standard 1 Snare 1 (4), set 51 94 Standard 1 Snare 3 (4), set 127 38 Acoustic Snare Drum (4)
+            - `JazzSnare2` -- 106 Jazz Snare 2 (4), set 32 40 Jazz Snare 2 (4), set 50 67 Jazz Snare 2 (4), set 51 67 Jazz Snare 2 (4)
+              - `RndJazzSnare2` [RandomStrike] -- set 33 40 [RND] Jazz Snare 2 (4)
+            - `JazzSnare` -- 105 Jazz Snare 1 (4), set 32 38 Jazz Snare 1 (4), set 50 66 Jazz Snare 1 (4), set 51 66 Jazz Snare 1 (4)
+              - `HipHopSnare2` [SampledBreak, LiveRoom] -- set 9 89 Hip-Hop Snare 2 (4), set 11 96 HipHop Snare 2 (4), set 26 96 Hip-Hop Snare 2 (4), set 50 96 Hip-Hop Snare 2 (4), set 51 76 HipHop Snare 2 (4), set 51 96 Hip-Hop Snare 2 (4)
                 - `ReverseHipHopSnare2` -- set 58 49 Reverse Hip-Hop Snare 2 (4)
-              - `JungleSnare2` [JungleBreak, LiveRoom] -- set 10 40 Jungle Snare 2 (4), set 50 98 Jungle Snare 2 (4)
+              - `JungleSnare2` [JungleBreak, LiveRoom] -- set 50 98 Jungle Snare 2 (4)
                 - `ReverseJungleSnare2` -- set 58 44 Reverse Jungle Snare 2 (4)
-            - `JungleSnare1` [JungleBreak, LiveRoom] -- 124 Jungle Snare 1 (4), set 10 38 Jungle Snare 1 (4), set 50 97 Jungle Snare 1 (4)
+              - `LoFiSnare2` [SampledBreak, LiveRoom] -- set 9 40 LoFi Snare 2 (3), set 11 94 LoFi Snare 2 (3), set 13 95 LoFi Snare 2 (3), set 26 94 LoFi Snare 2 (3), set 51 71 LoFi Snare 2 (3)
+              - `RndJazzSnare` [RandomStrike] -- set 33 38 [RND] Jazz Snare 1 (4)
+            - `JungleSnare1` [JungleBreak, LiveRoom] -- set 10 40 Jungle Snare (2), set 10 90 Jungle Snare Roll (4), set 11 92 Jungle Snare (2), set 13 96 Jungle Snare (2), set 26 92 Jungle Snare (2), set 50 97 Jungle Snare 1 (4), set 51 82 Jungle Snare (2), set 51 83 Jungle Snare Roll (4)
               - `ReverseJungleSnare1` -- set 58 50 Reverse Jungle Snare 1 (4)
-            - `RapSnare` [SampledBreak, LiveRoom] -- 123 Rap Snare (4), set 9 38 Rap Snare (4), set 50 95 Rap Snare (4)
+            - `LoFiSnare1` [SampledBreak] -- 123 Rap Snare (3), set 9 38 LoFi Snare 1 (3), set 10 96 LoFi Snare 1 (3), set 11 93 LoFi Snare 1 (3), set 13 94 LoFi Snare 1 (3), set 26 93 LoFi Snare 1 (3), set 51 70 LoFi Snare 1 (3)
+            - `RapSnare` [SampledBreak, LiveRoom] -- 124 Jungle Snare 1 (2), set 10 38 HipHop Snare 1 (2), set 11 95 HipHop Snare 1 (2), set 13 93 Hip-Hop Snare 1 (2), set 26 95 HipHop Snare 1 (2), set 50 95 Rap Snare (4), set 51 75 HipHop Snare 1 (2), set 51 95 Rap Snare (4)
             - `ReverseAcousticSnare` -- set 57 40 Reverse Snare 1 (4), set 57 42 Reverse Standard 1 Snare 1 (4)
-            - `RndAcousticSnare` [RandomStrike] -- set 2 38 [RND] Snare (4)
+            - `RndAcousticSnare` [RandomStrike] -- set 2 38 [RND] Snare (4), set 12 38 [RND] Room Snare 1 (4)
             - `SideStick` -- 37 Side Stick (4), set 127 37 Rim Shot (4)
-            - `SnareDrum2` -- 40 Snare Drum 2 (4), 98 Std 1 Snare 2 (4), 100 Std 2 Snare 2 (4), 101 Snare Drum 2 (4), 103 Std 1 Snare 2 (4), 108 Room Snare 2 (4), 110 Power Snare 2 (2), 120 TR-808 Snare 2 (2), set 1 40 Standard 2 Snare 2 (2), set 2 40 Standard 3 Snare 2 (2), set 50 61 Standard 1 Snare 2 (4), set 50 63 Standard 2 Snare 2 (2), set 50 64 Tight Snare (4), set 50 69 Room Snare 2 (2), set 50 93 Standard 1 Snare 2 (4)
-              - `BrushTap` -- set 40 38 Brush Tap (4), set 50 84 Brush Tap 1 (4), set 50 85 Brush Tap 2 (4)
-                - `BrushSlap` -- set 40 39 Brush Slap (4), set 50 86 Brush Slap 1 (4), set 50 87 Brush Slap 2 (4), set 50 88 Brush Slap 3 (4)
-              - `ConcertSnare` -- 24 Concert SD (4), set 48 38 Concert SD (4), set 48 40 Concert SD (4), set 49 30 Concert SD (4), set 50 65 Concert Snare (4)
+              - `JungleRim` [JungleBreak] -- set 10 37 Jungle Snare Rim (3)
+              - `LoFiRim` [SampledBreak] -- set 9 90 LoFi Snare Rim (3), set 51 73 LoFi Snare Rim (3)
+            - `SnareDrum2` -- 40 Snare Drum 2 (4), 98 Std 1 Snare 2 (4), 100 Std 2 Snare 2 (4), 101 Snare Drum 2 (4), 103 Std 1 Snare 2 (4), 108 Room Snare 2 (4), 110 Power Snare 2 (2), 120 TR-808 Snare 2 (2), set 1 40 Standard 2 Snare 2 (2), set 2 40 Standard 3 Snare 2 (2), set 8 96 Standard 1 Snare 2 (4), set 9 93 Standard 1 Snare 2 (4), set 9 95 Room Snare 2 (2), set 50 61 Standard 1 Snare 2 (4), set 50 63 Standard 2 Snare 2 (2), set 50 64 Tight Snare (4), set 50 69 Room Snare 2 (2), set 50 93 Standard 1 Snare 2 (4), set 51 61 Standard 1 Snare 2 (4), set 51 63 Standard 2 Snare 2 (2), set 51 64 Tight Snare (4), set 51 69 Room Snare 2 (2), set 51 93 Standard 1 Snare 2 (4)
+              - `BrushTap` -- set 40 38 Brush Tap (4), set 41 38 Brush Tap 2 (4), set 50 84 Brush Tap 1 (4), set 50 85 Brush Tap 2 (4), set 51 84 Brush Tap 1 (4), set 51 85 Brush Tap 2 (4), set 51 86 Brush Tap 2 (4)
+                - `BrushSlap` -- set 40 39 Brush Slap (4), set 41 39 Brush Slap 2 (4), set 50 86 Brush Slap 1 (4), set 50 87 Brush Slap 2 (4), set 50 88 Brush Slap 3 (4), set 51 87 Brush Slap 2 (4), set 51 88 Brush Slap 3 (4)
+                  - `RndBrushSlap` [RandomStrike] -- set 42 39 [RND] Brush Slap 2 (4)
+                - `RndBrushTap` [RandomStrike] -- set 42 38 [RND] Brush Tap 2 (4)
+              - `ConcertSnare` -- 24 Concert SD (4), set 48 38 Concert SD (4), set 48 40 Concert SD (4), set 49 30 Concert SD (4), set 50 65 Concert Snare (4), set 51 65 Concert Snare (4)
               - `ReverseSnareDrum2` -- set 57 41 Reverse Snare 2 (4), set 57 43 Reverse Tight Snare (4)
-          - `KickDrum` -- 0 Std 1 Kick 1 (4), 1 Std 1 Kick 2 (4), 2 Std 2 Kick 1 (4), 3 Std 2 Kick 2 (4), 4 Kick Drum 1 (4), 5 Kick Drum 2 (4), 8 Room Kick 1 (4), 9 Room Kick 2 (4), 11 Power Kick 2 (2), 12 Electric Kick 2 (2), 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4), set 1 35 Standard 2 Kick 2 (2), set 1 36 Standard 2 Kick 1 (2), set 2 35 Standard 3 Kick 2 (2), set 50 38 Standard 1 Kick 2 (4), set 50 39 Standard 1 Kick 1 (4), set 50 40 Standard 1 Kick 1 (4), set 50 41 Standard 1 Kick 2 (4), set 50 42 Standard 2 Kick 1 (2), set 50 43 Standard 2 Kick 2 (2), set 50 44 Kick Drum1 (4), set 50 45 Kick Drum 2 (4), set 50 46 Soft Kick (2), set 50 50 Room Kick 1 (2), set 50 51 Room Kick 2 (2), set 127 35 Acoustic Bass Drum (4), set 127 36 Acoustic Bass Drum (4)
-            - `ConcertBassDrum` -- set 48 35 Concert BD 2 (4), set 48 36 Concert BD 1 (4), set 49 32 Concert BD 1 (4), set 50 49 Concert BD 1 (4)
+              - `RndSnareDrum2` [RandomStrike] -- set 12 40 [RND] Room Snare 2 (4)
+          - `KickDrum` -- 0 Std 1 Kick 1 (4), 1 Std 1 Kick 2 (4), 2 Std 2 Kick 1 (4), 3 Std 2 Kick 2 (4), 4 Kick Drum 1 (4), 5 Kick Drum 2 (4), 8 Room Kick 1 (4), 9 Room Kick 2 (4), 11 Power Kick 2 (2), 12 Electric Kick 2 (2), 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4), set 1 35 Standard 2 Kick 2 (2), set 1 36 Standard 2 Kick 1 (2), set 2 35 Standard 3 Kick 2 (2), set 50 38 Standard 1 Kick 2 (4), set 50 39 Standard 1 Kick 1 (4), set 50 40 Standard 1 Kick 1 (4), set 50 41 Standard 1 Kick 2 (4), set 50 42 Standard 2 Kick 1 (2), set 50 43 Standard 2 Kick 2 (2), set 50 44 Kick Drum1 (4), set 50 45 Kick Drum 2 (4), set 50 46 Soft Kick (2), set 50 50 Room Kick 1 (2), set 50 51 Room Kick 2 (2), set 51 38 Standard 1 Kick 2 (4), set 51 39 Standard 1 Kick 1 (4), set 51 40 Standard 1 Kick 2 (4), set 51 41 Standard 1 Kick 1 (4), set 51 50 Room Kick 2 (2), set 51 51 Room Kick 1 (2), set 127 35 Acoustic Bass Drum (4), set 127 36 Acoustic Bass Drum (4)
+            - `ConcertBassDrum` -- set 48 35 Concert BD 2 (4), set 48 36 Concert BD 1 (4), set 49 32 Concert BD 1 (4), set 50 49 Concert BD 1 (4), set 51 49 Concert BD 1 (4)
               - `ReverseConcertBassDrum` -- set 57 37 Reverse Concert Bass Drum (4)
-            - `HipHopKick1` [SampledBreak] -- set 9 36 Hip-Hop Kick 1 (4), set 50 33 Hip-Hop Kick 1 (4)
+            - `HipHopKick1` [SampledBreak] -- set 9 36 Hip-Hop Kick 1 (4), set 50 33 Hip-Hop Kick 1 (4), set 51 33 Hip-Hop Kick 1 (4), set 51 47 Hip-Hop Kick 1 (4)
               - `ReverseHipHopKick1` -- set 58 38 Reverse Hip-Hop Kick 1 (4)
-            - `JazzKick2` -- 7 Jazz Kick 2 (4), set 32 35 Jazz Kick 2 (4), set 40 35 Jazz Kick 2 (4), set 50 48 Jazz Kick 2 (4)
-            - `JazzKick` -- 6 Jazz Kick 1 (4), set 32 36 Jazz Kick 1 (4), set 40 36 Jazz Kick 1 (4), set 50 47 Jazz Kick 1 (4)
-              - `HipHopKick2` [SampledBreak] -- set 9 35 Hip-Hop Kick 2 (4), set 50 32 Hip-Hop Kick 2 (4)
-            - `JungleKick1` [JungleBreak] -- set 10 36 Jungle Kick 1 (4), set 50 35 Jungle Kick 1 (4)
+            - `JazzKick2` -- 7 Jazz Kick 2 (4), set 32 35 Jazz Kick 2 (4), set 40 35 Jazz Kick 2 (4), set 50 48 Jazz Kick 2 (4), set 51 44 Jazz Kick 2 (4)
+              - `RndJazzKick2` [RandomStrike] -- set 33 35 [RND] Jazz Kick 2 (4)
+            - `JazzKick` -- 6 Jazz Kick 1 (4), set 32 36 Jazz Kick 1 (4), set 40 36 Jazz Kick 1 (4), set 50 47 Jazz Kick 1 (4), set 51 45 Jazz Kick 1 (4)
+              - `HipHopKick2` [SampledBreak] -- set 9 35 Hip-Hop Kick 2 (4), set 50 32 Hip-Hop Kick 2 (4), set 51 32 Hip-Hop Kick 2 (4), set 51 46 Hip-Hop Kick 2 (4)
+              - `RndJazzKick` [RandomStrike] -- set 33 36 [RND] Jazz Kick 1 (4)
+            - `JungleKick1` [JungleBreak] -- set 10 36 Jungle Kick 1 (4), set 10 89 Jungle Kick Roll (4), set 50 35 Jungle Kick 1 (4), set 51 35 Jungle Kick 1 (4), set 51 53 Jungle Kick 1 (4), set 51 54 Jungle Kick Roll (4)
             - `MondoKick` [LiveRoom] -- 10 Power Kick 1 (4), set 16 35 Power Kick 2 (2), set 16 36 MONDO Kick (4), set 50 52 Power Kick1 (4), set 50 53 Power Kick2 (2)
               - `ReverseMondoKick` -- set 57 38 Reverse Power Kick1 (4)
             - `ReverseKickDrum` -- set 57 36 Reverse Kick 1 (4)
-            - `RndKickDrum` [RandomStrike] -- set 2 36 [RND] Kick (4)
+            - `RndKickDrum` [RandomStrike] -- set 2 36 [RND] Kick (4), set 12 35 [RND] Room Kick 2 (4), set 12 36 [RND] Room Kick 1 (4)
           - `MeasuredStroke` [NoisyPercussionMixin]
             - `AgogoHigh` -- 67 High Agogo (4), set 49 84 High Agogo (4), set 127 67 High Agogo (4)
               - `MelodicAgogoHigh` [PlayedAtPitchMixin] -- GM 113 Agogo (4)
@@ -2509,24 +2854,24 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `SfxSticks` -- 31 Sticks (4), set 56 43 Sticks (4)
               - `ReverseSfxSticks` -- set 57 48 Reverse Sticks (4)
             - `SfxThroat`
-              - `Hoo` -- set 9 78 High Hoo (4), set 9 79 Low Hoo (4), set 10 78 High Hoo (4), set 10 79 Low Hoo (4), set 11 78 High Hoo (4), set 11 79 Low Hoo (4), set 25 78 High Hoo (4), set 25 79 Low Hoo (4), set 26 78 High Hoo (4), set 26 79 Low Hoo (4), set 27 78 High Hoo (4), set 27 79 Low Hoo (4), set 28 78 High Hoo (4), set 28 79 Low Hoo (4), set 29 78 High Hoo (4), set 29 79 Low Hoo (4), set 30 78 High Hoo (4), set 30 79 Low Hoo (4), set 57 83 Hoo (4), set 282 78 High Hoo (4), set 282 79 Low Hoo (4)
+              - `Hoo` -- set 9 78 High Hoo (4), set 9 79 Low Hoo (4), set 10 78 High Hoo (4), set 10 79 Low Hoo (4), set 11 78 High Hoo (4), set 11 79 Low Hoo (4), set 13 78 High Hoo (4), set 13 79 Low Hoo (4), set 25 78 High Hoo (4), set 25 79 Low Hoo (4), set 26 78 High Hoo (4), set 26 79 Low Hoo (4), set 27 78 High Hoo (4), set 27 79 Low Hoo (4), set 28 78 High Hoo (4), set 28 79 Low Hoo (4), set 29 78 High Hoo (4), set 29 79 Low Hoo (4), set 30 78 High Hoo (4), set 30 79 Low Hoo (4), set 57 83 Hoo (4), set 282 78 High Hoo (4), set 282 79 Low Hoo (4)
               - `RfxVoice`
                 - `RfxBaert` -- set 58 80 Baert High (3), set 58 81 Baert Low (3)
                 - `RfxDouby` -- set 58 78 Douby (3)
                   - `RfxDoubyRev` -- set 58 79 Reverse Douby (3)
-                - `RfxFrog` -- set 58 76 Frog Voice (3)
-                - `RfxKakegoe` -- set 52 59 Yyoo Dude (3)
-                  - `RfxKakegoeRev` -- set 58 77 Reverse Yyoo Dude (3)
-                - `RfxVoiceAu` -- set 57 82 Voice Au (3), set 58 74 Voice Au (3)
-                - `RfxVoiceOne` -- set 58 65 Voice One (4)
-                  - `RfxVoiceOneRev` -- set 58 66 Reverse Voice One (4)
-                - `RfxVoiceOu` -- set 57 81 Voice Ou (3), set 58 73 Voice Ou (3)
-                - `RfxVoiceTah` -- set 58 71 Voice Tah (3)
-                  - `RfxVoiceTahRev` -- set 58 72 Reverse Voice Tah (3)
-                - `RfxVoiceThree` -- set 58 69 Voice Three (4)
-                  - `RfxVoiceThreeRev` -- set 58 70 Reverse Voice Three (4)
-                - `RfxVoiceTwo` -- set 58 67 Voice Two (4)
-                  - `RfxVoiceTwoRev` -- set 58 68 Reverse Voice Two (4)
+                - `RfxFrog` -- set 58 76 Frog Voice (3), set 60 80 Frog Voice (3), set 61 72 Frog Voice (3)
+                - `RfxKakegoe` -- set 52 59 Yyoo Dude (3), set 61 73 Yyoo Dude (3)
+                  - `RfxKakegoeRev` -- set 58 77 Reverse Yyoo Dude (3), set 61 51 Reverse Yyoo Dude (3)
+                - `RfxVoiceAu` -- set 57 82 Voice Au (3), set 58 74 Voice Au (3), set 61 75 Voice Au (3)
+                - `RfxVoiceOne` -- set 58 65 Voice One (4), set 61 59 Voice One (4)
+                  - `RfxVoiceOneRev` -- set 58 66 Reverse Voice One (4), set 61 41 Reverse Voice One (4)
+                - `RfxVoiceOu` -- set 57 81 Voice Ou (3), set 58 73 Voice Ou (3), set 61 74 Voice Ou (3)
+                - `RfxVoiceTah` -- set 58 71 Voice Tah (3), set 61 62 Voice Tah (3)
+                  - `RfxVoiceTahRev` -- set 58 72 Reverse Voice Tah (3), set 61 44 Reverse Voice Tah (3)
+                - `RfxVoiceThree` -- set 58 69 Voice Three (4), set 61 61 Voice Three (4)
+                  - `RfxVoiceThreeRev` -- set 58 70 Reverse Voice Three (4), set 61 43 Reverse Voice Three (4)
+                - `RfxVoiceTwo` -- set 58 67 Voice Two (4), set 61 60 Voice Two (4)
+                  - `RfxVoiceTwoRev` -- set 58 68 Reverse Voice Two (4), set 61 42 Reverse Voice Two (4)
                 - `RfxVoiceWhey` -- set 58 75 Voice Whey (3)
               - `SfxDog` -- set 56 76 Dog (4), set 127 100 Dog (4)
               - `SfxGrowl` -- set 56 87 Growl (3), set 57 88 Flying Monster (3)
@@ -2538,16 +2883,16 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `Taiko` [PlayedAtPitchMixin] -- GM 116 Taiko Drum (4), set 49 36 Wadaiko (4), set 49 38 Shime Taiko (2), set 52 50 Wadaiko (4), set 52 52 Small Taiko (2), set 52 53 Shimedaiko (2), set 52 78 Tang Gu (2), set 52 79 Tang Gu Mute (2)
             - `TimbaleHigh` -- 65 High Timbale (4), set 49 68 Timbales Paila (2), set 49 69 Timbales High (4), set 127 65 High Timbale (4)
             - `TimbaleLow` -- 66 Low Timbale (4), set 49 67 Timbales Low (4), set 127 66 Low Timbale (4)
-          - `Tambourine` [NoisyPercussionMixin] -- 54 Tambourine (4), set 9 54 Shake Tambourine (2), set 10 54 Shake Tambourine (2), set 11 54 Shake Tambourine (2), set 26 54 Shake Tambourine (2), set 49 26 Tambourine (4), set 127 54 Tambourine (4)
+          - `Tambourine` [NoisyPercussionMixin] -- 54 Tambourine (4), set 9 54 Shake Tambourine (2), set 10 54 Shake Tambourine (2), set 11 54 Shake Tambourine (2), set 13 54 Shake Tambourine (2), set 26 54 Shake Tambourine (2), set 49 26 Tambourine (4), set 127 54 Tambourine (4)
             - `ReverseTambourine` -- set 58 57 Reverse Tambourine 2 (2), set 58 58 Reverse Shake Tambourine (2)
             - `RfxDigitalTambourine` [SampledBreak] -- set 57 72 Digital Tambourine (3)
           - `TomTom` -- GM 117 Melodic Tom (4), 45 Low Tom (4), 47 Low-Mid Tom (4), set 127 45 Acoustic Middle Tom (4), set 127 47 Acoustic Middle Tom (4)
-            - `BrushTomMid` -- set 40 45 Brush Mid Tom 2 (4), set 40 47 Brush Mid Tom 1 (4)
+            - `BrushTomMid` -- set 40 45 Brush Mid Tom 2 (4), set 40 47 Brush Mid Tom 1 (4), set 41 45 Brush Mid Tom 2 (4), set 41 47 Brush Mid Tom 1 (4), set 42 45 Brush Mid Tom 2 (4), set 42 47 Brush Mid Tom 1 (4)
             - `FloorTom` -- GM 117 Melodic Tom (4), 41 Low Floor Tom (4), 43 High Floor Tom (4), set 127 41 Acoustic Low Tom (4), set 127 43 Acoustic Low Tom (4)
-              - `BrushTomLow` -- set 40 41 Brush Low Tom 2 (4), set 40 43 Brush Low Tom 1 (4)
+              - `BrushTomLow` -- set 40 41 Brush Low Tom 2 (4), set 40 43 Brush Low Tom 1 (4), set 41 41 Brush Low Tom 2 (4), set 41 43 Brush Low Tom 1 (4), set 42 41 Brush Low Tom 2 (4), set 42 43 Brush Low Tom 1 (4)
               - `RoomFloorTom` [LiveRoom] -- set 8 41 Room Low Tom 2 (4), set 8 43 Room Low Tom 1 (4), set 16 41 Room Low Tom 2 (4), set 16 43 Room Low Tom 1 (4)
             - `HighTom` -- 48 Hi-Mid Tom (4), 50 High Tom (4), set 127 48 Acoustic High Tom (4), set 127 50 Acoustic High Tom (4)
-              - `BrushTomHigh` -- set 40 48 Brush High Tom 2 (4), set 40 50 Brush High Tom 1 (4)
+              - `BrushTomHigh` -- set 40 48 Brush High Tom 2 (4), set 40 50 Brush High Tom 1 (4), set 41 48 Brush High Tom 2 (4), set 41 50 Brush High Tom 1 (4), set 42 48 Brush High Tom 2 (4), set 42 50 Brush High Tom 1 (4)
               - `ReverseHighTom` -- set 57 46 Reverse Tom 1 (4)
               - `RoomHighTom` [LiveRoom] -- set 8 48 Room Hi Tom 2 (4), set 8 50 Room Hi Tom 1 (4), set 16 48 Room Hi Tom 2 (4), set 16 50 Room Hi Tom 1 (4)
             - `ReverseTomTom` -- set 57 47 Reverse Tom 2 (4)
@@ -2555,7 +2900,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `SynthDrum`
           - `MoogSynthDrum` -- GM 118 Synth Drum (4)
           - `Simmons` [ModeDecays]
-            - `ElectronicKick` -- 13 Electric Kick 1 (4), set 24 35 Electric Kick 2 (2), set 24 36 Elec BD (4), set 26 36 Electric Kick 2 (2), set 50 54 Electric Kick 2 (2), set 50 55 Electric Kick 1 (4), set 50 56 Electric Kick (4), set 282 36 Electric Kick 2 (2)
+            - `ElectronicKick` -- 13 Electric Kick 1 (4), set 24 35 Electric Kick 2 (2), set 24 36 Elec BD (4), set 50 54 Electric Kick 2 (2), set 50 55 Electric Kick 1 (4), set 50 56 Electric Kick (4), set 282 36 Electric Kick 2 (2)
               - `ReverseElectronicKick` -- set 57 39 Reverse Electric Kick 1 (4)
             - `ElectronicTom`
               - `ElectronicTom41` -- set 24 41 Elec Low Tom 2 (4), set 26 41 Electric Low Tom 2 (4), set 282 41 Electric Low Tom2 (4)
@@ -2568,14 +2913,14 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `TR808` [ModeDecays]
             - `CR78`
               - `CR78Claves` -- set 27 75 CR-78 Claves (4), set 28 75 CR-78 Claves (4)
-              - `CR78ClosedHat` -- set 11 44 CR-78 Closed Hi-Hat (4), set 26 42 CR-78 Closed Hi-Hat (4), set 27 42 CR-78 CHH (4), set 53 45 CR-78 Closed Hi-Hat (4), set 282 42 CR-78 CHH (4)
-                - `CR78OpenHat` -- set 26 46 CR-78 Open Hi-Hat (4), set 27 46 CR-78 OHH (4), set 53 60 CR-78 Open Hi-Hat (4), set 282 46 CR-78 OHH (4)
+              - `CR78ClosedHat` -- set 11 44 CR-78 Closed Hi-Hat (4), set 26 42 CR-78 Closed Hi-Hat (4), set 27 42 CR-78 CHH (4), set 53 45 CR-78 Closed Hi-Hat (4), set 62 43 CR-78 Closed Hi-Hat (4), set 282 42 CR-78 CHH (4)
+                - `CR78OpenHat` -- set 26 46 CR-78 Open Hi-Hat (4), set 27 46 CR-78 OHH (4), set 53 60 CR-78 Open Hi-Hat (4), set 62 57 CR-78 Open Hi-Hat (4), set 282 46 CR-78 OHH (4)
                   - `ReverseCR78OpenHat` -- set 57 54 Reverse CR-78 Open Hi-Hat (4)
-              - `CR78Guiro` -- set 9 74 CR-78 Guiro (4), set 10 74 CR-78 Guiro (4), set 11 74 CR-78 Guiro (4), set 25 74 CR-78 Guiro (4), set 27 74 CR-78 Guiro (4), set 28 74 CR-78 Guiro (4), set 30 74 CR-78 Guiro (4)
-              - `CR78HiBongo` -- set 11 60 CR-78 High Bongo (4), set 25 60 CR-78 High Bongo (4), set 27 60 CR-78 High Bongo (4), set 28 60 CR-78 High Bongo (4)
-                - `CR78LowBongo` -- set 11 61 CR-78 Low Bongo (4), set 25 61 CR-78 Low Bongo (4), set 27 61 CR-78 Low Bongo (4), set 28 61 CR-78 Low Bongo (4)
-              - `CR78Kick` -- set 27 36 CR-78 Kick 1 (4), set 50 25 CR-78 Kick 1 (4)
-                - `CR78Kick2` -- set 27 35 CR-78 Kick 2 (4), set 28 35 CR-78 Kick 2 (4), set 50 26 CR-78 Kick 2 (4)
+              - `CR78Guiro` -- set 9 74 CR-78 Guiro (4), set 10 74 CR-78 Guiro (4), set 11 74 CR-78 Guiro (4), set 13 74 CR-78 Guiro (4), set 25 74 CR-78 Guiro (4), set 27 74 CR-78 Guiro (4), set 28 74 CR-78 Guiro (4), set 30 74 CR-78 Guiro (4)
+              - `CR78HiBongo` -- set 11 60 CR-78 High Bongo (4), set 13 60 CR-78 High Bongo (4), set 25 60 CR-78 High Bongo (4), set 27 60 CR-78 High Bongo (4), set 28 60 CR-78 High Bongo (4)
+                - `CR78LowBongo` -- set 11 61 CR-78 Low Bongo (4), set 13 61 CR-78 Low Bongo (4), set 25 61 CR-78 Low Bongo (4), set 27 61 CR-78 Low Bongo (4), set 28 61 CR-78 Low Bongo (4)
+              - `CR78Kick` -- set 27 36 CR-78 Kick 1 (4), set 50 25 CR-78 Kick 1 (4), set 51 25 CR-78 Kick 1 (4)
+                - `CR78Kick2` -- set 27 35 CR-78 Kick 2 (4), set 28 35 CR-78 Kick 2 (4), set 50 26 CR-78 Kick 2 (4), set 51 26 CR-78 Kick 2 (4)
               - `CR78Maracas` -- set 27 70 CR-78 Maracas (4), set 28 70 CR-78 Maracas (4)
               - `CR78MetalBeat2` -- set 27 81 CR-78 Metal Beat 2 (4), set 28 81 CR-78 Metalic Beat 2 (4)
               - `CR78MetalBeat` -- set 27 80 CR-78 Metal Beat 1 (4), set 28 80 CR-78 Metalic Beat 1 (4)
@@ -2589,7 +2934,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `RfxBangu` -- set 49 44 Ban Gu (4), set 52 77 Ban Gu (4)
             - `RfxBendir` -- set 49 54 Bendir (3)
               - `ReverseRfxBendir` -- set 57 59 Reverse Bendir (3)
-            - `RfxBounce` -- set 58 82 Bounce (3), set 58 83 Reverse Bounce (3)
+            - `RfxBounce` -- set 58 82 Bounce (3), set 58 83 Reverse Bounce (3), set 60 88 Bounce (3)
             - `RfxBuk` -- set 52 60 Buk (3)
             - `RfxCongaSlide` -- set 49 78 Conga Slide (3)
             - `RfxDaluo` -- set 49 47 Bend Gong (4), set 52 81 Bend Gong (4)
@@ -2608,7 +2953,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `RfxMC500Beep` -- 22 MC-500 Beep 1 (3), 23 MC-500 Beep 2 (3), set 56 21 MC-500 Beep 1 (3), set 56 22 MC-500 Beep 2 (3)
             - `RfxMetallicPerc` -- set 57 76 Metallic Percussion (3)
             - `RfxModulatedBell` -- set 57 74 Modulated Bell (3)
-            - `RfxNoiseAttack` -- set 58 87 Noise Attack (3)
+            - `RfxNoiseAttack` -- set 58 87 Noise Attack (3), set 60 87 Noise Attack (3)
             - `RfxOhkawa` -- set 49 41 Ohkawa (3), set 52 56 Ohkawa (3)
             - `RfxPaiBan` -- set 52 76 Pai Ban (3)
             - `RfxPandieroOpen` -- set 49 80 Open Pandiero (3)
@@ -2642,22 +2987,24 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `ReverseSfxHighQ` -- set 57 69 Reverse Hi Q (3)
             - `SfxSquareClick` -- 32 Square Click (3), set 56 44 Square Click (3)
             - `TR606`
-              - `TR606ClosedHat` -- set 10 42 TR-606 Closed Hi-Hat (4), set 27 44 606 CHH (4), set 28 42 606 CHH (4), set 28 44 606 CHH (4), set 53 42 TR-606 Closed Hi-Hat (4)
+              - `TR606ClosedHat` -- set 10 42 TR-606 Closed Hi-Hat (4), set 27 44 606 CHH (4), set 28 42 606 CHH (4), set 28 44 606 CHH (4), set 53 42 TR-606 Closed Hi-Hat (4), set 62 41 TR-606 Closed Hi-Hat (4)
                 - `ReverseTR606ClosedHat` -- set 58 53 Reverse TR-606 Closed Hi-Hat (4)
-                - `TR606OpenHat` -- set 10 46 TR-606 Open Hi-Hat (4), set 28 46 606 OHH (4), set 53 57 TR-606 Open Hi-Hat (4)
+                - `TR606OpenHat` -- set 10 46 TR-606 Open Hi-Hat (4), set 28 46 606 OHH (4), set 53 57 TR-606 Open Hi-Hat (4), set 62 55 TR-606 Open Hi-Hat (4)
                   - `ReverseTR606OpenHat` -- set 58 62 Reverse TR-606 Open Hi-Hat (4)
-              - `TR606Cymbal` -- set 25 51 TR-606 Ride Cymbal (4), set 26 51 TR-606 Ride Cymbal (4), set 27 51 606 Ride Cymbal (4), set 28 51 606 Ride Cymbal (4), set 53 87 TR-606 Ride Cymbal (4)
-              - `TR606Kick` -- set 28 36 606 Kick 1 (4), set 50 27 TR-606 Kick (4)
+              - `TR606Cymbal` -- set 25 51 TR-606 Ride Cymbal (4), set 26 51 TR-606 Ride Cymbal (4), set 27 51 606 Ride Cymbal (4), set 28 51 606 Ride Cymbal (4), set 53 87 TR-606 Ride Cymbal (4), set 62 85 TR-606 Ride Cymbal (4)
+              - `TR606Kick` -- set 28 36 606 Kick 1 (4), set 50 27 TR-606 Kick (4), set 51 27 TR-606 Kick (4)
               - `TR606Snare` -- set 28 38 606 Snare 1 (4)
                 - `ReverseTR606Snare` -- set 58 47 Reverse TR-606 Snare 1 (4)
-                - `TR606Snare2` -- set 28 40 606 Snare 2 (4)
+                - `TR606Snare2` -- set 10 91 TR-606 Snare 2 (4), set 13 89 TR-606 Snare 2 (4), set 26 89 TR-606 Snare 2 (4), set 28 40 606 Snare 2 (4), set 51 78 TR-606 Snare 2 (4)
                   - `ReverseTR606Snare2` -- set 58 41 Reverse TR-606 Snare 2 (4)
-              - `TR606Tom` -- set 28 41 606 Low Tom 2 (4), set 28 43 606 Low Tom 1 (4), set 28 45 606 Mid Tom 2 (4)
-                - `TR606HiTom` -- set 28 47 606 Mid Tom 1 (4), set 28 48 606 Hi Tom 2 (4), set 28 50 606 Hi Tom 1 (4)
+                  - `TechnoTR606Snare` -- set 11 38 Techno TR-606 Snare 2 (4)
+              - `TR606Tom` -- set 11 41 TR-606 Low Tom 2 (4), set 11 43 TR-606 Low Tom 1 (4), set 11 45 TR-606 Mid Tom 2 (4), set 28 41 606 Low Tom 2 (4), set 28 43 606 Low Tom 1 (4), set 28 45 606 Mid Tom 2 (4)
+                - `TR606HiTom` -- set 11 47 TR-606 Mid Tom 1 (4), set 11 48 TR-606 High Tom 2 (4), set 11 50 TR-606 High Tom 1 (4), set 28 47 606 Mid Tom 1 (4), set 28 48 606 Hi Tom 2 (4), set 28 50 606 Hi Tom 1 (4)
             - `TR707`
-              - `TR707Clap` -- set 11 39 TR-707 Hand Clap (4), set 27 39 707 Hand Clap (4), set 28 39 707 Hand Clap (4), set 29 39 707 Hand Clap (4), set 53 96 TR-707 Hand Clap (4)
+              - `TR707Clap` -- set 9 39 TR-707 Claps (4), set 27 39 707 Hand Clap (4), set 28 39 707 Hand Clap (4), set 29 39 707 Hand Clap (4), set 53 96 TR-707 Hand Clap (4), set 62 89 TR-707 Claps (4), set 62 96 TR-707 Hand Clap (4)
                 - `RfxStereoClap` -- set 57 78 Stereo Noise Clap (3)
-              - `TR707Kick` -- set 29 36 707 Kick 1 (4), set 50 28 TR-707 Kick (4)
+                - `TR909Clap` -- set 11 39 TR-909 Claps (3), set 13 39 TR-909 Claps (3), set 62 92 TR-909 Claps (3)
+              - `TR707Kick` -- set 29 36 707 Kick 1 (4), set 50 28 TR-707 Kick (4), set 51 28 TR-707 Kick (4)
                 - `ReverseTR707Kick` -- set 58 36 Reverse TR-707 Kick 1 (4)
                 - `TR707Kick2` -- set 29 35 707 Kick 2 (4)
               - `TR707Rim` -- set 29 37 707 Rim Shot (4)
@@ -2667,49 +3014,50 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `TR707Tom` -- set 29 41 707 Low Tom 2 (4), set 29 43 707 Low Tom 1 (4)
                 - `TR707HiTom` -- set 29 48 707 Hi Tom 2 (4), set 29 50 707 Hi Tom 1 (4)
                 - `TR707MidTom` -- set 29 45 707 Mid Tom 2 (4), set 29 47 707 Mid Tom 1 (4)
-            - `TR808Claves` -- set 9 75 TR-808 Claves (4), set 10 75 TR-808 Claves (4), set 11 75 TR-808 Claves (4), set 25 75 808 Claves (4), set 30 75 808 Claves (4), set 281 75 808 Claves (4)
+            - `TR808Claves` -- set 9 75 TR-808 Claves (4), set 10 75 TR-808 Claves (4), set 11 75 TR-808 Claves (4), set 13 75 TR-808 Claves (4), set 25 75 808 Claves (4), set 30 75 808 Claves (4), set 281 75 808 Claves (4)
               - `RfxDistortionKnock` -- set 58 84 Distortion Knock (3)
-            - `TR808ClosedHat` -- set 25 42 808 CHH (4), set 25 44 808 CHH (4), set 26 44 TR-808 Closed Hi-Hat 2 (4), set 53 43 TR-808 Closed Hi-Hat (4), set 53 44 TR-808 Closed Hi-Hat (4), set 281 42 808 CHH (4), set 281 44 808 CHH (4), set 282 44 808 CHH (4)
+            - `TR808ClosedHat` -- set 25 42 808 CHH (4), set 25 44 808 CHH (4), set 26 44 TR-808 Closed Hi-Hat 2 (4), set 53 43 TR-808 Closed Hi-Hat (4), set 53 44 TR-808 Closed Hi-Hat (4), set 62 42 TR-808 Closed Hi-Hat (4), set 281 42 808 CHH (4), set 281 44 808 CHH (4), set 282 44 808 CHH (4)
               - `ReverseTR808ClosedHat` -- set 58 55 Reverse TR-808 Closed Hi-Hat (4)
-              - `TR808OpenHat` -- set 25 46 808 OHH (4), set 53 58 TR-808 Open Hi-Hat (4), set 53 59 TR-808 Open Hi-Hat (4), set 281 46 808 OHH (4)
+              - `TR808OpenHat` -- set 25 46 808 OHH (4), set 53 58 TR-808 Open Hi-Hat (4), set 53 59 TR-808 Open Hi-Hat (4), set 62 56 TR-808 Open Hi-Hat (4), set 281 46 808 OHH (4)
                 - `ReverseTR808OpenHat` -- set 58 59 Reverse TR-808 Open Hi-Hat (4)
-            - `TR808Conga` -- set 11 64 TR-808 Low Conga (4), set 25 64 808 Low Conga (4), set 27 64 808 Low Conga (4), set 28 64 808 Low Conga (4), set 281 64 808 Low Conga (4)
-              - `TR808HiConga` -- set 11 62 TR-808 High Conga (4), set 25 62 808 High Conga (4), set 27 62 808 High Conga (4), set 28 62 808 High Conga (4), set 281 62 808 High Conga (4)
-              - `TR808MidConga` -- set 11 63 TR-808 Mute Conga (4), set 25 63 808 Mid Conga (4), set 27 63 808 Mid Conga (4), set 28 63 808 Mid Conga (4), set 281 63 808 Mid Conga (4)
-            - `TR808Cowbell` -- set 9 56 TR-808 Cowbell (4), set 10 56 TR-808 Cowbell (4), set 11 56 TR-808 Cowbell (4), set 25 56 808 Cowbell (4), set 26 56 TR-808 Cowbell (4), set 27 56 CR-78 Cowbell (2), set 28 56 CR-78 Cowbell (2), set 29 56 808 Cowbell (4), set 30 56 808 Cowbell (4), set 281 56 808 Cowbell (4)
-            - `TR808Cymbal` -- set 10 49 TR-808 Crash Cymbal (4), set 25 49 808 Cymbal (4), set 26 49 TR-808 Crash Cymbal (4), set 27 49 808 Cymbal (4), set 28 49 808 Cymbal (4), set 53 67 TR-808 Crash Cymbal (4), set 53 88 TR-808 Ride Cymbal (2), set 281 49 808 Cymbal (4)
-            - `TR808Kick` -- 14 TR-808 Kick (4), set 25 35 TR-808 Kick 2 (2), set 25 36 808 Bass Drum (4), set 50 29 TR-808 Kick 1 (4), set 50 57 TR-808 Kick (4), set 281 36 808 Bass Drum (4)
-              - `JungleKick2` -- set 10 35 Jungle Kick 2 (4), set 50 34 Jungle Kick 2 (4)
-                - `ReverseJungleKick2` -- set 58 39 Reverse Jungle Kick 2 (4)
-            - `TR808Maracas` -- set 9 70 TR-808 Maracas (4), set 10 70 TR-808 Maracas (4), set 11 70 TR-808 Maracas (4), set 25 70 808 Maracas (4), set 29 70 808 Maracas (4), set 30 70 808 Maracas (4), set 281 70 808 Maracas (4)
-            - `TR808RimShot` -- set 9 37 TR-808 Rim Shot (4), set 11 37 TR-808 Rim Shot (4), set 25 37 808 Rim Shot (4), set 281 37 808 Rim Shot (4)
+            - `TR808Conga` -- set 11 64 TR-808 Low Conga (4), set 13 64 TR-808 Low Conga (4), set 25 64 808 Low Conga (4), set 27 64 808 Low Conga (4), set 28 64 808 Low Conga (4), set 281 64 808 Low Conga (4)
+              - `TR808HiConga` -- set 11 62 TR-808 High Conga (4), set 13 62 TR-808 High Conga (4), set 25 62 808 High Conga (4), set 27 62 808 High Conga (4), set 28 62 808 High Conga (4), set 281 62 808 High Conga (4)
+              - `TR808MidConga` -- set 11 63 TR-808 Mute Conga (4), set 13 63 TR-808 Mute Conga (4), set 25 63 808 Mid Conga (4), set 27 63 808 Mid Conga (4), set 28 63 808 Mid Conga (4), set 281 63 808 Mid Conga (4)
+            - `TR808Cowbell` -- set 9 56 TR-808 Cowbell (4), set 10 56 TR-808 Cowbell (4), set 11 56 TR-808 Cowbell (4), set 13 56 TR-808 Cowbell (4), set 25 56 808 Cowbell (4), set 26 56 TR-808 Cowbell (4), set 27 56 CR-78 Cowbell (2), set 28 56 CR-78 Cowbell (2), set 29 56 808 Cowbell (4), set 30 56 808 Cowbell (4), set 281 56 808 Cowbell (4)
+            - `TR808Cymbal` -- set 25 49 808 Cymbal (4), set 26 49 TR-808 Crash Cymbal (4), set 27 49 808 Cymbal (4), set 28 49 808 Cymbal (4), set 53 67 TR-808 Crash Cymbal (4), set 53 88 TR-808 Ride Cymbal (2), set 62 65 TR-808 Crash Cymbal (4), set 62 86 TR-808 Ride Cymbal (2), set 281 49 808 Cymbal (4)
+            - `TR808Kick` -- 14 TR-808 Kick (4), set 25 35 TR-808 Kick 2 (2), set 25 36 808 Bass Drum (4), set 50 29 TR-808 Kick 1 (4), set 50 57 TR-808 Kick (4), set 51 29 TR-808 Kick 1 (4), set 51 57 TR-808 Kick 1 (4), set 281 36 808 Bass Drum (4)
+              - `JungleKick2` -- set 10 35 Jungle Kick 2 (4), set 50 34 Jungle Kick 2 (4), set 51 34 Jungle Kick 2 (4), set 51 52 Jungle Kick 2 (4)
+                - `ReverseJungleKick2` -- set 58 39 Reverse Jungle Kick 2 (4), set 59 49 Reverse Jungle Kick 2 (4)
+              - `TechnoTR808Kick` -- set 11 35 Techno TR-808 Kick (4)
+            - `TR808Maracas` -- set 9 70 TR-808 Maracas (4), set 10 70 TR-808 Maracas (4), set 11 70 TR-808 Maracas (4), set 13 70 TR-808 Maracas (4), set 25 70 808 Maracas (4), set 29 70 808 Maracas (4), set 30 70 808 Maracas (4), set 281 70 808 Maracas (4)
+            - `TR808RimShot` -- set 9 37 TR-808 Rim Shot (4), set 25 37 808 Rim Shot (4), set 281 37 808 Rim Shot (4)
             - `TR808Snare` -- 119 TR-808 Snare 1 (4), set 25 38 808 Snare Drum (4), set 25 40 TR-808 Snare 2 (2), set 50 80 TR-808 Snare 1 (4), set 50 81 TR-808 Snare 2 (2), set 281 38 808 Snare Drum (4)
               - `ReverseTR808Snare` -- set 57 45 Reverse 808 Snare (4)
-            - `TR808Tom` -- set 11 41 TR-808 Low Tom 2 (4), set 11 43 TR-808 Low Tom 1 (4), set 25 41 808 Low Tom 2 (4), set 25 43 808 Low Tom 1 (4), set 281 41 808 Low Tom 2 (4), set 281 43 808 Low Tom 1 (4)
-              - `TR808HiTom` -- set 11 48 TR-808 High Tom 2 (4), set 11 50 TR-808 High Tom 1 (4), set 25 48 808 Hi Tom 2 (4), set 25 50 808 Hi Tom 1 (4), set 281 48 808 Hi Tom 2 (4), set 281 50 808 Hi Tom 1 (4)
-              - `TR808MidTom` -- set 11 45 TR-808 Mid Tom 2 (4), set 11 47 TR-808 Mid Tom 1 (4), set 25 45 808 Mid Tom 2 (4), set 25 47 808 Mid Tom 1 (4), set 281 45 808 Mid Tom 2 (4), set 281 47 808 Mid Tom 1 (4)
+            - `TR808Tom` -- set 25 41 808 Low Tom 2 (4), set 25 43 808 Low Tom 1 (4), set 281 41 808 Low Tom 2 (4), set 281 43 808 Low Tom 1 (4)
+              - `TR808HiTom` -- set 25 48 808 Hi Tom 2 (4), set 25 50 808 Hi Tom 1 (4), set 281 48 808 Hi Tom 2 (4), set 281 50 808 Hi Tom 1 (4)
+              - `TR808MidTom` -- set 25 45 808 Mid Tom 2 (4), set 25 47 808 Mid Tom 1 (4), set 281 45 808 Mid Tom 2 (4), set 281 47 808 Mid Tom 1 (4)
             - `TR909`
-              - `TR909Kick` -- 15 TR-909 Kick (4), set 30 36 909 Kick 1 (4), set 50 30 TR-909 Kick 1 (4), set 50 58 TR-909 Kick (4), set 50 59 Dance Kick (2), set 281 35 909 Bass Drum (4), set 282 35 Dance Kick (2)
-                - `ReverseTR909Kick` -- set 58 37 Reverse TR-909 Kick 1 (4)
+              - `TR909Kick` -- 15 TR-909 Kick (4), set 13 36 TR-909 Kick 1 (4), set 26 36 Dance Kick (2), set 30 36 909 Kick 1 (4), set 50 30 TR-909 Kick 1 (4), set 50 58 TR-909 Kick (4), set 50 59 Dance Kick (2), set 51 30 TR-909 Kick 1 (4), set 51 56 Dance Kick (2), set 51 59 TR-909 Kick 1 (4), set 281 35 909 Bass Drum (4), set 282 35 Dance Kick (2)
+                - `FatKick` -- set 26 35 Fat Kick (3), set 51 55 Fat Kick (3)
+                - `ReverseTR909Kick` -- set 58 37 Reverse TR-909 Kick 1 (4), set 59 53 Reverse TR-909 Kick 1 (4)
                 - `RfxDistortionKick` -- set 57 67 Distortion Kick (3)
-                - `TR909CompKick` -- set 26 35 TR-909 Comp Kick (3)
-                - `TR909Kick2` -- 16 Dance Kick (4), set 30 35 909 Kick 2 (4), set 50 31 TR-909 Kick 2 (4)
-                  - `TechnoKick2` -- set 11 35 Techno Kick 2 (4), set 50 36 Techno Kick 2 (4)
+                - `TR909Kick2` -- 16 Dance Kick (4), set 13 35 TR-909 Kick 2 (4), set 30 35 909 Kick 2 (4), set 50 31 TR-909 Kick 2 (4), set 51 31 TR-909 Kick 2 (4), set 51 58 TR-909 Kick 2 (4)
+                  - `TechnoKick2` -- set 50 36 Techno Kick 2 (4), set 51 36 Techno Kick 2 (4)
                     - `ReverseTechnoKick2` -- set 58 40 Reverse Techno Kick 2 (4)
-                - `TechnoKick1` -- set 11 36 Techno Kick 1 (4), set 50 37 Techno KicK 1 (4)
-              - `TR909Rim` -- set 30 37 909 Rim (4)
-              - `TR909Snare` -- 112 Dance Snare 1 (4), 121 TR-909 Snare 1 (4), 125 House Snare 1 (4), 126 [88] House Snare (4), set 26 38 House Snare (2), set 30 38 909 Snare 1 (4), set 50 73 Dance Snare 1 (2), set 50 77 House Snare (2), set 50 82 TR-909 Snare 1 (4), set 57 80 Slappy (4), set 281 40 909 Snare 1 (4), set 282 38 Dance Snare 1 (2)
-                - `ReverseTR909Snare` -- set 57 44 Reverse Dance Snare (4), set 58 48 Reverse TR-909 Snare 1 (4), set 58 51 Reverse House Snare (2)
-                - `TR909Snare2` -- 113 Dance Snare 2 (4), 114 Disco Snare (4), 122 TR-909 Snare 2 (4), 127 House Snare 2 (4), set 26 40 Dance Snare 2 (2), set 30 40 909 Snare 2 (4), set 50 74 Dance Snare 2 (2), set 50 75 Disco Snare (2), set 50 83 TR-909 Snare 2 (4), set 282 40 Dance Snare 2 (2)
-                  - `TechnoSnare2` -- set 11 40 Techno Snare 2 (4)
+                - `TechnoKick1` -- set 11 36 Techno Kick 1 (4), set 50 37 Techno KicK 1 (4), set 51 37 Techno Kick 1 (4)
+              - `TR909Rim` -- set 11 37 TR-909 Snare Rim (4), set 13 37 House Snare Rim (4), set 26 37 Dance Rim Shot (4), set 30 37 909 Rim (4)
+              - `TR909Snare` -- 112 Dance Snare 1 (4), 121 TR-909 Snare 1 (4), 125 House Snare 1 (4), 126 [88] House Snare (4), set 9 96 Dance Snare 1 (2), set 10 92 Dance Snare 1 (2), set 10 94 House Snare (2), set 11 89 Dance Snare 1 (2), set 11 90 House Snare (2), set 13 38 House Snare 1 (4), set 13 90 Dance Snare 1 (2), set 26 38 Dance Snare 1 (2), set 26 91 House Snare (2), set 30 38 909 Snare 1 (4), set 50 73 Dance Snare 1 (2), set 50 77 House Snare (2), set 50 82 TR-909 Snare 1 (4), set 51 77 Dance Snare 1 (2), set 51 80 House Snare (2), set 57 80 Slappy (4), set 281 40 909 Snare 1 (4), set 282 38 Dance Snare 1 (2)
+                - `ReverseTR909Snare` -- set 57 44 Reverse Dance Snare (4), set 58 48 Reverse TR-909 Snare 1 (4), set 58 51 Reverse House Snare (2), set 59 72 Reverse Dance Snare (4)
+                - `TR909Snare2` -- 113 Dance Snare 2 (4), 114 Disco Snare (4), 122 TR-909 Snare 2 (4), 127 House Snare 2 (4), set 13 40 House Snare 2 (4), set 30 40 909 Snare 2 (4), set 50 74 Dance Snare 2 (2), set 50 75 Disco Snare (2), set 50 83 TR-909 Snare 2 (4), set 51 74 Dance Snare 2 (2), set 282 40 Dance Snare 2 (2)
+                  - `TechnoSnare2`
                     - `ReverseTechnoSnare2` -- set 58 45 Reverse Techno Snare 2 (4)
-                - `TechnoSnare1` -- set 11 38 Techno Snare 1 (4), set 50 99 Techno Snare 1 (4)
-              - `TR909Tom` -- set 9 41 TR-909 Low Tom 2 (4), set 10 41 TR-909 Low Tom 2 (4), set 30 41 909 Low Tom 2 (4)
-                - `TR909HiTom` -- set 9 48 TR-909 High Tom 2 (4), set 10 48 TR-909 High Tom 2 (4), set 30 48 909 Hi Tom 2 (4)
-                  - `TR909HiTom1` -- set 9 50 TR-909 High Tom 1 (4), set 10 50 TR-909 High Tom 1 (4), set 30 50 909 Hi Tom 1 (4)
-                - `TR909LowTom1` -- set 9 43 TR-909 Low Tom 1 (4), set 10 43 TR-909 Low Tom 1 (4), set 30 43 909 Low Tom 1 (4)
-                - `TR909MidTom` -- set 9 45 TR-909 Mid Tom 2 (4), set 10 45 TR-909 Mid Tom 2 (4), set 30 45 909 Mid Tom 2 (4)
-                  - `TR909MidTom1` -- set 9 47 TR-909 Mid Tom 1 (4), set 10 47 TR-909 Mid Tom 1 (4), set 30 47 909 Mid Tom 1 (4)
+                - `TechnoSnare1` -- set 10 93 Techno Snare (2), set 11 40 Techno Snare (2), set 13 91 Techno Snare (2), set 26 90 Techno Snare (2), set 50 99 Techno Snare 1 (4), set 51 79 Techno Snare (2)
+              - `TR909Tom` -- set 9 41 TR-909 Low Tom 2 (4), set 10 41 TR-909 Low Tom 2 (4), set 13 41 TR-909 Low Tom 2 (4), set 30 41 909 Low Tom 2 (4)
+                - `TR909HiTom` -- set 9 48 TR-909 High Tom 2 (4), set 10 48 TR-909 High Tom 2 (4), set 13 48 TR-909 High Tom 2 (4), set 30 48 909 Hi Tom 2 (4)
+                  - `TR909HiTom1` -- set 9 50 TR-909 High Tom 1 (4), set 10 50 TR-909 High Tom 1 (4), set 13 50 TR-909 High Tom 1 (4), set 30 50 909 Hi Tom 1 (4)
+                - `TR909LowTom1` -- set 9 43 TR-909 Low Tom 1 (4), set 10 43 TR-909 Low Tom 1 (4), set 13 43 TR-909 Low Tom 1 (4), set 30 43 909 Low Tom 1 (4)
+                - `TR909MidTom` -- set 9 45 TR-909 Mid Tom 2 (4), set 10 45 TR-909 Mid Tom 2 (4), set 13 45 TR-909 Mid Tom 2 (4), set 30 45 909 Mid Tom 2 (4)
+                  - `TR909MidTom1` -- set 9 47 TR-909 Mid Tom 1 (4), set 10 47 TR-909 Mid Tom 1 (4), set 13 47 TR-909 Mid Tom 1 (4), set 30 47 909 Mid Tom 1 (4)
         - `Timpani` -- GM 47 Timpani (4), set 48 41 Timpani F (4), set 48 42 Timpani F# (4), set 48 43 Timpani G (4), set 48 44 Timpani G# (4), set 48 45 Timpani A (4), set 48 46 Timpani A# (4), set 48 47 Timpani B (4), set 48 48 Timpani c (4), set 48 49 Timpani c# (4), set 48 50 Timpani d (4), set 48 51 Timpani d# (4), set 48 52 Timpani e (4), set 48 53 Timpani f (4)
       - `MetalPercussion`
         - `BirdTweet` -- GM 123 Bird Tweet (4)
@@ -2719,11 +3067,14 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `GamelanGong` [ModeDecays] -- set 49 50 Gamelan Gong (4), set 52 25 Gamelan Gong 1 (4), set 52 26 Gamelan Gong 2 (4), set 52 27 Gamelan Gong 3 (4), set 52 28 Gamelan Gong 4 (4), set 52 29 Gamelan Gong 5 (4), set 52 30 Gamelan Gong 6 (4), set 52 31 Gamelan Gong 7 (4), set 52 32 Gamelan Gong 8 (4), set 52 33 Gamelan Gong 9 (4), set 52 34 Gamelan Gong 10 (4)
         - `SteelPan` -- GM 114 Steel Drums (4)
         - `TelephoneRing` [ModeDecays] -- GM 124 Telephone Ring (4), set 56 89 Telephone 1 (4)
-        - `Triangle` -- 80 Mute Triangle (4), 81 Open Triangle (4), set 9 80 Mute Triangle (4), set 9 81 Open Triangle (4), set 10 80 Mute Triangle (4), set 10 81 Open Triangle (4), set 11 80 Mute Triangle (4), set 11 81 Open Triangle (4), set 26 80 Mute Triangle (4), set 26 81 Open Triangle (4), set 49 91 Mute Triangle (4), set 49 92 Open Triangle (4), set 282 80 Electric Mute Triangle (2), set 282 81 Electric Open Triangle (2)
+        - `Triangle` -- 80 Mute Triangle (4), 81 Open Triangle (4), set 9 80 Electric Mute Triangle (2), set 9 81 Electric Open Triangle (2), set 10 80 Electric Mute Triangle (2), set 10 81 Electric Open Triangle (2), set 11 80 Electric Mute Triangle (2), set 11 81 Electric Open Triangle (2), set 13 80 Electric Mute Triangle (2), set 13 81 Electric Open Triangle (2), set 26 80 Electric Mute Triangle (2), set 26 81 Electric Open Triangle (2), set 49 91 Mute Triangle (4), set 49 92 Open Triangle (4), set 282 80 Electric Mute Triangle (2), set 282 81 Electric Open Triangle (2)
       - `NoiseDrum` [NoisyPercussionMixin]
-        - `HandClap` -- 39 Hand Clap (4), set 1 39 Hand Clap (4), set 10 39 Hand Clap 2 (2), set 53 91 Hand Clap (4), set 53 92 Hand Clap 2 (2), set 53 93 Hand Clap (4), set 53 94 Hand Clap (4), set 53 95 Hand Clap 2 (2), set 127 39 Hand Clap (4)
-          - `FingerSnap` -- 26 Finger Snap (4), set 1 26 Finger Snap (4), set 26 26 Finger Snap 2 (4), set 49 25 Finger Snap (4)
+        - `HandClap` -- 39 Hand Clap (4), set 1 39 Hand Clap (4), set 12 39 Hand Clap (4), set 33 39 Hand Clap 2 (2), set 53 91 Hand Clap (4), set 53 92 Hand Clap 2 (2), set 53 93 Hand Clap (4), set 53 94 Hand Clap (4), set 53 95 Hand Clap 2 (2), set 62 94 Hand Clap (4), set 62 95 Hand Clap 2 (2), set 127 39 Hand Clap (4)
+          - `CompClaps2` -- set 26 39 Comp Claps 2 (3), set 62 93 Comp Claps 2 (3)
+          - `FingerSnap` -- 26 Finger Snap (4), set 1 26 Finger Snap (4), set 12 26 Finger Snap (4), set 26 26 Finger Snap 2 (4), set 33 26 Finger Snap 2 (4), set 41 26 Finger Snap 2 (4), set 42 26 Finger Snap 2 (4), set 49 25 Finger Snap (4)
+          - `HipHopClaps` -- set 9 91 Hip-Hop Claps (3), set 62 90 Hip-Hop Claps (3)
           - `RfxSpark` -- set 57 75 Spark (3)
+          - `RnBClaps` -- set 10 39 R&B Claps (3), set 62 91 R&B Claps (3)
           - `RndHandClap` [RandomStrike] -- set 2 39 [RND] Hand Clap (4)
       - `OrchestraHit` -- GM 55 Orchestra Hit (4), set 56 96 Percussion Bang (2)
       - `Rattle` [NoisyPercussionMixin]
@@ -2733,10 +3084,12 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `Maracas` -- 70 Maracas (4), set 49 64 Caxixi (2), set 127 70 Maracas (4)
         - `SfxFootstep` -- set 56 56 Footsteps1 (4), set 56 57 Footsteps2 (4), set 127 80 Footsteps 1 (4), set 127 81 Footsteps 2 (4)
         - `SfxPunch` -- set 56 54 Punch (4), set 127 78 Punch (4)
-        - `Shaker` -- 82 Shaker (4), set 9 82 TR-626 Shaker (2), set 10 82 TR-626 Shaker (2), set 11 82 TR-626 Shaker (2), set 26 82 TR-626 Shaker (2), set 49 86 Shaker (4)
+        - `Shaker` -- 82 Shaker (4), set 11 82 TR-626 Shaker (2), set 13 82 TR-626 Shaker (2), set 26 82 TR-626 Shaker (2), set 49 86 Shaker (4)
+          - `JungleShaker` [JungleBreak] -- set 10 82 Jungle Shaker (3)
+          - `RndShaker` [RandomStrike] -- set 9 82 Shaker 2 (4)
       - `SnareDrum` [NoisyPercussionMixin]
-        - `BrushSwirl` -- set 40 40 Brush Swirl (4), set 50 89 Brush Swirl 1 (4), set 50 90 Brush Swirl 2 (4), set 50 91 Brush Long Swirl (4)
-        - `GatedSnare` -- 109 Power Snare 1 (4), 111 Gated Snare (4), 115 Electric Snare 2 (4), 117 Electric Snare 3 (4), set 16 38 Gated SD (4), set 16 40 Power Snare 2 (2), set 24 40 Gated SD (4), set 50 70 Power Snare 1 (4), set 50 71 Power Snare 2 (2), set 50 72 Gated Snare (4), set 50 76 Electric Snare 2 (4)
+        - `BrushSwirl` -- set 40 40 Brush Swirl (4), set 41 40 Brush Swirl 1 (4), set 42 40 Brush Swirl 1 (4), set 50 89 Brush Swirl 1 (4), set 50 90 Brush Swirl 2 (4), set 50 91 Brush Long Swirl (4), set 51 89 Brush Swirl 1 (4), set 51 90 Brush Swirl 2 (4), set 51 91 Brush Long Swirl (4)
+        - `GatedSnare` -- 109 Power Snare 1 (4), 111 Gated Snare (4), 115 Electric Snare 2 (4), 117 Electric Snare 3 (4), set 16 38 Gated SD (4), set 16 40 Power Snare 2 (2), set 24 40 Gated SD (4), set 50 70 Power Snare 1 (4), set 50 71 Power Snare 2 (2), set 50 72 Gated Snare (4), set 50 76 Electric Snare 2 (4), set 51 72 Gated Snare (4)
       - `WoodPercussion` [NoisyPercussionMixin] -- GM 115 Woodblock (4)
         - `Castanets` -- 85 Castanets (4), set 48 39 Castanets (4), set 49 27 Castanets (4)
         - `Claves` -- 75 Claves (4), set 49 40 Hyoushigi (2), set 49 97 Claves (4), set 52 55 Hyoushigi (2), set 127 75 Claves (4)
@@ -2839,8 +3192,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `VoiceOohs` [_VocalBody] -- GM 53 Voice Oohs (4)
     - `BreathNoise` [NoisyPercussionMixin] -- GM 121 Breath Noise (4)
       - `Applause` -- GM 126 Applause (4)
-        - `OrchestraApplause` -- 88 Applause 2 (4), set 32 88 Applause (4), set 40 88 Applause (4), set 48 88 Applause (4), set 56 58 Applause (4), set 127 82 Applause (4)
-          - `SmallClub` -- set 9 88 Small Club 1 (4), set 10 88 Small Club 1 (4), set 24 88 Small Club 1 (4), set 25 88 Small Club 1 (4), set 26 88 Small Club 1 (4), set 27 88 Small Club 1 (4), set 28 88 Small Club 1 (4), set 29 88 Small Club 1 (4), set 56 91 Small Club 1 (4), set 56 92 Small Club 2 (4)
+        - `OrchestraApplause` -- 88 Applause 2 (4), set 32 88 Applause (4), set 33 88 Applause (4), set 40 88 Applause (4), set 41 88 Applause (4), set 42 88 Applause (4), set 48 88 Applause (4), set 56 58 Applause (4), set 127 82 Applause (4)
+          - `SmallClub` -- set 9 88 Small Club 1 (4), set 10 88 Small Club 1 (4), set 13 88 Small Club 1 (4), set 24 88 Small Club 1 (4), set 25 88 Small Club 1 (4), set 26 88 Small Club 1 (4), set 27 88 Small Club 1 (4), set 28 88 Small Club 1 (4), set 29 88 Small Club 1 (4), set 56 91 Small Club 1 (4), set 56 92 Small Club 2 (4)
             - `RfxApplauseWave` -- set 56 93 Applause Wave (3)
         - `PhonoNoise` -- set 56 29 Phonograph Noise (4)
       - `Seashore` -- GM 122 Seashore (3)
@@ -2864,11 +3217,11 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `RfxTapeStop` -- set 57 84 Tape Stop 1 (3)
               - `RfxTapeStop2` -- set 57 85 Tape Stop 2 (3)
           - `SfxRain` -- set 56 79 Rain (4), set 127 103 Rain (4)
-          - `SfxScratchPush` -- 29 Scratch Push (4), set 9 29 Scratch Push 2 (2), set 10 29 Scratch Push 2 (2), set 11 29 Scratch Push 2 (2), set 26 29 Scratch Push 2 (2), set 56 31 Scratch Push 2 (2), set 56 41 Scratch Push (4), set 282 29 Scratch Push2 (2)
+          - `SfxScratchPush` -- 29 Scratch Push (4), set 9 29 Scratch Push 2 (2), set 10 29 Scratch Push 2 (2), set 11 29 Scratch Push 2 (2), set 13 29 Scratch Push 2 (2), set 26 29 Scratch Push 2 (2), set 56 31 Scratch Push 2 (2), set 56 41 Scratch Push (4), set 282 29 Scratch Push2 (2)
             - `RfxGuitarWah` -- set 56 24 Guitar Wah (3)
             - `RfxSwish` -- set 57 79 Swish (3)
               - `RfxVelocityNoise` -- set 57 77 Velocity Noise FX (3)
-            - `SfxScratchPull` -- 30 Scratch Pull (4), set 9 30 Scratch Pull 2 (2), set 10 30 Scratch Pull 2 (2), set 11 30 Scratch Pull 2 (2), set 26 30 Scratch Pull 2 (2), set 56 32 Scratch Pull 2 (2), set 56 42 Scratch Pull (4), set 56 61 Scratch (4), set 127 85 Scratch (4), set 282 30 Scratch Pull2 (2)
+            - `SfxScratchPull` -- 30 Scratch Pull (4), set 9 30 Scratch Pull 2 (2), set 10 30 Scratch Pull 2 (2), set 11 30 Scratch Pull 2 (2), set 13 30 Scratch Pull 2 (2), set 26 30 Scratch Pull 2 (2), set 56 32 Scratch Pull 2 (2), set 56 42 Scratch Pull (4), set 56 61 Scratch (4), set 127 85 Scratch (4), set 282 30 Scratch Pull2 (2)
               - `ReverseSfxScratchPull` -- set 57 61 Reverse Scratch (4)
               - `RfxPickScrape` -- set 56 38 Pick Scrape (3)
           - `SfxScream` -- set 56 53 Screaming (4), set 127 77 Screaming (4)

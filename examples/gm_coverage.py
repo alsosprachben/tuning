@@ -648,6 +648,20 @@ def _gs_sets_rated():
                   # Ben, on examples/techno_demo.py: "It actually sounds really cool."
                   'TechnoKick1Properties': (lambda: 4), 'TechnoKick2Properties': (lambda: 4),
                   'TechnoSnare1Properties': (lambda: 4), 'TechnoSnare2Properties': (lambda: 4),
+                  # ...and the SC-8850's Techno set's machines so driven (the fitted
+                  # 808 kick and 606 snare). Ben, on examples/techno_ab_demo.py:
+                  # "The driven 808 and 606 sound good"
+                  'TechnoTR808KickProperties': (lambda: 4), 'TechnoTR606SnareProperties': (lambda: 4),
+                  # the SC-8850's dance-era drums, ours through what each name
+                  # implies (examples/rfx_demo.py s8850dance; Ben: "Level the
+                  # snares", no verdict of their own)
+                  **{_c: (lambda: 3) for _c in (
+                      'JungleRimProperties', 'JungleCrashProperties', 'JungleShakerProperties',
+                      'LoFiSnare1Properties', 'LoFiSnare2Properties', 'LoFiRimProperties',
+                      'HipHopClapsProperties', 'RnBClapsProperties', 'CompClaps2Properties',
+                      'TR909ClapProperties', 'FatKickProperties')},
+                  # Rock Snare Dry: Standard's snare, gated (APPROX)
+                  'AcousticSnareProperties': (lambda: PERC_RATED[38][0]),
                   # the Jungle drums (tonelib.JungleBreak: breaks sped up; Kick 2 the
                   # 808's sub). Ben, on examples/jungle_demo.py: "sound good"
                   'JungleKick1Properties': (lambda: 4), 'JungleKick2Properties': (lambda: 4),
@@ -837,9 +851,14 @@ STANDARD_BY_DESIGN = {33}
 # lists, parsed by examples/gs_drumsets.py): {(map, PC): {key: name}}, a key
 # that sounds and is not "same as Standard 1". A set is BUILT only where every
 # one of them is ours; else PARTIAL -- silent where the set stands alone,
-# Standard's drum where it stands on Standard
+# Standard's drum where it stands on Standard. The native sets are the
+# SC-8850's (percussion_sc8850): where it revised or added a set, its own list
+# (DRUMSET8850_TSV; in a set that stands alone a "same as Standard 1" key is
+# Standard 1's sound, and its own)
 DRUMSET_TSV = os.path.expanduser("~/Documents/refs/roland/sc88pro_drumsets.tsv")
+DRUMSET8850_TSV = os.path.expanduser("~/Documents/refs/roland/sc8850_drumsets.tsv")
 _OWN = None
+_SAME = ("\u2190", "<-", "<\u2013")
 
 
 def roland_own_keys(pc, lsb=0):
@@ -852,9 +871,25 @@ def roland_own_keys(pc, lsb=0):
                 if len(f) < 5:
                     continue
                 mp, p_, _sn, key, name = f[:5]
-                if name.startswith("-") or name in ("\u2190", "<-", ""):
+                if name.startswith("-") or name in _SAME or name == "":
                     continue
                 _OWN.setdefault((mp, int(p_)), {})[int(key)] = name
+        if os.path.exists(DRUMSET8850_TSV):
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from sc8850_sets import ALONE
+            rows = [l.split("\t") for l in open(DRUMSET8850_TSV).read().strip().split("\n")[1:]]
+            std = {int(f[2]): f[3] for f in rows if f[0] == "1"}
+            for p_, _sn, key, name, _fl, pro in rows:
+                p_, key = int(p_), int(key)
+                if pro == "1":
+                    continue                    # the SC-88 Pro's set, unchanged
+                if name in _SAME and p_ in ALONE:
+                    name = std.get(key, "---")
+                if name.startswith("-") or name in _SAME or name == "":
+                    continue
+                _OWN.setdefault(("sc8850", p_), {})[key] = name
+    if lsb == 0 and ("sc8850", pc) in _OWN:
+        return _OWN[("sc8850", pc)]
     mp = {0: "native", 1: "sc55", 2: "sc88", 3: "native"}[lsb]
     return _OWN.get((mp, pc)) or (_OWN.get(("native", pc)) if lsb else None)
 
