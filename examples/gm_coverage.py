@@ -1408,6 +1408,11 @@ def _sc88_var_rated():
                                         "patterns (sc88_synth.SH5, examples/sh5_fit.py: each step a note at its "
                                         "own cutoff, 9 dB rms -- no held SH-5 note under CC0), with %s changed"
                                      % ", ".join(sorted(k for k in pan if pan[k] != __import__("sc88_synth").SH5.get(k))))
+            if nm in ("CS Bass", "CS Saw", "CS Saw Lead"):
+                VAR_RATED[(p, b)] = (3, "SC-88 map: the CS fitted to a Yamaha CS-30L's bass (sc88_synth.CS, "
+                                        "examples/cs_fit.py: Modular Samples, CC0; 5.0 dB on the harmonics, 0.31 "
+                                        "octave on the contour; the 2-pole by design, the takes agreeing), with %s "
+                                        "changed" % ", ".join(sorted(k for k in pan if pan[k] != __import__("sc88_synth").CS.get(k))))
             if nm.startswith(("JP", "JPMG")):
                 VAR_RATED[(p, b)] = (3, "SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, "
                                         "examples/sepways_fit.py), one pass, with %s changed. Ben, on "

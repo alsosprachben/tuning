@@ -156,6 +156,23 @@ def sh5(**changes):
     return dict(SH5, **changes)
 
 
+# THE CS: the panel fitted to a Yamaha CS-30L's bass (examples/cs_fit.py:
+# Modular Samples, CC0, keys C2-C4 sounding, every frame of the held note):
+# a near-saw into a dark low-pass its contour opens 3.6 octaves and settles
+# half-way (5.0 dB rms on the harmonics, 0.31 octave on the contour, 2.2 dB
+# on the amplifier), no key tracking. The 2-pole, the CS series' own 12 dB --
+# the takes agree (0.1 dB better than the 4-pole) but cannot decide it. Its
+# Saw pack, the filter open, is the engine's saw within a dB of 1/k.
+CS = {"mode": 1, "osc1_wave": 0.558, "osc1_level": 1.0, "osc2_level": 0.0, "osc2_freq": 0.5,
+      "sub_level": 0.0, "noise_level": 0.0, "resonance": 0.0, "kb_track": 0.0, "cutoff": 0.331,
+      "eg_amount": 0.784, "f_attack": 0.059, "f_decay": 0.479, "f_sustain": 0.527, "a_attack": 0.027,
+      "a_decay": 0.6, "a_sustain": 1.0, "a_release": 0.15, "mod_amount": 0.5, "lfo1_depth": 0.5}
+
+
+def cs(**changes):
+    return dict(CS, **changes)
+
+
 SC88_SYNTH = {
     # --- the Jupiter-8's (JUPITER: fitted on the record) -------------------
     # its clav: a narrow pulse, the filter snapping shut, a short body
@@ -237,6 +254,16 @@ SC88_SYNTH = {
     (39, 18): ("SH101Bass 2", "MoogSynthBass2",
                sh(osc1_level=0.0, osc2_level=1.0, sub_level=0.5, cutoff=0.47, resonance=0.5, eg_amount=0.75,
                   f_attack=0.0, f_decay=0.18, f_sustain=0.15)),
+    # --- the CS's (CS: fitted to a CS-30L's bass) ---------------------------
+    # its bass, the fitted patch, its second voice a few cents off
+    (38, 2): ("CS Bass", "MoogSynthBass1", cs(osc2_wave=0.558, osc2_level=0.7, osc2_octave=8, osc2_freq=c(6))),
+    # its saw, the filter open: the Saw pack
+    (81, 30): ("CS Saw", "MoogSawLead", cs(osc1_wave=SAW, cutoff=0.85, eg_amount=0.5)),
+    # the CS-80's lead: a saw, the filter swelling open and holding, an edge
+    # of resonance
+    (81, 18): ("CS Saw Lead", "MoogSawLead",
+               cs(osc1_wave=SAW, cutoff=0.6, resonance=0.2, eg_amount=0.65, f_attack=0.15, f_decay=0.6,
+                  f_sustain=0.6, a_release=0.25)),
     # --- the SH-5's (SH5: read from its sample-and-hold steps) -------------
     # its brass: both VCOs at the key a few cents apart, the ladder swelling
     # open and settling as brass does
