@@ -1482,12 +1482,27 @@ def _sc88_var_rated():
         from sc88_synth import SC8850_SYNTH
     except ImportError:
         SC8850_SYNTH = {}
-    for (p, b), (nm, base, pan) in SC8850_SYNTH.items():
+    for (p, b), _e in SC8850_SYNTH.items():
+        nm, base, pan = _e[:3]
         k = (p, 128 * 4 + b) if (p, b) in patch_map.MAP_OTHER.get(4, ()) else (p, b)
-        if k in patch_map.VARIATIONS:
-            VAR_RATED[k] = (3, "SC-8850 map: a Moog panel, %s's with %s changed (sc88_synth.py); "
-                               "voiced from what the tone is, the engine fitted to Ben's Messenger. %s"
-                            % (base.replace("Moog", "the "), ", ".join(sorted(pan)), _GM2_LAST))
+        if k not in patch_map.VARIATIONS:
+            continue
+        if (p, b) in _JP8000:
+            uni = (_e[3] if len(_e) > 3 else {}).get('moog_unison')
+            VAR_RATED[k] = (3, "SC-8850 map: a Moog panel, %s's with %s changed (sc88_synth.py)%s; voiced "
+                               "from what the tone is. Ben, on examples/jp8000_demo.py: \"They sound good\""
+                            % (base.replace("Moog", "the "), ", ".join(sorted(pan)),
+                               (", %d saws in unison, the supersaw fitted to a player's JD-Xi take "
+                                "(examples/supersaw_fit.py)" % uni['voices']) if uni else ""))
+            continue
+        VAR_RATED[k] = (3, "SC-8850 map: a Moog panel, %s's with %s changed (sc88_synth.py); "
+                           "voiced from what the tone is, the engine fitted to Ben's Messenger. %s"
+                        % (base.replace("Moog", "the "), ", ".join(sorted(pan)), _GM2_LAST))
+
+
+# THE JP-8000 TONES AND SAW STACKS (2026-10-26; examples/jp8000_demo.py)
+_JP8000 = {(81, 15), (81, 10), (81, 13), (81, 12), (81, 9), (81, 14), (81, 47), (80, 7), (84, 26),
+                   (80, 31), (86, 5), (86, 6)}
 
 
 def variations():

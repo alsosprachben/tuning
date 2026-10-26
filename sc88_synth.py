@@ -20,6 +20,11 @@ on the wave 0.8 = 0.2 of its travel); MOD destination 0 is 1->2 FM.
 two whose capital is not a Moog (35, 55) name the Moog voice they start from.
 """
 SAW, SQ, TRI = 0.5, 0.68, 0.335
+# THE SUPERSAW (moog.unison), fitted to a player's JD-Xi SuperSaw take (CC0,
+# Freesound 573045; examples/supersaw_fit.py FIT): seven voices spread as the
+# JP-8000's, the outermost +/-25 cents, each drifting +/-30 cents at its own
+# 0.1-4 Hz, the sides 0.61 of the centre, the stereo 0.4 open
+SUPERSAW = dict(voices=7, cents=25.31, mix=0.613, drift_cents=30.49, drift_hz=(0.1, 3.955), width=0.3954)
 
 
 def c(cents):
@@ -614,7 +619,8 @@ MAP_SYNTH = {
 # finds a GM 2 tone by name): {(program, bank): (name, the capital's Moog
 # class, panel changes)}, voiced from what each name is -- starting points for
 # Ben's ear, as SC88_SYNTH's. A slot an earlier map used for another tone is
-# keyed under the SC-8850's map (patch_map: 128 x 4 + bank).
+# keyed under the SC-8850's map (patch_map: 128 x 4 + bank). An optional
+# fourth field is the class's own settings over its base's (moog_unison).
 SC8850_SYNTH = {
     # a clavinet's bite from a narrow pulse: a sharp filter blip, a short body
     (7, 39): ("Pulse Clav", "MoogSynthBass1",
@@ -662,4 +668,52 @@ SC8850_SYNTH = {
     (91, 3): ("Itopia", "MoogChoirPad",
               dict(osc1_wave=SAW, osc2_wave=SAW, osc2_freq=c(7), cutoff=0.55, resonance=0.2, a_attack=0.4,
                    lfo1_dest=0, lfo1_depth=0.62, lfo1_rate=0.3)),
+
+    # --- THE JP-8000's and its saw stacks: a fourth field, the class's own
+    # settings -- moog_unison, the supersaw (SUPERSAW, fitted to a player's
+    # JD-Xi take: examples/supersaw_fit.py; Ben: "Supersaw sounds great") ----
+    # the supersaw itself: one saw a voice, open, held
+    (81, 15): ("JP SuperSaw", "MoogSawLead",
+               dict(osc1_wave=SAW, osc2_level=0.0, cutoff=0.95, resonance=0.0, eg_amount=0.5, kb_track=1.0,
+                    a_attack=0.0, a_sustain=1.0, a_release=0.3),
+               dict(moog_unison=SUPERSAW)),
+    # the JP-8000's plain saw, as a player's take reads it (Freesound 275439,
+    # CC0: "a real Roland JP-8000 Saw wave"): its harmonics 5-8 dB under a 1/k
+    # saw's from the 2nd on -- the fundamental stood up, as a triangle at the
+    # pitch beside the saw does (the init patch's second oscillator)
+    (81, 10): ("JP8000 Saw", "MoogSawLead",
+               dict(osc1_wave=SAW, osc2_wave=TRI, osc2_freq=0.5, osc2_level=0.6, cutoff=0.95, resonance=0.0,
+                    eg_amount=0.5, a_sustain=1.0, a_release=0.25)),
+    # two saws a dozen cents apart: the Jupiter's (JUPITER) and the Oberheim's
+    (81, 13): ("JP DoubleSaw", "MoogSawLead",
+               jp(osc2_freq=c(-12), cutoff=0.8, eg_amount=0.5, a_sustain=1.0, a_release=0.25)),
+    (81, 12): ("OB DoubleSaw", "MoogSawLead",
+               ob(osc2_wave=SAW, osc2_level=0.8, osc2_freq=c(-12), cutoff=0.7, a_release=0.25)),
+    # FAT: a smaller stack -- three saws, then five -- under the saw lead's own
+    (81, 9): ("Fat Saw Lead", "MoogSawLead", dict(osc2_level=0.0),
+              dict(moog_unison=dict(SUPERSAW, voices=3, cents=12.0, drift_cents=10.0))),
+    (81, 14): ("FatSawLead 2", "MoogSawLead", dict(osc2_level=0.0),
+               dict(moog_unison=dict(SUPERSAW, voices=5, cents=18.0, drift_cents=18.0))),
+    # techno's: the supersaw closed down, its filter snapping open on each key
+    (81, 47): ("Techno Saw", "MoogSawLead",
+               dict(osc1_wave=SAW, osc2_level=0.0, cutoff=0.6, resonance=0.35, eg_amount=0.75, f_attack=0.0,
+                    f_decay=0.2, f_sustain=0.3, a_sustain=1.0, a_release=0.2),
+               dict(moog_unison=SUPERSAW)),
+    # TWM, the JP-8000's triangle wave modulation: a triangle whose shape LFO 1
+    # turns (the panel's wave modulation), a second a few cents off
+    (80, 7): ("JP8000 TWM", "MoogSquareLead",
+              dict(osc1_wave=TRI, osc2_wave=TRI, osc2_freq=c(-6), osc2_level=0.6, cutoff=0.8, resonance=0.0,
+                   eg_amount=0.5, lfo1_dest=2, lfo1_depth=0.8, lfo1_rate=0.55, a_sustain=1.0, a_release=0.2)),
+    # its FEEDBACK oscillator, a saw fed back on itself -- read as 1 -> 2 FM
+    # on a saw pair, a buzzing, phasing edge
+    (84, 26): ("JP8000Fd Osc", "MoogCharangLead",
+               dict(osc1_wave=SAW, osc2_wave=SAW, osc2_freq=c(3), mod_dest=0, mod_amount=0.62, cutoff=0.8)),
+    # its distortion lead: the supersaw, smaller, into the charang's valve
+    (80, 31): ("JP8000DistLd", "MoogCharangLead",
+               dict(osc1_wave=SAW, osc2_level=0.0, cutoff=0.75, resonance=0.2),
+               dict(moog_unison=dict(SUPERSAW, voices=5, cents=15.0, drift_cents=15.0))),
+    # its fifths: the fifths lead's saws (OSC 2 a fifth up) stacked
+    (86, 5): ("JP 5th Saw", "MoogFifthsLead", dict(cutoff=0.8, a_sustain=1.0),
+              dict(moog_unison=dict(SUPERSAW, voices=5, cents=15.0, drift_cents=15.0))),
+    (86, 6): ("JP8000 5thFB", "MoogFifthsLead", dict(cutoff=0.8, mod_dest=0, mod_amount=0.6, a_sustain=1.0)),
 }
