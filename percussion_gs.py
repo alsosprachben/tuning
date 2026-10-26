@@ -891,6 +891,60 @@ STROKES.update({
                      ((0.0, 0.0), (0.12, 0.0), (0.26, 1.0)), ts=0.015),
     'Yyoo Dude': _vo(**_YO), 'Reverse Yyoo Dude': _vo_rev(**_YO),
 })
+# THE VOICE SET'S WORDS (f0 Hz, length s, pitch semitones, level dB, the
+# vowel's motion), each after its consonant (ts)
+_COMEON = dict(f0=150.0, dur=0.45, ts=0.05, pitch=((0.0, 1.0), (0.15, 2.0), (0.45, -2.0)),
+               level=((0.0, -14.0), (0.04, 0.0), (0.3, -3.0), (0.45, -26.0)), morph=((0.0, 0.0), (0.18, 0.1), (0.35, 1.0)))
+_AOU = dict(f0=160.0, dur=0.6, pitch=((0.0, 0.0), (0.3, 2.0), (0.6, -2.0)),
+            level=((0.0, -16.0), (0.05, 0.0), (0.45, -3.0), (0.6, -26.0)), morph=((0.0, 0.0), (0.2, 0.3), (0.5, 1.0)))
+_OOU = dict(f0=150.0, dur=0.65, pitch=((0.0, 0.0), (0.3, 1.0), (0.65, -2.0)),
+            level=((0.0, -16.0), (0.05, 0.0), (0.5, -3.0), (0.65, -26.0)), morph=((0.0, 0.0), (0.25, 0.0), (0.55, 1.0)))
+_HIE = dict(f0=200.0, dur=0.4, ts=0.06, pitch=((0.0, 1.0), (0.4, -2.0)),
+            level=((0.0, -10.0), (0.03, 0.0), (0.25, -3.0), (0.4, -26.0)), morph=((0.0, 0.0), (0.1, 0.0), (0.3, 1.0)))
+_HIE2 = dict(_HIE, f0=260.0, dur=0.3, pitch=((0.0, 2.0), (0.3, -1.0)),
+             level=((0.0, -10.0), (0.03, 0.0), (0.18, -3.0), (0.3, -26.0)), morph=((0.0, 0.0), (0.08, 0.0), (0.24, 1.0)))
+_OOUE = dict(f0=180.0, dur=0.5, pitch=((0.0, 0.0), (0.25, 2.0), (0.5, 3.0)),
+             level=((0.0, -16.0), (0.05, 0.0), (0.4, -2.0), (0.5, -26.0)), morph=((0.0, 0.0), (0.2, 0.0), (0.4, 1.0)))
+# KIKIT: "ki" and "kit", each after its k, a t to close
+_KIKIT = dict(f0=220.0, dur=0.12, pitch=((0.0, 0.0), (0.12, -1.0)), level=((0.0, -8.0), (0.02, 0.0), (0.09, -2.0), (0.12, -30.0)),
+              syllables=((0.03, 0.0, 0.0), (0.2, 1.0, 1.0)), ts=0.03)
+# the baby's giggle: six "ha"s high and falling, quieter as they go
+_BABY = dict(f0=380.0, dur=0.08, pitch=((0.0, 1.0), (0.08, -1.0)), level=((0.0, -12.0), (0.015, 0.0), (0.06, -4.0), (0.08, -30.0)),
+             syllables=tuple((round(0.12 * i, 3), -0.6 * i, -1.2 * i) for i in range(6)), jitter=0.03)
+def _rev_syl(g, total):
+    """A word of several syllables, reversed: each syllable's start mirrored
+    (its end becomes its start), latest first."""
+    return dict(g, syllables=tuple(sorted((round(total - (t + g['dur']), 4), p, l) for t, p, l in g['syllables'])))
+
+
+_LAN = dict(f0=330.0, dur=0.75, pitch=((0.0, -0.3), (0.1, 0.0), (0.75, 0.0)),
+            level=((0.0, -14.0), (0.08, 0.0), (0.6, -2.0), (0.75, -26.0)), morph=((0.0, 0.0), (0.45, 0.0), (0.65, 1.0)),
+            jitter=0.01)
+STROKES.update({
+    'Voice ComeOn': _vo(**_COMEON), 'Reverse Voice Come On': _vo_rev(**_COMEON),
+    'Voice Kikit': _vo(**_KIKIT), 'Reverse Voice Kikit': _vo_rev(**_rev_syl(_KIKIT, 0.36), total=0.36),
+    'Voice Aou': _vo(**_AOU), 'Reverse Voice Aou': _vo_rev(**_AOU),
+    'Voice Oou': _vo(**_OOU), 'Reverse Voice Oou': _vo_rev(**_OOU),
+    'Voice Hie': _vo(**_HIE), 'Reverse Voice Hie 2': _vo_rev(**_HIE2),
+    'Reverse Ooue!': _vo_rev(**_OOUE),
+    'Baby Laughing': _vo(**_BABY), 'Reverse Baby Laughing': _vo_rev(**_rev_syl(_BABY, 0.68), total=0.68),
+    'Jazz Voice Thum': _vo(140.0, 0.3, ((0.0, 0.0), (0.3, -1.0)), ((0.0, -10.0), (0.03, 0.0), (0.2, -4.0), (0.3, -28.0)),
+                           ((0.0, 0.0), (0.12, 0.0), (0.25, 1.0)), ts=0.05),
+    'Jazz Voice Bap': _vo(150.0, 0.16, ((0.0, 0.5), (0.16, 0.0)), ((0.0, -6.0), (0.02, 0.0), (0.13, -2.0), (0.16, -30.0)), ts=0.015),
+    'Jazz Voice Dat': _vo(160.0, 0.16, ((0.0, 0.5), (0.16, 0.0)), ((0.0, -6.0), (0.02, 0.0), (0.13, -2.0), (0.16, -30.0)), ts=0.015),
+    'Jazz Voice Dow': _vo(150.0, 0.35, ((0.0, 0.5), (0.35, -2.0)), ((0.0, -6.0), (0.02, 0.0), (0.25, -3.0), (0.35, -28.0)),
+                          ((0.0, 0.0), (0.1, 0.0), (0.3, 1.0)), ts=0.015),
+    'Japanese Female Voice Lah': _vo(330.0, 0.7, ((0.0, -0.3), (0.1, 0.0), (0.7, 0.0)),
+                                     ((0.0, -20.0), (0.08, 0.0), (0.55, -2.0), (0.7, -26.0)), ((0.0, 0.0), (0.08, 1.0)),
+                                     jitter=0.01),
+    'Japanese Female Voice Lan': _vo(**_LAN), 'Reverse Japanese Female Voice Lan': _vo_rev(**_LAN),
+    'Japanese Male Voice Wah': _vo(147.0, 0.6, ((0.0, -0.3), (0.1, 0.0), (0.6, 0.0)),
+                                   ((0.0, -18.0), (0.06, 0.0), (0.45, -2.0), (0.6, -26.0)), ((0.0, 0.0), (0.1, 1.0)),
+                                   jitter=0.012),
+    'Japanese Male Voice Woh': _vo(147.0, 0.6, ((0.0, -0.3), (0.1, 0.0), (0.6, 0.0)),
+                                   ((0.0, -18.0), (0.06, 0.0), (0.45, -2.0), (0.6, -26.0)), ((0.0, 0.0), (0.1, 1.0)),
+                                   jitter=0.012),
+})
 
 
 # THE CONSONANTS: each a key below the set, struck at its moment in the word
@@ -915,6 +969,76 @@ for _w, (_c, _ts) in _CONS.items():
     STROKES[_nm] = _at(*_ts)
     _VOICE_LAYER[_w] = _VOICE_LAYER.get(_w, ()) + ((_k, _nm),)
 
+# THE VOICE SET'S (SC-8850, 62): its words on the throat (tonelib.Rfx*Voice*,
+# Rfx Scat, Jp), voiced from what each says -- no recording; Ben's ear to
+# judge -- with their consonants, its breaths, its oohs and their chords
+VOICE.update({
+    'consonant k': ('c', 'RfxBurstKProperties', 1000.0), 'consonant p': ('c', 'RfxBurstPProperties', 1000.0),
+    'consonant h': ('c', 'RfxBreathHProperties', 1000.0), 'consonant b': ('c', 'RfxBurstDProperties', 1000.0),
+    'Voice ComeOn': ('c', 'RfxVoiceComeOnProperties', 1000.0),
+    'Reverse Voice Come On': ('c', 'RfxVoiceComeOnProperties', 1000.0),
+    'Voice Kikit': ('c', 'RfxVoiceKikitProperties', 1000.0),
+    'Reverse Voice Kikit': ('c', 'RfxVoiceKikitProperties', 1000.0),
+    'Voice Aou': ('c', 'RfxVoiceAouProperties', 1000.0), 'Reverse Voice Aou': ('c', 'RfxVoiceAouProperties', 1000.0),
+    'Voice Oou': ('c', 'RfxVoiceOouProperties', 1000.0), 'Reverse Voice Oou': ('c', 'RfxVoiceOouProperties', 1000.0),
+    'Voice Hie': ('c', 'RfxVoiceHieProperties', 1000.0),
+    'Reverse Voice Hie 2': ('c', 'RfxVoiceHieProperties', 1000.0),
+    'Reverse Ooue!': ('c', 'RfxVoiceOoueProperties', 1000.0),
+    'Baby Laughing': ('c', 'RfxBabyLaughProperties', 1000.0),
+    'Reverse Baby Laughing': ('c', 'RfxBabyLaughProperties', 1000.0),
+    'Jazz Voice Thum': ('c', 'RfxScatThumProperties', 1000.0), 'Jazz Voice Bap': ('c', 'RfxScatAhProperties', 1000.0),
+    'Jazz Voice Dat': ('c', 'RfxScatAhProperties', 1000.0), 'Jazz Voice Dow': ('c', 'RfxScatDowProperties', 1000.0),
+    'Japanese Female Voice Lah': ('c', 'RfxJpLahProperties', 1000.0),
+    'Japanese Female Voice Lan': ('c', 'RfxJpLanProperties', 1000.0),
+    'Reverse Japanese Female Voice Lan': ('c', 'RfxJpLanProperties', 1000.0),
+    'Japanese Male Voice Wah': ('c', 'RfxJpWahProperties', 1000.0),
+    'Japanese Male Voice Woh': ('c', 'RfxJpWohProperties', 1000.0),
+    # the SFX set's own
+    'Punch': ('k', 56, 54), 'Screaming': ('k', 56, 53), 'Laughing': ('k', 56, 52),
+    # BREATHS: GM 121's breath at a pitch (its noise's centre) and a length
+    # (GATE): a flute's higher and shorter, a voice's lower; reversed, drawn
+    # in -- a woman's brighter than a man's
+    'Flute Breath 1': ('c', 'RfxFluteBreath1Properties', 1000.0), 'Flute Breath 2': ('c', 'RfxFluteBreath2Properties', 1000.0),
+    'Flute Breath 3': ('c', 'RfxFluteBreath3Properties', 1000.0),
+    'Voice Breath 1': ('c', 'RfxVoiceBreath1Properties', 1000.0), 'Voice Breath 2': ('c', 'RfxVoiceBreath2Properties', 1000.0),
+    'Reverse Breath Slow': ('c', 'RfxRevBreathProperties', 1000.0),
+    'Reverse Breath Short': ('c', 'RfxRevBreathShortProperties', 1000.0),
+    'Reverse Breath Strong': ('c', 'RfxRevBreathStrongProperties', 1000.0),
+    "Reverse Woman's Breath": ('c', 'RfxRevWomanBreathProperties', 1000.0),
+    "Reverse Man's Breath": ('c', 'RfxRevManBreathProperties', 1000.0),
+    # OOHS: GM 53's fitted choir "oo", one voice at F4; the chords that voice
+    # stacked (Maj7 A on C4, B on F4; Sus4 A on C4, B on D4)
+    'Voice Oohs 2': ('c', 'VoiceOohsDrumProperties', 349.23),
+    'Voice Oohs Chord Maj7 A': ('c', 'VoiceOohsDrumProperties', 261.63),
+    'Voice Oohs Chord Maj7 B': ('c', 'VoiceOohsDrumProperties', 349.23),
+    'Voice Oohs Chord Sus4 A': ('c', 'VoiceOohsDrumProperties', 261.63),
+    'Voice Oohs Chord Sus4 B': ('c', 'VoiceOohsDrumProperties', 293.66),
+})
+_CHORDS = {'Voice Oohs Chord Maj7 A': (329.63, 392.0, 493.88), 'Voice Oohs Chord Maj7 B': (440.0, 523.25, 659.26),
+           'Voice Oohs Chord Sus4 A': (349.23, 392.0), 'Voice Oohs Chord Sus4 B': (392.0, 440.0)}
+_HIDDEN2 = iter(range(97, 128))       # the Voice set's own: its keys end at 96
+for _w, _hz in _CHORDS.items():
+    for _f in _hz:
+        _k = next(_HIDDEN2)
+        _nm = 'Oohs %.2f Hz' % _f
+        VOICE[_nm] = ('c', 'VoiceOohsDrumProperties', _f)
+        _VOICE_LAYER[_w] = _VOICE_LAYER.get(_w, ()) + ((_k, _nm),)
+# ...and its words' consonants, each at its moment (reversed, at its mirror)
+_CONS2 = {   # word: ((consonant, its times), ...)
+    'Voice ComeOn': (('k', (0.0,)),), 'Reverse Voice Come On': (('k', (0.475,)),),
+    'Voice Kikit': (('k', (0.0, 0.17)), ('t', (0.33,))), 'Reverse Voice Kikit': (('t', (0.0,)), ('k', (0.16, 0.33))),
+    'Voice Hie': (('h', (0.0,)),), 'Reverse Voice Hie 2': (('h', (0.32,)),),
+    'Jazz Voice Thum': (('th', (0.0,)),), 'Jazz Voice Bap': (('b', (0.0,)), ('p', (0.18,))),
+    'Jazz Voice Dat': (('d', (0.0,)), ('t', (0.18,))), 'Jazz Voice Dow': (('d', (0.0,)),),
+}
+for _w, _cs in _CONS2.items():
+    for _c, _ts in _cs:
+        _k = next(_HIDDEN2)
+        _nm = '%s (%s)' % (_w, _c)
+        VOICE[_nm] = VOICE['consonant %s' % _c]
+        STROKES[_nm] = _at(*_ts)
+        _VOICE_LAYER[_w] = _VOICE_LAYER.get(_w, ()) + ((_k, _nm),)
+
 # ...AND ITS LENGTH, a one-shot's (percussion_map.KIT_GATE): Small Club's the
 # takes' main burst, ~2.5 s; a choked crash's the hand's, 0.15 s
 GATE = {'Rock Snare Dry': 0.25, 'Rock SD Dry': 0.25, 'MC-500 Beep 1': 0.04, 'MC-500 Beep 2': 0.04, 'Guitar Wah': 0.25, 'Biwa FX': 1.2,
@@ -922,7 +1046,18 @@ GATE = {'Rock Snare Dry': 0.25, 'Rock SD Dry': 0.25, 'MC-500 Beep 1': 0.04, 'MC-
         'Applause Wave': 3.0, 'Eruption': 2.5, 'Sagat Closed': 0.07, 'Gengari Mute Low': 0.12, 'Gengari Mute High': 0.12, 'Jing Mute': 0.35, 'Tang Gu Mute': 0.12, 'Alias': 0.9, 'Swish': 0.35, 'Velocity Noise FX': 0.4, 'Missile': 1.0, 'Tape Stop 1': 1.0, 'Tape Stop 2': 0.6,
         'Guitar Slide': 0.3, 'Small Club 1': 2.5, 'Mute Crash Cymbal 1': 0.15, 'Mute Crash Cymbal 2': 0.15,
         'Standard 1 Mute Crash Cymbal': 0.15, 'Room Mute Crash Cymbal': 0.15, 'Jazz Mute Crash Cymbal': 0.15,
-        'Brush Mute Crash Cymbal': 0.15, 'Concert BD 1 Mute': 0.25}
+        'Brush Mute Crash Cymbal': 0.15, 'Concert BD 1 Mute': 0.25,
+        # the Voice set's breaths and oohs: their lengths
+        'Flute Breath 1': 0.32, 'Flute Breath 2': 0.47, 'Flute Breath 3': 0.24, 'Voice Breath 1': 0.57,
+        'Voice Breath 2': 0.77, 'Reverse Breath Slow': 0.95, 'Reverse Breath Short': 0.33, 'Reverse Breath Strong': 0.66,
+        "Reverse Woman's Breath": 0.58, "Reverse Man's Breath": 0.58, 'Voice Oohs 2': 1.2,
+        **{_n: 1.2 for _n in ('Voice Oohs Chord Maj7 A', 'Voice Oohs Chord Maj7 B', 'Voice Oohs Chord Sus4 A',
+                              'Voice Oohs Chord Sus4 B')},
+        **{'Oohs %.2f Hz' % _f: 1.2 for _hz in _CHORDS.values() for _f in _hz},
+        # (the reversed words: FORWARD pulses, the gesture mirrored -- each
+        # pulse reversed in its own period, Rhythm FX 2's way, read as noise:
+        # periodicity 0.3-0.6 against 0.9; Ben, "just noise")
+        }
 
 # ...AND ITS RING (percussion_map.KIT_RING, PERCUSSION_RING's sense): the
 # half-open hats', fitted to DRSKit's semi-open hat against its open one
@@ -1053,6 +1188,8 @@ RING.update({'Standard 1 Mute Crash Cymbal': 0.61, 'Room Mute Crash Cymbal': 0.6
              'Jazz Mute Crash Cymbal': 0.61, 'Brush Mute Crash Cymbal': 0.61})
 LEVEL.update({'Concert BD 1 Mute': 0.151})          # the open drum's trim (Orchestra's 36)
 LEVEL.update({'Dholak 1': 3.5487, 'Dholak 2': 4.9493})   # to the kit's drum target (examples/gs_levels.py)
+# the Voice set's words, breaths and oohs, to the voices' target (examples/gs_levels.py)
+LEVEL.update({'Voice ComeOn': 89.9813, 'Reverse Voice Come On': 92.801, 'Voice Kikit': 93.8224, 'Reverse Voice Kikit': 97.3389, 'Voice Aou': 83.9786, 'Reverse Voice Aou': 82.1472, 'Voice Oou': 100.8626, 'Reverse Voice Oou': 92.9273, 'Voice Hie': 82.9223, 'Reverse Voice Hie 2': 68.8167, 'Reverse Ooue!': 79.7716, 'Baby Laughing': 77.4072, 'Reverse Baby Laughing': 81.3076, 'Jazz Voice Thum': 102.1189, 'Jazz Voice Bap': 98.1927, 'Jazz Voice Dat': 107.5652, 'Jazz Voice Dow': 104.1424, 'Japanese Female Voice Lah': 67.8286, 'Japanese Female Voice Lan': 66.616, 'Reverse Japanese Female Voice Lan': 61.8973, 'Japanese Male Voice Wah': 93.7862, 'Japanese Male Voice Woh': 97.8748, 'Flute Breath 1': 58.3598, 'Flute Breath 2': 40.304, 'Flute Breath 3': 65.7982, 'Voice Breath 1': 44.4818, 'Voice Breath 2': 41.0972, 'Reverse Breath Slow': 32.4014, 'Reverse Breath Short': 28.6213, 'Reverse Breath Strong': 18.1199, "Reverse Woman's Breath": 32.4493, "Reverse Man's Breath": 27.8928, 'Voice Oohs 2': 1.6137, 'Voice Oohs Chord Maj7 B': 0.618})
 LEVEL.update({'Standard 1 Mute Crash Cymbal': 0.56, 'Room Mute Crash Cymbal': 0.218736,
               'Brush Mute Crash Cymbal': 0.1987})
 

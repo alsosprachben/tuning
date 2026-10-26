@@ -36,6 +36,16 @@ KIND = {
     'Reverse Voice Two': 'voice', 'Voice Three': 'voice', 'Reverse Voice Three': 'voice', 'Voice Tah': 'voice',
     'Reverse Voice Tah': 'voice', 'Voice Ou': 'voice', 'Voice Au': 'voice', 'Voice Whey': 'voice',
     'Frog Voice': 'voice', 'Douby': 'voice', 'Reverse Douby': 'voice', 'Baert High': 'voice', 'Baert Low': 'voice',
+    # the Voice set's words, breaths and oohs
+    **{_n: 'voice' for _n in (
+        'Voice ComeOn', 'Reverse Voice Come On', 'Voice Kikit', 'Reverse Voice Kikit', 'Voice Aou', 'Reverse Voice Aou',
+        'Voice Oou', 'Reverse Voice Oou', 'Voice Hie', 'Reverse Voice Hie 2', 'Reverse Ooue!', 'Baby Laughing',
+        'Reverse Baby Laughing', 'Jazz Voice Thum', 'Jazz Voice Bap', 'Jazz Voice Dat', 'Jazz Voice Dow',
+        'Japanese Female Voice Lah', 'Japanese Female Voice Lan', 'Reverse Japanese Female Voice Lan',
+        'Japanese Male Voice Wah', 'Japanese Male Voice Woh', 'Flute Breath 1', 'Flute Breath 2', 'Flute Breath 3',
+        'Voice Breath 1', 'Voice Breath 2', 'Reverse Breath Slow', 'Reverse Breath Short', 'Reverse Breath Strong',
+        "Reverse Woman's Breath", "Reverse Man's Breath", 'Voice Oohs 2', 'Voice Oohs Chord Maj7 A',
+        'Voice Oohs Chord Maj7 B', 'Voice Oohs Chord Sus4 A', 'Voice Oohs Chord Sus4 B')},
     # the Asia set's dholak
     'Dholak 1': 'drum', 'Dholak 2': 'drum',
     # the Rhythm FX sets' effects

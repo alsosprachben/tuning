@@ -28872,6 +28872,240 @@ class RfxHissThProperties(TR808Properties):
              "noise_len_ms": 100.0}
 
 
+# THE VOICE SET'S (SC-8850, 62): its words on the same throat, voiced from
+# what each says -- no recording of them; Ben's ear to judge. Three mouths
+# more: a nasal's murmur (n, m: F1 low, the level falling as the lips or
+# tongue close) and an l, each a word's end or its start
+VOWEL_N = _vowel_modes(250, 1700, 2600, db=(0.0, -14.0, -22.0))
+VOWEL_M = _vowel_modes(250, 1000, 2200, db=(0.0, -16.0, -26.0))
+VOWEL_L = _vowel_modes(360, 1300, 2700, db=(0.0, -8.0, -18.0))
+
+
+class RfxBurstKProperties(TR808Properties):
+    """A "k": the tongue's release at the soft palate -- a burst of mid noise
+    (1.5-4.5 kHz), 25 ms."""
+    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.025, "noise_db": -44.0,
+             "noise_hp_hz": 1500.0, "noise_lp_hz": 4500.0, "noise_decay_s": 0.025, "noise_rise_ms": 1.0}
+
+
+class RfxBurstPProperties(TR808Properties):
+    """A "p": the lips' release -- a broad, low puff (0.4-5 kHz), 20 ms."""
+    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.02, "noise_db": -46.0,
+             "noise_hp_hz": 400.0, "noise_lp_hz": 5000.0, "noise_decay_s": 0.02, "noise_rise_ms": 1.0}
+
+
+class RfxBreathHProperties(TR808Properties):
+    """An "h": a breath through the open throat (0.5-4 kHz), 60 ms, rising in."""
+    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.06, "noise_db": -48.0,
+             "noise_hp_hz": 500.0, "noise_lp_hz": 4000.0, "noise_decay_s": 0.06, "noise_rise_ms": 20.0,
+             "noise_len_ms": 60.0}
+
+
+class RfxVoiceComeOnProperties(RfxVoiceProperties):
+    """Voice 63, "Come On": "c'mon!" -- after its k, the uh into the o and
+    closing to its n."""
+    DRUM_MODES = VOWEL_O
+    DRUM_MODES_B = VOWEL_N
+
+
+class RfxVoiceKikitProperties(RfxVoiceProperties):
+    """Voice 64, "Kikit": "ki-kit!" -- two ee's, each after its k, a t to end."""
+    DRUM_MODES = VOWEL_I
+
+
+class RfxVoiceAouProperties(RfxVoiceProperties):
+    """Voice 65, "Aou": "ah-oo", the ah through the o closing to oo."""
+    DRUM_MODES = VOWEL_A
+    DRUM_MODES_B = VOWEL_U
+
+
+class RfxVoiceOouProperties(RfxVoiceProperties):
+    """Voice 66, "Oou": "oh-oo", the o closing to oo, longer."""
+    DRUM_MODES = VOWEL_O
+    DRUM_MODES_B = VOWEL_U
+
+
+class RfxVoiceHieProperties(RfxVoiceProperties):
+    """Voice 70, "Hie": "hi-eh!" -- after its h, the ee opening to eh."""
+    DRUM_MODES = VOWEL_I
+    DRUM_MODES_B = VOWEL_E
+
+
+class RfxVoiceOoueProperties(RfxVoiceProperties):
+    """Voice 53 (reversed), "Ooue!": "oo-eh!", the oo opening to eh."""
+    DRUM_MODES = VOWEL_U
+    DRUM_MODES_B = VOWEL_E
+
+
+class RfxScatThumProperties(RfxVoiceProperties):
+    """Voice 76, "Jazz Voice Thum": a scat "thum" -- after its th, the uh
+    closing to m."""
+    DRUM_MODES = VOWEL_ER
+    DRUM_MODES_B = VOWEL_M
+
+
+class RfxScatAhProperties(RfxVoiceProperties):
+    """Voice 77-78, "Jazz Voice Bap", "Dat": a scat syllable's open ah,
+    between its consonants."""
+    DRUM_MODES = VOWEL_A
+
+
+class RfxScatDowProperties(RfxVoiceProperties):
+    """Voice 79, "Jazz Voice Dow": after its d, the ah closing to oo."""
+    DRUM_MODES = VOWEL_A
+    DRUM_MODES_B = VOWEL_U
+
+
+class RfxJpLahProperties(RfxVoiceProperties):
+    """Voice 85, "Japanese Female Voice Lah": a sung "lah", the l opening to ah."""
+    DRUM_MODES = VOWEL_L
+    DRUM_MODES_B = VOWEL_A
+    breath_volume = 0.04
+
+
+class RfxJpLanProperties(RfxVoiceProperties):
+    """Voice 86, "Japanese Female Voice Lan": a sung "lahn", the ah into its n
+    (its l the level's rise)."""
+    DRUM_MODES = VOWEL_A
+    DRUM_MODES_B = VOWEL_N
+    breath_volume = 0.04
+
+
+class RfxJpWahProperties(RfxVoiceProperties):
+    """Voice 87, "Japanese Male Voice Wah": a sung "wah", the w (an oo) opening to ah."""
+    DRUM_MODES = VOWEL_U
+    DRUM_MODES_B = VOWEL_A
+
+
+class RfxJpWohProperties(RfxVoiceProperties):
+    """Voice 88, "Japanese Male Voice Woh": a sung "woh", the oo opening to o."""
+    DRUM_MODES = VOWEL_U
+    DRUM_MODES_B = VOWEL_O
+
+
+class RfxBabyLaughProperties(RfxVoiceProperties):
+    """Voice 71, "Baby Laughing": a baby's giggle -- short "ha"s high and
+    falling, on a small throat (an infant's tract ~1.4 times shorter: its
+    formants that much higher)."""
+    DRUM_MODES = tuple((round(f * 1.4, 4), d, w) for f, d, w in VOWEL_A)
+    breath_volume = 0.12
+
+
+class RfxVoiceComeOnRevProperties(RfxVoiceComeOnProperties):
+    played_backwards = True
+
+
+class RfxVoiceKikitRevProperties(RfxVoiceKikitProperties):
+    played_backwards = True
+
+
+class RfxVoiceAouRevProperties(RfxVoiceAouProperties):
+    played_backwards = True
+
+
+class RfxVoiceOouRevProperties(RfxVoiceOouProperties):
+    played_backwards = True
+
+
+class RfxVoiceHieRevProperties(RfxVoiceHieProperties):
+    played_backwards = True
+
+
+class RfxVoiceOoueRevProperties(RfxVoiceOoueProperties):
+    played_backwards = True
+
+
+class RfxJpLanRevProperties(RfxJpLanProperties):
+    played_backwards = True
+
+
+class RfxBabyLaughRevProperties(RfxBabyLaughProperties):
+    played_backwards = True
+
+
+class RfxBreathProperties(TR808Properties):
+    """THE VOICE SET'S BREATHS (SC-8850 36-40, 54-58): air, band-limited, as
+    shaped noise on the drum machine's noise (tr808.py): a breath is the air
+    through a mouth or across a flute's edge -- 0.2-3 kHz an exhale, higher
+    and airier a flute -- swelling in, then falling slowly over its length
+    (the layer falls from its first sample: noise_decay_s is its whole
+    length's fall, to -60 dB); reversed (Reverse Breath *), a rise over the
+    whole length on an almost flat level, cut at its end. (GM 121's breath,
+    spread over 64 harmonics, read as hiss: Ben, "just noise".)"""
+    # (decay_s, the silent tone's, bounds the note: each breath's own length)
+    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 1.0, "noise_db": -44.0,
+             "noise_hp_hz": 200.0, "noise_lp_hz": 3000.0, "noise_decay_s": 1.6, "noise_rise_ms": 80.0,
+             "noise_len_ms": 550.0}
+
+
+class RfxFluteBreath1Properties(RfxBreathProperties):
+    """Flute Breath 1: across the embouchure, airy (0.6-6 kHz), a short puff."""
+    tr808 = dict(RfxBreathProperties.tr808, noise_hp_hz=600.0, noise_lp_hz=6000.0, noise_rise_ms=40.0,
+                 noise_len_ms=300.0, noise_decay_s=1.0)
+
+
+class RfxFluteBreath2Properties(RfxBreathProperties):
+    """Flute Breath 2: the same, longer."""
+    tr808 = dict(RfxFluteBreath1Properties.tr808, noise_len_ms=450.0, noise_decay_s=1.5)
+
+
+class RfxFluteBreath3Properties(RfxBreathProperties):
+    """Flute Breath 3: a quick catch, brighter."""
+    tr808 = dict(RfxFluteBreath1Properties.tr808, noise_hp_hz=900.0, noise_lp_hz=7000.0, noise_rise_ms=20.0,
+                 noise_len_ms=220.0, noise_decay_s=0.7)
+
+
+class RfxVoiceBreath1Properties(RfxBreathProperties):
+    """Voice Breath 1: an exhale through the open mouth (0.2-3 kHz)."""
+
+
+class RfxVoiceBreath2Properties(RfxBreathProperties):
+    """Voice Breath 2: a longer, heavier sigh."""
+    tr808 = dict(RfxBreathProperties.tr808, noise_hp_hz=150.0, noise_lp_hz=2500.0, noise_rise_ms=150.0,
+                 noise_len_ms=750.0, noise_decay_s=2.2)
+
+
+class RfxRevBreathProperties(RfxBreathProperties):
+    """A breath reversed: its rise the whole length, cut at the end."""
+    tr808 = dict(RfxBreathProperties.tr808, noise_rise_ms=900.0, noise_len_ms=950.0, noise_decay_s=20.0)
+
+
+class RfxRevBreathShortProperties(RfxRevBreathProperties):
+    tr808 = dict(RfxRevBreathProperties.tr808, noise_rise_ms=300.0, noise_len_ms=330.0)
+
+
+class RfxRevBreathStrongProperties(RfxRevBreathProperties):
+    tr808 = dict(RfxRevBreathProperties.tr808, noise_rise_ms=620.0, noise_len_ms=660.0, noise_db=-40.0,
+                 noise_lp_hz=3500.0)
+
+
+class RfxRevWomanBreathProperties(RfxRevBreathProperties):
+    tr808 = dict(RfxRevBreathProperties.tr808, noise_rise_ms=540.0, noise_len_ms=580.0, noise_hp_hz=400.0,
+                 noise_lp_hz=5000.0)
+
+
+class RfxRevManBreathProperties(RfxRevBreathProperties):
+    tr808 = dict(RfxRevBreathProperties.tr808, noise_rise_ms=540.0, noise_len_ms=580.0, noise_hp_hz=150.0,
+                 noise_lp_hz=2500.0)
+
+
+class BreathNoiseDrumProperties(BreathNoiseProperties):
+    """GM 121's breath as a drum key: one breath its own length (the set's
+    GATE), however short the key -- a Sound Canvas plays a drum's sample
+    through, where GM 121 lasts while it is held."""
+    one_shot = True
+
+
+class BreathNoiseRevProperties(BreathNoiseDrumProperties):
+    """A breath played backwards: drawn in to its end."""
+    played_backwards = True
+
+
+class VoiceOohsDrumProperties(VoiceOohsProperties):
+    """GM 53's oohs as a drum key: sung its own length (the set's GATE)."""
+    one_shot = True
+
+
 # THE SFX SET'S ELECTRONIC CLICKS (39, 44): Roland's own synthesized sounds,
 # so the reference is GeneralUser GS's sample of each, and the instrument a
 # synth voice -- the TR-808 engine's resonator and click (tr808.py) fit them

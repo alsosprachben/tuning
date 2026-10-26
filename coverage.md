@@ -28,7 +28,7 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | SC-88Pro tones | 774 | 494 | 64% | 298 | 193 | 3 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
 | SC-8850 tones | 1262 | 522 | 41% | 315 | 204 | 3 | 0 | 0 |
-| SC-8850 drum sets | 37 | 34 | 92% | | | | | |
+| SC-8850 drum sets | 37 | 35 | 95% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
 
@@ -237,8 +237,8 @@ Standard. THE GOAL: every one built.
 | 58 | RHYTHM FX | RHYTHM FX | RHYTHM FX | -- | built: 53 keys of its own | 53 | **4** |
 | 59 | RHYTHM FX 2 | RHYTHM FX 2 | -- | -- | built: 56 keys of its own | 56 | **4** |
 | 60 | RHYTHM FX 3 | -- | -- | -- | partial: 56 of 75 keys (19 silent) | 56 | **3** |
-| 61 | SFX 2 | -- | -- | -- | partial: 3 of 60 keys (57 silent) | 3 | **3** |
-| 62 | VOICE | -- | -- | -- | partial: 13 of 53 keys (40 silent) | 13 | **3** |
+| 61 | SFX 2 | -- | -- | -- | partial: 4 of 60 keys (56 silent) | 4 | **3** |
+| 62 | VOICE | -- | -- | -- | built: 53 keys of its own | 53 | **2** |
 | 63 | CYM&CLAPS 2 | -- | -- | -- | built: 65 keys of its own | 65 | **4** |
 | 128 | -- | -- | -- | CM-64/32L | built: 67 keys of its own | 67 | **4** |
 
@@ -1671,6 +1671,7 @@ Standard. THE GOAL: every one built.
 
 | # | note | class | | notes |
 |---|---|---|---|---|
+| 52 | Baby Laughing | `RfxBabyLaugh` | **2** | Baby Laughing, the RfxBabyLaugh at 1000 Hz |
 | 80 | Frog Voice | `RfxFrog` | **3** | Frog Voice, the RfxFrog at 1000 Hz |
 | 87 | Noise Attack | `RfxNoiseAttack` | **3** | Noise Attack, the RfxNoiseAttack at 1000 Hz |
 | 88 | Bounce | `RfxBounce` | **3** | Bounce, the RfxBounce at 600 Hz |
@@ -1679,19 +1680,59 @@ Standard. THE GOAL: every one built.
 
 | # | note | class | | notes |
 |---|---|---|---|---|
+| 36 | Reverse Breath Slow | `RfxRevBreath` | **2** | Reverse Breath Slow, the RfxRevBreath at 1000 Hz |
+| 37 | Reverse Breath Short | `RfxRevBreathShort` | **2** | Reverse Breath Short, the RfxRevBreathShort at 1000 Hz |
+| 38 | Reverse Breath Strong | `RfxRevBreathStrong` | **2** | Reverse Breath Strong, the RfxRevBreathStrong at 1000 Hz |
+| 39 | Reverse Woman's Breath | `RfxRevWomanBreath` | **2** | Reverse Woman's Breath, the RfxRevWomanBreath at 1000 Hz |
+| 40 | Reverse Man's Breath | `RfxRevManBreath` | **2** | Reverse Man's Breath, the RfxRevManBreath at 1000 Hz |
 | 41 | Reverse Voice One | `RfxVoiceOneRev` | **4** | Reverse Voice One, the RfxVoiceOneRev at 1000 Hz |
 | 42 | Reverse Voice Two | `RfxVoiceTwoRev` | **4** | Reverse Voice Two, the RfxVoiceTwoRev at 1000 Hz |
 | 43 | Reverse Voice Three | `RfxVoiceThreeRev` | **4** | Reverse Voice Three, the RfxVoiceThreeRev at 1000 Hz |
 | 44 | Reverse Voice Tah | `RfxVoiceTahRev` | **3** | Reverse Voice Tah, the RfxVoiceTahRev at 1000 Hz |
+| 45 | Reverse Voice Come On | `RfxVoiceComeOn` | **2** | Reverse Voice Come On, the RfxVoiceComeOn at 1000 Hz |
+| 46 | Reverse Voice Kikit | `RfxVoiceKikit` | **2** | Reverse Voice Kikit, the RfxVoiceKikit at 1000 Hz |
+| 47 | Reverse Voice Aou | `RfxVoiceAou` | **2** | Reverse Voice Aou, the RfxVoiceAou at 1000 Hz |
+| 48 | Reverse Voice Oou | `RfxVoiceOou` | **2** | Reverse Voice Oou, the RfxVoiceOou at 1000 Hz |
+| 49 | Reverse Voice Hie 2 | `RfxVoiceHie` | **2** | Reverse Voice Hie 2, the RfxVoiceHie at 1000 Hz |
+| 50 | Reverse Baby Laughing | `RfxBabyLaugh` | **2** | Reverse Baby Laughing, the RfxBabyLaugh at 1000 Hz |
 | 51 | Reverse Yyoo Dude | `RfxKakegoeRev` | **3** | Reverse Yyoo Dude, the RfxKakegoeRev at 1000 Hz |
+| 52 | Reverse Japanese Female Voice Lan | `RfxJpLan` | **2** | Reverse Japanese Female Voice Lan, the RfxJpLan at 1000 Hz |
+| 53 | Reverse Ooue! | `RfxVoiceOoue` | **2** | Reverse Ooue!, the RfxVoiceOoue at 1000 Hz |
+| 54 | Flute Breath 1 | `RfxFluteBreath1` | **2** | Flute Breath 1, the RfxFluteBreath1 at 1000 Hz |
+| 55 | Flute Breath 2 | `RfxFluteBreath2` | **2** | Flute Breath 2, the RfxFluteBreath2 at 1000 Hz |
+| 56 | Flute Breath 3 | `RfxFluteBreath3` | **2** | Flute Breath 3, the RfxFluteBreath3 at 1000 Hz |
+| 57 | Voice Breath 1 | `RfxVoiceBreath1` | **2** | Voice Breath 1, the RfxVoiceBreath1 at 1000 Hz |
+| 58 | Voice Breath 2 | `RfxVoiceBreath2` | **2** | Voice Breath 2, the RfxVoiceBreath2 at 1000 Hz |
 | 59 | Voice One | `RfxVoiceOne` | **4** | Voice One, the RfxVoiceOne at 1000 Hz |
 | 60 | Voice Two | `RfxVoiceTwo` | **4** | Voice Two, the RfxVoiceTwo at 1000 Hz |
 | 61 | Voice Three | `RfxVoiceThree` | **4** | Voice Three, the RfxVoiceThree at 1000 Hz |
 | 62 | Voice Tah | `RfxVoiceTah` | **3** | Voice Tah, the RfxVoiceTah at 1000 Hz |
+| 63 | Voice ComeOn | `RfxVoiceComeOn` | **2** | Voice ComeOn, the RfxVoiceComeOn at 1000 Hz |
+| 64 | Voice Kikit | `RfxVoiceKikit` | **2** | Voice Kikit, the RfxVoiceKikit at 1000 Hz |
+| 65 | Voice Aou | `RfxVoiceAou` | **2** | Voice Aou, the RfxVoiceAou at 1000 Hz |
+| 66 | Voice Oou | `RfxVoiceOou` | **2** | Voice Oou, the RfxVoiceOou at 1000 Hz |
+| 67 | Punch | `SfxPunch` | **4** | Punch: set 56's key 54 |
+| 68 | Screaming | `SfxScream` | **4** | Screaming: set 56's key 53 |
+| 69 | Laughing | `SfxLaugh` | **4** | Laughing: set 56's key 52 |
+| 70 | Voice Hie | `RfxVoiceHie` | **2** | Voice Hie, the RfxVoiceHie at 1000 Hz |
+| 71 | Baby Laughing | `RfxBabyLaugh` | **2** | Baby Laughing, the RfxBabyLaugh at 1000 Hz |
 | 72 | Frog Voice | `RfxFrog` | **3** | Frog Voice, the RfxFrog at 1000 Hz |
 | 73 | Yyoo Dude | `RfxKakegoe` | **3** | Yyoo Dude, the RfxKakegoe at 1000 Hz |
 | 74 | Voice Ou | `RfxVoiceOu` | **3** | Voice Ou, the RfxVoiceOu at 1000 Hz |
 | 75 | Voice Au | `RfxVoiceAu` | **3** | Voice Au, the RfxVoiceAu at 1000 Hz |
+| 76 | Jazz Voice Thum | `RfxScatThum` | **2** | Jazz Voice Thum, the RfxScatThum at 1000 Hz |
+| 77 | Jazz Voice Bap | `RfxScatAh` | **2** | Jazz Voice Bap, the RfxScatAh at 1000 Hz |
+| 78 | Jazz Voice Dat | `RfxScatAh` | **2** | Jazz Voice Dat, the RfxScatAh at 1000 Hz |
+| 79 | Jazz Voice Dow | `RfxScatDow` | **2** | Jazz Voice Dow, the RfxScatDow at 1000 Hz |
+| 80 | Voice Oohs 2 | `VoiceOohsDrum` | **4** | Voice Oohs 2, the VoiceOohsDrum at 349 Hz |
+| 81 | Voice Oohs Chord Maj7 A | `VoiceOohsDrum` | **4** | Voice Oohs Chord Maj7 A, the VoiceOohsDrum at 262 Hz |
+| 82 | Voice Oohs Chord Maj7 B | `VoiceOohsDrum` | **4** | Voice Oohs Chord Maj7 B, the VoiceOohsDrum at 349 Hz |
+| 83 | Voice Oohs Chord Sus4 A | `VoiceOohsDrum` | **4** | Voice Oohs Chord Sus4 A, the VoiceOohsDrum at 262 Hz |
+| 84 | Voice Oohs Chord Sus4 B | `VoiceOohsDrum` | **4** | Voice Oohs Chord Sus4 B, the VoiceOohsDrum at 294 Hz |
+| 85 | Japanese Female Voice Lah | `RfxJpLah` | **2** | Japanese Female Voice Lah, the RfxJpLah at 1000 Hz |
+| 86 | Japanese Female Voice Lan | `RfxJpLan` | **2** | Japanese Female Voice Lan, the RfxJpLan at 1000 Hz |
+| 87 | Japanese Male Voice Wah | `RfxJpWah` | **2** | Japanese Male Voice Wah, the RfxJpWah at 1000 Hz |
+| 88 | Japanese Male Voice Woh | `RfxJpWoh` | **2** | Japanese Male Voice Woh, the RfxJpWoh at 1000 Hz |
 
 ### 62 Cym&Claps 2
 
@@ -2975,7 +3016,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-722 classes.
+748 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -3232,15 +3273,29 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `SfxThroat`
               - `Hoo` -- set 9 78 High Hoo (4), set 9 79 Low Hoo (4), set 10 78 High Hoo (4), set 10 79 Low Hoo (4), set 11 78 High Hoo (4), set 11 79 Low Hoo (4), set 13 78 High Hoo (4), set 13 79 Low Hoo (4), set 25 78 High Hoo (4), set 25 79 Low Hoo (4), set 26 78 High Hoo (4), set 26 79 Low Hoo (4), set 27 78 High Hoo (4), set 27 79 Low Hoo (4), set 28 78 High Hoo (4), set 28 79 Low Hoo (4), set 29 78 High Hoo (4), set 29 79 Low Hoo (4), set 30 78 High Hoo (4), set 30 79 Low Hoo (4), set 57 83 Hoo (4), set 282 78 High Hoo (4), set 282 79 Low Hoo (4)
               - `RfxVoice`
+                - `RfxBabyLaugh` -- set 60 52 Baby Laughing (2), set 61 50 Reverse Baby Laughing (2), set 61 71 Baby Laughing (2)
                 - `RfxBaert` -- set 58 80 Baert High (3), set 58 81 Baert Low (3)
                 - `RfxDouby` -- set 58 78 Douby (3)
                   - `RfxDoubyRev` -- set 58 79 Reverse Douby (3)
                 - `RfxFrog` -- set 58 76 Frog Voice (3), set 60 80 Frog Voice (3), set 61 72 Frog Voice (3)
+                - `RfxJpLah` -- set 61 85 Japanese Female Voice Lah (2)
+                - `RfxJpLan` -- set 61 52 Reverse Japanese Female Voice Lan (2), set 61 86 Japanese Female Voice Lan (2)
+                - `RfxJpWah` -- set 61 87 Japanese Male Voice Wah (2)
+                - `RfxJpWoh` -- set 61 88 Japanese Male Voice Woh (2)
                 - `RfxKakegoe` -- set 52 59 Yyoo Dude (3), set 61 73 Yyoo Dude (3)
                   - `RfxKakegoeRev` -- set 58 77 Reverse Yyoo Dude (3), set 61 51 Reverse Yyoo Dude (3)
+                - `RfxScatAh` -- set 61 77 Jazz Voice Bap (2), set 61 78 Jazz Voice Dat (2)
+                - `RfxScatDow` -- set 61 79 Jazz Voice Dow (2)
+                - `RfxScatThum` -- set 61 76 Jazz Voice Thum (2)
+                - `RfxVoiceAou` -- set 61 47 Reverse Voice Aou (2), set 61 65 Voice Aou (2)
                 - `RfxVoiceAu` -- set 57 82 Voice Au (3), set 58 74 Voice Au (3), set 61 75 Voice Au (3)
+                - `RfxVoiceComeOn` -- set 61 45 Reverse Voice Come On (2), set 61 63 Voice ComeOn (2)
+                - `RfxVoiceHie` -- set 61 49 Reverse Voice Hie 2 (2), set 61 70 Voice Hie (2)
+                - `RfxVoiceKikit` -- set 61 46 Reverse Voice Kikit (2), set 61 64 Voice Kikit (2)
                 - `RfxVoiceOne` -- set 58 65 Voice One (4), set 61 59 Voice One (4)
                   - `RfxVoiceOneRev` -- set 58 66 Reverse Voice One (4), set 61 41 Reverse Voice One (4)
+                - `RfxVoiceOou` -- set 61 48 Reverse Voice Oou (2), set 61 66 Voice Oou (2)
+                - `RfxVoiceOoue` -- set 61 53 Reverse Ooue! (2)
                 - `RfxVoiceOu` -- set 57 81 Voice Ou (3), set 58 73 Voice Ou (3), set 61 74 Voice Ou (3)
                 - `RfxVoiceTah` -- set 58 71 Voice Tah (3), set 61 62 Voice Tah (3)
                   - `RfxVoiceTahRev` -- set 58 72 Reverse Voice Tah (3), set 61 44 Reverse Voice Tah (3)
@@ -3252,7 +3307,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `SfxDog` -- set 56 76 Dog (4), set 127 100 Dog (4)
               - `SfxGrowl` -- set 56 87 Growl (3), set 57 88 Flying Monster (3)
               - `SfxKitty` -- set 56 85 Kitty (4)
-              - `SfxLaugh` -- set 56 52 Laughing (4), set 127 76 Laughing (4)
+              - `SfxLaugh` -- set 56 52 Laughing (4), set 61 69 Laughing (4), set 127 76 Laughing (4)
             - `SfxWindchime` -- set 1 84 Bar Chimes (2), set 49 35 Bar Chimes (2), set 56 62 Windchime (3), set 127 86 Windchime (3)
             - `SurdoOpen` -- 87 Open Surdo (4), set 49 81 Open Surdo (4)
               - `SurdoMute` -- 86 Mute Surdo (4), set 49 82 Mute Surdo (4)
@@ -3324,6 +3379,17 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `RfxBendir` -- set 49 54 Bendir (3)
               - `ReverseRfxBendir` -- set 57 59 Reverse Bendir (3)
             - `RfxBounce` -- set 58 82 Bounce (3), set 58 83 Reverse Bounce (3), set 60 88 Bounce (3)
+            - `RfxBreath`
+              - `RfxFluteBreath1` -- set 61 54 Flute Breath 1 (2)
+              - `RfxFluteBreath2` -- set 61 55 Flute Breath 2 (2)
+              - `RfxFluteBreath3` -- set 61 56 Flute Breath 3 (2)
+              - `RfxRevBreath` -- set 61 36 Reverse Breath Slow (2)
+                - `RfxRevBreathShort` -- set 61 37 Reverse Breath Short (2)
+                - `RfxRevBreathStrong` -- set 61 38 Reverse Breath Strong (2)
+                - `RfxRevManBreath` -- set 61 40 Reverse Man's Breath (2)
+                - `RfxRevWomanBreath` -- set 61 39 Reverse Woman's Breath (2)
+              - `RfxVoiceBreath1` -- set 61 57 Voice Breath 1 (2)
+              - `RfxVoiceBreath2` -- set 61 58 Voice Breath 2 (2)
             - `RfxBuk` -- set 52 60 Buk (3)
             - `RfxCongaSlide` -- set 49 78 Conga Slide (3)
             - `RfxDaluo` -- set 49 47 Bend Gong (4), set 52 81 Bend Gong (4)
@@ -3486,7 +3552,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `Cabasa` -- 69 Cabasa (4), set 49 95 Cabasa Up (4), set 49 96 Cabasa Down (4), set 127 69 Cabasa (4)
         - `Maracas` -- 70 Maracas (4), set 49 64 Caxixi (2), set 127 70 Maracas (4)
         - `SfxFootstep` -- set 56 56 Footsteps1 (4), set 56 57 Footsteps2 (4), set 127 80 Footsteps 1 (4), set 127 81 Footsteps 2 (4)
-        - `SfxPunch` -- set 56 54 Punch (4), set 127 78 Punch (4)
+        - `SfxPunch` -- set 56 54 Punch (4), set 61 67 Punch (4), set 127 78 Punch (4)
         - `Shaker` -- 82 Shaker (4), set 11 82 TR-626 Shaker (2), set 13 82 TR-626 Shaker (2), set 26 82 TR-626 Shaker (2), set 49 86 Shaker (4)
           - `JungleShaker` [JungleBreak] -- set 10 82 Jungle Shaker (3)
             - `ReverseJungleShaker` -- set 59 94 Reverse Jungle Shaker (3)
@@ -3596,6 +3662,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `SynthVoice`
           - `MoogSynthVoice` -- GM 54 Synth Choir (4)
         - `VoiceOohs` [_VocalBody] -- GM 53 Voice Oohs (4)
+          - `VoiceOohsDrum` -- set 61 80 Voice Oohs 2 (4), set 61 81 Voice Oohs Chord Maj7 A (4), set 61 82 Voice Oohs Chord Maj7 B (4), set 61 83 Voice Oohs Chord Sus4 A (4), set 61 84 Voice Oohs Chord Sus4 B (4)
     - `BreathNoise` [NoisyPercussionMixin] -- GM 121 Breath Noise (4)
       - `Applause` -- GM 126 Applause (4)
         - `OrchestraApplause` -- 88 Applause 2 (4), set 32 88 Applause (4), set 33 88 Applause (4), set 40 88 Applause (4), set 41 88 Applause (4), set 42 88 Applause (4), set 48 88 Applause (4), set 56 58 Applause (4), set 56 88 Applause2 (4), set 127 82 Applause (4)
@@ -3630,7 +3697,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `SfxScratchPull` -- 30 Scratch Pull (4), set 9 30 Scratch Pull 2 (2), set 10 30 Scratch Pull 2 (2), set 11 30 Scratch Pull 2 (2), set 13 30 Scratch Pull 2 (2), set 26 30 Scratch Pull 2 (2), set 56 32 Scratch Pull 2 (2), set 56 42 Scratch Pull (4), set 56 61 Scratch (4), set 127 85 Scratch (4), set 282 30 Scratch Pull2 (2)
               - `ReverseSfxScratchPull` -- set 57 61 Reverse Scratch (4)
               - `RfxPickScrape` -- set 56 38 Pick Scrape (3)
-          - `SfxScream` -- set 56 53 Screaming (4), set 127 77 Screaming (4)
+          - `SfxScream` -- set 56 53 Screaming (4), set 61 68 Screaming (4), set 127 77 Screaming (4)
           - `SfxSiren` -- set 56 67 Siren (4), set 127 91 Siren (4)
           - `SfxSkid` -- set 56 64 Car-Skid (4), set 127 88 Car-stop (4)
           - `SfxStarship` -- set 56 71 Starship (3), set 127 95 Starship (3)

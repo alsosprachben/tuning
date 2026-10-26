@@ -684,6 +684,24 @@ def _gs_sets_rated():
                       'KendangPelegonganProperties', 'KelontukProperties', 'KelontukMuteProperties',
                       'KelontukSideProperties', 'GamelanJublagProperties', 'GamelanJegoganProperties',
                       'ReyongProperties', 'KajarProperties', 'KempurProperties', 'KopyakProperties')},
+                  # the Voice set's words, voiced on the throat from what each says (no
+                  # recording), and its reversals
+                  **{_c: (lambda: 2) for _c in (
+                      'RfxVoiceComeOnProperties', 'RfxVoiceKikitProperties', 'RfxVoiceAouProperties',
+                      'RfxVoiceOouProperties', 'RfxVoiceHieProperties', 'RfxVoiceOoueProperties', 'RfxScatThumProperties',
+                      'RfxScatAhProperties',
+                      'RfxScatDowProperties', 'RfxJpLahProperties', 'RfxJpLanProperties', 'RfxJpWahProperties',
+                      'RfxJpWohProperties', 'RfxBabyLaughProperties', 'RfxVoiceComeOnRevProperties',
+                      'RfxVoiceKikitRevProperties', 'RfxVoiceAouRevProperties', 'RfxVoiceOouRevProperties',
+                      'RfxVoiceHieRevProperties', 'RfxVoiceOoueRevProperties', 'RfxJpLanRevProperties',
+                      'RfxBabyLaughRevProperties', 'RfxBurstKProperties', 'RfxBurstPProperties', 'RfxBreathHProperties',
+                      'RfxFluteBreath1Properties', 'RfxFluteBreath2Properties', 'RfxFluteBreath3Properties',
+                      'RfxVoiceBreath1Properties', 'RfxVoiceBreath2Properties', 'RfxRevBreathProperties',
+                      'RfxRevBreathShortProperties', 'RfxRevBreathStrongProperties', 'RfxRevWomanBreathProperties',
+                      'RfxRevManBreathProperties')},
+                  # ...its breaths GM 121's at a pitch and length, its oohs GM 53's
+                  'BreathNoiseDrumProperties': (lambda: RATED[121][0]), 'BreathNoiseRevProperties': (lambda: 2),
+                  'VoiceOohsDrumProperties': (lambda: RATED[53][0]),
                   # the Asia set's dholak, each head's open stroke fitted (examples/perc_fit.py
                   # dholak_*: the bass 3.6 dB, the treble 10.7 -- its strokes cut from a
                   # groove, the bass head ringing under them)
