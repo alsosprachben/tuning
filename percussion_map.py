@@ -2071,9 +2071,12 @@ def _build_gs_sets():
                 strokes = {}
             elif spec[0] == 'n':
                 # [RND]: the voice, each strike varied (tonelib.RandomStrike)
-                if cls not in _rnd:
-                    _rnd[cls] = type("Rnd" + cls.__name__, (_TL.RandomStrike, cls), {})
-                cls = _rnd[cls]
+                # (a voice already varied -- a kit's own [RND] key, borrowed --
+                # is kept as it is)
+                if not issubclass(cls, _TL.RandomStrike):
+                    if cls not in _rnd:
+                        _rnd[cls] = type("Rnd" + cls.__name__, (_TL.RandomStrike, cls), {})
+                    cls = _rnd[cls]
             KITS[k][key] = (name, cls, f0)
             for tab, v in ((KIT_RING, ring), (KIT_LEVEL, level), (KIT_GATE, gate)):
                 if v is not None:

@@ -3400,8 +3400,12 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # a reversed hat was its quiet modes and a 2 ms click. The row's own
             # attack hump is made a sample wide and its release hump dropped:
             # the hump is the arrival's, below
-            emit_partial(om, ampL * g, ampR * g, ampM * g, nomf, start, max(start + 1.0, end - _out),
-                         fin, _out, 1.0, -lr, 0.0, 0.0, 0.0, cv, cc, 0.0, sj, csc, gr, cr, _ph(start))
+            # ...its fade-out no longer than the row itself, so it ENDS at the
+            # arrival: a slow forward fade-in (the jazz crash's, 0.36 s) on a
+            # row begun 29 ms before it went on growing past it, ~e^144 -- NaN
+            _o = min(_out, max(1.0, end - start))
+            emit_partial(om, ampL * g, ampR * g, ampM * g, nomf, start, max(start + 1.0, end - _o),
+                         fin, _o, 1.0, -lr, 0.0, 0.0, 0.0, cv, cc, 0.0, sj, csc, gr, cr, _ph(start))
         jp = cv * csc * 0.25                       # the hump's peak, r(1-r) at r = 1/2
         if jp > 0.0 and ch > 0.0:
             _cbw = (_CBW[0], _CBW[1])

@@ -28,7 +28,7 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | SC-88Pro tones | 774 | 494 | 64% | 298 | 193 | 3 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
 | SC-8850 tones | 1262 | 522 | 41% | 315 | 204 | 3 | 0 | 0 |
-| SC-8850 drum sets | 37 | 30 | 81% | | | | | |
+| SC-8850 drum sets | 37 | 31 | 84% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
 
@@ -221,7 +221,7 @@ Standard. THE GOAL: every one built.
 | 30 | TR-707 | TR-707 | -- | -- | built: 23 keys of its own | 23 | **4** |
 | 31 | TR-909 | TR-909 | -- | -- | built: 23 keys of its own | 23 | **4** |
 | 33 | JAZZ | JAZZ | JAZZ | JAZZ | built: 18 keys of its own | 18 | **4** |
-| 34 | JAZZ L/R | -- | -- | -- | built: 22 keys of its own | 20 | **4** |
+| 34 | JAZZ L/R | -- | -- | -- | built: 22 keys of its own | 22 | **4** |
 | 41 | BRUSH | BRUSH | BRUSH | BRUSH | built: 17 keys of its own | 17 | **4** |
 | 42 | BRUSH 2 | -- | -- | -- | built: 20 keys of its own | 18 | **4** |
 | 43 | BRUSH 2 L/R | -- | -- | -- | partial: 20 of 22 keys (2 Standard's drum) | 18 | **4** |
@@ -239,7 +239,7 @@ Standard. THE GOAL: every one built.
 | 60 | RHYTHM FX 3 | -- | -- | -- | partial: 56 of 75 keys (19 silent) | 56 | **3** |
 | 61 | SFX 2 | -- | -- | -- | partial: 3 of 60 keys (57 silent) | 3 | **3** |
 | 62 | VOICE | -- | -- | -- | partial: 13 of 53 keys (40 silent) | 13 | **3** |
-| 63 | CYM&CLAPS 2 | -- | -- | -- | partial: 50 of 65 keys (15 silent) | 50 | **4** |
+| 63 | CYM&CLAPS 2 | -- | -- | -- | built: 65 keys of its own | 65 | **4** |
 | 128 | -- | -- | -- | CM-64/32L | built: 67 keys of its own | 67 | **4** |
 
 ### 1 Standard 2
@@ -796,9 +796,11 @@ Standard. THE GOAL: every one built.
 | 39 | Hand Clap 2 | `HandClap` | **2** | Hand Clap 2: Standard's key 39 -- the nearest we have, not the sound |
 | 40 | [RND] Jazz Snare 2 | `RndJazzSnare2` | **4** | [RND] Jazz Snare 2: set 32's key 40, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 41 | [RND] Jazz Low Tom 2 | `RndJazzTomLow` | **4** | [RND] Jazz Low Tom 2, the JazzTomLow at 90 Hz |
+| 42 | [RND] Jazz Closed Hi-Hat | `RndClosedHiHat` | **4** | [RND] Jazz Closed Hi-Hat: set 32's key 42, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 43 | [RND] Jazz Low Tom 1 | `RndJazzTomLow` | **4** | [RND] Jazz Low Tom 1, the JazzTomLow at 101 Hz |
 | 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
 | 45 | [RND] Jazz Mid Tom 2 | `RndJazzTomHigh` | **4** | [RND] Jazz Mid Tom 2, the JazzTomHigh at 144 Hz |
+| 46 | [RND] Jazz Open Hi-Hat | `RndOpenHiHat` | **4** | [RND] Jazz Open Hi-Hat: set 32's key 46, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 47 | [RND] Jazz Mid Tom 1 | `RndJazzTomHigh` | **4** | [RND] Jazz Mid Tom 1, the JazzTomHigh at 162 Hz |
 | 48 | [RND] Jazz High Tom 2 | `RndJazzTomHigh` | **4** | [RND] Jazz High Tom 2, the JazzTomHigh at 182 Hz |
 | 49 | [RND] Jazz Crash Cymbal | `RndJazzCrash` | **4** | [RND] Jazz Crash Cymbal, the JazzCrash at 288 Hz |
@@ -1688,7 +1690,9 @@ Standard. THE GOAL: every one built.
 | 33 | Reverse Room Closed Hi-Hat | `ReverseRoomClosedHat` | **3** | Reverse Room Closed Hi-Hat: set 9's key 42, played backwards |
 | 34 | Reverse Jazz Closed Hi-Hat | `ReverseRndClosedHiHat` | **4** | Reverse Jazz Closed Hi-Hat: set 32's key 42, played backwards |
 | 35 | Reverse Brush Closed Hi-Hat | `ReverseBrushClosedHat` | **4** | Reverse Brush Closed Hi-Hat: set 40's key 42, played backwards |
+| 36 | Standard 1 Closed Hi-Hat | `ClosedHiHat` | **4** | Standard 1 Closed Hi-Hat: Standard's key 42 |
 | 37 | Room Closed Hi-Hat | `RoomClosedHat` | **3** | Room Closed Hi-Hat, the RoomClosedHat at 248 Hz |
+| 38 | Jazz Closed Hi-Hat | `RndClosedHiHat` | **4** | Jazz Closed Hi-Hat: set 32's key 42 |
 | 39 | Brush Closed Hi-Hat | `BrushClosedHat` | **4** | Brush Closed Hi-Hat, the BrushClosedHat at 248 Hz |
 | 40 | TR-707 Closed Hi-Hat | `TR707ClosedHat` | **4** | TR-707 Closed Hi-Hat: set 29's key 42 |
 | 41 | TR-606 Closed Hi-Hat | `TR606ClosedHat` | **4** | TR-606 Closed Hi-Hat: set 28's key 42 |
@@ -1699,13 +1703,16 @@ Standard. THE GOAL: every one built.
 | 46 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
 | 47 | Half-Open Hi-Hat 1 | `OpenHiHat` | **4** | Half-Open Hi-Hat 1, the OpenHiHat at 248 Hz |
 | 48 | Half-Open Hi-Hat 2 | `OpenHiHat` | **4** | Half-Open Hi-Hat 2, the OpenHiHat at 248 Hz |
+| 49 | Standard 1 Open Hi-Hat | `OpenHiHat` | **4** | Standard 1 Open Hi-Hat: Standard's key 46 |
 | 50 | Room Open Hi-Hat | `RoomOpenHat` | **3** | Room Open Hi-Hat, the RoomOpenHat at 248 Hz |
+| 51 | Jazz Open Hi-Hat | `RndOpenHiHat` | **4** | Jazz Open Hi-Hat: set 32's key 46 |
 | 52 | Brush Open Hi-Hat | `BrushOpenHat` | **4** | Brush Open Hi-Hat, the BrushOpenHat at 248 Hz |
 | 53 | TR-909 Open Hi-Hat | `TR909OpenHat` | **4** | TR-909 Open Hi-Hat: set 30's key 46 |
 | 54 | TR-707 Open Hi-Hat | `TR707OpenHat` | **4** | TR-707 Open Hi-Hat: set 29's key 46 |
 | 55 | TR-606 Open Hi-Hat | `TR606OpenHat` | **4** | TR-606 Open Hi-Hat: set 28's key 46 |
 | 56 | TR-808 Open Hi-Hat | `TR808OpenHat` | **4** | TR-808 Open Hi-Hat: set 25's key 46 |
 | 57 | CR-78 Open Hi-Hat | `CR78OpenHat` | **4** | CR-78 Open Hi-Hat: set 27's key 46 |
+| 58 | Standard 1 Crash Cymbal | `CrashCymbal1` | **4** | Standard 1 Crash Cymbal: Standard's key 49 |
 | 59 | Room Crash Cymbal | `RoomCrash` | **3** | Room Crash Cymbal, the RoomCrash at 288 Hz |
 | 60 | Jazz Crash Cymbal | `JazzCrash` | **4** | Jazz Crash Cymbal, the JazzCrash at 288 Hz |
 | 61 | Brush Crash Cymbal | `BrushCrash` | **4** | Brush Crash Cymbal, the BrushCrash at 288 Hz |
@@ -1713,12 +1720,22 @@ Standard. THE GOAL: every one built.
 | 63 | TR-909 Crash Cymbal | `TR909Crash` | **4** | TR-909 Crash Cymbal: set 30's key 49 |
 | 64 | Jungle Crash Cymbal | `JungleCrash` | **3** | Jungle Crash Cymbal, the JungleCrash at 288 Hz |
 | 65 | TR-808 Crash Cymbal | `TR808Cymbal` | **4** | TR-808 Crash Cymbal: set 25's key 49 |
+| 66 | Standard 1 Mute Crash Cymbal | `CrashCymbal1` | **4** | Standard 1 Mute Crash Cymbal, the CrashCymbal1 at 288 Hz |
+| 67 | Room Mute Crash Cymbal | `RoomCrash` | **3** | Room Mute Crash Cymbal, the RoomCrash at 288 Hz |
+| 68 | Jazz Mute Crash Cymbal | `JazzCrash` | **4** | Jazz Mute Crash Cymbal, the JazzCrash at 288 Hz |
+| 69 | Brush Mute Crash Cymbal | `BrushCrash` | **4** | Brush Mute Crash Cymbal, the BrushCrash at 288 Hz |
 | 70 | Mute Crash Cymbal 1 | `CrashCymbal1` | **4** | Mute Crash Cymbal 1, the CrashCymbal1 at 288 Hz |
 | 71 | Mute Crash Cymbal 2 | `CrashCymbal2` | **4** | Mute Crash Cymbal 2, the CrashCymbal2 at 334 Hz |
+| 72 | Reverse Standard 1 Crash Cymbal | `ReverseCrashCymbal1` | **4** | Reverse Standard 1 Crash Cymbal: Standard's key 49, played backwards |
+| 73 | Reverse Room Crash Cymbal | `ReverseRoomCrash` | **3** | Reverse Room Crash Cymbal: set 8's key 49, played backwards |
+| 74 | Reverse Jazz Crash Cymbal | `ReverseJazzCrash` | **4** | Reverse Jazz Crash Cymbal: set 32's key 49, played backwards |
+| 75 | Reverse Brush Crash Cymbal | `ReverseBrushCrash` | **4** | Reverse Brush Crash Cymbal: set 40's key 49, played backwards |
 | 76 | Splash Cymbal | `SplashCymbal` | **4** | Splash Cymbal: Standard's key 55 |
+| 77 | Standard Ride Bell | `RideBell` | **4** | Standard Ride Bell: Standard's key 53 |
 | 78 | Room Ride Bell | `RoomRideBell` | **3** | Room Ride Bell, the RoomRideBell at 148 Hz |
 | 79 | Jazz Ride Bell | `JazzRideBell` | **4** | Jazz Ride Bell, the JazzRideBell at 148 Hz |
 | 80 | Brush Ride Bell | `RideBell` | **2** | Brush Ride Bell: Standard's key 53 -- the nearest we have, not the sound |
+| 81 | Standard Ride Cymbal | `RideCymbal` | **4** | Standard Ride Cymbal: Standard's key 51 |
 | 82 | Room Ride Cymbal | `RoomRide` | **3** | Room Ride Cymbal, the RoomRide at 148 Hz |
 | 83 | Jazz Ride Cymbal | `JazzRide` | **4** | Jazz Ride Cymbal, the JazzRide at 148 Hz |
 | 84 | Brush Ride Cymbal | `RideCymbal` | **2** | Brush Ride Cymbal: Standard's key 51 -- the nearest we have, not the sound |
@@ -2947,7 +2964,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-716 classes.
+719 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -3023,20 +3040,23 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `Cymbal` [NoisyPercussionMixin]
         - `ChineseCymbal` -- 52 Chinese Cymbal (4), set 53 89 Chinese Cymbal (4), set 53 90 Chinese Cymbal 2 (2), set 62 87 Chinese Cymbal (4), set 62 88 Chinese Cymbal 2 (2)
           - `RfxNaobo` -- set 52 87 Nao Bo (4), set 52 88 Xiao Bo (4)
-        - `CrashCymbal1` -- 49 Crash Cymbal 1 (4), set 49 28 Crash Cymbal 1 (4), set 53 61 Crash Cymbal 1 (4), set 53 65 Hard Crash Cymbal (2), set 53 68 Mute Crash Cymbal 1 (4), set 62 62 Hard Crash Cymbal (2), set 62 70 Mute Crash Cymbal 1 (4), set 127 49 Crash Cymbal (4)
-          - `BrushCrash` -- set 40 49 Brush Crash Cymbal (4), set 41 49 Brush Crash Cymbal (4), set 53 64 Brush Crash Cymbal (4), set 62 61 Brush Crash Cymbal (4)
+        - `CrashCymbal1` -- 49 Crash Cymbal 1 (4), set 49 28 Crash Cymbal 1 (4), set 53 61 Crash Cymbal 1 (4), set 53 65 Hard Crash Cymbal (2), set 53 68 Mute Crash Cymbal 1 (4), set 62 58 Standard 1 Crash Cymbal (4), set 62 62 Hard Crash Cymbal (2), set 62 66 Standard 1 Mute Crash Cymbal (4), set 62 70 Mute Crash Cymbal 1 (4), set 127 49 Crash Cymbal (4)
+          - `BrushCrash` -- set 40 49 Brush Crash Cymbal (4), set 41 49 Brush Crash Cymbal (4), set 53 64 Brush Crash Cymbal (4), set 62 61 Brush Crash Cymbal (4), set 62 69 Brush Mute Crash Cymbal (4)
+            - `ReverseBrushCrash` -- set 62 75 Reverse Brush Crash Cymbal (4)
             - `RndBrushCrash` [RandomStrike] -- set 42 49 [RND] Brush Crash Cymbal (4)
           - `CengCeng` -- set 49 49 Rama Cymbal (4), set 52 45 Rama Cymbal Low (4), set 52 46 Rama Cymbal High (4), set 54 45 Ceng-Ceng (4), set 55 45 Ceng-Ceng (4)
             - `Kopyak` -- set 54 46 Kopyak Open (3), set 54 47 Kopyak Mute (3), set 55 46 Kopyak Open (3), set 55 47 Kopyak Mute (3)
           - `ConcertCymbal1` -- set 48 59 Concert Cymbal 1 (4), set 49 31 Concert Cymbal (4)
-          - `JazzCrash` -- set 32 49 Jazz Crash Cymbal (4), set 62 60 Jazz Crash Cymbal (4)
+          - `JazzCrash` -- set 32 49 Jazz Crash Cymbal (4), set 62 60 Jazz Crash Cymbal (4), set 62 68 Jazz Mute Crash Cymbal (4)
+            - `ReverseJazzCrash` -- set 62 74 Reverse Jazz Crash Cymbal (4)
             - `RndJazzCrash` [RandomStrike] -- set 33 49 [RND] Jazz Crash Cymbal (4)
           - `JungleCrash` [JungleBreak] -- set 10 49 Jungle Crash (3), set 62 64 Jungle Crash Cymbal (3)
             - `ReverseJungleCrash` -- set 59 83 Reverse Jungle Crash Cymbal (3)
-          - `ReverseCrashCymbal1` -- set 53 70 Reverse Crash Cymbal 1 (4), set 57 50 Reverse Cymbal 1 (4)
+          - `ReverseCrashCymbal1` -- set 53 70 Reverse Crash Cymbal 1 (4), set 57 50 Reverse Cymbal 1 (4), set 62 72 Reverse Standard 1 Crash Cymbal (4)
           - `ReverseCymbal` -- GM 119 Reverse Cymbal (4), set 9 52 Reverse Cymbal (4), set 10 52 Reverse Cymbal (4), set 11 52 Reverse Cymbal (4), set 13 52 Reverse Cymbal (4), set 24 52 Reverse Cymbal (4), set 26 52 Reverse Cymbal (4), set 282 52 Reverse Cymbal (4)
           - `RndCrashCymbal1` [RandomStrike] -- set 2 49 [RND] Crash Cymbal (4)
-          - `RoomCrash` [LiveRoom] -- set 8 49 Room Crash Cymbal (3), set 62 59 Room Crash Cymbal (3)
+          - `RoomCrash` [LiveRoom] -- set 8 49 Room Crash Cymbal (3), set 62 59 Room Crash Cymbal (3), set 62 67 Room Mute Crash Cymbal (3)
+            - `ReverseRoomCrash` -- set 62 73 Reverse Room Crash Cymbal (3)
             - `RndRoomCrash` [RandomStrike] -- set 12 49 [RND] Room Crash Cymbal (3)
           - `TR909Crash` [RomMetalMixin] -- set 9 49 TR-909 Crash Cymbal (4), set 11 49 TR-909 Crash Cymbal (4), set 11 57 TR-909 Crash Cymbal (4), set 13 49 TR-909 Crash Cymbal (4), set 13 57 TR-909 Crash Cymbal (4), set 25 57 TR-909 Crash Cymbal (4), set 27 57 909 Crash (4), set 28 57 909 Crash (4), set 29 49 909 Crash (4), set 30 49 909 Crash (4), set 53 66 TR-909 Crash Cymbal (4), set 62 63 TR-909 Crash Cymbal (4)
             - `ReverseTR909Crash` -- set 53 73 Reverse TR-909 Crash Cymbal (4), set 58 64 Reverse TR-707 Crash Cymbal (2)
@@ -3046,25 +3066,25 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `CrashRide` -- 59 Ride Cymbal 2 (4), set 53 79 Ride Cymbal 2 (4)
           - `RndCrashRide` [RandomStrike] -- set 2 59 [RND] Ride Cymbal 2 (4)
         - `HiHat`
-          - `ClosedHiHat` -- 42 Closed Hi-Hat (4), set 1 42 Closed Hi-Hat (4), set 48 27 Closed Hi-Hat (4), set 53 36 Closed Hi-Hat (4), set 53 38 Closed Hi-Hat 3 (2), set 53 39 Closed Hi-Hat 4 (2), set 53 40 Closed Hi-Hat (4), set 127 42 Closed High Hat (4)
+          - `ClosedHiHat` -- 42 Closed Hi-Hat (4), set 1 42 Closed Hi-Hat (4), set 48 27 Closed Hi-Hat (4), set 53 36 Closed Hi-Hat (4), set 53 38 Closed Hi-Hat 3 (2), set 53 39 Closed Hi-Hat 4 (2), set 53 40 Closed Hi-Hat (4), set 62 36 Standard 1 Closed Hi-Hat (4), set 127 42 Closed High Hat (4)
             - `BrushClosedHat` -- set 40 42 Brush Closed Hi-Hat (4), set 41 42 Brush Closed Hi-Hat (4), set 62 39 Brush Closed Hi-Hat (4)
               - `ReverseBrushClosedHat` -- set 59 87 Reverse Brush Closed Hi-Hat (4), set 62 35 Reverse Brush Closed Hi-Hat (4)
               - `RndBrushClosedHat` [RandomStrike] -- set 42 42 [RND] Brush Closed Hi-Hat (4)
             - `JungleHiHat` [JungleBreak] -- set 10 44 Jungle Hi-Hat (4), set 53 35 Jungle Hi-Hat (4)
               - `ReverseJungleHiHat` -- set 58 56 Reverse Jungle Hi-Hat (4)
             - `ReverseClosedHiHat` -- set 53 33 Reverse Closed Hi-Hat 1 (4), set 57 55 Reverse Closed Hi-Hat (4), set 58 52 Reverse Closed Hi-Hat (4), set 59 84 Reverse Standard Closed Hi-Hat (4), set 62 32 Reverse Standard Closed Hi-Hat (4)
-            - `RndClosedHiHat` [RandomStrike] -- set 2 42 [RND] Closed Hi-Hat (4), set 24 42 Closed Hi-Hat 2 (4), set 32 42 Closed Hi-Hat 2 (4), set 53 37 Closed Hi-Hat 2 (4)
+            - `RndClosedHiHat` [RandomStrike] -- set 2 42 [RND] Closed Hi-Hat (4), set 24 42 Closed Hi-Hat 2 (4), set 32 42 Closed Hi-Hat 2 (4), set 33 42 [RND] Jazz Closed Hi-Hat (4), set 53 37 Closed Hi-Hat 2 (4), set 62 38 Jazz Closed Hi-Hat (4)
               - `ReverseRndClosedHiHat` -- set 59 86 Reverse Jazz Closed Hi-Hat (4), set 62 34 Reverse Jazz Closed Hi-Hat (4)
             - `RoomClosedHat` [LiveRoom] -- set 8 42 Room Closed Hi-Hat 3 (3), set 9 42 Room Closed Hi-Hat (3), set 13 42 Room Closed Hi-Hat (3), set 16 42 Closed Hi-hat3 C (3), set 62 37 Room Closed Hi-Hat (3)
               - `ReverseRoomClosedHat` -- set 59 85 Reverse Room Closed Hi-Hat (3), set 62 33 Reverse Room Closed Hi-Hat (3)
               - `RndRoomClosedHat` [RandomStrike] -- set 12 42 [RND] Room Closed Hi-Hat (3)
             - `TR707ClosedHat` [RomMetalMixin] -- set 11 42 TR-707 Closed Hi-Hat (4), set 29 42 707 CHH (4), set 29 44 707 CHH (4), set 30 42 707 CHH (4), set 30 44 707 CHH (4), set 53 41 TR-707 Closed Hi-Hat (4), set 62 40 TR-707 Closed Hi-Hat (4)
               - `ReverseTR707ClosedHat` -- set 58 54 Reverse TR-707 Closed Hi-Hat (4)
-          - `OpenHiHat` -- 46 Open Hi-Hat (4), set 1 46 Open Hi-Hat (4), set 48 29 Open Hi-Hat (4), set 53 49 Half-Open Hi-Hat 1 (4), set 53 50 Half-Open Hi-Hat 2 (4), set 53 51 Open Hi Hat (4), set 53 53 Open Hi-Hat 3 (2), set 62 47 Half-Open Hi-Hat 1 (4), set 62 48 Half-Open Hi-Hat 2 (4), set 127 44 Open High Hat 2 (4), set 127 46 Open High Hat 1 (4)
+          - `OpenHiHat` -- 46 Open Hi-Hat (4), set 1 46 Open Hi-Hat (4), set 48 29 Open Hi-Hat (4), set 53 49 Half-Open Hi-Hat 1 (4), set 53 50 Half-Open Hi-Hat 2 (4), set 53 51 Open Hi Hat (4), set 53 53 Open Hi-Hat 3 (2), set 62 47 Half-Open Hi-Hat 1 (4), set 62 48 Half-Open Hi-Hat 2 (4), set 62 49 Standard 1 Open Hi-Hat (4), set 127 44 Open High Hat 2 (4), set 127 46 Open High Hat 1 (4)
             - `BrushOpenHat` -- set 40 46 Brush Open Hi-Hat (4), set 41 46 Brush Open Hi-Hat (4), set 62 52 Brush Open Hi-Hat (4)
               - `RndBrushOpenHat` [RandomStrike] -- set 42 46 [RND] Brush Open Hi-Hat (4)
             - `ReverseOpenHiHat` -- set 53 32 Reverse Open Hi-Hat (4), set 57 52 Reverse Open Hi-Hat (4), set 58 61 Reverse Open Hi-Hat (4)
-            - `RndOpenHiHat` [RandomStrike] -- set 2 46 [RND] Open Hi-Hat (4), set 24 46 Open Hi-Hat 2 (4), set 32 46 Open Hi-Hat 2 (4), set 53 52 Open Hi-Hat 2 (4), set 53 54 Open Hi-Hat 2 (4)
+            - `RndOpenHiHat` [RandomStrike] -- set 2 46 [RND] Open Hi-Hat (4), set 24 46 Open Hi-Hat 2 (4), set 32 46 Open Hi-Hat 2 (4), set 33 46 [RND] Jazz Open Hi-Hat (4), set 53 52 Open Hi-Hat 2 (4), set 53 54 Open Hi-Hat 2 (4), set 62 51 Jazz Open Hi-Hat (4)
             - `RoomOpenHat` [LiveRoom] -- set 8 46 Room Open Hi-Hat 3 (3), set 9 46 Room Open Hi-Hat (3), set 13 46 Room Open Hi-Hat (3), set 16 46 Open Hi-hat3 (3), set 62 50 Room Open Hi-Hat (3)
               - `RndRoomOpenHat` [RandomStrike] -- set 12 46 [RND] Room Open Hi-Hat (3)
             - `TR707OpenHat` [RomMetalMixin] -- set 29 46 707 OHH (4), set 53 56 TR-707 Open Hi-Hat (4), set 62 54 TR-707 Open Hi-Hat (4)
@@ -3073,13 +3093,13 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `PedalHiHat` -- 44 Pedal Hi-Hat (4), set 1 44 Pedal Hi-Hat (4), set 9 44 Pedal Hi-Hat (4), set 12 44 Pedal Hi-Hat (4), set 13 44 Pedal Hi-Hat (4), set 33 44 Pedal Hi-Hat (4), set 41 44 Pedal Hi-Hat (4), set 42 44 Pedal Hi-Hat (4), set 48 28 Pedal Hi-Hat (4), set 53 46 Pedal Hi-Hat (4), set 53 47 Pedal Hi-Hat (4), set 53 48 Pedal Hi-Hat (4), set 62 44 Pedal Hi-Hat (4), set 62 45 Pedal Hi-Hat (4), set 62 46 Pedal Hi-Hat (4)
             - `ReversePedalHiHat` -- set 53 34 Reverse Closed Hi-Hat 2 (2)
             - `RndPedalHiHat` [RandomStrike] -- set 2 44 [RND] Pedal Hi-Hat (4)
-        - `RideBell` -- 53 Ride Bell (4), set 9 53 Ride Bell (4), set 10 53 Ride Bell (4), set 11 53 Ride Bell (4), set 13 53 Ride Bell (4), set 26 53 Ride Bell (4), set 41 53 Brush Ride Bell (2), set 53 76 Ride Bell (4), set 53 77 Brush Ride Bell (2), set 62 80 Brush Ride Bell (2)
+        - `RideBell` -- 53 Ride Bell (4), set 9 53 Ride Bell (4), set 10 53 Ride Bell (4), set 11 53 Ride Bell (4), set 13 53 Ride Bell (4), set 26 53 Ride Bell (4), set 41 53 Brush Ride Bell (2), set 53 76 Ride Bell (4), set 53 77 Brush Ride Bell (2), set 62 77 Standard Ride Bell (4), set 62 80 Brush Ride Bell (2)
           - `JazzRideBell` -- set 32 53 Jazz Ride Bell (4), set 62 79 Jazz Ride Bell (4)
             - `RndJazzRideBell` [RandomStrike] -- set 33 53 [RND] Jazz Ride Bell (4)
           - `RndRideBell` [RandomStrike] -- set 2 53 [RND] Ride Bell 1 (4), set 42 53 [RND] Brush Ride Bell (4)
           - `RoomRideBell` [LiveRoom] -- set 8 53 Room Ride Bell (3), set 62 78 Room Ride Bell (3)
             - `RndRoomRideBell` [RandomStrike] -- set 12 53 [RND] Room Ride Bell (3)
-        - `RideCymbal` -- 51 Ride Cymbal 1 (4), set 10 51 Ride Cymbal 1 (4), set 11 51 Ride Cymbal 1 (4), set 40 51 Ride Cymbal Inner (4), set 41 51 Brush Ride Cymbal (2), set 48 30 Ride Cymbal (4), set 53 78 Ride Cymbal 1 (4), set 53 80 Brush Ride Cymbal (2), set 53 81 Ride Cymbal Low Inner (4), set 53 82 Ride Cymbal Mid Inner (4), set 53 83 Ride Cymbal High Inner (4), set 62 84 Brush Ride Cymbal (2), set 127 51 Ride Cymbal (4)
+        - `RideCymbal` -- 51 Ride Cymbal 1 (4), set 10 51 Ride Cymbal 1 (4), set 11 51 Ride Cymbal 1 (4), set 40 51 Ride Cymbal Inner (4), set 41 51 Brush Ride Cymbal (2), set 48 30 Ride Cymbal (4), set 53 78 Ride Cymbal 1 (4), set 53 80 Brush Ride Cymbal (2), set 53 81 Ride Cymbal Low Inner (4), set 53 82 Ride Cymbal Mid Inner (4), set 53 83 Ride Cymbal High Inner (4), set 62 81 Standard Ride Cymbal (4), set 62 84 Brush Ride Cymbal (2), set 127 51 Ride Cymbal (4)
           - `JazzRide` -- set 32 51 Jazz Ride Cymbal (4), set 62 83 Jazz Ride Cymbal (4)
             - `RndJazzRide` [RandomStrike] -- set 33 51 [RND] JAZZ Ride Cymbal (4)
           - `ReverseRideCymbal` -- set 57 53 Reverse Ride Cymbal (4)

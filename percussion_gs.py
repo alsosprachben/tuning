@@ -681,7 +681,20 @@ VOICE = {
     # crash's): the crash, cut at GATE
     'Mute Crash Cymbal 1': ('c', 'CrashCymbal1Properties', 288.3),
     'Mute Crash Cymbal 2': ('c', 'CrashCymbal2Properties', 333.7),
+    # ...and each kit's own (Cym&Claps 2, SC-8850): Standard 1's, Room's,
+    # Jazz's, Brush's crash, choked
+    'Standard 1 Mute Crash Cymbal': ('c', 'CrashCymbal1Properties', 288.3),
+    'Room Mute Crash Cymbal': ('c', 'RoomCrashProperties', 288.3),
+    'Jazz Mute Crash Cymbal': ('c', 'JazzCrashProperties', 288.3),
+    'Brush Mute Crash Cymbal': ('c', 'BrushCrashProperties', 288.3),
     'Reverse Crash Cymbal 1': ('r', 0, 49), 'Reverse Crash Cymbal 2': ('r', 0, 57),
+    # Cym&Claps 2's: the kits' own cymbals and hats, by kit, forward and back
+    'Standard 1 Crash Cymbal': ('k', 0, 49), 'Reverse Standard 1 Crash Cymbal': ('r', 0, 49),
+    'Reverse Room Crash Cymbal': ('r', 8, 49), 'Reverse Jazz Crash Cymbal': ('r', 32, 49),
+    'Reverse Brush Crash Cymbal': ('r', 40, 49),
+    'Standard 1 Closed Hi-Hat': ('k', 0, 42), 'Jazz Closed Hi-Hat': ('k', 32, 42),
+    'Standard 1 Open Hi-Hat': ('k', 0, 46), 'Jazz Open Hi-Hat': ('k', 32, 46),
+    'Standard Ride Bell': ('k', 0, 53), 'Standard Ride Cymbal': ('k', 0, 51),
     'Reverse Crash Cymbal 3': ('r', 0, 57, APPROX), 'Reverse TR-909 Crash Cymbal': ('r', 30, 49),
     'Splash Cymbal': ('k', 0, 55), 'Ride Bell': ('k', 0, 53), 'Brush Ride Bell': ('k', 0, 53, APPROX),
     'Ride Cymbal 1': ('k', 0, 51), 'Ride Cymbal 2': ('k', 0, 59), 'Brush Ride Cymbal': ('k', 0, 51, APPROX),
@@ -897,7 +910,9 @@ for _w, (_c, _ts) in _CONS.items():
 GATE = {'Rock Snare Dry': 0.25, 'Rock SD Dry': 0.25, 'MC-500 Beep 1': 0.04, 'MC-500 Beep 2': 0.04, 'Guitar Wah': 0.25, 'Biwa FX': 1.2,
         'Phonograph Noise': 2.0, 'Pick Scrape': 0.8, 'Telephone 1': 1.5, 'Small Club 2': 2.5,
         'Applause Wave': 3.0, 'Eruption': 2.5, 'Sagat Closed': 0.07, 'Gengari Mute Low': 0.12, 'Gengari Mute High': 0.12, 'Jing Mute': 0.35, 'Tang Gu Mute': 0.12, 'Alias': 0.9, 'Swish': 0.35, 'Velocity Noise FX': 0.4, 'Missile': 1.0, 'Tape Stop 1': 1.0, 'Tape Stop 2': 0.6,
-        'Guitar Slide': 0.3, 'Small Club 1': 2.5, 'Mute Crash Cymbal 1': 0.15, 'Mute Crash Cymbal 2': 0.15}
+        'Guitar Slide': 0.3, 'Small Club 1': 2.5, 'Mute Crash Cymbal 1': 0.15, 'Mute Crash Cymbal 2': 0.15,
+        'Standard 1 Mute Crash Cymbal': 0.15, 'Room Mute Crash Cymbal': 0.15, 'Jazz Mute Crash Cymbal': 0.15,
+        'Brush Mute Crash Cymbal': 0.15}
 
 # ...AND ITS RING (percussion_map.KIT_RING, PERCUSSION_RING's sense): the
 # half-open hats', fitted to DRSKit's semi-open hat against its open one
@@ -1022,6 +1037,12 @@ GATE.update({'Reverse Voice One': round(1 / _ONE['f0'], 4), 'Reverse Voice Two':
              round(1 / (_YO['f0'] * 2 ** (5 / 12.0)), 4)})
 LEVEL.update({'Mute Crash Cymbal 1': 0.56, 'Mute Crash Cymbal 2': 0.56,
               'Brush Crash Cymbal': round(0.56 * 10 ** (-9 / 20.0), 4)})
+# ...the kits' choked crashes their kit's crash's ring and trim (Room's and
+# Brush's KIT_RING/LEVEL 49; Jazz's crash plays at its class's own level)
+RING.update({'Standard 1 Mute Crash Cymbal': 0.61, 'Room Mute Crash Cymbal': 0.61,
+             'Jazz Mute Crash Cymbal': 0.61, 'Brush Mute Crash Cymbal': 0.61})
+LEVEL.update({'Standard 1 Mute Crash Cymbal': 0.56, 'Room Mute Crash Cymbal': 0.218736,
+              'Brush Mute Crash Cymbal': 0.1987})
 
 # Every name the SC-88 Pro's sets use has a voice here (2026-10-25); a few
 # are the nearest we have (APPROX), and Standard's Voice One-Three (17-19)
