@@ -223,6 +223,16 @@ INSTS = {
                                ("pelegongan", 39, "ciblon_medium_thung", 186), ("kelontuk", 40, "ciblon_medium_tong", 290),
                                ("kelontuk_mute", 41, "ciblon_medium_tak", 478),
                                ("kelontuk_side", 42, "ketipung_small_tak", 406))},
+    # THE ASIA SET'S DHOLAK (the SC-8850's 89-90, tonelib.DholakProperties): its
+    # bass head's open stroke and its treble's, cut from iyankc's groove
+    # (examples/freesound_slice.py dholak; freesound 479246, CC0) -- the bass
+    # with the bass skin's one-shot (536872, CC0) as bass_00
+    "dholak_bass": dict(kit=52, note=89, glob=os.path.expanduser("~/Documents/refs/dholak/hits/bass_*.wav"),
+                        groups=None, merge=0.04, max_modes=10, band=(50, 4000), floor=-35, flat=(1000, 8000),
+                        T=_JAZZ_T, clip=-60.0, params=DRUM_PARAMS),
+    "dholak_treble": dict(kit=52, note=90, glob=os.path.expanduser("~/Documents/refs/dholak/hits/treble_*.wav"),
+                          groups=None, merge=0.04, max_modes=10, band=(390, 8000), floor=-35, flat=(1000, 8000),
+                          T=_JAZZ_T, clip=-60.0, params=DRUM_PARAMS),
     # GS key 82, Shaker: Camo's shaker in VSCO 2 CE, eight single shakes of
     # 0.16-0.27 s (CC0), shaped noise as the maracas and cabasa (SHAKE_PARAMS,
     # then --trim3 into its noise_bands)

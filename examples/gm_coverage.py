@@ -684,6 +684,12 @@ def _gs_sets_rated():
                       'KendangPelegonganProperties', 'KelontukProperties', 'KelontukMuteProperties',
                       'KelontukSideProperties', 'GamelanJublagProperties', 'GamelanJegoganProperties',
                       'ReyongProperties', 'KajarProperties', 'KempurProperties', 'KopyakProperties')},
+                  # the Asia set's dholak, each head's open stroke fitted (examples/perc_fit.py
+                  # dholak_*: the bass 3.6 dB, the treble 10.7 -- its strokes cut from a
+                  # groove, the bass head ringing under them)
+                  'DholakBassProperties': (lambda: 3), 'DholakTrebleProperties': (lambda: 3),
+                  # Concert BD 1 Mute: the Orchestra set's concert bass drum, choked by the hand
+                  'ConcertBassDrumProperties': (lambda: 3),
                   # Rock Snare Dry: Standard's snare, gated (APPROX)
                   'AcousticSnareProperties': (lambda: PERC_RATED[38][0]),
                   # the Jungle drums (tonelib.JungleBreak: breaks sped up; Kick 2 the

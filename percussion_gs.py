@@ -378,6 +378,16 @@ VOICE = {
     # the world's
     'Wadaiko': ('c', 'TaikoProperties', 65.9), 'Shime Taiko': ('c', 'TaikoProperties', 330.0, APPROX),
     'Atarigane': ('c', 'AtariganeProperties', 1318.5), 'Big Gong': ('k', 52, 74), 'Small Gong': ('k', 52, 75),
+    'Dholak 1': ('c', 'DholakBassProperties', 107.0), 'Dholak 2': ('c', 'DholakTrebleProperties', 790.0),
+    # THE BRUSH KIT'S KICK (Brush 2, Brush 2 L/R, Kick & Snare 2): the jazz
+    # kit's bass drum, which a brush player plays -- its own feathered stroke
+    # unrecorded; its left foot the jazz kick's second beater
+    'Brush Kick 1': ('k', 32, 36, APPROX), 'Brush Kick 2': ('k', 32, 35, APPROX),
+    '[L] Brush Kick 1': ('c', 'LeftJazzKickProperties', 70.0, APPROX),
+    '[L] Brush Kick 2': ('c', 'LeftJazzKick2Properties', 46.0, APPROX),
+    # the concert bass drum, the hand on its head (its exclusive class is the
+    # open drum's): cut at GATE
+    'Concert BD 1 Mute': ('c', 'ConcertBassDrumProperties', 37.7),
     'Thai Gong': ('k', 52, 73, APPROX), 'Rama Cymbal': ('c', 'CengCengProperties', 440.0),
     'Gamelan Gong': ('c', 'GamelanGongProperties', 65.4), 'Hyoushigi': ('k', 0, 75, APPROX),
     # backwards (blockrender._reverse_partial): the voice swelling to its hit
@@ -912,7 +922,7 @@ GATE = {'Rock Snare Dry': 0.25, 'Rock SD Dry': 0.25, 'MC-500 Beep 1': 0.04, 'MC-
         'Applause Wave': 3.0, 'Eruption': 2.5, 'Sagat Closed': 0.07, 'Gengari Mute Low': 0.12, 'Gengari Mute High': 0.12, 'Jing Mute': 0.35, 'Tang Gu Mute': 0.12, 'Alias': 0.9, 'Swish': 0.35, 'Velocity Noise FX': 0.4, 'Missile': 1.0, 'Tape Stop 1': 1.0, 'Tape Stop 2': 0.6,
         'Guitar Slide': 0.3, 'Small Club 1': 2.5, 'Mute Crash Cymbal 1': 0.15, 'Mute Crash Cymbal 2': 0.15,
         'Standard 1 Mute Crash Cymbal': 0.15, 'Room Mute Crash Cymbal': 0.15, 'Jazz Mute Crash Cymbal': 0.15,
-        'Brush Mute Crash Cymbal': 0.15}
+        'Brush Mute Crash Cymbal': 0.15, 'Concert BD 1 Mute': 0.25}
 
 # ...AND ITS RING (percussion_map.KIT_RING, PERCUSSION_RING's sense): the
 # half-open hats', fitted to DRSKit's semi-open hat against its open one
@@ -1041,6 +1051,8 @@ LEVEL.update({'Mute Crash Cymbal 1': 0.56, 'Mute Crash Cymbal 2': 0.56,
 # Brush's KIT_RING/LEVEL 49; Jazz's crash plays at its class's own level)
 RING.update({'Standard 1 Mute Crash Cymbal': 0.61, 'Room Mute Crash Cymbal': 0.61,
              'Jazz Mute Crash Cymbal': 0.61, 'Brush Mute Crash Cymbal': 0.61})
+LEVEL.update({'Concert BD 1 Mute': 0.151})          # the open drum's trim (Orchestra's 36)
+LEVEL.update({'Dholak 1': 3.5487, 'Dholak 2': 4.9493})   # to the kit's drum target (examples/gs_levels.py)
 LEVEL.update({'Standard 1 Mute Crash Cymbal': 0.56, 'Room Mute Crash Cymbal': 0.218736,
               'Brush Mute Crash Cymbal': 0.1987})
 

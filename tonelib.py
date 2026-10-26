@@ -13707,6 +13707,46 @@ class CongaOpenProperties(MeasuredStrokeProperties):
     attack_time = 0.00155233
 
 
+class DholakProperties(CongaOpenProperties):
+    """THE DHOLAK (the SC-8850's Asia set, 89-90): the north Indian barrel drum,
+    two heads played with the hands -- a hand drum as the conga is, so its
+    knobs to start from; each head's open stroke FITTED (examples/perc_fit.py
+    dholak_*) to iyankc's groove (Freesound 479246, CC0) cut stroke by stroke
+    (examples/freesound_slice.py dholak) and curesforbrokenhearts' bass-skin
+    one-shot (536872, CC0)."""
+
+
+class DholakBassProperties(DholakProperties):
+    """Dholak 1 (89): the bass head's open stroke, its "ge" -- ~107 Hz."""
+    DRUM_MODES = ((0.6640, -14.5, 49), (0.9446, -5.9, 88), (1.0747, 0.0, 84), (1.3143, -22.7, 95), (1.4991, -23.7, 135), (1.6634, -26.9, 106), (2.3342, -22.0, 129), (2.7928, -27.4, 158), (3.1624, -23.2, 189), (3.6690, -20.0, 260))
+    slow_share = 0.0956916
+    slow_dbs = 26.3899
+    click_cal_db = 1.0756
+    click_dbs = 179.901
+    click_stroke_slope = 0.123212
+    chiff_volume = 2.08254
+    chiff_width = 0.0545995
+    chiff_bandwidth = 0.306921
+    sustain_jitter = 0.289783
+    band_trim_db = ((177, 18.8), (354, 13.0), (707, 4.6), (1414, 0.4), (2828, -6.2), (5657, -11.9), (11314, -18.7))
+
+
+class DholakTrebleProperties(DholakProperties):
+    """Dholak 2 (90): the treble head's open stroke, its "na" -- ~790 Hz, its
+    head's own lowest mode an octave under (394 Hz, -5 dB)."""
+    DRUM_MODES = ((0.4988, -5.3, 184), (0.6592, -8.6, 308), (0.7102, -30.5, 277), (0.9939, 0.0, 224), (1.3916, -22.1, 158), (1.5520, -24.2, 568), (1.7476, -22.3, 235), (1.8876, -30.1, 514), (1.9794, -26.6, 156), (2.3577, -26.5, 435))
+    slow_share = 0.0774855
+    slow_dbs = 41.7229
+    click_cal_db = 0.65292
+    click_dbs = 143.521
+    click_stroke_slope = 0.106744
+    chiff_volume = 0.0978702
+    chiff_width = 0.0306885
+    chiff_bandwidth = 0.128725
+    sustain_jitter = 0.0294626
+    band_trim_db = ((177, -6.8), (354, 11.3), (707, 14.9), (1414, 7.5), (2828, -0.2), (5657, -10.9), (11314, -15.9))
+
+
 class KendangProperties(CongaOpenProperties):
     """THE KENDANG (the SC-8850's Gamelan sets, 36-42): the gamelan's two-headed
     barrel drum, played with the hands (and in kebyar a mallet, the panggul) --

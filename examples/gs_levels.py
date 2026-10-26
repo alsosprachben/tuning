@@ -36,6 +36,8 @@ KIND = {
     'Reverse Voice Two': 'voice', 'Voice Three': 'voice', 'Reverse Voice Three': 'voice', 'Voice Tah': 'voice',
     'Reverse Voice Tah': 'voice', 'Voice Ou': 'voice', 'Voice Au': 'voice', 'Voice Whey': 'voice',
     'Frog Voice': 'voice', 'Douby': 'voice', 'Reverse Douby': 'voice', 'Baert High': 'voice', 'Baert Low': 'voice',
+    # the Asia set's dholak
+    'Dholak 1': 'drum', 'Dholak 2': 'drum',
     # the Rhythm FX sets' effects
     'Techno Thip': 'voice', 'Pop Drop': 'voice', 'Syn. Drops': 'voice', 'Pipe': 'drum', 'Distortion Kick': 'drum',
     'Sub Marine': 'voice', 'Noise Attack': 'voice', 'Bounce': 'voice', 'Reverse Bounce': 'voice',

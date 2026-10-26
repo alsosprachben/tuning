@@ -28,7 +28,7 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | SC-88Pro tones | 774 | 494 | 64% | 298 | 193 | 3 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
 | SC-8850 tones | 1262 | 522 | 41% | 315 | 204 | 3 | 0 | 0 |
-| SC-8850 drum sets | 37 | 31 | 84% | | | | | |
+| SC-8850 drum sets | 37 | 34 | 92% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
 
@@ -223,13 +223,13 @@ Standard. THE GOAL: every one built.
 | 33 | JAZZ | JAZZ | JAZZ | JAZZ | built: 18 keys of its own | 18 | **4** |
 | 34 | JAZZ L/R | -- | -- | -- | built: 22 keys of its own | 22 | **4** |
 | 41 | BRUSH | BRUSH | BRUSH | BRUSH | built: 17 keys of its own | 17 | **4** |
-| 42 | BRUSH 2 | -- | -- | -- | built: 20 keys of its own | 18 | **4** |
-| 43 | BRUSH 2 L/R | -- | -- | -- | partial: 20 of 22 keys (2 Standard's drum) | 18 | **4** |
+| 42 | BRUSH 2 | -- | -- | -- | built: 20 keys of its own | 20 | **4** |
+| 43 | BRUSH 2 L/R | -- | -- | -- | built: 22 keys of its own | 22 | **4** |
 | 49 | ORCHESTRA | ORCHESTRA | ORCHESTRA | ORCHESTRA | built: 25 keys of its own | 25 | **4** |
 | 50 | ETHNIC | ETHNIC | ETHNIC | -- | built: 75 keys of its own | 75 | **4** |
 | 51 | KICK & SNARE | KICK & SNARE | KICK & SNARE | -- | built: 75 keys of its own | 75 | **4** |
-| 52 | KICK & SNARE 2 | -- | -- | -- | partial: 69 of 72 keys (3 silent) | 69 | **4** |
-| 53 | ASIA | ASIA | -- | -- | partial: 64 of 66 keys (2 silent) | 60 | **3** |
+| 52 | KICK & SNARE 2 | -- | -- | -- | built: 72 keys of its own | 72 | **4** |
+| 53 | ASIA | ASIA | -- | -- | built: 66 keys of its own | 62 | **3** |
 | 54 | CYMBAL&CLAPS | CYMBAL&CLAPS | -- | -- | built: 65 keys of its own | 65 | **4** |
 | 55 | GAMELAN 1 | -- | -- | -- | built: 53 keys of its own | 53 | **3** |
 | 56 | GAMELAN 2 | -- | -- | -- | built: 53 keys of its own | 53 | **3** |
@@ -839,6 +839,8 @@ Standard. THE GOAL: every one built.
 | # | note | class | | notes |
 |---|---|---|---|---|
 | 26 | Finger Snap 2 | `FingerSnap` | **4** | Finger Snap 2: Standard's key 26 |
+| 35 | Brush Kick 2 | `JazzKick2` | **2** | Brush Kick 2: set 32's key 35 -- the nearest we have, not the sound |
+| 36 | Brush Kick 1 | `JazzKick` | **2** | Brush Kick 1: set 32's key 36 -- the nearest we have, not the sound |
 | 38 | Brush Tap 2 | `BrushTap` | **4** | Brush Tap 2: set 40's key 38 |
 | 39 | Brush Slap 2 | `BrushSlap` | **4** | Brush Slap 2: set 40's key 39 |
 | 40 | Brush Swirl 1 | `BrushSwirl` | **4** | Brush Swirl 1: set 40's key 40 |
@@ -862,6 +864,8 @@ Standard. THE GOAL: every one built.
 | # | note | class | | notes |
 |---|---|---|---|---|
 | 26 | Finger Snap 2 | `FingerSnap` | **4** | Finger Snap 2: Standard's key 26 |
+| 35 | [RND] Brush Kick 2 | `RndJazzKick2` | **4** | [RND] Brush Kick 2: set 32's key 35, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 36 | [RND] Brush Kick 1 | `RndJazzKick` | **4** | [RND] Brush Kick 1: set 32's key 36, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 38 | [RND] Brush Tap 2 | `RndBrushTap` | **4** | [RND] Brush Tap 2: set 40's key 38, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 39 | [RND] Brush Slap 2 | `RndBrushSlap` | **4** | [RND] Brush Slap 2: set 40's key 39, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 40 | Brush Swirl 1 | `BrushSwirl` | **4** | Brush Swirl 1: set 40's key 40 |
@@ -879,6 +883,8 @@ Standard. THE GOAL: every one built.
 | 53 | [RND] Brush Ride Bell | `RndRideBell` | **4** | [RND] Brush Ride Bell: Standard's key 53, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 59 | Ride Cymbal Edge | `RideEdge` | **4** | Ride Cymbal Edge, the RideEdge at 148 Hz |
 | 88 | Applause | `OrchestraApplause` | **4** | Applause: set 48's key 88 |
+| 95 | [L] Brush Kick 2 | `LeftJazzKick2` | **2** | [L] Brush Kick 2, the LeftJazzKick2 at 46 Hz -- the nearest we have, not the sound |
+| 96 | [L] Brush Kick 1 | `LeftJazzKick` | **2** | [L] Brush Kick 1, the LeftJazzKick at 70 Hz -- the nearest we have, not the sound |
 
 ### 48 Orchestra
 
@@ -1091,10 +1097,13 @@ Standard. THE GOAL: every one built.
 | 39 | Standard 1 Kick 1 | `KickDrum` | **4** | Standard 1 Kick 1: Standard's key 36 |
 | 40 | Standard 1 Kick 2 | `KickDrum` | **4** | Standard 1 Kick 2: Standard's key 35 |
 | 41 | Standard 1 Kick 1 | `KickDrum` | **4** | Standard 1 Kick 1: Standard's key 36 |
+| 42 | Brush Kick 2 | `JazzKick2` | **2** | Brush Kick 2: set 32's key 35 -- the nearest we have, not the sound |
+| 43 | Brush Kick 1 | `JazzKick` | **2** | Brush Kick 1: set 32's key 36 -- the nearest we have, not the sound |
 | 44 | Jazz Kick 2 | `JazzKick2` | **4** | Jazz Kick 2: set 32's key 35 |
 | 45 | Jazz Kick 1 | `JazzKick` | **4** | Jazz Kick 1: set 32's key 36 |
 | 46 | Hip-Hop Kick 2 | `HipHopKick2` | **4** | Hip-Hop Kick 2, the HipHopKick2 at 56 Hz |
 | 47 | Hip-Hop Kick 1 | `HipHopKick1` | **4** | Hip-Hop Kick 1, the HipHopKick1 at 37 Hz |
+| 48 | Concert BD 1 Mute | `ConcertBassDrum` | **3** | Concert BD 1 Mute, the ConcertBassDrum at 38 Hz |
 | 49 | Concert BD 1 | `ConcertBassDrum` | **4** | Concert BD 1: set 48's key 36 |
 | 50 | Room Kick 2 | `MondoKick` | **3** | Room Kick 2, the MondoKick at 39 Hz |
 | 51 | Room Kick 1 | `MondoKick` | **3** | Room Kick 1, the MondoKick at 44 Hz |
@@ -1208,6 +1217,8 @@ Standard. THE GOAL: every one built.
 | 86 | Hu Yin Luo High 2 | `RfxHuYinLuo` | **3** | Hu Yin Luo High 2, the RfxHuYinLuo at 500 Hz |
 | 87 | Nao Bo | `RfxNaobo` | **4** | Nao Bo, the RfxNaobo at 182 Hz |
 | 88 | Xiao Bo | `RfxNaobo` | **4** | Xiao Bo, the RfxNaobo at 272 Hz |
+| 89 | Dholak 1 | `DholakBass` | **3** | Dholak 1, the DholakBass at 107 Hz |
+| 90 | Dholak 2 | `DholakTreble` | **3** | Dholak 2, the DholakTreble at 790 Hz |
 
 ### 53 Cymbal & Claps
 
@@ -1605,8 +1616,8 @@ Standard. THE GOAL: every one built.
 | 42 | Reverse Room Kick 1 | `ReverseMondoKick` | **3** | Reverse Room Kick 1: set 8's key 36, played backwards |
 | 43 | Reverse Jazz Kick 2 | `ReverseJazzKick2` | **4** | Reverse Jazz Kick 2: set 32's key 35, played backwards |
 | 44 | Reverse Jazz Kick 1 | `ReverseJazzKick` | **4** | Reverse Jazz Kick 1: set 32's key 36, played backwards |
-| 45 | Reverse Brush Kick 2 | `ReverseJazzKick2` | **4** | Reverse Brush Kick 2: set 41's key 35, played backwards |
-| 46 | Reverse Brush Kick 1 | `ReverseJazzKick` | **4** | Reverse Brush Kick 1: set 41's key 36, played backwards |
+| 45 | Reverse Brush Kick 2 | `ReverseJazzKick2` | **2** | Reverse Brush Kick 2: set 41's key 35, played backwards |
+| 46 | Reverse Brush Kick 1 | `ReverseJazzKick` | **2** | Reverse Brush Kick 1: set 41's key 36, played backwards |
 | 47 | Reverse HipHop Kick 2 | `ReverseHipHopKick2` | **4** | Reverse HipHop Kick 2: set 9's key 35, played backwards |
 | 48 | Reverse HipHop Kick 1 | `ReverseHipHopKick1` | **4** | Reverse HipHop Kick 1: set 9's key 36, played backwards |
 | 49 | Reverse Jungle Kick 2 | `ReverseJungleKick2` | **4** | Reverse Jungle Kick 2: set 10's key 35, played backwards |
@@ -2964,7 +2975,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-719 classes.
+722 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -3161,20 +3172,20 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
                 - `ReverseRoomSnare2` -- set 59 59 Reverse Room Snare 2 (3)
                 - `RndRoomSnare2` [RandomStrike] -- set 12 40 [RND] Room Snare 2 (3)
           - `KickDrum` -- 0 Std 1 Kick 1 (4), 1 Std 1 Kick 2 (4), 2 Std 2 Kick 1 (4), 3 Std 2 Kick 2 (4), 4 Kick Drum 1 (4), 5 Kick Drum 2 (4), 8 Room Kick 1 (3), 9 Room Kick 2 (3), 11 Power Kick 2 (2), 12 Electric Kick 2 (2), 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4), set 1 35 Standard 2 Kick 2 (2), set 1 36 Standard 2 Kick 1 (2), set 50 38 Standard 1 Kick 2 (4), set 50 39 Standard 1 Kick 1 (4), set 50 40 Standard 1 Kick 1 (4), set 50 41 Standard 1 Kick 2 (4), set 50 42 Standard 2 Kick 1 (2), set 50 43 Standard 2 Kick 2 (2), set 50 44 Kick Drum1 (4), set 50 45 Kick Drum 2 (4), set 50 46 Soft Kick (2), set 51 38 Standard 1 Kick 2 (4), set 51 39 Standard 1 Kick 1 (4), set 51 40 Standard 1 Kick 2 (4), set 51 41 Standard 1 Kick 1 (4), set 127 35 Acoustic Bass Drum (4), set 127 36 Acoustic Bass Drum (4)
-            - `ConcertBassDrum` -- set 48 35 Concert BD 2 (4), set 48 36 Concert BD 1 (4), set 49 32 Concert BD 1 (4), set 50 49 Concert BD 1 (4), set 51 49 Concert BD 1 (4)
+            - `ConcertBassDrum` -- set 48 35 Concert BD 2 (4), set 48 36 Concert BD 1 (4), set 49 32 Concert BD 1 (4), set 50 49 Concert BD 1 (4), set 51 48 Concert BD 1 Mute (3), set 51 49 Concert BD 1 (4)
               - `ReverseConcertBassDrum` -- set 57 37 Reverse Concert Bass Drum (4)
             - `HipHopKick1` [SampledBreak] -- set 9 36 Hip-Hop Kick 1 (4), set 50 33 Hip-Hop Kick 1 (4), set 51 33 Hip-Hop Kick 1 (4), set 51 47 Hip-Hop Kick 1 (4)
               - `ReverseHipHopKick1` -- set 58 38 Reverse Hip-Hop Kick 1 (4), set 59 48 Reverse HipHop Kick 1 (4)
-            - `JazzKick2` -- 7 Jazz Kick 2 (4), set 32 35 Jazz Kick 2 (4), set 40 35 Jazz Kick 2 (4), set 50 48 Jazz Kick 2 (4), set 51 44 Jazz Kick 2 (4)
-              - `LeftJazzKick2` [RandomStrike] -- set 33 95 [L] Jazz Kick 2 (3)
-              - `ReverseJazzKick2` -- set 59 43 Reverse Jazz Kick 2 (4), set 59 45 Reverse Brush Kick 2 (4)
-              - `RndJazzKick2` [RandomStrike] -- set 33 35 [RND] Jazz Kick 2 (4)
-            - `JazzKick` -- 6 Jazz Kick 1 (4), set 32 36 Jazz Kick 1 (4), set 40 36 Jazz Kick 1 (4), set 50 47 Jazz Kick 1 (4), set 51 45 Jazz Kick 1 (4)
+            - `JazzKick2` -- 7 Jazz Kick 2 (4), set 32 35 Jazz Kick 2 (4), set 40 35 Jazz Kick 2 (4), set 41 35 Brush Kick 2 (2), set 50 48 Jazz Kick 2 (4), set 51 42 Brush Kick 2 (2), set 51 44 Jazz Kick 2 (4)
+              - `LeftJazzKick2` [RandomStrike] -- set 33 95 [L] Jazz Kick 2 (3), set 42 95 [L] Brush Kick 2 (2)
+              - `ReverseJazzKick2` -- set 59 43 Reverse Jazz Kick 2 (4), set 59 45 Reverse Brush Kick 2 (2)
+              - `RndJazzKick2` [RandomStrike] -- set 33 35 [RND] Jazz Kick 2 (4), set 42 35 [RND] Brush Kick 2 (4)
+            - `JazzKick` -- 6 Jazz Kick 1 (4), set 32 36 Jazz Kick 1 (4), set 40 36 Jazz Kick 1 (4), set 41 36 Brush Kick 1 (2), set 50 47 Jazz Kick 1 (4), set 51 43 Brush Kick 1 (2), set 51 45 Jazz Kick 1 (4)
               - `HipHopKick2` [SampledBreak] -- set 9 35 Hip-Hop Kick 2 (4), set 50 32 Hip-Hop Kick 2 (4), set 51 32 Hip-Hop Kick 2 (4), set 51 46 Hip-Hop Kick 2 (4)
                 - `ReverseHipHopKick2` -- set 59 47 Reverse HipHop Kick 2 (4)
-              - `LeftJazzKick` [RandomStrike] -- set 33 96 [L] Jazz Kick 1 (3)
-              - `ReverseJazzKick` -- set 59 44 Reverse Jazz Kick 1 (4), set 59 46 Reverse Brush Kick 1 (4)
-              - `RndJazzKick` [RandomStrike] -- set 33 36 [RND] Jazz Kick 1 (4)
+              - `LeftJazzKick` [RandomStrike] -- set 33 96 [L] Jazz Kick 1 (3), set 42 96 [L] Brush Kick 1 (2)
+              - `ReverseJazzKick` -- set 59 44 Reverse Jazz Kick 1 (4), set 59 46 Reverse Brush Kick 1 (2)
+              - `RndJazzKick` [RandomStrike] -- set 33 36 [RND] Jazz Kick 1 (4), set 42 36 [RND] Brush Kick 1 (4)
             - `JungleKick1` [JungleBreak] -- set 10 36 Jungle Kick 1 (4), set 10 89 Jungle Kick Roll (4), set 50 35 Jungle Kick 1 (4), set 51 35 Jungle Kick 1 (4), set 51 53 Jungle Kick 1 (4), set 51 54 Jungle Kick Roll (4)
               - `ReverseJungleKick1` -- set 59 50 Reverse Jungle Kick 1 (4)
             - `LeftKick` [RandomStrike] -- set 2 95 [L] Standard Kick 2 (3), set 2 96 [L] Standard Kick 1 (3)
@@ -3194,6 +3205,9 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `CongaLow` -- 64 Low Conga (4), set 49 75 Mute Low Conga (2), set 49 77 Open Low Conga (4), set 127 64 Low Conga (4)
             - `CongaMute` -- 62 Mute Hi Conga (4), set 49 73 Mute High Conga (4), set 49 76 Conga Slap (2), set 127 62 Mute Hi Conga (4)
             - `CongaOpen` -- 63 Open Hi Conga (4), set 49 74 Open High Conga (4), set 127 63 High Conga (4)
+              - `Dholak`
+                - `DholakBass` -- set 52 89 Dholak 1 (3)
+                - `DholakTreble` -- set 52 90 Dholak 2 (3)
               - `Kendang`
                 - `KelontukMute` -- set 54 41 Kelontuk Mute (3), set 55 41 Kelontuk Mute (3)
                 - `Kelontuk` -- set 54 40 Kelontuk (3), set 55 40 Kelontuk (3)

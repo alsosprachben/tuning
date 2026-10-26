@@ -86,6 +86,15 @@ h2{
   letter-spacing:-.01em; margin:0; text-wrap:balance;
 }
 section{margin-top:52px; display:flex; flex-direction:column; gap:18px}
+/* ---- the contents ------------------------------------------------------- */
+.toc{border:1px solid var(--rule); border-radius:4px; background:var(--card); padding:16px 20px}
+.tochead{font-family:"IBM Plex Sans",sans-serif; font-size:12px; font-weight:600; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--muted); margin-bottom:8px}
+.toc ol{margin:0; padding-left:22px; display:flex; flex-direction:column; gap:6px}
+.toc a{color:var(--accent); text-decoration:none}
+.toc a:hover{text-decoration:underline}
+.tocrow{display:flex; flex-wrap:wrap; gap:2px 12px; font-size:13px; margin-top:4px; color:var(--muted)}
+h2[id], h3[id]{scroll-margin-top:16px}
 p{margin:0; max-width:66ch; color:var(--ink-2)}
 
 /* ---- the map: 16 families x 8 programs ---------------------------------- */
@@ -258,11 +267,11 @@ def families():
                         % (p, e(C.GM[p]), e(C._class_name(p)), r, r, e(note)))
         out.append(
             '<section>\n<div class="fambox">\n'
-            '<div class="famhead"><h3>%s</h3><span class="rng">%d&ndash;%d</span>'
+            '<div class="famhead"><h3 id="fam-%d">%s</h3><span class="rng">%d&ndash;%d</span>'
             '<span class="pips">\n%s\n</span></div>\n'
             '<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th>'
             '<th></th><th>Notes</th></tr>\n%s\n</table></div></div>\n</section>'
-            % (e(fam), start, start + 7, pips, "\n".join(rows)))
+            % (start, e(fam), start, start + 7, pips, "\n".join(rows)))
     return "\n".join(out)
 
 
@@ -331,9 +340,9 @@ def drum_sets():
         pips = "\n".join('<span class="pip r%d"></span>' % C.KIT_RATED[k][n][0] for n in sorted(C.KIT_RATED[k]))
         rows = [(n, PM.KITS[k][n][0], PM.KITS[k][n][1].__name__) + tuple(C.KIT_RATED[k][n])
                 for n in sorted(C.KIT_RATED[k])]
-        out.append('<div class="fambox">\n<div class="famhead"><h3>%s</h3><span class="rng">program %d</span>'
+        out.append('<div class="fambox">\n<div class="famhead"><h3 id="set-%d">%s</h3><span class="rng">program %d</span>'
                    '<span class="pips">\n%s\n</span></div>\n%s</div>'
-                   % (e(PM.DRUM_SETS[k]), k, pips, note_table(rows)))
+                   % (k, e(PM.DRUM_SETS[k]), k, pips, note_table(rows)))
     return "\n".join(out)
 
 
@@ -643,10 +652,38 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 """
 
 
+def contents(html):
+    """THE CONTENTS (Ben: the page needs a table of contents), read off the
+    built page so it cannot drift from it: every <h2> given an id and listed
+    in order, the program families as a row of links under "Programs by
+    family" (where their boxes stand, after "Where it stands"), and each
+    built drum set as a row under its section."""
+    import re
+    heads = []
+
+    def tag(m):
+        text = re.sub(r"<[^>]+>", "", m.group(1))
+        slug = "s-" + re.sub(r"[^a-z0-9]+", "-", re.sub(r"&[a-z]+;", "", text.lower())).strip("-")
+        heads.append((slug, m.group(1)))
+        return '<h2 id="%s">%s</h2>' % (slug, m.group(1))
+    html = re.sub(r"<h2>(.*?)</h2>", tag, html)
+    fams = " ".join('<a href="#fam-%d">%s</a>' % (st, e(fam)) for st, fam in C.FAMILY)
+    sets = " ".join('<a href="#set-%d">%s</a>' % (k, e(PM.DRUM_SETS[k])) for k in sorted(C.KIT_RATED))
+    items = []
+    for slug, text in heads:
+        if slug.startswith("s-channel-10"):
+            items.append('<li><a href="#fam-0">Programs by family</a><div class="tocrow">%s</div></li>' % fams)
+        row = '<div class="tocrow">%s</div>' % sets if slug.startswith("s-drum-sets") else ""
+        items.append('<li><a href="#%s">%s</a>%s</li>' % (slug, text, row))
+    nav = ('<nav class="toc" aria-label="Contents"><div class="tochead">Contents</div>\n<ol>\n%s\n</ol></nav>'
+           % "\n".join(items))
+    return html.replace("</header>", "</header>\n" + nav, 1)
+
+
 def main(argv):
     out = argv[1] if len(argv) > 1 else os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "coverage.html")
-    open(out, "w").write(build())
+    open(out, "w").write(contents(build()))
     print("  wrote %s (%d bytes)" % (out, os.path.getsize(out)))
     return 0
 

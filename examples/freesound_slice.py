@@ -9,6 +9,7 @@ examples/perc_fit.py to read as it reads VSCO's one-stroke files.
     python3 examples/freesound_slice.py harmonium
     python3 examples/freesound_slice.py accordion
     python3 examples/freesound_slice.py sfx [NAME ...]   the SFX set's struck sounds (SFX)
+    python3 examples/freesound_slice.py dholak
 
 TIMBALES: hello_flowers' "50 Timbales Hits" (freesound 41196, CC0; ~/Documents/
 refs/sources.md), one 75 s mp3 decoded to float. 53 onsets (a rise of 20 dB in
@@ -423,6 +424,47 @@ PICK = {"metronome": {"ben": [6.98, 8.52, 10.03, 11.60, 13.10, 14.68, 16.18, 17.
         "footstep": {"637555": [0.43, 0.95, 1.44, 1.97, 2.47, 2.99, 3.50]}}
 
 
+def dholak():
+    """DHOLAK: iyankc's "DHOLAK-085-01" (freesound 479246, CC0; ~/Documents/refs/
+    dholak), an 85 bpm dholak groove, 48 kHz. 31 onsets (a rise of 12 dB,
+    over -35 dB, 80 ms apart), read 20-120 ms: the TREBLE head's open stroke
+    (its "na") rings ~790 Hz with nothing under 250 Hz to speak of (the
+    60-250 Hz band 15-32 dB under 300-1300); the BASS head's open stroke
+    (its "ge") at ~100-115 Hz, that band 12 dB and more over the mid. The
+    strokes between (edge and half strokes, ~390 Hz, the bands even) are left
+    out. Each to the next onset, into ~/Documents/refs/dholak/hits/
+    {bass,treble}_<n>.wav, with the bass skin's own one-shot (freesound 536872)
+    as bass_00."""
+    from scipy.io import wavfile
+    ref = os.path.expanduser("~/Documents/refs/dholak")
+    out = os.path.join(ref, "hits")
+    os.makedirs(out, exist_ok=True)
+    a, sr = read(os.path.join(ref, "479246__iyankc__dholak-085-01.wav"))
+    x = a.sum(1) if a.ndim > 1 else a
+    on = onsets(x, sr, rise_db=12.0, top_db=-35.0, gap=0.08) + [len(x)]
+    n = {"bass": 0, "treble": 0}
+    for s, t in zip(on[:-1], on[1:]):
+        seg = x[s + int(0.02 * sr):s + int(min(0.12, (t - s) / sr - 0.005) * sr)]
+        if len(seg) < int(0.03 * sr):
+            continue
+        S = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), 1 << 15)) ** 2
+        F = np.fft.rfftfreq(1 << 15, 1 / sr)
+        d = 10 * np.log10((S[(F > 60) & (F < 250)].sum() + 1e-20) / (S[(F > 300) & (F < 1300)].sum() + 1e-20))
+        f1, _db = lowest_mode(x[s:], sr, 60.0, 1200.0)
+        drum = ("treble" if d <= -15.0 and 770 <= f1 <= 810 else
+                "bass" if d >= 12.0 and 95 <= f1 <= 120 else None)
+        if drum is None:
+            continue
+        pre = int(0.005 * sr)
+        n[drum] += 1
+        wavfile.write(os.path.join(out, "%s_%02d.wav" % (drum, n[drum])), sr,
+                      a[max(0, s - pre):t - pre].astype(np.float32))
+        print("%s_%02d  t=%5.2f s  lowest mode %5.0f Hz, low-mid %+5.1f dB" % (drum, n[drum], s / sr, f1, d))
+    b, sb = read(os.path.join(ref, "536872__curesforbrokenhearts__dholak-bass-skin.wav"))
+    wavfile.write(os.path.join(out, "bass_00.wav"), sb, b.astype(np.float32))
+    print(n, "+ bass_00 ->", out)
+
+
 def sfx(names=None):
     from scipy.io import wavfile
     for name, (folder, globs, most, longest) in SFX.items():
@@ -474,7 +516,9 @@ def sfx(names=None):
 
 
 if __name__ == "__main__":
-    if sys.argv[1] == "pipes":
+    if sys.argv[1] == "dholak":
+        dholak()
+    elif sys.argv[1] == "pipes":
         pipes(sys.argv[2:])
     elif sys.argv[1] == "sfx":
         sfx(sys.argv[2:])
