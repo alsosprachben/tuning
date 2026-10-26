@@ -140,6 +140,22 @@ def sh(**changes):
     return dict(SH101, **changes)
 
 
+# THE SH-5: read, not fitted, from xanthorp's sample-and-hold patterns
+# (examples/sh5_fit.py: no held note under CC0; each S&H step a note at its
+# own cutoff -- 9 dB rms over 106 steps, the five takes likely five patches):
+# what the steps agree on, a saw-like OSC 1, the second VCO an octave under
+# at about half, a moderate peak. The 24 dB low-pass, as the SH-5 has (the
+# steps could not tell its slope from the 2-pole's: 0.3 dB).
+SH5 = {"mode": 0, "osc1_wave": 0.548, "osc1_level": 0.8, "osc2_wave": 0.521, "osc2_level": 0.44,
+       "osc1_octave": 8, "osc2_octave": 16, "osc2_freq": c(3), "sub_level": 0.0, "noise_level": 0.0,
+       "resonance": 0.414, "kb_track": 0.5, "a_attack": 0.0, "a_sustain": 1.0, "a_release": 0.2,
+       "mod_amount": 0.5, "lfo1_depth": 0.5}
+
+
+def sh5(**changes):
+    return dict(SH5, **changes)
+
+
 SC88_SYNTH = {
     # --- the Jupiter-8's (JUPITER: fitted on the record) -------------------
     # its clav: a narrow pulse, the filter snapping shut, a short body
@@ -221,6 +237,15 @@ SC88_SYNTH = {
     (39, 18): ("SH101Bass 2", "MoogSynthBass2",
                sh(osc1_level=0.0, osc2_level=1.0, sub_level=0.5, cutoff=0.47, resonance=0.5, eg_amount=0.75,
                   f_attack=0.0, f_decay=0.18, f_sustain=0.15)),
+    # --- the SH-5's (SH5: read from its sample-and-hold steps) -------------
+    # its brass: both VCOs at the key a few cents apart, the ladder swelling
+    # open and settling as brass does
+    (62, 3): ("SH-5 Brass", "MoogSynthBrass1",
+              sh5(osc2_octave=8, osc2_freq=c(8), osc2_level=0.7, cutoff=0.5, eg_amount=0.72, f_attack=0.2,
+                  f_decay=0.5, f_sustain=0.5, a_attack=0.06)),
+    # its bass-lead: the octave stack as read, a plucked contour held
+    (87, 6): ("SH-5 Bs.Lead", "MoogBassLead",
+              sh5(cutoff=0.55, eg_amount=0.72, f_attack=0.0, f_decay=0.3, f_sustain=0.35)),
     # the square and the saw together over the sub, a snappier contour
     (39, 20): ("SH101 Bass 3", "MoogSynthBass2",
                sh(osc1_wave=SQ, osc1_level=0.6, osc2_level=0.6, sub_level=0.4, cutoff=0.45, resonance=0.35,

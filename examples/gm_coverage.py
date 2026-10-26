@@ -1403,6 +1403,11 @@ def _sc88_var_rated():
                                         "exists under CC0 -- the refs are a bassline with its knobs moving and "
                                         "resonance sweeps), one VCO, with %s changed" % ", ".join(
                                             sorted(k for k in pan if pan[k] != __import__("sc88_synth").SH101.get(k))))
+            if nm in ("SH-5 Brass", "SH-5 Bs.Lead"):
+                VAR_RATED[(p, b)] = (3, "SC-88 map: the SH-5 READ, not fitted, from xanthorp's sample-and-hold "
+                                        "patterns (sc88_synth.SH5, examples/sh5_fit.py: each step a note at its "
+                                        "own cutoff, 9 dB rms -- no held SH-5 note under CC0), with %s changed"
+                                     % ", ".join(sorted(k for k in pan if pan[k] != __import__("sc88_synth").SH5.get(k))))
             if nm.startswith(("JP", "JPMG")):
                 VAR_RATED[(p, b)] = (3, "SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, "
                                         "examples/sepways_fit.py), one pass, with %s changed. Ben, on "

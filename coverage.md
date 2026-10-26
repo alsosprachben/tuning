@@ -25,9 +25,9 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | SC-55mkII tones | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 |
 | SC-88 tones | 418 | 418 | 100% | 285 | 130 | 3 | 0 | 0 |
 | SC-88 drum sets | 14 | 14 | 100% | | | | | |
-| SC-88Pro tones | 774 | 486 | 63% | 298 | 185 | 3 | 0 | 0 |
+| SC-88Pro tones | 774 | 488 | 63% | 298 | 187 | 3 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
-| SC-8850 tones | 1262 | 514 | 41% | 315 | 196 | 3 | 0 | 0 |
+| SC-8850 tones | 1262 | 516 | 41% | 315 | 198 | 3 | 0 | 0 |
 | SC-8850 drum sets | 37 | 30 | 81% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
@@ -2125,7 +2125,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 228 of the SC-55's 228 are built,
+under a program (SC-55 owner's manual p.68). 230 of the SC-55's 230 are built,
 and 161 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -2322,6 +2322,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 61.8 | SC-55 | Brass 2 | `TromboneToTrumpet50Section_brass2` | **3** | the brass section's router (tuba, trombones, trumpets by register), every register a detuned pair, +-4 cents half left and right -- MuseScore's 61.8, its section twice, panned apart; the spread asserted |
 | 61.16 | SC-88 | Brass Fall | `TromboneToTrumpet50Section_sc88_61_16` | **3** | SC-88 map: GM 61 Brass Section with fall_cents=900.0 |
 | 62.1 | SC-55 | Poly Brass | `Sc88_62_1` | **3** | SC-88 map: a Moog panel, the SynthBrass1's with cutoff, eg_amount, f_attack, osc2_freq changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 62.3 | SC-55 | SH-5 Brass | `Sc88_62_3` | **3** | SC-88 map: the SH-5 READ, not fitted, from xanthorp's sample-and-hold patterns (sc88_synth.SH5, examples/sh5_fit.py: each step a note at its own cutoff, 9 dB rms -- no held SH-5 note under CC0), with a_attack, cutoff, eg_amount, f_attack, f_decay, f_sustain, osc2_freq, osc2_level, osc2_octave changed |
 | 62.5 | SC-55 | Jump Brass | `Sc8850_62_5` | **3** | SC-8850 map: a Moog panel, the SynthBrass1's with a_attack, a_release, cutoff, eg_amount, f_attack, osc2_freq changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/gm2_last_demo.py: "Sounds great" |
 | 62.8 | SC-55 | Synth Brass3 | `MoogSynthBrass3` | **3** | 62's blat punchier on the Moog (MoogSynthBrass3): the pair six cents apart, the contour opening faster and further, a little resonance on its edge. Ben: 'great' |
 | 62.9 | SC-55 | Quack Brass | `Sc88_62_9` | **3** | SC-88 map: a Moog panel, the SynthBrass1's with eg_amount, f_decay, f_sustain, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
@@ -2386,6 +2387,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 87.3 | SC-55 | JUNO Rave | `Sc88_87_3` | **3** | SC-88 map: a Moog panel, the BassLead's with cutoff, lfo1_depth, lfo1_dest, lfo1_rate, osc1_wave, osc2_freq, osc2_octave, osc2_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 87.4 | SC-55 | JP8 BsLead 1 | `Sc88_87_4` | **3** | SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, examples/sepways_fit.py), one pass, with a_release, a_sustain, cutoff, osc2_octave, osc2_wave changed. Ben, on examples/jp8_demo.py: "Sounds great" |
 | 87.5 | SC-55 | JP8 BsLead 2 | `Sc88_87_5` | **3** | SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, examples/sepways_fit.py), one pass, with a_release, a_sustain, cutoff, eg_amount, f_decay, f_sustain, osc2_octave, osc2_wave, resonance changed. Ben, on examples/jp8_demo.py: "Sounds great" |
+| 87.6 | SC-55 | SH-5 Bs.Lead | `Sc88_87_6` | **3** | SC-88 map: the SH-5 READ, not fitted, from xanthorp's sample-and-hold patterns (sc88_synth.SH5, examples/sh5_fit.py: each step a note at its own cutoff, 9 dB rms -- no held SH-5 note under CC0), with cutoff, eg_amount, f_attack, f_decay, f_sustain changed |
 | 87.7 | SC-88 | Delayed Lead | `MoogSawLead_sc8850_87_7` | **4** | SC-8850 map: GM 81 Lead 2 (sawtooth) with insertion_efx=((1, 80), {}). Ben, on examples/gm2_last_demo.py: "Sounds great" |
 | 88.1 | SC-55 | Fantasia 2 | `Sc88_88_1` | **3** | SC-88 map: a Moog panel, the NewAgePad's with mf104_feedback, mf104_mix, mf104_on, mf104_time changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 88.3 | SC-55 | Bell Heaven | `Sc88_88_3` | **3** | SC-88 map: a Moog panel, the NewAgePad's with a_decay, a_sustain, mod_amount, mod_dest changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
@@ -2677,7 +2679,7 @@ Each Sound Canvas's map of tones (the SC-55's own owner's manual p.68; the SC-55
 SC-88 and SC-88Pro maps from the SC-88Pro manual's list), against ours. A tone is built
 when we play it, as a program or a variation, and rated as the tables above rate it.
 A later map can put another tone under a number we built; that one is not counted.
-The maps' totals are in the Summary at the top; still to build: SC-55 0, SC-55mkII 0, SC-88 0, SC-88Pro 288 (4 another tone), SC-8850 748 (6 another tone).
+The maps' totals are in the Summary at the top; still to build: SC-55 0, SC-55mkII 0, SC-88 0, SC-88Pro 286 (4 another tone), SC-8850 746 (6 another tone).
 
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3), SC-88Pro 0.16 European Pf (4), SC-88Pro 3.8 Honky-tonk 2 (3), SC-88Pro 16.8 Trem. Organ (4), SC-88Pro 16.32 70's E.Organ (4), SC-88Pro 17.32 Perc. Organ (4), SC-8850 62.8 Pro Brass (3), SC-8850 63.8 SynBrass sfz (3).
@@ -2693,10 +2695,10 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Bass | 13/13 | 12/12 | 31/31 | 49/76 | 53/113 |
 | Strings | 8/8 | 9/9 | 11/11 | 12/20 | 13/29 |
 | Ensemble | 12/12 | 11/11 | 29/29 | 36/63 | 42/134 |
-| Brass | 13/13 | 15/15 | 27/27 | 27/51 | 31/84 |
+| Brass | 13/13 | 15/15 | 27/27 | 28/51 | 32/84 |
 | Reed | 11/11 | 8/8 | 11/11 | 11/20 | 11/23 |
 | Pipe | 10/10 | 8/8 | 9/9 | 13/22 | 13/27 |
-| Synth Lead | 11/11 | 12/12 | 30/30 | 52/80 | 56/131 |
+| Synth Lead | 11/11 | 12/12 | 30/30 | 53/80 | 57/131 |
 | Synth Pad | 10/10 | 8/8 | 21/21 | 24/43 | 26/83 |
 | Synth Effects | 8/8 | 11/11 | 42/42 | 45/76 | 45/122 |
 | Ethnic | 17/17 | 10/10 | 22/22 | 22/37 | 22/44 |
