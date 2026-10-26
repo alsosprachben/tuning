@@ -13707,6 +13707,123 @@ class CongaOpenProperties(MeasuredStrokeProperties):
     attack_time = 0.00155233
 
 
+class KendangProperties(CongaOpenProperties):
+    """THE KENDANG (the SC-8850's Gamelan sets, 36-42): the gamelan's two-headed
+    barrel drum, played with the hands (and in kebyar a mallet, the panggul) --
+    a hand drum as the conga is, so its knobs to start from; each stroke's own
+    modes and strike FITTED (examples/perc_fit.py kendang_*) to the Javanese
+    kendang's strokes, Casa da Musica's (Freesound pack 16058, CC BY 3.0,
+    measured only; sources.md): the Balinese drum's nearest recorded kin.
+    Ben's reading of Roland's names: the wadon (female, the large) and lanang
+    (male, the small), the bebarongan's and pelegongan's drums, and a small
+    kendang's open, muted and edge strokes (Kelontuk)."""
+
+
+class KendangWadonProperties(KendangProperties):
+    """Kendang Wadon (36): the large drum's open bass -- the kendhang ageng's "dha", 93 Hz."""
+    DRUM_MODES = ((1.0202, 0.0, 48), (1.6063, -25.7, 39), (2.0043, -17.5, 150), (2.1996, -14.4, 95), (2.4891, -21.0, 81), (2.9449, -17.2, 95), (3.3863, -25.9, 102), (3.6685, -16.9, 74), (5.1662, -27.3, 215), (5.4701, -23.7, 90))
+    slow_share = 0.0767065
+    slow_dbs = 26.1026
+    click_cal_db = 1.11018
+    click_dbs = 93.1124
+    click_stroke_slope = 0.0968317
+    chiff_volume = 1.45955
+    chiff_width = 0.0500493
+    chiff_bandwidth = 0.263943
+    sustain_jitter = 0.172525
+    band_trim_db = ((177, 18.6), (354, 13.2), (707, 7.5), (1414, 1.6), (2828, -4.9), (5657, -15.7), (11314, -20.3))
+
+
+class KendangLanangProperties(KendangProperties):
+    """Kendang Lanang (37): the small drum's open tone -- the ketipung's "dhung", 205 Hz."""
+    DRUM_MODES = ((0.8797, -34.8, 48), (1.0044, 0.0, 113), (1.0898, -19.2, 83), (1.3294, -22.7, 92), (1.8185, -29.5, 142), (2.5177, -30.5, 131), (2.9116, -30.9, 150))
+    slow_share = 0.0279691
+    slow_dbs = 66.2309
+    click_cal_db = 2.54167
+    click_dbs = 206.597
+    click_stroke_slope = 0.129509
+    chiff_volume = 0.726608
+    chiff_width = 0.0455718
+    chiff_bandwidth = 0.134275
+    sustain_jitter = 0.206403
+    band_trim_db = ((177, 34.7), (354, 17.3), (707, 9.7), (1414, -7.2), (2828, -13.6), (5657, -20.2), (11314, -20.6))
+
+
+class KendangBebaronganProperties(KendangProperties):
+    """Bebarongan (38): the barong's medium kendang, a full stroke -- the ciblon's "dlang", 196 Hz."""
+    DRUM_MODES = ((1.0128, 0.0, 73), (1.4626, -11.8, 147), (1.7681, -17.9, 52), (1.9329, -20.3, 53), (2.2694, -22.0, 93), (2.5372, -15.5, 84), (2.7088, -9.8, 78), (3.1517, -12.8, 88), (4.2503, -20.1, 59), (5.3730, -14.7, 144))
+    slow_share = 0.0688549
+    slow_dbs = 27.2598
+    click_cal_db = 1.00926
+    click_dbs = 59.085
+    click_stroke_slope = 0.109477
+    chiff_volume = 0.626558
+    chiff_width = 0.0443363
+    chiff_bandwidth = 0.259188
+    sustain_jitter = 0.060322
+    band_trim_db = ((177, 18.2), (354, 8.1), (707, 9.7), (1414, 2.2), (2828, -2.6), (5657, -13.8), (11314, -21.7))
+
+
+class KendangPelegonganProperties(KendangProperties):
+    """Pelegongan (39): the legong's hand-played kendang (krumpungan), open -- the ciblon's "thung", 186 Hz."""
+    DRUM_MODES = ((0.9225, -23.5, 92), (1.0130, 0.0, 109), (1.1143, -25.2, 98), (1.1794, -30.5, 107), (1.5557, -30.4, 95), (1.7763, -26.0, 115), (2.0332, -10.3, 92), (2.6736, -30.1, 112), (3.3211, -27.1, 131), (5.6546, -25.8, 112))
+    slow_share = 0.0155311
+    slow_dbs = 515.612
+    click_cal_db = 27.1048
+    click_dbs = 107.512
+    click_stroke_slope = 0.0774586
+    chiff_volume = 0.0230534
+    chiff_width = 0.045601
+    chiff_bandwidth = 0.297237
+    sustain_jitter = 0.00964486
+    band_trim_db = ((177, 23.7), (354, 14.8), (707, 2.1), (1414, 1.4), (2828, -8.1), (5657, -14.7), (11314, -19.2))
+
+
+class KelontukProperties(KendangProperties):
+    """Kelontuk (40): a small kendang struck open -- the ciblon's "tong", 290 Hz."""
+    DRUM_MODES = ((1.0001, 0.0, 181), (1.2971, -8.7, 145), (1.7635, -8.8, 152), (1.8401, -8.0, 120), (2.1255, -25.3, 122), (2.4782, -7.3, 173), (2.6777, -10.6, 314), (2.8471, -25.3, 182), (3.1766, -30.1, 231), (3.6012, -26.3, 289))
+    slow_share = 0.0772035
+    slow_dbs = 27.7391
+    click_cal_db = 1.16436
+    click_dbs = 132.785
+    click_stroke_slope = 0.139641
+    chiff_volume = 0.357825
+    chiff_width = 0.0390249
+    chiff_bandwidth = 0.172356
+    sustain_jitter = 0.025358
+    band_trim_db = ((177, 5.1), (354, 20.5), (707, 19.5), (1414, 2.6), (2828, -8.6), (5657, -18.2), (11314, -20.9))
+
+
+class KelontukMuteProperties(KendangProperties):
+    """Kelontuk Mute (41): the same drum's damped slap -- the ciblon's "tak", 478 Hz."""
+    DRUM_MODES = ((0.5701, -15.1, 173), (0.6152, -11.4, 174), (1.0263, -11.6, 81), (1.1121, -13.3, 76), (1.1994, -12.0, 101), (1.2909, 0.0, 83), (1.3627, -16.4, 63), (1.7217, -12.2, 204), (2.2032, -8.7, 214), (3.2562, -16.4, 108))
+    slow_share = 0.110807
+    slow_dbs = 38.3755
+    click_cal_db = 1.50675
+    click_dbs = 433.438
+    click_stroke_slope = 0.133239
+    chiff_volume = 0.358839
+    chiff_width = 0.0607622
+    chiff_bandwidth = 0.128622
+    sustain_jitter = 0.0334909
+    band_trim_db = ((177, 0.2), (354, 6.3), (707, 5.8), (1414, 10.5), (2828, 5.3), (5657, -8.3), (11314, -19.7))
+
+
+class KelontukSideProperties(KendangProperties):
+    """Kelontuk Side (42): the edge of the smallest -- the ketipung's "tak", 406 Hz."""
+    DRUM_MODES = ((1.0077, -6.1, 71), (1.0690, -4.9, 79), (1.1768, -2.2, 74), (1.3226, 0.0, 98), (1.4685, -6.1, 135), (1.6077, -8.2, 183), (1.7668, -5.7, 70), (1.8480, -4.5, 86), (1.9359, -7.2, 95), (2.0187, -8.3, 94))
+    slow_share = 0.0580476
+    slow_dbs = 44.574
+    click_cal_db = 2.14382
+    click_dbs = 218.308
+    click_stroke_slope = 0.135082
+    chiff_volume = 0.856814
+    chiff_width = 0.0979196
+    chiff_bandwidth = 0.197159
+    sustain_jitter = 0.0885563
+    band_trim_db = ((177, 1.1), (354, 3.7), (707, 5.9), (1414, 9.7), (2828, 3.5), (5657, -7.4), (11314, -16.6))
+
+
 class CongaLowProperties(MeasuredStrokeProperties):
     """GM 64: VSCO-2 CE's conga, the middle drum of the three, open, at three dynamics: 164 Hz, 4.8 semitones under the quinto (its tumba, at 138, is the lower one GM has no note for)."""
     DRUM_MODES = ((0.7960, -24.1, 40), (0.8699, -26.6, 115), (0.9971, 0.0, 57),
@@ -29132,6 +29249,57 @@ class RfxGenderKeyProperties(GenderProperties):
     left to ring, as a gender's bars are under the mallet with the damping
     hand away: a one-shot, where the tone keeps the key's damper."""
     one_shot = True
+
+
+# THE GAMELAN SETS' BRONZE (the SC-8850's Gamelan 1 and 2: a Balinese gong
+# kebyar), its voices fitted to UNT's Bwana Kumala (cpolcyn's pack, CC0) where
+# they were recorded -- the gangsa (GenderProperties), the gongs, the ceng-ceng --
+# and the rest as those are played; tuned by percussion_gs.SELISIR.
+class GamelanPemadeProperties(RfxGenderKeyProperties):
+    """Pemade (67-76): the gangsa pemade, UNT's measured (GenderProperties), its pair beating."""
+
+
+class GamelanPenyacahProperties(RfxGenderKeyProperties):
+    """Penyacah (60-66): the gangsa's bars in the pemade's low register, an octave over the jublag."""
+
+
+class GamelanJublagProperties(RfxGenderKeyProperties):
+    """Jublag (55-59; calung): the gangsa's bars an octave under the pemade,
+    struck with a PADDED mallet: the contact roll-off the gangsa's hard panggul
+    has at 4 kHz brought to 1.5, the bar's third mode (5.27) quiet. Theory."""
+    bore_corner_hz = 1500.0
+
+
+class GamelanJegoganProperties(RfxGenderKeyProperties):
+    """Jegogan (50-54): the deepest bars, two octaves under the pemade, their
+    padded mallet softer still (900 Hz): the fundamental and its pair's beat.
+    Roland's two voices (*) are the pair. Theory."""
+    bore_corner_hz = 900.0
+
+
+class ReyongProperties(BonangProperties):
+    """Reyong (77-88): a row of twelve small kettle gongs, four players -- the
+    Javanese bonang's kettles (BonangProperties, fitted to Casa da Musica's) as
+    a key struck and left: Bali's kin of them."""
+    one_shot = True
+
+
+class KajarProperties(BonangProperties):
+    """Kajar (48): the beat-keeper, a small kettle gong struck on its boss with
+    the other hand on it -- muted (percussion_gs.GATE)."""
+    one_shot = True
+
+
+class KempurProperties(GamelanGongProperties):
+    """Kempur (49): the middle hanging gong, between the great gongs and the
+    kettles, an octave over the gong wadon; UNT's gong's modes and beat at its
+    pitch. Roland's two voices (*): the beat."""
+
+
+class KopyakProperties(CengCengProperties):
+    """Kopyak (46, 47): the large hand cymbals, a pair clashed -- the ceng-ceng's
+    plates (fitted to UNT's), bigger and lower; muted by the hands closing on
+    them (percussion_gs.GATE, its exclusive class with the open)."""
 
 
 class RfxSagatProperties(TR808Properties):

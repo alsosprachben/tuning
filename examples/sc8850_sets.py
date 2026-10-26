@@ -51,6 +51,13 @@ PARENT = {13: 9, 34: 33, 42: 41, 43: 41}
 # SC-8850 names the machines -- so those machines through our valve (Ben)
 SET_VOICE = {(12, 35): 'Techno TR-808 Kick', (12, 36): 'Techno Kick 1', (12, 38): 'Techno TR-606 Snare 2'}
 
+# THE GAMELAN SETS (55, 56): each pitched instrument's keys by number from its
+# lowest ("Jegogan" five times: Jegogan 1-5), Gamelan 2's equal-tempered
+# ("... ET": percussion_gs.SELISIR, Ben), its gongs, kempur and kajar too
+GAMELAN = {55: "", 56: " ET"}
+GAMELAN_PITCHED = ("Jegogan", "Jublag", "Penyacah", "Pemade", "Reyong")
+GAMELAN_TUNED = ("Gamelan Gong Wadon", "Gamelan Gong Lanang", "Kempur", "Kajar")
+
 # NOT YET: Standard 1's (its kit the built-in default; its only change the
 # Room Snares on 95/96, not built)
 SKIP = {1}
@@ -115,7 +122,13 @@ def plan():
         if not own:
             continue
         rows = {}
-        for key, name in own.items():
+        count = {}
+        for key, name in sorted(own.items()):
+            if pc in GAMELAN and name in GAMELAN_PITCHED:
+                count[name] = count.get(name, 0) + 1
+                name = "%s %d%s" % (name, count[name], GAMELAN[pc])
+            elif pc in GAMELAN and name in GAMELAN_TUNED:
+                name += GAMELAN[pc]
             if name in ("---", ""):
                 rows[key] = ("---", None)
                 continue

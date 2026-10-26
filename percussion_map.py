@@ -2082,6 +2082,9 @@ def _build_gs_sets():
             for t, v in strokes.items():
                 KIT_STROKES.setdefault(k, {}).setdefault(t, {})[key] = v
         DRUM_SETS[k] = _GSET.SET_NAME.get(k, DRUM_SETS.get(k))     # an extended set keeps its name
+        # ...its exclusive classes ([EXC]: percussion_gs.SET_CHOKE)
+        for grp in getattr(_GSET, 'SET_CHOKE', {}).get(k, ()):
+            KIT_CHOKE.setdefault(k, []).append(set(grp))
         if k in _GSET.SET_ALONE:
             KIT_ONLY.add(k)
 

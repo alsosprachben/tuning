@@ -28,7 +28,7 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | SC-88Pro tones | 774 | 442 | 57% | 298 | 141 | 3 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
 | SC-8850 tones | 1262 | 451 | 36% | 307 | 141 | 3 | 0 | 0 |
-| SC-8850 drum sets | 37 | 28 | 76% | | | | | |
+| SC-8850 drum sets | 37 | 30 | 81% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
 
@@ -231,8 +231,8 @@ Standard. THE GOAL: every one built.
 | 52 | KICK & SNARE 2 | -- | -- | -- | partial: 69 of 72 keys (3 silent) | 69 | **4** |
 | 53 | ASIA | ASIA | -- | -- | partial: 64 of 66 keys (2 silent) | 60 | **3** |
 | 54 | CYMBAL&CLAPS | CYMBAL&CLAPS | -- | -- | built: 65 keys of its own | 65 | **4** |
-| 55 | GAMELAN 1 | -- | -- | -- | partial: 0 of 53 keys (53 silent) |  |  |
-| 56 | GAMELAN 2 | -- | -- | -- | partial: 0 of 53 keys (53 silent) |  |  |
+| 55 | GAMELAN 1 | -- | -- | -- | built: 53 keys of its own | 53 | **3** |
+| 56 | GAMELAN 2 | -- | -- | -- | built: 53 keys of its own | 53 | **3** |
 | 57 | SFX | SFX | SFX | SFX | built: 75 keys of its own | 75 | **4** |
 | 58 | RHYTHM FX | RHYTHM FX | RHYTHM FX | -- | built: 53 keys of its own | 53 | **4** |
 | 59 | RHYTHM FX 2 | RHYTHM FX 2 | -- | -- | built: 56 keys of its own | 56 | **4** |
@@ -1281,11 +1281,117 @@ Standard. THE GOAL: every one built.
 
 | # | note | class | | notes |
 |---|---|---|---|---|
+| 36 | Kendang Wadon | `KendangWadon` | **3** | Kendang Wadon, the KendangWadon at 93 Hz |
+| 37 | Kendang Lanang | `KendangLanang` | **3** | Kendang Lanang, the KendangLanang at 205 Hz |
+| 38 | Bebarongan | `KendangBebarongan` | **3** | Bebarongan, the KendangBebarongan at 196 Hz |
+| 39 | Pelegongan | `KendangPelegongan` | **3** | Pelegongan, the KendangPelegongan at 186 Hz |
+| 40 | Kelontuk | `Kelontuk` | **3** | Kelontuk, the Kelontuk at 290 Hz |
+| 41 | Kelontuk Mute | `KelontukMute` | **3** | Kelontuk Mute, the KelontukMute at 478 Hz |
+| 42 | Kelontuk Side | `KelontukSide` | **3** | Kelontuk Side, the KelontukSide at 406 Hz |
+| 43 | Gamelan Gong Wadon | `GamelanGong` | **4** | Gamelan Gong Wadon, the GamelanGong at 58 Hz |
+| 44 | Gamelan Gong Lanang | `GamelanGong` | **4** | Gamelan Gong Lanang, the GamelanGong at 69 Hz |
+| 45 | Ceng-Ceng | `CengCeng` | **4** | Ceng-Ceng, the CengCeng at 440 Hz |
+| 46 | Kopyak Open | `Kopyak` | **3** | Kopyak Open, the Kopyak at 300 Hz |
+| 47 | Kopyak Mute | `Kopyak` | **3** | Kopyak Mute, the Kopyak at 300 Hz |
+| 48 | Kajar | `Kajar` | **3** | Kajar, the Kajar at 458 Hz |
+| 49 | Kempur | `Kempur` | **3** | Kempur, the Kempur at 116 Hz |
+| 50 | Jegogan 1 | `GamelanJegogan` | **3** | Jegogan 1, the GamelanJegogan at 104 Hz |
+| 51 | Jegogan 2 | `GamelanJegogan` | **3** | Jegogan 2, the GamelanJegogan at 114 Hz |
+| 52 | Jegogan 3 | `GamelanJegogan` | **3** | Jegogan 3, the GamelanJegogan at 142 Hz |
+| 53 | Jegogan 4 | `GamelanJegogan` | **3** | Jegogan 4, the GamelanJegogan at 150 Hz |
+| 54 | Jegogan 5 | `GamelanJegogan` | **3** | Jegogan 5, the GamelanJegogan at 165 Hz |
+| 55 | Jublag 1 | `GamelanJublag` | **3** | Jublag 1, the GamelanJublag at 208 Hz |
+| 56 | Jublag 2 | `GamelanJublag` | **3** | Jublag 2, the GamelanJublag at 229 Hz |
+| 57 | Jublag 3 | `GamelanJublag` | **3** | Jublag 3, the GamelanJublag at 285 Hz |
+| 58 | Jublag 4 | `GamelanJublag` | **3** | Jublag 4, the GamelanJublag at 300 Hz |
+| 59 | Jublag 5 | `GamelanJublag` | **3** | Jublag 5, the GamelanJublag at 330 Hz |
+| 60 | Penyacah 1 | `GamelanPenyacah` | **4** | Penyacah 1, the GamelanPenyacah at 415 Hz |
+| 61 | Penyacah 2 | `GamelanPenyacah` | **4** | Penyacah 2, the GamelanPenyacah at 458 Hz |
+| 62 | Penyacah 3 | `GamelanPenyacah` | **4** | Penyacah 3, the GamelanPenyacah at 570 Hz |
+| 63 | Penyacah 4 | `GamelanPenyacah` | **4** | Penyacah 4, the GamelanPenyacah at 600 Hz |
+| 64 | Penyacah 5 | `GamelanPenyacah` | **4** | Penyacah 5, the GamelanPenyacah at 660 Hz |
+| 65 | Penyacah 6 | `GamelanPenyacah` | **4** | Penyacah 6, the GamelanPenyacah at 830 Hz |
+| 66 | Penyacah 7 | `GamelanPenyacah` | **4** | Penyacah 7, the GamelanPenyacah at 915 Hz |
+| 67 | Pemade 1 | `GamelanPemade` | **4** | Pemade 1, the GamelanPemade at 415 Hz |
+| 68 | Pemade 2 | `GamelanPemade` | **4** | Pemade 2, the GamelanPemade at 458 Hz |
+| 69 | Pemade 3 | `GamelanPemade` | **4** | Pemade 3, the GamelanPemade at 570 Hz |
+| 70 | Pemade 4 | `GamelanPemade` | **4** | Pemade 4, the GamelanPemade at 600 Hz |
+| 71 | Pemade 5 | `GamelanPemade` | **4** | Pemade 5, the GamelanPemade at 660 Hz |
+| 72 | Pemade 6 | `GamelanPemade` | **4** | Pemade 6, the GamelanPemade at 830 Hz |
+| 73 | Pemade 7 | `GamelanPemade` | **4** | Pemade 7, the GamelanPemade at 915 Hz |
+| 74 | Pemade 8 | `GamelanPemade` | **4** | Pemade 8, the GamelanPemade at 1139 Hz |
+| 75 | Pemade 9 | `GamelanPemade` | **4** | Pemade 9, the GamelanPemade at 1200 Hz |
+| 76 | Pemade 10 | `GamelanPemade` | **4** | Pemade 10, the GamelanPemade at 1320 Hz |
+| 77 | Reyong 1 | `Reyong` | **3** | Reyong 1, the Reyong at 458 Hz |
+| 78 | Reyong 2 | `Reyong` | **3** | Reyong 2, the Reyong at 570 Hz |
+| 79 | Reyong 3 | `Reyong` | **3** | Reyong 3, the Reyong at 600 Hz |
+| 80 | Reyong 4 | `Reyong` | **3** | Reyong 4, the Reyong at 660 Hz |
+| 81 | Reyong 5 | `Reyong` | **3** | Reyong 5, the Reyong at 830 Hz |
+| 82 | Reyong 6 | `Reyong` | **3** | Reyong 6, the Reyong at 915 Hz |
+| 83 | Reyong 7 | `Reyong` | **3** | Reyong 7, the Reyong at 1139 Hz |
+| 84 | Reyong 8 | `Reyong` | **3** | Reyong 8, the Reyong at 1200 Hz |
+| 85 | Reyong 9 | `Reyong` | **3** | Reyong 9, the Reyong at 1320 Hz |
+| 86 | Reyong 10 | `Reyong` | **3** | Reyong 10, the Reyong at 1661 Hz |
+| 87 | Reyong 11 | `Reyong` | **3** | Reyong 11, the Reyong at 1830 Hz |
+| 88 | Reyong 12 | `Reyong` | **3** | Reyong 12, the Reyong at 2278 Hz |
 
 ### 55 Gamelan 2
 
 | # | note | class | | notes |
 |---|---|---|---|---|
+| 36 | Kendang Wadon | `KendangWadon` | **3** | Kendang Wadon, the KendangWadon at 93 Hz |
+| 37 | Kendang Lanang | `KendangLanang` | **3** | Kendang Lanang, the KendangLanang at 205 Hz |
+| 38 | Bebarongan | `KendangBebarongan` | **3** | Bebarongan, the KendangBebarongan at 196 Hz |
+| 39 | Pelegongan | `KendangPelegongan` | **3** | Pelegongan, the KendangPelegongan at 186 Hz |
+| 40 | Kelontuk | `Kelontuk` | **3** | Kelontuk, the Kelontuk at 290 Hz |
+| 41 | Kelontuk Mute | `KelontukMute` | **3** | Kelontuk Mute, the KelontukMute at 478 Hz |
+| 42 | Kelontuk Side | `KelontukSide` | **3** | Kelontuk Side, the KelontukSide at 406 Hz |
+| 43 | Gamelan Gong Wadon ET | `GamelanGong` | **4** | Gamelan Gong Wadon ET, the GamelanGong at 58 Hz |
+| 44 | Gamelan Gong Lanang ET | `GamelanGong` | **4** | Gamelan Gong Lanang ET, the GamelanGong at 69 Hz |
+| 45 | Ceng-Ceng | `CengCeng` | **4** | Ceng-Ceng, the CengCeng at 440 Hz |
+| 46 | Kopyak Open | `Kopyak` | **3** | Kopyak Open, the Kopyak at 300 Hz |
+| 47 | Kopyak Mute | `Kopyak` | **3** | Kopyak Mute, the Kopyak at 300 Hz |
+| 48 | Kajar ET | `Kajar` | **3** | Kajar ET, the Kajar at 466 Hz |
+| 49 | Kempur ET | `Kempur` | **3** | Kempur ET, the Kempur at 117 Hz |
+| 50 | Jegogan 1 ET | `GamelanJegogan` | **3** | Jegogan 1 ET, the GamelanJegogan at 104 Hz |
+| 51 | Jegogan 2 ET | `GamelanJegogan` | **3** | Jegogan 2 ET, the GamelanJegogan at 117 Hz |
+| 52 | Jegogan 3 ET | `GamelanJegogan` | **3** | Jegogan 3 ET, the GamelanJegogan at 139 Hz |
+| 53 | Jegogan 4 ET | `GamelanJegogan` | **3** | Jegogan 4 ET, the GamelanJegogan at 147 Hz |
+| 54 | Jegogan 5 ET | `GamelanJegogan` | **3** | Jegogan 5 ET, the GamelanJegogan at 165 Hz |
+| 55 | Jublag 1 ET | `GamelanJublag` | **3** | Jublag 1 ET, the GamelanJublag at 208 Hz |
+| 56 | Jublag 2 ET | `GamelanJublag` | **3** | Jublag 2 ET, the GamelanJublag at 233 Hz |
+| 57 | Jublag 3 ET | `GamelanJublag` | **3** | Jublag 3 ET, the GamelanJublag at 277 Hz |
+| 58 | Jublag 4 ET | `GamelanJublag` | **3** | Jublag 4 ET, the GamelanJublag at 294 Hz |
+| 59 | Jublag 5 ET | `GamelanJublag` | **3** | Jublag 5 ET, the GamelanJublag at 330 Hz |
+| 60 | Penyacah 1 ET | `GamelanPenyacah` | **4** | Penyacah 1 ET, the GamelanPenyacah at 415 Hz |
+| 61 | Penyacah 2 ET | `GamelanPenyacah` | **4** | Penyacah 2 ET, the GamelanPenyacah at 466 Hz |
+| 62 | Penyacah 3 ET | `GamelanPenyacah` | **4** | Penyacah 3 ET, the GamelanPenyacah at 554 Hz |
+| 63 | Penyacah 4 ET | `GamelanPenyacah` | **4** | Penyacah 4 ET, the GamelanPenyacah at 587 Hz |
+| 64 | Penyacah 5 ET | `GamelanPenyacah` | **4** | Penyacah 5 ET, the GamelanPenyacah at 659 Hz |
+| 65 | Penyacah 6 ET | `GamelanPenyacah` | **4** | Penyacah 6 ET, the GamelanPenyacah at 831 Hz |
+| 66 | Penyacah 7 ET | `GamelanPenyacah` | **4** | Penyacah 7 ET, the GamelanPenyacah at 932 Hz |
+| 67 | Pemade 1 ET | `GamelanPemade` | **4** | Pemade 1 ET, the GamelanPemade at 415 Hz |
+| 68 | Pemade 2 ET | `GamelanPemade` | **4** | Pemade 2 ET, the GamelanPemade at 466 Hz |
+| 69 | Pemade 3 ET | `GamelanPemade` | **4** | Pemade 3 ET, the GamelanPemade at 554 Hz |
+| 70 | Pemade 4 ET | `GamelanPemade` | **4** | Pemade 4 ET, the GamelanPemade at 587 Hz |
+| 71 | Pemade 5 ET | `GamelanPemade` | **4** | Pemade 5 ET, the GamelanPemade at 659 Hz |
+| 72 | Pemade 6 ET | `GamelanPemade` | **4** | Pemade 6 ET, the GamelanPemade at 831 Hz |
+| 73 | Pemade 7 ET | `GamelanPemade` | **4** | Pemade 7 ET, the GamelanPemade at 932 Hz |
+| 74 | Pemade 8 ET | `GamelanPemade` | **4** | Pemade 8 ET, the GamelanPemade at 1109 Hz |
+| 75 | Pemade 9 ET | `GamelanPemade` | **4** | Pemade 9 ET, the GamelanPemade at 1175 Hz |
+| 76 | Pemade 10 ET | `GamelanPemade` | **4** | Pemade 10 ET, the GamelanPemade at 1319 Hz |
+| 77 | Reyong 1 ET | `Reyong` | **3** | Reyong 1 ET, the Reyong at 466 Hz |
+| 78 | Reyong 2 ET | `Reyong` | **3** | Reyong 2 ET, the Reyong at 554 Hz |
+| 79 | Reyong 3 ET | `Reyong` | **3** | Reyong 3 ET, the Reyong at 587 Hz |
+| 80 | Reyong 4 ET | `Reyong` | **3** | Reyong 4 ET, the Reyong at 659 Hz |
+| 81 | Reyong 5 ET | `Reyong` | **3** | Reyong 5 ET, the Reyong at 831 Hz |
+| 82 | Reyong 6 ET | `Reyong` | **3** | Reyong 6 ET, the Reyong at 932 Hz |
+| 83 | Reyong 7 ET | `Reyong` | **3** | Reyong 7 ET, the Reyong at 1109 Hz |
+| 84 | Reyong 8 ET | `Reyong` | **3** | Reyong 8 ET, the Reyong at 1175 Hz |
+| 85 | Reyong 9 ET | `Reyong` | **3** | Reyong 9 ET, the Reyong at 1319 Hz |
+| 86 | Reyong 10 ET | `Reyong` | **3** | Reyong 10 ET, the Reyong at 1661 Hz |
+| 87 | Reyong 11 ET | `Reyong` | **3** | Reyong 11 ET, the Reyong at 1865 Hz |
+| 88 | Reyong 12 ET | `Reyong` | **3** | Reyong 12 ET, the Reyong at 2217 Hz |
 
 ### 56 SFX
 
@@ -2715,7 +2821,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-665 classes.
+681 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -2766,6 +2872,10 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `Celesta` [ModeDecays] -- GM 8 Celesta (4)
         - `Gender` [ModeDecays]
           - `RfxGenderKey` -- set 52 35 Gender 1 (4), set 52 36 Gender 2 (4), set 52 37 Gender 3 (4), set 52 38 Gender 4 (4), set 52 39 Gender 5 (4)
+            - `GamelanJegogan` -- set 54 50 Jegogan 1 (3), set 54 51 Jegogan 2 (3), set 54 52 Jegogan 3 (3), set 54 53 Jegogan 4 (3), set 54 54 Jegogan 5 (3), set 55 50 Jegogan 1 ET (3), set 55 51 Jegogan 2 ET (3), set 55 52 Jegogan 3 ET (3), set 55 53 Jegogan 4 ET (3), set 55 54 Jegogan 5 ET (3)
+            - `GamelanJublag` -- set 54 55 Jublag 1 (3), set 54 56 Jublag 2 (3), set 54 57 Jublag 3 (3), set 54 58 Jublag 4 (3), set 54 59 Jublag 5 (3), set 55 55 Jublag 1 ET (3), set 55 56 Jublag 2 ET (3), set 55 57 Jublag 3 ET (3), set 55 58 Jublag 4 ET (3), set 55 59 Jublag 5 ET (3)
+            - `GamelanPemade` -- set 54 67 Pemade 1 (4), set 54 68 Pemade 2 (4), set 54 69 Pemade 3 (4), set 54 70 Pemade 4 (4), set 54 71 Pemade 5 (4), set 54 72 Pemade 6 (4), set 54 73 Pemade 7 (4), set 54 74 Pemade 8 (4), set 54 75 Pemade 9 (4), set 54 76 Pemade 10 (4), set 55 67 Pemade 1 ET (4), set 55 68 Pemade 2 ET (4), set 55 69 Pemade 3 ET (4), set 55 70 Pemade 4 ET (4), set 55 71 Pemade 5 ET (4), set 55 72 Pemade 6 ET (4), set 55 73 Pemade 7 ET (4), set 55 74 Pemade 8 ET (4), set 55 75 Pemade 9 ET (4), set 55 76 Pemade 10 ET (4)
+            - `GamelanPenyacah` -- set 54 60 Penyacah 1 (4), set 54 61 Penyacah 2 (4), set 54 62 Penyacah 3 (4), set 54 63 Penyacah 4 (4), set 54 64 Penyacah 5 (4), set 54 65 Penyacah 6 (4), set 54 66 Penyacah 7 (4), set 55 60 Penyacah 1 ET (4), set 55 61 Penyacah 2 ET (4), set 55 62 Penyacah 3 ET (4), set 55 63 Penyacah 4 ET (4), set 55 64 Penyacah 5 ET (4), set 55 65 Penyacah 6 ET (4), set 55 66 Penyacah 7 ET (4)
         - `Glockenspiel` -- GM 9 Glockenspiel (4)
         - `MusicBox` [ModeDecays] -- GM 10 Music Box (4)
       - `TunedBar`
@@ -2790,7 +2900,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `CrashCymbal1` -- 49 Crash Cymbal 1 (4), set 49 28 Crash Cymbal 1 (4), set 53 61 Crash Cymbal 1 (4), set 53 65 Hard Crash Cymbal (2), set 53 68 Mute Crash Cymbal 1 (4), set 62 62 Hard Crash Cymbal (2), set 62 70 Mute Crash Cymbal 1 (4), set 127 49 Crash Cymbal (4)
           - `BrushCrash` -- set 40 49 Brush Crash Cymbal (4), set 41 49 Brush Crash Cymbal (4), set 53 64 Brush Crash Cymbal (4), set 62 61 Brush Crash Cymbal (4)
             - `RndBrushCrash` [RandomStrike] -- set 42 49 [RND] Brush Crash Cymbal (4)
-          - `CengCeng` -- set 49 49 Rama Cymbal (4), set 52 45 Rama Cymbal Low (4), set 52 46 Rama Cymbal High (4)
+          - `CengCeng` -- set 49 49 Rama Cymbal (4), set 52 45 Rama Cymbal Low (4), set 52 46 Rama Cymbal High (4), set 54 45 Ceng-Ceng (4), set 55 45 Ceng-Ceng (4)
+            - `Kopyak` -- set 54 46 Kopyak Open (3), set 54 47 Kopyak Mute (3), set 55 46 Kopyak Open (3), set 55 47 Kopyak Mute (3)
           - `ConcertCymbal1` -- set 48 59 Concert Cymbal 1 (4), set 49 31 Concert Cymbal (4)
           - `JazzCrash` -- set 32 49 Jazz Crash Cymbal (4), set 62 60 Jazz Crash Cymbal (4)
             - `RndJazzCrash` [RandomStrike] -- set 33 49 [RND] Jazz Crash Cymbal (4)
@@ -2919,6 +3030,14 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `CongaLow` -- 64 Low Conga (4), set 49 75 Mute Low Conga (2), set 49 77 Open Low Conga (4), set 127 64 Low Conga (4)
             - `CongaMute` -- 62 Mute Hi Conga (4), set 49 73 Mute High Conga (4), set 49 76 Conga Slap (2), set 127 62 Mute Hi Conga (4)
             - `CongaOpen` -- 63 Open Hi Conga (4), set 49 74 Open High Conga (4), set 127 63 High Conga (4)
+              - `Kendang`
+                - `KelontukMute` -- set 54 41 Kelontuk Mute (3), set 55 41 Kelontuk Mute (3)
+                - `Kelontuk` -- set 54 40 Kelontuk (3), set 55 40 Kelontuk (3)
+                - `KelontukSide` -- set 54 42 Kelontuk Side (3), set 55 42 Kelontuk Side (3)
+                - `KendangBebarongan` -- set 54 38 Bebarongan (3), set 55 38 Bebarongan (3)
+                - `KendangLanang` -- set 54 37 Kendang Lanang (3), set 55 37 Kendang Lanang (3)
+                - `KendangPelegongan` -- set 54 39 Pelegongan (3), set 55 39 Pelegongan (3)
+                - `KendangWadon` -- set 54 36 Kendang Wadon (3), set 55 36 Kendang Wadon (3)
             - `CowbellStroke` -- 56 Cowbell (4), set 49 70 Cowbell (4), set 127 56 Cowbell (4)
             - `SfxBassSlap` -- set 56 25 Guitar Slap (2), set 56 50 String slap of double bass (3)
             - `SfxDoor` -- set 56 60 Door (4), set 127 84 Door (4)
@@ -3153,7 +3272,10 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `SfxBirds` -- set 56 78 Birds (4), set 56 86 Bird 2 (2), set 127 102 Birds (4)
         - `Bonang` [ModeDecays] -- set 52 40 Bonang 1 (4), set 52 41 Bonang 2 (4), set 52 42 Bonang 3 (4), set 52 43 Bonang 4 (4), set 52 44 Bonang 5 (4)
           - `Atarigane` -- set 49 39 Atarigane (2), set 52 54 Atarigane (2)
-        - `GamelanGong` [ModeDecays] -- set 49 50 Gamelan Gong (4), set 52 25 Gamelan Gong 1 (4), set 52 26 Gamelan Gong 2 (4), set 52 27 Gamelan Gong 3 (4), set 52 28 Gamelan Gong 4 (4), set 52 29 Gamelan Gong 5 (4), set 52 30 Gamelan Gong 6 (4), set 52 31 Gamelan Gong 7 (4), set 52 32 Gamelan Gong 8 (4), set 52 33 Gamelan Gong 9 (4), set 52 34 Gamelan Gong 10 (4)
+          - `Kajar` -- set 54 48 Kajar (3), set 55 48 Kajar ET (3)
+          - `Reyong` -- set 54 77 Reyong 1 (3), set 54 78 Reyong 2 (3), set 54 79 Reyong 3 (3), set 54 80 Reyong 4 (3), set 54 81 Reyong 5 (3), set 54 82 Reyong 6 (3), set 54 83 Reyong 7 (3), set 54 84 Reyong 8 (3), set 54 85 Reyong 9 (3), set 54 86 Reyong 10 (3), set 54 87 Reyong 11 (3), set 54 88 Reyong 12 (3), set 55 77 Reyong 1 ET (3), set 55 78 Reyong 2 ET (3), set 55 79 Reyong 3 ET (3), set 55 80 Reyong 4 ET (3), set 55 81 Reyong 5 ET (3), set 55 82 Reyong 6 ET (3), set 55 83 Reyong 7 ET (3), set 55 84 Reyong 8 ET (3), set 55 85 Reyong 9 ET (3), set 55 86 Reyong 10 ET (3), set 55 87 Reyong 11 ET (3), set 55 88 Reyong 12 ET (3)
+        - `GamelanGong` [ModeDecays] -- set 49 50 Gamelan Gong (4), set 52 25 Gamelan Gong 1 (4), set 52 26 Gamelan Gong 2 (4), set 52 27 Gamelan Gong 3 (4), set 52 28 Gamelan Gong 4 (4), set 52 29 Gamelan Gong 5 (4), set 52 30 Gamelan Gong 6 (4), set 52 31 Gamelan Gong 7 (4), set 52 32 Gamelan Gong 8 (4), set 52 33 Gamelan Gong 9 (4), set 52 34 Gamelan Gong 10 (4), set 54 43 Gamelan Gong Wadon (4), set 54 44 Gamelan Gong Lanang (4), set 55 43 Gamelan Gong Wadon ET (4), set 55 44 Gamelan Gong Lanang ET (4)
+          - `Kempur` -- set 54 49 Kempur (3), set 55 49 Kempur ET (3)
         - `SteelPan` -- GM 114 Steel Drums (4)
         - `TelephoneRing` [ModeDecays] -- GM 124 Telephone Ring (4), set 56 89 Telephone 1 (4)
         - `Triangle` -- 80 Mute Triangle (4), 81 Open Triangle (4), set 9 80 Electric Mute Triangle (2), set 9 81 Electric Open Triangle (2), set 10 80 Electric Mute Triangle (2), set 10 81 Electric Open Triangle (2), set 11 80 Electric Mute Triangle (2), set 11 81 Electric Open Triangle (2), set 13 80 Electric Mute Triangle (2), set 13 81 Electric Open Triangle (2), set 26 80 Electric Mute Triangle (2), set 26 81 Electric Open Triangle (2), set 49 91 Mute Triangle (4), set 49 92 Open Triangle (4), set 282 80 Electric Mute Triangle (2), set 282 81 Electric Open Triangle (2)

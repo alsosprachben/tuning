@@ -102,6 +102,7 @@ LOW_RING = (48, 49, 50)
 BURST = (54, 56, 76, 77)
 BURST_PARAMS = ("rise_s", "settle_s", "settle_db", "shake_min_s")
 _JAZZ = os.path.expanduser("~/Documents/refs/jazz_kit_soneproject/wav/")
+_CDM = os.path.expanduser("~/Documents/refs/freesound/gamelan_cdm/wav/")
 _OCT31 = (31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)
 _JAZZ_T = ((0.000, 0.010), (0.010, 0.030), (0.030, 0.060), (0.060, 0.120), (0.12, 0.25), (0.25, 0.40))
 INSTS = {
@@ -211,6 +212,17 @@ INSTS = {
                           glob=_JAZZ + "tom[27][0-3]*.wav", groups=None,
                           band=(100, 4000), floor=-35, flat=(500, 4000), T=_JAZZ_T, clip=-60.0,
                           params=DRUM_PARAMS),
+    # THE GAMELAN SETS' KENDANG (the SC-8850's 36-42, tonelib.KendangProperties):
+    # Casa da Musica's Javanese kendang (Freesound pack 16058, CC BY 3.0, measured
+    # only; sources.md), one take a stroke, read as Ben's reading of Roland's names
+    **{"kendang_%s" % nm: dict(kit=54, note=n, glob=_CDM + take + ".wav", groups=None, merge=0.04, max_modes=10,
+                               band=(max(40, int(f0 * 0.5)), 4000), floor=-35, flat=(1000, 8000),
+                               T=_JAZZ_T, clip=-60.0, params=DRUM_PARAMS)
+       for nm, n, take, f0 in (("wadon", 36, "kendhang_ageng_dha", 93), ("lanang", 37, "ketipung_small_dhung", 205),
+                               ("bebarongan", 38, "ciblon_medium_dlang", 196),
+                               ("pelegongan", 39, "ciblon_medium_thung", 186), ("kelontuk", 40, "ciblon_medium_tong", 290),
+                               ("kelontuk_mute", 41, "ciblon_medium_tak", 478),
+                               ("kelontuk_side", 42, "ketipung_small_tak", 406))},
     # GS key 82, Shaker: Camo's shaker in VSCO 2 CE, eight single shakes of
     # 0.16-0.27 s (CC0), shaped noise as the maracas and cabasa (SHAKE_PARAMS,
     # then --trim3 into its noise_bands)

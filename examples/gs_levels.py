@@ -73,6 +73,13 @@ KIND = {
     'Room Crash Cymbal': 'cymbal', 'Room Ride Cymbal': 'cymbal', 'Room Ride Bell': 'cymbal',
     'Jazz Low Tom 1': 'drum', 'Jazz Mid Tom 1': 'drum', 'Jazz Crash Cymbal': 'cymbal', 'Jazz Ride Cymbal': 'cymbal',
     'Jazz Ride Bell': 'cymbal',
+    # the Gamelan sets': its drums, its bronze (each pitched instrument by its
+    # middle key: FAMILY), its gongs and cymbals
+    'Kendang Wadon': 'drum', 'Kendang Lanang': 'drum', 'Bebarongan': 'drum', 'Pelegongan': 'drum',
+    'Kelontuk': 'drum', 'Kelontuk Mute': 'drum', 'Kelontuk Side': 'drum', 'Gamelan Gong Wadon': 'gong',
+    'Gamelan Gong Lanang': 'gong', 'Kempur': 'gong', 'Kajar': 'drum', 'Ceng-Ceng': 'cymbal',
+    'Kopyak Open': 'cymbal', 'Kopyak Mute': 'cymbal', 'Jegogan 3': 'drum', 'Jublag 3': 'drum',
+    'Penyacah 4': 'drum', 'Pemade 5': 'drum', 'Reyong 6': 'drum',
     'Jingle Bell': 'cymbal', 'Req Dum': 'drum', 'Req Tik': 'drum', 'Bendir': 'drum', 'Udo Short': 'drum',
     'Udo Long': 'drum', 'Udo Slap': 'drum', 'Talking Drum': 'drum', 'Bend Talking Drum': 'drum',
     'Djembe': 'drum', 'Djembe Rim': 'drum', 'Conga Slide': 'drum', 'Open Pandiero': 'drum',
@@ -85,6 +92,14 @@ KIND = {
 }
 # ...and a soft stroke's kind 6 dB under its loud one's
 SOFT = {'Gengari p': 6.0, 'Jing p': 6.0}
+# ONE TRIM FOR AN INSTRUMENT'S KEYS: a gamelan instrument levelled by its
+# middle key, the trim given to every key of it, in both sets
+FAMILY = {'%s %d' % (inst, mid): ['%s %d%s' % (inst, n, et) for n in range(1, count + 1) for et in ('', ' ET')]
+          for inst, mid, count in (('Jegogan', 3, 5), ('Jublag', 3, 5), ('Penyacah', 4, 7), ('Pemade', 5, 10),
+                                   ('Reyong', 6, 12))}
+FAMILY.update({n: [n, n + ' ET'] for n in ('Gamelan Gong Wadon', 'Gamelan Gong Lanang', 'Kempur', 'Kajar')})
+
+
 # THE SAME DRUM ELSEWHERE: a voice that is Standard's in another room (the
 # Room set's) or the same drum from another kit (the Jazz set's) sits where
 # Standard's does -- by kind, the closed hat would be the open's level, and
@@ -148,7 +163,8 @@ def main(argv):
         new = round(cur * 10 ** (d / 20.0), 4) if abs(d) > 3.0 else cur
         print("  %-20s %-6s %6.1f dB  (target %.1f)  trim %s -> %s" % (name, kind, lv, target, cur, new))
         if new != cur:
-            trims[name] = new
+            for n in FAMILY.get(name, [name]):
+                trims[n] = new
     if "--write" in argv and trims:
         p = os.path.join(HERE, "percussion_gs.py")
         s = open(p).read()

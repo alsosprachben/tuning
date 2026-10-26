@@ -674,6 +674,16 @@ def _gs_sets_rated():
                       'RoomOpenHatProperties', 'RoomCrashProperties', 'RoomRideProperties',
                       'RoomRideBellProperties', 'MondoKickProperties', 'LeftKickProperties',
                       'LeftRoomKickProperties', 'LeftJazzKickProperties', 'LeftJazzKick2Properties')},
+                  # the SC-8850's Gamelan sets: UNT's own gamelan where it was recorded (the
+                  # gangsa's bars, the gongs, the ceng-ceng) -- and the kendang fitted to
+                  # Java's, the jublag's and jegogan's padded mallets, the kettles, the
+                  # kempur and the kopyak built from their kin; examples/gamelan_demo.py
+                  **{_c: (lambda: 4) for _c in ('GamelanPemadeProperties', 'GamelanPenyacahProperties')},
+                  **{_c: (lambda: 3) for _c in (
+                      'KendangWadonProperties', 'KendangLanangProperties', 'KendangBebaronganProperties',
+                      'KendangPelegonganProperties', 'KelontukProperties', 'KelontukMuteProperties',
+                      'KelontukSideProperties', 'GamelanJublagProperties', 'GamelanJegoganProperties',
+                      'ReyongProperties', 'KajarProperties', 'KempurProperties', 'KopyakProperties')},
                   # Rock Snare Dry: Standard's snare, gated (APPROX)
                   'AcousticSnareProperties': (lambda: PERC_RATED[38][0]),
                   # the Jungle drums (tonelib.JungleBreak: breaks sped up; Kick 2 the
