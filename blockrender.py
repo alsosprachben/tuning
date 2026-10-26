@@ -3205,6 +3205,38 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _BLrows[_i] = ((_BLrows[_par] if _par in _BLrows else 1.0) * _cur).astype(np.float32)
             _map[_par] = _i
         _CMX_TREM[_c] = (_pk, _map)
+    # AN ALIASING SWEEP (tonelib `alias_sweep`: (start Hz, end Hz, seconds,
+    # sample rate, harmonics)): a sawtooth swept up through a sampler with no
+    # filter -- each harmonic FOLDED about its Nyquist (|k f - m fs|), so each
+    # moves on its own path, falling while the note rises once it is past the
+    # fold. A row a harmonic, its ratio to where it sat at the onset (the
+    # class's mode_ratios are those). (ch, note, on) -> its rows, by harmonic.
+    _ALIAS_AT = {}
+    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
+        if is_drum(_pg):
+            _dd = percussion_for_note(_nt, kit_for_program(int(_pg)))
+            _apc = _dd[1] if _dd else None
+        else:
+            _apc = property_class_for_note(_pg, _nt)
+        _asw = getattr(_apc, 'alias_sweep', None)
+        if not _asw:
+            continue
+        _af0, _af1, _aT, _afs, _anh = _asw
+        _ab0 = int(_on * SR) // BLK
+        _atb = (np.arange(nblk) - _ab0 + 0.5) * BLK / float(SR)
+        _af = _af0 * (_af1 / _af0) ** np.clip(_atb / _aT, 0.0, 1.0)
+        _rws = []
+        for _ak in range(1, int(_anh) + 1):
+            _nom = T.alias_fold(_ak * _af0, _afs)
+            if _nom < 20.0:
+                _rws.append(-1)
+                continue
+            _fk = np.mod(_ak * _af, _afs)
+            _fk = np.where(_fk > _afs / 2.0, _afs - _fk, _fk)
+            _r = np.where(_atb > 0.0, _fk / _nom, 1.0).astype(np.float32)
+            _cc = np.concatenate(([0.0], np.cumsum((_r.astype(np.float64) - 1.0) * BLK)))[:nblk]
+            _rws.append(len(BRrows)); BRrows.append(_r); BCrows.append(_cc)
+        _ALIAS_AT[(_c, _nt, _on)] = _rws
     BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
     BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
     BL = None
@@ -3652,7 +3684,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _sk = _sfx_strokes_of[_skk] = getattr(
                     property_class_for_note(pg, note), 'sfx_strokes_of', None)
             if _sk:
-                strokes = rasp_strokes(_sk[1], on, off, kit=_sk[0])
+                # ...the note's own key in that kit where it names none (the
+                # Morse keyboard: every key its character)
+                strokes = rasp_strokes(note if _sk[1] is None else _sk[1], on, off, kit=_sk[0])
         if strokes is None:
             expanded.append(ev); continue
         for k, st in enumerate(strokes):
@@ -5235,6 +5269,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _BR[0] = _mea[1]            # the meend: the note's own row, or none
         if _sir is not None:
             _BR[0] = _sir[0][0]         # the siren's rotor (its lower disc's, a rank's below)
+        _als = _ALIAS_AT.get((ch, note, on))
         _DL[0] = getattr(props,'left_hrtf_delay',0.0)*SR; _DL[1] = getattr(props,'right_hrtf_delay',0.0)*SR
         li, ri = props.left_incidence, props.right_incidence
         # A SECTION IS PEOPLE IN CHAIRS, not a point. Each player is a separate
@@ -5838,7 +5873,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 # ...OR A MACHINE'S (strike_flam_times: (s, dB) a burst): a
                 # drum machine's clap is one sample, its bursts where its
                 # envelope generator put them, the same on every note
-                _bursts = [(float(_ft), float(_fd)) for _ft, _fd in props.strike_flam_times]
+                _bursts = [(float(_fb[0]), float(_fb[1])) for _fb in props.strike_flam_times]
+                # ...each in its own place in the balance, where it says (a
+                # stereo clap: tonelib.RfxStereoClapProperties)
+                if all(len(_fb) > 2 for _fb in props.strike_flam_times):
+                    _fbal = [float(_fb[2]) for _fb in props.strike_flam_times]
             elif getattr(props, 'strike_flam_people', None):
                 # ...OR A FEW PEOPLE (strike_flam_people: (n, lowest and
                 # highest claps a second, jitter, dB spread)): each clapping
@@ -6509,6 +6548,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
                     if hf > SR/2: break
                     hv = hv_sub(m)
                     if hv == 0.0: continue
+                    # ...an aliasing sweep's harmonic on its own folded row
+                    if _als is not None:
+                        _BR[0] = _als[m - 1] if m - 1 < len(_als) else -1
                     # each partial's own jitter where the voice says so (a snare's
                     # wires are noise, its head is not); else the note's
                     sjit = rp.partial_jitter(m) if _pjit else sjit_n

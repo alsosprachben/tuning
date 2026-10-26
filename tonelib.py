@@ -28180,6 +28180,296 @@ class SfxSquareClickProperties(TR808Properties):
              "click_lp_hz": 8132.4373}
 
 
+
+# THE RHYTHM FX SETS' SYNTH HITS (Rhythm FX 64-70, Rhythm FX 2 82-87;
+# Standard 3 plays Rhythm FX's 76-88): Roland's own synthesized sounds, so
+# no recording to fit -- each a guess from its NAME (Ben: Roland's names
+# only, educated guesses on semantics), a patch on the TR-808 engine as the
+# SFX set's High Q is: a sine swept (bend_oct > 0 falls, < 0 rises), its
+# click, its noise.
+
+class RfxTechnoThipProperties(TR808Properties):
+    """Rhythm FX 64, "Techno Thip": a tight high blip -- a sine at 1.8 kHz
+    snapping down an octave onto itself in 4 ms, gone in 60, a click on it."""
+    tr808 = {"tune_hz": 1800.0, "decay_s": 0.06, "bend_oct": 1.0, "bend_ms": 4.0,
+             "h2_db": -24.0, "click_db": -12.0, "click_dbs": 3000.0, "click_hp_hz": 2000.0}
+
+
+class RfxPopDropProperties(TR808Properties):
+    """Rhythm FX 65, "Pop Drop": a cork's "bloop" -- a sine rising 1.2
+    octaves onto 900 Hz in 15 ms (the mouth of a bottle opening), 0.12 s."""
+    tr808 = {"tune_hz": 900.0, "decay_s": 0.12, "bend_oct": -1.2, "bend_ms": 15.0,
+             "h2_db": -20.0, "click_db": -20.0, "click_dbs": 2000.0}
+
+
+class RfxSynDropsProperties(TR808Properties):
+    """Rhythm FX 68, "Syn. Drops": a water drop's "plip" -- a sine gliding up
+    1.5 octaves onto 1.5 kHz in 8 ms (the bubble a drop pulls down closing),
+    80 ms, a tick at its start."""
+    tr808 = {"tune_hz": 1500.0, "decay_s": 0.08, "bend_oct": -1.5, "bend_ms": 8.0,
+             "click_db": -18.0, "click_dbs": 5000.0, "click_hp_hz": 3000.0}
+
+
+class RfxPipeProperties(TR808Properties):
+    """Rhythm FX 70, "Pipe": a struck plastic tube -- an open pipe's
+    harmonics (2 and 3 under the first), a hollow "tonk" at 330 Hz, 0.35 s,
+    the stick's click on it."""
+    tr808 = {"tune_hz": 330.0, "decay_s": 0.35, "res": ((2.0, -8.0, 0.25), (3.0, -14.0, 0.15)),
+             "bend_oct": 0.05, "bend_ms": 10.0, "click_db": -16.0, "click_dbs": 2500.0}
+
+
+class RfxSubMarineProperties(TR808Properties):
+    """Rhythm FX 2 86, "Sub Marine": a film submarine's sonar ping -- a pure
+    1.2 kHz, a soft 5 ms onset, ringing 2.5 s -- and its RETURN, the echo off
+    the target (percussion_gs.STROKES)."""
+    tr808 = {"tune_hz": 1200.0, "decay_s": 2.5, "attack_ms": 5.0}
+
+
+class RfxNoiseAttackProperties(TR808Properties):
+    """Rhythm FX 2 87, "Noise Attack": a burst of band-passed noise (0.5-6
+    kHz), no tone, gone in a quarter second."""
+    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.25, "noise_db": 0.0,
+             "noise_hp_hz": 500.0, "noise_lp_hz": 6000.0, "noise_decay_s": 0.25, "noise_rise_ms": 1.0}
+
+
+class RfxBounceProperties(TR808Properties):
+    """Rhythm FX 2 82, "Bounce": a ball bouncing to rest -- each bounce a
+    "boing" (a sine at 600 Hz falling half an octave in 20 ms), the bounces
+    closer and softer as it settles (percussion_gs.STROKES' pattern); 83
+    "Reverse Bounce" the same bounces backwards in time."""
+    tr808 = {"tune_hz": 600.0, "decay_s": 0.12, "bend_oct": 0.5, "bend_ms": 20.0,
+             "h2_db": -22.0, "click_db": -24.0, "click_dbs": 2000.0}
+
+
+class RfxDistortionKickProperties(TR909KickProperties):
+    """Rhythm FX 67, "Distortion Kick": the 909's kick through our valve hard
+    (6, past the Techno kicks' 4) -- baked once (tr808.drive)."""
+    tr808 = _driven(TR909KickProperties, 6.0)
+
+
+class RfxDistortionKnockProperties(TR808ClavesProperties):
+    """Rhythm FX 2 84, "Distortion Knock": a knock -- the 808's claves, a
+    knuckle's wood -- through our valve hard (5), baked once."""
+    tr808 = _driven(TR808ClavesProperties, 5.0)
+
+
+# THE RHYTHM FX SETS' SWEPT AND MOVING EFFECTS (Rhythm FX 75-88, Rhythm FX 2
+# 85-91): guesses from the names, on the weather and laser machinery -- a
+# noise colour or a tone riding a bend (tension_bend > 0 falls onto the note,
+# < 0 rises onto it), its length the set's gate; runs of strokes (chirps,
+# beeps, a two-tone) percussion_gs.STROKES' patterns.
+
+class RfxSwishProperties(SfxScratchPushProperties):
+    """Rhythm FX 79, "Swish": air swept past -- a broad hiss (0.5-10 kHz)
+    rising two octaves onto itself in a tenth of a second, the scratch's
+    noise riding the bend."""
+    tension_bend = -0.75
+    tension_settle_time = 0.1
+    breath_noise_fade_s = 0.03
+    breath_noise_db = ((101, 20.0), (202, 30.0), (404, 40.0), (808, 46.0), (1616, 50.0), (3233, 52.0),
+                       (6465, 50.0), (10263, 44.0), (12931, 38.0))
+
+
+class RfxVelocityNoiseProperties(RfxSwishProperties):
+    """Rhythm FX 77, "Velocity Noise FX": the swish falling -- an octave down
+    onto itself (its brightness following velocity, as the name says, is
+    every voice's effort law)."""
+    tension_bend = 1.0
+    tension_settle_time = 0.15
+
+
+class RfxSparkProperties(HandClapProperties):
+    """Rhythm FX 75, "Spark": an electric arc -- forty tiny bright cracks
+    (2-12 kHz, each gone in a few ms) in 0.3 s, their levels exponential
+    (many small, few large: strike_flam_exp_db, the reed's crackle)."""
+    strike_flam = 40
+    strike_flam_s = 0.3
+    strike_flam_db = 30.0
+    strike_flam_exp_db = 6.0
+    strike_noise_dbs = 4000.0
+    strike_noise_db = ((1018, -20.0), (1282, -14.0), (1616, -8.0), (2036, -3.0), (2565, 0.0), (3232, 1.0),
+                       (4072, 2.0), (5131, 2.0), (6465, 1.0), (8145, 0.0), (10263, -2.0), (12930, -5.0))
+
+
+class RfxMissileProperties(SfxLaserProperties):
+    """Rhythm FX 86, "Missile": one coming in -- a whistle (a sine, a trace
+    of its octave) falling two octaves onto 600 Hz over a second, then the
+    BOOM (a late strike: the explosion's low colour, 1 s on) -- which ends
+    the whistle (Ben): the note gated there (percussion_gs.GATE), the boom
+    ringing on past it."""
+    mode_ratios = (1.0, 2.0)
+    mode_gains = (1.0, 0.08)
+    max_harmonic = 2
+    tension_bend = 3.0
+    tension_bend_max = 4.0
+    tension_settle_time = 0.45
+    release_valve_time = 0.05
+    strike_noise_at = 1.0
+    strike_noise_dbs = 40.0
+    strike_noise_len_s = 1.2
+    strike_noise_fade_s = 0.005
+    strike_noise_db = ((51, -6.0), (64, 0.0), (80, 1.0), (101, 2.0), (127, 3.0), (160, 2.0), (202, 4.0),
+                       (255, 2.0), (321, 3.0), (404, 3.0), (509, 2.0), (641, 2.0), (808, 1.0), (1018, 1.0),
+                       (1283, 1.0), (1616, 1.0), (2036, -3.0), (2566, -9.0), (3233, -16.0), (4073, -21.0),
+                       (5132, -24.0), (6465, -33.0))
+
+
+class RfxSpaceBirdsProperties(TR808Properties):
+    """Rhythm FX 87, "Space Birds": electronic chirps -- each a sine rising
+    0.6 octave onto 2.6 kHz in 25 ms, 90 ms long, a flock of them at their
+    own pitches (percussion_gs.STROKES)."""
+    tr808 = {"tune_hz": 2600.0, "decay_s": 0.09, "bend_oct": -0.6, "bend_ms": 25.0}
+
+
+class RfxSpaceWormsProperties(TR808Properties):
+    """Rhythm FX 2 88, "Space Worms": a squelchy wriggle -- each a resonant
+    "blurp" (400 Hz falling an octave onto itself in 30 ms, its 2nd and 3rd
+    strong), six of them wiggling up and down (percussion_gs.STROKES)."""
+    tr808 = {"tune_hz": 400.0, "decay_s": 0.15, "bend_oct": 1.0, "bend_ms": 30.0,
+             "h2_db": -6.0, "h3_db": -10.0}
+
+
+class RfxTapeStopProperties(SfxLaserProperties):
+    """Rhythm FX 84, "Tape Stop 1": a tape stopping under the music -- a
+    sawtooth's harmonics (a note's worth of sound) sliding four octaves down
+    to nothing as the reels stop, fading as it slows. 2 (85) stops faster."""
+    mode_ratios = tuple(float(k) for k in range(1, 13))
+    mode_gains = tuple(1.0 / k for k in range(1, 13))
+    max_harmonic = 12
+    tension_bend = 15.0
+    tension_bend_max = 16.0
+    tension_settle_time = 0.35
+    decay_db = 25.0
+    release_valve_time = 0.05
+
+
+class RfxTapeStop2Properties(RfxTapeStopProperties):
+    """Rhythm FX 85, "Tape Stop 2": the reels stopping twice as fast."""
+    tension_settle_time = 0.18
+    decay_db = 45.0
+
+
+class RfxSquareToneProperties(SfxLaserProperties):
+    """A steady square tone, no sweep: Rhythm FX 2 89 "Emergency !" (a
+    two-tone siren, nee-naw), its run percussion_gs.STROKES -- each tone
+    stopping with its stroke (not a one-shot: the laser's rings on)."""
+    one_shot = False
+    tension_bend = 0.0
+    tension_bend_max = 0.0
+
+
+class RfxSawSweepProperties(SfxLaserProperties):
+    """Rhythm FX 2 91, "Saw LFO Saw": a sawtooth whose pitch a sawtooth LFO
+    sweeps -- each cycle rising an octave onto its note (percussion_gs.STROKES
+    repeating it at 8 a second), each cycle stopping with its stroke and the
+    next starting its own bend."""
+    one_shot = False
+    mode_ratios = tuple(float(k) for k in range(1, 13))
+    mode_gains = tuple(1.0 / k for k in range(1, 13))
+    max_harmonic = 12
+    tension_bend = -0.5
+    tension_bend_max = 1.0
+    tension_settle_time = 0.04
+
+
+class RfxMorseProperties(SfxLaserProperties):
+    """A TELEGRAPH'S SIDETONE (percussion_map's Morse keyboard; Rhythm FX 2
+    90, "Calculating...", and GS 125.10, Ben: "international morse code
+    spread across the keyboard"): a pure tone keyed on and off, its edges 5
+    ms (a keyer shapes them: a hard key clicks), each dot and dash a stroke
+    stopping with itself."""
+    one_shot = False
+    mode_ratios = (1.0,)
+    mode_gains = (1.0,)
+    max_harmonic = 1
+    tension_bend = 0.0
+    tension_bend_max = 0.0
+    attack_time = 0.005
+    release_valve_time = 0.005
+
+
+# THE RHYTHM FX SETS' STRUCK AND PROCESSED OBJECTS (Rhythm FX 66, 71-74, 76,
+# 78, 80): guesses from the names -- struck things as resonators and their
+# modes (the TR-808 engine), a sampled tambourine through a sampler.
+
+class RfxWoodySlapProperties(TR808Properties):
+    """Rhythm FX 66, "Woody Slap": a hand slapping a wooden box -- the
+    board's ring at 420 Hz and a plate mode at 2.7x, 0.12 s, under the hand's
+    slap (noise 0.8-6 kHz, gone in 40 ms)."""
+    tr808 = {"tune_hz": 420.0, "decay_s": 0.12, "res": ((2.7, -8.0, 0.08),), "bend_oct": 0.08,
+             "bend_ms": 8.0, "noise_db": -4.0, "noise_hp_hz": 800.0, "noise_lp_hz": 6000.0,
+             "noise_decay_s": 0.04, "click_db": -14.0, "click_dbs": 3000.0}
+
+
+class RfxIceBlockProperties(TR808Properties):
+    """Rhythm FX 71, "Ice Block": a block of ice struck -- glassy, its modes
+    inharmonic (1.8 kHz and 2.3, 3.9, 5.6x it), short (0.25 s), a crisp
+    tick."""
+    tr808 = {"tune_hz": 1800.0, "decay_s": 0.25,
+             "res": ((2.31, -5.0, 0.18), (3.92, -9.0, 0.12), (5.6, -14.0, 0.08)),
+             "click_db": -10.0, "click_dbs": 6000.0, "click_hp_hz": 3000.0}
+
+
+class RfxMetallicPercProperties(TR808Properties):
+    """Rhythm FX 76, "Metallic Percussion": a bright clank -- a struck bar's
+    inharmonic modes (700 Hz and 1.47 ... 5.1x it), 0.5 s, a hard click."""
+    tr808 = {"tune_hz": 700.0, "decay_s": 0.5,
+             "res": ((1.47, -3.0, 0.5), (2.09, -5.0, 0.4), (2.76, -6.0, 0.35), (3.54, -8.0, 0.3),
+                     (5.1, -12.0, 0.2)),
+             "click_db": -8.0, "click_dbs": 4000.0}
+
+
+class RfxModulatedBellProperties(TR808Properties):
+    """Rhythm FX 74, "Modulated Bell": the FM bell -- a carrier and a
+    modulator 3.5x it, the sidebands at 2.5, 4.5, 6 and 8x the note (880 Hz)
+    under it, the higher dying sooner, the note ringing 2 s."""
+    tr808 = {"tune_hz": 880.0, "decay_s": 2.0,
+             "res": ((2.5, -4.0, 1.2), (4.5, -8.0, 0.9), (6.0, -12.0, 0.7), (8.0, -16.0, 0.5)),
+             "click_db": -24.0, "click_dbs": 3000.0}
+
+
+class RfxDigitalTambourineProperties(SampledBreak, TambourineProperties):
+    """Rhythm FX 72, "Digital Tambourine": Standard's tambourine through an
+    early sampler -- nothing over its Nyquist (8-bit era, 22 kHz: 11 kHz),
+    its grit under it (SampledBreak), at its own pitch."""
+    sample_semitones = 0.0
+    sampler_rate_hz = 22050.0
+    grit_db = -36.0
+
+
+def alias_fold(f, fs):
+    """Where a frequency f lands sampled at fs with no filter: folded about
+    fs/2, again and again (|f - m fs|)."""
+    f = f % fs
+    return fs - f if f > fs / 2.0 else f
+
+
+class RfxAliasProperties(SfxLaserProperties):
+    """Rhythm FX 73, "Alias": ALIASING heard as it moves (Ben: "a sweep up and
+    that folds back") -- a sawtooth swept up from 300 Hz to 6 kHz in 0.8 s
+    through a sampler at 8 kHz with no filter (alias_sweep; blockrender's
+    rows): each harmonic folded about the 4 kHz Nyquist, so each turns back
+    down as it reaches it while the note keeps rising, the harmonics crossing
+    one another -- the downward-whistling chirps of a sweep through a
+    too-low sample rate. A guess from the name (its neighbours, Digital
+    Tambourine and Modulated Bell, are named for their processing)."""
+    alias_sweep = (300.0, 6000.0, 0.8, 8000.0, 16)
+    mode_ratios = tuple(alias_fold(k * 300.0, 8000.0) / 300.0 for k in range(1, 17))
+    mode_gains = tuple((1.0 / k if alias_fold(k * 300.0, 8000.0) >= 20.0 else 0.0) for k in range(1, 17))
+    max_harmonic = 16
+    tension_bend = 0.0
+    tension_bend_max = 0.0
+    decay_db = 3.0
+
+
+class RfxStereoClapProperties(TR707ClapProperties):
+    """Rhythm FX 78, "Stereo Noise Clap": the 707's clap, its four bursts
+    from four places across the stereo field (left, right, centre-right,
+    centre-left) -- one clap spread wide."""
+    tr808 = dict(TR707ClapProperties.tr808,
+                 click_bursts=((0.0, -1.0, 0.15), (0.01, 0.0, 1.42), (0.02, 0.0, 1.0), (0.031, 0.5, 0.57)))
+
+
 import os as _os
 # The default room is the hall, and it needs the stagger as much as any other --
 # it is the one with three coincident surfaces.

@@ -340,6 +340,50 @@ VOICE = {
     'Reverse TR-808 Open Hi-Hat': ('r', 25, 46), 'Reverse TR-707 Open Hi-Hat': ('r', 29, 46),
     'Reverse TR-606 Open Hi-Hat': ('r', 28, 46), 'Reverse TR-707 Crash Cymbal': ('r', 29, 49, APPROX),
     'Reverse Hu Yin Luo': None,
+    # THE RHYTHM FX SETS' SYNTH HITS (tonelib.Rfx*: guesses from the names, on
+    # the TR-808 engine) -- and Rhythm FX's Hoo, the Dance set's High Hoo
+    'Techno Thip': ('c', 'RfxTechnoThipProperties', 1800.0),
+    'Pop Drop': ('c', 'RfxPopDropProperties', 900.0),
+    'Syn. Drops': ('c', 'RfxSynDropsProperties', 1500.0),
+    'Pipe': ('c', 'RfxPipeProperties', 330.0),
+    'Distortion Kick': ('c', 'RfxDistortionKickProperties', 49.8),
+    'Sub Marine': ('c', 'RfxSubMarineProperties', 1200.0),
+    'Noise Attack': ('c', 'RfxNoiseAttackProperties', 1000.0),
+    'Bounce': ('c', 'RfxBounceProperties', 600.0),
+    'Reverse Bounce': ('c', 'RfxBounceProperties', 600.0),
+    'Distortion Knock': ('c', 'RfxDistortionKnockProperties', 2421.8),
+    'Hoo': ('c', 'HooProperties', 1000.0),
+    # ...AND THEIR SWEPT AND MOVING EFFECTS (tonelib.Rfx*, the weather and
+    # laser machinery; the guitar's slide and the starship the SFX set's)
+    'Swish': ('c', 'RfxSwishProperties', 261.63),
+    'Velocity Noise FX': ('c', 'RfxVelocityNoiseProperties', 261.63),
+    'Spark': ('c', 'RfxSparkProperties', 310.4),
+    'Missile': ('c', 'RfxMissileProperties', 600.0),
+    'Space Birds': ('c', 'RfxSpaceBirdsProperties', 2600.0),
+    'Space Worms': ('c', 'RfxSpaceWormsProperties', 400.0),
+    'Tape Stop 1': ('c', 'RfxTapeStopProperties', 30.0),
+    'Tape Stop 2': ('c', 'RfxTapeStop2Properties', 30.0),
+    'Emergency !': ('c', 'RfxSquareToneProperties', 960.0),
+    'Calculating...': ('c', 'RfxMorseProperties', 700.0),
+    'Saw LFO Saw': ('c', 'RfxSawSweepProperties', 220.0),
+    'Guitar Slide': ('c', 'SfxFretSlideProperties', 261.63),
+    # ...AND THEIR STRUCK AND PROCESSED OBJECTS (tonelib.Rfx*); Slappy a guess:
+    # the SFX set's slap and its slapback echoes (STROKES)
+    'Woody Slap': ('c', 'RfxWoodySlapProperties', 420.0),
+    'Ice Block': ('c', 'RfxIceBlockProperties', 1800.0),
+    'Metallic Percussion': ('c', 'RfxMetallicPercProperties', 700.0),
+    'Modulated Bell': ('c', 'RfxModulatedBellProperties', 880.0),
+    'Digital Tambourine': ('c', 'RfxDigitalTambourineProperties', 1000.0),
+    'Alias': ('c', 'RfxAliasProperties', 300.0),
+    'Stereo Noise Clap': ('c', 'RfxStereoClapProperties', 1000.0),
+    # SLAPPY: a SNARE -- the SC-8850 files it last in its sets' bank of
+    # snares (97-127, after House Snare 2 and Voice Tah), from the SC-88's
+    # own sounds, two voices: a tight dance snare (the 909's) and a hand's
+    # slap on it (LAYER) -- house's and new jack's "slappy" snare
+    'Slappy': ('k', 30, 38),
+    'Slappy (slap)': ('c', 'SfxSlapProperties', 335.0),
+    # a monster flying past: the SFX set's growl, low (STROKES)
+    'Flying Monster': ('c', 'SfxGrowlProperties', 1000.0),
     # Cymbal & Claps': a second take of a hat or a clap our voice each strike
     # varied; the old maps' takes our one voice; the 808's ride its cymbal
     'Reverse Closed Hi-Hat 1': ('r', 0, 42), 'Reverse Closed Hi-Hat 2': ('r', 0, 44, APPROX),
@@ -383,16 +427,91 @@ VOICE = {
 _HOO_PITCH = ((0.0, -2.1), (0.01, 0.0), (0.1, 0.2), (0.12, -0.4), (0.15, -1.9), (0.17, -6.1),
               (0.19, -9.1), (0.21, -11.0), (0.23, -12.7))
 _HOO_LEVEL = ((0.0, -12.0), (0.02, -2.0), (0.1, -1.0), (0.12, 0.0), (0.16, -4.0), (0.2, -8.0), (0.23, -20.0))
+# THE BOUNCE: a ball settling -- each gap 0.75 of the last from 0.3 s, each
+# bounce 2 dB under the one before; REVERSE BOUNCE the same mirrored in time
+_BOUNCE = [(0.0, 0.0, 0.0)]
+for _i in range(1, 10):
+    _BOUNCE.append((_BOUNCE[-1][0] + 0.3 * 0.75 ** (_i - 1), -2.0 * _i, 0.0))
+_BOUNCE = tuple((round(t, 4), d, st) for t, d, st in _BOUNCE)
+_REV_BOUNCE = tuple(sorted((round(_BOUNCE[-1][0] - t, 4), d, st) for t, d, st in _BOUNCE))
+# INTERNATIONAL MORSE CODE (ITU-R M.1677-1): its letters, figures and
+# punctuation, in its order; a dash three dots, a dot between a character's
+# elements, three between characters, seven between words; the speed in
+# words a minute of "PARIS" (50 dots a word: 20 wpm a 60 ms dot)
+MORSE_DOT_S = 0.06
+MORSE = {
+    "A": ".-", "B": "-...", "C": "-.-.", "D": "-..", "E": ".", "F": "..-.", "G": "--.", "H": "....",
+    "I": "..", "J": ".---", "K": "-.-", "L": ".-..", "M": "--", "N": "-.", "O": "---", "P": ".--.",
+    "Q": "--.-", "R": ".-.", "S": "...", "T": "-", "U": "..-", "V": "...-", "W": ".--", "X": "-..-",
+    "Y": "-.--", "Z": "--..",
+    "1": ".----", "2": "..---", "3": "...--", "4": "....-", "5": ".....", "6": "-....", "7": "--...",
+    "8": "---..", "9": "----.", "0": "-----",
+    ".": ".-.-.-", ",": "--..--", ":": "---...", "?": "..--..", "'": ".----.", "-": "-....-",
+    "/": "-..-.", "(": "-.--.", ")": "-.--.-", '"': ".-..-.", "=": "-...-", "+": ".-.-.",
+    "x": "-..-", "@": ".--.-.",
+}
+MORSE_CHARS = tuple(MORSE)        # the keyboard's order: x is the multiplication sign
+
+
+def morse_pattern(text, dot=MORSE_DOT_S):
+    """A pattern's strokes (s, dB, semitones, length s) sending TEXT."""
+    out, t = [], 0.0
+    for w, word in enumerate(text.split()):
+        if w:
+            t += 7 * dot
+        for c, ch in enumerate(word):
+            if c:
+                t += 3 * dot
+            for e, sym in enumerate(MORSE[ch]):
+                if e:
+                    t += dot
+                n = 1 if sym == "." else 3
+                out.append((round(t, 4), 0.0, 0.0, round(n * dot, 4)))
+                t += n * dot
+    return tuple(out)
+
+
+_morse = morse_pattern
+
+
 STROKES = {
     'High Hoo': {"voiced": (((0.0, 0.0, 0.0),), 480.0, _HOO_PITCH, 0.23, 0.01, 0.0, 0.02, 1.0, None,
                             ((0.0, 1.0),), _HOO_LEVEL)},
     'Low Hoo': {"voiced": (((0.0, 0.0, 0.0),), 320.0, _HOO_PITCH, 0.23, 0.01, 0.0, 0.02, 1.0, None,
                            ((0.0, 0.85),), _HOO_LEVEL)},
+    # THE SONAR PING and its RETURN: the echo off the target 0.7 s on, 14 dB
+    # down, 10 cents low (moving away)
+    'Sub Marine': {"pattern": ((0.0, 0.0, 0.0), (0.7, -14.0, -0.1))},
+    # THE FLOCK: seven chirps at their own times and pitches over 0.8 s
+    'Space Birds': {"pattern": ((0.0, 0.0, 0.0), (0.09, -4.0, 3.0), (0.21, -2.0, -2.0), (0.33, -6.0, 5.0),
+                                (0.47, -3.0, 1.0), (0.6, -8.0, 7.0), (0.74, -5.0, -1.0))},
+    # THE WRIGGLE: six blurps wiggling up and down, 90 ms apart
+    'Space Worms': {"pattern": ((0.0, 0.0, 0.0), (0.09, -2.0, 3.0), (0.18, -1.0, -2.0), (0.27, -3.0, 4.0),
+                                (0.36, -4.0, -1.0), (0.45, -6.0, 2.0))},
+    # NEE-NAW: the two-tone a fourth apart, 0.35 s each, three times
+    'Emergency !': {"pattern": tuple((0.35 * i, 0.0, 0.0 if i % 2 == 0 else -5.0) for i in range(6))},
+    # CALCULATING: Morse, "CALC" at 20 words a minute on a 700 Hz sidetone
+    # (Ben; percussion_map.morse_pattern -- the tone 125.10 the keyboard's)
+    'Calculating...': {"pattern": _morse("CALC")},
+    # THE LFO: the sweep eight times a second for a second
+    'Saw LFO Saw': {"pattern": tuple((0.125 * i, 0.0, 0.0) for i in range(8))},
+    # THE FLYING MONSTER: the growl (the SFX set's, KIT_STROKES[56] 86) low at
+    # 85 Hz and long, passing -- swelling in and away, its jaw working twice a
+    # second, its pitch falling 3 semitones as it goes by (Doppler)
+    'Flying Monster': {"voiced": (((0.0, 0.0, 0.0),), 85.0, ((0.0, 1.0), (0.75, 0.0), (1.5, -2.0)),
+                                  1.5, 0.03, 0.0, 0.045, 2.0, None,
+                                  ((0.0, 0.8), (0.25, 1.1), (0.5, 0.8), (0.75, 1.1), (1.0, 0.8),
+                                   (1.25, 1.05), (1.5, 0.7)),
+                                  ((0.0, -24.0), (0.45, 0.0), (1.0, -2.0), (1.5, -26.0)))},
+    'Bounce': {"pattern": _BOUNCE},
+    'Reverse Bounce': {"pattern": _REV_BOUNCE},
 }
+STROKES['Hoo'] = STROKES['High Hoo']
 
 # ...AND ITS LENGTH, a one-shot's (percussion_map.KIT_GATE): Small Club's the
 # takes' main burst, ~2.5 s; a choked crash's the hand's, 0.15 s
-GATE = {'Small Club 1': 2.5, 'Mute Crash Cymbal 1': 0.15, 'Mute Crash Cymbal 2': 0.15}
+GATE = {'Alias': 0.9, 'Swish': 0.35, 'Velocity Noise FX': 0.4, 'Missile': 1.0, 'Tape Stop 1': 1.0, 'Tape Stop 2': 0.6,
+        'Guitar Slide': 0.3, 'Small Club 1': 2.5, 'Mute Crash Cymbal 1': 0.15, 'Mute Crash Cymbal 2': 0.15}
 
 # ...AND ITS RING (percussion_map.KIT_RING, PERCUSSION_RING's sense): the
 # half-open hats', fitted to DRSKit's semi-open hat against its open one
@@ -406,6 +525,14 @@ LEVEL = {'Half-Open Hi-Hat 1': 0.47, 'Half-Open Hi-Hat 2': 0.47}
 # ...the crashes played by class (choked, brushed) Standard's crashes' ring and
 # trim (PERCUSSION_RING/LEVEL 49, 57), the brushed one 9 dB under
 RING.update({'Mute Crash Cymbal 1': 0.61, 'Mute Crash Cymbal 2': 1.69, 'Brush Crash Cymbal': 0.61})
+# ...the SFX set's voices borrowed whole its trims (KIT_LEVEL[56] 47, 71)
+LEVEL.update({'Guitar Slide': 59.315})
+# ...and Standard's voices borrowed whole theirs (PERCUSSION_LEVEL 28, 54)
+LEVEL.update({'Slappy (slap)': 0.0771, 'Digital Tambourine': 1.1874})
+
+# A SOUND OF TWO VOICES (percussion_map._build_gs_sets): its second voice, on
+# a key below the set's own, struck with it
+LAYER = {'Slappy': ((16, 'Slappy (slap)'),)}
 LEVEL.update({'Mute Crash Cymbal 1': 0.56, 'Mute Crash Cymbal 2': 0.56,
               'Brush Crash Cymbal': round(0.56 * 10 ** (-9 / 20.0), 4)})
 

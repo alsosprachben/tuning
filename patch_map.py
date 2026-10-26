@@ -1019,6 +1019,20 @@ for _pv, _k in SFX_VARIATIONS.items():
     # noise +34 dB over the kit's, 124's telephone -25)
     VARIATION_TRIM_DB.setdefault(_pv, KIT_TRIM_DB)
 
+
+def _morse_tone():
+    """GS 125.10 "Calculating" (SC-88 Pro and SC-8850 maps, among the machines
+    after the Starship): the Morse keyboard (percussion_map.MORSE_KIT) played
+    from the keys -- each note its own character, at its own pitch."""
+    import percussion_map as _PM
+    base = melodic_sfx(60, kit=_PM.MORSE_KIT)
+    return type("RfxMorseKeyboard", (base,), {"sfx_strokes_of": (_PM.MORSE_KIT, None)})
+
+
+VARIATIONS[(125, 10)] = _morse_tone()
+VARIATION_TRIM_DB.setdefault((125, 10), KIT_TRIM_DB)
+
+
 # GS BANK 127: THE MT-32 SET (SC-55 p.69) -- the MT-32's 128 tones on the
 # GS programs, for files written for one (a Sound Canvas in its MT-32 map).
 # Each its nearest voice here: a GM program (its router and all, at that

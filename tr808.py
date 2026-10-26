@@ -137,7 +137,7 @@ PANEL = {
     "click_hp_hz": 20.0,
     "click_lp_hz": 20000.0,
     "click_dbs": 400.0,         # amplitude dB/s
-    "click_bursts": (),         # ((s, dB), ...): the click fired at each, a clap's
+    "click_bursts": (),         # ((s, dB[, balance]), ...): the click fired at each, a clap's
                                 # bursts where its envelope generator puts them
     "click_tilt": 0.0,          # dB per octave (-6: the trigger pulse leaking through,
                                 # its sinc's envelope -- the drums' skirt over ~1 kHz)
@@ -426,7 +426,9 @@ def voice_attrs(patch):
         attrs["strike_noise_db"] = tuple((round(hz), -120.0) for hz in BANDS)
     attrs["strike_noise_dbs"] = p["click_dbs"]
     if p["click_bursts"]:
-        attrs["strike_flam_times"] = tuple((float(t), float(db)) for t, db in p["click_bursts"])
+        # ...a third field a burst's place in the balance (radians, 0 left to
+        # pi/2 right), where it has one
+        attrs["strike_flam_times"] = tuple(tuple(float(v) for v in b) for b in p["click_bursts"])
     attrs["strike_noise_len_s"] = 0.25
     return attrs
 

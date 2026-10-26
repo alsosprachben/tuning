@@ -667,7 +667,34 @@ def _gs_sets_rated():
                   # on examples/cymclaps_demo.py: "cymclaps all sound good")
                   'OpenHiHatProperties': (lambda: 4), 'RideCymbalProperties': (lambda: 4),
                   'RideEdgeProperties': (lambda: 4), 'BrushCrashProperties': (lambda: 4),
-                  'CrashCymbal1Properties': (lambda: 4), 'CrashCymbal2Properties': (lambda: 4)}
+                  'CrashCymbal1Properties': (lambda: 4), 'CrashCymbal2Properties': (lambda: 4),
+                  # THE RHYTHM FX SETS' VOICES AND EFFECTS (2026-10-25): guesses
+                  # from Roland's names, on our engines (tonelib.Rfx*). Heard
+                  # in examples/rfx_demo.py: group a, Ben: "All sound good"
+                  # (the sonar, its return added: "Sonar sounds good")...
+                  'RfxTechnoThipProperties': (lambda: 4), 'RfxPopDropProperties': (lambda: 4),
+                  'RfxSynDropsProperties': (lambda: 4), 'RfxPipeProperties': (lambda: 4),
+                  'RfxDistortionKickProperties': (lambda: 4), 'RfxSubMarineProperties': (lambda: 4),
+                  'RfxNoiseAttackProperties': (lambda: 4), 'RfxBounceProperties': (lambda: 4),
+                  'RfxDistortionKnockProperties': (lambda: 4),
+                  # ...group b heard, the missile's whistle ended at its boom
+                  # ("Missile sounds good"), Calculating made Morse (ITU-R
+                  # M.1677-1; "Call the morse good"); the rest no verdict of
+                  # their own
+                  'RfxMissileProperties': (lambda: 4), 'RfxMorseProperties': (lambda: 4),
+                  'RfxSwishProperties': (lambda: 3), 'RfxVelocityNoiseProperties': (lambda: 3),
+                  'RfxSparkProperties': (lambda: 3), 'RfxSpaceBirdsProperties': (lambda: 3),
+                  'RfxSpaceWormsProperties': (lambda: 3), 'RfxTapeStopProperties': (lambda: 3),
+                  'RfxTapeStop2Properties': (lambda: 3), 'RfxSquareToneProperties': (lambda: 3),
+                  'RfxSawSweepProperties': (lambda: 3), 'SfxFretSlideProperties': (lambda: 3),
+                  'SfxGrowlProperties': (lambda: 3),
+                  # ...group c heard, Alias a sweep folding about a sampler's
+                  # Nyquist ("Sounds good"), Slappy a snare and a slap (where
+                  # the SC-8850 files it); the rest no verdict of their own
+                  'RfxAliasProperties': (lambda: 4), 'RfxWoodySlapProperties': (lambda: 3),
+                  'RfxIceBlockProperties': (lambda: 3), 'RfxMetallicPercProperties': (lambda: 3),
+                  'RfxModulatedBellProperties': (lambda: 3), 'RfxDigitalTambourineProperties': (lambda: 3),
+                  'RfxStereoClapProperties': (lambda: 3), 'SfxSlapProperties': (lambda: 3)}
     for which, keys in _G.SETS.items():
         k = _G.SET_KIT[which]
         KIT_RATED[k] = {}
@@ -1114,6 +1141,13 @@ def _sfx_var_rated():
         r, note = KIT_RATED[56][key]
         VAR_RATED[(p, v)] = (r, "the SFX set's key %d played from the keyboard, C4 at its "
                                 "kit pitch (its gate, ring and level the kit's): %s" % (key, note))
+    # ...and 125.10 "Calculating" (SC-88 Pro, SC-8850): the Morse keyboard
+    # (percussion_map.MORSE_KIT), each key its character. Ben: "Call the
+    # morse good"
+    VAR_RATED[(125, 10)] = (4, "MORSE across the keyboard: each key a character of ITU-R M.1677-1 "
+                               "(A-Z, 1-0, its punctuation, from middle C), sent once at 20 words a "
+                               "minute on a sidetone at the key's pitch (percussion_map.MORSE_KIT; "
+                               "Rhythm FX 2's 90 sends CALC). Ben: \"Call the morse good\"")
 
 
 def _mt32_var_rated():

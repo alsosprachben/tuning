@@ -1646,12 +1646,15 @@ def _voiced(note, on, syllables, f0, shape, dur, rise, fall_db, jitter=0.01, shi
 
 def _pattern(on, strokes):
     """(start, end, level, pitch) for a KIT_STROKES pattern: each stroke at
-    its time, level and pitch, running to the next (the last 0.3 s). The
+    its time, level and pitch, running to the next (the last 0.3 s) -- or,
+    a fourth field, for that long (a Morse dot, the silence after it). The
     level scales the velocity, and a drum's velocity is its volume on the
     square law (40 log10 v), so a stroke's dB are halved into it."""
     out = []
-    for k, (t, db, semis) in enumerate(strokes):
-        end = strokes[k + 1][0] if k + 1 < len(strokes) else t + 0.3
+    for k, st in enumerate(strokes):
+        t, db, semis = st[:3]
+        end = (t + st[3] if len(st) > 3 else
+               strokes[k + 1][0] if k + 1 < len(strokes) else t + 0.3)
         out.append((on + t, on + end, 10.0 ** (db / 40.0), 2.0 ** (semis / 12.0)))
     return out
 
@@ -1969,6 +1972,13 @@ def _build_gs_sets():
     for which, keys in _GSET.SETS.items():
         k = _GSET.SET_KIT[which]
         KITS[k] = {}
+        # A SOUND OF TWO VOICES (percussion_gs.LAYER): its second on a key of
+        # its own below the set's (none sounds there), struck with it
+        keys = dict(keys)
+        for key, name in list(keys.items()):
+            for hk, ln in getattr(_GSET, 'LAYER', {}).get(name, ()):
+                keys[hk] = ln
+                KIT_LAYER.setdefault(k, {})[key] = KIT_LAYER.get(k, {}).get(key, ()) + (hk,)
         for key, name in keys.items():
             spec = _GSET.VOICE.get(name)
             if spec is None:
@@ -2014,5 +2024,24 @@ def _build_gs_sets():
 
 
 _build_gs_sets()
+
+
+
+# THE MORSE KEYBOARD (Rhythm FX 2's "Calculating...", and GS 126's tone of
+# that name, 125.10, played from it: patch_map; Ben: "international morse
+# code spread across the keyboard"): a hidden kit, every key a character of
+# ITU-R M.1677-1 (percussion_gs.MORSE_CHARS) from middle C, round again past
+# them, on a telegraph's sidetone (tonelib.RfxMorseProperties), each key at
+# its pitch
+MORSE_KIT = 1024
+
+
+def morse_char(note):
+    return _GSET.MORSE_CHARS[(note - 60) % len(_GSET.MORSE_CHARS)]
+
+
+KITS[MORSE_KIT] = {n: ("Morse %s" % morse_char(n), _T.RfxMorseProperties, 440.0 * 2.0 ** ((60 - 69) / 12.0))
+                   for n in range(128)}
+KIT_STROKES[MORSE_KIT] = {"pattern": {n: _GSET.morse_pattern(morse_char(n)) for n in range(128)}}
 # ...and the Standard keys that borrow from a set only built just now
 _sc88pro_extra({k for k, v in SC88PRO_EXTRA_KEYS.items() if v[1] in _GSET.SET_NAME})
