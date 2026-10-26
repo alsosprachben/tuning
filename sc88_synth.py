@@ -42,6 +42,23 @@ def jp(**changes):
     return dict(JUPITER, **changes)
 
 
+# THE MINIMOOG: the panel fitted to a Model D's held bass (examples/
+# minimoog_fit.py: Garzul's, CC0, at C1 and C4, 2.8 dB rms over both): two
+# shark-tooth waves -- the triangle skewed toward the saw, the Model D's own
+# -- the second an octave up and a little louder, 1.4 cents sharp (its
+# harmonics beat at k x 0.21 Hz at C4); the 4-pole low-pass open at 3.7 kHz,
+# a touch of resonance, no key tracking (the two notes, three octaves apart,
+# say off). The SC-88's MG tones are it with what their names change.
+MINIMOOG = {"mode": 0, "osc1_wave": 0.404, "osc2_wave": 0.414, "osc1_level": 0.8, "osc2_level": 0.852,
+            "osc1_octave": 8, "osc2_octave": 4, "osc2_freq": c(1.4), "sub_level": 0.0, "noise_level": 0.0,
+            "cutoff": 0.78, "resonance": 0.065, "kb_track": 0.0, "eg_amount": 0.5, "a_attack": 0.0,
+            "a_sustain": 1.0, "a_release": 0.15}
+
+
+def mg(**changes):
+    return dict(MINIMOOG, **changes)
+
+
 SC88_SYNTH = {
     # --- the Jupiter-8's (JUPITER: fitted on the record) -------------------
     # its clav: a narrow pulse, the filter snapping shut, a short body
@@ -309,6 +326,38 @@ SC88_SYNTH = {
     (39, 21): ("Spike Bass", "MoogSynthBass2",
                dict(osc1_wave=SAW, sub_level=0.4, cutoff=0.45, resonance=0.55, eg_amount=0.85,
                     f_decay=0.1, f_sustain=0.1)),
+    # --- the Minimoog's (MINIMOOG: fitted to a Model D's held bass) ---------
+    # its bass, the fitted patch itself
+    (39, 4): ("MG Bass", "MoogSynthBass2", mg()),
+    # the second oscillator an octave UNDER, the ladder lower and plucked
+    (39, 6): ("MG Oct Bass2", "MoogSynthBass2",
+              mg(osc2_octave=16, cutoff=0.6, eg_amount=0.7, f_attack=0.0, f_decay=0.3, f_sustain=0.35)),
+    # a blip: the contour flicks OSC 2's pitch and snaps the ladder shut, a short body
+    (39, 7): ("MG Blip Bs:", "MoogSynthBass2",
+              mg(cutoff=0.55, eg_amount=0.75, f_attack=0.0, f_decay=0.1, f_sustain=0.1, mod_dest=1,
+                 mod_amount=0.58, a_decay=0.3, a_sustain=0.3)),
+    # OSC 2 a fifth up, at the key's footage
+    (39, 25): ("MG 5th Bass", "MoogSynthBass2", mg(osc2_octave=8, osc2_freq=c(700), cutoff=0.68)),
+    # the "wow": a resonant ladder opened slowly by the contour and falling back,
+    # its bass kept (RES BASS: the resonance cost it 8 dB)
+    (39, 27): ("WowMG Bass", "MoogSynthBass2",
+               mg(cutoff=0.45, resonance=0.45, res_bass=True, eg_amount=0.8, f_attack=0.15, f_decay=0.35,
+                  f_sustain=0.3)),
+    # a narrow pulse on both, at unison, the ladder edged with resonance
+    (80, 27): ("MG Reso. Pls", "MoogSquareLead",
+               mg(osc1_wave=0.8, osc2_wave=0.8, osc2_octave=8, osc2_freq=c(5), cutoff=0.62, resonance=0.55)),
+    # its saws: two at unison, a few cents apart
+    (81, 24): ("MG Saw 1", "MoogSawLead", mg(osc1_wave=SAW, osc2_wave=SAW, osc2_octave=8, osc2_freq=c(5), cutoff=0.72)),
+    # ...the octave stack kept, the ladder lower and opened by the contour
+    (81, 25): ("MG Saw 2", "MoogSawLead",
+               mg(osc1_wave=SAW, osc2_wave=SAW, cutoff=0.66, eg_amount=0.65, f_decay=0.4, f_sustain=0.5)),
+    # the lead: saws a little wider apart, an edge of resonance, a glide
+    (81, 31): ("MG Saw Lead", "MoogSawLead",
+               mg(osc1_wave=SAW, osc2_wave=SAW, osc2_octave=8, osc2_freq=c(7), cutoff=0.7, resonance=0.2,
+                  glide=0.05)),
+    # unison: the saws wide apart and the sub under them
+    (81, 34): ("MG unison", "MoogSawLead",
+               mg(osc1_wave=SAW, osc2_wave=SAW, osc2_octave=8, osc2_freq=c(15), sub_level=0.4, cutoff=0.7)),
 }
 
 

@@ -1371,6 +1371,13 @@ def _sc88_var_rated():
             VAR_RATED[(p, b)] = (3, "SC-88 map: a Moog panel, %s's with %s changed (sc88_synth.py); "
                                     "voiced from what the tone is, the engine fitted to Ben's Messenger"
                                  % (base.replace("Moog", "the "), ", ".join(sorted(pan))))
+            if nm.startswith(("MG", "WowMG")):
+                VAR_RATED[(p, b)] = (3, "SC-88 map: the Minimoog fitted to a Model D's held bass (sc88_synth."
+                                        "MINIMOOG, examples/minimoog_fit.py: Garzul's, CC0, C1 and C4, 3 dB "
+                                        "rms rendered), with %s changed. Ben, on examples/mg_demo.py: \"They sound "
+                                        "great\"" % (", ".join(
+                                            sorted(k for k in pan if pan[k] != __import__("sc88_synth").MINIMOOG.get(k)))
+                                            or "nothing"))
             if nm.startswith(("JP", "JPMG")):
                 VAR_RATED[(p, b)] = (3, "SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, "
                                         "examples/sepways_fit.py), one pass, with %s changed. Ben, on "
