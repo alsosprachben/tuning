@@ -237,6 +237,16 @@ def state_at(events, t):
     return st
 
 
+def tone_state(ty, params=None):
+    """The EFX state a TONE carries (tonelib's insertion_efx): its type, its
+    parameters over the type's own, no sends of its own."""
+    st = fresh_state()
+    apply(st, ('type', tuple(ty)))
+    for n, v in (params or {}).items():
+        apply(st, ('param', n, v))
+    return st
+
+
 def message(ev, dev=0x10):
     """The GS DT1 SysEx data (without F0/F7) for an EFX event -- parse()'s
     inverse: what the live panel sends, so a setting made there is the

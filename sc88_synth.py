@@ -27,7 +27,66 @@ def c(cents):
     return 0.5 + cents / 1400.0
 
 
+# THE JUPITER-8: the panel fitted to Jonathan Cain's on the record (examples/
+# sepways_fit.py FIT: two saws through the open 4-pole low-pass, no resonance,
+# a ~90 ms filter rise, the brass contour fading out) -- one pass of it, OSC 2
+# at its -10 cents (the record's doubling was the mix's; the chorus is ours,
+# Ben). The SC-88's Jupiter tones are it with what their names change.
+JUPITER = {"mode": 0, "osc1_wave": SAW, "osc2_wave": SAW, "osc1_level": 0.8, "osc2_level": 0.8,
+           "osc2_freq": c(-10), "resonance": 0.0, "kb_track": 0.0, "f_attack": 0.0913, "a_attack": 0.0,
+           "a_decay": 0.6076, "a_sustain": 0.2254, "a_release": 0.6076, "cutoff": 0.85, "eg_amount": 0.3,
+           "f_decay": 0.4, "f_sustain": 1.0}
+
+
+def jp(**changes):
+    return dict(JUPITER, **changes)
+
+
 SC88_SYNTH = {
+    # --- the Jupiter-8's (JUPITER: fitted on the record) -------------------
+    # its clav: a narrow pulse, the filter snapping shut, a short body
+    (7, 33): ("JP8 Clav. 1", "MoogSynthBass1",
+              jp(osc1_wave=0.85, osc2_wave=0.85, cutoff=0.62, eg_amount=0.75, f_attack=0.0, f_decay=0.12,
+                 f_sustain=0.1, a_decay=0.3, a_sustain=0.1, a_release=0.15, kb_track=0.8)),
+    # ...brighter and edged with resonance
+    (7, 35): ("JP8 Clav. 2", "MoogSynthBass1",
+              jp(osc1_wave=0.9, osc2_wave=0.9, cutoff=0.68, resonance=0.4, eg_amount=0.7, f_attack=0.0,
+                 f_decay=0.1, f_sustain=0.15, a_decay=0.3, a_sustain=0.1, a_release=0.15, kb_track=0.8)),
+    # the Jupiter-4's: one oscillator a voice, a resonant snap
+    (38, 3): ("JP-4 Bass", "MoogSynthBass1",
+              jp(osc2_level=0.0, cutoff=0.5, resonance=0.35, eg_amount=0.75, f_attack=0.0, f_decay=0.2,
+                 f_sustain=0.15, a_decay=0.5, a_sustain=0.4, a_release=0.15)),
+    # the Jupiter-8's: both saws, the second an octave down, a punch
+    (38, 4): ("JP-8 Bass", "MoogSynthBass1",
+              jp(osc2_octave=16, cutoff=0.52, eg_amount=0.7, f_attack=0.0, f_decay=0.25, f_sustain=0.25,
+                 a_decay=0.5, a_sustain=0.5, a_release=0.15)),
+    # "JPMG": the Jupiter's bass with the Minimoog's sub under it (read)
+    (38, 6): ("JPMG Bass", "MoogSynthBass1",
+              jp(osc2_octave=16, sub_level=0.5, cutoff=0.5, eg_amount=0.7, f_attack=0.0, f_decay=0.25,
+                 f_sustain=0.3, a_decay=0.5, a_sustain=0.5, a_release=0.15)),
+    # its strings: the saws spread wider, swelling, held
+    (50, 3): ("JP Strings", "MoogSynthStrings1",
+              jp(osc2_freq=c(-14), cutoff=0.72, eg_amount=0.0, a_attack=0.3, a_decay=0.6, a_sustain=1.0,
+                 a_release=0.4)),
+    # its square lead
+    (80, 18): ("JP-8 Square", "MoogSquareLead",
+               jp(osc1_wave=SQ, osc2_wave=SQ, cutoff=0.75, a_sustain=1.0, a_release=0.2)),
+    # its pulse leads, narrower, the second edged with resonance
+    (80, 25): ("JP8 PulseLd1", "MoogSquareLead",
+               jp(osc1_wave=0.82, osc2_wave=0.82, cutoff=0.75, a_sustain=1.0, a_release=0.2)),
+    (80, 26): ("JP8 PulseLd2", "MoogSquareLead",
+               jp(osc1_wave=0.9, osc2_wave=0.9, cutoff=0.7, resonance=0.3, a_sustain=1.0, a_release=0.2)),
+    # bass and lead: a saw over a square an octave down
+    (87, 4): ("JP8 BsLead 1", "MoogBassLead",
+              jp(osc2_wave=SQ, osc2_octave=16, cutoff=0.7, a_sustain=0.8, a_release=0.25)),
+    (87, 5): ("JP8 BsLead 2", "MoogBassLead",
+              jp(osc2_wave=SQ, osc2_octave=16, cutoff=0.65, resonance=0.35, eg_amount=0.5, f_decay=0.3,
+                 f_sustain=0.5, a_sustain=0.8, a_release=0.25)),
+    # its square pad: swelling, held, slow to go
+    (92, 2): ("JP8 Sqr Pad", "MoogBowedPad",
+              jp(osc1_wave=SQ, osc2_wave=SQ, osc2_freq=c(-12), cutoff=0.68, eg_amount=0.0, a_attack=0.4,
+                 a_decay=0.6, a_sustain=1.0, a_release=0.5)),
+
     # --- basses ---------------------------------------------------------
     (35, 4): ("SynFretless", "MoogSynthBass1",
               dict(osc1_wave=0.45, osc2_level=0.0, sub_level=0.4, cutoff=0.50, resonance=0.2,
@@ -266,4 +325,59 @@ MAP_SYNTH = {
                  dict(osc1_wave=TRI, osc2_wave=TRI, osc2_level=1.0, osc2_octave=8, osc2_freq=0.5,
                       osc1_level=0.0, mod_dest=0, mod_amount=0.66, sub_level=0.6, cutoff=0.58,
                       resonance=0.1, f_decay=0.25, f_sustain=0.35)),
+}
+
+
+# THE SC-8850 MAP'S OWN SYNTH TONES, the GM 2 sound set's (patch_map.gm2_bank
+# finds a GM 2 tone by name): {(program, bank): (name, the capital's Moog
+# class, panel changes)}, voiced from what each name is -- starting points for
+# Ben's ear, as SC88_SYNTH's. A slot an earlier map used for another tone is
+# keyed under the SC-8850's map (patch_map: 128 x 4 + bank).
+SC8850_SYNTH = {
+    # a clavinet's bite from a narrow pulse: a sharp filter blip, a short body
+    (7, 39): ("Pulse Clav", "MoogSynthBass1",
+              dict(osc1_wave=0.88, osc2_level=0.0, sub_level=0.0, cutoff=0.6, resonance=0.25, eg_amount=0.7,
+                   f_decay=0.1, f_sustain=0.1, a_decay=0.3, a_sustain=0.15, kb_track=0.8)),
+    # the same pulse a bass: the clav's snap over a sub
+    (38, 19): ("Clavi Bass", "MoogSynthBass1",
+               dict(osc1_wave=0.85, osc2_level=0.0, sub_level=0.35, cutoff=0.5, resonance=0.3, eg_amount=0.75,
+                    f_decay=0.1, f_sustain=0.1, a_decay=0.35, a_sustain=0.2)),
+    # a bass struck, not blown: the filter thrown wide for an instant and shut
+    (38, 20): ("Hammer", "MoogSynthBass1",
+               dict(osc1_wave=SAW, osc2_level=0.0, sub_level=0.5, cutoff=0.44, resonance=0.3, eg_amount=0.92,
+                    f_decay=0.06, f_sustain=0.12, a_decay=0.4, a_sustain=0.35)),
+    # a pulse bass with a click on its front: the contour's attack the whole tone
+    (39, 29): ("Attack Pulse", "MoogSynthBass2",
+               dict(osc1_wave=0.8, sub_level=0.3, cutoff=0.5, resonance=0.2, eg_amount=0.9, f_decay=0.05,
+                    f_sustain=0.25)),
+    # a vocal pad from two detuned saws, a resonant formant-like peak, slow
+    (54, 19): ("Analog Voice", "MoogSynthVoice",
+               dict(osc1_wave=SAW, osc2_wave=SAW, osc2_level=0.9, osc2_freq=c(8), cutoff=0.55, resonance=0.35,
+                    a_attack=0.3, a_release=0.36, lfo1_dest=1, lfo1_depth=0.57, lfo1_rate=0.6)),
+    # a polysynth brass, polished (the Prophet's): a moderate swell, detuned
+    (62, 8): ("Pro Brass", "MoogSynthBrass1",
+              dict(osc2_freq=c(10), f_attack=0.15, eg_amount=0.6, cutoff=0.55, a_attack=0.08)),
+    # the OB-Xa's stab ("Jump"): bright detuned saws, a fast front, short
+    (62, 5): ("Jump Brass", "MoogSynthBrass1",
+              dict(osc2_freq=c(12), f_attack=0.05, eg_amount=0.55, cutoff=0.6, a_attack=0.02, a_release=0.12)),
+    # brass sforzando: a hard filter peak and a fall to a held tone
+    (63, 8): ("SynBrass sfz", "MoogSynthBrass2",
+              dict(eg_amount=0.85, f_attack=0.03, f_decay=0.3, f_sustain=0.25, a_attack=0.02, cutoff=0.5)),
+    # a saw lead played as a singer: rounder, a gentle glide
+    (81, 36): ("Natural Lead", "MoogSawLead",
+               dict(cutoff=0.58, resonance=0.1, glide=0.05, a_attack=0.06)),
+    # a sequencer's saw: plucked by its contour, resonant
+    (81, 46): ("SequencedSaw", "MoogSawLead",
+               dict(f_decay=0.15, f_sustain=0.1, a_decay=0.3, a_sustain=0.2, resonance=0.4, eg_amount=0.7)),
+    # a hard-synced lead: OSC 2 sweeping against OSC 1, wiry
+    (84, 1): ("Wire Lead", "MoogCharangLead",
+              dict(osc1_level=0.3, osc2_level=1.0, osc2_wave=SAW, sync=True, osc2_freq=0.8, cutoff=0.65,
+                   eg_amount=0.6)),
+    # near a sine: triangles through a low ladder, a slow swell
+    (89, 5): ("Sine Pad", "MoogWarmPad",
+              dict(osc1_wave=TRI, osc2_wave=TRI, osc2_freq=c(4), cutoff=0.5, resonance=0.0)),
+    # the JD-800's airy choir: saws and noise, the cutoff drifting slowly
+    (91, 3): ("Itopia", "MoogChoirPad",
+              dict(osc1_wave=SAW, osc2_wave=SAW, osc2_freq=c(7), cutoff=0.55, resonance=0.2, a_attack=0.4,
+                   lfo1_dest=0, lfo1_depth=0.62, lfo1_rate=0.3)),
 }

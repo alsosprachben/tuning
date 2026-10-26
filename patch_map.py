@@ -1655,6 +1655,27 @@ SC8850_CHEAP = {
     # doo-wah (efxfilter.plunger). GM 59 is the harmon, stem out (measured);
     # Ben's choice of mute and control for the second
     (59, 2): ("MuteTrumpet2", ("set", 56, dict(plunger=True))),
+    # GM 2's last (2026-10-26). Roland's "Legend" is a vintage Rhodes -- ours,
+    # fitted to one (GM 4); and the same through the module's PHASER, which the
+    # tone carries (insertion_efx: gsefx.tone_state) where a file sets none
+    (5, 10): ("EP Legend", ("set", 4, {})),
+    (5, 32): ("EP Phase", ("set", 4, dict(insertion_efx=((0x01, 0x20), {})))),
+    # the hit's ranks (OrchestraHitProperties.stop_ranks: bass 0, tenor 1,
+    # horn 2, string 3, tpt 4, wind 5, picc 6): the low ones alone; the bright
+    # ones alone (the Eurodance stab); and a SIXTH chord -- the hit is a root
+    # and fifth, so itself a major sixth up adds the sixth and the third
+    (55, 1): ("Bass Hit", ("set", 55, dict(default_stops=0b0001011))),
+    (55, 2): ("6th Hit", ("layer", ((55, 0, 0.0), (55, 9, -3.0)))),
+    (55, 3): ("Euro Hit", ("set", 55, dict(default_stops=0b1011100))),
+    # the Chinese hammered dulcimer: ours (Kemp's, fitted), struck nearer the
+    # bridge with bamboo beaters -- brighter, its brass strings ringing longer
+    (46, 24): ("Yang Qin", ("set", 15, dict(strike_point=1.0 / 8, tonal_dampening=0.6))),
+    # the choir humming, lips closed: a nasal murmur -- one low formant, the
+    # mouth's others nearly gone, the closure's low-pass
+    (53, 40): ("Humming", ("set", 53, dict(formants=((250.0, 120.0, 1.0), (2200.0, 300.0, 0.06),
+                                                     (2700.0, 400.0, 0.04)), bore_corner_hz=1500.0))),
+    # a saw lead through the module's stereo delay, which the tone carries
+    (87, 7): ("Delayed Lead", ("set", 81, dict(insertion_efx=((0x01, 0x50), {})))),
 }
 
 for _cheap, _tag in ((SC88_CHEAP, "sc88"), (SC8850_CHEAP, "sc8850")):
@@ -1947,6 +1968,16 @@ def map_bank(program, bank, gsmap):
 
 def _map_norm(name):
     return "".join(ch for ch in name.lower() if ch.isalnum())
+
+
+# THE SC-8850 MAP'S OWN SYNTH TONES (sc88_synth.SC8850_SYNTH): under their
+# own bank, or the SC-8850 map's key where an earlier map used the slot
+from sc88_synth import SC8850_SYNTH
+for (_p, _b), (_nm, _base, _pan) in SC8850_SYNTH.items():
+    _B = getattr(_TL, _base)
+    _k = 128 * 4 + _b if (_p, _b) in MAP_OTHER.get(4, ()) else _b
+    VARIATIONS[(_p, _k)] = type("Sc8850_%d_%d" % (_p, _b), (_B,), dict(messenger=dict(_B.messenger, **_pan)))
+    VARIATION_NAMES[(_p, _k)] = _nm
 
 
 # GENERAL MIDI 2's variations (bank select MSB 121, the LSB picking): GM 2

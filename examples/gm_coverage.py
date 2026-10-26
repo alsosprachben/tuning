@@ -1311,6 +1311,9 @@ GM2_HEARD = {k: 'Ben, on examples/gm2_tones_demo.py: "sound good"' for k in _GM2
 # (examples/plunger_demo.py) -- the curve centre-weighted at Ben's suggestion
 GM2_HEARD[(59, 2)] = ('the plunger, aftertouch opening it (no recording; voiced by ear). '
                       'Ben, on examples/plunger_demo.py: "fine for now"')
+# GM 2's last 21 (2026-10-26), heard together in examples/gm2_last_demo.py
+_GM2_LAST = 'Ben, on examples/gm2_last_demo.py: "Sounds great"'
+GM2_HEARD.update({k: _GM2_LAST for k in ((5, 10), (5, 32), (46, 24), (53, 40), (55, 1), (55, 2), (55, 3), (87, 7))})
 
 
 def _sc88_var_rated():
@@ -1368,6 +1371,23 @@ def _sc88_var_rated():
             VAR_RATED[(p, b)] = (3, "SC-88 map: a Moog panel, %s's with %s changed (sc88_synth.py); "
                                     "voiced from what the tone is, the engine fitted to Ben's Messenger"
                                  % (base.replace("Moog", "the "), ", ".join(sorted(pan))))
+            if nm.startswith(("JP", "JPMG")):
+                VAR_RATED[(p, b)] = (3, "SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, "
+                                        "examples/sepways_fit.py), one pass, with %s changed. Ben, on "
+                                        'examples/jp8_demo.py: "Sounds great"' % ", ".join(
+                                            sorted(k for k in pan if pan[k] != __import__("sc88_synth").JUPITER.get(k))))
+    # ...and the SC-8850 map's (sc88_synth.SC8850_SYNTH), GM 2's last, under
+    # their own bank or the SC-8850 map's key
+    try:
+        from sc88_synth import SC8850_SYNTH
+    except ImportError:
+        SC8850_SYNTH = {}
+    for (p, b), (nm, base, pan) in SC8850_SYNTH.items():
+        k = (p, 128 * 4 + b) if (p, b) in patch_map.MAP_OTHER.get(4, ()) else (p, b)
+        if k in patch_map.VARIATIONS:
+            VAR_RATED[k] = (3, "SC-8850 map: a Moog panel, %s's with %s changed (sc88_synth.py); "
+                               "voiced from what the tone is, the engine fitted to Ben's Messenger. %s"
+                            % (base.replace("Moog", "the "), ", ".join(sorted(pan)), _GM2_LAST))
 
 
 def variations():

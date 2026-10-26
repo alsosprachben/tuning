@@ -4730,6 +4730,14 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _EFXN[0] = None
         if _EFXEV and not MOOG_NEUTRAL and _GSX.assigned(_EFXEV, ch, on):
             _EFXN[0] = _GSX.chain(_GSX.state_at(_EFXEV, on))
+        elif drum is None and not MOOG_NEUTRAL:
+            # ...or THE TONE'S OWN (insertion_efx: the SC-8850's EP Phase, its
+            # Delayed Lead), where the file assigns the part none: (type, its
+            # parameters over the type's), as the module's own tone would
+            _tefx = getattr(_DRONE_PC.get((ch, note, on)) or property_class_for_note(prog, note),
+                            'insertion_efx', None)
+            if _tefx is not None:
+                _EFXN[0] = _GSX.chain(_GSX.tone_state(*_tefx))
             if _EFXN[0] is not None and ch not in _EFX_CH:
                 _EFX_CH[ch] = _EFXN[0]
                 # ITS SENDS ARE THE PART'S NOW: the reverb's distance, here
