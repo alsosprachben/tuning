@@ -28555,6 +28555,351 @@ class RfxMorseProperties(SfxLaserProperties):
     release_valve_time = 0.005
 
 
+# THE CHINESE OPERA GONGS (the Asia set's Shou Luo, Bend Gong and Hu Yin Luo;
+# the Ethnic set's Bend Gong): FITTED (examples/operagong_fit.py) to the
+# Beijing Opera Percussion Instrument Dataset's open strokes (CompMusic/QMUL,
+# CC BY 4.0, measured only) on the TR-808 engine -- its modes as resonators,
+# each its own decay, and the GLIDE a gong's plate makes: stiffer the further
+# it moves, so its modes sit higher the louder it rings.
+
+class RfxDaluoProperties(TR808Properties):
+    """BEND GONG: the DALUO, Beijing opera's great gong, whose pitch FALLS
+    after the strike -- 0.17 octave (two semitones) onto 179 Hz with a 1.1 s
+    time constant, the sag the opera knows it by (nine open strokes, their
+    median); 26 modes to 16x the low one, many ringing 5-7 s; a padded
+    beater's soft click."""
+    tr808 = {"tune_hz": 179.3, "decay_s": 2.63, "bend_oct": 0.171, "bend_ms": 1071.0,
+             "res": ((1.0961, -9.5, 1.701), (2.0025, -7.6, 2.275), (3.0209, -15.7, 3.761), (3.1135, -19.4, 4.897),
+                     (3.6135, -7.8, 2.287), (3.9579, -14.7, 1.422), (4.0792, -14.7, 1.688), (4.1606, -11.2, 1.22),
+                     (4.7405, -12.7, 2.114), (6.0237, -5.5, 7.121), (6.9423, -12.4, 5.181), (7.1268, -14.6, 1.425),
+                     (7.9092, -21.8, 1.364), (9.5262, -13.5, 3.132), (9.6375, -9.8, 5.292), (9.8707, -18.8, 1.361),
+                     (11.4205, -7.9, 6.523), (12.3213, -5.8, 4.659), (13.0777, -2.7, 5.076), (13.2339, -8.3, 6.791),
+                     (14.1524, -9.6, 5.546), (14.434, -6.7, 3.474), (15.0444, -8.1, 6.391), (15.2534, -8.0, 5.529),
+                     (15.7019, -6.3, 5.083), (15.949, -8.7, 5.172)),
+             "click_db": -24.0, "click_dbs": 1500.0}
+
+
+class RfxHuYinLuoProperties(RfxDaluoProperties):
+    """HU YIN LUO, the "tiger-tone gong": a falling opera gong, smaller than
+    the daluo and dropping further -- the roar it is named for (a guess in
+    degree: no tiger gong in the dataset; the daluo's modes and glide, its
+    fall doubled to 0.35 octave, quicker, 0.6 s). Its sizes the set's keys'
+    pitches (percussion_gs)."""
+    tr808 = dict(RfxDaluoProperties.tr808, bend_oct=0.35, bend_ms=600.0)
+
+
+class RfxXiaoluoProperties(TR808Properties):
+    """SHOU LUO, the hand gong: the XIAOLUO, Beijing opera's small gong, whose
+    pitch RISES after the strike -- 0.7 semitone onto 661 Hz with a 0.26 s
+    time constant (twelve open strokes, every one rising); 19 modes 2.4-6x
+    its low one, ~2 s; struck with a thin board, a hard click."""
+    tr808 = {"tune_hz": 660.6, "decay_s": 2.38, "bend_oct": -0.062, "bend_ms": 263.0,
+             "res": ((2.3893, -10.4, 1.836), (2.4952, -9.7, 2.079), (2.9015, -9.7, 1.97), (2.9613, -7.6, 2.921),
+                     (3.2346, -9.3, 1.531), (3.3109, -10.2, 1.3), (3.6578, -8.9, 1.599), (3.8502, -12.5, 2.398),
+                     (4.0385, -9.2, 2.44), (4.1505, -12.7, 2.174), (4.346, -13.3, 2.429), (4.6966, -8.4, 1.519),
+                     (4.7718, -12.0, 1.401), (4.8709, -6.6, 1.744), (4.9804, -12.1, 2.769), (5.0549, -11.2, 2.909),
+                     (5.2131, -9.6, 2.107), (5.4558, -10.2, 1.289), (6.1061, -10.3, 1.89)),
+             "click_db": -14.0, "click_dbs": 3000.0}
+
+
+class RfxNaoboProperties(ChineseCymbalProperties):
+    """NAO BO (the Asia set's 87): Beijing opera's cymbals, a pair clashed --
+    our china cymbal, its colour and ring refitted to the dataset's 62
+    strokes (examples/asia_fit.py naobo): bright, 2-4 kHz, ~2.6 s to -40 dB.
+    XIAO BO (88) the smaller pair, higher (percussion_gs)."""
+    band_trim_db = ((177, 3.1), (354, 12.6), (707, -15.5), (1414, -8.2), (2828, 0.9), (5657, 1.3), (11314, 5.9))
+
+
+class RfxBanguProperties(TR808Properties):
+    """BAN GU (the Asia set's 77; the Ethnic set's 44): Beijing opera's small
+    high drum -- a thick wooden body, a tiny skin stretched hard, struck with
+    two thin sticks: the band's leader. A tight skin's modes from ~1.9 kHz
+    (the dataset's 59 strokes' strongest peak) and the stick's crack, gone in
+    0.2 s -- its length matched and its colour within ~4 dB an octave of the
+    takes (examples/asia_fit.py bangu), set by hand: the band trim does not
+    reach a TR-808 patch."""
+    tr808 = {"tune_hz": 1926.0, "decay_s": 0.36,
+             "res": ((1.59, 0.0, 0.22), (2.14, 1.0, 0.18), (2.65, -1.0, 0.14), (3.16, -6.0, 0.08), (3.65, -9.0, 0.06)),
+             "bend_oct": 0.04, "bend_ms": 8.0, "noise_db": 0.0, "noise_hp_hz": 1800.0, "noise_lp_hz": 8000.0,
+             "noise_decay_s": 0.05, "click_db": 0.0, "click_dbs": 4000.0, "click_hp_hz": 2000.0}
+
+
+class RfxPaiBanProperties(TR808Properties):
+    """PAI BAN (the Asia set's 76): Beijing opera's clapper -- three hardwood
+    slabs clacked together: a dry, sharp wooden clack (no recording: the
+    claves' kind, drier and brighter, ~1.1 kHz, 60 ms)."""
+    tr808 = {"tune_hz": 1100.0, "decay_s": 0.06, "res": ((2.4, -6.0, 0.04), (3.9, -12.0, 0.03)),
+             "noise_db": -4.0, "noise_hp_hz": 1500.0, "noise_lp_hz": 9000.0, "noise_decay_s": 0.03,
+             "click_db": -4.0, "click_dbs": 5000.0}
+
+
+# THE JAPANESE DRUMS OF NOH AND KABUKI (the Asia set's 51, 56-58; the Ethnic
+# set's 37, 41-43): no recording of them to fit (a drum machine's sample is
+# no reference), so how they are made and played, on the TR-808 engine.
+
+class RfxOhkawaProperties(TR808Properties):
+    """OHKAWA (otsuzumi): the larger hourglass drum, held at the hip, its
+    horsehide heads dried over charcoal before each performance until they
+    are hard, struck with the fingers' caps -- a sharp, dry, high "KAN!": a
+    crack (1.2-10 kHz) over a tight resonance near 1.6 kHz, ~80 ms, almost
+    no tone."""
+    tr808 = {"tune_hz": 1600.0, "decay_s": 0.08, "res": ((1.47, -4.0, 0.06), (2.2, -8.0, 0.04)),
+             "noise_db": 2.0, "noise_hp_hz": 1200.0, "noise_lp_hz": 10000.0, "noise_decay_s": 0.05,
+             "click_db": 0.0, "click_dbs": 5000.0, "click_hp_hz": 1500.0}
+
+
+class RfxKotsuzumiLowProperties(TR808Properties):
+    """LOW KOTSUZUMI: the small hourglass drum on the shoulder, its pitch the
+    player's grip on the ropes -- the open "PON", round and ringing: a loose
+    skin's modes from ~260 Hz, sagging a semitone as the grip eases (100 ms),
+    ~0.45 s, the fingers' soft slap."""
+    tr808 = {"tune_hz": 260.0, "decay_s": 0.45, "res": ((1.59, -7.0, 0.3), (2.14, -12.0, 0.2), (2.3, -14.0, 0.18)),
+             "bend_oct": 0.08, "bend_ms": 100.0, "noise_db": -18.0, "noise_hp_hz": 300.0, "noise_lp_hz": 4000.0,
+             "noise_decay_s": 0.03, "click_db": -16.0, "click_dbs": 2500.0}
+
+
+class RfxKotsuzumiHighProperties(RfxKotsuzumiLowProperties):
+    """HIGH KOTSUZUMI: the ropes gripped hard and the skin struck sharply --
+    the dry "TA": ~600 Hz, short (0.15 s), more slap than ring."""
+    tr808 = dict(RfxKotsuzumiLowProperties.tr808, tune_hz=600.0, decay_s=0.15, bend_oct=0.03, bend_ms=40.0,
+                 noise_db=-8.0, noise_hp_hz=800.0, noise_lp_hz=8000.0, click_db=-8.0)
+
+
+class RfxTaikoRimProperties(TR808Properties):
+    """WADAIKO RIM (kara, fuchi): the stick on the taiko's wooden rim -- a
+    woody click, the body's knock near 1.2 kHz, 70 ms."""
+    tr808 = {"tune_hz": 1200.0, "decay_s": 0.07, "res": ((2.6, -9.0, 0.04),), "noise_db": -6.0,
+             "noise_hp_hz": 1000.0, "noise_lp_hz": 7000.0, "noise_decay_s": 0.03, "click_db": -6.0,
+             "click_dbs": 4000.0}
+
+
+# THE KOREAN PERCUSSION OF SAMUL NORI (the Asia set's 60-72): no recordings to
+# fit (none on Freesound), so how the instruments are made and played, on
+# the TR-808 engine -- guesses, for Ben's ear.
+
+class RfxBukProperties(TR808Properties):
+    """BUK: the barrel drum, one head under a stick -- a deep thud near 100 Hz,
+    a loose skin's modes over the body's, ~0.45 s."""
+    tr808 = {"tune_hz": 100.0, "decay_s": 0.45, "res": ((1.59, -6.0, 0.3), (2.14, -10.0, 0.2), (2.65, -14.0, 0.15)),
+             "bend_oct": 0.1, "bend_ms": 40.0, "noise_db": -14.0, "noise_hp_hz": 200.0, "noise_lp_hz": 3000.0,
+             "noise_decay_s": 0.05, "click_db": -12.0, "click_dbs": 2500.0}
+
+
+class RfxGengariProperties(TR808Properties):
+    """GENGARI (kkwaenggwari): the small flat brass gong that leads samul nori,
+    struck with a hard mallet -- piercing, its inharmonic modes from ~1.1 kHz
+    to 5x it, ringing ~1.2 s, the mallet's hard click. Its mutes the fingers
+    inside the rim (percussion_gs.GATE), its sizes the set's pitches."""
+    tr808 = {"tune_hz": 1100.0, "decay_s": 1.2,
+             "res": ((1.47, -3.0, 1.0), (1.95, -5.0, 0.9), (2.39, -6.0, 0.8), (2.81, -7.0, 0.7), (3.4, -9.0, 0.6),
+                     (4.1, -11.0, 0.5), (5.0, -14.0, 0.4)),
+             "click_db": -6.0, "click_dbs": 4000.0}
+
+
+class RfxJangguKunProperties(TR808Properties):
+    """JANG-GU KUN (gung): the hourglass drum's left head under its round
+    mallet -- a round, low boom near 130 Hz, ~0.5 s."""
+    tr808 = {"tune_hz": 130.0, "decay_s": 0.5, "res": ((1.59, -8.0, 0.3), (2.14, -13.0, 0.2)),
+             "bend_oct": 0.06, "bend_ms": 50.0, "noise_db": -18.0, "noise_hp_hz": 200.0, "noise_lp_hz": 2000.0,
+             "noise_decay_s": 0.04, "click_db": -18.0, "click_dbs": 2000.0}
+
+
+class RfxJangguCheProperties(TR808Properties):
+    """JANG-GU CHE (chae, yeol): the right head under the thin bamboo stick --
+    a sharp, high crack, its tight skin near 480 Hz, 0.15 s."""
+    tr808 = {"tune_hz": 480.0, "decay_s": 0.15, "res": ((1.59, -5.0, 0.1), (2.14, -8.0, 0.08)),
+             "noise_db": -2.0, "noise_hp_hz": 1200.0, "noise_lp_hz": 9000.0, "noise_decay_s": 0.04,
+             "click_db": -2.0, "click_dbs": 5000.0}
+
+
+class RfxJingProperties(TR808Properties):
+    """JING: the large gong under a soft mallet -- a deep hum near 110 Hz, its
+    lowest mode a pair 1.2% apart beating slowly (the jing's "wow"), modes to
+    3.2x it, ringing ~5 s, a felt mallet's soft thump."""
+    tr808 = {"tune_hz": 110.0, "decay_s": 5.0,
+             "res": ((1.012, -2.0, 5.0), (1.52, -9.0, 3.5), (2.0, -8.0, 3.0), (2.43, -13.0, 2.4), (2.81, -15.0, 2.0),
+                     (3.2, -18.0, 1.6)),
+             "attack_ms": 6.0, "click_db": -26.0, "click_dbs": 1500.0}
+
+
+class RfxGenderKeyProperties(GenderProperties):
+    """GENDER 1-5 (the Asia set's 35-39): the gamelan's metallophone
+    (GenderProperties, fitted to UNT's gangsa) as a drum key -- struck and
+    left to ring, as a gender's bars are under the mallet with the damping
+    hand away: a one-shot, where the tone keeps the key's damper."""
+    one_shot = True
+
+
+class RfxSagatProperties(TR808Properties):
+    """SAGAT (the Asia set's 47-48): Thai finger cymbals, small thick brass
+    cups (as the ching) -- a bright high ring, their modes from ~2.4 kHz,
+    struck open and left (1.6 s) or pressed closed (choked, percussion_gs.
+    GATE). No recording: their kind."""
+    tr808 = {"tune_hz": 2400.0, "decay_s": 1.6,
+             "res": ((1.48, -4.0, 1.3), (2.06, -6.0, 1.1), (2.74, -9.0, 0.9), (3.6, -12.0, 0.7)),
+             "click_db": -10.0, "click_dbs": 5000.0}
+
+
+# THE TABLA (the Ethnic set's 57-61): mmiron's tabla bols (Freesound pack
+# 8162, CC0; ~/Documents/refs/tabla_mmiron), each stroke's pitch, partials,
+# glide and length read off its takes, on the TR-808 engine. The dayan (the
+# right drum) rings near-harmonic modes its black paste tunes; the bayan (the
+# left) is the bass, its pitch the palm's pressure on the head.
+
+class RfxTablaTunProperties(TR808Properties):
+    """TABLA TUN: the dayan's open centre stroke -- its fundamental all but
+    alone, 314 Hz (all three takes), ringing 1.5 s to -40 dB."""
+    tr808 = {"tune_hz": 314.0, "decay_s": 2.2, "res": ((2.0, -22.0, 1.0), (3.0, -26.0, 0.7)),
+             "click_db": -26.0, "click_dbs": 3000.0}
+
+
+class RfxTablaNaProperties(TR808Properties):
+    """TABLA NA: the forefinger on the dayan's rim, the head's middle damped --
+    its upper modes ringing, 837 and 1135 Hz (2.67x and 3.6x the tun), 0.3 s,
+    a sharp tick."""
+    tr808 = {"tune_hz": 837.0, "decay_s": 0.45, "res": ((1.356, -2.0, 0.4), (1.733, -12.0, 0.25)),
+             "click_db": -12.0, "click_dbs": 5000.0, "click_hp_hz": 1500.0}
+
+
+class RfxTablaTeProperties(TR808Properties):
+    """TABLA TE: a closed slap on the dayan, the fingers left on the head -- a
+    damped thud, its modes 125-830 Hz, gone in 60 ms."""
+    tr808 = {"tune_hz": 125.0, "decay_s": 0.08, "res": ((1.84, -3.0, 0.07), (2.34, -4.0, 0.06), (4.4, -8.0, 0.05),
+                                                        (6.6, -12.0, 0.04)),
+             "noise_db": -10.0, "noise_hp_hz": 200.0, "noise_lp_hz": 3000.0, "noise_decay_s": 0.03,
+             "click_db": -10.0, "click_dbs": 4000.0}
+
+
+class RfxTablaGeProperties(TR808Properties):
+    """TABLA GE: the bayan, struck and the palm lifted -- its bass falling 121
+    -> 97 Hz in a fifth of a second (the takes' median), ringing ~2 s."""
+    tr808 = {"tune_hz": 97.0, "decay_s": 3.0, "bend_oct": 0.32, "bend_ms": 90.0,
+             "res": ((3.0, -18.0, 1.2), (5.0, -26.0, 0.6)), "click_db": -20.0, "click_dbs": 2500.0}
+
+
+class RfxTablaGeHiProperties(TR808Properties):
+    """TABLA GE HI: the bayan with the palm PRESSING the head -- its bass
+    rising 127 -> 174 Hz (the takes that rise), shorter, ~0.6 s."""
+    tr808 = {"tune_hz": 174.0, "decay_s": 0.9, "bend_oct": -0.45, "bend_ms": 150.0,
+             "res": ((3.0, -18.0, 0.4),), "click_db": -20.0, "click_dbs": 2500.0}
+
+
+# THE ETHNIC SET'S REST (its 33, 51-56, 62-66, 78-80, 83): read off VCSL's
+# CC0 takes where it has the instrument (sources.md) -- the darbuka's dum and
+# tek for the riq, its frame drum for the bendir, its sleigh bells -- and from
+# how the others are played; the TR-808 engine. A jingle is our tambourine
+# (percussion_gs.LAYER).
+
+class RfxReqDumProperties(TR808Properties):
+    """REQ DUM: the riq's centre stroke -- the head's dark "dum" (VCSL's
+    darbuka dum: 144 Hz, 0.8 s), its jingles on a layer."""
+    tr808 = {"tune_hz": 144.0, "decay_s": 0.9, "res": ((1.59, -14.0, 0.45), (2.14, -18.0, 0.3)),
+             "click_db": -20.0, "click_dbs": 2500.0}
+
+
+class RfxReqTikProperties(TR808Properties):
+    """REQ TIK: the riq's rim stroke -- the head's bright "tik" (VCSL's darbuka
+    tek: its modes 728, 1079, 1398, 1690 Hz, 0.25 s), its jingles on a layer."""
+    tr808 = {"tune_hz": 728.0, "decay_s": 0.35, "res": ((1.482, -1.0, 0.28), (1.92, -3.0, 0.22), (2.32, -5.0, 0.16)),
+             "click_db": -8.0, "click_dbs": 5000.0, "click_hp_hz": 1500.0}
+
+
+class RfxBendirProperties(TR808Properties):
+    """BENDIR: the North African frame drum, a snare string under its head --
+    the frame drum's low head (VCSL's: ~90 Hz, its modes above, ~1 s) and the
+    string's buzz, a band of noise dying with it."""
+    tr808 = {"tune_hz": 90.0, "decay_s": 1.1, "res": ((1.5, -8.0, 0.7), (2.3, -12.0, 0.45), (3.6, -16.0, 0.3)),
+             "noise_db": -8.0, "noise_hp_hz": 1500.0, "noise_lp_hz": 6000.0, "noise_decay_s": 0.6,
+             "click_db": -16.0, "click_dbs": 2500.0}
+
+
+class RfxJingleBellProperties(TR808Properties):
+    """JINGLE BELL: sleigh bells shaken once (VCSL's: their partials 2.5-11
+    kHz, ~0.7 s) -- several bells, not together: five clicks in 30 ms, each
+    from its own place."""
+    tr808 = {"tune_hz": 2540.0, "decay_s": 0.6,
+             "res": ((2.07, -2.0, 0.5), (2.72, -4.0, 0.4), (4.13, -1.0, 0.45), (4.17, -3.0, 0.45)),
+             "noise_db": -6.0, "noise_hp_hz": 5000.0, "noise_lp_hz": 14000.0, "noise_decay_s": 0.3,
+             "click_db": -6.0, "click_dbs": 3000.0, "click_hp_hz": 3000.0,
+             "click_bursts": ((0.0, 0.0, 0.6), (0.006, -2.0, 1.0), (0.013, -3.0, 0.3), (0.021, -4.0, 1.2),
+                              (0.03, -6.0, 0.8))}
+
+
+class RfxUduLongProperties(TR808Properties):
+    """UDU LONG: the clay pot drum's hole struck -- its air's resonance, a
+    hollow "boong" near 120 Hz falling as it rings, ~0.9 s."""
+    tr808 = {"tune_hz": 120.0, "decay_s": 0.9, "bend_oct": 0.35, "bend_ms": 200.0, "res": ((2.1, -16.0, 0.4),),
+             "click_db": -20.0, "click_dbs": 2000.0}
+
+
+class RfxUduShortProperties(RfxUduLongProperties):
+    """UDU SHORT: the hole struck and covered -- higher, quicker, 0.3 s."""
+    tr808 = dict(RfxUduLongProperties.tr808, tune_hz=180.0, decay_s=0.3, bend_oct=0.25, bend_ms=60.0)
+
+
+class RfxUduSlapProperties(TR808Properties):
+    """UDU SLAP: the palm on the pot's body -- a sharp, hollow clay slap."""
+    tr808 = {"tune_hz": 600.0, "decay_s": 0.08, "res": ((1.7, -6.0, 0.05),), "noise_db": -4.0,
+             "noise_hp_hz": 800.0, "noise_lp_hz": 6000.0, "noise_decay_s": 0.03, "click_db": -4.0,
+             "click_dbs": 4000.0}
+
+
+class RfxTalkingDrumProperties(TR808Properties):
+    """TALKING DRUM: the hourglass drum under the arm, its cords squeezed --
+    a struck tone near 220 Hz falling a little as the squeeze eases, 0.5 s."""
+    tr808 = {"tune_hz": 220.0, "decay_s": 0.5, "bend_oct": 0.1, "bend_ms": 120.0,
+             "res": ((1.59, -8.0, 0.3), (2.14, -12.0, 0.2)), "click_db": -14.0, "click_dbs": 3000.0}
+
+
+class RfxBendTalkingDrumProperties(RfxTalkingDrumProperties):
+    """BEND TALKING DRUM: the cords squeezed after the stroke -- its pitch
+    rising half an octave, the drum "talking"."""
+    tr808 = dict(RfxTalkingDrumProperties.tr808, bend_oct=-0.5, bend_ms=150.0, decay_s=0.7)
+
+
+class RfxDjembeProperties(TR808Properties):
+    """DJEMBE: its tone stroke, the fingers at the edge -- the goatskin's bright
+    ring near 330 Hz, 0.3 s, a slap's crack on it."""
+    tr808 = {"tune_hz": 330.0, "decay_s": 0.35, "res": ((1.6, -4.0, 0.22), (2.3, -6.0, 0.16)),
+             "noise_db": -8.0, "noise_hp_hz": 1000.0, "noise_lp_hz": 8000.0, "noise_decay_s": 0.04,
+             "click_db": -8.0, "click_dbs": 4000.0}
+
+
+class RfxDjembeRimProperties(TR808Properties):
+    """DJEMBE RIM: the slap at the edge, the fingers snapping on the head -- a
+    sharp crack over a short ring near 700 Hz."""
+    tr808 = {"tune_hz": 700.0, "decay_s": 0.08, "res": ((1.6, -4.0, 0.06),), "noise_db": 0.0,
+             "noise_hp_hz": 1500.0, "noise_lp_hz": 10000.0, "noise_decay_s": 0.05, "click_db": 0.0,
+             "click_dbs": 5000.0}
+
+
+class RfxCongaSlideProperties(TR808Properties):
+    """CONGA SLIDE: a conga's open tone with a finger pressed and slid across
+    the head -- its pitch rising a third, 0.6 s."""
+    tr808 = {"tune_hz": 330.0, "decay_s": 0.6, "bend_oct": -0.25, "bend_ms": 120.0,
+             "res": ((1.59, -8.0, 0.35), (2.14, -12.0, 0.25)), "click_db": -12.0, "click_dbs": 3000.0}
+
+
+class RfxPandieroOpenProperties(TR808Properties):
+    """OPEN PANDIERO: the Brazilian frame drum's head ringing open (its
+    jingles on a layer) -- near 150 Hz, 0.5 s."""
+    tr808 = {"tune_hz": 150.0, "decay_s": 0.5, "res": ((1.5, -8.0, 0.3), (2.3, -12.0, 0.2)),
+             "click_db": -16.0, "click_dbs": 3000.0}
+
+
+class RfxPandieroMuteProperties(RfxPandieroOpenProperties):
+    """MUTE PANDIERO: the thumb's stroke with the head held -- a short thud."""
+    tr808 = dict(RfxPandieroOpenProperties.tr808, tune_hz=180.0, decay_s=0.09)
+
+
+class RfxTamborimProperties(TR808Properties):
+    """TAMBORIM: the small, tight Brazilian drum under a stick -- a short, high
+    crack near 620 Hz, 0.12 s."""
+    tr808 = {"tune_hz": 620.0, "decay_s": 0.14, "res": ((1.6, -6.0, 0.09),), "noise_db": -8.0,
+             "noise_hp_hz": 1500.0, "noise_lp_hz": 9000.0, "noise_decay_s": 0.04, "click_db": -4.0,
+             "click_dbs": 5000.0}
+
+
 # THE RHYTHM FX SETS' STRUCK AND PROCESSED OBJECTS (Rhythm FX 66, 71-74, 76,
 # 78, 80): guesses from the names -- struck things as resonators and their
 # modes (the TR-808 engine), a sampled tambourine through a sampler.

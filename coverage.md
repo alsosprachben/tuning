@@ -24,11 +24,11 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | SC-55 drum sets | 10 | 5 | 50% | | | | | |
 | SC-55mkII tones | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 |
 | SC-88 tones | 418 | 418 | 100% | 285 | 130 | 3 | 0 | 0 |
-| SC-88 drum sets | 14 | 5 | 36% | | | | | |
-| SC-88Pro tones | 774 | 442 | 57% | 299 | 140 | 3 | 0 | 0 |
-| SC-88Pro drum sets | 25 | 9 | 36% | | | | | |
-| SC-8850 tones | 1262 | 451 | 36% | 308 | 140 | 3 | 0 | 0 |
-| SC-8850 drum sets | 37 | 9 | 24% | | | | | |
+| SC-88 drum sets | 14 | 7 | 50% | | | | | |
+| SC-88Pro tones | 774 | 442 | 57% | 298 | 141 | 3 | 0 | 0 |
+| SC-88Pro drum sets | 25 | 14 | 56% | | | | | |
+| SC-8850 tones | 1262 | 451 | 36% | 307 | 141 | 3 | 0 | 0 |
+| SC-8850 drum sets | 37 | 14 | 38% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
 
@@ -196,36 +196,36 @@ Standard. THE GOAL: every one built.
 | 1 | STANDARD 1 | STANDARD 1 | STANDARD 1 | STANDARD | built: the note map above | 106 | **4** |
 | 2 | STANDARD 2 | STANDARD 2 | STANDARD 2 | -- | built: 10 keys of its own | 10 | **4** |
 | 3 | STANDARD L/R | STANDARD 3 | -- | -- | built: 12 keys of its own | 12 | **4** |
-| 9 | ROOM | ROOM | ROOM | ROOM | partial: 6 of 15 keys (9 Standard's drum) | 6 | **4** |
+| 9 | ROOM | ROOM | ROOM | ROOM | built: 6 keys of its own | 6 | **4** |
 | 10 | HIP HOP | HIP HOP | -- | -- | built: 29 keys of its own | 29 | **4** |
 | 11 | JUNGLE | JUNGLE | -- | -- | built: 29 keys of its own | 29 | **4** |
 | 12 | TECHNO | TECHNO | -- | -- | built: 35 keys of its own | 35 | **4** |
 | 13 | ROOM L/R | -- | -- | -- | **not built: plays Standard** |  |  |
 | 14 | HOUSE | -- | -- | -- | **not built: plays Standard** |  |  |
-| 17 | POWER | POWER | POWER | POWER | partial: 8 of 11 keys (3 Standard's drum) | 8 | **4** |
-| 25 | ELECTRONIC | ELECTRONIC | ELECTRONIC | ELECTRONIC | partial: 10 of 19 keys (9 Standard's drum) | 10 | **4** |
-| 26 | TR-808 | TR-808 | TR-808/909 | TR-808 | partial: 19 of 37 keys (18 Standard's drum) | 19 | **4** |
+| 17 | POWER | POWER | POWER | POWER | partial: 9 of 11 keys (2 Standard's drum) | 8 | **4** |
+| 25 | ELECTRONIC | ELECTRONIC | ELECTRONIC | ELECTRONIC | partial: 15 of 19 keys (4 Standard's drum) | 10 | **4** |
+| 26 | TR-808 | TR-808 | TR-808/909 | TR-808 | partial: 26 of 37 keys (11 Standard's drum) | 19 | **4** |
 | 27 | DANCE | DANCE | DANCE | -- | built: 27 keys of its own | 27 | **4** |
-| 28 | CR-78 | CR-78 | -- | -- | partial: 29 of 37 keys (8 Standard's drum) | 29 | **4** |
-| 29 | TR-606 | TR-606 | -- | -- | partial: 19 of 37 keys (18 Standard's drum) | 19 | **4** |
-| 30 | TR-707 | TR-707 | -- | -- | partial: 19 of 29 keys (10 Standard's drum) | 19 | **4** |
-| 31 | TR-909 | TR-909 | -- | -- | partial: 19 of 29 keys (10 Standard's drum) | 19 | **4** |
-| 33 | JAZZ | JAZZ | JAZZ | JAZZ | partial: 4 of 12 keys (8 Standard's drum) | 4 | **4** |
+| 28 | CR-78 | CR-78 | -- | -- | partial: 32 of 37 keys (5 Standard's drum) | 29 | **4** |
+| 29 | TR-606 | TR-606 | -- | -- | partial: 22 of 37 keys (15 Standard's drum) | 19 | **4** |
+| 30 | TR-707 | TR-707 | -- | -- | partial: 24 of 29 keys (5 Standard's drum) | 19 | **4** |
+| 31 | TR-909 | TR-909 | -- | -- | partial: 24 of 29 keys (5 Standard's drum) | 19 | **4** |
+| 33 | JAZZ | JAZZ | JAZZ | JAZZ | partial: 7 of 12 keys (5 Standard's drum) | 4 | **4** |
 | 34 | JAZZ L/R | -- | -- | -- | **not built: plays Standard** |  |  |
-| 41 | BRUSH | BRUSH | BRUSH | BRUSH | partial: 3 of 20 keys (17 Standard's drum) | 3 | **4** |
+| 41 | BRUSH | BRUSH | BRUSH | BRUSH | partial: 6 of 20 keys (14 Standard's drum) | 3 | **4** |
 | 42 | BRUSH 2 | -- | -- | -- | **not built: plays Standard** |  |  |
 | 43 | BRUSH 2 L/R | -- | -- | -- | **not built: plays Standard** |  |  |
-| 49 | ORCHESTRA | ORCHESTRA | ORCHESTRA | ORCHESTRA | partial: 25 of 26 keys (1 Standard's drum) | 25 | **4** |
-| 50 | ETHNIC | ETHNIC | ETHNIC | -- | partial: 49 of 75 keys (26 silent) | 49 | **4** |
+| 49 | ORCHESTRA | ORCHESTRA | ORCHESTRA | ORCHESTRA | built: 25 keys of its own | 25 | **4** |
+| 50 | ETHNIC | ETHNIC | ETHNIC | -- | built: 75 keys of its own | 75 | **4** |
 | 51 | KICK & SNARE | KICK & SNARE | KICK & SNARE | -- | built: 75 keys of its own | 75 | **4** |
 | 52 | KICK & SNARE 2 | -- | -- | -- | **not built: plays Standard** |  |  |
-| 53 | ASIA | ASIA | -- | -- | partial: 5 of 64 keys (59 silent) |  |  |
+| 53 | ASIA | ASIA | -- | -- | built: 64 keys of its own | 60 | **3** |
 | 54 | CYMBAL&CLAPS | CYMBAL&CLAPS | -- | -- | built: 65 keys of its own | 65 | **4** |
 | 55 | GAMELAN 1 | -- | -- | -- | **not built: plays Standard** |  |  |
 | 56 | GAMELAN 2 | -- | -- | -- | **not built: plays Standard** |  |  |
 | 57 | SFX | SFX | SFX | SFX | partial: 48 of 75 keys (27 silent) | 47 | **4** |
 | 58 | RHYTHM FX | RHYTHM FX | RHYTHM FX | -- | partial: 52 of 53 keys (1 silent) | 52 | **4** |
-| 59 | RHYTHM FX 2 | RHYTHM FX 2 | -- | -- | partial: 55 of 56 keys (1 silent) | 55 | **4** |
+| 59 | RHYTHM FX 2 | RHYTHM FX 2 | -- | -- | built: 56 keys of its own | 56 | **4** |
 | 60 | RHYTHM FX 3 | -- | -- | -- | **not built: plays Standard** |  |  |
 | 61 | SFX 2 | -- | -- | -- | **not built: plays Standard** |  |  |
 | 62 | VOICE | -- | -- | -- | **not built: plays Standard** |  |  |
@@ -632,18 +632,40 @@ Standard. THE GOAL: every one built.
 | 30 | Concert SD | `ConcertSnare` | **4** | Concert SD: set 48's key 38 |
 | 31 | Concert Cymbal | `ConcertCymbal1` | **4** | Concert Cymbal: set 48's key 59 |
 | 32 | Concert BD 1 | `ConcertBassDrum` | **4** | Concert BD 1: set 48's key 36 |
+| 33 | Jingle Bell | `RfxJingleBell` | **4** | Jingle Bell, the RfxJingleBell at 2540 Hz |
 | 34 | Bell Tree | `Crotale` | **4** | Bell Tree: Standard's key 84 |
 | 35 | Bar Chimes | `SfxWindchime` | **2** | Bar Chimes: set 56's key 62 -- the nearest we have, not the sound |
 | 36 | Wadaiko | `Taiko` | **4** | Wadaiko, the Taiko at 66 Hz |
+| 37 | Wadaiko Rim | `RfxTaikoRim` | **3** | Wadaiko Rim, the RfxTaikoRim at 1200 Hz |
 | 38 | Shime Taiko | `Taiko` | **2** | Shime Taiko, the Taiko at 330 Hz -- the nearest we have, not the sound |
 | 39 | Atarigane | `Atarigane` | **2** | Atarigane, the Atarigane at 1318 Hz |
 | 40 | Hyoushigi | `Claves` | **2** | Hyoushigi: Standard's key 75 -- the nearest we have, not the sound |
+| 41 | Ohkawa | `RfxOhkawa` | **3** | Ohkawa, the RfxOhkawa at 1600 Hz |
+| 42 | High Kotsuzumi | `RfxKotsuzumiHigh` | **3** | High Kotsuzumi, the RfxKotsuzumiHigh at 600 Hz |
+| 43 | Low Kotsuzumi | `RfxKotsuzumiLow` | **3** | Low Kotsuzumi, the RfxKotsuzumiLow at 260 Hz |
+| 44 | Ban Gu | `RfxBangu` | **4** | Ban Gu, the RfxBangu at 1926 Hz |
 | 45 | Big Gong | `TamTam40` | **4** | Big Gong: set 52's key 74 |
 | 46 | Small Gong | `TamTam22` | **4** | Small Gong: set 52's key 75 |
+| 47 | Bend Gong | `RfxDaluo` | **4** | Bend Gong, the RfxDaluo at 179 Hz |
 | 48 | Thai Gong | `TamTam28` | **2** | Thai Gong: set 52's key 73 -- the nearest we have, not the sound |
 | 49 | Rama Cymbal | `CengCeng` | **4** | Rama Cymbal, the CengCeng at 440 Hz |
 | 50 | Gamelan Gong | `GamelanGong` | **4** | Gamelan Gong, the GamelanGong at 65 Hz |
+| 51 | Udo Short | `RfxUduShort` | **3** | Udo Short, the RfxUduShort at 180 Hz |
+| 52 | Udo Long | `RfxUduLong` | **3** | Udo Long, the RfxUduLong at 120 Hz |
+| 53 | Udo Slap | `RfxUduSlap` | **3** | Udo Slap, the RfxUduSlap at 600 Hz |
+| 54 | Bendir | `RfxBendir` | **3** | Bendir, the RfxBendir at 90 Hz |
+| 55 | Req Dum | `RfxReqDum` | **4** | Req Dum, the RfxReqDum at 144 Hz |
+| 56 | Req Tik | `RfxReqTik` | **4** | Req Tik, the RfxReqTik at 728 Hz |
+| 57 | Tabla Te | `RfxTablaTe` | **4** | Tabla Te, the RfxTablaTe at 125 Hz |
+| 58 | Tabla Na | `RfxTablaNa` | **4** | Tabla Na, the RfxTablaNa at 837 Hz |
+| 59 | Tabla Tun | `RfxTablaTun` | **4** | Tabla Tun, the RfxTablaTun at 314 Hz |
+| 60 | Tabla Ge | `RfxTablaGe` | **4** | Tabla Ge, the RfxTablaGe at 97 Hz |
+| 61 | Tabla Ge Hi | `RfxTablaGeHi` | **4** | Tabla Ge Hi, the RfxTablaGeHi at 174 Hz |
+| 62 | Talking Drum | `RfxTalkingDrum` | **3** | Talking Drum, the RfxTalkingDrum at 220 Hz |
+| 63 | Bend Talking Drum | `RfxBendTalkingDrum` | **3** | Bend Talking Drum, the RfxBendTalkingDrum at 220 Hz |
 | 64 | Caxixi | `Maracas` | **2** | Caxixi: Standard's key 70 -- the nearest we have, not the sound |
+| 65 | Djembe | `RfxDjembe` | **3** | Djembe, the RfxDjembe at 330 Hz |
+| 66 | Djembe Rim | `RfxDjembeRim` | **3** | Djembe Rim, the RfxDjembeRim at 700 Hz |
 | 67 | Timbales Low | `TimbaleLow` | **4** | Timbales Low: Standard's key 66 |
 | 68 | Timbales Paila | `TimbaleHigh` | **2** | Timbales Paila: Standard's key 65 -- the nearest we have, not the sound |
 | 69 | Timbales High | `TimbaleHigh` | **4** | Timbales High: Standard's key 65 |
@@ -655,8 +677,12 @@ Standard. THE GOAL: every one built.
 | 75 | Mute Low Conga | `CongaLow` | **2** | Mute Low Conga: Standard's key 64 -- the nearest we have, not the sound |
 | 76 | Conga Slap | `CongaMute` | **2** | Conga Slap: Standard's key 62 -- the nearest we have, not the sound |
 | 77 | Open Low Conga | `CongaLow` | **4** | Open Low Conga: Standard's key 64 |
+| 78 | Conga Slide | `RfxCongaSlide` | **3** | Conga Slide, the RfxCongaSlide at 330 Hz |
+| 79 | Mute Pandiero | `RfxPandieroMute` | **3** | Mute Pandiero, the RfxPandieroMute at 180 Hz |
+| 80 | Open Pandiero | `RfxPandieroOpen` | **3** | Open Pandiero, the RfxPandieroOpen at 150 Hz |
 | 81 | Open Surdo | `SurdoOpen` | **4** | Open Surdo: Standard's key 87 |
 | 82 | Mute Surdo | `SurdoMute` | **4** | Mute Surdo: Standard's key 86 |
+| 83 | Tamborim | `RfxTamborim` | **3** | Tamborim, the RfxTamborim at 620 Hz |
 | 84 | High Agogo | `AgogoHigh` | **4** | High Agogo: Standard's key 67 |
 | 85 | Low Agogo | `AgogoLow` | **4** | Low Agogo: Standard's key 68 |
 | 86 | Shaker | `Shaker` | **4** | Shaker: Standard's key 82 |
@@ -753,6 +779,71 @@ Standard. THE GOAL: every one built.
 | 97 | Jungle Snare 1 | `JungleSnare1` | **4** | Jungle Snare 1, the JungleSnare1 at 246 Hz |
 | 98 | Jungle Snare 2 | `JungleSnare2` | **4** | Jungle Snare 2, the JungleSnare2 at 220 Hz |
 | 99 | Techno Snare 1 | `TechnoSnare1` | **4** | Techno Snare 1, the TechnoSnare1 at 120 Hz |
+
+### 52 Asia
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 25 | Gamelan Gong 1 | `GamelanGong` | **4** | Gamelan Gong 1, the GamelanGong at 65 Hz |
+| 26 | Gamelan Gong 2 | `GamelanGong` | **4** | Gamelan Gong 2, the GamelanGong at 75 Hz |
+| 27 | Gamelan Gong 3 | `GamelanGong` | **4** | Gamelan Gong 3, the GamelanGong at 86 Hz |
+| 28 | Gamelan Gong 4 | `GamelanGong` | **4** | Gamelan Gong 4, the GamelanGong at 99 Hz |
+| 29 | Gamelan Gong 5 | `GamelanGong` | **4** | Gamelan Gong 5, the GamelanGong at 114 Hz |
+| 30 | Gamelan Gong 6 | `GamelanGong` | **4** | Gamelan Gong 6, the GamelanGong at 131 Hz |
+| 31 | Gamelan Gong 7 | `GamelanGong` | **4** | Gamelan Gong 7, the GamelanGong at 150 Hz |
+| 32 | Gamelan Gong 8 | `GamelanGong` | **4** | Gamelan Gong 8, the GamelanGong at 173 Hz |
+| 33 | Gamelan Gong 9 | `GamelanGong` | **4** | Gamelan Gong 9, the GamelanGong at 198 Hz |
+| 34 | Gamelan Gong 10 | `GamelanGong` | **4** | Gamelan Gong 10, the GamelanGong at 228 Hz |
+| 35 | Gender 1 | `RfxGenderKey` | **4** | Gender 1, the RfxGenderKey at 262 Hz |
+| 36 | Gender 2 | `RfxGenderKey` | **4** | Gender 2, the RfxGenderKey at 301 Hz |
+| 37 | Gender 3 | `RfxGenderKey` | **4** | Gender 3, the RfxGenderKey at 345 Hz |
+| 38 | Gender 4 | `RfxGenderKey` | **4** | Gender 4, the RfxGenderKey at 397 Hz |
+| 39 | Gender 5 | `RfxGenderKey` | **4** | Gender 5, the RfxGenderKey at 456 Hz |
+| 40 | Bonang 1 | `Bonang` | **4** | Bonang 1, the Bonang at 523 Hz |
+| 41 | Bonang 2 | `Bonang` | **4** | Bonang 2, the Bonang at 601 Hz |
+| 42 | Bonang 3 | `Bonang` | **4** | Bonang 3, the Bonang at 690 Hz |
+| 43 | Bonang 4 | `Bonang` | **4** | Bonang 4, the Bonang at 793 Hz |
+| 44 | Bonang 5 | `Bonang` | **4** | Bonang 5, the Bonang at 911 Hz |
+| 45 | Rama Cymbal Low | `CengCeng` | **4** | Rama Cymbal Low, the CengCeng at 440 Hz |
+| 46 | Rama Cymbal High | `CengCeng` | **4** | Rama Cymbal High, the CengCeng at 587 Hz |
+| 47 | Sagat Open | `RfxSagat` | **3** | Sagat Open, the RfxSagat at 2400 Hz |
+| 48 | Sagat Closed | `RfxSagat` | **3** | Sagat Closed, the RfxSagat at 2400 Hz |
+| 50 | Wadaiko | `Taiko` | **4** | Wadaiko, the Taiko at 66 Hz |
+| 51 | Wadaiko Rim | `RfxTaikoRim` | **3** | Wadaiko Rim, the RfxTaikoRim at 1200 Hz |
+| 52 | Small Taiko | `Taiko` | **2** | Small Taiko, the Taiko at 120 Hz -- the nearest we have, not the sound |
+| 53 | Shimedaiko | `Taiko` | **2** | Shimedaiko, the Taiko at 330 Hz -- the nearest we have, not the sound |
+| 54 | Atarigane | `Atarigane` | **2** | Atarigane, the Atarigane at 1318 Hz |
+| 55 | Hyoushigi | `Claves` | **2** | Hyoushigi: Standard's key 75 -- the nearest we have, not the sound |
+| 56 | Ohkawa | `RfxOhkawa` | **3** | Ohkawa, the RfxOhkawa at 1600 Hz |
+| 57 | High Kotsuzumi | `RfxKotsuzumiHigh` | **3** | High Kotsuzumi, the RfxKotsuzumiHigh at 600 Hz |
+| 58 | Low Kotsuzumi | `RfxKotsuzumiLow` | **3** | Low Kotsuzumi, the RfxKotsuzumiLow at 260 Hz |
+| 59 | Yyoo Dude | `RfxKakegoe` | **3** | Yyoo Dude, the RfxKakegoe at 1000 Hz |
+| 60 | Buk | `RfxBuk` | **3** | Buk, the RfxBuk at 100 Hz |
+| 61 | Buk Rim | `RfxTaikoRim` | **3** | Buk Rim, the RfxTaikoRim at 1300 Hz |
+| 62 | Gengari p | `RfxGengari` | **3** | Gengari p, the RfxGengari at 1100 Hz |
+| 63 | Gengari Mute Low | `RfxGengari` | **3** | Gengari Mute Low, the RfxGengari at 1038 Hz |
+| 64 | Gengari f | `RfxGengari` | **3** | Gengari f, the RfxGengari at 1100 Hz |
+| 65 | Gengari Mute High | `RfxGengari` | **3** | Gengari Mute High, the RfxGengari at 1165 Hz |
+| 66 | Gengari Samll | `RfxGengari` | **3** | Gengari Samll, the RfxGengari at 1468 Hz |
+| 67 | Jang-Gu Che | `RfxJangguChe` | **3** | Jang-Gu Che, the RfxJangguChe at 480 Hz |
+| 68 | Jang-Gu Kun | `RfxJangguKun` | **3** | Jang-Gu Kun, the RfxJangguKun at 130 Hz |
+| 69 | Jang-Gu Rim | `RfxTaikoRim` | **3** | Jang-Gu Rim, the RfxTaikoRim at 1500 Hz |
+| 70 | Jing p | `RfxJing` | **3** | Jing p, the RfxJing at 110 Hz |
+| 71 | Jing f | `RfxJing` | **3** | Jing f, the RfxJing at 110 Hz |
+| 72 | Jing Mute | `RfxJing` | **3** | Jing Mute, the RfxJing at 110 Hz |
+| 76 | Pai Ban | `RfxPaiBan` | **3** | Pai Ban, the RfxPaiBan at 1100 Hz |
+| 77 | Ban Gu | `RfxBangu` | **4** | Ban Gu, the RfxBangu at 1926 Hz |
+| 78 | Tang Gu | `Taiko` | **2** | Tang Gu, the Taiko at 110 Hz -- the nearest we have, not the sound |
+| 79 | Tang Gu Mute | `Taiko` | **2** | Tang Gu Mute, the Taiko at 110 Hz -- the nearest we have, not the sound |
+| 80 | Shou Luo | `RfxXiaoluo` | **4** | Shou Luo, the RfxXiaoluo at 661 Hz |
+| 81 | Bend Gong | `RfxDaluo` | **4** | Bend Gong, the RfxDaluo at 179 Hz |
+| 82 | Hu Yin Luo Low | `RfxHuYinLuo` | **3** | Hu Yin Luo Low, the RfxHuYinLuo at 250 Hz |
+| 83 | Hu Yin Luo Mid | `RfxHuYinLuo` | **3** | Hu Yin Luo Mid, the RfxHuYinLuo at 340 Hz |
+| 84 | Hu Yin Luo Mid 2 | `RfxHuYinLuo` | **3** | Hu Yin Luo Mid 2, the RfxHuYinLuo at 360 Hz |
+| 85 | Hu Yin Luo High | `RfxHuYinLuo` | **3** | Hu Yin Luo High, the RfxHuYinLuo at 470 Hz |
+| 86 | Hu Yin Luo High 2 | `RfxHuYinLuo` | **3** | Hu Yin Luo High 2, the RfxHuYinLuo at 500 Hz |
+| 87 | Nao Bo | `RfxNaobo` | **4** | Nao Bo, the RfxNaobo at 182 Hz |
+| 88 | Xiao Bo | `RfxNaobo` | **4** | Xiao Bo, the RfxNaobo at 272 Hz |
 
 ### 53 Cymbal & Claps
 
@@ -908,16 +999,16 @@ Standard. THE GOAL: every one built.
 | 61 | Reverse Scratch | `ReverseSfxScratchPull` | **4** | Reverse Scratch: set 56's key 61, played backwards |
 | 62 | Reverse Laser Gun | `ReverseSfxLaser` | **3** | Reverse Laser Gun: set 56's key 74, played backwards |
 | 63 | Key Click | `SfxKeyClick` | **4** | Key Click: set 56's key 51 |
-| 64 | Techno Thip | `RfxTechnoThip` | **4** | Techno Thip, the RfxTechnoThip at 1800 Hz |
-| 65 | Pop Drop | `RfxPopDrop` | **4** | Pop Drop, the RfxPopDrop at 900 Hz |
+| 64 | Techno Thip | `RfxTechnoThip` | **3** | Techno Thip, the RfxTechnoThip at 1800 Hz |
+| 65 | Pop Drop | `RfxPopDrop` | **3** | Pop Drop, the RfxPopDrop at 900 Hz |
 | 66 | Woody Slap | `RfxWoodySlap` | **3** | Woody Slap, the RfxWoodySlap at 420 Hz |
-| 67 | Distortion Kick | `RfxDistortionKick` | **4** | Distortion Kick, the RfxDistortionKick at 50 Hz |
-| 68 | Syn. Drops | `RfxSynDrops` | **4** | Syn. Drops, the RfxSynDrops at 1500 Hz |
+| 67 | Distortion Kick | `RfxDistortionKick` | **3** | Distortion Kick, the RfxDistortionKick at 50 Hz |
+| 68 | Syn. Drops | `RfxSynDrops` | **3** | Syn. Drops, the RfxSynDrops at 1500 Hz |
 | 69 | Reverse Hi Q | `ReverseSfxHighQ` | **3** | Reverse Hi Q: Standard's key 27, played backwards |
-| 70 | Pipe | `RfxPipe` | **4** | Pipe, the RfxPipe at 330 Hz |
+| 70 | Pipe | `RfxPipe` | **3** | Pipe, the RfxPipe at 330 Hz |
 | 71 | Ice Block | `RfxIceBlock` | **3** | Ice Block, the RfxIceBlock at 1800 Hz |
 | 72 | Digital Tambourine | `RfxDigitalTambourine` | **3** | Digital Tambourine, the RfxDigitalTambourine at 1000 Hz |
-| 73 | Alias | `RfxAlias` | **4** | Alias, the RfxAlias at 300 Hz |
+| 73 | Alias | `RfxAlias` | **3** | Alias, the RfxAlias at 300 Hz |
 | 74 | Modulated Bell | `RfxModulatedBell` | **3** | Modulated Bell, the RfxModulatedBell at 880 Hz |
 | 75 | Spark | `RfxSpark` | **3** | Spark, the RfxSpark at 310 Hz |
 | 76 | Metallic Percussion | `RfxMetallicPerc` | **3** | Metallic Percussion, the RfxMetallicPerc at 700 Hz |
@@ -925,12 +1016,12 @@ Standard. THE GOAL: every one built.
 | 78 | Stereo Noise Clap | `RfxStereoClap` | **3** | Stereo Noise Clap, the RfxStereoClap at 1000 Hz |
 | 79 | Swish | `RfxSwish` | **3** | Swish, the RfxSwish at 262 Hz |
 | 80 | Slappy | `TR909Snare` | **4** | Slappy: set 30's key 38 |
-| 81 | Voice Ou | `RfxVoiceOu` | **4** | Voice Ou, the RfxVoiceOu at 1000 Hz |
-| 82 | Voice Au | `RfxVoiceAu` | **4** | Voice Au, the RfxVoiceAu at 1000 Hz |
+| 81 | Voice Ou | `RfxVoiceOu` | **3** | Voice Ou, the RfxVoiceOu at 1000 Hz |
+| 82 | Voice Au | `RfxVoiceAu` | **3** | Voice Au, the RfxVoiceAu at 1000 Hz |
 | 83 | Hoo | `Hoo` | **4** | Hoo, the Hoo at 1000 Hz |
 | 84 | Tape Stop 1 | `RfxTapeStop` | **3** | Tape Stop 1, the RfxTapeStop at 30 Hz |
 | 85 | Tape Stop 2 | `RfxTapeStop2` | **3** | Tape Stop 2, the RfxTapeStop2 at 30 Hz |
-| 86 | Missile | `RfxMissile` | **4** | Missile, the RfxMissile at 600 Hz |
+| 86 | Missile | `RfxMissile` | **3** | Missile, the RfxMissile at 600 Hz |
 | 87 | Space Birds | `RfxSpaceBirds` | **3** | Space Birds, the RfxSpaceBirds at 2600 Hz |
 | 88 | Flying Monster | `SfxGrowl` | **3** | Flying Monster, the SfxGrowl at 1000 Hz |
 
@@ -965,6 +1056,7 @@ Standard. THE GOAL: every one built.
 | 60 | Reverse TR-707 Open Hi-Hat | `ReverseTR707OpenHat` | **4** | Reverse TR-707 Open Hi-Hat: set 29's key 46, played backwards |
 | 61 | Reverse Open Hi-Hat | `ReverseOpenHiHat` | **4** | Reverse Open Hi-Hat: Standard's key 46, played backwards |
 | 62 | Reverse TR-606 Open Hi-Hat | `ReverseTR606OpenHat` | **4** | Reverse TR-606 Open Hi-Hat: set 28's key 46, played backwards |
+| 63 | Reverse Hu Yin Luo | `ReverseRfxHuYinLuo` | **3** | Reverse Hu Yin Luo: set 52's key 83, played backwards |
 | 64 | Reverse TR-707 Crash Cymbal | `ReverseTR909Crash` | **2** | Reverse TR-707 Crash Cymbal: set 29's key 49, played backwards -- the nearest we have, not the sound |
 | 65 | Voice One | `RfxVoiceOne` | **4** | Voice One, the RfxVoiceOne at 1000 Hz |
 | 66 | Reverse Voice One | `RfxVoiceOneRev` | **4** | Reverse Voice One, the RfxVoiceOneRev at 1000 Hz |
@@ -972,26 +1064,26 @@ Standard. THE GOAL: every one built.
 | 68 | Reverse Voice Two | `RfxVoiceTwoRev` | **4** | Reverse Voice Two, the RfxVoiceTwoRev at 1000 Hz |
 | 69 | Voice Three | `RfxVoiceThree` | **4** | Voice Three, the RfxVoiceThree at 1000 Hz |
 | 70 | Reverse Voice Three | `RfxVoiceThreeRev` | **4** | Reverse Voice Three, the RfxVoiceThreeRev at 1000 Hz |
-| 71 | Voice Tah | `RfxVoiceTah` | **4** | Voice Tah, the RfxVoiceTah at 1000 Hz |
-| 72 | Reverse Voice Tah | `RfxVoiceTahRev` | **4** | Reverse Voice Tah, the RfxVoiceTahRev at 1000 Hz |
-| 73 | Voice Ou | `RfxVoiceOu` | **4** | Voice Ou, the RfxVoiceOu at 1000 Hz |
-| 74 | Voice Au | `RfxVoiceAu` | **4** | Voice Au, the RfxVoiceAu at 1000 Hz |
-| 75 | Voice Whey | `RfxVoiceWhey` | **4** | Voice Whey, the RfxVoiceWhey at 1000 Hz |
-| 76 | Frog Voice | `RfxFrog` | **4** | Frog Voice, the RfxFrog at 1000 Hz |
-| 77 | Reverse Yyoo Dude | `RfxKakegoeRev` | **4** | Reverse Yyoo Dude, the RfxKakegoeRev at 1000 Hz |
-| 78 | Douby | `RfxDouby` | **4** | Douby, the RfxDouby at 1000 Hz |
-| 79 | Reverse Douby | `RfxDoubyRev` | **4** | Reverse Douby, the RfxDoubyRev at 1000 Hz |
-| 80 | Baert High | `RfxBaert` | **4** | Baert High, the RfxBaert at 1000 Hz |
-| 81 | Baert Low | `RfxBaert` | **4** | Baert Low, the RfxBaert at 1000 Hz |
-| 82 | Bounce | `RfxBounce` | **4** | Bounce, the RfxBounce at 600 Hz |
-| 83 | Reverse Bounce | `RfxBounce` | **4** | Reverse Bounce, the RfxBounce at 600 Hz |
-| 84 | Distortion Knock | `RfxDistortionKnock` | **4** | Distortion Knock, the RfxDistortionKnock at 2422 Hz |
+| 71 | Voice Tah | `RfxVoiceTah` | **3** | Voice Tah, the RfxVoiceTah at 1000 Hz |
+| 72 | Reverse Voice Tah | `RfxVoiceTahRev` | **3** | Reverse Voice Tah, the RfxVoiceTahRev at 1000 Hz |
+| 73 | Voice Ou | `RfxVoiceOu` | **3** | Voice Ou, the RfxVoiceOu at 1000 Hz |
+| 74 | Voice Au | `RfxVoiceAu` | **3** | Voice Au, the RfxVoiceAu at 1000 Hz |
+| 75 | Voice Whey | `RfxVoiceWhey` | **3** | Voice Whey, the RfxVoiceWhey at 1000 Hz |
+| 76 | Frog Voice | `RfxFrog` | **3** | Frog Voice, the RfxFrog at 1000 Hz |
+| 77 | Reverse Yyoo Dude | `RfxKakegoeRev` | **3** | Reverse Yyoo Dude, the RfxKakegoeRev at 1000 Hz |
+| 78 | Douby | `RfxDouby` | **3** | Douby, the RfxDouby at 1000 Hz |
+| 79 | Reverse Douby | `RfxDoubyRev` | **3** | Reverse Douby, the RfxDoubyRev at 1000 Hz |
+| 80 | Baert High | `RfxBaert` | **3** | Baert High, the RfxBaert at 1000 Hz |
+| 81 | Baert Low | `RfxBaert` | **3** | Baert Low, the RfxBaert at 1000 Hz |
+| 82 | Bounce | `RfxBounce` | **3** | Bounce, the RfxBounce at 600 Hz |
+| 83 | Reverse Bounce | `RfxBounce` | **3** | Reverse Bounce, the RfxBounce at 600 Hz |
+| 84 | Distortion Knock | `RfxDistortionKnock` | **3** | Distortion Knock, the RfxDistortionKnock at 2422 Hz |
 | 85 | Guitar Slide | `SfxFretSlide` | **3** | Guitar Slide, the SfxFretSlide at 262 Hz |
-| 86 | Sub Marine | `RfxSubMarine` | **4** | Sub Marine, the RfxSubMarine at 1200 Hz |
-| 87 | Noise Attack | `RfxNoiseAttack` | **4** | Noise Attack, the RfxNoiseAttack at 1000 Hz |
+| 86 | Sub Marine | `RfxSubMarine` | **3** | Sub Marine, the RfxSubMarine at 1200 Hz |
+| 87 | Noise Attack | `RfxNoiseAttack` | **3** | Noise Attack, the RfxNoiseAttack at 1000 Hz |
 | 88 | Space Worms | `RfxSpaceWorms` | **3** | Space Worms, the RfxSpaceWorms at 400 Hz |
 | 89 | Emergency ! | `RfxSquareTone` | **3** | Emergency !, the RfxSquareTone at 960 Hz |
-| 90 | Calculating... | `RfxMorse` | **4** | Calculating..., the RfxMorse at 700 Hz |
+| 90 | Calculating... | `RfxMorse` | **3** | Calculating..., the RfxMorse at 700 Hz |
 | 91 | Saw LFO Saw | `RfxSawSweep` | **3** | Saw LFO Saw, the RfxSawSweep at 220 Hz |
 
 ### 127 CM-64/32L
@@ -2137,7 +2229,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-554 classes.
+593 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -2186,6 +2278,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
     - `Mallet`
       - `StruckBar`
         - `Celesta` [ModeDecays] -- GM 8 Celesta (4)
+        - `Gender` [ModeDecays]
+          - `RfxGenderKey` -- set 52 35 Gender 1 (4), set 52 36 Gender 2 (4), set 52 37 Gender 3 (4), set 52 38 Gender 4 (4), set 52 39 Gender 5 (4)
         - `Glockenspiel` -- GM 9 Glockenspiel (4)
         - `MusicBox` [ModeDecays] -- GM 10 Music Box (4)
       - `TunedBar`
@@ -2204,9 +2298,10 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
     - `Percussion`
       - `Cymbal` [NoisyPercussionMixin]
         - `ChineseCymbal` -- 52 Chinese Cymbal (4), set 53 89 Chinese Cymbal (4), set 53 90 Chinese Cymbal 2 (2)
+          - `RfxNaobo` -- set 52 87 Nao Bo (4), set 52 88 Xiao Bo (4)
         - `CrashCymbal1` -- 49 Crash Cymbal 1 (4), set 49 28 Crash Cymbal 1 (4), set 53 61 Crash Cymbal 1 (4), set 53 65 Hard Crash Cymbal (2), set 53 68 Mute Crash Cymbal 1 (4), set 127 49 Crash Cymbal (4)
           - `BrushCrash` -- set 53 64 Brush Crash Cymbal (4)
-          - `CengCeng` -- set 49 49 Rama Cymbal (4)
+          - `CengCeng` -- set 49 49 Rama Cymbal (4), set 52 45 Rama Cymbal Low (4), set 52 46 Rama Cymbal High (4)
           - `ConcertCymbal1` -- set 48 59 Concert Cymbal 1 (4), set 49 31 Concert Cymbal (4)
           - `ReverseCrashCymbal1` -- set 53 70 Reverse Crash Cymbal 1 (4), set 57 50 Reverse Cymbal 1 (4)
           - `ReverseCymbal` -- GM 119 Reverse Cymbal (4), set 9 52 Reverse Cymbal (4), set 10 52 Reverse Cymbal (4), set 11 52 Reverse Cymbal (4), set 24 52 Reverse Cymbal (4), set 26 52 Reverse Cymbal (4), set 282 52 Reverse Cymbal (4)
@@ -2310,23 +2405,23 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `SfxThroat`
               - `Hoo` -- set 9 78 High Hoo (4), set 9 79 Low Hoo (4), set 10 78 High Hoo (4), set 10 79 Low Hoo (4), set 11 78 High Hoo (4), set 11 79 Low Hoo (4), set 26 78 High Hoo (4), set 26 79 Low Hoo (4), set 57 83 Hoo (4), set 282 78 High Hoo (4), set 282 79 Low Hoo (4)
               - `RfxVoice`
-                - `RfxBaert` -- set 58 80 Baert High (4), set 58 81 Baert Low (4)
-                - `RfxDouby` -- set 58 78 Douby (4)
-                  - `RfxDoubyRev` -- set 58 79 Reverse Douby (4)
-                - `RfxFrog` -- set 58 76 Frog Voice (4)
-                - `RfxKakegoe`
-                  - `RfxKakegoeRev` -- set 58 77 Reverse Yyoo Dude (4)
-                - `RfxVoiceAu` -- set 57 82 Voice Au (4), set 58 74 Voice Au (4)
+                - `RfxBaert` -- set 58 80 Baert High (3), set 58 81 Baert Low (3)
+                - `RfxDouby` -- set 58 78 Douby (3)
+                  - `RfxDoubyRev` -- set 58 79 Reverse Douby (3)
+                - `RfxFrog` -- set 58 76 Frog Voice (3)
+                - `RfxKakegoe` -- set 52 59 Yyoo Dude (3)
+                  - `RfxKakegoeRev` -- set 58 77 Reverse Yyoo Dude (3)
+                - `RfxVoiceAu` -- set 57 82 Voice Au (3), set 58 74 Voice Au (3)
                 - `RfxVoiceOne` -- set 58 65 Voice One (4)
                   - `RfxVoiceOneRev` -- set 58 66 Reverse Voice One (4)
-                - `RfxVoiceOu` -- set 57 81 Voice Ou (4), set 58 73 Voice Ou (4)
-                - `RfxVoiceTah` -- set 58 71 Voice Tah (4)
-                  - `RfxVoiceTahRev` -- set 58 72 Reverse Voice Tah (4)
+                - `RfxVoiceOu` -- set 57 81 Voice Ou (3), set 58 73 Voice Ou (3)
+                - `RfxVoiceTah` -- set 58 71 Voice Tah (3)
+                  - `RfxVoiceTahRev` -- set 58 72 Reverse Voice Tah (3)
                 - `RfxVoiceThree` -- set 58 69 Voice Three (4)
                   - `RfxVoiceThreeRev` -- set 58 70 Reverse Voice Three (4)
                 - `RfxVoiceTwo` -- set 58 67 Voice Two (4)
                   - `RfxVoiceTwoRev` -- set 58 68 Reverse Voice Two (4)
-                - `RfxVoiceWhey` -- set 58 75 Voice Whey (4)
+                - `RfxVoiceWhey` -- set 58 75 Voice Whey (3)
               - `SfxDog` -- set 56 76 Dog (4), set 127 100 Dog (4)
               - `SfxGrowl` -- set 56 86 Growl (3), set 57 88 Flying Monster (3)
               - `SfxKitty` -- set 56 85 Kitty (4)
@@ -2334,7 +2429,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `SfxWindchime` -- set 1 84 Bar Chimes (2), set 49 35 Bar Chimes (2), set 56 62 Windchime (3), set 127 86 Windchime (3)
             - `SurdoOpen` -- 87 Open Surdo (4), set 49 81 Open Surdo (4)
               - `SurdoMute` -- 86 Mute Surdo (4), set 49 82 Mute Surdo (4)
-            - `Taiko` [PlayedAtPitchMixin] -- GM 116 Taiko Drum (4), set 49 36 Wadaiko (4), set 49 38 Shime Taiko (2)
+            - `Taiko` [PlayedAtPitchMixin] -- GM 116 Taiko Drum (4), set 49 36 Wadaiko (4), set 49 38 Shime Taiko (2), set 52 50 Wadaiko (4), set 52 52 Small Taiko (2), set 52 53 Shimedaiko (2), set 52 78 Tang Gu (2), set 52 79 Tang Gu Mute (2)
             - `TimbaleHigh` -- 65 High Timbale (4), set 49 68 Timbales Paila (2), set 49 69 Timbales High (4), set 127 65 High Timbale (4)
             - `TimbaleLow` -- 66 Low Timbale (4), set 49 67 Timbales Low (4), set 127 66 Low Timbale (4)
           - `Tambourine` [NoisyPercussionMixin] -- 54 Tambourine (4), set 9 54 Shake Tambourine (2), set 10 54 Shake Tambourine (2), set 11 54 Shake Tambourine (2), set 26 54 Shake Tambourine (2), set 49 26 Tambourine (4), set 127 54 Tambourine (4)
@@ -2382,19 +2477,55 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
                 - `ReverseCR78Snare` -- set 58 42 Reverse CR-78 Snare 1 (4)
               - `CR78Tambourine` -- set 27 54 CR-78 Tambourine (4)
               - `CR78Tom` -- set 27 41 CR-78 Low Tom 2 (4), set 27 43 CR-78 Low Tom 1 (4), set 27 45 CR-78 Mid Tom 2 (4), set 27 47 CR-78 Mid Tom 1 (4), set 27 48 CR-78 High Tom 2 (4), set 27 50 CR-78 High Tom 1 (4)
-            - `RfxBounce` -- set 58 82 Bounce (4), set 58 83 Reverse Bounce (4)
+            - `RfxBangu` -- set 49 44 Ban Gu (4), set 52 77 Ban Gu (4)
+            - `RfxBendir` -- set 49 54 Bendir (3)
+            - `RfxBounce` -- set 58 82 Bounce (3), set 58 83 Reverse Bounce (3)
+            - `RfxBuk` -- set 52 60 Buk (3)
+            - `RfxCongaSlide` -- set 49 78 Conga Slide (3)
+            - `RfxDaluo` -- set 49 47 Bend Gong (4), set 52 81 Bend Gong (4)
+              - `RfxHuYinLuo` -- set 52 82 Hu Yin Luo Low (3), set 52 83 Hu Yin Luo Mid (3), set 52 84 Hu Yin Luo Mid 2 (3), set 52 85 Hu Yin Luo High (3), set 52 86 Hu Yin Luo High 2 (3)
+                - `ReverseRfxHuYinLuo` -- set 58 63 Reverse Hu Yin Luo (3)
+            - `RfxDjembe` -- set 49 65 Djembe (3)
+            - `RfxDjembeRim` -- set 49 66 Djembe Rim (3)
+            - `RfxGengari` -- set 52 62 Gengari p (3), set 52 63 Gengari Mute Low (3), set 52 64 Gengari f (3), set 52 65 Gengari Mute High (3), set 52 66 Gengari Samll (3)
             - `RfxIceBlock` -- set 57 71 Ice Block (3)
+            - `RfxJangguChe` -- set 52 67 Jang-Gu Che (3)
+            - `RfxJangguKun` -- set 52 68 Jang-Gu Kun (3)
+            - `RfxJing` -- set 52 70 Jing p (3), set 52 71 Jing f (3), set 52 72 Jing Mute (3)
+            - `RfxJingleBell` -- set 49 33 Jingle Bell (4)
+            - `RfxKotsuzumiLow` -- set 49 43 Low Kotsuzumi (3), set 52 58 Low Kotsuzumi (3)
+              - `RfxKotsuzumiHigh` -- set 49 42 High Kotsuzumi (3), set 52 57 High Kotsuzumi (3)
             - `RfxMetallicPerc` -- set 57 76 Metallic Percussion (3)
             - `RfxModulatedBell` -- set 57 74 Modulated Bell (3)
-            - `RfxNoiseAttack` -- set 58 87 Noise Attack (4)
-            - `RfxPipe` -- set 57 70 Pipe (4)
-            - `RfxPopDrop` -- set 57 65 Pop Drop (4)
+            - `RfxNoiseAttack` -- set 58 87 Noise Attack (3)
+            - `RfxOhkawa` -- set 49 41 Ohkawa (3), set 52 56 Ohkawa (3)
+            - `RfxPaiBan` -- set 52 76 Pai Ban (3)
+            - `RfxPandieroOpen` -- set 49 80 Open Pandiero (3)
+              - `RfxPandieroMute` -- set 49 79 Mute Pandiero (3)
+            - `RfxPipe` -- set 57 70 Pipe (3)
+            - `RfxPopDrop` -- set 57 65 Pop Drop (3)
+            - `RfxReqDum` -- set 49 55 Req Dum (4)
+            - `RfxReqTik` -- set 49 56 Req Tik (4)
+            - `RfxSagat` -- set 52 47 Sagat Open (3), set 52 48 Sagat Closed (3)
             - `RfxSpaceBirds` -- set 57 87 Space Birds (3)
             - `RfxSpaceWorms` -- set 58 88 Space Worms (3)
-            - `RfxSubMarine` -- set 58 86 Sub Marine (4)
-            - `RfxSynDrops` -- set 57 68 Syn. Drops (4)
-            - `RfxTechnoThip` -- set 57 64 Techno Thip (4)
+            - `RfxSubMarine` -- set 58 86 Sub Marine (3)
+            - `RfxSynDrops` -- set 57 68 Syn. Drops (3)
+            - `RfxTablaGeHi` -- set 49 61 Tabla Ge Hi (4)
+            - `RfxTablaGe` -- set 49 60 Tabla Ge (4)
+            - `RfxTablaNa` -- set 49 58 Tabla Na (4)
+            - `RfxTablaTe` -- set 49 57 Tabla Te (4)
+            - `RfxTablaTun` -- set 49 59 Tabla Tun (4)
+            - `RfxTaikoRim` -- set 49 37 Wadaiko Rim (3), set 52 51 Wadaiko Rim (3), set 52 61 Buk Rim (3), set 52 69 Jang-Gu Rim (3)
+            - `RfxTalkingDrum` -- set 49 62 Talking Drum (3)
+              - `RfxBendTalkingDrum` -- set 49 63 Bend Talking Drum (3)
+            - `RfxTamborim` -- set 49 83 Tamborim (3)
+            - `RfxTechnoThip` -- set 57 64 Techno Thip (3)
+            - `RfxUduLong` -- set 49 52 Udo Long (3)
+              - `RfxUduShort` -- set 49 51 Udo Short (3)
+            - `RfxUduSlap` -- set 49 53 Udo Slap (3)
             - `RfxWoodySlap` -- set 57 66 Woody Slap (3)
+            - `RfxXiaoluo` -- set 52 80 Shou Luo (4)
             - `SfxHighQ` -- 27 High Q (3), set 56 39 High Q (3)
               - `ReverseSfxHighQ` -- set 57 69 Reverse Hi Q (3)
             - `SfxSquareClick` -- 32 Square Click (3), set 56 44 Square Click (3)
@@ -2425,7 +2556,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
                 - `TR707HiTom` -- set 29 48 707 Hi Tom 2 (4), set 29 50 707 Hi Tom 1 (4)
                 - `TR707MidTom` -- set 29 45 707 Mid Tom 2 (4), set 29 47 707 Mid Tom 1 (4)
             - `TR808Claves` -- set 9 75 TR-808 Claves (4), set 10 75 TR-808 Claves (4), set 11 75 TR-808 Claves (4), set 25 75 808 Claves (4), set 30 75 808 Claves (4), set 281 75 808 Claves (4)
-              - `RfxDistortionKnock` -- set 58 84 Distortion Knock (4)
+              - `RfxDistortionKnock` -- set 58 84 Distortion Knock (3)
             - `TR808ClosedHat` -- set 25 42 808 CHH (4), set 25 44 808 CHH (4), set 26 44 TR-808 Closed Hi-Hat 2 (4), set 53 43 TR-808 Closed Hi-Hat (4), set 53 44 TR-808 Closed Hi-Hat (4), set 281 42 808 CHH (4), set 281 44 808 CHH (4), set 282 44 808 CHH (4)
               - `ReverseTR808ClosedHat` -- set 58 55 Reverse TR-808 Closed Hi-Hat (4)
               - `TR808OpenHat` -- set 25 46 808 OHH (4), set 53 58 TR-808 Open Hi-Hat (4), set 53 59 TR-808 Open Hi-Hat (4), set 281 46 808 OHH (4)
@@ -2448,7 +2579,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `TR909`
               - `TR909Kick` -- 15 TR-909 Kick (4), set 30 36 909 Kick 1 (4), set 50 30 TR-909 Kick 1 (4), set 50 58 TR-909 Kick (4), set 50 59 Dance Kick (2), set 281 35 909 Bass Drum (4), set 282 35 Dance Kick (2)
                 - `ReverseTR909Kick` -- set 58 37 Reverse TR-909 Kick 1 (4)
-                - `RfxDistortionKick` -- set 57 67 Distortion Kick (4)
+                - `RfxDistortionKick` -- set 57 67 Distortion Kick (3)
                 - `TR909CompKick` -- set 26 35 TR-909 Comp Kick (3)
                 - `TR909Kick2` -- 16 Dance Kick (4), set 30 35 909 Kick 2 (4), set 50 31 TR-909 Kick 2 (4)
                   - `TechnoKick2` -- set 11 35 Techno Kick 2 (4), set 50 36 Techno Kick 2 (4)
@@ -2471,9 +2602,9 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `MetalPercussion`
         - `BirdTweet` -- GM 123 Bird Tweet (4)
           - `SfxBirds` -- set 56 78 Birds (4), set 127 102 Birds (4)
-        - `Bonang` [ModeDecays]
-          - `Atarigane` -- set 49 39 Atarigane (2)
-        - `GamelanGong` [ModeDecays] -- set 49 50 Gamelan Gong (4)
+        - `Bonang` [ModeDecays] -- set 52 40 Bonang 1 (4), set 52 41 Bonang 2 (4), set 52 42 Bonang 3 (4), set 52 43 Bonang 4 (4), set 52 44 Bonang 5 (4)
+          - `Atarigane` -- set 49 39 Atarigane (2), set 52 54 Atarigane (2)
+        - `GamelanGong` [ModeDecays] -- set 49 50 Gamelan Gong (4), set 52 25 Gamelan Gong 1 (4), set 52 26 Gamelan Gong 2 (4), set 52 27 Gamelan Gong 3 (4), set 52 28 Gamelan Gong 4 (4), set 52 29 Gamelan Gong 5 (4), set 52 30 Gamelan Gong 6 (4), set 52 31 Gamelan Gong 7 (4), set 52 32 Gamelan Gong 8 (4), set 52 33 Gamelan Gong 9 (4), set 52 34 Gamelan Gong 10 (4)
         - `SteelPan` -- GM 114 Steel Drums (4)
         - `TelephoneRing` [ModeDecays] -- GM 124 Telephone Ring (4)
         - `Triangle` -- 80 Mute Triangle (4), 81 Open Triangle (4), set 9 80 Mute Triangle (4), set 9 81 Open Triangle (4), set 10 80 Mute Triangle (4), set 10 81 Open Triangle (4), set 11 80 Mute Triangle (4), set 11 81 Open Triangle (4), set 26 80 Mute Triangle (4), set 26 81 Open Triangle (4), set 49 91 Mute Triangle (4), set 49 92 Open Triangle (4), set 282 80 Electric Mute Triangle (2), set 282 81 Electric Open Triangle (2)
@@ -2496,7 +2627,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `GatedSnare` -- 109 Power Snare 1 (4), 111 Gated Snare (4), 115 Electric Snare 2 (4), 117 Electric Snare 3 (4), set 16 38 Gated SD (4), set 24 40 Gated SD (4), set 50 70 Power Snare 1 (4), set 50 71 Power Snare 2 (2), set 50 72 Gated Snare (4), set 50 76 Electric Snare 2 (4)
       - `WoodPercussion` [NoisyPercussionMixin] -- GM 115 Woodblock (4)
         - `Castanets` -- 85 Castanets (4), set 48 39 Castanets (4), set 49 27 Castanets (4)
-        - `Claves` -- 75 Claves (4), set 49 40 Hyoushigi (2), set 49 97 Claves (4), set 127 75 Claves (4)
+        - `Claves` -- 75 Claves (4), set 49 40 Hyoushigi (2), set 49 97 Claves (4), set 52 55 Hyoushigi (2), set 127 75 Claves (4)
         - `Guiro` -- 73 Short Guiro (4), 74 Long Guiro (4), set 49 93 Short Guiro (4), set 49 94 Long Guiro (4)
           - `ReverseGuiro` -- set 57 58 Reverse Guiro (4)
         - `WoodBlockHi` -- 76 Hi Wood Block (4), set 49 98 High Wood Block (4)
@@ -2611,9 +2742,9 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `SfxJet` -- set 56 69 Jetplane (4), set 127 93 Jet (4)
           - `SfxLaser` -- set 56 74 Lasergun (3), set 127 98 Lasergun (3)
             - `ReverseSfxLaser` -- set 57 62 Reverse Laser Gun (3)
-            - `RfxAlias` -- set 57 73 Alias (4)
-            - `RfxMissile` -- set 57 86 Missile (4)
-            - `RfxMorse` -- set 58 90 Calculating... (4)
+            - `RfxAlias` -- set 57 73 Alias (3)
+            - `RfxMissile` -- set 57 86 Missile (3)
+            - `RfxMorse` -- set 58 90 Calculating... (3)
             - `RfxSawSweep` -- set 58 91 Saw LFO Saw (3)
             - `RfxSquareTone` -- set 58 89 Emergency ! (3)
             - `RfxTapeStop` -- set 57 84 Tape Stop 1 (3)

@@ -668,46 +668,46 @@ def _gs_sets_rated():
                   'OpenHiHatProperties': (lambda: 4), 'RideCymbalProperties': (lambda: 4),
                   'RideEdgeProperties': (lambda: 4), 'BrushCrashProperties': (lambda: 4),
                   'CrashCymbal1Properties': (lambda: 4), 'CrashCymbal2Properties': (lambda: 4),
-                  # THE RHYTHM FX SETS' VOICES AND EFFECTS (2026-10-25): guesses
-                  # from Roland's names, on our engines (tonelib.Rfx*). Heard
-                  # in examples/rfx_demo.py: group a, Ben: "All sound good"
-                  # (the sonar, its return added: "Sonar sounds good")...
-                  'RfxTechnoThipProperties': (lambda: 4), 'RfxPopDropProperties': (lambda: 4),
-                  'RfxSynDropsProperties': (lambda: 4), 'RfxPipeProperties': (lambda: 4),
-                  'RfxDistortionKickProperties': (lambda: 4), 'RfxSubMarineProperties': (lambda: 4),
-                  'RfxNoiseAttackProperties': (lambda: 4), 'RfxBounceProperties': (lambda: 4),
-                  'RfxDistortionKnockProperties': (lambda: 4),
-                  # ...group b heard, the missile's whistle ended at its boom
-                  # ("Missile sounds good"), Calculating made Morse (ITU-R
-                  # M.1677-1; "Call the morse good"); the rest no verdict of
-                  # their own
-                  'RfxMissileProperties': (lambda: 4), 'RfxMorseProperties': (lambda: 4),
-                  'RfxSwishProperties': (lambda: 3), 'RfxVelocityNoiseProperties': (lambda: 3),
-                  'RfxSparkProperties': (lambda: 3), 'RfxSpaceBirdsProperties': (lambda: 3),
-                  'RfxSpaceWormsProperties': (lambda: 3), 'RfxTapeStopProperties': (lambda: 3),
-                  'RfxTapeStop2Properties': (lambda: 3), 'RfxSquareToneProperties': (lambda: 3),
-                  'RfxSawSweepProperties': (lambda: 3), 'SfxFretSlideProperties': (lambda: 3),
-                  'SfxGrowlProperties': (lambda: 3),
-                  # ...group c heard, Alias a sweep folding about a sampler's
-                  # Nyquist ("Sounds good"), Slappy a snare and a slap (where
-                  # the SC-8850 files it); the rest no verdict of their own
-                  'RfxAliasProperties': (lambda: 4), 'RfxWoodySlapProperties': (lambda: 3),
-                  'RfxIceBlockProperties': (lambda: 3), 'RfxMetallicPercProperties': (lambda: 3),
-                  'RfxModulatedBellProperties': (lambda: 3), 'RfxDigitalTambourineProperties': (lambda: 3),
-                  'RfxStereoClapProperties': (lambda: 3), 'SfxSlapProperties': (lambda: 3),
-                  # ...group d, the voices: throats, a word's vowel moving
-                  # (DRUM_MODES_B), its consonants on keys below the set --
-                  # the count from a CC0 take, the rest from vowel tables;
-                  # Yyoo Dude the noh drummer's kakegoe, as it is described.
-                  # Ben: "The voices and kakegoe sound good"
-                  **{_c: (lambda: 4) for _c in (
-                      'RfxVoiceOneProperties', 'RfxVoiceOneRevProperties', 'RfxVoiceTwoProperties',
-                      'RfxVoiceTwoRevProperties', 'RfxVoiceThreeProperties', 'RfxVoiceThreeRevProperties',
+                  # THE RHYTHM FX SETS' VOICES AND EFFECTS, THE ASIA AND ETHNIC
+                  # SETS' REST (2026-10-25), on the page's scale: a 4 where a
+                  # recording of the instrument is its target, a 3 where it is
+                  # built from how the instrument works and Ben's ear passed it
+                  # (examples/rfx_demo.py a-d, gong, asia1, asia2, ethnic: "All
+                  # sound good", "Sonar sounds good", "Missile sounds good", "Call
+                  # the morse good", "The voices and kakegoe sound good", "The
+                  # gongs sound good", "sounds good to me", "Both sound good")
+                  **{_c: (lambda: 3) for _c in (
+                      'RfxTechnoThipProperties', 'RfxPopDropProperties', 'RfxSynDropsProperties',
+                      'RfxPipeProperties', 'RfxDistortionKickProperties', 'RfxSubMarineProperties',
+                      'RfxNoiseAttackProperties', 'RfxBounceProperties', 'RfxDistortionKnockProperties',
+                      'RfxMissileProperties', 'RfxMorseProperties', 'RfxSwishProperties',
+                      'RfxVelocityNoiseProperties', 'RfxSparkProperties', 'RfxSpaceBirdsProperties',
+                      'RfxSpaceWormsProperties', 'RfxTapeStopProperties', 'RfxTapeStop2Properties',
+                      'RfxSquareToneProperties', 'RfxSawSweepProperties', 'SfxFretSlideProperties',
+                      'SfxGrowlProperties', 'RfxAliasProperties', 'RfxWoodySlapProperties',
+                      'RfxIceBlockProperties', 'RfxMetallicPercProperties', 'RfxModulatedBellProperties',
+                      'RfxDigitalTambourineProperties', 'RfxStereoClapProperties', 'SfxSlapProperties',
                       'RfxVoiceTahProperties', 'RfxVoiceTahRevProperties', 'RfxVoiceOuProperties',
                       'RfxVoiceAuProperties', 'RfxVoiceWheyProperties', 'RfxFrogProperties',
                       'RfxDoubyProperties', 'RfxDoubyRevProperties', 'RfxBaertProperties',
                       'RfxKakegoeProperties', 'RfxKakegoeRevProperties', 'RfxBurstTProperties',
-                      'RfxBurstDProperties', 'RfxHissThProperties')}}
+                      'RfxBurstDProperties', 'RfxHissThProperties',
+                      'RfxHuYinLuoProperties', 'RfxPaiBanProperties', 'RfxOhkawaProperties',
+                      'RfxKotsuzumiLowProperties', 'RfxKotsuzumiHighProperties', 'RfxTaikoRimProperties',
+                      'RfxBukProperties', 'RfxGengariProperties', 'RfxJangguKunProperties',
+                      'RfxJangguCheProperties', 'RfxJingProperties', 'RfxSagatProperties',
+                      'RfxBendirProperties', 'RfxUduLongProperties', 'RfxUduShortProperties',
+                      'RfxUduSlapProperties', 'RfxTalkingDrumProperties', 'RfxBendTalkingDrumProperties',
+                      'RfxDjembeProperties', 'RfxDjembeRimProperties', 'RfxCongaSlideProperties',
+                      'RfxPandieroOpenProperties', 'RfxPandieroMuteProperties', 'RfxTamborimProperties')},
+                  **{_c: (lambda: 4) for _c in (
+                      'RfxVoiceOneProperties', 'RfxVoiceOneRevProperties', 'RfxVoiceTwoProperties',
+                      'RfxVoiceTwoRevProperties', 'RfxVoiceThreeProperties', 'RfxVoiceThreeRevProperties',
+                      'RfxDaluoProperties', 'RfxXiaoluoProperties', 'RfxNaoboProperties', 'RfxBanguProperties',
+                      'RfxGenderKeyProperties', 'BonangProperties', 'GamelanGongProperties',
+                      'RfxTablaTunProperties', 'RfxTablaNaProperties', 'RfxTablaTeProperties',
+                      'RfxTablaGeProperties', 'RfxTablaGeHiProperties', 'RfxReqDumProperties',
+                      'RfxReqTikProperties', 'RfxJingleBellProperties', 'TambourineProperties')}}
     for which, keys in _G.SETS.items():
         k = _G.SET_KIT[which]
         KIT_RATED[k] = {}
@@ -861,7 +861,15 @@ def _set_status(pc, lsb=0):
         mine = [n for n in PM.KITS[k] if n not in hidden]
         own = roland_own_keys(pc, lsb)
         if own:
-            missing = [key for key in own if key not in PM.KITS[k]]
+            # ...a key Roland names for a different sample of the same drum
+            # (Room's "Hand Clap") is covered where our voice for that name IS
+            # Standard's on that key and the set plays Standard's there
+            import percussion_gs as _G
+            def _covered(key, name):
+                sp = _G.VOICE.get(name)
+                return (k not in PM.KIT_ONLY and sp is not None and sp[0] == 'k' and sp[1] == 0
+                        and sp[2] == key)
+            missing = [key for key, name in own.items() if key not in PM.KITS[k] and not _covered(key, name)]
             if missing:
                 how = "silent" if k in PM.KIT_ONLY else "Standard's drum"
                 return ("partial: %d of %d keys (%d %s)" % (len(own) - len(missing), len(own),
@@ -1197,7 +1205,7 @@ def _sfx_var_rated():
     # ...and 125.10 "Calculating" (SC-88 Pro, SC-8850): the Morse keyboard
     # (percussion_map.MORSE_KIT), each key its character. Ben: "Call the
     # morse good"
-    VAR_RATED[(125, 10)] = (4, "MORSE across the keyboard: each key a character of ITU-R M.1677-1 "
+    VAR_RATED[(125, 10)] = (3, "MORSE across the keyboard: each key a character of ITU-R M.1677-1 "
                                "(A-Z, 1-0, its punctuation, from middle C), sent once at 20 words a "
                                "minute on a sidetone at the key's pitch (percussion_map.MORSE_KIT; "
                                "Rhythm FX 2's 90 sends CALC). Ben: \"Call the morse good\"")

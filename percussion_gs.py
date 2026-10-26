@@ -15,6 +15,20 @@ nearest we have rather than the sound (rated 2 in coverage).
 # (map, PC): {key: Roland's name} -- '---' no sound; a key not listed is
 # "same as Standard 1"
 SETS = {
+    ('native', 53): {  # ASIA: EXTENDING the set Tokei plays (its gongs and crash,
+        # percussion_map.KITS[52]); its Chinese opera gongs, the kakegoe -- first,
+        # as other sets play its keys backwards
+        25: 'Gamelan Gong 1', 26: 'Gamelan Gong 2', 27: 'Gamelan Gong 3', 28: 'Gamelan Gong 4', 29: 'Gamelan Gong 5', 30: 'Gamelan Gong 6', 31: 'Gamelan Gong 7', 32: 'Gamelan Gong 8', 33: 'Gamelan Gong 9', 34: 'Gamelan Gong 10',
+        35: 'Gender 1', 36: 'Gender 2', 37: 'Gender 3', 38: 'Gender 4', 39: 'Gender 5', 40: 'Bonang 1', 41: 'Bonang 2', 42: 'Bonang 3', 43: 'Bonang 4', 44: 'Bonang 5',
+        45: 'Rama Cymbal Low', 46: 'Rama Cymbal High', 47: 'Sagat Open', 48: 'Sagat Closed',
+        50: 'Wadaiko', 51: 'Wadaiko Rim', 52: 'Small Taiko', 53: 'Shimedaiko', 54: 'Atarigane',
+        55: 'Hyoushigi', 56: 'Ohkawa', 57: 'High Kotsuzumi', 58: 'Low Kotsuzumi',
+        59: 'Yyoo Dude', 60: 'Buk', 61: 'Buk Rim', 62: 'Gengari p', 63: 'Gengari Mute Low', 64: 'Gengari f',
+        65: 'Gengari Mute High', 66: 'Gengari Samll', 67: 'Jang-Gu Che', 68: 'Jang-Gu Kun', 69: 'Jang-Gu Rim',
+        70: 'Jing p', 71: 'Jing f', 72: 'Jing Mute', 80: 'Shou Luo', 81: 'Bend Gong', 82: 'Hu Yin Luo Low', 83: 'Hu Yin Luo Mid',
+        84: 'Hu Yin Luo Mid 2', 85: 'Hu Yin Luo High', 86: 'Hu Yin Luo High 2', 87: 'Nao Bo',
+        88: 'Xiao Bo', 77: 'Ban Gu', 76: 'Pai Ban', 78: 'Tang Gu', 79: 'Tang Gu Mute',
+    },
     ('native', 2): {  # STANDARD 2
         26: 'Finger Snap', 35: 'Standard 2 Kick 2', 36: 'Standard 2 Kick 1',
         38: 'Standard 2 Snare 1', 39: 'Hand Clap', 40: 'Standard 2 Snare 2', 42: 'Closed Hi-Hat',
@@ -194,10 +208,12 @@ SETS = {
 # where each set is kept (percussion_map.KITS): the native ones at their
 # program, the SC-88 map's own at 128 x 2 + program (_map_set); and whether
 # it stands alone
-SET_KIT = {('native', 2): 1, ('native', 3): 2, ('native', 27): 26, ('native', 10): 9, ('native', 11): 10, ('native', 12): 11, ('native', 50): 49, ('native', 51): 50, ('native', 58): 57, ('native', 59): 58, ('native', 54): 53,
+SET_KIT = {('native', 2): 1, ('native', 3): 2, ('native', 27): 26, ('native', 10): 9, ('native', 11): 10, ('native', 12): 11, ('native', 50): 49, ('native', 51): 50, ('native', 58): 57, ('native', 59): 58, ('native', 54): 53, ('native', 53): 52,
            ('sc88', 27): 2 * 128 + 26}
-SET_NAME = {1: "Standard 2", 2: "Standard 3", 9: "Hip-Hop", 10: "Jungle", 11: "Techno", 49: "Ethnic", 50: "Kick & Snare", 57: "Rhythm FX", 58: "Rhythm FX 2", 53: "Cymbal & Claps", 26: "Dance", 2 * 128 + 26: "Dance"}
-SET_ALONE = {49, 50, 53, 57, 58}
+SET_NAME = {1: "Standard 2", 2: "Standard 3", 9: "Hip-Hop", 10: "Jungle", 11: "Techno", 49: "Ethnic", 50: "Kick & Snare", 57: "Rhythm FX", 58: "Rhythm FX 2", 53: "Cymbal & Claps", 52: "Asia", 26: "Dance", 2 * 128 + 26: "Dance"}
+SET_ALONE = {49, 50, 52, 53, 57, 58}
+# ...and the sets that EXTEND a kit built elsewhere rather than replace it
+SET_EXTEND = {52}
 
 APPROX = 'approx'
 
@@ -339,7 +355,84 @@ VOICE = {
     'Reverse Tambourine 2': ('r', 0, 54, APPROX), 'Reverse Shake Tambourine': ('r', 0, 54, APPROX),
     'Reverse TR-808 Open Hi-Hat': ('r', 25, 46), 'Reverse TR-707 Open Hi-Hat': ('r', 29, 46),
     'Reverse TR-606 Open Hi-Hat': ('r', 28, 46), 'Reverse TR-707 Crash Cymbal': ('r', 29, 49, APPROX),
-    'Reverse Hu Yin Luo': None,
+    # THE CHINESE OPERA GONGS (tonelib.RfxDaluo, RfxHuYinLuo, RfxXiaoluo):
+    # the tiger gongs in three sizes (a "2" a second gong a little higher), the
+    # reverse the middle one's
+    'Shou Luo': ('c', 'RfxXiaoluoProperties', 660.6),
+    'Bend Gong': ('c', 'RfxDaluoProperties', 179.3),
+    'Hu Yin Luo Low': ('c', 'RfxHuYinLuoProperties', 250.0),
+    'Hu Yin Luo Mid': ('c', 'RfxHuYinLuoProperties', 340.0),
+    'Hu Yin Luo Mid 2': ('c', 'RfxHuYinLuoProperties', 360.0),
+    'Hu Yin Luo High': ('c', 'RfxHuYinLuoProperties', 470.0),
+    'Hu Yin Luo High 2': ('c', 'RfxHuYinLuoProperties', 500.0),
+    'Reverse Hu Yin Luo': ('r', 52, 83),
+    # ...and the opera's cymbals and its small drum (the dataset's naobo and
+    # bangu; the small cymbals the pair a fifth up)
+    'Nao Bo': ('c', 'RfxNaoboProperties', 181.9),
+    'Xiao Bo': ('c', 'RfxNaoboProperties', 272.5),
+    'Ban Gu': ('c', 'RfxBanguProperties', 1926.0),
+    # the clapper and the hall drum: no recordings -- a hardwood clack, and
+    # our taiko a mid-sized barrel drum (110 Hz), its mute hand-damped (GATE)
+    'Pai Ban': ('c', 'RfxPaiBanProperties', 1100.0),
+    # THE JAPANESE DRUMS (tonelib.RfxOhkawa, RfxKotsuzumi*, RfxTaikoRim: how
+    # they are made and played); the small taiko ours higher
+    'Ohkawa': ('c', 'RfxOhkawaProperties', 1600.0),
+    'High Kotsuzumi': ('c', 'RfxKotsuzumiHighProperties', 600.0),
+    'Low Kotsuzumi': ('c', 'RfxKotsuzumiLowProperties', 260.0),
+    'Wadaiko Rim': ('c', 'RfxTaikoRimProperties', 1200.0),
+    # THE KOREAN (tonelib.RfxBuk, RfxGengari, RfxJanggu*, RfxJing: guesses from
+    # how they are made and played; "Samll" as Roland prints it). A rim the
+    # taiko rim's click; the gengari's mutes choked (GATE), a semitone either
+    # way, its small one a fourth up; the jing's mute hand-damped
+    # THE JAVANESE AND THE THAI: the gamelan's fitted voices (GS 112.8-10) at
+    # SLENDRO's pitches -- five near-equal steps an octave (240 cents): the ten
+    # gongs from the Ethnic set's 65.4 Hz up two octaves, the gender from
+    # middle C, the bonang's kettles an octave over it; the ceng-ceng a fourth
+    # apart; the sagat open, and closed (GATE)
+    # THE ETHNIC SET'S REST (tonelib.Rfx*: VCSL's takes where it has them, the
+    # rest how they are played); a jingle our tambourine (LAYER)
+    'Jingle Bell': ('c', 'RfxJingleBellProperties', 2540.0),
+    'Req Dum': ('c', 'RfxReqDumProperties', 144.0),
+    'Req Tik': ('c', 'RfxReqTikProperties', 728.0),
+    'Bendir': ('c', 'RfxBendirProperties', 90.0),
+    'Udo Short': ('c', 'RfxUduShortProperties', 180.0),
+    'Udo Long': ('c', 'RfxUduLongProperties', 120.0),
+    'Udo Slap': ('c', 'RfxUduSlapProperties', 600.0),
+    'Talking Drum': ('c', 'RfxTalkingDrumProperties', 220.0),
+    'Bend Talking Drum': ('c', 'RfxBendTalkingDrumProperties', 220.0),
+    'Djembe': ('c', 'RfxDjembeProperties', 330.0),
+    'Djembe Rim': ('c', 'RfxDjembeRimProperties', 700.0),
+    'Conga Slide': ('c', 'RfxCongaSlideProperties', 330.0),
+    'Open Pandiero': ('c', 'RfxPandieroOpenProperties', 150.0),
+    'Mute Pandiero': ('c', 'RfxPandieroMuteProperties', 180.0),
+    'Tamborim': ('c', 'RfxTamborimProperties', 620.0),
+    # THE TABLA (tonelib.RfxTabla*, from mmiron's CC0 bols)
+    'Tabla Te': ('c', 'RfxTablaTeProperties', 125.0),
+    'Tabla Na': ('c', 'RfxTablaNaProperties', 837.0),
+    'Tabla Tun': ('c', 'RfxTablaTunProperties', 314.0),
+    'Tabla Ge': ('c', 'RfxTablaGeProperties', 97.0),
+    'Tabla Ge Hi': ('c', 'RfxTablaGeHiProperties', 174.0),
+    'Buk': ('c', 'RfxBukProperties', 100.0),
+    'Buk Rim': ('c', 'RfxTaikoRimProperties', 1300.0),
+    'Gengari p': ('c', 'RfxGengariProperties', 1100.0),
+    'Gengari f': ('c', 'RfxGengariProperties', 1100.0),
+    'Gengari Mute Low': ('c', 'RfxGengariProperties', 1038.0),
+    'Gengari Mute High': ('c', 'RfxGengariProperties', 1165.0),
+    'Gengari Samll': ('c', 'RfxGengariProperties', 1468.0),
+    'Jang-Gu Che': ('c', 'RfxJangguCheProperties', 480.0),
+    'Jang-Gu Kun': ('c', 'RfxJangguKunProperties', 130.0),
+    'Jang-Gu Rim': ('c', 'RfxTaikoRimProperties', 1500.0),
+    'Jing p': ('c', 'RfxJingProperties', 110.0),
+    'Jing f': ('c', 'RfxJingProperties', 110.0),
+    'Jing Mute': ('c', 'RfxJingProperties', 110.0),
+    'Rama Cymbal Low': ('c', 'CengCengProperties', 440.0),
+    'Rama Cymbal High': ('c', 'CengCengProperties', 587.3),
+    'Sagat Open': ('c', 'RfxSagatProperties', 2400.0),
+    'Sagat Closed': ('c', 'RfxSagatProperties', 2400.0),
+    'Small Taiko': ('c', 'TaikoProperties', 120.0, APPROX),
+    'Shimedaiko': ('c', 'TaikoProperties', 330.0, APPROX),
+    'Tang Gu': ('c', 'TaikoProperties', 110.0, APPROX),
+    'Tang Gu Mute': ('c', 'TaikoProperties', 110.0, APPROX),
     # THE RHYTHM FX SETS' SYNTH HITS (tonelib.Rfx*: guesses from the names, on
     # the TR-808 engine) -- and Rhythm FX's Hoo, the Dance set's High Hoo
     'Techno Thip': ('c', 'RfxTechnoThipProperties', 1800.0),
@@ -376,6 +469,10 @@ VOICE = {
     # the kotsuzumi, makes it a noh drummer's long "yo-o"
     'Reverse Yyoo Dude': ('c', 'RfxKakegoeRevProperties', 1000.0),
     'Yyoo Dude': ('c', 'RfxKakegoeProperties', 1000.0),
+    **{'Gamelan Gong %d' % (_i + 1): ('c', 'GamelanGongProperties', round(65.4 * 2 ** (_i / 5.0), 2))
+   for _i in range(10)},
+    **{'Gender %d' % (_i + 1): ('c', 'RfxGenderKeyProperties', round(261.63 * 2 ** (_i / 5.0), 2)) for _i in range(5)},
+    **{'Bonang %d' % (_i + 1): ('c', 'BonangProperties', round(523.25 * 2 ** (_i / 5.0), 2)) for _i in range(5)},
     # ...and the keys below the set that carry their consonants and Yo Dude's
     # second word
     'consonant t': ('c', 'RfxBurstTProperties', 1000.0),
@@ -625,13 +722,16 @@ for _w, (_c, _ts) in _CONS.items():
 
 # ...AND ITS LENGTH, a one-shot's (percussion_map.KIT_GATE): Small Club's the
 # takes' main burst, ~2.5 s; a choked crash's the hand's, 0.15 s
-GATE = {'Alias': 0.9, 'Swish': 0.35, 'Velocity Noise FX': 0.4, 'Missile': 1.0, 'Tape Stop 1': 1.0, 'Tape Stop 2': 0.6,
+GATE = {'Sagat Closed': 0.07, 'Gengari Mute Low': 0.12, 'Gengari Mute High': 0.12, 'Jing Mute': 0.35, 'Tang Gu Mute': 0.12, 'Alias': 0.9, 'Swish': 0.35, 'Velocity Noise FX': 0.4, 'Missile': 1.0, 'Tape Stop 1': 1.0, 'Tape Stop 2': 0.6,
         'Guitar Slide': 0.3, 'Small Club 1': 2.5, 'Mute Crash Cymbal 1': 0.15, 'Mute Crash Cymbal 2': 0.15}
 
 # ...AND ITS RING (percussion_map.KIT_RING, PERCUSSION_RING's sense): the
 # half-open hats', fitted to DRSKit's semi-open hat against its open one
 # (examples/halfhat_fit.py) -- 2 halfway (in log) to the open hat
 RING = {'Half-Open Hi-Hat 1': 0.0721, 'Half-Open Hi-Hat 2': 0.1344}
+# ...the opera cymbals', fitted (examples/asia_fit.py naobo), the small pair shorter
+RING['Nao Bo'] = 0.56
+RING['Xiao Bo'] = 0.62
 # ...the ride's zones Standard's ride's (PERCUSSION_RING[51])
 RING.update({'Ride Cymbal %s %s' % (h, z): 0.5 for h in ('Low', 'Mid', 'High') for z in ('Inner', 'Edge')})
 # ...AND ITS LEVEL TRIM (percussion_map.KIT_LEVEL): the half-open hats the open
@@ -645,10 +745,24 @@ LEVEL.update({'Guitar Slide': 59.315})
 # ...and Standard's voices borrowed whole theirs (PERCUSSION_LEVEL 28, 54)
 LEVEL.update({'Slappy (slap)': 0.0771, 'Digital Tambourine': 1.1874})
 
+# THE CLASS VOICES LEVELLED to the kit (examples/gs_levels.py)
+LEVEL.update({'High Hoo': 43.9236, 'Low Hoo': 70.5532, 'Hoo': 42.9539, 'Yyoo Dude': 87.9449, 'Reverse Yyoo Dude': 490.848, 'Voice One': 95.1735, 'Reverse Voice One': 241.4161, 'Voice Two': 94.8676, 'Reverse Voice Two': 233.8809, 'Voice Three': 102.6541, 'Reverse Voice Three': 206.488, 'Voice Tah': 130.6951, 'Reverse Voice Tah': 280.3505, 'Voice Ou': 102.0971, 'Voice Au': 103.6908, 'Voice Whey': 74.2745, 'Frog Voice': 80.4819, 'Douby': 114.649, 'Reverse Douby': 247.8117, 'Baert High': 81.688, 'Baert Low': 122.9863, 'Techno Thip': 4.281, 'Pop Drop': 2.4134, 'Syn. Drops': 3.594, 'Pipe': 1.4294, 'Noise Attack': 0.5112, 'Bounce': 2.2248, 'Reverse Bounce': 2.2902, 'Distortion Knock': 5.3581, 'Swish': 4.1329, 'Velocity Noise FX': 3.5333, 'Spark': 3.0143, 'Space Birds': 2.961, 'Tape Stop 1': 4.6273, 'Tape Stop 2': 6.1098, 'Emergency !': 3.7488, 'Calculating...': 4.5691, 'Saw LFO Saw': 3.0384, 'Woody Slap': 1.5678, 'Ice Block': 2.2633, 'Modulated Bell': 0.5649, 'Alias': 3.6555, 'Stereo Noise Clap': 1.6868, 'Flying Monster': 6.0009, 'Bend Gong': 0.595, 'Hu Yin Luo Low': 0.4998, 'Hu Yin Luo Mid': 0.5653, 'Hu Yin Luo Mid 2': 0.5636, 'Hu Yin Luo High': 0.6186, 'Hu Yin Luo High 2': 0.6435, 'Pai Ban': 1.7533, 'Tang Gu Mute': 1.4555, 'Low Kotsuzumi': 1.4294, 'Wadaiko Rim': 2.1837, 'Small Taiko': 1.5138, 'Buk Rim': 1.9684, 'Gengari p': 0.5949, 'Jang-Gu Rim': 2.083, 'Jing p': 0.2654, 'Jing f': 0.5315, 'Jing Mute': 0.5315, 'Gamelan Gong 1': 0.4601, 'Gamelan Gong 2': 0.4982, 'Gamelan Gong 3': 0.5458, 'Gamelan Gong 4': 0.5881, 'Gamelan Gong 5': 0.6136, 'Gamelan Gong 6': 0.6423, 'Gamelan Gong 7': 0.667, 'Gamelan Gong 8': 0.6863, 'Gamelan Gong 9': 0.6697, 'Gamelan Gong 10': 0.6878, 'Bonang 1': 0.4947, 'Bonang 2': 0.5771, 'Bonang 3': 0.6025, 'Bonang 4': 0.6666, 'Bonang 5': 0.53, 'Bendir': 0.5921, 'Udo Short': 1.9571, 'Udo Slap': 1.5506, 'Talking Drum': 1.483, 'Mute Pandiero': 2.0032, 'Tamborim': 1.5554, 'Tabla Te': 1.6667, 'Tabla Ge': 0.604})
+
+# ...a word's consonant at its word's trim: they were balanced together
+for _w, (_c, _ts) in _CONS.items():
+    if _w in LEVEL:
+        LEVEL['%s (%s)' % (_w, _c)] = LEVEL[_w]
+
 # A SOUND OF TWO VOICES (percussion_map._build_gs_sets): its second voice, on
 # a key below the set's own, struck with it
 LAYER = {'Slappy': ((16, 'Slappy (slap)'),)}
 LAYER.update(_VOICE_LAYER)      # the voices' consonants (above)
+# ...the riq's and the pandeiro's jingles (our tambourine, on keys below the
+# Ethnic set's: it has none under 25), 9 dB under the head
+LAYER.update({'Req Dum': ((20, 'Req jingles'),), 'Req Tik': ((21, 'Req jingles'),),
+              'Open Pandiero': ((22, 'Pandiero jingles'),), 'Mute Pandiero': ((23, 'Pandiero jingles'),)})
+VOICE['Req jingles'] = VOICE['Pandiero jingles'] = ('c', 'TambourineProperties', 1000.0)
+LEVEL.update({'Req jingles': round(1.1874 * 10 ** (-9 / 20.0), 4), 'Pandiero jingles': round(1.1874 * 10 ** (-9 / 20.0), 4)})
 # ...a REVERSED voice's pulses each gated to its period (1/f0): a pulse turned
 # round must land somewhere, and ungated a one-shot runs on to its ring
 GATE.update({'Reverse Voice One': round(1 / _ONE['f0'], 4), 'Reverse Voice Two': round(1 / _TWO['f0'], 4),
@@ -658,7 +772,7 @@ GATE.update({'Reverse Voice One': round(1 / _ONE['f0'], 4), 'Reverse Voice Two':
 LEVEL.update({'Mute Crash Cymbal 1': 0.56, 'Mute Crash Cymbal 2': 0.56,
               'Brush Crash Cymbal': round(0.56 * 10 ** (-9 / 20.0), 4)})
 
-# not built yet: Jingle Bell, Wadaiko Rim, Ohkawa, the Kotsuzumi,
+# not built yet: Jingle Bell,
 # Ban Gu, Bend Gong, the udu, Bendir, Req, the tabla, the talking drums,
 # Djembe, Conga Slide, Pandiero, Tamborim, High/Low Hoo, Reverse Bendir, and
 # Rhythm FX's synth effects (Techno Thip ... Flying Monster)

@@ -1977,7 +1977,7 @@ def _build_gs_sets():
     _rev, _rnd = {}, {}
     for which, keys in _GSET.SETS.items():
         k = _GSET.SET_KIT[which]
-        KITS[k] = {}
+        KITS[k] = KITS.get(k, {}) if k in getattr(_GSET, 'SET_EXTEND', ()) else {}
         # A SOUND OF TWO VOICES (percussion_gs.LAYER): its second on a key of
         # its own below the set's (none sounds there), struck with it
         keys = dict(keys)
@@ -2030,10 +2030,6 @@ def _build_gs_sets():
 
 
 _build_gs_sets()
-# ...and the Asia set's KAKEGOE (59, "Yyoo Dude"), beside its kotsuzumi:
-# Rhythm FX 2's 77 is it backwards (percussion_gs)
-KITS[52][59] = ("Yyoo Dude", _T.RfxKakegoeProperties, 1000.0)
-KIT_STROKES.setdefault(52, {}).setdefault("voiced", {})[59] = _GSET.STROKES["Yyoo Dude"]["voiced"]
 
 
 
