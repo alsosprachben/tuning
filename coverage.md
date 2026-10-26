@@ -1579,20 +1579,20 @@ Standard. THE GOAL: every one built.
 | 63 | Reverse Hu Yin Luo | `ReverseRfxHuYinLuo` | **3** | Reverse Hu Yin Luo: set 52's key 83, played backwards |
 | 64 | Reverse TR-707 Crash Cymbal | `ReverseTR909Crash` | **2** | Reverse TR-707 Crash Cymbal: set 29's key 49, played backwards -- the nearest we have, not the sound |
 | 65 | Voice One | `RfxVoiceOne` | **4** | Voice One, the RfxVoiceOne at 1000 Hz |
-| 66 | Reverse Voice One | `RfxVoiceOneRev` | **4** | Reverse Voice One, the RfxVoiceOneRev at 1000 Hz |
+| 66 | Reverse Voice One | `RfxVoiceOne` | **4** | Reverse Voice One, the RfxVoiceOne at 1000 Hz |
 | 67 | Voice Two | `RfxVoiceTwo` | **4** | Voice Two, the RfxVoiceTwo at 1000 Hz |
-| 68 | Reverse Voice Two | `RfxVoiceTwoRev` | **4** | Reverse Voice Two, the RfxVoiceTwoRev at 1000 Hz |
+| 68 | Reverse Voice Two | `RfxVoiceTwo` | **4** | Reverse Voice Two, the RfxVoiceTwo at 1000 Hz |
 | 69 | Voice Three | `RfxVoiceThree` | **4** | Voice Three, the RfxVoiceThree at 1000 Hz |
-| 70 | Reverse Voice Three | `RfxVoiceThreeRev` | **4** | Reverse Voice Three, the RfxVoiceThreeRev at 1000 Hz |
+| 70 | Reverse Voice Three | `RfxVoiceThree` | **4** | Reverse Voice Three, the RfxVoiceThree at 1000 Hz |
 | 71 | Voice Tah | `RfxVoiceTah` | **3** | Voice Tah, the RfxVoiceTah at 1000 Hz |
-| 72 | Reverse Voice Tah | `RfxVoiceTahRev` | **3** | Reverse Voice Tah, the RfxVoiceTahRev at 1000 Hz |
+| 72 | Reverse Voice Tah | `RfxVoiceTah` | **3** | Reverse Voice Tah, the RfxVoiceTah at 1000 Hz |
 | 73 | Voice Ou | `RfxVoiceOu` | **3** | Voice Ou, the RfxVoiceOu at 1000 Hz |
 | 74 | Voice Au | `RfxVoiceAu` | **3** | Voice Au, the RfxVoiceAu at 1000 Hz |
 | 75 | Voice Whey | `RfxVoiceWhey` | **3** | Voice Whey, the RfxVoiceWhey at 1000 Hz |
 | 76 | Frog Voice | `RfxFrog` | **3** | Frog Voice, the RfxFrog at 1000 Hz |
-| 77 | Reverse Yyoo Dude | `RfxKakegoeRev` | **3** | Reverse Yyoo Dude, the RfxKakegoeRev at 1000 Hz |
+| 77 | Reverse Yyoo Dude | `RfxKakegoe` | **3** | Reverse Yyoo Dude, the RfxKakegoe at 1000 Hz |
 | 78 | Douby | `RfxDouby` | **3** | Douby, the RfxDouby at 1000 Hz |
-| 79 | Reverse Douby | `RfxDoubyRev` | **3** | Reverse Douby, the RfxDoubyRev at 1000 Hz |
+| 79 | Reverse Douby | `RfxDouby` | **3** | Reverse Douby, the RfxDouby at 1000 Hz |
 | 80 | Baert High | `RfxBaert` | **3** | Baert High, the RfxBaert at 1000 Hz |
 | 81 | Baert Low | `RfxBaert` | **3** | Baert Low, the RfxBaert at 1000 Hz |
 | 82 | Bounce | `RfxBounce` | **3** | Bounce, the RfxBounce at 600 Hz |
@@ -1685,17 +1685,17 @@ Standard. THE GOAL: every one built.
 | 38 | Reverse Breath Strong | `RfxRevBreathStrong` | **2** | Reverse Breath Strong, the RfxRevBreathStrong at 1000 Hz |
 | 39 | Reverse Woman's Breath | `RfxRevWomanBreath` | **2** | Reverse Woman's Breath, the RfxRevWomanBreath at 1000 Hz |
 | 40 | Reverse Man's Breath | `RfxRevManBreath` | **2** | Reverse Man's Breath, the RfxRevManBreath at 1000 Hz |
-| 41 | Reverse Voice One | `RfxVoiceOneRev` | **4** | Reverse Voice One, the RfxVoiceOneRev at 1000 Hz |
-| 42 | Reverse Voice Two | `RfxVoiceTwoRev` | **4** | Reverse Voice Two, the RfxVoiceTwoRev at 1000 Hz |
-| 43 | Reverse Voice Three | `RfxVoiceThreeRev` | **4** | Reverse Voice Three, the RfxVoiceThreeRev at 1000 Hz |
-| 44 | Reverse Voice Tah | `RfxVoiceTahRev` | **3** | Reverse Voice Tah, the RfxVoiceTahRev at 1000 Hz |
+| 41 | Reverse Voice One | `RfxVoiceOne` | **4** | Reverse Voice One, the RfxVoiceOne at 1000 Hz |
+| 42 | Reverse Voice Two | `RfxVoiceTwo` | **4** | Reverse Voice Two, the RfxVoiceTwo at 1000 Hz |
+| 43 | Reverse Voice Three | `RfxVoiceThree` | **4** | Reverse Voice Three, the RfxVoiceThree at 1000 Hz |
+| 44 | Reverse Voice Tah | `RfxVoiceTah` | **3** | Reverse Voice Tah, the RfxVoiceTah at 1000 Hz |
 | 45 | Reverse Voice Come On | `RfxVoiceComeOn` | **2** | Reverse Voice Come On, the RfxVoiceComeOn at 1000 Hz |
 | 46 | Reverse Voice Kikit | `RfxVoiceKikit` | **2** | Reverse Voice Kikit, the RfxVoiceKikit at 1000 Hz |
 | 47 | Reverse Voice Aou | `RfxVoiceAou` | **2** | Reverse Voice Aou, the RfxVoiceAou at 1000 Hz |
 | 48 | Reverse Voice Oou | `RfxVoiceOou` | **2** | Reverse Voice Oou, the RfxVoiceOou at 1000 Hz |
 | 49 | Reverse Voice Hie 2 | `RfxVoiceHie` | **2** | Reverse Voice Hie 2, the RfxVoiceHie at 1000 Hz |
 | 50 | Reverse Baby Laughing | `RfxBabyLaugh` | **2** | Reverse Baby Laughing, the RfxBabyLaugh at 1000 Hz |
-| 51 | Reverse Yyoo Dude | `RfxKakegoeRev` | **3** | Reverse Yyoo Dude, the RfxKakegoeRev at 1000 Hz |
+| 51 | Reverse Yyoo Dude | `RfxKakegoe` | **3** | Reverse Yyoo Dude, the RfxKakegoe at 1000 Hz |
 | 52 | Reverse Japanese Female Voice Lan | `RfxJpLan` | **2** | Reverse Japanese Female Voice Lan, the RfxJpLan at 1000 Hz |
 | 53 | Reverse Ooue! | `RfxVoiceOoue` | **2** | Reverse Ooue!, the RfxVoiceOoue at 1000 Hz |
 | 54 | Flute Breath 1 | `RfxFluteBreath1` | **2** | Flute Breath 1, the RfxFluteBreath1 at 1000 Hz |
@@ -3016,7 +3016,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-748 classes.
+742 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -3275,15 +3275,13 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `RfxVoice`
                 - `RfxBabyLaugh` -- set 60 52 Baby Laughing (2), set 61 50 Reverse Baby Laughing (2), set 61 71 Baby Laughing (2)
                 - `RfxBaert` -- set 58 80 Baert High (3), set 58 81 Baert Low (3)
-                - `RfxDouby` -- set 58 78 Douby (3)
-                  - `RfxDoubyRev` -- set 58 79 Reverse Douby (3)
+                - `RfxDouby` -- set 58 78 Douby (3), set 58 79 Reverse Douby (3)
                 - `RfxFrog` -- set 58 76 Frog Voice (3), set 60 80 Frog Voice (3), set 61 72 Frog Voice (3)
                 - `RfxJpLah` -- set 61 85 Japanese Female Voice Lah (2)
                 - `RfxJpLan` -- set 61 52 Reverse Japanese Female Voice Lan (2), set 61 86 Japanese Female Voice Lan (2)
                 - `RfxJpWah` -- set 61 87 Japanese Male Voice Wah (2)
                 - `RfxJpWoh` -- set 61 88 Japanese Male Voice Woh (2)
-                - `RfxKakegoe` -- set 52 59 Yyoo Dude (3), set 61 73 Yyoo Dude (3)
-                  - `RfxKakegoeRev` -- set 58 77 Reverse Yyoo Dude (3), set 61 51 Reverse Yyoo Dude (3)
+                - `RfxKakegoe` -- set 52 59 Yyoo Dude (3), set 58 77 Reverse Yyoo Dude (3), set 61 51 Reverse Yyoo Dude (3), set 61 73 Yyoo Dude (3)
                 - `RfxScatAh` -- set 61 77 Jazz Voice Bap (2), set 61 78 Jazz Voice Dat (2)
                 - `RfxScatDow` -- set 61 79 Jazz Voice Dow (2)
                 - `RfxScatThum` -- set 61 76 Jazz Voice Thum (2)
@@ -3292,17 +3290,13 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
                 - `RfxVoiceComeOn` -- set 61 45 Reverse Voice Come On (2), set 61 63 Voice ComeOn (2)
                 - `RfxVoiceHie` -- set 61 49 Reverse Voice Hie 2 (2), set 61 70 Voice Hie (2)
                 - `RfxVoiceKikit` -- set 61 46 Reverse Voice Kikit (2), set 61 64 Voice Kikit (2)
-                - `RfxVoiceOne` -- set 58 65 Voice One (4), set 61 59 Voice One (4)
-                  - `RfxVoiceOneRev` -- set 58 66 Reverse Voice One (4), set 61 41 Reverse Voice One (4)
+                - `RfxVoiceOne` -- set 58 65 Voice One (4), set 58 66 Reverse Voice One (4), set 61 41 Reverse Voice One (4), set 61 59 Voice One (4)
                 - `RfxVoiceOou` -- set 61 48 Reverse Voice Oou (2), set 61 66 Voice Oou (2)
                 - `RfxVoiceOoue` -- set 61 53 Reverse Ooue! (2)
                 - `RfxVoiceOu` -- set 57 81 Voice Ou (3), set 58 73 Voice Ou (3), set 61 74 Voice Ou (3)
-                - `RfxVoiceTah` -- set 58 71 Voice Tah (3), set 61 62 Voice Tah (3)
-                  - `RfxVoiceTahRev` -- set 58 72 Reverse Voice Tah (3), set 61 44 Reverse Voice Tah (3)
-                - `RfxVoiceThree` -- set 58 69 Voice Three (4), set 61 61 Voice Three (4)
-                  - `RfxVoiceThreeRev` -- set 58 70 Reverse Voice Three (4), set 61 43 Reverse Voice Three (4)
-                - `RfxVoiceTwo` -- set 58 67 Voice Two (4), set 61 60 Voice Two (4)
-                  - `RfxVoiceTwoRev` -- set 58 68 Reverse Voice Two (4), set 61 42 Reverse Voice Two (4)
+                - `RfxVoiceTah` -- set 58 71 Voice Tah (3), set 58 72 Reverse Voice Tah (3), set 61 44 Reverse Voice Tah (3), set 61 62 Voice Tah (3)
+                - `RfxVoiceThree` -- set 58 69 Voice Three (4), set 58 70 Reverse Voice Three (4), set 61 43 Reverse Voice Three (4), set 61 61 Voice Three (4)
+                - `RfxVoiceTwo` -- set 58 67 Voice Two (4), set 58 68 Reverse Voice Two (4), set 61 42 Reverse Voice Two (4), set 61 60 Voice Two (4)
                 - `RfxVoiceWhey` -- set 58 75 Voice Whey (3)
               - `SfxDog` -- set 56 76 Dog (4), set 127 100 Dog (4)
               - `SfxGrowl` -- set 56 87 Growl (3), set 57 88 Flying Monster (3)
