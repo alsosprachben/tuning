@@ -24,7 +24,7 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | SC-55 drum sets | 10 | 7 | 70% | | | | | |
 | SC-55mkII tones | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 |
 | SC-88 tones | 418 | 418 | 100% | 285 | 130 | 3 | 0 | 0 |
-| SC-88 drum sets | 14 | 11 | 79% | | | | | |
+| SC-88 drum sets | 14 | 14 | 100% | | | | | |
 | SC-88Pro tones | 774 | 442 | 57% | 298 | 141 | 3 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
 | SC-8850 tones | 1262 | 451 | 36% | 307 | 141 | 3 | 0 | 0 |
@@ -212,7 +212,7 @@ Standard. THE GOAL: every one built.
 | 12 | TECHNO | TECHNO | -- | -- | built: 45 keys of its own | 45 | **4** |
 | 13 | ROOM L/R | -- | -- | -- | built: 21 keys of its own | 15 | **3** |
 | 14 | HOUSE | -- | -- | -- | built: 46 keys of its own | 46 | **4** |
-| 17 | POWER | POWER | POWER | POWER | built: 10 keys of its own | 10 | **4** |
+| 17 | POWER | POWER | POWER | POWER | built: 12 keys of its own | 12 | **4** |
 | 25 | ELECTRONIC | ELECTRONIC | ELECTRONIC | ELECTRONIC | built: 14 keys of its own | 14 | **4** |
 | 26 | TR-808 | TR-808 | TR-808/909 | TR-808 | built: 30 keys of its own | 30 | **4** |
 | 27 | DANCE | DANCE | DANCE | -- | built: 38 keys of its own | 38 | **4** |
@@ -220,7 +220,7 @@ Standard. THE GOAL: every one built.
 | 29 | TR-606 | TR-606 | -- | -- | built: 34 keys of its own | 34 | **4** |
 | 30 | TR-707 | TR-707 | -- | -- | built: 23 keys of its own | 23 | **4** |
 | 31 | TR-909 | TR-909 | -- | -- | built: 23 keys of its own | 23 | **4** |
-| 33 | JAZZ | JAZZ | JAZZ | JAZZ | built: 17 keys of its own | 17 | **4** |
+| 33 | JAZZ | JAZZ | JAZZ | JAZZ | built: 18 keys of its own | 18 | **4** |
 | 34 | JAZZ L/R | -- | -- | -- | built: 22 keys of its own | 20 | **4** |
 | 41 | BRUSH | BRUSH | BRUSH | BRUSH | built: 17 keys of its own | 17 | **4** |
 | 42 | BRUSH 2 | -- | -- | -- | built: 20 keys of its own | 18 | **4** |
@@ -233,7 +233,7 @@ Standard. THE GOAL: every one built.
 | 54 | CYMBAL&CLAPS | CYMBAL&CLAPS | -- | -- | built: 65 keys of its own | 65 | **4** |
 | 55 | GAMELAN 1 | -- | -- | -- | partial: 0 of 53 keys (53 silent) |  |  |
 | 56 | GAMELAN 2 | -- | -- | -- | partial: 0 of 53 keys (53 silent) |  |  |
-| 57 | SFX | SFX | SFX | SFX | built: 74 keys of its own | 74 | **4** |
+| 57 | SFX | SFX | SFX | SFX | built: 75 keys of its own | 75 | **4** |
 | 58 | RHYTHM FX | RHYTHM FX | RHYTHM FX | -- | built: 53 keys of its own | 53 | **4** |
 | 59 | RHYTHM FX 2 | RHYTHM FX 2 | -- | -- | built: 56 keys of its own | 56 | **4** |
 | 60 | RHYTHM FX 3 | -- | -- | -- | partial: 3 of 75 keys (72 silent) | 3 | **4** |
@@ -523,8 +523,10 @@ Standard. THE GOAL: every one built.
 | 38 | Gated SD | `GatedSnare` | **4** | GATED SD: the Electronic set's gated snare, as the manual names it, set against Standard's snare as GeneralUser's Power snare sits against its own |
 | 40 | Power Snare 2 | `GatedSnare` | **2** | Power Snare 2: set 16's key 38 -- the nearest we have, not the sound |
 | 41 | Room Low Tom 2 | `RoomFloorTom` | **4** | the Room set's tom (as program 8) |
+| 42 | Closed Hi-hat3 C | `RoomClosedHat` | **3** | Closed Hi-hat3 C, the RoomClosedHat at 248 Hz |
 | 43 | Room Low Tom 1 | `RoomFloorTom` | **4** | the Room set's tom (as program 8) |
 | 45 | Room Mid Tom 2 | `RoomTom` | **4** | the Room set's tom (as program 8) |
+| 46 | Open Hi-hat3 | `RoomOpenHat` | **3** | Open Hi-hat3, the RoomOpenHat at 248 Hz |
 | 47 | Room Mid Tom 1 | `RoomTom` | **4** | the Room set's tom (as program 8) |
 | 48 | Room Hi Tom 2 | `RoomHighTom` | **4** | the Room set's tom (as program 8) |
 | 50 | Room Hi Tom 1 | `RoomHighTom` | **4** | the Room set's tom (as program 8) |
@@ -767,6 +769,7 @@ Standard. THE GOAL: every one built.
 | 35 | Jazz Kick 2 | `JazzKick2` | **4** | JAZZ KICK 2: the kit's ~47 Hz tuning: its modes measured, the Standard kick's strike (fitted whole to the room-laden takes, the click ran to +53 dB and the trims to +31/-25) |
 | 36 | Jazz Kick 1 | `JazzKick` | **4** | JAZZ KICK 1: the ~71 Hz drum of soneproject's kit in a jazz bar (Freesound 25895, CC0): its modes measured, its strike fitted (examples/perc_fit.py jazz_kick1, 8.4 -> 7.9 dB; the takes a Zoom H1 out in the room, so the score is the room's as much as the drum's). Ben: the Jazz set sounds great |
 | 38 | Jazz Snare 1 | `JazzSnare` | **4** | JAZZ SNARE 1: the kit's bright snare, 251 Hz on top, the wires ~15 dB under the body: modes, strike and noise fitted (7.2 -> 4.3 dB) |
+| 39 | Hand Clap2 | `HandClap` | **2** | Hand Clap2: Standard's key 39 -- the nearest we have, not the sound |
 | 40 | Jazz Snare 2 | `JazzSnare2` | **4** | JAZZ SNARE 2: the same snare darker, 174 Hz on top: its modes measured, Snare 1's strike with the wires 7.5 dB lower (the takes' difference). Also the SC-88 Pro's Standard key 106 |
 | 41 | Jazz Low Tom 2 | `JazzTomLow` | **4** | Jazz Low Tom 2, the JazzTomLow at 90 Hz |
 | 42 | Closed Hi-Hat 2 | `RndClosedHiHat` | **4** | Closed Hi-Hat 2: Standard's key 42, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
@@ -1355,6 +1358,7 @@ Standard. THE GOAL: every one built.
 | 85 | Kitty | `SfxKitty` | **4** | KITTY (past the set, GS 123.4): a cat's meow as a throat (examples/throat_fit.py cat): peridactyloptrix's five meows (Freesound 214759, CC0), one 0.75 s syllable at 640 Hz, clean, near level then falling ~a semitone; LPC formants (on its harmonics, floored wide) with its fundamental and 4.5-5 kHz added, balanced to the meows (0.0 dB in every band). Ben: 'Kitty sounds good' |
 | 86 | Bird 2 | `SfxBirds` | **2** | Bird 2, the SfxBirds at 3322 Hz -- the nearest we have, not the sound |
 | 87 | Growl | `SfxGrowl` | **3** | GROWL (on the SC-88's key 87, GS 123.5): a dog's growl as a throat (throat_fit.py growl): qubodup's (Freesound 122183, CC0), one 0.75 s expression at ~130 Hz, its roughness measured (4.5% jitter: 35% voiced, the take's 39%), its MOUTH opening and closing (formants scaled per pulse, new: fitted to the jaw's path, 300-1000 over 80-300 Hz, 0.9 dB rms), its LIFE a level contour (new: up in 30 ms, a sagging body, a 0.15 s release), balanced to the bursts (0.0 dB). Ben: 'good enough' -- a player's pitch bend gives it its character |
+| 88 | Applause2 | `OrchestraApplause` | **4** | Applause2: Standard's key 88 |
 | 89 | Telephone 1 | `TelephoneRing` | **4** | Telephone 1, the TelephoneRing at 523 Hz |
 | 90 | Telephone 2 | `RfxSquareTone` | **3** | Telephone 2, the RfxSquareTone at 1000 Hz |
 | 91 | Small Club 1 | `SmallClub` | **4** | Small Club 1, the SmallClub at 440 Hz |
@@ -2811,7 +2815,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `ReverseJungleHiHat` -- set 58 56 Reverse Jungle Hi-Hat (4)
             - `ReverseClosedHiHat` -- set 53 33 Reverse Closed Hi-Hat 1 (4), set 57 55 Reverse Closed Hi-Hat (4), set 58 52 Reverse Closed Hi-Hat (4)
             - `RndClosedHiHat` [RandomStrike] -- set 2 42 [RND] Closed Hi-Hat (4), set 24 42 Closed Hi-Hat 2 (4), set 32 42 Closed Hi-Hat 2 (4), set 53 37 Closed Hi-Hat 2 (4)
-            - `RoomClosedHat` [LiveRoom] -- set 8 42 Room Closed Hi-Hat 3 (3), set 9 42 Room Closed Hi-Hat (3), set 13 42 Room Closed Hi-Hat (3), set 62 37 Room Closed Hi-Hat (3)
+            - `RoomClosedHat` [LiveRoom] -- set 8 42 Room Closed Hi-Hat 3 (3), set 9 42 Room Closed Hi-Hat (3), set 13 42 Room Closed Hi-Hat (3), set 16 42 Closed Hi-hat3 C (3), set 62 37 Room Closed Hi-Hat (3)
               - `RndRoomClosedHat` [RandomStrike] -- set 12 42 [RND] Room Closed Hi-Hat (3)
             - `TR707ClosedHat` [RomMetalMixin] -- set 11 42 TR-707 Closed Hi-Hat (4), set 29 42 707 CHH (4), set 29 44 707 CHH (4), set 30 42 707 CHH (4), set 30 44 707 CHH (4), set 53 41 TR-707 Closed Hi-Hat (4), set 62 40 TR-707 Closed Hi-Hat (4)
               - `ReverseTR707ClosedHat` -- set 58 54 Reverse TR-707 Closed Hi-Hat (4)
@@ -2820,7 +2824,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `RndBrushOpenHat` [RandomStrike] -- set 42 46 [RND] Brush Open Hi-Hat (4)
             - `ReverseOpenHiHat` -- set 53 32 Reverse Open Hi-Hat (4), set 57 52 Reverse Open Hi-Hat (4), set 58 61 Reverse Open Hi-Hat (4)
             - `RndOpenHiHat` [RandomStrike] -- set 2 46 [RND] Open Hi-Hat (4), set 24 46 Open Hi-Hat 2 (4), set 32 46 Open Hi-Hat 2 (4), set 53 52 Open Hi-Hat 2 (4), set 53 54 Open Hi-Hat 2 (4)
-            - `RoomOpenHat` [LiveRoom] -- set 8 46 Room Open Hi-Hat 3 (3), set 9 46 Room Open Hi-Hat (3), set 13 46 Room Open Hi-Hat (3), set 62 50 Room Open Hi-Hat (3)
+            - `RoomOpenHat` [LiveRoom] -- set 8 46 Room Open Hi-Hat 3 (3), set 9 46 Room Open Hi-Hat (3), set 13 46 Room Open Hi-Hat (3), set 16 46 Open Hi-hat3 (3), set 62 50 Room Open Hi-Hat (3)
               - `RndRoomOpenHat` [RandomStrike] -- set 12 46 [RND] Room Open Hi-Hat (3)
             - `TR707OpenHat` [RomMetalMixin] -- set 29 46 707 OHH (4), set 53 56 TR-707 Open Hi-Hat (4), set 62 54 TR-707 Open Hi-Hat (4)
               - `ReverseTR707OpenHat` -- set 58 60 Reverse TR-707 Open Hi-Hat (4)
@@ -3154,7 +3158,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `TelephoneRing` [ModeDecays] -- GM 124 Telephone Ring (4), set 56 89 Telephone 1 (4)
         - `Triangle` -- 80 Mute Triangle (4), 81 Open Triangle (4), set 9 80 Electric Mute Triangle (2), set 9 81 Electric Open Triangle (2), set 10 80 Electric Mute Triangle (2), set 10 81 Electric Open Triangle (2), set 11 80 Electric Mute Triangle (2), set 11 81 Electric Open Triangle (2), set 13 80 Electric Mute Triangle (2), set 13 81 Electric Open Triangle (2), set 26 80 Electric Mute Triangle (2), set 26 81 Electric Open Triangle (2), set 49 91 Mute Triangle (4), set 49 92 Open Triangle (4), set 282 80 Electric Mute Triangle (2), set 282 81 Electric Open Triangle (2)
       - `NoiseDrum` [NoisyPercussionMixin]
-        - `HandClap` -- 39 Hand Clap (4), set 1 39 Hand Clap (4), set 12 39 Hand Clap (4), set 33 39 Hand Clap 2 (2), set 53 91 Hand Clap (4), set 53 92 Hand Clap 2 (2), set 53 93 Hand Clap (4), set 53 94 Hand Clap (4), set 53 95 Hand Clap 2 (2), set 62 94 Hand Clap (4), set 62 95 Hand Clap 2 (2), set 127 39 Hand Clap (4)
+        - `HandClap` -- 39 Hand Clap (4), set 1 39 Hand Clap (4), set 12 39 Hand Clap (4), set 32 39 Hand Clap2 (2), set 33 39 Hand Clap 2 (2), set 53 91 Hand Clap (4), set 53 92 Hand Clap 2 (2), set 53 93 Hand Clap (4), set 53 94 Hand Clap (4), set 53 95 Hand Clap 2 (2), set 62 94 Hand Clap (4), set 62 95 Hand Clap 2 (2), set 127 39 Hand Clap (4)
           - `CompClaps2` -- set 26 39 Comp Claps 2 (3), set 62 93 Comp Claps 2 (3)
           - `FingerSnap` -- 26 Finger Snap (4), set 1 26 Finger Snap (4), set 12 26 Finger Snap (4), set 26 26 Finger Snap 2 (4), set 33 26 Finger Snap 2 (4), set 41 26 Finger Snap 2 (4), set 42 26 Finger Snap 2 (4), set 49 25 Finger Snap (4)
           - `HipHopClaps` -- set 9 91 Hip-Hop Claps (3), set 62 90 Hip-Hop Claps (3)
@@ -3277,7 +3281,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `VoiceOohs` [_VocalBody] -- GM 53 Voice Oohs (4)
     - `BreathNoise` [NoisyPercussionMixin] -- GM 121 Breath Noise (4)
       - `Applause` -- GM 126 Applause (4)
-        - `OrchestraApplause` -- 88 Applause 2 (4), set 32 88 Applause (4), set 33 88 Applause (4), set 40 88 Applause (4), set 41 88 Applause (4), set 42 88 Applause (4), set 48 88 Applause (4), set 56 58 Applause (4), set 127 82 Applause (4)
+        - `OrchestraApplause` -- 88 Applause 2 (4), set 32 88 Applause (4), set 33 88 Applause (4), set 40 88 Applause (4), set 41 88 Applause (4), set 42 88 Applause (4), set 48 88 Applause (4), set 56 58 Applause (4), set 56 88 Applause2 (4), set 127 82 Applause (4)
           - `SmallClub` -- set 9 88 Small Club 1 (4), set 10 88 Small Club 1 (4), set 13 88 Small Club 1 (4), set 24 88 Small Club 1 (4), set 25 88 Small Club 1 (4), set 26 88 Small Club 1 (4), set 27 88 Small Club 1 (4), set 28 88 Small Club 1 (4), set 29 88 Small Club 1 (4), set 56 91 Small Club 1 (4), set 56 92 Small Club 2 (4)
             - `RfxApplauseWave` -- set 56 93 Applause Wave (3)
         - `PhonoNoise` -- set 56 29 Phonograph Noise (4)

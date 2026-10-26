@@ -21,7 +21,7 @@ SETS = {
         26: 'Chord Stroke Down', 27: 'Chord Stroke Up', 28: 'Biwa FX', 29: 'Phonograph Noise',
         30: 'Tape Rewind', 31: 'Scratch Push 2', 32: 'Scratch Pull 2', 33: 'Cutting Noise 2 Up',
         34: 'Cutting Noise 2 Down', 35: 'Distortion Guitar Cutting Noise Up',
-        36: 'Distortion Guitar Cutting Noise Down', 37: 'Bass Slide', 38: 'Pick Scrape', 86: 'Bird 2',
+        36: 'Distortion Guitar Cutting Noise Down', 37: 'Bass Slide', 38: 'Pick Scrape', 86: 'Bird 2', 88: 'Applause2',
         89: 'Telephone 1', 90: 'Telephone 2', 91: 'Small Club 1', 92: 'Small Club 2', 93: 'Applause Wave',
         94: 'Eruption', 95: 'Big Shot', 96: 'Percussion Bang'},
     ('native', 41): {  # BRUSH: EXTENDING the set built in percussion_map -- its brushed
@@ -33,7 +33,9 @@ SETS = {
     # THE MACHINE AND KIT SETS' KEYS FROM OTHER SETS (Roland's lists): each
     # EXTENDING the set built in percussion_map -- the CR-78's sounds on the
     # 606 and 808, the Kick 2s, the Hoos and Small Club, the ride's zones
-    ('native', 17): {35: 'Power Kick 2', 40: 'Power Snare 2'},
+    # (its hats the SC-88's "Hi-hat 3" -- the Room set's, Power being Standard's
+    # in a big room, its toms already the Room toms)
+    ('native', 17): {35: 'Power Kick 2', 40: 'Power Snare 2', 42: 'Closed Hi-hat3 C', 46: 'Open Hi-hat3'},
     # ROOM (its toms percussion_map's): its own kick and snare -- Standard's in
     # the live room (tonelib.MondoKickProperties, RoomSnareProperties)
     ('native', 9): {35: 'Room Kick 2', 36: 'Room Kick 1', 38: 'Room Snare 1', 40: 'Room Snare 2'},
@@ -43,7 +45,7 @@ SETS = {
     ('native', 29): {35: 'CR-78 Kick 2', 37: 'CR-78 Rim Shot', 54: 'CR-78 Tambourine', 56: 'CR-78 Cowbell', 59: 'Ride Cymbal Edge', 60: 'CR-78 High Bongo', 61: 'CR-78 Low Bongo', 70: 'CR-78 Maracas', 74: 'CR-78 Guiro', 75: 'CR-78 Claves', 78: 'High Hoo', 79: 'Low Hoo', 80: 'CR-78 Metalic Beat 1', 81: 'CR-78 Metalic Beat 2', 88: 'Small Club 1'},
     ('native', 30): {59: 'Ride Cymbal Edge', 78: 'High Hoo', 79: 'Low Hoo', 88: 'Small Club 1'},
     ('native', 31): {59: 'Ride Cymbal Edge', 74: 'CR-78 Guiro', 78: 'High Hoo', 79: 'Low Hoo'},
-    ('native', 33): {42: 'Closed Hi-Hat 2', 46: 'Open Hi-Hat 2', 51: 'Ride Cymbal Inner', 59: 'Ride Cymbal Edge', 88: 'Applause'},
+    ('native', 33): {39: 'Hand Clap2', 42: 'Closed Hi-Hat 2', 46: 'Open Hi-Hat 2', 51: 'Ride Cymbal Inner', 59: 'Ride Cymbal Edge', 88: 'Applause'},
     ('native', 53): {  # ASIA: EXTENDING the set Tokei plays (its gongs and crash,
         # percussion_map.KITS[52]); its Chinese opera gongs, the kakegoe -- first,
         # as other sets play its keys backwards
@@ -311,6 +313,9 @@ VOICE = {
     # the Jungle set's (tonelib.JungleBreak: breaks sped up), and its others
     'Jungle Hi-Hat': ('c', 'JungleHiHatProperties', 312.9),
     'Hand Clap 2': ('k', 0, 39, APPROX), 'TR-606 Closed Hi-Hat': ('k', 28, 42),
+    # the SC-88 map's own names (its Power, Jazz and SFX sets)
+    'Closed Hi-hat3 C': ('c', 'RoomClosedHatProperties', 248.4), 'Open Hi-hat3': ('c', 'RoomOpenHatProperties', 248.4),
+    'Hand Clap2': ('k', 0, 39, APPROX), 'Applause2': ('k', 0, 88),
     'TR-606 Open Hi-Hat': ('k', 28, 46), 'TR-808 Crash Cymbal': ('k', 25, 49),
     'Standard 3 Kick 2': ('k', 0, 35, APPROX), 'Standard 3 Snare 2': ('k', 0, 40, APPROX),
     # Standard 3's [RND] voices: Standard's own, each strike varied (tonelib.RandomStrike)
@@ -892,11 +897,14 @@ LEVEL.update({'Slappy (slap)': 0.0771, 'Digital Tambourine': 1.1874})
 STANDARD_OF = {'Room Kick 1': 36, 'Room Kick 2': 35, 'Room Snare 1': 38, 'Room Snare 2': 40,
                'Room Closed Hi-Hat': 42, 'Room Closed Hi-Hat 3': 42, 'Room Open Hi-Hat': 46,
                'Room Open Hi-Hat 3': 46, 'Room Crash Cymbal': 49, 'Room Ride Cymbal': 51, 'Room Ride Bell': 53,
-               '[L] Standard Kick 1': 36, '[L] Standard Kick 2': 35, '[L] Room Kick 1': 36, '[L] Room Kick 2': 35}
+               'Closed Hi-hat3 C': 42, 'Open Hi-hat3': 46, '[L] Standard Kick 1': 36, '[L] Standard Kick 2': 35, '[L] Room Kick 1': 36, '[L] Room Kick 2': 35}
 
 
 # THE CLASS VOICES LEVELLED to the kit (examples/gs_levels.py)
 LEVEL.update({'High Hoo': 43.9236, 'Low Hoo': 70.5532, 'Hoo': 42.9539, 'Yyoo Dude': 87.9449, 'Reverse Yyoo Dude': 490.848, 'Voice One': 95.1735, 'Reverse Voice One': 241.4161, 'Voice Two': 94.8676, 'Reverse Voice Two': 233.8809, 'Voice Three': 102.6541, 'Reverse Voice Three': 206.488, 'Voice Tah': 130.6951, 'Reverse Voice Tah': 280.3505, 'Voice Ou': 102.0971, 'Voice Au': 103.6908, 'Voice Whey': 74.2745, 'Frog Voice': 80.4819, 'Douby': 114.649, 'Reverse Douby': 247.8117, 'Baert High': 81.688, 'Baert Low': 122.9863, 'Techno Thip': 4.281, 'Pop Drop': 2.4134, 'Syn. Drops': 3.594, 'Pipe': 1.4294, 'Noise Attack': 0.5112, 'Bounce': 2.2248, 'Reverse Bounce': 2.2902, 'Distortion Knock': 5.3581, 'Swish': 4.1329, 'Velocity Noise FX': 3.5333, 'Spark': 3.0143, 'Space Birds': 2.961, 'Tape Stop 1': 4.6273, 'Tape Stop 2': 6.1098, 'Emergency !': 3.7488, 'Calculating...': 4.5691, 'Saw LFO Saw': 3.0384, 'Woody Slap': 1.5678, 'Ice Block': 2.2633, 'Modulated Bell': 0.5649, 'Alias': 3.6555, 'Stereo Noise Clap': 1.6868, 'Flying Monster': 6.0009, 'Bend Gong': 0.595, 'Hu Yin Luo Low': 0.4998, 'Hu Yin Luo Mid': 0.5653, 'Hu Yin Luo Mid 2': 0.5636, 'Hu Yin Luo High': 0.6186, 'Hu Yin Luo High 2': 0.6435, 'Pai Ban': 1.7533, 'Tang Gu Mute': 1.4555, 'Low Kotsuzumi': 1.4294, 'Wadaiko Rim': 2.1837, 'Small Taiko': 1.5138, 'Buk Rim': 1.9684, 'Gengari p': 0.5949, 'Jang-Gu Rim': 2.083, 'Jing p': 0.2654, 'Jing f': 0.5315, 'Jing Mute': 0.5315, 'Gamelan Gong 1': 0.4601, 'Gamelan Gong 2': 0.4982, 'Gamelan Gong 3': 0.5458, 'Gamelan Gong 4': 0.5881, 'Gamelan Gong 5': 0.6136, 'Gamelan Gong 6': 0.6423, 'Gamelan Gong 7': 0.667, 'Gamelan Gong 8': 0.6863, 'Gamelan Gong 9': 0.6697, 'Gamelan Gong 10': 0.6878, 'Bonang 1': 0.4947, 'Bonang 2': 0.5771, 'Bonang 3': 0.6025, 'Bonang 4': 0.6666, 'Bonang 5': 0.53, 'Bendir': 0.5921, 'Udo Short': 1.9571, 'Udo Slap': 1.5506, 'Talking Drum': 1.483, 'Mute Pandiero': 2.0032, 'Tamborim': 1.5554, 'Tabla Te': 1.6667, 'Tabla Ge': 0.604, 'MC-500 Beep 1': 3.9281, 'MC-500 Beep 2': 3.1058, 'Guitar Wah': 2.0689, 'Biwa FX': 2.5052, 'Phonograph Noise': 7.212, 'Tape Rewind': 3.3312, 'Bass Slide': 49.3266, 'Pick Scrape': 2.0225, 'Bird 2': 0.6743, 'Telephone 1': 0.0748, 'Telephone 2': 3.0982, 'Eruption': 1.6774, 'Big Shot': 4.2851, 'LoFi Snare 2': 0.3231, 'LoFi Snare Rim': 1.5021, 'Hip-Hop Claps': 2.4116, 'HipHop Snare 1': 0.3376, 'HipHop Snare 2': 0.2828, 'R&B Claps': 1.8039, 'Jungle Snare': 0.3995, 'Jungle Snare Rim': 1.658, 'Jungle Crash': 0.8649, 'Jungle Shaker': 1.8687, 'Jungle Snare Roll': 0.3528, 'Techno Snare': 1.5174, 'TR-909 Claps': 1.6031, 'Comp Claps 2': 1.4772, 'Hip-Hop Kick 1': 0.5382, 'Hip-Hop Kick 2': 0.6671, 'Rap Snare': 0.3376, 'Hip-Hop Snare 2': 0.2787, 'Jungle Kick 1': 0.6524, 'Jungle Kick 2': 0.5588, 'Jungle Snare 1': 0.3995, 'Jungle Snare 2': 0.3782, 'Jungle Hi-Hat': 10.4855, 'Techno Snare 1': 1.5017, 'Techno TR-808 Kick': 0.6877, 'Techno TR-606 Snare 2': 0.5233, 'Jazz Mid Tom 1': 1.4206, 'Room Kick 1': 0.3214, 'Room Kick 2': 0.3308, 'Room Snare 1': 0.3542, 'Room Snare 2': 0.3215, 'Room Closed Hi-Hat 3': 0.3422, 'Room Open Hi-Hat 3': 0.3215, 'Room Crash Cymbal': 0.3906, 'Room Ride Cymbal': 0.4399, 'Room Ride Bell': 0.4445})
+# ...the SC-88 map's names for the Room hats, at the Room hats' levels
+LEVEL['Closed Hi-hat3 C'] = LEVEL['Room Closed Hi-Hat 3']
+LEVEL['Open Hi-hat3'] = LEVEL['Room Open Hi-Hat 3']
 
 # ...a word's consonant at its word's trim: they were balanced together
 for _w, (_c, _ts) in _CONS.items():
