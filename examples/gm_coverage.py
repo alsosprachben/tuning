@@ -1397,6 +1397,12 @@ def _sc88_var_rated():
                                         "peak left), with %s changed" % (", ".join(
                                             sorted(k for k in pan if pan[k] != __import__("sc88_synth").TB303.get(k)))
                                             or "nothing"))
+            if nm in ("Syn.Bass101", "Reso SHBass", "SH101Bass 1", "SH101Bass 2", "SH101 Bass 3", "SH-101 Saw"):
+                VAR_RATED[(p, b)] = (3, "SC-88 map: the SH-101 as the Juno-6's fitted voice without its chorus "
+                                        "(sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note "
+                                        "exists under CC0 -- the refs are a bassline with its knobs moving and "
+                                        "resonance sweeps), one VCO, with %s changed" % ", ".join(
+                                            sorted(k for k in pan if pan[k] != __import__("sc88_synth").SH101.get(k))))
             if nm.startswith(("JP", "JPMG")):
                 VAR_RATED[(p, b)] = (3, "SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, "
                                         "examples/sepways_fit.py), one pass, with %s changed. Ben, on "

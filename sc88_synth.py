@@ -126,6 +126,20 @@ def tb(**changes):
     return dict(TB303, **changes)
 
 
+# THE SH-101: the Juno-6's fitted voice (JUNO) without its chorus -- the
+# SH-101 is the same Roland voice, one VCO (its pulse, OSC 1; its saw, OSC 2;
+# the square SUB) into the same IR3109 4-pole. No clean SH-101 note exists
+# under CC0 (examples/sh101 refs: a bassline with its knobs moving, and
+# resonance sweeps); the sweeps say what the engine's contour already does
+# (exponential in octaves, the self-oscillation fading ~17 dB/s). Held as a
+# bass plays: the amplifier at 0.8 after its decay.
+SH101 = dict({k: v for k, v in JUNO.items() if k != "insertion_efx"}, a_decay=0.6, a_sustain=0.8)
+
+
+def sh(**changes):
+    return dict(SH101, **changes)
+
+
 SC88_SYNTH = {
     # --- the Jupiter-8's (JUPITER: fitted on the record) -------------------
     # its clav: a narrow pulse, the filter snapping shut, a short body
@@ -176,8 +190,8 @@ SC88_SYNTH = {
               dict(osc1_wave=0.45, osc2_level=0.0, sub_level=0.4, cutoff=0.50, resonance=0.2,
                    eg_amount=0.6, a_attack=0.09, glide=0.25)),
     (38, 1): ("Syn.Bass101", "MoogSynthBass1",
-              dict(osc1_wave=SAW, osc2_level=0.0, sub_level=0.6, sub_wave=0.3, cutoff=0.52,
-                   resonance=0.15, f_decay=0.22, f_sustain=0.3)),
+              sh(osc1_level=0.0, osc2_level=1.0, sub_level=0.6, cutoff=0.52, resonance=0.15, eg_amount=0.75,
+                 f_attack=0.0, f_decay=0.22, f_sustain=0.3)),
     (38, 9): ("TB303 Bass", "MoogSynthBass1",
               dict(osc1_wave=SAW, osc2_level=0.0, sub_level=0.0, cutoff=0.45, resonance=0.7,
                    eg_amount=0.85, f_decay=0.2, f_sustain=0.0, res_bass=False, glide=0.1)),
@@ -185,8 +199,8 @@ SC88_SYNTH = {
                dict(osc1_wave=SQ, osc2_level=0.0, cutoff=0.5, resonance=0.55, eg_amount=0.8,
                     f_decay=0.12, f_sustain=0.1)),
     (38, 16): ("Reso SHBass", "MoogSynthBass1",
-               dict(osc1_wave=SAW, osc2_level=0.0, sub_level=0.4, cutoff=0.5, resonance=0.6,
-                    eg_amount=0.75, f_decay=0.3, f_sustain=0.2)),
+               sh(osc1_level=0.0, osc2_level=1.0, sub_level=0.4, cutoff=0.5, resonance=0.6, eg_amount=0.75,
+                  f_attack=0.0, f_decay=0.3, f_sustain=0.2)),
     (39, 1): ("Syn.Bass201", "MoogSynthBass2",
               dict(osc1_wave=0.62, sub_level=0.6, cutoff=0.52, resonance=0.2, f_decay=0.25, f_sustain=0.4)),
     (39, 2): ("ModularBass", "MoogSynthBass2",
@@ -202,9 +216,15 @@ SC88_SYNTH = {
                dict(osc1_wave=0.42, sub_level=0.6, cutoff=0.45, resonance=0.35, eg_amount=0.7,
                     f_decay=0.35, f_sustain=0.4, glide=0.05)),
     (39, 17): ("SH101Bass 1", "MoogSynthBass2",
-               dict(osc1_wave=0.75, sub_level=0.5, cutoff=0.5, resonance=0.25, f_decay=0.25, f_sustain=0.3)),
+               sh(osc1_wave=0.75, osc1_level=0.8, osc2_level=0.0, sub_level=0.5, cutoff=0.5, resonance=0.25,
+                  eg_amount=0.75, f_attack=0.0, f_decay=0.25, f_sustain=0.3)),
     (39, 18): ("SH101Bass 2", "MoogSynthBass2",
-               dict(osc1_wave=SAW, sub_level=0.5, cutoff=0.47, resonance=0.5, f_decay=0.18, f_sustain=0.15)),
+               sh(osc1_level=0.0, osc2_level=1.0, sub_level=0.5, cutoff=0.47, resonance=0.5, eg_amount=0.75,
+                  f_attack=0.0, f_decay=0.18, f_sustain=0.15)),
+    # the square and the saw together over the sub, a snappier contour
+    (39, 20): ("SH101 Bass 3", "MoogSynthBass2",
+               sh(osc1_wave=SQ, osc1_level=0.6, osc2_level=0.6, sub_level=0.4, cutoff=0.45, resonance=0.35,
+                  eg_amount=0.8, f_attack=0.0, f_decay=0.15, f_sustain=0.1, a_decay=0.4, a_sustain=0.4)),
     (39, 19): ("Smooth Bass", "MoogSynthBass2",
                dict(osc1_wave=TRI, sub_level=0.5, cutoff=0.5, resonance=0.0, eg_amount=0.6,
                     a_attack=0.05, f_sustain=0.7)),
@@ -353,8 +373,8 @@ SC88_SYNTH = {
                     resonance=0.15, f_decay=0.3, f_sustain=0.5)),
     # an SH-101: one saw and its square sub, a snappy resonant contour (SuwaFF, 1216)
     (81, 29): ("SH-101 Saw", "MoogSawLead",
-               dict(osc2_level=0.0, sub_level=0.4, cutoff=0.62, resonance=0.3, eg_amount=0.75,
-                    f_decay=0.25, f_sustain=0.35)),
+               sh(osc1_level=0.0, osc2_level=1.0, sub_level=0.4, cutoff=0.62, resonance=0.3, eg_amount=0.75,
+                  f_attack=0.0, f_decay=0.25, f_sustain=0.35, a_sustain=1.0, a_release=0.2)),
     # a Juno's saw and pulse, the pulse's width swept by the LFO, detuned (SuwaFF, storm_pro: 2177)
     (87, 3): ("JUNO Rave", "MoogBassLead",
               dict(osc1_wave=SAW, osc2_wave=SQ, osc2_octave=8, osc2_freq=c(18), sub_level=0.3,

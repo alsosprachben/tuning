@@ -25,9 +25,9 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | SC-55mkII tones | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 |
 | SC-88 tones | 418 | 418 | 100% | 285 | 130 | 3 | 0 | 0 |
 | SC-88 drum sets | 14 | 14 | 100% | | | | | |
-| SC-88Pro tones | 774 | 485 | 63% | 298 | 184 | 3 | 0 | 0 |
+| SC-88Pro tones | 774 | 486 | 63% | 298 | 185 | 3 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
-| SC-8850 tones | 1262 | 513 | 41% | 315 | 195 | 3 | 0 | 0 |
+| SC-8850 tones | 1262 | 514 | 41% | 315 | 196 | 3 | 0 | 0 |
 | SC-8850 drum sets | 37 | 30 | 81% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
@@ -2125,7 +2125,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 227 of the SC-55's 227 are built,
+under a program (SC-55 owner's manual p.68). 228 of the SC-55's 228 are built,
 and 161 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -2233,7 +2233,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 35.4 | SC-55 | SynFretless | `Sc88_35_4` | **3** | SC-88 map: a Moog panel, the SynthBass1's with a_attack, cutoff, eg_amount, glide, osc1_wave, osc2_level, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 35.5 | SC-88 | Mr.Smooth | `FretlessBass_sc88_35_5` | **4** | SC-88 map: GM 35 Fretless Bass with lowpass_hz=455.7, lowpass_order=3.605, tonal_dampening=2.315 |
 | 36.8 | SC-88 | Reso Slap | `SlapBass_sc88_36_8` | **4** | SC-88 map: GM 36 Slap Bass 1 with tonal_dampening=1.4 |
-| 38.1 | SC-55 | Syn.Bass101 | `Sc88_38_1` | **3** | SC-88 map: a Moog panel, the SynthBass1's with cutoff, f_decay, f_sustain, osc1_wave, osc2_level, resonance, sub_level, sub_wave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 38.1 | SC-55 | Syn.Bass101 | `Sc88_38_1` | **3** | SC-88 map: the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps), one VCO, with cutoff, eg_amount, f_attack, f_decay, f_sustain, osc1_level, resonance, sub_level changed |
 | 38.3 | SC-55 | JP-4 Bass | `Sc88_38_3` | **3** | SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, examples/sepways_fit.py), one pass, with a_decay, a_release, a_sustain, cutoff, eg_amount, f_attack, f_decay, f_sustain, osc2_level, resonance changed. Ben, on examples/jp8_demo.py: "Sounds great" |
 | 38.4 | SC-55 | JP-8 Bass | `Sc88_38_4` | **3** | SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, examples/sepways_fit.py), one pass, with a_decay, a_release, a_sustain, cutoff, eg_amount, f_attack, f_decay, f_sustain, osc2_octave changed. Ben, on examples/jp8_demo.py: "Sounds great" |
 | 38.6 | SC-55 | JPMG Bass | `Sc88_38_6` | **3** | SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, examples/sepways_fit.py), one pass, with a_decay, a_release, a_sustain, cutoff, eg_amount, f_attack, f_decay, f_sustain, osc2_octave, sub_level changed. Ben, on examples/jp8_demo.py: "Sounds great" |
@@ -2245,7 +2245,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 38.13 | SC-55 | TB303 Saw Bs | `Sc88_38_13` | **3** | SC-88 map: the TB-303 fitted to a TB-303's note (sc88_synth.TB303, examples/tb303_fit.py: DJMini's, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left), with cutoff, osc1_wave, resonance changed |
 | 38.14 | SC-55 | Rubber303 Bs | `Sc88_38_14` | **3** | SC-88 map: the TB-303 fitted to a TB-303's note (sc88_synth.TB303, examples/tb303_fit.py: DJMini's, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left), with cutoff, eg_amount, f_decay, resonance changed |
 | 38.15 | SC-55 | Reso 303 Bs | `Sc88_38_15` | **3** | SC-88 map: the TB-303 fitted to a TB-303's note (sc88_synth.TB303, examples/tb303_fit.py: DJMini's, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left), with eg_amount, resonance changed |
-| 38.16 | SC-55 | Reso SHBass | `Sc88_38_16` | **3** | SC-88 map: a Moog panel, the SynthBass1's with cutoff, eg_amount, f_decay, f_sustain, osc1_wave, osc2_level, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 38.16 | SC-55 | Reso SHBass | `Sc88_38_16` | **3** | SC-88 map: the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps), one VCO, with cutoff, eg_amount, f_attack, f_decay, f_sustain, osc1_level, resonance, sub_level changed |
 | 38.17 | SC-55 | 303 Sqr Bs | `Sc88_38_17` | **3** | SC-88 map: the TB-303 fitted to a TB-303's note (sc88_synth.TB303, examples/tb303_fit.py: DJMini's, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left), with osc1_wave changed |
 | 38.18 | SC-55 | TB303 DistBs | `Sc88_38_18` | **3** | SC-88 map: the TB-303 fitted to a TB-303's note (sc88_synth.TB303, examples/tb303_fit.py: DJMini's, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left), with insertion_efx changed |
 | 38.19 | SC-55 | Clavi Bass | `Sc8850_38_19` | **3** | SC-8850 map: a Moog panel, the SynthBass1's with a_decay, a_sustain, cutoff, eg_amount, f_decay, f_sustain, osc1_wave, osc2_level, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/gm2_last_demo.py: "Sounds great" |
@@ -2259,9 +2259,10 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 39.8 | SC-55 | Synth Bass 4 | `MoogSynthBass4` | **3** | the talking bass on the Moog (MoogSynthBass4): both GS sets' takes hold a peak h17-23 10-16 dB over its neighbours -- a square and the SUB through a resonant ladder left open, the cutoff tracking the key. Ben: 'great' |
 | 39.9 | SC-55 | X Wire Bass | `Sc88_39_9` | **3** | SC-88 map: a Moog panel, the SynthBass2's with cutoff, eg_amount, osc1_level, osc2_freq, osc2_level, osc2_wave, sub_level, sync changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 39.16 | SC-55 | Rubber Bass | `Sc88_39_16` | **3** | SC-88 map: a Moog panel, the SynthBass2's with cutoff, eg_amount, f_decay, f_sustain, glide, osc1_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
-| 39.17 | SC-55 | SH101Bass 1 | `Sc88_39_17` | **3** | SC-88 map: a Moog panel, the SynthBass2's with cutoff, f_decay, f_sustain, osc1_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
-| 39.18 | SC-55 | SH101Bass 2 | `Sc88_39_18` | **3** | SC-88 map: a Moog panel, the SynthBass2's with cutoff, f_decay, f_sustain, osc1_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 39.17 | SC-55 | SH101Bass 1 | `Sc88_39_17` | **3** | SC-88 map: the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps), one VCO, with cutoff, eg_amount, f_attack, f_decay, f_sustain, osc1_level, osc1_wave, osc2_level, resonance, sub_level changed |
+| 39.18 | SC-55 | SH101Bass 2 | `Sc88_39_18` | **3** | SC-88 map: the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps), one VCO, with cutoff, eg_amount, f_attack, f_decay, f_sustain, osc1_level, resonance, sub_level changed |
 | 39.19 | SC-55 | Smooth Bass | `Sc88_39_19` | **3** | SC-88 map: a Moog panel, the SynthBass2's with a_attack, cutoff, eg_amount, f_sustain, osc1_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 39.20 | SC-55 | SH101 Bass 3 | `Sc88_39_20` | **3** | SC-88 map: the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps), one VCO, with a_decay, a_sustain, cutoff, eg_amount, f_attack, f_decay, f_sustain, osc1_level, osc1_wave, osc2_level, resonance, sub_level changed |
 | 39.21 | SC-55 | Spike Bass | `Sc88_39_21` | **3** | SC-88 map: a Moog panel, the SynthBass2's with cutoff, eg_amount, f_decay, f_sustain, osc1_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 39.25 | SC-55 | MG 5th Bass | `Sc88_39_25` | **3** | SC-88 map: the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG, examples/minimoog_fit.py: Garzul's, CC0, C1 and C4, 3 dB rms rendered), with cutoff, osc2_freq, osc2_octave changed. Ben, on examples/mg_demo.py: "They sound great" |
 | 39.27 | SC-55 | WowMG Bass | `Sc88_39_27` | **3** | SC-88 map: the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG, examples/minimoog_fit.py: Garzul's, CC0, C1 and C4, 3 dB rms rendered), with cutoff, eg_amount, f_attack, f_decay, f_sustain, res_bass, resonance changed. Ben, on examples/mg_demo.py: "They sound great" |
@@ -2365,7 +2366,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 81.25 | SC-55 | MG Saw 2 | `Sc88_81_25` | **3** | SC-88 map: the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG, examples/minimoog_fit.py: Garzul's, CC0, C1 and C4, 3 dB rms rendered), with cutoff, eg_amount, f_decay, f_sustain, osc1_wave, osc2_wave changed. Ben, on examples/mg_demo.py: "They sound great" |
 | 81.26 | SC-55 | OB Saw 1 | `Sc88_81_26` | **3** | SC-88 map: the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM, examples/obx_fit.py: Analogist's jungle pad, CC0, ten four-note chords, 3.2 dB rms rendered), with cutoff, osc2_freq, osc2_wave changed |
 | 81.27 | SC-55 | OB Saw 2 | `Sc88_81_27` | **3** | SC-88 map: the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM, examples/obx_fit.py: Analogist's jungle pad, CC0, ten four-note chords, 3.2 dB rms rendered), with cutoff, eg_amount, f_decay, f_sustain, osc2_freq, osc2_wave changed |
-| 81.29 | SC-55 | SH-101 Saw | `Sc88_81_29` | **3** | SC-88 map: a Moog panel, the SawLead's with cutoff, eg_amount, f_decay, f_sustain, osc2_level, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 81.29 | SC-55 | SH-101 Saw | `Sc88_81_29` | **3** | SC-88 map: the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps), one VCO, with a_sustain, cutoff, eg_amount, f_attack, f_decay, f_sustain, osc1_level, resonance, sub_level changed |
 | 81.31 | SC-55 | MG Saw Lead | `Sc88_81_31` | **3** | SC-88 map: the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG, examples/minimoog_fit.py: Garzul's, CC0, C1 and C4, 3 dB rms rendered), with cutoff, glide, osc1_wave, osc2_freq, osc2_octave, osc2_wave, resonance changed. Ben, on examples/mg_demo.py: "They sound great" |
 | 81.32 | SC-55 | OB Saw Lead | `Sc88_81_32` | **3** | SC-88 map: the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM, examples/obx_fit.py: Analogist's jungle pad, CC0, ten four-note chords, 3.2 dB rms rendered), with cutoff, glide, osc2_freq, osc2_wave, res_bass, resonance changed |
 | 81.34 | SC-55 | MG unison | `Sc88_81_34` | **3** | SC-88 map: the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG, examples/minimoog_fit.py: Garzul's, CC0, C1 and C4, 3 dB rms rendered), with cutoff, osc1_wave, osc2_freq, osc2_octave, osc2_wave, sub_level changed. Ben, on examples/mg_demo.py: "They sound great" |
@@ -2676,7 +2677,7 @@ Each Sound Canvas's map of tones (the SC-55's own owner's manual p.68; the SC-55
 SC-88 and SC-88Pro maps from the SC-88Pro manual's list), against ours. A tone is built
 when we play it, as a program or a variation, and rated as the tables above rate it.
 A later map can put another tone under a number we built; that one is not counted.
-The maps' totals are in the Summary at the top; still to build: SC-55 0, SC-55mkII 0, SC-88 0, SC-88Pro 289 (4 another tone), SC-8850 749 (6 another tone).
+The maps' totals are in the Summary at the top; still to build: SC-55 0, SC-55mkII 0, SC-88 0, SC-88Pro 288 (4 another tone), SC-8850 748 (6 another tone).
 
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3), SC-88Pro 0.16 European Pf (4), SC-88Pro 3.8 Honky-tonk 2 (3), SC-88Pro 16.8 Trem. Organ (4), SC-88Pro 16.32 70's E.Organ (4), SC-88Pro 17.32 Perc. Organ (4), SC-8850 62.8 Pro Brass (3), SC-8850 63.8 SynBrass sfz (3).
@@ -2689,7 +2690,7 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Chromatic Percussion | 12/12 | 12/12 | 18/18 | 18/23 | 18/29 |
 | Organ | 12/12 | 16/16 | 30/30 | 29/49 | 30/71 |
 | Guitar | 16/16 | 19/19 | 34/34 | 36/55 | 41/72 |
-| Bass | 13/13 | 12/12 | 31/31 | 48/76 | 52/113 |
+| Bass | 13/13 | 12/12 | 31/31 | 49/76 | 53/113 |
 | Strings | 8/8 | 9/9 | 11/11 | 12/20 | 13/29 |
 | Ensemble | 12/12 | 11/11 | 29/29 | 36/63 | 42/134 |
 | Brass | 13/13 | 15/15 | 27/27 | 27/51 | 31/84 |
