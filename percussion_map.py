@@ -1989,7 +1989,12 @@ def _build_gs_sets():
     _rev, _rnd = {}, {}
     for which, keys in _GSET.SETS.items():
         k = _GSET.SET_KIT[which]
-        KITS[k] = KITS.get(k, {}) if k in getattr(_GSET, 'SET_EXTEND', ()) else {}
+        # ...an ADDED set on its parent (the SC-8850's L/R sets) starts as a copy of it
+        base = getattr(_GSET, 'SET_BASE', {}).get(k)
+        if base is not None and base in KITS:
+            _map_set(k // 128, k % 128, base, _GSET.SET_NAME.get(k, ''), {})
+        KITS[k] = (KITS.get(k, {}) if (k in getattr(_GSET, 'SET_EXTEND', ()) or base is not None)
+                   else {})
         # A SOUND OF TWO VOICES (percussion_gs.LAYER): its second on a key of
         # its own below the set's (none sounds there), struck with it
         keys = dict(keys)
@@ -2000,7 +2005,16 @@ def _build_gs_sets():
         for key, name in keys.items():
             spec = _GSET.VOICE.get(name)
             if spec is None:
+                # "---" in the SC-8850's sets: that key silent here
+                if name == '---' and k in getattr(_GSET, 'SET_SILENCE', ()):
+                    KITS[k].pop(key, None)
                 continue
+            # ...a voice over an extended set's key wears its own tables, not
+            # the voice it replaces' (Rap Snare's trim on LoFi Snare 1)
+            for tab in (KIT_RING, KIT_LEVEL, KIT_GATE):
+                tab.get(k, {}).pop(key, None)
+            for tab in KIT_STROKES.get(k, {}).values():
+                tab.pop(key, None)
             if spec[0] == 'c':
                 KITS[k][key] = (name, getattr(_TL, spec[1]), float(spec[2]))
                 # ...its gesture, if it has one (a throat's pulse train)

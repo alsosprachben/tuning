@@ -1,10 +1,11 @@
 """The Techno set (program 11 on the drums; percussion_gs) four on the floor
-at 130 BPM: Techno Kick 1 (36) on every beat, Kick 2 (35) in the second
-half, the 707's clap and Techno Snare 1 (38) on two and four, Snare 2 (40)
-in the second half, the 707's closed hats on the sixteenths and the 909's
-open hat off the beat, an 808 tom fill, a crash to close. Then each driven
-drum alone beside the 909 drum it is driven from (the TR-909 set's 36, 35,
-38, 40). Writes OUT/techno.wav (and _room.wav).
+at 130 BPM: Techno Kick 1 (36, the 909's, driven) on every beat, the TR-808
+Kick driven (35) in the second half, the 909's clap and the TR-606 Snare 2
+driven (38) on two and four, Techno Snare (40) in the second half, the 707's
+closed hats on the sixteenths and the 909's open hat off the beat, a 606 tom
+fill, a crash to close. Then each driven drum alone beside the machine's drum
+it is driven from (the TR-909 set's 36 and 38, the TR-808's 36, the TR-606's
+40). Writes OUT/techno.wav (and _room.wav).
 
     python3 examples/techno_demo.py OUT
 """
@@ -41,8 +42,8 @@ def groove():
                 ev.append((b0 + 2.5 + i * 0.25, None, n, 104))
     ev += [(32, None, 36, 116), (32, None, 49, 104)]
     t = 36.0
-    for ours, theirs in ((36, 36), (35, 35), (38, 38), (40, 40)):
-        ev.append((t, 30, theirs, 112))
+    for ours, (prog, theirs) in ((36, (30, 36)), (35, (25, 36)), (38, (28, 40)), (40, (30, 38))):
+        ev.append((t, prog, theirs, 112))
         ev.append((t + 1.5, None, ours, 112))
         t += 3.0
     mf = mido.MidiFile(type=1, ticks_per_beat=480)

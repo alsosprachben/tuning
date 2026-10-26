@@ -401,6 +401,31 @@ VOICE = {
     'CR-78 Cowbell': ('k', 25, 56, APPROX), 'Tambourine 2': ('k', 0, 54, APPROX),
     'Ride Cymbal Edge': ('c', 'RideEdgeProperties', 147.5), 'Ride Cymbal Inner': ('c', 'RideCymbalProperties', 147.5),
     'Applause': ('k', 48, 88),
+    # THE SC-8850's DANCE-ERA DRUMS (tonelib: ours through the sampler each name
+    # implies, driven, or cut; the machines' from their own sets)
+    'LoFi Snare 1': ('c', 'LoFiSnare1Properties', 195.1), 'LoFi Snare 2': ('c', 'LoFiSnare2Properties', 165.0),
+    'LoFi Snare Rim': ('c', 'LoFiRimProperties', 195.1), 'TR-707 Claps': ('k', 29, 39),
+    'Hip-Hop Claps': ('c', 'HipHopClapsProperties', 310.4), 'Shaker 2': ('n', 0, 82),
+    'HipHop Snare 1': ('c', 'RapSnareProperties', 173.8, APPROX),
+    'Hip-Hop Snare 1': ('c', 'RapSnareProperties', 173.8, APPROX),
+    'HipHop Snare 2': ('c', 'HipHopSnare2Properties', 131.0), 'R&B Claps': ('c', 'RnBClapsProperties', 310.4),
+    'Jungle Snare': ('c', 'JungleSnare1Properties', 245.8, APPROX),
+    'Jungle Snare Rim': ('c', 'JungleRimProperties', 195.1), 'Jungle Crash': ('c', 'JungleCrashProperties', 288.3),
+    'Jungle Crash Cymbal': ('c', 'JungleCrashProperties', 288.3),
+    'Jungle Shaker': ('c', 'JungleShakerProperties', 386.0),
+    'Jungle Kick Roll': ('c', 'JungleKick1Properties', 52.8), 'Jungle Snare Roll': ('c', 'JungleSnare1Properties', 245.8),
+    'TR-606 Snare 2': ('k', 28, 40), 'TR-606 Low Tom 2': ('k', 28, 41), 'TR-606 Low Tom 1': ('k', 28, 43),
+    'TR-606 Mid Tom 2': ('k', 28, 45), 'TR-606 Mid Tom 1': ('k', 28, 47), 'TR-606 High Tom 2': ('k', 28, 48),
+    'TR-606 High Tom 1': ('k', 28, 50), 'Techno Snare': ('c', 'TechnoSnare1Properties', 119.9, APPROX),
+    # the SC-8850's Techno set's machine drums, driven (its name says distorted)
+    'Techno TR-808 Kick': ('c', 'TechnoTR808KickProperties', 49.6),
+    'Techno TR-606 Snare 2': ('c', 'TechnoTR606SnareProperties', 203.9),
+    'Rock Snare Dry': ('c', 'AcousticSnareProperties', 195.1, APPROX),
+    'Rock SD Dry': ('c', 'AcousticSnareProperties', 195.1, APPROX),
+    'TR-909 Snare Rim': ('k', 30, 37), 'Dance Rim Shot': ('k', 30, 37), 'TR-909 Ride Cymbal': ('k', 30, 51),
+    'TR-909 Claps': ('c', 'TR909ClapProperties', 1000.0), 'House Snare 1': ('k', 30, 38),
+    'House Snare 2': ('k', 30, 40), 'House Snare Rim': ('k', 30, 37), 'Fat Kick': ('c', 'FatKickProperties', 42.0),
+    'Comp Claps 2': ('c', 'CompClaps2Properties', 310.4),
     # THE SC-88 PRO SFX SET'S ADDITIONS (tonelib.Rfx*: ours where we have the
     # sound -- the fret slide, the cutting noises (their second takes and the
     # distorted ones ours: the guitar's amp is a channel's), the record, the
@@ -714,6 +739,10 @@ STROKES = {
     # TELEPHONE 2: an electronic trill, two tones a minor third apart at 20 a
     # second, for 0.8 s
     'Telephone 2': {"pattern": tuple((0.025 * i, 0.0, 3.0 * (i % 2), 0.025) for i in range(32))},
+    # THE JUNGLE ROLLS: the kick and the snare rolled as Standard's snare roll
+    # (percussion_map.PERCUSSION_ROLL[25]) is, while the key is held
+    'Jungle Kick Roll': {"roll": (13.5, 6, 0.009, 3.0, 1.5, 0.08, 2.0, 0.3, -14.0, -4.0, 0.0)},
+    'Jungle Snare Roll': {"roll": (13.5, 6, 0.009, 3.0, 1.5, 0.08, 2.0, 0.3, -14.0, -4.0, 0.0)},
     'Bounce': {"pattern": _BOUNCE},
     'Reverse Bounce': {"pattern": _REV_BOUNCE},
 }
@@ -807,7 +836,7 @@ for _w, (_c, _ts) in _CONS.items():
 
 # ...AND ITS LENGTH, a one-shot's (percussion_map.KIT_GATE): Small Club's the
 # takes' main burst, ~2.5 s; a choked crash's the hand's, 0.15 s
-GATE = {'MC-500 Beep 1': 0.04, 'MC-500 Beep 2': 0.04, 'Guitar Wah': 0.25, 'Biwa FX': 1.2,
+GATE = {'Rock Snare Dry': 0.25, 'Rock SD Dry': 0.25, 'MC-500 Beep 1': 0.04, 'MC-500 Beep 2': 0.04, 'Guitar Wah': 0.25, 'Biwa FX': 1.2,
         'Phonograph Noise': 2.0, 'Pick Scrape': 0.8, 'Telephone 1': 1.5, 'Small Club 2': 2.5,
         'Applause Wave': 3.0, 'Eruption': 2.5, 'Sagat Closed': 0.07, 'Gengari Mute Low': 0.12, 'Gengari Mute High': 0.12, 'Jing Mute': 0.35, 'Tang Gu Mute': 0.12, 'Alias': 0.9, 'Swish': 0.35, 'Velocity Noise FX': 0.4, 'Missile': 1.0, 'Tape Stop 1': 1.0, 'Tape Stop 2': 0.6,
         'Guitar Slide': 0.3, 'Small Club 1': 2.5, 'Mute Crash Cymbal 1': 0.15, 'Mute Crash Cymbal 2': 0.15}
@@ -837,7 +866,7 @@ LEVEL.update({'Brush Closed Hi-Hat': 0.87, 'Brush Open Hi-Hat': 0.47})
 LEVEL.update({'Slappy (slap)': 0.0771, 'Digital Tambourine': 1.1874})
 
 # THE CLASS VOICES LEVELLED to the kit (examples/gs_levels.py)
-LEVEL.update({'High Hoo': 43.9236, 'Low Hoo': 70.5532, 'Hoo': 42.9539, 'Yyoo Dude': 87.9449, 'Reverse Yyoo Dude': 490.848, 'Voice One': 95.1735, 'Reverse Voice One': 241.4161, 'Voice Two': 94.8676, 'Reverse Voice Two': 233.8809, 'Voice Three': 102.6541, 'Reverse Voice Three': 206.488, 'Voice Tah': 130.6951, 'Reverse Voice Tah': 280.3505, 'Voice Ou': 102.0971, 'Voice Au': 103.6908, 'Voice Whey': 74.2745, 'Frog Voice': 80.4819, 'Douby': 114.649, 'Reverse Douby': 247.8117, 'Baert High': 81.688, 'Baert Low': 122.9863, 'Techno Thip': 4.281, 'Pop Drop': 2.4134, 'Syn. Drops': 3.594, 'Pipe': 1.4294, 'Noise Attack': 0.5112, 'Bounce': 2.2248, 'Reverse Bounce': 2.2902, 'Distortion Knock': 5.3581, 'Swish': 4.1329, 'Velocity Noise FX': 3.5333, 'Spark': 3.0143, 'Space Birds': 2.961, 'Tape Stop 1': 4.6273, 'Tape Stop 2': 6.1098, 'Emergency !': 3.7488, 'Calculating...': 4.5691, 'Saw LFO Saw': 3.0384, 'Woody Slap': 1.5678, 'Ice Block': 2.2633, 'Modulated Bell': 0.5649, 'Alias': 3.6555, 'Stereo Noise Clap': 1.6868, 'Flying Monster': 6.0009, 'Bend Gong': 0.595, 'Hu Yin Luo Low': 0.4998, 'Hu Yin Luo Mid': 0.5653, 'Hu Yin Luo Mid 2': 0.5636, 'Hu Yin Luo High': 0.6186, 'Hu Yin Luo High 2': 0.6435, 'Pai Ban': 1.7533, 'Tang Gu Mute': 1.4555, 'Low Kotsuzumi': 1.4294, 'Wadaiko Rim': 2.1837, 'Small Taiko': 1.5138, 'Buk Rim': 1.9684, 'Gengari p': 0.5949, 'Jang-Gu Rim': 2.083, 'Jing p': 0.2654, 'Jing f': 0.5315, 'Jing Mute': 0.5315, 'Gamelan Gong 1': 0.4601, 'Gamelan Gong 2': 0.4982, 'Gamelan Gong 3': 0.5458, 'Gamelan Gong 4': 0.5881, 'Gamelan Gong 5': 0.6136, 'Gamelan Gong 6': 0.6423, 'Gamelan Gong 7': 0.667, 'Gamelan Gong 8': 0.6863, 'Gamelan Gong 9': 0.6697, 'Gamelan Gong 10': 0.6878, 'Bonang 1': 0.4947, 'Bonang 2': 0.5771, 'Bonang 3': 0.6025, 'Bonang 4': 0.6666, 'Bonang 5': 0.53, 'Bendir': 0.5921, 'Udo Short': 1.9571, 'Udo Slap': 1.5506, 'Talking Drum': 1.483, 'Mute Pandiero': 2.0032, 'Tamborim': 1.5554, 'Tabla Te': 1.6667, 'Tabla Ge': 0.604, 'MC-500 Beep 1': 3.9281, 'MC-500 Beep 2': 3.1058, 'Guitar Wah': 2.0689, 'Biwa FX': 2.5052, 'Phonograph Noise': 7.212, 'Tape Rewind': 3.3312, 'Bass Slide': 49.3266, 'Pick Scrape': 2.0225, 'Bird 2': 0.6743, 'Telephone 1': 0.0748, 'Telephone 2': 3.0982, 'Eruption': 1.6774, 'Big Shot': 4.2851})
+LEVEL.update({'High Hoo': 43.9236, 'Low Hoo': 70.5532, 'Hoo': 42.9539, 'Yyoo Dude': 87.9449, 'Reverse Yyoo Dude': 490.848, 'Voice One': 95.1735, 'Reverse Voice One': 241.4161, 'Voice Two': 94.8676, 'Reverse Voice Two': 233.8809, 'Voice Three': 102.6541, 'Reverse Voice Three': 206.488, 'Voice Tah': 130.6951, 'Reverse Voice Tah': 280.3505, 'Voice Ou': 102.0971, 'Voice Au': 103.6908, 'Voice Whey': 74.2745, 'Frog Voice': 80.4819, 'Douby': 114.649, 'Reverse Douby': 247.8117, 'Baert High': 81.688, 'Baert Low': 122.9863, 'Techno Thip': 4.281, 'Pop Drop': 2.4134, 'Syn. Drops': 3.594, 'Pipe': 1.4294, 'Noise Attack': 0.5112, 'Bounce': 2.2248, 'Reverse Bounce': 2.2902, 'Distortion Knock': 5.3581, 'Swish': 4.1329, 'Velocity Noise FX': 3.5333, 'Spark': 3.0143, 'Space Birds': 2.961, 'Tape Stop 1': 4.6273, 'Tape Stop 2': 6.1098, 'Emergency !': 3.7488, 'Calculating...': 4.5691, 'Saw LFO Saw': 3.0384, 'Woody Slap': 1.5678, 'Ice Block': 2.2633, 'Modulated Bell': 0.5649, 'Alias': 3.6555, 'Stereo Noise Clap': 1.6868, 'Flying Monster': 6.0009, 'Bend Gong': 0.595, 'Hu Yin Luo Low': 0.4998, 'Hu Yin Luo Mid': 0.5653, 'Hu Yin Luo Mid 2': 0.5636, 'Hu Yin Luo High': 0.6186, 'Hu Yin Luo High 2': 0.6435, 'Pai Ban': 1.7533, 'Tang Gu Mute': 1.4555, 'Low Kotsuzumi': 1.4294, 'Wadaiko Rim': 2.1837, 'Small Taiko': 1.5138, 'Buk Rim': 1.9684, 'Gengari p': 0.5949, 'Jang-Gu Rim': 2.083, 'Jing p': 0.2654, 'Jing f': 0.5315, 'Jing Mute': 0.5315, 'Gamelan Gong 1': 0.4601, 'Gamelan Gong 2': 0.4982, 'Gamelan Gong 3': 0.5458, 'Gamelan Gong 4': 0.5881, 'Gamelan Gong 5': 0.6136, 'Gamelan Gong 6': 0.6423, 'Gamelan Gong 7': 0.667, 'Gamelan Gong 8': 0.6863, 'Gamelan Gong 9': 0.6697, 'Gamelan Gong 10': 0.6878, 'Bonang 1': 0.4947, 'Bonang 2': 0.5771, 'Bonang 3': 0.6025, 'Bonang 4': 0.6666, 'Bonang 5': 0.53, 'Bendir': 0.5921, 'Udo Short': 1.9571, 'Udo Slap': 1.5506, 'Talking Drum': 1.483, 'Mute Pandiero': 2.0032, 'Tamborim': 1.5554, 'Tabla Te': 1.6667, 'Tabla Ge': 0.604, 'MC-500 Beep 1': 3.9281, 'MC-500 Beep 2': 3.1058, 'Guitar Wah': 2.0689, 'Biwa FX': 2.5052, 'Phonograph Noise': 7.212, 'Tape Rewind': 3.3312, 'Bass Slide': 49.3266, 'Pick Scrape': 2.0225, 'Bird 2': 0.6743, 'Telephone 1': 0.0748, 'Telephone 2': 3.0982, 'Eruption': 1.6774, 'Big Shot': 4.2851, 'LoFi Snare 2': 0.3231, 'LoFi Snare Rim': 1.5021, 'Hip-Hop Claps': 2.4116, 'HipHop Snare 1': 0.3376, 'HipHop Snare 2': 0.2828, 'R&B Claps': 1.8039, 'Jungle Snare': 0.3995, 'Jungle Snare Rim': 1.658, 'Jungle Crash': 0.8649, 'Jungle Shaker': 1.8687, 'Jungle Snare Roll': 0.3528, 'Techno Snare': 1.5174, 'TR-909 Claps': 1.6031, 'Comp Claps 2': 1.4772, 'Hip-Hop Kick 1': 0.5382, 'Hip-Hop Kick 2': 0.6671, 'Rap Snare': 0.3376, 'Hip-Hop Snare 2': 0.2787, 'Jungle Kick 1': 0.6524, 'Jungle Kick 2': 0.5588, 'Jungle Snare 1': 0.3995, 'Jungle Snare 2': 0.3782, 'Jungle Hi-Hat': 10.4855, 'Techno Snare 1': 1.5017, 'Techno TR-808 Kick': 0.6877, 'Techno TR-606 Snare 2': 0.5233})
 
 # ...a word's consonant at its word's trim: they were balanced together
 for _w, (_c, _ts) in _CONS.items():
@@ -872,3 +901,19 @@ LEVEL.update({'Mute Crash Cymbal 1': 0.56, 'Mute Crash Cymbal 2': 0.56,
 # Every name the SC-88 Pro's sets use has a voice here (2026-10-25); a few
 # are the nearest we have (APPROX), and Standard's Voice One-Three (17-19)
 # stay silent: its keys play no voiced strokes.
+
+
+# THE SC-8850's VERSIONS OF THE SETS, OURS (percussion_sc8850, written from its
+# manual by examples/sc8850_sets.py): its revised sets extending the native
+# kits, its added programs native kits of their own; an [RND] name our voice
+# each strike varied
+import percussion_sc8850 as _S8850   # noqa: E402
+SETS.update(_S8850.SETS)
+SET_KIT.update(_S8850.SET_KIT)
+SET_NAME.update(_S8850.SET_NAME)
+SET_ALONE |= _S8850.SET_ALONE
+SET_EXTEND |= _S8850.SET_EXTEND
+SET_BASE = dict(_S8850.SET_BASE)
+SET_SILENCE = set(_S8850.SET_SILENCE)
+for _n, _spec in _S8850.RND.items():
+    VOICE.setdefault(_n, _spec)

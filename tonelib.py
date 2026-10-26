@@ -19052,6 +19052,20 @@ class TR606Snare2Properties(TR606SnareProperties):
              "click_tilt": 0.4436}
 
 
+class TechnoTR808KickProperties(TR808KickProperties):
+    """The SC-8850's Techno set's TR-808 Kick (its 35, where the SC-88 Pro's set
+    had Techno Kick 2): the set's name says distorted, the SC-8850 says which
+    machine -- the 808's boom through our valve at 3 (its sine clipped toward a
+    square: the thump's harmonics)."""
+    tr808 = _driven(TR808KickProperties, 3.0)
+
+
+class TechnoTR606SnareProperties(TR606Snare2Properties):
+    """The SC-8850's Techno set's TR-606 Snare 2 (its 38, where the SC-88 Pro's
+    had Techno Snare 1): the 606's accented snare through our valve at 2."""
+    tr808 = _driven(TR606Snare2Properties, 2.0)
+
+
 class TR606TomProperties(TR606Properties):
     """606 Low Tom: a bridged-T whose pitch falls as it rings."""
     tr808 = {"tune_hz": 137.1, "decay_s": 0.4388, "diodes": True, "bend_oct": 0.1552,
@@ -19522,6 +19536,83 @@ class JungleSnare2Properties(JungleBreak, LiveRoom, JazzSnareProperties):
 class JungleHiHatProperties(JungleBreak, ClosedHiHatProperties):
     """Jungle Hi-Hat: the break's closed hat, four semitones up."""
     sample_semitones = 4.0
+
+
+# THE SC-8850's DANCE-ERA DRUMS (its revised Hip-Hop, Jungle, Techno, Dance and
+# its House): ours through the sampler each name implies, or driven, or cut.
+
+class JungleRimProperties(JungleBreak, SideStickProperties):
+    """Jungle Snare Rim: the side stick in the break, sped up (the Jungle set's
+    sampler, JungleBreak)."""
+    sample_semitones = 4.0
+
+
+class JungleCrashProperties(JungleBreak, CrashCymbal1Properties):
+    """Jungle Crash: the crash in the break, sped up."""
+    sample_semitones = 2.0
+
+
+class JungleShakerProperties(JungleBreak, ShakerProperties):
+    """Jungle Shaker: the shaker in the break, sped up."""
+    sample_semitones = 3.0
+
+
+class LoFiSnare1Properties(SampledBreak, AcousticSnareProperties):
+    """LoFi Snare 1: the acoustic snare through a crude sampler -- 12-bit grit
+    loud, nothing over 8 kHz (16 kHz), two semitones down."""
+    sample_semitones = -2.0
+    sampler_rate_hz = 16000.0
+    grit_db = -32.0
+
+
+class LoFiSnare2Properties(SampledBreak, LiveRoom, JazzSnareProperties):
+    """LoFi Snare 2: the jazz snare in its room through the same sampler."""
+    sample_semitones = -1.0
+    sampler_rate_hz = 16000.0
+    grit_db = -32.0
+
+
+class LoFiRimProperties(SampledBreak, SideStickProperties):
+    """LoFi Snare Rim: the side stick through the same sampler."""
+    sample_semitones = -1.0
+    sampler_rate_hz = 16000.0
+    grit_db = -32.0
+
+
+class HipHopClapsProperties(HandClapProperties):
+    """Hip-Hop Claps: the hand clap gone dull, as through the boom-bap
+    sampler -- its top rolled off (nothing over ~11 kHz: the sampler's
+    Nyquist), its tail a touch longer (a noise voice takes no SampledBreak)."""
+    strike_noise_db = tuple((hz, db - (12.0 if hz > 8000 else 4.0 if hz > 5000 else 0.0))
+                            for hz, db in HandClapProperties.strike_noise_db)
+    strike_noise_dbs = 800.0
+
+
+class RnBClapsProperties(HandClapProperties):
+    """R&B Claps: more hands, looser -- eleven over 90 ms, the slow-jam clap."""
+    strike_flam = 11
+    strike_flam_s = 0.09
+
+
+class CompClaps2Properties(HandClapProperties):
+    """Comp Claps 2: the hand clap through a compressor -- its tail held up
+    (600 dB/s where the clap falls at 1000), its hands closer in level."""
+    strike_noise_dbs = 600.0
+    strike_flam_db = 8.0
+
+
+class TR909ClapProperties(TR707ClapProperties):
+    """TR-909 Claps: the 909's clap (our 909 set has none) -- the 707's clap
+    circuit tighter and brighter, its bursts 8 ms apart (a guess: no 909 clap
+    recording here)."""
+    tr808 = dict(TR707ClapProperties.tr808, click_bursts=((0.0, -1.0), (0.008, 0.0), (0.016, 0.0), (0.025, 0.5)),
+                 noise_hp_hz=1300.0, noise_lp_hz=4000.0)
+
+
+class FatKickProperties(TR909KickProperties):
+    """Fat Kick: the 909's kick tuned down a few semitones, its decay longer,
+    through our valve at 2 -- round and saturated (tr808.drive)."""
+    tr808 = _driven(TR909KickProperties, 2.0, tune_hz=42.0, decay_s=0.9)
 
 
 class JungleKick2Properties(TR808KickProperties):

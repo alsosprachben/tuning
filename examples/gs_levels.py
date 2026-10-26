@@ -58,6 +58,16 @@ KIND = {
     'Tape Rewind': 'voice', 'Bass Slide': 'voice', 'Pick Scrape': 'voice', 'Bird 2': 'voice',
     'Telephone 1': 'voice', 'Telephone 2': 'voice', 'Small Club 2': 'voice', 'Applause Wave': 'voice',
     'Eruption': 'voice', 'Big Shot': 'drum', 'Percussion Bang': 'drum', 'Small Club 1': 'voice',
+    'LoFi Snare 1': 'drum', 'LoFi Snare 2': 'drum', 'LoFi Snare Rim': 'drum', 'Hip-Hop Claps': 'drum',
+    'HipHop Snare 1': 'drum', 'HipHop Snare 2': 'drum', 'R&B Claps': 'drum', 'Jungle Snare': 'drum',
+    'Jungle Snare Rim': 'drum', 'Jungle Crash': 'cymbal', 'Jungle Shaker': 'drum', 'Jungle Kick Roll': 'drum',
+    'Jungle Snare Roll': 'drum', 'Techno Snare': 'drum', 'Rock Snare Dry': 'drum', 'TR-909 Claps': 'drum',
+    'Fat Kick': 'drum', 'Comp Claps 2': 'drum',
+    # the older break and techno voices (their sets' own, levelled too: Ben)
+    'Hip-Hop Kick 1': 'drum', 'Hip-Hop Kick 2': 'drum', 'Rap Snare': 'drum', 'Hip-Hop Snare 2': 'drum',
+    'Jungle Kick 1': 'drum', 'Jungle Kick 2': 'drum', 'Jungle Snare 1': 'drum', 'Jungle Snare 2': 'drum',
+    'Jungle Hi-Hat': 'cymbal', 'Techno Kick 1': 'drum', 'Techno Kick 2': 'drum', 'Techno Snare 1': 'drum',
+    'Techno Snare 2': 'drum', 'TR-909 Comp Kick': 'drum', 'Techno TR-808 Kick': 'drum', 'Techno TR-606 Snare 2': 'drum',
     'Jingle Bell': 'cymbal', 'Req Dum': 'drum', 'Req Tik': 'drum', 'Bendir': 'drum', 'Udo Short': 'drum',
     'Udo Long': 'drum', 'Udo Slap': 'drum', 'Talking Drum': 'drum', 'Bend Talking Drum': 'drum',
     'Djembe': 'drum', 'Djembe Rim': 'drum', 'Conga Slide': 'drum', 'Open Pandiero': 'drum',
@@ -82,7 +92,9 @@ def level_of(kit, key):
     m.tracks.append(t)
     t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
     t.append(mido.Message("sysex", data=[0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41], time=0))
-    t.append(mido.Message("program_change", channel=9, program=kit, time=0))
+    if kit >= 128:      # a map's own set (128 x map + program): its CC32
+        t.append(mido.Message("control_change", channel=9, control=32, value=kit // 128, time=0))
+    t.append(mido.Message("program_change", channel=9, program=kit % 128, time=0))
     t.append(mido.Message("note_on", channel=9, note=key, velocity=100, time=240))
     t.append(mido.Message("note_off", channel=9, note=key, velocity=0, time=240))
     t.append(mido.MetaMessage("end_of_track", time=1920 * 2))
@@ -96,9 +108,12 @@ def level_of(kit, key):
 def where(name):
     """(kit, key) of a set that plays NAME as a class voice."""
     import percussion_gs as G
+    import percussion_map as P
     for which, keys in G.SETS.items():
         for key, nm in keys.items():
-            if nm == name:
+            # ...where it still plays (a later set -- the SC-8850's over a
+            # native one -- can have put another voice on that key)
+            if nm == name and P.KITS.get(G.SET_KIT[which], {}).get(key, ("",))[0] == name:
                 return G.SET_KIT[which], key
     return None
 

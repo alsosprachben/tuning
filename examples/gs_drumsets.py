@@ -3,7 +3,8 @@
 text layer ("Native Drum set (1-7)", "SC-88 Drum set (1-3)", "SC-55 Drum
 set": printed pp.163-176).
 
-    python3 -I examples/gs_drumsets.py parse MANUAL.txt OUT.tsv   (pdftotext -layout)
+    python3 -I examples/gs_drumsets.py parse MANUAL.txt OUT.tsv   (pdftotext -layout; the SC-88 Pro's
+                                                                   manual, or the SC-8850's: "sc8850" rows)
     python3 -I examples/gs_drumsets.py diff OUT.tsv [SET ...]     each set's keys unlike Standard 1
 
 Each page sets its sets side by side, one fixed-width column each, under a
@@ -16,7 +17,7 @@ which is skipped (the key counts on). "←" is "same as Standard 1" (that map's)
 import re
 import sys
 
-PAGE = re.compile(r"^\s+(Native|SC-88|SC-55) Drum set(?: \((\d)\))?\s*$")
+PAGE = re.compile(r"^\s*(Native|SC-88|SC-55|SC-8850) Drum [Ss]et(?: \((\d+)\))?\s*$")
 PCROW = re.compile(r"PC\s?\d+")
 
 
@@ -29,7 +30,7 @@ def parse(path):
         if not m:
             i += 1
             continue
-        mp = {"Native": "native", "SC-88": "sc88", "SC-55": "sc55"}[m.group(1)]
+        mp = {"Native": "native", "SC-88": "sc88", "SC-55": "sc55", "SC-8850": "sc8850"}[m.group(1)]
         j = i + 1
         # the PC line, then the names
         while j < len(lines) and not PCROW.search(lines[j]):
@@ -41,19 +42,26 @@ def parse(path):
         for k, (c0, pc) in enumerate(cols):
             c1 = cols[k + 1][0] if k + 1 < len(cols) else None
             sets.append((pc, names[c0:c1].strip() if c1 else names[c0:].strip(), c0, c1))
-        if "Notes 0-19" in " ".join(lines[i:j]):
+        # pages 7 (the SC-88 Pro's) and the SC-8850's "Notes 0-21 and 95-127 are
+        # as follows": their keys jump, so they are not numbered by counting
+        if "Notes 0-19" in " ".join(lines[i:j]) or "are as follows" in " ".join(lines[i:j]):
             i = j + 2                            # page 7: the 0-19, 97-127 keys, sets grouped
             continue
         key = None
         kcol = cols[0][0]                        # key numbers live left of the first set
         for line in lines[j + 2:]:
-            if "PC    : Program Number" in line or PAGE.match(line):
+            if ("PC    : Program Number" in line or PAGE.match(line) or line.lstrip().startswith("SC-8850 Drum Set (")
+                    or ": Same as the percussion sound" in line or "Program Number (Drum Set" in line):
                 break
             km = re.match(r"^\s*(?:C\d+\s+|C-1\s+)?(\d{1,3})\b", line[:kcol])
             body = line
             if km and line[km.end():].strip() == "":
                 continue                         # a key number alone on its line
-            if km:
+            # THE SC-8850's labels drift: a key's number can sit on the line of the
+            # row after it (Asia's 29 on Gamelan Gong 6's line, losing Gong 5). Its
+            # rows run in key order without gaps, so there the first label sets
+            # the count and every row after it is the next key
+            if km and (mp != "sc8850" or key is None):
                 key = int(km.group(1))
             elif key is not None:
                 key += 1
