@@ -11899,6 +11899,41 @@ class HighTomProperties(TomTomProperties):
     initial_gain = TomTomProperties.initial_gain * 10 ** (-1.25 / 20.0)
 
 
+class JazzTomLowProperties(FloorTomProperties):
+    """The SC-8850's JAZZ set's Jazz Low Toms (41, 43): soneproject's kit in a
+    jazz bar (Freesound pack 25895, CC0; sources.md: jazz_kit_soneproject),
+    its low tom, ~101 Hz, struck with sticks (its -6 takes and tom7a-d). Its
+    modes measured and its strike fitted (examples/perc_fit.py jazz_tom_low)."""
+    DRUM_MODES = ((1.0127, 0.0, 35), (1.5524, -22.9, 44), (2.0987, -18.1, 46), (2.2653, -25.3, 137), (2.4585, -23.7, 130), (2.8316, -27.2, 120), (3.0581, -28.8, 67), (3.6111, -27.9, 51), (3.8509, -30.0, 99), (6.7824, -28.9, 87))
+    slow_share = 0.352052
+    slow_dbs = 15.0762
+    click_cal_db = 3.73364
+    click_dbs = 119.879
+    click_stroke_slope = 0.244225
+    chiff_volume = 0.00179927
+    chiff_width = 0.0108632
+    chiff_bandwidth = 0.0310331
+    sustain_jitter = 0.00169747
+    band_trim_db = ((177, -6.7), (354, 0.3), (707, 0.4), (1414, 4.5), (2828, 0.3), (5657, 5.0), (11314, -4.0))
+
+
+class JazzTomHighProperties(TomTomProperties):
+    """The JAZZ set's Jazz Mid and High Toms (45-50): the same kit's rack tom,
+    ~162 Hz (its -6 takes and tom70-72); the high toms it tuned up, as
+    Standard's are (examples/perc_fit.py jazz_tom_high)."""
+    DRUM_MODES = ((1.0177, 0.0, 70), (1.3500, -16.5, 58), (1.5784, -10.3, 107), (1.7321, -23.4, 129), (2.0146, -10.6, 46), (2.3801, -17.3, 164), (3.0738, -15.2, 135), (3.2815, -21.7, 55), (3.7799, -22.3, 45), (4.7478, -22.0, 94))
+    slow_share = 0.116203
+    slow_dbs = 69.6882
+    click_cal_db = 14.055
+    click_dbs = 147.938
+    click_stroke_slope = 0.685698
+    chiff_volume = 0.000576149
+    chiff_width = 0.010594
+    chiff_bandwidth = 0.0655064
+    sustain_jitter = 0.00125224
+    band_trim_db = ((177, -3.4), (354, -3.5), (707, -3.5), (1414, 0.6), (2828, -0.8), (5657, 0.7), (11314, 9.9))
+
+
 class KickDrumProperties(KitDrumProperties):
     """GM 35 and 36: DRSKit's kick, beater rebounding, 44 Hz where it settles.
 
@@ -17356,11 +17391,11 @@ class ClosedHiHatProperties(HiHatProperties):
                    0.0874, 0.0764, 0.1483, 0.1020, 0.2101, 0.1127, 0.1015, 0.1199,
                    0.1618, 0.0760, 0.1328, 0.1480, 0.0831, 0.1117, 0.2077, 0.1221,
                    0.1958, 0.1457, 0.1561, 0.1493, 0.1945, 0.1631, 0.2151, 1.0000)
-    ring_decay_above = 54.7
+    ring_decay_above = 21.7253  
     aftersound_ratio = 1.00
-    aftersound_fraction = 0.00
+    aftersound_fraction = 0.0139093  
     sustain_jitter = 0.40
-    chiff_volume = 100.0
+    chiff_volume = 907.57  
     chiff_bandwidth = 0.15
     # THE BALANCE IS NOT RE-DERIVED HERE. The three sit where Ben's ear put
     # them before the rebuild -- the open hat 1.2 dB over the closed one --
@@ -17370,6 +17405,18 @@ class ClosedHiHatProperties(HiHatProperties):
     initial_gain = (0.014036) * 1.2735   # +2.1 dB: K-weighted to the string reference
     # VOLUME ON THE SQUARE LAW (examples/drum_volume.py): dB at each velocity
     strike_volume_trim_db = ((127, -5.0), (100, 0.0), (85, 3.4), (70, 7.4), (60, 10.5), (45, 15.8), (30, 20.5), (15, 21.9))
+    ring_peak_hz = 209.439  
+    ring_decay_floor = 223.298  
+    ring_decay_below = 1.10192  
+    aftersound_dbs = 47.5545  
+    bloom_gain = 0.0763923  
+    bloom_seconds = 0.0048877  
+    bloom_center_hz = 2947.31  
+    bloom_octaves = 1.88904  
+    bloom_swell = 2.53949  
+    bloom_gain_slope = 0.0700117  
+    chiff_width = 0.0022303  
+    band_trim_db = ((177, -1.0), (354, -3.3), (707, 1.3), (1414, 2.7), (2828, 0.7), (5657, 2.1), (11314, -2.4))
 
 
 
@@ -17384,7 +17431,14 @@ class PedalHiHatProperties(HiHatProperties):
     Its old anchor was the weakest of the three and still is: it was set from
     footclose.mf against footsplash.mf, and a foot CLOSE and a foot SPLASH are
     not the same effort, so Iowa's "mf" does not mean the same thing in both.
-    """
+
+    THE THUMP CUT (2026-10-25). That mechanism was Iowa's stand on its stage,
+    not a kit's pedal: matched by level, it stood in for the chick (Ben: the
+    hats "quiet" all along). DRSKit has no pedal take, so the chick stays
+    Iowa's and the bands under 2 kHz come down to the refitted closed hat's
+    share of them (crash_fit.py --hats): -21 dB at 125 Hz, -12 to -13 to 1
+    kHz, -7 at 2 kHz (two passes: its strike noise took the first only in
+    part), each band then within ~3 dB of the closed hat's."""
     mode_gains  = (0.0335, 0.0183, 0.0093, 0.0070, 0.0089, 0.0041, 0.0066, 0.0046,
                    0.0030, 0.0028, 0.0027, 0.0042, 0.0047, 0.0050, 0.0012, 0.0021,
                    0.0009, 0.0027, 0.0031, 0.0021, 0.0031, 0.0018, 0.0011, 0.0009,
@@ -17419,6 +17473,8 @@ class PedalHiHatProperties(HiHatProperties):
     sustain_jitter = 0.05
     chiff_volume = 220.0
     chiff_bandwidth = 0.06
+    band_trim_db = ((88, -21.0), (177, -21.3), (354, -11.6), (707, -12.3), (1414, -13.2), (2828, -7.3),
+                    (5657, 0.0), (11314, 0.0))
     # THE BALANCE IS NOT RE-DERIVED HERE. The three sit where Ben's ear put
     # them before the rebuild -- the open hat 1.2 dB over the closed one --
     # and initial_gain is solved to hold each voice's K-weighted loudness
@@ -17477,11 +17533,11 @@ class OpenHiHatProperties(HiHatProperties):
                    0.1298, 0.1048, 0.1817, 0.1970, 0.0950, 0.1250, 0.1440, 0.0836,
                    0.1359, 0.1280, 0.2141, 0.2437, 0.1577, 0.1213, 0.1151, 0.1671,
                    0.1729, 0.2742, 0.1725, 0.1713, 0.1910, 0.2179, 0.2278, 1.0000)
-    ring_decay_above = 10.0
+    ring_decay_above = 11.2678  
     aftersound_ratio = 0.20
-    aftersound_fraction = 0.50
+    aftersound_fraction = 0.811688  
     sustain_jitter = 0.40
-    chiff_volume = 60.0
+    chiff_volume = 26.3044  
     chiff_bandwidth = 0.10
     # THE BALANCE IS NOT RE-DERIVED HERE. The three sit where Ben's ear put
     # them before the rebuild -- the open hat 1.2 dB over the closed one --
@@ -17491,6 +17547,18 @@ class OpenHiHatProperties(HiHatProperties):
     initial_gain = (0.029231) * 1.2589   # +2.0 dB: K-weighted to the string reference
     # VOLUME ON THE SQUARE LAW (examples/drum_volume.py): dB at each velocity
     strike_volume_trim_db = ((127, -4.9), (100, 0.0), (85, 3.3), (70, 7.1), (60, 9.9), (45, 14.0), (30, 16.7), (15, 17.4))
+    ring_peak_hz = 1884
+    ring_decay_floor = 13.6598
+    ring_decay_below = 5.33463
+    aftersound_dbs = 9.7573
+    bloom_gain = 0.0529529
+    bloom_seconds = 0.00464785
+    bloom_center_hz = 2761.62
+    bloom_octaves = 1.62892
+    bloom_swell = 1.08558
+    bloom_gain_slope = 0.0975855
+    chiff_width = 0.00840012
+    band_trim_db = ((177, -7.3), (354, 2.1), (707, 2.6), (1414, 5.7), (2828, 5.3), (5657, -0.6), (11314, -7.8))
 
 
 
@@ -21269,6 +21337,206 @@ class RideBellProperties(CymbalProperties):
     # -8 dB with the rest of the kit; this class used to inherit the cymbal
     # family's 1/10 and so would not have moved with the others.
     initial_gain = 0.078217
+
+# THE ROOM SET'S OWN (the SC-8850's Room, Room L/R; its House and Kick &
+# Snare 2 borrow them): Standard's drums and cymbals in the live room (LiveRoom,
+# fitted to what GeneralUser GS's Room toms carry over its Standard toms), as
+# the Room toms and the MONDO kick are -- the room's early sound on the plate
+# as on the head. Room Kick 1 and 2 are the MONDO kick (Standard's kick there).
+#
+# THE CYMBALS HEAR ITS FIRST BOUNCES ONLY (reflection_order 1, as Standard's
+# room): every partial is rendered again for each image, a cymbal's are
+# hundreds and ring for seconds, and at the room's third order (62 images, its
+# hard walls dropping none under the floor and none late) a ride in eighths
+# rendered 231 s for 16 (24x Standard's, on the GPU). Its walls stay -- close,
+# hard, bright -- and the higher images, on partials this dense, would have
+# merged into the plate's own wash.
+class RoomSnareProperties(LiveRoom, AcousticSnareProperties):
+    """Room Snare 1: Standard's snare in the live room."""
+
+
+class RoomSnare2Properties(LiveRoom, SnareDrum2Properties):
+    """Room Snare 2: Standard's Snare Drum 2 in the live room."""
+
+
+class RoomClosedHatProperties(LiveRoom, ClosedHiHatProperties):
+    """Room Closed Hi-Hat (and the SC-8850's "3"): Standard's in the live room."""
+    reflection_order = 1
+
+
+class RoomOpenHatProperties(LiveRoom, OpenHiHatProperties):
+    """Room Open Hi-Hat (and "3"): Standard's in the live room."""
+    reflection_order = 1
+
+
+class RoomCrashProperties(LiveRoom, CrashCymbal1Properties):
+    """Room Crash Cymbal: Standard's crash in the live room."""
+    reflection_order = 1
+
+
+class RoomRideProperties(LiveRoom, RideCymbalProperties):
+    """Room Ride Cymbal: Standard's ride in the live room."""
+    reflection_order = 1
+
+
+class RoomRideBellProperties(LiveRoom, RideBellProperties):
+    """Room Ride Bell: Standard's ride bell in the live room."""
+    reflection_order = 1
+
+
+# THE JAZZ SET'S CYMBALS (the SC-8850's Jazz, Jazz L/R): soneproject's kit in
+# a jazz bar (Freesound pack 25895, CC0; sources.md: jazz_kit_soneproject),
+# fitted by examples/crash_fit.py --jazz on Standard's plates: the crash its
+# crash1 / cymb2da / cymbals6d, 6e, 2fb (one plate: 1463, 1757, 3136 Hz in
+# every take), the ride its ride1-2 (the bow), the bell its ride3-4 and
+# cymbals73-75 (the cup: 383, 719, 1397 Hz, tonal, +45-56 dB over the floor)
+class JazzCrashProperties(CrashCymbal1Properties):
+    """Jazz Crash Cymbal (49). Fitted (examples/crash_fit.py --jazz) at three
+    velocities to the takes' grid AND its tail's decay (cymbals2fb-7, 0.5-2.5
+    s): fitted to the grid alone its tail was all aftersound, 6-7 dB/s in
+    every band where the take falls 12-26, faster up high; the aftersound
+    now goes at 16 dB/s and the ring, peaking at 9.6 kHz, carries the rest.
+    Its swell after the hit (bloom) 0.18 s, centred at 1.6 kHz."""
+    ring_peak_hz = 9647.89
+    ring_decay_floor = 37.8398
+    ring_decay_below = 83.321
+    ring_decay_above = 17.3331
+    aftersound_fraction = 0.520061
+    aftersound_dbs = 15.6887
+    bloom_gain = 4.86998
+    bloom_seconds = 0.180037
+    bloom_center_hz = 1566.14
+    bloom_octaves = 2.2693
+    bloom_swell = 1.65286
+    bloom_gain_slope = 1.08625
+    chiff_volume = 1.84879
+    chiff_width = 0.405336
+    band_trim_db = ((354, -1.7), (707, 2.0), (1414, -0.6), (2828, 6.2), (5657, 2.6), (11314, -8.5))
+
+
+class JazzRideProperties(RideCymbalProperties):
+    """Jazz Ride Cymbal (51). Fitted (examples/crash_fit.py --jazz): 9.37 ->
+    3.67 dB, on its two bow takes -- the wash darker than Standard's (its
+    ring peaking at 2.4 kHz), the strike's ping at 1.4 kHz forward, no
+    swell. ITS TAIL GIVEN A TARGET: no take reaches past ~2 s, and the fit
+    left the floor at 1.6 dB/s, the wash falling 5-6 dB/s at 1-4 kHz where
+    ride1 falls 11 (0.5-2.0 s, every band 250 Hz-4 kHz). The decays set by
+    hand to it (floor 5.0, below 0.8, above 4.0: 16.5 13.7 10.6 11.4 16.3
+    14.1 dB/s against 11.2 11.1 11.2 10.9 13.4 20.8), the trim re-solved
+    under them: the grid 3.67 -> 3.92 dB."""
+    ring_peak_hz = 2426.03
+    ring_decay_floor = 5.0
+    ring_decay_below = 0.8
+    ring_decay_above = 4.0
+    aftersound_fraction = 0.0490885
+    aftersound_dbs = 7.28145
+    bloom_gain = 0.0319334
+    bloom_seconds = 0.00645319
+    bloom_center_hz = 2044.82
+    bloom_octaves = 1.86219
+    bloom_swell = 1.16717
+    bloom_gain_slope = 0.0934319
+    chiff_volume = 1.48455
+    chiff_width = 0.495407
+    band_trim_db = ((354, 1.5), (707, 0.9), (1414, 9.6), (2828, -0.6), (5657, -2.8), (11314, -8.5))
+
+
+class JazzRideBellProperties(RideBellProperties):
+    """Jazz Ride Bell (53). Fitted (examples/crash_fit.py --jazz): 4.90 ->
+    2.94 dB, on its five cup takes. It RINGS, as ride4 does (1-2 dB/s and
+    a swell at 1 kHz under 2 kHz, 0.2-1.05 s), so the low floor stays; but
+    the fit left the aftersound at 2.2 dB/s, and that is what lingered at 8
+    kHz (8.6 dB/s where the take falls 34) -- 15 dB/s takes it to 23 at no
+    cost on the grid (2.937 -> 2.941 dB), the trim re-solved."""
+    ring_peak_hz = 2713.38
+    ring_decay_floor = 0.617874
+    ring_decay_below = 1.35183
+    ring_decay_above = 17.1395
+    aftersound_fraction = 0.0536164
+    aftersound_dbs = 15.0
+    bloom_gain = 0.0223446
+    bloom_seconds = 0.00492874
+    bloom_center_hz = 1787.91
+    bloom_octaves = 1.33436
+    bloom_swell = 0.848913
+    bloom_gain_slope = 0.256617
+    chiff_volume = 0.407671
+    chiff_width = 0.0115671
+    band_trim_db = ((354, -1.9), (707, 5.4), (1414, -0.7), (2828, -7.9), (5657, 1.2), (11314, 3.9))
+
+
+# THE LEFT FOOT ("[L]", the SC-8850's L/R sets' keys 95 and 96; Ben: a
+# double pedal's): the same drum struck by a second beater beside the first --
+# off centre, ~0.35 of the radius where the right one lands ~0.15. Read on an
+# ideal membrane (each measured mode taken for the ideal one nearest its
+# ratio: (0,1) 1.000, (1,1) 1.594, (2,1) 2.136, (0,2) 2.296, (3,1) 2.653,
+# (1,2) 2.918, (4,1) 3.156, (2,2) 3.501, (0,3) 3.600), a mode's level goes as
+# J_m(j_mn r/a): the modes with a node at the centre come up, the centre's
+# own go down, each by at most 6 dB (the measured drum is not ideal -- a
+# kick's thump is its air -- so the reading is a direction, not a number).
+# Each strike varied, as the sets' [RND] drums are. A theory; Ben's ear.
+_MEMBRANE = ((0, 2.4048, 1.000), (1, 3.8317, 1.594), (2, 5.1356, 2.136), (0, 5.5201, 2.296),
+             (3, 6.3802, 2.653), (1, 7.0156, 2.918), (4, 7.5883, 3.156), (2, 8.4172, 3.501),
+             (0, 8.6537, 3.600))
+
+
+def _bessel_j(m, x):
+    """J_m(x) by its series (x under ~10: ample terms)."""
+    t = (x / 2.0) ** m
+    for k in range(1, m + 1):
+        t /= k
+    tot, k = t, 0
+    while abs(t) > 1e-12 * max(abs(tot), 1e-30) and k < 60:
+        k += 1
+        t *= -(x * x / 4.0) / (k * (k + m))
+        tot += t
+    return tot
+
+
+def _off_centre(modes, shapes=None, r0=0.15, r1=0.35, cap_db=6.0):
+    """SHAPES, where a drum's modes are labelled: each mode's (m, j_mn) on the
+    batter head, or None -- not the batter's (the resonant head's, the
+    air's beyond the thump, unread) and left as it is."""
+    out = []
+    for i, (ratio, db, rate) in enumerate(modes):
+        if shapes is not None:
+            if shapes[i] is None:
+                out.append((ratio, db, rate))
+                continue
+            m, j = shapes[i]
+        else:
+            m, j, _r = min(_MEMBRANE, key=lambda q: abs(q[2] - ratio))
+        a0, a1 = abs(_bessel_j(m, j * r0)), abs(_bessel_j(m, j * r1))
+        d = 20.0 * _log(max(a1, 1e-6) / max(a0, 1e-6)) / _log(10.0)
+        out.append((ratio, db + max(-cap_db, min(cap_db, d)), rate))
+    return tuple(out)
+
+
+# Standard's kick labels its modes (KickDrumProperties): the thump the air,
+# both heads as one (as the (0,1)); the batter's (1,1) the pair at 1.485 and
+# 1.598, its (2,1) at 2.22; the resonant head's 1.947 and 3.00, and the rest,
+# unread -- left as they are
+_KICK_SHAPES = ((0, 2.4048), (1, 3.8317), (1, 3.8317), None, (2, 5.1356), None, None, None, None, None, None)
+
+
+class LeftKickProperties(RandomStrike, KickDrumProperties):
+    """[L] Standard Kick 1 and 2: Standard's kick, the left beater."""
+    DRUM_MODES = _off_centre(KickDrumProperties.DRUM_MODES, _KICK_SHAPES)
+
+
+class LeftRoomKickProperties(RandomStrike, MondoKickProperties):
+    """[L] Room Kick 1 and 2: the Room kick (the MONDO kick: Standard's), the left beater."""
+    DRUM_MODES = _off_centre(MondoKickProperties.DRUM_MODES, _KICK_SHAPES)
+
+
+class LeftJazzKickProperties(RandomStrike, JazzKickProperties):
+    """[L] Jazz Kick 1: the jazz kick, the left beater."""
+    DRUM_MODES = _off_centre(JazzKickProperties.DRUM_MODES)
+
+
+class LeftJazzKick2Properties(RandomStrike, JazzKick2Properties):
+    """[L] Jazz Kick 2: the jazz kick at its low tuning, the left beater."""
+    DRUM_MODES = _off_centre(JazzKick2Properties.DRUM_MODES)
 # --- The human voice -------------------------------------------------------
 class SynthLeadProperties(FlueOrganProperties):
     """GM 82-87: synth leads that borrow the flue pipe's tone but have no stops.

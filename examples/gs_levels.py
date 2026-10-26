@@ -68,6 +68,11 @@ KIND = {
     'Jungle Kick 1': 'drum', 'Jungle Kick 2': 'drum', 'Jungle Snare 1': 'drum', 'Jungle Snare 2': 'drum',
     'Jungle Hi-Hat': 'cymbal', 'Techno Kick 1': 'drum', 'Techno Kick 2': 'drum', 'Techno Snare 1': 'drum',
     'Techno Snare 2': 'drum', 'TR-909 Comp Kick': 'drum', 'Techno TR-808 Kick': 'drum', 'Techno TR-606 Snare 2': 'drum',
+    # the SC-8850's Room and Jazz sets' own
+    'Room Kick 1': 'drum', 'Room Kick 2': 'drum', 'Room Snare 1': 'drum', 'Room Snare 2': 'drum', 'Room Closed Hi-Hat 3': 'cymbal', 'Room Open Hi-Hat 3': 'cymbal',
+    'Room Crash Cymbal': 'cymbal', 'Room Ride Cymbal': 'cymbal', 'Room Ride Bell': 'cymbal',
+    'Jazz Low Tom 1': 'drum', 'Jazz Mid Tom 1': 'drum', 'Jazz Crash Cymbal': 'cymbal', 'Jazz Ride Cymbal': 'cymbal',
+    'Jazz Ride Bell': 'cymbal',
     'Jingle Bell': 'cymbal', 'Req Dum': 'drum', 'Req Tik': 'drum', 'Bendir': 'drum', 'Udo Short': 'drum',
     'Udo Long': 'drum', 'Udo Slap': 'drum', 'Talking Drum': 'drum', 'Bend Talking Drum': 'drum',
     'Djembe': 'drum', 'Djembe Rim': 'drum', 'Conga Slide': 'drum', 'Open Pandiero': 'drum',
@@ -80,6 +85,14 @@ KIND = {
 }
 # ...and a soft stroke's kind 6 dB under its loud one's
 SOFT = {'Gengari p': 6.0, 'Jing p': 6.0}
+# THE SAME DRUM ELSEWHERE: a voice that is Standard's in another room (the
+# Room set's) or the same drum from another kit (the Jazz set's) sits where
+# Standard's does -- by kind, the closed hat would be the open's level, and
+# the live room's reflections lift a drum's loudest 150 ms 8-12 dB
+MATCH = {'Room Kick 1': 36, 'Room Kick 2': 35, 'Room Snare 1': 38, 'Room Snare 2': 40, 'Room Closed Hi-Hat 3': 42, 'Room Open Hi-Hat 3': 46,
+         'Room Crash Cymbal': 49, 'Room Ride Cymbal': 51, 'Room Ride Bell': 53,
+         'Jazz Low Tom 1': 43, 'Jazz Mid Tom 1': 47, 'Jazz Crash Cymbal': 49, 'Jazz Ride Cymbal': 51,
+         'Jazz Ride Bell': 53}
 
 
 def level_of(kit, key):
@@ -129,10 +142,11 @@ def main(argv):
         if wk is None:
             continue
         lv = level_of(*wk)
-        d = TARGET[kind] - SOFT.get(name, 0.0) - lv
+        target = level_of(0, MATCH[name]) if name in MATCH else TARGET[kind] - SOFT.get(name, 0.0)
+        d = target - lv
         cur = G.LEVEL.get(name, 1.0)
         new = round(cur * 10 ** (d / 20.0), 4) if abs(d) > 3.0 else cur
-        print("  %-20s %-6s %6.1f dB  (target %.0f)  trim %s -> %s" % (name, kind, lv, TARGET[kind], cur, new))
+        print("  %-20s %-6s %6.1f dB  (target %.1f)  trim %s -> %s" % (name, kind, lv, target, cur, new))
         if new != cur:
             trims[name] = new
     if "--write" in argv and trims:

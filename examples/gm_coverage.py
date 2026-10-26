@@ -226,11 +226,11 @@ PERC_RATED = {
  39:(4,"VCSL claps (CC0, examples/clap_fit.py): an ensemble -- seven hands flammed over 65 ms, each a fitted noise burst. Ben: sounds great"),
  40:(4,"Roland's SNARE DRUM 2 (SC-55 p.70), a second acoustic snare: VCSL's Modern 1 (CC0), wires on, ten hits over 30 dB on a stereo pair (examples/snare_fit.py --vcsl). Its own head -- lowest mode 192.5 Hz, the loudest 435 -- and stick burst; 8.3 -> 6.9 dB. 2.5 dB under 38, where three GM sets keep theirs. The drum machine's snare is the Electronic set's"),
  41:(4,"DRSKit's floor tom, 30 strokes on its close mic: modes 1 : 1.631 : 2.012 : 2.349 : 2.971, a long ring (the fundamental 13 dB/s, about 2.5 s), a two-stage decay, the stick's click, a glide that grows with the stroke. Ben, by ear"),
- 42:(4,"Iowa hi-hat, five takes"),
+ 42:(4,"REFIT TO A KIT DRUMMER'S: DrumGizmo DRSKit's closed hats (24 strokes, CC-BY, measured only; examples/crash_fit.py --hats) on the plate measured on Iowa's -- a short bright tick, nearly all strike, 7.75 -> 4.91 dB over the grid; Iowa's were a percussionist's, darker, a stand's thump under them. Set by its SIZZLE (4-16 kHz re the snare) where GeneralUser GS has its hat. Ben: \"The new hats sound much better\""),
  43:(4,"as 41, higher"),
- 44:(4,"Iowa hi-hat, foot-close take"),
+ 44:(4,"Iowa hi-hat, foot-close take (DRSKit has no pedal take) -- its stand's thump under 2 kHz cut to the refitted closed hat's share, set by its sizzle where GeneralUser GS has its pedal hat. Ben: \"The new hats sound much better\""),
  45:(4,"DRSKit's rack tom, 27 strokes on its close mic: modes 1 : 1.477 : 1.755 : 2.259, the stick's click 30-60 dB under the fundamental to 6 kHz, a glide that grows with the stroke. Ben, by ear"),
- 46:(4,"Iowa hi-hat, open"),
+ 46:(4,"REFIT TO A KIT DRUMMER'S: DRSKit's open hats (18 strokes; examples/crash_fit.py --hats), 5.84 -> 3.37 dB; set by its sizzle where GeneralUser GS has it -- 13.5 dB up: the quiet hat Ben had heard all along. Ben: \"The new hats sound much better\""),
  47:(4,"as 45, higher"),
  48:(4,"as 45, higher"),
  49:(4,"Iowa 17\" suspended crash for the modes, refitted to DRSKit's left crash hit HARD with the stick's shank (11 strokes over 37 dB): the cascade's swell of 2-8 kHz after the strike, scattered (in order it glided), growing with the stroke; a slow ring at its own 8.5 dB/s; the shank's thud. Ben, by ear: sounds great"),
@@ -660,6 +660,20 @@ def _gs_sets_rated():
                       'LoFiSnare1Properties', 'LoFiSnare2Properties', 'LoFiRimProperties',
                       'HipHopClapsProperties', 'RnBClapsProperties', 'CompClaps2Properties',
                       'TR909ClapProperties', 'FatKickProperties')},
+                  # the SC-8850's Jazz set's own, fitted to soneproject's jazz-bar kit
+                  # (CC0; perc_fit.py jazz_tom_low/high, crash_fit.py --jazz), heard in
+                  # examples/roomjazz_demo.py
+                  **{_c: (lambda: 4) for _c in (
+                      'JazzTomLowProperties', 'JazzTomHighProperties', 'JazzCrashProperties',
+                      'JazzRideProperties', 'JazzRideBellProperties')},
+                  # the Room set's own (Standard's in the live room) and the L/R sets'
+                  # left foot (the beater off centre, a membrane's modes): theory,
+                  # heard in examples/roomjazz_demo.py
+                  **{_c: (lambda: 3) for _c in (
+                      'RoomSnareProperties', 'RoomSnare2Properties', 'RoomClosedHatProperties',
+                      'RoomOpenHatProperties', 'RoomCrashProperties', 'RoomRideProperties',
+                      'RoomRideBellProperties', 'MondoKickProperties', 'LeftKickProperties',
+                      'LeftRoomKickProperties', 'LeftJazzKickProperties', 'LeftJazzKick2Properties')},
                   # Rock Snare Dry: Standard's snare, gated (APPROX)
                   'AcousticSnareProperties': (lambda: PERC_RATED[38][0]),
                   # the Jungle drums (tonelib.JungleBreak: breaks sped up; Kick 2 the
@@ -746,7 +760,7 @@ def _gs_sets_rated():
             if spec is None:
                 continue
             approx = len(spec) > 3 and spec[3] == _G.APPROX
-            if spec[0] == 'c':
+            if spec[0] in ('c', 'nc'):
                 r = cls_rating[spec[1]]()
                 note = "%s, the %s at %.0f Hz" % (name, spec[1].replace("Properties", ""), spec[2])
             else:

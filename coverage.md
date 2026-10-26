@@ -19,16 +19,16 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | GM 1 programs | 128 | 128 | 100% | 119 | 9 | 0 | 0 | 0 |
 | GM 1 percussion keys (35-81) | 47 | 47 | 100% | 47 | 0 | 0 | 0 | 0 |
 | GM 2 tones (MSB 121) | 256 | 235 | 92% | 193 | 42 | 0 | 0 | 0 |
-| GM 2 drum sets | 9 | 9 | 100% | 9 | 0 | 0 | 0 | 0 |
+| GM 2 drum sets | 9 | 9 | 100% | 8 | 1 | 0 | 0 | 0 |
 | SC-55 tones | 214 | 214 | 100% | 171 | 40 | 3 | 0 | 0 |
 | SC-55 drum sets | 10 | 7 | 70% | | | | | |
 | SC-55mkII tones | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 |
 | SC-88 tones | 418 | 418 | 100% | 285 | 130 | 3 | 0 | 0 |
-| SC-88 drum sets | 14 | 10 | 71% | | | | | |
+| SC-88 drum sets | 14 | 11 | 79% | | | | | |
 | SC-88Pro tones | 774 | 442 | 57% | 298 | 141 | 3 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
 | SC-8850 tones | 1262 | 451 | 36% | 307 | 141 | 3 | 0 | 0 |
-| SC-8850 drum sets | 37 | 23 | 62% | | | | | |
+| SC-8850 drum sets | 37 | 28 | 76% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
 
@@ -71,8 +71,8 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 | rating | notes | share |
 |---|---|---|
 | 2 specific, theory | 5 | 4% |
-| 3 specific, theory + ear | 5 | 4% |
-| 4 specific, validated against a target | 105 | 91% |
+| 3 specific, theory + ear | 9 | 8% |
+| 4 specific, validated against a target | 101 | 88% |
 
 | # | note | class | | notes |
 |---|---|---|---|---|
@@ -84,8 +84,8 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 | 5 | Kick Drum 2 | `KickDrum` | **4** | SC-88 Pro's Kick Drum 2: Standard's key 35 |
 | 6 | Jazz Kick 1 | `JazzKick` | **4** | SC-88 Pro's Jazz Kick 1: set 32's key 36 |
 | 7 | Jazz Kick 2 | `JazzKick2` | **4** | SC-88 Pro's Jazz Kick 2: set 32's key 35 |
-| 8 | Room Kick 1 | `KickDrum` | **4** | SC-88 Pro's Room Kick 1: set 8's key 36 |
-| 9 | Room Kick 2 | `KickDrum` | **4** | SC-88 Pro's Room Kick 2: set 8's key 35 |
+| 8 | Room Kick 1 | `KickDrum` | **3** | SC-88 Pro's Room Kick 1: set 8's key 36 |
+| 9 | Room Kick 2 | `KickDrum` | **3** | SC-88 Pro's Room Kick 2: set 8's key 35 |
 | 10 | Power Kick 1 | `MondoKick` | **4** | SC-88 Pro's Power Kick 1: set 16's key 36 |
 | 11 | Power Kick 2 | `KickDrum` | **2** | SC-88 Pro's Power Kick 2: set 16's key 35 |
 | 12 | Electric Kick 2 | `KickDrum` | **2** | SC-88 Pro's Electric Kick 2: set 24's key 35 |
@@ -113,11 +113,11 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 | 39 | Hand Clap | `HandClap` | **4** | VCSL claps (CC0, examples/clap_fit.py): an ensemble -- seven hands flammed over 65 ms, each a fitted noise burst. Ben: sounds great |
 | 40 | Snare Drum 2 | `SnareDrum2` | **4** | Roland's SNARE DRUM 2 (SC-55 p.70), a second acoustic snare: VCSL's Modern 1 (CC0), wires on, ten hits over 30 dB on a stereo pair (examples/snare_fit.py --vcsl). Its own head -- lowest mode 192.5 Hz, the loudest 435 -- and stick burst; 8.3 -> 6.9 dB. 2.5 dB under 38, where three GM sets keep theirs. The drum machine's snare is the Electronic set's |
 | 41 | Low Floor Tom | `FloorTom` | **4** | DRSKit's floor tom, 30 strokes on its close mic: modes 1 : 1.631 : 2.012 : 2.349 : 2.971, a long ring (the fundamental 13 dB/s, about 2.5 s), a two-stage decay, the stick's click, a glide that grows with the stroke. Ben, by ear |
-| 42 | Closed Hi-Hat | `ClosedHiHat` | **4** | Iowa hi-hat, five takes |
+| 42 | Closed Hi-Hat | `ClosedHiHat` | **4** | REFIT TO A KIT DRUMMER'S: DrumGizmo DRSKit's closed hats (24 strokes, CC-BY, measured only; examples/crash_fit.py --hats) on the plate measured on Iowa's -- a short bright tick, nearly all strike, 7.75 -> 4.91 dB over the grid; Iowa's were a percussionist's, darker, a stand's thump under them. Set by its SIZZLE (4-16 kHz re the snare) where GeneralUser GS has its hat. Ben: "The new hats sound much better" |
 | 43 | High Floor Tom | `FloorTom` | **4** | as 41, higher |
-| 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Iowa hi-hat, foot-close take |
+| 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Iowa hi-hat, foot-close take (DRSKit has no pedal take) -- its stand's thump under 2 kHz cut to the refitted closed hat's share, set by its sizzle where GeneralUser GS has its pedal hat. Ben: "The new hats sound much better" |
 | 45 | Low Tom | `TomTom` | **4** | DRSKit's rack tom, 27 strokes on its close mic: modes 1 : 1.477 : 1.755 : 2.259, the stick's click 30-60 dB under the fundamental to 6 kHz, a glide that grows with the stroke. Ben, by ear |
-| 46 | Open Hi-Hat | `OpenHiHat` | **4** | Iowa hi-hat, open |
+| 46 | Open Hi-Hat | `OpenHiHat` | **4** | REFIT TO A KIT DRUMMER'S: DRSKit's open hats (18 strokes; examples/crash_fit.py --hats), 5.84 -> 3.37 dB; set by its sizzle where GeneralUser GS has it -- 13.5 dB up: the quiet hat Ben had heard all along. Ben: "The new hats sound much better" |
 | 47 | Low-Mid Tom | `TomTom` | **4** | as 45, higher |
 | 48 | Hi-Mid Tom | `HighTom` | **4** | as 45, higher |
 | 49 | Crash Cymbal 1 | `CrashCymbal1` | **4** | Iowa 17" suspended crash for the modes, refitted to DRSKit's left crash hit HARD with the stick's shank (11 strokes over 37 dB): the cascade's swell of 2-8 kHz after the strike, scattered (in order it glided), growing with the stroke; a slow ring at its own 8.5 dB/s; the shank's thud. Ben, by ear: sounds great |
@@ -170,8 +170,8 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 | 104 | Std 1 Snare 3 | `AcousticSnare` | **4** | SC-88 Pro's Std 1 Snare 3: Standard's key 38 |
 | 105 | Jazz Snare 1 | `JazzSnare` | **4** | SC-88 Pro's Jazz Snare 1: set 32's key 38 |
 | 106 | Jazz Snare 2 | `JazzSnare2` | **4** | SC-88 Pro's Jazz Snare 2: set 32's key 40 |
-| 107 | Room Snare 1 | `AcousticSnare` | **4** | SC-88 Pro's Room Snare 1: set 8's key 38 |
-| 108 | Room Snare 2 | `SnareDrum2` | **4** | SC-88 Pro's Room Snare 2: set 8's key 40 |
+| 107 | Room Snare 1 | `AcousticSnare` | **3** | SC-88 Pro's Room Snare 1: set 8's key 38 |
+| 108 | Room Snare 2 | `SnareDrum2` | **3** | SC-88 Pro's Room Snare 2: set 8's key 40 |
 | 109 | Power Snare 1 | `GatedSnare` | **4** | SC-88 Pro's Power Snare 1: set 16's key 38 |
 | 110 | Power Snare 2 | `SnareDrum2` | **2** | SC-88 Pro's Power Snare 2: set 16's key 40 |
 | 111 | Gated Snare | `GatedSnare` | **4** | SC-88 Pro's Gated Snare: set 16's key 38 |
@@ -205,12 +205,12 @@ Standard. THE GOAL: every one built.
 |---|---|---|---|---|---|---|---|
 | 1 | STANDARD 1 | STANDARD 1 | STANDARD 1 | STANDARD | built: the note map above | 115 | **4** |
 | 2 | STANDARD 2 | STANDARD 2 | STANDARD 2 | -- | built: 10 keys of its own | 10 | **4** |
-| 3 | STANDARD L/R | STANDARD 3 | -- | -- | partial: 9 of 17 keys (8 Standard's drum) | 12 | **4** |
-| 9 | ROOM | ROOM | ROOM | ROOM | partial: 15 of 20 keys (5 Standard's drum) | 8 | **4** |
+| 3 | STANDARD L/R | STANDARD 3 | -- | -- | built: 20 keys of its own | 20 | **4** |
+| 9 | ROOM | ROOM | ROOM | ROOM | built: 17 keys of its own | 17 | **3** |
 | 10 | HIP HOP | HIP HOP | -- | -- | built: 39 keys of its own | 39 | **4** |
 | 11 | JUNGLE | JUNGLE | -- | -- | built: 40 keys of its own | 40 | **4** |
 | 12 | TECHNO | TECHNO | -- | -- | built: 45 keys of its own | 45 | **4** |
-| 13 | ROOM L/R | -- | -- | -- | partial: 18 of 21 keys (3 Standard's drum) | 10 | **4** |
+| 13 | ROOM L/R | -- | -- | -- | built: 21 keys of its own | 15 | **3** |
 | 14 | HOUSE | -- | -- | -- | built: 46 keys of its own | 46 | **4** |
 | 17 | POWER | POWER | POWER | POWER | built: 10 keys of its own | 10 | **4** |
 | 25 | ELECTRONIC | ELECTRONIC | ELECTRONIC | ELECTRONIC | built: 14 keys of its own | 14 | **4** |
@@ -220,8 +220,8 @@ Standard. THE GOAL: every one built.
 | 29 | TR-606 | TR-606 | -- | -- | built: 34 keys of its own | 34 | **4** |
 | 30 | TR-707 | TR-707 | -- | -- | built: 23 keys of its own | 23 | **4** |
 | 31 | TR-909 | TR-909 | -- | -- | built: 23 keys of its own | 23 | **4** |
-| 33 | JAZZ | JAZZ | JAZZ | JAZZ | partial: 12 of 20 keys (8 Standard's drum) | 9 | **4** |
-| 34 | JAZZ L/R | -- | -- | -- | partial: 12 of 22 keys (10 Standard's drum) | 9 | **4** |
+| 33 | JAZZ | JAZZ | JAZZ | JAZZ | built: 17 keys of its own | 17 | **4** |
+| 34 | JAZZ L/R | -- | -- | -- | built: 22 keys of its own | 20 | **4** |
 | 41 | BRUSH | BRUSH | BRUSH | BRUSH | built: 17 keys of its own | 17 | **4** |
 | 42 | BRUSH 2 | -- | -- | -- | built: 20 keys of its own | 18 | **4** |
 | 43 | BRUSH 2 L/R | -- | -- | -- | partial: 20 of 22 keys (2 Standard's drum) | 18 | **4** |
@@ -239,7 +239,7 @@ Standard. THE GOAL: every one built.
 | 60 | RHYTHM FX 3 | -- | -- | -- | partial: 3 of 75 keys (72 silent) | 3 | **4** |
 | 61 | SFX 2 | -- | -- | -- | partial: 3 of 60 keys (57 silent) | 3 | **3** |
 | 62 | VOICE | -- | -- | -- | partial: 13 of 53 keys (40 silent) | 13 | **3** |
-| 63 | CYM&CLAPS 2 | -- | -- | -- | partial: 40 of 65 keys (25 silent) | 40 | **4** |
+| 63 | CYM&CLAPS 2 | -- | -- | -- | partial: 46 of 65 keys (19 silent) | 46 | **4** |
 | 128 | -- | -- | -- | CM-64/32L | built: 67 keys of its own | 67 | **4** |
 
 ### 1 Standard 2
@@ -261,29 +261,46 @@ Standard. THE GOAL: every one built.
 
 | # | note | class | | notes |
 |---|---|---|---|---|
-| 35 | Standard 3 Kick 2 | `KickDrum` | **2** | Standard 3 Kick 2: Standard's key 35 -- the nearest we have, not the sound |
-| 36 | [RND] Kick | `RndKickDrum` | **4** | [RND] Kick: Standard's key 36, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
-| 38 | [RND] Snare | `RndAcousticSnare` | **4** | [RND] Snare: Standard's key 38, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 35 | [RND] Standard Kick 2 | `RndKickDrum` | **4** | [RND] Standard Kick 2: Standard's key 35, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 36 | [RND] Standard Kick 1 | `RndKickDrum` | **4** | [RND] Standard Kick 1: Standard's key 36, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 38 | [RND] Standard Snare 1 | `RndAcousticSnare` | **4** | [RND] Standard Snare 1: Standard's key 38, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 39 | [RND] Hand Clap | `RndHandClap` | **4** | [RND] Hand Clap: Standard's key 39, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
-| 40 | Standard 3 Snare 2 | `SnareDrum2` | **2** | Standard 3 Snare 2: Standard's key 40 -- the nearest we have, not the sound |
+| 40 | [RND] Standard Snare 2 | `RndSnareDrum2` | **4** | [RND] Standard Snare 2: Standard's key 40, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 41 | [RND] Low Tom 2 | `RndFloorTom` | **4** | [RND] Low Tom 2: Standard's key 41, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 42 | [RND] Closed Hi-Hat | `RndClosedHiHat` | **4** | [RND] Closed Hi-Hat: Standard's key 42, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 43 | [RND] Low Tom 1 | `RndFloorTom` | **4** | [RND] Low Tom 1: Standard's key 43, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 44 | [RND] Pedal Hi-Hat | `RndPedalHiHat` | **4** | [RND] Pedal Hi-Hat: Standard's key 44, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 45 | [RND] Mid Tom 2 | `RndTomTom` | **4** | [RND] Mid Tom 2: Standard's key 45, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 46 | [RND] Open Hi-Hat | `RndOpenHiHat` | **4** | [RND] Open Hi-Hat: Standard's key 46, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 47 | [RND] Mid Tom 1 | `RndTomTom` | **4** | [RND] Mid Tom 1: Standard's key 47, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 48 | [RND] High Tom 2 | `RndHighTom` | **4** | [RND] High Tom 2: Standard's key 48, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 49 | [RND] Crash Cymbal | `RndCrashCymbal1` | **4** | [RND] Crash Cymbal: Standard's key 49, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 50 | [RND] High Tom 1 | `RndHighTom` | **4** | [RND] High Tom 1: Standard's key 50, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 51 | [RND] Ride Cymbal 1 | `RndRideCymbal` | **4** | [RND] Ride Cymbal 1: Standard's key 51, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 53 | [RND] Ride Bell 1 | `RndRideBell` | **4** | [RND] Ride Bell 1: Standard's key 53, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 59 | [RND] Ride Cymbal 2 | `RndCrashRide` | **4** | [RND] Ride Cymbal 2: Standard's key 59, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 95 | [L] Standard Kick 2 | `LeftKick` | **3** | [L] Standard Kick 2, the LeftKick at 39 Hz |
+| 96 | [L] Standard Kick 1 | `LeftKick` | **3** | [L] Standard Kick 1, the LeftKick at 44 Hz |
 
 ### 8 Room
 
 | # | note | class | | notes |
 |---|---|---|---|---|
+| 35 | Room Kick 2 | `MondoKick` | **3** | Room Kick 2, the MondoKick at 39 Hz |
+| 36 | Room Kick 1 | `MondoKick` | **3** | Room Kick 1, the MondoKick at 44 Hz |
+| 38 | Room Snare 1 | `RoomSnare` | **3** | Room Snare 1, the RoomSnare at 195 Hz |
+| 40 | Room Snare 2 | `RoomSnare2` | **3** | Room Snare 2, the RoomSnare2 at 192 Hz |
 | 41 | Room Low Tom 2 | `RoomFloorTom` | **4** | ROOM LOW TOM 2: Standard's floor tom in a small LIVE ROOM of its own (tonelib.LiveRoom: ~3.5 x 3.9 x 2.8 m, hard walls, reflections to the third order, the drum 1.5 m away facing the listener), fitted (examples/roomset_fit.py) to what GeneralUser GS's Room toms carry over its Standard toms: early reflections +4.5 dB against +5.4, top +3.0 against +2.2. The hall's drum moved further back gave +1 dB, aimed at the back wall 6-7 dB darker: the live room's hard walls make it roomier AND brighter. Ben: sounds great |
+| 42 | Room Closed Hi-Hat 3 | `RoomClosedHat` | **3** | Room Closed Hi-Hat 3, the RoomClosedHat at 248 Hz |
 | 43 | Room Low Tom 1 | `RoomFloorTom` | **4** | as 41 |
 | 45 | Room Mid Tom 2 | `RoomTom` | **4** | ROOM MID TOM 2: Standard's rack tom in the live room (as 41) |
+| 46 | Room Open Hi-Hat 3 | `RoomOpenHat` | **3** | Room Open Hi-Hat 3, the RoomOpenHat at 248 Hz |
 | 47 | Room Mid Tom 1 | `RoomTom` | **4** | as 45 |
 | 48 | Room Hi Tom 2 | `RoomHighTom` | **4** | ROOM HI TOM 2: Standard's high tom in the live room (as 41) |
+| 49 | Room Crash Cymbal | `RoomCrash` | **3** | Room Crash Cymbal, the RoomCrash at 288 Hz |
 | 50 | Room Hi Tom 1 | `RoomHighTom` | **4** | as 48 |
+| 51 | Room Ride Cymbal | `RoomRide` | **3** | Room Ride Cymbal, the RoomRide at 148 Hz |
+| 53 | Room Ride Bell | `RoomRideBell` | **3** | Room Ride Bell, the RoomRideBell at 148 Hz |
 | 95 | Standard 1 Snare 1 | `AcousticSnare` | **4** | Standard 1 Snare 1: Standard's key 38 |
 | 96 | Standard 1 Snare 2 | `SnareDrum2` | **4** | Standard 1 Snare 2: Standard's key 40 |
 
@@ -299,16 +316,16 @@ Standard. THE GOAL: every one built.
 | 38 | LoFi Snare 1 | `LoFiSnare1` | **3** | LoFi Snare 1, the LoFiSnare1 at 195 Hz |
 | 39 | TR-707 Claps | `TR707Clap` | **4** | TR-707 Claps: set 29's key 39 |
 | 40 | LoFi Snare 2 | `LoFiSnare2` | **3** | LoFi Snare 2, the LoFiSnare2 at 165 Hz |
-| 41 | TR-909 Low Tom 2 | `TR909Tom` | **4** | TR-909 Low Tom 2: set 30's key 41 |
-| 42 | Room Closed Hi-Hat | `ClosedHiHat` | **2** | Room Closed Hi-Hat: Standard's key 42 -- the nearest we have, not the sound |
-| 43 | TR-909 Low Tom 1 | `TR909LowTom1` | **4** | TR-909 Low Tom 1: set 30's key 43 |
+| 41 | Jazz Low Tom 2 | `JazzTomLow` | **4** | Jazz Low Tom 2, the JazzTomLow at 90 Hz |
+| 42 | Room Closed Hi-Hat | `RoomClosedHat` | **3** | Room Closed Hi-Hat, the RoomClosedHat at 248 Hz |
+| 43 | Jazz Low Tom 1 | `JazzTomLow` | **4** | Jazz Low Tom 1, the JazzTomLow at 101 Hz |
 | 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
-| 45 | TR-909 Mid Tom 2 | `TR909MidTom` | **4** | TR-909 Mid Tom 2: set 30's key 45 |
-| 46 | Room Open Hi-Hat | `OpenHiHat` | **2** | Room Open Hi-Hat: Standard's key 46 -- the nearest we have, not the sound |
-| 47 | TR-909 Mid Tom 1 | `TR909MidTom1` | **4** | TR-909 Mid Tom 1: set 30's key 47 |
-| 48 | TR-909 High Tom 2 | `TR909HiTom` | **4** | TR-909 High Tom 2: set 30's key 48 |
+| 45 | Jazz Mid Tom 2 | `JazzTomHigh` | **4** | Jazz Mid Tom 2, the JazzTomHigh at 144 Hz |
+| 46 | Room Open Hi-Hat | `RoomOpenHat` | **3** | Room Open Hi-Hat, the RoomOpenHat at 248 Hz |
+| 47 | Jazz Mid Tom 1 | `JazzTomHigh` | **4** | Jazz Mid Tom 1, the JazzTomHigh at 162 Hz |
+| 48 | Jazz High Tom 2 | `JazzTomHigh` | **4** | Jazz High Tom 2, the JazzTomHigh at 182 Hz |
 | 49 | TR-909 Crash Cymbal | `TR909Crash` | **4** | TR-909 Crash Cymbal: set 30's key 49 |
-| 50 | TR-909 High Tom 1 | `TR909HiTom1` | **4** | TR-909 High Tom 1: set 30's key 50 |
+| 50 | Jazz High Tom 1 | `JazzTomHigh` | **4** | Jazz High Tom 1, the JazzTomHigh at 204 Hz |
 | 52 | Reverse Cymbal | `ReverseCymbal` | **4** | Reverse Cymbal: set 24's key 52 |
 | 53 | Ride Bell | `RideBell` | **4** | Ride Bell: Standard's key 53 |
 | 54 | Shake Tambourine | `Tambourine` | **2** | Shake Tambourine: Standard's key 54 -- the nearest we have, not the sound |
@@ -327,8 +344,8 @@ Standard. THE GOAL: every one built.
 | 91 | Hip-Hop Claps | `HipHopClaps` | **3** | Hip-Hop Claps, the HipHopClaps at 310 Hz |
 | 92 | Standard 1 Snare 1 | `AcousticSnare` | **4** | Standard 1 Snare 1: Standard's key 38 |
 | 93 | Standard 1 Snare 2 | `SnareDrum2` | **4** | Standard 1 Snare 2: Standard's key 40 |
-| 94 | Room Snare 1 | `AcousticSnare` | **2** | Room Snare 1: Standard's key 38 -- the nearest we have, not the sound |
-| 95 | Room Snare 2 | `SnareDrum2` | **2** | Room Snare 2: Standard's key 40 -- the nearest we have, not the sound |
+| 94 | Room Snare 1 | `RoomSnare` | **3** | Room Snare 1, the RoomSnare at 195 Hz |
+| 95 | Room Snare 2 | `RoomSnare2` | **3** | Room Snare 2, the RoomSnare2 at 192 Hz |
 | 96 | Dance Snare 1 | `TR909Snare` | **2** | Dance Snare 1: set 30's key 38 -- the nearest we have, not the sound |
 
 ### 10 Jungle
@@ -431,15 +448,20 @@ Standard. THE GOAL: every one built.
 | # | note | class | | notes |
 |---|---|---|---|---|
 | 26 | Finger Snap | `FingerSnap` | **4** | Finger Snap: Standard's key 26 |
-| 35 | [RND] Room Kick 2 | `RndKickDrum` | **4** | [RND] Room Kick 2: Standard's key 35, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
-| 36 | [RND] Room Kick 1 | `RndKickDrum` | **4** | [RND] Room Kick 1: Standard's key 36, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
-| 38 | [RND] Room Snare 1 | `RndAcousticSnare` | **4** | [RND] Room Snare 1: Standard's key 38, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 35 | [RND] Room Kick 2 | `RndMondoKick` | **3** | [RND] Room Kick 2, the MondoKick at 39 Hz |
+| 36 | [RND] Room Kick 1 | `RndMondoKick` | **3** | [RND] Room Kick 1, the MondoKick at 44 Hz |
+| 38 | [RND] Room Snare 1 | `RndRoomSnare` | **3** | [RND] Room Snare 1, the RoomSnare at 195 Hz |
 | 39 | Hand Clap | `HandClap` | **4** | Hand Clap: Standard's key 39 |
-| 40 | [RND] Room Snare 2 | `RndSnareDrum2` | **4** | [RND] Room Snare 2: Standard's key 40, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
-| 42 | [RND] Room Closed Hi-Hat | `RndClosedHiHat` | **4** | [RND] Room Closed Hi-Hat: Standard's key 42, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 40 | [RND] Room Snare 2 | `RndRoomSnare2` | **3** | [RND] Room Snare 2, the RoomSnare2 at 192 Hz |
+| 42 | [RND] Room Closed Hi-Hat | `RndRoomClosedHat` | **3** | [RND] Room Closed Hi-Hat, the RoomClosedHat at 248 Hz |
 | 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
-| 46 | [RND] Room Open Hi-Hat | `RndOpenHiHat` | **4** | [RND] Room Open Hi-Hat: Standard's key 46, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 46 | [RND] Room Open Hi-Hat | `RndRoomOpenHat` | **3** | [RND] Room Open Hi-Hat, the RoomOpenHat at 248 Hz |
+| 49 | [RND] Room Crash Cymbal | `RndRoomCrash` | **3** | [RND] Room Crash Cymbal, the RoomCrash at 288 Hz |
+| 51 | [RND] Room Ride Cymbal | `RndRoomRide` | **3** | [RND] Room Ride Cymbal, the RoomRide at 148 Hz |
+| 53 | [RND] Room Ride Bell | `RndRoomRideBell` | **3** | [RND] Room Ride Bell, the RoomRideBell at 148 Hz |
 | 55 | Splash Cymbal | `SplashCymbal` | **4** | Splash Cymbal: Standard's key 55 |
+| 95 | [L] Room Kick 2 | `LeftRoomKick` | **3** | [L] Room Kick 2, the LeftRoomKick at 39 Hz |
+| 96 | [L] Room Kick 1 | `LeftRoomKick` | **3** | [L] Room Kick 1, the LeftRoomKick at 44 Hz |
 
 ### 13 House
 
@@ -454,11 +476,11 @@ Standard. THE GOAL: every one built.
 | 39 | TR-909 Claps | `TR909Clap` | **3** | TR-909 Claps, the TR909Clap at 1000 Hz |
 | 40 | House Snare 2 | `TR909Snare2` | **4** | House Snare 2: set 30's key 40 |
 | 41 | TR-909 Low Tom 2 | `TR909Tom` | **4** | TR-909 Low Tom 2: set 30's key 41 |
-| 42 | Room Closed Hi-Hat | `ClosedHiHat` | **2** | Room Closed Hi-Hat: Standard's key 42 -- the nearest we have, not the sound |
+| 42 | Room Closed Hi-Hat | `RoomClosedHat` | **3** | Room Closed Hi-Hat, the RoomClosedHat at 248 Hz |
 | 43 | TR-909 Low Tom 1 | `TR909LowTom1` | **4** | TR-909 Low Tom 1: set 30's key 43 |
 | 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
 | 45 | TR-909 Mid Tom 2 | `TR909MidTom` | **4** | TR-909 Mid Tom 2: set 30's key 45 |
-| 46 | Room Open Hi-Hat | `OpenHiHat` | **2** | Room Open Hi-Hat: Standard's key 46 -- the nearest we have, not the sound |
+| 46 | Room Open Hi-Hat | `RoomOpenHat` | **3** | Room Open Hi-Hat, the RoomOpenHat at 248 Hz |
 | 47 | TR-909 Mid Tom 1 | `TR909MidTom1` | **4** | TR-909 Mid Tom 1: set 30's key 47 |
 | 48 | TR-909 High Tom 2 | `TR909HiTom` | **4** | TR-909 High Tom 2: set 30's key 48 |
 | 49 | TR-909 Crash Cymbal | `TR909Crash` | **4** | TR-909 Crash Cymbal: set 30's key 49 |
@@ -746,9 +768,17 @@ Standard. THE GOAL: every one built.
 | 36 | Jazz Kick 1 | `JazzKick` | **4** | JAZZ KICK 1: the ~71 Hz drum of soneproject's kit in a jazz bar (Freesound 25895, CC0): its modes measured, its strike fitted (examples/perc_fit.py jazz_kick1, 8.4 -> 7.9 dB; the takes a Zoom H1 out in the room, so the score is the room's as much as the drum's). Ben: the Jazz set sounds great |
 | 38 | Jazz Snare 1 | `JazzSnare` | **4** | JAZZ SNARE 1: the kit's bright snare, 251 Hz on top, the wires ~15 dB under the body: modes, strike and noise fitted (7.2 -> 4.3 dB) |
 | 40 | Jazz Snare 2 | `JazzSnare2` | **4** | JAZZ SNARE 2: the same snare darker, 174 Hz on top: its modes measured, Snare 1's strike with the wires 7.5 dB lower (the takes' difference). Also the SC-88 Pro's Standard key 106 |
+| 41 | Jazz Low Tom 2 | `JazzTomLow` | **4** | Jazz Low Tom 2, the JazzTomLow at 90 Hz |
 | 42 | Closed Hi-Hat 2 | `RndClosedHiHat` | **4** | Closed Hi-Hat 2: Standard's key 42, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 43 | Jazz Low Tom 1 | `JazzTomLow` | **4** | Jazz Low Tom 1, the JazzTomLow at 101 Hz |
+| 45 | Jazz Mid Tom 2 | `JazzTomHigh` | **4** | Jazz Mid Tom 2, the JazzTomHigh at 144 Hz |
 | 46 | Open Hi-Hat 2 | `RndOpenHiHat` | **4** | Open Hi-Hat 2: Standard's key 46, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
-| 51 | Ride Cymbal Inner | `RideCymbal` | **4** | Ride Cymbal Inner, the RideCymbal at 148 Hz |
+| 47 | Jazz Mid Tom 1 | `JazzTomHigh` | **4** | Jazz Mid Tom 1, the JazzTomHigh at 162 Hz |
+| 48 | Jazz High Tom 2 | `JazzTomHigh` | **4** | Jazz High Tom 2, the JazzTomHigh at 182 Hz |
+| 49 | Jazz Crash Cymbal | `JazzCrash` | **4** | Jazz Crash Cymbal, the JazzCrash at 288 Hz |
+| 50 | Jazz High Tom 1 | `JazzTomHigh` | **4** | Jazz High Tom 1, the JazzTomHigh at 204 Hz |
+| 51 | Jazz Ride Cymbal | `JazzRide` | **4** | Jazz Ride Cymbal, the JazzRide at 148 Hz |
+| 53 | Jazz Ride Bell | `JazzRideBell` | **4** | Jazz Ride Bell, the JazzRideBell at 148 Hz |
 | 59 | Ride Cymbal Edge | `RideEdge` | **4** | Ride Cymbal Edge, the RideEdge at 148 Hz |
 | 88 | Applause | `OrchestraApplause` | **4** | Applause: set 48's key 88 |
 
@@ -762,9 +792,20 @@ Standard. THE GOAL: every one built.
 | 38 | [RND] Jazz Snare 1 | `RndJazzSnare` | **4** | [RND] Jazz Snare 1: set 32's key 38, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 39 | Hand Clap 2 | `HandClap` | **2** | Hand Clap 2: Standard's key 39 -- the nearest we have, not the sound |
 | 40 | [RND] Jazz Snare 2 | `RndJazzSnare2` | **4** | [RND] Jazz Snare 2: set 32's key 40, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
+| 41 | [RND] Jazz Low Tom 2 | `RndJazzTomLow` | **4** | [RND] Jazz Low Tom 2, the JazzTomLow at 90 Hz |
+| 43 | [RND] Jazz Low Tom 1 | `RndJazzTomLow` | **4** | [RND] Jazz Low Tom 1, the JazzTomLow at 101 Hz |
 | 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
+| 45 | [RND] Jazz Mid Tom 2 | `RndJazzTomHigh` | **4** | [RND] Jazz Mid Tom 2, the JazzTomHigh at 144 Hz |
+| 47 | [RND] Jazz Mid Tom 1 | `RndJazzTomHigh` | **4** | [RND] Jazz Mid Tom 1, the JazzTomHigh at 162 Hz |
+| 48 | [RND] Jazz High Tom 2 | `RndJazzTomHigh` | **4** | [RND] Jazz High Tom 2, the JazzTomHigh at 182 Hz |
+| 49 | [RND] Jazz Crash Cymbal | `RndJazzCrash` | **4** | [RND] Jazz Crash Cymbal, the JazzCrash at 288 Hz |
+| 50 | [RND] Jazz High Tom 1 | `RndJazzTomHigh` | **4** | [RND] Jazz High Tom 1, the JazzTomHigh at 204 Hz |
+| 51 | [RND] JAZZ Ride Cymbal | `RndJazzRide` | **4** | [RND] JAZZ Ride Cymbal, the JazzRide at 148 Hz |
+| 53 | [RND] Jazz Ride Bell | `RndJazzRideBell` | **4** | [RND] Jazz Ride Bell, the JazzRideBell at 148 Hz |
 | 59 | Ride Cymbal Edge | `RideEdge` | **4** | Ride Cymbal Edge, the RideEdge at 148 Hz |
 | 88 | Applause | `OrchestraApplause` | **4** | Applause: set 48's key 88 |
+| 95 | [L] Jazz Kick 2 | `LeftJazzKick2` | **3** | [L] Jazz Kick 2, the LeftJazzKick2 at 46 Hz |
+| 96 | [L] Jazz Kick 1 | `LeftJazzKick` | **3** | [L] Jazz Kick 1, the LeftJazzKick at 70 Hz |
 
 ### 40 Brush
 
@@ -819,16 +860,16 @@ Standard. THE GOAL: every one built.
 | 38 | [RND] Brush Tap 2 | `RndBrushTap` | **4** | [RND] Brush Tap 2: set 40's key 38, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 39 | [RND] Brush Slap 2 | `RndBrushSlap` | **4** | [RND] Brush Slap 2: set 40's key 39, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 40 | Brush Swirl 1 | `BrushSwirl` | **4** | Brush Swirl 1: set 40's key 40 |
-| 41 | Brush Low Tom 2 | `BrushTomLow` | **4** | Brush Low Tom 2, the BrushTomLow at 87 Hz |
-| 42 | Brush Closed Hi-Hat | `BrushClosedHat` | **4** | Brush Closed Hi-Hat, the BrushClosedHat at 248 Hz |
-| 43 | Brush Low Tom 1 | `BrushTomLow` | **4** | Brush Low Tom 1, the BrushTomLow at 98 Hz |
+| 41 | [RND] Brush Low Tom 2 | `RndBrushTomLow` | **4** | [RND] Brush Low Tom 2, the BrushTomLow at 87 Hz |
+| 42 | [RND] Brush Closed Hi-Hat | `RndBrushClosedHat` | **4** | [RND] Brush Closed Hi-Hat, the BrushClosedHat at 248 Hz |
+| 43 | [RND] Brush Low Tom 1 | `RndBrushTomLow` | **4** | [RND] Brush Low Tom 1, the BrushTomLow at 98 Hz |
 | 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
-| 45 | Brush Mid Tom 2 | `BrushTomMid` | **4** | Brush Mid Tom 2, the BrushTomMid at 110 Hz |
-| 46 | Brush Open Hi-Hat | `BrushOpenHat` | **4** | Brush Open Hi-Hat, the BrushOpenHat at 248 Hz |
-| 47 | Brush Mid Tom 1 | `BrushTomMid` | **4** | Brush Mid Tom 1, the BrushTomMid at 130 Hz |
-| 48 | Brush High Tom 2 | `BrushTomHigh` | **4** | Brush High Tom 2, the BrushTomHigh at 150 Hz |
-| 49 | Brush Crash Cymbal | `BrushCrash` | **4** | Brush Crash Cymbal, the BrushCrash at 288 Hz |
-| 50 | Brush High Tom 1 | `BrushTomHigh` | **4** | Brush High Tom 1, the BrushTomHigh at 175 Hz |
+| 45 | [RND] Brush Mid Tom 2 | `RndBrushTomMid` | **4** | [RND] Brush Mid Tom 2, the BrushTomMid at 110 Hz |
+| 46 | [RND] Brush Open Hi-Hat | `RndBrushOpenHat` | **4** | [RND] Brush Open Hi-Hat, the BrushOpenHat at 248 Hz |
+| 47 | [RND] Brush Mid Tom 1 | `RndBrushTomMid` | **4** | [RND] Brush Mid Tom 1, the BrushTomMid at 130 Hz |
+| 48 | [RND] Brush High Tom 2 | `RndBrushTomHigh` | **4** | [RND] Brush High Tom 2, the BrushTomHigh at 150 Hz |
+| 49 | [RND] Brush Crash Cymbal | `RndBrushCrash` | **4** | [RND] Brush Crash Cymbal, the BrushCrash at 288 Hz |
+| 50 | [RND] Brush High Tom 1 | `RndBrushTomHigh` | **4** | [RND] Brush High Tom 1, the BrushTomHigh at 175 Hz |
 | 51 | [RND] Brush Ride Cymbal | `RndRideCymbal` | **4** | [RND] Brush Ride Cymbal: Standard's key 51, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 53 | [RND] Brush Ride Bell | `RndRideBell` | **4** | [RND] Brush Ride Bell: Standard's key 53, each strike varied ([RND]: level, brightness, pitch, a few ms; tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good |
 | 59 | Ride Cymbal Edge | `RideEdge` | **4** | Ride Cymbal Edge, the RideEdge at 148 Hz |
@@ -973,8 +1014,8 @@ Standard. THE GOAL: every one built.
 | 47 | Jazz Kick 1 | `JazzKick` | **4** | Jazz Kick 1: set 32's key 36 |
 | 48 | Jazz Kick 2 | `JazzKick2` | **4** | Jazz Kick 2: set 32's key 35 |
 | 49 | Concert BD 1 | `ConcertBassDrum` | **4** | Concert BD 1: set 48's key 36 |
-| 50 | Room Kick 1 | `KickDrum` | **2** | Room Kick 1: Standard's key 36 -- the nearest we have, not the sound |
-| 51 | Room Kick 2 | `KickDrum` | **2** | Room Kick 2: Standard's key 35 -- the nearest we have, not the sound |
+| 50 | Room Kick 1 | `MondoKick` | **3** | Room Kick 1, the MondoKick at 44 Hz |
+| 51 | Room Kick 2 | `MondoKick` | **3** | Room Kick 2, the MondoKick at 39 Hz |
 | 52 | Power Kick1 | `MondoKick` | **4** | Power Kick1: set 16's key 36 |
 | 53 | Power Kick2 | `MondoKick` | **2** | Power Kick2: set 16's key 36 -- the nearest we have, not the sound |
 | 54 | Electric Kick 2 | `ElectronicKick` | **2** | Electric Kick 2: set 24's key 36 -- the nearest we have, not the sound |
@@ -991,8 +1032,8 @@ Standard. THE GOAL: every one built.
 | 65 | Concert Snare | `ConcertSnare` | **4** | Concert Snare: set 48's key 38 |
 | 66 | Jazz Snare 1 | `JazzSnare` | **4** | Jazz Snare 1: set 32's key 38 |
 | 67 | Jazz Snare 2 | `JazzSnare2` | **4** | Jazz Snare 2: set 32's key 40 |
-| 68 | Room Snare 1 | `AcousticSnare` | **2** | Room Snare 1: Standard's key 38 -- the nearest we have, not the sound |
-| 69 | Room Snare 2 | `SnareDrum2` | **2** | Room Snare 2: Standard's key 40 -- the nearest we have, not the sound |
+| 68 | Room Snare 1 | `RoomSnare` | **3** | Room Snare 1, the RoomSnare at 195 Hz |
+| 69 | Room Snare 2 | `RoomSnare2` | **3** | Room Snare 2, the RoomSnare2 at 192 Hz |
 | 70 | Power Snare 1 | `GatedSnare` | **4** | Power Snare 1: set 16's key 38 |
 | 71 | Power Snare 2 | `GatedSnare` | **2** | Power Snare 2: set 16's key 38 -- the nearest we have, not the sound |
 | 72 | Gated Snare | `GatedSnare` | **4** | Gated Snare: set 16's key 38 |
@@ -1050,8 +1091,8 @@ Standard. THE GOAL: every one built.
 | 46 | Hip-Hop Kick 2 | `HipHopKick2` | **4** | Hip-Hop Kick 2, the HipHopKick2 at 56 Hz |
 | 47 | Hip-Hop Kick 1 | `HipHopKick1` | **4** | Hip-Hop Kick 1, the HipHopKick1 at 37 Hz |
 | 49 | Concert BD 1 | `ConcertBassDrum` | **4** | Concert BD 1: set 48's key 36 |
-| 50 | Room Kick 2 | `KickDrum` | **2** | Room Kick 2: Standard's key 35 -- the nearest we have, not the sound |
-| 51 | Room Kick 1 | `KickDrum` | **2** | Room Kick 1: Standard's key 36 -- the nearest we have, not the sound |
+| 50 | Room Kick 2 | `MondoKick` | **3** | Room Kick 2, the MondoKick at 39 Hz |
+| 51 | Room Kick 1 | `MondoKick` | **3** | Room Kick 1, the MondoKick at 44 Hz |
 | 52 | Jungle Kick 2 | `JungleKick2` | **4** | Jungle Kick 2, the JungleKick2 at 42 Hz |
 | 53 | Jungle Kick 1 | `JungleKick1` | **4** | Jungle Kick 1, the JungleKick1 at 53 Hz |
 | 54 | Jungle Kick Roll | `JungleKick1` | **4** | Jungle Kick Roll, the JungleKick1 at 53 Hz |
@@ -1068,8 +1109,8 @@ Standard. THE GOAL: every one built.
 | 65 | Concert Snare | `ConcertSnare` | **4** | Concert Snare: set 48's key 38 |
 | 66 | Jazz Snare 1 | `JazzSnare` | **4** | Jazz Snare 1: set 32's key 38 |
 | 67 | Jazz Snare 2 | `JazzSnare2` | **4** | Jazz Snare 2: set 32's key 40 |
-| 68 | Room Snare 1 | `AcousticSnare` | **2** | Room Snare 1: Standard's key 38 -- the nearest we have, not the sound |
-| 69 | Room Snare 2 | `SnareDrum2` | **2** | Room Snare 2: Standard's key 40 -- the nearest we have, not the sound |
+| 68 | Room Snare 1 | `RoomSnare` | **3** | Room Snare 1, the RoomSnare at 195 Hz |
+| 69 | Room Snare 2 | `RoomSnare2` | **3** | Room Snare 2, the RoomSnare2 at 192 Hz |
 | 70 | LoFi Snare 1 | `LoFiSnare1` | **3** | LoFi Snare 1, the LoFiSnare1 at 195 Hz |
 | 71 | LoFi Snare 2 | `LoFiSnare2` | **3** | LoFi Snare 2, the LoFiSnare2 at 165 Hz |
 | 72 | Gated Snare | `GatedSnare` | **4** | Gated Snare: set 16's key 38 |
@@ -1480,7 +1521,7 @@ Standard. THE GOAL: every one built.
 
 | # | note | class | | notes |
 |---|---|---|---|---|
-| 37 | Room Closed Hi-Hat | `ClosedHiHat` | **2** | Room Closed Hi-Hat: Standard's key 42 -- the nearest we have, not the sound |
+| 37 | Room Closed Hi-Hat | `RoomClosedHat` | **3** | Room Closed Hi-Hat, the RoomClosedHat at 248 Hz |
 | 39 | Brush Closed Hi-Hat | `BrushClosedHat` | **4** | Brush Closed Hi-Hat, the BrushClosedHat at 248 Hz |
 | 40 | TR-707 Closed Hi-Hat | `TR707ClosedHat` | **4** | TR-707 Closed Hi-Hat: set 29's key 42 |
 | 41 | TR-606 Closed Hi-Hat | `TR606ClosedHat` | **4** | TR-606 Closed Hi-Hat: set 28's key 42 |
@@ -1491,13 +1532,15 @@ Standard. THE GOAL: every one built.
 | 46 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
 | 47 | Half-Open Hi-Hat 1 | `OpenHiHat` | **4** | Half-Open Hi-Hat 1, the OpenHiHat at 248 Hz |
 | 48 | Half-Open Hi-Hat 2 | `OpenHiHat` | **4** | Half-Open Hi-Hat 2, the OpenHiHat at 248 Hz |
-| 50 | Room Open Hi-Hat | `OpenHiHat` | **2** | Room Open Hi-Hat: Standard's key 46 -- the nearest we have, not the sound |
+| 50 | Room Open Hi-Hat | `RoomOpenHat` | **3** | Room Open Hi-Hat, the RoomOpenHat at 248 Hz |
 | 52 | Brush Open Hi-Hat | `BrushOpenHat` | **4** | Brush Open Hi-Hat, the BrushOpenHat at 248 Hz |
 | 53 | TR-909 Open Hi-Hat | `TR909OpenHat` | **4** | TR-909 Open Hi-Hat: set 30's key 46 |
 | 54 | TR-707 Open Hi-Hat | `TR707OpenHat` | **4** | TR-707 Open Hi-Hat: set 29's key 46 |
 | 55 | TR-606 Open Hi-Hat | `TR606OpenHat` | **4** | TR-606 Open Hi-Hat: set 28's key 46 |
 | 56 | TR-808 Open Hi-Hat | `TR808OpenHat` | **4** | TR-808 Open Hi-Hat: set 25's key 46 |
 | 57 | CR-78 Open Hi-Hat | `CR78OpenHat` | **4** | CR-78 Open Hi-Hat: set 27's key 46 |
+| 59 | Room Crash Cymbal | `RoomCrash` | **3** | Room Crash Cymbal, the RoomCrash at 288 Hz |
+| 60 | Jazz Crash Cymbal | `JazzCrash` | **4** | Jazz Crash Cymbal, the JazzCrash at 288 Hz |
 | 61 | Brush Crash Cymbal | `BrushCrash` | **4** | Brush Crash Cymbal, the BrushCrash at 288 Hz |
 | 62 | Hard Crash Cymbal | `CrashCymbal1` | **2** | Hard Crash Cymbal: Standard's key 49 -- the nearest we have, not the sound |
 | 63 | TR-909 Crash Cymbal | `TR909Crash` | **4** | TR-909 Crash Cymbal: set 30's key 49 |
@@ -1506,7 +1549,11 @@ Standard. THE GOAL: every one built.
 | 70 | Mute Crash Cymbal 1 | `CrashCymbal1` | **4** | Mute Crash Cymbal 1, the CrashCymbal1 at 288 Hz |
 | 71 | Mute Crash Cymbal 2 | `CrashCymbal2` | **4** | Mute Crash Cymbal 2, the CrashCymbal2 at 334 Hz |
 | 76 | Splash Cymbal | `SplashCymbal` | **4** | Splash Cymbal: Standard's key 55 |
+| 78 | Room Ride Bell | `RoomRideBell` | **3** | Room Ride Bell, the RoomRideBell at 148 Hz |
+| 79 | Jazz Ride Bell | `JazzRideBell` | **4** | Jazz Ride Bell, the JazzRideBell at 148 Hz |
 | 80 | Brush Ride Bell | `RideBell` | **2** | Brush Ride Bell: Standard's key 53 -- the nearest we have, not the sound |
+| 82 | Room Ride Cymbal | `RoomRide` | **3** | Room Ride Cymbal, the RoomRide at 148 Hz |
+| 83 | Jazz Ride Cymbal | `JazzRide` | **4** | Jazz Ride Cymbal, the JazzRide at 148 Hz |
 | 84 | Brush Ride Cymbal | `RideCymbal` | **2** | Brush Ride Cymbal: Standard's key 51 -- the nearest we have, not the sound |
 | 85 | TR-606 Ride Cymbal | `TR606Cymbal` | **4** | TR-606 Ride Cymbal: set 28's key 51 |
 | 86 | TR-808 Ride Cymbal | `TR808Cymbal` | **2** | TR-808 Ride Cymbal: set 25's key 49 -- the nearest we have, not the sound |
@@ -1532,11 +1579,11 @@ Standard. THE GOAL: every one built.
 | 39 | Hand Clap | `HandClap` | **4** | HAND CLAP -- the MT-32's, as Standard's 39: VCSL claps (CC0, examples/clap_fit.py): an ensemble -- seven hands flammed over 65 ms, each a fitted noise burst. Ben: sounds great |
 | 40 | Electronic Snare Drum | `SimmonsSnare` | **4** | ELECTRONIC SNARE DRUM -- the MT-32's, as the Electronic set's 38: the SDS-V's snare module on the same engine: one oscillator near 450 Hz under its noise, fitted to the real Simmons snare GeneralUser's is closest to (hit 36), score 7.6 -- its decay within a few ms of the hit's. The two-tone snare fitted to GeneralUser itself stays in the code (ElectronicSnareProperties) |
 | 41 | Acoustic Low Tom | `FloorTom` | **4** | ACOUSTIC LOW TOM -- the MT-32's, as Standard's 41: DRSKit's floor tom, 30 strokes on its close mic: modes 1 : 1.631 : 2.012 : 2.349 : 2.971, a long ring (the fundamental 13 dB/s, about 2.5 s), a two-stage decay, the stick's click, a glide that grows with the stroke. Ben, by ear |
-| 42 | Closed High Hat | `ClosedHiHat` | **4** | CLOSED HIGH HAT -- the MT-32's, as Standard's 42: Iowa hi-hat, five takes |
+| 42 | Closed High Hat | `ClosedHiHat` | **4** | CLOSED HIGH HAT -- the MT-32's, as Standard's 42: REFIT TO A KIT DRUMMER'S: DrumGizmo DRSKit's closed hats (24 strokes, CC-BY, measured only; examples/crash_fit.py --hats) on the plate measured on Iowa's -- a short bright tick, nearly all strike, 7.75 -> 4.91 dB over the grid; Iowa's were a percussionist's, darker, a stand's thump under them. Set by its SIZZLE (4-16 kHz re the snare) where GeneralUser GS has its hat. Ben: "The new hats sound much better" |
 | 43 | Acoustic Low Tom | `FloorTom` | **4** | ACOUSTIC LOW TOM -- the MT-32's, as Standard's 43: as 41, higher |
-| 44 | Open High Hat 2 | `OpenHiHat` | **4** | OPEN HIGH HAT 2 -- the MT-32's, as Standard's 46: Iowa hi-hat, open |
+| 44 | Open High Hat 2 | `OpenHiHat` | **4** | OPEN HIGH HAT 2 -- the MT-32's, as Standard's 46: REFIT TO A KIT DRUMMER'S: DRSKit's open hats (18 strokes; examples/crash_fit.py --hats), 5.84 -> 3.37 dB; set by its sizzle where GeneralUser GS has it -- 13.5 dB up: the quiet hat Ben had heard all along. Ben: "The new hats sound much better" |
 | 45 | Acoustic Middle Tom | `TomTom` | **4** | ACOUSTIC MIDDLE TOM -- the MT-32's, as Standard's 45: DRSKit's rack tom, 27 strokes on its close mic: modes 1 : 1.477 : 1.755 : 2.259, the stick's click 30-60 dB under the fundamental to 6 kHz, a glide that grows with the stroke. Ben, by ear |
-| 46 | Open High Hat 1 | `OpenHiHat` | **4** | OPEN HIGH HAT 1 -- the MT-32's, as Standard's 46: Iowa hi-hat, open |
+| 46 | Open High Hat 1 | `OpenHiHat` | **4** | OPEN HIGH HAT 1 -- the MT-32's, as Standard's 46: REFIT TO A KIT DRUMMER'S: DRSKit's open hats (18 strokes; examples/crash_fit.py --hats), 5.84 -> 3.37 dB; set by its sizzle where GeneralUser GS has it -- 13.5 dB up: the quiet hat Ben had heard all along. Ben: "The new hats sound much better" |
 | 47 | Acoustic Middle Tom | `TomTom` | **4** | ACOUSTIC MIDDLE TOM -- the MT-32's, as Standard's 47: as 45, higher |
 | 48 | Acoustic High Tom | `HighTom` | **4** | ACOUSTIC HIGH TOM -- the MT-32's, as Standard's 48: as 45, higher |
 | 49 | Crash Cymbal | `CrashCymbal1` | **4** | CRASH CYMBAL -- the MT-32's, as Standard's 49: Iowa 17" suspended crash for the modes, refitted to DRSKit's left crash hit HARD with the stick's shank (11 strokes over 37 dB): the cascade's swell of 2-8 kHz after the strike, scattered (in order it glided), growing with the stroke; a slow ring at its own 8.5 dB/s; the shank's thud. Ben, by ear: sounds great |
@@ -2664,7 +2711,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-627 classes.
+665 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -2737,13 +2784,18 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `ChineseCymbal` -- 52 Chinese Cymbal (4), set 53 89 Chinese Cymbal (4), set 53 90 Chinese Cymbal 2 (2), set 62 87 Chinese Cymbal (4), set 62 88 Chinese Cymbal 2 (2)
           - `RfxNaobo` -- set 52 87 Nao Bo (4), set 52 88 Xiao Bo (4)
         - `CrashCymbal1` -- 49 Crash Cymbal 1 (4), set 49 28 Crash Cymbal 1 (4), set 53 61 Crash Cymbal 1 (4), set 53 65 Hard Crash Cymbal (2), set 53 68 Mute Crash Cymbal 1 (4), set 62 62 Hard Crash Cymbal (2), set 62 70 Mute Crash Cymbal 1 (4), set 127 49 Crash Cymbal (4)
-          - `BrushCrash` -- set 40 49 Brush Crash Cymbal (4), set 41 49 Brush Crash Cymbal (4), set 42 49 Brush Crash Cymbal (4), set 53 64 Brush Crash Cymbal (4), set 62 61 Brush Crash Cymbal (4)
+          - `BrushCrash` -- set 40 49 Brush Crash Cymbal (4), set 41 49 Brush Crash Cymbal (4), set 53 64 Brush Crash Cymbal (4), set 62 61 Brush Crash Cymbal (4)
+            - `RndBrushCrash` [RandomStrike] -- set 42 49 [RND] Brush Crash Cymbal (4)
           - `CengCeng` -- set 49 49 Rama Cymbal (4), set 52 45 Rama Cymbal Low (4), set 52 46 Rama Cymbal High (4)
           - `ConcertCymbal1` -- set 48 59 Concert Cymbal 1 (4), set 49 31 Concert Cymbal (4)
+          - `JazzCrash` -- set 32 49 Jazz Crash Cymbal (4), set 62 60 Jazz Crash Cymbal (4)
+            - `RndJazzCrash` [RandomStrike] -- set 33 49 [RND] Jazz Crash Cymbal (4)
           - `JungleCrash` [JungleBreak] -- set 10 49 Jungle Crash (3), set 62 64 Jungle Crash Cymbal (3)
           - `ReverseCrashCymbal1` -- set 53 70 Reverse Crash Cymbal 1 (4), set 57 50 Reverse Cymbal 1 (4)
           - `ReverseCymbal` -- GM 119 Reverse Cymbal (4), set 9 52 Reverse Cymbal (4), set 10 52 Reverse Cymbal (4), set 11 52 Reverse Cymbal (4), set 13 52 Reverse Cymbal (4), set 24 52 Reverse Cymbal (4), set 26 52 Reverse Cymbal (4), set 282 52 Reverse Cymbal (4)
           - `RndCrashCymbal1` [RandomStrike] -- set 2 49 [RND] Crash Cymbal (4)
+          - `RoomCrash` [LiveRoom] -- set 8 49 Room Crash Cymbal (3), set 62 59 Room Crash Cymbal (3)
+            - `RndRoomCrash` [RandomStrike] -- set 12 49 [RND] Room Crash Cymbal (3)
           - `TR909Crash` [RomMetalMixin] -- set 9 49 TR-909 Crash Cymbal (4), set 11 49 TR-909 Crash Cymbal (4), set 11 57 TR-909 Crash Cymbal (4), set 13 49 TR-909 Crash Cymbal (4), set 13 57 TR-909 Crash Cymbal (4), set 25 57 TR-909 Crash Cymbal (4), set 27 57 909 Crash (4), set 28 57 909 Crash (4), set 29 49 909 Crash (4), set 30 49 909 Crash (4), set 53 66 TR-909 Crash Cymbal (4), set 62 63 TR-909 Crash Cymbal (4)
             - `ReverseTR909Crash` -- set 53 73 Reverse TR-909 Crash Cymbal (4), set 58 64 Reverse TR-707 Crash Cymbal (2)
         - `CrashCymbal2` -- 57 Crash Cymbal 2 (4), set 53 62 Crash Cymbal 2 (4), set 53 63 Crash Cymbal 3 (2), set 53 69 Mute Crash Cymbal 2 (4), set 62 71 Mute Crash Cymbal 2 (4)
@@ -2752,18 +2804,24 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `CrashRide` -- 59 Ride Cymbal 2 (4), set 53 79 Ride Cymbal 2 (4)
           - `RndCrashRide` [RandomStrike] -- set 2 59 [RND] Ride Cymbal 2 (4)
         - `HiHat`
-          - `ClosedHiHat` -- 42 Closed Hi-Hat (4), set 1 42 Closed Hi-Hat (4), set 9 42 Room Closed Hi-Hat (2), set 13 42 Room Closed Hi-Hat (2), set 48 27 Closed Hi-Hat (4), set 53 36 Closed Hi-Hat (4), set 53 38 Closed Hi-Hat 3 (2), set 53 39 Closed Hi-Hat 4 (2), set 53 40 Closed Hi-Hat (4), set 62 37 Room Closed Hi-Hat (2), set 127 42 Closed High Hat (4)
-            - `BrushClosedHat` -- set 40 42 Brush Closed Hi-Hat (4), set 41 42 Brush Closed Hi-Hat (4), set 42 42 Brush Closed Hi-Hat (4), set 62 39 Brush Closed Hi-Hat (4)
+          - `ClosedHiHat` -- 42 Closed Hi-Hat (4), set 1 42 Closed Hi-Hat (4), set 48 27 Closed Hi-Hat (4), set 53 36 Closed Hi-Hat (4), set 53 38 Closed Hi-Hat 3 (2), set 53 39 Closed Hi-Hat 4 (2), set 53 40 Closed Hi-Hat (4), set 127 42 Closed High Hat (4)
+            - `BrushClosedHat` -- set 40 42 Brush Closed Hi-Hat (4), set 41 42 Brush Closed Hi-Hat (4), set 62 39 Brush Closed Hi-Hat (4)
+              - `RndBrushClosedHat` [RandomStrike] -- set 42 42 [RND] Brush Closed Hi-Hat (4)
             - `JungleHiHat` [JungleBreak] -- set 10 44 Jungle Hi-Hat (4), set 53 35 Jungle Hi-Hat (4)
               - `ReverseJungleHiHat` -- set 58 56 Reverse Jungle Hi-Hat (4)
             - `ReverseClosedHiHat` -- set 53 33 Reverse Closed Hi-Hat 1 (4), set 57 55 Reverse Closed Hi-Hat (4), set 58 52 Reverse Closed Hi-Hat (4)
-            - `RndClosedHiHat` [RandomStrike] -- set 2 42 [RND] Closed Hi-Hat (4), set 12 42 [RND] Room Closed Hi-Hat (4), set 24 42 Closed Hi-Hat 2 (4), set 32 42 Closed Hi-Hat 2 (4), set 53 37 Closed Hi-Hat 2 (4)
+            - `RndClosedHiHat` [RandomStrike] -- set 2 42 [RND] Closed Hi-Hat (4), set 24 42 Closed Hi-Hat 2 (4), set 32 42 Closed Hi-Hat 2 (4), set 53 37 Closed Hi-Hat 2 (4)
+            - `RoomClosedHat` [LiveRoom] -- set 8 42 Room Closed Hi-Hat 3 (3), set 9 42 Room Closed Hi-Hat (3), set 13 42 Room Closed Hi-Hat (3), set 62 37 Room Closed Hi-Hat (3)
+              - `RndRoomClosedHat` [RandomStrike] -- set 12 42 [RND] Room Closed Hi-Hat (3)
             - `TR707ClosedHat` [RomMetalMixin] -- set 11 42 TR-707 Closed Hi-Hat (4), set 29 42 707 CHH (4), set 29 44 707 CHH (4), set 30 42 707 CHH (4), set 30 44 707 CHH (4), set 53 41 TR-707 Closed Hi-Hat (4), set 62 40 TR-707 Closed Hi-Hat (4)
               - `ReverseTR707ClosedHat` -- set 58 54 Reverse TR-707 Closed Hi-Hat (4)
-          - `OpenHiHat` -- 46 Open Hi-Hat (4), set 1 46 Open Hi-Hat (4), set 9 46 Room Open Hi-Hat (2), set 13 46 Room Open Hi-Hat (2), set 48 29 Open Hi-Hat (4), set 53 49 Half-Open Hi-Hat 1 (4), set 53 50 Half-Open Hi-Hat 2 (4), set 53 51 Open Hi Hat (4), set 53 53 Open Hi-Hat 3 (2), set 62 47 Half-Open Hi-Hat 1 (4), set 62 48 Half-Open Hi-Hat 2 (4), set 62 50 Room Open Hi-Hat (2), set 127 44 Open High Hat 2 (4), set 127 46 Open High Hat 1 (4)
-            - `BrushOpenHat` -- set 40 46 Brush Open Hi-Hat (4), set 41 46 Brush Open Hi-Hat (4), set 42 46 Brush Open Hi-Hat (4), set 62 52 Brush Open Hi-Hat (4)
+          - `OpenHiHat` -- 46 Open Hi-Hat (4), set 1 46 Open Hi-Hat (4), set 48 29 Open Hi-Hat (4), set 53 49 Half-Open Hi-Hat 1 (4), set 53 50 Half-Open Hi-Hat 2 (4), set 53 51 Open Hi Hat (4), set 53 53 Open Hi-Hat 3 (2), set 62 47 Half-Open Hi-Hat 1 (4), set 62 48 Half-Open Hi-Hat 2 (4), set 127 44 Open High Hat 2 (4), set 127 46 Open High Hat 1 (4)
+            - `BrushOpenHat` -- set 40 46 Brush Open Hi-Hat (4), set 41 46 Brush Open Hi-Hat (4), set 62 52 Brush Open Hi-Hat (4)
+              - `RndBrushOpenHat` [RandomStrike] -- set 42 46 [RND] Brush Open Hi-Hat (4)
             - `ReverseOpenHiHat` -- set 53 32 Reverse Open Hi-Hat (4), set 57 52 Reverse Open Hi-Hat (4), set 58 61 Reverse Open Hi-Hat (4)
-            - `RndOpenHiHat` [RandomStrike] -- set 2 46 [RND] Open Hi-Hat (4), set 12 46 [RND] Room Open Hi-Hat (4), set 24 46 Open Hi-Hat 2 (4), set 32 46 Open Hi-Hat 2 (4), set 53 52 Open Hi-Hat 2 (4), set 53 54 Open Hi-Hat 2 (4)
+            - `RndOpenHiHat` [RandomStrike] -- set 2 46 [RND] Open Hi-Hat (4), set 24 46 Open Hi-Hat 2 (4), set 32 46 Open Hi-Hat 2 (4), set 53 52 Open Hi-Hat 2 (4), set 53 54 Open Hi-Hat 2 (4)
+            - `RoomOpenHat` [LiveRoom] -- set 8 46 Room Open Hi-Hat 3 (3), set 9 46 Room Open Hi-Hat (3), set 13 46 Room Open Hi-Hat (3), set 62 50 Room Open Hi-Hat (3)
+              - `RndRoomOpenHat` [RandomStrike] -- set 12 46 [RND] Room Open Hi-Hat (3)
             - `TR707OpenHat` [RomMetalMixin] -- set 29 46 707 OHH (4), set 53 56 TR-707 Open Hi-Hat (4), set 62 54 TR-707 Open Hi-Hat (4)
               - `ReverseTR707OpenHat` -- set 58 60 Reverse TR-707 Open Hi-Hat (4)
             - `TR909OpenHat` [RomMetalMixin] -- set 11 46 TR-909 Open Hi-Hat (4), set 30 46 909 OHH (4), set 53 55 TR-909 Open Hi-Hat (4), set 62 53 TR-909 Open Hi-Hat (4)
@@ -2771,11 +2829,19 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `ReversePedalHiHat` -- set 53 34 Reverse Closed Hi-Hat 2 (2)
             - `RndPedalHiHat` [RandomStrike] -- set 2 44 [RND] Pedal Hi-Hat (4)
         - `RideBell` -- 53 Ride Bell (4), set 9 53 Ride Bell (4), set 10 53 Ride Bell (4), set 11 53 Ride Bell (4), set 13 53 Ride Bell (4), set 26 53 Ride Bell (4), set 41 53 Brush Ride Bell (2), set 53 76 Ride Bell (4), set 53 77 Brush Ride Bell (2), set 62 80 Brush Ride Bell (2)
+          - `JazzRideBell` -- set 32 53 Jazz Ride Bell (4), set 62 79 Jazz Ride Bell (4)
+            - `RndJazzRideBell` [RandomStrike] -- set 33 53 [RND] Jazz Ride Bell (4)
           - `RndRideBell` [RandomStrike] -- set 2 53 [RND] Ride Bell 1 (4), set 42 53 [RND] Brush Ride Bell (4)
-        - `RideCymbal` -- 51 Ride Cymbal 1 (4), set 10 51 Ride Cymbal 1 (4), set 11 51 Ride Cymbal 1 (4), set 32 51 Ride Cymbal Inner (4), set 40 51 Ride Cymbal Inner (4), set 41 51 Brush Ride Cymbal (2), set 48 30 Ride Cymbal (4), set 53 78 Ride Cymbal 1 (4), set 53 80 Brush Ride Cymbal (2), set 53 81 Ride Cymbal Low Inner (4), set 53 82 Ride Cymbal Mid Inner (4), set 53 83 Ride Cymbal High Inner (4), set 62 84 Brush Ride Cymbal (2), set 127 51 Ride Cymbal (4)
+          - `RoomRideBell` [LiveRoom] -- set 8 53 Room Ride Bell (3), set 62 78 Room Ride Bell (3)
+            - `RndRoomRideBell` [RandomStrike] -- set 12 53 [RND] Room Ride Bell (3)
+        - `RideCymbal` -- 51 Ride Cymbal 1 (4), set 10 51 Ride Cymbal 1 (4), set 11 51 Ride Cymbal 1 (4), set 40 51 Ride Cymbal Inner (4), set 41 51 Brush Ride Cymbal (2), set 48 30 Ride Cymbal (4), set 53 78 Ride Cymbal 1 (4), set 53 80 Brush Ride Cymbal (2), set 53 81 Ride Cymbal Low Inner (4), set 53 82 Ride Cymbal Mid Inner (4), set 53 83 Ride Cymbal High Inner (4), set 62 84 Brush Ride Cymbal (2), set 127 51 Ride Cymbal (4)
+          - `JazzRide` -- set 32 51 Jazz Ride Cymbal (4), set 62 83 Jazz Ride Cymbal (4)
+            - `RndJazzRide` [RandomStrike] -- set 33 51 [RND] JAZZ Ride Cymbal (4)
           - `ReverseRideCymbal` -- set 57 53 Reverse Ride Cymbal (4)
           - `RideEdge` -- set 27 59 Ride Cymbal Edge (4), set 28 59 Ride Cymbal Edge (4), set 29 59 Ride Cymbal Edge (4), set 30 59 Ride Cymbal Edge (4), set 32 59 Ride Cymbal Edge (4), set 33 59 Ride Cymbal Edge (4), set 40 59 Ride Cymbal Edge (4), set 41 59 Ride Cymbal Edge (4), set 42 59 Ride Cymbal Edge (4), set 53 84 Ride Cymbal Low Edge (4), set 53 85 Ride Cymbal Mid Edge (4), set 53 86 Ride Cymbal High Edge (4)
           - `RndRideCymbal` [RandomStrike] -- set 2 51 [RND] Ride Cymbal 1 (4), set 42 51 [RND] Brush Ride Cymbal (4)
+          - `RoomRide` [LiveRoom] -- set 8 51 Room Ride Cymbal (3), set 62 82 Room Ride Cymbal (3)
+            - `RndRoomRide` [RandomStrike] -- set 12 51 [RND] Room Ride Cymbal (3)
           - `TR909Ride` [RomMetalMixin] -- set 13 51 TR-909 Ride Cymbal (4), set 29 51 909 Ride (4), set 30 51 909 Ride (4)
         - `SplashCymbal` -- 55 Splash Cymbal (4), set 12 55 Splash Cymbal (4), set 53 74 Splash Cymbal (4), set 53 75 Splash Cymbal (4), set 62 76 Splash Cymbal (4)
         - `TamTam` [ModeDecays]
@@ -2788,7 +2854,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `SfxMachinegun` -- set 56 73 Machinegun (4), set 127 97 Machinegun (4)
       - `MembraneDrum`
         - `KitDrum`
-          - `AcousticSnare` [NoisyPercussionMixin] -- 25 Snare Roll (4), 38 Acoustic Snare (4), 97 Std 1 Snare 1 (4), 99 Std 2 Snare 1 (4), 102 Std 1 Snare 1 (4), 104 Std 1 Snare 3 (4), 107 Room Snare 1 (4), set 1 38 Standard 2 Snare 1 (2), set 8 95 Standard 1 Snare 1 (4), set 9 92 Standard 1 Snare 1 (4), set 9 94 Room Snare 1 (2), set 10 95 Rock Snare Dry (2), set 11 91 Rock Snare Dry (2), set 13 92 Rock Snare Dry (2), set 26 40 Rock SD Dry (2), set 49 29 Snare Roll (4), set 50 60 Standard 1 Snare 1 (4), set 50 62 Standard 2 Snare 1 (2), set 50 68 Room Snare 1 (2), set 50 92 Standard 1 Snare 1 (4), set 50 94 Standard 1 Snare 3 (4), set 51 60 Standard 1 Snare 1 (4), set 51 62 Standard 2 Snare 1 (2), set 51 68 Room Snare 1 (2), set 51 81 Rock Snare Dry (2), set 51 92 Standard 1 Snare 1 (4), set 51 94 Standard 1 Snare 3 (4), set 127 38 Acoustic Snare Drum (4)
+          - `AcousticSnare` [NoisyPercussionMixin] -- 25 Snare Roll (4), 38 Acoustic Snare (4), 97 Std 1 Snare 1 (4), 99 Std 2 Snare 1 (4), 102 Std 1 Snare 1 (4), 104 Std 1 Snare 3 (4), 107 Room Snare 1 (3), set 1 38 Standard 2 Snare 1 (2), set 8 95 Standard 1 Snare 1 (4), set 9 92 Standard 1 Snare 1 (4), set 10 95 Rock Snare Dry (2), set 11 91 Rock Snare Dry (2), set 13 92 Rock Snare Dry (2), set 26 40 Rock SD Dry (2), set 49 29 Snare Roll (4), set 50 60 Standard 1 Snare 1 (4), set 50 62 Standard 2 Snare 1 (2), set 50 92 Standard 1 Snare 1 (4), set 50 94 Standard 1 Snare 3 (4), set 51 60 Standard 1 Snare 1 (4), set 51 62 Standard 2 Snare 1 (2), set 51 81 Rock Snare Dry (2), set 51 92 Standard 1 Snare 1 (4), set 51 94 Standard 1 Snare 3 (4), set 127 38 Acoustic Snare Drum (4)
             - `JazzSnare2` -- 106 Jazz Snare 2 (4), set 32 40 Jazz Snare 2 (4), set 50 67 Jazz Snare 2 (4), set 51 67 Jazz Snare 2 (4)
               - `RndJazzSnare2` [RandomStrike] -- set 33 40 [RND] Jazz Snare 2 (4)
             - `JazzSnare` -- 105 Jazz Snare 1 (4), set 32 38 Jazz Snare 1 (4), set 50 66 Jazz Snare 1 (4), set 51 66 Jazz Snare 1 (4)
@@ -2803,33 +2869,42 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `LoFiSnare1` [SampledBreak] -- 123 Rap Snare (3), set 9 38 LoFi Snare 1 (3), set 10 96 LoFi Snare 1 (3), set 11 93 LoFi Snare 1 (3), set 13 94 LoFi Snare 1 (3), set 26 93 LoFi Snare 1 (3), set 51 70 LoFi Snare 1 (3)
             - `RapSnare` [SampledBreak, LiveRoom] -- 124 Jungle Snare 1 (2), set 10 38 HipHop Snare 1 (2), set 11 95 HipHop Snare 1 (2), set 13 93 Hip-Hop Snare 1 (2), set 26 95 HipHop Snare 1 (2), set 50 95 Rap Snare (4), set 51 75 HipHop Snare 1 (2), set 51 95 Rap Snare (4)
             - `ReverseAcousticSnare` -- set 57 40 Reverse Snare 1 (4), set 57 42 Reverse Standard 1 Snare 1 (4)
-            - `RndAcousticSnare` [RandomStrike] -- set 2 38 [RND] Snare (4), set 12 38 [RND] Room Snare 1 (4)
+            - `RndAcousticSnare` [RandomStrike] -- set 2 38 [RND] Standard Snare 1 (4)
+            - `RoomSnare` [LiveRoom] -- set 8 38 Room Snare 1 (3), set 9 94 Room Snare 1 (3), set 50 68 Room Snare 1 (3), set 51 68 Room Snare 1 (3)
+              - `RndRoomSnare` [RandomStrike] -- set 12 38 [RND] Room Snare 1 (3)
             - `SideStick` -- 37 Side Stick (4), set 127 37 Rim Shot (4)
               - `JungleRim` [JungleBreak] -- set 10 37 Jungle Snare Rim (3)
               - `LoFiRim` [SampledBreak] -- set 9 90 LoFi Snare Rim (3), set 51 73 LoFi Snare Rim (3)
-            - `SnareDrum2` -- 40 Snare Drum 2 (4), 98 Std 1 Snare 2 (4), 100 Std 2 Snare 2 (4), 101 Snare Drum 2 (4), 103 Std 1 Snare 2 (4), 108 Room Snare 2 (4), 110 Power Snare 2 (2), 120 TR-808 Snare 2 (2), set 1 40 Standard 2 Snare 2 (2), set 2 40 Standard 3 Snare 2 (2), set 8 96 Standard 1 Snare 2 (4), set 9 93 Standard 1 Snare 2 (4), set 9 95 Room Snare 2 (2), set 50 61 Standard 1 Snare 2 (4), set 50 63 Standard 2 Snare 2 (2), set 50 64 Tight Snare (4), set 50 69 Room Snare 2 (2), set 50 93 Standard 1 Snare 2 (4), set 51 61 Standard 1 Snare 2 (4), set 51 63 Standard 2 Snare 2 (2), set 51 64 Tight Snare (4), set 51 69 Room Snare 2 (2), set 51 93 Standard 1 Snare 2 (4)
+            - `SnareDrum2` -- 40 Snare Drum 2 (4), 98 Std 1 Snare 2 (4), 100 Std 2 Snare 2 (4), 101 Snare Drum 2 (4), 103 Std 1 Snare 2 (4), 108 Room Snare 2 (3), 110 Power Snare 2 (2), 120 TR-808 Snare 2 (2), set 1 40 Standard 2 Snare 2 (2), set 8 96 Standard 1 Snare 2 (4), set 9 93 Standard 1 Snare 2 (4), set 50 61 Standard 1 Snare 2 (4), set 50 63 Standard 2 Snare 2 (2), set 50 64 Tight Snare (4), set 50 93 Standard 1 Snare 2 (4), set 51 61 Standard 1 Snare 2 (4), set 51 63 Standard 2 Snare 2 (2), set 51 64 Tight Snare (4), set 51 93 Standard 1 Snare 2 (4)
               - `BrushTap` -- set 40 38 Brush Tap (4), set 41 38 Brush Tap 2 (4), set 50 84 Brush Tap 1 (4), set 50 85 Brush Tap 2 (4), set 51 84 Brush Tap 1 (4), set 51 85 Brush Tap 2 (4), set 51 86 Brush Tap 2 (4)
                 - `BrushSlap` -- set 40 39 Brush Slap (4), set 41 39 Brush Slap 2 (4), set 50 86 Brush Slap 1 (4), set 50 87 Brush Slap 2 (4), set 50 88 Brush Slap 3 (4), set 51 87 Brush Slap 2 (4), set 51 88 Brush Slap 3 (4)
                   - `RndBrushSlap` [RandomStrike] -- set 42 39 [RND] Brush Slap 2 (4)
                 - `RndBrushTap` [RandomStrike] -- set 42 38 [RND] Brush Tap 2 (4)
               - `ConcertSnare` -- 24 Concert SD (4), set 48 38 Concert SD (4), set 48 40 Concert SD (4), set 49 30 Concert SD (4), set 50 65 Concert Snare (4), set 51 65 Concert Snare (4)
               - `ReverseSnareDrum2` -- set 57 41 Reverse Snare 2 (4), set 57 43 Reverse Tight Snare (4)
-              - `RndSnareDrum2` [RandomStrike] -- set 12 40 [RND] Room Snare 2 (4)
-          - `KickDrum` -- 0 Std 1 Kick 1 (4), 1 Std 1 Kick 2 (4), 2 Std 2 Kick 1 (4), 3 Std 2 Kick 2 (4), 4 Kick Drum 1 (4), 5 Kick Drum 2 (4), 8 Room Kick 1 (4), 9 Room Kick 2 (4), 11 Power Kick 2 (2), 12 Electric Kick 2 (2), 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4), set 1 35 Standard 2 Kick 2 (2), set 1 36 Standard 2 Kick 1 (2), set 2 35 Standard 3 Kick 2 (2), set 50 38 Standard 1 Kick 2 (4), set 50 39 Standard 1 Kick 1 (4), set 50 40 Standard 1 Kick 1 (4), set 50 41 Standard 1 Kick 2 (4), set 50 42 Standard 2 Kick 1 (2), set 50 43 Standard 2 Kick 2 (2), set 50 44 Kick Drum1 (4), set 50 45 Kick Drum 2 (4), set 50 46 Soft Kick (2), set 50 50 Room Kick 1 (2), set 50 51 Room Kick 2 (2), set 51 38 Standard 1 Kick 2 (4), set 51 39 Standard 1 Kick 1 (4), set 51 40 Standard 1 Kick 2 (4), set 51 41 Standard 1 Kick 1 (4), set 51 50 Room Kick 2 (2), set 51 51 Room Kick 1 (2), set 127 35 Acoustic Bass Drum (4), set 127 36 Acoustic Bass Drum (4)
+              - `RndSnareDrum2` [RandomStrike] -- set 2 40 [RND] Standard Snare 2 (4)
+              - `RoomSnare2` [LiveRoom] -- set 8 40 Room Snare 2 (3), set 9 95 Room Snare 2 (3), set 50 69 Room Snare 2 (3), set 51 69 Room Snare 2 (3)
+                - `RndRoomSnare2` [RandomStrike] -- set 12 40 [RND] Room Snare 2 (3)
+          - `KickDrum` -- 0 Std 1 Kick 1 (4), 1 Std 1 Kick 2 (4), 2 Std 2 Kick 1 (4), 3 Std 2 Kick 2 (4), 4 Kick Drum 1 (4), 5 Kick Drum 2 (4), 8 Room Kick 1 (3), 9 Room Kick 2 (3), 11 Power Kick 2 (2), 12 Electric Kick 2 (2), 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4), set 1 35 Standard 2 Kick 2 (2), set 1 36 Standard 2 Kick 1 (2), set 50 38 Standard 1 Kick 2 (4), set 50 39 Standard 1 Kick 1 (4), set 50 40 Standard 1 Kick 1 (4), set 50 41 Standard 1 Kick 2 (4), set 50 42 Standard 2 Kick 1 (2), set 50 43 Standard 2 Kick 2 (2), set 50 44 Kick Drum1 (4), set 50 45 Kick Drum 2 (4), set 50 46 Soft Kick (2), set 51 38 Standard 1 Kick 2 (4), set 51 39 Standard 1 Kick 1 (4), set 51 40 Standard 1 Kick 2 (4), set 51 41 Standard 1 Kick 1 (4), set 127 35 Acoustic Bass Drum (4), set 127 36 Acoustic Bass Drum (4)
             - `ConcertBassDrum` -- set 48 35 Concert BD 2 (4), set 48 36 Concert BD 1 (4), set 49 32 Concert BD 1 (4), set 50 49 Concert BD 1 (4), set 51 49 Concert BD 1 (4)
               - `ReverseConcertBassDrum` -- set 57 37 Reverse Concert Bass Drum (4)
             - `HipHopKick1` [SampledBreak] -- set 9 36 Hip-Hop Kick 1 (4), set 50 33 Hip-Hop Kick 1 (4), set 51 33 Hip-Hop Kick 1 (4), set 51 47 Hip-Hop Kick 1 (4)
               - `ReverseHipHopKick1` -- set 58 38 Reverse Hip-Hop Kick 1 (4)
             - `JazzKick2` -- 7 Jazz Kick 2 (4), set 32 35 Jazz Kick 2 (4), set 40 35 Jazz Kick 2 (4), set 50 48 Jazz Kick 2 (4), set 51 44 Jazz Kick 2 (4)
+              - `LeftJazzKick2` [RandomStrike] -- set 33 95 [L] Jazz Kick 2 (3)
               - `RndJazzKick2` [RandomStrike] -- set 33 35 [RND] Jazz Kick 2 (4)
             - `JazzKick` -- 6 Jazz Kick 1 (4), set 32 36 Jazz Kick 1 (4), set 40 36 Jazz Kick 1 (4), set 50 47 Jazz Kick 1 (4), set 51 45 Jazz Kick 1 (4)
               - `HipHopKick2` [SampledBreak] -- set 9 35 Hip-Hop Kick 2 (4), set 50 32 Hip-Hop Kick 2 (4), set 51 32 Hip-Hop Kick 2 (4), set 51 46 Hip-Hop Kick 2 (4)
+              - `LeftJazzKick` [RandomStrike] -- set 33 96 [L] Jazz Kick 1 (3)
               - `RndJazzKick` [RandomStrike] -- set 33 36 [RND] Jazz Kick 1 (4)
             - `JungleKick1` [JungleBreak] -- set 10 36 Jungle Kick 1 (4), set 10 89 Jungle Kick Roll (4), set 50 35 Jungle Kick 1 (4), set 51 35 Jungle Kick 1 (4), set 51 53 Jungle Kick 1 (4), set 51 54 Jungle Kick Roll (4)
-            - `MondoKick` [LiveRoom] -- 10 Power Kick 1 (4), set 16 35 Power Kick 2 (2), set 16 36 MONDO Kick (4), set 50 52 Power Kick1 (4), set 50 53 Power Kick2 (2)
+            - `LeftKick` [RandomStrike] -- set 2 95 [L] Standard Kick 2 (3), set 2 96 [L] Standard Kick 1 (3)
+            - `MondoKick` [LiveRoom] -- 10 Power Kick 1 (4), set 8 35 Room Kick 2 (3), set 8 36 Room Kick 1 (3), set 16 35 Power Kick 2 (2), set 16 36 MONDO Kick (4), set 50 50 Room Kick 1 (3), set 50 51 Room Kick 2 (3), set 50 52 Power Kick1 (4), set 50 53 Power Kick2 (2), set 51 50 Room Kick 2 (3), set 51 51 Room Kick 1 (3)
+              - `LeftRoomKick` [RandomStrike] -- set 12 95 [L] Room Kick 2 (3), set 12 96 [L] Room Kick 1 (3)
               - `ReverseMondoKick` -- set 57 38 Reverse Power Kick1 (4)
+              - `RndMondoKick` [RandomStrike] -- set 12 35 [RND] Room Kick 2 (3), set 12 36 [RND] Room Kick 1 (3)
             - `ReverseKickDrum` -- set 57 36 Reverse Kick 1 (4)
-            - `RndKickDrum` [RandomStrike] -- set 2 36 [RND] Kick (4), set 12 35 [RND] Room Kick 2 (4), set 12 36 [RND] Room Kick 1 (4)
+            - `RndKickDrum` [RandomStrike] -- set 2 35 [RND] Standard Kick 2 (4), set 2 36 [RND] Standard Kick 1 (4)
           - `MeasuredStroke` [NoisyPercussionMixin]
             - `AgogoHigh` -- 67 High Agogo (4), set 49 84 High Agogo (4), set 127 67 High Agogo (4)
               - `MelodicAgogoHigh` [PlayedAtPitchMixin] -- GM 113 Agogo (4)
@@ -2887,15 +2962,25 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `ReverseTambourine` -- set 58 57 Reverse Tambourine 2 (2), set 58 58 Reverse Shake Tambourine (2)
             - `RfxDigitalTambourine` [SampledBreak] -- set 57 72 Digital Tambourine (3)
           - `TomTom` -- GM 117 Melodic Tom (4), 45 Low Tom (4), 47 Low-Mid Tom (4), set 127 45 Acoustic Middle Tom (4), set 127 47 Acoustic Middle Tom (4)
-            - `BrushTomMid` -- set 40 45 Brush Mid Tom 2 (4), set 40 47 Brush Mid Tom 1 (4), set 41 45 Brush Mid Tom 2 (4), set 41 47 Brush Mid Tom 1 (4), set 42 45 Brush Mid Tom 2 (4), set 42 47 Brush Mid Tom 1 (4)
+            - `BrushTomMid` -- set 40 45 Brush Mid Tom 2 (4), set 40 47 Brush Mid Tom 1 (4), set 41 45 Brush Mid Tom 2 (4), set 41 47 Brush Mid Tom 1 (4)
+              - `RndBrushTomMid` [RandomStrike] -- set 42 45 [RND] Brush Mid Tom 2 (4), set 42 47 [RND] Brush Mid Tom 1 (4)
             - `FloorTom` -- GM 117 Melodic Tom (4), 41 Low Floor Tom (4), 43 High Floor Tom (4), set 127 41 Acoustic Low Tom (4), set 127 43 Acoustic Low Tom (4)
-              - `BrushTomLow` -- set 40 41 Brush Low Tom 2 (4), set 40 43 Brush Low Tom 1 (4), set 41 41 Brush Low Tom 2 (4), set 41 43 Brush Low Tom 1 (4), set 42 41 Brush Low Tom 2 (4), set 42 43 Brush Low Tom 1 (4)
+              - `BrushTomLow` -- set 40 41 Brush Low Tom 2 (4), set 40 43 Brush Low Tom 1 (4), set 41 41 Brush Low Tom 2 (4), set 41 43 Brush Low Tom 1 (4)
+                - `RndBrushTomLow` [RandomStrike] -- set 42 41 [RND] Brush Low Tom 2 (4), set 42 43 [RND] Brush Low Tom 1 (4)
+              - `JazzTomLow` -- set 9 41 Jazz Low Tom 2 (4), set 9 43 Jazz Low Tom 1 (4), set 32 41 Jazz Low Tom 2 (4), set 32 43 Jazz Low Tom 1 (4)
+                - `RndJazzTomLow` [RandomStrike] -- set 33 41 [RND] Jazz Low Tom 2 (4), set 33 43 [RND] Jazz Low Tom 1 (4)
+              - `RndFloorTom` [RandomStrike] -- set 2 41 [RND] Low Tom 2 (4), set 2 43 [RND] Low Tom 1 (4)
               - `RoomFloorTom` [LiveRoom] -- set 8 41 Room Low Tom 2 (4), set 8 43 Room Low Tom 1 (4), set 16 41 Room Low Tom 2 (4), set 16 43 Room Low Tom 1 (4)
             - `HighTom` -- 48 Hi-Mid Tom (4), 50 High Tom (4), set 127 48 Acoustic High Tom (4), set 127 50 Acoustic High Tom (4)
-              - `BrushTomHigh` -- set 40 48 Brush High Tom 2 (4), set 40 50 Brush High Tom 1 (4), set 41 48 Brush High Tom 2 (4), set 41 50 Brush High Tom 1 (4), set 42 48 Brush High Tom 2 (4), set 42 50 Brush High Tom 1 (4)
+              - `BrushTomHigh` -- set 40 48 Brush High Tom 2 (4), set 40 50 Brush High Tom 1 (4), set 41 48 Brush High Tom 2 (4), set 41 50 Brush High Tom 1 (4)
+                - `RndBrushTomHigh` [RandomStrike] -- set 42 48 [RND] Brush High Tom 2 (4), set 42 50 [RND] Brush High Tom 1 (4)
               - `ReverseHighTom` -- set 57 46 Reverse Tom 1 (4)
+              - `RndHighTom` [RandomStrike] -- set 2 48 [RND] High Tom 2 (4), set 2 50 [RND] High Tom 1 (4)
               - `RoomHighTom` [LiveRoom] -- set 8 48 Room Hi Tom 2 (4), set 8 50 Room Hi Tom 1 (4), set 16 48 Room Hi Tom 2 (4), set 16 50 Room Hi Tom 1 (4)
+            - `JazzTomHigh` -- set 9 45 Jazz Mid Tom 2 (4), set 9 47 Jazz Mid Tom 1 (4), set 9 48 Jazz High Tom 2 (4), set 9 50 Jazz High Tom 1 (4), set 32 45 Jazz Mid Tom 2 (4), set 32 47 Jazz Mid Tom 1 (4), set 32 48 Jazz High Tom 2 (4), set 32 50 Jazz High Tom 1 (4)
+              - `RndJazzTomHigh` [RandomStrike] -- set 33 45 [RND] Jazz Mid Tom 2 (4), set 33 47 [RND] Jazz Mid Tom 1 (4), set 33 48 [RND] Jazz High Tom 2 (4), set 33 50 [RND] Jazz High Tom 1 (4)
             - `ReverseTomTom` -- set 57 47 Reverse Tom 2 (4)
+            - `RndTomTom` [RandomStrike] -- set 2 45 [RND] Mid Tom 2 (4), set 2 47 [RND] Mid Tom 1 (4)
             - `RoomTom` [LiveRoom] -- set 8 45 Room Mid Tom 2 (4), set 8 47 Room Mid Tom 1 (4), set 16 45 Room Mid Tom 2 (4), set 16 47 Room Mid Tom 1 (4)
         - `SynthDrum`
           - `MoogSynthDrum` -- GM 118 Synth Drum (4)
@@ -3052,12 +3137,12 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
                   - `TechnoSnare2`
                     - `ReverseTechnoSnare2` -- set 58 45 Reverse Techno Snare 2 (4)
                 - `TechnoSnare1` -- set 10 93 Techno Snare (2), set 11 40 Techno Snare (2), set 13 91 Techno Snare (2), set 26 90 Techno Snare (2), set 50 99 Techno Snare 1 (4), set 51 79 Techno Snare (2)
-              - `TR909Tom` -- set 9 41 TR-909 Low Tom 2 (4), set 10 41 TR-909 Low Tom 2 (4), set 13 41 TR-909 Low Tom 2 (4), set 30 41 909 Low Tom 2 (4)
-                - `TR909HiTom` -- set 9 48 TR-909 High Tom 2 (4), set 10 48 TR-909 High Tom 2 (4), set 13 48 TR-909 High Tom 2 (4), set 30 48 909 Hi Tom 2 (4)
-                  - `TR909HiTom1` -- set 9 50 TR-909 High Tom 1 (4), set 10 50 TR-909 High Tom 1 (4), set 13 50 TR-909 High Tom 1 (4), set 30 50 909 Hi Tom 1 (4)
-                - `TR909LowTom1` -- set 9 43 TR-909 Low Tom 1 (4), set 10 43 TR-909 Low Tom 1 (4), set 13 43 TR-909 Low Tom 1 (4), set 30 43 909 Low Tom 1 (4)
-                - `TR909MidTom` -- set 9 45 TR-909 Mid Tom 2 (4), set 10 45 TR-909 Mid Tom 2 (4), set 13 45 TR-909 Mid Tom 2 (4), set 30 45 909 Mid Tom 2 (4)
-                  - `TR909MidTom1` -- set 9 47 TR-909 Mid Tom 1 (4), set 10 47 TR-909 Mid Tom 1 (4), set 13 47 TR-909 Mid Tom 1 (4), set 30 47 909 Mid Tom 1 (4)
+              - `TR909Tom` -- set 10 41 TR-909 Low Tom 2 (4), set 13 41 TR-909 Low Tom 2 (4), set 30 41 909 Low Tom 2 (4)
+                - `TR909HiTom` -- set 10 48 TR-909 High Tom 2 (4), set 13 48 TR-909 High Tom 2 (4), set 30 48 909 Hi Tom 2 (4)
+                  - `TR909HiTom1` -- set 10 50 TR-909 High Tom 1 (4), set 13 50 TR-909 High Tom 1 (4), set 30 50 909 Hi Tom 1 (4)
+                - `TR909LowTom1` -- set 10 43 TR-909 Low Tom 1 (4), set 13 43 TR-909 Low Tom 1 (4), set 30 43 909 Low Tom 1 (4)
+                - `TR909MidTom` -- set 10 45 TR-909 Mid Tom 2 (4), set 13 45 TR-909 Mid Tom 2 (4), set 30 45 909 Mid Tom 2 (4)
+                  - `TR909MidTom1` -- set 10 47 TR-909 Mid Tom 1 (4), set 13 47 TR-909 Mid Tom 1 (4), set 30 47 909 Mid Tom 1 (4)
         - `Timpani` -- GM 47 Timpani (4), set 48 41 Timpani F (4), set 48 42 Timpani F# (4), set 48 43 Timpani G (4), set 48 44 Timpani G# (4), set 48 45 Timpani A (4), set 48 46 Timpani A# (4), set 48 47 Timpani B (4), set 48 48 Timpani c (4), set 48 49 Timpani c# (4), set 48 50 Timpani d (4), set 48 51 Timpani d# (4), set 48 52 Timpani e (4), set 48 53 Timpani f (4)
       - `MetalPercussion`
         - `BirdTweet` -- GM 123 Bird Tweet (4)

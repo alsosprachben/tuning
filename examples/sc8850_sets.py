@@ -124,7 +124,11 @@ def plan():
             spec = G.VOICE.get(n)
             if spec is None:
                 missing.setdefault(name, []).append((pc, key))
-            rows[key] = (n, ("n",) + tuple(spec[1:3]) if (rnd and spec and spec[0] == "k") else None)
+            # [RND]: a kit's voice ('n', set, key) or a class ('nc', class, Hz), each strike varied
+            r = None
+            if rnd and spec and spec[0] in ("k", "c"):
+                r = ("n" if spec[0] == "k" else "nc",) + tuple(spec[1:3])
+            rows[key] = (n, r)
         if old is not None:
             rows = {k: v for k, v in rows.items() if v[0] != norm(old.get(k, "---"))[0]}
         if rows:

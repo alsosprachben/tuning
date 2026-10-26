@@ -200,6 +200,17 @@ INSTS = {
     "jazz_snare2": dict(kit=32, merge=0.04, max_modes=16, note=40, glob=_JAZZ + "snare4*9.wav", groups=None,
                         band=(120, 6000), floor=-30, flat=(1000, 12000), T=_JAZZ_T, clip=-60.0,
                         params=DRUM_PARAMS),
+    # ...its two toms (the SC-8850's Jazz toms), struck with sticks: the low
+    # ~101 Hz (tom1c-f -6, tom7a-d), the rack ~162 Hz (tom20-23 -6, tom70-72);
+    # the short bright -9 and tom4x takes (rim or brush) left out, and the
+    # clipped tom21a-6
+    "jazz_tom_low": dict(kit=32, merge=0.04, max_modes=10, note=43, glob=_JAZZ + "tom[17][a-f]*.wav", groups=None,
+                         band=(60, 3000), floor=-35, flat=(500, 4000), T=_JAZZ_T, clip=-60.0,
+                         params=DRUM_PARAMS),
+    "jazz_tom_high": dict(kit=32, exclude=('tom21a-6',), merge=0.04, max_modes=10, note=47,
+                          glob=_JAZZ + "tom[27][0-3]*.wav", groups=None,
+                          band=(100, 4000), floor=-35, flat=(500, 4000), T=_JAZZ_T, clip=-60.0,
+                          params=DRUM_PARAMS),
     # GS key 82, Shaker: Camo's shaker in VSCO 2 CE, eight single shakes of
     # 0.16-0.27 s (CC0), shaped noise as the maracas and cabasa (SHAKE_PARAMS,
     # then --trim3 into its noise_bands)

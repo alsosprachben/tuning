@@ -805,11 +805,17 @@ KIT_GATE = {24: {}, 25: {}, 48: {88: 1.4},
 # (examples/elkit_balance.py). Each note on its own key's Standard note had
 # left the kick 1.2 dB and the toms 4-12 dB under (Ben: "Our kick seems
 # quieter").
+# ROOM'S AND POWER'S, 2026-10-25: matched again, each note scaled by its own
+# gap (drumset_check.py 8, 16): the live room (LiveRoom, refitted at third
+# order after they were matched) had left the room toms 3-12 dB and Power's
+# kicks 10 dB over the Standard notes they replace. (Power's 35 and 40 are its
+# 36 and 38, copied with their levels: its Snare 2 reads 3.6 dB over
+# Standard's, whose Snare 2 is itself 3.3 under its Snare 1.)
 KIT_LEVEL = {24: {36: 1.697, 38: 0.823, 40: 0.790, 41: 0.945, 43: 0.990, 45: 0.984, 47: 0.992, 48: 0.988, 50: 0.967},
              25: {36: 2.445, 37: 0.298, 38: 0.479, 41: 1.649, 42: 0.151, 43: 1.790, 44: 0.139, 45: 2.023, 46: 0.195, 47: 2.163, 48: 2.523, 49: 0.319, 50: 2.807, 56: 1.763, 62: 2.439, 63: 2.470, 64: 1.675, 70: 0.550, 75: 8.462},
              48: {27: 2.703, 28: 2.143, 29: 0.757, 30: 0.290, 35: 0.092, 36: 0.151, 38: 1.778, 39: 0.514, 40: 1.778, 41: 0.627, 42: 0.631, 43: 0.639, 44: 0.623, 45: 0.621, 46: 0.620, 47: 0.610, 48: 0.612, 49: 0.629, 50: 0.614, 51: 0.625, 52: 0.644, 53: 0.633, 57: 0.551, 59: 0.558, 88: 1.683},
-             8: {41: 1.026, 43: 1.013, 45: 1.019, 47: 0.936, 48: 1.453, 50: 1.110},
-             16: {36: 0.906, 38: 1.175, 41: 1.043, 43: 1.032, 45: 1.040, 47: 0.944, 48: 1.470, 50: 1.129},
+             8: {41: 0.340, 43: 0.263, 45: 0.308, 47: 0.655, 48: 0.649, 50: 0.412},
+             16: {36: 0.283, 38: 1.175, 41: 0.341, 43: 0.265, 45: 0.307, 47: 0.653, 48: 0.649, 50: 0.410},
              56: {39: 0.864, 40: 0.091, 41: 1.169, 42: 1.279, 43: 0.206, 44: 0.491, 45: 0.072, 46: 0.742, 47: 59.315, 48: 0.099, 49: 0.298, 50: 0.484, 51: 0.408, 52: 5.284, 53: 1.777, 54: 9.798, 55: 3.855, 56: 0.806, 57: 0.952, 58: 0.705, 59: 1.478, 60: 0.320, 61: 2.240, 62: 1.305, 63: 0.063, 64: 8.793, 65: 1.407, 66: 1.285, 67: 0.474, 68: 0.785, 69: 0.381, 70: 0.632, 71: 1.119, 72: 3.108, 73: 1.495, 74: 2.103, 75: 1.460, 76: 1.389, 77: 1.426, 78: 0.326, 79: 0.025, 80: 1.587, 81: 0.569, 82: 0.111, 83: 0.034, 84: 5.146},
              40: {38: 0.490, 39: 0.570, 40: 0.011},
              # the CM-64/32L set's, over its sources' (_cm32l)
@@ -1014,9 +1020,15 @@ PERCUSSION_LEVEL = {
     # ...and both hats then sat too close to the crash -- the open one only 1.6 dB
     # under it. A crash is the loudest thing a kit does; hats live well below it,
     # nearer the ride. Both dropped 5 dB, keeping the 3.5 dB open/closed gap.
-    42: 0.87,                # closed
-    44: 0.87,                # pedal, to match
-    46: 0.47,                # open
+    # ...and then (2026-10-25) THE HATS REFITTED TO A KIT DRUMMER'S (DRSKit:
+    # crash_fit.py --hats; the pedal's stand thump cut), and set by their SIZZLE:
+    # the 4-16 kHz band, K-weighted, against the snare, where GeneralUser GS has
+    # its hats. Matched by whole level, Iowa's low thump had stood in for the
+    # sizzle (Ben, all along: "the hi-hat was quiet"). GeneralUser keeps the
+    # rule above: its open hat 2.8 dB over the closed, 5.9 under the crash.
+    42: 0.2160,              # closed (-12.1 dB: the refit's click is bright)
+    44: 1.0827,              # pedal (+1.9)
+    46: 2.2238,              # open (+13.5)
     # The crash family then stood ~10 dB over everything else that is made of
     # metal. A crash IS the loudest cymbal, but at that distance it stops being
     # an accent within the kit and becomes an interruption of it.
@@ -2015,8 +2027,25 @@ def _build_gs_sets():
                 tab.get(k, {}).pop(key, None)
             for tab in KIT_STROKES.get(k, {}).values():
                 tab.pop(key, None)
-            if spec[0] == 'c':
-                KITS[k][key] = (name, getattr(_TL, spec[1]), float(spec[2]))
+            if spec[0] in ('c', 'nc'):
+                cls = getattr(_TL, spec[1])
+                if spec[0] == 'nc':
+                    # [RND] on a class (the SC-8850's Room and Jazz L/R): it,
+                    # each strike varied (tonelib.RandomStrike)
+                    if cls not in _rnd:
+                        _rnd[cls] = type("Rnd" + cls.__name__, (_TL.RandomStrike, cls), {})
+                    cls = _rnd[cls]
+                KITS[k][key] = (name, cls, float(spec[2]))
+                # ...STANDARD'S OWN DRUM elsewhere (the Room set's, the left
+                # foot's: percussion_gs.STANDARD_OF) wears Standard's ring and
+                # level for that key, as a 'k' voice does -- unworn, the Room
+                # open hat rang Standard's 0.23 ring long and 6.6 dB hot
+                std = getattr(_GSET, 'STANDARD_OF', {}).get(name)
+                if std is not None:
+                    if PERCUSSION_RING.get(std):
+                        KIT_RING.setdefault(k, {})[key] = PERCUSSION_RING[std]
+                    if PERCUSSION_LEVEL.get(std):
+                        KIT_LEVEL.setdefault(k, {})[key] = PERCUSSION_LEVEL[std]
                 # ...its gesture, if it has one (a throat's pulse train)
                 for t, v in getattr(_GSET, 'STROKES', {}).get(name, {}).items():
                     KIT_STROKES.setdefault(k, {}).setdefault(t, {})[key] = v
@@ -2025,7 +2054,9 @@ def _build_gs_sets():
                 if name in getattr(_GSET, 'RING', {}):
                     KIT_RING.setdefault(k, {})[key] = _GSET.RING[name]
                 if name in getattr(_GSET, 'LEVEL', {}):
-                    KIT_LEVEL.setdefault(k, {})[key] = _GSET.LEVEL[name]
+                    # (a trim on Standard's level, where it wears it)
+                    KIT_LEVEL.setdefault(k, {})[key] = _GSET.LEVEL[name] * (
+                        (PERCUSSION_LEVEL.get(std) or 1.0) if std is not None else 1.0)
                 continue
             (nm, cls, f0), ring, level, gate, pan, strokes = _source(spec[1], spec[2])
             if spec[0] == 'r':

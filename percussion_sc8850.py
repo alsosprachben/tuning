@@ -8,10 +8,10 @@ our voice each strike varied."""
 
 SETS = {
     ('sc8850', 3): {  # STANDARD L/R
-        35: 'Standard Kick 2', 36: 'Standard Kick 1', 38: 'Standard Snare 1',
-        40: 'Standard Snare 2', 41: 'Low Tom 2', 42: '[RND] Closed Hi-Hat', 43: 'Low Tom 1',
-        45: 'Mid Tom 2', 47: 'Mid Tom 1', 48: 'High Tom 2', 50: 'High Tom 1',
-        95: '[L] Standard Kick 2', 96: '[L] Standard Kick 1',
+        35: '[RND] Standard Kick 2', 36: '[RND] Standard Kick 1', 38: '[RND] Standard Snare 1',
+        40: '[RND] Standard Snare 2', 41: '[RND] Low Tom 2', 42: '[RND] Closed Hi-Hat',
+        43: '[RND] Low Tom 1', 45: '[RND] Mid Tom 2', 47: '[RND] Mid Tom 1', 48: '[RND] High Tom 2',
+        50: '[RND] High Tom 1', 95: '[L] Standard Kick 2', 96: '[L] Standard Kick 1',
     },
     ('sc8850', 9): {  # ROOM
         42: 'Room Closed Hi-Hat 3', 46: 'Room Open Hi-Hat 3', 49: 'Room Crash Cymbal',
@@ -49,9 +49,10 @@ SETS = {
         38: '[RND] Room Snare 1', 39: 'Hand Clap', 40: '[RND] Room Snare 2', 41: 'Room Low Tom 2',
         42: '[RND] Room Closed Hi-Hat', 43: 'Room Low Tom 1', 44: 'Pedal Hi-Hat',
         45: 'Room Mid Tom 2', 46: '[RND] Room Open Hi-Hat', 47: 'Room Mid Tom 1',
-        48: 'Room High Tom 2', 49: 'Room Crash Cymbal', 50: 'Room High Tom 1',
-        51: 'Room Ride Cymbal', 53: 'Room Ride Bell', 55: 'Splash Cymbal', 89: '---', 90: '---',
-        91: '---', 92: '---', 93: '---', 94: '---', 95: '[L] Room Kick 2', 96: '[L] Room Kick 1',
+        48: 'Room High Tom 2', 49: '[RND] Room Crash Cymbal', 50: 'Room High Tom 1',
+        51: '[RND] Room Ride Cymbal', 53: '[RND] Room Ride Bell', 55: 'Splash Cymbal', 89: '---',
+        90: '---', 91: '---', 92: '---', 93: '---', 94: '---', 95: '[L] Room Kick 2',
+        96: '[L] Room Kick 1',
     },
     ('sc8850', 14): {  # HOUSE
         29: 'Scratch Push 2', 30: 'Scratch Pull 2', 35: 'TR-909 Kick 2', 36: 'TR-909 Kick 1',
@@ -82,12 +83,13 @@ SETS = {
     },
     ('sc8850', 34): {  # JAZZ L/R
         26: 'Finger Snap 2', 35: '[RND] Jazz Kick 2', 36: '[RND] Jazz Kick 1',
-        38: '[RND] Jazz Snare 1', 39: 'Hand Clap 2', 40: '[RND] Jazz Snare 2', 41: 'Jazz Low Tom 2',
-        42: 'Jazz Closed Hi-Hat', 43: 'Jazz Low Tom 1', 44: 'Pedal Hi-Hat', 45: 'Jazz Mid Tom 2',
-        46: 'Jazz Open Hi-Hat', 47: 'Jazz Mid Tom 1', 48: 'Jazz High Tom 2',
-        49: 'Jazz Crash Cymbal', 50: 'Jazz High Tom 1', 51: 'JAZZ Ride Cymbal',
-        53: 'Jazz Ride Bell', 59: 'Ride Cymbal Edge', 88: 'Applause', 89: '---', 90: '---',
-        91: '---', 92: '---', 93: '---', 94: '---', 95: '[L] Jazz Kick 2', 96: '[L] Jazz Kick 1',
+        38: '[RND] Jazz Snare 1', 39: 'Hand Clap 2', 40: '[RND] Jazz Snare 2',
+        41: '[RND] Jazz Low Tom 2', 42: 'Jazz Closed Hi-Hat', 43: '[RND] Jazz Low Tom 1',
+        44: 'Pedal Hi-Hat', 45: '[RND] Jazz Mid Tom 2', 46: 'Jazz Open Hi-Hat',
+        47: '[RND] Jazz Mid Tom 1', 48: '[RND] Jazz High Tom 2', 49: '[RND] Jazz Crash Cymbal',
+        50: '[RND] Jazz High Tom 1', 51: '[RND] JAZZ Ride Cymbal', 53: '[RND] Jazz Ride Bell',
+        59: 'Ride Cymbal Edge', 88: 'Applause', 89: '---', 90: '---', 91: '---', 92: '---',
+        93: '---', 94: '---', 95: '[L] Jazz Kick 2', 96: '[L] Jazz Kick 1',
     },
     ('sc8850', 42): {  # BRUSH 2
         26: 'Finger Snap 2', 35: 'Brush Kick 2', 36: 'Brush Kick 1', 38: 'Brush Tap 2',
@@ -100,12 +102,13 @@ SETS = {
     },
     ('sc8850', 43): {  # BRUSH 2 L/R
         26: 'Finger Snap 2', 35: 'Brush Kick 2', 36: 'Brush Kick 1', 38: '[RND] Brush Tap 2',
-        39: '[RND] Brush Slap 2', 40: 'Brush Swirl 1', 41: 'Brush Low Tom 2',
-        42: 'Brush Closed Hi-Hat', 43: 'Brush Low Tom 1', 44: 'Pedal Hi-Hat', 45: 'Brush Mid Tom 2',
-        46: 'Brush Open Hi-Hat', 47: 'Brush Mid Tom 1', 48: 'Brush High Tom 2',
-        49: 'Brush Crash Cymbal', 50: 'Brush High Tom 1', 51: '[RND] Brush Ride Cymbal',
-        53: '[RND] Brush Ride Bell', 59: 'Ride Cymbal Edge', 88: 'Applause', 89: '---', 90: '---',
-        91: '---', 92: '---', 93: '---', 94: '---', 95: '[L] Brush Kick 2', 96: '[L] Brush Kick 1',
+        39: '[RND] Brush Slap 2', 40: 'Brush Swirl 1', 41: '[RND] Brush Low Tom 2',
+        42: '[RND] Brush Closed Hi-Hat', 43: '[RND] Brush Low Tom 1', 44: 'Pedal Hi-Hat',
+        45: '[RND] Brush Mid Tom 2', 46: '[RND] Brush Open Hi-Hat', 47: '[RND] Brush Mid Tom 1',
+        48: '[RND] Brush High Tom 2', 49: '[RND] Brush Crash Cymbal', 50: '[RND] Brush High Tom 1',
+        51: '[RND] Brush Ride Cymbal', 53: '[RND] Brush Ride Bell', 59: 'Ride Cymbal Edge',
+        88: 'Applause', 89: '---', 90: '---', 91: '---', 92: '---', 93: '---', 94: '---',
+        95: '[L] Brush Kick 2', 96: '[L] Brush Kick 1',
     },
     ('sc8850', 52): {  # KICK & SNARE 2
         22: '---', 23: '---', 24: '---', 25: 'CR-78 Kick 1', 26: 'CR-78 Kick 2', 27: 'TR-606 Kick',
@@ -268,4 +271,4 @@ SET_ALONE = {51, 54, 55, 59, 60, 61, 62}
 SET_EXTEND = {2, 8, 9, 10, 11, 26, 32, 52}
 SET_BASE = {12: 8, 33: 32, 41: 40, 42: 40}
 SET_SILENCE = {2, 8, 9, 10, 11, 12, 13, 26, 32, 33, 41, 42, 51, 52, 54, 55, 59, 60, 61, 62}
-RND = {'[RND] Closed Hi-Hat': ('n', 0, 42), '[RND] Room Kick 2': ('n', 0, 35), '[RND] Room Kick 1': ('n', 0, 36), '[RND] Room Snare 1': ('n', 0, 38), '[RND] Room Snare 2': ('n', 0, 40), '[RND] Room Closed Hi-Hat': ('n', 0, 42), '[RND] Room Open Hi-Hat': ('n', 0, 46), '[RND] Jazz Kick 2': ('n', 32, 35), '[RND] Jazz Kick 1': ('n', 32, 36), '[RND] Jazz Snare 1': ('n', 32, 38), '[RND] Jazz Snare 2': ('n', 32, 40), '[RND] Brush Tap 2': ('n', 40, 38), '[RND] Brush Slap 2': ('n', 40, 39), '[RND] Brush Ride Cymbal': ('n', 0, 51), '[RND] Brush Ride Bell': ('n', 0, 53)}
+RND = {'[RND] Standard Kick 2': ('n', 0, 35), '[RND] Standard Kick 1': ('n', 0, 36), '[RND] Standard Snare 1': ('n', 0, 38), '[RND] Standard Snare 2': ('n', 0, 40), '[RND] Low Tom 2': ('n', 0, 41), '[RND] Closed Hi-Hat': ('n', 0, 42), '[RND] Low Tom 1': ('n', 0, 43), '[RND] Mid Tom 2': ('n', 0, 45), '[RND] Mid Tom 1': ('n', 0, 47), '[RND] High Tom 2': ('n', 0, 48), '[RND] High Tom 1': ('n', 0, 50), '[RND] Room Kick 2': ('nc', 'MondoKickProperties', 39.4), '[RND] Room Kick 1': ('nc', 'MondoKickProperties', 44.4), '[RND] Room Snare 1': ('nc', 'RoomSnareProperties', 195.1), '[RND] Room Snare 2': ('nc', 'RoomSnare2Properties', 192.5), '[RND] Room Closed Hi-Hat': ('nc', 'RoomClosedHatProperties', 248.4), '[RND] Room Open Hi-Hat': ('nc', 'RoomOpenHatProperties', 248.4), '[RND] Room Crash Cymbal': ('nc', 'RoomCrashProperties', 288.3), '[RND] Room Ride Cymbal': ('nc', 'RoomRideProperties', 147.5), '[RND] Room Ride Bell': ('nc', 'RoomRideBellProperties', 147.5), '[RND] Jazz Kick 2': ('n', 32, 35), '[RND] Jazz Kick 1': ('n', 32, 36), '[RND] Jazz Snare 1': ('n', 32, 38), '[RND] Jazz Snare 2': ('n', 32, 40), '[RND] Jazz Low Tom 2': ('nc', 'JazzTomLowProperties', 90.0), '[RND] Jazz Low Tom 1': ('nc', 'JazzTomLowProperties', 101.0), '[RND] Jazz Mid Tom 2': ('nc', 'JazzTomHighProperties', 144.0), '[RND] Jazz Mid Tom 1': ('nc', 'JazzTomHighProperties', 162.0), '[RND] Jazz High Tom 2': ('nc', 'JazzTomHighProperties', 182.0), '[RND] Jazz Crash Cymbal': ('nc', 'JazzCrashProperties', 288.3), '[RND] Jazz High Tom 1': ('nc', 'JazzTomHighProperties', 204.0), '[RND] JAZZ Ride Cymbal': ('nc', 'JazzRideProperties', 147.5), '[RND] Jazz Ride Bell': ('nc', 'JazzRideBellProperties', 147.5), '[RND] Brush Tap 2': ('n', 40, 38), '[RND] Brush Slap 2': ('n', 40, 39), '[RND] Brush Low Tom 2': ('nc', 'BrushTomLowProperties', 87.0), '[RND] Brush Closed Hi-Hat': ('nc', 'BrushClosedHatProperties', 248.4), '[RND] Brush Low Tom 1': ('nc', 'BrushTomLowProperties', 98.0), '[RND] Brush Mid Tom 2': ('nc', 'BrushTomMidProperties', 110.0), '[RND] Brush Open Hi-Hat': ('nc', 'BrushOpenHatProperties', 248.4), '[RND] Brush Mid Tom 1': ('nc', 'BrushTomMidProperties', 130.0), '[RND] Brush High Tom 2': ('nc', 'BrushTomHighProperties', 150.0), '[RND] Brush Crash Cymbal': ('nc', 'BrushCrashProperties', 288.3), '[RND] Brush High Tom 1': ('nc', 'BrushTomHighProperties', 175.0), '[RND] Brush Ride Cymbal': ('n', 0, 51), '[RND] Brush Ride Bell': ('n', 0, 53)}
