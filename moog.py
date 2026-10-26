@@ -945,7 +945,19 @@ def weights(panel, mk, nf, fmax=FMAX_HZ):
 # the instrument is this one. Offsets from 64 (-1..+1) on the knobs they name,
 # at the ranges midi.md gives every synth: cutoff +-2 octaves (0.2 of CUTOFF's
 # ten), resonance +-half the knob, times x/+ 4 (0.15 of the knobs' four decades).
-GM_SOUND = {'brightness': ('cutoff', 0.2), 'resonance': ('resonance', 0.5),
+# BRIGHTNESS (CC74, and GS's TVF cutoff NRPN 01 20 -- one parameter on a Sound
+# Canvas: SC-8850 owner's manual, "TVF Cutoff (=NRPN# 32/CC#74)") moves the
+# cutoff +/-8 octaves over its full swing, 150 cents a step: the one figure
+# either standard gives a cutoff control (GM 2's Controller Destination
+# Setting, -9600 to +9450 cents; Roland's controller matrix CUTOFF CONTROL),
+# and spessasynth's CC74. GM 2 leaves CC74's own amount to the maker, Roland
+# publishes none. Ben, A/B at +/-2, 4 and 8 on Uramach's Beethoven 9
+# (examples/cutoff_range_ab.py): "4 or 8 sound better". The knob's span for
+# it from knob_cutoff's law (~11.4 octaves over the knob: 8 is 0.703 of it);
+# the knob clamps at its ends, as a tone already wide open stays so
+GM_CUTOFF_OCTAVES = 8.0
+GM_SOUND = {'brightness': ('cutoff', GM_CUTOFF_OCTAVES * 0.5 / math.log2(knob_cutoff(0.75) / knob_cutoff(0.25))),
+            'resonance': ('resonance', 0.5),
             'attack': ('a_attack', 0.15), 'release': ('a_release', 0.15),
             'decay': ('a_decay', 0.15)}
 

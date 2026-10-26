@@ -3343,6 +3343,22 @@ def _prepare(path, tuner='hybrid440', sink=None):
     # for an image -- exactly as OSC 1's partial there is anchored.
     _FMW = [0.0]; _FMPH = [0.0]
     _MOOG_FT, _MOOG_KN, _MOOG_KROW = [], [], {}   # per-note rows, per-channel knobs
+    # ...a knob row that MOVES (moog: KN, one entry a grid point): {row: [(grid,
+    # knob row), ...]} -- a channel whose cutoff or resonance the file turns
+    # while notes sound (a GS TVF NRPN sweep, CC74/71, the controller matrix's
+    # cutoff), every Moog note on it reading the channel's knobs as they are
+    _MOOG_KVAR = {}
+    _KMOVES = {}
+
+    def _kn_moves(_c):
+        """True for a channel whose cutoff or resonance changes after it is
+        first set: its Moog notes read a timeline (_MOOG_KVAR). A channel set
+        once, or never, keeps its notes' constant rows."""
+        if _c not in _KMOVES:
+            _ts = {round(_et, 6) for _et, _q, _cc, _v in _SND_TL.get(_c, ()) if _cc in (71, 74)}
+            _ts |= {round(_et, 6) for _et, _v in _CMXEV['cutoff'].get(_c, ())}
+            _KMOVES[_c] = len(_ts) > 1
+        return _KMOVES[_c]
     _MOOG_MPI, _MOOG_MPC, _MOOG_MPR = [], [], []   # per-note pitch rows (moog.pitch_rows)
     _MOOG_MKI, _MOOG_MPK, _MOOG_MPKN = [], [], [0]  # per-note shape rows (moog.shape_rows)
     _MF104 = []         # (first row, end row, settings): notes through the MF-104M (mf104.py)
@@ -4587,6 +4603,25 @@ def _prepare(path, tuner='hybrid440', sink=None):
               if _MOOG_FT else None)
         KN = (np.ascontiguousarray(np.array(_MOOG_KN, np.float32).reshape(-1))
               if _MOOG_KN else None)
+        knk, kb0 = 1, 0
+        if _MOOG_KVAR:
+            # MOVING ROWS: every row gets knk entries, grid kb0 on (the kernel
+            # clamps outside them), from the first change to the last; a
+            # constant row the same entry throughout
+            _chg = [_g for _tl in _MOOG_KVAR.values() for _g, _r in _tl[1:]]
+            kb0 = max(0, min(_chg) - 1)
+            knk = max(_chg) - kb0 + 1
+            _kn = np.repeat(np.array(_MOOG_KN, np.float32)[:, None, :], knk, axis=1)
+            for _row, _tl in _MOOG_KVAR.items():
+                _cur = _tl[0][1]
+                for _g, _r in _tl:
+                    if _g <= kb0:
+                        _cur = _r
+                _kn[_row, :, :] = _cur
+                for _g, _r in _tl:
+                    if _g > kb0:
+                        _kn[_row, _g - kb0:, :] = _r
+            KN = np.ascontiguousarray(_kn.reshape(-1))
         _mpon = any(int(r[12]) & 1 for r in _MOOG_FT) if _MOOG_FT else False
         MPI = np.ascontiguousarray(np.array(_MOOG_MPI, np.int32).reshape(-1)) if _mpon else None
         MPC = np.ascontiguousarray(np.array(_MOOG_MPC or [0.0], np.float64)) if _mpon else None
@@ -4594,7 +4629,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _mkon = any(int(r[12]) & 14 for r in _MOOG_FT) if _MOOG_FT else False
         MKI = np.ascontiguousarray(np.array(_MOOG_MKI, np.int32).reshape(-1)) if _mkon else None
         MPK = np.ascontiguousarray(np.concatenate(_MOOG_MPK).astype(np.float32)) if _mkon else None
-        return dict(FT=FT, KN=KN, MPI=MPI, MPC=MPC, MPR=MPR, MKI=MKI, MPK=MPK)
+        return dict(FT=FT, KN=KN, knk=knk, kb0=kb0, MPI=MPI, MPC=MPC, MPR=MPR, MKI=MKI, MPK=MPK)
 
     def _cons_expand(_bi, _b):
         """One burst as its EMISSIONS (see below): a seat each, the room's
@@ -5786,8 +5821,31 @@ def _prepare(path, tuner='hybrid440', sink=None):
             for _lay in (('a',) if MOOG_NEUTRAL else _MG.layers_of(props)):
                 _pan = _MG.apply_gm(_MG.panel_of(props, layer=_lay), _sd)
                 _knr = tuple(_MG.kn_row(_pan))
-                if (ch, _knr) not in _MOOG_KROW:
-                    _MOOG_KROW[(ch, _knr)] = len(_MOOG_KN); _MOOG_KN.append(list(_knr))
+                _kkey = (ch, _knr)
+                if not MOOG_NEUTRAL and _mmgr is None and _kn_moves(ch):
+                    # THE CHANNEL'S KNOBS OVER TIME: one row for every note of
+                    # this voice on it, its knobs as the channel's sound
+                    # controllers stand at each change (the note's own filter
+                    # of them, as at its onset: what the class grants, its bias)
+                    _kkey = (ch, 'moves', pc.__name__, _lay)
+                    if _kkey not in _MOOG_KROW:
+                        _kbase = _MG.panel_of(props, layer=_lay)
+
+                        def _kn_at(_t):
+                            _d = _snd_d(ch, _t)
+                            if _sbias:
+                                _d = dict(_d)
+                                for _bk, _bv in _sbias.items():
+                                    _d[_bk] = _d.get(_bk, 0.0) + _bv
+                            _d = {_k: _v for _k, _v in _d.items() if _k in _sctl} if _sctl else {}
+                            return tuple(_MG.kn_row(_MG.apply_gm(_kbase, _d)))
+                        _kts = sorted({_et for _et, _q, _cc, _v in _SND_TL.get(ch, ())}
+                                      | {_et for _et, _v in _CMXEV['cutoff'].get(ch, ())})
+                        _MOOG_KROW[_kkey] = len(_MOOG_KN); _MOOG_KN.append(list(_kn_at(0.0)))
+                        _MOOG_KVAR[_MOOG_KROW[_kkey]] = [(0, _kn_at(0.0))] + [
+                            (int(_et * SR) // _MG.MG, _kn_at(_et)) for _et in _kts]
+                if _kkey not in _MOOG_KROW:
+                    _MOOG_KROW[_kkey] = len(_MOOG_KN); _MOOG_KN.append(list(_knr))
                 # A VALVE AFTER THE LADDER (the charang) hears the filter at its
                 # sustain: baked into the partials here, before tubeamp.expand
                 # runs on them, and taken back out by the kernel (FT slot 11).
@@ -5813,7 +5871,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                     _MOOG_MPK.append(_mdat); _MOOG_MPKN[0] += len(_mdat)
                 else:
                     _MOOG_MKI.append([0, 0, 1, 0, -1, -1, -1])
-                _MOOG_FT.append(_MG.ft_row(_pan, f0, _MOOG_KROW[(ch, _knr)], _pre,
+                _MOOG_FT.append(_MG.ft_row(_pan, f0, _MOOG_KROW[_kkey], _pre,
                                            (_MG.FT_PITCH if _mpp is not None else 0) | _msf))
                 _mre = max(1.0, _MG.release_span(_pan) * SR)
                 vb = props.voice_vibrato(f0, 0)
@@ -7254,7 +7312,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _mt = _moog_tables()
     FT, KN, MPI, MPC, MPR, MKI, MPK = (_mt[k] for k in ('FT', 'KN', 'MPI', 'MPC', 'MPR', 'MKI', 'MPK'))
     prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC, BL=BL,
-                FT=FT, KN=KN, knk=1, kb0=0, MPI=MPI, MPC=MPC, MPR=MPR, MKI=MKI, MPK=MPK,
+                FT=FT, KN=KN, knk=_mt['knk'], kb0=_mt['kb0'], MPI=MPI, MPC=MPC, MPR=MPR, MKI=MKI, MPK=MPK,
                 mvol=mvol,
                 cons_bursts=cons_bursts,
                 room_q=room_q, reverb_send=dict(_REVERB_CH), reverb_steps=dict(_REVERB_STEPS),

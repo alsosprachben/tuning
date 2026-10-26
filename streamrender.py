@@ -1092,7 +1092,7 @@ class Stream:
         self.peak_live = max(self.peak_live, P)
         prep = dict(lib=self.ctx['lib'], P=P, N=self.N, nblk=self.ctx['nblk'], sh=self.ctx['sh'],
                     G=self.ctx['G'], S=self.ctx['S'], BR=self.ctx['BR'], BC=self.ctx['BC'], BL=self.ctx.get('BL'),
-                    knk=1, kb0=0, **self.ctx['moog_tables']())
+                    **self.ctx['moog_tables']())
         for k, dt in B.FINAL_DTYPES:
             prep[k] = np.ascontiguousarray(rows[k][order].astype(dt))
         self._lobe_prep(prep, rows, order)
@@ -1238,7 +1238,7 @@ class Stream:
                 uniq.setdefault(k, []).append(i)
             base = dict(lib=self.ctx['lib'], N=self.N, nblk=self.ctx['nblk'], sh=self.ctx['sh'],
                         G=self.ctx['G'], S=self.ctx['S'], BR=self.ctx['BR'], BC=self.ctx['BC'], BL=self.ctx.get('BL'),
-                        knk=1, kb0=0, **self.ctx['moog_tables']())
+                        **self.ctx['moog_tables']())
             for k, ix in uniq.items():
                 g = self._group(k, w0)
                 ix = np.array(ix)
