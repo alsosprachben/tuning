@@ -25,9 +25,9 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | SC-55mkII tones | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 |
 | SC-88 tones | 418 | 418 | 100% | 285 | 130 | 3 | 0 | 0 |
 | SC-88 drum sets | 14 | 14 | 100% | | | | | |
-| SC-88Pro tones | 774 | 491 | 63% | 298 | 190 | 3 | 0 | 0 |
+| SC-88Pro tones | 774 | 494 | 64% | 298 | 193 | 3 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
-| SC-8850 tones | 1262 | 519 | 41% | 315 | 201 | 3 | 0 | 0 |
+| SC-8850 tones | 1262 | 522 | 41% | 315 | 204 | 3 | 0 | 0 |
 | SC-8850 drum sets | 37 | 30 | 81% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
@@ -2125,7 +2125,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 233 of the SC-55's 233 are built,
+under a program (SC-55 owner's manual p.68). 236 of the SC-55's 236 are built,
 and 161 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -2172,6 +2172,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 16.17 | SC-88 | 60'sOrgan 2 | `DrawbarOrgan_sc88_16_17` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x12c |
 | 16.18 | SC-88 | 60'sOrgan 3 | `DrawbarOrgan_sc88_16_18` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x1fc |
 | 16.24 | SC-88 | CheeseOrgan | `DrawbarOrgan_sc88_16_24` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x16c |
+| 16.25 | SC-55 | D-50 Organ | `Sc88_16_25` | **3** | SC-88 map: the D-50 VOICED (sc88_synth.D50): its partials' 15-cent detune measured on agerven's D-50 (CC0), its filter and chorus not -- no CC0 D-50 saw or organ note exists; with a_release, cutoff, eg_amount, osc1_wave, osc2_freq, osc2_level, osc2_octave, osc2_wave changed |
 | 16.26 | SC-55 | JUNO Organ | `Sc88_16_26` | **3** | SC-88 map: the Juno fitted to a Juno-6's notes (sc88_synth.JUNO, examples/juno_fit.py: Modular Samples, CC0, the PW Pluck C2-C6 over its whole pluck), its chorus the tone's own Stereo Chorus, with a_decay, a_release, a_sustain, cutoff, eg_amount, insertion_efx, osc1_level, osc1_wave, osc2_level, sub_level changed |
 | 16.32 | SC-88 | Organ 4 | `DrawbarOrgan_sc88_16_32` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x1ff |
 | 16.33 | SC-88 | Even Bar | `DrawbarOrgan_sc88_16_33` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x12d |
@@ -2363,12 +2364,14 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 81.6 | SC-55 | GR-300 | `Sc88_81_6` | **3** | SC-88 map: a Moog panel, the SawLead's with cutoff, osc1_wave, osc2_freq, osc2_octave, osc2_wave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 81.7 | SC-55 | LA Saw | `Sc88_81_7` | **3** | SC-88 map: a Moog panel, the SawLead's with eg_amount, f_decay, noise_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 81.8 | SC-55 | Doctor Solo | `Sc88_81_8` | **3** | SC-88 map: a Moog panel, the SawLead's with cutoff, lfo1_depth, lfo1_dest, lfo1_rate changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 81.11 | SC-55 | D-50 Fat Saw | `Sc88_81_11` | **3** | SC-88 map: the D-50 VOICED (sc88_synth.D50): its partials' 15-cent detune measured on agerven's D-50 (CC0), its filter and chorus not -- no CC0 D-50 saw or organ note exists; with osc2_level changed |
 | 81.16 | SC-55 | Waspy Synth | `Sc88_81_16` | **3** | SC-88 map: a Moog panel, the SawLead's with cutoff, osc2_freq, resonance, sync changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 81.18 | SC-55 | CS Saw Lead | `Sc88_81_18` | **3** | SC-88 map: the CS fitted to a Yamaha CS-30L's bass (sc88_synth.CS, examples/cs_fit.py: Modular Samples, CC0; 5.0 dB on the harmonics, 0.31 octave on the contour; the 2-pole by design, the takes agreeing), with a_release, cutoff, eg_amount, f_attack, f_decay, f_sustain, osc1_wave, resonance changed |
 | 81.24 | SC-55 | MG Saw 1 | `Sc88_81_24` | **3** | SC-88 map: the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG, examples/minimoog_fit.py: Garzul's, CC0, C1 and C4, 3 dB rms rendered), with cutoff, osc1_wave, osc2_freq, osc2_octave, osc2_wave changed. Ben, on examples/mg_demo.py: "They sound great" |
 | 81.25 | SC-55 | MG Saw 2 | `Sc88_81_25` | **3** | SC-88 map: the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG, examples/minimoog_fit.py: Garzul's, CC0, C1 and C4, 3 dB rms rendered), with cutoff, eg_amount, f_decay, f_sustain, osc1_wave, osc2_wave changed. Ben, on examples/mg_demo.py: "They sound great" |
 | 81.26 | SC-55 | OB Saw 1 | `Sc88_81_26` | **3** | SC-88 map: the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM, examples/obx_fit.py: Analogist's jungle pad, CC0, ten four-note chords, 3.2 dB rms rendered), with cutoff, osc2_freq, osc2_wave changed |
 | 81.27 | SC-55 | OB Saw 2 | `Sc88_81_27` | **3** | SC-88 map: the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM, examples/obx_fit.py: Analogist's jungle pad, CC0, ten four-note chords, 3.2 dB rms rendered), with cutoff, eg_amount, f_decay, f_sustain, osc2_freq, osc2_wave changed |
+| 81.28 | SC-55 | D-50 Saw | `Sc88_81_28` | **3** | SC-88 map: the D-50 VOICED (sc88_synth.D50): its partials' 15-cent detune measured on agerven's D-50 (CC0), its filter and chorus not -- no CC0 D-50 saw or organ note exists; with nothing changed |
 | 81.29 | SC-55 | SH-101 Saw | `Sc88_81_29` | **3** | SC-88 map: the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps), one VCO, with a_sustain, cutoff, eg_amount, f_attack, f_decay, f_sustain, osc1_level, resonance, sub_level changed |
 | 81.30 | SC-55 | CS Saw | `Sc88_81_30` | **3** | SC-88 map: the CS fitted to a Yamaha CS-30L's bass (sc88_synth.CS, examples/cs_fit.py: Modular Samples, CC0; 5.0 dB on the harmonics, 0.31 octave on the contour; the 2-pole by design, the takes agreeing), with cutoff, eg_amount, osc1_wave changed |
 | 81.31 | SC-55 | MG Saw Lead | `Sc88_81_31` | **3** | SC-88 map: the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG, examples/minimoog_fit.py: Garzul's, CC0, C1 and C4, 3 dB rms rendered), with cutoff, glide, osc1_wave, osc2_freq, osc2_octave, osc2_wave, resonance changed. Ben, on examples/mg_demo.py: "They sound great" |
@@ -2682,7 +2685,7 @@ Each Sound Canvas's map of tones (the SC-55's own owner's manual p.68; the SC-55
 SC-88 and SC-88Pro maps from the SC-88Pro manual's list), against ours. A tone is built
 when we play it, as a program or a variation, and rated as the tables above rate it.
 A later map can put another tone under a number we built; that one is not counted.
-The maps' totals are in the Summary at the top; still to build: SC-55 0, SC-55mkII 0, SC-88 0, SC-88Pro 283 (4 another tone), SC-8850 743 (6 another tone).
+The maps' totals are in the Summary at the top; still to build: SC-55 0, SC-55mkII 0, SC-88 0, SC-88Pro 280 (4 another tone), SC-8850 740 (6 another tone).
 
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3), SC-88Pro 0.16 European Pf (4), SC-88Pro 3.8 Honky-tonk 2 (3), SC-88Pro 16.8 Trem. Organ (4), SC-88Pro 16.32 70's E.Organ (4), SC-88Pro 17.32 Perc. Organ (4), SC-8850 62.8 Pro Brass (3), SC-8850 63.8 SynBrass sfz (3).
@@ -2693,7 +2696,7 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 |---|---|---|---|---|---|
 | Piano | 12/12 | 21/21 | 26/26 | 29/39 | 30/61 |
 | Chromatic Percussion | 12/12 | 12/12 | 18/18 | 18/23 | 18/29 |
-| Organ | 12/12 | 16/16 | 30/30 | 29/49 | 30/71 |
+| Organ | 12/12 | 16/16 | 30/30 | 30/49 | 31/71 |
 | Guitar | 16/16 | 19/19 | 34/34 | 36/55 | 41/72 |
 | Bass | 13/13 | 12/12 | 31/31 | 50/76 | 54/113 |
 | Strings | 8/8 | 9/9 | 11/11 | 12/20 | 13/29 |
@@ -2701,7 +2704,7 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Brass | 13/13 | 15/15 | 27/27 | 28/51 | 32/84 |
 | Reed | 11/11 | 8/8 | 11/11 | 11/20 | 11/23 |
 | Pipe | 10/10 | 8/8 | 9/9 | 13/22 | 13/27 |
-| Synth Lead | 11/11 | 12/12 | 30/30 | 55/80 | 59/131 |
+| Synth Lead | 11/11 | 12/12 | 30/30 | 57/80 | 61/131 |
 | Synth Pad | 10/10 | 8/8 | 21/21 | 24/43 | 26/83 |
 | Synth Effects | 8/8 | 11/11 | 42/42 | 45/76 | 45/122 |
 | Ethnic | 17/17 | 10/10 | 22/22 | 22/37 | 22/44 |

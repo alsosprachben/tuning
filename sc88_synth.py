@@ -173,6 +173,26 @@ def cs(**changes):
     return dict(CS, **changes)
 
 
+# THE D-50: voiced, not fitted -- the one CC0 D-50 take that holds a note
+# (agerven's supersquare, examples/d50 refs) gives its two partials' detune:
+# every harmonic split 15 cents (they beat at 0.0087 x the harmonic's
+# frequency: 8.9 Hz at 989, 17.3 at 1978); its filter is LFO-swept through
+# the take and its chorus is under the beating, so neither is measured. A
+# saw partial pair, the digital TVF as the 4-pole, a held contour, and the
+# D-50's chorus as a moderate Stereo Chorus (depth 12: a guess, deeper than
+# the Juno's measured 7).
+D50_CHORUS = ((0x01, 0x42), {4: 10, 5: 12})
+D50 = {"mode": 0, "osc1_wave": SAW, "osc1_level": 0.8, "osc2_wave": SAW, "osc2_level": 0.0, "osc2_octave": 8,
+       "osc2_freq": c(15), "sub_level": 0.0, "noise_level": 0.0, "resonance": 0.1, "kb_track": 0.5,
+       "cutoff": 0.72, "eg_amount": 0.62, "f_attack": 0.0, "f_decay": 0.6, "f_sustain": 0.6, "a_attack": 0.0,
+       "a_decay": 0.6, "a_sustain": 1.0, "a_release": 0.3, "mod_amount": 0.5, "lfo1_depth": 0.5,
+       "insertion_efx": D50_CHORUS}
+
+
+def d50(**changes):
+    return dict(D50, **changes)
+
+
 SC88_SYNTH = {
     # --- the Jupiter-8's (JUPITER: fitted on the record) -------------------
     # its clav: a narrow pulse, the filter snapping shut, a short body
@@ -254,6 +274,16 @@ SC88_SYNTH = {
     (39, 18): ("SH101Bass 2", "MoogSynthBass2",
                sh(osc1_level=0.0, osc2_level=1.0, sub_level=0.5, cutoff=0.47, resonance=0.5, eg_amount=0.75,
                   f_attack=0.0, f_decay=0.18, f_sustain=0.15)),
+    # --- the D-50's (D50: voiced; its partials' detune measured) -----------
+    # one saw partial, through its chorus
+    (81, 28): ("D-50 Saw", "MoogSawLead", d50()),
+    # the pair: two saw partials 15 cents apart, as the D-50's structure is
+    (81, 11): ("D-50 Fat Saw", "MoogSawLead", d50(osc2_level=0.8)),
+    # its organ: a square partial and another an octave up, the filter open,
+    # a gate (the organ's capital is no Moog: the square lead's)
+    (16, 25): ("D-50 Organ", "MoogSquareLead",
+               d50(osc1_wave=SQ, osc2_wave=SQ, osc2_level=0.5, osc2_octave=4, osc2_freq=0.5, cutoff=0.85,
+                   eg_amount=0.5, a_release=0.08)),
     # --- the CS's (CS: fitted to a CS-30L's bass) ---------------------------
     # its bass, the fitted patch, its second voice a few cents off
     (38, 2): ("CS Bass", "MoogSynthBass1", cs(osc2_wave=0.558, osc2_level=0.7, osc2_octave=8, osc2_freq=c(6))),
@@ -562,17 +592,6 @@ SC88_SYNTH = {
 }
 
 
-# THE LEVELS OF THOSE WHOSE PANEL SETS THEIRS APART from their program's
-# (patch_map.VARIATION_TRIM_DB): each matched to a Moog program of its kind,
-# already balanced to GeneralUser GS (examples/synth_var_levels.py) -- the
-# Juno organ and sub to the square lead's (80), the strings to the synth
-# strings' (51), the bell, the ladder's own sine, to the crystal's (98); the
-# 303's to the synth bass's (38: their resonance costs the ladder its bass,
-# the Distortion drives hard), its lead to the saw lead's (81), its acid
-# guitars to the charang's (84)
-SYNTH_TRIM_DB = {(16, 26): 4.7, (51, 2): 6.7, (84, 24): 2.7, (98, 20): 10.4,
-                 (38, 11): 12.9, (38, 12): 9.1, (38, 13): 11.4, (38, 14): 10.6, (38, 15): 9.5,
-                 (38, 17): 7.7, (38, 18): -14.3, (83, 1): -1.8, (84, 9): -0.4, (84, 10): 0.0}
 
 
 # THE OTHER MAPS' OWN SYNTH TONES (patch_map's map switch, bank select LSB):

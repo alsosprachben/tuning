@@ -1413,6 +1413,12 @@ def _sc88_var_rated():
                                         "examples/cs_fit.py: Modular Samples, CC0; 5.0 dB on the harmonics, 0.31 "
                                         "octave on the contour; the 2-pole by design, the takes agreeing), with %s "
                                         "changed" % ", ".join(sorted(k for k in pan if pan[k] != __import__("sc88_synth").CS.get(k))))
+            if nm in ("D-50 Saw", "D-50 Fat Saw", "D-50 Organ"):
+                VAR_RATED[(p, b)] = (3, "SC-88 map: the D-50 VOICED (sc88_synth.D50): its partials' 15-cent "
+                                        "detune measured on agerven's D-50 (CC0), its filter and chorus not -- no "
+                                        "CC0 D-50 saw or organ note exists; with %s changed" % (", ".join(
+                                            sorted(k for k in pan if pan[k] != __import__("sc88_synth").D50.get(k)))
+                                            or "nothing"))
             if nm.startswith(("JP", "JPMG")):
                 VAR_RATED[(p, b)] = (3, "SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, "
                                         "examples/sepways_fit.py), one pass, with %s changed. Ben, on "

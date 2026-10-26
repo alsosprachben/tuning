@@ -307,9 +307,7 @@ def cap_trim(vels=(64, 100)):
     VARIATION_TRIM_FIT with the rest (bank 127 excepted, at its targets')."""
     import patch_map as PM
     have = set(gu_variations())
-    from sc88_synth import SYNTH_TRIM_DB        # leveled to a program of their kind instead
-    pairs = sorted(k for k in PM.VARIATIONS if k[1] != 127 and k in PM.VARIATION_NAMES and k not in have
-                   and k not in SYNTH_TRIM_DB)
+    pairs = sorted(k for k in PM.VARIATIONS if k[1] != 127 and k in PM.VARIATION_NAMES and k not in have)
     if not pairs:
         return
     os.environ.setdefault("TUNING_REFLECT", "0")
