@@ -174,8 +174,10 @@ def patch_tree():
                kids=[dict(label=row(i, 127, nm, "(plays %s)" % plays), pick=(False, i, 127, "mt32"))
                      for i, nm, plays in tones[8 * k:8 * k + 8]])
           for k in range(len(tones) // 8)]
+    # (a map's own copy of a set -- the SC-88 Pro's, kept before the SC-8850
+    # revised it -- is the set's number in that standard: kit_in_map picks it)
     kits = [dict(label="%3d %s" % (k, PM.drum_set_name(k)), pick=(True, k, 0, None))
-            for k in sorted(PM.DRUM_SETS)]
+            for k in sorted(PM.DRUM_SETS) if k < 128 or k == PM.SC88_TR808_909]
     return dict(label="patch", kids=[
         dict(label="General MIDI          128 programs", crumb="GM", kids=families("gm", gm)),
         dict(label="Sound Canvas          by level and model", crumb="Sound Canvas",
@@ -383,7 +385,12 @@ GLOBALS = (
     ("metronome",  "bpm",    0.0, 300.0, 1.0),
     ("ring",       "ring",   0.0, 16.0, 1.0),
     ("metro level", "dB",  -40.0, 12.0, 0.5),
+    # THE STANDARD: the Sound Canvas map a part's map 0 plays (Live.std_map;
+    # --map) -- the banks a program change reads, the drum sets, and where the
+    # patch picker opens. A file's CC32 or TONE MAP messages still pick per part
+    ("standard",   "std",    0.0,  4.0, 1.0),
 )
+STD_NAMES = ("ours", "SC-55", "SC-88", "SC-88Pro", "SC-8850")
 
 # THE KEYS A PANEL CONTROL MAY BE BOUND TO: everything the panel does not
 # already use, in any pane, since a bound key fires from every pane. Space is
@@ -517,7 +524,8 @@ class TUI:
                 float(L.renderer.K),
                 float(LV.ROOM_NAMES.index(L.room_name or "dry")),
                 1.0 if isinstance(L.renderer, LV.GpuRenderer) else 0.0,
-                float(L.metro_bpm), float(L.metro_ring), float(L.metro_level_db))[i]
+                float(L.metro_bpm), float(L.metro_ring), float(L.metro_level_db),
+                float(L.std_map))[i]
 
     def set_global(self, i, v):
         L = self.live
@@ -557,6 +565,11 @@ class TUI:
             self.metronome(L.metro_bpm, round(v))
         elif i == 12:
             L.set_metro_level(v)
+        elif i == 13:
+            L.std_map = int(round(v))
+            L.dirty = True
+            self.say("standard: %s -- program changes read its banks and drum sets; "
+                     "the patch picker opens in it" % STD_NAMES[L.std_map])
         elif i == 9:
             on = v >= 0.5
             if on != isinstance(L.renderer, LV.GpuRenderer):
@@ -1346,8 +1359,13 @@ class TUI:
         tree = patch_tree()
         leaves = tree_leaves(tree)
         found = [leaf_crumb(up, lf) for _, up, lf in leaves]
-        here = ((True, p.program, 0, None) if p.drums else
-                (False, p.program, p.variation, getattr(p, "std", "gm")))
+        # ...a part with no standard of its own opens in THE STANDARD (the
+        # globals pane's; Live.std_map), at its level of the Sound Canvas
+        _std = getattr(p, "std", "gm")
+        if _std == "gm" and self.live.std_map:
+            _std = "sc%d" % self.live.std_map
+        here = ((True, p.program % 128 if p.program >= 3 * 128 else p.program, 0, None) if p.drums else
+                (False, p.program, p.variation, _std))
         path = (next((pa for pa, _, lf in leaves if lf["pick"] == here), None)
                 # a patch picked by number, or saved before standards: its GM place
                 or next((pa for pa, _, lf in leaves if lf["pick"][:3] == here[:3]), None)
@@ -1383,7 +1401,9 @@ class TUI:
             node = k
         dr, prog, v, std = leaf["pick"]
         if dr:
-            self.change_patch(drums=True, program=prog)
+            # the set as the standard has it (an SC-88 Pro standard: its own
+            # Hip-Hop set, not the SC-8850's)
+            self.change_patch(drums=True, program=PM.kit_in_map(prog, self.live.std_map) if prog < 128 else prog)
         else:
             self.change_patch(program=prog, bank=v, std=std)
 
@@ -2692,6 +2712,8 @@ def synth_fmt(kind, v, pan=None):
 
 
 def fmt(v, unit):
+    if unit == "std":
+        return STD_NAMES[int(round(v))]
     if unit == "room":
         return LV.ROOM_NAMES[int(round(v))]
     if unit == "x":

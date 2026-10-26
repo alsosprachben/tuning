@@ -847,6 +847,21 @@ def kit_for_program(program):
     return program if program in KITS else 0
 
 
+def kit_in_map(program, gsmap):
+    """The drum set a program change selects in Sound Canvas map `gsmap`
+    (CC32, or the standard map 0 plays): that map's own copy where it has one
+    (the SC-88's TR-808/909; the SC-88 Pro's sets the SC-8850 revised), the
+    SC-88 Pro's for an older map's file where only it kept the earlier set,
+    else the program."""
+    if gsmap:
+        mk = 128 * gsmap + program
+        if mk in KITS:
+            return mk
+        if gsmap in (1, 2) and 3 * 128 + program in KITS:
+            return 3 * 128 + program
+    return program
+
+
 def drum_set_name(program):
     """What the SC-55 calls this program on a drum channel, and whether it
     sounds as itself here."""
@@ -2015,6 +2030,13 @@ def _build_gs_sets():
                     order.insert(me, order.pop(at[0]))
     for which, keys in order:
         k = _GSET.SET_KIT[which]
+        # THE SC-88 PRO'S SET KEPT before the SC-8850 revises it in place: a
+        # file in the SC-88 Pro map (CC32 3) plays the set that map had --
+        # SENSATIO's Hip-Hop set, the Rap Snare on 38, not the SC-8850's LoFi
+        # Snare 1 -- and CC32 0 (ours) the SC-8850's
+        if which[0] == 'sc8850' and k in _GSET.SET_EXTEND and k in KITS and 3 * 128 + k not in KITS:
+            _snap = _map_set(3, k, k, DRUM_SETS.get(k, ''), {})
+            KIT_STROKES[_snap] = {t: dict(d) for t, d in KIT_STROKES.get(k, {}).items()}
         # ...an ADDED set on its parent (the SC-8850's L/R sets) starts as a copy of it
         base = getattr(_GSET, 'SET_BASE', {}).get(k)
         if base is not None and base in KITS:

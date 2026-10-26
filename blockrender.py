@@ -148,7 +148,7 @@ from patch_map import VariationProgram, VARIATIONS, layers_of
 from brass_fingering import cents_offset as brass_cents, INSTRUMENTS as BRASS_KIND
 from percussion_map import (percussion_for_note, choke_group, rasp_strokes,
                             GM_PERCUSSION_CHANNEL, DrumProgram, is_drum, kit_for_program,
-                            key_layers, KITS)
+                            key_layers, KITS, kit_in_map)
 
 # SR is the engine's sample rate. It used to be hardcoded here AND as six literal
 # 44100s inside the kernel, so it could not actually be changed; the kernel now
@@ -579,6 +579,12 @@ def parse(path):
     # change resolved to -- channel 10 from power-on -- and the program itself
     # carries the answer (DrumProgram), snapshotted at note-on like the rest.
     _bmsb = {}; _blsb = {}; _drums = {}
+    # ...and each part's MAP 0 (TONE MAP-0 NUMBER), where a file sets one: the
+    # map a part with CC32 0 reads its bank and drum set in, else the standard
+    _map0 = {}
+
+    def _map_of(ch):
+        return _blsb.get(ch, 0) or _map0.get(ch, DEFAULT_MAP)
     _var = {}                # the channel's variation (GS bank), from its last program change
     # THE DRUM INSTRUMENTS' OWN SETTINGS (GS): per channel, [(t, seq, key,
     # param, value)] from the drum NRPNs (18-1F rr) and the drum setup SysEx
@@ -728,15 +734,12 @@ def parse(path):
                     _inj.extend(msg.copy(channel=_m2, time=0) for _m2 in _mpe.members(_mc))
         if msg.type == 'program_change':
             _dr, _pr, _var_ = T.resolve_patch(_bmsb.get(msg.channel, 0),
-                                             _blsb.get(msg.channel, 0), msg.program,
+                                             _map_of(msg.channel), msg.program,
                                              _is_drums(msg.channel), _rxbank[0])
             if _dr and _bmsb.get(msg.channel, 0) != T.GM2_DRUM_BANK:
-                # ...a drum set read in the map CC32 names, where that map has
-                # a set of its own there (percussion_map._map_set: the SC-88's
-                # TR-808/909 on 26); else the program, as before
-                _mk = 128 * _blsb.get(msg.channel, 0) + _pr
-                if _blsb.get(msg.channel, 0) and _mk in KITS:
-                    _pr = _mk
+                # ...a drum set read in the part's map, where that map has a
+                # set of its own there (percussion_map.kit_in_map)
+                _pr = kit_in_map(_pr, _map_of(msg.channel))
             _drums[msg.channel] = _dr
             ch_prog[msg.channel] = _pr
             _var[msg.channel] = 0 if _dr else _var_
@@ -908,6 +911,7 @@ def parse(path):
                 # goes to 0, as live's does; this renderer kept them.
                 _rxbank[0] = _lvl != 1
                 _bmsb.clear(); _blsb.clear(); _drums.clear(); ch_prog.clear(); _var.clear()
+                _map0.clear()           # "When GS Reset is received ... 00: SELECTED"
                 _rmap.clear()
                 efxev.append((t, ('reset',)))
                 _GSX.apply(_efxst, ('reset',), _efxparts)
@@ -971,6 +975,10 @@ def parse(path):
             if _gp is not None:
                 # A PART PARAMETER: read as the MIDI message it is, next, in order
                 _inj.extend(_gp[1])
+                continue
+            _m0 = parse_gs_map0(msg.data)
+            if _m0 is not None:
+                _map0[_m0[0]] = _m0[1]
                 continue
             _ds = parse_gs_drum_setup(msg.data)
             if _ds is not None:
@@ -1321,6 +1329,41 @@ def gm_on_level(data):
     return None
 
 
+# THE STANDARD: the Sound Canvas map a part's map 0 plays (TONE MAP-0 NUMBER,
+# SC-8850 owner's manual, MIDI implementation 40 4x 01) where a file does not
+# set it per part -- 0 ours (patch_map.map_bank), 1 SC-55, 2 SC-88, 3 SC-88
+# Pro, 4 SC-8850. `blockrender.py ... --map N`, or TUNING_MAP.
+DEFAULT_MAP = int(os.environ.get('TUNING_MAP', '0') or 0)
+
+
+MAP_WORDS = {'ours': 0, 'sc55': 1, 'sc-55': 1, 'sc88': 2, 'sc-88': 2, 'sc88pro': 3, 'sc-88pro': 3,
+             'sc8850': 4, 'sc-8850': 4}
+
+
+def map_number(s):
+    """A standard as --map names it: a word of MAP_WORDS or the map's number."""
+    s = str(s).strip().lower().replace(' ', '')
+    n = MAP_WORDS.get(s, MAP_WORDS.get(s.replace('-', '')))
+    if n is None:
+        n = int(s) if s.isdigit() else -1
+    if not 0 <= n <= 4:
+        raise ValueError("--map: ours, sc55, sc88, sc88pro, sc8850 or 0-4, not %r" % s)
+    return n
+
+
+def parse_gs_map0(data):
+    """(channel, map) for a part's TONE MAP-0 NUMBER, or None.
+
+    F0 41 dd 42 12 4b 4p 01 mm cs F7 (b 0 port A, 1 port B: channel + 16; p
+    the GS part, 0 part 10): the map 1-4 that map 0 means on that part."""
+    d = tuple(data)
+    if not (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12
+            and d[4] in (0x40, 0x50) and d[5] >> 4 == 4 and d[6] == 0x01 and 1 <= d[7] <= 4):
+        return None
+    blk = d[5] & 0x0F
+    return (9 if blk == 0 else (blk - 1 if blk <= 9 else blk)) + (16 if d[4] == 0x50 else 0), d[7]
+
+
 def parse_gs_reset(data):
     """True for Roland's GS Reset, F0 41 dd 42 12 40 00 7F 00 41 F7.
 
@@ -1462,13 +1505,20 @@ def parse_gs_part(data):
     as PortedMidi carries them."""
     d = tuple(data)
     if not (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12
-            and d[4] in (0x40, 0x50) and d[5] >> 4 in (1, 2)):
+            and d[4] in (0x40, 0x50) and d[5] >> 4 in (1, 2, 4)):
         return None
     blk = d[5] & 0x0F
     ch = (9 if blk == 0 else (blk - 1 if blk <= 9 else blk)) + (16 if d[4] == 0x50 else 0)
     a, v = d[6], d[7]
     C = lambda cc, val: ('control_change', dict(control=cc, value=max(0, min(127, val))))
-    if d[5] >> 4 == 2:
+    if d[5] >> 4 == 4:
+        # TONE MAP NUMBER (40 4x 00, "= CC#32 : Bank number LSB", SC-8850
+        # owner's manual): 0 SELECTED -- the part's map 0 -- or a map, 1-4.
+        # The rest of the 4x block (the EFX, EQ, outputs) is read elsewhere
+        if a != 0x00 or v > 4:
+            return None
+        msgs = [C(32, v)]
+    elif d[5] >> 4 == 2:
         # THE CONTROLLERS' DESTINATIONS (40 2x): the two our voices have as
         # messages. BEND PITCH CONTROL is the bend range (RPN 0/0); MOD LFO1
         # PITCH DEPTH, 0-600 cents, the mod wheel's vibrato (RPN 0/5, GM 2's
@@ -7761,6 +7811,13 @@ if __name__=="__main__":
     if '--gpu' in sys.argv:
         RENDER_GPU = True
         sys.argv.remove('--gpu')
+    if '--map' in sys.argv:
+        # THE STANDARD map 0 plays (DEFAULT_MAP): ours, sc55, sc88, sc88pro,
+        # sc8850, or the map's number
+        _i = sys.argv.index('--map')
+        DEFAULT_MAP = map_number(sys.argv[_i + 1])
+        os.environ['TUNING_MAP'] = str(DEFAULT_MAP)     # ...for `import blockrender` elsewhere too
+        del sys.argv[_i:_i + 2]
     inp,outp=sys.argv[1],sys.argv[2]; tuner=sys.argv[3] if len(sys.argv)>3 else 'hybrid440'
     # Optional 4th argument sets the pitch everything tunes to: "a=432" names the
     # frequency of A4, "c=256" the frequency of middle C. Which end you give

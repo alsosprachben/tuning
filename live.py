@@ -88,7 +88,7 @@ import gsefx as _GSX
 import gsdelay as _GSD
 import register as _RGM     # the free-string register's physics (live: _reg_*)
 from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL,
-                            kit_for_program, drum_set_name, key_layers)
+                            kit_for_program, drum_set_name, key_layers, kit_in_map)
 
 # Columns of the partial table, in the order blockrender builds them.
 # p0 is the LEFT ear's carrier phase and p0R the RIGHT one: the interaural
@@ -3903,6 +3903,12 @@ class Live:
         # Rx.BANK SELECT: off after GM1 System On, on after GS Reset or GM 2 On.
         self.bank_msb = {}
         self.bank_lsb = {}
+        # THE STANDARD (Sound Canvas map) a channel's map 0 plays -- 0 ours, 1
+        # SC-55, 2 SC-88, 3 SC-88 Pro, 4 SC-8850 (blockrender.DEFAULT_MAP, the
+        # --map option, the panel's standard) -- and a part's own, where a
+        # TONE MAP-0 NUMBER message set one
+        self.std_map = B.DEFAULT_MAP
+        self.map0 = {}
         # LEGATO: each channel's most recent onset group, and the flag that
         # carries a slur into _note_on as _glide_from carries a glide.
         self.onset_group = {}
@@ -5080,8 +5086,11 @@ class Live:
             # is the player's own setup, and one channel of a file turning into
             # a kit must not turn the player's piano into one.
             _msb = self.bank_msb.get(ch, 0)
+            # ...THE MAP the bank is read in: CC32, else the part's map 0 (TONE
+            # MAP-0 NUMBER), else the standard (Live.std_map)
+            _map = self.bank_lsb.get(ch, 0) or self.map0.get(ch, self.std_map)
             _dr, _prog, _var = T.resolve_patch(
-                _msb, self.bank_lsb.get(ch, 0), msg.program,
+                _msb, _map, msg.program,
                 self.ch_drums.get(ch, ch == GM_PERCUSSION_CHANNEL), self.rx_bank)
             self.ch_drums[ch] = _dr
             _said = self.rx_bank and _msb in (T.GM2_DRUM_BANK, T.GM2_MELODIC_BANK)
@@ -5089,8 +5098,10 @@ class Live:
                 if not self._listens(part, ch):
                     continue
                 _pd = _dr if (_said and part.channel == ch) else part.drums
-                want = (_prog, _pd, self._tuner_for(_prog, _pd, part.base_tuner),
-                        patch_variation(_prog, _pd, _var))
+                # a drum set in the map, where it has its own (kit_in_map)
+                _pp = kit_in_map(_prog, _map) if _pd and _msb != T.GM2_DRUM_BANK else _prog
+                want = (_pp, _pd, self._tuner_for(_pp, _pd, part.base_tuner),
+                        patch_variation(_pp, _pd, _var))
                 if part.patch.key == want:
                     continue
                 self.patch_reqs.append((part.pid, want))
@@ -8333,6 +8344,11 @@ class Live:
                 for _pm in _gp[1]:
                     self._one(n0, _pm)
             return
+        _m0 = _BRs.parse_gs_map0(d)
+        if _m0 is not None:
+            if _m0[0] < 16 and not _g:
+                self.map0[_m0[0]] = _m0[1]      # read at the part's next program change
+            return
         _rp = _BRs.parse_gs_rhythm_part(d)
         if _rp is not None:
             ch, mode = _rp
@@ -8377,6 +8393,7 @@ class Live:
         self.slab.send = [1.0] * 256           # every channel back to the nominal distance
         self.bank_msb.clear()
         self.bank_lsb.clear()
+        self.map0.clear()
         self.ch_drums.clear()
         # ...and the device-level state, BEFORE the per-channel loop re-pitches
         # every channel, so that loop lands them on a master tuning of zero.
@@ -9779,6 +9796,7 @@ def preset_from(live):
         # outside the float() loop apply_preset runs over the knobs.
         controls=[dict(c) for c in getattr(live, "screen_controls", [])],
         room=getattr(live, "room_name", None),
+        std_map=getattr(live, "std_map", 0),
         chanstate=scene_from(live),
         routes=[r.to_dict() for r in getattr(live, "routes", ())],
         # the rig's Messenger: which firmware's chart, and the output it is on
@@ -9827,6 +9845,8 @@ def apply_preset(live, preset, progress=None):
     live.screen_controls = [dict(c) for c in preset.get("controls", [])]
     # The room, if the preset has one and the rig has a room at all (the
     # selftest's Live instances do not). Queued: it rebuilds the patches.
+    if "std_map" in preset:
+        live.std_map = int(preset["std_map"])
     _rm = preset.get("room")
     if _rm and getattr(live, "room_name", None) and _rm != live.room_name:
         live.set_room(_rm)
@@ -10749,6 +10769,67 @@ def selftest_gs(check):
               and _PMV.property_class_for_note(_vpm(8, 1, 3), 60) is _PMV.VARIATIONS[(3, 136)](60)
               and _PMV.bank_select(136) == (8, 1),
               "  (3.8 under LSB 0-3: %s; 39.8/3 %d; 0.16/3 %d; LSB 4 39.8/0.8 %s)" % (_mp, _mb, _mc, _m4))
+        # THE MAP BY SYSEX (SC-8850 owner's manual, 40 4x 00/01): TONE MAP
+        # NUMBER is CC32; TONE MAP-0 NUMBER is what map 0 plays on the part,
+        # until a GS Reset; the standard (--map: blockrender.DEFAULT_MAP) is it
+        # for every part. 3.8 is the SC-55's own under map 1, ours under 0
+        _gs = lambda *a: _M("sysex", data=[0x41, 0x10, 0x42, 0x12] + list(a) + [0])
+        _vsx = lambda pre: getattr([n[6] for n in B.parse(_bfile(
+            pre + [_M("control_change", channel=0, control=0, value=8),
+                   _M("program_change", channel=0, program=3)] + _on(0, 60)))[2]][0], "variation", 0)
+        _tm = (_vsx([_gs(0x40, 0x41, 0x00, 0x01)]), _vsx([_gs(0x40, 0x41, 0x01, 0x01)]),
+               _vsx([_gs(0x40, 0x41, 0x01, 0x01), _gs(0x40, 0x00, 0x7F, 0x00)]),
+               _vsx([_gs(0x40, 0x42, 0x01, 0x01)]))
+        _was_map = B.DEFAULT_MAP
+        try:
+            B.DEFAULT_MAP = 1
+            _tmd = (_vsx([]), _vsx([_M("control_change", channel=0, control=32, value=2)]))
+        finally:
+            B.DEFAULT_MAP = _was_map
+        check("file: TONE MAP NUMBER is CC32, TONE MAP-0 NUMBER map 0 on its part until a GS Reset, "
+              "the standard map 0 everywhere -- 3.8 the SC-55's under each, ours otherwise",
+              _tm == (136, 136, 8, 8) and _tmd == (136, 8),
+              "  (sysex map, map-0, map-0 then reset, map-0 on part 2: %s; standard 1, CC32 2 over it: %s)"
+              % (_tm, _tmd))
+        # ...and DRUM SETS in the map: the Hip-Hop set (program 9) is the SC-88
+        # Pro's own under map 3 (its Rap Snare), the SC-8850's under ours
+        _kit = lambda pre: int([n[6] for n in B.parse(_bfile(
+            pre + [_M("program_change", channel=9, program=9)] + _on(9, 38)))[2]][0])
+        try:
+            B.DEFAULT_MAP = 3
+            _kd = _kit([])
+        finally:
+            B.DEFAULT_MAP = _was_map
+        _ks = (_kit([]), _kit([_M("control_change", channel=9, control=32, value=3)]),
+               _kit([_gs(0x40, 0x40, 0x01, 0x03)]), _kd)
+        check("file: a drum set in the map -- Hip-Hop under ours, CC32 3, map-0 3 on part 10, the "
+              "standard 3: the SC-8850's, then the SC-88 Pro's (Rap Snare on 38)",
+              _ks == (9, 393, 393, 393) and _PM.KITS[393][38][0] == "Rap Snare"
+              and _PM.KITS[9][38][0] == "LoFi Snare 1",
+              "  (%s)" % (_ks,))
+        _lv = Live(program=0, rate=48000, frames=128, verbose=False)
+        _lv.std_map = 1
+        _lv.on_midi(_M("control_change", channel=0, control=0, value=16))
+        _lv.on_midi(_M("program_change", channel=0, program=62)); _lv.apply(0)
+        _oks = _lv.wait_patch(90)
+        _vst = _lv.parts[0].variation
+        _lv.std_map = 0
+        _lv.on_midi(_gs(0x40, 0x41, 0x01, 0x01))
+        _lv.on_midi(_M("control_change", channel=0, control=0, value=16))
+        _lv.on_midi(_M("program_change", channel=0, program=63)); _lv.apply(0)
+        _oks = _oks and _lv.wait_patch(90)
+        _vm0 = _lv.parts[0].variation
+        _lv.on_midi(_gs(0x40, 0x41, 0x00, 0x00))     # TONE MAP NUMBER 0: map 0, still SC-55 here
+        _lv.on_midi(_gs(0x40, 0x00, 0x7F, 0x00))     # GS Reset: map 0 ours again
+        _lv.on_midi(_M("control_change", channel=0, control=0, value=16))
+        _lv.on_midi(_M("program_change", channel=0, program=62)); _lv.apply(0)
+        _oks = _oks and _lv.wait_patch(90)
+        _vrs = _lv.parts[0].variation
+        _lv.shutdown()
+        check("live: the standard 1 reads 62.16 as the SC-55's; TONE MAP-0 1 on the part does too; "
+              "after a GS Reset, ours again",
+              _oks and _vst == 144 and _vm0 == _PMV.map_bank(63, 16, 1) and _vrs == _PMV.map_bank(62, 16, 0),
+              "  (%s, %s, %s)" % (_vst, _vm0, _vrs))
         _lv = Live(program=0, rate=48000, frames=128, verbose=False)
         _lv.on_midi(_M("control_change", channel=0, control=0, value=16))
         _lv.on_midi(_M("control_change", channel=0, control=32, value=1))
@@ -19935,6 +20016,9 @@ def main():
     ap.add_argument("--list", action="store_true", help="list MIDI inputs and exit")
     ap.add_argument("--room", default=None, choices=ROOM_NAMES,
                     help="the room, early reflections and tail (default: the session's, else hall)")
+    ap.add_argument("--map", default=None, metavar="STANDARD",
+                    help="the Sound Canvas map a part's map 0 plays: ours (default), sc55, sc88, "
+                         "sc88pro, sc8850 (or 0-4); also the panel's standard")
     ap.add_argument("--fresh", action="store_true",
                     help="start clean instead of resuming the last session")
     ap.add_argument("--selftest", nargs="?", const="", default=None, metavar="TAGS",
@@ -20007,6 +20091,9 @@ def main():
             sys.stderr.write("  resumed the last session (--fresh to start clean)\n")
         except Exception as e:
             sys.stderr.write("  the last session would not apply (%s); starting clean\n" % e)
+    # THE STANDARD, if named: over the session's
+    if a.map is not None:
+        live.std_map = B.map_number(a.map)
     # THE MESSENGER TO SET, if one is named -- or the session's, if it is
     # plugged in -- and its Moog parts set to their programs now it is open
     _mport = a.messenger or (sess or {}).get("messenger_port")
