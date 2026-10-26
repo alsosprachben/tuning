@@ -1389,6 +1389,14 @@ def _sc88_var_rated():
                                         "examples/juno_fit.py: Modular Samples, CC0, the PW Pluck C2-C6 over its "
                                         "whole pluck), its chorus the tone's own Stereo Chorus, with %s changed"
                                      % ", ".join(sorted(k for k in pan if pan[k] != __import__("sc88_synth").JUNO.get(k))))
+            if nm in ("TB303 Bass 2", "Kicked TB303", "TB303 Saw Bs", "Rubber303 Bs", "Reso 303 Bs", "303 Sqr Bs",
+                      "TB303 DistBs", "TB Lead", "Acid Guitar1", "Acid Guitar2"):
+                VAR_RATED[(p, b)] = (3, "SC-88 map: the TB-303 fitted to a TB-303's note (sc88_synth.TB303, "
+                                        "examples/tb303_fit.py: DJMini's, CC0, its resonant peak through the pluck "
+                                        "0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader "
+                                        "peak left), with %s changed" % (", ".join(
+                                            sorted(k for k in pan if pan[k] != __import__("sc88_synth").TB303.get(k)))
+                                            or "nothing"))
             if nm.startswith(("JP", "JPMG")):
                 VAR_RATED[(p, b)] = (3, "SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, "
                                         "examples/sepways_fit.py), one pass, with %s changed. Ben, on "

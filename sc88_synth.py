@@ -105,6 +105,27 @@ def juno(**changes):
     return dict(JUNO, **changes)
 
 
+# THE TB-303: the panel fitted to a TB-303's own note (examples/tb303_fit.py:
+# DJMini's, CC0, C3 held; laffik's TD-3, its clone, swept by hand for the
+# slope). One VCO, OSC 1 alone, no key tracking. Its pluck, from the
+# resonant peak traced every 5 ms and fitted with the engine's own contour
+# (0.03 octave rms): rising 29 ms to ~1.6 kHz, falling back to 693 Hz -- 1.15
+# octaves over a 721 Hz cutoff, decay 0.30 s, no sustain. Held, the
+# 4-pole at resonance 0.62 matches the 303's harmonics within 4.1 dB rms;
+# the diode ladder's broader peak (its 6th harmonic 14 dB up on ours) is
+# what is left. The VCA holds while the gate does. The 2-pole fits 5 dB worse.
+TB303 = {"mode": 0, "osc1_wave": 0.45, "osc1_level": 1.0, "osc2_level": 0.0, "osc2_freq": 0.5,
+         "sub_level": 0.0, "noise_level": 0.0, "kb_track": 0.0, "resonance": 0.62, "res_bass": False,
+         "cutoff": 0.572, "eg_amount": 0.66, "f_attack": 0.073, "f_decay": 0.275, "f_sustain": 0.0,
+         "a_attack": 0.0, "a_decay": 0.297, "a_sustain": 0.825, "a_release": 0.08,
+         "mod_amount": 0.5, "lfo1_depth": 0.5}
+TB_DIST = ((0x01, 0x11), {})          # the Distortion insertion type, as the module's own
+
+
+def tb(**changes):
+    return dict(TB303, **changes)
+
+
 SC88_SYNTH = {
     # --- the Jupiter-8's (JUPITER: fitted on the record) -------------------
     # its clav: a narrow pulse, the filter snapping shut, a short body
@@ -442,6 +463,30 @@ SC88_SYNTH = {
     (98, 20): ("JUNO Bell", "MoogCrystalFX",
                juno(osc1_level=0.0, osc2_level=0.0, sub_level=0.0, resonance=1.0, kb_track=1.0, cutoff=0.532,
                     eg_amount=0.5, mod_amount=0.5, a_decay=0.581, a_sustain=0.0, a_release=0.581)),
+    # --- the TB-303's (TB303: fitted to a TB-303's note) --------------------
+    # a second voicing: the peak lower, the decay longer
+    (38, 11): ("TB303 Bass 2", "MoogSynthBass1", tb(resonance=0.5, f_decay=0.36)),
+    # a kick under it: OSC 2 a triangle at the key, its pitch thrown up 1.5
+    # octaves by the contour and falling with it -- the kick's sweep, ~185 Hz
+    # down to the fundamental on a C2
+    (38, 12): ("Kicked TB303", "MoogSynthBass1",
+               tb(osc2_wave=TRI, osc2_level=0.9, osc2_octave=8, mod_dest=1, mod_amount=0.65)),
+    # its saw, plain, a little more open and less resonant
+    (38, 13): ("TB303 Saw Bs", "MoogSynthBass1", tb(osc1_wave=SAW, cutoff=0.6, resonance=0.45)),
+    # rubbery: a slower, shallower sweep, the peak softer
+    (38, 14): ("Rubber303 Bs", "MoogSynthBass1", tb(cutoff=0.55, resonance=0.45, eg_amount=0.62, f_decay=0.45)),
+    # the peak pushed up and the sweep deeper
+    (38, 15): ("Reso 303 Bs", "MoogSynthBass1", tb(resonance=0.7, eg_amount=0.72)),
+    # its square (the 303's, made from the saw)
+    (38, 17): ("303 Sqr Bs", "MoogSynthBass1", tb(osc1_wave=SQ)),
+    # through distortion, the module's own Distortion type
+    (38, 18): ("TB303 DistBs", "MoogSynthBass1", tb(insertion_efx=TB_DIST)),
+    # the 303 as a lead: held, the sweep longer
+    (83, 1): ("TB Lead", "MoogSawLead", tb(osc1_wave=SAW, cutoff=0.62, f_decay=0.4, a_sustain=1.0, a_release=0.2)),
+    # acid through the charang's valve: the 303's saw and peak, held
+    (84, 9): ("Acid Guitar1", "MoogCharangLead", tb(osc1_wave=SAW, a_sustain=1.0, a_release=0.2)),
+    # ...its square, the peak higher
+    (84, 10): ("Acid Guitar2", "MoogCharangLead", tb(osc1_wave=SQ, resonance=0.68, a_sustain=1.0, a_release=0.2)),
 }
 
 
@@ -449,8 +494,13 @@ SC88_SYNTH = {
 # (patch_map.VARIATION_TRIM_DB): each matched to a Moog program of its kind,
 # already balanced to GeneralUser GS (examples/synth_var_levels.py) -- the
 # Juno organ and sub to the square lead's (80), the strings to the synth
-# strings' (51), the bell, the ladder's own sine, to the crystal's (98)
-SYNTH_TRIM_DB = {(16, 26): 4.7, (51, 2): 6.7, (84, 24): 2.7, (98, 20): 10.4}
+# strings' (51), the bell, the ladder's own sine, to the crystal's (98); the
+# 303's to the synth bass's (38: their resonance costs the ladder its bass,
+# the Distortion drives hard), its lead to the saw lead's (81), its acid
+# guitars to the charang's (84)
+SYNTH_TRIM_DB = {(16, 26): 4.7, (51, 2): 6.7, (84, 24): 2.7, (98, 20): 10.4,
+                 (38, 11): 12.9, (38, 12): 9.1, (38, 13): 11.4, (38, 14): 10.6, (38, 15): 9.5,
+                 (38, 17): 7.7, (38, 18): -14.3, (83, 1): -1.8, (84, 9): -0.4, (84, 10): 0.0}
 
 
 # THE OTHER MAPS' OWN SYNTH TONES (patch_map's map switch, bank select LSB):

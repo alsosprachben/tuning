@@ -71,7 +71,7 @@ def take(ref, patch, n):
     return read(f[0])
 
 
-def frames(x, r, f0, foot=8):
+def frames(x, r, f0, foot=8, times=TIMES):
     """[(t, band dB re the frame's strongest, frame level dB)] on the grid of
     harmonics of the sub's frequency (half the oscillators', which sound at
     f0 x 8/foot), from the onset while within FLOOR_DB."""
@@ -82,7 +82,7 @@ def frames(x, r, f0, foot=8):
     W = max(int(0.04 * r), int(4.0 / fb * r))
     peak = None
     out = []
-    for t in TIMES:
+    for t in times:
         i = on + int(t * r)
         if i + W > len(x):
             break
@@ -118,7 +118,7 @@ def spectra(panel, f0, K):
     ok = (j >= 0) & (j < K)
     f, a, j = f[ok], a[ok], j[ok]
     fc = moog.knob_cutoff(0.0) * 2.0 ** (moog.CUT_OCT * CUTS) * moog.cutoff_at(1.0, f0, panel['kb_track'])
-    g = moog.ladder_gain(f[None, :], fc[:, None], moog.knob_k(panel['resonance']), moog.LP4)
+    g = moog.ladder_gain(f[None, :], fc[:, None], moog.knob_k(panel['resonance']), int(panel['mode']))
     pw = (a * g * moog.output_gain(f)) ** 2
     out = np.zeros((len(CUTS), K))
     for c in range(len(CUTS)):
@@ -162,12 +162,12 @@ def stage1(meas, foot):
     return best
 
 
-def stage2(rows):
+def stage2(rows, track=None):
     """The contour on the cutoffs (octaves): cutoff, EG AMOUNT, f attack, decay,
     sustain, and KB TRACKING -- continuous here: the Juno's KYBD slider is,
     and the kernel takes any exponent (moog.cutoff_at). Frames that fit worse
     than 6 dB (a high note down to its fundamental: no cutoff to read) are
-    left out."""
+    left out. TRACK, if given, is held (an instrument without it)."""
     rows = [q for q in rows if q[3] < 6.0]
     f0 = np.array([q[0] for q in rows])
     t = np.array([q[1] for q in rows])
@@ -182,6 +182,9 @@ def stage2(rows):
         return (moog.CUT_OCT * cut + track * np.log2(f0 / moog.KB_REF_HZ)
                 + moog.eg_octaves(eg) * env)
 
+    if track is not None:
+        LO, HI = LO[:5] + (track,), HI[:5] + (track,)
+
     def cost(v):
         v = np.clip(v, LO, HI)
         return float(np.sqrt(np.sum(w * (model(v) - o) ** 2) / w.sum()))
@@ -189,7 +192,8 @@ def stage2(rows):
     for eg in (0.6, 0.75, 0.9):
         for fd in (0.2, 0.4, 0.6):
             for fs in (0.0, 0.5, 0.9):
-                r = minimize(cost, np.array([0.4, eg, 0.05, fd, fs, 0.5]), method="Nelder-Mead",
+                r = minimize(cost, np.array([0.4, eg, 0.05, fd, fs, 0.5 if track is None else track]),
+                             method="Nelder-Mead",
                              options=dict(xatol=1e-3, fatol=1e-4, maxiter=1500))
                 if best is None or r.fun < best[0]:
                     best = (r.fun, np.clip(r.x, LO, HI))
