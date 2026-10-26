@@ -902,11 +902,17 @@ if __import__('os').environ.get('TUNING_MOOG', '1') != '0':
     for (_p, _b), (_nm, _base, _pan) in SC88_SYNTH.items():
         _B = getattr(_tl, _base)
         _pan = dict(_pan)
-        _attrs = dict(messenger=dict(_B.messenger, **{k: v for k, v in _pan.items() if k != "key_pan_spread"}))
-        if "key_pan_spread" in _pan:
-            _attrs["key_pan_spread"] = _pan["key_pan_spread"]
+        # a panel's own class attributes, not knobs: the key's pan spread,
+        # and the insertion effect the tone carries (a Juno's chorus)
+        _cls_keys = ("key_pan_spread", "insertion_efx")
+        _attrs = dict(messenger=dict(_B.messenger, **{k: v for k, v in _pan.items() if k not in _cls_keys}))
+        for _k in _cls_keys:
+            if _k in _pan:
+                _attrs[_k] = _pan[_k]
         VARIATIONS[(_p, _b)] = type("Sc88_%d_%d" % (_p, _b), (_B,), _attrs)
         VARIATION_NAMES[(_p, _b)] = _nm
+    from sc88_synth import SYNTH_TRIM_DB
+    VARIATION_TRIM_DB.update(SYNTH_TRIM_DB)
     # ...and the other maps' own synth tones, under their map's key (map_bank)
     from sc88_synth import MAP_SYNTH
     for (_m, _p, _b), (_nm, _base, _pan) in MAP_SYNTH.items():

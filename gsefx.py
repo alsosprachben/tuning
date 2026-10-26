@@ -1219,6 +1219,19 @@ def mix_share(events, ch, sr):
     return share
 
 
+def chain_share(c):
+    """share(non samples) -> a chain's own chorus/flanger wet share, held: for
+    an effect a TONE carries (tone_state), which no event in the file
+    assigns -- its Balance, or its CF Mix as mix_share takes it."""
+    import numpy as np
+    if c.get('cf_share') is not None:
+        v = float(c['cf_share'])
+    else:
+        a = c['cf'][1] if c['cf'] is not None else 0.0
+        v = a * a / (1.0 + a * a)
+    return lambda non: np.full(np.shape(non), v)
+
+
 def cf_device(flanger, rate, depth, fb):
     """The chain's chorus or flanger as chorus.gs_copies's device: rate from
     the table, depth as the system chorus's swing, feedback +-98 %. The base

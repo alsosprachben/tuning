@@ -76,6 +76,35 @@ def ob(**changes):
     return dict(OBERHEIM, **changes)
 
 
+# THE JUNO: the panel fitted to a Juno-6's own notes (examples/juno_fit.py:
+# Modular Samples, CC0, sampled key by key). One DCO a voice, so the two
+# oscillators are its pulse (OSC 1, where LFO 1's PWM lands) and its saw (OSC
+# 2) at exact unison -- no detune, no drift -- with the square SUB (0.3);
+# the 4-pole IR3109. Fitted on the PW Pluck, every C from C2 to C6 over its
+# whole pluck (3.1 dB rms on the harmonics, the contour 0.8 octave, the
+# amplifier 0.5 dB): the saw with the pulse under it, the filter opened 5.6
+# octaves and closing over ~2.4 s, all but no key tracking (the Juno's KYBD
+# slider is continuous, and so is the kernel's), the amplifier falling 1.6 s.
+# Its chorus is the tone's own insertion effect: Stereo Chorus at the Juno's
+# CHORUS I (0.5 Hz; JUNO_CHORUS2 is II, 0.8 Hz), its DEPTH 7, not the type's
+# 111 (a 17.5 ms sweep, +-95 cents): the takes' own chorus moves a copy about
+# 6 cents (examples/juno_fit.py --chorus: the dry and the copy beat at 0.003-
+# 0.007 x each harmonic's frequency -- 0.75 Hz at 131 Hz, 15 at 2 kHz), as the
+# Juno-60's BBD does, a triangle sweeping 1.7-5.4 ms at 0.51 Hz.
+JUNO_CHORUS1 = ((0x01, 0x42), {4: 9, 5: 7})
+JUNO_CHORUS2 = ((0x01, 0x42), {4: 15, 5: 7})
+JUNO = {"mode": 0, "osc1_wave": 0.715, "osc1_level": 0.46, "osc2_wave": SAW, "osc2_level": 1.0,
+        "osc1_octave": 8, "osc2_octave": 8, "osc2_freq": 0.5, "sub_wave": 0.3, "sub_level": 0.0,
+        "noise_level": 0.0, "resonance": 0.015, "kb_track": 0.022, "cutoff": 0.323, "eg_amount": 0.854,
+        "f_attack": 0.058, "f_decay": 0.671, "f_sustain": 0.0, "a_attack": 0.0, "a_decay": 0.583,
+        "a_sustain": 0.081, "a_release": 0.2, "mod_amount": 0.5, "lfo1_depth": 0.5,
+        "insertion_efx": JUNO_CHORUS1}
+
+
+def juno(**changes):
+    return dict(JUNO, **changes)
+
+
 SC88_SYNTH = {
     # --- the Jupiter-8's (JUPITER: fitted on the record) -------------------
     # its clav: a narrow pulse, the filter snapping shut, a short body
@@ -391,7 +420,37 @@ SC88_SYNTH = {
     # the lead: an edge of resonance (its bass kept: RES BASS) and a glide
     (81, 32): ("OB Saw Lead", "MoogSawLead",
                ob(osc2_wave=SAW, osc2_freq=c(9), cutoff=0.68, resonance=0.2, res_bass=True, glide=0.05)),
+    # --- the Juno's (JUNO: fitted to a Juno-6's notes) ---------------------
+    # its organ: the square pulse and the sub, the filter open, a gate for a
+    # contour, CHORUS II (the organ's capital is no Moog: the square lead's)
+    (16, 26): ("JUNO Organ", "MoogSquareLead",
+               juno(osc1_wave=SQ, osc1_level=0.8, osc2_level=0.0, sub_level=0.5, cutoff=0.85, eg_amount=0.5,
+                    a_decay=0.6, a_sustain=1.0, a_release=0.08, insertion_efx=JUNO_CHORUS2)),
+    # its strings, from the Open Pad's oscillators (its pulse, saw and sub:
+    # 0.85 / 0.48, 0.66, 0.42; 8 dB rms, the PWM and chorus moving them): the
+    # filter open, a 0.25 s swell, the pulse's width swept by LFO 1, CHORUS I
+    (51, 2): ("JUNO Strings", "MoogSynthStrings2",
+              juno(osc1_wave=0.854, osc1_level=0.478, osc2_level=0.659, sub_level=0.419, resonance=0.27,
+                   cutoff=0.8, eg_amount=0.5, a_attack=0.3, a_decay=0.6, a_sustain=1.0, a_release=0.45,
+                   lfo1_dest=2, lfo1_depth=0.68, lfo1_rate=0.4)),
+    # the sub up front: the pulse and the square an octave under it, held
+    (84, 24): ("JUNO Sub Osc", "MoogSquareLead",
+               juno(osc1_wave=SQ, osc1_level=0.6, osc2_level=0.5, sub_level=0.9, cutoff=0.6, eg_amount=0.62,
+                    f_decay=0.5, f_sustain=0.4, a_decay=0.6, a_sustain=1.0)),
+    # the Sine Pluck: the ladder ringing alone an octave over the key (it
+    # tracks 1:1), falling 22 dB a second -- the oscillators off; FM off
+    (98, 20): ("JUNO Bell", "MoogCrystalFX",
+               juno(osc1_level=0.0, osc2_level=0.0, sub_level=0.0, resonance=1.0, kb_track=1.0, cutoff=0.532,
+                    eg_amount=0.5, mod_amount=0.5, a_decay=0.581, a_sustain=0.0, a_release=0.581)),
 }
+
+
+# THE LEVELS OF THOSE WHOSE PANEL SETS THEIRS APART from their program's
+# (patch_map.VARIATION_TRIM_DB): each matched to a Moog program of its kind,
+# already balanced to GeneralUser GS (examples/synth_var_levels.py) -- the
+# Juno organ and sub to the square lead's (80), the strings to the synth
+# strings' (51), the bell, the ladder's own sine, to the crystal's (98)
+SYNTH_TRIM_DB = {(16, 26): 4.7, (51, 2): 6.7, (84, 24): 2.7, (98, 20): 10.4}
 
 
 # THE OTHER MAPS' OWN SYNTH TONES (patch_map's map switch, bank select LSB):

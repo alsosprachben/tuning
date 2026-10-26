@@ -4738,14 +4738,16 @@ def _prepare(path, tuner='hybrid440', sink=None):
                             'insertion_efx', None)
             if _tefx is not None:
                 _EFXN[0] = _GSX.chain(_GSX.tone_state(*_tefx))
-            if _EFXN[0] is not None and ch not in _EFX_CH:
-                _EFX_CH[ch] = _EFXN[0]
-                # ITS SENDS ARE THE PART'S NOW: the reverb's distance, here
-                # before the channel's is read from CC91
-                _rv = _EFXN[0]['sends'].get(_GSX.SEND_REV, 40)
-                _C91D[ch] = max(0.0, _rv) / float(GM_DEFAULT_REVERB)
-                _REVERB_CH.setdefault(ch, _C91D[ch])
-                _REVERB_STEPS.pop(ch, None)    # the effect's send, not CC91's
+                _EFX_CH[('tone', ch)] = True
+        # the part's first chain, the file's or the tone's, is the channel's
+        if _EFXN[0] is not None and ch not in _EFX_CH:
+            _EFX_CH[ch] = _EFXN[0]
+            # ITS SENDS ARE THE PART'S NOW: the reverb's distance, here
+            # before the channel's is read from CC91
+            _rv = _EFXN[0]['sends'].get(_GSX.SEND_REV, 40)
+            _C91D[ch] = max(0.0, _rv) / float(GM_DEFAULT_REVERB)
+            _REVERB_CH.setdefault(ch, _C91D[ch])
+            _REVERB_STEPS.pop(ch, None)    # the effect's send, not CC91's
         if _GS_DLY and not MOOG_NEUTRAL:
             if _EFXN[0] is not None:
                 _gs_s = _EFXN[0]['sends'].get(_GSX.SEND_DLY, 0) / 127.0
@@ -5386,7 +5388,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
             if _ex['cabinet'] and _MCH[0] not in _CAB_CH and os.environ.get('TUNING_CABINET', '1') != '0':
                 _CAB_CH[_MCH[0]] = _ex['cabinet']
             if _ex['cf'] is not None:
-                _CHORUS_CH[_MCH[0]] = (0.0, _ex['cf'][0], 'gs', _GSX.mix_share(_EFXEV, _MCH[0], SR))
+                # its wet share as the file sets it -- or, the tone's own effect
+                # (no event assigns it), the chain's own (gsefx.chain_share)
+                _CHORUS_CH[_MCH[0]] = (0.0, _ex['cf'][0], 'gs',
+                                       _GSX.chain_share(_ex) if _EFX_CH.get(('tone', _MCH[0]))
+                                       else _GSX.mix_share(_EFXEV, _MCH[0], SR))
             if _ex.get('rotary') and _MCH[0] not in _LESLIE_CH:
                 # a Rotary: the part through our Leslie, its rotors as the type
                 # sets them and its speed as the file switches it

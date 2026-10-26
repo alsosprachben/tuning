@@ -135,9 +135,11 @@ def fit(meas):
     return best
 
 
-def render(panel, notes, prog=38, held=5.5):
+def render(panel, notes, prog=38, held=5.5, efx=None):
     """The panel through the renderer itself (the kernel, not the model): each
-    note (or chord, a tuple) held alone, a second apart; the wav's path."""
+    note (or chord, a tuple) held alone, a second apart; the wav's path. EFX,
+    a tone's insertion effect ((msb, lsb), {param: value}), is sent as a GS
+    file sends it, the part assigned to it."""
     import mido
     d = tempfile.mkdtemp(prefix="minimoog_")
     m = mido.MidiFile(ticks_per_beat=480)
@@ -145,6 +147,12 @@ def render(panel, notes, prog=38, held=5.5):
     m.tracks.append(t)
     t.append(mido.MetaMessage('set_tempo', tempo=500000, time=0))
     t.append(mido.Message('program_change', program=prog, time=0))
+    if efx is not None:
+        import gsefx
+        evs = [('type', efx[0])] + [('param', k, v) for k, v in sorted(efx[1].items())] + [('part', 0, True)]
+        t.insert(1, mido.Message('sysex', data=[0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41]))
+        for ev in evs:
+            t.append(mido.Message('sysex', data=gsefx.message(ev)))
     for n in notes:
         ch = n if isinstance(n, tuple) else (n,)        # a tuple is a chord
         for i, k in enumerate(ch):

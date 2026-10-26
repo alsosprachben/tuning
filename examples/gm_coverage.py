@@ -1383,6 +1383,12 @@ def _sc88_var_rated():
                                         "OBERHEIM, examples/obx_fit.py: Analogist's jungle pad, CC0, ten "
                                         "four-note chords, 3.2 dB rms rendered), with %s changed" % ", ".join(
                                             sorted(k for k in pan if pan[k] != __import__("sc88_synth").OBERHEIM.get(k))))
+            if nm.startswith("JUNO") and "JUNO" in __import__("sc88_synth").__dict__ and \
+                    pan.get("insertion_efx") in (__import__("sc88_synth").JUNO_CHORUS1, __import__("sc88_synth").JUNO_CHORUS2):
+                VAR_RATED[(p, b)] = (3, "SC-88 map: the Juno fitted to a Juno-6's notes (sc88_synth.JUNO, "
+                                        "examples/juno_fit.py: Modular Samples, CC0, the PW Pluck C2-C6 over its "
+                                        "whole pluck), its chorus the tone's own Stereo Chorus, with %s changed"
+                                     % ", ".join(sorted(k for k in pan if pan[k] != __import__("sc88_synth").JUNO.get(k))))
             if nm.startswith(("JP", "JPMG")):
                 VAR_RATED[(p, b)] = (3, "SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, "
                                         "examples/sepways_fit.py), one pass, with %s changed. Ben, on "
