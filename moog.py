@@ -684,6 +684,56 @@ def panel_of(props, overrides=None, layer='a'):
     return out
 
 
+# THE UNISON (a supersaw: the JP-8000's seven saws; a "fat" lead's stack):
+# the note's oscillators sounded again by more voices, each at its own detune,
+# free-running phase, slow drift and place in the stereo -- the kernel's own
+# rows, one set a voice. A class declares it (`moog_unison`); the panel's knobs
+# are each voice's alike. Not in a live template (MOOG_NEUTRAL) yet.
+#   voices        how many (1: none)
+#   cents         the outermost voice's detune, +/-
+#   mix           each side voice's level re the centre's (the JP-8000's MIX)
+#   drift_cents   each voice's slow wander, +/- (the take's smear: its saws
+#                 are not fixed lines)
+#   drift_hz      (lo, hi): each voice's own drift rate, drawn in it
+#   width         0 mono ... 1: the outermost voices hard left and right
+# SEVEN VOICES SPREAD AS THE JP-8000'S: its offsets re the centre at full
+# DETUNE, measured by Szabo ("How to Emulate the Super Saw", 2010), as
+# fractions of the outermost -- uneven, the inner pair close in. Other counts
+# spread evenly.
+SUPERSAW_SPREAD = (-1.0, -0.5716, -0.1774, 0.0, 0.1810, 0.5650, 0.9767)
+UNISON = {'voices': 1, 'cents': 0.0, 'mix': 1.0, 'drift_cents': 0.0, 'drift_hz': (0.2, 1.0),
+          'width': 0.0}
+
+
+def unison(spec, f0):
+    """[(ratio, gain, phase (cycles), left, right, drift)] a voice, or None:
+    gains summing in power to the centre's alone (free-running voices add as
+    power), drift (depth, rate Hz, phase) for the kernel's vibrato slot or
+    None. Seeded on the note, so a render repeats and no two notes agree."""
+    if not spec:
+        return None
+    u = dict(UNISON, **spec)
+    n = int(u['voices'])
+    if n <= 1:
+        return None
+    import random
+    rng = random.Random(0x5A75 + int(round(f0 * 100.0)))
+    sp = SUPERSAW_SPREAD if n == 7 else tuple(-1.0 + 2.0 * i / (n - 1) for i in range(n))
+    mid = min(range(n), key=lambda i: abs(sp[i]))
+    g = [1.0 if i == mid else float(u['mix']) for i in range(n)]
+    norm = sum(x * x for x in g) ** -0.5
+    out = []
+    for i in range(n):
+        ratio = 2.0 ** (sp[i] * float(u['cents']) / 1200.0)
+        pan = max(-1.0, min(1.0, sp[i] * float(u['width'])))
+        a = (pan + 1.0) * math.pi / 4.0
+        dc = float(u['drift_cents'])
+        drift = ((2.0 ** (dc / 1200.0) - 1.0) * rng.uniform(0.6, 1.0),
+                 rng.uniform(*u['drift_hz']), rng.uniform(0.0, 2.0 * math.pi)) if dc else None
+        out.append((ratio, g[i] * norm, rng.random(), math.cos(a) * 2 ** 0.5, math.sin(a) * 2 ** 0.5, drift))
+    return out
+
+
 def layers_of(props):
     """A LAYERED VOICE is two Messengers on one MIDI channel -- as a Moog Muse
     stacks its two timbres on a key -- each a whole panel (MF-104M included),

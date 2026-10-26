@@ -5899,7 +5899,22 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _fmi = _MG.fm_index(_pan)
                 _fm1 = (2 * math.pi * f0 * _MG.osc_ratio(_pan, _MG.OSC1) / SR) if _fmi else 0.0
                 _fmph = cmath.phase(_MG.osc_spectrum(_pan['osc1_wave'], 1)[0]) if _fmi else 0.0
-                for _osc, _k, _hf, _amp, _ph in _mparts:
+                # THE UNISON (moog.unison: a supersaw's seven saws), each voice its
+                # own detune, phase, drift and place; noise and the ladder's own
+                # sine sound once
+                _uvs = None if MOOG_NEUTRAL else _MG.unison(getattr(props, 'moog_unison', None), f0)
+                _vb0 = (_VB[0], _VB[1], _VB[2])
+                for _osc, _k, _hf, _amp, _ph, _ur, _ug, _ul, _urr, _udr in (
+                        (_o, _k0, _h, _a, _p0 + (2.0 * math.pi * _uv[2] * _k0
+                                                 if _o in (_MG.OSC1, _MG.OSC2, _MG.SUB) else 0.0),
+                         _uv[0], _uv[1], _uv[3], _uv[4], _uv[5])
+                        for _o, _k0, _h, _a, _p0 in _mparts
+                        for _ui, _uv in enumerate(_uvs or ((1.0, 1.0, 0.0, 1.0, 1.0, None),))
+                        if not (_ui and _o in (_MG.NOISE, _MG.SELF))):
+                    if _uvs:
+                        # ...the voice's drift in the vibrato slot (the note's
+                        # own vibrato where the voice has none)
+                        _VB[0], _VB[1], _VB[2] = _udr if _udr else _vb0
                     _MK[0] = _osc * 4096 + _k
                     _FMW[0], _FMPH[0] = (_fm1, _fmph) if _osc == _MG.OSC2 else (0.0, 0.0)
                     # a noise band: its wash bandwidth, NEGATIVE, is what makes the
@@ -5922,8 +5937,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
                         _gM *= float(_body(_hn))
                     if _pre and not MOOG_NEUTRAL and _osc != _MG.SELF:
                         _gM *= float(_MG.sustain_gain(_pan, f0, _hf))
-                    emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hn, li),
-                                 _gM * props.hrtf_gain(_hn, ri), _gM, _hn, non, noff, 1.0, _mre,
+                    emit_partial(2 * math.pi * _hf * _ur / SR, _gM * _ug * _ul * props.hrtf_gain(_hn, li),
+                                 _gM * _ug * _urr * props.hrtf_gain(_hn, ri), _gM * _ug, _hn, non, noff, 1.0, _mre,
                                  chiff, 0.0, 0.0, 0.0, 1.0,
                                  0.0 if _nz else cv * props.chiff_harmonic_gain(_k),
                                  cc, crl, sjit, csc, -1, 0, ph0=_ph)
