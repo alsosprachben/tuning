@@ -1305,6 +1305,17 @@ GLISS_ARRIVAL_S = 0.06
 GLISS_ARRIVAL_FRAC = 0.2
 
 
+def uniq_programs(plist):
+    """A channel's programs, each (program, variation) once, in the order first
+    played. dict.fromkeys would not do: a VariationProgram is equal to its bare
+    program, so it kept a channel's first variation of a program alone -- 100.4
+    Choir Stab hid 100.8 Org Bell's organ (its registration, its wind) after it."""
+    seen = {}
+    for q in plist:
+        seen.setdefault((int(q), getattr(q, 'variation', 0)), q)
+    return list(seen.values())
+
+
 def organ_family(cls):
     """The registered instrument a voice belongs to -- the class that defines
     its stop ranks (the tonewheel, the harmonium, the church organ, the
@@ -2513,7 +2524,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     # each has its own ranks, stop word and swell -- organ_family. A channel
     # with one organ is built exactly as it was.
     for ch, _plist in ch_progs.items():
-        for prog in dict.fromkeys(_plist):
+        for prog in uniq_programs(_plist):         # each (program, variation) once
             pc = property_class_for_program(prog)
             if not getattr(pc, 'registerable', False):
                 continue
@@ -2559,7 +2570,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _WROWS = {}              # channel -> {(a, b): (ratio per block, level at block edges)}
     wrow_key = {}            # (channel, rank) -> (a, b)
     for ch, _plist in ch_progs.items():
-        prog = next((q for q in dict.fromkeys(_plist)
+        prog = next((q for q in uniq_programs(_plist)
                      if getattr(property_class_for_program(q), 'registerable', False)), None)
         if prog is None:
             continue
@@ -2614,7 +2625,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     for ch, _plist in ch_progs.items():
         if any(k[0] == ch for k in crow_of):
             continue
-        pc = next((c for c in (property_class_for_program(q) for q in dict.fromkeys(_plist))
+        pc = next((c for c in (property_class_for_program(q) for q in uniq_programs(_plist))
                    if getattr(c, 'breath_wobble_db', 0.0) > 0.0
                    or getattr(c, 'breath_noise_wobble_db', 0.0) > 0.0
                    or getattr(c, 'breath_pitch_cents', 0.0) > 0.0), None)

@@ -1498,6 +1498,17 @@ def _sc88_var_rated():
         VAR_RATED[k] = (3, "SC-8850 map: a Moog panel, %s's with %s changed (sc88_synth.py); "
                            "voiced from what the tone is, the engine fitted to Ben's Messenger. %s"
                         % (base.replace("Moog", "the "), ", ".join(sorted(pan)), _GM2_LAST))
+    # ...the synth programs' LAYERED tones (patch_map._SYN_LAYERED): an
+    # acoustic voice of ours with a synth panel's (Ben, on examples/synths_demo.py
+    # n: "Sounds good")
+    for (p, b), (nm, ly) in getattr(patch_map, "_SYN_LAYERED", {}).items():
+        def _lname(src):
+            if isinstance(src, tuple):
+                return src[1].__name__ if src[0] == "class" else "set %d's key %d" % (src[2], src[1])
+            return "GM %d" % (src + 1)
+        VAR_RATED[(p, b)] = (3, "SC-8850 map: layered: %s. Ben, on examples/synths_demo.py n: \"Sounds good\"" % " + ".join(
+            "%s%s%s" % (_lname(l[0]), (" %+d st" % l[1]) if l[1] else "", (" %+.0f dB" % l[2]) if l[2] else "")
+            for l in ly))
     # ...the synth tones built after (2026-10-26: the leads, basses, strings,
     # voices, brass, pads, effects), in any table: heard, every one
     for p, b in sorted(_SYNTHS_1026) + [(p, 128 * m + b) for m, p, b in _MAP_SYNTHS_1026]:

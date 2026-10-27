@@ -281,6 +281,15 @@ GROUPS = {
           (103, 17, '7th Atmos.', 'chords', 60),
           (103, 18, 'Galaxy Way', 'chords', 60),
           (103, 19, 'Rising OSC.', 'chords', 60)],
+    # the layered ones (patch_map._SYN_LAYERED)
+    "n": [(50, 17, 'Hybrid Str.', 'chords', 60), (51, 5, 'Hybrid Str.2', 'chords', 60),
+          (62, 10, 'OrchSynBrass', 'chords', 60), (62, 17, 'Hybrid Brass', 'chords', 60),
+          (91, 7, 'Bamboo Hit', 'line', 72), (92, 4, 'Steel Glass', 'chords', 60), (92, 5, 'Bottle Stack', 'chords', 60),
+          (93, 3, 'Steel Pad', 'chords', 60), (96, 3, 'Anklung Pad', 'chords', 60), (96, 4, 'Rattle Pad', 'chords', 60),
+          (96, 9, 'EP Pad', 'chords', 60), (96, 10, 'Tambra Pad', 'chords', 60), (96, 11, 'CP Pad', 'chords', 60),
+          (98, 22, 'Pizz Bell', 'line', 72), (99, 9, 'Noise Piano', 'chords', 60), (99, 11, 'Tambra Atmos', 'chords', 60),
+          (100, 4, 'Choir Stab', 'stabs', 60), (100, 8, 'Org Bell', 'chords', 60), (101, 26, 'Pour Magic', 'line', 72),
+          (101, 27, 'DancingDrill', 'line', 60)],
 }
 TONES = GROUPS["a"]
 
