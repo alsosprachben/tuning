@@ -5901,8 +5901,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _fmph = cmath.phase(_MG.osc_spectrum(_pan['osc1_wave'], 1)[0]) if _fmi else 0.0
                 # THE UNISON (moog.unison: a supersaw's seven saws), each voice its
                 # own detune, phase, drift and place; noise and the ladder's own
-                # sine sound once
+                # sine sound once, the centre voice's
                 _uvs = None if MOOG_NEUTRAL else _MG.unison(getattr(props, 'moog_unison', None), f0)
+                _umid = min(range(len(_uvs)), key=lambda i: abs(_uvs[i][0] - 1.0)) if _uvs else 0
                 _vb0 = (_VB[0], _VB[1], _VB[2])
                 for _osc, _k, _hf, _amp, _ph, _ur, _ug, _ul, _urr, _udr in (
                         (_o, _k0, _h, _a, _p0 + (2.0 * math.pi * _uv[2] * _k0
@@ -5910,7 +5911,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                          _uv[0], _uv[1], _uv[3], _uv[4], _uv[5])
                         for _o, _k0, _h, _a, _p0 in _mparts
                         for _ui, _uv in enumerate(_uvs or ((1.0, 1.0, 0.0, 1.0, 1.0, None),))
-                        if not (_ui and _o in (_MG.NOISE, _MG.SELF))):
+                        if not (_ui != _umid and _o in (_MG.NOISE, _MG.SELF))):
                     if _uvs:
                         # ...the voice's drift in the vibrato slot (the note's
                         # own vibrato where the voice has none)

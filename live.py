@@ -1620,6 +1620,56 @@ class Slab:
         a["aLp"][idx] = a["aL"][idx]
         a["aRp"][idx] = a["aR"][idx]
 
+    def unison_voice(self, idx, uv):
+        """ONE VOICE OF A UNISON (moog.unison: a supersaw) on these freshly
+        stamped Moog slots: its detune (the frequency, anchored at the onset as
+        moog_retimbre anchors a stamped note's), its phase (k x its offset on an
+        oscillator's harmonic k: the saw's shape kept), its level and place
+        (into the panel weights' base, mo_uL/R, so a knob turned later keeps
+        them; its place on the direct sound alone), its drift (the vibrato
+        columns). A voice past the centre's
+        carries no noise and no ladder sine: those sound once."""
+        ratio, g, uph, gl, gr, drift = uv
+        a = self.a
+        idx = np.asarray(idx, np.int64)
+        if not len(idx):
+            return
+        mk = a["mk"][idx]
+        osc = mk // 4096
+        if ratio != 1.0:
+            om0 = a["om"][idx]
+            om1 = om0 * ratio
+            non = a["non"][idx].astype(np.float64) + a["nfr"][idx]
+            a["p0"][idx] -= (om1 - om0) * (non + a["delL"][idx])
+            a["p0R"][idx] -= (om1 - om0) * (non + a["delR"][idx])
+            a["om"][idx] = om1
+        tone = (osc == _MG.OSC1) | (osc == _MG.OSC2) | (osc == _MG.SUB)
+        if uph:
+            dph = np.where(tone, 2.0 * np.pi * uph * (mk % 4096), 0.0)
+            a["p0"][idx] += dph
+            a["p0R"][idx] += dph
+        # the place on the direct sound alone: a room image is made from the
+        # partial's own level and its own path (blockrender's emit_partial),
+        # as the file renders it
+        dr = a["rdl"][idx] == 0
+        fl = np.where(dr, g * gl, g).astype(np.float32)
+        fr = np.where(dr, g * gr, g).astype(np.float32)
+        for arr, f in ((self.mo_uL, fl), (self.aL0, fl), (a["aL"], fl), (a["aLp"], fl),
+                       (self.mo_uR, fr), (self.aR0, fr), (a["aR"], fr), (a["aRp"], fr)):
+            arr[idx] *= f
+        if drift is not None:
+            t = idx[tone]
+            a["vd"][t], a["vr"][t], a["vp"][t] = drift
+        self.dirty = True
+
+    def silence_slots(self, idx):
+        """Zero these slots' level, at their weights' base too."""
+        idx = np.asarray(idx, np.int64)
+        for arr in (self.mo_uL, self.aL0, self.a["aL"], self.a["aLp"],
+                    self.mo_uR, self.aR0, self.a["aR"], self.a["aRp"]):
+            arr[idx] = 0.0
+        self.dirty = True
+
     def moog_retimbre(self, idx, panel, n):
         """What the panel makes of these Moog slots: each partial's weight
         (waveshape, mixer, band limit), its phase (a waveshape's harmonics
@@ -5341,6 +5391,28 @@ class Live:
                     _lslots[_ly] = list(self.slab.last_slots)
                 else:
                     self.dropped += 1
+            # THE UNISON (moog.unison: a supersaw): each layer's stamp again for
+            # every voice past the first, under the same key, each its own
+            # detune, phase, level, place and drift (Slab.unison_voice); the
+            # first stamp is the centre voice's
+            _ft = tmpl.get("FT") if isinstance(tmpl, dict) else None
+            _uvs = (_MG.unison(getattr(_vcm, 'moog_unison', None), float(_ft[10]))
+                    if _ft is not None else None)
+            if _uvs:
+                _mid = min(range(len(_uvs)), key=lambda i: abs(_uvs[i][0] - 1.0))
+                for _ly, _sl in list(_lslots.items()):
+                    self.slab.unison_voice(_sl, _uvs[_mid])
+                    for _ui, _uv in enumerate(_uvs):
+                        if _ui == _mid:
+                            continue
+                        if not self.slab.stamp(dict(tmpl, scatter_ms=0.0), key, _lon, scale, layer=_ly):
+                            self.dropped += 1
+                            continue
+                        _us = list(self.slab.last_slots)
+                        self.slab.unison_voice(_us, _uv)
+                        _umk = self.slab.a["mk"][np.asarray(_us, np.int64)] // 4096
+                        self.slab.silence_slots(np.asarray(_us, np.int64)[(_umk == _MG.NOISE) | (_umk == _MG.SELF)])
+                        _lslots[_ly] = _lslots[_ly] + _us
         # a note started while the wheel is up must join in progress
         slots = self.slab.live.get(key)
         # PAN BEFORE THE EFFECTS CAPTURE. clav_tone, tremolo_arm and press all
@@ -10093,7 +10165,9 @@ def selftest_gs(check):
         _vp = lambda bank, prog: [n[6] for n in B.parse(_bfile(
             [_M("control_change", channel=0, control=0, value=bank),
              _M("program_change", channel=0, program=prog)] + _on(0, 60)))[2]][0]
-        _v5, _v3 = _vp(5, 125), _vp(10, 125)      # 125.10: no GS tone, so never built
+        _v5, _v3 = _vp(5, 125), _vp(40, 125)      # 125.40: no map has a tone there, so never built
+        # (125.10 was this test's unbuilt bank until the Morse keyboard, the
+        # SC-8850's 125.10 "Calculating...", was built)
         check("file: CC0 = 5 and program 125 is the variation; an unbuilt bank the capital tone",
               getattr(_v5, "variation", 0) == 5 and int(_v5) == 125
               and _PMV.property_class_for_program(_v5) is _vcls
@@ -10704,8 +10778,10 @@ def selftest_gs(check):
               "  (onsets vs re-picked %s dB; click %+.1f dB)" % (" ".join("%+.1f" % v for v in _hdrop), _hclk))
         # THE ASIA SET (53): its gongs are Iowa's tam-tams at their own places,
         # its 49 Standard's crash (Tokei's cymbal roll, by intent), and a key
-        # it does not build is silent -- not Standard's guiro on it
-        _ag = [_PM.percussion_for_note(_k, 52) for _k in (73, 74, 75, 49, 36)]
+        # it does not have is silent -- not Standard's voice on it. (It holds
+        # 25-90 whole since its gamelan keys were built -- 36 Gender 2, which
+        # this test once heard silent; 24, Standard's Concert SD, it lacks.)
+        _ag = [_PM.percussion_for_note(_k, 52) for _k in (73, 74, 75, 49, 24)]
         check("file: ASIA's gongs -- the Asian, Big and Small Gong are the 28, 40 and 22 inch "
               "tam-tams, Big left and Small right; 49 the crash; its unbuilt keys silent",
               [(_g[0], _g[1].__mro__[1].__name__ if _g[1].__name__.startswith('_') else _g[1].__name__)
@@ -10750,9 +10826,10 @@ def selftest_gs(check):
                                                      _PMV.property_class_for_note(_m32c, 60).__name__))
         # THE MAP SWITCH (patch_map.map_bank): CC32 reads the bank in a Sound
         # Canvas's map. 3.8 is the SC-55mkII's HonkyTonk w under LSB 1, ours
-        # (Old Upright, the SC-88's) under 2, and under 3 the capital (the
-        # SC-88Pro's Honky-tonk 2 is not built); the SC-88Pro's 39.8 is the
-        # SC-88's own Beef FM Bass; a bank a map lacks is its capital
+        # (Old Upright, the SC-88's) under 2, and under 3 the SC-88Pro's own
+        # Honky-tonk 2 (128 x 3 + 8, built since this test began); the
+        # SC-88Pro's 39.8 is the SC-88's own Beef FM Bass, its 0.16 its own
+        # European Pf (128 x 3 + 16); a bank a map lacks is its capital
         _vpm = lambda bank, lsb, prog: [n[6] for n in B.parse(_bfile(
             [_M("control_change", channel=0, control=0, value=bank),
              _M("control_change", channel=0, control=32, value=lsb),
@@ -10763,9 +10840,10 @@ def selftest_gs(check):
         # ...and the SC-8850's (LSB 4): its 39.8 the SC-88's Beef FM Bass, its
         # 0.8 upright (not built) the capital
         _m4 = (getattr(_vpm(8, 4, 39), "variation", 0), getattr(_vpm(8, 4, 0), "variation", 0))
-        check("file: CC32 picks the map -- 3.8 ours, the SC-55's own, ours, the capital; "
-              "88Pro 39.8 the SC-88's; 88Pro 0.16 the capital",
-              _mp == [8, 136, 8, 0] and _mb == 264 and _mc == 0 and _m4 == (264, 0)
+        check("file: CC32 picks the map -- 3.8 ours, the SC-55's own, ours, the SC-88Pro's own; "
+              "88Pro 39.8 the SC-88's; 88Pro 0.16 its own",
+              _mp == [8, 136, 8, 392] and _mb == 264 and _mc == 400 and _m4 == (264, 0)
+              and _PMV.VARIATION_NAMES[(3, 392)] == "Honky-tonk 2" and _PMV.VARIATION_NAMES[(0, 400)] == "European Pf"
               and _PMV.property_class_for_note(_vpm(8, 1, 3), 60) is _PMV.VARIATIONS[(3, 136)](60)
               and _PMV.bank_select(136) == (8, 1),
               "  (3.8 under LSB 0-3: %s; 39.8/3 %d; 0.16/3 %d; LSB 4 39.8/0.8 %s)" % (_mp, _mb, _mc, _m4))
@@ -10863,7 +10941,7 @@ def selftest_gs(check):
               _d.get("bank") == 5 and _rt.variation == 5 and _rt.patch.key[3] == 5
               and "bank" not in _d0
               and Part.from_dict(_d0).variation == 0
-              and patch_for(125, False, "hybrid", variation=10).key[3] == 0,
+              and patch_for(125, False, "hybrid", variation=40).key[3] == 0,
               "  (%s; an unbuilt bank keys as 0)" % _d)
         _lv.on_midi(_SX(0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41)); _lv.apply(0)
         _lv.wait_patch(90)
@@ -13069,12 +13147,16 @@ def selftest(only=""):
     # rise first and the bright ones surge in at the end. It was a shared swell
     # (the attack let past blockrender's 45% cap), which the order of arrival
     # gave away; examples/reverse_check.py sets it against the crash flipped.
+    # (Not the only reversed voice now: the GS sets' reversed breaths and
+    # brass, and percussion_map's Reverse* drums, are each a forward voice
+    # played backwards -- every class declaring it is named for it)
     check("...and the reverse cymbal is the crash played backwards",
           getattr(_rc, "played_backwards", False)
           and not getattr(_T.CrashCymbal1Properties, "played_backwards", False)
-          and [_n for _n, _c in vars(_T).items()
-               if isinstance(_c, type) and getattr(_c, "played_backwards", False)]
-          == ["ReverseCymbalProperties"],
+          and "ReverseCymbalProperties" in [_n for _n, _c in vars(_T).items()
+                                            if isinstance(_c, type) and "played_backwards" in vars(_c)]
+          and all("Rev" in _n for _n, _c in vars(_T).items()
+                  if isinstance(_c, type) and "played_backwards" in vars(_c)),
           "  (each partial reversed; the attack cap untouched at %.0f%%)"
           % (100 * _T.SynthProperties.attack_fraction_max))
     # ...AND IT IS NOT A ONE-SHOT, which every other cymbal is. A struck cymbal
@@ -16769,6 +16851,56 @@ def selftest(only=""):
     check("...a knob on layer B turns layer B alone, and both layers save",
           _moveb > 0.0 and _movea == 0.0 and _lpart.synth_b.get("osc2_level") == 0.1,
           "  (layer B moved %.1e, layer A %.1e; synth_b through to_dict)" % (_moveb, _movea))
+    # THE UNISON (moog.unison: the supersaw) LIVE: the knob-neutral template
+    # stamped once a voice under the note's key, each voice's detune, phase,
+    # level, place and drift on its slots (Slab.unison_voice) -- as the file
+    # renders it: GM 81's saw lead with the fitted supersaw, a held C4
+    _UC = T.MoogSawLead
+    _menv6 = os.environ.get("TUNING_MOOG_PANEL")
+    os.environ.pop("TUNING_MOOG_PANEL", None)
+    _UC.moog_unison = __import__("sc88_synth").SUPERSAW
+    try:
+        _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=81)
+        _mm.save(_mpath)
+        _lv = Live(program=81, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+        _lv.warm()
+        _lo = []
+        def _lp():
+            _n0 = _lv.n; _lv.apply(_n0); _lv.sweep(_n0); _lv.slab.reap(_n0); _lv._mf104_reap(_n0)
+            _lo.append(np.array(_lv.renderer.render(_n0, 128)[0])); _lv.n = _n0 + 128
+        _lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); _lp()
+        _lix = np.flatnonzero(_lv.slab.busy); _lrd = _lv.slab.a["rdl"][_lix]
+        _lon = int(min(_lv.slab.a["non"][_lix][_lrd == 0]))
+        _urows = len({int(_r) for _r in np.unique(_lv.slab.a["fx"][_lix]) if _r >= 0})
+        while _lv.n < _lon + _BRb.SR:
+            _lp()
+        _lv.on_midi(mido.Message("note_off", channel=0, note=60, velocity=0)); _lp()
+        _loff = int(_lv.slab.a["noff"][_lix][_lrd == 0][0])
+        for _ in range(int(1.5 * _BRb.SR / 128)):
+            _lp()
+        _ustuck = _lv.stuck
+        _lv.shutdown()
+        _lL = np.concatenate(_lo).astype(float)
+        _lq = _BRb.prepare(_mpath, "even")
+        _lq = dict(_lq, non=_lq["non"] + _lon, noff=_lq["noff"] - int(_BRb.SR) + _loff,
+                   p0=_lq["p0"] - _lq["om"] * _lon, p0R=_lq["p0R"] - _lq["om"] * _lon,
+                   fmp=_lq["fmp"] - _lq["fmw"] * _lon, fmpR=_lq["fmpR"] - _lq["fmw"] * _lon)
+        _lF = _BRb.synth_window(_lq, 0, len(_lL))[0].astype(float)
+        _UC.moog_unison = None
+        _lq1 = _BRb.prepare(_mpath, "even")
+        _l1 = _BRb.synth_window(_lq1, 0, _lq1["N"])[0].astype(float)
+    finally:
+        _UC.moog_unison = None
+        if _menv6 is not None:
+            os.environ["TUNING_MOOG_PANEL"] = _menv6
+    _la, _lb = _lL[_lon:], _lF[_lon:]
+    _lg = float(np.dot(_la, _lb) / np.dot(_la, _la))
+    _ures = float(np.sqrt(((_lg * _la - _lb) ** 2).mean()) / np.sqrt((_lb ** 2).mean()))
+    _udb = 20.0 * math.log10(np.sqrt((_lb ** 2).mean()) / np.sqrt((_l1 ** 2).mean()))
+    check("live plays the unison as the file renders it: seven voices, one key",
+          _urows == 7 and _ures < 1e-4 and _ustuck == 0 and abs(_udb) < 1.5,
+          "  (GM 81, the supersaw: %d filter rows, residual %.1e, level re one voice %+.1f dB)"
+          % (_urows, _ures, _udb))
     # ...AND LIVE PLAYS IT AS THE FILE RENDERS IT: a held note through the
     # pedal, OSC 2 a fourth up (the line filters each partial where it SOUNDS),
     # the repeats stamped on the note's own onset, carrying only the partials
@@ -19239,7 +19371,9 @@ def selftest(only=""):
     _rp = _T.resolve_patch
     check("bank select: GM 2's 120 and 121, GS's variation, a drum channel kept",
           _rp(120, 0, 24, False) == (True, 24, 0)
-          and _rp(121, 3, 5, True) == (False, 5, 3)
+          # GM 2's LSB names a tone (patch_map.gm2_bank): 5.3 is the
+          # SC-8850's bank 10 of that name, not bank 3
+          and _rp(121, 3, 5, True) == (False, 5, __import__("patch_map").gm2_bank(5, 3)) != (False, 5, 3)
           and _rp(0, 0, 24, True) == (True, 24, 0)       # GS files send this
           and _rp(127, 0, 24, True) == (True, 24, 0)     # XG's drums, monocas2
           and _rp(8, 0, 5, False) == (False, 5, 8)
@@ -19251,25 +19385,30 @@ def selftest(only=""):
               is __import__("patch_map").property_class_for_program(p)
               for p, v in [k for k in __import__("patch_map").VARIATION_NAMES
                            if k not in __import__("patch_map").VARIATIONS][:3]))
+    # (1 Standard 2, 29 TR-707, 30 TR-909, 49 Ethnic and 60 SFX 2 are built
+    # sets now, the SC-88 Pro's and the SC-8850's; 20, 35 and 47 name none)
     check("drum sets: the SC-55's numbers; only built ones sound as themselves",
           [_PM.kit_for_program(k) for k in (0, 24, 25, 8, 16, 56, 127, 1, 20, 29, 30, 35, 47, 49, 60)]
-          == [0, 24, 25, 8, 16, 56, 127, 0, 0, 0, 0, 0, 0, 0, 0]
+          == [0, 24, 25, 8, 16, 56, 127, 1, 0, 29, 30, 0, 0, 49, 60]
           and _PM.drum_set_name(24) == "Electronic"
           and _PM.drum_set_name(25) == "TR-808"
           and _PM.drum_set_name(127) == "CM-64/32L"
-          and _PM.percussion_for_note(36, 56) is None      # the SFX set has no drums
+          # the SFX set has no drums: its 36 is the SC-88 Pro's guitar noise
+          and "Guitar" in _PM.percussion_for_note(36, 56)[0]
           # ...and the CM-64/32L's blanks are silent, its effects the SFX set's
           and _PM.percussion_for_note(52, 127) is None
           and _PM.percussion_for_note(100, 127)[0] == "Dog"
           and _PM.drum_set_name(32) == "Jazz",
-          "  (the manual does not say what a non-set number does, so the "
-          "corpus's 1, 20, 29, 30, 35, 47, 49, 60 play Standard, as before)")
-    check("...and Brush is the jazz set, since the SC-55's Jazz is Standard",
-          _PM.kit_for_program(40) == 40 and _PM.kit_for_program(32) == 0
+          "  (the manual does not say what a non-set number does, so 20, 35 "
+          "and 47 play Standard, as before)")
+    # (Jazz, 32, is its own set since the GS sets were built; Brush is it
+    # with the brushed strokes -- its kick the Jazz set's)
+    check("...and Brush is the jazz set with brushes",
+          _PM.kit_for_program(40) == 40 and _PM.kit_for_program(32) == 32
           and [_PM.percussion_for_note(n, 40)[0] for n in (38, 39, 40)]
           == ["Brush Tap", "Brush Slap", "Brush Swirl"]
-          and _PM.percussion_for_note(36, 40)[0] == "Bass Drum 1",
-          "  (three snare strokes; every other note is Standard's, p.70)")
+          and _PM.percussion_for_note(36, 40)[0] == "Jazz Kick 1",
+          "  (three snare strokes; its kick the Jazz set's, p.70)")
 
     def _bfile(msgs):
         _m = mido.MidiFile(type=1, ticks_per_beat=480)
