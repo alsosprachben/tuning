@@ -1275,6 +1275,58 @@ VARIATIONS[(107, 9)] = _TDP
 # GS 25.16 "Mandolin": unison courses of steel strings (tonelib.MandolinProperties)
 from tonelib import MandolinProperties as _MDP
 VARIATIONS[(25, 16)] = _MDP
+# ...25.17 "Mandolin 2": brighter, picked nearer the bridge; 25.18
+# "MandolinTrem": tremolo-picked, as the mandolin is played (tonelib
+# tremolo_pick_hz: 12 strokes a second)
+VARIATIONS[(25, 17)] = type("Mandolin2Properties", (_MDP,), dict(tonal_dampening=_MDP.tonal_dampening * 0.8))
+VARIATION_NAMES[(25, 17)] = "Mandolin 2"
+VARIATIONS[(25, 18)] = type("MandolinTremProperties", (_MDP,), dict(tremolo_pick_hz=12.0))
+VARIATION_NAMES[(25, 18)] = "MandolinTrem"
+VARIATION_TRIM_DB[(25, 17)] = VARIATION_TRIM_DB[(25, 18)] = PROGRAM_TRIM_DB.get(25, 0.0)
+# ...and the tones that are a voice no program routes to (2026-10-26):
+# the NAY (72.8; the Arabic end-blown reed flute: our kawala, its cousin)
+# and with a tremolo of the breath; the ZITHER (15.16-17: the kanun, a
+# zither, plucked; its second brighter); CHURCH BELL 2 (14.10: the church
+# bell with its hum an octave under, louder)
+from tonelib import KawalaProperties as _KWL, KanunProperties as _KNN
+VARIATIONS[(72, 8)] = _KWL
+VARIATION_NAMES[(72, 8)] = "Nay"
+VARIATIONS[(72, 9)] = type("NayTremoloProperties", (_KWL,), dict(sound_bias={"vib_depth": 0.9, "vib_rate": 0.3}))
+VARIATION_NAMES[(72, 9)] = "Nay Tremolo"
+VARIATIONS[(15, 16)] = _KNN
+VARIATION_NAMES[(15, 16)] = "Zither 1"
+VARIATIONS[(15, 17)] = type("Zither2Properties", (_KNN,), dict(tonal_dampening=_KNN.tonal_dampening * 0.75))
+VARIATION_NAMES[(15, 17)] = "Zither 2"
+LAYERED[(14, 10)] = ((("class", _CBP), 0, 0.0), (("class", _CBP), -12, -6.0))
+VARIATIONS[(14, 10)] = _CBP
+VARIATION_NAMES[(14, 10)] = "Church Bell2"
+# the UILLEANN PIPES (109.9-11: tonelib, measured on a practice set): the
+# set, its "normal" (the same voice: Roland's names do not say what parts
+# them), and ornamented -- a CUT on every note, a flick a fourth above
+from tonelib import UilleannPipeProperties as _UIL
+VARIATIONS[(109, 9)] = _UIL
+VARIATION_NAMES[(109, 9)] = "Uillean Pipe"
+VARIATIONS[(109, 10)] = _UIL
+VARIATION_NAMES[(109, 10)] = "UillnPipe Nm"
+VARIATIONS[(109, 11)] = type("UilleannPipeOrnamentedProperties", (_UIL,), dict(cut_semitones=5))
+VARIATION_NAMES[(109, 11)] = "UillnPipe Or"
+for _k in ((109, 9), (109, 10), (109, 11)):
+    VARIATION_TRIM_DB[_k] = PROGRAM_TRIM_DB.get(109, 0.0)
+# the DIDGERIDOO (109.8: tonelib, fitted to two CC0 takes, examples/didg_fit.py)
+from tonelib import DidgeridooProperties as _DDG
+VARIATIONS[(109, 8)] = _DDG
+VARIATION_NAMES[(109, 8)] = "Didgeridoo"
+VARIATION_TRIM_DB[(109, 8)] = PROGRAM_TRIM_DB.get(58, 0.0)
+# the BODHRAN, open and with the hand pressed in (108.9-10: tonelib, fitted
+# to Teh_Bucket's strokes, examples/perc_fit.py bodhran)
+from tonelib import BodhranProperties as _BDH, BodhranMuteProperties as _BDM
+VARIATIONS[(108, 9)] = _BDH
+VARIATION_NAMES[(108, 9)] = "Bodhran"
+VARIATIONS[(108, 10)] = _BDM
+VARIATION_NAMES[(108, 10)] = "Bodhran Mute"
+VARIATION_TRIM_DB[(108, 9)] = VARIATION_TRIM_DB[(108, 10)] = PROGRAM_TRIM_DB.get(116, 0.0)
+for _k, _src in (((72, 8), 75), ((72, 9), 75), ((15, 16), 15), ((15, 17), 15), ((14, 10), 14)):
+    VARIATION_TRIM_DB[_k] = PROGRAM_TRIM_DB.get(_src, 0.0)
 
 
 # THE SC-88 MAP'S CHEAP TONES (Roland's SC-88Pro owner's manual, its
@@ -1656,6 +1708,150 @@ SC88_CHEAP = {
     (61, 17): ("Trumpet Fall", ("set", 56, dict(fall_cents=900.0))),
     (61, 24): ("Octave Brass", ("layer", ((61, 0, 0.0), (61, 12, -6.0)))),
     (61, 25): ("Brass + Reed", ("layer", ((61, 0, 0.0), (65, 0, -4.0)))),
+    # --- THE SC-88 PRO's OTHER ORGANS (2026-10-26): drawbars (bit 0 16',
+    # 1 5 1/3', 2 8', 3 4', 4 2 2/3', 5 2', 6 1 3/5', 7 1 1/3', 8 1'; 11 the
+    # third-harmonic percussion, 12 the second), the church organ's ranks,
+    # the reeds' settings -------------------------------------------------
+    (16, 19): ("Farf Organ", ("set", 16, dict(default_stops=0b100101100, amp_drive=0.8))),   # a combo organ, thin and edged
+    (16, 27): ("Hybrid Organ", ("layer", ((16, 0, 0.0), (89, 0, -8.0)))),                    # the drawbars over a warm pad
+    (16, 29): ("Digi Church", ("set", 19, dict(default_stops=0b10010011))),                  # a church organ, 8' 4' 16' mixture
+    (16, 48): ("5th Organ", ("layer", ((16, 0, 0.0), (16, 7, -4.0)))),
+    (17, 2): ("E.Organ 16+2", ("set", 17, dict(default_stops=0b100001))),                    # 16' and 2'
+    (17, 9): ("Octave Organ", ("layer", ((17, 0, 0.0), (17, 12, -6.0)))),
+    (18, 17): ("Rock Organ 1", ("set", 18, dict(default_stops=0b111111111, amp_drive=1.5))),
+    (18, 18): ("Rock Organ 2", ("set", 18, dict(default_stops=0b100000111, amp_drive=2.0, leslie_fast=True))),
+    # a theatre organ: the tibia (flute 8), the vox humana, the celeste, the
+    # koppelflute 4, and the tremulant that makes it one
+    (19, 33): ("Theater Org.", ("set", 19, dict(default_stops=(1 << 6) | (1 << 23) | (1 << 21) | (1 << 14) | (1 << 13)))),
+    # the reed organ's wind louder in it
+    (20, 8): ("Wind Organ", ("set", 20, dict(breath_noise_db=tuple(
+        (h, d + 8.0) for h, d in __import__("tonelib").ReedOrganFreeProperties.breath_noise_db)))),
+    # accordions: through the distortion; chorused; harder (brighter, the
+    # reeds' edge up) and softer (darker)
+    (21, 9): ("Dist. Accord", ("set", 21, dict(insertion_efx=((0x01, 0x11), {})))),
+    (21, 16): ("Cho. Accord", ("set", 21, dict(insertion_efx=((0x01, 0x42), {})))),
+    (21, 24): ("Hard Accord", ("set", 21, dict(tonal_dampening=1.5, reed_edge=0.0045))),
+    (21, 25): ("Soft Accord", ("set", 21, dict(tonal_dampening=2.6))),
+    # bandoneons: two reeds a few cents apart; the octave reed louder
+    (23, 8): ("Bandoneon 2", ("set", 23, dict(detuned_pair=(-5.0, 5.0)))),
+    (23, 16): ("Bandoneon 3", ("layer", ((23, 0, 0.0), (23, 12, -3.0)))),
+    # --- THE SC-88 PRO's OTHER KEYBOARDS (2026-10-26) -----------------------
+    (0, 24): ("Piano + Str.", ("layer", ((0, 0, 0.0), (48, 0, -6.0)))),
+    # the Rhodes through the chorus, softly (the tine's swing small), and
+    # through the distortion
+    (4, 9): ("Cho. E.Piano", ("set", 4, dict(insertion_efx=((0x01, 0x42), {})))),
+    (4, 10): ("SilentRhodes", ("set", 4, dict(pickup_deflection=0.35))),
+    (4, 17): ("Dist E.Piano", ("set", 4, dict(insertion_efx=((0x01, 0x11), {})))),
+    # the harpsichord's other registers (bit 0 8', 1 the upper 8', 2 4', 3
+    # the lute): 8' and 4'
+    (6, 1): ("Harpsichord2", ("set", 6, dict(default_stops=0b101))),
+    # the clavinet: compressed, through the auto-wah (its resonance), an
+    # octave doubling
+    (7, 8): ("Comp Clav.", ("set", 7, dict(insertion_efx=((0x01, 0x30), {})))),
+    (7, 16): ("Reso Clav.", ("set", 7, dict(insertion_efx=((0x01, 0x21), {})))),
+    (7, 24): ("Clav.o", ("layer", ((7, 0, 0.0), (7, 12, -6.0)))),
+    # --- THE SC-88 PRO's OTHER GUITARS (2026-10-26): the Strat (GM 27, its
+    # neck pickup at 0.247 of the string), a Telecaster's pickups (TC: the
+    # slanted bridge pickup ~0.065, the neck ~0.21), a Les Paul's
+    # humbuckers (LP: the overdrive's pair at the bridge) -------------------
+    (27, 1): ("Clean Half", ("set", 27, dict(pickup_points=(0.247, 0.155)))),          # neck and middle
+    (27, 2): ("Open Hard 1", ("set", 27, dict(strike_point=0.12))),
+    (27, 3): ("Open Hard 2", ("set", 27, dict(strike_point=0.11, pickup_points=(0.09,)))),
+    (27, 9): ("JC Chorus Gt", ("set", 27, dict(amp_drive=0.0, cabinet="jc120", insertion_efx=((0x01, 0x42), {})))),
+    (27, 16): ("TC FrontPick", ("set", 27, dict(pickup_points=(0.21,)))),
+    (27, 17): ("TC Rear Pick", ("set", 27, dict(pickup_points=(0.065,)))),
+    (27, 18): ("TC Clean ff", ("set", 27, dict(pickup_points=(0.065,), strike_point=0.11))),
+    (27, 19): ("TC Clean 2:", ("set", 27, dict(pickup_points=(0.065,), hammer_legato=True, slur_cuts_release=True))),
+    (28, 2): ("TC Muted Gt.", ("set", 28, dict(pickup_points=(0.065,)))),
+    (29, 1): ("Overdrive 2", ("set", 29, dict(amp_drive=6.0))),
+    (29, 2): ("Overdrive 3", ("set", 29, dict(amp_drive=3.0, pickup_points=(0.21, 0.24)))),
+    (29, 8): ("LP OverDrvGt", ("set", 29, dict(pickup_points=(0.049, 0.077), amp_drive=5.0))),
+    (29, 9): ("LP OverDrv:", ("set", 29, dict(pickup_points=(0.049, 0.077), amp_drive=5.0, hammer_legato=True,
+                                              slur_cuts_release=True))),
+    (30, 3): ("Distortion:", ("set", 30, dict(hammer_legato=True, slur_cuts_release=True))),
+    (30, 4): ("Dist.Fast", ("set", 30, dict(attack_time=0.0008, strike_point=0.12))),
+    (31, 9): ("Gt.Feedback2", ("var", (30, 9))),
+    # harmonics on the bass: the guitar's harmonics an octave down
+    (31, 24): ("E.Bass Harm.", ("layer", ((31, -12, 0.0),))),
+    # --- THE SC-88 PRO's OTHER ACOUSTICS (2026-10-26) -----------------------
+    (8, 1): ("Pop Celesta", ("layer", ((8, 0, 0.0), (8, 12, -8.0)))),
+    (11, 9): ("Vibraphones", ("set", 11, dict(detuned_pair=(-4.0, 4.0), key_pan_spread=WIDE))),
+    (15, 24): ("Dulcimer", ("alias", 15)),
+    # basses: a rockabilly slap on the upright (struck at its end), a wilder
+    # one, an open hi-hat on every note (Roland's), the Jazz bass on both
+    # pickups, driven for rock, chorused, its harmonics over it; the pick
+    # harder, darker; the fretless with the upright; slap and pop, two slaps
+    (32, 1): ("Rockabilly", ("set", 32, dict(strike_point=0.08, tonal_dampening=1.2))),
+    (32, 8): ("Wild A.Bass", ("set", 32, dict(tonal_dampening=0.9))),
+    (32, 16): ("Bass + OHH", ("layer", ((32, 0, 0.0), (("kit", 46, 0), 0, -8.0)))),
+    (33, 3): ("Jazz Bass 2", ("set", 33, dict(pickup_points=(0.098, 0.2)))),
+    (33, 4): ("Rock Bass", ("set", 33, dict(amp_drive=1.0))),
+    (33, 8): ("ChorusJazzBs", ("set", 33, dict(pickup_points=(0.098,), insertion_efx=((0x01, 0x42), {})))),
+    (33, 16): ("F.Bass/Harm.", ("layer", ((33, 0, 0.0), (31, 12, -10.0)))),
+    (34, 2): ("Picked Bass3", ("set", 34, dict(amp_drive=2.0))),
+    (34, 3): ("Picked Bass4", ("set", 34, dict(tonal_dampening=3.0))),
+    (34, 16): ("P.Bass/Harm.", ("layer", ((34, 0, 0.0), (31, 12, -10.0)))),
+    (35, 8): ("Wood+FlessBs", ("layer", ((35, 0, 0.0), (32, 0, -4.0)))),
+    (36, 1): ("Slap Pop", ("layer", ((36, 0, 0.0), (37, 0, -3.0)))),
+    (36, 9): ("Unison Slap", ("set", 36, dict(detuned_pair=(-6.0, 6.0)))),
+    # strings' attack sharper, legato-enabled (the colon)
+    (40, 1): ("Violin Atk:", ("set", 40, dict(sound_bias={"attack": -1.0}, hammer_legato=True))),
+    (41, 1): ("Viola Atk.:", ("set", 41, dict(sound_bias={"attack": -1.0}, hammer_legato=True))),
+    (42, 1): ("Cello Atk.:", ("set", 42, dict(sound_bias={"attack": -1.0}, hammer_legato=True))),
+    # pizzicato: the cellos and basses (an octave and two under), a chamber
+    # group, in stereo, one player
+    (45, 1): ("Vcs&Cbs Pizz", ("layer", ((45, -12, 0.0), (45, -24, -4.0)))),
+    (45, 2): ("Chamber Pizz", ("set", 45, dict(section_players=2))),
+    (45, 3): ("St.Pizzicato", ("set", 45, dict(key_pan_spread=WIDE))),
+    (45, 8): ("Solo Pizz.", ("set", 45, dict(section_players=1))),
+    # reeds: the soprano and the oboe with more vibrato; the alto growled (the
+    # breath through a driven reed); with a trumpet; the tenor brighter, wide;
+    # the baritone brighter; reeds and winds together
+    (64, 8): ("Soprano Exp.", ("set", 64, dict(sound_bias={"vib_depth": 0.6}))),
+    (65, 9): ("Grow Sax", ("set", 65, dict(amp_drive=1.5))),
+    (65, 16): ("AltoSax + Tp", ("layer", ((65, 0, 0.0), (56, 0, -4.0)))),
+    (66, 1): ("Tenor Sax", ("set", 66, dict(sound_bias={"brightness": 0.3}))),
+    (66, 9): ("St.Tenor Sax", ("set", 66, dict(key_pan_spread=WIDE))),
+    (67, 1): ("Bari. Sax", ("set", 67, dict(sound_bias={"brightness": 0.3}))),
+    (68, 8): ("Oboe Exp.", ("set", 68, dict(sound_bias={"vib_depth": 0.6}))),
+    (68, 16): ("Multi Reed", ("layer", ((68, 0, 0.0), (71, 0, -3.0), (70, -12, -6.0)))),
+    (71, 16): ("Multi Wind", ("layer", ((73, 12, 0.0), (68, 0, -3.0), (71, 0, -3.0)))),
+    # pipes: the dizi (the flute, breathier and brighter: its membrane's buzz
+    # is not modelled), the flute with more vibrato, with the violin; the
+    # zampona (the pan flute, breathier; then its chiff harder); the
+    # shakuhachi legato-enabled; the whistle's second
+    (72, 16): ("Di", ("set", 73, dict(sound_bias={"brightness": 0.4, "attack": -0.5}))),
+    (73, 2): ("Flute Exp.", ("set", 73, dict(sound_bias={"vib_depth": 0.6}))),
+    (73, 8): ("Flute + Vln", ("layer", ((73, 0, 0.0), (40, 0, -4.0)))),
+    (75, 16): ("Zampona", ("set", 75, dict(sound_bias={"brightness": -0.3}))),
+    (75, 17): ("Zampona Atk", ("set", 75, dict(sound_bias={"brightness": -0.3, "attack": -1.0}))),
+    (77, 1): ("Shakuhachi:", ("alias", 77)),
+    (78, 1): ("Whistle 2", ("set", 78, dict(sound_bias={"vib_depth": 0.5}))),
+    # --- THE SC-88 PRO's ETHNIC TONES (2026-10-26) ---------------------------
+    # the sitar's third: its jawari brighter still, a narrower course
+    (104, 3): ("Sitar 3", ("set", 104, dict(tonal_dampening=0.33, detuned_pair=(-4.0, 4.0)))),
+    # the SAN XIAN, the shamisen's Chinese parent: a snakeskin head, no
+    # sawari, plucked nearer the end -- the shamisen brighter, drier
+    (105, 9): ("San Xian", ("set", 106, dict(strike_point=0.12, tonal_dampening=0.8))),
+    # the GU ZHENG: the koto's Chinese parent, steel-wound strings ringing
+    # longer and brighter
+    (107, 1): ("Gu Zheng", ("set", 107, dict(tonal_dampening=0.55, decay_db=6.0))),
+    # an octave harp: the koto doubled an octave up
+    (107, 24): ("Oct Harp", ("layer", ((107, 0, 0.0), (107, 12, -6.0)))),
+    # the SANZA, the mbira: the kalimba with its bottle-cap rattle (a short
+    # noise on each pluck: the kit's cabasa, quiet)
+    (108, 8): ("Sanza", ("layer", ((108, 0, 0.0), (("kit", 69, 0), 0, -18.0)))),
+    # the ER HU: two silk strings bowed over a python-skin drum, its sound
+    # nasal and vocal, its vibrato wide -- the violin, brighter, the vibrato
+    # deeper; the GAO HU, its higher cousin, brighter still
+    (110, 8): ("Er Hu", ("set", 40, dict(sound_bias={"brightness": 0.35, "vib_depth": 0.7}))),
+    (110, 9): ("Gao Hu", ("set", 40, dict(sound_bias={"brightness": 0.55, "vib_depth": 0.6}))),
+    # the MIZMAR (the Arab shawm, outdoors) and the SUONA (China's, with its
+    # metal bell): the shanai louder in its upper partials; the suona's
+    # second with its vibrato wider
+    (111, 24): ("Mizmar", ("set", 111, dict(sound_bias={"brightness": 0.35}))),
+    (111, 32): ("Suona 1", ("set", 111, dict(sound_bias={"brightness": 0.5}))),
+    (111, 33): ("Suona 2", ("set", 111, dict(sound_bias={"brightness": 0.5, "vib_depth": 0.6}))),
 }
 _SC88_DONE = {}
 
@@ -1737,6 +1933,118 @@ SC8850_CHEAP = {
                                                      (2700.0, 400.0, 0.04)), bore_corner_hz=1500.0))),
     # a saw lead through the module's stereo delay, which the tone carries
     (87, 7): ("Delayed Lead", ("set", 81, dict(insertion_efx=((0x01, 0x50), {})))),
+
+    # --- THE SC-8850's OTHER ACOUSTICS (2026-10-26) -------------------------
+    (10, 1): ("Music Box 2", ("set", 10, dict(detuned_pair=(-5.0, 5.0)))),
+    (10, 8): ("St.Music Box", ("set", 10, dict(key_pan_spread=WIDE))),
+    (13, 8): ("Xylophone w", ("set", 13, dict(key_pan_spread=WIDE))),
+    (14, 16): ("Tubularbellw", ("set", 14, dict(key_pan_spread=WIDE))),
+    (15, 2): ("Santur 3", ("set", 15, dict(detuned_pair=(-9.0, 9.0), strike_point=1.0 / 9))),
+    (32, 9): ("Atk A.Bass", ("set", 32, dict(strike_point=0.08))),
+    (33, 5): ("Heart Bass", ("set", 33, dict(tonal_dampening=3.2))),
+    (33, 6): ("AttackFinger", ("set", 33, dict(strike_point=0.08))),
+    # double-picked: the picked bass tremolo-picked, eight strokes a second
+    (34, 4): ("Double Pick", ("set", 34, dict(tremolo_pick_hz=8.0))),
+    (37, 1): ("Slap Bass 3", ("set", 37, dict(tonal_dampening=1.6))),
+    (44, 2): ("Trem Str.St.", ("set", 44, dict(key_pan_spread=WIDE))),
+    (44, 10): ("SuspenseStr2", ("set", 44, dict(tonal_dampening=0.75, key_pan_spread=WIDE))),
+    (45, 17): ("StringsSpic.", ("set", 48, dict(one_shot=True, gate_time=0.05, release_valve_time=0.12,
+                                                attack_time=0.012, speech_cycles=0.0))),
+    # the harp with the strings, wide; an Irish harp (brighter, ringing
+    # longer); the yang qin again, struck nearer its end and doubled
+    (46, 1): ("Harp&Strings", ("layer", ((46, 0, 0.0), (48, 0, -6.0)))),
+    (46, 2): ("Harp St.", ("set", 46, dict(key_pan_spread=WIDE))),
+    (46, 8): ("Uillean Harp", ("set", 46, dict(tonal_dampening=0.7))),
+    (46, 25): ("Yang Qin 2", ("set", 15, dict(strike_point=1.0 / 9, tonal_dampening=0.55, detuned_pair=(-5.0, 5.0)))),
+    (65, 17): ("Sax Section", ("layer", ((65, 0, 0.0), (66, 0, -3.0), (67, -12, -6.0)))),
+    (67, 8): ("Bari & Tenor", ("layer", ((67, 0, 0.0), (66, 12, -4.0)))),
+    (71, 17): ("Quad Wind", ("layer", ((73, 12, 0.0), (68, 0, -3.0), (71, 0, -3.0), (70, -12, -6.0)))),
+    (73, 9): ("Pipe & Reed", ("layer", ((73, 0, 0.0), (68, 0, -4.0)))),
+    # the bansuri: the flute darker and breathier
+    (73, 17): ("Indian Flute", ("set", 73, dict(sound_bias={"brightness": -0.4, "vib_depth": 0.4}))),
+    # the TIN WHISTLE: the recorder's fipple, brighter; plain; ornamented
+    # (a quicker vibrato for its cuts and rolls)
+    (75, 24): ("Tin Whistle", ("set", 74, dict(sound_bias={"brightness": 0.3}))),
+    (75, 25): ("TinWhtsle Nm", ("alias", 74)),
+    (75, 26): ("TinWhtsle Or", ("set", 74, dict(sound_bias={"brightness": 0.3, "vib_depth": 0.5, "vib_rate": 0.4}))),
+
+    # --- THE SC-8850's ETHNIC TONES (2026-10-26) -----------------------------
+    # the sitar's fourth: darker, its jawari softened
+    (104, 5): ("Sitar 4", ("set", 104, dict(tonal_dampening=0.55))),
+
+    # --- THE SC-8850's OTHER GUITARS (2026-10-26) ---------------------------
+    (25, 10): ("Atk Steel Gt", ("set", 25, dict(tonal_dampening=0.55))),
+    (27, 5): ("Atk CleanGt.", ("set", 27, dict(strike_point=0.11))),
+    (27, 20): ("LP Rear Pick", ("set", 27, dict(pickup_points=(0.049, 0.077)))),
+    (27, 21): ("LP Rear 2", ("set", 27, dict(pickup_points=(0.049, 0.077), amp_drive=1.2))),
+    (27, 22): ("LP RearAtack", ("set", 27, dict(pickup_points=(0.049, 0.077), strike_point=0.11))),
+    # the zhongruan: the moon-bodied Chinese lute, picked -- the steel guitar
+    # mellower, and tremolo-picked as it often is
+    (27, 24): ("Chung Ruan", ("set", 25, dict(tonal_dampening=1.0))),
+    (27, 25): ("Chung Ruan 2", ("set", 25, dict(tonal_dampening=1.0, tremolo_pick_hz=10.0))),
+    (29, 5): ("Attack Drive", ("set", 29, dict(strike_point=0.12))),
+    (29, 10): ("LP Half Drv", ("set", 29, dict(pickup_points=(0.049, 0.077), amp_drive=2.5))),
+    (29, 11): ("LP Half Drv2", ("set", 29, dict(pickup_points=(0.21, 0.24), amp_drive=2.5))),
+    (29, 12): ("LP Chorus", ("set", 29, dict(pickup_points=(0.049, 0.077), amp_drive=2.5, insertion_efx=((0x01, 0x42), {})))),
+    (30, 5): ("Attack Dist", ("set", 30, dict(strike_point=0.12))),
+
+    # --- THE SC-8850's OTHER KEYBOARDS (2026-10-26) -------------------------
+    # the upright as GS 0.1 names it; the grand with a softer hammer (its
+    # felt's contact low-pass at 0.75, Piano 1d's at 0.6), and wide
+    (0, 1): ("UprightPiano", ("alias", 1)),
+    (0, 2): ("Mild Piano", ("set", 0, dict(hammer_corner_hz=0.75 * 3542.03))),
+    (0, 9): ("Mild Piano w", ("set", 0, dict(hammer_corner_hz=0.75 * 3542.03, key_pan_spread=WIDE))),
+    # the piano with the strings, the choir, the oohs
+    (0, 25): ("Piano + Str2", ("layer", ((0, 0, 0.0), (48, 0, -3.0)))),
+    (0, 26): ("Piano+Choir1", ("layer", ((0, 0, 0.0), (52, 0, -6.0)))),
+    (0, 27): ("Piano+Choir2", ("layer", ((0, 0, 0.0), (53, 0, -5.0)))),
+    # the upright played pop (a harder hammer: its corner up) and rock (harder
+    # still, through the overdrive), and wide
+    (1, 1): ("Pop Piano", ("set", 1, dict(hammer_corner_hz=1.6 * 189.3))),
+    (1, 2): ("Rock Piano", ("set", 1, dict(hammer_corner_hz=2.2 * 189.3, insertion_efx=((0x01, 0x10), {})))),
+    (1, 9): ("Rock Piano w", ("set", 1, dict(hammer_corner_hz=2.2 * 189.3, key_pan_spread=WIDE,
+                                             insertion_efx=((0x01, 0x10), {})))),
+    # the Wurlitzer harder, and two a few cents apart
+    (5, 1): ("E.Piano 3", ("set", 5, dict(pickup_deflection=1.2))),
+    (5, 9): ("Detuned EP 3", ("set", 5, dict(detuned_pair=(-8.0, 8.0)))),
+    # the harpsichord's two 8's
+    (6, 2): ("Harpsichord3", ("set", 6, dict(default_stops=0b11))),
+    # the clavinet: its bridge pickup; the attack harder (the strike's noise
+    # and the hammer's chiff up), harder again; through the phaser
+    (7, 1): ("Clav. 2", ("set", 7, dict(clav_pickup="bridge"))),
+    (7, 2): ("Atk Clav.1", ("set", 7, dict(chiff_volume=1.0, strike_noise_slope=2.0))),
+    (7, 3): ("Atk Clav.2", ("set", 7, dict(chiff_volume=1.4, strike_noise_slope=2.6, clav_pickup="bridge"))),
+    (7, 17): ("Phase Clav", ("set", 7, dict(insertion_efx=((0x01, 0x20), {})))),
+
+    # --- THE SC-8850's OTHER ORGANS (2026-10-26) ----------------------------
+    # FULL ORGANS: nine full registrations, from the foundations up to all
+    # nine, each a player's different full sound
+    (16, 2): ("Ful Organ 1", ("set", 16, dict(default_stops=0b000001111))),     # 16' 5 1/3' 8' 4'
+    (16, 3): ("Ful Organ 2", ("set", 16, dict(default_stops=0b000111111))),     # ...and 2 2/3' 2'
+    (16, 4): ("Ful Organ 3", ("set", 16, dict(default_stops=0b110101111))),     # 16 5 8 4 2, 1 1/3' 1'
+    (16, 5): ("Ful Organ 4", ("set", 16, dict(default_stops=0b101111101))),     # 16' 8' 4' 2 2/3' 2' 1 3/5' 1'
+    (16, 6): ("Ful Organ 5", ("set", 16, dict(default_stops=0b111111101))),     # all but 5 1/3'
+    (16, 7): ("Ful Organ 6", ("set", 16, dict(default_stops=0b011111111))),     # all but 1'
+    (16, 10): ("Ful Organ 7", ("set", 16, dict(default_stops=0b111100111))),    # 888 and the top three
+    (16, 11): ("Ful Organ 8", ("set", 16, dict(default_stops=0b111111011))),    # all but 8'
+    (16, 12): ("Ful Organ 9", ("set", 16, dict(default_stops=0b111111111, amp_drive=1.0))),   # all nine, driven
+    # an FM organ (sines: 16' 8' 4')
+    (16, 31): ("FM Organ", ("set", 16, dict(default_stops=0b001101))),
+    # JAZZ: 888 with the third-harmonic percussion, then 888 and 4', 16' 8'
+    # alone, all three of the upper, the second harmonic's percussion
+    (17, 3): ("Jazz Organ 2", ("set", 17, dict(default_stops=0b100000000111))),
+    (17, 4): ("Jazz Organ 3", ("set", 17, dict(default_stops=0b100000001111))),
+    (17, 5): ("Jazz Organ 4", ("set", 17, dict(default_stops=0b100000000101))),
+    (17, 6): ("Jazz Organ 5", ("set", 17, dict(default_stops=0b100111000111))),
+    (17, 7): ("Jazz Organ 6", ("set", 17, dict(default_stops=0b1000000000111))),
+    # PERCUSSIVE: the percussion on other registrations
+    (17, 33): ("Perc.Organ 2", ("set", 17, dict(default_stops=0b100000000101))),
+    (17, 34): ("Perc.Organ 3", ("set", 17, dict(default_stops=0b1000000101100))),
+    (17, 35): ("Perc.Organ 4", ("set", 17, dict(default_stops=0b100100101101))),
+    # the BLUES HARP: the harmonica cupped and pushed (its reeds' edge up,
+    # darker) and its second, supplementary take brighter
+    (22, 8): ("B.Harp Basic", ("set", 22, dict(reed_edge=0.0115, tonal_dampening=2.3))),
+    (22, 9): ("B.Harp Suppl", ("set", 22, dict(reed_edge=0.0135, tonal_dampening=1.8))),
 
     # --- THE SC-8850's OTHER BRASS (2026-10-26) -----------------------------
     # the trumpet with its breath (GM 121's) under it; warmer than Warm Tp.;
@@ -2157,6 +2465,15 @@ _SYN_LAYERED = {
     # (SFX 2's) over the goblins
     (101, 26): ("Pour Magic", ((("kit", 61, 60), 0, 0.0), (98, 12, -6.0))),
     (101, 27): ("DancingDrill", ((("kit", 72, 60), 0, 0.0), (101, 0, -6.0))),
+    # the sitar over the tambura's drone (SC-8850); the oud with strings, the
+    # kanun with a choir (SC-88 Pro)
+    (104, 4): ("Sitar/Drone", ((104, 0, 0.0), (("class", TambouraProperties), 0, -8.0))),
+    (105, 28): ("Oud+Strings", ((("class", _TL.OudProperties), 0, 0.0), (48, 0, -6.0))),
+    (107, 19): ("Kanoon+Choir", ((("class", _TL.KanunProperties), 0, 0.0), (52, 0, -8.0))),
+    # the PI PA: a pear-shaped lute, frets high, plucked with nails near the
+    # bridge -- the oud, brighter, nearer the bridge, its courses single
+    (105, 32): ("Pi Pa", ((("class", type("PipaProperties", (_TL.OudProperties,), dict(
+        strike_point=0.07, tonal_dampening=0.4, course_partner_gain=0.0))), 0, 0.0),)),
 }
 for (_p, _b), (_nm, _ly) in _SYN_LAYERED.items():
     LAYERED[(_p, _b)] = _ly
@@ -2285,6 +2602,14 @@ MAP_TONES = {
     (3, 0, 16): ("European Pf", ("set", 0, {"hammer_corner_hz": 0.8 * 3542.03})),
     # the SC-88 Pro's Synth Horn where ours is Horn Orch: the synth brass
     (3, 60, 16): ("Synth Horn", ("alias", 62)),
+    # the SC-88 Pro's Organ. o where ours is Organ 109: the organ and its octave
+    (3, 16, 9): ("Organ. o", ("layer", ((16, 0, 0.0), (16, 12, -6.0)))),
+    # ...and its Jazz Organ where ours is Organ 201: 888 and the third-
+    # harmonic percussion, Jimmy Smith's
+    (3, 17, 1): ("Jazz Organ", ("set", 17, {"default_stops": 0b100000000111})),
+    # the SC-8850's wide upright and wide pop piano where ours are Piano 1w / 2w
+    (4, 0, 8): ("Upright P w", ("set", 1, {"key_pan_spread": WIDE})),
+    (4, 1, 8): ("Pop Piano w", ("set", 1, {"hammer_corner_hz": 1.6 * 189.3, "key_pan_spread": WIDE})),
     # the honky-tonk's two extra strings further out: 14-30 cents, not 8-20
     (3, 3, 8): ("Honky-tonk 2", ("set", 3, {"string_detune_range": (14.0, 30.0)})),
     # the Leslie's TREMOLO, its fast speed (Leslie names them chorale and tremolo)
@@ -2308,7 +2633,7 @@ for (_m, _p, _b), (_nm, _how) in MAP_TONES.items():
 # preset for, levelled to it as the programs are (examples/sfx_levels.py
 # --var-trim: velocities 64 and 100, K level re a piano C4) -- over the
 # defaults set above (a variation's capital's trim, or the SFX set's)
-VARIATION_TRIM_FIT = {(0, 8): 0.0, (0, 16): 0.2, (1, 8): 8.2, (2, 1): -1.3, (2, 2): -2.8, (2, 8): 1.9, (3, 8): 7.3, (3, 136): 9.6, (4, 8): 0.6, (4, 16): -7.4, (4, 24): -4.5, (4, 144): -2.1, (4, 264): -2.0, (5, 8): -2.4, (5, 16): -5.3, (5, 144): -5.6, (6, 8): -11.9, (6, 16): -10.9, (6, 24): -12.5, (11, 8): 2.3, (12, 8): 2.9, (14, 8): -2.6, (14, 9): -1.9, (15, 1): 4.2, (16, 1): -7.4, (16, 8): -4.4, (16, 9): -6.0, (16, 16): -5.5, (16, 17): -5.7, (16, 18): -9.6, (16, 25): -2.1, (16, 26): -3.5, (16, 32): -10.1, (16, 33): -7.7, (16, 40): -6.9, (17, 1): -2.4, (17, 8): -2.0, (17, 32): -2.7, (18, 8): -10.1, (18, 16): -7.9, (18, 24): -10.1, (19, 8): -2.6, (19, 16): -3.8, (19, 24): 5.4, (19, 32): 5.2, (21, 8): -12.2, (24, 8): 7.9, (24, 16): 8.3, (24, 24): 9.6, (25, 8): -0.9, (25, 9): -0.4, (25, 16): 3.5, (26, 8): 12.8, (27, 8): 3.7, (28, 8): 5.1, (30, 8): 6.6, (31, 8): -12.7, (31, 16): 13.2, (34, 1): 3.7, (35, 4): 9.2, (38, 1): -5.6, (38, 2): -5.6, (38, 5): 4.8, (38, 8): -4.6, (38, 9): -2.9, (38, 10): 5.4, (38, 11): 11.7, (38, 12): 11.8, (38, 13): 11.4, (38, 14): 13.6, (38, 15): 10.0, (38, 16): 7.9, (38, 17): 7.4, (38, 18): -8.1, (38, 21): 10.8, (38, 22): 1.6, (38, 23): 5.4, (38, 24): 14.8, (38, 32): 8.8, (38, 33): 0.3, (38, 34): 20.2, (38, 35): 7.2, (38, 36): 5.2, (38, 40): -17.1, (38, 41): -20.0, (38, 42): -16.9, (38, 43): 6.4, (38, 44): 11.2, (39, 1): -4.2, (39, 2): -2.6, (39, 3): 3.0, (39, 5): -0.7, (39, 8): -2.3, (39, 9): -1.3, (39, 10): -0.7, (39, 11): 4.1, (39, 12): 1.7, (39, 13): -1.0, (39, 14): 1.9, (39, 15): -3.7, (39, 16): -0.9, (39, 17): -1.8, (39, 18): 1.7, (39, 19): -3.3, (39, 20): 0.8, (39, 22): -2.2, (39, 23): -0.9, (39, 24): -3.8, (39, 26): -0.1, (39, 28): -2.3, (39, 30): -5.1, (39, 31): -7.3, (39, 32): -16.4, (39, 33): 7.3, (39, 34): -1.9, (39, 35): -1.0, (39, 36): -1.7, (39, 37): 0.9, (39, 38): -20.7, (39, 39): -0.6, (39, 40): -24.3, (39, 41): 0.6, (39, 42): -2.7, (39, 264): -3.9, (45, 16): 16.1, (48, 1): 2.5, (48, 2): 7.4, (48, 3): 2.7, (48, 4): 1.7, (48, 5): -1.0, (48, 6): 0.0, (48, 7): 2.3, (48, 8): 2.2, (48, 9): 0.9, (48, 11): -0.4, (48, 12): 5.2, (48, 13): 5.9, (48, 14): 0.2, (48, 15): -0.5, (48, 16): 2.1, (48, 17): 0.4, (48, 18): 0.1, (48, 19): 0.7, (48, 20): 2.0, (48, 24): 4.2, (48, 32): 0.6, (48, 33): 1.1, (48, 34): 4.3, (49, 2): 0.6, (49, 10): 2.6, (49, 11): 2.8, (49, 12): 5.5, (49, 13): 1.5, (50, 1): 10.0, (50, 2): 9.0, (50, 4): 6.8, (50, 8): 5.0, (50, 9): 6.3, (50, 10): 7.4, (50, 11): 5.1, (50, 12): 6.4, (50, 16): 6.5, (50, 17): 3.5, (50, 25): 6.3, (51, 1): -0.3, (51, 2): 5.7, (51, 3): 4.9, (51, 4): -0.2, (51, 5): -1.9, (51, 6): -18.1, (51, 7): -3.6, (51, 8): -0.9, (51, 9): 0.1, (51, 10): -1.3, (52, 8): 3.5, (52, 10): 2.5, (52, 11): 3.1, (52, 12): 4.2, (52, 13): 3.0, (52, 14): -0.7, (52, 16): 4.5, (52, 33): 2.0, (53, 1): 4.3, (53, 2): 2.4, (53, 3): 1.1, (53, 4): 0.6, (53, 5): 1.6, (53, 6): 15.7, (53, 9): 15.7, (53, 10): 15.7, (53, 11): 15.7, (53, 12): 15.7, (53, 16): 15.7, (53, 17): 3.1, (53, 18): 15.7, (53, 19): 4.8, (53, 20): 15.7, (53, 21): 4.4, (53, 22): 15.7, (53, 23): 15.7, (53, 24): 11.2, (53, 32): 15.7, (53, 33): 4.2, (53, 34): 15.7, (53, 35): 1.7, (53, 36): 15.7, (53, 37): 15.7, (54, 1): -0.1, (54, 2): 8.1, (54, 8): 2.1, (54, 9): 14.3, (54, 10): 5.6, (54, 16): 6.9, (54, 17): 0.6, (54, 18): 1.4, (55, 10): -15.9, (55, 11): -12.1, (55, 12): -17.1, (55, 13): -10.9, (55, 14): -10.7, (55, 15): -15.6, (55, 16): 16.3, (55, 17): -12.2, (55, 18): -32.1, (55, 20): -12.0, (55, 21): -15.8, (55, 22): -9.1, (55, 23): -18.8, (55, 24): 7.4, (55, 25): -17.9, (55, 26): -11.6, (55, 27): -12.1, (56, 2): 3.3, (56, 4): 3.4, (56, 16): -0.0, (56, 26): 3.5, (56, 27): 3.4, (56, 32): 3.3, (57, 2): 3.3, (57, 3): 0.4, (57, 8): 1.2, (57, 16): 3.9, (58, 8): -0.0, (59, 1): 13.7, (59, 3): 13.6, (59, 8): 13.3, (60, 2): 4.9, (60, 9): 6.3, (60, 16): 6.4, (60, 24): 7.3, (60, 400): 7.2, (61, 1): 3.8, (61, 2): 2.6, (61, 3): 4.0, (61, 4): -1.6, (61, 5): -0.3, (61, 8): 3.1, (61, 9): 4.4, (61, 10): 1.8, (61, 12): 1.4, (61, 14): 0.7, (61, 17): 5.4, (61, 24): 3.8, (61, 25): 2.0, (61, 26): 0.5, (61, 32): -0.7, (61, 33): -1.8, (61, 35): 2.0, (61, 36): -0.6, (61, 37): -1.8, (61, 38): -2.7, (62, 1): 8.4, (62, 2): 10.9, (62, 3): 11.2, (62, 4): 8.1, (62, 8): 3.2, (62, 9): 11.0, (62, 10): 5.9, (62, 16): 7.4, (62, 17): 6.7, (62, 18): 10.7, (62, 19): 21.0, (62, 144): 9.0, (63, 2): 14.0, (63, 3): 8.4, (63, 4): 11.2, (63, 5): 8.2, (63, 6): 11.3, (63, 8): 5.2, (63, 10): 10.1, (63, 11): -13.8, (63, 12): 12.3, (63, 16): 8.5, (63, 17): 7.6, (63, 144): 8.5, (63, 401): 8.8, (80, 1): -2.3, (80, 2): 9.0, (80, 3): 11.9, (80, 4): 0.3, (80, 5): 8.5, (80, 6): 5.5, (80, 7): 1.9, (80, 8): 8.0, (80, 9): 12.1, (80, 11): 7.1, (80, 19): 3.2, (80, 20): -12.1, (80, 21): -15.2, (80, 22): 4.5, (80, 23): 2.5, (80, 24): 2.8, (80, 28): 6.8, (80, 29): 3.0, (80, 30): -6.7, (80, 31): 3.3, (80, 32): 10.6, (80, 33): 5.4, (80, 34): 6.7, (80, 35): 9.1, (81, 1): -5.4, (81, 2): -2.0, (81, 3): 3.1, (81, 4): -1.0, (81, 5): 1.1, (81, 6): -2.8, (81, 7): -0.5, (81, 8): 4.0, (81, 9): 2.7, (81, 10): -2.5, (81, 11): -6.2, (81, 12): -5.9, (81, 13): -7.8, (81, 14): 2.6, (81, 15): -4.4, (81, 16): 4.1, (81, 17): 0.6, (81, 18): 2.2, (81, 28): 2.0, (81, 29): 3.7, (81, 30): -2.4, (81, 33): -0.9, (81, 35): 1.5, (81, 40): 12.1, (81, 41): 14.6, (81, 42): 7.4, (81, 43): -0.3, (81, 44): 2.0, (81, 45): 7.3, (81, 47): 3.8, (82, 1): 8.8, (82, 2): 9.9, (82, 8): 8.9, (82, 9): 8.8, (83, 1): 5.7, (83, 2): 0.1, (83, 3): -2.0, (83, 4): 2.4, (83, 5): 9.2, (83, 6): 2.2, (83, 7): 3.4, (83, 8): 10.0, (83, 9): 5.2, (83, 10): -2.2, (84, 2): 0.9, (84, 3): -3.0, (84, 4): -2.7, (84, 5): -6.7, (84, 6): -3.7, (84, 8): 0.1, (84, 9): 2.8, (84, 10): -8.1, (84, 11): -0.4, (84, 12): 1.3, (84, 16): 5.3, (84, 17): -0.4, (84, 18): -3.8, (84, 19): 3.6, (84, 20): -11.7, (84, 21): -0.3, (84, 22): -0.6, (84, 24): 1.1, (84, 25): 1.4, (84, 26): 2.2, (85, 1): 3.9, (85, 8): 3.7, (85, 9): 3.8, (85, 10): 3.9, (86, 1): 1.2, (86, 2): 3.5, (86, 3): 6.3, (86, 4): 0.1, (86, 5): 1.2, (86, 6): 3.3, (86, 8): 3.7, (87, 1): 6.5, (87, 2): 3.5, (87, 6): 8.7, (88, 1): 14.7, (88, 2): 10.5, (88, 4): 12.6, (88, 5): 14.7, (88, 6): 9.7, (88, 7): 15.3, (89, 1): 2.2, (89, 2): 2.6, (89, 3): 2.9, (89, 4): 4.5, (89, 6): 4.6, (89, 8): 7.8, (89, 9): 5.9, (89, 10): 7.2, (89, 11): 3.0, (89, 12): -2.4, (89, 13): 4.9, (90, 1): 7.8, (90, 2): 7.8, (90, 3): 7.4, (90, 4): 9.1, (90, 9): 9.9, (90, 10): 14.6, (90, 11): 14.4, (90, 12): 4.3, (90, 13): 8.3, (90, 14): 9.7, (90, 15): 10.1, (90, 16): 7.5, (90, 17): 8.1, (90, 24): 9.8, (91, 1): 8.0, (91, 2): 5.0, (91, 4): 1.9, (91, 5): 11.0, (91, 6): 4.0, (91, 7): 2.7, (91, 8): 3.1, (91, 9): 8.1, (91, 10): 6.1, (91, 11): 8.7, (91, 12): 6.7, (92, 1): 8.5, (92, 3): 12.0, (92, 4): -8.3, (92, 5): 5.7, (93, 1): 5.8, (93, 2): 5.4, (93, 3): -4.2, (93, 4): 7.1, (93, 5): 5.7, (94, 1): 10.7, (94, 2): 10.2, (94, 8): 10.2, (94, 9): 11.0, (94, 10): 8.7, (94, 11): 4.2, (94, 12): 11.4, (95, 1): 5.1, (95, 2): -1.7, (95, 3): 7.2, (95, 4): 5.0, (95, 8): 5.9, (95, 9): 4.2, (95, 10): 12.8, (95, 11): 6.0, (95, 12): 1.0, (95, 13): 7.9, (95, 14): 7.5, (95, 15): 4.0, (96, 1): 1.3, (96, 2): 15.9, (96, 3): 2.5, (96, 4): 1.0, (96, 5): 0.8, (96, 6): -3.9, (96, 7): 1.7, (96, 8): -0.9, (96, 9): 1.7, (96, 10): 11.1, (96, 11): -0.5, (97, 1): 5.5, (97, 2): 7.7, (97, 3): 5.5, (97, 4): 5.2, (97, 5): 5.6, (97, 8): 10.9, (98, 1): 8.1, (98, 2): 12.8, (98, 3): -0.9, (98, 4): 3.8, (98, 5): -6.0, (98, 6): 3.5, (98, 7): 3.9, (98, 8): 3.9, (98, 9): 4.6, (98, 10): 3.9, (98, 11): 5.1, (98, 12): 3.4, (98, 13): 3.9, (98, 16): 3.0, (98, 17): 3.6, (98, 18): 0.1, (98, 19): 9.3, (98, 20): 11.7, (98, 21): 1.9, (98, 22): -13.1, (98, 23): 4.9, (99, 1): 6.2, (99, 2): 5.6, (99, 3): 4.6, (99, 4): 2.8, (99, 5): 8.3, (99, 6): 5.2, (99, 7): 6.2, (99, 8): 2.5, (99, 9): 4.7, (99, 10): 5.1, (99, 11): 12.1, (100, 1): 9.5, (100, 3): 5.3, (100, 4): -12.6, (100, 5): 4.4, (100, 6): 8.5, (100, 7): 6.0, (100, 8): -3.4, (101, 1): 3.8, (101, 2): 8.1, (101, 3): 9.7, (101, 4): 4.4, (101, 5): 3.6, (101, 6): 3.6, (101, 7): 3.7, (101, 8): 5.8, (101, 9): 6.1, (101, 10): 3.8, (101, 11): 5.1, (101, 12): 4.9, (101, 13): 6.6, (101, 14): 6.1, (101, 15): 2.2, (101, 16): 9.1, (101, 17): 9.3, (101, 18): 6.8, (101, 19): 5.8, (101, 20): 5.0, (101, 21): 6.7, (101, 22): 4.2, (101, 23): 1.7, (101, 24): 2.4, (101, 25): 4.7, (101, 26): 4.4, (101, 27): 8.9, (101, 28): -15.6, (101, 29): 6.7, (101, 30): 5.1, (101, 31): 5.4, (101, 32): 7.4, (102, 1): -3.3, (102, 2): 6.7, (102, 3): -1.2, (102, 4): -1.2, (102, 5): 1.8, (102, 6): -2.5, (102, 7): -2.3, (102, 8): 3.4, (102, 9): 2.1, (102, 10): 2.1, (102, 11): 2.2, (103, 1): 5.6, (103, 2): 3.0, (103, 3): 4.9, (103, 4): 13.5, (103, 5): 4.8, (103, 6): 4.3, (103, 9): -4.4, (103, 10): 4.9, (103, 11): 6.1, (103, 16): 6.8, (103, 17): 5.9, (103, 18): 4.6, (103, 19): 4.5, (104, 1): 12.6, (104, 2): 17.0, (107, 8): 0.7, (115, 8): -13.2, (116, 8): 0.5, (117, 1): 5.8, (117, 8): -1.8, (117, 9): 5.5, (118, 8): 1.2, (118, 9): 0.0, (119, 1): -1.7, (119, 8): -0.2, (119, 9): 2.5, (119, 16): -2.8, (119, 17): -2.1, (119, 24): 1.2, (119, 25): 2.1, (120, 1): -5.4, (120, 2): -5.3, (120, 3): 1.0, (120, 4): 1.0, (120, 6): 32.8, (121, 1): -9.6, (122, 1): 16.4, (122, 2): -0.7, (122, 3): 11.8, (122, 4): 19.8, (122, 5): 3.4, (123, 1): -10.8, (123, 2): -6.9, (124, 1): 13.3, (124, 2): -7.4, (124, 3): -10.3, (124, 4): -8.0, (124, 5): -2.0, (124, 7): -6.4, (125, 1): 3.1, (125, 2): -8.3, (125, 3): -1.4, (125, 4): -4.3, (125, 5): 1.1, (125, 6): -6.7, (125, 7): 2.0, (125, 8): -2.4, (125, 9): 0.8, (126, 1): -2.4, (126, 2): -8.0, (126, 3): -1.1, (126, 4): -3.4, (126, 5): -0.9, (126, 6): 14.3, (127, 1): 4.7, (127, 2): 8.3, (127, 3): 4.2}
+VARIATION_TRIM_FIT = {(0, 1): 8.4, (0, 2): 0.1, (0, 8): 0.0, (0, 9): 0.1, (0, 16): 0.2, (0, 24): 0.3, (0, 25): 0.3, (0, 26): -0.6, (0, 27): -2.3, (0, 520): 8.4, (1, 1): 6.1, (1, 2): -3.6, (1, 8): 8.2, (1, 9): -3.6, (1, 520): 6.1, (2, 1): -1.3, (2, 2): -2.8, (2, 8): 1.9, (3, 8): 7.3, (3, 136): 9.6, (4, 8): 0.6, (4, 9): -1.8, (4, 10): 7.4, (4, 16): -7.4, (4, 17): -20.3, (4, 24): -4.5, (4, 144): -2.1, (4, 264): -2.0, (5, 1): -6.5, (5, 8): -2.4, (5, 9): -5.6, (5, 16): -5.3, (5, 144): -5.6, (6, 1): -11.8, (6, 2): -12.4, (6, 8): -11.9, (6, 16): -10.9, (6, 24): -12.5, (6, 32): 0.0, (7, 1): -1.1, (7, 2): -2.8, (7, 3): -1.1, (7, 8): -1.1, (7, 16): -0.4, (7, 17): -1.1, (7, 24): -5.0, (7, 32): -0.6, (7, 36): -2.6, (7, 37): -27.0, (7, 38): 5.0, (8, 1): -2.1, (10, 1): 8.2, (10, 8): 8.6, (11, 8): 2.3, (11, 9): 2.2, (12, 8): 2.9, (13, 8): 1.4, (14, 8): -2.6, (14, 9): -1.9, (14, 10): -5.0, (14, 16): 1.4, (15, 1): 4.2, (15, 2): 4.3, (15, 16): -2.3, (15, 17): -4.4, (15, 24): 3.6, (16, 1): -7.4, (16, 2): -7.7, (16, 3): -8.7, (16, 4): -10.7, (16, 5): -10.4, (16, 6): -12.1, (16, 7): -12.0, (16, 8): -4.4, (16, 9): -6.0, (16, 10): -12.0, (16, 11): -17.1, (16, 12): -14.4, (16, 16): -5.5, (16, 17): -5.7, (16, 18): -9.6, (16, 19): -6.7, (16, 25): -2.1, (16, 26): -3.5, (16, 27): -7.0, (16, 28): -1.5, (16, 29): -5.2, (16, 30): -1.4, (16, 31): -7.3, (16, 32): -10.1, (16, 33): -7.7, (16, 40): -6.9, (16, 48): -8.1, (16, 393): -5.6, (17, 1): -2.4, (17, 2): -0.4, (17, 3): -2.4, (17, 4): -2.8, (17, 5): -1.9, (17, 6): -6.9, (17, 7): -2.4, (17, 8): -2.0, (17, 9): -3.1, (17, 32): -2.7, (17, 33): -1.9, (17, 34): -1.3, (17, 35): -3.3, (17, 385): -2.4, (18, 8): -10.1, (18, 16): -7.9, (18, 17): -10.0, (18, 18): -6.0, (18, 24): -10.1, (19, 8): -2.6, (19, 16): -3.8, (19, 24): 5.4, (19, 32): 5.2, (19, 33): 4.8, (20, 8): 6.8, (21, 8): -12.2, (21, 9): -19.8, (21, 16): -9.2, (21, 24): -10.0, (21, 25): -10.0, (22, 8): 0.3, (22, 9): 0.4, (23, 8): -1.2, (23, 16): -3.8, (24, 8): 7.9, (24, 16): 8.3, (24, 24): 9.6, (25, 8): -0.9, (25, 9): -0.4, (25, 10): -1.0, (25, 16): 3.5, (25, 17): -2.9, (25, 18): -3.8, (26, 8): 12.8, (27, 1): 1.1, (27, 2): 6.8, (27, 3): 8.2, (27, 5): 7.2, (27, 8): 3.7, (27, 9): 7.6, (27, 16): 5.6, (27, 17): 7.6, (27, 18): 8.8, (27, 19): 7.6, (27, 20): 2.0, (27, 21): 2.1, (27, 22): 3.2, (27, 24): 4.8, (27, 25): 0.7, (28, 2): 17.7, (28, 8): 5.1, (29, 1): 10.6, (29, 2): 5.6, (29, 5): 11.2, (29, 8): 10.5, (29, 9): 10.5, (29, 10): 10.3, (29, 11): 4.4, (29, 12): 12.0, (30, 3): 6.7, (30, 4): 7.1, (30, 5): 7.1, (30, 8): 6.6, (31, 8): -12.7, (31, 9): 6.9, (31, 16): 13.2, (31, 24): 12.5, (32, 1): 4.1, (32, 8): 4.0, (32, 9): 4.2, (32, 16): 3.1, (33, 3): 3.8, (33, 4): 3.7, (33, 5): 7.5, (33, 6): 4.5, (33, 8): 12.0, (33, 16): 3.1, (34, 1): 3.7, (34, 2): 4.3, (34, 3): 11.9, (34, 4): 0.3, (34, 16): 3.0, (35, 4): 9.2, (35, 8): 3.4, (36, 1): -7.1, (36, 9): -2.2, (37, 1): -9.0, (37, 8): 4.6, (38, 1): -5.6, (38, 2): -5.6, (38, 5): 4.8, (38, 8): -4.6, (38, 9): -2.9, (38, 10): 5.4, (38, 11): 11.7, (38, 12): 11.8, (38, 13): 11.4, (38, 14): 13.6, (38, 15): 10.0, (38, 16): 7.9, (38, 17): 7.4, (38, 18): -8.1, (38, 21): 10.8, (38, 22): 1.6, (38, 23): 5.4, (38, 24): 14.8, (38, 32): 8.8, (38, 33): 0.3, (38, 34): 20.2, (38, 35): 7.2, (38, 36): 5.2, (38, 40): -17.1, (38, 41): -20.0, (38, 42): -16.9, (38, 43): 6.4, (38, 44): 11.2, (39, 1): -4.2, (39, 2): -2.6, (39, 3): 3.0, (39, 5): -0.7, (39, 8): -2.3, (39, 9): -1.3, (39, 10): -0.7, (39, 11): 4.1, (39, 12): 1.7, (39, 13): -1.0, (39, 14): 1.9, (39, 15): -3.7, (39, 16): -0.9, (39, 17): -1.8, (39, 18): 1.7, (39, 19): -3.3, (39, 20): 0.8, (39, 22): -2.2, (39, 23): -0.9, (39, 24): -3.8, (39, 26): -0.1, (39, 28): -2.3, (39, 30): -5.1, (39, 31): -7.3, (39, 32): -16.4, (39, 33): 7.3, (39, 34): -1.9, (39, 35): -1.0, (39, 36): -1.7, (39, 37): 0.9, (39, 38): -20.7, (39, 39): -0.6, (39, 40): -24.3, (39, 41): 0.6, (39, 42): -2.7, (39, 264): -3.9, (40, 1): 9.2, (41, 1): 1.6, (42, 1): 7.7, (44, 2): -0.6, (44, 10): -4.8, (45, 1): -14.9, (45, 2): -1.3, (45, 3): -3.3, (45, 8): -3.4, (45, 16): 16.1, (45, 17): 5.0, (46, 1): 2.9, (46, 2): 4.3, (46, 8): 2.6, (46, 16): 4.4, (46, 25): 7.4, (46, 26): 4.4, (48, 1): 2.5, (48, 2): 7.4, (48, 3): 2.7, (48, 4): 1.7, (48, 5): -1.0, (48, 6): 0.0, (48, 7): 2.3, (48, 8): 2.2, (48, 9): 0.9, (48, 11): -0.4, (48, 12): 5.2, (48, 13): 5.9, (48, 14): 0.2, (48, 15): -0.5, (48, 16): 2.1, (48, 17): 0.4, (48, 18): 0.1, (48, 19): 0.7, (48, 20): 2.0, (48, 24): 4.2, (48, 32): 0.6, (48, 33): 1.1, (48, 34): 4.3, (49, 2): 0.6, (49, 10): 2.6, (49, 11): 2.8, (49, 12): 5.5, (49, 13): 1.5, (50, 1): 10.0, (50, 2): 9.0, (50, 4): 6.8, (50, 8): 5.0, (50, 9): 6.3, (50, 10): 7.4, (50, 11): 5.1, (50, 12): 6.4, (50, 16): 6.5, (50, 17): 3.5, (50, 25): 6.3, (51, 1): -0.3, (51, 2): 5.7, (51, 3): 4.9, (51, 4): -0.2, (51, 5): -1.9, (51, 6): -18.1, (51, 7): -3.6, (51, 8): -0.9, (51, 9): 0.1, (51, 10): -1.3, (52, 8): 3.5, (52, 10): 2.5, (52, 11): 3.1, (52, 12): 4.2, (52, 13): 3.0, (52, 14): -0.7, (52, 16): 4.5, (52, 33): 2.0, (53, 1): 4.3, (53, 2): 2.4, (53, 3): 1.1, (53, 4): 0.6, (53, 5): 1.6, (53, 6): 15.7, (53, 9): 15.7, (53, 10): 15.7, (53, 11): 15.7, (53, 12): 15.7, (53, 16): 15.7, (53, 17): 3.1, (53, 18): 15.7, (53, 19): 4.8, (53, 20): 15.7, (53, 21): 4.4, (53, 22): 15.7, (53, 23): 15.7, (53, 24): 11.2, (53, 32): 15.7, (53, 33): 4.2, (53, 34): 15.7, (53, 35): 1.7, (53, 36): 15.7, (53, 37): 15.7, (54, 1): -0.1, (54, 2): 8.1, (54, 8): 2.1, (54, 9): 14.3, (54, 10): 5.6, (54, 16): 6.9, (54, 17): 0.6, (54, 18): 1.4, (55, 10): -15.9, (55, 11): -12.1, (55, 12): -17.1, (55, 13): -10.9, (55, 14): -10.7, (55, 15): -15.6, (55, 16): 16.3, (55, 17): -12.2, (55, 18): -32.1, (55, 20): -12.0, (55, 21): -15.8, (55, 22): -9.1, (55, 23): -18.8, (55, 24): 7.4, (55, 25): -17.9, (55, 26): -11.6, (55, 27): -12.1, (56, 2): 3.3, (56, 4): 3.4, (56, 16): -0.0, (56, 26): 3.5, (56, 27): 3.4, (56, 32): 3.3, (57, 2): 3.3, (57, 3): 0.4, (57, 8): 1.2, (57, 16): 3.9, (58, 8): -0.0, (59, 1): 13.7, (59, 3): 13.6, (59, 8): 13.3, (60, 2): 4.9, (60, 9): 6.3, (60, 16): 6.4, (60, 24): 7.3, (60, 400): 7.2, (61, 1): 3.8, (61, 2): 2.6, (61, 3): 4.0, (61, 4): -1.6, (61, 5): -0.3, (61, 8): 3.1, (61, 9): 4.4, (61, 10): 1.8, (61, 12): 1.4, (61, 14): 0.7, (61, 17): 5.4, (61, 24): 3.8, (61, 25): 2.0, (61, 26): 0.5, (61, 32): -0.7, (61, 33): -1.8, (61, 35): 2.0, (61, 36): -0.6, (61, 37): -1.8, (61, 38): -2.7, (62, 1): 8.4, (62, 2): 10.9, (62, 3): 11.2, (62, 4): 8.1, (62, 8): 3.2, (62, 9): 11.0, (62, 10): 5.9, (62, 16): 7.4, (62, 17): 6.7, (62, 18): 10.7, (62, 19): 21.0, (62, 144): 9.0, (63, 2): 14.0, (63, 3): 8.4, (63, 4): 11.2, (63, 5): 8.2, (63, 6): 11.3, (63, 8): 5.2, (63, 10): 10.1, (63, 11): -13.8, (63, 12): 12.3, (63, 16): 8.5, (63, 17): 7.6, (63, 144): 8.5, (63, 401): 8.8, (64, 8): 5.1, (65, 9): 5.6, (65, 16): 1.7, (65, 17): -1.1, (66, 1): 6.8, (66, 9): 6.8, (67, 1): 2.7, (67, 8): -0.3, (68, 8): 8.0, (68, 16): 2.5, (71, 16): -0.9, (71, 17): -2.5, (72, 8): 11.0, (72, 9): 11.0, (72, 16): 10.6, (73, 2): 8.3, (73, 8): 3.9, (73, 9): 4.2, (73, 17): 8.3, (75, 16): 8.3, (75, 17): 8.3, (75, 24): 7.4, (75, 25): 7.4, (75, 26): 7.4, (77, 1): 8.7, (78, 1): 11.6, (80, 1): -2.3, (80, 2): 9.0, (80, 3): 11.9, (80, 4): 0.3, (80, 5): 8.5, (80, 6): 5.5, (80, 7): 1.9, (80, 8): 8.0, (80, 9): 12.1, (80, 11): 7.1, (80, 19): 3.2, (80, 20): -12.1, (80, 21): -15.2, (80, 22): 4.5, (80, 23): 2.5, (80, 24): 2.8, (80, 28): 6.8, (80, 29): 3.0, (80, 30): -6.7, (80, 31): 3.3, (80, 32): 10.6, (80, 33): 5.4, (80, 34): 6.7, (80, 35): 9.1, (81, 1): -5.4, (81, 2): -2.0, (81, 3): 3.1, (81, 4): -1.0, (81, 5): 1.1, (81, 6): -2.8, (81, 7): -0.5, (81, 8): 4.0, (81, 9): 2.7, (81, 10): -2.5, (81, 11): -6.2, (81, 12): -5.9, (81, 13): -7.8, (81, 14): 2.6, (81, 15): -4.4, (81, 16): 4.1, (81, 17): 0.6, (81, 18): 2.2, (81, 28): 2.0, (81, 29): 3.7, (81, 30): -2.4, (81, 33): -0.9, (81, 35): 1.5, (81, 40): 12.1, (81, 41): 14.6, (81, 42): 7.4, (81, 43): -0.3, (81, 44): 2.0, (81, 45): 7.3, (81, 47): 3.8, (82, 1): 8.8, (82, 2): 9.9, (82, 8): 8.9, (82, 9): 8.8, (83, 1): 5.7, (83, 2): 0.1, (83, 3): -2.0, (83, 4): 2.4, (83, 5): 9.2, (83, 6): 2.2, (83, 7): 3.4, (83, 8): 10.0, (83, 9): 5.2, (83, 10): -2.2, (84, 2): 0.9, (84, 3): -3.0, (84, 4): -2.7, (84, 5): -6.7, (84, 6): -3.7, (84, 8): 0.1, (84, 9): 2.8, (84, 10): -8.1, (84, 11): -0.4, (84, 12): 1.3, (84, 16): 5.3, (84, 17): -0.4, (84, 18): -3.8, (84, 19): 3.6, (84, 20): -11.7, (84, 21): -0.3, (84, 22): -0.6, (84, 24): 1.1, (84, 25): 1.4, (84, 26): 2.2, (85, 1): 3.9, (85, 8): 3.7, (85, 9): 3.8, (85, 10): 3.9, (86, 1): 1.2, (86, 2): 3.5, (86, 3): 6.3, (86, 4): 0.1, (86, 5): 1.2, (86, 6): 3.3, (86, 8): 3.7, (87, 1): 6.5, (87, 2): 3.5, (87, 6): 8.7, (88, 1): 14.7, (88, 2): 10.5, (88, 4): 12.6, (88, 5): 14.7, (88, 6): 9.7, (88, 7): 15.3, (89, 1): 2.2, (89, 2): 2.6, (89, 3): 2.9, (89, 4): 4.5, (89, 6): 4.6, (89, 8): 7.8, (89, 9): 5.9, (89, 10): 7.2, (89, 11): 3.0, (89, 12): -2.4, (89, 13): 4.9, (90, 1): 7.8, (90, 2): 7.8, (90, 3): 7.4, (90, 4): 9.1, (90, 9): 9.9, (90, 10): 14.6, (90, 11): 14.4, (90, 12): 4.3, (90, 13): 8.3, (90, 14): 9.7, (90, 15): 10.1, (90, 16): 7.5, (90, 17): 8.1, (90, 24): 9.8, (91, 1): 8.0, (91, 2): 5.0, (91, 4): 1.9, (91, 5): 11.0, (91, 6): 4.0, (91, 7): 2.7, (91, 8): 3.1, (91, 9): 8.1, (91, 10): 6.1, (91, 11): 8.7, (91, 12): 6.7, (92, 1): 8.5, (92, 3): 12.0, (92, 4): -8.3, (92, 5): 5.7, (93, 1): 5.8, (93, 2): 5.4, (93, 3): -4.2, (93, 4): 7.1, (93, 5): 5.7, (94, 1): 10.7, (94, 2): 10.2, (94, 8): 10.2, (94, 9): 11.0, (94, 10): 8.7, (94, 11): 4.2, (94, 12): 11.4, (95, 1): 5.1, (95, 2): -1.7, (95, 3): 7.2, (95, 4): 5.0, (95, 8): 5.9, (95, 9): 4.2, (95, 10): 12.8, (95, 11): 6.0, (95, 12): 1.0, (95, 13): 7.9, (95, 14): 7.5, (95, 15): 4.0, (96, 1): 1.3, (96, 2): 15.9, (96, 3): 2.5, (96, 4): 1.0, (96, 5): 0.8, (96, 6): -3.9, (96, 7): 1.7, (96, 8): -0.9, (96, 9): 1.7, (96, 10): 11.1, (96, 11): -0.5, (97, 1): 5.5, (97, 2): 7.7, (97, 3): 5.5, (97, 4): 5.2, (97, 5): 5.6, (97, 8): 10.9, (98, 1): 8.1, (98, 2): 12.8, (98, 3): -0.9, (98, 4): 3.8, (98, 5): -6.0, (98, 6): 3.5, (98, 7): 3.9, (98, 8): 3.9, (98, 9): 4.6, (98, 10): 3.9, (98, 11): 5.1, (98, 12): 3.4, (98, 13): 3.9, (98, 16): 3.0, (98, 17): 3.6, (98, 18): 0.1, (98, 19): 9.3, (98, 20): 11.7, (98, 21): 1.9, (98, 22): -13.1, (98, 23): 4.9, (99, 1): 6.2, (99, 2): 5.6, (99, 3): 4.6, (99, 4): 2.8, (99, 5): 8.3, (99, 6): 5.2, (99, 7): 6.2, (99, 8): 2.5, (99, 9): 4.7, (99, 10): 5.1, (99, 11): 12.1, (100, 1): 9.5, (100, 3): 5.3, (100, 4): -12.6, (100, 5): 4.4, (100, 6): 8.5, (100, 7): 6.0, (100, 8): -3.4, (101, 1): 3.8, (101, 2): 8.1, (101, 3): 9.7, (101, 4): 4.4, (101, 5): 3.6, (101, 6): 3.6, (101, 7): 3.7, (101, 8): 5.8, (101, 9): 6.1, (101, 10): 3.8, (101, 11): 5.1, (101, 12): 4.9, (101, 13): 6.6, (101, 14): 6.1, (101, 15): 2.2, (101, 16): 9.1, (101, 17): 9.3, (101, 18): 6.8, (101, 19): 5.8, (101, 20): 5.0, (101, 21): 6.7, (101, 22): 4.2, (101, 23): 1.7, (101, 24): 2.4, (101, 25): 4.7, (101, 26): 4.4, (101, 27): 8.9, (101, 28): -15.6, (101, 29): 6.7, (101, 30): 5.1, (101, 31): 5.4, (101, 32): 7.4, (102, 1): -3.3, (102, 2): 6.7, (102, 3): -1.2, (102, 4): -1.2, (102, 5): 1.8, (102, 6): -2.5, (102, 7): -2.3, (102, 8): 3.4, (102, 9): 2.1, (102, 10): 2.1, (102, 11): 2.2, (103, 1): 5.6, (103, 2): 3.0, (103, 3): 4.9, (103, 4): 13.5, (103, 5): 4.8, (103, 6): 4.3, (103, 9): -4.4, (103, 10): 4.9, (103, 11): 6.1, (103, 16): 6.8, (103, 17): 5.9, (103, 18): 4.6, (103, 19): 4.5, (104, 1): 12.6, (104, 2): 17.0, (104, 3): 11.0, (104, 4): 15.1, (104, 5): 15.9, (105, 9): 11.8, (105, 28): 6.6, (105, 32): 8.1, (106, 8): 4.5, (107, 1): 8.5, (107, 8): 0.7, (107, 19): 1.4, (107, 24): 8.5, (108, 8): 11.3, (108, 9): 5.8, (108, 10): 6.9, (109, 8): 3.2, (109, 9): 11.5, (109, 10): 11.5, (109, 11): 12.0, (110, 8): 7.9, (110, 9): 9.1, (111, 24): 5.5, (111, 32): 5.5, (111, 33): 5.5, (115, 8): -13.2, (116, 8): 0.5, (117, 1): 5.8, (117, 8): -1.8, (117, 9): 5.5, (118, 8): 1.2, (118, 9): 0.0, (119, 1): -1.7, (119, 8): -0.2, (119, 9): 2.5, (119, 16): -2.8, (119, 17): -2.1, (119, 24): 1.2, (119, 25): 2.1, (120, 1): -5.4, (120, 2): -5.3, (120, 3): 1.0, (120, 4): 1.0, (120, 6): 32.8, (121, 1): -9.6, (122, 1): 16.4, (122, 2): -0.7, (122, 3): 11.8, (122, 4): 19.8, (122, 5): 3.4, (123, 1): -10.8, (123, 2): -6.9, (124, 1): 13.3, (124, 2): -7.4, (124, 3): -10.3, (124, 4): -8.0, (124, 5): -2.0, (124, 7): -6.4, (125, 1): 3.1, (125, 2): -8.3, (125, 3): -1.4, (125, 4): -4.3, (125, 5): 1.1, (125, 6): -6.7, (125, 7): 2.0, (125, 8): -2.4, (125, 9): 0.8, (126, 1): -2.4, (126, 2): -8.0, (126, 3): -1.1, (126, 4): -3.4, (126, 5): -0.9, (126, 6): 14.3, (127, 1): 4.7, (127, 2): 8.3, (127, 3): 4.2}
 VARIATION_TRIM_DB.update(VARIATION_TRIM_FIT)
 
 # ...AND BY EAR, where there is no witness: dB added over the above (so a

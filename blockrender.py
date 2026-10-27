@@ -1278,7 +1278,7 @@ def send_weights(rs, steps, mch, non):
     g = np.ones(len(mch), np.float32)
     for c in np.unique(mch):
         m = mch == c
-        st = steps.get(int(c)) if steps else None
+        st = steps.get(int(_GSX.part_of(int(c)))) if steps else None
         g[m] = step_at(st, np.asarray(non)[m]) if st is not None else (rs or {}).get(int(c), 1.0)
     return g
 
@@ -1288,7 +1288,7 @@ def send_values(rs, steps, heard):
     needs a send bus of its own."""
     out = set()
     for c in heard:
-        st = steps.get(int(c)) if steps else None
+        st = steps.get(int(_GSX.part_of(int(c)))) if steps else None
         out |= set(st[1].tolist()) if st is not None else {(rs or {}).get(int(c), 1.0)}
     return out
 
@@ -1838,7 +1838,7 @@ LAST_DRONES = []        # see prepare(): the drone notes it last inserted
 GM_DEFAULT_REVERB = 40
 
 
-def registration_blocks(ch, prop, ccs, nblk, amp=None):
+def registration_blocks(ch, prop, ccs, nblk, amp=None, recalls=()):
     ranks = prop.stop_ranks; order = getattr(prop, 'crescendo_order', [r[0] for r in ranks])
     # 14-bit stop word: CC11 (low 7 bits 0..6) | CC43 (high bits 7..13) -- lets a
     # Mixtur and other stops past bit 6 be drawn. CC43=0 -> the old 7-bit behaviour.
@@ -1864,8 +1864,18 @@ def registration_blocks(ch, prop, ccs, nblk, amp=None):
             k = r[0]; rank_ev[k].append((t, 1.0 if ((mask>>i)&1 or k in drawn) else 0.0))
         swell_ev.append((t, vol))
     emit(0.0)
+    # ...and a PROGRAM CHANGE recalls its tone's registration (recalls: [(t,
+    # default_stops)], a different tone of this organ on the channel -- GS's
+    # Organ 101 then Organ 4): the stop word set to it there, the file's own
+    # drawbar moves acting on it after. A channel kept the first tone's
+    # registration through every change before (Ful Organ 9 after Ful Organ 1
+    # sounded Ful Organ 1)
+    if recalls:
+        ev = sorted(list(ev) + [(t, -1, d) for t, d in recalls], key=lambda e: e[0])
     for t, cc, val in ev:
-        if cc in wccs: wbytes[wccs.index(cc)] = val
+        if cc == -1:
+            wbytes = [(val >> (7 * i)) & 0x7F for i in range(len(wccs))]
+        elif cc in wccs: wbytes[wccs.index(cc)] = val
         elif cc==4: cres=val/127.0
         elif cc==7 and swells: vol=val/127.0
         else: continue
@@ -2541,7 +2551,18 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _orgk = (ch, organ_family(pc))
             if _orgk in rankev_of:
                 continue
-            pr = pc(261.6,0,1,1); g,s,rev = registration_blocks(ch, pr, ccs, nblk, _CMXEV['amp'].get(ch))
+            # each later tone of this organ on the channel recalls its own
+            # registration where its first note is (registration_blocks)
+            _fam = _orgk[1]; _rcl = []; _ds = getattr(pc, 'default_stops', 1)
+            for _e in sorted((_e for _e in notes if _e[0] == ch), key=lambda _e: _e[2]):
+                for _c in voice_classes(_e[6]):
+                    if getattr(_c, 'registerable', False) and organ_family(_c) == _fam:
+                        _d = getattr(_c, 'default_stops', 1)
+                        if _d != _ds:
+                            _rcl.append((_e[2] - 1e-4, _d)); _ds = _d
+                        break
+            pr = pc(261.6,0,1,1); g,s,rev = registration_blocks(ch, pr, ccs, nblk, _CMXEV['amp'].get(ch),
+                                                                recalls=_rcl)
             rankev_of[_orgk]=rev
             crow_of[_orgk]=len(Srows); Srows.append(s)
             for r in pr.stop_ranks: k=r[0]; grow_of[(_orgk,k)]=len(Grows); Grows.append(g[k])
@@ -3404,6 +3425,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     REFLECT = (os.environ.get('TUNING_REFLECT', '1') not in ('0', 'off', '')
                and '--no-reflect' not in sys.argv)
     _MCH = [0]               # MIDI channel of the note being emitted (stem/object export)
+    _TONE_SEGS = {}          # channel -> its tones in order heard (gsefx.TONE_SEG)
     _LV = [-1]               # its channel's fader row, if the fader moves under it (THE CHANNEL FADER)
     # Where this partial is actually radiating FROM. A section is not one
     # source: section_position_x seats each player at their own desk, and
@@ -3529,7 +3551,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # kHz over ten metres. Its LEVEL stays as the mix wrote it: that is
             # the normalisation that makes the send a distance, not a fader
             # (roomtail sets the tail by the same multiple).
-            _dm = _src_dist(_MCH[0], props)
+            _dm = _src_dist(_GSX.part_of(_MCH[0]), props)
             if _dm != 1.0:
                 _r0 = math.sqrt(px * px + props.radiation_distance ** 2 + pz * pz)
                 _ga = 10.0 ** (-props.air_absorption_db_per_m(nomf) * (_dm - 1.0) * _r0 / 20.0)
@@ -3544,7 +3566,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 ampL *= _ga; ampR *= _ga; ampM *= _ga
             # THE FILE'S GS EQ, on the parts that have it on (gs_eq_gain):
             # the partial at its frequency, its reflections with it
-            if _GS_EQ and _MCH[0] not in _GS_EQ['off']:
+            if _GS_EQ and _GSX.part_of(_MCH[0]) not in _GS_EQ['off']:
                 _ge = gs_eq_gain(nomf, _GS_EQ['eq'])
                 ampL *= _ge; ampR *= _ge; ampM *= _ge
             # THE INSERTION EFFECT's compressor (gsefx), before its OD: its
@@ -3693,7 +3715,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # the 2 m listener_distance -- that one is a stage image chosen to give
         # the head model sensible interaural cues, not a claim about where the
         # players are (see the radiation comment in tonelib).
-        _dm = _src_dist(_MCH[0], props)
+        _dm = _src_dist(_GSX.part_of(_MCH[0]), props)
         _rk = (nomf, px, pz, _radius[0], _dm) + _refl_state(props)
         _terms = _REFL.get(_rk) if PREP_MEMO else None
         PREP_MEMO_STATS[0] += 1
@@ -4191,6 +4213,46 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _GLISS_STEPS.append((_e[0], _p, _t0, _t0 + _dt * 1.35, _e[4], _e[5], _e[6]))
         _GLISS[(_e[0], _e[1], _e[2] + _T)] = (1.0, _sm, _e[1] - 1, _dt)
         _GLISS_STEPS.append((_e[0], _e[1], _e[2] + _T, _e[3], _e[4], _e[5], _e[6]))
+    # ...AND TREMOLO PICKING (tonelib tremolo_pick_hz: GS 25.18 MandolinTrem):
+    # a held note re-struck at the picking rate, each stroke a note of its own,
+    # down and up alternating (the up softer), its time scattered -- seeded by
+    # the note, so a render repeats
+    for _e in list(notes):
+        _k3 = (_e[0], _e[1], _e[2])
+        if _k3 in _GLISS_DROP or is_drum(_e[6]):
+            continue
+        _pct = property_class_for_note(_e[6], _e[1])
+        _hz = getattr(_pct, 'tremolo_pick_hz', 0.0) or 0.0
+        if not _hz or _e[3] - _e[2] < 1.5 / _hz:
+            continue
+        _rng = __import__("random").Random(0x7E3D + _e[1] * 977 + int(_e[2] * 1000))
+        _per = 1.0 / _hz
+        _jit = float(_pct.tremolo_pick_jitter)
+        _up = 10.0 ** (float(_pct.tremolo_pick_up_db) / 20.0)
+        _ts = [_e[2]]
+        while _ts[-1] + _per < _e[3] - 0.25 * _per:
+            _ts.append(_e[2] + len(_ts) * _per + _rng.uniform(-_jit, _jit) * _per)
+        _GLISS_DROP.add(_k3)
+        for _i, _t0 in enumerate(_ts):
+            _v = _e[4] if _i % 2 == 0 else (max(1, int(round(_e[4] * _up))) if isinstance(_e[4], int) else _e[4] * _up)
+            _t1 = _e[3] if _i == len(_ts) - 1 else min(_e[3], _ts[_i + 1] + 0.02)
+            _GLISS_STEPS.append((_e[0], _e[1], _t0, _t1, _v, _e[5], _e[6]))
+    # ...AND A CUT (tonelib cut_semitones: the uilleann pipes' ornament, GS
+    # 109.11 "UillnPipe Or"): a flicked upper finger -- the note cut_semitones
+    # above for cut_s at the onset, slurred into the note (a chanter never
+    # stops), which then sounds from there to its end
+    for _e in list(notes):
+        _k3 = (_e[0], _e[1], _e[2])
+        if _k3 in _GLISS_DROP or is_drum(_e[6]):
+            continue
+        _pcc = property_class_for_note(_e[6], _e[1])
+        _cs = int(getattr(_pcc, 'cut_semitones', 0) or 0)
+        _cT = float(getattr(_pcc, 'cut_s', 0.03))
+        if not _cs or _e[3] - _e[2] < 3.0 * _cT or not 0 <= _e[1] + _cs <= 127:
+            continue
+        _GLISS_DROP.add(_k3)
+        _GLISS_STEPS.append((_e[0], _e[1] + _cs, _e[2], _e[2] + _cT, _e[4], _e[5], _e[6]))
+        _GLISS_STEPS.append((_e[0], _e[1], _e[2] + _cT, _e[3], _e[4], _e[5], _e[6]))
     if _gliss_clean:
         print("  %d valved glissandi were too short to run and played clean "
               "(a step would have been under 12 ms)" % _gliss_clean)
@@ -4723,7 +4785,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         if REFLECT and _src is not None:
             _pr, _px, _pz, _rad = _src
             try:
-                _dmb = _src_dist(_MCH[0], _pr)
+                _dmb = _src_dist(_GSX.part_of(_MCH[0]), _pr)
                 _terms = _pr.reflection_terms(_fc, _px * _dmb, _pr.radiation_distance * _dmb,
                                               _pz * _dmb, _rad)
             except Exception:
@@ -4837,6 +4899,18 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _S0[0] = len(A['om'])
         _SV[0], _SV[1] = 0.0, 1.0; _VDL[0] = 0.0
         _MCH[0] = ch
+        # A PROGRAM CHANGE TO ANOTHER TONE IS ANOTHER INSTRUMENT on the part: its
+        # own mix channel (gsefx.TONE_SEG), so the channel passes set from a
+        # tone -- an amp, a cabinet, a Leslie, a tremolo, its own insertion
+        # effect -- are that tone's, never the part's other tones' (Ben: the
+        # chorus stayed on after JC Chorus Gt; passac's recorder through the
+        # organ's Leslie). The part's first tone keeps the channel itself.
+        _tk = (type(prog).__name__, int(prog), repr(sorted(getattr(prog, '__dict__', {}).items())))
+        _tsl = _TONE_SEGS.setdefault(ch, [])
+        if _tk not in _tsl:
+            _tsl.append(_tk)
+        if _tsl.index(_tk):
+            _MCH[0] = ch + _GSX.TONE_SEG * (_tsl.index(_tk) % _GSX.TONE_SEG)
         _LV[0] = -1
         choked = None
         if (ch, note) in choke_at:
@@ -4884,15 +4958,16 @@ def _prepare(path, tuner='hybrid440', sink=None):
                             'insertion_efx', None)
             if _tefx is not None:
                 _EFXN[0] = _GSX.chain(_GSX.tone_state(*_tefx))
-                _EFX_CH[('tone', ch)] = True
+                _EFX_CH[('tone', _MCH[0])] = True
         # the part's first chain, the file's or the tone's, is the channel's
-        if _EFXN[0] is not None and ch not in _EFX_CH:
-            _EFX_CH[ch] = _EFXN[0]
+        # (the tone's: its own mix channel)
+        if _EFXN[0] is not None and _MCH[0] not in _EFX_CH:
+            _EFX_CH[_MCH[0]] = _EFXN[0]
             # ITS SENDS ARE THE PART'S NOW: the reverb's distance, here
             # before the channel's is read from CC91
             _rv = _EFXN[0]['sends'].get(_GSX.SEND_REV, 40)
             _C91D[ch] = max(0.0, _rv) / float(GM_DEFAULT_REVERB)
-            _REVERB_CH.setdefault(ch, _C91D[ch])
+            _REVERB_CH.setdefault(_MCH[0], _C91D[ch])
             _REVERB_STEPS.pop(ch, None)    # the effect's send, not CC91's
         if _GS_DLY and not MOOG_NEUTRAL:
             if _EFXN[0] is not None:
@@ -5448,13 +5523,21 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _PX[0] = getattr(props,'position_x',0.0); _PZ[0] = getattr(props,'position_z',0.0)
         # The consonant bursts are built before this loop runs, so they never
         # saw a props and never got a room -- see the reflection pass below.
-        if _MCH[0] not in _CONS_SRC:
-            _CONS_SRC[_MCH[0]] = (props, _PX[0], _PZ[0], _radius[0])
+        if _GSX.part_of(_MCH[0]) not in _CONS_SRC:
+            # (the part's: its consonant bursts carry its MIDI channel)
+            _CONS_SRC[_GSX.part_of(_MCH[0])] = (props, _PX[0], _PZ[0], _radius[0])
         if getattr(props, 'plunger', False) and _MCH[0] not in _FILTER_CH:
             # A PLUNGER (efxfilter.plunger): the channel's moving filter, the
             # player's hand on the channel's aftertouch -- the part's, as an
             # insertion effect's wah is
             _FILTER_CH[_MCH[0]] = __import__('efxfilter').plunger(ats.get(ch, ()))
+        if getattr(props, 'mouth_states', None) and _MCH[0] not in _FILTER_CH:
+            # A DIDGERIDOO'S MOUTH (efxfilter.mouth): the player's formants
+            # wandering over the drone, the channel's moving filter -- or, when
+            # the file moves the mod wheel, set by it ("oo" at 0, "ah" at 127)
+            _FILTER_CH[_MCH[0]] = __import__('efxfilter').mouth(
+                props.mouth_states, props.mouth_dwell_s, props.mouth_glide_s, props.mouth_floor, seed=int(_MCH[0]),
+                wheel=[(_t, _v) for _t, _cc, _v in ccs.get(ch, []) if _cc == 1])
         if getattr(props, 'amp_drive', 0.0) and _MCH[0] not in _AMP_CH:
             # TUNING_AMP_DRIVE overrides every voice's drive at once, which is
             # how the stage gets auditioned: the same passage clean, at the
@@ -5483,7 +5566,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # have.
             _drv = float(props.amp_drive)
             if not getattr(props, 'leslie', False):
-                _c1 = [v for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 1]
+                _c1 = [v for t, cc, v in in_order(ccs.get(_GSX.part_of(_MCH[0]), [])) if cc == 1]
                 if _c1:
                     _drv *= 4.0 * _c1[0] / 127.0
             _AMP_CH[_MCH[0]] = float(os.environ.get('TUNING_AMP_DRIVE', _drv))
@@ -5552,7 +5635,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 # a moving filter (a Phaser, a wah, a Step Flanger, a Humanizer):
                 # its control over the file, from the effect's timeline
                 _fc_ = _GSX.filter_setup(_EFXEV, _MCH[0],
-                                         [(_n[2], _n[3], _n[4]) for _n in notes if _n[0] == _MCH[0]])
+                                         [(_n[2], _n[3], _n[4]) for _n in notes if _n[0] == _GSX.part_of(_MCH[0])])
                 if _fc_ is not None:
                     _FILTER_CH[_MCH[0]] = _fc_
             if _ex.get('trem') and _MCH[0] not in _TREM_CH:
@@ -5588,7 +5671,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                         _LESLIE_CH[_vc] = _rs_
                 if _eb.get('filter'):
                     _fc_ = _GSX.filter_setup(_EFXEV, _vc,
-                                             [(_n[2], _n[3], _n[4]) for _n in notes if _n[0] == _MCH[0]])
+                                             [(_n[2], _n[3], _n[4]) for _n in notes if _n[0] == _GSX.part_of(_MCH[0])])
                     if _fc_ is not None:
                         _FILTER_CH[_vc] = _fc_
                 if _MCH[0] in _REVERB_CH:
@@ -5597,7 +5680,16 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _SYM_CH[_MCH[0]] = props
         if REGISTER and (getattr(props, 'register_gain', 0.0)
                          or getattr(props, 'register_knock_gain', 0.0)):
-            if _MCH[0] not in _REG_CH:
+            # A CHANNEL THAT CHANGES INSTRUMENT (a piano, then a harpsichord:
+            # program changes, or a GS variation's other stops) gets a bank for
+            # each: the strings, the choirs and their bridges are the class's.
+            # The first keeps the channel's own key, so a part that never
+            # changes is as it was; a later one an int key past it (the knock's
+            # phases hash the key)
+            _rk = _MCH[0]
+            while _rk in _REG_CH and _REG_CH[_rk]['pc'] is not type(props):
+                _rk += 100000
+            if _rk not in _REG_CH:
                 # ITS STRINGS ARE BUILT HERE, at its first note, for both the
                 # whole table and the stream: whatever tonelib's per-note state
                 # is now (the soft pedal, honky_detune) is the instrument's at
@@ -5605,7 +5697,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 import register as _REG
                 # (a voice with no damper pedal -- the harpsichord -- frees
                 # nothing at CC64, as its notes ignore it)
-                _REG_CH[_MCH[0]] = dict(pc=type(props), props=props, pan=pan, chan_vol=chan_vol,
+                _REG_CH[_rk] = dict(pc=type(props), props=props, pan=pan, chan_vol=chan_vol,
                                         table=FREQ_N, strikes=[],
                                         pedal=(_PED_CH.get(ch, []) if getattr(props, 'damper_pedal', True)
                                                else []),
@@ -5629,7 +5721,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 # ...and each drawn rank's choir, by its gate row: which bridge
                 # its partials drive the free strings through
                 _REG_OPEN[0]['grc'] = {grow_of[(_orgk, k)]: _ci[props.rank_choirs.get(k, k)] for k in _drawn}
-            _REG_CH[_MCH[0]]['strikes'].append(_REG_OPEN[0])
+            _REG_CH[_rk]['strikes'].append(_REG_OPEN[0])
         if getattr(props, 'cabinet', None) and _MCH[0] not in _CAB_CH:
             # TUNING_CABINET=0 takes the speaker out, which is not a setting
             # anyone wants to play through -- it is the A/B that shows what the
@@ -5646,7 +5738,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # ONE VALUE FOR THE PIECE, from the channel's first CC1, the same
             # rule the amplifier's drive follows: a player sets the rockers and
             # then plays, where live it is a control being moved.
-            _c1 = [v for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 1]
+            _c1 = [v for t, cc, v in in_order(ccs.get(_GSX.part_of(_MCH[0]), [])) if cc == 1]
             _set = (int(round(_c1[0] / 127.0 * (len(T.CLAV_TONE) - 1)))
                     if _c1 else T.CLAV_FLAT)
             _set = int(os.environ.get('TUNING_CLAV', _set))
@@ -5661,7 +5753,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             #
             # A file with no CC1 gets no modulation, which is the panel's own
             # default position and what every file in the corpus will see.
-            _c1 = [v for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 1]
+            _c1 = [v for t, cc, v in in_order(ccs.get(_GSX.part_of(_MCH[0]), [])) if cc == 1]
             if getattr(props, 'tremolo_intrinsic', False):
                 # AN INTRINSIC TREMOLO IS NOT A WHEEL EFFECT. GM 44 is called
                 # Tremolo Strings: the stroke is the patch, so it is on at full
@@ -5708,7 +5800,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # which is a textbook send bus, arrived at from the room equation
         # rather than bolted onto it.
         if _MCH[0] not in _REVERB_CH:
-            _c91 = [v for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 91]
+            _c91 = [v for t, cc, v in in_order(ccs.get(_GSX.part_of(_MCH[0]), [])) if cc == 91]
             if _c91:
                 _REVERB_CH[_MCH[0]] = _c91[0] / float(GM_DEFAULT_REVERB)
             elif getattr(props, 'reverb_distance', None) is not None:
@@ -5717,7 +5809,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 # the channel overrides it, as a desk's send would.
                 _REVERB_CH[_MCH[0]] = float(props.reverb_distance)
         if _MCH[0] not in _CHORUS_CH:
-            _c93t = [(t, v) for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 93]
+            _c93t = [(t, v) for t, cc, v in in_order(ccs.get(_GSX.part_of(_MCH[0]), [])) if cc == 93]
             _c93 = [v for _, v in _c93t]
             if _c93 and len(set(_c93)) > 1 and max(_c93) > 0 and _GS_CHO and not MOOG_NEUTRAL:
                 # ...AND ITS CC93 FOLLOWS THE SONG, as CC91 does (send_steps):
@@ -5754,7 +5846,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # rotor has momentum, so this is a history of requests and not a
             # speed -- leslie.Rotor spends real seconds getting between them.
             import leslie as _LES0
-            _req = [(t, _LES0.zone(v)) for t, cc, v in in_order(ccs.get(_MCH[0], []))
+            _req = [(t, _LES0.zone(v)) for t, cc, v in in_order(ccs.get(_GSX.part_of(_MCH[0]), []))
                     if cc == 1]
             if not _req or _req[0][0] > 0.0:
                 _req.insert(0, (0.0, _LES0.TREMOLO
@@ -5851,7 +5943,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _hx = v11
             _hperc = _st('percussion')
             if _st('tremolo') and getattr(props, 'stop_tremolo_depth', 0.0) > 0.0:
-                _HTREM_CH[ch] = (float(props.stop_tremolo_hz),
+                _HTREM_CH[_MCH[0]] = (float(props.stop_tremolo_hz),
                                  float(props.stop_tremolo_depth), False)
                 _HT_PEND[0] = len(A['om'])
         transverse = []   # (freq, raw gain, decay dbps) of the main partials, for phantom pairing
@@ -7523,7 +7615,7 @@ def render_partials(prep, n0, winlen, L, R):
     bus = prep.get('bus')
     if bus:
         import efxbus as _EB
-        mch = np.asarray(prep['mch'])
+        mch = _GSX.part_of(prep['mch'])            # the part's bus, every tone of it
         on = np.isin(mch, list(bus))
         _render_partials(prep_rows(prep, ~on), n0, winlen, L, R)
         for ch, spec in bus.items():
@@ -7809,7 +7901,7 @@ def render(path, tuner='hybrid440'):
 def channel_rows(prep):
     """{MIDI channel: row mask} over the partial table -- a parallel type's
     branch B (its virtual channel, gsefx.VIRT) in its part's."""
-    mch = prep['mch'] % _GSX.VIRT
+    mch = _GSX.part_of(prep['mch'])          # its tones' mix channels in it too
     return {int(c): (mch == c) for c in np.unique(mch)}
 
 
@@ -7829,7 +7921,7 @@ def source_rows(prep):
     An object is a thing that persists and moves; the movement belongs in its
     position over time, not in its identity.
     """
-    mch = prep['mch'].astype(np.int64) % _GSX.VIRT          # branch B in its part
+    mch = _GSX.part_of(prep['mch'])          # branch B, and its tones, in its part
     pl = prep['pl'].astype(np.int64)
     gr = prep['gr'].astype(np.int64)
     key = (mch << 40) ^ (pl << 20) ^ (gr + 1)
@@ -7870,7 +7962,7 @@ def subset(prep, mask, objectify=False):
     # the stems back up, which is exactly what a per-part tract pass does.
     bursts = prep.get('cons_bursts')
     if bursts:
-        chans = set(int(c) for c in np.unique(prep['mch'][mask]))
+        chans = set(int(c) for c in np.unique(_GSX.part_of(prep['mch'][mask])))
         out['cons_bursts'] = [b for b in bursts
                               if len(b) < 6 or int(b[5]) in chans]
     # By name, not by length: G and S are the registration blocks, not partial

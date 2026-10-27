@@ -233,6 +233,28 @@ INSTS = {
     "dholak_treble": dict(kit=52, note=90, glob=os.path.expanduser("~/Documents/refs/dholak/hits/treble_*.wav"),
                           groups=None, merge=0.04, max_modes=10, band=(390, 8000), floor=-35, flat=(1000, 8000),
                           T=_JAZZ_T, clip=-60.0, params=DRUM_PARAMS),
+    # THE BODHRAN (SC-8850 108.9-10, tonelib.BodhranProperties): Teh_Bucket's
+    # strokes (freesound 521586, CC0), cut by examples/freesound_slice.py
+    # bodhran -- 27 open, 6 with the hand pressed into the skin. The head's
+    # lowest mode at 90.8 Hz; the take's 60.0 and 180.0 Hz lines are the same
+    # in both kinds (a pressed skin moves its modes) and sit on the mains'
+    # odd harmonics: HUM, left out. A played-at-pitch program, as the taiko:
+    # fitted at note 42 (F#2, 92.5 Hz), the nearest; the grid's octaves from
+    # 31 Hz, the first 250 ms as the taiko's
+    "bodhran": dict(program=108, bank=9, note=42, f0=90.8,
+                    glob=os.path.expanduser("~/Documents/refs/freesound/bodhran/hits/open_*.wav"),
+                    groups=None, band=(80, 5000), floor=-35, flat=(500, 4000), hum=(60.0, 120.0, 180.0, 300.0),
+                    merge=0.02, max_modes=24,
+                    edges=(31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000),
+                    T=((0.000, 0.010), (0.010, 0.030), (0.030, 0.060), (0.060, 0.120), (0.12, 0.25)),
+                    flat_weight=0.0, params=DRUM_PARAMS + ("ring_scale",)),
+    "bodhran_mute": dict(program=108, bank=10, note=42, f0=90.8,
+                         glob=os.path.expanduser("~/Documents/refs/freesound/bodhran/hits/mute_*.wav"),
+                         groups=None, band=(80, 8000), floor=-35, flat=(1000, 8000),
+                         hum=(60.0, 120.0, 180.0, 300.0), merge=0.02, max_modes=24,
+                         edges=(31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000),
+                         T=((0.000, 0.010), (0.010, 0.030), (0.030, 0.060), (0.060, 0.120), (0.12, 0.25)),
+                         flat_weight=0.0, params=DRUM_PARAMS + ("ring_scale",)),
     # GS key 82, Shaker: Camo's shaker in VSCO 2 CE, eight single shakes of
     # 0.16-0.27 s (CC0), shaped noise as the maracas and cabasa (SHAKE_PARAMS,
     # then --trim3 into its noise_bands)
@@ -379,6 +401,7 @@ HOLD = [1.0]
 # melodic channel at the note nearest the recorded pitch -- PROG[0] is the
 # program, None for a drum note
 PROG = [None]
+BANK = [0]        # ...and its bank (CC0), a GS variation's (spec "bank")
 
 
 def _render_program(note, vel, secs):
@@ -388,6 +411,8 @@ def _render_program(note, vel, secs):
     t = mido.MidiTrack()
     m.tracks.append(t)
     t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    if BANK[0]:
+        t.append(mido.Message("control_change", channel=0, control=0, value=BANK[0], time=0))
     t.append(mido.Message("program_change", channel=0, program=PROG[0], time=0))
     t.append(mido.Message("note_on", channel=0, note=note, velocity=vel, time=0))
     t.append(mido.Message("note_off", channel=0, note=note, velocity=0, time=int(secs * 960)))
@@ -404,6 +429,8 @@ def inst_class(spec):
     import percussion_map as PM
     if "program" in spec:
         import patch_map
+        if spec.get("bank"):
+            return patch_map.VARIATIONS[(spec["program"], spec["bank"])]
         return patch_map.property_class_for_note(spec["program"], spec["note"])
     if "kit" in spec:
         return PM.KITS[spec["kit"]][spec["note"]][1]
@@ -435,7 +462,11 @@ def files(inst):
 
 def load(p):
     a, sr = read(p)
-    a = np.pad(a.astype(np.float64), ((0, sr), (0, 0)))
+    a = a.astype(np.float64)
+    if a.ndim == 1 or a.shape[1] == 1:
+        # a MONO take (the bodhran's) as two halves, its power the take's
+        a = np.repeat(a.reshape(len(a), 1), 2, 1) * 0.5 ** 0.5
+    a = np.pad(a, ((0, sr), (0, 0)))
     return [a[:, 0], a[:, 1]], sr
 
 
@@ -484,6 +515,8 @@ def modes(inst, f0):
     pk = [i for i in b if A[i] >= A[(f > f[i] * 0.985) & (f < f[i] * 1.015)].max()]
     top = max(A[i] for i in pk)
     pk = [i for i in pk if A[i] > top + spec["floor"]]
+    # A TAKE'S HUM (spec "hum": Hz): a mains line is no mode of the drum
+    pk = [i for i in pk if all(abs(f[i] / h - 1.0) > 0.015 for h in spec.get("hum", ()))]
     # NEAR-DUPLICATES, merged (spec "merge": a ratio): a mode smeared by the
     # stroke's glide, or a room's hump, reads as a run of peaks a percent
     # apart -- the jazz kick's 40-44 Hz came out as seven "modes" -- and two
@@ -569,6 +602,8 @@ def scatter(inst):
     for k in range(4):
         ch = 0 if PROG[0] is not None else 9
         if k == 0 and PROG[0] is not None:
+            if BANK[0]:
+                t.append(mido.Message("control_change", channel=0, control=0, value=BANK[0], time=0))
             t.append(mido.Message("program_change", channel=0, program=PROG[0], time=0))
         t.append(mido.Message("note_on", channel=ch, note=spec["note"], velocity=100, time=0 if k == 0 else 900))
         t.append(mido.Message("note_off", channel=ch, note=spec["note"], velocity=0, time=60))
@@ -978,6 +1013,7 @@ def main(argv):
     os.environ.setdefault("TUNING_MASTER_DB", "-14")
     import percussion_map as PM
     PROG[0] = spec.get("program")
+    BANK[0] = spec.get("bank", 0)
     C.KIT = spec.get("kit", 0)      # a drum note in another set (the SFX set's)
     f0 = inst_f0(spec)
     if "--modes" in argv:

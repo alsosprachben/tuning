@@ -87,6 +87,21 @@ PARALLEL_TYPES = ("Cho / Delay", "FL / Delay", "Cho / Flanger", "OD1 / OD2", "OD
                   "OD / AutoWah", "PH / Rotary", "PH / AutoWah")
 BUILT |= set(PARALLEL_TYPES)
 VIRT = 1 << 16
+# A TONE'S OWN MIX CHANNEL (blockrender): a part's later tones -- a program
+# change to another instrument -- each on the part's channel + TONE_SEG x k,
+# so what a tone brings to its channel (its amp, cabinet, Leslie, tremolo,
+# its own insertion effect) is that tone's alone. part_of gives the PART
+# back (the MIDI channel: its sends, the file's effect, its stem), a parallel
+# type's branch B (+ VIRT) included.
+TONE_SEG = 1 << 8
+
+
+def part_of(mch):
+    """The part (MIDI channel) a mix channel belongs to: an int, or an array."""
+    import numpy as np
+    if np.ndim(mch) == 0:
+        return (int(mch) % VIRT) % TONE_SEG
+    return (np.asarray(mch).astype(np.int64) % VIRT) % TONE_SEG
 BRANCH_LEVEL = 96
 _BRANCH_PREFIX = {"Cho": "Cho", "Delay": "Dly", "FL": "FL", "Flanger": "FL", "OD1": "OD1", "OD2": "OD2",
                   "OD": "OD", "Rotary": "RT", "Phaser": "PH", "PH": "PH", "AutoWah": "AW"}
@@ -413,7 +428,7 @@ def params(name):
 def at(events, ch, t):
     """The chain part `ch` hears at t, or None: a virtual channel (ch >=
     VIRT) the parallel type's branch B of its part's."""
-    base = ch % VIRT
+    base = part_of(ch)
     if not assigned(events, base, t):
         return None
     c = chain(state_at(events, t))
@@ -508,6 +523,24 @@ HEXA_DLY_STEP_MS = 0.5
 TREMOLO_CHORUS_DEPTH = 0.5
 
 
+# THE INSERTION EFFECTS' DEPTH (their choruses and flangers, 0-127): read at
+# first as the system chorus's law, (v+1)/3.2 ms of swing peak to peak -- but
+# the types' own defaults sit far up that scale (the Stereo Chorus's 111: a
+# 17.5 ms swing, its copies +-84 cents at 0.45 Hz, the goblins Ben heard on
+# JC Chorus Gt), so their scale is finer: EFX_DEPTH_SCALE of it -- 0.2, Ben's
+# ear, between the A/B's 1/4 and 1/8 (JC Chorus Gt, LP Chorus, ChorusJazzBs
+# and SENSATIO's Space Voice on Space D): the Stereo Chorus's 111 a 3.5 ms
+# swing, its copies +-17 cents at 0.45 Hz. THE CHORUSES ONLY: a flanger's
+# swing stays an eighth of the system law's (its comb in the flanging range),
+# unheard by Ben at the new scale. TUNING_EFX_DEPTH_SCALE for an A/B.
+EFX_DEPTH_SCALE = float(__import__("os").environ.get("TUNING_EFX_DEPTH_SCALE", "0.2"))
+
+
+def efx_swing(depth, flanger=False):
+    """An insertion chorus's or flanger's swing, seconds either way."""
+    return (int(depth) + 1) / 3.2 / 1000.0 / 2.0 * (1.0 / 8.0 if flanger else EFX_DEPTH_SCALE)
+
+
 def _chorus(name, g, pn):
     """A chorus type's device for chorus.gs_copies, with its voices (taps:
     (side, LFO phase, extra delay s, depth factor)): the pre-delay and the
@@ -517,12 +550,11 @@ def _chorus(name, g, pn):
     parameters, the 3D Chorus's two placed wider than the speakers."""
     rate = table_value(6, g("Rate" if "Rate" in pn else "Cho Rate", 8))
     depth = g("Depth" if "Depth" in pn else "Cho Depth", 64)
-    swing = (int(depth) + 1) / 3.2 / 1000.0 / 2.0
+    # a flanger's swing an eighth of the system law's, as cf_device's, so its
+    # comb stays in the flanging range; its feedback the comb's depth
+    swing = efx_swing(depth, name == "Stereo Flanger")
     fb = 0.0
     if name == "Stereo Flanger":
-        # a flanger's swing an eighth of a chorus's, as cf_device's, so its
-        # comb stays in the flanging range; its feedback the comb's depth
-        swing /= 8.0
         fb = feedback(g("Feedback", 104))
     pre = (table_value(1, g("Pre Dly", 10)) or 0.0) / 1000.0
     ph = math.radians(2.0 * g("Phase", int(CHORUS_PHASE_DEG / 2.0))) if "Phase" in pn \
@@ -590,7 +622,7 @@ def _delay(name, g, pn, sec):
     if name == "Stereo Delay" or name == "Mod Delay":
         dev['cross'] = bool(g("Fb Mode", 0))
     if name == "Mod Delay":
-        dev['mod'] = (table_value(6, g("Mod Rate", 12)), (g("Mod Depth", 21) + 1) / 3.2 / 1000.0 / 2.0,
+        dev['mod'] = (table_value(6, g("Mod Rate", 12)), efx_swing(g("Mod Depth", 21)),
                       math.radians(2.0 * g("Mod Phase", 45)))
     return dev
 
@@ -741,7 +773,7 @@ def _filter(name, g, pn):
                     ctrl=('sweep', table_value(12, g("PH Man", 36)), PHASER_OCT * g("PH Depth", 32) / 127.0,
                           rate2(g("PH Rate", 16)), None, 0.0))
     if name == "Step Flanger":
-        swing = (int(g("Depth", 95)) + 1) / 3.2 / 1000.0 / 2.0 / 8.0
+        swing = efx_swing(g("Depth", 95), True)
         pre = (table_value(1, g("Pre Dly", 10)) or 0.0) / 1000.0
         return dict(ty=4, pa=g("Balance", 64) / 127.0, pb=feedback(g("Feedback", 79)), pc=0.0,
                     ctrl=('comb', pre, swing, table_value(6, g("Rate", 5)), table_value(6, g("Step Rate", 54))))
@@ -1049,14 +1081,14 @@ def chain(st):
                     out['cabinet'] = 'guitar12'
         for mod in ("Cho", "FL"):
             if mod == "FL" and "Cho Rate" in pn and "FL Rate" in pn:
-                swing = (int(g("FL Depth", 24)) + 1) / 3.2 / 1000.0 / 2.0 / 8.0
+                swing = efx_swing(g("FL Depth", 24), True)
                 pre = (table_value(1, g("FL Dly", 16)) or 0.0) / 1000.0
                 out['filter'] = dict(ty=4, pa=g("FL Bal", 64) / 127.0, pb=feedback(g("FL Fb", 104)), pc=0.0,
                                      ctrl=('comb', pre, swing, table_value(6, g("FL Rate", 11)), None))
                 continue
             if mod + " Rate" in pn:
                 rate = table_value(6, g(mod + " Rate", 8))
-                swing = (int(g(mod + " Depth", 64)) + 1) / 3.2 / 1000.0 / 2.0 / (8.0 if mod == "FL" else 1.0)
+                swing = efx_swing(g(mod + " Depth", 64), mod == "FL")
                 pre = (table_value(1, g(mod + " Dly", 10)) or 0.0) / 1000.0
                 out['cf'] = (dict(tau=pre + swing, rate=rate, vd=2.0 * math.pi * rate * swing,
                                   fb=feedback(g("FL Fb", 104)) if mod == "FL" else 0.0, level=1.0, lpf=None), 0.0)
@@ -1122,7 +1154,7 @@ def _stage(o, pre, g, pn, mk):
     import efxfilter as EF
     if pre in ("Cho", "FL"):
         rate = table_value(6, g(pre + " Rate", 8))
-        swing = (int(g(pre + " Depth", 64)) + 1) / 3.2 / 1000.0 / 2.0 / (8.0 if pre == "FL" else 1.0)
+        swing = efx_swing(g(pre + " Depth", 64), pre == "FL")
         dl = (table_value(1, g(pre + " Dly", 10)) or 0.0) / 1000.0
         o['cf'] = (dict(tau=dl + swing, rate=rate, vd=2.0 * math.pi * rate * swing,
                         fb=feedback(g("FL Fb", 104)) if pre == "FL" else 0.0, level=1.0, lpf=None), 0.0)
@@ -1238,7 +1270,7 @@ def cf_device(flanger, rate, depth, fb):
     delay is chosen -- a chorus 10 ms, a flanger 1 ms -- and a flanger's swing
     an eighth of a chorus's, so its comb stays in the flanging range."""
     r = rate2(rate)
-    swing = (int(depth) + 1) / 3.2 / 1000.0 / 2.0 / (8.0 if flanger else 1.0)
+    swing = efx_swing(depth, flanger)
     return dict(tau=(0.001 if flanger else 0.010) + swing, rate=r,
                 vd=2.0 * math.pi * r * swing, fb=feedback(fb), level=1.0, lpf=None)
 

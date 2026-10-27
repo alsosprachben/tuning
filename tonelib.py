@@ -1913,6 +1913,13 @@ class SynthProperties:
     rip_s = 0.15
     rip_start_db = 12.0
     rip_smear = 0.8
+    # ...AND TREMOLO PICKING (GS 25.18 "MandolinTrem", the ruan's): a held
+    # note re-struck tremolo_pick_hz times a second, down and up strokes
+    # alternating (the up tremolo_pick_up_db softer), each stroke's time
+    # scattered tremolo_pick_jitter of a period; 0 is none
+    tremolo_pick_hz = 0.0
+    tremolo_pick_up_db = -2.0
+    tremolo_pick_jitter = 0.08
 
     # Metres of stereo spread per octave of pitch (times position_x). Positive =
     # higher notes toward one side; the piano flips the sign so its keyboard reads
@@ -7926,6 +7933,67 @@ class CylindricalBrassProperties(BrassProperties):
     chiff_max_valve_time = 0.04    # fast, tight onset
 
 
+
+class DidgeridooProperties(BrassProperties):
+    """GM2 / SC-88 Pro 109.8, "Didgeridoo": a eucalyptus trunk hollowed by
+    termites, ~1.3 m, the lips buzzing at its end -- a lip reed, so brass --
+    and THE PLAYER'S MOUTH over it, which is the instrument's voice: the
+    vocal tract's formants, moved by the tongue and cheeks while the drone
+    holds (circular breathing keeps it going).
+
+    Fitted to two CC0 takes (dethrok's held drone, freesound 272165; Jimmie
+    P. Rodgers' playing, 173923; staged by examples/freesound_slice.py
+    didgeridoo), both at 64.6 Hz, by examples/didg_fit.py: 4472 frames, each
+    the SOURCE (one series: the lips through the pipe) times efxfilter's VOWEL
+    response at that frame's three centres -- 7.2 dB rms about the source
+    alone, 5.7 with the mouth. The source: the odd harmonics strong, the
+    evens 15-25 dB under (h2 -23, h3 -5, h4 -26, h5 -9 re h1), falling to
+    -50 by h30.
+
+    THE MOUTH (efxfilter.mouth, a channel's moving filter as the plunger is):
+    the frames' centres clustered into twelve states with their shares; a
+    state held a log-normal while and glided to, its dwell and glide chosen so
+    the generated tracks have the takes' spread (F1-F3 sd 250, 405, 338 Hz)
+    -- the motion's time scale is long (the takes' F1-F2 correlated over
+    3-5 s), so held ~2 s and glided quickly. Seeded by the channel:
+    irregular, never a cycle, the same every render.
+
+    THE MOD WHEEL SETS THE VOWEL when a file moves it (any CC1 on the
+    channel): the states laid along the wheel by their F1, closed ("oo",
+    365 Hz) at 0 to open ("ah", 1066 Hz) at 127, at the glide -- and the
+    wander off (Ben: "wheel should replace the wander")."""
+    # FITTED through the renderer, the mouth wandering a different way in each
+    # render (examples/wind_fit.py --voice=didgeridoo --fit=tables --nh=40
+    # --match=_0, 16 pieces: 5.3 -> 1.2 dB rms h2-h40), from didg_fit's source
+    mode_gains = (1.00000, 0.11197, 0.65893, 0.06365, 0.42334, 0.02081, 0.11179, 0.00794, 0.04548, 0.01864,
+                  0.13635, 0.03825, 0.06314, 0.01781, 0.02853, 0.00419, 0.01382, 0.00987, 0.02331, 0.01187,
+                  0.01489, 0.00559, 0.01442, 0.00792, 0.01257, 0.00714, 0.01074, 0.00433, 0.00630, 0.00953,
+                  0.00993, 0.01161, 0.00973, 0.00824, 0.01102, 0.00433, 0.00591, 0.00628, 0.00575, 0.00296)
+    max_harmonic = 40
+    # the measured series is what leaves the pipe: no bore filter, no tilts
+    bore_corner_hz = 0.0
+    effort_tilt = 0.0
+    blare_db_per_khz = 0.0
+    # (examples/didg_fit.py)
+    mouth_states = ((365, 831, 2497, 0.074), (504, 882, 1822, 0.100), (506, 1585, 1932, 0.078),
+                    (526, 1042, 1755, 0.197), (552, 1015, 2306, 0.062), (570, 1649, 2441, 0.057),
+                    (579, 968, 2649, 0.102), (601, 1950, 2409, 0.056), (794, 1115, 1762, 0.038),
+                    (1046, 1572, 1933, 0.046), (1053, 1489, 2428, 0.030), (1066, 1863, 2334, 0.160))
+    mouth_dwell_s = (2.0, 0.75)      # a log-normal's median and log spread
+    mouth_glide_s = 0.06
+    mouth_floor = 0.15
+    # the level (sfx_levels.py --var-trim measured it 54.6 dB under its capital,
+    # the bagpipe: the series is a table, read at the brass gain's scale)
+    initial_gain = BrassProperties.initial_gain * 10 ** (54.6 / 20.0)
+    # THE BREATH (circular breathing, the lips' air), FITTED (examples/wind_fit.py
+    # --voice=didgeridoo --fit=tables --breath --match=_0, 16 pieces: 17.2 ->
+    # 0.2 dB over 20 bands): ~-50 dB at the bottom, rising to -35 over 1-5 kHz
+    breath_noise_db = ((160, -56.5), (202, -49.7), (255, -56.1), (321, -46.9), (404, -50.3), (509, -49.7),
+                       (641, -46.7), (808, -41.9), (1018, -35.0), (1283, -37.8), (1616, -36.3), (2036, -35.3),
+                       (2566, -36.2), (3233, -36.4), (4073, -35.5), (5132, -35.1), (6465, -44.4), (8146, -52.3),
+                       (10263, -53.8), (12931, -45.5))
+
+
 class ConicalBrassProperties(BrassProperties):
     """Conical-bore brass (French horn, tuba): the continuous flare damps the
     upper harmonics into a round, mellow tone, and conical instruments speak
@@ -13714,6 +13782,67 @@ class CongaOpenProperties(MeasuredStrokeProperties):
     initial_gain = 0.007724      # held at the old voice's level, -36.1 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
     click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
     attack_time = 0.00155233
+
+
+
+class BodhranProperties(PlayedAtPitchMixin, MeasuredStrokeProperties):
+    """SC-8850 108.9, "Bodhran": the Irish frame drum -- a goatskin on a
+    shallow wooden hoop, one side open, struck with a tipper (a short stick
+    rocked from the wrist) and played as a pitched part, as the taiko is.
+
+    Teh_Bucket's strokes (freesound 521586, CC0; examples/freesound_slice.py
+    bodhran), 27 open: the head's lowest mode at 90.8 Hz -- the take's lines
+    at 60.0 and 180.0 Hz are the same open and pressed, on the mains' odd
+    harmonics, and are hum -- the strike leaning on the modes at 1.27-1.61
+    (115-146 Hz), the head 30 dB down in ~0.2 s: a frame drum's short boom.
+    Modes from the loudest strokes (examples/perc_fit.py bodhran --modes)."""
+    DRUM_MODES = ((0.9922, -5.5, 53), (1.2664, -1.3, 70), (1.6052, 0.0, 89), (2.2505, -7.1, 103),
+                  (2.3957, -12.0, 118), (2.5974, -7.9, 136), (3.2023, -15.3, 145), (3.6782, -11.0, 176),
+                  (3.9928, -16.1, 176), (4.3074, -17.8, 129), (4.4687, -18.3, 165), (4.8801, -15.4, 188),
+                  (5.3076, -17.8, 217), (5.5335, -19.8, 194), (5.6706, -19.9, 204), (5.8803, -19.4, 190),
+                  (6.1062, -20.3, 240), (6.2595, -19.6, 221), (6.4773, -20.9, 236), (6.8806, -23.8, 192),
+                  (7.1145, -22.4, 222), (7.6388, -21.0, 192), (8.0825, -25.7, 191), (8.4374, -26.0, 176))
+    RECORDED_HZ = 90.8
+    # the taiko's, to start: a stick on a skin
+    slow_share = 0.0109556  
+    slow_dbs = 203.949  
+    click_cal_db = 1.23218  
+    click_dbs = 206.293  
+    click_stroke_slope = 1.26761  
+    chiff_volume = 3.14069  
+    chiff_width = 0.549996  
+    chiff_bandwidth = 0.0605486  
+    sustain_jitter = 0.0121584  
+    ring_scale = 0.722138  
+    band_trim_db = ((44, 24.5), (88, 13.8), (177, 11.9), (354, 7.8), (707, 2.2), (1414, -5.4), (2828, -12.1), (5657, -17.6), (11314, -25.1))
+    attack_time = 0.004
+    click_per_band = 24
+    initial_gain = TaikoProperties.initial_gain
+    mode_jitter = 0.0
+
+
+class BodhranMuteProperties(BodhranProperties):
+    """SC-8850 108.10, "Bodhran Mute": the hand pressed into the back of the
+    skin, as a player stops the boom -- the same take's six pressed strokes:
+    the strike modes raised (the peak 114 -> 130 Hz), brighter (the centroid
+    over 100 Hz 1.7 -> 4 kHz) and shorter. Its modes re the open head's
+    90.8 Hz (examples/perc_fit.py bodhran_mute --modes), read to 0.45 of the
+    strongest's ratio band: the pressed skin's partials above (10-31x) are
+    the tipper's slap, the noise's to make."""
+    DRUM_MODES = ((1.0002, -9.7, 64), (1.4519, 0.0, 59), (2.0246, -2.8, 129), (2.2263, -7.8, 115),
+                  (2.5006, -13.2, 169), (2.6296, -14.0, 176), (3.2104, -20.5, 143), (3.6379, -18.2, 145),
+                  (3.8799, -17.4, 183), (4.4526, -24.4, 247))
+    slow_share = 0.00784277
+    slow_dbs = 233.561
+    click_cal_db = 1.03946
+    click_dbs = 185.843
+    click_stroke_slope = 2.36529
+    chiff_volume = 6.06542
+    chiff_width = 0.543777
+    chiff_bandwidth = 0.0587489
+    sustain_jitter = 0.015283
+    ring_scale = 0.761513
+    band_trim_db = ((44, 25.1), (88, 16.0), (177, 8.2), (354, -3.3), (707, -10.1), (1414, -5.5), (2828, -2.9), (5657, -6.8), (11314, -20.7))
 
 
 class DholakProperties(CongaOpenProperties):
@@ -24837,6 +24966,96 @@ class BagpipeBassDroneProperties(BagpipeDroneProperties):
 BagpipeProperties.drone_classes = ((57, BagpipeTenorDroneProperties),
                                    (57, BagpipeTenor2DroneProperties),
                                    (45, BagpipeBassDroneProperties))
+
+
+class UilleannPipeProperties(BagpipeProperties):
+    """SC-8850 109.9-11, "Uillean Pipe": the Irish uilleann pipes -- the bag
+    filled by a bellows under the arm (uilleann, "of the elbow"), not the
+    mouth, so the reeds stay dry and the voice is sweet and quiet against
+    the Highland pipe's; a conical chanter in D over TWO octaves (the upper
+    overblown), three drones in D: tenor at the chanter's bottom D, baritone
+    an octave under, bass two (Wikipedia, "Uilleann pipes").
+
+    Measured on luis_audp's practice set (freesound 268816, CC BY 3.0:
+    measurement only; examples/freesound_slice.py uilleann, 70 chanter
+    notes): THE SCALE IS JUST, tuned to the drone -- from D, E 203.9 (9/8),
+    F# 386.3 (5/4), G 505.9, A 696.6 (3/2), B 888.1 (5/3), and the C natural
+    968.9 cents, the harmonic seventh (7/4) -- the chanter's D 10 cents over
+    A440's. AND TWO REGISTERS: the bottom octave reedy (h2-h3 up to 19 dB
+    over the fundamental), the upper octave nearly a flute (h2 -26 dB, h3
+    -42): its series as two tables, mode_gains_low under the break at C#5.
+    The drones are the Highland drones' voices retuned to D (no drone-alone
+    stretch in the take; its bass drone's h1-h3 and h7, where the chanter
+    never plays, read the Highland bass drone's shape)."""
+    scale_tonic_note = 62                       # the chanter's bottom D
+    scale_cents = {0: 0.0, 2: 203.9, 4: 386.3, 5: 505.9, 7: 696.6, 9: 888.1, 10: 968.9,
+                   12: 1200.0, 14: 1403.9, 16: 1586.3, 17: 1705.9, 19: 1896.6, 21: 2088.1, 22: 2168.9,
+                   24: 2400.0}
+    # the drones: tenor D4, baritone D3, bass D2 (the take's bass 1.2 cents
+    # over the chanter's two octaves down)
+    drone_ratios = (1.0, 0.5, 0.25 * 2.0 ** (1.2 / 1200.0))
+    # THE CHANTER'S SERIES, FITTED through the renderer (examples/wind_fit.py
+    # --voice=uilleann --fit=tables --nh=20, the breath fitted first): above
+    # the break (--keys=74-88, D5 up, 47 notes) 1.2 dB rms h2-h20 -- nearly a
+    # flute, h2 -27 dB; under it (--low --keys=60-73, D4-C5) 0.0 dB -- h2-h3
+    # level with the fundamental, a reed
+    max_harmonic = 20
+    mode_gains = (1.00000, 0.03005, 0.01630, 0.00605, 0.01586, 0.01522, 0.00621, 0.00815, 0.00528, 0.00238,
+                  0.00328, 0.00178, 0.00194, 0.00246, 0.00495, 0.00582, 0.00898, 0.00721, 0.01409, 0.02235)
+    mode_gains_low = (1.00000, 1.01246, 0.88484, 0.31151, 0.17873, 0.27394, 0.27218, 0.13807, 0.13216, 0.11181,
+                      0.31426, 0.20239, 0.06902, 0.05115, 0.05720, 0.07840, 0.11742, 0.03206, 0.07623, 0.05456)
+    register_low_hz = (560.0, 585.0)            # the break: C#5 the bottom's, D5 the top's
+    # THE LEVEL: a measured table is read at the bare initial_gain, where the
+    # Highland's series model scales its own ~500 times -- the chanter sat 55
+    # dB under its drones and breath. Its fundamental at D4 the Highland
+    # chanter's (harmonic_volume, 0.024); the bank trim sets the balance
+    initial_gain = BagpipeProperties.initial_gain * 10 ** (56.9 / 20.0)
+    # THE BREATH, FITTED with it (wind_fit.py --fit=tables --breath, 0.5 dB over
+    # 18 bands above the break, 0.9 under) -- AND WITHOUT THE DRONE: the take's
+    # drone sounds throughout, its harmonics in the chanter's gaps (a just
+    # chanter is a multiple of it), and read as breath they made the low notes
+    # rough (Ben) -- 6 dB under the fundamental at 808 Hz, now 27. Every bin
+    # within 25 Hz of a multiple of 73.9 Hz left out (VOICE_OPTS drone_hz)
+    breath_noise_db = ((160, -23.7), (202, -42.1), (255, -21.5), (321, -45.5), (404, -28.7), (509, -22.3),
+                       (641, -31.2), (808, -34.6), (1018, -35.0), (1283, -41.3), (1616, -40.8), (2036, -41.2),
+                       (2566, -41.7), (3233, -47.0), (4073, -43.7), (5132, -49.9), (6465, -49.1), (8146, -48.8),
+                       (10263, -48.4), (12931, -36.0))
+    breath_noise_low_db = ((160, -19.6), (202, -39.0), (255, -10.9), (321, -23.7), (404, -25.2), (509, -33.7),
+                           (641, -31.9), (808, -27.2), (1018, -27.0), (1283, -28.0), (1616, -21.4), (2036, -22.3),
+                           (2566, -23.0), (3233, -31.1), (4073, -25.7), (5132, -34.4), (6465, -29.0),
+                           (8146, -33.2), (10263, -43.4), (12931, -32.3))
+    # A CUT (the uilleann's ornament, a flicked upper finger): off here; the
+    # ornamented tone (109.11) sets it
+    cut_semitones = 0
+    cut_s = 0.03
+
+
+class UilleannDroneProperties(BagpipeTenorDroneProperties):
+    """An uilleann drone: the Highland tenor drone's voice in D -- its pitch a
+    placeholder note mapped to its ratio of the chanter's D (scale_cents)."""
+    scale_tonic_note = 62
+    # 4 dB under the Highland's against its chanter: the take's bass drone
+    # 17 dB under the chanter's D5, ours 13 (the bellows-blown set is quiet)
+    initial_gain = BagpipeTenorDroneProperties.initial_gain * 10 ** (-4.0 / 20.0)
+
+
+class UilleannTenorDroneProperties(UilleannDroneProperties):
+    scale_cents = {-12: 0.0000}
+
+
+class UilleannBaritoneDroneProperties(UilleannDroneProperties):
+    scale_cents = {-24: -1200.0000}
+
+
+class UilleannBassDroneProperties(BagpipeBassDroneProperties):
+    scale_tonic_note = 62
+    initial_gain = BagpipeBassDroneProperties.initial_gain * 10 ** (-4.0 / 20.0)
+    scale_cents = {-36: -2398.8000}
+
+
+UilleannPipeProperties.drone_classes = ((50, UilleannTenorDroneProperties),
+                                        (38, UilleannBaritoneDroneProperties),
+                                        (26, UilleannBassDroneProperties))
 
 class BassoonProperties(ConicalReedProperties):
     """The bassoon's resonance sits far lower than the oboe's -- measured at its

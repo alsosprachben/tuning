@@ -178,6 +178,74 @@ def plunger(pressure, closed_hz=PLUNGER_CLOSED_HZ, mid_hz=PLUNGER_MID_HZ, open_h
     return Channel(2, q, mix, 0.0, corner)
 
 
+
+# THE DIDGERIDOO'S MOUTH (tonelib.DidgeridooProperties): the player's vocal
+# tract over the drone, three formants moving -- VOWEL's response (type 5),
+# its centres wandering among the mouth STATES fitted to the takes
+# (examples/didg_fit.py): a state drawn by its share, held a log-normal
+# DWELL, glided to at GLIDE's time constant. Irregular by construction (a
+# seeded draw, never a cycle: a regular sweep reads as a phaser), and the
+# same for a channel every render.
+def mouth_track(t, states, dwell, glide, seed=0):
+    """The three centres (3 arrays, Hz) at times t (seconds, ascending, even
+    steps) -- the mouth's wander from t=0."""
+    t = np.asarray(t, float)
+    rng = np.random.default_rng(seed)
+    st = np.asarray([s_[:3] for s_ in states], float)
+    p = np.asarray([s_[3] for s_ in states], float)
+    p = p / p.sum()
+    T = float(t[-1]) if len(t) else 0.0
+    times, picks, now = [], [], 0.0
+    while now <= T + 1.0:
+        times.append(now)
+        picks.append(rng.choice(len(st), p=p))
+        now += dwell[0] * math.exp(dwell[1] * rng.standard_normal())
+    i = np.clip(np.searchsorted(np.asarray(times), t, side='right') - 1, 0, len(picks) - 1)
+    target = st[np.asarray(picks)[i]]
+    if len(t) < 2 or glide <= 0.0:
+        return [target[:, k] for k in range(3)]
+    a = math.exp(-(t[1] - t[0]) / glide)
+    from scipy.signal import lfilter
+    out = []
+    for k in range(3):
+        y, _zf = lfilter([1.0 - a], [1.0, -a], target[:, k], zi=[a * target[0, k]])
+        out.append(y)
+    return out
+
+
+# a fit's renders each a different wander (examples/wind_fit.py sets it per
+# render, so its median over notes is the mouth's average, not one state's)
+MOUTH_SEED_OFFSET = [0]
+
+
+def mouth_wheel(t, states, wheel, glide):
+    """The three centres at times t from the MOD WHEEL [(t, 0-127)]: the
+    states in order of their F1 (closed to open, "oo" to "ah") laid along the
+    wheel, between two the centres interpolated, moving at the glide. Before
+    the wheel's first message it is at 0, the controller's own default."""
+    st = np.asarray(sorted(s_[:3] for s_ in states), float)
+    ev = sorted(wheel)
+    pos = steps([0.0] + [t_ for t_, _v in ev], [0.0] + [float(v) for _t, v in ev], glide=glide)(t)
+    u = np.clip(pos, 0.0, 127.0) / 127.0 * (len(st) - 1)
+    i = np.minimum(np.floor(u).astype(int), len(st) - 2)
+    w = u - i
+    return [st[i, k] * (1.0 - w) + st[i + 1, k] * w for k in range(3)]
+
+
+def mouth(states, dwell, glide, floor, seed=0, wheel=None):
+    """A didgeridoo's moving mouth (Channel, VOWEL): its gain set so the
+    formants' mean lift over the floor is unity at the states' centre. With
+    the channel's MOD WHEEL [(t, 0-127)] -- any CC1 in the file -- the wheel
+    sets the vowel and the wander is off (Ben: "wheel should replace the
+    wander"); with none, the fitted wander."""
+    c = np.asarray([s_[:3] for s_ in states], float).mean(0)
+    f = np.geomspace(60.0, 4000.0, 200)
+    g = 1.0 / float(np.exp(np.mean(np.log(response(5, f, c, floor, 1.0, 0.0)))))
+    if wheel:
+        return Channel(5, floor, g, 0.0, lambda t: mouth_wheel(t, states, wheel, glide), rows=3)
+    seed = seed + MOUTH_SEED_OFFSET[0]
+    return Channel(5, floor, g, 0.0, lambda t: mouth_track(t, states, dwell, glide, seed), rows=3)
+
 def lfo(rate, phase=0.0):
     """A free-running sine, -1..1, on the absolute clock (t in seconds)."""
     return lambda t: np.sin(2.0 * math.pi * rate * np.asarray(t, float) + phase)

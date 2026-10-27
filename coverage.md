@@ -20,14 +20,14 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | GM 1 percussion keys (35-81) | 47 | 47 | 100% | 47 | 0 | 0 | 0 | 0 |
 | GM 2 tones (MSB 121) | 256 | 256 | 100% | 201 | 55 | 0 | 0 | 0 |
 | GM 2 drum sets | 9 | 9 | 100% | 8 | 1 | 0 | 0 | 0 |
-| SC-55 tones | 415 | 415 | 100% | 171 | 241 | 3 | 0 | 0 |
+| SC-55 tones | 438 | 438 | 100% | 171 | 264 | 3 | 0 | 0 |
 | SC-55 drum sets | 10 | 10 | 100% | | | | | |
 | SC-55mkII tones | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 |
 | SC-88 tones | 418 | 418 | 100% | 285 | 130 | 3 | 0 | 0 |
 | SC-88 drum sets | 14 | 14 | 100% | | | | | |
-| SC-88Pro tones | 774 | 629 | 81% | 327 | 299 | 3 | 0 | 0 |
+| SC-88Pro tones | 774 | 737 | 95% | 414 | 320 | 3 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
-| SC-8850 tones | 1262 | 910 | 72% | 402 | 502 | 6 | 0 | 0 |
+| SC-8850 tones | 1262 | 1106 | 88% | 565 | 535 | 6 | 0 | 0 |
 | SC-8850 drum sets | 37 | 37 | 100% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
@@ -2332,71 +2332,149 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 519 of the SC-55's 519 are built,
-and 264 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
+under a program (SC-55 owner's manual p.68). 547 of the SC-55's 547 are built,
+and 428 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
 | program.bank | map | GS name | class | | notes |
 |---|---|---|---|---|---|
+| 0.1 | SC-88 | UprightPiano | `UprightPiano` | **4** | SC-8850 map: GM 1 Bright Acoustic Piano's voice |
+| 0.2 | SC-88 | Mild Piano | `GrandPiano_sc8850_0_2` | **4** | SC-8850 map: GM 0 Acoustic Grand Piano with hammer_corner_hz=2656.5225 |
 | 0.8 | SC-88 | Piano 1w | `GrandPiano_sc88_0_8` | **4** | SC-88 map: GM 0 Acoustic Grand Piano with key_pan_spread=0.5 |
+| 0.9 | SC-88 | Mild Piano w | `GrandPiano_sc8850_0_9` | **4** | SC-8850 map: GM 0 Acoustic Grand Piano with hammer_corner_hz=2656.5225, key_pan_spread=0.5 |
 | 0.16 | SC-88 | Piano 1d | `GrandPiano_sc88_0_16` | **4** | SC-88 map: GM 0 Acoustic Grand Piano with hammer_corner_hz=2125.218 |
+| 0.24 | SC-88 | Piano + Str. | `GrandPiano_sc88_0_24` | **4** | SC-88 map: layered: GM 0 + GM 48 -6 dB |
+| 0.25 | SC-88 | Piano + Str2 | `GrandPiano_sc8850_0_25` | **4** | SC-8850 map: layered: GM 0 + GM 48 -3 dB |
+| 0.26 | SC-88 | Piano+Choir1 | `GrandPiano_sc8850_0_26` | **4** | SC-8850 map: layered: GM 0 + GM 52 -6 dB |
+| 0.27 | SC-88 | Piano+Choir2 | `GrandPiano_sc8850_0_27` | **4** | SC-8850 map: layered: GM 0 + GM 53 -5 dB |
+| 1.1 | SC-88 | Pop Piano | `UprightPiano_sc8850_1_1` | **4** | SC-8850 map: GM 1 Bright Acoustic Piano with hammer_corner_hz=302.88000000000005 |
+| 1.2 | SC-88 | Rock Piano | `UprightPiano_sc8850_1_2` | **4** | SC-8850 map: GM 1 Bright Acoustic Piano with hammer_corner_hz=416.46000000000004, insertion_efx=((1, 16), {}) |
 | 1.8 | SC-88 | Piano 2w | `UprightPiano_sc88_1_8` | **4** | SC-88 map: GM 1 Bright Acoustic Piano with key_pan_spread=0.5 |
+| 1.9 | SC-88 | Rock Piano w | `UprightPiano_sc8850_1_9` | **4** | SC-8850 map: GM 1 Bright Acoustic Piano with hammer_corner_hz=416.46000000000004, key_pan_spread=0.5, insertion_efx=((1, 16), {}) |
 | 1.16 | SC-88 | Dance Piano | `UprightPiano_sc88_1_16` | **4** | SC-88 map: GM 1 Bright Acoustic Piano with hammer_corner_hz=302.88000000000005, key_pan_spread=0.5 |
 | 2.1 | SC-88 | EG+Rhodes 1 | `ElectricGrand_sc88_2_1` | **4** | SC-88 map: layered: GM 2 + GM 4 -6 dB |
 | 2.2 | SC-88 | EG+Rhodes 2 | `ElectricGrand_sc88_2_2` | **4** | SC-88 map: layered: GM 2 -3 dB + GM 4 |
 | 2.8 | SC-88 | Piano 3w | `ElectricGrand_sc88_2_8` | **4** | SC-88 map: GM 2 Electric Grand Piano with key_pan_spread=0.5 |
 | 3.8 | SC-88 | Old Upright | `UprightPiano` | **4** | SC-88 map: GM 1 Bright Acoustic Piano's voice |
 | 4.8 | SC-55 | Detuned EP 1 | `DetunedEP1` | **3** | the Rhodes as a detuned pair (chorus._pair): the note 4 cents down and half left, a copy 4 up and half right, by level, the copy 7 ms behind -- MuseScore's 4.8 (its sample twice, +-4); the spread the GM sets', asserted |
+| 4.9 | SC-88 | Cho. E.Piano | `Rhodes_sc88_4_9` | **4** | SC-88 map: GM 4 Electric Piano 1 with insertion_efx=((1, 66), {}) |
+| 4.10 | SC-88 | SilentRhodes | `Rhodes_sc88_4_10` | **4** | SC-88 map: GM 4 Electric Piano 1 with pickup_deflection=0.35 |
 | 4.16 | SC-88 | FM+SA EP | `Rhodes_sc88_4_16` | **4** | SC-88 map: layered: GM 4 + GM 5 -4 dB |
+| 4.17 | SC-88 | Dist E.Piano | `Rhodes_sc88_4_17` | **4** | SC-88 map: GM 4 Electric Piano 1 with insertion_efx=((1, 17), {}) |
 | 4.24 | SC-88 | 60'sE.Piano | `Wurlitzer` | **4** | SC-88 map: GM 5 Electric Piano 2's voice |
 | 4.25 | SC-88 | Hard Rhodes | `Rhodes_sc88_4_25` | **4** | SC-88 map: GM 4 Electric Piano 1 with pickup_deflection=1.12 |
 | 4.26 | SC-88 | MellwRhodes | `Rhodes_sc88_4_26` | **4** | SC-88 map: GM 4 Electric Piano 1 with pickup_deflection=0.45 |
+| 5.1 | SC-88 | E.Piano 3 | `Wurlitzer_sc8850_5_1` | **4** | SC-8850 map: GM 5 Electric Piano 2 with pickup_deflection=1.2 |
 | 5.8 | SC-55 | Detuned EP 2 | `DetunedEP2` | **3** | the Wurlitzer as a detuned pair, as 4.8 |
+| 5.9 | SC-88 | Detuned EP 3 | `Wurlitzer_sc8850_5_9` | **4** | SC-8850 map: GM 5 Electric Piano 2 with detuned_pair=(-8.0, 8.0) |
 | 5.10 | SC-88 | EP Legend | `Rhodes_sc8850_5_10` | **4** | SC-8850 map: GM 4 Electric Piano 1 with . Ben, on examples/gm2_last_demo.py: "Sounds great" |
 | 5.16 | SC-88 | St.FM EP | `Wurlitzer_sc88_5_16` | **4** | SC-88 map: GM 5 Electric Piano 2 with key_pan_spread=0.5 |
 | 5.24 | SC-88 | Hard FM EP | `Wurlitzer_sc88_5_24` | **4** | SC-88 map: GM 5 Electric Piano 2 with pickup_deflection=1.46 |
 | 5.32 | SC-88 | EP Phase | `Rhodes_sc8850_5_32` | **4** | SC-8850 map: GM 4 Electric Piano 1 with insertion_efx=((1, 32), {}). Ben, on examples/gm2_last_demo.py: "Sounds great" |
+| 6.1 | SC-88 | Harpsichord2 | `Harpsichord_sc88_6_1` | **4** | SC-88 map: GM 6 Harpsichord with default_stops=0x5 |
+| 6.2 | SC-88 | Harpsichord3 | `Harpsichord_sc8850_6_2` | **4** | SC-8850 map: GM 6 Harpsichord with default_stops=0x3 |
 | 6.8 | SC-55 | Coupled Hps. | `CoupledHarpsichord` | **4** | the harpsichord's 8' and 4' together, both fitted stops (the stops table): what both GM sets' 6.8 plays, their harpsichord with a layer an octave up; Ben's pick of four (8'+8', 8'+4', 8'+8'+4'), the upper 8' left to draw for the full coupler |
 | 6.16 | SC-88 | Harpsi.w | `Harpsichord_sc88_6_16` | **4** | SC-88 map: GM 6 Harpsichord with key_pan_spread=0.5 |
 | 6.24 | SC-88 | Harpsi.o | `Harpsichord_sc88_6_24` | **4** | SC-88 map: layered: GM 6 + GM 6 +12 st -6 dB |
+| 6.32 | SC-55 | Synth Harpsi | `Sc88_6_32` | **3** | SC-88 map: a Moog panel, the SquareLead's with a_decay, a_release, a_sustain, cutoff, eg_amount, f_attack, f_decay, f_sustain, osc1_wave, osc2_freq, osc2_level, osc2_octave, osc2_wave, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 7.1 | SC-88 | Clav. 2 | `Clavinet_sc8850_7_1` | **4** | SC-8850 map: GM 7 Clavinet with clav_pickup=bridge |
+| 7.2 | SC-88 | Atk Clav.1 | `Clavinet_sc8850_7_2` | **4** | SC-8850 map: GM 7 Clavinet with chiff_volume=1.0, strike_noise_slope=2.0 |
+| 7.3 | SC-88 | Atk Clav.2 | `Clavinet_sc8850_7_3` | **4** | SC-8850 map: GM 7 Clavinet with chiff_volume=1.4, strike_noise_slope=2.6, clav_pickup=bridge |
+| 7.8 | SC-88 | Comp Clav. | `Clavinet_sc88_7_8` | **4** | SC-88 map: GM 7 Clavinet with insertion_efx=((1, 48), {}) |
+| 7.16 | SC-88 | Reso Clav. | `Clavinet_sc88_7_16` | **4** | SC-88 map: GM 7 Clavinet with insertion_efx=((1, 33), {}) |
+| 7.17 | SC-88 | Phase Clav | `Clavinet_sc8850_7_17` | **4** | SC-8850 map: GM 7 Clavinet with insertion_efx=((1, 32), {}) |
+| 7.24 | SC-88 | Clav.o | `Clavinet_sc88_7_24` | **4** | SC-88 map: layered: GM 7 + GM 7 +12 st -6 dB |
+| 7.32 | SC-55 | Analog Clav. | `Sc88_7_32` | **3** | SC-88 map: a Moog panel, the SynthBass1's with a_decay, a_release, a_sustain, cutoff, eg_amount, f_attack, f_decay, f_sustain, kb_track, osc1_wave, osc2_level, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 7.33 | SC-55 | JP8 Clav. 1 | `Sc88_7_33` | **3** | SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, examples/sepways_fit.py), one pass, with a_decay, a_release, a_sustain, cutoff, eg_amount, f_attack, f_decay, f_sustain, kb_track, osc1_wave, osc2_wave changed. Ben, on examples/jp8_demo.py: "Sounds great" |
 | 7.35 | SC-55 | JP8 Clav. 2 | `Sc88_7_35` | **3** | SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, examples/sepways_fit.py), one pass, with a_decay, a_release, a_sustain, cutoff, eg_amount, f_attack, f_decay, f_sustain, kb_track, osc1_wave, osc2_wave, resonance changed. Ben, on examples/jp8_demo.py: "Sounds great" |
+| 7.36 | SC-55 | SynRingClav. | `Sc8850_7_36` | **3** | SC-8850 map: a Moog panel, the SynthBass1's with a_decay, a_release, a_sustain, cutoff, eg_amount, f_decay, f_sustain, mod_amount, mod_dest, osc1_wave, osc2_freq, osc2_wave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/gm2_last_demo.py: "Sounds great" |
+| 7.37 | SC-55 | SynDistClav. | `Sc8850_7_37` | **3** | SC-8850 map: a Moog panel, the SynthBass1's with a_decay, a_release, a_sustain, cutoff, eg_amount, f_decay, f_sustain, insertion_efx, osc1_wave, osc2_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/gm2_last_demo.py: "Sounds great" |
+| 7.38 | SC-55 | JP8000 Clav. | `Sc8850_7_38` | **3** | SC-8850 map: a Moog panel, the SynthBass1's with a_decay, a_release, a_sustain, cutoff, eg_amount, f_decay, f_sustain, osc1_wave, osc2_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/gm2_last_demo.py: "Sounds great" |
 | 7.39 | SC-55 | Pulse Clav | `Sc8850_7_39` | **3** | SC-8850 map: a Moog panel, the SynthBass1's with a_decay, a_sustain, cutoff, eg_amount, f_decay, f_sustain, kb_track, osc1_wave, osc2_level, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/gm2_last_demo.py: "Sounds great" |
+| 8.1 | SC-88 | Pop Celesta | `Celesta_sc88_8_1` | **4** | SC-88 map: layered: GM 8 + GM 8 +12 st -8 dB |
+| 10.1 | SC-88 | Music Box 2 | `MusicBox_sc8850_10_1` | **4** | SC-8850 map: GM 10 Music Box with detuned_pair=(-5.0, 5.0) |
+| 10.8 | SC-88 | St.Music Box | `MusicBox_sc8850_10_8` | **4** | SC-8850 map: GM 10 Music Box with key_pan_spread=0.5 |
 | 11.1 | SC-88 | Hard Vibe | `Vibraphone_sc88_11_1` | **4** | SC-88 map: GM 11 Vibraphone with bar_modes=((1, 1.0), (4, 0.75), (10, 0.25)) |
 | 11.8 | SC-88 | Vib.w | `Vibraphone_sc88_11_8` | **4** | SC-88 map: GM 11 Vibraphone with key_pan_spread=0.5 |
+| 11.9 | SC-88 | Vibraphones | `Vibraphone_sc88_11_9` | **4** | SC-88 map: GM 11 Vibraphone with detuned_pair=(-4.0, 4.0), key_pan_spread=0.5 |
 | 12.8 | SC-88 | Marimba w | `Marimba_sc88_12_8` | **4** | SC-88 map: GM 12 Marimba with key_pan_spread=0.5 |
 | 12.16 | SC-55 | Barafon | `Balafon` | **4** | the West African balafon, fitted to marini24's 17 strikes (CC BY 4.0; examples/balafon_fit.py): undercut wooden bars whose tuning falls up the keys (the second mode 4.1x at 236 Hz to 2.9x from ~700 Hz, the third 9x to a floor of 7), their levels by the key (a big bar rings its upper modes, a small one not), short and shorter up (35 dB/s at 236 Hz, 230 at 1.5 kHz), and the gourds' membranes BUZZING between the partials, fitted through the renderer (0.48 dB by band). Ben: 'Sounds great' |
 | 12.17 | SC-55 | Barafon 2 | `BalafonSoft` | **2** | the same balafon played SOFTER and so drier (Ben's choice): its buzz 12 dB under (a membrane rattles only when driven hard), the upper modes 4 and 8 dB under (a soft mallet's longer contact) -- ASSUMED, one effort recorded. Ben: 'Sounds good' |
 | 12.24 | SC-55 | Log Drum | `LogDrum` | **4** | a slit drum, fitted to VSCO 2's log drum (CC0; examples/logdrum_fit.py): two tongues, 108 and 155 Hz, three strokes each. The TONGUE -- its fundamental, its 2nd and 3rd (13-27 dB under on the big tongue, 31-45 on the small) -- and the LOG's own modes at 183, 505 and 660 Hz, fixed in Hz whatever key, the 183 a thump and a ring; the mallet's KNOCK between the modes (strike noise, band by band, 0.3 dB; falling 397 dB/s, the small tongue's ~20 dB under); harder strokes brighter (0.4 dB an octave per dB). 6.2 dB rms over 46 cells. At the marimba's level. Ben: 'Sounds great' |
+| 13.8 | SC-88 | Xylophone w | `Xylophone_sc8850_13_8` | **4** | SC-8850 map: GM 13 Xylophone with key_pan_spread=0.5 |
 | 14.8 | SC-55 | Church Bell | `ChurchBell` | **4** | St. Kathrin's church bell, Gelting (Pianobook, Zoom H5): its 19 modes fitted window by window to their level at the strike and decay -- the strike note an octave under the nominal (649.6 Hz), the flat hum (0.438) and the 1.125 ringing seconds, the superquint a doublet 3 Hz apart, the clang 4.2-13.7 gone in a second; within ~6 dB of the recording, mode by mode against the nominal, to 2.5 s (its noise beyond). Ben: "Sounds amazing" |
 | 14.9 | SC-88 | Carillon | `ChurchBell` | **4** | SC-88 map: 14.8's voice |
+| 14.10 | SC-55 | Church Bell2 | `ChurchBell` | **3** | CHURCH BELL 2: St. Kathrin's bell (14.8, fitted) with its hum doubled an octave under at -6 dB |
+| 14.16 | SC-88 | Tubularbellw | `TubularBell_sc8850_14_16` | **4** | SC-8850 map: GM 14 Tubular Bells with key_pan_spread=0.5 |
 | 15.1 | SC-88 | Santur 2 | `HammeredDulcimer_sc88_15_1` | **4** | SC-88 map: GM 15 Dulcimer with detuned_pair=(-6.0, 6.0) |
+| 15.2 | SC-88 | Santur 3 | `HammeredDulcimer_sc8850_15_2` | **4** | SC-8850 map: GM 15 Dulcimer with detuned_pair=(-9.0, 9.0), strike_point=0.1111111111111111 |
 | 15.8 | SC-88 | Cimbalom | `HammeredDulcimer_sc88_15_8` | **4** | SC-88 map: GM 15 Dulcimer with decay_db=4.5, tonal_dampening=0.65 |
+| 15.16 | SC-55 | Zither 1 | `Kanun` | **3** | the ZITHER: our kanun, the Arabic plucked zither |
+| 15.17 | SC-55 | Zither 2 | `Zither2` | **3** | the ZITHER brighter: the kanun, its top damped 0.75x as fast |
+| 15.24 | SC-88 | Dulcimer | `HammeredDulcimer` | **4** | SC-88 map: GM 15 Dulcimer's voice |
 | 16.1 | SC-88 | Organ 101 | `DrawbarOrgan_sc88_16_1` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x2d |
+| 16.2 | SC-88 | Ful Organ 1 | `DrawbarOrgan_sc8850_16_2` | **4** | SC-8850 map: GM 16 Drawbar Organ with default_stops=0xf |
+| 16.3 | SC-88 | Ful Organ 2 | `DrawbarOrgan_sc8850_16_3` | **4** | SC-8850 map: GM 16 Drawbar Organ with default_stops=0x3f |
+| 16.4 | SC-88 | Ful Organ 3 | `DrawbarOrgan_sc8850_16_4` | **4** | SC-8850 map: GM 16 Drawbar Organ with default_stops=0x1af |
+| 16.5 | SC-88 | Ful Organ 4 | `DrawbarOrgan_sc8850_16_5` | **4** | SC-8850 map: GM 16 Drawbar Organ with default_stops=0x17d |
+| 16.6 | SC-88 | Ful Organ 5 | `DrawbarOrgan_sc8850_16_6` | **4** | SC-8850 map: GM 16 Drawbar Organ with default_stops=0x1fd |
+| 16.7 | SC-88 | Ful Organ 6 | `DrawbarOrgan_sc8850_16_7` | **4** | SC-8850 map: GM 16 Drawbar Organ with default_stops=0xff |
 | 16.8 | SC-55 | Detuned Or. 1 | `DetunedOrgan1` | **3** | the drawbar organ on its SCANNER CHORUS, C3 (the stops table's scanner row): what GS's two detuned copies stand in for on an organ that cannot be detuned |
 | 16.9 | SC-88 | Organ 109 | `DrawbarOrgan_sc88_16_9` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x3c |
+| 16.10 | SC-88 | Ful Organ 7 | `DrawbarOrgan_sc8850_16_10` | **4** | SC-8850 map: GM 16 Drawbar Organ with default_stops=0x1e7 |
+| 16.11 | SC-88 | Ful Organ 8 | `DrawbarOrgan_sc8850_16_11` | **4** | SC-8850 map: GM 16 Drawbar Organ with default_stops=0x1fb |
+| 16.12 | SC-88 | Ful Organ 9 | `DrawbarOrgan_sc8850_16_12` | **4** | SC-8850 map: GM 16 Drawbar Organ with default_stops=0x1ff, amp_drive=1.0 |
 | 16.16 | SC-88 | 60'sOrgan 1 | `DrawbarOrgan_sc88_16_16` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x10c |
 | 16.17 | SC-88 | 60'sOrgan 2 | `DrawbarOrgan_sc88_16_17` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x12c |
 | 16.18 | SC-88 | 60'sOrgan 3 | `DrawbarOrgan_sc88_16_18` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x1fc |
+| 16.19 | SC-88 | Farf Organ | `DrawbarOrgan_sc88_16_19` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x12c, amp_drive=0.8 |
 | 16.24 | SC-88 | CheeseOrgan | `DrawbarOrgan_sc88_16_24` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x16c |
 | 16.25 | SC-55 | D-50 Organ | `Sc88_16_25` | **3** | SC-88 map: the D-50 VOICED (sc88_synth.D50): its partials' 15-cent detune measured on agerven's D-50 (CC0), its filter and chorus not -- no CC0 D-50 saw or organ note exists; with a_release, cutoff, eg_amount, osc1_wave, osc2_freq, osc2_level, osc2_octave, osc2_wave changed |
 | 16.26 | SC-55 | JUNO Organ | `Sc88_16_26` | **3** | SC-88 map: the Juno fitted to a Juno-6's notes (sc88_synth.JUNO, examples/juno_fit.py: Modular Samples, CC0, the PW Pluck C2-C6 over its whole pluck), its chorus the tone's own Stereo Chorus, with a_decay, a_release, a_sustain, cutoff, eg_amount, insertion_efx, osc1_level, osc1_wave, osc2_level, sub_level changed |
+| 16.27 | SC-88 | Hybrid Organ | `DrawbarOrgan_sc88_16_27` | **4** | SC-88 map: layered: GM 16 + GM 89 -8 dB |
+| 16.28 | SC-55 | VS Organ | `Sc88_16_28` | **3** | SC-88 map: a Moog panel, the SquareLead's with a_decay, a_release, a_sustain, cutoff, eg_amount, osc1_wave, osc2_freq, osc2_level, osc2_octave, osc2_wave, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 16.29 | SC-88 | Digi Church | `FlueOrgan_sc88_16_29` | **4** | SC-88 map: GM 19 Church Organ with default_stops=0x93 |
+| 16.30 | SC-55 | JX-8P Organ | `Sc8850_16_30` | **3** | SC-8850 map: a Moog panel, the SquareLead's with a_attack, a_decay, a_release, a_sustain, cutoff, eg_amount, f_attack, f_decay, f_sustain, insertion_efx, kb_track, lfo1_depth, mod_amount, mode, noise_level, osc1_level, osc1_octave, osc1_wave, osc2_freq, osc2_level, osc2_octave, osc2_wave, resonance, sub_level, sub_wave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/gm2_last_demo.py: "Sounds great" |
+| 16.31 | SC-88 | FM Organ | `DrawbarOrgan_sc8850_16_31` | **4** | SC-8850 map: GM 16 Drawbar Organ with default_stops=0xd |
 | 16.32 | SC-88 | Organ 4 | `DrawbarOrgan_sc88_16_32` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x1ff |
 | 16.33 | SC-88 | Even Bar | `DrawbarOrgan_sc88_16_33` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x12d |
 | 16.40 | SC-88 | Organ Bass | `DrawbarOrgan_sc88_16_40` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x5 |
+| 16.48 | SC-88 | 5th Organ | `DrawbarOrgan_sc88_16_48` | **4** | SC-88 map: layered: GM 16 + GM 16 +7 st -4 dB |
 | 17.1 | SC-88 | Organ 201 | `PercussiveOrgan_sc88_17_1` | **4** | SC-88 map: GM 17 Percussive Organ with default_stops=0x1007 |
+| 17.2 | SC-88 | E.Organ 16+2 | `PercussiveOrgan_sc88_17_2` | **4** | SC-88 map: GM 17 Percussive Organ with default_stops=0x21 |
+| 17.3 | SC-88 | Jazz Organ 2 | `PercussiveOrgan_sc8850_17_3` | **4** | SC-8850 map: GM 17 Percussive Organ with default_stops=0x807 |
+| 17.4 | SC-88 | Jazz Organ 3 | `PercussiveOrgan_sc8850_17_4` | **4** | SC-8850 map: GM 17 Percussive Organ with default_stops=0x80f |
+| 17.5 | SC-88 | Jazz Organ 4 | `PercussiveOrgan_sc8850_17_5` | **4** | SC-8850 map: GM 17 Percussive Organ with default_stops=0x805 |
+| 17.6 | SC-88 | Jazz Organ 5 | `PercussiveOrgan_sc8850_17_6` | **4** | SC-8850 map: GM 17 Percussive Organ with default_stops=0x9c7 |
+| 17.7 | SC-88 | Jazz Organ 6 | `PercussiveOrgan_sc8850_17_7` | **4** | SC-8850 map: GM 17 Percussive Organ with default_stops=0x1007 |
 | 17.8 | SC-55 | Detuned Or. 2 | `DetunedOrgan2` | **3** | the percussive organ on its scanner chorus, C3, as 16.8 |
+| 17.9 | SC-88 | Octave Organ | `PercussiveOrgan_sc88_17_9` | **4** | SC-88 map: layered: GM 17 + GM 17 +12 st -6 dB |
 | 17.32 | SC-88 | Organ 5 | `PercussiveOrgan_sc88_17_32` | **4** | SC-88 map: GM 17 Percussive Organ with default_stops=0x907 |
+| 17.33 | SC-88 | Perc.Organ 2 | `PercussiveOrgan_sc8850_17_33` | **4** | SC-8850 map: GM 17 Percussive Organ with default_stops=0x805 |
+| 17.34 | SC-88 | Perc.Organ 3 | `PercussiveOrgan_sc8850_17_34` | **4** | SC-8850 map: GM 17 Percussive Organ with default_stops=0x102c |
+| 17.35 | SC-88 | Perc.Organ 4 | `PercussiveOrgan_sc8850_17_35` | **4** | SC-8850 map: GM 17 Percussive Organ with default_stops=0x92d |
 | 18.8 | SC-88 | Rotary Org. | `RockOrgan_sc88_18_8` | **4** | SC-88 map: GM 18 Rock Organ with default_stops=0x1ff, leslie_fast=False |
 | 18.16 | SC-88 | RotaryOrg.S | `RockOrgan_sc88_18_16` | **4** | SC-88 map: GM 18 Rock Organ with leslie_fast=False |
+| 18.17 | SC-88 | Rock Organ 1 | `RockOrgan_sc88_18_17` | **4** | SC-88 map: GM 18 Rock Organ with default_stops=0x1ff, amp_drive=1.5 |
+| 18.18 | SC-88 | Rock Organ 2 | `RockOrgan_sc88_18_18` | **4** | SC-88 map: GM 18 Rock Organ with default_stops=0x107, amp_drive=2.0, leslie_fast=True |
 | 18.24 | SC-88 | RotaryOrg.F | `RockOrgan_sc88_18_24` | **4** | SC-88 map: GM 18 Rock Organ with leslie_fast=True, default_stops=0x1ff |
 | 19.8 | SC-55 | Church Org. 2 | `ChurchOrgan2` | **4** | the church organ's principal chorus to the fourth harmonic -- 8', 4', the principal quint 2 2/3', 2' -- every rank Pitea's recorded pipe (the stops table); clear and bright, short of the mixture (Ben's registration). GeneralUser's 19.8 is its organ an octave up, MuseScore's its organ coupled at 16': neither a plenum |
 | 19.16 | SC-88 | ChurchOrg.3 | `FlueOrgan_sc88_19_16` | **4** | SC-88 map: GM 19 Church Organ with default_stops=0x93 |
 | 19.24 | SC-88 | Organ Flute | `FlueOrgan_sc88_19_24` | **4** | SC-88 map: GM 19 Church Organ with default_stops=0x4040 |
 | 19.32 | SC-88 | Trem.Flute | `FlueOrgan_sc88_19_32` | **4** | SC-88 map: GM 19 Church Organ with default_stops=0x6040 |
+| 19.33 | SC-88 | Theater Org. | `FlueOrgan_sc88_19_33` | **4** | SC-88 map: GM 19 Church Organ with default_stops=0xa06040 |
+| 20.8 | SC-88 | Wind Organ | `ReedOrganFree_sc88_20_8` | **4** | SC-88 map: GM 20 Reed Organ with breath_noise_db=((160, -39.7), (202, -44.0), (255, -34.2), (321, -34.7), (404, -30.5), (509, -28.4), (641, -30.299999999999997), (808, -30.299999999999997), (1018, -29.5), (1283, -32.0), (1616, -34.1), (2036, -34.7), (2566, -35.3), (3233, -33.2), (4073, -34.4), (5132, -37.2), (6465, -41.4), (8146, -46.4), (10263, -51.4), (12931, -51.8)) |
 | 20.16 | SC-88 | Puff Organ | `ReedOrganFree_sc8850_20_16` | **4** | SC-8850 map: GM 20 Reed Organ with breath_noise_db=((160, -39.7), (202, -44.0), (255, -34.2), (321, -34.7), (404, -30.5), (509, -28.4), (641, -30.299999999999997), (808, -30.299999999999997), (1018, -29.5), (1283, -32.0), (1616, -34.1), (2036, -34.7), (2566, -35.3), (3233, -33.2), (4073, -34.4), (5132, -37.2), (6465, -41.4), (8146, -46.4), (10263, -51.4), (12931, -51.8)). Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 21.8 | SC-55 | Accordion It | `AccordionItalian` | **3** | the musette: GM 21's accordion with a third middle reed, M-16 / M / M+16 -- the wet reed's tuning measured on the Hohner, mirrored flat (asserted). Both GM sets' 21.8 is their accordion made wetter; no recording of a three-reed musette here (juskiddink's Paolo Soprani take is a dry register). Ben's pick of three |
+| 21.9 | SC-88 | Dist. Accord | `Accordion_sc88_21_9` | **4** | SC-88 map: GM 21 Accordion with insertion_efx=((1, 17), {}) |
+| 21.16 | SC-88 | Cho. Accord | `Accordion_sc88_21_16` | **4** | SC-88 map: GM 21 Accordion with insertion_efx=((1, 66), {}) |
+| 21.24 | SC-88 | Hard Accord | `Accordion_sc88_21_24` | **4** | SC-88 map: GM 21 Accordion with tonal_dampening=1.5, reed_edge=0.0045 |
+| 21.25 | SC-88 | Soft Accord | `Accordion_sc88_21_25` | **4** | SC-88 map: GM 21 Accordion with tonal_dampening=2.6 |
 | 22.1 | SC-88 | Harmonica 2 | `Harmonica_sc88_22_1` | **4** | SC-88 map: GM 22 Harmonica with reed_edge=0.0128 |
+| 22.8 | SC-88 | B.Harp Basic | `Harmonica_sc8850_22_8` | **4** | SC-8850 map: GM 22 Harmonica with reed_edge=0.0115, tonal_dampening=2.3 |
+| 22.9 | SC-88 | B.Harp Suppl | `Harmonica_sc8850_22_9` | **4** | SC-8850 map: GM 22 Harmonica with reed_edge=0.0135, tonal_dampening=1.8 |
+| 23.8 | SC-88 | Bandoneon 2 | `TangoAccordion_sc88_23_8` | **4** | SC-88 map: GM 23 Tango Accordion with detuned_pair=(-5.0, 5.0) |
+| 23.16 | SC-88 | Bandoneon 3 | `TangoAccordion_sc88_23_16` | **4** | SC-88 map: layered: GM 23 + GM 23 +12 st -3 dB |
 | 24.8 | SC-55 | Ukulele | `Ukulele` | **4** | BEN'S OWN UKULELE, a Luna, concert size (G C E A, re-entrant, A440), recorded by him through his A6 for it (ukulele_ben/; examples/pluck_fit.py --voice=ukulele): its 52 chromatic notes staged; its strings' stiffness measured (B 2.7e-4, the nylon guitar's was 5x); its fast dark decay (the fundamental 15-45 dB/s); its box (a resonance at 800 Hz, a hollow at 1 kHz; 2.9 dB rms to 5 kHz); the finger's flesh a soft noise burst (the attacks' flatness matched); and ITS PITCH WANDERING 9 cents over a second after the strike's glide, a soft string under a fretting finger (Ben: 'more than the guitar model'). Its first 15 ms ~5-8 dB brighter over 2 kHz than his (a fingertip rounding the pluck, not modelled). Ben: 'Perfect. Sounds great' |
 | 24.16 | SC-88 | Nylon Gt.o | `NylonGuitar_sc88_24_16` | **4** | SC-88 map: layered: GM 24 + GM 24 +12 st -6 dB |
 | 24.24 | SC-88 | VeloHarmnix | `NylonGuitar_sc88_24_24` | **4** | SC-88 map: layered: GM 24 vel 0-95 + GM 31 vel 96-127 |
@@ -2404,22 +2482,51 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 24.40 | SC-88 | Lequint Gt. | `NylonGuitar_sc88_24_40` | **4** | SC-88 map: GM 24 Acoustic Guitar (nylon) with tonal_dampening=0.75, decay_db=7.0 |
 | 25.8 | SC-55 | 12-str. Gt | `TwelveString` | **3** | the steel-string with its courses DOUBLED, read off John Magner's Fender 12-string (Pianobook), its harmonics resolved into doublets: below B3 an octave string on the even harmonics, as loud as the main at its own pitch (the open low strings' 2nd ~10 dB over a single string's), 8 cents off (6-14 measured); B3 up a unison partner at 0.9, 5.5 cents off (2.6-9). Levels the robust numbers only: the Fender is a different guitar from the steel-string's fit. STRUCK BY A PICK (tonelib.Plectrum; examples/plectrum_fit.py): the scrape as noise of its own -- the take's attack as bright on E2 as on A4, which brighter partials cannot be -- at the note's level to 7 kHz, gone at 400 dB/s (fitted on the 4-16 kHz envelope over 70 ms, after a fit on 15 ms shares took a long quiet scrape Ben heard as harsh), the course crossed 28 ms apart. Ben: 'Sounds good' |
 | 25.9 | SC-88 | Nylon+Steel | `NylonGuitar_sc88_25_9` | **4** | SC-88 map: layered: GM 24 -2 dB + GM 25 -2 dB |
+| 25.10 | SC-88 | Atk Steel Gt | `SteelGuitar_sc8850_25_10` | **4** | SC-8850 map: GM 25 Acoustic Guitar (steel) with tonal_dampening=0.55 |
 | 25.16 | SC-55 | Mandolin | `Mandolin` | **3** | unison COURSES of steel strings, measured from each harmonic's beating (examples/course_sympathy.py --voice=mandolin: 5.5 cents, the partner 0.45), its decay fitted to the Eclectic Mandolin's takes (examples/pluck_fit.py --voice=mandolin: 14.35 dB/s, steeply by register), and PICKED (tonelib.Plectrum): the scrape at the note's level to 5.5 kHz gone at 700 dB/s, the top partials struck 12 dB an octave over 1.5 kHz and gone at 400 dB/s (the take's top falls 24-42 dB by 0.1 s), the course crossed 14 ms apart. The take is re-amped dark, so its colour is not a target: fitted on flatness and how fast the top falls. Its other open courses KICKED through the bridge (contact, tuned a fourth low, D3 A3 E4 B4): the D course at its own harmonics 29-44 dB under 10 of 13 notes, the A seldom, the E and B hardly. Ben: 'Sounds good' |
+| 25.17 | SC-55 | Mandolin 2 | `Mandolin2` | **3** | the mandolin (25.16, fitted) brighter: its top damped 0.8x as fast, picked nearer the bridge |
+| 25.18 | SC-55 | MandolinTrem | `MandolinTrem` | **3** | the mandolin (25.16, fitted) TREMOLO-PICKED: a held note re-struck 12 times a second, the up strokes 2 dB softer, each stroke's time scattered 8% of a period (tonelib tremolo_pick_hz) |
 | 25.32 | SC-88 | Steel Gt.2 | `SteelGuitar_sc88_25_32` | **4** | SC-88 map: GM 25 Acoustic Guitar (steel) with tonal_dampening=0.6 |
 | 25.33 | SC-88 | Steel + Body | `SteelGuitar_sc8850_25_33` | **4** | SC-8850 map: GM 25 Acoustic Guitar (steel) with body_trim_db=((126, -9.45), (159, 2.7), (200, 9.149999999999999), (252, 1.0499999999999998), (317, 0.0), (400, -6.75), (504, -2.8499999999999996), (635, -4.050000000000001), (800, -5.4), (1008, -11.100000000000001), (1270, -9.3), (1600, -0.44999999999999996), (2016, 0.15000000000000002), (2540, 0.75), (3200, 9.45), (4032, 8.100000000000001), (5080, 6.0), (6400, 6.0), (8063, 1.0499999999999998), (10159, -0.44999999999999996), (12800, -10.95)). Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 26.1 | SC-88 | Mellow Gt. | `JazzGuitar_sc88_26_1` | **4** | SC-88 map: GM 26 Electric Guitar (jazz) with tonal_dampening=2.6 |
 | 26.8 | SC-55 | Hawaiian Gt. | `HawaiianGuitar` | **4** | a LAP STEEL fitted to David Long's (Pianobook, Lapsteel Articulations; examples/pluck_fit.py --voice=lapsteel): its six open strings -- the sustain (decay fit 17.4 -> 10.2 dB/s rms, the low harmonics 2-6 dB/s), the tone rolled back on its pickup (resonance 500 Hz, Q 0.5; lapsteel_tone.py), and its OTHER OPEN STRINGS answering through the bridge, each as tuned on that instrument, harmonic by harmonic where it lies near the note's (the E2 string's 2nd under an E3 at -14 dB, the take's -13, beating 1.7 Hz off) -- what Ben heard as 'more inharmonicity, especially lower'. Ben: 'Sounds great' |
+| 27.1 | SC-88 | Clean Half | `ElectricGuitar_sc88_27_1` | **4** | SC-88 map: GM 27 Electric Guitar (clean) with pickup_points=(0.247, 0.155) |
+| 27.2 | SC-88 | Open Hard 1 | `ElectricGuitar_sc88_27_2` | **4** | SC-88 map: GM 27 Electric Guitar (clean) with strike_point=0.12 |
+| 27.3 | SC-88 | Open Hard 2 | `ElectricGuitar_sc88_27_3` | **4** | SC-88 map: GM 27 Electric Guitar (clean) with strike_point=0.11, pickup_points=(0.09,) |
 | 27.4 | SC-88 | JC Clean Gt. | `ElectricGuitar_sc88_27_4` | **4** | SC-88 map: GM 27 Electric Guitar (clean) with amp_drive=0.0, cabinet=jc120 |
+| 27.5 | SC-88 | Atk CleanGt. | `ElectricGuitar_sc8850_27_5` | **4** | SC-8850 map: GM 27 Electric Guitar (clean) with strike_point=0.11 |
 | 27.8 | SC-55 | Chorus Gt. | `ChorusGuitar` | **3** | the Stratocaster into a chorus pedal (the swept bucket-brigade chorus CC93 makes), on at half by default -- GeneralUser's 27.8 is its clean guitar with a copy 7 cents up; the pedal's settings asserted |
+| 27.9 | SC-88 | JC Chorus Gt | `ElectricGuitar_sc88_27_9` | **4** | SC-88 map: GM 27 Electric Guitar (clean) with amp_drive=0.0, cabinet=jc120, insertion_efx=((1, 66), {}) |
+| 27.16 | SC-88 | TC FrontPick | `ElectricGuitar_sc88_27_16` | **4** | SC-88 map: GM 27 Electric Guitar (clean) with pickup_points=(0.21,) |
+| 27.17 | SC-88 | TC Rear Pick | `ElectricGuitar_sc88_27_17` | **4** | SC-88 map: GM 27 Electric Guitar (clean) with pickup_points=(0.065,) |
+| 27.18 | SC-88 | TC Clean ff | `ElectricGuitar_sc88_27_18` | **4** | SC-88 map: GM 27 Electric Guitar (clean) with pickup_points=(0.065,), strike_point=0.11 |
+| 27.19 | SC-88 | TC Clean 2: | `ElectricGuitar_sc88_27_19` | **4** | SC-88 map: GM 27 Electric Guitar (clean) with pickup_points=(0.065,), hammer_legato=True, slur_cuts_release=True |
+| 27.20 | SC-88 | LP Rear Pick | `ElectricGuitar_sc8850_27_20` | **4** | SC-8850 map: GM 27 Electric Guitar (clean) with pickup_points=(0.049, 0.077) |
+| 27.21 | SC-88 | LP Rear 2 | `ElectricGuitar_sc8850_27_21` | **4** | SC-8850 map: GM 27 Electric Guitar (clean) with pickup_points=(0.049, 0.077), amp_drive=1.2 |
+| 27.22 | SC-88 | LP RearAtack | `ElectricGuitar_sc8850_27_22` | **4** | SC-8850 map: GM 27 Electric Guitar (clean) with pickup_points=(0.049, 0.077), strike_point=0.11 |
 | 27.23 | SC-88 | Mid Tone GTR | `ElectricGuitar_sc8850_27_23` | **4** | SC-8850 map: GM 27 Electric Guitar (clean) with pickup_points=(0.155,). Ben, on examples/gm2_tones_demo.py: "sound good" |
+| 27.24 | SC-88 | Chung Ruan | `SteelGuitar_sc8850_27_24` | **4** | SC-8850 map: GM 25 Acoustic Guitar (steel) with tonal_dampening=1.0 |
+| 27.25 | SC-88 | Chung Ruan 2 | `SteelGuitar_sc8850_27_25` | **4** | SC-8850 map: GM 25 Acoustic Guitar (steel) with tonal_dampening=1.0, tremolo_pick_hz=10.0 |
 | 28.1 | SC-88 | Muted Dis.Gt | `DistortionGuitar_sc88_30_25` | **4** | SC-88 map: 30.25's voice |
+| 28.2 | SC-88 | TC Muted Gt. | `MutedGuitar_sc88_28_2` | **4** | SC-88 map: GM 28 Electric Guitar (muted) with pickup_points=(0.065,) |
 | 28.8 | SC-55 | Funk Gt. | `FunkGuitar` | **3** | the Stratocaster on position 4: neck (0.247) and middle (0.157) pickups in parallel -- their combs summed, the mean of two coils, the resonance up by sqrt 2 with the halved inductance -- through a cleaner amp (drive 0.3). The physics of the wiring; not fitted to a recording of one |
 | 28.16 | SC-88 | Funk Gt.2 | `FunkGuitar` | **3** | SC-88 map: 28.8's voice |
 | 28.24 | SC-88 | Jazz Man | `JazzGuitar_sc8850_28_24` | **4** | SC-8850 map: GM 26 Electric Guitar (jazz) with decay_db=11.39, harmonic_decay_db=3.626, decay_register_slope=0.55, strike_depth=0.7821, tonal_dampening=2.513. Ben, on examples/gm2_tones_demo.py: "sound good" |
+| 29.1 | SC-88 | Overdrive 2 | `OverdrivenGuitar_sc88_29_1` | **4** | SC-88 map: GM 29 Overdriven Guitar with amp_drive=6.0 |
+| 29.2 | SC-88 | Overdrive 3 | `OverdrivenGuitar_sc88_29_2` | **4** | SC-88 map: GM 29 Overdriven Guitar with amp_drive=3.0, pickup_points=(0.21, 0.24) |
 | 29.3 | SC-88 | More Drive | `OverdrivenGuitar` | **4** | SC-88 map: GM 29 Overdriven Guitar's voice |
 | 29.4 | SC-88 | Guitar Pinch | `OverdrivenGuitar_sc8850_29_4` | **4** | SC-8850 map: layered: GM 29 -6 dB + GM 29 +24 st -3 dB. Ben, on examples/gm2_tones_demo.py: "sound good" |
+| 29.5 | SC-88 | Attack Drive | `OverdrivenGuitar_sc8850_29_5` | **4** | SC-8850 map: GM 29 Overdriven Guitar with strike_point=0.12 |
+| 29.8 | SC-88 | LP OverDrvGt | `OverdrivenGuitar_sc88_29_8` | **4** | SC-88 map: GM 29 Overdriven Guitar with pickup_points=(0.049, 0.077), amp_drive=5.0 |
+| 29.9 | SC-88 | LP OverDrv: | `OverdrivenGuitar_sc88_29_9` | **4** | SC-88 map: GM 29 Overdriven Guitar with pickup_points=(0.049, 0.077), amp_drive=5.0, hammer_legato=True, slur_cuts_release=True |
+| 29.10 | SC-88 | LP Half Drv | `OverdrivenGuitar_sc8850_29_10` | **4** | SC-8850 map: GM 29 Overdriven Guitar with pickup_points=(0.049, 0.077), amp_drive=2.5 |
+| 29.11 | SC-88 | LP Half Drv2 | `OverdrivenGuitar_sc8850_29_11` | **4** | SC-8850 map: GM 29 Overdriven Guitar with pickup_points=(0.21, 0.24), amp_drive=2.5 |
+| 29.12 | SC-88 | LP Chorus | `OverdrivenGuitar_sc8850_29_12` | **4** | SC-8850 map: GM 29 Overdriven Guitar with pickup_points=(0.049, 0.077), amp_drive=2.5, insertion_efx=((1, 66), {}) |
 | 30.1 | SC-88 | Dist. Gt2 : | `DistortionGuitar_sc88_30_1` | **4** | SC-88 map: GM 30 Distortion Guitar with hammer_legato=True, slur_cuts_release=True |
 | 30.2 | SC-88 | DazedGuitar | `DistortionGuitar_sc88_30_2` | **4** | SC-88 map: GM 30 Distortion Guitar with detuned_pair=(-12.0, 12.0) |
+| 30.3 | SC-88 | Distortion: | `DistortionGuitar_sc88_30_3` | **4** | SC-88 map: GM 30 Distortion Guitar with hammer_legato=True, slur_cuts_release=True |
+| 30.4 | SC-88 | Dist.Fast | `DistortionGuitar_sc88_30_4` | **4** | SC-88 map: GM 30 Distortion Guitar with attack_time=0.0008, strike_point=0.12 |
+| 30.5 | SC-88 | Attack Dist | `DistortionGuitar_sc8850_30_5` | **4** | SC-8850 map: GM 30 Distortion Guitar with strike_point=0.12 |
 | 30.8 | SC-55 | Feedback Gt. | `FeedbackGuitar` | **3** | the distortion guitar HELD INTO FEEDBACK (tonelib.Feedback, examples/feedback_fit.py): a second after the pluck the partial nearest the loop's band (~800 Hz; 600-1100 on the Feedbacker's '69 Strat into a Super Reverb) swells in and holds while the rest dies, the amp distorting it with the note -- GeneralUser's 30.8 has no bloom; ours follows the real thing. Ben: 'They sound great' |
 | 30.9 | SC-88 | FeedbackGt2 | `FeedbackGuitar` | **3** | SC-88 map: 30.8's voice |
 | 30.16 | SC-88 | PowerGuitar | `DistortionGuitar_sc88_30_16` | **4** | SC-88 map: GM 30 Distortion Guitar with amp_drive=28.9 |
@@ -2429,18 +2536,39 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 30.25 | SC-88 | Rock Rhythm2 | `DistortionGuitar_sc88_30_25` | **4** | SC-88 map: GM 30 Distortion Guitar with decay_db=48.33, harmonic_decay_db=9.202, decay_register_slope=0.8949, strike_depth=0.7927, tonal_dampening=2.742 |
 | 30.26 | SC-88 | Dist Rtm GTR | `DistortionGuitar_sc8850_30_26` | **4** | SC-8850 map: GM 30 Distortion Guitar with decay_db=15.21, harmonic_decay_db=4.369, decay_register_slope=0.6189, strike_depth=0.7843, tonal_dampening=2.559. Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 31.8 | SC-55 | Gt. Feedback | `GuitarFeedback` | **4** | FEEDBACK ITSELF on a clean amp (GuitarFeedbackProperties), fitted to the Gretsch's clean G4 (Pianobook, OMS-1): the fundamental 21 dB over the pluck a second in (the take's 23), its odd harmonics -20/-18/-23 dB as the amp saturates (-25/-16/-21), sinking slowly while held -- as GeneralUser's 31.8 swells. Ben: 'They sound great' |
+| 31.9 | SC-88 | Gt.Feedback2 | `FeedbackGuitar` | **3** | SC-88 map: 30.9's voice |
 | 31.16 | SC-88 | Ac.Gt.Harm. | `GuitarHarmonics` | **4** | SC-88 map: GM 31 Guitar Harmonics's voice |
+| 31.24 | SC-88 | E.Bass Harm. | `GuitarHarmonics_sc88_31_24` | **4** | SC-88 map: layered: GM 31 -12 st |
+| 32.1 | SC-88 | Rockabilly | `AcousticBass_sc88_32_1` | **4** | SC-88 map: GM 32 Acoustic Bass with strike_point=0.08, tonal_dampening=1.2 |
+| 32.8 | SC-88 | Wild A.Bass | `AcousticBass_sc88_32_8` | **4** | SC-88 map: GM 32 Acoustic Bass with tonal_dampening=0.9 |
+| 32.9 | SC-88 | Atk A.Bass | `AcousticBass_sc8850_32_9` | **4** | SC-8850 map: GM 32 Acoustic Bass with strike_point=0.08 |
+| 32.16 | SC-88 | Bass + OHH | `AcousticBass_sc88_32_16` | **4** | SC-88 map: layered: GM 32 + set 0's key 46 -8 dB |
 | 33.1 | SC-88 | FingeredBs2 | `FingeredBass_sc88_33_1` | **4** | SC-88 map: GM 33 Electric Bass (finger) with tonal_dampening=2.9 |
 | 33.2 | SC-88 | Jazz Bass | `FingeredBass_sc88_33_2` | **4** | SC-88 map: GM 33 Electric Bass (finger) with pickup_points=(0.098,), tonal_dampening=2.0 |
+| 33.3 | SC-88 | Jazz Bass 2 | `FingeredBass_sc88_33_3` | **4** | SC-88 map: GM 33 Electric Bass (finger) with pickup_points=(0.098, 0.2) |
+| 33.4 | SC-88 | Rock Bass | `FingeredBass_sc88_33_4` | **4** | SC-88 map: GM 33 Electric Bass (finger) with amp_drive=1.0 |
+| 33.5 | SC-88 | Heart Bass | `FingeredBass_sc8850_33_5` | **4** | SC-8850 map: GM 33 Electric Bass (finger) with tonal_dampening=3.2 |
+| 33.6 | SC-88 | AttackFinger | `FingeredBass_sc8850_33_6` | **4** | SC-8850 map: GM 33 Electric Bass (finger) with strike_point=0.08 |
 | 33.7 | SC-88 | Finger Slap | `FingeredBass_sc8850_33_7` | **4** | SC-8850 map: layered: GM 33 + GM 36 -6 dB. Ben, on examples/gm2_tones_demo.py: "sound good" |
+| 33.8 | SC-88 | ChorusJazzBs | `FingeredBass_sc88_33_8` | **4** | SC-88 map: GM 33 Electric Bass (finger) with pickup_points=(0.098,), insertion_efx=((1, 66), {}) |
+| 33.16 | SC-88 | F.Bass/Harm. | `FingeredBass_sc88_33_16` | **4** | SC-88 map: layered: GM 33 + GM 31 +12 st -10 dB |
 | 34.1 | SC-88 | Picked Bass2 | `PickedBass_sc88_34_1` | **4** | SC-88 map: GM 34 Electric Bass (pick) with amp_drive=1.0 |
+| 34.2 | SC-88 | Picked Bass3 | `PickedBass_sc88_34_2` | **4** | SC-88 map: GM 34 Electric Bass (pick) with amp_drive=2.0 |
+| 34.3 | SC-88 | Picked Bass4 | `PickedBass_sc88_34_3` | **4** | SC-88 map: GM 34 Electric Bass (pick) with tonal_dampening=3.0 |
+| 34.4 | SC-88 | Double Pick | `PickedBass_sc8850_34_4` | **4** | SC-8850 map: GM 34 Electric Bass (pick) with tremolo_pick_hz=8.0 |
 | 34.8 | SC-88 | MutePickBs. | `PickedBass_sc88_34_8` | **4** | SC-88 map: GM 34 Electric Bass (pick) with decay_db=20.0, tonal_dampening=2.4 |
+| 34.16 | SC-88 | P.Bass/Harm. | `PickedBass_sc88_34_16` | **4** | SC-88 map: layered: GM 34 + GM 31 +12 st -10 dB |
 | 35.1 | SC-88 | Fretless Bs2 | `FretlessBass_sc88_35_1` | **4** | SC-88 map: GM 35 Fretless Bass with lowpass_hz=455.7, lowpass_order=3.605, tonal_dampening=2.315 |
 | 35.2 | SC-88 | FretlessBs3 | `FretlessBass_sc88_35_2` | **4** | SC-88 map: GM 35 Fretless Bass with pickup_points=(0.1893,), pickup_width=0.006505, tonal_dampening=2.556, lowpass_hz=462.4, lowpass_order=3.224 |
 | 35.3 | SC-88 | FretlessBs4 | `FretlessBass_sc88_35_3` | **4** | SC-88 map: GM 35 Fretless Bass with pickup_points=(0.07274,), pickup_width=0.03394, tonal_dampening=2.309, lowpass_hz=735.6, lowpass_order=3.673 |
 | 35.4 | SC-55 | SynFretless | `Sc88_35_4` | **3** | SC-88 map: a Moog panel, the SynthBass1's with a_attack, cutoff, eg_amount, glide, osc1_wave, osc2_level, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 35.5 | SC-88 | Mr.Smooth | `FretlessBass_sc88_35_5` | **4** | SC-88 map: GM 35 Fretless Bass with lowpass_hz=455.7, lowpass_order=3.605, tonal_dampening=2.315 |
+| 35.8 | SC-88 | Wood+FlessBs | `FretlessBass_sc88_35_8` | **4** | SC-88 map: layered: GM 35 + GM 32 -4 dB |
+| 36.1 | SC-88 | Slap Pop | `SlapBass_sc88_36_1` | **4** | SC-88 map: layered: GM 36 + GM 37 -3 dB |
 | 36.8 | SC-88 | Reso Slap | `SlapBass_sc88_36_8` | **4** | SC-88 map: GM 36 Slap Bass 1 with tonal_dampening=1.4 |
+| 36.9 | SC-88 | Unison Slap | `SlapBass_sc88_36_9` | **4** | SC-88 map: GM 36 Slap Bass 1 with detuned_pair=(-6.0, 6.0) |
+| 37.1 | SC-88 | Slap Bass 3 | `PoppedBass_sc8850_37_1` | **4** | SC-8850 map: GM 37 Slap Bass 2 with tonal_dampening=1.6 |
+| 37.8 | SC-55 | FM Slap | `Sc8850_37_8` | **3** | SC-8850 map: a Moog panel, the SynthBass2's with a_decay, a_sustain, cutoff, eg_amount, f_decay, f_sustain, mod_amount, mod_dest, osc1_wave, osc2_wave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/gm2_last_demo.py: "Sounds great" |
 | 38.1 | SC-55 | Syn.Bass101 | `Sc88_38_1` | **3** | SC-88 map: the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps), one VCO, with cutoff, eg_amount, f_attack, f_decay, f_sustain, osc1_level, resonance, sub_level changed |
 | 38.2 | SC-55 | CS Bass | `Sc88_38_2` | **3** | SC-88 map: the CS fitted to a Yamaha CS-30L's bass (sc88_synth.CS, examples/cs_fit.py: Modular Samples, CC0; 5.0 dB on the harmonics, 0.31 octave on the contour; the 2-pole by design, the takes agreeing), with osc2_freq, osc2_level, osc2_octave, osc2_wave changed |
 | 38.3 | SC-55 | JP-4 Bass | `Sc88_38_3` | **3** | SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, examples/sepways_fit.py), one pass, with a_decay, a_release, a_sustain, cutoff, eg_amount, f_attack, f_decay, f_sustain, osc2_level, resonance changed. Ben, on examples/jp8_demo.py: "Sounds great" |
@@ -2516,11 +2644,27 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 39.40 | SC-55 | DistSynBass | `Sc8850_39_40` | **3** | SC-8850 map: a Moog panel, the SynthBass2's with cutoff, insertion_efx, osc1_wave, osc2_level, osc2_wave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/synths_demo.py (all 13 parts): "They all sound good" |
 | 39.41 | SC-55 | Rise Bass | `Sc8850_39_41` | **3** | SC-8850 map: a Moog panel, the SynthBass2's with cutoff, f_decay, f_sustain, mod_amount, mod_dest, osc1_level, osc1_wave, osc2_level, osc2_wave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/synths_demo.py (all 13 parts): "They all sound good" |
 | 39.42 | SC-55 | Cyber Bass | `Sc8850_39_42` | **3** | SC-8850 map: a Moog panel, the SynthBass2's with cutoff, eg_amount, f_decay, mod_amount, mod_dest, osc1_wave, osc2_wave, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/synths_demo.py (all 13 parts): "They all sound good" |
+| 40.1 | SC-88 | Violin Atk: | `Violin_sc88_40_1` | **4** | SC-88 map: GM 40 Violin with sound_bias={'attack': -1.0}, hammer_legato=True |
 | 40.8 | SC-88 | Slow Violin | `Violin_sc88_40_8` | **4** | SC-88 map: GM 40 Violin with sound_bias={'attack': 1.0} |
+| 41.1 | SC-88 | Viola Atk.: | `Viola_sc88_41_1` | **4** | SC-88 map: GM 41 Viola with sound_bias={'attack': -1.0}, hammer_legato=True |
+| 42.1 | SC-88 | Cello Atk.: | `Cello_sc88_42_1` | **4** | SC-88 map: GM 42 Cello with sound_bias={'attack': -1.0}, hammer_legato=True |
+| 44.2 | SC-88 | Trem Str.St. | `ViolinTremolo_sc8850_44_2` | **4** | SC-8850 map: GM 44 Tremolo Strings with key_pan_spread=0.5 |
 | 44.8 | SC-88 | SlowTremolo | `ViolinTremolo_sc88_44_8` | **4** | SC-88 map: GM 44 Tremolo Strings with sound_bias={'attack': 1.0} |
 | 44.9 | SC-88 | SuspenseStr | `ViolinTremolo_sc88_44_9` | **4** | SC-88 map: GM 44 Tremolo Strings with tonal_dampening=0.9 |
+| 44.10 | SC-88 | SuspenseStr2 | `ViolinTremolo_sc8850_44_10` | **4** | SC-8850 map: GM 44 Tremolo Strings with tonal_dampening=0.75, key_pan_spread=0.5 |
+| 45.1 | SC-88 | Vcs&Cbs Pizz | `ViolinPizz_sc88_45_1` | **4** | SC-88 map: layered: GM 45 -12 st + GM 45 -24 st -4 dB |
+| 45.2 | SC-88 | Chamber Pizz | `ViolinPizz_sc88_45_2` | **4** | SC-88 map: GM 45 Pizzicato Strings with section_players=2 |
+| 45.3 | SC-88 | St.Pizzicato | `ViolinPizz_sc88_45_3` | **4** | SC-88 map: GM 45 Pizzicato Strings with key_pan_spread=0.5 |
+| 45.8 | SC-88 | Solo Pizz. | `ViolinPizz_sc88_45_8` | **4** | SC-88 map: GM 45 Pizzicato Strings with section_players=1 |
 | 45.16 | SC-88 | Solo Spic. | `Violin_sc88_45_16` | **4** | SC-88 map: GM 40 Violin with section_players=1, one_shot=True, gate_time=0.04, release_valve_time=0.12, attack_time=0.012, speech_cycles=0.0 |
+| 45.17 | SC-88 | StringsSpic. | `Violin_sc8850_45_17` | **4** | SC-8850 map: GM 48 String Ensemble 1 with one_shot=True, gate_time=0.05, release_valve_time=0.12, attack_time=0.012, speech_cycles=0.0 |
+| 46.1 | SC-88 | Harp&Strings | `Harp_sc8850_46_1` | **4** | SC-8850 map: layered: GM 46 + GM 48 -6 dB |
+| 46.2 | SC-88 | Harp St. | `Harp_sc8850_46_2` | **4** | SC-8850 map: GM 46 Orchestral Harp with key_pan_spread=0.5 |
+| 46.8 | SC-88 | Uillean Harp | `Harp_sc8850_46_8` | **4** | SC-8850 map: GM 46 Orchestral Harp with tonal_dampening=0.7 |
+| 46.16 | SC-55 | Synth Harp | `Sc88_46_16` | **3** | SC-88 map: a Moog panel, the SquareLead's with a_decay, a_release, a_sustain, cutoff, eg_amount, f_attack, f_decay, f_sustain, osc1_wave, osc2_level, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 46.24 | SC-88 | Yang Qin | `HammeredDulcimer_sc8850_46_24` | **4** | SC-8850 map: GM 15 Dulcimer with strike_point=0.125, tonal_dampening=0.6. Ben, on examples/gm2_last_demo.py: "Sounds great" |
+| 46.25 | SC-88 | Yang Qin 2 | `HammeredDulcimer_sc8850_46_25` | **4** | SC-8850 map: GM 15 Dulcimer with strike_point=0.1111111111111111, tonal_dampening=0.55, detuned_pair=(-5.0, 5.0) |
+| 46.26 | SC-55 | SynthYangQin | `Sc8850_46_26` | **3** | SC-8850 map: a Moog panel, the SquareLead's with a_decay, a_release, a_sustain, cutoff, eg_amount, f_decay, f_sustain, osc1_wave, osc2_level, osc2_octave, osc2_wave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/gm2_last_demo.py: "Sounds great" |
 | 48.1 | SC-88 | Bright Str: | `Violin_sc88_48_1` | **4** | SC-88 map: GM 48 String Ensemble 1 with bore_corner_hz=4500.0 |
 | 48.2 | SC-88 | ChamberStr: | `Violin_sc88_48_2` | **4** | SC-88 map: GM 48 String Ensemble 1 with section_players=2, section_width_m=0.8 |
 | 48.3 | SC-88 | Cello sect. | `Cello_sc88_48_3` | **4** | SC-88 map: GM 42 Cello with section_players=6, section_spread_cents=6.0, section_width_m=2.0 |
@@ -2723,14 +2867,40 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 63.12 | SC-55 | JP8000SawBrs | `Sc8850_63_12` | **3** | SC-8850 map: a Moog panel, the SynthBrass2's with eg_amount, f_attack, osc2_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/synths_demo.py (all 13 parts): "They all sound good" |
 | 63.16 | SC-88 | VeloBrass 1 | `MoogSynthBrass2_sc88_63_16` | **4** | SC-88 map: layered: GM 63 vel 0-90 + GM 62 vel 91-127 |
 | 63.17 | SC-88 | VeloBrass 2 | `MoogSynthBrass2_sc88_63_17` | **3** | SC-88 map: layered: GM 63 vel 0-90 + GM 61 vel 91-127 |
+| 64.8 | SC-88 | Soprano Exp. | `Saxophone_sc88_64_8` | **4** | SC-88 map: GM 64 Soprano Sax with sound_bias={'vib_depth': 0.6} |
 | 65.8 | SC-55 | AltoSax Exp. | `AltoSaxExp` | **4** | the alto PLAYED OUT, fitted as a difference from GM 65 to Iowa's AltoSax.Vib.ff (examples/sax_exp_fit.py; 32 notes matched by pitch against the NoVib.mf takes GM 65 is fitted to): its own vibrato, 4.85 Hz at +-8.1 cents where the mf takes play straight (rendered 4.98 Hz, 8.9 cents), the ladder 1-2 dB up above h3 (miss 1.34 -> 0.66 dB). Ben: 'Sounds good' |
+| 65.9 | SC-88 | Grow Sax | `Saxophone_sc88_65_9` | **4** | SC-88 map: GM 65 Alto Sax with amp_drive=1.5 |
+| 65.16 | SC-88 | AltoSax + Tp | `Saxophone_sc88_65_16` | **4** | SC-88 map: layered: GM 65 + GM 56 -4 dB |
+| 65.17 | SC-88 | Sax Section | `Saxophone_sc8850_65_17` | **4** | SC-8850 map: layered: GM 65 + GM 66 -3 dB + GM 67 -12 st -6 dB |
+| 66.1 | SC-88 | Tenor Sax | `Saxophone_sc88_66_1` | **4** | SC-88 map: GM 66 Tenor Sax with sound_bias={'brightness': 0.3} |
 | 66.8 | SC-55 | BreathyTnr. | `Saxophone_breathy` | **4** | the tenor played airy, fitted on GM 66 to cemorse100's 'soft, airy' C5 (CC0; examples/breathy_fit.py): the ladder darker (9.8 -> 2.3 dB), a breath table through the renderer (1.45 dB by band); the wet reed's CRACKLE as a layer (ReedCrackleProperties: exponential levels, fitted between the harmonics, shaped by the bore -- nothing under ~1 kHz; drawn as true exponentials by the kernel's synth_voice_xdec); a soft onset (tone 0.12 s, breath 0.1 s, as the take's); a slur carries tone and breath (breath_noise_slur); the breath -5 dB an octave up from C5 (ASSUMED, Ben's: no airy sax recorded at more than one register). Ben, through ten rounds: 'Sounds good' |
+| 66.9 | SC-88 | St.Tenor Sax | `Saxophone_sc88_66_9` | **4** | SC-88 map: GM 66 Tenor Sax with key_pan_spread=0.5 |
+| 67.1 | SC-88 | Bari. Sax | `Saxophone_sc88_67_1` | **4** | SC-88 map: GM 67 Baritone Sax with sound_bias={'brightness': 0.3} |
+| 67.8 | SC-88 | Bari & Tenor | `Saxophone_sc8850_67_8` | **4** | SC-8850 map: layered: GM 67 + GM 66 +12 st -4 dB |
+| 68.8 | SC-88 | Oboe Exp. | `ConicalReed_sc88_68_8` | **4** | SC-88 map: GM 68 Oboe with sound_bias={'vib_depth': 0.6} |
+| 68.16 | SC-88 | Multi Reed | `ConicalReed_sc88_68_16` | **4** | SC-88 map: layered: GM 68 + GM 71 -3 dB + GM 70 -12 st -6 dB |
 | 71.8 | SC-55 | Bs Clarinet | `BassClarinet` | **4** | the bass clarinet over its whole compass (tonelib.BassClarinetProperties, fitted to Iowa's mf runs; GM 71 plays it only below D3), its effort law fitted on Iowa's pp and ff matched note for note (examples/bsclar_fit.py): 0.97 dB of tilt per dB from pp to mf, 0.41 above (effort_tilt_up); G3's centroid pp 209 Hz against Iowa's 202. Ben: 'Sounds great' |
+| 71.16 | SC-88 | Multi Wind | `OpenPipe_sc88_71_16` | **4** | SC-88 map: layered: GM 73 +12 st + GM 68 -3 dB + GM 71 -3 dB |
+| 71.17 | SC-88 | Quad Wind | `OpenPipe_sc8850_71_17` | **4** | SC-8850 map: layered: GM 73 +12 st + GM 68 -3 dB + GM 71 -3 dB + GM 70 -12 st -6 dB |
 | 72.1 | SC-88 | Piccolo : | `OpenPipe` | **4** | SC-88 map: GM 72 Piccolo's voice |
+| 72.8 | SC-55 | Nay | `Kawala` | **3** | the NAY: our kawala (75.8, an educated guess fitted to its end-blown family), the Arabic ney's cousin |
+| 72.9 | SC-55 | Nay Tremolo | `NayTremolo` | **3** | the NAY with a tremolo of the breath: the kawala, its vibrato deeper and quicker |
+| 72.16 | SC-88 | Di | `OpenPipe_sc88_72_16` | **4** | SC-88 map: GM 73 Flute with sound_bias={'brightness': 0.4, 'attack': -0.5} |
 | 73.1 | SC-88 | Flute 2 : | `OpenPipe` | **4** | SC-88 map: GM 73 Flute's voice |
+| 73.2 | SC-88 | Flute Exp. | `OpenPipe_sc88_73_2` | **4** | SC-88 map: GM 73 Flute with sound_bias={'vib_depth': 0.6} |
 | 73.3 | SC-88 | Flt Travelso | `OpenPipe_sc88_73_3` | **4** | SC-88 map: GM 73 Flute with tonal_dampening=1.513, bore_corner_hz=104.3, even_harmonic_db=-8.253 |
+| 73.8 | SC-88 | Flute + Vln | `OpenPipe_sc88_73_8` | **4** | SC-88 map: layered: GM 73 + GM 40 -4 dB |
+| 73.9 | SC-88 | Pipe & Reed | `OpenPipe_sc8850_73_9` | **4** | SC-8850 map: layered: GM 73 + GM 68 -4 dB |
 | 73.16 | SC-55 | Tron Flute | `OpenPipe_tron` | **3** | the MELLOTRON's flute tape (tonelib.MellotronMixin): our flute under the tape's cut fitted on its violins (the flute notes found were 0.135 s, too short to fit), the capstan's wow in place of a vibrato of its own. Ben: 'Sounds incredible' |
+| 73.17 | SC-88 | Indian Flute | `OpenPipe_sc8850_73_17` | **4** | SC-8850 map: GM 73 Flute with sound_bias={'brightness': -0.4, 'vib_depth': 0.4} |
 | 75.8 | SC-55 | Kawala | `Kawala` | **3** | the Egyptian kawala, an EDUCATED GUESS (Ben: 'make educated guesses for the last two'): no kawala under an open licence, so fitted to its end-blown family -- EKVelika's Balkan kaval and aliaref's Turkish ney (both CC0; examples/freesound_slice.py pipes kawala, 22 held notes G#3-E5) -- on the shakuhachi, its series and breath as one table each (wind_fit.py --voice=kawala --fit=tables --nh=16: 0.7 and 0.9 dB rms): the octave over the fundamental (+4 dB), a breath ~30 dB under it. At the pan flute's level. |
+| 75.16 | SC-88 | Zampona | `PanFlute_sc88_75_16` | **4** | SC-88 map: GM 75 Pan Flute with sound_bias={'brightness': -0.3} |
+| 75.17 | SC-88 | Zampona Atk | `PanFlute_sc88_75_17` | **4** | SC-88 map: GM 75 Pan Flute with sound_bias={'brightness': -0.3, 'attack': -1.0} |
+| 75.24 | SC-88 | Tin Whistle | `Recorder_sc8850_75_24` | **4** | SC-8850 map: GM 74 Recorder with sound_bias={'brightness': 0.3} |
+| 75.25 | SC-88 | TinWhtsle Nm | `Recorder` | **4** | SC-8850 map: GM 74 Recorder's voice |
+| 75.26 | SC-88 | TinWhtsle Or | `Recorder_sc8850_75_26` | **4** | SC-8850 map: GM 74 Recorder with sound_bias={'brightness': 0.3, 'vib_depth': 0.5, 'vib_rate': 0.4} |
+| 77.1 | SC-88 | Shakuhachi: | `Shakuhachi` | **4** | SC-88 map: GM 77 Shakuhachi's voice |
+| 78.1 | SC-88 | Whistle 2 | `Whistle_sc88_78_1` | **4** | SC-88 map: GM 78 Whistle with sound_bias={'vib_depth': 0.5} |
 | 80.1 | SC-55 | Square | `Sc88_80_1` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, eg_amount, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 80.2 | SC-55 | Hollow Mini | `Sc88_80_2` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, osc1_wave, osc2_level, osc2_octave, osc2_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 80.3 | SC-55 | Mellow FM | `Sc88_80_3` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, mod_amount, mod_dest, osc1_level, osc1_wave, osc2_level, osc2_wave, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
@@ -3045,18 +3215,40 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 103.19 | SC-55 | Rising OSC. | `Sc8850_103_19` | **3** | SC-8850 map: a Moog panel, the SciFiFX's with f_attack, f_sustain, mod_amount, mod_dest changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/synths_demo.py (all 13 parts): "They all sound good" |
 | 104.1 | SC-88 | Sitar 2 | `Sitar_sc88_104_1` | **4** | SC-88 map: GM 104 Sitar with tonal_dampening=0.4125 |
 | 104.2 | SC-88 | DetuneSitar | `Sitar_sc88_104_2` | **4** | SC-88 map: GM 104 Sitar with detuned_pair=(-8.0, 8.0) |
+| 104.3 | SC-88 | Sitar 3 | `Sitar_sc88_104_3` | **4** | SC-88 map: GM 104 Sitar with tonal_dampening=0.33, detuned_pair=(-4.0, 4.0) |
+| 104.4 | SC-55 | Sitar/Drone | `Sitar` | **3** | SC-8850 map: layered: GM 105 + TambouraProperties -8 dB. Ben, on examples/synths_demo.py n: "Sounds good" |
+| 104.5 | SC-88 | Sitar 4 | `Sitar_sc8850_104_5` | **4** | SC-8850 map: GM 104 Sitar with tonal_dampening=0.55 |
 | 104.8 | SC-55 | Tambra | `Tambra` | **3** | Roland's other tanpura (one voice to the Tamboura's two; no manual says more, no recording of either tone here): ours is the same tanpura with its jawari SET ANOTHER WAY, fitted to sankalp's take 1 (CC BY 4.0; examples/tanpura_fit.py --take=1 --cls=TambraProperties), whose cells differ from take 2's by 9-13 dB -- the brighter setting, the top over 5 kHz ~13 dB up, the swirl centred at 5.4 kHz and stronger; 10.1 dB rms over 250 cells (4-5 plucks a string). At the sitar's level. Ben: 'Sounds good' |
 | 104.16 | SC-55 | Tamboura | `Tamboura` | **4** | the tanpura, fitted to sankalp's drone takes (Freesound pack 9571, CC BY 4.0; examples/tanpura_fit.py): no string rings alone in them, so each is read through the partials that are its alone -- Pa's odd harmonics, the low Sa's 1st, 5th, 7th, 11th ... -- from each pluck to its next, ~14 plucks a string. The jawari's SWIRL as a burst in its band (bloom_decay_dbs, new): ~1.5-4.5 kHz rising 10-20 dB to a peak 0.3-0.85 s in and falling at 21 dB/s, a fundamental 15-20 dB under it, the decay's register slope from the two strings' own rates (9.6 and 6.0 dB/s); 9.6 dB rms over 241 cells (one take: the two disagree by 9-13 dB, two settings of the thread). The sitar's jawari model without its taraf; at the sitar's level. Ben: 'Sounds great' |
 | 105.1 | SC-88 | Muted Banjo | `Banjo_sc88_105_1` | **4** | SC-88 map: GM 105 Banjo with decay_db=30.0, tonal_dampening=1.2 |
 | 105.8 | SC-55 | Rabab | `Rabab` | **3** | the Afghan rubab on the banjo's drumhead, gut on goatskin, fitted thinly: the only open rubab found is the 2 s solo opening belamalta10's '3 continents' (Freesound 513846, CC0 as uploaded -- GarageBand's loop, so measure only; examples/rabab_fit.py). Its seven notes give the colour (the fundamental weak, h2-h7 15-30 dB over it, the top falling from 2.5 kHz; 0.8 dB rms over 12 bands), the decay (24 dB/s, the banjo's 19) and the STOP: the plectrum damps each string before the next pluck (1.3-4.4 dB in the 20-35 ms before it, then ~100 dB/s; Ben heard it), so the note-off stops it. The sympathetic strings ASSUMED (the oud's contact model, eight on C's natural scale). At the banjo's level. Ben: 'Sounds good' |
+| 105.9 | SC-88 | San Xian | `Shamisen_sc88_105_9` | **3** | SC-88 map: GM 106 Shamisen with strike_point=0.12, tonal_dampening=0.8 |
 | 105.16 | SC-55 | Gopichant | `Gopichant` | **4** | the ektara of Bengal's Bauls, fitted to Rajobrata's Shantiniketan ektara (Pianobook, 'The Ektara': C3-A3, three strokes, three round-robins, plain and bent; measure only). THE SCOOP from the 45 bent takes: 236 cents under 30-50 ms in, 15 by 0.15 s, deeper the harder (151-276), an exponential in pitch (0.04 s), every pluck. The string from the plain takes (examples/pluck_fit.py --voice=gopichant): nearly harmonic (B 1e-5, the banjo's 8e-5 had stretched the top out of place -- the high notes' missing top Ben heard), plucked a third along (the banjo's 0.12 notched 3-4 kHz on G3-A3), its decay 7 dB/s rms, its colour to 13 kHz 0.7 dB rms. At the banjo's level. Ben: 'Sounds good' |
 | 105.24 | SC-55 | Oud | `Oud` | **4** | the Arabic oud, fitted to Andy R. Jordan's notes (Commons, CC BY-SA 3.0) and hammondman's (Freesound, CC0; examples/pluck_fit.py --voice=oud): a plain plucked string struck near its end (the risha), the kanun's structure where the nylon guitar was 30-60 dB short up top, its bowl as a third-octave trim (5.6 -> 2.5 dB rms), its decay from hammondman's long notes; its DOUBLE COURSES measured from each harmonic's beating (examples/course_sympathy.py: 4-9 cents, the second string ~6 dB under), and its other open courses KICKED through the bridge (contact, the Arab tuning C2 F2 A2 D3 G3 C4: the A and D courses 26-42 dB under the note, the D ~12 cents sharp, the outer four under -45). Ben: 'Sounds good' |
+| 105.28 | SC-55 | Oud+Strings | `Oud` | **3** | SC-8850 map: layered: OudProperties + GM 49 -6 dB. Ben, on examples/synths_demo.py n: "Sounds good" |
+| 105.32 | SC-55 | Pi Pa | `Pipa` | **3** | SC-8850 map: layered: PipaProperties. Ben, on examples/synths_demo.py n: "Sounds good" |
 | 106.1 | SC-88 | Tsugaru | `Shamisen_sc88_106_1` | **3** | SC-88 map: GM 106 Shamisen with tonal_dampening=0.35, decay_db=3.0 |
+| 106.8 | SC-55 | Syn Shamisen | `Sc88_106_8` | **3** | SC-88 map: a Moog panel, the SquareLead's with a_decay, a_release, a_sustain, cutoff, eg_amount, f_attack, f_decay, f_sustain, osc1_wave, osc2_level, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 107.1 | SC-88 | Gu Zheng | `Koto_sc88_107_1` | **4** | SC-88 map: GM 107 Koto with tonal_dampening=0.55, decay_db=6.0 |
 | 107.8 | SC-55 | Taisho Koto | `TaishoKoto` | **4** | the TAISHOGOTO, fitted to Arthur Chanson's soprano (Pianobook; examples/pluck_fit.py --voice=taisho): each key a course, a low string and three an octave up a few cents apart; the small box barely radiating the low fundamental (its corner 600 Hz: E5's 3rd 11 dB over its 1st); decay on h1-h6; the 12-string's plectrum; THE PICK'S SWEEP across the course timed on all 81 takes (half together, half the trio 15-50 ms late); its open G2 DRONE a stop on the wheel (low: ringing in sympathy; high: struck with every stroke, TaishoDroneProperties fitted to its 24 strokes). Ben: 'The fit is otherwise great', 'Sounds great' |
 | 107.16 | SC-55 | Kanoon | `Kanun` | **4** | the KANUN (tonelib.KanunProperties): courses of three strings over a wooden box, FITTED to Baris Bozkurt's isolated notes (Freesound 211133, CC0; examples/pluck_fit.py --voice=kanun, 28 notes): its inharmonicity measured (B 7.9e-5, 13x the koto's -- Ben: 'looser ... like a guitar'), its decay set on the whole note's level curve, its body within ~3 dB 250 Hz-13 kHz. Ben: 'Sounds great now' |
+| 107.19 | SC-55 | Kanoon+Choir | `Kanun` | **3** | SC-8850 map: layered: KanunProperties + GM 53 -8 dB. Ben, on examples/synths_demo.py n: "Sounds good" |
+| 107.24 | SC-88 | Oct Harp | `Koto_sc88_107_24` | **4** | SC-88 map: layered: GM 107 + GM 107 +12 st -6 dB |
+| 108.8 | SC-88 | Sanza | `Kalimba_sc88_108_8` | **4** | SC-88 map: layered: GM 108 + set 0's key 69 -18 dB |
+| 108.9 | SC-55 | Bodhran | `Bodhran` | **3** | the BODHRAN fitted to Teh_Bucket's 27 open strokes (freesound 521586, CC0; examples/perc_fit.py bodhran): its 24 modes over the head's 90.8 Hz (the take's 60/180 Hz mains hum left out), the tipper's strike and the band trims, 3.1 dB rms over the band-by-time grid; played at pitch as the taiko |
+| 108.10 | SC-55 | Bodhran Mute | `BodhranMute` | **3** | the BODHRAN MUTE: the same take's 6 strokes with the hand pressed into the skin -- its strike modes raised (114 -> 130 Hz), brighter, shorter; fitted 4.3 dB rms (perc_fit.py bodhran_mute) |
+| 109.8 | SC-55 | Didgeridoo | `Didgeridoo` | **3** | the DIDGERIDOO fitted to two CC0 takes (dethrok's drone, Jimmie P. Rodgers' playing; examples/didg_fit.py): the lips' series through the pipe (odd harmonics strong, evens 15-25 dB under) and the PLAYER'S MOUTH -- three formants wandering among 12 fitted states, as a moving vowel filter (efxfilter.mouth) -- frames 7.2 -> 5.7 dB rms with it |
+| 109.9 | SC-55 | Uillean Pipe | `UilleannPipe` | **3** | the UILLEANN PIPES measured on luis_audp's practice set (freesound 268816, CC BY: measurement only; examples/wind_fit.py --voice=uilleann): the chanter's just scale against the drone (E 9/8, F# 5/4, A 3/2, the C natural the harmonic seventh), its two registers fitted as two tables (the bottom a reed, h2-h3 level with the fundamental, 0.0 dB rms; the upper nearly a flute, 1.2 dB), the bellows' breath (0.1-0.4 dB); three drones in D (the Highland drones' voices retuned, 4 dB quieter, the bass 17 dB under the chanter as the take's) |
+| 109.10 | SC-55 | UillnPipe Nm | `UilleannPipe` | **3** | the UILLEANN PIPES (109.9), 'normal': the same voice -- Roland's names do not say what parts the two |
+| 109.11 | SC-55 | UillnPipe Or | `UilleannPipeOrnamented` | **3** | the UILLEANN PIPES ornamented: a CUT on every note (tonelib cut_semitones) -- a flicked upper finger, a fourth above for 30 ms, slurred into the note |
+| 110.8 | SC-88 | Er Hu | `Violin_sc88_110_8` | **4** | SC-88 map: GM 40 Violin with sound_bias={'brightness': 0.35, 'vib_depth': 0.7} |
+| 110.9 | SC-88 | Gao Hu | `Violin_sc88_110_9` | **4** | SC-88 map: GM 40 Violin with sound_bias={'brightness': 0.55, 'vib_depth': 0.6} |
 | 111.1 | SC-88 | Shanai 2 | `Shanai_sc88_111_1` | **3** | SC-88 map: GM 111 Shanai with sound_bias={'vib_depth': 0.5} |
 | 111.8 | SC-55 | Pungi | `Pungi` | **3** | the snake charmer's pungi, its melody pipe fitted to Nick Mariette's snake charmers in Bhaktapur (Wikimedia Commons, CC BY 2.5; examples/pungi_fit.py): a street, so its 32 held notes A4-D#5 tracked by their harmonics over the crowd -- bright and buzzy, h2-h5 within 4 dB, h4 the strongest, a series table on the shanai's reed (0.0 dB rms h1-h12); the hiss assumed (the hichiriki's: between the harmonics the take is the street). THE DRONE PIPE, a note of the part held under each phrase, its series from the take's drone (0.0 dB h2-h8, 2.4 dB over the melody's h2); THE WHEEL CHOOSES ITS NOTE (Ben), C3-B3 in twelve steps, F3 with none -- files read the first CC1, live follows the wheel. At the shanai's level. Ben: 'Sounds great' |
 | 111.16 | SC-55 | Hichiriki | `Hichiriki` | **4** | gagaku's double reed, fitted to gaijinbuzz's shrine wedding (Freesound 680565, CC0; examples/wind_fit.py --voice=hichiriki), the only open recording found: nine held notes D5-E5 over the sho. The whole series, the fundamental the strongest (a table to h24 over the shanai's reed: 34.2 -> 0.0 dB rms; the hiss 0.5 dB, the shrine's floor under the fundamental left out). THE ENBAI: a phrase's first note lipped up from 230 cents under (the take's 145-290), ~0.15 s in log frequency, no slur repeating it (tension_bend_slurs, new). At the shanai's level. Ben: 'Sounds great' |
+| 111.24 | SC-88 | Mizmar | `Shanai_sc88_111_24` | **3** | SC-88 map: GM 111 Shanai with sound_bias={'brightness': 0.35} |
+| 111.32 | SC-88 | Suona 1 | `Shanai_sc88_111_32` | **3** | SC-88 map: GM 111 Shanai with sound_bias={'brightness': 0.5} |
+| 111.33 | SC-88 | Suona 2 | `Shanai_sc88_111_33` | **3** | SC-88 map: GM 111 Shanai with sound_bias={'brightness': 0.5, 'vib_depth': 0.6} |
 | 112.8 | SC-55 | Bonang | `Bonang` | **4** | the Javanese kettle gongs, fitted to Casa da Musica's bonang barung and panerus (CC BY 3.0; examples/gender_fit.py --bonang): 33 kettles 338-1382 Hz, the kettle's partner at 1.55 (-22 dB), a quiet octave, a broad mode near 3, a 7 s ring with no register law; the mallet's own strike (--mallet: a burst between the modes, 0.6-0.9 kHz, 945 dB/s; 3.9 dB by band over the first 15 ms). Ben: the tone good, 'what it is missing is the sound of the reaction of the mallet itself' -> 'Sounds good now' |
 | 112.9 | SC-55 | Gender | `Gender` | **4** | the gamelan's metallophone, fitted to UNT's Balinese gangsa (cpolcyn, CC0; examples/gender_fit.py): a free bar 1 : 2.70 : 5.27, the third mode carrying the strike under ~4 kHz (the panggul's roll-off, steep), the fundamental ringing (D 1.87 at 415 Hz), 42 keys; the Balinese pair (26 cents, GangsaPairProperties) taken off against Casa da Musica's Javanese gender, which has none. Ben: 'I hear it less tuned, but not too bright' -> 'Sounds good' |
 | 112.10 | SC-55 | GamelanGong | `GamelanGong` | **4** | the gong ageng, fitted to UNT's big gong (CC0; examples/gender_fit.py --gong): 69.3 Hz, the octave pair 2.00/2.08 at -1 dB, the beat 0.61 Hz at 2.2 dB p-p (recorded 1.4-2.4), the felt's onset 0.18 s (0.10-0.16), 3.0 dB/s (2.9-3.1); shorter up the register by the same gamelan's kempli (slope 0.73). Ben: 'Sounds good' |
@@ -3278,29 +3470,29 @@ Each Sound Canvas's map of tones (the SC-55's own owner's manual p.68; the SC-55
 SC-88 and SC-88Pro maps from the SC-88Pro manual's list), against ours. A tone is built
 when we play it, as a program or a variation, and rated as the tables above rate it.
 A later map can put another tone under a number we built; that one is not counted.
-The maps' totals are in the Summary at the top; still to build: SC-55 0, SC-55mkII 0, SC-88 0, SC-88Pro 145 (2 another tone), SC-8850 352 (4 another tone).
+The maps' totals are in the Summary at the top; still to build: SC-55 0, SC-55mkII 0, SC-88 0, SC-88Pro 37, SC-8850 156.
 
 
-A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3), SC-88Pro 0.16 European Pf (4), SC-88Pro 3.8 Honky-tonk 2 (3), SC-88Pro 16.8 Trem. Organ (4), SC-88Pro 16.32 70's E.Organ (4), SC-88Pro 17.32 Perc. Organ (4), SC-88Pro 60.16 Synth Horn (4), SC-88Pro 63.17 Transbrass (3), SC-8850 62.8 Pro Brass (3), SC-8850 63.8 SynBrass sfz (3).
+A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3), SC-88Pro 0.16 European Pf (4), SC-88Pro 3.8 Honky-tonk 2 (3), SC-88Pro 16.8 Trem. Organ (4), SC-88Pro 16.9 Organ. o (4), SC-88Pro 16.32 70's E.Organ (4), SC-88Pro 17.1 Jazz Organ (4), SC-88Pro 17.32 Perc. Organ (4), SC-88Pro 60.16 Synth Horn (4), SC-88Pro 63.17 Transbrass (3), SC-8850 0.8 Upright P w (4), SC-8850 1.8 Pop Piano w (4), SC-8850 62.8 Pro Brass (3), SC-8850 63.8 SynBrass sfz (3).
 
 ### By family: built of each map's tones
 
 | family | SC-55 | SC-55mkII | SC-88 | SC-88Pro | SC-8850 |
 |---|---|---|---|---|---|
-| Piano | 12/12 | 21/21 | 26/26 | 29/39 | 30/61 |
-| Chromatic Percussion | 12/12 | 12/12 | 18/18 | 18/23 | 18/29 |
-| Organ | 12/12 | 16/16 | 30/30 | 30/49 | 31/71 |
-| Guitar | 16/16 | 19/19 | 34/34 | 36/55 | 41/72 |
-| Bass | 41/41 | 12/12 | 31/31 | 62/76 | 94/113 |
-| Strings | 8/8 | 9/9 | 11/11 | 12/20 | 13/29 |
+| Piano | 15/15 | 21/21 | 26/26 | 39/39 | 61/61 |
+| Chromatic Percussion | 15/15 | 12/12 | 18/18 | 23/23 | 29/29 |
+| Organ | 13/13 | 16/16 | 30/30 | 49/49 | 71/71 |
+| Guitar | 18/18 | 19/19 | 34/34 | 55/55 | 72/72 |
+| Bass | 42/42 | 12/12 | 31/31 | 76/76 | 113/113 |
+| Strings | 9/9 | 9/9 | 11/11 | 20/20 | 29/29 |
 | Ensemble | 28/28 | 11/11 | 29/29 | 63/63 | 134/134 |
 | Brass | 23/23 | 15/15 | 27/27 | 51/51 | 84/84 |
-| Reed | 11/11 | 8/8 | 11/11 | 11/20 | 11/23 |
-| Pipe | 10/10 | 8/8 | 9/9 | 13/22 | 13/27 |
+| Reed | 11/11 | 8/8 | 11/11 | 20/20 | 23/23 |
+| Pipe | 12/12 | 8/8 | 9/9 | 22/22 | 27/27 |
 | Synth Lead | 59/59 | 12/12 | 30/30 | 80/80 | 131/131 |
 | Synth Pad | 48/48 | 8/8 | 21/21 | 43/43 | 83/83 |
 | Synth Effects | 58/58 | 11/11 | 42/42 | 76/76 | 122/122 |
-| Ethnic | 17/17 | 10/10 | 22/22 | 22/37 | 22/44 |
+| Ethnic | 27/27 | 10/10 | 22/22 | 37/37 | 44/44 |
 | Percussive | 18/18 | 13/13 | 28/28 | 29/47 | 29/95 |
 | Sound Effects | 42/42 | 41/41 | 49/49 | 54/73 | 54/144 |
 

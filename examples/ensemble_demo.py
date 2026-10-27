@@ -3,7 +3,8 @@ strings, choirs and voices, orchestra hits), each selected as a GS file
 selects it on the SC-8850 map (CC0 the bank, CC32 4), a short phrase apiece:
 strings and choirs chords, a solo voice a line, the hits and the scat
 syllables stabs. GROUP o strings, p choirs, q the voices' syllables, r hits,
-s and t brass, u the trombones and tubas as single lines.
+s and t brass, u the trombones and tubas as single lines,
+v and w the organs, accordions, harmonicas and bandoneons.
 Writes OUT/ensemble_GROUP.wav (and _room.wav). The player is
 examples/synths_demo.py's.
 
@@ -141,6 +142,197 @@ GROUPS = {
     # bones is eight trombones, which read as a section
     "u": [(57, 2, 'Twin bones', 'line', 48), (57, 3, 'Bones & Tuba', 'line', 48), (57, 8, 'Bs. Trombone', 'line', 36),
           (57, 16, 'Euphonium', 'line', 48), (58, 8, 'Tuba + Horn', 'line', 36), (61, 2, 'Bones Sect.', 'line', 48)],
+    # the organs, accordions, harmonicas, bandoneons (v, w)
+    "v": [(16, 2, 'Ful Organ 1', 'chords', 60),
+          (16, 3, 'Ful Organ 2', 'chords', 60),
+          (16, 4, 'Ful Organ 3', 'chords', 60),
+          (16, 5, 'Ful Organ 4', 'chords', 60),
+          (16, 6, 'Ful Organ 5', 'chords', 60),
+          (16, 7, 'Ful Organ 6', 'chords', 60),
+          (16, 9, 'Organ o', 'chords', 60),
+          (16, 10, 'Ful Organ 7', 'chords', 60),
+          (16, 11, 'Ful Organ 8', 'chords', 60),
+          (16, 12, 'Ful Organ 9', 'chords', 60),
+          (16, 19, 'Farf Organ', 'chords', 60),
+          (16, 27, 'Hybrid Organ', 'chords', 60),
+          (16, 28, 'VS Organ', 'chords', 60),
+          (16, 29, 'Digi Church', 'chords', 60),
+          (16, 30, 'JX-8P Organ', 'chords', 60),
+          (16, 31, 'FM Organ', 'chords', 60),
+          (16, 48, '5th Organ', 'chords', 60),
+          (17, 1, 'Jazz Organ', 'chords', 60),
+          (17, 2, 'E.Organ 16+2', 'chords', 60),
+          (17, 3, 'Jazz Organ 2', 'chords', 60)],
+    "w": [(17, 4, 'Jazz Organ 3', 'chords', 60),
+          (17, 5, 'Jazz Organ 4', 'chords', 60),
+          (17, 6, 'Jazz Organ 5', 'chords', 60),
+          (17, 7, 'Jazz Organ 6', 'chords', 60),
+          (17, 9, 'Octave Organ', 'chords', 60),
+          (17, 33, 'Perc.Organ 2', 'chords', 60),
+          (17, 34, 'Perc.Organ 3', 'chords', 60),
+          (17, 35, 'Perc.Organ 4', 'chords', 60),
+          (18, 17, 'Rock Organ 1', 'chords', 60),
+          (18, 18, 'Rock Organ 2', 'chords', 60),
+          (19, 33, 'Theater Org.', 'chords', 60),
+          (20, 8, 'Wind Organ', 'chords', 60),
+          (21, 9, 'Dist. Accord', 'chords', 60),
+          (21, 16, 'Cho. Accord', 'chords', 60),
+          (21, 24, 'Hard Accord', 'chords', 60),
+          (21, 25, 'Soft Accord', 'chords', 60),
+          (22, 8, 'B.Harp Basic', 'line', 72),
+          (22, 9, 'B.Harp Suppl', 'line', 72),
+          (23, 8, 'Bandoneon 2', 'chords', 60),
+          (23, 16, 'Bandoneon 3', 'chords', 60)],
+    # the keyboards and chromatic percussion (x), guitars (y), basses and strings (z), reeds and pipes (aa)
+    "x": [(0, 1, 'UprightPiano', 'chords', 60),
+          (0, 2, 'Mild Piano', 'chords', 60),
+          (0, 9, 'Mild Piano w', 'chords', 60),
+          (0, 24, 'Piano + Str.', 'chords', 60),
+          (0, 25, 'Piano + Str2', 'chords', 60),
+          (0, 26, 'Piano+Choir1', 'chords', 60),
+          (0, 27, 'Piano+Choir2', 'chords', 60),
+          (1, 1, 'Pop Piano', 'chords', 60),
+          (1, 2, 'Rock Piano', 'chords', 60),
+          (1, 9, 'Rock Piano w', 'chords', 60),
+          (4, 9, 'Cho. E.Piano', 'chords', 60),
+          (4, 10, 'SilentRhodes', 'chords', 60),
+          (4, 17, 'Dist E.Piano', 'chords', 60),
+          (5, 1, 'E.Piano 3', 'chords', 60),
+          (5, 9, 'Detuned EP 3', 'chords', 60),
+          (6, 1, 'Harpsichord2', 'chords', 60),
+          (6, 2, 'Harpsichord3', 'chords', 60),
+          (6, 32, 'Synth Harpsi', 'chords', 60),
+          (7, 1, 'Clav. 2', 'chords', 60),
+          (7, 2, 'Atk Clav.1', 'chords', 60),
+          (7, 3, 'Atk Clav.2', 'chords', 60),
+          (7, 8, 'Comp Clav.', 'chords', 60)],
+    "x2": [(7, 16, 'Reso Clav.', 'chords', 60),
+           (7, 17, 'Phase Clav', 'chords', 60),
+           (7, 24, 'Clav.o', 'chords', 60),
+           (7, 32, 'Analog Clav.', 'chords', 60),
+           (7, 36, 'SynRingClav.', 'chords', 60),
+           (7, 37, 'SynDistClav.', 'chords', 60),
+           (7, 38, 'JP8000 Clav.', 'chords', 60),
+           (8, 1, 'Pop Celesta', 'chords', 60),
+           (10, 1, 'Music Box 2', 'chords', 60),
+           (10, 8, 'St.Music Box', 'chords', 60),
+           (11, 9, 'Vibraphones', 'chords', 60),
+           (13, 8, 'Xylophone w', 'chords', 60),
+           (14, 10, 'Church Bell2', 'chords', 60),
+           (14, 16, 'Tubularbellw', 'chords', 60),
+           (15, 2, 'Santur 3', 'chords', 60),
+           (15, 16, 'Zither 1', 'chords', 60),
+           (15, 17, 'Zither 2', 'chords', 60),
+           (15, 24, 'Dulcimer', 'chords', 60)],
+    "y": [(25, 10, 'Atk Steel Gt', 'chords', 60),
+          (25, 17, 'Mandolin 2', 'chords', 60),
+          (25, 18, 'MandolinTrem', 'chords', 60),
+          (27, 1, 'Clean Half', 'chords', 60),
+          (27, 2, 'Open Hard 1', 'chords', 60),
+          (27, 3, 'Open Hard 2', 'chords', 60),
+          (27, 5, 'Atk CleanGt.', 'chords', 60),
+          (27, 9, 'JC Chorus Gt', 'chords', 60),
+          (27, 16, 'TC FrontPick', 'chords', 60),
+          (27, 17, 'TC Rear Pick', 'chords', 60),
+          (27, 18, 'TC Clean ff', 'chords', 60),
+          (27, 19, 'TC Clean 2:', 'chords', 60),
+          (27, 20, 'LP Rear Pick', 'chords', 60),
+          (27, 21, 'LP Rear 2', 'chords', 60),
+          (27, 22, 'LP RearAtack', 'chords', 60),
+          (27, 24, 'Chung Ruan', 'chords', 60),
+          (27, 25, 'Chung Ruan 2', 'chords', 60),
+          (28, 2, 'TC Muted Gt.', 'chords', 60),
+          (29, 1, 'Overdrive 2', 'chords', 60),
+          (29, 2, 'Overdrive 3', 'chords', 60),
+          (29, 5, 'Attack Drive', 'chords', 60),
+          (29, 8, 'LP OverDrvGt', 'chords', 60)],
+    "y2": [(29, 9, 'LP OverDrv:', 'chords', 60),
+           (29, 10, 'LP Half Drv', 'chords', 60),
+           (29, 11, 'LP Half Drv2', 'chords', 60),
+           (29, 12, 'LP Chorus', 'chords', 60),
+           (30, 3, 'Distortion:', 'chords', 60),
+           (30, 4, 'Dist.Fast', 'chords', 60),
+           (30, 5, 'Attack Dist', 'chords', 60),
+           (31, 9, 'Gt.Feedback2', 'stabs', 60),
+           (31, 24, 'E.Bass Harm.', 'stabs', 60)],
+    "z": [(32, 1, 'Rockabilly', 'line', 36),
+          (32, 8, 'Wild A.Bass', 'line', 36),
+          (32, 9, 'Atk A.Bass', 'line', 36),
+          (32, 16, 'Bass + OHH', 'line', 36),
+          (33, 3, 'Jazz Bass 2', 'line', 36),
+          (33, 4, 'Rock Bass', 'line', 36),
+          (33, 5, 'Heart Bass', 'line', 36),
+          (33, 6, 'AttackFinger', 'line', 36),
+          (33, 8, 'ChorusJazzBs', 'line', 36),
+          (33, 16, 'F.Bass/Harm.', 'line', 36),
+          (34, 2, 'Picked Bass3', 'line', 36),
+          (34, 3, 'Picked Bass4', 'line', 36),
+          (34, 4, 'Double Pick', 'line', 36),
+          (34, 16, 'P.Bass/Harm.', 'line', 36),
+          (35, 8, 'Wood+FlessBs', 'line', 36),
+          (36, 1, 'Slap Pop', 'line', 36),
+          (36, 9, 'Unison Slap', 'line', 36),
+          (37, 1, 'Slap Bass 3', 'line', 36),
+          (37, 8, 'FM Slap', 'line', 36),
+          (40, 1, 'Violin Atk:', 'line', 60),
+          (41, 1, 'Viola Atk.:', 'line', 55),
+          (42, 1, 'Cello Atk.:', 'line', 43)],
+    "z2": [(44, 2, 'Trem Str.St.', 'chords', 60),
+           (44, 10, 'SuspenseStr2', 'chords', 60),
+           (45, 1, 'Vcs&Cbs Pizz', 'line', 48),
+           (45, 2, 'Chamber Pizz', 'line', 48),
+           (45, 3, 'St.Pizzicato', 'line', 48),
+           (45, 8, 'Solo Pizz.', 'line', 48),
+           (45, 17, 'StringsSpic.', 'line', 48),
+           (46, 1, 'Harp&Strings', 'chords', 55),
+           (46, 2, 'Harp St.', 'chords', 55),
+           (46, 8, 'Uillean Harp', 'chords', 55),
+           (46, 16, 'Synth Harp', 'chords', 55),
+           (46, 25, 'Yang Qin 2', 'chords', 55),
+           (46, 26, 'SynthYangQin', 'chords', 55)],
+    "aa": [(64, 8, 'Soprano Exp.', 'line', 67),
+           (65, 9, 'Grow Sax', 'line', 60),
+           (65, 16, 'AltoSax + Tp', 'line', 60),
+           (65, 17, 'Sax Section', 'line', 60),
+           (66, 1, 'Tenor Sax', 'line', 55),
+           (66, 9, 'St.Tenor Sax', 'line', 55),
+           (67, 1, 'Bari. Sax', 'line', 48),
+           (67, 8, 'Bari & Tenor', 'line', 48),
+           (68, 8, 'Oboe Exp.', 'line', 67),
+           (68, 16, 'Multi Reed', 'line', 67),
+           (71, 16, 'Multi Wind', 'line', 60),
+           (71, 17, 'Quad Wind', 'line', 60),
+           (72, 8, 'Nay', 'line', 67),
+           (72, 9, 'Nay Tremolo', 'line', 67),
+           (72, 16, 'Di', 'line', 67),
+           (73, 2, 'Flute Exp.', 'line', 72),
+           (73, 8, 'Flute + Vln', 'line', 72),
+           (73, 9, 'Pipe & Reed', 'line', 72),
+           (73, 17, 'Indian Flute', 'line', 72),
+           (75, 16, 'Zampona', 'line', 72),
+           (75, 17, 'Zampona Atk', 'line', 72),
+           (75, 24, 'Tin Whistle', 'line', 72)],
+    "aa2": [(75, 25, 'TinWhtsle Nm', 'line', 72),
+            (75, 26, 'TinWhtsle Or', 'line', 72),
+            (77, 1, 'Shakuhachi:', 'line', 67),
+            (78, 1, 'Whistle 2', 'line', 79)],
+    # the ethnic tones (ab)
+    "ab": [(104, 3, 'Sitar 3', 'line', 60), (104, 4, 'Sitar/Drone', 'line', 60), (104, 5, 'Sitar 4', 'line', 60),
+           (105, 9, 'San Xian', 'line', 60), (105, 28, 'Oud+Strings', 'chords', 55), (105, 32, 'Pi Pa', 'line', 67),
+           (106, 8, 'Syn Shamisen', 'line', 60), (107, 1, 'Gu Zheng', 'chords', 60), (107, 19, 'Kanoon+Choir', 'chords', 60),
+           (107, 24, 'Oct Harp', 'chords', 60), (108, 8, 'Sanza', 'line', 67), (110, 8, 'Er Hu', 'line', 67),
+           (110, 9, 'Gao Hu', 'line', 74), (111, 24, 'Mizmar', 'line', 67), (111, 32, 'Suona 1', 'line', 67),
+           (111, 33, 'Suona 2', 'line', 67)],
+    # the fitted ethnic voices (ac): the bodhran open and muted, played as a
+    # pitched part at its recorded F#2; the didgeridoo's drone, held
+    # the insertion choruses (ad): their depth law's A/B (TUNING_EFX_DEPTH_SCALE)
+    "ad": [(27, 9, 'JC Chorus Gt', 'chords', 60), (29, 12, 'LP Chorus', 'chords', 60),
+           (33, 8, 'ChorusJazzBs', 'line', 36)],
+    "ac": [(108, 9, 'Bodhran', 'jig', 42), (108, 10, 'Bodhran Mute', 'jig', 42),
+           (109, 8, 'Didgeridoo', 'drone', 36)],
+    # the uilleann pipes (ae): a reel in D, the drones under it
+    "ae": [(109, 9, 'Uillean Pipe', 'reel', 62), (109, 10, 'UillnPipe Nm', 'reel', 62),
+           (109, 11, 'UillnPipe Or', 'reel', 62)],
 }
 TONES = GROUPS["o"]
 
@@ -167,10 +359,20 @@ def song():
             seq = CHORDS
         elif phrase == "trance":
             seq = TRANCE
+        elif phrase == "jig":
+            # a jig's 6/8, the tipper's down-up-down and the accents' rests
+            seq = [((0,), 1 / 3.0)] * 3 + [((0,), 2 / 3.0), ((0,), 1 / 3.0)] + [((0,), 1 / 3.0)] * 6 + \
+                  [((0,), 1 / 3.0)] * 3 + [((0,), 2 / 3.0), ((0,), 1 / 3.0)] + [((0,), 1.0)] * 2
+        elif phrase == "drone":
+            seq = [((0,), 16.0)]
+        elif phrase == "reel":
+            # two bars of a reel in D, in quavers, ending on the long D
+            seq = [((d,), 0.5) for d in (0, 2, 4, 7, 9, 7, 4, 7, 12, 9, 7, 4, 2, 0, 2, 4,
+                                         7, 4, 7, 9, 12, 14, 12, 9, 7, 9, 7, 4)] + [((0,), 2.0)]
         else:
             seq = STABS
         for notes, length in seq:
-            dur = length * (0.9 if phrase not in ("stabs", "trance") else 0.45)
+            dur = length * (1.0 if phrase == "reel" else 0.9 if phrase not in ("stabs", "trance", "jig") else 0.45)
             for d in notes:
                 ev.append((b, 3, ("on", root + d, 100)))
                 ev.append((b + dur, 4, ("off", root + d)))
@@ -210,7 +412,7 @@ def main(argv):
     print("  " + f)
     t = 0.0
     for prog, lsb, name, phrase, _root in TONES:
-        n = {"riff": 8, "line": 8, "chords": 8, "stabs": 6, "trance": 16}[phrase]
+        n = {"riff": 8, "line": 8, "chords": 8, "stabs": 6, "trance": 16, "jig": 8, "drone": 16, "reel": 16}[phrase]
         print("  %5.1f s  %s (SC-8850 %d.%d)" % (t * 60.0 / TEMPO, name, prog, lsb))
         t += n + 1.5
     return 0

@@ -72,6 +72,12 @@ VOICES = {
     "hichiriki": (111, "HichirikiProperties", "hichiriki", "*_gaijin_*.wav"),
     "pungi": (111, "PungiProperties", "pungi", "*_bk_*.wav"),
     "kawala": (75, "KawalaProperties", "kawala", "*.wav"),
+    # GM2 109.8: the didgeridoo's staged pieces (freesound_slice.py didgeridoo),
+    # measured on 109 with the drones corked (its mouth moving: didg_fit.py)
+    "didgeridoo": (109, "DidgeridooProperties", "didgeridoo", "*.wav"),
+    # SC-8850 109.9: luis_audp's uilleann practice set (CC BY: measurement
+    # only), its chanter's stable notes (freesound_slice.py uilleann)
+    "uilleann": (109, "UilleannPipeProperties", "uilleann", "*_luis_*.wav"),
     # GM 20: donyaquick's harmonium, its 32 keys G2-D5 held 7-12 s (CC0),
     # staged by examples/freesound_slice.py harmonium
     "reedorgan": (20, "ReedOrganFreeProperties", "reedorgan", "*_donya_*.wav"),
@@ -94,6 +100,13 @@ VOICE_OPTS = {
     # the kaval's and the ney's held notes, 0.25 s and more: read early
     "kawala": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.05, t1=0.25),
     "whistle": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.08, t1=0.25),
+    # the drone at 64.6 Hz, C2 21.6 cents flat; 2.5 s pieces, cut mid-drone
+    "didgeridoo": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.1, t1=2.3,
+                       tonic_cents=-21.6, cc1=0),
+    # the chanter's D 10 cents over A440's; a march's notes, 0.12 s and more
+    # (cut 50 ms either side): read 40-110 ms in; the drones corked
+    "uilleann": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.04, t1=0.11,
+                     tonic_cents=10.0, cc1=0, drone_hz=73.9),
     # THE CHANTER IS AT ITS OWN PITCH: Low A 487.27 Hz, 176.7 cents over A=440.
     # Its files are named by the note that plays each degree, and ours are
     # rendered there under a static bend of as much (a tuning, which every
@@ -121,6 +134,8 @@ VOICE_OPTS = {
 }
 TONIC_CENTS = 0.0
 CC1 = None
+DRONE_HZ = None          # a drone under the take (VOICE_OPTS drone_hz): its harmonics kept out of the breath
+DRONE_GUARD_HZ = 25.0    # either side: a 70 ms Hann's main lobe is +-29 Hz
 CCS = ()          # (cc, value) sent before the note: a registration (VOICE_OPTS ccs)
 T0, T1 = 0.4, 1.9
 VEL = 80
@@ -235,6 +250,9 @@ def render(program, key, secs=2.4):
         t.append(mido.Message("control_change", channel=0, control=_cc, value=_v, time=0))
     t.append(mido.Message("note_on", channel=0, note=key, velocity=VEL, time=0))
     t.append(mido.Message("note_off", channel=0, note=key, velocity=0, time=int(secs * 960)))
+    # a moving mouth (the didgeridoo's) wanders differently in each render
+    import efxfilter
+    efxfilter.MOUTH_SEED_OFFSET[0] += 1
     L, R = B.render(m)[:2]
     return 0.5 * (np.asarray(L, np.float64) + np.asarray(R, np.float64)), B.SR
 
@@ -874,6 +892,14 @@ def spectra(x, sr, key, nh):
     h = np.array(h)
     ph = (f / f0) % 1.0
     gap = (((ph > 0.3) & (ph < 0.7)) | (f < 0.7 * f0)) & (f > 100)
+    if DRONE_HZ:
+        # A TAKE WITH ITS DRONE SOUNDING (the uilleann practice set): the drone's
+        # harmonics sit in the chanter's gaps -- a just-tuned chanter is a
+        # multiple of it, so a D4's mid-gap IS the drone's 6th -- and were read
+        # as breath (Ben heard the low notes rough). Every bin within
+        # DRONE_GUARD_HZ of a multiple of it left out, the take's and ours alike
+        dk = f / DRONE_HZ
+        gap &= np.abs(dk - np.round(dk)) * DRONE_HZ > DRONE_GUARD_HZ
     col = []
     for lo, hi in zip(E3[:-1], E3[1:]):
         m = gap & (f >= lo) & (f < hi) & (f < 0.45 * sr)
@@ -1184,11 +1210,12 @@ def main(argv):
     if spec:
         return inharm(spec) or 0
     voice = next((a.split("=")[1] for a in argv if a.startswith("--voice=")), "recorder")
-    global T0, T1, TONIC_CENTS, CC1, CCS
+    global T0, T1, TONIC_CENTS, CC1, CCS, DRONE_HZ
     T0 = VOICE_OPTS.get(voice, {}).get("t0", T0)
     T1 = VOICE_OPTS.get(voice, {}).get("t1", T1)
     TONIC_CENTS = VOICE_OPTS.get(voice, {}).get("tonic_cents", 0.0)
     CC1 = VOICE_OPTS.get(voice, {}).get("cc1")
+    DRONE_HZ = VOICE_OPTS.get(voice, {}).get("drone_hz")
     CCS = VOICE_OPTS.get(voice, {}).get("ccs", ())
     prog, cls = use_class(voice)
     fitarg = next((a for a in argv if a.startswith("--fit")), None)

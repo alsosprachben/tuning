@@ -1106,7 +1106,7 @@ class Stream:
         # processors -- kept across windows, fed silence where it has no rows,
         # so the stream is the whole table's one continuous pass
         import efxbus as EB
-        mch = np.asarray(prep['mch'])
+        mch = B._GSX.part_of(prep['mch'])           # the part's bus, every tone of it
         on = np.isin(mch, list(bus))
         L, R, SL, SR_ = self._synth(B.prep_rows(prep, ~on), wi, w0, w1)
         procs = self.__dict__.setdefault('_busp', {})
@@ -1200,9 +1200,11 @@ class Stream:
     # -- stems and objects -------------------------------------------------------
     def _group_keys(self, rows):
         if self.stems['by'] == 'source':
-            return [tuple(x) for x in np.stack([rows['mch'].astype(np.int64), rows['pl'].astype(np.int64),
+            # a part's stem: its tones' mix channels and branch B in it, as the
+            # whole table's channel_rows / source_rows (gsefx.part_of)
+            return [tuple(x) for x in np.stack([self.B._GSX.part_of(rows['mch']), rows['pl'].astype(np.int64),
                                                 rows['gr'].astype(np.int64)], 1).tolist()]
-        return [(int(c),) for c in rows['mch'].tolist()]
+        return [(int(c),) for c in self.B._GSX.part_of(rows['mch']).tolist()]
 
     def _group(self, key, w0):
         """A part's writer, opened -- and, if it first sounds now, given the

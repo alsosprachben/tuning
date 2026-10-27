@@ -10,6 +10,9 @@ examples/perc_fit.py to read as it reads VSCO's one-stroke files.
     python3 examples/freesound_slice.py accordion
     python3 examples/freesound_slice.py sfx [NAME ...]   the SFX set's struck sounds (SFX)
     python3 examples/freesound_slice.py dholak
+    python3 examples/freesound_slice.py bodhran
+    python3 examples/freesound_slice.py didgeridoo
+    python3 examples/freesound_slice.py uilleann
 
 TIMBALES: hello_flowers' "50 Timbales Hits" (freesound 41196, CC0; ~/Documents/
 refs/sources.md), one 75 s mp3 decoded to float. 53 onsets (a rise of 20 dB in
@@ -515,6 +518,104 @@ def sfx(names=None):
                                                             s / sr, len(seg) / sr))
 
 
+def bodhran():
+    """BODHRAN: Teh_Bucket's "bodhran hits" (freesound 521586, CC0; ~/Documents/
+    refs/freesound/bodhran), 35 s of single strokes, 48 kHz mono. Onsets a
+    rise of 15 dB over -25 dB (the take's two ghosts at -33 are left), 0.1 s
+    apart. The head's lowest mode is at ~60 Hz (it rings longest: 24 dB down
+    to 0 over the first second, 0.04 s stroke), the strike leaning on its
+    modes at 114-146. Two kinds, told apart by the strongest peak in 105-140
+    Hz and the brightness (the spectral centroid over 100 Hz, 0-0.4 s):
+
+      open   ~114 Hz, centroid under 2.5 kHz, the head left to ring
+      mute   ~130 Hz, centroid over 3 kHz: the hand pressed into the back of
+             the skin, raising it and damping it (18.4-24.6 s)
+
+    The roll's quick strokes (cut by the next within 0.4 s) are left out.
+    Each to the next onset (at most 1.3 s), into hits/{open,mute}_<n>.wav."""
+    from scipy.io import wavfile
+    ref = os.path.expanduser("~/Documents/refs/freesound/bodhran")
+    out = os.path.join(ref, "hits")
+    os.makedirs(out, exist_ok=True)
+    a, sr = read(os.path.join(ref, "521586__teh_bucket__bodhran-hits.wav"))
+    x = a.sum(1) if a.ndim > 1 else a
+    on = onsets(x, sr, rise_db=15.0, top_db=-25.0, gap=0.1) + [len(x)]
+    n = {"open": 0, "mute": 0}
+    for s, t in zip(on[:-1], on[1:]):
+        if t - s < int(0.4 * sr):
+            continue
+        seg = x[s:s + int(0.4 * sr)]
+        S = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), 1 << 16))
+        F = np.fft.rfftfreq(1 << 16, 1 / sr)
+        b = (F > 105) & (F < 140)
+        pk = float(F[b][np.argmax(S[b])])
+        c = float((S[F > 100] * F[F > 100]).sum() / S[F > 100].sum())
+        kind = "open" if c < 2500 else "mute" if c > 3000 and pk > 124 else None
+        if kind is None:
+            continue
+        pre = int(0.005 * sr)
+        n[kind] += 1
+        wavfile.write(os.path.join(out, "%s_%02d.wav" % (kind, n[kind])), sr,
+                      a[max(0, s - pre):min(t, s + int(1.3 * sr)) - pre].astype(np.float32))
+        print("%s_%02d  t=%5.2f s  peak %4.0f Hz  centroid %4.0f Hz" % (kind, n[kind], s / sr, pk, c))
+    print(n, "->", out)
+
+
+def didgeridoo():
+    """DIDGERIDOO: dethrok's held drone (freesound 272165) and Jimmie P.
+    Rodgers' playing (173923), both CC0 (~/Documents/refs/freesound/didgeridoo),
+    the drone at 64.6 Hz -- C2, 21 cents flat -- in both. Cut into 2.5 s
+    pieces where it sounds (every 50 ms within 25 dB of the take's loudest),
+    named as they sound for examples/wind_fit.py --voice=didgeridoo:
+    staged/didgeridoo/C2_didg_<take>_<n>.wav, 44.1 kHz mono, 16-bit."""
+    import subprocess
+    from scipy.io import wavfile
+    ref = os.path.expanduser("~/Documents/refs/freesound/didgeridoo")
+    out = os.path.expanduser("~/Documents/refs/freesound/staged/didgeridoo")
+    os.makedirs(out, exist_ok=True)
+    sr = 44100
+    for tag, name in (("dethrok", "272165__dethrok__didgeridoo.aiff"),
+                      ("jimmie", "173923__qubodup__jimmies-didgeridoo.flac")):
+        raw = subprocess.run(["sox", os.path.join(ref, name), "-t", "f32", "-c", "1", "-r", str(sr), "-"],
+                             capture_output=True, check=True).stdout
+        x = np.frombuffer(raw, np.float32)
+        h = int(0.05 * sr)
+        e = 10 * np.log10(np.array([np.mean(x[i:i + h] ** 2) for i in range(0, len(x) - h, h)]) + 1e-20)
+        on = e > e.max() - 25.0
+        L = int(2.5 * sr)
+        n, i = 0, 0
+        while i + L <= len(x):
+            if on[i // h:(i + L) // h].all():
+                n += 1
+                # 16-bit PCM (voicefit's reader takes no float wav), at the
+                # take's own level
+                wavfile.write(os.path.join(out, "C2_didg_%s_%02d.wav" % (tag, n)), sr,
+                              np.clip(np.round(x[i:i + L] * 32767.0), -32768, 32767).astype(np.int16))
+                i += L
+            else:
+                i += h
+        print(tag, n, "pieces ->", out)
+
+
+def uilleann():
+    """UILLEANN PIPES: luis_audp's practice set (freesound 268816, CC BY 3.0:
+    MEASUREMENT ONLY, never sent; ~/Documents/refs/freesound/uilleann), a
+    march on the chanter over the bass drone, 2 min, MP3 128 kbps. The drone
+    at 73.9 Hz (D2, 10 cents sharp); the chanter's stable notes (stage_runs:
+    0.12 s and more -- a march's notes are short, ornamented -- tracked over 270-1300 Hz so the drone is never the
+    period) into staged/uilleann as <note>_luis_<n>.wav, named as they sound."""
+    out = os.path.join(REFS, "staged", "uilleann")
+    os.makedirs(out, exist_ok=True)
+    for f in glob.glob(os.path.join(out, "*.wav")):
+        os.remove(f)
+    sr = 44100
+    raw = subprocess.run(["sox", os.path.join(REFS, "uilleann", "268816__luis_audp__me-practicing-uilleann-pipes.mp3"),
+                          "-t", "f32", "-c", "1", "-r", str(sr), "-"], capture_output=True, check=True).stdout
+    x = np.frombuffer(raw, np.float32).astype(np.float64)
+    n = stage_runs(x, sr, out, "luis", 270.0, 1300.0, 0.12)
+    print(n, "notes ->", out)
+
+
 if __name__ == "__main__":
     if sys.argv[1] == "dholak":
         dholak()
@@ -524,4 +625,5 @@ if __name__ == "__main__":
         sfx(sys.argv[2:])
     else:
         {"timbales": timbales, "surdo": surdo, "bagpipe": bagpipe, "harmonium": harmonium,
-         "accordion": accordion}[sys.argv[1]]()
+         "accordion": accordion, "bodhran": bodhran, "didgeridoo": didgeridoo,
+         "uilleann": uilleann}[sys.argv[1]]()

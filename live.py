@@ -10838,11 +10838,11 @@ def selftest_gs(check):
         _mb = getattr(_vpm(8, 3, 39), "variation", 0)
         _mc = getattr(_vpm(16, 3, 0), "variation", 0)
         # ...and the SC-8850's (LSB 4): its 39.8 the SC-88's Beef FM Bass, its
-        # 0.8 upright (not built) the capital
+        # 0.8 its own Upright P w (128 x 4 + 8, built 2026-10-26)
         _m4 = (getattr(_vpm(8, 4, 39), "variation", 0), getattr(_vpm(8, 4, 0), "variation", 0))
         check("file: CC32 picks the map -- 3.8 ours, the SC-55's own, ours, the SC-88Pro's own; "
               "88Pro 39.8 the SC-88's; 88Pro 0.16 its own",
-              _mp == [8, 136, 8, 392] and _mb == 264 and _mc == 400 and _m4 == (264, 0)
+              _mp == [8, 136, 8, 392] and _mb == 264 and _mc == 400 and _m4 == (264, 520)
               and _PMV.VARIATION_NAMES[(3, 392)] == "Honky-tonk 2" and _PMV.VARIATION_NAMES[(0, 400)] == "European Pf"
               and _PMV.property_class_for_note(_vpm(8, 1, 3), 60) is _PMV.VARIATIONS[(3, 136)](60)
               and _PMV.bank_select(136) == (8, 1),

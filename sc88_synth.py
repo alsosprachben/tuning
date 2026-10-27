@@ -557,6 +557,28 @@ SC88_SYNTH = {
     # --- the Juno's (JUNO: fitted to a Juno-6's notes) ---------------------
     # its organ: the square pulse and the sub, the filter open, a gate for a
     # contour, CHORUS II (the organ's capital is no Moog: the square lead's)
+    # the Prophet VS's (its vector organ): a square with a triangle an octave
+    # up, the filter open, a gate for a contour (2026-10-26)
+    (16, 28): ("VS Organ", "MoogSquareLead",
+               dict(osc1_wave=SQ, osc2_wave=TRI, osc2_octave=4, osc2_freq=0.5, osc2_level=0.6, sub_level=0.0,
+                    cutoff=0.8, eg_amount=0.5, a_decay=0.6, a_sustain=1.0, a_release=0.08)),
+    # a synth harpsichord: narrow pulses an octave apart, plucked shut
+    (6, 32): ("Synth Harpsi", "MoogSquareLead",
+              dict(osc1_wave=0.85, osc2_wave=0.85, osc2_octave=4, osc2_freq=0.5, osc2_level=0.6, sub_level=0.0,
+                   cutoff=0.7, eg_amount=0.75, f_attack=0.0, f_decay=0.15, f_sustain=0.1, a_decay=0.6,
+                   a_sustain=0.0, a_release=0.3)),
+    # an analog clav: the Jupiter's clav (JP8 Clav. 1) on a plain pulse
+    (7, 32): ("Analog Clav.", "MoogSynthBass1",
+              dict(osc1_wave=0.82, osc2_level=0.0, sub_level=0.0, cutoff=0.6, eg_amount=0.75, f_attack=0.0,
+                   f_decay=0.12, f_sustain=0.1, a_decay=0.3, a_sustain=0.1, a_release=0.15, kb_track=0.8)),
+    # a synth harp: a plucked pulse ringing out
+    # a synth shamisen: a plucked pulse, nasal, short
+    (106, 8): ("Syn Shamisen", "MoogSquareLead",
+               dict(osc1_wave=0.85, osc2_level=0.0, sub_level=0.0, cutoff=0.6, resonance=0.5, eg_amount=0.75,
+                    f_attack=0.0, f_decay=0.12, f_sustain=0.0, a_decay=0.5, a_sustain=0.0, a_release=0.3)),
+    (46, 16): ("Synth Harp", "MoogSquareLead",
+               dict(osc1_wave=0.75, osc2_level=0.0, sub_level=0.0, cutoff=0.68, eg_amount=0.7, f_attack=0.0,
+                    f_decay=0.3, f_sustain=0.0, a_decay=0.8, a_sustain=0.0, a_release=0.6)),
     (16, 26): ("JUNO Organ", "MoogSquareLead",
                juno(osc1_wave=SQ, osc1_level=0.8, osc2_level=0.0, sub_level=0.5, cutoff=0.85, eg_amount=0.5,
                     a_decay=0.6, a_sustain=1.0, a_release=0.08, insertion_efx=JUNO_CHORUS2)),
@@ -1015,6 +1037,35 @@ SC8850_SYNTH = {
     (85, 10): ("Vox Lead 2", "MoogVoiceLead", dict(osc2_freq=c(8), lfo1_dest=1, lfo1_depth=0.56, lfo1_rate=0.66)),
     # fifths on narrow pulses
     (86, 4): ("5th Pulse", "MoogFifthsLead", dict(osc1_wave=0.85, osc2_wave=0.85, cutoff=0.72)),
+
+    # the JX-8P's organ: the Juno's voice, two squares an octave apart and the
+    # sub, through its chorus
+    (16, 30): ("JX-8P Organ", "MoogSquareLead",
+               juno(osc1_wave=SQ, osc1_level=0.8, osc2_wave=SQ, osc2_octave=4, osc2_level=0.5, sub_level=0.3,
+                    cutoff=0.82, eg_amount=0.5, a_decay=0.6, a_sustain=1.0, a_release=0.08,
+                    insertion_efx=JUNO_CHORUS1)),
+
+    # synth clavs: ringing (1 -> 2 FM's sidebands), distorted, and the JP-8000's
+    # (a supersaw plucked shut)
+    (7, 36): ("SynRingClav.", "MoogSynthBass1",
+              dict(osc1_wave=SQ, osc2_wave=SQ, osc2_freq=c(700), mod_dest=0, mod_amount=0.66, cutoff=0.62,
+                   eg_amount=0.75, f_decay=0.12, f_sustain=0.1, a_decay=0.3, a_sustain=0.1, a_release=0.15)),
+    (7, 37): ("SynDistClav.", "MoogSynthBass1",
+              dict(osc1_wave=0.82, osc2_level=0.0, cutoff=0.62, eg_amount=0.75, f_decay=0.12, f_sustain=0.1,
+                   a_decay=0.3, a_sustain=0.1, a_release=0.15, insertion_efx=TB_DIST)),
+    (7, 38): ("JP8000 Clav.", "MoogSynthBass1",
+              dict(osc1_wave=SAW, osc2_level=0.0, cutoff=0.62, eg_amount=0.75, f_decay=0.12, f_sustain=0.1,
+                   a_decay=0.3, a_sustain=0.1, a_release=0.15),
+              dict(moog_unison=dict(SUPERSAW, voices=5, cents=15.0, drift_cents=12.0))),
+
+    # an FM slap (a bass's thumb on 1 -> 2 FM, the contour snapping) and a synth
+    # yang qin (a struck pulse, bright and short)
+    (37, 8): ("FM Slap", "MoogSynthBass2",
+              dict(osc1_wave=TRI, osc2_wave=TRI, mod_dest=0, mod_amount=0.68, cutoff=0.6, eg_amount=0.8,
+                   f_decay=0.1, f_sustain=0.2, a_decay=0.4, a_sustain=0.3)),
+    (46, 26): ("SynthYangQin", "MoogSquareLead",
+               dict(osc1_wave=0.82, osc2_wave=TRI, osc2_octave=4, osc2_level=0.5, cutoff=0.72, eg_amount=0.75,
+                    f_decay=0.12, f_sustain=0.0, a_decay=0.5, a_sustain=0.0, a_release=0.4)),
 
     # --- THE SC-8850's OTHER SYNTH BASSES (2026-10-26) ----------------------
     # jungle's: a sine held long and low
