@@ -4243,6 +4243,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _v = _e[4] if _i % 2 == 0 else (max(1, int(round(_e[4] * _up))) if isinstance(_e[4], int) else _e[4] * _up)
             _t1 = _e[3] if _i == len(_ts) - 1 else min(_e[3], _ts[_i + 1] + 0.02)
             _GLISS_STEPS.append((_e[0], _e[1], _t0, _t1, _v, _e[5], _e[6]))
+    _CUT_OF = {}            # (ch, the cut's note, on) -> the written note it opens
     # ...AND A CUT (tonelib cut_semitones: the uilleann pipes' ornament, GS
     # 109.11 "UillnPipe Or"): a flicked upper finger -- the note cut_semitones
     # above for cut_s at the onset, slurred into the note (a chanter never
@@ -4259,6 +4260,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _GLISS_DROP.add(_k3)
         _GLISS_STEPS.append((_e[0], _e[1] + _cs, _e[2], _e[2] + _cT, _e[4], _e[5], _e[6]))
         _GLISS_STEPS.append((_e[0], _e[1], _e[2] + _cT, _e[3], _e[4], _e[5], _e[6]))
+        # the flick is the written note's onset: its legato is the note's
+        # (and it is no occurrence of its own pitch, so a later real note of
+        # that pitch keeps its own legato); the note then arrives by slur
+        _CUT_OF[(_e[0], _e[1] + _cs, _e[2])] = _e[1]
+        _MONO_SLUR.add((_e[0], _e[1], _e[2] + _cT))
     if _gliss_clean:
         print("  %d valved glissandi were too short to run and played clean "
               "(a step would have been under 12 ms)" % _gliss_clean)
@@ -4953,6 +4959,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # multiplying it (its 0-127 a share of the part's, preset taken as all)
         # THE INSERTION EFFECT, where this part is assigned to it and its type
         # is built (gsefx.chain): what it is at this note's onset
+        del _EFXN[1:]
         _EFXN[0] = None
         if _EFXEV and not MOOG_NEUTRAL and _GSX.assigned(_EFXEV, ch, on):
             _EFXN[0] = _GSX.chain(_GSX.state_at(_EFXEV, on))
@@ -4965,10 +4972,15 @@ def _prepare(path, tuner='hybrid440', sink=None):
             if _tefx is not None:
                 _EFXN[0] = _GSX.chain(_GSX.tone_state(*_tefx))
                 _EFX_CH[('tone', _MCH[0])] = True
+                _EFXN.append(_tefx)
         # the part's first chain, the file's or the tone's, is the channel's
-        # (the tone's: its own mix channel)
+        # (the tone's: its own mix channel) -- and the timeline its setups
+        # read below: the file's, or the tone's own (gsefx.tone_events), for
+        # no event in the file puts a tone's moving filter or bus on the part
         if _EFXN[0] is not None and _MCH[0] not in _EFX_CH:
             _EFX_CH[_MCH[0]] = _EFXN[0]
+            _EFX_CH[('ev', _MCH[0])] = (_GSX.tone_events(*_EFXN[1], part=ch) if len(_EFXN) > 1
+                                        else _EFXEV)
             # ITS SENDS ARE THE PART'S NOW: the reverb's distance, here
             # before the channel's is read from CC91
             _rv = _EFXN[0]['sends'].get(_GSX.SEND_REV, 40)
@@ -5371,7 +5383,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # an exciter that can carry declare legato_attack_s; see tonelib.
         # The arithmetic is tonelib's (slur_attack), shared with live, which
         # applies the same slur after stamping a template.
-        _slurred = (ch, note, _occ.get((ch, note), 0)) in legato
+        _ln = _CUT_OF.get((ch, note, on), note)       # a cut: the written note's legato
+        _lgk = (ch, _ln, _occ.get((ch, _ln), 0))
+        _slurred = _lgk in legato
         if _slurred:
             at = T.slur_attack(at, props)
         # A GUITAR'S LEGATO IS THE FRETTING HAND (hammer_legato: Roland's ":"
@@ -5393,7 +5407,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _FOLD_STORE[(ch, note)] = (_nx2, _st2)
         _HAM[0] = 0.0
         if getattr(props, 'hammer_legato', False):
-            if (ch, note, _occ.get((ch, note), 0)) in legato and ch in _HAM_T0:
+            if _lgk in legato and ch in _HAM_T0:
                 _HAM[0] = max(0.0, on - _HAM_T0[ch])
                 at = max(at, HAMMER_ATTACK_S)
             else:
@@ -5411,14 +5425,15 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # A PIPE'S SPEECH, not a bellows: every pipe that speaks overshoots
             _PUSH_PEND[0] = (_row0, props, f0, 0.0, 0.0)
         elif getattr(props, 'bellows_push_gain', 0.0):
-            if ((ch, note, _occ.get((ch, note), 0)) not in legato
+            if (_lgk not in legato
                     and (ch, note, on) not in _GLISS and (ch, note, on) not in _MONO_SLUR):
                 _PUSH_T0[ch] = on
                 _PUSH_PEND[0] = (_row0, props, f0, 0.0, 0.0)
             elif ch in _PUSH_T0:
                 # ...and carried over a slur, where it has got to
                 _PUSH_PEND[0] = (_row0, props, f0, on - _PUSH_T0[ch], at * SR)
-        _occ[(ch, note)] = _occ.get((ch, note), 0) + 1
+        if (ch, note, on) not in _CUT_OF:
+            _occ[(ch, note)] = _occ.get((ch, note), 0) + 1
         rt = props.release_valve_time if props.release_valve_time is not None else props.chiff_max_valve_time
         # Pipe speech scales with wavelength: add speech_cycles periods of the
         # fundamental to the fixed floor (mirrors tonelib.speech_time -- bass
@@ -5607,6 +5622,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         if _EFXN[0] is not None and _EFX_CH.get(_MCH[0]) is _EFXN[0] and not _EFX_CH.get(('done', _MCH[0])):
             _EFX_CH[('done', _MCH[0])] = True
             _ex = _EFXN[0]
+            _ev_ = _EFX_CH[('ev', _MCH[0])]     # the file's timeline, or the tone's own
             if _ex['od_gain'] is not None and _MCH[0] not in _AMP_CH:
                 _AMP_CH[_MCH[0]] = _GSX.PEDAL_AMP_DRIVE
                 _ref = getattr(props, 'amp_reference', None) or 0.2289
@@ -5616,10 +5632,10 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 # ITS LEVEL IS AFTER THE VALVE: the reference follows the
                 # file's level timeline (tubeamp.segment), so the level's
                 # automation is a level and the OD's gain alone is drive
-                _st = sorted({0.0} | {float(t) for t, e in _EFXEV})
+                _st = sorted({0.0} | {float(t) for t, e in _ev_})
                 _AMP_REF[_MCH[0]] = ('steps', _AMP_REF[_MCH[0]] / max(_AMP_LV0.get(_MCH[0], 1.0), 1e-12),
                                      [t * SR for t in _st],
-                                     [((_GSX.chain(_GSX.state_at(_EFXEV, t)) or _ex)['level'])
+                                     [((_GSX.chain(_GSX.state_at(_ev_, t)) or _ex)['level'])
                                       for t in _st])
             if _ex['eq'] is not None:
                 _EFXEQ_CH[_MCH[0]] = _ex['eq']
@@ -5630,20 +5646,26 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 # (no event assigns it), the chain's own (gsefx.chain_share)
                 _CHORUS_CH[_MCH[0]] = (0.0, _ex['cf'][0], 'gs',
                                        _GSX.chain_share(_ex) if _EFX_CH.get(('tone', _MCH[0]))
-                                       else _GSX.mix_share(_EFXEV, _MCH[0], SR))
+                                       else _GSX.mix_share(_ev_, _MCH[0], SR))
             if _ex.get('rotary') and _MCH[0] not in _LESLIE_CH:
                 # a Rotary: the part through our Leslie, its rotors as the type
                 # sets them and its speed as the file switches it
-                _rs_ = _GSX.rotary_setup(_EFXEV, _MCH[0])
+                _rs_ = _GSX.rotary_setup(_ev_, _MCH[0])
                 if _rs_ is not None:
                     _LESLIE_CH[_MCH[0]] = _rs_
             if _ex.get('filter') and _MCH[0] not in _FILTER_CH:
                 # a moving filter (a Phaser, a wah, a Step Flanger, a Humanizer):
                 # its control over the file, from the effect's timeline
-                _fc_ = _GSX.filter_setup(_EFXEV, _MCH[0],
+                _fc_ = _GSX.filter_setup(_ev_, _MCH[0],
                                          [(_n[2], _n[3], _n[4]) for _n in notes if _n[0] == _GSX.part_of(_MCH[0])])
                 if _fc_ is not None:
                     _FILTER_CH[_MCH[0]] = _fc_
+            if _ex.get('bus') and _EFX_CH.get(('tone', _MCH[0])) and _ev_ is not _EFXEV:
+                # A TONE's OWN BUS (Bit Hit, Comp Clav.): its rows alone,
+                # through its processor over the whole file
+                _bs = _GSX.bus_setup(_ev_, _MCH[0], SR)
+                if _bs is not None:
+                    _BUS_CH[_GSX.TONE_BUS + _MCH[0]] = _bs
             if _ex.get('trem') and _MCH[0] not in _TREM_CH:
                 # a Tremolo Chorus's tremolo: the tremolo pass's (rate, depth, stereo)
                 _TREM_CH[_MCH[0]] = tuple(_ex['trem'])
@@ -5661,22 +5683,22 @@ def _prepare(path, tuner='hybrid440', sink=None):
                     _AMP_CH[_vc] = _GSX.PEDAL_AMP_DRIVE
                     _ref = _ref or 0.2289
                 if _vc in _AMP_CH and _ref:
-                    _st = sorted({0.0} | {float(t) for t, e in _EFXEV})
+                    _st = sorted({0.0} | {float(t) for t, e in _ev_})
                     _AMP_REF[_vc] = ('steps', _ref * _cv0, [t * SR for t in _st],
-                                     [((_GSX.at(_EFXEV, _vc, t) or _eb)['level']) for t in _st])
+                                     [((_GSX.at(_ev_, _vc, t) or _eb)['level']) for t in _st])
                     _AMP_LV0[_vc] = _eb['level']
                 if _eb['cabinet'] and os.environ.get('TUNING_CABINET', '1') != '0':
                     _CAB_CH[_vc] = _eb['cabinet']
                 elif getattr(props, 'cabinet', None) and os.environ.get('TUNING_CABINET', '1') != '0':
                     _CAB_CH[_vc] = props.cabinet
                 if _eb['cf'] is not None:
-                    _CHORUS_CH[_vc] = (0.0, _eb['cf'][0], 'gs', _GSX.mix_share(_EFXEV, _vc, SR))
+                    _CHORUS_CH[_vc] = (0.0, _eb['cf'][0], 'gs', _GSX.mix_share(_ev_, _vc, SR))
                 if _eb.get('rotary'):
-                    _rs_ = _GSX.rotary_setup(_EFXEV, _vc)
+                    _rs_ = _GSX.rotary_setup(_ev_, _vc)
                     if _rs_ is not None:
                         _LESLIE_CH[_vc] = _rs_
                 if _eb.get('filter'):
-                    _fc_ = _GSX.filter_setup(_EFXEV, _vc,
+                    _fc_ = _GSX.filter_setup(_ev_, _vc,
                                              [(_n[2], _n[3], _n[4]) for _n in notes if _n[0] == _GSX.part_of(_MCH[0])])
                     if _fc_ is not None:
                         _FILTER_CH[_vc] = _fc_
@@ -7621,11 +7643,10 @@ def render_partials(prep, n0, winlen, L, R):
     bus = prep.get('bus')
     if bus:
         import efxbus as _EB
-        mch = _GSX.part_of(prep['mch'])            # the part's bus, every tone of it
-        on = np.isin(mch, list(bus))
+        on = _GSX.bus_mask(prep['mch'], list(bus))    # a part's bus, every tone of it; a tone's, its own
         _render_partials(prep_rows(prep, ~on), n0, winlen, L, R)
         for ch, spec in bus.items():
-            m = mch == ch
+            m = _GSX.bus_mask(prep['mch'], [ch])
             if not m.any():
                 continue
             bL = np.zeros(winlen, np.float32); bR = np.zeros(winlen, np.float32)

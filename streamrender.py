@@ -1106,14 +1106,13 @@ class Stream:
         # processors -- kept across windows, fed silence where it has no rows,
         # so the stream is the whole table's one continuous pass
         import efxbus as EB
-        mch = B._GSX.part_of(prep['mch'])           # the part's bus, every tone of it
-        on = np.isin(mch, list(bus))
+        on = B._GSX.bus_mask(prep['mch'], list(bus))   # a part's bus, every tone of it; a tone's, its own
         L, R, SL, SR_ = self._synth(B.prep_rows(prep, ~on), wi, w0, w1)
         procs = self.__dict__.setdefault('_busp', {})
         for ch, spec in bus.items():
             if ch not in procs:
                 procs[ch] = (EB.Bus(spec, B.SR, T_master_gain()), EB.Bus(spec, B.SR, T_master_gain()))
-            m = mch == ch
+            m = B._GSX.bus_mask(prep['mch'], [ch])
             if m.any():
                 bL, bR, bSL, bSR = self._synth(B.prep_rows(prep, m), wi, w0, w1)
             else:

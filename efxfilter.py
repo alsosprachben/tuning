@@ -167,11 +167,14 @@ PLUNGER_GLIDE_S = 0.03
 def plunger(pressure, closed_hz=PLUNGER_CLOSED_HZ, mid_hz=PLUNGER_MID_HZ, open_hz=PLUNGER_OPEN_HZ,
             linear=PLUNGER_LINEAR, q=PLUNGER_Q, mix=PLUNGER_MIX, glide=PLUNGER_GLIDE_S):
     """A plunger's moving filter (Channel) from a channel's [(t, aftertouch 0-127)]:
-    sealed at 0, mid_hz at 64, open at 127."""
-    ev = sorted(pressure or ())
-    st = steps([0.0] + [t for t, _v in ev], [0.0] + [float(v) for _t, v in ev], glide=glide)
+    sealed at 0, mid_hz at 64, open at 127. The list is read at each call, so
+    live can go on appending to it (the hand as it moves)."""
+    if pressure is None:
+        pressure = []
 
     def corner(t):
+        ev = sorted(pressure)
+        st = steps([0.0] + [t_ for t_, _v in ev], [0.0] + [float(v) for _t, v in ev], glide=glide)
         u = 2.0 * np.clip(st(t), 0.0, 127.0) / 127.0 - 1.0
         g = linear * u + (1.0 - linear) * u ** 3
         return mid_hz * np.where(g < 0.0, closed_hz / mid_hz, open_hz / mid_hz) ** np.abs(g)
@@ -232,15 +235,63 @@ def mouth_wheel(t, states, wheel, glide):
     return [st[i, k] * (1.0 - w) + st[i + 1, k] * w for k in range(3)]
 
 
+class MouthWander:
+    """mouth_track's wander one time at a time, for live: the same seeded
+    draws in the same order, the glide a one-pole stepped between calls --
+    t ascending (a block's middle, each block)."""
+
+    def __init__(self, states, dwell, glide, seed=0):
+        self.rng = np.random.default_rng(seed)
+        self.st = np.asarray([s_[:3] for s_ in states], float)
+        p = np.asarray([s_[3] for s_ in states], float)
+        self.p = p / p.sum()
+        self.dwell, self.glide = dwell, glide
+        self.next_t, self.target, self.cur, self.t = 0.0, None, None, None
+
+    def __call__(self, t):
+        t = float(np.asarray(t, float).ravel()[-1])
+        while self.next_t <= t:
+            self.target = self.st[self.rng.choice(len(self.st), p=self.p)]
+            self.next_t += self.dwell[0] * math.exp(self.dwell[1] * self.rng.standard_normal())
+        if self.cur is None or self.glide <= 0.0:
+            self.cur = self.target.copy()
+        else:
+            k = math.exp(-max(t - self.t, 0.0) / self.glide)
+            self.cur = self.target + (self.cur - self.target) * k
+        self.t = t
+        return [np.array([self.cur[i]]) for i in range(3)]
+
+
+def mouth_gain(states, floor):
+    """The mouth's gain: the formants' mean lift over the floor unity at the
+    states' centre."""
+    c = np.asarray([s_[:3] for s_ in states], float).mean(0)
+    f = np.geomspace(60.0, 4000.0, 200)
+    return 1.0 / float(np.exp(np.mean(np.log(response(5, f, c, floor, 1.0, 0.0)))))
+
+
+def mouth_live(states, dwell, glide, floor, seed=0, wheel=None):
+    """The mouth for live (Live._tone_fx): the fitted wander until the mod
+    wheel first moves, the wheel's vowel from then -- WHEEL a list live
+    appends [(t, 0-127)] to, read at each call."""
+    g = mouth_gain(states, floor)
+    wander = MouthWander(states, dwell, glide, seed + MOUTH_SEED_OFFSET[0])
+    wheel = wheel if wheel is not None else []
+
+    def control(t):
+        if wheel:
+            return mouth_wheel(t, states, list(wheel), glide)
+        return wander(t)
+    return Channel(5, floor, g, 0.0, control, rows=3)
+
+
 def mouth(states, dwell, glide, floor, seed=0, wheel=None):
     """A didgeridoo's moving mouth (Channel, VOWEL): its gain set so the
     formants' mean lift over the floor is unity at the states' centre. With
     the channel's MOD WHEEL [(t, 0-127)] -- any CC1 in the file -- the wheel
     sets the vowel and the wander is off (Ben: "wheel should replace the
     wander"); with none, the fitted wander."""
-    c = np.asarray([s_[:3] for s_ in states], float).mean(0)
-    f = np.geomspace(60.0, 4000.0, 200)
-    g = 1.0 / float(np.exp(np.mean(np.log(response(5, f, c, floor, 1.0, 0.0)))))
+    g = mouth_gain(states, floor)
     if wheel:
         return Channel(5, floor, g, 0.0, lambda t: mouth_wheel(t, states, wheel, glide), rows=3)
     seed = seed + MOUTH_SEED_OFFSET[0]

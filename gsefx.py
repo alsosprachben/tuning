@@ -262,6 +262,30 @@ def tone_state(ty, params=None):
     return st
 
 
+def tone_events(ty, params=None, part=0):
+    """A tone's effect as a TIMELINE of its own (tone_state's, set at 0 with
+    the part on it): what the setups read over a file -- filter_setup,
+    rotary_setup, bus_setup -- where no event in the file assigns the part."""
+    ev = [(0.0, ('type', tuple(ty)))] + [(0.0, ('param', n, v)) for n, v in (params or {}).items()]
+    return ev + [(0.0, ('part', part_of(part), True))]
+
+
+# A TONE's OWN BUS (Bit Hit's Lo-Fi, Comp Clav.'s compressor): keyed by its
+# mix channel past this, as a part's bus is keyed by the part -- so a bus
+# takes only that tone's rows, not the part's other tones'
+TONE_BUS = 1 << 24
+
+
+def bus_mask(mch, keys):
+    """Rows (their mix channels) on any of these buses: a part's key takes
+    every tone of the part, a tone's (TONE_BUS + mix channel) its own."""
+    import numpy as np
+    mch = np.asarray(mch).astype(np.int64)
+    parts = [k for k in keys if k < TONE_BUS]
+    tones = [k - TONE_BUS for k in keys if k >= TONE_BUS]
+    return np.isin(part_of(mch), parts) | np.isin(mch, tones)
+
+
 def message(ev, dev=0x10):
     """The GS DT1 SysEx data (without F0/F7) for an EFX event -- parse()'s
     inverse: what the live panel sends, so a setting made there is the

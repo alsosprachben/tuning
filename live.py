@@ -981,6 +981,10 @@ class Slab:
         self.fl_ch = np.zeros(capacity, np.int32)
         self.fl_aL = np.zeros(capacity, np.float32)
         self.fl_aR = np.zeros(capacity, np.float32)
+        # ...and A TONE's OWN EFFECT CHANNEL (Live._tone_fx): -1, or the tone's
+        # (ch + TONE_SEG k) -- what its bus takes the slot by, the MIDI channel
+        # (slot_ch) staying the part's for its controllers
+        self.fx_ch = np.full(capacity, -1, np.int32)
         self._fl_mo, self._fl_sav = [], None          # the Moog rows' |H| this block (moog_filter_apply)
         self._shed_mo = []                            # Moog rows faded out, to go when the fade has (shed_tick)
         self.tr_aR = np.zeros(capacity, np.float32)
@@ -1427,6 +1431,7 @@ class Slab:
         self.tp[idx] = -1               # a fresh slot carries no taps
         self.tpx[idx] = 0
         self.fl_on[idx] = False         # ...and no filter
+        self.fx_ch[idx] = -1
         self.ls_on[idx] = False
         self.tr_on[idx] = False
         self.cv_on[idx] = False
@@ -1943,6 +1948,7 @@ class Slab:
         self.tp[idx] = -1               # a fresh slot carries no taps
         self.tpx[idx] = 0
         self.fl_on[idx] = False         # ...and no filter
+        self.fx_ch[idx] = -1
         self.ls_on[idx] = False
         self.tr_on[idx] = False
         self.cv_on[idx] = False
@@ -2278,7 +2284,8 @@ class Slab:
             if len(src) and self.bus_chans:
                 # a bus channel's copies are the bus's: written after its own
                 # partials (bus_fill), and through its effect with them
-                src = src[~np.isin(self.slot_ch[src], list(self.bus_chans))]
+                src = src[~(np.isin(self.slot_ch[src], list(self.bus_chans))
+                            | np.isin(self.fx_ch[src], list(self.bus_chans)))]
             if len(src):
                 m = self._expand(src, self.tp[src].astype(np.int32), tab, self.cap,
                                  min(self.tcap, self.tap_cap), _GSD.REPEAT_FLOOR, n0, frames)
@@ -2304,7 +2311,7 @@ class Slab:
         self.bus_m, self.bus_hide = 0, None
         if chans:
             a = self.a
-            m = self.busy & np.isin(self.slot_ch, list(chans))
+            m = self.busy & (np.isin(self.slot_ch, list(chans)) | np.isin(self.fx_ch, list(chans)))
             if extra is not None and len(extra):
                 # ...and what has no channel of its own: the bus parts' valve products
                 m[np.asarray(extra, np.int64)] = True
@@ -2326,7 +2333,8 @@ class Slab:
                 # bus as the file has them, the Enhancer brightening its echoes
                 tab = self.tap_tab
                 if tab is not None:
-                    ts = np.flatnonzero((self.tp >= 0) & np.isin(self.slot_ch, list(chans))).astype(np.int64)
+                    ts = np.flatnonzero((self.tp >= 0) & (np.isin(self.slot_ch, list(chans))
+                                                          | np.isin(self.fx_ch, list(chans)))).astype(np.int64)
                     if len(ts):
                         self.bus_m += self._expand(ts, self.tp[ts].astype(np.int32), tab, d0 + self.bus_m,
                                                    min(self.tcap - self.tap_m - self.bus_m, self.tap_cap),
@@ -2752,6 +2760,16 @@ _PATCH_LOCK = threading.RLock()
 _PATCH_PINNED = set()        # (program, drums, tuner, variation) a Part is holding now
 
 
+class _ToneOf:
+    """A part seen as one of its tones (Live._tone_wheel): wheel_roles asks
+    a part for its patch and whether it is an organ."""
+
+    def __init__(self, part, patch):
+        self.pid, self.patch = part.pid, patch
+
+    organ = property(lambda self: self.patch.organ)
+
+
 class Patch:
     """Every template for one patch: (program, drums, tuner, variation).
 
@@ -2782,6 +2800,18 @@ class Patch:
         # a change of speed is a change of PARTIALS and cannot be retuned --
         # it needs a different template. Hence a speed axis on the cache.
         self.leslie = (not drums) and getattr(pc, "leslie", False)
+        # WHAT THE TONE BRINGS OF ITS OWN (Live._tone_fx): its insertion effect
+        # (patch_map's insertion_efx: EP Phase, JC Chorus Gt, Bit Hit), the
+        # trumpet's plunger, the didgeridoo's mouth -- each on an effect
+        # channel of the tone's, as the file renderer gives it a mix channel
+        self.insertion_efx = None if drums else getattr(pc, "insertion_efx", None)
+        self.plunger = (not drums) and bool(getattr(pc, "plunger", False))
+        self.mouth = (None if drums or not getattr(pc, "mouth_states", None)
+                      else (pc.mouth_states, pc.mouth_dwell_s, pc.mouth_glide_s, pc.mouth_floor))
+        # ...and the uilleann chanter's CUT (tonelib cut_semitones): each note
+        # opened by a flick cut_semitones above for cut_s (Live._cut_on)
+        self.cut = ((0, 0.0) if drums else (int(getattr(pc, "cut_semitones", 0) or 0),
+                                            float(getattr(pc, "cut_s", 0.03))))
         # A SIREN'S DISCS (tonelib siren_rotor / siren_upper): which ranks turn
         # with the upper disc, and per key whether its voice is a rotor at all
         # (a drum set's key 67 is; the set's other keys are not)
@@ -3902,6 +3932,21 @@ class Live:
         self.efx_events = []
         self.last_ctl = None                         # (source code, when): the panel's learn
         self.efx_notes = collections.defaultdict(list)
+        # A TONE's OWN EFFECTS (_tone_fx): its effect channel (ch + TONE_SEG k,
+        # as the file renderer's mix channels) -> {ch, chain, events, flt,
+        # wheel, at}; the tones each MIDI channel has played, in order
+        self.tone_fx, self._tone_seg = {}, {}
+        # EACH KEY's TONE (_note_on): (pid, ch, note) -> the patch it was struck
+        # with, so a note held through a program change stays that instrument
+        # -- its wheel, its pressure, its valve (_tone_wheel, _amp_retire)
+        self.key_tone = {}
+        # ...and AN OLD TONE's VALVE, kept with its notes after a program change
+        # (_swap_patch): its key -> (pid, the old patch), released when the
+        # last of them is (_amp_retire)
+        self.amp_retired = {}
+        # THE CUTS UNDER WAY (_cut_on): (pid, ch, the cut's note) -> (part,
+        # the written note, velocity, the sample it gives way at)
+        self.cutting = {}
         self._flt, self._flt_key, self._efx_nrev = {}, None, 0
         self.soft = {}          # channel -> the una corda shift is in
         self.sost = {}          # channel -> keys the sostenuto pedal is holding
@@ -4467,6 +4512,7 @@ class Live:
             self.slab.release(k, n0)
         self.down.clear()
         self.pedalled.clear()
+        self.cutting.clear()
         for p in self.parts:
             self._amp_touch(p)
 
@@ -4485,6 +4531,10 @@ class Live:
                                        for e in U.decode(pkt, self.m2_sysex))
                 self.m2_held_at = 0.0
             evs, self.events = self.events, collections.deque()
+        if self.cutting:
+            self._cut_go(n0)
+        if self.amp_retired:
+            self._amp_retire(n0)
         for stamped, msg in evs:
             if self.measure and msg.type == "note_on" and msg.velocity > 0 and self._dac:
                 # When will this note's first sample leave the DAC, in the same
@@ -4754,6 +4804,7 @@ class Live:
             self._repitch(ch, n0)
         elif msg.type == "aftertouch":
             self.pressure[ch] = msg.value / 127.0
+            self._tone_ctl(ch, 'at', n0, msg.value)        # a plunger's hand
             for slots, tilt in self._press_groups(ch):
                 self.slab.press(slots, self.pressure[ch], self.press_db, tilt)
         elif msg.type == "polytouch":
@@ -4785,6 +4836,8 @@ class Live:
                 clavs = [p for p in here if 'tone' in roles[p.pid]]
                 detuners = [p for p in here if 'detune' in roles[p.pid]]
                 dronists = [p for p in here if 'drones' in roles[p.pid]]
+                if any('mouth' in roles[p.pid] for p in here):
+                    self._tone_ctl(ch, 'wheel', n0, msg.value)   # the didgeridoo's vowel
                 for p in [p for p in here if 'drone note' in roles[p.pid]]:
                     # even steps over the choices, as blockrender reads a
                     # file's first CC1 -- live, the drone moved as it turns
@@ -4810,7 +4863,7 @@ class Live:
                     was = p.swell
                     p.swell = sw
                     if sw != was:
-                        self.slab.channel_gain(self._sounding(ch, pids={p.pid}), sw / was)
+                        self.slab.channel_gain(self._sounding(ch, pids={p.pid}, tone=p.patch), sw / was)
                 if amped:
                     # THE WHEEL IS THE GAIN KNOB. On a Leslie it is the swell
                     # pedal, which sits in FRONT of a fixed-gain amplifier; on
@@ -4846,10 +4899,10 @@ class Live:
                     step = int(round(msg.value / 127.0 * (len(_TLm.CLAV_TONE) - 1)))
                     if self.clav_step.get(part.pid) != step:
                         self.clav_step[part.pid] = step
-                        self.slab.clav_tone(step, self._sounding(ch, pids={part.pid}))
+                        self.slab.clav_tone(step, self._sounding(ch, pids={part.pid}, tone=part.patch))
                 for part in tremmed:
                     self.trem_depth[part.pid] = (msg.value / 127.0) * part.patch.tremolo_depth
-                    self.slab.tremolo_arm(self._sounding(ch, pids={part.pid}),
+                    self.slab.tremolo_arm(self._sounding(ch, pids={part.pid}, tone=part.patch),
                                           self.trem_depth[part.pid],
                                           part.patch.tremolo_stereo)
                 for part in organs:
@@ -4869,6 +4922,10 @@ class Live:
                     # sets them absolutely, so two calls would fight.
                     for part in others:
                         self._vib_apply(part, ch, n0)
+                # ...AND THE TONES A PART STILL HOLDS FROM BEFORE A PROGRAM
+                # CHANGE, each the wheel ITS voice has (_tone_wheel)
+                for p in here:
+                    self._tone_wheel(p, ch, msg.value, n0)
             elif msg.control in (7, 11):            # volume and expression
                 # (v7*v11)^2, which is blockrender's law at line 840 -- the
                 # same squared MIDI curve velocity uses, applied to the
@@ -5205,7 +5262,7 @@ class Live:
             self._slur = _slur
             for part in parts:
                 if part.matches(self._pc(ch), msg.note):
-                    self._note_on(part, ch, msg.note, msg.velocity, n0)
+                    self._cut_on(part, ch, msg.note, msg.velocity, n0)
                     # a key that also strikes another's sound (percussion_map.
                     # KIT_LAYER): the metronome bell's tick is the click key's.
                     # One-shots, so no key need stay down for them
@@ -5245,6 +5302,8 @@ class Live:
             for part in parts:
                 if not part.matches(self._pc(ch), msg.note):
                     continue
+                if self._cut_off(part, ch, msg.note, n0):
+                    continue            # let go in its flick: the note never came
                 # ONE SOURCE OF TRUTH with the file path, which grew the same
                 # rule today. `not part.organ` was right and narrow: it caught
                 # the organs and the harpsichord (registerable, both) and left
@@ -5265,7 +5324,81 @@ class Live:
             if pedalled:
                 self.pedalled.add((ch, msg.note))
 
+    def _efx_note(self, part, ch, note, vel, slots, _cp, n0):
+        """THE INSERTION EFFECT on a note just stamped -- the module's, or its
+        tone's own (_tone_fx) -- its level, EQ, place, rotor and moving filter:
+        (the chain or None, the channel it is on). Its taps go on at the end of
+        _note_on, where the bend is known (_tap_arm)."""
+        _efx = self._efx_for(ch) if slots and not part.drums else None
+        # ...THE MODULE's, or THE TONE's OWN on the tone's effect channel
+        # (_tone_fx), where the part is not on the module's
+        _ec = ch
+        _tfx = self._tone_fx(part, ch, n0) if slots else None
+        if _tfx is not None:
+            self.slab.fx_ch[np.fromiter(slots, np.int64, len(slots))] = _tfx
+            if _efx is None and self.tone_fx[_tfx]['chain'] is not None:
+                _efx, _ec = self.tone_fx[_tfx]['chain'], _tfx
+        if _efx is not None:
+            self._efx_direct(_efx, slots, part)
+            self.efx_notes[_ec].append([n0 / float(self.rate), math.inf, vel, note])
+            self._efx_nrev += 1
+            if _efx.get('pos3d'):
+                self._efx_place3d(_efx, slots, _cp, n0)
+            if _efx.get('rotary'):
+                self._efx_rotary_arm(_efx, slots, note, n0)
+            if self._filter_for(_ec):
+                self.slab.filter_arm(slots, _ec)
+        if _tfx is not None and _ec != _tfx and self.tone_fx[_tfx]['flt'] is not None:
+            # the plunger or the mouth, under the module's effect: the voice's
+            # own filter wins the row, as offline (blockrender's _FILTER_CH)
+            if self._filter_for(_tfx):
+                self.slab.filter_arm(slots, _tfx)
+        return _efx, _ec
+
+    # THE UILLEANN CHANTER's CUT, live (tonelib cut_semitones; blockrender's
+    # cut): the key opens a flick cut_semitones above, held cut_s, and the
+    # written note arrives from it by slur -- the chanter never stops. Live
+    # cannot know a note's length, so every note is cut (offline a note under
+    # three flicks long is not); a key let go in its flick ends there.
+    def _cut_on(self, part, ch, note, vel, n0):
+        cs, cT = part.patch.cut
+        if not cs or not 0 <= note + cs <= 127:
+            self._note_on(part, ch, note, vel, n0)
+            return
+        self._note_on(part, ch, note + cs, vel, n0)
+        self.cutting[(part.pid, ch, note + cs)] = (part, note, vel, n0 + int(round(cT * self.rate)))
+
+    def _cut_keys(self, pid, ch, cnote):
+        return [k for k in list(self.slab.live) if k[0] == pid and k[1] == ch and k[2] == cnote]
+
+    def _cut_go(self, n0):
+        """The flicks whose time is up give way to their notes, by slur."""
+        for ck, (part, note, vel, due) in list(self.cutting.items()):
+            if due > n0:
+                continue
+            del self.cutting[ck]
+            if part not in self.parts:
+                continue
+            self._slur = True
+            try:
+                self._note_on(part, ck[1], note, vel, n0)
+            finally:
+                self._slur = False
+            for k in self._cut_keys(part.pid, ck[1], ck[2]):
+                self.slab.release(k, n0)
+
+    def _cut_off(self, part, ch, note, n0):
+        """A key up while its flick still sounds: the flick ends, and there
+        is no note to let go. True when that was so."""
+        hit = [ck for ck, v in self.cutting.items() if ck[0] == part.pid and ck[1] == ch and v[1] == note]
+        for ck in hit:
+            del self.cutting[ck]
+            for k in self._cut_keys(part.pid, ch, ck[2]):
+                self.slab.release(k, n0)
+        return bool(hit)
+
     def _note_on(self, part, ch, note, vel, n0):
+        self.key_tone[(part.pid, ch, note)] = part.patch
         snote = note + part.transpose
         if not 0 <= snote <= 127:
             return
@@ -5340,6 +5473,15 @@ class Live:
                 if sc:
                     self._reg_strike(part, ch, note, n0, tmpl, list(sc),
                                      sorted(set(sc.values())), sc)
+            # ...AND ITS EFFECT, the module's or the tone's own (Bit Hit's
+            # Lo-Fi on an orchestra hit's sections), on every drawn rank
+            _rs = [s_ for r in part.drawn for s_ in self.slab.live.get((part.pid, ch, note, r), ())]
+            if _rs:
+                _cp = part.pan if part.pan is not None else self.cpan.get(ch, T.GM_DEFAULT_PAN)
+                _efx, _ec = self._efx_note(part, ch, note, vel, _rs, _cp, n0)
+                if _efx is not None and self.EFX_TAPS:
+                    self._tap_tables()
+                    self._tap_arm(_ec, _rs)
             return
         key = (part.pid, ch, note, None)
         # THE SAME STRING STRUCK AGAIN, pedal or no pedal: the last strike on
@@ -5425,17 +5567,7 @@ class Live:
             self.slab.repan(slots, _cp, T.GM_DEFAULT_PAN, self.rate, itd=True)
         # THE INSERTION EFFECT's level and EQ on the note, before the same
         # captures (its copies at the end, where the bend is known)
-        _efx = self._efx_for(ch) if slots and not part.drums else None
-        if _efx is not None:
-            self._efx_direct(_efx, slots, part)
-            self.efx_notes[ch].append([n0 / float(self.rate), math.inf, vel, note])
-            self._efx_nrev += 1
-            if _efx.get('pos3d'):
-                self._efx_place3d(_efx, slots, _cp, n0)
-            if _efx.get('rotary'):
-                self._efx_rotary_arm(_efx, slots, note, n0)
-            if self._filter_for(ch):
-                self.slab.filter_arm(slots, ch)
+        _efx, _ec = self._efx_note(part, ch, note, vel, slots, _cp, n0)
         # UNA CORDA, before those same captures and for the same reason.
         if self.soft.get(ch) and slots:
             self.slab.soft_strings(slots, part.patch.soft_pedal_strings,
@@ -5538,7 +5670,7 @@ class Live:
         if _efx is not None:
             if self.EFX_TAPS:
                 self._tap_tables()
-                self._tap_arm(ch, slots)
+                self._tap_arm(_ec, slots)
             else:
                 self._efx_copies(_efx, part, ch, note, tmpl, key, slots, scale, n0, b)
             if _efx.get('par'):
@@ -5983,8 +6115,15 @@ class Live:
 
     def _efx_for(self, ch):
         """The chain channel ch hears now, cached by the EFX's revision -- a
-        virtual channel (ch + gsefx.VIRT) a parallel type's branch B."""
+        virtual channel (ch + gsefx.VIRT) a parallel type's branch B; a
+        tone's effect channel (_tone_fx) its tone's own chain."""
         base = ch % _GSX.VIRT
+        if base >= _GSX.TONE_SEG:
+            tf = self.tone_fx.get(base)
+            c = tf['chain'] if tf is not None else None
+            if c is None or ch < _GSX.VIRT:
+                return c
+            return (c.get('par') or {}).get('B')
         if base not in self.efx_parts:
             return None
         if getattr(self, "_efx_cache", (None,))[0] != self.efx_rev:
@@ -5995,13 +6134,78 @@ class Live:
         return c
 
     def _efx_chans(self):
-        """The EFX's channels, and a parallel type's branch B of each."""
-        out = set(self.efx_parts)
-        for c in self.efx_parts:
+        """The EFX's channels, and a parallel type's branch B of each -- and
+        the tones' own effect channels (_tone_fx)."""
+        out = set(self.efx_parts) | set(self.tone_fx)
+        for c in list(out):
             ex = self._efx_for(c)
             if ex is not None and ex.get('par'):
                 out.add(c + _GSX.VIRT)
         return out
+
+    def _efx_events_of(self, c):
+        """The timeline channel c's effect reads: the module's, or a tone's
+        own (gsefx.tone_events)."""
+        tf = self.tone_fx.get(c % _GSX.VIRT)
+        return tf['events'] if tf is not None else self.efx_events
+
+    # A TONE's OWN EFFECTS, LIVE. A program change is another instrument (the
+    # file renderer's TONE_SEG), so what a tone brings -- the insertion effect
+    # patch_map gives it (EP Phase's phaser, JC Chorus Gt's chorus, Bit Hit's
+    # Lo-Fi), the plunger, the didgeridoo's mouth -- is on an effect channel
+    # of that tone's, ch + TONE_SEG k: the module's effect machinery (its
+    # direct gain, taps, moving filter, bus) run on it, and the tone's notes
+    # alone under it, held ones after a program change included. The module's
+    # effect, where the part is on it, takes the tone's place, as offline.
+    def _tone_fx(self, part, ch, n0=0):
+        """The effect channel of the tone part plays now on ch, or None."""
+        pt = part.patch
+        if part.drums or not (pt.insertion_efx or pt.plunger or pt.mouth):
+            return None
+        lst = self._tone_seg.setdefault(ch, [])
+        if pt.key not in lst:
+            lst.append(pt.key)
+        fxc = ch % _GSX.TONE_SEG + _GSX.TONE_SEG * (1 + lst.index(pt.key) % (_GSX.TONE_SEG - 1))
+        if fxc not in self.tone_fx:
+            import efxfilter as _EF
+            tf = dict(ch=ch, key=pt.key, chain=None, events=None, flt=None, wheel=[], at=[])
+            if pt.insertion_efx:
+                tf['events'] = _GSX.tone_events(*pt.insertion_efx, part=ch)
+                tf['chain'] = self._tone_chain(pt)
+            # the hand and the wheel where they already are: a wheel moved
+            # before the first note has set the vowel
+            t = n0 / float(self.rate)
+            if ch in self.pressure:
+                tf['at'].append((t, int(round(self.pressure[ch] * 127))))
+            if ch in self.wheel_at:
+                tf['wheel'].append((t, int(self.wheel_at[ch])))
+            if pt.plunger:
+                tf['flt'] = _EF.plunger(tf['at'])
+            elif pt.mouth:
+                tf['flt'] = _EF.mouth_live(*pt.mouth, seed=fxc, wheel=tf['wheel'])
+            self.tone_fx[fxc] = tf
+            self.efx_rev += 1
+        return fxc
+
+    _TONE_CHAINS = {}
+
+    @classmethod
+    def _tone_chain(cls, patch):
+        """The chain a patch's own insertion effect makes (gsefx.tone_state)."""
+        k = repr(patch.insertion_efx)
+        if k not in cls._TONE_CHAINS:
+            cls._TONE_CHAINS[k] = _GSX.chain(_GSX.tone_state(*patch.insertion_efx))
+        return cls._TONE_CHAINS[k]
+
+    def _tone_ctl(self, ch, key, n0, v):
+        """The wheel (key 'wheel') or aftertouch ('at') reaching ch's tones'
+        mouths and plungers: the last few moves kept (a glide needs two)."""
+        t = n0 / float(self.rate)
+        for tf in self.tone_fx.values():
+            if tf['ch'] == ch and tf['flt'] is not None:
+                lst = tf[key]
+                lst.append((t, int(v)))
+                del lst[:-3]
 
     @staticmethod
     def _efx_share(ex):
@@ -6159,12 +6363,19 @@ class Live:
             import efxfilter as _EF
             for c in self._efx_chans():
                 ex = self._efx_for(c)
-                if ex is None:
-                    continue
+                tf = self.tone_fx.get(c % _GSX.VIRT)
+                if tf is not None and tf['ch'] in self.efx_parts:
+                    ex = None           # the module's effect in the tone's place
                 comp = []
+                if tf is not None and tf['flt'] is not None and c < _GSX.VIRT:
+                    comp.append(('chan', tf['flt']))    # the plunger, the mouth
+                if ex is None:
+                    if comp:
+                        self._flt[c] = comp
+                    continue
                 if ex.get('filter') is not None:
                     nts = [(s0, s1, v) for s0, s1, v, _n in self.efx_notes.get(c % _GSX.VIRT, ())]
-                    chn = _GSX.filter_setup(self.efx_events, c, nts)
+                    chn = _GSX.filter_setup(self._efx_events_of(c), c, nts)
                     if chn is not None:
                         comp.append(('chan', chn))
                 if self._cf_comb(ex):
@@ -6184,7 +6395,7 @@ class Live:
 
     def _filter_block(self, n0, frames):
         """Every filtered channel's |H| this block, at the block's middle."""
-        if not self.efx_parts or not self.slab.fl_on.any():
+        if not (self.efx_parts or self.tone_fx) or not self.slab.fl_on.any():
             return
         import efxfilter as _EF
         t = (n0 + 0.5 * frames) / float(self.rate)
@@ -6219,13 +6430,25 @@ class Live:
             if lst and lst[0][1] < t - 4.0:
                 lst[:] = [x for x in lst if x[1] >= t - 4.0]
 
-    def _bus_chans_now(self):
-        """The EFX's channels when its type has a bus of its own, else none."""
+    def _bus_owner(self):
+        """(chain, channels) of the bus this block: the EFX's parts when its
+        type has a bus of its own -- else a TONE's (_tone_fx: Bit Hit's Lo-Fi,
+        Comp Clav.'s compressor) with notes sounding, its effect channel; else
+        (None, set()). One bus at a time, as the module has one EFX."""
         for c in self.efx_parts:
             ex = self._efx_for(c)
-            if ex is not None and ex.get('bus'):
-                return set(self.efx_parts)
-        return set()
+            if ex is not None:
+                return (ex, set(self.efx_parts)) if ex.get('bus') else (None, set())
+        sl = self.slab
+        for c, tf in self.tone_fx.items():
+            ex = tf['chain']
+            if ex is not None and ex.get('bus') and (sl.busy & (sl.fx_ch == c)).any():
+                return ex, {c}
+        return None, set()
+
+    def _bus_chans_now(self):
+        """The EFX's channels when its type has a bus of its own, else none."""
+        return self._bus_owner()[1]
 
     def _bus_block(self, n0, frames):
         """A PART'S OWN BUS, live (LiveBus): the EFX's parts on a bus type --
@@ -6233,12 +6456,8 @@ class Live:
         rendered apart and processed, the processor rebuilt only when the
         effect's setting changes (a knob, a type), its state otherwise carried
         -- and kept running on silence after the notes, for a reverb's tail."""
-        ex = None
-        for c in self.efx_parts:
-            ex = self._efx_for(c)
-            if ex is not None:
-                break
-        spec = (ex['bus'], ex.get('bus_mix', (0.0, 1.0))) if ex is not None and ex.get('bus') else None
+        ex, chans = self._bus_owner()
+        spec = (ex['bus'], ex.get('bus_mix', (0.0, 1.0))) if ex is not None else None
         key = None if spec is None else (spec[0][0], tuple(sorted(spec[0][1].items())), tuple(spec[1]), frames)
         if key != getattr(self, "_bus_key", None):
             if getattr(self, "_busp", None) is not None:
@@ -6249,10 +6468,9 @@ class Live:
             self.slab.bus_fill((), n0, frames)
             self.renderer.bus_proc = None
             return
-        chans = set(self.efx_parts)
         extra = []
         for p in self.parts:
-            if p.channel is None or p.channel in chans:
+            if p.channel is None or p.channel in {_GSX.part_of(c) for c in chans}:
                 extra.extend(self.slab.live.get(self._amp_key(p.pid), ()))
         self.slab.bus_fill(chans, n0, frames, extra)
         self.renderer.bus_proc = self._busp
@@ -6402,8 +6620,9 @@ class Live:
     def _tap_tables(self):
         """The tap sets, one a channel, flattened for tap_expand -- rebuilt
         when the effect, its parts or a part's pan has moved."""
+        _pc = sorted({_GSX.part_of(c) for c in set(self.efx_parts) | set(self.tone_fx)})
         key = (self.efx_rev, tuple(sorted(self.efx_parts)),
-               tuple(self.cpan.get(c, T.GM_DEFAULT_PAN) for c in sorted(self.efx_parts)))
+               tuple(self.cpan.get(c, T.GM_DEFAULT_PAN) for c in _pc))
         if getattr(self, "_tap_key", None) == key:
             return
         self._tap_key = key
@@ -6425,7 +6644,7 @@ class Live:
             ex = self._efx_for(c) if c is not None else None
             if ex is None:
                 continue
-            a0, r0, d0 = tab[max(0, min(127, int(self.cpan.get(c % _GSX.VIRT, T.GM_DEFAULT_PAN))))]
+            a0, r0, d0 = tab[max(0, min(127, int(self.cpan.get(_GSX.part_of(c), T.GM_DEFAULT_PAN))))]
             al0[i], ar0[i] = a0, r0
             if ex.get('cf') is not None and not self._cf_comb(ex):
                 dry[i] = (1.0 - self._efx_share(ex)) ** 0.5
@@ -6839,7 +7058,7 @@ class Live:
         so the two sources are summed first and written once; two calls would
         each undo the other.
         """
-        slots = self._sounding(ch, pids={part.pid})
+        slots = self._sounding(ch, pids={part.pid}, tone=part.patch)
         if not slots:
             return
         add, rate = self._snd_vib(part, ch, slots)
@@ -6979,8 +7198,37 @@ class Live:
                      'detune': 'detuning', 'drones': 'drones (0: the chanter alone)',
                      'drone stop': 'the drone (up: struck)',
                      'drone note': "the drone's note (C3 to B3)",
+                     'mouth': 'the mouth (oo to ah)',
                      'vibrato': 'vibrato', 'swell': 'swell pedal',
                      'crank': 'crank: the upper disc turned (at the top the 12-row fundamental cancels)'}
+
+    def _tone_wheel(self, part, ch, v, n0):
+        """THE MOD WHEEL ON NOTES HELD THROUGH A PROGRAM CHANGE: each old
+        tone's own (key_tone) -- a Rhodes chord held under a string patch keeps
+        the wheel as its tremolo, the strings take it as their vibrato -- as
+        the file renderer has each tone on its own mix channel. The per-note
+        roles only (tremolo, the rockers, vibrato); its valve stays as it was
+        (_amp_retire)."""
+        olds = set()
+        for k in list(self.slab.live):
+            if k[0] == part.pid and k[1] == ch:
+                kt = self.key_tone.get((k[0], k[1], k[2]))
+                if kt is not None and kt is not part.patch:
+                    olds.add(kt)
+        for tone in olds:
+            sl = self._sounding(ch, pids={part.pid}, tone=tone, old=True)
+            if not sl:
+                continue
+            roles = self.wheel_roles(_ToneOf(part, tone))
+            if 'tremolo' in roles:
+                self.slab.tremolo_arm(sl, v / 127.0 * tone.tremolo_depth, tone.tremolo_stereo)
+            if 'tone' in roles:
+                import tonelib as _TLm
+                self.slab.clav_tone(int(round(v / 127.0 * (len(_TLm.CLAV_TONE) - 1))), sl)
+            if 'vibrato' in roles:
+                w = v / 127.0
+                self.slab.retune(sl, n0, vd=(2.0 ** (self._mod_cents(ch) * w / 1200.0)) - 1.0,
+                                 vrs=1.0 + self.mod_rate * w)
 
     def wheel_roles(self, part):
         """What the mod wheel is on this part -- the CC1 branch asks this, and
@@ -7028,6 +7276,10 @@ class Live:
             r.append('drone stop')
         if pt.drone_note_wheel:
             r.append('drone note')
+        # ON A DIDGERIDOO IT IS THE MOUTH: "oo" closed to "ah" open, in place
+        # of the fitted wander (Ben: "wheel should replace the wander")
+        if pt.mouth:
+            r.append('mouth')
         # AND WHERE THE INSTRUMENT CANNOT BEND AFTER ITS ATTACK -- a hammer,
         # a mallet, a stick, a noise (tonelib Synth.wheel_vibrato) -- NOTHING:
         # the vibrato default had given a piano, a glockenspiel and a gunshot
@@ -7547,12 +7799,14 @@ class Live:
     def _note_off(self, part, ch, note, n0):
         n0 = n0 + self._amp_ahead(part)
         self._amp_touch(part)
-        if part.patch.amp_drive > 0.0 or self._efx_od(part) is not None:
+        if (part.patch.amp_drive > 0.0 or self._efx_od(part) is not None) \
+                and self.key_tone.get((part.pid, ch, note), part.patch) is part.patch:
             # THE PRODUCTS END WITH THEIR CHORD, over the note's own release, as
             # the file's end at their segment's -- the new snapshot (_amp_touch)
             # gives what is still held its own
             self.slab.release(self._amp_key(part.pid), n0)
-        for _en in self.efx_notes.get(ch, ()):
+        for _en in [e for c in (ch,) + tuple(c for c, tf in self.tone_fx.items() if tf['ch'] == ch)
+                    for e in self.efx_notes.get(c, ())]:
             if _en[3] == note and _en[1] == math.inf:
                 _en[1] = n0 / float(self.rate)          # the auto wah's envelope lets go
                 self._efx_nrev += 1
@@ -7726,7 +7980,11 @@ class Live:
     def _efx_od(self, part):
         """The EFX chain with an OD stage this part plays through, or None:
         its channel's -- or, for an all-channels part, the first of the EFX's
-        channels it is sounding on."""
+        channels it is sounding on -- or, the part on none of them, the
+        TONE's own (_tone_fx: Rock Piano's Overdrive, Dist. Accord's)."""
+        if part.patch.insertion_efx and not (part.channel is not None and part.channel in self.efx_parts):
+            c = self._tone_chain(part.patch)
+            return c if c.get('od_gain') else None
         if not self.efx_parts:
             return None
         if part.channel is not None:
@@ -7747,6 +8005,19 @@ class Live:
         if part.patch.amp_drive > 0.0 or self._efx_od(part) is not None:
             return LIVE_AMP_LOOKAHEAD * self.frames
         return 0
+
+    AMP_OLD = "amp_old"     # an old tone's valve, after a program change (_swap_patch)
+
+    def _amp_retire(self, n0):
+        """An old tone's valve ends when the last of its notes has been let go."""
+        for rk, (pid, old) in list(self.amp_retired.items()):
+            if rk not in self.slab.live:
+                del self.amp_retired[rk]
+                continue
+            if not any(k[0] == pid and k[1] >= 0 and self.key_tone.get((k[0], k[1], k[2])) is old
+                       for k in list(self.slab.live)):
+                self.slab.release(rk, n0)
+                del self.amp_retired[rk]
 
     def _amp_key(self, pid):
         # A uniform 4-tuple like every other key, with no channel and no note:
@@ -8019,6 +8290,9 @@ class Live:
         slots = []
         for pid in pids:
             slots.extend(self.slab.live.get(self._amp_key(pid), ()))
+        for rk, (pid, _old) in self.amp_retired.items():
+            if pid in pids:
+                slots.extend(self.slab.live.get(rk, ()))
         if slots:
             self.slab.retune(slots, n0, om_scale=scale)
 
@@ -8716,6 +8990,21 @@ class Live:
         is what a program change means. What must go is everything keyed to the
         OLD voice: its panel state, and its amplifier's products.
         """
+        # THE OLD TONE's VALVE GOES WITH THE OLD TONE's NOTES: a program change
+        # is another instrument (the file renderer's per-tone mix channel), so
+        # a guitar held through it keeps its distortion, and the new tone's
+        # valve hears only its own notes -- the products under a key of their
+        # own, let go when the last of the old notes is (_amp_retire). Kept
+        # under the part's key they were never let go at all: note-off asks
+        # the NEW voice whether it has a valve.
+        old = part.patch
+        ak = self._amp_key(part.pid)
+        if patch is not old and self.slab.live.get(ak):
+            rk = (part.pid, -1, -1, "%s%d" % (self.AMP_OLD, n0))
+            self.slab.live[rk] = self.slab.live.pop(ak)
+            if ak in self.slab.oneshot:
+                self.slab.oneshot[rk] = self.slab.oneshot.pop(ak)
+            self.amp_retired[rk] = (part.pid, old)
         part.set_patch(patch)
         # A MOOG PROGRAM SETS THE MESSENGER to it (queued, so the audio thread
         # does not wait on MIDI)
@@ -8852,6 +9141,8 @@ class Live:
         _b_od = bool(_effx is not None and (_effx.get('par') or {}).get('B', {}).get('od_gain'))
         slots = [sl for k, ss in self.slab.live.items()
                  if k[0] == pid and k[3] != "amp"
+                 and not (isinstance(k[3], str) and k[3].startswith(self.AMP_OLD))
+                 and self.key_tone.get((k[0], k[1], k[2]), part.patch) is part.patch   # this tone's notes
                  and (_b_od or not (isinstance(k[3], str) and k[3].startswith(self.EFX_SLOT + "B")))
                  for sl in ss]
         if drive <= 0.0 or len(slots) < 2:
@@ -9507,11 +9798,12 @@ class Live:
         """
         for k in [k for k in list(self.slab.live)
                   if k[3] not in ("amp", self.DRONE_SLOT)
-                  and not (isinstance(k[3], str) and k[3].startswith((self.MF104_SLOT, self.EFX_SLOT)))
+                  and not (isinstance(k[3], str) and k[3].startswith((self.MF104_SLOT, self.EFX_SLOT, self.AMP_OLD)))
                   and (k[1], k[2]) not in self.sost.get(k[1], ())
                   and (k[1], k[2]) not in self.down
                   and (k[1], k[2]) not in self.pedalled
                   and (k[0], k[1], k[2]) not in self.siren_st
+                  and (k[0], k[1], k[2]) not in self.cutting
                   and not self.slab.oneshot.get(k)]:
             self.slab.release(k, n)
             self.stuck += 1
@@ -9532,10 +9824,11 @@ class Live:
                 continue
             if (k[0], k[1], k[2]) in self.siren_st:
                 continue        # a siren's pressure is its air, not a brightness
-            groups.setdefault(self._press_tilt(k[0], k[2]), []).extend(slots)
+            groups.setdefault(self._press_tilt(k[0], k[2], self.key_tone.get((k[0], k[1], k[2]))),
+                              []).extend(slots)
         return [(v, t) for t, v in groups.items()]
 
-    def _press_tilt(self, pid, note):
+    def _press_tilt(self, pid, note, patch=None):
         """How much this voice brightens per unit of aftertouch. MEASURED.
 
         Slab.press scales each partial by (f/f0)^(tilt*p), which is 6.02*tilt dB
@@ -9560,7 +9853,7 @@ class Live:
             if p.pid != pid:
                 continue
             try:
-                et = getattr(p.patch._voice_class(note), "effort_tilt", 0.0)
+                et = getattr((patch or p.patch)._voice_class(note), "effort_tilt", 0.0)
             except Exception:
                 return self.press_tilt
             # EFFORT VOICES ONLY, as the file renderer has always done. A voice
@@ -9571,7 +9864,7 @@ class Live:
             return (et * self.press_db / 6.0206) if et else 0.0
         return 0.0
 
-    def _sounding(self, ch, pids=None, note=None, pcs=None, skip_abs=False):
+    def _sounding(self, ch, pids=None, note=None, pcs=None, skip_abs=False, tone=None, old=False):
         """Every slot sounding on this channel, optionally narrowed to a set of
         parts, to one note, or to a set of PITCH CLASSES.
 
@@ -9602,6 +9895,12 @@ class Live:
                 continue
             if skip_abs and self.pn_at.get((k[0], k[1], k[2]), (1.0, False))[1]:
                 continue                # a MIDI 2.0 absolute pitch: not the key's
+            if tone is not None:
+                # ONE TONE's NOTES (key_tone): the part's current one takes the
+                # keys no note struck (its drones); an OLD one only its own
+                kt = self.key_tone.get((k[0], k[1], k[2]))
+                if not (kt is tone or (kt is None and not old)):
+                    continue
             out.extend(slots)
         return out
 
@@ -9680,7 +9979,7 @@ class Live:
                     self._ls_rate = self.rotor_horn.rate
             # THE INSERTION EFFECT: its moving filter on the levels the swings
             # left, then its copies from the partials as they now stand
-            if self.efx_parts or self.slab.tap_m:
+            if self.efx_parts or self.tone_fx or self.slab.tap_m:
                 self._efx_rotary_sync()
                 self._filter_block(n0, frame_count)
                 self.slab.moog_filter_apply()
