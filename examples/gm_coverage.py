@@ -1291,6 +1291,10 @@ VAR_RATED = {
     (15, 17): (3, "the ZITHER brighter: the kanun, its top damped 0.75x as fast"),
     (108, 9): (3, "the BODHRAN fitted to Teh_Bucket's 27 open strokes (freesound 521586, CC0; examples/perc_fit.py bodhran): its 24 modes over the head's 90.8 Hz (the take's 60/180 Hz mains hum left out), the tipper's strike and the band trims, 3.1 dB rms over the band-by-time grid; played at pitch as the taiko"),
     (108, 10): (3, "the BODHRAN MUTE: the same take's 6 strokes with the hand pressed into the skin -- its strike modes raised (114 -> 130 Hz), brighter, shorter; fitted 4.3 dB rms (perc_fit.py bodhran_mute)"),
+    (122, 16): (3, "PINK NOISE: the breath noise voice (GM 121's) with every third-octave band level -- equal power per band -- held still"),
+    (125, 12): (3, "a BURNER: the breath noise voice as a gas burner's roar, its low bands up, falling 4 dB a third-octave band above 250 Hz, flickering 3 dB at 7 Hz -- a guess, no recording"),
+    (120, 13): (3, "BIWA TREMOLO: the biwa (120.12, fitted) tremolo-picked, ten strokes a second"),
+    (118, 13): (3, "606 DIST.TOM: the 606 set's tom (set 28's key 45) from the keyboard, through the valve at drive 2"),
     (109, 9): (3, "the UILLEANN PIPES measured on luis_audp's practice set (freesound 268816, CC BY: measurement only; examples/wind_fit.py --voice=uilleann): the chanter's just scale against the drone (E 9/8, F# 5/4, A 3/2, the C natural the harmonic seventh), its two registers fitted as two tables (the bottom a reed, h2-h3 level with the fundamental, 0.0 dB rms; the upper nearly a flute, 1.2 dB), the bellows' breath (0.1-0.4 dB); three drones in D (the Highland drones' voices retuned, 4 dB quieter, the bass 17 dB under the chanter as the take's)"),
     (109, 10): (3, "the UILLEANN PIPES (109.9), 'normal': the same voice -- Roland's names do not say what parts the two"),
     (109, 11): (3, "the UILLEANN PIPES ornamented: a CUT on every note (tonelib cut_semitones) -- a flicked upper finger, a fourth above for 30 ms, slurred into the note"),
@@ -1402,6 +1406,16 @@ def _sc88_var_rated():
             kr = PERC_RATED[how[1]] if how[2] == 0 else KIT_RATED[how[2]].get(how[1], PERC_RATED.get(how[1]))
             r = kr[0]
             note = "set %d's key %d from the keyboard%s" % (how[2], how[1], ", played backwards" if kind == "rev" else "")
+        elif kind == "menu":
+            # a MENU (patch_map.kit_menu): a different drum on each key, rated as
+            # its weakest
+            rs = [(PERC_RATED[k] if st == 0 else KIT_RATED[st].get(k, PERC_RATED.get(k)))[0]
+                  for _kd, k, st in how[1]]
+            r = min(rs)
+            sets = sorted({st for _kd, _k, st in how[1]})
+            note = "a MENU: %d drums on consecutive keys from C2, each at its kit pitch (%s)" % (
+                len(how[1]), "; ".join("set %d's keys %s" % (st, ",".join(str(k) for _kd, k, s2 in how[1] if s2 == st))
+                                      for st in sets))
         elif kind == "set":
             r = RATED[how[1]][0]
             note = "GM %d %s with %s" % (how[1], names[how[1]], ", ".join(

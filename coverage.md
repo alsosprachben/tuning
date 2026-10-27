@@ -20,14 +20,14 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | GM 1 percussion keys (35-81) | 47 | 47 | 100% | 47 | 0 | 0 | 0 | 0 |
 | GM 2 tones (MSB 121) | 256 | 256 | 100% | 201 | 55 | 0 | 0 | 0 |
 | GM 2 drum sets | 9 | 9 | 100% | 8 | 1 | 0 | 0 | 0 |
-| SC-55 tones | 438 | 438 | 100% | 171 | 264 | 3 | 0 | 0 |
+| SC-55 tones | 442 | 442 | 100% | 171 | 268 | 3 | 0 | 0 |
 | SC-55 drum sets | 10 | 10 | 100% | | | | | |
 | SC-55mkII tones | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 |
 | SC-88 tones | 418 | 418 | 100% | 285 | 130 | 3 | 0 | 0 |
 | SC-88 drum sets | 14 | 14 | 100% | | | | | |
-| SC-88Pro tones | 774 | 737 | 95% | 414 | 320 | 3 | 0 | 0 |
+| SC-88Pro tones | 774 | 774 | 100% | 431 | 334 | 9 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
-| SC-8850 tones | 1262 | 1106 | 88% | 565 | 535 | 6 | 0 | 0 |
+| SC-8850 tones | 1262 | 1262 | 100% | 597 | 584 | 81 | 0 | 0 |
 | SC-8850 drum sets | 37 | 37 | 100% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
@@ -2332,8 +2332,8 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 547 of the SC-55's 547 are built,
-and 428 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
+under a program (SC-55 owner's manual p.68). 552 of the SC-55's 552 are built,
+and 579 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
 | program.bank | map | GS name | class | | notes |
@@ -3253,47 +3253,166 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 112.9 | SC-55 | Gender | `Gender` | **4** | the gamelan's metallophone, fitted to UNT's Balinese gangsa (cpolcyn, CC0; examples/gender_fit.py): a free bar 1 : 2.70 : 5.27, the third mode carrying the strike under ~4 kHz (the panggul's roll-off, steep), the fundamental ringing (D 1.87 at 415 Hz), 42 keys; the Balinese pair (26 cents, GangsaPairProperties) taken off against Casa da Musica's Javanese gender, which has none. Ben: 'I hear it less tuned, but not too bright' -> 'Sounds good' |
 | 112.10 | SC-55 | GamelanGong | `GamelanGong` | **4** | the gong ageng, fitted to UNT's big gong (CC0; examples/gender_fit.py --gong): 69.3 Hz, the octave pair 2.00/2.08 at -1 dB, the beat 0.61 Hz at 2.2 dB p-p (recorded 1.4-2.4), the felt's onset 0.18 s (0.10-0.16), 3.0 dB/s (2.9-3.1); shorter up the register by the same gamelan's kempli (slope 0.73). Ben: 'Sounds good' |
 | 112.11 | SC-55 | St.Gamelan | `GangsaPair` | **2** | the gamelan in stereo, BY ITS NAME: no recording of Roland's tone and neither GS SoundFont has one (both hold only 112.0), and no GS file here uses it. Composed of fitted voices: the Balinese gangsa as played, a pair 26 cents apart left and right (GangsaPairProperties), and the bonang an octave over it at -6 dB, as the panerus doubles the melody. Ben: 'It sounds good, but I don't know what it is supposed to sound like' |
+| 112.12 | SC-88 | Jang-Gu | `RfxJangguChe_sfx67` | **3** | SC-88 map: set 52's key 67 from the keyboard |
+| 112.13 | SC-88 | Jegogan | `GamelanJegogan_sfx50` | **3** | SC-8850 map: set 54's key 50 from the keyboard |
+| 112.14 | SC-88 | Jublag | `GamelanJublag_sfx55` | **3** | SC-8850 map: set 54's key 55 from the keyboard |
+| 112.15 | SC-88 | Pemade | `GamelanPemade_sfx67` | **4** | SC-8850 map: set 54's key 67 from the keyboard |
 | 112.16 | SC-55 | RAMA Cymbal | `CengCeng` | **4** | the Balinese CENG-CENG (tonelib.CengCengProperties): a plate from the crash FITTED to the UNT gamelan Bwana Kumala's single ringing strikes (Freesound pack 12954, CC0; examples/rama_fit.py: multi-strike files rejected, 4.8 dB on the grid), with each strike's chatter of the stand's plates (14-17 sub-hits in 120 ms) as strike_flam bursts at +10 dB by Ben's ear |
+| 112.17 | SC-88 | Kajar | `Kajar_sfx48` | **3** | SC-8850 map: set 54's key 48 from the keyboard |
+| 112.18 | SC-88 | Kelontuk | `Kelontuk_sfx40` | **3** | SC-8850 map: set 54's key 40 from the keyboard |
+| 112.19 | SC-88 | Kelontuk Mt | `KelontukMute_sfx41` | **3** | SC-8850 map: set 54's key 41 from the keyboard |
+| 112.20 | SC-88 | Kelontuk Sid | `KelontukSide_sfx42` | **3** | SC-8850 map: set 54's key 42 from the keyboard |
+| 112.21 | SC-88 | Kopyak Op | `Kopyak_sfx46` | **3** | SC-8850 map: set 54's key 46 from the keyboard |
+| 112.22 | SC-88 | Kopyak Mt | `Kopyak_sfx47` | **3** | SC-8850 map: set 54's key 47 from the keyboard |
+| 112.23 | SC-88 | Ceng Ceng | `CengCeng_sfx45` | **4** | SC-8850 map: set 54's key 45 from the keyboard |
+| 112.24 | SC-88 | Reyoung | `Reyong_sfx77` | **3** | SC-8850 map: set 54's key 77 from the keyboard |
+| 112.25 | SC-88 | Kempur | `Kempur_sfx49` | **3** | SC-8850 map: set 54's key 49 from the keyboard |
+| 112.32 | SC-88 | Jngl Crash | `JungleCrash_sfx49` | **3** | SC-8850 map: set 10's key 49 from the keyboard |
+| 112.40 | SC-88 | Crash Menu | `TR808Cymbal_sfx65_menu60` | **2** | SC-8850 map: a MENU: 17 drums on consecutive keys from C2, each at its kit pitch (set 62's keys 58,59,60,61,62,63,64,65,66,67,68,69,70,71,76,87,88) |
+| 112.41 | SC-88 | RideCym Menu | `RideCymbal_sfx81_menu60` | **2** | SC-8850 map: a MENU: 6 drums on consecutive keys from C2, each at its kit pitch (set 62's keys 81,82,83,84,85,86) |
+| 112.42 | SC-88 | RideBellMenu | `RideBell_sfx77_menu60` | **2** | SC-8850 map: a MENU: 4 drums on consecutive keys from C2, each at its kit pitch (set 62's keys 77,78,79,80) |
 | 113.8 | SC-55 | Atarigane | `Atarigane` | **2** | the festival hand gong, an EDUCATED GUESS (Ben's word): no recording found, so the bonang's MEASURED bronze kettle (its partner at 1.55, octave, mode near 3, mallet burst) with what differs reasoned -- a hard deer-horn mallet (the upper modes 12-18 dB up, a mode near 4.2), a small thick hand-held gong (~1.5 s ring, not 7), the horn's click brighter and quicker. At the agogo's level; examples/atarigane_demo.py plays a festival figure at C6. |
+| 113.16 | SC-88 | Tambourine | `Tambourine_sfx54` | **4** | SC-88 map: set 0's key 54 from the keyboard |
+| 114.1 | SC-88 | Island Mlt | `SteelPan_sc88_114_1` | **4** | SC-88 map: layered: GM 114 + GM 12 -6 dB |
 | 115.8 | SC-55 | Castanets | `Castanets_sfx85` | **4** | set 0's key 85 played from the keyboard (patch_map.melodic_sfx), C4 at its kit pitch, transposed whole -- at C4 its key's spectrum within 0.05-0.33 dB: Iowa castanets |
+| 115.16 | SC-88 | Angklung | `WoodPercussion_sc88_115_16` | **4** | SC-88 map: GM 115 Woodblock with tremolo_pick_hz=11.0, tremolo_pick_up_db=-1.0, tremolo_pick_jitter=0.12 |
+| 115.17 | SC-88 | Angkl Rhythm | `WoodPercussion` | **4** | SC-88 map: GM 115 Woodblock's voice |
+| 115.24 | SC-88 | Finger Snaps | `FingerSnap_sfx26` | **4** | SC-88 map: set 1's key 26 from the keyboard |
+| 115.32 | SC-88 | 909 HandClap | `TR909Clap_sfx39` | **3** | SC-88 map: set 13's key 39 from the keyboard |
+| 115.40 | SC-88 | HandClapMenu | `TR707Clap_sfx89_menu60` | **2** | SC-8850 map: a MENU: 8 drums on consecutive keys from C2, each at its kit pitch (set 62's keys 89,90,91,92,93,94,95,96) |
+| 116.1 | SC-88 | Small Taiko | `Taiko_sfx52` | **2** | SC-88 map: set 52's key 52 from the keyboard |
 | 116.8 | SC-55 | Concert BD | `ConcertBassDrum_sfx36` | **4** | set 48's key 36 played from the keyboard (patch_map.melodic_sfx), C4 at its kit pitch, transposed whole -- at C4 its key's spectrum within 0.05-0.33 dB: CONCERT BD 1, FITTED BY TWO LEVELS (examples/orch_fit.py): GeneralUser GS's Orchestra bass drum picks VCSL's "Bass Drum 1" (CC0), and the drum is fitted to its hit -- 73 modes read settled to -45 dB AND early to 3 kHz (a big head's upper modes are gone before a kick's are read), per-octave trims and rates: 10.7 dB. Balanced as GeneralUser's set (examples/elkit_balance.py --kit=48). Ben: sounds good |
+| 116.9 | SC-88 | ConcertBD Mt | `ConcertBassDrum_sfx48` | **3** | SC-8850 map: set 51's key 48 from the keyboard |
+| 116.16 | SC-88 | Jungle BD | `JungleKick1_sfx36` | **4** | SC-88 map: set 10's key 36 from the keyboard |
+| 116.17 | SC-88 | Techno BD | `TechnoKick1_sfx36` | **4** | SC-88 map: set 11's key 36 from the keyboard |
+| 116.18 | SC-88 | Bounce | `RfxBounce_sfx82` | **3** | SC-88 map: set 58's key 82 from the keyboard |
+| 116.24 | SC-88 | KendangWadon | `KendangWadon_sfx36` | **3** | SC-8850 map: set 54's key 36 from the keyboard |
+| 116.25 | SC-88 | Bebarongan | `KendangBebarongan_sfx38` | **3** | SC-8850 map: set 54's key 38 from the keyboard |
+| 116.26 | SC-88 | Pelegongan | `KendangPelegongan_sfx39` | **3** | SC-8850 map: set 54's key 39 from the keyboard |
+| 116.27 | SC-88 | Dholak 1 | `DholakBass_sfx89` | **3** | SC-8850 map: set 52's key 89 from the keyboard |
+| 116.28 | SC-88 | Dholak 2 | `DholakTreble_sfx90` | **3** | SC-8850 map: set 52's key 90 from the keyboard |
+| 116.32 | SC-88 | Jngl BD Roll | `JungleKick1_sfx89` | **4** | SC-8850 map: set 10's key 89 from the keyboard |
+| 116.40 | SC-88 | Kick Menu 1 | `KickDrum_sfx46_menu60` | **2** | SC-8850 map: a MENU: 16 drums on consecutive keys from C2, each at its kit pitch (set 50's keys 38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53) |
+| 116.41 | SC-88 | Kick Menu 2 | `CR78Kick_sfx25_menu60` | **2** | SC-8850 map: a MENU: 12 drums on consecutive keys from C2, each at its kit pitch (set 50's keys 25,26,27,28,29,30,31,54,55,56,57,58) |
+| 116.42 | SC-88 | Kick Menu 3 | `TR909Kick_sfx59_menu60` | **2** | SC-8850 map: a MENU: 9 drums on consecutive keys from C2, each at its kit pitch (set 50's keys 32,33,34,35,36,37,59; set 51's keys 55,56) |
+| 116.43 | SC-88 | Kick Menu 4 | `JungleKick1_sfx53_menu60` | **2** | SC-8850 map: a MENU: 13 drums on consecutive keys from C2, each at its kit pitch (set 51's keys 42,43,44,45,46,47,48,49,50,51,52,53,54) |
 | 117.1 | SC-88 | Real Tom | `TomTom_sfx45` | **4** | SC-88 map: set 0's key 45 from the keyboard |
+| 117.2 | SC-88 | Real Tom 2 | `RoomTom_sfx45` | **4** | SC-8850 map: set 8's key 45 from the keyboard |
+| 117.3 | SC-88 | Jazz Tom | `JazzTomHigh_sfx45` | **4** | SC-8850 map: set 32's key 45 from the keyboard |
+| 117.4 | SC-88 | Brush Tom | `BrushTomMid_sfx45` | **4** | SC-8850 map: set 40's key 45 from the keyboard |
 | 117.8 | SC-55 | Melo. Tom 2 | `ElectronicTom47_sfx47` | **4** | set 24's key 47 played from the keyboard (patch_map.melodic_sfx), C4 at its kit pitch, transposed whole -- at C4 its key's spectrum within 0.05-0.33 dB: as 41 |
 | 117.9 | SC-88 | Rock Tom | `RoomTom_sfx45` | **4** | SC-88 map: set 16's key 45 from the keyboard |
+| 117.16 | SC-88 | Rash SD | `LoFiSnare1_sfx38` | **3** | SC-88 map: set 9's key 38 from the keyboard |
+| 117.17 | SC-88 | House SD | `TR909Snare_sfx38` | **4** | SC-88 map: set 13's key 38 from the keyboard |
+| 117.18 | SC-88 | Jungle SD | `JungleSnare1_sfx40` | **2** | SC-88 map: set 10's key 40 from the keyboard |
+| 117.19 | SC-88 | 909 SD | `TR909Snare_sfx38` | **4** | SC-88 map: set 30's key 38 from the keyboard |
+| 117.24 | SC-88 | Jngl SD Roll | `JungleSnare1_sfx90` | **4** | SC-8850 map: set 10's key 90 from the keyboard |
+| 117.40 | SC-88 | SD Menu 1 | `GatedSnare_sfx71_menu60` | **2** | SC-8850 map: a MENU: 13 drums on consecutive keys from C2, each at its kit pitch (set 50's keys 60,61,62,63,64,65,66,67,68,69,70,71,72) |
+| 117.41 | SC-88 | SD Menu 2 | `TR909Snare2_sfx75_menu60` | **2** | SC-8850 map: a MENU: 11 drums on consecutive keys from C2, each at its kit pitch (set 50's keys 73,74,75,76,77,78,79,80,81,82,83) |
+| 117.42 | SC-88 | SD Menu 3 | `BrushTap_sfx84_menu60` | **4** | SC-8850 map: a MENU: 8 drums on consecutive keys from C2, each at its kit pitch (set 50's keys 84,85,86,87,88,89,90,91) |
+| 117.43 | SC-88 | SD Menu 4 | `TR909Snare_sfx80_menu60` | **2** | SC-8850 map: a MENU: 14 drums on consecutive keys from C2, each at its kit pitch (set 51's keys 70,71,72,73,74,75,76,77,78,79,80,81,82,83) |
+| 117.44 | SC-88 | SD Menu 5 | `AcousticSnare_sfx92_menu60` | **4** | SC-8850 map: a MENU: 8 drums on consecutive keys from C2, each at its kit pitch (set 50's keys 92,93,94,95,96,97,98,99) |
 | 118.8 | SC-55 | 808 Tom | `TR808MidTom_sfx47` | **4** | set 25's key 47 played from the keyboard (patch_map.melodic_sfx), C4 at its kit pitch, transposed whole -- at C4 its key's spectrum within 0.05-0.33 dB: as 45, 2 semitones higher (as 43) |
 | 118.9 | SC-88 | Elec Perc | `ElectronicTom45_sfx45` | **4** | SC-88 map: set 24's key 45 from the keyboard |
 | 118.10 | SC-55 | Sine Perc. | `Sc88_118_10` | **3** | SC-88 map: a Moog panel, the SynthDrum's with a_decay, cutoff, noise_level, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 118.11 | SC-88 | 606 Tom | `TR606Tom_sfx45` | **4** | SC-88 map: set 28's key 45 from the keyboard |
+| 118.12 | SC-88 | 909 Tom | `TR909MidTom_sfx45` | **4** | SC-88 map: set 30's key 45 from the keyboard |
+| 118.13 | SC-55 | 606 Dist.Tom | `Tr606DistTom` | **3** | 606 DIST.TOM: the 606 set's tom (set 28's key 45) from the keyboard, through the valve at drive 2 |
 | 119.1 | SC-88 | ReverseCym2 | `CrashCymbal2_sfx57_rev` | **4** | SC-88 map: set 0's key 57 from the keyboard, played backwards |
+| 119.2 | SC-88 | Reverse Cym3 | `ReverseRoomCrash_sfx73` | **3** | SC-88 map: set 62's key 73 from the keyboard |
+| 119.3 | SC-88 | Reverse Cym4 | `ReverseJazzCrash_sfx74` | **4** | SC-8850 map: set 62's key 74 from the keyboard |
 | 119.8 | SC-88 | Rev.Snare 1 | `AcousticSnare_sfx38_rev` | **4** | SC-88 map: set 0's key 38 from the keyboard, played backwards |
 | 119.9 | SC-88 | Rev.Snare 2 | `SnareDrum2_sfx40_rev` | **4** | SC-88 map: set 0's key 40 from the keyboard, played backwards |
 | 119.16 | SC-88 | Rev.Kick 1 | `KickDrum_sfx36_rev` | **4** | SC-88 map: set 0's key 36 from the keyboard, played backwards |
 | 119.17 | SC-88 | Rev.ConBD | `ConcertBassDrum_sfx36_rev` | **4** | SC-88 map: set 48's key 36 from the keyboard, played backwards |
 | 119.24 | SC-88 | Rev.Tom 1 | `TomTom_sfx45_rev` | **4** | SC-88 map: set 0's key 45 from the keyboard, played backwards |
 | 119.25 | SC-88 | Rev.Tom 2 | `HighTom_sfx48_rev` | **4** | SC-88 map: set 0's key 48 from the keyboard, played backwards |
+| 119.26 | SC-88 | Rev.Tom 3 | `HighTom_sfx50_rev` | **4** | SC-8850 map: set 0's key 50 from the keyboard, played backwards |
+| 119.27 | SC-88 | Rev.Tom 4 | `FloorTom_sfx41_rev` | **4** | SC-8850 map: set 0's key 41 from the keyboard, played backwards |
+| 119.40 | SC-88 | Rev.SD Menu1 | `ReverseAcousticSnare_sfx56_menu60` | **2** | SC-8850 map: a MENU: 8 drums on consecutive keys from C2, each at its kit pitch (set 59's keys 56,57,58,59,60,61,62,63) |
+| 119.41 | SC-88 | Rev.SD Menu2 | `ReverseAcousticSnare_sfx73_menu60` | **2** | SC-8850 map: a MENU: 15 drums on consecutive keys from C2, each at its kit pitch (set 59's keys 64,65,66,67,68,69,70,71,72,73,74,75,76,77,78) |
+| 119.42 | SC-88 | Rev.SD Menu3 | `ReverseTR909Snare_sfx48_menu60` | **2** | SC-8850 map: a MENU: 17 drums on consecutive keys from C2, each at its kit pitch (set 57's keys 40,41,42,43,44,45; set 58's keys 41,42,43,44,45,46,47,48,49,50,51) |
+| 119.43 | SC-88 | Rev.BD Menu1 | `ReverseKickDrum_sfx39_menu60` | **2** | SC-8850 map: a MENU: 8 drums on consecutive keys from C2, each at its kit pitch (set 59's keys 39,40,41,42,43,44,45,46) |
+| 119.44 | SC-88 | Rev.BD Menu2 | `ReverseTR909Kick_sfx53_menu60` | **2** | SC-8850 map: a MENU: 9 drums on consecutive keys from C2, each at its kit pitch (set 59's keys 47,48,49,50,51,52,53,54,55) |
+| 119.45 | SC-88 | Rev.BD Menu3 | `ReverseConcertBassDrum_sfx37_menu60` | **4** | SC-8850 map: a MENU: 9 drums on consecutive keys from C2, each at its kit pitch (set 57's keys 36,37,38,39; set 58's keys 36,37,38,39,40) |
+| 119.46 | SC-88 | Rev.ClapMenu | `ReverseTR707Clap_sfx88_menu60` | **3** | SC-8850 map: a MENU: 6 drums on consecutive keys from C2, each at its kit pitch (set 59's keys 88,89,90,91,92,95) |
 | 120.1 | SC-55 | Gt. Cut Noise | `SfxGuitarCutDown_sfx48` | **4** | the SFX set's key 48 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): GUITAR CUTTING NOISE (DOWN): a muted strum on steel strings (Freesound, CC0), the strings' scrape at 0.14-3 kHz: 5.9 dB. A nylon guitar's take had been its body's thump -- a tom (Ben) |
 | 120.2 | SC-55 | String Slap | `SfxBassSlap_sfx50` | **3** | the SFX set's key 50 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): STRING SLAP OF DOUBLE BASS: a hand slapping an upright's strings (Freesound, CC0), judged from 31 Hz: 9.7 dB -- the take's three onsets (the rattle) one strike here |
 | 120.3 | SC-88 | Gt.CutNz. 2 | `SfxGuitarCutDown_sfx48` | **4** | SC-88 map: 120.1's voice |
 | 120.4 | SC-88 | Dist.CutNz. | `SfxGuitarCutDown_sfx48` | **4** | SC-88 map: 120.1's voice |
 | 120.5 | SC-88 | Bass Slide | `GuitarFretNoise_sc88_120_5` | **3** | SC-88 map: GM 120 Guitar Fret Noise with formants=((990.0, 1170.0, 1.0),), bore_corner_hz=2040.0, bell_cutoff_hz=380.0 |
 | 120.6 | SC-88 | Pick Scrape | `GuitarFretNoise` | **3** | SC-88 map: GM 120 Guitar Fret Noise's voice |
+| 120.8 | SC-88 | Gt. FX Menu | `SfxGuitarCutDown_sfx48_menu60` | **2** | SC-88 map: a MENU: 13 drums on consecutive keys from C2, each at its kit pitch (set 56's keys 23,24,25,26,27,28,33,34,35,36,47,48,49) |
+| 120.9 | SC-88 | Bartok Pizz. | `ViolinPizz_sc88_120_9` | **3** | SC-88 map: layered: GM 45 + set 56's key 50 -4 dB |
+| 120.10 | SC-88 | Guitar Slap | `SfxBassSlap_sfx25` | **2** | SC-88 map: set 56's key 25 from the keyboard |
+| 120.11 | SC-88 | Chord Stroke | `RfxStrum_sfx26` | **3** | SC-88 map: set 56's key 26 from the keyboard |
 | 120.12 | SC-55 | Biwa Stroke | `Biwa` | **4** | the SATSUMA BIWA (tonelib.BiwaProperties): a wooden-bodied lute from the shamisen's struck-silk numbers, FITTED to Hugh de Ferranti's satsuma biwa (PARADISEC HDF1-SB33, CC BY-NC-SA 4.0 data: the fitted numbers derive from it; sources.md): 44 strokes, the decay fast and flat across the harmonics, the body 500 Hz-5 kHz (the cassette's ends not the instrument's). Ben: 'Sounds great' |
+| 120.13 | SC-55 | Biwa Tremolo | `BiwaTremolo` | **3** | BIWA TREMOLO: the biwa (120.12, fitted) tremolo-picked, ten strokes a second |
+| 120.16 | SC-88 | A.Bs.Nz Menu | `SfxBassSlap_sfx50_menu60` | **2** | SC-8850 map: a MENU: 5 drums on consecutive keys from C2, each at its kit pitch (set 56's keys 37,50; set 60's keys 31,32,33) |
+| 120.17 | SC-88 | D.Gt.Nz Menu | `SfxGuitarCutUp_sfx35_menu60` | **2** | SC-8850 map: a MENU: 4 drums on consecutive keys from C2, each at its kit pitch (set 56's keys 35,36,24; set 60's keys 34) |
+| 120.18 | SC-88 | E.Gt.NzMenu1 | `SfxFretSlide_sfx47_menu60` | **2** | SC-8850 map: a MENU: 5 drums on consecutive keys from C2, each at its kit pitch (set 56's keys 48,49,33,34,47) |
+| 120.19 | SC-88 | E.Gt.NzMenu2 | `RfxStrum_sfx43_menu60` | **2** | SC-8850 map: a MENU: 5 drums on consecutive keys from C2, each at its kit pitch (set 60's keys 39,40,41,42,43) |
+| 120.20 | SC-88 | G.StrokeMenu | `RfxStrum_sfx40_menu60` | **2** | SC-8850 map: a MENU: 7 drums on consecutive keys from C2, each at its kit pitch (set 56's keys 26,27; set 60's keys 39,40,41,42,43) |
+| 120.21 | SC-88 | Gt.SlideMenu | `SfxFretSlide_sfx35_menu60` | **2** | SC-8850 map: a MENU: 6 drums on consecutive keys from C2, each at its kit pitch (set 56's keys 23,47; set 60's keys 35,36,37,38) |
+| 120.22 | SC-88 | A.Bs.Mute Nz | `SfxBassSlap_sfx31` | **2** | SC-8850 map: set 60's key 31 from the keyboard |
+| 120.23 | SC-88 | A.Bs.TouchNz | `SfxBassSlap_sfx32` | **2** | SC-8850 map: set 60's key 32 from the keyboard |
+| 120.24 | SC-88 | A.Bs.AtackNz | `SfxBassSlap_sfx33` | **2** | SC-8850 map: set 60's key 33 from the keyboard |
+| 120.25 | SC-88 | TC Up Nz | `SfxGuitarCutUp_sfx49` | **4** | SC-8850 map: set 56's key 49 from the keyboard |
+| 120.26 | SC-88 | TC DownMt.Nz | `SfxGuitarCutDown_sfx34` | **2** | SC-8850 map: set 56's key 34 from the keyboard |
+| 120.27 | SC-88 | TC UpMt.Nz | `SfxGuitarCutUp_sfx33` | **2** | SC-8850 map: set 56's key 33 from the keyboard |
+| 120.28 | SC-88 | TC Down Nz | `SfxGuitarCutDown_sfx48` | **4** | SC-8850 map: set 56's key 48 from the keyboard |
+| 120.29 | SC-88 | DstGT.Up Nz | `SfxGuitarCutUp_sfx35` | **2** | SC-8850 map: set 56's key 35 from the keyboard |
+| 120.30 | SC-88 | DstGT.DwnNz1 | `SfxGuitarCutDown_sfx36` | **2** | SC-8850 map: set 56's key 36 from the keyboard |
+| 120.31 | SC-88 | DstGT.DwnNz2 | `ReverseSfxGuitarCutDown_sfx25_rev` | **2** | SC-8850 map: set 59's key 25 from the keyboard, played backwards |
+| 120.32 | SC-88 | DstGT.MuteNz | `SfxGuitarCutDown_sfx34` | **2** | SC-8850 map: set 60's key 34 from the keyboard |
+| 120.34 | SC-88 | Gt.StrokeNz5 | `RfxStrum_sfx43` | **2** | SC-8850 map: set 60's key 43 from the keyboard |
+| 120.35 | SC-88 | StlGt.SldNz1 | `SfxFretSlide_sfx35` | **2** | SC-8850 map: set 60's key 35 from the keyboard |
+| 120.36 | SC-88 | StlGt.SldNz2 | `SfxFretSlide_sfx36` | **2** | SC-8850 map: set 60's key 36 from the keyboard |
+| 120.37 | SC-88 | StlGt.SldNz3 | `SfxFretSlide_sfx37` | **2** | SC-8850 map: set 60's key 37 from the keyboard |
+| 120.38 | SC-88 | StlGt.SldNz4 | `SfxFretSlide_sfx38` | **2** | SC-8850 map: set 60's key 38 from the keyboard |
+| 120.39 | SC-88 | Gt.StrokeNz1 | `RfxStrum_sfx39` | **2** | SC-8850 map: set 60's key 39 from the keyboard |
+| 120.40 | SC-88 | Gt.StrokeNz2 | `RfxStrum_sfx40` | **2** | SC-8850 map: set 60's key 40 from the keyboard |
+| 120.41 | SC-88 | Gt.StrokeNz3 | `SfxGuitarCutDown_sfx41` | **2** | SC-8850 map: set 60's key 41 from the keyboard |
+| 120.42 | SC-88 | Gt.StrokeNz4 | `SfxGuitarCutUp_sfx42` | **2** | SC-8850 map: set 60's key 42 from the keyboard |
 | 121.1 | SC-55 | Fl. Key Click | `SfxKeyClick_sfx51` | **4** | the SFX set's key 51 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): KEY CLICK: a woodwind key struck, not blown -- a saxophone's (Freesound, CC0; no CC0 flute key clicks exist): 5.9 dB |
+| 121.2 | SC-88 | Brth Nz Menu | `RfxVoiceBreath2_sfx58_menu60` | **2** | SC-8850 map: a MENU: 5 drums on consecutive keys from C2, each at its kit pitch (set 61's keys 54,55,56,57,58) |
+| 121.3 | SC-88 | Fl.Breath 1 | `RfxFluteBreath1_sfx54` | **2** | SC-8850 map: set 61's key 54 from the keyboard |
+| 121.4 | SC-88 | Fl.Breath 2 | `RfxFluteBreath2_sfx55` | **2** | SC-8850 map: set 61's key 55 from the keyboard |
+| 121.5 | SC-88 | Fl.Breath 3 | `RfxFluteBreath3_sfx56` | **2** | SC-8850 map: set 61's key 56 from the keyboard |
+| 121.6 | SC-88 | Vox Breath 1 | `RfxVoiceBreath1_sfx57` | **2** | SC-8850 map: set 61's key 57 from the keyboard |
+| 121.7 | SC-88 | Vox Breath 2 | `RfxVoiceBreath2_sfx58` | **2** | SC-8850 map: set 61's key 58 from the keyboard |
+| 121.8 | SC-88 | Trombone Nz | `Sfx2TromboneNoiseRev_sfx37_rev` | **3** | SC-8850 map: set 59's key 37 from the keyboard, played backwards |
+| 121.9 | SC-88 | Trumpet Nz | `Sfx2TrumpetNoiseRev_sfx38_rev` | **3** | SC-8850 map: set 59's key 38 from the keyboard, played backwards |
 | 122.1 | SC-55 | Rain | `SfxRain_sfx79` | **4** | the SFX set's key 79 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): RAIN fitted to a Freesound recording (CC0, examples/weather_fit.py): the hiss band by band (1.7 dB rms) and the DROPS as clicks -- each a cluster of sines across 500 Hz-16 kHz at one instant (grains' ninth field), +16 dB over the hiss against the recording's +19, every octave lifted as its drops lift it. Ben: "the rain is good enough drops" |
 | 122.2 | SC-55 | Thunder | `SfxThunder_sfx80` | **4** | the SFX set's key 80 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): THUNDER fitted to a Freesound strike (CC0): its rumble under 250 Hz exact to 2 kHz, the cracks low grains; gated 1 s as GeneralUser GS's |
 | 122.3 | SC-55 | Wind | `SfxWind_sfx81` | **4** | the SFX set's key 81 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): WIND fitted to a Freesound howl (CC0): the 1 kHz howl over its rumble, 0.2 dB rms; one gust a key (a drum channel has no swell rows) |
 | 122.4 | SC-55 | Stream | `SfxStream_sfx83` | **4** | the SFX set's key 83 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): STREAM fitted to a Freesound brook (CC0): its hiss (0.2 dB rms), its drops a short ring at 2 kHz under clicks to 16 kHz -- the ring kept short (Ben: "a bit too bouncy ball") |
 | 122.5 | SC-55 | Bubble | `SfxBubble_sfx84` | **4** | the SFX set's key 84 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): BUBBLES set from a Freesound recording's own events (CC0): 11 a second at 300 Hz-1.2 kHz, each rising from 0.88 of its pitch (grains' glide), dying at 220 dB/s -- run as the bell tree's cascade, 22 rising (percussion_map.KIT_STROKES), as Ben approved it |
+| 122.6 | SC-88 | Wind 2 | `SfxWind_sfx81` | **2** | SC-88 map: set 60's key 81 from the keyboard |
+| 122.7 | SC-88 | Cricket | `Sfx2Cricket_sfx78` | **3** | SC-8850 map: set 60's key 78 from the keyboard |
+| 122.16 | SC-55 | Pink Noise | `PinkNoise` | **3** | PINK NOISE: the breath noise voice (GM 121's) with every third-octave band level -- equal power per band -- held still |
 | 122.17 | SC-55 | White Noise | `Sc88_122_17` | **3** | SC-88 map: a Moog panel, the AtmosphereFX's with a_attack, a_release, a_sustain, cutoff, eg_amount, noise_level, osc1_level, osc2_level, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 123.1 | SC-55 | Dog | `SfxDog_sfx76` | **4** | the SFX set's key 76 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): DOG: a bark as a throat (examples/throat_fit.py): pulses at the six Freesound dogs' near-level contour (CC0; ~540 Hz, up 0.8 semitone, down 1.5), rough (6% jitter, 2 dB shimmer, breath), bright first then darkening ~9 dB at 4-8 kHz as the barks do, ringing their formants (LPC: 560 Hz, 1.35, 2.4, 3.5, 5.4 kHz) levelled to their bands |
 | 123.2 | SC-55 | Horse | `SfxHoof_sfx77` | **3** | the SFX set's key 77 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): HORSE-GALLOP: horseshoe clicks (Ben's call) in GeneralUser GS's five-fall gallop -- a free bar's modes from 1.9 kHz gone in ~60 ms over a bright strike, set, not fitted (no recording has a shoe's click alone). Levelled to the footsteps: GeneralUser's swells in over 5 s, 20 dB down |
 | 123.3 | SC-88 | Bird 2 | `SfxBirds_sfx78` | **4** | SC-88 map: set 56's key 78 from the keyboard |
+| 123.6 | SC-88 | Growl 2 | `SfxGrowl_sfx79` | **2** | SC-8850 map: set 60's key 79 from the keyboard |
+| 123.7 | SC-88 | Fancy Animal | `SfxKitty_sfx77` | **2** | SC-8850 map: set 60's key 77 from the keyboard |
+| 123.8 | SC-88 | Seal | `Sfx2Seal_sfx76` | **3** | SC-8850 map: set 60's key 76 from the keyboard |
 | 124.1 | SC-55 | Telephone 2 | `MoogTelephone2` | **3** | an ELECTRONIC TONE RINGER on the Moog (MoogTelephone2), fitted to GeneralUser GS's own (examples/telephone2_fit.py): OSC 2 a saw through a band pass for the piezo, LFO 1 a square switching it up a fifth at 14.6 Hz -- 1824/2736 Hz at C4, the upper 6.4 dB under (GU's 9.8), 8.6 dB rms over each tone's harmonics; sounds 2.8 octaves over where written. Ben: 'sound great' |
 | 124.2 | SC-55 | Door Creaking | `SfxDoorCreak_sfx59` | **4** | the SFX set's key 59 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): DOOR CREAKING: a hinge's stick-slip as a pulse train slowing 285 to 130 Hz (GeneralUser GS's gesture) over the hinge's noise, fitted to a Freesound cupboard door (CC0): 1.6 dB |
 | 124.3 | SC-55 | Door | `SfxDoor_sfx60` | **4** | the SFX set's key 60 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): DOOR: a wooden door slammed (Freesound, CC0): the slab, the latch, the frame (perc_fit): 6.5 dB |
 | 124.4 | SC-55 | Scratch | `SfxScratchPull_sfx61` | **4** | the SFX set's key 61 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): SCRATCH: the Scratch Pull, as GeneralUser GS plays it |
 | 124.5 | SC-55 | Windchime | `SfxWindchime_sfx62` | **3** | the SFX set's key 62 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): WINDCHIME: a metal chime tube struck, ringing out (Freesound, CC0): 13.0 dB -- one tube where GS's is a shaken set |
 | 124.7 | SC-88 | Scratch 2 | `SfxScratchPull_sfx61` | **4** | SC-88 map: 124.4's voice |
+| 124.8 | SC-88 | ScratchKey | `SfxScratchPull_sfx61` | **4** | SC-88 map: set 56's key 61 from the keyboard |
+| 124.9 | SC-88 | TapeRewind | `RfxTapeRewind_sfx30` | **3** | SC-88 map: set 56's key 30 from the keyboard |
 | 124.10 | SC-55 | Phono Noise | `PhonoNoise` | **4** | a RECORD'S SURFACE as a voice (tonelib.PhonoNoiseProperties), FITTED to nervousneal's blank groove (a 1961 MGM test pressing, Freesound 586430, CC0; examples/phono_fit.py): the hiss flat 300 Hz-12 kHz with its rumble (not brown: RIAA flattens it), clicks 34/s over 12 dB against the take's 36.7, their level spread and bright spectrum the take's, one timeline for the record with each click randomly placed in the balance (Ben) and 11.5% recurring a revolution on. Not modelled: the hiss's L/R anti-correlation, clicks of opposite polarity. Ben: 'Sounds great now' |
+| 124.11 | SC-55 | MC-500 Beep | `Sc88_124_11` | **3** | SC-88 map: a Moog panel, the SquareLead's with a_attack, a_release, a_sustain, cutoff, eg_amount, osc1_wave, osc2_level, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 124.12 | SC-88 | Scratch 3 | `SfxScratchPush_sfx82` | **2** | SC-8850 map: set 60's key 82 from the keyboard |
+| 124.13 | SC-88 | Scratch 4 | `SfxScratchPull_sfx83` | **2** | SC-8850 map: set 60's key 83 from the keyboard |
+| 124.14 | SC-88 | Scratch 5 | `SfxScratchPush_sfx84` | **2** | SC-8850 map: set 60's key 84 from the keyboard |
+| 124.15 | SC-88 | Scratch 6 | `SfxScratchPull_sfx85` | **2** | SC-8850 map: set 60's key 85 from the keyboard |
+| 124.16 | SC-88 | Scratch 7 | `SfxScratchPush_sfx86` | **2** | SC-8850 map: set 60's key 86 from the keyboard |
 | 125.1 | SC-55 | Car-Engine | `SfxEngine_sfx63` | **4** | the SFX set's key 63 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): CAR ENGINE fitted to a Freesound idle (CC0, examples/weather_fit.py): its firing at 47.4 Hz and harmonics as partials, each standing out of the engine's noise as the recording's (h1-h6 within 2 dB; those barely over the noise held at their measured heights), the noise's colour 1.6 dB rms |
 | 125.2 | SC-55 | Car-Stop | `SfxSkid_sfx64` | **4** | the SFX set's key 64 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): CAR SKID fitted to a Freesound handbrake turn (CC0): a squeal near 1.4 kHz over the tyre's roar (2.6 dB rms), never steady -- three near pitches beating under a slow swing, as the recording hops 53 cents rms |
 | 125.3 | SC-55 | Car-Pass | `SfxCarPass_sfx65` | **4** | the SFX set's key 65 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): CAR PASS fitted to a Freesound pass on a wet road (CC0): the tyres' noise (2.2 dB rms) swelling and falling, the engine one tone 18-21 dB over it (the recording's 16-20) falling 140 to 108 Hz through the pass -- GeneralUser GS's fast Doppler, an exponential in pitch, the noise riding it |
@@ -3303,16 +3422,53 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 125.7 | SC-55 | Jetplane | `SfxJet_sfx69` | **4** | the SFX set's key 69 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): JETPLANE fitted to a Freesound jet (CC0): its roar (0.0 dB rms), swelling in |
 | 125.8 | SC-55 | Starship | `SfxStarship_sfx71` | **3** | the SFX set's key 71 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): STARSHIP: no recording exists, so GeneralUser GS's patch as it means it (examples/starship_ref.py, from its SF2 generators -- timidity plays it as a 4409 Hz whine): a resonant hiss at 3.8 kHz (4.1 dB rms) and a buzz warbling 581 cents at 10.9 Hz. Not modelled: the noise loop's 7 Hz repetition. Levelled to the jet |
 | 125.9 | SC-55 | Burst Noise | `SfxBurstNoise` | **3** | a hiss and LOW BURSTS (SfxBurstNoiseProperties), the weather's machinery fitted to GeneralUser GS's own (examples/weather_fit.py burst): the colour within ~1 dB from 320 Hz to 8 kHz, 100-400 Hz bursts ~1.6 a second at C4, transposed whole by the key. Ben: 'sound great' |
+| 125.11 | SC-88 | Perc. Bang | `OrchestraHit_sfx96` | **2** | SC-88 map: set 56's key 96 from the keyboard |
+| 125.12 | SC-55 | Burner | `Burner` | **3** | a BURNER: the breath noise voice as a gas burner's roar, its low bands up, falling 4 dB a third-octave band above 250 Hz, flickering 3 dB at 7 Hz -- a guess, no recording |
+| 125.13 | SC-88 | Glass & Glam | `Sfx2GlassStir_sfx58` | **3** | SC-8850 map: set 60's key 58 from the keyboard |
+| 125.14 | SC-88 | Ice Ring | `Sfx2IceRing_sfx59` | **3** | SC-8850 map: set 60's key 59 from the keyboard |
+| 125.15 | SC-88 | Over Blow | `Sfx2OverBlow_sfx68` | **3** | SC-8850 map: set 60's key 68 from the keyboard |
+| 125.16 | SC-88 | Crack Bottle | `Sfx2CrackBottle_sfx60` | **3** | SC-8850 map: set 60's key 60 from the keyboard |
+| 125.17 | SC-88 | Pour Bottle | `SfxBubble_sfx61` | **2** | SC-8850 map: set 60's key 61 from the keyboard |
+| 125.18 | SC-88 | Soda | `Sfx2Soda_sfx62` | **3** | SC-8850 map: set 60's key 62 from the keyboard |
+| 125.19 | SC-88 | Open CD Tray | `Sfx2CdTray_sfx44` | **3** | SC-8850 map: set 60's key 44 from the keyboard |
+| 125.20 | SC-88 | Audio Switch | `SfxSquareClick_sfx45` | **2** | SC-8850 map: set 60's key 45 from the keyboard |
+| 125.21 | SC-88 | Key Typing | `SfxKeyClick_sfx46_menu60` | **2** | SC-8850 map: a MENU: 6 drums on consecutive keys from C2, each at its kit pitch (set 60's keys 46,47,48,49,50,51) |
+| 125.22 | SC-88 | SL 1 | `SfxTrain_sfx66` | **2** | SC-8850 map: set 60's key 66 from the keyboard |
+| 125.23 | SC-88 | SL 2 | `SfxTrain_sfx67` | **2** | SC-8850 map: set 60's key 67 from the keyboard |
+| 125.24 | SC-88 | Car Engine 2 | `SfxEngine_sfx63` | **2** | SC-8850 map: set 60's key 63 from the keyboard |
+| 125.25 | SC-88 | Car Horn | `Sfx2CarHorn_sfx64` | **3** | SC-8850 map: set 60's key 64 from the keyboard |
+| 125.26 | SC-88 | Boeeeen | `Sfx2Boing_sfx57` | **3** | SC-8850 map: set 60's key 57 from the keyboard |
+| 125.27 | SC-88 | R.Crossing | `Sfx2Crossing_sfx65` | **3** | SC-8850 map: set 60's key 65 from the keyboard |
+| 125.28 | SC-88 | Compresser | `Sfx2Compressor_sfx73` | **3** | SC-8850 map: set 60's key 73 from the keyboard |
+| 125.29 | SC-88 | Sword Boom! | `RfxSwish_sfx69` | **2** | SC-8850 map: set 60's key 69 from the keyboard |
+| 125.30 | SC-88 | Sword Cross | `Sfx2SwordCross_sfx70` | **3** | SC-8850 map: set 60's key 70 from the keyboard |
+| 125.31 | SC-88 | Stab! 1 | `OrchestraHit_sfx54` | **2** | SC-8850 map: set 60's key 54 from the keyboard |
+| 125.32 | SC-88 | Stab! 2 | `OrchestraHit_sfx55` | **2** | SC-8850 map: set 60's key 55 from the keyboard |
 | 126.1 | SC-55 | Laughing | `SfxLaugh_sfx52` | **4** | the SFX set's key 52 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): LAUGHING: a "ho ho ho" (Ben's call; a woman's laugh never read as one) -- a throat pulsed as a Freesound Santa says it (CC0): four arcing "ho"s and a long falling "hooo", each glottal pulse ringing his /o/'s formants (LPC: 500, 850 Hz, 2.5, 2.9, 5.7 kHz; examples/throat_fit.py), so the pitch slides through a fixed vowel. 2.1 s where GeneralUser GS's laugh is 0.9 |
 | 126.2 | SC-55 | Screaming | `SfxScream_sfx53` | **4** | the SFX set's key 53 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): SCREAMING: a girl's scream (Freesound, CC0), its harmonics at her own levels (h2 -5 dB, h3 -12) over a breath 60 dB under, sliding up a fourth into 1.24 kHz as GeneralUser GS's does (weather_fit HARMCOL: colour 0.0 dB at the harmonics) |
 | 126.3 | SC-55 | Punch | `SfxPunch_sfx54` | **4** | the SFX set's key 54 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): PUNCH: a fist on a body (Freesound, CC0) as a 16 ms burst of shaped noise, its colour fitted (2.6 dB) -- as a body's modes it rang half a second |
 | 126.4 | SC-55 | Heart Beat | `SfxHeartbeat_sfx55` | **3** | the SFX set's key 55 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): HEART BEAT: not a recording -- the heart's own waveform, a textbook ECG beat's Fourier series, 1 Hz harmonics at the FFT's gains and phases (examples/ecg_heart.py: rendered, correlation 1.000) -- and over it the BLOOD FLOW as a Doppler hears it, noise filling to a top that follows an artery's velocity (3 kHz at peak; systole, the dicrotic notch, diastole's run-off). Ben: "sounds great" |
 | 126.5 | SC-55 | Footstep | `SfxFootstep_sfx56` | **4** | the SFX set's key 56 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): FOOTSTEPS1: a hard shoe on stone (Freesound, CC0): the heel as shaped noise (colour 1.0 dB) and, 70 ms on, the sole 8 dB under, as the recorded steps pair |
 | 126.6 | SC-88 | Applause 2 | `OrchestraApplause_sfx58` | **4** | SC-88 map: set 56's key 58 from the keyboard |
+| 126.7 | SC-88 | Small Club | `SmallClub_sfx88` | **4** | SC-88 map: set 9's key 88 from the keyboard |
+| 126.8 | SC-88 | ApplauseWave | `RfxApplauseWave_sfx93` | **3** | SC-88 map: set 56's key 93 from the keyboard |
+| 126.9 | SC-88 | BabyLaughing | `RfxBabyLaugh_sfx52` | **2** | SC-8850 map: set 60's key 52 from the keyboard |
+| 126.16 | SC-88 | Voice One | `RfxVoiceOne_sfx59` | **4** | SC-88 map: set 61's key 59 from the keyboard |
+| 126.17 | SC-88 | Voice Two | `RfxVoiceTwo_sfx60` | **4** | SC-88 map: set 61's key 60 from the keyboard |
+| 126.18 | SC-88 | Voice Three | `RfxVoiceThree_sfx61` | **4** | SC-88 map: set 61's key 61 from the keyboard |
+| 126.19 | SC-88 | Voice Tah | `RfxVoiceTah_sfx62` | **3** | SC-88 map: set 61's key 62 from the keyboard |
+| 126.20 | SC-88 | Voice Whey | `RfxVoiceWhey_sfx75` | **3** | SC-88 map: set 58's key 75 from the keyboard |
+| 126.22 | SC-88 | Voice Kikit | `RfxVoiceKikit_sfx64` | **2** | SC-8850 map: set 61's key 64 from the keyboard |
+| 126.23 | SC-88 | Voice ComeOn | `RfxVoiceComeOn_sfx63` | **2** | SC-8850 map: set 61's key 63 from the keyboard |
+| 126.24 | SC-88 | Voice Aou | `RfxVoiceAou_sfx65` | **2** | SC-8850 map: set 61's key 65 from the keyboard |
+| 126.25 | SC-88 | Voice Oou | `RfxVoiceOou_sfx66` | **2** | SC-8850 map: set 61's key 66 from the keyboard |
+| 126.26 | SC-88 | Voice Hie | `RfxVoiceHie_sfx70` | **2** | SC-8850 map: set 61's key 70 from the keyboard |
 | 127.1 | SC-55 | Machinegun | `SfxMachinegun_sfx73` | **4** | the SFX set's key 73 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): MACHINEGUN: the set's gun shot (72) fired every 69 ms, 0.69 s of them, as a Freesound M16A1 burst measures (CC0) -- an impact train in the set's own stroke table (percussion_map.KIT_STROKES) |
 | 127.2 | SC-55 | Lasergun | `SfxLaser_sfx74` | **3** | the SFX set's key 74 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): LASERGUN: a square wave swept down from 12x its note with a 0.1 s time constant, held and cut, as a Freesound blaster (CC0) measures. GeneralUser GS's is no reference (its envelope dies in 1 ms by the SF2; timidity plays a whine) |
 | 127.3 | SC-55 | Explosion | `SfxExplosion_sfx75` | **4** | the SFX set's key 75 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): EXPLOSION: a dynamite blast (Freesound, CC0; weather_fit: 0.4 dB), at once, held 0.6 s, dying over the next second as GeneralUser GS's does |
+| 127.4 | SC-88 | Eruption | `SfxExplosion_sfx94` | **4** | SC-88 map: set 56's key 94 from the keyboard |
 | 127.5 | SC-88 | Big Shot | `Gunshot_sc88_127_5` | **4** | SC-88 map: GM 127 Gunshot with strike_noise_len_s=2.0, strike_noise_tail=(-3.0, 30.0) |
+| 127.6 | SC-88 | Explosion 2 | `SfxExplosion_sfx75` | **2** | SC-8850 map: set 60's key 75 from the keyboard |
 
 ## Bank 127: the MT-32 set
 
@@ -3470,7 +3626,7 @@ Each Sound Canvas's map of tones (the SC-55's own owner's manual p.68; the SC-55
 SC-88 and SC-88Pro maps from the SC-88Pro manual's list), against ours. A tone is built
 when we play it, as a program or a variation, and rated as the tables above rate it.
 A later map can put another tone under a number we built; that one is not counted.
-The maps' totals are in the Summary at the top; still to build: SC-55 0, SC-55mkII 0, SC-88 0, SC-88Pro 37, SC-8850 156.
+The maps' totals are in the Summary at the top; still to build: SC-55 0, SC-55mkII 0, SC-88 0, SC-88Pro 0, SC-8850 0.
 
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3), SC-88Pro 0.16 European Pf (4), SC-88Pro 3.8 Honky-tonk 2 (3), SC-88Pro 16.8 Trem. Organ (4), SC-88Pro 16.9 Organ. o (4), SC-88Pro 16.32 70's E.Organ (4), SC-88Pro 17.1 Jazz Organ (4), SC-88Pro 17.32 Perc. Organ (4), SC-88Pro 60.16 Synth Horn (4), SC-88Pro 63.17 Transbrass (3), SC-8850 0.8 Upright P w (4), SC-8850 1.8 Pop Piano w (4), SC-8850 62.8 Pro Brass (3), SC-8850 63.8 SynBrass sfz (3).
@@ -3493,8 +3649,8 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Synth Pad | 48/48 | 8/8 | 21/21 | 43/43 | 83/83 |
 | Synth Effects | 58/58 | 11/11 | 42/42 | 76/76 | 122/122 |
 | Ethnic | 27/27 | 10/10 | 22/22 | 37/37 | 44/44 |
-| Percussive | 18/18 | 13/13 | 28/28 | 29/47 | 29/95 |
-| Sound Effects | 42/42 | 41/41 | 49/49 | 54/73 | 54/144 |
+| Percussive | 19/19 | 13/13 | 28/28 | 47/47 | 95/95 |
+| Sound Effects | 45/45 | 41/41 | 49/49 | 73/73 | 144/144 |
 
 ### The SC-88 map's 0 still to build, by what they take
 

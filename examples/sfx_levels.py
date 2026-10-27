@@ -5,6 +5,7 @@ program's note played alone, its level re a piano C4 at the same velocity.
     python3 examples/sfx_levels.py [--vel=110] [--progs=127:55,126:60,... | --all] [SF2 ...]
     python3 examples/sfx_levels.py --trim     the bank to GeneralUser GS (writes patch_map.py)
     python3 examples/sfx_levels.py --var-trim the GS variations to GU's own presets for them
+    python3 examples/sfx_levels.py --kit-trim the tones made of a drum set's sound to its level there
 
 Each SoundFont (examples/gm_release.py's four: FluidR3, GeneralUser GS,
 MuseScore General, TimGM6mb) through timidity, reverb and chorus off; ours
@@ -337,9 +338,91 @@ def cap_trim(vels=(64, 100)):
                                    sorted(diffs.items(), key=lambda kv: -abs(kv[1]))[:6])), flush=True)
 
 
+
+def kit_drum_mid(kit, key, vel, path):
+    """drum_mid in a drum SET: the set's program change on channel 10 first."""
+    m = mido.MidiFile(ticks_per_beat=480)
+    t = mido.MidiTrack()
+    m.tracks.append(t)
+    t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    t.append(mido.Message("program_change", channel=9, program=kit & 0x7F, time=0))
+    t.append(mido.Message("note_on", channel=9, note=key, velocity=vel, time=240))
+    t.append(mido.Message("note_off", channel=9, note=key, velocity=0, time=120))
+    t.append(mido.MetaMessage("end_of_track", time=2880))
+    m.save(path)
+
+
+# A TONE MADE OF ANOTHER VOICE, at that voice's level -- not its capital's:
+# Bartok Pizz. is the pizzicato's (GM 45, not 120's fret noise), the MC-500
+# beep the square lead's (GM 80)
+KIT_TRIM_REF = {(120, 9): 45, (124, 11): 80}
+
+
+def kit_trim(keys=None, vels=(64, 100)):
+    """--kit-trim: each tone made of a DRUM SET's sound (patch_map's ("kit",
+    key, set), ("rev", ...), ("menu", ...) tones) at that sound's level in its
+    own set: the set's key on channel 10 against the tone from the keyboard
+    where it sounds at the set's pitch (C4; a menu's first drum, C2), K level,
+    both velocities -- the trim moved by the mean. Reversed sounds against
+    their forward stroke. (cap_trim matched them to their CAPITAL tone, which
+    for an SFX is another kind of sound: the MC-500 beep +78 dB against the
+    telephone, Bartok Pizz. -45 against the fret noise.) KIT_TRIM_REF: a tone
+    made of a program, at that program's level. keys: only these (p, bank)."""
+    import re
+    import patch_map as PM
+    os.environ.setdefault("TUNING_REFLECT", "0")
+    os.environ.setdefault("TUNING_MASTER_DB", "-14")
+    import blockrender as B
+    todo = {}
+    for tab in (PM.SC88_CHEAP, PM.SC8850_CHEAP):
+        for k, (_nm, how) in tab.items():
+            if how[0] in ("kit", "rev"):
+                todo[k] = ("kit", how[2], how[1], 60)
+            elif how[0] == "menu":
+                todo[k] = ("kit", how[1][0][2], how[1][0][1], 36)
+    for k, prog in KIT_TRIM_REF.items():
+        todo[k] = ("prog", prog, 60, 60)
+    if keys is not None:
+        todo = {k: v for k, v in todo.items() if k in keys}
+    with tempfile.TemporaryDirectory() as d:
+        def k_level(mid):
+            L, R = B.render(mido.MidiFile(mid))[:2]
+            return levels([np.asarray(L, np.float64), np.asarray(R, np.float64)], B.SR)[1]
+        moved = {}
+        for (p, b), (kind, src, key, note) in sorted(todo.items()):
+            ds = []
+            for v_ in vels:
+                ref, tone = os.path.join(d, "r.mid"), os.path.join(d, "t.mid")
+                if kind == "kit":
+                    kit_drum_mid(src, key, v_, ref)
+                else:
+                    note_mid(src, key, v_, ref)
+                var_mid(p, b, note, v_, tone)
+                a, c = k_level(tone), k_level(ref)
+                if np.isfinite(a) and np.isfinite(c) and a > -200 and c > -200:
+                    ds.append(c - a)
+            if ds:
+                dv = float(np.mean(ds))
+                base = PM.VARIATION_TRIM_DB.get((p, b), PM.PROGRAM_TRIM_DB.get(p, 0.0))
+                PM.VARIATION_TRIM_DB[(p, b)] = PM.VARIATION_TRIM_FIT[(p, b)] = round(base + dv, 1)
+                moved[(p, b)] = dv
+                print("  %d.%d %-14s %+6.1f dB -> trim %+.1f" % (p, b, PM.VARIATION_NAMES.get((p, b), "?"), dv,
+                                                              PM.VARIATION_TRIM_FIT[(p, b)]), flush=True)
+    path = os.path.join(HERE, "patch_map.py")
+    src = open(path).read()
+    tab = "{" + ", ".join("(%d, %d): %.1f" % (p, v, PM.VARIATION_TRIM_FIT[(p, v)])
+                          for p, v in sorted(PM.VARIATION_TRIM_FIT)) + "}"
+    src = re.sub(r"^VARIATION_TRIM_FIT = .*$", lambda _: "VARIATION_TRIM_FIT = " + tab, src, count=1, flags=re.M)
+    open(path, "w").write(src)
+    print("  written: %d tones at their sets' levels" % len(moved))
+
+
 def main(argv):
     if "--trim" in argv:
         trim(ALL)
+        return 0
+    if "--kit-trim" in argv:
+        kit_trim()
         return 0
     if "--var-trim" in argv:
         var_trim()

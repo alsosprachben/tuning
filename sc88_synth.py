@@ -573,6 +573,10 @@ SC88_SYNTH = {
                    f_decay=0.12, f_sustain=0.1, a_decay=0.3, a_sustain=0.1, a_release=0.15, kb_track=0.8)),
     # a synth harp: a plucked pulse ringing out
     # a synth shamisen: a plucked pulse, nasal, short
+    # the MC-500's beep: the sequencer's own square tone, as long as the key
+    (124, 11): ("MC-500 Beep", "MoogSquareLead",
+                dict(osc1_wave=0.5, osc2_level=0.0, sub_level=0.0, cutoff=0.95, resonance=0.0, eg_amount=0.0,
+                     a_attack=0.0, a_sustain=1.0, a_release=0.05)),
     (106, 8): ("Syn Shamisen", "MoogSquareLead",
                dict(osc1_wave=0.85, osc2_level=0.0, sub_level=0.0, cutoff=0.6, resonance=0.5, eg_amount=0.75,
                     f_attack=0.0, f_decay=0.12, f_sustain=0.0, a_decay=0.5, a_sustain=0.0, a_release=0.3)),

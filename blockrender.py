@@ -1324,6 +1324,12 @@ def voice_classes(prog):
     out = [property_class_for_program(prog)]
     for lp in (layers_of(prog) or ()):
         out.append(layer_class(lp[0], 60))
+    # ...and a tone whose class is a function of the KEY (a menu, patch_map.
+    # kit_menu: a different drum on each; a register-routed ensemble): every
+    # key's -- Rev.ClapMenu's clap hit is the orchestra hit's, registered
+    _v = getattr(prog, 'variation', 0)
+    if _v and not isinstance(__import__('patch_map').VARIATIONS.get((int(prog) & 0x7F, _v), type), type):
+        out.extend(property_class_for_note(prog, _n) for _n in range(128))
     return out
 
 
