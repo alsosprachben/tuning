@@ -220,6 +220,61 @@ class Gpu:
         out = self.res.sum(1)
         return [out[c] for c in range(4)]
 
+    # PIPELINED, live (GpuRenderer, TUNING_GPU_PIPELINE): a block launched and
+    # not waited for, its result collected a block later -- the CPU builds the
+    # next block's tables while the GPU renders this one. Each SLOT has its
+    # own buffers over its own tables (the GPU reads them in place, so the
+    # table in flight must not be the one being written) and its own result;
+    # the kernel's arguments are set at each launch, as they are copied there.
+    def launch(self, tab, n0, frames, send, slot):
+        """Enqueue the sample pass for tab in `slot`; returns a handle for
+        collect. Nothing waits."""
+        cl = self.cl
+        st = self.__dict__.setdefault("slots", {}).setdefault(slot, {})
+        k = self.k
+        for i, name, arr in ((6, "D", tab.D), (7, "C", tab.C), (8, "S", tab.SB)):
+            held = st.get(name)
+            if held is None or held[0] is not arr:
+                held = st[name] = (arr, cl.Buffer(self.ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR,
+                                                  hostbuf=arr.view(np.uint8)))
+            k.set_arg(i, held[1])
+        nd = tab.nact
+        per = max(2, -(-nd // 1024))
+        groups = max(1, -(-nd // per))
+        groups = -(-groups // self.LG) * self.LG
+        NG = groups // self.LG
+        # the result buffer GROWS ONLY, and its host array is the slot's own:
+        # the group count follows the rows, which move every block, and a
+        # buffer made on the audio thread at each change was a spike past the
+        # slot. Safe to reuse: a slot is collected before it is launched again
+        need = 4 * NG * frames
+        if st.get("cap", 0) < need:
+            st["cap"] = max(need, 2 * st.get("cap", 0))
+            st["acc"] = cl.Buffer(self.ctx, cl.mem_flags.WRITE_ONLY, 4 * st["cap"])
+            st["host"] = np.empty(st["cap"], np.float32)
+        res = st["host"][:need].reshape(4, NG, frames)
+        k.set_arg(9, st["acc"])
+        k.set_arg(2, np.int32(frames))
+        k.set_arg(3, np.int32(moog_grid(frames)))
+        k.set_arg(0, np.int32(nd))
+        k.set_arg(1, np.int32(per))
+        k.set_arg(4, np.uint64(n0))
+        k.set_arg(5, np.int32(1 if send else 0))
+        lk = self.LK if frames % self.LK == 0 else 1
+        cl.enqueue_nd_range_kernel(self.q, k, (frames, groups), (lk, self.LG))
+        ev = cl.enqueue_copy(self.q, res, st["acc"], is_blocking=False)
+        # samples() keeps its own arguments set once: they are not ours now
+        self.over = {}
+        self.shape = None
+        return ev, res
+
+    def collect(self, h):
+        """A launch's (L, R, SL, SR), waited for."""
+        ev, res = h
+        ev.wait()
+        out = res.sum(1)
+        return [out[c] for c in range(4)]
+
 
 class _Window:
     """One window's tables, in page-aligned memory the GPU reads in place,

@@ -2696,13 +2696,117 @@ class GpuRenderer(Renderer):
         self.idx = np.zeros(0, np.int64)
         self.on_gpu = False                 # did the last block go to the GPU
         self.ms_setup = self.ms_samples = 0.0
+        # PIPELINED (TUNING_GPU_PIPELINE=1): a block late, so the CPU's half
+        # of block n+1 runs while the GPU renders block n -- two tables taking
+        # turns, the bus parts' a third (render)
+        self.pipeline = (backend == "cl" and
+                         os.environ.get("TUNING_GPU_PIPELINE", "0") not in ("", "0", "off"))
+        if self.pipeline:
+            self.tabs = [self.tab, gpurender.BlockTables(setup_threads)]
+            self.bus_tab = gpurender.BlockTables(setup_threads)
+            self._turn = 0
+            self._pend = None
 
     def bounds(self):
         if self.slab.dirty:
             self.idx = np.flatnonzero(self.slab.busy).astype(np.int64)
         return super().bounds()
 
+    # THE PIPELINE: render() returns the block before the one it is given.
+    # The block given is started -- its tables built and the GPU launched, not
+    # waited for; or, a block the CPU takes (too few rows for the GPU),
+    # rendered now and held -- and the one started last time is finished:
+    # its GPU result collected (by now usually done), the bus parts' added,
+    # gained and clipped. Every block goes through the same delay, so a
+    # change between the GPU and the CPU loses none and repeats none. What the
+    # player hears is one block later; nothing else moves.
     def render(self, n0, frames):
+        if not self.pipeline:
+            return self._render_now(n0, frames)
+        cur = self._start(n0, frames)
+        prev, self._pend = self._pend, cur
+        return self._finish(prev, frames)
+
+    def _start(self, n0, frames):
+        snd = self.send
+        b = self.bounds()
+        if (b is None or self.act < self.gpu_min or frames != self.frames
+                or B.BLK != frames or n0 % frames):
+            self.on_gpu = False
+            L, R = Renderer.render(self, n0, frames)
+            return ("done", L.copy(), R.copy(),
+                    self.SL[:frames].copy() if snd else None, self.SR[:frames].copy() if snd else None)
+        self.on_gpu = True
+        sl = self.slab
+        sl.prep()["kb0"] = n0 // moog_grid(B.BLK)
+        sl.moog_pitch_block(n0, frames)
+        sl.moog_shape_block(n0, frames)
+        sl.moog_fm_block()
+        t0 = time.perf_counter()
+        idx = self.idx
+        bus = getattr(self, "bus_proc", None)
+        if bus is not None and sl.bus_hide is not None:
+            idx = idx[~np.isin(idx, sl.bus_hide)]
+        if sl.tap_m:
+            idx = np.concatenate([idx, np.arange(sl.cap, sl.cap + sl.tap_m, dtype=np.int64)])
+        tab = self.tabs[self._turn]
+        tab.setup(sl.prep(), idx, n0, snd)
+        h = self.gpu.launch(tab, n0, frames, snd, self._turn)
+        self._turn ^= 1
+        extra = None
+        if bus is not None:
+            # the bus parts now, their own table and a wait (the queue is in
+            # order: behind the block just launched), through the bus
+            BL = np.zeros(frames, np.float32); BR = np.zeros(frames, np.float32)
+            BSL = np.zeros(frames, np.float32); BSR = np.zeros(frames, np.float32)
+            if sl.bus_m:
+                c1 = sl.cap + sl.tap_m
+                self.bus_tab.setup(sl.prep(), np.arange(c1, c1 + sl.bus_m, dtype=np.int64), n0, snd)
+                bL, bR, bSL, bSR = self.gpu.collect(self.gpu.launch(self.bus_tab, n0, frames, snd, "bus"))
+                BL[:] = bL[:frames]; BR[:] = bR[:frames]
+                if snd:
+                    BSL[:] = bSL[:frames]; BSR[:] = bSR[:frames]
+            oL, oR = bus.process(BL, BR, T.master_gain)
+            sL = sR = None
+            if snd:
+                sL, sR = bus.process_send(BSL, BSR, T.master_gain)
+            extra = (oL, oR, sL, sR)
+        self.ms_setup = (time.perf_counter() - t0) * 1e3
+        sl.knobs_advance()
+        return ("gpu", h, extra, snd)
+
+    def _finish(self, p, frames):
+        g = T.master_gain
+        if p is None:                       # the first block: nothing started before it
+            self.L[:frames] = 0.0; self.R[:frames] = 0.0
+            self.SL[:frames] = 0.0; self.SR[:frames] = 0.0
+            return self.L[:frames], self.R[:frames]
+        if p[0] == "done":
+            self.L[:frames] = p[1]; self.R[:frames] = p[2]
+            if p[3] is not None:
+                self.SL[:frames] = p[3]; self.SR[:frames] = p[4]
+            else:
+                self.SL[:frames] = 0.0; self.SR[:frames] = 0.0
+            return self.L[:frames], self.R[:frames]
+        _, h, extra, snd = p
+        t1 = time.perf_counter()
+        L, R, SL, SR = self.gpu.collect(h)
+        self.ms_samples = (time.perf_counter() - t1) * 1e3
+        L = np.array(L[:frames], np.float32); R = np.array(R[:frames], np.float32)
+        if extra is not None:
+            L += extra[0]; R += extra[1]
+        self.L[:frames] = L * g; self.R[:frames] = R * g
+        np.clip(self.L, -1, 1, self.L); np.clip(self.R, -1, 1, self.R)
+        if snd:
+            SL = np.array(SL[:frames], np.float32); SR = np.array(SR[:frames], np.float32)
+            if extra is not None and extra[2] is not None:
+                SL += extra[2]; SR += extra[3]
+            self.SL[:frames] = SL * g; self.SR[:frames] = SR * g
+        else:
+            self.SL[:frames] = 0.0; self.SR[:frames] = 0.0
+        return self.L[:frames], self.R[:frames]
+
+    def _render_now(self, n0, frames):
         b = self.bounds()
         if (b is None or self.act < self.gpu_min or frames != self.frames
                 or B.BLK != frames or n0 % frames):
