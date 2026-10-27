@@ -25,9 +25,9 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | SC-55mkII tones | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 |
 | SC-88 tones | 418 | 418 | 100% | 285 | 130 | 3 | 0 | 0 |
 | SC-88 drum sets | 14 | 14 | 100% | | | | | |
-| SC-88Pro tones | 774 | 595 | 77% | 298 | 294 | 3 | 0 | 0 |
+| SC-88Pro tones | 774 | 629 | 81% | 327 | 299 | 3 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
-| SC-8850 tones | 1262 | 806 | 64% | 315 | 488 | 3 | 0 | 0 |
+| SC-8850 tones | 1262 | 910 | 72% | 402 | 502 | 6 | 0 | 0 |
 | SC-8850 drum sets | 37 | 37 | 100% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
@@ -2333,7 +2333,7 @@ Controls are the rest of the console that are not stops.
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
 under a program (SC-55 owner's manual p.68). 519 of the SC-55's 519 are built,
-and 161 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
+and 264 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
 | program.bank | map | GS name | class | | notes |
@@ -2523,17 +2523,37 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 46.24 | SC-88 | Yang Qin | `HammeredDulcimer_sc8850_46_24` | **4** | SC-8850 map: GM 15 Dulcimer with strike_point=0.125, tonal_dampening=0.6. Ben, on examples/gm2_last_demo.py: "Sounds great" |
 | 48.1 | SC-88 | Bright Str: | `Violin_sc88_48_1` | **4** | SC-88 map: GM 48 String Ensemble 1 with bore_corner_hz=4500.0 |
 | 48.2 | SC-88 | ChamberStr: | `Violin_sc88_48_2` | **4** | SC-88 map: GM 48 String Ensemble 1 with section_players=2, section_width_m=0.8 |
+| 48.3 | SC-88 | Cello sect. | `Cello_sc88_48_3` | **4** | SC-88 map: GM 42 Cello with section_players=6, section_spread_cents=6.0, section_width_m=2.0 |
+| 48.4 | SC-88 | Bright Str.2 | `Violin_sc8850_48_4` | **4** | SC-8850 map: GM 48 String Ensemble 1 with bore_corner_hz=5500.0 |
+| 48.5 | SC-88 | Bright Str.3 | `Violin_sc8850_48_5` | **4** | SC-8850 map: GM 48 String Ensemble 1 with bore_corner_hz=6500.0, tonal_dampening=0.9 |
+| 48.6 | SC-88 | Quad Strings | `Violin_sc8850_48_6` | **4** | SC-8850 map: GM 48 String Ensemble 1 with section_players=14, key_pan_spread=0.5 |
+| 48.7 | SC-88 | Mild Strings | `Violin_sc8850_48_7` | **4** | SC-8850 map: GM 48 String Ensemble 1 with bore_corner_hz=2600.0 |
 | 48.8 | SC-55 | Orchestra | `Violin_orchestra` | **3** | a LAYERED variation (patch_map.LAYERED): the strings by register (cello, viola, violin) and the brass section's own router an octave above at -10 dB -- both GM sets' 48.8 is their strings with their brass 8va; the layer's level by Ben's ear of -4/-10/-16 |
 | 48.9 | SC-88 | Orchestra 2 | `Violin_sc88_48_9` | **4** | SC-88 map: layered: GM 48 + GM 60 -8 dB |
 | 48.10 | SC-88 | TremoloOrch | `ViolinTremolo_sc88_48_10` | **3** | SC-88 map: layered: GM 44 + GM 61 +12 st -10 dB |
 | 48.11 | SC-88 | Choir Str. | `Violin_sc88_48_11` | **4** | SC-88 map: layered: GM 48 + GM 52 -4 dB |
+| 48.12 | SC-88 | Strings+Horn | `Violin_sc88_48_12` | **4** | SC-88 map: layered: GM 48 + GM 60 -6 dB |
+| 48.13 | SC-88 | Str.+Flute | `Violin_sc8850_48_13` | **4** | SC-8850 map: layered: GM 48 + GM 73 +12 st -8 dB |
+| 48.14 | SC-88 | Choir Str.2 | `Violin_sc8850_48_14` | **4** | SC-8850 map: layered: GM 48 + GM 52 -2 dB |
+| 48.15 | SC-88 | Choir Str.3 | `Violin_sc8850_48_15` | **4** | SC-8850 map: layered: GM 48 -2 dB + GM 52 |
 | 48.16 | SC-88 | St.Strings | `Violin_sc88_48_16` | **4** | SC-88 map: GM 48 String Ensemble 1 with key_pan_spread=0.5 |
+| 48.17 | SC-88 | St.Strings 2 | `Violin_sc8850_48_17` | **4** | SC-8850 map: GM 48 String Ensemble 1 with key_pan_spread=0.75 |
+| 48.18 | SC-88 | St.Strings 3 | `Violin_sc8850_48_18` | **4** | SC-8850 map: GM 48 String Ensemble 1 with key_pan_spread=1.0, section_players=10 |
+| 48.19 | SC-88 | Orchestra 3 | `Violin_sc8850_48_19` | **3** | SC-8850 map: layered: GM 48 + GM 61 -8 dB + GM 60 -10 dB |
+| 48.20 | SC-88 | Orchestra 4 | `Violin_sc8850_48_20` | **3** | SC-8850 map: layered: GM 48 + GM 61 +12 st -10 dB + GM 71 +12 st -10 dB |
 | 48.24 | SC-88 | VeloStrings | `ViolinSlow_sc88_48_24` | **4** | SC-88 map: layered: GM 49 vel 0-90 + GM 48 vel 91-127 |
+| 48.32 | SC-88 | Oct Strings1 | `Violin_sc88_48_32` | **4** | SC-88 map: layered: GM 48 + GM 48 +12 st -4 dB |
+| 48.33 | SC-88 | Oct Strings2 | `Violin_sc88_48_33` | **4** | SC-88 map: layered: GM 48 + GM 48 -12 st -4 dB |
+| 48.34 | SC-88 | ContraBsSect | `Contrabass_sc8850_48_34` | **4** | SC-8850 map: GM 43 Contrabass with section_players=4, section_spread_cents=6.0 |
 | 48.40 | SC-88 | 60s Strings | `Violin_sc8850_48_40` | **4** | SC-8850 map: GM 48 String Ensemble 1 with section_players=4, section_width_m=1.2, bore_corner_hz=4500.0. Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 49.1 | SC-88 | SlowStrings2 | `ViolinSlow_sc88_49_1` | **4** | SC-88 map: GM 49 String Ensemble 2 with attack_time=1.8, tonal_dampening=2.1 |
+| 49.2 | SC-88 | SlowStrings3 | `ViolinSlow_sc8850_49_2` | **4** | SC-8850 map: GM 49 String Ensemble 2 with bore_corner_hz=2600.0 |
 | 49.8 | SC-88 | Legato Str. | `Violin_sc88_49_8` | **4** | SC-88 map: GM 48 String Ensemble 1 with sound_bias={'attack': 0.5} |
 | 49.9 | SC-88 | Warm Strings | `ViolinSlow_sc88_49_9` | **4** | SC-88 map: GM 49 String Ensemble 2 with bore_corner_hz=2200.0 |
 | 49.10 | SC-88 | St.SlowStr. | `ViolinSlow_sc88_49_10` | **4** | SC-88 map: GM 49 String Ensemble 2 with key_pan_spread=0.5 |
+| 49.11 | SC-88 | St.Slow Str2 | `ViolinSlow_sc8850_49_11` | **4** | SC-8850 map: GM 49 String Ensemble 2 with key_pan_spread=0.75 |
+| 49.12 | SC-88 | S.Str+Choir | `ViolinSlow_sc8850_49_12` | **4** | SC-8850 map: layered: GM 49 + GM 52 -4 dB |
+| 49.13 | SC-88 | S.Str+Choir2 | `ViolinSlow_sc8850_49_13` | **4** | SC-8850 map: layered: GM 49 -2 dB + GM 52 |
 | 50.1 | SC-55 | OB Strings | `Sc88_50_1` | **3** | SC-88 map: a Moog panel, the SynthStrings1's with a_attack, cutoff, f_attack, osc2_freq, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 50.2 | SC-55 | StackStrings | `Sc88_50_2` | **3** | SC-88 map: a Moog panel, the SynthStrings1's with cutoff, osc2_freq, osc2_level, osc2_octave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/synths_demo.py (all 13 parts): "They all sound good" |
 | 50.3 | SC-55 | JP Strings | `Sc88_50_3` | **3** | SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, examples/sepways_fit.py), one pass, with a_attack, a_decay, a_release, a_sustain, cutoff, eg_amount, osc2_freq changed. Ben, on examples/jp8_demo.py: "Sounds great" |
@@ -2559,9 +2579,41 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 51.10 | SC-55 | StraightStr. | `Sc8850_51_10` | **3** | SC-8850 map: a Moog panel, the SynthStrings2's with cutoff, osc2_freq changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/synths_demo.py (all 13 parts): "They all sound good" |
 | 52.8 | SC-88 | St.Choir | `ChoirAahs_sc88_52_8` | **4** | SC-88 map: GM 52 Choir Aahs with key_pan_spread=0.5 |
 | 52.9 | SC-88 | Melted Choir | `ChoirAahs_sc88_52_9` | **4** | SC-88 map: GM 52 Choir Aahs with tonal_dampening=1.9 |
+| 52.10 | SC-88 | Church Choir | `ChoirAahs_sc88_52_10` | **4** | SC-88 map: GM 52 Choir Aahs with key_pan_spread=0.5, tonal_dampening=1.7, section_players=12 |
+| 52.11 | SC-88 | Boys Choir 1 | `ChoirAahs_sc8850_52_11` | **4** | SC-8850 map: GM 52 Choir Aahs with voice_part=boy, section_players=8, bore_corner_hz=13500.0 |
+| 52.12 | SC-88 | Boys Choir 2 | `ChoirAahs_sc8850_52_12` | **4** | SC-8850 map: GM 52 Choir Aahs with voice_part=boy, section_players=6, bore_corner_hz=14000.0, tonal_dampening=1.3 |
+| 52.13 | SC-88 | St.BoysChoir | `ChoirAahs_sc8850_52_13` | **4** | SC-8850 map: GM 52 Choir Aahs with voice_part=boy, section_players=8, key_pan_spread=0.5 |
+| 52.14 | SC-88 | Rich Choir | `ChoirAahs_sc8850_52_14` | **4** | SC-8850 map: GM 52 Choir Aahs with section_players=14, key_pan_spread=0.5, tonal_dampening=1.35 |
+| 52.16 | SC-88 | Choir Hahs | `ChoirAahs_sc88_52_16` | **4** | SC-88 map: GM 52 Choir Aahs with breath_noise_db=((177, -27.1), (223, -32.0), (281, -17.5), (354, 8.9), (445, 7.8), (561, 19.5), (707, 23.6), (891, 19.7), (1122, 18.9), (1414, 15.4), (1782, 10.7), (2245, 10.3), (2828, 21.6), (3564, 22.3), (4490, 11.3), (5657, 9.7)), chiff_min_valve_time=0.04, chiff_max_valve_time=0.08 |
 | 52.24 | SC-88 | Chorus Lahs | `ChoirAahs_sc88_52_24` | **4** | SC-88 map: GM 52 Choir Aahs with section_players=4, chiff_min_valve_time=0.025, chiff_max_valve_time=0.05 |
 | 52.32 | SC-88 | ChoirAahs 2 | `ChoirAahs_sc88_52_32` | **4** | SC-88 map: GM 52 Choir Aahs with section_players=12 |
+| 52.33 | SC-88 | Male Aah+Str | `ChoirAahs_sc88_52_33` | **4** | SC-88 map: layered: GM 52 with voice_crossover_hz=20000.0 + GM 48 -5 dB |
+| 53.1 | SC-88 | Chorus Oohs | `VoiceOohs_sc8850_53_1` | **4** | SC-8850 map: GM 53 Voice Oohs with section_players=10 |
+| 53.2 | SC-88 | Voice Oohs 2 | `VoiceOohs_sc8850_53_2` | **4** | SC-8850 map: GM 53 Voice Oohs with tonal_dampening=1.3 |
+| 53.3 | SC-88 | Chorus Oohs2 | `VoiceOohs_sc8850_53_3` | **4** | SC-8850 map: GM 53 Voice Oohs with section_players=10, key_pan_spread=0.5 |
+| 53.4 | SC-88 | OohsCodeMaj7 | `VoiceOohs_sc8850_53_4` | **4** | SC-8850 map: layered: GM 53 + GM 53 +4 st -2 dB + GM 53 +7 st -2 dB + GM 53 +11 st -3 dB |
+| 53.5 | SC-88 | OohsCodeSus4 | `VoiceOohs_sc8850_53_5` | **4** | SC-8850 map: layered: GM 53 + GM 53 +5 st -2 dB + GM 53 +7 st -2 dB |
+| 53.6 | SC-88 | Jazz Scat | `VoiceOohs_sc8850_53_6` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((743.0, 285.0, 1.0), (1102.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), section_players=1, chiff_min_valve_time=0.012, chiff_max_valve_time=0.025 |
 | 53.8 | SC-88 | Voice Dahs | `VoiceOohs_sc88_53_8` | **4** | SC-88 map: GM 53 Voice Oohs with formants=((743.0, 285.0, 1.0), (1102.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), chiff_min_valve_time=0.015, chiff_max_valve_time=0.03 |
+| 53.9 | SC-88 | JzVoice Dat | `VoiceOohs_sc8850_53_9` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((743.0, 285.0, 1.0), (1102.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), section_players=1, one_shot=True, gate_time=0.14, chiff_min_valve_time=0.01, chiff_max_valve_time=0.02 |
+| 53.10 | SC-88 | JzVoice Bap | `VoiceOohs_sc8850_53_10` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((743.0, 285.0, 1.0), (1102.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), section_players=1, one_shot=True, gate_time=0.13, chiff_min_valve_time=0.008, chiff_max_valve_time=0.018 |
+| 53.11 | SC-88 | JzVoice Dow | `VoiceOohs_sc8850_53_11` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((450.0, 248.0, 1.0), (809.0, 250.0, 1.248), (2883.0, 569.0, 0.879), (3490.0, 150.0, 0.762)), section_players=1, chiff_min_valve_time=0.012, chiff_max_valve_time=0.025 |
+| 53.12 | SC-88 | JzVoice Thum | `VoiceOohs_sc8850_53_12` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((640.0, 285.0, 1.0), (1190.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), section_players=1, bore_corner_hz=1800.0, chiff_min_valve_time=0.02, chiff_max_valve_time=0.04 |
+| 53.16 | SC-88 | VoiceLah Fem | `VoiceOohs_sc8850_53_16` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((743.0, 285.0, 1.0), (1102.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), voice_crossover_hz=20.0, section_players=1, chiff_min_valve_time=0.03, chiff_max_valve_time=0.05 |
+| 53.17 | SC-88 | ChorusLahFem | `VoiceOohs_sc8850_53_17` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((743.0, 285.0, 1.0), (1102.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), voice_crossover_hz=20.0, section_players=8, chiff_min_valve_time=0.03, chiff_max_valve_time=0.05 |
+| 53.18 | SC-88 | VoiceLuh Fem | `VoiceOohs_sc8850_53_18` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((640.0, 285.0, 1.0), (1190.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), voice_crossover_hz=20.0, section_players=1, chiff_min_valve_time=0.03, chiff_max_valve_time=0.05 |
+| 53.19 | SC-88 | ChorusLuhFem | `VoiceOohs_sc8850_53_19` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((640.0, 285.0, 1.0), (1190.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), voice_crossover_hz=20.0, section_players=8, chiff_min_valve_time=0.03, chiff_max_valve_time=0.05 |
+| 53.20 | SC-88 | VoiceLan Fem | `VoiceOohs_sc8850_53_20` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((600.0, 285.0, 1.0), (1300.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), voice_crossover_hz=20.0, section_players=1, chiff_min_valve_time=0.03, chiff_max_valve_time=0.05 |
+| 53.21 | SC-88 | ChorusLanFem | `VoiceOohs_sc8850_53_21` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((600.0, 285.0, 1.0), (1300.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), voice_crossover_hz=20.0, section_players=8, chiff_min_valve_time=0.03, chiff_max_valve_time=0.05 |
+| 53.22 | SC-88 | VoiceAah Fem | `VoiceOohs_sc8850_53_22` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((743.0, 285.0, 1.0), (1102.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), voice_crossover_hz=20.0, section_players=1 |
+| 53.23 | SC-88 | VoiceUuh Fem | `VoiceOohs_sc8850_53_23` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((334.0, 227.0, 1.0), (803.0, 284.0, 0.479), (2614.0, 450.0, 0.733), (3465.0, 150.0, 0.485)), voice_crossover_hz=20.0, section_players=1 |
+| 53.24 | SC-88 | Fem Lah&Lan | `VoiceOohs_sc8850_53_24` | **4** | SC-8850 map: layered: GM 53 with formants=((743.0, 285.0, 1.0), (1102.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), voice_crossover_hz=20.0, section_players=1 + GM 53 with formants=((600.0, 285.0, 1.0), (1300.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), voice_crossover_hz=20.0, section_players=1 -2 dB |
+| 53.32 | SC-88 | VoiceWah Mal | `VoiceOohs_sc8850_53_32` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((743.0, 285.0, 1.0), (1102.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), voice_crossover_hz=20000.0, section_players=1, chiff_min_valve_time=0.05, chiff_max_valve_time=0.08 |
+| 53.33 | SC-88 | ChorusWahMal | `VoiceOohs_sc8850_53_33` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((743.0, 285.0, 1.0), (1102.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), voice_crossover_hz=20000.0, section_players=8, chiff_min_valve_time=0.05, chiff_max_valve_time=0.08 |
+| 53.34 | SC-88 | VoiceWoh Mal | `VoiceOohs_sc8850_53_34` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((450.0, 248.0, 1.0), (809.0, 250.0, 1.248), (2883.0, 569.0, 0.879), (3490.0, 150.0, 0.762)), voice_crossover_hz=20000.0, section_players=1, chiff_min_valve_time=0.05, chiff_max_valve_time=0.08 |
+| 53.35 | SC-88 | ChorusWohMal | `VoiceOohs_sc8850_53_35` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((450.0, 248.0, 1.0), (809.0, 250.0, 1.248), (2883.0, 569.0, 0.879), (3490.0, 150.0, 0.762)), voice_crossover_hz=20000.0, section_players=8, chiff_min_valve_time=0.05, chiff_max_valve_time=0.08 |
+| 53.36 | SC-88 | VoiceAah Mal | `VoiceOohs_sc8850_53_36` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((743.0, 285.0, 1.0), (1102.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), voice_crossover_hz=20000.0, section_players=1 |
+| 53.37 | SC-88 | VoiceOoh Mal | `VoiceOohs_sc8850_53_37` | **4** | SC-8850 map: GM 53 Voice Oohs with voice_crossover_hz=20000.0, section_players=1 |
 | 53.40 | SC-88 | Humming | `VoiceOohs_sc8850_53_40` | **4** | SC-8850 map: GM 53 Voice Oohs with formants=((250.0, 120.0, 1.0), (2200.0, 300.0, 0.06), (2700.0, 400.0, 0.04)), bore_corner_hz=1500.0. Ben, on examples/gm2_last_demo.py: "Sounds great" |
 | 54.1 | SC-55 | SynVox 2 | `Sc8850_54_1` | **3** | SC-8850 map: a Moog panel, the SynthVoice's with cutoff, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/synths_demo.py (all 13 parts): "They all sound good" |
 | 54.2 | SC-55 | SynVox 3 | `Sc8850_54_2` | **3** | SC-8850 map: a Moog panel, the SynthVoice's with cutoff, lfo1_depth, lfo1_dest, lfo1_rate, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/synths_demo.py (all 13 parts): "They all sound good" |
@@ -2578,23 +2630,74 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 55.8 | SC-88 | Impact Hit | `OrchestraHit_sc88_55_8` | **3** | SC-88 map: layered: GM 55 + GM 47 -24 st +10 dB + set 48's key 36 -18 st +10 dB + GM 61 with one_shot=True, gate_time=0.12 +12 dB |
 | 55.9 | SC-88 | Philly Hit | `OrchestraHit_sc88_55_9` | **4** | SC-88 map: layered: GM 55 + GM 48 with one_shot=True, gate_time=0.15 +11 dB |
 | 55.10 | SC-88 | Double Hit | `OrchestraHit_sc88_55_10` | **4** | SC-88 map: layered: GM 55 + GM 55 +12 st -6 dB |
+| 55.11 | SC-88 | Perc. Hit | `OrchestraHit_sc88_55_11` | **4** | SC-88 map: layered: GM 55 + set 48's key 38 -12 st +4 dB |
+| 55.12 | SC-88 | Shock Wave | `OrchestraHit_sc88_55_12` | **4** | SC-88 map: layered: GM 55 + GM 55 -12 st -3 dB + set 48's key 57 -12 st +2 dB |
+| 55.13 | SC-88 | Bounce Hit | `OrchestraHit_sc8850_55_13` | **2** | SC-8850 map: layered: GM 55 -4 dB + set 60's key 56 |
+| 55.14 | SC-88 | Drill Hit | `OrchestraHit_sc8850_55_14` | **2** | SC-8850 map: layered: GM 55 -4 dB + set 60's key 72 |
+| 55.15 | SC-88 | Thrill Hit | `OrchestraHit_sc8850_55_15` | **4** | SC-8850 map: layered: GM 55 -2 st + GM 55 +10 st -6 dB |
 | 55.16 | SC-55 | Lo Fi Rave | `Sc88_55_16` | **3** | SC-88 map: a Moog panel, the SynthBrass1's with a_attack, a_decay, a_release, a_sustain, cutoff, f_attack, noise_level, osc1_wave, osc2_freq, osc2_wave, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 55.17 | SC-88 | Techno Hit | `OrchestraHit_sc88_55_17` | **4** | SC-88 map: layered: GM 55 + set 30's key 36 -24 st +4 dB |
+| 55.18 | SC-88 | Dist. Hit | `OrchestraHit_sc88_55_18` | **4** | SC-88 map: GM 55 Orchestra Hit with insertion_efx=((1, 17), {}) |
 | 55.19 | SC-88 | Bam Hit | `OrchestraHit_sc88_55_19` | **3** | SC-88 map: layered: GM 55 + set 48's key 36 -20 st +10 dB + GM 61 with one_shot=True, gate_time=0.12 +16 dB |
+| 55.20 | SC-88 | Bit Hit | `OrchestraHit_sc88_55_20` | **4** | SC-88 map: GM 55 Orchestra Hit with insertion_efx=((1, 114), {}) |
+| 55.21 | SC-88 | Bim Hit | `OrchestraHit_sc88_55_21` | **4** | SC-88 map: layered: GM 55 + GM 55 +7 st -4 dB |
+| 55.22 | SC-88 | Technorg Hit | `OrchestraHit_sc88_55_22` | **4** | SC-88 map: layered: GM 55 -2 dB + GM 16 with one_shot=True, gate_time=0.15 |
+| 55.23 | SC-88 | Rave Hit | `OrchestraHit_sc88_55_23` | **4** | SC-88 map: layered: GM 55 + GM 55 +12 st -4 dB + GM 55 -12 st -4 dB |
+| 55.24 | SC-88 | Strings Hit | `Violin_sc88_55_24` | **4** | SC-88 map: GM 48 String Ensemble 1 with one_shot=True, gate_time=0.18, sound_bias={'attack': -1.0} |
+| 55.25 | SC-88 | Stack Hit | `OrchestraHit_sc88_55_25` | **4** | SC-88 map: layered: GM 55 + GM 55 +12 st -5 dB + GM 55 +19 st -8 dB |
+| 55.26 | SC-88 | Industry Hit | `OrchestraHit_sc8850_55_26` | **2** | SC-8850 map: layered: GM 55 -2 dB + set 60's key 71 |
+| 55.27 | SC-88 | Clap Hit | `OrchestraHit_sc8850_55_27` | **4** | SC-8850 map: layered: GM 55 + set 0's key 39 +2 dB |
 | 56.1 | SC-88 | Trumpet 2 | `Trumpet_sc88_56_1` | **4** | SC-88 map: GM 56 Trumpet with blare_db_per_khz=-0.9, blare_knee_hz=192, blare_cap_db=15.2, exp_vibrato_cents=5.4, solo_vibrato_hz=4.83 |
+| 56.2 | SC-88 | Trumpet | `Trumpet_sc88_56_2` | **4** | SC-88 map: GM 56 Trumpet with blare_db_per_khz=2.0, blare_knee_hz=400, blare_cap_db=20.0 |
 | 56.3 | SC-88 | Dark Trumpet | `Trumpet_sc8850_56_3` | **4** | SC-8850 map: GM 56 Trumpet with blare_db_per_khz=-10.0, blare_knee_hz=160, blare_cap_db=34.8. Ben, on examples/gm2_tones_demo.py: "sound good" |
+| 56.4 | SC-88 | Trumpet & Nz | `Trumpet_sc8850_56_4` | **4** | SC-8850 map: layered: GM 56 + GM 121 -14 dB |
 | 56.8 | SC-55 | Flugel Horn | `Flugelhorn` | **4** | the flugelhorn: our trumpet's source on a conical bore, its five colour knobs (bell cutoff and order, bore corner, roll-off, register law) refitted to Chris Cook's 'Dusty Flugelhorn' (Pianobook, a Yamaha 6310z, E3-A#5 at one soft dynamic; examples/flugel_fit.py): 21.2 -> 4.7 dB rms over 31 notes, ours read through the trumpet's own soft law while fitting (Warm Tp., Iowa's pp against its mf) so the class is the flugelhorn at mf; its attack the takes' (9-18 ms). A lower bell (1.2 kHz), the cone's faster roll-off. One player's Commons flugelhorn/trumpet pair read a lighter horn (--fit=commons); Ben chose this one by ear. At the trumpet's level. Ben: 'sounds more properly like a Flugelhorn' |
+| 56.16 | SC-88 | 4th Trumpets | `Trumpet_sc88_56_16` | **4** | SC-88 map: layered: GM 56 + GM 56 +5 st -2 dB |
 | 56.24 | SC-88 | Bright Tp. | `Trumpet_sc88_56_24` | **4** | SC-88 map: GM 56 Trumpet with blare_db_per_khz=7.7, blare_knee_hz=754, blare_cap_db=25.9 |
 | 56.25 | SC-88 | Warm Tp. | `Trumpet_sc88_56_25` | **4** | SC-88 map: GM 56 Trumpet with blare_db_per_khz=-6.6, blare_knee_hz=160, blare_cap_db=34.8 |
+| 56.26 | SC-88 | Warm Tp.2 | `Trumpet_sc8850_56_26` | **4** | SC-8850 map: GM 56 Trumpet with blare_db_per_khz=-9.0, blare_knee_hz=150, blare_cap_db=36.0 |
+| 56.27 | SC-88 | Twin Tp. | `Trumpet_sc8850_56_27` | **4** | SC-8850 map: GM 56 Trumpet with detuned_pair=(-6.0, 6.0) |
+| 56.32 | SC-88 | Syn. Trumpet | `MoogSynthBrass1` | **4** | SC-88 map: GM 62 Synth Brass 1's voice |
 | 57.1 | SC-88 | Trombone 2 | `Trombone_sc88_57_1` | **4** | SC-88 map: GM 57 Trombone with blare_db_per_khz=7.7, blare_knee_hz=754, blare_cap_db=25.9 |
+| 57.2 | SC-88 | Twin bones | `Trombone_sc88_57_2` | **4** | SC-88 map: GM 57 Trombone with detuned_pair=(-6.0, 6.0) |
+| 57.3 | SC-88 | Bones & Tuba | `Trombone_sc8850_57_3` | **4** | SC-8850 map: layered: GM 57 + GM 58 -12 st -4 dB |
 | 57.4 | SC-88 | Bright Tb | `Trombone_sc88_57_1` | **4** | SC-8850 map: 57.1's voice. Ben, on examples/gm2_tones_demo.py: "sound good" |
+| 57.8 | SC-88 | Bs. Trombone | `Trombone_sc88_57_8` | **4** | SC-88 map: GM 57 Trombone with blare_db_per_khz=-4.0, blare_knee_hz=150, blare_cap_db=30.0, tonal_dampening=1.0 |
+| 57.16 | SC-88 | Euphonium | `ConicalBrass_sc8850_57_16` | **4** | SC-8850 map: GM 58 Tuba with blare_db_per_khz=6.0, blare_knee_hz=300, blare_cap_db=22.0 |
 | 58.1 | SC-88 | Tuba 2 | `ConicalBrass_sc88_58_1` | **4** | SC-88 map: GM 58 Tuba with blare_db_per_khz=30.1, blare_knee_hz=116, blare_cap_db=24.7 |
+| 58.8 | SC-88 | Tuba + Horn | `ConicalBrass_sc8850_58_8` | **4** | SC-8850 map: layered: GM 58 + GM 60 +12 st -6 dB |
+| 59.1 | SC-88 | Cup Mute Tp | `MutedTrumpet_sc8850_59_1` | **4** | SC-8850 map: GM 59 Muted Trumpet with mute_resonance_hz=1200.0, mute_resonance_db=4.0, mute_resonance_q=1.0, mute_response=((200, -11.6), (252, -11.6), (317, -11.6), (400, -16.5), (504, -19.9), (635, -31.4), (800, -33.3), (1008, -28.1), (1270, -41.0), (1600, -19.2), (2016, -17.7), (2540, -7.4), (3200, -14.7), (4032, -8.0), (5080, -0.7000000000000002), (6400, -3.3), (8063, -0.20000000000000018)) |
 | 59.2 | SC-88 | MuteTrumpet2 | `Trumpet_sc8850_59_2` | **4** | SC-8850 map: GM 56 Trumpet with plunger=True. the plunger, aftertouch opening it (no recording; voiced by ear). Ben, on examples/plunger_demo.py: "fine for now" |
+| 59.3 | SC-88 | MuteTrumpet3 | `MutedTrumpet_sc8850_59_3` | **4** | SC-8850 map: GM 59 Muted Trumpet with mute_resonance_hz=1800.0, mute_resonance_db=8.0, mute_resonance_q=1.6 |
+| 59.8 | SC-88 | Muted Horns | `MutedTrumpet_sc88_59_8` | **4** | SC-88 map: layered: GM 59 -12 st |
 | 60.1 | SC-88 | Fr.Horn 2 | `Horn_sc88_60_1` | **4** | SC-88 map: GM 60 French Horn with blare_db_per_khz=-14.0, blare_knee_hz=162, blare_cap_db=10.3 |
+| 60.2 | SC-88 | Horn + Orche | `Horn_sc88_60_2` | **4** | SC-88 map: layered: GM 60 + GM 48 -6 dB |
 | 60.3 | SC-88 | Wide FreHrns | `Horn_sc88_60_3` | **4** | SC-88 map: GM 60 French Horn with key_pan_spread=0.5 |
 | 60.8 | SC-88 | Fr.HornSolo | `Horn_sc88_60_8` | **4** | SC-88 map: GM 60 French Horn with blare_db_per_khz=9.9, blare_knee_hz=588, blare_cap_db=29.1 |
+| 60.9 | SC-88 | Dual Horns | `Horn_sc88_60_9` | **4** | SC-88 map: GM 60 French Horn with detuned_pair=(-8.0, 8.0) |
 | 60.16 | SC-88 | Horn Orch | `Horn_sc88_60_16` | **4** | SC-88 map: GM 60 French Horn with detuned_pair=(-5.0, 5.0) |
+| 60.24 | SC-88 | F.Horn Rip | `Horn_sc88_60_24` | **4** | SC-88 map: GM 60 French Horn with rip_cents=700.0, rip_s=0.15 |
+| 61.1 | SC-88 | Brass ff | `TromboneToTrumpet50Section_sc88_61_1` | **3** | SC-88 map: GM 61 Brass Section with blare_db_per_khz=9.0, blare_knee_hz=700, blare_cap_db=28.0 |
+| 61.2 | SC-88 | Bones Sect. | `Trombone_sc88_61_2` | **4** | SC-88 map: GM 57 Trombone with detuned_pair=(-7.0, 7.0), key_pan_spread=0.5 |
+| 61.3 | SC-88 | St. Brass ff | `TromboneToTrumpet50Section_sc8850_61_3` | **3** | SC-8850 map: GM 61 Brass Section with blare_db_per_khz=9.0, blare_knee_hz=700, blare_cap_db=28.0, key_pan_spread=0.5 |
+| 61.4 | SC-88 | Quad Brass1 | `TromboneToTrumpet50Section_sc8850_61_4` | **3** | SC-8850 map: layered: GM 61 + GM 56 +12 st -6 dB + GM 57 -4 dB + GM 58 -12 st -8 dB |
+| 61.5 | SC-88 | Quad Brass2 | `TromboneToTrumpet50Section_sc8850_61_5` | **3** | SC-8850 map: layered: GM 61 + GM 56 -3 dB + GM 60 -5 dB + GM 58 -12 st -9 dB |
 | 61.8 | SC-55 | Brass 2 | `TromboneToTrumpet50Section_brass2` | **3** | the brass section's router (tuba, trombones, trumpets by register), every register a detuned pair, +-4 cents half left and right -- MuseScore's 61.8, its section twice, panned apart; the spread asserted |
+| 61.9 | SC-88 | Brass 3 | `TromboneToTrumpet50Section_sc88_61_9` | **3** | SC-88 map: GM 61 Brass Section with blare_db_per_khz=4.0, blare_knee_hz=500, blare_cap_db=22.0 |
+| 61.10 | SC-88 | Brass sfz | `TromboneToTrumpet50Section_sc88_61_10` | **3** | SC-88 map: layered: GM 61 with one_shot=True, gate_time=0.15 +4 dB + GM 61 -6 dB |
+| 61.12 | SC-88 | Brass sfz 2 | `TromboneToTrumpet50Section_sc8850_61_12` | **3** | SC-8850 map: layered: GM 61 with one_shot=True, gate_time=0.1 +6 dB + GM 61 -9 dB |
+| 61.14 | SC-88 | FatPop Brass | `TromboneToTrumpet50Section_sc8850_61_14` | **3** | SC-8850 map: layered: GM 61 + GM 56 -4 dB + GM 65 -8 dB |
 | 61.16 | SC-88 | Brass Fall | `TromboneToTrumpet50Section_sc88_61_16` | **3** | SC-88 map: GM 61 Brass Section with fall_cents=900.0 |
+| 61.17 | SC-88 | Trumpet Fall | `Trumpet_sc88_61_17` | **4** | SC-88 map: GM 56 Trumpet with fall_cents=900.0 |
+| 61.24 | SC-88 | Octave Brass | `TromboneToTrumpet50Section_sc88_61_24` | **3** | SC-88 map: layered: GM 61 + GM 61 +12 st -6 dB |
+| 61.25 | SC-88 | Brass + Reed | `TromboneToTrumpet50Section_sc88_61_25` | **3** | SC-88 map: layered: GM 61 + GM 65 -4 dB |
+| 61.26 | SC-88 | Fat + Reed | `TromboneToTrumpet50Section_sc8850_61_26` | **3** | SC-8850 map: layered: GM 61 + GM 65 -2 dB + GM 66 -12 st -6 dB |
+| 61.32 | SC-88 | Orch Brass | `Horn_sc8850_61_32` | **4** | SC-8850 map: layered: GM 60 + GM 57 -3 dB + GM 58 -12 st -8 dB |
+| 61.33 | SC-88 | Orch Brass 2 | `Horn_sc8850_61_33` | **4** | SC-8850 map: layered: GM 60 + GM 57 -3 dB + GM 58 -12 st -8 dB + GM 56 +12 st -6 dB |
+| 61.35 | SC-88 | St.FatPopBrs | `TromboneToTrumpet50Section_sc8850_61_35` | **3** | SC-8850 map: layered: GM 61 with key_pan_spread=0.5 + GM 56 with key_pan_spread=0.5 -4 dB + GM 65 with key_pan_spread=0.5 -8 dB |
+| 61.36 | SC-88 | St.Orch Brs | `Horn_sc8850_61_36` | **4** | SC-8850 map: layered: GM 60 with key_pan_spread=0.5 + GM 57 with key_pan_spread=0.5 -3 dB + GM 58 with key_pan_spread=0.5 -12 st -8 dB |
+| 61.37 | SC-88 | St.Orch Brs2 | `Horn_sc8850_61_37` | **4** | SC-8850 map: layered: GM 60 with key_pan_spread=0.5 + GM 57 with key_pan_spread=0.5 -3 dB + GM 58 with key_pan_spread=0.5 -12 st -8 dB + GM 56 with key_pan_spread=0.5 +12 st -6 dB |
+| 61.38 | SC-88 | St.Orch Brs3 | `Horn_sc8850_61_38` | **4** | SC-8850 map: layered: GM 60 with key_pan_spread=0.5 + GM 57 with key_pan_spread=0.5 -2 dB + GM 58 with key_pan_spread=0.5 -12 st -6 dB + GM 56 with key_pan_spread=0.5 +12 st -4 dB |
 | 62.1 | SC-55 | Poly Brass | `Sc88_62_1` | **3** | SC-88 map: a Moog panel, the SynthBrass1's with cutoff, eg_amount, f_attack, osc2_freq changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 62.2 | SC-55 | Stack Brass | `Sc88_62_2` | **3** | SC-88 map: a Moog panel, the SynthBrass1's with osc2_freq, osc2_level, osc2_octave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger. Ben, on examples/synths_demo.py (all 13 parts): "They all sound good" |
 | 62.3 | SC-55 | SH-5 Brass | `Sc88_62_3` | **3** | SC-88 map: the SH-5 READ, not fitted, from xanthorp's sample-and-hold patterns (sc88_synth.SH5, examples/sh5_fit.py: each step a note at its own cutoff, 9 dB rms -- no held SH-5 note under CC0), with a_attack, cutoff, eg_amount, f_attack, f_decay, f_sustain, osc2_freq, osc2_level, osc2_octave changed |
@@ -3175,10 +3278,10 @@ Each Sound Canvas's map of tones (the SC-55's own owner's manual p.68; the SC-55
 SC-88 and SC-88Pro maps from the SC-88Pro manual's list), against ours. A tone is built
 when we play it, as a program or a variation, and rated as the tables above rate it.
 A later map can put another tone under a number we built; that one is not counted.
-The maps' totals are in the Summary at the top; still to build: SC-55 0, SC-55mkII 0, SC-88 0, SC-88Pro 179 (3 another tone), SC-8850 456 (5 another tone).
+The maps' totals are in the Summary at the top; still to build: SC-55 0, SC-55mkII 0, SC-88 0, SC-88Pro 145 (2 another tone), SC-8850 352 (4 another tone).
 
 
-A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3), SC-88Pro 0.16 European Pf (4), SC-88Pro 3.8 Honky-tonk 2 (3), SC-88Pro 16.8 Trem. Organ (4), SC-88Pro 16.32 70's E.Organ (4), SC-88Pro 17.32 Perc. Organ (4), SC-88Pro 63.17 Transbrass (3), SC-8850 62.8 Pro Brass (3), SC-8850 63.8 SynBrass sfz (3).
+A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3), SC-88Pro 0.16 European Pf (4), SC-88Pro 3.8 Honky-tonk 2 (3), SC-88Pro 16.8 Trem. Organ (4), SC-88Pro 16.32 70's E.Organ (4), SC-88Pro 17.32 Perc. Organ (4), SC-88Pro 60.16 Synth Horn (4), SC-88Pro 63.17 Transbrass (3), SC-8850 62.8 Pro Brass (3), SC-8850 63.8 SynBrass sfz (3).
 
 ### By family: built of each map's tones
 
@@ -3190,8 +3293,8 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Guitar | 16/16 | 19/19 | 34/34 | 36/55 | 41/72 |
 | Bass | 41/41 | 12/12 | 31/31 | 62/76 | 94/113 |
 | Strings | 8/8 | 9/9 | 11/11 | 12/20 | 13/29 |
-| Ensemble | 28/28 | 11/11 | 29/29 | 46/63 | 67/134 |
-| Brass | 23/23 | 15/15 | 27/27 | 34/51 | 47/84 |
+| Ensemble | 28/28 | 11/11 | 29/29 | 63/63 | 134/134 |
+| Brass | 23/23 | 15/15 | 27/27 | 51/51 | 84/84 |
 | Reed | 11/11 | 8/8 | 11/11 | 11/20 | 11/23 |
 | Pipe | 10/10 | 8/8 | 9/9 | 13/22 | 13/27 |
 | Synth Lead | 59/59 | 12/12 | 30/30 | 80/80 | 131/131 |

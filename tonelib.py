@@ -1904,6 +1904,15 @@ class SynthProperties:
     fall_s = 0.45
     fall_fade_db = 30.0
     fall_smear = 0.6
+    # ...AND A RIP, its mirror (GS 60.24 "F.Horn Rip"): from the note's onset
+    # a run UP the lattice from rip_cents below, a semitone a step over rip_s,
+    # crescendoing from rip_start_db under into the note, smeared (a lip
+    # gliss more than a fingered one: rip_smear); the note proper sounds from
+    # where the run arrives. 0 cents is none
+    rip_cents = 0.0
+    rip_s = 0.15
+    rip_start_db = 12.0
+    rip_smear = 0.8
 
     # Metres of stereo spread per octave of pitch (times position_x). Positive =
     # higher notes toward one side; the piano flips the sign so its keyboard reads

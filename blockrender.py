@@ -144,7 +144,7 @@ RAND_GRAN = 100000.0
 # performance takes the next keys without a template per position
 SCANNER_OFF = False
 from patch_map import property_class_for_program, property_class_for_note, program_trim
-from patch_map import VariationProgram, VARIATIONS, layers_of
+from patch_map import VariationProgram, VARIATIONS, layers_of, layer_class
 from brass_fingering import cents_offset as brass_cents, INSTRUMENTS as BRASS_KIND
 from percussion_map import (percussion_for_note, choke_group, rasp_strokes,
                             GM_PERCUSSION_CHANNEL, DrumProgram, is_drum, kit_for_program,
@@ -1314,6 +1314,17 @@ def uniq_programs(plist):
     for q in plist:
         seen.setdefault((int(q), getattr(q, 'variation', 0)), q)
     return list(seen.values())
+
+
+def voice_classes(prog):
+    """The voice classes a program change brings onto a channel: its own, and a
+    LAYERED variation's layers' (patch_map.layer_class) -- an organ can be a
+    layer of a tone whose own class is not one (Technorg Hit: the orchestra hit
+    with an organ stab), and its registration and wind are the organ's."""
+    out = [property_class_for_program(prog)]
+    for lp in (layers_of(prog) or ()):
+        out.append(layer_class(lp[0], 60))
+    return out
 
 
 def organ_family(cls):
@@ -2524,8 +2535,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     # each has its own ranks, stop word and swell -- organ_family. A channel
     # with one organ is built exactly as it was.
     for ch, _plist in ch_progs.items():
-        for prog in uniq_programs(_plist):         # each (program, variation) once
-            pc = property_class_for_program(prog)
+        for pc in (c for q in uniq_programs(_plist) for c in voice_classes(q)):  # a layer's organ too
             if not getattr(pc, 'registerable', False):
                 continue
             _orgk = (ch, organ_family(pc))
@@ -2570,11 +2580,10 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _WROWS = {}              # channel -> {(a, b): (ratio per block, level at block edges)}
     wrow_key = {}            # (channel, rank) -> (a, b)
     for ch, _plist in ch_progs.items():
-        prog = next((q for q in uniq_programs(_plist)
-                     if getattr(property_class_for_program(q), 'registerable', False)), None)
-        if prog is None:
+        pc = next((c for q in uniq_programs(_plist) for c in voice_classes(q)
+                   if getattr(c, 'registerable', False)), None)
+        if pc is None:
             continue
-        pc = property_class_for_program(prog)
         if getattr(pc, 'wind_skirt_db', None) is None or not getattr(pc, 'wind_pitch_exp', 0.0):
             continue                            # not a pipe organ
         _wk = (ch, organ_family(pc))
@@ -4152,6 +4161,36 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _GLISS[(_e[0], _p, _t0)] = (10.0 ** (-float(_pcf.fall_fade_db) * (_i + 1) / _ns / 20.0), _sm,
                                         _e[1] - _i, _dt)
             _GLISS_STEPS.append((_e[0], _p, _t0, _t0 + _dt * 1.35, _e[4], _e[5], _e[6]))
+    # ...AND A RIP, the fall's mirror (tonelib rip_cents: GS 60.24 "F.Horn
+    # Rip"): from the onset a run UP the lattice from rip_cents below, a
+    # semitone a step over rip_s, crescendoing from rip_start_db under, each
+    # step a real note on its fingered pitch; the note proper sounds from where
+    # the run arrives, and its onset is still where the file put it
+    for _e in list(notes):
+        _k3 = (_e[0], _e[1], _e[2])
+        if _k3 in _GLISS_DROP or is_drum(_e[6]):
+            continue
+        _pcr = property_class_for_note(_e[6], _e[1])
+        _rc = getattr(_pcr, 'rip_cents', 0.0) or 0.0
+        if not _rc:
+            continue
+        _ns = max(2, int(round(_rc / 100.0)))
+        _T = float(_pcr.rip_s)
+        if _e[3] <= _e[2] + _T:
+            continue                    # a note shorter than its rip: played plain
+        _dt = _T / _ns
+        _sm = float(getattr(_pcr, 'rip_smear', 0.8))
+        _GLISS_DROP.add(_k3)
+        for _i in range(_ns):
+            _p = _e[1] - _ns + _i
+            if _p < 0:
+                continue
+            _t0 = _e[2] + _i * _dt
+            _GLISS[(_e[0], _p, _t0)] = (10.0 ** (-float(_pcr.rip_start_db) * (_ns - _i) / _ns / 20.0), _sm,
+                                        (_p - 1) if _i else None, _dt)
+            _GLISS_STEPS.append((_e[0], _p, _t0, _t0 + _dt * 1.35, _e[4], _e[5], _e[6]))
+        _GLISS[(_e[0], _e[1], _e[2] + _T)] = (1.0, _sm, _e[1] - 1, _dt)
+        _GLISS_STEPS.append((_e[0], _e[1], _e[2] + _T, _e[3], _e[4], _e[5], _e[6]))
     if _gliss_clean:
         print("  %d valved glissandi were too short to run and played clean "
               "(a step would have been under 12 ms)" % _gliss_clean)
@@ -5153,8 +5192,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 i = _bisect.bisect_right(rows, (on / float(SR) + 1e-3,)) - 1
                 if i >= 0:
                     vbase = _VOW.VOWELS.get(rows[i][1])
+            # (the part the file declares, else one the TONE declares: GS's
+            # Boys Choir is a treble's body, tonelib.VOICE_BODIES 'boy')
             props.formants = props._sung_formants(_tess.get(ch, f0),
-                                                  part=_parts.get(ch), base=vbase)
+                                                  part=_parts.get(ch) or getattr(props, 'voice_part', None),
+                                                  base=vbase)
         # how long the key was held, before a one-shot's extension: a shaken
         # noise (tonelib.ShakenNoiseProperties) shakes for a share of it
         _held = off - on
