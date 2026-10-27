@@ -481,6 +481,10 @@ def tree():
 
 
 def build():
+    # the drum sets' ratings first, as gm_coverage.main has them: the tones made
+    # of a set's sound (Jang-Gu, set 52's) are rated by them
+    C._gs_sets_rated()
+    C._sc88pro_extra_rated()
     hist = [0, 0, 0, 0, 0]
     for p in range(128):
         hist[C.RATED[p][0]] += 1
