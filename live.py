@@ -4521,6 +4521,37 @@ class Live:
         """Tell the cache which voices are on stage, so it evicts none of them."""
         pin_patches({p.patch.key for p in self.parts})
 
+    # THE WATCHDOG (main, playing): a session that freezes -- the panel dead,
+    # the sound stuck on a note or gone -- cannot press its own panic, so it
+    # reports itself. A thread looks each second at whether the audio
+    # callback is still rendering blocks; stalled 3 s, it writes every
+    # thread's stack (faulthandler) to PANIC_DUMP. If that thread cannot run
+    # at all (the interpreter's lock held), faulthandler's own C watchdog,
+    # re-armed by it each second, writes them after 8 s. SIGUSR1 writes them
+    # on demand (kill -USR1 <pid>).
+    def start_watchdog(self, stall_s=3.0):
+        import faulthandler
+        f = open(self.PANIC_DUMP, "a", buffering=1)
+        self._wd_file = f
+        faulthandler.register(signal.SIGUSR1, file=f, all_threads=True)
+
+        def run():
+            last, since, told = -1, time.monotonic(), False
+            while not self.patch_stop:
+                faulthandler.dump_traceback_later(8.0, file=f)
+                time.sleep(1.0)
+                b = self.blocks
+                if b != last:
+                    last, since, told = b, time.monotonic(), False
+                elif not told and time.monotonic() - since > stall_s:
+                    f.write("==== audio stalled %.1f s at block %d, %s -- every thread:\n"
+                            % (time.monotonic() - since, b, time.strftime("%Y-%m-%d %H:%M:%S")))
+                    f.flush()
+                    faulthandler.dump_traceback(file=f, all_threads=True)
+                    told = True
+            faulthandler.cancel_dump_traceback_later()
+        threading.Thread(target=run, name="watchdog", daemon=True).start()
+
     def shutdown(self):
         """Stop the worker threads and the renderer.
 
@@ -4529,6 +4560,14 @@ class Live:
         which cost an hour of chasing a program change that was working
         perfectly and simply could not say so.
         """
+        if getattr(self, "_wd_file", None) is not None and (self.slab.live or len(self._orphans())):
+            # ...AND WHAT WAS STILL SOUNDING when the session ended (Ctrl-C on
+            # a hang included): panic's report, without the panic
+            try:
+                self._wd_file.write("==== at quit, still sounding:\n")
+                self._hang_dump(self.n)
+            except Exception:
+                pass
         self.patch_stop = True
         self.patch_go.set()
         self.amp_stop = True
@@ -11998,6 +12037,12 @@ def selftest_gs(check):
 
 
 def selftest(only=""):
+    # its panics report to a file of its own, not the player's live_dump.txt
+    Live.PANIC_DUMP = os.path.join(tempfile.gettempdir(), "live_dump_selftest.txt")
+    return _selftest(only)
+
+
+def _selftest(only=""):
     import tonelib as _T
     """Assert the live engine's behaviour without any audio or MIDI hardware.
 
@@ -20742,6 +20787,7 @@ def main():
     live = Live(program=a.program, rate=a.rate, frames=a.frames, tuner=a.tuner, eastern=a.eastern,
                 drums=a.drums, headroom_db=a.headroom, capacity=a.capacity,
                 threads=a.threads, gpu=a.gpu, verbose=not a.tui)
+    live.start_watchdog()
     if a.gpu:
         print("gpu: " + ("%s, above %d occupied slots" % (live.renderer.gpu.name, live.renderer.gpu_min)
                          if isinstance(live.renderer, GpuRenderer)
