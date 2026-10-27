@@ -848,7 +848,13 @@ class Slab:
         self.tp = np.full(capacity, -1, np.int32)    # each slot's tap set (its channel's), -1 none
         self.tpx = np.zeros(capacity, np.int64)      # ...and its longest tap: the slot is held that much longer
         self.tap_m = 0                               # scratch rows written for this block
-        self.tap_cap = self.tcap                     # ...at most (the budget governor's: Live.callback)
+        # ...their cost at most, in units (TAP_MOOG_COST; the budget
+        # governor's: Live.callback), and what this block's cost
+        self.tap_ucap = self.tcap * self.TAP_MOOG_COST
+        self.tap_cap = self.tap_ucap
+        self.tap_u = 0
+        import ctypes as _C
+        self._units = _C.c_int64(0)
         self.bus_m, self.bus_hide = 0, None          # the bus's scratch rows (bus_fill), its originals
         self.bus_chans = set()                       # the channels on it this block (Live._bus_chans_now)
         self.tap_lib = None
@@ -1731,6 +1737,22 @@ class Slab:
         on = self.aL0[idx] > 0
         if on.any():
             f[:] = float(np.median(a["aL"][idx][on] / self.aL0[idx][on]))
+        # ...AND THE SWINGS' OWN BASELINES move with it (channel_gain's four):
+        # a Moog voice on the Rotary, a tremolo or a moving filter rewrites
+        # aL from them every block, and would put the old timbre back
+        # -- by the ratio, or, a row that was silent (a mixer level from 0),
+        # set where the swing is armed, as its capture would have read it
+        _nL, _nR = self.mo_uL[idx] * w, self.mo_uR[idx] * w
+        _arm = (self.ls_on, self.tr_on, self.cv_on, self.fl_on)
+        for _new, _old, _bases in ((_nL, self.aL0[idx], (self.ls_aL, self.tr_aL, self.cv_aL, self.fl_aL)),
+                                   (_nR, self.aR0[idx], (self.ls_aR, self.tr_aR, self.cv_aR, self.fl_aR))):
+            _z = _old == 0
+            _q = np.where(_z, 1, _new / np.where(_z, 1, _old)).astype(np.float32)
+            for _b, _on in zip(_bases, _arm):
+                _b[idx] *= _q
+                _set = _z & _on[idx]
+                if _set.any():
+                    _b[idx[_set]] = (_new[_set] * f[_set]).astype(np.float32)
         self.aL0[idx] = self.mo_uL[idx] * w
         self.aR0[idx] = self.mo_uR[idx] * w
         a["aL"][idx] = self.aL0[idx] * f
@@ -2250,9 +2272,15 @@ class Slab:
     _TAP_NAMED = ("om", "p0", "p0R", "non", "noff", "nf", "aL", "aR", "vd", "vr", "vp", "vdl",
                   "delL", "delR", "fx", "gr", "br")
 
-    def _expand(self, src, st, tab, dst0, cap, floor, n0, frames, identity=False):
+    # A MOOG COPY's COST in the governor's units, a plain copy's 1: measured
+    # 1.6 against 0.6 us a copy a block (Mellow FM and E.Piano 1 through Space
+    # D, 128-sample blocks, 2026-10-27) -- the ladder and FM sidebands again
+    TAP_MOOG_COST = 3
+
+    def _expand(self, src, st, tab, dst0, cap, floor, n0, frames, identity=False, ucap=None):
         """tapkernel.c's tap_expand over these source slots and tap sets, into
-        the scratch rows from dst0 (cap of them): how many it wrote."""
+        the scratch rows from dst0 (cap of them), at most ucap cost units of
+        copies (TAP_MOOG_COST): how many rows it wrote (the units: _units)."""
         import ctypes as C
         a = self.full
         if getattr(self, "_tap_cols", None) is None:
@@ -2271,7 +2299,9 @@ class Slab:
             P(tab["hz"]), P(tab["al1"]), P(tab["ar1"]), P(tab["dl"]), P(tab["vd"]), P(tab["vr"]),
             P(tab["ph"]), P(a["re"]), C.c_double(floor), C.c_int64(n0), C.c_int64(n0 + frames),
             C.c_double(_PAN_BETA), C.c_double(float(B.SR)), C.c_int64(IDLE),
-            C.c_int64(dst0), C.c_int(cap), C.c_int(1 if identity else 0))
+            C.c_int64(dst0), C.c_int(cap), C.c_int(1 if identity else 0),
+            C.c_int(self.TAP_MOOG_COST), C.c_int64(1 << 62 if ucap is None else int(ucap)),
+            C.byref(self._units))
 
     def tap_fill(self, n0, frames):
         """THE REFERENCED TAPS, this block (tapkernel.c): every partial with a
@@ -2288,7 +2318,8 @@ class Slab:
                             | np.isin(self.fx_ch[src], list(self.bus_chans)))]
             if len(src):
                 m = self._expand(src, self.tp[src].astype(np.int32), tab, self.cap,
-                                 min(self.tcap, self.tap_cap), _GSD.REPEAT_FLOOR, n0, frames)
+                                 self.tcap, _GSD.REPEAT_FLOOR, n0, frames, ucap=self.tap_cap)
+        self.tap_u = int(self._units.value) if m else 0
         # rows left over from a busier block go quiet
         if m < self.tap_m:
             self.full["non"][self.cap + m:self.cap + self.tap_m] = IDLE
@@ -2337,8 +2368,8 @@ class Slab:
                                                           | np.isin(self.fx_ch, list(chans)))).astype(np.int64)
                     if len(ts):
                         self.bus_m += self._expand(ts, self.tp[ts].astype(np.int32), tab, d0 + self.bus_m,
-                                                   min(self.tcap - self.tap_m - self.bus_m, self.tap_cap),
-                                                   _GSD.REPEAT_FLOOR, n0, frames)
+                                                   self.tcap - self.tap_m - self.bus_m,
+                                                   _GSD.REPEAT_FLOOR, n0, frames, ucap=self.tap_cap)
         if self.bus_m < prev:
             d0 = self.cap + self.tap_m
             self.full["non"][d0 + self.bus_m:d0 + prev] = IDLE
@@ -4507,14 +4538,81 @@ class Live:
         """The body of panic, callable with n0 in hand -- which is what a GM
         System On needs, because it arrives ON the audio thread and must take
         effect on this block rather than the next."""
+        try:
+            self._hang_dump(n0)
+        except Exception as e:
+            self.last_error = "panic dump: %s: %s" % (type(e).__name__, e)
         for k in list(self.slab.live):
             self.slab.oneshot.pop(k, None)
             self.slab.release(k, n0)
+        # ...AND WHAT NO KEY OWNS: a row sounding with no key behind it cannot
+        # be reached by a note-off, the sweep or the loop above -- the hang Ben
+        # heard that a key struck again did not stop. Ended here over its own
+        # release, so panic always ends everything (the dump says who it was)
+        orphan = self._orphans()
+        if len(orphan):
+            a = self.slab.a
+            a["noff"][orphan] = np.minimum(a["noff"][orphan], n0 + a["rdl"][orphan].astype(np.int64))
+            self.slab.retiring.append((orphan, n0))
+            fr = a["fx"][orphan]                  # a Moog row's key-up is its pitch row's (Slab.release)
+            fr = np.unique(fr[fr >= 0])
+            if len(fr):
+                self.slab.mp_toff[fr] = np.minimum(self.slab.mp_toff[fr], float(n0))
         self.down.clear()
         self.pedalled.clear()
         self.cutting.clear()
         for p in self.parts:
             self._amp_touch(p)
+
+    PANIC_DUMP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "live_dump.txt")
+
+    def _orphans(self):
+        """Busy slab rows (not the taps' scratch rows) that no key holds and
+        that are still to end."""
+        sl = self.slab
+        held = np.zeros(sl.cap, bool)
+        for ss in list(sl.live.values()):
+            if ss:
+                held[np.fromiter(ss, np.int64, len(ss))] = True
+        a = sl.a
+        return np.flatnonzero(sl.busy[:sl.cap] & ~held & (a["noff"][:sl.cap] == IDLE))
+
+    def _hang_dump(self, n0):
+        """PANIC's REPORT (live_dump.txt, appended): what was sounding when P
+        was pressed -- every key and its rows, the rows no key holds, the
+        effect and the counters -- so a hang can be read after the fact."""
+        sl, a = self.slab, self.slab.a
+        L = ["==== panic at sample %d (%.1f s), %s" % (n0, n0 / float(self.rate), time.strftime("%Y-%m-%d %H:%M:%S")),
+             "parts: " + "; ".join("pid %d ch %s %s v%d" % (p.pid, p.channel, p.patch.cls_name, p.variation)
+                                   for p in self.parts),
+             "efx: type %s parts %s; tone_fx %s" % (self.efx.get('type'), sorted(self.efx_parts),
+                                                    {c: (tf['chain'] or {}).get('name') for c, tf in self.tone_fx.items()}),
+             "down %s pedalled %s cutting %s amp_retired %s" % (sorted(self.down), sorted(self.pedalled),
+                                                                list(self.cutting), list(self.amp_retired)),
+             "stuck %d errors %d last_error %s dropped %d tap_m %d tap_cap %d tap_shed %d partials_shed %d"
+             % (self.stuck, self.errors, self.last_error, self.dropped, sl.tap_m, sl.tap_cap,
+                getattr(self, 'tap_shed', 0), getattr(self, 'partials_shed', 0))]
+
+        def rows(ix):
+            ix = np.asarray(ix, np.int64)
+            if not len(ix):
+                return "none"
+            on = a["non"][ix]; off = a["noff"][ix]
+            return ("%d rows: moog %d rotor %d filter %d trem %d taps %d; onset %d..%d; released %d; "
+                    "level max %.2e; f %.0f..%.0f Hz" % (
+                        len(ix), int((a["fx"][ix] >= 0).sum()), int(sl.ls_on[ix].sum()), int(sl.fl_on[ix].sum()),
+                        int(sl.tr_on[ix].sum()), int((sl.tp[ix] >= 0).sum()), int(on.min()), int(on.max()),
+                        int((off != IDLE).sum()), float(np.abs(a["aL"][ix]).max()),
+                        float(a["om"][ix].min() * self.rate / (2 * math.pi)),
+                        float(a["om"][ix].max() * self.rate / (2 * math.pi))))
+        for k, ss in list(sl.live.items()):
+            L.append("key %s oneshot %s tone %s: %s" % (k, bool(sl.oneshot.get(k)),
+                                                       getattr(self.key_tone.get(tuple(k[:3])), 'cls_name', None),
+                                                       rows(ss)))
+        L.append("ORPHANS (busy, no key, unreleased): %s" % rows(self._orphans()))
+        L.append("busy rows in all: %d" % int(sl.busy.sum()))
+        with open(self.PANIC_DUMP, "a") as f:
+            f.write("\n".join(L) + "\n")
 
     def request_stops(self, part, want):
         """set_stops from the TUI. Drawing a stop STAMPS, which is the single
@@ -6527,7 +6625,6 @@ class Live:
         rt = ex['rotary']
         self._efx_rotary_sync()
         idx = np.fromiter(slots, np.int64, len(slots))
-        idx = idx[self.slab.a["fx"][idx] < 0]
         if not len(idx):
             return
         rng = np.random.default_rng(int(note) * 7919 + len(idx))
@@ -10031,17 +10128,22 @@ class Live:
         # called again at once and never catches up -- and while the audio
         # thread runs Python back to back the panel starves: the session
         # hangs. The insertion effect's copies are the load that can give:
-        # over 85% of the slot, the next block writes 30% fewer of them (the
-        # quietest go first, every note alike: tapkernel.c's ranks); under
-        # 70%, they come back an eighth at a time.
+        # over 85% of the slot, the next block writes 30% less of them (the
+        # quietest go first, every note alike: tapkernel.c's ranks) -- counted
+        # by COST, a Moog copy as TAP_MOOG_COST plain ones; and they come back
+        # an eighth at a time only once FOUR blocks running are under 70%: one
+        # quiet block between spikes refilled them into the next spike, and a
+        # Moog chord (Mellow FM, Space D) sat there, its copies cut and
+        # restored, its worst blocks past the slot -- Ben's underruns.
         _sl = self.slab
-        if _sl.tap_m or _sl.tap_cap < _sl.tcap:
+        if _sl.tap_m or _sl.tap_cap < _sl.tap_ucap:
             _bud = 1000.0 * frame_count / float(self.rate)
+            _calm = self.render_ms < 0.7 * _bud and all(x < 0.7 * _bud for x in self._ms_hist)
             if self.render_ms > 0.85 * _bud and _sl.tap_m:     # (no copies: nothing of theirs to cut)
-                _sl.tap_cap = int(min(_sl.tap_cap, _sl.tap_m) * 0.7)
+                _sl.tap_cap = int(min(_sl.tap_cap, _sl.tap_u) * 0.7)
                 self.tap_shed += 1
-            elif self.render_ms < 0.7 * _bud and _sl.tap_cap < _sl.tcap:
-                _sl.tap_cap = min(_sl.tcap, _sl.tap_cap + max(256, _sl.tap_cap // 8))
+            elif _calm and _sl.tap_cap < _sl.tap_ucap:
+                _sl.tap_cap = min(_sl.tap_ucap, _sl.tap_cap + max(256, _sl.tap_cap // 8))
         # ...AND THEN THE NOTES' OWN PARTIALS. With no copies left to give,
         # blocks still over 95% of the slot -- by their median over the last
         # four, so one chord's strike is not a reason -- shed the quietest
@@ -10176,7 +10278,34 @@ def preset_from(live):
         messenger_bend=getattr(live, "messenger_bend", 2.0),
         # the secondary (Eastern) tuning, ragas.py's spec, or None
         eastern=getattr(live, "eastern", None),
+        # THE INSERTION EFFECT (gsefx): its type, parameters, sends, control
+        # sources and the parts on it -- pairs, as JSON keys are strings
+        efx=efx_from(live),
     )
+
+
+def efx_from(live):
+    st = live.efx
+    return dict(type=list(st['type']),
+                p=sorted([int(k), int(v)] for k, v in st['p'].items()),
+                send=sorted([int(k), int(v)] for k, v in st['send'].items()),
+                ctl=sorted([int(k), int(v)] for k, v in (st.get('ctl') or {}).items()),
+                parts=sorted(int(c) for c in live.efx_parts))
+
+
+def efx_recall(live, d):
+    """An effect as efx_from saved it, sent as the panel sends it (GS
+    messages, Live.efx_send) -- or, None (a preset from before effects were
+    kept), the effect off: Thru, no part on it."""
+    d = d or dict(type=[0, 0], p=[], send=[], ctl=[], parts=[])
+    evs = [('type', tuple(d['type']))]
+    evs += [('param', k, v) for k, v in d.get('p', ())]
+    evs += [('send', k, v) for k, v in d.get('send', ())]
+    evs += [('ctl', k, v) for k, v in d.get('ctl', ())]
+    want = set(d.get('parts', ()))
+    evs += [('part', c, c in want) for c in sorted(want | set(live.efx_parts))]
+    for ev in evs:
+        live.efx_send(ev)
 
 
 def save_preset(name, live, path=PRESET_PATH):
@@ -10224,6 +10353,7 @@ def apply_preset(live, preset, progress=None):
     live.set_routes([Route.from_dict(r) for r in preset.get("routes", [])])
     if preset.get("chanstate"):
         recall_scene(live, preset["chanstate"])
+    efx_recall(live, preset.get("efx"))
     if preset.get("messenger_firmware") in _MG.FIRMWARES:
         live.messenger_firmware = preset["messenger_firmware"]
     if preset.get("messenger_bend"):

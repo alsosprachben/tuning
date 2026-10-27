@@ -20,8 +20,11 @@
      delL, delR  + the side's interaural delay against the source's
      vd, vr, vp  a chorus voice's LFO on the file's clock, else the note's
                  own vibrato delayed by D
-   Moog rows (fx >= 0), organ gates (gr >= 0) and bend rows (br >= 0) read
-   tables indexed by absolute block and are not tapped.
+   Organ gates (gr >= 0) and bend rows (br >= 0) read tables indexed by
+   absolute block and are not tapped. A MOOG ROW (fx >= 0) is: its copy keeps
+   the row's tables, as the file renderer's copies keep every column
+   (chorus.gs_copies) -- its contours run from the copy's own onset, its
+   knobs where they stand -- so a Moog voice has its chorus and its echoes.
 
    ONLY WHAT SOUNDS IN THIS BLOCK is written: a copy whose onset is after
    the block, or whose end (noff + release + its ears' delays) is before it,
@@ -73,9 +76,16 @@ int tap_expand(int ncol, void** colp, const int* colsz,
                const double* thz, const double* tal1, const double* tar1, const double* tdl,
                const double* tvd, const double* tvr, const double* tph,
                const float* re, double floor, int64_t n0, int64_t n1,
-               double beta, double sr, int64_t idle, int64_t dst0, int cap, int identity)
+               double beta, double sr, int64_t idle, int64_t dst0, int cap, int identity,
+               int moog_w, int64_t ucap, int64_t* units)
 {
+    /* THE GOVERNOR's CAP IS IN COST, not rows (Live.callback): a Moog row's
+       copy runs the ladder and its FM sidebands again, measured at ~2.7 times
+       a plain copy's time, so it counts moog_w units against ucap; `cap` is
+       only the scratch rows there are room for */
     int m = 0;
+    int64_t u = 0;
+    *units = 0;
     double b2 = beta * beta;
     double top = 0.0;
     for (int i = 0; i < nsrc; i++) {
@@ -96,9 +106,9 @@ int tap_expand(int ncol, void** colp, const int* colsz,
     for (int i = 0; i < nsrc; i++) {
         int64_t s = src[i];
         int st = set[i];
-        /* (an IDENTITY copy -- the bus's: no delay -- reads the Moog's, the
-           gate's and the bend's tables at the same instant, so takes them all) */
-        if (st < 0 || ts[st] + rk >= ts[st + 1] || (!identity && (fx[s] >= 0 || gr[s] >= 0 || br[s] >= 0)))
+        /* (an IDENTITY copy -- the bus's: no delay -- reads the gate's and
+           the bend's tables at the same instant, so takes them too) */
+        if (st < 0 || ts[st] + rk >= ts[st + 1] || (!identity && (gr[s] >= 0 || br[s] >= 0)))
             continue;
         if (aL[s] == 0.0f && aR[s] == 0.0f)
             continue;
@@ -114,8 +124,10 @@ int tap_expand(int ncol, void** colp, const int* colsz,
         double ph0R = p0R[s] + oms * ((double)non[s] + (double)delR[s]);
         {
             int t = ts[st] + rk;
-            if (m >= cap)
+            if (m >= cap || u >= ucap) {
+                *units = u;
                 return m;
+            }
             int64_t D = tD[t];
             int64_t on2 = non[s] + D;
             if (on2 >= n1)
@@ -143,8 +155,9 @@ int tap_expand(int ncol, void** colp, const int* colsz,
             for (int c = 0; c < ncol; c++)
                 memcpy((char*)colp[c] + d * colsz[c], (char*)colp[c] + s * colsz[c], colsz[c]);
             non[d] = on2;
-            /* a delayed copy reads no table by block; an identity copy its original's */
-            fx[d] = identity ? fx[s] : -1;
+            /* a delayed copy reads no gate or bend table by block; an identity
+               copy its original's; every copy a Moog row's (above) */
+            fx[d] = fx[s];
             gr[d] = identity ? gr[s] : -1;
             br[d] = identity ? br[s] : -1;
             noff[d] = noff[s] == idle ? idle : noff[s] + D;
@@ -169,7 +182,9 @@ int tap_expand(int ncol, void** colp, const int* colsz,
                 vp[d] = (float)((double)vp[s] - TWO_PI * (double)vr[s] * (double)D / sr);
             }
             m++;
+            u += fx[s] >= 0 ? moog_w : 1;
         }
     }
+    *units = u;
     return m;
 }
