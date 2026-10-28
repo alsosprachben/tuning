@@ -545,8 +545,12 @@ KIT_TRIM_DB = -1.7
 # ones, so the program's level and not the effect -- and Ben chose +3 from
 # +0/+3/+4.5/+6 on the whole mix (4.5 too much). Its electric bass under
 # them the same +3 (Ben, by ear on the same mix), finger and pick. Every
-# variation of the program with it. A GM file keeps GeneralUser's balance.
-GS_TRIM_DB = {29: 3.0, 30: 3.0, 33: 3.0, 34: 3.0}
+# variation of the program with it. Dracula X's Tougi (SC-88) the same for
+# the nylon: its Main gt already at CC7 120, velocity 126, and still quiet;
+# Ben chose +6 from +3/+6 (against GeneralUser the nylon is within ~2 dB --
+# Roland's guitars sit hotter in its band). A GM file keeps GeneralUser's
+# balance.
+GS_TRIM_DB = {24: 6.0, 29: 3.0, 30: 3.0, 33: 3.0, 34: 3.0}
 # ...and its drum kit: Tokei's kick, hats and snare quiet against the band
 # (Ben: "the whole kit could be 3dB higher"), every kit, every key
 GS_DRUM_TRIM_DB = 3.0
