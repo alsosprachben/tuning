@@ -7895,6 +7895,10 @@ def render(path, tuner='hybrid440'):
             L, R, s = _STR.render(path, tuner, B=sys.modules[__name__],
                                   gpu=_gpu() if RENDER_GPU else None)
             kdt = time.time() - t0
+            if s.nonfinite:
+                print("  WARNING: %d row(s) rendered NaN and were dropped: %s (window s, channel, onset s)"
+                      % (len(s.nonfinite), [(round(w / SR, 2), c, round(o / SR, 3))
+                                            for w, c, o in s.nonfinite[:8]]))
             _LAST_PREP.clear()
             _LAST_PREP.update(_STR.result(s))
             return L, R, s.ctx['total'], s.rows_total, kdt

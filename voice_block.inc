@@ -319,7 +319,12 @@
                 //
                 // g = f_target/f_source - 1, so t=0 gives exactly the source pitch
                 // and t->infinity the target the note was built at. g > -1 for any
-                // two real frequencies, so the denominator cannot vanish.
+                // two real frequencies, so the denominator cannot vanish -- for
+                // t >= 0. Before the onset (the block that holds it, an ear's or
+                // a room image's delay) t is negative, e^{-t/tau} passes 1/|g|
+                // for a glide down, and the log took a negative: ROUKA's Moog
+                // lead wrote NaN through its whole batch. So t starts at 0; the
+                // partial is silent there and the source pitch is t=0's anyway.
                 //
                 // Extra phase is the exact integral of (bendfac - 1):
                 //     tau * ln( (1 + g*e^{-t/tau}) / (1 + g) )
@@ -331,7 +336,7 @@
                 // four ways: phases ADD and frequency factors MULTIPLY.
                 if(gbav[p]!=0.f){
                     float gg=gbav[p], gs=gtau[p], gcu=gcut[p];
-                    float trel=(float)(ns-a)/SRATE_F;
+                    float trel=fmaxf((float)(ns-a)/SRATE_F, 0.f);
                     float e=expf(-(trel<gcu?trel:gcu)/gs);
                     bph += (double)w*SRATE_D*(double)(gs*logf((1.f+gg*e)/(1.f+gg)));
                     if(trel<gcu) bendfac *= 1.f/(1.f+gg*e);

@@ -14,6 +14,7 @@ past, and a counting sink that measures a piece's live partials without ever
 holding its table.
 """
 import os
+import sys
 from array import array
 
 import numpy as np
@@ -319,6 +320,7 @@ class Stream:
         self.rows = 0
         self.rows_total = 0
         self.peak_live = 0
+        self.nonfinite = []                     # rows dropped for a NaN batch: (w0, channel, onset)
         self.made = {}
         self.dried = set()
         self.notes = []             # notes waiting on their sympathetic buckets
@@ -1123,6 +1125,34 @@ class Stream:
         self._emit(w0, w1, L, R, SL, SR_)
 
     def _synth(self, prep, wi, w0, w1):
+        """_synth_rows, guarded: A BATCH WITH A NON-FINITE SAMPLE is said
+        aloud and rendered again without the rows that made it. One NaN
+        partial is silent before its onset, but 0 * NaN is NaN, so it poisoned
+        the batch, and the clip wrote ROUKA's Moog lead as 5 s pinned at -1.
+        The rows are found by halving (a few renders, only when it happens)."""
+        out = self._synth_rows(prep, wi, w0, w1)
+        if all(np.isfinite(x).all() for x in out):
+            return out
+        B = self.B
+
+        def bad(idx):
+            sub = B.prep_rows(prep, np.isin(np.arange(prep['P']), idx))
+            if all(np.isfinite(x).all() for x in self._synth_rows(sub, wi, w0, w1)):
+                return []
+            if len(idx) == 1:
+                return list(idx)
+            h = len(idx) // 2
+            return bad(idx[:h]) + bad(idx[h:])
+        rows = bad(np.arange(prep['P']))
+        self.nonfinite.extend((w0, int(prep['mch'][r]), int(prep['non'][r])) for r in rows)
+        print('  NON-FINITE batch at %.2f s: dropped %d row(s) %s (channel, onset s)'
+              % (w0 / B.SR, len(rows), [(int(prep['mch'][r]), round(prep['non'][r] / B.SR, 3))
+                                        for r in rows[:8]]), file=sys.stderr, flush=True)
+        keep = np.ones(prep['P'], bool); keep[rows] = False
+        out = self._synth_rows(B.prep_rows(prep, keep), wi, w0, w1)
+        return tuple(np.nan_to_num(x, nan=0., posinf=0., neginf=0.) for x in out)
+
+    def _synth_rows(self, prep, wi, w0, w1):
         """A window's samples of these rows: (L, R, SL, SR), the send rendered
         where the channels heard send differently -- on the GPU or the CPU."""
         B = self.B
@@ -1152,6 +1182,7 @@ class Stream:
         if self.send is True:
             g = B.send_weights(self.ctx['reverb'], self.ctx.get('reverb_steps'),
                                prep['mch'], prep['non'])
+            prep = dict(prep)                   # the guard may render these rows again
             prep['aL'] = prep['aL'] * g
             prep['aR'] = prep['aR'] * g
             B.synth_partials(prep, w0, n, 0, P, SL, SR_)
