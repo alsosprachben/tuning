@@ -284,8 +284,9 @@ _POOL = []
 SYNTH_CHUNK = 8192
 # A GPU FILE RENDER BUILDS THE INPUT ON THE GPU (gpurender.Gpu.amp_sum, set by
 # blockrender.render): 12-24x the loop below, its rounding 120-135 dB under the
-# sum and the products it yields the same to 1e-7. Live, and the CPU, keep the
-# loop. TUNING_GPU_AMP=0 keeps it in a GPU render too.
+# sum and the products it yields the same to 1e-7. Live's fine-pass workers
+# the same (valvefine, ampgpu); a CPU file render keeps the loop.
+# TUNING_GPU_AMP=0 keeps the loop everywhere.
 GPU = [None]
 
 

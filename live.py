@@ -12788,15 +12788,23 @@ def _selftest(only=""):
         lv.on_midi(mido.Message("pitchwheel", channel=0, pitch=int(v * 8191)))
         lv.apply(lv.n)
 
-    def settle(limit=150):
+    def settle(limit=600):
         # A REAL BLOCK, not just apply(): sweep() is what the callback does
         # next, and a version of this that left it out passed while the
         # amplifier was being swept away the instant it was stamped.
+        # ...AND THE FINE PASS LANDED, and standing for 20 blocks: the checks
+        # below read the amplifier's products, and which pass they read was a
+        # race -- on the CPU the fast one, on the GPU (5x the fine pass's
+        # speed) the fine one, and the fine one's level is not the fast one's.
+        calm = 0
         for _ in range(limit):
             time.sleep(0.005)
             lv.apply(lv.n); lv.sweep(lv.n); lv.slab.reap(lv.n)
             lv.n += 128
-            if not lv.amp_busy and lv.amp_out is None:
+            idle = not lv.amp_busy and lv.amp_out is None and not lv.amp_fine_results
+            calm = calm + 1 if idle and (lv.amp_fine_placed.get(pid) == lv.amp_jid.get(pid)
+                                         or not lv.slab.live.get(lv._amp_key(pid))) else 0
+            if calm >= 20:
                 return True
         return False
 
@@ -12901,7 +12909,13 @@ def _selftest(only=""):
     # can trade places with ones under that floor -- 150 against 149 one day,
     # 149 against 149 the next, as earlier tests moved the random phases
     e_many = _ampe()
-    check("a chord makes more distortion than one key", e_many > 1.5 * e_one,
+    # ...BY HOW MUCH depends on how the tonewheels line up: gears hold them in
+    # near-exact ratios, so the alignment drifts over many seconds and a
+    # chord's products are its first second's (live as in the file). The same
+    # chord at 24 random phase sets: 3.5 dB over one key on average, sd 0.75
+    # dB (one key 0.35), 3 dB from least to most -- and a 4 s analysis barely
+    # narrows it (0.60). So "more", with a margin under that spread.
+    check("a chord makes more distortion than one key", e_many > 1.1 * e_one,
           "  (%.1f dB more distortion energy; %d vs %d partials)"
           % (10 * math.log10(max(e_many, 1e-30) / max(e_one, 1e-30)), many, one))
     # The products die with the chord that made them: their lifetime is the
@@ -13938,13 +13952,17 @@ def _selftest(only=""):
     # event?" -- they are, and attaching them to the note made them restart on
     # every one. The flag is general; the bagpipe is the only voice that sets
     # it, because a chorus, a section and a set of sympathetic strings all
-    # belong to the note that excited them and a drone does not.
-    _spanners = [_n for _n, _c in vars(_T).items()
-                 if isinstance(_c, type) and getattr(_c, "unison_spans_part", False)]
+    # belong to the note that excited them and a drone does not. Its family
+    # inherits it (the uilleann pipes' drones are the same machine).
+    _setters = [_n for _n, _c in vars(_T).items()
+                if isinstance(_c, type) and "unison_spans_part" in vars(_c) and _c.unison_spans_part]
+    _spanners = sorted(_n for _n, _c in vars(_T).items()
+                       if isinstance(_c, type) and getattr(_c, "unison_spans_part", False))
     check("...and they span the PHRASE, not the note and not the channel",
           _eth[109].unison_spans_part
           and not _T.SynthProperties.unison_spans_part
-          and _spanners == ["BagpipeProperties"]
+          and _setters == ["BagpipeProperties"]
+          and _spanners == ["BagpipeProperties", "UilleannPipeProperties"]
           and _eth[109].part_break_s > 0.0,
           "  (rendered: the drone holds through a detached line, and stops "
           "dead through a %.0f s rest)" % _eth[109].part_break_s)
