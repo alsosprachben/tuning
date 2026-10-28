@@ -2339,7 +2339,7 @@ class Slab:
         organ's gate and the bend's tables at the same instant as its
         original, so those rows go with the rest."""
         prev = getattr(self, "bus_m", 0)
-        self.bus_m, self.bus_hide = 0, None
+        self.bus_m, self.bus_hide, self.bus_id_m = 0, None, 0
         if chans:
             a = self.a
             m = self.busy & (np.isin(self.slot_ch, list(chans)) | np.isin(self.fx_ch, list(chans)))
@@ -2358,6 +2358,7 @@ class Slab:
                 d0 = self.cap + self.tap_m
                 self.bus_m = self._expand(src, np.zeros(len(src), np.int32), Slab._BUS_TAB, d0,
                                           self.tcap - self.tap_m, 0.0, n0, frames, identity=True)
+                self.bus_id_m = self.bus_m      # the originals' copies (a silent row has none); then their echoes
                 self.bus_hide = src
                 # THE BUS PARTS' COPIES (the effect's delays, chorus, shifters --
                 # EH -> Chorus, -> Delay, -> Flanger), after them: through the
@@ -2692,7 +2693,7 @@ class GpuRenderer(Renderer):
         self.backend = backend
         self.gpu_min = gpu_min_for(frames) if gpu_min is None else gpu_min
         self.tab = gpurender.BlockTables(setup_threads)
-        self.gpu = gpurender.Gpu() if backend == "cl" else None
+        self.gpu = gpurender.shared_gpu() if backend == "cl" else None
         self.idx = np.zeros(0, np.int64)
         self.on_gpu = False                 # did the last block go to the GPU
         self.ms_setup = self.ms_samples = 0.0
@@ -2751,7 +2752,7 @@ class GpuRenderer(Renderer):
             idx = np.concatenate([idx, np.arange(sl.cap, sl.cap + sl.tap_m, dtype=np.int64)])
         tab = self.tabs[self._turn]
         tab.setup(sl.prep(), idx, n0, snd)
-        h = self.gpu.launch(tab, n0, frames, snd, self._turn)
+        h = self.gpu.launch(tab, n0, frames, snd, (id(self), self._turn))
         self._turn ^= 1
         extra = None
         if bus is not None:
@@ -2762,7 +2763,7 @@ class GpuRenderer(Renderer):
             if sl.bus_m:
                 c1 = sl.cap + sl.tap_m
                 self.bus_tab.setup(sl.prep(), np.arange(c1, c1 + sl.bus_m, dtype=np.int64), n0, snd)
-                bL, bR, bSL, bSR = self.gpu.collect(self.gpu.launch(self.bus_tab, n0, frames, snd, "bus"))
+                bL, bR, bSL, bSR = self.gpu.collect(self.gpu.launch(self.bus_tab, n0, frames, snd, (id(self), "bus")))
                 BL[:] = bL[:frames]; BR[:] = bR[:frames]
                 if snd:
                     BSL[:] = bSL[:frames]; BSR[:] = bSR[:frames]
@@ -3876,10 +3877,64 @@ class Part:
         return p
 
 
+# THE SELFTEST's LIVES, REAPED (_reap_lives): ~117 Lives made, a third shut
+# down by their tests -- the rest, a name rebound to the next one, kept alive
+# by their own worker threads and frozen by _gc_freeze: ~40 MB each, 4-5 GB by
+# the end, and the run killed for memory. When a Live is made, each earlier
+# one no frame of the main thread still names (a local, or in a list or tuple
+# there) is shut down and collected. None outside the selftest: a player's
+# Live is never touched.
+_REAP = None
+_REAP_SEEN = {}         # id -> (its last (n, blocks, efx_rev), Lives made since it moved)
+REAP_STALE = 10
+
+
+def _reap_lives():
+    import gc
+    held = set()
+    f = sys._current_frames().get(threading.main_thread().ident)
+    while f is not None:
+        for v in list(f.f_locals.values()):
+            held.add(id(v))
+            if isinstance(v, (list, tuple)):
+                held.update(id(x) for x in v)
+        f = f.f_back
+    done = False
+    for r in list(_REAP):
+        lv = r()
+        if lv is None:
+            _REAP.remove(r)
+            continue
+        # ...AND ONE STILL NAMED THAT HAS NOT MOVED -- no block rendered, no
+        # message taken -- through the last REAP_STALE Lives made: its test
+        # is over (the selftest is one long function, and each test's own
+        # name lives on to its end). Shut down and its slab and renderer let
+        # go; a test that came back to it would fail aloud, not quietly
+        sig = (lv.n, lv.blocks, lv.efx_rev)
+        st = _REAP_SEEN.get(id(lv))
+        _REAP_SEEN[id(lv)] = (sig, (st[1] + 1) if st and st[0] == sig else 0)
+        stale = _REAP_SEEN[id(lv)][1] >= REAP_STALE and not getattr(lv, "_reap_keep", False)
+        if id(lv) not in held or stale:
+            _REAP.remove(r)
+            _REAP_SEEN.pop(id(lv), None)
+            if not lv.patch_stop:
+                lv.shutdown()
+            if stale:
+                lv.slab = lv.renderer = None
+                lv.parts = []
+            done = True
+        del lv
+    if done:
+        gc.collect()
+
+
 class Live:
     def __init__(self, program=56, rate=48000, frames=128, capacity=16384,
                  tuner="hybrid", verbose=True, drums=False, headroom_db=4.0,
                  parts=None, threads=1, gpu=False, eastern=None):
+        if _REAP is not None:
+            _reap_lives()
+            _REAP.append(__import__("weakref").ref(self))
         B.set_sample_rate(rate)
         B.BLK = frames          # see BLOCK ALIGNMENT in the module docstring
         self.rate, self.frames, self.tuner = rate, frames, tuner
@@ -4575,7 +4630,35 @@ class Live:
         self.amp_fine_go.set()          # the workers themselves are shared (_fine_pool): they stay
         if self.messenger_q is not None:
             self.messenger_q.put(None)
-        self.renderer.close()
+        # THE REGISTER's WORKER AND ITS TWO THREADS (_reg_start): stopped, its
+        # pipe closed so the reader's recv returns -- left running, each
+        # piano Live kept them and everything they hold (~110 MB a GPU Live
+        # in the selftest)
+        self.reg_stop = True
+        self.reg_go.set()
+        if getattr(self, "reg_proc", None) is not None:
+            try:
+                self.reg_proc.terminate()
+                self.reg_proc.join(2.0)
+            except Exception:
+                pass
+            for _c in (getattr(self, "reg_conn", None),):
+                try:
+                    _c.close()
+                except Exception:
+                    pass
+            self.reg_proc = None
+        if self.renderer is not None:        # (None: the selftest's reaper let it go)
+            self.renderer.close()
+        # ...AND THE FROZEN GO BACK TO THE COLLECTOR (_gc_freeze). A Live is
+        # all cycles -- its threads hold its bound methods, its posts close
+        # over it, the renderer holds the slab -- and every freeze it lived
+        # through moved them where no collection looks: shut down, it was
+        # kept whole, ~100 MB each, and the selftest's ~35 grew to 4.4 GB
+        # and were killed for memory. Unfrozen here, it goes at the next
+        # collection; a player's one Live only does this at quit.
+        import gc
+        gc.unfreeze()
 
     # ---- A MESSENGER TO SET ---------------------------------------------------
     # Selecting a Moog program sets the player's own Messenger to it: the
@@ -11898,24 +11981,27 @@ def selftest_gs(check):
             for _nn in notes:
                 _lv.on_midi(_M("note_on", channel=0, note=_nn, velocity=110))
             _lv.apply(0)
-            _bm, _tm, _amp = 0, 0, 0
+            _bm, _tm, _amp, _sil = 0, 0, 0, 0
             for _i in range(int(0.8 * 48000 / 128)):
                 _lv.callback(None, 128, None, 0)
                 _h = _lv.slab.bus_hide
                 _ak = _lv.slab.live.get(_lv._amp_key(_lv.parts[0].pid), [])
-                _bm = max(_bm, _lv.slab.bus_m - (0 if _h is None else len(_h)))
+                _bm = max(_bm, _lv.slab.bus_m - _lv.slab.bus_id_m)     # past the originals' own copies
+                _src = np.flatnonzero(_lv.slab.tp >= 0)
+                if len(_src):
+                    _sil = max(_sil, int(((_lv.slab.a["aL"][_src] == 0) & (_lv.slab.a["aR"][_src] == 0)).sum()))
                 _tm = max(_tm, _lv.slab.tap_m)
                 if _h is not None and len(_ak):
                     _amp = max(_amp, int(np.isin(np.asarray(_ak), _h).sum()))
-            return _bm, _tm, _amp, _lv.errors
+            return _bm, _tm, _amp, _lv.errors, (_sil, _lv.partials_shed)
         finally:
             _lv.shutdown()
-    _xc, _xt, _, _xe1 = _xhear((0x02, 0x08), 4, (64,))
-    _, _, _xa, _xe2 = _xhear((0x01, 0x72), 29, (52, 59, 64))
+    _xc, _xt, _, _xe1, _xs = _xhear((0x02, 0x08), 4, (64,))
+    _, _, _xa, _xe2, _ = _xhear((0x01, 0x72), 29, (52, 59, 64))
     check("live: a bus part's copies and valve products go through the bus with its notes",
           _xc > 0 and _xt == 0 and _xa > 50 and not (_xe1 or _xe2),
-          "  (EH -> Delay: %d echo rows on the bus, %d left outside it; the guitar's products on it: %d)"
-          % (_xc, _xt, _xa))
+          "  (EH -> Delay: %d echo rows on the bus, %d left outside it -- %d tapped rows silent, %d partials shed;"
+          " the guitar's products on it: %d)" % (_xc, _xt, _xs[0], _xs[1], _xa))
     # THE VALVE, LIVE, AGAINST THE FILE (Ben's guitar comparison):
     # (1) the channel's volume applied once -- a live note's partials at the
     #     file's own levels (headroom aside), the valve off in both;
@@ -12039,7 +12125,12 @@ def selftest_gs(check):
 def selftest(only=""):
     # its panics report to a file of its own, not the player's live_dump.txt
     Live.PANIC_DUMP = os.path.join(tempfile.gettempdir(), "live_dump_selftest.txt")
-    return _selftest(only)
+    global _REAP
+    _REAP = []
+    try:
+        return _selftest(only)
+    finally:
+        _REAP = None
 
 
 def _selftest(only=""):
@@ -12297,7 +12388,7 @@ def _selftest(only=""):
     check("wheel back to 0 restores the baseline exactly (no compounding)",
           float(np.abs(lv.slab.a["vd"][idx] - base).max()) == 0.0
           and float(np.abs(lv.slab.a["vr"][idx] - baser).max()) == 0.0)
-    lv.renderer.close()
+    lv.shutdown()
 
     # THE RATE IS INSIDE THE ACCUMULATED PHASE, not only the depth: the kernel's
     # vibrato term is (f*d/r)*(cos(2*pi*r*ton+vp) - cos(2*pi*r*t+vp)), so moving
@@ -12343,7 +12434,7 @@ def _selftest(only=""):
         lj2 = float(np.abs(lfo(lv.slab, ix, n) - wasl).max())
         check("%s: ...still, after 8 s of holding" % label, lj2 < 1e-3,
               "  (%.1e rad)" % lj2)
-        lv.renderer.close()
+        lv.shutdown()
 
     # a one-body voice has no spread to preserve and must behave as it always did
     lv = Live(program=56, rate=48000, frames=128, verbose=False); lv.warm()
@@ -12354,7 +12445,7 @@ def _selftest(only=""):
     check("one player: the wheel is still a flat 35 cents",
           len(np.unique(lv.slab.a["vd"][i2])) == 1
           and abs(cents[0] - lv.mod_cents) < 0.01)
-    lv.renderer.close()
+    lv.shutdown()
 
     # ---- the reference renderer must survive a NON-section voice ------------
     # hammer_down asks every partial that carries a player index for its entry
@@ -12388,7 +12479,7 @@ def _selftest(only=""):
     c = np.log2(1.0 + lv.slab.a["vd"][ix].astype(np.float64)) * 1200.0
     check("...at one depth, since they are the same instrument",
           float(c.max() - c.min()) < 0.01, "  (%.1f-%.1f cents)" % (c.min(), c.max()))
-    lv.renderer.close()
+    lv.shutdown()
 
     # and the locked behaviour is still reachable, which is the right answer for
     # a synth lead and makes the wheel a tempo control
@@ -12402,7 +12493,7 @@ def _selftest(only=""):
     ix = np.flatnonzero(lv.slab.busy)
     check("spread = 0 locks the chord back together",
           len(np.unique(lv.slab.a["vp"][ix])) == 1 and len(np.unique(lv.slab.a["vr"][ix])) == 1)
-    lv.renderer.close()
+    lv.shutdown()
     _T.TrumpetProperties.solo_vibrato_spread = was
     _T._SOLO_VIBRATO.clear(); _PATCHES.clear()
 
@@ -12445,7 +12536,7 @@ def _selftest(only=""):
     check("the mod wheel reaches the HARMONICS, not just the fundamental",
           h2 > 20.0 and h4 > 20.0,
           "  (h1 %.0f, h2 %.0f, h4 %.0f cents)" % (h1, h2, h4))
-    lv.renderer.close()
+    lv.shutdown()
 
     # ---- entry scatter -----------------------------------------------------
     lv = Live(program=61, rate=48000, frames=128, verbose=False); lv.warm()   # brass section
@@ -12468,13 +12559,13 @@ def _selftest(only=""):
           "  (%.2f ms of 6.0)" % span)
     lv.down.clear(); lv.sweep(lv.n)
     leak(lv, "entry scatter leaks no slots")
-    lv.renderer.close()
+    lv.shutdown()
 
     # a one-body voice must be untouched: every partial starts together
     lv = Live(program=57, rate=48000, frames=128, verbose=False); lv.warm()   # one trombone
     e = press(lv)
     check("a single player still enters as one", e == (0,), "  (%s)" % (e,))
-    lv.renderer.close()
+    lv.shutdown()
 
     # ---- the threaded renderer ---------------------------------------------
     # 12. splitting the table across threads must not change what you hear
@@ -12506,7 +12597,7 @@ def _selftest(only=""):
           max(per) <= 2 * max(min(per), 1), "  (%s)" % per)
     lv1.down.clear(); lv3.down.clear(); lv1.sweep(lv1.n); lv3.sweep(lv3.n)
     leak(lv3, "threaded: all slots returned")
-    lv1.renderer.close(); lv3.renderer.close()
+    lv1.shutdown(); lv3.shutdown()
 
     # 13. a light block must NOT wake the pool -- below the threshold the
     # wakeups cost more than the split saves (measured 0.96x at 560 partials)
@@ -12516,7 +12607,7 @@ def _selftest(only=""):
     lv.apply(0); lv.callback(None, 128, None, 0)
     check("a light block takes the direct path", lv.renderer.act < PARALLEL_MIN,
           "  (%d active)" % lv.renderer.act)
-    lv.renderer.close()
+    lv.shutdown()
 
     # 14. swapping the pool live, which is what the TUI's threads control does
     lv = Live(rate=48000, frames=128, verbose=False, threads=1,
@@ -12538,7 +12629,7 @@ def _selftest(only=""):
           ok and lv.errors == 0, "" if lv.errors == 0 else "  (%s)" % lv.last_error)
     lv.down.clear(); lv.sweep(lv.n)
     leak(lv, "pool swap leaks no slots")
-    lv.renderer.close()
+    lv.shutdown()
 
     # 14b. THE GPU RENDERER plays what the CPU plays: the block setup through
     # synth_voice's own source (voice_block), the samples evaluated rather than
@@ -12557,7 +12648,7 @@ def _selftest(only=""):
         lv = Live(program=prog, rate=48000, frames=128, verbose=False, tuner="even")
         lv.warm()
         if backend and swap_at is None:
-            lv.renderer.close()
+            lv.shutdown()
             lv.renderer = GpuRenderer(lv.slab, 128, 1, backend=backend, gpu_min=0)
             lv.slab.dirty = True
         lv.renderer.send = True
@@ -12582,7 +12673,7 @@ def _selftest(only=""):
             out.append(np.concatenate([L, R, lv.renderer.SL[:128], lv.renderer.SR[:128]]))
             lv.n = _n0 + 128
         lv.down.clear(); lv.sweep(lv.n)
-        lv.renderer.close()
+        lv.shutdown()
         return np.concatenate(out).astype(float), gpu_blocks, lv
     for _gp, _gname in ((48, "a string chord"), (98, "a Moog FM bell")):
         _gref, _, _ = _gplay(_gp, None)
@@ -12604,14 +12695,14 @@ def _selftest(only=""):
     # ...and a light block stays on the CPU
     lv = Live(program=56, rate=48000, frames=128, verbose=False)
     lv.warm()
-    lv.renderer.close()
+    lv.shutdown()
     lv.renderer = GpuRenderer(lv.slab, 128, 1, backend="c", gpu_min=PARALLEL_MIN)
     lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
     lv.apply(0); lv.callback(None, 128, None, 0)
     check("a light block stays on the CPU under the GPU renderer",
           not lv.renderer.on_gpu and 0 < lv.renderer.act < PARALLEL_MIN,
           "  (%d active)" % lv.renderer.act)
-    lv.renderer.close()
+    lv.shutdown()
 
     # 15. fuzz every mode: no errors, no leaks
     for prog, drums, label in ((0, False, "piano"), (19, False, "organ"), (0, True, "drums")):
@@ -12772,7 +12863,7 @@ def _selftest(only=""):
     _g0, _g1 = _gtrace(False), _gtrace(True)
     check("a note tapped under a held one leaves its distortion where it was",
           abs(_g1 - _g0) < 2.0, "  (held E2 alone %.1f dB; after a B2 tapped at 3 s, %.1f)" % (_g0, _g1))
-    _gl.renderer.close()
+    _gl.shutdown()
 
     # ---- the mod wheel is the swell pedal ----------------------------------
     key = lv._amp_key(pid)
@@ -12915,7 +13006,7 @@ def _selftest(only=""):
     check("the meter survives being read while the slab churns", bad is None,
           "" if bad is None else "  (%s)" % bad)
     lv.amp_stop = True; lv.amp_go.set()
-    lv.renderer.close()
+    lv.shutdown()
 
     # ---- the electric guitar ------------------------------------------------
     # Same amplifier, different instrument, and the differences are the point:
@@ -13057,11 +13148,11 @@ def _selftest(only=""):
     check("...and bakes no distortion into the template",
           _tq is not None and _tq["P"] < 200,
           "  (%s partials for one note)" % (None if _tq is None else _tq["P"]))
-    _gq.amp_stop = True; _gq.amp_go.set(); _gq.renderer.close()
+    _gq.amp_stop = True; _gq.amp_go.set(); _gq.shutdown()
 
     check("the guitar raised no errors", gv.errors == 0 and gv.amp_err is None,
           "" if gv.errors == 0 else "  (%s)" % gv.last_error)
-    gv.amp_stop = True; gv.amp_go.set(); gv.renderer.close()
+    gv.amp_stop = True; gv.amp_go.set(); gv.shutdown()
 
     # ---- the rest of the family ---------------------------------------------
     # Cheap, because these are one instrument with the pickup moved, the palm
@@ -13867,6 +13958,7 @@ def _selftest(only=""):
     # drones themselves were baked into every note's template, so a held line
     # stacked three of them per note.
     lvbp = Live(program=109, rate=48000, frames=128, verbose=False); lvbp.warm()
+    lvbp._reap_keep = True      # its drones are come back to past the rest (below): not stale
     _bpb = lvbp.parts[0].patch
     check("the live bagpipe knows it has drones, and keeps them out of the note",
           _bpb.drone_wheel and len(_bpb.drone_ratios) == 3
@@ -13993,7 +14085,7 @@ def _selftest(only=""):
         _r = _r[np.isfinite(_r) & (_r > 0)]
         _spread.append((_lab, _b.nbuckets,
                         20 * _math.log10(_r.max() / max(_r.min(), 1e-30))))
-        _l.renderer.close()
+        _l.shutdown()
     # 1e-4 dB, not 0: templates are stored as float32, so the square lead's
     # 64 partials come back 1e-6 dB apart at two velocities from rounding
     # alone. The threshold is a storage limit, not a tolerance for touch.
@@ -14231,7 +14323,7 @@ def _selftest(only=""):
           _b(_e1) > _b(_e0) * 1.05 and _tp.effort_tilt > 0.0,
           "  (energy above h4: %.1f%% -> %.1f%% at full pressure)"
           % (100 * _b(_e0), 100 * _b(_e1)))
-    _lvp.renderer.close()
+    _lvp.shutdown()
 
     # ---- CC91 reverb is a DISTANCE, which this renderer already had ---------
     # roomtail.py has said so from the start: "the room constant sets the
@@ -14998,7 +15090,7 @@ def _selftest(only=""):
     _km = [_k for _k in lvm.slab.live if _k[2] == 61 and _k[3] is None][0]
     lvm.on_midi(mido.Message("pitchwheel", channel=0, pitch=3000)); lvm.apply(0)
     _lr = lvm.meend_at[_km][0]
-    lvm.renderer.close()
+    lvm.shutdown()
     check("...and the file and live pull it to the same pitch, the strings unbent",
           _rows and abs(1200.0 * _math.log2(_fr / _lr)) < 0.5 and not _symbent,
           "  (wheel 3000 of 8191 over 7 semitones: file %.1f, live %.1f cents; sympathetic rows "
@@ -15023,7 +15115,7 @@ def _selftest(only=""):
         lvs.on_midi(mido.Message("note_on", channel=0, note=_gn, velocity=100)); lvs.apply(0)
         _ks2 = [_k for _k in lvs.slab.live if _k[2] == _gn and _k[3] is None and list(lvs.slab.live[_k]) != _sl]
         _om2 = (lvs.slab.a["om"][list(lvs.slab.live[_ks2[0]])].astype(np.float64) if _ks2 else np.zeros(0))
-        lvs.renderer.close()
+        lvs.shutdown()
         _st = 2.0 ** (1.0 / 12.0)
         _ok = (_sm is not None and _sm.any() and len(_om2) == len(_om0)
                and np.allclose(_om1[_sm], _om0[_sm], rtol=1e-6)
@@ -15619,7 +15711,7 @@ def _selftest(only=""):
         _by_tuner[_tn] = (_l._tonic_hz(_l.parts[0]),
                           sorted(_l._tonic_hz(_l.parts[0]) * _r
                                  for _r in _l.parts[0].patch.drone_ratios))
-        _l.renderer.close()
+        _l.shutdown()
     _a4, _d4 = _by_tuner["hybrid440"]
     _a1, _d1 = _by_tuner["hybrid"]
     check("...and the drones are tuned to the chanter, not to a fork",
@@ -15669,7 +15761,7 @@ def _selftest(only=""):
                                  / max(_live_level(_l, vel=30), 1e-12))
         if abs(_db) > 0.01:
             _touchless.append("%s %+.1f dB" % (_lab, _db))
-        _l.renderer.close()
+        _l.shutdown()
     check("...and live honours that, which it did not for anything but the organs",
           not _touchless,
           "  (five fixed-volume voices, velocity 30 to 120, all flat)"
@@ -15733,7 +15825,7 @@ def _selftest(only=""):
             _ks = [_k for _k in _l.slab.live if _k[2] == 60]
             _lv2.append(sum(float(np.abs(_l.slab.a["aL"][_l.slab.live[_k]]).sum())
                             for _k in _ks))
-            _l.renderer.close()
+            _l.shutdown()
         _fade.append((_lab, 20 * _math.log10(max(_lv2[1], 1e-30)
                                              / max(_lv2[0], 1e-30))))
     _want = 20 * _math.log10((32 / 127.0) ** 2)
@@ -15748,7 +15840,7 @@ def _selftest(only=""):
           and abs(_a2 - _a1) < 1e-6,
           "  (%+.1f dB under a held note, and the same message twice adds %+.2f)"
           % (20 * _math.log10(_a1 / _a0), 20 * _math.log10(_a2 / _a1)))
-    _lv7.renderer.close()
+    _lv7.shutdown()
     # ...AND NOW THE FILE PATH DOES TOO (blockrender, THE CHANNEL FADER): a
     # CC7/CC11 that moves under a sounding note is a row, ramped at block
     # edges through the fader's 15 ms inertia. Held flute, CC11 127 -> 64 a
@@ -15857,7 +15949,7 @@ def _selftest(only=""):
         _l.on_midi(mido.Message("note_on", channel=0, note=_nt, velocity=90)); _l.apply(0)
         _ks = [_k for _k in _l.slab.live if _k[2] == _nt]
         _re = float(np.max(_l.slab.a["re"][_l.slab.live[_ks[0]]])) / 48000.0 if _ks else 0.0
-        _l.renderer.close()
+        _l.shutdown()
         _rvt = _patch_map.property_class_for_program(_p).release_valve_time
         _tails.append("%d %.2f/%.2f s" % (_p, _got, _want))
         if not (0.5 * _want <= _got <= 1.3 * _want) or abs(_re - _rvt) > 2e-3:
@@ -15906,7 +15998,7 @@ def _selftest(only=""):
           _held == 3 and _short == 3 and _long == 0,
           "  (3 drones at note-off, 3 still at 0.5 s, none at %.0f s)"
           % _bpb.part_break_s)
-    lvbp.renderer.close()
+    lvbp.shutdown()
     # THE PUNGI'S WHEEL CHOOSES ITS DRONE'S NOTE (tonelib.PungiProperties):
     # one drone under the line, F3 with no CC1, moved as the wheel turns
     # (C3 at the bottom, B3 at the top), on the other of two keys so the old
@@ -15945,7 +16037,7 @@ def _selftest(only=""):
           and [n for _, n in _pg[:3]] == [53, 48, 59]
           and all(len(d) == 1 for d, _ in _pg[:3]) and _pg[3][0] == [],
           "  (notes %s, one drone each, none after the rest)" % [n for _, n in _pg[:3]])
-    lvpg.renderer.close()
+    lvpg.shutdown()
     # A CONE PASSES THE WHOLE SERIES. The shanai had been on the bagpipe's
     # class, which is ReedOrganProperties underneath and suppresses the evens.
     _sh = _eth[111](261.63, 0.0, 1.0, 1.0)
@@ -16335,7 +16427,7 @@ def _selftest(only=""):
           Part(_lt.parts[0].patch).touch_fixed() and abs(_on) < 0.1
           and abs(_off - 40.0 * math.log10(30 / 120.0)) < 0.5,
           "  (v30 against v120: %+.1f dB fixed, %+.1f dB following)" % (_on, _off))
-    _lt.renderer.close()
+    _lt.shutdown()
     # A PART'S OWN PAN POT seats it, and the channel's CC10 then leaves it --
     # a layer's two passes stay where the desk put them (a head shadow, not a
     # level pan: a middle-C saw at 20 is about 1 dB to the left, broadband,
@@ -16382,7 +16474,7 @@ def _selftest(only=""):
           # (fixed is the LEVEL: the bucket's timbre still moves the RMS ~0.2 dB)
           not _dflt[0] and abs(_dflt[1] - 40.0 * math.log10(30 / 120.0)) < 0.5 and abs(_fx) < 0.5,
           "  (Moog: v30 against v120 %+.1f dB by default, %+.1f fixed)" % (_dflt[1], _fx))
-    _lp.renderer.close()
+    _lp.shutdown()
     # THE FREE-STRING REGISTER, LIVE (register.LiveChannel, on its own worker
     # process): a pedalled chord's free strings sound, survive the keys going
     # up under the pedal, and are gone -- every slot back -- at pedal-up; a
@@ -16398,7 +16490,7 @@ def _selftest(only=""):
     if not _rl.reg_enabled:
         check("the free-string register, live (needs the GPU)", True,
               "  (skipped: %s)" % (GPU_ERROR or "no GPU renderer"))
-        _rl.renderer.close()
+        _rl.shutdown()
     else:
         _rl.warm()
         _rts = []
@@ -16464,7 +16556,7 @@ def _selftest(only=""):
               and _rk[-1][2] - _rk[-3][2] < _rk[0][0],
               "  (the key's rows by strike %s; forced %s; slab %s)"
               % ([r[0] for r in _rk], [r[1] for r in _rk], [r[2] for r in _rk]))
-        _rl.renderer.close()
+        _rl.shutdown()
         # THE HARPSICHORD'S CHOIRS, LIVE. A key lifts every choir's damper, so
         # the choirs its stops do not pluck ring through the bridge while it is
         # down, and stop when it comes up -- as the file renders it
@@ -16491,7 +16583,7 @@ def _selftest(only=""):
         check("a harpsichord key's undrawn choirs ring while it is down, and stop at key-up",
               _hheld > 0 and _hup == 0 and _hl.reg_dropped == 0 and _hl.reg_err is None,
               "  (%d free rows held, %d after; drawn %s)" % (_hheld, _hup, sorted(_hl.parts[0].drawn)))
-        _hl.renderer.close()
+        _hl.shutdown()
         # A HELD HARPSICHORD NOTE DECAYS, EVERY STOP. The quill's catch -- rows
         # 16 dB under the pluck, ending at the slip -- was stamped with the
         # key's note-off, and held undecaying (and drove the free strings at
@@ -16513,7 +16605,7 @@ def _selftest(only=""):
             for _ in range(int(3.0 * 48000) // 128):
                 _hx.append(np.frombuffer(_hk.callback(None, 128, None, 0)[0], np.float32)[0::2].copy())
                 time.sleep(128.0 / 48000.0)
-            _hk.renderer.close()
+            _hk.shutdown()
             _hx = np.concatenate(_hx).astype(np.float64)
             _hr = lambda _a, _b: 20.0 * math.log10(
                 math.sqrt(float(np.mean(_hx[int(_a * 48000):int(_b * 48000)] ** 2))) + 1e-12)
@@ -16531,7 +16623,7 @@ def _selftest(only=""):
         _hk.on_midi(mido.Message("note_off", channel=0, note=60))
         _hx += [np.frombuffer(_hk.callback(None, 128, None, 0)[0], np.float32)[0::2].copy()
                 for _ in range(40)]
-        _hk.renderer.close()
+        _hk.shutdown()
         from scipy.signal import butter as _bt, sosfilt as _sf
         _hx = _sf(_bt(4, [2000, 9000], 'bandpass', fs=48000, output='sos'),
                   np.concatenate(_hx).astype(np.float64))
@@ -18126,7 +18218,7 @@ def _selftest(only=""):
     check("...with the wheel down giving one string and no beating at all",
           len(_unison(DETUNE_STEPS[0])) == 1,
           "  (the unison collapses to a single in-tune string)")
-    lvh.renderer.close()
+    lvh.shutdown()
 
     # ---- the electric grand: a CP-70 is a short piano with no board ---------
     check("the electric grand is not the acoustic one",
@@ -18532,7 +18624,7 @@ def _selftest(only=""):
           "  (%.0f deg apart, %.2f dB left in mono)" % (deg, dm))
     check("...and the wheel is not ALSO bending the pitch",
           lv.mod.get(0, 0.0) == 0.0 and lv.parts[0].patch.amp_drive == 0.0)
-    lv.renderer.close()
+    lv.shutdown()
 
     lv = Live(program=4, rate=48000, frames=128, verbose=False); lv.warm()
     lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); lv.apply(0)
@@ -18551,7 +18643,7 @@ def _selftest(only=""):
     drift = float(np.max(np.abs(now - base))) if len(base) == len(now) else 1.0
     check("moving the wheel does not compound the swing",
           drift < 1e-9, "  (base amplitude drifted %.1e over four moves)" % drift)
-    lv.renderer.close()
+    lv.shutdown()
 
     # ---- the Wurlitzer: one mechanism, a different curve --------------------
     check("the Wurlitzer is not a piano either",
@@ -18687,7 +18779,7 @@ def _selftest(only=""):
                 out.append(np.frombuffer(b, np.float32)[0::2].astype(float))
         lvk.on_midi(mido.Message("note_on", channel=0, note=52, velocity=100)); _pk(0.6)
         lvk.on_midi(mido.Message("note_off", channel=0, note=52, velocity=0)); _pk(0.3)
-        lvk.renderer.close()
+        lvk.shutdown()
         _T.ClavinetProperties.release_click_db = was
         return np.concatenate(out)
     _ka, _kb = _keyup_run(True), _keyup_run(False)
@@ -18762,7 +18854,7 @@ def _selftest(only=""):
             b, _f = lvc.callback(None, 128, None, 0)
             out.append(np.frombuffer(b, np.float32)[0::2])
         x = np.concatenate(out).astype(float)
-        lvc.renderer.close()
+        lvc.shutdown()
         def cen(a0, a1):
             a, b = int(a0 * 48000), int(a1 * 48000)
             X = np.abs(np.fft.rfft(x[a:b] * np.hanning(b - a)))
@@ -18797,7 +18889,7 @@ def _selftest(only=""):
           drift < 1e-9, "  (unfiltered base drifted %.1e over five moves)" % drift)
     check("...and the wheel is not ALSO bending the pitch on this voice",
           lvq.mod.get(0, 0.0) == 0.0)
-    lvq.renderer.close()
+    lvq.shutdown()
 
     # ---- the cuica, which is not struck at all ------------------------------
     import percussion_map as _PM2
@@ -18886,7 +18978,7 @@ def _selftest(only=""):
     # And it must reach the partial table, negative, scaled by velocity.
     lv = Live(program=114, rate=48000, frames=128, verbose=False); lv.warm()
     hard = float(np.asarray(lv.parts[0].patch.get(60, 127)["tbav"])[0])
-    lv.renderer.close()
+    lv.shutdown()
     check("the pan's bend reaches the partials, still negative",
           hard < 0.0, "  (tbav %+.5f)" % hard)
 
@@ -18987,7 +19079,7 @@ def _selftest(only=""):
     check("...and an older preset without them loads with none",
           _lr3.screen_controls == [] and _lr3.routes == ())
     for _x in (_lr2, _lr3):
-        _x.renderer.close()
+        _x.shutdown()
 
     # The panel itself, on a stub screen: every pane drawn at two sizes, and the
     # keys driven through add, toggle, step, hotkey, route and delete.
@@ -19128,7 +19220,7 @@ def _selftest(only=""):
     check("picker: a part keeps its standard through a preset; none is GM",
           _ps.to_dict().get("std") == "sc3" and Part.from_dict(dict(program=0)).std == "gm"
           and "std" not in Part.from_dict(dict(program=0)).to_dict())
-    _lr.renderer.close()
+    _lr.shutdown()
 
     # MONO FROM THE PANEL: a keyboard with no mode buttons still gets one.
     _lmo = Live(program=56, rate=48000, frames=128, verbose=False)
@@ -19218,7 +19310,7 @@ def _selftest(only=""):
           [x.to_dict() for x in _lk2.routes]
           == [dict(src=["note", 24], dst=64, keep=False, channel=None, latch=True)],
           "  (%s)" % [x.describe() for x in _lk2.routes])
-    _lk2.renderer.close()
+    _lk2.shutdown()
 
     # ---- SCENES AND THE SESSION ---------------------------------------------
     # The channel controls as MIDI events, one per (channel, controller), the
@@ -19329,7 +19421,7 @@ def _selftest(only=""):
           "registration it leaves is saved as the stops themselves -- an old "
           "scene's wheel is not replayed onto it either)" % sorted(_og2.parts[0].drawn))
     for _x in (_og, _og2):
-        _x.renderer.close()
+        _x.shutdown()
     # THE HARMONIUM (GM 20): its stop word is CC43/44 -- CC11 is its bellows --
     # the registers split at f-one, and three of its stops are not reeds.
     # Each effect is read at note-on, and live must stamp what the file builds.
@@ -19448,7 +19540,7 @@ def _selftest(only=""):
           and any(l.startswith("hautbois 4") and l.rstrip().endswith("treble") for l in _labs)
           and any(l.startswith("tremolo") and l.rstrip().endswith("effect") for l in _labs),
           "  (%s; picker: %s)" % (_uH.stops_str(_hp), _labs[:3]))
-    _hm.renderer.close()
+    _hm.shutdown()
     # THE ORGAN'S PANEL READS LIKE A STOP JAMB, whatever the bits are: gravest
     # flue first, reeds last, and the digit is the place on the panel.
     _oc = Live(program=19, rate=48000, frames=128, verbose=False)
@@ -19496,7 +19588,7 @@ def _selftest(only=""):
     check("a preset saved under the old stop names still draws them",
           _rd == ["flute 8", "mixture III", "principal 16", "principal 8", "trumpet 8"],
           "  (%s)" % _rd)
-    _oc.renderer.close()
+    _oc.shutdown()
 
     # ---- MIDI 2.0 ------------------------------------------------------------
     import ump as _U
@@ -19544,7 +19636,7 @@ def _selftest(only=""):
         for _ in range(150):
             out.append(np.frombuffer(lv.callback(None, 128, None, 0)[0], np.float32).copy())
         st = (dict(lv.brange), dict(lv.fine), lv.errors)
-        lv.renderer.close()
+        lv.shutdown()
         return np.concatenate(out), st
     _ad, _sd2 = _br_run(False)
     _ab, _sb2 = _br_run(True)
@@ -19562,7 +19654,7 @@ def _selftest(only=""):
           _l96.brange.get(0) == 2.0 and _l96.m2_ignored >= 1,
           "  (bend range %s after an increment; %d ignored -- M2-104 D.3.3)"
           % (_l96.brange.get(0), _l96.m2_ignored))
-    _l96.renderer.close()
+    _l96.shutdown()
 
     # PER-NOTE PITCH, exact and absolute (M2-104 7.4.15): measured as the ratio
     # every partial moved by against the same key played plainly.
@@ -19595,7 +19687,7 @@ def _selftest(only=""):
         _w725 = (440.0 * 2 ** ((59.5 - 69) / 12)) / _lp.parts[0].patch.freqs()[60]
         _pn.append((_prog, float(np.ptp(_r) / _r[0]), 1200 * math.log2(_r[0] / _want),
                     1200 * math.log2(_bend), _still, 1200 * math.log2(_p725 / _w725)))
-        _lp.renderer.close()
+        _lp.shutdown()
     check("MIDI 2.0 per-note pitch is exact and absolute, under a tuner at A415",
           all(sp < 1e-9 and abs(e) < 1e-6 and abs(b - 200.0) < 1e-6 and st and abs(e2) < 1e-6
               for _, sp, e, b, st, e2 in _pn),
@@ -19622,7 +19714,7 @@ def _selftest(only=""):
         _hz = (float(np.concatenate([_le.slab.a["om"][list(_le.slab.live[k])] for k in _ks]).min())
                * 48000 / 2 / math.pi) if _ks else 0.0
         _hw = 440.0 * 2 ** ((_qa / 512.0 - 69) / 12)
-        _rx.close(); _tx.close(); _le.renderer.close()
+        _rx.close(); _tx.close(); _le.shutdown()
         check("a MIDI 2.0 note sent through the ALSA sequencer sounds at its own pitch",
               bool(_ks) and abs(1200 * math.log2(_hz / _hw)) < 1e-3,
               "  (%.4f Hz for a Pitch 7.9 of %.4f Hz)" % (_hz, _hw))
@@ -19691,7 +19783,7 @@ def _selftest(only=""):
           and 16 in _lg2.sota and 0 not in _lg2.sota and _lg2.errors == 0,
           "  (keys %s; scale/octave on channels %s)"
           % (sorted({k[1:3] for k in _lg2.slab.live}), sorted(_lg2.sota)))
-    _lg2.renderer.close()
+    _lg2.shutdown()
     # ---- MPE (M1-100-UM v1.1) --------------------------------------------------
     _Mm = mido.Message
     _mcc = lambda ch, c, v: _Mm("control_change", channel=ch, control=c, value=v)
@@ -19786,7 +19878,7 @@ def _selftest(only=""):
           _mheld and not any(k[1] == 13 for k in _lm.slab.live)
           and _lm.mpe.n == {(0, 'lower'): 11, (0, 'upper'): 3},
           "  (%s)" % _lm.mpe_label())
-    _lm.renderer.close()
+    _lm.shutdown()
     # OFFLINE, the same file: each note's bend at onset is its own, and a slide
     # is the note's own row. Against the tuner's key, as live measures it.
     _mm = mido.MidiFile(ticks_per_beat=480); _mt = mido.MidiTrack(); _mm.tracks.append(_mt)
@@ -19869,7 +19961,7 @@ def _selftest(only=""):
           _stored and _inj == [e for e in _stored if " control=126 " not in e],
           "  (%d events written to scenes.json and injected back)" % len(_stored or []))
     for _x in (_sc, _sc2, _sc3):
-        _x.renderer.close()
+        _x.shutdown()
 
     # ---- THE ROOM, LIVE ------------------------------------------------------
     # The tail roomtail.py convolves onto a render, convolved block by block on

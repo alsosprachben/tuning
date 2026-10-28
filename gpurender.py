@@ -276,6 +276,21 @@ class Gpu:
         return [out[c] for c in range(4)]
 
 
+# ONE GPU PER PROCESS (shared_gpu): a context, its queue and the program
+# compiled for it are ~110 MB on the Iris that the driver keeps after they are
+# released -- made per Live, the selftest's GPU Lives each left that behind.
+# Every live renderer shares this one (pipelined renderers each in slots of
+# their own: Gpu.launch); its kernel arguments are set at each call.
+_SHARED_GPU = None
+
+
+def shared_gpu():
+    global _SHARED_GPU
+    if _SHARED_GPU is None:
+        _SHARED_GPU = Gpu()
+    return _SHARED_GPU
+
+
 class _Window:
     """One window's tables, in page-aligned memory the GPU reads in place,
     and the buffers over them. Two take turns, so one can be filled while the
