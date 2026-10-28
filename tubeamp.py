@@ -282,9 +282,20 @@ def small_signal(**kw):
 
 _POOL = []
 SYNTH_CHUNK = 8192
+# A GPU FILE RENDER BUILDS THE INPUT ON THE GPU (gpurender.Gpu.amp_sum, set by
+# blockrender.render): 12-24x the loop below, its rounding 120-135 dB under the
+# sum and the products it yields the same to 1e-7. Live, and the CPU, keep the
+# loop. TUNING_GPU_AMP=0 keeps it in a GPU render too.
+GPU = [None]
 
 
-def _synth(a, f, p, t):
+def _synth(a, f, p, t, fs=None):
+    if GPU[0] is not None and fs:
+        return GPU[0].amp_sum(a, f, p, len(t), fs)
+    return _synth_loop(a, f, p, t)
+
+
+def _synth_loop(a, f, p, t):
     """sum A cos(2 pi F t + P) over the partials, in chunks of the sample axis
     on every core. Each sample is still built by the same operations in the
     same partial order, so the result is bit-identical to the plain loop
@@ -399,7 +410,7 @@ def emit(freqs, amps, phases, sr, drive, window_s=WINDOW_S,
     # longer any physical need to throw away quiet partials. Accumulated in a
     # loop rather than broadcast, because the (partials x samples) matrix is
     # tens of megabytes and is read exactly once.
-    x = _synth(a, f, p, t)
+    x = _synth(a, f, p, t, fs)
     pk = float(np.abs(x).max())
     if pk <= 0.0:
         return []

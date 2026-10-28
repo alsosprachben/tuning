@@ -7892,8 +7892,13 @@ def render(path, tuner='hybrid440'):
         import streamrender as _STR
         try:
             t0 = time.time()
-            L, R, s = _STR.render(path, tuner, B=sys.modules[__name__],
-                                  gpu=_gpu() if RENDER_GPU else None)
+            import tubeamp as _TA
+            _TA.GPU[0] = _gpu() if RENDER_GPU and os.environ.get("TUNING_GPU_AMP", "1") != "0" else None
+            try:
+                L, R, s = _STR.render(path, tuner, B=sys.modules[__name__],
+                                      gpu=_gpu() if RENDER_GPU else None)
+            finally:
+                _TA.GPU[0] = None
             kdt = time.time() - t0
             if s.nonfinite:
                 print("  WARNING: %d row(s) rendered NaN and were dropped: %s (window s, channel, onset s)"

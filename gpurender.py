@@ -180,6 +180,34 @@ class Gpu:
         self.res = None
         self.shape = None
 
+    AMP_J, AMP_NL = 128, 32     # amp_sum's factoring: sample = J*(NL*h + l) + j
+
+    def amp_sum(self, a, f, p, n, fs):
+        """tubeamp._synth on the GPU: sum a cos(2 pi f t + p), t = arange(n)/fs,
+        as float64 (ampkernel.cl). The phasor tables are made in double here, so
+        float32 only ever carries a value under 1 and its rounding sits about
+        140 dB under the sum, where the valve's products are 60-90 dB down."""
+        cl = self.cl
+        if not hasattr(self, "_amp"):
+            self._amp = cl.Kernel(cl.Program(self.ctx, open(os.path.join(HERE, "ampkernel.cl")).read()).build(),
+                                  "amp_sum")
+        J, NL = self.AMP_J, self.AMP_NL
+        K = len(f)
+        nb = -(-n // J)
+        nh = -(-nb // NL)
+        w = 2.0 * np.pi * np.asarray(f, float) / fs
+        cx = lambda ph: np.ascontiguousarray(np.exp(1j * ph).astype(np.complex64))      # noqa: E731
+        tabs = (cx(np.outer(np.arange(nh) * float(J * NL), w) + p) * np.asarray(a, np.float32),
+                cx(np.outer(np.arange(NL) * float(J), w)),
+                cx(np.outer(w, np.arange(J))))
+        mf = cl.mem_flags
+        bufs = [cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=v) for v in tabs]
+        out = np.empty(nb * J, np.float32)
+        ob = cl.Buffer(self.ctx, mf.WRITE_ONLY, out.nbytes)
+        self._amp(self.q, (J, nb), None, np.int32(K), np.int32(J), np.int32(NL), *bufs, ob)
+        cl.enqueue_copy(self.q, out, ob)
+        return out[:n].astype(np.float64)
+
     def _over(self, i, name, arr):
         """Argument i: a buffer over arr, made again only when arr is new."""
         held = self.over.get(name)
