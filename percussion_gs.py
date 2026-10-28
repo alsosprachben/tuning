@@ -1166,7 +1166,10 @@ LEVEL = {'Half-Open Hi-Hat 1': 0.47, 'Half-Open Hi-Hat 2': 0.47}
 RING.update({'Mute Crash Cymbal 1': 0.61, 'Mute Crash Cymbal 2': 1.69, 'Brush Crash Cymbal': 0.61})
 # ...the SFX set's voices borrowed whole its trims (KIT_LEVEL[56] 47, 71)
 LEVEL.update({'Guitar Slide': 59.315})
-LEVEL.update({'Brush Closed Hi-Hat': 0.87, 'Brush Open Hi-Hat': 0.47})
+# ...the closed one since 22 dB under that (0.87, Standard's before its hats
+# were refitted on their sizzle): balanced to GeneralUser GS's Brush hat
+# (examples/lent_balance.py; its KIT_LEVEL[40] is popped for a borrowed voice)
+LEVEL.update({'Brush Closed Hi-Hat': 0.0691, 'Brush Open Hi-Hat': 0.47})
 # ...and Standard's voices borrowed whole theirs (PERCUSSION_LEVEL 28, 54)
 LEVEL.update({'Slappy (slap)': 0.0771, 'Digital Tambourine': 1.1874})
 

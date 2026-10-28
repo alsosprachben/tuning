@@ -811,8 +811,13 @@ KIT_GATE = {24: {}, 25: {}, 48: {88: 1.4},
 # kicks 10 dB over the Standard notes they replace. (Power's 35 and 40 are its
 # 36 and 38, copied with their levels: its Snare 2 reads 3.6 dB over
 # Standard's, whose Snare 2 is itself 3.3 under its Snare 1.)
-KIT_LEVEL = {24: {36: 1.697, 38: 0.823, 40: 0.790, 41: 0.945, 43: 0.990, 45: 0.984, 47: 0.992, 48: 0.988, 50: 0.967},
-             25: {36: 2.445, 37: 0.298, 38: 0.479, 41: 1.649, 42: 0.151, 43: 1.790, 44: 0.139, 45: 2.023, 46: 0.195, 47: 2.163, 48: 2.523, 49: 0.319, 50: 2.807, 56: 1.763, 62: 2.439, 63: 2.470, 64: 1.675, 70: 0.550, 75: 8.462},
+KIT_LEVEL = {# the machine sets' keys other sets borrow, never set (their recordings each
+             # normalized): balanced at home to GeneralUser GS (examples/lent_balance.py)
+             30: {36: 1.240, 37: 1.189, 38: 1.238, 49: 0.419},
+             28: {51: 0.273},
+             27: {42: 0.692, 46: 2.162, 54: 0.087, 60: 1.374, 61: 1.551, 74: 0.090},
+             24: {36: 1.697, 38: 0.823, 40: 0.790, 41: 0.945, 43: 0.990, 45: 0.984, 47: 0.992, 48: 0.988, 50: 0.967, 52: 0.128},
+             25: {36: 2.445, 37: 0.298, 38: 0.479, 41: 1.649, 42: 0.151, 43: 1.790, 44: 0.139, 45: 2.023, 46: 0.195, 47: 2.163, 48: 2.523, 49: 0.319, 50: 2.807, 56: 1.763, 62: 2.439, 63: 2.470, 64: 1.675, 70: 0.550, 75: 1.754},
              48: {27: 2.703, 28: 2.143, 29: 0.757, 30: 0.290, 35: 0.092, 36: 0.151, 38: 1.778, 39: 0.514, 40: 1.778, 41: 0.627, 42: 0.631, 43: 0.639, 44: 0.623, 45: 0.621, 46: 0.620, 47: 0.610, 48: 0.612, 49: 0.629, 50: 0.614, 51: 0.625, 52: 0.644, 53: 0.633, 57: 0.551, 59: 0.558, 88: 1.683},
              8: {41: 0.340, 43: 0.263, 45: 0.308, 47: 0.655, 48: 0.649, 50: 0.412},
              16: {36: 0.283, 38: 1.175, 41: 0.341, 43: 0.265, 45: 0.307, 47: 0.653, 48: 0.649, 50: 0.410},
@@ -1027,8 +1032,9 @@ PERCUSSION_LEVEL = {
     54: 1.1874, # tambourine +1.6 dB
     69: 2.1697, # cabasa +28.9 dB
     70: 2.6794, # maracas +30.3 dB
-    71: 87.7984,  # whistle short, held at its old level (fitted to VCSL's ball whistle: -4.28 dB without)
-    72: 82.4220, # whistle long, held at its old level (-8.77 dB without)
+    71: 22.4223,  # whistle short: held at its old level when it became a pipe, then 11.9 dB down to
+                  # GeneralUser GS's (examples/lent_balance.py) -- it stood 12 dB over the snare
+    72: 33.9628, # whistle long: the same, 7.7 dB down
     # The open hat sat 9.4 dB above the closed one. An open hat IS louder -- more
     # metal is free to move -- but not by that much; on a kit it is a few dB, and
     # at nine the closed strokes vanish between the open ones.
@@ -1063,12 +1069,14 @@ PERCUSSION_LEVEL = {
     # and they agree on the kick to 2.5 dB (examples/kit_levels.py). Ben, on
     # a bossa nova: "the bass drum seems rather loud compared to the rest".
     35: 0.7964, 36: 0.7964,      # bass drum
-    84: 0.483,       # bell tree -6.3 dB: 22 bars share the gesture
+    84: 1.3873,       # bell tree: 22 bars share the gesture (was -6.3 dB for it), then 9.2 dB up
+                      # to GeneralUser GS's (examples/lent_balance.py): it sat 22 dB under the snare
     37: 1.0000,   # held against the wash-floor fix
     55: 0.5533,   # held against the wash-floor fix
     81: 0.1260,   # open triangle -16.2 dB -- see the note above
     80: 0.1472,   # mute triangle -16.2 dB -- see the note above
 
+    51: 0.3452,   # ride 9.2 dB down, to GeneralUser GS's (examples/lent_balance.py): 15 dB under the snare
 }
 _RING_CLASSES = {}
 
