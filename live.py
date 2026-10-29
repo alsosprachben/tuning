@@ -6254,6 +6254,16 @@ class Live:
             return
         if kind == 'free':
             modes, z, at, floor = job[2], job[3], job[4], job[5]
+            # ONLY STRINGS STILL FREE NOW: the worker answers a damp in turn,
+            # behind whatever it had already worked out, so a result made while
+            # the pedal was down could land after it came up and ring strings
+            # whose dampers had fallen -- under load, a million modes after the
+            # pedal (1400 rows still sounding 0.8 s on, the selftest's pedal-up
+            # check); idle, none
+            if len(modes):
+                ok = np.isin(st['key'][modes], self._reg_free(st['part'], rid[1]))
+                if not ok.all():
+                    modes, z = modes[ok], z[ok]
             if not len(modes):
                 return
             nb = max(self.reg_budget, 1)

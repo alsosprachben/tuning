@@ -19,7 +19,10 @@ GeneralUser has that set, else in a set of GeneralUser's that plays the same
 Roland voice (the CR-78 Tambourine in its 808/909 set). A key no set of
 GeneralUser's plays is listed and left as it is.
 
---write scales the home set's KIT_LEVEL (PERCUSSION_LEVEL for Standard's);
+--write scales the home set's KIT_LEVEL (PERCUSSION_LEVEL for Standard's) --
+or, where the home set plays the key by CLASS (a 'c'/'nc' voice), its
+percussion_gs.LEVEL: _build_gs_sets pops a class voice's KIT_LEVEL entry and
+reads that instead, so a KIT_LEVEL written for it did nothing (the Brush hat);
 --keys=set:key,... measures and writes just those (a set already balanced by
 other means -- in-set, by ear, its room -- takes only the misses that are its
 own: the Brush hat 22 dB hot, Standard's surdos 12-16).
@@ -95,6 +98,31 @@ def main(argv):
                       % (h, k, name, g, ref[0], ref[1], o, g - o), flush=True)
     if "--write" not in argv:
         return 0
+    import percussion_gs as G
+    # ...A CLASS VOICE AT HOME: its trim is percussion_gs.LEVEL[name]
+    by_class = {}
+    for h, ms in miss.items():
+        for k in [k for k, dv in ms.items() if abs(dv) >= MIN_DB]:
+            name = next((ks.get(k) for w, ks in G.SETS.items() if G.SET_KIT[w] == h and k in ks), None)
+            if name and (G.VOICE.get(name) or ("",))[0] in ("c", "nc"):
+                by_class[name] = (h, k, ms.pop(k))
+    if by_class:
+        pg = os.path.join(HERE, "percussion_gs.py")
+        lines = open(pg).read().split("\n")
+        for name, (h, k, dv) in sorted(by_class.items()):
+            cur = G.LEVEL.get(name, 1.0) * 10 ** (dv / 20.0)
+            pat = re.compile(r"'%s': [0-9.]+" % re.escape(name))
+            # the LAST assignment is the one that stands
+            at = [i for i, ln in enumerate(lines) if ln.startswith("LEVEL") and pat.search(ln)]
+            if at:
+                lines[at[-1]] = pat.sub("'%s': %.4f" % (name, cur), lines[at[-1]])
+            else:
+                # before the aliases copy LEVEL (the Room hats' SC-88 names, the consonants)
+                i = next(i for i, ln in enumerate(lines) if ln.startswith("# ...the SC-88 map's names for the Room hats"))
+                lines[i:i] = ["LEVEL.update({'%s': %.4f})    # set %d key %d, balanced to GeneralUser GS "
+                              "(examples/lent_balance.py)" % (name, cur, h, k), ""]
+            print("  percussion_gs.LEVEL['%s'] (set %d key %d): %+.1f" % (name, h, k, dv))
+        open(pg, "w").write("\n".join(lines))
     p = os.path.join(HERE, "percussion_map.py")
     s = open(p).read()
     for h, ms in miss.items():
