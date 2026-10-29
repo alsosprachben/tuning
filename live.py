@@ -88,6 +88,7 @@ import gsefx as _GSX
 import gsdelay as _GSD
 import register as _RGM     # the free-string register's physics (live: _reg_*)
 import damper as _DMP       # half-pedalling: each key's damper by the pedal's value
+import rtsched as _RT       # the audio thread real-time and pinned; the callbacks' probe
 from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL,
                             kit_for_program, drum_set_name, key_layers, kit_in_map)
 
@@ -4343,6 +4344,14 @@ class Live:
         self.press_db = T.PRESS_DB      # one constant, shared with the file path
         self.press_tilt = T.PRESS_TILT
         self.underruns = 0
+        # THE CALLBACKS' TIMING (rtsched.CbRing), for the stall dump; and the
+        # audio thread's real-time scheduling, set by open_stream
+        self.cb_ring = _RT.CbRing(frames / float(rate))
+        self.rt = None
+        self._cb_busy = False
+        self.kicks = 0                  # streams restarted by the kicker (start_kicker)
+        self._kick_quit = False
+        self._kick_lock = threading.Lock()
         self.tap_shed = 0       # blocks the governor cut the effect's copies on
         self.partials_shed = 0  # ...and partials it ended (Slab.shed)
         self._ms_hist = collections.deque(maxlen=4)
@@ -4652,6 +4661,15 @@ class Live:
                         ss = "unreadable (%s)" % e
                     f.write("  stream %s; errors %d, last %s; callback exceptions %d; underruns %d\n"
                             % (ss, self.errors, self.last_error, self.cb_exceptions, self.underruns))
+                    # ...AND HOW THE CALLBACKS CAME BEFORE IT: slower until
+                    # they missed (our load), or on time and then not at all
+                    for _rep in ((lambda: self.rt.report()) if self.rt is not None else None,
+                                 lambda: self.cb_ring.report()):
+                        if _rep is not None:
+                            try:
+                                f.write(_rep() + "\n")
+                            except Exception as e:
+                                f.write("  (report: %s)\n" % e)
                     f.flush()
                     faulthandler.dump_traceback(file=f, all_threads=True)
                     told = True
@@ -10460,6 +10478,84 @@ class Live:
     # exception gives a silent block, is counted, and its traceback goes to
     # PANIC_DUMP (the first few, then one in ten seconds).
     def callback(self, in_data, frame_count, time_info, status):
+        t_in = time.perf_counter()
+        self._cb_busy = True
+        rt = self.rt
+        if rt is not None:
+            rt.tick(t_in)
+        try:
+            return self._callback_safe(in_data, frame_count, time_info, status)
+        finally:
+            self.cb_ring.note(t_in, time.perf_counter(), status)
+            self._cb_busy = False
+            if rt is not None:
+                rt.done()
+
+    # ---- THE KICKER --------------------------------------------------------
+    # PortAudio 19.6's ALSA backend over PipeWire sometimes stops calling: the
+    # callbacks ordinary to the last (2.5 ms, on time), then nothing -- its
+    # thread polls the plugin in 3 ms steps that never see room, and only
+    # after 2048 timeouts (pa_linux_alsa.c, PaAlsaStream_WaitForFrames) does
+    # it recover: ~6-15 s of silence, once every few minutes of play (Ben's
+    # sessions of 2026-10-28; examples/rt_bench.py found it 3 runs in 8, each
+    # 3-16 s after the stream opened, and the "slow callback" beside each was
+    # the one AFTER it, catching up on the notes queued meanwhile). A thread
+    # here watches: KICK_S without a callback, none running, the stream
+    # active -- abort and start it again. The abort cancels PortAudio's thread
+    # out of its poll; the new one is real-time again by rtsched's tick.
+    KICK_S = 0.2
+
+    def start_kicker(self):
+        if os.environ.get("TUNING_KICK", "1") == "0":
+            return
+
+        def run():
+            since = 0.0                 # the last restart: give the new stream its own KICK_S
+            while not self.patch_stop and not self._kick_quit:
+                time.sleep(0.02)
+                st, last = self.stream, self.cb_ring.last
+                if st is None or last is None or self._cb_busy:
+                    continue
+                now = time.perf_counter()
+                if now - max(last, since) < self.KICK_S:
+                    continue
+                with self._kick_lock:
+                    if self._kick_quit:
+                        return
+                    try:
+                        if not st.is_active():
+                            continue
+                        # (PyAudio's Stream has no abort: its C module's,
+                        # on the stream it wraps; then start as ever)
+                        import pyaudio as _pa
+                        _pa.pa.abort_stream(st._stream)
+                        st._is_running = False
+                        st.start_stream()
+                        ok = "restarted"
+                    except Exception as e:
+                        ok = "restart failed: %s: %s" % (type(e).__name__, e)
+                        self.errors += 1
+                        self.last_error = "kicker: " + ok
+                    since = time.perf_counter()
+                    self.kicks += 1
+                    f = getattr(self, "_wd_file", None)
+                    if f is not None:
+                        try:
+                            f.write("==== %s: no callback for %.0f ms at block %d -- stream %s (kick %d)\n"
+                                    % (time.strftime("%Y-%m-%d %H:%M:%S"), 1000 * (now - last),
+                                       self.blocks, ok, self.kicks))
+                            f.flush()
+                        except Exception:
+                            pass
+        threading.Thread(target=run, daemon=True, name="kicker").start()
+
+    def stop_kicker(self):
+        """Before the stream is stopped at quit: no restart may race the stop."""
+        self._kick_quit = True
+        with self._kick_lock:
+            pass
+
+    def _callback_safe(self, in_data, frame_count, time_info, status):
         import pyaudio
         n0 = self.n
         try:
@@ -10711,6 +10807,9 @@ class Live:
                     gpu=isinstance(self.renderer, GpuRenderer),
                     on_gpu=getattr(self.renderer, "on_gpu", False),
                     budget_ms=self.frames * 1000.0 / self.rate,
+                    rt=self.rt.status() if self.rt is not None else "",
+                    kicks=self.kicks,
+                    late=self.cb_ring.late2,
                     last_error=self.last_error)
 
 
@@ -21053,9 +21152,14 @@ def _gc_freeze():
 def open_stream(live, rate, frames):
     import pyaudio
     pa = pyaudio.PyAudio()
+    # THE AUDIO THREAD REAL-TIME AND PINNED (rtsched): set up here, on the
+    # main thread, before PortAudio starts it; the callback does the rest
+    live.rt = _RT.RtSched()
+    live.rt.prepare(extra_pids=[live.reg_proc.pid] if live.reg_proc is not None else ())
     stream = pa.open(format=pyaudio.paFloat32, channels=2, rate=rate, output=True,
                      frames_per_buffer=frames, stream_callback=live.callback)
     live.stream = stream
+    live.start_kicker()
     return pa, stream
 
 
@@ -21318,6 +21422,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        live.stop_kicker()
         stream.stop_stream(); stream.close(); pa.terminate()
         if port:
             port.close()

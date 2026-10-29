@@ -2169,7 +2169,10 @@ class TUI:
                     % (s["under"], s["drop"], s["err"], s["stuck"], s["miss"],
                        (("  efx %d cut %d" % (s.get("taps", 0), s.get("shed", 0)))
                         if s.get("taps") or s.get("shed") else "")
-                       + ("  shed %d" % s["pshed"] if s.get("pshed") else "")),
+                       + ("  shed %d" % s["pshed"] if s.get("pshed") else "")
+                       + ("  late %d" % s["late"] if s.get("late") else "")
+                       + ("  kick %d" % s["kicks"] if s.get("kicks") else "")
+                       + ("  " + s["rt"] if s.get("rt") else "")),
                     C("red") if bad else C("dim"))
         y += 1
 
@@ -2796,6 +2799,7 @@ def run(live, port_name, ump_client=None):
         pass
     finally:
         ui.builder.stop = True
+        live.stop_kicker()
         stream.stop_stream(); stream.close(); pa.terminate()
         sys.stderr.flush()
         os.dup2(_err_fd, 2)
