@@ -12127,14 +12127,25 @@ def selftest_gs(check):
         _want = (_GSX.PEDAL_AMP_DRIVE and 0.2289 * __import__("patch_map").program_trim(_pr.patch.vprogram)
                  * _GSX.chain(_lvr.efx)['level'] * _lvr._chan_gain(0) * _pr.gain() * _lvr.slab.headroom)
         _refok = _job is not None and abs(_job[8] / _want - 1.0) < 1e-6
-        _fland, _xfok = None, False
+        # ...CROSSED OVER, if there was a sounding fast result to cross from.
+        # On the GPU (ampgpu) the fine pass can land FIRST -- 10 ms a chord,
+        # against the fast pass on a busy CPU -- or inside the lookahead, before
+        # the chord sounds (_amp_place: start > n0); either way its products
+        # are the chord's first, with the note's own attack, and a fast result
+        # after it is dropped as late. All three are right
+        _fland, _xfok, _fast_first = None, False, False
         for _i in range(200):
+            _st = _lvr.amp_start.get(_pr.pid)
+            _had = (bool(_lvr.slab.live.get(_lvr._amp_key(_pr.pid)))
+                    and _st is not None and _st <= _lvr.n)
             _lvr.callback(None, 128, None, 0)
             _tm.sleep(0.003)
             if _lvr.amp_fine_placed.get(_pr.pid) is not None and _fland is None:
-                _fland = _i
+                _fland, _fast_first = _i, _had
                 _ps = _lvr.slab.live.get(_lvr._amp_key(_pr.pid), [])
-                _xfok = bool(len(_ps)) and bool(np.all(_lvr.slab.a["fa"][np.asarray(_ps)] == np.float32(int(_lvr.AMP_XFADE * 48000))))
+                _xf = np.float32(int(_lvr.AMP_XFADE * 48000))
+                _fa = _lvr.slab.a["fa"][np.asarray(_ps, np.int64)]
+                _xfok = bool(len(_ps)) and bool(np.all(_fa == _xf) if _had else not np.any(_fa == _xf))
                 break
         _ahead0 = (int(_lvr.slab.a["non"][[x for _k, _v in _lvr.slab.live.items() if _k[3] is None for x in _v]].min()) - 0) // 128
     finally:
@@ -12151,8 +12162,9 @@ def selftest_gs(check):
           abs(_vlvl) < 0.5 and abs(_ph - 1.234) < 1e-6 and _guard and _refok
           and _vahead == LIVE_AMP_LOOKAHEAD and _nn0 == 0 and _fland is not None and _fland < 60 and _xfok,
           "  (file/live level %+.2f dB; phase %.4f; guard %s; reference %s; lookahead %d / none %d blocks; "
-          "fine pass at %s blocks, crossed over %s)"
-          % (_vlvl, _ph, _guard, _refok, _vahead, _nn0, _fland, _xfok))
+          "fine pass at %s blocks, %s %s)"
+          % (_vlvl, _ph, _guard, _refok, _vahead, _nn0, _fland,
+             "over the sounding fast pass: crossed over" if _fast_first else "first to sound: the note's own attack", _xfok))
     _f0 = _fhear(None); _fp = _fhear((0x01, 0x20)); _ff = _fhear((0x01, 0x23))
     _fw = _fhear((0x01, 0x21), prog=7, ex=[('param', 2, 127), ('param', 6, 0)])
     _fc = float(np.corrcoef(_ff[:, 0], _ff[:, 1])[0, 1])
