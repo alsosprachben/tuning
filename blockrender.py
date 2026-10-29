@@ -4386,6 +4386,21 @@ def _prepare(path, tuner='hybrid440', sink=None):
             return _memo[_key]
         return _of
 
+    def _pedal_damping_of(_c, _top):
+        """A half-pedalled channel's felt on the register's free strings, per
+        key: (each pedal move, in samples; the residual rate from it, nepers
+        a second at the key's fundamental) -- a sympathetic string rings
+        under the felt's gap, so only the residual takes it (damper.py)."""
+        _ts, _vs = _PEDV_CH[_c]
+
+        def _of(_key):
+            _r = [_DMP.rate_db_s(_DMP.contact(_v, _key, _top), False) * _DMP.LN10_20
+                  if _DMP.contact(_v, _key, _top) < 1.0 else 0.0 for _v in _vs]
+            if not any(_r):
+                return None
+            return np.asarray(_ts, float) * SR, np.asarray(_r, float)
+        return _of
+
     def _damp_close(_r1):
         """The open half-pedalled note's rows end at _r1: its track, from its
         fundamental's decay (damper.track), over its blocks from key-up to
@@ -5866,6 +5881,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                         pedal=((_pedal_spans_of(ch, int(getattr(props, 'damper_top', 128)))
                                                 if ch in _PEDV_CH else _PED_CH.get(ch, []))
                                                if getattr(props, 'damper_pedal', True) else []),
+                                        # ...and the felt's residual on its free
+                                        # strings, through the band (damper.py)
+                                        damping=(_pedal_damping_of(ch, int(getattr(props, 'damper_top', 128)))
+                                                 if ch in _PEDV_CH and getattr(props, 'damper_pedal', True)
+                                                 else None),
                                         strings=_REG.Strings(type(props), FREQ_N, pan, chan_vol, SR,
                                                              (string_partial, partial_decay,
                                                               unison_partial)))

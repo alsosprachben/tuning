@@ -438,7 +438,7 @@ class Channel(object):
     Rows are ordered (phase, seq): the timeline's free and bridge rows in the
     order they were made, then the forced rows."""
 
-    def __init__(self, ch, strings, props, pedal, sr, blk, cols, scale=1.0, keep=True):
+    def __init__(self, ch, strings, props, pedal, sr, blk, cols, scale=1.0, keep=True, damping=None):
         self.ch, self.S, self.sr, self.blk, self.cols = ch, strings, sr, blk, cols
         self.keep = keep             # keep each strike's driver rows once used (the
                                      # whole table, which holds every row anyway)
@@ -478,6 +478,67 @@ class Channel(object):
         self.loud = 0.0              # the loudest partial so far: the floor's reference
         self.template = None
         self.T = 0.0
+        # THE FELT IN THE BAND (damper.py, half-pedalling): a free string
+        # under a damper that only touches it loses energy to it all the same
+        # -- the residual, the highs first. damping(key) -> (breakpoints in
+        # samples, the extra rate from each, nepers/s at the key's own
+        # fundamental), or None for a key never in the band. The state decays
+        # by it, each row is written with the rate at its start, and a pedal
+        # move that changes a key's rate re-segments that key's strings.
+        self.r_lr = np.array(strings.alpha, float)      # each mode's row rate
+        self.damp = {}
+        self.pevents = {}            # block -> keys whose rate changes there
+        self.dw = None
+        if damping is not None:
+            f0 = 440.0 * 2.0 ** ((np.asarray(strings.key, float) - 69.0) / 12.0)
+            import damper as _DMP
+            self.dw = (np.maximum(np.asarray(strings.f, float), 1e-6) / f0) ** _DMP.BETA
+            for k in self.keyidx:
+                got = damping(k)
+                if got is None:
+                    continue
+                bk, rate = np.asarray(got[0], float), np.asarray(got[1], float)
+                if not len(bk) or not np.any(rate):
+                    continue
+                D = np.concatenate(([0.0], np.cumsum(rate[:-1] * np.diff(bk) / sr)))
+                self.damp[k] = (bk, rate, D)
+                for i in range(len(bk)):
+                    if i == 0 or rate[i] != rate[i - 1]:
+                        b = int(math.ceil(bk[i] / blk)) * blk
+                        self.pevents.setdefault(b, set()).add(k)
+
+    def _drate(self, keys, n):
+        """The felt's extra rate (nepers/s at the key's fundamental) at sample
+        n, for each of these modes' keys."""
+        out = np.zeros(len(keys))
+        for k in np.unique(keys):
+            d = self.damp.get(int(k))
+            if d is not None:
+                i = int(np.searchsorted(d[0], n, 'right')) - 1
+                if i >= 0:
+                    out[keys == k] = d[1][i]
+        return out
+
+    def _dcum(self, keys, n):
+        """The felt's damping done by n (nepers at the key's fundamental)."""
+        out = np.zeros(len(keys))
+        if self.damp:
+            n = np.broadcast_to(np.asarray(n, float), (len(keys),))
+            for k in np.unique(keys):
+                d = self.damp.get(int(k))
+                if d is not None:
+                    m = keys == k
+                    i = np.searchsorted(d[0], n[m], 'right') - 1
+                    j = np.maximum(i, 0)
+                    out[m] = np.where(i >= 0, d[2][j] + d[1][j] * (n[m] - d[0][j]) / self.sr, 0.0)
+        return out
+
+    def _dgain(self, modes, n0, n1):
+        """exp(-felt) on these modes from n0 to n1: 1 where nothing damps."""
+        if not self.damp or not len(modes):
+            return 1.0
+        keys = self.S.key[modes]
+        return np.exp(-self.dw[modes] * (self._dcum(keys, n1) - self._dcum(keys, n0)))
 
     # -- the free spans, as known ----------------------------------------------
     def _span_list(self, key):
@@ -556,8 +617,19 @@ class Channel(object):
         while True:
             gb = min((b for b in self.groups if b + blk <= T), default=None)
             pb = min((p for p in self.pending if p <= T), default=None)
-            if gb is None and pb is None:
+            # (a pedal move as a strike: once its block is done, so the stream
+            # meets it after the same strikes the whole table does)
+            eb = min((p for p in self.pevents if p + blk <= T), default=None)
+            if gb is None and pb is None and eb is None:
                 break
+            if eb is not None and (gb is None or eb < gb) and (pb is None or eb < pb):
+                # THE PEDAL MOVED: these keys' sounding strings take their new
+                # rate from here (a row a rate, crossed over as a split is)
+                keys = self.pevents.pop(eb)
+                mk = np.isin(self.S.key, list(keys)) & (self.Az != 0)
+                if mk.any():
+                    self._update(mk, eb, np.zeros(len(self.Az), complex), ('pedal', eb), force=mk)
+                continue
             if pb is not None and (gb is None or pb <= gb):
                 add = self.pending.pop(pb)
                 self._update(add != 0, pb, add, ('damper', pb))
@@ -580,6 +652,8 @@ class Channel(object):
             e = min(e, min(self.groups))
         if self.pending:
             e = min(e, min(self.pending))
+        if self.pevents:
+            e = min(e, min(self.pevents))
         if self.T != float('inf'):
             e = min(e, float(int(self.T // self.blk) * self.blk))
         return e
@@ -669,7 +743,7 @@ class Channel(object):
                     seqs = list(range(self.seq, self.seq + len(cand)))
                     self.seq += len(cand)
                     self.bridges.append((seqs, cand, xfer[cand], n_off, re_off, pb, ('damper', si)))
-                tr = xfer * np.exp(-am * (pb - n_off) / sr)
+                tr = xfer * np.exp(-am * (pb - n_off) / sr) * self._dgain(np.arange(M), n_off, pb)
                 self.pending[pb] = self.pending[pb] + tr if pb in self.pending else tr
         self._update(np.abs(add) > 0, b, add, ('strike', b))
 
@@ -687,7 +761,7 @@ class Channel(object):
                          (self.span_end(int(c % 256), float(tu[c // 256])) for c in cu)])
         return vals[np.ravel(inv)]
 
-    def _update(self, m, b, add, src):
+    def _update(self, m, b, add, src, force=None):
         """Mode set m gains `add` (referenced to block b), then settles. A
         string whose damper fell since its last update starts from rest."""
         S, am, sr = self.S, self.S.alpha, self.sr
@@ -701,7 +775,8 @@ class Channel(object):
             e = np.where(np.isnan(e), nref[live], e)
             dead = live[e <= b]
             Az[dead] = 0; nref[dead] = b
-        Az[idx] = Az[idx] * np.exp(-am[idx] * np.maximum(b - nref[idx], 0.0) / sr) + add[idx]
+        Az[idx] = (Az[idx] * np.exp(-am[idx] * np.maximum(b - nref[idx], 0.0) / sr)
+                   * self._dgain(idx, nref[idx], b) + add[idx])
         nref[idx] = b
         # split the modes whose row has drifted from the truth
         floor = self.floor
@@ -713,9 +788,12 @@ class Channel(object):
             end = self.ends(S.key[h], self.r_b[h])
             end = np.where(np.isnan(end), self.r_b[h], end)
             alive = np.minimum(np.minimum(self.r_nfloor[h], end), self.r_closed[h]) > b
-            rz[has] = np.where(alive, self.Rz[h] * np.exp(-am[h] * np.maximum(b - self.rref[h], 0.0) / sr), 0)
+            rz[has] = np.where(alive, self.Rz[h] * np.exp(-self.r_lr[h] * np.maximum(b - self.rref[h], 0.0) / sr), 0)
         mag = np.maximum(np.abs(tz), floor)
-        go = idx[np.abs(tz - rz) > SPLIT * mag]
+        go = np.abs(tz - rz) > SPLIT * mag
+        if force is not None:
+            go |= force[idx] & has
+        go = idx[go]
         if not len(go):
             return
         free_now = ~np.isnan(self.ends(S.key[go], np.full(len(go), float(b))))
@@ -730,14 +808,15 @@ class Channel(object):
             z = Az[i]
             if abs(z) < floor or not fr:
                 continue
-            n_floor = b + sr * math.log(abs(z) / floor) / max(am[i], 1e-9)
-            rec = self._write(i, z, b, self.blk, None, None, 'free', src)
+            lr = float(am[i]) + (float(self.dw[i] * self._drate(S.key[i:i + 1], float(b))[0]) if self.damp else 0.0)
+            n_floor = b + sr * math.log(abs(z) / floor) / max(lr, 1e-9)
+            rec = self._write(i, z, b, self.blk, None, None, 'free', src, lr=lr)
             rec.update(mode=i, b=float(b), key=int(S.key[i]), n_floor=n_floor, closed=None)
             self.open.append(rec)
             self.rrec[i] = rec
             self.has[i] = True
             self.r_b[i] = b; self.r_nfloor[i] = n_floor; self.r_closed[i] = np.inf
-            self.Rz[i] = z; self.rref[i] = b
+            self.Rz[i] = z; self.rref[i] = b; self.r_lr[i] = lr
 
     def _alive(self, rec, b):
         """Whether a free row still sounds at b, as far as it can be known."""
@@ -747,7 +826,7 @@ class Channel(object):
             x = min(x, rec['closed'])
         return x > b
 
-    def _write(self, i, z, non, fa, noff, re_, kind, src, seq=None):
+    def _write(self, i, z, non, fa, noff, re_, kind, src, seq=None, lr=None):
         S, sr = self.S, self.sr
         om = S.W[i] / sr
         ph = math.atan2(z.imag, z.real)
@@ -755,7 +834,7 @@ class Channel(object):
         row.update(om=om, p0=ph - om * S.dl[i], p0R=ph - om * S.dr[i],
                    aL=abs(z) * S.hl[i], aR=abs(z) * S.hr[i], aM=abs(z),
                    nf=S.f[i], nfr=S.f[i], non=float(non), noff=noff,
-                   fa=float(fa), re=re_, logr=float(S.alpha[i]), logrA=0.0, aft=0.0,
+                   fa=float(fa), re=re_, logr=float(S.alpha[i] if lr is None else lr), logrA=0.0, aft=0.0,
                    sus=0.0, cv=0.0, sj=0.0, crl=0.0, csc=0.0, cbw=0.0, tbav=0.0,
                    tcut=0.0, gb=0.0, gc=0.0, vd=0.0, vdl=0.0, br=-1, gr=-1, cr=0,
                    delL=S.dl[i], delR=S.dr[i], px=S.px[i], pl=int(S.string[i]),
@@ -827,7 +906,7 @@ def channel_for(ch, R, sr, blk, cols, scale, string_fns, keep=True):
     """A Channel from prepare()'s record of a register channel (its class,
     first props, pan, volume, tuning table and pedal spans)."""
     S = R.get('strings') or Strings(R['pc'], R['table'], R['pan'], R['chan_vol'], sr, string_fns)
-    return Channel(ch, S, R['props'], R['pedal'], sr, blk, cols, scale, keep)
+    return Channel(ch, S, R['props'], R['pedal'], sr, blk, cols, scale, keep, R.get('damping'))
 
 
 def expand(A, channels, sr, blk, cols, meta=None):
@@ -879,6 +958,14 @@ class LiveChannel(object):
         self.stamped = np.zeros(M, bool)
         self.held = {}               # strike id -> its forced parts, for the hand-over
         self.loud = 0.0
+        # THE FELT IN THE BAND (damper.py; Channel's damping): each mode's
+        # extra rate now, nepers/s, set by felt(); and the rate its stamped
+        # row was written with
+        self.krate = np.zeros(M)
+        self.Rk = np.zeros(M)
+        import damper as _DMP
+        f0 = 440.0 * 2.0 ** ((np.asarray(strings.key, float) - 69.0) / 12.0)
+        self.dw = (np.maximum(np.asarray(strings.f, float), 1e-6) / f0) ** _DMP.BETA
 
     def mask(self, keys):
         m = np.zeros(len(self.S.f), bool)
@@ -888,7 +975,7 @@ class LiveChannel(object):
                 m[ix] = True
         return m
 
-    def _settle(self, touched, at):
+    def _settle(self, touched, at, force=None):
         """The touched modes whose stamped row has drifted: (modes, Z at `at`)."""
         am, sr = self.S.alpha, self.sr
         idx = np.flatnonzero(touched)
@@ -896,11 +983,13 @@ class LiveChannel(object):
             return idx, np.zeros(0, complex)
         tz = self.Az[idx]
         rz = np.where(self.stamped[idx],
-                      self.Rz[idx] * np.exp(-am[idx] * np.maximum(at - self.rref[idx], 0.0) / sr), 0)
+                      self.Rz[idx] * np.exp(-(am[idx] + self.Rk[idx]) * np.maximum(at - self.rref[idx], 0.0) / sr), 0)
         floor = self.fl * max(self.loud, 1e-30)
         go = np.abs(tz - rz) > SPLIT * np.maximum(np.abs(tz), floor)
+        if force is not None:
+            go |= force
         idx, z = idx[go], tz[go]
-        self.Rz[idx] = z; self.rref[idx] = at
+        self.Rz[idx] = z; self.rref[idx] = at; self.Rk[idx] = self.krate[idx]
         self.stamped[idx] = np.abs(z) >= floor
         return idx, z
 
@@ -961,7 +1050,7 @@ class LiveChannel(object):
         self.held[sid] = keep
         touched = np.abs(add) > 0
         self.Az[touched] = self.Az[touched] * np.exp(
-            -am[touched] * np.maximum(at - self.nref[touched], 0.0) / sr) + add[touched]
+            -(am[touched] + self.krate[touched]) * np.maximum(at - self.nref[touched], 0.0) / sr) + add[touched]
         self.nref[touched] = at
         idx, z = self._settle(touched, at)
         return idx, z, forced
@@ -987,7 +1076,7 @@ class LiveChannel(object):
         add[~free] = 0
         touched = np.abs(add) > 0
         self.Az[touched] = self.Az[touched] * np.exp(
-            -am[touched] * np.maximum(at - self.nref[touched], 0.0) / sr) + add[touched]
+            -(am[touched] + self.krate[touched]) * np.maximum(at - self.nref[touched], 0.0) / sr) + add[touched]
         self.nref[touched] = at
         return self._settle(touched, at)
 
@@ -995,6 +1084,25 @@ class LiveChannel(object):
         """These keys' dampers fell: their strings are at rest."""
         m = self.mask(keys)
         self.Az[m] = 0; self.Rz[m] = 0; self.stamped[m] = False
+
+    def felt(self, at, keys, rates):
+        """The pedal moved at sample `at`: these keys' strings decay from here
+        at their own rate plus the felt's (rates: nepers/s at each key's
+        fundamental, the highs more). Their sounding modes are brought to
+        `at` and re-stamped at the new rate: (modes, Z at `at`)."""
+        S, am, sr = self.S, self.S.alpha, self.sr
+        new = self.krate.copy()
+        for k, r in zip(keys, rates):
+            ix = self.keyidx.get(k)
+            if ix is not None:
+                new[ix] = r * self.dw[ix]
+        ch = np.flatnonzero(new != self.krate)
+        live = ch[self.Az[ch] != 0]
+        self.Az[live] *= np.exp(-(am[live] + self.krate[live]) * np.maximum(at - self.nref[live], 0.0) / sr)
+        self.nref[live] = at
+        self.krate = new
+        touched = np.zeros(len(S.f), bool); touched[live] = True
+        return self._settle(touched, at, force=touched[np.flatnonzero(touched)])
 
 
 def live_worker(conn):
@@ -1007,7 +1115,8 @@ def live_worker(conn):
       ('strike', rid, sid, note, at, drv, free[, plucked]) -> ('free', rid, modes, z, at, floor)
                                                    [+ ('forced', rid, note, forced, at)]
       ('release', rid, sid, at, free)          -> ('free', ...)
-      ('damp', rid, keys); ('stop',)"""
+      ('damp', rid, keys); ('stop',)
+      ('felt', rid, at, keys, rates)           -> ('free', ...): the pedal in the band"""
     import os
     try:
         os.nice(5)                     # below the audio, whose core this is not
@@ -1052,5 +1161,10 @@ def live_worker(conn):
                 conn.send(('free', rid, idx, z, at, lc.fl * max(lc.loud, 1e-30)))
             elif kind == 'damp':
                 lc.damp(job[2])
+            elif kind == 'felt':
+                at, keys, rates = job[2:5]
+                idx, z = lc.felt(at, keys, rates)
+                if len(idx):
+                    conn.send(('free', rid, idx, z, at, lc.fl * max(lc.loud, 1e-30)))
         except Exception as e:
             conn.send(('error', None, "%s: %s" % (type(e).__name__, e)))

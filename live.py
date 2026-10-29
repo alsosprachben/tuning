@@ -5398,6 +5398,7 @@ class Live:
                 was_v = self.pedal_v.get(ch, 0)
                 self.pedal[ch] = downp
                 self.pedal_v[ch] = msg.value
+                self._reg_felt(ch, n0)
                 if msg.value < was_v:
                     # Pedal up: the dampers fall -- on the keys that are UP,
                     # each where its contact is full (damper.py: all of them
@@ -6300,6 +6301,42 @@ class Live:
         self.reg_jobs.append(('damp', rid, sorted(set(range(21, 109)) - free)))
         self.reg_go.set()
 
+    def _reg_felt(self, ch, n0):
+        """The pedal moved: each register part's free strings on this channel
+        take the felt's residual for their key's contact (damper.py) -- the
+        keys whose rate changed sent to the worker (LiveChannel.felt), which
+        re-stamps their sounding strings at it, and kept here (st['krate'])
+        for the rows it hands back."""
+        if not self.reg_enabled:
+            return
+        v = self.pedal_v.get(ch, 0)
+        for rid, st in list(self.reg.items()):
+            if rid[1] != ch or not st['ready']:
+                continue
+            pc = st['part'].patch._voice_class(60)
+            top = int(getattr(pc, 'damper_top', 128))
+            if not getattr(pc, 'damper_pedal', True):
+                continue
+            kr = st.setdefault('krate_key', {})
+            keys, rates = [], []
+            for k in range(21, 109):
+                c = _DMP.contact(v, k, top)
+                r = _DMP.rate_db_s(c, False) * _DMP.LN10_20 if 0.0 < c < 1.0 else 0.0
+                if r != kr.get(k, 0.0):
+                    kr[k] = r
+                    keys.append(k); rates.append(r)
+            if not keys:
+                continue
+            if 'dw' not in st:
+                f0 = 440.0 * 2.0 ** ((np.asarray(st['key'], float) - 69.0) / 12.0)
+                st['dw'] = (np.maximum(np.asarray(st['f'], float), 1e-6) / f0) ** _DMP.BETA
+                st['krate'] = np.zeros(len(st['f']))
+            for k, r in zip(keys, rates):
+                ix = np.flatnonzero(st['key'] == k)
+                st['krate'][ix] = r * st['dw'][ix]
+            self.reg_jobs.append(('felt', rid, float(n0), keys, rates))
+            self.reg_go.set()
+
     def _reg_channel(self, ch, n0, kill=False):
         """A pedal came up on this channel (or everything stopped, kill):
         every register part on it damps what is no longer free."""
@@ -6342,6 +6379,7 @@ class Live:
                 st['slot_of'] = np.full(info['M'], -1, np.int64)
                 st['n_floor'] = np.zeros(info['M'])
                 st['ready'] = True
+                self._reg_felt(rid[1], n0)      # a pedal already in the band
         # this block's strikes: their stamped direct rows, read now (after the
         # note's pan and tuning), and the keys free now
         for rid, sid, note, at, slots, plucked, slot_choir in self.reg_pend:
@@ -6420,9 +6458,11 @@ class Live:
                 self.reg_more = True
             # every mode's old row gives way at this block to its new one
             self._reg_close(st, modes[st['slot_of'][modes] >= 0], n0, float(B.BLK))
-            zz = z * np.exp(-st['alpha'][modes] * max(n0 - at, 0.0) / self.rate)
+            # each mode's rate: its own, and the felt's in the band (_reg_felt)
+            lr = st['alpha'][modes] + (st['krate'][modes] if 'krate' in st else 0.0)
+            zz = z * np.exp(-lr * max(n0 - at, 0.0) / self.rate)
             keep = np.abs(zz) >= floor
-            modes, zz = modes[keep], zz[keep]
+            modes, zz, lr = modes[keep], zz[keep], lr[keep]
             n = len(modes)
             if not n:
                 return
@@ -6435,7 +6475,7 @@ class Live:
                      aR=(mag * st['hr'][modes]).astype(np.float32),
                      nf=st['f'][modes].astype(np.float32), nfr=st['f'][modes].astype(np.float32),
                      non=np.full(n, n0, np.int64), fa=np.full(n, float(B.BLK), np.float32),
-                     logr=st['alpha'][modes].astype(np.float32),
+                     logr=lr.astype(np.float32),
                      delL=st['dl'][modes].astype(np.float32), delR=st['dr'][modes].astype(np.float32),
                      pl=st['string'][modes].astype(np.int32), rdl=np.zeros(n, np.float32))
             for c in ("logrA", "aft", "sus", "cv", "sj", "crl", "csc", "cbw", "tbav", "tcut", "vd", "az"):
@@ -6456,7 +6496,7 @@ class Live:
                 self.slab.repan(list(got), _cp, T.GM_DEFAULT_PAN, self.rate, itd=True)
             st['slot_of'][modes] = got
             st['n_floor'][modes] = n0 + self.rate * np.log(np.maximum(np.abs(zz) / floor, 1.0)) \
-                / np.maximum(st['alpha'][modes], 1e-9)
+                / np.maximum(lr, 1e-9)
             self.reg_live = True
             return
         if kind == 'forced':
