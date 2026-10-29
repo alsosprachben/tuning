@@ -2568,6 +2568,9 @@ class Renderer:
         while True:
             self.go[k].wait(); self.go[k].clear()
             if self.stop:
+                # ...SAYING SO: a render waiting on this worker (done[k]) would
+                # otherwise wait for ever -- the audio thread hung for good
+                self.done[k].set()
                 return
             try:
                 L, R = self.bufs[k]
@@ -10510,14 +10513,25 @@ class Live:
             return
 
         def run():
-            since = 0.0                 # the last restart: give the new stream its own KICK_S
+            # STALE AS THIS THREAD SAW IT, not by the last callback's clock: a
+            # build holding the interpreter's lock (a long C call) keeps the
+            # callback AND this thread out alike, and woken after it, this saw
+            # a gap PortAudio had not made -- and restarted a stream that was
+            # about to be called (live's start, 2026-10-29: one kick 4 s in, as
+            # the session built). Only KICK_S of this thread's own watching,
+            # through which the callback could have run and did not, counts.
+            seen, stale_at = None, None
             while not self.patch_stop and not self._kick_quit:
                 time.sleep(0.02)
                 st, last = self.stream, self.cb_ring.last
                 if st is None or last is None or self._cb_busy:
+                    seen, stale_at = None, None
                     continue
                 now = time.perf_counter()
-                if now - max(last, since) < self.KICK_S:
+                if last != seen:
+                    seen, stale_at = last, now
+                    continue
+                if now - stale_at < self.KICK_S:
                     continue
                 with self._kick_lock:
                     if self._kick_quit:
@@ -10536,7 +10550,7 @@ class Live:
                         ok = "restart failed: %s: %s" % (type(e).__name__, e)
                         self.errors += 1
                         self.last_error = "kicker: " + ok
-                    since = time.perf_counter()
+                    seen, stale_at = None, None
                     self.kicks += 1
                     f = getattr(self, "_wd_file", None)
                     if f is not None:
@@ -11101,7 +11115,13 @@ def save_scene(name, live, path=None):
 
 def save_session(live, path=None):
     """The whole live state, as a preset -- parts, globals, room, controls,
-    routes and the channel scene. Written atomically; never raises."""
+    routes and the channel scene. Written atomically; never raises.
+
+    NOT WHILE THE RIG IS STARTING (livetui.run's first build): its parts are
+    not there yet, and a key pressed or a quit then would save an empty rig
+    over the session it is loading."""
+    if getattr(live, "starting", False):
+        return False
     try:
         _save_json(path or SESSION_PATH, preset_from(live))
         live.dirty = False
@@ -21298,9 +21318,16 @@ def main():
     # a build that does not glitch.
     sys.setswitchinterval(0.0005)
 
+    # THE PANEL FIRST (--tui): the rig starts with NO parts, the panel and the
+    # audio open at once, and the room, the session and the warming are the
+    # panel's first build -- its progress bar, as a program change shows it
+    # (Ben: "show the TUI first, and then show the building progress"). With
+    # no parts a key struck meanwhile plays nothing, rather than building a
+    # patch on the audio thread.
     live = Live(program=a.program, rate=a.rate, frames=a.frames, tuner=a.tuner, eastern=a.eastern,
                 drums=a.drums, headroom_db=a.headroom, capacity=a.capacity,
-                threads=a.threads, gpu=a.gpu, verbose=not a.tui)
+                threads=a.threads, gpu=a.gpu, verbose=not a.tui,
+                parts=[] if a.tui else None)
     live.start_watchdog()
     if a.gpu:
         print("gpu: " + ("%s, above %d occupied slots" % (live.renderer.gpu.name, live.renderer.gpu_min)
@@ -21310,42 +21337,66 @@ def main():
     # parts, globals, room, controls, routes and each channel's mix. A named
     # preset asked for on the command line wins over it.
     sess = None if (a.fresh or a.preset) else load_session()
-    live.enable_room(a.room or (sess or {}).get("room")
-                     or os.environ.get("TUNING_ROOM") or "hall")
+    pres = None
     if a.preset:
         pres = load_presets().get(a.preset)
         if not pres:
             sys.exit("no preset %r in %s" % (a.preset, PRESET_PATH))
-        apply_preset(live, pres)
-    elif sess:
-        try:
-            apply_preset(live, sess)
-            sys.stderr.write("  resumed the last session (--fresh to start clean)\n")
-        except Exception as e:
-            sys.stderr.write("  the last session would not apply (%s); starting clean\n" % e)
-    # THE STANDARD, if named: over the session's
-    if a.map is not None:
-        live.std_map = B.map_number(a.map)
-    # THE MESSENGER TO SET, if one is named -- or the session's, if it is
-    # plugged in -- and its Moog parts set to their programs now it is open
-    _mport = a.messenger or (sess or {}).get("messenger_port")
-    if a.messenger_firmware:
-        live.messenger_firmware = a.messenger_firmware
-    if a.messenger_bend:
-        live.messenger_bend = a.messenger_bend
-    if _mport and _mport.lower() != "none":
-        try:
-            _mn = live.open_messenger(_mport)
-        except Exception:
-            _mn = None
-        if _mn:
-            _ms = sum(live.messenger_sync(p) for p in live.parts)
-            sys.stderr.write("  Messenger on %s (%s chart): %d CCs sent\n"
-                             % (_mn, live.messenger_firmware, _ms))
-        elif a.messenger:
-            sys.stderr.write("  no MIDI output matches %r (outputs: %s)\n"
-                             % (a.messenger, ", ".join(mido.get_output_names())))
-    live.dirty = False
+
+    def start(progress=None, say=None, step=None):
+        """Everything the parts need: the room they are built in, the preset
+        or the last session (or the --program part), the standard, the
+        Messenger, the patches warmed. Here before the stream opens; on the
+        panel's builder (livetui.run) after it, with `progress`, `say` (a
+        line for the player) and `step` (what is building, for its bar)."""
+        say = say or (lambda m: sys.stderr.write("  %s\n" % m))
+        step = step or (lambda lab: None)
+        _room = (a.room or (sess or {}).get("room") or os.environ.get("TUNING_ROOM") or "hall")
+        step("the room (%s)" % _room)
+        live.enable_room(_room)
+        if pres is not None:
+            step("preset %s" % a.preset)
+            apply_preset(live, pres, progress)
+        elif sess:
+            step("the last session")
+            try:
+                apply_preset(live, sess, progress)
+                say("resumed the last session (--fresh to start clean)")
+            except Exception as e:
+                say("the last session would not apply (%s); starting clean" % e)
+        if not live.parts:
+            # (the panel's rig starts empty: no preset or session, or one that
+            # did not apply -- the --program part, as without the panel)
+            step("program %d" % a.program)
+            live.set_parts([Part.from_dict(dict(program=a.program, drums=bool(a.drums), tuner=a.tuner),
+                                           progress, getattr(live, "eastern", None))])
+        # THE STANDARD, if named: over the session's
+        if a.map is not None:
+            live.std_map = B.map_number(a.map)
+        # THE MESSENGER TO SET, if one is named -- or the session's, if it is
+        # plugged in -- and its Moog parts set to their programs now it is open
+        _mport = a.messenger or (sess or {}).get("messenger_port")
+        if a.messenger_firmware:
+            live.messenger_firmware = a.messenger_firmware
+        if a.messenger_bend:
+            live.messenger_bend = a.messenger_bend
+        if _mport and _mport.lower() != "none":
+            try:
+                _mn = live.open_messenger(_mport)
+            except Exception:
+                _mn = None
+            if _mn:
+                _ms = sum(live.messenger_sync(p) for p in live.parts)
+                say("Messenger on %s (%s chart): %d CCs sent" % (_mn, live.messenger_firmware, _ms))
+            elif a.messenger:
+                say("no MIDI output matches %r (outputs: %s)"
+                    % (a.messenger, ", ".join(mido.get_output_names())))
+        live.dirty = False
+        step("warming the patches")
+        live.warm(progress)
+        if a.midi2_play:
+            play_ump_file(live, a.midi2_play)
+
     if a.midi2 or a.midi2_pitch:
         import ump as _U
         live.midi2 = _U.Midi1to2(pitch_of=_U.pitch_table(a.midi2_pitch) if a.midi2_pitch else None)
@@ -21361,9 +21412,8 @@ def main():
             else:
                 sys.exit("--mpe: lower, upper, both, or lower:N / upper:N")
         sys.stderr.write("  %s\n" % live.mpe_label())
-    live.warm()
-    if a.midi2_play:
-        play_ump_file(live, a.midi2_play)
+    if not a.tui:
+        start()
     uc = None
     if a.ump or a.ump_from:
         import alsaump
@@ -21380,7 +21430,7 @@ def main():
 
     if a.tui:
         import livetui
-        return livetui.run(live, name, uc)
+        return livetui.run(live, name, uc, start=start)
 
     if a.drums:
         sys.stderr.write("  GM percussion at %d Hz, %d-frame blocks\n" % (a.rate, a.frames))

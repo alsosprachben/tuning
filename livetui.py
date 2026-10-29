@@ -321,7 +321,9 @@ class Builder(threading.Thread):
                 if self.stop:
                     return
                 label, fn = self.q.popleft()
-            self.label, self.frac = label, 0.0
+            # (a new job clears the last one's failure: it is old news, and
+            # the panel's line is for what is happening now)
+            self.label, self.frac, self.error = label, 0.0, None
             try:
                 fn(self.progress)
             except Exception as e:
@@ -476,8 +478,11 @@ STOP_KEYS, STOP_LABELS, STOP_KEYS_FROM = stop_keymap()
 # desktop whose window manager keeps Alt. Backtick: on no layout a digit-row
 # level, so never a stop key itself.
 STOP_PREFIX = "`"
-# A panel control cannot be bound to a stop key.
-HOTKEYS_FREE = HOTKEYS_FREE - set(STOP_KEYS)
+# A panel control cannot be bound to a stop key -- nor to the synth pane's own
+# keys (B layer, D defaults, F firmware, M Messenger, T send, 0 zero): a hotkey
+# fires from every pane, ahead of the pane's own keys, and took them over.
+SYNTH_PANE_KEYS = set("BDFMT0")
+HOTKEYS_FREE = HOTKEYS_FREE - set(STOP_KEYS) - SYNTH_PANE_KEYS
 
 
 
@@ -495,14 +500,16 @@ class TUI:
         self.grow = 0           # selected global
         self.meter = 0.0
         self.message = ""
-        self.msg_until = 0.0
+        self.msg_at = self.msg_until = 0.0
+        self._err_seen = {}     # which error -> (its text, when it first showed)
         self.help = False
         self._colors = {}
 
     # ---- helpers ------------------------------------------------------------
     def say(self, msg, secs=3.0):
         self.message = msg
-        self.msg_until = time.monotonic() + secs
+        self.msg_at = time.monotonic()
+        self.msg_until = self.msg_at + secs
 
     def parts(self):
         return list(self.live.parts)
@@ -573,22 +580,31 @@ class TUI:
         elif i == 9:
             on = v >= 0.5
             if on != isinstance(L.renderer, LV.GpuRenderer):
-                old = L.renderer
-                L.renderer = LV.make_renderer(L.slab, L.frames, old.K, on)
-                L.slab.dirty = True
-                old.close()
-                if on and not isinstance(L.renderer, LV.GpuRenderer):
+                new = LV.make_renderer(L.slab, L.frames, L.renderer.K, on)
+                self.swap_renderer(new)
+                if on and not isinstance(new, LV.GpuRenderer):
                     self.say("gpu: not available -- %s" % LV.GPU_ERROR)
         else:
-            # A new worker pool, swapped in by one atomic assignment. The old
-            # one is told to stop; its threads are daemons and exit on their own.
             k = int(round(v))
             if k != L.renderer.K:
-                old = L.renderer
-                L.renderer = LV.make_renderer(L.slab, L.frames, k,
-                                              isinstance(old, LV.GpuRenderer))
-                L.slab.dirty = True
-                old.close()
+                self.swap_renderer(LV.make_renderer(L.slab, L.frames, k,
+                                                    isinstance(L.renderer, LV.GpuRenderer)))
+
+    def swap_renderer(self, new):
+        """A new renderer (threads, gpu), made here -- a GPU context takes a
+        while -- and SWAPPED BY THE AUDIO THREAD, between two blocks. It was
+        swapped and the old one closed from here, while the callback could be
+        inside the old one's render: it read live.renderer five times a block
+        (two renderers in one block), and a worker told to stop mid-block
+        returned without saying it was done -- the callback waiting on it for
+        ever, the audio gone for good."""
+        L = self.live
+
+        def go(n0):
+            old, L.renderer = L.renderer, new
+            L.slab.dirty = True
+            old.close()                  # no render of it is running: this is between blocks
+        L.post(go)
 
     def metronome(self, bpm, ring):
         """Set the metronome. Its drum part is built the first time it is
@@ -618,10 +634,40 @@ class TUI:
             L.set_metronome(bpm, ring)
 
     # ---- edits that need a patch --------------------------------------------
-    def rebuild(self, label, specs):
-        """Replace the whole part set from a list of spec dicts, off-thread."""
+    # WHAT A CHEAP EDIT WRITES straight onto a live Part (adjust, type_value,
+    # mute, touch, M): carried onto the new parts when a rebuild lands, if it
+    # was made while the rebuild was building
+    CARRY = ("channel", "lo", "hi", "transpose", "level_db", "muted", "fixed_touch",
+             "pan", "cc_map")
+
+    def rebuild(self, label, edit):
+        """Replace the whole part set, off-thread: `edit(specs)` -> the new
+        specs (None: nothing to do), applied to the parts AS THEY ARE WHEN THE
+        BUILD STARTS. It took a list made when the key was pressed, and the
+        build swapped all of it in: pick part 1's patch, then part 2's before
+        the first build landed, and part 1 went back; + twice stepped once.
+        Now each queued edit sees the one before it. And what a cheap edit
+        wrote onto the old parts while this built -- a level, a channel, a
+        mute -- is carried onto the new ones (CARRY): the swap lost it."""
         def job(progress):
+            before = self.specs()
+            for i, s in enumerate(before):
+                s["_row"] = i
+            specs = edit([dict(s) for s in before])
+            if specs is None:
+                return
             parts = [LV.Part.from_dict(s, progress, getattr(self.live, "eastern", None)) for s in specs]
+            now = self.specs()
+            if len(now) == len(before):
+                for p, s in zip(parts, specs):
+                    r = s.get("_row")
+                    if r is None:
+                        continue
+                    for k in self.CARRY:
+                        # changed on the old part since the build began, and
+                        # not by this edit itself
+                        if now[r].get(k) != before[r].get(k) and s.get(k) == before[r].get(k):
+                            setattr(p, k, now[r].get(k))
             self.live.set_parts(parts)
         self.builder.submit(label, job)
 
@@ -632,8 +678,21 @@ class TUI:
         p = self.sel()
         if p is None:
             return
-        specs = self.specs()
-        s = specs[self.row]
+        row = self.row
+
+        def edit(specs):
+            if row >= len(specs):
+                return None
+            s = specs[row]
+            if not self._patch_edit(s, delta, program, drums, bank, std):
+                return None
+            self.builder.label = patch_label(s)
+            return specs
+        # (the label the build starts under; its own, once it knows the patch)
+        self.rebuild("part %d patch" % (row + 1), edit)
+
+    def _patch_edit(self, s, delta, program, drums, bank, std):
+        """change_patch's edit of one part's spec; False: nothing to change."""
         # A NEW PATCH IS ON ITS CAPITAL TONE unless a bank is asked for: stepping
         # programs leaves a variation, as a Sound Canvas's program buttons do
         s.pop("bank", None)
@@ -660,45 +719,59 @@ class TUI:
                 if delta > 0:
                     s["drums"], s["program"] = False, 0
                 else:
-                    return
+                    return False
             else:
                 n = s["program"] + delta
                 if n < 0:
                     s["drums"] = True
                 elif n > 127:
-                    return
+                    return False
                 else:
                     s["program"] = n
         s["drawn"] = []          # a new patch has its own stops
-        self.rebuild(patch_label(s), specs)
+        return True
 
     def change_tuner(self, delta):
         p = self.sel()
         if p is None:
             return
-        specs = self.specs()
-        s = specs[self.row]
-        i = (TUNERS.index(s["tuner"]) if s["tuner"] in TUNERS else 0) + delta
-        s["tuner"] = TUNERS[max(0, min(len(TUNERS) - 1, i))]
-        self.rebuild("%s / %s" % (patch_label(s), s["tuner"]), specs)
+        row = self.row
+
+        def edit(specs):
+            if row >= len(specs):
+                return None
+            s = specs[row]
+            i = (TUNERS.index(s["tuner"]) if s["tuner"] in TUNERS else 0) + delta
+            s["tuner"] = TUNERS[max(0, min(len(TUNERS) - 1, i))]
+            self.builder.label = "%s / %s" % (patch_label(s), s["tuner"])
+            return specs
+        self.rebuild("part %d tuner" % (row + 1), edit)
 
     def add_part(self):
-        specs = self.specs()
-        if not specs:
-            specs = [dict(program=56, drums=False, tuner="hybrid440", lo=0, hi=127)]
-        else:
-            specs.insert(self.row + 1, dict(specs[self.row]))
-        self.rebuild("layer", specs)
+        row = self.row
+
+        def edit(specs):
+            if not specs:
+                return [dict(program=56, drums=False, tuner="hybrid440", lo=0, hi=127)]
+            r = min(row, len(specs) - 1)
+            specs.insert(r + 1, dict(specs[r]))
+            return specs
+        self.rebuild("layer", edit)
         self.row += 1
         self.say("layered -- same keys, same channel; change its patch or zone")
 
     def del_part(self):
-        specs = self.specs()
-        if len(specs) <= 1:
+        if len(self.parts()) <= 1:
             self.say("the last part cannot be removed")
             return
-        specs.pop(self.row)
-        self.rebuild("remove part", specs)
+        row = self.row
+
+        def edit(specs):
+            if len(specs) <= 1 or row >= len(specs):
+                return None
+            specs.pop(row)
+            return specs
+        self.rebuild("remove part", edit)
         self.row = max(0, self.row - 1)
 
     def split_here(self):
@@ -711,12 +784,17 @@ class TUI:
         if mid <= p.lo or mid >= p.hi:
             self.say("range too small to split")
             return
-        specs = self.specs()
-        upper = dict(specs[self.row])
-        specs[self.row]["hi"] = mid
-        upper["lo"] = mid + 1
-        specs.insert(self.row + 1, upper)
-        self.rebuild("split", specs)
+        row = self.row
+
+        def edit(specs):
+            if row >= len(specs):
+                return None
+            upper = dict(specs[row])
+            specs[row]["hi"] = mid
+            upper["lo"] = mid + 1
+            specs.insert(row + 1, upper)
+            return specs
+        self.rebuild("split", edit)
         self.say("split at %s -- now change the upper part's patch" % note_name(mid))
 
     # ---- cheap edits --------------------------------------------------------
@@ -1014,9 +1092,14 @@ class TUI:
                          start)
         if pick is None or TUNERS[pick] == own:
             return
-        specs = self.specs()
-        specs[self.row]["tuner"] = TUNERS[pick]
-        self.rebuild("%s / %s" % (patch_label(specs[self.row]), TUNERS[pick]), specs)
+        row, tuner = self.row, TUNERS[pick]
+
+        def edit(specs):
+            if row >= len(specs):
+                return None
+            specs[row]["tuner"] = tuner
+            return specs
+        self.rebuild("%s / %s" % (p.label(), tuner), edit)
 
     def pick_eastern(self, scr):
         """THE EASTERN TUNING, the rig's secondary (ragas.py): a SYSTEM of swara
@@ -1333,11 +1416,14 @@ class TUI:
                 k = min(len(vals) - 1, j + 10)
             elif 48 <= c <= 57:
                 got = self.prompt(scr, "%s raw value = %s" % (nm, chr(c)))
-                try:
-                    x = int(chr(c) + (got or ""), 10)
-                    k = vals.index(min(vals, key=lambda y: abs(y - x)))
-                except ValueError:
-                    pass
+                # (Esc there is None: nothing typed is applied -- it set the
+                # first digit, which was never meant)
+                if got is not None:
+                    try:
+                        x = int(chr(c) + got, 10)
+                        k = vals.index(min(vals, key=lambda y: abs(y - x)))
+                    except ValueError:
+                        pass
             elif c in (10, 13):
                 return
             elif c == 27:
@@ -1819,6 +1905,9 @@ class TUI:
         self.addstr(scr, y, 0, hdr[:w - 1],
                     curses.A_BOLD | (C("cyan") if self.pane == 0 else C("dim")))
         y += 1
+        if not self.parts() and getattr(L, "starting", False):
+            self.addstr(scr, y, 6, "starting -- the parts appear when they are built (below)", C("dim"))
+            y += 1
         for i, p in enumerate(self.parts()):
             if y >= h - 12:
                 break
@@ -2182,12 +2271,24 @@ class TUI:
             self.addstr(scr, h - 2, 2, "building %s  %s  %d%%"
                         % (lab, bar(self.builder.frac, 0, 1, 20),
                            int(self.builder.frac * 100)), C("yellow") | curses.A_BOLD)
-        elif self.builder.error:
-            self.addstr(scr, h - 2, 2, "build failed: " + self.builder.error, C("red"))
-        elif s["last_error"]:
-            self.addstr(scr, h - 2, 2, "last error: " + s["last_error"], C("red"))
-        elif time.monotonic() < self.msg_until:
-            self.addstr(scr, h - 2, 2, self.message, C("green"))
+        else:
+            # THE NEWEST OF: a build's failure, the engine's last error, a
+            # message -- each for its time. The errors latched: neither was
+            # ever cleared, so after one, no message showed again all session
+            # ("press the key on your keyboard" among them). The health line's
+            # err count stays, red, for the record.
+            now = time.monotonic()
+            line = None
+            for which, txt in (("build", self.builder.error), ("engine", s["last_error"])):
+                was = self._err_seen.get(which)
+                if txt and (was is None or was[0] != txt):
+                    self._err_seen[which] = was = (txt, now)
+                if txt and now - was[1] < self.ERR_SECS and (line is None or was[1] > line[0]):
+                    line = (was[1], ("build failed: " if which == "build" else "last error: ") + txt, "red")
+            if now < self.msg_until and (line is None or self.msg_at >= line[0]):
+                line = (self.msg_at, self.message, "green")
+            if line is not None:
+                self.addstr(scr, h - 2, 2, line[1], C(line[2]))
         keys = (("tab pane   a control   r route   d del   space toggle   "
                  "-/+ step   enter value   b hotkey   ? help   q quit")
                 if self.pane == 2 else
@@ -2197,6 +2298,8 @@ class TUI:
         if self.help:
             self.draw_help(scr)
         scr.refresh()
+
+    ERR_SECS = 10.0
 
     def cell(self, p, c):
         if c == "patch":
@@ -2551,6 +2654,14 @@ class TUI:
         # assumed: see the keycode probe in the commit message.
         scr.keypad(True)
         scr.timeout(50)                 # 20 Hz redraw; supersedes nodelay
+        # ESCAPE AT ONCE: curses holds a bare Esc for ESCDELAY (1000 ms) in
+        # case an arrow key's sequence follows -- every Esc in a menu, prompt
+        # or the effect editor answered a second late. A terminal sends a
+        # sequence's bytes together; 25 ms is plenty to tell them apart.
+        try:
+            curses.set_escdelay(25)
+        except (AttributeError, curses.error):
+            pass
         try:
             curses.start_color(); curses.use_default_colors()
             for i, name in enumerate(("red", "green", "yellow", "cyan")):
@@ -2777,9 +2888,12 @@ def signed_bar(v, n):
     return _bar(-d, n, left=True) + "\u2502" + " " * n
 
 
-def run(live, port_name, ump_client=None):
+def run(live, port_name, ump_client=None, start=None):
     """Open audio and MIDI, then hand the terminal to curses. With no
-    `port_name` the MIDI arrives some other way -- the ALSA MIDI 2.0 client."""
+    `port_name` the MIDI arrives some other way -- the ALSA MIDI 2.0 client.
+    `start(progress, say, step)`, if given, is the rig's own start (live.main:
+    the room, the session, the warming), run as the panel's first build so
+    the panel shows at once and the start's progress on it."""
     # STDERR TO A LOG while curses has the screen: what PyAudio, PortAudio or
     # a thread prints there was drawn over and lost (Ben's hang of 2026-10-28
     # left no word). live_stderr.log, next to live_dump.txt, appended per session.
@@ -2788,19 +2902,39 @@ def run(live, port_name, ump_client=None):
     sys.stderr.flush()
     _err_fd = os.dup(2)
     os.dup2(_log.fileno(), 2)
-    pa, stream = LV.open_stream(live, live.rate, live.frames)
-    port = mido.open_input(port_name, callback=live.on_midi) if port_name else None
-    ui = TUI(live, port_name or ("ALSA %s" % ump_client.address if ump_client else "no MIDI"))
-    ui.free_hotkeys()
-    stream.start_stream()
+    # ...AND BACK, whatever fails: the stream, the MIDI port and the panel are
+    # opened inside the try, so a keyboard unplugged or an audio device that
+    # will not open says so on the terminal, not only in the log
+    pa = stream = port = ui = None
     try:
+        pa, stream = LV.open_stream(live, live.rate, live.frames)
+        port = mido.open_input(port_name, callback=live.on_midi) if port_name else None
+        ui = TUI(live, port_name or ("ALSA %s" % ump_client.address if ump_client else "no MIDI"))
+        stream.start_stream()
+        if start is not None:
+            live.starting = True
+
+            def job(progress):
+                try:
+                    start(progress, say=lambda m: ui.say(m, 6.0),
+                          step=lambda lab: setattr(ui.builder, "label", "starting: " + lab))
+                finally:
+                    live.starting = False
+                ui.free_hotkeys()        # (the session's controls are in now)
+            ui.builder.submit("starting", job)
+        else:
+            ui.free_hotkeys()
         curses.wrapper(ui.loop)
     except KeyboardInterrupt:
         pass
     finally:
-        ui.builder.stop = True
+        if ui is not None:
+            ui.builder.stop = True
         live.stop_kicker()
-        stream.stop_stream(); stream.close(); pa.terminate()
+        if stream is not None:
+            stream.stop_stream(); stream.close()
+        if pa is not None:
+            pa.terminate()
         sys.stderr.flush()
         os.dup2(_err_fd, 2)
         os.close(_err_fd)
