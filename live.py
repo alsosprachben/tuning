@@ -4363,6 +4363,7 @@ class Live:
         self.last_error = None
         self.peak = 0.0
         self.last_peak = 0.0
+        self.last_lr = (0.0, 0.0)
         self.render_ms = 0.0    # last block's kernel time, against the budget
         self.render_max = 0.0
         self.blocks = 0
@@ -10743,7 +10744,9 @@ class Live:
         if self.blocks > 16 and self.render_ms > self.render_max:
             self.render_max = self.render_ms
         self.n = n0 + frame_count
-        p = float(max(np.abs(L).max(), np.abs(R).max()))
+        # (each side's, for the panel's stereo meter; the peak is the larger)
+        self.last_lr = (float(np.abs(L).max()), float(np.abs(R).max()))
+        p = max(self.last_lr)
         if CLIPLOG and (not (p < CLIPLOG_PEAK)) and n0 - self._clip_at > self.rate:
             self._clip_at = n0
             self._clip_snap(n0, p)
@@ -10809,7 +10812,7 @@ class Live:
 
     def stats(self):
         return dict(t=self.n / self.rate, peak=self.peak,
-                    last_peak=self.last_peak,
+                    last_peak=self.last_peak, last_lr=self.last_lr,
                     sounding=self._sounding_count(),
                     used=self.slab.cap - len(self.slab.free), cap=self.slab.cap,
                     free=len(self.slab.free),

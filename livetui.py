@@ -504,6 +504,13 @@ class TUI:
         self._err_seen = {}     # which error -> (its text, when it first showed)
         self.help = False
         self._colors = {}
+        self._pairs = {}
+        self.rich = False               # the 256-colour palette (init_theme)
+        self._mlev = [0.0, 0.0]         # the stereo meter's fall
+        self._mhold = [(0.0, 0.0), (0.0, 0.0)]   # its peak holds: (level, when)
+        self._cpu_hist = collections.deque(maxlen=48)
+        self._cpu_acc, self._cpu_n = 0.0, 0
+        self._health = {}               # count -> (value, when it last rose)
 
     # ---- helpers ------------------------------------------------------------
     def say(self, msg, secs=3.0):
@@ -918,7 +925,9 @@ class TUI:
         try:
             while True:
                 scr.move(h - 1, 0); scr.clrtoeol()
-                self.addstr(scr, h - 1, 0, (label + buf)[:w - 1], curses.A_BOLD)
+                self.addstr(scr, h - 1, 0, label[:w - 1], self.C("accent") | curses.A_BOLD)
+                self.addstr(scr, h - 1, len(label), buf[:max(0, w - 1 - len(label))] + "_",
+                            self.C("value") | curses.A_BOLD)
                 scr.refresh()
                 c = scr.getch()
                 if c == -1:
@@ -971,25 +980,25 @@ class TUI:
             pos = vis.index(i) if i in vis else 0
             n = min(max(len(vis), 1), max(3, h - 8))
             top = max(0, min(pos - n // 2, len(vis) - n))
-            bw = min(w - 4, max(len(title) + 4, max((len(x) for x in here), default=10) + 8))
+            bw = min(w - 4, max(len(title) + 8, max((len(x) for x in here), default=10) + 8))
             y0 = max(0, (h - n) // 2 - 1)
             x0 = max(0, (w - bw) // 2)
-            for y in range(y0 - 1, y0 + n + 2):
-                self.addstr(scr, y, x0, " " * bw, curses.A_REVERSE)
-            self.addstr(scr, y0 - 1, x0 + 2, title[:bw - 4], curses.A_REVERSE | curses.A_BOLD)
+            foot = (("/" + query + ("_" if searching else "") + "   %d found" % len(vis)) if (searching or query)
+                    else "enter select   / search   esc cancel")
+            self.box(scr, y0 - 1, x0, n + 3, bw, title, foot)
+            if searching or query:
+                self.addstr(scr, y0 + n + 1, x0 + 3, ("/" + query + ("_" if searching else ""))[:bw - 6],
+                            self.C("accent") | curses.A_BOLD)
             for k in range(n):
                 if top + k >= len(vis):
                     if not vis and k == 0:
-                        self.addstr(scr, y0, x0, ("   (nothing matches)")[:bw], curses.A_REVERSE)
+                        self.addstr(scr, y0, x0 + 2, "(nothing matches)"[:bw - 4], self.C("dim"))
                     continue
                 j = vis[top + k]
-                mark = ">" if j == i else " "
-                txt = " %s %-*s" % (mark, bw - 5, here[j][:bw - 5])
-                self.addstr(scr, y0 + k, x0, txt[:bw],
-                            curses.A_REVERSE | (curses.A_BOLD if j == i else 0))
-            foot = (("/" + query + ("_" if searching else "") + "   %d found" % len(vis)) if (searching or query)
-                    else "enter select   / search   esc cancel")
-            self.addstr(scr, y0 + n + 1, x0 + 2, foot[:bw - 4], curses.A_REVERSE)
+                txt = " %-*s" % (bw - 5, here[j][:bw - 5])
+                at = (self.C("sel") | curses.A_BOLD if j == i else
+                      self.C("label") if here[j].startswith("--") else self.C("text"))
+                self.addstr(scr, y0 + k, x0 + 1, txt[:bw - 2], at)
             scr.refresh()
             c = scr.getch()
             if c == -1:
@@ -1193,24 +1202,18 @@ class TUI:
             h, w = scr.getmaxyx()
             n = min(len(items), max(3, h - 8))
             top = max(0, min(i - n // 2, len(items) - n))
-            bw = min(w - 4, max(len(title) + 6,
+            bw = min(w - 4, max(len(title) + 8,
                                 max((len(x) for x in items), default=10) + 10))
             y0 = max(0, (h - n) // 2 - 1)
             x0 = max(0, (w - bw) // 2)
-            for y in range(y0 - 1, y0 + n + 2):
-                self.addstr(scr, y, x0, " " * bw, curses.A_REVERSE)
-            self.addstr(scr, y0 - 1, x0 + 2, title[:bw - 4],
-                        curses.A_REVERSE | curses.A_BOLD)
+            self.box(scr, y0 - 1, x0, n + 3, bw, title, "space toggle   enter accept   esc cancel")
             for k in range(n):
                 j = top + k
-                txt = " %s [%s] %-*s" % (">" if j == i else " ",
-                                         "x" if j in chosen else " ",
-                                         bw - 9, items[j][:bw - 9])
-                self.addstr(scr, y0 + k, x0, txt[:bw],
-                            curses.A_REVERSE | (curses.A_BOLD if j == i else 0))
-            self.addstr(scr, y0 + n + 1, x0 + 2,
-                        "space toggle   enter accept   esc cancel"[:bw - 4],
-                        curses.A_REVERSE)
+                on = j in chosen
+                txt = " %s %-*s" % ("\u25cf" if on else "\u25cb", bw - 7, items[j][:bw - 7])
+                at = (self.C("sel") | curses.A_BOLD if j == i else
+                      (self.C("accent") if on else self.C("text")))
+                self.addstr(scr, y0 + k, x0 + 1, txt[:bw - 2], at)
             scr.refresh()
             c = scr.getch()
             if c == -1:
@@ -1806,7 +1809,7 @@ class TUI:
         """The pane itself, between the part table and the meters."""
         C = self.C
         L = self.live
-        self.addstr(scr, y, 0, "-" * (w - 1), C("dim"))
+        self.rule(scr, y, w, "CONTROLS & ROUTES", self.pane == 2)
         y += 1
         rows = self.ctl_rows()
         sel = self.ctl_sel() if self.pane == 2 else None
@@ -1885,102 +1888,128 @@ class TUI:
         L = self.live
         s = L.stats()
         C = self.C
-        y = 0
-
-        # header
-        self.addstr(scr, y, 1, "tuning", curses.A_BOLD | C("cyan"))
-        self.addstr(scr, y, 8, "%d Hz   %d frames   %.1f ms/block"
-                    % (L.rate, L.frames, s["budget_ms"]), C("dim"))
-        if getattr(L, "eastern", None):
-            self.addstr(scr, y, 40, ("eastern " + L.eastern)[:max(0, w - 82)], C("cyan"))
-        pn = self.port_name + ("  " + L.midi2_label if L.midi2_label else "") \
-            + ("  " + L.mpe_label() if L.mpe else "")
-        self.addstr(scr, y, max(40, w - len(pn) - 2), pn[:max(0, w - 42)], C("dim"))
-        y += 1
-        self.addstr(scr, y, 0, "-" * (w - 1), C("dim"))
-        y += 1
-
-        # parts
+        # THE OUTPUT SECTION SITS ON THE BOTTOM (draw_meters), where it does
+        # not move as parts come and go; everything else above it
+        bottom = h - 5
+        self.draw_header(scr, w, s)
+        starting = getattr(L, "starting", False)
+        self.rule(scr, 1, w, "PARTS", self.pane == 0,
+                  right=("%d part%s" % (len(self.parts()), "" if len(self.parts()) == 1 else "s")))
+        y = 2
         hdr = "   #  " + "".join("%-*s" % (COL_W[c], c) for c in COLS)
-        self.addstr(scr, y, 0, hdr[:w - 1],
-                    curses.A_BOLD | (C("cyan") if self.pane == 0 else C("dim")))
+        self.addstr(scr, y, 0, hdr[:w - 1], C("label"))
         y += 1
-        if not self.parts() and getattr(L, "starting", False):
-            self.addstr(scr, y, 6, "starting -- the parts appear when they are built (below)", C("dim"))
+        if not self.parts() and starting:
+            self.addstr(scr, y, 6, "starting -- the parts appear when they are built", C("dim"))
             y += 1
         for i, p in enumerate(self.parts()):
-            if y >= h - 12:
+            if y >= bottom - 6:
                 break
-            here = (self.pane == 0 and i == self.row)
-            self.addstr(scr, y, 0, "%s %2d " % (">" if here else " ", i + 1),
-                        curses.A_BOLD if here else 0)
+            sel = i == self.row
+            here = self.pane == 0 and sel
+            # the part the other panes act on keeps its mark there, fainter
+            self.addstr(scr, y, 0, "\u258c" if sel else " ",
+                        C("accent") if here else C("faint"))
+            self.addstr(scr, y, 2, "%2d" % (i + 1),
+                        (C("accent") | curses.A_BOLD) if here else C("dim"))
             x = 6
             for ci, c in enumerate(COLS):
                 txt = self.cell(p, c)
-                at = 0
-                if here and ci == self.col:
-                    at = curses.A_REVERSE
-                elif here:
-                    at = curses.A_BOLD
                 if p.muted:
-                    at |= C("dim")
+                    at = C("dim")
+                elif c == "patch":
+                    at = self.hue(p)
+                else:
+                    at = C("text")
+                if here and ci == self.col:
+                    at = C("sel")
+                elif here:
+                    at |= curses.A_BOLD
                 self.addstr(scr, y, x, "%-*s" % (COL_W[c], txt[:COL_W[c] - 1]), at)
                 x += COL_W[c]
             if p.muted:
-                self.addstr(scr, y, x, "muted", C("dim"))
+                self.addstr(scr, y, x, "muted", C("warn"))
             y += 1
             # The full registration goes UNDERNEATH the selected row, not off to
             # the right of it: at x=70 on an 80-column terminal it was clipped
             # clean off the screen, which is no way to show a registration.
             if here and p.organ:
                 for ln in self.stops_lines(p, max(20, w - 8)):
-                    if y >= h - 12:
+                    if y >= bottom - 6:
                         break
-                    self.addstr(scr, y, 6, ln, C("yellow"))
+                    self.draw_stops_line(scr, y, 6, ln)
                     y += 1
         # THE INSERTION EFFECT: one for the module, the parts on it
         _ef = L.efx
         if _ef['type'] != (0, 0) or L.efx_parts:
             _on = ", ".join(str(c + 1) for c in sorted(L.efx_parts)) or "none"
-            self.addstr(scr, y, 6, ("EFX  %s   channels %s   (X to edit)"
-                                    % (GSX.TYPES.get(_ef['type'], "?"), _on))[:w - 8], C("cyan"))
+            self.addstr(scr, y, 6, "EFX", C("accent2") | curses.A_BOLD)
+            self.addstr(scr, y, 10, ("%s   channels %s   (X to edit)"
+                                     % (GSX.TYPES.get(_ef['type'], "?"), _on))[:w - 12], C("accent2"))
             y += 1
-        y += 1
 
         if self.pane == 2:
-            y = self.draw_controls(scr, y, w, h - 6)
+            self.draw_controls(scr, y, w, bottom)
         elif self.pane == 3:
-            y = self.draw_synth(scr, y, w, h)
+            self.draw_synth(scr, y, w, bottom + 4)
         else:
-            y = self.draw_globals(scr, y, w, h)
+            self.draw_globals(scr, y, w, bottom)
+        self.draw_meters(scr, w, h, s)
 
-        self.draw_meters(scr, y, w, h, s)
+    def draw_header(self, scr, w, s):
+        """The top line: the name, the stream, the eastern tuning, the port,
+        and a lamp for the audio thread's scheduling."""
+        L, C = self.live, self.C
+        self.addstr(scr, 0, 1, "\u25c6 tuning", C("accent") | curses.A_BOLD)
+        self.addstr(scr, 0, 12, "%g kHz \u00b7 %d frames \u00b7 %.1f ms"
+                    % (L.rate / 1000.0, L.frames, s["budget_ms"]), C("dim"))
+        if getattr(L, "eastern", None):
+            self.addstr(scr, 0, 46, ("eastern " + L.eastern)[:max(0, w - 90)], C("accent2"))
+        rt = s.get("rt") or ""
+        lamp = ("\u25cf " + rt) if rt else ""
+        lcol = (C("ok") if rt.startswith("RT") else C("warn") if ("dropped" in rt or "refused" in rt)
+                else C("dim"))
+        pn = self.port_name + ("  " + L.midi2_label if L.midi2_label else "") \
+            + ("  " + L.mpe_label() if L.mpe else "")
+        xr = w - len(lamp) - 2
+        if lamp:
+            self.addstr(scr, 0, xr, lamp, lcol)
+        self.addstr(scr, 0, max(46, xr - len(pn) - 3), pn[:max(0, xr - 49)], C("dim"))
 
-    def draw_globals(self, scr, y, w, h):
+    def draw_stops_line(self, scr, y, x, ln):
+        """A registration line: the stops drawn ([name]) in the accent, the
+        rest in grey, their keys dim."""
+        import re
         C = self.C
-        # keyboard map
-        y = self.draw_keyboard(scr, y, w)
-        y += 1
+        self.addstr(scr, y, x, ln, C("label"))
+        for m in re.finditer(r"\[[^\]]*\]", ln):
+            self.addstr(scr, y, x + m.start(), m.group(0), C("accent") | curses.A_BOLD)
+        if ln.startswith("stops"):
+            self.addstr(scr, y, x, "stops", C("dim"))
 
-        # globals
-        self.addstr(scr, y, 0, "-" * (w - 1), C("dim"))
+    def draw_globals(self, scr, y, w, bottom):
+        C = self.C
+        y = self.draw_keyboard(scr, y, w, bottom)
+        if y >= bottom:
+            return y
+        self.rule(scr, y, w, "GLOBALS", self.pane == 1)
         y += 1
+        half = (len(GLOBALS) + 1) // 2
         for i, (name, unit, lo, hi, step) in enumerate(GLOBALS):
-            if y >= h - 4:
-                break
+            row = y + (i if i < half else i - half)
+            if row >= bottom:
+                continue
             v = self.get_global(i)
             here = (self.pane == 1 and i == self.grow)
-            half = (len(GLOBALS) + 1) // 2
             col = 0 if i < half else (w // 2)
-            row = y + (i if i < half else i - half)
-            self.addstr(scr, row, col + 2, "%-11s" % name,
-                        curses.A_REVERSE if here else 0)
-            self.addstr(scr, row, col + 14, "%8s" % fmt(v, unit),
-                        curses.A_BOLD if here else 0)
-            self.addstr(scr, row, col + 24, bar(v, lo, hi, 14),
-                        C("green") if here else C("dim"))
-        y += (len(GLOBALS) + 1) // 2
-        return y
+            self.addstr(scr, row, col + 1, "\u25b8" if here else " ", C("accent"))
+            self.addstr(scr, row, col + 3, "%-11s" % name,
+                        (C("accent") | curses.A_BOLD) if here else C("label"))
+            self.addstr(scr, row, col + 15, "%9s" % fmt(v, unit),
+                        C("value") | (curses.A_BOLD if here else 0))
+            self.track_bar(scr, row, col + 26, 0.0 if hi <= lo else (v - lo) / (hi - lo), 14,
+                           C("accent") if here else C("accent2"))
+        return y + half
 
     # ---- the synth panel (the fourth pane) ----------------------------------
     def synth_part(self):
@@ -2112,7 +2141,7 @@ class TUI:
 
     def draw_synth(self, scr, y, w, h):
         C = self.C
-        self.addstr(scr, y, 0, "-" * (w - 1), C("dim"))
+        self.rule(scr, y, w, "SYNTH", self.pane == 3)
         y += 1
         p = self.synth_part()
         if p is None:
@@ -2221,83 +2250,162 @@ class TUI:
             y += 1
         return y + 1
 
-    def draw_meters(self, scr, y, w, h, s):
-        C = self.C
-        L = self.live
-        # meters
-        self.addstr(scr, y, 0, "-" * (w - 1), C("dim"))
-        y += 1
-        self.meter = max(s["last_peak"], self.meter * 0.80)
-        pk = s["peak"]
-        pcol = "red" if pk > 0.99 else ("yellow" if pk > 0.85 else "green")
-        self.addstr(scr, y, 2, "out")
-        self.addstr(scr, y, 6, bar(self.meter, 0.0, 1.0, 22), C(pcol))
-        self.addstr(scr, y, 30, "%.3f  peak %.3f" % (self.meter, pk), C(pcol))
-        use = s["used"] / float(s["cap"])
-        self.addstr(scr, y, 52, "voices %5d/%d" % (s["used"], s["cap"]),
-                    C("red") if use > 0.9 else 0)
-        y += 1
-        load = s["render_ms"] / max(s["budget_ms"], 1e-9)
-        lcol = "red" if load > 0.7 else ("yellow" if load > 0.4 else "dim")
-        self.addstr(scr, y, 2, "cpu")
-        self.addstr(scr, y, 6, bar(load, 0.0, 1.0, 22), C(lcol))
-        self.addstr(scr, y, 30, "%.2f/%.2f ms  max %.2f%s"
-                    % (s["render_ms"], s["budget_ms"], s["render_max"],
-                       (("  x%d" % s["threads"]) if s["threads"] > 1 else "")
-                       + ("  gpu" if s.get("on_gpu") else ("  (gpu)" if s.get("gpu") else ""))), C(lcol))
-        ws = L.wheel_state()
-        if ws:
-            self.addstr(scr, y + 1, 2, "mod")
-            self.addstr(scr, y + 1, 6,
-                        "wheel %3d%%  vibrato %5.1f-%5.1f c at %4.2f-%4.2f Hz   cc1 x%d last %d"
-                        % (int(ws["wheel"] * 100), ws["cents_lo"], ws["cents_hi"],
-                           ws["rate_lo"], ws["rate_hi"], ws["cc1"], ws["cc1_last"]),
-                        C("cyan") if ws["wheel"] > 0 else C("dim"))
-        bad = s["under"] + s["drop"] + s["err"] + s["miss"]
-        self.addstr(scr, y, 52, "under %d  drop %d  err %d  stuck %d  miss %d%s"
-                    % (s["under"], s["drop"], s["err"], s["stuck"], s["miss"],
-                       (("  efx %d cut %d" % (s.get("taps", 0), s.get("shed", 0)))
-                        if s.get("taps") or s.get("shed") else "")
-                       + ("  shed %d" % s["pshed"] if s.get("pshed") else "")
-                       + ("  late %d" % s["late"] if s.get("late") else "")
-                       + ("  kick %d" % s["kicks"] if s.get("kicks") else "")
-                       + ("  " + s["rt"] if s.get("rt") else "")),
-                    C("red") if bad else C("dim"))
-        y += 1
+    # THE KEYS, per pane: (key, what it does), drawn as a line of hints
+    PANE_KEYS = {
+        0: (("tab", "pane"), ("\u2191\u2193", "part"), ("\u2190\u2192", "column"), ("-/+", "change"),
+            ("\u23ce", "pick"), ("a", "layer"), ("s", "split"), ("d", "del"), ("m", "mute"),
+            ("S/L", "preset"), ("N/R", "scene"), ("?", "help"), ("q", "quit")),
+        1: (("tab", "pane"), ("\u2191\u2193", "setting"), ("-/+", "change"), ("_/+", "coarse"),
+            ("P", "panic"), ("S/L", "preset"), ("?", "help"), ("q", "quit")),
+        2: (("tab", "pane"), ("a", "control"), ("r", "route"), ("d", "del"), ("space", "toggle"),
+            ("-/+", "step"), ("\u23ce", "value"), ("b", "hotkey"), ("?", "help"), ("q", "quit")),
+        3: (("tab", "pane"), ("\u2191\u2193", "knob"), ("-/+", "turn"), ("space", "patch's"),
+            ("0", "zero"), ("D", "defaults"), ("B", "layer"), ("M", "Messenger"), ("T", "send"),
+            ("?", "help"), ("q", "quit")),
+    }
 
-        # builder / message / help line
+    def draw_meters(self, scr, w, h, s):
+        """THE OUTPUT SECTION, on the bottom: the stereo meter in dB (green,
+        amber, red; a peak held 1.5 s), the CPU's last seconds as a sparkline,
+        the voices, and the health -- quiet unless something went wrong
+        lately -- then the message line and the pane's keys."""
+        C = self.C
+        y = h - 5
+        self.rule(scr, y, w, "OUTPUT")
+        now = time.monotonic()
+        lr = s.get("last_lr") or (s["last_peak"], s["last_peak"])
+        # (laid out by the width: a narrow screen's meters and spark shorter)
+        mn = 26 if w >= 118 else 12
+        for k in (0, 1):
+            m = max(lr[k], self._mlev[k] * 0.8)
+            self._mlev[k] = m
+            if m >= self._mhold[k][0] or now - self._mhold[k][1] > 1.5:
+                self._mhold[k] = (m, now)
+            self.level_meter(scr, y + 1 + k, 2, "LR"[k], m, self._mhold[k][0], mn)
+        pk = s["peak"]
+        px = mn + 13
+        self.addstr(scr, y + 1, px, "peak", C("label"))
+        self.addstr(scr, y + 1, px + 5, ("%+.1f dB" % level_db(pk)) if pk > 1e-6 else "  -inf",
+                    C("bad") if pk > 0.99 else C("value"))
+        if pk > 0.99:
+            self.addstr(scr, y + 2, px, "CLIP", C("bad") | curses.A_BOLD)
+        # THE CPU: the slot's share, its worst of each 0.2 s, over ~10 s
+        load = s["render_ms"] / max(s["budget_ms"], 1e-9)
+        self._cpu_acc = max(self._cpu_acc, load)
+        self._cpu_n += 1
+        if self._cpu_n >= 4:
+            self._cpu_hist.append(self._cpu_acc)
+            self._cpu_acc, self._cpu_n = 0.0, 0
+        x = px + 15
+        sw = max(6, min(self._cpu_hist.maxlen, w - x - 33))
+        self.addstr(scr, y + 1, x, "cpu", C("label"))
+        cells = [(SPARK[min(7, int(min(1.0, v) * 7.999))],
+                  C("ok") if v < 0.5 else C("warn") if v < 0.85 else C("bad")) for v in self._cpu_hist]
+        if cells:
+            self.runs(scr, y + 1, x + 4, cells[-sw:])
+        # FIXED WIDTHS, the engine a word of its own: "gpu" when this block
+        # went to the GPU, "cpu" when it did not (the GPU takes a block only
+        # above gpu_min occupied slots; or it is off). It was "(gpu)" or "gpu"
+        # straight after the figures, and moved as they and it changed length
+        fig = "%5.2f/%.2f ms  max %5.1f" % (s["render_ms"], s["budget_ms"], s["render_max"])
+        fx = x + 5 + sw
+        self.addstr(scr, y + 1, fx, fig, C("bad") if load > 0.85 else C("text"))
+        on_gpu = bool(s.get("on_gpu"))
+        self.addstr(scr, y + 1, fx + len(fig) + 2, "gpu" if on_gpu else "cpu",
+                    (C("accent2") | curses.A_BOLD) if on_gpu else C("dim"))
+        if s["threads"] > 1:
+            self.addstr(scr, y + 1, fx + len(fig) + 6, "x%d" % s["threads"], C("dim"))
+        use = s["used"] / float(max(s["cap"], 1))
+        self.addstr(scr, y + 2, x, "voices", C("label"))
+        self.addstr(scr, y + 2, x + 7, "%d/%d" % (s["used"], s["cap"]),
+                    C("bad") if use > 0.9 else C("text"))
+        # THE HEALTH: each count that is not zero, amber (red for the ones
+        # that lose notes) for 10 s after it rose, then grey -- a record
+        items, fresh = [], False
+        for key, lab, worse in (("under", "under", False), ("late", "late", False), ("kicks", "kick", False),
+                                ("drop", "drop", True), ("err", "err", True), ("stuck", "stuck", True),
+                                ("miss", "miss", True), ("pshed", "shed", False), ("shed", "efx cut", False)):
+            v = int(s.get(key) or 0)
+            was = self._health.get(key, (0, -1e9))
+            if v > was[0]:
+                self._health[key] = was = (v, now)
+            elif v < was[0]:
+                self._health[key] = was = (v, was[1])
+            if v:
+                recent = now - was[1] < 10.0
+                fresh = fresh or recent
+                items.append(("%s %d" % (lab, v), (C("bad") if worse else C("warn")) if recent else C("dim")))
+        hx = x + 22
+        self.addstr(scr, y + 2, hx, "\u25cf", C("warn") if fresh else C("ok"))
+        hx += 2
+        if not items:
+            self.addstr(scr, y + 2, hx, "clean", C("ok"))
+        for txt, at in items:
+            self.addstr(scr, y + 2, hx, txt, at)
+            hx += len(txt) + 2
+
+        # builder / message line
         if self.builder.busy():
             lab = self.builder.label or "building"
-            self.addstr(scr, h - 2, 2, "building %s  %s  %d%%"
-                        % (lab, bar(self.builder.frac, 0, 1, 20),
-                           int(self.builder.frac * 100)), C("yellow") | curses.A_BOLD)
+            self.addstr(scr, h - 2, 2, "\u25cc %s" % lab, C("accent") | curses.A_BOLD)
+            bx = min(w - 30, 6 + len(lab))
+            self.track_bar(scr, h - 2, bx, self.builder.frac, 20, C("accent"))
+            self.addstr(scr, h - 2, bx + 21, "%d%%" % int(self.builder.frac * 100), C("accent"))
         else:
             # THE NEWEST OF: a build's failure, the engine's last error, a
             # message -- each for its time. The errors latched: neither was
             # ever cleared, so after one, no message showed again all session
             # ("press the key on your keyboard" among them). The health line's
-            # err count stays, red, for the record.
-            now = time.monotonic()
+            # err count stays, for the record.
             line = None
             for which, txt in (("build", self.builder.error), ("engine", s["last_error"])):
                 was = self._err_seen.get(which)
                 if txt and (was is None or was[0] != txt):
                     self._err_seen[which] = was = (txt, now)
                 if txt and now - was[1] < self.ERR_SECS and (line is None or was[1] > line[0]):
-                    line = (was[1], ("build failed: " if which == "build" else "last error: ") + txt, "red")
+                    line = (was[1], ("build failed: " if which == "build" else "last error: ") + txt, "bad")
             if now < self.msg_until and (line is None or self.msg_at >= line[0]):
-                line = (self.msg_at, self.message, "green")
+                line = (self.msg_at, self.message, "ok")
             if line is not None:
                 self.addstr(scr, h - 2, 2, line[1], C(line[2]))
-        keys = (("tab pane   a control   r route   d del   space toggle   "
-                 "-/+ step   enter value   b hotkey   ? help   q quit")
-                if self.pane == 2 else
-                ("tab pane   arrows move   -/+ change   enter patch   a layer   "
-                 "s split   d del   m mute   S/L preset   N/R scene   ? help   q quit"))
-        self.addstr(scr, h - 1, 1, keys, C("dim"))
+        x = 1
+        for k, what in self.PANE_KEYS.get(self.pane, ()):
+            if x + len(k) + len(what) + 2 >= w - 1:
+                break
+            self.addstr(scr, h - 1, x, k, C("accent"))
+            self.addstr(scr, h - 1, x + len(k) + 1, what, C("dim"))
+            x += len(k) + len(what) + 4
         if self.help:
             self.draw_help(scr)
         scr.refresh()
+
+    def level_meter(self, scr, y, x, lab, v, hold, n):
+        """One side of the stereo meter: dB over METER_FLOOR_DB..0, each cell
+        coloured by where it sits (green to -18, amber to -6, red above),
+        the held peak a bright tick, the level in figures after it."""
+        C = self.C
+        fl = METER_FLOOR_DB
+        f = max(0.0, min(1.0, (level_db(v) - fl) / -fl))
+        hf = max(0.0, min(1.0, (level_db(hold) - fl) / -fl))
+
+        def zone(c):
+            top = fl + (-fl) * (c + 1) / n
+            return C("ok") if top <= -18.0 else C("warn") if top <= -6.0 else C("bad")
+        cells = []
+        full = int(f * n)
+        for c in range(n):
+            if c < full:
+                cells.append(("\u2588", zone(c)))
+            elif c == full and f * n - full > 0.0:
+                cells.append((BAR_EIGHTHS[min(7, int((f * n - full) * 8))], zone(c)))
+            else:
+                cells.append(("\u00b7", C("faint")))
+        hi = min(n - 1, int(hf * n))
+        if hold > 1e-6 and hi >= full:
+            cells[hi] = ("\u2502", zone(hi) | curses.A_BOLD)
+        self.addstr(scr, y, x, lab, C("label"))
+        self.runs(scr, y, x + 2, cells)
+        self.addstr(scr, y, x + 3 + n, ("%6.1f" % level_db(v)) if v > 1e-6 else "  -inf", C("text"))
 
     ERR_SECS = 10.0
 
@@ -2359,34 +2467,84 @@ class TUI:
     def stops_str(self, p):
         return "  ".join(self.stops_lines(p, 10 ** 6))
 
-    def draw_keyboard(self, scr, y, w):
-        """Which part answers which key. The point of a split is that you can see
-        it, so this is drawn from the parts themselves rather than described."""
+    def draw_keyboard(self, scr, y, w, bottom):
+        """THE KEYBOARD: an 88-key piano where the screen is wide enough,
+        each key held lit in the hue of the part that answers it (dimmer:
+        held by the pedal), and under it each part's zone in its hue. On a
+        narrow screen, the zones alone, as a strip."""
+        if y >= bottom - 1:
+            return y
+        self.rule(scr, y, w, "KEYBOARD")
+        y += 1
+        lo, hi = 21, 108
+        whites = [n for n in range(lo, hi + 1) if n % 12 not in BLACK_KEYS]
+        if w < 2 * len(whites) + 8:
+            return self.draw_zone_strip(scr, y, w, bottom)
+        C = self.C
+        x0 = max(2, (w - 2 * len(whites)) // 2)
+        wi = {n: i for i, n in enumerate(whites)}
+
+        def col(n):                       # a white key's left cell; a black key's one
+            n = max(lo, min(hi, n))
+            return x0 + (2 * wi[n] if n in wi else 2 * wi[n - 1] + 1)
+        held = self.held_keys()
+        iv, eb = C("ivory"), C("ebony")
+        top = []
+        bot = []
+        for i, n in enumerate(whites):
+            a = held.get(n, iv)
+            top += [("\u2588", a), ("\u2588", a)]
+            bot += [("\u2588", a), ("\u258c", a)]
+        for n in range(lo + 1, hi + 1):
+            if n % 12 in BLACK_KEYS:
+                top[2 * wi[n - 1] + 1] = ("\u2588", held.get(n, eb))
+        self.runs(scr, y, x0, top)
+        self.runs(scr, y + 1, x0, bot)
+        self.addstr(scr, y + 1, x0 - 3, "A0", C("faint"))
+        self.addstr(scr, y + 1, x0 + 2 * len(whites) + 1, "C8", C("faint"))
+        y += 2
+        for i, p in enumerate(self.parts()):
+            if y >= bottom - 1:
+                break
+            if p.muted:
+                continue
+            a, b = col(p.lo), col(p.hi) + (1 if max(lo, min(hi, p.hi)) in wi else 0)
+            on = i == self.row
+            at = self.hue(p) | (0 if on else curses.A_DIM)
+            self.addstr(scr, y, a, "\u2501" * max(1, b - a + 1), at)
+            nm = ("kit" if p.drums else GM[p.program]) if not p.organ else \
+                 ("organ" if p.patch.cres_order else "harmonium")
+            self.addstr(scr, y, a + 1, " %d %s " % (i + 1, nm[:max(4, b - a - 4)]), at | curses.A_BOLD)
+            y += 1
+        return y
+
+    def draw_zone_strip(self, scr, y, w, bottom):
+        """The narrow screen's keyboard: which part answers which key, as a
+        strip from A0 to C8, a label under each part's span."""
         lo, hi = 21, 108
         width = max(20, min(w - 8, 88))
+
         def col(n):
             return 4 + int((n - lo) * (width - 1) / float(hi - lo))
-        self.addstr(scr, y, 0, " " * (w - 1))
-        self.addstr(scr, y, 0, "  " + note_name(lo), self.C("dim"))
-        self.addstr(scr, y, 4 + width + 1, note_name(hi), self.C("dim"))
+        self.addstr(scr, y, 0, "  " + note_name(lo), self.C("faint"))
+        self.addstr(scr, y, 4 + width + 1, note_name(hi), self.C("faint"))
         line = [" "] * (width + 1)
         for i, p in enumerate(self.parts()):
             if p.muted:
                 continue
             a, b = col(max(lo, p.lo)), col(min(hi, p.hi))
             for x in range(max(0, a - 4), min(width, b - 4) + 1):
-                line[x] = "=" if line[x] == " " else "#"     # # = layered
-        self.addstr(scr, y, 4, "".join(line), self.C("cyan"))
+                line[x] = "\u2501" if line[x] == " " else "\u254b"     # crossed: layered
+        self.addstr(scr, y, 4, "".join(line), self.C("accent2"))
         y += 1
-        # a label under each part's own span
         for i, p in enumerate(self.parts()):
-            if p.muted or y >= scr.getmaxyx()[0] - 12:
+            if p.muted or y >= bottom - 1:
                 continue
             a = col(max(lo, p.lo))
             nm = ("kit" if p.drums else GM[p.program].split()[0]) if not p.organ else \
                  ("organ" if p.patch.cres_order else "harmonium")
-            self.addstr(scr, y, a, "|%d %s" % (i + 1, nm),
-                        self.C("dim") if i != self.row else self.C("cyan"))
+            self.addstr(scr, y, a, "\u2570 %d %s" % (i + 1, nm),
+                        self.hue(p) | (curses.A_BOLD if i == self.row else 0))
             y += 1
         return y
 
@@ -2435,7 +2593,8 @@ class TUI:
             "                    it; 3 is usually best. Watch the cpu meter.",
             "  gpu               renders the samples on the GPU (OpenCL); the CPU",
             "                    still sets each partial's block up and takes the",
-            "                    light ones. The meter shows gpu while it is on it.",
+            "                    light ones. The cpu line says which drew the block:",
+            "                    gpu (teal) above ~1000 sounding slots, else cpu.",
             "",
             "on-screen controls and routes  (the third pane)",
             "  a                 add a control: any pedal, CC, the wheel, aftertouch,",
@@ -2485,14 +2644,14 @@ class TUI:
             "  ?  close this        q  quit",
         ]
         h, w = scr.getmaxyx()
-        bw = min(w - 4, max(len(x) for x in lines) + 4)
-        y0 = max(0, (h - len(lines)) // 2 - 1)
+        bw = min(w - 4, max(len(x) for x in lines) + 6)
+        y0 = max(1, (h - len(lines)) // 2)
         x0 = max(0, (w - bw) // 2)
-        for k in range(-1, len(lines) + 1):
-            self.addstr(scr, y0 + k, x0, " " * bw, curses.A_REVERSE)
+        self.box(scr, y0 - 1, x0, len(lines) + 2, bw, "help", "? or esc closes")
         for k, ln in enumerate(lines):
-            self.addstr(scr, y0 + k, x0 + 2, ln[:bw - 4],
-                        curses.A_REVERSE | (curses.A_BOLD if ln and ln[0] != " " else 0))
+            head = bool(ln) and ln[0] != " "
+            self.addstr(scr, y0 + k, x0 + 3, ln[:bw - 6],
+                        (self.C("accent") | curses.A_BOLD) if head else self.C("text"))
 
     # ---- input --------------------------------------------------------------
     def key(self, scr, c):
@@ -2662,16 +2821,7 @@ class TUI:
             curses.set_escdelay(25)
         except (AttributeError, curses.error):
             pass
-        try:
-            curses.start_color(); curses.use_default_colors()
-            for i, name in enumerate(("red", "green", "yellow", "cyan")):
-                curses.init_pair(i + 1, (curses.COLOR_RED, curses.COLOR_GREEN,
-                                         curses.COLOR_YELLOW, curses.COLOR_CYAN)[i], -1)
-            self._colors = {"red": curses.color_pair(1), "green": curses.color_pair(2),
-                            "yellow": curses.color_pair(3), "cyan": curses.color_pair(4),
-                            "dim": curses.A_DIM}
-        except curses.error:
-            self._colors = {}
+        self.init_theme()
         saved = time.monotonic()
         while True:
             self.draw(scr)
@@ -2684,6 +2834,16 @@ class TUI:
             if c == -1:
                 continue
             if c == curses.KEY_RESIZE:
+                # A FULL REPAINT: after a resize curses' record of what is on
+                # the screen is stale, and drawing only what changed left the
+                # old layout's lines standing among the new (a tmux window
+                # resized under the panel: the stops twice, the globals over
+                # the meters)
+                try:
+                    curses.update_lines_cols()
+                except AttributeError:
+                    pass
+                scr.clear()
                 continue
             if not self.key(scr, c):
                 return
@@ -2691,6 +2851,121 @@ class TUI:
 
     def C(self, name):
         return self._colors.get(name, 0)
+
+    # ---- the look ---------------------------------------------------------
+    def init_theme(self):
+        """THEME_256's roles as colour pairs where the terminal has 256
+        colours, else the eight; and the old names (red, green, yellow,
+        cyan, dim) the panes still use, mapped onto the roles."""
+        self._colors, self._pairs, self.rich = {}, {}, False
+        try:
+            curses.start_color(); curses.use_default_colors()
+        except curses.error:
+            return
+        if curses.COLORS >= 256 and curses.COLOR_PAIRS >= 64:
+            self.rich = True
+            for k, v in THEME_256.items():
+                self._colors[k] = self.pair(v)
+            self._colors["sel"] = self.pair(THEME_256["onaccent"], THEME_256["accent"])
+        else:
+            pr = {k: self.pair(c) for k, c in (("red", curses.COLOR_RED), ("green", curses.COLOR_GREEN),
+                                               ("yellow", curses.COLOR_YELLOW), ("cyan", curses.COLOR_CYAN))}
+            self._colors.update(text=0, value=curses.A_BOLD, label=0, dim=curses.A_DIM,
+                                faint=curses.A_DIM, rule=curses.A_DIM, accent=pr["yellow"] | curses.A_BOLD,
+                                accent2=pr["cyan"], ok=pr["green"], warn=pr["yellow"], bad=pr["red"],
+                                ivory=0, ebony=curses.A_DIM, onaccent=0, sel=curses.A_REVERSE)
+        self._colors.update(red=self._colors["bad"], green=self._colors["ok"],
+                            yellow=self._colors["warn"], cyan=self._colors["accent2"])
+
+    def pair(self, fg, bg=-1):
+        """The colour pair for (fg, bg), made the first time it is asked for."""
+        key = (fg, bg)
+        got = self._pairs.get(key)
+        if got is None:
+            n = len(self._pairs) + 1
+            try:
+                if n >= curses.COLOR_PAIRS:
+                    return 0
+                curses.init_pair(n, fg, bg)
+                got = curses.color_pair(n)
+            except (curses.error, AttributeError):   # (no colour: curses not started)
+                got = 0
+            self._pairs[key] = got
+        return got
+
+    def hue(self, p):
+        """A part's family hue (FAMILY_HUE): the table, its zone, its notes."""
+        if not self.rich:
+            return self.C("accent2")
+        return self.pair(DRUM_HUE if p.drums else FAMILY_HUE[(p.program // 8) % 16])
+
+    def rule(self, scr, y, w, title=None, on=False, right=None):
+        """A section's rule, its title on it -- the accent when it is the pane."""
+        self.addstr(scr, y, 0, "\u2500" * (w - 1), self.C("rule"))
+        if title:
+            self.addstr(scr, y, 2, " %s " % title,
+                        (self.C("accent") | curses.A_BOLD) if on else self.C("label"))
+        if right:
+            self.addstr(scr, y, max(0, w - len(right) - 5), " %s " % right, self.C("dim"))
+
+    def runs(self, scr, y, x, cells):
+        """Cells [(char, attr)] as runs of one attr: fewer curses calls (the
+        panel's drawing shares the interpreter's lock with the audio)."""
+        i, n = 0, len(cells)
+        while i < n:
+            a = cells[i][1]
+            j = i + 1
+            while j < n and cells[j][1] == a:
+                j += 1
+            self.addstr(scr, y, x + i, "".join(c for c, _a in cells[i:j]), a)
+            i = j
+
+    def track_bar(self, scr, y, x, f, n, attr):
+        """A bar over a faint track: how far, and how far it could go."""
+        self.addstr(scr, y, x, "\u2500" * n, self.C("faint"))
+        b = _bar(f, n).rstrip(" ")
+        if b:
+            self.addstr(scr, y, x, b, attr)
+
+    def box(self, scr, top, left, hh, ww, title=None, foot=None):
+        """A rounded box, cleared inside: the pickers, the help."""
+        R = self.C("rule")
+        self.addstr(scr, top, left, "\u256d" + "\u2500" * (ww - 2) + "\u256e", R)
+        for y in range(top + 1, top + hh - 1):
+            self.addstr(scr, y, left, "\u2502", R)
+            self.addstr(scr, y, left + 1, " " * (ww - 2))
+            self.addstr(scr, y, left + ww - 1, "\u2502", R)
+        self.addstr(scr, top + hh - 1, left, "\u2570" + "\u2500" * (ww - 2) + "\u256f", R)
+        if title:
+            self.addstr(scr, top, left + 2, (" %s " % title)[:ww - 4], self.C("accent") | curses.A_BOLD)
+        if foot:
+            self.addstr(scr, top + hh - 1, left + 2, (" %s " % foot)[:ww - 4], self.C("dim"))
+
+    def held_keys(self):
+        """{note: attr} of the keys down (bright) and held by the pedal
+        (dim), each in the hue of the part that answers it."""
+        L = self.live
+        for _ in range(3):
+            try:
+                down, ped = list(L.down), list(L.pedalled)
+                break
+            except RuntimeError:             # (the audio thread changed it mid-copy)
+                continue
+        else:
+            return {}
+        parts = [p for p in self.parts() if not p.muted]
+        out = {}
+        for keys, dim in ((ped, True), (down, False)):
+            for k in keys:
+                try:
+                    ch, n = k[0], k[1]
+                except (TypeError, IndexError):
+                    continue
+                p = next((p for p in parts if (p.channel is None or p.channel == ch)
+                          and p.lo <= n <= p.hi), None)
+                a = self.hue(p) if p is not None else self.C("accent")
+                out[n] = a | (curses.A_DIM if dim else curses.A_BOLD)
+        return out
 
 
 def patch_label(spec):
@@ -2849,6 +3124,29 @@ def fmt(v, unit):
     return "%.2f" % v
 
 
+# ---- THE LOOK ----------------------------------------------------------------
+# A palette of ROLES, not colours: what a thing is -- a label, a value, the
+# accent, a warning -- picks how it looks. The 256-colour cube where the
+# terminal has it (TUI.init_theme), else the eight colours and attributes.
+# Amber on a dark screen, as a hardware unit's display: values bright, their
+# labels grey, the rules faint.
+THEME_256 = dict(text=252, value=255, label=246, dim=243, faint=238, rule=240,
+                 accent=215, accent2=73, ok=114, warn=214, bad=203,
+                 ivory=253, ebony=236, onaccent=234)
+# THE FAMILIES' HUES, one per GM family of eight (FAMILIES): the parts table,
+# the keyboard's zones and the notes held in them, so a split reads at a glance
+FAMILY_HUE = (223, 187, 179, 173, 137, 174, 175, 215, 150, 116, 81, 141, 105, 180, 144, 110)
+DRUM_HUE = 167
+BLACK_KEYS = (1, 3, 6, 8, 10)
+SPARK = "\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588"
+METER_FLOOR_DB = -48.0
+
+
+def level_db(v):
+    import math
+    return 20.0 * math.log10(max(float(v), 1e-6))
+
+
 # THE BARS, at eight steps a cell: recept's bar (../recept/bar.py, bar.js),
 # a full block for each whole cell and one of the left-aligned eighths for
 # the remainder. A bar growing LEFT (the negative half of a centred knob) has
@@ -2920,6 +3218,12 @@ def run(live, port_name, ump_client=None, start=None):
                           step=lambda lab: setattr(ui.builder, "label", "starting: " + lab))
                 finally:
                     live.starting = False
+                    # THE START'S OWN COUNTS GO: hundreds of underruns of
+                    # silence while the patches built, read red for the whole
+                    # session after (the health line counts what playing does)
+                    live.underruns = 0
+                    live.cb_ring.late2 = live.cb_ring.late4 = live.cb_ring.over = 0
+                    live.render_max = 0.0
                 ui.free_hotkeys()        # (the session's controls are in now)
             ui.builder.submit("starting", job)
         else:
