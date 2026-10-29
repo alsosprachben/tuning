@@ -204,6 +204,30 @@ def leaf_crumb(up, leaf):
     return " \u203a ".join([n["crumb"] for n in up if n.get("crumb")] + [leaf["label"].strip()])
 
 
+def part_title(p):
+    """A part's sound by name, as the parts table names it: the drum set, or
+    the program by its standard -- a GS variation, an MT-32 tone (bank 127)
+    by its own name, not the GM program under its number."""
+    if p.drums:
+        return "%s kit" % PM.drum_set_name(p.program)
+    return gm_label(p.program, p.variation)
+
+
+_DRUM_NAMES = {}
+
+
+def drum_key_name(note, program):
+    """A drum key by its name in the set a drum part plays, as the engine
+    looks it up (percussion_map.percussion_for_note, kit_for_program), or
+    None where the set has nothing on it."""
+    kit = PM.kit_for_program(int(program))
+    key = (kit, int(note))
+    if key not in _DRUM_NAMES:
+        got = PM.percussion_for_note(int(note), kit)
+        _DRUM_NAMES[key] = got[0] if got else None
+    return _DRUM_NAMES[key]
+
+
 def gm_label_short(p, width, v=0):
     """gm_label within a column: past it, the GM name's own qualifier goes
     and Electric/Acoustic shorten -- "E. Guitar (Stratocaster)" -- so the
@@ -2588,9 +2612,13 @@ class TUI:
             on = i == self.row
             at = self.hue(p) | (0 if on else curses.A_DIM)
             self.addstr(scr, y, a, "\u2501" * max(1, b - a + 1), at)
-            nm = ("kit" if p.drums else GM[p.program]) if not p.organ else \
-                 ("organ" if p.patch.cres_order else "harmonium")
-            self.addstr(scr, y, a + 1, " %d %s " % (i + 1, nm[:max(4, b - a - 4)]), at | curses.A_BOLD)
+            nm = part_title(p)
+            lab = " %d %s " % (i + 1, nm[:max(4, b - a - 4)])
+            self.addstr(scr, y, a + 1, lab, at | curses.A_BOLD)
+            tag, ta = self.drum_tag(p)
+            if tag:
+                self.addstr(scr, y, a + 1 + len(lab), tag[:max(0, b - a - len(lab) - 1)],
+                            self.C("accent") | ta if ta & curses.A_BOLD else self.C("dim"))
             y += 1
         return y
 
@@ -2617,9 +2645,9 @@ class TUI:
             if p.muted or y >= bottom - 1:
                 continue
             a = col(max(lo, p.lo))
-            nm = ("kit" if p.drums else GM[p.program].split()[0]) if not p.organ else \
-                 ("organ" if p.patch.cres_order else "harmonium")
-            self.addstr(scr, y, a, "\u2570 %d %s" % (i + 1, nm),
+            _tg = self.drum_tag(p)[0].rstrip()
+            nm = part_title(p) + ((" " + _tg) if _tg else "")
+            self.addstr(scr, y, a, "\u2570 %d %s" % (i + 1, nm[:max(4, w - a - 6)]),
                         self.hue(p) | (curses.A_BOLD if i == self.row else 0))
             y += 1
         return y
@@ -3202,6 +3230,37 @@ class TUI:
             self.addstr(scr, top, left + 2, (" %s " % title)[:ww - 4], self.C("accent") | curses.A_BOLD)
         if foot:
             self.addstr(scr, top + hh - 1, left + 2, (" %s " % foot)[:ww - 4], self.C("dim"))
+
+    def last_drum(self, p):
+        """(its name, the key, seconds since) of the last key struck that a
+        drum part answers -- its channel(s), its range -- or None."""
+        for _ in range(3):
+            try:
+                last = dict(self.live.last_struck)
+                break
+            except RuntimeError:
+                continue
+        else:
+            return None
+        chans = range(16) if p.channel is None else (p.channel,)
+        best = None
+        for ch in chans:
+            got = last.get(ch)
+            if got and p.lo <= got[0] <= p.hi and (best is None or got[2] > best[2]):
+                best = got
+        if best is None:
+            return None
+        nm = drum_key_name(best[0], p.program)
+        return (nm or "key %d" % best[0]), best[0], time.monotonic() - best[2]
+
+    def drum_tag(self, p):
+        """' \u00b7 Acoustic Snare 38' for a drum part's zone label, and how
+        bright: the accent for 2 s after the hit, then dim."""
+        got = self.last_drum(p) if p.drums else None
+        if got is None:
+            return "", 0
+        nm, n, age = got
+        return "\u00b7 %s %d " % (nm, n), (curses.A_BOLD if age < 2.0 else curses.A_DIM)
 
     def held_keys(self):
         """{note: attr} of the keys down (bright) and held by the pedal

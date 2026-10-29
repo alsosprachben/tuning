@@ -4364,6 +4364,9 @@ class Live:
         self.peak = 0.0
         self.last_peak = 0.0
         self.last_lr = (0.0, 0.0)
+        # channel -> (note, velocity, when): the last key struck, for the panel
+        # (not last_on: that is portamento's source note, read as a number)
+        self.last_struck = {}
         self.render_ms = 0.0    # last block's kernel time, against the budget
         self.render_max = 0.0
         self.blocks = 0
@@ -4940,6 +4943,11 @@ class Live:
                 # up (USB + ALSA + rtmidi + our queue), and how far ahead of the
                 # DAC we are rendering (the audio buffer).
                 self.lat.append(((self._wall - stamped), (self._dac - self._cur)))
+            # THE LAST KEY STRUCK on each channel, for the panel (a drum
+            # part names it): one dict write a note -- a hit begins and ends
+            # between two of the panel's frames, so the keys down miss it
+            if getattr(msg, "type", None) == "note_on" and getattr(msg, "velocity", 0):
+                self.last_struck[getattr(msg, "channel", 0)] = (msg.note, msg.velocity, time.monotonic())
             try:
                 self._one(n0, msg)
             except Exception as e:
