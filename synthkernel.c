@@ -1051,6 +1051,45 @@ void synth_voice_xdec(
 #endif
 
 
+#ifdef DAMP_KERNEL
+// ---------------------------------------------------------------------------
+// ONLY IN THE DAMPER'S BUILD (-DDAMP_KERNEL, libsynthdamp_<rate>.so):
+// synth_voice with its half-pedalled rows' level taken down by their damper
+// track (damper.py): drow[p] the track (-1 none), dwt[p] the row's weight
+// (the felt takes the highs first), DM the tracks' cumulative damping at
+// block edges, each over its own span: DMN[t] edges from block DMB[t], at
+// DM+DMO[t]. For the rows blockrender.synth_partials sends
+// it; every other row renders through synth_voice, spelled as it was.
+void synth_voice_damp(
+    float* outL, float* outR, long n0, long winlen, int BLK, int nblk, int P,
+    const double* omega, const double* ph0L, const double* ph0R,
+    const float* ampL, const float* ampR, const float* nomfreq,
+    const long* non, const long* noff, const float* fadeS, const float* relS, const float* chiffS,
+    const float* logr, const float* logrA, const float* aftL, const float* susL,
+    const float* chVol, const float* chCyc, const float* chRel, const float* susJit, const float* chScale,
+    const float* chBW,
+    const float* tbav, const float* tau, const float* tcut,
+    const float* gbav, const float* gtau, const float* gcut,
+    const float* vdep, const float* vrate, const float* vph, const float* vdl,
+    const float* delL, const float* delR,
+    const int* grow, const int* crow, const float* G, const float* S,
+    const int* brow, const float* BR, const double* BC, const float* BL,
+    const int* fxr, const float* FT, const float* KN, long knk, long kb0,
+    const float* ampLp, const float* ampRp, const int* mkr,
+    const int* MPI, const double* MPC, const float* MPR,
+    const int* MKI, const float* MPK,
+    const double* fmw, const double* fmp, const double* fmpR,
+    float sfloor, float spow, float shmax, float shref, long CHUNK,
+    const float* sendW, float* outSL, float* outSR,
+    const int* drow, const float* dwt, const float* DM, const long* DMO, const long* DMB, const long* DMN)
+{
+#define DAMP_PASS
+#include "voice_main.inc"
+#undef DAMP_PASS
+}
+#endif
+
+
 #ifdef LESLIE_KERNEL
 // ---------------------------------------------------------------------------
 // ONLY IN THE LESLIE'S BUILD (-DLESLIE_KERNEL, libsynthlobe_<rate>.so):
@@ -1107,6 +1146,24 @@ void synth_voice_lobe(
 // C or SB was too small (counts then hold what was asked for).
 //
 // The arguments are synth_voice's, less its outputs, its window and CHUNK.
+#ifdef DAMP_KERNEL
+// THE DAMPER'S GPU BUILD (-DVOICE_BLOCK -DDAMP_KERNEL, libsynthgpudamp): the
+// half-pedalled rows' tracks (synth_voice_damp's drow, dwt, DM), set before
+// voice_block -- not in its arguments, so its signature, which blockrender
+// reads from this text, is the one every build declares. NULL drow: none.
+static const int* vd_drow; static const float* vd_dwt; static const float* vd_DM;
+static const long *vd_DMO, *vd_DMB, *vd_DMN;
+void voice_damp_set(const int* drow, const float* dwt, const float* DM, const long* DMO, const long* DMB,
+                    const long* DMN)
+{
+    vd_drow=drow; vd_dwt=dwt; vd_DM=DM; vd_DMO=DMO; vd_DMB=DMB; vd_DMN=DMN;
+}
+static inline float vd_track(long t, long j)
+{
+    long q=j-vd_DMB[t], nn=vd_DMN[t];
+    return q<0 ? 0.f : vd_DM[vd_DMO[t]+(q<nn?q:nn-1)];
+}
+#endif
 int voice_block(long n0, int BLK, int nblk, int P,
     const double* omega, const double* ph0L, const double* ph0R,
     const float* ampL, const float* ampR, const float* nomfreq,
@@ -1154,6 +1211,18 @@ int voice_block(long n0, int BLK, int nblk, int P,
         #include "voice_partial.inc"
         {
         long b=bn0/BLK;
+#ifdef DAMP_KERNEL
+        // a half-pedalled row: its damping as its BLrow, this block's two
+        // edges (synth_voice_damp's, voice_main.inc)
+        float dsc[2];
+        if(vd_drow && vd_drow[p]>=0){
+            long bb=b<nblk?b:nblk-1;
+            long t=vd_drow[p];
+            dsc[0]=(BLrow?BLrow[bb]:1.f)*expf(-vd_dwt[p]*vd_track(t, bb));
+            dsc[1]=(BLrow?BLrow[bb+1]:1.f)*expf(-vd_dwt[p]*vd_track(t, bb+1));
+            BLrow=dsc-bb;
+        }
+#endif
         #include "voice_block.inc"
         d->ns=(int)(ns-bn0); d->ne=(int)(ne-bn0);
         d->zLr=zrL; d->zLi=ziL; d->zRr=zrR; d->zRi=ziR; d->winst=winst;

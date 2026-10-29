@@ -134,6 +134,7 @@ import mf104 as _MFD
 import gsdelay as _GSD
 import gsefx as _GSX
 import ctrlmatrix as _CMX
+import damper as _DMP
 
 # Mirrors RAND_GRAN in synthkernel.c: the chiff phase is redrawn at this many
 # times the partial's frequency per second, which at 100000 is every sample --
@@ -256,6 +257,38 @@ def ensure_gpu_lib():
 
 
 
+def ensure_damp_lib():
+    """The kernel built with synth_voice_damp (-DDAMP_KERNEL): synth_voice with
+    its half-pedalled rows' level taken down by their damper track (damper.py),
+    for the rows synth_partials sends it. A library of its own: the
+    kernel-edits rule."""
+    src = os.path.join(HERE, "synthkernel.c")
+    return _build(src, "libsynthdamp_%d.so" % SR, ["-DDAMP_KERNEL"], ["synth_voice_damp"])
+
+
+def ensure_gpu_damp_lib():
+    """The GPU's block setup with the same (-DVOICE_BLOCK -DDAMP_KERNEL): a
+    table that has half-pedalled rows sets up through it, its tracks handed
+    over by voice_damp_set first. Every other table: ensure_gpu_lib, as it
+    was."""
+    src = os.path.join(HERE, "synthkernel.c")
+    lib = _build(src, "libsynthgpudamp_%d.so" % SR, ["-DVOICE_BLOCK", "-DDAMP_KERNEL"],
+                 ["synth_voice", "voice_block", "voice_samples", "voice_sizes", "voice_pack",
+                  "voice_damp_set"])
+    return lib
+
+
+def _damp_args(a, sl):
+    """synth_voice_damp's last three: each row's track ('dk', -1 none) and
+    weight ('dg', damper.weight), and the tracks: 'DM' their values
+    (damper.track's cumulative dB at block edges) end to end, each over its
+    own span -- 'DMN' edges from block 'DMB', at offset 'DMO'."""
+    ip = lambda x: x.ctypes.data_as(ctypes.POINTER(ctypes.c_int))      # noqa: E731
+    fp = lambda x: x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))    # noqa: E731
+    lp = lambda x: x.ctypes.data_as(ctypes.POINTER(ctypes.c_long))     # noqa: E731
+    return (ip(sl('dk')), fp(sl('dg')), fp(a['DM']), lp(a['DMO']), lp(a['DMB']), lp(a['DMN']))
+
+
 def ensure_xdec_lib():
     """The kernel built with synth_voice_xdec (-DXDEC_KERNEL): synth_voice with
     its fast noise rows drawn as exponentials (synthkernel.c xdec_block), for
@@ -280,6 +313,8 @@ def _xdec_rows(a, i0, i1):
         & (a['logr'][i0:i1] * BLK > XDEC_NEPERS * SR) & (a['gr'][i0:i1] < 0)
     if a.get('BL') is not None:
         m &= a['br'][i0:i1] < 0
+    if a.get('DM') is not None:
+        m &= a['dk'][i0:i1] < 0         # a damped row has a level line (synth_voice_damp)
     if a.get('FT') is not None and 'fx' in a:
         m &= a['fx'][i0:i1] < 0
     return np.flatnonzero(m) + i0
@@ -3908,6 +3943,19 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _segs.append((_dn, total))      # held down to the end of the file
         if _segs:
             _PED_CH[_c] = _segs
+    # HALF-PEDALLING (damper.py): a channel whose CC64 ever stands between 0
+    # and 127 keeps its VALUES, and its notes' dampers land where the key's
+    # contact is full -- passing on the way through the band, where a released
+    # note is damped by its level (damper.track). A file of 0 and 127 never
+    # comes here and renders as it did.
+    _PEDV_CH = {}
+    for _c, _evs in ccs.items():
+        _pv = [(_t, _v) for _t, _cc, _v in in_order(_evs) if _cc == 64]
+        if any(0 < _v < 127 for _t, _v in _pv):
+            _PEDV_CH[_c] = ([_t for _t, _v in _pv], [_v for _t, _v in _pv])
+    if _PEDV_CH and sink is not None:
+        import streamrender as _SRM
+        raise _SRM.NotStreamable("half-pedal")
 
     # ALL SOUND OFF stops a channel dead, pedal or no pedal -- what a panic
     # button sends. Collected the same way as the damper, and applied after it
@@ -4298,6 +4346,74 @@ def _prepare(path, tuner='hybrid440', sink=None):
             return _segs[_i][1]
         return _t
 
+    def _pedal_at(_c, _t):
+        """The half-pedalled channel's CC64 in force at _t (0 before any)."""
+        _ts, _vs = _PEDV_CH[_c]
+        _i = _bisect.bisect_right(_ts, _t) - 1
+        return _vs[_i] if _i >= 0 else 0
+
+    def _damper_lands(_c, _t, _key, _top):
+        """(when this key's damper lands, released at _t: its contact full;
+        whether the pedal stands in its band on the way)."""
+        _ts, _vs = _PEDV_CH[_c]
+        _band = False
+        _i = _bisect.bisect_right(_ts, _t) - 1
+        _times = [_t] + _ts[_i + 1:]
+        _vals = [_vs[_i] if _i >= 0 else 0] + _vs[_i + 1:]
+        for _tt, _v in zip(_times, _vals):
+            _k = _DMP.contact(_v, _key, _top)
+            if _k >= 1.0:
+                return _tt, _band
+            if _k > 0.0:
+                _band = True
+        return max(float(total), _t), _band
+
+    def _pedal_spans_of(_c, _top):
+        """A half-pedalled channel's free spans for the register, per key: free
+        while the key's damper is off its strings (contact under 1)."""
+        _ts, _vs = _PEDV_CH[_c]
+        _memo = {}
+
+        def _of(_key):
+            if _key not in _memo:
+                _segs, _a = [], None
+                for _tt, _v in zip(_ts, _vs):
+                    _free = _DMP.contact(_v, _key, _top) < 1.0
+                    if _free and _a is None:
+                        _a = _tt
+                    elif not _free and _a is not None:
+                        _segs.append((_a, _tt)); _a = None
+                if _a is not None:
+                    _segs.append((_a, max(float(total), _a)))
+                _memo[_key] = _segs
+            return _memo[_key]
+        return _of
+
+    def _damp_close(_r1):
+        """The open half-pedalled note's rows end at _r1: its track, from its
+        fundamental's decay (damper.track), over its blocks from key-up to
+        landing."""
+        _d = _DAMP_OPEN[0]
+        _DAMP_OPEN[0] = None
+        if _d is None or _r1 <= _d['row0']:
+            return
+        _r0 = _d['row0']
+        _nfs = np.asarray(A['nf'][_r0:_r1], float)
+        _f0 = 440.0 * 2.0 ** ((_d['key'] - 69) / 12.0)
+        _j = _r0 + int(np.argmin(np.abs(np.log(np.maximum(_nfs, 1e-3) / _f0))))
+        _lr, _lra, _af, _su = (float(A[_k][_j]) for _k in ('logr', 'logrA', 'aft', 'sus'))
+        _vdb = 40.0 * math.log10(max(_d['vel'], 1) / 127.0)
+
+        def _lvl(_tt, _on=_d['on']):
+            _x = max(_tt - _on, 0.0)
+            _dc = _su + (1.0 - _su) * ((1.0 - _af) * math.exp(-_lr * _x) + _af * math.exp(-_lra * _x))
+            return _vdb + 20.0 * math.log10(max(_dc, 1e-12))
+        _b0 = int(_d['off'] * SR) // BLK
+        _b1 = min(nblk, int(math.ceil(_d['land'] * SR / BLK)))
+        _edges = (np.arange(_b0, _b1 + 1) * BLK) / float(SR)
+        _dc, _full = _DMP.track(_edges, lambda _tt: _pedal_at(_d['ch'], _tt), _d['key'], _lvl, _d['top'])
+        _DAMP_TRACKS.append((_r0, _r1, _f0, _b0, _dc.astype(np.float32)))
+
     _next_same = {}
     _seen = {}
     for _n in sorted(notes, key=lambda e: -e[2]):
@@ -4323,6 +4439,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
     # and the strike whose rows are being emitted (closed at the next note)
     _REG_CH = {}
     _REG_OPEN = [None]
+    _DAMP_OPEN = [None]         # the half-pedalled note being emitted (damper.py)
+    _DAMP_TRACKS = []           # (row0, row1, f0, first block, its track)
     _AMP_CH = {}
     _AMP_REF = {}
     _AMP_LV0 = {}       # the EFX level in a part's reference when it was taken (1 if none)
@@ -4901,6 +5019,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _NOTE_ROW0.append((_row0, (ch, note, on) in _stroked))
         if _REG_OPEN[0] is not None:
             _REG_OPEN[0]['rows'] = (_REG_OPEN[0]['rows'][0], _pre); _REG_OPEN[0] = None
+        if _DAMP_OPEN[0] is not None:
+            _damp_close(_pre)
         _raw_off = off           # when the KEY came up, before any pedal held it
         if _HT_PEND[0] is not None:
             _HT_ROWS.append((_HT_PEND[0], _pre)); _HT_PEND[0] = None
@@ -5328,6 +5448,22 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _nx = _next_same.get(((ch, note), on))
         _mcut = (ch, note, on) in _MONO_CUT
         if (not getattr(pc, 'one_shot', False) and getattr(pc, 'damper_pedal', True)
+                and not _mcut and ch in _PEDV_CH):
+            # ...A HALF-PEDALLED CHANNEL: the damper lands where this key's
+            # contact is full; a note that meets the band on the way gets a
+            # track (closed with its rows, at the next note)
+            # (the band across the whole keyboard, as live's: a note above
+            # damper_top is damped at key-up as it always was -- the free
+            # strings past it are the register's, which knows its own top)
+            _top = 128
+            _land, _band = _damper_lands(ch, off, note, _top)
+            if _nx is not None and _land > off:
+                _land = min(_land, max(off, _nx - RETRIGGER_FADE))
+            if _band and _land > off:
+                _DAMP_OPEN[0] = dict(ch=ch, key=note, on=on, off=off, land=_land, vel=vel,
+                                     top=_top, row0=_row0)
+            off = max(off, _land)
+        elif (not getattr(pc, 'one_shot', False) and getattr(pc, 'damper_pedal', True)
                 and not _mcut):
             _rel = _damper_falls(ch, off)
             if _rel > off:
@@ -5727,8 +5863,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 # nothing at CC64, as its notes ignore it)
                 _REG_CH[_rk] = dict(pc=type(props), props=props, pan=pan, chan_vol=chan_vol,
                                         table=FREQ_N, strikes=[],
-                                        pedal=(_PED_CH.get(ch, []) if getattr(props, 'damper_pedal', True)
-                                               else []),
+                                        pedal=((_pedal_spans_of(ch, int(getattr(props, 'damper_top', 128)))
+                                                if ch in _PEDV_CH else _PED_CH.get(ch, []))
+                                               if getattr(props, 'damper_pedal', True) else []),
                                         strings=_REG.Strings(type(props), FREQ_N, pan, chan_vol, SR,
                                                              (string_partial, partial_decay,
                                                               unison_partial)))
@@ -7232,6 +7369,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
     # the last strike's rows end here -- before the stream hears them
     if _REG_OPEN[0] is not None:
         _REG_OPEN[0]['rows'] = (_REG_OPEN[0]['rows'][0], len(A['om'])); _REG_OPEN[0] = None
+    if _DAMP_OPEN[0] is not None:
+        _damp_close(len(A['om']))
     _gsw = _GSD_OPEN[0]
     if _GSD_OPEN[0] is not None:
         if len(A['om']) > _GSD_OPEN[0][0]:
@@ -7521,6 +7660,20 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 rel_rows=list(_REL_ROWS), rel_jacks=list(_REL_JACKS))
     for k,dt in FINAL_DTYPES:
         prep[k] = arr(k, dt)
+    # THE HALF-PEDALLED ROWS (damper.py; synth_voice_damp): each row's track
+    # and weight, and the tracks end to end, each over its own blocks. Absent
+    # (no 'DM') for every file whose pedal is a switch.
+    if _DAMP_TRACKS:
+        _dk = np.full(P, -1, np.int32)
+        _dg = np.zeros(P, np.float32)
+        for _t, (_r0, _r1, _f0, _b0, _dc) in enumerate(_DAMP_TRACKS):
+            _dk[_r0:_r1] = _t
+            _dg[_r0:_r1] = _DMP.weight(prep['nf'][_r0:_r1], _f0)
+        _n = np.array([len(x[4]) for x in _DAMP_TRACKS], np.int64)
+        prep.update(dk=_dk, dg=_dg, DM=np.ascontiguousarray(np.concatenate([x[4] for x in _DAMP_TRACKS])),
+                    DMO=np.concatenate(([0], np.cumsum(_n)[:-1])).astype(np.int64),
+                    DMB=np.array([x[3] for x in _DAMP_TRACKS], np.int64), DMN=_n)
+        print("  half-pedal: %d released notes damped through the band" % len(_DAMP_TRACKS))
     # THE LESLIE'S LOBE (leslie.lobe_columns): each row's rotor and lobe, and
     # the rotors' angles on the grid -- the kernel swings the level
     if A.get('lsr') is not None:
@@ -7705,6 +7858,17 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
     fp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
     # ROWS FASTER THAN A BLOCK (_xdec_rows) render through synth_voice_xdec, the
     # rest as they always did; a table with none makes the one call below
+    # HALF-PEDALLED ROWS (damper.py) render through synth_voice_damp; the rest
+    # as below. A table with none has no 'DM' and comes straight past.
+    if a.get('DM') is not None:
+        dmr = np.flatnonzero(a['dk'][i0:i1] >= 0) + i0
+        if len(dmr):
+            rest = np.setdiff1d(np.arange(i0, i1), dmr)
+            xr = np.intersect1d(_xdec_rows(a, i0, i1), rest)
+            _synth_rows(a, np.setdiff1d(rest, xr), n0, winlen, L, R, SndL, SndR, None)
+            _synth_rows(a, xr, n0, winlen, L, R, SndL, SndR, ensure_xdec_lib().synth_voice_xdec)
+            _synth_rows(a, dmr, n0, winlen, L, R, SndL, SndR, ensure_damp_lib().synth_voice_damp, damp=True)
+            return
     xr = _xdec_rows(a, i0, i1)
     if len(xr):
         keep = np.setdiff1d(np.arange(i0, i1), xr)
@@ -7727,9 +7891,10 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
                     fp(SndR) if SndL is not None else None)
 
 
-def _synth_rows(a, rows, n0, winlen, L, R, SndL, SndR, fn):
+def _synth_rows(a, rows, n0, winlen, L, R, SndL, SndR, fn, damp=False):
     """Rows `rows` of the table (an index array) through FN, or through the
-    table's own function (synth_voice, or the Leslie's) when FN is None."""
+    table's own function (synth_voice, or the Leslie's) when FN is None; with
+    damp, FN is synth_voice_damp and takes the rows' damper tracks."""
     if not len(rows):
         return
     fp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
@@ -7742,7 +7907,8 @@ def _synth_rows(a, rows, n0, winlen, L, R, SndL, SndR, fn):
                     ctypes.c_long(_chunk()),
                     fp(sl('sw')) if SndL is not None else None,
                     fp(SndL) if SndL is not None else None,
-                    fp(SndR) if SndL is not None else None)
+                    fp(SndR) if SndL is not None else None,
+                    *(_damp_args(a, sl) if damp else ()))
 
 
 def _voice_args(a, sl, P, lobe=True):
@@ -8008,6 +8174,9 @@ def subset(prep, mask, objectify=False):
         out[k] = np.ascontiguousarray(prep[k][mask])
     if prep.get('LANG') is not None:       # the Leslie's lobe, per row
         for k in ('lsr', 'lph', 'lfl', 'lsh', 'lnm'):
+            out[k] = np.ascontiguousarray(prep[k][mask])
+    if prep.get('DM') is not None:         # the dampers' tracks, per row (damper.py)
+        for k in ('dk', 'dg'):
             out[k] = np.ascontiguousarray(prep[k][mask])
     out['P'] = int(mask.sum())
     if objectify:

@@ -16,6 +16,26 @@
         for(int p=0;p<P;p++){
             #include "voice_partial.inc"
             long bstart=(cs>a?cs:a)/BLK, bend=(ce<zend?ce:zend+1)/BLK+1;
+#ifdef DAMP_PASS
+            // A HALF-PEDALLED ROW (damper.py; synth_voice_damp): its level times
+            // exp(-dwt * DM), its damper track's cumulative damping (dB), at this
+            // chunk's block edges -- handed over AS its BLrow (times the wind's,
+            // if it rides one), so every place the wind's level reaches, the
+            // dampers do; and a row with a BLrow is never a fast exponential
+            float dsc[CHUNK/BLK+4];
+            if(drow && drow[p]>=0){
+                // the track's own span: DMN[t] edges from block DMB[t], at
+                // DM+DMO[t]; 0 before it (the key still down), its last after
+                long t=drow[p], o=DMO[t], b0=DMB[t], nn=DMN[t];
+                long lo=bstart<nblk-1?bstart:nblk-1, hi=bend<nblk?bend:nblk;
+                float wq=dwt[p];
+                for(long j=lo;j<=hi;j++){
+                    long q=j-b0; float v= q<0 ? 0.f : DM[o+(q<nn?q:nn-1)];
+                    dsc[j-lo]=(BLrow?BLrow[j]:1.f)*expf(-wq*v);
+                }
+                BLrow=dsc-lo;
+            }
+#endif
             for(long b=bstart;b<bend;b++){
                 #include "voice_block.inc"
                 // EVERY OTHER VOICE takes the loop it always took, spelled as it

@@ -449,7 +449,12 @@ class Channel(object):
         self.top = int(getattr(P, 'damper_top', 128))
         self.fl = floor_of(P)
         self.rel = float(getattr(P, 'release_valve_time', 0.12) or 0.12) * sr
-        self.pedal = [(a * sr, b * sr) for a, b in pedal]
+        # the pedal's free spans, (s, s) -- or, a HALF-PEDALLED channel
+        # (damper.py), a function of the key giving that key's: free until its
+        # damper's contact is full. A sympathetic string rings far under the
+        # felt's gap, so through the band it is free (Lehtonen's level limit)
+        self.pedal_of = pedal if callable(pedal) else None
+        self.pedal = [] if callable(pedal) else [(a * sr, b * sr) for a, b in pedal]
         self.holds = {}              # key -> [(n0, n1)] known so far
         self.spans = {}              # key -> merged spans (a cache)
         self.endmemo = {}            # key -> {sample: span end} (a cache)
@@ -481,7 +486,9 @@ class Channel(object):
             if key >= self.top:
                 sp = [(0.0, float('inf'))]
             else:
-                sp = _merge(self.pedal + self.holds.get(key, []))
+                ped = (self.pedal if self.pedal_of is None
+                       else [(a * self.sr, b * self.sr) for a, b in self.pedal_of(key)])
+                sp = _merge(ped + self.holds.get(key, []))
             self.spans[key] = sp
         return sp
 

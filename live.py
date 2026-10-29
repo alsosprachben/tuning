@@ -87,6 +87,7 @@ import tonelib as T
 import gsefx as _GSX
 import gsdelay as _GSD
 import register as _RGM     # the free-string register's physics (live: _reg_*)
+import damper as _DMP       # half-pedalling: each key's damper by the pedal's value
 from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL,
                             kit_for_program, drum_set_name, key_layers, kit_in_map)
 
@@ -536,12 +537,18 @@ class Route(object):
     input thread that calls on_midi.
     """
 
-    def __init__(self, src, dst, keep=False, channel=None, latch=False):
+    def __init__(self, src, dst, keep=False, channel=None, latch=False, press=True):
         self.src = tuple(src)
         self.dst = dst
         self.keep = bool(keep)
         self.channel = None if channel is None else int(channel)
         self.latch = bool(latch)     # a KEY onto a switch: press toggles
+        # A KEY HELD AS THE SUSTAIN PEDAL, PUSHED INTO, LOWERS THE DAMPERS
+        # (damper.py, half-pedalling): its channel aftertouch, while it is down,
+        # sends CC64 127 - pressure -- held lightly, the dampers off; pushed in,
+        # resting on the strings; pushed fully, down (Ben's choice of direction:
+        # plain sustain costs no effort). Only a held, unlatched key onto 64.
+        self.press = bool(press)
         self._down = {}
         self._held = set()           # channels whose key this route swallowed
         self._prior = {}             # channel -> the value before the key went down
@@ -561,6 +568,8 @@ class Route(object):
         if kind == "pressure":
             return msg.type == "aftertouch"
         if kind == "note":
+            if msg.type == "aftertouch":
+                return self._pressing(msg.channel)
             if msg.type not in ("note_on", "note_off") or msg.note != self.src[1]:
                 return False
             # A RELEASE ONLY IF THIS ROUTE TOOK THE PRESS. A route added while
@@ -568,6 +577,11 @@ class Route(object):
             # that key is sounding ends instead of sticking.
             return self._is_on(msg) or msg.channel in self._held
         return False
+
+    def _pressing(self, ch):
+        """This key, held as the sustain pedal on ch, takes the channel's
+        aftertouch (Route.press)."""
+        return self.press and not self.latch and self.dst == 64 and ch in self._held
 
     def _level(self, msg):
         """How far the source is pushed, 0..1."""
@@ -625,6 +639,9 @@ class Route(object):
                               release the value the control had before; the
                               wheel bends up by velocity/127 of its travel
         """
+        if msg.type == "aftertouch":
+            # pushed into while held: the dampers lowered (Route.press)
+            return [control_message(self.dst, 127 - msg.value, ch)]
         on = self._is_on(msg)
         if on:
             self._held.add(ch)
@@ -654,12 +671,12 @@ class Route(object):
 
     def to_dict(self):
         return dict(src=list(self.src), dst=self.dst, keep=self.keep,
-                    channel=self.channel, latch=self.latch)
+                    channel=self.channel, latch=self.latch, press=self.press)
 
     @classmethod
     def from_dict(cls, d):
         return cls(d["src"], d["dst"], d.get("keep", False), d.get("channel"),
-                   d.get("latch", False))
+                   d.get("latch", False), d.get("press", True))
 
     def describe(self):
         s = self.src
@@ -943,6 +960,17 @@ class Slab:
         # rather than to zero: at zero the chiff's hash index never advances, so
         # the "noise" becomes a fixed phase offset and the wash turns tonal.
         self.a["cbw"][:] = B.RAND_GRAN
+        # THE DAMPERS' TRACKS (damper.py; Live._damp_block): each slot's track
+        # (-1 none) and weight, and the tracks themselves, two values each --
+        # the block's start and end, as the wind's BL rows are
+        self.a["dk"] = np.full(capacity, -1, np.int32)
+        self.a["dg"] = np.zeros(capacity, np.float32)
+        _nt = Live.DAMP_TRACKS
+        self.DM = np.zeros(2 * _nt, np.float32)
+        self.DMO = np.arange(0, 2 * _nt, 2, dtype=np.int64)
+        self.DMB = np.zeros(_nt, np.int64)
+        self.DMN = np.full(_nt, 2, np.int64)
+        self.free_tracks = list(range(_nt))
         # ...and every kernel column past the slots, for the taps' scratch rows:
         # `full` the whole column (the kernel's and tap_expand's), `a` a view
         # of the slots alone -- the same memory, so the slab reads as it did
@@ -1413,7 +1441,8 @@ class Slab:
             d.update(lib=self.lib, P=self.cap + self.tcap, nblk=1, G=self.G, S=self.S,
                      BR=self.BR, BC=self.BC, BL=self.BL, sh=self.sh,
                      FT=self.FT, KN=self.KN, knk=2, kb0=0,
-                     MPI=self.MPI, MPC=self.MPC, MPR=self.MPR, MKI=self.MKI, MPK=self.MPK)
+                     MPI=self.MPI, MPC=self.MPC, MPR=self.MPR, MKI=self.MKI, MPK=self.MPK,
+                     DM=self.DM, DMO=self.DMO, DMB=self.DMB, DMN=self.DMN)
             self._prep_cache = d
         return self._prep_cache
 
@@ -1434,6 +1463,7 @@ class Slab:
         slots = [self.free.popleft() for _ in range(n)]
         idx = np.fromiter(slots, np.int64, n)
         self.busy[idx] = True
+        self.a["dk"][idx] = -1          # a fresh slot carries no damper track
         self.tp[idx] = -1               # a fresh slot carries no taps
         self.tpx[idx] = 0
         self.fl_on[idx] = False         # ...and no filter
@@ -1967,6 +1997,7 @@ class Slab:
         slots = [self.free.popleft() for _ in range(n)]
         idx = np.fromiter(slots, np.int64, n)
         self.busy[idx] = True
+        self.a["dk"][idx] = -1          # a fresh slot carries no damper track
         self.tp[idx] = -1               # a fresh slot carries no taps
         self.tpx[idx] = 0
         self.fl_on[idx] = False         # ...and no filter
@@ -3987,6 +4018,12 @@ class Live:
         self.lat = []
         self._dac = self._cur = self._wall = 0.0
         self.pedal = {}         # channel -> sustain pedal down
+        # ...and its VALUE (damper.py, half-pedalling): each key's damper by
+        # its contact at that value -- 127 off every string, 0 on every one,
+        # between them the band, the bass dampers biting first
+        self.pedal_v = {}
+        self.key_vel = {}       # (pid, ch, note) -> the strike's velocity (the damper's level model)
+        self.damp_tracks = {}   # (pid, ch, note) -> a half-pedalled note's damper track (_damp_block)
         self.pedalled = set()   # keys whose damper the pedal is holding off
         self.n = 0                       # absolute sample clock
         # TUNING_TAP=path: every block the callback hands the sound card, as
@@ -5358,17 +5395,21 @@ class Live:
                                     self.rate, itd=False)
             elif msg.control == 64:                 # sustain pedal
                 downp = msg.value >= 64
-                was = self.pedal.get(ch, False)
+                was_v = self.pedal_v.get(ch, 0)
                 self.pedal[ch] = downp
-                if was and not downp:
-                    # Pedal up: every damper falls at once -- on the keys that
-                    # are UP. A key let go under the pedal and struck again is
-                    # held again; its damper stays off because the finger is
-                    # on it. Guarded here as well as cleared at note-on, since
-                    # a slab key is (part, ch, note) and not the press, so a
-                    # stale entry releases the new note, not the old one.
+                self.pedal_v[ch] = msg.value
+                if msg.value < was_v:
+                    # Pedal up: the dampers fall -- on the keys that are UP,
+                    # each where its contact is full (damper.py: all of them
+                    # at 0, the bass first through the band). A key let go
+                    # under the pedal and struck again is held again; its
+                    # damper stays off because the finger is on it. Guarded
+                    # here as well as cleared at note-on, since a slab key is
+                    # (part, ch, note) and not the press, so a stale entry
+                    # releases the new note, not the old one.
                     gone = {k for k in self.pedalled
-                            if k[0] == ch and k not in self.down}
+                            if k[0] == ch and k not in self.down
+                            and not self._pedal_holds(ch, k[1])}
                     for k in [k for k in list(self.slab.live) if (k[1], k[2]) in gone]:
                         self.slab.release(k, n0)
                     self.pedalled -= gone
@@ -5435,7 +5476,7 @@ class Live:
                     for k in [k for k in list(self.slab.live)
                               if (k[1], k[2]) in _gone
                               and (k[1], k[2]) not in self.down
-                              and not (self.pedal.get(ch, False))]:
+                              and not self._pedal_holds(ch, k[2])]:
                         self.slab.release(k, n0)
                     self.pedalled -= _gone
                     self._reg_channel(ch, n0)
@@ -5484,6 +5525,7 @@ class Live:
                 self.pedalled = {k for k in self.pedalled if k[0] != ch}
                 self.sost.pop(ch, None)
                 self.pedal[ch] = False
+                self.pedal_v.pop(ch, None)
                 _fade = np.float32(B.RETRIGGER_FADE * self.rate)
                 for k in [k for k in list(self.slab.live) if k[1] == ch]:
                     _sl = self.slab.live.get(k)
@@ -5511,7 +5553,7 @@ class Live:
                 for k in [k for k in list(self.slab.live) if k[1] == ch]:
                     if self.slab.oneshot.get(k):
                         continue                # rings out on its own decay
-                    if _keep[0] or (k[1], k[2]) in _keep[1]:
+                    if self._pedal_holds(ch, k[2]) or (k[1], k[2]) in _keep[1]:
                         self.pedalled.add((k[1], k[2]))
                         continue                # a damper is still off it
                     self.slab.release(k, n0)
@@ -5648,7 +5690,7 @@ class Live:
                 # every bowed string and every blown pipe holding a pedalled
                 # note at full bow with nobody bowing it. See
                 # SynthProperties.damper_pedal.
-                if ((self.pedal.get(ch, False)
+                if ((self._pedal_holds(ch, msg.note, part)
                      or (ch, msg.note) in self.sost.get(ch, ()))
                         and part.patch.damper_pedal):
                     # The key is up but the damper is not: the string keeps
@@ -5737,6 +5779,7 @@ class Live:
 
     def _note_on(self, part, ch, note, vel, n0):
         self.key_tone[(part.pid, ch, note)] = part.patch
+        self.key_vel[(part.pid, ch, note)] = vel
         snote = note + part.transpose
         if not 0 <= snote <= 127:
             return
@@ -6107,6 +6150,97 @@ class Live:
         return (getattr(pc, 'register_gain', 0.0) > 0.0
                 or getattr(pc, 'register_knock_gain', 0.0) > 0.0)
 
+    def _pedal_holds(self, ch, note, part=None):
+        """The sustain pedal keeps this key's damper off its strings: its
+        contact (damper.py) under 1 at the pedal's value -- 127 holds every
+        key, 0 none, a switch pedal exactly as it always did."""
+        v = self.pedal_v.get(ch, 0)
+        return v > 0 and _DMP.contact(v, note, 128) < 1.0
+
+    # THE DAMPERS IN BETWEEN (damper.py): a pedalled note whose key's contact
+    # is in the band is taken down by its level -- fast while it is louder
+    # than the felt's gap, then a residual -- through a damper TRACK the
+    # kernel reads at the block's two edges (synth_voice_damp, the GPU's damp
+    # build: the slab's dk/dg columns and DM, two values a track). A track
+    # once taken stays with its note: the damping already done is not undone.
+    DAMP_TRACKS = 256
+
+    def _damp_block(self, n0, frames):
+        sl = self.slab
+        if not (self.damp_tracks or any(0 < v < 127 for v in self.pedal_v.values())):
+            return
+        a, dt = sl.a, frames / float(self.rate)
+        for (ch, note) in list(self.pedalled):
+            v = self.pedal_v.get(ch, 0)
+            c = _DMP.contact(v, note, 128)
+            for k in [k for k in sl.live if k[1] == ch and k[2] == note and len(k) >= 3]:
+                kk = (k[0], ch, note)
+                st = self.damp_tracks.get(kk)
+                if st is None:
+                    if not 0.0 < c < 1.0 or not sl.free_tracks:
+                        continue
+                    st = self._damp_open(kk, n0)
+                    if st is None:
+                        continue
+                if k not in st['keys']:
+                    self._damp_mark(st, k)
+        for kk, st in list(self.damp_tracks.items()):
+            t = st['t']
+            idx = st['slots']
+            alive = idx[(sl.busy[idx]) & (a['dk'][idx] == t)] if len(idx) else idx
+            if not len(alive):
+                del self.damp_tracks[kk]
+                sl.free_tracks.append(t)
+                continue
+            st['slots'] = alive
+            v = self.pedal_v.get(kk[1], 0)
+            c = _DMP.contact(v, kk[2], 128) if (kk[1], kk[2]) in self.pedalled else 0.0
+            d0 = st['dc']
+            if 0.0 < c < 1.0:
+                x = max((n0 - st['non']) / float(self.rate), 0.0)
+                dc = st['su'] + (1.0 - st['su']) * ((1.0 - st['af']) * math.exp(-st['lr'] * x)
+                                                    + st['af'] * math.exp(-st['lra'] * x))
+                lvl = st['vdb'] + 20.0 * math.log10(max(dc, 1e-12)) - d0
+                st['dc'] = d0 + _DMP.rate_db_s(c, lvl > _DMP.threshold_db(c)) * dt
+            sl.DM[2 * t] = d0
+            sl.DM[2 * t + 1] = st['dc']
+
+    def _damp_open(self, kk, n0):
+        """A track for this pressed-and-pedalled key: its level model from its
+        fundamental's decay and the strike's velocity."""
+        sl = self.slab
+        rows = [i for k, ss in sl.live.items() if (k[0], k[1], k[2]) == kk for i in ss]
+        if not rows:
+            return None
+        idx = np.asarray(rows, np.int64)
+        part = next((p for p in self.parts if p.pid == kk[0]), None)
+        f0 = 440.0 * 2.0 ** ((kk[2] + (part.transpose if part else 0) - 69) / 12.0)
+        a = sl.a
+        nf = a['nf'][idx].astype(float)
+        j = idx[int(np.argmin(np.abs(np.log(np.maximum(nf, 1e-3) / f0))))]
+        t = sl.free_tracks.pop()
+        st = dict(t=t, dc=0.0, f0=f0, keys=set(), slots=np.zeros(0, np.int64),
+                  non=float(a['non'][j]), lr=float(a['logr'][j]), lra=float(a['logrA'][j]),
+                  af=float(a['aft'][j]), su=float(a['sus'][j]),
+                  vdb=40.0 * math.log10(max(self.key_vel.get(kk, 100), 1) / 127.0))
+        sl.DM[2 * t] = sl.DM[2 * t + 1] = 0.0
+        self.damp_tracks[kk] = st
+        for k in [k for k in sl.live if (k[0], k[1], k[2]) == kk]:
+            self._damp_mark(st, k)
+        return st
+
+    def _damp_mark(self, st, k):
+        """This slab key's rows onto the track: its index, each row's weight."""
+        sl = self.slab
+        ss = sl.live.get(k)
+        st['keys'].add(k)
+        if not ss:
+            return
+        idx = np.fromiter(ss, np.int64, len(ss))
+        sl.a['dk'][idx] = st['t']
+        sl.a['dg'][idx] = _DMP.weight(sl.a['nf'][idx], st['f0'])
+        st['slots'] = np.union1d(st['slots'], idx)
+
     def _reg_free(self, part, ch):
         """The keys whose strings are free on this channel, now."""
         pc = part.patch._voice_class(60)
@@ -6114,8 +6248,16 @@ class Live:
         # a voice with no damper pedal (the harpsichord) frees nothing at
         # CC64 or CC66, as its notes ignore them: its keys held, no more
         pedals = getattr(pc, 'damper_pedal', True)
-        if pedals and self.pedal.get(ch, False):
-            return list(range(21, 109))
+        if pedals and self.pedal_v.get(ch, 0) > 0:
+            # each key free while its damper is off it (damper.py): a
+            # sympathetic string rings far under the felt's gap, so through
+            # the band it is free -- all of them at 127, none at 0
+            held = [k for k in range(21, 109) if _DMP.contact(self.pedal_v[ch], k, top) < 1.0]
+            if len(held) == 88:
+                return held
+            keys = {k[1] for k in self.down if k[0] == ch} | set(held)
+            keys |= {k[1] for k in self.sost.get(ch, ())}
+            return sorted(keys | set(range(top, 109)))
         keys = {k[1] for k in self.down if k[0] == ch}
         if pedals:
             keys |= {k[1] for k in self.sost.get(ch, ())}
@@ -10325,6 +10467,7 @@ class Live:
                 self._wind_block(n0, frame_count)
             self.apply(n0)
             self.sweep(n0)
+            self._damp_block(n0, frame_count)
             self._drone_reap(n0)
             self._mf104_reap(n0)
             if self._efx_q:
@@ -12341,6 +12484,48 @@ def _selftest(only=""):
           any(k[2] == 64 for k in lv.slab.live))
     lv.on_midi(mido.Message("note_off", channel=0, note=64, velocity=0))
     lv.apply(14912); lv.sweep(14912)
+
+    # 4b. HALF-PEDALLING (damper.py): a released chord under the pedal, then
+    # the pedal held, moved into the band, or lifted -- in the band it fades,
+    # quieter than held and louder than lifted; and a key held as the pedal,
+    # pushed into (aftertouch: Route.press), moves the dampers the same way
+    def _half(mode):
+        _lh = Live(program=0, rate=48000, frames=128, verbose=False, tuner="hybrid440")
+        _lh.warm()
+        if mode == "route":
+            _lh.set_routes([Route(("note", 53), 64)])
+            _lh.on_midi(mido.Message("note_on", channel=0, note=53, velocity=100))
+        else:
+            _lh.on_midi(mido.Message("control_change", channel=0, control=64, value=127))
+        _o = []
+
+        def _rb(n):
+            for _ in range(n):
+                _o.append(np.frombuffer(_lh.callback(None, 128, None, 0)[0], np.float32))
+        for _n in (48, 55, 60, 64, 67, 72):
+            _lh.on_midi(mido.Message("note_on", channel=0, note=_n, velocity=90))
+        _rb(375)
+        for _n in (48, 55, 60, 64, 67, 72):
+            _lh.on_midi(mido.Message("note_off", channel=0, note=_n))
+        _rb(190)
+        if mode == "route":
+            _lh.on_midi(mido.Message("aftertouch", channel=0, value=64))
+        elif mode != 127:
+            _lh.on_midi(mido.Message("control_change", channel=0, control=64, value=mode))
+        _rb(375)
+        _x = np.concatenate(_o[-225:]).astype(float)
+        _r = (10 * math.log10(np.mean(_x * _x) + 1e-30), len(_lh.damp_tracks), _lh.pedal_v.get(0), _lh.errors)
+        _lh.shutdown()
+        return _r
+    _hp = {m: _half(m) for m in (127, 64, 0, "route")}
+    check("half-pedal: in the band a released chord fades -- under held, over lifted",
+          _hp[0][0] < _hp[64][0] - 20.0 and _hp[64][0] < _hp[127][0] - 6.0
+          and _hp[64][1] > 0 and _hp[127][1] == 0 and not any(r[3] for r in _hp.values()),
+          "  (0.4-1 s after: held %.1f, CC64 64 %.1f, lifted %.1f dB; %d tracks)"
+          % (_hp[127][0], _hp[64][0], _hp[0][0], _hp[64][1]))
+    check("...and a key held as the pedal, pushed into, lowers the dampers",
+          _hp["route"][2] == 63 and _hp["route"][1] > 0 and _hp["route"][0] < _hp[127][0] - 6.0,
+          "  (aftertouch 64: CC64 %s, %.1f dB, %d tracks)" % (_hp["route"][2], _hp["route"][0], _hp["route"][1]))
 
     # 5. a lost note-off is healed rather than droning
     lv = Live(program=0, rate=48000, frames=128, verbose=False); lv.warm()
@@ -19253,7 +19438,7 @@ def _selftest(only=""):
     _ui.key(_scr, ord("r"))
     check("panel: r adds a route",
           [x.to_dict() for x in _lr.routes]
-          == [dict(src=["bend", "up"], dst=66, keep=False, channel=None, latch=False)])
+          == [dict(src=["bend", "up"], dst=66, keep=False, channel=None, latch=False, press=True)])
     _ui.crow = 2
     _ui.key(_scr, ord("d"))
     _ui.crow = 0
@@ -19400,7 +19585,7 @@ def _selftest(only=""):
     _uk.key(_Scr(24, 80), ord("r"))
     check("...and the panel builds one: r, a key by name, sustain, toggle",
           [x.to_dict() for x in _lk2.routes]
-          == [dict(src=["note", 24], dst=64, keep=False, channel=None, latch=True)],
+          == [dict(src=["note", 24], dst=64, keep=False, channel=None, latch=True, press=True)],
           "  (%s)" % [x.describe() for x in _lk2.routes])
     _lk2.shutdown()
 

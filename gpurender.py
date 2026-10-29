@@ -99,8 +99,15 @@ class BlockTables:
         P = prep['P']
         sl = lambda k: prep[k]                     # noqa: E731
         vp = ctypes.c_void_p
+        # A TABLE WITH HALF-PEDALLED ROWS (damper.py) sets up through the
+        # damper's build, its tracks handed over first; every other table
+        # through this one's own library, as it always did
+        lib = self.lib
+        if prep.get('DM') is not None and len(idx) and (prep['dk'][idx] >= 0).any():
+            lib = B.ensure_gpu_damp_lib()
+            lib.voice_damp_set(*B._damp_args(prep, sl))
         while True:
-            r = self.lib.voice_block(
+            r = lib.voice_block(
                 ctypes.c_long(n0), *(args or B._voice_args(prep, sl, P)),
                 prep['sw'].ctypes.data_as(ctypes.POINTER(ctypes.c_float)), int(bool(send)),
                 idx.ctypes.data_as(ctypes.POINTER(ctypes.c_long)), nact,
