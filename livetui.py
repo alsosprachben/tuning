@@ -511,6 +511,9 @@ class TUI:
         self._cpu_hist = collections.deque(maxlen=48)
         self._cpu_acc, self._cpu_n = 0.0, 0
         self._health = {}               # count -> (value, when it last rose)
+        self.hits = []                  # this frame's (y, x0, x1, action): what a tap there does
+        self._drag = None               # (what a drag moves, the row it was last at)
+        self._note = None               # (channel, note) the screen piano is sounding
 
     # ---- helpers ------------------------------------------------------------
     def say(self, msg, secs=3.0):
@@ -929,8 +932,8 @@ class TUI:
                 self.addstr(scr, h - 1, len(label), buf[:max(0, w - 1 - len(label))] + "_",
                             self.C("value") | curses.A_BOLD)
                 scr.refresh()
-                c = scr.getch()
-                if c == -1:
+                c = self.read(scr)
+                if c == -1 or isinstance(c, Mouse):
                     continue
                 if c in (10, 13):
                     return buf.strip()
@@ -1000,7 +1003,21 @@ class TUI:
                       self.C("label") if here[j].startswith("--") else self.C("text"))
                 self.addstr(scr, y0 + k, x0 + 1, txt[:bw - 2], at)
             scr.refresh()
-            c = scr.getch()
+            c = self.read(scr)
+            if isinstance(c, Mouse):
+                # A TAP ON A ROW picks it (Enter); the wheel moves; a tap
+                # outside the box cancels
+                if c.kind == "wheel" and vis:
+                    i = vis[max(0, min(len(vis) - 1, pos - c.dy))]
+                elif c.kind == "press":
+                    inside = y0 - 1 <= c.y <= y0 + n + 1 and x0 <= c.x < x0 + bw
+                    if not inside:
+                        return None
+                    k = c.y - y0
+                    if 0 <= k < n and top + k < len(vis):
+                        i = vis[top + k]
+                        return ("found", i) if here is not items else i
+                continue
             if c == -1:
                 continue
             if searching and 32 <= c < 127 and c != ord("/"):
@@ -1215,7 +1232,23 @@ class TUI:
                       (self.C("accent") if on else self.C("text")))
                 self.addstr(scr, y0 + k, x0 + 1, txt[:bw - 2], at)
             scr.refresh()
-            c = scr.getch()
+            c = self.read(scr)
+            if isinstance(c, Mouse):
+                # A TAP ON A ROW toggles it; on the foot, "enter accept" and
+                # "esc cancel" are what they say; the wheel moves
+                if c.kind == "wheel":
+                    i = max(0, min(len(items) - 1, i - c.dy))
+                elif c.kind == "press":
+                    k = c.y - y0
+                    if 0 <= k < n and x0 <= c.x < x0 + bw:
+                        i = top + k
+                        chosen.symmetric_difference_update({i})
+                    elif c.y == y0 + n + 1 and x0 <= c.x < x0 + bw:
+                        if c.x - x0 >= bw * 2 // 3:
+                            return None
+                        if c.x - x0 >= bw // 3:
+                            return chosen
+                continue
             if c == -1:
                 continue
             if c in (curses.KEY_UP, ord("k")):
@@ -1334,7 +1367,7 @@ class TUI:
                     if lc is not None and lc[1] > t0:
                         code = lc[0]
                         break
-                    if scr.getch() == 27:
+                    if self.read(scr) == 27:
                         return
                     self.draw(scr)
             finally:
@@ -1407,8 +1440,14 @@ class TUI:
                 nm, show(vals[j]), vals[j])
             self.addstr(scr, h // 2, max(0, (w - len(line)) // 2), line[:w - 1], curses.A_REVERSE | curses.A_BOLD)
             scr.refresh()
-            c = scr.getch()
+            c = self.read(scr)
             k = j
+            if isinstance(c, Mouse):
+                if c.kind == "wheel":
+                    k = max(0, min(len(vals) - 1, j + c.dy))
+                elif c.kind == "press":
+                    return                      # (a tap keeps it, as Enter)
+                c = -1
             if c in (curses.KEY_RIGHT, ord("l"), ord("+"), ord("=")):
                 k = min(len(vals) - 1, j + 1)
             elif c in (curses.KEY_LEFT, ord("h"), ord("-")):
@@ -1593,7 +1632,7 @@ class TUI:
                 if got is not None:
                     return got
                 self.draw(scr)
-                if scr.getch() == 27:
+                if self.read(scr) == 27:
                     self.say("cancelled")
                     return None
             self.say("no key came in")
@@ -1737,8 +1776,8 @@ class TUI:
         self.say("press the key for %s  (esc: none)" % LV.CONTROL_BY_KEY[c["key"]][1], 30)
         self.draw(scr)
         while True:
-            k = scr.getch()
-            if k != -1:
+            k = self.read(scr)
+            if k != -1 and not isinstance(k, Mouse):
                 break
         if k == 27:
             c["hotkey"] = None
@@ -1809,7 +1848,7 @@ class TUI:
         """The pane itself, between the part table and the meters."""
         C = self.C
         L = self.live
-        self.rule(scr, y, w, "CONTROLS & ROUTES", self.pane == 2)
+        self.rule(scr, y, w, "CONTROLS & ROUTES", self.pane == 2, pane=2)
         y += 1
         rows = self.ctl_rows()
         sel = self.ctl_sel() if self.pane == 2 else None
@@ -1834,6 +1873,7 @@ class TUI:
             chs = "all" if c.get("channel") is None else str(c["channel"] + 1)
             self.addstr(scr, y, 0, (">" if here else " ") + " %-16s ch %-3s"
                         % (label, chs), curses.A_REVERSE if here else 0)
+            self.hit(y, 0, max(27, w - 1), ("ctl", rows.index(r)))
             if kind == "switch":
                 on = self.switch_on(key, c.get("channel"))
                 self.addstr(scr, y, 27, " ON " if on else " off",
@@ -1866,6 +1906,7 @@ class TUI:
             self.addstr(scr, y, 0, (">" if here else " ") + " "
                         + L.routes[r[1]].describe(),
                         curses.A_REVERSE if here else 0)
+            self.hit(y, 0, max(27, w - 1), ("ctl", rows.index(r)))
             y += 1
         return y
 
@@ -1884,6 +1925,7 @@ class TUI:
 
     def draw(self, scr):
         scr.erase()
+        self.hits = []
         h, w = scr.getmaxyx()
         L = self.live
         s = L.stats()
@@ -1893,7 +1935,7 @@ class TUI:
         bottom = h - 5
         self.draw_header(scr, w, s)
         starting = getattr(L, "starting", False)
-        self.rule(scr, 1, w, "PARTS", self.pane == 0,
+        self.rule(scr, 1, w, "PARTS", self.pane == 0, pane=0,
                   right=("%d part%s" % (len(self.parts()), "" if len(self.parts()) == 1 else "s")))
         y = 2
         hdr = "   #  " + "".join("%-*s" % (COL_W[c], c) for c in COLS)
@@ -1912,6 +1954,7 @@ class TUI:
                         C("accent") if here else C("faint"))
             self.addstr(scr, y, 2, "%2d" % (i + 1),
                         (C("accent") | curses.A_BOLD) if here else C("dim"))
+            self.hit(y, 0, 6, ("cell", i, None))
             x = 6
             for ci, c in enumerate(COLS):
                 txt = self.cell(p, c)
@@ -1926,6 +1969,7 @@ class TUI:
                 elif here:
                     at |= curses.A_BOLD
                 self.addstr(scr, y, x, "%-*s" % (COL_W[c], txt[:COL_W[c] - 1]), at)
+                self.hit(y, x, x + COL_W[c], ("cell", i, ci))
                 x += COL_W[c]
             if p.muted:
                 self.addstr(scr, y, x, "muted", C("warn"))
@@ -1992,7 +2036,7 @@ class TUI:
         y = self.draw_keyboard(scr, y, w, bottom)
         if y >= bottom:
             return y
-        self.rule(scr, y, w, "GLOBALS", self.pane == 1)
+        self.rule(scr, y, w, "GLOBALS", self.pane == 1, pane=1)
         y += 1
         half = (len(GLOBALS) + 1) // 2
         for i, (name, unit, lo, hi, step) in enumerate(GLOBALS):
@@ -2009,6 +2053,8 @@ class TUI:
                         C("value") | (curses.A_BOLD if here else 0))
             self.track_bar(scr, row, col + 26, 0.0 if hi <= lo else (v - lo) / (hi - lo), 14,
                            C("accent") if here else C("accent2"))
+            self.hit(row, col, col + 25, ("global", i))
+            self.hit(row, col + 26, col + 40, ("gbar", i))
         return y + half
 
     # ---- the synth panel (the fourth pane) ----------------------------------
@@ -2141,7 +2187,7 @@ class TUI:
 
     def draw_synth(self, scr, y, w, h):
         C = self.C
-        self.rule(scr, y, w, "SYNTH", self.pane == 3)
+        self.rule(scr, y, w, "SYNTH", self.pane == 3, pane=3)
         y += 1
         p = self.synth_part()
         if p is None:
@@ -2174,6 +2220,9 @@ class TUI:
             v = self.synth_value(p, knob)
             own = knob in self.synth_own(p)
             self.addstr(scr, row, x + 7, "%-10s" % label, curses.A_REVERSE if here else 0)
+            self.hit(row, x, x + 29, ("knob", i))
+            if kind not in SYNTH_STEPS and kind not in self.SYNTH_CENTRED:
+                self.hit(row, x + 29, x + 38, ("kbar", i))
             self.addstr(scr, row, x + 18, "%10s" % synth_fmt(kind, v, pan),
                         (curses.A_BOLD if here else 0) | (C("yellow") if own else 0))
             if kind in self.SYNTH_CENTRED:
@@ -2262,6 +2311,17 @@ class TUI:
         3: (("tab", "pane"), ("\u2191\u2193", "knob"), ("-/+", "turn"), ("space", "patch's"),
             ("0", "zero"), ("D", "defaults"), ("B", "layer"), ("M", "Messenger"), ("T", "send"),
             ("?", "help"), ("q", "quit")),
+    }
+
+    # WHAT A TAP ON A HINT PRESSES (q is not here: a stray tap must not quit)
+    HINT_CODES = {
+        "tab": (9,), "\u2191\u2193": (curses.KEY_UP, curses.KEY_DOWN),
+        "\u2190\u2192": (curses.KEY_LEFT, curses.KEY_RIGHT), "-/+": (ord("-"), ord("=")),
+        "_/+": (ord("_"), ord("+")), "\u23ce": (10,), "a": (ord("a"),), "s": (ord("s"),),
+        "d": (ord("d"),), "m": (ord("m"),), "S/L": (ord("S"), ord("L")),
+        "N/R": (ord("N"), ord("R")), "?": (ord("?"),), "P": (ord("P"),), "r": (ord("r"),),
+        "space": (ord(" "),), "b": (ord("b"),), "0": (ord("0"),), "D": (ord("D"),),
+        "B": (ord("B"),), "M": (ord("M"),), "T": (ord("T"),),
     }
 
     def draw_meters(self, scr, w, h, s):
@@ -2374,6 +2434,14 @@ class TUI:
                 break
             self.addstr(scr, h - 1, x, k, C("accent"))
             self.addstr(scr, h - 1, x + len(k) + 1, what, C("dim"))
+            # (a tap is the key: a pair -- -/+, the arrows -- each half its own)
+            codes = self.HINT_CODES.get(k, ())
+            if len(codes) == 1:
+                self.hit(h - 1, x, x + len(k) + 1 + len(what), ("key", codes[0]))
+            elif len(codes) == 2:
+                half = max(1, len(k) // 2)
+                self.hit(h - 1, x, x + half, ("key", codes[0]))
+                self.hit(h - 1, x + len(k) - half, x + len(k) + 1 + len(what), ("key", codes[1]))
             x += len(k) + len(what) + 4
         if self.help:
             self.draw_help(scr)
@@ -2500,6 +2568,14 @@ class TUI:
                 top[2 * wi[n - 1] + 1] = ("\u2588", held.get(n, eb))
         self.runs(scr, y, x0, top)
         self.runs(scr, y + 1, x0, bot)
+        # (a tap plays: the white keys on both rows, the black on the top one)
+        for n, i in wi.items():
+            self.hit(y + 1, x0 + 2 * i, x0 + 2 * i + 2, ("note", n))
+            self.hit(y, x0 + 2 * i, x0 + 2 * i + 2, ("note", n))
+        for n in range(lo + 1, hi + 1):
+            if n % 12 in BLACK_KEYS:
+                c = x0 + 2 * wi[n - 1] + 1
+                self.hit(y, c, c + 1, ("note", n))
         self.addstr(scr, y + 1, x0 - 3, "A0", C("faint"))
         self.addstr(scr, y + 1, x0 + 2 * len(whites) + 1, "C8", C("faint"))
         y += 2
@@ -2665,8 +2741,8 @@ class TUI:
             # the FIRST row's stop. The next key, if it is a stop key, is the
             # third row's (Alt+digit) or the fourth's (Alt+shift+digit): the
             # church organ's recorded Pitea ranks, bits 14 and up.
-            n = scr.getch()
-            if 0 < n < 0x110000 and chr(n) in STOP_KEYS:
+            n = self.read(scr)
+            if isinstance(n, int) and 0 < n < 0x110000 and chr(n) in STOP_KEYS:
                 row, i = STOP_KEYS[chr(n)]
                 self.toggle_stop(i, row + 2)
             return True     # never quit on ESC: a half-read arrow key is an ESC
@@ -2822,6 +2898,17 @@ class TUI:
         except (AttributeError, curses.error):
             pass
         self.init_theme()
+        mouse = os.environ.get("TUNING_MOUSE", "1") != "0"
+        if mouse:
+            sys.stdout.write(MOUSE_ON); sys.stdout.flush()
+        try:
+            return self._loop(scr)
+        finally:
+            self.note_off()                 # (a key the screen piano left down)
+            if mouse:
+                sys.stdout.write(MOUSE_OFF); sys.stdout.flush()
+
+    def _loop(self, scr):
         saved = time.monotonic()
         while True:
             self.draw(scr)
@@ -2830,7 +2917,11 @@ class TUI:
             if self.live.dirty and time.monotonic() - saved >= 2.0:
                 LV.save_session(self.live)
                 saved = time.monotonic()
-            c = scr.getch()
+            c = self.read(scr)
+            if isinstance(c, Mouse):
+                self.mouse(scr, c)
+                self.live.dirty = True
+                continue
             if c == -1:
                 continue
             if c == curses.KEY_RESIZE:
@@ -2851,6 +2942,174 @@ class TUI:
 
     def C(self, name):
         return self._colors.get(name, 0)
+
+    # ---- the mouse ----------------------------------------------------------
+    def read(self, scr):
+        """The next key, as getch gives it -- or a Mouse, for an SGR mouse
+        report (MOUSE_ON). Every loop that reads keys reads them here, or a
+        report's ESC read as Escape: a tap in a picker closed it."""
+        c = scr.getch()
+        if c != 27:
+            return c
+        n = scr.getch()
+        if n != ord("["):
+            if n != -1:
+                curses.ungetch(n)
+            return 27
+        m = scr.getch()
+        if m != ord("<"):
+            if m != -1:
+                curses.ungetch(m)
+            curses.ungetch(n)
+            return 27
+        body = ""
+        for _ in range(24):
+            k = scr.getch()
+            if k == -1:
+                return -1                   # (a report cut short: dropped)
+            ch = chr(k) if 0 <= k < 0x110000 else ""
+            if ch in ("M", "m"):
+                return parse_sgr_mouse(body, ch) or -1
+            body += ch
+        return -1
+
+    def hit(self, y, x0, x1, action):
+        """Record that a tap on row y, columns x0..x1-1, does `action`."""
+        self.hits.append((y, x0, x1, action))
+
+    def hit_at(self, y, x):
+        """The last-drawn action under (y, x): drawn later is on top."""
+        for hy, x0, x1, act in reversed(self.hits):
+            if hy == y and x0 <= x < x1:
+                return act, x - x0, x1 - x0
+        return None
+
+    def mouse(self, scr, m):
+        """What a tap, a drag, a release or the wheel does where it lands:
+        select (a tap on what is selected acts, as Enter); drag up or down,
+        or the wheel, to change; tap a bar to set it; the piano plays from
+        press to release, gliding along the keys as the finger moves; a key
+        hint is its key."""
+        if self.help:
+            if m.kind == "press":
+                self.help = False
+            return
+        if m.kind == "release":
+            self._drag = None
+            self.note_off()
+            return
+        got = self.hit_at(m.y, m.x)
+        if m.kind == "drag":
+            if self._note is not None:
+                if got and got[0][0] == "note" and got[0][1] != self._note[1]:
+                    self.note_on(got[0][1])              # the glide: off the last, on this one
+                return
+            if self._drag is not None:
+                what, last = self._drag
+                d = last - m.y                           # up is more
+                if d:
+                    for _ in range(abs(d)):
+                        self.bump(1 if d > 0 else -1)
+                    self._drag = (what, m.y)
+            return
+        if got is None:
+            return
+        act, off, span = got
+        kind = act[0]
+        if m.kind == "wheel":
+            if self.select(act):
+                self.bump(m.dy)
+            return
+        # a press
+        if kind == "pane":
+            self.pane = act[1]
+        elif kind == "key":
+            self.key(scr, act[1])
+        elif kind == "note":
+            self.note_on(act[1])
+        elif kind in ("gbar", "kbar"):
+            self.select(act)
+            self.set_by_bar(act, (off + 0.5) / float(max(span, 1)))
+            self._drag = (act, m.y)
+        else:
+            was = self.selected(act)
+            if self.select(act):
+                self._drag = (act, m.y)
+                if was:
+                    self.act_on(scr, act)
+
+    def selected(self, act):
+        """Whether `act` names what is selected now."""
+        kind = act[0]
+        if kind == "cell":
+            return self.pane == 0 and self.row == act[1] and (act[2] is None or self.col == act[2])
+        if kind == "global":
+            return self.pane == 1 and self.grow == act[1]
+        if kind == "knob":
+            return self.pane == 3 and self.srow == act[1]
+        if kind == "ctl":
+            return self.pane == 2 and self.crow == act[1]
+        return False
+
+    def select(self, act):
+        """Make `act`'s thing the selection (and its pane the pane). False:
+        not a thing that is selected."""
+        kind = act[0]
+        if kind == "cell":
+            self.pane, self.row = 0, act[1]
+            if act[2] is not None:
+                self.col = act[2]
+        elif kind in ("global", "gbar"):
+            self.pane, self.grow = 1, act[1]
+        elif kind in ("knob", "kbar"):
+            self.pane, self.srow = 3, act[1]
+        elif kind == "ctl":
+            self.pane, self.crow = 2, act[1]
+        else:
+            return False
+        return True
+
+    def act_on(self, scr, act):
+        """A tap on what was already selected: what Enter (or space) does."""
+        kind = act[0]
+        if kind == "cell" and act[2] is not None:
+            self.enter(scr)
+        elif kind == "ctl":
+            self.ctl_space()
+        elif kind == "knob":
+            sec, knob, label, kd = SYNTH_KNOBS[act[1]]
+            if kd in SYNTH_STEPS:
+                self.synth_bump(1)                   # a switch: its next position
+
+    def set_by_bar(self, act, f):
+        """A tap on a bar: its value where the bar was touched."""
+        f = max(0.0, min(1.0, f))
+        if act[0] == "gbar":
+            name, unit, lo, hi, step = GLOBALS[act[1]]
+            v = lo + f * (hi - lo)
+            self.set_global(act[1], round(v / step) * step if step else v)
+        elif act[0] == "kbar":
+            p = self.synth_part()
+            if p is None:
+                return
+            sec, knob, label, kd = SYNTH_KNOBS[act[1]]
+            if kd not in SYNTH_STEPS:
+                self.live.set_synth(p, knob, f, layer=self.synth_layer(p))
+
+    def note_on(self, n):
+        """The screen piano: the note on the selected part's channel (its
+        first, for one that hears them all), the last one let go first."""
+        p = self.sel()
+        ch = 0 if p is None or p.channel is None else p.channel
+        self.note_off()
+        self.live.inject(mido.Message("note_on", channel=ch, note=int(n), velocity=90))
+        self._note = (ch, int(n))
+
+    def note_off(self):
+        if self._note is not None:
+            ch, n = self._note
+            self._note = None
+            self.live.inject(mido.Message("note_off", channel=ch, note=n, velocity=0))
 
     # ---- the look ---------------------------------------------------------
     def init_theme(self):
@@ -2899,12 +3158,15 @@ class TUI:
             return self.C("accent2")
         return self.pair(DRUM_HUE if p.drums else FAMILY_HUE[(p.program // 8) % 16])
 
-    def rule(self, scr, y, w, title=None, on=False, right=None):
-        """A section's rule, its title on it -- the accent when it is the pane."""
+    def rule(self, scr, y, w, title=None, on=False, right=None, pane=None):
+        """A section's rule, its title on it -- the accent when it is the pane;
+        a tap on the title goes to `pane`."""
         self.addstr(scr, y, 0, "\u2500" * (w - 1), self.C("rule"))
         if title:
             self.addstr(scr, y, 2, " %s " % title,
                         (self.C("accent") | curses.A_BOLD) if on else self.C("label"))
+            if pane is not None:
+                self.hit(y, 2, 4 + len(title), ("pane", pane))
         if right:
             self.addstr(scr, y, max(0, w - len(right) - 5), " %s " % right, self.C("dim"))
 
@@ -3140,6 +3402,41 @@ DRUM_HUE = 167
 BLACK_KEYS = (1, 3, 6, 8, 10)
 SPARK = "\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588"
 METER_FLOOR_DB = -48.0
+
+
+# THE MOUSE (and a touchscreen, which a terminal hears as one): button-event
+# tracking -- presses, releases, drags with a button down, the wheel -- in SGR
+# coordinates (ESC [ < b ; x ; y M, m for a release), read by TUI.read
+# itself rather than curses' own mouse support, whose reading hangs on each
+# terminal description's kmous. TUNING_MOUSE=0 leaves the terminal's own.
+MOUSE_ON = "\033[?1002h\033[?1006h"
+MOUSE_OFF = "\033[?1006l\033[?1002l"
+
+
+class Mouse(object):
+    """One report: kind press | release | drag | wheel, the button (0 left),
+    the cell (x, y, from 0), and for the wheel dy (+1 up, -1 down)."""
+    __slots__ = ("kind", "button", "x", "y", "dy")
+
+    def __init__(self, kind, button, x, y, dy=0):
+        self.kind, self.button, self.x, self.y, self.dy = kind, button, x, y, dy
+
+    def __repr__(self):
+        return "Mouse(%s %d at %d,%d%s)" % (self.kind, self.button, self.x, self.y,
+                                            (" %+d" % self.dy) if self.dy else "")
+
+
+def parse_sgr_mouse(body, final):
+    """Mouse for an SGR report's body "b;x;y" and its final M or m, else None."""
+    try:
+        b, x, y = (int(t) for t in body.split(";"))
+    except ValueError:
+        return None
+    if b & 64:                                  # the wheel: 64 up, 65 down
+        return Mouse("wheel", b & 3, x - 1, y - 1, 1 if (b & 1) == 0 else -1)
+    if final == "m":
+        return Mouse("release", b & 3, x - 1, y - 1)
+    return Mouse("drag" if b & 32 else "press", b & 3, x - 1, y - 1)
 
 
 def level_db(v):
