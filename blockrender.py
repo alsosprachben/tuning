@@ -3953,9 +3953,6 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _pv = [(_t, _v) for _t, _cc, _v in in_order(_evs) if _cc == 64]
         if any(0 < _v < 127 for _t, _v in _pv):
             _PEDV_CH[_c] = ([_t for _t, _v in _pv], [_v for _t, _v in _pv])
-    if _PEDV_CH and sink is not None:
-        import streamrender as _SRM
-        raise _SRM.NotStreamable("half-pedal")
 
     # ALL SOUND OFF stops a channel dead, pedal or no pedal -- what a panic
     # button sends. Collected the same way as the damper, and applied after it
@@ -4946,6 +4943,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
                         cons_bursts=cons_bursts, cons_expand=_cons_expand, cons_src=_CONS_SRC,
                         mvol=_mvol, moog_tables=_moog_tables,
                         reverb=_REVERB_CH, reverb_steps=_REVERB_STEPS, qacc=_QACC, F=_F_SYM, ht_rows=_HT_ROWS,
+                        # the half-pedalled notes' damper tracks, each closed
+                        # before its note's rows are flushed (damper.py)
+                        damp_tracks=_DAMP_TRACKS,
                         amp_ref=_AMP_REF, amp_imb=_AMP_IMB,
                         moog_ft=_MOOG_FT, moog_mpi=_MOOG_MPI, moog_mki=_MOOG_MKI,
                         effects=dict(sympathetic=_SYM_CH, mf104=_MF104, gsdelay=_GSDN, tubeamp=_AMP_CH,
@@ -7772,7 +7772,7 @@ def _gpu():
 def _row_keys():
     import leslie as _LES, efxfilter as _EF
     return ([k for k, _ in FINAL_DTYPES] + [k for k, _, _ in _LES.LOBE_COLS]
-            + [k for k, _, _ in _EF.FILTER_COLS] + ['sw'])
+            + [k for k, _, _ in _EF.FILTER_COLS] + ['sw', 'dk', 'dg'])
 
 
 def prep_rows(prep, mask):

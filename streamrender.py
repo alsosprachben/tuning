@@ -1099,6 +1099,7 @@ class Stream:
             prep[k] = np.ascontiguousarray(rows[k][order].astype(dt))
         self._lobe_prep(prep, rows, order)
         self._filter_prep(prep)
+        self._damp_prep(prep, rows, order)
         bus = self.ctx['effects'].get('bus')
         if not bus:
             L, R, SL, SR_ = self._synth(prep, wi, w0, w1)
@@ -1187,6 +1188,44 @@ class Stream:
             prep['aR'] = prep['aR'] * g
             B.synth_partials(prep, w0, n, 0, P, SL, SR_)
         return L, R, SL, SR_
+
+    def _damp_prep(self, prep, rows, ix):
+        """THE HALF-PEDALLED ROWS (damper.py; blockrender's DM): a note's own
+        rows -- order key (0, its global row) -- onto the damper track that
+        covers their row, as the whole table puts each note's rows; every
+        other row (a pass's copy, the register's) none, as there. The tracks
+        this window uses, renumbered, end to end over their own blocks."""
+        tr = self.ctx.get('damp_tracks')
+        if not tr:
+            return
+        if len(tr) != getattr(self, '_dtn', -1):
+            self._dtn = len(tr)
+            self._dt0 = np.array([t[0] for t in tr], np.int64)
+            self._dt1 = np.array([t[1] for t in tr], np.int64)
+        key = rows['key'][ix]
+        dk = np.full(len(ix), -1, np.int64)
+        note = np.flatnonzero(key[:, 0] == 0)
+        if len(note):
+            g = key[note, 1]
+            t = np.searchsorted(self._dt0, g, side='right') - 1
+            ok = (t >= 0) & (g < self._dt1[np.maximum(t, 0)])
+            dk[note[ok]] = t[ok]
+        if not (dk >= 0).any():
+            return
+        import damper as DMP
+        used, loc = np.unique(dk[dk >= 0], return_inverse=True)
+        dkl = np.full(len(ix), -1, np.int32)
+        dkl[dk >= 0] = loc
+        f0 = np.array([tr[u][2] for u in used])
+        prep['dk'] = dkl
+        prep['dg'] = np.zeros(len(ix), np.float32)
+        m = dkl >= 0
+        prep['dg'][m] = DMP.weight(prep['nf'][m], f0[dkl[m]])
+        n = np.array([len(tr[u][4]) for u in used], np.int64)
+        prep['DM'] = np.ascontiguousarray(np.concatenate([tr[u][4] for u in used]))
+        prep['DMO'] = np.concatenate(([0], np.cumsum(n)[:-1])).astype(np.int64)
+        prep['DMB'] = np.array([tr[u][3] for u in used], np.int64)
+        prep['DMN'] = n
 
     def _filter_prep(self, prep):
         """A moving filter's columns and control table (blockrender.filter_prep),
@@ -1279,6 +1318,7 @@ class Stream:
                     prep[c] = np.ascontiguousarray(rows[c][ix].astype(dt))
                 self._lobe_prep(prep, rows, ix)
                 self._filter_prep(prep)
+                self._damp_prep(prep, rows, ix)
                 if self.stems['objects']:          # subset(objectify=True)'s rules
                     prep['aL'] = prep['aR'] = np.ascontiguousarray(prep['aM'])
                     prep['p0R'] = np.ascontiguousarray(prep['p0'])
