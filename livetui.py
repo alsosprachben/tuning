@@ -146,17 +146,18 @@ def patch_tree():
     def row(i, b, name, note):
         return "%3d%-5s %-16s %s" % (i, (".%d" % b) if b else "", name, note or "")
 
+    def capital_desc(i):
+        return CAPITAL_DESC.get(i) or MODELLED.get(i)
+
     def families(std, leaves_of):
         return [dict(label="%-20s %3d-%d" % (f, 8 * k, 8 * k + 7),
-                     kids=[dict(label=row(i, 0, GM[i], None), kids=leaves_of(i))
+                     kids=[dict(label=row(i, 0, GM[i], capital_desc(i)), kids=leaves_of(i))
                            if len(leaves_of(i)) > 1 else leaves_of(i)[0]
                            for i in range(8 * k, 8 * k + 8)])
                 for k, f in enumerate(FAMILIES)]
 
     def gm(i):
-        return [dict(label=row(i, 0, GM[i], CAPITAL_DESC.get(i) or
-                               (MODELLED[i] if i in MODELLED else None)),
-                     pick=(False, i, 0, "gm"))]
+        return [dict(label=row(i, 0, GM[i], capital_desc(i)), pick=(False, i, 0, "gm"))]
 
     def sc(m):
         def leaves(i):
@@ -202,6 +203,61 @@ def tree_leaves(node, path=(), up=()):
 def leaf_crumb(up, leaf):
     """A leaf as a search lists it: its standard and level, then its row."""
     return " \u203a ".join([n["crumb"] for n in up if n.get("crumb")] + [leaf["label"].strip()])
+
+
+# WHAT EACH VOICE WAS FITTED AGAINST (Ben: "we have descriptions of many
+# program classes, what they were fitted against"): the coverage table's
+# rating and note (examples/gm_coverage.py: RATED, VAR_RATED, KIT_RATED),
+# shown under the picker for the row it stands on. Read once, on the first
+# picker that asks; a table that will not load leaves the picker as it was.
+_COVERAGE = []
+
+
+def coverage():
+    """examples/gm_coverage, its variation and set ratings filled, or None."""
+    if not _COVERAGE:
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples"))
+            import gm_coverage as G
+            G._gs_sets_rated()
+            G._sc88pro_extra_rated()
+            G.variations()
+            _COVERAGE.append(G)
+        except Exception:
+            _COVERAGE.append(None)
+    return _COVERAGE[0]
+
+
+def fit_note(pick):
+    """(rating, note) for a picker leaf's pick (drums, program, variation key,
+    standard), or None. A tone that is another program's voice (an MT-32
+    tone, a renamed map tone) says so, then what that voice was fitted to."""
+    G = coverage()
+    if G is None:
+        return None
+    dr, p, k, _ = pick
+    if dr:
+        keys = G.KIT_RATED.get(p) if p else G.PERC_RATED
+        if not keys:
+            return None
+        rs = sorted(r for r, _ in keys.values() if r is not None)
+        n = collections.Counter(rs)
+        return (rs[len(rs) // 2] if rs else None,
+                "the %s set's %d keys: %s. Each key's own note is on the coverage page (coverage.md)."
+                % (PM.drum_set_name(p), len(keys),
+                   ", ".join("%d rated %d" % (n[r], r) for r in sorted(n, reverse=True))))
+    if not k:
+        return G.RATED.get(p)
+    got = G.VAR_RATED.get((p, k))
+    if got is None:
+        return G.RATED.get(p)
+    r, note = got
+    # ...an alias (aliased_variation) or a routed variation (routed_variation)
+    # names its program in its defaults: that voice's own note follows
+    q = getattr(PMAP.VARIATIONS.get((p, k)), "__defaults__", None)
+    if q and isinstance(q[0], int) and q[0] in G.RATED:
+        note = "%s -- %s" % (note, G.RATED[q[0]][1])
+    return r, note
 
 
 def part_title(p):
@@ -970,7 +1026,7 @@ class TUI:
         finally:
             curses.curs_set(0)
 
-    def menu(self, scr, title, items, start=0, nav=False, everywhere=None):
+    def menu(self, scr, title, items, start=0, nav=False, everywhere=None, about=None):
         """A centred picker. Returns an index, or None if cancelled.
 
         A TREE'S LEVEL (pick_patch): with nav, Left -- or Backspace outside a
@@ -983,12 +1039,20 @@ class TUI:
         typed (any case: "slow str", "rhodes", "127 bell"), the arrows move
         within them, Enter picks, Backspace edits, Esc clears it (a second
         closes the menu). A heading row (a section of the patch list) stays
-        out of a search's matches."""
+        out of a search's matches.
+
+        WITH about(row, found) -> (rating, note) or None, a box under the
+        list says what the row stood on was fitted against (fit_note), its
+        first lines; "?" shows the whole note."""
         scr.keypad(True)
         i = start
         query, searching = "", False
 
         here = items
+        # ...the about box only where something in it is rated (a level of
+        # standards or families has nothing to say), or for a search's rows
+        rated = about is not None and any(about(j, False) for j in range(len(items)))
+        drawn = None
 
         def view():
             if not query:
@@ -1005,11 +1069,18 @@ class TUI:
             if vis and i not in vis:
                 i = vis[0]
             pos = vis.index(i) if i in vis else 0
-            n = min(max(len(vis), 1), max(3, h - 8))
+            ah = 7 if about is not None and (rated or wide) and h >= 20 else 0
+            n = min(max(len(vis), 1), max(3, h - 8 - ah))
             top = max(0, min(pos - n // 2, len(vis) - n))
-            bw = min(w - 4, max(len(title) + 8, max((len(x) for x in here), default=10) + 8))
-            y0 = max(0, (h - n) // 2 - 1)
+            bw = min(w - 4, max(len(title) + 8, max((len(x) for x in here), default=10) + 8,
+                                72 if ah else 0))
+            y0 = max(0, (h - n - ah) // 2 - 1)
             x0 = max(0, (w - bw) // 2)
+            # ...A NEW SHAPE REPAINTS THE PANEL under it, so a tree's level
+            # or a narrowing search leaves no edge of a bigger box behind
+            if about is not None and drawn != (y0, x0, n, ah, bw):
+                self.draw(scr)
+                drawn = (y0, x0, n, ah, bw)
             foot = (("/" + query + ("_" if searching else "") + "   %d found" % len(vis)) if (searching or query)
                     else "enter select   / search   esc cancel")
             self.box(scr, y0 - 1, x0, n + 3, bw, title, foot)
@@ -1026,6 +1097,17 @@ class TUI:
                 at = (self.C("sel") | curses.A_BOLD if j == i else
                       self.C("label") if here[j].startswith("--") else self.C("text"))
                 self.addstr(scr, y0 + k, x0 + 1, txt[:bw - 2], at)
+            fit = about(i, here is not items) if ah and vis else None
+            if ah:
+                lines = self.fit_lines(fit, bw - 4)
+                more = len(lines) > ah - 2
+                if more:
+                    lines = lines[:ah - 2]
+                    lines[-1] = lines[-1][:bw - 6] + " \u2026"
+                self.box(scr, y0 + n + 2, x0, ah, bw, self.fit_title(fit),
+                         "? the whole note" if more else None)
+                for k, ln in enumerate(lines):
+                    self.addstr(scr, y0 + n + 3 + k, x0 + 2, ln, self.C("text"))
             scr.refresh()
             c = self.read(scr)
             if isinstance(c, Mouse):
@@ -1034,7 +1116,7 @@ class TUI:
                 if c.kind == "wheel" and vis:
                     i = vis[max(0, min(len(vis) - 1, pos - c.dy))]
                 elif c.kind == "press":
-                    inside = y0 - 1 <= c.y <= y0 + n + 1 and x0 <= c.x < x0 + bw
+                    inside = y0 - 1 <= c.y <= y0 + n + 1 + ah and x0 <= c.x < x0 + bw
                     if not inside:
                         return None
                     k = c.y - y0
@@ -1052,6 +1134,10 @@ class TUI:
                 continue
             if c == ord("/"):
                 searching = True
+                continue
+            if c == ord("?") and fit:
+                self.show_note(scr, fit)
+                drawn = None
                 continue
             if c in (curses.KEY_UP, ord("k")):
                 i = vis[max(0, pos - 1)] if vis else i
@@ -1073,6 +1159,30 @@ class TUI:
                     return None
             elif c == ord("q") and not searching:
                 return None
+
+    def fit_title(self, fit):
+        """The about box's title: the coverage rating, by its meaning."""
+        if not fit or fit[0] is None:
+            return "not rated"
+        return "rated %d: %s" % (fit[0], coverage().LEVEL.get(fit[0], ""))
+
+    @staticmethod
+    def fit_lines(fit, width):
+        import textwrap
+        return textwrap.wrap(fit[1], max(10, width)) if fit else []
+
+    def show_note(self, scr, fit):
+        """The whole fitted-against note, in a box over the picker; a key closes it."""
+        h, w = scr.getmaxyx()
+        bw = min(w - 2, 96)
+        lines = self.fit_lines(fit, bw - 4)[:max(1, h - 4)]
+        y0, x0 = max(0, (h - len(lines) - 2) // 2), max(0, (w - bw) // 2)
+        self.box(scr, y0, x0, len(lines) + 2, bw, self.fit_title(fit), "any key")
+        for k, ln in enumerate(lines):
+            self.addstr(scr, y0 + 1 + k, x0 + 2, ln, self.C("text"))
+        scr.refresh()
+        while self.read(scr) == -1:
+            pass
 
     def enter(self, scr):
         """Enter acts on the column you are actually standing in."""
@@ -1529,8 +1639,20 @@ class TUI:
             title = " \u203a ".join(["patch for part %d" % (self.row + 1)] +
                                     [n["crumb"] for n, _ in stack if n.get("crumb")] +
                                     ([node["crumb"]] if node.get("crumb") else []))
+            # ...the box under it: what the row's voice was fitted against (a
+            # program with tones under it: its capital, the first of them)
+            def about(j, wide, _kids=node["kids"]):
+                if wide:
+                    return fit_note(leaves[j][2]["pick"])
+                k = _kids[j]
+                if "kids" in k:
+                    if (not all("pick" in x for x in k["kids"])
+                            or len({x["pick"][1] for x in k["kids"]}) > 1):
+                        return None             # a standard, a level, a family, eight tones
+                    k = k["kids"][0]
+                return fit_note(k["pick"])
             got = self.menu(scr, title, [k["label"] for k in node["kids"]], start,
-                            nav=True, everywhere=found)
+                            nav=True, everywhere=found, about=about)
             if got is None:
                 return
             if got == "back":
