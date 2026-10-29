@@ -2777,6 +2777,14 @@ def signed_bar(v, n):
 def run(live, port_name, ump_client=None):
     """Open audio and MIDI, then hand the terminal to curses. With no
     `port_name` the MIDI arrives some other way -- the ALSA MIDI 2.0 client."""
+    # STDERR TO A LOG while curses has the screen: what PyAudio, PortAudio or
+    # a thread prints there was drawn over and lost (Ben's hang of 2026-10-28
+    # left no word). live_stderr.log, next to live_dump.txt, appended per session.
+    _log = open(os.path.join(os.path.dirname(os.path.abspath(LV.__file__)), "live_stderr.log"), "a", buffering=1)
+    _log.write("==== session %s\n" % time.strftime("%Y-%m-%d %H:%M:%S"))
+    sys.stderr.flush()
+    _err_fd = os.dup(2)
+    os.dup2(_log.fileno(), 2)
     pa, stream = LV.open_stream(live, live.rate, live.frames)
     port = mido.open_input(port_name, callback=live.on_midi) if port_name else None
     ui = TUI(live, port_name or ("ALSA %s" % ump_client.address if ump_client else "no MIDI"))
@@ -2789,6 +2797,9 @@ def run(live, port_name, ump_client=None):
     finally:
         ui.builder.stop = True
         stream.stop_stream(); stream.close(); pa.terminate()
+        sys.stderr.flush()
+        os.dup2(_err_fd, 2)
+        os.close(_err_fd)
         if port:
             port.close()
         if ump_client:

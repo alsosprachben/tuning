@@ -4317,6 +4317,9 @@ class Live:
         self.render_ms = 0.0    # last block's kernel time, against the budget
         self.render_max = 0.0
         self.blocks = 0
+        self.cb_exceptions = 0          # exceptions out of the callback's body (callback)
+        self._cb_logged = 0.0
+        self.stream = None              # the PortAudio stream, once open (open_stream): the watchdog asks it
 
     # ---- parts --------------------------------------------------------------
     def set_parts(self, parts):
@@ -4601,6 +4604,17 @@ class Live:
                 elif not told and time.monotonic() - since > stall_s:
                     f.write("==== audio stalled %.1f s at block %d, %s -- every thread:\n"
                             % (time.monotonic() - since, b, time.strftime("%Y-%m-%d %H:%M:%S")))
+                    # ...AND WHETHER PORTAUDIO STILL CALLS US: a stream that is
+                    # no longer active was stopped (an exception it saw, or the
+                    # device); one still active and not calling is the device
+                    try:
+                        st = self.stream
+                        ss = ("none" if st is None else "active %s, stopped %s"
+                              % (st.is_active(), st.is_stopped()))
+                    except Exception as e:
+                        ss = "unreadable (%s)" % e
+                    f.write("  stream %s; errors %d, last %s; callback exceptions %d; underruns %d\n"
+                            % (ss, self.errors, self.last_error, self.cb_exceptions, self.underruns))
                     f.flush()
                     faulthandler.dump_traceback(file=f, all_threads=True)
                     told = True
@@ -10245,7 +10259,45 @@ class Live:
         return y
 
     # ---- audio --------------------------------------------------------------
+    # THE WHOLE CALLBACK GUARDED. Its render has its own guard (a silent
+    # block), but the tail after it -- master gain, room, limiter, governor,
+    # meter -- had none, and an exception there reaches PyAudio, which aborts
+    # the stream: the sound gone for good, every thread idle, the traceback
+    # printed under the TUI's screen. Ben's hang of 2026-10-28 (switching to
+    # Bright Piano) dumped exactly that, and could not say which. Now any
+    # exception gives a silent block, is counted, and its traceback goes to
+    # PANIC_DUMP (the first few, then one in ten seconds).
     def callback(self, in_data, frame_count, time_info, status):
+        import pyaudio
+        n0 = self.n
+        try:
+            return self._callback(in_data, frame_count, time_info, status)
+        except Exception as e:
+            self.errors += 1
+            self.last_error = "callback: %s: %s" % (type(e).__name__, e)
+            self.cb_exceptions += 1
+            if self.n == n0:
+                self.n = n0 + frame_count
+                self.blocks += 1
+            now = time.monotonic()
+            if self.cb_exceptions <= 5 or now - self._cb_logged > 10.0:
+                self._cb_logged = now
+                try:
+                    import traceback
+                    f = getattr(self, "_wd_file", None)
+                    txt = ("==== callback exception %d at block %d, %s:\n%s"
+                           % (self.cb_exceptions, self.blocks, time.strftime("%Y-%m-%d %H:%M:%S"),
+                              traceback.format_exc()))
+                    if f is not None:
+                        f.write(txt); f.flush()
+                    else:
+                        with open(self.PANIC_DUMP, "a") as g:
+                            g.write(txt)
+                except Exception:
+                    pass
+            return (np.zeros(frame_count * 2, np.float32).tobytes(), pyaudio.paContinue)
+
+    def _callback(self, in_data, frame_count, time_info, status):
         import pyaudio
         if status:
             self.underruns += 1
@@ -20756,6 +20808,7 @@ def open_stream(live, rate, frames):
     pa = pyaudio.PyAudio()
     stream = pa.open(format=pyaudio.paFloat32, channels=2, rate=rate, output=True,
                      frames_per_buffer=frames, stream_callback=live.callback)
+    live.stream = stream
     return pa, stream
 
 
