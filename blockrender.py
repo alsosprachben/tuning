@@ -5638,14 +5638,15 @@ def _prepare(path, tuner='hybrid440', sink=None):
             if pch in _d and vch not in _d:
                 _d[vch] = _d[pch]
 
-    # read before bound on some path, so carried note to note as the loop's
-    # locals were (the stops loop's gain, read by the release click): bound
-    # and deleted here, so the first note finds them unbound as it did
-    _hf = _ppk = _tilt = gain = None
-    del _hf, _ppk, _tilt, gain
+    # read before bound on some path (as far as the dataflow can tell; each
+    # is bound under its read's own condition), so carried note to note as
+    # the loop's locals were: bound and deleted here, so the first note
+    # finds them unbound as it did
+    _hf = _ppk = _tilt = None
+    del _hf, _ppk, _tilt
     def _build_note(_ev):
         """One note of the note loop: its rows, and what it leaves for later passes."""
-        nonlocal _hf, _ppk, _tilt, gain
+        nonlocal _hf, _ppk, _tilt
         (ch, note, on, off, vel, (v7, v11, pan), prog) = _ev
         em.onset = on
         _pna = None              # MIDI 2.0 per-note pitch: set where f0 is decided
@@ -7424,6 +7425,10 @@ def _prepare(path, tuner='hybrid440', sink=None):
                              cc, crl, 0.0, csc, -1, 0, ph0=_ph)
             stops = ()
         _bnote = em.bend_row          # the note's own row, which a chest row multiplies
+        # THE NOTE'S GAIN where it has no stops (a Moog, a shaken noise, a
+        # pulse): the release click below rides it, and without this it rode
+        # whatever note last had stops -- or raised, on the first
+        gain = 1.0
         for key, ratio, gain, *rest in stops:
             # A stop with no pipes (the harmonium's Expression, Percussion,
             # Tremolo) has a gate and no partials; a rank with a key range (its
