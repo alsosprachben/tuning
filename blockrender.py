@@ -2245,6 +2245,606 @@ def prepare(path, tuner='hybrid440', sink=None):
     return out
 
 
+def _prep_notes_off(ccs, notes):
+    """ALL NOTES OFF and the four channel-mode messages that carry it
+    (CC123-127): every key held on the channel lifted there. Returns notes."""
+    # ------------------------------------------- CHANNEL MODE, CC123 to CC127
+    #
+    # ALL NOTES OFF, which this renderer did not read -- and Roland's text
+    # makes four more messages carry it: OMNI OFF (124) and OMNI ON (125) are
+    # "the same processing ... as when All Note Off is received", and MONO
+    # (126) and POLY (127) are All Sounds Off AND All Notes Off before they
+    # change the mode. So all five lift every key held on the channel, and a
+    # held damper then does what it would do to any lifted key.
+    for _c, _evs in ccs.items():
+        _aoff = sorted(_t for _t, _cc, _v in _evs if _cc in (123, 124, 125, 126, 127))
+        if not _aoff:
+            continue
+        _nn = []
+        for _n in notes:
+            if _n[0] == _c:
+                _i = _bisect.bisect_right(_aoff, _n[2])
+                if _i < len(_aoff) and _aoff[_i] < _n[3]:
+                    _n = (_n[0], _n[1], _n[2], _aoff[_i]) + tuple(_n[4:])
+            _nn.append(_n)
+        notes = _nn
+    return notes
+
+
+def _prep_mono_mode(ccs, gmon, notes, total):
+    """MONO MODE (CC126/127): a mono channel's notes rewritten as one voice that
+    goes back to a key still held. Returns (_MONO_CUT, _MONO_SLUR, notes)."""
+    # MONO MODE, which is what makes portamento's source note a fact rather
+    # than a convention. In poly mode "which note does this glide from" has no
+    # answer when a chord is sounding -- Roland gives none, and CC84 exists
+    # because there is none. In mono there is only ever one note.
+    #
+    # Roland sets the channel to Mode 4, M = 1, "regardless of the value of
+    # mono number": one voice. What it does not specify is what happens when
+    # the key on top is released while another is still held. Every monophonic
+    # instrument answers the same way -- it goes back to the key still down,
+    # last-pressed first -- and that is what a trill with one finger held
+    # needs, so that is what this does. Stated as a convention, not as Roland.
+    #
+    # The handoff is a SLUR: the new note takes the voice's legato attack, and
+    # the old one stops as it starts rather than ringing out on its own
+    # release or under the damper. One voice cannot be in two places.
+    _MONO_SLUR = set()      # (ch, note, on) that arrive by slur
+    _MONO_CUT = set()       # (ch, note, on) that are cut off by the next
+    _mono_notes = []
+    _in_mono = set()
+    for _c, _evs in ccs.items():
+        _gm = [_t for _t, _q in gmon]
+        _mode = sorted([(_t, _cc == 126) for _t, _cc, _v in _evs if _cc in (126, 127)]
+                       + [(_t, False) for _t in _gm], key=lambda e: e[0])
+        if not any(_m for _t, _m in _mode):
+            continue
+        _spans = []; _st = None
+        for _t, _m in _mode:
+            if _m and _st is None:
+                _st = _t
+            elif not _m and _st is not None:
+                _spans.append((_st, _t)); _st = None
+        if _st is not None:
+            _spans.append((_st, total + 1.0))
+
+        def _mono_at(_t, _spans=_spans):
+            return any(_a <= _t < _b for _a, _b in _spans)
+
+        _mine = [_n for _n in notes if _n[0] == _c and _mono_at(_n[2])]
+        if not _mine:
+            continue
+        _in_mono.update(id(_n) for _n in _mine)
+        # Releases before presses at the same instant: a key lifted as the next
+        # goes down is not an overlap, so it is not a slur.
+        _ev = sorted([(_n[2], 1, _n) for _n in _mine]
+                     + [(_n[3], 0, _n) for _n in _mine],
+                     key=lambda e: (e[0], e[1]))
+        _stack = []            # held keys, in the order they went down
+        _cur = None            # (note tuple it came from, start, slur)
+
+        def _emit(_src, _start, _end, _slur, _cut):
+            if _end - _start <= 1e-9:
+                return
+            _nt = (_c, _src[1], _start, _end) + tuple(_src[4:])
+            _mono_notes.append(_nt)
+            if _slur:
+                _MONO_SLUR.add((_c, _src[1], _start))
+            if _cut:
+                _MONO_CUT.add((_c, _src[1], _start))
+
+        for _t, _kind, _n in _ev:
+            if _kind == 1:
+                if _cur is not None:
+                    _emit(_cur[0], _cur[1], _t, _cur[2], True)
+                _stack = [_x for _x in _stack if _x[1] != _n[1]] + [_n]
+                _cur = (_n, _t, _cur is not None)
+            else:
+                _top = _cur is not None and _cur[0][1] == _n[1]
+                _stack = [_x for _x in _stack if _x[1] != _n[1]]
+                if not _top:
+                    continue            # already replaced: nothing sounds for it
+                if _stack:
+                    _emit(_cur[0], _cur[1], _t, _cur[2], True)
+                    _cur = (_stack[-1], _t, True)   # back to the key still down
+                else:
+                    _emit(_cur[0], _cur[1], _t, _cur[2], False)
+                    _cur = None
+    if _mono_notes:
+        notes = [_n for _n in notes if id(_n) not in _in_mono] + _mono_notes
+    return (_MONO_CUT, _MONO_SLUR, notes)
+
+
+def _prep_octave_tuning(notes, sotas):
+    """SCALE/OCTAVE TUNING (GS): the table in force at each channel's first
+    note, a temperament folded into f0; a later change is reported. Returns _OTUN."""
+    # THE SAME SPLIT THE PITCH WHEEL GETS, and for the same reason: a table set
+    # before the channel's first note and never changed is a TEMPERAMENT, and a
+    # fixed factor on f0 reproduces it exactly. Real files send it once in the
+    # header. One that changed mid-note would be a gesture, which this does not
+    # model -- the last table in force at the channel's first note is used and
+    # the change is reported rather than silently interpolated.
+    _OTUN = {}
+    for _c, _ev in sotas.items():
+        # ON TIME ALONE, and stably. sorted() on the bare tuples broke ties on
+        # the table itself, so two tables sent on the same tick came out in
+        # order of their cents rather than the order they were sent -- which
+        # mattered the moment GM System On started posting a zero table.
+        _ev = sorted(_ev, key=lambda e: e[0])
+        _f = min((_n[2] for _n in notes if _n[0] == _c), default=None)
+        if _f is None:
+            continue
+        _tab = next((_t for _s, _t in reversed(_ev) if _s <= _f + 1e-6),
+                    _ev[0][1])
+        if any(abs(_x) > 1e-9 for _x in _tab):
+            _OTUN[_c] = _tab
+        # Only a change AFTER the first note is a change mid-piece. A header
+        # that sets a table and then resets it on the same tick has changed
+        # its mind before anyone played, which is nothing to report.
+        if any(_s > _f + 1e-6 and _t != _tab for _s, _t in _ev):
+            print("  scale/octave tuning changes mid-piece on channel %d; "
+                  "the table in force at its first note is used" % _c)
+    return _OTUN
+
+
+def _prep_choir_parts(notes, path):
+    """A CHOIR'S BODY BELONGS TO THE PART: each channel's voice part, lyric
+    vowels and median pitch (tessitura). Returns (_lyr, _parts, _tess)."""
+    # A CHOIR'S BODY BELONGS TO THE PART, NOT THE NOTE. Alto and tenor overlap
+    # by a fourth, yet one section is women and the other men -- tracts 17%
+    # apart -- so a per-note pitch rule cannot separate them and would flip the
+    # body inside a line. A part's TESSITURA can: take each channel's median
+    # pitch once and let every note of that channel be sung by the same people.
+    _parts = _voice_parts(path)
+    _lyr = _lyric_vowels(path)
+    for _c, _v in _vocalise().items():          # a wordless part still has a vowel
+        _lyr.setdefault(_c, [(0.0, _v, None, None)])
+    _tess = {}
+    for _e in notes:
+        _tess.setdefault(_e[0], []).append(_e[1])
+    _tess = {c: 440.0 * 2.0 ** ((sorted(v)[len(v) // 2] - 69) / 12.0)
+             for c, v in _tess.items() if v}
+    return (_lyr, _parts, _tess)
+
+
+def _prep_organ_rows(_CMXEV, ccs, ch_progs, nblk, notes):
+    """ORGAN REGISTRATION ROWS, keyed by (channel, organ): the gate and swell
+    rows each registered organ's ranks and swell pedal ride. Returns (Grows,
+    Srows, _laws, crow_of, grow_of, rankev_of, sh)."""
+    # organ registration rows
+    Grows=[]; Srows=[]; grow_of={}; crow_of={}; rankev_of={}; sh=(0.06,1.6,3.5,1500.0); _laws=[]
+    # KEYED BY (channel, organ): a channel can change program from one
+    # registered instrument to another (a tonewheel, then a harmonium), and
+    # each has its own ranks, stop word and swell -- organ_family. A channel
+    # with one organ is built exactly as it was.
+    for ch, _plist in ch_progs.items():
+        for pc in (c for q in uniq_programs(_plist) for c in voice_classes(q)):  # a layer's organ too
+            if not getattr(pc, 'registerable', False):
+                continue
+            _orgk = (ch, organ_family(pc))
+            if _orgk in rankev_of:
+                continue
+            # each later tone of this organ on the channel recalls its own
+            # registration where its first note is (registration_blocks)
+            _fam = _orgk[1]; _rcl = []; _ds = getattr(pc, 'default_stops', 1)
+            for _e in sorted((_e for _e in notes if _e[0] == ch), key=lambda _e: _e[2]):
+                for _c in voice_classes(_e[6]):
+                    if getattr(_c, 'registerable', False) and organ_family(_c) == _fam:
+                        _d = getattr(_c, 'default_stops', 1)
+                        if _d != _ds:
+                            _rcl.append((_e[2] - 1e-4, _d)); _ds = _d
+                        break
+            pr = pc(261.6,0,1,1); g,s,rev = registration_blocks(ch, pr, ccs, nblk, _CMXEV['amp'].get(ch),
+                                                                recalls=_rcl)
+            rankev_of[_orgk]=rev
+            crow_of[_orgk]=len(Srows); Srows.append(s)
+            for r in pr.stop_ranks: k=r[0]; grow_of[(_orgk,k)]=len(Grows); Grows.append(g[k])
+            if tuple(getattr(pr, 'stop_word_ccs', (11, 43)))[0] == 11:   # only what swells shapes the swell
+                _laws.append((crow_of[_orgk], (pr.swell_floor, pr.swell_gain_power,
+                                             pr.swell_hf_max, pr.swell_hf_ref_hz)))
+    return (Grows, Srows, _laws, crow_of, grow_of, rankev_of, sh)
+
+
+def _prep_swell_law(Srows, _laws, sh):
+    """ONE SWELL LAW PER RENDER, every organ's own level: the law sh the
+    kernel applies to every swell row. Returns sh."""
+    # ONE SWELL LAW PER RENDER, BUT EVERY ORGAN'S OWN LEVEL. The kernel applies
+    # one law (sh) to every swell row, and it used to be whichever organ was
+    # processed LAST -- so with a Hammond and a church organ in one file each
+    # got the other's box: the Hammond, whose swell is fixed open (floor 1.0),
+    # took the flue's 0.06 floor, and a rock organ asked for -3 dB by CC7 came
+    # out +16 (examples/qkbattle_mix.py). Now the law is a real box's -- the
+    # first organ that has one -- and every other organ's row is re-mapped so
+    # that law gives the LEVEL its own law would:
+    #     L = f_i + (1 - f_i) s^p_i,   s' = ((L - f_g) / (1 - f_g))^(1/p_g)
+    # A single-organ render keeps its own law and its rows untouched.
+    if _laws:
+        sh = next((lw for _r, lw in _laws if lw[0] < 1.0), _laws[-1][1])
+        fg, pg = sh[0], sh[1]
+        for _r, (fi, pi, _hm, _hr) in _laws:
+            if (fi, pi) == (fg, pg):
+                continue
+            _s = np.asarray(Srows[_r], np.float64)
+            _L = fi + (1.0 - fi) * np.clip(_s, 0.0, 1.0) ** pi
+            if fg < 1.0:
+                Srows[_r] = np.clip((_L - fg) / (1.0 - fg), 0.0, 1.0) ** (1.0 / pg)
+            else:
+                Srows[_r] = np.ones_like(_s)      # a law with no range: open
+    return sh
+
+
+def _prep_chest_wind(Grows, ch_progs, grow_of, nblk, notes, rankev_of):
+    """THE CHEST'S WIND (wind.py): one pressure per organ channel, its wander,
+    its sag under the pipes speaking, and the Tremulant. Returns (_WROWS, wrow_key)."""
+    # THE CHEST'S WIND (wind.py): one pressure per organ channel -- a division
+    # stands on its own chest -- moved by its wander and its sag under the
+    # pipes speaking (TUNING_WIND) and by the Tremulant when drawn (a stop, on
+    # whatever TUNING_WIND says). Every rank answers it by its family: the
+    # pitch rides a bend row per (channel, family), the level that row's BL.
+    # Built whole here, before any note, so a stream is the table by
+    # construction. A channel with neither gets no rows, and renders as it did.
+    _WROWS = {}              # channel -> {(a, b): (ratio per block, level at block edges)}
+    wrow_key = {}            # (channel, rank) -> (a, b)
+    for ch, _plist in ch_progs.items():
+        pc = next((c for q in uniq_programs(_plist) for c in voice_classes(q)
+                   if getattr(c, 'registerable', False)), None)
+        if pc is None:
+            continue
+        if getattr(pc, 'wind_skirt_db', None) is None or not getattr(pc, 'wind_pitch_exp', 0.0):
+            continue                            # not a pipe organ
+        _wk = (ch, organ_family(pc))
+        _tr = rankev_of[_wk].get('tremulant', ())
+        _trem_on = any(tg >= 0.5 for _t, tg in _tr) and pc.tremulant_depth > 0.0
+        _wsc = wind_scale_for(pc)
+        if not (_wsc or _trem_on):
+            continue
+        import wind as _WND
+        _bt = (np.arange(nblk) + 0.5) * BLK / SR
+        _trem = np.zeros(nblk)
+        for _t, tg in _tr:                      # the stop's draw, a step per block
+            _trem[_bt >= _t] = tg
+        _dem = np.zeros(nblk + 1)
+        _ranks = [r for r in pc.stop_ranks if r[1] is not None]
+        for _n in notes:
+            if _n[0] != ch or property_class_for_program(_n[6]) is not pc:
+                continue
+            _f = 440.0 * 2.0 ** ((_n[1] - 69) / 12.0)
+            _b0 = min(nblk, int(_n[2] * SR / BLK)); _b1 = min(nblk, int(_n[3] * SR / BLK) + 1)
+            if _b1 <= _b0:
+                continue
+            for r in _ranks:
+                _rat = r[1] if isinstance(r[1], (list, tuple)) else [r[1]]
+                _w = sum(_WND.pipe_draw(_f * q) for q in _rat)
+                _dem[_b0:_b1] += _w * Grows[grow_of[(_wk, r[0])]][_b0:_b1]
+        _wd = _WND.Wind(pc, BLK / SR, seed=ch, scale=_wsc, wander_scale=(1.0 if _wsc else 0.0))
+        _p = _wd.blocks(_dem[:nblk], _trem)
+        _WROWS[ch] = {}
+        for r in _ranks:
+            _wc = T.rank_wind_class(pc, r)
+            _ab = (float(_wc.wind_pitch_exp), float(_wc.wind_level_exp))
+            wrow_key[(ch, r[0])] = _ab
+            if _ab not in _WROWS[ch]:
+                _WROWS[ch][_ab] = _WND.pitch_level(_p, *_ab)
+        if _VERBOSE_WIND:
+            print("  wind ch%d: pressure %.4f..%.4f, peak draw %.1f units%s"
+                  % (ch, _p.min(), _p.max(), _dem.max(), ", tremulant" if _trem_on else ""))
+    return (_WROWS, wrow_key)
+
+
+def _prep_breath(ch_progs, crow_of, nblk):
+    """THE PLAYER'S BREATH: per played-pipe channel, slow noises for the tone's
+    level, the breath noise's level and the pitch, at block edges. Returns _BREATH."""
+    # THE PLAYER'S BREATH (tonelib.SynthProperties.breath_wobble_db): on a
+    # channel a played pipe sounds on, the tone's level, the breath noise's
+    # level and the pitch -- each slow noise (one pole at its corner, unit
+    # variance from the first edge). The levels ride BEND ROWS' levels (BL,
+    # below), given at block EDGES and ramped across each block: as gate rows,
+    # held a block, every 11.6 ms step on a loud fundamental was a click and
+    # the breath crackled (kurtosis 21 against the recordings' 4). Seeded by
+    # the channel, built whole here: a stream is the table by construction.
+    _BREATH = {}             # ch -> (tone level at edges, noise level at edges, pitch ratio a block)
+    for ch, _plist in ch_progs.items():
+        if any(k[0] == ch for k in crow_of):
+            continue
+        pc = next((c for c in (property_class_for_program(q) for q in uniq_programs(_plist))
+                   if getattr(c, 'breath_wobble_db', 0.0) > 0.0
+                   or getattr(c, 'breath_noise_wobble_db', 0.0) > 0.0
+                   or getattr(c, 'breath_pitch_cents', 0.0) > 0.0), None)
+        if pc is None:
+            continue
+        _rng = np.random.default_rng(9173 + ch)
+
+        def _wander(fc):
+            a = math.exp(-2.0 * math.pi * fc * BLK / SR)
+            b = math.sqrt(1.0 - a * a)
+            z = _rng.standard_normal(nblk + 1)
+            y = np.empty(nblk + 1)
+            y[0] = z[0]
+            for i in range(1, nblk + 1):
+                y[i] = a * y[i - 1] + b * z[i]
+            return y
+        _tz = _wander(pc.breath_wobble_hz)
+        _sh = float(pc.breath_noise_wobble_share)
+        _nz = _sh * _tz + math.sqrt(max(0.0, 1.0 - _sh * _sh)) * _wander(pc.breath_noise_wobble_hz)
+        _ps = float(pc.breath_pitch_share)
+        _pz = _ps * _tz + math.sqrt(max(0.0, 1.0 - _ps * _ps)) * _wander(pc.breath_pitch_hz)
+        _pzb = 0.5 * (_pz[:-1] + _pz[1:])                 # a block's pitch: its edges' mean
+        _BREATH[ch] = (10.0 ** (pc.breath_wobble_db * _tz / 20.0),
+                       10.0 ** (pc.breath_noise_wobble_db * _nz / 20.0),
+                       2.0 ** (pc.breath_pitch_cents * _pzb / 1200.0))
+    return _BREATH
+
+
+def _prep_exclusive_classes(inner_ridge, notes):
+    """EXCLUSIVE CLASSES: when a closed hi-hat (or any choke group's stroke)
+    damps a ringing one, per drum channel. Returns choke_at."""
+    # EXCLUSIVE CLASSES: a closed hi-hat stroke damps a ringing open one. Applied
+    # here, on the note list, because it is a fact about the instrument rather
+    # than about the envelope -- the open hat simply stops.
+    #
+    # PER CHANNEL: a hi-hat is one object in ONE kit. Keyed on the note alone,
+    # a second drum channel (GM 2's CC0 = 120) would close the first one's hat.
+    drum_ons = {}
+    kit_on = {}                 # each drum note's set: its exclusive classes are the set's
+    for ch, note, on, off, vel, _, _pg in notes:
+        if is_drum(_pg) and choke_group(note, kit_for_program(int(_pg))) is not None:
+            kit_on[(ch, note)] = kit_for_program(int(_pg))
+            # A ridge WITHIN a scrape is not a new stroke: the gourd goes on
+            # ringing as the stick moves to the next ridge, so only the start of
+            # a scrape damps what came before it.
+            if (note, on) in inner_ridge: continue
+            drum_ons.setdefault((ch, note), []).append(on)
+    choke_at = {}
+    for (ch, note), ons in drum_ons.items():
+        grp = choke_group(note, kit_on.get((ch, note), 0))
+        later = sorted(t for (c2, n2), ts in drum_ons.items()
+                       if c2 == ch and n2 in grp for t in ts)
+        choke_at[(ch, note)] = later
+    return choke_at
+
+
+def _prep_effort_baseline(notes):
+    """EFFORT BASELINE: each channel's median velocity, the reference effort
+    is measured from. Returns _vbase."""
+    # EFFORT BASELINE, PER CHANNEL. Velocity in a real file is largely used to
+    # BALANCE one instrument against the others, not to say how hard the player
+    # is blowing -- so absolute velocity is the wrong signal. What carries effort
+    # is the DEVIATION: this note against how this part is normally played. The
+    # median is used rather than the mean so a few accents do not move the
+    # reference they are supposed to be measured against.
+    _vbase = {}
+    for _ch in {n[0] for n in notes}:
+        _vs = sorted(n[4] for n in notes if n[0] == _ch)
+        if _vs: _vbase[_ch] = _vs[len(_vs)//2]
+    return _vbase
+
+
+def _prep_damper_pedal(ccs, total):
+    """THE DAMPER PEDAL (CC64): each channel's down/up spans, and its values
+    for half-pedalling. Returns (_PEDV_CH, _PED_CH)."""
+    # THE DAMPER PEDAL. CC64 >= 64 lifts the dampers off every string, so a key
+    # released while it is down goes on ringing until the pedal comes up. That
+    # is a note-LENGTH fact, which is why it is resolved here rather than in
+    # parse(): _next_same below and _PHRASE_CH further down are both computed
+    # from the file's own note-offs, and they mean different things -- a phrase
+    # is when a piper lets the bag down, not when a pianist lifts a foot.
+    #
+    # ccs already carries every (t, control, value), so this costs no parsing.
+    _PED_CH = {}          # channel -> [(down_sec, up_sec)], sorted and disjoint
+    for _c, _evs in ccs.items():
+        _segs = []; _dn = None
+        for _t, _cc, _v in in_order(_evs):
+            if _cc != 64:
+                continue
+            # 64 is the switch point GM specifies, and half-pedalling is real:
+            # ondine.mid writes 0/24/40/56/72/88/104/127. Anything under 64 is
+            # the damper on the string.
+            if _v >= 64 and _dn is None:
+                _dn = _t
+            elif _v < 64 and _dn is not None:
+                _segs.append((_dn, _t)); _dn = None
+        if _dn is not None:
+            _segs.append((_dn, total))      # held down to the end of the file
+        if _segs:
+            _PED_CH[_c] = _segs
+    # HALF-PEDALLING (damper.py): a channel whose CC64 ever stands between 0
+    # and 127 keeps its VALUES, and its notes' dampers land where the key's
+    # contact is full -- passing on the way through the band, where a released
+    # note is damped by its level (damper.track). A file of 0 and 127 never
+    # comes here and renders as it did.
+    _PEDV_CH = {}
+    for _c, _evs in ccs.items():
+        _pv = [(_t, _v) for _t, _cc, _v in in_order(_evs) if _cc == 64]
+        if any(0 < _v < 127 for _t, _v in _pv):
+            _PEDV_CH[_c] = ([_t for _t, _v in _pv], [_v for _t, _v in _pv])
+    return (_PEDV_CH, _PED_CH)
+
+
+def _prep_sound_off(ccs):
+    """ALL SOUND OFF (CC120, and 126/127): when each channel stops dead.
+    Returns _SOFF_CH."""
+    # ALL SOUND OFF stops a channel dead, pedal or no pedal -- what a panic
+    # button sends. Collected the same way as the damper, and applied after it
+    # in the note loop so it overrides a held pedal.
+    _SOFF_CH = {}
+    for _c, _evs in ccs.items():
+        # 126 and 127 too: Roland's MONO and POLY are "the same processing ...
+        # as when All Sounds Off and All Notes Off is received".
+        _ts = sorted(_t for _t, _cc, _v in _evs if _cc in (120, 126, 127))
+        if _ts:
+            _SOFF_CH[_c] = _ts
+    return _SOFF_CH
+
+
+def _prep_sostenuto_soft(ccs, notes, total):
+    """SOSTENUTO (CC66) catches the keys down when it went down; and the SOFT
+    pedal (CC67) in force at a time. Returns (_SOST_HELD, _soft_at)."""
+    # SOSTENUTO holds only the keys already down when the pedal went down, and
+    # lets everything played after it damp normally. That asymmetry is the
+    # whole instrument and nothing else here expresses it: _next_same answers
+    # "when is this key struck again", _PHRASE_CH answers "is the channel
+    # active", and neither answers "what was sounding at this instant".
+    #
+    # Keyed on the note INSTANCE, (channel, note, onset), because being caught
+    # by the pedal is a fact about one press of one key -- and read from the
+    # RAW note-off, before the damper below can extend it.
+    _SOST_HELD = {}
+    for _c, _evs in ccs.items():
+        _segs = []; _dn = None
+        for _t, _cc, _v in in_order(_evs):
+            if _cc != 66:
+                continue
+            if _v >= 64 and _dn is None:
+                _dn = _t
+            elif _v < 64 and _dn is not None:
+                _segs.append((_dn, _t)); _dn = None
+        if _dn is not None:
+            _segs.append((_dn, total))
+        for _d0, _u0 in _segs:
+            for _e in notes:
+                if _e[0] == _c and _e[2] <= _d0 < _e[3]:
+                    _SOST_HELD[(_e[0], _e[1], _e[2])] = max(
+                        _u0, _SOST_HELD.get((_e[0], _e[1], _e[2]), 0.0))
+
+    # CC67, the soft pedal: same switch, same half-pedal collapse.
+    _SOFT_CH = {}
+    for _c, _evs in ccs.items():
+        _segs = []; _dn = None
+        for _t, _cc, _v in in_order(_evs):
+            if _cc != 67:
+                continue
+            if _v >= 64 and _dn is None:
+                _dn = _t
+            elif _v < 64 and _dn is not None:
+                _segs.append((_dn, _t)); _dn = None
+        if _dn is not None:
+            _segs.append((_dn, total))
+        if _segs:
+            _SOFT_CH[_c] = _segs
+
+    def _soft_at(_c, _t):
+        """Was the una corda shift in at this note's ONSET?
+
+        At the onset and not across the note, because the shift decides which
+        strings the HAMMER reaches. Once a note is struck, moving the pedal
+        cannot un-strike a string -- which is why this is a build-time fact
+        and not a gain.
+        """
+        for _d0, _u0 in _SOFT_CH.get(_c, ()):
+            if _d0 <= _t < _u0:
+                return True
+        return False
+    return (_SOST_HELD, _soft_at)
+
+
+def _prep_portamento(ccs, total):
+    """PORTAMENTO (CC5/65/84): each channel's switch, time and source-note
+    timelines. Returns (_PORTA_CTL, _porta_cc5_at, _porta_on_at)."""
+    # ------------------------------------------------- PORTAMENTO (CC5/65/84)
+    #
+    # THREE CONTROLLERS THAT ARE NOT THREE SETTINGS OF ONE THING. CC65 is a
+    # switch, CC5 is a speed, and CC84 is neither: its data byte is a source
+    # NOTE NUMBER, it fires once, and it works with the switch off. Roland's
+    # VE-GS Pro MIDI Implementation is the primary source for all three -- the
+    # SC-55 manual is a scan with no text layer (see sources.md) and this one
+    # is the same GS control set with the text intact.
+    #
+    # CC5 IS A RATE, NOT A TIME, and that is Roland's own word: "This adjusts
+    # the rate of pitch change when Portamento is ON or when using the
+    # Portamento Control. A value of 0 results in the fastest change." So a
+    # wide interval takes proportionally longer than a narrow one, which is
+    # also what a hand does. What Roland does NOT publish is the curve from
+    # the 0-127 value to an actual speed; that is chosen here and written down
+    # in midi.md, the same position tension_settle_time is in.
+    _PORTA_ON = {}      # channel -> [(down_sec, up_sec)], the CC65 segments
+    for _c, _evs in ccs.items():
+        _segs = []; _dn = None
+        for _t, _cc, _v in in_order(_evs):
+            if _cc != 65:
+                continue
+            # 64 again, the same switch point the three pedals collapse at.
+            if _v >= 64 and _dn is None:
+                _dn = _t
+            elif _v < 64 and _dn is not None:
+                _segs.append((_dn, _t)); _dn = None
+        if _dn is not None:
+            _segs.append((_dn, total))
+        if _segs:
+            _PORTA_ON[_c] = _segs
+
+    _PORTA_T = {}       # channel -> sorted [(t, CC5 value)]
+    _PORTA_CTL = {}     # channel -> sorted [(t, source note number)]
+    for _c, _evs in ccs.items():
+        _t5 = [(_t, _v) for _t, _cc, _v in in_order(_evs) if _cc == 5]
+        if _t5:
+            _PORTA_T[_c] = _t5
+        _t84 = [(_t, _v) for _t, _cc, _v in in_order(_evs) if _cc == 84]
+        if _t84:
+            _PORTA_CTL[_c] = _t84
+
+    def _porta_on_at(_c, _t):
+        """Was CC65 up at this instant? Roland: 0-63 OFF, 64-127 ON."""
+        for _d0, _u0 in _PORTA_ON.get(_c, ()):
+            if _d0 <= _t < _u0:
+                return True
+        return False
+
+    def _porta_cc5_at(_c, _t):
+        """The CC5 in force at _t. Roland's initial value is 0 -- fastest."""
+        _ev = _PORTA_T.get(_c)
+        if not _ev:
+            return 0
+        _i = _bisect.bisect_right(_ev, (_t, 128)) - 1
+        return _ev[_i][1] if _i >= 0 else 0
+    return (_PORTA_CTL, _porta_cc5_at, _porta_on_at)
+
+
+def _prep_glide_sources(_PORTA_CTL, _porta_on_at, notes):
+    """WHERE EACH NOTE GLIDES FROM, per note instance, decided once for the
+    file (CC84 wins over CC65 and is consumed). Returns _GLIDE_SRC."""
+    # WHERE EACH NOTE GLIDES FROM, decided once for the whole file because
+    # offline it can be. Keyed on the note INSTANCE, (channel, note, onset),
+    # for the same reason sostenuto is: being glided into is a fact about one
+    # press of one key.
+    #
+    # CC84 WINS OVER CC65 AND IS CONSUMED. Roland's Example 2 sends it with
+    # nothing sounding at all and still glides, so it is not "reuse the voice
+    # that is playing" -- it is "the next note starts from here", and it fires
+    # once. The most recent CC84 before a note-on applies to that note-on and
+    # to no other.
+    _GLIDE_SRC = {}
+    _prev_on = {}       # channel -> (onset, pitch) of the last note started
+    _ctl_used = {}      # channel -> index of the last CC84 already spent
+    for _e in sorted(notes, key=lambda e: (e[2], e[0], e[1])):
+        _c, _n, _on = _e[0], _e[1], _e[2]
+        _src = None
+        _ctl = _PORTA_CTL.get(_c)
+        if _ctl:
+            _i = _bisect.bisect_right(_ctl, (_on, 128)) - 1
+            if _i >= 0 and _i != _ctl_used.get(_c, -1):
+                _pv = _prev_on.get(_c)
+                # ...only if it arrived AFTER the previous note-on, or it is a
+                # message about a note that has already been and gone.
+                if _pv is None or _ctl[_i][0] >= _pv[0]:
+                    _ctl_used[_c] = _i
+                    if _ctl[_i][1] != CC84_CANCEL:
+                        _src = _ctl[_i][1]
+        if _src is None and _porta_on_at(_c, _on):
+            _pv = _prev_on.get(_c)
+            # A STRICTLY EARLIER ONSET, so a chord does not glide from itself.
+            # Which note of a chord a glide starts from is undefined in poly
+            # mode -- Roland does not say, and CC84 exists because it does not.
+            # The last one to start is the convention, and it is a convention.
+            if _pv is not None and _pv[0] < _on:
+                _src = _pv[1]
+        if _src is not None and _src != _n:
+            _GLIDE_SRC[(_c, _n, _on)] = _src
+        _pv = _prev_on.get(_c)
+        if _pv is None or _on >= _pv[0]:
+            _prev_on[_c] = (_on, _n)
+    return _GLIDE_SRC
+
+
 def _prepare(path, tuner='hybrid440', sink=None):
     """Parse + tune + build the full partial table (the one-time cost). Returns a
     dict of contiguous arrays ready for synth_window(); reused by render() (one
@@ -2414,133 +3014,12 @@ def _prepare(path, tuner='hybrid440', sink=None):
             return FREQ_E
         return _F(c, t)
 
-    # ------------------------------------------- CHANNEL MODE, CC123 to CC127
-    #
-    # ALL NOTES OFF, which this renderer did not read -- and Roland's text
-    # makes four more messages carry it: OMNI OFF (124) and OMNI ON (125) are
-    # "the same processing ... as when All Note Off is received", and MONO
-    # (126) and POLY (127) are All Sounds Off AND All Notes Off before they
-    # change the mode. So all five lift every key held on the channel, and a
-    # held damper then does what it would do to any lifted key.
-    for _c, _evs in ccs.items():
-        _aoff = sorted(_t for _t, _cc, _v in _evs if _cc in (123, 124, 125, 126, 127))
-        if not _aoff:
-            continue
-        _nn = []
-        for _n in notes:
-            if _n[0] == _c:
-                _i = _bisect.bisect_right(_aoff, _n[2])
-                if _i < len(_aoff) and _aoff[_i] < _n[3]:
-                    _n = (_n[0], _n[1], _n[2], _aoff[_i]) + tuple(_n[4:])
-            _nn.append(_n)
-        notes = _nn
+    notes = _prep_notes_off(ccs, notes)
 
-    # MONO MODE, which is what makes portamento's source note a fact rather
-    # than a convention. In poly mode "which note does this glide from" has no
-    # answer when a chord is sounding -- Roland gives none, and CC84 exists
-    # because there is none. In mono there is only ever one note.
-    #
-    # Roland sets the channel to Mode 4, M = 1, "regardless of the value of
-    # mono number": one voice. What it does not specify is what happens when
-    # the key on top is released while another is still held. Every monophonic
-    # instrument answers the same way -- it goes back to the key still down,
-    # last-pressed first -- and that is what a trill with one finger held
-    # needs, so that is what this does. Stated as a convention, not as Roland.
-    #
-    # The handoff is a SLUR: the new note takes the voice's legato attack, and
-    # the old one stops as it starts rather than ringing out on its own
-    # release or under the damper. One voice cannot be in two places.
-    _MONO_SLUR = set()      # (ch, note, on) that arrive by slur
-    _MONO_CUT = set()       # (ch, note, on) that are cut off by the next
-    _mono_notes = []
-    _in_mono = set()
-    for _c, _evs in ccs.items():
-        _gm = [_t for _t, _q in gmon]
-        _mode = sorted([(_t, _cc == 126) for _t, _cc, _v in _evs if _cc in (126, 127)]
-                       + [(_t, False) for _t in _gm], key=lambda e: e[0])
-        if not any(_m for _t, _m in _mode):
-            continue
-        _spans = []; _st = None
-        for _t, _m in _mode:
-            if _m and _st is None:
-                _st = _t
-            elif not _m and _st is not None:
-                _spans.append((_st, _t)); _st = None
-        if _st is not None:
-            _spans.append((_st, total + 1.0))
-
-        def _mono_at(_t, _spans=_spans):
-            return any(_a <= _t < _b for _a, _b in _spans)
-
-        _mine = [_n for _n in notes if _n[0] == _c and _mono_at(_n[2])]
-        if not _mine:
-            continue
-        _in_mono.update(id(_n) for _n in _mine)
-        # Releases before presses at the same instant: a key lifted as the next
-        # goes down is not an overlap, so it is not a slur.
-        _ev = sorted([(_n[2], 1, _n) for _n in _mine]
-                     + [(_n[3], 0, _n) for _n in _mine],
-                     key=lambda e: (e[0], e[1]))
-        _stack = []            # held keys, in the order they went down
-        _cur = None            # (note tuple it came from, start, slur)
-
-        def _emit(_src, _start, _end, _slur, _cut):
-            if _end - _start <= 1e-9:
-                return
-            _nt = (_c, _src[1], _start, _end) + tuple(_src[4:])
-            _mono_notes.append(_nt)
-            if _slur:
-                _MONO_SLUR.add((_c, _src[1], _start))
-            if _cut:
-                _MONO_CUT.add((_c, _src[1], _start))
-
-        for _t, _kind, _n in _ev:
-            if _kind == 1:
-                if _cur is not None:
-                    _emit(_cur[0], _cur[1], _t, _cur[2], True)
-                _stack = [_x for _x in _stack if _x[1] != _n[1]] + [_n]
-                _cur = (_n, _t, _cur is not None)
-            else:
-                _top = _cur is not None and _cur[0][1] == _n[1]
-                _stack = [_x for _x in _stack if _x[1] != _n[1]]
-                if not _top:
-                    continue            # already replaced: nothing sounds for it
-                if _stack:
-                    _emit(_cur[0], _cur[1], _t, _cur[2], True)
-                    _cur = (_stack[-1], _t, True)   # back to the key still down
-                else:
-                    _emit(_cur[0], _cur[1], _t, _cur[2], False)
-                    _cur = None
-    if _mono_notes:
-        notes = [_n for _n in notes if id(_n) not in _in_mono] + _mono_notes
+    (_MONO_CUT, _MONO_SLUR, notes) = _prep_mono_mode(ccs, gmon, notes, total)
 
 
-    # THE SAME SPLIT THE PITCH WHEEL GETS, and for the same reason: a table set
-    # before the channel's first note and never changed is a TEMPERAMENT, and a
-    # fixed factor on f0 reproduces it exactly. Real files send it once in the
-    # header. One that changed mid-note would be a gesture, which this does not
-    # model -- the last table in force at the channel's first note is used and
-    # the change is reported rather than silently interpolated.
-    _OTUN = {}
-    for _c, _ev in sotas.items():
-        # ON TIME ALONE, and stably. sorted() on the bare tuples broke ties on
-        # the table itself, so two tables sent on the same tick came out in
-        # order of their cents rather than the order they were sent -- which
-        # mattered the moment GM System On started posting a zero table.
-        _ev = sorted(_ev, key=lambda e: e[0])
-        _f = min((_n[2] for _n in notes if _n[0] == _c), default=None)
-        if _f is None:
-            continue
-        _tab = next((_t for _s, _t in reversed(_ev) if _s <= _f + 1e-6),
-                    _ev[0][1])
-        if any(abs(_x) > 1e-9 for _x in _tab):
-            _OTUN[_c] = _tab
-        # Only a change AFTER the first note is a change mid-piece. A header
-        # that sets a table and then resets it on the same tick has changed
-        # its mind before anyone played, which is nothing to report.
-        if any(_s > _f + 1e-6 and _t != _tab for _s, _t in _ev):
-            print("  scale/octave tuning changes mid-piece on channel %d; "
-                  "the table in force at its first note is used" % _c)
+    _OTUN = _prep_octave_tuning(notes, sotas)
 
     def _pressure_of(ch, note, on, off):
         """This note's pressure, 0..1: the time-weighted MEAN over its span.
@@ -2574,163 +3053,12 @@ def _prepare(path, tuner='hybrid440', sink=None):
         acc += v * (off - t0)
         return max(0.0, min(1.0, acc / (off - on)))
     N = int(total*SR) + SR; nblk = N // BLK + 2
-    # A CHOIR'S BODY BELONGS TO THE PART, NOT THE NOTE. Alto and tenor overlap
-    # by a fourth, yet one section is women and the other men -- tracts 17%
-    # apart -- so a per-note pitch rule cannot separate them and would flip the
-    # body inside a line. A part's TESSITURA can: take each channel's median
-    # pitch once and let every note of that channel be sung by the same people.
-    _parts = _voice_parts(path)
-    _lyr = _lyric_vowels(path)
-    for _c, _v in _vocalise().items():          # a wordless part still has a vowel
-        _lyr.setdefault(_c, [(0.0, _v, None, None)])
-    _tess = {}
-    for _e in notes:
-        _tess.setdefault(_e[0], []).append(_e[1])
-    _tess = {c: 440.0 * 2.0 ** ((sorted(v)[len(v) // 2] - 69) / 12.0)
-             for c, v in _tess.items() if v}
-    # organ registration rows
-    Grows=[]; Srows=[]; grow_of={}; crow_of={}; rankev_of={}; sh=(0.06,1.6,3.5,1500.0); _laws=[]
-    # KEYED BY (channel, organ): a channel can change program from one
-    # registered instrument to another (a tonewheel, then a harmonium), and
-    # each has its own ranks, stop word and swell -- organ_family. A channel
-    # with one organ is built exactly as it was.
-    for ch, _plist in ch_progs.items():
-        for pc in (c for q in uniq_programs(_plist) for c in voice_classes(q)):  # a layer's organ too
-            if not getattr(pc, 'registerable', False):
-                continue
-            _orgk = (ch, organ_family(pc))
-            if _orgk in rankev_of:
-                continue
-            # each later tone of this organ on the channel recalls its own
-            # registration where its first note is (registration_blocks)
-            _fam = _orgk[1]; _rcl = []; _ds = getattr(pc, 'default_stops', 1)
-            for _e in sorted((_e for _e in notes if _e[0] == ch), key=lambda _e: _e[2]):
-                for _c in voice_classes(_e[6]):
-                    if getattr(_c, 'registerable', False) and organ_family(_c) == _fam:
-                        _d = getattr(_c, 'default_stops', 1)
-                        if _d != _ds:
-                            _rcl.append((_e[2] - 1e-4, _d)); _ds = _d
-                        break
-            pr = pc(261.6,0,1,1); g,s,rev = registration_blocks(ch, pr, ccs, nblk, _CMXEV['amp'].get(ch),
-                                                                recalls=_rcl)
-            rankev_of[_orgk]=rev
-            crow_of[_orgk]=len(Srows); Srows.append(s)
-            for r in pr.stop_ranks: k=r[0]; grow_of[(_orgk,k)]=len(Grows); Grows.append(g[k])
-            if tuple(getattr(pr, 'stop_word_ccs', (11, 43)))[0] == 11:   # only what swells shapes the swell
-                _laws.append((crow_of[_orgk], (pr.swell_floor, pr.swell_gain_power,
-                                             pr.swell_hf_max, pr.swell_hf_ref_hz)))
-    # ONE SWELL LAW PER RENDER, BUT EVERY ORGAN'S OWN LEVEL. The kernel applies
-    # one law (sh) to every swell row, and it used to be whichever organ was
-    # processed LAST -- so with a Hammond and a church organ in one file each
-    # got the other's box: the Hammond, whose swell is fixed open (floor 1.0),
-    # took the flue's 0.06 floor, and a rock organ asked for -3 dB by CC7 came
-    # out +16 (examples/qkbattle_mix.py). Now the law is a real box's -- the
-    # first organ that has one -- and every other organ's row is re-mapped so
-    # that law gives the LEVEL its own law would:
-    #     L = f_i + (1 - f_i) s^p_i,   s' = ((L - f_g) / (1 - f_g))^(1/p_g)
-    # A single-organ render keeps its own law and its rows untouched.
-    if _laws:
-        sh = next((lw for _r, lw in _laws if lw[0] < 1.0), _laws[-1][1])
-        fg, pg = sh[0], sh[1]
-        for _r, (fi, pi, _hm, _hr) in _laws:
-            if (fi, pi) == (fg, pg):
-                continue
-            _s = np.asarray(Srows[_r], np.float64)
-            _L = fi + (1.0 - fi) * np.clip(_s, 0.0, 1.0) ** pi
-            if fg < 1.0:
-                Srows[_r] = np.clip((_L - fg) / (1.0 - fg), 0.0, 1.0) ** (1.0 / pg)
-            else:
-                Srows[_r] = np.ones_like(_s)      # a law with no range: open
-    # THE CHEST'S WIND (wind.py): one pressure per organ channel -- a division
-    # stands on its own chest -- moved by its wander and its sag under the
-    # pipes speaking (TUNING_WIND) and by the Tremulant when drawn (a stop, on
-    # whatever TUNING_WIND says). Every rank answers it by its family: the
-    # pitch rides a bend row per (channel, family), the level that row's BL.
-    # Built whole here, before any note, so a stream is the table by
-    # construction. A channel with neither gets no rows, and renders as it did.
-    _WROWS = {}              # channel -> {(a, b): (ratio per block, level at block edges)}
-    wrow_key = {}            # (channel, rank) -> (a, b)
-    for ch, _plist in ch_progs.items():
-        pc = next((c for q in uniq_programs(_plist) for c in voice_classes(q)
-                   if getattr(c, 'registerable', False)), None)
-        if pc is None:
-            continue
-        if getattr(pc, 'wind_skirt_db', None) is None or not getattr(pc, 'wind_pitch_exp', 0.0):
-            continue                            # not a pipe organ
-        _wk = (ch, organ_family(pc))
-        _tr = rankev_of[_wk].get('tremulant', ())
-        _trem_on = any(tg >= 0.5 for _t, tg in _tr) and pc.tremulant_depth > 0.0
-        _wsc = wind_scale_for(pc)
-        if not (_wsc or _trem_on):
-            continue
-        import wind as _WND
-        _bt = (np.arange(nblk) + 0.5) * BLK / SR
-        _trem = np.zeros(nblk)
-        for _t, tg in _tr:                      # the stop's draw, a step per block
-            _trem[_bt >= _t] = tg
-        _dem = np.zeros(nblk + 1)
-        _ranks = [r for r in pc.stop_ranks if r[1] is not None]
-        for _n in notes:
-            if _n[0] != ch or property_class_for_program(_n[6]) is not pc:
-                continue
-            _f = 440.0 * 2.0 ** ((_n[1] - 69) / 12.0)
-            _b0 = min(nblk, int(_n[2] * SR / BLK)); _b1 = min(nblk, int(_n[3] * SR / BLK) + 1)
-            if _b1 <= _b0:
-                continue
-            for r in _ranks:
-                _rat = r[1] if isinstance(r[1], (list, tuple)) else [r[1]]
-                _w = sum(_WND.pipe_draw(_f * q) for q in _rat)
-                _dem[_b0:_b1] += _w * Grows[grow_of[(_wk, r[0])]][_b0:_b1]
-        _wd = _WND.Wind(pc, BLK / SR, seed=ch, scale=_wsc, wander_scale=(1.0 if _wsc else 0.0))
-        _p = _wd.blocks(_dem[:nblk], _trem)
-        _WROWS[ch] = {}
-        for r in _ranks:
-            _wc = T.rank_wind_class(pc, r)
-            _ab = (float(_wc.wind_pitch_exp), float(_wc.wind_level_exp))
-            wrow_key[(ch, r[0])] = _ab
-            if _ab not in _WROWS[ch]:
-                _WROWS[ch][_ab] = _WND.pitch_level(_p, *_ab)
-        if _VERBOSE_WIND:
-            print("  wind ch%d: pressure %.4f..%.4f, peak draw %.1f units%s"
-                  % (ch, _p.min(), _p.max(), _dem.max(), ", tremulant" if _trem_on else ""))
-    # THE PLAYER'S BREATH (tonelib.SynthProperties.breath_wobble_db): on a
-    # channel a played pipe sounds on, the tone's level, the breath noise's
-    # level and the pitch -- each slow noise (one pole at its corner, unit
-    # variance from the first edge). The levels ride BEND ROWS' levels (BL,
-    # below), given at block EDGES and ramped across each block: as gate rows,
-    # held a block, every 11.6 ms step on a loud fundamental was a click and
-    # the breath crackled (kurtosis 21 against the recordings' 4). Seeded by
-    # the channel, built whole here: a stream is the table by construction.
-    _BREATH = {}             # ch -> (tone level at edges, noise level at edges, pitch ratio a block)
-    for ch, _plist in ch_progs.items():
-        if any(k[0] == ch for k in crow_of):
-            continue
-        pc = next((c for c in (property_class_for_program(q) for q in uniq_programs(_plist))
-                   if getattr(c, 'breath_wobble_db', 0.0) > 0.0
-                   or getattr(c, 'breath_noise_wobble_db', 0.0) > 0.0
-                   or getattr(c, 'breath_pitch_cents', 0.0) > 0.0), None)
-        if pc is None:
-            continue
-        _rng = np.random.default_rng(9173 + ch)
-
-        def _wander(fc):
-            a = math.exp(-2.0 * math.pi * fc * BLK / SR)
-            b = math.sqrt(1.0 - a * a)
-            z = _rng.standard_normal(nblk + 1)
-            y = np.empty(nblk + 1)
-            y[0] = z[0]
-            for i in range(1, nblk + 1):
-                y[i] = a * y[i - 1] + b * z[i]
-            return y
-        _tz = _wander(pc.breath_wobble_hz)
-        _sh = float(pc.breath_noise_wobble_share)
-        _nz = _sh * _tz + math.sqrt(max(0.0, 1.0 - _sh * _sh)) * _wander(pc.breath_noise_wobble_hz)
-        _ps = float(pc.breath_pitch_share)
-        _pz = _ps * _tz + math.sqrt(max(0.0, 1.0 - _ps * _ps)) * _wander(pc.breath_pitch_hz)
-        _pzb = 0.5 * (_pz[:-1] + _pz[1:])                 # a block's pitch: its edges' mean
-        _BREATH[ch] = (10.0 ** (pc.breath_wobble_db * _tz / 20.0),
-                       10.0 ** (pc.breath_noise_wobble_db * _nz / 20.0),
-                       2.0 ** (pc.breath_pitch_cents * _pzb / 1200.0))
+    (_lyr, _parts, _tess) = _prep_choir_parts(notes, path)
+    (Grows, Srows, _laws, crow_of, grow_of, rankev_of, sh) = _prep_organ_rows(_CMXEV, ccs, ch_progs, nblk,
+        notes)
+    sh = _prep_swell_law(Srows, _laws, sh)
+    (_WROWS, wrow_key) = _prep_chest_wind(Grows, ch_progs, grow_of, nblk, notes, rankev_of)
+    _BREATH = _prep_breath(ch_progs, crow_of, nblk)
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
 
@@ -3877,39 +4205,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
             if k: inner_ridge.add((note, t0))
     notes = expanded
 
-    # EXCLUSIVE CLASSES: a closed hi-hat stroke damps a ringing open one. Applied
-    # here, on the note list, because it is a fact about the instrument rather
-    # than about the envelope -- the open hat simply stops.
-    #
-    # PER CHANNEL: a hi-hat is one object in ONE kit. Keyed on the note alone,
-    # a second drum channel (GM 2's CC0 = 120) would close the first one's hat.
-    drum_ons = {}
-    kit_on = {}                 # each drum note's set: its exclusive classes are the set's
-    for ch, note, on, off, vel, _, _pg in notes:
-        if is_drum(_pg) and choke_group(note, kit_for_program(int(_pg))) is not None:
-            kit_on[(ch, note)] = kit_for_program(int(_pg))
-            # A ridge WITHIN a scrape is not a new stroke: the gourd goes on
-            # ringing as the stick moves to the next ridge, so only the start of
-            # a scrape damps what came before it.
-            if (note, on) in inner_ridge: continue
-            drum_ons.setdefault((ch, note), []).append(on)
-    choke_at = {}
-    for (ch, note), ons in drum_ons.items():
-        grp = choke_group(note, kit_on.get((ch, note), 0))
-        later = sorted(t for (c2, n2), ts in drum_ons.items()
-                       if c2 == ch and n2 in grp for t in ts)
-        choke_at[(ch, note)] = later
+    choke_at = _prep_exclusive_classes(inner_ridge, notes)
 
-    # EFFORT BASELINE, PER CHANNEL. Velocity in a real file is largely used to
-    # BALANCE one instrument against the others, not to say how hard the player
-    # is blowing -- so absolute velocity is the wrong signal. What carries effort
-    # is the DEVIATION: this note against how this part is normally played. The
-    # median is used rather than the mean so a few accents do not move the
-    # reference they are supposed to be measured against.
-    _vbase = {}
-    for _ch in {n[0] for n in notes}:
-        _vs = sorted(n[4] for n in notes if n[0] == _ch)
-        if _vs: _vbase[_ch] = _vs[len(_vs)//2]
+    _vbase = _prep_effort_baseline(notes)
 
     # ONE STRING PER NOTE. When a pitch is played again, it is the SAME string:
     # the damper lands, the key comes back down, and the plectrum plucks what it
@@ -3927,206 +4225,15 @@ def _prepare(path, tuner='hybrid440', sink=None):
     # Only the RELEASE is clipped, never the note: the player has already lifted
     # the key, so what is cut is a tail the instrument would not have sustained
     # through a re-pluck anyway.
-    # THE DAMPER PEDAL. CC64 >= 64 lifts the dampers off every string, so a key
-    # released while it is down goes on ringing until the pedal comes up. That
-    # is a note-LENGTH fact, which is why it is resolved here rather than in
-    # parse(): _next_same below and _PHRASE_CH further down are both computed
-    # from the file's own note-offs, and they mean different things -- a phrase
-    # is when a piper lets the bag down, not when a pianist lifts a foot.
-    #
-    # ccs already carries every (t, control, value), so this costs no parsing.
-    _PED_CH = {}          # channel -> [(down_sec, up_sec)], sorted and disjoint
-    for _c, _evs in ccs.items():
-        _segs = []; _dn = None
-        for _t, _cc, _v in in_order(_evs):
-            if _cc != 64:
-                continue
-            # 64 is the switch point GM specifies, and half-pedalling is real:
-            # ondine.mid writes 0/24/40/56/72/88/104/127. Anything under 64 is
-            # the damper on the string.
-            if _v >= 64 and _dn is None:
-                _dn = _t
-            elif _v < 64 and _dn is not None:
-                _segs.append((_dn, _t)); _dn = None
-        if _dn is not None:
-            _segs.append((_dn, total))      # held down to the end of the file
-        if _segs:
-            _PED_CH[_c] = _segs
-    # HALF-PEDALLING (damper.py): a channel whose CC64 ever stands between 0
-    # and 127 keeps its VALUES, and its notes' dampers land where the key's
-    # contact is full -- passing on the way through the band, where a released
-    # note is damped by its level (damper.track). A file of 0 and 127 never
-    # comes here and renders as it did.
-    _PEDV_CH = {}
-    for _c, _evs in ccs.items():
-        _pv = [(_t, _v) for _t, _cc, _v in in_order(_evs) if _cc == 64]
-        if any(0 < _v < 127 for _t, _v in _pv):
-            _PEDV_CH[_c] = ([_t for _t, _v in _pv], [_v for _t, _v in _pv])
+    (_PEDV_CH, _PED_CH) = _prep_damper_pedal(ccs, total)
 
-    # ALL SOUND OFF stops a channel dead, pedal or no pedal -- what a panic
-    # button sends. Collected the same way as the damper, and applied after it
-    # in the note loop so it overrides a held pedal.
-    _SOFF_CH = {}
-    for _c, _evs in ccs.items():
-        # 126 and 127 too: Roland's MONO and POLY are "the same processing ...
-        # as when All Sounds Off and All Notes Off is received".
-        _ts = sorted(_t for _t, _cc, _v in _evs if _cc in (120, 126, 127))
-        if _ts:
-            _SOFF_CH[_c] = _ts
+    _SOFF_CH = _prep_sound_off(ccs)
 
-    # SOSTENUTO holds only the keys already down when the pedal went down, and
-    # lets everything played after it damp normally. That asymmetry is the
-    # whole instrument and nothing else here expresses it: _next_same answers
-    # "when is this key struck again", _PHRASE_CH answers "is the channel
-    # active", and neither answers "what was sounding at this instant".
-    #
-    # Keyed on the note INSTANCE, (channel, note, onset), because being caught
-    # by the pedal is a fact about one press of one key -- and read from the
-    # RAW note-off, before the damper below can extend it.
-    _SOST_HELD = {}
-    for _c, _evs in ccs.items():
-        _segs = []; _dn = None
-        for _t, _cc, _v in in_order(_evs):
-            if _cc != 66:
-                continue
-            if _v >= 64 and _dn is None:
-                _dn = _t
-            elif _v < 64 and _dn is not None:
-                _segs.append((_dn, _t)); _dn = None
-        if _dn is not None:
-            _segs.append((_dn, total))
-        for _d0, _u0 in _segs:
-            for _e in notes:
-                if _e[0] == _c and _e[2] <= _d0 < _e[3]:
-                    _SOST_HELD[(_e[0], _e[1], _e[2])] = max(
-                        _u0, _SOST_HELD.get((_e[0], _e[1], _e[2]), 0.0))
+    (_SOST_HELD, _soft_at) = _prep_sostenuto_soft(ccs, notes, total)
 
-    # CC67, the soft pedal: same switch, same half-pedal collapse.
-    _SOFT_CH = {}
-    for _c, _evs in ccs.items():
-        _segs = []; _dn = None
-        for _t, _cc, _v in in_order(_evs):
-            if _cc != 67:
-                continue
-            if _v >= 64 and _dn is None:
-                _dn = _t
-            elif _v < 64 and _dn is not None:
-                _segs.append((_dn, _t)); _dn = None
-        if _dn is not None:
-            _segs.append((_dn, total))
-        if _segs:
-            _SOFT_CH[_c] = _segs
+    (_PORTA_CTL, _porta_cc5_at, _porta_on_at) = _prep_portamento(ccs, total)
 
-    def _soft_at(_c, _t):
-        """Was the una corda shift in at this note's ONSET?
-
-        At the onset and not across the note, because the shift decides which
-        strings the HAMMER reaches. Once a note is struck, moving the pedal
-        cannot un-strike a string -- which is why this is a build-time fact
-        and not a gain.
-        """
-        for _d0, _u0 in _SOFT_CH.get(_c, ()):
-            if _d0 <= _t < _u0:
-                return True
-        return False
-
-    # ------------------------------------------------- PORTAMENTO (CC5/65/84)
-    #
-    # THREE CONTROLLERS THAT ARE NOT THREE SETTINGS OF ONE THING. CC65 is a
-    # switch, CC5 is a speed, and CC84 is neither: its data byte is a source
-    # NOTE NUMBER, it fires once, and it works with the switch off. Roland's
-    # VE-GS Pro MIDI Implementation is the primary source for all three -- the
-    # SC-55 manual is a scan with no text layer (see sources.md) and this one
-    # is the same GS control set with the text intact.
-    #
-    # CC5 IS A RATE, NOT A TIME, and that is Roland's own word: "This adjusts
-    # the rate of pitch change when Portamento is ON or when using the
-    # Portamento Control. A value of 0 results in the fastest change." So a
-    # wide interval takes proportionally longer than a narrow one, which is
-    # also what a hand does. What Roland does NOT publish is the curve from
-    # the 0-127 value to an actual speed; that is chosen here and written down
-    # in midi.md, the same position tension_settle_time is in.
-    _PORTA_ON = {}      # channel -> [(down_sec, up_sec)], the CC65 segments
-    for _c, _evs in ccs.items():
-        _segs = []; _dn = None
-        for _t, _cc, _v in in_order(_evs):
-            if _cc != 65:
-                continue
-            # 64 again, the same switch point the three pedals collapse at.
-            if _v >= 64 and _dn is None:
-                _dn = _t
-            elif _v < 64 and _dn is not None:
-                _segs.append((_dn, _t)); _dn = None
-        if _dn is not None:
-            _segs.append((_dn, total))
-        if _segs:
-            _PORTA_ON[_c] = _segs
-
-    _PORTA_T = {}       # channel -> sorted [(t, CC5 value)]
-    _PORTA_CTL = {}     # channel -> sorted [(t, source note number)]
-    for _c, _evs in ccs.items():
-        _t5 = [(_t, _v) for _t, _cc, _v in in_order(_evs) if _cc == 5]
-        if _t5:
-            _PORTA_T[_c] = _t5
-        _t84 = [(_t, _v) for _t, _cc, _v in in_order(_evs) if _cc == 84]
-        if _t84:
-            _PORTA_CTL[_c] = _t84
-
-    def _porta_on_at(_c, _t):
-        """Was CC65 up at this instant? Roland: 0-63 OFF, 64-127 ON."""
-        for _d0, _u0 in _PORTA_ON.get(_c, ()):
-            if _d0 <= _t < _u0:
-                return True
-        return False
-
-    def _porta_cc5_at(_c, _t):
-        """The CC5 in force at _t. Roland's initial value is 0 -- fastest."""
-        _ev = _PORTA_T.get(_c)
-        if not _ev:
-            return 0
-        _i = _bisect.bisect_right(_ev, (_t, 128)) - 1
-        return _ev[_i][1] if _i >= 0 else 0
-
-    # WHERE EACH NOTE GLIDES FROM, decided once for the whole file because
-    # offline it can be. Keyed on the note INSTANCE, (channel, note, onset),
-    # for the same reason sostenuto is: being glided into is a fact about one
-    # press of one key.
-    #
-    # CC84 WINS OVER CC65 AND IS CONSUMED. Roland's Example 2 sends it with
-    # nothing sounding at all and still glides, so it is not "reuse the voice
-    # that is playing" -- it is "the next note starts from here", and it fires
-    # once. The most recent CC84 before a note-on applies to that note-on and
-    # to no other.
-    _GLIDE_SRC = {}
-    _prev_on = {}       # channel -> (onset, pitch) of the last note started
-    _ctl_used = {}      # channel -> index of the last CC84 already spent
-    for _e in sorted(notes, key=lambda e: (e[2], e[0], e[1])):
-        _c, _n, _on = _e[0], _e[1], _e[2]
-        _src = None
-        _ctl = _PORTA_CTL.get(_c)
-        if _ctl:
-            _i = _bisect.bisect_right(_ctl, (_on, 128)) - 1
-            if _i >= 0 and _i != _ctl_used.get(_c, -1):
-                _pv = _prev_on.get(_c)
-                # ...only if it arrived AFTER the previous note-on, or it is a
-                # message about a note that has already been and gone.
-                if _pv is None or _ctl[_i][0] >= _pv[0]:
-                    _ctl_used[_c] = _i
-                    if _ctl[_i][1] != CC84_CANCEL:
-                        _src = _ctl[_i][1]
-        if _src is None and _porta_on_at(_c, _on):
-            _pv = _prev_on.get(_c)
-            # A STRICTLY EARLIER ONSET, so a chord does not glide from itself.
-            # Which note of a chord a glide starts from is undefined in poly
-            # mode -- Roland does not say, and CC84 exists because it does not.
-            # The last one to start is the convention, and it is a convention.
-            if _pv is not None and _pv[0] < _on:
-                _src = _pv[1]
-        if _src is not None and _src != _n:
-            _GLIDE_SRC[(_c, _n, _on)] = _src
-        _pv = _prev_on.get(_c)
-        if _pv is None or _on >= _pv[0]:
-            _prev_on[_c] = (_on, _n)
+    _GLIDE_SRC = _prep_glide_sources(_PORTA_CTL, _porta_on_at, notes)
 
     # ---------------------------------- A VALVED GLISS WALKS THE HARMONICS
     #
