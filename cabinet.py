@@ -100,6 +100,37 @@ class Guitar12(Cabinet):
     bell_order = 2.0
 
 
+class Guitar412(Cabinet):
+    """A closed-back 4x12 with Celestion Vintage 30s, close-miked: the high-gain
+    rhythm guitar's stack. FITTED to jesterdyne's BG412S impulse responses
+    (Freesound pack 34071, CC0, measured only: a plywood Behringer BG412S, V30s,
+    an SM57 on the cone -- "Even", "Balls", "Brutal"; examples/cab412_fit.py),
+    1.25 dB rms over sixth octaves 50 Hz-8 kHz -- its hollows held broad (at
+    least 400 Hz, at most 0.7 deep): the gain lands on each partial at its own
+    frequency, and a narrower notch is the mic position's comb, not the box.
+
+    What it has that the open-backed 12" (Guitar12) has not:
+
+      119 Hz peak   the sealed box, and the mic close on the cone: the chug's
+                    body, +3.4 dB at 140 Hz. NOT a deeper reach -- below 100 Hz
+                    it falls faster than the 12"'s (-21 dB at 50 Hz), so a low
+                    E's fundamental sits 9 dB under its second harmonic.
+      1.5 kHz       the V30's hollow: the scooped middle, -3.7 dB.
+      2.3 kHz       presence, +3.5, narrower than the 12"'s breakup peak, and a
+      2.9 kHz       dip above it.
+      5.9 kHz, 11th the top, higher and steeper than the 12"'s 4.2 kHz.
+
+    The pack is "mix ready" by its author's word, so a shaping EQ may be in it.
+    """
+    formants = ((119.4, 103.6, 0.770), (2331.0, 336.9, 0.278))
+    antiformants = ((1525.0, 400.0, 0.426), (2947.0, 400.0, 0.375))
+    formant_floor = 0.418
+    bore_corner_hz = 5945.0
+    bore_order = 11.0
+    bell_cutoff_hz = 130.5
+    bell_order = 3.02
+
+
 class Bass410(Cabinet):
     """Four 10" drivers in a sealed bass cabinet, no tweeter.
 
@@ -216,7 +247,7 @@ class JazzChorus212(Cabinet):
     bell_order = 2.0
 
 
-CABINETS = {"guitar12": Guitar12(), "bass410": Bass410(),
+CABINETS = {"guitar12": Guitar12(), "guitar412": Guitar412(), "bass410": Bass410(),
             "rhodes": RhodesSuitcase(), "wurlitzer": WurlitzerInternal(),
             "jc120": JazzChorus212()}
 

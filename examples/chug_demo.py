@@ -5,7 +5,7 @@ Metallica, there is a thump short sound when they play muted").
     python3 examples/chug_demo.py OUTDIR
 
 writes OUTDIR/chug.mid: a stop-start riff in E at 108 bpm on the SC-88 map's 28.1
-"Muted Dis.Gt" -- the distortion guitar (drive 14.4, a 12-inch cabinet)
+"Muted Dis.Gt" -- the distortion guitar (drive 14.4, a closed-back 4x12)
 with the palm mute's decay law fitted to IDMT-SMT's muted takes, through its
 gate (efxbus.NoiseGate) -- and open accents on GM 30, the same guitar
 unmuted. Quad-tracked as a record is: two

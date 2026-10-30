@@ -1482,9 +1482,10 @@ SC88_CHEAP = {
     # compression in front, its stop the gate's, 6 ms (examples/chug_demo.py)
     # ...ITS OPEN STRINGS RINGING ON under the palm between chugs (standard
     # tuning's six, up to 2 s; blockrender open_string_ring) -- what the gate cuts
+    # -- into a closed-back 4x12 (cabinet.Guitar412), the rhythm rig's stack
     (28, 1): ("Muted Dis.Gt", ("set", 30, dict(palm_mute(1.0), noise_gate=dict(
         keyed=True, hold_s=0.008, close_s=0.006, sustain_db=-24.0, ratio=6.0, makeup_db=13.0),
-        open_string_ring=((40, 45, 50, 55, 59, 64), 2.0)))),
+        open_string_ring=((40, 45, 50, 55, 59, 64), 2.0), cabinet="guitar412"))),
     # BRASS FALL: the brass section, its notes falling off -- held 0.15 s,
     # then a run down the valved lattice, 9 semitones over 0.45 s, half-valved,
     # fading 30 dB (tonelib fall_cents; a gliss down, not a sweep -- Ben):
