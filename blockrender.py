@@ -2245,6 +2245,43 @@ def prepare(path, tuner='hybrid440', sink=None):
     return out
 
 
+def _prep_sound_controls(_CMXEV, _cmx_at, _sys, gmon):
+    """CC71-78 IN FORCE AT AN ONSET: each channel's sound-controller timeline
+    and the lookup into it. Returns (_SND_TL, _snd_d)."""
+    # ------------------------------------------- CC71-78, IN FORCE AT AN ONSET
+    # A timeline per channel rather than a snapshot per note, so the notes this
+    # renderer makes for itself -- a mono handoff, a gliss rung -- read the same
+    # state as the notes the file wrote. GM System On puts every control back
+    # to 64; CC121 does not touch them, as live does not.
+    _SND_TL = {}
+    for _c, _evs in _sys['snd'].items():
+        _ev = [(_t, _q, _cc, _v) for _t, _q, _cc, _v in _evs]
+        _ev += [(_t, _q, None, None) for _t, _q in gmon]
+        _ev.sort(key=lambda e: (e[0], e[1]))
+        _SND_TL[_c] = _ev
+
+    def _snd_d(_c, _t):
+        """{control name: d} in force at _t, only the ones that are not 64."""
+        _st = {}
+        for _et, _q, _cc, _v in _SND_TL.get(_c, ()):
+            if _et > _t + 1e-9:
+                break
+            if _cc is None:
+                _st = {}
+            else:
+                _st[T.SOUND_CC[_cc]] = T.sound_offset(_v)
+        # ...and the controller matrix's, at this onset (ctrlmatrix): its CUTOFF
+        # as brightness (GS's TVF NRPN spans the same 9600 cents in 64 steps),
+        # its LFO1 rate as the voice's own vibrato rate (x 2^d). (Its LFO1 pitch
+        # depth is a gesture on a sounding note: the pitch stream's, below.)
+        if _c in _CMXEV['cutoff']:
+            _st['brightness'] = max(-1.0, min(1.0, _st.get('brightness', 0.0) + _cmx_at('cutoff', _c, _t) / 9600.0))
+        if _c in _CMXEV['rate']:
+            _st['vib_rate'] = _st.get('vib_rate', 0.0) + math.log2(max(0.1, 1.0 + _cmx_at('rate', _c, _t) / 5.5))
+        return {_k: _d for _k, _d in _st.items() if _d}
+    return (_SND_TL, _snd_d)
+
+
 def _prep_notes_off(ccs, notes):
     """ALL NOTES OFF and the four channel-mode messages that carry it
     (CC123-127): every key held on the channel lifted there. Returns notes."""
@@ -2845,6 +2882,594 @@ def _prep_glide_sources(_PORTA_CTL, _porta_on_at, notes):
     return _GLIDE_SRC
 
 
+def _prep_gliss(_F, _GLIDE_SRC, _MONO_SLUR, _porta_cc5_at, notes):
+    """A VALVED GLISS WALKS THE HARMONICS: glisses, rips, falls and cuts
+    rewritten as the real notes they run through. Returns (_CUT_OF, _GLISS, notes)."""
+    # ---------------------------------- A VALVED GLISS WALKS THE HARMONICS
+    #
+    # A trumpet does not slide. Ben, who plays these: brass players gliss by
+    # moving "cleanly from one fingering to another, and blow through the
+    # harmonics", or by half-valving to break the alignment and smear between
+    # them. So the reachable pitches are a LATTICE -- a partial over whatever
+    # length the valves have added -- and a gliss is a RUN through it, not a
+    # sweep across it. sources.md carries the physical account.
+    #
+    # THE RENDERER THEREFORE EMITS REAL NOTES, which is not a workaround: the
+    # model says a run of pitches is what is happening, so a run of pitches is
+    # what gets built. Each step goes through the same note loop as everything
+    # else, which means each one picks up the FINGERED pitch for free --
+    # brass_fingering puts every semitone a few cents off equal temperament,
+    # differently, and that wobble is a good part of what makes the gesture
+    # recognisable rather than merely continuous.
+    #
+    # AND THE RUN IS EVEN, not exponential. The reciprocal settle the other
+    # mechanisms use is a hand DECELERATING into a target, which is what a
+    # slide or a finger does; ripping through seven fingerings is a sequence of
+    # discrete actions at a steady rate, and an exponential would also never
+    # reach the last step.
+    _gliss_clean = 0    # glisses too short to play, reported below
+    _GLISS = {}         # (ch, note, on) -> (level scale, smear 0..1)
+    _GLISS_DROP = set() # the notes the run replaces
+    _GLISS_STEPS = []
+    for _e in notes:
+        _k3 = (_e[0], _e[1], _e[2])
+        _gs = _GLIDE_SRC.get(_k3)
+        if _gs is None:
+            continue
+        _pcv = property_class_for_note(_e[6], _e[1])
+        if getattr(_pcv, 'glide_mechanism', None) != 'valve':
+            continue
+        _step = 1 if _e[1] > _gs else -1
+        _path = list(range(_gs, _e[1], _step))       # src .. one short of target
+        if len(_path) < 2 or _e[3] - _e[2] <= 0.0:
+            continue                                 # a tone or less: the lip has it
+        # One journey time, from the same speed law every other mechanism uses,
+        # so CC5 means one thing across the bank -- and it KEEPS meaning it
+        # unless the note physically cannot hold the run. The cap used to be
+        # half the note, which squeezed a slow gliss on any note shorter than
+        # twice its run, so CC5 meant different speeds at different note
+        # lengths. Now the run keeps CC5's time and gives way only to leave the
+        # arrival a real hold: max(60 ms, 20%) of the note, the least that
+        # still sounds like landing somewhere.
+        _cc5 = _porta_cc5_at(_e[0], _e[2])
+        _Fe = _F(_e[0], _e[2])
+        _T = T.glide_tau(_cc5, _Fe[_e[1]], _Fe[_gs], 'slide') * T.PORTA_SETTLE_TAUS
+        _dur = _e[3] - _e[2]
+        _T = min(_T, _dur - max(GLISS_ARRIVAL_S, GLISS_ARRIVAL_FRAC * _dur))
+        _dt = _T / float(len(_path)) if _T > 0.0 else 0.0
+        if _dt < 0.012:
+            # Faster than a valve moves: played clean. COUNTED, which it was
+            # not -- a gliss that disappeared left nothing to say it had.
+            _gliss_clean += 1
+            continue
+        # SMEAR RIDES ON THE SAME KNOB, which is Ben's suggestion: "maybe the
+        # speed controller can control how straight or slurred the glissando is
+        # across the harmonics". A quick gliss is a RIP and the steps are the
+        # sound of it; a slow one is held, and a player holding a staircase
+        # half-valves instead. So the smear opens with CC5, and with it the
+        # level comes DOWN -- half-valving breaks the harmonic alignment and
+        # loses support, and that dip is the audible tell. Without it a smear
+        # is just a portamento with extra steps.
+        _sm = min(1.0, max(0.0, _cc5 / 127.0))
+        for _i, _p in enumerate(_path):
+            _t0 = _e[2] + _i * _dt
+            # Quietest in the middle, where the alignment is worst, and back up
+            # at both ends where a real fingering is being held.
+            _mid = 1.0 - abs((_i + 0.5) / len(_path) * 2.0 - 1.0)
+            _lv = 1.0 - 0.45 * _sm * _mid
+            _GLISS[(_e[0], _p, _t0)] = (_lv, _sm,
+                                        _path[_i - 1] if _i else None, _dt)
+            _GLISS_STEPS.append(
+                (_e[0], _p, _t0, _t0 + _dt * 1.35, _e[4], _e[5], _e[6]))
+        # The note proper begins where the run arrives. Its own onset is where
+        # the gliss STARTED, which is what the file asked for: a rip into a
+        # note is part of the note, not something played before it.
+        _GLISS[(_e[0], _e[1], _e[2] + _T)] = (1.0, _sm, _path[-1], _dt)
+        _GLISS_STEPS.append(
+            (_e[0], _e[1], _e[2] + _T, _e[3], _e[4], _e[5], _e[6]))
+        _GLIDE_SRC.pop(_k3, None)       # the lattice replaces the smooth glide
+        _GLISS_DROP.add(_k3)
+    # A FALL IS A GLISS DOWN (tonelib fall_cents: GS 61.16 "Brass Fall"), so it
+    # walks the lattice as one does -- not a smooth sweep, which a valved
+    # instrument cannot make past the lip's tone (Ben). The note holds
+    # fall_at_s, then runs down a semitone a step over fall_s, each step a real
+    # note on its fingered pitch, the level fading fall_fade_db across the run,
+    # half-valved (smear fall_smear) as a fall usually is; the run ends it. A
+    # key let go before the fall begins releases as any note does.
+    for _e in list(notes):
+        _k3 = (_e[0], _e[1], _e[2])
+        if _k3 in _GLISS_DROP or is_drum(_e[6]):
+            continue
+        _pcf = property_class_for_note(_e[6], _e[1])
+        _fc = getattr(_pcf, 'fall_cents', 0.0) or 0.0
+        if not _fc:
+            continue
+        _tf = _e[2] + float(_pcf.fall_at_s)
+        if _e[3] <= _tf:
+            continue
+        _ns = max(2, int(round(_fc / 100.0)))
+        _dt = float(_pcf.fall_s) / _ns
+        _sm = float(getattr(_pcf, 'fall_smear', 0.6))
+        _GLISS_DROP.add(_k3)
+        _GLISS_STEPS.append((_e[0], _e[1], _e[2], _tf, _e[4], _e[5], _e[6]))
+        for _i in range(_ns):
+            _p = _e[1] - 1 - _i
+            if _p < 0:
+                break
+            _t0 = _tf + _i * _dt
+            _GLISS[(_e[0], _p, _t0)] = (10.0 ** (-float(_pcf.fall_fade_db) * (_i + 1) / _ns / 20.0), _sm,
+                                        _e[1] - _i, _dt)
+            _GLISS_STEPS.append((_e[0], _p, _t0, _t0 + _dt * 1.35, _e[4], _e[5], _e[6]))
+    # ...AND A RIP, the fall's mirror (tonelib rip_cents: GS 60.24 "F.Horn
+    # Rip"): from the onset a run UP the lattice from rip_cents below, a
+    # semitone a step over rip_s, crescendoing from rip_start_db under, each
+    # step a real note on its fingered pitch; the note proper sounds from where
+    # the run arrives, and its onset is still where the file put it
+    for _e in list(notes):
+        _k3 = (_e[0], _e[1], _e[2])
+        if _k3 in _GLISS_DROP or is_drum(_e[6]):
+            continue
+        _pcr = property_class_for_note(_e[6], _e[1])
+        _rc = getattr(_pcr, 'rip_cents', 0.0) or 0.0
+        if not _rc:
+            continue
+        _ns = max(2, int(round(_rc / 100.0)))
+        _T = float(_pcr.rip_s)
+        if _e[3] <= _e[2] + _T:
+            continue                    # a note shorter than its rip: played plain
+        _dt = _T / _ns
+        _sm = float(getattr(_pcr, 'rip_smear', 0.8))
+        _GLISS_DROP.add(_k3)
+        for _i in range(_ns):
+            _p = _e[1] - _ns + _i
+            if _p < 0:
+                continue
+            _t0 = _e[2] + _i * _dt
+            _GLISS[(_e[0], _p, _t0)] = (10.0 ** (-float(_pcr.rip_start_db) * (_ns - _i) / _ns / 20.0), _sm,
+                                        (_p - 1) if _i else None, _dt)
+            _GLISS_STEPS.append((_e[0], _p, _t0, _t0 + _dt * 1.35, _e[4], _e[5], _e[6]))
+        _GLISS[(_e[0], _e[1], _e[2] + _T)] = (1.0, _sm, _e[1] - 1, _dt)
+        _GLISS_STEPS.append((_e[0], _e[1], _e[2] + _T, _e[3], _e[4], _e[5], _e[6]))
+    # ...AND TREMOLO PICKING (tonelib tremolo_pick_hz: GS 25.18 MandolinTrem):
+    # a held note re-struck at the picking rate, each stroke a note of its own,
+    # down and up alternating (the up softer), its time scattered -- seeded by
+    # the note, so a render repeats
+    for _e in list(notes):
+        _k3 = (_e[0], _e[1], _e[2])
+        if _k3 in _GLISS_DROP or is_drum(_e[6]):
+            continue
+        _pct = property_class_for_note(_e[6], _e[1])
+        _hz = getattr(_pct, 'tremolo_pick_hz', 0.0) or 0.0
+        if not _hz or _e[3] - _e[2] < 1.5 / _hz:
+            continue
+        _rng = __import__("random").Random(0x7E3D + _e[1] * 977 + int(_e[2] * 1000))
+        _per = 1.0 / _hz
+        _jit = float(_pct.tremolo_pick_jitter)
+        _up = 10.0 ** (float(_pct.tremolo_pick_up_db) / 20.0)
+        _ts = [_e[2]]
+        while _ts[-1] + _per < _e[3] - 0.25 * _per:
+            _ts.append(_e[2] + len(_ts) * _per + _rng.uniform(-_jit, _jit) * _per)
+        _GLISS_DROP.add(_k3)
+        for _i, _t0 in enumerate(_ts):
+            _v = _e[4] if _i % 2 == 0 else (max(1, int(round(_e[4] * _up))) if isinstance(_e[4], int) else _e[4] * _up)
+            _t1 = _e[3] if _i == len(_ts) - 1 else min(_e[3], _ts[_i + 1] + 0.02)
+            _GLISS_STEPS.append((_e[0], _e[1], _t0, _t1, _v, _e[5], _e[6]))
+    _CUT_OF = {}            # (ch, the cut's note, on) -> the written note it opens
+    # ...AND A CUT (tonelib cut_semitones: the uilleann pipes' ornament, GS
+    # 109.11 "UillnPipe Or"): a flicked upper finger -- the note cut_semitones
+    # above for cut_s at the onset, slurred into the note (a chanter never
+    # stops), which then sounds from there to its end
+    for _e in list(notes):
+        _k3 = (_e[0], _e[1], _e[2])
+        if _k3 in _GLISS_DROP or is_drum(_e[6]):
+            continue
+        _pcc = property_class_for_note(_e[6], _e[1])
+        _cs = int(getattr(_pcc, 'cut_semitones', 0) or 0)
+        _cT = float(getattr(_pcc, 'cut_s', 0.03))
+        if not _cs or _e[3] - _e[2] < 3.0 * _cT or not 0 <= _e[1] + _cs <= 127:
+            continue
+        _GLISS_DROP.add(_k3)
+        _GLISS_STEPS.append((_e[0], _e[1] + _cs, _e[2], _e[2] + _cT, _e[4], _e[5], _e[6]))
+        _GLISS_STEPS.append((_e[0], _e[1], _e[2] + _cT, _e[3], _e[4], _e[5], _e[6]))
+        # the flick is the written note's onset: its legato is the note's
+        # (and it is no occurrence of its own pitch, so a later real note of
+        # that pitch keeps its own legato); the note then arrives by slur
+        _CUT_OF[(_e[0], _e[1] + _cs, _e[2])] = _e[1]
+        _MONO_SLUR.add((_e[0], _e[1], _e[2] + _cT))
+    if _gliss_clean:
+        print("  %d valved glissandi were too short to run and played clean "
+              "(a step would have been under 12 ms)" % _gliss_clean)
+    if _GLISS_STEPS:
+        notes = [_n for _n in notes
+                 if (_n[0], _n[1], _n[2]) not in _GLISS_DROP] + _GLISS_STEPS
+    return (_CUT_OF, _GLISS, notes)
+
+
+def _prep_damper_helpers(A, _DAMP_OPEN, _DAMP_TRACKS, _PEDV_CH, _PED_CH, _SOFF_CH, nblk, total):
+    """The note loop's damper questions: the next All Sound Off, where the
+    dampers fall and land, a channel's pedal spans and half-pedal damping, and
+    closing a half-pedalled note's track. Returns (_damp_close, _damper_falls,
+    _damper_lands, _pedal_damping_of, _pedal_spans_of, _sound_off)."""
+    def _sound_off(_c, _t):
+        """The first All Sound Off on this channel strictly AFTER _t.
+
+        Strictly, not "at or after". A sound-off on the same tick as a note-on
+        is in the file's header nearly every time it happens -- CC126 and
+        CC127 carry one, and they are set before the first note -- and "at or
+        after" let it kill the note it preceded, four milliseconds in. It was
+        the same for a bare CC120; nobody sends one of those in a header, so it
+        never showed until mono mode did.
+        """
+        _ts = _SOFF_CH.get(_c)
+        if not _ts:
+            return None
+        _i = _bisect.bisect_right(_ts, _t)
+        return _ts[_i] if _i < len(_ts) else None
+
+    def _damper_falls(_c, _t):
+        """When the damper actually lands for a key released at _t."""
+        _segs = _PED_CH.get(_c)
+        if not _segs:
+            return _t
+        _i = _bisect.bisect_right(_segs, (_t, 1e18)) - 1
+        if _i >= 0 and _segs[_i][0] <= _t < _segs[_i][1]:
+            return _segs[_i][1]
+        return _t
+
+    def _pedal_at(_c, _t):
+        """The half-pedalled channel's CC64 in force at _t (0 before any)."""
+        _ts, _vs = _PEDV_CH[_c]
+        _i = _bisect.bisect_right(_ts, _t) - 1
+        return _vs[_i] if _i >= 0 else 0
+
+    def _damper_lands(_c, _t, _key, _top):
+        """(when this key's damper lands, released at _t: its contact full;
+        whether the pedal stands in its band on the way)."""
+        _ts, _vs = _PEDV_CH[_c]
+        _band = False
+        _i = _bisect.bisect_right(_ts, _t) - 1
+        _times = [_t] + _ts[_i + 1:]
+        _vals = [_vs[_i] if _i >= 0 else 0] + _vs[_i + 1:]
+        for _tt, _v in zip(_times, _vals):
+            _k = _DMP.contact(_v, _key, _top)
+            if _k >= 1.0:
+                return _tt, _band
+            if _k > 0.0:
+                _band = True
+        return max(float(total), _t), _band
+
+    def _pedal_spans_of(_c, _top):
+        """A half-pedalled channel's free spans for the register, per key: free
+        while the key's damper is off its strings (contact under 1)."""
+        _ts, _vs = _PEDV_CH[_c]
+        _memo = {}
+
+        def _of(_key):
+            if _key not in _memo:
+                _segs, _a = [], None
+                for _tt, _v in zip(_ts, _vs):
+                    _free = _DMP.contact(_v, _key, _top) < 1.0
+                    if _free and _a is None:
+                        _a = _tt
+                    elif not _free and _a is not None:
+                        _segs.append((_a, _tt)); _a = None
+                if _a is not None:
+                    _segs.append((_a, max(float(total), _a)))
+                _memo[_key] = _segs
+            return _memo[_key]
+        return _of
+
+    def _pedal_damping_of(_c, _top):
+        """A half-pedalled channel's felt on the register's free strings, per
+        key: (each pedal move, in samples; the residual rate from it, nepers
+        a second at the key's fundamental) -- a sympathetic string rings
+        under the felt's gap, so only the residual takes it (damper.py)."""
+        _ts, _vs = _PEDV_CH[_c]
+
+        def _of(_key):
+            _r = [_DMP.rate_db_s(_DMP.contact(_v, _key, _top), False) * _DMP.LN10_20
+                  if _DMP.contact(_v, _key, _top) < 1.0 else 0.0 for _v in _vs]
+            if not any(_r):
+                return None
+            return np.asarray(_ts, float) * SR, np.asarray(_r, float)
+        return _of
+
+    def _damp_close(_r1):
+        """The open half-pedalled note's rows end at _r1: its track, from its
+        fundamental's decay (damper.track), over its blocks from key-up to
+        landing."""
+        _d = _DAMP_OPEN[0]
+        _DAMP_OPEN[0] = None
+        if _d is None or _r1 <= _d['row0']:
+            return
+        _r0 = _d['row0']
+        _nfs = np.asarray(A['nf'][_r0:_r1], float)
+        _f0 = 440.0 * 2.0 ** ((_d['key'] - 69) / 12.0)
+        _j = _r0 + int(np.argmin(np.abs(np.log(np.maximum(_nfs, 1e-3) / _f0))))
+        _lr, _lra, _af, _su = (float(A[_k][_j]) for _k in ('logr', 'logrA', 'aft', 'sus'))
+        _vdb = 40.0 * math.log10(max(_d['vel'], 1) / 127.0)
+
+        def _lvl(_tt, _on=_d['on']):
+            _x = max(_tt - _on, 0.0)
+            _dc = _su + (1.0 - _su) * ((1.0 - _af) * math.exp(-_lr * _x) + _af * math.exp(-_lra * _x))
+            return _vdb + 20.0 * math.log10(max(_dc, 1e-12))
+        _b0 = int(_d['off'] * SR) // BLK
+        _b1 = min(nblk, int(math.ceil(_d['land'] * SR / BLK)))
+        _edges = (np.arange(_b0, _b1 + 1) * BLK) / float(SR)
+        _dc, _full = _DMP.track(_edges, lambda _tt: _pedal_at(_d['ch'], _tt), _d['key'], _lvl, _d['top'])
+        _DAMP_TRACKS.append((_r0, _r1, _f0, _b0, _dc.astype(np.float32),
+                             np.asarray(A['non'][_r0:_r1], np.int64)))
+    return (_damp_close, _damper_falls, _damper_lands, _pedal_damping_of, _pedal_spans_of, _sound_off)
+
+
+def _prep_sympathetic(A, _F_SYM, _REG_CH, _SYM_CH, sink):
+    """THE NOTES NOBODY HIT: sympathetic strings and the free-string register,
+    emitted after the note loop and before the amplifier. Returns their rows
+    (_sym0, _sym1)."""
+    # THE NOTES NOBODY HIT, AND THEY RUN BEFORE THE AMPLIFIER. A sympathetic
+    # note is part of what the instrument produces, so it is part of what an
+    # amplifier would be handed -- and part of what a room would hear. See
+    # sympathetic.py, and note that a steelpan's coupling turned out to be a
+    # mechanical kick through shared steel rather than resonance.
+    _sym0 = _sym1 = len(A['om'])         # the sympathetic rows: [_sym0, _sym1)
+    if _SYM_CH:
+        import sympathetic as _SYM
+        # The table in force at each strike -- the tuner's, or under gm2 the
+        # channel's MTS table -- rather than one global FREQ for the piece.
+        # ...and an Indian instrument's under a secondary tuning, the raga's
+        _ns = _SYM.expand(A, _SYM_CH, SR, PARTIAL_COLS + ('az', 'dr'),
+                          table=_F_SYM)
+        _sym1 = len(A['om'])
+        if _ns:
+            print("  sympathetic: %d channel(s), %d partials from notes nobody hit"
+                  % (len(_SYM_CH), _ns))
+    # THE FREE-STRING REGISTER, right after: the strings nobody struck, each a
+    # string the note loop would have emitted (string_partial and its kin), at
+    # the tuning in force. See register.py.
+    if _REG_CH and sink is None:
+        import register as _REG
+        _rc = {}
+        _cols = PARTIAL_COLS + ('az', 'dr')
+        for _c, _R in _REG_CH.items():
+            _C = _REG.channel_for(_c, _R, SR, BLK, _cols, REGISTER_SCALE,
+                                  (string_partial, partial_decay, unison_partial))
+            for _x in _R['strikes']:
+                if _x['rows'][1] is None:
+                    continue
+                _r0, _r1 = _x['rows']
+                _rows = _strike_rows(A, _r0, _r1, _cols, _x.get('gr'))
+                _C.strike(_x['key'], _x['on'], _x['held'], _x['av'], _rows, _x.get('plucked'),
+                          [_x['grc'][int(g)] for g in _rows['gr']] if _x.get('grc') else None)
+            _rc[_c] = _C
+        _nr = _REG.expand(A, _rc, SR, BLK, _cols)
+        print("  register: %d channel(s), %d partials from the free strings" % (len(_rc), _nr))
+    return (_sym0, _sym1)
+
+
+def _prep_copy_tracks(A, _DAMP_TRACKS, _pcols):
+    """A HALF-PEDALLED NOTE'S COPIES TAKE ITS DAMPER: every row tagged with its
+    own row number ('dsrc') for the passes that copy it. Returns (_arr, _pcols)."""
+    # A HALF-PEDALLED NOTE'S COPIES TAKE ITS DAMPER (damper.onto_tracks): its
+    # rows carry their own row number ('dsrc') through every pass from here,
+    # so a chorus voice, a tremolo's sideband, a delay's repeat or a Leslie's
+    # sideband of it knows the note it copies. The notes nobody hit (the
+    # sympathetic strings, the register: above, -1) have their own felt; the
+    # amplifier's products are of no one note (cleared below). The stream
+    # finds the same through its order keys.
+    from array import array as _arr
+    if _DAMP_TRACKS:
+        _dsrc = _arr('d', [-1.0]) * len(A['om'])
+        for _x in _DAMP_TRACKS:
+            _dsrc[_x[0]:_x[1]] = _arr('d', map(float, range(_x[0], _x[1])))
+        A['dsrc'] = _dsrc
+        _pcols = _pcols + ('dsrc',)
+    return (_arr, _pcols)
+
+
+def _prep_delays(A, N, _GSDN, _MF104, _MOOG_FT, _MOOG_MKI, _MOOG_MPI, _pcols):
+    """THE DELAYS, FIRST: the MF-104M analog delay and the GS delay emit their
+    repeats as partials. Returns N, lengthened for the repeats."""
+    # THE MF-104M ANALOG DELAY, AND IT RUNS FIRST: the pedal is plugged
+    # straight into the Moog, so a valve after it (the charang's) hears the
+    # echoes, and every pass after this treats a repeat as any partial. A
+    # repeat whose note has pitch or shape rows reads a copy of its FT row
+    # whose row offsets are D later -- exact, D being whole grid points
+    # (mf104.GRID). The render grows to hold the last echo's release.
+    if _MF104:
+        _MF = _MFD
+        _mfdup = {}
+        def _mf_dup(fx, d):
+            ft = _MOOG_FT[fx]
+            fl = int(ft[12])
+            if not fl & (1 | 14):        # no pitch or shape rows: the contours
+                return None              # run from the copy's own onset already
+            if (fx, d) not in _mfdup:
+                g = d // _MF.GRID
+                _MOOG_FT.append(list(ft))
+                _mpi = list(_MOOG_MPI[fx])
+                if fl & 1:
+                    _mpi[1] += g
+                _MOOG_MPI.append(_mpi)
+                _mki = list(_MOOG_MKI[fx])
+                if fl & 14:
+                    _mki[1] += g
+                _MOOG_MKI.append(_mki)
+                _mfdup[(fx, d)] = len(_MOOG_FT) - 1
+            return _mfdup[(fx, d)]
+        _nm, _mlast = _MF.expand(A, _MF104, SR, _pcols, dup_fx=_mf_dup)
+        if _mlast + SR // 2 > N:
+            N = _mlast + SR // 2         # nblk stays: the kernel clamps every per-block row
+        print("  MF-104M: %d note(s), %d repeats" % (len(_MF104), _nm))
+    if _GSDN:
+        # THE GS DELAY's repeats (gsdelay.py), after the MF-104M's: of each
+        # sending note's own rows, as the stream makes them
+        _ng, _glast = _GSD.expand(A, _GSDN, SR, _pcols, gsd_place)
+        if _glast + SR // 2 > N:
+            N = _glast + SR // 2
+        print("  GS delay: %d note(s), %d repeats" % (len(_GSDN), _ng))
+    return N
+
+
+def _prep_ring_length(A, N, total):
+    """THE TABLE'S LENGTH: on to where the last partial dies, capped at
+    RING_MAX after the music. Returns N."""
+    # ...and on to where the last partial dies (RING_FLOOR), in chunks so a
+    # long piece's table is never copied whole
+    _rl = 0
+    for _j in range(0, len(A['om']), 1 << 20):
+        _rl = max(_rl, ring_last({k: A[k][_j:_j + (1 << 20)] for k in
+                                  ('aL', 'aR', 'sus', 'aft', 'logr', 'logrA', 'non', 'noff', 're', 'delL', 'delR')}))
+    _rl = min(_rl + BLK, int((total + RING_MAX) * SR))
+    if _rl > N:
+        N = _rl                          # nblk stays, as above
+    return N
+
+
+def _prep_amplifier(A, _AMP_CH, _AMP_IMB, _AMP_REF, _arr, _pcols):
+    """THE AMPLIFIER (tubeamp): a valve's distortion products as partials,
+    before the rotor sees them."""
+    # THE AMPLIFIER, AND IT RUNS FIRST. A Leslie's chain is organ -> amp ->
+    # crossover -> rotors, so the valve is upstream of the rotor; here that is
+    # simply which of two passes goes first, because both work on partials.
+    # Distortion products emitted now are picked up by the rotor pass below and
+    # given their Doppler and their level swing exactly as any other partial.
+    if _AMP_CH and __import__('tubeamp').ENABLED:
+        import tubeamp as _AMP
+        _a0 = len(A['om'])
+        _na = _AMP.expand(A, _AMP_CH, SR, _pcols,
+                          references=_AMP_REF, imbalances=_AMP_IMB)
+        if 'dsrc' in A and len(A['dsrc']) > _a0:
+            A['dsrc'][_a0:] = _arr('d', [-1.0]) * (len(A['dsrc']) - _a0)
+        if _na:
+            print("  tube amp: %d channel(s), %d distortion partials"
+                  % (len(_AMP_CH), _na))
+
+
+def _prep_clav_rockers(A, _CLAV_CH):
+    """THE CLAVINET'S TONE ROCKERS: a preamp filter on the partials that exist."""
+    # THE CLAVINET'S TONE ROCKERS. A preamp filter of FREQUENCY, so it scales
+    # the partials that exist rather than making any, and the same function
+    # serves the live per-block gain. Before the speaker, because it is in the
+    # instrument.
+    if _CLAV_CH:
+        nf = A['nf']
+        for ch, setting in _CLAV_CH.items():
+            sel = np.asarray(A['mch']) == ch
+            if not sel.any():
+                continue
+            g = T.clav_tone_gain(np.asarray(nf)[sel], setting)
+            for col in ('aL', 'aR', 'aM'):
+                # a typed column is scaled where it lies (asarray is a view
+                # of it); a list is rebuilt, as it always was
+                v = np.asarray(A[col]); v[sel] *= g
+                if isinstance(A[col], list):
+                    A[col] = list(v)
+                del v           # a live view would stop the column growing (BufferError)
+            print("  clavinet: %s, %d partials through the tone section"
+                  % (T.CLAV_TONE[setting][0], int(sel.sum())))
+
+
+def _prep_tremolo(A, _HTREM_CH, _HT_ROWS, _TREM_CH, _pcols):
+    """THE TREMOLO (a stereo pan on a Rhodes), after the amplifier."""
+    # THE TREMOLO, and on a Rhodes it is a stereo pan rather than a level
+    # swing. After the amplifier so that a valve works on the carrier and not
+    # on the sidebands, before the speaker so the speaker colours them. See
+    # tremolo.py, which argues both placements.
+    if _HT_ROWS:
+        import tremolo as _TRM
+        _hm = np.zeros(len(A['om']), bool)
+        for _a, _b in _HT_ROWS:
+            _hm[_a:_b] = True
+        _nt = _TRM.expand(A, _HTREM_CH, SR, _pcols, rows=_hm)
+        if _nt:
+            print("  harmonium tremolo: %d notes, %d sidebands" % (len(_HT_ROWS), _nt))
+    if _TREM_CH:
+        import tremolo as _TRM
+        _nt = _TRM.expand(A, _TREM_CH, SR, _pcols)
+        if _nt:
+            _r0 = list(_TREM_CH.values())[0]
+            print("  tremolo: %.1f Hz, depth %.2f%s, %d sidebands"
+                  % (_r0[0], _r0[1], " (stereo pan)" if _r0[2] else "", _nt))
+
+
+def _prep_scanner(A, _SCAN_CH, _pcols):
+    """THE SCANNER VIBRATO, inside the organ, before any chorus."""
+    # THE SCANNER IS INSIDE THE ORGAN, ahead of any chorus pedal, the cabinet
+    # and the Leslie, whose copies inherit its row
+    if _SCAN_CH:
+        import scanner as _SCN
+        _ns = _SCN.expand(A, _SCAN_CH, SR, _pcols)
+        print("  scanner: %s, %d chorus copies (the circuit's dry share under them)"
+              % (", ".join("ch%d %s%d" % (c, "C" if v[2] else "V", v[1]) for c, v in _SCAN_CH.items()), _ns))
+
+
+def _prep_chorus(A, _CHORUS_CH, _pcols):
+    """THE CHORUS, before the speaker."""
+    # THE CHORUS SITS BEFORE THE SPEAKER, which is where a chorus pedal sits:
+    # the cabinet colours whatever reaches it, copies included.
+    if _CHORUS_CH:
+        _nc = _CHR.expand(A, _CHORUS_CH, SR, _pcols, place=gsd_place)
+        if _nc:
+            _c0 = list(_CHORUS_CH.values())[0]
+            print("  chorus: %d channel(s), %d copies %s"
+                  % (len(_CHORUS_CH), _nc, "through the GS chorus" if len(_c0) > 2 and _c0[2] == 'gs'
+                     else "at %s cents" % "/".join("%+.0f" % c for c in _c0[1])))
+
+
+def _prep_insertion_eq(A, _EFXEQ_CH):
+    """THE INSERTION EFFECT'S EQ (gsefx.eq_gain), after its OD and amp."""
+    # THE INSERTION EFFECT's EQ, after its OD and amp (gsefx.eq_gain): every
+    # partial of the part, the valve's products and the copies included
+    if _EFXEQ_CH:
+        _mq = np.asarray(A['mch']); _fq = np.asarray(A['nf'], float)
+        for _qc, _qe in _EFXEQ_CH.items():
+            _qs = np.flatnonzero(_mq == _qc)
+            if len(_qs):
+                _qg = _GSX.eq_gain(_fq[_qs], _qe)
+                for _col in ('aL', 'aR', 'aM'):
+                    if isinstance(A[_col], list):
+                        for _i, _g in zip(_qs.tolist(), _qg.tolist()):
+                            A[_col][_i] *= _g
+                    else:
+                        np.asarray(A[_col])[_qs] *= _qg
+        # ...and its views of the table let go: a pass after it (the Leslie,
+        # a Rotary's) extends the columns, which a live view forbids
+        del _mq, _fq
+
+
+def _prep_cabinet(A, _CAB_CH, _pcols):
+    """THE SPEAKER CABINET (cabinet.py), after the amplifier, before the room."""
+    # THE SPEAKER, AFTER THE AMPLIFIER AND BEFORE THE ROOM. A cabinet creates
+    # nothing -- it only fails to pass things -- but it has to see the
+    # amplifier's output or it is not in the chain at all: a clipped signal has
+    # harmonics to Nyquist and a real 12" throws nearly all of them away. Put
+    # this before the amp pass, or on the voice class as a FormantBody, and
+    # every distortion product bypasses the speaker. See cabinet.py.
+    if _CAB_CH:
+        import cabinet as _CAB
+        _nc = _CAB.expand(A, _CAB_CH, SR, _pcols)
+        if _nc:
+            print("  cabinet: %s, %d partials through the speaker"
+                  % ("/".join(sorted(set(_CAB_CH.values()))), _nc))
+
+
+def _prep_rotating_speaker(A, _LESLIE_CH, _LFLIP, _pcols):
+    """THE ROTATING SPEAKER (leslie.py): each row takes the rotor phase of its
+    own azimuth."""
+    # THE ROTATING SPEAKER. Every row already knows where it went -- px/pz is
+    # the listener's position for a direct partial and the IMAGE's for a
+    # reflected one -- so each takes the rotor phase of its own azimuth, and
+    # the room hears a different quarter of the turn than the listener does.
+    # That difference is the effect; see leslie.py.
+    if _LESLIE_CH:
+        import leslie as _LES
+        _n = _LES.expand(A, _LESLIE_CH, SR, _pcols, flips=_LFLIP, place=gsd_place)
+        if _n:
+            print("  leslie: %d channel(s), %d sideband partials, %d speed change(s)"
+                  % (len(_LESLIE_CH), _n,
+                     sum(len(v['horn'] if isinstance(v, dict) else v) - 1 for v in _LESLIE_CH.values())))
+
+
 def _prepare(path, tuner='hybrid440', sink=None):
     """Parse + tune + build the full partial table (the one-time cost). Returns a
     dict of contiguous arrays ready for synth_window(); reused by render() (one
@@ -2967,37 +3592,13 @@ def _prepare(path, tuner='hybrid440', sink=None):
                   "should move them arrived; here they keep their tuning until "
                   "their next onset (live moves them)" % _late)
 
-    # ------------------------------------------- CC71-78, IN FORCE AT AN ONSET
-    # A timeline per channel rather than a snapshot per note, so the notes this
-    # renderer makes for itself -- a mono handoff, a gliss rung -- read the same
-    # state as the notes the file wrote. GM System On puts every control back
-    # to 64; CC121 does not touch them, as live does not.
-    _SND_TL = {}
-    for _c, _evs in _sys['snd'].items():
-        _ev = [(_t, _q, _cc, _v) for _t, _q, _cc, _v in _evs]
-        _ev += [(_t, _q, None, None) for _t, _q in gmon]
-        _ev.sort(key=lambda e: (e[0], e[1]))
-        _SND_TL[_c] = _ev
+    # Read by helpers made below and filled by the note loop: bound here so a
+    # pass that makes a helper can hand it the object.
+    _SYM_CH = {}                # channel -> the props of its sympathetic strings
+    _DAMP_OPEN = [None]         # the half-pedalled note being emitted (damper.py)
+    _DAMP_TRACKS = []           # (row0, row1, f0, first block, its track, its rows' onsets)
 
-    def _snd_d(_c, _t):
-        """{control name: d} in force at _t, only the ones that are not 64."""
-        _st = {}
-        for _et, _q, _cc, _v in _SND_TL.get(_c, ()):
-            if _et > _t + 1e-9:
-                break
-            if _cc is None:
-                _st = {}
-            else:
-                _st[T.SOUND_CC[_cc]] = T.sound_offset(_v)
-        # ...and the controller matrix's, at this onset (ctrlmatrix): its CUTOFF
-        # as brightness (GS's TVF NRPN spans the same 9600 cents in 64 steps),
-        # its LFO1 rate as the voice's own vibrato rate (x 2^d). (Its LFO1 pitch
-        # depth is a gesture on a sounding note: the pitch stream's, below.)
-        if _c in _CMXEV['cutoff']:
-            _st['brightness'] = max(-1.0, min(1.0, _st.get('brightness', 0.0) + _cmx_at('cutoff', _c, _t) / 9600.0))
-        if _c in _CMXEV['rate']:
-            _st['vib_rate'] = _st.get('vib_rate', 0.0) + math.log2(max(0.1, 1.0 + _cmx_at('rate', _c, _t) / 5.5))
-        return {_k: _d for _k, _d in _st.items() if _d}
+    (_SND_TL, _snd_d) = _prep_sound_controls(_CMXEV, _cmx_at, _sys, gmon)
 
     def _F(_c, _t):
         """This channel's 128-key table at time _t: FREQ unless under gm2."""
@@ -4235,313 +4836,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
 
     _GLIDE_SRC = _prep_glide_sources(_PORTA_CTL, _porta_on_at, notes)
 
-    # ---------------------------------- A VALVED GLISS WALKS THE HARMONICS
-    #
-    # A trumpet does not slide. Ben, who plays these: brass players gliss by
-    # moving "cleanly from one fingering to another, and blow through the
-    # harmonics", or by half-valving to break the alignment and smear between
-    # them. So the reachable pitches are a LATTICE -- a partial over whatever
-    # length the valves have added -- and a gliss is a RUN through it, not a
-    # sweep across it. sources.md carries the physical account.
-    #
-    # THE RENDERER THEREFORE EMITS REAL NOTES, which is not a workaround: the
-    # model says a run of pitches is what is happening, so a run of pitches is
-    # what gets built. Each step goes through the same note loop as everything
-    # else, which means each one picks up the FINGERED pitch for free --
-    # brass_fingering puts every semitone a few cents off equal temperament,
-    # differently, and that wobble is a good part of what makes the gesture
-    # recognisable rather than merely continuous.
-    #
-    # AND THE RUN IS EVEN, not exponential. The reciprocal settle the other
-    # mechanisms use is a hand DECELERATING into a target, which is what a
-    # slide or a finger does; ripping through seven fingerings is a sequence of
-    # discrete actions at a steady rate, and an exponential would also never
-    # reach the last step.
-    _gliss_clean = 0    # glisses too short to play, reported below
-    _GLISS = {}         # (ch, note, on) -> (level scale, smear 0..1)
-    _GLISS_DROP = set() # the notes the run replaces
-    _GLISS_STEPS = []
-    for _e in notes:
-        _k3 = (_e[0], _e[1], _e[2])
-        _gs = _GLIDE_SRC.get(_k3)
-        if _gs is None:
-            continue
-        _pcv = property_class_for_note(_e[6], _e[1])
-        if getattr(_pcv, 'glide_mechanism', None) != 'valve':
-            continue
-        _step = 1 if _e[1] > _gs else -1
-        _path = list(range(_gs, _e[1], _step))       # src .. one short of target
-        if len(_path) < 2 or _e[3] - _e[2] <= 0.0:
-            continue                                 # a tone or less: the lip has it
-        # One journey time, from the same speed law every other mechanism uses,
-        # so CC5 means one thing across the bank -- and it KEEPS meaning it
-        # unless the note physically cannot hold the run. The cap used to be
-        # half the note, which squeezed a slow gliss on any note shorter than
-        # twice its run, so CC5 meant different speeds at different note
-        # lengths. Now the run keeps CC5's time and gives way only to leave the
-        # arrival a real hold: max(60 ms, 20%) of the note, the least that
-        # still sounds like landing somewhere.
-        _cc5 = _porta_cc5_at(_e[0], _e[2])
-        _Fe = _F(_e[0], _e[2])
-        _T = T.glide_tau(_cc5, _Fe[_e[1]], _Fe[_gs], 'slide') * T.PORTA_SETTLE_TAUS
-        _dur = _e[3] - _e[2]
-        _T = min(_T, _dur - max(GLISS_ARRIVAL_S, GLISS_ARRIVAL_FRAC * _dur))
-        _dt = _T / float(len(_path)) if _T > 0.0 else 0.0
-        if _dt < 0.012:
-            # Faster than a valve moves: played clean. COUNTED, which it was
-            # not -- a gliss that disappeared left nothing to say it had.
-            _gliss_clean += 1
-            continue
-        # SMEAR RIDES ON THE SAME KNOB, which is Ben's suggestion: "maybe the
-        # speed controller can control how straight or slurred the glissando is
-        # across the harmonics". A quick gliss is a RIP and the steps are the
-        # sound of it; a slow one is held, and a player holding a staircase
-        # half-valves instead. So the smear opens with CC5, and with it the
-        # level comes DOWN -- half-valving breaks the harmonic alignment and
-        # loses support, and that dip is the audible tell. Without it a smear
-        # is just a portamento with extra steps.
-        _sm = min(1.0, max(0.0, _cc5 / 127.0))
-        for _i, _p in enumerate(_path):
-            _t0 = _e[2] + _i * _dt
-            # Quietest in the middle, where the alignment is worst, and back up
-            # at both ends where a real fingering is being held.
-            _mid = 1.0 - abs((_i + 0.5) / len(_path) * 2.0 - 1.0)
-            _lv = 1.0 - 0.45 * _sm * _mid
-            _GLISS[(_e[0], _p, _t0)] = (_lv, _sm,
-                                        _path[_i - 1] if _i else None, _dt)
-            _GLISS_STEPS.append(
-                (_e[0], _p, _t0, _t0 + _dt * 1.35, _e[4], _e[5], _e[6]))
-        # The note proper begins where the run arrives. Its own onset is where
-        # the gliss STARTED, which is what the file asked for: a rip into a
-        # note is part of the note, not something played before it.
-        _GLISS[(_e[0], _e[1], _e[2] + _T)] = (1.0, _sm, _path[-1], _dt)
-        _GLISS_STEPS.append(
-            (_e[0], _e[1], _e[2] + _T, _e[3], _e[4], _e[5], _e[6]))
-        _GLIDE_SRC.pop(_k3, None)       # the lattice replaces the smooth glide
-        _GLISS_DROP.add(_k3)
-    # A FALL IS A GLISS DOWN (tonelib fall_cents: GS 61.16 "Brass Fall"), so it
-    # walks the lattice as one does -- not a smooth sweep, which a valved
-    # instrument cannot make past the lip's tone (Ben). The note holds
-    # fall_at_s, then runs down a semitone a step over fall_s, each step a real
-    # note on its fingered pitch, the level fading fall_fade_db across the run,
-    # half-valved (smear fall_smear) as a fall usually is; the run ends it. A
-    # key let go before the fall begins releases as any note does.
-    for _e in list(notes):
-        _k3 = (_e[0], _e[1], _e[2])
-        if _k3 in _GLISS_DROP or is_drum(_e[6]):
-            continue
-        _pcf = property_class_for_note(_e[6], _e[1])
-        _fc = getattr(_pcf, 'fall_cents', 0.0) or 0.0
-        if not _fc:
-            continue
-        _tf = _e[2] + float(_pcf.fall_at_s)
-        if _e[3] <= _tf:
-            continue
-        _ns = max(2, int(round(_fc / 100.0)))
-        _dt = float(_pcf.fall_s) / _ns
-        _sm = float(getattr(_pcf, 'fall_smear', 0.6))
-        _GLISS_DROP.add(_k3)
-        _GLISS_STEPS.append((_e[0], _e[1], _e[2], _tf, _e[4], _e[5], _e[6]))
-        for _i in range(_ns):
-            _p = _e[1] - 1 - _i
-            if _p < 0:
-                break
-            _t0 = _tf + _i * _dt
-            _GLISS[(_e[0], _p, _t0)] = (10.0 ** (-float(_pcf.fall_fade_db) * (_i + 1) / _ns / 20.0), _sm,
-                                        _e[1] - _i, _dt)
-            _GLISS_STEPS.append((_e[0], _p, _t0, _t0 + _dt * 1.35, _e[4], _e[5], _e[6]))
-    # ...AND A RIP, the fall's mirror (tonelib rip_cents: GS 60.24 "F.Horn
-    # Rip"): from the onset a run UP the lattice from rip_cents below, a
-    # semitone a step over rip_s, crescendoing from rip_start_db under, each
-    # step a real note on its fingered pitch; the note proper sounds from where
-    # the run arrives, and its onset is still where the file put it
-    for _e in list(notes):
-        _k3 = (_e[0], _e[1], _e[2])
-        if _k3 in _GLISS_DROP or is_drum(_e[6]):
-            continue
-        _pcr = property_class_for_note(_e[6], _e[1])
-        _rc = getattr(_pcr, 'rip_cents', 0.0) or 0.0
-        if not _rc:
-            continue
-        _ns = max(2, int(round(_rc / 100.0)))
-        _T = float(_pcr.rip_s)
-        if _e[3] <= _e[2] + _T:
-            continue                    # a note shorter than its rip: played plain
-        _dt = _T / _ns
-        _sm = float(getattr(_pcr, 'rip_smear', 0.8))
-        _GLISS_DROP.add(_k3)
-        for _i in range(_ns):
-            _p = _e[1] - _ns + _i
-            if _p < 0:
-                continue
-            _t0 = _e[2] + _i * _dt
-            _GLISS[(_e[0], _p, _t0)] = (10.0 ** (-float(_pcr.rip_start_db) * (_ns - _i) / _ns / 20.0), _sm,
-                                        (_p - 1) if _i else None, _dt)
-            _GLISS_STEPS.append((_e[0], _p, _t0, _t0 + _dt * 1.35, _e[4], _e[5], _e[6]))
-        _GLISS[(_e[0], _e[1], _e[2] + _T)] = (1.0, _sm, _e[1] - 1, _dt)
-        _GLISS_STEPS.append((_e[0], _e[1], _e[2] + _T, _e[3], _e[4], _e[5], _e[6]))
-    # ...AND TREMOLO PICKING (tonelib tremolo_pick_hz: GS 25.18 MandolinTrem):
-    # a held note re-struck at the picking rate, each stroke a note of its own,
-    # down and up alternating (the up softer), its time scattered -- seeded by
-    # the note, so a render repeats
-    for _e in list(notes):
-        _k3 = (_e[0], _e[1], _e[2])
-        if _k3 in _GLISS_DROP or is_drum(_e[6]):
-            continue
-        _pct = property_class_for_note(_e[6], _e[1])
-        _hz = getattr(_pct, 'tremolo_pick_hz', 0.0) or 0.0
-        if not _hz or _e[3] - _e[2] < 1.5 / _hz:
-            continue
-        _rng = __import__("random").Random(0x7E3D + _e[1] * 977 + int(_e[2] * 1000))
-        _per = 1.0 / _hz
-        _jit = float(_pct.tremolo_pick_jitter)
-        _up = 10.0 ** (float(_pct.tremolo_pick_up_db) / 20.0)
-        _ts = [_e[2]]
-        while _ts[-1] + _per < _e[3] - 0.25 * _per:
-            _ts.append(_e[2] + len(_ts) * _per + _rng.uniform(-_jit, _jit) * _per)
-        _GLISS_DROP.add(_k3)
-        for _i, _t0 in enumerate(_ts):
-            _v = _e[4] if _i % 2 == 0 else (max(1, int(round(_e[4] * _up))) if isinstance(_e[4], int) else _e[4] * _up)
-            _t1 = _e[3] if _i == len(_ts) - 1 else min(_e[3], _ts[_i + 1] + 0.02)
-            _GLISS_STEPS.append((_e[0], _e[1], _t0, _t1, _v, _e[5], _e[6]))
-    _CUT_OF = {}            # (ch, the cut's note, on) -> the written note it opens
-    # ...AND A CUT (tonelib cut_semitones: the uilleann pipes' ornament, GS
-    # 109.11 "UillnPipe Or"): a flicked upper finger -- the note cut_semitones
-    # above for cut_s at the onset, slurred into the note (a chanter never
-    # stops), which then sounds from there to its end
-    for _e in list(notes):
-        _k3 = (_e[0], _e[1], _e[2])
-        if _k3 in _GLISS_DROP or is_drum(_e[6]):
-            continue
-        _pcc = property_class_for_note(_e[6], _e[1])
-        _cs = int(getattr(_pcc, 'cut_semitones', 0) or 0)
-        _cT = float(getattr(_pcc, 'cut_s', 0.03))
-        if not _cs or _e[3] - _e[2] < 3.0 * _cT or not 0 <= _e[1] + _cs <= 127:
-            continue
-        _GLISS_DROP.add(_k3)
-        _GLISS_STEPS.append((_e[0], _e[1] + _cs, _e[2], _e[2] + _cT, _e[4], _e[5], _e[6]))
-        _GLISS_STEPS.append((_e[0], _e[1], _e[2] + _cT, _e[3], _e[4], _e[5], _e[6]))
-        # the flick is the written note's onset: its legato is the note's
-        # (and it is no occurrence of its own pitch, so a later real note of
-        # that pitch keeps its own legato); the note then arrives by slur
-        _CUT_OF[(_e[0], _e[1] + _cs, _e[2])] = _e[1]
-        _MONO_SLUR.add((_e[0], _e[1], _e[2] + _cT))
-    if _gliss_clean:
-        print("  %d valved glissandi were too short to run and played clean "
-              "(a step would have been under 12 ms)" % _gliss_clean)
-    if _GLISS_STEPS:
-        notes = [_n for _n in notes
-                 if (_n[0], _n[1], _n[2]) not in _GLISS_DROP] + _GLISS_STEPS
+    (_CUT_OF, _GLISS, notes) = _prep_gliss(_F, _GLIDE_SRC, _MONO_SLUR, _porta_cc5_at, notes)
 
-    def _sound_off(_c, _t):
-        """The first All Sound Off on this channel strictly AFTER _t.
-
-        Strictly, not "at or after". A sound-off on the same tick as a note-on
-        is in the file's header nearly every time it happens -- CC126 and
-        CC127 carry one, and they are set before the first note -- and "at or
-        after" let it kill the note it preceded, four milliseconds in. It was
-        the same for a bare CC120; nobody sends one of those in a header, so it
-        never showed until mono mode did.
-        """
-        _ts = _SOFF_CH.get(_c)
-        if not _ts:
-            return None
-        _i = _bisect.bisect_right(_ts, _t)
-        return _ts[_i] if _i < len(_ts) else None
-
-    def _damper_falls(_c, _t):
-        """When the damper actually lands for a key released at _t."""
-        _segs = _PED_CH.get(_c)
-        if not _segs:
-            return _t
-        _i = _bisect.bisect_right(_segs, (_t, 1e18)) - 1
-        if _i >= 0 and _segs[_i][0] <= _t < _segs[_i][1]:
-            return _segs[_i][1]
-        return _t
-
-    def _pedal_at(_c, _t):
-        """The half-pedalled channel's CC64 in force at _t (0 before any)."""
-        _ts, _vs = _PEDV_CH[_c]
-        _i = _bisect.bisect_right(_ts, _t) - 1
-        return _vs[_i] if _i >= 0 else 0
-
-    def _damper_lands(_c, _t, _key, _top):
-        """(when this key's damper lands, released at _t: its contact full;
-        whether the pedal stands in its band on the way)."""
-        _ts, _vs = _PEDV_CH[_c]
-        _band = False
-        _i = _bisect.bisect_right(_ts, _t) - 1
-        _times = [_t] + _ts[_i + 1:]
-        _vals = [_vs[_i] if _i >= 0 else 0] + _vs[_i + 1:]
-        for _tt, _v in zip(_times, _vals):
-            _k = _DMP.contact(_v, _key, _top)
-            if _k >= 1.0:
-                return _tt, _band
-            if _k > 0.0:
-                _band = True
-        return max(float(total), _t), _band
-
-    def _pedal_spans_of(_c, _top):
-        """A half-pedalled channel's free spans for the register, per key: free
-        while the key's damper is off its strings (contact under 1)."""
-        _ts, _vs = _PEDV_CH[_c]
-        _memo = {}
-
-        def _of(_key):
-            if _key not in _memo:
-                _segs, _a = [], None
-                for _tt, _v in zip(_ts, _vs):
-                    _free = _DMP.contact(_v, _key, _top) < 1.0
-                    if _free and _a is None:
-                        _a = _tt
-                    elif not _free and _a is not None:
-                        _segs.append((_a, _tt)); _a = None
-                if _a is not None:
-                    _segs.append((_a, max(float(total), _a)))
-                _memo[_key] = _segs
-            return _memo[_key]
-        return _of
-
-    def _pedal_damping_of(_c, _top):
-        """A half-pedalled channel's felt on the register's free strings, per
-        key: (each pedal move, in samples; the residual rate from it, nepers
-        a second at the key's fundamental) -- a sympathetic string rings
-        under the felt's gap, so only the residual takes it (damper.py)."""
-        _ts, _vs = _PEDV_CH[_c]
-
-        def _of(_key):
-            _r = [_DMP.rate_db_s(_DMP.contact(_v, _key, _top), False) * _DMP.LN10_20
-                  if _DMP.contact(_v, _key, _top) < 1.0 else 0.0 for _v in _vs]
-            if not any(_r):
-                return None
-            return np.asarray(_ts, float) * SR, np.asarray(_r, float)
-        return _of
-
-    def _damp_close(_r1):
-        """The open half-pedalled note's rows end at _r1: its track, from its
-        fundamental's decay (damper.track), over its blocks from key-up to
-        landing."""
-        _d = _DAMP_OPEN[0]
-        _DAMP_OPEN[0] = None
-        if _d is None or _r1 <= _d['row0']:
-            return
-        _r0 = _d['row0']
-        _nfs = np.asarray(A['nf'][_r0:_r1], float)
-        _f0 = 440.0 * 2.0 ** ((_d['key'] - 69) / 12.0)
-        _j = _r0 + int(np.argmin(np.abs(np.log(np.maximum(_nfs, 1e-3) / _f0))))
-        _lr, _lra, _af, _su = (float(A[_k][_j]) for _k in ('logr', 'logrA', 'aft', 'sus'))
-        _vdb = 40.0 * math.log10(max(_d['vel'], 1) / 127.0)
-
-        def _lvl(_tt, _on=_d['on']):
-            _x = max(_tt - _on, 0.0)
-            _dc = _su + (1.0 - _su) * ((1.0 - _af) * math.exp(-_lr * _x) + _af * math.exp(-_lra * _x))
-            return _vdb + 20.0 * math.log10(max(_dc, 1e-12))
-        _b0 = int(_d['off'] * SR) // BLK
-        _b1 = min(nblk, int(math.ceil(_d['land'] * SR / BLK)))
-        _edges = (np.arange(_b0, _b1 + 1) * BLK) / float(SR)
-        _dc, _full = _DMP.track(_edges, lambda _tt: _pedal_at(_d['ch'], _tt), _d['key'], _lvl, _d['top'])
-        _DAMP_TRACKS.append((_r0, _r1, _f0, _b0, _dc.astype(np.float32),
-                             np.asarray(A['non'][_r0:_r1], np.int64)))
+    (_damp_close, _damper_falls, _damper_lands, _pedal_damping_of, _pedal_spans_of,
+        _sound_off) = _prep_damper_helpers(A, _DAMP_OPEN, _DAMP_TRACKS, _PEDV_CH, _PED_CH, _SOFF_CH, nblk,
+        total)
 
     # THE STRINGS' NEXT NOTES, by channel (open_string_ring): onsets and the
     # string each note lies on, built the first time a voice asks
@@ -4584,13 +4883,10 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _CONS_SRC = {}
     _LESLIE_CH = {}
     _FILTER_CH = {}     # channel -> its moving filter (efxfilter.Channel)
-    _SYM_CH = {}
     # THE FREE-STRING REGISTER: channel -> its class's strike list and setup,
     # and the strike whose rows are being emitted (closed at the next note)
     _REG_CH = {}
     _REG_OPEN = [None]
-    _DAMP_OPEN = [None]         # the half-pedalled note being emitted (damper.py)
-    _DAMP_TRACKS = []           # (row0, row1, f0, first block, its track, its rows' onsets)
     _AMP_CH = {}
     _AMP_REF = {}
     _AMP_LV0 = {}       # the EFX level in a part's reference when it was taken (1 if none)
@@ -7593,225 +7889,28 @@ def _prepare(path, tuner='hybrid440', sink=None):
     # makes a reflection widen rather than thicken.
     cons_bursts = [_cons_expand(_bi, _b) for _bi, _b in enumerate(cons_bursts)]
 
-    # THE NOTES NOBODY HIT, AND THEY RUN BEFORE THE AMPLIFIER. A sympathetic
-    # note is part of what the instrument produces, so it is part of what an
-    # amplifier would be handed -- and part of what a room would hear. See
-    # sympathetic.py, and note that a steelpan's coupling turned out to be a
-    # mechanical kick through shared steel rather than resonance.
-    _sym0 = _sym1 = len(A['om'])         # the sympathetic rows: [_sym0, _sym1)
-    if _SYM_CH:
-        import sympathetic as _SYM
-        # The table in force at each strike -- the tuner's, or under gm2 the
-        # channel's MTS table -- rather than one global FREQ for the piece.
-        # ...and an Indian instrument's under a secondary tuning, the raga's
-        _ns = _SYM.expand(A, _SYM_CH, SR, PARTIAL_COLS + ('az', 'dr'),
-                          table=_F_SYM)
-        _sym1 = len(A['om'])
-        if _ns:
-            print("  sympathetic: %d channel(s), %d partials from notes nobody hit"
-                  % (len(_SYM_CH), _ns))
-    # THE FREE-STRING REGISTER, right after: the strings nobody struck, each a
-    # string the note loop would have emitted (string_partial and its kin), at
-    # the tuning in force. See register.py.
-    if _REG_CH and sink is None:
-        import register as _REG
-        _rc = {}
-        _cols = PARTIAL_COLS + ('az', 'dr')
-        for _c, _R in _REG_CH.items():
-            _C = _REG.channel_for(_c, _R, SR, BLK, _cols, REGISTER_SCALE,
-                                  (string_partial, partial_decay, unison_partial))
-            for _x in _R['strikes']:
-                if _x['rows'][1] is None:
-                    continue
-                _r0, _r1 = _x['rows']
-                _rows = _strike_rows(A, _r0, _r1, _cols, _x.get('gr'))
-                _C.strike(_x['key'], _x['on'], _x['held'], _x['av'], _rows, _x.get('plucked'),
-                          [_x['grc'][int(g)] for g in _rows['gr']] if _x.get('grc') else None)
-            _rc[_c] = _C
-        _nr = _REG.expand(A, _rc, SR, BLK, _cols)
-        print("  register: %d channel(s), %d partials from the free strings" % (len(_rc), _nr))
+    (_sym0, _sym1) = _prep_sympathetic(A, _F_SYM, _REG_CH, _SYM_CH, sink)
 
-    # THE AMPLIFIER, AND IT RUNS FIRST. A Leslie's chain is organ -> amp ->
-    # crossover -> rotors, so the valve is upstream of the rotor; here that is
-    # simply which of two passes goes first, because both work on partials.
-    # Distortion products emitted now are picked up by the rotor pass below and
-    # given their Doppler and their level swing exactly as any other partial.
-    # A HALF-PEDALLED NOTE'S COPIES TAKE ITS DAMPER (damper.onto_tracks): its
-    # rows carry their own row number ('dsrc') through every pass from here,
-    # so a chorus voice, a tremolo's sideband, a delay's repeat or a Leslie's
-    # sideband of it knows the note it copies. The notes nobody hit (the
-    # sympathetic strings, the register: above, -1) have their own felt; the
-    # amplifier's products are of no one note (cleared below). The stream
-    # finds the same through its order keys.
     _pcols = PARTIAL_COLS + ('az', 'dr')
-    if _DAMP_TRACKS:
-        from array import array as _arr
-        _dsrc = _arr('d', [-1.0]) * len(A['om'])
-        for _x in _DAMP_TRACKS:
-            _dsrc[_x[0]:_x[1]] = _arr('d', map(float, range(_x[0], _x[1])))
-        A['dsrc'] = _dsrc
-        _pcols = _pcols + ('dsrc',)
-    # THE MF-104M ANALOG DELAY, AND IT RUNS FIRST: the pedal is plugged
-    # straight into the Moog, so a valve after it (the charang's) hears the
-    # echoes, and every pass after this treats a repeat as any partial. A
-    # repeat whose note has pitch or shape rows reads a copy of its FT row
-    # whose row offsets are D later -- exact, D being whole grid points
-    # (mf104.GRID). The render grows to hold the last echo's release.
-    if _MF104:
-        _MF = _MFD
-        _mfdup = {}
-        def _mf_dup(fx, d):
-            ft = _MOOG_FT[fx]
-            fl = int(ft[12])
-            if not fl & (1 | 14):        # no pitch or shape rows: the contours
-                return None              # run from the copy's own onset already
-            if (fx, d) not in _mfdup:
-                g = d // _MF.GRID
-                _MOOG_FT.append(list(ft))
-                _mpi = list(_MOOG_MPI[fx])
-                if fl & 1:
-                    _mpi[1] += g
-                _MOOG_MPI.append(_mpi)
-                _mki = list(_MOOG_MKI[fx])
-                if fl & 14:
-                    _mki[1] += g
-                _MOOG_MKI.append(_mki)
-                _mfdup[(fx, d)] = len(_MOOG_FT) - 1
-            return _mfdup[(fx, d)]
-        _nm, _mlast = _MF.expand(A, _MF104, SR, _pcols, dup_fx=_mf_dup)
-        if _mlast + SR // 2 > N:
-            N = _mlast + SR // 2         # nblk stays: the kernel clamps every per-block row
-        print("  MF-104M: %d note(s), %d repeats" % (len(_MF104), _nm))
-    if _GSDN:
-        # THE GS DELAY's repeats (gsdelay.py), after the MF-104M's: of each
-        # sending note's own rows, as the stream makes them
-        _ng, _glast = _GSD.expand(A, _GSDN, SR, _pcols, gsd_place)
-        if _glast + SR // 2 > N:
-            N = _glast + SR // 2
-        print("  GS delay: %d note(s), %d repeats" % (len(_GSDN), _ng))
+    (_arr, _pcols) = _prep_copy_tracks(A, _DAMP_TRACKS, _pcols)
+    N = _prep_delays(A, N, _GSDN, _MF104, _MOOG_FT, _MOOG_MKI, _MOOG_MPI, _pcols)
 
-    # ...and on to where the last partial dies (RING_FLOOR), in chunks so a
-    # long piece's table is never copied whole
-    _rl = 0
-    for _j in range(0, len(A['om']), 1 << 20):
-        _rl = max(_rl, ring_last({k: A[k][_j:_j + (1 << 20)] for k in
-                                  ('aL', 'aR', 'sus', 'aft', 'logr', 'logrA', 'non', 'noff', 're', 'delL', 'delR')}))
-    _rl = min(_rl + BLK, int((total + RING_MAX) * SR))
-    if _rl > N:
-        N = _rl                          # nblk stays, as above
+    N = _prep_ring_length(A, N, total)
 
-    if _AMP_CH and __import__('tubeamp').ENABLED:
-        import tubeamp as _AMP
-        _a0 = len(A['om'])
-        _na = _AMP.expand(A, _AMP_CH, SR, _pcols,
-                          references=_AMP_REF, imbalances=_AMP_IMB)
-        if 'dsrc' in A and len(A['dsrc']) > _a0:
-            A['dsrc'][_a0:] = _arr('d', [-1.0]) * (len(A['dsrc']) - _a0)
-        if _na:
-            print("  tube amp: %d channel(s), %d distortion partials"
-                  % (len(_AMP_CH), _na))
+    _prep_amplifier(A, _AMP_CH, _AMP_IMB, _AMP_REF, _arr, _pcols)
 
-    # THE SPEAKER, AFTER THE AMPLIFIER AND BEFORE THE ROOM. A cabinet creates
-    # nothing -- it only fails to pass things -- but it has to see the
-    # amplifier's output or it is not in the chain at all: a clipped signal has
-    # harmonics to Nyquist and a real 12" throws nearly all of them away. Put
-    # this before the amp pass, or on the voice class as a FormantBody, and
-    # every distortion product bypasses the speaker. See cabinet.py.
-    # THE CLAVINET'S TONE ROCKERS. A preamp filter of FREQUENCY, so it scales
-    # the partials that exist rather than making any, and the same function
-    # serves the live per-block gain. Before the speaker, because it is in the
-    # instrument.
-    if _CLAV_CH:
-        nf = A['nf']
-        for ch, setting in _CLAV_CH.items():
-            sel = np.asarray(A['mch']) == ch
-            if not sel.any():
-                continue
-            g = T.clav_tone_gain(np.asarray(nf)[sel], setting)
-            for col in ('aL', 'aR', 'aM'):
-                # a typed column is scaled where it lies (asarray is a view
-                # of it); a list is rebuilt, as it always was
-                v = np.asarray(A[col]); v[sel] *= g
-                if isinstance(A[col], list):
-                    A[col] = list(v)
-                del v           # a live view would stop the column growing (BufferError)
-            print("  clavinet: %s, %d partials through the tone section"
-                  % (T.CLAV_TONE[setting][0], int(sel.sum())))
+    _prep_clav_rockers(A, _CLAV_CH)
 
-    # THE TREMOLO, and on a Rhodes it is a stereo pan rather than a level
-    # swing. After the amplifier so that a valve works on the carrier and not
-    # on the sidebands, before the speaker so the speaker colours them. See
-    # tremolo.py, which argues both placements.
-    if _HT_ROWS:
-        import tremolo as _TRM
-        _hm = np.zeros(len(A['om']), bool)
-        for _a, _b in _HT_ROWS:
-            _hm[_a:_b] = True
-        _nt = _TRM.expand(A, _HTREM_CH, SR, _pcols, rows=_hm)
-        if _nt:
-            print("  harmonium tremolo: %d notes, %d sidebands" % (len(_HT_ROWS), _nt))
-    if _TREM_CH:
-        import tremolo as _TRM
-        _nt = _TRM.expand(A, _TREM_CH, SR, _pcols)
-        if _nt:
-            _r0 = list(_TREM_CH.values())[0]
-            print("  tremolo: %.1f Hz, depth %.2f%s, %d sidebands"
-                  % (_r0[0], _r0[1], " (stereo pan)" if _r0[2] else "", _nt))
+    _prep_tremolo(A, _HTREM_CH, _HT_ROWS, _TREM_CH, _pcols)
 
-    # THE SCANNER IS INSIDE THE ORGAN, ahead of any chorus pedal, the cabinet
-    # and the Leslie, whose copies inherit its row
-    if _SCAN_CH:
-        import scanner as _SCN
-        _ns = _SCN.expand(A, _SCAN_CH, SR, _pcols)
-        print("  scanner: %s, %d chorus copies (the circuit's dry share under them)"
-              % (", ".join("ch%d %s%d" % (c, "C" if v[2] else "V", v[1]) for c, v in _SCAN_CH.items()), _ns))
+    _prep_scanner(A, _SCAN_CH, _pcols)
 
-    # THE CHORUS SITS BEFORE THE SPEAKER, which is where a chorus pedal sits:
-    # the cabinet colours whatever reaches it, copies included.
-    if _CHORUS_CH:
-        _nc = _CHR.expand(A, _CHORUS_CH, SR, _pcols, place=gsd_place)
-        if _nc:
-            _c0 = list(_CHORUS_CH.values())[0]
-            print("  chorus: %d channel(s), %d copies %s"
-                  % (len(_CHORUS_CH), _nc, "through the GS chorus" if len(_c0) > 2 and _c0[2] == 'gs'
-                     else "at %s cents" % "/".join("%+.0f" % c for c in _c0[1])))
+    _prep_chorus(A, _CHORUS_CH, _pcols)
 
-    # THE INSERTION EFFECT's EQ, after its OD and amp (gsefx.eq_gain): every
-    # partial of the part, the valve's products and the copies included
-    if _EFXEQ_CH:
-        _mq = np.asarray(A['mch']); _fq = np.asarray(A['nf'], float)
-        for _qc, _qe in _EFXEQ_CH.items():
-            _qs = np.flatnonzero(_mq == _qc)
-            if len(_qs):
-                _qg = _GSX.eq_gain(_fq[_qs], _qe)
-                for _col in ('aL', 'aR', 'aM'):
-                    if isinstance(A[_col], list):
-                        for _i, _g in zip(_qs.tolist(), _qg.tolist()):
-                            A[_col][_i] *= _g
-                    else:
-                        np.asarray(A[_col])[_qs] *= _qg
-        # ...and its views of the table let go: a pass after it (the Leslie,
-        # a Rotary's) extends the columns, which a live view forbids
-        del _mq, _fq
-    if _CAB_CH:
-        import cabinet as _CAB
-        _nc = _CAB.expand(A, _CAB_CH, SR, _pcols)
-        if _nc:
-            print("  cabinet: %s, %d partials through the speaker"
-                  % ("/".join(sorted(set(_CAB_CH.values()))), _nc))
+    _prep_insertion_eq(A, _EFXEQ_CH)
+    _prep_cabinet(A, _CAB_CH, _pcols)
 
-    # THE ROTATING SPEAKER. Every row already knows where it went -- px/pz is
-    # the listener's position for a direct partial and the IMAGE's for a
-    # reflected one -- so each takes the rotor phase of its own azimuth, and
-    # the room hears a different quarter of the turn than the listener does.
-    # That difference is the effect; see leslie.py.
-    if _LESLIE_CH:
-        import leslie as _LES
-        _n = _LES.expand(A, _LESLIE_CH, SR, _pcols, flips=_LFLIP, place=gsd_place)
-        if _n:
-            print("  leslie: %d channel(s), %d sideband partials, %d speed change(s)"
-                  % (len(_LESLIE_CH), _n,
-                     sum(len(v['horn'] if isinstance(v, dict) else v) - 1 for v in _LESLIE_CH.values())))
+    _prep_rotating_speaker(A, _LESLIE_CH, _LFLIP, _pcols)
 
     P = len(A["om"])
     def arr(k,dt):

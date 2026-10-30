@@ -84,8 +84,17 @@ def table_hashes(prep):
 
 
 def against(out, ref):
-    a = {l.split()[1]: l.split() for l in open(out) if l.strip()}
-    b = {l.split()[1]: l.split() for l in open(ref) if l.strip()}
+    def keyed(path):
+        """name -> fields; a second file of the same name (two SENSATIO.MID
+        from two sets) is name#2, paired with the reference's by order"""
+        out, seen = {}, {}
+        for l in open(path):
+            if l.strip():
+                f = l.split()
+                seen[f[1]] = seen.get(f[1], 0) + 1
+                out[f[1] if seen[f[1]] == 1 else "%s#%d" % (f[1], seen[f[1]])] = f
+        return out
+    a, b = keyed(out), keyed(ref)
     moved = []
     for name, la in a.items():
         lb = b.get(name)
