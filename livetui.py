@@ -2124,10 +2124,12 @@ class TUI:
             # the right of it: at x=70 on an 80-column terminal it was clipped
             # clean off the screen, which is no way to show a registration.
             if here and p.organ:
-                for ln in self.stops_lines(p, max(20, w - 8)):
+                for ln, spans in self.stops_layout(p, max(20, w - 8)):
                     if y >= bottom - 6:
                         break
                     self.draw_stops_line(scr, y, 6, ln)
+                    for x0, x1, row, i in spans:
+                        self.hit(y, 6 + x0, 6 + x1, ("stop", row, i))
                     y += 1
         # THE INSERTION EFFECT: one for the module, the parts on it
         _ef = L.efx
@@ -2658,14 +2660,20 @@ class TUI:
     def stops_lines(self, p, width=80):
         """One line per key row, wrapped to the width: each stop with the key
         that toggles it written next to it, and the drawn ones bracketed."""
-        lines = []
+        return [ln for ln, _ in self.stops_layout(p, width)]
+
+    def stops_layout(self, p, width=80):
+        """stops_lines, each line with its stops' spans [(x0, x1, row, i)]:
+        where a tap toggles that stop (Ben: "if you click the stops, they
+        will toggle")."""
+        out = []
         for row, names in enumerate(p.patch.stop_row_lines):
-            cur = "stops  " if row == 0 else "       "
+            cur, spans = ("stops  " if row == 0 else "       "), []
             i = -1
             for r in names:
                 if r == "|":
                     if cur.strip():
-                        lines.append(cur.rstrip()); cur = "       "
+                        out.append((cur.rstrip(), spans)); cur, spans = "       ", []
                     continue
                 i += 1
                 # rows 2 and 3 are the same keys after the STOP_PREFIX key (or
@@ -2673,10 +2681,11 @@ class TUI:
                 k = ((STOP_PREFIX if row >= 2 else "") + STOP_LABELS.get((row % 2, i), "")) if row < 4 else ""
                 item = ("%s[%s]" % (k, r)) if r in p.drawn else ("%s %s " % (k, r))
                 if len(cur) + len(item) + 1 > width and cur.strip():
-                    lines.append(cur.rstrip()); cur = "       "
+                    out.append((cur.rstrip(), spans)); cur, spans = "       ", []
+                spans.append((len(cur), len(cur) + len(item), row, i))
                 cur += item + " "
-            lines.append(cur.rstrip())
-        return lines
+            out.append((cur.rstrip(), spans))
+        return out
 
     def stops_str(self, p):
         return "  ".join(self.stops_lines(p, 10 ** 6))
@@ -3177,6 +3186,8 @@ class TUI:
             self.key(scr, act[1])
         elif kind == "note":
             self.note_on(act[1])
+        elif kind == "stop":
+            self.toggle_stop(act[2], act[1])     # a tap draws it, or puts it in
         elif kind in ("gbar", "kbar"):
             self.select(act)
             self.set_by_bar(act, (off + 0.5) / float(max(span, 1)))
