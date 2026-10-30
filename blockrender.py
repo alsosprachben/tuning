@@ -5235,11 +5235,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
     def _refl_norm(f, px, pz, d):
         """sqrt(E(1) / E(d)), E = 1 + the images' energy against the direct,
         for the current voice at frequency f moved out by d (_src_dist)."""
-        k = (round(f, 1), px, pz, em.radius, d) + _refl_state(props)
+        k = (round(f, 1), px, pz, em.radius, d) + _refl_state(em.props)
         g = _RNORM.get(k)
         if g is None:
-            r = props.radiation_distance
-            e = [1.0 + sum(rg * rg for rg, _, _ in props.reflection_terms(f, px * m, r * m, pz * m, em.radius))
+            r = em.props.radiation_distance
+            e = [1.0 + sum(rg * rg for rg, _, _ in em.props.reflection_terms(f, px * m, r * m, pz * m, em.radius))
                  for m in (1.0, d)]
             if len(_RNORM) >= PREP_MEMO_MAX:
                 _RNORM.clear()
@@ -5638,7 +5638,15 @@ def _prepare(path, tuner='hybrid440', sink=None):
             if pch in _d and vch not in _d:
                 _d[vch] = _d[pch]
 
-    for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
+    # read before bound on some path, so carried note to note as the loop's
+    # locals were (the stops loop's gain, read by the release click): bound
+    # and deleted here, so the first note finds them unbound as it did
+    _hf = _ppk = _tilt = gain = None
+    del _hf, _ppk, _tilt, gain
+    def _build_note(_ev):
+        """One note of the note loop: its rows, and what it leaves for later passes."""
+        nonlocal _hf, _ppk, _tilt, gain
+        (ch, note, on, off, vel, (v7, v11, pan), prog) = _ev
         em.onset = on
         _pna = None              # MIDI 2.0 per-note pitch: set where f0 is decided
         _mmgr = None             # MPE: this note's manager channel, if it is on a member
@@ -5704,7 +5712,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             drum = (percussion_for_note(note, kit_for_program(int(prog)))
                     if is_drum(prog) else None)
         if is_drum(prog) and drum is None:
-            continue                      # unmapped drum: the reference drops it
+            return                        # unmapped drum: the reference drops it
         _dst = drum_edit_at(_DEDIT[ch], note, on) if (drum is not None and ch in _DEDIT) else {}
         if _ud is not None:
             _own = dict(_ud[2])
@@ -5712,7 +5720,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _own[_k] = _own.get('pitch', 0) + _v if _k == 'pitch' else _v
             _dst = _own
         if _dst.get('rxon', 1) == 0:
-            continue                      # the kit told not to receive this key
+            return                        # the kit told not to receive this key
         # INTO THE GS DELAY: the part's send at the onset, a drum key's own
         # multiplying it (its 0-127 a share of the part's, preset taken as all)
         # THE INSERTION EFFECT, where this part is assigned to it and its type
@@ -8024,6 +8032,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
                     _REL_JACKS.append((_j0, len(A['om']), _jr, _jo))
         if len(A['om']) > _rel0:
             _REL_ROWS.append((_rel0, len(A['om'])))
+
+    for _ev in notes:
+        _build_note(_ev)
     em.reverse = None
     em.note_end = len(A['om'])   # the last note's rows end here (stroke_rows)
     _snd_finish(em.sound_pending)      # the last note's CC71/74/75, as the loop gives the others
