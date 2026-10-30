@@ -2612,6 +2612,740 @@ def _prep_breath(ch_progs, crow_of, nblk):
     return _BREATH
 
 
+def _prep_pitch_bend(_CMXEV, _cmx_at, _pwseq, _sys, gmon, master, nblk, notes, pws, rpns):
+    """PITCH BEND: A TUNING IS NOT A GESTURE. Each channel's pitch ratio from the
+    wheel, RPNs, master tuning, MPE zones and the matrix, split into a fixed
+    tuning (_BTUN, folded into f0) and a moving gesture (_BGEST); and the
+    channels whose notes meend. Returns (_BGEST, _BTUN, _MEEND_CH, _mpe_member,
+    _pitch_stream)."""
+    # ---- PITCH BEND: A TUNING IS NOT A GESTURE ----------------------------
+    # The wheel carries two entirely different things and they need different
+    # machinery, so they are separated here rather than downstream.
+    #
+    # A bend SET BEFORE THE CHANNEL'S FIRST NOTE AND NEVER MOVED is a TUNING.
+    # John Sankey's bwv847.mid and bwv974.mid are the reason this matters: they
+    # put one pitch class on each channel and one static bend on each, which is
+    # a temperament written in twelve numbers -- C +0.0 cents, C# -9.8, D -7.7,
+    # D# -5.9, E -9.8, F -2.0, F# -11.7, G -3.8, G# -7.8, A -11.7, A# -3.9,
+    # B -7.8. The renderer threw it away. A tuning goes into f0 with the other
+    # fixed pitch offsets, costs nothing, is EXACT, and is honoured by every
+    # voice -- including the harpsichord those files are written for, which
+    # could not bend a note if it wanted to.
+    #
+    # A bend that MOVES WHILE THE CHANNEL IS SOUNDING is a GESTURE, and only a
+    # voice that can physically be bent gets one. (A-Team.mid is the corpus's
+    # only example: 0 to +200 cents in 57 ms on a guitar.)
+    #
+    # The classifier is not a heuristic and has no threshold: if the wheel
+    # never moves while anything is sounding, a fixed offset reproduces it
+    # EXACTLY, and there is nothing left to approximate.
+    _BTUN = {}          # channel -> fixed ratio, folded into f0
+    _BGEST = {}         # channel -> [(t, residual ratio)], only where it moves
+    _first_on = {}
+    for _n in notes:
+        if _n[0] not in _first_on or _n[2] < _first_on[_n[0]]:
+            _first_on[_n[0]] = _n[2]
+    # ONE RATIO PER CHANNEL, FROM FIVE INPUTS: the wheel over its range (RPN 0),
+    # the channel's coarse and fine tuning (RPN 2, 1), and the device's master
+    # coarse and fine tuning (Universal Realtime 04 04, 04 03). The split below
+    # then runs on the PRODUCT, so a coarse tune set in the header is a
+    # temperament exactly as a static wheel is, and an RPN 0 change while the
+    # wheel is off centre moves the pitch -- which is the entire point of RPN 0.
+    # tonelib.channel_pitch_ratio is the same function live.py's _repitch uses.
+    #
+    # IN THE ORDER THE FILE SENT THEM, not by a rule about which kind of
+    # message usually comes first. Most of these land on the same tick -- a
+    # file's header is all tick zero -- and the first draft broke those ties by
+    # putting GM System On first, on the theory that that is where files put
+    # it. A file that tunes and THEN resets was left tuned. Message order is
+    # the only tie-break that is not a guess.
+    def _pitch_stream(_c, with_master=True):
+        _ev = [(_t, _q, 'wheel', _p) for _t, _q, _p in _pwseq.get(_c, ())]
+        _ev += [(_t, _q, _k, _v) for _t, _k, _v, _q in rpns.get(_c, ())
+                if _k in ('range', 'fine', 'coarse')]
+        if with_master:
+            _ev += [(_t, _q, 'm' + _k, _v) for _t, _k, _v, _q in master
+                    if _k in ('fine', 'coarse')]
+        _ev += [(_t, _q, 'gmon', None) for _t, _q in gmon]
+        _ev.sort(key=lambda e: (e[0], e[1]))
+        st = {}
+        out = []
+        for _t, _o, _k, _v in _ev:
+            if _k == 'gmon':
+                st = {}
+            else:
+                st[_k] = _v
+            out.append((_t, T.channel_pitch_ratio(
+                st.get('range', T.BEND_RANGE_SEMITONES), st.get('wheel', 0),
+                st.get('coarse', 0.0), st.get('fine', 0.0),
+                st.get('mcoarse', 0.0), st.get('mfine', 0.0))))
+        return out
+
+    # MPE: a MEMBER channel is not a tuning and a gesture -- every note on it
+    # brings its own bend -- so its pitch is decided per note below (_MPE_AT),
+    # and the channel split is for everything else.
+    _mpe_ev = _sys.get('mpe') or []
+
+    def _zone_at(_c, _t):
+        _z = None
+        for _t0, _chs in _mpe_ev:
+            if _t0 <= _t + 1e-9:
+                _z = _chs
+            else:
+                break
+        return (_z or {}).get(_c)
+
+    def _manager(_c, _t):
+        _z = _zone_at(_c, _t)
+        return None if _z is None else 16 * _z[0] + (0 if _z[1] == 'lower' else 15)
+    _mpe_member = {}
+    if _mpe_ev:
+        for _n in notes:
+            _m = _manager(_n[0], _n[2])
+            if _m is not None and _m != _n[0]:
+                _mpe_member[(_n[0], _n[1], _n[2])] = _m
+    _mchans = {k[0] for k in _mpe_member}
+    # A MEEND IS THE NOTE'S, NOT THE CHANNEL'S (tonelib.meend_cents): a channel
+    # whose notes lock their bend to the tuning's swaras (bend_detents) has its
+    # wheel read per note below (_MEEND_AT), and is left out of the channel's
+    # tuning/gesture split here so the bend is not applied twice
+    _MEEND_CH = set()
+    for _n in notes:
+        if (_n[0] in _pwseq and not isinstance(_n[6], DrumProgram)
+                and getattr(property_class_for_note(_n[6], _n[1]), 'bend_detents', False)):
+            _MEEND_CH.add(_n[0])
+    _pchans = (set(pws) | set(rpns) | (set(_first_on) if master else set()) | set(_CMXEV['pitch'])
+               | set(_CMXEV['vib'])) - _mchans - _MEEND_CH
+    _bdt2 = BLK / float(SR)
+    for _c in _pchans:
+        _ev = _pitch_stream(_c)
+        if _c in _CMXEV['pitch'] or _c in _CMXEV['vib']:
+            # ...times the controller matrix's PITCH (ctrlmatrix: a source other
+            # than the bend into pitch, in semitones), each change a ratio
+            # event; and its VIBRATO (LFO1 pitch depth from aftertouch, a CC, the
+            # bend: a gesture on a note already sounding) as a sine on the same
+            # stream, a point a block wherever its depth is up -- the bend
+            # row's phase runs on across blocks, so its steps do not click
+            _mev = [(_t, 2.0 ** (_s / 12.0)) for _t, _s in _CMXEV['pitch'].get(_c, ())]
+            if _c in _CMXEV['vib']:
+                _vev = _CMXEV['vib'][_c]
+                _pv = 0.0
+                _vi = 0
+                _psemi = 0.0
+                _pit = _CMXEV['pitch'].get(_c, ())
+                _pj = 0
+                _was = False
+                for _kb in range(nblk):
+                    _tb = (_kb + 0.5) * _bdt2
+                    while _vi < len(_vev) and _vev[_vi][0] <= _tb:
+                        _pv = _vev[_vi][1]; _vi += 1
+                    while _pj < len(_pit) and _pit[_pj][0] <= _tb:
+                        _psemi = _pit[_pj][1]; _pj += 1
+                    if _pv <= 0.0:
+                        if _was:                # back to the plain pitch as it stops
+                            _mev.append((_kb * _bdt2, 2.0 ** (_psemi / 12.0)))
+                        _was = False
+                        continue
+                    _was = True
+                    _hz = max(0.5, TREMOLO_MATRIX_HZ + _cmx_at('rate', _c, _tb))
+                    _mev.append((_kb * _bdt2, 2.0 ** ((_psemi * 100.0 + _pv * math.sin(2.0 * math.pi * _hz * _tb)) / 1200.0)))
+                _mev.sort()
+            _merged, _rb, _rm = [], 1.0, 1.0
+            for _t, _k, _r in sorted([(_t, 0, _r) for _t, _r in (_ev or ())] + [(_t, 1, _r) for _t, _r in _mev]):
+                if _k == 0:
+                    _rb = _r
+                else:
+                    _rm = _r
+                _merged.append((_t, _rb * _rm))
+            _ev = _merged
+        _f = _first_on.get(_c)
+        if _f is None or not _ev:
+            continue                            # tuning a silent channel
+        # THE VALUE IN FORCE AT THE FIRST NOTE, which is the LAST event at or
+        # before it. This used to take the FIRST such event: a file that set
+        # the wheel twice before playing was tuned by the setting it had
+        # already changed its mind about.
+        _pre = [_r for _t, _r in _ev if _t <= _f + 1e-6]
+        _tun = _pre[-1] if _pre else 1.0
+        # Only what happens once the channel is sounding can be a gesture;
+        # anything earlier is folded into the tuning above.
+        _res = [(_t, _r / _tun) for _t, _r in _ev if _t > _f + 1e-6]
+        if abs(_tun - 1.0) > 1e-12:
+            _BTUN[_c] = _tun
+        if any(abs(_r - 1.0) > 1e-9 for _, _r in _res):
+            _BGEST[_c] = _res
+    return (_BGEST, _BTUN, _MEEND_CH, _mpe_member, _pitch_stream)
+
+
+def _prep_bend_rows(FREQ_E, _BGEST, _F, _MEEND_CH, _pwseq, nblk, notes, rpns):
+    """THE BEND ROWS: each meend note's own row (_MEEND_AT) and each gesturing
+    channel's. Returns (BCrows, BRrows, _MEEND_AT, brow_of)."""
+    BRrows=[]; BCrows=[]; brow_of={}
+    # THE MEEND, per note: the wheel's pull, from this note, mapped through the
+    # tuning's swaras above it (tonelib.meend_detents/meend_cents) -- the
+    # secondary tuning's raga when one is set, else every key of the table the
+    # note is tuned in -- over the file's RPN 0 range, or the class's own when
+    # it sets none. (ratio at Note On, its own row), as _MPE_AT.
+    _MEEND_AT = {}
+    if _MEEND_CH:
+        import ragas as _RG
+        for _n in notes:
+            _c, _nt, _on, _off = _n[0], _n[1], _n[2], _n[3]
+            if _c not in _MEEND_CH or isinstance(_n[6], DrumProgram):
+                continue
+            _pcm = property_class_for_note(_n[6], _nt)
+            if not getattr(_pcm, 'bend_detents', False):
+                continue
+            _ind = getattr(_pcm, 'tuning_family', None) == 'indian'
+            _tab = FREQ_E if (FREQ_E is not None and _ind) else _F(_c, _on)
+            _sa = (T.raga_sa_note if (T.raga_sa_note is not None and (_ind or FREQ_E is None))
+                   else int(getattr(_pcm, 'sympathetic_tonic', 60)))
+            if _sa not in _tab or _nt not in _tab:
+                continue
+            if T.raga_spec and (_ind or FREQ_E is None):
+                _sy, _rg, _, _ = _RG.parse(T.raga_spec)
+                _sw = [_cv for _, _cv in _RG.swaras(_sy, _rg)]
+            else:
+                _sw = [1200.0 * math.log2(_tab[_sa + _k] / _tab[_sa]) for _k in range(12)]
+            _nc = 1200.0 * math.log2(_tab[_nt] / _tab[_sa])
+            _rng = [(_t, _v) for _t, _k, _v, _q in rpns.get(_c, ()) if _k == 'range']
+            _rst = ([_v for _t, _v in _rng if _t <= _on + 1e-9] or [None])[-1]
+            if _rst is None:
+                _rst = float(getattr(_pcm, 'bend_range_semitones', T.BEND_RANGE_SEMITONES))
+            _det = T.meend_detents(_nc, _sw, 100.0 * _rst)
+            _st = float(getattr(_pcm, 'meend_strength', 0.6))
+
+            def _ratio(_w):
+                return 2.0 ** (T.meend_cents(100.0 * _rst * _w / 8192.0, _det, _st) / 1200.0)
+            _wseq = sorted((_t, _p) for _t, _q, _p in _pwseq.get(_c, ()))
+            _w0 = ([_p for _t, _p in _wseq if _t <= _on + 1e-9] or [0])[-1]
+            _r0 = _ratio(_w0)
+            _mv = [(_t, _ratio(_p) / _r0) for _t, _p in _wseq if _on + 1e-9 < _t <= _off]
+            _row = -1
+            if any(abs(_r - 1.0) > 1e-9 for _, _r in _mv):
+                _r, _cc = bend_blocks(_mv, nblk)
+                _row = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+            _MEEND_AT[(_c, _nt, _on)] = (_r0, _row)
+    for _c, _ev in _BGEST.items():
+        _r, _cc = bend_blocks(_ev, nblk)
+        brow_of[_c] = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+    return (BCrows, BRrows, _MEEND_AT, brow_of)
+
+
+def _prep_breath_rows(BCrows, BRrows, _BREATH, brow_of, nblk):
+    """THE BREATH'S ROWS: per breathing channel, a bend row for the pitch with
+    the tone's level as its BL, and one for the breath noise. Returns
+    (_BLrows, bbrow_of)."""
+    # THE BREATH'S ROWS (above): per channel, a bend row carrying the pitch
+    # (times the channel's gesture, if it has one; the phase summed exactly as
+    # bend_blocks sums it) with the TONE'S level as its BL, and an unbent row
+    # with the BREATH NOISE'S level. Only a note of a breathing class takes them.
+    bbrow_of = {}; _BLrows = {}
+    for _c, (_tl, _nl, _rt) in _BREATH.items():
+        _r = _rt.astype(np.float32)
+        if _c in brow_of:
+            _r = (BRrows[brow_of[_c]].astype(np.float64) * _r).astype(np.float32)
+        _cc = np.concatenate(([0.0], np.cumsum((_r.astype(np.float64) - 1.0) * BLK)))[:nblk]
+        _i = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+        _BLrows[_i] = _tl.astype(np.float32)
+        _j = len(BRrows); BRrows.append(np.ones(nblk, np.float32)); BCrows.append(np.zeros(nblk))
+        _BLrows[_j] = _nl.astype(np.float32)
+        bbrow_of[_c] = (_i, _j)
+    return (_BLrows, bbrow_of)
+
+
+def _prep_wind_rows(BCrows, BRrows, _BLrows, _WROWS, nblk, wrow_key):
+    """THE WIND'S ROWS: a bend row per (channel, organ family), its phase the
+    running sum of the chest's ratio. Returns wrow_of."""
+    # the wind's rows (above): a bend row per (channel, family), its phase the
+    # running sum of its ratio exactly as bend_blocks makes it, and its level
+    wrow_of = {}
+    for _c, _fams in _WROWS.items():
+        for _ab, (_r, _lv) in _fams.items():
+            _r = _r.astype(np.float32)          # the ratio the kernel reads, summed as it is
+            _cc = np.concatenate(([0.0], np.cumsum((_r.astype(np.float64) - 1.0) * BLK)))[:nblk]
+            _i = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+            _BLrows[_i] = _lv.astype(np.float32)
+            for (_c2, _k), _ab2 in wrow_key.items():
+                if _c2 == _c and _ab2 == _ab:
+                    wrow_of[(_c, _k)] = _i
+    return wrow_of
+
+
+def _prep_mpe_pitch(BCrows, BRrows, _mpe_member, _pitch_stream, nblk, notes):
+    """MPE, PER NOTE: the member's bend times the manager's; the value at Note On
+    into f0, what moves after on the note's own row. Returns _MPE_AT."""
+    # MPE, PER NOTE: the member's bend plus the manager's, in semitones -- a
+    # product of ratios (M1-100-UM Appendix C). The value in force at Note On
+    # goes into that note's f0; what moves afterwards is the note's own row:
+    # its member's bend until its Note Off and no longer (2.2.6), its
+    # manager's for as long as it sounds (A.4.1). (ratio at onset, row).
+    _MPE_AT = {}
+    if _mpe_member:
+        def _val(_st, _tt, _d=1.0):
+            _v = _d
+            for _t0, _r in _st:
+                if _t0 <= _tt + 1e-9:
+                    _v = _r
+                else:
+                    break
+            return _v
+        _sm = {}
+        for (ch, note, on), mgr in _mpe_member.items():
+            if ch not in _sm:
+                _sm[ch] = _pitch_stream(ch)
+            if ('m', mgr) not in _sm:
+                _sm[('m', mgr)] = _pitch_stream(mgr, with_master=False)
+        _offs = {(n[0], n[1], n[2]): (n[3], n[6]) for n in notes if (n[0], n[1], n[2]) in _mpe_member}
+        for (ch, note, on), mgr in _mpe_member.items():
+            off, prog = _offs[(ch, note, on)]
+            ms, gs = _sm[ch], _sm[('m', mgr)]
+            r0 = _val(ms, on) * _val(gs, on)
+            row = -1
+            bendable = (not isinstance(prog, DrumProgram)
+                        and getattr(property_class_for_note(prog, note), 'pitch_bendable', True))
+            moves = sorted({_t for _t, _ in ms if on + 1e-9 < _t <= off}
+                           | {_t for _t, _ in gs if _t > on + 1e-9})
+            if bendable and moves:
+                ev = [(_t, _val(ms, min(_t, off)) * _val(gs, _t) / r0) for _t in moves]
+                if any(abs(_r - 1.0) > 1e-9 for _, _r in ev):
+                    _r, _cc = bend_blocks(ev, nblk)
+                    row = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+            _MPE_AT[(ch, note, on)] = (r0, row)
+    return _MPE_AT
+
+
+def _prep_per_note_pitch(BCrows, BRrows, _BGEST, _F, _OTUN, _sys, nblk, notes):
+    """MIDI 2.0 PER-NOTE PITCH: each note's absolute pitch and bend at onset,
+    and a row of its own when it moves. Returns _PN_AT."""
+    # MIDI 2.0 PER-NOTE PITCH, per note: (absolute semitones at onset or None,
+    # the per-note bend ratio at onset, and a bend row of its own when the
+    # pitch moves while it sounds). The row is the channel's gesture times the
+    # note's own movement, so the kernel is unchanged: one row per note.
+    _PN_AT = {}
+    _pnd = _sys.get('pn') or {}
+    if any(_pnd.get(k) for k in ('attr', 'p725', 'bend')):
+        def _step(evs, tt, default):
+            v = default
+            for _t, _v in evs:
+                if _t <= tt + 1e-9:
+                    v = _v
+                else:
+                    break
+            return v
+        for (ch, note, on, off, vel, _cvv, prog) in notes:
+            if isinstance(prog, DrumProgram):
+                continue
+            _k = (ch, note)
+            _attr = _pnd['attr'].get((ch, note, on))
+            _p7 = _pnd['p725'].get(_k, [])
+            _bd = _pnd['bend'].get(_k, [])
+            _rg = _pnd['range'].get(ch, [])
+            if _attr is None and not _p7 and not _bd:
+                continue
+            _tuned = _F(ch, on)[note] * (2.0 ** (_OTUN[ch][note % 12] / 1200.0)
+                                         if _OTUN.get(ch) else 1.0)
+
+            def _abs(tt):
+                p = _attr if _attr is not None else _step(_p7, tt, None)
+                return None if p is None else p
+
+            def _hz(tt):
+                p = _abs(tt)
+                return 440.0 * 2.0 ** ((p - 69.0) / 12.0) if p is not None else _tuned
+
+            def _pb(tt):
+                b = _step(_bd, tt, 0.0)
+                return 2.0 ** (b * _step(_rg, tt, T.PN_BEND_RANGE) / 12.0) if b else 1.0
+            p0, b0 = _abs(on), _pb(on)
+            moves = sorted({_t for _t, _ in (([] if _attr is not None else _p7) + _bd + _rg)
+                            if on + 1e-9 < _t <= off})
+            row = -1
+            if moves:
+                bendable = getattr(property_class_for_note(prog, note), 'pitch_bendable', True)
+                chev = _BGEST.get(ch, []) if bendable else []
+                ref = _hz(on) * b0
+                times = sorted({_t for _t, _ in chev} | set(moves))
+                ev = [(_t, _step(chev, _t, 1.0) * (_hz(_t) * _pb(_t) / ref)) for _t in times]
+                _r, _cc = bend_blocks(ev, nblk)
+                row = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+            _PN_AT[(ch, note, on)] = (p0, b0, row)
+    return _PN_AT
+
+
+def _prep_siren(BCrows, BRrows, _BLrows, _F, _mpe_member, ats, ccs, nblk, notes, pts):
+    """THE SIREN'S ROTOR (siren.py): each siren note's disc speed integrated a
+    block at a time, wound up by its drive and coasting. Returns _SIREN_AT."""
+    # THE SIREN'S ROTOR (siren.py; tonelib siren_rotor): a siren's pitch is its
+    # disc's speed, and its speed has inertia -- wound up by its drive, coasting
+    # without it. Each siren note gets its rotor integrated a block at a time
+    # into a ROW of its own (the mean speed a block, the phase summed from it
+    # as bend_blocks sums it, the level at each block edge), carried key to
+    # key: a press while the disc still coasts starts from the speed it has.
+    # The fire siren's drive is its motor, full while held (its GS length the
+    # least); the Helmholtz siren's is its AIR -- velocity, channel and poly
+    # aftertouch, CC2, the most of them -- and its level the air's, against
+    # the velocity's own gain. Its upper disc rides a second row, the first's
+    # turned by the crank (CC1): the same ratio, its phase ahead by the
+    # chest's angle, and its ratio moved while the wheel moves, as the crank
+    # moved it. (ch, note, on) -> (rows, end).
+    _SIREN_AT = {}
+    _sir_keys = {}
+    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
+        if (_c, _nt, _on) in _mpe_member:
+            continue
+        if is_drum(_pg):
+            _dd = percussion_for_note(_nt, kit_for_program(int(_pg)))
+            _spc = _dd[1] if _dd else None
+        else:
+            _spc = property_class_for_note(_pg, _nt)
+        _kind = getattr(_spc, 'siren_rotor', None)
+        if _kind:
+            _sir_keys.setdefault((_c, _nt, _kind), []).append((_on, _of, _v, _spc))
+    if _sir_keys:
+        import siren as _SIR
+        _bdt = BLK / float(SR)
+
+        def _stepv(_ev, _tt, _d=0):
+            _x = _d
+            for _t0, _val in _ev:
+                if _t0 <= _tt + 1e-9:
+                    _x = _val
+                else:
+                    break
+            return _x
+        for (_c, _nt, _kind), _ns in _sir_keys.items():
+            _ns.sort()
+            _rot = _SIR.Rotor(_kind)
+            _tprev = None
+            _at = sorted(ats.get(_c, []))
+            _pt = sorted(pts.get((_c, _nt), []))
+            _c2 = sorted((_t, _val) for _t, _cc, _val in ccs.get(_c, []) if _cc == 2)
+            _c1 = sorted((_t, _val) for _t, _cc, _val in ccs.get(_c, []) if _cc == 1)
+            for _i, (_on, _of, _v, _spc) in enumerate(_ns):
+                if _tprev is not None and _on > _tprev:
+                    _rot.coast(_on - _tprev)
+                _drive_end = _of
+                if getattr(_spc, 'held_texture', False) and getattr(_spc, 'gate_time', None):
+                    _drive_end = max(_of, _on + _spc.gate_time)
+                _cap = _ns[_i + 1][0] if _i + 1 < len(_ns) else float('inf')
+                _pv = _v / 127.0
+                _b0 = int(_on * SR // BLK)
+                _r = []; _lv = []
+                _k = _b0
+                _end = None
+                while True:
+                    _tb = _k * _bdt
+                    if _tb >= _cap or _k >= nblk:
+                        _end = min(_cap, nblk * _bdt)
+                        break
+                    _tm = _tb + 0.5 * _bdt
+                    if _tm < _drive_end:
+                        if _kind == 'fire':
+                            _p = 1.0
+                        else:
+                            _p = max(_pv, _stepv(_at, _tm) / 127.0, _stepv(_pt, _tm) / 127.0,
+                                     _stepv(_c2, _tm) / 127.0)
+                    else:
+                        _p = 0.0
+                    _rr, _l0, _l1 = _rot.block(_p, _bdt)
+                    _r.append(_rr); _lv.append(_l0)
+                    _k += 1
+                    if _tb >= _drive_end:
+                        if _kind == 'fire':
+                            if _l1 <= 10.0 ** (-_SIR.FLOOR_DB / 20.0):
+                                _end = _k * _bdt
+                                break
+                        elif _rot.air <= 1e-3 * max(_pv, 1e-3):
+                            _end = _k * _bdt
+                            break
+                _lv.append(_rot.level())
+                _tprev = min(_end, _cap)
+                # ...AND HELD AT ITS LAST past its end, for its release: a row
+                # back at 1 there sounded the tail at full level and the key's
+                # nominal pitch
+                _ra = np.ones(nblk, np.float32)
+                _n = min(len(_r), nblk - _b0)
+                _ra[_b0:_b0 + _n] = _r[:_n]
+                if _n:
+                    _ra[_b0 + _n:] = _r[_n - 1]
+                _la = np.ones(nblk + 1, np.float32)
+                _lvn = np.asarray(_lv[:_n + 1], np.float64)
+                if _kind != 'fire':
+                    _lvn = _lvn / math.sqrt(max(_pv, 1e-3))   # the velocity's gain is the onset's level
+                _la[_b0:_b0 + len(_lvn)] = _lvn
+                _la[_b0 + len(_lvn):] = _lvn[-1]
+                _cc = np.concatenate(([0.0], np.cumsum((_ra.astype(np.float64) - 1.0) * BLK)))[:nblk]
+                _lo = len(BRrows); BRrows.append(_ra); BCrows.append(_cc)
+                _BLrows[_lo] = _la
+                _rows = (_lo,)
+                if getattr(_spc, 'siren_upper', None):
+                    # the crank: the upper chest's angle as samples of phase at
+                    # each block's start, from the wheel; 0 outside the note
+                    _frev = _F(_c, _on)[_nt] / 12.0
+                    _dl = np.zeros(nblk + 1, np.float64)
+                    for _j in range(_b0, min(_b0 + _n + 1, nblk + 1)):
+                        _dl[_j] = _SIR.crank_samples(_SIR.crank_angle(_stepv(_c1, _j * _bdt)),
+                                                     _frev, SR)
+                    _ru = (_ra.astype(np.float64) + np.diff(_dl) / BLK).astype(np.float32)
+                    # the lower disc's phase plus the chest's angle, exactly --
+                    # summed from _ru instead, a note in the render's first
+                    # block lost its starting angle (no block before it to
+                    # carry the step)
+                    _cu = _cc + _dl[:nblk]
+                    _up = len(BRrows); BRrows.append(_ru); BCrows.append(_cu)
+                    _BLrows[_up] = _la.copy()
+                    _rows = (_lo, _up)
+                _SIREN_AT[(_c, _nt, _on)] = (_rows, _tprev)
+    return _SIREN_AT
+
+
+def _prep_scanner_channels(BCrows, BRrows, ccs, nblk, notes):
+    """THE HAMMOND SCANNER (scanner.py): one moving-delay row per channel on the
+    synchronous motor's clock. Returns _SCAN_CH."""
+    # THE HAMMOND SCANNER (scanner.py; tonelib `scanner`, 'V1'..'C3'): its
+    # vibrato is a moving delay -- one row per channel, BC the delay as phase,
+    # on the synchronous motor's clock from the render's start, so every note
+    # rides the same sweep. Its partials go onto it after the notes are built
+    # (scanner.expand, below: vibrato moves them, chorus adds a copy).
+    _SCAN_CH = {}
+    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
+        if SCANNER_OFF or _c in _SCAN_CH or is_drum(_pg):
+            continue
+        _spc = property_class_for_note(_pg, _nt)
+        if not (getattr(_spc, 'scanner_switch', False) or getattr(_spc, 'scanner', None)):
+            continue
+        import scanner as _SCN
+        # the selector's position: the channel's first CC94, else the voice's own
+        _c94 = [_val for _t, _cc, _val in in_order(ccs.get(_c, [])) if _cc == _SCN.SWITCH_CC]
+        _sset = _SCN.setting_of(_spc, _c94[0] if _c94 else None)
+        if _sset:
+            _dep, _cho = _sset
+            _rws = []
+            for _r, _cc in _SCN.rows(nblk, BLK, SR, _dep, _cho):      # a row per band
+                _rws.append(len(BRrows)); BRrows.append(_r); BCrows.append(_cc)
+            _SCAN_CH[_c] = (tuple(_rws), _dep, _cho)
+    return _SCAN_CH
+
+
+def _prep_channel_fader(BCrows, BRrows, _BLrows, _CMXEV, _MPE_AT, _PN_AT, _SCAN_CH, _SIREN_AT, _mpe_member,
+        bbrow_of, brow_of, ccs, nblk, notes):
+    """THE CHANNEL FADER, MID-NOTE: a level row per channel whose CC7/CC11 moves
+    under held notes (not a stamped mt32mux channel). Returns _LROW."""
+    # THE CHANNEL FADER, MID-NOTE. A note took CC7 x CC11 (squared) once, at
+    # its onset, so a swell or a fade written over a held note did nothing
+    # here -- while live, a fader in someone's hand, moved the notes already
+    # sounding (Ben, the Prophet's Song's sea: "needs to fade out"). Now a
+    # channel whose CC7 or CC11 MOVES while one of its notes sounds (its
+    # release with it, FADER_TAIL) carries the level as a row: its notes are
+    # emitted at unity and every row they ride takes the level as BL -- the
+    # channel's bend and breath rows, its notes' own MPE and per-note rows,
+    # and for everything else a level-only row (emit_partial). A channel
+    # that only sets its level between notes is untouched, folded in at
+    # onset as it always was, so its render is the same to the bit.
+    # Not an organ whose CC11 is its stop word and CC7 its swell: those
+    # have their own rows (registration_blocks). Keyed as _MCH is: an MPE
+    # member's note by its zone's manager.
+    _LROW = {}
+    _org = {}
+
+    def _plain(_pg, _nt):
+        if isinstance(_pg, DrumProgram):
+            return True
+        _k = (_pg, getattr(_pg, 'variation', 0), getattr(_pg, 'layer', None), _nt)
+        if _k not in _org:
+            _pc = property_class_for_note(_pg, _nt)
+            _org[_k] = not (getattr(_pc, 'registerable', False)
+                            and tuple(getattr(_pc, 'stop_word_ccs', (11, 43)))[0] == 11)
+        return _org[_k]
+    _spans = {}
+    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
+        if _plain(_pg, _nt):
+            _spans.setdefault(_mpe_member.get((_c, _nt, _on), _c), []).append((_on, _of + FADER_TAIL))
+    # ...BUT NOT A STAMPED CHANNEL. mt32mux carries several parts on one
+    # channel by putting each part's CC7 (and CC11) a tick before EVERY note
+    # it plays, for the note to snapshot at its onset -- so another part's
+    # note still sounding sees the stamp as a fader move, and would be
+    # rescaled by a level that is not its own. A channel where nearly every
+    # note (STAMPED_SHARE) has a CC7 within STAMP_S before it is stamped,
+    # and keeps the onset rule the stamps were written for. No ordinary
+    # file sends a volume before every note.
+    _ons = {}
+    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
+        _ons.setdefault(_mpe_member.get((_c, _nt, _on), _c), []).append(_on)
+    for _c in list(_spans):
+        _t7 = np.array(sorted(_t for _t, _cc, _val in ccs.get(_c, []) if _cc == 7))
+        _o = np.array(sorted(_ons.get(_c, [])))
+        if len(_t7) and len(_o):
+            _k = np.searchsorted(_t7, _o + 1e-9, side='right') - 1
+            _hit = (_k >= 0) & ((_o - _t7[np.maximum(_k, 0)]) <= STAMP_S)
+            if _hit.mean() >= STAMPED_SHARE:
+                del _spans[_c]
+    for _c, _sp in _spans.items():
+        _v7, _v11, _fev = T.GM_DEFAULT_VOLUME, T.GM_DEFAULT_EXPRESSION, []
+        _lv = ((_v7 / 127.0) * (_v11 / 127.0)) ** 2
+        # ...and the controller matrix's AMPLITUDE (ctrlmatrix), a gain moved
+        # by the mod wheel, a CC or the pressure -- after the CC at its instant,
+        # whose change it follows. A channel with none: the CCs, in their order
+        _ag = 1.0
+        _evs = [(_t, 0, _i, _cc, _val) for _i, (_t, _cc, _val) in enumerate(in_order(ccs.get(_c, [])))]
+        _evs += [(_t, 1, _i, 'amp', _gv) for _i, (_t, _gv) in enumerate(_CMXEV['amp'].get(_c, ()))]
+        for _t, _k, _i, _cc, _val in (sorted(_evs) if len(_evs) and _c in _CMXEV['amp'] else _evs):
+            if _cc == 'amp':
+                _ag = _val
+            elif _cc == 7:
+                _v7 = _val
+            elif _cc == 11:
+                _v11 = _val
+            elif _cc == 121:
+                _v11 = 127                      # reset: expression back up, volume kept
+            else:
+                continue
+            _g = ((_v7 / 127.0) * (_v11 / 127.0)) ** 2
+            if _ag != 1.0:
+                _g = _g * _ag
+            if _g != _lv and any(_a < _t < _b for _a, _b in _sp):
+                _LROW[_c] = None
+            _fev.append((_t, _g))
+            _lv = _g
+        if _c not in _LROW:
+            continue
+        _L = onepole_edges(_fev, nblk, ((T.GM_DEFAULT_VOLUME / 127.0) * (T.GM_DEFAULT_EXPRESSION / 127.0)) ** 2)
+        _own = [brow_of.get(_c)] + list(bbrow_of.get(_c, ()))
+        _own += [_r for (_ch, _nt, _on), (_r0, _r) in _MPE_AT.items() if _mpe_member.get((_ch, _nt, _on)) == _c]
+        _own += [_x[2] for (_ch, _nt, _on), _x in _PN_AT.items() if _mpe_member.get((_ch, _nt, _on), _ch) == _c]
+        _own += [_rw for (_ch, _nt, _on), (_rws, _e) in _SIREN_AT.items() if _ch == _c for _rw in _rws]
+        if _c in _SCAN_CH:
+            _own.extend(_SCAN_CH[_c][0])
+        for _r in set(_own):
+            if _r is not None and _r >= 0:
+                _BLrows[_r] = (_BLrows[_r] * _L) if _r in _BLrows else _L.copy()
+        _i = len(BRrows); BRrows.append(np.ones(nblk, np.float32)); BCrows.append(np.zeros(nblk))
+        _BLrows[_i] = _L
+        _LROW[_c] = _i
+    return _LROW
+
+
+def _prep_wind_combos(BCrows, BRrows, _BLrows, _MEEND_AT, _MPE_AT, _PN_AT, bbrow_of, brow_of, nblk, wrow_of):
+    """A NOTE RIDES ONE BEND ROW: a note with a row of its own on an organ
+    chest rides the product of its row and the wind's. Returns wcombo."""
+    # A NOTE RIDES ONE BEND ROW, so a note with a row of its own -- MIDI 2.0
+    # per-note pitch, MPE, a meend, the channel's gesture or the player's
+    # breath -- on an organ chest rides their PRODUCT: its own ratio and level
+    # times its family's wind row's. The rank loop used to put it on the wind
+    # row alone, and the note's own pitch was lost the day the shared wind
+    # came on by default (live's Clip File test). (base row, wind row) -> row.
+    wcombo = {}
+    if wrow_of:
+        _wch = {}
+        for (_c, _k), _w in wrow_of.items():
+            _wch.setdefault(_c, set()).add(_w)
+        _bases = {}
+        for _c, _r in brow_of.items():
+            _bases.setdefault(_c, set()).add(_r)
+        for _c, _rs in bbrow_of.items():
+            _bases.setdefault(_c, set()).add(_rs[0])
+        for (_c, _nt, _on), _x in _PN_AT.items():
+            _bases.setdefault(_c, set()).add(_x[2])
+        for (_c, _nt, _on), _x in _MPE_AT.items():
+            _bases.setdefault(_c, set()).add(_x[1])
+        for (_c, _nt, _on), _x in _MEEND_AT.items():
+            _bases.setdefault(_c, set()).add(_x[1])
+        for _c, _ws in _wch.items():
+            for _b in _bases.get(_c, ()):
+                if _b is None or _b < 0:
+                    continue
+                for _w in _ws:
+                    _r = (BRrows[_b].astype(np.float64) * BRrows[_w].astype(np.float64)).astype(np.float32)
+                    _cc = np.concatenate(([0.0], np.cumsum((_r.astype(np.float64) - 1.0) * BLK)))[:nblk]
+                    _i = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+                    if _b in _BLrows or _w in _BLrows:
+                        _one = np.ones(nblk + 1, np.float32)
+                        _BLrows[_i] = _BLrows.get(_b, _one) * _BLrows.get(_w, _one)
+                    wcombo[(_b, _w)] = _i
+    return wcombo
+
+
+def _prep_matrix_tremolo(BCrows, BRrows, _BLrows, _CMXEV, _LROW, bbrow_of, brow_of, nblk, wrow_of):
+    """THE MATRIX'S TREMOLO (ctrlmatrix LFO1 amplitude depth): each channel's
+    sidebands on rows of their own. Returns _CMX_TREM."""
+    # THE MATRIX'S TREMOLO (ctrlmatrix: LFO1 AMPLITUDE DEPTH, moved by the mod
+    # wheel, a CC or the pressure): the channel's sidebands (tremolo.expand)
+    # at the peak depth, each riding a row of its own -- its parent's ratio
+    # and level times depth(t) / peak, the faders' glide -- so a held note's
+    # tremolo swells with the wheel. A row for each row its notes can ride:
+    # the channel's bend, breath and fader rows, and none (-1).
+    _CMX_TREM = {}
+    for _c, _tv in _CMXEV['tva'].items():
+        _pk = max(_v for _t, _v in _tv)
+        if _pk <= 0.0:
+            continue
+        _cur = onepole_edges([(_t, _v / _pk) for _t, _v in _tv], nblk, 0.0)
+        _map = {}
+        _wpar = [_v for (_wc, _wk), _v in wrow_of.items() if _wc == _c]      # a pipe organ's wind rows
+        for _par in set([brow_of.get(_c), _LROW.get(_c), -1] + list(bbrow_of.get(_c, ())) + _wpar):
+            if _par is None:
+                continue
+            _r = (BRrows[_par] if _par >= 0 else np.ones(nblk, np.float32)).astype(np.float32)
+            _cc = (BCrows[_par] if _par >= 0 else np.zeros(nblk))
+            _i = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+            _BLrows[_i] = ((_BLrows[_par] if _par in _BLrows else 1.0) * _cur).astype(np.float32)
+            _map[_par] = _i
+        _CMX_TREM[_c] = (_pk, _map)
+    return _CMX_TREM
+
+
+def _prep_alias_sweep(BCrows, BRrows, nblk, notes):
+    """AN ALIASING SWEEP (tonelib alias_sweep): a sawtooth swept through a
+    filterless sampler, each harmonic folded about its Nyquist. Returns _ALIAS_AT."""
+    # AN ALIASING SWEEP (tonelib `alias_sweep`: (start Hz, end Hz, seconds,
+    # sample rate, harmonics)): a sawtooth swept up through a sampler with no
+    # filter -- each harmonic FOLDED about its Nyquist (|k f - m fs|), so each
+    # moves on its own path, falling while the note rises once it is past the
+    # fold. A row a harmonic, its ratio to where it sat at the onset (the
+    # class's mode_ratios are those). (ch, note, on) -> its rows, by harmonic.
+    _ALIAS_AT = {}
+    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
+        if is_drum(_pg):
+            _dd = percussion_for_note(_nt, kit_for_program(int(_pg)))
+            _apc = _dd[1] if _dd else None
+        else:
+            _apc = property_class_for_note(_pg, _nt)
+        _asw = getattr(_apc, 'alias_sweep', None)
+        if not _asw:
+            continue
+        _af0, _af1, _aT, _afs, _anh = _asw
+        _ab0 = int(_on * SR) // BLK
+        _atb = (np.arange(nblk) - _ab0 + 0.5) * BLK / float(SR)
+        _af = _af0 * (_af1 / _af0) ** np.clip(_atb / _aT, 0.0, 1.0)
+        _rws = []
+        for _ak in range(1, int(_anh) + 1):
+            _nom = T.alias_fold(_ak * _af0, _afs)
+            if _nom < 20.0:
+                _rws.append(-1)
+                continue
+            _fk = np.mod(_ak * _af, _afs)
+            _fk = np.where(_fk > _afs / 2.0, _afs - _fk, _fk)
+            _r = np.where(_atb > 0.0, _fk / _nom, 1.0).astype(np.float32)
+            _cc = np.concatenate(([0.0], np.cumsum((_r.astype(np.float64) - 1.0) * BLK)))[:nblk]
+            _rws.append(len(BRrows)); BRrows.append(_r); BCrows.append(_cc)
+        _ALIAS_AT[(_c, _nt, _on)] = _rws
+    return _ALIAS_AT
+
+
+def _prep_bend_arrays(BCrows, BRrows, _BLrows, nblk):
+    """The bend rows as the kernel's arrays: ratio (BR), phase (BC) and level
+    (BL). Returns (BC, BL, BR)."""
+    BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
+    BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
+    BL = None
+    if _BLrows:
+        BL = np.ones((len(BRrows), nblk + 1), np.float32)
+        for _i, _lv in _BLrows.items():
+            BL[_i] = _lv
+    return (BC, BL, BR)
+
+
 def _prep_exclusive_classes(inner_ridge, notes):
     """EXCLUSIVE CLASSES: when a closed hi-hat (or any choke group's stroke)
     damps a ringing one, per drum channel. Returns choke_at."""
@@ -3663,657 +4397,23 @@ def _prepare(path, tuner='hybrid440', sink=None):
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
 
-    # ---- PITCH BEND: A TUNING IS NOT A GESTURE ----------------------------
-    # The wheel carries two entirely different things and they need different
-    # machinery, so they are separated here rather than downstream.
-    #
-    # A bend SET BEFORE THE CHANNEL'S FIRST NOTE AND NEVER MOVED is a TUNING.
-    # John Sankey's bwv847.mid and bwv974.mid are the reason this matters: they
-    # put one pitch class on each channel and one static bend on each, which is
-    # a temperament written in twelve numbers -- C +0.0 cents, C# -9.8, D -7.7,
-    # D# -5.9, E -9.8, F -2.0, F# -11.7, G -3.8, G# -7.8, A -11.7, A# -3.9,
-    # B -7.8. The renderer threw it away. A tuning goes into f0 with the other
-    # fixed pitch offsets, costs nothing, is EXACT, and is honoured by every
-    # voice -- including the harpsichord those files are written for, which
-    # could not bend a note if it wanted to.
-    #
-    # A bend that MOVES WHILE THE CHANNEL IS SOUNDING is a GESTURE, and only a
-    # voice that can physically be bent gets one. (A-Team.mid is the corpus's
-    # only example: 0 to +200 cents in 57 ms on a guitar.)
-    #
-    # The classifier is not a heuristic and has no threshold: if the wheel
-    # never moves while anything is sounding, a fixed offset reproduces it
-    # EXACTLY, and there is nothing left to approximate.
-    _BTUN = {}          # channel -> fixed ratio, folded into f0
-    _BGEST = {}         # channel -> [(t, residual ratio)], only where it moves
-    _first_on = {}
-    for _n in notes:
-        if _n[0] not in _first_on or _n[2] < _first_on[_n[0]]:
-            _first_on[_n[0]] = _n[2]
-    # ONE RATIO PER CHANNEL, FROM FIVE INPUTS: the wheel over its range (RPN 0),
-    # the channel's coarse and fine tuning (RPN 2, 1), and the device's master
-    # coarse and fine tuning (Universal Realtime 04 04, 04 03). The split below
-    # then runs on the PRODUCT, so a coarse tune set in the header is a
-    # temperament exactly as a static wheel is, and an RPN 0 change while the
-    # wheel is off centre moves the pitch -- which is the entire point of RPN 0.
-    # tonelib.channel_pitch_ratio is the same function live.py's _repitch uses.
-    #
-    # IN THE ORDER THE FILE SENT THEM, not by a rule about which kind of
-    # message usually comes first. Most of these land on the same tick -- a
-    # file's header is all tick zero -- and the first draft broke those ties by
-    # putting GM System On first, on the theory that that is where files put
-    # it. A file that tunes and THEN resets was left tuned. Message order is
-    # the only tie-break that is not a guess.
-    def _pitch_stream(_c, with_master=True):
-        _ev = [(_t, _q, 'wheel', _p) for _t, _q, _p in _pwseq.get(_c, ())]
-        _ev += [(_t, _q, _k, _v) for _t, _k, _v, _q in rpns.get(_c, ())
-                if _k in ('range', 'fine', 'coarse')]
-        if with_master:
-            _ev += [(_t, _q, 'm' + _k, _v) for _t, _k, _v, _q in master
-                    if _k in ('fine', 'coarse')]
-        _ev += [(_t, _q, 'gmon', None) for _t, _q in gmon]
-        _ev.sort(key=lambda e: (e[0], e[1]))
-        st = {}
-        out = []
-        for _t, _o, _k, _v in _ev:
-            if _k == 'gmon':
-                st = {}
-            else:
-                st[_k] = _v
-            out.append((_t, T.channel_pitch_ratio(
-                st.get('range', T.BEND_RANGE_SEMITONES), st.get('wheel', 0),
-                st.get('coarse', 0.0), st.get('fine', 0.0),
-                st.get('mcoarse', 0.0), st.get('mfine', 0.0))))
-        return out
-
-    # MPE: a MEMBER channel is not a tuning and a gesture -- every note on it
-    # brings its own bend -- so its pitch is decided per note below (_MPE_AT),
-    # and the channel split is for everything else.
-    _mpe_ev = _sys.get('mpe') or []
-
-    def _zone_at(_c, _t):
-        _z = None
-        for _t0, _chs in _mpe_ev:
-            if _t0 <= _t + 1e-9:
-                _z = _chs
-            else:
-                break
-        return (_z or {}).get(_c)
-
-    def _manager(_c, _t):
-        _z = _zone_at(_c, _t)
-        return None if _z is None else 16 * _z[0] + (0 if _z[1] == 'lower' else 15)
-    _mpe_member = {}
-    if _mpe_ev:
-        for _n in notes:
-            _m = _manager(_n[0], _n[2])
-            if _m is not None and _m != _n[0]:
-                _mpe_member[(_n[0], _n[1], _n[2])] = _m
-    _mchans = {k[0] for k in _mpe_member}
-    # A MEEND IS THE NOTE'S, NOT THE CHANNEL'S (tonelib.meend_cents): a channel
-    # whose notes lock their bend to the tuning's swaras (bend_detents) has its
-    # wheel read per note below (_MEEND_AT), and is left out of the channel's
-    # tuning/gesture split here so the bend is not applied twice
-    _MEEND_CH = set()
-    for _n in notes:
-        if (_n[0] in _pwseq and not isinstance(_n[6], DrumProgram)
-                and getattr(property_class_for_note(_n[6], _n[1]), 'bend_detents', False)):
-            _MEEND_CH.add(_n[0])
-    _pchans = (set(pws) | set(rpns) | (set(_first_on) if master else set()) | set(_CMXEV['pitch'])
-               | set(_CMXEV['vib'])) - _mchans - _MEEND_CH
-    _bdt2 = BLK / float(SR)
-    for _c in _pchans:
-        _ev = _pitch_stream(_c)
-        if _c in _CMXEV['pitch'] or _c in _CMXEV['vib']:
-            # ...times the controller matrix's PITCH (ctrlmatrix: a source other
-            # than the bend into pitch, in semitones), each change a ratio
-            # event; and its VIBRATO (LFO1 pitch depth from aftertouch, a CC, the
-            # bend: a gesture on a note already sounding) as a sine on the same
-            # stream, a point a block wherever its depth is up -- the bend
-            # row's phase runs on across blocks, so its steps do not click
-            _mev = [(_t, 2.0 ** (_s / 12.0)) for _t, _s in _CMXEV['pitch'].get(_c, ())]
-            if _c in _CMXEV['vib']:
-                _vev = _CMXEV['vib'][_c]
-                _pv = 0.0
-                _vi = 0
-                _psemi = 0.0
-                _pit = _CMXEV['pitch'].get(_c, ())
-                _pj = 0
-                _was = False
-                for _kb in range(nblk):
-                    _tb = (_kb + 0.5) * _bdt2
-                    while _vi < len(_vev) and _vev[_vi][0] <= _tb:
-                        _pv = _vev[_vi][1]; _vi += 1
-                    while _pj < len(_pit) and _pit[_pj][0] <= _tb:
-                        _psemi = _pit[_pj][1]; _pj += 1
-                    if _pv <= 0.0:
-                        if _was:                # back to the plain pitch as it stops
-                            _mev.append((_kb * _bdt2, 2.0 ** (_psemi / 12.0)))
-                        _was = False
-                        continue
-                    _was = True
-                    _hz = max(0.5, TREMOLO_MATRIX_HZ + _cmx_at('rate', _c, _tb))
-                    _mev.append((_kb * _bdt2, 2.0 ** ((_psemi * 100.0 + _pv * math.sin(2.0 * math.pi * _hz * _tb)) / 1200.0)))
-                _mev.sort()
-            _merged, _rb, _rm = [], 1.0, 1.0
-            for _t, _k, _r in sorted([(_t, 0, _r) for _t, _r in (_ev or ())] + [(_t, 1, _r) for _t, _r in _mev]):
-                if _k == 0:
-                    _rb = _r
-                else:
-                    _rm = _r
-                _merged.append((_t, _rb * _rm))
-            _ev = _merged
-        _f = _first_on.get(_c)
-        if _f is None or not _ev:
-            continue                            # tuning a silent channel
-        # THE VALUE IN FORCE AT THE FIRST NOTE, which is the LAST event at or
-        # before it. This used to take the FIRST such event: a file that set
-        # the wheel twice before playing was tuned by the setting it had
-        # already changed its mind about.
-        _pre = [_r for _t, _r in _ev if _t <= _f + 1e-6]
-        _tun = _pre[-1] if _pre else 1.0
-        # Only what happens once the channel is sounding can be a gesture;
-        # anything earlier is folded into the tuning above.
-        _res = [(_t, _r / _tun) for _t, _r in _ev if _t > _f + 1e-6]
-        if abs(_tun - 1.0) > 1e-12:
-            _BTUN[_c] = _tun
-        if any(abs(_r - 1.0) > 1e-9 for _, _r in _res):
-            _BGEST[_c] = _res
-    BRrows=[]; BCrows=[]; brow_of={}
-    # THE MEEND, per note: the wheel's pull, from this note, mapped through the
-    # tuning's swaras above it (tonelib.meend_detents/meend_cents) -- the
-    # secondary tuning's raga when one is set, else every key of the table the
-    # note is tuned in -- over the file's RPN 0 range, or the class's own when
-    # it sets none. (ratio at Note On, its own row), as _MPE_AT.
-    _MEEND_AT = {}
-    if _MEEND_CH:
-        import ragas as _RG
-        for _n in notes:
-            _c, _nt, _on, _off = _n[0], _n[1], _n[2], _n[3]
-            if _c not in _MEEND_CH or isinstance(_n[6], DrumProgram):
-                continue
-            _pcm = property_class_for_note(_n[6], _nt)
-            if not getattr(_pcm, 'bend_detents', False):
-                continue
-            _ind = getattr(_pcm, 'tuning_family', None) == 'indian'
-            _tab = FREQ_E if (FREQ_E is not None and _ind) else _F(_c, _on)
-            _sa = (T.raga_sa_note if (T.raga_sa_note is not None and (_ind or FREQ_E is None))
-                   else int(getattr(_pcm, 'sympathetic_tonic', 60)))
-            if _sa not in _tab or _nt not in _tab:
-                continue
-            if T.raga_spec and (_ind or FREQ_E is None):
-                _sy, _rg, _, _ = _RG.parse(T.raga_spec)
-                _sw = [_cv for _, _cv in _RG.swaras(_sy, _rg)]
-            else:
-                _sw = [1200.0 * math.log2(_tab[_sa + _k] / _tab[_sa]) for _k in range(12)]
-            _nc = 1200.0 * math.log2(_tab[_nt] / _tab[_sa])
-            _rng = [(_t, _v) for _t, _k, _v, _q in rpns.get(_c, ()) if _k == 'range']
-            _rst = ([_v for _t, _v in _rng if _t <= _on + 1e-9] or [None])[-1]
-            if _rst is None:
-                _rst = float(getattr(_pcm, 'bend_range_semitones', T.BEND_RANGE_SEMITONES))
-            _det = T.meend_detents(_nc, _sw, 100.0 * _rst)
-            _st = float(getattr(_pcm, 'meend_strength', 0.6))
-
-            def _ratio(_w):
-                return 2.0 ** (T.meend_cents(100.0 * _rst * _w / 8192.0, _det, _st) / 1200.0)
-            _wseq = sorted((_t, _p) for _t, _q, _p in _pwseq.get(_c, ()))
-            _w0 = ([_p for _t, _p in _wseq if _t <= _on + 1e-9] or [0])[-1]
-            _r0 = _ratio(_w0)
-            _mv = [(_t, _ratio(_p) / _r0) for _t, _p in _wseq if _on + 1e-9 < _t <= _off]
-            _row = -1
-            if any(abs(_r - 1.0) > 1e-9 for _, _r in _mv):
-                _r, _cc = bend_blocks(_mv, nblk)
-                _row = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
-            _MEEND_AT[(_c, _nt, _on)] = (_r0, _row)
-    for _c, _ev in _BGEST.items():
-        _r, _cc = bend_blocks(_ev, nblk)
-        brow_of[_c] = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
-    # THE BREATH'S ROWS (above): per channel, a bend row carrying the pitch
-    # (times the channel's gesture, if it has one; the phase summed exactly as
-    # bend_blocks sums it) with the TONE'S level as its BL, and an unbent row
-    # with the BREATH NOISE'S level. Only a note of a breathing class takes them.
-    bbrow_of = {}; _BLrows = {}
-    for _c, (_tl, _nl, _rt) in _BREATH.items():
-        _r = _rt.astype(np.float32)
-        if _c in brow_of:
-            _r = (BRrows[brow_of[_c]].astype(np.float64) * _r).astype(np.float32)
-        _cc = np.concatenate(([0.0], np.cumsum((_r.astype(np.float64) - 1.0) * BLK)))[:nblk]
-        _i = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
-        _BLrows[_i] = _tl.astype(np.float32)
-        _j = len(BRrows); BRrows.append(np.ones(nblk, np.float32)); BCrows.append(np.zeros(nblk))
-        _BLrows[_j] = _nl.astype(np.float32)
-        bbrow_of[_c] = (_i, _j)
-    # the wind's rows (above): a bend row per (channel, family), its phase the
-    # running sum of its ratio exactly as bend_blocks makes it, and its level
-    wrow_of = {}
-    for _c, _fams in _WROWS.items():
-        for _ab, (_r, _lv) in _fams.items():
-            _r = _r.astype(np.float32)          # the ratio the kernel reads, summed as it is
-            _cc = np.concatenate(([0.0], np.cumsum((_r.astype(np.float64) - 1.0) * BLK)))[:nblk]
-            _i = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
-            _BLrows[_i] = _lv.astype(np.float32)
-            for (_c2, _k), _ab2 in wrow_key.items():
-                if _c2 == _c and _ab2 == _ab:
-                    wrow_of[(_c, _k)] = _i
-    # MPE, PER NOTE: the member's bend plus the manager's, in semitones -- a
-    # product of ratios (M1-100-UM Appendix C). The value in force at Note On
-    # goes into that note's f0; what moves afterwards is the note's own row:
-    # its member's bend until its Note Off and no longer (2.2.6), its
-    # manager's for as long as it sounds (A.4.1). (ratio at onset, row).
-    _MPE_AT = {}
-    if _mpe_member:
-        def _val(_st, _tt, _d=1.0):
-            _v = _d
-            for _t0, _r in _st:
-                if _t0 <= _tt + 1e-9:
-                    _v = _r
-                else:
-                    break
-            return _v
-        _sm = {}
-        for (ch, note, on), mgr in _mpe_member.items():
-            if ch not in _sm:
-                _sm[ch] = _pitch_stream(ch)
-            if ('m', mgr) not in _sm:
-                _sm[('m', mgr)] = _pitch_stream(mgr, with_master=False)
-        _offs = {(n[0], n[1], n[2]): (n[3], n[6]) for n in notes if (n[0], n[1], n[2]) in _mpe_member}
-        for (ch, note, on), mgr in _mpe_member.items():
-            off, prog = _offs[(ch, note, on)]
-            ms, gs = _sm[ch], _sm[('m', mgr)]
-            r0 = _val(ms, on) * _val(gs, on)
-            row = -1
-            bendable = (not isinstance(prog, DrumProgram)
-                        and getattr(property_class_for_note(prog, note), 'pitch_bendable', True))
-            moves = sorted({_t for _t, _ in ms if on + 1e-9 < _t <= off}
-                           | {_t for _t, _ in gs if _t > on + 1e-9})
-            if bendable and moves:
-                ev = [(_t, _val(ms, min(_t, off)) * _val(gs, _t) / r0) for _t in moves]
-                if any(abs(_r - 1.0) > 1e-9 for _, _r in ev):
-                    _r, _cc = bend_blocks(ev, nblk)
-                    row = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
-            _MPE_AT[(ch, note, on)] = (r0, row)
-    # MIDI 2.0 PER-NOTE PITCH, per note: (absolute semitones at onset or None,
-    # the per-note bend ratio at onset, and a bend row of its own when the
-    # pitch moves while it sounds). The row is the channel's gesture times the
-    # note's own movement, so the kernel is unchanged: one row per note.
-    _PN_AT = {}
-    _pnd = _sys.get('pn') or {}
-    if any(_pnd.get(k) for k in ('attr', 'p725', 'bend')):
-        def _step(evs, tt, default):
-            v = default
-            for _t, _v in evs:
-                if _t <= tt + 1e-9:
-                    v = _v
-                else:
-                    break
-            return v
-        for (ch, note, on, off, vel, _cvv, prog) in notes:
-            if isinstance(prog, DrumProgram):
-                continue
-            _k = (ch, note)
-            _attr = _pnd['attr'].get((ch, note, on))
-            _p7 = _pnd['p725'].get(_k, [])
-            _bd = _pnd['bend'].get(_k, [])
-            _rg = _pnd['range'].get(ch, [])
-            if _attr is None and not _p7 and not _bd:
-                continue
-            _tuned = _F(ch, on)[note] * (2.0 ** (_OTUN[ch][note % 12] / 1200.0)
-                                         if _OTUN.get(ch) else 1.0)
-
-            def _abs(tt):
-                p = _attr if _attr is not None else _step(_p7, tt, None)
-                return None if p is None else p
-
-            def _hz(tt):
-                p = _abs(tt)
-                return 440.0 * 2.0 ** ((p - 69.0) / 12.0) if p is not None else _tuned
-
-            def _pb(tt):
-                b = _step(_bd, tt, 0.0)
-                return 2.0 ** (b * _step(_rg, tt, T.PN_BEND_RANGE) / 12.0) if b else 1.0
-            p0, b0 = _abs(on), _pb(on)
-            moves = sorted({_t for _t, _ in (([] if _attr is not None else _p7) + _bd + _rg)
-                            if on + 1e-9 < _t <= off})
-            row = -1
-            if moves:
-                bendable = getattr(property_class_for_note(prog, note), 'pitch_bendable', True)
-                chev = _BGEST.get(ch, []) if bendable else []
-                ref = _hz(on) * b0
-                times = sorted({_t for _t, _ in chev} | set(moves))
-                ev = [(_t, _step(chev, _t, 1.0) * (_hz(_t) * _pb(_t) / ref)) for _t in times]
-                _r, _cc = bend_blocks(ev, nblk)
-                row = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
-            _PN_AT[(ch, note, on)] = (p0, b0, row)
-    # THE SIREN'S ROTOR (siren.py; tonelib siren_rotor): a siren's pitch is its
-    # disc's speed, and its speed has inertia -- wound up by its drive, coasting
-    # without it. Each siren note gets its rotor integrated a block at a time
-    # into a ROW of its own (the mean speed a block, the phase summed from it
-    # as bend_blocks sums it, the level at each block edge), carried key to
-    # key: a press while the disc still coasts starts from the speed it has.
-    # The fire siren's drive is its motor, full while held (its GS length the
-    # least); the Helmholtz siren's is its AIR -- velocity, channel and poly
-    # aftertouch, CC2, the most of them -- and its level the air's, against
-    # the velocity's own gain. Its upper disc rides a second row, the first's
-    # turned by the crank (CC1): the same ratio, its phase ahead by the
-    # chest's angle, and its ratio moved while the wheel moves, as the crank
-    # moved it. (ch, note, on) -> (rows, end).
-    _SIREN_AT = {}
-    _sir_keys = {}
-    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
-        if (_c, _nt, _on) in _mpe_member:
-            continue
-        if is_drum(_pg):
-            _dd = percussion_for_note(_nt, kit_for_program(int(_pg)))
-            _spc = _dd[1] if _dd else None
-        else:
-            _spc = property_class_for_note(_pg, _nt)
-        _kind = getattr(_spc, 'siren_rotor', None)
-        if _kind:
-            _sir_keys.setdefault((_c, _nt, _kind), []).append((_on, _of, _v, _spc))
-    if _sir_keys:
-        import siren as _SIR
-        _bdt = BLK / float(SR)
-
-        def _stepv(_ev, _tt, _d=0):
-            _x = _d
-            for _t0, _val in _ev:
-                if _t0 <= _tt + 1e-9:
-                    _x = _val
-                else:
-                    break
-            return _x
-        for (_c, _nt, _kind), _ns in _sir_keys.items():
-            _ns.sort()
-            _rot = _SIR.Rotor(_kind)
-            _tprev = None
-            _at = sorted(ats.get(_c, []))
-            _pt = sorted(pts.get((_c, _nt), []))
-            _c2 = sorted((_t, _val) for _t, _cc, _val in ccs.get(_c, []) if _cc == 2)
-            _c1 = sorted((_t, _val) for _t, _cc, _val in ccs.get(_c, []) if _cc == 1)
-            for _i, (_on, _of, _v, _spc) in enumerate(_ns):
-                if _tprev is not None and _on > _tprev:
-                    _rot.coast(_on - _tprev)
-                _drive_end = _of
-                if getattr(_spc, 'held_texture', False) and getattr(_spc, 'gate_time', None):
-                    _drive_end = max(_of, _on + _spc.gate_time)
-                _cap = _ns[_i + 1][0] if _i + 1 < len(_ns) else float('inf')
-                _pv = _v / 127.0
-                _b0 = int(_on * SR // BLK)
-                _r = []; _lv = []
-                _k = _b0
-                _end = None
-                while True:
-                    _tb = _k * _bdt
-                    if _tb >= _cap or _k >= nblk:
-                        _end = min(_cap, nblk * _bdt)
-                        break
-                    _tm = _tb + 0.5 * _bdt
-                    if _tm < _drive_end:
-                        if _kind == 'fire':
-                            _p = 1.0
-                        else:
-                            _p = max(_pv, _stepv(_at, _tm) / 127.0, _stepv(_pt, _tm) / 127.0,
-                                     _stepv(_c2, _tm) / 127.0)
-                    else:
-                        _p = 0.0
-                    _rr, _l0, _l1 = _rot.block(_p, _bdt)
-                    _r.append(_rr); _lv.append(_l0)
-                    _k += 1
-                    if _tb >= _drive_end:
-                        if _kind == 'fire':
-                            if _l1 <= 10.0 ** (-_SIR.FLOOR_DB / 20.0):
-                                _end = _k * _bdt
-                                break
-                        elif _rot.air <= 1e-3 * max(_pv, 1e-3):
-                            _end = _k * _bdt
-                            break
-                _lv.append(_rot.level())
-                _tprev = min(_end, _cap)
-                # ...AND HELD AT ITS LAST past its end, for its release: a row
-                # back at 1 there sounded the tail at full level and the key's
-                # nominal pitch
-                _ra = np.ones(nblk, np.float32)
-                _n = min(len(_r), nblk - _b0)
-                _ra[_b0:_b0 + _n] = _r[:_n]
-                if _n:
-                    _ra[_b0 + _n:] = _r[_n - 1]
-                _la = np.ones(nblk + 1, np.float32)
-                _lvn = np.asarray(_lv[:_n + 1], np.float64)
-                if _kind != 'fire':
-                    _lvn = _lvn / math.sqrt(max(_pv, 1e-3))   # the velocity's gain is the onset's level
-                _la[_b0:_b0 + len(_lvn)] = _lvn
-                _la[_b0 + len(_lvn):] = _lvn[-1]
-                _cc = np.concatenate(([0.0], np.cumsum((_ra.astype(np.float64) - 1.0) * BLK)))[:nblk]
-                _lo = len(BRrows); BRrows.append(_ra); BCrows.append(_cc)
-                _BLrows[_lo] = _la
-                _rows = (_lo,)
-                if getattr(_spc, 'siren_upper', None):
-                    # the crank: the upper chest's angle as samples of phase at
-                    # each block's start, from the wheel; 0 outside the note
-                    _frev = _F(_c, _on)[_nt] / 12.0
-                    _dl = np.zeros(nblk + 1, np.float64)
-                    for _j in range(_b0, min(_b0 + _n + 1, nblk + 1)):
-                        _dl[_j] = _SIR.crank_samples(_SIR.crank_angle(_stepv(_c1, _j * _bdt)),
-                                                     _frev, SR)
-                    _ru = (_ra.astype(np.float64) + np.diff(_dl) / BLK).astype(np.float32)
-                    # the lower disc's phase plus the chest's angle, exactly --
-                    # summed from _ru instead, a note in the render's first
-                    # block lost its starting angle (no block before it to
-                    # carry the step)
-                    _cu = _cc + _dl[:nblk]
-                    _up = len(BRrows); BRrows.append(_ru); BCrows.append(_cu)
-                    _BLrows[_up] = _la.copy()
-                    _rows = (_lo, _up)
-                _SIREN_AT[(_c, _nt, _on)] = (_rows, _tprev)
-    # THE HAMMOND SCANNER (scanner.py; tonelib `scanner`, 'V1'..'C3'): its
-    # vibrato is a moving delay -- one row per channel, BC the delay as phase,
-    # on the synchronous motor's clock from the render's start, so every note
-    # rides the same sweep. Its partials go onto it after the notes are built
-    # (scanner.expand, below: vibrato moves them, chorus adds a copy).
-    _SCAN_CH = {}
-    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
-        if SCANNER_OFF or _c in _SCAN_CH or is_drum(_pg):
-            continue
-        _spc = property_class_for_note(_pg, _nt)
-        if not (getattr(_spc, 'scanner_switch', False) or getattr(_spc, 'scanner', None)):
-            continue
-        import scanner as _SCN
-        # the selector's position: the channel's first CC94, else the voice's own
-        _c94 = [_val for _t, _cc, _val in in_order(ccs.get(_c, [])) if _cc == _SCN.SWITCH_CC]
-        _sset = _SCN.setting_of(_spc, _c94[0] if _c94 else None)
-        if _sset:
-            _dep, _cho = _sset
-            _rws = []
-            for _r, _cc in _SCN.rows(nblk, BLK, SR, _dep, _cho):      # a row per band
-                _rws.append(len(BRrows)); BRrows.append(_r); BCrows.append(_cc)
-            _SCAN_CH[_c] = (tuple(_rws), _dep, _cho)
-    # THE CHANNEL FADER, MID-NOTE. A note took CC7 x CC11 (squared) once, at
-    # its onset, so a swell or a fade written over a held note did nothing
-    # here -- while live, a fader in someone's hand, moved the notes already
-    # sounding (Ben, the Prophet's Song's sea: "needs to fade out"). Now a
-    # channel whose CC7 or CC11 MOVES while one of its notes sounds (its
-    # release with it, FADER_TAIL) carries the level as a row: its notes are
-    # emitted at unity and every row they ride takes the level as BL -- the
-    # channel's bend and breath rows, its notes' own MPE and per-note rows,
-    # and for everything else a level-only row (emit_partial). A channel
-    # that only sets its level between notes is untouched, folded in at
-    # onset as it always was, so its render is the same to the bit.
-    # Not an organ whose CC11 is its stop word and CC7 its swell: those
-    # have their own rows (registration_blocks). Keyed as _MCH is: an MPE
-    # member's note by its zone's manager.
-    _LROW = {}
-    _org = {}
-
-    def _plain(_pg, _nt):
-        if isinstance(_pg, DrumProgram):
-            return True
-        _k = (_pg, getattr(_pg, 'variation', 0), getattr(_pg, 'layer', None), _nt)
-        if _k not in _org:
-            _pc = property_class_for_note(_pg, _nt)
-            _org[_k] = not (getattr(_pc, 'registerable', False)
-                            and tuple(getattr(_pc, 'stop_word_ccs', (11, 43)))[0] == 11)
-        return _org[_k]
-    _spans = {}
-    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
-        if _plain(_pg, _nt):
-            _spans.setdefault(_mpe_member.get((_c, _nt, _on), _c), []).append((_on, _of + FADER_TAIL))
-    # ...BUT NOT A STAMPED CHANNEL. mt32mux carries several parts on one
-    # channel by putting each part's CC7 (and CC11) a tick before EVERY note
-    # it plays, for the note to snapshot at its onset -- so another part's
-    # note still sounding sees the stamp as a fader move, and would be
-    # rescaled by a level that is not its own. A channel where nearly every
-    # note (STAMPED_SHARE) has a CC7 within STAMP_S before it is stamped,
-    # and keeps the onset rule the stamps were written for. No ordinary
-    # file sends a volume before every note.
-    _ons = {}
-    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
-        _ons.setdefault(_mpe_member.get((_c, _nt, _on), _c), []).append(_on)
-    for _c in list(_spans):
-        _t7 = np.array(sorted(_t for _t, _cc, _val in ccs.get(_c, []) if _cc == 7))
-        _o = np.array(sorted(_ons.get(_c, [])))
-        if len(_t7) and len(_o):
-            _k = np.searchsorted(_t7, _o + 1e-9, side='right') - 1
-            _hit = (_k >= 0) & ((_o - _t7[np.maximum(_k, 0)]) <= STAMP_S)
-            if _hit.mean() >= STAMPED_SHARE:
-                del _spans[_c]
-    for _c, _sp in _spans.items():
-        _v7, _v11, _fev = T.GM_DEFAULT_VOLUME, T.GM_DEFAULT_EXPRESSION, []
-        _lv = ((_v7 / 127.0) * (_v11 / 127.0)) ** 2
-        # ...and the controller matrix's AMPLITUDE (ctrlmatrix), a gain moved
-        # by the mod wheel, a CC or the pressure -- after the CC at its instant,
-        # whose change it follows. A channel with none: the CCs, in their order
-        _ag = 1.0
-        _evs = [(_t, 0, _i, _cc, _val) for _i, (_t, _cc, _val) in enumerate(in_order(ccs.get(_c, [])))]
-        _evs += [(_t, 1, _i, 'amp', _gv) for _i, (_t, _gv) in enumerate(_CMXEV['amp'].get(_c, ()))]
-        for _t, _k, _i, _cc, _val in (sorted(_evs) if len(_evs) and _c in _CMXEV['amp'] else _evs):
-            if _cc == 'amp':
-                _ag = _val
-            elif _cc == 7:
-                _v7 = _val
-            elif _cc == 11:
-                _v11 = _val
-            elif _cc == 121:
-                _v11 = 127                      # reset: expression back up, volume kept
-            else:
-                continue
-            _g = ((_v7 / 127.0) * (_v11 / 127.0)) ** 2
-            if _ag != 1.0:
-                _g = _g * _ag
-            if _g != _lv and any(_a < _t < _b for _a, _b in _sp):
-                _LROW[_c] = None
-            _fev.append((_t, _g))
-            _lv = _g
-        if _c not in _LROW:
-            continue
-        _L = onepole_edges(_fev, nblk, ((T.GM_DEFAULT_VOLUME / 127.0) * (T.GM_DEFAULT_EXPRESSION / 127.0)) ** 2)
-        _own = [brow_of.get(_c)] + list(bbrow_of.get(_c, ()))
-        _own += [_r for (_ch, _nt, _on), (_r0, _r) in _MPE_AT.items() if _mpe_member.get((_ch, _nt, _on)) == _c]
-        _own += [_x[2] for (_ch, _nt, _on), _x in _PN_AT.items() if _mpe_member.get((_ch, _nt, _on), _ch) == _c]
-        _own += [_rw for (_ch, _nt, _on), (_rws, _e) in _SIREN_AT.items() if _ch == _c for _rw in _rws]
-        if _c in _SCAN_CH:
-            _own.extend(_SCAN_CH[_c][0])
-        for _r in set(_own):
-            if _r is not None and _r >= 0:
-                _BLrows[_r] = (_BLrows[_r] * _L) if _r in _BLrows else _L.copy()
-        _i = len(BRrows); BRrows.append(np.ones(nblk, np.float32)); BCrows.append(np.zeros(nblk))
-        _BLrows[_i] = _L
-        _LROW[_c] = _i
-    # A NOTE RIDES ONE BEND ROW, so a note with a row of its own -- MIDI 2.0
-    # per-note pitch, MPE, a meend, the channel's gesture or the player's
-    # breath -- on an organ chest rides their PRODUCT: its own ratio and level
-    # times its family's wind row's. The rank loop used to put it on the wind
-    # row alone, and the note's own pitch was lost the day the shared wind
-    # came on by default (live's Clip File test). (base row, wind row) -> row.
-    wcombo = {}
-    if wrow_of:
-        _wch = {}
-        for (_c, _k), _w in wrow_of.items():
-            _wch.setdefault(_c, set()).add(_w)
-        _bases = {}
-        for _c, _r in brow_of.items():
-            _bases.setdefault(_c, set()).add(_r)
-        for _c, _rs in bbrow_of.items():
-            _bases.setdefault(_c, set()).add(_rs[0])
-        for (_c, _nt, _on), _x in _PN_AT.items():
-            _bases.setdefault(_c, set()).add(_x[2])
-        for (_c, _nt, _on), _x in _MPE_AT.items():
-            _bases.setdefault(_c, set()).add(_x[1])
-        for (_c, _nt, _on), _x in _MEEND_AT.items():
-            _bases.setdefault(_c, set()).add(_x[1])
-        for _c, _ws in _wch.items():
-            for _b in _bases.get(_c, ()):
-                if _b is None or _b < 0:
-                    continue
-                for _w in _ws:
-                    _r = (BRrows[_b].astype(np.float64) * BRrows[_w].astype(np.float64)).astype(np.float32)
-                    _cc = np.concatenate(([0.0], np.cumsum((_r.astype(np.float64) - 1.0) * BLK)))[:nblk]
-                    _i = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
-                    if _b in _BLrows or _w in _BLrows:
-                        _one = np.ones(nblk + 1, np.float32)
-                        _BLrows[_i] = _BLrows.get(_b, _one) * _BLrows.get(_w, _one)
-                    wcombo[(_b, _w)] = _i
-    # THE MATRIX'S TREMOLO (ctrlmatrix: LFO1 AMPLITUDE DEPTH, moved by the mod
-    # wheel, a CC or the pressure): the channel's sidebands (tremolo.expand)
-    # at the peak depth, each riding a row of its own -- its parent's ratio
-    # and level times depth(t) / peak, the faders' glide -- so a held note's
-    # tremolo swells with the wheel. A row for each row its notes can ride:
-    # the channel's bend, breath and fader rows, and none (-1).
-    _CMX_TREM = {}
-    for _c, _tv in _CMXEV['tva'].items():
-        _pk = max(_v for _t, _v in _tv)
-        if _pk <= 0.0:
-            continue
-        _cur = onepole_edges([(_t, _v / _pk) for _t, _v in _tv], nblk, 0.0)
-        _map = {}
-        _wpar = [_v for (_wc, _wk), _v in wrow_of.items() if _wc == _c]      # a pipe organ's wind rows
-        for _par in set([brow_of.get(_c), _LROW.get(_c), -1] + list(bbrow_of.get(_c, ())) + _wpar):
-            if _par is None:
-                continue
-            _r = (BRrows[_par] if _par >= 0 else np.ones(nblk, np.float32)).astype(np.float32)
-            _cc = (BCrows[_par] if _par >= 0 else np.zeros(nblk))
-            _i = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
-            _BLrows[_i] = ((_BLrows[_par] if _par in _BLrows else 1.0) * _cur).astype(np.float32)
-            _map[_par] = _i
-        _CMX_TREM[_c] = (_pk, _map)
-    # AN ALIASING SWEEP (tonelib `alias_sweep`: (start Hz, end Hz, seconds,
-    # sample rate, harmonics)): a sawtooth swept up through a sampler with no
-    # filter -- each harmonic FOLDED about its Nyquist (|k f - m fs|), so each
-    # moves on its own path, falling while the note rises once it is past the
-    # fold. A row a harmonic, its ratio to where it sat at the onset (the
-    # class's mode_ratios are those). (ch, note, on) -> its rows, by harmonic.
-    _ALIAS_AT = {}
-    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
-        if is_drum(_pg):
-            _dd = percussion_for_note(_nt, kit_for_program(int(_pg)))
-            _apc = _dd[1] if _dd else None
-        else:
-            _apc = property_class_for_note(_pg, _nt)
-        _asw = getattr(_apc, 'alias_sweep', None)
-        if not _asw:
-            continue
-        _af0, _af1, _aT, _afs, _anh = _asw
-        _ab0 = int(_on * SR) // BLK
-        _atb = (np.arange(nblk) - _ab0 + 0.5) * BLK / float(SR)
-        _af = _af0 * (_af1 / _af0) ** np.clip(_atb / _aT, 0.0, 1.0)
-        _rws = []
-        for _ak in range(1, int(_anh) + 1):
-            _nom = T.alias_fold(_ak * _af0, _afs)
-            if _nom < 20.0:
-                _rws.append(-1)
-                continue
-            _fk = np.mod(_ak * _af, _afs)
-            _fk = np.where(_fk > _afs / 2.0, _afs - _fk, _fk)
-            _r = np.where(_atb > 0.0, _fk / _nom, 1.0).astype(np.float32)
-            _cc = np.concatenate(([0.0], np.cumsum((_r.astype(np.float64) - 1.0) * BLK)))[:nblk]
-            _rws.append(len(BRrows)); BRrows.append(_r); BCrows.append(_cc)
-        _ALIAS_AT[(_c, _nt, _on)] = _rws
-    BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
-    BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
-    BL = None
-    if _BLrows:
-        BL = np.ones((len(BRrows), nblk + 1), np.float32)
-        for _i, _lv in _BLrows.items():
-            BL[_i] = _lv
+    (_BGEST, _BTUN, _MEEND_CH, _mpe_member, _pitch_stream) = _prep_pitch_bend(_CMXEV, _cmx_at, _pwseq, _sys,
+        gmon, master, nblk, notes, pws, rpns)
+    (BCrows, BRrows, _MEEND_AT, brow_of) = _prep_bend_rows(FREQ_E, _BGEST, _F, _MEEND_CH, _pwseq, nblk,
+        notes, rpns)
+    (_BLrows, bbrow_of) = _prep_breath_rows(BCrows, BRrows, _BREATH, brow_of, nblk)
+    wrow_of = _prep_wind_rows(BCrows, BRrows, _BLrows, _WROWS, nblk, wrow_key)
+    _MPE_AT = _prep_mpe_pitch(BCrows, BRrows, _mpe_member, _pitch_stream, nblk, notes)
+    _PN_AT = _prep_per_note_pitch(BCrows, BRrows, _BGEST, _F, _OTUN, _sys, nblk, notes)
+    _SIREN_AT = _prep_siren(BCrows, BRrows, _BLrows, _F, _mpe_member, ats, ccs, nblk, notes, pts)
+    _SCAN_CH = _prep_scanner_channels(BCrows, BRrows, ccs, nblk, notes)
+    _LROW = _prep_channel_fader(BCrows, BRrows, _BLrows, _CMXEV, _MPE_AT, _PN_AT, _SCAN_CH, _SIREN_AT,
+        _mpe_member, bbrow_of, brow_of, ccs, nblk, notes)
+    wcombo = _prep_wind_combos(BCrows, BRrows, _BLrows, _MEEND_AT, _MPE_AT, _PN_AT, bbrow_of, brow_of, nblk,
+        wrow_of)
+    _CMX_TREM = _prep_matrix_tremolo(BCrows, BRrows, _BLrows, _CMXEV, _LROW, bbrow_of, brow_of, nblk, wrow_of)
+    _ALIAS_AT = _prep_alias_sweep(BCrows, BRrows, nblk, notes)
+    (BC, BL, BR) = _prep_bend_arrays(BCrows, BRrows, _BLrows, nblk)
     # partial table
     # THE COLUMNS AS DOUBLES, not lists: a list holds a pointer and a float
     # object a partial (32 bytes), array('d') the 8-byte double itself, and
