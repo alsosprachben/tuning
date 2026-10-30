@@ -6,6 +6,7 @@ program's note played alone, its level re a piano C4 at the same velocity.
     python3 examples/sfx_levels.py --trim     the bank to GeneralUser GS (writes patch_map.py)
     python3 examples/sfx_levels.py --var-trim the GS variations to GU's own presets for them
     python3 examples/sfx_levels.py --kit-trim the tones made of a drum set's sound to its level there
+    python3 examples/sfx_levels.py --bass-trim the basses (32-39 and their variations) on the LOW BAND
 
 Each SoundFont (examples/gm_release.py's four: FluidR3, GeneralUser GS,
 MuseScore General, TimGM6mb) through timidity, reverb and chorus off; ours
@@ -95,6 +96,30 @@ def ours(progs, vel, d):
 
 KIT = (35, 36, 38, 42, 49)        # the kit's core: kicks, snare, hi-hat, crash
 
+# THE READING every trim takes, K-weighted (BS.1770: what the ear calls
+# loud) -- but not for a bass. K-weighting discounts the low end and lifts
+# everything over 1.5 kHz by 4 dB, and our basses are fitted voices, brighter
+# than GU's samples and with their weight in the second and third harmonics:
+# K-matched, they read as loud as GU's while carrying 9-14 dB less of the
+# bass register (Ben: "it has been weak"). So a bass is trimmed on its LOW
+# BAND, 40-400 Hz, where a bass's loudness is (--bass-trim).
+BASSES = range(32, 40)
+LOW_BAND = (40.0, 400.0)
+
+
+def k_level(chs, sr):
+    return levels(chs, sr)[1]
+
+
+def low_level(chs, sr):
+    """The loudest 150 ms of the low band (LOW_BAND), dB, as C.level reads."""
+    from scipy.signal import butter, sosfilt
+    sos = butter(4, LOW_BAND, btype="bandpass", fs=sr, output="sos")
+    return C.level([sosfilt(sos, np.asarray(c, np.float64)) for c in chs], sr)
+
+
+LEVEL = [k_level]
+
 
 def drum_mid(note, vel, path):
     m = mido.MidiFile(ticks_per_beat=480)
@@ -134,7 +159,7 @@ def gu_levels(progs, vel, d):
                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         a, sr = read(wav)
         a = a.astype(np.float64)
-        out[key] = levels([a[:, 0], a[:, 1]] if a.ndim > 1 else [a], sr)[1] if np.abs(a).max() > 0 else None
+        out[key] = LEVEL[0]([a[:, 0], a[:, 1]] if a.ndim > 1 else [a], sr) if np.abs(a).max() > 0 else None
     return out
 
 
@@ -150,11 +175,11 @@ def our_levels(progs, vel, d):
         mid = os.path.join(d, "o.mid")
         make(*args, vel, mid)
         L, R = B.render(mido.MidiFile(mid))[:2]
-        out[key] = levels([np.asarray(L, np.float64), np.asarray(R, np.float64)], B.SR)[1]
+        out[key] = LEVEL[0]([np.asarray(L, np.float64), np.asarray(R, np.float64)], B.SR)
     return out
 
 
-def trim(progs, vels=(64, 100), passes=2):
+def trim(progs, vels=(64, 100), passes=2, kit=True):
     """PROGRAM_TRIM_DB and KIT_TRIM_DB to GeneralUser GS (Ben: "take one
     sample at 64 and another at 100, and average the two differences"): each
     program's K level re a piano C4 at both velocities, GU's less ours,
@@ -177,7 +202,7 @@ def trim(progs, vels=(64, 100), passes=2):
                 if ds:
                     diff[key] = float(np.mean(ds))
             prog_d = {p: diff[(p, k)] for p, k in progs if (p, k) in diff and p != REF[0]}
-            kit_d = float(np.median([diff[("kit", n)] for n in KIT if ("kit", n) in diff]))
+            kit_d = float(np.median([diff[("kit", n)] for n in KIT if ("kit", n) in diff])) if kit else 0.0
             rms = float(np.sqrt(np.mean(np.square(list(prog_d.values())))))
             print("  pass %d: programs off GU by %.1f dB rms (worst %s), the kit by %+.1f" % (
                 it, rms, ", ".join("%d %+.1f" % kv for kv in sorted(prog_d.items(), key=lambda kv: -abs(kv[1]))[:5]),
@@ -224,7 +249,7 @@ def gu_variations():
                   and (p, v) in PM.VARIATION_NAMES)
 
 
-def var_trim(vels=(64, 100), passes=1):
+def var_trim(vels=(64, 100), passes=1, progs=None):
     """VARIATION_TRIM_FIT: each GS variation's level to GeneralUser GS's own
     preset for it, as trim() does the programs (velocities 64 and 100, K
     level re a piano C4, GU's less ours, averaged) -- from the variation's
@@ -233,7 +258,7 @@ def var_trim(vels=(64, 100), passes=1):
     MT-32 set plays each tone at its target's level."""
     import re
     import patch_map as PM
-    pairs = gu_variations()
+    pairs = [k for k in gu_variations() if progs is None or k[0] in progs]
     sf = gu_path()
     with tempfile.TemporaryDirectory() as d:
         cfg = os.path.join(d, "v.cfg")
@@ -254,7 +279,7 @@ def var_trim(vels=(64, 100), passes=1):
                                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 a, sr = read(wav)
                 a = a.astype(np.float64)
-                out[key] = (levels([a[:, 0], a[:, 1]] if a.ndim > 1 else [a], sr)[1]
+                out[key] = (LEVEL[0]([a[:, 0], a[:, 1]] if a.ndim > 1 else [a], sr)
                             if np.abs(a).max() > 0 else None)
             return out
 
@@ -268,7 +293,7 @@ def var_trim(vels=(64, 100), passes=1):
                 mid = os.path.join(d, "o.mid")
                 var_mid(p, b, KEY_OF.get(p, 60) if key != REF else REF[1], v_, mid)
                 L, R = B.render(mido.MidiFile(mid))[:2]
-                out[key] = levels([np.asarray(L, np.float64), np.asarray(R, np.float64)], B.SR)[1]
+                out[key] = LEVEL[0]([np.asarray(L, np.float64), np.asarray(R, np.float64)], B.SR)
             return out
         g = {v: gu(v) for v in vels}
         for it in range(passes + 1):
@@ -290,7 +315,7 @@ def var_trim(vels=(64, 100), passes=1):
                 base = PM.VARIATION_TRIM_DB.get((p, v), PM.PROGRAM_TRIM_DB.get(p, 0.0))
                 PM.VARIATION_TRIM_DB[(p, v)] = round(base + dv, 1)
                 PM.VARIATION_TRIM_FIT[(p, v)] = PM.VARIATION_TRIM_DB[(p, v)]
-    cap_trim(vels)
+    cap_trim(vels, progs)
     path = os.path.join(HERE, "patch_map.py")
     src = open(path).read()
     tab = "{" + ", ".join("(%d, %d): %.1f" % (p, v, PM.VARIATION_TRIM_FIT[(p, v)])
@@ -300,7 +325,7 @@ def var_trim(vels=(64, 100), passes=1):
     print("  written: %d variation trims" % len(PM.VARIATION_TRIM_FIT))
 
 
-def cap_trim(vels=(64, 100)):
+def cap_trim(vels=(64, 100), progs=None):
     """THE VARIATIONS GeneralUser HAS NO PRESET FOR (the SC-88 map's cheap
     tones, mostly) at their CAPITAL tone's loudness: each its K level less its
     capital's at the program's key, both velocities, the trim moved by the
@@ -308,7 +333,8 @@ def cap_trim(vels=(64, 100)):
     VARIATION_TRIM_FIT with the rest (bank 127 excepted, at its targets')."""
     import patch_map as PM
     have = set(gu_variations())
-    pairs = sorted(k for k in PM.VARIATIONS if k[1] != 127 and k in PM.VARIATION_NAMES and k not in have)
+    pairs = sorted(k for k in PM.VARIATIONS if k[1] != 127 and k in PM.VARIATION_NAMES and k not in have
+                   and (progs is None or k[0] in progs))
     if not pairs:
         return
     os.environ.setdefault("TUNING_REFLECT", "0")
@@ -319,7 +345,7 @@ def cap_trim(vels=(64, 100)):
             mid = os.path.join(d, "c.mid")
             var_mid(p, b, KEY_OF.get(p, 60), v_, mid)
             L, R = B.render(mido.MidiFile(mid))[:2]
-            return levels([np.asarray(L, np.float64), np.asarray(R, np.float64)], B.SR)[1]
+            return LEVEL[0]([np.asarray(L, np.float64), np.asarray(R, np.float64)], B.SR)
         diffs = {}
         for p, b in pairs:
             ds = []
@@ -418,14 +444,28 @@ def kit_trim(keys=None, vels=(64, 100)):
 
 
 def main(argv):
+    # (THE BASSES on their low band in every full trim, not K: a K pass over
+    # them would undo --bass-trim)
     if "--trim" in argv:
-        trim(ALL)
+        trim(tuple(x for x in ALL if x[0] not in BASSES))
+        LEVEL[0] = low_level
+        trim(tuple(x for x in ALL if x[0] in BASSES), kit=False)
         return 0
     if "--kit-trim" in argv:
         kit_trim()
         return 0
     if "--var-trim" in argv:
-        var_trim()
+        var_trim(progs=[p for p in range(128) if p not in BASSES])
+        LEVEL[0] = low_level
+        var_trim(progs=BASSES)
+        return 0
+    if "--bass-trim" in argv:
+        # the basses' capitals to GU on the low band (the kit's trim left
+        # as it is), then their variations: to GU's presets, the rest to
+        # their capitals -- all on the same reading
+        LEVEL[0] = low_level
+        trim(tuple((p, KEY_OF.get(p, 60)) for p in BASSES), kit=False)
+        var_trim(progs=BASSES)
         return 0
     vel = int(next((a.split("=")[1] for a in argv if a.startswith("--vel=")), 110))
     progs = next((tuple(tuple(int(v) for v in x.split(":")) for x in a.split("=")[1].split(","))
