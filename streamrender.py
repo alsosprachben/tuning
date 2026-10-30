@@ -1192,40 +1192,43 @@ class Stream:
     def _damp_prep(self, prep, rows, ix):
         """THE HALF-PEDALLED ROWS (damper.py; blockrender's DM): a note's own
         rows -- order key (0, its global row) -- onto the damper track that
-        covers their row, as the whole table puts each note's rows; every
-        other row (a pass's copy, the register's) none, as there. The tracks
-        this window uses, renumbered, end to end over their own blocks."""
+        covers their row, as the whole table puts each note's rows; and a
+        pass's copy of one (its key the source's key nested in its own: an
+        MF-104 or GS delay repeat, a tremolo's sideband, the scanner's or the
+        chorus's copy, a Leslie's sideband) onto its note's, as the whole
+        table's 'dsrc' does. The notes nobody hit (a sympathetic string, the
+        register) and the amplifier's products (no source in their key) none.
+        The tracks this window uses, renumbered, end to end over their own
+        blocks (damper.onto_tracks)."""
         tr = self.ctx.get('damp_tracks')
         if not tr:
             return
+        import damper as DMP
         if len(tr) != getattr(self, '_dtn', -1):
             self._dtn = len(tr)
-            self._dt0 = np.array([t[0] for t in tr], np.int64)
-            self._dt1 = np.array([t[1] for t in tr], np.int64)
+            self._dtx = DMP.Tracks(tr)
         key = rows['key'][ix]
-        dk = np.full(len(ix), -1, np.int64)
-        note = np.flatnonzero(key[:, 0] == 0)
-        if len(note):
-            g = key[note, 1]
-            t = np.searchsorted(self._dt0, g, side='right') - 1
-            ok = (t >= 0) & (g < self._dt1[np.maximum(t, 0)])
-            dk[note[ok]] = t[ok]
-        if not (dk >= 0).any():
+        n, W = key.shape
+        ar = np.arange(n)
+        # ...down the nesting: a copy's level, then its source's key at +4
+        off = np.zeros(n, np.int64)
+        for _ in range(W // 4):
+            lv = key[ar, off]
+            nxt = np.minimum(off + 4, W - 1)
+            step = (np.isin(lv, self.COPY_LEVELS) & (off + 4 < W) & (key[ar, nxt] >= 0))
+            if not step.any():
+                break
+            off[step] += 4
+        lv = key[ar, off]
+        root = np.where(lv == 0, key[ar, np.minimum(off + 1, W - 1)], -1)
+        root[self.B.fast_rows(prep)] = -1      # the bursts: no damper reaches them (fast_rows)
+        got = DMP.onto_tracks(self._dtx, root, (off == 0) & (lv == 0), prep['non'], prep['nf'], self.B.BLK)
+        if got is None:
             return
-        import damper as DMP
-        used, loc = np.unique(dk[dk >= 0], return_inverse=True)
-        dkl = np.full(len(ix), -1, np.int32)
-        dkl[dk >= 0] = loc
-        f0 = np.array([tr[u][2] for u in used])
-        prep['dk'] = dkl
-        prep['dg'] = np.zeros(len(ix), np.float32)
-        m = dkl >= 0
-        prep['dg'][m] = DMP.weight(prep['nf'][m], f0[dkl[m]])
-        n = np.array([len(tr[u][4]) for u in used], np.int64)
-        prep['DM'] = np.ascontiguousarray(np.concatenate([tr[u][4] for u in used]))
-        prep['DMO'] = np.concatenate(([0], np.cumsum(n)[:-1])).astype(np.int64)
-        prep['DMB'] = np.array([tr[u][3] for u in used], np.int64)
-        prep['DMN'] = n
+        prep.update(got[0])
+
+    # the order key's levels that are a copy of their source row (above)
+    COPY_LEVELS = (2, 3, 4, 5, 6, 7)
 
     def _filter_prep(self, prep):
         """A moving filter's columns and control table (blockrender.filter_prep),

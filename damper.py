@@ -132,6 +132,59 @@ def weight(nf, f0):
     return LN10_20 * (np.maximum(np.asarray(nf, float), 1e-6) / np.maximum(np.asarray(f0, float), 1e-6)) ** BETA
 
 
+class Tracks:
+    """The file's tracks, indexed: blockrender's _DAMP_TRACKS, each (row0,
+    row1, f0, first block, its track, its rows' onsets)."""
+    def __init__(self, tracks):
+        self.n = len(tracks)
+        self.tr = tracks
+        self.r0 = np.array([t[0] for t in tracks], np.int64)
+        self.r1 = np.array([t[1] for t in tracks], np.int64)
+        self.f0 = np.array([t[2] for t in tracks], float)
+        self.b0 = np.array([t[3] for t in tracks], np.int64)
+        self.non = np.concatenate([np.asarray(t[5], np.int64) for t in tracks])
+        self.noff = np.concatenate(([0], np.cumsum(self.r1 - self.r0)[:-1])).astype(np.int64)
+
+
+def onto_tracks(T, root, own, non, nf, blk):
+    """A HALF-PEDALLED NOTE'S ROWS AND ITS COPIES ONTO ITS TRACK. root: each
+    row's note row in the whole table (-1 none, and -1 for a burst too fast
+    for any damper: blockrender.fast_rows) -- itself for a note's own row,
+    the row it was copied from for a pass's copy (a chorus voice, a
+    tremolo's sideband, a delay's repeat); own: the rows that are the note's.
+    A copy that sounds later (the delay's repeat) takes the track as many
+    whole blocks later -- its damper lands when its echo of the key-up does.
+    Returns the kernel's dk, dg, DM, DMO, DMB, DMN for these rows, the tracks
+    renumbered to the ones they use, and how many copies took one; or None."""
+    root = np.asarray(root, np.int64)
+    dk = np.full(len(root), -1, np.int64)
+    m = np.flatnonzero(root >= 0)
+    if not len(m) or not T.n:
+        return None
+    g = root[m]
+    t = np.searchsorted(T.r0, g, side='right') - 1
+    ok = (t >= 0) & (g < T.r1[np.maximum(t, 0)])
+    m, g, t = m[ok], g[ok], t[ok]
+    if not len(m):
+        return None
+    # ...the copy's lag behind the row it copies, in whole blocks
+    sb = np.zeros(len(m), np.int64)
+    cp = ~np.asarray(own, bool)[m]
+    if cp.any():
+        lag = np.asarray(non, np.int64)[m[cp]] - T.non[T.noff[t[cp]] + g[cp] - T.r0[t[cp]]]
+        sb[cp] = np.rint(lag / float(blk)).astype(np.int64)
+    used, loc = np.unique(np.stack([t, sb], 1), axis=0, return_inverse=True)
+    loc = np.asarray(loc).reshape(-1)
+    dk[m] = loc
+    dg = np.zeros(len(root), np.float32)
+    dg[m] = weight(np.asarray(nf)[m], T.f0[t])
+    n = np.array([len(T.tr[u][4]) for u in used[:, 0]], np.int64)
+    return dict(dk=dk.astype(np.int32), dg=dg,
+                DM=np.ascontiguousarray(np.concatenate([T.tr[u][4] for u in used[:, 0]])),
+                DMO=np.concatenate(([0], np.cumsum(n)[:-1])).astype(np.int64),
+                DMB=(T.b0[used[:, 0]] + used[:, 1]).astype(np.int64), DMN=n), int(cp.sum())
+
+
 def selftest(verbose=True):
     fails = []
 

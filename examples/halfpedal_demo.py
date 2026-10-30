@@ -17,6 +17,13 @@ each a chord or a bass under the pedal, the keys let go, then:
                 down a step at a time instead of stopping
   4. SLOW LIFT  the pedal brought up through the whole band over two seconds:
                 the dampers settling, the bass last
+
+    python3 examples/halfpedal_demo.py --copies OUTDIR
+
+writes OUTDIR/halfpedal_copies.mid (and _switch): the same gestures on a GS
+file's parts whose passes COPY their rows -- the piano through the chorus
+(CC93) and the GS delay (CC94), the Detuned EP 1 (4.8, a detuned pair) -- so
+the copies are damped with their notes (damper.onto_tracks).
 """
 import os
 import sys
@@ -77,6 +84,28 @@ def piece():
     return sorted(ev, key=lambda e: e[0])
 
 
+GS_RESET = (0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41)
+
+
+def copies(ev):
+    """The piece on two GS parts that copy their rows: ch 0 the piano with
+    chorus and delay sends, ch 1 the Detuned EP 1 an octave up, quieter."""
+    out = [(0.0, mido.Message("sysex", data=GS_RESET))]
+    for c, setup in ((0, ((93, 110), (94, 100))), (1, ((0, 8),))):
+        for cc, v in setup:
+            out.append((0.01, mido.Message("control_change", channel=c, control=cc, value=v)))
+        for t, msg in ev:
+            if msg.type == "program_change":
+                msg = msg.copy(program=0 if c == 0 else 4)
+                t = 0.02
+            elif msg.type in ("note_on", "note_off") and c == 1:
+                msg = msg.copy(note=min(msg.note + 12, 108), velocity=int(msg.velocity * 0.8))
+            if hasattr(msg, "channel"):
+                msg = msg.copy(channel=c)
+            out.append((t, msg))
+    return sorted(out, key=lambda e: e[0])
+
+
 def write(ev, path, switch=False):
     m = mido.MidiFile(ticks_per_beat=TPB)
     tr = mido.MidiTrack()
@@ -93,12 +122,15 @@ def write(ev, path, switch=False):
 
 
 def main(argv):
+    cp = "--copies" in argv
+    argv = [a for a in argv if a != "--copies"]
     out = argv[1] if len(argv) > 1 else "."
     os.makedirs(out, exist_ok=True)
-    ev = piece()
-    write(ev, os.path.join(out, "halfpedal.mid"))
-    write(ev, os.path.join(out, "halfpedal_switch.mid"), switch=True)
-    print("  %s, %s" % (os.path.join(out, "halfpedal.mid"), os.path.join(out, "halfpedal_switch.mid")))
+    ev = copies(piece()) if cp else piece()
+    nm = "halfpedal_copies" if cp else "halfpedal"
+    write(ev, os.path.join(out, nm + ".mid"))
+    write(ev, os.path.join(out, nm + "_switch.mid"), switch=True)
+    print("  %s, %s" % (os.path.join(out, nm + ".mid"), os.path.join(out, nm + "_switch.mid")))
     return 0
 
 

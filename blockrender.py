@@ -307,6 +307,15 @@ def ensure_xdec_lib():
 XDEC_NEPERS = 2.302585
 
 
+def fast_rows(a):
+    """_xdec_rows' own test, over the whole table: the rows falling more than
+    20 dB in a block with a plain decay. A damper cannot reach them -- tens of
+    dB down by any key-up -- so they take no damper track (damper.onto_tracks)
+    and keep the exact burst."""
+    return ((np.asarray(a['sus']) <= 0) & (np.asarray(a['aft']) <= 0)
+            & (np.asarray(a['logr']) * BLK > XDEC_NEPERS * SR) & (np.asarray(a['gr']) < 0))
+
+
 def _xdec_rows(a, i0, i1):
     """The indices in [i0, i1) of rows synth_voice_xdec draws; empty: none."""
     m = (a['sus'][i0:i1] <= 0) & (a['aft'][i0:i1] <= 0) \
@@ -4424,7 +4433,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _b1 = min(nblk, int(math.ceil(_d['land'] * SR / BLK)))
         _edges = (np.arange(_b0, _b1 + 1) * BLK) / float(SR)
         _dc, _full = _DMP.track(_edges, lambda _tt: _pedal_at(_d['ch'], _tt), _d['key'], _lvl, _d['top'])
-        _DAMP_TRACKS.append((_r0, _r1, _f0, _b0, _dc.astype(np.float32)))
+        _DAMP_TRACKS.append((_r0, _r1, _f0, _b0, _dc.astype(np.float32),
+                             np.asarray(A['non'][_r0:_r1], np.int64)))
 
     _next_same = {}
     _seen = {}
@@ -4452,7 +4462,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _REG_CH = {}
     _REG_OPEN = [None]
     _DAMP_OPEN = [None]         # the half-pedalled note being emitted (damper.py)
-    _DAMP_TRACKS = []           # (row0, row1, f0, first block, its track)
+    _DAMP_TRACKS = []           # (row0, row1, f0, first block, its track, its rows' onsets)
     _AMP_CH = {}
     _AMP_REF = {}
     _AMP_LV0 = {}       # the EFX level in a part's reference when it was taken (1 if none)
@@ -7478,6 +7488,21 @@ def _prepare(path, tuner='hybrid440', sink=None):
     # simply which of two passes goes first, because both work on partials.
     # Distortion products emitted now are picked up by the rotor pass below and
     # given their Doppler and their level swing exactly as any other partial.
+    # A HALF-PEDALLED NOTE'S COPIES TAKE ITS DAMPER (damper.onto_tracks): its
+    # rows carry their own row number ('dsrc') through every pass from here,
+    # so a chorus voice, a tremolo's sideband, a delay's repeat or a Leslie's
+    # sideband of it knows the note it copies. The notes nobody hit (the
+    # sympathetic strings, the register: above, -1) have their own felt; the
+    # amplifier's products are of no one note (cleared below). The stream
+    # finds the same through its order keys.
+    _pcols = PARTIAL_COLS + ('az', 'dr')
+    if _DAMP_TRACKS:
+        from array import array as _arr
+        _dsrc = _arr('d', [-1.0]) * len(A['om'])
+        for _x in _DAMP_TRACKS:
+            _dsrc[_x[0]:_x[1]] = _arr('d', map(float, range(_x[0], _x[1])))
+        A['dsrc'] = _dsrc
+        _pcols = _pcols + ('dsrc',)
     # THE MF-104M ANALOG DELAY, AND IT RUNS FIRST: the pedal is plugged
     # straight into the Moog, so a valve after it (the charang's) hears the
     # echoes, and every pass after this treats a repeat as any partial. A
@@ -7505,14 +7530,14 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _MOOG_MKI.append(_mki)
                 _mfdup[(fx, d)] = len(_MOOG_FT) - 1
             return _mfdup[(fx, d)]
-        _nm, _mlast = _MF.expand(A, _MF104, SR, PARTIAL_COLS + ('az', 'dr'), dup_fx=_mf_dup)
+        _nm, _mlast = _MF.expand(A, _MF104, SR, _pcols, dup_fx=_mf_dup)
         if _mlast + SR // 2 > N:
             N = _mlast + SR // 2         # nblk stays: the kernel clamps every per-block row
         print("  MF-104M: %d note(s), %d repeats" % (len(_MF104), _nm))
     if _GSDN:
         # THE GS DELAY's repeats (gsdelay.py), after the MF-104M's: of each
         # sending note's own rows, as the stream makes them
-        _ng, _glast = _GSD.expand(A, _GSDN, SR, PARTIAL_COLS + ('az', 'dr'), gsd_place)
+        _ng, _glast = _GSD.expand(A, _GSDN, SR, _pcols, gsd_place)
         if _glast + SR // 2 > N:
             N = _glast + SR // 2
         print("  GS delay: %d note(s), %d repeats" % (len(_GSDN), _ng))
@@ -7529,8 +7554,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
 
     if _AMP_CH and __import__('tubeamp').ENABLED:
         import tubeamp as _AMP
-        _na = _AMP.expand(A, _AMP_CH, SR, PARTIAL_COLS + ('az', 'dr'),
+        _a0 = len(A['om'])
+        _na = _AMP.expand(A, _AMP_CH, SR, _pcols,
                           references=_AMP_REF, imbalances=_AMP_IMB)
+        if 'dsrc' in A and len(A['dsrc']) > _a0:
+            A['dsrc'][_a0:] = _arr('d', [-1.0]) * (len(A['dsrc']) - _a0)
         if _na:
             print("  tube amp: %d channel(s), %d distortion partials"
                   % (len(_AMP_CH), _na))
@@ -7571,12 +7599,12 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _hm = np.zeros(len(A['om']), bool)
         for _a, _b in _HT_ROWS:
             _hm[_a:_b] = True
-        _nt = _TRM.expand(A, _HTREM_CH, SR, PARTIAL_COLS + ('az', 'dr'), rows=_hm)
+        _nt = _TRM.expand(A, _HTREM_CH, SR, _pcols, rows=_hm)
         if _nt:
             print("  harmonium tremolo: %d notes, %d sidebands" % (len(_HT_ROWS), _nt))
     if _TREM_CH:
         import tremolo as _TRM
-        _nt = _TRM.expand(A, _TREM_CH, SR, PARTIAL_COLS + ('az', 'dr'))
+        _nt = _TRM.expand(A, _TREM_CH, SR, _pcols)
         if _nt:
             _r0 = list(_TREM_CH.values())[0]
             print("  tremolo: %.1f Hz, depth %.2f%s, %d sidebands"
@@ -7586,14 +7614,14 @@ def _prepare(path, tuner='hybrid440', sink=None):
     # and the Leslie, whose copies inherit its row
     if _SCAN_CH:
         import scanner as _SCN
-        _ns = _SCN.expand(A, _SCAN_CH, SR, PARTIAL_COLS + ('az', 'dr'))
+        _ns = _SCN.expand(A, _SCAN_CH, SR, _pcols)
         print("  scanner: %s, %d chorus copies (the circuit's dry share under them)"
               % (", ".join("ch%d %s%d" % (c, "C" if v[2] else "V", v[1]) for c, v in _SCAN_CH.items()), _ns))
 
     # THE CHORUS SITS BEFORE THE SPEAKER, which is where a chorus pedal sits:
     # the cabinet colours whatever reaches it, copies included.
     if _CHORUS_CH:
-        _nc = _CHR.expand(A, _CHORUS_CH, SR, PARTIAL_COLS + ('az', 'dr'), place=gsd_place)
+        _nc = _CHR.expand(A, _CHORUS_CH, SR, _pcols, place=gsd_place)
         if _nc:
             _c0 = list(_CHORUS_CH.values())[0]
             print("  chorus: %d channel(s), %d copies %s"
@@ -7619,7 +7647,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         del _mq, _fq
     if _CAB_CH:
         import cabinet as _CAB
-        _nc = _CAB.expand(A, _CAB_CH, SR, PARTIAL_COLS + ('az', 'dr'))
+        _nc = _CAB.expand(A, _CAB_CH, SR, _pcols)
         if _nc:
             print("  cabinet: %s, %d partials through the speaker"
                   % ("/".join(sorted(set(_CAB_CH.values()))), _nc))
@@ -7631,7 +7659,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     # That difference is the effect; see leslie.py.
     if _LESLIE_CH:
         import leslie as _LES
-        _n = _LES.expand(A, _LESLIE_CH, SR, PARTIAL_COLS + ('az', 'dr'), flips=_LFLIP, place=gsd_place)
+        _n = _LES.expand(A, _LESLIE_CH, SR, _pcols, flips=_LFLIP, place=gsd_place)
         if _n:
             print("  leslie: %d channel(s), %d sideband partials, %d speed change(s)"
                   % (len(_LESLIE_CH), _n,
@@ -7684,16 +7712,19 @@ def _prepare(path, tuner='hybrid440', sink=None):
     # and weight, and the tracks end to end, each over its own blocks. Absent
     # (no 'DM') for every file whose pedal is a switch.
     if _DAMP_TRACKS:
-        _dk = np.full(P, -1, np.int32)
-        _dg = np.zeros(P, np.float32)
-        for _t, (_r0, _r1, _f0, _b0, _dc) in enumerate(_DAMP_TRACKS):
-            _dk[_r0:_r1] = _t
-            _dg[_r0:_r1] = _DMP.weight(prep['nf'][_r0:_r1], _f0)
-        _n = np.array([len(x[4]) for x in _DAMP_TRACKS], np.int64)
-        prep.update(dk=_dk, dg=_dg, DM=np.ascontiguousarray(np.concatenate([x[4] for x in _DAMP_TRACKS])),
-                    DMO=np.concatenate(([0], np.cumsum(_n)[:-1])).astype(np.int64),
-                    DMB=np.array([x[3] for x in _DAMP_TRACKS], np.int64), DMN=_n)
-        print("  half-pedal: %d released notes damped through the band" % len(_DAMP_TRACKS))
+        _root = np.asarray(A.pop('dsrc'), np.float64).astype(np.int64)
+        if len(_root) != P:
+            # (a pass that did not carry the column: the notes' own rows only)
+            print("  half-pedal: a pass dropped the copies' source rows; the notes alone")
+            _root = np.full(P, -1, np.int64)
+            for _x in _DAMP_TRACKS:
+                _root[_x[0]:_x[1]] = np.arange(_x[0], _x[1])
+        _got = _DMP.onto_tracks(_DMP.Tracks(_DAMP_TRACKS), np.where(fast_rows(prep), -1, _root),
+                                _root == np.arange(P), prep['non'], prep['nf'], BLK)
+        if _got is not None:
+            prep.update(_got[0])
+            print("  half-pedal: %d released notes damped through the band%s"
+                  % (len(_DAMP_TRACKS), (", %d copied rows with them" % _got[1]) if _got[1] else ""))
     # THE LESLIE'S LOBE (leslie.lobe_columns): each row's rotor and lobe, and
     # the rotors' angles on the grid -- the kernel swings the level
     if A.get('lsr') is not None:
