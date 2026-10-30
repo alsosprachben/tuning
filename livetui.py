@@ -2124,13 +2124,7 @@ class TUI:
             # the right of it: at x=70 on an 80-column terminal it was clipped
             # clean off the screen, which is no way to show a registration.
             if here and p.organ:
-                for ln, spans in self.stops_layout(p, max(20, w - 8)):
-                    if y >= bottom - 6:
-                        break
-                    self.draw_stops_line(scr, y, 6, ln)
-                    for x0, x1, row, i in spans:
-                        self.hit(y, 6 + x0, 6 + x1, ("stop", row, i))
-                    y += 1
+                y = self.draw_stop_buttons(scr, y, 6, w, bottom - 6, p)
         # THE INSERTION EFFECT: one for the module, the parts on it
         _ef = L.efx
         if _ef['type'] != (0, 0) or L.efx_parts:
@@ -2168,16 +2162,37 @@ class TUI:
             self.addstr(scr, 0, xr, lamp, lcol)
         self.addstr(scr, 0, max(46, xr - len(pn) - 3), pn[:max(0, xr - 49)], C("dim"))
 
-    def draw_stops_line(self, scr, y, x, ln):
-        """A registration line: the stops drawn ([name]) in the accent, the
-        rest in grey, their keys dim."""
-        import re
+    def draw_stop_buttons(self, scr, y, x, w, last, p):
+        """The registration as buttons (stops_grid) from row y, not past row
+        `last`: a drawn stop filled in the accent, the rest raised in grey,
+        each with its key; a tap on one toggles it. The next free row."""
         C = self.C
-        self.addstr(scr, y, x, ln, C("label"))
-        for m in re.finditer(r"\[[^\]]*\]", ln):
-            self.addstr(scr, y, x + m.start(), m.group(0), C("accent") | curses.A_BOLD)
-        if ln.startswith("stops"):
-            self.addstr(scr, y, x, "stops", C("dim"))
+        x0 = x + 7
+        lines, bw = self.stops_grid(p, max(20, w - x0 - 2))
+        # ...BLANK LINES BETWEEN THEM where the screen has the room, so the
+        # buttons read as buttons and not as grey columns: between every line
+        # of them while the keyboard and globals keep ten rows, else between
+        # key rows only, else none
+        krows = len({c[0][1] for c in lines})
+        every = 2 * len(lines) - 1 <= last - y - 10
+        rows_only = not every and len(lines) + krows - 1 <= last - y
+        for k, cells in enumerate(lines):
+            if k and (every or (rows_only and cells[0][1] != lines[k - 1][0][1])):
+                y += 1
+            if y >= last:
+                break
+            if k == 0:
+                self.addstr(scr, y, x, "stops", C("dim"))
+            for cx, row, i, key, name in cells:
+                on = name in p.drawn
+                face = (C("sel") | curses.A_BOLD) if on else C("btn")
+                txt = (" %s %s" % (key, name)) if key else (" " + name)    # (bw: the longest, +2)
+                self.addstr(scr, y, x0 + cx, ("%-*s" % (bw, txt))[:bw], face)
+                if key:
+                    self.addstr(scr, y, x0 + cx + 1, key, face if on else C("btnkey"))
+                self.hit(y, x0 + cx, x0 + cx + bw, ("stop", row, i))
+            y += 1
+        return y
 
     def draw_globals(self, scr, y, w, bottom):
         C = self.C
@@ -2660,32 +2675,60 @@ class TUI:
     def stops_lines(self, p, width=80):
         """One line per key row, wrapped to the width: each stop with the key
         that toggles it written next to it, and the drawn ones bracketed."""
-        return [ln for ln, _ in self.stops_layout(p, width)]
-
-    def stops_layout(self, p, width=80):
-        """stops_lines, each line with its stops' spans [(x0, x1, row, i)]:
-        where a tap toggles that stop (Ben: "if you click the stops, they
-        will toggle")."""
-        out = []
+        lines = []
         for row, names in enumerate(p.patch.stop_row_lines):
-            cur, spans = ("stops  " if row == 0 else "       "), []
+            cur = "stops  " if row == 0 else "       "
             i = -1
             for r in names:
                 if r == "|":
                     if cur.strip():
-                        out.append((cur.rstrip(), spans)); cur, spans = "       ", []
+                        lines.append(cur.rstrip()); cur = "       "
                     continue
                 i += 1
-                # rows 2 and 3 are the same keys after the STOP_PREFIX key (or
-                # Alt, where the window manager leaves Alt to the terminal)
-                k = ((STOP_PREFIX if row >= 2 else "") + STOP_LABELS.get((row % 2, i), "")) if row < 4 else ""
+                k = self.stop_key(row, i)
                 item = ("%s[%s]" % (k, r)) if r in p.drawn else ("%s %s " % (k, r))
                 if len(cur) + len(item) + 1 > width and cur.strip():
-                    out.append((cur.rstrip(), spans)); cur, spans = "       ", []
-                spans.append((len(cur), len(cur) + len(item), row, i))
+                    lines.append(cur.rstrip()); cur = "       "
                 cur += item + " "
-            out.append((cur.rstrip(), spans))
-        return out
+            lines.append(cur.rstrip())
+        return lines
+
+    @staticmethod
+    def stop_key(row, i):
+        """The key that toggles stop i of key row `row`: rows 2 and 3 are the
+        same keys after the STOP_PREFIX key (or Alt, where the window manager
+        leaves Alt to the terminal); past row 3, none (a tap only)."""
+        return ((STOP_PREFIX if row >= 2 else "") + STOP_LABELS.get((row % 2, i), "")) if row < 4 else ""
+
+    # THE STOPS AS BUTTONS (Ben: "more like aligned buttons ... laid out in an
+    # ordered way"): one width for every stop, so the columns line up down
+    # the whole registration; each key row starts its own line, and the
+    # voice's own groups ("|" in stop_rows) break lines within it
+    STOP_GAP = 1
+
+    def stops_grid(self, p, width=80):
+        """[[(column x, row, i, key, name), ...] per line], and the button
+        width. x counts from the grid's left edge."""
+        rows = p.patch.stop_row_lines
+        items = [(self.stop_key(row, i), r) for row, names in enumerate(rows)
+                 for i, r in enumerate(n for n in names if n != "|")]
+        bw = min(max((len(k) + len(r) for k, r in items), default=8) + 2, max(8, width))
+        per = max(1, (width + self.STOP_GAP) // (bw + self.STOP_GAP))
+        out = []
+        for row, names in enumerate(rows):
+            cur, i = [], -1
+            for r in names:
+                if r == "|":
+                    if cur:
+                        out.append(cur); cur = []
+                    continue
+                i += 1
+                if len(cur) == per:
+                    out.append(cur); cur = []
+                cur.append((len(cur) * (bw + self.STOP_GAP), row, i, self.stop_key(row, i), r))
+            if cur:
+                out.append(cur)
+        return out, bw
 
     def stops_str(self, p):
         return "  ".join(self.stops_lines(p, 10 ** 6))
@@ -3287,13 +3330,17 @@ class TUI:
             for k, v in THEME_256.items():
                 self._colors[k] = self.pair(v)
             self._colors["sel"] = self.pair(THEME_256["onaccent"], THEME_256["accent"])
+            # a button's face (the stops): raised grey, its key dimmer
+            self._colors["btn"] = self.pair(THEME_256["text"], THEME_256["button"])
+            self._colors["btnkey"] = self.pair(THEME_256["dim"], THEME_256["button"])
         else:
             pr = {k: self.pair(c) for k, c in (("red", curses.COLOR_RED), ("green", curses.COLOR_GREEN),
                                                ("yellow", curses.COLOR_YELLOW), ("cyan", curses.COLOR_CYAN))}
             self._colors.update(text=0, value=curses.A_BOLD, label=0, dim=curses.A_DIM,
                                 faint=curses.A_DIM, rule=curses.A_DIM, accent=pr["yellow"] | curses.A_BOLD,
                                 accent2=pr["cyan"], ok=pr["green"], warn=pr["yellow"], bad=pr["red"],
-                                ivory=0, ebony=curses.A_DIM, onaccent=0, sel=curses.A_REVERSE)
+                                ivory=0, ebony=curses.A_DIM, onaccent=0, sel=curses.A_REVERSE,
+                                btn=0, btnkey=curses.A_DIM)
         self._colors.update(red=self._colors["bad"], green=self._colors["ok"],
                             yellow=self._colors["warn"], cyan=self._colors["accent2"])
 
@@ -3586,7 +3633,7 @@ def fmt(v, unit):
 # labels grey, the rules faint.
 THEME_256 = dict(text=252, value=255, label=246, dim=243, faint=238, rule=240,
                  accent=215, accent2=73, ok=114, warn=214, bad=203,
-                 ivory=253, ebony=236, onaccent=234)
+                 ivory=253, ebony=236, onaccent=234, button=237)
 # THE FAMILIES' HUES, one per GM family of eight (FAMILIES): the parts table,
 # the keyboard's zones and the notes held in them, so a split reads at a glance
 FAMILY_HUE = (223, 187, 179, 173, 137, 174, 175, 215, 150, 116, 81, 141, 105, 180, 144, 110)
