@@ -4436,6 +4436,27 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _DAMP_TRACKS.append((_r0, _r1, _f0, _b0, _dc.astype(np.float32),
                              np.asarray(A['non'][_r0:_r1], np.int64)))
 
+    # THE STRINGS' NEXT NOTES, by channel (open_string_ring): onsets and the
+    # string each note lies on, built the first time a voice asks
+    _STR_NOTES = {}
+
+    def _string_free(_c, _k, _on, _open, _cap):
+        """When the string that open-string pitch _k is played on next sounds
+        on channel _c after _on (a note from its open pitch up to the next
+        string's): the string's ring is stopped there, as a re-strike stops it,
+        and at the latest _cap s after _on."""
+        if _c not in _STR_NOTES:
+            _o = sorted((_n[2], _n[1]) for _n in notes if _n[0] == _c)
+            _STR_NOTES[_c] = (np.array([x[0] for x in _o], float),
+                              np.searchsorted(np.asarray(_open), [x[1] for x in _o], side='right') - 1)
+        _t, _si = _STR_NOTES[_c]
+        _s = int(np.searchsorted(_open, _k, side='right') - 1)
+        _j = np.flatnonzero((_t > _on + 1e-9) & (_si == _s))
+        _end = _on + _cap
+        if len(_j):
+            _end = min(_end, max(_on, _t[_j[0]] - RETRIGGER_FADE))
+        return _end
+
     _next_same = {}
     _seen = {}
     for _n in sorted(notes, key=lambda e: -e[2]):
@@ -5459,6 +5480,15 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _sir = _SIREN_AT.get((ch, note, on))
         if _sir is not None:
             off = max(on + 1e-3, _sir[1])
+        # A PALM-MUTED OPEN STRING RINGS ON (open_string_ring: the palm is the
+        # damper, and it stays on the strings between chugs). A fretted note
+        # stops at its key-up -- the finger lifting damps it -- but an open
+        # string only has the palm on it: it sounds on at its muted decay
+        # until that string is played again, and through a high-gain amp that
+        # ring is what fills the rests -- what a rhythm player's gate is for
+        _osr = getattr(pc, 'open_string_ring', None)
+        if _osr and not getattr(pc, 'one_shot', False) and note in _osr[0]:
+            off = max(off, _string_free(ch, note, on, _osr[0], _osr[1]))
         # THE PEDAL, between the two of them on purpose. After the one-shot
         # extension, because a cymbal has no damper to lift and must not be
         # pedalled; before the choke override below, so a closed hi-hat still
@@ -5774,6 +5804,17 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _AMP_REF[_MCH[0]] = (_ref * chan_vol / _EFG) if _ref else None
             _AMP_LV0[_MCH[0]] = _EFXN[0]['level'] if _EFXN[0] is not None else 1.0
             _AMP_IMB[_MCH[0]] = getattr(props, 'amp_imbalance', None)
+        # A VOICE's OWN GATE (noise_gate: a chugging rhythm guitar's, 28.1):
+        # its rows alone through efxbus.NoiseGate over the whole file, on the
+        # tone's bus as a tone's own insertion effect is
+        _ngk = _GSX.TONE_BUS + _MCH[0]
+        if getattr(props, 'noise_gate', None) and _ngk not in _BUS_CH and not MOOG_NEUTRAL:
+            _ngkw = dict(props.noise_gate)
+            if _ngkw.pop('keyed', False):
+                # ...keyed by the channel's keys as played (their own key-ups,
+                # before an open string's ring or a pedal held them on)
+                _ngkw['keys'] = [(int(round(_n[2] * SR)), int(round(_n[3] * SR))) for _n in notes if _n[0] == ch]
+            _BUS_CH[_ngk] = dict(kind='noisegate', kw=_ngkw, spans=[(0, 1 << 62)], mix=(0.0, 1.0))
         # THE INSERTION EFFECT's AMP, SPEAKER AND FLANGER, set once for the
         # part at its first note through it: its OD stage a gain in front of
         # the voice's own valve (two stages in series: their gains multiply,

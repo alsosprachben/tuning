@@ -106,6 +106,119 @@ class Compressor:
         return (L * g).astype(np.float32), (R * g).astype(np.float32)
 
 
+class _Pole:
+    """A one-pole low-pass over a window, its memory carried: tau in s."""
+
+    def __init__(self, tau, sr):
+        self.a = math.exp(-1.0 / max(1.0, tau * sr))
+        self.z = None
+
+    def run(self, x):
+        from scipy.signal import lfilter
+        zi = [self.a * (x[0] if self.z is None else self.z)]
+        y, zf = lfilter([1.0 - self.a], [1.0, -self.a], x, zi=zi)
+        self.z = float(y[-1]) if len(y) else self.z
+        return y
+
+
+class NoiseGate:
+    """THE RHYTHM GUITAR'S GATE, and the compression in front of it (Ben: the
+    gated chug "needs to sound like a string section bowing": a firm start,
+    a held body, a clean stop -- martele).
+
+    BODY: a compressor holds a sounding note up -- over sustain_db under the
+    part's playing level, the excess taken down to 1/ratio, so a palm-muted
+    chug's 12 dB sag in its first 150 ms becomes a held stroke. GATE: open
+    while the note is over threshold_db under the playing level, shut once
+    it falls hysteresis_db further, held open hold_s past its last open
+    sample; it opens in open_s and closes in close_s, to floor_db -- the bow
+    stopping on the string, not a click. THE PLAYING LEVEL is the part's own
+    running peak, falling ref_fall_db_s when it plays softer, so the settings
+    sit where an engineer sets them against the player, whatever the fader.
+
+    KEYED (keys: the part's key-down spans, samples): open while a key is
+    down and hold_s past its key-up, whatever the level -- as a rhythm
+    player's gate is keyed from the guitar's clean signal ahead of the amp,
+    where a pick attack stands far over the strings' ring (between chugs the
+    distorted ring is nearly as loud as the chug, and no threshold parts
+    them). The stroke is as long as the key, its stop the gate's close.
+
+    Vectorised, its state carried across windows (the envelopes' memories,
+    the gate's last state and its last open sample, the running peak), so a
+    stream of windows is the whole signal's. The laws are chosen."""
+
+    def __init__(self, sr, threshold_db=-30.0, hysteresis_db=6.0, hold_s=0.015,
+                 open_s=0.0005, close_s=0.006, floor_db=-80.0, ref_fall_db_s=6.0,
+                 sustain_db=None, ratio=4.0, attack_s=0.002, release_s=0.06,
+                 makeup_db=None, detect_s=0.02, keys=None):
+        self.thr, self.hyst, self.floor = threshold_db, hysteresis_db, 10.0 ** (floor_db / 20.0)
+        self.hold = max(1, int(round(hold_s * sr)))
+        self.fall = ref_fall_db_s / float(sr)               # dB a sample
+        self.sus, self.ratio = sustain_db, ratio
+        # ...the make-up puts a peak back where it was (None: the full
+        # reduction at the playing level), so the body is what rises
+        self.mk = 10.0 ** (((-sustain_db * (1.0 - 1.0 / ratio)) if makeup_db is None else makeup_db) / 20.0) \
+            if sustain_db is not None else 1.0
+        # each envelope: the faster pole rising, the slower falling (their max)
+        self.det = (_Pole(0.0003, sr), _Pole(detect_s, sr))
+        self.cmp = (_Pole(attack_s, sr), _Pole(release_s, sr))
+        self.gain = (_Pole(open_s, sr), _Pole(close_s, sr))
+        self.ref = -240.0                                   # the running peak, dB
+        self.state = 0                                      # the gate: 0 shut, 1 open
+        self.since = 1 << 40                                # samples since it was last open
+        # ...keyed: the spans, sorted, and the sample the processor is at (it
+        # is fed the part's whole signal from 0: efxbus.Bus)
+        self.keys = None if keys is None else np.array(sorted(keys), np.int64).reshape(-1, 2)
+        self.n = 0
+
+    def _ref(self, lv):
+        """The running peak (dB) at each sample: a peak held, falling."""
+        m = np.arange(len(lv), dtype=np.float64)
+        c = self.fall
+        r = np.maximum.accumulate(lv + m * c) - m * c
+        r = np.maximum(r, self.ref - (m + 1.0) * c)
+        self.ref = float(r[-1])
+        return r
+
+    def process(self, L, R):
+        L = np.asarray(L, np.float64); R = np.asarray(R, np.float64)
+        n = len(L)
+        if not n:
+            return L.astype(np.float32), R.astype(np.float32)
+        x = np.maximum(np.abs(L), np.abs(R))
+        ref = self._ref(20.0 * np.log10(np.maximum(x, 1e-12)))
+        g = np.ones(n)
+        if self.sus is not None:
+            env = np.maximum(self.cmp[0].run(x), self.cmp[1].run(x))
+            over = np.maximum(20.0 * np.log10(np.maximum(env, 1e-12)) - (ref + self.sus), 0.0)
+            g = 10.0 ** (-over * (1.0 - 1.0 / self.ratio) / 20.0) * self.mk
+        k = np.arange(n)
+        if self.keys is not None:
+            # ...KEYED: open over each key's span, held past its key-up
+            op = np.zeros(n, bool)
+            a, b = self.n, self.n + n
+            ks = self.keys[(self.keys[:, 0] < b) & (self.keys[:, 1] + self.hold > a)]
+            for k0, k1 in ks:
+                op[max(0, k0 - a):max(0, min(n, k1 + self.hold - a))] = True
+            tgt = np.where(op, 1.0, self.floor)
+        else:
+            det = 20.0 * np.log10(np.maximum(np.maximum(self.det[0].run(x), self.det[1].run(x)), 1e-12))
+            # ...THE GATE'S STATE: open over the threshold, shut under it
+            # less the hysteresis, between them as it was
+            s = np.where(det > ref + self.thr, 1, np.where(det < ref + self.thr - self.hyst, 0, -1))
+            last = np.maximum.accumulate(np.where(s >= 0, k, -1))
+            st = np.where(last >= 0, s[np.maximum(last, 0)], self.state)
+            self.state = int(st[-1])
+            # ...HELD open hold_s past its last open sample
+            lo = np.maximum.accumulate(np.where(st == 1, k, -(1 << 40)))
+            since = np.where(lo >= 0, k - lo, self.since + k + 1)
+            self.since = int(since[-1])
+            tgt = np.where(since < self.hold, 1.0, self.floor)
+        self.n += n
+        g = g * np.maximum(self.gain[0].run(tgt), self.gain[1].run(tgt))
+        return (L * g).astype(np.float32), (R * g).astype(np.float32)
+
+
 class Enhancer:
     """The top octaves made brighter: the signal above ENH_HZ, saturated, its
     new harmonics mixed back at Mix, Sens driving the saturation."""
@@ -388,6 +501,8 @@ def make(kind, sr, **kw):
         return GateReverb(sr, **kw)
     if kind == 'reverb':
         return Reverb(sr, **kw)
+    if kind == 'noisegate':
+        return NoiseGate(sr, **kw)
     if kind == 'enh':
         return Enhancer(sr, kw.get('sens', 64), kw.get('mix', 64))
     raise ValueError(kind)

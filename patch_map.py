@@ -1476,8 +1476,15 @@ SC88_CHEAP = {
     # parts (tracks 21, 30, 31 at 3:28; examples/tone_ab.py)
     (30, 25): ("Rock Rhythm2", ("set", 30, palm_mute(1.0))),
     # MUTED DIS.GT: the distortion guitar under the whole palm mute -- Rock
-    # Rhythm2's tone, as Ben chose it (SENSATIO, 2)
-    (28, 1): ("Muted Dis.Gt", ("var", (30, 25))),
+    # Rhythm2's tone, as Ben chose it (SENSATIO, 2) -- and THROUGH A GATE, as
+    # a chugging rhythm rig is (efxbus.NoiseGate; Ben: the gated chug "needs
+    # to sound like a string section bowing"): its body held by the
+    # compression in front, its stop the gate's, 6 ms (examples/chug_demo.py)
+    # ...ITS OPEN STRINGS RINGING ON under the palm between chugs (standard
+    # tuning's six, up to 2 s; blockrender open_string_ring) -- what the gate cuts
+    (28, 1): ("Muted Dis.Gt", ("set", 30, dict(palm_mute(1.0), noise_gate=dict(
+        keyed=True, hold_s=0.008, close_s=0.006, sustain_db=-24.0, ratio=6.0, makeup_db=13.0),
+        open_string_ring=((40, 45, 50, 55, 59, 64), 2.0)))),
     # BRASS FALL: the brass section, its notes falling off -- held 0.15 s,
     # then a run down the valved lattice, 9 semitones over 0.45 s, half-valved,
     # fading 30 dB (tonelib fall_cents; a gliss down, not a sweep -- Ben):
@@ -1516,7 +1523,12 @@ SC88_CHEAP = {
     (33, 1): ("FingeredBs2", ("set", 33, dict(tonal_dampening=2.9))),
     # a Jazz bass on its bridge pickup alone: brighter, its own comb
     (33, 2): ("Jazz Bass", ("set", 33, dict(pickup_points=(0.098,), tonal_dampening=2.0))),
-    (34, 8): ("MutePickBs.", ("set", 34, dict(decay_db=20.0, tonal_dampening=2.4))),
+    # MUTE PICK BASS: the palm on the strings, and the BASSIST'S STOP -- a key-up
+    # damped by the hands at once (release 0.05 s, chosen), not the picked
+    # bass's fitted 0.355 s lift-off ring: in a stop-start riff the bass stops
+    # with the band (examples/chug_demo.py)
+    (34, 8): ("MutePickBs.", ("set", 34, dict(decay_db=20.0, tonal_dampening=2.4,
+                                              release_valve_time=0.05))),
     # Mr. Smooth: the soul fretless Ben heard in Fretless Bs2
     (35, 5): ("Mr.Smooth", ("set", 35, dict(lowpass_hz=455.7, lowpass_order=3.605, tonal_dampening=2.315))),
     (36, 8): ("Reso Slap", ("set", 36, dict(tonal_dampening=1.4))),
