@@ -4541,6 +4541,316 @@ def _prep_rotating_speaker(A, _LESLIE_CH, _LFLIP, _pcols):
                      sum(len(v['horn'] if isinstance(v, dict) else v) - 1 for v in _LESLIE_CH.values())))
 
 
+class _Emitter(object):
+    """_prepare's emitter: emit_partial and the rows it writes. Its attributes
+    are the names the emitter reads -- the table (A), the current note's
+    settings, which the note loop writes into one-item cells (_TB, _MCH...),
+    and the voice (props) -- each the same object _prepare binds, handed
+    over where _prepare binds it (examples/refactor/prep_emitter.py)."""
+
+    def _reverse_partial(self, om, ampL, ampR, ampM, nomf, non, fa, ch, logr, logrA, aft, sus, cv, cc,
+                         crl, sj, csc, gr, cr, ph0):
+        """One partial of the forward note, emitted TIME-REVERSED: what a tape
+        of it played backwards is. Each decay is a growth at its own rate, so
+        the longest-lived modes rise first and the brief ones -- the bright
+        upper modes, the stick's strike -- surge in at the end; a partial that
+        started d after the forward onset ends d before the arrival. Each of
+        the two decays (the kernel's logr and its aftersound, logrA) is its own
+        row, begun where it is REV_FLOOR under its end (or at the note's
+        onset, faded in), so no growth is ever more than 100 dB. The attack's
+        chiff, a hump of wash just after the strike, becomes a swell of noise
+        (a noise row, the wash's width) just before the arrival."""
+        n0, arr = self._REV[0]
+        end = arr - (non - n0)
+        if end <= n0:
+            return
+        self._REV[0] = None                             # its own rows are forward rows
+        try:
+            self._reverse_rows(n0, end, om, ampL, ampR, ampM, nomf, fa, ch, logr, logrA, aft, sus, cv, cc,
+                          crl, sj, csc, gr, cr, ph0)
+        finally:
+            self._REV[0] = (n0, arr)
+
+    def _reverse_rows(self, n0, end, om, ampL, ampR, ampM, nomf, fa, ch, logr, logrA, aft, sus, cv, cc,
+                      crl, sj, csc, gr, cr, ph0):
+        _out = max(fa, 0.001 * SR)                 # the forward fade-in, now the cut-off
+        _out = min(_out, 0.5 * (end - n0))
+        # ...AND THE PHASE MIRRORED: cos(w t + ph0) backwards is cos(w t' - ph0),
+        # so each row reaches -ph0 at its end, where the forward one began at
+        # ph0. The modes that set out together at the strike arrive together:
+        # turned through whatever phase their spans gave them, the crash's
+        # arrival summed incoherently, 4-5 dB short of the strike it mirrors.
+        def _ph(start):
+            return -ph0 - om * self._PJ[0] * (end - start)
+        for w, lr in (((1.0 - sus) * (1.0 - aft), logr), ((1.0 - sus) * aft, logrA), (sus, 0.0)):
+            if w <= 0.0:
+                continue
+            span = self.REV_FLOOR / lr * SR if lr > 0.0 else end - n0
+            start = max(n0, end - span)
+            g = w * math.exp(-lr * (end - start) / SR)
+            fin = 0.01 * SR if start <= n0 else 0.001 * SR
+            # the forward fade-in, reversed, is a fade-out ENDING at the arrival.
+            # ITS WASH WITH IT: the chiff's sustained floor (sj x cv, the
+            # partial's own jittered copy) rides the partial's level, so it
+            # swells as the partial does -- a hat or a cymbal is mostly that
+            # wash (sj x cv ~115 x the modes on the closed hat), and without it
+            # a reversed hat was its quiet modes and a 2 ms click. The row's own
+            # attack hump is made a sample wide and its release hump dropped:
+            # the hump is the arrival's, below
+            # ...its fade-out no longer than the row itself, so it ENDS at the
+            # arrival: a slow forward fade-in (the jazz crash's, 0.36 s) on a
+            # row begun 29 ms before it went on growing past it, ~e^144 -- NaN
+            _o = min(_out, max(1.0, end - start))
+            self.emit_partial(om, ampL * g, ampR * g, ampM * g, nomf, start, max(start + 1.0, end - _o),
+                         fin, _o, 1.0, -lr, 0.0, 0.0, 0.0, cv, cc, 0.0, sj, csc, gr, cr, _ph(start))
+        jp = cv * csc * 0.25                       # the hump's peak, r(1-r) at r = 1/2
+        if jp > 0.0 and ch > 0.0:
+            _cbw = (self._CBW[0], self._CBW[1])
+            self._CBW[0], self._CBW[1] = -max(abs(_cbw[0]), 1e-3), 0.0
+            _nr = self._NOREFL[0]
+            self._NOREFL[0] = True
+            start = max(n0, end - ch)
+            pk = end - ch / 3.0                    # the forward hump peaks a third in
+            g = jp * (1.0 - sus) * (1.0 - aft) * math.exp(-logr * (ch / 3.0) / SR)
+            self.emit_partial(om, ampL * g, ampR * g, ampM * g, nomf, start, max(start + 1.0, pk),
+                         max(1.0, pk - start), max(1.0, end - pk), ch, 0.0, 0.0, 0.0, 1.0, 0.0,
+                         cc, crl, 0.0, csc, gr, cr, _ph(start))
+            self._CBW[0], self._CBW[1] = _cbw
+            self._NOREFL[0] = _nr
+
+    def emit_partial(self, om, ampL, ampR, ampM, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0=0.0,
+                     _place=None):
+        # _place is (delL, delR, px, pz) for an image source; None means the
+        # direct sound, which also emits the images.
+        if self._REV[0] is not None and _place is None:
+            self._reverse_partial(om, ampL, ampR, ampM, nomf, non, fa, ch, logr, logrA, aft, sus, cv, cc,
+                             crl, sj, csc, gr, cr, ph0)
+            return
+        om = om * self._PJ[0]
+        if self._XPON[0] and om >= self._NYQ_OM:
+            return          # a transposition (_XP) carried it past Nyquist
+        dl, dr, px, pz = _place if _place else (self._DL[0], self._DL[1], self._PX[0], self._PZ[0])
+        _am0 = ampM
+        if _place is None:
+            self._AZ[0] = math.atan2(px, max(self.props.radiation_distance, 1e-6))
+            # FURTHER AWAY, THE SAME BALANCE: a channel's distance multiple
+            # (_src_dist -- CC91, or the voice's own) moves the source out
+            # along its own ray, so the reflections below follow it and the
+            # direct path crosses the extra air -- its top end, a few dB at 8-16
+            # kHz over ten metres. Its LEVEL stays as the mix wrote it: that is
+            # the normalisation that makes the send a distance, not a fader
+            # (roomtail sets the tail by the same multiple).
+            _dm = self._src_dist(_GSX.part_of(self._MCH[0]), self.props)
+            if _dm != 1.0:
+                _r0 = math.sqrt(px * px + self.props.radiation_distance ** 2 + pz * pz)
+                _ga = 10.0 ** (-self.props.air_absorption_db_per_m(nomf) * (_dm - 1.0) * _r0 / 20.0)
+                # ...AND THE PART AS LOUD AS IT WAS. Further out the direct
+                # weakens against its own images, so holding the direct alone
+                # left a part sent to 127 1.5-3 dB louder (measured over an
+                # octave: flute, piano, strings). The direct and its early
+                # images are held to the energy they had at the voice's own
+                # distance: the ratio between them moves, which is the cue
+                if self.REFLECT and not self._NOREFL[0]:
+                    _ga *= self._refl_norm(nomf, px, pz, _dm)
+                ampL *= _ga; ampR *= _ga; ampM *= _ga
+            # THE FILE'S GS EQ, on the parts that have it on (gs_eq_gain):
+            # the partial at its frequency, its reflections with it
+            if _GS_EQ and _GSX.part_of(self._MCH[0]) not in _GS_EQ['off']:
+                _ge = gs_eq_gain(nomf, _GS_EQ['eq'])
+                ampL *= _ge; ampR *= _ge; ampM *= _ge
+            # THE INSERTION EFFECT's compressor (gsefx), before its OD: its
+            # sustain the decay slowed (logr, logrA), its makeup a gain. Its
+            # EQ is after the OD and the amp: the speaker pass (_EFXEQ_CH)
+            _ex = self._EFXN[0]
+            if _ex is not None:
+                if _ex['comp'] is not None:
+                    logr = logr * _ex['comp'][0]
+                    logrA = logrA * _ex['comp'][0]
+                    ampL *= _ex['comp'][1]; ampR *= _ex['comp'][1]; ampM *= _ex['comp'][1]
+                    # ...and its attack: the onset risen over it (gsefx.CMP_ATTACK_MS)
+                    if _ex['comp'][2] > 0.0:
+                        fa = max(fa, _ex['comp'][2] * SR)
+            # A HAMMER-ON / PULL-OFF (hammer_legato): no pick -- the string
+            # rings on from the note that was picked, so each partial starts
+            # where its own decay (the compressor's, if any) has got to since
+            # that pick (the kernel's two-stage law: logr, then the
+            # aftersound's logrA), less what the fretting finger costs
+            # (HAMMER_LOSS_DB)
+            if self._HAM[0] > 0.0:
+                _hg = (((1.0 - aft) * math.exp(-logr * self._HAM[0]) + aft * math.exp(-logrA * self._HAM[0]))
+                       * HAMMER_GAIN)
+                ampL *= _hg; ampR *= _hg; ampM *= _hg
+        # THE EAR DELAY MOVES THE CARRIER, NOT JUST THE ENVELOPE. A path length
+        # delays the whole signal; delaying only the envelope leaves both ears
+        # with identical carrier phase, so a held note has no interaural time
+        # difference at all -- and below ~500 Hz, where the head casts no shadow
+        # (0.01 dB at C2), ITD is the ONLY cue there is. Measured on a C2 string
+        # chord, sustain-only peak IACC: 0.9978 as a point source, 0.9926 with
+        # the players seated but the carrier shared, 0.8382 with both. The seats
+        # supply the positions; this is what turns a position into an arrival.
+        # p0 = -om*(non + d) + ph0, i.e. exactly "this partial, delayed by d".
+        #
+        # THE SAME PLATE STRUCK AGAIN (fold_restrike: a gong). The new strike
+        # does not erase the old ring, it adds to it -- and both are the same
+        # modes, at the same frequencies, each decaying at its own one rate
+        # (no aftersound: a single exponential). So from the re-strike on the
+        # old mode IS its value then, decaying on the new note's clock, and the
+        # two sum as phasors into one row: exact, and a roll costs one strike's
+        # rows however long it runs. The old strike's direct rows (and its
+        # bloom's, once risen) end at the re-strike, fading over the new
+        # attack; the new strike's direct rows take them in. Reflections are
+        # made from the direct row below, so they fold with it.
+        if _place is None and self._FOLDIN[0] and not self._LATE[0] and aft == 0.0 and sus == 0.0:
+            _old = self._FOLDIN[0].pop(round(nomf, 3), None)
+            if _old:
+                _pl, _pr = -om * (non + dl) + ph0, -om * (non + dr) + ph0
+                _zl, _zr, _zm = (ampL * cmath.exp(1j * _pl), ampR * cmath.exp(1j * _pr),
+                                 ampM * cmath.exp(1j * _pl))
+                for _oL, _oR, _oM, _q0, _q0R, _n1, _lr in _old:
+                    _g = math.exp(-_lr * (non - _n1) / SR)
+                    _zl += _oL * _g * cmath.exp(1j * _q0)
+                    _zr += _oR * _g * cmath.exp(1j * _q0R)
+                    _zm += _oM * _g * cmath.exp(1j * _q0)
+                ampL, ampR, ampM = abs(_zl), abs(_zr), abs(_zm)
+                ph0 = cmath.phase(_zl) + om * (non + dl)
+        # (taking in the strike before FIRST, then leaving the sum to the next:
+        # in a roll each strike carries all the ones before it)
+        if _place is None and self._FOLD[0] is not None:
+            _n2, _xf, _st = self._FOLD[0]
+            if aft == 0.0 and sus == 0.0 and non + fa <= _n2 < noff:
+                _st.setdefault(round(nomf, 3), []).append(
+                    (ampL, ampR, ampM, -om * (non + dl) + ph0, -om * (non + dr) + ph0, non, logr))
+                noff = _n2
+                re = _xf
+        self.A["om"].append(om)
+        self.A["p0"].append(-om*(non + dl) + ph0)
+        self.A["p0R"].append(-om*(non + dr) + ph0)
+        self.A["aL"].append(ampL); self.A["aR"].append(ampR)
+        # ampM is this partial BEFORE the head model -- what the instrument
+        # radiates, not what an ear receives. aL/aR are ampM times a per-ear
+        # hrtf_gain, so keeping it costs one column and makes a source-referenced
+        # (object) render exact rather than an un-mixing of the binaural one.
+        self.A["aM"].append(ampM); self.A["mch"].append(self._MCH[0])
+        self.A["px"].append(px); self.A["pz"].append(pz); self.A["az"].append(self._AZ[0])
+        # 1 for the sound that goes straight to the listener, 0 for an image.
+        # The amplifier distorts BEFORE anything radiates, so its products are
+        # formed from the direct signal only -- a product between a direct
+        # partial and its own reflection would be two copies of one voltage
+        # beating against each other, which happens in the room and not in the
+        # valve.
+        # ...and a LATE COPY's (the bloom) 0.75 and 0.25: still direct and an
+        # image either side of 0.5, as every reader tests, but marked, so the
+        # sympathetic pass does not take its late arrivals for new strikes
+        self.A["dr"].append((0.75 if self._LATE[0] else 0.9 if self._RINGF[0] else 1.0) if _place is None
+                       else (0.25 if self._LATE[0] else 0.1 if self._RINGF[0] else 0.0))
+        self.A["nf"].append(nomf); self.A["non"].append(non); self.A["noff"].append(noff); self.A["fa"].append(fa); self.A["re"].append(re); self.A["ch"].append(ch)
+        self.A["logr"].append(logr); self.A["logrA"].append(logrA); self.A["aft"].append(aft); self.A["sus"].append(sus)
+        self.A["cv"].append(cv); self.A["cc"].append(cc); self.A["crl"].append(crl); self.A["sj"].append(sj); self.A["csc"].append(csc)
+        # index is t*f*gran, so gran IS the fractional width; an absolute
+        # width in Hz is that same number divided by where the partial sits.
+        self.A["cbw"].append(self._CBW[1]/max(1e-6,nomf) if self._CBW[1] > 0.0 else self._CBW[0])
+        self.A["tbav"].append(self._TB[0]); self.A["tau"].append(self._TB[1]); self.A["tcut"].append(self._TB[2])
+        # THE GLIDE IS PER NOTE, NOT PER PARTIAL, but it is stamped per partial
+        # because that is where the kernel reads it -- and because _TB beside it
+        # is NOT per note: mode lock overrides it per partial, which is exactly
+        # why portamento could not borrow those three slots and has its own.
+        self.A["gb"].append(self._GL[0]); self.A["gt"].append(self._GL[1]); self.A["gc"].append(self._GL[2])
+        # CC77 moves the depth -- adding up to 30 cents where a voice has none,
+        # taking a voice's own toward zero downward -- and CC76 the rate.
+        _vd0 = self._VB[0]
+        if self._SV[0] > 0.0:
+            _vd0 = _vd0 + self._SV[0] * (2.0 ** (T.SOUND_VIB_DEPTH_CENTS / 1200.0) - 1.0)
+        elif self._SV[0] < 0.0:
+            _vd0 = _vd0 * (1.0 + self._SV[0])
+        self.A["vd"].append(_vd0); self.A["vr"].append(self._VB[1] * self._SV[1]); self.A["vp"].append(self._VB[2])
+        self.A["vdl"].append(self._VDL[0])
+        self.A["delL"].append(dl); self.A["delR"].append(dr)
+        self.A["gr"].append(gr); self.A["cr"].append(cr); self.A["br"].append(self._BR[0] if (self._BR[0] >= 0 or self._LV[0] < 0) else self._LV[0]); self.A["pl"].append(self._PL[0])
+        self.A["fx"].append(self._FX[0]); self.A["mk"].append(self._MK[0]); self.A["rdl"].append(self._RD[0])
+        self.A["fmw"].append(self._FMW[0])
+        # the onset's fraction of a sample, which the table's whole-sample
+        # `non` drops and the phase anchor above keeps: live needs it to move a
+        # partial's frequency without moving its phase (a room image's onset
+        # is hardly ever a whole sample)
+        self.A["nfr"].append(non - math.floor(non))
+        self.A["fmp"].append(-self._FMW[0] * (non + dl) + self._FMPH[0] if self._FMW[0] else 0.0)
+        self.A["fmpR"].append(-self._FMW[0] * (non + dr) + self._FMPH[0] if self._FMW[0] else 0.0)
+        if _place is None and ampM > 0.0:
+            # Q is how much louder this partial is toward the listener than its
+            # own spherical average, so ampM^2/Q is the power it feeds the room.
+            # Read at the band centre: the sphere integral is cached per radius
+            # and frequency, and per-partial resolution buys nothing here.
+            bi = min(range(len(self.ROOM_BANDS)),
+                     key=lambda i: abs(math.log(max(nomf, 1e-6) / self.ROOM_BANDS[i])))
+            try:
+                q = self.props.directivity_factor(self.ROOM_BANDS[bi], px, pz, self._radius[0])
+            except Exception:
+                q = 1.0
+            e = _am0 * _am0             # the power it feeds the room, before the air
+            self._QACC[bi][0] += e
+            self._QACC[bi][1] += e / max(q, 1e-6)
+        if _place is not None or not self.REFLECT or self._NOREFL[0]:
+            return
+        _direct_az = math.atan2(px, max(self.props.radiation_distance, 1e-6))
+        # THE REFLECTIONS. Each is this same partial heard again off one
+        # surface, and every term in it is frequency-dependent, which is why it
+        # belongs here and not in a reverb: how much the instrument sent that
+        # way (its directivity at the departure angle, not at the listener),
+        # what the surface kept, and what the longer path cost in air. A
+        # sampled instrument has one radiation pattern and can only delay a
+        # copy of it; this sends a different spectrum at the ceiling than at
+        # the audience, because that is what the instrument does.
+        # The room is a hall, so the source sits at radiation_distance, not at
+        # the 2 m listener_distance -- that one is a stage image chosen to give
+        # the head model sensible interaural cues, not a claim about where the
+        # players are (see the radiation comment in tonelib).
+        _dm = self._src_dist(_GSX.part_of(self._MCH[0]), self.props)
+        _rk = (nomf, px, pz, self._radius[0], _dm) + _refl_state(self.props)
+        _terms = self._REFL.get(_rk) if PREP_MEMO else None
+        PREP_MEMO_STATS[0] += 1
+        if _terms is None:
+            PREP_MEMO_STATS[1] += 1
+            # BOUNDED: Valkyries (16M partials) ran a 7 GB machine into swap
+            # with the memo unbounded, and prepared slower than without it.
+            # Emptying it changes no result, only what is asked again.
+            if len(self._REFL) >= PREP_MEMO_MAX:
+                self._REFL.clear()
+                PREP_MEMO_STATS[2] += 1
+            # THE SOURCE MOVED OUT ALONG ITS RAY by the distance multiple: the
+            # same direction (so the same width and pan), the images from where
+            # it now stands -- gains and delays still relative to its direct sound
+            #
+            # AND EACH IMAGE'S EAR DELAYS ON THE DIRECT SOUND'S BASELINE. The
+            # direct sound's come from the head model's stage image at
+            # listener_distance; an image's hrtf_at counts its whole path from
+            # the origin, and rdelay already carries the path it adds -- so the
+            # image arrived (path - stage)/c late: 9.1 ms after the direct on a
+            # piano's floor bounce whose geometry says 2.1. Each image keeps its
+            # interaural difference and loses the path counted twice.
+            _sx, _sy, _sz = px * _dm, self.props.radiation_distance * _dm, pz * _dm
+            _stage = math.sqrt(px * px + self.props.listener_distance ** 2 + pz * pz)
+            _terms = []
+            for rg, rdelay, image in self.props.reflection_terms(nomf, _sx, _sy, _sz, self._radius[0]):
+                _rli, _rri, _rld, _rrd = self.props.hrtf_at(image[0], image[2], image[1])
+                _sh = (math.sqrt(image[0] ** 2 + image[1] ** 2 + image[2] ** 2) - _stage) / self.props.sound_speed
+                _terms.append((rg, rdelay, image, (_rli, _rri, _rld - _sh, _rrd - _sh)))
+            if PREP_MEMO:
+                self._REFL[_rk] = _terms
+        for rg, rdelay, image, (rli, rri, rld, rrd) in _terms:
+            ix, iy, iz = image
+            self._AZ[0] = math.atan2(ix, max(iy, 1e-6))
+            gm = ampM * rg
+            # as the table will store it: onsets are kept as whole samples
+            self._RD[0] = float(int(non + rdelay*SR) - int(non))
+            self.emit_partial(om/self._PJ[0], gm*self.props.hrtf_gain(nomf, rli),
+                         gm*self.props.hrtf_gain(nomf, rri), gm, nomf,
+                         non + rdelay*SR, noff + rdelay*SR, fa, re, ch,
+                         logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0,
+                         _place=(rld*SR, rrd*SR, ix, iz))
+        self._RD[0] = 0.0
+        self._AZ[0] = _direct_az
+
+
 def _prepare(path, tuner='hybrid440', sink=None):
     """Parse + tune + build the full partial table (the one-time cost). Returns a
     dict of contiguous arrays ready for synth_window(); reused by render() (one
@@ -4794,307 +5104,47 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _REV = [None]
     REV_FLOOR = math.log(1e5)    # a reversed decay starts 100 dB under its arrival
 
-    def _reverse_partial(om, ampL, ampR, ampM, nomf, non, fa, ch, logr, logrA, aft, sus, cv, cc,
-                         crl, sj, csc, gr, cr, ph0):
-        """One partial of the forward note, emitted TIME-REVERSED: what a tape
-        of it played backwards is. Each decay is a growth at its own rate, so
-        the longest-lived modes rise first and the brief ones -- the bright
-        upper modes, the stick's strike -- surge in at the end; a partial that
-        started d after the forward onset ends d before the arrival. Each of
-        the two decays (the kernel's logr and its aftersound, logrA) is its own
-        row, begun where it is REV_FLOOR under its end (or at the note's
-        onset, faded in), so no growth is ever more than 100 dB. The attack's
-        chiff, a hump of wash just after the strike, becomes a swell of noise
-        (a noise row, the wash's width) just before the arrival."""
-        n0, arr = _REV[0]
-        end = arr - (non - n0)
-        if end <= n0:
-            return
-        _REV[0] = None                             # its own rows are forward rows
-        try:
-            _reverse_rows(n0, end, om, ampL, ampR, ampM, nomf, fa, ch, logr, logrA, aft, sus, cv, cc,
-                          crl, sj, csc, gr, cr, ph0)
-        finally:
-            _REV[0] = (n0, arr)
+    # THE EMITTER (_Emitter, above): the names it reads, handed to it as the
+    # same objects; what is bound later is handed over where it is bound.
+    em = _Emitter()
+    em.A = A
+    em.REFLECT = REFLECT
+    em.REV_FLOOR = REV_FLOOR
+    em.ROOM_BANDS = ROOM_BANDS
+    em._AZ = _AZ
+    em._BR = _BR
+    em._CBW = _CBW
+    em._DL = _DL
+    em._EFXN = _EFXN
+    em._FMPH = _FMPH
+    em._FMW = _FMW
+    em._FX = _FX
+    em._GL = _GL
+    em._LATE = _LATE
+    em._LV = _LV
+    em._MCH = _MCH
+    em._MK = _MK
+    em._NOREFL = _NOREFL
+    em._NYQ_OM = _NYQ_OM
+    em._PJ = _PJ
+    em._PL = _PL
+    em._PX = _PX
+    em._PZ = _PZ
+    em._QACC = _QACC
+    em._RD = _RD
+    em._REFL = _REFL
+    em._REV = _REV
+    em._RINGF = _RINGF
+    em._TB = _TB
+    em._VB = _VB
+    em._VDL = _VDL
+    em._XPON = _XPON
+    em._radius = _radius
+    _reverse_partial = em._reverse_partial
+    _reverse_rows = em._reverse_rows
+    emit_partial = em.emit_partial
 
-    def _reverse_rows(n0, end, om, ampL, ampR, ampM, nomf, fa, ch, logr, logrA, aft, sus, cv, cc,
-                      crl, sj, csc, gr, cr, ph0):
-        _out = max(fa, 0.001 * SR)                 # the forward fade-in, now the cut-off
-        _out = min(_out, 0.5 * (end - n0))
-        # ...AND THE PHASE MIRRORED: cos(w t + ph0) backwards is cos(w t' - ph0),
-        # so each row reaches -ph0 at its end, where the forward one began at
-        # ph0. The modes that set out together at the strike arrive together:
-        # turned through whatever phase their spans gave them, the crash's
-        # arrival summed incoherently, 4-5 dB short of the strike it mirrors.
-        def _ph(start):
-            return -ph0 - om * _PJ[0] * (end - start)
-        for w, lr in (((1.0 - sus) * (1.0 - aft), logr), ((1.0 - sus) * aft, logrA), (sus, 0.0)):
-            if w <= 0.0:
-                continue
-            span = REV_FLOOR / lr * SR if lr > 0.0 else end - n0
-            start = max(n0, end - span)
-            g = w * math.exp(-lr * (end - start) / SR)
-            fin = 0.01 * SR if start <= n0 else 0.001 * SR
-            # the forward fade-in, reversed, is a fade-out ENDING at the arrival.
-            # ITS WASH WITH IT: the chiff's sustained floor (sj x cv, the
-            # partial's own jittered copy) rides the partial's level, so it
-            # swells as the partial does -- a hat or a cymbal is mostly that
-            # wash (sj x cv ~115 x the modes on the closed hat), and without it
-            # a reversed hat was its quiet modes and a 2 ms click. The row's own
-            # attack hump is made a sample wide and its release hump dropped:
-            # the hump is the arrival's, below
-            # ...its fade-out no longer than the row itself, so it ENDS at the
-            # arrival: a slow forward fade-in (the jazz crash's, 0.36 s) on a
-            # row begun 29 ms before it went on growing past it, ~e^144 -- NaN
-            _o = min(_out, max(1.0, end - start))
-            emit_partial(om, ampL * g, ampR * g, ampM * g, nomf, start, max(start + 1.0, end - _o),
-                         fin, _o, 1.0, -lr, 0.0, 0.0, 0.0, cv, cc, 0.0, sj, csc, gr, cr, _ph(start))
-        jp = cv * csc * 0.25                       # the hump's peak, r(1-r) at r = 1/2
-        if jp > 0.0 and ch > 0.0:
-            _cbw = (_CBW[0], _CBW[1])
-            _CBW[0], _CBW[1] = -max(abs(_cbw[0]), 1e-3), 0.0
-            _nr = _NOREFL[0]
-            _NOREFL[0] = True
-            start = max(n0, end - ch)
-            pk = end - ch / 3.0                    # the forward hump peaks a third in
-            g = jp * (1.0 - sus) * (1.0 - aft) * math.exp(-logr * (ch / 3.0) / SR)
-            emit_partial(om, ampL * g, ampR * g, ampM * g, nomf, start, max(start + 1.0, pk),
-                         max(1.0, pk - start), max(1.0, end - pk), ch, 0.0, 0.0, 0.0, 1.0, 0.0,
-                         cc, crl, 0.0, csc, gr, cr, _ph(start))
-            _CBW[0], _CBW[1] = _cbw
-            _NOREFL[0] = _nr
 
-    def emit_partial(om, ampL, ampR, ampM, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0=0.0,
-                     _place=None):
-        # _place is (delL, delR, px, pz) for an image source; None means the
-        # direct sound, which also emits the images.
-        if _REV[0] is not None and _place is None:
-            _reverse_partial(om, ampL, ampR, ampM, nomf, non, fa, ch, logr, logrA, aft, sus, cv, cc,
-                             crl, sj, csc, gr, cr, ph0)
-            return
-        om = om * _PJ[0]
-        if _XPON[0] and om >= _NYQ_OM:
-            return          # a transposition (_XP) carried it past Nyquist
-        dl, dr, px, pz = _place if _place else (_DL[0], _DL[1], _PX[0], _PZ[0])
-        _am0 = ampM
-        if _place is None:
-            _AZ[0] = math.atan2(px, max(props.radiation_distance, 1e-6))
-            # FURTHER AWAY, THE SAME BALANCE: a channel's distance multiple
-            # (_src_dist -- CC91, or the voice's own) moves the source out
-            # along its own ray, so the reflections below follow it and the
-            # direct path crosses the extra air -- its top end, a few dB at 8-16
-            # kHz over ten metres. Its LEVEL stays as the mix wrote it: that is
-            # the normalisation that makes the send a distance, not a fader
-            # (roomtail sets the tail by the same multiple).
-            _dm = _src_dist(_GSX.part_of(_MCH[0]), props)
-            if _dm != 1.0:
-                _r0 = math.sqrt(px * px + props.radiation_distance ** 2 + pz * pz)
-                _ga = 10.0 ** (-props.air_absorption_db_per_m(nomf) * (_dm - 1.0) * _r0 / 20.0)
-                # ...AND THE PART AS LOUD AS IT WAS. Further out the direct
-                # weakens against its own images, so holding the direct alone
-                # left a part sent to 127 1.5-3 dB louder (measured over an
-                # octave: flute, piano, strings). The direct and its early
-                # images are held to the energy they had at the voice's own
-                # distance: the ratio between them moves, which is the cue
-                if REFLECT and not _NOREFL[0]:
-                    _ga *= _refl_norm(nomf, px, pz, _dm)
-                ampL *= _ga; ampR *= _ga; ampM *= _ga
-            # THE FILE'S GS EQ, on the parts that have it on (gs_eq_gain):
-            # the partial at its frequency, its reflections with it
-            if _GS_EQ and _GSX.part_of(_MCH[0]) not in _GS_EQ['off']:
-                _ge = gs_eq_gain(nomf, _GS_EQ['eq'])
-                ampL *= _ge; ampR *= _ge; ampM *= _ge
-            # THE INSERTION EFFECT's compressor (gsefx), before its OD: its
-            # sustain the decay slowed (logr, logrA), its makeup a gain. Its
-            # EQ is after the OD and the amp: the speaker pass (_EFXEQ_CH)
-            _ex = _EFXN[0]
-            if _ex is not None:
-                if _ex['comp'] is not None:
-                    logr = logr * _ex['comp'][0]
-                    logrA = logrA * _ex['comp'][0]
-                    ampL *= _ex['comp'][1]; ampR *= _ex['comp'][1]; ampM *= _ex['comp'][1]
-                    # ...and its attack: the onset risen over it (gsefx.CMP_ATTACK_MS)
-                    if _ex['comp'][2] > 0.0:
-                        fa = max(fa, _ex['comp'][2] * SR)
-            # A HAMMER-ON / PULL-OFF (hammer_legato): no pick -- the string
-            # rings on from the note that was picked, so each partial starts
-            # where its own decay (the compressor's, if any) has got to since
-            # that pick (the kernel's two-stage law: logr, then the
-            # aftersound's logrA), less what the fretting finger costs
-            # (HAMMER_LOSS_DB)
-            if _HAM[0] > 0.0:
-                _hg = (((1.0 - aft) * math.exp(-logr * _HAM[0]) + aft * math.exp(-logrA * _HAM[0]))
-                       * HAMMER_GAIN)
-                ampL *= _hg; ampR *= _hg; ampM *= _hg
-        # THE EAR DELAY MOVES THE CARRIER, NOT JUST THE ENVELOPE. A path length
-        # delays the whole signal; delaying only the envelope leaves both ears
-        # with identical carrier phase, so a held note has no interaural time
-        # difference at all -- and below ~500 Hz, where the head casts no shadow
-        # (0.01 dB at C2), ITD is the ONLY cue there is. Measured on a C2 string
-        # chord, sustain-only peak IACC: 0.9978 as a point source, 0.9926 with
-        # the players seated but the carrier shared, 0.8382 with both. The seats
-        # supply the positions; this is what turns a position into an arrival.
-        # p0 = -om*(non + d) + ph0, i.e. exactly "this partial, delayed by d".
-        #
-        # THE SAME PLATE STRUCK AGAIN (fold_restrike: a gong). The new strike
-        # does not erase the old ring, it adds to it -- and both are the same
-        # modes, at the same frequencies, each decaying at its own one rate
-        # (no aftersound: a single exponential). So from the re-strike on the
-        # old mode IS its value then, decaying on the new note's clock, and the
-        # two sum as phasors into one row: exact, and a roll costs one strike's
-        # rows however long it runs. The old strike's direct rows (and its
-        # bloom's, once risen) end at the re-strike, fading over the new
-        # attack; the new strike's direct rows take them in. Reflections are
-        # made from the direct row below, so they fold with it.
-        if _place is None and _FOLDIN[0] and not _LATE[0] and aft == 0.0 and sus == 0.0:
-            _old = _FOLDIN[0].pop(round(nomf, 3), None)
-            if _old:
-                _pl, _pr = -om * (non + dl) + ph0, -om * (non + dr) + ph0
-                _zl, _zr, _zm = (ampL * cmath.exp(1j * _pl), ampR * cmath.exp(1j * _pr),
-                                 ampM * cmath.exp(1j * _pl))
-                for _oL, _oR, _oM, _q0, _q0R, _n1, _lr in _old:
-                    _g = math.exp(-_lr * (non - _n1) / SR)
-                    _zl += _oL * _g * cmath.exp(1j * _q0)
-                    _zr += _oR * _g * cmath.exp(1j * _q0R)
-                    _zm += _oM * _g * cmath.exp(1j * _q0)
-                ampL, ampR, ampM = abs(_zl), abs(_zr), abs(_zm)
-                ph0 = cmath.phase(_zl) + om * (non + dl)
-        # (taking in the strike before FIRST, then leaving the sum to the next:
-        # in a roll each strike carries all the ones before it)
-        if _place is None and _FOLD[0] is not None:
-            _n2, _xf, _st = _FOLD[0]
-            if aft == 0.0 and sus == 0.0 and non + fa <= _n2 < noff:
-                _st.setdefault(round(nomf, 3), []).append(
-                    (ampL, ampR, ampM, -om * (non + dl) + ph0, -om * (non + dr) + ph0, non, logr))
-                noff = _n2
-                re = _xf
-        A["om"].append(om)
-        A["p0"].append(-om*(non + dl) + ph0)
-        A["p0R"].append(-om*(non + dr) + ph0)
-        A["aL"].append(ampL); A["aR"].append(ampR)
-        # ampM is this partial BEFORE the head model -- what the instrument
-        # radiates, not what an ear receives. aL/aR are ampM times a per-ear
-        # hrtf_gain, so keeping it costs one column and makes a source-referenced
-        # (object) render exact rather than an un-mixing of the binaural one.
-        A["aM"].append(ampM); A["mch"].append(_MCH[0])
-        A["px"].append(px); A["pz"].append(pz); A["az"].append(_AZ[0])
-        # 1 for the sound that goes straight to the listener, 0 for an image.
-        # The amplifier distorts BEFORE anything radiates, so its products are
-        # formed from the direct signal only -- a product between a direct
-        # partial and its own reflection would be two copies of one voltage
-        # beating against each other, which happens in the room and not in the
-        # valve.
-        # ...and a LATE COPY's (the bloom) 0.75 and 0.25: still direct and an
-        # image either side of 0.5, as every reader tests, but marked, so the
-        # sympathetic pass does not take its late arrivals for new strikes
-        A["dr"].append((0.75 if _LATE[0] else 0.9 if _RINGF[0] else 1.0) if _place is None
-                       else (0.25 if _LATE[0] else 0.1 if _RINGF[0] else 0.0))
-        A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re); A["ch"].append(ch)
-        A["logr"].append(logr); A["logrA"].append(logrA); A["aft"].append(aft); A["sus"].append(sus)
-        A["cv"].append(cv); A["cc"].append(cc); A["crl"].append(crl); A["sj"].append(sj); A["csc"].append(csc)
-        # index is t*f*gran, so gran IS the fractional width; an absolute
-        # width in Hz is that same number divided by where the partial sits.
-        A["cbw"].append(_CBW[1]/max(1e-6,nomf) if _CBW[1] > 0.0 else _CBW[0])
-        A["tbav"].append(_TB[0]); A["tau"].append(_TB[1]); A["tcut"].append(_TB[2])
-        # THE GLIDE IS PER NOTE, NOT PER PARTIAL, but it is stamped per partial
-        # because that is where the kernel reads it -- and because _TB beside it
-        # is NOT per note: mode lock overrides it per partial, which is exactly
-        # why portamento could not borrow those three slots and has its own.
-        A["gb"].append(_GL[0]); A["gt"].append(_GL[1]); A["gc"].append(_GL[2])
-        # CC77 moves the depth -- adding up to 30 cents where a voice has none,
-        # taking a voice's own toward zero downward -- and CC76 the rate.
-        _vd0 = _VB[0]
-        if _SV[0] > 0.0:
-            _vd0 = _vd0 + _SV[0] * (2.0 ** (T.SOUND_VIB_DEPTH_CENTS / 1200.0) - 1.0)
-        elif _SV[0] < 0.0:
-            _vd0 = _vd0 * (1.0 + _SV[0])
-        A["vd"].append(_vd0); A["vr"].append(_VB[1] * _SV[1]); A["vp"].append(_VB[2])
-        A["vdl"].append(_VDL[0])
-        A["delL"].append(dl); A["delR"].append(dr)
-        A["gr"].append(gr); A["cr"].append(cr); A["br"].append(_BR[0] if (_BR[0] >= 0 or _LV[0] < 0) else _LV[0]); A["pl"].append(_PL[0])
-        A["fx"].append(_FX[0]); A["mk"].append(_MK[0]); A["rdl"].append(_RD[0])
-        A["fmw"].append(_FMW[0])
-        # the onset's fraction of a sample, which the table's whole-sample
-        # `non` drops and the phase anchor above keeps: live needs it to move a
-        # partial's frequency without moving its phase (a room image's onset
-        # is hardly ever a whole sample)
-        A["nfr"].append(non - math.floor(non))
-        A["fmp"].append(-_FMW[0] * (non + dl) + _FMPH[0] if _FMW[0] else 0.0)
-        A["fmpR"].append(-_FMW[0] * (non + dr) + _FMPH[0] if _FMW[0] else 0.0)
-        if _place is None and ampM > 0.0:
-            # Q is how much louder this partial is toward the listener than its
-            # own spherical average, so ampM^2/Q is the power it feeds the room.
-            # Read at the band centre: the sphere integral is cached per radius
-            # and frequency, and per-partial resolution buys nothing here.
-            bi = min(range(len(ROOM_BANDS)),
-                     key=lambda i: abs(math.log(max(nomf, 1e-6) / ROOM_BANDS[i])))
-            try:
-                q = props.directivity_factor(ROOM_BANDS[bi], px, pz, _radius[0])
-            except Exception:
-                q = 1.0
-            e = _am0 * _am0             # the power it feeds the room, before the air
-            _QACC[bi][0] += e
-            _QACC[bi][1] += e / max(q, 1e-6)
-        if _place is not None or not REFLECT or _NOREFL[0]:
-            return
-        _direct_az = math.atan2(px, max(props.radiation_distance, 1e-6))
-        # THE REFLECTIONS. Each is this same partial heard again off one
-        # surface, and every term in it is frequency-dependent, which is why it
-        # belongs here and not in a reverb: how much the instrument sent that
-        # way (its directivity at the departure angle, not at the listener),
-        # what the surface kept, and what the longer path cost in air. A
-        # sampled instrument has one radiation pattern and can only delay a
-        # copy of it; this sends a different spectrum at the ceiling than at
-        # the audience, because that is what the instrument does.
-        # The room is a hall, so the source sits at radiation_distance, not at
-        # the 2 m listener_distance -- that one is a stage image chosen to give
-        # the head model sensible interaural cues, not a claim about where the
-        # players are (see the radiation comment in tonelib).
-        _dm = _src_dist(_GSX.part_of(_MCH[0]), props)
-        _rk = (nomf, px, pz, _radius[0], _dm) + _refl_state(props)
-        _terms = _REFL.get(_rk) if PREP_MEMO else None
-        PREP_MEMO_STATS[0] += 1
-        if _terms is None:
-            PREP_MEMO_STATS[1] += 1
-            # BOUNDED: Valkyries (16M partials) ran a 7 GB machine into swap
-            # with the memo unbounded, and prepared slower than without it.
-            # Emptying it changes no result, only what is asked again.
-            if len(_REFL) >= PREP_MEMO_MAX:
-                _REFL.clear()
-                PREP_MEMO_STATS[2] += 1
-            # THE SOURCE MOVED OUT ALONG ITS RAY by the distance multiple: the
-            # same direction (so the same width and pan), the images from where
-            # it now stands -- gains and delays still relative to its direct sound
-            #
-            # AND EACH IMAGE'S EAR DELAYS ON THE DIRECT SOUND'S BASELINE. The
-            # direct sound's come from the head model's stage image at
-            # listener_distance; an image's hrtf_at counts its whole path from
-            # the origin, and rdelay already carries the path it adds -- so the
-            # image arrived (path - stage)/c late: 9.1 ms after the direct on a
-            # piano's floor bounce whose geometry says 2.1. Each image keeps its
-            # interaural difference and loses the path counted twice.
-            _sx, _sy, _sz = px * _dm, props.radiation_distance * _dm, pz * _dm
-            _stage = math.sqrt(px * px + props.listener_distance ** 2 + pz * pz)
-            _terms = []
-            for rg, rdelay, image in props.reflection_terms(nomf, _sx, _sy, _sz, _radius[0]):
-                _rli, _rri, _rld, _rrd = props.hrtf_at(image[0], image[2], image[1])
-                _sh = (math.sqrt(image[0] ** 2 + image[1] ** 2 + image[2] ** 2) - _stage) / props.sound_speed
-                _terms.append((rg, rdelay, image, (_rli, _rri, _rld - _sh, _rrd - _sh)))
-            if PREP_MEMO:
-                _REFL[_rk] = _terms
-        for rg, rdelay, image, (rli, rri, rld, rrd) in _terms:
-            ix, iy, iz = image
-            _AZ[0] = math.atan2(ix, max(iy, 1e-6))
-            gm = ampM * rg
-            # as the table will store it: onsets are kept as whole samples
-            _RD[0] = float(int(non + rdelay*SR) - int(non))
-            emit_partial(om/_PJ[0], gm*props.hrtf_gain(nomf, rli),
-                         gm*props.hrtf_gain(nomf, rri), gm, nomf,
-                         non + rdelay*SR, noff + rdelay*SR, fa, re, ch,
-                         logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0,
-                         _place=(rld*SR, rrd*SR, ix, iz))
-        _RD[0] = 0.0
-        _AZ[0] = _direct_az
     (_stroked, inner_ridge, notes, stroke_morph, stroke_mouth, stroke_pitch,
         stroke_tilt) = _prep_strokes(notes)
 
@@ -5212,6 +5262,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _RNORM.clear()
             g = _RNORM[k] = math.sqrt(e[0] / e[1])
         return g
+    em._refl_norm = _refl_norm
 
     def _src_dist(ch, pr):
         """The source's distance as a multiple of its voice's own: the channel's
@@ -5227,6 +5278,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         if d is None:
             d = getattr(pr, 'reverb_distance', None)
         return 1.0 if d is None else max(0.1, float(d))
+    em._src_dist = _src_dist
     _CLAV_CH = {}
     _DETUNE_CH = {}
     _DRONE_CH = {}          # how many drones, per channel: see below
@@ -5362,6 +5414,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
 
     _SND_PEND = [None]
     _SV = [0.0, 1.0]         # per-note CC77 depth offset d, CC76 rate scale
+    em._SV = _SV
 
     def _push_finish(_p):
         """THE BELLOWS' PUSH (tonelib.bellows_push_gain): a note from silence,
@@ -5418,10 +5471,13 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _PUSH_T0 = {}           # channel -> when its bellows' push began (a note from silence)
     _HAM_T0 = {}            # channel -> when its string was last PICKED (hammer_legato)
     _FOLD = [None]          # (re-strike sample, crossfade, store) if this note's plate is struck again
+    em._FOLD = _FOLD
     _FOLDIN = [None]        # {mode Hz: [old rows]} the strike before left this one to take in
+    em._FOLDIN = _FOLDIN
     _FOLD_STORE = {}        # (ch, note) -> (re-strike time s, store)
     _FOLD_ON = os.environ.get('TUNING_FOLD', '1') not in ('0', 'off', '')
     _HAM = [0.0]            # this note's seconds since that pick, if a hammer-on; else 0
+    em._HAM = _HAM
     _LFLIP = []             # rows on the Leslie rotor their pitch would not pick (the crossover's copies)
 
     def _mvol():
@@ -5958,6 +6014,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _EFG = _EFXN[0].get('od_gain') or 1.0
             chan_vol *= _EFG
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10: a turn (tonelib.stage_angle)
+        em.props = props
         if _seat:
             # a seat inside the instrument, at the angle its pan names
             props.seat_x = props.listener_distance * math.tan(T.stage_angle(_seat))
