@@ -2245,6 +2245,103 @@ def prepare(path, tuner='hybrid440', sink=None):
     return out
 
 
+def _prep_eastern_tuning(FREQ, tuner):
+    """A SECONDARY TUNING for the Eastern instruments (ragas.py): the table the
+    classes with tuning_family 'indian' play, Sa at the primary tuner's pitch
+    for its key unless named; None when off. Returns FREQ_E."""
+    # A SECONDARY TUNING for the Eastern instruments (ragas.py): the classes that
+    # declare tuning_family = 'indian' play this table, the rest the render's.
+    # Sa sits at the primary tuner's own pitch for its key unless the spec
+    # names one, so Sa coincides with the Western instruments. None = off.
+    FREQ_E = None
+    _east = EASTERN or os.environ.get('TUNING_EASTERN') or None
+    if _east:
+        import ragas
+        _sys_e, _raga_e, _sa_key, _sa_hz = ragas.parse(_east)
+        FREQ_E = ragas.table(_east, sa_hz=FREQ.get(ragas.sa_note(_sa_key)))
+        T.raga_sa_note = ragas.sa_note(_sa_key)
+        T.raga_spec = _east
+    elif str(tuner).lower().startswith('raga:'):
+        # ...or the render's own tuner IS a raga's: Sa is then its Sa
+        import ragas
+        T.raga_sa_note = ragas.sa_note(ragas.parse(tuner)[2])
+        T.raga_spec = tuner
+    else:
+        T.raga_sa_note = None
+        T.raga_spec = None
+    return FREQ_E
+
+
+def _prep_gm2_store(_sys, gmon, notes, rpns, tuner):
+    """THE `gm2` TUNER'S STORE: under gm2 only, the file's MTS dumps and
+    single-note changes, with RPN 0/3 and 0/4, replayed into a timeline of
+    tuning tables per channel. Returns _MTS_TL."""
+    # ---------------------------------------------- THE `gm2` TUNER'S STORE
+    #
+    # Under `gm2`, and only under it, the FILE owns the tuning: its MTS dumps
+    # and single-note changes fill an mts.TuningStore, and RPN 0/4 and 0/3 pick
+    # a bank and program per channel. Replayed in message order -- the
+    # tie-break the RPNs taught -- into a timeline of (time, table) per
+    # channel, and each note reads the table in force at its ONSET through
+    # _F(ch, t). Under every other tuner _F is simply FREQ, so the note loop
+    # below does not branch on the tuner at all.
+    #
+    # THE SPEC SAYS SOUNDING NOTES MOVE, for two of these: a tuning program or
+    # bank select ("This change takes effect immediately") and a real-time
+    # single-note change. Here each note keeps the table in force at its
+    # onset, so a change that lands mid-note reaches it only from its next
+    # onset -- moving a sounding partial is a gesture, and live does it where
+    # this does not. Counted and reported, not hidden. Dumps and non-real-time
+    # changes are setup messages and do not count: the spec has them ignored
+    # by notes already sounding, which is exactly what this does.
+    _MTS_TL = {}
+    if str(tuner).lower() == 'gm2':
+        _store = _MTS.TuningStore(warn=lambda m: print("  " + m))
+        _tev = [(_t, _q, 'mts', None, _m) for _t, _q, _m in _sys['mts']]
+        for _c, _evs in rpns.items():
+            _tev += [(_t, _q, _k, _c, _v) for _t, _k, _v, _q in _evs
+                     if _k in ('tprog', 'tbank')]
+        _tev += [(_t, _q, 'gmon', None, None) for _t, _q in gmon]
+        _tev.sort(key=lambda e: (e[0], e[1]))
+        _cur = {}
+        # Every channel a note is on, and at least the first sixteen: a MIDI
+        # 2.0 file can address sixteen groups of them.
+        _mts_chs = sorted(set(range(16)) | {n[0] for n in notes})
+
+        def _snap(_t):
+            for _c in _mts_chs:
+                _tab = _store.table_for(_c)
+                if _cur.get(_c) is not _tab:
+                    _cur[_c] = _tab
+                    _MTS_TL.setdefault(_c, []).append(
+                        (_t, {_k: float(_tab[_k]) for _k in range(128)}))
+        _snap(0.0)
+        for _t, _q, _k, _c, _v in _tev:
+            if _k == 'mts':
+                _store.load(_v)
+            elif _k == 'tprog':
+                _store.select(_c, program=_v)
+            elif _k == 'tbank':
+                _store.select(_c, bank=_v)
+            elif _k == 'gmon':
+                _store.reset_selections()
+            _snap(_t)
+        _late = 0
+        for _t, _q, _m in _sys['mts']:
+            if _m[0] == 'single' and _m[4]:
+                _late += sum(1 for _n in notes if _n[2] < _t < _n[3])
+        for _c, _evs in rpns.items():
+            for _t, _k, _v, _q in _evs:
+                if _k in ('tprog', 'tbank'):
+                    _late += sum(1 for _n in notes
+                                 if _n[0] == _c and _n[2] < _t < _n[3])
+        if _late:
+            print("  gm2: %d notes were sounding when a tuning change that "
+                  "should move them arrived; here they keep their tuning until "
+                  "their next onset (live moves them)" % _late)
+    return _MTS_TL
+
+
 def _prep_sound_controls(_CMXEV, _cmx_at, _sys, gmon):
     """CC71-78 IN FORCE AT AN ONSET: each channel's sound-controller timeline
     and the lookup into it. Returns (_SND_TL, _snd_d)."""
@@ -3346,6 +3443,79 @@ def _prep_bend_arrays(BCrows, BRrows, _BLrows, nblk):
     return (BC, BL, BR)
 
 
+def _prep_strokes(notes):
+    """SCRAPED instruments expanded into their ridge impacts (and the SFX
+    strokes) before anything else reads the note list. Returns (_stroked,
+    inner_ridge, notes, stroke_morph, stroke_mouth, stroke_pitch, stroke_tilt)."""
+    # SCRAPED instruments expand into their individual ridge impacts before
+    # anything else looks at the note list, so the choke and the envelopes all
+    # see the real strokes.
+    expanded = []
+    inner_ridge = set()          # ridges after the first, which must not choke each other
+    stroke_pitch = {}            # (note, t) -> frequency scale, for swept instruments
+    stroke_tilt = {}             # (note, t) -> a throat's tilt dB, for a voice's pulses
+    stroke_mouth = {}            # (note, t) -> a throat's formant scale: the mouth's opening
+    stroke_morph = {}            # (note, t) -> a throat's vowel moving: toward its DRUM_MODES_B
+    _sfx_strokes_of = {}         # (program, note) -> (kit, key) whose strokes a melodic SFX plays
+    _stroked = set()             # (ch, note, t) of every stroke: live keeps their own onsets
+    for ev in notes:
+        ch, note, on, off, vel, rest, pg = ev
+        # A KEY THAT ALSO STRIKES ANOTHER'S SOUND (percussion_map.KIT_LAYER):
+        # the metronome bell's tick is the click key's, at the bell's velocity
+        if is_drum(pg):
+            for _ln in key_layers(note, kit_for_program(int(pg))):
+                expanded.append((ch, _ln, on, off, vel, rest, pg))
+        # A LAYERED VARIATION (patch_map.LAYERED: GS's Orchestra): one event a
+        # layer, each its own program and transposition, before anything else
+        # sees the note
+        _lys = None if is_drum(pg) else layers_of(pg)
+        if _lys:
+            # ...each within its velocity range (a "Velo" variation switches
+            # voice with how hard the key is struck)
+            for _lp, _st, _vlo, _vhi in _lys:
+                if 0 <= note + _st <= 127 and _vlo <= vel <= _vhi:
+                    expanded.append((ch, note + _st, on, off, vel, rest, _lp))
+            continue
+        strokes = rasp_strokes(note, on, off, kit=kit_for_program(int(pg))) if is_drum(pg) else None
+        # ...AND A KIT KEY PLAYED FROM THE KEYBOARD (patch_map.melodic_sfx: a GS
+        # SFX variation) keeps its strokes: the dog's bark, the gallop's hooves,
+        # the machine gun's train, the laugh's syllables, the bubbles' run --
+        # its class names the key whose table they are
+        if strokes is None and not is_drum(pg):
+            # keyed by the variation and layer as well: a VariationProgram is
+            # equal to its plain program, so 126.1's laugh and 126.0's applause
+            # shared one entry, whichever came first
+            _skk = (pg, getattr(pg, 'variation', 0), getattr(pg, 'layer', None), note)
+            _sk = _sfx_strokes_of.get(_skk, 0)
+            if _sk == 0:
+                _sk = _sfx_strokes_of[_skk] = getattr(
+                    property_class_for_note(pg, note), 'sfx_strokes_of', None)
+            if _sk:
+                # ...the note's own key in that kit where it names none (the
+                # Morse keyboard: every key its character)
+                strokes = rasp_strokes(note if _sk[1] is None else _sk[1], on, off, kit=_sk[0])
+        if strokes is None:
+            expanded.append(ev); continue
+        for k, st in enumerate(strokes):
+            t0, t1, lvl = st[0], st[1], st[2]
+            # A swept instrument gives each stroke its own PITCH -- a bell tree's
+            # rod crosses graduated bars. Carried alongside the note list the way
+            # inner_ridge is, so the event tuple keeps its shape.
+            if len(st) > 3 and st[3] != 1.0:
+                stroke_pitch[(note, t0)] = st[3]
+            if len(st) > 4:
+                stroke_tilt[(note, t0)] = st[4]
+            if len(st) > 5:
+                stroke_mouth[(note, t0)] = st[5]
+            if len(st) > 6:
+                stroke_morph[(note, t0)] = st[6]
+            expanded.append((ch, note, t0, t1, max(1, int(vel * lvl)), rest, pg))
+            _stroked.add((ch, note, t0))
+            if k: inner_ridge.add((note, t0))
+    notes = expanded
+    return (_stroked, inner_ridge, notes, stroke_morph, stroke_mouth, stroke_pitch, stroke_tilt)
+
+
 def _prep_exclusive_classes(inner_ridge, notes):
     """EXCLUSIVE CLASSES: when a closed hi-hat (or any choke group's stroke)
     damps a ringing one, per drum channel. Returns choke_at."""
@@ -3936,6 +4106,173 @@ def _prep_damper_helpers(A, _DAMP_OPEN, _DAMP_TRACKS, _PEDV_CH, _PED_CH, _SOFF_C
     return (_damp_close, _damper_falls, _damper_lands, _pedal_damping_of, _pedal_spans_of, _sound_off)
 
 
+def _prep_tremolo_channels(_CMXEV, _CMX_TREM, _cmx_at):
+    """The controller matrix's tremolo channels: each at the LFO1 rate in force
+    where its depth peaks. Returns _TREM_CH."""
+    _TREM_CH = {}
+    # ...the controller matrix's (above): a GM vibrato's rate, its rows' map
+    for _c, (_pk, _map) in _CMX_TREM.items():
+        # ...at the LFO1 rate in force where its depth peaks (a sideband's
+        # offset is fixed for the note: a rate that moved mid-note would move
+        # it, which nothing here does)
+        _tpk = max(_CMXEV['tva'][_c], key=lambda e: e[1])[0]
+        _TREM_CH[_c] = (max(0.5, TREMOLO_MATRIX_HZ + _cmx_at('rate', _c, _tpk)), _pk, False, 0.0, None, _map)
+    return _TREM_CH
+
+
+def _prep_phrase_spans(notes):
+    """A PART'S SPAN: each channel's phrases, for voices whose extra voices
+    belong to the part (drones, a piper's bag). Returns (_PHRASE_CH,
+    _SPANNED, _by_ch)."""
+    # A PART'S SPAN, for voices whose extra voices belong to the channel rather
+    # than the note -- a bagpipe's drones are the only ones today. First note-on
+    # to last note-off, so a drone sounds under the whole line instead of
+    # restarting on every note of it. See SynthProperties.unison_spans_part.
+    # PHRASES, not the channel's whole lifetime. This spanned first note-on to
+    # last note-off, so a bagpipe part with sixteen bars of tacet in the middle
+    # droned straight through them. A piper does not stop for a two-bar rest and
+    # does not keep the bag up through a whole section off, so the drones follow
+    # the PLAYED PHRASES: notes are grouped, and a gap longer than the voice's
+    # part_break_s starts a new one.
+    #
+    # Seconds and not bars, because the decision being modelled is when a player
+    # lets the bag down, and that is a real-time judgement.
+    _PHRASE_CH = {}
+    _by_ch = {}
+    for _e in notes:
+        _by_ch.setdefault(_e[0], []).append((_e[2], _e[3]))
+    for _c, _ns in _by_ch.items():
+        _gap = 2.0
+        for _p in {_e[6] for _e in notes if _e[0] == _c}:
+            _gap = getattr(property_class_for_program(_p), 'part_break_s', _gap)
+        _ph = []
+        for _on, _off in sorted(_ns):
+            if _ph and _on - _ph[-1][1] <= _gap:
+                _ph[-1] = (_ph[-1][0], max(_ph[-1][1], _off))
+            else:
+                _ph.append((_on, _off))
+        _PHRASE_CH[_c] = _ph
+    _SPANNED = set()          # (channel, phrase index) already emitted
+    return (_PHRASE_CH, _SPANNED, _by_ch)
+
+
+def _prep_consonants(_lyr, cons_bursts, notes):
+    """CONSONANTS AS THEIR OWN EVENTS: a sung part's consonant bursts from its
+    lyrics, appended to cons_bursts."""
+    if _lyr and _CONS:
+        _by_ch = {}
+        for _e in notes:
+            _by_ch.setdefault(_e[0], []).append(_e)
+        for _ch, _rows in _lyr.items():
+            _evs = sorted(_by_ch.get(_ch, []), key=lambda e: e[2])
+            if not _evs: continue
+            _ons = [e[2] for e in _evs]
+            for _row in _rows:
+                # A syllable may have a coda and NO onset -- "ex", "es", "il"
+                # all begin on a vowel. Bailing out here when there is no
+                # onset skipped their codas too, which is why the /ks/ of "ex"
+                # stayed silent even once the spelling rules found it.
+                _spec = _VOW.CONSONANTS.get(_row[2]) if len(_row) > 2 and _row[2] else None
+                _cods = _row[3] if len(_row) > 3 and _row[3] else ()
+                if isinstance(_cods, str): _cods = (_cods,)
+                if not _spec and not _cods: continue
+                _vol, _w, _ctr, _bw = _spec[:4] if _spec else (0.0, 0.02, 1000.0, 800.0)
+                # A STOP IS A CLOSURE IN THE TUBE, and its burst is filtered by
+                # the cavity in FRONT of that closure -- so the three classes
+                # (velar compact, alveolar diffuse-rising, labial diffuse-
+                # falling) are one fact about front-cavity length, not three
+                # hand-set bands. It also makes "a velar burst follows its
+                # vowel" disappear as a special case: the front cavity is cut
+                # out of THAT vowel's own tract, so the peak runs from 2495 Hz
+                # before /i/ to 614 before /u/ with no rule for it.
+                _shape = _stop_shape(_row[2], _row[1]) if _spec else None
+                _el = (_spec[4] if len(_spec) > 4 else 0.3) if _spec else 0.3
+                _i = _bisect.bisect_left(_ons, _row[0] - 1e-3)
+                if _i >= len(_evs): continue
+                _e = _evs[_i]
+                # THE LOCAL RHYTHMIC GRAIN: the shortest note hereabouts, which
+                # is what sets how fast the words are going. Scaled by the
+                # segment's own elasticity, so a fricative follows the tempo
+                # and a plosive barely does.
+                _lo = max(0, _i - 6); _hi = min(len(_evs), _i + 7)
+                _gaps = [_evs[j+1][2] - _evs[j][2] for j in range(_lo, _hi-1)
+                         if _evs[j+1][2] - _evs[j][2] > 1e-3]
+                _unit = min(_gaps) if _gaps else CONSONANT_REF
+                _w = _w * (_unit / CONSONANT_REF) ** _el
+                # ...and it may not eat the note in front of it. A consonant
+                # sits in the time before the beat; if there is less time than
+                # it wants, it gets what there is.
+                # A singer TAKES the time from the previous note -- closing
+                # that vowel early to make room -- so the limit is the note's
+                # own start, not its end. Capping at the end instead squeezed
+                # every consonant in a legato line to the 20 ms floor.
+                _prev_on = _evs[_i-1][2] if _i > 0 else 0.0
+                _room = max(0.012, (_e[2] - _prev_on) * 0.6)
+                _w = max(0.010, min(_w, _room))
+                # Friction does not stop when voicing starts; it OVERLAPS it.
+                # Ending the burst exactly on the onset put a seam there.
+                _st = _e[2] - _w * 0.78
+                _pan = _e[5][2] if isinstance(_e[5], tuple) and len(_e[5]) > 2 else 0.0
+                _g = ((_e[4] / 127.0) ** 2) * CONSONANT_GAIN * _vol
+                if _spec and _st >= 0.0:
+                    cons_bursts.append((int(_st * SR), max(8, int(_w * SR)), _ctr, _bw, 1.0,
+                                        _g * math.sqrt(max(0.0, 0.5 * (1.0 - _pan))),
+                                        _g * math.sqrt(max(0.0, 0.5 * (1.0 + _pan))),
+                                        _shape, _ch))
+                # A CODA closes the syllable at the note's END rather than
+                # opening it, and there can be TWO: "ex" is /ks/. Codas are
+                # quieter than onsets -- a singer releases them, they do not
+                # have to launch the note.
+                _back = 0.0
+                for _ck in reversed(_cods):
+                    _cd = _VOW.CONSONANTS.get(_ck)
+                    if not _cd: continue
+                    _cv, _cw2, _cc, _cbw = _cd[:4]
+                    _cel = _cd[4] if len(_cd) > 4 else 0.3
+                    _cw2 *= (_unit / CONSONANT_REF) ** _cel
+                    _cg = ((_e[4] / 127.0) ** 2) * CONSONANT_GAIN * _cv * 0.6
+                    _cst = _e[3] - _back - _cw2 * 0.5
+                    _back += _cw2 * 0.8
+                    if _cst < 0.0: continue
+                    cons_bursts.append((int(_cst * SR), max(8, int(_cw2 * SR)),
+                                        _cc, _cbw, 1.0,
+                                        _cg * math.sqrt(max(0.0, 0.5 * (1.0 - _pan))),
+                                        _cg * math.sqrt(max(0.0, 0.5 * (1.0 + _pan))),
+                                        _stop_shape(_ck, _row[1]), _ch))
+
+
+def _prep_slur_out(legato, notes):
+    """A SLUR ENDS THE NOTE IT LEAVES: the notes a legato slur leaves.
+    Returns _SLUR_OUT."""
+    # A SLUR ENDS THE NOTE IT LEAVES. The slurred note's attack is the voice's
+    # legato one (slur_attack, below); the note it follows must stop as the new
+    # one sounds, not ring its whole release under it -- on a chanter the
+    # finger moves and the old pitch is gone, and an 80 ms release under every
+    # change sounds as a release and a fresh attack (Ben, of Scotland the
+    # Brave). The notes a slurred note FOLLOWS on its channel (sounding up to
+    # its onset, or ending within the file's legato tolerance before it), for
+    # a voice that says so (SynthProperties.slur_cuts_release).
+    _SLUR_OUT = set()
+    _socc = {}
+    _sl_on = {}
+    for _e in notes:
+        _k = _socc.get((_e[0], _e[1]), 0); _socc[(_e[0], _e[1])] = _k + 1
+        if (_e[0], _e[1], _k) in legato:
+            _sl_on.setdefault(_e[0], []).append(_e[2])
+    if _sl_on:
+        import bisect as _bis
+        for _v in _sl_on.values():
+            _v.sort()
+        for _e in notes:
+            _v = _sl_on.get(_e[0])
+            if not _v:
+                continue
+            _q = _bis.bisect_right(_v, _e[2])       # the first slurred onset after this one
+            if _q < len(_v) and _e[3] >= _v[_q] - 0.02:
+                _SLUR_OUT.add((_e[0], _e[1], _e[2]))
+    return _SLUR_OUT
+
+
 def _prep_sympathetic(A, _F_SYM, _REG_CH, _SYM_CH, sink):
     """THE NOTES NOBODY HIT: sympathetic strings and the free-string register,
     emitted after the note loop and before the amplifier. Returns their rows
@@ -4212,26 +4549,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     import random; random.seed(0)   # per-note pitch/timing jitter, deterministic (as the reference seeds)
     T.RND_STREAM.seed(0)            # ...and the [RND] drum strikes' (tonelib.RandomStrike)
     FREQ = tuning_table(tuner)
-    # A SECONDARY TUNING for the Eastern instruments (ragas.py): the classes that
-    # declare tuning_family = 'indian' play this table, the rest the render's.
-    # Sa sits at the primary tuner's own pitch for its key unless the spec
-    # names one, so Sa coincides with the Western instruments. None = off.
-    FREQ_E = None
-    _east = EASTERN or os.environ.get('TUNING_EASTERN') or None
-    if _east:
-        import ragas
-        _sys_e, _raga_e, _sa_key, _sa_hz = ragas.parse(_east)
-        FREQ_E = ragas.table(_east, sa_hz=FREQ.get(ragas.sa_note(_sa_key)))
-        T.raga_sa_note = ragas.sa_note(_sa_key)
-        T.raga_spec = _east
-    elif str(tuner).lower().startswith('raga:'):
-        # ...or the render's own tuner IS a raga's: Sa is then its Sa
-        import ragas
-        T.raga_sa_note = ragas.sa_note(ragas.parse(tuner)[2])
-        T.raga_spec = tuner
-    else:
-        T.raga_sa_note = None
-        T.raga_spec = None
+    FREQ_E = _prep_eastern_tuning(FREQ, tuner)
     ch_prog, ch_progs, notes, ccs, total, legato, pws, (ats, pts, sotas, _sys) = parse(path)
     _DEDIT = _sys.get('dedit') or {}
     _EFXEV = (_sys.get('efx') or []) if os.environ.get('TUNING_GS_EFX', '1') not in ('0', 'off', '') else []
@@ -4262,69 +4580,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     rpns, master, gmon = _sys['rpns'], _sys['master'], _sys['gmon']
     _pwseq = _sys['pwseq']
 
-    # ---------------------------------------------- THE `gm2` TUNER'S STORE
-    #
-    # Under `gm2`, and only under it, the FILE owns the tuning: its MTS dumps
-    # and single-note changes fill an mts.TuningStore, and RPN 0/4 and 0/3 pick
-    # a bank and program per channel. Replayed in message order -- the
-    # tie-break the RPNs taught -- into a timeline of (time, table) per
-    # channel, and each note reads the table in force at its ONSET through
-    # _F(ch, t). Under every other tuner _F is simply FREQ, so the note loop
-    # below does not branch on the tuner at all.
-    #
-    # THE SPEC SAYS SOUNDING NOTES MOVE, for two of these: a tuning program or
-    # bank select ("This change takes effect immediately") and a real-time
-    # single-note change. Here each note keeps the table in force at its
-    # onset, so a change that lands mid-note reaches it only from its next
-    # onset -- moving a sounding partial is a gesture, and live does it where
-    # this does not. Counted and reported, not hidden. Dumps and non-real-time
-    # changes are setup messages and do not count: the spec has them ignored
-    # by notes already sounding, which is exactly what this does.
-    _MTS_TL = {}
-    if str(tuner).lower() == 'gm2':
-        _store = _MTS.TuningStore(warn=lambda m: print("  " + m))
-        _tev = [(_t, _q, 'mts', None, _m) for _t, _q, _m in _sys['mts']]
-        for _c, _evs in rpns.items():
-            _tev += [(_t, _q, _k, _c, _v) for _t, _k, _v, _q in _evs
-                     if _k in ('tprog', 'tbank')]
-        _tev += [(_t, _q, 'gmon', None, None) for _t, _q in gmon]
-        _tev.sort(key=lambda e: (e[0], e[1]))
-        _cur = {}
-        # Every channel a note is on, and at least the first sixteen: a MIDI
-        # 2.0 file can address sixteen groups of them.
-        _mts_chs = sorted(set(range(16)) | {n[0] for n in notes})
-
-        def _snap(_t):
-            for _c in _mts_chs:
-                _tab = _store.table_for(_c)
-                if _cur.get(_c) is not _tab:
-                    _cur[_c] = _tab
-                    _MTS_TL.setdefault(_c, []).append(
-                        (_t, {_k: float(_tab[_k]) for _k in range(128)}))
-        _snap(0.0)
-        for _t, _q, _k, _c, _v in _tev:
-            if _k == 'mts':
-                _store.load(_v)
-            elif _k == 'tprog':
-                _store.select(_c, program=_v)
-            elif _k == 'tbank':
-                _store.select(_c, bank=_v)
-            elif _k == 'gmon':
-                _store.reset_selections()
-            _snap(_t)
-        _late = 0
-        for _t, _q, _m in _sys['mts']:
-            if _m[0] == 'single' and _m[4]:
-                _late += sum(1 for _n in notes if _n[2] < _t < _n[3])
-        for _c, _evs in rpns.items():
-            for _t, _k, _v, _q in _evs:
-                if _k in ('tprog', 'tbank'):
-                    _late += sum(1 for _n in notes
-                                 if _n[0] == _c and _n[2] < _t < _n[3])
-        if _late:
-            print("  gm2: %d notes were sounding when a tuning change that "
-                  "should move them arrived; here they keep their tuning until "
-                  "their next onset (live moves them)" % _late)
+    _MTS_TL = _prep_gm2_store(_sys, gmon, notes, rpns, tuner)
 
     # Read by helpers made below and filled by the note loop: bound here so a
     # pass that makes a helper can hand it the object.
@@ -4839,72 +5095,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
                          _place=(rld*SR, rrd*SR, ix, iz))
         _RD[0] = 0.0
         _AZ[0] = _direct_az
-    # SCRAPED instruments expand into their individual ridge impacts before
-    # anything else looks at the note list, so the choke and the envelopes all
-    # see the real strokes.
-    expanded = []
-    inner_ridge = set()          # ridges after the first, which must not choke each other
-    stroke_pitch = {}            # (note, t) -> frequency scale, for swept instruments
-    stroke_tilt = {}             # (note, t) -> a throat's tilt dB, for a voice's pulses
-    stroke_mouth = {}            # (note, t) -> a throat's formant scale: the mouth's opening
-    stroke_morph = {}            # (note, t) -> a throat's vowel moving: toward its DRUM_MODES_B
-    _sfx_strokes_of = {}         # (program, note) -> (kit, key) whose strokes a melodic SFX plays
-    _stroked = set()             # (ch, note, t) of every stroke: live keeps their own onsets
-    for ev in notes:
-        ch, note, on, off, vel, rest, pg = ev
-        # A KEY THAT ALSO STRIKES ANOTHER'S SOUND (percussion_map.KIT_LAYER):
-        # the metronome bell's tick is the click key's, at the bell's velocity
-        if is_drum(pg):
-            for _ln in key_layers(note, kit_for_program(int(pg))):
-                expanded.append((ch, _ln, on, off, vel, rest, pg))
-        # A LAYERED VARIATION (patch_map.LAYERED: GS's Orchestra): one event a
-        # layer, each its own program and transposition, before anything else
-        # sees the note
-        _lys = None if is_drum(pg) else layers_of(pg)
-        if _lys:
-            # ...each within its velocity range (a "Velo" variation switches
-            # voice with how hard the key is struck)
-            for _lp, _st, _vlo, _vhi in _lys:
-                if 0 <= note + _st <= 127 and _vlo <= vel <= _vhi:
-                    expanded.append((ch, note + _st, on, off, vel, rest, _lp))
-            continue
-        strokes = rasp_strokes(note, on, off, kit=kit_for_program(int(pg))) if is_drum(pg) else None
-        # ...AND A KIT KEY PLAYED FROM THE KEYBOARD (patch_map.melodic_sfx: a GS
-        # SFX variation) keeps its strokes: the dog's bark, the gallop's hooves,
-        # the machine gun's train, the laugh's syllables, the bubbles' run --
-        # its class names the key whose table they are
-        if strokes is None and not is_drum(pg):
-            # keyed by the variation and layer as well: a VariationProgram is
-            # equal to its plain program, so 126.1's laugh and 126.0's applause
-            # shared one entry, whichever came first
-            _skk = (pg, getattr(pg, 'variation', 0), getattr(pg, 'layer', None), note)
-            _sk = _sfx_strokes_of.get(_skk, 0)
-            if _sk == 0:
-                _sk = _sfx_strokes_of[_skk] = getattr(
-                    property_class_for_note(pg, note), 'sfx_strokes_of', None)
-            if _sk:
-                # ...the note's own key in that kit where it names none (the
-                # Morse keyboard: every key its character)
-                strokes = rasp_strokes(note if _sk[1] is None else _sk[1], on, off, kit=_sk[0])
-        if strokes is None:
-            expanded.append(ev); continue
-        for k, st in enumerate(strokes):
-            t0, t1, lvl = st[0], st[1], st[2]
-            # A swept instrument gives each stroke its own PITCH -- a bell tree's
-            # rod crosses graduated bars. Carried alongside the note list the way
-            # inner_ridge is, so the event tuple keeps its shape.
-            if len(st) > 3 and st[3] != 1.0:
-                stroke_pitch[(note, t0)] = st[3]
-            if len(st) > 4:
-                stroke_tilt[(note, t0)] = st[4]
-            if len(st) > 5:
-                stroke_mouth[(note, t0)] = st[5]
-            if len(st) > 6:
-                stroke_morph[(note, t0)] = st[6]
-            expanded.append((ch, note, t0, t1, max(1, int(vel * lvl)), rest, pg))
-            _stroked.add((ch, note, t0))
-            if k: inner_ridge.add((note, t0))
-    notes = expanded
+    (_stroked, inner_ridge, notes, stroke_morph, stroke_mouth, stroke_pitch,
+        stroke_tilt) = _prep_strokes(notes)
 
     choke_at = _prep_exclusive_classes(inner_ridge, notes)
 
@@ -4993,14 +5185,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _AMP_IMB = {}
     _CAB_CH = {}
     _EFXEQ_CH = {}      # a part's insertion-effect EQ, after its valve: {ch: eq}
-    _TREM_CH = {}
-    # ...the controller matrix's (above): a GM vibrato's rate, its rows' map
-    for _c, (_pk, _map) in _CMX_TREM.items():
-        # ...at the LFO1 rate in force where its depth peaks (a sideband's
-        # offset is fixed for the note: a rate that moved mid-note would move
-        # it, which nothing here does)
-        _tpk = max(_CMXEV['tva'][_c], key=lambda e: e[1])[0]
-        _TREM_CH[_c] = (max(0.5, TREMOLO_MATRIX_HZ + _cmx_at('rate', _c, _tpk)), _pk, False, 0.0, None, _map)
+    _TREM_CH = _prep_tremolo_channels(_CMXEV, _CMX_TREM, _cmx_at)
     # The harmonium's Tremolo stop: channel -> (rate, depth, stereo), and the
     # row spans of the notes that sounded with it drawn. Per NOTE, because it
     # is a stop and not a panel knob -- tremolo.expand takes the row mask.
@@ -5045,35 +5230,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _CLAV_CH = {}
     _DETUNE_CH = {}
     _DRONE_CH = {}          # how many drones, per channel: see below
-    # A PART'S SPAN, for voices whose extra voices belong to the channel rather
-    # than the note -- a bagpipe's drones are the only ones today. First note-on
-    # to last note-off, so a drone sounds under the whole line instead of
-    # restarting on every note of it. See SynthProperties.unison_spans_part.
-    # PHRASES, not the channel's whole lifetime. This spanned first note-on to
-    # last note-off, so a bagpipe part with sixteen bars of tacet in the middle
-    # droned straight through them. A piper does not stop for a two-bar rest and
-    # does not keep the bag up through a whole section off, so the drones follow
-    # the PLAYED PHRASES: notes are grouped, and a gap longer than the voice's
-    # part_break_s starts a new one.
-    #
-    # Seconds and not bars, because the decision being modelled is when a player
-    # lets the bag down, and that is a real-time judgement.
-    _PHRASE_CH = {}
-    _by_ch = {}
-    for _e in notes:
-        _by_ch.setdefault(_e[0], []).append((_e[2], _e[3]))
-    for _c, _ns in _by_ch.items():
-        _gap = 2.0
-        for _p in {_e[6] for _e in notes if _e[0] == _c}:
-            _gap = getattr(property_class_for_program(_p), 'part_break_s', _gap)
-        _ph = []
-        for _on, _off in sorted(_ns):
-            if _ph and _on - _ph[-1][1] <= _gap:
-                _ph[-1] = (_ph[-1][0], max(_ph[-1][1], _off))
-            else:
-                _ph.append((_on, _off))
-        _PHRASE_CH[_c] = _ph
-    _SPANNED = set()          # (channel, phrase index) already emitted
+    (_PHRASE_CH, _SPANNED, _by_ch) = _prep_phrase_spans(notes)
     # THE DRONES ARE NOTES OF THE PART, each its own voice (tonelib
     # BagpipeDroneProperties): under every phrase a bagpipe channel plays, the
     # drones its CC1 leaves uncorked (the first CC1, read once, as below), from
@@ -5170,113 +5327,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
             if _a <= _on <= _b:
                 return _i, (_a, _b)
         return 0, (_on, _on)
-    if _lyr and _CONS:
-        _by_ch = {}
-        for _e in notes:
-            _by_ch.setdefault(_e[0], []).append(_e)
-        for _ch, _rows in _lyr.items():
-            _evs = sorted(_by_ch.get(_ch, []), key=lambda e: e[2])
-            if not _evs: continue
-            _ons = [e[2] for e in _evs]
-            for _row in _rows:
-                # A syllable may have a coda and NO onset -- "ex", "es", "il"
-                # all begin on a vowel. Bailing out here when there is no
-                # onset skipped their codas too, which is why the /ks/ of "ex"
-                # stayed silent even once the spelling rules found it.
-                _spec = _VOW.CONSONANTS.get(_row[2]) if len(_row) > 2 and _row[2] else None
-                _cods = _row[3] if len(_row) > 3 and _row[3] else ()
-                if isinstance(_cods, str): _cods = (_cods,)
-                if not _spec and not _cods: continue
-                _vol, _w, _ctr, _bw = _spec[:4] if _spec else (0.0, 0.02, 1000.0, 800.0)
-                # A STOP IS A CLOSURE IN THE TUBE, and its burst is filtered by
-                # the cavity in FRONT of that closure -- so the three classes
-                # (velar compact, alveolar diffuse-rising, labial diffuse-
-                # falling) are one fact about front-cavity length, not three
-                # hand-set bands. It also makes "a velar burst follows its
-                # vowel" disappear as a special case: the front cavity is cut
-                # out of THAT vowel's own tract, so the peak runs from 2495 Hz
-                # before /i/ to 614 before /u/ with no rule for it.
-                _shape = _stop_shape(_row[2], _row[1]) if _spec else None
-                _el = (_spec[4] if len(_spec) > 4 else 0.3) if _spec else 0.3
-                _i = _bisect.bisect_left(_ons, _row[0] - 1e-3)
-                if _i >= len(_evs): continue
-                _e = _evs[_i]
-                # THE LOCAL RHYTHMIC GRAIN: the shortest note hereabouts, which
-                # is what sets how fast the words are going. Scaled by the
-                # segment's own elasticity, so a fricative follows the tempo
-                # and a plosive barely does.
-                _lo = max(0, _i - 6); _hi = min(len(_evs), _i + 7)
-                _gaps = [_evs[j+1][2] - _evs[j][2] for j in range(_lo, _hi-1)
-                         if _evs[j+1][2] - _evs[j][2] > 1e-3]
-                _unit = min(_gaps) if _gaps else CONSONANT_REF
-                _w = _w * (_unit / CONSONANT_REF) ** _el
-                # ...and it may not eat the note in front of it. A consonant
-                # sits in the time before the beat; if there is less time than
-                # it wants, it gets what there is.
-                # A singer TAKES the time from the previous note -- closing
-                # that vowel early to make room -- so the limit is the note's
-                # own start, not its end. Capping at the end instead squeezed
-                # every consonant in a legato line to the 20 ms floor.
-                _prev_on = _evs[_i-1][2] if _i > 0 else 0.0
-                _room = max(0.012, (_e[2] - _prev_on) * 0.6)
-                _w = max(0.010, min(_w, _room))
-                # Friction does not stop when voicing starts; it OVERLAPS it.
-                # Ending the burst exactly on the onset put a seam there.
-                _st = _e[2] - _w * 0.78
-                _pan = _e[5][2] if isinstance(_e[5], tuple) and len(_e[5]) > 2 else 0.0
-                _g = ((_e[4] / 127.0) ** 2) * CONSONANT_GAIN * _vol
-                if _spec and _st >= 0.0:
-                    cons_bursts.append((int(_st * SR), max(8, int(_w * SR)), _ctr, _bw, 1.0,
-                                        _g * math.sqrt(max(0.0, 0.5 * (1.0 - _pan))),
-                                        _g * math.sqrt(max(0.0, 0.5 * (1.0 + _pan))),
-                                        _shape, _ch))
-                # A CODA closes the syllable at the note's END rather than
-                # opening it, and there can be TWO: "ex" is /ks/. Codas are
-                # quieter than onsets -- a singer releases them, they do not
-                # have to launch the note.
-                _back = 0.0
-                for _ck in reversed(_cods):
-                    _cd = _VOW.CONSONANTS.get(_ck)
-                    if not _cd: continue
-                    _cv, _cw2, _cc, _cbw = _cd[:4]
-                    _cel = _cd[4] if len(_cd) > 4 else 0.3
-                    _cw2 *= (_unit / CONSONANT_REF) ** _cel
-                    _cg = ((_e[4] / 127.0) ** 2) * CONSONANT_GAIN * _cv * 0.6
-                    _cst = _e[3] - _back - _cw2 * 0.5
-                    _back += _cw2 * 0.8
-                    if _cst < 0.0: continue
-                    cons_bursts.append((int(_cst * SR), max(8, int(_cw2 * SR)),
-                                        _cc, _cbw, 1.0,
-                                        _cg * math.sqrt(max(0.0, 0.5 * (1.0 - _pan))),
-                                        _cg * math.sqrt(max(0.0, 0.5 * (1.0 + _pan))),
-                                        _stop_shape(_ck, _row[1]), _ch))
+    _prep_consonants(_lyr, cons_bursts, notes)
     notes = sorted(notes, key=lambda e: (e[2], e[0], e[1]))
-    # A SLUR ENDS THE NOTE IT LEAVES. The slurred note's attack is the voice's
-    # legato one (slur_attack, below); the note it follows must stop as the new
-    # one sounds, not ring its whole release under it -- on a chanter the
-    # finger moves and the old pitch is gone, and an 80 ms release under every
-    # change sounds as a release and a fresh attack (Ben, of Scotland the
-    # Brave). The notes a slurred note FOLLOWS on its channel (sounding up to
-    # its onset, or ending within the file's legato tolerance before it), for
-    # a voice that says so (SynthProperties.slur_cuts_release).
-    _SLUR_OUT = set()
-    _socc = {}
-    _sl_on = {}
-    for _e in notes:
-        _k = _socc.get((_e[0], _e[1]), 0); _socc[(_e[0], _e[1])] = _k + 1
-        if (_e[0], _e[1], _k) in legato:
-            _sl_on.setdefault(_e[0], []).append(_e[2])
-    if _sl_on:
-        import bisect as _bis
-        for _v in _sl_on.values():
-            _v.sort()
-        for _e in notes:
-            _v = _sl_on.get(_e[0])
-            if not _v:
-                continue
-            _q = _bis.bisect_right(_v, _e[2])       # the first slurred onset after this one
-            if _q < len(_v) and _e[3] >= _v[_q] - 0.02:
-                _SLUR_OUT.add((_e[0], _e[1], _e[2]))
+    _SLUR_OUT = _prep_slur_out(legato, notes)
 
     def _snd_finish(_p):
         """Brightness, resonance and decay on the partials one note made.
