@@ -6432,6 +6432,7 @@ def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None):
 
 
 SONG_STATS = [0, 0]     # notes whose channel questions were checked, that differed
+READING_STATS = [0, 0]  # files whose check song is the engine's own reading; whose notes need passes it lacks
 
 
 def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st, eff, nx, mcut, slurred,
@@ -7549,8 +7550,24 @@ def _prepare(path, tuner='hybrid440', sink=None):
     if NATIVE_TONE == 'check':
         import native as _NV
         if _NV.lib() is not None:
-            _SONG = _NV.Song(ccs, notes, total, freq=FREQ, mts=_MTS_TL, btun=_BTUN, otun=_OTUN,
-                             faders=set(_LROW), trim=lambda _p: program_trim(_p, is_drum(_p), gs=_GS_FILE[0]))
+            _mid = _NV.Midi(path) if isinstance(path, (str, mido.MidiFile)) else None
+            if (_mid is not None and not _mid.error
+                    and [_NV._ev_key(_e) for _e in _mid.notes()] != [_NV._ev_key(_e) for _e in notes]):
+                # the passes that rewrite the notes past all-notes-off (a drum's
+                # strokes, _prep_strokes; glissandi, _prep_gliss) are not the
+                # engine's yet: its song from Python's notes, and counted
+                READING_STATS[1] += 1
+                _mid = None
+            if _mid is not None and not _mid.error:
+                # THE ENGINE READS THE FILE ITSELF (native/midi.cpp): its song from
+                # its own reading, Python's beside it to compare
+                READING_STATS[0] += 1
+                _SONG = _mid.song(total, lambda _p, _d: program_trim(DrumProgram(_p) if _d else _p, _d,
+                                                                   gs=_GS_FILE[0]),
+                                  freq=FREQ, mts=_MTS_TL, btun=_BTUN, otun=_OTUN, faders=set(_LROW))
+            else:
+                _SONG = _NV.Song(ccs, notes, total, freq=FREQ, mts=_MTS_TL, btun=_BTUN, otun=_OTUN,
+                                 faders=set(_LROW), trim=lambda _p: program_trim(_p, is_drum(_p), gs=_GS_FILE[0]))
     # Occurrence index per (channel, note) in ONSET order -- the same key
     # _legato_ticks used, so a note found in seconds here is the note it judged
     # in ticks there.

@@ -142,6 +142,9 @@ double nv_song_note_off(void *s, long long ch, int note, double on, double off, 
 int nv_song_soft_at(void *s, long long ch, double t);
 int nv_song_next_same(void *s, long long ch, int note, double on, double *out);
 int nv_song_pitch_level(void *s, int index, int effort_tilt, double *out);
+void nv_song_cc(void *s, long long ch, double t, int cc, int v);
+void nv_song_note(void *s, long long ch, int note, double on, double off, int vel, double v7, double v11,
+                  double pan, double trim);
 
 #ifdef __cplusplus
 }

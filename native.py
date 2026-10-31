@@ -152,7 +152,7 @@ def lib():
 
 def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
-                                                       'channel.cpp', 'room.cpp')]
+                                                       'channel.cpp', 'room.cpp', 'midi.cpp')]
             + [os.path.join(HERE, 'roomcore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -163,10 +163,10 @@ def _load():
         # The C core (tone.c, with voice.c) and the C++ engine (engine.cpp)
         # under the same flags, linked into one library.
         flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
-        objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o']
+        objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
-            for src, o in zip(srcs[4:7], objs[1:]):
+            for src, o in zip(srcs[4:8], objs[1:]):
                 subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', src, '-o', o])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lm'])
         finally:
@@ -201,6 +201,14 @@ def _load():
                                  ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p, D, ctypes.POINTER(NoteOut),
                                  ctypes.POINTER(I)]),
             ('nv_images', I, [D, I, C, C, C, I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_midi_read', ctypes.c_void_p, [ctypes.c_char_p, LL, ctypes.POINTER(I)]),
+            ('nv_midi_free', None, [ctypes.c_void_p]), ('nv_midi_total', C, [ctypes.c_void_p]),
+            ('nv_midi_n_notes', I, [ctypes.c_void_p]), ('nv_midi_n_ccs', I, [ctypes.c_void_p]),
+            ('nv_midi_n_pws', I, [ctypes.c_void_p]),
+            ('nv_midi_note', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_midi_cc', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_midi_pw', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_midi_song', None, [ctypes.c_void_p, ctypes.c_void_p, D]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
             ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C]),
@@ -510,12 +518,19 @@ def note_class(cls):
     return got[0]
 
 
+def _ev_key(e):
+    """A note event as the song knows it: (channel, key, on, off, velocity,
+    (v7, v11, pan), program as an int)."""
+    return (int(e[0]), int(e[1]), e[2], e[3], int(e[4]), tuple(e[5]), int(e[6]))
+
+
 class Song(object):
     """native/channel.cpp's Song: a file's controller events and notes, and
     what a note asks of its channel -- its end once the pedals have had their
     say, the soft pedal at its onset, its key's next strike."""
 
-    def __init__(self, ccs, notes, total, freq=None, mts=None, btun=None, otun=None, faders=(), trim=None):
+    def __init__(self, ccs, notes, total, freq=None, mts=None, btun=None, otun=None, faders=(), trim=None,
+                 finish=True):
         """ccs, notes and total as blockrender's; the tuning: freq the file's
         128-key table, mts {channel: [(t, table)]}, btun {channel: ratio},
         otun {channel: 12 cents}; faders the channels whose fader is a row;
@@ -527,7 +542,7 @@ class Song(object):
                 d.nv_song_cc(self.p, int(c), float(t), int(cc), int(v))
         self._idx = {}
         for i, e in enumerate(notes):
-            self._idx.setdefault(tuple(e), []).append(i)
+            self._idx.setdefault(_ev_key(e), []).append(i)
             v7, v11, pan = e[5]
             d.nv_song_note(self.p, int(e[0]), int(e[1]), float(e[2]), float(e[3]), int(e[4]), float(v7),
                            float(v11), float(pan), float(trim(e[6]) if trim else 1.0))
@@ -543,13 +558,14 @@ class Song(object):
             ot = (otun or {}).get(c)
             d.nv_song_channel(self.p, int(c), float((btun or {}).get(c) or 0.0),
                               (ctypes.c_double * 12)(*ot) if ot else None, int(c in faders))
-        d.nv_song_finish(self.p, float(total))
+        if finish:
+            d.nv_song_finish(self.p, float(total))
 
     def take(self, ev):
         """The index of note event ev (a tuple of the notes given) in the
         song, each index given once: two identical events, in the order
         asked. None for an event it was not given."""
-        q = self._idx.get(ev)
+        q = self._idx.get(_ev_key(ev))
         return q.pop(0) if q else None
 
     def pitch_level(self, index, effort_tilt):
@@ -600,3 +616,79 @@ def images(props, sx, sy, sz, cap=64):
     if n < 0:
         return None
     return nsurf[:n], surf[:int(nsurf[:n].sum())], img[:3 * n], mir[:3 * n]
+
+
+MIDI_REFUSED = {-1: 'malformed', -2: 'type 2', -3: 'ports', -4: 'an exclusive', -5: 'a bank',
+                -6: 'an NRPN or MPE', -7: 'mono mode'}
+
+
+class Midi(object):
+    """native/midi.cpp's reading of a MIDI file (bytes, a path, or a
+    mido.MidiFile): blockrender.parse's for a GM file, its notes after
+    _prep_notes_off. .error is why it was refused (MIDI_REFUSED), else 0."""
+
+    def __init__(self, src):
+        if isinstance(src, (bytes, bytearray)):
+            b = bytes(src)
+        elif isinstance(src, str):
+            with open(src, 'rb') as f:
+                b = f.read()
+        else:
+            import io
+            buf = io.BytesIO()
+            src.save(file=buf)
+            b = buf.getvalue()
+        d = self.d = lib()
+        e = ctypes.c_int(0)
+        self.p = d.nv_midi_read(b, len(b), ctypes.byref(e))
+        self.error = e.value
+
+    def __del__(self):
+        if getattr(self, 'p', None):
+            self.d.nv_midi_free(self.p)
+            self.p = None
+
+    def total(self):
+        return self.d.nv_midi_total(self.p)
+
+    def notes(self):
+        """[(channel, key, on, off, velocity, (v7, v11, pan), program, drum)]"""
+        I5, D5 = ctypes.c_int * 5, ctypes.c_double * 5
+        out = []
+        for i in range(self.d.nv_midi_n_notes(self.p)):
+            iv, dv = I5(), D5()
+            self.d.nv_midi_note(self.p, i, iv, dv)
+            out.append((iv[0], iv[1], dv[0], dv[1], iv[2], (dv[2], dv[3], dv[4]), iv[3], iv[4]))
+        return out
+
+    def ccs(self):
+        """{channel: [(t, control, value)]}, in message order"""
+        I5 = ctypes.c_int * 5
+        out = {}
+        for i in range(self.d.nv_midi_n_ccs(self.p)):
+            iv, t = I5(), ctypes.c_double()
+            self.d.nv_midi_cc(self.p, i, iv, ctypes.byref(t))
+            out.setdefault(iv[0], []).append((t.value, iv[1], iv[2]))
+        return out
+
+    def pws(self):
+        """{channel: [(t, pitch)]}"""
+        I5 = ctypes.c_int * 5
+        out = {}
+        for i in range(self.d.nv_midi_n_pws(self.p)):
+            iv, t = I5(), ctypes.c_double()
+            self.d.nv_midi_pw(self.p, i, iv, ctypes.byref(t))
+            out.setdefault(iv[0], []).append((t.value, iv[1]))
+        return out
+
+    def song(self, total, trim, freq=None, mts=None, btun=None, otun=None, faders=()):
+        """A Song (above) from this reading: trim(program, drum) the channel
+        volume's trim; the tuning as Song's."""
+        s = Song({}, [], None, freq=freq, mts=mts, btun=btun, otun=otun, faders=faders, finish=False)
+        tr = (ctypes.c_double * 256)(*([float(trim(p, False)) for p in range(128)]
+                                       + [float(trim(p, True)) for p in range(128)]))
+        self.d.nv_midi_song(self.p, s.p, tr)
+        for i, e in enumerate(self.notes()):
+            s._idx.setdefault(_ev_key(e), []).append(i)
+        self.d.nv_song_finish(s.p, float(total))
+        return s

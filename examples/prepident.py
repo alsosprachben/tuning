@@ -184,9 +184,10 @@ def main():
                                       " ".join("%s=%s" % kv for kv in sorted(keys.items()))))
         if B.NATIVE_TONE == 'check':
             # the engine against the Python, as it played: rows, voices, channels
-            print("NATIVECHECK rows=%d/%d voice=%d/%d channel=%d/%d" % (
+            print("NATIVECHECK rows=%d/%d voice=%d/%d channel=%d/%d reading=%d/%d" % (
                 B.NATIVE_STATS[1], B.NATIVE_STATS[2], B.VOICE_STATS[1], B.VOICE_STATS[2],
-                B.SONG_STATS[0], B.SONG_STATS[1]))
+                B.SONG_STATS[0], B.SONG_STATS[1], B.READING_STATS[0] + B.READING_STATS[1],
+                B.READING_STATS[1]))
         return 0
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     opt = dict(a[2:].split("=", 1) if "=" in a else (a[2:], "") for a in sys.argv[1:] if a.startswith("--"))
@@ -219,6 +220,11 @@ def main():
             f.write(one_file(p, seconds, cap) + "\n")
             f.flush()
     for what, (a, b, names) in sorted(CHECKS.items()):
+        if what == "reading":
+            # files the engine read itself, and those whose notes need the passes it lacks
+            print("native reading: %d files read by the engine, %d need passes it lacks%s" % (
+                a - b, b, (" (" + " ".join(names[:8]) + ")") if names else ""))
+            continue
         print("native check %s: %d checked, %d differed%s" % (what, a, b, (" (" + " ".join(names[:8]) + ")")
                                                               if names else ""))
     if opt.get("against"):
