@@ -144,7 +144,10 @@ int nv_song_next_same(void *s, long long ch, int note, double on, double *out);
 int nv_song_pitch_level(void *s, int index, int effort_tilt, double *out);
 void nv_song_cc(void *s, long long ch, double t, int cc, int v);
 void nv_song_note(void *s, long long ch, int note, double on, double off, int vel, double v7, double v11,
-                  double pan, double trim);
+                  double pan, double trim, int prog, int drum);
+int nv_song_n_notes(void *s);
+void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv);
+int nv_song_first_cc(void *s, long long ch, int cc, int *v);
 
 #ifdef __cplusplus
 }

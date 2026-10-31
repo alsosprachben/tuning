@@ -22,6 +22,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 _LIB = [None]
 
 C = ctypes.c_double
+NCOLS = 50          # native/nv.h: blockrender.EMIT_COLS
 I = ctypes.c_int
 LL = ctypes.c_longlong
 
@@ -115,7 +116,9 @@ class NoteClass(ctypes.Structure):
                    ('n_strike', I), ('strike_hz', C * 32), ('strike_db', C * 32), ('strike_noise_dbs', C),
                    ('strike_span_set', I)]
                 + [(f, C) for f in ('strike_span_lo', 'strike_span_hi', 'strike_octave_db', 'strike_fade_s',
-                                    'strike_len_s', 'strike_at_s', 'strike_cal_db')])
+                                    'strike_len_s', 'strike_at_s', 'strike_cal_db')]
+                + [('room_planes', C * 6), ('room_order', I), ('damper_pedal', I), ('detune_lo', C),
+                   ('detune_hi', C), ('detune_wheel', I)])
 
 
 class NoteIn(ctypes.Structure):
@@ -211,7 +214,10 @@ def _load():
             ('nv_midi_song', None, [ctypes.c_void_p, ctypes.c_void_p, D]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
-            ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C]),
+            ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C, I, I]),
+            ('nv_play', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoteIn), D, I,
+                            ctypes.POINTER(PyRandomState), ctypes.c_void_p, LL, ctypes.c_void_p, D,
+                            ctypes.POINTER(LL)]),
             ('nv_song_tuning', None, [ctypes.c_void_p, LL, C, D]),
             ('nv_song_channel', None, [ctypes.c_void_p, LL, C, D, I]),
             ('nv_song_pitch_level', I, [ctypes.c_void_p, I, I, D]),
@@ -508,6 +514,9 @@ def note_class(cls):
             k.strike_len_s = getattr(cls, 'strike_noise_len_s', None) or 0.25
             k.strike_at_s = getattr(cls, 'strike_noise_at', 0.0) or 0.0
             k.strike_cal_db = getattr(cls, 'strike_noise_cal_db', 0.0) or 0.0
+        k.damper_pedal = int(bool(getattr(cls, 'damper_pedal', True)))
+        k.detune_lo, k.detune_hi = cls.string_detune_range
+        k.detune_wheel = int(bool(getattr(cls, 'detune_wheel', False)))
         got = _NOTE[cls] = [k, None]
     if got is False:
         return None
@@ -515,6 +524,8 @@ def note_class(cls):
     if got[1] is not v[3]:
         got[0].tmpl = v[1]
         got[1] = v[3]
+    got[0].room_planes[:] = room_walls(v[2])
+    got[0].room_order = int(v[2].reflection_order)
     return got[0]
 
 
@@ -544,8 +555,10 @@ class Song(object):
         for i, e in enumerate(notes):
             self._idx.setdefault(_ev_key(e), []).append(i)
             v7, v11, pan = e[5]
+            import percussion_map as _PM
             d.nv_song_note(self.p, int(e[0]), int(e[1]), float(e[2]), float(e[3]), int(e[4]), float(v7),
-                           float(v11), float(pan), float(trim(e[6]) if trim else 1.0))
+                           float(v11), float(pan), float(trim(e[6]) if trim else 1.0), int(e[6]),
+                           int(_PM.is_drum(e[6])))
         T128 = ctypes.c_double * 128
         def row(tab):           # a table as 128 numbers, 0 for a key it lacks
             return T128(*[float(tab[k]) if k in tab else 0.0 for k in range(128)])
@@ -692,3 +705,36 @@ class Midi(object):
             s._idx.setdefault(_ev_key(e), []).append(i)
         self.d.nv_song_finish(s.p, float(total))
         return s
+
+
+def play(song, classes, tmpl, br, cap):
+    """nv_play: every note of song through the engine, in the note loop's
+    order. classes(program, key) -> the voice class, or None; tmpl a NoteIn
+    with the emitter's constants; br {channel: bend (or fader) row}; cap the
+    rows the store holds. (rows, qacc, azimuth), or (None, i) where note i
+    could not be the engine's."""
+    import random
+    import numpy as np
+    d = lib()
+    K = (ctypes.c_void_p * (128 * 128))()
+    keep = []
+    for prog in range(128):
+        for key in range(128):
+            cls = classes(prog, key)
+            k = note_class(cls) if cls is not None else None
+            if k is not None:
+                keep.append(k)
+                K[128 * prog + key] = ctypes.addressof(k)
+    nbr = max([int(c) + 1 for c in br] + [1])
+    B = (ctypes.c_double * nbr)(*[float(br.get(c, -1)) for c in range(nbr)])
+    random.seed(0)
+    rs = random_state()
+    rows = np.empty((cap, NCOLS))
+    qacc = np.zeros(18)
+    az = ctypes.c_double(0.0)
+    nr = ctypes.c_longlong(0)
+    n = d.nv_play(song.p, K, ctypes.byref(tmpl), B, nbr, ctypes.byref(rs), rows.ctypes.data, cap,
+                  qacc.ctypes.data, ctypes.byref(az), ctypes.byref(nr))
+    if n < 0:
+        return None, -n - 1
+    return rows[:nr.value], qacc, az.value

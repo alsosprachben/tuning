@@ -184,6 +184,7 @@ struct Ev {
     double on, off;
     int vel;
     double v7, v11, pan, trim;          // the channel's CC7, CC11, CC10 at its onset; its program's trim
+    int prog, drum;                     // its program, and whether a drum set's
 };
 
 // A file's channels and notes.
@@ -332,9 +333,34 @@ void nv_song_cc(void *s, long long ch, double t, int cc, int v)
 }
 
 void nv_song_note(void *s, long long ch, int note, double on, double off, int vel, double v7, double v11,
-                  double pan, double trim)
+                  double pan, double trim, int prog, int drum)
 {
-    ((nv::Song *)s)->notes.push_back(nv::Ev{ch, note, on, off, vel, v7, v11, pan, trim});
+    ((nv::Song *)s)->notes.push_back(nv::Ev{ch, note, on, off, vel, v7, v11, pan, trim, prog, drum});
+}
+
+int nv_song_n_notes(void *s) { return (int)((nv::Song *)s)->notes.size(); }
+
+// note i as given: (channel, key, velocity, program, drum) ints; (on, off) doubles
+void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv)
+{
+    const nv::Ev &e = ((nv::Song *)s)->notes[i];
+    *ch = e.ch;
+    iv[0] = e.note; iv[1] = e.vel; iv[2] = e.prog; iv[3] = e.drum;
+    dv[0] = e.on; dv[1] = e.off;
+}
+
+// the channel's first value of controller cc in time order (in_order), if any
+int nv_song_first_cc(void *s, long long ch, int cc, int *v)
+{
+    const nv::Channel *C = ((nv::Song *)s)->get(ch);
+    if (!C)
+        return 0;
+    for (const nv::CC &e : C->ccs)
+        if (e.cc == cc) {
+            *v = e.v;
+            return 1;
+        }
+    return 0;
 }
 
 // the file's tuning (ch < 0, at 0) or a channel's MTS table from t

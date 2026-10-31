@@ -18,8 +18,10 @@
 // (no fused multiply-adds, no builtins), with Python's tie order for
 // max/min (pymax/pymin below) and its ** as libm's pow.
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 #include "nv.h"
 
@@ -66,6 +68,12 @@ typedef struct {
     double strike_span_lo, strike_span_hi;
     double strike_octave_db;            // strike_noise_octave_db, else strike_noise_slope
     double strike_fade_s, strike_len_s, strike_at_s, strike_cal_db;
+    // the room it plays in (WALLS' signed planes, its reflection order), its
+    // dampers, its strings' detune range and whether CC1 scales it (detune_wheel)
+    double room_planes[6];
+    int room_order, damper_pedal;
+    double detune_lo, detune_hi;
+    int detune_wheel;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -280,6 +288,77 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         n->f0 = pl[0]; n->vel = pl[1]; n->pan = pl[2]; n->chan_vol = pl[3]; n->effort = pl[4];
     }
     return nv_note(K, n, rs, nimg, nsurf, surf, img, mir, rows, cap, qacc, azimuth, out);
+}
+
+// A SONG PLAYED: every note, in the note loop's order (by onset, channel and
+// key, stably), each through nv_song_play with its class (K[128 * program +
+// key]; every note must have one) -- the rows of the whole song's notes.
+// tmpl: the emitter's constants for every note (rate, fades, Nyquist, the
+// room's bands, REFLECT, the glide, vibrato and sound rows' rest state);
+// br[channel]: the channel's bend (or fader) row, -1 none. The global random
+// stream from rs, carried note to note; qacc and *azimuth too. *nrows the
+// rows written. Returns the notes played, or -(1 + i) where note i could not
+// be (no class, or the store too small).
+int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr, PyRandom *rs,
+            double *rows, long long cap, double *qacc, double *azimuth, long long *nrows)
+{
+    int nn = nv_song_n_notes(song);
+    std::vector<int> order(nn);
+    std::vector<long long> chs(nn);
+    std::vector<int> keys(nn);
+    std::vector<double> ons(nn);
+    for (int i = 0; i < nn; i++) {
+        int iv[4];
+        double dv[2];
+        nv_song_get_note(song, i, &chs[i], iv, dv);
+        keys[i] = iv[0];
+        ons[i] = dv[0];
+        order[i] = i;
+    }
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
+        if (ons[a] != ons[b])
+            return ons[a] < ons[b];
+        if (chs[a] != chs[b])
+            return chs[a] < chs[b];
+        return keys[a] < keys[b];
+    });
+    long long total = 0;
+    for (int j = 0; j < nn; j++) {
+        int i = order[j];
+        long long ch;
+        int iv[4];
+        double dv[2];
+        nv_song_get_note(song, i, &ch, iv, dv);
+        const NoteClass *k = (iv[3] || iv[2] < 0 || iv[2] > 127) ? nullptr : K[128 * iv[2] + iv[0]];
+        if (!k)
+            return -(1 + i);
+        NoteIn n = *tmpl;
+        n.ch = ch; n.note = iv[0]; n.on = dv[0]; n.key_off = dv[1];
+        n.vel = iv[1];
+        n.damper_pedal = k->damper_pedal;
+        n.mcut = 0; n.slurred = 0; n.slur_out = 0;
+        n.channel = (double)ch;
+        n.br = (ch >= 0 && ch < nbr) ? br[ch] : -1.0;
+        n.from_song = 1; n.song_index = i;
+        double det = 1.0;
+        int c1;
+        if (k->detune_wheel && nv_song_first_cc(song, ch, 1, &c1))
+            det = c1 / 64.0;
+        n.detune_lo = k->detune_lo * det; n.detune_hi = k->detune_hi * det;
+        memcpy(n.planes, k->room_planes, sizeof n.planes);
+        n.order = k->room_order;
+        n.no_reflections = 0;
+        NoteOut out;
+        int band = 0;
+        long long left = cap - total;
+        int r = nv_song_play(song, k, &n, rs, -1, nullptr, nullptr, nullptr, nullptr, rows + NCOLS * total,
+                             (int)(left > 0x7fffffff ? 0x7fffffff : left), qacc, azimuth, &out, &band);
+        if (r < 0)
+            return -(1 + i);
+        total += r;
+    }
+    *nrows = total;
+    return nn;
 }
 
 }  // extern "C"

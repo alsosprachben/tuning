@@ -393,7 +393,7 @@ void nv_midi_song(void *p, void *song, const double *trim)
         nv_song_cc(song, e.ch, e.t, e.cc, e.v);
     for (const nv::Note &n : P->notes)
         nv_song_note(song, n.ch, n.note, n.on, n.off, n.vel, n.v7, n.v11, n.pan,
-                     trim[(n.drum ? 128 : 0) + n.prog]);
+                     trim[(n.drum ? 128 : 0) + n.prog], n.prog, n.drum);
 }
 
 }  // extern "C"
