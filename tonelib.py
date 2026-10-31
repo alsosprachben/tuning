@@ -193,7 +193,7 @@ def _roomcore():
                 lib = os.path.join(here, "libroomcore.so")
                 if not os.path.exists(lib) or os.path.getmtime(src) > os.path.getmtime(lib):
                     tmp = "%s.%d.tmp" % (lib, os.getpid())
-                    subprocess.check_call(["gcc", "-O3", "-march=native", "-ffp-contract=off", "-shared",
+                    subprocess.check_call(["gcc", "-O3", "-march=native", "-ffp-contract=off", "-fno-builtin", "-shared",
                                            "-fPIC", src, "-o", tmp, "-lm"])
                     os.replace(tmp, lib)
                 dll = ctypes.CDLL(lib)
