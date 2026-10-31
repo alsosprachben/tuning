@@ -101,7 +101,9 @@ def _load():
             ('nv_random_check', None, [LL, I, D]),
             ('nv_tone', I, [P, ctypes.POINTER(ToneIn), I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                             ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p, ctypes.POINTER(I),
-                            ctypes.c_void_p, D])):
+                            ctypes.c_void_p, D]),
+            ('nv_strike', I, [P, ctypes.POINTER(ToneIn), I, ctypes.c_void_p, ctypes.c_void_p, C, C, C, C, C, C, C,
+                              C, ctypes.c_void_p, I, ctypes.c_void_p, D])):
         f = getattr(d, name)
         f.restype, f.argtypes = res, args
     return d

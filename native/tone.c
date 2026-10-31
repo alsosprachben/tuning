@@ -275,3 +275,31 @@ int nv_tone(const VoiceSnap *v, const ToneIn *t,
     }
     return R.n;
 }
+
+/* blockrender._note_strike_noise for a single burst at the onset (no flams,
+ * no crowd, no recorded clicks, no tail, no layers): each band of the
+ * voice's strike_noise_db (hz[], db[]) a noise row (the caller sets the
+ * noise width in t->cbw0/1 and no room images, t->reflect 0), its level the
+ * band's with the register's tilt (reg) and the calibration (scal), decaying
+ * at slr from bon for slen samples. qacc and *azimuth as nv_tone's. Returns
+ * the rows written, -1 if the store was too small. */
+int nv_strike(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db,
+              double reg, double bdb, double scal, double slr, double sfade, double slen, double bon,
+              double pos_x, double *rows, int cap, double *qacc, double *azimuth)
+{
+    Rows R = {rows, 0, cap};
+    double VB[3] = {0.0, 5.5, 0.0};
+    double sr = t->sr;
+    for (int i = 0; i < nb; i++) {
+        double hf = hz[i];
+        if (hf >= 0.45 * sr)
+            continue;
+        double gM = v->gain * pow(10.0, (db[i] + reg + bdb + scal) / 20.0);
+        if (!emit(v, t, &R, qacc, azimuth, NULL, 0, 2 * PI * hf / sr,
+                  gM * nv_hrtf_gain(v, hf, t->li) * 1.0, gM * nv_hrtf_gain(v, hf, t->ri) * 1.0, gM, hf,
+                  bon, bon + slen, sfade, 0.01 * sr, t->chiff, slr, 0.0, 0.0, 0.0, 0.0, t->cc, t->crl,
+                  0.0, t->csc, -1.0, 0.0, 0.0, 0.0, VB, pos_x))
+            return -1;
+    }
+    return R.n;
+}
