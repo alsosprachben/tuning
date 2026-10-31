@@ -174,6 +174,37 @@ def db_amplitude(db):
 
 from zlib import crc32 as _crc32
 
+
+# roomcore.c: the room's reflections in C (SynthProperties._reflection_terms_c),
+# built when its source is newer, without -ffast-math or fused multiply-adds
+# so it is Python's arithmetic bit for bit. TUNING_ROOM_C=0: Python's own.
+_ROOMC = [None]
+
+
+def _roomcore():
+    if _ROOMC[0] is None:
+        _ROOMC[0] = False
+        if os.environ.get("TUNING_ROOM_C", "1") not in ("0", "off", ""):
+            try:
+                import ctypes
+                import subprocess
+                here = os.path.dirname(os.path.abspath(__file__))
+                src = os.path.join(here, "roomcore.c")
+                lib = os.path.join(here, "libroomcore.so")
+                if not os.path.exists(lib) or os.path.getmtime(src) > os.path.getmtime(lib):
+                    tmp = "%s.%d.tmp" % (lib, os.getpid())
+                    subprocess.check_call(["gcc", "-O3", "-march=native", "-ffp-contract=off", "-shared",
+                                           "-fPIC", src, "-o", tmp, "-lm"])
+                    os.replace(tmp, lib)
+                dll = ctypes.CDLL(lib)
+                P, D, I = ctypes.c_void_p, ctypes.c_double, ctypes.c_int
+                dll.reflection_terms.argtypes = [P, P, P, P, D, D, D, D, D, I, I, P, P, P, P, P, P, P]
+                dll.reflection_terms.restype = I
+                _ROOMC[0] = dll
+            except Exception as e:      # no compiler, no library: Python's own
+                errlog("roomcore unavailable (%s)" % e)
+    return _ROOMC[0]
+
 # Per-note draws that the build was repeating per HARMONIC. All three are pure
 # functions of (class, note) or (class, note, player) and were being recomputed
 # tens of thousands of times per piece; see the docstrings at their use sites.
@@ -2281,6 +2312,9 @@ class SynthProperties:
         from math import sqrt
         if not self.reflection_order:
             return []
+        dll = _roomcore()
+        if dll:
+            return self._reflection_terms_c(dll, frequency, sx, sy, sz, radius)
         direct = sqrt(sx * sx + sy * sy + sz * sz) or 1e-9
         direct_dir = self.directivity_gain(frequency, sx, sz, radius) or 1e-9
         air = self.air_absorption_db_per_m(frequency)
@@ -2311,6 +2345,67 @@ class SynthProperties:
                 continue
             out.append((gain, delay, image))
         return out
+
+    # THE SAME IN C (roomcore.c): reflection_terms bit for bit, the image
+    # list from image_sources (a pure function of the source's place and the
+    # room, so held), the room as numbers (_room_pack, held per its values)
+    _IMG_CACHE = {}
+    _PACK_CACHE = {}
+    _ROOM_MEMO_MAX = 20000
+
+    def _images_for(self, sx, sy, sz):
+        """image_sources(sx, sy, sz) and its arrays for the C, held."""
+        import numpy as np
+        walls = tuple(getattr(self, attr) for _, _, attr, _ in self.WALLS)
+        key = (sx, sy, sz, walls, self.reflection_order)
+        got = SynthProperties._IMG_CACHE.get(key)
+        if got is None:
+            imgs = self.image_sources(sx, sy, sz)
+            idx = {nm: i for i, (nm, _, _, _) in enumerate(self.WALLS)}
+            nsurf = np.array([len(names) for names, _, _ in imgs], np.int32)
+            surf = np.array([idx[nm] for names, _, _ in imgs for nm in names], np.int32)
+            img = np.ascontiguousarray([c for _, im, _ in imgs for c in im], np.float64)
+            mir = np.ascontiguousarray([c for _, _, mr in imgs for c in mr], np.float64)
+            if len(SynthProperties._IMG_CACHE) >= self._ROOM_MEMO_MAX:
+                SynthProperties._IMG_CACHE.clear()
+            got = SynthProperties._IMG_CACHE[key] = (imgs, nsurf, surf, img, mir)
+        return got
+
+    def _room_pack(self):
+        """The room's numbers for roomcore.c: (R, AHZ, ALPHA, SCAT)."""
+        import numpy as np
+        key = (self.radiation_distance, self.directivity_radius, self.directivity_floor,
+               self.directivity_axis_deg, self.sound_speed, self.reflection_floor_db,
+               self.reflection_fusion_s or 0.0, self.air_temperature_c, self.air_pressure_kpa,
+               self.air_humidity_pct, id(self.SURFACE_ALPHA), id(self.SURFACE_SCATTER),
+               tuple(self._ALPHA_HZ))
+        got = SynthProperties._PACK_CACHE.get(key)
+        if got is None:
+            names = [nm for nm, _, _, _ in self.WALLS]
+            got = (np.array(key[:10], np.float64), np.array(self._ALPHA_HZ, np.float64),
+                   np.ascontiguousarray([v for nm in names for v in self.SURFACE_ALPHA[nm]], np.float64),
+                   np.ascontiguousarray([v for nm in names for v in self.SURFACE_SCATTER[nm]], np.float64))
+            if len(SynthProperties._PACK_CACHE) >= self._ROOM_MEMO_MAX:
+                SynthProperties._PACK_CACHE.clear()
+            SynthProperties._PACK_CACHE[key] = got
+        return got
+
+    def _reflection_terms_c(self, dll, frequency, sx, sy, sz, radius):
+        import numpy as np
+        imgs, nsurf, surf, img, mir = self._images_for(sx, sy, sz)
+        n = len(imgs)
+        if not n:
+            return []
+        R, AHZ, ALPHA, SCAT = self._room_pack()
+        keep = np.empty(n, np.int32)
+        gain = np.empty(n, np.float64)
+        delay = np.empty(n, np.float64)
+        k = dll.reflection_terms(R.ctypes.data, AHZ.ctypes.data, ALPHA.ctypes.data, SCAT.ctypes.data,
+                                 float(frequency), float(sx), float(sy), float(sz),
+                                 0.0 if radius is None else float(radius), 0 if radius is None else 1,
+                                 n, nsurf.ctypes.data, surf.ctypes.data, img.ctypes.data, mir.ctypes.data,
+                                 keep.ctypes.data, gain.ctypes.data, delay.ctypes.data)
+        return [(float(gain[i]), float(delay[i]), imgs[keep[i]][1]) for i in range(k)]
 
     _Q_CACHE = {}
 

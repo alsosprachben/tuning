@@ -4652,6 +4652,7 @@ class _Emitter(object):
             return          # a transposition (_XP) carried it past Nyquist
         dl, dr, px, pz = _place if _place else (self._DL[0], self._DL[1], self.pos_x, self.pos_z)
         _am0 = ampM
+        _rst = None             # the voice's room state (_refl_state), made once a partial
         if _place is None:
             self.azimuth = math.atan2(px, max(self.props.radiation_distance, 1e-6))
             # FURTHER AWAY, THE SAME BALANCE: a channel's distance multiple
@@ -4674,7 +4675,8 @@ class _Emitter(object):
                 # images are held to the energy they had at the voice's own
                 # distance: the ratio between them moves, which is the cue
                 if self.REFLECT and not self.no_reflections:
-                    _ga *= self._refl_norm(nomf, px, pz, _dm)
+                    _rst = _refl_state(self.props)
+                    _ga *= self._refl_norm(nomf, px, pz, _dm, _rst)
                 ampL *= _ga; ampR *= _ga; ampM *= _ga
             # THE FILE'S GS EQ, on the parts that have it on (gs_eq_gain):
             # the partial at its frequency, its reflections with it
@@ -4839,7 +4841,10 @@ class _Emitter(object):
         # the head model sensible interaural cues, not a claim about where the
         # players are (see the radiation comment in tonelib).
         _dm = self._src_dist(_part, self.props)
-        _rk = (nomf, px, pz, self.radius, _dm) + _refl_state(self.props)
+        # (the voice's room state, made once a partial: _refl_norm's above if it ran)
+        if _rst is None:
+            _rst = _refl_state(self.props)
+        _rk = (nomf, px, pz, self.radius, _dm) + _rst
         _terms = self._REFL.get(_rk) if PREP_MEMO else None
         PREP_MEMO_STATS[0] += 1
         if _terms is None:
@@ -7007,10 +7012,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
 
     _RNORM = {}
 
-    def _refl_norm(f, px, pz, d):
+    def _refl_norm(f, px, pz, d, st=None):
         """sqrt(E(1) / E(d)), E = 1 + the images' energy against the direct,
-        for the current voice at frequency f moved out by d (_src_dist)."""
-        k = (round(f, 1), px, pz, em.radius, d) + _refl_state(em.props)
+        for the current voice at frequency f moved out by d (_src_dist).
+        st: the voice's _refl_state, if the caller has it."""
+        k = (round(f, 1), px, pz, em.radius, d) + (_refl_state(em.props) if st is None else st)
         g = _RNORM.get(k)
         if g is None:
             r = em.props.radiation_distance
