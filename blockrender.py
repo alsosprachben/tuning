@@ -4632,6 +4632,13 @@ class _Emitter(object):
             self._CBW[0], self._CBW[1] = _cbw
             self.no_reflections = _nr
 
+    def _appends(self):
+        """{column: its append}, bound once for the table the emitter writes."""
+        if getattr(self, '_ap_of', None) is not self.A:
+            self._ap = {k: v.append for k, v in self.A.items()}
+            self._ap_of = self.A
+        return self._ap
+
     def emit_partial(self, om, ampL, ampR, ampM, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0=0.0,
                      _place=None):
         # _place is (delL, delR, px, pz) for an image source; None means the
@@ -4654,7 +4661,9 @@ class _Emitter(object):
             # kHz over ten metres. Its LEVEL stays as the mix wrote it: that is
             # the normalisation that makes the send a distance, not a fader
             # (roomtail sets the tail by the same multiple).
-            _dm = self._src_dist(_GSX.part_of(self.channel), self.props)
+            # the part this mix channel belongs to (gsefx.part_of, for an int)
+            _part = (int(self.channel) % _GSX.VIRT) % _GSX.TONE_SEG
+            _dm = self._src_dist(_part, self.props)
             if _dm != 1.0:
                 _r0 = math.sqrt(px * px + self.props.radiation_distance ** 2 + pz * pz)
                 _ga = 10.0 ** (-self.props.air_absorption_db_per_m(nomf) * (_dm - 1.0) * _r0 / 20.0)
@@ -4669,7 +4678,7 @@ class _Emitter(object):
                 ampL *= _ga; ampR *= _ga; ampM *= _ga
             # THE FILE'S GS EQ, on the parts that have it on (gs_eq_gain):
             # the partial at its frequency, its reflections with it
-            if _GS_EQ and _GSX.part_of(self.channel) not in _GS_EQ['off']:
+            if _GS_EQ and _part not in _GS_EQ['off']:
                 _ge = gs_eq_gain(nomf, _GS_EQ['eq'])
                 ampL *= _ge; ampR *= _ge; ampM *= _ge
             # THE INSERTION EFFECT's compressor (gsefx), before its OD: its
@@ -4736,16 +4745,28 @@ class _Emitter(object):
                     (ampL, ampR, ampM, -om * (non + dl) + ph0, -om * (non + dr) + ph0, non, logr))
                 noff = _n2
                 re = _xf
-        self.A["om"].append(om)
-        self.A["p0"].append(-om*(non + dl) + ph0)
-        self.A["p0R"].append(-om*(non + dr) + ph0)
-        self.A["aL"].append(ampL); self.A["aR"].append(ampR)
+        # the table's columns, their appends bound once (a column is the same
+        # object for the whole note loop: the stream trims it in place)
+        ap = self._appends()
+        _cbw = self._CBW[1]/max(1e-6,nomf) if self._CBW[1] > 0.0 else self._CBW[0]
+        # CC77 moves the depth -- adding up to 30 cents where a voice has none,
+        # taking a voice's own toward zero downward -- and CC76 the rate.
+        _vd0 = self._VB[0]
+        if self._SV[0] > 0.0:
+            _vd0 = _vd0 + self._SV[0] * (2.0 ** (T.SOUND_VIB_DEPTH_CENTS / 1200.0) - 1.0)
+        elif self._SV[0] < 0.0:
+            _vd0 = _vd0 * (1.0 + self._SV[0])
+        _br = self.bend_row if (self.bend_row >= 0 or self.fader_row < 0) else self.fader_row
+        ap['om'](om)
+        ap['p0'](-om*(non + dl) + ph0)
+        ap['p0R'](-om*(non + dr) + ph0)
+        ap['aL'](ampL); ap['aR'](ampR)
         # ampM is this partial BEFORE the head model -- what the instrument
         # radiates, not what an ear receives. aL/aR are ampM times a per-ear
         # hrtf_gain, so keeping it costs one column and makes a source-referenced
         # (object) render exact rather than an un-mixing of the binaural one.
-        self.A["aM"].append(ampM); self.A["mch"].append(self.channel)
-        self.A["px"].append(px); self.A["pz"].append(pz); self.A["az"].append(self.azimuth)
+        ap['aM'](ampM); ap['mch'](self.channel)
+        ap['px'](px); ap['pz'](pz); ap['az'](self.azimuth)
         # 1 for the sound that goes straight to the listener, 0 for an image.
         # The amplifier distorts BEFORE anything radiates, so its products are
         # formed from the direct signal only -- a product between a direct
@@ -4755,47 +4776,46 @@ class _Emitter(object):
         # ...and a LATE COPY's (the bloom) 0.75 and 0.25: still direct and an
         # image either side of 0.5, as every reader tests, but marked, so the
         # sympathetic pass does not take its late arrivals for new strikes
-        self.A["dr"].append((0.75 if self.late_copy else 0.9 if self.ring_rows else 1.0) if _place is None
-                       else (0.25 if self.late_copy else 0.1 if self.ring_rows else 0.0))
-        self.A["nf"].append(nomf); self.A["non"].append(non); self.A["noff"].append(noff); self.A["fa"].append(fa); self.A["re"].append(re); self.A["ch"].append(ch)
-        self.A["logr"].append(logr); self.A["logrA"].append(logrA); self.A["aft"].append(aft); self.A["sus"].append(sus)
-        self.A["cv"].append(cv); self.A["cc"].append(cc); self.A["crl"].append(crl); self.A["sj"].append(sj); self.A["csc"].append(csc)
+        ap['dr']((0.75 if self.late_copy else 0.9 if self.ring_rows else 1.0) if _place is None
+                 else (0.25 if self.late_copy else 0.1 if self.ring_rows else 0.0))
+        ap['nf'](nomf); ap['non'](non); ap['noff'](noff); ap['fa'](fa); ap['re'](re); ap['ch'](ch)
+        ap['logr'](logr); ap['logrA'](logrA); ap['aft'](aft); ap['sus'](sus)
+        ap['cv'](cv); ap['cc'](cc); ap['crl'](crl); ap['sj'](sj); ap['csc'](csc)
         # index is t*f*gran, so gran IS the fractional width; an absolute
         # width in Hz is that same number divided by where the partial sits.
-        self.A["cbw"].append(self._CBW[1]/max(1e-6,nomf) if self._CBW[1] > 0.0 else self._CBW[0])
-        self.A["tbav"].append(self._TB[0]); self.A["tau"].append(self._TB[1]); self.A["tcut"].append(self._TB[2])
+        ap['cbw'](_cbw)
+        ap['tbav'](self._TB[0]); ap['tau'](self._TB[1]); ap['tcut'](self._TB[2])
         # THE GLIDE IS PER NOTE, NOT PER PARTIAL, but it is stamped per partial
         # because that is where the kernel reads it -- and because _TB beside it
         # is NOT per note: mode lock overrides it per partial, which is exactly
         # why portamento could not borrow those three slots and has its own.
-        self.A["gb"].append(self._GL[0]); self.A["gt"].append(self._GL[1]); self.A["gc"].append(self._GL[2])
-        # CC77 moves the depth -- adding up to 30 cents where a voice has none,
-        # taking a voice's own toward zero downward -- and CC76 the rate.
-        _vd0 = self._VB[0]
-        if self._SV[0] > 0.0:
-            _vd0 = _vd0 + self._SV[0] * (2.0 ** (T.SOUND_VIB_DEPTH_CENTS / 1200.0) - 1.0)
-        elif self._SV[0] < 0.0:
-            _vd0 = _vd0 * (1.0 + self._SV[0])
-        self.A["vd"].append(_vd0); self.A["vr"].append(self._VB[1] * self._SV[1]); self.A["vp"].append(self._VB[2])
-        self.A["vdl"].append(self.vibrato_delay)
-        self.A["delL"].append(dl); self.A["delR"].append(dr)
-        self.A["gr"].append(gr); self.A["cr"].append(cr); self.A["br"].append(self.bend_row if (self.bend_row >= 0 or self.fader_row < 0) else self.fader_row); self.A["pl"].append(self.player)
-        self.A["fx"].append(self.moog_filter_row); self.A["mk"].append(self.moog_key); self.A["rdl"].append(self.image_delay)
-        self.A["fmw"].append(self.fm_omega)
+        ap['gb'](self._GL[0]); ap['gt'](self._GL[1]); ap['gc'](self._GL[2])
+        ap['vd'](_vd0); ap['vr'](self._VB[1] * self._SV[1]); ap['vp'](self._VB[2])
+        ap['vdl'](self.vibrato_delay)
+        ap['delL'](dl); ap['delR'](dr)
+        ap['gr'](gr); ap['cr'](cr); ap['br'](_br); ap['pl'](self.player)
+        ap['fx'](self.moog_filter_row); ap['mk'](self.moog_key); ap['rdl'](self.image_delay)
+        ap['fmw'](self.fm_omega)
         # the onset's fraction of a sample, which the table's whole-sample
         # `non` drops and the phase anchor above keeps: live needs it to move a
         # partial's frequency without moving its phase (a room image's onset
         # is hardly ever a whole sample)
-        self.A["nfr"].append(non - math.floor(non))
-        self.A["fmp"].append(-self.fm_omega * (non + dl) + self.fm_phase if self.fm_omega else 0.0)
-        self.A["fmpR"].append(-self.fm_omega * (non + dr) + self.fm_phase if self.fm_omega else 0.0)
+        ap['nfr'](non - math.floor(non))
+        ap['fmp'](-self.fm_omega * (non + dl) + self.fm_phase if self.fm_omega else 0.0)
+        ap['fmpR'](-self.fm_omega * (non + dr) + self.fm_phase if self.fm_omega else 0.0)
         if _place is None and ampM > 0.0:
             # Q is how much louder this partial is toward the listener than its
             # own spherical average, so ampM^2/Q is the power it feeds the room.
             # Read at the band centre: the sphere integral is cached per radius
             # and frequency, and per-partial resolution buys nothing here.
-            bi = min(range(len(self.ROOM_BANDS)),
-                     key=lambda i: abs(math.log(max(nomf, 1e-6) / self.ROOM_BANDS[i])))
+            # (the nearest band in log frequency, the first of equals, as
+            # min() over the bands picked it)
+            _lf = max(nomf, 1e-6)
+            bi, _bd = 0, abs(math.log(_lf / self.ROOM_BANDS[0]))
+            for _i in range(1, len(self.ROOM_BANDS)):
+                _d = abs(math.log(_lf / self.ROOM_BANDS[_i]))
+                if _d < _bd:
+                    bi, _bd = _i, _d
             try:
                 q = self.props.directivity_factor(self.ROOM_BANDS[bi], px, pz, self.radius)
             except Exception:
@@ -4818,7 +4838,7 @@ class _Emitter(object):
         # the 2 m listener_distance -- that one is a stage image chosen to give
         # the head model sensible interaural cues, not a claim about where the
         # players are (see the radiation comment in tonelib).
-        _dm = self._src_dist(_GSX.part_of(self.channel), self.props)
+        _dm = self._src_dist(_part, self.props)
         _rk = (nomf, px, pz, self.radius, _dm) + _refl_state(self.props)
         _terms = self._REFL.get(_rk) if PREP_MEMO else None
         PREP_MEMO_STATS[0] += 1
@@ -4850,17 +4870,49 @@ class _Emitter(object):
                 _terms.append((rg, rdelay, image, (_rli, _rri, _rld - _sh, _rrd - _sh)))
             if PREP_MEMO:
                 self._REFL[_rk] = _terms
+        # EACH IMAGE IS THIS PARTIAL AGAIN, its own place, delay and ear
+        # gains: its row exactly as a call of emit_partial with _place would
+        # make it (the same values in the same order -- om through the jitter
+        # and back, the Nyquist guard, the image's onset as a whole sample),
+        # written here without the call
+        _omi = om / self.jitter_scale * self.jitter_scale
+        _skip = self.transposed and _omi >= self._NYQ_OM
+        _dri = 0.25 if self.late_copy else 0.1 if self.ring_rows else 0.0
+        _hg = self.props.hrtf_gain
+        _fmw, _fmph = self.fm_omega, self.fm_phase
         for rg, rdelay, image, (rli, rri, rld, rrd) in _terms:
             ix, iy, iz = image
             self.azimuth = math.atan2(ix, max(iy, 1e-6))
             gm = ampM * rg
             # as the table will store it: onsets are kept as whole samples
             self.image_delay = float(int(non + rdelay*SR) - int(non))
-            self.emit_partial(om/self.jitter_scale, gm*self.props.hrtf_gain(nomf, rli),
-                         gm*self.props.hrtf_gain(nomf, rri), gm, nomf,
-                         non + rdelay*SR, noff + rdelay*SR, fa, re, ch,
-                         logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0,
-                         _place=(rld*SR, rrd*SR, ix, iz))
+            if _skip:
+                continue        # a transposition (_XP) carried it past Nyquist
+            _gl, _gr = gm*_hg(nomf, rli), gm*_hg(nomf, rri)
+            _ni, _fi = non + rdelay*SR, noff + rdelay*SR
+            _dli, _dri_ = rld*SR, rrd*SR
+            ap['om'](_omi)
+            ap['p0'](-_omi*(_ni + _dli) + ph0)
+            ap['p0R'](-_omi*(_ni + _dri_) + ph0)
+            ap['aL'](_gl); ap['aR'](_gr)
+            ap['aM'](gm); ap['mch'](self.channel)
+            ap['px'](ix); ap['pz'](iz); ap['az'](self.azimuth)
+            ap['dr'](_dri)
+            ap['nf'](nomf); ap['non'](_ni); ap['noff'](_fi); ap['fa'](fa); ap['re'](re); ap['ch'](ch)
+            ap['logr'](logr); ap['logrA'](logrA); ap['aft'](aft); ap['sus'](sus)
+            ap['cv'](cv); ap['cc'](cc); ap['crl'](crl); ap['sj'](sj); ap['csc'](csc)
+            ap['cbw'](_cbw)
+            ap['tbav'](self._TB[0]); ap['tau'](self._TB[1]); ap['tcut'](self._TB[2])
+            ap['gb'](self._GL[0]); ap['gt'](self._GL[1]); ap['gc'](self._GL[2])
+            ap['vd'](_vd0); ap['vr'](self._VB[1] * self._SV[1]); ap['vp'](self._VB[2])
+            ap['vdl'](self.vibrato_delay)
+            ap['delL'](_dli); ap['delR'](_dri_)
+            ap['gr'](gr); ap['cr'](cr); ap['br'](_br); ap['pl'](self.player)
+            ap['fx'](self.moog_filter_row); ap['mk'](self.moog_key); ap['rdl'](self.image_delay)
+            ap['fmw'](_fmw)
+            ap['nfr'](_ni - math.floor(_ni))
+            ap['fmp'](-_fmw * (_ni + _dli) + _fmph if _fmw else 0.0)
+            ap['fmpR'](-_fmw * (_ni + _dri_) + _fmph if _fmw else 0.0)
         self.image_delay = 0.0
         self.azimuth = _direct_az
 

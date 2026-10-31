@@ -273,3 +273,31 @@ int strike_drive(int R, const double *aM, const double *om, const double *non, c
     free(fW); free(wj); free(bj); free(Wj); free(aj); free(close); free(cj); free(fr); free(fo);
     return nfo;
 }
+
+/* ------------------------------------------------------------------ the felt */
+
+/* register.Channel._dcum: the felt's damping done by sample n[i] (nepers at
+ * key[i]'s fundamental), for each of n queries. Each key's breakpoints
+ * bk[], rates and cumulative damping D[] are a slice of the flat arrays,
+ * off[key]..off[key + 1] (an empty slice: never damped). The same
+ * arithmetic, in the same order, as the numpy: bit-identical. */
+void dcum(int n, const long *key, const double *t, const long *off, const double *bk,
+          const double *rate, const double *D, double sr, double *out)
+{
+    for (int q = 0; q < n; q++) {
+        long k = key[q];
+        long a = off[k], z = off[k + 1];
+        if (z <= a) {
+            out[q] = 0.0;
+            continue;
+        }
+        /* np.searchsorted(bk, t, 'right') - 1 */
+        long lo = a, hi = z;
+        while (lo < hi) {
+            long m = (lo + hi) / 2;
+            if (bk[m] <= t[q]) lo = m + 1; else hi = m;
+        }
+        long i = lo - 1;
+        out[q] = i >= a ? D[i] + rate[i] * (t[q] - bk[i]) / sr : 0.0;
+    }
+}

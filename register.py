@@ -61,6 +61,7 @@ the register reaches the room through the send and the late tail.
 """
 import ctypes
 import math
+import operator
 import os
 import random
 import subprocess
@@ -388,7 +389,10 @@ def _load_core():
         # built to a temporary name and moved: a live engine and a render
         # starting at once must never load a half-written library
         tmp = "%s.%d.tmp" % (lib, os.getpid())
-        subprocess.check_call(["gcc", "-O3", "-march=native", "-shared", "-fPIC", src, "-o", tmp, "-lm"])
+        # no -ffast-math, and no fused multiply-adds (numpy makes none): the
+        # order of operations is the source's
+        subprocess.check_call(["gcc", "-O3", "-march=native", "-ffp-contract=off", "-shared", "-fPIC",
+                               src, "-o", tmp, "-lm"])
         os.replace(tmp, lib)
     dll = ctypes.CDLL(lib)
     P, D = ctypes.c_void_p, ctypes.c_double
@@ -397,6 +401,8 @@ def _load_core():
     dll.strike_drive.argtypes = ([ctypes.c_int] + [P] * 15 + [ctypes.c_int] + [P] * 7 + [D, ctypes.c_long,
                                  ctypes.c_long, D, D, D, D, D, D, P, P, ctypes.c_int, P, P, P, P, P])
     dll.strike_drive.restype = ctypes.c_int
+    dll.dcum.argtypes = [ctypes.c_int, P, P, P, P, P, P, D, P]
+    dll.dcum.restype = None
     return dll
 
 
@@ -581,6 +587,16 @@ class Channel(object):
                     if i == 0 or rate[i] != rate[i - 1]:
                         b = int(math.ceil(bk[i] / blk)) * blk
                         self.pevents.setdefault(b, set()).add(k)
+        # ...and the same tables flat, each key a slice, for the C core's dcum
+        self._dflat = None
+        if self.damp:
+            off = np.zeros(130, np.int64)
+            parts = [self.damp.get(k) for k in range(129)]
+            for k in range(129):
+                off[k + 1] = off[k] + (len(parts[k][0]) if parts[k] is not None else 0)
+            cat = lambda i: np.ascontiguousarray(np.concatenate(                 # noqa: E731
+                [p_[i] for p_ in parts if p_ is not None]), np.float64)
+            self._dflat = (off, cat(0), cat(1), cat(2))
 
     def _drate(self, keys, n):
         """The felt's extra rate (nepers/s at the key's fundamental) at sample
@@ -596,6 +612,16 @@ class Channel(object):
 
     def _dcum(self, keys, n):
         """The felt's damping done by n (nepers at the key's fundamental)."""
+        dll = _core()
+        if dll and self._dflat is not None and len(keys):
+            # in C (registercore.c dcum): the same arithmetic, bit-identical
+            off, bk, rate, D = self._dflat
+            k8 = np.ascontiguousarray(keys, np.int64)
+            t8 = np.ascontiguousarray(np.broadcast_to(np.asarray(n, float), (len(keys),)), np.float64)
+            out = np.empty(len(keys))
+            dll.dcum(len(keys), k8.ctypes.data, t8.ctypes.data, off.ctypes.data, bk.ctypes.data,
+                     rate.ctypes.data, D.ctypes.data, float(self.sr), out.ctypes.data)
+            return out
         out = np.zeros(len(keys))
         if self.damp:
             n = np.broadcast_to(np.asarray(n, float), (len(keys),))
@@ -1050,8 +1076,9 @@ def expand(A, channels, sr, blk, cols, meta=None):
     for ch, C in channels.items():
         C.finish()
         recs = sorted(C.take(), key=lambda r: (r['phase'], r['seq']))
+        rows = [r['row'] for r in recs]
         for c in cols:
-            A[c].extend([r['row'][c] for r in recs])
+            A[c].extend(map(operator.itemgetter(c), rows))
         if meta is not None:
             meta.extend((ch, r['kind'], r['src'], r['mode']) for r in recs)
         added += len(recs)
