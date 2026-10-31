@@ -102,6 +102,41 @@ class PyRandomState(ctypes.Structure):
     _fields_ = [('mt', ctypes.c_uint32 * 624), ('i', I)]
 
 
+class NoteClass(ctypes.Structure):
+    """native/engine.cpp's NoteClass: what a voice class is to a note's setup."""
+    _fields_ = ([('init', VoiceInit), ('tmpl', VoiceSnap), ('chiff_max_valve_time', C), ('release_valve_set', I),
+                 ('release_valve_time', C), ('speech_cycles', C), ('legato_set', I), ('legato_attack_s', C),
+                 ('attack_fraction_max', C), ('release_fraction_set', I), ('release_fraction_max', C),
+                 ('slur_cuts_release', I), ('chiff_width_set', I)]
+                + [(f, C) for f in ('chiff_width', 'chiff_width_cycles', 'chiff_volume', 'chiff_cycle',
+                                    'chiff_release', 'sustain_jitter', 'cbw0', 'cbw1', 'tension_bend_power')]
+                + [('tension_bend_slurs', I), ('tension_settle_time', C), ('tension_settle_cutoff', C),
+                   ('tension_log', I), ('tbend_cut_scale', C), ('sustain_level', C), ('reflection_order', I),
+                   ('n_strike', I), ('strike_hz', C * 32), ('strike_db', C * 32), ('strike_noise_dbs', C),
+                   ('strike_span_set', I)]
+                + [(f, C) for f in ('strike_span_lo', 'strike_span_hi', 'strike_octave_db', 'strike_fade_s',
+                                    'strike_len_s', 'strike_at_s', 'strike_cal_db')])
+
+
+class NoteIn(ctypes.Structure):
+    """native/engine.cpp's NoteIn: a note as its file and channel give it."""
+    _fields_ = ([(f, C) for f in ('f0', 'pan', 'vel', 'chan_vol', 'effort', 'on', 'off', 'nx')]
+                + [(f, I) for f in ('has_nx', 'mcut', 'slurred', 'slur_out')]
+                + [('detune_lo', C), ('detune_hi', C), ('soft_pedal_down', I), ('fixed_touch', I)]
+                + [(f, C) for f in ('sr', 'retrigger_fade', 'channel', 'br', 'nyq_om')]
+                + [('sv', C * 2), ('sound_vib_depth_cents', C), ('vibrato_delay', C), ('gl', C * 3)]
+                + [(f, C) for f in ('fx', 'mk', 'fm_omega', 'fm_phase')]
+                + [('room_bands', C * 9), ('reflect', I), ('no_reflections', I)])
+
+
+class NoteOut(ctypes.Structure):
+    """native/engine.cpp's NoteOut: what the note's setup worked out."""
+    _fields_ = ([(f, I) for f in ('n_knock', 'n_tone', 'n_phantom')]
+                + [(f, C) for f in ('non', 'noff', 'fade', 'rel', 'chiff', 'jitter_scale', 'dl', 'dr', 'li',
+                                    'ri', 'pos_x', 'pos_z', 'B', 'cv', 'cc', 'crl', 'sjit', 'csc')]
+                + [('tb', C * 3), ('cbw', C * 2)])
+
+
 def lib():
     """native/ as a library, built when a source is newer; None if it cannot be."""
     if _LIB[0] is None:
@@ -115,16 +150,26 @@ def lib():
 
 
 def _load():
-    srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h')]
+    srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp')]
             + [os.path.join(HERE, 'roomcore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
         tmp = '%s.%d.tmp' % (so, os.getpid())
         # no -ffast-math, no fused multiply-adds: Python's order of operations;
         # no builtins: pow(x, 2.0) is libm's pow, as Python's x ** 2 is (gcc's
-        # x*x is correctly rounded where pow, at 0.52 ULP, is not always)
-        subprocess.check_call(['gcc', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-shared', '-fPIC',
-                               srcs[0], '-o', tmp, '-lm'])
+        # x*x is correctly rounded where pow, at 0.52 ULP, is not always).
+        # The C core (tone.c, with voice.c) and the C++ engine (engine.cpp)
+        # under the same flags, linked into one library.
+        flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
+        oc, ocpp = tmp + '.tone.o', tmp + '.engine.o'
+        try:
+            subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', oc])
+            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', srcs[4], '-o', ocpp])
+            subprocess.check_call(['g++', '-shared', oc, ocpp, '-o', tmp, '-lm'])
+        finally:
+            for o in (oc, ocpp):
+                if os.path.exists(o):
+                    os.remove(o)
         os.replace(tmp, so)
     d = ctypes.CDLL(so)
     P = ctypes.POINTER(VoiceSnap)
@@ -145,6 +190,9 @@ def _load():
                               C, ctypes.c_void_p, I, ctypes.c_void_p, D]),
             ('nv_voice_init', None, [ctypes.POINTER(VoiceInit), P, C, C, C, C, C, ctypes.POINTER(PyRandomState),
                                      P, ctypes.POINTER(VoiceNote)]),
+            ('nv_note', I, [ctypes.POINTER(NoteClass), ctypes.POINTER(NoteIn), ctypes.POINTER(PyRandomState), I,
+                            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I,
+                            ctypes.c_void_p, D, ctypes.POINTER(NoteOut)]),
             ('nv_phantom', I, [P, ctypes.POINTER(ToneIn), ctypes.c_void_p, I, I, ctypes.c_void_p, ctypes.c_void_p,
                                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p, D])):
         f = getattr(d, name)
@@ -355,3 +403,89 @@ def random_state():
     r.mt[:] = st[:624]
     r.i = st[624]
     return r
+
+
+_NOTE = {}
+# a class attribute that, set, means a note of the class takes a path the
+# engine does not have (blockrender plays it): the tone's extras
+# (_tone_native), the knock's (_strike_native), the note setup's
+_NOTE_OFF = ('bloom_seconds', 'speech_harmonic_exp', 'speech_harmonic_exp_per_octave', 'wind_skirt_always',
+             'unison_spans_part', 'unison_drop_late', 'strike_phase_spread', 'partial_phase_spread',
+             'stroke_scatter', 'string_choirs', 'unison_shares_phase', 'directivity_radius', 'strike_in_s',
+             'jitter_by_partial', 'mode_lock_spread', 'played_backwards', 'fold_restrike', 'hammer_legato',
+             'strike_flam_rate', 'strike_flam_times', 'strike_flam_people', 'strike_noise_tail',
+             'strike_noise_layers', 'transposed_from_hz', 'one_shot', 'gate_time')
+_NOTE_ABSENT = ('pre_pluck_s', 'feedback_harmonic')
+
+
+def note_class(cls):
+    """native/engine.cpp's NoteClass for cls, or None where its notes are not
+    the engine's: made once, its template's room kept current."""
+    import tonelib as T
+    import blockrender as BR
+    got = _NOTE.get(cls)
+    if got is None:
+        v = _class(cls)
+        ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF)
+              and not any(hasattr(cls, a) for a in _NOTE_ABSENT)
+              and getattr(cls, 'mode_phase', None) is None and int(getattr(cls, 'strike_flam', 0) or 0) <= 1
+              and len(getattr(cls, 'strike_noise_db', ()) or ()) <= 32)
+        if ok:
+            # a section's players and their onsets: none for one instrument (its prototype asked)
+            p = v[2]
+            ok = not (hasattr(p, 'section_seats') and p.section_seats()) and not any(
+                hasattr(p, 'section_onsets_at') and p.section_onsets_at(f) for f in (27.5, 261.6, 4186.0))
+        if not ok:
+            _NOTE[cls] = False
+            return None
+        k = NoteClass()
+        k.init = v[0]
+        k.chiff_max_valve_time = cls.chiff_max_valve_time
+        k.release_valve_set = int(cls.release_valve_time is not None)
+        k.release_valve_time = cls.release_valve_time or 0.0
+        k.speech_cycles = cls.speech_cycles
+        lg = getattr(cls, 'legato_attack_s', None)
+        k.legato_set, k.legato_attack_s = int(lg is not None), lg or 0.0
+        k.attack_fraction_max = getattr(cls, 'attack_fraction_max', 0.45)
+        rfm = getattr(cls, 'release_fraction_max', 0.45)
+        k.release_fraction_set, k.release_fraction_max = int(rfm is not None), rfm or 0.0
+        k.slur_cuts_release = int(bool(getattr(cls, 'slur_cuts_release', False)))
+        k.chiff_width_set = int(cls.chiff_width is not None)
+        k.chiff_width = cls.chiff_width or 0.0
+        k.chiff_width_cycles = cls.chiff_width_cycles
+        k.chiff_volume, k.chiff_cycle = cls.chiff_volume, cls.chiff_cycle
+        k.chiff_release = getattr(cls, 'chiff_release', 1.0) or 0.0
+        k.sustain_jitter = cls.sustain_jitter
+        k.cbw0 = getattr(cls, 'chiff_bandwidth', None) or BR.RAND_GRAN
+        k.cbw1 = getattr(cls, 'chiff_bandwidth_hz', None) or 0.0
+        k.tension_bend_power = cls.tension_bend_power
+        k.tension_bend_slurs = int(bool(getattr(cls, 'tension_bend_slurs', True)))
+        k.tension_settle_time = getattr(cls, 'tension_settle_time', 0.28) or 0.28
+        k.tension_settle_cutoff = getattr(cls, 'tension_settle_cutoff', 1.8)
+        k.tension_log = int(bool(getattr(cls, 'tension_log', False)))
+        k.tbend_cut_scale = BR.TBEND_CUT_SCALE
+        k.sustain_level = cls.sustain_level
+        k.reflection_order = int(bool(cls.reflection_order))
+        tab = getattr(cls, 'strike_noise_db', ()) or ()
+        k.n_strike = len(tab)
+        for i, b in enumerate(tab):
+            k.strike_hz[i], k.strike_db[i] = float(b[0]), float(b[1])
+        if tab:
+            k.strike_noise_dbs = cls.strike_noise_dbs
+            sp = getattr(cls, 'strike_noise_span_hz', None)
+            k.strike_span_set = int(bool(sp))
+            if sp:
+                k.strike_span_lo, k.strike_span_hi = sp
+            k.strike_octave_db = getattr(cls, 'strike_noise_octave_db', cls.strike_noise_slope)
+            k.strike_fade_s = cls.strike_noise_fade_s
+            k.strike_len_s = getattr(cls, 'strike_noise_len_s', None) or 0.25
+            k.strike_at_s = getattr(cls, 'strike_noise_at', 0.0) or 0.0
+            k.strike_cal_db = getattr(cls, 'strike_noise_cal_db', 0.0) or 0.0
+        got = _NOTE[cls] = [k, None]
+    if got is False:
+        return None
+    v = _class(cls)          # its room current
+    if got[1] is not v[3]:
+        got[0].tmpl = v[1]
+        got[1] = v[3]
+    return got[0]

@@ -6103,7 +6103,7 @@ def _voice_native_begin(cls):
     import native as _NV
     if _NV.lib() is None or not _NV.init_supported(cls):
         return None
-    return _NV.random_state() if NATIVE_TONE == 'check' else True
+    return _NV.random_state()
 
 
 def _voice_native(props, cls, f0, pan, av, cv, eff, st, nt):
@@ -6112,11 +6112,11 @@ def _voice_native(props, cls, f0, pan, av, cv, eff, st, nt):
     after it compared with the C's."""
     import native as _NV
     import random as _rnd
-    got = _NV.voice(cls, f0, pan, av, cv, eff, state=st if st is not True else None)
+    got = _NV.voice(cls, f0, pan, av, cv, eff, state=st if NATIVE_TONE == 'check' else None)
     if got is None:
         return None
     VOICE_STATS[0] += 1
-    if st is not True:
+    if NATIVE_TONE == 'check':
         s, o = got
         P = props
         bad = [f for f, py in (('pitch_jitter', P.pitch_jitter), ('attack_jitter', P.attack_jitter),
@@ -6386,6 +6386,100 @@ def _note_phantoms_py(em, props, nt, transverse, emit_partial):
                 aftp, adbp = props.aftersound(nt.f0, dph); lrAp = math.log(T.db_ratio(adbp)) if adbp>0 else 0.0
                 emit_partial(2*math.pi*fph/SR, g, g, g, fph, nt.non, nt.noff, nt.fade, nt.rel, nt.chiff,
                              lrp, lrAp, aftp, props.sustain_level, 0.0, 0.0, 0.0, 0.0, nt.csc, -1, 0)
+
+
+def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st, eff, nx, mcut, slurred,
+                       slur_out):
+    """A piano note from the engine (native/engine.cpp's nv_note): its knock,
+    tone and phantom partials, the voice built there from the note as the
+    file and channel give it. (rows, qacc, azimuth, NoteOut, row0, qacc
+    before), or None where the note is not the engine's (Python plays it)."""
+    import native as _NV
+    P = props
+    K = _NV.note_class(nt.pc)
+    if K is None or nt.organ or len(stops) != 1 or tuple(stops[0]) != ("_", 1.0, 1.0):
+        return None
+    if _sir is not None or _als is not None or seats or onsets or mls > 0.0:
+        return None
+    if T.choir_of(P, "_") or T.rank_detune_cents(P, "_", nt.note) or em.pos_x != getattr(P, 'position_x', 0.0):
+        return None
+    if _native_ready(em, P) is None:
+        return None
+    if em.REFLECT and P.reflection_order:
+        imgs, nsurf, surf, img, mir = P._images_for(em.pos_x * 1.0, P.radiation_distance * 1.0, em.pos_z * 1.0)
+        if len(imgs) > 64:
+            return None
+    else:
+        imgs, nsurf, surf, img, mir = [], np.zeros(1, np.int32), np.zeros(1, np.int32), np.zeros(3), np.zeros(3)
+    n = _NV.NoteIn()
+    n.f0, n.pan, n.vel, n.chan_vol, n.effort = nt.f0, nt.pan, nt.vel, nt.chan_vol, eff
+    n.on, n.off = nt.on, nt.off
+    n.has_nx, n.nx = int(nx is not None), (nx if nx is not None else 0.0)
+    n.mcut, n.slurred, n.slur_out = int(bool(mcut)), int(bool(slurred)), int(bool(slur_out))
+    lo, hi = nt.pc.string_detune_range
+    if issubclass(nt.pc, T.HonkyTonkProperties):
+        lo, hi = lo * T.honky_detune, hi * T.honky_detune
+    n.detune_lo, n.detune_hi = lo, hi
+    n.soft_pedal_down, n.fixed_touch = int(bool(T.soft_pedal_down)), int(bool(T.FIXED_TOUCH))
+    n.sr, n.retrigger_fade, n.channel = SR, RETRIGGER_FADE, em.channel
+    n.br = em.bend_row if (em.bend_row >= 0 or em.fader_row < 0) else em.fader_row
+    n.nyq_om = em._NYQ_OM
+    n.sv[:] = list(em._SV)
+    n.sound_vib_depth_cents, n.vibrato_delay = T.SOUND_VIB_DEPTH_CENTS, em.vibrato_delay
+    n.gl[:] = list(em._GL)
+    n.fx, n.mk, n.fm_omega, n.fm_phase = em.moog_filter_row, em.moog_key, em.fm_omega, em.fm_phase
+    n.room_bands[:] = list(em.ROOM_BANDS)
+    n.reflect, n.no_reflections = int(bool(em.REFLECT)), int(bool(em.no_reflections))
+    mh = P.max_harmonic + 1
+    npar = min(mh, int(getattr(P, 'phantom_max_order', 16)))
+    cap = (K.n_strike + 1) + mh * 3 * (1 + len(imgs)) + 16 + max(1, npar * (npar + 1) // 2) * (1 + len(imgs))
+    rows = np.empty((cap, len(EMIT_COLS)))
+    q0 = [v for pr in em._QACC for v in pr]
+    qacc = np.array(q0, np.float64)
+    az = ctypes.c_double(em.azimuth)
+    out = _NV.NoteOut()
+    st = type(st).from_buffer_copy(st)
+    k = _NV.lib().nv_note(ctypes.byref(K), ctypes.byref(n), ctypes.byref(st), len(imgs), nsurf.ctypes.data,
+                          surf.ctypes.data, img.ctypes.data, mir.ctypes.data, rows.ctypes.data, cap,
+                          qacc.ctypes.data, ctypes.byref(az), ctypes.byref(out))
+    if k < 0:
+        return None
+    return rows[:k], qacc, az.value, out, len(em.A['om']), q0
+
+
+def _note_native_apply(em, props, nt, A, wn, _VB):
+    """'on': the engine's note into the table, and the emitter as the
+    Python's knock, tone and phantoms leave it."""
+    rows, qacc, az, out = wn[:4]
+    NATIVE_STATS[0] += 1
+    _rows_into(A, rows)
+    for i, pr in enumerate(em._QACC):
+        pr[0], pr[1] = float(qacc[2 * i]), float(qacc[2 * i + 1])
+    em.azimuth = az
+    if out.n_knock:
+        em.no_reflections = False
+    em.player = 0
+    _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
+    if out.n_tone:
+        em.radius = None
+        em.pos_x = getattr(props, 'position_x', 0.0)
+
+
+def _note_native_check(em, nt, A, wn, B, TBN):
+    """'check': the engine's whole note against what the Python made of it --
+    its rows, the room's tallies, and the setup's times and bends."""
+    rows, qacc, az, out, row0 = wn[:5]
+    _rows_check(A, row0, rows, qacc, az, em, 'note', nt)
+    py = (nt.non, nt.noff, nt.fade, nt.rel, nt.chiff, em.jitter_scale, em._DL[0], em._DL[1], nt.li, nt.ri,
+          em.pos_x, em.pos_z, B, nt.cv, nt.cc, nt.crl, nt.sjit, nt.csc, tuple(TBN), (em._CBW[0], em._CBW[1]))
+    c = (out.non, out.noff, out.fade, out.rel, out.chiff, out.jitter_scale, out.dl, out.dr, out.li, out.ri,
+         out.pos_x, out.pos_z, out.B, out.cv, out.cc, out.crl, out.sjit, out.csc, tuple(out.tb),
+         tuple(out.cbw))
+    names = ('non', 'noff', 'fade', 'rel', 'chiff', 'jitter_scale', 'dl', 'dr', 'li', 'ri', 'pos_x', 'pos_z',
+             'B', 'cv', 'cc', 'crl', 'sjit', 'csc', 'tb', 'cbw')
+    bad = [nm for nm, a, b in zip(names, py, c) if a != b]
+    if bad:
+        _voice_report(bad, nt)
 
 
 def _rows_into(A, rows):
@@ -8068,6 +8162,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             nt.chan_vol *= nt.efx_gain
         em.nsnap = None
         _vst = _voice_native_begin(nt.pc)
+        _vst0 = None if _vst is None else type(_vst).from_buffer_copy(_vst)   # the stream, for the engine's note
         props = nt.pc(nt.f0, nt.pan, (nt.vel/127.0)**2, nt.chan_vol, _eff)   # pan = CC10: a turn (tonelib.stage_angle)
         em.props = props
         if _vst is not None:
@@ -8574,7 +8669,14 @@ def _prepare(path, tuner='hybrid440', sink=None):
         stops = _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG_KROW,
                 _MOOG_KVAR, _MOOG_MKI, _MOOG_MPC, _MOOG_MPI, _MOOG_MPK, _MOOG_MPKN, _MOOG_MPR,
                 _SND_TL, _VB, _kn_moves, _mmgr, _sbias, _sctl, _snd_d, emit_partial, stops)
-        _pjit = _note_strike_noise(em, props, nt, _CBW, _VB, _pjit, emit_partial, random)
+        _wn = None
+        if _vst0 is not None and em.nsnap is not None and not _sd and _XP == 1.0 and not (_hx or _hperc or _pjit):
+            _wn = _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, _vst0, _eff,
+                                     _nx, _mcut, _slurred, (nt.ch, nt.note, nt.on) in _SLUR_OUT)
+        if _wn is not None and NATIVE_TONE == 'on':
+            _note_native_apply(em, props, nt, A, _wn, _VB)
+        else:
+            _pjit = _note_strike_noise(em, props, nt, _CBW, _VB, _pjit, emit_partial, random)
         _note_struck_layer(props, nt, emit_partial, random)
         _note_ring(em, props, nt, A, _RING, _VB, emit_partial, random)
         if getattr(props, 'touch_leak_db', None) is not None and (props.harmonic_touch or 1) > 1:
@@ -8610,16 +8712,22 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # pulse): the release click below rides it, and without this it rode
         # whatever note last had stops -- or raised, on the first
         gain = 1.0
-        gain = _note_stops(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TBN, _VB, _afm,
-                _als, _bnote, _hperc, _hx, _phrase_of, _pjit, _sir, crow_of, dur, emit_partial, gain,
-                grow_of, mls, onsets, random, rankev_of, seats, sjit_n, stops, transverse, wcombo,
-                wrow_of)
+        if _wn is not None and NATIVE_TONE == 'on':
+            gain = 1.0          # the one stop's (_tone_apply)
+        else:
+            gain = _note_stops(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TBN, _VB, _afm,
+                    _als, _bnote, _hperc, _hx, _phrase_of, _pjit, _sir, crow_of, dur, emit_partial, gain,
+                    grow_of, mls, onsets, random, rankev_of, seats, sjit_n, stops, transverse, wcombo,
+                    wrow_of)
         # MARKED AFTER THE WHOLE NOTE, not inside the harmonic loop: the guard
         # above runs once per harmonic, so marking it there would emit the drone
         # for harmonic 1 and skip it for every other.
         if getattr(props, 'unison_spans_part', False):
             _SPANNED.add((nt.ch, _phrase_of(nt.ch, nt.on)[0]))
-        _note_phantoms(em, props, nt, transverse, emit_partial)
+        if _wn is None or NATIVE_TONE != 'on':
+            _note_phantoms(em, props, nt, transverse, emit_partial)
+        if _wn is not None and NATIVE_TONE == 'check':
+            _note_native_check(em, nt, A, _wn, B, _TBN)
         # THE MECHANISM LETTING GO. On a harpsichord the key coming up is not
         # only the damper arriving: the jack falls back and its tongue brushes
         # past the string it just plucked. That is a MECHANICAL event, not a

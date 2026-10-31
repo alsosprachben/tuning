@@ -16,24 +16,7 @@
 #include <stddef.h>
 #include "voice.c"
 
-#define NCOLS 50
 
-typedef struct {
-    /* the note */
-    double f0, B, gain, non, noff, fade, rel, chiff, cv, cc, crl, sjit, csc;
-    double li, ri, sustain_level;
-    double gr, cr;
-    double sr;
-    /* the emitter's state for the note */
-    double jitter_scale, nyq_om;
-    int transposed, reflect;
-    double dl, dr, pos_x0, pos_x_props, pos_z, channel;
-    double cbw0, cbw1, tb[3], gl[3], sv[2], sound_vib_depth_cents, vibrato_delay;
-    double br, fx, mk, fm_omega, fm_phase;
-    /* the head, for each image's ears (hrtf_at) */
-    double listener_distance, head_radius, pan_angle;
-    double room_bands[9];
-} ToneIn;
 
 /* SynthProperties.hrtf_at(x, z, y): (left inc, right inc, left delay, right delay) */
 static void hrtf_at(const VoiceSnap *v, const ToneIn *t, double position_x, double position_z,

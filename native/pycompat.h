@@ -16,11 +16,8 @@
 
 #include <math.h>
 #include <stdint.h>
+#include "nv.h"
 
-typedef struct {
-    uint32_t mt[624];
-    int i;
-} PyRandom;
 
 static void pyr_init_genrand(PyRandom *r, uint32_t s)
 {
