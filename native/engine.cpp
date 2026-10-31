@@ -86,6 +86,8 @@ typedef struct {
     // the room's walls (WALLS' order, signed planes) and its reflection order
     double planes[6];
     int order;
+    int from_song;                      // nv_song_play: its pitch and level from the song too...
+    int song_index;                     // ...as its note there (the song's notes, in order)
 } NoteIn;
 
 // What the note's setup worked out, beside its rows.
@@ -270,6 +272,13 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
     if (!n->has_nx)
         n->nx = 0.0;
     n->soft_pedal_down = nv_song_soft_at(song, n->ch, n->on);
+    if (n->from_song) {
+        // its pitch and level from the file, not the caller
+        double pl[5];
+        if (!nv_song_pitch_level(song, n->song_index, K->init.effort_tilt != 0.0, pl))
+            return -1;
+        n->f0 = pl[0]; n->vel = pl[1]; n->pan = pl[2]; n->chan_vol = pl[3]; n->effort = pl[4];
+    }
     return nv_note(K, n, rs, nimg, nsurf, surf, img, mir, rows, cap, qacc, azimuth, out);
 }
 

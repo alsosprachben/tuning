@@ -4551,7 +4551,8 @@ class _Note(object):
 
     __slots__ = ('ch', 'note', 'on', 'off', 'vel', 'v7', 'v11', 'pan', 'prog', 'key_off', 'drum',
                  'organ', 'pc', 'organ_key', 'freq', 'chan_vol', 'efx_gain', 'f0', 'non', 'noff',
-                 'fade', 'rel', 'chiff', 'cv', 'cc', 'crl', 'csc', 'sjit', 'li', 'ri', 'row0')
+                 'fade', 'rel', 'chiff', 'cv', 'cc', 'crl', 'csc', 'sjit', 'li', 'ri', 'row0',
+                 'song_index')
 
 
 class _Emitter(object):
@@ -6388,7 +6389,21 @@ def _note_phantoms_py(em, props, nt, transverse, emit_partial):
                              lrp, lrAp, aftp, props.sustain_level, 0.0, 0.0, 0.0, 0.0, nt.csc, -1, 0)
 
 
-def _song_check(song, nt, off_key, mcut, nx, damp_open):
+def _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT, FREQ_E):
+    """A melodic note whose pitch and level are its channel's alone: no
+    per-note pitch, MPE, meend, transposition, pressure or insertion effect,
+    and a voice with no sounding octaves, scale, brass law, registration or
+    raga table -- nv_song_pitch_level's."""
+    k = (nt.ch, nt.note, nt.on)
+    pc = nt.pc
+    return (nt.drum is None and not nt.organ and not _pna and not _press and _XP == 1.0 and _EFXN[0] is None
+            and k not in _mpe_member and k not in _MPE_AT and k not in _MEEND_AT
+            and not getattr(pc, 'sounding_octaves', 0.0) and not getattr(pc, 'scale_cents', None)
+            and not pc.__name__.endswith('BrassProperties')
+            and not (FREQ_E is not None and getattr(pc, 'tuning_family', None) == 'indian'))
+
+
+def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None):
     """'check': the engine's channels against the Python's for this note --
     its end once the pedals have had their say, its half-pedal band, the
     soft pedal at its onset, its key's next strike."""
@@ -6404,6 +6419,11 @@ def _song_check(song, nt, off_key, mcut, nx, damp_open):
         bad.append('soft')
     if song.next_same(nt.ch, nt.note, nt.on) != nx:
         bad.append('next')
+    if cargs is not None:
+        # its pitch and level: (f0, velocity, pan, channel volume, effort) as the voice was built with
+        got = song.pitch_level(nt.song_index, getattr(nt.pc, 'effort_tilt', 0.0))
+        if got is None or tuple(got) != tuple(float(x) for x in cargs):
+            bad.append('pitch/level %r vs %r' % (cargs, got))
     SONG_STATS[0] += 1
     if bad:
         SONG_STATS[1] += 1
@@ -6415,7 +6435,7 @@ SONG_STATS = [0, 0]     # notes whose channel questions were checked, that diffe
 
 
 def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st, eff, nx, mcut, slurred,
-                       slur_out, song=None, key_off=None):
+                       slur_out, song=None, key_off=None, from_song=False):
     """A piano note from the engine (native/engine.cpp's nv_note): its knock,
     tone and phantom partials, the voice built there from the note as the
     file and channel give it. (rows, qacc, azimuth, NoteOut, row0, qacc
@@ -6474,6 +6494,8 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     if song is not None:
         # the note as its FILE gives it: its key-up, and the channels' answers
         n.ch, n.note, n.key_off = nt.ch, nt.note, key_off
+        n.from_song = int(bool(from_song) and nt.song_index is not None)
+        n.song_index = nt.song_index if nt.song_index is not None else -1
         n.damper_pedal = int(bool(getattr(nt.pc, 'damper_pedal', True)))
         n.off, n.nx, n.has_nx, n.soft_pedal_down = -1.0, -1.0, 0, 0
         band = ctypes.c_int(0)
@@ -7527,7 +7549,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
     if NATIVE_TONE == 'check':
         import native as _NV
         if _NV.lib() is not None:
-            _SONG = _NV.Song(ccs, notes, total)
+            _SONG = _NV.Song(ccs, notes, total, freq=FREQ, mts=_MTS_TL, btun=_BTUN, otun=_OTUN,
+                             faders=set(_LROW), trim=lambda _p: program_trim(_p, is_drum(_p), gs=_GS_FILE[0]))
     # Occurrence index per (channel, note) in ONSET order -- the same key
     # _legato_ticks used, so a note found in seconds here is the note it judged
     # in ticks there.
@@ -7977,6 +8000,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         """One note of the note loop: its rows, and what it leaves for later passes."""
         nt = _Note()
         (nt.ch, nt.note, nt.on, nt.off, nt.vel, (nt.v7, nt.v11, nt.pan), nt.prog) = _ev
+        nt.song_index = _SONG.take(tuple(_ev)) if _SONG is not None else None
         em.onset = nt.on
         _pna = None              # MIDI 2.0 per-note pitch: set where f0 is decided
         _mmgr = None             # MPE: this note's manager channel, if it is on a member
@@ -8215,6 +8239,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _vst0 = None if _vst is None else type(_vst).from_buffer_copy(_vst)   # the stream, for the engine's note
         props = nt.pc(nt.f0, nt.pan, (nt.vel/127.0)**2, nt.chan_vol, _eff)   # pan = CC10: a turn (tonelib.stage_angle)
         em.props = props
+        _cargs = (nt.f0, nt.vel, nt.pan, nt.chan_vol, _eff)
         if _vst is not None:
             em.nsnap = _voice_native(props, nt.pc, nt.f0, nt.pan, (nt.vel/127.0)**2, nt.chan_vol, _eff, _vst, nt)
         if _seat:
@@ -8342,7 +8367,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # nothing about its own decay would have stopped it. Applied after the
         # one-shot extension, which would otherwise put the note-off back.
         if _SONG is not None:
-            _song_check(_SONG, nt, _off_key, _mcut, _nx, _DAMP_OPEN)
+            _song_check(_SONG, nt, _off_key, _mcut, _nx, _DAMP_OPEN,
+                        _cargs if _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT, FREQ_E)
+                        else None)
         if choked is not None and choked < nt.off:
             nt.off = choked
         if props.inharmonicity_dynamic:
@@ -8726,7 +8753,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
         if _vst0 is not None and em.nsnap is not None and not _sd and _XP == 1.0 and not (_hx or _hperc or _pjit):
             _wn = _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, _vst0, _eff,
                                      _nx, _mcut, _slurred, (nt.ch, nt.note, nt.on) in _SLUR_OUT,
-                                     _SONG if choked is None else None, _off_key)
+                                     _SONG if choked is None else None, _off_key,
+                                     _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT,
+                                                  FREQ_E))
         if _wn is not None and NATIVE_TONE == 'on':
             _note_native_apply(em, props, nt, A, _wn, _VB)
         else:

@@ -127,7 +127,7 @@ class NoteIn(ctypes.Structure):
                 + [('sv', C * 2), ('sound_vib_depth_cents', C), ('vibrato_delay', C), ('gl', C * 3)]
                 + [(f, C) for f in ('fx', 'mk', 'fm_omega', 'fm_phase')]
                 + [('room_bands', C * 9), ('reflect', I), ('no_reflections', I), ('ch', LL), ('note', I),
-                   ('damper_pedal', I), ('key_off', C), ('planes', C * 6), ('order', I)])
+                   ('damper_pedal', I), ('key_off', C), ('planes', C * 6), ('order', I), ('from_song', I), ('song_index', I)])
 
 
 class NoteOut(ctypes.Structure):
@@ -203,7 +203,10 @@ def _load():
             ('nv_images', I, [D, I, C, C, C, I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
-            ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C]),
+            ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C]),
+            ('nv_song_tuning', None, [ctypes.c_void_p, LL, C, D]),
+            ('nv_song_channel', None, [ctypes.c_void_p, LL, C, D, I]),
+            ('nv_song_pitch_level', I, [ctypes.c_void_p, I, I, D]),
             ('nv_song_finish', None, [ctypes.c_void_p, C]),
             ('nv_song_note_off', C, [ctypes.c_void_p, LL, I, C, C, I, I, C, ctypes.POINTER(I)]),
             ('nv_song_soft_at', I, [ctypes.c_void_p, LL, C]),
@@ -512,15 +515,50 @@ class Song(object):
     what a note asks of its channel -- its end once the pedals have had their
     say, the soft pedal at its onset, its key's next strike."""
 
-    def __init__(self, ccs, notes, total):
+    def __init__(self, ccs, notes, total, freq=None, mts=None, btun=None, otun=None, faders=(), trim=None):
+        """ccs, notes and total as blockrender's; the tuning: freq the file's
+        128-key table, mts {channel: [(t, table)]}, btun {channel: ratio},
+        otun {channel: 12 cents}; faders the channels whose fader is a row;
+        trim(program) the program's trim on the channel volume."""
         d = self.d = lib()
         self.p = d.nv_song_new()
         for c, evs in ccs.items():
             for t, cc, v in evs:
                 d.nv_song_cc(self.p, int(c), float(t), int(cc), int(v))
-        for e in notes:
-            d.nv_song_note(self.p, int(e[0]), int(e[1]), float(e[2]), float(e[3]))
+        self._idx = {}
+        for i, e in enumerate(notes):
+            self._idx.setdefault(tuple(e), []).append(i)
+            v7, v11, pan = e[5]
+            d.nv_song_note(self.p, int(e[0]), int(e[1]), float(e[2]), float(e[3]), int(e[4]), float(v7),
+                           float(v11), float(pan), float(trim(e[6]) if trim else 1.0))
+        T128 = ctypes.c_double * 128
+        def row(tab):           # a table as 128 numbers, 0 for a key it lacks
+            return T128(*[float(tab[k]) if k in tab else 0.0 for k in range(128)])
+        if freq is not None:
+            d.nv_song_tuning(self.p, -1, 0.0, row(freq))
+        for c, tl in (mts or {}).items():
+            for t, tab in tl:
+                d.nv_song_tuning(self.p, int(c), float(t), row(tab))
+        for c in set(btun or ()) | set(otun or ()) | set(faders):
+            ot = (otun or {}).get(c)
+            d.nv_song_channel(self.p, int(c), float((btun or {}).get(c) or 0.0),
+                              (ctypes.c_double * 12)(*ot) if ot else None, int(c in faders))
         d.nv_song_finish(self.p, float(total))
+
+    def take(self, ev):
+        """The index of note event ev (a tuple of the notes given) in the
+        song, each index given once: two identical events, in the order
+        asked. None for an event it was not given."""
+        q = self._idx.get(ev)
+        return q.pop(0) if q else None
+
+    def pitch_level(self, index, effort_tilt):
+        """(f0, velocity, pan, channel volume, effort) of the song's note at
+        index, or None"""
+        o = (ctypes.c_double * 5)()
+        if index is None or not self.d.nv_song_pitch_level(self.p, int(index), int(bool(effort_tilt)), o):
+            return None
+        return tuple(o)
 
     def __del__(self):
         if getattr(self, 'p', None):

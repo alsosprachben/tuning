@@ -182,6 +182,8 @@ struct Ev {
     long long ch;
     int note;
     double on, off;
+    int vel;
+    double v7, v11, pan, trim;          // the channel's CC7, CC11, CC10 at its onset; its program's trim
 };
 
 // A file's channels and notes.
@@ -189,7 +191,15 @@ struct Song {
     std::map<long long, Channel> ch;
     std::vector<Ev> notes;
     std::map<NoteKey, double> next_same, sost_held;
+    std::map<long long, int> vbase;     // each channel's median velocity (_vbase)
     double total = 0.0;
+    // ITS TUNING: the file's table, a channel's MIDI Tuning Standard tables
+    // from their times (_MTS_TL), its fixed bend (_BTUN) and octave tuning (_OTUN)
+    std::vector<double> freq = std::vector<double>(128, 0.0);
+    std::map<long long, std::vector<std::pair<double, std::vector<double>>>> mts;
+    std::map<long long, double> btun;
+    std::map<long long, std::vector<double>> otun;
+    std::map<long long, int> fader;     // channels whose fader is a row (_LROW): their volume 1
 
     void finish(double total_)
     {
@@ -211,6 +221,14 @@ struct Song {
                 next_same[NoteKey{e.ch, e.note, e.on}] = it->second;
             seen[k] = e.on;
         }
+        // _vbase: each channel's median velocity, sorted()[len // 2]
+        std::map<long long, std::vector<int>> vs;
+        for (const Ev &e : notes)
+            vs[e.ch].push_back(e.vel);
+        for (auto &v : vs) {
+            std::sort(v.second.begin(), v.second.end());
+            vbase[v.first] = v.second[v.second.size() / 2];
+        }
         // _SOST_HELD: each sostenuto span catches the keys down as it went down
         for (auto &c : ch)
             for (const Span &s : c.second.sost)
@@ -220,6 +238,35 @@ struct Song {
                         auto it = sost_held.find(k);
                         sost_held[k] = pymax(s.second, it == sost_held.end() ? 0.0 : it->second);
                     }
+    }
+
+    // _F: this channel's 128-key table at t
+    const std::vector<double> &table(long long c, double t) const
+    {
+        auto it = mts.find(c);
+        if (it == mts.end() || it->second.empty())
+            return freq;
+        const auto &tl = it->second;
+        int i = 0;
+        for (int j = 0; j < (int)tl.size(); j++)        // bisect_right on the starts, of t + 1e-9
+            if (tl[j].first <= t + 1e-9)
+                i = j + 1;
+        i -= 1;
+        return tl[i > 0 ? i : 0].second;
+    }
+
+    // _note_class_and_pitch for a melodic note with none of its extras (no
+    // per-note pitch, MPE, meend, sounding octaves, scale or brass law): f0
+    double pitch(long long c, int note, double on) const
+    {
+        double f0 = table(c, on)[note];
+        auto b = btun.find(c);
+        if (b != btun.end() && b->second != 0.0)
+            f0 *= b->second;
+        auto o = otun.find(c);
+        if (o != otun.end() && !o->second.empty())
+            f0 *= pow(2.0, o->second[note % 12] / 1200.0);
+        return f0;
     }
 
     const Channel *get(long long c) const
@@ -284,9 +331,63 @@ void nv_song_cc(void *s, long long ch, double t, int cc, int v)
     ((nv::Song *)s)->ch[ch].ccs.push_back(nv::CC{t, cc, v});
 }
 
-void nv_song_note(void *s, long long ch, int note, double on, double off)
+void nv_song_note(void *s, long long ch, int note, double on, double off, int vel, double v7, double v11,
+                  double pan, double trim)
 {
-    ((nv::Song *)s)->notes.push_back(nv::Ev{ch, note, on, off});
+    ((nv::Song *)s)->notes.push_back(nv::Ev{ch, note, on, off, vel, v7, v11, pan, trim});
+}
+
+// the file's tuning (ch < 0, at 0) or a channel's MTS table from t
+void nv_song_tuning(void *s, long long ch, double t, const double *freq)
+{
+    nv::Song *S = (nv::Song *)s;
+    if (ch < 0)
+        S->freq.assign(freq, freq + 128);
+    else
+        S->mts[ch].push_back(std::make_pair(t, std::vector<double>(freq, freq + 128)));
+}
+
+void nv_song_channel(void *s, long long ch, double btun, const double *otun, int fader)
+{
+    nv::Song *S = (nv::Song *)s;
+    if (btun != 0.0)
+        S->btun[ch] = btun;
+    if (otun)
+        S->otun[ch] = std::vector<double>(otun, otun + 12);
+    if (fader)
+        S->fader[ch] = 1;
+}
+
+// A note's pitch and level as its channel gives them: f0, velocity, pan,
+// channel volume ((CC7 CC11)^2, its program's trim; 1 under a fader row),
+// effort (40 log10 of its velocity over the channel's median, +-12, where
+// the voice has an effort tilt). The note by its index in the song's notes
+// (two can share a key, an onset and a key-up). 0 if there is no such note.
+int nv_song_pitch_level(void *s, int i, int effort_tilt, double *out)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (i < 0 || i >= (int)S->notes.size())
+        return 0;
+    long long ch = S->notes[i].ch;
+    int note = S->notes[i].note;
+    double on = S->notes[i].on;
+    const nv::Ev &e = S->notes[i];
+    out[0] = S->pitch(ch, note, on);
+    out[1] = e.vel;
+    out[2] = e.pan;
+    double cv = pow(e.v7 * e.v11, 2.0);
+    if (S->fader.count(ch))
+        cv = 1.0;
+    out[3] = cv * e.trim;
+    double eff = 0.0;
+    auto vb = S->vbase.find(ch);
+    int b = vb != S->vbase.end() ? vb->second : 0;
+    if (!b)
+        b = e.vel;
+    if (effort_tilt && e.vel && b)
+        eff = nv::pymax(-12.0, nv::pymin(12.0, 40.0 * log10(e.vel / (double)b)));
+    out[4] = eff;
+    return 1;
 }
 
 void nv_song_finish(void *s, double total) { ((nv::Song *)s)->finish(total); }
