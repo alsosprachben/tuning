@@ -150,7 +150,8 @@ def lib():
 
 
 def _load():
-    srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp')]
+    srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
+                                                       'channel.cpp')]
             + [os.path.join(HERE, 'roomcore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -161,13 +162,14 @@ def _load():
         # The C core (tone.c, with voice.c) and the C++ engine (engine.cpp)
         # under the same flags, linked into one library.
         flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
-        oc, ocpp = tmp + '.tone.o', tmp + '.engine.o'
+        oc, ocpp, och = tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o'
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', oc])
             subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', srcs[4], '-o', ocpp])
-            subprocess.check_call(['g++', '-shared', oc, ocpp, '-o', tmp, '-lm'])
+            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', srcs[5], '-o', och])
+            subprocess.check_call(['g++', '-shared', oc, ocpp, och, '-o', tmp, '-lm'])
         finally:
-            for o in (oc, ocpp):
+            for o in (oc, ocpp, och):
                 if os.path.exists(o):
                     os.remove(o)
         os.replace(tmp, so)
@@ -193,6 +195,13 @@ def _load():
             ('nv_note', I, [ctypes.POINTER(NoteClass), ctypes.POINTER(NoteIn), ctypes.POINTER(PyRandomState), I,
                             ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I,
                             ctypes.c_void_p, D, ctypes.POINTER(NoteOut)]),
+            ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
+            ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
+            ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C]),
+            ('nv_song_finish', None, [ctypes.c_void_p, C]),
+            ('nv_song_note_off', C, [ctypes.c_void_p, LL, I, C, C, I, I, C, ctypes.POINTER(I)]),
+            ('nv_song_soft_at', I, [ctypes.c_void_p, LL, C]),
+            ('nv_song_next_same', I, [ctypes.c_void_p, LL, I, C, D]),
             ('nv_phantom', I, [P, ctypes.POINTER(ToneIn), ctypes.c_void_p, I, I, ctypes.c_void_p, ctypes.c_void_p,
                                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p, D])):
         f = getattr(d, name)
@@ -489,3 +498,38 @@ def note_class(cls):
         got[0].tmpl = v[1]
         got[1] = v[3]
     return got[0]
+
+
+class Song(object):
+    """native/channel.cpp's Song: a file's controller events and notes, and
+    what a note asks of its channel -- its end once the pedals have had their
+    say, the soft pedal at its onset, its key's next strike."""
+
+    def __init__(self, ccs, notes, total):
+        d = self.d = lib()
+        self.p = d.nv_song_new()
+        for c, evs in ccs.items():
+            for t, cc, v in evs:
+                d.nv_song_cc(self.p, int(c), float(t), int(cc), int(v))
+        for e in notes:
+            d.nv_song_note(self.p, int(e[0]), int(e[1]), float(e[2]), float(e[3]))
+        d.nv_song_finish(self.p, float(total))
+
+    def __del__(self):
+        if getattr(self, 'p', None):
+            self.d.nv_song_free(self.p)
+            self.p = None
+
+    def note_off(self, ch, note, on, off, damper_pedal, mcut, retrigger_fade):
+        """(the note's end, whether a half-pedalled note meets the band)"""
+        b = ctypes.c_int(0)
+        r = self.d.nv_song_note_off(self.p, int(ch), int(note), float(on), float(off), int(bool(damper_pedal)),
+                                    int(bool(mcut)), float(retrigger_fade), ctypes.byref(b))
+        return r, bool(b.value)
+
+    def soft_at(self, ch, t):
+        return bool(self.d.nv_song_soft_at(self.p, int(ch), float(t)))
+
+    def next_same(self, ch, note, on):
+        o = ctypes.c_double(0.0)
+        return o.value if self.d.nv_song_next_same(self.p, int(ch), int(note), float(on), ctypes.byref(o)) else None

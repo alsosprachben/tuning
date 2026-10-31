@@ -14,6 +14,10 @@ Options as bitident's: --from=PATH --grep=REGEX --gs --program=N --kit=N
 --list --against=FILE; and --cap-mb=N. Run it in a worktree at the old commit and in the
 working tree, or once at the old commit to a file and --against it after.
 
+Under TUNING_NATIVE_TONE=check (the Python plays, the native engine is asked
+the same and compared with ==), each file's check counters are tallied --
+rows, voices, channel answers -- and the files that differed named.
+
 EACH FILE IN ITS OWN PROCESS, under a memory cap (--cap-mb=N, default
 3000): in one process the GS files' tables and blockrender's module state
 piled up to 5 GB and the machine swapped. A file over the cap is stopped
@@ -148,10 +152,27 @@ def one_file(p, seconds, cap_mb):
             return "SKIPPED %s over_cap=%dMB" % (os.path.basename(p), rss)
         time.sleep(0.5)
     line = (child.stdout.read() or "").strip().splitlines()
+    for l in line:
+        if l.startswith("NATIVECHECK "):
+            _tally(os.path.basename(p), l.split()[1:])
     line = [l for l in line if l.startswith("PREPIDENT ")]
     if child.returncode != 0 or not line:
         return "FAILED %s rc=%d" % (os.path.basename(p), child.returncode)
     return line[-1][len("PREPIDENT "):]
+
+
+CHECKS = {}         # TUNING_NATIVE_TONE=check: what -> [checked, differed], and the files that differed
+
+
+def _tally(name, fields):
+    for f in fields:
+        what, n = f.split("=")
+        a, b = (int(x) for x in n.split("/"))
+        t = CHECKS.setdefault(what, [0, 0, []])
+        t[0] += a
+        t[1] += b
+        if b:
+            t[2].append(name)
 
 
 def main():
@@ -161,6 +182,11 @@ def main():
         whole, keys = table_hashes(B.prepare(src))
         print("PREPIDENT %s %s %s" % (whole, os.path.basename(p),
                                       " ".join("%s=%s" % kv for kv in sorted(keys.items()))))
+        if B.NATIVE_TONE == 'check':
+            # the engine against the Python, as it played: rows, voices, channels
+            print("NATIVECHECK rows=%d/%d voice=%d/%d channel=%d/%d" % (
+                B.NATIVE_STATS[1], B.NATIVE_STATS[2], B.VOICE_STATS[1], B.VOICE_STATS[2],
+                B.SONG_STATS[0], B.SONG_STATS[1]))
         return 0
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     opt = dict(a[2:].split("=", 1) if "=" in a else (a[2:], "") for a in sys.argv[1:] if a.startswith("--"))
@@ -192,6 +218,9 @@ def main():
             wait_for_live()
             f.write(one_file(p, seconds, cap) + "\n")
             f.flush()
+    for what, (a, b, names) in sorted(CHECKS.items()):
+        print("native check %s: %d checked, %d differed%s" % (what, a, b, (" (" + " ".join(names[:8]) + ")")
+                                                              if names else ""))
     if opt.get("against"):
         moved, same, new = against(out, opt["against"])
         print("against %s: %d moved, %d table-identical, %d not in it"

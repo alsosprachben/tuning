@@ -6388,6 +6388,32 @@ def _note_phantoms_py(em, props, nt, transverse, emit_partial):
                              lrp, lrAp, aftp, props.sustain_level, 0.0, 0.0, 0.0, 0.0, nt.csc, -1, 0)
 
 
+def _song_check(song, nt, off_key, mcut, nx, damp_open):
+    """'check': the engine's channels against the Python's for this note --
+    its end once the pedals have had their say, its half-pedal band, the
+    soft pedal at its onset, its key's next strike."""
+    dp = getattr(nt.pc, 'damper_pedal', True) and not getattr(nt.pc, 'one_shot', False)
+    off, band = song.note_off(nt.ch, nt.note, nt.on, off_key, dp, mcut, RETRIGGER_FADE)
+    bad = []
+    if off != nt.off:
+        bad.append('off %r vs %r' % (nt.off, off))
+    _d = damp_open[0]
+    if band != (_d is not None and _d['on'] == nt.on and _d['ch'] == nt.ch and _d['key'] == nt.note):
+        bad.append('band')
+    if song.soft_at(nt.ch, nt.on) != bool(T.soft_pedal_down):
+        bad.append('soft')
+    if song.next_same(nt.ch, nt.note, nt.on) != nx:
+        bad.append('next')
+    SONG_STATS[0] += 1
+    if bad:
+        SONG_STATS[1] += 1
+        if SONG_STATS[1] <= 5:
+            print("  native channel DIFFERS (ch %d note %d at %.3f s): %s" % (nt.ch, nt.note, nt.on, ', '.join(bad)))
+
+
+SONG_STATS = [0, 0]     # notes whose channel questions were checked, that differed
+
+
 def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st, eff, nx, mcut, slurred,
                        slur_out):
     """A piano note from the engine (native/engine.cpp's nv_note): its knock,
@@ -7478,6 +7504,13 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _k = (_n[0], _n[1])
         if _k in _seen: _next_same[(_k, _n[2])] = _seen[_k]
         _seen[_k] = _n[2]
+    # THE ENGINE'S CHANNELS (native/channel.cpp), from the same events and
+    # notes: 'check' asks each note's end, soft pedal and next strike of both
+    _SONG = None
+    if NATIVE_TONE == 'check':
+        import native as _NV
+        if _NV.lib() is not None:
+            _SONG = _NV.Song(ccs, notes, total)
     # Occurrence index per (channel, note) in ONSET order -- the same key
     # _legato_ticks used, so a note found in seconds here is the note it judged
     # in ticks there.
@@ -8270,6 +8303,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # the string's own decay run on under a lifted damper. Which is what
         # actually happens.
         _nx = _next_same.get(((nt.ch, nt.note), nt.on))
+        _off_key = nt.off
         _mcut = (nt.ch, nt.note, nt.on) in _MONO_CUT
         _note_pedal(nt, _DAMP_OPEN, _PEDV_CH, _damper_falls, _damper_lands, _mcut, _nx)
         # ...AND THE SOSTENUTO PEDAL, which caught this note only if its key
@@ -8290,6 +8324,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # is that the instrument is physically damped, so it stops even though
         # nothing about its own decay would have stopped it. Applied after the
         # one-shot extension, which would otherwise put the note-off back.
+        if _SONG is not None:
+            _song_check(_SONG, nt, _off_key, _mcut, _nx, _DAMP_OPEN)
         if choked is not None and choked < nt.off:
             nt.off = choked
         if props.inharmonicity_dynamic:
