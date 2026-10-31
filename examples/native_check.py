@@ -49,9 +49,12 @@ def main(argv):
         r = random.Random(seed)
         same(('random', seed), [r.random() for _ in range(8)], list(out))
 
-    pc = PM.PROGRAM_CLASS[0]
+    # every native piano class, in turn (each has its own board, strings and laws)
+    pcs = sorted({PM.PROGRAM_CLASS[p] for p in PM.PROGRAM_CLASS
+                  if N.init_supported(PM.PROGRAM_CLASS[p])}, key=lambda c: c.__name__)
     skipped = 0
     for k in range(n_notes):
+        pc = pcs[k % len(pcs)]
         key = rng.randint(21, 108)
         f0 = 440.0 * 2.0 ** ((key - 69) / 12.0) * (1.0 + rng.uniform(-0.002, 0.002))
         av = (rng.randint(1, 127) / 127.0) ** 2
@@ -139,6 +142,25 @@ def main(argv):
     T.soft_pedal_down = False
     T.honky_detune = 1.0
     print("voice init: %d notes over %s" % (inits, sorted(c.__name__ for c in classes)))
+
+    # the register's string bank (native/strings.c) against register.Strings:
+    # each class, at a tuning, pan, volume, soft pedal and honky-tonk detune
+    import register as RG
+    banks = 0
+    for k, cls in enumerate(sorted(classes, key=lambda c: c.__name__) * 2):
+        table = B.tuning_table(('hybrid440', 'even', 'werckmeister')[k % 3])
+        pan, cv = rng.uniform(-1, 1), rng.uniform(0.2, 1.0)
+        T.soft_pedal_down = bool(k % 3 == 0)
+        T.honky_detune = rng.uniform(0.5, 1.5)
+        py = RG.Strings(cls, table, pan, cv, B.SR, (B.string_partial, B.partial_decay, B.unison_partial))
+        c = N.strings(cls, table, pan, cv, B.SR)
+        banks += 1
+        for f in ('key', 'string', 'harm', 'f', 'alpha', 'w', 'hl', 'hr', 'dl', 'dr', 'px', 'W'):
+            a, b = getattr(py, f), c[f]
+            same(('strings', cls.__name__, f), (len(a), a.tolist()), (len(b), b.tolist()))
+    T.soft_pedal_down = False
+    T.honky_detune = 1.0
+    print("string banks: %d over the same classes" % banks)
     for what, a, b in bad[:20]:
         print("  DIFF %s: python %r, native %r" % (what, a, b))
     print("native voice: %d comparisons over %d piano notes (%d unsupported), %d differ"

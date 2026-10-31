@@ -15,6 +15,7 @@
  */
 #include <stddef.h>
 #include "voice.c"
+#include "strings.c"      /* the register's string bank */
 
 
 

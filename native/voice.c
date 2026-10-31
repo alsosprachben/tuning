@@ -50,12 +50,23 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
 }
 
 /* GrandPianoProperties.soundboard_gain */
+/* soundboard_gain: the grand's board (board_kind 0); the upright's, its low
+ * roll-off of its own order (1); the electric grand's bridge and piezo (2) */
 static double soundboard_gain(const VoiceSnap *v, double fn)
 {
+    if (v->board_kind == 2) {
+        double slope = 1.0;
+        if (v->bridge_force_power != 0.0) {
+            double f0 = v->frequency_x * pow(2.0, v->octave_position);
+            double r = fn / (f0 > 1e-9 ? f0 : 1e-9);
+            slope = pow(1.0 > r ? 1.0 : r, v->bridge_force_power);     /* max(r, 1.0) */
+        }
+        return v->bridge_gain * slope / (1.0 + pow(fn / v->bridge_corner_hz, v->bridge_order));
+    }
     double body = 1.0 + v->board_body_gain * exp(
         -(pow(log(fn / v->board_body_hz), 2.0)) / (2.0 * pow(v->board_body_width, 2.0)));
     double high = 1.0 / (1.0 + pow(fn / v->board_high_hz, v->board_high_order));
-    double low = 1.0 / (1.0 + pow(v->board_low_hz / fn, 2.0));
+    double low = 1.0 / (1.0 + pow(v->board_low_hz / fn, v->board_kind == 1 ? v->board_low_order : 2.0));
     return body * high * low;
 }
 

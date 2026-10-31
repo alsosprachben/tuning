@@ -50,7 +50,9 @@ class VoiceSnap(ctypes.Structure):
                 ('radiation_distance', C), ('position_x', C), ('position_z', C), ('hrtf_beta', C),
                 ('room', C * 10), ('ahz', C * 6), ('alpha', C * 36), ('scat', C * 36),
                 ('phantom_coupling', C), ('phantom_register_power', C), ('phantom_ref_hz', C),
-                ('phantom_note_max_hz', C), ('phantom_gain_floor', C), ('phantom_max_order', I)]
+                ('phantom_note_max_hz', C), ('phantom_gain_floor', C), ('phantom_max_order', I),
+                ('board_kind', I), ('board_low_order', C), ('bridge_gain', C), ('bridge_corner_hz', C),
+                ('bridge_order', C), ('bridge_force_power', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -155,7 +157,7 @@ def lib():
 
 def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
-                                                       'channel.cpp', 'room.cpp', 'midi.cpp')]
+                                                       'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c')]
             + [os.path.join(HERE, 'roomcore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -212,6 +214,7 @@ def _load():
             ('nv_midi_cc', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_pw', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_song', None, [ctypes.c_void_p, ctypes.c_void_p, D]),
+            ('nv_strings', I, [ctypes.POINTER(VoiceInit), P, D, C, C, C, ctypes.c_void_p, ctypes.c_void_p, I]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
             ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C, I, I]),
@@ -236,12 +239,23 @@ def supported(props):
     """Whether the native voice plays this voice: the grand piano so far
     (GrandPianoProperties), and none of the features not ported yet."""
     import tonelib as T
-    if not isinstance(props, T.GrandPianoProperties):
+    if not isinstance(props, T.GrandPianoProperties) or _board_kind(type(props)) is None:
         return False
     return (props.mode_gains is None and props.mode_ratios is None and not props.harmonic_touch
             and not props.bore_corner_hz and not props.pickup_points and bool(props.strike_point)
             and len(props.note_detune_cents) <= 4 and len(props.string_gain) == 2
             and len(props.string_break_hz) == 2 and props.max_harmonic is not None)
+
+
+_BOARD = {'GrandPianoProperties': 0, 'UprightPianoProperties': 1, 'ElectricGrandProperties': 2}
+
+
+def _board_kind(cls):
+    """Which soundboard_gain cls has (VoiceSnap.board_kind), or None."""
+    for k in cls.__mro__:
+        if 'soundboard_gain' in k.__dict__:
+            return _BOARD.get(k.__name__)
+    return None
 
 
 def snapshot(props):
@@ -296,6 +310,12 @@ def snapshot(props):
     s.phantom_note_max_hz = getattr(p, 'phantom_note_max_hz', 0.0)
     s.phantom_gain_floor = getattr(p, 'phantom_gain_floor', 3e-3)
     s.phantom_max_order = int(getattr(p, 'phantom_max_order', 16))
+    s.board_kind = _board_kind(type(p))
+    if s.board_kind == 1:
+        s.board_low_order = p.board_low_order
+    elif s.board_kind == 2:
+        s.bridge_gain, s.bridge_corner_hz, s.bridge_order = p.bridge_gain, p.bridge_corner_hz, p.bridge_order
+        s.bridge_force_power = p.bridge_force_power or 0.0
     return s
 
 
@@ -738,3 +758,40 @@ def play(song, classes, tmpl, br, cap):
     if n < 0:
         return None, -n - 1
     return rows[:nr.value], qacc, az.value
+
+
+class StringMode(ctypes.Structure):
+    """native/strings.c's StringMode: one mode of the register's string bank."""
+    _fields_ = [('key', LL), ('string', LL), ('harm', LL)] + [(f, C) for f in (
+        'f', 'alpha', 'w', 'hl', 'hr', 'dl', 'dr', 'px')]
+
+
+def strings(cls, table, pan, chan_vol, sr):
+    """register.Strings' arrays for a piano class from native/strings.c:
+    {name: numpy array} (key, string, harm, f, alpha, w, hl, hr, dl, dr, px,
+    W), or None where the class is not the engine's. table {key: Hz}; the
+    honky-tonk's detune as the module's honky_detune stands."""
+    import numpy as np
+    import tonelib as T
+    got = _class(cls)
+    if got is None:
+        return None
+    c = VoiceInit.from_buffer_copy(got[0])
+    lo, hi = cls.string_detune_range
+    if issubclass(cls, T.HonkyTonkProperties):
+        lo, hi = lo * T.honky_detune, hi * T.honky_detune
+    c.detune_lo, c.detune_hi = lo, hi
+    c.fixed_touch = int(bool(T.FIXED_TOUCH))
+    tab = (ctypes.c_double * 128)(*[float(table[k]) if k in table else 0.0 for k in range(128)])
+    cap = 88 * 4 * 130
+    out = (StringMode * cap)()
+    tmp = (StringMode * cap)()
+    n = lib().nv_strings(ctypes.byref(c), ctypes.byref(got[1]), tab, float(pan), float(chan_vol), float(sr),
+                         out, tmp, cap)
+    if n < 0:
+        return None
+    a = np.frombuffer(out, dtype=np.dtype([('key', 'i8'), ('string', 'i8'), ('harm', 'i8')] + [
+        (f, 'f8') for f in ('f', 'alpha', 'w', 'hl', 'hr', 'dl', 'dr', 'px')]), count=n)
+    r = {k: np.array(a[k]) for k in a.dtype.names}
+    r['W'] = 2.0 * math.pi * r['f']
+    return r
