@@ -598,15 +598,13 @@ class Stream:
     def _register(self, T):
         for rank, (ch, C) in enumerate(self.reg.items()):
             C.advance(T)
-            recs = C.take()
-            if not recs:
+            got = C.take()
+            if got is None:
                 continue
-            n = len(recs)
-            out = {c: np.array([x['row'][c] for x in recs], dtype=self.dtypes[c])
-                   for c in self.cols}
+            n = len(got['seq'])
+            out = {c: np.asarray(got['cols'][c]).astype(self.dtypes[c]) for c in self.cols}
             lvl = np.stack([np.full(n, 1, np.int64), np.full(n, self.REG_RANK0 + rank, np.int64),
-                            np.array([x['phase'] for x in recs], np.int64),
-                            np.array([x['seq'] for x in recs], np.int64)], 1)
+                            got['phase'], got['seq']], 1)
             out['key'], out['klen'] = _key(lvl, np.zeros((n, 0), np.int64), np.zeros(n, np.int64))
             self._final(out)
 

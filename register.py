@@ -406,6 +406,10 @@ def _load_core():
     dll.strike_drive.restype = ctypes.c_int
     dll.dcum.argtypes = [ctypes.c_int, P, P, P, P, P, P, D, P]
     dll.dcum.restype = None
+    L = ctypes.c_long
+    dll.free_rows.argtypes = ([ctypes.c_int] + [P] * 15 + [P] * 8 + [D] * 4 + [L, L, P] + [P] * 21
+                              + [P, L])
+    dll.free_rows.restype = ctypes.c_int
     return dll
 
 
@@ -546,7 +550,10 @@ class Channel(object):
         M = len(strings.f)
         self.Az = np.zeros(M, complex); self.nref = np.zeros(M)
         self.Rz = np.zeros(M, complex); self.rref = np.zeros(M)
-        self.rrec = [None] * M        # each mode's latest free row (its record)
+        self.rows = _Rows()            # the free and bridge rows, as columns
+        self.rrow = np.full(M, -1, np.int64)    # each mode's latest free row (its index)
+        self.srcs = []                # each row's source, by index (rows' 'src')
+        self.src_ix = {}
         # ...and what its end turns on, as arrays: the row's start, where it
         # falls under the floor, where a split closed it
         self.has = np.zeros(M, bool)
@@ -555,8 +562,9 @@ class Channel(object):
         self.groups = {}             # block -> [strike index]
         self.pending = {}            # damper block -> transfer amplitudes
         self.bridges = []            # undecided: (seqs, modes, values, n0, re0, pb, src)
-        self.open = []               # free rows not yet final
-        self.out = []                # final rows not yet handed out
+        self.open = np.zeros(0, np.int64)   # free rows not yet final (row indices)
+        self.out = []                # final forced rows not yet handed out
+        self.out_rows = []           # final free and bridge rows not yet handed out (indices)
         self.seq = 0
         self.fseq = 0
         self.loud = 0.0              # the loudest partial so far: the floor's reference
@@ -765,8 +773,8 @@ class Channel(object):
     def pending_min(self):
         """The earliest onset a row not yet handed out may have."""
         m = self.next_event()
-        for r in self.open:
-            m = min(m, r['row']['non'])
+        if len(self.open):
+            m = min(m, float(self.rows.c['non'][self.open].min()))
         for br in self.bridges:
             m = min(m, br[3])
         return m
@@ -956,36 +964,85 @@ class Channel(object):
             return
         free_now = ~np.isnan(self.ends(S.key[go], np.full(len(go), float(b))))
         # the felt's rate at b, asked once for all of them (a lookup: the same
-        # values as asking mode by mode, which was most of _update's time)
+        # values as asking mode by mode)
         drate = self._drate(S.key[go], float(b)) if self.damp else None
+        dll = _core()
+        if dll:
+            self._free_rows_c(dll, go, free_now, drate, floor, b, src)
+            return
         for k_, (i, fr) in enumerate(zip(go, free_now)):
-            rec = self.rrec[i]
-            if rec is not None:
-                if rec['closed'] is None or rec['closed'] > b:
-                    rec['closed'] = float(b)
-                    self.r_closed[i] = float(b)
-            self.rrec[i] = None
+            rec = int(self.rrow[i])
+            if rec >= 0 and self.rows.c['closed'][rec] > b:
+                self.rows.c['closed'][rec] = float(b)
+                self.r_closed[i] = float(b)
+            self.rrow[i] = -1
             self.has[i] = False
             z = Az[i]
             if abs(z) < floor or not fr:
                 continue
             lr = float(am[i]) + (float(self.dw[i] * drate[k_]) if self.damp else 0.0)
             n_floor = b + sr * math.log(abs(z) / floor) / max(lr, 1e-9)
-            rec = self._write(i, z, b, self.blk, None, None, 'free', src, lr=lr)
-            rec.update(mode=i, b=float(b), key=int(S.key[i]), n_floor=n_floor, closed=None)
-            self.open.append(rec)
-            self.rrec[i] = rec
+            r = self._write(i, z, b, self.blk, None, None, 0, src, lr=lr)
+            self.rows.c['b'][r] = float(b); self.rows.c['n_floor'][r] = n_floor
+            self.rows.c['closed'][r] = np.inf
+            self.open = np.append(self.open, r)
+            self.rrow[i] = r
             self.has[i] = True
             self.r_b[i] = b; self.r_nfloor[i] = n_floor; self.r_closed[i] = np.inf
             self.Rz[i] = z; self.rref[i] = b; self.r_lr[i] = lr
 
-    def _alive(self, rec, b):
-        """Whether a free row still sounds at b, as far as it can be known."""
-        end = self.span_end(rec['key'], rec['b'])
-        x = min(rec['n_floor'], end if end is not None else rec['b'])
-        if rec['closed'] is not None:
-            x = min(x, rec['closed'])
-        return x > b
+    def _src(self, src):
+        """A source's index in self.srcs."""
+        k = self.src_ix.get(src)
+        if k is None:
+            k = self.src_ix[src] = len(self.srcs)
+            self.srcs.append(src)
+        return k
+
+    def _free_rows_c(self, dll, go, free_now, drate, floor, b, src):
+        """_update's loop over the drifted modes, in C (registercore.c
+        free_rows): the same rows, bit for bit, written into the store."""
+        S, Rw = self.S, self.rows
+        Rw.room(len(go))
+        if not hasattr(self, '_c_mode'):
+            f8 = lambda v: np.ascontiguousarray(v, np.float64)     # noqa: E731
+            self._c_mode = dict(am=f8(S.alpha), W=f8(S.W), f=f8(S.f), hl=f8(S.hl), hr=f8(S.hr),
+                                dl=f8(S.dl), dr=f8(S.dr), px=f8(S.px),
+                                string=np.ascontiguousarray(S.string, np.int64),
+                                key=np.ascontiguousarray(S.key, np.int64),
+                                dw=f8(self.dw) if self.dw is not None else None)
+        cm = self._c_mode
+        go8 = np.ascontiguousarray(go, np.int64)
+        fn = np.ascontiguousarray(free_now, np.bool_)
+        dr8 = np.ascontiguousarray(drate, np.float64) if self.damp else None
+        opn = np.empty(len(self.open) + len(go), np.int64)
+        opn[:len(self.open)] = self.open
+        seq = ctypes.c_long(self.seq)
+        P = lambda a: None if a is None else a.ctypes.data              # noqa: E731
+        c = Rw.c
+        got = dll.free_rows(len(go8), P(go8), P(fn), P(dr8) if self.damp else None,
+                            P(self.Az), P(cm['am']), P(cm['dw']) if self.damp else None, P(cm['W']),
+                            P(cm['f']), P(cm['hl']), P(cm['hr']), P(cm['dl']), P(cm['dr']),
+                            P(cm['px']), P(cm['string']), P(cm['key']),
+                            P(self.rrow), P(self.has), P(self.r_b), P(self.r_nfloor), P(self.r_closed),
+                            P(self.Rz), P(self.rref), P(self.r_lr),
+                            float(floor), float(b), float(self.sr), float(self.blk), self._src(src),
+                            Rw.n, ctypes.byref(seq),
+                            P(c['om']), P(c['p0']), P(c['p0R']), P(c['aL']), P(c['aR']), P(c['aM']),
+                            P(c['nf']), P(c['non']), P(c['fa']), P(c['logr']), P(c['delL']),
+                            P(c['delR']), P(c['px']), P(c['pl']), P(c['mode']), P(c['key']), P(c['b']),
+                            P(c['n_floor']), P(c['closed']), P(c['seq']), P(c['src']),
+                            P(opn), len(self.open))
+        Rw.n += got
+        self.seq = seq.value
+        self.open = opn[:len(self.open) + got]
+
+    def _alive(self, r, b):
+        """Whether free row r still sounds at b, as far as it can be known."""
+        c = self.rows.c
+        end = self.span_end(int(c['key'][r]), float(c['b'][r]))
+        x = min(float(c['n_floor'][r]), end if end is not None else float(c['b'][r]))
+        return min(x, float(c['closed'][r])) > b
 
     # a free row's fields that are the same on every row
     _CONST = dict(logrA=0.0, aft=0.0, sus=0.0, cv=0.0, sj=0.0, crl=0.0, csc=0.0, cbw=0.0, tbav=0.0,
@@ -993,23 +1050,28 @@ class Channel(object):
                   fx=-1, mk=0, rdl=0.0, fmw=0.0, fmp=0.0, fmpR=0.0, dr=1.0)
 
     def _write(self, i, z, non, fa, noff, re_, kind, src, seq=None, lr=None):
-        S, sr = self.S, self.sr
+        """A row of mode i, its state z at `non`, into the store; its index.
+        kind: 0 free (noff and re set when it settles), 1 bridge."""
+        S, sr, Rw = self.S, self.sr, self.rows
+        Rw.room(1)
+        r = Rw.n
+        Rw.n += 1
+        c = Rw.c
         om = S.W[i] / sr
         ph = math.atan2(z.imag, z.real)
-        # the template with the constant fields, made once a template
-        if getattr(self, '_base_of', None) is not self.template:
-            self._base = dict(self.template)
-            self._base.update(self._CONST)
-            self._base_of = self.template
-        row = dict(self._base)
-        row.update(om=om, p0=ph - om * S.dl[i], p0R=ph - om * S.dr[i],
-                   aL=abs(z) * S.hl[i], aR=abs(z) * S.hr[i], aM=abs(z),
-                   nf=S.f[i], nfr=S.f[i], non=float(non), noff=noff,
-                   fa=float(fa), re=re_, logr=float(S.alpha[i] if lr is None else lr),
-                   delL=S.dl[i], delR=S.dr[i], px=S.px[i], pl=int(S.string[i]))
+        c['om'][r] = om; c['p0'][r] = ph - om * S.dl[i]; c['p0R'][r] = ph - om * S.dr[i]
+        c['aL'][r] = abs(z) * S.hl[i]; c['aR'][r] = abs(z) * S.hr[i]; c['aM'][r] = abs(z)
+        c['nf'][r] = S.f[i]; c['non'][r] = float(non)
+        c['noff'][r] = np.nan if noff is None else noff
+        c['fa'][r] = float(fa); c['re'][r] = np.nan if re_ is None else re_
+        c['logr'][r] = float(S.alpha[i] if lr is None else lr)
+        c['delL'][r] = S.dl[i]; c['delR'][r] = S.dr[i]; c['px'][r] = S.px[i]
+        c['pl'][r] = int(S.string[i]); c['mode'][r] = int(i); c['key'][r] = int(S.key[i])
+        c['kind'][r] = kind; c['src'][r] = self._src(src)
         if seq is None:
             seq = self.seq; self.seq += 1
-        return dict(row=row, phase=0, seq=seq, kind=kind, src=src, mode=int(i))
+        c['seq'][r] = seq
+        return r
 
     def _forced(self, drv, r, beta, F, si):
         row = {c: drv[c][r] for c in self.cols}
@@ -1038,36 +1100,66 @@ class Channel(object):
             for sq, i, z in zip(seqs, cand, vals):
                 if self.span_end(int(self.S.key[i]), n0) is None:
                     continue
-                rec = self._write(i, z, n0, max(re0, 1.0), float(pb), float(self.blk),
-                                  'bridge', src, seq=sq)
-                self.out.append(rec)
+                self.out_rows.append(self._write(i, z, n0, max(re0, 1.0), float(pb),
+                                                 float(self.blk), 1, src, seq=sq))
         self.bridges = keep
 
     def _settle_rows(self):
         """Free rows whose end nothing to come can change: settled, handed out."""
         e = self.next_event()
+        c = self.rows.c
         keep = []
-        for rec in self.open:
-            end = self.span_end(rec['key'], rec['b'])
+        for r in self.open:
+            r = int(r)
+            end = self.span_end(int(c['key'][r]), float(c['b'][r]))
             exact = end is not None and end < self.T
-            x = min(rec['n_floor'], rec['closed'] if rec['closed'] is not None else float('inf'),
-                    end if exact else float('inf'))
+            closed = float(c['closed'][r])
+            nfl = float(c['n_floor'][r])
+            x = min(nfl, closed, end if exact else float('inf'))
             if x <= e or self.T == float('inf'):
-                end = end if end is not None else rec['b']
-                noff, re_ = (end, self.rel) if end <= rec['n_floor'] else (rec['n_floor'], float(self.blk))
-                if rec['closed'] is not None and noff > rec['closed']:
-                    noff, re_ = rec['closed'], float(self.blk)
-                rec['row']['noff'] = float(min(noff, 9e15))
-                rec['row']['re'] = float(re_)
-                self.out.append(rec)
+                end = end if end is not None else float(c['b'][r])
+                noff, re_ = (end, self.rel) if end <= nfl else (nfl, float(self.blk))
+                if closed != float('inf') and noff > closed:
+                    noff, re_ = closed, float(self.blk)
+                c['noff'][r] = float(min(noff, 9e15))
+                c['re'][r] = float(re_)
+                self.out_rows.append(r)
             else:
-                keep.append(rec)
-        self.open = keep
+                keep.append(r)
+        self.open = np.array(keep, np.int64)
 
     def take(self):
-        """The rows final since the last take, each with its (phase, seq)."""
-        got, self.out = self.out, []
-        return got
+        """The rows final since the last take, as columns: {'cols': {column:
+        array}, 'phase', 'seq', 'kind', 'src', 'mode'} -- the free and bridge
+        rows from the store (phase 0), then the forced (phase 1)."""
+        ids = np.array(self.out_rows, np.int64)
+        forced, self.out, self.out_rows = self.out, [], []
+        n0, n1 = len(ids), len(forced)
+        if not n0 + n1:
+            return None
+        rc = self.rows.c
+        tpl = self.template or {}
+        cols = {}
+        for k in self.cols:
+            if k in _Rows.ROW:
+                v = rc[k][ids]
+            elif k == 'nfr':
+                v = rc['nf'][ids]
+            elif k in self._CONST:
+                v = np.full(n0, self._CONST[k])
+            else:
+                v = np.full(n0, tpl[k]) if n0 else np.zeros(0)
+            if n1:
+                fv = np.array([x['row'][k] for x in forced])
+                v = np.concatenate([np.asarray(v, np.result_type(v, fv)), fv]) if n0 else fv
+            cols[k] = v
+        kinds = ('free', 'bridge')
+        return dict(cols=cols,
+                    phase=np.concatenate([np.zeros(n0, np.int64), np.ones(n1, np.int64)]),
+                    seq=np.concatenate([rc['seq'][ids], np.array([x['seq'] for x in forced], np.int64)]),
+                    kind=[kinds[k] for k in rc['kind'][ids]] + ['forced'] * n1,
+                    src=[self.srcs[k] for k in rc['src'][ids]] + [x['src'] for x in forced],
+                    mode=np.concatenate([rc['mode'][ids], np.full(n1, -1, np.int64)]))
 
 
 def channel_for(ch, R, sr, blk, cols, scale, string_fns, keep=True):
@@ -1075,6 +1167,38 @@ def channel_for(ch, R, sr, blk, cols, scale, string_fns, keep=True):
     first props, pan, volume, tuning table and pedal spans)."""
     S = R.get('strings') or Strings(R['pc'], R['table'], R['pan'], R['chan_vol'], sr, string_fns)
     return Channel(ch, S, R['props'], R['pedal'], sr, blk, cols, scale, keep, R.get('damping'))
+
+
+class _Rows(object):
+    """A channel's free and bridge rows, as columns: the fields that vary
+    from row to row, and each row's bookkeeping (its mode, key, start, where
+    it falls under the floor, where a split closed it, its seq, its source).
+    The C core (registercore.c free_rows) writes into these arrays; a row
+    is its index. The fields every row shares come from the template when
+    the rows are handed out (take)."""
+
+    # a row's own fields (the rest are its bookkeeping)
+    ROW = ('om', 'p0', 'p0R', 'aL', 'aR', 'aM', 'nf', 'non', 'noff', 'fa', 're', 'logr',
+           'delL', 'delR', 'px', 'pl')
+    F8 = ('om', 'p0', 'p0R', 'aL', 'aR', 'aM', 'nf', 'non', 'noff', 'fa', 're', 'logr',
+          'delL', 'delR', 'px', 'b', 'n_floor', 'closed')
+    I8 = ('pl', 'mode', 'key', 'seq', 'src', 'kind')
+
+    def __init__(self, cap=1024):
+        self.n = 0
+        self.c = {k: np.zeros(cap) for k in self.F8}
+        self.c.update({k: np.zeros(cap, np.int64) for k in self.I8})
+
+    def room(self, more):
+        """Grow (doubling) so `more` rows fit after the n there are."""
+        cap = len(self.c['om'])
+        if self.n + more <= cap:
+            return
+        new = max(2 * cap, self.n + more)
+        for k, v in self.c.items():
+            w = np.zeros(new, v.dtype)
+            w[:self.n] = v[:self.n]
+            self.c[k] = w
 
 
 # array-module typecodes the table's columns use, as numpy dtypes
@@ -1089,21 +1213,22 @@ def expand(A, channels, sr, blk, cols, meta=None):
     added = 0
     for ch, C in channels.items():
         C.finish()
-        recs = sorted(C.take(), key=lambda r: (r['phase'], r['seq']))
-        rows = [r['row'] for r in recs]
+        got = C.take()
+        if got is None:
+            continue
+        o = np.lexsort((got['seq'], got['phase']))          # (phase, seq) order
         for c in cols:
-            col = A[c]
-            vals = list(map(operator.itemgetter(c), rows))
+            col, v = A[c], got['cols'][c][o]
             nd = _ARRAY_DTYPE.get(getattr(col, 'typecode', None))
-            if nd is not None and vals:
+            if nd is not None and len(v):
                 # a typed column takes the whole run as bytes: numpy casts as
                 # the array module does (float64 -> float32 rounds to nearest)
-                col.frombytes(np.asarray(vals).astype(nd).tobytes())
+                col.frombytes(np.asarray(v).astype(nd).tobytes())
             else:
-                col.extend(vals)
+                col.extend(v.tolist())
         if meta is not None:
-            meta.extend((ch, r['kind'], r['src'], r['mode']) for r in recs)
-        added += len(recs)
+            meta.extend((ch, got['kind'][i], got['src'][i], int(got['mode'][i])) for i in o)
+        added += len(o)
     return added
 
 

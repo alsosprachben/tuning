@@ -345,3 +345,87 @@ void dcum(int n, const long *key, const double *t, const long *off, const double
         out[q] = i >= a ? D[i] + rate[i] * (t[q] - bk[i]) / sr : 0.0;
     }
 }
+
+/* ------------------------------------------------------------------ free rows */
+
+/* register.Channel._update's loop over the modes whose row has drifted (go):
+ * each closes the row it had (closed at b, unless closed earlier), and,
+ * where it is still over the floor and its string is free, opens a new one
+ * -- its values written straight into the row store's columns, at row
+ * index n onward. Python's math.atan2, math.log and abs(complex) are the
+ * same libm calls (atan2, log, hypot), the arithmetic in the same order, no
+ * fused multiply-adds: bit-identical. Returns the rows written; the store
+ * must have room for ngo more (the caller grows it first).
+ *
+ * Per mode (M of them): Az (complex), am (alpha), dw (the felt's weight, or
+ * NULL), W, f, hl, hr, dl, dr, px, string, key; state: rrow (its open row
+ * or -1), has, r_b, r_nfloor, r_closed, Rz (complex), rref, r_lr.
+ * Per go mode k: go[k], free_now[k], drate[k] (or NULL).
+ * Per row (the store): om p0 p0R aL aR aM nf non fa logr delL delR px pl,
+ * mode key b n_floor closed seq src. open_ids: the open rows, appended. */
+int free_rows(int ngo, const long *go, const char *free_now, const double *drate,
+              const double complex *Az, const double *am, const double *dw, const double *W,
+              const double *f, const double *hl, const double *hr, const double *dl, const double *dr,
+              const double *px, const long *string, const long *key,
+              long *rrow, char *has, double *r_b, double *r_nfloor, double *r_closed,
+              double complex *Rz, double *rref, double *r_lr,
+              double floor_, double b, double sr, double blk, long src,
+              long n, long *seq,
+              double *c_om, double *c_p0, double *c_p0R, double *c_aL, double *c_aR, double *c_aM,
+              double *c_nf, double *c_non, double *c_fa, double *c_logr, double *c_delL,
+              double *c_delR, double *c_px, long *c_pl, long *c_mode, long *c_key, double *c_b,
+              double *c_nfloor, double *c_closed, long *c_seq, long *c_src,
+              long *open_ids, long nopen)
+{
+    long n0 = n;
+    for (int k = 0; k < ngo; k++) {
+        long i = go[k];
+        long rec = rrow[i];
+        if (rec >= 0 && c_closed[rec] > b) {      /* (None is +inf: always over b) */
+            c_closed[rec] = b;
+            r_closed[i] = b;
+        }
+        rrow[i] = -1;
+        has[i] = 0;
+        double complex z = Az[i];
+        double az = cabs(z);
+        if (az < floor_ || !free_now[k])
+            continue;
+        double lr = am[i] + (dw ? dw[i] * drate[k] : 0.0);
+        double n_floor = b + sr * log(az / floor_) / (lr > 1e-9 ? lr : 1e-9);
+        double om = W[i] / sr;
+        double ph = atan2(cimag(z), creal(z));
+        c_om[n] = om;
+        c_p0[n] = ph - om * dl[i];
+        c_p0R[n] = ph - om * dr[i];
+        c_aL[n] = az * hl[i];
+        c_aR[n] = az * hr[i];
+        c_aM[n] = az;
+        c_nf[n] = f[i];
+        c_non[n] = b;
+        c_fa[n] = blk;
+        c_logr[n] = lr;
+        c_delL[n] = dl[i];
+        c_delR[n] = dr[i];
+        c_px[n] = px[i];
+        c_pl[n] = string[i];
+        c_mode[n] = i;
+        c_key[n] = key[i];
+        c_b[n] = b;
+        c_nfloor[n] = n_floor;
+        c_closed[n] = 1.0 / 0.0;
+        c_seq[n] = (*seq)++;
+        c_src[n] = src;
+        open_ids[nopen++] = n;
+        rrow[i] = n;
+        has[i] = 1;
+        r_b[i] = b;
+        r_nfloor[i] = n_floor;
+        r_closed[i] = 1.0 / 0.0;
+        Rz[i] = z;
+        rref[i] = b;
+        r_lr[i] = lr;
+        n++;
+    }
+    return (int)(n - n0);
+}
