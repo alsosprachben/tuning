@@ -6053,12 +6053,169 @@ def _note_pulse(em, props, nt, _VB, emit_partial, stops):
     return stops
 
 
+# THE TONE IN C (native/tone.c, native.py): a note whose tone is the plain
+# one-stop path -- a voice native.py supports, and none of _note_stops' or
+# emit_partial's extras in play -- has its rows made in C, bit for bit the
+# Python's. TUNING_NATIVE_TONE: 'on' (the default) plays it there, 'check'
+# plays it in Python and compares the C's rows (NATIVE_STATS), 'off' never.
+NATIVE_TONE = os.environ.get('TUNING_NATIVE_TONE', 'on')
+NATIVE_STATS = [0, 0, 0, 0]      # notes played native, notes checked, checks that differed, rows compared
+# the columns emit_partial writes, in its order
+EMIT_COLS = ("om", "p0", "p0R", "aL", "aR", "aM", "mch", "px", "pz", "az", "dr", "nf", "non", "noff",
+             "fa", "re", "ch", "logr", "logrA", "aft", "sus", "cv", "cc", "crl", "sj", "csc", "cbw",
+             "tbav", "tau", "tcut", "gb", "gt", "gc", "vd", "vr", "vp", "vdl", "delL", "delR", "gr",
+             "cr", "br", "pl", "fx", "mk", "rdl", "fmw", "nfr", "fmp", "fmpR")
+_TC_DTYPE = {'f': np.float32, 'd': np.float64, 'i': np.int32}
+
+
+def _tone_native(em, props, nt, stops, onsets, seats, mls, _als, _hx, _hperc, _pjit, _sir, sjit_n, rank_B):
+    """The note's tone from C: (rows, transverse, qacc, azimuth), or None
+    where anything in play is not ported (Python plays it)."""
+    import native as _NV
+    d = _NV.lib()
+    if d is None or len(stops) != 1:
+        return None
+    key, ratio, gain, *rest = stops[0]
+    if rest or ratio != 1.0 or nt.organ or _sir is not None or seats or onsets or mls > 0.0:
+        return None
+    if _als is not None or _hx is not None or _hperc or _pjit:
+        return None
+    P = props
+    if (getattr(P, 'directivity_radius', 0.0) > 0.0 or getattr(P, 'bloom_seconds', 0.0) > 0.0
+            or getattr(P, 'speech_harmonic_exp', 0.0) or getattr(P, 'speech_harmonic_exp_per_octave', 0.0)
+            or hasattr(P, 'pre_pluck_s') or hasattr(P, 'feedback_harmonic')
+            or getattr(P, 'wind_skirt_always', False) or getattr(P, 'unison_spans_part', False)
+            or getattr(P, 'unison_drop_late', False) or getattr(P, 'strike_phase_spread', 0.0) > 0.0
+            or getattr(P, 'mode_phase', None) is not None or getattr(P, 'partial_phase_spread', 0.0) > 0.0
+            or getattr(P, 'stroke_scatter', False) or getattr(P, 'string_choirs', None)
+            or getattr(P, 'unison_shares_phase', False)):
+        return None
+    if T.choir_of(P, key) or T.rank_detune_cents(P, key, nt.note):
+        return None
+    if (em.reverse is not None or em.fold is not None or em.fold_in or em.hammer_on > 0.0
+            or em._EFXN[0] is not None or em.late_copy or em.ring_rows or em.radius is not None):
+        return None
+    _part = (int(em.channel) % _GSX.VIRT) % _GSX.TONE_SEG
+    if (_GS_EQ and _part not in _GS_EQ['off']) or em._src_dist(_part, P) != 1.0:
+        return None
+    px0 = em.pos_x
+    if px0 != getattr(P, 'position_x', 0.0):
+        return None
+    snap = _NV.snapshot(P)
+    if snap is None:
+        return None
+    reflect = bool(em.REFLECT and not em.no_reflections and P.reflection_order)
+    if reflect:
+        imgs, nsurf, surf, img, mir = P._images_for(px0 * 1.0, P.radiation_distance * 1.0, em.pos_z * 1.0)
+        if len(imgs) > 64:
+            return None
+    else:
+        imgs, nsurf, surf, img, mir = [], np.zeros(1, np.int32), np.zeros(1, np.int32), np.zeros(3), np.zeros(3)
+    t = _NV.ToneIn()
+    t.f0, t.B, t.gain = nt.f0, rank_B, gain
+    t.non, t.noff, t.fade, t.rel, t.chiff = nt.non, nt.noff, nt.fade, nt.rel, nt.chiff
+    t.cv, t.cc, t.crl, t.sjit, t.csc = nt.cv, nt.cc, nt.crl, sjit_n, nt.csc
+    t.li, t.ri, t.sustain_level = nt.li, nt.ri, P.sustain_level
+    t.gr, t.cr, t.sr = -1, 0, SR
+    t.jitter_scale, t.nyq_om, t.transposed, t.reflect = em.jitter_scale, em._NYQ_OM, int(bool(em.transposed)), int(reflect)
+    t.dl, t.dr, t.pos_x0, t.pos_x_props, t.pos_z = em._DL[0], em._DL[1], px0, getattr(P, 'position_x', 0.0), em.pos_z
+    t.channel = em.channel
+    t.cbw0, t.cbw1 = em._CBW[0], em._CBW[1]
+    t.tb[:] = list(em._TB)
+    t.gl[:] = list(em._GL)
+    t.sv[:] = list(em._SV)
+    t.sound_vib_depth_cents, t.vibrato_delay = T.SOUND_VIB_DEPTH_CENTS, em.vibrato_delay
+    t.br = em.bend_row if (em.bend_row >= 0 or em.fader_row < 0) else em.fader_row
+    t.fx, t.mk, t.fm_omega, t.fm_phase = em.moog_filter_row, em.moog_key, em.fm_omega, em.fm_phase
+    t.listener_distance, t.head_radius = P.listener_distance, P.head_radius
+    t.pan_angle = getattr(P, 'pan_angle', 0.0)
+    t.room_bands[:] = list(em.ROOM_BANDS)
+    cap = (P.max_harmonic + 1) * 3 * (1 + len(imgs)) + 16
+    rows = np.empty((cap, len(EMIT_COLS)))
+    trans = np.empty((P.max_harmonic + 1, 3))
+    ntr = ctypes.c_int(0)
+    qacc = np.array([v for pr in em._QACC for v in pr], np.float64)
+    az = ctypes.c_double(em.azimuth)
+    n = d.nv_tone(ctypes.byref(snap), ctypes.byref(t), len(imgs), nsurf.ctypes.data, surf.ctypes.data,
+                  img.ctypes.data, mir.ctypes.data, rows.ctypes.data, cap, trans.ctypes.data,
+                  ctypes.byref(ntr), qacc.ctypes.data, ctypes.byref(az))
+    if n < 0:
+        return None
+    return rows[:n], trans[:ntr.value], qacc, az.value, gain
+
+
+def _tone_apply(em, props, nt, A, got, transverse, _VB, sjit_n):
+    """The C's tone into the table and the emitter, as the Python leaves them."""
+    rows, trans, qacc, az, gain = got
+    if len(rows):
+        for j, c in enumerate(EMIT_COLS):
+            col = A[c]
+            a = getattr(col, 'a', col)
+            dt = _TC_DTYPE.get(getattr(a, 'typecode', None))
+            if dt is not None:
+                a.frombytes(np.ascontiguousarray(rows[:, j]).astype(dt).tobytes())
+            else:
+                col.extend(rows[:, j].tolist())
+    for i, pr in enumerate(em._QACC):
+        pr[0], pr[1] = float(qacc[2 * i]), float(qacc[2 * i + 1])
+    em.azimuth = az
+    if len(trans):
+        transverse.extend((float(a), float(b), float(c)) for a, b, c in trans)
+        nt.sjit = sjit_n
+        em.radius = None
+        _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
+        em.player = 0
+        em.pos_x = getattr(props, 'position_x', 0.0)
+    return gain
+
+
 def _note_stops(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TBN, _VB, _afm, _als, _bnote,
         _hperc, _hx, _phrase_of, _pjit, _sir, crow_of, dur, emit_partial, gain, grow_of, mls, onsets, random,
         rankev_of, seats, sjit_n, stops, transverse, wcombo, wrow_of):
     """THE NOTE'S TONE: for each stop (an organ's ranks, or one for any other
     voice), its harmonics -- unison voices, section players, bloom, mode
     lock, chiff -- emitted. Returns gain, the last stop's."""
+    if NATIVE_TONE != 'off':
+        got = _tone_native(em, props, nt, stops, onsets, seats, mls, _als, _hx, _hperc, _pjit, _sir, sjit_n, B)
+        if got is not None and NATIVE_TONE == 'on':
+            NATIVE_STATS[0] += 1
+            return _tone_apply(em, props, nt, A, got, transverse, _VB, sjit_n)
+        if got is not None:
+            # 'check': the Python plays it, and the C's rows are compared
+            _row0 = len(A['om'])
+            _g = _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TBN, _VB, _afm,
+                                _als, _bnote, _hperc, _hx, _phrase_of, _pjit, _sir, crow_of, dur,
+                                emit_partial, gain, grow_of, mls, onsets, random, rankev_of, seats, sjit_n,
+                                stops, transverse, wcombo, wrow_of)
+            rows = got[0]
+            py = np.stack([np.asarray(A[c][_row0:], np.float64) for c in EMIT_COLS], 1) \
+                if len(A['om']) > _row0 else np.zeros((0, len(EMIT_COLS)))
+            cast = np.stack([rows[:, j].astype(_TC_DTYPE[getattr(getattr(A[c], 'a', A[c]), 'typecode', 'd')])
+                             .astype(np.float64) for j, c in enumerate(EMIT_COLS)], 1) if len(rows) else rows
+            qpy = [v for pr in em._QACC for v in pr]
+            NATIVE_STATS[1] += 1
+            NATIVE_STATS[3] += len(py)
+            bad = (py.shape != cast.shape or not np.array_equal(py, cast) or qpy != list(got[2])
+                   or em.azimuth != got[3])
+            if bad:
+                NATIVE_STATS[2] += 1
+                if NATIVE_STATS[2] <= 5:
+                    _w = ('rows %d vs %d' % (len(py), len(cast)) if py.shape != cast.shape else
+                          'columns %s' % sorted({EMIT_COLS[j] for j in np.nonzero(~(py == cast).all(0))[0]}))
+                    print("  native tone DIFFERS: ch %d note %d at %.3f s: %s%s%s" % (
+                        nt.ch, nt.note, nt.on, _w, '' if qpy == list(got[2]) else ', qacc',
+                        '' if em.azimuth == got[3] else ', azimuth'))
+            return _g
+    return _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TBN, _VB, _afm, _als,
+                          _bnote, _hperc, _hx, _phrase_of, _pjit, _sir, crow_of, dur, emit_partial, gain,
+                          grow_of, mls, onsets, random, rankev_of, seats, sjit_n, stops, transverse, wcombo,
+                          wrow_of)
+
+
+def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TBN, _VB, _afm, _als, _bnote,
+        _hperc, _hx, _phrase_of, _pjit, _sir, crow_of, dur, emit_partial, gain, grow_of, mls, onsets, random,
+        rankev_of, seats, sjit_n, stops, transverse, wcombo, wrow_of):
+    """_note_stops' Python, for every note the C does not play."""
     for key, ratio, gain, *rest in stops:
         # A stop with no pipes (the harmonium's Expression, Percussion,
         # Tremolo) has a gate and no partials; a rank with a key range (its

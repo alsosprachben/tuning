@@ -47,7 +47,20 @@ class VoiceSnap(ctypes.Structure):
                 ('exp_vibrato_cents', C), ('solo_vibrato_spread', C), ('solo_vibrato_hz', C),
                 ('section_salt', LL),
                 ('radiation_distance', C), ('position_x', C), ('position_z', C), ('hrtf_beta', C),
-                ('room', C * 10)]
+                ('room', C * 10), ('ahz', C * 6), ('alpha', C * 36), ('scat', C * 36)]
+
+
+class ToneIn(ctypes.Structure):
+    """native/tone.c's ToneIn: the note, and the emitter's state for it."""
+    _fields_ = ([(f, C) for f in ('f0', 'B', 'gain', 'non', 'noff', 'fade', 'rel', 'chiff', 'cv', 'cc', 'crl',
+                                  'sjit', 'csc', 'li', 'ri', 'sustain_level', 'gr', 'cr', 'sr',
+                                  'jitter_scale', 'nyq_om')]
+                + [('transposed', I), ('reflect', I)]
+                + [(f, C) for f in ('dl', 'dr', 'pos_x0', 'pos_x_props', 'pos_z', 'channel', 'cbw0', 'cbw1')]
+                + [('tb', C * 3), ('gl', C * 3), ('sv', C * 2)]
+                + [(f, C) for f in ('sound_vib_depth_cents', 'vibrato_delay', 'br', 'fx', 'mk', 'fm_omega',
+                                    'fm_phase', 'listener_distance', 'head_radius', 'pan_angle')]
+                + [('room_bands', C * 9)])
 
 
 def lib():
@@ -63,7 +76,8 @@ def lib():
 
 
 def _load():
-    srcs = [os.path.join(HERE, 'native', f) for f in ('voice.c', 'pycompat.h')] + [os.path.join(HERE, 'roomcore.c')]
+    srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h')]
+            + [os.path.join(HERE, 'roomcore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
         tmp = '%s.%d.tmp' % (so, os.getpid())
@@ -84,7 +98,10 @@ def _load():
             ('nv_chiff_harmonic_gain', C, [P, C]), ('nv_bloom_delay_for', C, [P, C]),
             ('nv_voice_vibrato', I, [P, C, I, D]), ('nv_string_partial', I, [P, C, C, I, C, D]),
             ('nv_partial_decay', None, [P, C, I, D]), ('nv_unison_partial', None, [C, C, C, C, D]),
-            ('nv_random_check', None, [LL, I, D])):
+            ('nv_random_check', None, [LL, I, D]),
+            ('nv_tone', I, [P, ctypes.POINTER(ToneIn), I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                            ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p, ctypes.POINTER(I),
+                            ctypes.c_void_p, D])):
         f = getattr(d, name)
         f.restype, f.argtypes = res, args
     return d
@@ -143,6 +160,9 @@ def snapshot(props):
     s.section_salt = int(p._section_salt())
     s.position_x = getattr(p, 'position_x', 0.0)
     s.position_z = getattr(p, 'position_z', 0.0)
-    R = p._room_pack()[0]
+    R, AHZ, ALPHA, SCAT = p._room_pack()
     s.room[:] = [float(x) for x in R]
+    s.ahz[:] = [float(x) for x in AHZ]
+    s.alpha[:] = [float(x) for x in ALPHA]
+    s.scat[:] = [float(x) for x in SCAT]
     return s

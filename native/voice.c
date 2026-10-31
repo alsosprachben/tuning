@@ -51,6 +51,7 @@ typedef struct {
     /* where it is heard */
     double radiation_distance, position_x, position_z, hrtf_beta;
     double room[10];                /* roomcore.c's R: directivity, speed, air */
+    double ahz[6], alpha[36], scat[36];     /* ...its octave bands and surfaces */
 } VoiceSnap;
 
 /* tonelib.db_ratio */
