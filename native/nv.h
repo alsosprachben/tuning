@@ -132,6 +132,10 @@ int nv_phantom(const VoiceSnap *v, const ToneIn *t, const double *trans, int ntr
                int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
                double *rows, int cap, double *qacc, double *azimuth);
 
+/* room.cpp: a source's image sources in the room (SynthProperties.image_sources) */
+int nv_images(const double *planes, int order, double sx, double sy, double sz, int cap,
+              int *nsurf, int *surf, double *img, double *mir);
+
 /* channel.cpp's Song: a file's channels, as a note asks of them */
 double nv_song_note_off(void *s, long long ch, int note, double on, double off, int damper_pedal, int mcut,
                         double retrigger_fade, int *band);

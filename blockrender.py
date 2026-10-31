@@ -6431,12 +6431,14 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
         return None
     if _native_ready(em, P) is None:
         return None
-    if em.REFLECT and P.reflection_order:
+    if em.REFLECT and P.reflection_order and NATIVE_TONE == 'check':
+        # the engine makes the room's images itself (nv_images): here, Python's beside them
         imgs, nsurf, surf, img, mir = P._images_for(em.pos_x * 1.0, P.radiation_distance * 1.0, em.pos_z * 1.0)
-        if len(imgs) > 64:
-            return None
-    else:
-        imgs, nsurf, surf, img, mir = [], np.zeros(1, np.int32), np.zeros(1, np.int32), np.zeros(3), np.zeros(3)
+        got = _NV.images(P, em.pos_x * 1.0, P.radiation_distance * 1.0, em.pos_z * 1.0)
+        if got is None or not (len(got[0]) == len(imgs) and all(np.array_equal(a, b) for a, b in
+                                                                 zip(got, (nsurf, surf, img, mir)))):
+            _voice_report(['images'], nt)
+    imgs, nsurf, surf, img, mir = [], np.zeros(1, np.int32), np.zeros(1, np.int32), np.zeros(3), np.zeros(3)
     n = _NV.NoteIn()
     n.f0, n.pan, n.vel, n.chan_vol, n.effort = nt.f0, nt.pan, nt.vel, nt.chan_vol, eff
     n.on, n.off = nt.on, nt.off
@@ -6456,9 +6458,13 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.fx, n.mk, n.fm_omega, n.fm_phase = em.moog_filter_row, em.moog_key, em.fm_omega, em.fm_phase
     n.room_bands[:] = list(em.ROOM_BANDS)
     n.reflect, n.no_reflections = int(bool(em.REFLECT)), int(bool(em.no_reflections))
+    n.planes[:] = _NV.room_walls(P)
+    n.order = int(P.reflection_order)
     mh = P.max_harmonic + 1
     npar = min(mh, int(getattr(P, 'phantom_max_order', 16)))
-    cap = (K.n_strike + 1) + mh * 3 * (1 + len(imgs)) + 16 + max(1, npar * (npar + 1) // 2) * (1 + len(imgs))
+    _o = int(P.reflection_order) if em.REFLECT else 0
+    ni = min(64, sum(6 * 5 ** k for k in range(_o)))      # the images there can be, at most
+    cap = (K.n_strike + 1) + mh * 3 * (1 + ni) + 16 + max(1, npar * (npar + 1) // 2) * (1 + ni)
     rows = np.empty((cap, len(EMIT_COLS)))
     q0 = [v for pr in em._QACC for v in pr]
     qacc = np.array(q0, np.float64)
@@ -6471,12 +6477,12 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
         n.damper_pedal = int(bool(getattr(nt.pc, 'damper_pedal', True)))
         n.off, n.nx, n.has_nx, n.soft_pedal_down = -1.0, -1.0, 0, 0
         band = ctypes.c_int(0)
-        k = _NV.lib().nv_song_play(song.p, ctypes.byref(K), ctypes.byref(n), ctypes.byref(st), len(imgs),
+        k = _NV.lib().nv_song_play(song.p, ctypes.byref(K), ctypes.byref(n), ctypes.byref(st), -1,
                                    nsurf.ctypes.data, surf.ctypes.data, img.ctypes.data, mir.ctypes.data,
                                    rows.ctypes.data, cap, qacc.ctypes.data, ctypes.byref(az), ctypes.byref(out),
                                    ctypes.byref(band))
     else:
-        k = _NV.lib().nv_note(ctypes.byref(K), ctypes.byref(n), ctypes.byref(st), len(imgs), nsurf.ctypes.data,
+        k = _NV.lib().nv_note(ctypes.byref(K), ctypes.byref(n), ctypes.byref(st), -1, nsurf.ctypes.data,
                               surf.ctypes.data, img.ctypes.data, mir.ctypes.data, rows.ctypes.data, cap,
                               qacc.ctypes.data, ctypes.byref(az), ctypes.byref(out))
     if k < 0:

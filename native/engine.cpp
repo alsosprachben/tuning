@@ -83,6 +83,9 @@ typedef struct {
     long long ch;
     int note, damper_pedal;
     double key_off;
+    // the room's walls (WALLS' order, signed planes) and its reflection order
+    double planes[6];
+    int order;
 } NoteIn;
 
 // What the note's setup worked out, beside its rows.
@@ -98,7 +101,8 @@ typedef struct {
 // its phantom partials: the note's rows into rows (cap of them), qacc[18]
 // and *azimuth carried; rs the global random stream (NULL: a scratch one).
 // The room's image sources for the voice's position (img etc.) are the
-// caller's. Returns the rows written, -1 if the store was too small.
+// caller's, or with nimg < 0 the room's (nv_images, from n's walls). Returns
+// the rows written, -1 if the store was too small.
 int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
             int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
             double *rows, int cap, double *qacc, double *azimuth, NoteOut *out)
@@ -203,6 +207,19 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         out->n_knock = k;
         total += k;
         no_refl = 0;
+    }
+
+    // THE ROOM'S IMAGES of the voice where it stands (_images_for)
+    int nsurf_[64], surf_[64 * 8];
+    double img_[3 * 64], mir_[3 * 64];
+    if (nimg < 0) {
+        if (n->order > 8)
+            return -1;
+        nimg = nv_images(n->planes, n->order, s.position_x * 1.0, s.radiation_distance * 1.0, s.position_z * 1.0,
+                         64, nsurf_, surf_, img_, mir_);
+        if (nimg < 0)
+            return -1;
+        nsurf = nsurf_; surf = surf_; img = img_; mir = mir_;
     }
 
     // THE TONE (_note_stops, one stop at gain 1)

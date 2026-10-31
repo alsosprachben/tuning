@@ -127,7 +127,7 @@ class NoteIn(ctypes.Structure):
                 + [('sv', C * 2), ('sound_vib_depth_cents', C), ('vibrato_delay', C), ('gl', C * 3)]
                 + [(f, C) for f in ('fx', 'mk', 'fm_omega', 'fm_phase')]
                 + [('room_bands', C * 9), ('reflect', I), ('no_reflections', I), ('ch', LL), ('note', I),
-                   ('damper_pedal', I), ('key_off', C)])
+                   ('damper_pedal', I), ('key_off', C), ('planes', C * 6), ('order', I)])
 
 
 class NoteOut(ctypes.Structure):
@@ -152,7 +152,7 @@ def lib():
 
 def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
-                                                       'channel.cpp')]
+                                                       'channel.cpp', 'room.cpp')]
             + [os.path.join(HERE, 'roomcore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -163,14 +163,14 @@ def _load():
         # The C core (tone.c, with voice.c) and the C++ engine (engine.cpp)
         # under the same flags, linked into one library.
         flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
-        oc, ocpp, och = tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o'
+        objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o']
         try:
-            subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', oc])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', srcs[4], '-o', ocpp])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', srcs[5], '-o', och])
-            subprocess.check_call(['g++', '-shared', oc, ocpp, och, '-o', tmp, '-lm'])
+            subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
+            for src, o in zip(srcs[4:7], objs[1:]):
+                subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', src, '-o', o])
+            subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lm'])
         finally:
-            for o in (oc, ocpp, och):
+            for o in objs:
                 if os.path.exists(o):
                     os.remove(o)
         os.replace(tmp, so)
@@ -200,6 +200,7 @@ def _load():
                                  ctypes.POINTER(PyRandomState), I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                                  ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p, D, ctypes.POINTER(NoteOut),
                                  ctypes.POINTER(I)]),
+            ('nv_images', I, [D, I, C, C, C, I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
             ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C]),
@@ -539,3 +540,25 @@ class Song(object):
     def next_same(self, ch, note, on):
         o = ctypes.c_double(0.0)
         return o.value if self.d.nv_song_next_same(self.p, int(ch), int(note), float(on), ctypes.byref(o)) else None
+
+
+def room_walls(props):
+    """The room's walls as nv_images takes them: WALLS' signed planes."""
+    return [sgn * getattr(props, attr) for _, _, attr, sgn in props.WALLS]
+
+
+def images(props, sx, sy, sz, cap=64):
+    """nv_images: (nsurf, surf, img, mir) as _images_for packs them, or None
+    over cap."""
+    import numpy as np
+    pl = (ctypes.c_double * 6)(*room_walls(props))
+    o = int(props.reflection_order)
+    nsurf = np.zeros(cap, np.int32)
+    surf = np.zeros(cap * max(o, 1), np.int32)
+    img = np.zeros(3 * cap)
+    mir = np.zeros(3 * cap)
+    n = lib().nv_images(pl, o, float(sx), float(sy), float(sz), cap, nsurf.ctypes.data, surf.ctypes.data,
+                        img.ctypes.data, mir.ctypes.data)
+    if n < 0:
+        return None
+    return nsurf[:n], surf[:int(nsurf[:n].sum())], img[:3 * n], mir[:3 * n]
