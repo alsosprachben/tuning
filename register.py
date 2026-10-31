@@ -59,8 +59,11 @@ reaches share its frequency and decay, so they are ONE row per driver partial
 per decay stage, riding the driver's envelope and damper. Direct sound only:
 the register reaches the room through the send and the late tail.
 """
+import ctypes
 import math
+import os
 import random
+import subprocess
 
 import numpy as np
 
@@ -349,7 +352,69 @@ def _glide_grid(cut, tau):
     return np.array(t)
 
 
+# ------------------------------------------------------------------ in C
+# registercore.c: free_part's arithmetic as a loop. numpy spent the time on
+# small arrays -- a few dozen pairs a call, a dozen temporaries each -- not
+# on the exponentials. TUNING_REGISTER_C=0 keeps the numpy path, the
+# reference examples/regclose.py checks the C against (by tolerance: numpy's
+# float64 exp is its own SIMD routine, so the two differ in the last bits).
+_CORE = [None]
+
+
+def _core():
+    """The C library, built when its source is newer; False where it cannot be."""
+    if _CORE[0] is None:
+        _CORE[0] = False
+        if os.environ.get("TUNING_REGISTER_C", "1") not in ("0", "off", ""):
+            try:
+                _CORE[0] = _load_core()
+            except (OSError, subprocess.CalledProcessError) as e:
+                print("  register: C core unavailable (%s); numpy path" % e)
+    return _CORE[0]
+
+
+def _load_core():
+    here = os.path.dirname(os.path.abspath(__file__))
+    src = os.path.join(here, "registercore.c")
+    lib = os.path.join(here, "libregistercore.so")
+    if not os.path.exists(lib) or os.path.getmtime(src) > os.path.getmtime(lib):
+        # built to a temporary name and moved: a live engine and a render
+        # starting at once must never load a half-written library
+        tmp = "%s.%d.tmp" % (lib, os.getpid())
+        subprocess.check_call(["gcc", "-O3", "-march=native", "-shared", "-fPIC", src, "-o", tmp, "-lm"])
+        os.replace(tmp, lib)
+    dll = ctypes.CDLL(lib)
+    P, D = ctypes.c_void_p, ctypes.c_double
+    dll.free_part.argtypes = [ctypes.c_int, P, D, P, P, P, D, D, D, D, P, P]
+    dll.free_part.restype = None
+    return dll
+
+
+def _free_part_c(dll, c, Wi, bi, Wm, am, tb, tau, cut, need):
+    n = len(Wm)
+    c = np.ascontiguousarray(np.broadcast_to(np.asarray(c, complex), (n,)))
+    bi = np.ascontiguousarray(np.broadcast_to(np.asarray(bi, float), (n,)))
+    Wm = np.ascontiguousarray(Wm, float)
+    am = np.ascontiguousarray(am, float)
+    fr = np.empty(n, complex)
+    fo = np.empty(n, complex)
+    dll.free_part(n, c.ctypes.data, float(Wi), bi.ctypes.data, Wm.ctypes.data, am.ctypes.data,
+                  float(tb), float(tau), float(cut), float(need), fr.ctypes.data, fo.ctypes.data)
+    return fr, fo
+
+
 def free_part(c, Wi, bi, Wm, am, tb=0.0, tau=1.0, cut=0.0, need=0.0):
+    """free_part_py's answer, from the C core where it is built and the call
+    is one driver partial on an array of modes (as Channel and LiveChannel
+    make it); else free_part_py's own."""
+    dll = _core()
+    if (dll and np.ndim(Wm) == 1 and len(Wm)
+            and np.ndim(Wi) == np.ndim(tb) == np.ndim(tau) == np.ndim(cut) == 0):
+        return _free_part_c(dll, c, Wi, bi, Wm, am, tb, tau, cut, need)
+    return free_part_py(c, Wi, bi, Wm, am, tb, tau, cut, need)
+
+
+def free_part_py(c, Wi, bi, Wm, am, tb=0.0, tau=1.0, cut=0.0, need=0.0):
     """The free part's complex amplitude, referenced to the driver's onset (its
     phase there 0): what multiplies e^{(iW_m - a_m) t}. Also the forced
     coefficient, what multiplies the driver (whose own phase carries the
