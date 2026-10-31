@@ -3,6 +3,7 @@
 
     python3 examples/regclose.py [SECONDS] FILE.mid ...           the tables
     python3 examples/regclose.py --render [SECONDS] FILE.mid ...  the audio
+    (--cap-mb=N: stop a child past N MB, default 3000, and report it skipped)
 
 The register's C core is not bit-identical to numpy (numpy's float64 exp is
 its own SIMD routine), so it is checked by tolerance, the rest of prepare by
@@ -50,10 +51,27 @@ def child(mode, path, seconds, out):
     np.savez(out, **arrs)
 
 
-def run(mode, path, seconds, c_on, out):
+def run(mode, path, seconds, c_on, out, cap_mb):
+    """One child; False if it passed cap_mb of memory and was stopped (as
+    prepident's: a dense GS file's table can pass the machine's memory)."""
+    import time
     env = dict(os.environ, TUNING_REGISTER_C="1" if c_on else "0")
-    subprocess.run([sys.executable, os.path.abspath(__file__), "--child", mode, path, str(seconds), out],
-                   env=env, check=True, cwd=os.getcwd())
+    child = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--child", mode, path,
+                              str(seconds), out], env=env, cwd=os.getcwd())
+    while child.poll() is None:
+        try:
+            with open("/proc/%d/status" % child.pid) as st:
+                rss = next((int(l.split()[1]) // 1024 for l in st if l.startswith("VmRSS:")), 0)
+        except OSError:
+            rss = 0
+        if rss > cap_mb:
+            child.kill()
+            child.wait()
+            return False
+        time.sleep(0.5)
+    if child.returncode:
+        raise subprocess.CalledProcessError(child.returncode, path)
+    return True
 
 
 def compare_tables(a, b):
@@ -98,14 +116,20 @@ def main(argv):
     if not args:
         print(__doc__)
         return 2
-    fails = 0
+    cap = int(next((a.split("=", 1)[1] for a in argv if a.startswith("--cap-mb=")), 3000))
+    fails = skipped = 0
     with tempfile.TemporaryDirectory() as tmp:
         for p in args:
             name = os.path.basename(p)
             fa, fb = os.path.join(tmp, "numpy.npz"), os.path.join(tmp, "c.npz")
             mode = "render" if render else "prepare"
-            run(mode, p, seconds, False, fa)
-            run(mode, p, seconds, True, fb)
+            if not (run(mode, p, seconds, False, fa, cap) and run(mode, p, seconds, True, fb, cap)):
+                print("%-24s SKIPPED: over %d MB (try a shorter excerpt)" % (name, cap))
+                skipped += 1
+                for f in (fa, fb):
+                    if os.path.exists(f):
+                        os.remove(f)
+                continue
             a, b = np.load(fa), np.load(fb)
             if render:
                 ref = np.sqrt(np.mean(a["L"] ** 2 + a["R"] ** 2))
@@ -129,8 +153,8 @@ def main(argv):
             sys.stdout.flush()
             for f in (fa, fb):
                 os.remove(f)
-    print("%d file(s), %d outside tolerance" % (len(args), fails))
-    return 1 if fails else 0
+    print("%d file(s), %d outside tolerance, %d skipped over the memory cap" % (len(args), fails, skipped))
+    return 1 if fails or skipped else 0
 
 
 if __name__ == "__main__":

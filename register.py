@@ -200,6 +200,13 @@ class Strings(object):
         bc = getattr(pc, 'buff_choirs', None) or {}
         self.buffs = [(names.index(b), names.index(a)) for b, a in bc.items()
                       if b in names and a in names]
+        # ...and the arrays the C core reads (registercore.c strike_drive), typed
+        self._c_W = np.ascontiguousarray(self.W, np.float64)
+        self._c_alpha = np.ascontiguousarray(self.alpha, np.float64)
+        self._c_w = np.ascontiguousarray(self.w, np.float64)
+        self._c_bridge = np.ascontiguousarray(self.bridge, np.int64)
+        self._c_key = np.ascontiguousarray(self.key, np.int64)
+        self._c_cb = np.ascontiguousarray(self.choir_bridges, np.int64)
 
     def coupling(self, j, key, choir=None):
         """The bridge's weight from a driver on `key` (its choir, if any) to
@@ -387,6 +394,9 @@ def _load_core():
     P, D = ctypes.c_void_p, ctypes.c_double
     dll.free_part.argtypes = [ctypes.c_int, P, D, P, P, P, D, D, D, D, P, P]
     dll.free_part.restype = None
+    dll.strike_drive.argtypes = ([ctypes.c_int] + [P] * 15 + [ctypes.c_int] + [P] * 7 + [D, ctypes.c_long,
+                                 ctypes.c_long, D, D, D, D, D, D, P, P, ctypes.c_int, P, P, P, P, P])
+    dll.strike_drive.restype = ctypes.c_int
     return dll
 
 
@@ -757,44 +767,49 @@ class Channel(object):
             fW = Wm[fi]
             xfer = np.zeros(M, complex)
             n_off = None
-            for r in range(len(drv['om'])):
-                a_i = float(drv['aM'][r])
-                if a_i < floor:
-                    continue
-                om_i = float(drv['om'][r]); Wi = om_i * sr
-                n_i = float(drv['non'][r])
-                theta = om_i * n_i + float(drv['p0'][r]) + om_i * float(drv['delL'][r])
-                n_off, re_off = float(drv['noff'][r]), float(drv['re'][r])
-                tb, ta, cu = float(drv['tbav'][r]), float(drv['tau'][r]), float(drv['tcut'][r])
-                for wgt, beta in stages(float(drv['aft'][r]), float(drv['sus'][r]),
-                                        float(drv['logr'][r]), float(drv['logrA'][r])):
-                    cmax = self.kappa * a_i * wgt
-                    if cmax <= 0:
+            dll = _core()
+            if dll:
+                # the loop below, in C (registercore.c strike_drive)
+                n_off, re_off = self._drive_c(dll, drv, st, fi, b, floor, add, xfer, si)
+            else:
+                for r in range(len(drv['om'])):
+                    a_i = float(drv['aM'][r])
+                    if a_i < floor:
                         continue
-                    reach = cmax / (floor * SPLIT)          # |D| past which it is lost
-                    lo = np.searchsorted(fW, Wi - reach); hi = np.searchsorted(fW, Wi + reach)
-                    if hi <= lo:
-                        continue
-                    j = fi[lo:hi]
-                    wj = S.coupling(j, st['key'], None if st['choir'] is None else st['choir'][r])
-                    bj, close = coincident(self.kappa * wgt * wj, Wi, beta, Wm[j], am[j])
-                    fr, fo = free_part(cmax * wj, Wi, bj, Wm[j], am[j], tb, ta, cu,
-                                       need=floor * SPLIT)
-                    # free: from the driver's onset, at the mode's own frequency
-                    add[j] += fr * np.exp(1j * (theta - Wm[j] * n_i / sr) + am[j] * (n_i - b) / sr)
-                    # forced: one row riding this driver's stage, relative to it --
-                    # and one more for each coincident pair, at its own decay
-                    F = complex(fo[~close].sum())
-                    if abs(F) > floor * SPLIT:
-                        self._forced(drv, r, beta, F / a_i, si)
-                    for k in np.flatnonzero(close):
-                        if abs(fo[k]) > floor * SPLIT:
-                            self._forced(drv, r, float(bj[k]), complex(fo[k]) / a_i, si)
-                    # what the forced part holds when this driver's damper falls
-                    tq = (n_off - n_i) / sr
-                    gq = glide_phase(Wi, tb, ta, cu, tq)
-                    xfer[j] += fo * np.exp(1j * (theta + Wi * tq + gq - Wm[j] * n_off / sr)
-                                           - bj * tq)
+                    om_i = float(drv['om'][r]); Wi = om_i * sr
+                    n_i = float(drv['non'][r])
+                    theta = om_i * n_i + float(drv['p0'][r]) + om_i * float(drv['delL'][r])
+                    n_off, re_off = float(drv['noff'][r]), float(drv['re'][r])
+                    tb, ta, cu = float(drv['tbav'][r]), float(drv['tau'][r]), float(drv['tcut'][r])
+                    for wgt, beta in stages(float(drv['aft'][r]), float(drv['sus'][r]),
+                                            float(drv['logr'][r]), float(drv['logrA'][r])):
+                        cmax = self.kappa * a_i * wgt
+                        if cmax <= 0:
+                            continue
+                        reach = cmax / (floor * SPLIT)          # |D| past which it is lost
+                        lo = np.searchsorted(fW, Wi - reach); hi = np.searchsorted(fW, Wi + reach)
+                        if hi <= lo:
+                            continue
+                        j = fi[lo:hi]
+                        wj = S.coupling(j, st['key'], None if st['choir'] is None else st['choir'][r])
+                        bj, close = coincident(self.kappa * wgt * wj, Wi, beta, Wm[j], am[j])
+                        fr, fo = free_part(cmax * wj, Wi, bj, Wm[j], am[j], tb, ta, cu,
+                                           need=floor * SPLIT)
+                        # free: from the driver's onset, at the mode's own frequency
+                        add[j] += fr * np.exp(1j * (theta - Wm[j] * n_i / sr) + am[j] * (n_i - b) / sr)
+                        # forced: one row riding this driver's stage, relative to it --
+                        # and one more for each coincident pair, at its own decay
+                        F = complex(fo[~close].sum())
+                        if abs(F) > floor * SPLIT:
+                            self._forced(drv, r, beta, F / a_i, si)
+                        for k in np.flatnonzero(close):
+                            if abs(fo[k]) > floor * SPLIT:
+                                self._forced(drv, r, float(bj[k]), complex(fo[k]) / a_i, si)
+                        # what the forced part holds when this driver's damper falls
+                        tq = (n_off - n_i) / sr
+                        gq = glide_phase(Wi, tb, ta, cu, tq)
+                        xfer[j] += fo * np.exp(1j * (theta + Wi * tq + gq - Wm[j] * n_off / sr)
+                                               - bj * tq)
             if self.knock > 0:
                 # through the bridge as the drive is: across bridges, and onto
                 # the struck string's own other length (S.coupling)
@@ -811,6 +826,55 @@ class Channel(object):
                 tr = xfer * np.exp(-am * (pb - n_off) / sr) * self._dgain(np.arange(M), n_off, pb)
                 self.pending[pb] = self.pending[pb] + tr if pb in self.pending else tr
         self._update(np.abs(add) > 0, b, add, ('strike', b))
+
+    def _drive_c(self, dll, drv, st, fi, b, floor, add, xfer, si):
+        """_strikes' loop over one strike's driver partials, in C: adds each
+        mode's free kick to `add` and its damper hand-over to `xfer`, makes
+        the forced rows in the Python's order, and returns the last driver's
+        (noff, re) -- (None, None) if none was over the floor."""
+        S, M = self.S, len(self.S.f)
+        if not hasattr(S, '_c_W'):          # a Strings made before the core read them
+            S._c_W, S._c_alpha, S._c_w = (np.ascontiguousarray(v, np.float64) for v in (S.W, S.alpha, S.w))
+            S._c_bridge, S._c_key, S._c_cb = (np.ascontiguousarray(v, np.int64)
+                                              for v in (S.bridge, S.key, S.choir_bridges))
+        f8 = lambda v: np.ascontiguousarray(v, np.float64)          # noqa: E731
+        i8 = lambda v: np.ascontiguousarray(v, np.int64)            # noqa: E731
+        R = len(drv['om'])
+        cols = [f8(drv[c]) for c in ('aM', 'om', 'non', 'p0', 'delL', 'noff', 're', 'tbav', 'tau',
+                                       'tcut', 'aft', 'sus', 'logr', 'logrA')]
+        choir = i8(np.full(R, -1) if st['choir'] is None else st['choir'])
+        key = st['key']
+        kb = S.keybridge[key] if S.keybridge is not None and key in S.keybridge else -1
+        pk = S.partner.get(key)
+        fi8 = i8(fi)
+        cap = 4 * 3 * max(R, 1)
+        while True:
+            add_s = np.zeros(M, complex)
+            xfer_s = np.zeros(M, complex)
+            f_r = np.zeros(cap, np.int32)
+            f_beta = np.zeros(cap, np.float64)
+            f_val = np.zeros(cap, complex)
+            lo_ = ctypes.c_double()
+            lr_ = ctypes.c_double()
+            n = dll.strike_drive(R, *[c.ctypes.data for c in cols], choir.ctypes.data,
+                                 len(fi8), fi8.ctypes.data, S._c_W.ctypes.data, S._c_alpha.ctypes.data,
+                                 S._c_w.ctypes.data, S._c_bridge.ctypes.data, S._c_key.ctypes.data,
+                                 S._c_cb.ctypes.data, float(S.cross), int(kb),
+                                 int(-1 if pk is None else pk), float(S.partner_k),
+                                 float(self.kappa), float(floor), SPLIT, float(self.sr), float(b),
+                                 add_s.ctypes.data, xfer_s.ctypes.data, cap,
+                                 f_r.ctypes.data, f_beta.ctypes.data, f_val.ctypes.data,
+                                 ctypes.byref(lo_), ctypes.byref(lr_))
+            if n <= cap:
+                break
+            cap = n
+        add += add_s
+        xfer += xfer_s
+        for k in range(n):
+            self._forced(drv, int(f_r[k]), float(f_beta[k]), complex(f_val[k]), si)
+        if lo_.value < 0:
+            return None, None
+        return lo_.value, lr_.value
 
     def ends(self, keys, times):
         """span_end over arrays, NaN for "not free": once per distinct
@@ -862,7 +926,10 @@ class Channel(object):
         if not len(go):
             return
         free_now = ~np.isnan(self.ends(S.key[go], np.full(len(go), float(b))))
-        for i, fr in zip(go, free_now):
+        # the felt's rate at b, asked once for all of them (a lookup: the same
+        # values as asking mode by mode, which was most of _update's time)
+        drate = self._drate(S.key[go], float(b)) if self.damp else None
+        for k_, (i, fr) in enumerate(zip(go, free_now)):
             rec = self.rrec[i]
             if rec is not None:
                 if rec['closed'] is None or rec['closed'] > b:
@@ -873,7 +940,7 @@ class Channel(object):
             z = Az[i]
             if abs(z) < floor or not fr:
                 continue
-            lr = float(am[i]) + (float(self.dw[i] * self._drate(S.key[i:i + 1], float(b))[0]) if self.damp else 0.0)
+            lr = float(am[i]) + (float(self.dw[i] * drate[k_]) if self.damp else 0.0)
             n_floor = b + sr * math.log(abs(z) / floor) / max(lr, 1e-9)
             rec = self._write(i, z, b, self.blk, None, None, 'free', src, lr=lr)
             rec.update(mode=i, b=float(b), key=int(S.key[i]), n_floor=n_floor, closed=None)
