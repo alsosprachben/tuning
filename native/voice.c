@@ -291,3 +291,209 @@ void nv_random_check(long long seed, int n, double *out)
     for (int i = 0; i < n; i++)
         out[i] = pyr_random(&r);
 }
+
+/* THE VOICE'S CONSTRUCTOR (SynthProperties.__init__ and
+ * GrandPianoProperties.__init__): the class's constants, the note's
+ * (frequency, pan, velocity, channel volume, effort), and the global random
+ * stream in and out. What the base class draws from that stream (pitch and
+ * attack jitter) is drawn here in its order, so the stream after a note is
+ * the Python's. Branches the four native piano classes never take (a chiff
+ * scaled by force, the bloom's gain, a strike wobble, a velocity trim table,
+ * no HRTF) are refused by native.py, not ported. */
+typedef struct {
+    double tonal_dampening, octave_dampening;
+    int octave_modulo;
+    double octave_width, seat_x, decay_register_slope;
+    double pitch_jitter_cents, timing_jitter_seconds;
+    double tension_bend, tension_bend_max, tension_bend_ref_hz, tension_bend_slope;
+    int inharmonicity_dynamic;
+    double inharmonicity_coefficient, ia, ib, ic, id, ie;   /* a + b x + c x^2 + d/x + e/x^2 */
+    double effort, effort_tilt, effort_tilt_up;
+    int effort_tilt_up_set;
+    int even_db_set;
+    double even_harmonic_db, even_harmonic_db_per_octave;
+    int touch_sensitive, fixed_touch;
+    double initial_gain, octave_gain, projection_db;
+    double register_effort_db, register_tilt_db, register_center_hz, register_half_octaves;
+    double listener_distance, head_radius, position_z, sound_speed;
+    double max_partial_hz;          /* 0: none */
+    double bloom_seconds, bloom_slope, bloom_stretch_max;
+    double detune_lo, detune_hi;    /* string_detune_range (the honky-tonk's scaled) */
+    int key_jitter;                 /* the grand's per-key pitch error (GrandPianoProperties) */
+    int soft_pedal_down;
+    /* the B law: 0 the polynomial; 1 the upright's (k f^p, wound under
+       break_hz, plain over); 2 the electric grand's (the polynomial times
+       (long/short)^4 of its strings) */
+    int b_law;
+    double wound_k, wound_p, plain_k, plain_p, break_hz;
+    double scale_constant_hz_m, reference_string_max_m, case_string_max_m;
+    /* the upright's (UprightPianoProperties.__init__): the hammer's contact
+       from the velocity, and the level across the keyboard (Hz, dB) */
+    int upright, n_level;
+    double attack_time, hammer_soft_s, hammer_hard_s;
+    double level_hz[32], level_db[32];
+} VoiceInit;
+
+/* what the note setup reads of the voice besides its VoiceSnap */
+typedef struct {
+    double pitch_jitter, attack_jitter, pan_angle;
+    double left_incidence, right_incidence, left_hrtf_delay, right_hrtf_delay;
+    double inharmonicity_coefficient, B;    /* the class's scaled; and the law's at the note */
+    double tension_bend, attack_time;
+} VoiceNote;
+
+static double pymin(double a, double b) { return b < a ? b : a; }
+static double pymax(double a, double b) { return b > a ? b : a; }
+
+/* tonelib.stage_angle */
+static double stage_angle(double p)
+{
+    return asin(0.5 * tan(pymax(-1.0, pymin(1.0, p)) * PI / 4.0));
+}
+
+/* SynthProperties.register_effort_at */
+static double register_effort_at(const VoiceInit *c, double frequency)
+{
+    if (c->register_effort_db == 0.0 && c->register_tilt_db == 0.0)
+        return 0.0;
+    double octaves = log(frequency / c->register_center_hz) / log(2.0);
+    double span = c->register_half_octaves;
+    double x = pymin(1.0, fabs(octaves) / span);
+    double tilt = c->register_tilt_db * pymax(-span, pymin(span, octaves));
+    return c->register_effort_db * (x * x) + tilt;
+}
+
+/* SynthProperties.hrtf_at(position_x) at the voice's own height and distance */
+static void voice_hrtf_at(const VoiceInit *c, double th, double position_x, double *out)
+{
+    double z = c->position_z, y = c->listener_distance;
+    if (th != 0.0) {
+        double px = position_x * cos(th) + y * sin(th);
+        double py = -position_x * sin(th) + y * cos(th);
+        position_x = px;
+        y = py;
+    }
+    double distance = pymax(sqrt(pow(position_x, 2.0) + y * y + z * z), c->head_radius);
+    double base_delay = distance / c->sound_speed;
+    double cos_to_right = position_x / distance;
+    for (int ear = 0; ear < 2; ear++) {
+        double theta = acos(pymax(-1.0, pymin(1.0, ear == 0 ? -cos_to_right : cos_to_right)));
+        double offset = theta <= PI / 2 ? -cos(theta) : (theta - PI / 2);
+        out[ear] = theta;
+        out[2 + ear] = base_delay + offset * c->head_radius / c->sound_speed;
+    }
+}
+
+/* tmpl: the class's VoiceSnap (its constants; every per-note field is
+ * rewritten here). rs: the global stream (Python's random.getstate()), or
+ * NULL to draw from a scratch one -- the attack jitter is then not the
+ * Python's, and nothing in the VoiceSnap depends on it. */
+void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
+                   double attack_volume, double channel_volume, double effort, PyRandom *rs,
+                   VoiceSnap *s, VoiceNote *o)
+{
+    PyRandom scratch;
+    if (!rs) {
+        pyr_seed(&scratch, 0);
+        rs = &scratch;
+    }
+    *s = *tmpl;
+    double eff = effort != 0.0 ? effort : c->effort;
+    s->attack_volume = attack_volume;
+    if (c->bloom_seconds > 0.0 && c->bloom_slope != 0.0) {
+        double av = pow(pymax(attack_volume, 1e-3), -fabs(c->bloom_slope));
+        s->bloom_seconds = c->bloom_seconds * pymin(av, c->bloom_stretch_max);
+    } else {
+        s->bloom_seconds = c->bloom_seconds;
+    }
+    s->frequency_x = 415.0;
+    double op = log(frequency / s->frequency_x) / log(2.0);
+    s->octave_position = op;
+    if (c->max_partial_hz != 0.0 && frequency != 0.0) {
+        int mh = (int)(c->max_partial_hz / frequency);
+        s->max_harmonic = mh > 1 ? mh : 1;
+    }
+    s->decay_register_factor = pow(2.0, c->decay_register_slope * op);
+    o->pitch_jitter = c->pitch_jitter_cents != 0.0
+        ? pow(2.0, pyr_uniform(rs, -c->pitch_jitter_cents, c->pitch_jitter_cents) / 1200.0) - 1.0 : 0.0;
+    o->attack_jitter = c->timing_jitter_seconds != 0.0 ? pyr_uniform(rs, 0.0, c->timing_jitter_seconds) : 0.0;
+    o->tension_bend = c->tension_bend;
+    if (c->tension_bend != 0.0) {
+        double tbs = c->tension_bend > 0.0 ? 1.0 : -1.0;
+        o->tension_bend = tbs * pymin(c->tension_bend_max, fabs(c->tension_bend)
+                                      * pow(c->tension_bend_ref_hz / frequency, c->tension_bend_slope));
+    }
+    o->inharmonicity_coefficient = c->inharmonicity_coefficient;
+    if (c->inharmonicity_dynamic)
+        o->inharmonicity_coefficient *= (1.0 + fabs(op));
+    s->attack_dampening = c->octave_modulo ? c->tonal_dampening + floor(op) * c->octave_dampening
+                                           : c->tonal_dampening + op * c->octave_dampening;
+    if (c->effort_tilt != 0.0 && eff != 0.0) {
+        double tilt = c->effort_tilt;
+        if (eff > 0 && c->effort_tilt_up_set)
+            tilt = c->effort_tilt_up;
+        s->attack_dampening -= (tilt * eff) / 6.0206;
+    }
+    s->even_db_set = c->even_db_set;
+    s->even_harmonic_db = c->even_db_set ? c->even_harmonic_db : 0.0;
+    if (c->even_db_set && c->even_harmonic_db_per_octave != 0.0)
+        s->even_harmonic_db = c->even_harmonic_db + c->even_harmonic_db_per_octave * op;
+    double touch = (c->touch_sensitive || !c->fixed_touch) ? attack_volume : 1.0;
+    s->gain = (c->initial_gain * pow(10.0, c->octave_gain * op / 20.0)
+               * pow(10.0, (register_effort_at(c, s->frequency_x * pow(2.0, op)) + c->projection_db) / 20.0)
+               * touch * channel_volume);
+    /* place() */
+    o->pan_angle = stage_angle(channel_pan);
+    s->position_x = op * c->octave_width + c->seat_x;
+    s->position_z = c->position_z;
+    s->hrtf_beta = 2.0 * c->sound_speed / c->head_radius;
+    double e[4];
+    voice_hrtf_at(c, o->pan_angle, s->position_x, e);
+    o->left_incidence = e[0]; o->right_incidence = e[1];
+    o->left_hrtf_delay = e[2]; o->right_hrtf_delay = e[3];
+    /* GrandPianoProperties: the key's own strings and pitch error */
+    int midi = (int)rint(69.0 + 12.0 * log(frequency / 440.0) / log(2.0));
+    PyRandom r;
+    pyr_seed(&r, midi);
+    s->unison_key = midi;
+    s->n_detune = 2;
+    s->note_detune_cents[0] = -pyr_uniform(&r, c->detune_lo, c->detune_hi);
+    s->note_detune_cents[1] = pyr_uniform(&r, c->detune_lo, c->detune_hi);
+    s->note_detune_cents[2] = s->note_detune_cents[3] = 0.0;
+    if (c->key_jitter && c->pitch_jitter_cents != 0.0)
+        o->pitch_jitter = pow(2.0, pyr_uniform(&r, -c->pitch_jitter_cents, c->pitch_jitter_cents) / 1200.0) - 1.0;
+    s->soft_pedal_down = c->soft_pedal_down;
+    o->attack_time = c->attack_time;
+    if (c->upright) {
+        o->attack_time = c->hammer_soft_s + (c->hammer_hard_s - c->hammer_soft_s) * attack_volume;
+        int n = c->n_level;
+        if (n) {
+            double f = frequency, db = 0.0;
+            if (f <= c->level_hz[0])
+                db = c->level_db[0];
+            else if (f >= c->level_hz[n - 1])
+                db = c->level_db[n - 1];
+            else
+                for (int i = 0; i + 1 < n; i++)
+                    if (f < c->level_hz[i + 1]) {
+                        double f0 = c->level_hz[i], d0 = c->level_db[i], f1 = c->level_hz[i + 1];
+                        db = d0 + (c->level_db[i + 1] - d0) * log(f / f0) / log(f1 / f0);
+                        break;
+                    }
+            s->gain *= pow(10.0, db / 20.0);
+        }
+    }
+    /* blockrender: the law's B at the note (inharmonicity_coefficient_for_frequency) */
+    double x = frequency;
+    if (c->b_law == 1) {
+        o->B = frequency < c->break_hz ? c->wound_k * pow(x, c->wound_p) : c->plain_k * pow(x, c->plain_p);
+    } else {
+        o->B = c->ia + c->ib * x + c->ic * x * x + (c->id / x) + (c->ie / (x * x));
+        if (c->b_law == 2) {
+            double f = pymax(x, 1e-6);
+            double long_ = pymin(c->scale_constant_hz_m / f, c->reference_string_max_m);
+            double short_ = pymin(c->scale_constant_hz_m / f, c->case_string_max_m);
+            o->B = o->B * pow(long_ / short_, 4.0);
+        }
+    }
+}

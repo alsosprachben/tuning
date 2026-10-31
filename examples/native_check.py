@@ -100,6 +100,45 @@ def main(argv):
             vv = p.voice_vibrato(f0, idx)
             same(('vibrato', key, idx), tuple(vv) if vv else None, (o3[0], o3[1], o3[2]) if got else None)
     T.soft_pedal_down = False
+
+    # the voice's constructor (nv_voice_init): each class, its VoiceSnap and
+    # what the note setup reads, and the global random stream after it
+    import random as R_
+    classes = [c for c in {PM.PROGRAM_CLASS[k] for k in PM.PROGRAM_CLASS} if N.init_supported(c)]
+    inits = 0
+    for k in range(n_notes):
+        cls = classes[k % len(classes)]
+        key = rng.randint(21, 108)
+        f0 = 440.0 * 2.0 ** ((key - 69) / 12.0) * (1.0 + rng.uniform(-0.002, 0.002))
+        args = (f0, rng.uniform(-1, 1), (rng.randint(1, 127) / 127.0) ** 2, rng.uniform(0.2, 1.0),
+                rng.choice((0.0, 0.0, rng.uniform(-6, 6))))
+        T.soft_pedal_down = (k % 7 == 0)
+        T.honky_detune = rng.choice((1.0, 1.0, rng.uniform(0.3, 2.0)))
+        R_.seed(rng.getrandbits(64))
+        st = N.random_state()
+        p = cls(*args)
+        after = R_.getstate()[1]
+        got = N.voice(cls, *args, state=st)
+        inits += 1
+        sp = N.snapshot(p)
+        for f, _ in N.VoiceSnap._fields_:
+            a, b = getattr(sp, f), getattr(got[0], f)
+            if not isinstance(a, (int, float)):
+                a, b = list(a), list(b)
+            same(('init', cls.__name__, key, f), a, b)
+        o = got[1]
+        for f, py in (('pitch_jitter', p.pitch_jitter), ('attack_jitter', p.attack_jitter),
+                      ('pan_angle', p.pan_angle), ('left_incidence', p.left_incidence),
+                      ('right_incidence', p.right_incidence), ('left_hrtf_delay', p.left_hrtf_delay),
+                      ('right_hrtf_delay', p.right_hrtf_delay),
+                      ('inharmonicity_coefficient', p.inharmonicity_coefficient),
+                      ('B', p.inharmonicity_coefficient_for_frequency(f0)), ('tension_bend', p.tension_bend),
+                      ('attack_time', p.attack_time)):
+            same(('init', cls.__name__, key, f), py, getattr(o, f))
+        same(('init', cls.__name__, key, 'stream'), list(after), list(st.mt) + [st.i])
+    T.soft_pedal_down = False
+    T.honky_detune = 1.0
+    print("voice init: %d notes over %s" % (inits, sorted(c.__name__ for c in classes)))
     for what, a, b in bad[:20]:
         print("  DIFF %s: python %r, native %r" % (what, a, b))
     print("native voice: %d comparisons over %d piano notes (%d unsupported), %d differ"

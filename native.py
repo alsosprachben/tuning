@@ -65,6 +65,43 @@ class ToneIn(ctypes.Structure):
                 + [('room_bands', C * 9)])
 
 
+class VoiceInit(ctypes.Structure):
+    """native/voice.c's VoiceInit: a class's constants for its constructor."""
+    _fields_ = ([(f, C) for f in ('tonal_dampening', 'octave_dampening')] + [('octave_modulo', I)]
+                + [(f, C) for f in ('octave_width', 'seat_x', 'decay_register_slope', 'pitch_jitter_cents',
+                                    'timing_jitter_seconds', 'tension_bend', 'tension_bend_max',
+                                    'tension_bend_ref_hz', 'tension_bend_slope')]
+                + [('inharmonicity_dynamic', I)]
+                + [(f, C) for f in ('inharmonicity_coefficient', 'ia', 'ib', 'ic', 'id', 'ie', 'effort',
+                                    'effort_tilt', 'effort_tilt_up')]
+                + [('effort_tilt_up_set', I), ('even_db_set', I)]
+                + [(f, C) for f in ('even_harmonic_db', 'even_harmonic_db_per_octave')]
+                + [('touch_sensitive', I), ('fixed_touch', I)]
+                + [(f, C) for f in ('initial_gain', 'octave_gain', 'projection_db', 'register_effort_db',
+                                    'register_tilt_db', 'register_center_hz', 'register_half_octaves',
+                                    'listener_distance', 'head_radius', 'position_z', 'sound_speed',
+                                    'max_partial_hz', 'bloom_seconds', 'bloom_slope', 'bloom_stretch_max',
+                                    'detune_lo', 'detune_hi')]
+                + [('key_jitter', I), ('soft_pedal_down', I), ('b_law', I)]
+                + [(f, C) for f in ('wound_k', 'wound_p', 'plain_k', 'plain_p', 'break_hz', 'scale_constant_hz_m',
+                                    'reference_string_max_m', 'case_string_max_m')]
+                + [('upright', I), ('n_level', I)]
+                + [(f, C) for f in ('attack_time', 'hammer_soft_s', 'hammer_hard_s')]
+                + [('level_hz', C * 32), ('level_db', C * 32)])
+
+
+class VoiceNote(ctypes.Structure):
+    """native/voice.c's VoiceNote: what the note setup reads of a voice besides its VoiceSnap."""
+    _fields_ = [(f, C) for f in ('pitch_jitter', 'attack_jitter', 'pan_angle', 'left_incidence',
+                                 'right_incidence', 'left_hrtf_delay', 'right_hrtf_delay',
+                                 'inharmonicity_coefficient', 'B', 'tension_bend', 'attack_time')]
+
+
+class PyRandomState(ctypes.Structure):
+    """pycompat.h's PyRandom: CPython's Mersenne Twister, its 624 words and index."""
+    _fields_ = [('mt', ctypes.c_uint32 * 624), ('i', I)]
+
+
 def lib():
     """native/ as a library, built when a source is newer; None if it cannot be."""
     if _LIB[0] is None:
@@ -106,6 +143,8 @@ def _load():
                             ctypes.c_void_p, D]),
             ('nv_strike', I, [P, ctypes.POINTER(ToneIn), I, ctypes.c_void_p, ctypes.c_void_p, C, C, C, C, C, C, C,
                               C, ctypes.c_void_p, I, ctypes.c_void_p, D]),
+            ('nv_voice_init', None, [ctypes.POINTER(VoiceInit), P, C, C, C, C, C, ctypes.POINTER(PyRandomState),
+                                     P, ctypes.POINTER(VoiceNote)]),
             ('nv_phantom', I, [P, ctypes.POINTER(ToneIn), ctypes.c_void_p, I, I, ctypes.c_void_p, ctypes.c_void_p,
                                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p, D])):
         f = getattr(d, name)
@@ -178,3 +217,141 @@ def snapshot(props):
     s.phantom_gain_floor = getattr(p, 'phantom_gain_floor', 3e-3)
     s.phantom_max_order = int(getattr(p, 'phantom_max_order', 16))
     return s
+
+
+_INIT_OWN = ('SynthProperties', 'GrandPianoProperties', 'UprightPianoProperties', 'HonkyTonkProperties', 'object')
+_BASE_OWN = {'place': 'SynthProperties', 'hrtf_at': 'SynthProperties', 'register_effort': 'SynthProperties',
+             'register_effort_at': 'SynthProperties', 'pan': 'SynthProperties',
+             'inharmonicity_coefficient_func': 'InharmonicStringProperties'}
+_CLASS = {}
+
+
+def _owner(cls, name):
+    for k in cls.__mro__:
+        if name in k.__dict__:
+            return k.__name__
+    return None
+
+
+def init_supported(cls):
+    """Whether native/voice.c's nv_voice_init builds this class's voice: a
+    piano constructor (SynthProperties', the grand's, the honky-tonk's), the
+    base class's placing and laws, and none of the branches not ported."""
+    import tonelib as T
+    if not issubclass(cls, T.GrandPianoProperties) or not T.hrtf:
+        return False
+    if any(k.__name__ not in _INIT_OWN for k in cls.__mro__ if '__init__' in k.__dict__):
+        return False
+    if any(_owner(cls, n) != o for n, o in _BASE_OWN.items()):
+        return False
+    if _b_law(cls) is None:
+        return False
+    c = cls
+    if (issubclass(cls, T.UprightPianoProperties) and len(cls.register_level_db or ()) > 32) or c.attack_time is None:
+        return False
+    return not ((c.strike_noise_slope and c.chiff_volume) or (c.bloom_gain > 0.0 and c.bloom_gain_slope)
+                or (c.strike_wobble_hz > 0.0 and c.strike_wobble_gain > 0.0) or c.strike_volume_trim_db)
+
+
+def _b_law(cls):
+    """Which inharmonicity_coefficient_for_frequency cls has (VoiceInit.b_law), or None."""
+    own = _owner(cls, 'inharmonicity_coefficient_for_frequency')
+    return {'InharmonicStringProperties': 0, 'UprightPianoProperties': 1, 'ElectricGrandProperties': 2}.get(own)
+
+
+def _class(cls):
+    """(VoiceInit, the class's VoiceSnap template, a prototype voice) for cls,
+    or None: made once, the template's room refilled when the room changes."""
+    import random
+    import tonelib as T
+    got = _CLASS.get(cls)
+    if got is None:
+        if not init_supported(cls):
+            _CLASS[cls] = False
+            return None
+        st = random.getstate()
+        try:
+            proto = cls(261.6, 0.0, 0.5, 1.0)
+        finally:
+            random.setstate(st)
+        tmpl = snapshot(proto)
+        if tmpl is None:
+            _CLASS[cls] = False
+            return None
+        c = VoiceInit()
+        for f, _ in VoiceInit._fields_:
+            if getattr(cls, f, None) is not None:
+                setattr(c, f, getattr(cls, f) if not isinstance(getattr(cls, f), bool) else int(getattr(cls, f)))
+        c.ia, c.ib, c.ic, c.id, c.ie = cls.a, cls.b, cls.c, cls.d, cls.e
+        c.octave_modulo = int(bool(cls.octave_modulo))
+        c.inharmonicity_dynamic = int(bool(cls.inharmonicity_dynamic))
+        c.effort_tilt_up_set = int(cls.effort_tilt_up is not None)
+        c.effort_tilt_up = cls.effort_tilt_up or 0.0
+        c.even_db_set = int(cls.even_harmonic_db is not None)
+        c.even_harmonic_db = cls.even_harmonic_db or 0.0
+        c.touch_sensitive = int(bool(cls.touch_sensitive))
+        c.max_partial_hz = cls.max_partial_hz or 0.0
+        c.sound_speed = proto.sound_speed
+        c.key_jitter = 1
+        c.b_law = _b_law(cls)
+        c.attack_time = cls.attack_time
+        if issubclass(cls, T.UprightPianoProperties):
+            c.upright = 1
+            c.hammer_soft_s, c.hammer_hard_s = cls.hammer_contact_s
+            pts = cls.register_level_db or ()
+            c.n_level = len(pts)
+            for i, (f, db) in enumerate(pts):
+                c.level_hz[i], c.level_db[i] = f, db
+        if c.b_law == 1:
+            (c.wound_k, c.wound_p), (c.plain_k, c.plain_p) = cls.wound_B, cls.plain_B
+            c.break_hz = cls.upright_break_hz
+        elif c.b_law == 2:
+            c.scale_constant_hz_m = cls.scale_constant_hz_m
+            c.reference_string_max_m, c.case_string_max_m = cls.reference_string_max_m, cls.case_string_max_m
+        got = _CLASS[cls] = [c, tmpl, proto, proto._room_pack()]
+    if got is False:
+        return None
+    room = got[2]._room_pack()
+    if room is not got[3]:
+        R, AHZ, ALPHA, SCAT = room
+        t = got[1]
+        t.room[:] = [float(x) for x in R]
+        t.ahz[:] = [float(x) for x in AHZ]
+        t.alpha[:] = [float(x) for x in ALPHA]
+        t.scat[:] = [float(x) for x in SCAT]
+        got[3] = room
+    return got
+
+
+def voice(cls, frequency, channel_pan, attack_volume, channel_volume, effort=0.0, state=None):
+    """cls(frequency, channel_pan, attack_volume, channel_volume, effort) in C:
+    (VoiceSnap, VoiceNote), or None where the class is not supported. state:
+    a PyRandomState for the global stream, drawn from as the constructor
+    draws (None: the snapshot alone, the stream untouched)."""
+    import tonelib as T
+    d = lib()
+    got = _class(cls) if d is not None else None
+    if got is None:
+        return None
+    c, tmpl = got[0], got[1]
+    lo, hi = cls.string_detune_range
+    if '__init__' in getattr(T, 'HonkyTonkProperties', object).__dict__ and issubclass(cls, T.HonkyTonkProperties):
+        lo, hi = lo * T.honky_detune, hi * T.honky_detune
+    c.detune_lo, c.detune_hi = lo, hi
+    c.fixed_touch = int(bool(T.FIXED_TOUCH))
+    c.soft_pedal_down = int(bool(T.soft_pedal_down))
+    s, o = VoiceSnap(), VoiceNote()
+    d.nv_voice_init(ctypes.byref(c), ctypes.byref(tmpl), float(frequency), float(channel_pan),
+                    float(attack_volume), float(channel_volume), float(effort),
+                    ctypes.byref(state) if state is not None else None, ctypes.byref(s), ctypes.byref(o))
+    return s, o
+
+
+def random_state():
+    """The global random stream as a PyRandomState."""
+    import random
+    st = random.getstate()[1]
+    r = PyRandomState()
+    r.mt[:] = st[:624]
+    r.i = st[624]
+    return r

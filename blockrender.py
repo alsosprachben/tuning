@@ -6092,6 +6092,72 @@ EMIT_COLS = ("om", "p0", "p0R", "aL", "aR", "aM", "mch", "px", "pz", "az", "dr",
 _TC_DTYPE = {'f': np.float32, 'd': np.float64, 'i': np.int32}
 
 
+VOICE_STATS = [0, 0, 0]     # voices built in C, snapshots checked against them, that differed
+
+
+def _voice_native_begin(cls):
+    """Before a voice is constructed: the global random stream ('check'), or
+    True ('on'), where native/voice.c builds this class; else None."""
+    if NATIVE_TONE == 'off':
+        return None
+    import native as _NV
+    if _NV.lib() is None or not _NV.init_supported(cls):
+        return None
+    return _NV.random_state() if NATIVE_TONE == 'check' else True
+
+
+def _voice_native(props, cls, f0, pan, av, cv, eff, st, nt):
+    """The voice as native/voice.c builds it (its VoiceSnap), beside props;
+    in 'check', what the note setup reads of props and the random stream
+    after it compared with the C's."""
+    import native as _NV
+    import random as _rnd
+    got = _NV.voice(cls, f0, pan, av, cv, eff, state=st if st is not True else None)
+    if got is None:
+        return None
+    VOICE_STATS[0] += 1
+    if st is not True:
+        s, o = got
+        P = props
+        bad = [f for f, py in (('pitch_jitter', P.pitch_jitter), ('attack_jitter', P.attack_jitter),
+                              ('pan_angle', P.pan_angle), ('left_incidence', P.left_incidence),
+                              ('right_incidence', P.right_incidence), ('left_hrtf_delay', P.left_hrtf_delay),
+                              ('right_hrtf_delay', P.right_hrtf_delay), ('tension_bend', P.tension_bend),
+                              ('inharmonicity_coefficient', P.inharmonicity_coefficient),
+                              ('attack_time', P.attack_time))
+               if getattr(o, f) != py]
+        if list(_rnd.getstate()[1]) != list(st.mt) + [st.i]:
+            bad.append('stream')
+        if P.inharmonicity_dynamic and o.B != P.inharmonicity_coefficient_for_frequency(f0):
+            bad.append('B')
+        _voice_report(bad, nt)
+    return got[0]
+
+
+def _voice_check(snap, py, nt):
+    """'check': the C's VoiceSnap against native.snapshot of the Python voice."""
+    import native as _NV
+    if py is None:
+        return _voice_report(['unsupported'], nt)
+    bad = []
+    for f, _ in _NV.VoiceSnap._fields_:
+        a, b = getattr(py, f), getattr(snap, f)
+        if not isinstance(a, (int, float)):
+            a, b = list(a), list(b)
+        if a != b:
+            bad.append(f)
+    _voice_report(bad, nt)
+
+
+def _voice_report(bad, nt):
+    VOICE_STATS[1] += 1
+    if bad:
+        VOICE_STATS[2] += 1
+        if VOICE_STATS[2] <= 5:
+            print("  native voice DIFFERS%s: %s" % (
+                '' if nt is None else ' (ch %d note %d at %.3f s)' % (nt.ch, nt.note, nt.on), ', '.join(bad)))
+
+
 def _native_ready(em, props):
     """(library, the voice's VoiceSnap) where the C can emit this voice's rows
     as emit_partial would -- a supported voice, and none of the emitter's
@@ -6108,7 +6174,16 @@ def _native_ready(em, props):
     _part = (int(em.channel) % _GSX.VIRT) % _GSX.TONE_SEG
     if (_GS_EQ and _part not in _GS_EQ['off']) or em._src_dist(_part, P) != 1.0:
         return None
-    snap = _NV.snapshot(P)
+    snap = getattr(em, 'nsnap', None)
+    if snap is not None and getattr(em, 'props', None) is not P:
+        snap = None
+    if snap is not None:
+        snap.soft_pedal_down = int(bool(T.soft_pedal_down))
+        if NATIVE_TONE == 'check':
+            _voice_check(snap, _NV.snapshot(P), nt=None)
+            snap = None
+    if snap is None:
+        snap = _NV.snapshot(P)
     return None if snap is None else (d, snap)
 
 
@@ -7130,6 +7205,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     em.moog_filter_row = -1               # the Moog filter row of this note (moog.py), -1 = none
     em.moog_key = 0                # a Moog partial's oscillator * 4096 + harmonic, 0 = none
     em.no_reflections = False        # emit no room images for this partial (noise: see below)
+    em.nsnap = None          # the voice as the C built it (_voice_native), while props are as built
     em.late_copy = False     # rows of a late copy (bloom): dr 0.75 direct, 0.25 an image -- see sympathetic.expand
     _RING = []          # [(first, end)] of each note's ring rows: off the wheel (live reads them too)
     _GRAIN_ROWS = []    # [(first, end)] of each note's grains: live keeps their own onsets
@@ -7990,12 +8066,17 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # louder, saturating at the valve's ceiling, as a pedal does
             nt.efx_gain = _EFXN[0].get('od_gain') or 1.0
             nt.chan_vol *= nt.efx_gain
+        em.nsnap = None
+        _vst = _voice_native_begin(nt.pc)
         props = nt.pc(nt.f0, nt.pan, (nt.vel/127.0)**2, nt.chan_vol, _eff)   # pan = CC10: a turn (tonelib.stage_angle)
         em.props = props
+        if _vst is not None:
+            em.nsnap = _voice_native(props, nt.pc, nt.f0, nt.pan, (nt.vel/127.0)**2, nt.chan_vol, _eff, _vst, nt)
         if _seat:
             # a seat inside the instrument, at the angle its pan names
             props.seat_x = props.listener_distance * math.tan(T.stage_angle(_seat))
             props.place()
+            em.nsnap = None
         if _EFXN[0] is not None and _EFXN[0].get('pos3d'):
             # THE PART PLACED IN 3D (gsefx: 3D Manual, 3D Auto): its angle the
             # type's, past the speakers and behind, turning at 3D Auto's speed --
@@ -8003,6 +8084,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _az, _turn = _EFXN[0]['pos3d']
             props.pan_angle = math.radians(((_az + 360.0 * _turn * nt.on + 180.0) % 360.0) - 180.0)
             props.place()
+            em.nsnap = None
         if (nt.drum is not None or _xf) and _tilt is not None:
             # a voice's pulse, darker or brighter as its syllable goes on
             # (percussion_map._voiced; tonelib.SfxThroatProperties)
@@ -8022,6 +8104,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # harmonic_volume, long after construction, so this needs no change
             # to a constructor signature that subclasses override.
             props.gain *= T.db_amplitude(T.PRESS_DB * _press)
+            em.nsnap = None
         # HALF-VALVING LOSES SUPPORT, and the dip is the whole tell. Deepest in
         # the middle of the run where the harmonic alignment is worst, back up
         # at either end where a real fingering is being held. A smear without
@@ -8029,6 +8112,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _gl = _GLISS.get((nt.ch, nt.note, nt.on))
         if _gl is not None and _gl[0] != 1.0:
             props.gain *= _gl[0]
+            em.nsnap = None
         # A sung vowel picks its body from the PART's tessitura, not this note's
         # pitch, so a tenor stays a man across his whole range. See _VocalBody.
         if hasattr(props, '_sung_formants') and (nt.ch in _tess or nt.ch in _parts):
