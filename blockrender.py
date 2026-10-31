@@ -6232,6 +6232,87 @@ def _strike_native(em, props, nt):
     return rows[:n], qacc, az.value
 
 
+def _note_phantoms(em, props, nt, transverse, emit_partial):
+    """THE PHANTOM PARTIALS of a low piano note, after its tone: from the C
+    where the voice is native (_phantom_native), else _note_phantoms_py."""
+    if NATIVE_TONE != 'off' and transverse and getattr(props, 'phantom_coupling', 0.0) > 0.0:
+        got = _phantom_native(em, props, nt, transverse)
+        if got is not None:
+            rows, qacc, az = got
+            if NATIVE_TONE == 'on':
+                NATIVE_STATS[0] += 1
+                _rows_into(em.A, rows)
+                for i, pr in enumerate(em._QACC):
+                    pr[0], pr[1] = float(qacc[2 * i]), float(qacc[2 * i + 1])
+                em.azimuth = az
+                return
+            _row0 = len(em.A['om'])
+            _note_phantoms_py(em, props, nt, transverse, emit_partial)
+            _rows_check(em.A, _row0, rows, qacc, az, em, 'phantom', nt)
+            return
+    _note_phantoms_py(em, props, nt, transverse, emit_partial)
+
+
+def _phantom_native(em, props, nt, transverse):
+    """The phantom partials from C: (rows, qacc, azimuth), or None (Python
+    plays them). The emitter as the tone leaves it: player 0, no vibrato,
+    the voice at its own place."""
+    P = props
+    if (em.player != 0 or tuple(em._VB) != (0.0, 5.5, 0.0) or em.pos_x != getattr(P, 'position_x', 0.0)
+            or len(transverse) > P.max_harmonic + 1):
+        return None
+    ready = _native_ready(em, P)
+    if ready is None:
+        return None
+    d, snap = ready
+    reflect = bool(em.REFLECT and not em.no_reflections and P.reflection_order)
+    if reflect:
+        imgs, nsurf, surf, img, mir = P._images_for(em.pos_x * 1.0, P.radiation_distance * 1.0, em.pos_z * 1.0)
+        if len(imgs) > 64:
+            return None
+    else:
+        imgs, nsurf, surf, img, mir = [], np.zeros(1, np.int32), np.zeros(1, np.int32), np.zeros(3), np.zeros(3)
+    t = _tone_in(em, P, nt, P.gain, 0.0, 0.0, reflect)
+    tr = np.ascontiguousarray(transverse, np.float64)
+    npar = min(len(transverse), int(getattr(P, 'phantom_max_order', 16)))
+    cap = max(1, npar * (npar + 1) // 2) * (1 + len(imgs))
+    rows = np.empty((cap, len(EMIT_COLS)))
+    qacc = np.array([v for pr in em._QACC for v in pr], np.float64)
+    az = ctypes.c_double(em.azimuth)
+    n = d.nv_phantom(ctypes.byref(snap), ctypes.byref(t), tr.ctypes.data, len(transverse), len(imgs),
+                     nsurf.ctypes.data, surf.ctypes.data, img.ctypes.data, mir.ctypes.data, rows.ctypes.data,
+                     cap, qacc.ctypes.data, ctypes.byref(az))
+    if n < 0:
+        return None
+    return rows[:n], qacc, az.value
+
+
+def _note_phantoms_py(em, props, nt, transverse, emit_partial):
+    """_note_phantoms' Python, for every note the C does not play."""
+    # Phantom (longitudinal / Conklin) sum-tones for the wound bass: f_i+f_j of
+    # the transverse partials, gain ~ coupling * v_i*v_j, decay d_i+d_j; centred
+    # (no HRTF gain, like the reference). Off unless phantom_coupling > 0 (piano
+    # bass, note <= phantom_note_max_hz).
+    coupling = getattr(props,'phantom_coupling',0.0)
+    power = getattr(props,'phantom_register_power',0.0)
+    if power > 0.0: coupling *= (getattr(props,'phantom_ref_hz',65.0)/nt.f0)**power
+    if coupling > 0.0 and nt.f0 <= getattr(props,'phantom_note_max_hz',0.0) and transverse:
+        parents = transverse[:getattr(props,'phantom_max_order',16)]
+        floor = getattr(props,'phantom_gain_floor',3e-3)*max(v for _,v,_ in parents)
+        for a in range(len(parents)):
+            fa,va,da = parents[a]
+            for bb in range(a,len(parents)):
+                fb,vb,db_ = parents[bb]
+                fph = fa+fb
+                if fph >= SR/2: break
+                g = coupling*va*vb*(1.0 if a==bb else 2.0)*props.radiation_gain(fph)
+                if g < floor: continue
+                dph = da+db_; lrp = math.log(T.db_ratio(dph)) if dph>0 else 0.0
+                aftp, adbp = props.aftersound(nt.f0, dph); lrAp = math.log(T.db_ratio(adbp)) if adbp>0 else 0.0
+                emit_partial(2*math.pi*fph/SR, g, g, g, fph, nt.non, nt.noff, nt.fade, nt.rel, nt.chiff,
+                             lrp, lrAp, aftp, props.sustain_level, 0.0, 0.0, 0.0, 0.0, nt.csc, -1, 0)
+
+
 def _rows_into(A, rows):
     """C-made rows into the table's columns, a column at a time."""
     if not len(rows):
@@ -8454,28 +8535,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # for harmonic 1 and skip it for every other.
         if getattr(props, 'unison_spans_part', False):
             _SPANNED.add((nt.ch, _phrase_of(nt.ch, nt.on)[0]))
-        # Phantom (longitudinal / Conklin) sum-tones for the wound bass: f_i+f_j of
-        # the transverse partials, gain ~ coupling * v_i*v_j, decay d_i+d_j; centred
-        # (no HRTF gain, like the reference). Off unless phantom_coupling > 0 (piano
-        # bass, note <= phantom_note_max_hz).
-        coupling = getattr(props,'phantom_coupling',0.0)
-        power = getattr(props,'phantom_register_power',0.0)
-        if power > 0.0: coupling *= (getattr(props,'phantom_ref_hz',65.0)/nt.f0)**power
-        if coupling > 0.0 and nt.f0 <= getattr(props,'phantom_note_max_hz',0.0) and transverse:
-            parents = transverse[:getattr(props,'phantom_max_order',16)]
-            floor = getattr(props,'phantom_gain_floor',3e-3)*max(v for _,v,_ in parents)
-            for a in range(len(parents)):
-                fa,va,da = parents[a]
-                for bb in range(a,len(parents)):
-                    fb,vb,db_ = parents[bb]
-                    fph = fa+fb
-                    if fph >= SR/2: break
-                    g = coupling*va*vb*(1.0 if a==bb else 2.0)*props.radiation_gain(fph)
-                    if g < floor: continue
-                    dph = da+db_; lrp = math.log(T.db_ratio(dph)) if dph>0 else 0.0
-                    aftp, adbp = props.aftersound(nt.f0, dph); lrAp = math.log(T.db_ratio(adbp)) if adbp>0 else 0.0
-                    emit_partial(2*math.pi*fph/SR, g, g, g, fph, nt.non, nt.noff, nt.fade, nt.rel, nt.chiff,
-                                 lrp, lrAp, aftp, props.sustain_level, 0.0, 0.0, 0.0, 0.0, nt.csc, -1, 0)
+        _note_phantoms(em, props, nt, transverse, emit_partial)
         # THE MECHANISM LETTING GO. On a harpsichord the key coming up is not
         # only the damper arriving: the jack falls back and its tongue brushes
         # past the string it just plucked. That is a MECHANICAL event, not a

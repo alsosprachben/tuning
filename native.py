@@ -47,7 +47,9 @@ class VoiceSnap(ctypes.Structure):
                 ('exp_vibrato_cents', C), ('solo_vibrato_spread', C), ('solo_vibrato_hz', C),
                 ('section_salt', LL),
                 ('radiation_distance', C), ('position_x', C), ('position_z', C), ('hrtf_beta', C),
-                ('room', C * 10), ('ahz', C * 6), ('alpha', C * 36), ('scat', C * 36)]
+                ('room', C * 10), ('ahz', C * 6), ('alpha', C * 36), ('scat', C * 36),
+                ('phantom_coupling', C), ('phantom_register_power', C), ('phantom_ref_hz', C),
+                ('phantom_note_max_hz', C), ('phantom_gain_floor', C), ('phantom_max_order', I)]
 
 
 class ToneIn(ctypes.Structure):
@@ -103,7 +105,9 @@ def _load():
                             ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p, ctypes.POINTER(I),
                             ctypes.c_void_p, D]),
             ('nv_strike', I, [P, ctypes.POINTER(ToneIn), I, ctypes.c_void_p, ctypes.c_void_p, C, C, C, C, C, C, C,
-                              C, ctypes.c_void_p, I, ctypes.c_void_p, D])):
+                              C, ctypes.c_void_p, I, ctypes.c_void_p, D]),
+            ('nv_phantom', I, [P, ctypes.POINTER(ToneIn), ctypes.c_void_p, I, I, ctypes.c_void_p, ctypes.c_void_p,
+                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p, D])):
         f = getattr(d, name)
         f.restype, f.argtypes = res, args
     return d
@@ -167,4 +171,10 @@ def snapshot(props):
     s.ahz[:] = [float(x) for x in AHZ]
     s.alpha[:] = [float(x) for x in ALPHA]
     s.scat[:] = [float(x) for x in SCAT]
+    s.phantom_coupling = getattr(p, 'phantom_coupling', 0.0)
+    s.phantom_register_power = getattr(p, 'phantom_register_power', 0.0)
+    s.phantom_ref_hz = getattr(p, 'phantom_ref_hz', 65.0)
+    s.phantom_note_max_hz = getattr(p, 'phantom_note_max_hz', 0.0)
+    s.phantom_gain_floor = getattr(p, 'phantom_gain_floor', 3e-3)
+    s.phantom_max_order = int(getattr(p, 'phantom_max_order', 16))
     return s

@@ -52,6 +52,9 @@ typedef struct {
     double radiation_distance, position_x, position_z, hrtf_beta;
     double room[10];                /* roomcore.c's R: directivity, speed, air */
     double ahz[6], alpha[36], scat[36];     /* ...its octave bands and surfaces */
+    /* the phantom partials (the wound bass's sum-tones) */
+    double phantom_coupling, phantom_register_power, phantom_ref_hz, phantom_note_max_hz, phantom_gain_floor;
+    int phantom_max_order;
 } VoiceSnap;
 
 /* tonelib.db_ratio */

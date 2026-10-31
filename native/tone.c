@@ -303,3 +303,62 @@ int nv_strike(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, con
     }
     return R.n;
 }
+
+/* blockrender._note_phantoms: the wound bass's phantom partials -- f_i + f_j
+ * of the note's transverse partials (trans: ntrans of (hz, raw gain, dB/s),
+ * nv_tone's), gain coupling v_i v_j (twice for i != j) times the radiation,
+ * decay d_i + d_j; centred, no HRTF gain; with their room images. The
+ * emitter as the tone leaves it (player 0, no vibrato, the voice's own
+ * place). qacc and *azimuth as nv_tone's. Returns the rows written, -1 if
+ * the store was too small. */
+int nv_phantom(const VoiceSnap *v, const ToneIn *t, const double *trans, int ntrans,
+               int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
+               double *rows, int cap, double *qacc, double *azimuth)
+{
+    Rows R = {rows, 0, cap};
+    double terms[9 * 64];
+    double VB[3] = {0.0, 5.5, 0.0};
+    double sr = t->sr;
+    double coupling = v->phantom_coupling;
+    double power = v->phantom_register_power;
+    if (power > 0.0)
+        coupling *= pow(v->phantom_ref_hz / t->f0, power);
+    if (!(coupling > 0.0 && t->f0 <= v->phantom_note_max_hz && ntrans > 0))
+        return 0;
+    int np = ntrans < v->phantom_max_order ? ntrans : v->phantom_max_order;
+    if (np <= 0)
+        return 0;
+    double vmax = trans[1];
+    for (int i = 1; i < np; i++)
+        if (trans[3 * i + 1] > vmax)
+            vmax = trans[3 * i + 1];
+    double floor_ = v->phantom_gain_floor * vmax;
+    for (int a = 0; a < np; a++) {
+        double fa = trans[3 * a], va = trans[3 * a + 1], da = trans[3 * a + 2];
+        for (int b = a; b < np; b++) {
+            double fb = trans[3 * b], vb = trans[3 * b + 1], db_ = trans[3 * b + 2];
+            double fph = fa + fb;
+            if (fph >= sr / 2)
+                break;
+            double g = coupling * va * vb * (a == b ? 1.0 : 2.0) * nv_radiation_gain(v, fph, 0.0, 0);
+            if (g < floor_)
+                continue;
+            double dph = da + db_;
+            double lrp = dph > 0 ? log(db_ratio(dph)) : 0.0;
+            double af[2];
+            nv_aftersound(v, t->f0, dph, af);
+            double lrAp = af[1] > 0 ? log(db_ratio(af[1])) : 0.0;
+            int nt_ = 0;
+            if (t->reflect) {
+                nt_ = note_terms(v, t, fph, t->pos_x_props, t->pos_z, nimg, nsurf, surf, img, mir, terms);
+                if (nt_ < 0)
+                    return -1;
+            }
+            if (!emit(v, t, &R, qacc, azimuth, terms, nt_, 2 * PI * fph / sr, g, g, g, fph, t->non, t->noff,
+                      t->fade, t->rel, t->chiff, lrp, lrAp, af[0], t->sustain_level, 0.0, 0.0, 0.0, 0.0, t->csc,
+                      -1.0, 0.0, 0.0, 0.0, VB, t->pos_x_props))
+                return -1;
+        }
+    }
+    return R.n;
+}
