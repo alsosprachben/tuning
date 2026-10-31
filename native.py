@@ -126,7 +126,8 @@ class NoteIn(ctypes.Structure):
                 + [(f, C) for f in ('sr', 'retrigger_fade', 'channel', 'br', 'nyq_om')]
                 + [('sv', C * 2), ('sound_vib_depth_cents', C), ('vibrato_delay', C), ('gl', C * 3)]
                 + [(f, C) for f in ('fx', 'mk', 'fm_omega', 'fm_phase')]
-                + [('room_bands', C * 9), ('reflect', I), ('no_reflections', I)])
+                + [('room_bands', C * 9), ('reflect', I), ('no_reflections', I), ('ch', LL), ('note', I),
+                   ('damper_pedal', I), ('key_off', C)])
 
 
 class NoteOut(ctypes.Structure):
@@ -195,6 +196,10 @@ def _load():
             ('nv_note', I, [ctypes.POINTER(NoteClass), ctypes.POINTER(NoteIn), ctypes.POINTER(PyRandomState), I,
                             ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I,
                             ctypes.c_void_p, D, ctypes.POINTER(NoteOut)]),
+            ('nv_song_play', I, [ctypes.c_void_p, ctypes.POINTER(NoteClass), ctypes.POINTER(NoteIn),
+                                 ctypes.POINTER(PyRandomState), I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                                 ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p, D, ctypes.POINTER(NoteOut),
+                                 ctypes.POINTER(I)]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
             ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C]),
@@ -423,7 +428,8 @@ _NOTE_OFF = ('bloom_seconds', 'speech_harmonic_exp', 'speech_harmonic_exp_per_oc
              'stroke_scatter', 'string_choirs', 'unison_shares_phase', 'directivity_radius', 'strike_in_s',
              'jitter_by_partial', 'mode_lock_spread', 'played_backwards', 'fold_restrike', 'hammer_legato',
              'strike_flam_rate', 'strike_flam_times', 'strike_flam_people', 'strike_noise_tail',
-             'strike_noise_layers', 'transposed_from_hz', 'one_shot', 'gate_time')
+             'strike_noise_layers', 'transposed_from_hz', 'one_shot', 'gate_time', 'tape_length_s',
+             'open_string_ring')
 _NOTE_ABSENT = ('pre_pluck_s', 'feedback_harmonic')
 
 

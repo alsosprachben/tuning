@@ -132,6 +132,12 @@ int nv_phantom(const VoiceSnap *v, const ToneIn *t, const double *trans, int ntr
                int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
                double *rows, int cap, double *qacc, double *azimuth);
 
+/* channel.cpp's Song: a file's channels, as a note asks of them */
+double nv_song_note_off(void *s, long long ch, int note, double on, double off, int damper_pedal, int mcut,
+                        double retrigger_fade, int *band);
+int nv_song_soft_at(void *s, long long ch, double t);
+int nv_song_next_same(void *s, long long ch, int note, double on, double *out);
+
 #ifdef __cplusplus
 }
 #endif

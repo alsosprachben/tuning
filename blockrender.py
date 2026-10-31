@@ -6415,7 +6415,7 @@ SONG_STATS = [0, 0]     # notes whose channel questions were checked, that diffe
 
 
 def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st, eff, nx, mcut, slurred,
-                       slur_out):
+                       slur_out, song=None, key_off=None):
     """A piano note from the engine (native/engine.cpp's nv_note): its knock,
     tone and phantom partials, the voice built there from the note as the
     file and channel give it. (rows, qacc, azimuth, NoteOut, row0, qacc
@@ -6465,9 +6465,20 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     az = ctypes.c_double(em.azimuth)
     out = _NV.NoteOut()
     st = type(st).from_buffer_copy(st)
-    k = _NV.lib().nv_note(ctypes.byref(K), ctypes.byref(n), ctypes.byref(st), len(imgs), nsurf.ctypes.data,
-                          surf.ctypes.data, img.ctypes.data, mir.ctypes.data, rows.ctypes.data, cap,
-                          qacc.ctypes.data, ctypes.byref(az), ctypes.byref(out))
+    if song is not None:
+        # the note as its FILE gives it: its key-up, and the channels' answers
+        n.ch, n.note, n.key_off = nt.ch, nt.note, key_off
+        n.damper_pedal = int(bool(getattr(nt.pc, 'damper_pedal', True)))
+        n.off, n.nx, n.has_nx, n.soft_pedal_down = -1.0, -1.0, 0, 0
+        band = ctypes.c_int(0)
+        k = _NV.lib().nv_song_play(song.p, ctypes.byref(K), ctypes.byref(n), ctypes.byref(st), len(imgs),
+                                   nsurf.ctypes.data, surf.ctypes.data, img.ctypes.data, mir.ctypes.data,
+                                   rows.ctypes.data, cap, qacc.ctypes.data, ctypes.byref(az), ctypes.byref(out),
+                                   ctypes.byref(band))
+    else:
+        k = _NV.lib().nv_note(ctypes.byref(K), ctypes.byref(n), ctypes.byref(st), len(imgs), nsurf.ctypes.data,
+                              surf.ctypes.data, img.ctypes.data, mir.ctypes.data, rows.ctypes.data, cap,
+                              qacc.ctypes.data, ctypes.byref(az), ctypes.byref(out))
     if k < 0:
         return None
     return rows[:k], qacc, az.value, out, len(em.A['om']), q0
@@ -8708,7 +8719,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _wn = None
         if _vst0 is not None and em.nsnap is not None and not _sd and _XP == 1.0 and not (_hx or _hperc or _pjit):
             _wn = _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, _vst0, _eff,
-                                     _nx, _mcut, _slurred, (nt.ch, nt.note, nt.on) in _SLUR_OUT)
+                                     _nx, _mcut, _slurred, (nt.ch, nt.note, nt.on) in _SLUR_OUT,
+                                     _SONG if choked is None else None, _off_key)
         if _wn is not None and NATIVE_TONE == 'on':
             _note_native_apply(em, props, nt, A, _wn, _VB)
         else:

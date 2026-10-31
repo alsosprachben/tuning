@@ -79,6 +79,10 @@ typedef struct {
     double fx, mk, fm_omega, fm_phase;
     double room_bands[9];
     int reflect, no_reflections;        // the emitter's REFLECT, and no_reflections before the note
+    // for nv_song_play: the note's key in its file, and its key-up
+    long long ch;
+    int note, damper_pedal;
+    double key_off;
 } NoteIn;
 
 // What the note's setup worked out, beside its rows.
@@ -233,6 +237,23 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     memcpy(out->tb, tb, sizeof tb);
     out->cbw[0] = K->cbw0; out->cbw[1] = K->cbw1;
     return total;
+}
+
+// A note as its FILE gives it: its channel's answers (native/channel.cpp's
+// Song) for its end once the pedals have had their say, its key's next
+// strike and the soft pedal at its onset, then nv_note. n's off, nx and
+// soft pedal are written; *band: a half-pedalled note that meets the band.
+int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
+                 int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
+                 double *rows, int cap, double *qacc, double *azimuth, NoteOut *out, int *band)
+{
+    n->off = nv_song_note_off(song, n->ch, n->note, n->on, n->key_off, n->damper_pedal, n->mcut,
+                              n->retrigger_fade, band);
+    n->has_nx = nv_song_next_same(song, n->ch, n->note, n->on, &n->nx);
+    if (!n->has_nx)
+        n->nx = 0.0;
+    n->soft_pedal_down = nv_song_soft_at(song, n->ch, n->on);
+    return nv_note(K, n, rs, nimg, nsurf, surf, img, mir, rows, cap, qacc, azimuth, out);
 }
 
 }  // extern "C"
