@@ -390,9 +390,12 @@ def _load_core():
         # starting at once must never load a half-written library
         tmp = "%s.%d.tmp" % (lib, os.getpid())
         # no -ffast-math, and no fused multiply-adds (numpy makes none): the
-        # order of operations is the source's
-        subprocess.check_call(["gcc", "-O3", "-march=native", "-ffp-contract=off", "-shared", "-fPIC",
-                               src, "-o", tmp, "-lm"])
+        # order of operations is the source's. The glide's integral is
+        # vectorised (#pragma omp simd), its exp/expm1/sin/cos from glibc's
+        # vector library, 8 wide where the machine has AVX-512
+        subprocess.check_call(["gcc", "-O3", "-march=native", "-ffp-contract=off", "-fopenmp-simd",
+                               "-fno-math-errno", "-mprefer-vector-width=512", "-shared", "-fPIC",
+                               src, "-o", tmp, "-lmvec", "-lm"])
         os.replace(tmp, lib)
     dll = ctypes.CDLL(lib)
     P, D = ctypes.c_void_p, ctypes.c_double
@@ -984,19 +987,26 @@ class Channel(object):
             x = min(x, rec['closed'])
         return x > b
 
+    # a free row's fields that are the same on every row
+    _CONST = dict(logrA=0.0, aft=0.0, sus=0.0, cv=0.0, sj=0.0, crl=0.0, csc=0.0, cbw=0.0, tbav=0.0,
+                  tcut=0.0, gb=0.0, gc=0.0, vd=0.0, vdl=0.0, br=-1, gr=-1, cr=0,
+                  fx=-1, mk=0, rdl=0.0, fmw=0.0, fmp=0.0, fmpR=0.0, dr=1.0)
+
     def _write(self, i, z, non, fa, noff, re_, kind, src, seq=None, lr=None):
         S, sr = self.S, self.sr
         om = S.W[i] / sr
         ph = math.atan2(z.imag, z.real)
-        row = dict(self.template)
+        # the template with the constant fields, made once a template
+        if getattr(self, '_base_of', None) is not self.template:
+            self._base = dict(self.template)
+            self._base.update(self._CONST)
+            self._base_of = self.template
+        row = dict(self._base)
         row.update(om=om, p0=ph - om * S.dl[i], p0R=ph - om * S.dr[i],
                    aL=abs(z) * S.hl[i], aR=abs(z) * S.hr[i], aM=abs(z),
                    nf=S.f[i], nfr=S.f[i], non=float(non), noff=noff,
-                   fa=float(fa), re=re_, logr=float(S.alpha[i] if lr is None else lr), logrA=0.0, aft=0.0,
-                   sus=0.0, cv=0.0, sj=0.0, crl=0.0, csc=0.0, cbw=0.0, tbav=0.0,
-                   tcut=0.0, gb=0.0, gc=0.0, vd=0.0, vdl=0.0, br=-1, gr=-1, cr=0,
-                   delL=S.dl[i], delR=S.dr[i], px=S.px[i], pl=int(S.string[i]),
-                   fx=-1, mk=0, rdl=0.0, fmw=0.0, fmp=0.0, fmpR=0.0, dr=1.0)
+                   fa=float(fa), re=re_, logr=float(S.alpha[i] if lr is None else lr),
+                   delL=S.dl[i], delR=S.dr[i], px=S.px[i], pl=int(S.string[i]))
         if seq is None:
             seq = self.seq; self.seq += 1
         return dict(row=row, phase=0, seq=seq, kind=kind, src=src, mode=int(i))
@@ -1067,6 +1077,10 @@ def channel_for(ch, R, sr, blk, cols, scale, string_fns, keep=True):
     return Channel(ch, S, R['props'], R['pedal'], sr, blk, cols, scale, keep, R.get('damping'))
 
 
+# array-module typecodes the table's columns use, as numpy dtypes
+_ARRAY_DTYPE = {'f': np.float32, 'd': np.float64, 'i': np.int32}
+
+
 def expand(A, channels, sr, blk, cols, meta=None):
     """The whole table's way: every register channel fed all its strikes,
     finished, its rows appended in (phase, seq) order -- the order the
@@ -1078,7 +1092,15 @@ def expand(A, channels, sr, blk, cols, meta=None):
         recs = sorted(C.take(), key=lambda r: (r['phase'], r['seq']))
         rows = [r['row'] for r in recs]
         for c in cols:
-            A[c].extend(map(operator.itemgetter(c), rows))
+            col = A[c]
+            vals = list(map(operator.itemgetter(c), rows))
+            nd = _ARRAY_DTYPE.get(getattr(col, 'typecode', None))
+            if nd is not None and vals:
+                # a typed column takes the whole run as bytes: numpy casts as
+                # the array module does (float64 -> float32 rounds to nearest)
+                col.frombytes(np.asarray(vals).astype(nd).tobytes())
+            else:
+                col.extend(vals)
         if meta is not None:
             meta.extend((ch, r['kind'], r['src'], r['mode']) for r in recs)
         added += len(recs)

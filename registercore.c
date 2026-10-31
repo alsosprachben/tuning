@@ -9,7 +9,8 @@
  * register is checked against the Python path by tolerance
  * (examples/regclose.py), everything else stays table-identical.
  *
- * Built without -ffast-math, so the order of operations is the source's.
+ * Built without -ffast-math or fused multiply-adds, so the order of operations
+ * is the source's; the glide's integral alone is vectorised (integral_batch).
  */
 #include <complex.h>
 #include <math.h>
@@ -47,14 +48,6 @@ static double glide_start(double tb, double cut)
     return cut < 0 ? expm1(tb) : tb;
 }
 
-/* numpy's complex expm1 (npymath nc_expm1) */
-static double complex cexpm1(double complex z)
-{
-    double x = creal(z), y = cimag(z);
-    double a = sin(y / 2.0);
-    return (expm1(x) * cos(y) - 2.0 * a * a) + I * (exp(x) * sin(y));
-}
-
 /* register._glide_grid: times 0..cut; returns the count, *out malloc'd */
 static int glide_grid(double cut, double tau, double **out)
 {
@@ -75,29 +68,68 @@ static int glide_grid(double cut, double tau, double **out)
     return n;
 }
 
-/* free_part's integral for one pair over times tt[0..nt), clipped at the
- * cut, with ph[k] the glide's phase at tt[k] (the driver's: the same for
- * every pair, so computed once a call) */
-static double complex integral(const double *tt, const double *ph, int nt, double ca, double wi,
-                               double wm, double a_, double b_)
+/* THE GLIDE'S INTEGRAL FOR MANY PAIRS AT ONCE. Every near pair of a call
+ * integrates over the same times with the same glide phase ph[k] (the
+ * driver's); a pair differs only by its offset dw = W_i - W_m and its decay
+ * difference da = a_m - b_i. So the loop runs over the times outside and the
+ * pairs inside, in real arithmetic, where gcc vectorises it -- exp, expm1,
+ * sin and cos from glibc's vector library (libmvec), 8 pairs a step on
+ * AVX-512. Each step is exact for a linear exponent, as before:
+ *     exp(g_{k-1}) (e^x - 1) / (x / dt),   x = g_k - g_{k-1}
+ * with numpy's complex expm1 (e^x - 1 = expm1(xr) cos xi - 2 sin^2(xi/2)
+ * + i e^xr sin xi), and exp(g_{k-1}) dt where |x| is too small. Not
+ * bit-identical to the scalar loop it replaces (the vector routines differ
+ * in the last bits); checked by tolerance like the rest of the core. */
+#pragma omp declare simd notinbranch
+extern double exp(double);
+#pragma omp declare simd notinbranch
+extern double expm1(double);
+#pragma omp declare simd notinbranch
+extern double sin(double);
+#pragma omp declare simd notinbranch
+extern double cos(double);
+
+static void integral_batch(const double *tt, const double *ph, int nt, double ca, int np,
+                           const double *dw, const double *da, double *sre, double *sim)
 {
-    double complex s = 0.0;
+    double *gr = malloc(np * sizeof(double)), *gi = malloc(np * sizeof(double));
     double tp = tt[0] < ca ? tt[0] : ca;
-    double complex gp = I * ((wi - wm) * tp + ph[0]) + (a_ - b_) * tp;
+    for (int p = 0; p < np; p++) {
+        gi[p] = dw[p] * tp + ph[0];
+        gr[p] = da[p] * tp;
+        sre[p] = 0.0;
+        sim[p] = 0.0;
+    }
     for (int k = 1; k < nt; k++) {
         double t = tt[k] < ca ? tt[k] : ca;
-        double complex g = I * ((wi - wm) * t + ph[k]) + (a_ - b_) * t;
         double dt = t - tp;
-        double complex sl = (g - gp) / (dt > 0 ? dt : 1.0);
-        double complex x = sl * dt;
-        if (cabs(x) > 1e-9)
-            s += cexp(gp) * cexpm1(x) / sl;
-        else
-            s += cexp(gp) * dt;
+        double phk = ph[k];
+        if (dt > 0) {
+#pragma omp simd
+            for (int p = 0; p < np; p++) {
+                double nr = da[p] * t, ni = dw[p] * t + phk;
+                double xr = nr - gr[p], xi = ni - gi[p];
+                double e = exp(gr[p]);
+                double er = e * cos(gi[p]), ei = e * sin(gi[p]);
+                double h = sin(0.5 * xi);
+                double mr = expm1(xr) * cos(xi) - 2.0 * h * h;
+                double mi = exp(xr) * sin(xi);
+                double xx = xr * xr + xi * xi;
+                /* (e^x - 1) dt / x, and its limit dt where x is too small */
+                double big = xx > 1e-18;
+                double inv = big ? dt / (big ? xx : 1.0) : 0.0;
+                double qr = big ? (mr * xr + mi * xi) * inv : dt;
+                double qi = big ? (mi * xr - mr * xi) * inv : 0.0;
+                sre[p] += er * qr - ei * qi;
+                sim[p] += er * qi + ei * qr;
+                gr[p] = nr;
+                gi[p] = ni;
+            }
+        }
         tp = t;
-        gp = g;
     }
-    return s;
+    free(gr);
+    free(gi);
 }
 
 /* register.free_part for n pairs sharing one driver: c[i] complex, Wi, tb,
@@ -116,42 +148,54 @@ void free_part(int n, const double complex *c, double Wi, const double *bi, cons
         return;
     double gs = glide_start(tb, cut);
     double ca = cut_time(cut);
-    double *grid = NULL, *half = NULL, *pg = NULL, *ph = NULL;
-    int ng = 0, nh = 0;
+    /* the pairs the glide matters for: near, and able to reach `need` */
+    int *near = malloc((n > 0 ? n : 1) * sizeof(int));
+    int nn = 0;
     for (int i = 0; i < n; i++) {
         double complex D0 = (I * Wi * (1.0 + gs) - bi[i]) - (I * Wm[i] - am[i]);
         freep[i] = -c[i] / D0;
         double width = fabs(Wi * gs) + fabs(am[i] - bi[i]) + 1.0;
-        if (!(fabs(Wi - Wm[i]) < NEAR * width) || !(cabs(freep[i]) >= need))
-            continue;
-        if (grid == NULL) {
-            ng = glide_grid(ca, tau, &grid);
-            /* the grid and its midpoints, in order (sorted, as numpy sorts them) */
-            nh = 2 * ng - 1;
-            half = malloc(nh * sizeof(double));
-            for (int k = 0; k < ng; k++) {
-                half[2 * k] = grid[k];
-                if (k + 1 < ng)
-                    half[2 * k + 1] = 0.5 * (grid[k + 1] + grid[k]);
-            }
-            /* the glide's phase at each time, clipped at the cut as the
-               integral clips its times */
-            pg = malloc(ng * sizeof(double));
-            ph = malloc(nh * sizeof(double));
-            for (int k = 0; k < ng; k++)
-                pg[k] = glide_phase(Wi, tb, tau, cut, grid[k] < ca ? grid[k] : ca);
-            for (int k = 0; k < nh; k++)
-                ph[k] = glide_phase(Wi, tb, tau, cut, half[k] < ca ? half[k] : ca);
-        }
-        double complex y = c[i] * (4.0 * integral(half, ph, nh, ca, Wi, Wm[i], am[i], bi[i])
-                                   - integral(grid, pg, ng, ca, Wi, Wm[i], am[i], bi[i])) / 3.0;
-        double th = glide_phase(Wi, tb, tau, cut, ca);
-        freep[i] = y - forced[i] * cexp(I * th + (I * (Wi - Wm[i]) + (am[i] - bi[i])) * ca);
+        if (fabs(Wi - Wm[i]) < NEAR * width && cabs(freep[i]) >= need)
+            near[nn++] = i;
     }
-    free(grid);
-    free(half);
-    free(pg);
-    free(ph);
+    if (nn) {
+        double *grid, *half, *pg, *ph;
+        int ng = glide_grid(ca, tau, &grid);
+        /* the grid and its midpoints, in order (sorted, as numpy sorts them) */
+        int nh = 2 * ng - 1;
+        half = malloc(nh * sizeof(double));
+        for (int k = 0; k < ng; k++) {
+            half[2 * k] = grid[k];
+            if (k + 1 < ng)
+                half[2 * k + 1] = 0.5 * (grid[k + 1] + grid[k]);
+        }
+        /* the glide's phase at each time, clipped at the cut as the
+           integral clips its times */
+        pg = malloc(ng * sizeof(double));
+        ph = malloc(nh * sizeof(double));
+        for (int k = 0; k < ng; k++)
+            pg[k] = glide_phase(Wi, tb, tau, cut, grid[k] < ca ? grid[k] : ca);
+        for (int k = 0; k < nh; k++)
+            ph[k] = glide_phase(Wi, tb, tau, cut, half[k] < ca ? half[k] : ca);
+        double *dw = malloc(nn * sizeof(double)), *da = malloc(nn * sizeof(double));
+        double *hr = malloc(nn * sizeof(double)), *hi = malloc(nn * sizeof(double));
+        double *qr = malloc(nn * sizeof(double)), *qi = malloc(nn * sizeof(double));
+        for (int q = 0; q < nn; q++) {
+            dw[q] = Wi - Wm[near[q]];
+            da[q] = am[near[q]] - bi[near[q]];
+        }
+        integral_batch(half, ph, nh, ca, nn, dw, da, hr, hi);
+        integral_batch(grid, pg, ng, ca, nn, dw, da, qr, qi);
+        double th = glide_phase(Wi, tb, tau, cut, ca);
+        for (int q = 0; q < nn; q++) {
+            int i = near[q];
+            double complex y = c[i] * (4.0 * (hr[q] + I * hi[q]) - (qr[q] + I * qi[q])) / 3.0;
+            freep[i] = y - forced[i] * cexp(I * th + (I * (Wi - Wm[i]) + (am[i] - bi[i])) * ca);
+        }
+        free(grid); free(half); free(pg); free(ph);
+        free(dw); free(da); free(hr); free(hi); free(qr); free(qi);
+    }
+    free(near);
 }
 
 /* ------------------------------------------------------------------ a strike */
