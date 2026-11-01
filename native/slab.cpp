@@ -83,6 +83,7 @@ struct Slab {
     std::vector<std::vector<int32_t>> i4;
     std::vector<float> sw, aL0, aR0, sg, sre, hrel, vbase, vrbase, vsc;
     std::vector<int32_t> dk, slot_ch;
+    std::vector<float> aLp, aRp;            // pressure's columns: none on a piano, still the kernel's
     std::vector<char> busy;
     std::deque<long> free;
     // the keys sounding and their slots, in the order first stamped (a
@@ -113,6 +114,7 @@ struct Slab {
         hrel.assign(cap, 1.0f); vbase.assign(cap, 0.0f); vsc.assign(cap, 1.0f);
         vrbase.assign(cap, 1.0f * 5.5f);
         dk.assign(cap, -1); slot_ch.assign(cap, -1);
+        aLp.assign(cap, 0.0f); aRp.assign(cap, 0.0f);
         busy.assign(cap, 0);
         for (long i = 0; i < cap; i++)
             free.push_back(i);
@@ -488,6 +490,124 @@ struct Piano {
         }
     }
 
+    // LIVE'S SIDE TABLES (live.Slab's, at rest: a piano never moves them)
+    // and its render over the slab (Renderer.render, one thread): every slot
+    // from 0 past the last busy one through synth_voice, the fast bursts
+    // apart through synth_voice_xdec (synth_partials' _xdec_rows)
+    std::vector<float> G = std::vector<float>(1, 1.0f), Sx = std::vector<float>(1, 1.0f);
+    std::vector<float> BRt = std::vector<float>(65, 1.0f), BLt = std::vector<float>(130, 1.0f);
+    std::vector<double> BCt = std::vector<double>(65, 0.0);
+    std::vector<float> FT = std::vector<float>(1024 * 30, 0.0f), KN = std::vector<float>(256 * 2 * 9, 0.0f);
+    std::vector<int32_t> MPI = std::vector<int32_t>(1024 * 3, 0), MKI = std::vector<int32_t>(1024 * 7, 0);
+    std::vector<double> MPC = std::vector<double>(1024 * 65, 0.0);
+    std::vector<float> MPR = std::vector<float>(1024 * 65, 1.0f), MPK = std::vector<float>(1024 * 1920, 0.0f);
+    float sh[4] = {0.06f, 1.6f, 3.5f, 1500.0f};
+    double xdec_nepers = 2.302585;
+
+    void init_tables()
+    {
+        for (int r = 0; r < 1024; r++) {
+            MPI[3 * r + 2] = 1;
+            MKI[7 * r + 2] = 1;
+            MKI[7 * r + 4] = MKI[7 * r + 5] = MKI[7 * r + 6] = -1;
+        }
+    }
+
+    void render(long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx, long long blk,
+                double master_gain)
+    {
+        for (long k = 0; k < frames; k++) {
+            L[k] = 0.0f;
+            R[k] = 0.0f;
+            if (SL) {
+                SL[k] = 0.0f;
+                SR[k] = 0.0f;
+            }
+        }
+        // ...and after it, knobs_advance: each slot's level now is where the
+        // next block's ramp starts (aLp, aRp)
+        struct Advance {
+            Slab &S;
+            ~Advance() { S.aLp = S.f4[0]; S.aRp = S.f4[1]; }
+        } advance{S};
+        long hi = -1;
+        for (long q = 0; q < S.cap; q++)
+            if (S.busy[q])
+                hi = q;
+        if (hi < 0)
+            return;
+        hi += 1;
+        long kb0 = (long)(n0 / blk);                        // moog_grid(128) = 128
+        long chunk = blk * std::max(1L, (long)(rate / blk));
+        auto fast = [&](long q) {
+            float lr = S.f4[6][q];
+            return S.f4[9][q] <= 0 && S.f4[8][q] <= 0 && (float)(lr * (float)blk) > (float)(xdec_nepers * rate)
+                   && S.i4[0][q] < 0 && S.i4[2][q] < 0 && S.dk[q] < 0 && S.i4[4][q] < 0;
+        };
+        std::vector<long> xr, keep;
+        for (long q = 0; q < hi; q++)
+            (fast(q) ? xr : keep).push_back(q);
+        auto call = [&](void *fn, const long *rows, long n, bool whole) {
+            if (!n)
+                return;
+            // columns gathered (a set of rows), or the slab's own (the whole range)
+            std::vector<double> d[6];
+            std::vector<float> f[32];
+            std::vector<long> l[2];
+            std::vector<int> i[6];
+            auto gd = [&](const std::vector<double> &c, int k) {
+                if (whole) return c.data();
+                d[k].resize(n); for (long q = 0; q < n; q++) d[k][q] = c[rows[q]]; return (const double *)d[k].data();
+            };
+            int fk = 0;
+            auto gf = [&](const std::vector<float> &c) {
+                if (whole) return c.data();
+                std::vector<float> &v = f[fk++];
+                v.resize(n); for (long q = 0; q < n; q++) v[q] = c[rows[q]]; return (const float *)v.data();
+            };
+            auto gl = [&](const std::vector<long long> &c, int k) {
+                l[k].resize(n); for (long q = 0; q < n; q++) l[k][q] = (long)c[whole ? q : rows[q]];
+                return (const long *)l[k].data();
+            };
+            int ik = 0;
+            auto gi = [&](const std::vector<int32_t> &c) {
+                if (whole) return (const int *)c.data();
+                std::vector<int> &v = i[ik++];
+                v.resize(n); for (long q = 0; q < n; q++) v[q] = c[rows[q]]; return (const int *)v.data();
+            };
+            const std::vector<float> *F4 = S.f4.data(), *F4N = S.f4n.data();
+            ((nv_voice_fn)fn)(L, R, (long)n0, frames, (int)blk, 1, (int)n, gd(S.f8[0], 0), gd(S.f8[1], 1),
+                              gd(S.f8[2], 2), gf(F4[0]), gf(F4[1]), gf(F4[2]), gl(S.i8[0], 0), gl(S.i8[1], 1),
+                              gf(F4[3]), gf(F4[4]), gf(F4[5]), gf(F4[6]), gf(F4[7]), gf(F4[8]), gf(F4[9]),
+                              gf(F4[10]), gf(F4[11]), gf(F4[12]), gf(F4[13]), gf(F4[14]), gf(F4[15]), gf(F4[16]),
+                              gf(F4[17]), gf(F4[18]), gf(F4N[0]), gf(F4N[1]), gf(F4N[2]), gf(F4[19]), gf(F4[20]),
+                              gf(F4[21]), gf(F4N[3]), gf(F4[22]), gf(F4[23]), gi(S.i4[0]), gi(S.i4[1]), G.data(),
+                              Sx.data(), gi(S.i4[2]), BRt.data(), BCt.data(), BLt.data(), gi(S.i4[4]), FT.data(),
+                              KN.data(), 2, kb0, gf(S.aLp), gf(S.aRp), gi(S.i4[5]), MPI.data(), MPC.data(),
+                              MPR.data(), MKI.data(), MPK.data(), gd(S.f8[3], 3), gd(S.f8[4], 4), gd(S.f8[5], 5),
+                              sh[0], sh[1], sh[2], sh[3], chunk, SL ? gf(S.sw) : nullptr, SL, SR);
+        };
+        if (!xr.empty()) {
+            call(sv, keep.data(), (long)keep.size(), false);
+            call(sx, xr.data(), (long)xr.size(), false);
+        } else {
+            call(sv, nullptr, hi, true);
+        }
+        // the master gain (float32, as numpy multiplies by a Python float) and
+        // the clip; the room's send scaled, not clipped
+        float g = (float)master_gain;
+        for (long k = 0; k < frames; k++) {
+            L[k] *= g;
+            R[k] *= g;
+            L[k] = L[k] < -1.0f ? -1.0f : (L[k] > 1.0f ? 1.0f : L[k]);
+            R[k] = R[k] < -1.0f ? -1.0f : (R[k] > 1.0f ? 1.0f : R[k]);
+            if (SL) {
+                SL[k] *= g;
+                SR[k] *= g;
+            }
+        }
+    }
+
     // live's callback for one block: its events, the sweep, the reap
     void block(long long n0, long long blk)
     {
@@ -534,6 +654,7 @@ void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int s
     P->S.headroom = (float)headroom;
     memcpy(P->S.pan_tab, pan_tab, sizeof P->S.pan_tab);
     P->S.pan_beta = pan_beta;
+    P->init_tables();
     return P;
 }
 
@@ -546,6 +667,14 @@ void nv_lp_event(void *h, int type, int ch, int a, int b)
 }
 
 void nv_lp_block(void *h, long long n0, long long blk) { ((nv::slab::Piano *)h)->block(n0, blk); }
+
+// Renderer.render's block: L, R (and with SL the room's send pair) over
+// [n0, n0 + frames), through synth_voice (sv) and synth_voice_xdec (sx)
+void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
+                  long long blk, double master_gain)
+{
+    ((nv::slab::Piano *)h)->render(n0, frames, L, R, SL, SR, sv, sx, blk, master_gain);
+}
 
 // the part's slab, for nv_slab_col and nv_slab_free_list
 void *nv_lp_slab(void *h) { return &((nv::slab::Piano *)h)->S; }
@@ -597,6 +726,9 @@ void nv_slab_col(void *h, int group, int index, void *out)
         memcpy(out, v[index]->data(), sizeof(float) * n);
         break;
     }
+    case 7:
+        memcpy(out, (index == 0 ? S->aLp : S->aRp).data(), sizeof(float) * n);
+        break;
     case 6: {
         if (index == 0)
             memcpy(out, S->dk.data(), sizeof(int32_t) * n);

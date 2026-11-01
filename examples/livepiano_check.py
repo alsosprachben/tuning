@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Does the native piano part play live MIDI as live.Live does?
 
-    python3 examples/livepiano_check.py [BLOCKS] [--program=N] [--seed=N] [--every=N]
+    python3 examples/livepiano_check.py [BLOCKS] [--program=N] [--seed=N] [--every=N] [--render]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native piano part (native/slab.cpp: its template cache, its slab, live's
@@ -12,7 +12,8 @@ part's block on the other. Every EVERY blocks (default 1) the two slabs are
 compared with ==: every slot column, the bookkeeping, the free queue's
 order. The first block that differs is reported with its events. Live's
 governor (Slab.shed, by the wall-clock render time) is off: a host policy,
-not arithmetic to match.
+not arithmetic to match. --render: each block's dry render too -- live's
+Renderer.render (and its room send, when on) against the native part's.
 """
 import os
 import random
@@ -49,6 +50,18 @@ def main(argv):
                      pt.soft_pedal_top, 48000, capacity=lv.slab.cap, headroom=lv.slab.headroom)
     held = set()
     M = mido.Message
+    dry = []
+    if "render" in opt:
+        _rend = lv.renderer.render
+
+        def _cap(n0, frames):
+            oL, oR = _rend(n0, frames)
+            r = lv.renderer
+            dry.append((n0, frames, oL.copy(), oR.copy(), bool(r.send),
+                        r.SL[:frames].copy() if r.send else None, r.SR[:frames].copy() if r.send else None))
+            return oL, oR
+        lv.renderer.render = _cap
+    rbad = []
     bad, log = [], []
 
     def compare(b):
@@ -91,6 +104,14 @@ def main(argv):
             nv.event(m)
         lv.callback(None, 128, None, 0)
         nv.block(n0, 128)
+        while dry:
+            rn0, fr, dL, dR, snd, sL, sR = dry.pop(0)
+            got = nv.render(rn0, fr, send=snd)
+            ok = np.array_equal(dL, got[0]) and np.array_equal(dR, got[1]) and (
+                not snd or (np.array_equal(sL, got[2]) and np.array_equal(sR, got[3])))
+            if not ok:
+                rbad.append(b)
+                bad.append("render")
         log.append((b, n0, msgs))
         if b % every == every - 1 or b == blocks - 1:
             if compare(b):
@@ -99,8 +120,9 @@ def main(argv):
                     print("    block %d at %d: %s" % (x[0], x[1], "; ".join(str(m) for m in x[2]) or "-"))
                 break
     sounding = sum(len(v) for v in lv.slab.live.values())
-    print("live piano: %d blocks, program %d, %s (%d slots sounding at the end)"
-          % (b + 1, prog, "identical" if not bad else "differs", sounding))
+    print("live piano: %d blocks, program %d, %s%s (%d slots sounding at the end)"
+          % (b + 1, prog, "identical" if not bad else "differs",
+             ", every block's render too" if "render" in opt and not rbad else "", sounding))
     return 1 if bad else 0
 
 

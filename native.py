@@ -263,6 +263,8 @@ def _load():
             ('nv_lp_event', None, [ctypes.c_void_p, I, I, I, I]),
             ('nv_lp_block', None, [ctypes.c_void_p, LL, LL]),
             ('nv_lp_slab', ctypes.c_void_p, [ctypes.c_void_p]),
+            ('nv_lp_render', None, [ctypes.c_void_p, LL, ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p,
+                                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, LL, C]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
             ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C, I, I]),
@@ -1193,7 +1195,8 @@ class Slab(object):
         import numpy as np
         for g, (cols, dt) in enumerate(((LIVE_F8, np.float64), (LIVE_F4, np.float32), (LIVE_F4N, np.float32),
                                         (("non", "noff"), np.int64), (LIVE_I4, np.int32),
-                                        (SLAB_BOOK, np.float32), (("dk", "slot_ch", "busy"), np.int32))):
+                                        (SLAB_BOOK, np.float32), (("dk", "slot_ch", "busy"), np.int32),
+                                        (("aLp", "aRp"), np.float32))):
             if name in cols:
                 out = np.empty(self.cap, dt)
                 self.d.nv_slab_col(self.p, g, cols.index(name), out.ctypes.data)
@@ -1333,3 +1336,18 @@ class LivePiano(object):
 
     def block(self, n0, blk):
         self.d.nv_lp_block(self.p, int(n0), int(blk))
+
+    def render(self, n0, frames, send=False):
+        """Renderer.render's block: (L, R) float32, and with send the room's
+        send pair -- (L, R, SL, SR)."""
+        import numpy as np
+        import blockrender as BR
+        L, R = np.empty(frames, np.float32), np.empty(frames, np.float32)
+        SL = np.empty(frames, np.float32) if send else None
+        SR = np.empty(frames, np.float32) if send else None
+        fn = lambda f: ctypes.cast(f, ctypes.c_void_p).value       # noqa: E731
+        self.d.nv_lp_render(self.p, int(n0), int(frames), L.ctypes.data, R.ctypes.data,
+                            SL.ctypes.data if send else None, SR.ctypes.data if send else None,
+                            fn(BR.ensure_lib().synth_voice), fn(BR.ensure_xdec_lib().synth_voice_xdec), BR.BLK,
+                            float(BR.T.master_gain))
+        return (L, R, SL, SR) if send else (L, R)
