@@ -135,6 +135,12 @@ int nv_phantom(const VoiceSnap *v, const ToneIn *t, const double *trans, int ntr
                int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
                double *rows, int cap, double *qacc, double *azimuth);
 
+/* strings.c: one mode of the register's string bank */
+typedef struct {
+    long long key, string, harm;
+    double f, alpha, w, hl, hr, dl, dr, px;
+} StringMode;
+
 /* room.cpp: a source's image sources in the room (SynthProperties.image_sources) */
 int nv_images(const double *planes, int order, double sx, double sy, double sz, int cap,
               int *nsurf, int *surf, double *img, double *mir);

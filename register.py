@@ -70,6 +70,29 @@ import numpy as np
 
 import tonelib as T
 
+
+def _xexp(x):
+    """exp over an array as libm does it (native.xexp): numpy's own SIMD exp is
+    a last bit away on a fifth of its values, and differently on another
+    machine. The file render's arithmetic below is libm's throughout, so a
+    port can match it bit for bit on any platform."""
+    return _NV().xexp(x)
+
+
+def _xpow(x, y):
+    """x ** y over arrays as libm's pow (native.xpow)."""
+    return _NV().xpow(x, y)
+
+
+def _xabs(z):
+    """abs of complex values as libm's hypot (native.xabs)."""
+    return _NV().xabs(z)
+
+
+def _NV():
+    import native
+    return native
+
 TAU = 2.0 * math.pi
 KEYS = range(21, 109)            # A0..C8, the piano's 88
 FLOOR = 1e-3                     # -60 dB of the strike's loudest partial
@@ -231,14 +254,14 @@ class Strings(object):
         interpolated, held past its ends), by how far above or below."""
         dk = self.key[j] - key
         prof = self.knock_profile
-        g = (10.0 ** (np.interp(dk, prof[0], prof[1]) / 20.0) if prof
-             else 10.0 ** (-fall * np.abs(dk) / 20.0))
+        g = (_xpow(10.0, np.interp(dk, prof[0], prof[1]) / 20.0) if prof
+             else _xpow(10.0, -fall * np.abs(dk) / 20.0))
         # ...AND BY EACH MODE'S FREQUENCY (register_knock_tilt): a kick gives a
         # string a velocity, and a mode's displacement goes as its velocity
         # over its frequency -- the kicked string is not as bright as a struck
         # one. 0 (every other voice): each mode alike, as it was.
         if self.knock_tilt:
-            g = g * (self.f[j] / 1000.0) ** (-self.knock_tilt)
+            g = g * _xpow(self.f[j] / 1000.0, -self.knock_tilt)
         return g
 
     def free_choirs(self, plucked):
@@ -582,9 +605,9 @@ class Channel(object):
         self.pevents = {}            # block -> keys whose rate changes there
         self.dw = None
         if damping is not None:
-            f0 = 440.0 * 2.0 ** ((np.asarray(strings.key, float) - 69.0) / 12.0)
+            f0 = 440.0 * _xpow(2.0, (np.asarray(strings.key, float) - 69.0) / 12.0)
             import damper as _DMP
-            self.dw = (np.maximum(np.asarray(strings.f, float), 1e-6) / f0) ** _DMP.BETA
+            self.dw = _xpow(np.maximum(np.asarray(strings.f, float), 1e-6) / f0, _DMP.BETA)
             for k in self.keyidx:
                 got = damping(k)
                 if got is None:
@@ -650,7 +673,7 @@ class Channel(object):
         if not self.damp or not len(modes):
             return 1.0
         keys = self.S.key[modes]
-        return np.exp(-self.dw[modes] * (self._dcum(keys, n1) - self._dcum(keys, n0)))
+        return _xexp(-self.dw[modes] * (self._dcum(keys, n1) - self._dcum(keys, n0)))
 
     # -- the free spans, as known ----------------------------------------------
     def _span_list(self, key):
@@ -855,12 +878,12 @@ class Channel(object):
                 add[fi] += amp * np.exp(1j * knock_phase(hash((self.ch, si)), len(fi)))
             if n_off is not None and np.any(xfer):
                 pb = int(math.ceil((n_off + re_off) / blk)) * blk
-                cand = np.flatnonzero(np.abs(xfer) >= floor)
+                cand = np.flatnonzero(_xabs(xfer) >= floor)
                 if len(cand):
                     seqs = list(range(self.seq, self.seq + len(cand)))
                     self.seq += len(cand)
                     self.bridges.append((seqs, cand, xfer[cand], n_off, re_off, pb, ('damper', si)))
-                tr = xfer * np.exp(-am * (pb - n_off) / sr) * self._dgain(np.arange(M), n_off, pb)
+                tr = xfer * _xexp(-am * (pb - n_off) / sr) * self._dgain(np.arange(M), n_off, pb)
                 self.pending[pb] = self.pending[pb] + tr if pb in self.pending else tr
         self._update(np.abs(add) > 0, b, add, ('strike', b))
 
@@ -941,7 +964,7 @@ class Channel(object):
             e = np.where(np.isnan(e), nref[live], e)
             dead = live[e <= b]
             Az[dead] = 0; nref[dead] = b
-        Az[idx] = (Az[idx] * np.exp(-am[idx] * np.maximum(b - nref[idx], 0.0) / sr)
+        Az[idx] = (Az[idx] * _xexp(-am[idx] * np.maximum(b - nref[idx], 0.0) / sr)
                    * self._dgain(idx, nref[idx], b) + add[idx])
         nref[idx] = b
         # split the modes whose row has drifted from the truth
@@ -954,9 +977,9 @@ class Channel(object):
             end = self.ends(S.key[h], self.r_b[h])
             end = np.where(np.isnan(end), self.r_b[h], end)
             alive = np.minimum(np.minimum(self.r_nfloor[h], end), self.r_closed[h]) > b
-            rz[has] = np.where(alive, self.Rz[h] * np.exp(-self.r_lr[h] * np.maximum(b - self.rref[h], 0.0) / sr), 0)
-        mag = np.maximum(np.abs(tz), floor)
-        go = np.abs(tz - rz) > SPLIT * mag
+            rz[has] = np.where(alive, self.Rz[h] * _xexp(-self.r_lr[h] * np.maximum(b - self.rref[h], 0.0) / sr), 0)
+        mag = np.maximum(_xabs(tz), floor)
+        go = _xabs(tz - rz) > SPLIT * mag
         if force is not None:
             go |= force[idx] & has
         go = idx[go]

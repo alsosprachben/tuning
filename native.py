@@ -157,7 +157,7 @@ def lib():
 
 def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
-                                                       'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c')]
+                                                       'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c')]
             + [os.path.join(HERE, 'roomcore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -215,6 +215,9 @@ def _load():
             ('nv_midi_pw', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_song', None, [ctypes.c_void_p, ctypes.c_void_p, D]),
             ('nv_strings', I, [ctypes.POINTER(VoiceInit), P, D, C, C, C, ctypes.c_void_p, ctypes.c_void_p, I]),
+            ('nv_exp_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_pow_n', None, [ctypes.c_long, ctypes.c_void_p, I, ctypes.c_void_p, I, ctypes.c_void_p]),
+            ('nv_cabs_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
             ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C, I, I]),
@@ -795,3 +798,50 @@ def strings(cls, table, pan, chan_vol, sr):
     r = {k: np.array(a[k]) for k in a.dtype.names}
     r['W'] = 2.0 * math.pi * r['f']
     return r
+
+
+# ------------------------------------------------------------------ exact array math
+#
+# numpy's float64 exp, power and complex abs over arrays are its own SIMD
+# routines (SVML on AVX-512), a last bit away from libm on a fifth of their
+# values -- and differently on another machine. xexp, xpow and xabs are
+# libm's, element by element (native/exactmath.c): the same bits on every
+# platform, and what a C port computes. numpy's where the library is not
+# there.
+
+def xexp(x):
+    import numpy as np
+    x = np.ascontiguousarray(x, np.float64)
+    d = lib()
+    if d is None:
+        return np.exp(x)
+    out = np.empty_like(x)
+    d.nv_exp_n(x.size, x.ctypes.data, out.ctypes.data)
+    return out
+
+
+def xpow(x, y):
+    import numpy as np
+    xa, ya = np.asarray(x, np.float64), np.asarray(y, np.float64)
+    d = lib()
+    if d is None:
+        return np.power(xa, ya)
+    shape = np.broadcast(xa, ya).shape
+    if xa.ndim and ya.ndim and xa.shape != ya.shape:
+        xa, ya = np.broadcast_arrays(xa, ya)
+    xa, ya = np.ascontiguousarray(xa), np.ascontiguousarray(ya)
+    out = np.empty(shape, np.float64)
+    # a one-element operand is the scalar every element takes
+    d.nv_pow_n(out.size, xa.ctypes.data, int(xa.size > 1), ya.ctypes.data, int(ya.size > 1), out.ctypes.data)
+    return out if shape else float(out)
+
+
+def xabs(z):
+    import numpy as np
+    z = np.ascontiguousarray(z, np.complex128)
+    d = lib()
+    if d is None:
+        return np.abs(z)
+    out = np.empty(z.shape, np.float64)
+    d.nv_cabs_n(z.size, z.ctypes.data, out.ctypes.data)
+    return out

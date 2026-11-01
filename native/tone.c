@@ -16,6 +16,7 @@
 #include <stddef.h>
 #include "voice.c"
 #include "strings.c"      /* the register's string bank */
+#include "exactmath.c"    /* array math as libm does it */
 
 
 

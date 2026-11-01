@@ -15,18 +15,7 @@
 #define NV_KEY_LO 21
 #define NV_KEY_HI 109           /* register.KEYS: range(21, 109) */
 
-typedef struct {
-    int n;
-    long long *key, *string, *harm;
-    double *f, *alpha, *w, *hl, *hr, *dl, *dr, *px, *W;
-} StringBank;
-
-typedef struct {
-    long long key, string, harm;
-    double f, alpha, w, hl, hr, dl, dr, px;
-} StringMode;
-
-/* insertion sort's stable cousin: a merge sort on f, as numpy's argsort(kind='stable') */
+/* a merge sort on f, stable, as numpy's argsort(kind='stable') */
 static void modes_sort(StringMode *a, StringMode *tmp, int n)
 {
     if (n < 2)
