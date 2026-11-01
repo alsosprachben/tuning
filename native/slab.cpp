@@ -15,9 +15,11 @@
 // Moog's rows, Leslie, filters and the damper tracks.
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <complex>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <map>
@@ -43,6 +45,8 @@ int nv_lreg_felt(void *h, double at, const int *keys, const double *rates, int n
 int nv_lreg_answer(void *h, long *idx, double *z, double *floor_);
 void nv_lreg_forced(void *h, long *slot, double *wgt, double *beta, double *val);
 void nv_lreg_free(void *h);
+int nv_cl_samples(void *h, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
+                  long long n0, int frames, int send, int mg, float *out);
 }
 
 namespace nv {
@@ -1333,6 +1337,121 @@ struct Piano {
         }
     }
 
+    // THE GPU'S BLOCK (live.GpuRenderer._render_now, gpurender.BlockTables):
+    // the setup on the CPU, voice_block over every busy slot (through the
+    // damper's build, its tracks handed over first, when one of them is on a
+    // track), into page-aligned tables that grow when a block asks for more
+    // cells or sidebands -- then the samples: the OpenCL GPU (gpu.cpp) or
+    // the C reference (voice_samples)
+    struct Table {
+        void *p = nullptr;
+        long n = 0, size = 0;           // records, and each one's bytes
+        ~Table() { free(p); }
+        // gpurender.aligned_zeros: n records, whole pages and whole records
+        void make(long want, long sz)
+        {
+            long a = 4096, b = sz;
+            while (b) {
+                long t = a % b;
+                a = b;
+                b = t;
+            }
+            long per = 4096 / a;                    // lcm(4096, sz) / sz
+            long m = std::max((std::max(want, 1L) + per - 1) / per * per, per);
+            free(p);
+            p = aligned_alloc(4096, (size_t)(m * sz));
+            memset(p, 0, (size_t)(m * sz));
+            n = m;
+            size = sz;
+        }
+        long bytes() const { return n * size; }
+    };
+    struct GpuSide {
+        void *vb = nullptr, *vbd = nullptr, *vds = nullptr, *vs = nullptr, *cl = nullptr;
+        long gpu_min = 1000;
+        int nthr = 4;
+        Table D, C, SB;
+    } gp;
+    bool on_gpu = false;                // did the last block go to the GPU
+    double ms_setup = 0.0, ms_samples = 0.0;    // its two halves (live's GpuRenderer.ms_*)
+    std::vector<long> gidx, gnon, gnoff;
+    std::vector<float> gout;
+
+    bool render_gpu(long long n0, long frames, float *L, float *R, float *SL, float *SR, long long blk)
+    {
+        gidx.clear();
+        for (long q = 0; q < S.cap; q++)
+            if (S.busy[q])
+                gidx.push_back(q);
+        long nact = (long)gidx.size();
+        if (nact > gp.D.n)
+            gp.D.make(std::max(nact, 2 * gp.D.n), gp.D.size);
+        long mg = (blk % 128 == 0 && blk / 128 <= 64) ? 128 : blk;     // moog_grid
+        long kb0 = (long)(n0 / mg);
+        gnon.resize(S.cap);
+        gnoff.resize(S.cap);
+        for (long q = 0; q < S.cap; q++) {
+            gnon[q] = (long)S.i8[0][q];
+            gnoff[q] = (long)S.i8[1][q];
+        }
+        void *vb = gp.vb;
+        bool damp = false;
+        for (long q : gidx)
+            damp = damp || S.dk[q] >= 0;
+        if (damp && gp.vbd && gp.vds) {
+            vb = gp.vbd;
+            ((nv_vdamp_fn)gp.vds)(S.dk.data(), S.dg.data(), DM.data(), DMO.data(), DMB.data(), DMN.data());
+        }
+        const std::vector<float> *F4 = S.f4.data(), *F4N = S.f4n.data();
+        int counts[2] = {0, 0};
+        auto t0 = std::chrono::steady_clock::now();
+        while (true) {
+            int r = ((nv_vblock_fn)vb)(
+                (long)n0, (int)blk, 1, (int)S.cap, S.f8[0].data(), S.f8[1].data(), S.f8[2].data(), F4[0].data(),
+                F4[1].data(), F4[2].data(), gnon.data(), gnoff.data(), F4[3].data(), F4[4].data(), F4[5].data(),
+                F4[6].data(), F4[7].data(), F4[8].data(), F4[9].data(), F4[10].data(), F4[11].data(),
+                F4[12].data(), F4[13].data(), F4[14].data(), F4[15].data(), F4[16].data(), F4[17].data(),
+                F4[18].data(), F4N[0].data(), F4N[1].data(), F4N[2].data(), F4[19].data(), F4[20].data(),
+                F4[21].data(), F4N[3].data(), F4[22].data(), F4[23].data(), S.i4[0].data(), S.i4[1].data(),
+                G.data(), Sx.data(), S.i4[2].data(), BRt.data(), BCt.data(), BLt.data(), S.i4[4].data(), FT.data(),
+                KN.data(), 2, kb0, S.aLp.data(), S.aRp.data(), S.i4[5].data(), MPI.data(), MPC.data(), MPR.data(),
+                MKI.data(), MPK.data(), S.f8[3].data(), S.f8[4].data(), S.f8[5].data(), sh[0], sh[1], sh[2], sh[3],
+                nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, nullptr, nullptr,
+                nullptr, nullptr, 0, S.sw.data(), SL ? 1 : 0, gidx.data(), (int)nact, gp.D.p, gp.C.p,
+                (int)gp.C.n, gp.SB.p, (int)gp.SB.n, gp.nthr, counts, 1);
+            if (r == 0)
+                break;
+            if (counts[0] > gp.C.n)
+                gp.C.make(2L * counts[0], gp.C.size);
+            if (counts[1] > gp.SB.n)
+                gp.SB.make(2L * counts[1], gp.SB.size);
+        }
+        auto t1 = std::chrono::steady_clock::now();
+        ms_setup = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        struct Ms {
+            double &out;
+            std::chrono::steady_clock::time_point t;
+            ~Ms() { out = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t).count(); }
+        } ms{ms_samples, t1};
+        if (gp.cl) {
+            gout.resize(4 * frames);
+            if (nv_cl_samples(gp.cl, gp.D.p, gp.D.bytes(), gp.C.p, gp.C.bytes(), gp.SB.p, gp.SB.bytes(), (int)nact,
+                              n0, (int)frames, SL ? 1 : 0, (int)mg, gout.data()) != 0)
+                return false;
+            for (long k = 0; k < frames; k++) {
+                L[k] = gout[k];
+                R[k] = gout[frames + k];
+                if (SL) {
+                    SL[k] = gout[2 * frames + k];
+                    SR[k] = gout[3 * frames + k];
+                }
+            }
+        } else {
+            ((nv_vsamples_fn)gp.vs)((long)n0, (int)blk, (int)nact, gp.D.p, gp.C.p, gp.SB.p, L, R, SL, SR);
+        }
+        return true;
+    }
+
     void render(long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx, void *sd,
                 long long blk, double master_gain)
     {
@@ -1357,6 +1476,15 @@ struct Piano {
         if (hi < 0)
             return;
         hi += 1;
+        // THE GPU (live.GpuRenderer), when given one and the block has rows
+        // enough for it (gpu_min); the CPU below otherwise
+        long act = 0;
+        for (long q = 0; q < hi; q++)
+            act += S.busy[q] != 0;
+        on_gpu = gp.vb && act >= gp.gpu_min && frames == blk && n0 % frames == 0;
+        if (on_gpu && !render_gpu(n0, frames, L, R, SL, SR, blk))
+            on_gpu = false;
+        if (!on_gpu) {
         long kb0 = (long)(n0 / blk);                        // moog_grid(128) = 128
         long chunk = blk * std::max(1L, (long)(rate / blk));
         auto fast = [&](long q) {
@@ -1426,6 +1554,7 @@ struct Piano {
             call(sv, nullptr, hi, true, false);
         }
 #undef VOICE_ARGS
+        }
         // the master gain (float32, as numpy multiplies by a Python float) and
         // the clip; the room's send scaled, not clipped
         float g = (float)master_gain;
@@ -1588,6 +1717,34 @@ void nv_lp_dm(void *h, float *out)
 {
     nv::slab::Piano *P = (nv::slab::Piano *)h;
     memcpy(out, P->DM.data(), sizeof(float) * P->DM.size());
+}
+
+// THE GPU (live.GpuRenderer): voice_block from the GPU's build (vb), its
+// damper build's voice_block and voice_damp_set (vbd, vds), voice_samples
+// (vs, the C reference) and voice_sizes (vz); cl an OpenCL GPU (nv_cl_new),
+// NULL to run the samples through voice_samples; a block of gpu_min busy
+// slots or more goes to it, its setup on nthr threads
+void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    auto &g = P->gp;
+    g.vb = vb; g.vbd = vbd; g.vds = vds; g.vs = vs; g.cl = cl; g.gpu_min = gpu_min; g.nthr = nthr;
+    int sz[3];
+    ((nv_vsizes_fn)vz)(sz);
+    g.D.make(1024, sz[0]);
+    g.C.make(1024, sz[1]);
+    g.SB.make(1 << 14, sz[2]);
+}
+
+// did the last block render on the GPU
+int nv_lp_on_gpu(void *h) { return ((nv::slab::Piano *)h)->on_gpu; }
+
+// ...and its two halves, ms: the setup (voice_block), the samples
+void nv_lp_gpu_ms(void *h, double *out)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    out[0] = P->ms_setup;
+    out[1] = P->ms_samples;
 }
 
 // Pressure's level at full aftertouch, dB (live.press_db)

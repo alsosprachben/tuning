@@ -2,6 +2,7 @@
 """Does native/nvlive play a MIDI file as live.Live does?
 
     python3 examples/nvlive_check.py FILE.mid [SECONDS] [--program=N] [--register] [--pedal-key=N]
+                                     [--gpu=cl|c] [--gpu-min=N]
 
 The first SECONDS (default 20) of FILE, cut as bitident cuts, its notes and
 controllers (the native reader's, in message order) each applied at the
@@ -15,7 +16,8 @@ PROGRAM throughout, as a keyboard would. --register: the free strings too,
 each side's register worker answering in step (examples/regsync.py; nvlive
 with its export's LREG); without, nvlive --no-register. --pedal-key=N: the
 file's key N is the sustain pedal on both sides (live.Route(("note", N), 64);
-nvlive --pedal-key).
+nvlive --pedal-key). --gpu: both on live.GpuRenderer's path (the samples on
+OpenCL, or "c" the C reference), from GPU-MIN busy slots (live's GPU_MIN).
 """
 import os
 import subprocess
@@ -55,9 +57,11 @@ def main(argv):
     total = m.total() + 3.0
     out = os.path.join(tmp, "nv.wav")
     reg = "register" in opt
+    gmin = int(opt.get("gpu-min", L.GPU_MIN))
     subprocess.check_call([exe, nvx, "--test", mid, out, "--program=%d" % prog, "--seconds=%r" % total]
                           + ([] if reg else ["--no-register"])
-                          + (["--pedal-key=" + opt["pedal-key"]] if "pedal-key" in opt else []),
+                          + (["--pedal-key=" + opt["pedal-key"]] if "pedal-key" in opt else [])
+                          + (["--gpu=" + (opt["gpu"] or "cl"), "--gpu-min=%d" % gmin] if "gpu" in opt else []),
                           stderr=subprocess.DEVNULL)
     raw = open(out, "rb").read()          # float32 stereo after a 44-byte header
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
@@ -65,6 +69,10 @@ def main(argv):
     lv = L.Live(program=prog, rate=48000, frames=128, verbose=False, threads=1, gpu=False)
     lv.parts[0].patch.warm()
     lv.slab.shed = lambda n, frac: 0
+    if "gpu" in opt:
+        send = lv.renderer.send
+        lv.renderer = L.GpuRenderer(lv.slab, 128, 1, backend=opt["gpu"] or "cl", gpu_min=gmin)
+        lv.renderer.send = send
     if "pedal-key" in opt:
         lv.set_routes([L.Route(("note", int(opt["pedal-key"])), 64)])
     if reg:

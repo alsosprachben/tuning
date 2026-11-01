@@ -2,7 +2,7 @@
 // Python at runtime.
 //
 //     nvlive EXPORT.nvx [--program=N] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
-//                       [--no-register] [--pedal-key=N] [--press-db=DB]
+//                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
 //
 // EXPORT.nvx is examples/native_export.py --live's. At start the part's
@@ -30,6 +30,12 @@
 // dampers (live.Route(("note", N), 64), slab.cpp's KeyPedal): held, CC64
 // 127; channel aftertouch while it is held, 127 - pressure; up, 0.
 //
+// THE GPU (--gpu, live's --gpu): live.GpuRenderer's block -- its setup on
+// the CPU (voice_block, from the export's LGPU builds), the samples on
+// OpenCL (native/gpu.cpp, gpukernel.cl) -- for a block with live's GPU_MIN
+// busy slots or more (--gpu-min). --gpu=c runs the samples through the C
+// reference (voice_samples) instead, to check the setup without a GPU.
+//
 // PRESSURE (channel aftertouch): the notes on its channel lifted by the
 // export's press_db (tonelib.PRESS_DB; --press-db=DB for Ben's session's) at
 // full, as live's Slab.press does a piano (no tilt: effort_tilt 0).
@@ -37,7 +43,9 @@
 // Not yet: live's governor (shedding partials when blocks run late), the
 // room and its send, the wheel, modulation, the other routes, the TUI.
 
+#include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <csignal>
 #include <cstdio>
@@ -74,6 +82,10 @@ void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float 
 void nv_lp_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20);
 void nv_lp_press_db(void *h, double db);
 void *nv_kp_new(int key);
+void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr);
+int nv_lp_on_gpu(void *h);
+void nv_lp_gpu_ms(void *h, double *out);
+void *nv_cl_new(const char *dir, const int *sizes, char *err, int errlen);
 int nv_kp_feed(void *h, int type, int ch, int a, int *v);
 void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
                     int top, double beta, int pedals, double rel, double full_db_s, double residual, double ln10_20,
@@ -101,6 +113,10 @@ struct Export {
         int i[3];               // damper_top, dampers, block
         int note[128];
     } reg[128];
+    // LGPU: live's GPU renderer -- its setup's builds, gpukernel.cl's directory, GPU_MIN (and at 64 frames or fewer)
+    std::string gpu_lib, gpu_damp_lib, gpu_dir;
+    int gpu_min[2] = {1000, 2000};
+    bool gpu = false;
 };
 
 static bool read_export(const char *path, Export &E)
@@ -149,6 +165,19 @@ static bool read_export(const char *path, Export &E)
                         ok = fread(r.modes.data(), sizeof(StringMode), r.M, f) == (size_t)r.M
                              && fread(r.d, 8, 9, f) == 9 && fread(r.i, 4, 3, f) == 3 && fread(r.note, 4, 128, f) == 128;
                     }
+                }
+                if (ok && fread(lv, 1, 4, f) == 4 && !memcmp(lv, "LGPU", 4)) {
+                    std::string *gs[3] = {&E.gpu_lib, &E.gpu_damp_lib, &E.gpu_dir};
+                    bool g = true;
+                    for (int i = 0; g && i < 3; i++) {
+                        int n;
+                        g = fread(&n, 4, 1, f) == 1;
+                        if (g) {
+                            gs[i]->resize(n);
+                            g = fread(&(*gs[i])[0], 1, n, f) == (size_t)n;
+                        }
+                    }
+                    E.gpu = g && fread(E.gpu_min, 4, 2, f) == 2;
                 }
             }
         }
@@ -311,6 +340,44 @@ int main(int argc, char **argv)
         }
     }
     const double master = E.k[K_MASTER];
+    // THE GPU (live.GpuRenderer), with --gpu: the setup on the CPU, the
+    // samples on OpenCL (--gpu=c: the C reference, voice_samples); a block
+    // with fewer than --gpu-min busy slots (live's GPU_MIN) on the CPU. One
+    // that cannot be had says why and plays on the CPU, as live does.
+    std::string gopt = "";
+    for (int i = 1; i < argc; i++)
+        if (!strcmp(argv[i], "--gpu"))
+            gopt = "cl";
+    gopt = opt(argc, argv, "gpu", gopt.c_str());
+    if (!gopt.empty()) {
+        std::string why;
+        void *gl = E.gpu ? dlopen(E.gpu_lib.c_str(), RTLD_NOW | RTLD_LOCAL) : nullptr;
+        void *gd = E.gpu ? dlopen(E.gpu_damp_lib.c_str(), RTLD_NOW | RTLD_LOCAL) : nullptr;
+        void *vb = gl ? dlsym(gl, "voice_block") : nullptr, *vs = gl ? dlsym(gl, "voice_samples") : nullptr;
+        void *vz = gl ? dlsym(gl, "voice_sizes") : nullptr;
+        void *vbd = gd ? dlsym(gd, "voice_block") : nullptr, *vds = gd ? dlsym(gd, "voice_damp_set") : nullptr;
+        void *cl = nullptr;
+        if (!E.gpu)
+            why = "the export has no GPU section (native_export.py --live again)";
+        else if (!vb || !vs || !vz || !vbd || !vds)
+            why = "no voice_block in " + E.gpu_lib + " / " + E.gpu_damp_lib;
+        else if (gopt != "c") {
+            int sz[3];
+            ((void (*)(int *))vz)(sz);
+            char err[512] = "";
+            cl = nv_cl_new(E.gpu_dir.c_str(), sz, err, sizeof err);
+            if (!cl)
+                why = err;
+        }
+        if (why.empty()) {
+            long gmin = atol(opt(argc, argv, "gpu-min",
+                                 std::to_string(BLK <= 64 ? E.gpu_min[1] : E.gpu_min[0]).c_str()).c_str());
+            nv_lp_gpu(part, vb, vbd, vds, vs, vz, cl, gmin, atoi(opt(argc, argv, "gpu-threads", "4").c_str()));
+            fprintf(stderr, "nvlive: the GPU (%s), from %ld busy slots\n", cl ? "OpenCL" : "the C reference", gmin);
+        } else {
+            fprintf(stderr, "nvlive: no GPU (%s): the CPU\n", why.c_str());
+        }
+    }
     // the pedal key's route ahead of the part: a message it takes becomes its
     // CC64 values; the rest go on (aftertouch the key does not take is
     // pressure: the notes on its channel lifted by press_db at full)
@@ -350,8 +417,11 @@ int main(int argc, char **argv)
                 secs = nv_midi_total(m) + 3.0;
             long long nb = (long long)(secs * SR) / BLK;
             std::vector<float> out;
+            std::vector<double> ms, msr, mss, msg;      // each block's events, step and render, ms; its render;
+                                                        // a GPU block's setup and samples
             int e = 0;
             for (long long b = 0; b < nb; b++) {
+                auto t0 = std::chrono::steady_clock::now();
                 long long n0 = b * BLK;
                 while (e < ne) {
                     int iv[4];
@@ -363,11 +433,47 @@ int main(int argc, char **argv)
                     e++;
                 }
                 nv_lp_block(part, n0, BLK);
+                auto t1 = std::chrono::steady_clock::now();
                 nv_lp_render(part, n0, (long)BLK, L, R, nullptr, nullptr, fn[0], fn[1], fn[2], BLK, master);
+                msr.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count());
+                if (nv_lp_on_gpu(part)) {
+                    double g2[2];
+                    nv_lp_gpu_ms(part, g2);
+                    mss.push_back(g2[0]);
+                    msg.push_back(g2[1]);
+                }
+                ms.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
                 for (long long k = 0; k < BLK; k++) {
                     out.push_back(L[k]);
                     out.push_back(R[k]);
                 }
+            }
+            // the blocks' times against the block's own length
+            if (!ms.empty()) {
+                std::vector<double> o = ms;
+                std::sort(o.begin(), o.end());
+                double sum = 0.0, budget = 1000.0 * BLK / SR;
+                long over = 0;
+                for (double x : o) {
+                    sum += x;
+                    over += x > budget;
+                }
+                fprintf(stderr, "nvlive: blocks %.3f ms mean, %.3f p99, %.3f worst; %ld of %zu over %.2f ms\n",
+                        sum / o.size(), o[o.size() * 99 / 100], o.back(), over, o.size(), budget);
+                // ...the render's share, and a GPU block's two halves
+                auto stat = [&](const char *what, std::vector<double> v) {
+                    if (v.empty())
+                        return;
+                    std::sort(v.begin(), v.end());
+                    double t = 0.0;
+                    for (double x : v)
+                        t += x;
+                    fprintf(stderr, "nvlive:   %s %.3f ms mean, %.3f p99, %.3f worst (%zu blocks)\n", what,
+                            t / v.size(), v[v.size() * 99 / 100], v.back(), v.size());
+                };
+                stat("render", msr);
+                stat("GPU setup", mss);
+                stat("GPU samples", msg);
             }
             nv_midi_free(m);
             FILE *wf = fopen(argv[i + 2], "wb");

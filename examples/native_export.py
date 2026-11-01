@@ -149,6 +149,14 @@ def main(argv):
                     ok.append(int(kc is not None and (getattr(kc, 'register_gain', 0.0) > 0.0
                                                       or getattr(kc, 'register_knock_gain', 0.0) > 0.0)))
                 f.write(struct.pack("<128i", *ok))
+            # LGPU: live's GPU renderer -- the setup's two builds (gpurender's,
+            # and the damper's), the directory gpukernel.cl and voicedesc.h are in,
+            # and live's GPU_MIN
+            f.write(b"LGPU")
+            for s in (os.fsencode(B.ensure_gpu_lib()._name), os.fsencode(B.ensure_gpu_damp_lib()._name),
+                      os.fsencode(HERE)):
+                f.write(struct.pack("<i", len(s)) + s)
+            f.write(struct.pack("<ii", int(L.GPU_MIN), int(L.GPU_MIN_SMALL)))
     print("native export: %d piano class(es), tuner %s, room %s -> %s" % (len(classes), tuner,
                                                                           room.decode() or "-", args[0]))
     return 0

@@ -3,6 +3,7 @@
 
     python3 examples/livepiano_check.py [BLOCKS] [--program=N] [--seed=N] [--every=N] [--render] [--register]
                                         [--half] [--pedal-key=N] [--pressure]
+                                        [--gpu=c|cl] [--gpu-min=N]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native piano part (native/slab.cpp: its template cache, its slab, live's
@@ -28,6 +29,11 @@ values (DM), as a track's number is handed out in a set's order, and dg.
 aftertouch while it is held) -- live.Route(("note", N), 64) through on_midi
 on one side, native.KeyPedal before the part's events on the other.
 --pressure: channel aftertouch among the controls (live's Slab.press).
+--gpu: each side renders as live.GpuRenderer -- the setup on the CPU
+(voice_block), the samples on the OpenCL GPU ("cl": live's through pyopencl,
+the native part's through native/gpu.cpp) or the C reference ("c",
+voice_samples) -- for a block with GPU-MIN busy slots or more (default
+live's GPU_MIN); the blocks each side took to the GPU are counted.
 """
 import os
 import random
@@ -63,6 +69,13 @@ def main(argv):
                                                if pt.detune_wheel else pt.leslie_default)
     nv = N.LivePiano(cache, part.pid, part.level_db, pt.nbuckets, speed, pt.damper_pedal, pt.soft_pedal_strings,
                      pt.soft_pedal_top, 48000, capacity=lv.slab.cap, headroom=lv.slab.headroom)
+    ngpu = [0, 0]
+    if "gpu" in opt:
+        gmin = int(opt.get("gpu-min", L.GPU_MIN))
+        send = lv.renderer.send
+        lv.renderer = L.GpuRenderer(lv.slab, 128, 1, backend=opt["gpu"] or "cl", gpu_min=gmin)
+        lv.renderer.send = send
+        nv.gpu(opt["gpu"] or "cl", gmin)
     if "register" in opt:
         import blockrender as BR
         import regsync
@@ -163,6 +176,9 @@ def main(argv):
         while dry:
             rn0, fr, dL, dR, snd, sL, sR = dry.pop(0)
             got = nv.render(rn0, fr, send=snd)
+            if "gpu" in opt:
+                ngpu[0] += lv.renderer.on_gpu
+                ngpu[1] += nv.on_gpu()
             ok = np.array_equal(dL, got[0]) and np.array_equal(dR, got[1]) and (
                 not snd or (np.array_equal(sL, got[2]) and np.array_equal(sR, got[3])))
             if not ok:
@@ -191,6 +207,8 @@ def main(argv):
         print("  register: %d rows placed, %d dropped (native %d); live's errors: %d %s" % (
             int(np.sum(lv.slab.busy)) - sounding, lv.reg_dropped, nv.reg_dropped(), lv.errors,
             lv.last_error or ""))
+    if "gpu" in opt:
+        print("  GPU (%s): live took %d blocks to it, native %d" % (opt["gpu"] or "cl", ngpu[0], ngpu[1]))
     if "half" in opt:
         print("  dampers: up to %d tracks at once, %d blocks with one" % (ntr, dmb))
     print("live piano: %d blocks, program %d, %s%s (%d slots sounding at the end)"

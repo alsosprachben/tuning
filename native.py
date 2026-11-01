@@ -161,7 +161,7 @@ def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
-                                                       'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp')]
+                                                       'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -174,7 +174,7 @@ def _load():
         flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
         objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
                 tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.slab.o',
-                tmp + '.registercore.o', tmp + '.livereg.o']
+                tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
             for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
@@ -188,7 +188,9 @@ def _load():
                                    os.path.join(HERE, 'registercore.c'), '-o', objs[10]])
             subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'livereg.cpp'),
                                    '-o', objs[11]])
-            subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm'])
+            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'gpu.cpp'),
+                                   '-o', objs[12]])
+            subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl'])
         finally:
             for o in objs:
                 if os.path.exists(o):
@@ -277,6 +279,10 @@ def _load():
                                     ctypes.c_void_p, LL, C]),
             ('nv_lp_damper', None, [ctypes.c_void_p, C, C, C, C, C]),
             ('nv_lp_press_db', None, [ctypes.c_void_p, C]),
+            ('nv_lp_gpu', None, [ctypes.c_void_p] + [ctypes.c_void_p] * 6 + [ctypes.c_long, I]),
+            ('nv_lp_on_gpu', I, [ctypes.c_void_p]),
+            ('nv_cl_new', ctypes.c_void_p, [ctypes.c_char_p, ctypes.c_void_p, ctypes.c_char_p, I]),
+            ('nv_cl_free', None, [ctypes.c_void_p]),
             ('nv_lp_dm', None, [ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_kp_new', ctypes.c_void_p, [I]),
             ('nv_kp_feed', I, [ctypes.c_void_p, I, I, I, ctypes.c_void_p]),
@@ -1406,6 +1412,9 @@ class LivePiano(object):
             self.slab.p = None              # the part owns its slab
             self.d.nv_lp_free(self.p)
             self.p = None
+        if getattr(self, '_cl', None):
+            self.d.nv_cl_free(self._cl)
+            self._cl = None
 
     def register(self, cls, table, rate, scale, reg_note):
         """The part's free strings, as live's register (live._reg_*) with a
@@ -1422,6 +1431,30 @@ class LivePiano(object):
 
     def reg_dropped(self):
         return self.d.nv_lp_reg_dropped(self.p)
+
+    def gpu(self, backend="cl", gpu_min=1000, nthreads=4):
+        """Render on the GPU, as live.GpuRenderer: the setup through
+        blockrender's GPU builds, the samples on OpenCL ("cl", native/gpu.cpp)
+        or the C reference ("c", voice_samples). A block with fewer than
+        gpu_min busy slots stays on the CPU."""
+        import blockrender as BR
+        g, gd = BR.ensure_gpu_lib(), BR.ensure_gpu_damp_lib()
+        fn = lambda f: ctypes.cast(f, ctypes.c_void_p).value       # noqa: E731
+        cl = None
+        if backend == "cl":
+            sz = (ctypes.c_int * 3)()
+            g.voice_sizes(sz)
+            err = ctypes.create_string_buffer(512)
+            cl = self.d.nv_cl_new(os.fsencode(HERE), sz, err, 512)
+            if not cl:
+                raise RuntimeError("native GPU: %s" % err.value.decode())
+        self._cl = cl
+        self._gl = (g, gd)
+        self.d.nv_lp_gpu(self.p, fn(g.voice_block), fn(gd.voice_block), fn(gd.voice_damp_set),
+                         fn(g.voice_samples), fn(g.voice_sizes), cl, int(gpu_min), int(nthreads))
+
+    def on_gpu(self):
+        return bool(self.d.nv_lp_on_gpu(self.p))
 
     def dm(self):
         """The damper tracks' values (live.Slab.DM): two a track."""
