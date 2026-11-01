@@ -230,7 +230,7 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
 // engine's (no class, or nv_note's -2); NV_TOO_SMALL if the store was.
 int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr, PyRandom *rs,
             double *rows, long long cap, double *qacc, double *azimuth, long long *nrows, int *played,
-            long long *row0)
+            long long *row0, int *bands, double *offs)
 {
     int nn = nv_song_n_notes(song);
     std::vector<int> order(nn);
@@ -290,6 +290,10 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (played) {
             played[j] = i;
             row0[j] = total;
+        }
+        if (bands) {
+            bands[j] = band;            // a half-pedalled note meeting the band: its track
+            offs[j] = n.off;            // ...and where its damper lands (its end)
         }
         total += r;
     }

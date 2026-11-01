@@ -79,6 +79,13 @@ def main(argv):
             got = Q
         else:
             got = (np.stack([Q[c].astype(np.float64) for c in B.EMIT_COLS], 1),)
+            for k in ("dk", "dg", "DM", "DMO", "DMB", "DMN"):
+                # a half-pedalled song's damper tracks
+                if (k in P) != (k in Q):
+                    extra.append("%s %s" % (k, "missing" if k in P else "extra"))
+                elif k in P and not (np.asarray(P[k]).dtype == np.asarray(Q[k]).dtype
+                                     and np.array_equal(np.asarray(P[k]), np.asarray(Q[k]))):
+                    extra.append("%s differs" % k)
             for k in ("N", "nblk", "P", "total", "sym_rows", "room_q"):
                 a, b = P[k], Q[k]
                 if k == "room_q":

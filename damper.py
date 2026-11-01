@@ -129,7 +129,15 @@ def track(edges, pedal_at, key, level_db, top=89):
 def weight(nf, f0):
     """dB of damping at frequency nf per dB at the fundamental f0, as the
     natural-log factor the kernel multiplies by (gain = exp(-weight * DC))."""
-    return LN10_20 * (np.maximum(np.asarray(nf, float), 1e-6) / np.maximum(np.asarray(f0, float), 1e-6)) ** BETA
+    # x ** BETA as libm's pow (native.xpow): numpy's SIMD power is a last bit
+    # away on a fifth of values, and differently on another machine
+    x = np.maximum(np.asarray(nf, float), 1e-6) / np.maximum(np.asarray(f0, float), 1e-6)
+    try:
+        import native as _NV
+        p = _NV.xpow(x, BETA)
+    except ImportError:
+        p = x ** BETA
+    return LN10_20 * p
 
 
 class Tracks:

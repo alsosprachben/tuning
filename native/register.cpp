@@ -846,12 +846,15 @@ extern "C" {
 // nv_play (a note that is not the engine's), -1e9 if memory ran out.
 long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                        PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind,
-                       double scale, double full_db_s, double residual, double beta, long long blk)
+                       double scale, double full_db_s, double residual, double beta, long long blk,
+                       long long *nnote, int *played_out, long long *row0_out, int *bands, double *offs)
 {
     using namespace nv::reg;
     int nn = nv_song_n_notes(song);
     std::vector<int> played(nn);
     std::vector<long long> row0(nn);
+    std::vector<int> band_(nn);
+    std::vector<double> off_(nn);
     long long nr = 0;
     // THE STORE, grown until the notes fit: each try from the same stream and tallies
     PyRandom rs0 = *rs;
@@ -868,7 +871,8 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         *rs = rs0;
         memcpy(qacc, q0, sizeof q0);
         *azimuth = az0;
-        got = nv_play(song, K, tmpl, br, nbr, rs, rows, cap, qacc, azimuth, &nr, played.data(), row0.data());
+        got = nv_play(song, K, tmpl, br, nbr, rs, rows, cap, qacc, azimuth, &nr, played.data(), row0.data(),
+                      band_.data(), off_.data());
         if (got != NV_TOO_SMALL)
             break;
         cap *= 2;
@@ -876,6 +880,15 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
     *rowsp = rows;
     if (got < 0)
         return got;
+    if (nnote)
+        *nnote = nr;
+    if (played_out)
+        for (int j = 0; j < nn; j++) {
+            played_out[j] = played[j];
+            row0_out[j] = row0[j];
+            bands[j] = band_[j];
+            offs[j] = off_[j];
+        }
     auto cast = [&](double *r) {
         for (int c = 0; c < NC; c++)
             if (kind[c] == 1)

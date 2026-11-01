@@ -4100,7 +4100,7 @@ def _prep_damper_helpers(A, _DAMP_OPEN, _DAMP_TRACKS, _PEDV_CH, _PED_CH, _SOFF_C
         _r0 = _d['row0']
         _nfs = np.asarray(A['nf'][_r0:_r1], float)
         _f0 = 440.0 * 2.0 ** ((_d['key'] - 69) / 12.0)
-        _j = _r0 + int(np.argmin(np.abs(np.log(np.maximum(_nfs, 1e-3) / _f0))))
+        _j = _r0 + int(np.argmin(np.abs(_xlog(np.maximum(_nfs, 1e-3) / _f0))))
         _lr, _lra, _af, _su = (float(A[_k][_j]) for _k in ('logr', 'logrA', 'aft', 'sus'))
         _vdb = 40.0 * math.log10(max(_d['vel'], 1) / 127.0)
 

@@ -230,16 +230,19 @@ def _load():
             ('nv_log_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_prepare', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoteIn), D, I,
                                 ctypes.POINTER(PyRandomState), ctypes.POINTER(D), ctypes.c_void_p, D,
-                                ctypes.c_void_p, C, C, C, C, LL, C, C, C, ctypes.c_void_p]),
+                                ctypes.c_void_p, C, C, C, C, LL, C, C, C, ctypes.c_void_p, C, C, C, C,
+                                ctypes.POINTER(ctypes.c_void_p)]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
             ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C, I, I]),
             ('nv_play', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoteIn), D, I,
                             ctypes.POINTER(PyRandomState), ctypes.c_void_p, LL, ctypes.c_void_p, D,
-                            ctypes.POINTER(LL), ctypes.c_void_p, ctypes.c_void_p]),
+                            ctypes.POINTER(LL), ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                            ctypes.c_void_p]),
             ('nv_play_full', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoteIn), D, I,
                                   ctypes.POINTER(PyRandomState), ctypes.POINTER(D), ctypes.c_void_p, D,
-                                  ctypes.c_void_p, C, C, C, C, LL, ctypes.POINTER(LL)]),
+                                  ctypes.c_void_p, C, C, C, C, LL, ctypes.POINTER(LL), ctypes.c_void_p,
+                                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_buf_free', None, [ctypes.c_void_p]),
             ('nv_song_tuning', None, [ctypes.c_void_p, LL, C, D]),
             ('nv_song_channel', None, [ctypes.c_void_p, LL, C, D, I]),
@@ -790,7 +793,7 @@ def play(song, classes, tmpl, br, cap, register=False, scale=1.0):
         buf = ctypes.POINTER(ctypes.c_double)()
         n = d.nv_play_full(song.p, K, ctypes.byref(tmpl), B, nbr, ctypes.byref(rs), ctypes.byref(buf),
                            qacc.ctypes.data, ctypes.byref(az), kind, float(scale), DM.FULL_DB_S, DM.RESIDUAL,
-                           DM.BETA, BR.BLK, None)
+                           DM.BETA, BR.BLK, None, None, None, None, None)
         try:
             if n < 0:
                 return None, (-n - 1 if n > -1000000000 else -1)
@@ -805,7 +808,7 @@ def play(song, classes, tmpl, br, cap, register=False, scale=1.0):
         qacc[:] = 0.0
         az.value = 0.0
         n = d.nv_play(song.p, K, ctypes.byref(tmpl), B, nbr, ctypes.byref(rs), rows.ctypes.data, cap,
-                      qacc.ctypes.data, ctypes.byref(az), ctypes.byref(nr), None, None)
+                      qacc.ctypes.data, ctypes.byref(az), ctypes.byref(nr), None, None, None, None)
         if n != -2000000000:
             break
         cap *= 2            # the store was too small: again, from the start
@@ -935,11 +938,13 @@ def prepare(song, classes, tmpl, br, total, scale=1.0):
     qacc = np.zeros(18)
     az = ctypes.c_double(0.0)
     kind = (ctypes.c_int * NCOLS)(*[1 if c in BR._COL_F4 else 2 if c in BR._COL_I4 else 0 for c in BR.EMIT_COLS])
-    out = (ctypes.c_double * 32)()
+    out = (ctypes.c_double * 48)()
     buf = ctypes.POINTER(ctypes.c_double)()
+    dm = (ctypes.c_void_p * 6)()
     n = d.nv_prepare(song.p, K, ctypes.byref(tmpl), B, nbr, ctypes.byref(rs), ctypes.byref(buf), qacc.ctypes.data,
                      ctypes.byref(az), kind, float(scale), DM.FULL_DB_S, DM.RESIDUAL, DM.BETA, BR.BLK, float(total),
-                     BR.RING_FLOOR, BR.RING_MAX, out)
+                     BR.RING_FLOOR, BR.RING_MAX, out, DM.KNEE_DB, DM.LN10_20, float(BR.XDEC_NEPERS),
+                     float(BR.SR), dm)
     try:
         if n < 0:
             return None, (-n - 1 if n > -1000000000 else -1)
@@ -949,6 +954,15 @@ def prepare(song, classes, tmpl, br, total, scale=1.0):
     dt = {c: (np.float32 if c in BR._COL_F4 else np.int32 if c in BR._COL_I4 else np.float64)
           for c in BR.EMIT_COLS}
     P = {c: rows[:, j].astype(dt[c]) for j, c in enumerate(BR.EMIT_COLS)}
+    nd = int(out[41])
+    if nd:
+        # THE HALF-PEDAL'S TRACKS (dk, dg per row; DM, DMO, DMB, DMN), as onto_tracks returns them
+        nrow, ntr, ndm = int(out[2]), int(out[40]), nd
+        a = lambda i, t, k: np.ctypeslib.as_array(ctypes.cast(dm[i], ctypes.POINTER(t)), shape=(k,)).copy()  # noqa
+        P.update(dk=a(0, ctypes.c_int32, nrow), dg=a(1, ctypes.c_float, nrow), DM=a(2, ctypes.c_float, ndm),
+                 DMO=a(3, ctypes.c_int64, ntr), DMB=a(4, ctypes.c_int64, ntr), DMN=a(5, ctypes.c_int64, ntr))
+        for i in range(6):
+            d.nv_buf_free(dm[i])
     P.update(N=int(out[0]), nblk=int(out[1]), P=int(out[2]), total=float(total),
              sym_rows=(int(out[3]), int(out[3])),
              room_q=[(out[4 + 3 * i], out[5 + 3 * i], out[6 + 3 * i]) for i in range(9)])

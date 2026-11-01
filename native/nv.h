@@ -223,7 +223,7 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
                  double *rows, int cap, double *qacc, double *azimuth, NoteOut *out, int *band);
 int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr, PyRandom *rs,
             double *rows, long long cap, double *qacc, double *azimuth, long long *nrows, int *played,
-            long long *row0);
+            long long *row0, int *bands, double *offs);
 
 /* strings.c: one mode of the register's string bank */
 typedef struct {
