@@ -240,6 +240,7 @@ def _load():
             ('nv_log_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_cexp_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_cangle_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_tanhf_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_prepare', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoteIn), D, I,
                                 ctypes.POINTER(PyRandomState), ctypes.POINTER(D), ctypes.c_void_p, D,
                                 ctypes.c_void_p, C, C, C, C, LL, C, C, C, ctypes.c_void_p, C, C, C, C,
@@ -280,6 +281,10 @@ def _load():
             ('nv_lp_damper', None, [ctypes.c_void_p, C, C, C, C, C]),
             ('nv_lp_press_db', None, [ctypes.c_void_p, C]),
             ('nv_lp_detune_wheel', None, [ctypes.c_void_p, I]),
+            ('nv_lp_room', None, [ctypes.c_void_p] * 5 + [ctypes.c_long, ctypes.c_void_p, ctypes.c_long, I]),
+            ('nv_lp_post', None, [ctypes.c_void_p, C, C]),
+            ('nv_lp_output', None, [ctypes.c_void_p, LL, ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p,
+                                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, LL, C]),
             ('nv_lp_gpu', None, [ctypes.c_void_p] + [ctypes.c_void_p] * 6 + [ctypes.c_long, I]),
             ('nv_lp_on_gpu', I, [ctypes.c_void_p]),
             ('nv_lp_shed', ctypes.c_long, [ctypes.c_void_p, LL, C]),
@@ -965,6 +970,18 @@ def xlog(x):
     return out
 
 
+def xtanhf(x):
+    """np.tanh of float32 values, libm's tanhf."""
+    import numpy as np
+    x = np.ascontiguousarray(x, np.float32)
+    d = lib()
+    if d is None:
+        return np.tanh(x)
+    out = np.empty(x.shape, np.float32)
+    d.nv_tanhf_n(x.size, x.ctypes.data, out.ctypes.data)
+    return out
+
+
 def xangle(z):
     """np.angle of complex values, libm's atan2(im, re)."""
     import numpy as np
@@ -1460,6 +1477,35 @@ class LivePiano(object):
 
     def on_gpu(self):
         return bool(self.d.nv_lp_on_gpu(self.p))
+
+    def room(self, ir, mir, frames):
+        """live.RoomTail's late room from its IRs ((n, 2) float32; mir the
+        modes', or None), through live's own convolver.c."""
+        import numpy as np
+        import live as L
+        cd = L._conv_dll()
+        self._ir = np.ascontiguousarray(ir, np.float32)
+        self._mir = None if mir is None else np.ascontiguousarray(mir, np.float32)
+        fn = lambda f: ctypes.cast(f, ctypes.c_void_p).value       # noqa: E731
+        self.d.nv_lp_room(self.p, fn(cd.conv_new), fn(cd.conv_process), fn(cd.conv_free), self._ir.ctypes.data,
+                          len(self._ir), None if self._mir is None else self._mir.ctypes.data,
+                          0 if self._mir is None else len(self._mir), int(frames))
+
+    def post(self, thresh=0.70, bend_range=2.0):
+        """The limiter's knee (live.thresh) and the pitch wheel's range."""
+        self.d.nv_lp_post(self.p, float(thresh), float(bend_range))
+
+    def output(self, n0, frames):
+        """live's callback after its step: the render, the room on the send,
+        the limiter -- (L, R) float32."""
+        import numpy as np
+        import blockrender as BR
+        L, R = np.empty(frames, np.float32), np.empty(frames, np.float32)
+        fn = lambda f: ctypes.cast(f, ctypes.c_void_p).value       # noqa: E731
+        self.d.nv_lp_output(self.p, int(n0), int(frames), L.ctypes.data, R.ctypes.data,
+                            fn(BR.ensure_lib().synth_voice), fn(BR.ensure_xdec_lib().synth_voice_xdec),
+                            fn(BR.ensure_damp_lib().synth_voice_damp), BR.BLK, float(BR.T.master_gain))
+        return L, R
 
     def shed(self, n, frac):
         """live.Slab.shed: the highest frac of the partials sounding at n end."""

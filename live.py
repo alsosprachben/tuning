@@ -92,6 +92,13 @@ import rtsched as _RT       # the audio thread real-time and pinned; the callbac
 from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL,
                             kit_for_program, drum_set_name, key_layers, kit_in_map)
 
+
+def _NVX():
+    """native (its libm wrappers), imported when first asked for."""
+    import native
+    return native
+
+
 # Columns of the partial table, in the order blockrender builds them.
 # p0 is the LEFT ear's carrier phase and p0R the RIGHT one: the interaural
 # delay is folded into the phase anchor, p0 = -om*(non + d) + ph0, so an ear
@@ -426,13 +433,13 @@ class RoomTail(object):
             c.close()
 
 
-def build_room_tail(rate, frames, band_q=None):
-    """The CURRENT room's IRs (tonelib.set_room has already been applied),
-    built as roomtail.main builds them. Off the audio thread: this takes a
-    second or two."""
+def room_irs(rate, band_q=None):
+    """The CURRENT room's late tail (tonelib.set_room has already been
+    applied) as roomtail.main draws it: (ir, mir), each (n, 2) float32 -- the
+    diffuse tail, or a device's (plate, echo) in a GS macro's room, and the
+    room's modes (None where it has none worth drawing) -- or None outdoors.
+    native_export.py --live writes them for nvlive."""
     import roomtail as _RT
-    # ...the tail the room has (tonelib room_tail), as roomtail.main draws it:
-    # none outdoors, a device's (plate, echo) in a GS macro's room
     kind = getattr(T.SynthProperties, 'room_tail', 'diffuse')
     if kind == 'none':
         return None
@@ -440,12 +447,18 @@ def build_room_tail(rate, frames, band_q=None):
     ir, _bands, _onset = _RT.build_ir(props, rate, channels=2, band_q=band_q)
     if kind != 'diffuse':
         ir = _RT.device_ir(kind, ir, rate, 1.0, None, 0)
-        return RoomTail(ir.astype(np.float32), None, frames)
+        return ir.astype(np.float32), None
     q_low = band_q.get(_RT.OCTAVES[0], 1.0) if band_q else 1.0
     mir, nmodes, fs = _RT.modal_ir(props, rate, channels=2, q_low=q_low)
     use_modes = bool(nmodes) and fs > 25.0
-    return RoomTail(ir.astype(np.float32),
-                    mir.astype(np.float32) if use_modes else None, frames)
+    return ir.astype(np.float32), (mir.astype(np.float32) if use_modes else None)
+
+
+def build_room_tail(rate, frames, band_q=None):
+    """The CURRENT room's tail (room_irs), ready to play. Off the audio
+    thread: this takes a second or two."""
+    irs = room_irs(rate, band_q)
+    return None if irs is None else RoomTail(irs[0], irs[1], frames)
 
 
 # ---- WHAT CAN BE CONTROLLED ------------------------------------------------
@@ -10486,7 +10499,9 @@ class Live:
         if not over.any():
             return x
         y = x.copy()
-        y[over] = np.sign(x[over]) * (t + (1.0 - t) * np.tanh((a[over] - t) / (1.0 - t)))
+        # libm's tanhf (native.xtanhf), not numpy's SIMD one: the same bits
+        # on every machine, and nvlive's (native/slab.cpp)
+        y[over] = np.sign(x[over]) * (t + (1.0 - t) * _NVX().xtanhf((a[over] - t) / (1.0 - t)))
         return y
 
     # ---- audio --------------------------------------------------------------

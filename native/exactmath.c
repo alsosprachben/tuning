@@ -44,6 +44,13 @@ void nv_cexp_n(long n, const double *z, double *out)
     }
 }
 
+/* tanh of float32 values, libm's tanhf (live.limit's knee) */
+void nv_tanhf_n(long n, const float *x, float *out)
+{
+    for (long i = 0; i < n; i++)
+        out[i] = tanhf(x[i]);
+}
+
 /* the angle of complex values (interleaved re, im): atan2(im, re), np.angle's */
 void nv_cangle_n(long n, const double *z, double *out)
 {

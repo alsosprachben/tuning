@@ -27,6 +27,7 @@
 #include <cstring>
 #include <deque>
 #include <map>
+#include <memory>
 #include <tuple>
 #include <set>
 #include <utility>
@@ -426,6 +427,120 @@ struct Slab {
 // pump after its job (live's own worker answers a few blocks later, as it
 // can: the same rows, later).
 
+// THE LATE ROOM (live.RoomTail): the diffuse tail and the room's modes, each
+// stereo, fed the send -- through convolver.c (live's Convolver, its library
+// loaded by the caller: conv_new, conv_process, conv_free). Each impulse
+// response split at one block: its first block's taps on the audio thread,
+// the rest on a thread of its own a block behind -- exact, since the rest
+// starts a block late by definition.
+typedef void *(*conv_new_fn)(const float *ir, int len, int B, int M);
+typedef void (*conv_proc_fn)(void *c, const float *x, float *out);
+typedef void (*conv_free_fn)(void *c);
+
+struct Room {
+    static const int SEGMENT_BLOCKS = 16;           // live.Convolver.SEGMENT_BLOCKS
+    conv_new_fn cnew;
+    conv_proc_fn cproc;
+    conv_free_fn cfree;
+    int B, nconv = 0;
+    void *head[4] = {}, *body[4] = {};
+    std::vector<float> inp[4], res[4], out[4], tmp;
+    std::thread worker;
+    std::mutex mu;
+    std::condition_variable cv;
+    bool go = false, done = true, stop = false;
+
+    // ir: n samples of 2 channels interleaved; mir the modes' (m 0: none)
+    Room(void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames)
+        : cnew((conv_new_fn)cn), cproc((conv_proc_fn)cp), cfree((conv_free_fn)cf), B(frames)
+    {
+        std::vector<std::vector<float>> irs;
+        for (int c = 0; c < 2; c++) {
+            irs.emplace_back(n);
+            for (long k = 0; k < n; k++)
+                irs.back()[k] = ir[2 * k + c];
+        }
+        for (int c = 0; m > 0 && c < 2; c++) {
+            irs.emplace_back(m);
+            for (long k = 0; k < m; k++)
+                irs.back()[k] = mir[2 * k + c];
+        }
+        nconv = (int)irs.size();
+        for (int i = 0; i < nconv; i++) {
+            const std::vector<float> &h = irs[i];
+            long hb = std::min((long)h.size(), (long)B);
+            head[i] = cnew(h.data(), (int)hb, B, SEGMENT_BLOCKS);
+            body[i] = (long)h.size() > B ? cnew(h.data() + B, (int)(h.size() - B), B, SEGMENT_BLOCKS) : nullptr;
+            inp[i].assign(B, 0.0f);
+            res[i].assign(B, 0.0f);
+            out[i].assign(B, 0.0f);
+        }
+        tmp.assign(B, 0.0f);
+        worker = std::thread([this] { work(); });
+    }
+
+    ~Room()
+    {
+        {
+            std::unique_lock<std::mutex> lk(mu);
+            cv.wait(lk, [&] { return done; });
+            stop = true;
+            go = true;
+        }
+        cv.notify_all();
+        worker.join();
+        for (int i = 0; i < nconv; i++) {
+            if (head[i]) cfree(head[i]);
+            if (body[i]) cfree(body[i]);
+        }
+    }
+
+    void work()
+    {
+        std::unique_lock<std::mutex> lk(mu);
+        while (true) {
+            cv.wait(lk, [&] { return go; });
+            go = false;
+            if (stop)
+                return;
+            lk.unlock();
+            for (int i = 0; i < nconv; i++)
+                if (body[i])
+                    cproc(body[i], inp[i].data(), res[i].data());
+            lk.lock();
+            done = true;
+            cv.notify_all();
+        }
+    }
+
+    // RoomTail.process: the room's (wl, wr) for a block of the send
+    void process(const float *sL, const float *sR, float *wl, float *wr)
+    {
+        {
+            std::unique_lock<std::mutex> lk(mu);
+            cv.wait(lk, [&] { return done; });     // last block's body: ready, normally long since
+            done = false;
+        }
+        const float *xs[4] = {sL, sR, sL, sR};
+        for (int i = 0; i < nconv; i++) {
+            cproc(head[i], xs[i], tmp.data());
+            for (int k = 0; k < B; k++)
+                out[i][k] = tmp[k] + res[i][k];
+        }
+        for (int i = 0; i < nconv; i++)
+            memcpy(inp[i].data(), xs[i], sizeof(float) * B);
+        {
+            std::lock_guard<std::mutex> lk(mu);
+            go = true;
+        }
+        cv.notify_all();
+        for (int k = 0; k < B; k++) {
+            wl[k] = nconv == 4 ? out[0][k] + out[2][k] : out[0][k];
+            wr[k] = nconv == 4 ? out[1][k] + out[3][k] : out[1][k];
+        }
+    }
+};
+
 struct Ev {
     int type;               // 0 note-on, 1 note-off, 2 control change, 3 channel aftertouch (a),
                             // 4 the pitch wheel (a, -8192..8191)
@@ -662,6 +777,13 @@ struct Piano {
                         if (reg[i].ch == ch)
                             reg_damper(ch, n0, -1, true);
             }
+        } else if (cc == 91) {
+            // a DISTANCE (live's): CC91 over GM's 40 times the room's nominal
+            // one, on the notes sounding too
+            double d = v / 40.0;
+            S.send[ch] = d;
+            for (long q : sounding(ch))
+                S.sw[q] = (float)d;
         } else if (cc == 67) {
             soft[ch] = v >= 64;
         } else if (cc == 1 && detune_wheel) {
@@ -1746,6 +1868,64 @@ struct Piano {
         }
     }
 
+    // AFTER THE RENDER (live's callback): the master volume (live's Master
+    // Volume, 1.0: no ramp), the room on the send -- the kernel's second
+    // output when the channels' CC91s differ, else the dry mix times their
+    // one distance -- and the soft limiter's knee
+    std::unique_ptr<Room> room;
+    double thresh = 0.70;                           // live.thresh
+    std::vector<float> oSL, oSR, oA, oB, oWL, oWR;
+
+    // Live.limit: a soft knee above thresh (libm's tanhf, as live's now)
+    void limit(float *x, long n) const
+    {
+        float t = (float)thresh, k = (float)(1.0 - thresh);
+        for (long i = 0; i < n; i++) {
+            float a = fabsf(x[i]);
+            if (a > t)
+                x[i] = (x[i] > 0.0f ? 1.0f : -1.0f) * (t + k * tanhf((a - t) / k));
+        }
+    }
+
+    void output(long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd, long long blk,
+                double master_gain)
+    {
+        bool uniform = true;
+        for (int c = 1; c < 256 && uniform; c++)
+            uniform = S.send[c] == S.send[0];
+        bool snd = room && !uniform;
+        oSL.assign(frames, 0.0f);
+        oSR.assign(frames, 0.0f);
+        render(n0, frames, L, R, snd ? oSL.data() : nullptr, snd ? oSR.data() : nullptr, sv, sx, sd, blk,
+               master_gain);
+        if (room) {
+            const float *sl = L, *sr = R;
+            if (snd) {
+                sl = oSL.data();                    // (times the master volume's 1.0)
+                sr = oSR.data();
+            } else if (S.send[0] != 1.0) {
+                float u = (float)S.send[0];
+                oA.resize(frames);
+                oB.resize(frames);
+                for (long k = 0; k < frames; k++) {
+                    oA[k] = L[k] * u;
+                    oB[k] = R[k] * u;
+                }
+                sl = oA.data();
+                sr = oB.data();
+            }
+            oWL.resize(frames);
+            oWR.resize(frames);
+            room->process(sl, sr, oWL.data(), oWR.data());
+            for (long k = 0; k < frames; k++) {
+                L[k] = L[k] + oWL[k];
+                R[k] = R[k] + oWR[k];
+            }
+        }
+        limit(L, frames);
+        limit(R, frames);
+    }
+
     // THE BUDGET GOVERNOR (live's callback, after its render; Slab.shed):
     // each block's time against its slot, the last four kept; when their
     // median-ish (the second smallest) is over 95% of the slot -- so one
@@ -2005,6 +2185,28 @@ void nv_lp_gpu_ms(void *h, double *out)
     nv::slab::Piano *P = (nv::slab::Piano *)h;
     out[0] = P->ms_setup;
     out[1] = P->ms_samples;
+}
+
+// The late room (live.RoomTail) through convolver.c's conv_new, conv_process
+// and conv_free: ir n stereo samples interleaved, mir the modes' (m 0: none)
+void nv_lp_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames)
+{
+    ((nv::slab::Piano *)h)->room.reset(new nv::slab::Room(cn, cp, cf, ir, n, mir, m, frames));
+}
+
+// the soft limiter's knee (live.thresh) and the pitch wheel's range (live.bend_range)
+void nv_lp_post(void *h, double thresh, double bend_range)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    P->thresh = thresh;
+    P->bend_range = bend_range;
+}
+
+// live's callback after its events and step: the render, the room, the limiter
+void nv_lp_output(void *h, long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd,
+                  long long blk, double master_gain)
+{
+    ((nv::slab::Piano *)h)->output(n0, frames, L, R, sv, sx, sd, blk, master_gain);
 }
 
 // The mod wheel picks a honky-tonk's detune (live's 'detune' role)

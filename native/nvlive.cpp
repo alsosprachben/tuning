@@ -3,7 +3,7 @@
 //
 //     nvlive EXPORT.nvx [--program=N] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
-//                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor]
+//                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry]
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
 //                       [--rt] [--reg-async] [--govern]
 //
@@ -17,7 +17,7 @@
 //
 // --test: no devices. IN.mid's notes and controllers (native/midi.cpp, in
 // message order) each applied at the start of the block its time falls in,
-// the dry blocks (live's Renderer.render: master gain and clip, no room)
+// each block's output (live's callback: the render, the room, the limiter)
 // written to OUT.wav as float32 -- what examples/nvlive_check.py compares
 // with live.Live fed the same events.
 //
@@ -58,7 +58,12 @@
 // wheel on a honky-tonk picks its detune, and on the other pianos does
 // nothing, as live's (a hammered string takes no vibrato).
 //
-// Not yet: the room and its send, RPNs, the other routes, the TUI.
+// AFTER THE RENDER, as live's callback: the room's late tail on the send
+// (the export's room, live's convolver; --dry: none) and the soft limiter.
+// The export takes the session's room, master level, headroom, pressure,
+// knee and wheel range, as live starts.
+//
+// Not yet: RPNs, the other routes, the TUI.
 
 #include <algorithm>
 #include <atomic>
@@ -104,6 +109,10 @@ void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float 
 void nv_lp_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20);
 void nv_lp_press_db(void *h, double db);
 void nv_lp_detune_wheel(void *h, int on);
+void nv_lp_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
+void nv_lp_post(void *h, double thresh, double bend_range);
+void nv_lp_output(void *h, long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd,
+                  long long blk, double master_gain);
 void *nv_kp_new(int key);
 void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr);
 int nv_lp_on_gpu(void *h);
@@ -121,7 +130,7 @@ void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, doubl
 // the export's constants (native_export.py's order)
 enum { K_SR, K_BLK, K_CHUNK, K_MASTER, K_RING_FLOOR, K_RING_MAX, K_XDEC, K_REG_SCALE, K_FULL, K_RESIDUAL, K_BETA,
        K_KNEE, K_LN10_20, K_RETRIGGER, K_NYQ_OM, K_SVDC, K_FIXED_TOUCH, K_REFLECT, K_BANDS, K_SH = K_BANDS + 9,
-       K_PRESS_DB = K_SH + 4 };
+       K_PRESS_DB = K_SH + 4, K_THRESH, K_BEND_RANGE };
 
 struct Export {
     std::vector<double> k, freq, trim, pan;
@@ -143,6 +152,10 @@ struct Export {
     std::string gpu_lib, gpu_damp_lib, gpu_dir;
     int gpu_min[2] = {1000, 2000};
     bool gpu = false;
+    // LROOM: live's convolver, the room's late tail (n stereo samples) and its modes' (m; 0 none)
+    std::string conv_lib;
+    std::vector<float> ir, mir;
+    bool has_room = false;
 };
 
 static bool read_export(const char *path, Export &E)
@@ -204,6 +217,23 @@ static bool read_export(const char *path, Export &E)
                         }
                     }
                     E.gpu = g && fread(E.gpu_min, 4, 2, f) == 2;
+                }
+                char r5[5];
+                if (ok && fread(r5, 1, 5, f) == 5 && !memcmp(r5, "LROOM", 5)) {
+                    int n = 0;
+                    bool g = fread(&n, 4, 1, f) == 1;
+                    if (g) {
+                        E.conv_lib.resize(n);
+                        g = fread(&E.conv_lib[0], 1, n, f) == (size_t)n;
+                    }
+                    for (std::vector<float> *v : {&E.ir, &E.mir}) {
+                        g = g && fread(&n, 4, 1, f) == 1;
+                        if (g) {
+                            v->resize(2 * (size_t)n);
+                            g = fread(v->data(), 4, 2 * (size_t)n, f) == 2 * (size_t)n;
+                        }
+                    }
+                    E.has_room = g;
                 }
             }
         }
@@ -439,6 +469,26 @@ int main(int argc, char **argv)
     void *part = nv_lp_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], 16384,
                            E.headroom, E.pan.data(), E.beta);
     nv_lp_detune_wheel(part, pp[6] >= 0);       // the export's speed: a honky-tonk's wheel, else -1
+    if (E.k.size() > K_BEND_RANGE)
+        nv_lp_post(part, E.k[K_THRESH], E.k[K_BEND_RANGE]);
+    // THE ROOM'S LATE TAIL (the export's: the session's room), through live's
+    // convolver -- unless --dry
+    bool dry = false;
+    for (int i = 1; i < argc; i++)
+        dry = dry || !strcmp(argv[i], "--dry");
+    if (!dry && E.has_room && !E.ir.empty()) {
+        void *ch = dlopen(E.conv_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
+        void *cn = ch ? dlsym(ch, "conv_new") : nullptr, *cp = ch ? dlsym(ch, "conv_process") : nullptr;
+        void *cf = ch ? dlsym(ch, "conv_free") : nullptr;
+        if (cn && cp && cf) {
+            nv_lp_room(part, cn, cp, cf, E.ir.data(), (long)E.ir.size() / 2, E.mir.empty() ? nullptr : E.mir.data(),
+                       (long)E.mir.size() / 2, (int)BLK);
+            fprintf(stderr, "nvlive: the room's tail, %.2f s%s\n", E.ir.size() / 2 / SR,
+                    E.mir.empty() ? "" : ", and its modes");
+        } else {
+            fprintf(stderr, "nvlive: no convolver (%s): dry\n", E.conv_lib.c_str());
+        }
+    }
     // the free strings (live's register, its worker answering in step)
     const Export::Reg &rg = E.reg[program & 127];
     bool noreg = false;
@@ -576,7 +626,7 @@ int main(int argc, char **argv)
                 }
                 nv_lp_block(part, n0, BLK);
                 auto t1 = std::chrono::steady_clock::now();
-                nv_lp_render(part, n0, (long)BLK, L, R, nullptr, nullptr, fn[0], fn[1], fn[2], BLK, master);
+                nv_lp_output(part, n0, (long)BLK, L, R, fn[0], fn[1], fn[2], BLK, master);
                 msr.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count());
                 mstep.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count());
                 if (!nv_lp_on_gpu(part))
@@ -713,7 +763,7 @@ int main(int argc, char **argv)
         for (const Midi &m : evs)
             event(m.type, m.ch, m.a, m.b);
         nv_lp_block(part, n0, BLK);
-        nv_lp_render(part, n0, (long)BLK, L, R, nullptr, nullptr, fn[0], fn[1], fn[2], BLK, master);
+        nv_lp_output(part, n0, (long)BLK, L, R, fn[0], fn[1], fn[2], BLK, master);
         rt::busy_since = 0;
         double ms = (rt::now_ns() - t0) / 1e6;
         if (govern)

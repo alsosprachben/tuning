@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Export what the native renderer needs from the Python, once: OUT.nvx
 
-    python3 examples/native_export.py OUT.nvx [--tuner=NAME] [--live]
+    python3 examples/native_export.py OUT.nvx [--tuner=NAME] [--live [--room=NAME] [--fresh]]
 
 native/nvrender renders a General MIDI piano file to the dry WAV and room
 sidecar blockrender writes, with no Python at runtime. What it cannot work out
@@ -34,12 +34,23 @@ Then an LREG section, each program's free strings as live's register
 builds them (native.live_bank: the string bank at the part's tuning, its
 LiveChannel's constants), its dampers and release, damper.py's felt, and
 which keys' classes answer (live._reg_voice) -- an M of 0 where none.
+Then LGPU (live's GPU renderer's builds) and LROOM: live's convolver
+library and the room's late tail (live.room_irs: the diffuse tail's and
+the modes' impulse responses, stereo), none in a room without one.
+
+--live TAKES THE LAST SESSION, as live starts (live.load_session; --fresh:
+not): its room (--room says otherwise; else TUNING_ROOM, else the hall),
+which the voices are packed in and the tail is drawn for, its master level,
+the slab's headroom, the pressure's lift, the limiter's knee and the
+wheel's range.
 """
 import ctypes
 import math
 import os
 import struct
 import sys
+
+import numpy as np
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
@@ -54,9 +65,23 @@ def main(argv):
         print(__doc__)
         return 2
     import blockrender as B
+    sess = {}
     if "live" in opt:
         B.set_sample_rate(48000)
         B.BLK = 128
+        import live as L
+        sess = ({} if "fresh" in opt else L.load_session()) or {}
+        room_name = opt.get("room") or sess.get("room") or os.environ.get("TUNING_ROOM") or "hall"
+        # live.Live._apply_room: the room every voice is built in, before they are packed
+        if room_name == "dry":
+            os.environ["TUNING_REFLECT"] = "0"
+        else:
+            os.environ.pop("TUNING_REFLECT", None)
+            import tonelib as _T
+            _T.set_room(room_name)
+        if "master_db" in sess:
+            import tonelib as _T
+            _T.master_gain = 10.0 ** (float(sess["master_db"]) / 20.0)
     import damper as DM
     import native as N
     import patch_map as PM
@@ -88,7 +113,9 @@ def main(argv):
               float(B.RETRIGGER_FADE), 0.98 * math.pi, float(T.SOUND_VIB_DEPTH_CENTS),
               float(bool(T.FIXED_TOUCH)), float(os.environ.get("TUNING_REFLECT", "1") not in ("0", "off", ""))]
     consts += [63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0] + list(sh)
-    consts += [float(T.PRESS_DB)]       # live's pressure at full aftertouch (nvlive)
+    # live's pressure at full aftertouch, the limiter's knee, the wheel's range (nvlive)
+    consts += [float(sess.get("press_db", T.PRESS_DB)), float(sess.get("thresh", 0.70)),
+               float(sess.get("bend_range", 2.0))]
     room = os.fsencode(T.ROOM_NAME[0] or "")
     with open(args[0], "wb") as f:
         f.write(MAGIC)
@@ -110,7 +137,7 @@ def main(argv):
             tab = L.pan_table()
             f.write(b"LIVE")
             f.write(struct.pack("<384d", *[float(x) for row in tab for x in row]))
-            f.write(struct.pack("<dd", float(L._PAN_BETA), 10.0 ** (-4.0 / 20.0)))
+            f.write(struct.pack("<dd", float(L._PAN_BETA), 10.0 ** (-float(sess.get("headroom_db", 4.0)) / 20.0)))
             for prog in range(128):
                 rec = [0] * 9
                 if any(cmap[128 * prog + k] >= 0 for k in range(128)):
@@ -157,8 +184,24 @@ def main(argv):
                       os.fsencode(HERE)):
                 f.write(struct.pack("<i", len(s)) + s)
             f.write(struct.pack("<ii", int(L.GPU_MIN), int(L.GPU_MIN_SMALL)))
+            # LROOM: live's convolver, and the room's late tail as live draws it
+            # at its start (no rig measured yet: band_q None)
+            f.write(b"LROOM")
+            cv = os.fsencode(L._conv_dll()._name)
+            f.write(struct.pack("<i", len(cv)) + cv)
+            irs = None if room_name == "dry" else L.room_irs(48000)
+            for a in ((None, None) if irs is None else irs):
+                if a is None:
+                    f.write(struct.pack("<i", 0))
+                else:
+                    a = np.ascontiguousarray(a, np.float32)
+                    f.write(struct.pack("<i", len(a)) + a.tobytes())
     print("native export: %d piano class(es), tuner %s, room %s -> %s" % (len(classes), tuner,
                                                                           room.decode() or "-", args[0]))
+    if sess:
+        print("  from the last session: room %s, master %s dB, headroom %s dB, press %s dB, knee %s"
+              % (sess.get("room"), sess.get("master_db"), sess.get("headroom_db"), sess.get("press_db"),
+                 sess.get("thresh")))
     return 0
 
 

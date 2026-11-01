@@ -2,7 +2,7 @@
 """Does native/nvlive play a MIDI file as live.Live does?
 
     python3 examples/nvlive_check.py FILE.mid [SECONDS] [--program=N] [--register] [--pedal-key=N]
-                                     [--gpu=cl|c] [--gpu-min=N]
+                                     [--gpu=cl|c] [--gpu-min=N] [--room=NAME]
 
 The first SECONDS (default 20) of FILE, cut as bitident cuts, its notes and
 controllers (the native reader's, in message order) each applied at the
@@ -10,8 +10,10 @@ start of the 128-sample block its time falls in: once through nvlive --test
 (the native live piano, from a live export: examples/native_export.py
 --live), once through live.Live(program, 48 kHz, 128 a block, on the CPU)
 by on_midi and its own callback -- its patch warmed first, its governor off
--- capturing each block's dry render (Renderer.render). Every sample of the
-two compared with ==. The file's programs are not followed: the part plays
+-- each block's whole output (its callback's: the render, the room, the
+limiter). Both in ROOM (default the hall; not the session's: the export
+is made --fresh), live's templates and the native ones built in it. Every
+sample of the two compared with ==. The file's programs are not followed: the part plays
 PROGRAM throughout, as a keyboard would. --register: the free strings too,
 each side's register worker answering in step (examples/regsync.py; nvlive
 with its export's LREG); without, nvlive --no-register. --pedal-key=N: the
@@ -47,8 +49,9 @@ def main(argv):
     mid = os.path.join(tmp, "in.mid")
     BI.excerpt(args[0], secs).save(mid)
     nvx = os.path.join(tmp, "live.nvx")
-    subprocess.check_call([sys.executable, os.path.join(HERE, "examples", "native_export.py"), nvx, "--live"],
-                          stdout=subprocess.DEVNULL)
+    room = opt.get("room") or "hall"
+    subprocess.check_call([sys.executable, os.path.join(HERE, "examples", "native_export.py"), nvx, "--live",
+                           "--fresh", "--room=" + room], stdout=subprocess.DEVNULL)
     exe = N.build_nvlive()
     m = N.Midi(mid)
     if m.error:
@@ -67,6 +70,7 @@ def main(argv):
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
     # live.Live, fed the same events on the same blocks
     lv = L.Live(program=prog, rate=48000, frames=128, verbose=False, threads=1, gpu=False)
+    lv.enable_room(room)
     lv.parts[0].patch.warm()
     lv.slab.shed = lambda n, frac: 0
     if "gpu" in opt:
@@ -79,13 +83,6 @@ def main(argv):
         import regsync
         regsync.sync(lv, lv.parts[0])
     dry = []
-    _rend = lv.renderer.render
-
-    def cap(n0, frames):
-        a, b = _rend(n0, frames)
-        dry.append(np.stack([a.copy(), b.copy()], 1))
-        return a, b
-    lv.renderer.render = cap
     evs = m.events()
     nb = int(total * 48000) // 128
     e = 0
@@ -102,14 +99,14 @@ def main(argv):
             else:
                 lv.on_midi(M("control_change", channel=ch, control=a, value=v))
             e += 1
-        lv.callback(None, 128, None, 0)
+        dry.append(np.frombuffer(lv.callback(None, 128, None, 0)[0], np.float32).reshape(-1, 2))
     py = np.concatenate(dry) if dry else np.zeros((0, 2), np.float32)
     if py.shape != nv.shape:
         print("%s: length %r vs %r" % (os.path.basename(args[0]), py.shape, nv.shape))
         return 1
     d = np.flatnonzero(np.any(py != nv, 1))
-    print("%s (%g s, program %d%s): %d blocks, %s" % (
-        os.path.basename(args[0]), secs, prog, ", register" if reg else "", nb,
+    print("%s (%g s, program %d%s, %s): %d blocks, %s" % (
+        os.path.basename(args[0]), secs, prog, ", register" if reg else "", room, nb,
         "identical" if not len(d) else "%d frames differ from block %d (max %g)"
         % (len(d), d[0] // 128, float(np.max(np.abs(py.astype(np.float64) - nv))))))
     return 1 if len(d) else 0

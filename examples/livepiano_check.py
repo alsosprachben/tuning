@@ -4,6 +4,7 @@
     python3 examples/livepiano_check.py [BLOCKS] [--program=N] [--seed=N] [--every=N] [--render] [--register]
                                         [--half] [--pedal-key=N] [--pressure]
                                         [--gpu=c|cl] [--gpu-min=N] [--shed=N] [--wheels]
+                                        [--room=NAME] [--cc91] [--thresh=X]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native piano part (native/slab.cpp: its template cache, its slab, live's
@@ -34,6 +35,13 @@ on one side, native.KeyPedal before the part's events on the other.
 the native part's through native/gpu.cpp) or the C reference ("c",
 voice_samples) -- for a block with GPU-MIN busy slots or more (default
 live's GPU_MIN); the blocks each side took to the GPU are counted.
+--room=NAME: both in that room -- live.enable_room before its patch is
+warmed, the native templates packed after -- and every block's whole output
+compared (live's callback: the render, the master, the room's tail on the
+send, the limiter; the native part's output) in place of --render's dry
+blocks. --cc91: the channels' reverb sends among the controls, so the send
+runs as the kernel's second output while they differ. --thresh: the soft
+limiter's knee (live's 0.70), low to make it work.
 --wheels: the pitch wheel (live._repitch, the notes sounding moved and a
 note struck under it joining) and the mod wheel (a honky-tonk's detune).
 --shed=N: every N blocks the governor's last resort on both sides at the
@@ -64,6 +72,8 @@ def main(argv):
     every = int(opt.get("every", 1))
     rng = random.Random(int(opt.get("seed", 1)))
     lv = L.Live(program=prog, rate=48000, frames=128, verbose=False, threads=1, gpu=False)
+    if opt.get("room"):
+        lv.enable_room(opt["room"])
     part = lv.parts[0]
     pt = part.patch
     pt.warm()           # live warms off the audio thread; here, before the first press
@@ -83,6 +93,11 @@ def main(argv):
         lv.renderer = L.GpuRenderer(lv.slab, 128, 1, backend=opt["gpu"] or "cl", gpu_min=gmin)
         lv.renderer.send = send
         nv.gpu(opt["gpu"] or "cl", gmin)
+    if opt.get("room"):
+        lv.thresh = float(opt.get("thresh", lv.thresh))
+        if lv.room is not None:
+            nv.room(lv.room.ir, lv.room.mir, 128)
+        nv.post(lv.thresh, lv.bend_range)
     if "register" in opt:
         import blockrender as BR
         import regsync
@@ -90,7 +105,7 @@ def main(argv):
         nv.register(pt._voice_class(60), BR.tuning_table(pt.tuner), 48000.0, getattr(BR, 'REGISTER_SCALE', 1.0),
                     [lv._reg_voice(part, n) for n in range(128)])
     held = set()
-    ntr = dmb = nshed = 0
+    ntr = dmb = nshed = nlim = 0
     pk = int(opt["pedal-key"]) if "pedal-key" in opt else None
     kp = None
     if pk is not None:
@@ -175,6 +190,8 @@ def main(argv):
                     msgs.append(M("control_change", channel=ch, control=1, value=rng.randint(0, 127)))
             elif "pressure" in opt and rng.random() < 0.4:
                 msgs.append(M("aftertouch", channel=ch, value=rng.choice((0, rng.randint(0, 127)))))
+            elif "cc91" in opt and rng.random() < 0.3:
+                msgs.append(M("control_change", channel=ch, control=91, value=rng.randint(0, 127)))
             else:
                 cc = rng.choice((7, 11, 10, 67))
                 msgs.append(M("control_change", channel=ch, control=cc, value=rng.randint(0, 127)))
@@ -183,8 +200,21 @@ def main(argv):
             lv.on_midi(m)
             for x in (kp.feed(m) if kp is not None else [m]):
                 nv.event(x)
-        lv.callback(None, 128, None, 0)
+        got_py = lv.callback(None, 128, None, 0)[0]
         nv.block(n0, 128)
+        if opt.get("room"):
+            oL, oR = nv.output(n0, 128)
+            st = np.empty(256, np.float32)
+            st[0::2] = oL
+            st[1::2] = oR
+            nlim += int(np.max(np.abs(st)) > lv.thresh * 0.9)
+            if "gpu" in opt:
+                ngpu[0] += lv.renderer.on_gpu
+                ngpu[1] += nv.on_gpu()
+            if st.tobytes() != got_py:
+                rbad.append(b)
+                bad.append("output")
+            dry.clear()
         while dry:
             rn0, fr, dL, dR, snd, sL, sR = dry.pop(0)
             got = nv.render(rn0, fr, send=snd)
@@ -224,6 +254,8 @@ def main(argv):
         print("  register: %d rows placed, %d dropped (native %d); live's errors: %d %s" % (
             int(np.sum(lv.slab.busy)) - sounding, lv.reg_dropped, nv.reg_dropped(), lv.errors,
             lv.last_error or ""))
+    if opt.get("room"):
+        print("  room %s: %d blocks reaching the limiter's knee (%.2f)" % (opt["room"], nlim, lv.thresh))
     if "shed" in opt:
         print("  shed: %d partials" % nshed)
     if "gpu" in opt:
