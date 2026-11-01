@@ -3,7 +3,7 @@
 
     python3 examples/livepiano_check.py [BLOCKS] [--program=N] [--seed=N] [--every=N] [--render] [--register]
                                         [--half] [--pedal-key=N] [--pressure]
-                                        [--gpu=c|cl] [--gpu-min=N]
+                                        [--gpu=c|cl] [--gpu-min=N] [--shed=N]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native piano part (native/slab.cpp: its template cache, its slab, live's
@@ -34,6 +34,10 @@ on one side, native.KeyPedal before the part's events on the other.
 the native part's through native/gpu.cpp) or the C reference ("c",
 voice_samples) -- for a block with GPU-MIN busy slots or more (default
 live's GPU_MIN); the blocks each side took to the GPU are counted.
+--shed=N: every N blocks the governor's last resort on both sides at the
+next block's start (live's Slab.shed, a tenth of what sounds), as a block
+over budget would -- the governor itself goes by the wall clock, so it is
+asked here instead.
 """
 import os
 import random
@@ -83,7 +87,7 @@ def main(argv):
         nv.register(pt._voice_class(60), BR.tuning_table(pt.tuner), 48000.0, getattr(BR, 'REGISTER_SCALE', 1.0),
                     [lv._reg_voice(part, n) for n in range(128)])
     held = set()
-    ntr = dmb = 0
+    ntr = dmb = nshed = 0
     pk = int(opt["pedal-key"]) if "pedal-key" in opt else None
     kp = None
     if pk is not None:
@@ -184,6 +188,11 @@ def main(argv):
             if not ok:
                 rbad.append(b)
                 bad.append("render")
+        if "shed" in opt and b % int(opt["shed"]) == int(opt["shed"]) - 1:
+            k0, k1 = L.Slab.shed(lv.slab, lv.n, 0.1), nv.shed(lv.n, 0.1)     # (lv.slab.shed is stubbed: the governor)
+            nshed += k0
+            if k0 != k1:
+                bad.append("shed %d vs %d" % (k0, k1))
         log.append((b, n0, msgs))
         ntr = max(ntr, len(lv.damp_tracks))
         dmb += bool(lv.damp_tracks)
@@ -207,6 +216,8 @@ def main(argv):
         print("  register: %d rows placed, %d dropped (native %d); live's errors: %d %s" % (
             int(np.sum(lv.slab.busy)) - sounding, lv.reg_dropped, nv.reg_dropped(), lv.errors,
             lv.last_error or ""))
+    if "shed" in opt:
+        print("  shed: %d partials" % nshed)
     if "gpu" in opt:
         print("  GPU (%s): live took %d blocks to it, native %d" % (opt["gpu"] or "cl", ngpu[0], ngpu[1]))
     if "half" in opt:

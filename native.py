@@ -281,6 +281,8 @@ def _load():
             ('nv_lp_press_db', None, [ctypes.c_void_p, C]),
             ('nv_lp_gpu', None, [ctypes.c_void_p] + [ctypes.c_void_p] * 6 + [ctypes.c_long, I]),
             ('nv_lp_on_gpu', I, [ctypes.c_void_p]),
+            ('nv_lp_shed', ctypes.c_long, [ctypes.c_void_p, LL, C]),
+            ('nv_lp_govern', ctypes.c_long, [ctypes.c_void_p, C, C, LL]),
             ('nv_cl_new', ctypes.c_void_p, [ctypes.c_char_p, ctypes.c_void_p, ctypes.c_char_p, I]),
             ('nv_cl_free', None, [ctypes.c_void_p]),
             ('nv_lp_dm', None, [ctypes.c_void_p, ctypes.c_void_p]),
@@ -1455,6 +1457,14 @@ class LivePiano(object):
 
     def on_gpu(self):
         return bool(self.d.nv_lp_on_gpu(self.p))
+
+    def shed(self, n, frac):
+        """live.Slab.shed: the highest frac of the partials sounding at n end."""
+        return self.d.nv_lp_shed(self.p, int(n), float(frac))
+
+    def govern(self, ms, budget_ms, n):
+        """live's governor after a block of ms against budget_ms (the next at n)."""
+        return self.d.nv_lp_govern(self.p, float(ms), float(budget_ms), int(n))
 
     def dm(self):
         """The damper tracks' values (live.Slab.DM): two a track."""

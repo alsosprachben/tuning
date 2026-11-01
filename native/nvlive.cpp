@@ -3,9 +3,9 @@
 //
 //     nvlive EXPORT.nvx [--program=N] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
-//                       [--no-rt] [--rt-prio=N] [--reg-sync]
+//                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor]
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
-//                       [--rt] [--reg-async]
+//                       [--rt] [--reg-async] [--govern]
 //
 // EXPORT.nvx is examples/native_export.py --live's. At start the part's
 // templates are built (live.Patch.warm: every key 21-96 at each velocity
@@ -49,8 +49,12 @@
 // export's press_db (tonelib.PRESS_DB; --press-db=DB for Ben's session's) at
 // full, as live's Slab.press does a piano (no tilt: effort_tilt 0).
 //
-// Not yet: live's governor (shedding partials when blocks run late), the
-// room and its send, the wheel, modulation, the other routes, the TUI.
+// THE GOVERNOR when playing (live's; --no-governor: none): when blocks run
+// over 95% of their time (the second smallest of the last four), the
+// highest tenth of what sounds is faded out over 5 ms; --test takes
+// --govern to time it, its output then the machine's.
+//
+// Not yet: the room and its send, the wheel, modulation, the other routes, the TUI.
 
 #include <algorithm>
 #include <atomic>
@@ -100,6 +104,8 @@ void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void
 int nv_lp_on_gpu(void *h);
 void nv_lp_gpu_ms(void *h, double *out);
 void nv_lp_reg_async(void *h);
+long nv_lp_govern(void *h, double ms, double budget_ms, long long n);
+long nv_lp_partials_shed(void *h);
 void *nv_cl_new(const char *dir, const int *sizes, char *err, int errlen);
 int nv_kp_feed(void *h, int type, int ch, int a, int *v);
 void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
@@ -538,6 +544,9 @@ int main(int argc, char **argv)
                     fprintf(stderr, "nvlive: %s\n", why.empty() ? "real-time, SCHED_RR 18" : ("not real-time: " + why).c_str());
                 }
             }
+            bool tgov = false;
+            for (int q = 1; q < argc; q++)
+                tgov = tgov || !strcmp(argv[q], "--govern");
             std::vector<float> out;
             std::vector<double> ms, msr, mss, msg;      // each block's events, step and render, ms; its render;
                                                         // a GPU block's setup and samples
@@ -569,6 +578,8 @@ int main(int argc, char **argv)
                     msg.push_back(g2[1]);
                 }
                 ms.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+                if (tgov)
+                    nv_lp_govern(part, ms.back(), 1000.0 * BLK / SR, n0 + BLK);
                 for (long long k = 0; k < BLK; k++) {
                     out.push_back(L[k]);
                     out.push_back(R[k]);
@@ -602,6 +613,8 @@ int main(int argc, char **argv)
                 stat("CPU render", mcpu);
                 stat("GPU setup", mss);
                 stat("GPU samples", msg);
+                if (tgov)
+                    fprintf(stderr, "nvlive:   the governor shed %ld partials\n", nv_lp_partials_shed(part));
             }
             nv_midi_free(m);
             FILE *wf = fopen(argv[i + 2], "wb");
@@ -676,6 +689,9 @@ int main(int argc, char **argv)
     long long n0 = 0;
     long underruns = 0, over = 0, blocks = 0;
     double worst = 0.0, budget = 1000.0 * BLK / SR;
+    bool govern = true;
+    for (int i = 1; i < argc; i++)
+        govern = govern && strcmp(argv[i], "--no-governor");
     while (!g_stop) {
         long long t0 = rt::now_ns();
         rt::busy_since = t0;
@@ -690,6 +706,8 @@ int main(int argc, char **argv)
         nv_lp_render(part, n0, (long)BLK, L, R, nullptr, nullptr, fn[0], fn[1], fn[2], BLK, master);
         rt::busy_since = 0;
         double ms = (rt::now_ns() - t0) / 1e6;
+        if (govern)
+            nv_lp_govern(part, ms, budget, n0 + BLK);
         blocks++;
         over += ms > budget;
         worst = ms > worst ? ms : worst;
@@ -704,8 +722,9 @@ int main(int argc, char **argv)
         }
         n0 += BLK;
     }
-    fprintf(stderr, "nvlive: %ld blocks, %ld over %.2f ms (worst %.2f), %ld underruns%s\n", blocks, over, budget,
-            worst, underruns, rt::dropped ? ", real-time dropped by the guard" : "");
+    fprintf(stderr, "nvlive: %ld blocks, %ld over %.2f ms (worst %.2f), %ld underruns, %ld partials shed%s\n", blocks,
+            over, budget, worst, underruns, nv_lp_partials_shed(part),
+            rt::dropped ? ", real-time dropped by the guard" : "");
     g_stop = true;
     reader.join();
     A.close(A.pcm);

@@ -1683,6 +1683,70 @@ struct Piano {
         }
     }
 
+    // THE BUDGET GOVERNOR (live's callback, after its render; Slab.shed):
+    // each block's time against its slot, the last four kept; when their
+    // median-ish (the second smallest) is over 95% of the slot -- so one
+    // chord's strike is not a reason -- the highest tenth of the partials
+    // still sounding end over SHED_FADE: the top of each note's spectrum
+    // first, where its partials are quietest and the rest mask them. A shed
+    // slot keeps its key and is reaped with its note; only its sound stops.
+    // Ties in frequency (a note and its forced register rows share one) go
+    // by slot, where numpy's argpartition picks as it partitions.
+    static constexpr double SHED_FADE = 0.005;
+    double ms_hist[4];
+    int ms_n = 0;
+    long partials_shed = 0;
+
+    long shed(long long n, double frac)
+    {
+        std::vector<long> idx;
+        for (long q = 0; q < S.cap; q++) {
+            long long off = S.i8[1][q];
+            if (S.busy[q] && S.i8[0][q] <= n && (off == IDLE || off > n))
+                idx.push_back(q);
+        }
+        long k = (long)(frac * (double)idx.size());
+        if (k < 1)
+            return 0;
+        const std::vector<float> &nf = S.f4[F4_nf];
+        std::partial_sort(idx.begin(), idx.begin() + k, idx.end(), [&](long a, long b) {
+            return nf[a] > nf[b] || (nf[a] == nf[b] && a < b);
+        });
+        float fade = (float)(SHED_FADE * rate);
+        for (long i = 0; i < k; i++) {
+            long q = idx[i];
+            if (S.i4[I4_fx][q] >= 0)
+                continue;                       // a Moog row (none on a piano): its panel's, not ours
+            S.i8[1][q] = std::min(S.i8[1][q], n);
+            S.f4[F4_re][q] = std::min(S.f4[F4_re][q], fade);
+        }
+        return k;
+    }
+
+    // a block took ms of budget_ms; the next starts at n
+    long govern(double ms, double budget_ms, long long n)
+    {
+        if (ms_n == 4) {
+            for (int i = 0; i < 3; i++)
+                ms_hist[i] = ms_hist[i + 1];
+            ms_hist[3] = ms;
+        } else {
+            ms_hist[ms_n++] = ms;
+        }
+        if (ms_n < 4)
+            return 0;
+        double o[4] = {ms_hist[0], ms_hist[1], ms_hist[2], ms_hist[3]};
+        std::sort(o, o + 4);
+        if (!(o[1] > 0.95 * budget_ms))
+            return 0;
+        long k = shed(n, 0.1);
+        if (k) {
+            partials_shed += k;
+            ms_n = 0;
+        }
+        return k;
+    }
+
     // live's callback for one block: its events, the sweep, the reap
     void block(long long n0, long long blk)
     {
@@ -1854,6 +1918,18 @@ void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void
 // thread (live's worker process): answers placed at the pump after they are
 // ready, not in step -- for playing, not for the checks
 void nv_lp_reg_async(void *h) { ((nv::slab::Piano *)h)->start_reg_worker(); }
+
+// Slab.shed: the highest frac of the partials sounding at n end over 5 ms; how many
+long nv_lp_shed(void *h, long long n, double frac) { return ((nv::slab::Piano *)h)->shed(n, frac); }
+
+// The governor: a block took ms against its budget_ms, the next starts at n;
+// returns the partials it shed now
+long nv_lp_govern(void *h, double ms, double budget_ms, long long n)
+{
+    return ((nv::slab::Piano *)h)->govern(ms, budget_ms, n);
+}
+
+long nv_lp_partials_shed(void *h) { return ((nv::slab::Piano *)h)->partials_shed; }
 
 // did the last block render on the GPU
 int nv_lp_on_gpu(void *h) { return ((nv::slab::Piano *)h)->on_gpu; }

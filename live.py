@@ -1286,7 +1286,13 @@ class Slab:
         if k < 1:
             return 0
         f = a["nf"][idx]
-        q = idx[np.argpartition(-f, k)[:k]]
+        # the k highest; of those tied at the edge, the lowest slots (a note
+        # and its forced register rows share a frequency) -- one set, where
+        # argpartition's pick among ties was its own, so the native piano's
+        # governor (native/slab.cpp) sheds the very same partials
+        t = -np.partition(-f, k - 1)[k - 1]
+        gt = idx[f > t]
+        q = np.concatenate([gt, idx[f == t][:k - len(gt)]])
         mo = a["fx"][q] >= 0
         qn = q[~mo]
         a["noff"][qn] = np.minimum(a["noff"][qn], n)
