@@ -20,7 +20,13 @@
 #include <deque>
 #include <map>
 #include <tuple>
+#include <set>
+#include <utility>
 #include <vector>
+
+#include "live.h"
+
+extern "C" double nv_damper_contact(int p, int key, int top);
 
 namespace nv {
 namespace slab {
@@ -36,7 +42,7 @@ static const char *F4N[] = {"gb", "gt", "gc", "vdl"};
 static const char *I8[] = {"non", "noff"};
 static const char *I4[] = {"gr", "cr", "br", "pl", "fx", "mk"};
 enum { NF8 = 6, NF4 = 27, NF4N = 4, NI8 = 2, NI4 = 6 };
-enum { F4_aL = 0, F4_aR = 1, F4_re = 4, F4_cbw = 15, F4_vd = 19, F4_vr = 20, F4_delL = 22, F4_delR = 23, F4_rdl = 25 };
+enum { F4_aL = 0, F4_aR = 1, F4_nf = 2, F4_re = 4, F4_cbw = 15, F4_vd = 19, F4_vr = 20, F4_delL = 22, F4_delR = 23, F4_rdl = 25 };
 enum { F8_om = 0, F8_p0 = 1, F8_p0R = 2, F8_fmw = 3 };
 enum { I4_gr = 0, I4_cr = 1, I4_br = 2, I4_fx = 4 };
 
@@ -79,7 +85,10 @@ struct Slab {
     std::vector<int32_t> dk, slot_ch;
     std::vector<char> busy;
     std::deque<long> free;
-    std::map<Key, std::vector<long>> live;
+    // the keys sounding and their slots, in the order first stamped (a
+    // Python dict: a key released and stamped again goes to the end) --
+    // the order a pedal's release takes them in, so the free queue's order
+    std::vector<std::pair<Key, std::vector<long>>> live;
     std::map<Key, int> oneshot;
     std::vector<std::pair<std::vector<long>, long long>> retiring;
     std::vector<long> last_slots;
@@ -185,7 +194,7 @@ struct Slab {
             (void)m;
             oneshot[key] = 1;
         }
-        std::vector<long> &lv = live[key];
+        std::vector<long> &lv = live_of(key);
         lv.insert(lv.end(), idx.begin(), idx.end());
         for (long s : idx)
             i4[I4_fx][s] = -1;                  // _moog_stamp: not a Moog note
@@ -193,16 +202,111 @@ struct Slab {
         return true;
     }
 
+    // stamp_cols with a cached template (its own columns, hrel, dur)
+    bool stamp_t(const nv::live::Template &T, Key key, long long n0, double vel_scale, long long ch)
+    {
+        const double *f8p[6];
+        const float *f4p[27];
+        const long long *i8p[2];
+        const int32_t *i4p[6];
+        for (int c = 0; c < 6; c++)
+            f8p[c] = T.f8[c].data();
+        for (int c = 0; c < 27; c++)
+            f4p[c] = T.f4[c].data();
+        for (int c = 0; c < 2; c++)
+            i8p[c] = T.i8[c].data();
+        for (int c = 0; c < 6; c++)
+            i4p[c] = T.i4[c].data();
+        return stamp(f8p, f4p, i8p, i4p, T.hrel.data(), T.P, key, n0, vel_scale, T.dur, false, NAN, ch);
+    }
+
+    // THE PAN TABLE (live.pan_table: CC10 -> left and right shadow alpha, half
+    // the interaural delay) and the head's beta, from the caller
+    double pan_tab[128][3];
+    double pan_beta = 0.0;
+
+    // Slab.repan: CC10 was -> cc on these slots; the head shadow's ratio at
+    // each partial's frequency (float32), and with itd the ears' delays and
+    // the phases that follow them
+    void repan(const std::vector<long> &slots, int cc, int was, double rate, bool itd)
+    {
+        if (slots.empty() || cc == was)
+            return;
+        auto clamp = [](int v) { return v < 0 ? 0 : (v > 127 ? 127 : v); };
+        const double *t1 = pan_tab[clamp(cc)], *t0 = pan_tab[clamp(was)];
+        double b2 = pan_beta * pan_beta;
+        for (long sidx : slots) {
+            double om = 2.0 * M_PI * (double)f4[2][sidx];
+            auto shelf = [&](double al) { double x = al * om; return sqrt(x * x + b2); };
+            float rl = (float)(shelf(t1[0]) / shelf(t0[0]));
+            float rr = (float)(shelf(t1[1]) / shelf(t0[1]));
+            aL0[sidx] *= rl; aR0[sidx] *= rr;
+            f4[F4_aL][sidx] *= rl; f4[F4_aR][sidx] *= rr;
+        }
+        if (itd) {
+            float dl = (float)((t1[2] - t0[2]) * rate);
+            for (long sidx : slots) {
+                f4[F4_delL][sidx] += dl;
+                f4[F4_delR][sidx] -= dl;
+                f8[F8_p0][sidx] -= f8[F8_om][sidx] * (double)dl;
+                f8[F8_p0R][sidx] += f8[F8_om][sidx] * (double)dl;
+            }
+        }
+    }
+
+    // Slab.soft_strings: una corda, the `drop` highest of the instrument's `top` strings
+    void soft_strings(const std::vector<long> &slots, int drop, int top)
+    {
+        if (slots.empty() || drop <= 0 || top <= 0)
+            return;
+        for (long sidx : slots)
+            if (i4[3][sidx] > top - drop) {
+                aL0[sidx] = 0.0f; aR0[sidx] = 0.0f;
+                f4[F4_aL][sidx] = 0.0f; f4[F4_aR][sidx] = 0.0f;
+            }
+    }
+
+    // Slab.channel_gain: the fader moved under these slots, by a ratio (float32)
+    void channel_gain(const std::vector<long> &slots, double ratio)
+    {
+        if (slots.empty())
+            return;
+        float r = (float)ratio;
+        if ((double)r == 1.0)
+            return;
+        for (long sidx : slots) {
+            aL0[sidx] *= r; aR0[sidx] *= r;
+            f4[F4_aL][sidx] *= r; f4[F4_aR][sidx] *= r;
+        }
+    }
+
+    long live_find(const Key &key) const
+    {
+        for (size_t i = 0; i < live.size(); i++)
+            if (live[i].first == key)
+                return (long)i;
+        return -1;
+    }
+
+    std::vector<long> &live_of(const Key &key)
+    {
+        long i = live_find(key);
+        if (i < 0) {
+            live.push_back(std::make_pair(key, std::vector<long>()));
+            return live.back().second;
+        }
+        return live[i].second;
+    }
+
     void release(Key key, long long n)
     {
-        auto it = live.find(key);
-        if (it == live.end() || it->second.empty()) {
-            if (it != live.end())
-                live.erase(it);
+        long li = live_find(key);
+        if (li < 0)
             return;
-        }
-        std::vector<long> idx = it->second;
-        live.erase(it);
+        std::vector<long> idx = live[li].second;
+        live.erase(live.begin() + li);
+        if (idx.empty())
+            return;
         auto o = oneshot.find(key);
         if (o != oneshot.end()) {
             oneshot.erase(o);
@@ -248,10 +352,204 @@ struct Slab {
     }
 };
 
+// ---------------------------------------------------------------------------
+// A PIANO PART, LIVE: live.Live's events for one piano part on its slab --
+// what _one_core, _note_on and _note_off do for a piano, block by block as
+// live's callback runs them: the block's events at its start, then the sweep
+// (a key neither down nor held released), then the reap. Not here yet: the
+// pitch wheel, modulation, CC71-78, pressure, sostenuto, half-pedal damper
+// tracks, the register (live's needs the GPU), mono, the other voices.
+
+struct Ev {
+    int type;               // 0 note-on, 1 note-off, 2 control change
+    int ch, a, b;
+};
+
+struct Piano {
+    Slab S;
+    void *cache;
+    long long pid;
+    double level_db = 0.0, swell = 1.0, rate, retrigger;
+    int nbuckets, speed, damper_pedal, soft_drop, soft_top;
+    int vol[16], expr[16], cpan[16], pedal_v[16];
+    bool soft[16];
+    double cgain[16];
+    bool cgain_set[16];
+    std::set<std::pair<int, int>> down, pedalled;
+    std::vector<Ev> events;
+
+    Piano(long cap) : S(cap)
+    {
+        for (int c = 0; c < 16; c++) {
+            vol[c] = 100; expr[c] = 127; cpan[c] = 64; pedal_v[c] = 0;     // GM's power-on
+            soft[c] = false; cgain[c] = 1.0; cgain_set[c] = false;
+        }
+    }
+
+    int bucket(int vel) const
+    {
+        int b = (int)(vel * nbuckets / 128.0);
+        return b < nbuckets - 1 ? b : nbuckets - 1;
+    }
+
+    double chan_gain(int ch) const { return pow((vol[ch] / 127.0) * (expr[ch] / 127.0), 2.0); }
+
+    bool pedal_holds(int ch, int note) const
+    {
+        int v = pedal_v[ch];
+        return v > 0 && nv_damper_contact(v, note, 128) < 1.0;
+    }
+
+    std::vector<long> sounding(int ch) const
+    {
+        std::vector<long> out;
+        for (auto &kv : S.live)
+            if (std::get<1>(kv.first) == ch)
+                out.insert(out.end(), kv.second.begin(), kv.second.end());
+        return out;
+    }
+
+    void note_on(int ch, int note, int vel, long long n0)
+    {
+        down.insert(std::make_pair(ch, note));
+        pedalled.erase(std::make_pair(ch, note));
+        if (note < 0 || note > 127)
+            return;
+        const nv::live::Template *T = nv_tcache_lookup(cache, note, bucket(vel), speed);
+        if (!T)
+            return;                         // a miss: live warms it off the audio thread
+        double scale = pow(10.0, level_db / 20.0) * swell * chan_gain(ch);
+        scale *= pow(vel / 127.0, 2.0) / std::max(pow(T->vel / 127.0, 2.0), 1e-9);    // touch: the press over the template's
+        Key key(pid, ch, note, -1);
+        long li = S.live_find(key);
+        if (damper_pedal && li >= 0 && !S.live[li].second.empty() && !S.oneshot.count(key)) {
+            // a restrike: the string under the hammer stops in a steal-fade
+            float fade = (float)(retrigger * rate);
+            for (long sidx : S.live[li].second)
+                if (fade < S.f4[F4_re][sidx])
+                    S.f4[F4_re][sidx] = fade;
+            S.release(key, n0);
+        }
+        if (!S.stamp_t(*T, key, n0, scale, ch))
+            return;                         // the slab full: this note does not sound
+        long lj = S.live_find(key);
+        std::vector<long> slots = lj >= 0 ? S.live[lj].second : std::vector<long>();
+        if (cpan[ch] != 64 && !slots.empty())
+            S.repan(slots, cpan[ch], 64, rate, true);
+        if (soft[ch] && !slots.empty())
+            S.soft_strings(slots, soft_drop, soft_top);
+    }
+
+    void note_off(int ch, int note, long long n0)
+    {
+        down.erase(std::make_pair(ch, note));
+        if (pedal_holds(ch, note) && damper_pedal) {
+            pedalled.insert(std::make_pair(ch, note));
+            return;
+        }
+        S.release(Key(pid, ch, note, -1), n0);
+    }
+
+    void control(int ch, int cc, int v, long long n0)
+    {
+        if (cc == 7 || cc == 11) {
+            (cc == 7 ? vol : expr)[ch] = v;
+            double g = chan_gain(ch), was = cgain_set[ch] ? cgain[ch] : 1.0;
+            if (g != was) {
+                cgain[ch] = g;
+                cgain_set[ch] = true;
+                S.channel_gain(sounding(ch), g / std::max(was, 1e-9));
+            }
+        } else if (cc == 10) {
+            int was = cpan[ch];
+            if (v != was) {
+                cpan[ch] = v;
+                S.repan(sounding(ch), v, was, rate, false);
+            }
+        } else if (cc == 64) {
+            int was_v = pedal_v[ch];
+            pedal_v[ch] = v;
+            if (v < was_v) {
+                std::set<std::pair<int, int>> gone;
+                for (auto &k : pedalled)
+                    if (k.first == ch && !down.count(k) && !pedal_holds(ch, k.second))
+                        gone.insert(k);
+                std::vector<Key> rel;
+                for (auto &kv : S.live)
+                    if (gone.count(std::make_pair((int)std::get<1>(kv.first), (int)std::get<2>(kv.first))))
+                        rel.push_back(kv.first);
+                for (auto &k : rel)
+                    S.release(k, n0);
+                for (auto &k : gone)
+                    pedalled.erase(k);
+            }
+        } else if (cc == 67) {
+            soft[ch] = v >= 64;
+        }
+    }
+
+    // live's callback for one block: its events, the sweep, the reap
+    void block(long long n0, long long blk)
+    {
+        std::vector<Ev> evs;
+        evs.swap(events);
+        for (const Ev &e : evs) {
+            if (e.type == 0)
+                note_on(e.ch, e.a, e.b, n0);
+            else if (e.type == 1)
+                note_off(e.ch, e.a, n0);
+            else
+                control(e.ch, e.a, e.b, n0);
+        }
+        std::vector<Key> sw;
+        for (auto &kv : S.live) {
+            std::pair<int, int> ck((int)std::get<1>(kv.first), (int)std::get<2>(kv.first));
+            if (!down.count(ck) && !pedalled.count(ck) && !S.oneshot.count(kv.first))
+                sw.push_back(kv.first);
+        }
+        for (auto &k : sw)
+            S.release(k, n0);
+        S.reap(n0, blk);
+    }
+};
+
 }  // namespace slab
 }  // namespace nv
 
 extern "C" {
+
+// A piano part on its own slab: the template cache (nv_tcache_new, warmed),
+// its part id, level, buckets, wheel step (-1 none), dampers, una corda
+// (strings dropped, of the top), the rate, the steal-fade, the slab's
+// capacity and headroom, the pan table (128 x 3) and the head's beta
+void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
+                int soft_drop, int soft_top, double rate, double retrigger, long cap, double headroom,
+                const double *pan_tab, double pan_beta)
+{
+    nv::slab::Piano *P = new nv::slab::Piano(cap);
+    P->cache = cache; P->pid = pid; P->level_db = level_db; P->nbuckets = nbuckets; P->speed = speed;
+    P->damper_pedal = damper_pedal; P->soft_drop = soft_drop; P->soft_top = soft_top;
+    P->rate = rate; P->retrigger = retrigger;
+    P->S.headroom_d = headroom;
+    P->S.headroom = (float)headroom;
+    memcpy(P->S.pan_tab, pan_tab, sizeof P->S.pan_tab);
+    P->S.pan_beta = pan_beta;
+    return P;
+}
+
+void nv_lp_free(void *h) { delete (nv::slab::Piano *)h; }
+
+// an event for the next block: 0 note-on (a key, b velocity), 1 note-off, 2 control (a cc, b value)
+void nv_lp_event(void *h, int type, int ch, int a, int b)
+{
+    ((nv::slab::Piano *)h)->events.push_back(nv::slab::Ev{type, ch, a, b});
+}
+
+void nv_lp_block(void *h, long long n0, long long blk) { ((nv::slab::Piano *)h)->block(n0, blk); }
+
+// the part's slab, for nv_slab_col and nv_slab_free_list
+void *nv_lp_slab(void *h) { return &((nv::slab::Piano *)h)->S; }
+
 
 void *nv_slab_new(long capacity, double headroom)
 {

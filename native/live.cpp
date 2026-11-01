@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "pycompat.h"
+#include "live.h"
 
 extern "C" {
 void *nv_midi_read(const uint8_t *buf, long long len, int *err);
@@ -150,16 +151,6 @@ static int emit_col(const char *n)
     return -1;
 }
 
-struct Template {
-    long P = 0;
-    std::vector<double> f8[6];
-    std::vector<float> f4[27], f4n[4], hrel;
-    std::vector<long long> i8[2];
-    std::vector<int32_t> i4[6];
-    std::vector<char> fa_at;
-    long long dur = 0;
-    int vel = 0;
-};
 
 struct Cache {
     std::vector<const NoteClass *> K;
@@ -326,3 +317,10 @@ const void *nv_tmpl_col(void *t, int group, int index)
 }
 
 }  // extern "C"
+
+extern "C" const nv::live::Template *nv_tcache_lookup(void *h, int note, int bucket, int speed)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    auto it = C->tm.find(std::make_tuple(note, bucket, speed));
+    return it == C->tm.end() ? nullptr : &it->second;
+}

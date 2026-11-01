@@ -161,7 +161,7 @@ def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
-                                                       'live.cpp', 'slab.cpp')]
+                                                       'live.cpp', 'slab.cpp', 'live.h')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -258,6 +258,11 @@ def _load():
             ('nv_slab_reap', None, [ctypes.c_void_p, LL, LL]),
             ('nv_slab_col', None, [ctypes.c_void_p, I, I, ctypes.c_void_p]),
             ('nv_slab_free_list', ctypes.c_long, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]),
+            ('nv_lp_new', ctypes.c_void_p, [ctypes.c_void_p, LL, C, I, I, I, I, I, C, C, ctypes.c_long, C, D, C]),
+            ('nv_lp_free', None, [ctypes.c_void_p]),
+            ('nv_lp_event', None, [ctypes.c_void_p, I, I, I, I]),
+            ('nv_lp_block', None, [ctypes.c_void_p, LL, LL]),
+            ('nv_lp_slab', ctypes.c_void_p, [ctypes.c_void_p]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
             ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C, I, I]),
@@ -1289,3 +1294,42 @@ class TemplateCache(object):
         out["push"] = np.zeros(n, bool)
         out["lflip"] = np.zeros(n, bool)
         return out
+
+
+class LivePiano(object):
+    """native/slab.cpp's piano part, live: its template cache, its slab, and
+    live.Live's events for it block by block. The slab reads back as a
+    native.Slab's does."""
+
+    def __init__(self, cache, pid, level_db, nbuckets, speed, damper_pedal, soft_drop, soft_top, rate,
+                 capacity=16384, headroom=1.0):
+        import live as L
+        import blockrender as BR
+        tab = L.pan_table()
+        pt = (ctypes.c_double * (128 * 3))(*[float(x) for row in tab for x in row])
+        self.d = lib()
+        self.cache = cache
+        self.p = self.d.nv_lp_new(cache.p, int(pid), float(level_db), int(nbuckets),
+                                  -1 if speed is None else int(speed), int(bool(damper_pedal)), int(soft_drop),
+                                  int(soft_top), float(rate), float(BR.RETRIGGER_FADE), int(capacity),
+                                  float(headroom), pt, float(L._PAN_BETA))
+        self.slab = Slab.__new__(Slab)
+        self.slab.d, self.slab.cap, self.slab.p = self.d, capacity, self.d.nv_lp_slab(self.p)
+
+    def __del__(self):
+        if getattr(self, 'p', None):
+            self.slab.p = None              # the part owns its slab
+            self.d.nv_lp_free(self.p)
+            self.p = None
+
+    def event(self, msg):
+        """A mido message for the next block (note-on, note-off, control change)."""
+        if msg.type == "note_on" and msg.velocity > 0:
+            self.d.nv_lp_event(self.p, 0, msg.channel, msg.note, msg.velocity)
+        elif msg.type in ("note_on", "note_off"):
+            self.d.nv_lp_event(self.p, 1, msg.channel, msg.note, 0)
+        elif msg.type == "control_change":
+            self.d.nv_lp_event(self.p, 2, msg.channel, msg.control, msg.value)
+
+    def block(self, n0, blk):
+        self.d.nv_lp_block(self.p, int(n0), int(blk))
