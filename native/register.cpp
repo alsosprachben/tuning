@@ -240,22 +240,31 @@ struct Channel {
 
     double floor_() const { return fl * pymax(loud, 1e-30); }
 
-    std::vector<Span> span_list(int k) const
+    // each key's free spans merged, made on first ask (register.Channel's
+    // `spans`): a strike on the key adds a hold and clears its entry
+    mutable std::map<int, std::vector<Span>> sp_cache;
+
+    const std::vector<Span> &span_list(int k) const
     {
-        if (k >= top)
-            return {Span(0.0, INF)};
+        auto it = sp_cache.find(k);
+        if (it != sp_cache.end())
+            return it->second;
         std::vector<Span> all;
+        if (k >= top) {
+            all.push_back(Span(0.0, INF));
+            return sp_cache[k] = all;
+        }
         if (per_key) {
-            auto it = pedal_key.find(k);
-            if (it != pedal_key.end())
-                all = it->second;
+            auto p = pedal_key.find(k);
+            if (p != pedal_key.end())
+                all = p->second;
         } else {
             all = pedal;
         }
         auto h = holds.find(k);
         if (h != holds.end())
             all.insert(all.end(), h->second.begin(), h->second.end());
-        return merge_spans(all);
+        return sp_cache[k] = merge_spans(all);
     }
 
     // span_end: the end of the free span holding sample n, or NaN for none
@@ -343,6 +352,7 @@ struct Channel {
         // rows: nr rows of NC columns (EMIT_COLS), the note's rows as the table holds them
         double n_on = on * sr;
         holds[k].push_back(Span(n_on, held * sr));
+        sp_cache.erase(k);
         Strike st;
         st.key = k;
         st.drv.assign(NC, {});
@@ -737,6 +747,7 @@ void nv_reg_key_pedal(void *h, int key, const double *spans, int nspans, const d
     for (int i = 0; i < nspans; i++)
         sp.push_back(Span(spans[2 * i] * C->sr, spans[2 * i + 1] * C->sr));
     C->pedal_key[key] = sp;
+    C->sp_cache.erase(key);
     if (dw && C->dw.empty())
         C->dw.assign(dw, dw + C->M);
     bool anyr = false;
