@@ -463,6 +463,13 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
     voice_hrtf_at(c, o->pan_angle, s->position_x, e);
     o->left_incidence = e[0]; o->right_incidence = e[1];
     o->left_hrtf_delay = e[2]; o->right_hrtf_delay = e[3];
+    o->attack_time = c->attack_time;
+    if (c->kind == 1) {
+        /* a kit drum: SynthProperties' constructor and no more; its B the
+           class's coefficient (no law: inharmonicity_dynamic is off) */
+        o->B = o->inharmonicity_coefficient;
+        return;
+    }
     /* GrandPianoProperties: the key's own strings and pitch error */
     int midi = (int)rint(69.0 + 12.0 * log(frequency / 440.0) / log(2.0));
     PyRandom r;
@@ -475,7 +482,6 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
     if (c->key_jitter && c->pitch_jitter_cents != 0.0)
         o->pitch_jitter = pow(2.0, pyr_uniform(&r, -c->pitch_jitter_cents, c->pitch_jitter_cents) / 1200.0) - 1.0;
     s->soft_pedal_down = c->soft_pedal_down;
-    o->attack_time = c->attack_time;
     if (c->upright) {
         o->attack_time = c->hammer_soft_s + (c->hammer_hard_s - c->hammer_soft_s) * attack_volume;
         int n = c->n_level;

@@ -95,7 +95,7 @@ class VoiceInit(ctypes.Structure):
                                     'reference_string_max_m', 'case_string_max_m')]
                 + [('upright', I), ('n_level', I)]
                 + [(f, C) for f in ('attack_time', 'hammer_soft_s', 'hammer_hard_s')]
-                + [('level_hz', C * 32), ('level_db', C * 32)])
+                + [('level_hz', C * 32), ('level_db', C * 32)] + [('kind', I)])
 
 
 class VoiceNote(ctypes.Structure):
@@ -488,9 +488,20 @@ def _owner(cls, name):
 
 def init_supported(cls):
     """Whether native/voice.c's nv_voice_init builds this class's voice: a
-    piano constructor (SynthProperties', the grand's, the honky-tonk's), the
-    base class's placing and laws, and none of the branches not ported."""
+    piano constructor (SynthProperties', the grand's, the honky-tonk's) or a
+    kit drum's (SynthProperties' alone), the base class's placing and laws,
+    and none of the branches not ported."""
     import tonelib as T
+    if kit_drum(cls):
+        if not T.hrtf or cls.attack_time is None or cls.inharmonicity_dynamic:
+            return False
+        if any(k.__name__ not in ('SynthProperties', 'object') for k in cls.__mro__ if '__init__' in k.__dict__):
+            return False
+        if any(_owner(cls, n) != o for n, o in _BASE_OWN.items() if n != 'inharmonicity_coefficient_func'):
+            return False
+        c = cls
+        return not ((c.strike_noise_slope and c.chiff_volume) or (c.bloom_gain > 0.0 and c.bloom_gain_slope)
+                    or (c.strike_wobble_hz > 0.0 and c.strike_wobble_gain > 0.0) or c.strike_volume_trim_db)
     if not issubclass(cls, T.GrandPianoProperties) or not T.hrtf:
         return False
     if any(k.__name__ not in _INIT_OWN for k in cls.__mro__ if '__init__' in k.__dict__):
@@ -535,7 +546,8 @@ def _class(cls):
         for f, _ in VoiceInit._fields_:
             if getattr(cls, f, None) is not None:
                 setattr(c, f, getattr(cls, f) if not isinstance(getattr(cls, f), bool) else int(getattr(cls, f)))
-        c.ia, c.ib, c.ic, c.id, c.ie = cls.a, cls.b, cls.c, cls.d, cls.e
+        if not kit_drum(cls):
+            c.ia, c.ib, c.ic, c.id, c.ie = cls.a, cls.b, cls.c, cls.d, cls.e
         c.octave_modulo = int(bool(cls.octave_modulo))
         c.inharmonicity_dynamic = int(bool(cls.inharmonicity_dynamic))
         c.effort_tilt_up_set = int(cls.effort_tilt_up is not None)
@@ -545,8 +557,9 @@ def _class(cls):
         c.touch_sensitive = int(bool(cls.touch_sensitive))
         c.max_partial_hz = cls.max_partial_hz or 0.0
         c.sound_speed = proto.sound_speed
-        c.key_jitter = 1
-        c.b_law = _b_law(cls)
+        c.kind = 1 if kit_drum(cls) else 0
+        c.key_jitter = int(c.kind == 0)
+        c.b_law = _b_law(cls) if c.kind == 0 else 0
         c.attack_time = cls.attack_time
         if issubclass(cls, T.UprightPianoProperties):
             c.upright = 1
@@ -587,7 +600,7 @@ def voice(cls, frequency, channel_pan, attack_volume, channel_volume, effort=0.0
     if got is None:
         return None
     c, tmpl = got[0], got[1]
-    lo, hi = cls.string_detune_range
+    lo, hi = getattr(cls, 'string_detune_range', (0.0, 0.0))     # (a drum has no strings)
     if '__init__' in getattr(T, 'HonkyTonkProperties', object).__dict__ and issubclass(cls, T.HonkyTonkProperties):
         lo, hi = lo * T.honky_detune, hi * T.honky_detune
     c.detune_lo, c.detune_hi = lo, hi

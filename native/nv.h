@@ -112,6 +112,9 @@ typedef struct {
     int upright, n_level;
     double attack_time, hammer_soft_s, hammer_hard_s;
     double level_hz[32], level_db[32];
+    /* 0 a grand's constructor (the key's strings and pitch error, the B law
+       above); 1 a kit drum's (SynthProperties' alone: B the class's own) */
+    int kind;
 } VoiceInit;
 
 /* what the note setup reads of the voice besides its VoiceSnap */

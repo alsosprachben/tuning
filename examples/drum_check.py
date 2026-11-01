@@ -7,7 +7,9 @@ the Python it ports?
 For NOTES random strokes (default 400) of the Standard set's drums the
 native voice plays (native.kit_drum: the kick, the toms) -- each at its key's
 pitch, now and then retuned as a file's drum setup retunes it, across the
-velocities and the kit's seats -- every function native/voice.c ports is
+velocities and the kit's seats -- the constructor (nv_voice_init: the
+voice, what the note setup reads, the global random stream after it) and
+every function native/voice.c ports is
 asked what its Python method is asked: each partial's mode ratio (the
 measured modes, the stick's click), series and volume, decay and its two
 stages (aftersound_partial), and blockrender's string_partial and
@@ -89,10 +91,48 @@ def main(argv):
             got = d.nv_voice_vibrato(sp, f0, idx, o3)
             vv = p.voice_vibrato(f0, idx)
             same(('vibrato', key, idx), tuple(vv) if vv else None, (o3[0], o3[1], o3[2]) if got else None)
+    # THE CONSTRUCTOR (nv_voice_init): each class from the same arguments and
+    # the same global random stream as Python's, its VoiceSnap and what the
+    # note setup reads, and the stream after it
+    import random as R_
+    import tonelib as T
+    inits = 0
+    for k in range(n_notes):
+        key = keys[k % len(keys)]
+        name, cls, f0, pan = PCM.percussion_for_note(key, 0)
+        args = (f0 * (2.0 ** (rng.randint(-12, 12) / 12.0) if rng.random() < 0.3 else 1.0),
+                rng.choice((pan, rng.uniform(-1, 1))), (rng.randint(1, 127) / 127.0) ** 2,
+                rng.uniform(0.2, 1.0), rng.choice((0.0, 0.0, rng.uniform(-6, 6))))
+        R_.seed(rng.getrandbits(64))
+        st = N.random_state()
+        p = cls(*args)
+        after = R_.getstate()[1]
+        got = N.voice(cls, *args, state=st)
+        if got is None:
+            bad.append((name, "constructor not supported"))
+            continue
+        inits += 1
+        sp = N.snapshot(p)
+        for f, _ in N.VoiceSnap._fields_:
+            a, b = getattr(sp, f), getattr(got[0], f)
+            if not isinstance(a, (int, float)):
+                flat = lambda x: [list(r) if not isinstance(r, (int, float)) else r for r in x]  # noqa: E731
+                a, b = flat(a), flat(b)
+            same(('init', name, f), a, b)
+        o = got[1]
+        for f, py in (('pitch_jitter', p.pitch_jitter), ('attack_jitter', p.attack_jitter),
+                      ('pan_angle', p.pan_angle), ('left_incidence', p.left_incidence),
+                      ('right_incidence', p.right_incidence), ('left_hrtf_delay', p.left_hrtf_delay),
+                      ('right_hrtf_delay', p.right_hrtf_delay),
+                      ('inharmonicity_coefficient', p.inharmonicity_coefficient),
+                      ('B', p.inharmonicity_coefficient), ('tension_bend', p.tension_bend),
+                      ('attack_time', p.attack_time)):
+            same(('init', name, f), py, getattr(o, f))
+        same(('init', name, 'stream'), list(after[:624]) + [after[624]], list(st.mt) + [st.i])
     for b in bad[:12]:
         print("  DIFFERS", b)
-    print("drum voice: %d strokes of %s, %d answers, %s"
-          % (n_notes, ", ".join(PCM.percussion_for_note(k, 0)[0] for k in keys), asked,
+    print("drum voice: %d strokes of %s and %d constructions, %d answers, %s"
+          % (n_notes, ", ".join(PCM.percussion_for_note(k, 0)[0] for k in keys), inits, asked,
              "identical" if not bad else "%d differ" % len(bad)))
     return len(bad)
 
