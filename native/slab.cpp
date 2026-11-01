@@ -15,6 +15,10 @@
 // Moog's rows, Leslie, filters and the damper tracks.
 
 #include <algorithm>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -775,7 +779,6 @@ struct Piano {
     struct RegSt {
         int ch;
         bool ready = false;
-        void *lc = nullptr;
         double row_f8[NF8], row_f4[NF4];
         int32_t row_i4[NI4];
         std::vector<long> slot_of;
@@ -809,11 +812,157 @@ struct Piano {
     bool reg_live = false, reg_more = false;
     long reg_budget = 0, reg_dropped = 0;
 
+    // THE WORKER'S JOBS (live's reg_jobs: 'strike', 'release', 'damp',
+    // 'felt'), each answered onto a queue of Replies by run_job -- at once,
+    // into reg_out, when the register runs in step (the checks: live's
+    // worker as regsync answers it); or on a worker thread of its own
+    // (reg_async, nvlive: live's worker process, off the audio thread), its
+    // answers taken up at the next pump after they are ready
+    struct Job {
+        int kind;                                   // 0 strike, 1 release, 2 damp, 3 felt
+        int ch, note = -1, R = 0;
+        long long sid = 0;
+        double at = 0.0;
+        std::vector<double> cols, rates;
+        std::vector<long> d;
+        std::vector<int> keys;
+    };
+    std::map<int, void *> lcs;                      // channel -> its register (the worker's chans)
+    bool reg_async = false;
+    std::thread reg_thread;
+    std::mutex reg_mu;
+    std::condition_variable reg_cv;
+    std::deque<Job> reg_jobs;
+    std::deque<Reply> reg_done;
+    std::atomic<long> reg_ndone{0};
+    bool reg_stop = false;
+
     ~Piano()
     {
-        for (RegSt &st : reg)
-            if (st.lc)
-                nv_lreg_free(st.lc);
+        if (reg_thread.joinable()) {
+            {
+                std::lock_guard<std::mutex> lk(reg_mu);
+                reg_stop = true;
+            }
+            reg_cv.notify_all();
+            reg_thread.join();
+        }
+        for (auto &kv : lcs)
+            nv_lreg_free(kv.second);
+    }
+
+    void *lc_of(int ch)
+    {
+        auto it = lcs.find(ch);
+        if (it != lcs.end())
+            return it->second;
+        void *h = nv_lreg_new(rmodes.data(), (int)rmodes.size(), rate, r_kappa, r_knock, r_fall, r_fl, r_top, r_beta);
+        lcs[ch] = h;
+        return h;
+    }
+
+    // a 'free' answer (the job's at sample `at`) onto out -- always, or only
+    // with modes in it; returns the strike's forced rows
+    int answer(int ch, void *lc, int n, double at, bool always, std::deque<Reply> &out)
+    {
+        Reply r;
+        r.kind = 0;
+        r.ch = ch;
+        r.note = -1;
+        r.at = at;
+        r.modes.resize(n);
+        std::vector<double> zz(2 * (size_t)n + 2);
+        double fl;
+        int nf = nv_lreg_answer(lc, r.modes.data(), zz.data(), &fl);
+        r.z.resize(n);
+        for (int q = 0; q < n; q++)
+            r.z[q] = cplx(zz[2 * q], zz[2 * q + 1]);
+        r.floor = fl;
+        if (always || n)
+            out.push_back(std::move(r));
+        return nf;
+    }
+
+    void run_job(const Job &j, std::deque<Reply> &out)
+    {
+        void *lc = lc_of(j.ch);
+        if (j.kind == 0) {
+            int n = nv_lreg_strike(lc, j.sid, j.note, j.at, j.R, j.cols.data(), j.d.data(), j.keys.data(),
+                                   (int)j.keys.size());
+            int nf = answer(j.ch, lc, n, j.at, true, out);
+            if (nf) {
+                Reply r;
+                r.kind = 1;
+                r.ch = j.ch;
+                r.note = j.note;
+                r.at = j.at;
+                r.f_slot.resize(nf); r.f_wgt.resize(nf); r.f_beta.resize(nf);
+                std::vector<double> v(2 * (size_t)nf);
+                nv_lreg_forced(lc, r.f_slot.data(), r.f_wgt.data(), r.f_beta.data(), v.data());
+                for (int q = 0; q < nf; q++)
+                    r.f_val.push_back(cplx(v[2 * q], v[2 * q + 1]));
+                out.push_back(std::move(r));
+            }
+        } else if (j.kind == 1) {
+            answer(j.ch, lc, nv_lreg_release(lc, j.sid, j.at, j.keys.data(), (int)j.keys.size()), j.at, true, out);
+        } else if (j.kind == 2) {
+            nv_lreg_damp(lc, j.keys.data(), (int)j.keys.size());
+        } else {
+            answer(j.ch, lc, nv_lreg_felt(lc, j.at, j.keys.data(), j.rates.data(), (int)j.keys.size()), j.at, false,
+                   out);
+        }
+    }
+
+    void send_job(Job &&j)
+    {
+        if (!reg_async) {
+            run_job(j, reg_out);
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lk(reg_mu);
+            reg_jobs.push_back(std::move(j));
+        }
+        reg_cv.notify_one();
+    }
+
+    void reg_worker()
+    {
+        std::unique_lock<std::mutex> lk(reg_mu);
+        while (true) {
+            reg_cv.wait(lk, [&] { return reg_stop || !reg_jobs.empty(); });
+            if (reg_stop)
+                return;
+            Job j = std::move(reg_jobs.front());
+            reg_jobs.pop_front();
+            lk.unlock();
+            std::deque<Reply> out;
+            run_job(j, out);
+            lk.lock();
+            for (Reply &r : out)
+                reg_done.push_back(std::move(r));
+            reg_ndone = (long)reg_done.size();
+        }
+    }
+
+    void start_reg_worker()
+    {
+        if (reg_async)
+            return;
+        reg_async = true;
+        reg_thread = std::thread([this] { reg_worker(); });
+    }
+
+    // the worker's answers so far, onto reg_out (the audio thread)
+    void reg_collect()
+    {
+        if (!reg_async || reg_ndone.load() == 0)
+            return;
+        std::lock_guard<std::mutex> lk(reg_mu);
+        for (Reply &r : reg_done)
+            reg_out.push_back(std::move(r));
+        reg_done.clear();
+        reg_ndone = 0;
     }
 
     RegSt *reg_of(int ch)
@@ -851,37 +1000,6 @@ struct Piano {
         for (int k = r_top; k < 109; k++)
             keys.insert(k);
         return std::vector<int>(keys.begin(), keys.end());
-    }
-
-    // one channel's register (live_worker's chans: made with its first job)
-    void *reg_lc(RegSt &st)
-    {
-        if (!st.lc)
-            st.lc = nv_lreg_new(rmodes.data(), (int)rmodes.size(), rate, r_kappa, r_knock, r_fall, r_fl, r_top,
-                                r_beta);
-        return st.lc;
-    }
-
-    // a 'free' answer from the worker (its job at sample `at`), onto reg_out
-    // -- always, or only with modes in it; returns the strike's forced rows
-    int reg_answer(RegSt &st, int n, double at, bool always)
-    {
-        Reply r;
-        r.kind = 0;
-        r.ch = st.ch;
-        r.note = -1;
-        r.at = at;
-        r.modes.resize(n);
-        std::vector<double> zz(2 * (size_t)n + 2);
-        double fl;
-        int nf = nv_lreg_answer(st.lc, r.modes.data(), zz.data(), &fl);
-        r.z.resize(n);
-        for (int q = 0; q < n; q++)
-            r.z[q] = cplx(zz[2 * q], zz[2 * q + 1]);
-        r.floor = fl;
-        if (always || n)
-            reg_out.push_back(std::move(r));
-        return nf;
     }
 
     void reg_strike(int ch, int note, long long n0, const nv::live::Template &T, const std::vector<long> &slots)
@@ -940,7 +1058,9 @@ struct Piano {
             if (i >= 0) {
                 long long sid = reg_strike_of[i].second;
                 reg_strike_of.erase(reg_strike_of.begin() + i);
-                reg_answer(*st, nv_lreg_release(reg_lc(*st), sid, (double)n0, fv.data(), (int)fv.size()), (double)n0, true);
+                Job j;
+                j.kind = 1; j.ch = ch; j.sid = sid; j.at = (double)n0; j.keys = fv;
+                send_job(std::move(j));
             }
         }
         if (pedal_up) {
@@ -949,8 +1069,9 @@ struct Piano {
                 if (e.first.first != ch || free.count(e.first.second))
                     continue;
                 reg_strike_of.erase(reg_strike_of.begin() + strike_of_find(e.first.first, e.first.second));
-                reg_answer(*st, nv_lreg_release(reg_lc(*st), e.second, (double)n0, fv.data(), (int)fv.size()),
-                           (double)n0, true);
+                Job j;
+                j.kind = 1; j.ch = ch; j.sid = e.second; j.at = (double)n0; j.keys = fv;
+                send_job(std::move(j));
             }
         }
         if (st->ready) {
@@ -960,11 +1081,13 @@ struct Piano {
                     dead.push_back(m);
             reg_close(*st, dead, n0, r_rel);
         }
-        std::vector<int> damp;
+        Job j;
+        j.kind = 2;
+        j.ch = ch;
         for (int k = 21; k < 109; k++)
             if (!free.count(k))
-                damp.push_back(k);
-        nv_lreg_damp(reg_lc(*st), damp.data(), (int)damp.size());
+                j.keys.push_back(k);
+        send_job(std::move(j));
     }
 
     void reg_felt(int ch, long long n0)
@@ -1001,8 +1124,9 @@ struct Piano {
                 for (size_t m = 0; m < rmodes.size(); m++)
                     if (rmodes[m].key == keys[q])
                         st.krate[m] = rates[q] * st.dw[m];
-            reg_answer(st, nv_lreg_felt(reg_lc(st), (double)n0, keys.data(), rates.data(), (int)keys.size()),
-                       (double)n0, false);
+            Job j;
+            j.kind = 3; j.ch = st.ch; j.at = (double)n0; j.keys = keys; j.rates = rates;
+            send_job(std::move(j));
         }
     }
 
@@ -1051,25 +1175,14 @@ struct Piano {
                 for (int c = 0; c < 7; c++)
                     cols[(5 + c) * R + r] = (double)S.f4[f4c[c]][s];
             }
-            RegSt &st = *reg_of(p.ch);
-            std::vector<int> fv = reg_free(p.ch);
-            int n = nv_lreg_strike(reg_lc(st), p.sid, p.note, (double)p.at, R, cols.data(), d.data(), fv.data(),
-                                   (int)fv.size());
-            int nf = reg_answer(st, n, (double)p.at, true);
-            if (nf) {
-                Reply r;
-                r.kind = 1;
-                r.ch = p.ch;
-                r.note = p.note;
-                r.at = (double)p.at;
-                r.f_slot.resize(nf); r.f_wgt.resize(nf); r.f_beta.resize(nf);
-                std::vector<double> v(2 * (size_t)nf);
-                nv_lreg_forced(st.lc, r.f_slot.data(), r.f_wgt.data(), r.f_beta.data(), v.data());
-                for (int q = 0; q < nf; q++)
-                    r.f_val.push_back(cplx(v[2 * q], v[2 * q + 1]));
-                reg_out.push_back(std::move(r));
-            }
+            Job j;
+            j.kind = 0; j.ch = p.ch; j.sid = p.sid; j.note = p.note; j.at = (double)p.at; j.R = R;
+            j.cols.swap(cols);
+            j.d.swap(d);
+            j.keys = reg_free(p.ch);
+            send_job(std::move(j));
         }
+        reg_collect();
         // what the worker handed back: until a block's worth is placed
         reg_more = false;
         reg_budget = REG_PLACE_MAX;
@@ -1585,7 +1698,8 @@ struct Piano {
             else
                 control(e.ch, e.a, e.b, n0);
         }
-        if (reg_on && (!reg_pend.empty() || !reg_out.empty() || reg_live || !reg_retire.empty()))
+        if (reg_on && (!reg_pend.empty() || !reg_out.empty() || reg_live || !reg_retire.empty()
+                       || reg_ndone.load() > 0))
             reg_pump(n0);
         std::vector<Key> sw;
         for (auto &kv : S.live) {
@@ -1735,6 +1849,11 @@ void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void
     g.C.make(1024, sz[1]);
     g.SB.make(1 << 14, sz[2]);
 }
+
+// The register's jobs on a worker thread of the part's own, off the audio
+// thread (live's worker process): answers placed at the pump after they are
+// ready, not in step -- for playing, not for the checks
+void nv_lp_reg_async(void *h) { ((nv::slab::Piano *)h)->start_reg_worker(); }
 
 // did the last block render on the GPU
 int nv_lp_on_gpu(void *h) { return ((nv::slab::Piano *)h)->on_gpu; }

@@ -3,7 +3,9 @@
 //
 //     nvlive EXPORT.nvx [--program=N] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
+//                       [--no-rt] [--rt-prio=N] [--reg-sync]
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
+//                       [--rt] [--reg-async]
 //
 // EXPORT.nvx is examples/native_export.py --live's. At start the part's
 // templates are built (live.Patch.warm: every key 21-96 at each velocity
@@ -20,9 +22,16 @@
 // with live.Live fed the same events.
 //
 // THE REGISTER (the free strings answering, live's _reg_*) when the export
-// has the program's (its LREG section), unless --no-register: its worker's
-// jobs answered as they are sent (live's own worker, a process, answers a
-// few blocks later as it can).
+// has the program's (its LREG section), unless --no-register. Playing, its
+// jobs are answered on a thread of their own, off the audio thread, and
+// placed when ready -- as live's worker process does (--reg-sync: answered
+// as they are sent, in the block); --test answers them in step, as the
+// checks do, so its output is the same every run.
+//
+// REAL-TIME when playing (live's rtsched, its default): the audio thread
+// SCHED_RR 18, directly or through rtkit, guarded against a runaway block
+// (--no-rt or TUNING_RT=0: not). On Ctrl-C it reports its blocks over
+// budget and ALSA's underruns.
 //
 // THE DAMPERS IN BETWEEN (live._damp_block): a pedal value in damper.py's
 // band takes a pedalled key down by its level, through synth_voice_damp.
@@ -32,8 +41,8 @@
 //
 // THE GPU (--gpu, live's --gpu): live.GpuRenderer's block -- its setup on
 // the CPU (voice_block, from the export's LGPU builds), the samples on
-// OpenCL (native/gpu.cpp, gpukernel.cl) -- for a block with live's GPU_MIN
-// busy slots or more (--gpu-min). --gpu=c runs the samples through the C
+// OpenCL (native/gpu.cpp, gpukernel.cl) -- for a block with 100 busy slots
+// or more (--gpu-min; live's GPU_MIN is 1000, set for Python's costs). --gpu=c runs the samples through the C
 // reference (voice_samples) instead, to check the setup without a GPU.
 //
 // PRESSURE (channel aftertouch): the notes on its channel lifted by the
@@ -53,6 +62,11 @@
 #include <cstring>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <sched.h>
+#include <spawn.h>
+#include <sys/resource.h>
+#include <sys/syscall.h>
+#include <sys/wait.h>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -85,6 +99,7 @@ void *nv_kp_new(int key);
 void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr);
 int nv_lp_on_gpu(void *h);
 void nv_lp_gpu_ms(void *h, double *out);
+void nv_lp_reg_async(void *h);
 void *nv_cl_new(const char *dir, const int *sizes, char *err, int errlen);
 int nv_kp_feed(void *h, int type, int ch, int a, int *v);
 void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
@@ -212,6 +227,98 @@ struct Alsa {
 };
 
 static std::atomic<bool> g_stop(false);
+extern "C" char **environ;
+
+// REAL-TIME, as live's rtsched.RtSched sets it by default (not pinned): the
+// audio thread SCHED_RR at PRIO, under PipeWire's 20 -- directly when this
+// user may, else through rtkit (the desktop's real-time broker, no sudo),
+// which insists on RLIMIT_RTTIME: SIGXCPU at the soft limit, SIGKILL at the
+// hard. THE GUARD: a thread waking every GUARD_MS that, finding a block
+// running past STUCK_MS, puts the audio thread back on the desktop's
+// scheduler -- a runaway block costs real-time, never the session; SIGXCPU
+// does the same. rtkit's grants reset on fork, so the threads the audio
+// thread starts (the GPU setup's OpenMP team) are not real-time; the
+// register's worker is started before it is promoted, and is not either.
+namespace rt {
+const int PRIO = 18;                            // rtsched.PRIO
+const long RTTIME_SOFT_US = 100000, RTTIME_HARD_US = 200000;
+const int GUARD_MS = 25, STUCK_MS = 60;
+const int RESET_ON_FORK = 0x40000000;           // SCHED_RESET_ON_FORK
+static std::atomic<long> tid(0);
+static std::atomic<long long> busy_since(0);    // steady_clock ns at the running block's start, 0 between
+static std::atomic<bool> promoted(false);
+static std::atomic<int> dropped(0);
+
+static long long now_ns()
+{
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+
+static void demote()
+{
+    if (!promoted.exchange(false))
+        return;
+    sched_param p{};
+    p.sched_priority = 0;
+    sched_setscheduler((pid_t)tid.load(), SCHED_OTHER | RESET_ON_FORK, &p);
+    dropped++;
+}
+
+static void on_xcpu(int) { demote(); }
+
+// rtsched.rtkit_promote: busctl, naming the pid, so it works from any process
+static std::string rtkit(long pid, long t, int prio)
+{
+    std::string a[] = {"busctl", "--system", "call", "org.freedesktop.RealtimeKit1",
+                       "/org/freedesktop/RealtimeKit1", "org.freedesktop.RealtimeKit1",
+                       "MakeThreadRealtimeWithPID", "ttu", std::to_string(pid), std::to_string(t),
+                       std::to_string(prio)};
+    std::vector<char *> argv;
+    for (std::string &x : a)
+        argv.push_back(&x[0]);
+    argv.push_back(nullptr);
+    posix_spawn_file_actions_t fa;
+    posix_spawn_file_actions_init(&fa);
+    posix_spawn_file_actions_addopen(&fa, 1, "/dev/null", O_WRONLY, 0);
+    posix_spawn_file_actions_addopen(&fa, 2, "/dev/null", O_WRONLY, 0);
+    pid_t c;
+    int r = posix_spawnp(&c, "busctl", &fa, nullptr, argv.data(), environ);
+    posix_spawn_file_actions_destroy(&fa);
+    if (r != 0)
+        return "no busctl";
+    int st = 0;
+    waitpid(c, &st, 0);
+    return WIFEXITED(st) && WEXITSTATUS(st) == 0 ? "" : "rtkit refused";
+}
+
+// the calling thread real-time; "" or why not
+static std::string promote(int prio)
+{
+    tid = (long)syscall(SYS_gettid);
+    rlimit rl{(rlim_t)RTTIME_SOFT_US, (rlim_t)RTTIME_HARD_US};
+    setrlimit(RLIMIT_RTTIME, &rl);
+    signal(SIGXCPU, on_xcpu);
+    sched_param p{};
+    p.sched_priority = prio;
+    std::string why;
+    if (sched_setscheduler(0, SCHED_RR | RESET_ON_FORK, &p) != 0) {
+        why = rtkit((long)getpid(), tid.load(), prio);
+        if (!why.empty())
+            return why;
+    }
+    promoted = true;
+    std::thread([] {
+        while (!g_stop) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(GUARD_MS));
+            long long b = busy_since.load();
+            if (b && promoted.load() && now_ns() - b > (long long)STUCK_MS * 1000000)
+                demote();
+        }
+    }).detach();
+    return "";
+}
+}  // namespace rt
 static void on_signal(int) { g_stop = true; }
 
 struct Midi {
@@ -370,8 +477,13 @@ int main(int argc, char **argv)
                 why = err;
         }
         if (why.empty()) {
-            long gmin = atol(opt(argc, argv, "gpu-min",
-                                 std::to_string(BLK <= 64 ? E.gpu_min[1] : E.gpu_min[0]).c_str()).c_str());
+            // FROM 100 BUSY SLOTS, not live's GPU_MIN (1000, set against Python's
+            // cost of a GPU block): natively a GPU block is ~0.35 ms however
+            // many rows it has, and the CPU's took 1.4 ms on average under
+            // 1000 (5.7 ms at p99) -- ondine.mid's 60 s, real-time, register
+            // off the thread: 489 blocks over 2.67 ms at 1000, none at 100.
+            // Each side's own threshold is checked by nvlive_check --gpu-min.
+            long gmin = atol(opt(argc, argv, "gpu-min", "100").c_str());
             nv_lp_gpu(part, vb, vbd, vds, vs, vz, cl, gmin, atoi(opt(argc, argv, "gpu-threads", "4").c_str()));
             fprintf(stderr, "nvlive: the GPU (%s), from %ld busy slots\n", cl ? "OpenCL" : "the C reference", gmin);
         } else {
@@ -416,9 +528,20 @@ int main(int argc, char **argv)
             if (secs <= 0)
                 secs = nv_midi_total(m) + 3.0;
             long long nb = (long long)(secs * SR) / BLK;
+            // timing as played: --reg-async (the register off this thread; the
+            // output then varies run to run) and --rt (this thread real-time)
+            for (int q = 1; q < argc; q++) {
+                if (!strcmp(argv[q], "--reg-async"))
+                    nv_lp_reg_async(part);
+                if (!strcmp(argv[q], "--rt")) {
+                    std::string why = rt::promote(rt::PRIO);
+                    fprintf(stderr, "nvlive: %s\n", why.empty() ? "real-time, SCHED_RR 18" : ("not real-time: " + why).c_str());
+                }
+            }
             std::vector<float> out;
             std::vector<double> ms, msr, mss, msg;      // each block's events, step and render, ms; its render;
                                                         // a GPU block's setup and samples
+            std::vector<double> mstep, mcpu;            // the step (events, register, dampers); a CPU block's render
             int e = 0;
             for (long long b = 0; b < nb; b++) {
                 auto t0 = std::chrono::steady_clock::now();
@@ -436,6 +559,9 @@ int main(int argc, char **argv)
                 auto t1 = std::chrono::steady_clock::now();
                 nv_lp_render(part, n0, (long)BLK, L, R, nullptr, nullptr, fn[0], fn[1], fn[2], BLK, master);
                 msr.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count());
+                mstep.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count());
+                if (!nv_lp_on_gpu(part))
+                    mcpu.push_back(msr.back());
                 if (nv_lp_on_gpu(part)) {
                     double g2[2];
                     nv_lp_gpu_ms(part, g2);
@@ -472,6 +598,8 @@ int main(int argc, char **argv)
                             t / v.size(), v[v.size() * 99 / 100], v.back(), v.size());
                 };
                 stat("render", msr);
+                stat("step", mstep);
+                stat("CPU render", mcpu);
                 stat("GPU setup", mss);
                 stat("GPU samples", msg);
             }
@@ -526,10 +654,31 @@ int main(int argc, char **argv)
     std::mutex mu;
     std::vector<Midi> q;
     std::thread reader(midi_reader, fd, &mu, &q);
+    // the register's jobs on their own thread, off this one (--reg-sync: in step)
+    bool rsync = false, nort = getenv("TUNING_RT") && !strcmp(getenv("TUNING_RT"), "0");
+    for (int i = 1; i < argc; i++) {
+        rsync = rsync || !strcmp(argv[i], "--reg-sync");
+        nort = nort || !strcmp(argv[i], "--no-rt");
+    }
+    if (!rsync)
+        nv_lp_reg_async(part);
+    // ...and this thread real-time (--no-rt, TUNING_RT=0: not)
+    if (!nort) {
+        int prio = atoi(opt(argc, argv, "rt-prio", std::to_string(rt::PRIO).c_str()).c_str());
+        std::string why = rt::promote(prio);
+        if (why.empty())
+            fprintf(stderr, "nvlive: real-time, SCHED_RR %d\n", prio);
+        else
+            fprintf(stderr, "nvlive: not real-time (%s)\n", why.c_str());
+    }
     fprintf(stderr, "nvlive: playing (MIDI %s, audio %s, %u us); Ctrl-C to stop\n", dev.c_str(), pcmdev.c_str(), lat);
     std::vector<float> buf(2 * BLK);
     long long n0 = 0;
+    long underruns = 0, over = 0, blocks = 0;
+    double worst = 0.0, budget = 1000.0 * BLK / SR;
     while (!g_stop) {
+        long long t0 = rt::now_ns();
+        rt::busy_since = t0;
         std::vector<Midi> evs;
         {
             std::lock_guard<std::mutex> lk(mu);
@@ -539,15 +688,24 @@ int main(int argc, char **argv)
             event(m.type, m.ch, m.a, m.b);
         nv_lp_block(part, n0, BLK);
         nv_lp_render(part, n0, (long)BLK, L, R, nullptr, nullptr, fn[0], fn[1], fn[2], BLK, master);
+        rt::busy_since = 0;
+        double ms = (rt::now_ns() - t0) / 1e6;
+        blocks++;
+        over += ms > budget;
+        worst = ms > worst ? ms : worst;
         for (long long k = 0; k < BLK; k++) {
             buf[2 * k] = L[k];
             buf[2 * k + 1] = R[k];
         }
         long w = A.writei(A.pcm, buf.data(), (unsigned long)BLK);
-        if (w < 0)
+        if (w < 0) {
+            underruns += w == -32;                      // -EPIPE: the device ran dry
             A.recover(A.pcm, (int)w, 1);
+        }
         n0 += BLK;
     }
+    fprintf(stderr, "nvlive: %ld blocks, %ld over %.2f ms (worst %.2f), %ld underruns%s\n", blocks, over, budget,
+            worst, underruns, rt::dropped ? ", real-time dropped by the guard" : "");
     g_stop = true;
     reader.join();
     A.close(A.pcm);
