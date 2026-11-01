@@ -3,7 +3,7 @@
 //
 //     nvlive EXPORT.nvx [--program=N] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
-//                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry]
+//                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
 //                       [--rt] [--reg-async] [--govern]
 //
@@ -74,7 +74,12 @@
 // PORTAMENTO (CC5, 65, 84) is ignored, as live ignores it on a piano: a
 // glide is a voice's mechanism (live._glide), and no piano class has one.
 //
-// Not yet: the TUI.
+// THE PANEL (native/panel.h), playing on a terminal (--no-panel: none, and
+// Ctrl-C to stop): live's for this piano -- the globals, the controls and
+// routes (added and taken away here, kept beside the export in
+// EXPORT.nvx.routes and read back next time), the output's meters, panic.
+// The audio runs on its own thread; the panel's changes are done between
+// two blocks.
 
 #include <algorithm>
 #include <array>
@@ -87,6 +92,7 @@
 #include <cstring>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <functional>
 #include <sched.h>
 #include <spawn.h>
 #include <sys/resource.h>
@@ -98,6 +104,7 @@
 #include <unistd.h>
 #include <vector>
 
+#include "panel.h"
 #include "pycompat.h"
 
 extern "C" {
@@ -132,6 +139,10 @@ void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void
 int nv_lp_on_gpu(void *h);
 void nv_lp_gpu_ms(void *h, double *out);
 void nv_lp_reg_async(void *h);
+void nv_lp_set(void *h, int what, double v);
+void nv_lp_stats(void *h, double *out);
+void nv_lp_panic(void *h, long long n0);
+void nv_rt_del(void *h, int i);
 long nv_lp_govern(void *h, double ms, double budget_ms, long long n);
 long nv_lp_partials_shed(void *h);
 void *nv_cl_new(const char *dir, const int *sizes, char *err, int errlen);
@@ -583,10 +594,21 @@ int main(int argc, char **argv)
     // THE ROUTES ahead of the part (live.Route, Live.on_midi): the session's,
     // from the export, and --pedal-key's -- a key held as the sustain pedal,
     // pushed into (aftertouch) to lower the dampers
+    // ...or, once the panel has edited them, the routes kept beside the export
+    std::string routes_file = std::string(argv[1]) + ".routes";
+    if (FILE *rf = fopen(routes_file.c_str(), "r")) {
+        E.routes.clear();
+        std::array<int, 7> a;
+        while (fscanf(rf, "%d %d %d %d %d %d %d", &a[0], &a[1], &a[2], &a[3], &a[4], &a[5], &a[6]) == 7)
+            E.routes.push_back(a);
+        fclose(rf);
+        fprintf(stderr, "nvlive: the routes kept in %s\n", routes_file.c_str());
+    }
     void *router = nv_rt_new();
     for (auto &a : E.routes)
         nv_rt_add(router, a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
     std::string pks = opt(argc, argv, "pedal-key", "");
+    std::array<int, 7> pedal_route = {3, atoi(pks.c_str()), 64, 0, -1, 0, 1};
     if (!pks.empty()) {
         nv_rt_add(router, 3, atoi(pks.c_str()), 64, 0, -1, 0, 1);
         fprintf(stderr, "nvlive: key %d is the sustain pedal, pushed into to lower the dampers\n", atoi(pks.c_str()));
@@ -756,65 +778,215 @@ int main(int argc, char **argv)
     std::mutex mu;
     std::vector<Midi> q;
     std::thread reader(midi_reader, fd, &mu, &q);
-    // the register's jobs on their own thread, off this one (--reg-sync: in step)
-    bool rsync = false, nort = getenv("TUNING_RT") && !strcmp(getenv("TUNING_RT"), "0");
+    // the register's jobs on their own thread, off the audio one (--reg-sync: in step)
+    bool rsync = false, nort = getenv("TUNING_RT") && !strcmp(getenv("TUNING_RT"), "0"), nopanel = !isatty(1);
     for (int i = 1; i < argc; i++) {
         rsync = rsync || !strcmp(argv[i], "--reg-sync");
         nort = nort || !strcmp(argv[i], "--no-rt");
+        nopanel = nopanel || !strcmp(argv[i], "--no-panel");
     }
     if (!rsync)
         nv_lp_reg_async(part);
-    // ...and this thread real-time (--no-rt, TUNING_RT=0: not)
-    if (!nort) {
-        int prio = atoi(opt(argc, argv, "rt-prio", std::to_string(rt::PRIO).c_str()).c_str());
-        std::string why = rt::promote(prio);
-        if (why.empty())
-            fprintf(stderr, "nvlive: real-time, SCHED_RR %d\n", prio);
-        else
-            fprintf(stderr, "nvlive: not real-time (%s)\n", why.c_str());
-    }
-    fprintf(stderr, "nvlive: playing (MIDI %s, audio %s, %u us); Ctrl-C to stop\n", dev.c_str(), pcmdev.c_str(), lat);
-    std::vector<float> buf(2 * BLK);
-    long long n0 = 0;
+    fprintf(stderr, "nvlive: playing (MIDI %s, audio %s, %u us); %s\n", dev.c_str(), pcmdev.c_str(), lat,
+            nopanel ? "Ctrl-C to stop" : "the panel (q to stop)");
+    // WHAT THE PANEL POSTS, done between two blocks (live.post); what it
+    // reads, handed over after each; and a key it is learning
+    std::mutex pmu;
+    std::vector<std::function<void(long long)>> posted;
+    panel::Snap snap;
+    std::atomic<int> learning(0);                   // 1 armed, 2 got one
+    std::atomic<int> learnt_ch(-1), learnt_note(-1);
+    std::pair<int, int> swallow(-1, -1);            // the learnt key's release (audio thread)
     long underruns = 0, over = 0, blocks = 0;
     double worst = 0.0, budget = 1000.0 * BLK / SR;
     bool govern = true;
     for (int i = 1; i < argc; i++)
         govern = govern && strcmp(argv[i], "--no-governor");
-    while (!g_stop) {
-        long long t0 = rt::now_ns();
-        rt::busy_since = t0;
-        std::vector<Midi> evs;
-        {
-            std::lock_guard<std::mutex> lk(mu);
-            evs.swap(q);
+    double master_now = master;
+    std::atomic<bool> rt_on(false);
+    // THE AUDIO THREAD: real-time (--no-rt, TUNING_RT=0: not), block by block
+    auto audio = [&]() {
+        if (!nort) {
+            int prio = atoi(opt(argc, argv, "rt-prio", std::to_string(rt::PRIO).c_str()).c_str());
+            std::string why = rt::promote(prio);
+            rt_on = why.empty();
+            if (nopanel)
+                fprintf(stderr, why.empty() ? "nvlive: real-time, SCHED_RR %d\n" : "nvlive: not real-time (%s)\n",
+                        why.empty() ? prio : 0, why.c_str());
         }
-        for (const Midi &m : evs)
-            event(m.type, m.ch, m.a, m.b);
-        nv_lp_block(part, n0, BLK);
-        nv_lp_output(part, n0, (long)BLK, L, R, fn[0], fn[1], fn[2], BLK, master);
-        rt::busy_since = 0;
-        double ms = (rt::now_ns() - t0) / 1e6;
-        if (govern)
-            nv_lp_govern(part, ms, budget, n0 + BLK);
-        blocks++;
-        over += ms > budget;
-        worst = ms > worst ? ms : worst;
-        for (long long k = 0; k < BLK; k++) {
-            buf[2 * k] = L[k];
-            buf[2 * k + 1] = R[k];
+        std::vector<float> buf(2 * BLK);
+        long long n0 = 0;
+        while (!g_stop) {
+            long long t0 = rt::now_ns();
+            rt::busy_since = t0;
+            std::vector<std::function<void(long long)>> todo;
+            {
+                std::lock_guard<std::mutex> lk(pmu);
+                todo.swap(posted);
+            }
+            for (auto &f : todo)
+                f(n0);
+            std::vector<Midi> evs;
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                evs.swap(q);
+            }
+            for (const Midi &m : evs) {
+                // LEARNING A KEY (live._learn_take): the next press taken, and
+                // neither it nor its release plays
+                if (learning == 1 && m.type == 0) {
+                    learnt_ch = m.ch;
+                    learnt_note = m.a;
+                    learning = 2;
+                    swallow = std::make_pair(m.ch, m.a);
+                    continue;
+                }
+                if (m.type == 1 && swallow == std::make_pair(m.ch, m.a)) {
+                    swallow = std::make_pair(-1, -1);
+                    continue;
+                }
+                event(m.type, m.ch, m.a, m.b);
+            }
+            nv_lp_block(part, n0, BLK);
+            nv_lp_output(part, n0, (long)BLK, L, R, fn[0], fn[1], fn[2], BLK, master_now);
+            rt::busy_since = 0;
+            double ms = (rt::now_ns() - t0) / 1e6;
+            if (govern)
+                nv_lp_govern(part, ms, budget, n0 + BLK);
+            blocks++;
+            over += ms > budget;
+            worst = ms > worst ? ms : worst;
+            float pk[2] = {0.0f, 0.0f};
+            for (long long k = 0; k < BLK; k++) {
+                buf[2 * k] = L[k];
+                buf[2 * k + 1] = R[k];
+                pk[0] = std::max(pk[0], fabsf(L[k]));
+                pk[1] = std::max(pk[1], fabsf(R[k]));
+            }
+            {
+                std::lock_guard<std::mutex> lk(pmu);
+                snap.n0 = n0;
+                snap.blocks = blocks;
+                snap.over = over;
+                snap.ms_max = std::max(snap.ms_max, ms);
+                snap.ms_sum += ms;
+                snap.ms_n++;
+                snap.peak[0] = std::max(snap.peak[0], pk[0]);
+                snap.peak[1] = std::max(snap.peak[1], pk[1]);
+                if ((blocks & 7) == 0)
+                    nv_lp_stats(part, snap.eng);
+                snap.rt = rt_on && !rt::dropped;
+                snap.rt_dropped = rt::dropped > 0;
+            }
+            long w = A.writei(A.pcm, buf.data(), (unsigned long)BLK);
+            if (w < 0) {
+                underruns += w == -32;                  // -EPIPE: the device ran dry
+                A.recover(A.pcm, (int)w, 1);
+                std::lock_guard<std::mutex> lk(pmu);
+                snap.underruns = underruns;
+            }
+            n0 += BLK;
         }
-        long w = A.writei(A.pcm, buf.data(), (unsigned long)BLK);
-        if (w < 0) {
-            underruns += w == -32;                      // -EPIPE: the device ran dry
-            A.recover(A.pcm, (int)w, 1);
+    };
+    std::thread player(audio);
+    if (nopanel) {
+        while (!g_stop)
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    } else {
+        // THE PANEL, on this thread
+        static const char *GM[8] = {"Acoustic Grand Piano", "Bright Acoustic Piano", "Electric Grand Piano",
+                                    "Honky-tonk Piano", "Electric Piano 1", "Electric Piano 2", "Harpsichord",
+                                    "Clavi"};
+        panel::Host H;
+        auto post = [&](std::function<void(long long)> f) {
+            std::lock_guard<std::mutex> lk(pmu);
+            posted.push_back(std::move(f));
+        };
+        H.take = [&]() {
+            std::lock_guard<std::mutex> lk(pmu);
+            panel::Snap s = snap;
+            snap.ms_max = snap.ms_sum = 0.0;
+            snap.ms_n = 0;
+            snap.peak[0] = snap.peak[1] = 0.0f;
+            return s;
+        };
+        H.learn = [&](bool on) {
+            learnt_ch = learnt_note = -1;
+            learning = on ? 1 : 0;
+        };
+        H.learnt = [&]() {
+            return learning == 2 ? std::make_pair(learnt_ch.load(), learnt_note.load()) : std::make_pair(-1, -1);
+        };
+        H.rate = SR;
+        H.frames = (int)BLK;
+        H.budget_ms = budget;
+        H.program = program;
+        H.program_name = program >= 0 && program < 8 ? GM[program] : "";
+        H.port = dev;
+        H.room = E.room.empty() ? "-" : E.room;
+        H.reg_modes = rg.M > 0 && !noreg ? rg.M : 0;
+        double st[15];
+        nv_lp_stats(part, st);
+        H.has_gpu = st[12] > 0.5;
+        H.has_room = st[11] > 0.5;
+        H.g[0] = 20.0 * log10(std::max(master, 1e-12));
+        H.g[1] = -20.0 * log10(std::max(E.headroom, 1e-12));
+        H.g[2] = E.k.size() > K_THRESH ? E.k[K_THRESH] : 0.70;
+        H.g[3] = E.k.size() > K_BEND_RANGE ? E.k[K_BEND_RANGE] : 2.0;
+        H.g[4] = 35.0;
+        H.g[5] = E.k.size() > K_PRESS_DB ? E.k[K_PRESS_DB] : 8.0;
+        H.g[6] = H.has_gpu ? 1.0 : 0.0;
+        H.g[7] = H.has_room ? 1.0 : 0.0;
+        H.set_global = [&](int i, double v) {
+            post([&, i, v](long long) {
+                switch (i) {
+                case 0: master_now = pow(10.0, v / 20.0); break;     // T.master_gain
+                case 1: nv_lp_set(part, 0, v); break;
+                case 2: nv_lp_set(part, 2, v); break;
+                case 3: nv_lp_set(part, 3, v); break;
+                case 4: nv_lp_set(part, 4, v); break;
+                case 5: nv_lp_set(part, 1, v); break;
+                case 6: nv_lp_set(part, 5, v); break;
+                case 7: nv_lp_set(part, 6, v); break;
+                }
+            });
+        };
+        H.routes = E.routes;
+        if (!pks.empty())
+            H.routes.push_back(pedal_route);
+        H.add_route = [&](const std::array<int, 7> &a) {
+            post([&, a](long long) { nv_rt_add(router, a[0], a[1], a[2], a[3], a[4], a[5], a[6]); });
+        };
+        H.del_route = [&](int i) { post([&, i](long long) { nv_rt_del(router, i); }); };
+        H.panic = [&]() { post([&](long long n) { nv_lp_panic(part, n); }); };
+        bool edited = false;
+        auto was = H.routes;
+        panel::Panel P(H);
+        P.run([&]() { return !g_stop.load(); });
+        g_stop = true;
+        edited = H.routes != was;
+        // ROUTES ADDED OR TAKEN AWAY HERE are kept beside the export, and read
+        // back the next time (--pedal-key's own not among them)
+        if (edited) {
+            if (FILE *wf = fopen(routes_file.c_str(), "w")) {
+                bool skipped = pks.empty();
+                for (auto &a : H.routes) {
+                    if (!skipped && a == pedal_route) {
+                        skipped = true;
+                        continue;
+                    }
+                    fprintf(wf, "%d %d %d %d %d %d %d\n", a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
+                }
+                fclose(wf);
+                fprintf(stderr, "nvlive: routes kept in %s\n", routes_file.c_str());
+            }
         }
-        n0 += BLK;
     }
+    g_stop = true;
+    player.join();
     fprintf(stderr, "nvlive: %ld blocks, %ld over %.2f ms (worst %.2f), %ld underruns, %ld partials shed%s\n", blocks,
             over, budget, worst, underruns, nv_lp_partials_shed(part),
             rt::dropped ? ", real-time dropped by the guard" : "");
-    g_stop = true;
     reader.join();
     A.close(A.pcm);
     ::close(fd);

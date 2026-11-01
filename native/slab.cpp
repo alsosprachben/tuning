@@ -907,6 +907,36 @@ struct Piano {
         repitch(ch, n0);
     }
 
+    // PANIC (live.panic, _all_off): every key let go over its own release,
+    // what no key holds ended the same way (an orphan: busy, no key, not yet
+    // ending -- noff at n0 plus its release delay), the keys and the pedal's
+    // holds forgotten
+    bool room_on = true;                            // the panel's: the tail on or off
+    void panic(long long n0)
+    {
+        std::vector<Key> keys;
+        for (auto &kv : S.live)
+            keys.push_back(kv.first);
+        for (const Key &k : keys) {
+            S.oneshot.erase(k);
+            S.release(k, n0);
+        }
+        std::vector<char> held(S.cap, 0);
+        for (auto &kv : S.live)
+            for (long q : kv.second)
+                held[q] = 1;
+        std::vector<long> orphan;
+        for (long q = 0; q < S.cap; q++)
+            if (S.busy[q] && !held[q] && S.i8[1][q] == IDLE)
+                orphan.push_back(q);
+        for (long q : orphan)
+            S.i8[1][q] = std::min(S.i8[1][q], n0 + (long long)S.f4[F4_rdl][q]);
+        if (!orphan.empty())
+            S.retiring.push_back(std::make_pair(orphan, n0));
+        down.clear();
+        pedalled.clear();
+    }
+
     // CC120, ALL SOUND OFF (live's): the channel stopped now, pedal or no
     // pedal -- every key on it over the steal-fade, its keys, pedals and
     // sostenuto cleared, and its register killed (_reg_channel, kill)
@@ -1997,6 +2027,7 @@ struct Piano {
         Table D, C, SB;
     } gp;
     bool on_gpu = false;                // did the last block go to the GPU
+    bool gpu_off = false;               // the panel's: the CPU for every block
     double ms_setup = 0.0, ms_samples = 0.0;    // its two halves (live's GpuRenderer.ms_*)
     std::vector<long> gidx, gnon, gnoff;
     std::vector<float> gout;
@@ -2105,7 +2136,7 @@ struct Piano {
         long act = 0;
         for (long q = 0; q < hi; q++)
             act += S.busy[q] != 0;
-        on_gpu = gp.vb && act >= gp.gpu_min && frames == blk && n0 % frames == 0;
+        on_gpu = gp.vb && !gpu_off && act >= gp.gpu_min && frames == blk && n0 % frames == 0;
         if (on_gpu && !render_gpu(n0, frames, L, R, SL, SR, blk))
             on_gpu = false;
         if (!on_gpu) {
@@ -2219,12 +2250,12 @@ struct Piano {
         bool uniform = true;
         for (int c = 1; c < 256 && uniform; c++)
             uniform = S.send[c] == S.send[0];
-        bool snd = room && !uniform;
+        bool snd = room && room_on && !uniform;
         oSL.assign(frames, 0.0f);
         oSR.assign(frames, 0.0f);
         render(n0, frames, L, R, snd ? oSL.data() : nullptr, snd ? oSR.data() : nullptr, sv, sx, sd, blk,
                master_gain);
-        if (room) {
+        if (room && room_on) {
             const float *sl = L, *sr = R;
             if (snd) {
                 sl = oSL.data();                    // (times the master volume's 1.0)
@@ -2675,6 +2706,23 @@ int nv_rt_feed(void *h, int type, int ch, int a, int b, int *out, int cap)
 
 void nv_rt_free(void *h) { delete (nv::slab::Router *)h; }
 
+// the panel's: how many routes, route i's seven (nv_rt_add's), route i gone
+int nv_rt_count(void *h) { return (int)((nv::slab::Router *)h)->routes.size(); }
+
+void nv_rt_get(void *h, int i, int *out)
+{
+    const nv::slab::Route &r = ((nv::slab::Router *)h)->routes[i];
+    int v[7] = {r.src, r.arg, r.dst, r.keep, r.channel, r.latch, r.press};
+    memcpy(out, v, sizeof v);
+}
+
+void nv_rt_del(void *h, int i)
+{
+    auto &rs = ((nv::slab::Router *)h)->routes;
+    if (i >= 0 && i < (int)rs.size())
+        rs.erase(rs.begin() + i);
+}
+
 // the damper tracks' values (DM: 2 x 256 floats)
 void nv_lp_dm(void *h, float *out)
 {
@@ -2715,6 +2763,57 @@ long nv_lp_govern(void *h, double ms, double budget_ms, long long n)
 }
 
 long nv_lp_partials_shed(void *h) { return ((nv::slab::Piano *)h)->partials_shed; }
+
+// THE PANEL'S: a global set between blocks -- 0 headroom (dB), 1 the
+// pressure's lift (dB), 2 the limiter's knee, 3 the wheel's range, 4 the mod
+// range (cents), 5 the GPU on (1) or off, 6 the room's tail on or off
+void nv_lp_set(void *h, int what, double v)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    switch (what) {
+    case 0:
+        P->S.headroom_d = pow(10.0, -v / 20.0);
+        P->S.headroom = (float)P->S.headroom_d;
+        break;
+    case 1: P->press_db = v; break;
+    case 2: P->thresh = v; break;
+    case 3: P->bend_range = v; break;
+    case 4: P->mod_cents = v; break;
+    case 5: P->gpu_off = v < 0.5; break;
+    case 6: P->room_on = v >= 0.5; break;
+    }
+}
+
+// what the panel shows: 0 busy slots, 1 keys sounding, 2 partials shed, 3
+// register rows dropped, 4 the GPU took the last block, 5 its setup ms, 6
+// its samples ms, 7 channel 1's pedal, 8 sostenuto down on it, 9 mono on it,
+// 10 damper tracks, 11 a room, 12 the GPU on, 13 the tail on, 14 the bend
+// on channel 1 (cents)
+void nv_lp_stats(void *h, double *out)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    long busy = 0;
+    for (long q = 0; q < P->S.cap; q++)
+        busy += P->S.busy[q] != 0;
+    out[0] = (double)busy;
+    out[1] = (double)P->S.live.size();
+    out[2] = (double)P->partials_shed;
+    out[3] = (double)P->reg_dropped;
+    out[4] = P->on_gpu;
+    out[5] = P->ms_setup;
+    out[6] = P->ms_samples;
+    out[7] = P->pedal_v[0];
+    out[8] = P->sost.count(0) ? 1.0 : 0.0;
+    out[9] = P->mono[0];
+    out[10] = (double)P->dtracks.size();
+    out[11] = P->room ? 1.0 : 0.0;
+    out[12] = P->gp.vb && !P->gpu_off;
+    out[13] = P->room_on;
+    out[14] = 1200.0 * log2(P->bend[0]);
+}
+
+// live.panic, at n0
+void nv_lp_panic(void *h, long long n0) { ((nv::slab::Piano *)h)->panic(n0); }
 
 // did the last block render on the GPU
 int nv_lp_on_gpu(void *h) { return ((nv::slab::Piano *)h)->on_gpu; }

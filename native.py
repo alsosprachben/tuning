@@ -1165,7 +1165,9 @@ def build_nvlive():
     src = os.path.join(HERE, 'native', 'nvlive.cpp')
     exe = os.path.join(HERE, 'nvlive')
     so = os.path.join(HERE, 'libnative.so')
-    if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(so)) > os.path.getmtime(exe):
+    hdr = os.path.join(HERE, 'native', 'panel.h')
+    if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(hdr),
+                                      os.path.getmtime(so)) > os.path.getmtime(exe):
         tmp = '%s.%d.tmp' % (exe, os.getpid())
         subprocess.check_call(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin',
                                src, '-o', tmp, '-L' + HERE, '-lnative', '-ldl', '-lpthread',
