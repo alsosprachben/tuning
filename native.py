@@ -644,6 +644,13 @@ def note_class(cls):
     import tonelib as T
     import blockrender as BR
     got = _NOTE.get(cls)
+    if got is None and kit_drum(cls):
+        # A KIT DRUM'S VOICE IS NATIVE (voice.c, examples/drum_check.py), ITS
+        # NOTE NOT YET: the drum branch of the note setup (the kit's pitch and
+        # seat, the one-shot's hold, the glide) is Python's until it is ported
+        # and checked -- so its notes stay Python's, in blockrender and the exports
+        _NOTE[cls] = False
+        got = False
     if got is None:
         v = _class(cls)
         ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF)

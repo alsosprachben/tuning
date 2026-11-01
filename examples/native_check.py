@@ -107,7 +107,8 @@ def main(argv):
     # the voice's constructor (nv_voice_init): each class, its VoiceSnap and
     # what the note setup reads, and the global random stream after it
     import random as R_
-    classes = [c for c in {PM.PROGRAM_CLASS[k] for k in PM.PROGRAM_CLASS} if N.init_supported(c)]
+    classes = [c for c in {PM.PROGRAM_CLASS[k] for k in PM.PROGRAM_CLASS}
+               if N.init_supported(c) and issubclass(c, T.GrandPianoProperties)]     # (the drums: drum_check)
     inits = 0
     for k in range(n_notes):
         cls = classes[k % len(classes)]
