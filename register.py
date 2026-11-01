@@ -1463,6 +1463,16 @@ def _cplx(re, im):
     return out
 
 
+def _xangle(z):
+    """np.angle, libm's atan2 (native.xangle)."""
+    return _NV().xangle(z)
+
+
+def _xlog(x):
+    """log over an array as libm's (native.xlog)."""
+    return _NV().xlog(x)
+
+
 def _xcexp(z):
     """exp(re) * (cos im, sin im), libm's (native.xcexp)."""
     return _NV().xcexp(z)
@@ -1510,11 +1520,56 @@ def _glide_phase_x(Wi, tb, tau, cut, t):
     return Wi * tau * acc
 
 
+class LiveWorker(object):
+    """live_worker's state and its jobs, one at a time (a check runs them in
+    step with live's audio thread): each answer through send()."""
+
+    def __init__(self):
+        self.strings, self.chans = {}, {}
+
+    def handle(self, job, send):
+        import blockrender as B
+        kind = job[0]
+        if kind == 'build':
+            pid, pc, tuner, rate, scale = job[1:]
+            Sg = Strings(pc, B.tuning_table(tuner), 0.0, 1.0, rate,
+                         (B.string_partial, B.partial_decay, B.unison_partial))
+            self.strings[pid] = (Sg, _isolated(pc, 261.63, 0.0, 1.0), rate, scale)
+            send(('built', pid, dict(M=len(Sg.f), W=Sg.W, f=Sg.f, alpha=Sg.alpha,
+                                     key=Sg.key, string=Sg.string, hl=Sg.hl,
+                                     hr=Sg.hr, dl=Sg.dl, dr=Sg.dr)))
+            return
+        rid = job[1]
+        lc = self.chans.get(rid)
+        if lc is None and rid[0] in self.strings:
+            Sg, props, rate, scale = self.strings[rid[0]]
+            lc = self.chans[rid] = LiveChannel(Sg, props, rate, scale)
+        if lc is None:
+            return
+        if kind == 'strike':
+            sid, note, at, drv, free = job[2:7]
+            idx, z, forced = lc.strike(sid, note, at, drv, free, job[7] if len(job) > 7 else None)
+            send(('free', rid, idx, z, at, lc.fl * max(lc.loud, 1e-30)))
+            if forced:
+                send(('forced', rid, note, forced, at))
+        elif kind == 'release':
+            sid, at, free = job[2:]
+            idx, z = lc.release(sid, at, free)
+            send(('free', rid, idx, z, at, lc.fl * max(lc.loud, 1e-30)))
+        elif kind == 'damp':
+            lc.damp(job[2])
+        elif kind == 'felt':
+            at, keys, rates = job[2:5]
+            idx, z = lc.felt(at, keys, rates)
+            if len(idx):
+                send(('free', rid, idx, z, at, lc.fl * max(lc.loud, 1e-30)))
+
+
 def live_worker(conn):
     """live.py's register worker, in a PROCESS of its own: the response is
     Python-heavy, and a thread doing it took the interpreter lock from the
     audio callback (a pedal-up block went 1.9 -> 6.7 ms against a 2.67 ms
-    budget). Jobs in, results out, over a pipe:
+    budget). Jobs in, results out, over a pipe (LiveWorker.handle):
 
       ('build', pid, pc, tuner, rate, scale)   -> ('built', pid, arrays)
       ('strike', rid, sid, note, at, drv, free[, plucked]) -> ('free', rid, modes, z, at, floor)
@@ -1527,49 +1582,15 @@ def live_worker(conn):
         os.nice(5)                     # below the audio, whose core this is not
     except OSError:
         pass
-    import blockrender as B
-    strings, chans = {}, {}
+    W = LiveWorker()
     while True:
         try:
             job = conn.recv()
         except EOFError:
             return
-        kind = job[0]
-        if kind == 'stop':
+        if job[0] == 'stop':
             return
         try:
-            if kind == 'build':
-                pid, pc, tuner, rate, scale = job[1:]
-                Sg = Strings(pc, B.tuning_table(tuner), 0.0, 1.0, rate,
-                             (B.string_partial, B.partial_decay, B.unison_partial))
-                strings[pid] = (Sg, _isolated(pc, 261.63, 0.0, 1.0), rate, scale)
-                conn.send(('built', pid, dict(M=len(Sg.f), W=Sg.W, f=Sg.f, alpha=Sg.alpha,
-                                              key=Sg.key, string=Sg.string, hl=Sg.hl,
-                                              hr=Sg.hr, dl=Sg.dl, dr=Sg.dr)))
-                continue
-            rid = job[1]
-            lc = chans.get(rid)
-            if lc is None and rid[0] in strings:
-                Sg, props, rate, scale = strings[rid[0]]
-                lc = chans[rid] = LiveChannel(Sg, props, rate, scale)
-            if lc is None:
-                continue
-            if kind == 'strike':
-                sid, note, at, drv, free = job[2:7]
-                idx, z, forced = lc.strike(sid, note, at, drv, free, job[7] if len(job) > 7 else None)
-                conn.send(('free', rid, idx, z, at, lc.fl * max(lc.loud, 1e-30)))
-                if forced:
-                    conn.send(('forced', rid, note, forced, at))
-            elif kind == 'release':
-                sid, at, free = job[2:]
-                idx, z = lc.release(sid, at, free)
-                conn.send(('free', rid, idx, z, at, lc.fl * max(lc.loud, 1e-30)))
-            elif kind == 'damp':
-                lc.damp(job[2])
-            elif kind == 'felt':
-                at, keys, rates = job[2:5]
-                idx, z = lc.felt(at, keys, rates)
-                if len(idx):
-                    conn.send(('free', rid, idx, z, at, lc.fl * max(lc.loud, 1e-30)))
+            W.handle(job, conn.send)
         except Exception as e:
             conn.send(('error', None, "%s: %s" % (type(e).__name__, e)))

@@ -43,3 +43,10 @@ void nv_cexp_n(long n, const double *z, double *out)
         out[2 * i + 1] = e * sin(z[2 * i + 1]);
     }
 }
+
+/* the angle of complex values (interleaved re, im): atan2(im, re), np.angle's */
+void nv_cangle_n(long n, const double *z, double *out)
+{
+    for (long i = 0; i < n; i++)
+        out[i] = atan2(z[2 * i + 1], z[2 * i]);
+}

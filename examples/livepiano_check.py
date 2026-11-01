@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Does the native piano part play live MIDI as live.Live does?
 
-    python3 examples/livepiano_check.py [BLOCKS] [--program=N] [--seed=N] [--every=N] [--render]
+    python3 examples/livepiano_check.py [BLOCKS] [--program=N] [--seed=N] [--every=N] [--render] [--register]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native piano part (native/slab.cpp: its template cache, its slab, live's
@@ -14,6 +14,10 @@ order. The first block that differs is reported with its events. Live's
 governor (Slab.shed, by the wall-clock render time) is off: a host policy,
 not arithmetic to match. --render: each block's dry render too -- live's
 Renderer.render (and its room send, when on) against the native part's.
+--register: the free strings too (live's register, on the CPU here), its
+worker answering each job as it is sent on both sides -- live's through
+register.LiveWorker in step with its callback, the native part's in
+native/livereg.cpp -- so a reply is placed at the first pump after its job.
 """
 import os
 import random
@@ -21,6 +25,7 @@ import sys
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(HERE, "examples"))
 
 
 def main(argv):
@@ -48,6 +53,12 @@ def main(argv):
                                                if pt.detune_wheel else pt.leslie_default)
     nv = N.LivePiano(cache, part.pid, part.level_db, pt.nbuckets, speed, pt.damper_pedal, pt.soft_pedal_strings,
                      pt.soft_pedal_top, 48000, capacity=lv.slab.cap, headroom=lv.slab.headroom)
+    if "register" in opt:
+        import blockrender as BR
+        import regsync
+        regsync.sync(lv, part)
+        nv.register(pt._voice_class(60), BR.tuning_table(pt.tuner), 48000.0, getattr(BR, 'REGISTER_SCALE', 1.0),
+                    [lv._reg_voice(part, n) for n in range(128)])
     held = set()
     M = mido.Message
     dry = []
@@ -116,10 +127,23 @@ def main(argv):
         if b % every == every - 1 or b == blocks - 1:
             if compare(b):
                 print("  block %d (sample %d) DIFFERS: %s" % (b, n0, " ".join(bad[:8])))
+                if "debug" in opt:
+                    for c in bad[:2]:
+                        if c in L.ALL_COLS:
+                            x, y = np.asarray(lv.slab.a[c]), nv.slab.col(c)
+                            dd = np.flatnonzero(x != y)
+                            print("    %s at %d slots, e.g. %s: live %s native %s" % (
+                                c, len(dd), dd[:6].tolist(), x[dd[:6]].tolist(), y[dd[:6]].tolist()))
+                    own = {int(q): k for k, v in lv.slab.live.items() for q in v}
+                    print("    owners:", [own.get(int(q), "reg/retiring") for q in dd[:6]])
                 for x in log[-4:]:
                     print("    block %d at %d: %s" % (x[0], x[1], "; ".join(str(m) for m in x[2]) or "-"))
                 break
     sounding = sum(len(v) for v in lv.slab.live.values())
+    if "register" in opt:
+        print("  register: %d rows placed, %d dropped (native %d); live's errors: %d %s" % (
+            int(np.sum(lv.slab.busy)) - sounding, lv.reg_dropped, nv.reg_dropped(), lv.errors,
+            lv.last_error or ""))
     print("live piano: %d blocks, program %d, %s%s (%d slots sounding at the end)"
           % (b + 1, prog, "identical" if not bad else "differs",
              ", every block's render too" if "render" in opt and not rbad else "", sounding))

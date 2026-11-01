@@ -30,6 +30,10 @@ section: live's pan table (CC10 -> shadow alphas, half the ears' delay) and
 the head's beta, the slab's headroom (live's 4 dB), and each native
 program's part as live.Patch makes it -- its velocity buckets, wheel steps
 and default step, dampers, una corda's strings and the instrument's top.
+Then an LREG section, each program's free strings as live's register
+builds them (native.live_bank: the string bank at the part's tuning, its
+LiveChannel's constants), its dampers and release, damper.py's felt, and
+which keys' classes answer (live._reg_voice) -- an M of 0 where none.
 """
 import ctypes
 import math
@@ -116,6 +120,34 @@ def main(argv):
                     rec += [int(bool(pt.damper_pedal)), int(pt.soft_pedal_strings), int(pt.soft_pedal_top)]
                     rec = rec[:7] + rec[7:]
                 f.write(struct.pack("<10i", *(rec + [0] * (10 - len(rec)))[:10]))
+            f.write(b"LREG")
+            for prog in range(128):
+                pc = None
+                if any(cmap[128 * prog + k] >= 0 for k in range(128)):
+                    pt = L.Patch(prog, False, tuner, 0)
+                    pc = pt._voice_class(60)
+                    if not B.REGISTER or pc is None or not (getattr(pc, 'register_gain', 0.0) > 0.0
+                                                            or getattr(pc, 'register_knock_gain', 0.0) > 0.0):
+                        pc = None
+                if pc is None:
+                    f.write(struct.pack("<i", 0))
+                    continue
+                modes, M, kk = N.live_bank(pc, B.tuning_table(pt.tuner), float(B.SR),
+                                           getattr(B, 'REGISTER_SCALE', 1.0))
+                f.write(struct.pack("<i", M))
+                f.write(bytes(modes)[:M * ctypes.sizeof(N.StringMode)])
+                kappa, knock, fall, fl, top, beta = kk
+                f.write(struct.pack("<9d", kappa, knock, fall, fl, beta,
+                                    float(getattr(pc, 'release_valve_time', 0.12) or 0.12) * B.SR,
+                                    float(DM.FULL_DB_S), float(DM.RESIDUAL), float(DM.LN10_20)))
+                f.write(struct.pack("<3i", int(top), int(bool(getattr(pc, 'damper_pedal', True))), int(B.BLK)))
+                # live._reg_voice, key by key
+                ok = []
+                for k in range(128):
+                    kc = pt._voice_class(k)
+                    ok.append(int(kc is not None and (getattr(kc, 'register_gain', 0.0) > 0.0
+                                                      or getattr(kc, 'register_knock_gain', 0.0) > 0.0)))
+                f.write(struct.pack("<128i", *ok))
     print("native export: %d piano class(es), tuner %s, room %s -> %s" % (len(classes), tuner,
                                                                           room.decode() or "-", args[0]))
     return 0

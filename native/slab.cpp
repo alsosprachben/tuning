@@ -15,6 +15,7 @@
 // Moog's rows, Leslie, filters and the damper tracks.
 
 #include <cmath>
+#include <complex>
 #include <cstdint>
 #include <cstring>
 #include <deque>
@@ -25,8 +26,23 @@
 #include <vector>
 
 #include "live.h"
+#include "nv.h"
 
 extern "C" double nv_damper_contact(int p, int key, int top);
+
+extern "C" {
+// livereg.cpp: register.LiveChannel
+void *nv_lreg_new(const StringMode *modes, int M, double sr, double kappa, double knock, double fall, double fl,
+                  int top, double beta);
+int nv_lreg_strike(void *h, long long sid, int key, double at, int R, const double *cols, const long *slot,
+                   const int *free_keys, int nfree);
+int nv_lreg_release(void *h, long long sid, double at, const int *free_keys, int nfree);
+void nv_lreg_damp(void *h, const int *keys, int n);
+int nv_lreg_felt(void *h, double at, const int *keys, const double *rates, int n);
+int nv_lreg_answer(void *h, long *idx, double *z, double *floor_);
+void nv_lreg_forced(void *h, long *slot, double *wgt, double *beta, double *val);
+void nv_lreg_free(void *h);
+}
 
 namespace nv {
 namespace slab {
@@ -360,7 +376,11 @@ struct Slab {
 // live's callback runs them: the block's events at its start, then the sweep
 // (a key neither down nor held released), then the reap. Not here yet: the
 // pitch wheel, modulation, CC71-78, pressure, sostenuto, half-pedal damper
-// tracks, the register (live's needs the GPU), mono, the other voices.
+// tracks, mono, the other voices. THE REGISTER (live's _reg_*), when given
+// one (nv_lp_register): its worker's jobs answered in step -- each as it is
+// sent, as a worker that kept up would, so a reply is placed at the first
+// pump after its job (live's own worker answers a few blocks later, as it
+// can: the same rows, later).
 
 struct Ev {
     int type;               // 0 note-on, 1 note-off, 2 control change
@@ -425,12 +445,18 @@ struct Piano {
         Key key(pid, ch, note, -1);
         long li = S.live_find(key);
         if (damper_pedal && li >= 0 && !S.live[li].second.empty() && !S.oneshot.count(key)) {
-            // a restrike: the string under the hammer stops in a steal-fade
+            // a restrike: the string under the hammer stops in a steal-fade,
+            // and its forced register rows (REG_FORCED) with it
             float fade = (float)(retrigger * rate);
-            for (long sidx : S.live[li].second)
-                if (fade < S.f4[F4_re][sidx])
-                    S.f4[F4_re][sidx] = fade;
-            S.release(key, n0);
+            for (const Key &k : {key, Key(pid, ch, note, REG_FORCED)}) {
+                long lk = S.live_find(k);
+                if (lk < 0 || S.live[lk].second.empty())
+                    continue;
+                for (long sidx : S.live[lk].second)
+                    if (fade < S.f4[F4_re][sidx])
+                        S.f4[F4_re][sidx] = fade;
+                S.release(k, n0);
+            }
         }
         if (!S.stamp_t(*T, key, n0, scale, ch))
             return;                         // the slab full: this note does not sound
@@ -440,6 +466,8 @@ struct Piano {
             S.repan(slots, cpan[ch], 64, rate, true);
         if (soft[ch] && !slots.empty())
             S.soft_strings(slots, soft_drop, soft_top);
+        if (reg_on && reg_note[note] && !S.last_slots.empty())
+            reg_strike(ch, note, n0, *T, S.last_slots);
     }
 
     void note_off(int ch, int note, long long n0)
@@ -450,6 +478,10 @@ struct Piano {
             return;
         }
         S.release(Key(pid, ch, note, -1), n0);
+        if (reg_on) {
+            S.release(Key(pid, ch, note, REG_FORCED), n0);
+            reg_damper(ch, n0, note, false);
+        }
     }
 
     void control(int ch, int cc, int v, long long n0)
@@ -471,6 +503,7 @@ struct Piano {
         } else if (cc == 64) {
             int was_v = pedal_v[ch];
             pedal_v[ch] = v;
+            reg_felt(ch, n0);
             if (v < was_v) {
                 std::set<std::pair<int, int>> gone;
                 for (auto &k : pedalled)
@@ -484,10 +517,570 @@ struct Piano {
                     S.release(k, n0);
                 for (auto &k : gone)
                     pedalled.erase(k);
+                if (reg_on)                         // _reg_channel: the pedal came up
+                    for (size_t i = 0; i < reg.size(); i++)
+                        if (reg[i].ch == ch)
+                            reg_damper(ch, n0, -1, true);
             }
         } else if (cc == 67) {
             soft[ch] = v >= 64;
         }
+    }
+
+    // THE FREE-STRING REGISTER, LIVE (live._reg_strike, _reg_damper, _reg_felt,
+    // _reg_channel, _reg_pump, _reg_place, _reg_close): one register channel
+    // per MIDI channel (register.LiveChannel, livereg.cpp), its free rows the
+    // register's own slots, one per string mode, retired once -- at its
+    // damper or under the floor; its forced rows on their note's key (layer
+    // REG_FORCED), going when it does.
+    typedef std::complex<double> cplx;
+    static const long long REG_KEY = -2, REG_FORCED = -3;      // live's "reg" and REG_FORCED layers
+    static const long REG_PLACE_MAX = 256;
+    bool reg_on = false;
+    std::vector<StringMode> rmodes;
+    double r_kappa = 0, r_knock = 0, r_fall = 0, r_fl = 0, r_beta = 0, r_rel = 0, r_full = 0, r_resid = 0,
+           r_ln = 0, r_blk = 128;
+    int r_top = 128, r_pedals = 1;
+    bool reg_note[128];
+    struct RegSt {
+        int ch;
+        bool ready = false;
+        void *lc = nullptr;
+        double row_f8[NF8], row_f4[NF4];
+        int32_t row_i4[NI4];
+        std::vector<long> slot_of;
+        std::vector<double> n_floor, krate, dw;
+        bool has_krate = false;
+        std::map<int, double> krate_key;
+    };
+    std::vector<RegSt> reg;                         // by channel, as made (live's self.reg)
+    struct Pend {
+        int ch;
+        long long sid;
+        int note;
+        long long at;
+        std::vector<long> slots;
+    };
+    std::vector<Pend> reg_pend;
+    struct Reply {
+        int kind;                                   // 0 'free', 1 'forced'
+        int ch, note;
+        std::vector<long> modes;
+        std::vector<cplx> z;
+        double at, floor;
+        std::vector<long> f_slot;
+        std::vector<double> f_wgt, f_beta;
+        std::vector<cplx> f_val;
+    };
+    std::deque<Reply> reg_out;
+    std::vector<std::pair<std::pair<int, int>, long long>> reg_strike_of;      // (ch, note) -> sid, a dict's order
+    std::vector<std::pair<long long, std::vector<long>>> reg_retire;          // n0 -> slots closed, a dict's order
+    long long reg_sid = 0;
+    bool reg_live = false, reg_more = false;
+    long reg_budget = 0, reg_dropped = 0;
+
+    ~Piano()
+    {
+        for (RegSt &st : reg)
+            if (st.lc)
+                nv_lreg_free(st.lc);
+    }
+
+    RegSt *reg_of(int ch)
+    {
+        for (RegSt &st : reg)
+            if (st.ch == ch)
+                return &st;
+        return nullptr;
+    }
+
+    long strike_of_find(int ch, int note) const
+    {
+        for (size_t i = 0; i < reg_strike_of.size(); i++)
+            if (reg_strike_of[i].first == std::make_pair(ch, note))
+                return (long)i;
+        return -1;
+    }
+
+    // _reg_free: the keys whose strings are free on this channel, now (sorted)
+    std::vector<int> reg_free(int ch) const
+    {
+        std::set<int> keys;
+        if (r_pedals && pedal_v[ch] > 0) {
+            std::vector<int> held;
+            for (int k = 21; k < 109; k++)
+                if (nv_damper_contact(pedal_v[ch], k, r_top) < 1.0)
+                    held.push_back(k);
+            if (held.size() == 88)
+                return held;
+            keys.insert(held.begin(), held.end());
+        }
+        for (auto &d : down)
+            if (d.first == ch)
+                keys.insert(d.second);
+        for (int k = r_top; k < 109; k++)
+            keys.insert(k);
+        return std::vector<int>(keys.begin(), keys.end());
+    }
+
+    // one channel's register (live_worker's chans: made with its first job)
+    void *reg_lc(RegSt &st)
+    {
+        if (!st.lc)
+            st.lc = nv_lreg_new(rmodes.data(), (int)rmodes.size(), rate, r_kappa, r_knock, r_fall, r_fl, r_top,
+                                r_beta);
+        return st.lc;
+    }
+
+    // a 'free' answer from the worker (its job at sample `at`), onto reg_out
+    // -- always, or only with modes in it; returns the strike's forced rows
+    int reg_answer(RegSt &st, int n, double at, bool always)
+    {
+        Reply r;
+        r.kind = 0;
+        r.ch = st.ch;
+        r.note = -1;
+        r.at = at;
+        r.modes.resize(n);
+        std::vector<double> zz(2 * (size_t)n + 2);
+        double fl;
+        int nf = nv_lreg_answer(st.lc, r.modes.data(), zz.data(), &fl);
+        r.z.resize(n);
+        for (int q = 0; q < n; q++)
+            r.z[q] = cplx(zz[2 * q], zz[2 * q + 1]);
+        r.floor = fl;
+        if (always || n)
+            reg_out.push_back(std::move(r));
+        return nf;
+    }
+
+    void reg_strike(int ch, int note, long long n0, const nv::live::Template &T, const std::vector<long> &slots)
+    {
+        if (!reg_of(ch)) {
+            RegSt st;
+            st.ch = ch;
+            for (int c = 0; c < NF8; c++) st.row_f8[c] = T.f8[c][0];
+            for (int c = 0; c < NF4; c++) st.row_f4[c] = T.f4[c][0];
+            for (int c = 0; c < NI4; c++) st.row_i4[c] = T.i4[c][0];
+            reg.push_back(st);
+        }
+        reg_sid += 1;
+        long i = strike_of_find(ch, note);
+        if (i >= 0)
+            reg_strike_of[i].second = reg_sid;
+        else
+            reg_strike_of.push_back(std::make_pair(std::make_pair(ch, note), reg_sid));
+        reg_pend.push_back(Pend{ch, reg_sid, note, n0, slots});
+    }
+
+    void reg_close(RegSt &st, const std::vector<long> &modes, long long n0, double re_)
+    {
+        if (modes.empty())
+            return;
+        std::vector<long> sl;
+        for (long m : modes) {
+            long s = st.slot_of[m];
+            st.slot_of[m] = -1;
+            if (S.busy[s])
+                sl.push_back(s);
+        }
+        if (sl.empty())
+            return;
+        for (long s : sl) {
+            S.i8[1][s] = n0;
+            S.f4[F4_re][s] = (float)re_;
+        }
+        for (auto &e : reg_retire)
+            if (e.first == n0) {
+                e.second.insert(e.second.end(), sl.begin(), sl.end());
+                return;
+            }
+        reg_retire.push_back(std::make_pair(n0, sl));
+    }
+
+    void reg_damper(int ch, long long n0, int released, bool pedal_up)
+    {
+        RegSt *st = reg_of(ch);
+        if (!st)
+            return;
+        std::vector<int> fv = reg_free(ch);
+        std::set<int> free(fv.begin(), fv.end());
+        if (released >= 0 && !free.count(released)) {
+            long i = strike_of_find(ch, released);
+            if (i >= 0) {
+                long long sid = reg_strike_of[i].second;
+                reg_strike_of.erase(reg_strike_of.begin() + i);
+                reg_answer(*st, nv_lreg_release(reg_lc(*st), sid, (double)n0, fv.data(), (int)fv.size()), (double)n0, true);
+            }
+        }
+        if (pedal_up) {
+            std::vector<std::pair<std::pair<int, int>, long long>> was = reg_strike_of;
+            for (auto &e : was) {
+                if (e.first.first != ch || free.count(e.first.second))
+                    continue;
+                reg_strike_of.erase(reg_strike_of.begin() + strike_of_find(e.first.first, e.first.second));
+                reg_answer(*st, nv_lreg_release(reg_lc(*st), e.second, (double)n0, fv.data(), (int)fv.size()),
+                           (double)n0, true);
+            }
+        }
+        if (st->ready) {
+            std::vector<long> dead;
+            for (long m = 0; m < (long)rmodes.size(); m++)
+                if (!free.count((int)rmodes[m].key) && st->slot_of[m] >= 0)
+                    dead.push_back(m);
+            reg_close(*st, dead, n0, r_rel);
+        }
+        std::vector<int> damp;
+        for (int k = 21; k < 109; k++)
+            if (!free.count(k))
+                damp.push_back(k);
+        nv_lreg_damp(reg_lc(*st), damp.data(), (int)damp.size());
+    }
+
+    void reg_felt(int ch, long long n0)
+    {
+        if (!reg_on)
+            return;
+        int v = pedal_v[ch];
+        for (RegSt &st : reg) {
+            if (st.ch != ch || !st.ready || !r_pedals)
+                continue;
+            std::vector<int> keys;
+            std::vector<double> rates;
+            for (int k = 21; k < 109; k++) {
+                double c = nv_damper_contact(v, k, r_top);
+                double r = (0.0 < c && c < 1.0) ? r_full * c * r_resid * r_ln : 0.0;
+                auto it = st.krate_key.find(k);
+                if (r != (it == st.krate_key.end() ? 0.0 : it->second)) {
+                    st.krate_key[k] = r;
+                    keys.push_back(k);
+                    rates.push_back(r);
+                }
+            }
+            if (keys.empty())
+                continue;
+            if (!st.has_krate) {
+                st.has_krate = true;
+                st.krate.assign(rmodes.size(), 0.0);
+                for (const StringMode &q : rmodes) {
+                    double f0 = 440.0 * pow(2.0, ((double)q.key - 69.0) / 12.0);
+                    st.dw.push_back(pow((q.f >= 1e-6 ? q.f : 1e-6) / f0, r_beta));
+                }
+            }
+            for (size_t q = 0; q < keys.size(); q++)
+                for (size_t m = 0; m < rmodes.size(); m++)
+                    if (rmodes[m].key == keys[q])
+                        st.krate[m] = rates[q] * st.dw[m];
+            reg_answer(st, nv_lreg_felt(reg_lc(st), (double)n0, keys.data(), rates.data(), (int)keys.size()),
+                       (double)n0, false);
+        }
+    }
+
+    void reg_pump(long long n0)
+    {
+        for (RegSt &st : reg) {
+            if (!st.ready) {
+                st.slot_of.assign(rmodes.size(), -1);
+                st.n_floor.assign(rmodes.size(), 0.0);
+                st.ready = true;
+                reg_felt(st.ch, n0);            // a pedal already in the band
+            }
+        }
+        // this block's strikes: their stamped direct rows, read now, and the keys free now
+        std::vector<Pend> pend;
+        pend.swap(reg_pend);
+        for (const Pend &p : pend) {
+            std::vector<long> idx;
+            for (long s : p.slots)
+                if (S.busy[s])
+                    idx.push_back(s);
+            if (idx.empty())
+                continue;
+            double mn = 0.0;
+            std::vector<double> dl(idx.size());
+            for (size_t q = 0; q < idx.size(); q++) {
+                dl[q] = (double)S.f4[F4_delL][idx[q]] + (double)S.f4[F4_delR][idx[q]];
+                if (q == 0 || dl[q] < mn)
+                    mn = dl[q];
+            }
+            std::vector<long> d;
+            for (size_t q = 0; q < idx.size(); q++)
+                if (dl[q] <= mn + 2.0)
+                    d.push_back(idx[q]);
+            int R = (int)d.size();
+            // drv's columns, livereg.cpp's order: om p0 delL aM non logr logrA aft sus tbav tau tcut
+            std::vector<double> cols(12 * (size_t)R);
+            static const int f4c[] = {6, 7, 8, 9, 16, 17, 18};      // logr logrA aft sus tbav tau tcut
+            for (int r = 0; r < R; r++) {
+                long s = d[r];
+                cols[0 * R + r] = S.f8[F8_om][s];
+                cols[1 * R + r] = S.f8[F8_p0][s];
+                cols[2 * R + r] = (double)S.f4[F4_delL][s];
+                cols[3 * R + r] = 0.5 * ((double)S.aL0[s] + (double)S.aR0[s]);
+                cols[4 * R + r] = (double)S.i8[0][s];
+                for (int c = 0; c < 7; c++)
+                    cols[(5 + c) * R + r] = (double)S.f4[f4c[c]][s];
+            }
+            RegSt &st = *reg_of(p.ch);
+            std::vector<int> fv = reg_free(p.ch);
+            int n = nv_lreg_strike(reg_lc(st), p.sid, p.note, (double)p.at, R, cols.data(), d.data(), fv.data(),
+                                   (int)fv.size());
+            int nf = reg_answer(st, n, (double)p.at, true);
+            if (nf) {
+                Reply r;
+                r.kind = 1;
+                r.ch = p.ch;
+                r.note = p.note;
+                r.at = (double)p.at;
+                r.f_slot.resize(nf); r.f_wgt.resize(nf); r.f_beta.resize(nf);
+                std::vector<double> v(2 * (size_t)nf);
+                nv_lreg_forced(st.lc, r.f_slot.data(), r.f_wgt.data(), r.f_beta.data(), v.data());
+                for (int q = 0; q < nf; q++)
+                    r.f_val.push_back(cplx(v[2 * q], v[2 * q + 1]));
+                reg_out.push_back(std::move(r));
+            }
+        }
+        // what the worker handed back: until a block's worth is placed
+        reg_more = false;
+        reg_budget = REG_PLACE_MAX;
+        while (!reg_out.empty() && !reg_more) {
+            Reply r = std::move(reg_out.front());
+            reg_out.pop_front();
+            reg_place(n0, r);
+        }
+        // rows fallen under the floor: ended
+        if (reg_live) {
+            bool live_ = false;
+            for (RegSt &st : reg) {
+                if (!st.ready)
+                    continue;
+                bool on = false;
+                std::vector<long> done;
+                for (size_t m = 0; m < st.slot_of.size(); m++)
+                    if (st.slot_of[m] >= 0) {
+                        on = true;
+                        if (st.n_floor[m] <= (double)n0)
+                            done.push_back((long)m);
+                    }
+                if (on) {
+                    reg_close(st, done, n0, (double)r_blk);
+                    for (long x : st.slot_of)
+                        if (x >= 0) {
+                            live_ = true;
+                            break;
+                        }
+                }
+            }
+            reg_live = live_;
+        }
+        for (auto &e : reg_retire)
+            S.retiring.push_back(std::make_pair(e.second, e.first));
+        reg_retire.clear();
+    }
+
+    void reg_place(long long n0, Reply &job)
+    {
+        RegSt *stp = reg_of(job.ch);
+        if (!stp || !stp->ready)
+            return;
+        RegSt &st = *stp;
+        if (job.kind == 0) {
+            // ONLY STRINGS STILL FREE NOW
+            if (!job.modes.empty()) {
+                std::vector<int> fv = reg_free(job.ch);
+                std::set<int> free(fv.begin(), fv.end());
+                std::vector<long> m2;
+                std::vector<cplx> z2;
+                for (size_t q = 0; q < job.modes.size(); q++)
+                    if (free.count((int)rmodes[job.modes[q]].key)) {
+                        m2.push_back(job.modes[q]);
+                        z2.push_back(job.z[q]);
+                    }
+                job.modes.swap(m2);
+                job.z.swap(z2);
+            }
+            if (job.modes.empty())
+                return;
+            long nb = std::max(reg_budget, 1L);
+            if ((long)job.modes.size() > nb) {
+                // A BLOCK'S WORTH AT A TIME: the rest waits a block
+                Reply rest = job;
+                rest.modes.assign(job.modes.begin() + nb, job.modes.end());
+                rest.z.assign(job.z.begin() + nb, job.z.end());
+                reg_out.push_front(std::move(rest));
+                job.modes.resize(nb);
+                job.z.resize(nb);
+                reg_more = true;
+            }
+            reg_budget -= (long)job.modes.size();
+            if (reg_budget <= 0)
+                reg_more = true;
+            std::vector<long> old;
+            for (long m : job.modes)
+                if (st.slot_of[m] >= 0)
+                    old.push_back(m);
+            reg_close(st, old, n0, (double)r_blk);
+            // each mode's rate: its own, and the felt's in the band
+            double dt = (double)n0 - job.at;
+            dt = 0.0 > dt ? 0.0 : dt;                               // Python's max(n0 - at, 0.0)
+            std::vector<long> modes;
+            std::vector<cplx> zz;
+            std::vector<double> lr;
+            for (size_t q = 0; q < job.modes.size(); q++) {
+                long m = job.modes[q];
+                double l = st.has_krate ? rmodes[m].alpha + st.krate[m] : rmodes[m].alpha;
+                double g = exp(-l * dt / rate);
+                cplx a(job.z[q].real() * g - job.z[q].imag() * 0.0, job.z[q].real() * 0.0 + job.z[q].imag() * g);
+                if (hypot(a.real(), a.imag()) >= job.floor) {
+                    modes.push_back(m);
+                    zz.push_back(a);
+                    lr.push_back(l);
+                }
+            }
+            long n = (long)modes.size();
+            if (!n)
+                return;
+            // the rows: the template's first, with the mode's own pitch, level, ears and decay
+            std::vector<std::vector<double>> tf8(NF8, std::vector<double>(n));
+            std::vector<std::vector<float>> tf4(NF4, std::vector<float>(n));
+            std::vector<std::vector<long long>> ti8(NI8, std::vector<long long>(n, n0));
+            std::vector<std::vector<int32_t>> ti4(NI4, std::vector<int32_t>(n));
+            std::vector<float> hr(n, 1.0f);
+            double hd = S.headroom_d > 1e-12 ? S.headroom_d : 1e-12;
+            static const int zero4[] = {7, 8, 9, 10, 13, 12, 14, 15, 16, 18, 19, 24};   // logrA aft sus cv sj crl csc cbw tbav tcut vd az
+            for (long q = 0; q < n; q++) {
+                long m = modes[q];
+                const StringMode &M_ = rmodes[m];
+                for (int c = 0; c < NF8; c++) tf8[c][q] = st.row_f8[c];
+                for (int c = 0; c < NF4; c++) tf4[c][q] = (float)st.row_f4[c];
+                for (int c = 0; c < NI4; c++) ti4[c][q] = st.row_i4[c];
+                double om = (2.0 * M_PI * M_.f) / rate;
+                double ph = atan2(zz[q].imag(), zz[q].real());
+                double mag = hypot(zz[q].real(), zz[q].imag()) / hd;
+                tf8[F8_om][q] = om;
+                tf8[F8_p0][q] = ph - om * M_.dl;
+                tf8[F8_p0R][q] = ph - om * M_.dr;
+                tf4[F4_aL][q] = (float)(mag * M_.hl);
+                tf4[F4_aR][q] = (float)(mag * M_.hr);
+                tf4[F4_nf][q] = (float)M_.f;
+                tf4[26][q] = (float)M_.f;                           // nfr
+                tf4[3][q] = (float)r_blk;                           // fa
+                tf4[6][q] = (float)lr[q];                           // logr
+                tf4[F4_delL][q] = (float)M_.dl;
+                tf4[F4_delR][q] = (float)M_.dr;
+                tf4[F4_rdl][q] = 0.0f;
+                for (int c : zero4)
+                    tf4[c][q] = 0.0f;
+                ti4[3][q] = (int32_t)M_.string;                     // pl
+                ti4[I4_fx][q] = -1;
+                ti4[5][q] = 0;                                      // mk
+            }
+            const double *f8p[NF8];
+            const float *f4p[NF4];
+            const long long *i8p[NI8];
+            const int32_t *i4p[NI4];
+            for (int c = 0; c < NF8; c++) f8p[c] = tf8[c].data();
+            for (int c = 0; c < NF4; c++) f4p[c] = tf4[c].data();
+            for (int c = 0; c < NI8; c++) i8p[c] = ti8[c].data();
+            for (int c = 0; c < NI4; c++) i4p[c] = ti4[c].data();
+            Key key(pid, job.ch, REG_KEY, REG_KEY);
+            if (!S.stamp(f8p, f4p, i8p, i4p, hr.data(), n, key, n0, 1.0, 0, false, NAN, job.ch)) {
+                reg_dropped += n;
+                return;
+            }
+            std::vector<long> got = S.last_slots;
+            long li = S.live_find(key);
+            if (li >= 0)
+                S.live.erase(S.live.begin() + li);         // the register keeps its own slots
+            if (cpan[job.ch] != 64)
+                S.repan(got, cpan[job.ch], 64, rate, true);
+            for (long q = 0; q < n; q++) {
+                long m = modes[q];
+                st.slot_of[m] = got[q];
+                double a = hypot(zz[q].real(), zz[q].imag()) / job.floor;
+                st.n_floor[m] = (double)n0 + rate * log(a >= 1.0 ? a : 1.0) / (lr[q] >= 1e-9 ? lr[q] : 1e-9);
+            }
+            reg_live = true;
+            return;
+        }
+        // 'forced': its note still sounding -- and still ITS note
+        double win = 0.05 * rate;
+        std::vector<long> sl;
+        std::vector<double> wgt, beta;
+        std::vector<cplx> F;
+        for (size_t q = 0; q < job.f_slot.size(); q++) {
+            long s = job.f_slot[q];
+            double age = (double)(S.i8[0][s]) - job.at;                // float(non - at)
+            double d = age - (double)S.f4[F4_rdl][s];
+            if (S.busy[s] && S.i8[1][s] >= n0 && 0.0 <= d && d <= win) {
+                sl.push_back(s);
+                wgt.push_back(job.f_wgt[q]);
+                beta.push_back(job.f_beta[q]);
+                F.push_back(job.f_val[q]);
+            }
+        }
+        if (sl.empty())
+            return;
+        reg_budget -= (long)sl.size();
+        if (reg_budget <= 0)
+            reg_more = true;
+        long n = (long)sl.size();
+        std::vector<std::vector<double>> tf8(NF8, std::vector<double>(n));
+        std::vector<std::vector<float>> tf4(NF4, std::vector<float>(n));
+        std::vector<std::vector<long long>> ti8(NI8, std::vector<long long>(n, n0));
+        std::vector<std::vector<int32_t>> ti4(NI4, std::vector<int32_t>(n));
+        std::vector<float> hr(n, 1.0f);
+        double hd = S.headroom_d > 1e-12 ? S.headroom_d : 1e-12;
+        for (long q = 0; q < n; q++) {
+            long s = sl[q];
+            for (int c = 0; c < NF8; c++) tf8[c][q] = S.f8[c][s];
+            for (int c = 0; c < NF4; c++) tf4[c][q] = S.f4[c][s];
+            for (int c = 0; c < NI4; c++) ti4[c][q] = S.i4[c][s];
+            double a0 = (double)n0 - (double)S.i8[0][s];
+            double age = (a0 >= 0.0 ? a0 : 0.0) / rate;
+            double g = hypot(F[q].real(), F[q].imag()) * wgt[q] * exp(-beta[q] * age) / hd;
+            double om = S.f8[F8_om][s];
+            double ph = atan2(F[q].imag(), F[q].real())
+                        + glide_phase(om * rate, (double)S.f4[16][s], (double)S.f4[17][s], (double)S.f4[18][s], age);
+            tf4[F4_aL][q] = (float)((double)S.aL0[s] * g);
+            tf4[F4_aR][q] = (float)((double)S.aR0[s] * g);
+            tf8[F8_p0][q] = S.f8[F8_p0][s] + ph;
+            tf8[F8_p0R][q] = S.f8[F8_p0R][s] + ph;
+            tf4[3][q] = (float)r_blk;                                   // fa
+            tf4[6][q] = (float)beta[q];                                 // logr
+            tf4[7][q] = 0.0f;                                           // logrA
+            tf4[8][q] = 0.0f;                                           // aft
+            tf4[9][q] = beta[q] > 0 ? 0.0f : 1.0f;                      // sus
+            tf4[16][q] = 0.0f;                                          // tbav
+            tf4[F4_rdl][q] = 0.0f;
+        }
+        const double *f8p[NF8];
+        const float *f4p[NF4];
+        const long long *i8p[NI8];
+        const int32_t *i4p[NI4];
+        for (int c = 0; c < NF8; c++) f8p[c] = tf8[c].data();
+        for (int c = 0; c < NF4; c++) f4p[c] = tf4[c].data();
+        for (int c = 0; c < NI8; c++) i8p[c] = ti8[c].data();
+        for (int c = 0; c < NI4; c++) i4p[c] = ti4[c].data();
+        if (!S.stamp(f8p, f4p, i8p, i4p, hr.data(), n, Key(pid, job.ch, job.note, REG_FORCED), n0, 1.0, 0, false,
+                     NAN, job.ch))
+            reg_dropped += n;
+    }
+
+    // register._glide_phase_x
+    static double glide_phase(double Wi, double tb, double tau, double cut, double t)
+    {
+        double ct = cut < 0 ? -cut * 1048576.0 : cut;
+        double e = exp(-(!(ct < t) ? t : ct) / tau);
+        if (cut >= 0)
+            return Wi * tb * tau * (1.0 - e);
+        double acc = 0.0, term = 1.0, ek = 1.0;
+        for (int k = 1; k < 41; k++) {
+            term = term * tb / k;
+            ek = ek * e;
+            acc = acc + term * (1.0 - ek) / k;
+        }
+        return Wi * tau * acc;
     }
 
     // LIVE'S SIDE TABLES (live.Slab's, at rest: a piano never moves them)
@@ -621,6 +1214,8 @@ struct Piano {
             else
                 control(e.ch, e.a, e.b, n0);
         }
+        if (reg_on && (!reg_pend.empty() || !reg_out.empty() || reg_live || !reg_retire.empty()))
+            reg_pump(n0);
         std::vector<Key> sw;
         for (auto &kv : S.live) {
             std::pair<int, int> ck((int)std::get<1>(kv.first), (int)std::get<2>(kv.first));
@@ -659,6 +1254,28 @@ void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int s
 }
 
 void nv_lp_free(void *h) { delete (nv::slab::Piano *)h; }
+
+// The part's free strings (live's register): its string bank (M modes, as
+// nv_strings makes it), register.LiveChannel's constants (kappa, knock,
+// fall, floor, damper_top, the felt's BETA), the class's dampers and release
+// (samples), damper.py's FULL_DB_S, RESIDUAL, LN10_20, the block, and which
+// keys' classes answer (live._reg_voice, 128 flags)
+void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
+                    int top, double beta, int pedals, double rel, double full_db_s, double residual, double ln10_20,
+                    long long blk, const int *reg_note)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    P->reg_on = true;
+    P->rmodes.assign(modes, modes + M);
+    P->r_kappa = kappa; P->r_knock = knock; P->r_fall = fall; P->r_fl = fl; P->r_top = top; P->r_beta = beta;
+    P->r_pedals = pedals; P->r_rel = rel; P->r_full = full_db_s; P->r_resid = residual; P->r_ln = ln10_20;
+    P->r_blk = (double)blk;
+    for (int k = 0; k < 128; k++)
+        P->reg_note[k] = reg_note[k] != 0;
+}
+
+// the register's rows dropped for a full slab, and whether any are placed
+long nv_lp_reg_dropped(void *h) { return ((nv::slab::Piano *)h)->reg_dropped; }
 
 // an event for the next block: 0 note-on (a key, b velocity), 1 note-off, 2 control (a cc, b value)
 void nv_lp_event(void *h, int type, int ch, int a, int b)

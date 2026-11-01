@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Does native/nvlive play a MIDI file as live.Live does?
 
-    python3 examples/nvlive_check.py FILE.mid [SECONDS] [--program=N]
+    python3 examples/nvlive_check.py FILE.mid [SECONDS] [--program=N] [--register]
 
 The first SECONDS (default 20) of FILE, cut as bitident cuts, its notes and
 controllers (the native reader's, in message order) each applied at the
@@ -11,7 +11,9 @@ start of the 128-sample block its time falls in: once through nvlive --test
 by on_midi and its own callback -- its patch warmed first, its governor off
 -- capturing each block's dry render (Renderer.render). Every sample of the
 two compared with ==. The file's programs are not followed: the part plays
-PROGRAM throughout, as a keyboard would.
+PROGRAM throughout, as a keyboard would. --register: the free strings too,
+each side's register worker answering in step (examples/regsync.py; nvlive
+with its export's LREG); without, nvlive --no-register.
 """
 import os
 import subprocess
@@ -50,14 +52,18 @@ def main(argv):
         return 2
     total = m.total() + 3.0
     out = os.path.join(tmp, "nv.wav")
-    subprocess.check_call([exe, nvx, "--test", mid, out, "--program=%d" % prog, "--seconds=%r" % total],
-                          stderr=subprocess.DEVNULL)
+    reg = "register" in opt
+    subprocess.check_call([exe, nvx, "--test", mid, out, "--program=%d" % prog, "--seconds=%r" % total]
+                          + ([] if reg else ["--no-register"]), stderr=subprocess.DEVNULL)
     raw = open(out, "rb").read()          # float32 stereo after a 44-byte header
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
     # live.Live, fed the same events on the same blocks
     lv = L.Live(program=prog, rate=48000, frames=128, verbose=False, threads=1, gpu=False)
     lv.parts[0].patch.warm()
     lv.slab.shed = lambda n, frac: 0
+    if reg:
+        import regsync
+        regsync.sync(lv, lv.parts[0])
     dry = []
     _rend = lv.renderer.render
 
@@ -86,8 +92,8 @@ def main(argv):
         print("%s: length %r vs %r" % (os.path.basename(args[0]), py.shape, nv.shape))
         return 1
     d = np.flatnonzero(np.any(py != nv, 1))
-    print("%s (%g s, program %d): %d blocks, %s" % (
-        os.path.basename(args[0]), secs, prog, nb,
+    print("%s (%g s, program %d%s): %d blocks, %s" % (
+        os.path.basename(args[0]), secs, prog, ", register" if reg else "", nb,
         "identical" if not len(d) else "%d frames differ from block %d (max %g)"
         % (len(d), d[0] // 128, float(np.max(np.abs(py.astype(np.float64) - nv))))))
     return 1 if len(d) else 0

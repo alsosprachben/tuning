@@ -2,7 +2,8 @@
 // Python at runtime.
 //
 //     nvlive EXPORT.nvx [--program=N] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
-//     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S]
+//                       [--no-register]
+//     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register]
 //
 // EXPORT.nvx is examples/native_export.py --live's. At start the part's
 // templates are built (live.Patch.warm: every key 21-96 at each velocity
@@ -18,9 +19,14 @@
 // written to OUT.wav as float32 -- what examples/nvlive_check.py compares
 // with live.Live fed the same events.
 //
+// THE REGISTER (the free strings answering, live's _reg_*) when the export
+// has the program's (its LREG section), unless --no-register: its worker's
+// jobs answered as they are sent (live's own worker, a process, answers a
+// few blocks later as it can).
+//
 // Not yet: live's governor (shedding partials when blocks run late), the
-// room and its send, live's register, half-pedal tracks, the wheel,
-// modulation, pressure, the routes (push-to-damp), the TUI.
+// room and its send, half-pedal tracks, the wheel, modulation, pressure,
+// the routes (push-to-damp), the TUI.
 
 #include <atomic>
 #include <cmath>
@@ -56,6 +62,9 @@ void nv_lp_event(void *h, int type, int ch, int a, int b);
 void nv_lp_block(void *h, long long n0, long long blk);
 void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
                   long long blk, double master_gain);
+void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
+                    int top, double beta, int pedals, double rel, double full_db_s, double residual, double ln10_20,
+                    long long blk, const int *reg_note);
 }
 
 // the export's constants (native_export.py's order)
@@ -70,6 +79,14 @@ struct Export {
     double beta = 0.0, headroom = 1.0;
     int part[128][10];
     bool live = false;
+    // LREG: each program's free strings (live's register), M 0 for none
+    struct Reg {
+        int M = 0;
+        std::vector<StringMode> modes;
+        double d[9];            // kappa knock fall floor beta rel full_db_s residual ln10_20
+        int i[3];               // damper_top, dampers, block
+        int note[128];
+    } reg[128];
 };
 
 static bool read_export(const char *path, Export &E)
@@ -109,6 +126,17 @@ static bool read_export(const char *path, Export &E)
                      && fread(E.part, 4, 1280, f) == 1280;
             E.beta = bh[0];
             E.headroom = bh[1];
+            if (E.live && fread(lv, 1, 4, f) == 4 && !memcmp(lv, "LREG", 4)) {
+                for (int p = 0; p < 128 && ok; p++) {
+                    Export::Reg &r = E.reg[p];
+                    ok = fread(&r.M, 4, 1, f) == 1;
+                    if (ok && r.M > 0) {
+                        r.modes.resize(r.M);
+                        ok = fread(r.modes.data(), sizeof(StringMode), r.M, f) == (size_t)r.M
+                             && fread(r.d, 8, 9, f) == 9 && fread(r.i, 4, 3, f) == 3 && fread(r.note, 4, 128, f) == 128;
+                    }
+                }
+            }
         }
     }
     fclose(f);
@@ -243,6 +271,16 @@ int main(int argc, char **argv)
     fprintf(stderr, "nvlive: program %d, %ld templates\n", program, built);
     void *part = nv_lp_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], 16384,
                            E.headroom, E.pan.data(), E.beta);
+    // the free strings (live's register, its worker answering in step)
+    const Export::Reg &rg = E.reg[program & 127];
+    bool noreg = false;
+    for (int i = 1; i < argc; i++)
+        noreg = noreg || !strcmp(argv[i], "--no-register");
+    if (rg.M > 0 && !noreg) {
+        nv_lp_register(part, rg.modes.data(), rg.M, rg.d[0], rg.d[1], rg.d[2], rg.d[3], rg.i[0], rg.d[4], rg.i[1],
+                       rg.d[5], rg.d[6], rg.d[7], rg.d[8], rg.i[2], rg.note);
+        fprintf(stderr, "nvlive: the register: %d string modes\n", rg.M);
+    }
     void *fn[2];
     const char *FN[2] = {"synth_voice", "synth_voice_xdec"};
     for (int q = 0; q < 2; q++) {

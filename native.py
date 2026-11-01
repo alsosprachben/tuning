@@ -237,6 +237,7 @@ def _load():
             ('nv_cabs_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_log_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_cexp_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_cangle_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_prepare', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoteIn), D, I,
                                 ctypes.POINTER(PyRandomState), ctypes.POINTER(D), ctypes.c_void_p, D,
                                 ctypes.c_void_p, C, C, C, C, LL, C, C, C, ctypes.c_void_p, C, C, C, C,
@@ -265,6 +266,9 @@ def _load():
             ('nv_slab_free_list', ctypes.c_long, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]),
             ('nv_lp_new', ctypes.c_void_p, [ctypes.c_void_p, LL, C, I, I, I, I, I, C, C, ctypes.c_long, C, D, C]),
             ('nv_lp_free', None, [ctypes.c_void_p]),
+            ('nv_lp_register', None, [ctypes.c_void_p, ctypes.c_void_p, I, C, C, C, C, I, C, I, C, C, C, C, LL,
+                                      ctypes.c_void_p]),
+            ('nv_lp_reg_dropped', ctypes.c_long, [ctypes.c_void_p]),
             ('nv_lp_event', None, [ctypes.c_void_p, I, I, I, I]),
             ('nv_lp_block', None, [ctypes.c_void_p, LL, LL]),
             ('nv_lp_slab', ctypes.c_void_p, [ctypes.c_void_p]),
@@ -944,6 +948,18 @@ def xlog(x):
     return out
 
 
+def xangle(z):
+    """np.angle of complex values, libm's atan2(im, re)."""
+    import numpy as np
+    z = np.ascontiguousarray(z, np.complex128)
+    d = lib()
+    if d is None:
+        return np.angle(z)
+    out = np.empty(z.shape, np.float64)
+    d.nv_cangle_n(z.size, z.ctypes.data, out.ctypes.data)
+    return out
+
+
 def xcexp(z):
     """exp of complex values as exp(re) * (cos im, sin im), libm's."""
     import numpy as np
@@ -1379,6 +1395,22 @@ class LivePiano(object):
             self.d.nv_lp_free(self.p)
             self.p = None
 
+    def register(self, cls, table, rate, scale, reg_note):
+        """The part's free strings, as live's register (live._reg_*) with a
+        worker that answers each job as it is sent: cls the part's class at
+        key 60 (its strings, dampers, release), table its tuning, scale
+        blockrender.REGISTER_SCALE, reg_note which keys' classes answer."""
+        import damper as DMP
+        import blockrender as BR
+        self._modes, M, k = live_bank(cls, table, rate, scale)
+        rel = float(getattr(cls, 'release_valve_time', 0.12) or 0.12) * rate
+        flags = (ctypes.c_int * 128)(*[int(bool(x)) for x in reg_note])
+        self.d.nv_lp_register(self.p, self._modes, M, *k, int(bool(getattr(cls, 'damper_pedal', True))), rel,
+                              float(DMP.FULL_DB_S), float(DMP.RESIDUAL), float(DMP.LN10_20), int(BR.BLK), flags)
+
+    def reg_dropped(self):
+        return self.d.nv_lp_reg_dropped(self.p)
+
     def event(self, msg):
         """A mido message for the next block (note-on, note-off, control change)."""
         if msg.type == "note_on" and msg.velocity > 0:
@@ -1407,6 +1439,35 @@ class LivePiano(object):
         return (L, R, SL, SR) if send else (L, R)
 
 
+def live_bank(cls, table, sr, scale=1.0):
+    """live's register worker's string bank for a piano class (register.Strings
+    at pan 0, full volume) from native/strings.c, and its LiveChannel's
+    constants: (modes, M, (kappa, knock, fall, floor, damper_top, BETA))."""
+    import register as RG
+    import damper as DMP
+    import tonelib as T
+    got = _class(cls)
+    if got is None:
+        raise ValueError("%s is not the engine's" % cls.__name__)
+    c = VoiceInit.from_buffer_copy(got[0])
+    # the honky-tonk's detune as the worker has it: 1.0 -- a process of its
+    # own, where no file's channel has set tonelib.honky_detune
+    c.detune_lo, c.detune_hi = cls.string_detune_range
+    c.fixed_touch = int(bool(T.FIXED_TOUCH))
+    tab = (ctypes.c_double * 128)(*[float(table[k]) if k in table else 0.0 for k in range(128)])
+    cap = 88 * 4 * 130
+    modes = (StringMode * cap)()
+    tmp = (StringMode * cap)()
+    M = lib().nv_strings(ctypes.byref(c), ctypes.byref(got[1]), tab, 0.0, 1.0, float(sr), modes, tmp, cap)
+    if M < 0:
+        raise ValueError("too many modes")
+    P = RG._isolated(cls, 261.63, 0.0, 1.0)         # live_worker's props
+    return modes, M, (float(getattr(P, 'register_gain', 0.0)) * scale,
+                      float(getattr(P, 'register_knock_gain', 0.0)) * scale,
+                      float(getattr(P, 'register_knock_falloff', 0.0)),
+                      float(RG.floor_of(P)), int(getattr(P, 'damper_top', 128)), float(DMP.BETA))
+
+
 class LiveReg(object):
     """native/livereg.cpp: register.LiveChannel for a piano class, its jobs
     by the same names. Each answers as LiveChannel's does: (modes, z), and a
@@ -1417,33 +1478,9 @@ class LiveReg(object):
 
     def __init__(self, cls, table, sr, scale=1.0):
         import numpy as np
-        import register as RG
-        import damper as DMP
-        got = _class(cls)
-        if got is None:
-            raise ValueError("%s is not the engine's" % cls.__name__)
-        import tonelib as T
-        c = VoiceInit.from_buffer_copy(got[0])
-        lo, hi = cls.string_detune_range              # as strings() makes the bank
-        if issubclass(cls, T.HonkyTonkProperties):
-            lo, hi = lo * T.honky_detune, hi * T.honky_detune
-        c.detune_lo, c.detune_hi = lo, hi
-        c.fixed_touch = int(bool(T.FIXED_TOUCH))
-        tab = (ctypes.c_double * 128)(*[float(table[k]) if k in table else 0.0 for k in range(128)])
-        cap = 88 * 4 * 130
-        self._modes = (StringMode * cap)()
-        tmp = (StringMode * cap)()
         self.d = lib()
-        M = self.d.nv_strings(ctypes.byref(c), ctypes.byref(got[1]), tab, 0.0, 1.0, float(sr), self._modes, tmp, cap)
-        if M < 0:
-            raise ValueError("too many modes")
-        P = RG._isolated(cls, 261.63, 0.0, 1.0)         # live_worker's props
-        self.M = M
-        self.p = self.d.nv_lreg_new(self._modes, M, float(sr),
-                                    float(getattr(P, 'register_gain', 0.0)) * scale,
-                                    float(getattr(P, 'register_knock_gain', 0.0)) * scale,
-                                    float(getattr(P, 'register_knock_falloff', 0.0)),
-                                    float(RG.floor_of(P)), int(getattr(P, 'damper_top', 128)), float(DMP.BETA))
+        self._modes, self.M, k = live_bank(cls, table, sr, scale)
+        self.p = self.d.nv_lreg_new(self._modes, self.M, float(sr), *k)
         self._np = np
 
     def __del__(self):

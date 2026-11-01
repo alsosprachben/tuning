@@ -6358,8 +6358,8 @@ class Live:
             if not keys:
                 continue
             if 'dw' not in st:
-                f0 = 440.0 * 2.0 ** ((np.asarray(st['key'], float) - 69.0) / 12.0)
-                st['dw'] = (np.maximum(np.asarray(st['f'], float), 1e-6) / f0) ** _DMP.BETA
+                f0 = 440.0 * _RGM._xpow(2.0, (np.asarray(st['key'], float) - 69.0) / 12.0)
+                st['dw'] = _RGM._xpow(np.maximum(np.asarray(st['f'], float), 1e-6) / f0, _DMP.BETA)
                 st['krate'] = np.zeros(len(st['f']))
             for k, r in zip(keys, rates):
                 ix = np.flatnonzero(st['key'] == k)
@@ -6488,18 +6488,19 @@ class Live:
                 self.reg_more = True
             # every mode's old row gives way at this block to its new one
             self._reg_close(st, modes[st['slot_of'][modes] >= 0], n0, float(B.BLK))
-            # each mode's rate: its own, and the felt's in the band (_reg_felt)
+            # each mode's rate: its own, and the felt's in the band (_reg_felt).
+            # LIBM'S ARITHMETIC, as the worker's (register.LiveChannel): native/ ports it
             lr = st['alpha'][modes] + (st['krate'][modes] if 'krate' in st else 0.0)
-            zz = z * np.exp(-lr * max(n0 - at, 0.0) / self.rate)
-            keep = np.abs(zz) >= floor
+            zz = _RGM._xcmulr(z, _RGM._xexp(-lr * max(n0 - at, 0.0) / self.rate))
+            keep = _RGM._xabs(zz) >= floor
             modes, zz, lr = modes[keep], zz[keep], lr[keep]
             n = len(modes)
             if not n:
                 return
             om = st['W'][modes] / self.rate
-            ph = np.angle(zz)
+            ph = _RGM._xangle(zz)
             t = {c: np.full(n, v) for c, v in st['row'].items()}
-            mag = np.abs(zz) / max(self.slab.headroom, 1e-12)
+            mag = _RGM._xabs(zz) / max(self.slab.headroom, 1e-12)
             t.update(om=om, p0=ph - om * st['dl'][modes], p0R=ph - om * st['dr'][modes],
                      aL=(mag * st['hl'][modes]).astype(np.float32),
                      aR=(mag * st['hr'][modes]).astype(np.float32),
@@ -6525,7 +6526,7 @@ class Live:
             if _cp != T.GM_DEFAULT_PAN:
                 self.slab.repan(list(got), _cp, T.GM_DEFAULT_PAN, self.rate, itd=True)
             st['slot_of'][modes] = got
-            st['n_floor'][modes] = n0 + self.rate * np.log(np.maximum(np.abs(zz) / floor, 1.0)) \
+            st['n_floor'][modes] = n0 + self.rate * _RGM._xlog(np.maximum(_RGM._xabs(zz) / floor, 1.0)) \
                 / np.maximum(lr, 1e-9)
             self.reg_live = True
             return
@@ -6556,11 +6557,12 @@ class Live:
             F = np.array([x[3] for x in ok], complex)
             n = len(sl)
             age = np.maximum(n0 - a["non"][sl].astype(np.float64), 0.0) / self.rate
-            g = np.abs(F) * wgt * np.exp(-beta * age) / max(self.slab.headroom, 1e-12)
+            g = _RGM._xabs(F) * wgt * _RGM._xexp(-beta * age) / max(self.slab.headroom, 1e-12)
             om = a["om"][sl].astype(np.float64)
-            ph = np.angle(F) + _RGM.glide_phase(om * self.rate, a["tbav"][sl].astype(np.float64),
-                                                a["tau"][sl].astype(np.float64),
-                                                a["tcut"][sl].astype(np.float64), age)
+            _W = om * self.rate
+            _tb, _ta, _tc = (a[c][sl].astype(np.float64) for c in ("tbav", "tau", "tcut"))
+            ph = _RGM._xangle(F) + np.array([_RGM._glide_phase_x(float(_W[q]), float(_tb[q]), float(_ta[q]),
+                                                                 float(_tc[q]), float(age[q])) for q in range(n)])
             t = {c: a[c][sl].copy() for c in COLS_F4 + COLS_I4 + COLS_F8}
             t.update(aL=(self.slab.aL0[sl] * g).astype(np.float32),
                      aR=(self.slab.aR0[sl] * g).astype(np.float32),
