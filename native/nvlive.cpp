@@ -63,7 +63,10 @@
 // The export takes the session's room, master level, headroom, pressure,
 // knee and wheel range, as live starts.
 //
-// Not yet: RPNs, the other routes, the TUI.
+// THE RPNs as live reads them: the bend range, fine and coarse tuning (the
+// notes sounding moved), the mod range; CC121; sostenuto (CC66).
+//
+// Not yet: CC120/123, the other routes, the TUI.
 
 #include <algorithm>
 #include <atomic>
@@ -110,7 +113,7 @@ void nv_lp_damper(void *h, double full_db_s, double residual, double knee_db, do
 void nv_lp_press_db(void *h, double db);
 void nv_lp_detune_wheel(void *h, int on);
 void nv_lp_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
-void nv_lp_post(void *h, double thresh, double bend_range);
+void nv_lp_post(void *h, double thresh, double bend_range, double mod_cents);
 void nv_lp_output(void *h, long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd,
                   long long blk, double master_gain);
 void *nv_kp_new(int key);
@@ -470,7 +473,7 @@ int main(int argc, char **argv)
                            E.headroom, E.pan.data(), E.beta);
     nv_lp_detune_wheel(part, pp[6] >= 0);       // the export's speed: a honky-tonk's wheel, else -1
     if (E.k.size() > K_BEND_RANGE)
-        nv_lp_post(part, E.k[K_THRESH], E.k[K_BEND_RANGE]);
+        nv_lp_post(part, E.k[K_THRESH], E.k[K_BEND_RANGE], 35.0);     // (the mod range: no vibrato on a piano)
     // THE ROOM'S LATE TAIL (the export's: the session's room), through live's
     // convolver -- unless --dry
     bool dry = false;

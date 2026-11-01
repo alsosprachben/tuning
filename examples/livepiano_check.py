@@ -4,7 +4,7 @@
     python3 examples/livepiano_check.py [BLOCKS] [--program=N] [--seed=N] [--every=N] [--render] [--register]
                                         [--half] [--pedal-key=N] [--pressure]
                                         [--gpu=c|cl] [--gpu-min=N] [--shed=N] [--wheels]
-                                        [--room=NAME] [--cc91] [--thresh=X]
+                                        [--room=NAME] [--cc91] [--thresh=X] [--rpn]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native piano part (native/slab.cpp: its template cache, its slab, live's
@@ -42,6 +42,9 @@ send, the limiter; the native part's output) in place of --render's dry
 blocks. --cc91: the channels' reverb sends among the controls, so the send
 runs as the kernel's second output while they differ. --thresh: the soft
 limiter's knee (live's 0.70), low to make it work.
+--rpn: RPNs (bend range, fine and coarse tuning, the mod range, MTS's
+selects, the null; data entry and increment), NRPN selects, CC121 and the
+sostenuto pedal among the controls.
 --wheels: the pitch wheel (live._repitch, the notes sounding moved and a
 note struck under it joining) and the mod wheel (a honky-tonk's detune).
 --shed=N: every N blocks the governor's last resort on both sides at the
@@ -93,11 +96,12 @@ def main(argv):
         lv.renderer = L.GpuRenderer(lv.slab, 128, 1, backend=opt["gpu"] or "cl", gpu_min=gmin)
         lv.renderer.send = send
         nv.gpu(opt["gpu"] or "cl", gmin)
+    nv.post(lv.thresh, lv.bend_range, lv.mod_cents)
     if opt.get("room"):
         lv.thresh = float(opt.get("thresh", lv.thresh))
         if lv.room is not None:
             nv.room(lv.room.ir, lv.room.mir, 128)
-        nv.post(lv.thresh, lv.bend_range)
+        nv.post(lv.thresh, lv.bend_range, lv.mod_cents)
     if "register" in opt:
         import blockrender as BR
         import regsync
@@ -105,7 +109,7 @@ def main(argv):
         nv.register(pt._voice_class(60), BR.tuning_table(pt.tuner), 48000.0, getattr(BR, 'REGISTER_SCALE', 1.0),
                     [lv._reg_voice(part, n) for n in range(128)])
     held = set()
-    ntr = dmb = nshed = nlim = 0
+    ntr = dmb = nshed = nlim = ntune = nsost = 0
     pk = int(opt["pedal-key"]) if "pedal-key" in opt else None
     kp = None
     if pk is not None:
@@ -190,6 +194,26 @@ def main(argv):
                     msgs.append(M("control_change", channel=ch, control=1, value=rng.randint(0, 127)))
             elif "pressure" in opt and rng.random() < 0.4:
                 msgs.append(M("aftertouch", channel=ch, value=rng.choice((0, rng.randint(0, 127)))))
+            elif "rpn" in opt and rng.random() < 0.5:
+                x = rng.random()
+                if x < 0.3:                                 # select: an RPN, the null, or an NRPN
+                    sel = rng.choice(((0, 0), (0, 0), (0, 1), (0, 2), (0, 5), (0, 3), (127, 127), "n"))
+                    if sel == "n":
+                        msgs.append(M("control_change", channel=ch, control=99, value=1))
+                    else:
+                        msgs.append(M("control_change", channel=ch, control=101, value=sel[0]))
+                        msgs.append(M("control_change", channel=ch, control=100, value=sel[1]))
+                elif x < 0.6:
+                    msgs.append(M("control_change", channel=ch, control=6, value=rng.choice((0, 1, 2, 12, 64, 70,
+                                                                                            rng.randint(0, 127)))))
+                elif x < 0.7:
+                    msgs.append(M("control_change", channel=ch, control=38, value=rng.randint(0, 127)))
+                elif x < 0.8:
+                    msgs.append(M("control_change", channel=ch, control=rng.choice((96, 97)), value=0))
+                elif x < 0.85:
+                    msgs.append(M("control_change", channel=ch, control=121, value=0))
+                else:
+                    msgs.append(M("control_change", channel=ch, control=66, value=rng.choice((0, 127))))
             elif "cc91" in opt and rng.random() < 0.3:
                 msgs.append(M("control_change", channel=ch, control=91, value=rng.randint(0, 127)))
             else:
@@ -233,6 +257,9 @@ def main(argv):
                 bad.append("shed %d vs %d" % (k0, k1))
         log.append((b, n0, msgs))
         ntr = max(ntr, len(lv.damp_tracks))
+        ntune += any(v not in (None, 2.0) for v in lv.brange.values()) or any(lv.fine.values()) \
+            or any(lv.coarse.values())
+        nsost += any(lv.sost.values())
         dmb += bool(lv.damp_tracks)
         if b % every == every - 1 or b == blocks - 1:
             if compare(b):
@@ -254,6 +281,8 @@ def main(argv):
         print("  register: %d rows placed, %d dropped (native %d); live's errors: %d %s" % (
             int(np.sum(lv.slab.busy)) - sounding, lv.reg_dropped, nv.reg_dropped(), lv.errors,
             lv.last_error or ""))
+    if "rpn" in opt:
+        print("  RPNs: %d blocks with a range or tuning off GM's, %d with sostenuto holding keys" % (ntune, nsost))
     if opt.get("room"):
         print("  room %s: %d blocks reaching the limiter's knee (%.2f)" % (opt["room"], nlim, lv.thresh))
     if "shed" in opt:

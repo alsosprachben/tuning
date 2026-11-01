@@ -414,7 +414,8 @@ struct Slab {
 // what _one_core, _note_on and _note_off do for a piano, block by block as
 // live's callback runs them: the block's events at its start, then the sweep
 // (a key neither down nor held released), then the reap. Not here yet: the
-// RPNs, CC71-78, sostenuto, mono, the other voices. THE PITCH WHEEL
+// CC71-78, CC120/123, mono, the other voices. THE RPNs (bend range, fine
+// and coarse tuning, the mod range), CC121 and SOSTENUTO as live's. THE PITCH WHEEL
 // (live._repitch: GM's 2-semitone range) and the mod wheel, which on a piano
 // is nothing but a honky-tonk's detune.
 // PRESSURE (channel aftertouch, live's Slab.press) as a level: a piano's
@@ -565,7 +566,18 @@ struct Piano {
     // last applied to its notes; the range, GM's 2 semitones (no RPN 0 here)
     int wheel[16] = {};
     double bend[16] = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
-    double bend_range = 2.0;
+    double bend_range = 2.0;                        // live.bend_range, the session's
+    // THE RPNs (live's _rpn_data, _rpn_step; tonelib's arithmetic): the one
+    // selected (an NRPN selected: none), and what the channel's are set to --
+    // its bend range (-1: live's bend_range), fine and coarse tuning, the
+    // fine tuning's last MSB, the mod wheel's range (cents; -1: live's)
+    int rpn_msb[16], rpn_lsb[16];
+    bool rpn_none[16] = {};
+    double brange[16], fine[16] = {}, coarse[16] = {}, modrange[16];
+    int fine_msb[16];
+    double mod_cents = 35.0;                        // live.mod_cents (the session's)
+    // SOSTENUTO (CC66): the keys down when it went down, held (live.sost)
+    std::map<int, std::set<int>> sost;
     // THE MOD WHEEL on a honky-tonk (live's 'detune' role): which pre-warmed
     // detune new notes take, the nearest of DETUNE_STEPS (a piano's wheel
     // does nothing else: a hammered string takes no vibrato)
@@ -577,6 +589,11 @@ struct Piano {
         for (int t = 0; t < DAMP_TRACKS; t++) {
             free_tracks.push_back(t);
             DMO[t] = 2 * t;
+        }
+        for (int c = 0; c < 16; c++) {
+            rpn_msb[c] = rpn_lsb[c] = 127;
+            brange[c] = modrange[c] = -1.0;
+            fine_msb[c] = 64;
         }
         for (int c = 0; c < 16; c++) {
             vol[c] = 100; expr[c] = 127; cpan[c] = 64; pedal_v[c] = 0;     // GM's power-on
@@ -654,7 +671,8 @@ struct Piano {
     void note_off(int ch, int note, long long n0)
     {
         down.erase(std::make_pair(ch, note));
-        if (pedal_holds(ch, note) && damper_pedal) {
+        auto sq = sost.find(ch);
+        if ((pedal_holds(ch, note) || (sq != sost.end() && sq->second.count(note))) && damper_pedal) {
             pedalled.insert(std::make_pair(ch, note));
             return;
         }
@@ -717,18 +735,120 @@ struct Piano {
         }
     }
 
-    // live._repitch: the channel's ratio (tonelib.channel_pitch_ratio, no
-    // coarse or fine tuning here), its notes moved by the change
-    void pitchwheel(int ch, int v, long long n0)
+    double range_of(int ch) const { return brange[ch] >= 0.0 ? brange[ch] : bend_range; }
+
+    // live._repitch: the channel's ratio (tonelib.channel_pitch_ratio: the
+    // wheel over its range, the coarse and fine tuning; no master tuning
+    // here), its notes moved by the change
+    void repitch(int ch, long long n0)
     {
-        wheel[ch] = v;
-        double st = bend_range * (double)v / 8192.0 + 0.0 + 0.0 / 100.0 + 0.0 + 0.0 / 100.0;
+        double st = range_of(ch) * (double)wheel[ch] / 8192.0 + coarse[ch] + fine[ch] / 100.0 + 0.0 + 0.0 / 100.0;
         double ratio = pow(2.0, st / 12.0);
         double prev = bend[ch];
         if (ratio == prev)
             return;
         bend[ch] = ratio;
         retune(sounding(ch), n0, ratio / prev);
+    }
+
+    void pitchwheel(int ch, int v, long long n0)
+    {
+        wheel[ch] = v;
+        repitch(ch, n0);
+    }
+
+    // tonelib.RPN_STEP: (step, lo, hi) for (0, 0) .. (0, 5)
+    static bool rpn_step_of(int lsb, double *step, double *lo, double *hi)
+    {
+        static const double T[6][3] = {{0.01, 0.0, 127.99},
+                                       {100.0 / 8192.0, -100.0, 100.0 * 8191.0 / 8192.0},
+                                       {1.0, -64.0, 63.0},
+                                       {1.0, 0.0, 127.0},
+                                       {1.0, 0.0, 127.0},
+                                       {100.0 / 128.0, 0.0, 127.0 * 100.0 + 127.0 * 100.0 / 128.0}};
+        if (lsb < 0 || lsb > 5)
+            return false;
+        *step = T[lsb][0];
+        *lo = T[lsb][1];
+        *hi = T[lsb][2];
+        return true;
+    }
+
+    // live._rpn_data: CC6/CC38 into the RPN selected; the pitch ones re-pitch
+    // the channel; MTS's (0/3, 0/4) only a gm2 part acts on, none here; MPE's
+    // configuration (0/6) is not read here
+    void rpn_data(int ch, int cc, int v, long long n0)
+    {
+        if (rpn_none[ch])
+            return;                                 // an NRPN (GS's sound ones: not here)
+        int m = rpn_msb[ch], l = rpn_lsb[ch];
+        if (m != 0 || l > 5)
+            return;                                 // null, or not one read
+        if (l == 0) {
+            brange[ch] = cc == 6 ? (double)v : (double)(long)range_of(ch) + v / 100.0;     // rpn_bend_range
+        } else if (l == 1) {
+            if (cc == 6)
+                fine_msb[ch] = v;                   // rpn_fine
+            int lsb = cc == 38 ? v : 0;
+            fine[ch] = (double)(((fine_msb[ch] << 7) | lsb) - 8192) / 8192.0 * 100.0;
+        } else if (l == 2) {
+            if (cc != 6)
+                return;
+            coarse[ch] = (double)(v - 64);          // rpn_coarse
+        } else if (l == 5) {
+            double cur = modrange[ch] >= 0.0 ? modrange[ch] : mod_cents;
+            modrange[ch] = cc == 6 ? (double)v * 100.0 : (double)(long)floor(cur / 100.0) * 100.0 + v * (100.0 / 128.0);
+            return;                                 // (a piano's wheel takes no vibrato to re-send)
+        } else {
+            return;                                 // MTS: a gm2 part's
+        }
+        repitch(ch, n0);
+    }
+
+    // live._rpn_step: CC96 (up) / CC97, the selected RPN one unit of its finest byte
+    void rpn_step(int ch, bool up, long long n0)
+    {
+        if (rpn_none[ch] || rpn_msb[ch] != 0)
+            return;
+        int l = rpn_lsb[ch];
+        double step, lo, hi;
+        if (l == 3 || l == 4 || !rpn_step_of(l, &step, &lo, &hi))
+            return;                                 // (MTS's: a gm2 part's)
+        double cur = l == 0 ? range_of(ch) : l == 1 ? fine[ch] : l == 2 ? coarse[ch]
+                                                                    : (modrange[ch] >= 0.0 ? modrange[ch] : mod_cents);
+        double v = cur + (up ? step : -step);
+        v = std::max(lo, v);                        // min(hi, max(lo, v)): Python keeps the first of equals
+        v = std::min(hi, v);
+        if (l == 2)
+            v = (double)(long)nearbyint(v);
+        if (l == 0) {
+            brange[ch] = v;
+        } else if (l == 1) {
+            fine[ch] = v;
+            long code = (long)nearbyint(v / 100.0 * 8192.0) + 8192;       // rpn_fine_msb
+            fine_msb[ch] = (int)(std::max(0L, std::min(16383L, code)) >> 7);
+        } else if (l == 2) {
+            coarse[ch] = v;
+        } else {
+            modrange[ch] = v;
+            return;
+        }
+        repitch(ch, n0);
+    }
+
+    // live._reset_controllers (CC121): the wheel to centre, then CC1, CC11,
+    // CC64, CC65, CC66, CC67 as live sends them, pressure off, no RPN
+    // selected -- not the volume, pan, program or the tuning RPNs' values
+    void reset_controllers(int ch, long long n0)
+    {
+        wheel[ch] = 0;
+        repitch(ch, n0);
+        static const int RESET_CC[6][2] = {{1, 0}, {11, 127}, {64, 0}, {65, 0}, {66, 0}, {67, 0}};
+        for (auto &cv : RESET_CC)
+            control(ch, cv[0], cv[1], n0);
+        aftertouch(ch, 0);
+        rpn_none[ch] = false;
+        rpn_msb[ch] = rpn_lsb[ch] = 127;
     }
 
     // channel aftertouch: every key sounding on the channel (live's
@@ -786,6 +906,47 @@ struct Piano {
                 S.sw[q] = (float)d;
         } else if (cc == 67) {
             soft[ch] = v >= 64;
+        } else if (cc == 66) {
+            // SOSTENUTO: a snapshot of the keys down as it goes down; up, the
+            // ones it held let go where nothing else holds them
+            bool dn = v >= 64, was = sost.count(ch) > 0;
+            if (dn && !was) {
+                std::set<int> &h = sost[ch];
+                for (auto &d : down)
+                    if (d.first == ch)
+                        h.insert(d.second);
+            } else if (!dn && was) {
+                std::set<int> gone = sost[ch];
+                sost.erase(ch);
+                std::vector<Key> rel;
+                for (auto &kv : S.live) {
+                    int c2 = (int)std::get<1>(kv.first), nt = (int)std::get<2>(kv.first);
+                    if (c2 == ch && gone.count(nt) && !down.count(std::make_pair(c2, nt)) && !pedal_holds(ch, nt))
+                        rel.push_back(kv.first);
+                }
+                for (auto &k : rel)
+                    S.release(k, n0);
+                for (int nt : gone)
+                    pedalled.erase(std::make_pair(ch, nt));
+                if (reg_on)                         // _reg_channel
+                    for (size_t i = 0; i < reg.size(); i++)
+                        if (reg[i].ch == ch)
+                            reg_damper(ch, n0, -1, true);
+            }
+        } else if (cc == 98 || cc == 99) {
+            rpn_none[ch] = true;                    // NRPN select: no RPN takes the data
+        } else if (cc == 101 || cc == 100) {
+            if (rpn_none[ch]) {
+                rpn_none[ch] = false;
+                rpn_msb[ch] = rpn_lsb[ch] = 127;
+            }
+            (cc == 101 ? rpn_msb : rpn_lsb)[ch] = v;
+        } else if (cc == 6 || cc == 38) {
+            rpn_data(ch, cc, v, n0);
+        } else if (cc == 96 || cc == 97) {
+            rpn_step(ch, cc == 96, n0);
+        } else if (cc == 121) {
+            reset_controllers(ch, n0);
         } else if (cc == 1 && detune_wheel) {
             static const int steps[3] = {0, 64, 127};       // live.DETUNE_STEPS: min(), the first of a tie
             int best = steps[0];
@@ -1182,6 +1343,9 @@ struct Piano {
         for (auto &d : down)
             if (d.first == ch)
                 keys.insert(d.second);
+        auto sq = sost.find(ch);
+        if (r_pedals && sq != sost.end())
+            keys.insert(sq->second.begin(), sq->second.end());
         for (int k = r_top; k < 109; k++)
             keys.insert(k);
         return std::vector<int>(keys.begin(), keys.end());
@@ -2013,7 +2177,9 @@ struct Piano {
         std::vector<Key> sw;
         for (auto &kv : S.live) {
             std::pair<int, int> ck((int)std::get<1>(kv.first), (int)std::get<2>(kv.first));
-            if (!down.count(ck) && !pedalled.count(ck) && !S.oneshot.count(kv.first))
+            auto sq = sost.find(ck.first);
+            if (!down.count(ck) && !pedalled.count(ck) && !S.oneshot.count(kv.first)
+                && !(sq != sost.end() && sq->second.count(ck.second)))
                 sw.push_back(kv.first);
         }
         for (auto &k : sw)
@@ -2194,12 +2360,14 @@ void nv_lp_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, 
     ((nv::slab::Piano *)h)->room.reset(new nv::slab::Room(cn, cp, cf, ir, n, mir, m, frames));
 }
 
-// the soft limiter's knee (live.thresh) and the pitch wheel's range (live.bend_range)
-void nv_lp_post(void *h, double thresh, double bend_range)
+// the soft limiter's knee (live.thresh), the pitch wheel's range (live.bend_range)
+// and the mod wheel's (live.mod_cents)
+void nv_lp_post(void *h, double thresh, double bend_range, double mod_cents)
 {
     nv::slab::Piano *P = (nv::slab::Piano *)h;
     P->thresh = thresh;
     P->bend_range = bend_range;
+    P->mod_cents = mod_cents;
 }
 
 // live's callback after its events and step: the render, the room, the limiter

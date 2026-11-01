@@ -282,7 +282,7 @@ def _load():
             ('nv_lp_press_db', None, [ctypes.c_void_p, C]),
             ('nv_lp_detune_wheel', None, [ctypes.c_void_p, I]),
             ('nv_lp_room', None, [ctypes.c_void_p] * 5 + [ctypes.c_long, ctypes.c_void_p, ctypes.c_long, I]),
-            ('nv_lp_post', None, [ctypes.c_void_p, C, C]),
+            ('nv_lp_post', None, [ctypes.c_void_p, C, C, C]),
             ('nv_lp_output', None, [ctypes.c_void_p, LL, ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p,
                                     ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, LL, C]),
             ('nv_lp_gpu', None, [ctypes.c_void_p] + [ctypes.c_void_p] * 6 + [ctypes.c_long, I]),
@@ -1491,9 +1491,10 @@ class LivePiano(object):
                           len(self._ir), None if self._mir is None else self._mir.ctypes.data,
                           0 if self._mir is None else len(self._mir), int(frames))
 
-    def post(self, thresh=0.70, bend_range=2.0):
-        """The limiter's knee (live.thresh) and the pitch wheel's range."""
-        self.d.nv_lp_post(self.p, float(thresh), float(bend_range))
+    def post(self, thresh=0.70, bend_range=2.0, mod_cents=35.0):
+        """The limiter's knee (live.thresh), the pitch wheel's range and the
+        mod wheel's (live.bend_range, live.mod_cents)."""
+        self.d.nv_lp_post(self.p, float(thresh), float(bend_range), float(mod_cents))
 
     def output(self, n0, frames):
         """live's callback after its step: the render, the room on the send,
