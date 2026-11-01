@@ -349,6 +349,58 @@ void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv)
     dv[0] = e.on; dv[1] = e.off;
 }
 
+// the held-key end the sostenuto gives this note, if it caught it
+int nv_song_sost(void *s, long long ch, int note, double on, double *out)
+{
+    const nv::Song *S = (nv::Song *)s;
+    auto it = S->sost_held.find(nv::NoteKey{ch, note, on});
+    if (it == S->sost_held.end())
+        return 0;
+    *out = it->second;
+    return 1;
+}
+
+// _F: the channel's 128-key table at t
+void nv_song_table(void *s, long long ch, double t, double *out)
+{
+    const std::vector<double> &tab = ((nv::Song *)s)->table(ch, t);
+    for (int k = 0; k < 128; k++)
+        out[k] = tab[k];
+}
+
+double nv_song_total(void *s) { return ((nv::Song *)s)->total; }
+
+// the damper pedal's down/up spans (seconds), up to cap; the count
+int nv_song_ped_spans(void *s, long long ch, double *out, int cap)
+{
+    const nv::Channel *C = ((nv::Song *)s)->get(ch);
+    if (!C)
+        return 0;
+    int n = (int)C->ped.size();
+    for (int i = 0; i < n && i < cap; i++) {
+        out[2 * i] = C->ped[i].first;
+        out[2 * i + 1] = C->ped[i].second;
+    }
+    return n;
+}
+
+// a half-pedalled channel's CC64 (times, values), up to cap; 0 for a switch
+int nv_song_pedal_values(void *s, long long ch, double *t, int *v, int cap)
+{
+    const nv::Channel *C = ((nv::Song *)s)->get(ch);
+    if (!C)
+        return 0;
+    int n = (int)C->pv_t.size();
+    for (int i = 0; i < n && i < cap; i++) {
+        t[i] = C->pv_t[i];
+        v[i] = C->pv_v[i];
+    }
+    return n;
+}
+
+// damper.contact
+double nv_damper_contact(int p, int key, int top) { return nv::damper::contact(p, key, top); }
+
 // the channel's first value of controller cc in time order (in_order), if any
 int nv_song_first_cc(void *s, long long ch, int cc, int *v)
 {

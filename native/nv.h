@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 #define NCOLS 50                /* blockrender.EMIT_COLS */
+#define NV_TOO_SMALL (-2000000000)      /* nv_play: the row store was too small */
 
 typedef struct {
     uint32_t mt[624];
@@ -135,6 +136,95 @@ int nv_phantom(const VoiceSnap *v, const ToneIn *t, const double *trans, int ntr
                int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
                double *rows, int cap, double *qacc, double *azimuth);
 
+// What a voice class is to a note's setup: the constructor's constants and
+// the class's VoiceSnap, the attack/release/chiff laws, the tension bend and
+// the hammer's knock (strike_noise_db). "_set" flags carry Python's None.
+typedef struct {
+    VoiceInit init;
+    VoiceSnap tmpl;
+    double chiff_max_valve_time;
+    int release_valve_set;
+    double release_valve_time;
+    double speech_cycles;
+    int legato_set;
+    double legato_attack_s;
+    double attack_fraction_max;
+    int release_fraction_set;
+    double release_fraction_max;
+    int slur_cuts_release;
+    int chiff_width_set;
+    double chiff_width, chiff_width_cycles;
+    double chiff_volume, chiff_cycle, chiff_release, sustain_jitter;
+    double cbw0, cbw1;                  // chiff_bandwidth or RAND_GRAN, chiff_bandwidth_hz or 0
+    double tension_bend_power;
+    int tension_bend_slurs;
+    double tension_settle_time, tension_settle_cutoff;
+    int tension_log;
+    double tbend_cut_scale;
+    double sustain_level;
+    int reflection_order;
+    int n_strike;                       // the knock's bands (0: none)
+    double strike_hz[32], strike_db[32];
+    double strike_noise_dbs;
+    int strike_span_set;
+    double strike_span_lo, strike_span_hi;
+    double strike_octave_db;            // strike_noise_octave_db, else strike_noise_slope
+    double strike_fade_s, strike_len_s, strike_at_s, strike_cal_db;
+    // the room it plays in (WALLS' signed planes, its reflection order), its
+    // dampers, its strings' detune range and whether CC1 scales it (detune_wheel)
+    double room_planes[6];
+    int room_order, damper_pedal;
+    double detune_lo, detune_hi;
+    int detune_wheel;
+    // its free-string register (register.Channel): register_gain and
+    // register_knock_gain (times the render's scale), the knock's fall a
+    // semitone, damper_top, the floor (floor_of), the release (s)
+    double reg_gain, reg_knock, reg_fall;
+    int damper_top;
+    double reg_floor, reg_release;
+} NoteClass;
+
+// A note, as its file and channel give it, and the emitter's state for it.
+typedef struct {
+    double f0, pan, vel, chan_vol, effort, on, off, nx;
+    int has_nx, mcut, slurred, slur_out;
+    double detune_lo, detune_hi;        // string_detune_range, the honky-tonk's wheel applied
+    int soft_pedal_down, fixed_touch;
+    double sr, retrigger_fade, channel, br, nyq_om;
+    double sv[2], sound_vib_depth_cents, vibrato_delay, gl[3];
+    double fx, mk, fm_omega, fm_phase;
+    double room_bands[9];
+    int reflect, no_reflections;        // the emitter's REFLECT, and no_reflections before the note
+    // for nv_song_play: the note's key in its file, and its key-up
+    long long ch;
+    int note, damper_pedal;
+    double key_off;
+    // the room's walls (WALLS' order, signed planes) and its reflection order
+    double planes[6];
+    int order;
+    int from_song;                      // nv_song_play: its pitch and level from the song too...
+    int song_index;                     // ...as its note there (the song's notes, in order)
+} NoteIn;
+
+// What the note's setup worked out, beside its rows.
+typedef struct {
+    int n_knock, n_tone, n_phantom;
+    double non, noff, fade, rel, chiff, jitter_scale;
+    double dl, dr, li, ri, pos_x, pos_z, B;
+    double cv, cc, crl, sjit, csc;
+    double tb[3], cbw[2];
+} NoteOut;
+
+int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
+            int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
+            double *rows, int cap, double *qacc, double *azimuth, NoteOut *out);
+int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
+                 int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
+                 double *rows, int cap, double *qacc, double *azimuth, NoteOut *out, int *band);
+int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr, PyRandom *rs,
+            double *rows, long long cap, double *qacc, double *azimuth, long long *nrows, int *played,
+            long long *row0);
+
 /* strings.c: one mode of the register's string bank */
 typedef struct {
     long long key, string, harm;
@@ -157,6 +247,14 @@ void nv_song_note(void *s, long long ch, int note, double on, double off, int ve
 int nv_song_n_notes(void *s);
 void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv);
 int nv_song_first_cc(void *s, long long ch, int cc, int *v);
+int nv_song_sost(void *s, long long ch, int note, double on, double *out);
+void nv_song_table(void *s, long long ch, double t, double *out);
+double nv_song_total(void *s);
+int nv_song_ped_spans(void *s, long long ch, double *out, int cap);
+int nv_song_pedal_values(void *s, long long ch, double *t, int *v, int cap);
+double nv_damper_contact(int p, int key, int top);
+int nv_strings(const VoiceInit *c0, const VoiceSnap *tmpl, const double *table, double pan, double chan_vol,
+               double sr, StringMode *out, StringMode *tmp, int cap);
 
 #ifdef __cplusplus
 }

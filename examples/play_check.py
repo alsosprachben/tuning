@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Does the native engine play a piano file's notes as blockrender does?
 
-    python3 examples/play_check.py FILE.mid [SECONDS] [--tuner=NAME]
+    python3 examples/play_check.py FILE.mid [SECONDS] [--tuner=NAME] [--register]
 
 The engine on its own from the file's bytes: native/midi.cpp reads it,
 native/channel.cpp keeps its channels, and nv_play plays every note in the
@@ -31,7 +31,9 @@ sys.path.insert(0, os.path.join(HERE, "examples"))
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith("--")]
     opt = dict(a[2:].split("=", 1) if "=" in a else (a[2:], "") for a in argv[1:] if a.startswith("--"))
-    os.environ["TUNING_NATIVE_TONE"] = "off"        # the reference: all Python
+    os.environ["TUNING_NATIVE_TONE"] = "off"        # the reference: all Python...
+    if "register" in opt:
+        os.environ["TUNING_REGISTER_C"] = "1"       # ...its register on its C core
     import numpy as np
     import bitident as BI
     import blockrender as B
@@ -67,12 +69,8 @@ def main(argv):
         return B.property_class_for_note(prog, key)
 
     nn = len(m.notes())
-    cap = 600 * max(nn, 1)
-    while True:
-        got = N.play(song, classes, t, br, cap)
-        if got[0] is not None or cap > 20000 * max(nn, 1):
-            break
-        cap *= 4
+    got = N.play(song, classes, t, br, 600 * max(nn, 1), register="register" in opt,
+                 scale=float(os.environ.get("TUNING_REGISTER", "1") or 1))
     if got[0] is None:
         print("not the engine's: note %d %r" % (got[1], m.notes()[got[1]]))
         return 2

@@ -120,7 +120,9 @@ class NoteClass(ctypes.Structure):
                 + [(f, C) for f in ('strike_span_lo', 'strike_span_hi', 'strike_octave_db', 'strike_fade_s',
                                     'strike_len_s', 'strike_at_s', 'strike_cal_db')]
                 + [('room_planes', C * 6), ('room_order', I), ('damper_pedal', I), ('detune_lo', C),
-                   ('detune_hi', C), ('detune_wheel', I)])
+                   ('detune_hi', C), ('detune_wheel', I)]
+                + [('reg_gain', C), ('reg_knock', C), ('reg_fall', C), ('damper_top', I), ('reg_floor', C),
+                   ('reg_release', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -157,8 +159,9 @@ def lib():
 
 def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
-                                                       'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c')]
-            + [os.path.join(HERE, 'roomcore.c')])
+                                                       'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
+                                                       'register.cpp')]
+            + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
         tmp = '%s.%d.tmp' % (so, os.getpid())
@@ -168,12 +171,17 @@ def _load():
         # The C core (tone.c, with voice.c) and the C++ engine (engine.cpp)
         # under the same flags, linked into one library.
         flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
-        objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o']
+        objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
+                tmp + '.register.o', tmp + '.registercore.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
-            for src, o in zip(srcs[4:8], objs[1:]):
+            for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', 'register.cpp')], objs[1:6]):
                 subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', src, '-o', o])
-            subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lm'])
+            # register.py's C core, under ITS flags (register._load_core's): the same arithmetic
+            subprocess.check_call(['gcc', '-O3', '-march=native', '-ffp-contract=off', '-fopenmp-simd',
+                                   '-fno-math-errno', '-mprefer-vector-width=512', '-fPIC', '-c',
+                                   os.path.join(HERE, 'registercore.c'), '-o', objs[6]])
+            subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm'])
         finally:
             for o in objs:
                 if os.path.exists(o):
@@ -223,7 +231,11 @@ def _load():
             ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C, I, I]),
             ('nv_play', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoteIn), D, I,
                             ctypes.POINTER(PyRandomState), ctypes.c_void_p, LL, ctypes.c_void_p, D,
-                            ctypes.POINTER(LL)]),
+                            ctypes.POINTER(LL), ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_play_full', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoteIn), D, I,
+                                  ctypes.POINTER(PyRandomState), ctypes.POINTER(D), ctypes.c_void_p, D,
+                                  ctypes.c_void_p, C, C, C, C, LL]),
+            ('nv_buf_free', None, [ctypes.c_void_p]),
             ('nv_song_tuning', None, [ctypes.c_void_p, LL, C, D]),
             ('nv_song_channel', None, [ctypes.c_void_p, LL, C, D, I]),
             ('nv_song_pitch_level', I, [ctypes.c_void_p, I, I, D]),
@@ -470,7 +482,8 @@ _NOTE_OFF = ('bloom_seconds', 'speech_harmonic_exp', 'speech_harmonic_exp_per_oc
              'jitter_by_partial', 'mode_lock_spread', 'played_backwards', 'fold_restrike', 'hammer_legato',
              'strike_flam_rate', 'strike_flam_times', 'strike_flam_people', 'strike_noise_tail',
              'strike_noise_layers', 'transposed_from_hz', 'one_shot', 'gate_time', 'tape_length_s',
-             'open_string_ring')
+             'open_string_ring', 'course_keys', 'key_bridge', 'bridge_partner', 'buff_choirs',
+             'register_knock_tilt', 'register_knock_profile')
 _NOTE_ABSENT = ('pre_pluck_s', 'feedback_harmonic')
 
 
@@ -540,6 +553,13 @@ def note_class(cls):
         k.damper_pedal = int(bool(getattr(cls, 'damper_pedal', True)))
         k.detune_lo, k.detune_hi = cls.string_detune_range
         k.detune_wheel = int(bool(getattr(cls, 'detune_wheel', False)))
+        import register as _RG
+        k.reg_gain = float(getattr(cls, 'register_gain', 0.0))
+        k.reg_knock = float(getattr(cls, 'register_knock_gain', 0.0))
+        k.reg_fall = float(getattr(cls, 'register_knock_falloff', 0.0))
+        k.damper_top = int(getattr(cls, 'damper_top', 128))
+        k.reg_floor = _RG.floor_of(cls)
+        k.reg_release = float(getattr(cls, 'release_valve_time', 0.12) or 0.12)
         got = _NOTE[cls] = [k, None]
     if got is False:
         return None
@@ -730,12 +750,14 @@ class Midi(object):
         return s
 
 
-def play(song, classes, tmpl, br, cap):
+def play(song, classes, tmpl, br, cap, register=False, scale=1.0):
     """nv_play: every note of song through the engine, in the note loop's
     order. classes(program, key) -> the voice class, or None; tmpl a NoteIn
     with the emitter's constants; br {channel: bend (or fader) row}; cap the
-    rows the store holds. (rows, qacc, azimuth), or (None, i) where note i
-    could not be the engine's."""
+    rows the store holds; register: the free strings' rows after the notes'
+    (nv_play_full; scale the render's register scale). (rows, qacc,
+    azimuth), or (None, i) where note i could not be the engine's (-1: the
+    store too small)."""
     import random
     import numpy as np
     d = lib()
@@ -752,12 +774,36 @@ def play(song, classes, tmpl, br, cap):
     B = (ctypes.c_double * nbr)(*[float(br.get(c, -1)) for c in range(nbr)])
     random.seed(0)
     rs = random_state()
-    rows = np.empty((cap, NCOLS))
     qacc = np.zeros(18)
     az = ctypes.c_double(0.0)
     nr = ctypes.c_longlong(0)
-    n = d.nv_play(song.p, K, ctypes.byref(tmpl), B, nbr, ctypes.byref(rs), rows.ctypes.data, cap,
-                  qacc.ctypes.data, ctypes.byref(az), ctypes.byref(nr))
+    if register:
+        import blockrender as BR
+        import damper as DM
+        kind = (ctypes.c_int * NCOLS)(*[1 if c in BR._COL_F4 else 2 if c in BR._COL_I4 else 0
+                                        for c in BR.EMIT_COLS])
+        buf = ctypes.POINTER(ctypes.c_double)()
+        n = d.nv_play_full(song.p, K, ctypes.byref(tmpl), B, nbr, ctypes.byref(rs), ctypes.byref(buf),
+                           qacc.ctypes.data, ctypes.byref(az), kind, float(scale), DM.FULL_DB_S, DM.RESIDUAL,
+                           DM.BETA, BR.BLK)
+        try:
+            if n < 0:
+                return None, (-n - 1 if n > -1000000000 else -1)
+            rows = np.ctypeslib.as_array(buf, shape=(n, NCOLS)).copy() if n else np.zeros((0, NCOLS))
+        finally:
+            d.nv_buf_free(buf)
+        return rows, qacc, az.value
+    while True:
+        rows = np.empty((cap, NCOLS))
+        random.seed(0)
+        rs = random_state()
+        qacc[:] = 0.0
+        az.value = 0.0
+        n = d.nv_play(song.p, K, ctypes.byref(tmpl), B, nbr, ctypes.byref(rs), rows.ctypes.data, cap,
+                      qacc.ctypes.data, ctypes.byref(az), ctypes.byref(nr), None, None)
+        if n != -2000000000:
+            break
+        cap *= 2            # the store was too small: again, from the start
     if n < 0:
         return None, -n - 1
     return rows[:nr.value], qacc, az.value
