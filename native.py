@@ -236,9 +236,15 @@ def _load():
                                 ctypes.POINTER(PyRandomState), ctypes.POINTER(D), ctypes.c_void_p, D,
                                 ctypes.c_void_p, C, C, C, C, LL, C, C, C, ctypes.c_void_p, C, C, C, C,
                                 ctypes.POINTER(ctypes.c_void_p), I]),
-            ('nv_template', LL, [ctypes.c_void_p, ctypes.POINTER(NoteIn), D, D, I, I, I,
+            ('nv_template', LL, [ctypes.c_void_p, ctypes.POINTER(NoteIn), D, D, I, I, I, I,
                                  ctypes.POINTER(ctypes.POINTER(ctypes.c_double)), ctypes.c_void_p, C, C, C, C, LL,
                                  C, C, ctypes.c_void_p, C, C, C, C, ctypes.POINTER(ctypes.c_void_p)]),
+            ('nv_tcache_new', ctypes.c_void_p, [ctypes.c_void_p, ctypes.POINTER(NoteIn), D, D, ctypes.c_void_p,
+                                                ctypes.c_void_p, C, C, C, C, LL, C, C, C, C, C, C]),
+            ('nv_tcache_free', None, [ctypes.c_void_p]),
+            ('nv_tcache_warm', ctypes.c_long, [ctypes.c_void_p, I, I, I, I, ctypes.c_void_p, I]),
+            ('nv_tcache_get', ctypes.c_void_p, [ctypes.c_void_p, I, I, I, ctypes.POINTER(LL)]),
+            ('nv_tmpl_col', ctypes.c_void_p, [ctypes.c_void_p, I, I]),
             ('nv_render', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, I, I, LL,
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
@@ -1107,7 +1113,7 @@ def template(program, note, vel, tuner='hybrid440'):
     out = (ctypes.c_double * 48)()
     buf = ctypes.POINTER(ctypes.c_double)()
     dm = (ctypes.c_void_p * 6)()
-    n = d.nv_template(K, ctypes.byref(t), F, tr, int(program), int(note), int(vel), ctypes.byref(buf), kind,
+    n = d.nv_template(K, ctypes.byref(t), F, tr, int(program), int(note), int(vel), -1, ctypes.byref(buf), kind,
                       float(os.environ.get("TUNING_REGISTER", "1") or 1), DM.FULL_DB_S, DM.RESIDUAL, DM.BETA,
                       BR.BLK, BR.RING_FLOOR, BR.RING_MAX, out, DM.KNEE_DB, DM.LN10_20, float(BR.XDEC_NEPERS),
                       float(BR.SR), dm)
@@ -1194,3 +1200,92 @@ class Slab(object):
         out = np.empty(self.cap, np.int64)
         n = self.d.nv_slab_free_list(self.p, out.ctypes.data, self.cap)
         return out[:n].tolist()
+
+
+class TemplateCache(object):
+    """native/live.cpp's template cache: live.Patch's for a piano program --
+    each key at every velocity bucket's centre and every wheel step, built
+    once (warm) and looked up (get) -- its templates as live's dicts."""
+
+    def __init__(self, program, tuner='hybrid'):
+        import math
+        import blockrender as BR
+        import damper as DM
+        import patch_map as PM
+        import percussion_map as PCM
+        import tonelib as T
+        self.d = lib()
+        self.program = program
+        self.keep = []
+        K = (ctypes.c_void_p * (128 * 128))()
+        for key in range(128):
+            cls = BR.property_class_for_note(program, key)
+            k = note_class(cls) if cls is not None else None
+            if k is not None:
+                self.keep.append(k)
+                K[128 * program + key] = ctypes.addressof(k)
+        t = NoteIn()
+        t.sr, t.retrigger_fade, t.nyq_om = BR.SR, BR.RETRIGGER_FADE, 0.98 * math.pi
+        t.sv[:] = [0.0, 1.0]
+        t.sound_vib_depth_cents, t.vibrato_delay = T.SOUND_VIB_DEPTH_CENTS, 0.0
+        t.gl[:] = [0.0, 0.05, 0.0]
+        t.fx, t.mk, t.fm_omega, t.fm_phase = -1.0, 0.0, 0.0, 0.0
+        t.room_bands[:] = [63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0]
+        t.reflect = int(os.environ.get("TUNING_REFLECT", "1") not in ("0", "off", ""))
+        t.fixed_touch = 1
+        freq = BR.tuning_table(tuner)
+        F = (ctypes.c_double * 128)(*[float(freq[q]) if q in freq else 0.0 for q in range(128)])
+        tr = (ctypes.c_double * 256)(*([float(PM.program_trim(p, False)) for p in range(128)]
+                                       + [float(PM.program_trim(PCM.DrumProgram(p), True)) for p in range(128)]))
+        kind = (ctypes.c_int * NCOLS)(*[1 if c in BR._COL_F4 else 2 if c in BR._COL_I4 else 0
+                                        for c in BR.EMIT_COLS])
+        fin = dict(BR.FINAL_DTYPES)
+        fn = (ctypes.c_int * NCOLS)(*[{'f8': 0, 'f4': 1, 'i8': 2, 'i4': 3}.get(fin.get(c), -1)
+                                      for c in BR.EMIT_COLS])
+        self.p = self.d.nv_tcache_new(K, ctypes.byref(t), F, tr, kind, fn,
+                                      float(os.environ.get("TUNING_REGISTER", "1") or 1), DM.FULL_DB_S,
+                                      DM.RESIDUAL, DM.BETA, BR.BLK, BR.RING_FLOOR, BR.RING_MAX, DM.KNEE_DB,
+                                      DM.LN10_20, float(BR.XDEC_NEPERS), float(BR.SR))
+
+    def __del__(self):
+        if getattr(self, 'p', None):
+            self.d.nv_tcache_free(self.p)
+            self.p = None
+
+    def warm(self, lo, hi, nbuckets, speeds=(None,)):
+        sp = (ctypes.c_int * len(speeds))(*[-1 if v is None else int(v) for v in speeds])
+        return self.d.nv_tcache_warm(self.p, int(self.program), int(lo), int(hi), int(nbuckets), sp, len(speeds))
+
+    def get(self, note, bucket, speed=None):
+        """The template as live's dict (the piano's fields), or None."""
+        import numpy as np
+        o = (LL * 3)()
+        t = self.d.nv_tcache_get(self.p, int(note), int(bucket), -1 if speed is None else int(speed), o)
+        if not t:
+            return None
+        n = int(o[0])
+        out = dict(P=n, dur=int(o[1]), vel=int(o[2]), oneshot=False, send=None, scatter_ms=0.0, FT=None, KN=None,
+                   panel=None, grain=None, gof=None, sof=None, cof=None, rof=None, ranks={}, rel=None,
+                   rel_rank={})
+
+        def col(g, i, dt):
+            p = self.d.nv_tmpl_col(t, g, i)
+            return np.ctypeslib.as_array(ctypes.cast(p, ctypes.POINTER(dt)), shape=(n,)).copy() if n else \
+                np.zeros(0, np.dtype(dt))
+        for i, c in enumerate(LIVE_F8):
+            out[c] = col(0, i, ctypes.c_double)
+        for i, c in enumerate(LIVE_F4):
+            out[c] = col(1, i, ctypes.c_float)
+        for i, c in enumerate(LIVE_F4N):
+            out[c] = col(2, i, ctypes.c_float)
+        for i, c in enumerate(("non", "noff")):
+            out[c] = col(3, i, ctypes.c_int64)
+        for i, c in enumerate(LIVE_I4):
+            out[c] = col(4, i, ctypes.c_int32)
+        out["hrel"] = col(5, 0, ctypes.c_float)
+        out["fa_at"] = col(6, 0, ctypes.c_int8).astype(bool)
+        out["sym"] = np.zeros(n, bool)
+        out["ring"] = np.zeros(n, bool)
+        out["push"] = np.zeros(n, bool)
+        out["lflip"] = np.zeros(n, bool)
+        return out
