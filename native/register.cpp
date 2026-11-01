@@ -914,16 +914,27 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
     const double LN10_20 = log(10.0) / 20.0;
     std::vector<long long> order;                    // the channels, as made
     std::map<long long, std::pair<void *, const NoteClass *>> chans;
+    // EACH TONE ITS OWN MIX CHANNEL (the note loop's em.channel, gsefx.TONE_SEG):
+    // a channel's first program keeps the channel, each other one heard on it
+    // -- in the note loop's order, every note counted -- is ch + 256 x its
+    // place. A register channel is keyed by it, as _note_register keys
+    // _REG_CH, and its strings' phases hash that key.
+    std::map<long long, std::vector<int>> tones;
     for (int j = 0; j < nn; j++) {
         int i = played[j];
         long long ch;
         int iv[4];
         double dv[2];
         nv_song_get_note(song, i, &ch, iv, dv);
+        std::vector<int> &tl = tones[ch];
+        size_t ti = std::find(tl.begin(), tl.end(), iv[2]) - tl.begin();
+        if (ti == tl.size())
+            tl.push_back(iv[2]);
+        long long mix = ch + (ti ? 256LL * (long long)(ti % 256) : 0LL);
         const NoteClass *k = K[128 * iv[2] + iv[0]];
         if (!with_register || !(k->reg_gain != 0.0 || k->reg_knock != 0.0))
             continue;           // (blockrender.REGISTER off: live's templates)
-        long long rk = ch;
+        long long rk = mix;
         while (chans.count(rk) && chans[rk].second != k)
             rk += 100000;
         if (!chans.count(rk)) {
