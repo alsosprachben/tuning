@@ -201,6 +201,9 @@ struct Song {
     std::map<long long, double> btun;
     std::map<long long, std::vector<double>> otun;
     std::map<long long, int> fader;     // channels whose fader is a row (_LROW): their volume 1
+    // THE DRUM SETS (percussion_for_note at kit_for_program): each drum
+    // program's key, its pitch (0: no drum the engine knows) and its seat
+    std::vector<double> kit_f0, kit_seat;
 
     void finish(double total_)
     {
@@ -436,11 +439,22 @@ void nv_song_channel(void *s, long long ch, double btun, const double *otun, int
         S->fader[ch] = 1;
 }
 
+// The drum sets' keys: f0[128 * program + key] (0 where the engine has no
+// drum) and seat[...] (the drum's pan in its set)
+void nv_song_kits(void *s, const double *f0, const double *seat)
+{
+    nv::Song *S = (nv::Song *)s;
+    S->kit_f0.assign(f0, f0 + 16384);
+    S->kit_seat.assign(seat, seat + 16384);
+}
+
 // A note's pitch and level as its channel gives them: f0, velocity, pan,
 // channel volume ((CC7 CC11)^2, its program's trim; 1 under a fader row),
 // effort (40 log10 of its velocity over the channel's median, +-12, where
-// the voice has an effort tilt). The note by its index in the song's notes
-// (two can share a key, an onset and a key-up). 0 if there is no such note.
+// the voice has an effort tilt), and a drum's seat in its set. The note by
+// its index in the song's notes (two can share a key, an onset and a
+// key-up). 0 if there is no such note (or a drum the sets lack); 2 for a
+// drum: its pitch its set's, not a tuning's.
 int nv_song_pitch_level(void *s, int i, int effort_tilt, double *out)
 {
     const nv::Song *S = (nv::Song *)s;
@@ -450,7 +464,18 @@ int nv_song_pitch_level(void *s, int i, int effort_tilt, double *out)
     int note = S->notes[i].note;
     double on = S->notes[i].on;
     const nv::Ev &e = S->notes[i];
-    out[0] = S->pitch(ch, note, on);
+    int r = 1;
+    out[5] = 0.0;
+    if (e.drum) {
+        int q = 128 * e.prog + note;
+        if (S->kit_f0.empty() || e.prog < 0 || e.prog > 127 || S->kit_f0[q] == 0.0)
+            return 0;
+        out[0] = S->kit_f0[q];
+        out[5] = S->kit_seat[q];
+        r = 2;
+    } else {
+        out[0] = S->pitch(ch, note, on);
+    }
     out[1] = e.vel;
     out[2] = e.pan;
     double cv = pow(e.v7 * e.v11, 2.0);
@@ -465,7 +490,7 @@ int nv_song_pitch_level(void *s, int i, int effort_tilt, double *out)
     if (effort_tilt && e.vel && b)
         eff = nv::pymax(-12.0, nv::pymin(12.0, 40.0 * log10(e.vel / (double)b)));
     out[4] = eff;
-    return 1;
+    return r;
 }
 
 void nv_song_finish(void *s, double total) { ((nv::Song *)s)->finish(total); }

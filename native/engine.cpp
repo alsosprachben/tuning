@@ -215,17 +215,20 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
     n->soft_pedal_down = nv_song_soft_at(song, n->ch, n->on);
     if (n->from_song) {
         // its pitch and level from the file, not the caller
-        double pl[5];
-        if (!nv_song_pitch_level(song, n->song_index, K->init.effort_tilt != 0.0, pl))
+        double pl[6];
+        int r = nv_song_pitch_level(song, n->song_index, K->init.effort_tilt != 0.0, pl);
+        if (!r)
             return -2;
         n->f0 = pl[0]; n->vel = pl[1]; n->pan = pl[2]; n->chan_vol = pl[3]; n->effort = pl[4];
+        if (r == 2)
+            n->seat = pl[5];            // a drum: its seat in its set
     }
     return nv_note(K, n, rs, nimg, nsurf, surf, img, mir, rows, cap, qacc, azimuth, out);
 }
 
 // A SONG PLAYED: every note, in the note loop's order (by onset, channel and
 // key, stably), each through nv_song_play with its class (K[128 * program +
-// key]; every note must have one) -- the rows of the whole song's notes.
+// key], a drum set's from K[NV_K_DRUMS + ...]; every note must have one) -- the rows of the whole song's notes.
 // tmpl: the emitter's constants for every note (rate, fades, Nyquist, the
 // room's bands, REFLECT, the glide, vibrato and sound rows' rest state);
 // br[channel]: the channel's bend (or fader) row, -1 none. The global random
@@ -263,7 +266,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         int iv[4];
         double dv[2];
         nv_song_get_note(song, i, &ch, iv, dv);
-        const NoteClass *k = (iv[3] || iv[2] < 0 || iv[2] > 127) ? nullptr : K[128 * iv[2] + iv[0]];
+        const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[(iv[3] ? NV_K_DRUMS : 0) + 128 * iv[2] + iv[0]];
         if (!k)
             return -(1 + i);
         NoteIn n = *tmpl;

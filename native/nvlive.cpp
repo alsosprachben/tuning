@@ -161,7 +161,8 @@ enum { K_SR, K_BLK, K_CHUNK, K_MASTER, K_RING_FLOOR, K_RING_MAX, K_XDEC, K_REG_S
 struct Export {
     std::vector<double> k, freq, trim, pan;
     std::vector<std::vector<unsigned char>> classes;
-    std::vector<int> cmap, kind, fin;
+    std::vector<int> cmap, kind, fin;     // cmap: the programs' keys, then the drum sets'
+    std::vector<double> kit_f0, kit_seat;
     std::string room, libs[3];
     double beta = 0.0, headroom = 1.0;
     int part[128][10];
@@ -197,7 +198,8 @@ static bool read_export(const char *path, Export &E)
     bool ok = fread(magic, 1, 4, f) == 4 && !memcmp(magic, "NVX1", 4) && fread(&nk, 4, 1, f) == 1
               && fread(&csz, 4, 1, f) == 1 && fread(&ncls, 4, 1, f) == 1 && csz == (int)sizeof(NoteClass);
     if (ok) {
-        E.k.resize(nk); E.freq.resize(128); E.trim.resize(512); E.cmap.resize(16384);
+        E.k.resize(nk); E.freq.resize(128); E.trim.resize(512); E.cmap.resize(2 * NV_K_DRUMS);
+        E.kit_f0.resize(16384); E.kit_seat.resize(16384);
         E.kind.resize(NCOLS); E.fin.resize(NCOLS);
         ok = fread(E.k.data(), 8, nk, f) == (size_t)nk && fread(E.freq.data(), 8, 128, f) == 128
              && fread(E.trim.data(), 8, 512, f) == 512;
@@ -205,7 +207,9 @@ static bool read_export(const char *path, Export &E)
             E.classes.emplace_back(csz);
             ok = fread(E.classes.back().data(), 1, csz, f) == (size_t)csz;
         }
-        ok = ok && fread(E.cmap.data(), 4, 16384, f) == 16384 && fread(E.kind.data(), 4, NCOLS, f) == NCOLS
+        ok = ok && fread(E.cmap.data(), 4, 2 * NV_K_DRUMS, f) == 2 * NV_K_DRUMS
+             && fread(E.kit_f0.data(), 8, 16384, f) == 16384 && fread(E.kit_seat.data(), 8, 16384, f) == 16384
+             && fread(E.kind.data(), 4, NCOLS, f) == NCOLS
              && fread(E.fin.data(), 4, NCOLS, f) == NCOLS;
         std::string *ss[4] = {&E.room, &E.libs[0], &E.libs[1], &E.libs[2]};
         for (int i = 0; ok && i < 4; i++) {
@@ -528,7 +532,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "nvlive: tuned %s%s\n", tname.c_str(), rn >= 0 ? (rn == 69 ? " at a=" + a : " at c=" + c).c_str() : "");
     }
     // THE PART'S TEMPLATES (live.Patch.warm), built here
-    std::vector<const NoteClass *> K(16384, nullptr);
+    std::vector<const NoteClass *> K(2 * NV_K_DRUMS, nullptr);
     for (int q = 0; q < 16384; q++)
         if (E.cmap[q] >= 0)
             K[q] = (const NoteClass *)E.classes[E.cmap[q]].data();

@@ -334,6 +334,7 @@ def _load():
             ('nv_song_tuning', None, [ctypes.c_void_p, LL, C, D]),
             ('nv_song_channel', None, [ctypes.c_void_p, LL, C, D, I]),
             ('nv_song_pitch_level', I, [ctypes.c_void_p, I, I, D]),
+            ('nv_song_kits', None, [ctypes.c_void_p, D, D]),
             ('nv_song_finish', None, [ctypes.c_void_p, C]),
             ('nv_song_note_off', C, [ctypes.c_void_p, LL, I, C, C, I, I, C, ctypes.POINTER(I)]),
             ('nv_song_soft_at', I, [ctypes.c_void_p, LL, C]),
@@ -365,6 +366,59 @@ def kit_drum(cls):
         return False
     return (len(cls.DRUM_MODES) <= 16 and len(cls.CLICK_DB) <= 16 and len(cls.unison_detune or ()) <= 8
             and not cls.bore_corner_hz and not cls.harmonic_touch and not cls.pickup_points)
+
+
+_KITS = []
+
+
+def kits():
+    """The drum sets as the engine's song and K tables take them, for each
+    drum program p and key (q = 128 p + key, the set kit_for_program(p)):
+    (classes, f0, seat) -- the class the engine plays there (None where it
+    does not: no drum, a drum not native, or a key with more than its sound
+    -- a layer, a choke, strokes, a siren, a sweep) and, for every drum the
+    set maps, its pitch and its pan in the set (seat); f0 0 where none."""
+    if _KITS:
+        return _KITS[0]
+    import percussion_map as PCM
+    classes, f0, seat = [None] * 16384, (ctypes.c_double * 16384)(), (ctypes.c_double * 16384)()
+    for p in range(128):
+        kit = PCM.kit_for_program(p)
+        for key in range(128):
+            d = PCM.percussion_for_note(key, kit)
+            if not d:
+                continue
+            q = 128 * p + key
+            f0[q], seat[q] = float(d[2]), float(d[3])
+            cls = d[1]
+            if (kit_drum(cls) and not PCM.key_layers(key, kit) and PCM.choke_group(key, kit) is None
+                    and PCM.rasp_strokes(key, 0.0, 1.0, kit=kit) is None
+                    and not getattr(cls, 'siren_rotor', None) and not getattr(cls, 'alias_sweep', None)
+                    and not getattr(cls, 'sounding_octaves', 0.0)):
+                classes[q] = cls
+    _KITS.append((classes, f0, seat))
+    return _KITS[0]
+
+
+def k_table(classes, programs=range(128)):
+    """The engine's K: K[128 * program + key] the NoteClass of classes(program,
+    key) for each of programs, K[16384 + 128 * program + key] a drum set's
+    (kits()). (K, the NoteClasses it points at, to keep)."""
+    K = (ctypes.c_void_p * (2 * 16384))()
+    keep = []
+    for prog in programs:
+        for key in range(128):
+            cls = classes(prog, key)
+            k = note_class(cls) if cls is not None else None
+            if k is not None:
+                keep.append(k)
+                K[128 * prog + key] = ctypes.addressof(k)
+    for q, cls in enumerate(kits()[0]):
+        k = note_class(cls) if cls is not None else None
+        if k is not None:
+            keep.append(k)
+            K[16384 + q] = ctypes.addressof(k)
+    return K, keep
 
 
 def supported(props):
@@ -649,11 +703,6 @@ def note_class(cls):
     import blockrender as BR
     got = _NOTE.get(cls)
     drum = kit_drum(cls)
-    if got is None and drum and os.environ.get('TUNING_NATIVE_DRUMS') != '1':
-        # A KIT DRUM'S NOTE (its seat, the one-shot's hold) is the engine's
-        # only where TUNING_NATIVE_DRUMS=1 asks, until it is checked
-        _NOTE[cls] = False
-        got = False
     if got is None:
         v = _class(cls)
         # (a kit drum's one-shot hold is the engine's; a gate is not)
@@ -766,6 +815,8 @@ class Song(object):
             d.nv_song_note(self.p, int(e[0]), int(e[1]), float(e[2]), float(e[3]), int(e[4]), float(v7),
                            float(v11), float(pan), float(trim(e[6]) if trim else 1.0), int(e[6]),
                            int(_PM.is_drum(e[6])))
+        _, kf0, kseat = kits()
+        d.nv_song_kits(self.p, kf0, kseat)
         T128 = ctypes.c_double * 128
         def row(tab):           # a table as 128 numbers, 0 for a key it lacks
             return T128(*[float(tab[k]) if k in tab else 0.0 for k in range(128)])
@@ -789,9 +840,9 @@ class Song(object):
         return q.pop(0) if q else None
 
     def pitch_level(self, index, effort_tilt):
-        """(f0, velocity, pan, channel volume, effort) of the song's note at
-        index, or None"""
-        o = (ctypes.c_double * 5)()
+        """(f0, velocity, pan, channel volume, effort, seat) of the song's
+        note at index (seat: a drum's in its set, else 0), or None"""
+        o = (ctypes.c_double * 6)()
         if index is None or not self.d.nv_song_pitch_level(self.p, int(index), int(bool(effort_tilt)), o):
             return None
         return tuple(o)
@@ -937,15 +988,7 @@ def play(song, classes, tmpl, br, cap, register=False, scale=1.0):
     import random
     import numpy as np
     d = lib()
-    K = (ctypes.c_void_p * (128 * 128))()
-    keep = []
-    for prog in range(128):
-        for key in range(128):
-            cls = classes(prog, key)
-            k = note_class(cls) if cls is not None else None
-            if k is not None:
-                keep.append(k)
-                K[128 * prog + key] = ctypes.addressof(k)
+    K, keep = k_table(classes)
     nbr = max([int(c) + 1 for c in br] + [1])
     B = (ctypes.c_double * nbr)(*[float(br.get(c, -1)) for c in range(nbr)])
     random.seed(0)
@@ -1145,15 +1188,7 @@ def prepare(song, classes, tmpl, br, total, scale=1.0):
     import blockrender as BR
     import damper as DM
     d = lib()
-    K = (ctypes.c_void_p * (128 * 128))()
-    keep = []
-    for prog in range(128):
-        for key in range(128):
-            cls = classes(prog, key)
-            k = note_class(cls) if cls is not None else None
-            if k is not None:
-                keep.append(k)
-                K[128 * prog + key] = ctypes.addressof(k)
+    K, keep = k_table(classes)
     nbr = max([int(c) + 1 for c in br] + [1])
     B = (ctypes.c_double * nbr)(*[float(br.get(c, -1)) for c in range(nbr)])
     random.seed(0)
@@ -1312,7 +1347,7 @@ def template(program, note, vel, tuner='hybrid440'):
     k = note_class(cls) if cls is not None else None
     if k is None:
         return None
-    K = (ctypes.c_void_p * (128 * 128))()
+    K = (ctypes.c_void_p * (2 * 16384))()
     K[128 * program + note] = ctypes.addressof(k)
     t = NoteIn()
     t.sr, t.retrigger_fade, t.nyq_om = BR.SR, BR.RETRIGGER_FADE, 0.98 * math.pi
@@ -1436,7 +1471,7 @@ class TemplateCache(object):
         self.d = lib()
         self.program = program
         self.keep = []
-        K = (ctypes.c_void_p * (128 * 128))()
+        K = (ctypes.c_void_p * (2 * 16384))()
         for key in range(128):
             cls = BR.property_class_for_note(program, key)
             k = note_class(cls) if cls is not None else None

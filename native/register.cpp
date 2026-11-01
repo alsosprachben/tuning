@@ -931,14 +931,14 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         if (ti == tl.size())
             tl.push_back(iv[2]);
         long long mix = ch + (ti ? 256LL * (long long)(ti % 256) : 0LL);
-        const NoteClass *k = K[128 * iv[2] + iv[0]];
+        const NoteClass *k = K[(iv[3] ? NV_K_DRUMS : 0) + 128 * iv[2] + iv[0]];
         if (!with_register || !(k->reg_gain != 0.0 || k->reg_knock != 0.0))
             continue;           // (blockrender.REGISTER off: live's templates)
         long long rk = mix;
         while (chans.count(rk) && chans[rk].second != k)
             rk += 100000;
         if (!chans.count(rk)) {
-            double pl[5];
+            double pl[6];
             nv_song_pitch_level(song, i, k->init.effort_tilt != 0.0, pl);
             double tab[128];
             nv_song_table(song, ch, dv[0], tab);

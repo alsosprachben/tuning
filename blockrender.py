@@ -4569,7 +4569,7 @@ class _Note(object):
     __slots__ = ('ch', 'note', 'on', 'off', 'vel', 'v7', 'v11', 'pan', 'prog', 'key_off', 'drum',
                  'organ', 'pc', 'organ_key', 'freq', 'chan_vol', 'efx_gain', 'f0', 'non', 'noff',
                  'fade', 'rel', 'chiff', 'cv', 'cc', 'crl', 'csc', 'sjit', 'li', 'ri', 'row0',
-                 'song_index')
+                 'song_index', 'drum_plain')
 
 
 class _Emitter(object):
@@ -6409,13 +6409,13 @@ def _note_phantoms_py(em, props, nt, transverse, emit_partial):
 
 
 def _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT, FREQ_E):
-    """A melodic note whose pitch and level are its channel's alone: no
-    per-note pitch, MPE, meend, transposition, pressure or insertion effect,
-    and a voice with no sounding octaves, scale, brass law, registration or
-    raga table -- nv_song_pitch_level's."""
+    """A note whose pitch and level are its channel's alone: no per-note
+    pitch, MPE, meend, transposition, pressure or insertion effect, and a
+    voice with no sounding octaves, scale, brass law, registration or raga
+    table; a drum as its set has it (drum_plain) -- nv_song_pitch_level's."""
     k = (nt.ch, nt.note, nt.on)
     pc = nt.pc
-    return (nt.drum is None and not nt.organ and not _pna and not _press and _XP == 1.0 and _EFXN[0] is None
+    return ((nt.drum is None or nt.drum_plain) and not nt.organ and not _pna and not _press and _XP == 1.0 and _EFXN[0] is None
             and k not in _mpe_member and k not in _MPE_AT and k not in _MEEND_AT
             and not getattr(pc, 'sounding_octaves', 0.0) and not getattr(pc, 'scale_cents', None)
             and not pc.__name__.endswith('BrassProperties')
@@ -6439,7 +6439,8 @@ def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None):
     if song.next_same(nt.ch, nt.note, nt.on) != nx:
         bad.append('next')
     if cargs is not None:
-        # its pitch and level: (f0, velocity, pan, channel volume, effort) as the voice was built with
+        # its pitch and level: (f0, velocity, pan, channel volume, effort) as
+        # the voice was built with, and a drum's seat
         got = song.pitch_level(nt.song_index, getattr(nt.pc, 'effort_tilt', 0.0))
         if got is None or tuple(got) != tuple(float(x) for x in cargs):
             bad.append('pitch/level %r vs %r' % (cargs, got))
@@ -8111,6 +8112,10 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _dst = _own
         if _dst.get('rxon', 1) == 0:
             return                        # the kit told not to receive this key
+        # a drum as its set has it: no edit, not a user set's, one pitch a stroke
+        # (native.kits: the song's pitch for it)
+        nt.drum_plain = (nt.drum is not None and _ud is None and not _dst
+                         and (nt.note, nt.on) not in stroke_pitch)
         # INTO THE GS DELAY: the part's send at the onset, a drum key's own
         # multiplying it (its 0-127 a share of the part's, preset taken as all)
         # THE INSERTION EFFECT, where this part is assigned to it and its type
@@ -8275,7 +8280,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _vst0 = None if _vst is None else type(_vst).from_buffer_copy(_vst)   # the stream, for the engine's note
         props = nt.pc(nt.f0, nt.pan, (nt.vel/127.0)**2, nt.chan_vol, _eff)   # pan = CC10: a turn (tonelib.stage_angle)
         em.props = props
-        _cargs = (nt.f0, nt.vel, nt.pan, nt.chan_vol, _eff)
+        _cargs = (nt.f0, nt.vel, nt.pan, nt.chan_vol, _eff, _seat if nt.drum is not None else 0.0)
         if _seat:
             # a seat inside the instrument, at the angle its pan names
             props.seat_x = props.listener_distance * math.tan(T.stage_angle(_seat))

@@ -242,7 +242,7 @@ struct Cache {
 
 extern "C" {
 
-// A template cache: the classes (K[128 * program + key]), the engine's
+// A template cache: the classes (K[128 * program + key], the drum sets' after), the engine's
 // constants (tmpl: its fixed_touch set), the tuning, the trims, the columns'
 // table and final types, and the rest as nv_template's
 void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double *freq, const double *trim,
@@ -251,7 +251,7 @@ void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double 
                     double xdec_nepers, double SR)
 {
     nv::live::Cache *C = new nv::live::Cache();
-    C->K.assign(K, K + 16384);
+    C->K.assign(K, K + 2 * NV_K_DRUMS);
     C->t = *tmpl;
     memcpy(C->freq, freq, sizeof C->freq);
     memcpy(C->trim, trim, sizeof C->trim);

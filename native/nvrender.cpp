@@ -21,9 +21,14 @@
 // cannot be bent, so what moves under them moves nothing, as in
 // blockrender); a fader (CC7, CC11) moving under its notes as a row.
 //
+// THE DRUMS the engine has (the export's kit table: a set's key, its class,
+// pitch and seat) play from the song as blockrender plays them: the kit's
+// pitch, the seat, the one-shot's hold.
+//
 // Refused (exit 2) -- Python renders them: a file the reader refuses (an
 // NRPN, MPE, an exclusive past a reset...), a note no native class plays
-// (drums, other instruments), an MTS tuning select (gm2's store).
+// (other instruments, the other drums), an MTS tuning select (gm2's store),
+// a drum channel's wheel or tuning (its drums would ride it).
 
 #include <charconv>
 #include <cmath>
@@ -98,7 +103,8 @@ static int col(const char *name)
 struct Export {
     std::vector<double> k, freq, trim;
     std::vector<std::vector<unsigned char>> classes;
-    std::vector<int> cmap, kind, fin;
+    std::vector<int> cmap, kind, fin;     // cmap: the programs' keys, then the drum sets'
+    std::vector<double> kit_f0, kit_seat;
     std::string room, libs[3];
 };
 
@@ -112,7 +118,8 @@ static bool read_export(const char *path, Export &E)
     bool ok = fread(magic, 1, 4, f) == 4 && !memcmp(magic, "NVX1", 4) && fread(&nk, 4, 1, f) == 1
               && fread(&csz, 4, 1, f) == 1 && fread(&ncls, 4, 1, f) == 1 && csz == (int)sizeof(NoteClass);
     if (ok) {
-        E.k.resize(nk); E.freq.resize(128); E.trim.resize(512); E.cmap.resize(16384);
+        E.k.resize(nk); E.freq.resize(128); E.trim.resize(512); E.cmap.resize(2 * NV_K_DRUMS);
+        E.kit_f0.resize(16384); E.kit_seat.resize(16384);
         E.kind.resize(NCOLS); E.fin.resize(NCOLS);
         ok = fread(E.k.data(), 8, nk, f) == (size_t)nk && fread(E.freq.data(), 8, 128, f) == 128
              && fread(E.trim.data(), 8, 512, f) == 512;
@@ -120,7 +127,9 @@ static bool read_export(const char *path, Export &E)
             E.classes.emplace_back(csz);
             ok = fread(E.classes.back().data(), 1, csz, f) == (size_t)csz;
         }
-        ok = ok && fread(E.cmap.data(), 4, 16384, f) == 16384 && fread(E.kind.data(), 4, NCOLS, f) == NCOLS
+        ok = ok && fread(E.cmap.data(), 4, 2 * NV_K_DRUMS, f) == 2 * NV_K_DRUMS
+             && fread(E.kit_f0.data(), 8, 16384, f) == 16384 && fread(E.kit_seat.data(), 8, 16384, f) == 16384
+             && fread(E.kind.data(), 4, NCOLS, f) == NCOLS
              && fread(E.fin.data(), 4, NCOLS, f) == NCOLS;
         std::string *ss[4] = {&E.room, &E.libs[0], &E.libs[1], &E.libs[2]};
         for (int i = 0; ok && i < 4; i++) {
@@ -271,15 +280,29 @@ int main(int argc, char **argv)
         }
     }
     std::vector<double> first(256, INFINITY);
+    std::vector<char> drum_ch(256, 0);
     for (int i = 0, n = nv_midi_n_notes(midi); i < n; i++) {
         int iv[5];
         double dv[5];
         nv_midi_note(midi, i, iv, dv);
         if (dv[0] < first[iv[0] & 255])
             first[iv[0] & 255] = dv[0];
-        if (iv[4] || E.cmap[128 * iv[3] + iv[1]] < 0) {
+        drum_ch[iv[0] & 255] |= iv[4] != 0;
+        if (E.cmap[(iv[4] ? NV_K_DRUMS : 0) + 128 * iv[3] + iv[1]] < 0) {
             fprintf(stderr, "nvrender: refused: a note no native voice plays (program %d, key %d%s)\n", iv[3], iv[1],
                     iv[4] ? ", a drum" : "");
+            return 2;
+        }
+    }
+    // A DRUM CHANNEL'S WHEEL OR TUNING moves its drums (a kit drum can be
+    // bent: blockrender's bend row), which the bend passes do not make
+    for (int i = 0, n = nv_midi_n_pitch(midi); i < n; i++) {
+        int iv[2];
+        long seq;
+        double t, v;
+        nv_midi_pitch(midi, i, iv, &seq, &t, &v);
+        if (iv[0] >= 0 && drum_ch[iv[0] & 255]) {
+            fprintf(stderr, "nvrender: refused: a drum channel's pitch wheel or tuning\n");
             return 2;
         }
     }
@@ -287,6 +310,7 @@ int main(int argc, char **argv)
     // THE SONG
     void *song = nv_song_new();
     nv_song_tuning(song, -1, 0.0, E.freq.data());
+    nv_song_kits(song, E.kit_f0.data(), E.kit_seat.data());
     nv_midi_song(midi, song, E.trim.data() + (nv_midi_gs(midi) ? 256 : 0));
     // THE BEND PASSES (native/bend.cpp): each channel's tuning, from its wheel
     // and RPNs, into its notes' f0; a fader moving under its notes, a row --
@@ -307,8 +331,8 @@ int main(int argc, char **argv)
             nv_song_channel(song, c, btun[c], nullptr, br[c] >= 0.0);
     nv_song_finish(song, total);
     // THE TABLE
-    std::vector<const NoteClass *> K(16384, nullptr);
-    for (int q = 0; q < 16384; q++)
+    std::vector<const NoteClass *> K(2 * NV_K_DRUMS, nullptr);
+    for (int q = 0; q < 2 * NV_K_DRUMS; q++)
         if (E.cmap[q] >= 0)
             K[q] = (const NoteClass *)E.classes[E.cmap[q]].data();
     NoteIn t;
