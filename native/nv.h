@@ -62,6 +62,22 @@ typedef struct {
     /* the board (soundboard_gain): 0 the grand's, 1 the upright's, 2 the electric grand's bridge */
     int board_kind;
     double board_low_order, bridge_gain, bridge_corner_hz, bridge_order, bridge_force_power;
+    /* WHOSE METHODS THE VOICE HAS: 0 the grand's (its hammer and board, its
+       strings, its aftersound -- above); 1 a kit drum's (KitDrumProperties:
+       its measured modes, its stick's click, its two-stage decay -- below),
+       on SynthProperties' series volume and unison */
+    int kind;
+    double unison_gain;
+    int n_unison;
+    double unison_detune[8];
+    /* KitDrumProperties: DRUM_MODES (ratio, dB under the first, amplitude dB/s);
+       the click's CLICK_DB bands of click_per_band partials from CLICK_HZ0 */
+    int n_modes;
+    double modes[16][3];
+    int n_click, click_per_band;
+    double click_db[16];
+    double click_hz0, click_cal_db, click_scatter, click_dbs, click_stroke_slope, stroke_ref_db;
+    double slow_share, slow_dbs, slow_max_hz;       /* slow_max_hz 0: None */
 } VoiceSnap;
 
 typedef struct {

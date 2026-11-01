@@ -52,7 +52,12 @@ class VoiceSnap(ctypes.Structure):
                 ('phantom_coupling', C), ('phantom_register_power', C), ('phantom_ref_hz', C),
                 ('phantom_note_max_hz', C), ('phantom_gain_floor', C), ('phantom_max_order', I),
                 ('board_kind', I), ('board_low_order', C), ('bridge_gain', C), ('bridge_corner_hz', C),
-                ('bridge_order', C), ('bridge_force_power', C)]
+                ('bridge_order', C), ('bridge_force_power', C),
+                ('kind', I), ('unison_gain', C), ('n_unison', I), ('unison_detune', C * 8),
+                ('n_modes', I), ('modes', (C * 3) * 16), ('n_click', I), ('click_per_band', I),
+                ('click_db', C * 16), ('click_hz0', C), ('click_cal_db', C), ('click_scatter', C),
+                ('click_dbs', C), ('click_stroke_slope', C), ('stroke_ref_db', C),
+                ('slow_share', C), ('slow_dbs', C), ('slow_max_hz', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -339,10 +344,35 @@ def _load():
     return d
 
 
-def supported(props):
-    """Whether the native voice plays this voice: the grand piano so far
-    (GrandPianoProperties), and none of the features not ported yet."""
+# A KIT DRUM'S METHODS, as native/voice.c ports them (VoiceSnap.kind 1): a
+# class whose own methods are these, on SynthProperties' series volume and
+# unison -- not one with a noise layer (the snare's NoisyPercussionMixin) or
+# physics of its own past them
+_KIT_OWN = {'mode_ratio': 'KitDrumProperties', 'series_volume': 'KitDrumProperties',
+            'harmonic_decay': 'KitDrumProperties', 'aftersound': 'KitDrumProperties',
+            'aftersound_partial': 'KitDrumProperties', '_click': 'KitDrumProperties',
+            '_stroke_db': 'KitDrumProperties', '_f0': 'KitDrumProperties',
+            'harmonic_volume': 'SynthProperties', 'unison_voices': 'SynthProperties'}
+
+
+def kit_drum(cls):
+    """Whether cls is a kit drum native/voice.c plays (VoiceSnap.kind 1)."""
     import tonelib as T
+    if not issubclass(cls, T.KitDrumProperties) or issubclass(cls, T.NoisyPercussionMixin):
+        return False
+    if any(_owner(cls, n) != o for n, o in _KIT_OWN.items()):
+        return False
+    return (len(cls.DRUM_MODES) <= 16 and len(cls.CLICK_DB) <= 16 and len(cls.unison_detune or ()) <= 8
+            and not cls.bore_corner_hz and not cls.harmonic_touch and not cls.pickup_points)
+
+
+def supported(props):
+    """Whether the native voice plays this voice: the grand piano
+    (GrandPianoProperties) and the kit drums (kit_drum), and none of the
+    features not ported yet."""
+    import tonelib as T
+    if kit_drum(type(props)):
+        return True
     if not isinstance(props, T.GrandPianoProperties) or _board_kind(type(props)) is None:
         return False
     return (props.mode_gains is None and props.mode_ratios is None and not props.harmonic_touch
@@ -374,30 +404,49 @@ def snapshot(props):
     s.odd_only = int(bool(p.odd_only))
     s.even_db_set = int(p.even_harmonic_db is not None)
     s.even_harmonic_db = p.even_harmonic_db or 0.0
-    s.strike_point, s.strike_depth = p.strike_point, p.strike_depth
+    # (a drum has no strike point: its series is its own, and reads none of these)
+    s.strike_point, s.strike_depth = p.strike_point or 0.0, p.strike_depth or 0.0
     s.strike_fills = int(bool(p.strike_fills_with_force))
     s.strike_fill_fraction, s.attack_volume, s.attack_dampening = (
-        p.strike_fill_fraction, p.attack_volume, p.attack_dampening)
+        p.strike_fill_fraction or 0.0, p.attack_volume, p.attack_dampening or 0.0)
     s.frequency_x, s.octave_position = p.frequency_x, p.octave_position
     s.decay_db, s.harmonic_decay_db = p.decay_db, p.harmonic_decay_db
     s.harmonic_decay_dampening, s.decay_register_factor = p.harmonic_decay_dampening, p.decay_register_factor
-    for f in ('hammer_corner_hz', 'hammer_open_lo', 'hammer_open_slope', 'hammer_register_slope', 'hammer_order',
-              'board_body_gain', 'board_body_hz', 'board_body_width', 'board_high_hz', 'board_high_order',
-              'board_low_hz', 'string_crossfade_semitones', 'aftersound_decay_ratio', 'chiff_harmonic_power',
-              'bloom_seconds', 'bloom_center_hz', 'bloom_octaves', 'bloom_shape', 'exp_vibrato_cents',
-              'solo_vibrato_spread', 'solo_vibrato_hz', 'radiation_distance', 'hrtf_beta'):
+    for f in ('chiff_harmonic_power', 'bloom_seconds', 'bloom_center_hz', 'bloom_octaves', 'bloom_shape',
+              'exp_vibrato_cents', 'solo_vibrato_spread', 'solo_vibrato_hz', 'radiation_distance', 'hrtf_beta'):
         setattr(s, f, getattr(p, f))
-    s.string_gain[:] = list(p.string_gain)
-    s.string_break_hz[:] = list(p.string_break_hz)
-    s.soft_pedal_strings = int(p.soft_pedal_strings)
-    s.soft_pedal_down = int(bool(T.soft_pedal_down))
-    s.n_detune = len(p.note_detune_cents)
-    for i, c in enumerate(p.note_detune_cents):
-        s.note_detune_cents[i] = c
-    s.unison_beat_scatter = int(bool(p.unison_beat_scatter))
-    s.unison_beat_hz[:] = list(p.unison_beat_hz)
-    s.unison_key = int(p._unison_key)
-    s.aftersound_level[:] = [p.aftersound_level_1, p.aftersound_level_2, p.aftersound_level_3]
+    s.kind = 1 if kit_drum(type(p)) else 0
+    if s.kind == 1:
+        # KitDrumProperties' tables, and SynthProperties' unison
+        s.unison_gain = p.unison_gain
+        s.n_unison = len(p.unison_detune or ())
+        for i, x in enumerate(p.unison_detune or ()):
+            s.unison_detune[i] = x
+        s.n_modes = len(p.DRUM_MODES)
+        for i, row in enumerate(p.DRUM_MODES):
+            s.modes[i][:] = [float(x) for x in row]
+        s.n_click, s.click_per_band = len(p.CLICK_DB), int(p.click_per_band)
+        for i, x in enumerate(p.CLICK_DB):
+            s.click_db[i] = float(x)
+        s.click_hz0, s.click_cal_db, s.click_scatter = p.CLICK_HZ0, p.click_cal_db, p.click_scatter
+        s.click_dbs, s.click_stroke_slope, s.stroke_ref_db = p.click_dbs, p.click_stroke_slope, p.stroke_ref_db
+        s.slow_share, s.slow_dbs, s.slow_max_hz = p.slow_share, p.slow_dbs, p.slow_max_hz or 0.0
+    else:
+        for f in ('hammer_corner_hz', 'hammer_open_lo', 'hammer_open_slope', 'hammer_register_slope',
+                  'hammer_order', 'board_body_gain', 'board_body_hz', 'board_body_width', 'board_high_hz',
+                  'board_high_order', 'board_low_hz', 'string_crossfade_semitones', 'aftersound_decay_ratio'):
+            setattr(s, f, getattr(p, f))
+        s.string_gain[:] = list(p.string_gain)
+        s.string_break_hz[:] = list(p.string_break_hz)
+        s.soft_pedal_strings = int(p.soft_pedal_strings)
+        s.soft_pedal_down = int(bool(T.soft_pedal_down))
+        s.n_detune = len(p.note_detune_cents)
+        for i, c in enumerate(p.note_detune_cents):
+            s.note_detune_cents[i] = c
+        s.unison_beat_scatter = int(bool(p.unison_beat_scatter))
+        s.unison_beat_hz[:] = list(p.unison_beat_hz)
+        s.unison_key = int(p._unison_key)
+        s.aftersound_level[:] = [p.aftersound_level_1, p.aftersound_level_2, p.aftersound_level_3]
     s.chiff_span_set = int(p.chiff_harmonic_span is not None)
     s.chiff_harmonic_span = p.chiff_harmonic_span or 0.0
     s.section_salt = int(p._section_salt())
@@ -414,10 +463,10 @@ def snapshot(props):
     s.phantom_note_max_hz = getattr(p, 'phantom_note_max_hz', 0.0)
     s.phantom_gain_floor = getattr(p, 'phantom_gain_floor', 3e-3)
     s.phantom_max_order = int(getattr(p, 'phantom_max_order', 16))
-    s.board_kind = _board_kind(type(p))
-    if s.board_kind == 1:
+    s.board_kind = _board_kind(type(p)) if s.kind == 0 else 0
+    if s.kind == 0 and s.board_kind == 1:
         s.board_low_order = p.board_low_order
-    elif s.board_kind == 2:
+    elif s.kind == 0 and s.board_kind == 2:
         s.bridge_gain, s.bridge_corner_hz, s.bridge_order = p.bridge_gain, p.bridge_corner_hz, p.bridge_order
         s.bridge_force_power = p.bridge_force_power or 0.0
     return s

@@ -26,14 +26,61 @@ static double db_ratio(double db)
     return pow(10.0, x / 10.0);
 }
 
+/* KitDrumProperties._click: the band and frequency of partial `harmonic`
+ * if it is one of the stick's, else 0 */
+static int drum_click(const VoiceSnap *v, int harmonic, int *band, double *hz)
+{
+    int j = harmonic - v->n_modes - 1;
+    if (j < 0)
+        return 0;
+    int b = j / v->click_per_band, k = j % v->click_per_band;
+    if (b >= v->n_click)
+        return 0;
+    double x;
+    if (v->click_scatter != 0.0) {
+        /* anywhere in the band, by a hash of (band, partial) */
+        unsigned long long hv = ((unsigned long long)(b * 1000003LL + k * 7919LL + 12345LL) * 2654435761ULL)
+                                % 4294967296ULL;
+        double h = (double)hv / 4294967296.0;
+        x = (h - 0.5) * v->click_scatter
+            + (1.0 - v->click_scatter) * ((k + 0.5) / v->click_per_band - 0.5);
+    } else {
+        x = (k + 0.5) / v->click_per_band - 0.5
+            + 0.3 * (fmod((b * 7 + k * 13) * 0.6180339887, 1.0) - 0.5) / v->click_per_band;
+    }
+    *band = b;
+    *hz = v->click_hz0 * pow(2.0, (b + x) / 3.0);
+    return 1;
+}
+
 double nv_mode_ratio(const VoiceSnap *v, int m)
 {
-    (void)v;
+    if (v->kind == 1) {                         /* KitDrumProperties.mode_ratio */
+        if (1 <= m && m <= v->n_modes)
+            return v->modes[m - 1][0];
+        int b;
+        double hz;
+        return drum_click(v, m, &b, &hz) ? hz / (v->frequency_x * pow(2.0, v->octave_position)) : 0.0;
+    }
     return (double)m;                           /* mode_ratios None */
 }
 
 double nv_series_volume(const VoiceSnap *v, int harmonic)
 {
+    if (v->kind == 1) {                         /* KitDrumProperties.series_volume */
+        if (1 <= harmonic && harmonic <= v->n_modes)
+            return v->gain * pow(10.0, v->modes[harmonic - 1][1] / 20.0);
+        int b;
+        double hz;
+        if (!drum_click(v, harmonic, &b, &hz))
+            return 0.0;
+        /* _stroke_db: the stroke's dB against the drum's reference */
+        double av = v->attack_volume > 1e-6 ? v->attack_volume : 1e-6;
+        double sd = 20.0 * log(av) / log(10.0);
+        sd = (sd > -40.0 ? sd : -40.0) - v->stroke_ref_db;
+        double db = v->click_db[b] + v->click_cal_db + v->click_stroke_slope * sd;
+        return v->gain * pow(10.0, db / 20.0) / pow((double)v->click_per_band, 0.5);
+    }
     if (v->max_harmonic && harmonic > v->max_harmonic)
         return 0.0;
     if (harmonic % 2 == 0 && !v->even_db_set && v->odd_only)
@@ -76,6 +123,8 @@ double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
     double s = nv_series_volume(v, harmonic);
     if (s == 0.0)
         return 0.0;
+    if (v->kind != 0)
+        return s;                               /* SynthProperties': no bore */
     double fn = v->frequency_x * pow(2.0, v->octave_position) * harmonic;
     double fc = (v->hammer_corner_hz * (v->hammer_open_lo + v->hammer_open_slope * v->attack_volume)
                  * pow(2.0, v->hammer_register_slope * v->octave_position));
@@ -84,6 +133,13 @@ double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
 
 double nv_harmonic_decay(const VoiceSnap *v, int harmonic)
 {
+    if (v->kind == 1) {                         /* KitDrumProperties: half the amplitude dB/s */
+        if (1 <= harmonic && harmonic <= v->n_modes)
+            return 0.5 * v->modes[harmonic - 1][2];
+        int b;
+        double hz;
+        return drum_click(v, harmonic, &b, &hz) ? 0.5 * v->click_dbs : 0.0;
+    }
     double h = (double)harmonic;                /* mode_ratios None */
     double base = v->decay_db + v->harmonic_decay_db * h * pow(h, v->harmonic_decay_dampening);
     return base * v->decay_register_factor;
@@ -106,6 +162,17 @@ static double string_blend(const VoiceSnap *v, double frequency, double break_hz
 /* GrandPianoProperties.aftersound: (level, its decay rate) */
 void nv_aftersound(const VoiceSnap *v, double frequency, double decay_rate, double *out)
 {
+    if (v->kind == 1) {                         /* KitDrumProperties: the click has no remainder */
+        if (v->slow_share <= 0.0 || decay_rate >= 0.5 * v->click_dbs) {
+            out[0] = 0.0;
+            out[1] = decay_rate;
+        } else {
+            double s = 0.5 * v->slow_dbs;
+            out[0] = v->slow_share;
+            out[1] = s < decay_rate ? s : decay_rate;
+        }
+        return;
+    }
     double b1 = string_blend(v, frequency, v->string_break_hz[0]);
     double b2 = string_blend(v, frequency, v->string_break_hz[1]);
     double level = v->aftersound_level[0] + (v->aftersound_level[1] - v->aftersound_level[0]) * b1;
@@ -118,6 +185,13 @@ void nv_aftersound(const VoiceSnap *v, double frequency, double decay_rate, doub
  * in out[5k..5k+4]; returns how many */
 int nv_unison_voices(const VoiceSnap *v, double frequency, int harmonic, double harmonic_decay, double *out)
 {
+    if (v->kind != 0) {                         /* SynthProperties': a voice per detune */
+        for (int i = 0; i < v->n_unison; i++) {
+            out[5 * i + 0] = v->unison_gain; out[5 * i + 1] = v->unison_detune[i]; out[5 * i + 2] = 0.0;
+            out[5 * i + 3] = harmonic_decay; out[5 * i + 4] = 0.0;
+        }
+        return v->n_unison;
+    }
     double gains[2] = {v->string_gain[0] * string_blend(v, frequency, v->string_break_hz[0]),
                        v->string_gain[1] * string_blend(v, frequency, v->string_break_hz[1])};
     int ng = 2;
@@ -242,7 +316,12 @@ void nv_partial_decay(const VoiceSnap *v, double f0, int m, double *out)
     double dbps = nv_harmonic_decay(v, m);
     double logr = dbps > 0 ? log(db_ratio(dbps)) : 0.0;
     double a[2];
-    nv_aftersound(v, f0, dbps, a);
+    if (v->kind == 1 && v->slow_max_hz != 0.0 && f0 * nv_mode_ratio(v, m) > v->slow_max_hz) {
+        a[0] = 0.0;                             /* aftersound_partial: no remainder up here */
+        a[1] = dbps;
+    } else {
+        nv_aftersound(v, f0, dbps, a);
+    }
     out[0] = dbps;
     out[1] = logr;
     out[2] = a[0];

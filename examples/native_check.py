@@ -127,7 +127,9 @@ def main(argv):
         for f, _ in N.VoiceSnap._fields_:
             a, b = getattr(sp, f), getattr(got[0], f)
             if not isinstance(a, (int, float)):
-                a, b = list(a), list(b)
+                # (a table of rows, VoiceSnap.modes, row by row)
+                flat = lambda x: [list(r) if not isinstance(r, (int, float)) else r for r in x]  # noqa: E731
+                a, b = flat(a), flat(b)
             same(('init', cls.__name__, key, f), a, b)
         o = got[1]
         for f, py in (('pitch_jitter', p.pitch_jitter), ('attack_jitter', p.attack_jitter),
