@@ -2,7 +2,7 @@
 """Does native/nvlive play a MIDI file as live.Live does?
 
     python3 examples/nvlive_check.py FILE.mid [SECONDS] [--program=N] [--register] [--pedal-key=N]
-                                     [--gpu=cl|c] [--gpu-min=N] [--room=NAME]
+                                     [--gpu=cl|c] [--gpu-min=N] [--room=NAME] [--tuner=NAME]
 
 The first SECONDS (default 20) of FILE, cut as bitident cuts, its notes and
 controllers (the native reader's, in message order) each applied at the
@@ -20,6 +20,8 @@ with its export's LREG); without, nvlive --no-register. --pedal-key=N: the
 file's key N is the sustain pedal on both sides (live.Route(("note", N), 64);
 nvlive --pedal-key). --gpu: both on live.GpuRenderer's path (the samples on
 OpenCL, or "c" the C reference), from GPU-MIN busy slots (live's GPU_MIN).
+--tuner: live at that tuner, and nvlive computing it (native/tuner.cpp) in
+place of the export's, its free strings' bank built again at it.
 """
 import os
 import subprocess
@@ -64,12 +66,14 @@ def main(argv):
     subprocess.check_call([exe, nvx, "--test", mid, out, "--program=%d" % prog, "--seconds=%r" % total]
                           + ([] if reg else ["--no-register"])
                           + (["--pedal-key=" + opt["pedal-key"]] if "pedal-key" in opt else [])
-                          + (["--gpu=" + (opt["gpu"] or "cl"), "--gpu-min=%d" % gmin] if "gpu" in opt else []),
+                          + (["--gpu=" + (opt["gpu"] or "cl"), "--gpu-min=%d" % gmin] if "gpu" in opt else [])
+                          + (["--tuner=" + opt["tuner"]] if opt.get("tuner") else []),
                           stderr=subprocess.DEVNULL)
     raw = open(out, "rb").read()          # float32 stereo after a 44-byte header
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
     # live.Live, fed the same events on the same blocks
-    lv = L.Live(program=prog, rate=48000, frames=128, verbose=False, threads=1, gpu=False)
+    lv = L.Live(program=prog, rate=48000, frames=128, verbose=False, threads=1, gpu=False,
+                tuner=opt.get("tuner") or "hybrid")
     lv.enable_room(room)
     lv.parts[0].patch.warm()
     lv.slab.shed = lambda n, frac: 0

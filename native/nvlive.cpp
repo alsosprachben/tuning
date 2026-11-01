@@ -4,6 +4,7 @@
 //     nvlive EXPORT.nvx [--program=N] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
 //                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
+//                       [--tuner=NAME [--a=HZ | --c=HZ]]
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
 //                       [--rt] [--reg-async] [--govern]
 //
@@ -128,6 +129,7 @@ void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float 
 void nv_lp_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20);
 void nv_lp_press_db(void *h, double db);
 void nv_lp_detune_wheel(void *h, int on);
+int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, int *have);
 void nv_lp_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
 void nv_lp_post(void *h, double thresh, double bend_range, double mod_cents);
 void nv_lp_output(void *h, long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd,
@@ -171,6 +173,7 @@ struct Export {
         double d[9];            // kappa knock fall floor beta rel full_db_s residual ln10_20
         int i[3];               // damper_top, dampers, block
         int note[128];
+        std::vector<unsigned char> cinit, csnap;    // nv_strings' VoiceInit and VoiceSnap: the bank at another tuner
     } reg[128];
     // LGPU: live's GPU renderer -- its setup's builds, gpukernel.cl's directory, GPU_MIN (and at 64 frames or fewer)
     std::string gpu_lib, gpu_damp_lib, gpu_dir;
@@ -229,6 +232,14 @@ static bool read_export(const char *path, Export &E)
                         r.modes.resize(r.M);
                         ok = fread(r.modes.data(), sizeof(StringMode), r.M, f) == (size_t)r.M
                              && fread(r.d, 8, 9, f) == 9 && fread(r.i, 4, 3, f) == 3 && fread(r.note, 4, 128, f) == 128;
+                        for (std::vector<unsigned char> *v : {&r.cinit, &r.csnap}) {
+                            int n = 0;
+                            ok = ok && fread(&n, 4, 1, f) == 1;
+                            if (ok) {
+                                v->resize(n);
+                                ok = fread(v->data(), 1, n, f) == (size_t)n;
+                            }
+                        }
                     }
                 }
                 if (ok && fread(lv, 1, 4, f) == 4 && !memcmp(lv, "LGPU", 4)) {
@@ -481,6 +492,40 @@ int main(int argc, char **argv)
     if (!pp[0]) {
         fprintf(stderr, "nvlive: program %d is not a native piano\n", program);
         return 1;
+    }
+    // THE TUNER (native/tuner.cpp): --tuner=NAME in place of the export's (its
+    // --tuner, else live's hybrid) -- any of midilib's, `hybrid@D:466`,
+    // `raga:todi@c#` -- at --a=HZ or --c=HZ (tunelib.set_reference); the
+    // free strings' bank built again at it (nv_strings, as live_bank does)
+    std::string tname = opt(argc, argv, "tuner", "");
+    if (!tname.empty()) {
+        std::string a = opt(argc, argv, "a", ""), c = opt(argc, argv, "c", "");
+        int rn = !a.empty() ? 69 : !c.empty() ? 60 : -1;
+        double rh = !a.empty() ? atof(a.c_str()) : !c.empty() ? atof(c.c_str()) : 0.0;
+        double F[128];
+        int have[128];
+        int r = nv_tuning_table(tname.c_str(), rn, rh, F, have);
+        if (r) {
+            fprintf(stderr, "nvlive: tuner %s: %s\n", tname.c_str(),
+                    r == -1 ? "no such tuner" : r == -2 ? "no such key" : r == -3 ? "a bad pitch"
+                    : r == -4 ? "@KEY or :A4 on a tuner with no table to move" : "a bad raga spec");
+            return 1;
+        }
+        for (int n = 0; n < 128; n++)
+            E.freq[n] = have[n] ? F[n] : 0.0;
+        Export::Reg &rr = E.reg[program & 127];
+        if (rr.M > 0 && !rr.cinit.empty()) {
+            int cap = 88 * 4 * 130;
+            std::vector<StringMode> modes(cap), tmp(cap);
+            int M = nv_strings((const VoiceInit *)rr.cinit.data(), (const VoiceSnap *)rr.csnap.data(), E.freq.data(),
+                               0.0, 1.0, SR, modes.data(), tmp.data(), cap);
+            if (M > 0) {
+                modes.resize(M);
+                rr.modes.swap(modes);
+                rr.M = M;
+            }
+        }
+        fprintf(stderr, "nvlive: tuned %s%s\n", tname.c_str(), rn >= 0 ? (rn == 69 ? " at a=" + a : " at c=" + c).c_str() : "");
     }
     // THE PART'S TEMPLATES (live.Patch.warm), built here
     std::vector<const NoteClass *> K(16384, nullptr);

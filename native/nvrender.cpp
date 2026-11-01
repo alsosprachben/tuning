@@ -1,7 +1,11 @@
 // nvrender.cpp -- the native renderer: a General MIDI piano file to the dry
 // WAV and room sidecar blockrender writes, with no Python at runtime.
 //
-//     nvrender EXPORT.nvx IN.mid OUT.wav
+//     nvrender EXPORT.nvx IN.mid OUT.wav [--tuner=NAME [--a=HZ | --c=HZ]]
+//
+// --tuner: any of midilib's tuners, computed here (native/tuner.cpp) in place
+// of the export's table, at the reference pitch a= or c= -- blockrender's
+// `IN.mid OUT.wav NAME a=HZ`.
 //
 // EXPORT.nvx is examples/native_export.py's: the render's constants, the
 // tuning table, the trims, the piano classes and the kernel's libraries.
@@ -42,6 +46,7 @@ void nv_midi_song(void *p, void *song, const double *trim);
 void *nv_song_new(void);
 void nv_song_free(void *s);
 void nv_song_tuning(void *s, long long ch, double t, const double *freq);
+int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, int *have);
 void nv_song_finish(void *s, double total);
 long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                      PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind, double scale,
@@ -188,14 +193,36 @@ static bool write_wav(const char *path, const float *L, const float *R, long n, 
 
 int main(int argc, char **argv)
 {
-    if (argc != 4) {
-        fprintf(stderr, "usage: nvrender EXPORT.nvx IN.mid OUT.wav\n");
+    if (argc < 4) {
+        fprintf(stderr, "usage: nvrender EXPORT.nvx IN.mid OUT.wav [--tuner=NAME [--a=HZ | --c=HZ]]\n");
         return 1;
     }
     Export E;
     if (!read_export(argv[1], E)) {
         fprintf(stderr, "nvrender: cannot read %s (or it is not this build's)\n", argv[1]);
         return 1;
+    }
+    // THE TUNER, if named: its table in place of the export's
+    std::string tname, ra, rc;
+    for (int i = 4; i < argc; i++) {
+        if (!strncmp(argv[i], "--tuner=", 8))
+            tname = argv[i] + 8;
+        else if (!strncmp(argv[i], "--a=", 4))
+            ra = argv[i] + 4;
+        else if (!strncmp(argv[i], "--c=", 4))
+            rc = argv[i] + 4;
+    }
+    if (!tname.empty()) {
+        double F[128];
+        int have[128];
+        int r = nv_tuning_table(tname.c_str(), !ra.empty() ? 69 : !rc.empty() ? 60 : -1,
+                                !ra.empty() ? atof(ra.c_str()) : !rc.empty() ? atof(rc.c_str()) : 0.0, F, have);
+        if (r) {
+            fprintf(stderr, "nvrender: tuner %s refused (%d)\n", tname.c_str(), r);
+            return 1;
+        }
+        for (int n = 0; n < 128; n++)
+            E.freq[n] = have[n] ? F[n] : 0.0;
     }
     const double SR = E.k[K_SR];
     const long long BLK = (long long)E.k[K_BLK];

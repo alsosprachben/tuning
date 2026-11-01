@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Does native/nvrender render a piano file as blockrender's CLI does?
 
-    python3 examples/nvrender_check.py [file.mid ...] [SECONDS] [--from=PATH]
+    python3 examples/nvrender_check.py [file.mid ...] [SECONDS] [--from=PATH] [--tuner=NAME [--a=HZ]]
 
 For each file (the corpus by default; the first SECONDS of it, 20 by
 default, cut as bitident cuts, saved as a .mid both sides read): blockrender's
@@ -10,6 +10,8 @@ register on its C core) writes OUT.wav and OUT.room.json; native/nvrender,
 from an export made once (examples/native_export.py), writes its own. The
 two WAVs compared byte for byte, the sidecars text for text. A file nvrender
 refuses (exit 2: not a piano file, a bend, a moving fader) is counted.
+--tuner: both at that tuner -- nvrender computing it (native/tuner.cpp),
+blockrender's CLI taking it by name -- and --a at that reference pitch.
 """
 import os
 import subprocess
@@ -48,7 +50,8 @@ def main(argv):
         mid = os.path.join(tmp, name + ".mid")
         BI.excerpt(path, seconds).save(mid)
         nv = os.path.join(tmp, name + ".nv.wav")
-        r = subprocess.run([exe, nvx, mid, nv], capture_output=True, text=True)
+        tun = (["--tuner=" + opt["tuner"]] if opt.get("tuner") else []) + (["--a=" + opt["a"]] if opt.get("a") else [])
+        r = subprocess.run([exe, nvx, mid, nv] + tun, capture_output=True, text=True)
         if r.returncode == 2:
             refused += 1
             continue
@@ -57,7 +60,9 @@ def main(argv):
             print("  %s: nvrender failed: %s" % (name, r.stderr.strip()))
             continue
         py = os.path.join(tmp, name + ".py.wav")
-        subprocess.check_call([sys.executable, os.path.join(HERE, "blockrender.py"), mid, py], env=env,
+        cli = ([opt.get("tuner") or "hybrid440"] + (["a=" + opt["a"]] if opt.get("a") else [])
+               if opt.get("tuner") or opt.get("a") else [])
+        subprocess.check_call([sys.executable, os.path.join(HERE, "blockrender.py"), mid, py] + cli, env=env,
                               stdout=subprocess.DEVNULL)
         bad = []
         if open(nv, "rb").read() != open(py, "rb").read():

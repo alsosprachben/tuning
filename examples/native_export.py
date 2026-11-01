@@ -32,8 +32,10 @@ program's part as live.Patch makes it -- its velocity buckets, wheel steps
 and default step, dampers, una corda's strings and the instrument's top.
 Then an LREG section, each program's free strings as live's register
 builds them (native.live_bank: the string bank at the part's tuning, its
-LiveChannel's constants), its dampers and release, damper.py's felt, and
-which keys' classes answer (live._reg_voice) -- an M of 0 where none.
+LiveChannel's constants), its dampers and release, damper.py's felt, which
+keys' classes answer (live._reg_voice), and what the bank is built from
+(native.live_bank_class), for nvlive at another tuner -- an M of 0 where
+none.
 Then LGPU (live's GPU renderer's builds), LROOM (live's convolver library
 and the room's late tail, live.room_irs: the diffuse tail's and the modes'
 impulse responses, stereo; none in a room without one) and LROUTE (the
@@ -177,6 +179,11 @@ def main(argv):
                     ok.append(int(kc is not None and (getattr(kc, 'register_gain', 0.0) > 0.0
                                                       or getattr(kc, 'register_knock_gain', 0.0) > 0.0)))
                 f.write(struct.pack("<128i", *ok))
+                # ...and what the bank is built from, so nvlive can build it at
+                # a tuner of its own (native.live_bank_class: nv_strings' inputs)
+                bc, bs = N.live_bank_class(pc)
+                for x in (bytes(bc), bytes(bs)):
+                    f.write(struct.pack("<i", len(x)) + x)
             # LGPU: live's GPU renderer -- the setup's two builds (gpurender's,
             # and the damper's), the directory gpukernel.cl and voicedesc.h are in,
             # and live's GPU_MIN

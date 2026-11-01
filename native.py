@@ -161,7 +161,8 @@ def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
-                                                       'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp')]
+                                                       'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
+                                                       'tuner.cpp', 'tunertables.h')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -174,7 +175,7 @@ def _load():
         flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
         objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
                 tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.slab.o',
-                tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o']
+                tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o', tmp + '.tuner.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
             for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
@@ -190,6 +191,8 @@ def _load():
                                    '-o', objs[11]])
             subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'gpu.cpp'),
                                    '-o', objs[12]])
+            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'tuner.cpp'),
+                                   '-o', objs[13]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl'])
         finally:
             for o in objs:
@@ -240,6 +243,7 @@ def _load():
             ('nv_log_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_cexp_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_cangle_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_tuning_table', I, [ctypes.c_char_p, I, C, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_tanhf_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_prepare', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoteIn), D, I,
                                 ctypes.POINTER(PyRandomState), ctypes.POINTER(D), ctypes.c_void_p, D,
@@ -971,6 +975,25 @@ def xlog(x):
     return out
 
 
+TUNING_ERRORS = {-1: "no such tuner", -2: "no such key", -3: "a bad pitch",
+                 -4: "@KEY or :A4 on a tuner with no table to move", -5: "a bad raga spec"}
+
+
+def tuning_table(name, reference=None):
+    """blockrender.tuning_table(name) from native/tuner.cpp: {midi: Hz}, at
+    the reference (note, Hz) -- tunelib's in force when not given."""
+    if reference is None:
+        import tunelib as TL
+        reference = TL.reference()
+    out = (ctypes.c_double * 128)()
+    have = (ctypes.c_int * 128)()
+    r = lib().nv_tuning_table(name.encode(), -1 if reference is None else int(reference[0]),
+                              0.0 if reference is None else float(reference[1]), out, have)
+    if r:
+        raise ValueError("tuner %r: %s" % (name, TUNING_ERRORS.get(r, r)))
+    return {n: out[n] for n in range(128) if have[n]}
+
+
 def xtanhf(x):
     """np.tanh of float32 values, libm's tanhf."""
     import numpy as np
@@ -1182,7 +1205,7 @@ def build_nvrender():
     lib()
     src = os.path.join(HERE, 'native', 'nvrender.cpp')
     exe = os.path.join(HERE, 'nvrender')
-    so = os.path.join(HERE, 'libnative.so')
+    so = os.path.join(HERE, 'libnative.so')       # (the tuners are in it: native/tuner.cpp)
     if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(so)) > os.path.getmtime(exe):
         tmp = '%s.%d.tmp' % (exe, os.getpid())
         subprocess.check_call(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin',
@@ -1630,26 +1653,34 @@ class KeyPedal(Router):
         Router.__init__(self, [L.Route(("note", int(key)), 64)])
 
 
+def live_bank_class(cls):
+    """What nv_strings builds live's string bank for cls from, at any tuning:
+    (VoiceInit, VoiceSnap) -- the class's, the honky-tonk's detune as the
+    worker has it (1.0: a process of its own, where no file's channel has
+    set tonelib.honky_detune). native_export.py writes both, so nvlive can
+    build the bank again at a tuner of its own."""
+    import tonelib as T
+    got = _class(cls)
+    if got is None:
+        raise ValueError("%s is not the engine's" % cls.__name__)
+    c = VoiceInit.from_buffer_copy(got[0])
+    c.detune_lo, c.detune_hi = cls.string_detune_range
+    c.fixed_touch = int(bool(T.FIXED_TOUCH))
+    return c, got[1]
+
+
 def live_bank(cls, table, sr, scale=1.0):
     """live's register worker's string bank for a piano class (register.Strings
     at pan 0, full volume) from native/strings.c, and its LiveChannel's
     constants: (modes, M, (kappa, knock, fall, floor, damper_top, BETA))."""
     import register as RG
     import damper as DMP
-    import tonelib as T
-    got = _class(cls)
-    if got is None:
-        raise ValueError("%s is not the engine's" % cls.__name__)
-    c = VoiceInit.from_buffer_copy(got[0])
-    # the honky-tonk's detune as the worker has it: 1.0 -- a process of its
-    # own, where no file's channel has set tonelib.honky_detune
-    c.detune_lo, c.detune_hi = cls.string_detune_range
-    c.fixed_touch = int(bool(T.FIXED_TOUCH))
+    c, snap = live_bank_class(cls)
     tab = (ctypes.c_double * 128)(*[float(table[k]) if k in table else 0.0 for k in range(128)])
     cap = 88 * 4 * 130
     modes = (StringMode * cap)()
     tmp = (StringMode * cap)()
-    M = lib().nv_strings(ctypes.byref(c), ctypes.byref(got[1]), tab, 0.0, 1.0, float(sr), modes, tmp, cap)
+    M = lib().nv_strings(ctypes.byref(c), ctypes.byref(snap), tab, 0.0, 1.0, float(sr), modes, tmp, cap)
     if M < 0:
         raise ValueError("too many modes")
     P = RG._isolated(cls, 261.63, 0.0, 1.0)         # live_worker's props
