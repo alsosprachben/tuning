@@ -90,6 +90,33 @@ static float pairwise(const float *a, long n)
     return pairwise(a, n2) + pairwise(a + n2, n - n2);
 }
 
+// ...and of a float64 array (np.sum's)
+static double pairwise_d(const double *a, long n)
+{
+    if (n < 8) {
+        double res = 0.0;
+        for (long i = 0; i < n; i++)
+            res += a[i];
+        return res;
+    }
+    if (n <= 128) {
+        double r[8];
+        for (int k = 0; k < 8; k++)
+            r[k] = a[k];
+        long i;
+        for (i = 8; i < n - (n % 8); i += 8)
+            for (int k = 0; k < 8; k++)
+                r[k] += a[i + k];
+        double res = ((r[0] + r[1]) + (r[2] + r[3])) + ((r[4] + r[5]) + (r[6] + r[7]));
+        for (; i < n; i++)
+            res += a[i];
+        return res;
+    }
+    long n2 = n / 2;
+    n2 -= n2 % 8;
+    return pairwise_d(a, n2) + pairwise_d(a + n2, n - n2);
+}
+
 typedef std::tuple<long long, long long, long long, long long> Key;    // (part, channel, note, layer)
 
 struct Slab {
@@ -378,8 +405,10 @@ struct Slab {
 // what _one_core, _note_on and _note_off do for a piano, block by block as
 // live's callback runs them: the block's events at its start, then the sweep
 // (a key neither down nor held released), then the reap. Not here yet: the
-// pitch wheel, modulation, CC71-78, pressure, sostenuto, mono, the other
-// voices. THE DAMPERS IN BETWEEN (live._damp_block), when given damper.py's
+// pitch wheel, modulation, CC71-78, sostenuto, mono, the other voices.
+// PRESSURE (channel aftertouch, live's Slab.press) as a level: a piano's
+// effort_tilt is 0, so its partials are not tilted, only lifted by press_db
+// at full pressure. THE DAMPERS IN BETWEEN (live._damp_block), when given damper.py's
 // numbers (nv_lp_damper): a pedalled key in the band is taken down by its
 // level through a damper track the kernel reads (synth_voice_damp). THE REGISTER (live's _reg_*), when given
 // one (nv_lp_register): its worker's jobs answered in step -- each as it is
@@ -388,7 +417,7 @@ struct Slab {
 // can: the same rows, later).
 
 struct Ev {
-    int type;               // 0 note-on, 1 note-off, 2 control change
+    int type;               // 0 note-on, 1 note-off, 2 control change, 3 channel aftertouch (a)
     int ch, a, b;
 };
 
@@ -405,6 +434,8 @@ struct Piano {
     std::set<std::pair<int, int>> down, pedalled;
     std::vector<Ev> events;
     std::map<std::pair<int, int>, int> key_vel;     // (ch, note) -> the strike's velocity
+    double pressure[16] = {};                       // channel aftertouch, 0..1
+    double press_db = 8.0;                          // tonelib.PRESS_DB (live.press_db)
 
     Piano(long cap) : S(cap)
     {
@@ -477,6 +508,8 @@ struct Piano {
             S.repan(slots, cpan[ch], 64, rate, true);
         if (soft[ch] && !slots.empty())
             S.soft_strings(slots, soft_drop, soft_top);
+        if (pressure[ch] != 0.0)
+            press(slots, pressure[ch]);
         if (reg_on && reg_note[note] && !S.last_slots.empty())
             reg_strike(ch, note, n0, *T, S.last_slots);
     }
@@ -493,6 +526,38 @@ struct Piano {
             S.release(Key(pid, ch, note, REG_FORCED), n0);
             reg_damper(ch, n0, note, false);
         }
+    }
+
+    // live.Slab.press at tilt 0: each slot from its baseline (aL0, aR0),
+    // the shape normalised by the left baseline's power, times
+    // 10^(press_db * p / 20)
+    void press(const std::vector<long> &slots, double p)
+    {
+        if (slots.empty())
+            return;
+        long n = (long)slots.size();
+        std::vector<double> b2(n);
+        for (long q = 0; q < n; q++) {
+            double b = (double)S.aL0[slots[q]];
+            b2[q] = b * b;
+        }
+        double sh = 1.0;                    // hrel ** (0 * p)
+        double p2 = pairwise_d(b2.data(), n);
+        if (p2 > 0.0)                       // (base * shape) ** 2 is base * base again
+            sh = sh * pow(p2 / (pairwise_d(b2.data(), n) + 1e-30), 0.5);
+        sh = sh * pow(10.0, press_db * p / 20.0);
+        for (long s : slots) {
+            S.f4[F4_aL][s] = (float)((double)S.aL0[s] * sh);
+            S.f4[F4_aR][s] = (float)((double)S.aR0[s] * sh);
+        }
+    }
+
+    // channel aftertouch: every key sounding on the channel (live's
+    // _press_groups: the slab's keys in order, one tilt)
+    void aftertouch(int ch, int v)
+    {
+        pressure[ch] = v / 127.0;
+        press(sounding(ch), pressure[ch]);
     }
 
     void control(int ch, int cc, int v, long long n0)
@@ -1386,6 +1451,8 @@ struct Piano {
                 note_on(e.ch, e.a, e.b, n0);
             else if (e.type == 1)
                 note_off(e.ch, e.a, n0);
+            else if (e.type == 3)
+                aftertouch(e.ch, e.a);
             else
                 control(e.ch, e.a, e.b, n0);
         }
@@ -1522,6 +1589,9 @@ void nv_lp_dm(void *h, float *out)
     nv::slab::Piano *P = (nv::slab::Piano *)h;
     memcpy(out, P->DM.data(), sizeof(float) * P->DM.size());
 }
+
+// Pressure's level at full aftertouch, dB (live.press_db)
+void nv_lp_press_db(void *h, double db) { ((nv::slab::Piano *)h)->press_db = db; }
 
 // The dampers in between (live._damp_block): damper.py's FULL_DB_S,
 // RESIDUAL, KNEE_DB, BETA and LN10_20

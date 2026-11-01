@@ -276,6 +276,7 @@ def _load():
                                     ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                                     ctypes.c_void_p, LL, C]),
             ('nv_lp_damper', None, [ctypes.c_void_p, C, C, C, C, C]),
+            ('nv_lp_press_db', None, [ctypes.c_void_p, C]),
             ('nv_lp_dm', None, [ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_kp_new', ctypes.c_void_p, [I]),
             ('nv_kp_feed', I, [ctypes.c_void_p, I, I, I, ctypes.c_void_p]),
@@ -1381,7 +1382,7 @@ class LivePiano(object):
     native.Slab's does."""
 
     def __init__(self, cache, pid, level_db, nbuckets, speed, damper_pedal, soft_drop, soft_top, rate,
-                 capacity=16384, headroom=1.0):
+                 capacity=16384, headroom=1.0, press_db=None):
         import live as L
         import blockrender as BR
         tab = L.pan_table()
@@ -1397,6 +1398,8 @@ class LivePiano(object):
         import damper as DMP
         self.d.nv_lp_damper(self.p, float(DMP.FULL_DB_S), float(DMP.RESIDUAL), float(DMP.KNEE_DB), float(DMP.BETA),
                             float(DMP.LN10_20))
+        import tonelib as T
+        self.d.nv_lp_press_db(self.p, float(T.PRESS_DB if press_db is None else press_db))
 
     def __del__(self):
         if getattr(self, 'p', None):
@@ -1428,13 +1431,16 @@ class LivePiano(object):
         return out
 
     def event(self, msg):
-        """A mido message for the next block (note-on, note-off, control change)."""
+        """A mido message for the next block (note-on, note-off, control change,
+        channel aftertouch)."""
         if msg.type == "note_on" and msg.velocity > 0:
             self.d.nv_lp_event(self.p, 0, msg.channel, msg.note, msg.velocity)
         elif msg.type in ("note_on", "note_off"):
             self.d.nv_lp_event(self.p, 1, msg.channel, msg.note, 0)
         elif msg.type == "control_change":
             self.d.nv_lp_event(self.p, 2, msg.channel, msg.control, msg.value)
+        elif msg.type == "aftertouch":
+            self.d.nv_lp_event(self.p, 3, msg.channel, msg.value, 0)
 
     def block(self, n0, blk):
         self.d.nv_lp_block(self.p, int(n0), int(blk))

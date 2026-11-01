@@ -2,7 +2,7 @@
 """Does the native piano part play live MIDI as live.Live does?
 
     python3 examples/livepiano_check.py [BLOCKS] [--program=N] [--seed=N] [--every=N] [--render] [--register]
-                                        [--half] [--pedal-key=N]
+                                        [--half] [--pedal-key=N] [--pressure]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native piano part (native/slab.cpp: its template cache, its slab, live's
@@ -27,6 +27,7 @@ values (DM), as a track's number is handed out in a set's order, and dg.
 --pedal-key=N: key N held as the sustain pedal and pushed into (channel
 aftertouch while it is held) -- live.Route(("note", N), 64) through on_midi
 on one side, native.KeyPedal before the part's events on the other.
+--pressure: channel aftertouch among the controls (live's Slab.press).
 """
 import os
 import random
@@ -128,8 +129,7 @@ def main(argv):
             if r < 0.4 or not held:
                 note = rng.randint(lo, hi)
                 if note == pk:
-                    continue            # the pedal key plays no note (and aftertouch is the route's alone:
-                                        # the native part has no pressure yet)
+                    continue            # the pedal key plays no note
                 msgs.append(M("note_on", channel=ch, note=note, velocity=rng.randint(1, 127)))
                 held.add((ch, note))
             elif r < 0.8:
@@ -148,6 +148,8 @@ def main(argv):
                     msgs.append(M("note_on", channel=ch, note=pk, velocity=rng.randint(1, 127)))
             elif r < 0.9:
                 msgs.append(M("control_change", channel=ch, control=64, value=rng.choice(pedal)))
+            elif "pressure" in opt and rng.random() < 0.4:
+                msgs.append(M("aftertouch", channel=ch, value=rng.choice((0, rng.randint(0, 127)))))
             else:
                 cc = rng.choice((7, 11, 10, 67))
                 msgs.append(M("control_change", channel=ch, control=cc, value=rng.randint(0, 127)))

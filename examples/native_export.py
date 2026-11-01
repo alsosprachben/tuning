@@ -88,6 +88,7 @@ def main(argv):
               float(B.RETRIGGER_FADE), 0.98 * math.pi, float(T.SOUND_VIB_DEPTH_CENTS),
               float(bool(T.FIXED_TOUCH)), float(os.environ.get("TUNING_REFLECT", "1") not in ("0", "off", ""))]
     consts += [63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0] + list(sh)
+    consts += [float(T.PRESS_DB)]       # live's pressure at full aftertouch (nvlive)
     room = os.fsencode(T.ROOM_NAME[0] or "")
     with open(args[0], "wb") as f:
         f.write(MAGIC)

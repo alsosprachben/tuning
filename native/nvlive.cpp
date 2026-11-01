@@ -2,7 +2,7 @@
 // Python at runtime.
 //
 //     nvlive EXPORT.nvx [--program=N] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
-//                       [--no-register] [--pedal-key=N]
+//                       [--no-register] [--pedal-key=N] [--press-db=DB]
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
 //
 // EXPORT.nvx is examples/native_export.py --live's. At start the part's
@@ -30,9 +30,12 @@
 // dampers (live.Route(("note", N), 64), slab.cpp's KeyPedal): held, CC64
 // 127; channel aftertouch while it is held, 127 - pressure; up, 0.
 //
+// PRESSURE (channel aftertouch): the notes on its channel lifted by the
+// export's press_db (tonelib.PRESS_DB; --press-db=DB for Ben's session's) at
+// full, as live's Slab.press does a piano (no tilt: effort_tilt 0).
+//
 // Not yet: live's governor (shedding partials when blocks run late), the
-// room and its send, the wheel, modulation, pressure, the other routes, the
-// TUI.
+// room and its send, the wheel, modulation, the other routes, the TUI.
 
 #include <atomic>
 #include <cmath>
@@ -69,6 +72,7 @@ void nv_lp_block(void *h, long long n0, long long blk);
 void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
                   void *sd, long long blk, double master_gain);
 void nv_lp_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20);
+void nv_lp_press_db(void *h, double db);
 void *nv_kp_new(int key);
 int nv_kp_feed(void *h, int type, int ch, int a, int *v);
 void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
@@ -78,7 +82,8 @@ void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, doubl
 
 // the export's constants (native_export.py's order)
 enum { K_SR, K_BLK, K_CHUNK, K_MASTER, K_RING_FLOOR, K_RING_MAX, K_XDEC, K_REG_SCALE, K_FULL, K_RESIDUAL, K_BETA,
-       K_KNEE, K_LN10_20, K_RETRIGGER, K_NYQ_OM, K_SVDC, K_FIXED_TOUCH, K_REFLECT, K_BANDS, K_SH = K_BANDS + 9 };
+       K_KNEE, K_LN10_20, K_RETRIGGER, K_NYQ_OM, K_SVDC, K_FIXED_TOUCH, K_REFLECT, K_BANDS, K_SH = K_BANDS + 9,
+       K_PRESS_DB = K_SH + 4 };
 
 struct Export {
     std::vector<double> k, freq, trim, pan;
@@ -293,6 +298,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "nvlive: the register: %d string modes\n", rg.M);
     }
     nv_lp_damper(part, E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_KNEE], E.k[K_BETA], E.k[K_LN10_20]);
+    nv_lp_press_db(part, atof(opt(argc, argv, "press-db",
+                                  std::to_string(E.k.size() > K_PRESS_DB ? E.k[K_PRESS_DB] : 8.0).c_str()).c_str()));
     void *fn[3];
     const char *FN[3] = {"synth_voice", "synth_voice_xdec", "synth_voice_damp"};
     for (int q = 0; q < 3; q++) {
@@ -305,7 +312,8 @@ int main(int argc, char **argv)
     }
     const double master = E.k[K_MASTER];
     // the pedal key's route ahead of the part: a message it takes becomes its
-    // CC64 values; the rest go on, but aftertouch (no pressure here yet)
+    // CC64 values; the rest go on (aftertouch the key does not take is
+    // pressure: the notes on its channel lifted by press_db at full)
     std::string pks = opt(argc, argv, "pedal-key", "");
     void *kp = pks.empty() ? nullptr : nv_kp_new(atoi(pks.c_str()));
     if (kp)
@@ -314,7 +322,7 @@ int main(int argc, char **argv)
         int v = 0, n = kp ? nv_kp_feed(kp, type, ch, a, &v) : -1;
         if (n > 0)
             nv_lp_event(part, 2, ch, 64, v);
-        else if (n < 0 && type != 3)
+        else if (n < 0)
             nv_lp_event(part, type, ch, a, b);
     };
     float L[4096], R[4096];
