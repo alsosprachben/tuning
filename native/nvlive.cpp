@@ -2,8 +2,8 @@
 // Python at runtime.
 //
 //     nvlive EXPORT.nvx [--program=N] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
-//                       [--no-register]
-//     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register]
+//                       [--no-register] [--pedal-key=N]
+//     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
 //
 // EXPORT.nvx is examples/native_export.py --live's. At start the part's
 // templates are built (live.Patch.warm: every key 21-96 at each velocity
@@ -26,10 +26,13 @@
 //
 // THE DAMPERS IN BETWEEN (live._damp_block): a pedal value in damper.py's
 // band takes a pedalled key down by its level, through synth_voice_damp.
+// --pedal-key=N: MIDI key N is the sustain pedal, pushed into to lower the
+// dampers (live.Route(("note", N), 64), slab.cpp's KeyPedal): held, CC64
+// 127; channel aftertouch while it is held, 127 - pressure; up, 0.
 //
 // Not yet: live's governor (shedding partials when blocks run late), the
-// room and its send, the wheel, modulation, pressure, the routes
-// (push-to-damp), the TUI.
+// room and its send, the wheel, modulation, pressure, the other routes, the
+// TUI.
 
 #include <atomic>
 #include <cmath>
@@ -66,6 +69,8 @@ void nv_lp_block(void *h, long long n0, long long blk);
 void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
                   void *sd, long long blk, double master_gain);
 void nv_lp_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20);
+void *nv_kp_new(int key);
+int nv_kp_feed(void *h, int type, int ch, int a, int *v);
 void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
                     int top, double beta, int pedals, double rel, double full_db_s, double residual, double ln10_20,
                     long long blk, const int *reg_note);
@@ -180,7 +185,7 @@ struct Midi {
 };
 
 // raw MIDI bytes from a device file: running status; note-on at velocity 0 a
-// note-off; realtime and system messages skipped
+// note-off; channel aftertouch type 3; realtime and system messages skipped
 static void midi_reader(int fd, std::mutex *mu, std::vector<Midi> *q)
 {
     int status = 0, need = 0, got = 0;
@@ -217,6 +222,8 @@ static void midi_reader(int fd, std::mutex *mu, std::vector<Midi> *q)
                 m.type = 1;
             else if (hi == 0xB0)
                 m.type = 2;
+            else if (hi == 0xD0)
+                m.type = 3;
             if (m.type >= 0) {
                 std::lock_guard<std::mutex> lk(*mu);
                 q->push_back(m);
@@ -297,6 +304,19 @@ int main(int argc, char **argv)
         }
     }
     const double master = E.k[K_MASTER];
+    // the pedal key's route ahead of the part: a message it takes becomes its
+    // CC64 values; the rest go on, but aftertouch (no pressure here yet)
+    std::string pks = opt(argc, argv, "pedal-key", "");
+    void *kp = pks.empty() ? nullptr : nv_kp_new(atoi(pks.c_str()));
+    if (kp)
+        fprintf(stderr, "nvlive: key %d is the sustain pedal, pushed into to lower the dampers\n", atoi(pks.c_str()));
+    auto event = [&](int type, int ch, int a, int b) {
+        int v = 0, n = kp ? nv_kp_feed(kp, type, ch, a, &v) : -1;
+        if (n > 0)
+            nv_lp_event(part, 2, ch, 64, v);
+        else if (n < 0 && type != 3)
+            nv_lp_event(part, type, ch, a, b);
+    };
     float L[4096], R[4096];
     // --test: a file's events, block by block, to the dry blocks
     for (int i = 1; i + 2 < argc; i++)
@@ -331,7 +351,7 @@ int main(int argc, char **argv)
                     nv_midi_event(m, e, iv, &et);
                     if ((long long)(et * SR) / BLK > b)
                         break;                          // a later block's
-                    nv_lp_event(part, iv[0], iv[1], iv[2], iv[3]);
+                    event(iv[0], iv[1], iv[2], iv[3]);
                     e++;
                 }
                 nv_lp_block(part, n0, BLK);
@@ -402,7 +422,7 @@ int main(int argc, char **argv)
             evs.swap(q);
         }
         for (const Midi &m : evs)
-            nv_lp_event(part, m.type, m.ch, m.a, m.b);
+            event(m.type, m.ch, m.a, m.b);
         nv_lp_block(part, n0, BLK);
         nv_lp_render(part, n0, (long)BLK, L, R, nullptr, nullptr, fn[0], fn[1], fn[2], BLK, master);
         for (long long k = 0; k < BLK; k++) {

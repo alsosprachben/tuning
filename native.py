@@ -277,6 +277,9 @@ def _load():
                                     ctypes.c_void_p, LL, C]),
             ('nv_lp_damper', None, [ctypes.c_void_p, C, C, C, C, C]),
             ('nv_lp_dm', None, [ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_kp_new', ctypes.c_void_p, [I]),
+            ('nv_kp_feed', I, [ctypes.c_void_p, I, I, I, ctypes.c_void_p]),
+            ('nv_kp_free', None, [ctypes.c_void_p]),
             ('nv_lreg_new', ctypes.c_void_p, [ctypes.c_void_p, I, C, C, C, C, C, I, C]),
             ('nv_lreg_strike', I, [ctypes.c_void_p, LL, I, C, I, ctypes.c_void_p, ctypes.c_void_p,
                                    ctypes.c_void_p, I]),
@@ -1451,6 +1454,37 @@ class LivePiano(object):
                             fn(BR.ensure_damp_lib().synth_voice_damp), BR.BLK,
                             float(BR.T.master_gain))
         return (L, R, SL, SR) if send else (L, R)
+
+
+class KeyPedal(object):
+    """native/slab.cpp's key held as the sustain pedal (live.Route(("note",
+    key), 64)): feed(msg) -> the messages it becomes, as Live.on_midi's route
+    pass makes them."""
+
+    def __init__(self, key):
+        self.d = lib()
+        self.p = self.d.nv_kp_new(int(key))
+
+    def __del__(self):
+        if getattr(self, 'p', None):
+            self.d.nv_kp_free(self.p)
+            self.p = None
+
+    def feed(self, msg):
+        import mido
+        if msg.type == "aftertouch":
+            ty, a = 3, msg.value
+        elif msg.type == "note_on" and msg.velocity > 0:
+            ty, a = 0, msg.note
+        elif msg.type in ("note_on", "note_off"):
+            ty, a = 1, msg.note
+        else:
+            return [msg]
+        v = ctypes.c_int(0)
+        n = self.d.nv_kp_feed(self.p, ty, msg.channel, a, ctypes.byref(v))
+        if n < 0:
+            return [msg]
+        return [mido.Message("control_change", channel=msg.channel, control=64, value=v.value)] if n else []
 
 
 def live_bank(cls, table, sr, scale=1.0):

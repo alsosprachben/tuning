@@ -2,7 +2,7 @@
 """Does the native piano part play live MIDI as live.Live does?
 
     python3 examples/livepiano_check.py [BLOCKS] [--program=N] [--seed=N] [--every=N] [--render] [--register]
-                                        [--half]
+                                        [--half] [--pedal-key=N]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native piano part (native/slab.cpp: its template cache, its slab, live's
@@ -20,9 +20,13 @@ worker answering each job as it is sent on both sides -- live's through
 register.LiveWorker in step with its callback, the native part's in
 native/livereg.cpp -- so a reply is placed at the first pump after its job.
 --half: the pedal at values through damper.py's band as well (ondine.mid's
-0/24/40/.../127), so half-pedalled keys take damper tracks (live._damp_block):
+0/24/40/.../127; --half=all: any value), so half-pedalled keys take damper
+tracks (live._damp_block):
 the slabs' dk compared as which slots are on a track and that track's two
 values (DM), as a track's number is handed out in a set's order, and dg.
+--pedal-key=N: key N held as the sustain pedal and pushed into (channel
+aftertouch while it is held) -- live.Route(("note", N), 64) through on_midi
+on one side, native.KeyPedal before the part's events on the other.
 """
 import os
 import random
@@ -66,7 +70,14 @@ def main(argv):
                     [lv._reg_voice(part, n) for n in range(128)])
     held = set()
     ntr = dmb = 0
-    pedal = (0, 24, 40, 56, 72, 88, 104, 127) if "half" in opt else (0, 127)
+    pk = int(opt["pedal-key"]) if "pedal-key" in opt else None
+    kp = None
+    if pk is not None:
+        lv.set_routes([L.Route(("note", pk), 64)])
+        kp = N.KeyPedal(pk)
+    pk_down = set()
+    pedal = ((0, 24, 40, 56, 72, 88, 104, 127) if opt.get("half") != "all" else tuple(range(128))) \
+        if "half" in opt else (0, 127)
     M = mido.Message
     dry = []
     if "render" in opt:
@@ -116,12 +127,25 @@ def main(argv):
             ch = rng.choice((0, 0, 0, 1))
             if r < 0.4 or not held:
                 note = rng.randint(lo, hi)
+                if note == pk:
+                    continue            # the pedal key plays no note (and aftertouch is the route's alone:
+                                        # the native part has no pressure yet)
                 msgs.append(M("note_on", channel=ch, note=note, velocity=rng.randint(1, 127)))
                 held.add((ch, note))
             elif r < 0.8:
                 ch, note = rng.choice(sorted(held))
                 held.discard((ch, note))
                 msgs.append(M("note_off", channel=ch, note=note, velocity=0))
+            elif pk is not None and r < 0.9:
+                # the pedal key: pressed, let go, or pushed into while down
+                if ch in pk_down and rng.random() < 0.7:
+                    msgs.append(M("aftertouch", channel=ch, value=rng.randint(0, 127)))
+                elif ch in pk_down:
+                    pk_down.discard(ch)
+                    msgs.append(M("note_off", channel=ch, note=pk, velocity=0))
+                else:
+                    pk_down.add(ch)
+                    msgs.append(M("note_on", channel=ch, note=pk, velocity=rng.randint(1, 127)))
             elif r < 0.9:
                 msgs.append(M("control_change", channel=ch, control=64, value=rng.choice(pedal)))
             else:
@@ -130,7 +154,8 @@ def main(argv):
         n0 = lv.n
         for m in msgs:
             lv.on_midi(m)
-            nv.event(m)
+            for x in (kp.feed(m) if kp is not None else [m]):
+                nv.event(x)
         lv.callback(None, 128, None, 0)
         nv.block(n0, 128)
         while dry:

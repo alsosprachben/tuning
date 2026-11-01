@@ -1404,6 +1404,40 @@ struct Piano {
     }
 };
 
+// A KEY HELD AS THE SUSTAIN PEDAL (live.Route(("note", key), 64), held, not
+// latched, with press): the key down sends CC64 127 and its release 0 (on a
+// change); channel aftertouch while it is held sends 127 - pressure, so
+// pushing into the key lowers the dampers (damper.py's band) and pushing
+// fully puts them down. The key itself does not sound; a release this route
+// did not take the press of, and aftertouch with the key up, pass through.
+struct KeyPedal {
+    int key;
+    bool held[16] = {}, down[16] = {};
+
+    // -1: not this route's (the message goes on as it is); else how many
+    // CC64 values it becomes (0 or 1, in *v)
+    int feed(int type, int ch, int a, int *v)
+    {
+        if (type == 3) {                        // channel aftertouch, a its value
+            if (!held[ch])
+                return -1;
+            *v = 127 - a;
+            return 1;
+        }
+        if ((type != 0 && type != 1) || a != key)
+            return -1;
+        if (type == 1 && !held[ch])
+            return -1;
+        held[ch] = type == 0;
+        bool now = type == 0;
+        if (now == down[ch])
+            return 0;                           // a pedal is sent on a change
+        down[ch] = now;
+        *v = now ? 127 : 0;
+        return 1;
+    }
+};
+
 }  // namespace slab
 }  // namespace nv
 
@@ -1469,6 +1503,18 @@ void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float 
 {
     ((nv::slab::Piano *)h)->render(n0, frames, L, R, SL, SR, sv, sx, sd, blk, master_gain);
 }
+
+// A key as the sustain pedal, pushed into to lower the dampers (KeyPedal)
+void *nv_kp_new(int key)
+{
+    nv::slab::KeyPedal *k = new nv::slab::KeyPedal();
+    k->key = key;
+    return k;
+}
+
+int nv_kp_feed(void *h, int type, int ch, int a, int *v) { return ((nv::slab::KeyPedal *)h)->feed(type, ch, a, v); }
+
+void nv_kp_free(void *h) { delete (nv::slab::KeyPedal *)h; }
 
 // the damper tracks' values (DM: 2 x 256 floats)
 void nv_lp_dm(void *h, float *out)
