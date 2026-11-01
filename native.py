@@ -161,7 +161,7 @@ def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
-                                                       'live.cpp')]
+                                                       'live.cpp', 'slab.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -173,17 +173,19 @@ def _load():
         # under the same flags, linked into one library.
         flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
         objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
-                tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.registercore.o']
+                tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.slab.o',
+                tmp + '.registercore.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
             for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
-                                           for f in ('register.cpp', 'prepare.cpp', 'render.cpp', 'live.cpp')],
-                              objs[1:9]):
+                                           for f in ('register.cpp', 'prepare.cpp', 'render.cpp', 'live.cpp',
+                                                     'slab.cpp')],
+                              objs[1:10]):
                 subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', src, '-o', o])
             # register.py's C core, under ITS flags (register._load_core's): the same arithmetic
             subprocess.check_call(['gcc', '-O3', '-march=native', '-ffp-contract=off', '-fopenmp-simd',
                                    '-fno-math-errno', '-mprefer-vector-width=512', '-fPIC', '-c',
-                                   os.path.join(HERE, 'registercore.c'), '-o', objs[9]])
+                                   os.path.join(HERE, 'registercore.c'), '-o', objs[10]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm'])
         finally:
             for o in objs:
@@ -242,6 +244,14 @@ def _load():
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                               ctypes.c_long, C, C, C, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_slab_new', ctypes.c_void_p, [ctypes.c_long, C]), ('nv_slab_free', None, [ctypes.c_void_p]),
+            ('nv_slab_stamp', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, LL, LL, LL, LL, LL, C, LL, I,
+                                  C]),
+            ('nv_slab_release', None, [ctypes.c_void_p, LL, LL, LL, LL, LL]),
+            ('nv_slab_reap', None, [ctypes.c_void_p, LL, LL]),
+            ('nv_slab_col', None, [ctypes.c_void_p, I, I, ctypes.c_void_p]),
+            ('nv_slab_free_list', ctypes.c_long, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
             ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C, I, I]),
@@ -1113,3 +1123,74 @@ def template(program, note, vel, tuner='hybrid440'):
     P.update(N=int(out[0]), nblk=int(out[1]), P=int(out[2]), sym_rows=(int(out[3]), int(out[3])),
              room_q=[(out[4 + 3 * i], out[5 + 3 * i], out[6 + 3 * i]) for i in range(9)])
     return final(P)
+
+
+LIVE_F8 = ("om", "p0", "p0R", "fmw", "fmp", "fmpR")
+LIVE_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus", "cv", "cc", "crl", "sj", "csc",
+           "cbw", "tbav", "tau", "tcut", "vd", "vr", "vp", "delL", "delR", "az", "rdl", "nfr")
+LIVE_F4N = ("gb", "gt", "gc", "vdl")
+LIVE_I4 = ("gr", "cr", "br", "pl", "fx", "mk")
+SLAB_BOOK = ("sw", "aL0", "aR0", "sg", "sre", "hrel", "vbase", "vrbase", "vsc")
+
+
+class Slab(object):
+    """native/slab.cpp's slab: live.Slab's core for a piano -- stamp, release,
+    reap -- and its columns read back as live.Slab's names them."""
+
+    def __init__(self, capacity, headroom=1.0):
+        self.d = lib()
+        self.cap = capacity
+        self.p = self.d.nv_slab_new(capacity, float(headroom))
+
+    def __del__(self):
+        if getattr(self, 'p', None):
+            self.d.nv_slab_free(self.p)
+            self.p = None
+
+    def stamp(self, tmpl, key, n0, vel_scale):
+        import numpy as np
+        n = int(tmpl["P"])
+        keep = []
+
+        def arr(cols, dt):
+            a = (ctypes.c_void_p * len(cols))()
+            for j, c in enumerate(cols):
+                v = np.ascontiguousarray(tmpl[c], dt) if c in tmpl and tmpl[c] is not None else np.zeros(n, dt)
+                keep.append(v)
+                a[j] = v.ctypes.data
+            return a
+        f8 = arr(LIVE_F8, np.float64)
+        f4 = arr(LIVE_F4, np.float32)
+        i8 = arr(("non", "noff"), np.int64)
+        i4 = arr(LIVE_I4, np.int32)
+        hr = np.ascontiguousarray(tmpl["hrel"], np.float32)
+        snd = tmpl.get("send")
+        part, ch, note, layer = key[0], key[1], key[2], key[3]
+        return bool(self.d.nv_slab_stamp(self.p, f8, f4, i8, i4, hr.ctypes.data, n, int(part), int(ch), int(note),
+                                         -1 if layer is None else int(layer), int(n0), float(vel_scale),
+                                         int(tmpl.get("dur", 0)), int(bool(tmpl.get("oneshot"))),
+                                         float("nan") if snd is None else float(snd)))
+
+    def release(self, key, n):
+        self.d.nv_slab_release(self.p, int(key[0]), int(key[1]), int(key[2]),
+                               -1 if key[3] is None else int(key[3]), int(n))
+
+    def reap(self, n, blk):
+        self.d.nv_slab_reap(self.p, int(n), int(blk))
+
+    def col(self, name):
+        import numpy as np
+        for g, (cols, dt) in enumerate(((LIVE_F8, np.float64), (LIVE_F4, np.float32), (LIVE_F4N, np.float32),
+                                        (("non", "noff"), np.int64), (LIVE_I4, np.int32),
+                                        (SLAB_BOOK, np.float32), (("dk", "slot_ch", "busy"), np.int32))):
+            if name in cols:
+                out = np.empty(self.cap, dt)
+                self.d.nv_slab_col(self.p, g, cols.index(name), out.ctypes.data)
+                return out
+        raise KeyError(name)
+
+    def free_list(self):
+        import numpy as np
+        out = np.empty(self.cap, np.int64)
+        n = self.d.nv_slab_free_list(self.p, out.ctypes.data, self.cap)
+        return out[:n].tolist()

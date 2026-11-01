@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Does the native engine make live's templates as live does?
 
-    python3 examples/template_check.py [--programs=0,1,2,3] [--vels=1,40,64,100,127] [--keys=21-108]
+    python3 examples/template_check.py [--programs=0,1,2,3] [--vels=1,40,64,100,127] [--keys=21-108] [--live]
 
 live.Voice._raw_template: blockrender.prepare of a one-note file (tempo one
 beat a second, the program, CC7 and CC11 at 127, the key down at 0, up at
@@ -9,7 +9,9 @@ beat a second, the program, CC7 and CC11 at 127, the key down at 0, up at
 panel and the scanner neutral. native.template: the same file's bytes made in
 native/live.cpp and run through the engine. Per (program, key, velocity) the
 table's columns in prepare's final types, its length (N, nblk, P) and room
-(room_q), compared with ==. A key no native class plays is skipped.
+(room_q), compared with ==. A key no native class plays is skipped. --live:
+at live's rate and block (48 kHz, 128 samples: Live sets them before it
+builds a template).
 """
 import contextlib
 import io
@@ -54,6 +56,9 @@ def main(argv):
     import blockrender as B
     import native as N
     import tonelib as T
+    if "live" in opt:
+        B.set_sample_rate(48000)
+        B.BLK = 128
     progs = [int(x) for x in (opt.get("programs") or "0,1,2,3").split(",")]
     vels = [int(x) for x in (opt.get("vels") or "1,40,64,100,127").split(",")]
     k0, k1 = (int(x) for x in (opt.get("keys") or "21-108").split("-"))
