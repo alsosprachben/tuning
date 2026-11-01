@@ -127,7 +127,7 @@ class NoteClass(ctypes.Structure):
                 + [('room_planes', C * 6), ('room_order', I), ('damper_pedal', I), ('detune_lo', C),
                    ('detune_hi', C), ('detune_wheel', I)]
                 + [('reg_gain', C), ('reg_knock', C), ('reg_fall', C), ('damper_top', I), ('reg_floor', C),
-                   ('reg_release', C)])
+                   ('reg_release', C), ('one_shot', I), ('one_shot_hold', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -139,7 +139,8 @@ class NoteIn(ctypes.Structure):
                 + [('sv', C * 2), ('sound_vib_depth_cents', C), ('vibrato_delay', C), ('gl', C * 3)]
                 + [(f, C) for f in ('fx', 'mk', 'fm_omega', 'fm_phase')]
                 + [('room_bands', C * 9), ('reflect', I), ('no_reflections', I), ('ch', LL), ('note', I),
-                   ('damper_pedal', I), ('key_off', C), ('planes', C * 6), ('order', I), ('from_song', I), ('song_index', I)])
+                   ('damper_pedal', I), ('key_off', C), ('planes', C * 6), ('order', I), ('from_song', I), ('song_index', I),
+                   ('seat', C)])
 
 
 class NoteOut(ctypes.Structure):
@@ -589,23 +590,26 @@ def _class(cls):
     return got
 
 
-def voice(cls, frequency, channel_pan, attack_volume, channel_volume, effort=0.0, state=None):
+def voice(cls, frequency, channel_pan, attack_volume, channel_volume, effort=0.0, state=None, seat=0.0):
     """cls(frequency, channel_pan, attack_volume, channel_volume, effort) in C:
     (VoiceSnap, VoiceNote), or None where the class is not supported. state:
     a PyRandomState for the global stream, drawn from as the constructor
-    draws (None: the snapshot alone, the stream untouched)."""
+    draws (None: the snapshot alone, the stream untouched). seat: a seat
+    inside the instrument (a kit's drum), placed as blockrender places it."""
     import tonelib as T
     d = lib()
     got = _class(cls) if d is not None else None
     if got is None:
         return None
-    c, tmpl = got[0], got[1]
+    c, tmpl = VoiceInit.from_buffer_copy(got[0]), got[1]        # (the class's own, untouched by this note)
     lo, hi = getattr(cls, 'string_detune_range', (0.0, 0.0))     # (a drum has no strings)
     if '__init__' in getattr(T, 'HonkyTonkProperties', object).__dict__ and issubclass(cls, T.HonkyTonkProperties):
         lo, hi = lo * T.honky_detune, hi * T.honky_detune
     c.detune_lo, c.detune_hi = lo, hi
     c.fixed_touch = int(bool(T.FIXED_TOUCH))
     c.soft_pedal_down = int(bool(T.soft_pedal_down))
+    if seat:
+        c.seat_x = c.listener_distance * math.tan(T.stage_angle(seat))
     s, o = VoiceSnap(), VoiceNote()
     d.nv_voice_init(ctypes.byref(c), ctypes.byref(tmpl), float(frequency), float(channel_pan),
                     float(attack_volume), float(channel_volume), float(effort),
@@ -644,16 +648,16 @@ def note_class(cls):
     import tonelib as T
     import blockrender as BR
     got = _NOTE.get(cls)
-    if got is None and kit_drum(cls):
-        # A KIT DRUM'S VOICE IS NATIVE (voice.c, examples/drum_check.py), ITS
-        # NOTE NOT YET: the drum branch of the note setup (the kit's pitch and
-        # seat, the one-shot's hold, the glide) is Python's until it is ported
-        # and checked -- so its notes stay Python's, in blockrender and the exports
+    drum = kit_drum(cls)
+    if got is None and drum and os.environ.get('TUNING_NATIVE_DRUMS') != '1':
+        # A KIT DRUM'S NOTE (its seat, the one-shot's hold) is the engine's
+        # only where TUNING_NATIVE_DRUMS=1 asks, until it is checked
         _NOTE[cls] = False
         got = False
     if got is None:
         v = _class(cls)
-        ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF)
+        # (a kit drum's one-shot hold is the engine's; a gate is not)
+        ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF if not (drum and a == 'one_shot'))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT)
               and getattr(cls, 'mode_phase', None) is None and int(getattr(cls, 'strike_flam', 0) or 0) <= 1
               and len(getattr(cls, 'strike_noise_db', ()) or ()) <= 32)
@@ -708,8 +712,10 @@ def note_class(cls):
             k.strike_len_s = getattr(cls, 'strike_noise_len_s', None) or 0.25
             k.strike_at_s = getattr(cls, 'strike_noise_at', 0.0) or 0.0
             k.strike_cal_db = getattr(cls, 'strike_noise_cal_db', 0.0) or 0.0
-        k.damper_pedal = int(bool(getattr(cls, 'damper_pedal', True)))
-        k.detune_lo, k.detune_hi = cls.string_detune_range
+        k.one_shot = int(bool(getattr(cls, 'one_shot', False)))
+        k.one_shot_hold = BR.ONE_SHOT_MIN_S
+        k.damper_pedal = int(bool(getattr(cls, 'damper_pedal', True)) and not k.one_shot)
+        k.detune_lo, k.detune_hi = getattr(cls, 'string_detune_range', (0.0, 0.0))
         k.detune_wheel = int(bool(getattr(cls, 'detune_wheel', False)))
         import register as _RG
         k.reg_gain = float(getattr(cls, 'register_gain', 0.0))

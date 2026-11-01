@@ -56,6 +56,8 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     c.detune_hi = n->detune_hi;
     c.soft_pedal_down = n->soft_pedal_down;
     c.fixed_touch = n->fixed_touch;
+    if (n->seat != 0.0)                 // a seat inside the instrument, at the angle its pan names
+        c.seat_x = c.listener_distance * tan(nv_stage_angle(n->seat));
     double av = pow(n->vel / 127.0, 2.0);
     VoiceSnap s;
     VoiceNote o;
@@ -203,6 +205,8 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
                  int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
                  double *rows, int cap, double *qacc, double *azimuth, NoteOut *out, int *band)
 {
+    if (K->one_shot)                    // a one-shot rings out on its own decay
+        n->key_off = nv::pymax(n->key_off, n->on + K->one_shot_hold);
     n->off = nv_song_note_off(song, n->ch, n->note, n->on, n->key_off, n->damper_pedal, n->mcut,
                               n->retrigger_fade, band);
     n->has_nx = nv_song_next_same(song, n->ch, n->note, n->on, &n->nx);

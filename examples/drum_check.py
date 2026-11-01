@@ -8,7 +8,8 @@ For NOTES random strokes (default 400) of the Standard set's drums the
 native voice plays (native.kit_drum: the kick, the toms) -- each at its key's
 pitch, now and then retuned as a file's drum setup retunes it, across the
 velocities and the kit's seats -- the constructor (nv_voice_init: the
-voice, what the note setup reads, the global random stream after it) and
+voice, seated in the kit or not, what the note setup reads, the global
+random stream after it) and
 every function native/voice.c ports is
 asked what its Python method is asked: each partial's mode ratio (the
 measured modes, the stick's click), series and volume, decay and its two
@@ -103,11 +104,17 @@ def main(argv):
         args = (f0 * (2.0 ** (rng.randint(-12, 12) / 12.0) if rng.random() < 0.3 else 1.0),
                 rng.choice((pan, rng.uniform(-1, 1))), (rng.randint(1, 127) / 127.0) ** 2,
                 rng.uniform(0.2, 1.0), rng.choice((0.0, 0.0, rng.uniform(-6, 6))))
+        seat = rng.choice((0.0, pan, rng.uniform(-1, 1)))
         R_.seed(rng.getrandbits(64))
         st = N.random_state()
         p = cls(*args)
         after = R_.getstate()[1]
-        got = N.voice(cls, *args, state=st)
+        if seat:
+            # its seat in the kit, as blockrender places it
+            import math
+            p.seat_x = p.listener_distance * math.tan(T.stage_angle(seat))
+            p.place()
+        got = N.voice(cls, *args, state=st, seat=seat)
         if got is None:
             bad.append((name, "constructor not supported"))
             continue

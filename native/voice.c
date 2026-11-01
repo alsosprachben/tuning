@@ -363,6 +363,8 @@ static double stage_angle(double p)
     return asin(0.5 * tan(pymax(-1.0, pymin(1.0, p)) * PI / 4.0));
 }
 
+double nv_stage_angle(double p) { return stage_angle(p); }
+
 /* SynthProperties.register_effort_at */
 static double register_effort_at(const VoiceInit *c, double frequency)
 {

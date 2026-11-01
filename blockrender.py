@@ -6121,13 +6121,13 @@ def _voice_native_begin(cls):
     return _NV.random_state()
 
 
-def _voice_native(props, cls, f0, pan, av, cv, eff, st, nt):
+def _voice_native(props, cls, f0, pan, av, cv, eff, st, nt, seat=0.0):
     """The voice as native/voice.c builds it (its VoiceSnap), beside props;
     in 'check', what the note setup reads of props and the random stream
     after it compared with the C's."""
     import native as _NV
     import random as _rnd
-    got = _NV.voice(cls, f0, pan, av, cv, eff, state=st if NATIVE_TONE == 'check' else None)
+    got = _NV.voice(cls, f0, pan, av, cv, eff, state=st if NATIVE_TONE == 'check' else None, seat=seat)
     if got is None:
         return None
     VOICE_STATS[0] += 1
@@ -6158,7 +6158,9 @@ def _voice_check(snap, py, nt):
     for f, _ in _NV.VoiceSnap._fields_:
         a, b = getattr(py, f), getattr(snap, f)
         if not isinstance(a, (int, float)):
-            a, b = list(a), list(b)
+            # (a 2-D field's rows flattened: ctypes rows compare by identity)
+            flat = lambda x: [v for r in x for v in (r if not isinstance(r, (int, float)) else (r,))]  # noqa: E731
+            a, b = flat(a), flat(b)
         if a != b:
             bad.append(f)
     _voice_report(bad, nt)
@@ -6450,7 +6452,7 @@ READING_STATS = [0, 0]  # files whose check song is the engine's own reading; wh
 
 
 def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st, eff, nx, mcut, slurred,
-                       slur_out, song=None, key_off=None, from_song=False):
+                       slur_out, song=None, key_off=None, from_song=False, seat=0.0):
     """A piano note from the engine (native/engine.cpp's nv_note): its knock,
     tone and phantom partials, the voice built there from the note as the
     file and channel give it. (rows, qacc, azimuth, NoteOut, row0, qacc
@@ -6476,10 +6478,10 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     imgs, nsurf, surf, img, mir = [], np.zeros(1, np.int32), np.zeros(1, np.int32), np.zeros(3), np.zeros(3)
     n = _NV.NoteIn()
     n.f0, n.pan, n.vel, n.chan_vol, n.effort = nt.f0, nt.pan, nt.vel, nt.chan_vol, eff
-    n.on, n.off = nt.on, nt.off
+    n.on, n.off, n.seat = nt.on, nt.off, seat
     n.has_nx, n.nx = int(nx is not None), (nx if nx is not None else 0.0)
     n.mcut, n.slurred, n.slur_out = int(bool(mcut)), int(bool(slurred)), int(bool(slur_out))
-    lo, hi = nt.pc.string_detune_range
+    lo, hi = getattr(nt.pc, 'string_detune_range', (0.0, 0.0))
     if issubclass(nt.pc, T.HonkyTonkProperties):
         lo, hi = lo * T.honky_detune, hi * T.honky_detune
     n.detune_lo, n.detune_hi = lo, hi
@@ -6511,7 +6513,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
         n.ch, n.note, n.key_off = nt.ch, nt.note, key_off
         n.from_song = int(bool(from_song) and nt.song_index is not None)
         n.song_index = nt.song_index if nt.song_index is not None else -1
-        n.damper_pedal = int(bool(getattr(nt.pc, 'damper_pedal', True)))
+        n.damper_pedal = K.damper_pedal
         n.off, n.nx, n.has_nx, n.soft_pedal_down = -1.0, -1.0, 0, 0
         band = ctypes.c_int(0)
         k = _NV.lib().nv_song_play(song.p, ctypes.byref(K), ctypes.byref(n), ctypes.byref(st), -1,
@@ -8271,13 +8273,13 @@ def _prepare(path, tuner='hybrid440', sink=None):
         props = nt.pc(nt.f0, nt.pan, (nt.vel/127.0)**2, nt.chan_vol, _eff)   # pan = CC10: a turn (tonelib.stage_angle)
         em.props = props
         _cargs = (nt.f0, nt.vel, nt.pan, nt.chan_vol, _eff)
-        if _vst is not None:
-            em.nsnap = _voice_native(props, nt.pc, nt.f0, nt.pan, (nt.vel/127.0)**2, nt.chan_vol, _eff, _vst, nt)
         if _seat:
             # a seat inside the instrument, at the angle its pan names
             props.seat_x = props.listener_distance * math.tan(T.stage_angle(_seat))
             props.place()
-            em.nsnap = None
+        if _vst is not None:
+            em.nsnap = _voice_native(props, nt.pc, nt.f0, nt.pan, (nt.vel/127.0)**2, nt.chan_vol, _eff, _vst, nt,
+                                     _seat)
         if _EFXN[0] is not None and _EFXN[0].get('pos3d'):
             # THE PART PLACED IN 3D (gsefx: 3D Manual, 3D Auto): its angle the
             # type's, past the speakers and behind, turning at 3D Auto's speed --
@@ -8786,7 +8788,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                      _nx, _mcut, _slurred, (nt.ch, nt.note, nt.on) in _SLUR_OUT,
                                      _SONG if choked is None else None, _off_key,
                                      _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT,
-                                                  FREQ_E))
+                                                  FREQ_E), _seat)
         if _wn is not None and NATIVE_TONE == 'on':
             _note_native_apply(em, props, nt, A, _wn, _VB)
         else:

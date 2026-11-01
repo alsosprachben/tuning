@@ -201,6 +201,10 @@ typedef struct {
     double reg_gain, reg_knock, reg_fall;
     int damper_top;
     double reg_floor, reg_release;
+    // a one-shot (a kit drum): its note held to at least one_shot_hold past
+    // its onset, the key-up ignored (ONE_SHOT_MIN_S)
+    int one_shot;
+    double one_shot_hold;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -223,6 +227,7 @@ typedef struct {
     int order;
     int from_song;                      // nv_song_play: its pitch and level from the song too...
     int song_index;                     // ...as its note there (the song's notes, in order)
+    double seat;                        // a seat in the instrument (a kit's drum): its pan there, 0 none
 } NoteIn;
 
 // What the note's setup worked out, beside its rows.
@@ -272,6 +277,7 @@ double nv_song_total(void *s);
 int nv_song_ped_spans(void *s, long long ch, double *out, int cap);
 int nv_song_pedal_values(void *s, long long ch, double *t, int *v, int cap);
 double nv_damper_contact(int p, int key, int top);
+double nv_stage_angle(double p);
 int nv_strings(const VoiceInit *c0, const VoiceSnap *tmpl, const double *table, double pan, double chan_vol,
                double sr, StringMode *out, StringMode *tmp, int cap);
 
