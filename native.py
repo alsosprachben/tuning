@@ -60,7 +60,7 @@ class VoiceSnap(ctypes.Structure):
                 ('slow_share', C), ('slow_dbs', C), ('slow_max_hz', C),
                 ('noisy', I), ('hf_corner_hz', C), ('hf_order', C), ('n_trim', I), ('trim', (C * 2) * 8),
                 ('snare', I), ('fund_dbs', C), ('head_dbs', C), ('wire_jitter', C), ('head_jitter', C),
-                ('rim_from', I), ('rim_dbs', C)]
+                ('rim_from', I), ('rim_dbs', C), ('retarget', I), ('decay_target', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -130,7 +130,8 @@ class NoteClass(ctypes.Structure):
                 + [('room_planes', C * 6), ('room_order', I), ('damper_pedal', I), ('detune_lo', C),
                    ('detune_hi', C), ('detune_wheel', I)]
                 + [('reg_gain', C), ('reg_knock', C), ('reg_fall', C), ('damper_top', I), ('reg_floor', C),
-                   ('reg_release', C), ('one_shot', I), ('one_shot_hold', C), ('pjit', I), ('sps', C)])
+                   ('reg_release', C), ('one_shot', I), ('one_shot_hold', C), ('pjit', I), ('sps', C),
+                   ('n_flam', I), ('flam_s', C), ('flam_db', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -369,22 +370,59 @@ _SNARE_OWN = dict(_KIT_OWN, harmonic_volume='NoisyPercussionMixin', _hf_rolloff=
                   partial_jitter='AcousticSnareProperties', aftersound='AcousticSnareProperties')
 
 
-def kit_drum(cls):
-    """Whether cls is a kit drum native/voice.c plays (VoiceSnap.kind 1)."""
+# ...AND A MEASURED MODE SET'S ON SYNTHPROPERTIES, a noise's (the clap: its
+# mode silent, its sound the strike's flam), a key's decay retargeted or not
+_MODAL_OWN = {'mode_ratio': 'SynthProperties', 'series_volume': 'SynthProperties',
+              'harmonic_volume': 'NoisyPercussionMixin', '_hf_rolloff': 'NoisyPercussionMixin',
+              '_band_trim': 'NoisyPercussionMixin', 'chiff_harmonic_gain': 'NoisyPercussionMixin',
+              'aftersound': 'SynthProperties', 'unison_voices': 'SynthProperties'}
+
+
+def decay_target(cls):
+    """A key class's retargeted decay (percussion_map: harmonic_decay scaled
+    so its first mode's is the target): the target, else None."""
+    hd = cls.__dict__.get('harmonic_decay')
+    dd = getattr(hd, '__defaults__', None)
+    if hd is None or not dd or len(dd) != 2 or not isinstance(dd[0], type):
+        return None
+    return float(dd[1]) if _owner(dd[0], 'harmonic_decay') == 'SynthProperties' else None
+
+
+def _modal_drum(cls):
     import tonelib as T
-    if not issubclass(cls, T.KitDrumProperties):
+    # (the claps for now: the hats and the other washes are a family of their own)
+    if not issubclass(cls, T.HandClapProperties):
         return False
+    if any(_owner(cls, n) != o for n, o in _MODAL_OWN.items()):
+        return False
+    if _owner(cls, 'harmonic_decay') != 'SynthProperties' and decay_target(cls) is None:
+        return False
+    mg, mr = cls.mode_gains, cls.mode_ratios
+    return (mg is not None and mr is not None and len(mg) == len(mr) <= 16
+            and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
+            and not cls.mode_stroke_tilt and not cls.bore_corner_hz and not cls.harmonic_touch
+            and not cls.pickup_points and len(cls.band_trim_db) <= 8 and len(cls.unison_detune or ()) <= 8)
+
+
+def kit_drum(cls):
+    """Which drum native/voice.c plays cls as (VoiceSnap.kind): 1 a kit
+    drum, 2 a measured mode set's noise (the clap); else 0."""
+    import tonelib as T
+    if _modal_drum(cls):
+        return 2
+    if not issubclass(cls, T.KitDrumProperties):
+        return 0
     if issubclass(cls, T.NoisyPercussionMixin):
         if not issubclass(cls, T.AcousticSnareProperties) or len(cls.band_trim_db) > 8:
-            return False
+            return 0
         own = dict(_SNARE_OWN, harmonic_decay=_owner(cls, 'harmonic_decay'))
         if own['harmonic_decay'] not in ('AcousticSnareProperties', 'SideStickProperties'):
-            return False
+            return 0
     else:
         own = dict(_KIT_OWN, chiff_harmonic_gain='SynthProperties')
     if any(_owner(cls, n) != o for n, o in own.items()):
-        return False
-    return (len(cls.DRUM_MODES) <= 16 and len(cls.CLICK_DB) <= 16 and len(cls.unison_detune or ()) <= 8
+        return 0
+    return int(len(cls.DRUM_MODES) <= 16 and len(cls.CLICK_DB) <= 16 and len(cls.unison_detune or ()) <= 8
             and not cls.bore_corner_hz and not cls.harmonic_touch and not cls.pickup_points)
 
 
@@ -490,8 +528,24 @@ def snapshot(props):
     for f in ('chiff_harmonic_power', 'bloom_seconds', 'bloom_center_hz', 'bloom_octaves', 'bloom_shape',
               'exp_vibrato_cents', 'solo_vibrato_spread', 'solo_vibrato_hz', 'radiation_distance', 'hrtf_beta'):
         setattr(s, f, getattr(p, f))
-    s.kind = 1 if kit_drum(type(p)) else 0
-    if s.kind == 1:
+    s.kind = kit_drum(type(p))
+    if s.kind == 2:
+        # the measured mode set: (ratio, linear gain), SynthProperties' decay,
+        # its unison
+        s.unison_gain = p.unison_gain
+        s.n_unison = len(p.unison_detune or ())
+        for i, x in enumerate(p.unison_detune or ()):
+            s.unison_detune[i] = x
+        s.n_modes = len(p.mode_ratios)
+        for i, (r, g) in enumerate(zip(p.mode_ratios, p.mode_gains)):
+            s.modes[i][:] = [float(r), float(g), 0.0]
+        dt = decay_target(type(p))
+        s.retarget, s.decay_target = int(dt is not None), dt or 0.0
+        s.noisy, s.hf_corner_hz, s.hf_order = 1, p.hf_corner_hz, p.hf_order
+        s.n_trim = len(p.band_trim_db)
+        for i, (f, db) in enumerate(p.band_trim_db):
+            s.trim[i][:] = [float(f), float(db)]
+    elif s.kind == 1:
         # KitDrumProperties' tables, and SynthProperties' unison
         s.unison_gain = p.unison_gain
         s.n_unison = len(p.unison_detune or ())
@@ -642,7 +696,7 @@ def _class(cls):
         c.touch_sensitive = int(bool(cls.touch_sensitive))
         c.max_partial_hz = cls.max_partial_hz or 0.0
         c.sound_speed = proto.sound_speed
-        c.kind = 1 if kit_drum(cls) else 0
+        c.kind = kit_drum(cls)
         c.key_jitter = int(c.kind == 0)
         c.b_law = _b_law(cls) if c.kind == 0 else 0
         c.attack_time = cls.attack_time
@@ -748,7 +802,9 @@ def note_class(cls):
                                         if not (drum and a in ('one_shot', 'jitter_by_partial',
                                                                'strike_phase_spread')))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT)
-              and getattr(cls, 'mode_phase', None) is None and int(getattr(cls, 'strike_flam', 0) or 0) <= 1
+              and getattr(cls, 'mode_phase', None) is None and (int(getattr(cls, 'strike_flam', 0) or 0) <= 1
+                   or (int(cls.strike_flam) <= 64 and not getattr(cls, 'strike_flam_record', False)
+                       and not (getattr(cls, 'strike_flam_exp_db', 0.0) or 0.0)))
               and len(getattr(cls, 'strike_noise_db', ()) or ()) <= 32)
         if ok:
             # a section's players and their onsets: none for one instrument (its prototype asked)
@@ -801,6 +857,10 @@ def note_class(cls):
             k.strike_len_s = getattr(cls, 'strike_noise_len_s', None) or 0.25
             k.strike_at_s = getattr(cls, 'strike_noise_at', 0.0) or 0.0
             k.strike_cal_db = getattr(cls, 'strike_noise_cal_db', 0.0) or 0.0
+        nf = int(getattr(cls, 'strike_flam', 0) or 0)
+        k.n_flam = nf if nf > 1 else 0
+        k.flam_s = float(getattr(cls, 'strike_flam_s', 0.0) or 0.0)
+        k.flam_db = float(getattr(cls, 'strike_flam_db', 0.0) or 0.0)
         k.pjit = int(bool(getattr(cls, 'jitter_by_partial', False)))
         k.sps = float(getattr(cls, 'strike_phase_spread', 0.0) or 0.0)
         k.one_shot = int(bool(getattr(cls, 'one_shot', False)))

@@ -6483,6 +6483,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n = _NV.NoteIn()
     n.f0, n.pan, n.vel, n.chan_vol, n.effort = nt.f0, nt.pan, nt.vel, nt.chan_vol, eff
     n.on, n.off, n.seat = nt.on, nt.off, seat
+    n.ch, n.note = nt.ch, nt.note           # (a flam's draw is the note's)
     n.has_nx, n.nx = int(nx is not None), (nx if nx is not None else 0.0)
     n.mcut, n.slurred, n.slur_out = int(bool(mcut)), int(bool(slurred)), int(bool(slur_out))
     lo, hi = getattr(nt.pc, 'string_detune_range', (0.0, 0.0))
@@ -6505,7 +6506,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     npar = min(mh, int(getattr(P, 'phantom_max_order', 16)))
     _o = int(P.reflection_order) if em.REFLECT else 0
     ni = min(64, sum(6 * 5 ** k for k in range(_o)))      # the images there can be, at most
-    cap = (K.n_strike + 1) + mh * 3 * (1 + ni) + 16 + max(1, npar * (npar + 1) // 2) * (1 + ni)
+    cap = (K.n_strike * max(1, K.n_flam) + 1) + mh * 3 * (1 + ni) + 16 + max(1, npar * (npar + 1) // 2) * (1 + ni)
     rows = np.empty((cap, len(EMIT_COLS)))
     q0 = [v for pr in em._QACC for v in pr]
     qacc = np.array(q0, np.float64)

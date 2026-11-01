@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "nv.h"
+#include "pycompat.h"          // a flam's random.Random
 
 namespace nv {
 
@@ -137,16 +138,45 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         double slr = log(10.0) / 20.0 * K->strike_noise_dbs;
         double sfade = pymax(1.0, K->strike_fade_s * SR);
         double slen = K->strike_len_s * SR;
-        double bon = non + K->strike_at_s * SR + 0.0 * SR;
+        // A FLAM (strike_flam > 1): that many strikes, each at its own offset
+        // and level, drawn from the note (random.Random of its onset, key and
+        // channel), the first at the onset and the loudest at the table's
+        double boff[64], bdb[64];
+        int nb = 1;
+        boff[0] = bdb[0] = 0.0;
+        if (K->n_flam > 1) {
+            if (K->n_flam > 64)
+                return -2;
+            PyRandom fr;
+            pyr_seed(&fr, (long long)nearbyint(n->on * 1e6) * 131 + (long long)n->note * 7 + n->ch);
+            nb = K->n_flam;
+            for (int b = 0; b < nb; b++) {
+                boff[b] = pyr_uniform(&fr, 0.0, K->flam_s);
+                bdb[b] = -pyr_uniform(&fr, 0.0, K->flam_db);
+            }
+            double t0 = boff[0], l0 = bdb[0];
+            for (int b = 1; b < nb; b++) {
+                t0 = pymin(t0, boff[b]);
+                l0 = pymax(l0, bdb[b]);
+            }
+            for (int b = 0; b < nb; b++) {
+                boff[b] -= t0;
+                bdb[b] -= l0;
+            }
+        }
         ToneIn tk = t;
         tk.gain = s.gain; tk.B = 0.0; tk.sjit = 0.0; tk.reflect = 0;
         tk.cbw0 = -0.25; tk.cbw1 = 0.0;
-        int k = nv_strike(&s, &tk, K->n_strike, K->strike_hz, K->strike_db, reg, 0.0, K->strike_cal_db, slr,
-                          sfade, slen, bon, s.position_x, rows, cap, qacc, azimuth);
-        if (k < 0)
-            return -1;
-        out->n_knock = k;
-        total += k;
+        out->n_knock = 0;
+        for (int b = 0; b < nb; b++) {
+            double bon = non + K->strike_at_s * SR + boff[b] * SR;
+            int k = nv_strike(&s, &tk, K->n_strike, K->strike_hz, K->strike_db, reg, bdb[b], K->strike_cal_db,
+                              slr, sfade, slen, bon, s.position_x, rows + NCOLS * total, cap - total, qacc, azimuth);
+            if (k < 0)
+                return -1;
+            out->n_knock += k;
+            total += k;
+        }
         no_refl = 0;
     }
 

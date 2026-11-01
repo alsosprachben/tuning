@@ -92,6 +92,8 @@ double nv_partial_jitter(const VoiceSnap *v, int harmonic)
 
 double nv_mode_ratio(const VoiceSnap *v, int m)
 {
+    if (v->kind == 2)                           /* SynthProperties.mode_ratio: mode_ratios */
+        return 1 <= m && m <= v->n_modes ? v->modes[m - 1][0] : 0.0;
     if (v->kind == 1) {                         /* KitDrumProperties.mode_ratio */
         if (1 <= m && m <= v->n_modes)
             return v->modes[m - 1][0];
@@ -104,6 +106,11 @@ double nv_mode_ratio(const VoiceSnap *v, int m)
 
 double nv_series_volume(const VoiceSnap *v, int harmonic)
 {
+    if (v->kind == 2) {                         /* SynthProperties: a measured mode set */
+        if (v->max_harmonic && harmonic > v->max_harmonic)
+            return 0.0;
+        return 1 <= harmonic && harmonic <= v->n_modes ? v->gain * v->modes[harmonic - 1][1] : 0.0;
+    }
     if (v->kind == 1) {                         /* KitDrumProperties.series_volume */
         if (1 <= harmonic && harmonic <= v->n_modes)
             return v->gain * pow(10.0, v->modes[harmonic - 1][1] / 20.0);
@@ -173,6 +180,17 @@ double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
 
 double nv_harmonic_decay(const VoiceSnap *v, int harmonic)
 {
+    if (v->kind == 2) {                         /* SynthProperties, by where the mode sits */
+        double h = nv_mode_ratio(v, harmonic);
+        double base = (v->decay_db + v->harmonic_decay_db * h * pow(h, v->harmonic_decay_dampening))
+                      * v->decay_register_factor;
+        if (!v->retarget)
+            return base;
+        double h1 = nv_mode_ratio(v, 1);
+        double first = (v->decay_db + v->harmonic_decay_db * h1 * pow(h1, v->harmonic_decay_dampening))
+                       * v->decay_register_factor;
+        return first > 0 ? base * (v->decay_target / first) : v->decay_target;
+    }
     if (v->kind == 1 && v->rim_from && v->rim_from <= harmonic && harmonic <= v->n_modes)
         return 0.5 * v->rim_dbs;                /* SideStickProperties: the rim's */
     if (v->kind == 1 && v->snare) {             /* AcousticSnareProperties: the head's two rates */
@@ -210,6 +228,11 @@ static double string_blend(const VoiceSnap *v, double frequency, double break_hz
 /* GrandPianoProperties.aftersound: (level, its decay rate) */
 void nv_aftersound(const VoiceSnap *v, double frequency, double decay_rate, double *out)
 {
+    if (v->kind == 2) {                         /* SynthProperties: one stage */
+        out[0] = 0.0;
+        out[1] = decay_rate;
+        return;
+    }
     if (v->kind == 1 && v->snare) {             /* AcousticSnareProperties: the shell's, on the head */
         double lo = v->fund_dbs < v->head_dbs ? v->fund_dbs : v->head_dbs;    /* min(fund, head) */
         if (v->slow_share <= 0.0 || decay_rate < 0.5 * lo - 1e-9) {
@@ -533,9 +556,9 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
     o->left_incidence = e[0]; o->right_incidence = e[1];
     o->left_hrtf_delay = e[2]; o->right_hrtf_delay = e[3];
     o->attack_time = c->attack_time;
-    if (c->kind == 1) {
-        /* a kit drum: SynthProperties' constructor and no more; its B the
-           class's coefficient (no law: inharmonicity_dynamic is off) */
+    if (c->kind != 0) {
+        /* a kit drum, a mode set: SynthProperties' constructor and no more;
+           its B the class's coefficient (no law: inharmonicity_dynamic off) */
         o->B = o->inharmonicity_coefficient;
         return;
     }

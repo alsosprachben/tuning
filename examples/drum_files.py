@@ -7,7 +7,7 @@ N random General MIDI files (default 12), 12-20 seconds each, written for
 examples/nvrender_check.py to render both ways:
 one or two piano channels (programs 0-3) and channel 10 playing the kit
 drums native/voice.c has (native.kits: the kicks, the snares, the side
-stick and the toms) in a set whose keys they are (Standard, and sets 1, 8
+stick, the toms, the hand clap and the finger snap) in a set whose keys they are (Standard, and sets 1, 8
 and 32, which keep those drums; or a program kit_for_program sends to
 Standard). What the drum note setup has to
 get right, all of it in the mix: each key's pitch and seat in its set; the
@@ -20,7 +20,7 @@ import os
 import random
 import sys
 
-KEYS = (35, 36, 37, 38, 40, 41, 43, 45, 47, 48, 50)
+KEYS = (26, 35, 36, 37, 38, 39, 40, 41, 43, 45, 47, 48, 50)
 SETS = (0, 1, 8, 32, 3, 20, 44, 70)
 
 

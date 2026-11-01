@@ -91,6 +91,11 @@ typedef struct {
     double fund_dbs, head_dbs, wire_jitter, head_jitter;
     int rim_from;
     double rim_dbs;
+    /* kind 2 (a measured mode set on SynthProperties: modes[i] = (ratio,
+       linear gain, -)): a key's decay retargeted (percussion_map's _nNN
+       classes: the decay scaled so its first mode's is decay_target) */
+    int retarget;
+    double decay_target;
 } VoiceSnap;
 
 typedef struct {
@@ -126,7 +131,8 @@ typedef struct {
     double attack_time, hammer_soft_s, hammer_hard_s;
     double level_hz[32], level_db[32];
     /* 0 a grand's constructor (the key's strings and pitch error, the B law
-       above); 1 a kit drum's (SynthProperties' alone: B the class's own) */
+       above); 1 a kit drum's (SynthProperties' alone: B the class's own);
+       2 a measured mode set's (SynthProperties' alone too: the clap) */
     int kind;
 } VoiceInit;
 
@@ -230,6 +236,10 @@ typedef struct {
     // spread (strike_phase_spread): the tone's (a snare's wires)
     int pjit;
     double sps;
+    // the strike fired strike_flam times (n_flam > 1: an ensemble clap), each
+    // within flam_s and flam_db under the loudest
+    int n_flam;
+    double flam_s, flam_db;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.

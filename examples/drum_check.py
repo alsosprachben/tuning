@@ -47,7 +47,7 @@ def main(argv):
         if a != b and not (a != a and b != b):
             bad.append((what, a, b))
 
-    keys = [k for k in range(27, 88)
+    keys = [k for k in range(128)
             if PCM.percussion_for_note(k, 0) and N.kit_drum(PCM.percussion_for_note(k, 0)[1])]
     for k in range(n_notes):
         key = keys[k % len(keys)]

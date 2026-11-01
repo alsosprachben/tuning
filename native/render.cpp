@@ -123,11 +123,14 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
     memset(R, 0, sizeof(float) * N);
     bool has_dm = DM != nullptr;
     // _xdec_rows: falling more than XDEC_NEPERS a block, no sustain, no gate,
-    // and (with tracks) no track -- on the final float32 columns, numpy's float32
+    // not riding a row where the table has levels (BL: a fader's), and (with
+    // tracks) no track -- on the final float32 columns, numpy's float32
     auto xdec = [&](long long r) {
         float lr = f[F_logr][r];
         bool m = f[F_sus][r] <= 0 && f[F_aft][r] <= 0 && (float)(lr * (float)BLK) > (float)(xdec_nepers * SR)
                  && ii[I_gr][r] < 0;
+        if (BL)
+            m = m && ii[I_br][r] < 0;
         if (has_dm)
             m = m && ii[I_dk][r] < 0;
         return m;
