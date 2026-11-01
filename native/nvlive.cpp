@@ -66,7 +66,11 @@
 // THE RPNs as live reads them: the bend range, fine and coarse tuning (the
 // notes sounding moved), the mod range; CC121; sostenuto (CC66).
 //
-// Not yet: CC120/123, the other routes, the TUI.
+// ALL SOUND OFF, ALL NOTES OFF and the channel modes (CC120, 123, 124-127):
+// MONO (126) one voice a channel, handed over to each new key and back to
+// the last one held, POLY (127) as many as are played.
+//
+// Not yet: portamento, the other routes, the TUI.
 
 #include <algorithm>
 #include <atomic>

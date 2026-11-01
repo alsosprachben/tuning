@@ -46,7 +46,9 @@ limiter's knee (live's 0.70), low to make it work.
 selects, the null; data entry and increment), NRPN selects, CC121 and the
 sostenuto pedal among the controls.
 --modes: All Sound Off (CC120), All Notes Off (CC123) and the channel-mode
-messages that send them (124, 125, 127; not 126, live's mono, not here).
+messages that send them (124-127: MONO on and off among them, so the
+channels play in mono mode for stretches -- a voice handed over, and back).
+
 --wheels: the pitch wheel (live._repitch, the notes sounding moved and a
 note struck under it joining) and the mod wheel (a honky-tonk's detune).
 --shed=N: every N blocks the governor's last resort on both sides at the
@@ -111,7 +113,7 @@ def main(argv):
         nv.register(pt._voice_class(60), BR.tuning_table(pt.tuner), 48000.0, getattr(BR, 'REGISTER_SCALE', 1.0),
                     [lv._reg_voice(part, n) for n in range(128)])
     held = set()
-    ntr = dmb = nshed = nlim = ntune = nsost = nmode = 0
+    ntr = dmb = nshed = nlim = ntune = nsost = nmode = nmono = 0
     pk = int(opt["pedal-key"]) if "pedal-key" in opt else None
     kp = None
     if pk is not None:
@@ -217,8 +219,8 @@ def main(argv):
                 else:
                     msgs.append(M("control_change", channel=ch, control=66, value=rng.choice((0, 127))))
             elif "modes" in opt and rng.random() < 0.25:
-                msgs.append(M("control_change", channel=ch, control=rng.choice((120, 123, 123, 124, 125, 127)),
-                              value=0))
+                msgs.append(M("control_change", channel=ch,
+                              control=rng.choice((120, 123, 123, 124, 125, 126, 126, 127)), value=0))
                 nmode += 1
             elif "cc91" in opt and rng.random() < 0.3:
                 msgs.append(M("control_change", channel=ch, control=91, value=rng.randint(0, 127)))
@@ -266,6 +268,7 @@ def main(argv):
         ntune += any(v not in (None, 2.0) for v in lv.brange.values()) or any(lv.fine.values()) \
             or any(lv.coarse.values())
         nsost += any(lv.sost.values())
+        nmono += bool(lv.mono)
         dmb += bool(lv.damp_tracks)
         if b % every == every - 1 or b == blocks - 1:
             if compare(b):
@@ -288,7 +291,7 @@ def main(argv):
             int(np.sum(lv.slab.busy)) - sounding, lv.reg_dropped, nv.reg_dropped(), lv.errors,
             lv.last_error or ""))
     if "modes" in opt:
-        print("  modes: %d All Sound/Notes Off and mode messages" % nmode)
+        print("  modes: %d All Sound/Notes Off and mode messages; %d blocks in mono" % (nmode, nmono))
     if "rpn" in opt:
         print("  RPNs: %d blocks with a range or tuning off GM's, %d with sostenuto holding keys" % (ntune, nsost))
     if opt.get("room"):

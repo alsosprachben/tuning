@@ -414,7 +414,7 @@ struct Slab {
 // what _one_core, _note_on and _note_off do for a piano, block by block as
 // live's callback runs them: the block's events at its start, then the sweep
 // (a key neither down nor held released), then the reap. Not here yet: the
-// CC71-78, mono, the other voices. THE RPNs (bend range, fine and coarse
+// CC71-78, portamento, the other voices. MONO MODE (CC126/127), THE RPNs (bend range, fine and coarse
 // tuning, the mod range), CC120, CC121, CC123, the channel-mode messages and
 // SOSTENUTO as live's. THE PITCH WHEEL
 // (live._repitch: GM's 2-semitone range) and the mod wheel, which on a piano
@@ -579,6 +579,11 @@ struct Piano {
     double mod_cents = 35.0;                        // live.mod_cents (the session's)
     // SOSTENUTO (CC66): the keys down when it went down, held (live.sost)
     std::map<int, std::set<int>> sost;
+    // MONO MODE (CC126; live.mono): one voice a channel -- its held keys in
+    // press order (note, velocity) and the one sounding (-1 none)
+    bool mono[16] = {};
+    std::vector<std::pair<int, int>> mono_stack[16];
+    int mono_cur[16] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     // THE MOD WHEEL on a honky-tonk (live's 'detune' role): which pre-warmed
     // detune new notes take, the nearest of DETUNE_STEPS (a piano's wheel
     // does nothing else: a hammered string takes no vibrato)
@@ -625,11 +630,48 @@ struct Piano {
         return out;
     }
 
+    // a key down (live's note-on, before its parts): the key held, and in
+    // MONO the voice handed over -- the note sounding cut, the new key on top
+    // of the held stack
     void note_on(int ch, int note, int vel, long long n0)
     {
-        key_vel[std::make_pair(ch, note)] = vel;
         down.insert(std::make_pair(ch, note));
         pedalled.erase(std::make_pair(ch, note));
+        if (mono[ch]) {
+            std::vector<std::pair<int, int>> &st = mono_stack[ch];
+            std::vector<std::pair<int, int>> keep;
+            for (auto &x : st)
+                if (x.first != note)
+                    keep.push_back(x);
+            keep.push_back(std::make_pair(note, vel));
+            st.swap(keep);
+            int prev = mono_cur[ch];
+            if (prev >= 0 && prev != note)
+                mono_cut(ch, prev, n0);
+            mono_cur[ch] = note;
+        }
+        strike(ch, note, vel, n0);
+    }
+
+    // live._mono_cut: the voice taken -- this note stopped now over the
+    // steal-fade, pedal or no pedal (its key has not come up)
+    void mono_cut(int ch, int note, long long n0)
+    {
+        float fade = (float)(retrigger * rate);
+        for (auto &kv : S.live)
+            if (std::get<1>(kv.first) == ch && std::get<2>(kv.first) == note)
+                for (long q : kv.second)
+                    if (fade < S.f4[F4_re][q])
+                        S.f4[F4_re][q] = fade;
+        pedalled.erase(std::make_pair(ch, note));
+        let_go(ch, note, n0);
+    }
+
+    // the part's note (live._note_on): stamped, panned, softened, pressed,
+    // bent, its strings struck
+    void strike(int ch, int note, int vel, long long n0)
+    {
+        key_vel[std::make_pair(ch, note)] = vel;
         if (note < 0 || note > 127)
             return;
         const nv::live::Template *T = nv_tcache_lookup(cache, note, bucket(vel), speed);
@@ -669,14 +711,42 @@ struct Piano {
             reg_strike(ch, note, n0, *T, S.last_slots);
     }
 
+    // a key up (live's note-off): in MONO, the sounding key's voice back to
+    // the last key still held (struck again), or nothing if the voice had
+    // gone on already; then, as ever, the damper or the release
     void note_off(int ch, int note, long long n0)
     {
         down.erase(std::make_pair(ch, note));
+        if (mono[ch]) {
+            std::vector<std::pair<int, int>> &st = mono_stack[ch];
+            for (size_t i = 0; i < st.size();)
+                if (st[i].first == note)
+                    st.erase(st.begin() + i);
+                else
+                    i++;
+            if (mono_cur[ch] != note)
+                return;                             // already handed over: nothing sounds for it
+            if (!st.empty()) {
+                std::pair<int, int> back = st.back();
+                mono_cut(ch, note, n0);
+                mono_cur[ch] = back.first;
+                strike(ch, back.first, back.second, n0);
+                return;
+            }
+            mono_cur[ch] = -1;                      // last key up: an ordinary release
+        }
         auto sq = sost.find(ch);
         if ((pedal_holds(ch, note) || (sq != sost.end() && sq->second.count(note))) && damper_pedal) {
             pedalled.insert(std::make_pair(ch, note));
             return;
         }
+        let_go(ch, note, n0);
+    }
+
+    // the part's note let go (live._note_off): released, its forced register
+    // rows with it, and its damper told
+    void let_go(int ch, int note, long long n0)
+    {
         S.release(Key(pid, ch, note, -1), n0);
         if (reg_on) {
             S.release(Key(pid, ch, note, REG_FORCED), n0);
@@ -1028,11 +1098,17 @@ struct Piano {
             all_notes_off(ch, n0);
         } else if (cc >= 124 && cc <= 127) {
             // CHANNEL MODE, as live sends it: all four are All Notes Off, MONO
-            // and POLY All Sound Off first (live's mono mode is not here: a
-            // CC126 leaves the piano as poly as a CC127 does)
+            // and POLY All Sound Off first; MONO (126) one voice on the
+            // channel, POLY (127) as many as it plays
             if (cc >= 126)
                 all_sound_off(ch, n0);
             all_notes_off(ch, n0);
+            mono_stack[ch].clear();
+            mono_cur[ch] = -1;
+            if (cc == 126)
+                mono[ch] = true;
+            else if (cc == 127)
+                mono[ch] = false;
         } else if (cc == 1 && detune_wheel) {
             static const int steps[3] = {0, 64, 127};       // live.DETUNE_STEPS: min(), the first of a tie
             int best = steps[0];
