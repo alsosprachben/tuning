@@ -14,6 +14,7 @@
 // contact's, grain's or stroke's offsets, a catch's own end, the taps, the
 // Moog's rows, Leslie, filters and the damper tracks.
 
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <cstdint>
@@ -58,7 +59,7 @@ static const char *F4N[] = {"gb", "gt", "gc", "vdl"};
 static const char *I8[] = {"non", "noff"};
 static const char *I4[] = {"gr", "cr", "br", "pl", "fx", "mk"};
 enum { NF8 = 6, NF4 = 27, NF4N = 4, NI8 = 2, NI4 = 6 };
-enum { F4_aL = 0, F4_aR = 1, F4_nf = 2, F4_re = 4, F4_cbw = 15, F4_vd = 19, F4_vr = 20, F4_delL = 22, F4_delR = 23, F4_rdl = 25 };
+enum { F4_aL = 0, F4_aR = 1, F4_nf = 2, F4_re = 4, F4_logr = 6, F4_logrA = 7, F4_aft = 8, F4_sus = 9, F4_cbw = 15, F4_vd = 19, F4_vr = 20, F4_delL = 22, F4_delR = 23, F4_rdl = 25 };
 enum { F8_om = 0, F8_p0 = 1, F8_p0R = 2, F8_fmw = 3 };
 enum { I4_gr = 0, I4_cr = 1, I4_br = 2, I4_fx = 4 };
 
@@ -99,6 +100,7 @@ struct Slab {
     std::vector<std::vector<int32_t>> i4;
     std::vector<float> sw, aL0, aR0, sg, sre, hrel, vbase, vrbase, vsc;
     std::vector<int32_t> dk, slot_ch;
+    std::vector<float> dg;                 // a damped row's weight (damper.weight)
     std::vector<float> aLp, aRp;            // pressure's columns: none on a piano, still the kernel's
     std::vector<char> busy;
     std::deque<long> free;
@@ -130,6 +132,7 @@ struct Slab {
         hrel.assign(cap, 1.0f); vbase.assign(cap, 0.0f); vsc.assign(cap, 1.0f);
         vrbase.assign(cap, 1.0f * 5.5f);
         dk.assign(cap, -1); slot_ch.assign(cap, -1);
+        dg.assign(cap, 0.0f);
         aLp.assign(cap, 0.0f); aRp.assign(cap, 0.0f);
         busy.assign(cap, 0);
         for (long i = 0; i < cap; i++)
@@ -375,8 +378,10 @@ struct Slab {
 // what _one_core, _note_on and _note_off do for a piano, block by block as
 // live's callback runs them: the block's events at its start, then the sweep
 // (a key neither down nor held released), then the reap. Not here yet: the
-// pitch wheel, modulation, CC71-78, pressure, sostenuto, half-pedal damper
-// tracks, mono, the other voices. THE REGISTER (live's _reg_*), when given
+// pitch wheel, modulation, CC71-78, pressure, sostenuto, mono, the other
+// voices. THE DAMPERS IN BETWEEN (live._damp_block), when given damper.py's
+// numbers (nv_lp_damper): a pedalled key in the band is taken down by its
+// level through a damper track the kernel reads (synth_voice_damp). THE REGISTER (live's _reg_*), when given
 // one (nv_lp_register): its worker's jobs answered in step -- each as it is
 // sent, as a worker that kept up would, so a reply is placed at the first
 // pump after its job (live's own worker answers a few blocks later, as it
@@ -399,9 +404,14 @@ struct Piano {
     bool cgain_set[16];
     std::set<std::pair<int, int>> down, pedalled;
     std::vector<Ev> events;
+    std::map<std::pair<int, int>, int> key_vel;     // (ch, note) -> the strike's velocity
 
     Piano(long cap) : S(cap)
     {
+        for (int t = 0; t < DAMP_TRACKS; t++) {
+            free_tracks.push_back(t);
+            DMO[t] = 2 * t;
+        }
         for (int c = 0; c < 16; c++) {
             vol[c] = 100; expr[c] = 127; cpan[c] = 64; pedal_v[c] = 0;     // GM's power-on
             soft[c] = false; cgain[c] = 1.0; cgain_set[c] = false;
@@ -433,6 +443,7 @@ struct Piano {
 
     void note_on(int ch, int note, int vel, long long n0)
     {
+        key_vel[std::make_pair(ch, note)] = vel;
         down.insert(std::make_pair(ch, note));
         pedalled.erase(std::make_pair(ch, note));
         if (note < 0 || note > 127)
@@ -525,6 +536,156 @@ struct Piano {
         } else if (cc == 67) {
             soft[ch] = v >= 64;
         }
+    }
+
+    // THE DAMPERS IN BETWEEN (live._damp_block, _damp_open, _damp_mark;
+    // damper.py): a pedalled note whose key's contact is in the band takes a
+    // TRACK -- its damping so far at the block's two edges, DM -- its rows
+    // marked with it (the slab's dk, and dg their weight). A track stays with
+    // its note while any row of it sounds. Track numbers are handed out in
+    // `pedalled`'s order, which is not live's (a Python set's): the same
+    // tracks under other numbers, the same sound.
+    static const int DAMP_TRACKS = 256;     // live.DAMP_TRACKS
+    bool dmp_on = false;
+    double dmp_full = 0.0, dmp_res = 0.0, dmp_knee = 0.0, dmp_beta = 0.0, dmp_ln = 0.0;
+    struct DTrack {
+        int t;
+        double dc, f0, non, lr, lra, af, su, vdb;
+        std::set<Key> keys;
+        std::vector<long> slots;            // sorted (np.union1d)
+    };
+    std::vector<std::pair<std::pair<int, int>, DTrack>> dtracks;   // live's damp_tracks, in its order
+    std::vector<int> free_tracks;
+    std::vector<float> DM = std::vector<float>(2 * DAMP_TRACKS, 0.0f);
+    std::vector<long> DMO = std::vector<long>(DAMP_TRACKS, 0), DMB = std::vector<long>(DAMP_TRACKS, 0),
+                      DMN = std::vector<long>(DAMP_TRACKS, 2);
+
+    long dtrack_find(int ch, int note) const
+    {
+        for (size_t i = 0; i < dtracks.size(); i++)
+            if (dtracks[i].first == std::make_pair(ch, note))
+                return (long)i;
+        return -1;
+    }
+
+    void damp_block(long long n0, long long frames)
+    {
+        if (!dmp_on)
+            return;
+        bool any = !dtracks.empty();
+        for (int c = 0; c < 16 && !any; c++)
+            any = pedal_v[c] > 0 && pedal_v[c] < 127;
+        if (!any)
+            return;
+        double dt = frames / rate;
+        for (const auto &cn : pedalled) {
+            int ch = cn.first, note = cn.second;
+            double c = nv_damper_contact(pedal_v[ch], note, 128);
+            std::vector<Key> ks;
+            for (auto &kv : S.live)
+                if (std::get<1>(kv.first) == ch && std::get<2>(kv.first) == note)
+                    ks.push_back(kv.first);
+            for (const Key &k : ks) {
+                long i = dtrack_find(ch, note);
+                if (i < 0) {
+                    if (!(0.0 < c && c < 1.0) || free_tracks.empty())
+                        continue;
+                    i = damp_open(ch, note);
+                    if (i < 0)
+                        continue;
+                }
+                if (!dtracks[i].second.keys.count(k))
+                    damp_mark(dtracks[i].second, k);
+            }
+        }
+        for (size_t i = 0; i < dtracks.size();) {
+            DTrack &st = dtracks[i].second;
+            std::vector<long> alive;
+            for (long q : st.slots)
+                if (S.busy[q] && S.dk[q] == st.t)
+                    alive.push_back(q);
+            if (alive.empty()) {
+                free_tracks.push_back(st.t);
+                dtracks.erase(dtracks.begin() + i);
+                continue;
+            }
+            st.slots = alive;
+            int ch = dtracks[i].first.first, note = dtracks[i].first.second;
+            double c = pedalled.count(dtracks[i].first) ? nv_damper_contact(pedal_v[ch], note, 128) : 0.0;
+            double d0 = st.dc;
+            if (0.0 < c && c < 1.0) {
+                double x = std::max(((double)n0 - st.non) / rate, 0.0);
+                double dc = st.su + (1.0 - st.su) * ((1.0 - st.af) * exp(-st.lr * x) + st.af * exp(-st.lra * x));
+                double lvl = st.vdb + 20.0 * log10(dc >= 1e-12 ? dc : 1e-12) - d0;
+                double thr = -dmp_knee * c / (1.0 - c);         // damper.threshold_db
+                double r = dmp_full * c;                        // damper.rate_db_s
+                st.dc = d0 + (lvl > thr ? r : r * dmp_res) * dt;
+            }
+            DM[2 * st.t] = (float)d0;
+            DM[2 * st.t + 1] = (float)st.dc;
+            i++;
+        }
+    }
+
+    // a track for this pressed-and-pedalled key: its level model from its
+    // fundamental's decay and the strike's velocity (live._damp_open)
+    long damp_open(int ch, int note)
+    {
+        std::vector<long> rows;
+        std::vector<Key> ks;
+        for (auto &kv : S.live)
+            if (std::get<1>(kv.first) == ch && std::get<2>(kv.first) == note) {
+                ks.push_back(kv.first);
+                rows.insert(rows.end(), kv.second.begin(), kv.second.end());
+            }
+        if (rows.empty())
+            return -1;
+        double f0 = 440.0 * pow(2.0, (note - 69) / 12.0);
+        long j = rows[0];
+        double best = 0.0;
+        for (size_t q = 0; q < rows.size(); q++) {
+            double nf = (double)S.f4[F4_nf][rows[q]];
+            double d = fabs(log((nf >= 1e-3 ? nf : 1e-3) / f0));
+            if (q == 0 || d < best) {
+                best = d;
+                j = rows[q];
+            }
+        }
+        DTrack st;
+        st.t = free_tracks.back();
+        free_tracks.pop_back();
+        st.dc = 0.0;
+        st.f0 = f0;
+        st.non = (double)S.i8[0][j];
+        st.lr = S.f4[F4_logr][j];
+        st.lra = S.f4[F4_logrA][j];
+        st.af = S.f4[F4_aft][j];
+        st.su = S.f4[F4_sus][j];
+        auto kv = key_vel.find(std::make_pair(ch, note));
+        int vel = kv == key_vel.end() ? 100 : kv->second;
+        st.vdb = 40.0 * log10((vel > 1 ? vel : 1) / 127.0);
+        DM[2 * st.t] = DM[2 * st.t + 1] = 0.0f;
+        dtracks.emplace_back(std::make_pair(ch, note), st);
+        long i = (long)dtracks.size() - 1;
+        for (const Key &k : ks)
+            damp_mark(dtracks[i].second, k);
+        return i;
+    }
+
+    // this slab key's rows onto the track: its index, each row's weight
+    void damp_mark(DTrack &st, const Key &k)
+    {
+        st.keys.insert(k);
+        long li = S.live_find(k);
+        if (li < 0 || S.live[li].second.empty())
+            return;
+        for (long q : S.live[li].second) {
+            S.dk[q] = st.t;
+            double x = std::max((double)S.f4[F4_nf][q], 1e-6) / std::max(st.f0, 1e-6);
+            S.dg[q] = (float)(dmp_ln * pow(x, dmp_beta));     // damper.weight
+            st.slots.insert(std::lower_bound(st.slots.begin(), st.slots.end(), q), q);
+        }
+        st.slots.erase(std::unique(st.slots.begin(), st.slots.end()), st.slots.end());
     }
 
     // THE FREE-STRING REGISTER, LIVE (live._reg_strike, _reg_damper, _reg_felt,
@@ -1086,7 +1247,8 @@ struct Piano {
     // LIVE'S SIDE TABLES (live.Slab's, at rest: a piano never moves them)
     // and its render over the slab (Renderer.render, one thread): every slot
     // from 0 past the last busy one through synth_voice, the fast bursts
-    // apart through synth_voice_xdec (synth_partials' _xdec_rows)
+    // apart through synth_voice_xdec (synth_partials' _xdec_rows), and the
+    // rows on a damper track after them through synth_voice_damp (sd)
     std::vector<float> G = std::vector<float>(1, 1.0f), Sx = std::vector<float>(1, 1.0f);
     std::vector<float> BRt = std::vector<float>(65, 1.0f), BLt = std::vector<float>(130, 1.0f);
     std::vector<double> BCt = std::vector<double>(65, 0.0);
@@ -1106,8 +1268,8 @@ struct Piano {
         }
     }
 
-    void render(long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx, long long blk,
-                double master_gain)
+    void render(long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx, void *sd,
+                long long blk, double master_gain)
     {
         for (long k = 0; k < frames; k++) {
             L[k] = 0.0f;
@@ -1137,10 +1299,18 @@ struct Piano {
             return S.f4[9][q] <= 0 && S.f4[8][q] <= 0 && (float)(lr * (float)blk) > (float)(xdec_nepers * rate)
                    && S.i4[0][q] < 0 && S.i4[2][q] < 0 && S.dk[q] < 0 && S.i4[4][q] < 0;
         };
-        std::vector<long> xr, keep;
+        std::vector<long> xr, keep, dm;
         for (long q = 0; q < hi; q++)
-            (fast(q) ? xr : keep).push_back(q);
-        auto call = [&](void *fn, const long *rows, long n, bool whole) {
+            (S.dk[q] >= 0 && sd ? dm : fast(q) ? xr : keep).push_back(q);
+#define VOICE_ARGS L, R, (long)n0, frames, (int)blk, 1, (int)n, gd(S.f8[0], 0), gd(S.f8[1], 1), gd(S.f8[2], 2), \
+    gf(F4[0]), gf(F4[1]), gf(F4[2]), gl(S.i8[0], 0), gl(S.i8[1], 1), gf(F4[3]), gf(F4[4]), gf(F4[5]), gf(F4[6]), \
+    gf(F4[7]), gf(F4[8]), gf(F4[9]), gf(F4[10]), gf(F4[11]), gf(F4[12]), gf(F4[13]), gf(F4[14]), gf(F4[15]), \
+    gf(F4[16]), gf(F4[17]), gf(F4[18]), gf(F4N[0]), gf(F4N[1]), gf(F4N[2]), gf(F4[19]), gf(F4[20]), gf(F4[21]), \
+    gf(F4N[3]), gf(F4[22]), gf(F4[23]), gi(S.i4[0]), gi(S.i4[1]), G.data(), Sx.data(), gi(S.i4[2]), BRt.data(), \
+    BCt.data(), BLt.data(), gi(S.i4[4]), FT.data(), KN.data(), 2, kb0, gf(S.aLp), gf(S.aRp), gi(S.i4[5]), \
+    MPI.data(), MPC.data(), MPR.data(), MKI.data(), MPK.data(), gd(S.f8[3], 3), gd(S.f8[4], 4), gd(S.f8[5], 5), \
+    sh[0], sh[1], sh[2], sh[3], chunk, SL ? gf(S.sw) : nullptr, SL, SR
+        auto call = [&](void *fn, const long *rows, long n, bool whole, bool damp) {
             if (!n)
                 return;
             // columns gathered (a set of rows), or the slab's own (the whole range)
@@ -1169,23 +1339,28 @@ struct Piano {
                 v.resize(n); for (long q = 0; q < n; q++) v[q] = c[rows[q]]; return (const int *)v.data();
             };
             const std::vector<float> *F4 = S.f4.data(), *F4N = S.f4n.data();
-            ((nv_voice_fn)fn)(L, R, (long)n0, frames, (int)blk, 1, (int)n, gd(S.f8[0], 0), gd(S.f8[1], 1),
-                              gd(S.f8[2], 2), gf(F4[0]), gf(F4[1]), gf(F4[2]), gl(S.i8[0], 0), gl(S.i8[1], 1),
-                              gf(F4[3]), gf(F4[4]), gf(F4[5]), gf(F4[6]), gf(F4[7]), gf(F4[8]), gf(F4[9]),
-                              gf(F4[10]), gf(F4[11]), gf(F4[12]), gf(F4[13]), gf(F4[14]), gf(F4[15]), gf(F4[16]),
-                              gf(F4[17]), gf(F4[18]), gf(F4N[0]), gf(F4N[1]), gf(F4N[2]), gf(F4[19]), gf(F4[20]),
-                              gf(F4[21]), gf(F4N[3]), gf(F4[22]), gf(F4[23]), gi(S.i4[0]), gi(S.i4[1]), G.data(),
-                              Sx.data(), gi(S.i4[2]), BRt.data(), BCt.data(), BLt.data(), gi(S.i4[4]), FT.data(),
-                              KN.data(), 2, kb0, gf(S.aLp), gf(S.aRp), gi(S.i4[5]), MPI.data(), MPC.data(),
-                              MPR.data(), MKI.data(), MPK.data(), gd(S.f8[3], 3), gd(S.f8[4], 4), gd(S.f8[5], 5),
-                              sh[0], sh[1], sh[2], sh[3], chunk, SL ? gf(S.sw) : nullptr, SL, SR);
+            if (damp) {
+                std::vector<int> &dkr = i[ik++];
+                dkr.resize(n); for (long q = 0; q < n; q++) dkr[q] = S.dk[rows[q]];
+                std::vector<float> &dgr = f[fk++];
+                dgr.resize(n); for (long q = 0; q < n; q++) dgr[q] = S.dg[rows[q]];
+                // synth_voice_damp: synth_voice's arguments, then the tracks
+                ((nv_damp_fn)fn)(VOICE_ARGS, dkr.data(), dgr.data(), DM.data(), DMO.data(), DMB.data(), DMN.data());
+            } else {
+                ((nv_voice_fn)fn)(VOICE_ARGS);
+            }
         };
-        if (!xr.empty()) {
-            call(sv, keep.data(), (long)keep.size(), false);
-            call(sx, xr.data(), (long)xr.size(), false);
+        if (!dm.empty()) {
+            call(sv, keep.data(), (long)keep.size(), false, false);
+            call(sx, xr.data(), (long)xr.size(), false, false);
+            call(sd, dm.data(), (long)dm.size(), false, true);
+        } else if (!xr.empty()) {
+            call(sv, keep.data(), (long)keep.size(), false, false);
+            call(sx, xr.data(), (long)xr.size(), false, false);
         } else {
-            call(sv, nullptr, hi, true);
+            call(sv, nullptr, hi, true, false);
         }
+#undef VOICE_ARGS
         // the master gain (float32, as numpy multiplies by a Python float) and
         // the clip; the room's send scaled, not clipped
         float g = (float)master_gain;
@@ -1224,6 +1399,7 @@ struct Piano {
         }
         for (auto &k : sw)
             S.release(k, n0);
+        damp_block(n0, blk);
         S.reap(n0, blk);
     }
 };
@@ -1286,11 +1462,28 @@ void nv_lp_event(void *h, int type, int ch, int a, int b)
 void nv_lp_block(void *h, long long n0, long long blk) { ((nv::slab::Piano *)h)->block(n0, blk); }
 
 // Renderer.render's block: L, R (and with SL the room's send pair) over
-// [n0, n0 + frames), through synth_voice (sv) and synth_voice_xdec (sx)
+// [n0, n0 + frames), through synth_voice (sv), synth_voice_xdec (sx) and
+// synth_voice_damp (sd; NULL: no row is drawn by a damper track)
 void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
-                  long long blk, double master_gain)
+                  void *sd, long long blk, double master_gain)
 {
-    ((nv::slab::Piano *)h)->render(n0, frames, L, R, SL, SR, sv, sx, blk, master_gain);
+    ((nv::slab::Piano *)h)->render(n0, frames, L, R, SL, SR, sv, sx, sd, blk, master_gain);
+}
+
+// the damper tracks' values (DM: 2 x 256 floats)
+void nv_lp_dm(void *h, float *out)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    memcpy(out, P->DM.data(), sizeof(float) * P->DM.size());
+}
+
+// The dampers in between (live._damp_block): damper.py's FULL_DB_S,
+// RESIDUAL, KNEE_DB, BETA and LN10_20
+void nv_lp_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    P->dmp_on = true;
+    P->dmp_full = full_db_s; P->dmp_res = residual; P->dmp_knee = knee_db; P->dmp_beta = beta; P->dmp_ln = ln10_20;
 }
 
 // the part's slab, for nv_slab_col and nv_slab_free_list
@@ -1326,7 +1519,8 @@ void nv_slab_release(void *h, long long part, long long ch, long long note, long
 void nv_slab_reap(void *h, long long n, long long blk) { ((nv::slab::Slab *)h)->reap(n, blk); }
 
 // a column's values over the capacity: group 0 F8, 1 F4, 2 F4_NOTE, 3 I8, 4 I4;
-// 5 the bookkeeping (index: sw aL0 aR0 sg sre hrel vbase vrbase vsc), 6 dk/slot_ch/busy
+// 5 the bookkeeping (index: sw aL0 aR0 sg sre hrel vbase vrbase vsc), 6 dk/slot_ch/busy,
+// 7 aLp/aRp, 8 dg (index 3)
 void nv_slab_col(void *h, int group, int index, void *out)
 {
     nv::slab::Slab *S = (nv::slab::Slab *)h;
@@ -1343,6 +1537,9 @@ void nv_slab_col(void *h, int group, int index, void *out)
         memcpy(out, v[index]->data(), sizeof(float) * n);
         break;
     }
+    case 8:
+        memcpy(out, S->dg.data(), sizeof(float) * n);
+        break;
     case 7:
         memcpy(out, (index == 0 ? S->aLp : S->aRp).data(), sizeof(float) * n);
         break;

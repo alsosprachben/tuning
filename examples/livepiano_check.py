@@ -2,6 +2,7 @@
 """Does the native piano part play live MIDI as live.Live does?
 
     python3 examples/livepiano_check.py [BLOCKS] [--program=N] [--seed=N] [--every=N] [--render] [--register]
+                                        [--half]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native piano part (native/slab.cpp: its template cache, its slab, live's
@@ -18,6 +19,10 @@ Renderer.render (and its room send, when on) against the native part's.
 worker answering each job as it is sent on both sides -- live's through
 register.LiveWorker in step with its callback, the native part's in
 native/livereg.cpp -- so a reply is placed at the first pump after its job.
+--half: the pedal at values through damper.py's band as well (ondine.mid's
+0/24/40/.../127), so half-pedalled keys take damper tracks (live._damp_block):
+the slabs' dk compared as which slots are on a track and that track's two
+values (DM), as a track's number is handed out in a set's order, and dg.
 """
 import os
 import random
@@ -60,6 +65,8 @@ def main(argv):
         nv.register(pt._voice_class(60), BR.tuning_table(pt.tuner), 48000.0, getattr(BR, 'REGISTER_SCALE', 1.0),
                     [lv._reg_voice(part, n) for n in range(128)])
     held = set()
+    ntr = dmb = 0
+    pedal = (0, 24, 40, 56, 72, 88, 104, 127) if "half" in opt else (0, 127)
     M = mido.Message
     dry = []
     if "render" in opt:
@@ -89,6 +96,17 @@ def main(argv):
             bad.append("busy")
         if list(S.free) != nv.slab.free_list():
             bad.append("the free queue")
+        dk, xk = np.asarray(S.a['dk']), nv.slab.col("dk")
+        if not np.array_equal(dk >= 0, xk >= 0):
+            bad.append("dk")
+        else:
+            on = np.flatnonzero((dk >= 0) & np.asarray(S.busy, bool))
+            ndm = nv.dm()
+            if not (np.array_equal(S.DM[2 * dk[on]], ndm[2 * xk[on]])
+                    and np.array_equal(S.DM[2 * dk[on] + 1], ndm[2 * xk[on] + 1])):
+                bad.append("DM")
+        if not np.array_equal(np.asarray(S.a['dg']), nv.slab.col("dg")):
+            bad.append("dg")
         return bad
 
     for b in range(blocks):
@@ -105,7 +123,7 @@ def main(argv):
                 held.discard((ch, note))
                 msgs.append(M("note_off", channel=ch, note=note, velocity=0))
             elif r < 0.9:
-                msgs.append(M("control_change", channel=ch, control=64, value=rng.choice((0, 127))))
+                msgs.append(M("control_change", channel=ch, control=64, value=rng.choice(pedal)))
             else:
                 cc = rng.choice((7, 11, 10, 67))
                 msgs.append(M("control_change", channel=ch, control=cc, value=rng.randint(0, 127)))
@@ -124,6 +142,8 @@ def main(argv):
                 rbad.append(b)
                 bad.append("render")
         log.append((b, n0, msgs))
+        ntr = max(ntr, len(lv.damp_tracks))
+        dmb += bool(lv.damp_tracks)
         if b % every == every - 1 or b == blocks - 1:
             if compare(b):
                 print("  block %d (sample %d) DIFFERS: %s" % (b, n0, " ".join(bad[:8])))
@@ -144,6 +164,8 @@ def main(argv):
         print("  register: %d rows placed, %d dropped (native %d); live's errors: %d %s" % (
             int(np.sum(lv.slab.busy)) - sounding, lv.reg_dropped, nv.reg_dropped(), lv.errors,
             lv.last_error or ""))
+    if "half" in opt:
+        print("  dampers: up to %d tracks at once, %d blocks with one" % (ntr, dmb))
     print("live piano: %d blocks, program %d, %s%s (%d slots sounding at the end)"
           % (b + 1, prog, "identical" if not bad else "differs",
              ", every block's render too" if "render" in opt and not rbad else "", sounding))

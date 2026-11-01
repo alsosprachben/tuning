@@ -273,7 +273,10 @@ def _load():
             ('nv_lp_block', None, [ctypes.c_void_p, LL, LL]),
             ('nv_lp_slab', ctypes.c_void_p, [ctypes.c_void_p]),
             ('nv_lp_render', None, [ctypes.c_void_p, LL, ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p,
-                                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, LL, C]),
+                                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                                    ctypes.c_void_p, LL, C]),
+            ('nv_lp_damper', None, [ctypes.c_void_p, C, C, C, C, C]),
+            ('nv_lp_dm', None, [ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_lreg_new', ctypes.c_void_p, [ctypes.c_void_p, I, C, C, C, C, C, I, C]),
             ('nv_lreg_strike', I, [ctypes.c_void_p, LL, I, C, I, ctypes.c_void_p, ctypes.c_void_p,
                                    ctypes.c_void_p, I]),
@@ -1266,7 +1269,7 @@ class Slab(object):
         for g, (cols, dt) in enumerate(((LIVE_F8, np.float64), (LIVE_F4, np.float32), (LIVE_F4N, np.float32),
                                         (("non", "noff"), np.int64), (LIVE_I4, np.int32),
                                         (SLAB_BOOK, np.float32), (("dk", "slot_ch", "busy"), np.int32),
-                                        (("aLp", "aRp"), np.float32))):
+                                        (("aLp", "aRp"), np.float32), ((None, None, None, "dg"), np.float32))):
             if name in cols:
                 out = np.empty(self.cap, dt)
                 self.d.nv_slab_col(self.p, g, cols.index(name), out.ctypes.data)
@@ -1388,6 +1391,9 @@ class LivePiano(object):
                                   float(headroom), pt, float(L._PAN_BETA))
         self.slab = Slab.__new__(Slab)
         self.slab.d, self.slab.cap, self.slab.p = self.d, capacity, self.d.nv_lp_slab(self.p)
+        import damper as DMP
+        self.d.nv_lp_damper(self.p, float(DMP.FULL_DB_S), float(DMP.RESIDUAL), float(DMP.KNEE_DB), float(DMP.BETA),
+                            float(DMP.LN10_20))
 
     def __del__(self):
         if getattr(self, 'p', None):
@@ -1410,6 +1416,13 @@ class LivePiano(object):
 
     def reg_dropped(self):
         return self.d.nv_lp_reg_dropped(self.p)
+
+    def dm(self):
+        """The damper tracks' values (live.Slab.DM): two a track."""
+        import numpy as np
+        out = np.zeros(2 * 256, np.float32)
+        self.d.nv_lp_dm(self.p, out.ctypes.data)
+        return out
 
     def event(self, msg):
         """A mido message for the next block (note-on, note-off, control change)."""
@@ -1434,7 +1447,8 @@ class LivePiano(object):
         fn = lambda f: ctypes.cast(f, ctypes.c_void_p).value       # noqa: E731
         self.d.nv_lp_render(self.p, int(n0), int(frames), L.ctypes.data, R.ctypes.data,
                             SL.ctypes.data if send else None, SR.ctypes.data if send else None,
-                            fn(BR.ensure_lib().synth_voice), fn(BR.ensure_xdec_lib().synth_voice_xdec), BR.BLK,
+                            fn(BR.ensure_lib().synth_voice), fn(BR.ensure_xdec_lib().synth_voice_xdec),
+                            fn(BR.ensure_damp_lib().synth_voice_damp), BR.BLK,
                             float(BR.T.master_gain))
         return (L, R, SL, SR) if send else (L, R)
 

@@ -24,9 +24,12 @@
 // jobs answered as they are sent (live's own worker, a process, answers a
 // few blocks later as it can).
 //
+// THE DAMPERS IN BETWEEN (live._damp_block): a pedal value in damper.py's
+// band takes a pedalled key down by its level, through synth_voice_damp.
+//
 // Not yet: live's governor (shedding partials when blocks run late), the
-// room and its send, half-pedal tracks, the wheel, modulation, pressure,
-// the routes (push-to-damp), the TUI.
+// room and its send, the wheel, modulation, pressure, the routes
+// (push-to-damp), the TUI.
 
 #include <atomic>
 #include <cmath>
@@ -61,7 +64,8 @@ void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int s
 void nv_lp_event(void *h, int type, int ch, int a, int b);
 void nv_lp_block(void *h, long long n0, long long blk);
 void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
-                  long long blk, double master_gain);
+                  void *sd, long long blk, double master_gain);
+void nv_lp_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20);
 void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
                     int top, double beta, int pedals, double rel, double full_db_s, double residual, double ln10_20,
                     long long blk, const int *reg_note);
@@ -281,9 +285,10 @@ int main(int argc, char **argv)
                        rg.d[5], rg.d[6], rg.d[7], rg.d[8], rg.i[2], rg.note);
         fprintf(stderr, "nvlive: the register: %d string modes\n", rg.M);
     }
-    void *fn[2];
-    const char *FN[2] = {"synth_voice", "synth_voice_xdec"};
-    for (int q = 0; q < 2; q++) {
+    nv_lp_damper(part, E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_KNEE], E.k[K_BETA], E.k[K_LN10_20]);
+    void *fn[3];
+    const char *FN[3] = {"synth_voice", "synth_voice_xdec", "synth_voice_damp"};
+    for (int q = 0; q < 3; q++) {
         void *h = dlopen(E.libs[q].c_str(), RTLD_NOW | RTLD_LOCAL);
         fn[q] = h ? dlsym(h, FN[q]) : nullptr;
         if (!fn[q]) {
@@ -330,7 +335,7 @@ int main(int argc, char **argv)
                     e++;
                 }
                 nv_lp_block(part, n0, BLK);
-                nv_lp_render(part, n0, (long)BLK, L, R, nullptr, nullptr, fn[0], fn[1], BLK, master);
+                nv_lp_render(part, n0, (long)BLK, L, R, nullptr, nullptr, fn[0], fn[1], fn[2], BLK, master);
                 for (long long k = 0; k < BLK; k++) {
                     out.push_back(L[k]);
                     out.push_back(R[k]);
@@ -399,7 +404,7 @@ int main(int argc, char **argv)
         for (const Midi &m : evs)
             nv_lp_event(part, m.type, m.ch, m.a, m.b);
         nv_lp_block(part, n0, BLK);
-        nv_lp_render(part, n0, (long)BLK, L, R, nullptr, nullptr, fn[0], fn[1], BLK, master);
+        nv_lp_render(part, n0, (long)BLK, L, R, nullptr, nullptr, fn[0], fn[1], fn[2], BLK, master);
         for (long long k = 0; k < BLK; k++) {
             buf[2 * k] = L[k];
             buf[2 * k + 1] = R[k];

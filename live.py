@@ -6248,7 +6248,8 @@ class Live:
         f0 = 440.0 * 2.0 ** ((kk[2] + (part.transpose if part else 0) - 69) / 12.0)
         a = sl.a
         nf = a['nf'][idx].astype(float)
-        j = idx[int(np.argmin(np.abs(np.log(np.maximum(nf, 1e-3) / f0))))]
+        # its fundamental: the row nearest f0 (libm's log, for the native port)
+        j = idx[int(np.argmin(np.abs(_RGM._xlog(np.maximum(nf, 1e-3) / f0))))]
         t = sl.free_tracks.pop()
         st = dict(t=t, dc=0.0, f0=f0, keys=set(), slots=np.zeros(0, np.int64),
                   non=float(a['non'][j]), lr=float(a['logr'][j]), lra=float(a['logrA'][j]),
