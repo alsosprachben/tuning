@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cmath>
 #include <cstring>
 #include <map>
 #include <utility>
@@ -172,8 +173,22 @@ struct LiveEv {
     int type, ch, a, b;
 };
 
+// THE PITCH STREAM (blockrender.parse's _pwseq, rpns and gmon): what moves a
+// channel's pitch ratio, each with its time and its message's place in the
+// file (ties at one tick go by it): kind 0 the wheel, 1 the bend range, 2
+// fine tuning (cents), 3 coarse (semitones), 5 the mod range, 6 and 7 MTS's
+// program and bank, 9 GM System On or GS Reset (channel -1: every channel)
+struct PitchEv {
+    int ch;
+    double t;
+    long seq;
+    int kind;
+    double v;
+};
+
 struct Parsed {
     std::vector<LiveEv> events;     // the notes and controllers in message order
+    std::vector<PitchEv> pitch;
     std::vector<Note> notes;
     std::vector<CCEv> ccs;      // in message order
     std::vector<PwEv> pws;
@@ -184,6 +199,7 @@ struct Parsed {
 
 static const int GM_DEFAULT_VOLUME = 100, GM_DEFAULT_EXPRESSION = 127, GM_DEFAULT_PAN = 64;
 static const int PERCUSSION_CHANNEL = 9, CC84_CANCEL = 128;
+static const double BEND_RANGE_SEMITONES = 2.0;     // tonelib's: GM's
 
 // blockrender.parse for a GM file: < 0 where it would take a path this does not have
 static int parse(const uint8_t *buf, long long len, Parsed &P)
@@ -228,8 +244,18 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     bool rxbank = true;
     std::map<std::pair<int, int>, std::vector<Note>> on;
     std::map<int, std::pair<int, int>> rsel;    // a channel's selected RPN, (MSB, LSB); absent: none
+    // each channel's RPNs as data entry left them (parse's _rrange, _rfmsb,
+    // _rfine, _rcoarse, _rmod, _rtp, _rtb; absent: power-on)
+    std::map<int, double> rrange, rfine, rcoarse, rmod;
+    std::map<int, int> rfmsb, rtp, rtb;
+    auto getd = [](const std::map<int, double> &m, int c, double d) {
+        auto it = m.find(c);
+        return it != m.end() ? it->second : d;
+    };
+    long seq = 0;
     bool seen_note = false;
     for (const Msg &m : msgs) {
+        seq++;
         double delta = m.tick > 0 ? m.tick * (tempo * 1e-6 / tpb) : 0.0;
         t += delta;
         if (m.status == 0xFF) {
@@ -251,6 +277,9 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 P.gs = 1;
             rxbank = lvl != 1;
             bmsb.clear(); blsb.clear(); drums.clear(); prog.clear(); ctrl.clear(); rsel.clear();
+            // BACK TO POWER-ON: every tuning the file set, from here (gmon)
+            P.pitch.push_back(PitchEv{-1, t, seq, 9, 0.0});
+            rfmsb.clear(); rrange.clear(); rmod.clear(); rfine.clear(); rcoarse.clear(); rtp.clear(); rtb.clear();
             continue;
         }
         int ch = m.status & 0x0F, kind = m.status & 0xF0;
@@ -287,6 +316,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 ctrl[ch][11] = 127;
                 ctrl[ch][1] = 0;
                 P.pws.push_back(PwEv{ch, t, 0});
+                P.pitch.push_back(PitchEv{ch, t, seq, 0, 0.0});
                 rsel[ch] = std::make_pair(127, 127);
             }
             if (cc == 98 || cc == 99) {
@@ -299,9 +329,76 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 auto it = rsel.find(ch);
                 if (it == rsel.end() || it->second == std::make_pair(0, 6))
                     return -6;          // an NRPN's data (GS's), or MPE's configuration
+                // DATA ENTRY into the RPN selected (tonelib's rpn_*)
+                std::pair<int, int> sel = it->second;
+                if (sel == std::make_pair(0, 0)) {
+                    double cur = getd(rrange, ch, BEND_RANGE_SEMITONES);
+                    rrange[ch] = cc == 6 ? (double)v : (double)(long)cur + v / 100.0;
+                    P.pitch.push_back(PitchEv{ch, t, seq, 1, rrange[ch]});
+                } else if (sel == std::make_pair(0, 1)) {
+                    int msb = rfmsb.count(ch) ? rfmsb[ch] : 64;
+                    if (cc == 6)
+                        msb = v;
+                    int lsb = cc == 38 ? v : 0;
+                    rfmsb[ch] = msb;
+                    rfine[ch] = (double)(((msb << 7) | lsb) - 8192) / 8192.0 * 100.0;
+                    P.pitch.push_back(PitchEv{ch, t, seq, 2, rfine[ch]});
+                } else if (sel == std::make_pair(0, 2)) {
+                    if (cc == 6) {
+                        rcoarse[ch] = (double)(v - 64);
+                        P.pitch.push_back(PitchEv{ch, t, seq, 3, rcoarse[ch]});
+                    }
+                } else if (sel == std::make_pair(0, 5)) {
+                    double cur = getd(rmod, ch, 0.0);
+                    rmod[ch] = cc == 6 ? (double)v * 100.0
+                                       : (double)(long)floor(cur / 100.0) * 100.0 + v * (100.0 / 128.0);
+                    P.pitch.push_back(PitchEv{ch, t, seq, 5, rmod[ch]});
+                } else if ((sel == std::make_pair(0, 3) || sel == std::make_pair(0, 4)) && cc == 6) {
+                    (sel.second == 3 ? rtp : rtb)[ch] = v;
+                    P.pitch.push_back(PitchEv{ch, t, seq, sel.second == 3 ? 6 : 7, (double)v});
+                }
+            } else if (cc == 96 || cc == 97) {
+                // DATA INCREMENT / DECREMENT (tonelib.rpn_step): one unit of the
+                // selected RPN's finest byte, posted as data entry would post it
+                auto it = rsel.find(ch);
+                if (it != rsel.end() && it->second.first == 0 && it->second.second <= 5) {
+                    int l = it->second.second;
+                    static const double ST[6][3] = {{0.01, 0.0, 127.99},
+                                                    {100.0 / 8192.0, -100.0, 100.0 * 8191.0 / 8192.0},
+                                                    {1.0, -64.0, 63.0},
+                                                    {1.0, 0.0, 127.0},
+                                                    {1.0, 0.0, 127.0},
+                                                    {100.0 / 128.0, 0.0, 127.0 * 100.0 + 127.0 * 100.0 / 128.0}};
+                    double cur = l == 0 ? getd(rrange, ch, BEND_RANGE_SEMITONES) : l == 1 ? getd(rfine, ch, 0.0)
+                                 : l == 2 ? getd(rcoarse, ch, 0.0)
+                                 : l == 3 ? (double)(rtp.count(ch) ? rtp[ch] : 0)
+                                 : l == 4 ? (double)(rtb.count(ch) ? rtb[ch] : 0) : getd(rmod, ch, 0.0);
+                    double nv = cur + (cc == 96 ? ST[l][0] : -ST[l][0]);
+                    nv = std::max(ST[l][1], nv);
+                    nv = std::min(ST[l][2], nv);
+                    if (l == 2 || l == 3 || l == 4)
+                        nv = (double)(long)nearbyint(nv);
+                    static const int KIND[6] = {1, 2, 3, 6, 7, 5};
+                    if (l == 0)
+                        rrange[ch] = nv;
+                    else if (l == 1) {
+                        rfine[ch] = nv;
+                        long code = (long)nearbyint(nv / 100.0 * 8192.0) + 8192;
+                        rfmsb[ch] = (int)(std::max(0L, std::min(16383L, code)) >> 7);
+                    } else if (l == 2)
+                        rcoarse[ch] = nv;
+                    else if (l == 3)
+                        rtp[ch] = (int)nv;
+                    else if (l == 4)
+                        rtb[ch] = (int)nv;
+                    else
+                        rmod[ch] = nv;
+                    P.pitch.push_back(PitchEv{ch, t, seq, KIND[l], nv});
+                }
             }
         } else if (kind == 0xE0) {
             P.pws.push_back(PwEv{ch, t, ((m.d1 << 7) | m.d0) - 8192});
+            P.pitch.push_back(PitchEv{ch, t, seq, 0, (double)(((m.d1 << 7) | m.d0) - 8192)});
             P.events.push_back(LiveEv{t, 4, ch, ((m.d1 << 7) | m.d0) - 8192, 0});
         } else if (kind == 0x90 && m.d1 > 0) {
             seen_note = true;
@@ -379,6 +476,19 @@ int nv_midi_n_notes(void *p) { return (int)((nv::Parsed *)p)->notes.size(); }
 int nv_midi_n_ccs(void *p) { return (int)((nv::Parsed *)p)->ccs.size(); }
 int nv_midi_n_pws(void *p) { return (int)((nv::Parsed *)p)->pws.size(); }
 int nv_midi_n_events(void *p) { return (int)((nv::Parsed *)p)->events.size(); }
+
+// the pitch stream (PitchEv): how many; event i -- iv (channel, kind), its
+// message's place, its time and its value
+int nv_midi_n_pitch(void *p) { return (int)((nv::Parsed *)p)->pitch.size(); }
+
+void nv_midi_pitch(void *p, int i, int *iv, long *seq, double *t, double *v)
+{
+    const nv::PitchEv &e = ((nv::Parsed *)p)->pitch[i];
+    iv[0] = e.ch; iv[1] = e.kind;
+    *seq = e.seq;
+    *t = e.t;
+    *v = e.v;
+}
 
 // event i in message order: (type, channel, a, b), *t its time (s)
 void nv_midi_event(void *p, int i, int *iv, double *t)

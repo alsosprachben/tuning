@@ -162,7 +162,7 @@ def _load():
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
-                                                       'tuner.cpp', 'tunertables.h')]
+                                                       'tuner.cpp', 'tunertables.h', 'bend.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -175,7 +175,7 @@ def _load():
         flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
         objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
                 tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.slab.o',
-                tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o', tmp + '.tuner.o']
+                tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o', tmp + '.tuner.o', tmp + '.bend.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
             for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
@@ -193,6 +193,8 @@ def _load():
                                    '-o', objs[12]])
             subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'tuner.cpp'),
                                    '-o', objs[13]])
+            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'bend.cpp'),
+                                   '-o', objs[14]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl'])
         finally:
             for o in objs:
@@ -261,6 +263,7 @@ def _load():
             ('nv_render', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, I, I, LL,
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                              ctypes.c_void_p,
                               ctypes.c_long, C, C, C, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_slab_new', ctypes.c_void_p, [ctypes.c_long, C]), ('nv_slab_free', None, [ctypes.c_void_p]),
@@ -1165,6 +1168,8 @@ def render(F):
     tabs = [np.ascontiguousarray(F[k], t) for k, t in (('G', np.float32), ('S', np.float32), ('BR', np.float32),
                                                        ('BC', np.float64))]
     keep.extend(tabs)
+    bl = None if F.get('BL') is None else np.ascontiguousarray(F['BL'], np.float32)
+    keep.append(bl)
     sh = (ctypes.c_float * 4)(*[float(x) for x in F['sh']])
     has = F.get('DM') is not None
     dm = [np.ascontiguousarray(F[k], t) for k, t in (('DM', np.float32), ('DMO', np.int64), ('DMB', np.int64),
@@ -1175,7 +1180,8 @@ def render(F):
     sx = fn(BR.ensure_xdec_lib().synth_voice_xdec)
     sd = fn(BR.ensure_damp_lib().synth_voice_damp)
     d.nv_render(sv, sx, sd, n, BR.BLK, int(F['nblk']), int(F['P']), D, Fp, Lp, Ip, tabs[0].ctypes.data,
-                tabs[1].ctypes.data, tabs[2].ctypes.data, tabs[3].ctypes.data, BR._NO_ROWS.ctypes.data, sh,
+                tabs[1].ctypes.data, tabs[2].ctypes.data, tabs[3].ctypes.data,
+                None if bl is None else bl.ctypes.data, BR._NO_ROWS.ctypes.data, sh,
                 BR._chunk(), float(BR.XDEC_NEPERS), float(BR.SR), float(BR.T.master_gain),
                 *[a.ctypes.data if a is not None else None for a in dm], L.ctypes.data, R.ctypes.data)
     return L, R

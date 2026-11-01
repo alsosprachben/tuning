@@ -114,7 +114,8 @@ static void gather(Gather &g, const std::vector<long long> &rows, double *const 
 // for a table with no damper tracks.
 int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long P, double *const *d,
               float *const *f, long *const *l, int *const *ii, const float *G, const float *S, const float *BR,
-              const double *BC, const float *noRows, const float *sh, long CHUNK, double xdec_nepers, double SR,
+              const double *BC, const float *BL, const float *noRows, const float *sh, long CHUNK,
+              double xdec_nepers, double SR,
               double master_gain, const float *DM, const long *DMO, const long *DMB, const long *DMN, float *L,
               float *R)
 {
@@ -154,7 +155,7 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA), F(F_aft), F(F_sus),
                F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav), F(F_tau), F(F_tcut), F(F_gb),
                F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl), F(F_delL), F(F_delR), g.i[I_gr].data(),
-               g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, nullptr, nullptr, noRows, noRows, 1, 0, nullptr,
+               g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, BL, nullptr, noRows, noRows, 1, 0, nullptr,
                nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, sh[0], sh[1],
                sh[2], sh[3], CHUNK, nullptr, nullptr, nullptr);
         else
@@ -162,7 +163,7 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                 g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA), F(F_aft), F(F_sus),
                 F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav), F(F_tau), F(F_tcut), F(F_gb),
                 F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl), F(F_delL), F(F_delR), g.i[I_gr].data(),
-                g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, nullptr, nullptr, noRows, noRows, 1, 0, nullptr,
+                g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, BL, nullptr, noRows, noRows, 1, 0, nullptr,
                 nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, sh[0],
                 sh[1], sh[2], sh[3], CHUNK, nullptr, nullptr, nullptr, g.i[I_dk].data(), F(F_dg), DM, DMO, DMB,
                 DMN);

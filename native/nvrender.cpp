@@ -16,10 +16,14 @@
 // blockrender's sidecar). Bit for bit blockrender's whole-table CPU render
 // (TUNING_STREAM=0).
 //
-// Refused (exit 2) -- Python renders them: a file the reader refuses, a note
-// no native class plays (drums, other instruments), a pitch wheel or an RPN
-// (bend and tuning rows are not ported), a channel's volume or expression
-// moving after its first note (its fader row).
+// THE BEND PASSES (native/bend.cpp): a channel's wheel and RPNs (bend range,
+// fine and coarse tuning) as its tuning, folded into its notes (a piano
+// cannot be bent, so what moves under them moves nothing, as in
+// blockrender); a fader (CC7, CC11) moving under its notes as a row.
+//
+// Refused (exit 2) -- Python renders them: a file the reader refuses (an
+// NRPN, MPE, an exclusive past a reset...), a note no native class plays
+// (drums, other instruments), an MTS tuning select (gm2's store).
 
 #include <charconv>
 #include <cmath>
@@ -47,6 +51,12 @@ void *nv_song_new(void);
 void nv_song_free(void *s);
 void nv_song_tuning(void *s, long long ch, double t, const double *freq);
 int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, int *have);
+int nv_midi_n_pitch(void *p);
+void nv_midi_pitch(void *p, int i, int *iv, long *seq, double *t, double *v);
+int nv_bend_btun(void *midi, void *song, double bend_range, double *out);
+int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr, double tau, double fader_tail,
+                  double stamp_s, double stamped_share, int vol0, int expr0, float *L);
+void nv_song_channel(void *s, long long ch, double btun, const double *otun, int fader);
 void nv_song_finish(void *s, double total);
 long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                      PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind, double scale,
@@ -55,15 +65,17 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
                      void **dm, int with_register);
 int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long P, double *const *d,
               float *const *f, long *const *l, int *const *ii, const float *G, const float *S, const float *BR,
-              const double *BC, const float *noRows, const float *sh, long CHUNK, double xdec_nepers, double SR,
-              double master_gain, const float *DM, const long *DMO, const long *DMB, const long *DMN, float *L,
-              float *R);
+              const double *BC, const float *BL, const float *noRows, const float *sh, long CHUNK, double xdec_nepers,
+              double SR, double master_gain, const float *DM, const long *DMO, const long *DMB, const long *DMN,
+              float *L, float *R);
 void nv_buf_free(void *p);
 }
 
 // the export's constants, in native_export.py's order
 enum { K_SR, K_BLK, K_CHUNK, K_MASTER, K_RING_FLOOR, K_RING_MAX, K_XDEC, K_REG_SCALE, K_FULL, K_RESIDUAL, K_BETA,
-       K_KNEE, K_LN10_20, K_RETRIGGER, K_NYQ_OM, K_SVDC, K_FIXED_TOUCH, K_REFLECT, K_BANDS, K_SH = K_BANDS + 9 };
+       K_KNEE, K_LN10_20, K_RETRIGGER, K_NYQ_OM, K_SVDC, K_FIXED_TOUCH, K_REFLECT, K_BANDS, K_SH = K_BANDS + 9,
+       K_PRESS_DB = K_SH + 4, K_THRESH, K_BEND_RANGE, K_TAU, K_FADER_TAIL, K_STAMP_S, K_STAMPED_SHARE,
+       K_BEND_SEMIS, K_GM_VOL, K_GM_EXPR };
 
 // blockrender.EMIT_COLS
 static const char *COLS[NCOLS] = {
@@ -242,9 +254,21 @@ int main(int argc, char **argv)
         fprintf(stderr, "nvrender: refused: the reader (%d)\n", err);
         return 2;
     }
-    if (nv_midi_n_pws(midi) > 0) {
-        fprintf(stderr, "nvrender: refused: a pitch wheel (bend rows are Python's)\n");
-        return 2;
+    if (E.k.size() <= K_GM_EXPR) {
+        fprintf(stderr, "nvrender: %s is an export from before the bend passes (native_export.py again)\n", argv[1]);
+        return 1;
+    }
+    // MTS's program and bank selects act under `gm2` only, through a store
+    // that is not here: such a file is Python's
+    for (int i = 0, n = nv_midi_n_pitch(midi); i < n; i++) {
+        int iv[2];
+        long seq;
+        double t, v;
+        nv_midi_pitch(midi, i, iv, &seq, &t, &v);
+        if (iv[1] == 6 || iv[1] == 7) {
+            fprintf(stderr, "nvrender: refused: an MTS tuning select (gm2's store is Python's)\n");
+            return 2;
+        }
     }
     std::vector<double> first(256, INFINITY);
     for (int i = 0, n = nv_midi_n_notes(midi); i < n; i++) {
@@ -259,24 +283,28 @@ int main(int argc, char **argv)
             return 2;
         }
     }
-    for (int i = 0, n = nv_midi_n_ccs(midi); i < n; i++) {
-        int iv[5];
-        double t;
-        nv_midi_cc(midi, i, iv, &t);
-        if (iv[1] == 100 || iv[1] == 101) {
-            fprintf(stderr, "nvrender: refused: an RPN (tuning rows are Python's)\n");
-            return 2;
-        }
-        if ((iv[1] == 7 || iv[1] == 11) && t > first[iv[0] & 255]) {
-            fprintf(stderr, "nvrender: refused: channel %d's volume moves under its notes (a fader row)\n", iv[0]);
-            return 2;
-        }
-    }
     const double total = nv_midi_total(midi);
     // THE SONG
     void *song = nv_song_new();
     nv_song_tuning(song, -1, 0.0, E.freq.data());
     nv_midi_song(midi, song, E.trim.data() + (nv_midi_gs(midi) ? 256 : 0));
+    // THE BEND PASSES (native/bend.cpp): each channel's tuning, from its wheel
+    // and RPNs, into its notes' f0; a fader moving under its notes, a row --
+    // its notes at unity, each riding it (br)
+    double btun[256];
+    nv_bend_btun(midi, song, E.k[K_BEND_SEMIS], btun);
+    std::vector<int> fch;
+    std::vector<double> br(256, -1.0);
+    float one = 0.0f;
+    for (int c = 0; c < 256; c++)
+        if (nv_bend_fader(midi, song, c, 0, (int)BLK, SR, E.k[K_TAU], E.k[K_FADER_TAIL], E.k[K_STAMP_S],
+                          E.k[K_STAMPED_SHARE], (int)E.k[K_GM_VOL], (int)E.k[K_GM_EXPR], &one)) {
+            br[c] = (double)fch.size();
+            fch.push_back(c);
+        }
+    for (int c = 0; c < 256; c++)
+        if (btun[c] != 0.0 || br[c] >= 0.0)
+            nv_song_channel(song, c, btun[c], nullptr, br[c] >= 0.0);
     nv_song_finish(song, total);
     // THE TABLE
     std::vector<const NoteClass *> K(16384, nullptr);
@@ -298,7 +326,8 @@ int main(int argc, char **argv)
     double qacc[18] = {0}, az = 0.0, out[48] = {0};
     double *rows = nullptr;
     void *dm[6] = {nullptr};
-    long long P = nv_prepare(song, K.data(), &t, nullptr, 0, &rs, &rows, qacc, &az, E.kind.data(),
+    long long P = nv_prepare(song, K.data(), &t, fch.empty() ? nullptr : br.data(), fch.empty() ? 0 : 256, &rs, &rows,
+                             qacc, &az, E.kind.data(),
                              E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, total,
                              E.k[K_RING_FLOOR], E.k[K_RING_MAX], out, E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR,
                              dm, 1);
@@ -365,12 +394,23 @@ int main(int argc, char **argv)
             return 1;
         }
     }
-    float G = 1.0f, S = 1.0f, BRt = 1.0f, noRows[16] = {0}, sh[4];
-    double BC = 0.0;
+    float G = 1.0f, S = 1.0f, noRows[16] = {0}, sh[4];
     for (int q = 0; q < 4; q++)
         sh[q] = (float)E.k[K_SH + q];
+    // the rows (_prep_bend_arrays): a fader's ratio 1 and phase 0 a block, its
+    // level at each edge; no rows, one of ones and no levels
+    size_t nr = std::max<size_t>(fch.size(), 1);
+    std::vector<float> BRr(nr * nblk, 1.0f), BLr;
+    std::vector<double> BCr(nr * nblk, 0.0);
+    if (!fch.empty()) {
+        BLr.assign(nr * (nblk + 1), 1.0f);
+        for (size_t r = 0; r < fch.size(); r++)
+            nv_bend_fader(midi, song, fch[r], nblk, (int)BLK, SR, E.k[K_TAU], E.k[K_FADER_TAIL], E.k[K_STAMP_S],
+                          E.k[K_STAMPED_SHARE], (int)E.k[K_GM_VOL], (int)E.k[K_GM_EXPR], BLr.data() + r * (nblk + 1));
+    }
     std::vector<float> L(N), R(N);
-    nv_render(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fp, lp, ip, &G, &S, &BRt, &BC, noRows, sh,
+    nv_render(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fp, lp, ip, &G, &S, BRr.data(), BCr.data(),
+              BLr.empty() ? nullptr : BLr.data(), noRows, sh,
               (long)E.k[K_CHUNK], E.k[K_XDEC], SR, E.k[K_MASTER], (const float *)dm[2], (const long *)dm[3],
               (const long *)dm[4], (const long *)dm[5], L.data(), R.data());
     if (!write_wav(argv[3], L.data(), R.data(), N, (int)SR)) {

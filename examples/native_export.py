@@ -119,6 +119,10 @@ def main(argv):
     # live's pressure at full aftertouch, the limiter's knee, the wheel's range (nvlive)
     consts += [float(sess.get("press_db", T.PRESS_DB)), float(sess.get("thresh", 0.70)),
                float(sess.get("bend_range", 2.0))]
+    # the bend passes' (nvrender: native/bend.cpp): the fader's glide, its tail,
+    # the stamped channel's test, GM's bend range and power-on levels
+    consts += [float(B.TAU), float(B.FADER_TAIL), float(B.STAMP_S), float(B.STAMPED_SHARE),
+               float(T.BEND_RANGE_SEMITONES), float(T.GM_DEFAULT_VOLUME), float(T.GM_DEFAULT_EXPRESSION)]
     room = os.fsencode(T.ROOM_NAME[0] or "")
     with open(args[0], "wb") as f:
         f.write(MAGIC)

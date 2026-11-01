@@ -1876,12 +1876,15 @@ def onepole_edges(events, nblk, default):
     """onepole_blocks at the nblk+1 block EDGES rather than the centres: a
     bend row's level (BL), which the kernel ramps across each block. The same
     fader inertia (TAU), so a CC7 step is a 15 ms glide and not a click."""
+    # libm's exp (native.xexp; math.exp), not numpy's SIMD one: the same bits
+    # on every machine, and nvrender's (native/bend.cpp)
+    import native as _NVX
     te = np.arange(nblk + 1) * BLK / SR
     out = np.empty(nblk + 1, np.float32); segs = [(0.0, default)] + list(events); v = default
     for k, (t0, target) in enumerate(segs):
         t1 = segs[k + 1][0] if k + 1 < len(segs) else 1e18
-        m = (te >= t0) & (te < t1); out[m] = target + (v - target) * np.exp(-(te[m] - t0) / TAU)
-        if t1 < 1e17: v = target + (v - target) * np.exp(-(t1 - t0) / TAU)
+        m = (te >= t0) & (te < t1); out[m] = target + (v - target) * _NVX.xexp(-(te[m] - t0) / TAU)
+        if t1 < 1e17: v = target + (v - target) * math.exp(-(t1 - t0) / TAU)
     return out
 
 # How long a voice takes to get out of the way when its own pitch is struck
