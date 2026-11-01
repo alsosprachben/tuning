@@ -160,7 +160,7 @@ def lib():
 def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
-                                                       'register.cpp', 'prepare.cpp')]
+                                                       'register.cpp', 'prepare.cpp', 'render.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -172,16 +172,16 @@ def _load():
         # under the same flags, linked into one library.
         flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
         objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
-                tmp + '.register.o', tmp + '.prepare.o', tmp + '.registercore.o']
+                tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.registercore.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
-            for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f) for f in ('register.cpp', 'prepare.cpp')],
-                              objs[1:7]):
+            for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
+                                           for f in ('register.cpp', 'prepare.cpp', 'render.cpp')], objs[1:8]):
                 subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', src, '-o', o])
             # register.py's C core, under ITS flags (register._load_core's): the same arithmetic
             subprocess.check_call(['gcc', '-O3', '-march=native', '-ffp-contract=off', '-fopenmp-simd',
                                    '-fno-math-errno', '-mprefer-vector-width=512', '-fPIC', '-c',
-                                   os.path.join(HERE, 'registercore.c'), '-o', objs[7]])
+                                   os.path.join(HERE, 'registercore.c'), '-o', objs[8]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm'])
         finally:
             for o in objs:
@@ -232,6 +232,11 @@ def _load():
                                 ctypes.POINTER(PyRandomState), ctypes.POINTER(D), ctypes.c_void_p, D,
                                 ctypes.c_void_p, C, C, C, C, LL, C, C, C, ctypes.c_void_p, C, C, C, C,
                                 ctypes.POINTER(ctypes.c_void_p)]),
+            ('nv_render', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, I, I, LL,
+                              ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                              ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                              ctypes.c_long, C, C, C, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                              ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
             ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C, I, I]),
@@ -967,3 +972,70 @@ def prepare(song, classes, tmpl, br, total, scale=1.0):
              sym_rows=(int(out[3]), int(out[3])),
              room_q=[(out[4 + 3 * i], out[5 + 3 * i], out[6 + 3 * i]) for i in range(9)])
     return P
+
+
+_VF = ('aL', 'aR', 'nf', 'fa', 're', 'ch', 'logr', 'logrA', 'aft', 'sus', 'cv', 'cc', 'crl', 'sj', 'csc', 'cbw',
+       'tbav', 'tau', 'tcut', 'gb', 'gt', 'gc', 'vd', 'vr', 'vp', 'vdl', 'delL', 'delR', 'dg')
+
+
+def final(P):
+    """A native.prepare result in prepare's final column types (FINAL_DTYPES),
+    as blockrender hands the kernel: the trivial side tables of a song with
+    no bend, swell or chest rows (G, S, BR 1; BC 0), and its shutter."""
+    import numpy as np
+    import blockrender as BR
+    out = dict(P)
+    for k, dt in BR.FINAL_DTYPES:
+        if k in P:
+            out[k] = np.ascontiguousarray(np.asarray(P[k], np.float64 if dt.startswith('i') else None).astype(dt)
+                                          if dt.startswith('i') else np.asarray(P[k]).astype(dt))
+    out['G'] = np.ones((1, 1), np.float32)
+    out['S'] = np.ones((1, 1), np.float32)
+    out['BR'] = np.ones((1, 1), np.float32)
+    out['BC'] = np.zeros((1, 1), np.float64)
+    out['sh'] = BR.SHUTTER if hasattr(BR, 'SHUTTER') else (0.06, 1.6, 3.5, 1500.0)
+    return out
+
+
+def render(F):
+    """nv_render: the table F (final types: native.final, or blockrender.prepare's
+    own) to (L, R) float32 over [0, N) -- synthkernel.c's three entries as
+    blockrender builds them, routed as synth_partials does, the master gain
+    and the clip: synth_window(F, 0, N) on the CPU."""
+    import numpy as np
+    import blockrender as BR
+    d = lib()
+    n = int(F['N'])
+    L = np.empty(n, np.float32)
+    R = np.empty(n, np.float32)
+    keep = []
+
+    def ptrs(t, cols, dt):
+        arr = (ctypes.c_void_p * len(cols))()
+        for j, c in enumerate(cols):
+            if c in F and F[c] is not None:
+                a = np.ascontiguousarray(F[c], dt)
+                keep.append(a)
+                arr[j] = a.ctypes.data
+        return arr
+    D = ptrs(None, ('om', 'p0', 'p0R'), np.float64)
+    Fp = ptrs(None, _VF, np.float32)
+    Lp = ptrs(None, ('non', 'noff'), np.int64)
+    Ip = ptrs(None, ('gr', 'cr', 'br', 'dk'), np.int32)
+    tabs = [np.ascontiguousarray(F[k], t) for k, t in (('G', np.float32), ('S', np.float32), ('BR', np.float32),
+                                                       ('BC', np.float64))]
+    keep.extend(tabs)
+    sh = (ctypes.c_float * 4)(*[float(x) for x in F['sh']])
+    has = F.get('DM') is not None
+    dm = [np.ascontiguousarray(F[k], t) for k, t in (('DM', np.float32), ('DMO', np.int64), ('DMB', np.int64),
+                                                     ('DMN', np.int64))] if has else [None] * 4
+    keep.extend([a for a in dm if a is not None])
+    fn = lambda f: ctypes.cast(f, ctypes.c_void_p).value       # noqa: E731
+    sv = fn(BR.ensure_lib().synth_voice)
+    sx = fn(BR.ensure_xdec_lib().synth_voice_xdec)
+    sd = fn(BR.ensure_damp_lib().synth_voice_damp)
+    d.nv_render(sv, sx, sd, n, BR.BLK, int(F['nblk']), int(F['P']), D, Fp, Lp, Ip, tabs[0].ctypes.data,
+                tabs[1].ctypes.data, tabs[2].ctypes.data, tabs[3].ctypes.data, BR._NO_ROWS.ctypes.data, sh,
+                BR._chunk(), float(BR.XDEC_NEPERS), float(BR.SR), float(BR.T.master_gain),
+                *[a.ctypes.data if a is not None else None for a in dm], L.ctypes.data, R.ctypes.data)
+    return L, R
