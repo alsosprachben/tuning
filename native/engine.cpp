@@ -167,19 +167,23 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     int reflect = n->reflect && !no_refl && K->reflection_order;
     t.gain = 1.0; t.B = B; t.sjit = K->sustain_jitter; t.reflect = reflect;
     t.cbw0 = K->cbw0; t.cbw1 = K->cbw1;
+    t.pjit = K->pjit; t.sps = K->sps;
     double trans[3 * 1025];
     int ntr = 0;
     if (s.max_harmonic + 1 > 1025)
         return -2;
-    int k = nv_tone(&s, &t, reflect ? nimg : 0, nsurf, surf, img, mir, rows + NCOLS * total, cap - total,
-                    trans, &ntr, qacc, azimuth);
+    double sjit_last = K->sustain_jitter;       // (the note's sjit after its partials)
+    int k = nv_tone_rs(&s, &t, reflect ? nimg : 0, nsurf, surf, img, mir, rows + NCOLS * total, cap - total,
+                       trans, &ntr, qacc, azimuth, rs, &sjit_last);
+    if (k == -2)
+        return -2;                          // a sign to draw and no stream
     if (k < 0)
         return -1;
     out->n_tone = k;
     total += k;
 
     // THE PHANTOM PARTIALS (_note_phantoms)
-    t.gain = s.gain; t.B = 0.0; t.sjit = 0.0;
+    t.gain = s.gain; t.B = 0.0; t.sjit = 0.0; t.pjit = 0; t.sps = 0.0;
     k = nv_phantom(&s, &t, trans, ntr, reflect ? nimg : 0, nsurf, surf, img, mir, rows + NCOLS * total,
                    cap - total, qacc, azimuth);
     if (k < 0)
@@ -191,7 +195,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     out->jitter_scale = t.jitter_scale;
     out->dl = t.dl; out->dr = t.dr; out->li = t.li; out->ri = t.ri;
     out->pos_x = s.position_x; out->pos_z = s.position_z; out->B = B;
-    out->cv = t.cv; out->cc = t.cc; out->crl = t.crl; out->sjit = K->sustain_jitter; out->csc = t.csc;
+    out->cv = t.cv; out->cc = t.cc; out->crl = t.crl; out->sjit = sjit_last; out->csc = t.csc;
     memcpy(out->tb, tb, sizeof tb);
     out->cbw[0] = K->cbw0; out->cbw[1] = K->cbw1;
     return total;

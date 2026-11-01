@@ -6530,7 +6530,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
                               qacc.ctypes.data, ctypes.byref(az), ctypes.byref(out))
     if k < 0:
         return None
-    return rows[:k], qacc, az.value, out, len(em.A['om']), q0
+    return rows[:k], qacc, az.value, out, len(em.A['om']), q0, st
 
 
 def _note_native_apply(em, props, nt, A, wn, _VB):
@@ -6539,6 +6539,12 @@ def _note_native_apply(em, props, nt, A, wn, _VB):
     rows, qacc, az, out = wn[:4]
     NATIVE_STATS[0] += 1
     _rows_into(A, rows)
+    # what the Python's partials leave: the last one's jitter, and the random
+    # stream past the strike signs they drew (a snare's)
+    nt.sjit = out.sjit
+    if getattr(props, 'strike_phase_spread', 0.0) > 0.0:
+        import native as _NV
+        _NV.set_random_state(wn[6])
     for i, pr in enumerate(em._QACC):
         pr[0], pr[1] = float(qacc[2 * i]), float(qacc[2 * i + 1])
     em.azimuth = az
@@ -8791,7 +8797,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _MOOG_KVAR, _MOOG_MKI, _MOOG_MPC, _MOOG_MPI, _MOOG_MPK, _MOOG_MPKN, _MOOG_MPR,
                 _SND_TL, _VB, _kn_moves, _mmgr, _sbias, _sctl, _snd_d, emit_partial, stops)
         _wn = None
-        if _vst0 is not None and em.nsnap is not None and not _sd and _XP == 1.0 and not (_hx or _hperc or _pjit):
+        if _vst0 is not None and em.nsnap is not None and not _sd and _XP == 1.0 and not (_hx or _hperc):
             _wn = _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, _vst0, _eff,
                                      _nx, _mcut, _slurred, (nt.ch, nt.note, nt.on) in _SLUR_OUT,
                                      _SONG if choked is None else None, _off_key,

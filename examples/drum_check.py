@@ -5,15 +5,17 @@ the Python it ports?
     python3 examples/drum_check.py [NOTES]
 
 For NOTES random strokes (default 400) of the Standard set's drums the
-native voice plays (native.kit_drum: the kick, the toms) -- each at its key's
+native voice plays (native.kit_drum: the kick, the toms, the snares and the
+side stick) -- each at its key's
 pitch, now and then retuned as a file's drum setup retunes it, across the
 velocities and the kit's seats -- the constructor (nv_voice_init: the
 voice, seated in the kit or not, what the note setup reads, the global
 random stream after it) and
 every function native/voice.c ports is
 asked what its Python method is asked: each partial's mode ratio (the
-measured modes, the stick's click), series and volume, decay and its two
-stages (aftersound_partial), and blockrender's string_partial and
+measured modes, the stick's click), series and volume (a snare's roll-off
+and band trim), decay and its two stages (aftersound_partial), a snare's
+jitter, and blockrender's string_partial and
 partial_decay, the unison, radiation, the head's shadow, chiff, bloom and
 vibrato. The answers compared with ==; any difference printed; the exit
 status is the count.
@@ -65,6 +67,8 @@ def main(argv):
             same(('volume', key, m), p.harmonic_volume(m), d.nv_harmonic_volume(sp, m))
             dec = p.harmonic_decay(m)
             same(('decay', key, m), dec, d.nv_harmonic_decay(sp, m))
+            if getattr(p, 'jitter_by_partial', False):
+                same(('jitter', key, m), p.partial_jitter(m), d.nv_partial_jitter(sp, m))
             out = D40()
             n = d.nv_unison_voices(sp, f0, m, dec, out)
             same(('unison', key, m), [tuple(float(x) for x in v) for v in p.unison_voices(f0, m, dec)],

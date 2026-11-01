@@ -57,7 +57,10 @@ class VoiceSnap(ctypes.Structure):
                 ('n_modes', I), ('modes', (C * 3) * 16), ('n_click', I), ('click_per_band', I),
                 ('click_db', C * 16), ('click_hz0', C), ('click_cal_db', C), ('click_scatter', C),
                 ('click_dbs', C), ('click_stroke_slope', C), ('stroke_ref_db', C),
-                ('slow_share', C), ('slow_dbs', C), ('slow_max_hz', C)]
+                ('slow_share', C), ('slow_dbs', C), ('slow_max_hz', C),
+                ('noisy', I), ('hf_corner_hz', C), ('hf_order', C), ('n_trim', I), ('trim', (C * 2) * 8),
+                ('snare', I), ('fund_dbs', C), ('head_dbs', C), ('wire_jitter', C), ('head_jitter', C),
+                ('rim_from', I), ('rim_dbs', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -70,7 +73,7 @@ class ToneIn(ctypes.Structure):
                 + [('tb', C * 3), ('gl', C * 3), ('sv', C * 2)]
                 + [(f, C) for f in ('sound_vib_depth_cents', 'vibrato_delay', 'br', 'fx', 'mk', 'fm_omega',
                                     'fm_phase', 'listener_distance', 'head_radius', 'pan_angle')]
-                + [('room_bands', C * 9)])
+                + [('room_bands', C * 9), ('pjit', I), ('sps', C)])
 
 
 class VoiceInit(ctypes.Structure):
@@ -127,7 +130,7 @@ class NoteClass(ctypes.Structure):
                 + [('room_planes', C * 6), ('room_order', I), ('damper_pedal', I), ('detune_lo', C),
                    ('detune_hi', C), ('detune_wheel', I)]
                 + [('reg_gain', C), ('reg_knock', C), ('reg_fall', C), ('damper_top', I), ('reg_floor', C),
-                   ('reg_release', C), ('one_shot', I), ('one_shot_hold', C)])
+                   ('reg_release', C), ('one_shot', I), ('one_shot_hold', C), ('pjit', I), ('sps', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -339,6 +342,7 @@ def _load():
             ('nv_song_note_off', C, [ctypes.c_void_p, LL, I, C, C, I, I, C, ctypes.POINTER(I)]),
             ('nv_song_soft_at', I, [ctypes.c_void_p, LL, C]),
             ('nv_song_next_same', I, [ctypes.c_void_p, LL, I, C, D]),
+            ('nv_partial_jitter', C, [P, I]),
             ('nv_phantom', I, [P, ctypes.POINTER(ToneIn), ctypes.c_void_p, I, I, ctypes.c_void_p, ctypes.c_void_p,
                                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p, D])):
         f = getattr(d, name)
@@ -357,12 +361,28 @@ _KIT_OWN = {'mode_ratio': 'KitDrumProperties', 'series_volume': 'KitDrumProperti
             'harmonic_volume': 'SynthProperties', 'unison_voices': 'SynthProperties'}
 
 
+# ...AND A SNARE'S (AcousticSnareProperties on NoisyPercussionMixin: the
+# roll-off and band trim, the head's rates, the shell's remainder, each
+# partial's jitter; a side stick's rim)
+_SNARE_OWN = dict(_KIT_OWN, harmonic_volume='NoisyPercussionMixin', _hf_rolloff='NoisyPercussionMixin',
+                  _band_trim='NoisyPercussionMixin', chiff_harmonic_gain='NoisyPercussionMixin',
+                  partial_jitter='AcousticSnareProperties', aftersound='AcousticSnareProperties')
+
+
 def kit_drum(cls):
     """Whether cls is a kit drum native/voice.c plays (VoiceSnap.kind 1)."""
     import tonelib as T
-    if not issubclass(cls, T.KitDrumProperties) or issubclass(cls, T.NoisyPercussionMixin):
+    if not issubclass(cls, T.KitDrumProperties):
         return False
-    if any(_owner(cls, n) != o for n, o in _KIT_OWN.items()):
+    if issubclass(cls, T.NoisyPercussionMixin):
+        if not issubclass(cls, T.AcousticSnareProperties) or len(cls.band_trim_db) > 8:
+            return False
+        own = dict(_SNARE_OWN, harmonic_decay=_owner(cls, 'harmonic_decay'))
+        if own['harmonic_decay'] not in ('AcousticSnareProperties', 'SideStickProperties'):
+            return False
+    else:
+        own = dict(_KIT_OWN, chiff_harmonic_gain='SynthProperties')
+    if any(_owner(cls, n) != o for n, o in own.items()):
         return False
     return (len(cls.DRUM_MODES) <= 16 and len(cls.CLICK_DB) <= 16 and len(cls.unison_detune or ()) <= 8
             and not cls.bore_corner_hz and not cls.harmonic_touch and not cls.pickup_points)
@@ -486,6 +506,16 @@ def snapshot(props):
         s.click_hz0, s.click_cal_db, s.click_scatter = p.CLICK_HZ0, p.click_cal_db, p.click_scatter
         s.click_dbs, s.click_stroke_slope, s.stroke_ref_db = p.click_dbs, p.click_stroke_slope, p.stroke_ref_db
         s.slow_share, s.slow_dbs, s.slow_max_hz = p.slow_share, p.slow_dbs, p.slow_max_hz or 0.0
+        if isinstance(p, T.NoisyPercussionMixin):
+            s.noisy, s.hf_corner_hz, s.hf_order = 1, p.hf_corner_hz, p.hf_order
+            s.n_trim = len(p.band_trim_db)
+            for i, (f, db) in enumerate(p.band_trim_db):
+                s.trim[i][:] = [float(f), float(db)]
+        if isinstance(p, T.AcousticSnareProperties):
+            s.snare, s.fund_dbs, s.head_dbs = 1, p.fund_dbs, p.head_dbs
+            s.wire_jitter, s.head_jitter = p.wire_jitter, p.sustain_jitter
+            if _owner(type(p), 'harmonic_decay') == 'SideStickProperties':
+                s.rim_from, s.rim_dbs = int(p.RIM_FROM), p.rim_dbs
     else:
         for f in ('hammer_corner_hz', 'hammer_open_lo', 'hammer_open_slope', 'hammer_register_slope',
                   'hammer_order', 'board_body_gain', 'board_body_hz', 'board_body_width', 'board_high_hz',
@@ -671,6 +701,13 @@ def voice(cls, frequency, channel_pan, attack_volume, channel_volume, effort=0.0
     return s, o
 
 
+def set_random_state(st):
+    """The global random stream set to PyRandomState st (its gauss kept)."""
+    import random
+    v, _, g = random.getstate()
+    random.setstate((v, tuple(st.mt[:]) + (int(st.i),), g))
+
+
 def random_state():
     """The global random stream as a PyRandomState."""
     import random
@@ -705,8 +742,11 @@ def note_class(cls):
     drum = kit_drum(cls)
     if got is None:
         v = _class(cls)
-        # (a kit drum's one-shot hold is the engine's; a gate is not)
-        ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF if not (drum and a == 'one_shot'))
+        # (a kit drum's one-shot hold is the engine's, and a snare's partials'
+        # jitter and signs; a gate is not)
+        ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF
+                                        if not (drum and a in ('one_shot', 'jitter_by_partial',
+                                                               'strike_phase_spread')))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT)
               and getattr(cls, 'mode_phase', None) is None and int(getattr(cls, 'strike_flam', 0) or 0) <= 1
               and len(getattr(cls, 'strike_noise_db', ()) or ()) <= 32)
@@ -761,6 +801,8 @@ def note_class(cls):
             k.strike_len_s = getattr(cls, 'strike_noise_len_s', None) or 0.25
             k.strike_at_s = getattr(cls, 'strike_noise_at', 0.0) or 0.0
             k.strike_cal_db = getattr(cls, 'strike_noise_cal_db', 0.0) or 0.0
+        k.pjit = int(bool(getattr(cls, 'jitter_by_partial', False)))
+        k.sps = float(getattr(cls, 'strike_phase_spread', 0.0) or 0.0)
         k.one_shot = int(bool(getattr(cls, 'one_shot', False)))
         k.one_shot_hold = BR.ONE_SHOT_MIN_S
         k.damper_pedal = int(bool(getattr(cls, 'damper_pedal', True)) and not k.one_shot)

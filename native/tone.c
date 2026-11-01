@@ -185,10 +185,30 @@ static int note_terms(const VoiceSnap *v, const ToneIn *t, double f, double px, 
  * the note's rows into rows (cap of them, NCOLS each), each harmonic's (hf,
  * hv, dB/s) into transverse; qacc[18] carried; *azimuth the emitter's after.
  * Returns the rows written, -1 if the store was too small. */
+int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
+               int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
+               double *rows, int cap, double *transverse, int *ntrans, double *qacc, double *azimuth,
+               PyRandom *rs, double *sjit_last);
+
 int nv_tone(const VoiceSnap *v, const ToneIn *t,
             int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
             double *rows, int cap, double *transverse, int *ntrans, double *qacc, double *azimuth)
 {
+    return nv_tone_rs(v, t, nimg, nsurf, surf, img, mir, rows, cap, transverse, ntrans, qacc, azimuth,
+                      NULL, NULL);
+}
+
+/* nv_tone, drawing each partial's strike sign from rs (the global random
+ * stream: random.getrandbits(1), where strike_phase_spread asks; -2 without
+ * one), and *sjit_last the jitter of the last partial emitted (the note's
+ * nt.sjit after it) */
+int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
+               int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
+               double *rows, int cap, double *transverse, int *ntrans, double *qacc, double *azimuth,
+               PyRandom *rs, double *sjit_last)
+{
+    if (t->sps > 0.0 && !rs)
+        return -2;
     Rows R = {rows, 0, cap};
     double terms_main[9 * 64], terms_u[9 * 64];
     double sr = t->sr;
@@ -214,8 +234,13 @@ int nv_tone(const VoiceSnap *v, const ToneIn *t,
         if (!nv_voice_vibrato(v, t->f0, 0, VB)) {
             VB[0] = VB0[0]; VB[1] = VB0[1]; VB[2] = VB0[2];
         }
+        double sj = t->pjit ? nv_partial_jitter(v, m) : t->sjit;
+        if (sjit_last)
+            *sjit_last = sj;
         double non_m = t->non + 0.0;
         double mph = 0.0;
+        if (t->sps > 0.0)                           /* where the stick landed against its nodes */
+            mph = PI * (double)(pyr_genrand(rs) >> 31) * t->sps;
         int nt_ = 0;
         if (t->reflect) {
             nt_ = note_terms(v, t, hf, pos_x, t->pos_z, nimg, nsurf, surf, img, mir, terms_main);
@@ -223,7 +248,7 @@ int nv_tone(const VoiceSnap *v, const ToneIn *t,
                 return -1;
         }
         if (!emit(v, t, &R, qacc, azimuth, terms_main, nt_, 2 * PI * hf / sr, gL, gR, gM, hf, non_m, t->noff,
-                  t->fade, t->rel, t->chiff, pd[1], pd[3], pd[2], t->sustain_level, cvp, t->cc, t->crl, t->sjit,
+                  t->fade, t->rel, t->chiff, pd[1], pd[3], pd[2], t->sustain_level, cvp, t->cc, t->crl, sj,
                   t->csc, t->gr, t->cr, mph, 0.0, VB, pos_x))
             return -1;
         transverse[3 * *ntrans] = hf;
@@ -253,7 +278,7 @@ int nv_tone(const VoiceSnap *v, const ToneIn *t,
             }
             if (!emit(v, t, &R, qacc, azimuth, terms_u, ntu, 2 * PI * uf / sr, ugL, ugR, gM * gm, uf, non_u,
                       t->noff, t->fade, t->rel, t->chiff, ulr, pd[3], pd[2], t->sustain_level, cvp, t->cc,
-                      t->crl, t->sjit, t->csc, t->gr, t->cr, 2 * PI * uph + 0.0, (double)(ui + 1), VB, pos_x))
+                      t->crl, sj, t->csc, t->gr, t->cr, 2 * PI * uph + 0.0, (double)(ui + 1), VB, pos_x))
                 return -1;
         }
         pos_x = t->pos_x_props;     /* em.pos_x = the voice's position, after each harmonic */

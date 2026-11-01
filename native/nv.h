@@ -78,6 +78,19 @@ typedef struct {
     double click_db[16];
     double click_hz0, click_cal_db, click_scatter, click_dbs, click_stroke_slope, stroke_ref_db;
     double slow_share, slow_dbs, slow_max_hz;       /* slow_max_hz 0: None */
+    /* NoisyPercussionMixin: the partials' and the chiff's roll-off above
+       hf_corner_hz, and the band trim ((Hz, dB), log-interpolated) */
+    int noisy;
+    double hf_corner_hz, hf_order;
+    int n_trim;
+    double trim[8][2];
+    /* AcousticSnareProperties: the head's two rates, the shell's remainder on
+       the head modes alone, each partial's jitter (the wires', the head's);
+       SideStickProperties: the rim's modes from rim_from (0 none) and rate */
+    int snare;
+    double fund_dbs, head_dbs, wire_jitter, head_jitter;
+    int rim_from;
+    double rim_dbs;
 } VoiceSnap;
 
 typedef struct {
@@ -140,11 +153,19 @@ typedef struct {
     /* the head, for each image's ears (hrtf_at) */
     double listener_distance, head_radius, pan_angle;
     double room_bands[9];
+    /* each partial its own jitter (jitter_by_partial: nv_partial_jitter);
+       each its strike's sign, pi * a random bit * sps (strike_phase_spread) */
+    int pjit;
+    double sps;
 } ToneIn;
 
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
                    double attack_volume, double channel_volume, double effort, PyRandom *rs,
                    VoiceSnap *s, VoiceNote *o);
+int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
+               int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
+               double *rows, int cap, double *transverse, int *ntrans, double *qacc, double *azimuth,
+               PyRandom *rs, double *sjit_last);
 int nv_tone(const VoiceSnap *v, const ToneIn *t,
             int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
             double *rows, int cap, double *transverse, int *ntrans, double *qacc, double *azimuth);
@@ -205,6 +226,10 @@ typedef struct {
     // its onset, the key-up ignored (ONE_SHOT_MIN_S)
     int one_shot;
     double one_shot_hold;
+    // each partial its own jitter (jitter_by_partial), its strike's sign
+    // spread (strike_phase_spread): the tone's (a snare's wires)
+    int pjit;
+    double sps;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.

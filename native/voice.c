@@ -53,6 +53,43 @@ static int drum_click(const VoiceSnap *v, int harmonic, int *band, double *hz)
     return 1;
 }
 
+/* NoisyPercussionMixin._hf_rolloff at ratio h */
+static double hf_rolloff(const VoiceSnap *v, double h)
+{
+    double fn = v->frequency_x * pow(2.0, v->octave_position) * h;
+    return 1.0 / (1.0 + pow(fn / v->hf_corner_hz, v->hf_order));
+}
+
+double nv_mode_ratio(const VoiceSnap *v, int m);
+
+/* NoisyPercussionMixin._band_trim */
+static double band_trim(const VoiceSnap *v, int harmonic)
+{
+    if (!v->n_trim)
+        return 1.0;
+    double f = v->frequency_x * pow(2.0, v->octave_position) * nv_mode_ratio(v, harmonic);
+    int n = v->n_trim;
+    double db = 0.0;
+    if (f <= v->trim[0][0])
+        db = v->trim[0][1];
+    else if (f >= v->trim[n - 1][0])
+        db = v->trim[n - 1][1];
+    else
+        for (int i = 0; i + 1 < n; i++)
+            if (f < v->trim[i + 1][0]) {
+                double f0 = v->trim[i][0], d0 = v->trim[i][1], f1 = v->trim[i + 1][0], d1 = v->trim[i + 1][1];
+                db = d0 + (d1 - d0) * log(f / f0) / log(f1 / f0);
+                break;
+            }
+    return pow(10.0, db / 20.0);
+}
+
+/* AcousticSnareProperties.partial_jitter */
+double nv_partial_jitter(const VoiceSnap *v, int harmonic)
+{
+    return harmonic > v->n_modes ? v->wire_jitter : v->head_jitter;
+}
+
 double nv_mode_ratio(const VoiceSnap *v, int m)
 {
     if (v->kind == 1) {                         /* KitDrumProperties.mode_ratio */
@@ -123,8 +160,11 @@ double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
     double s = nv_series_volume(v, harmonic);
     if (s == 0.0)
         return 0.0;
-    if (v->kind != 0)
-        return s;                               /* SynthProperties': no bore */
+    if (v->kind != 0) {                         /* SynthProperties': no bore */
+        if (v->noisy)                           /* ...and the noise's roll-off and trim */
+            return s * hf_rolloff(v, nv_mode_ratio(v, harmonic)) * band_trim(v, harmonic);
+        return s;
+    }
     double fn = v->frequency_x * pow(2.0, v->octave_position) * harmonic;
     double fc = (v->hammer_corner_hz * (v->hammer_open_lo + v->hammer_open_slope * v->attack_volume)
                  * pow(2.0, v->hammer_register_slope * v->octave_position));
@@ -133,6 +173,14 @@ double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
 
 double nv_harmonic_decay(const VoiceSnap *v, int harmonic)
 {
+    if (v->kind == 1 && v->rim_from && v->rim_from <= harmonic && harmonic <= v->n_modes)
+        return 0.5 * v->rim_dbs;                /* SideStickProperties: the rim's */
+    if (v->kind == 1 && v->snare) {             /* AcousticSnareProperties: the head's two rates */
+        if (harmonic == 1)
+            return 0.5 * v->fund_dbs;
+        if (2 <= harmonic && harmonic <= v->n_modes)
+            return 0.5 * v->head_dbs;
+    }
     if (v->kind == 1) {                         /* KitDrumProperties: half the amplitude dB/s */
         if (1 <= harmonic && harmonic <= v->n_modes)
             return 0.5 * v->modes[harmonic - 1][2];
@@ -162,6 +210,18 @@ static double string_blend(const VoiceSnap *v, double frequency, double break_hz
 /* GrandPianoProperties.aftersound: (level, its decay rate) */
 void nv_aftersound(const VoiceSnap *v, double frequency, double decay_rate, double *out)
 {
+    if (v->kind == 1 && v->snare) {             /* AcousticSnareProperties: the shell's, on the head */
+        double lo = v->fund_dbs < v->head_dbs ? v->fund_dbs : v->head_dbs;    /* min(fund, head) */
+        if (v->slow_share <= 0.0 || decay_rate < 0.5 * lo - 1e-9) {
+            out[0] = 0.0;
+            out[1] = decay_rate;
+        } else {
+            double s = 0.5 * v->slow_dbs;
+            out[0] = v->slow_share;
+            out[1] = s < decay_rate ? s : decay_rate;
+        }
+        return;
+    }
     if (v->kind == 1) {                         /* KitDrumProperties: the click has no remainder */
         if (v->slow_share <= 0.0 || decay_rate >= 0.5 * v->click_dbs) {
             out[0] = 0.0;
@@ -243,7 +303,7 @@ double nv_hrtf_gain(const VoiceSnap *v, double frequency, double incidence)
     return sqrt(pow(alpha * omega, 2.0) + pow(v->hrtf_beta, 2.0)) / sqrt(pow(omega, 2.0) + pow(v->hrtf_beta, 2.0));
 }
 
-double nv_chiff_harmonic_gain(const VoiceSnap *v, double harmonic)
+static double chiff_harmonic_gain(const VoiceSnap *v, double harmonic)
 {
     if (!v->chiff_span_set)
         return 1.0;
@@ -251,6 +311,13 @@ double nv_chiff_harmonic_gain(const VoiceSnap *v, double harmonic)
     if (x <= 0.0)
         return 1.0;
     return 1.0 / (1.0 + pow(x, v->chiff_harmonic_power));
+}
+
+double nv_chiff_harmonic_gain(const VoiceSnap *v, double harmonic)
+{
+    if (v->noisy)                               /* NoisyPercussionMixin: the wash rolled off too */
+        return chiff_harmonic_gain(v, harmonic) * hf_rolloff(v, harmonic);
+    return chiff_harmonic_gain(v, harmonic);
 }
 
 double nv_bloom_delay_for(const VoiceSnap *v, double frequency)
