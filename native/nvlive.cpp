@@ -35,9 +35,10 @@
 //
 // THE DAMPERS IN BETWEEN (live._damp_block): a pedal value in damper.py's
 // band takes a pedalled key down by its level, through synth_voice_damp.
-// --pedal-key=N: MIDI key N is the sustain pedal, pushed into to lower the
-// dampers (live.Route(("note", N), 64), slab.cpp's KeyPedal): held, CC64
-// 127; channel aftertouch while it is held, 127 - pressure; up, 0.
+// THE ROUTES (live.Route): the session's, from the export, ahead of the
+// part (slab.cpp's Router) -- and --pedal-key=N, MIDI key N as the sustain
+// pedal, pushed into to lower the dampers: held, CC64 127; channel
+// aftertouch while it is held, 127 - pressure; up, 0.
 //
 // THE GPU (--gpu, live's --gpu): live.GpuRenderer's block -- its setup on
 // the CPU (voice_block, from the export's LGPU builds), the samples on
@@ -70,9 +71,10 @@
 // MONO (126) one voice a channel, handed over to each new key and back to
 // the last one held, POLY (127) as many as are played.
 //
-// Not yet: portamento, the other routes, the TUI.
+// Not yet: portamento, the TUI.
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -120,7 +122,9 @@ void nv_lp_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, 
 void nv_lp_post(void *h, double thresh, double bend_range, double mod_cents);
 void nv_lp_output(void *h, long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd,
                   long long blk, double master_gain);
-void *nv_kp_new(int key);
+void *nv_rt_new();
+void nv_rt_add(void *h, int src, int arg, int dst, int keep, int channel, int latch, int press);
+int nv_rt_feed(void *h, int type, int ch, int a, int b, int *out, int cap);
 void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr);
 int nv_lp_on_gpu(void *h);
 void nv_lp_gpu_ms(void *h, double *out);
@@ -128,7 +132,6 @@ void nv_lp_reg_async(void *h);
 long nv_lp_govern(void *h, double ms, double budget_ms, long long n);
 long nv_lp_partials_shed(void *h);
 void *nv_cl_new(const char *dir, const int *sizes, char *err, int errlen);
-int nv_kp_feed(void *h, int type, int ch, int a, int *v);
 void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
                     int top, double beta, int pedals, double rel, double full_db_s, double residual, double ln10_20,
                     long long blk, const int *reg_note);
@@ -163,6 +166,8 @@ struct Export {
     std::string conv_lib;
     std::vector<float> ir, mir;
     bool has_room = false;
+    // LROUTE: the session's routes, nv_rt_add's seven each
+    std::vector<std::array<int, 7>> routes;
 };
 
 static bool read_export(const char *path, Export &E)
@@ -242,6 +247,15 @@ static bool read_export(const char *path, Export &E)
                     }
                     E.has_room = g;
                 }
+                char r6[6];
+                int nr = 0;
+                if (ok && fread(r6, 1, 6, f) == 6 && !memcmp(r6, "LROUTE", 6) && fread(&nr, 4, 1, f) == 1)
+                    for (int q = 0; q < nr; q++) {
+                        std::array<int, 7> a;
+                        if (fread(a.data(), 4, 7, f) != 7)
+                            break;
+                        E.routes.push_back(a);
+                    }
             }
         }
     }
@@ -563,19 +577,24 @@ int main(int argc, char **argv)
             fprintf(stderr, "nvlive: no GPU (%s): the CPU\n", why.c_str());
         }
     }
-    // the pedal key's route ahead of the part: a message it takes becomes its
-    // CC64 values; the rest go on (aftertouch the key does not take is
-    // pressure: the notes on its channel lifted by press_db at full)
+    // THE ROUTES ahead of the part (live.Route, Live.on_midi): the session's,
+    // from the export, and --pedal-key's -- a key held as the sustain pedal,
+    // pushed into (aftertouch) to lower the dampers
+    void *router = nv_rt_new();
+    for (auto &a : E.routes)
+        nv_rt_add(router, a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
     std::string pks = opt(argc, argv, "pedal-key", "");
-    void *kp = pks.empty() ? nullptr : nv_kp_new(atoi(pks.c_str()));
-    if (kp)
+    if (!pks.empty()) {
+        nv_rt_add(router, 3, atoi(pks.c_str()), 64, 0, -1, 0, 1);
         fprintf(stderr, "nvlive: key %d is the sustain pedal, pushed into to lower the dampers\n", atoi(pks.c_str()));
+    }
+    if (!E.routes.empty())
+        fprintf(stderr, "nvlive: %zu route(s) from the session\n", E.routes.size());
     auto event = [&](int type, int ch, int a, int b) {
-        int v = 0, n = kp ? nv_kp_feed(kp, type, ch, a, &v) : -1;
-        if (n > 0)
-            nv_lp_event(part, 2, ch, 64, v);
-        else if (n < 0)
-            nv_lp_event(part, type, ch, a, b);
+        int out[4 * 16];
+        int n = nv_rt_feed(router, type, ch, a, b, out, 16);
+        for (int q = 0; q < n; q++)
+            nv_lp_event(part, out[4 * q], out[4 * q + 1], out[4 * q + 2], out[4 * q + 3]);
     };
     float L[4096], R[4096];
     // --test: a file's events, block by block, to the dry blocks

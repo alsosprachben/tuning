@@ -5,6 +5,7 @@
                                         [--half] [--pedal-key=N] [--pressure]
                                         [--gpu=c|cl] [--gpu-min=N] [--shed=N] [--wheels]
                                         [--room=NAME] [--cc91] [--thresh=X] [--rpn] [--modes]
+                                        [--routes]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native piano part (native/slab.cpp: its template cache, its slab, live's
@@ -45,6 +46,9 @@ limiter's knee (live's 0.70), low to make it work.
 --rpn: RPNs (bend range, fine and coarse tuning, the mod range, MTS's
 selects, the null; data entry and increment), NRPN selects, CC121 and the
 sostenuto pedal among the controls.
+--routes: a random set of routes (live.Route) on both sides -- through
+on_midi on live's, native.Router on the native part's -- onto what the
+native piano plays: the pedals, CC1, 7, 10, 11, the wheel, pressure, mono.
 --modes: All Sound Off (CC120), All Notes Off (CC123) and the channel-mode
 messages that send them (124-127: MONO on and off among them, so the
 channels play in mono mode for stretches -- a voice handed over, and back).
@@ -116,9 +120,19 @@ def main(argv):
     ntr = dmb = nshed = nlim = ntune = nsost = nmode = nmono = 0
     pk = int(opt["pedal-key"]) if "pedal-key" in opt else None
     kp = None
-    if pk is not None:
-        lv.set_routes([L.Route(("note", pk), 64)])
-        kp = N.KeyPedal(pk)
+    routes = [L.Route(("note", pk), 64)] if pk is not None else []
+    if "routes" in opt:
+        for _ in range(rng.randint(1, 3)):
+            kind = rng.choice(("cc", "bend", "pressure", "note"))
+            src = (("cc", rng.choice((2, 4, 11))) if kind == "cc"
+                   else ("bend", rng.choice(("up", "down", "both"))) if kind == "bend"
+                   else ("pressure",) if kind == "pressure" else ("note", rng.choice((lo, hi))))
+            routes.append(L.Route(src, rng.choice((64, 66, 67, 1, 7, 10, 11, "bend", "pressure", "mono")),
+                                  keep=rng.random() < 0.3, latch=rng.random() < 0.3))
+        print("  routes: %s" % "; ".join(r.describe() for r in routes))
+    if routes:
+        lv.set_routes(routes)
+        kp = N.Router(routes)
     pk_down = set()
     pedal = ((0, 24, 40, 56, 72, 88, 104, 127) if opt.get("half") != "all" else tuple(range(128))) \
         if "half" in opt else (0, 127)
@@ -196,6 +210,19 @@ def main(argv):
                     msgs.append(M("pitchwheel", channel=ch, pitch=rng.choice((0, rng.randint(-8192, 8191)))))
                 else:
                     msgs.append(M("control_change", channel=ch, control=1, value=rng.randint(0, 127)))
+            elif "routes" in opt and rng.random() < 0.4:
+                y = rng.random()
+                if y < 0.3:
+                    msgs.append(M("control_change", channel=ch, control=rng.choice((2, 4, 11)),
+                                  value=rng.randint(0, 127)))
+                elif y < 0.55:
+                    msgs.append(M("pitchwheel", channel=ch, pitch=rng.randint(-8192, 8191)))
+                elif y < 0.75:
+                    msgs.append(M("aftertouch", channel=ch, value=rng.randint(0, 127)))
+                else:
+                    nt = rng.choice((lo, hi))
+                    msgs.append(M("note_on", channel=ch, note=nt, velocity=rng.randint(1, 127))
+                                if rng.random() < 0.5 else M("note_off", channel=ch, note=nt, velocity=0))
             elif "pressure" in opt and rng.random() < 0.4:
                 msgs.append(M("aftertouch", channel=ch, value=rng.choice((0, rng.randint(0, 127)))))
             elif "rpn" in opt and rng.random() < 0.5:

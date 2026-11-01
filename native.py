@@ -292,9 +292,10 @@ def _load():
             ('nv_cl_new', ctypes.c_void_p, [ctypes.c_char_p, ctypes.c_void_p, ctypes.c_char_p, I]),
             ('nv_cl_free', None, [ctypes.c_void_p]),
             ('nv_lp_dm', None, [ctypes.c_void_p, ctypes.c_void_p]),
-            ('nv_kp_new', ctypes.c_void_p, [I]),
-            ('nv_kp_feed', I, [ctypes.c_void_p, I, I, I, ctypes.c_void_p]),
-            ('nv_kp_free', None, [ctypes.c_void_p]),
+            ('nv_rt_new', ctypes.c_void_p, []),
+            ('nv_rt_add', None, [ctypes.c_void_p, I, I, I, I, I, I, I]),
+            ('nv_rt_feed', I, [ctypes.c_void_p, I, I, I, I, ctypes.c_void_p, I]),
+            ('nv_rt_free', None, [ctypes.c_void_p]),
             ('nv_lreg_new', ctypes.c_void_p, [ctypes.c_void_p, I, C, C, C, C, C, I, C]),
             ('nv_lreg_strike', I, [ctypes.c_void_p, LL, I, C, I, ctypes.c_void_p, ctypes.c_void_p,
                                    ctypes.c_void_p, I]),
@@ -1557,35 +1558,74 @@ class LivePiano(object):
         return (L, R, SL, SR) if send else (L, R)
 
 
-class KeyPedal(object):
-    """native/slab.cpp's key held as the sustain pedal (live.Route(("note",
-    key), 64)): feed(msg) -> the messages it becomes, as Live.on_midi's route
-    pass makes them."""
+ROUTE_SRC = {"cc": 0, "bend": 1, "pressure": 2, "note": 3}
+ROUTE_HALF = {"up": 0, "down": 1, "both": 2}
+ROUTE_DST = {"bend": -1, "pressure": -2, "mono": -3}
 
-    def __init__(self, key):
+
+def route_args(r):
+    """A live.Route as nv_rt_add's (src, arg, dst, keep, channel, latch, press);
+    a destination live's catalogue does not have stays one (-99: no output)."""
+    kind = r.src[0]
+    arg = (ROUTE_HALF.get(r.src[1] if len(r.src) > 1 else "up", 0) if kind == "bend"
+           else int(r.src[1]) if kind in ("cc", "note") else 0)
+    dst = ROUTE_DST.get(r.dst, -99) if isinstance(r.dst, str) else int(r.dst)
+    return (ROUTE_SRC[kind], arg, dst, int(r.keep), -1 if r.channel is None else int(r.channel),
+            int(r.latch), int(r.press))
+
+
+class Router(object):
+    """native/slab.cpp's routes (live.Route, Live.on_midi's pass): feed(msg)
+    -> the messages it becomes, as on_midi hands them on."""
+
+    def __init__(self, routes):
         self.d = lib()
-        self.p = self.d.nv_kp_new(int(key))
+        self.p = self.d.nv_rt_new()
+        for r in routes:
+            self.d.nv_rt_add(self.p, *route_args(r))
 
     def __del__(self):
         if getattr(self, 'p', None):
-            self.d.nv_kp_free(self.p)
+            self.d.nv_rt_free(self.p)
             self.p = None
 
     def feed(self, msg):
         import mido
         if msg.type == "aftertouch":
-            ty, a = 3, msg.value
+            m = (3, msg.channel, msg.value, 0)
         elif msg.type == "note_on" and msg.velocity > 0:
-            ty, a = 0, msg.note
+            m = (0, msg.channel, msg.note, msg.velocity)
         elif msg.type in ("note_on", "note_off"):
-            ty, a = 1, msg.note
+            m = (1, msg.channel, msg.note, 0)
+        elif msg.type == "control_change":
+            m = (2, msg.channel, msg.control, msg.value)
+        elif msg.type == "pitchwheel":
+            m = (4, msg.channel, msg.pitch, 0)
         else:
             return [msg]
-        v = ctypes.c_int(0)
-        n = self.d.nv_kp_feed(self.p, ty, msg.channel, a, ctypes.byref(v))
-        if n < 0:
-            return [msg]
-        return [mido.Message("control_change", channel=msg.channel, control=64, value=v.value)] if n else []
+        out = (ctypes.c_int * 64)()
+        n = self.d.nv_rt_feed(self.p, *m, out, 16)
+        got = []
+        for q in range(n):
+            t, ch, a, b = out[4 * q:4 * q + 4]
+            if (t, ch, a, b) == m:
+                got.append(msg)             # passed on as it came (a release's velocity too)
+                continue
+            got.append(mido.Message("note_on", channel=ch, note=a, velocity=b) if t == 0 else
+                       mido.Message("note_off", channel=ch, note=a, velocity=0) if t == 1 else
+                       mido.Message("control_change", channel=ch, control=a, value=b) if t == 2 else
+                       mido.Message("aftertouch", channel=ch, value=a) if t == 3 else
+                       mido.Message("pitchwheel", channel=ch, pitch=a))
+        return got
+
+
+class KeyPedal(Router):
+    """A key held as the sustain pedal, pushed into to lower the dampers: the
+    router of live.Route(("note", key), 64) alone."""
+
+    def __init__(self, key):
+        import live as L
+        Router.__init__(self, [L.Route(("note", int(key)), 64)])
 
 
 def live_bank(cls, table, sr, scale=1.0):

@@ -2351,37 +2351,233 @@ struct Piano {
     }
 };
 
-// A KEY HELD AS THE SUSTAIN PEDAL (live.Route(("note", key), 64), held, not
-// latched, with press): the key down sends CC64 127 and its release 0 (on a
-// change); channel aftertouch while it is held sends 127 - pressure, so
-// pushing into the key lowers the dampers (damper.py's band) and pushing
-// fully puts them down. The key itself does not sound; a release this route
-// did not take the press of, and aftertouch with the key up, pass through.
-struct KeyPedal {
-    int key;
-    bool held[16] = {}, down[16] = {};
+// THE ROUTES (live.Route, and Live.on_midi's pass over them): one hardware
+// control made to drive another, ahead of the part. A message is (type, ch,
+// a, b): 0 note-on (a key, b velocity), 1 note-off, 2 control change (a
+// number, b value), 3 channel aftertouch (a), 4 the pitch wheel (a,
+// -8192..8191). A source is a CC, the wheel's up, down or both halves,
+// channel pressure, or a key; a destination one of live.CONTROLS -- a CC,
+// or BEND, PRESSURE, MONO -- and the transform follows from the two:
+//   the wheel onto a switch    held while pushed: down past PW_FIRE of its
+//                              half, up under PW_REARM
+//   a CC onto a switch         64 and above is down
+//   anything onto a CC         its travel scaled 0-127
+//   a CC onto the wheel        0-127 onto -8192..8191, centred at 64
+//   a key onto a switch        held while down, or each press toggles (latch);
+//                              held as the sustain pedal, its channel's
+//                              aftertouch while it is down is 127 - pressure
+//   a key onto anything else   its velocity while held, and on release the
+//                              value the control had before
+// A route REPLACES its source unless it keeps it; the messages that pass are
+// what the last value of each control is kept from (live.seen), which a key
+// puts back when it comes up.
+enum { DST_BEND = -1, DST_PRESSURE = -2, DST_MONO = -3 };
+enum { SRC_CC = 0, SRC_BEND = 1, SRC_PRESSURE = 2, SRC_NOTE = 3 };
+enum { K_SWITCH = 0, K_CONT = 1, K_BEND = 2, K_PRESSURE = 3 };
+static const double PW_FIRE = 0.50, PW_REARM = 0.20;    // live's
 
-    // -1: not this route's (the message goes on as it is); else how many
-    // CC64 values it becomes (0 or 1, in *v)
-    int feed(int type, int ch, int a, int *v)
-    {
-        if (type == 3) {                        // channel aftertouch, a its value
-            if (!held[ch])
-                return -1;
-            *v = 127 - a;
-            return 1;
+struct Msg {
+    int type, ch, a, b;
+};
+
+// live.CONTROLS: (key, kind, default); a key not here is no destination
+static bool control_spec(int key, int *kind, int *dflt)
+{
+    static const int T[][3] = {{64, K_SWITCH, 0}, {66, K_SWITCH, 0}, {67, K_SWITCH, 0}, {65, K_SWITCH, 0},
+                               {DST_MONO, K_SWITCH, 0}, {1, K_CONT, 0}, {11, K_CONT, 127}, {7, K_CONT, 100},
+                               {10, K_CONT, 64}, {5, K_CONT, 0}, {93, K_CONT, 0}, {94, K_CONT, 0},
+                               {74, K_CONT, 64}, {71, K_CONT, 64}, {73, K_CONT, 64}, {75, K_CONT, 64},
+                               {72, K_CONT, 64}, {76, K_CONT, 64}, {77, K_CONT, 64}, {78, K_CONT, 64},
+                               {DST_BEND, K_BEND, 0}, {DST_PRESSURE, K_PRESSURE, 0}};
+    for (auto &r : T)
+        if (r[0] == key) {
+            *kind = r[1];
+            *dflt = r[2];
+            return true;
         }
-        if ((type != 0 && type != 1) || a != key)
-            return -1;
-        if (type == 1 && !held[ch])
-            return -1;
-        held[ch] = type == 0;
-        bool now = type == 0;
-        if (now == down[ch])
-            return 0;                           // a pedal is sent on a change
-        down[ch] = now;
-        *v = now ? 127 : 0;
-        return 1;
+    return false;
+}
+
+// live.control_message: the message one catalogue control sends at value
+static Msg control_message(int key, long value, int ch)
+{
+    auto clamp = [](long v, long lo, long hi) { return v < lo ? lo : v > hi ? hi : v; };
+    if (key == DST_BEND)
+        return Msg{4, ch, (int)clamp(value, -8192, 8191), 0};
+    if (key == DST_PRESSURE)
+        return Msg{3, ch, (int)clamp(value, 0, 127), 0};
+    if (key == DST_MONO)
+        return value >= 64 ? Msg{2, ch, 126, 1} : Msg{2, ch, 127, 0};
+    return Msg{2, ch, key, (int)clamp(value, 0, 127)};
+}
+
+static long pyround(double x) { return (long)nearbyint(x); }    // round(): to even
+
+struct Route {
+    int src, arg, dst;          // arg: the CC, the key, or the wheel's half (0 up, 1 down, 2 both)
+    bool keep = false, latch = false, press = true;
+    int channel = -1;           // -1 every channel
+    bool down[16] = {}, held[16] = {};
+    std::map<int, int> prior;   // channel -> the value before the key went down
+
+    static bool is_on(const Msg &m) { return m.type == 0 && m.b > 0; }
+
+    bool pressing(int ch) const
+    {
+        return press && !latch && dst == 64 && held[ch];
+    }
+
+    bool matches(const Msg &m) const
+    {
+        if (channel >= 0 && m.ch != channel)
+            return false;
+        if (src == SRC_CC)
+            return m.type == 2 && m.a == arg;
+        if (src == SRC_BEND)
+            return m.type == 4;
+        if (src == SRC_PRESSURE)
+            return m.type == 3;
+        if (m.type == 3)
+            return pressing(m.ch);
+        if ((m.type != 0 && m.type != 1) || m.a != arg)
+            return false;
+        // a release only if this route took the press
+        return is_on(m) || held[m.ch];
+    }
+
+    double level(const Msg &m) const
+    {
+        if (src == SRC_BEND) {
+            int p = m.a;
+            if (arg == 0)
+                return std::max(0, p) / 8191.0;
+            if (arg == 1)
+                return std::max(0, -p) / 8192.0;
+            return abs(p) / 8192.0;
+        }
+        return (m.type == 3 ? m.a : m.b) / 127.0;
+    }
+
+    void rewrite(const Msg &m, const std::map<std::pair<int, int>, int> &seen, std::vector<Msg> &out)
+    {
+        int kind, dflt;
+        if (!control_spec(dst, &kind, &dflt))
+            return;
+        int ch = m.ch;
+        if (src == SRC_NOTE) {
+            key(m, ch, kind, dflt, seen, out);
+            return;
+        }
+        double x = level(m);
+        if (kind == K_SWITCH) {
+            bool was = down[ch], now;
+            if (src == SRC_BEND)
+                now = !was ? x >= PW_FIRE : x > PW_REARM;
+            else
+                now = x >= 64.0 / 127.0;
+            if (now == was)
+                return;                         // a pedal is sent on a change, not a stream
+            down[ch] = now;
+            out.push_back(control_message(dst, now ? 127 : 0, ch));
+            return;
+        }
+        if (kind == K_BEND) {
+            if (src == SRC_BEND) {
+                out.push_back(control_message(DST_BEND, m.a, ch));
+                return;
+            }
+            // each half on its own scale: 64 centre, 0 full down, 127 full up
+            double v = x * 127.0;
+            double p = v >= 64.0 ? (v - 64.0) / 63.0 * 8191.0 : (v - 64.0) / 64.0 * 8192.0;
+            out.push_back(control_message(DST_BEND, pyround(p), ch));
+            return;
+        }
+        out.push_back(control_message(dst, pyround(x * 127.0), ch));
+    }
+
+    void key(const Msg &m, int ch, int kind, int dflt, const std::map<std::pair<int, int>, int> &seen,
+             std::vector<Msg> &out)
+    {
+        if (m.type == 3) {
+            // pushed into while held: the dampers lowered (Route.press)
+            out.push_back(control_message(dst, 127 - m.a, ch));
+            return;
+        }
+        bool on = is_on(m);
+        held[ch] = on;
+        if (kind == K_SWITCH) {
+            bool was = down[ch], now;
+            if (latch) {
+                if (!on)
+                    return;
+                now = !was;
+            } else {
+                now = on;
+                if (now == was)
+                    return;
+            }
+            down[ch] = now;
+            out.push_back(control_message(dst, now ? 127 : 0, ch));
+            return;
+        }
+        if (on) {
+            if (!prior.count(ch)) {
+                auto it = seen.find(std::make_pair(ch, dst));
+                prior[ch] = it != seen.end() ? it->second : dflt;
+            }
+            int v = m.b;
+            out.push_back(control_message(dst, kind == K_BEND ? pyround(v / 127.0 * 8191) : v, ch));
+            return;
+        }
+        auto it = prior.find(ch);
+        if (it == prior.end())
+            return;
+        int pv = it->second;
+        prior.erase(it);
+        out.push_back(control_message(dst, pv, ch));
+    }
+};
+
+struct Router {
+    std::vector<Route> routes;
+    std::map<std::pair<int, int>, int> seen;    // (channel, control) -> its last value (live.seen)
+
+    // Live.on_midi's pass: the messages msg becomes, each then seen
+    std::vector<Msg> feed(const Msg &msg)
+    {
+        std::vector<Msg> out;
+        bool consumed = false;
+        for (Route &r : routes)
+            if (r.matches(msg)) {
+                r.rewrite(msg, seen, out);
+                consumed = consumed || !r.keep;
+            }
+        std::vector<Msg> msgs;
+        if (!consumed)
+            msgs.push_back(msg);
+        msgs.insert(msgs.end(), out.begin(), out.end());
+        for (const Msg &m : msgs)
+            see(m);
+        return msgs;
+    }
+
+    // Live._see: the last value of each control on each channel; CC121 forgets
+    // the ones it resets
+    void see(const Msg &m)
+    {
+        int kind, dflt;
+        if (m.type == 2) {
+            if (m.a == 121) {
+                for (int k : {1, 11, 64, 65, 66, 67, (int)DST_BEND, (int)DST_PRESSURE})
+                    seen.erase(std::make_pair(m.ch, k));
+            } else if (control_spec(m.a, &kind, &dflt)) {
+                seen[std::make_pair(m.ch, m.a)] = m.b;
+            }
+        } else if (m.type == 4) {
+            seen[std::make_pair(m.ch, (int)DST_BEND)] = m.a;
+        } else if (m.type == 3) {
+            seen[std::make_pair(m.ch, (int)DST_PRESSURE)] = m.a;
+        }
     }
 };
 
@@ -2451,17 +2647,33 @@ void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float 
     ((nv::slab::Piano *)h)->render(n0, frames, L, R, SL, SR, sv, sx, sd, blk, master_gain);
 }
 
-// A key as the sustain pedal, pushed into to lower the dampers (KeyPedal)
-void *nv_kp_new(int key)
+// THE ROUTES (live.Route, Live.on_midi): a router, its routes added in
+// order, each (source kind, its CC/half/key, destination, keep, channel -1
+// all, latch, press)
+void *nv_rt_new() { return new nv::slab::Router(); }
+
+void nv_rt_add(void *h, int src, int arg, int dst, int keep, int channel, int latch, int press)
 {
-    nv::slab::KeyPedal *k = new nv::slab::KeyPedal();
-    k->key = key;
-    return k;
+    nv::slab::Route r;
+    r.src = src; r.arg = arg; r.dst = dst; r.keep = keep != 0; r.channel = channel; r.latch = latch != 0;
+    r.press = press != 0;
+    ((nv::slab::Router *)h)->routes.push_back(r);
 }
 
-int nv_kp_feed(void *h, int type, int ch, int a, int *v) { return ((nv::slab::KeyPedal *)h)->feed(type, ch, a, v); }
+// one message in (type, ch, a, b); up to cap out, 4 ints each; how many
+int nv_rt_feed(void *h, int type, int ch, int a, int b, int *out, int cap)
+{
+    std::vector<nv::slab::Msg> got = ((nv::slab::Router *)h)->feed(nv::slab::Msg{type, ch, a, b});
+    int n = 0;
+    for (const nv::slab::Msg &m : got)
+        if (n < cap) {
+            out[4 * n] = m.type; out[4 * n + 1] = m.ch; out[4 * n + 2] = m.a; out[4 * n + 3] = m.b;
+            n++;
+        }
+    return n;
+}
 
-void nv_kp_free(void *h) { delete (nv::slab::KeyPedal *)h; }
+void nv_rt_free(void *h) { delete (nv::slab::Router *)h; }
 
 // the damper tracks' values (DM: 2 x 256 floats)
 void nv_lp_dm(void *h, float *out)

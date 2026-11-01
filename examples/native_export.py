@@ -34,15 +34,16 @@ Then an LREG section, each program's free strings as live's register
 builds them (native.live_bank: the string bank at the part's tuning, its
 LiveChannel's constants), its dampers and release, damper.py's felt, and
 which keys' classes answer (live._reg_voice) -- an M of 0 where none.
-Then LGPU (live's GPU renderer's builds) and LROOM: live's convolver
-library and the room's late tail (live.room_irs: the diffuse tail's and
-the modes' impulse responses, stereo), none in a room without one.
+Then LGPU (live's GPU renderer's builds), LROOM (live's convolver library
+and the room's late tail, live.room_irs: the diffuse tail's and the modes'
+impulse responses, stereo; none in a room without one) and LROUTE (the
+session's routes, native.route_args each).
 
 --live TAKES THE LAST SESSION, as live starts (live.load_session; --fresh:
 not): its room (--room says otherwise; else TUNING_ROOM, else the hall),
 which the voices are packed in and the tail is drawn for, its master level,
-the slab's headroom, the pressure's lift, the limiter's knee and the
-wheel's range.
+the slab's headroom, the pressure's lift, the limiter's knee, the wheel's
+range and its routes.
 """
 import ctypes
 import math
@@ -196,12 +197,17 @@ def main(argv):
                 else:
                     a = np.ascontiguousarray(a, np.float32)
                     f.write(struct.pack("<i", len(a)) + a.tobytes())
+            # LROUTE: the session's routes (live.Route), each as nv_rt_add takes it
+            routes = [L.Route.from_dict(r) for r in sess.get("routes", [])]
+            f.write(b"LROUTE" + struct.pack("<i", len(routes)))
+            for r in routes:
+                f.write(struct.pack("<7i", *N.route_args(r)))
     print("native export: %d piano class(es), tuner %s, room %s -> %s" % (len(classes), tuner,
                                                                           room.decode() or "-", args[0]))
     if sess:
-        print("  from the last session: room %s, master %s dB, headroom %s dB, press %s dB, knee %s"
+        print("  from the last session: room %s, master %s dB, headroom %s dB, press %s dB, knee %s, %d route(s)"
               % (sess.get("room"), sess.get("master_db"), sess.get("headroom_db"), sess.get("press_db"),
-                 sess.get("thresh")))
+                 sess.get("thresh"), len(sess.get("routes", []))))
     return 0
 
 
