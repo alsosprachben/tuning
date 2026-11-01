@@ -5,7 +5,7 @@
                                         [--half] [--pedal-key=N] [--pressure]
                                         [--gpu=c|cl] [--gpu-min=N] [--shed=N] [--wheels]
                                         [--room=NAME] [--cc91] [--thresh=X] [--rpn] [--modes]
-                                        [--routes]
+                                        [--routes] [--porta]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native piano part (native/slab.cpp: its template cache, its slab, live's
@@ -49,6 +49,9 @@ sostenuto pedal among the controls.
 --routes: a random set of routes (live.Route) on both sides -- through
 on_midi on live's, native.Router on the native part's -- onto what the
 native piano plays: the pedals, CC1, 7, 10, 11, the wheel, pressure, mono.
+--porta: portamento among the controls -- CC65 on and off, CC5's time,
+CC84's source -- which a piano ignores in live as natively: no piano class
+has a glide mechanism (live._glide). With --modes, in mono too.
 --modes: All Sound Off (CC120), All Notes Off (CC123) and the channel-mode
 messages that send them (124-127: MONO on and off among them, so the
 channels play in mono mode for stretches -- a voice handed over, and back).
@@ -210,6 +213,10 @@ def main(argv):
                     msgs.append(M("pitchwheel", channel=ch, pitch=rng.choice((0, rng.randint(-8192, 8191)))))
                 else:
                     msgs.append(M("control_change", channel=ch, control=1, value=rng.randint(0, 127)))
+            elif "porta" in opt and rng.random() < 0.3:
+                c = rng.choice((5, 65, 65, 84))
+                msgs.append(M("control_change", channel=ch, control=c,
+                              value=rng.randint(0, 127) if c != 65 else rng.choice((0, 127))))
             elif "routes" in opt and rng.random() < 0.4:
                 y = rng.random()
                 if y < 0.3:
@@ -317,6 +324,8 @@ def main(argv):
         print("  register: %d rows placed, %d dropped (native %d); live's errors: %d %s" % (
             int(np.sum(lv.slab.busy)) - sounding, lv.reg_dropped, nv.reg_dropped(), lv.errors,
             lv.last_error or ""))
+    if "porta" in opt:
+        print("  portamento: live glided %d notes (a piano has no glide mechanism)" % getattr(lv, "glides", 0))
     if "modes" in opt:
         print("  modes: %d All Sound/Notes Off and mode messages; %d blocks in mono" % (nmode, nmono))
     if "rpn" in opt:

@@ -71,7 +71,10 @@
 // MONO (126) one voice a channel, handed over to each new key and back to
 // the last one held, POLY (127) as many as are played.
 //
-// Not yet: portamento, the TUI.
+// PORTAMENTO (CC5, 65, 84) is ignored, as live ignores it on a piano: a
+// glide is a voice's mechanism (live._glide), and no piano class has one.
+//
+// Not yet: the TUI.
 
 #include <algorithm>
 #include <array>
