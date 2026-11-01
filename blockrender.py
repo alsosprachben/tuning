@@ -1781,6 +1781,17 @@ RING_FLOOR = 1e-5
 RING_MAX = 30.0              # seconds past the file's end, at most
 
 
+def _xlog(x):
+    """log over an array as libm does it (native.xlog): numpy's SIMD log is a
+    last bit away on a fifth of values, and differently on another machine;
+    numpy's where the native library is not there."""
+    try:
+        import native as _NVX
+        return _NVX.xlog(x)
+    except ImportError:
+        return np.log(x)
+
+
 def ring_last(r):
     """The last sample any of these partials sounds above RING_FLOOR: rows as
     a dict of columns (numpy arrays or array.array). 0 if none does."""
@@ -1795,7 +1806,7 @@ def ring_last(r):
         for c, lr in (((1.0 - sl) * (1.0 - af) * a, np.asarray(r['logr'], np.float64)),
                       ((1.0 - sl) * af * a, np.asarray(r['logrA'], np.float64))):
             loud = c > RING_FLOOR
-            tt = np.where(lr > 0.0, np.log(np.where(loud, c, 1.0) / RING_FLOOR) / np.where(lr > 0.0, lr, 1.0), np.inf)
+            tt = np.where(lr > 0.0, _xlog(np.where(loud, c, 1.0) / RING_FLOOR) / np.where(lr > 0.0, lr, 1.0), np.inf)
             t = np.maximum(t, np.where(loud, tt, 0.0))
         # a sustain above the floor holds until the release
         t = np.where(sl * a > RING_FLOOR, np.inf, t)

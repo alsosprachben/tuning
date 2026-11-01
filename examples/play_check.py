@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Does the native engine play a piano file's notes as blockrender does?
 
-    python3 examples/play_check.py FILE.mid [SECONDS] [--tuner=NAME] [--register]
+    python3 examples/play_check.py FILE.mid [SECONDS] [--tuner=NAME] [--register] [--prepare]
 
 The engine on its own from the file's bytes: native/midi.cpp reads it,
 native/channel.cpp keeps its channels, and nv_play plays every note in the
@@ -32,6 +32,8 @@ def main(argv):
     args = [a for a in argv[1:] if not a.startswith("--")]
     opt = dict(a[2:].split("=", 1) if "=" in a else (a[2:], "") for a in argv[1:] if a.startswith("--"))
     os.environ["TUNING_NATIVE_TONE"] = "off"        # the reference: all Python...
+    if "prepare" in opt:
+        opt["register"] = ""
     if "register" in opt:
         os.environ["TUNING_REGISTER_C"] = "1"       # ...its register on its C core
     import numpy as np
@@ -69,14 +71,28 @@ def main(argv):
         return B.property_class_for_note(prog, key)
 
     nn = len(m.notes())
-    got = N.play(song, classes, t, br, 600 * max(nn, 1), register="register" in opt,
-                 scale=float(os.environ.get("TUNING_REGISTER", "1") or 1))
+    scale = float(os.environ.get("TUNING_REGISTER", "1") or 1)
+    extra = []
+    if "prepare" in opt:
+        Q = N.prepare(song, classes, t, br, m.total(), scale=scale)
+        if isinstance(Q, tuple):
+            got = Q
+        else:
+            got = (np.stack([Q[c].astype(np.float64) for c in B.EMIT_COLS], 1),)
+            for k in ("N", "nblk", "P", "total", "sym_rows", "room_q"):
+                a, b = P[k], Q[k]
+                if k == "room_q":
+                    a, b = [tuple(float(x) for x in q) for q in a], [tuple(float(x) for x in q) for q in b]
+                if a != b:
+                    extra.append("%s (%r vs %r)" % (k, a, b))
+    else:
+        got = N.play(song, classes, t, br, 600 * max(nn, 1), register="register" in opt, scale=scale)
     if got[0] is None:
         print("not the engine's: note %d %r" % (got[1], m.notes()[got[1]]))
         return 2
     rows = got[0]
     n = len(rows)
-    bad, skipped = [], []
+    bad, skipped = list(extra), []
     for j, c in enumerate(B.EMIT_COLS):
         if c not in P:
             skipped.append(c)       # used by the passes after the notes, not returned ('dr')

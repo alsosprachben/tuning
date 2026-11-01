@@ -160,7 +160,7 @@ def lib():
 def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
-                                                       'register.cpp')]
+                                                       'register.cpp', 'prepare.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -172,15 +172,16 @@ def _load():
         # under the same flags, linked into one library.
         flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
         objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
-                tmp + '.register.o', tmp + '.registercore.o']
+                tmp + '.register.o', tmp + '.prepare.o', tmp + '.registercore.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
-            for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', 'register.cpp')], objs[1:6]):
+            for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f) for f in ('register.cpp', 'prepare.cpp')],
+                              objs[1:7]):
                 subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', src, '-o', o])
             # register.py's C core, under ITS flags (register._load_core's): the same arithmetic
             subprocess.check_call(['gcc', '-O3', '-march=native', '-ffp-contract=off', '-fopenmp-simd',
                                    '-fno-math-errno', '-mprefer-vector-width=512', '-fPIC', '-c',
-                                   os.path.join(HERE, 'registercore.c'), '-o', objs[6]])
+                                   os.path.join(HERE, 'registercore.c'), '-o', objs[7]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm'])
         finally:
             for o in objs:
@@ -226,6 +227,10 @@ def _load():
             ('nv_exp_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_pow_n', None, [ctypes.c_long, ctypes.c_void_p, I, ctypes.c_void_p, I, ctypes.c_void_p]),
             ('nv_cabs_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_log_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_prepare', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoteIn), D, I,
+                                ctypes.POINTER(PyRandomState), ctypes.POINTER(D), ctypes.c_void_p, D,
+                                ctypes.c_void_p, C, C, C, C, LL, C, C, C, ctypes.c_void_p]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
             ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C, I, I]),
@@ -234,7 +239,7 @@ def _load():
                             ctypes.POINTER(LL), ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_play_full', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoteIn), D, I,
                                   ctypes.POINTER(PyRandomState), ctypes.POINTER(D), ctypes.c_void_p, D,
-                                  ctypes.c_void_p, C, C, C, C, LL]),
+                                  ctypes.c_void_p, C, C, C, C, LL, ctypes.POINTER(LL)]),
             ('nv_buf_free', None, [ctypes.c_void_p]),
             ('nv_song_tuning', None, [ctypes.c_void_p, LL, C, D]),
             ('nv_song_channel', None, [ctypes.c_void_p, LL, C, D, I]),
@@ -785,7 +790,7 @@ def play(song, classes, tmpl, br, cap, register=False, scale=1.0):
         buf = ctypes.POINTER(ctypes.c_double)()
         n = d.nv_play_full(song.p, K, ctypes.byref(tmpl), B, nbr, ctypes.byref(rs), ctypes.byref(buf),
                            qacc.ctypes.data, ctypes.byref(az), kind, float(scale), DM.FULL_DB_S, DM.RESIDUAL,
-                           DM.BETA, BR.BLK)
+                           DM.BETA, BR.BLK, None)
         try:
             if n < 0:
                 return None, (-n - 1 if n > -1000000000 else -1)
@@ -866,6 +871,17 @@ def xexp(x):
     return out
 
 
+def xlog(x):
+    import numpy as np
+    x = np.ascontiguousarray(x, np.float64)
+    d = lib()
+    if d is None:
+        return np.log(x)
+    out = np.empty_like(x)
+    d.nv_log_n(x.size, x.ctypes.data, out.ctypes.data)
+    return out
+
+
 def xpow(x, y):
     import numpy as np
     xa, ya = np.asarray(x, np.float64), np.asarray(y, np.float64)
@@ -891,3 +907,49 @@ def xabs(z):
     out = np.empty(z.shape, np.float64)
     d.nv_cabs_n(z.size, z.ctypes.data, out.ctypes.data)
     return out
+
+
+def prepare(song, classes, tmpl, br, total, scale=1.0):
+    """nv_prepare: blockrender.prepare's result for a piano song, as far as
+    the engine has it -- {column: array} (EMIT_COLS, cast as the table
+    stores them), N, nblk, P, total, room_q, sym_rows -- or (None, i) where
+    note i is not the engine's."""
+    import random
+    import numpy as np
+    import blockrender as BR
+    import damper as DM
+    d = lib()
+    K = (ctypes.c_void_p * (128 * 128))()
+    keep = []
+    for prog in range(128):
+        for key in range(128):
+            cls = classes(prog, key)
+            k = note_class(cls) if cls is not None else None
+            if k is not None:
+                keep.append(k)
+                K[128 * prog + key] = ctypes.addressof(k)
+    nbr = max([int(c) + 1 for c in br] + [1])
+    B = (ctypes.c_double * nbr)(*[float(br.get(c, -1)) for c in range(nbr)])
+    random.seed(0)
+    rs = random_state()
+    qacc = np.zeros(18)
+    az = ctypes.c_double(0.0)
+    kind = (ctypes.c_int * NCOLS)(*[1 if c in BR._COL_F4 else 2 if c in BR._COL_I4 else 0 for c in BR.EMIT_COLS])
+    out = (ctypes.c_double * 32)()
+    buf = ctypes.POINTER(ctypes.c_double)()
+    n = d.nv_prepare(song.p, K, ctypes.byref(tmpl), B, nbr, ctypes.byref(rs), ctypes.byref(buf), qacc.ctypes.data,
+                     ctypes.byref(az), kind, float(scale), DM.FULL_DB_S, DM.RESIDUAL, DM.BETA, BR.BLK, float(total),
+                     BR.RING_FLOOR, BR.RING_MAX, out)
+    try:
+        if n < 0:
+            return None, (-n - 1 if n > -1000000000 else -1)
+        rows = np.ctypeslib.as_array(buf, shape=(n, NCOLS)).copy() if n else np.zeros((0, NCOLS))
+    finally:
+        d.nv_buf_free(buf)
+    dt = {c: (np.float32 if c in BR._COL_F4 else np.int32 if c in BR._COL_I4 else np.float64)
+          for c in BR.EMIT_COLS}
+    P = {c: rows[:, j].astype(dt[c]) for j, c in enumerate(BR.EMIT_COLS)}
+    P.update(N=int(out[0]), nblk=int(out[1]), P=int(out[2]), total=float(total),
+             sym_rows=(int(out[3]), int(out[3])),
+             room_q=[(out[4 + 3 * i], out[5 + 3 * i], out[6 + 3 * i]) for i in range(9)])
+    return P
