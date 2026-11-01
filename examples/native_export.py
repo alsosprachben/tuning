@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Export what the native renderer needs from the Python, once: OUT.nvx
 
-    python3 examples/native_export.py OUT.nvx [--tuner=NAME]
+    python3 examples/native_export.py OUT.nvx [--tuner=NAME] [--live]
 
 native/nvrender renders a General MIDI piano file to the dry WAV and room
 sidecar blockrender writes, with no Python at runtime. What it cannot work out
@@ -23,6 +23,13 @@ itself is written here, from the classes it was checked against:
 
 The kernel libraries are blockrender's (built here if they are not yet):
 their paths go in too. Binary, little-endian, for this machine.
+
+--live: for native/nvlive, at live's rate and block (48 kHz, 128 a block,
+live's tuner, hybrid, unless --tuner says), and after the rest a LIVE
+section: live's pan table (CC10 -> shadow alphas, half the ears' delay) and
+the head's beta, the slab's headroom (live's 4 dB), and each native
+program's part as live.Patch makes it -- its velocity buckets, wheel steps
+and default step, dampers, una corda's strings and the instrument's top.
 """
 import ctypes
 import math
@@ -43,12 +50,15 @@ def main(argv):
         print(__doc__)
         return 2
     import blockrender as B
+    if "live" in opt:
+        B.set_sample_rate(48000)
+        B.BLK = 128
     import damper as DM
     import native as N
     import patch_map as PM
     import percussion_map as PCM
     import tonelib as T
-    tuner = opt.get("tuner") or "hybrid440"
+    tuner = opt.get("tuner") or ("hybrid" if "live" in opt else "hybrid440")
     freq = B.tuning_table(tuner)
     classes, idx, cmap = [], {}, []
     for prog in range(128):
@@ -90,6 +100,22 @@ def main(argv):
                                       for c in B.EMIT_COLS]))
         for s in [room] + libs:
             f.write(struct.pack("<i", len(s)) + s)
+        if "live" in opt:
+            import live as L
+            tab = L.pan_table()
+            f.write(b"LIVE")
+            f.write(struct.pack("<384d", *[float(x) for row in tab for x in row]))
+            f.write(struct.pack("<dd", float(L._PAN_BETA), 10.0 ** (-4.0 / 20.0)))
+            for prog in range(128):
+                rec = [0] * 9
+                if any(cmap[128 * prog + k] >= 0 for k in range(128)):
+                    pt = L.Patch(prog, False, tuner, 0)
+                    sp = [(-1 if v is None else int(v)) for v in pt.speeds][:3]
+                    rec = ([1, pt.nbuckets, len(sp)] + sp + [-1] * (3 - len(sp))
+                           + [int(pt.leslie_default if pt.detune_wheel else -1)])
+                    rec += [int(bool(pt.damper_pedal)), int(pt.soft_pedal_strings), int(pt.soft_pedal_top)]
+                    rec = rec[:7] + rec[7:]
+                f.write(struct.pack("<10i", *(rec + [0] * (10 - len(rec)))[:10]))
     print("native export: %d piano class(es), tuner %s, room %s -> %s" % (len(classes), tuner,
                                                                           room.decode() or "-", args[0]))
     return 0

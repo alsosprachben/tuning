@@ -1,0 +1,380 @@
+// nvlive.cpp -- the native live piano: a MIDI keyboard in, audio out, no
+// Python at runtime.
+//
+//     nvlive EXPORT.nvx [--program=N] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
+//     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S]
+//
+// EXPORT.nvx is examples/native_export.py --live's. At start the part's
+// templates are built (live.Patch.warm: every key 21-96 at each velocity
+// bucket, natively), then live's callback runs block by block, 128 samples
+// at 48 kHz: the block's MIDI applied at its start, the sweep, the reap,
+// the render (native/slab.cpp: bit for bit live.Live's on the CPU), out to
+// ALSA. MIDI is read raw from the keyboard's device file; ALSA's PCM is
+// loaded at run time (libasound.so.2), so nothing needs its headers.
+//
+// --test: no devices. IN.mid's notes and controllers (native/midi.cpp, in
+// message order) each applied at the start of the block its time falls in,
+// the dry blocks (live's Renderer.render: master gain and clip, no room)
+// written to OUT.wav as float32 -- what examples/nvlive_check.py compares
+// with live.Live fed the same events.
+//
+// Not yet: live's governor (shedding partials when blocks run late), the
+// room and its send, live's register, half-pedal tracks, the wheel,
+// modulation, pressure, the routes (push-to-damp), the TUI.
+
+#include <atomic>
+#include <cmath>
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <dlfcn.h>
+#include <fcntl.h>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <unistd.h>
+#include <vector>
+
+#include "pycompat.h"
+
+extern "C" {
+void *nv_midi_read(const uint8_t *buf, long long len, int *err);
+void nv_midi_free(void *p);
+double nv_midi_total(void *p);
+int nv_midi_n_events(void *p);
+void nv_midi_event(void *p, int i, int *iv, double *t);
+void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double *freq, const double *trim,
+                    const int *kind, const int *fin, double scale, double full_db_s, double residual, double beta,
+                    long long blk, double ring_floor, double ring_max, double knee_db, double ln10_20,
+                    double xdec_nepers, double SR);
+long nv_tcache_warm(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp);
+void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
+                int soft_drop, int soft_top, double rate, double retrigger, long cap, double headroom,
+                const double *pan_tab, double pan_beta);
+void nv_lp_event(void *h, int type, int ch, int a, int b);
+void nv_lp_block(void *h, long long n0, long long blk);
+void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
+                  long long blk, double master_gain);
+}
+
+// the export's constants (native_export.py's order)
+enum { K_SR, K_BLK, K_CHUNK, K_MASTER, K_RING_FLOOR, K_RING_MAX, K_XDEC, K_REG_SCALE, K_FULL, K_RESIDUAL, K_BETA,
+       K_KNEE, K_LN10_20, K_RETRIGGER, K_NYQ_OM, K_SVDC, K_FIXED_TOUCH, K_REFLECT, K_BANDS, K_SH = K_BANDS + 9 };
+
+struct Export {
+    std::vector<double> k, freq, trim, pan;
+    std::vector<std::vector<unsigned char>> classes;
+    std::vector<int> cmap, kind, fin;
+    std::string room, libs[3];
+    double beta = 0.0, headroom = 1.0;
+    int part[128][10];
+    bool live = false;
+};
+
+static bool read_export(const char *path, Export &E)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        return false;
+    char magic[4];
+    int nk, csz, ncls;
+    bool ok = fread(magic, 1, 4, f) == 4 && !memcmp(magic, "NVX1", 4) && fread(&nk, 4, 1, f) == 1
+              && fread(&csz, 4, 1, f) == 1 && fread(&ncls, 4, 1, f) == 1 && csz == (int)sizeof(NoteClass);
+    if (ok) {
+        E.k.resize(nk); E.freq.resize(128); E.trim.resize(512); E.cmap.resize(16384);
+        E.kind.resize(NCOLS); E.fin.resize(NCOLS);
+        ok = fread(E.k.data(), 8, nk, f) == (size_t)nk && fread(E.freq.data(), 8, 128, f) == 128
+             && fread(E.trim.data(), 8, 512, f) == 512;
+        for (int i = 0; ok && i < ncls; i++) {
+            E.classes.emplace_back(csz);
+            ok = fread(E.classes.back().data(), 1, csz, f) == (size_t)csz;
+        }
+        ok = ok && fread(E.cmap.data(), 4, 16384, f) == 16384 && fread(E.kind.data(), 4, NCOLS, f) == NCOLS
+             && fread(E.fin.data(), 4, NCOLS, f) == NCOLS;
+        std::string *ss[4] = {&E.room, &E.libs[0], &E.libs[1], &E.libs[2]};
+        for (int i = 0; ok && i < 4; i++) {
+            int n;
+            ok = fread(&n, 4, 1, f) == 1;
+            if (ok) {
+                ss[i]->resize(n);
+                ok = fread(&(*ss[i])[0], 1, n, f) == (size_t)n;
+            }
+        }
+        char lv[4];
+        if (ok && fread(lv, 1, 4, f) == 4 && !memcmp(lv, "LIVE", 4)) {
+            E.pan.resize(384);
+            double bh[2];
+            E.live = fread(E.pan.data(), 8, 384, f) == 384 && fread(bh, 8, 2, f) == 2
+                     && fread(E.part, 4, 1280, f) == 1280;
+            E.beta = bh[0];
+            E.headroom = bh[1];
+        }
+    }
+    fclose(f);
+    return ok;
+}
+
+// ALSA's PCM, loaded at run time: the five calls a blocking writer needs
+struct Alsa {
+    void *h = nullptr, *pcm = nullptr;
+    int (*open)(void **, const char *, int, int);
+    int (*set_params)(void *, int, int, unsigned, unsigned, int, unsigned);
+    long (*writei)(void *, const void *, unsigned long);
+    int (*recover)(void *, int, int);
+    int (*close)(void *);
+    const char *(*strerror)(int);
+
+    bool load()
+    {
+        h = dlopen("libasound.so.2", RTLD_NOW);
+        if (!h)
+            return false;
+        open = (int (*)(void **, const char *, int, int))dlsym(h, "snd_pcm_open");
+        set_params = (int (*)(void *, int, int, unsigned, unsigned, int, unsigned))dlsym(h, "snd_pcm_set_params");
+        writei = (long (*)(void *, const void *, unsigned long))dlsym(h, "snd_pcm_writei");
+        recover = (int (*)(void *, int, int))dlsym(h, "snd_pcm_recover");
+        close = (int (*)(void *))dlsym(h, "snd_pcm_close");
+        strerror = (const char *(*)(int))dlsym(h, "snd_strerror");
+        return open && set_params && writei && recover && close && strerror;
+    }
+};
+
+static std::atomic<bool> g_stop(false);
+static void on_signal(int) { g_stop = true; }
+
+struct Midi {
+    int type, ch, a, b;
+};
+
+// raw MIDI bytes from a device file: running status; note-on at velocity 0 a
+// note-off; realtime and system messages skipped
+static void midi_reader(int fd, std::mutex *mu, std::vector<Midi> *q)
+{
+    int status = 0, need = 0, got = 0;
+    uint8_t d[2];
+    uint8_t buf[256];
+    while (!g_stop) {
+        ssize_t n = read(fd, buf, sizeof buf);
+        if (n <= 0) {
+            usleep(1000);
+            continue;
+        }
+        for (ssize_t i = 0; i < n; i++) {
+            uint8_t c = buf[i];
+            if (c >= 0xF8)
+                continue;                               // realtime: clock, sensing
+            if (c >= 0x80) {
+                status = c < 0xF0 ? c : 0;
+                int hi = c & 0xF0;
+                need = (hi == 0xC0 || hi == 0xD0) ? 1 : 2;
+                got = 0;
+                continue;
+            }
+            if (!status)
+                continue;                               // inside a sysex
+            d[got++] = c;
+            if (got < need)
+                continue;
+            got = 0;
+            int hi = status & 0xF0, ch = status & 0x0F;
+            Midi m{-1, ch, d[0], need > 1 ? d[1] : 0};
+            if (hi == 0x90 && d[1] > 0)
+                m.type = 0;
+            else if (hi == 0x80 || hi == 0x90)
+                m.type = 1;
+            else if (hi == 0xB0)
+                m.type = 2;
+            if (m.type >= 0) {
+                std::lock_guard<std::mutex> lk(*mu);
+                q->push_back(m);
+            }
+        }
+    }
+}
+
+static std::string opt(int argc, char **argv, const char *name, const char *def)
+{
+    std::string p = std::string("--") + name + "=";
+    for (int i = 1; i < argc; i++)
+        if (!strncmp(argv[i], p.c_str(), p.size()))
+            return argv[i] + p.size();
+    return def;
+}
+
+int main(int argc, char **argv)
+{
+    if (argc < 2) {
+        fprintf(stderr, "usage: nvlive EXPORT.nvx [--program=N] [--midi=DEV] [--device=PCM] [--latency-ms=10]\n"
+                        "       nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S]\n");
+        return 1;
+    }
+    Export E;
+    if (!read_export(argv[1], E) || !E.live) {
+        fprintf(stderr, "nvlive: %s is not a live export of this build (native_export.py --live)\n", argv[1]);
+        return 1;
+    }
+    const double SR = E.k[K_SR];
+    const long long BLK = (long long)E.k[K_BLK];
+    const int program = atoi(opt(argc, argv, "program", "0").c_str());
+    const int *pp = E.part[program & 127];
+    if (!pp[0]) {
+        fprintf(stderr, "nvlive: program %d is not a native piano\n", program);
+        return 1;
+    }
+    // THE PART'S TEMPLATES (live.Patch.warm), built here
+    std::vector<const NoteClass *> K(16384, nullptr);
+    for (int q = 0; q < 16384; q++)
+        if (E.cmap[q] >= 0)
+            K[q] = (const NoteClass *)E.classes[E.cmap[q]].data();
+    NoteIn t;
+    memset(&t, 0, sizeof t);
+    t.sr = SR; t.retrigger_fade = E.k[K_RETRIGGER]; t.nyq_om = E.k[K_NYQ_OM];
+    t.sv[1] = 1.0; t.sound_vib_depth_cents = E.k[K_SVDC]; t.gl[1] = 0.05; t.fx = -1.0;
+    for (int i = 0; i < 9; i++)
+        t.room_bands[i] = E.k[K_BANDS + i];
+    t.reflect = E.k[K_REFLECT] != 0.0;
+    t.fixed_touch = 1;                          // live builds its templates at fixed touch
+    void *cache = nv_tcache_new(K.data(), &t, E.freq.data(), E.trim.data(), E.kind.data(), E.fin.data(),
+                                E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, E.k[K_RING_FLOOR],
+                                E.k[K_RING_MAX], E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR);
+    int speeds[3] = {pp[3], pp[4], pp[5]};
+    long built = nv_tcache_warm(cache, program, 21, 96, pp[1], speeds, pp[2]);
+    fprintf(stderr, "nvlive: program %d, %ld templates\n", program, built);
+    void *part = nv_lp_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], 16384,
+                           E.headroom, E.pan.data(), E.beta);
+    void *fn[2];
+    const char *FN[2] = {"synth_voice", "synth_voice_xdec"};
+    for (int q = 0; q < 2; q++) {
+        void *h = dlopen(E.libs[q].c_str(), RTLD_NOW | RTLD_LOCAL);
+        fn[q] = h ? dlsym(h, FN[q]) : nullptr;
+        if (!fn[q]) {
+            fprintf(stderr, "nvlive: no %s in %s\n", FN[q], E.libs[q].c_str());
+            return 1;
+        }
+    }
+    const double master = E.k[K_MASTER];
+    float L[4096], R[4096];
+    // --test: a file's events, block by block, to the dry blocks
+    for (int i = 1; i + 2 < argc; i++)
+        if (!strcmp(argv[i], "--test")) {
+            FILE *mf = fopen(argv[i + 1], "rb");
+            if (!mf) {
+                fprintf(stderr, "nvlive: cannot read %s\n", argv[i + 1]);
+                return 1;
+            }
+            std::vector<uint8_t> bytes;
+            for (int c; (c = fgetc(mf)) != EOF;)
+                bytes.push_back((uint8_t)c);
+            fclose(mf);
+            int err = 0;
+            void *m = nv_midi_read(bytes.data(), (long long)bytes.size(), &err);
+            if (!m) {
+                fprintf(stderr, "nvlive: the reader refused %s (%d)\n", argv[i + 1], err);
+                return 2;
+            }
+            int ne = nv_midi_n_events(m);
+            double secs = atof(opt(argc, argv, "seconds", "0").c_str());
+            if (secs <= 0)
+                secs = nv_midi_total(m) + 3.0;
+            long long nb = (long long)(secs * SR) / BLK;
+            std::vector<float> out;
+            int e = 0;
+            for (long long b = 0; b < nb; b++) {
+                long long n0 = b * BLK;
+                while (e < ne) {
+                    int iv[4];
+                    double et;
+                    nv_midi_event(m, e, iv, &et);
+                    if ((long long)(et * SR) / BLK > b)
+                        break;                          // a later block's
+                    nv_lp_event(part, iv[0], iv[1], iv[2], iv[3]);
+                    e++;
+                }
+                nv_lp_block(part, n0, BLK);
+                nv_lp_render(part, n0, (long)BLK, L, R, nullptr, nullptr, fn[0], fn[1], BLK, master);
+                for (long long k = 0; k < BLK; k++) {
+                    out.push_back(L[k]);
+                    out.push_back(R[k]);
+                }
+            }
+            nv_midi_free(m);
+            FILE *wf = fopen(argv[i + 2], "wb");
+            if (!wf)
+                return 1;
+            uint32_t data = (uint32_t)(out.size() * 4);
+            auto u32 = [&](uint32_t v) { fwrite(&v, 4, 1, wf); };
+            auto u16 = [&](uint16_t v) { fwrite(&v, 2, 1, wf); };
+            fwrite("RIFF", 1, 4, wf); u32(36 + data); fwrite("WAVE", 1, 4, wf);
+            fwrite("fmt ", 1, 4, wf); u32(16); u16(3); u16(2); u32((uint32_t)SR); u32((uint32_t)SR * 8); u16(8);
+            u16(32);
+            fwrite("data", 1, 4, wf); u32(data);
+            fwrite(out.data(), 4, out.size(), wf);
+            fclose(wf);
+            fprintf(stderr, "nvlive: %lld blocks -> %s\n", nb, argv[i + 2]);
+            return 0;
+        }
+    // LIVE: the keyboard in, ALSA out
+    std::string dev = opt(argc, argv, "midi", "");
+    if (dev.empty()) {
+        for (int c = 0; c < 8 && dev.empty(); c++)
+            for (int d = 0; d < 4 && dev.empty(); d++) {
+                char p[64];
+                snprintf(p, sizeof p, "/dev/snd/midiC%dD%d", c, d);
+                if (access(p, R_OK) == 0)
+                    dev = p;
+            }
+    }
+    int fd = dev.empty() ? -1 : ::open(dev.c_str(), O_RDONLY | O_NONBLOCK);
+    if (fd < 0) {
+        fprintf(stderr, "nvlive: no MIDI input (%s); --midi=/dev/snd/midiCxDy\n", dev.c_str());
+        return 1;
+    }
+    Alsa A;
+    if (!A.load()) {
+        fprintf(stderr, "nvlive: cannot load libasound.so.2\n");
+        return 1;
+    }
+    std::string pcmdev = opt(argc, argv, "device", "default");
+    unsigned lat = (unsigned)(1000 * atof(opt(argc, argv, "latency-ms", "10").c_str()));
+    int r = A.open(&A.pcm, pcmdev.c_str(), 0 /* playback */, 0);
+    if (r >= 0)
+        r = A.set_params(A.pcm, 14 /* FLOAT_LE */, 3 /* RW_INTERLEAVED */, 2, (unsigned)SR, 1, lat);
+    if (r < 0) {
+        fprintf(stderr, "nvlive: ALSA %s: %s\n", pcmdev.c_str(), A.strerror(r));
+        return 1;
+    }
+    signal(SIGINT, on_signal);
+    signal(SIGTERM, on_signal);
+    std::mutex mu;
+    std::vector<Midi> q;
+    std::thread reader(midi_reader, fd, &mu, &q);
+    fprintf(stderr, "nvlive: playing (MIDI %s, audio %s, %u us); Ctrl-C to stop\n", dev.c_str(), pcmdev.c_str(), lat);
+    std::vector<float> buf(2 * BLK);
+    long long n0 = 0;
+    while (!g_stop) {
+        std::vector<Midi> evs;
+        {
+            std::lock_guard<std::mutex> lk(mu);
+            evs.swap(q);
+        }
+        for (const Midi &m : evs)
+            nv_lp_event(part, m.type, m.ch, m.a, m.b);
+        nv_lp_block(part, n0, BLK);
+        nv_lp_render(part, n0, (long)BLK, L, R, nullptr, nullptr, fn[0], fn[1], BLK, master);
+        for (long long k = 0; k < BLK; k++) {
+            buf[2 * k] = L[k];
+            buf[2 * k + 1] = R[k];
+        }
+        long w = A.writei(A.pcm, buf.data(), (unsigned long)BLK);
+        if (w < 0)
+            A.recover(A.pcm, (int)w, 1);
+        n0 += BLK;
+    }
+    g_stop = true;
+    reader.join();
+    A.close(A.pcm);
+    ::close(fd);
+    fprintf(stderr, "nvlive: stopped\n");
+    return 0;
+}

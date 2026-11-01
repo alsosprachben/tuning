@@ -165,7 +165,14 @@ struct PwEv {
     int pitch;
 };
 
+// an event as it came, for a live replay: 0 note-on, 1 note-off, 2 control
+struct LiveEv {
+    double t;
+    int type, ch, a, b;
+};
+
 struct Parsed {
+    std::vector<LiveEv> events;     // the notes and controllers in message order
     std::vector<Note> notes;
     std::vector<CCEv> ccs;      // in message order
     std::vector<PwEv> pws;
@@ -260,6 +267,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         } else if (kind == 0xB0) {
             int cc = m.d0, v = m.d1;
             P.ccs.push_back(CCEv{ch, t, cc, v});
+            P.events.push_back(LiveEv{t, 2, ch, cc, v});
             if (cc == 0)
                 bmsb[ch] = v;
             else if (cc == 32)
@@ -295,6 +303,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             P.pws.push_back(PwEv{ch, t, ((m.d1 << 7) | m.d0) - 8192});
         } else if (kind == 0x90 && m.d1 > 0) {
             seen_note = true;
+            P.events.push_back(LiveEv{t, 0, ch, m.d0, m.d1});
             auto &c = ctrl[ch];
             Note n;
             n.ch = ch; n.note = m.d0; n.on = t; n.off = 0.0; n.vel = m.d1;
@@ -305,6 +314,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             n.drum = is_drums(ch);
             on[std::make_pair(ch, m.d0)].push_back(n);
         } else if (kind == 0x80 || kind == 0x90) {
+            P.events.push_back(LiveEv{t, 1, ch, m.d0, 0});
             auto &q = on[std::make_pair(ch, m.d0)];
             if (!q.empty()) {
                 Note n = q.front();
@@ -366,6 +376,15 @@ int nv_midi_gs(void *p) { return ((nv::Parsed *)p)->gs; }
 int nv_midi_n_notes(void *p) { return (int)((nv::Parsed *)p)->notes.size(); }
 int nv_midi_n_ccs(void *p) { return (int)((nv::Parsed *)p)->ccs.size(); }
 int nv_midi_n_pws(void *p) { return (int)((nv::Parsed *)p)->pws.size(); }
+int nv_midi_n_events(void *p) { return (int)((nv::Parsed *)p)->events.size(); }
+
+// event i in message order: (type, channel, a, b), *t its time (s)
+void nv_midi_event(void *p, int i, int *iv, double *t)
+{
+    const nv::LiveEv &e = ((nv::Parsed *)p)->events[i];
+    iv[0] = e.type; iv[1] = e.ch; iv[2] = e.a; iv[3] = e.b;
+    *t = e.t;
+}
 
 // note i: (channel, key, velocity, program, drum) ints; (on, off, v7, v11, pan) doubles
 void nv_midi_note(void *p, int i, int *iv, double *dv)

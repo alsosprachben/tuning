@@ -223,6 +223,8 @@ def _load():
             ('nv_midi_free', None, [ctypes.c_void_p]), ('nv_midi_total', C, [ctypes.c_void_p]),
             ('nv_midi_n_notes', I, [ctypes.c_void_p]), ('nv_midi_n_ccs', I, [ctypes.c_void_p]),
             ('nv_midi_n_pws', I, [ctypes.c_void_p]), ('nv_midi_gs', I, [ctypes.c_void_p]),
+            ('nv_midi_n_events', I, [ctypes.c_void_p]),
+            ('nv_midi_event', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_note', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_cc', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_pw', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
@@ -768,6 +770,17 @@ class Midi(object):
             out.setdefault(iv[0], []).append((t.value, iv[1], iv[2]))
         return out
 
+    def events(self):
+        """[(t, type, channel, a, b)] in message order: 0 note-on (key,
+        velocity), 1 note-off, 2 control (number, value)"""
+        I4 = ctypes.c_int * 4
+        out = []
+        for i in range(self.d.nv_midi_n_events(self.p)):
+            iv, t = I4(), ctypes.c_double()
+            self.d.nv_midi_event(self.p, i, iv, ctypes.byref(t))
+            out.append((t.value, iv[0], iv[1], iv[2], iv[3]))
+        return out
+
     def pws(self):
         """{channel: [(t, pitch)]}"""
         I5 = ctypes.c_int * 5
@@ -1067,6 +1080,22 @@ def render(F):
                 BR._chunk(), float(BR.XDEC_NEPERS), float(BR.SR), float(BR.T.master_gain),
                 *[a.ctypes.data if a is not None else None for a in dm], L.ctypes.data, R.ctypes.data)
     return L, R
+
+
+def build_nvlive():
+    """native/nvlive (the live piano), built beside libnative.so when a source
+    is newer: its path."""
+    lib()
+    src = os.path.join(HERE, 'native', 'nvlive.cpp')
+    exe = os.path.join(HERE, 'nvlive')
+    so = os.path.join(HERE, 'libnative.so')
+    if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(so)) > os.path.getmtime(exe):
+        tmp = '%s.%d.tmp' % (exe, os.getpid())
+        subprocess.check_call(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin',
+                               src, '-o', tmp, '-L' + HERE, '-lnative', '-ldl', '-lpthread',
+                               '-Wl,-rpath,$ORIGIN'])
+        os.replace(tmp, exe)
+    return exe
 
 
 def build_nvrender():
