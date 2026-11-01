@@ -185,7 +185,10 @@ _REFL_ATTRS = ('radiation_distance', 'directivity_radius', 'directivity_floor',
                'directivity_axis_deg', 'sound_speed', 'reflection_order',
                'reflection_floor_db', 'reflection_fusion_s',
                'room_left', 'room_right', 'room_back', 'room_front', 'room_floor', 'room_ceiling',
-               'air_temperature_c', 'air_pressure_kpa', 'air_humidity_pct', 'head_radius')
+               'air_temperature_c', 'air_pressure_kpa', 'air_humidity_pct', 'head_radius',
+               # ...and the part's turn: hrtf_at turns every image by it, so a
+               # channel whose CC10 moved had its images heard at the old pan
+               'pan_angle', 'listener_distance')
 
 
 # A COLUMN'S STORAGE, by what reads it back before the table is final. A
