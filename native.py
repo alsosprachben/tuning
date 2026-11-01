@@ -218,7 +218,7 @@ def _load():
             ('nv_midi_read', ctypes.c_void_p, [ctypes.c_char_p, LL, ctypes.POINTER(I)]),
             ('nv_midi_free', None, [ctypes.c_void_p]), ('nv_midi_total', C, [ctypes.c_void_p]),
             ('nv_midi_n_notes', I, [ctypes.c_void_p]), ('nv_midi_n_ccs', I, [ctypes.c_void_p]),
-            ('nv_midi_n_pws', I, [ctypes.c_void_p]),
+            ('nv_midi_n_pws', I, [ctypes.c_void_p]), ('nv_midi_gs', I, [ctypes.c_void_p]),
             ('nv_midi_note', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_cc', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_pw', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
@@ -1039,3 +1039,18 @@ def render(F):
                 BR._chunk(), float(BR.XDEC_NEPERS), float(BR.SR), float(BR.T.master_gain),
                 *[a.ctypes.data if a is not None else None for a in dm], L.ctypes.data, R.ctypes.data)
     return L, R
+
+
+def build_nvrender():
+    """native/nvrender (the standalone renderer), built beside libnative.so
+    when a source is newer: its path."""
+    lib()
+    src = os.path.join(HERE, 'native', 'nvrender.cpp')
+    exe = os.path.join(HERE, 'nvrender')
+    so = os.path.join(HERE, 'libnative.so')
+    if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(so)) > os.path.getmtime(exe):
+        tmp = '%s.%d.tmp' % (exe, os.getpid())
+        subprocess.check_call(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin',
+                               src, '-o', tmp, '-L' + HERE, '-lnative', '-ldl', '-Wl,-rpath,$ORIGIN'])
+        os.replace(tmp, exe)
+    return exe

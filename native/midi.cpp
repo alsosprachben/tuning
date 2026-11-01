@@ -171,6 +171,7 @@ struct Parsed {
     std::vector<PwEv> pws;
     std::vector<std::pair<int, int>> progs;     // (channel, program) changes, for the caller
     double total = 0.0;
+    int gs = 0;                 // a Roland GS exclusive before the first note (gs_setup: the file speaks GS)
 };
 
 static const int GM_DEFAULT_VOLUME = 100, GM_DEFAULT_EXPRESSION = 127, GM_DEFAULT_PAN = 64;
@@ -219,6 +220,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     bool rxbank = true;
     std::map<std::pair<int, int>, std::vector<Note>> on;
     std::map<int, std::pair<int, int>> rsel;    // a channel's selected RPN, (MSB, LSB); absent: none
+    bool seen_note = false;
     for (const Msg &m : msgs) {
         double delta = m.tick > 0 ? m.tick * (tempo * 1e-6 / tpb) : 0.0;
         t += delta;
@@ -237,6 +239,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                           || (d[4] == 0x00 && d[5] == 0x00 && d[6] == 0x7F));
             if (!(lvl || gs))
                 return -4;              // any other exclusive: not a GM file's
+            if (!seen_note && d.size() >= 4 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12)
+                P.gs = 1;
             rxbank = lvl != 1;
             bmsb.clear(); blsb.clear(); drums.clear(); prog.clear(); ctrl.clear(); rsel.clear();
             continue;
@@ -290,6 +294,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         } else if (kind == 0xE0) {
             P.pws.push_back(PwEv{ch, t, ((m.d1 << 7) | m.d0) - 8192});
         } else if (kind == 0x90 && m.d1 > 0) {
+            seen_note = true;
             auto &c = ctrl[ch];
             Note n;
             n.ch = ch; n.note = m.d0; n.on = t; n.off = 0.0; n.vel = m.d1;
@@ -357,6 +362,7 @@ void *nv_midi_read(const uint8_t *buf, long long len, int *err)
 void nv_midi_free(void *p) { delete (nv::Parsed *)p; }
 
 double nv_midi_total(void *p) { return ((nv::Parsed *)p)->total; }
+int nv_midi_gs(void *p) { return ((nv::Parsed *)p)->gs; }
 int nv_midi_n_notes(void *p) { return (int)((nv::Parsed *)p)->notes.size(); }
 int nv_midi_n_ccs(void *p) { return (int)((nv::Parsed *)p)->ccs.size(); }
 int nv_midi_n_pws(void *p) { return (int)((nv::Parsed *)p)->pws.size(); }
