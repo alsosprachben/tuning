@@ -1293,8 +1293,8 @@ class LiveChannel(object):
         self.krate = np.zeros(M)
         self.Rk = np.zeros(M)
         import damper as _DMP
-        f0 = 440.0 * 2.0 ** ((np.asarray(strings.key, float) - 69.0) / 12.0)
-        self.dw = (np.maximum(np.asarray(strings.f, float), 1e-6) / f0) ** _DMP.BETA
+        f0 = 440.0 * _xpow(2.0, (np.asarray(strings.key, float) - 69.0) / 12.0)
+        self.dw = _xpow(np.maximum(np.asarray(strings.f, float), 1e-6) / f0, _DMP.BETA)
 
     def mask(self, keys):
         m = np.zeros(len(self.S.f), bool)
@@ -1312,21 +1312,26 @@ class LiveChannel(object):
             return idx, np.zeros(0, complex)
         tz = self.Az[idx]
         rz = np.where(self.stamped[idx],
-                      self.Rz[idx] * np.exp(-(am[idx] + self.Rk[idx]) * np.maximum(at - self.rref[idx], 0.0) / sr), 0)
+                      _xcmulr(self.Rz[idx], _xexp(-(am[idx] + self.Rk[idx])
+                                                  * np.maximum(at - self.rref[idx], 0.0) / sr)), 0)
         floor = self.fl * max(self.loud, 1e-30)
-        go = np.abs(tz - rz) > SPLIT * np.maximum(np.abs(tz), floor)
+        go = _xabs(tz - rz) > SPLIT * np.maximum(_xabs(tz), floor)
         if force is not None:
             go |= force
         idx, z = idx[go], tz[go]
         self.Rz[idx] = z; self.rref[idx] = at; self.Rk[idx] = self.krate[idx]
-        self.stamped[idx] = np.abs(z) >= floor
+        self.stamped[idx] = _xabs(z) >= floor
         return idx, z
 
     def strike(self, sid, key, at, drv, free_keys, plucked=None):
         """A strike at sample `at` of `key`, its stamped direct rows `drv`
         ({om, p0, delL, aM, non, logr, logrA, aft, sus, tbav, tau, tcut, slot}),
         with these keys' strings free. `plucked`, as Channel.strike's: the
-        choirs it plucked; its key's others are free while it is held."""
+        choirs it plucked; its key's others are free while it is held.
+
+        THE ARITHMETIC IS LIBM'S AND SPELLED OUT (_xexp, _xabs, _xcexp, _xcmul,
+        _xcsum): numpy's SIMD exp, abs, complex products and sums differ by
+        the machine in their last bits, and native/ ports this one."""
         S, sr = self.S, self.sr
         Wm, am = S.W, S.alpha
         M = len(S.f)
@@ -1361,25 +1366,27 @@ class LiveChannel(object):
                         continue
                     j = fi[lo:hi]
                     wj = S.coupling(j, key, int(drv['choir'][r]) if 'choir' in drv else None)
-                    bj, close = coincident(self.kappa * wgt * wj, Wi, beta, Wm[j], am[j])
+                    bj, close = _coincident_x(self.kappa * wgt * wj, Wi, beta, Wm[j], am[j])
                     fr, fo = free_part(cmax * wj, Wi, bj, Wm[j], am[j], tb, ta, cu,
                                        need=floor * SPLIT)
-                    add[j] += fr * np.exp(1j * (theta - Wm[j] * n_i / sr) + am[j] * (n_i - at) / sr)
+                    e = _xcexp(_cplx(am[j] * (n_i - at) / sr, theta - Wm[j] * n_i / sr))
+                    add[j] += _xcmul(fr, e)
                     # as Channel.strike: a coincident pair's forced part its own row
-                    F = complex(fo[~close].sum())
+                    F = _xcsum(fo[~close])
                     if abs(F) > floor * SPLIT:
                         forced.append((int(drv['slot'][r]), wgt, beta, F / a_i))
                     for k in np.flatnonzero(close):
-                        if abs(fo[k]) > floor * SPLIT:
+                        if abs(complex(fo[k])) > floor * SPLIT:
                             forced.append((int(drv['slot'][r]), wgt, float(bj[k]), complex(fo[k]) / a_i))
                     keep.append((j, fo, Wi, bj, theta, n_i, tb, ta, cu))
         if self.knock > 0 and len(fi):
             amp = self.knock * self.loud_of(drv) * S.coupling(fi, key) * S.knock_shape(fi, key, self.fall)
-            add[fi] += amp * np.exp(1j * knock_phase(hash(('live', sid)), len(fi)))
+            ph = knock_phase(hash((LIVE_KNOCK_SALT, sid)), len(fi))
+            add[fi] += _xcmulr(_xcexp(_cplx(np.zeros(len(fi)), ph)), amp)
         self.held[sid] = keep
         touched = np.abs(add) > 0
-        self.Az[touched] = self.Az[touched] * np.exp(
-            -(am[touched] + self.krate[touched]) * np.maximum(at - self.nref[touched], 0.0) / sr) + add[touched]
+        self.Az[touched] = _xcmulr(self.Az[touched], _xexp(
+            -(am[touched] + self.krate[touched]) * np.maximum(at - self.nref[touched], 0.0) / sr)) + add[touched]
         self.nref[touched] = at
         idx, z = self._settle(touched, at)
         return idx, z, forced
@@ -1400,12 +1407,13 @@ class LiveChannel(object):
         add = np.zeros(len(S.f), complex)
         for j, fo, Wi, beta, theta, n_i, tb, ta, cu in keep:
             tq = (at - n_i) / sr
-            gq = glide_phase(Wi, tb, ta, cu, tq)
-            add[j] += fo * np.exp(1j * (theta + Wi * tq + gq - Wm[j] * at / sr) - beta * tq)
+            gq = _glide_phase_x(Wi, tb, ta, cu, tq)
+            e = _xcexp(_cplx(-(beta * tq), theta + Wi * tq + gq - Wm[j] * at / sr))
+            add[j] += _xcmul(fo, e)
         add[~free] = 0
         touched = np.abs(add) > 0
-        self.Az[touched] = self.Az[touched] * np.exp(
-            -(am[touched] + self.krate[touched]) * np.maximum(at - self.nref[touched], 0.0) / sr) + add[touched]
+        self.Az[touched] = _xcmulr(self.Az[touched], _xexp(
+            -(am[touched] + self.krate[touched]) * np.maximum(at - self.nref[touched], 0.0) / sr)) + add[touched]
         self.nref[touched] = at
         return self._settle(touched, at)
 
@@ -1427,11 +1435,79 @@ class LiveChannel(object):
                 new[ix] = r * self.dw[ix]
         ch = np.flatnonzero(new != self.krate)
         live = ch[self.Az[ch] != 0]
-        self.Az[live] *= np.exp(-(am[live] + self.krate[live]) * np.maximum(at - self.nref[live], 0.0) / sr)
+        self.Az[live] = _xcmulr(self.Az[live], _xexp(-(am[live] + self.krate[live])
+                                                     * np.maximum(at - self.nref[live], 0.0) / sr))
         self.nref[live] = at
         self.krate = new
         touched = np.zeros(len(S.f), bool); touched[live] = True
         return self._settle(touched, at, force=touched[np.flatnonzero(touched)])
+
+
+# ------------------------------------------------------------------ live's exact arithmetic
+#
+# LiveChannel's per-row work, spelled out so a port can match it on any
+# machine: numpy's complex products and sums (SIMD, fused multiply-adds), its
+# array exp and abs (SVML) differ by the machine in their last bits. Real
+# arithmetic, one operation at a time, and libm's exp, cos, sin, hypot.
+
+LIVE_KNOCK_SALT = 0x4C495645    # the live knock's seed: hash((salt, strike)), the same in every process
+                                # (it was hash(('live', sid)), a str: salted per process by PYTHONHASHSEED)
+
+
+def _cplx(re, im):
+    """A complex array from its real and imaginary parts, as given."""
+    re, im = np.broadcast_arrays(np.asarray(re, np.float64), np.asarray(im, np.float64))
+    out = np.empty(re.shape, np.complex128)
+    out.real = re
+    out.imag = im
+    return out
+
+
+def _xcexp(z):
+    """exp(re) * (cos im, sin im), libm's (native.xcexp)."""
+    return _NV().xcexp(z)
+
+
+def _xcmul(a, b):
+    """a * b for complex arrays, the four products and two sums each rounded."""
+    a, b = np.asarray(a, np.complex128), np.asarray(b, np.complex128)
+    return _cplx(a.real * b.real - a.imag * b.imag, a.real * b.imag + a.imag * b.real)
+
+
+def _xcmulr(z, r):
+    """z * r for complex z and real r, as numpy promotes r: (r, 0)."""
+    z = np.asarray(z, np.complex128)
+    r = np.asarray(r, np.float64)
+    return _cplx(z.real * r - z.imag * 0.0, z.real * 0.0 + z.imag * r)
+
+
+def _xcsum(z):
+    """The sum of complex values: each part's numpy pairwise sum, contiguous."""
+    z = np.asarray(z, np.complex128)
+    if not len(z):
+        return 0j
+    return complex(float(np.ascontiguousarray(z.real).sum()), float(np.ascontiguousarray(z.imag).sum()))
+
+
+def _coincident_x(cw, Wi, bi, Wm, am):
+    """coincident's answer, its distance |D| by libm's hypot: D = (am - bi, Wi - Wm)."""
+    thr = np.asarray(cw, float) / ROWS_OVER
+    close = _xabs(_cplx(am - bi, Wi - Wm)) < thr
+    return np.where(close, np.maximum(bi, am) + thr, bi), close
+
+
+def _glide_phase_x(Wi, tb, tau, cut, t):
+    """glide_phase for one row and one time, in scalars and libm's exp."""
+    ct = -cut * TBEND_CUT_SCALE if cut < 0 else cut
+    e = math.exp(-(t if not ct < t else ct) / tau)
+    if cut >= 0:
+        return Wi * tb * tau * (1.0 - e)
+    acc, term, ek = 0.0, 1.0, 1.0
+    for k in range(1, 41):
+        term = term * tb / k
+        ek = ek * e
+        acc = acc + term * (1.0 - ek) / k
+    return Wi * tau * acc
 
 
 def live_worker(conn):

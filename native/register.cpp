@@ -108,7 +108,7 @@ static cplx rmul_c(double r, cplx z)
 }
 
 // CPython's hash((a, b)) of two ints (3.8+'s xxHash-style tuple hash)
-static long long py_tuple_hash2(long long a, long long b)
+long long py_tuple_hash2(long long a, long long b)        // (livereg.cpp's too)
 {
     const uint64_t P1 = 11400714785074694791ULL, P2 = 14029467366897019727ULL, P5 = 2870177450012600261ULL;
     auto ih = [](long long v) -> uint64_t {        // hash(int) for |v| < 2**61 - 1
@@ -128,7 +128,7 @@ static long long py_tuple_hash2(long long a, long long b)
 }
 
 // numpy's RandomState(seed).uniform(0, TAU, n): MT19937 by init_genrand
-static std::vector<double> knock_phase(long long seed, int n)
+std::vector<double> knock_phase(long long seed, int n)      // (livereg.cpp's too)
 {
     PyRandom r;
     uint32_t s = (uint32_t)(seed & 0x7fffffff);

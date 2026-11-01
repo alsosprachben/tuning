@@ -33,3 +33,13 @@ void nv_log_n(long n, const double *x, double *out)
     for (long i = 0; i < n; i++)
         out[i] = log(x[i]);
 }
+
+/* exp of complex values (interleaved re, im): exp(re) * (cos im, sin im) */
+void nv_cexp_n(long n, const double *z, double *out)
+{
+    for (long i = 0; i < n; i++) {
+        double e = exp(z[2 * i]);
+        out[2 * i] = e * cos(z[2 * i + 1]);
+        out[2 * i + 1] = e * sin(z[2 * i + 1]);
+    }
+}

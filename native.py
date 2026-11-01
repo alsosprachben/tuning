@@ -161,7 +161,7 @@ def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
-                                                       'live.cpp', 'slab.cpp', 'live.h')]
+                                                       'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -174,7 +174,7 @@ def _load():
         flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
         objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
                 tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.slab.o',
-                tmp + '.registercore.o']
+                tmp + '.registercore.o', tmp + '.livereg.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
             for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
@@ -186,6 +186,8 @@ def _load():
             subprocess.check_call(['gcc', '-O3', '-march=native', '-ffp-contract=off', '-fopenmp-simd',
                                    '-fno-math-errno', '-mprefer-vector-width=512', '-fPIC', '-c',
                                    os.path.join(HERE, 'registercore.c'), '-o', objs[10]])
+            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'livereg.cpp'),
+                                   '-o', objs[11]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm'])
         finally:
             for o in objs:
@@ -234,6 +236,7 @@ def _load():
             ('nv_pow_n', None, [ctypes.c_long, ctypes.c_void_p, I, ctypes.c_void_p, I, ctypes.c_void_p]),
             ('nv_cabs_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_log_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_cexp_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_prepare', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoteIn), D, I,
                                 ctypes.POINTER(PyRandomState), ctypes.POINTER(D), ctypes.c_void_p, D,
                                 ctypes.c_void_p, C, C, C, C, LL, C, C, C, ctypes.c_void_p, C, C, C, C,
@@ -267,6 +270,16 @@ def _load():
             ('nv_lp_slab', ctypes.c_void_p, [ctypes.c_void_p]),
             ('nv_lp_render', None, [ctypes.c_void_p, LL, ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p,
                                     ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, LL, C]),
+            ('nv_lreg_new', ctypes.c_void_p, [ctypes.c_void_p, I, C, C, C, C, C, I, C]),
+            ('nv_lreg_strike', I, [ctypes.c_void_p, LL, I, C, I, ctypes.c_void_p, ctypes.c_void_p,
+                                   ctypes.c_void_p, I]),
+            ('nv_lreg_release', I, [ctypes.c_void_p, LL, C, ctypes.c_void_p, I]),
+            ('nv_lreg_damp', None, [ctypes.c_void_p, ctypes.c_void_p, I]),
+            ('nv_lreg_felt', I, [ctypes.c_void_p, C, ctypes.c_void_p, ctypes.c_void_p, I]),
+            ('nv_lreg_answer', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, D]),
+            ('nv_lreg_forced', None, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                                      ctypes.c_void_p]),
+            ('nv_lreg_free', None, [ctypes.c_void_p]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
             ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C, I, I]),
@@ -931,6 +944,18 @@ def xlog(x):
     return out
 
 
+def xcexp(z):
+    """exp of complex values as exp(re) * (cos im, sin im), libm's."""
+    import numpy as np
+    z = np.ascontiguousarray(z, np.complex128)
+    d = lib()
+    if d is None:
+        return np.exp(z)
+    out = np.empty_like(z)
+    d.nv_cexp_n(z.size, z.ctypes.data, out.ctypes.data)
+    return out
+
+
 def xpow(x, y):
     import numpy as np
     xa, ya = np.asarray(x, np.float64), np.asarray(y, np.float64)
@@ -1380,3 +1405,95 @@ class LivePiano(object):
                             fn(BR.ensure_lib().synth_voice), fn(BR.ensure_xdec_lib().synth_voice_xdec), BR.BLK,
                             float(BR.T.master_gain))
         return (L, R, SL, SR) if send else (L, R)
+
+
+class LiveReg(object):
+    """native/livereg.cpp: register.LiveChannel for a piano class, its jobs
+    by the same names. Each answers as LiveChannel's does: (modes, z), and a
+    strike's forced rows [(slot, weight, decay, value)] too; floor() the
+    floor its last answer was made at."""
+
+    LIVE_DRV = ("om", "p0", "delL", "aM", "non", "logr", "logrA", "aft", "sus", "tbav", "tau", "tcut")
+
+    def __init__(self, cls, table, sr, scale=1.0):
+        import numpy as np
+        import register as RG
+        import damper as DMP
+        got = _class(cls)
+        if got is None:
+            raise ValueError("%s is not the engine's" % cls.__name__)
+        import tonelib as T
+        c = VoiceInit.from_buffer_copy(got[0])
+        lo, hi = cls.string_detune_range              # as strings() makes the bank
+        if issubclass(cls, T.HonkyTonkProperties):
+            lo, hi = lo * T.honky_detune, hi * T.honky_detune
+        c.detune_lo, c.detune_hi = lo, hi
+        c.fixed_touch = int(bool(T.FIXED_TOUCH))
+        tab = (ctypes.c_double * 128)(*[float(table[k]) if k in table else 0.0 for k in range(128)])
+        cap = 88 * 4 * 130
+        self._modes = (StringMode * cap)()
+        tmp = (StringMode * cap)()
+        self.d = lib()
+        M = self.d.nv_strings(ctypes.byref(c), ctypes.byref(got[1]), tab, 0.0, 1.0, float(sr), self._modes, tmp, cap)
+        if M < 0:
+            raise ValueError("too many modes")
+        P = RG._isolated(cls, 261.63, 0.0, 1.0)         # live_worker's props
+        self.M = M
+        self.p = self.d.nv_lreg_new(self._modes, M, float(sr),
+                                    float(getattr(P, 'register_gain', 0.0)) * scale,
+                                    float(getattr(P, 'register_knock_gain', 0.0)) * scale,
+                                    float(getattr(P, 'register_knock_falloff', 0.0)),
+                                    float(RG.floor_of(P)), int(getattr(P, 'damper_top', 128)), float(DMP.BETA))
+        self._np = np
+
+    def __del__(self):
+        if getattr(self, 'p', None):
+            self.d.nv_lreg_free(self.p)
+            self.p = None
+
+    def _keys(self, keys):
+        return self._np.ascontiguousarray(list(keys), self._np.int32)
+
+    def _answer(self, n):
+        np = self._np
+        idx = np.empty(max(n, 1), np.int64)
+        z = np.empty(max(n, 1), np.complex128)
+        fl = ctypes.c_double()
+        nf = self.d.nv_lreg_answer(self.p, idx.ctypes.data, z.ctypes.data, ctypes.byref(fl))
+        self.last_floor = fl.value
+        return idx[:n], z[:n], nf
+
+    def floor(self):
+        return self.last_floor
+
+    def strike(self, sid, key, at, drv, free_keys, plucked=None):
+        np = self._np
+        R = len(drv['om'])
+        cols = np.ascontiguousarray(np.stack([np.asarray(drv[c], np.float64) for c in self.LIVE_DRV])
+                                    if R else np.zeros((len(self.LIVE_DRV), 0)))
+        slot = np.ascontiguousarray(drv['slot'], np.int64) if R else np.zeros(1, np.int64)
+        fk = self._keys(free_keys)
+        n = self.d.nv_lreg_strike(self.p, int(sid), int(key), float(at), R, cols.ctypes.data, slot.ctypes.data,
+                                  fk.ctypes.data, len(fk))
+        idx, z, nf = self._answer(n)
+        sl = np.empty(max(nf, 1), np.int64)
+        w, b = np.empty(max(nf, 1)), np.empty(max(nf, 1))
+        v = np.empty(max(nf, 1), np.complex128)
+        self.d.nv_lreg_forced(self.p, sl.ctypes.data, w.ctypes.data, b.ctypes.data, v.ctypes.data)
+        forced = [(int(sl[q]), float(w[q]), float(b[q]), complex(v[q])) for q in range(nf)]
+        return idx, z, forced
+
+    def release(self, sid, at, free_keys):
+        fk = self._keys(free_keys)
+        n = self.d.nv_lreg_release(self.p, int(sid), float(at), fk.ctypes.data, len(fk))
+        return self._answer(n)[:2]
+
+    def damp(self, keys):
+        k = self._keys(keys)
+        self.d.nv_lreg_damp(self.p, k.ctypes.data, len(k))
+
+    def felt(self, at, keys, rates):
+        k = self._keys(keys)
+        r = self._np.ascontiguousarray(rates, self._np.float64)
+        n = self.d.nv_lreg_felt(self.p, float(at), k.ctypes.data, r.ctypes.data, len(k))
+        return self._answer(n)[:2]
