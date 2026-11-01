@@ -20,7 +20,8 @@ extern "C" {
 long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                        PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind,
                        double scale, double full_db_s, double residual, double beta, long long blk,
-                       long long *nnote, int *played_out, long long *row0_out, int *bands, double *offs);
+                       long long *nnote, int *played_out, long long *row0_out, int *bands, double *offs,
+                       int with_register);
 
 // blockrender.ring_last over rows (NCOLS each, EMIT_COLS): the last sample any
 // sounds above floor_, 0 if none does
@@ -86,7 +87,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
                      PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind, double scale,
                      double full_db_s, double residual, double beta, long long blk, double total, double ring_floor,
                      double ring_max, double *out, double knee_db, double ln10_20, double xdec_nepers, double SR,
-                     void **dm)
+                     void **dm, int with_register)
 {
     long long nnote = 0;
     int nn = nv_song_n_notes(song);
@@ -94,7 +95,8 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
     std::vector<long long> row0(nn);
     std::vector<double> offs(nn);
     long long P = nv_play_full(song, K, tmpl, br, nbr, rs, rowsp, qacc, azimuth, kind, scale, full_db_s, residual,
-                               beta, blk, &nnote, played.data(), row0.data(), bands.data(), offs.data());
+                               beta, blk, &nnote, played.data(), row0.data(), bands.data(), offs.data(),
+                               with_register);
     if (P < 0)
         return P;
     out[40] = 0.0;

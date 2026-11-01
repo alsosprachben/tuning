@@ -847,7 +847,8 @@ extern "C" {
 long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                        PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind,
                        double scale, double full_db_s, double residual, double beta, long long blk,
-                       long long *nnote, int *played_out, long long *row0_out, int *bands, double *offs)
+                       long long *nnote, int *played_out, long long *row0_out, int *bands, double *offs,
+                       int with_register)
 {
     using namespace nv::reg;
     int nn = nv_song_n_notes(song);
@@ -909,8 +910,8 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         double dv[2];
         nv_song_get_note(song, i, &ch, iv, dv);
         const NoteClass *k = K[128 * iv[2] + iv[0]];
-        if (!(k->reg_gain != 0.0 || k->reg_knock != 0.0))
-            continue;
+        if (!with_register || !(k->reg_gain != 0.0 || k->reg_knock != 0.0))
+            continue;           // (blockrender.REGISTER off: live's templates)
         long long rk = ch;
         while (chans.count(rk) && chans[rk].second != k)
             rk += 100000;

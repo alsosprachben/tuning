@@ -47,7 +47,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
                      PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind, double scale,
                      double full_db_s, double residual, double beta, long long blk, double total, double ring_floor,
                      double ring_max, double *out, double knee_db, double ln10_20, double xdec_nepers, double SR,
-                     void **dm);
+                     void **dm, int with_register);
 int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long P, double *const *d,
               float *const *f, long *const *l, int *const *ii, const float *G, const float *S, const float *BR,
               const double *BC, const float *noRows, const float *sh, long CHUNK, double xdec_nepers, double SR,
@@ -274,7 +274,7 @@ int main(int argc, char **argv)
     long long P = nv_prepare(song, K.data(), &t, nullptr, 0, &rs, &rows, qacc, &az, E.kind.data(),
                              E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, total,
                              E.k[K_RING_FLOOR], E.k[K_RING_MAX], out, E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR,
-                             dm);
+                             dm, 1);
     if (P < 0) {
         fprintf(stderr, "nvrender: refused: a note is not the engine's (%lld)\n", P);
         return 2;
