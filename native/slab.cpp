@@ -414,8 +414,9 @@ struct Slab {
 // what _one_core, _note_on and _note_off do for a piano, block by block as
 // live's callback runs them: the block's events at its start, then the sweep
 // (a key neither down nor held released), then the reap. Not here yet: the
-// CC71-78, CC120/123, mono, the other voices. THE RPNs (bend range, fine
-// and coarse tuning, the mod range), CC121 and SOSTENUTO as live's. THE PITCH WHEEL
+// CC71-78, mono, the other voices. THE RPNs (bend range, fine and coarse
+// tuning, the mod range), CC120, CC121, CC123, the channel-mode messages and
+// SOSTENUTO as live's. THE PITCH WHEEL
 // (live._repitch: GM's 2-semitone range) and the mod wheel, which on a piano
 // is nothing but a honky-tonk's detune.
 // PRESSURE (channel aftertouch, live's Slab.press) as a level: a piano's
@@ -836,6 +837,80 @@ struct Piano {
         repitch(ch, n0);
     }
 
+    // CC120, ALL SOUND OFF (live's): the channel stopped now, pedal or no
+    // pedal -- every key on it over the steal-fade, its keys, pedals and
+    // sostenuto cleared, and its register killed (_reg_channel, kill)
+    void all_sound_off(int ch, long long n0)
+    {
+        for (auto it = down.begin(); it != down.end();)
+            it = it->first == ch ? down.erase(it) : std::next(it);
+        for (auto it = pedalled.begin(); it != pedalled.end();)
+            it = it->first == ch ? pedalled.erase(it) : std::next(it);
+        sost.erase(ch);
+        pedal_v[ch] = 0;
+        float fade = (float)(retrigger * rate);
+        std::vector<Key> keys;
+        for (auto &kv : S.live)
+            if (std::get<1>(kv.first) == ch)
+                keys.push_back(kv.first);
+        for (const Key &k : keys) {
+            long li = S.live_find(k);
+            if (li >= 0)
+                for (long q : S.live[li].second)
+                    if (fade < S.f4[F4_re][q])
+                        S.f4[F4_re][q] = fade;
+            S.oneshot.erase(k);
+            S.release(k, n0);
+        }
+        if (!reg_on)
+            return;
+        for (RegSt &st : reg) {
+            if (st.ch != ch)
+                continue;
+            if (st.ready) {
+                std::vector<long> on;
+                for (long m = 0; m < (long)st.slot_of.size(); m++)
+                    if (st.slot_of[m] >= 0)
+                        on.push_back(m);
+                reg_close(st, on, n0, retrigger * rate);
+            }
+            for (size_t i = 0; i < reg_strike_of.size();)
+                if (reg_strike_of[i].first.first == ch)
+                    reg_strike_of.erase(reg_strike_of.begin() + i);
+                else
+                    i++;
+            Job j;
+            j.kind = 2;
+            j.ch = ch;
+            for (int k = 21; k < 109; k++)
+                j.keys.push_back(k);
+            send_job(std::move(j));
+        }
+    }
+
+    // CC123, ALL NOTES OFF (live's): the keys come up -- a note under a held
+    // damper or the sostenuto rings on (pedalled), a one-shot on its own decay
+    void all_notes_off(int ch, long long n0)
+    {
+        for (auto it = down.begin(); it != down.end();)
+            it = it->first == ch ? down.erase(it) : std::next(it);
+        auto sq = sost.find(ch);
+        std::vector<Key> keys;
+        for (auto &kv : S.live)
+            if (std::get<1>(kv.first) == ch)
+                keys.push_back(kv.first);
+        for (const Key &k : keys) {
+            if (S.oneshot.count(k) && S.oneshot[k])
+                continue;
+            int nt = (int)std::get<2>(k);
+            if (pedal_holds(ch, nt) || (sq != sost.end() && sq->second.count(nt))) {
+                pedalled.insert(std::make_pair(ch, nt));
+                continue;
+            }
+            S.release(k, n0);
+        }
+    }
+
     // live._reset_controllers (CC121): the wheel to centre, then CC1, CC11,
     // CC64, CC65, CC66, CC67 as live sends them, pressure off, no RPN
     // selected -- not the volume, pan, program or the tuning RPNs' values
@@ -947,6 +1022,17 @@ struct Piano {
             rpn_step(ch, cc == 96, n0);
         } else if (cc == 121) {
             reset_controllers(ch, n0);
+        } else if (cc == 120) {
+            all_sound_off(ch, n0);
+        } else if (cc == 123) {
+            all_notes_off(ch, n0);
+        } else if (cc >= 124 && cc <= 127) {
+            // CHANNEL MODE, as live sends it: all four are All Notes Off, MONO
+            // and POLY All Sound Off first (live's mono mode is not here: a
+            // CC126 leaves the piano as poly as a CC127 does)
+            if (cc >= 126)
+                all_sound_off(ch, n0);
+            all_notes_off(ch, n0);
         } else if (cc == 1 && detune_wheel) {
             static const int steps[3] = {0, 64, 127};       // live.DETUNE_STEPS: min(), the first of a tie
             int best = steps[0];
