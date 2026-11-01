@@ -165,7 +165,8 @@ struct PwEv {
     int pitch;
 };
 
-// an event as it came, for a live replay: 0 note-on, 1 note-off, 2 control
+// an event as it came, for a live replay: 0 note-on, 1 note-off, 2 control,
+// 4 the pitch wheel (a: -8192..8191)
 struct LiveEv {
     double t;
     int type, ch, a, b;
@@ -301,6 +302,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             }
         } else if (kind == 0xE0) {
             P.pws.push_back(PwEv{ch, t, ((m.d1 << 7) | m.d0) - 8192});
+            P.events.push_back(LiveEv{t, 4, ch, ((m.d1 << 7) | m.d0) - 8192, 0});
         } else if (kind == 0x90 && m.d1 > 0) {
             seen_note = true;
             P.events.push_back(LiveEv{t, 0, ch, m.d0, m.d1});

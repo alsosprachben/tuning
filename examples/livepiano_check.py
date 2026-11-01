@@ -3,7 +3,7 @@
 
     python3 examples/livepiano_check.py [BLOCKS] [--program=N] [--seed=N] [--every=N] [--render] [--register]
                                         [--half] [--pedal-key=N] [--pressure]
-                                        [--gpu=c|cl] [--gpu-min=N] [--shed=N]
+                                        [--gpu=c|cl] [--gpu-min=N] [--shed=N] [--wheels]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native piano part (native/slab.cpp: its template cache, its slab, live's
@@ -34,6 +34,8 @@ on one side, native.KeyPedal before the part's events on the other.
 the native part's through native/gpu.cpp) or the C reference ("c",
 voice_samples) -- for a block with GPU-MIN busy slots or more (default
 live's GPU_MIN); the blocks each side took to the GPU are counted.
+--wheels: the pitch wheel (live._repitch, the notes sounding moved and a
+note struck under it joining) and the mod wheel (a honky-tonk's detune).
 --shed=N: every N blocks the governor's last resort on both sides at the
 next block's start (live's Slab.shed, a tenth of what sounds), as a block
 over budget would -- the governor itself goes by the wall clock, so it is
@@ -72,7 +74,8 @@ def main(argv):
     speed = None if pt.speeds == (None,) else (lv.detune_step.get(part.pid, pt.leslie_default)
                                                if pt.detune_wheel else pt.leslie_default)
     nv = N.LivePiano(cache, part.pid, part.level_db, pt.nbuckets, speed, pt.damper_pedal, pt.soft_pedal_strings,
-                     pt.soft_pedal_top, 48000, capacity=lv.slab.cap, headroom=lv.slab.headroom)
+                     pt.soft_pedal_top, 48000, capacity=lv.slab.cap, headroom=lv.slab.headroom,
+                     detune_wheel=pt.detune_wheel)
     ngpu = [0, 0]
     if "gpu" in opt:
         gmin = int(opt.get("gpu-min", L.GPU_MIN))
@@ -165,6 +168,11 @@ def main(argv):
                     msgs.append(M("note_on", channel=ch, note=pk, velocity=rng.randint(1, 127)))
             elif r < 0.9:
                 msgs.append(M("control_change", channel=ch, control=64, value=rng.choice(pedal)))
+            elif "wheels" in opt and rng.random() < 0.4:
+                if rng.random() < 0.7:
+                    msgs.append(M("pitchwheel", channel=ch, pitch=rng.choice((0, rng.randint(-8192, 8191)))))
+                else:
+                    msgs.append(M("control_change", channel=ch, control=1, value=rng.randint(0, 127)))
             elif "pressure" in opt and rng.random() < 0.4:
                 msgs.append(M("aftertouch", channel=ch, value=rng.choice((0, rng.randint(0, 127)))))
             else:

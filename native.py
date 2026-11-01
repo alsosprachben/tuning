@@ -279,6 +279,7 @@ def _load():
                                     ctypes.c_void_p, LL, C]),
             ('nv_lp_damper', None, [ctypes.c_void_p, C, C, C, C, C]),
             ('nv_lp_press_db', None, [ctypes.c_void_p, C]),
+            ('nv_lp_detune_wheel', None, [ctypes.c_void_p, I]),
             ('nv_lp_gpu', None, [ctypes.c_void_p] + [ctypes.c_void_p] * 6 + [ctypes.c_long, I]),
             ('nv_lp_on_gpu', I, [ctypes.c_void_p]),
             ('nv_lp_shed', ctypes.c_long, [ctypes.c_void_p, LL, C]),
@@ -804,7 +805,8 @@ class Midi(object):
 
     def events(self):
         """[(t, type, channel, a, b)] in message order: 0 note-on (key,
-        velocity), 1 note-off, 2 control (number, value)"""
+        velocity), 1 note-off, 2 control (number, value), 4 the pitch wheel
+        (-8192..8191)"""
         I4 = ctypes.c_int * 4
         out = []
         for i in range(self.d.nv_midi_n_events(self.p)):
@@ -1390,7 +1392,7 @@ class LivePiano(object):
     native.Slab's does."""
 
     def __init__(self, cache, pid, level_db, nbuckets, speed, damper_pedal, soft_drop, soft_top, rate,
-                 capacity=16384, headroom=1.0, press_db=None):
+                 capacity=16384, headroom=1.0, press_db=None, detune_wheel=False):
         import live as L
         import blockrender as BR
         tab = L.pan_table()
@@ -1408,6 +1410,7 @@ class LivePiano(object):
                             float(DMP.LN10_20))
         import tonelib as T
         self.d.nv_lp_press_db(self.p, float(T.PRESS_DB if press_db is None else press_db))
+        self.d.nv_lp_detune_wheel(self.p, int(bool(detune_wheel)))
 
     def __del__(self):
         if getattr(self, 'p', None):
@@ -1475,7 +1478,7 @@ class LivePiano(object):
 
     def event(self, msg):
         """A mido message for the next block (note-on, note-off, control change,
-        channel aftertouch)."""
+        channel aftertouch, the pitch wheel)."""
         if msg.type == "note_on" and msg.velocity > 0:
             self.d.nv_lp_event(self.p, 0, msg.channel, msg.note, msg.velocity)
         elif msg.type in ("note_on", "note_off"):
@@ -1484,6 +1487,8 @@ class LivePiano(object):
             self.d.nv_lp_event(self.p, 2, msg.channel, msg.control, msg.value)
         elif msg.type == "aftertouch":
             self.d.nv_lp_event(self.p, 3, msg.channel, msg.value, 0)
+        elif msg.type == "pitchwheel":
+            self.d.nv_lp_event(self.p, 4, msg.channel, msg.pitch, 0)
 
     def block(self, n0, blk):
         self.d.nv_lp_block(self.p, int(n0), int(blk))

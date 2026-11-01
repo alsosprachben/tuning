@@ -97,6 +97,8 @@ def main(argv):
                 lv.on_midi(M("note_on", channel=ch, note=a, velocity=v))
             elif ty == 1:
                 lv.on_midi(M("note_off", channel=ch, note=a, velocity=0))
+            elif ty == 4:
+                lv.on_midi(M("pitchwheel", channel=ch, pitch=a))
             else:
                 lv.on_midi(M("control_change", channel=ch, control=a, value=v))
             e += 1

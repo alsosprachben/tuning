@@ -413,7 +413,9 @@ struct Slab {
 // what _one_core, _note_on and _note_off do for a piano, block by block as
 // live's callback runs them: the block's events at its start, then the sweep
 // (a key neither down nor held released), then the reap. Not here yet: the
-// pitch wheel, modulation, CC71-78, sostenuto, mono, the other voices.
+// RPNs, CC71-78, sostenuto, mono, the other voices. THE PITCH WHEEL
+// (live._repitch: GM's 2-semitone range) and the mod wheel, which on a piano
+// is nothing but a honky-tonk's detune.
 // PRESSURE (channel aftertouch, live's Slab.press) as a level: a piano's
 // effort_tilt is 0, so its partials are not tilted, only lifted by press_db
 // at full pressure. THE DAMPERS IN BETWEEN (live._damp_block), when given damper.py's
@@ -425,7 +427,8 @@ struct Slab {
 // can: the same rows, later).
 
 struct Ev {
-    int type;               // 0 note-on, 1 note-off, 2 control change, 3 channel aftertouch (a)
+    int type;               // 0 note-on, 1 note-off, 2 control change, 3 channel aftertouch (a),
+                            // 4 the pitch wheel (a, -8192..8191)
     int ch, a, b;
 };
 
@@ -443,6 +446,15 @@ struct Piano {
     std::vector<Ev> events;
     std::map<std::pair<int, int>, int> key_vel;     // (ch, note) -> the strike's velocity
     double pressure[16] = {};                       // channel aftertouch, 0..1
+    // THE PITCH WHEEL (live._repitch): each channel's raw wheel and the ratio
+    // last applied to its notes; the range, GM's 2 semitones (no RPN 0 here)
+    int wheel[16] = {};
+    double bend[16] = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
+    double bend_range = 2.0;
+    // THE MOD WHEEL on a honky-tonk (live's 'detune' role): which pre-warmed
+    // detune new notes take, the nearest of DETUNE_STEPS (a piano's wheel
+    // does nothing else: a hammered string takes no vibrato)
+    bool detune_wheel = false;
     double press_db = 8.0;                          // tonelib.PRESS_DB (live.press_db)
 
     Piano(long cap) : S(cap)
@@ -518,6 +530,8 @@ struct Piano {
             S.soft_strings(slots, soft_drop, soft_top);
         if (pressure[ch] != 0.0)
             press(slots, pressure[ch]);
+        if (bend[ch] != 1.0)                // a note struck under a bend joins it
+            retune(slots, n0, bend[ch]);
         if (reg_on && reg_note[note] && !S.last_slots.empty())
             reg_strike(ch, note, n0, *T, S.last_slots);
     }
@@ -558,6 +572,48 @@ struct Piano {
             S.f4[F4_aL][s] = (float)((double)S.aL0[s] * sh);
             S.f4[F4_aR][s] = (float)((double)S.aR0[s] * sh);
         }
+    }
+
+    // live.Slab.retune for a pitch (om_scale; the vibrato's depth and rate
+    // as they are): om scaled, and the phase anchored where it is now -- the
+    // vibrato's accumulated swing included, which moves with om (a piano's
+    // depth is 0, so that term is too)
+    void retune(const std::vector<long> &slots, long long n, double scale)
+    {
+        if (slots.empty())
+            return;
+        double tn = (double)n / rate;
+        for (long q : slots) {
+            double om0 = S.f8[F8_om][q], vd = (double)S.f4[F4_vd][q];
+            double vr = std::max((double)S.f4[F4_vr][q], 1e-6), vp = (double)S.f4[21][q];   // vp
+            double ton = (double)S.i8[0][q] / rate;
+            auto extra = [&](double om) {
+                double w2 = 2.0 * M_PI * vr;
+                double swing = cos(w2 * ton + vp) - cos(w2 * tn + vp);
+                return (om * rate / (2.0 * M_PI)) * vd / vr * swing;
+            };
+            double before = extra(om0);
+            double om1 = om0 * scale;
+            double after = extra(om1);
+            double step = (om0 - om1) * (double)n - (after - before);
+            S.f8[F8_p0][q] += step;
+            S.f8[F8_p0R][q] += step;
+            S.f8[F8_om][q] = om1;
+        }
+    }
+
+    // live._repitch: the channel's ratio (tonelib.channel_pitch_ratio, no
+    // coarse or fine tuning here), its notes moved by the change
+    void pitchwheel(int ch, int v, long long n0)
+    {
+        wheel[ch] = v;
+        double st = bend_range * (double)v / 8192.0 + 0.0 + 0.0 / 100.0 + 0.0 + 0.0 / 100.0;
+        double ratio = pow(2.0, st / 12.0);
+        double prev = bend[ch];
+        if (ratio == prev)
+            return;
+        bend[ch] = ratio;
+        retune(sounding(ch), n0, ratio / prev);
     }
 
     // channel aftertouch: every key sounding on the channel (live's
@@ -608,6 +664,13 @@ struct Piano {
             }
         } else if (cc == 67) {
             soft[ch] = v >= 64;
+        } else if (cc == 1 && detune_wheel) {
+            static const int steps[3] = {0, 64, 127};       // live.DETUNE_STEPS: min(), the first of a tie
+            int best = steps[0];
+            for (int st : steps)
+                if (abs(st - v) < abs(best - v))
+                    best = st;
+            speed = best;
         }
     }
 
@@ -1759,6 +1822,8 @@ struct Piano {
                 note_off(e.ch, e.a, n0);
             else if (e.type == 3)
                 aftertouch(e.ch, e.a);
+            else if (e.type == 4)
+                pitchwheel(e.ch, e.a, n0);
             else
                 control(e.ch, e.a, e.b, n0);
         }
@@ -1941,6 +2006,9 @@ void nv_lp_gpu_ms(void *h, double *out)
     out[0] = P->ms_setup;
     out[1] = P->ms_samples;
 }
+
+// The mod wheel picks a honky-tonk's detune (live's 'detune' role)
+void nv_lp_detune_wheel(void *h, int on) { ((nv::slab::Piano *)h)->detune_wheel = on != 0; }
 
 // Pressure's level at full aftertouch, dB (live.press_db)
 void nv_lp_press_db(void *h, double db) { ((nv::slab::Piano *)h)->press_db = db; }

@@ -54,7 +54,11 @@
 // highest tenth of what sounds is faded out over 5 ms; --test takes
 // --govern to time it, its output then the machine's.
 //
-// Not yet: the room and its send, the wheel, modulation, the other routes, the TUI.
+// THE WHEELS: the pitch wheel over GM's 2 semitones (live._repitch); the mod
+// wheel on a honky-tonk picks its detune, and on the other pianos does
+// nothing, as live's (a hammered string takes no vibrato).
+//
+// Not yet: the room and its send, RPNs, the other routes, the TUI.
 
 #include <algorithm>
 #include <atomic>
@@ -99,6 +103,7 @@ void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float 
                   void *sd, long long blk, double master_gain);
 void nv_lp_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20);
 void nv_lp_press_db(void *h, double db);
+void nv_lp_detune_wheel(void *h, int on);
 void *nv_kp_new(int key);
 void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr);
 int nv_lp_on_gpu(void *h);
@@ -371,6 +376,10 @@ static void midi_reader(int fd, std::mutex *mu, std::vector<Midi> *q)
                 m.type = 2;
             else if (hi == 0xD0)
                 m.type = 3;
+            else if (hi == 0xE0) {
+                m.type = 4;                             // the pitch wheel, -8192..8191
+                m.a = ((d[1] << 7) | d[0]) - 8192;
+            }
             if (m.type >= 0) {
                 std::lock_guard<std::mutex> lk(*mu);
                 q->push_back(m);
@@ -429,6 +438,7 @@ int main(int argc, char **argv)
     fprintf(stderr, "nvlive: program %d, %ld templates\n", program, built);
     void *part = nv_lp_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], 16384,
                            E.headroom, E.pan.data(), E.beta);
+    nv_lp_detune_wheel(part, pp[6] >= 0);       // the export's speed: a honky-tonk's wheel, else -1
     // the free strings (live's register, its worker answering in step)
     const Export::Reg &rg = E.reg[program & 127];
     bool noreg = false;
