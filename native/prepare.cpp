@@ -99,6 +99,14 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
                                with_register);
     if (P < 0)
         return P;
+    // THE STROKES' ROWS (stroke_rows): each gesture's stroke's, from its
+    // first row to the next note's
+    for (int j = 0; j < nn; j++)
+        if (nv_song_stroked(song, played[j])) {
+            long long r1 = j + 1 < nn ? row0[j + 1] : nnote;
+            if (r1 > row0[j])
+                nv_song_add_stroke_rows(song, row0[j], r1);
+        }
     out[40] = 0.0;
     out[41] = 0.0;
     const double sr = tmpl->sr;

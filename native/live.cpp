@@ -106,11 +106,32 @@ extern "C" {
 // and the rest as nv_prepare's. The rows in *rowsp (nv_buf_free), out[] as
 // nv_prepare's. Returns the rows, or < 0 (the file refused, a note not the
 // engine's).
+static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, const double *freq,
+                               const double *trim, int program, int note, int vel, int fast, double **rowsp,
+                               const int *kind, double scale, double full_db_s, double residual, double beta,
+                               long long blk, double ring_floor, double ring_max, double *out, double knee_db,
+                               double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
+                               std::vector<long long> *srows);
+
 long long nv_template(const NoteClass *const *K, const NoteIn *tmpl, const double *freq, const double *trim,
                       int program, int note, int vel, int fast, double **rowsp, const int *kind, double scale,
                       double full_db_s, double residual, double beta, long long blk, double ring_floor,
                       double ring_max, double *out, double knee_db, double ln10_20, double xdec_nepers, double SR,
                       void **dm, const nv::live::Kits *kit = nullptr)
+{
+    return template_rows(K, tmpl, freq, trim, program, note, vel, fast, rowsp, kind, scale, full_db_s, residual,
+                         beta, blk, ring_floor, ring_max, out, knee_db, ln10_20, xdec_nepers, SR, dm, kit, nullptr);
+}
+
+}  // extern "C"
+
+// ...and its strokes' rows (srows: [first, end) pairs, the song's stroke_rows)
+static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, const double *freq,
+                               const double *trim, int program, int note, int vel, int fast, double **rowsp,
+                               const int *kind, double scale, double full_db_s, double residual, double beta,
+                               long long blk, double ring_floor, double ring_max, double *out, double knee_db,
+                               double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
+                               std::vector<long long> *srows)
 {
     std::vector<uint8_t> f = kit ? nv::live::one_note(program, note, vel, 9, fast, 480 * 18)
                                  : nv::live::one_note(program, note, vel, 0, fast);
@@ -134,12 +155,15 @@ long long nv_template(const NoteClass *const *K, const NoteIn *tmpl, const doubl
     double qacc[18] = {0}, az = 0.0;
     long long P = nv_prepare(song, K, tmpl, nullptr, 0, &rs, rowsp, qacc, &az, kind, scale, full_db_s, residual,
                              beta, blk, total, ring_floor, ring_max, out, knee_db, ln10_20, xdec_nepers, SR, dm, 0);
+    if (srows && P >= 0) {
+        int n = nv_song_n_stroke_rows(song, nullptr, 0);
+        srows->resize(2 * n);
+        nv_song_n_stroke_rows(song, srows->data(), n);
+    }
     nv_song_free(song);
     nv_midi_free(m);
     return P;
 }
-
-}  // extern "C"
 
 // ---------------------------------------------------------------------------
 // THE TEMPLATE CACHE (live.Patch): a part's keys, each at every velocity
@@ -201,9 +225,10 @@ struct Cache {
     {
         double *rows = nullptr, out[48] = {0};
         void *dm[6] = {nullptr};
-        long long P = nv_template(K.data(), &t, freq, trim, program, note, vel, fast, &rows, kind, scale, full,
-                                  residual, beta, blk, ring_floor, ring_max, out, knee, ln10_20, xdec, SR, dm,
-                                  drums ? &kit : nullptr);
+        std::vector<long long> srows;
+        long long P = template_rows(K.data(), &t, freq, trim, program, note, vel, fast, &rows, kind, scale, full,
+                                    residual, beta, blk, ring_floor, ring_max, out, knee, ln10_20, xdec, SR, dm,
+                                    drums ? &kit : nullptr, &srows);
         if (P < 0) {
             free(rows);
             return false;
@@ -259,26 +284,46 @@ struct Cache {
             for (long long r = 0; r < P; r++)
                 T.fa_at[r] = fa[r] == mode;
         }
-        // A STROKED KEY (a drum's gesture: every row a stroke's): each row
-        // where its stroke falls in the note (sof: its onset less its room
-        // delay, over the least of them; numpy's int64 - float32, truncated)
+        // A STROKED KEY (a drum's gesture): each stroke's rows where it falls
+        // in the note (sof: its onset less its room delay, over the least of
+        // the strokes'; numpy's int64 - float32, truncated) -- a layer's rows,
+        // struck with the key, at the press (0)
         int q = 128 * program + note;
         const NoteClass *nc = (q >= 0 && q < NV_K_DRUMS) ? K[(drums ? NV_K_DRUMS : 0) + q] : nullptr;
-        if (P && drums && kit.skind[q] != 0) {
+        if (P && !srows.empty()) {
             const std::vector<float> &rdl = T.f4[25];
+            std::vector<char> st(P, 0);
+            for (size_t k = 0; k < srows.size(); k += 2)
+                for (long long r = srows[k]; r < std::min(srows[k + 1], (long long)P); r++)
+                    st[r] = 1;
             double mn = 0.0;
+            bool any = false;
             for (long long r = 0; r < P; r++) {
+                if (!st[r])
+                    continue;
                 double b = (double)T.i8[0][r] - (double)rdl[r];
-                if (r == 0 || b < mn)
+                if (!any || b < mn)
                     mn = b;
+                any = true;
             }
-            T.sof.resize(P);
-            for (long long r = 0; r < P; r++)
-                T.sof[r] = (long long)((double)T.i8[0][r] - (double)rdl[r] - mn);
+            if (any) {
+                T.sof.assign(P, 0);
+                for (long long r = 0; r < P; r++)
+                    if (st[r])
+                        T.sof[r] = (long long)((double)T.i8[0][r] - (double)rdl[r] - mn);
+            }
         }
         // A ONE-SHOT: each row its length offline (rof) -- but not past where
         // it falls silent, ONESHOT_FLOOR_DB under the loudest row, where it
         // only decays; its length the longest, counted from the press
+        // A TAPE PLAYED BACKWARDS STOPS AT ITS ARRIVAL (live's rof for
+        // played_backwards): each row grows to its own end, a key-up before
+        // it still cutting it there
+        if (P && nc && nc->played_backwards) {
+            T.rof.resize(P);
+            for (long long r = 0; r < P; r++)
+                T.rof[r] = T.i8[1][r] - T.i8[0][r];
+        }
         T.oneshot = P && nc && nc->one_shot;
         if (T.oneshot) {
             T.rof.resize(P);

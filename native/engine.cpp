@@ -64,6 +64,18 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     VoiceNote o;
     nv_voice_init(&c, &K->tmpl, n->f0, n->pan, pow(n->vel / 127.0, 2.0), n->chan_vol, n->effort, rs, &s, &o);
     const double av = s.attack_volume;  // (an [RND] strike's, varied)
+    if (s.throat) {
+        // A THROAT'S PULSE (SfxThroatProperties), as the note sets it on the
+        // voice it has built: its tilt, mouth and vowel (NaN: the class's),
+        // and its breath, tilted with it
+        if (!std::isnan(n->stroke_tilt))
+            s.stroke_tilt_db = n->stroke_tilt;
+        if (!std::isnan(n->stroke_mouth))
+            s.formant_scale = n->stroke_mouth;
+        if (!std::isnan(n->stroke_morph))
+            s.formant_morph = n->stroke_morph;
+        o.chiff_volume = s.breath_volume * pow(10.0, s.stroke_tilt_db / 20.0);
+    }
     const double f0 = n->f0;
     double B = c.inharmonicity_dynamic ? o.B : o.inharmonicity_coefficient;
     double dur = n->off - n->on;
@@ -394,6 +406,9 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         n.channel = (double)ch;
         n.br = (ch >= 0 && ch < nbr) ? br[ch] : -1.0;
         n.from_song = 1; n.song_index = i;
+        double pv[3];
+        nv_song_note_voice(song, i, pv);    // a throat's pulse: its tilt, mouth and vowel
+        n.stroke_tilt = pv[0]; n.stroke_mouth = pv[1]; n.stroke_morph = pv[2];
         double det = 1.0;
         int c1;
         if (k->detune_wheel && nv_song_first_cc(song, ch, 1, &c1))

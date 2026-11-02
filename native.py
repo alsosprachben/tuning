@@ -70,7 +70,8 @@ class VoiceSnap(ctypes.Structure):
                 ('bell_order', C), ('bore_norm', C), ('pea', I), ('pea_vibrato_cents', C), ('pea_vibrato_hz', C),
                 ('n_bar', I), ('bar_n', I * 16), ('bar_g', C * 16),
                 ('n_md', I), ('n_ma', I), ('n_mp', I), ('mode_decays', C * 400), ('mode_after', (C * 2) * 400),
-                ('mode_phases', C * 400)]
+                ('mode_phases', C * 400), ('throat', I), ('n_mb', I), ('stroke_tilt_db', C),
+                ('formant_scale', C), ('formant_morph', C), ('breath_volume', C), ('mb', (C * 2) * 128)]
 
 
 class ToneIn(ctypes.Structure):
@@ -171,7 +172,8 @@ class NoteIn(ctypes.Structure):
                 + [(f, C) for f in ('fx', 'mk', 'fm_omega', 'fm_phase')]
                 + [('room_bands', C * 9), ('reflect', I), ('no_reflections', I), ('ch', LL), ('note', I),
                    ('damper_pedal', I), ('key_off', C), ('planes', C * 6), ('order', I), ('from_song', I), ('song_index', I),
-                   ('seat', C), ('held', C), ('rnd_draws', C * 4)])
+                   ('seat', C), ('held', C), ('rnd_draws', C * 4), ('stroke_tilt', C), ('stroke_mouth', C),
+                   ('stroke_morph', C)])
 
 
 class NoteOut(ctypes.Structure):
@@ -580,6 +582,13 @@ def kit_drum(cls):
         if len(cls.band_trim_db) > 32:
             return 0
         own = dict(_MEASURED_OWN)
+        if issubclass(cls, T.SfxThroatProperties):
+            # (a throat's: its mouth, its vowel and its tilt on the stroke's, its
+            # breath tilted with it -- the vowel's second set as long as its first)
+            own = dict(own, mode_ratio='SfxThroatProperties', harmonic_volume='SfxThroatProperties',
+                       chiff_volume='SfxThroatProperties')
+            if cls.DRUM_MODES_B and len(cls.DRUM_MODES_B) != len(cls.DRUM_MODES):
+                return 0
     elif issubclass(cls, T.NoisyPercussionMixin) and issubclass(cls, T.TambourineProperties):
         if len(cls.band_trim_db) > 32:
             return 0
@@ -599,6 +608,31 @@ def kit_drum(cls):
             and not cls.bore_corner_hz and not cls.harmonic_touch and not cls.pickup_points)
 
 
+def _voiced_spec(syllables, f0, shape, dur, rise, fall_db, jitter=0.01, shimmer_db=0.0, bright=None,
+                 mouth=None, level=None, morph=None):
+    """percussion_map._voiced's arguments as native/channel.cpp's voiced reads
+    them: f0, dur, rise, fall dB, jitter, shimmer dB; the shape (0, bend,
+    time constant; or 1, n, its n (s, semitones)); the syllables (n, then
+    each one's time, dB, semitones, and 1 and its own shape and length, or
+    0); then the bright, mouth, level and morph contours, each n and its n
+    (s, value) (0: none)."""
+    def shp(sh):
+        if isinstance(sh[0], tuple):
+            return [1.0, float(len(sh))] + [float(x) for pt in sh for x in pt]
+        return [0.0, float(sh[0]), float(sh[1])]
+
+    def contour(pts):
+        return [float(len(pts or ()))] + [float(x) for pt in (pts or ()) for x in pt]
+    out = [float(f0), float(dur), float(rise), float(fall_db), float(jitter), float(shimmer_db)] + shp(shape)
+    out.append(float(len(syllables)))
+    for syl in syllables:
+        out += [float(syl[0]), float(syl[1]), float(syl[2])]
+        out += [1.0] + shp(syl[3]) + [float(syl[4])] if len(syl) > 3 else [0.0]
+    for c in (bright, mouth, level, morph):
+        out += contour(c)
+    return out
+
+
 def stroke_spec(note, kit):
     """The gesture percussion_map.rasp_strokes plays this set's key as, as
     the song's strokes take it (native/channel.cpp Song::strokes): (kind,
@@ -606,8 +640,9 @@ def stroke_spec(note, kit):
     dB), 2 a cascade (span, n, semitones), 3 an impact train (rate, secs,
     fall, jitter, scatter, strike dB, side set, side dB, side slope), 4 a
     roll (_snare_roll's eleven), 5 a pattern (n, then each stroke's time, dB,
-    semitones and length, NaN where it runs to the next); (0, []) none; None
-    a gesture the song does not have (a voiced stroke, a rattle)."""
+    semitones and length, NaN where it runs to the next), 6 a voice's pulses
+    (_voiced_spec); (0, []) none; None a gesture the song does not have (a
+    rattle)."""
     import percussion_map as PCM
     tabs = PCM.KIT_STROKES.get(kit, {}) if kit in PCM.KIT_ONLY else None
     if tabs is None and note in PCM.KITS.get(kit, {}):
@@ -629,8 +664,10 @@ def stroke_spec(note, kit):
     ro = table("roll", PCM.PERCUSSION_ROLL)
     if ro is not None:
         return 4, [float(x) for x in ro] + [0.0] * (11 - len(ro))
-    if tabs is not None and tabs.get("voiced", {}).get(note) is not None:
-        return None
+    vo = tabs.get("voiced", {}).get(note) if tabs is not None else None
+    if vo is not None:
+        vs = _voiced_spec(*vo)
+        return (6, vs) if len(vs) <= SPAR - 4 else None
     pa = tabs.get("pattern", {}).get(note) if tabs is not None else None
     if pa is not None:
         if 1 + 4 * len(pa) > SPAR - 4:
@@ -837,6 +874,18 @@ def snapshot(props):
             for i, (bn, bg) in enumerate(p.bar_modes):
                 s.bar_n[i], s.bar_g[i] = int(bn), float(bg)
     elif s.kind == 1:
+        if isinstance(p, T.SfxThroatProperties):
+            # a throat's pulse: its tilt, mouth and vowel (the note's, nv_note), its breath
+            s.throat = 1
+            # (the class's: a note's own arrive in its NoteIn)
+            k = type(p)
+            s.stroke_tilt_db, s.formant_scale, s.formant_morph = (k.stroke_tilt_db, k.stroke_formant_scale,
+                                                                  k.stroke_formant_morph)
+            s.breath_volume = p.breath_volume
+            mb = p.DRUM_MODES_B or ()
+            s.n_mb = len(mb)
+            for i, row in enumerate(mb):
+                s.mb[i][:] = [float(row[0]), float(row[1])]
         # KitDrumProperties' tables, and SynthProperties' unison
         s.unison_gain = p.unison_gain
         s.n_unison = len(p.unison_detune or ())
@@ -990,7 +1039,9 @@ def _class(cls):
             return None
         c = VoiceInit()
         for f, _ in VoiceInit._fields_:
-            if getattr(cls, f, None) is not None:
+            if isinstance(getattr(cls, f, None), property):
+                setattr(c, f, getattr(proto, f))       # (a throat's breath: the prototype's)
+            elif getattr(cls, f, None) is not None:
                 setattr(c, f, getattr(cls, f) if not isinstance(getattr(cls, f), bool) else int(getattr(cls, f)))
         if not kit_drum(cls):
             c.ia, c.ib, c.ic, c.id, c.ie = cls.a, cls.b, cls.c, cls.d, cls.e
@@ -1162,7 +1213,8 @@ def note_class(cls):
         k.chiff_width_set = int(cls.chiff_width is not None)
         k.chiff_width = cls.chiff_width or 0.0
         k.chiff_width_cycles = cls.chiff_width_cycles
-        k.chiff_volume, k.chiff_cycle = cls.chiff_volume, cls.chiff_cycle
+        k.chiff_volume = v[2].chiff_volume if isinstance(cls.chiff_volume, property) else cls.chiff_volume
+        k.chiff_cycle = cls.chiff_cycle
         k.chiff_release = getattr(cls, 'chiff_release', 1.0) or 0.0
         k.sustain_jitter = cls.sustain_jitter
         k.cbw0 = getattr(cls, 'chiff_bandwidth', None) or BR.RAND_GRAN

@@ -133,6 +133,18 @@ static double pairwise_d(const double *a, long n)
 
 typedef std::tuple<long long, long long, long long, long long> Key;    // (part, channel, note, layer)
 
+// THE SLOTS, ONCE EACH, as numpy's x[idx] op= y takes them: a held one-shot's
+// key still lists slots reaped and stamped again by a later note (live's
+// Slab.live keeps them too), so a channel's slots can name one twice -- and
+// a step applied twice is not live's (the fader, the pan's shadow, a bend)
+static std::vector<long> once(const std::vector<long> &slots)
+{
+    std::vector<long> u(slots);
+    std::sort(u.begin(), u.end());
+    u.erase(std::unique(u.begin(), u.end()), u.end());
+    return u;
+}
+
 struct Slab {
     long cap;
     std::vector<std::vector<double>> f8;
@@ -305,7 +317,8 @@ struct Slab {
         auto clamp = [](int v) { return v < 0 ? 0 : (v > 127 ? 127 : v); };
         const double *t1 = pan_tab[clamp(cc)], *t0 = pan_tab[clamp(was)];
         double b2 = pan_beta * pan_beta;
-        for (long sidx : slots) {
+        const std::vector<long> u = once(slots);
+        for (long sidx : u) {
             double om = 2.0 * M_PI * (double)f4[2][sidx];
             auto shelf = [&](double al) { double x = al * om; return sqrt(x * x + b2); };
             float rl = (float)(shelf(t1[0]) / shelf(t0[0]));
@@ -315,7 +328,7 @@ struct Slab {
         }
         if (itd) {
             float dl = (float)((t1[2] - t0[2]) * rate);
-            for (long sidx : slots) {
+            for (long sidx : u) {
                 f4[F4_delL][sidx] += dl;
                 f4[F4_delR][sidx] -= dl;
                 f8[F8_p0][sidx] -= f8[F8_om][sidx] * (double)dl;
@@ -344,7 +357,7 @@ struct Slab {
         float r = (float)ratio;
         if ((double)r == 1.0)
             return;
-        for (long sidx : slots) {
+        for (long sidx : once(slots)) {
             aL0[sidx] *= r; aR0[sidx] *= r;
             f4[F4_aL][sidx] *= r; f4[F4_aR][sidx] *= r;
         }
@@ -975,7 +988,7 @@ struct Piano {
         if (slots.empty())
             return;
         double tn = (double)n / rate;
-        for (long q : slots) {
+        for (long q : once(slots)) {
             double om0 = S.f8[F8_om][q], vd = (double)S.f4[F4_vd][q];
             double vr = std::max((double)S.f4[F4_vr][q], 1e-6), vp = (double)S.f4[21][q];   // vp
             double ton = (double)S.i8[0][q] / rate;

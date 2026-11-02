@@ -6256,7 +6256,8 @@ def _tone_native(em, props, nt, stops, onsets, seats, mls, _als, _hx, _hperc, _p
             or getattr(P, 'unison_drop_late', False) or getattr(P, 'strike_phase_spread', 0.0) > 0.0
             or getattr(P, 'mode_phase', None) is not None or getattr(P, 'partial_phase_spread', 0.0) > 0.0
             or getattr(P, 'stroke_scatter', False) or getattr(P, 'string_choirs', None)
-            or getattr(P, 'unison_shares_phase', False)):
+            or getattr(P, 'unison_shares_phase', False)
+            or isinstance(P, T.SfxThroatProperties)):       # (a pulse's own: the engine's note alone)
         return None
     if T.choir_of(P, key) or T.rank_detune_cents(P, key, nt.note):
         return None
@@ -6492,6 +6493,10 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.held = held                           # (a shake's share of the key)
     if hasattr(P, 'rnd_draws'):
         n.rnd_draws[:] = [float(x) for x in P.rnd_draws]       # (an [RND] strike's)
+    # (a throat's pulse, as the note set it on the voice)
+    n.stroke_tilt = getattr(P, 'stroke_tilt_db', math.nan)
+    n.stroke_mouth = getattr(P, 'stroke_formant_scale', math.nan)
+    n.stroke_morph = getattr(P, 'stroke_formant_morph', math.nan)
     n.has_nx, n.nx = int(nx is not None), (nx if nx is not None else 0.0)
     n.mcut, n.slurred, n.slur_out = int(bool(mcut)), int(bool(slurred)), int(bool(slur_out))
     lo, hi = getattr(nt.pc, 'string_detune_range', (0.0, 0.0))

@@ -142,6 +142,13 @@ typedef struct {
        partial) and where it starts (mode_phase, radians) */
     int n_md, n_ma, n_mp;
     double mode_decays[400], mode_after[400][2], mode_phases[400];
+    /* SfxThroatProperties: a pulse's tilt (dB at 4 kHz over 1 kHz), its
+       mouth (the formants scaled) and its vowel moved toward DRUM_MODES_B
+       (n_mb of (ratio, dB)) -- the note's, set after the voice is built;
+       its breath (chiff_volume: breath_volume, tilted) */
+    int throat, n_mb;
+    double stroke_tilt_db, formant_scale, formant_morph, breath_volume;
+    double mb[128][2];
 } VoiceSnap;
 
 typedef struct {
@@ -374,6 +381,9 @@ typedef struct {
     double seat;                        // a seat in the instrument (a kit's drum): its pan there, 0 none
     double held;                        // how long its key was held, s (a shake's share of it)
     double rnd_draws[4];                // an [RND] voice's strike (VoiceInit.rnd_draws)
+    // a throat's pulse (SfxThroatProperties): its tilt, mouth and vowel's
+    // morph -- NaN, the class's own
+    double stroke_tilt, stroke_mouth, stroke_morph;
 } NoteIn;
 
 // What the note's setup worked out, beside its rows.
@@ -429,7 +439,11 @@ void nv_song_cc(void *s, long long ch, double t, int cc, int v);
 void nv_song_note(void *s, long long ch, int note, double on, double off, int vel, double v7, double v11,
                   double pan, double trim, int prog, int drum);
 int nv_song_n_notes(void *s);
+int nv_song_stroked(void *s, int i);
+void nv_song_add_stroke_rows(void *s, long long a, long long b);
+int nv_song_n_stroke_rows(void *s, long long *ab, int cap);
 void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv);
+void nv_song_note_voice(void *s, int i, double *out);
 int nv_song_first_cc(void *s, long long ch, int cc, int *v);
 int nv_song_sost(void *s, long long ch, int note, double on, double *out);
 void nv_song_table(void *s, long long ch, double t, double *out);

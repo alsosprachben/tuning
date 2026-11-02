@@ -112,8 +112,16 @@ double nv_mode_ratio(const VoiceSnap *v, int m)
     if (v->kind == 2)                           /* SynthProperties.mode_ratio: mode_ratios */
         return 1 <= m && m <= v->n_mm ? v->mm_ratio[m - 1] : 0.0;
     if (v->kind == 1) {                         /* KitDrumProperties.mode_ratio */
-        if (1 <= m && m <= v->n_modes)
-            return v->modes[m - 1][0];
+        if (1 <= m && m <= v->n_modes) {
+            double r = v->modes[m - 1][0];
+            if (v->throat) {                    /* SfxThroatProperties': the vowel moved, the mouth */
+                if (v->formant_morph != 0.0 && v->n_mb)
+                    r *= pow(v->mb[m - 1][0] / v->modes[m - 1][0], v->formant_morph);
+                if (v->formant_scale != 1.0)
+                    return r * v->formant_scale;
+            }
+            return r;
+        }
         int b;
         double hz;
         return drum_click(v, m, &b, &hz) ? hz / (v->frequency_x * pow(2.0, v->octave_position)) : 0.0;
@@ -201,10 +209,21 @@ static double soundboard_gain(const VoiceSnap *v, double fn)
 
 static double harmonic_volume(const VoiceSnap *v, int harmonic);
 
-/* the voice's harmonic_volume, and SampledBreak's: nothing at or above its Nyquist */
+/* the voice's harmonic_volume -- a throat's tilted and its vowel moved --
+   and SampledBreak's: nothing at or above its Nyquist */
 double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
 {
     double s = harmonic_volume(v, harmonic);
+    if (v->throat && harmonic <= v->n_modes) {
+        /* SfxThroatProperties': the vowel's levels moved, the pulse tilted */
+        if (v->formant_morph != 0.0 && s != 0.0 && v->n_mb)
+            s *= pow(10.0, v->formant_morph * (v->mb[harmonic - 1][1] - v->modes[harmonic - 1][1]) / 20.0);
+        if (v->stroke_tilt_db != 0.0 && s != 0.0) {
+            double hz = 1000.0 * v->modes[harmonic - 1][0];
+            if (hz > 1000.0)
+                s *= pow(10.0, 0.5 * v->stroke_tilt_db * log(hz / 1000.0) / log(2.0) / 20.0);
+        }
+    }
     if (v->nyquist != 0.0 && !(v->frequency_x * pow(2.0, v->octave_position) * nv_mode_ratio(v, harmonic) < v->nyquist))
         return 0.0;
     return s;

@@ -192,6 +192,9 @@ struct Ev {
     int prog, drum;                     // its program, and whether a drum set's
     double ratio = 1.0;                 // a stroke's pitch (stroke_pitch: a bell tree's bar)
     int inner = 0;                      // a ridge after a scrape's first (inner_ridge: it chokes nothing)
+    // a throat's pulse (stroke_tilt, stroke_mouth, stroke_morph): NaN, none
+    double tilt = NAN, mouth = NAN, morph = NAN;
+    int stroked = 0;                    // one of a gesture's strokes (_prep_strokes' _stroked)
 };
 
 // A file's channels and notes.
@@ -200,6 +203,9 @@ struct Song {
     std::vector<Ev> notes;
     std::map<NoteKey, double> next_same, sost_held;
     std::map<long long, int> vbase;     // each channel's median velocity (_vbase)
+    // the rows of each played note that is a gesture's stroke (nv_prepare's:
+    // blockrender's stroke_rows), [first, end)
+    std::vector<std::pair<long long, long long>> stroke_rows;
     double total = 0.0;
     // ITS TUNING: the file's table, a channel's MIDI Tuning Standard tables
     // from their times (_MTS_TL), its fixed bend (_BTUN) and octave tuning (_OTUN)
@@ -303,7 +309,7 @@ struct Song {
     // A STRUCK OR SCRAPED GESTURE'S STROKES (percussion_map.rasp_strokes, as
     // _prep_strokes expands them): each drum note whose set's key has a
     // gesture (kind[q]: 1 a rasp, 2 a cascade, 3 an impact train, 4 a roll,
-    // 5 a pattern; par[NV_SPAR q..])
+    // 5 a pattern, 6 a voice's pulses; par[NV_SPAR q..])
     // replaced by its strokes -- each its own onset, end, velocity
     // (max(1, int(velocity x level))), pitch and, past the first, an inner
     // ridge. AND A KEY THAT ALSO STRIKES ANOTHER'S SOUND (key_layers:
@@ -326,6 +332,25 @@ struct Song {
                 continue;
             }
             const double *p = par + NV_SPAR * q;
+            if (kd == 6) {
+                // a voice's pulses: each its tilt, mouth and vowel too
+                std::vector<std::array<double, 7>> vs;
+                voiced(e.note, e.on, p, vs);
+                for (size_t k = 0; k < vs.size(); k++) {
+                    Ev x = e;
+                    x.on = vs[k][0];
+                    x.off = vs[k][1];
+                    long v = (long)(e.vel * vs[k][2]);
+                    x.vel = (int)(v > 1 ? v : 1);
+                    x.ratio = 1.0;
+                    x.inner = k > 0;
+                x.stroked = 1;
+                    x.stroked = 1;
+                    x.tilt = vs[k][4]; x.mouth = vs[k][5]; x.morph = vs[k][6];
+                    out.push_back(x);
+                }
+                continue;
+            }
             std::vector<std::array<double, 4>> st;     // (on, off, level, pitch)
             if (kd == 1)
                 rasp(e.on, e.off, p, st);
@@ -345,6 +370,7 @@ struct Song {
                 x.vel = (int)(v > 1 ? v : 1);
                 x.ratio = st[k][3] != 1.0 ? st[k][3] : 1.0;
                 x.inner = k > 0;
+                x.stroked = 1;
                 out.push_back(x);
             }
         }
@@ -455,6 +481,100 @@ struct Song {
             const double *st = p + 1 + 4 * k;
             double end = !std::isnan(st[3]) ? st[0] + st[3] : k + 1 < n ? st[4] : st[0] + 0.3;
             out.push_back({on + st[0], on + end, pow(10.0, st[1] / 40.0), pow(2.0, st[2] / 12.0)});
+        }
+    }
+
+    // a contour's value at t ((s, value) pairs, n of them: _voiced's along)
+    static double along(const double *pts, int n, double t)
+    {
+        if (t <= pts[0])
+            return pts[1];
+        for (int i = 0; i + 1 < n; i++) {
+            double ta = pts[2 * i], sa = pts[2 * i + 1], tb = pts[2 * i + 2], sb = pts[2 * i + 3];
+            if (t <= tb)
+                return sa + (sb - sa) * (t - ta) / (tb - ta);
+        }
+        return pts[2 * n - 1];
+    }
+
+    // a pitch's shape (native.stroke_spec): 0, bend octaves, time constant;
+    // or 1, n, its (s, semitones) contour -- the octaves it moves at t; the
+    // numbers it took
+    static int shape_at(const double *p, double t, double *oct)
+    {
+        if (p[0] == 0.0) {
+            *oct = p[1] * exp(-t / p[2]);
+            return 3;
+        }
+        int n = (int)p[1];
+        *oct = along(p + 2, n, t) / 12.0;
+        return 2 + 2 * n;
+    }
+
+    // a voice's pulses (_voiced): (f0, dur, rise, fall dB, jitter, shimmer
+    // dB, the shape, n syllables of (time, dB, semitones, own: 0 or 1 and
+    // its shape and length), then the bright, mouth, level and morph
+    // contours, n pairs each) -- each pulse (on, off, level, 1, its tilt,
+    // mouth and vowel: NaN where the stroke names none)
+    static void voiced(int note, double on, const double *p, std::vector<std::array<double, 7>> &out)
+    {
+        PyRandom r;
+        pyr_seed(&r, (long long)note * 7919LL + (long long)nearbyint(on * 1e4));
+        double f0 = p[0], dur = p[1], rise = p[2], fall_db = p[3], jitter = p[4], shimmer = p[5];
+        double oct;
+        const double *shape = p + 6;
+        int c = 6 + shape_at(shape, 0.0, &oct);
+        int nsyl = (int)p[c++];
+        const double *syl = p + c;
+        // skip past the syllables to the contours
+        for (int s = 0; s < nsyl; s++) {
+            c += 3;
+            if (p[c++] != 0.0) {
+                c += shape_at(p + c, 0.0, &oct);
+                c++;
+            }
+        }
+        const double *ct[4];
+        int cn[4];
+        for (int i = 0; i < 4; i++) {
+            cn[i] = (int)p[c];
+            ct[i] = p + c + 1;
+            c += 1 + 2 * cn[i];
+        }
+        const double *bright = ct[0], *mouth = ct[1], *level = ct[2], *morph = ct[3];
+        const double *q = syl;
+        for (int s = 0; s < nsyl; s++) {
+            double ts = q[0], db = q[1], semis = q[2];
+            const double *sh = shape;
+            double dn = dur;
+            q += 3;
+            if (*q++ != 0.0) {
+                sh = q;
+                q += shape_at(q, 0.0, &oct);
+                dn = *q++;
+            }
+            double t = 0.0;
+            while (t < dn) {
+                shape_at(sh, t, &oct);
+                double f = f0 * pow(2.0, semis / 12.0 + oct);
+                double env = cn[2] ? along(level, cn[2], t)
+                    : t < rise ? 20.0 * log10(pymax(t / rise, 0.03)) : -fall_db * (t - rise) / pymax(dn - rise, 1e-6);
+                double per = pymax(0.3, pyr_gauss(&r, 1.0, jitter)) / f;
+                double lvl = db + env + (shimmer != 0.0 ? pyr_gauss(&r, 0.0, shimmer) : 0.0);
+                double tilt = NAN, mo = NAN, mr = NAN;
+                if (cn[3]) {
+                    tilt = cn[0] ? along(bright, cn[0], t) : 0.0;
+                    mo = cn[1] ? along(mouth, cn[1], t) : 1.0;
+                    mr = along(morph, cn[3], t);
+                } else if (cn[1]) {
+                    tilt = cn[0] ? along(bright, cn[0], t) : 0.0;
+                    mo = along(mouth, cn[1], t);
+                } else if (cn[0]) {
+                    tilt = along(bright, cn[0], t);
+                }
+                out.push_back({on + ts + t, on + ts + t + per, pow(10.0, lvl / 40.0), 1.0, tilt, mo, mr});
+                t += per;
+            }
         }
     }
 
@@ -618,6 +738,26 @@ void nv_song_note(void *s, long long ch, int note, double on, double off, int ve
 
 int nv_song_n_notes(void *s) { return (int)((nv::Song *)s)->notes.size(); }
 
+// note i one of a gesture's strokes (_stroked)
+int nv_song_stroked(void *s, int i) { return ((nv::Song *)s)->notes[i].stroked; }
+
+// the stroke notes' rows, [first, end), as nv_prepare found them
+void nv_song_add_stroke_rows(void *s, long long a, long long b)
+{
+    ((nv::Song *)s)->stroke_rows.push_back(std::make_pair(a, b));
+}
+
+int nv_song_n_stroke_rows(void *s, long long *ab, int cap)
+{
+    const nv::Song *S = (nv::Song *)s;
+    int n = (int)S->stroke_rows.size();
+    for (int k = 0; k < n && k < cap; k++) {
+        ab[2 * k] = S->stroke_rows[k].first;
+        ab[2 * k + 1] = S->stroke_rows[k].second;
+    }
+    return n;
+}
+
 // note i as given: (channel, key, velocity, program, drum) ints; (on, off) doubles
 void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv)
 {
@@ -625,6 +765,13 @@ void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv)
     *ch = e.ch;
     iv[0] = e.note; iv[1] = e.vel; iv[2] = e.prog; iv[3] = e.drum;
     dv[0] = e.on; dv[1] = e.off;
+}
+
+// note i's pulse, a throat's (Ev: tilt, mouth, morph; NaN none)
+void nv_song_note_voice(void *s, int i, double *out)
+{
+    const nv::Ev &e = ((nv::Song *)s)->notes[i];
+    out[0] = e.tilt; out[1] = e.mouth; out[2] = e.morph;
 }
 
 // the held-key end the sostenuto gives this note, if it caught it
