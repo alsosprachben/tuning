@@ -325,6 +325,48 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
     return R.n;
 }
 
+/* blockrender._note_shake_noise: the shake's noise bands (hz[], db[] of nb),
+ * k rows a band spread across it, each twice -- the shake, swelling in over
+ * rise_s and held for its share of the key (held s), then the settle,
+ * falling settle_db over settle_s, crossfaded; the caller sets the noise
+ * width (t->cbw0) and no images (t->reflect 0). qacc and *azimuth as
+ * nv_tone's. Returns the rows written, -1 if the store was too small. */
+int nv_shake(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db, int k,
+             double held, double shake_min_s, double shake_frac, double shake_xfade_s, double rise_s,
+             double settle_db, double settle_s, double pos_x, double *rows, int cap, double *qacc,
+             double *azimuth)
+{
+    Rows R = {rows, 0, cap};
+    double VB[3] = {0.0, 5.5, 0.0};
+    double sr = t->sr;
+    double shk = pymax(shake_min_s, held * shake_frac);
+    double xf = pymin(shake_xfade_s, 0.5 * shk);
+    double rise = pymax(1e-4, pymin(rise_s, shk - xf)) * sr;
+    double slr = log(10.0) / 20.0 * settle_db / settle_s;
+    double sgain = exp(slr * xf);
+    double son = t->non + (shk - xf) * sr;
+    for (int b = 0; b < nb; b++)
+        for (int j = 0; j < k; j++) {
+            double hf = hz[b] * pow(2.0, (j - 0.5 * (k - 1)) / (3.0 * k));
+            double d = db[b] - 10.0 * log10((double)k);
+            if (hf >= 0.45 * sr)
+                continue;
+            double gM = v->gain * pow(10.0, d / 20.0) * nv_radiation_gain(v, hf, 0.0, 0);
+            double gl = nv_hrtf_gain(v, hf, t->li), gr = nv_hrtf_gain(v, hf, t->ri);
+            double om = 2 * PI * hf / sr;
+            if (!emit(v, t, &R, qacc, azimuth, NULL, 0, om, gM * gl, gM * gr, gM, hf, t->non,
+                      t->non + (shk - 0.5 * xf) * sr, rise, xf * sr, t->chiff, 0.0, 0.0, 0.0, 1.0, 0.0, t->cc,
+                      t->crl, 0.0, t->csc, -1.0, 0.0, 0.0, 0.0, VB, pos_x, 0))
+                return -1;
+            double g2 = gM * sgain;
+            if (!emit(v, t, &R, qacc, azimuth, NULL, 0, om, g2 * gl, g2 * gr, g2, hf, son,
+                      son + (xf + 4.0 * settle_s) * sr, xf * sr, 0.02 * sr, t->chiff, slr, 0.0, 0.0, 0.0, 0.0,
+                      t->cc, t->crl, 0.0, t->csc, -1.0, 0.0, 0.0, 0.0, VB, pos_x, 0))
+                return -1;
+        }
+    return R.n;
+}
+
 /* blockrender._note_strike_noise for a single burst at the onset (no flams,
  * no crowd, no recorded clicks, no tail, no layers): each band of the
  * voice's strike_noise_db (hz[], db[]) a noise row (the caller sets the

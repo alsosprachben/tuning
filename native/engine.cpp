@@ -180,6 +180,28 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         no_refl = 0;
     }
 
+    // A SHAKE AS SHAPED NOISE (_note_shake_noise): in place of the tone
+    if (K->shake) {
+        ToneIn ts = t;
+        ts.cbw0 = -K->noise_rel; ts.cbw1 = 0.0; ts.sjit = 0.0;
+        int k = nv_shake(&s, &ts, K->n_nb, K->nb_hz, K->nb_db, K->noise_rows, n->held, K->shake_min_s,
+                         K->shake_frac, K->shake_xfade_s, K->rise_s, K->settle_db, K->settle_s, s.position_x,
+                         rows + NCOLS * total, cap - total, qacc, azimuth);
+        if (k < 0)
+            return -1;
+        total += k;
+        out->n_tone = 0;
+        out->n_phantom = 0;
+        out->non = non; out->noff = noff; out->fade = fade; out->rel = rel; out->chiff = chiff;
+        out->jitter_scale = t.jitter_scale;
+        out->dl = t.dl; out->dr = t.dr; out->li = t.li; out->ri = t.ri;
+        out->pos_x = s.position_x; out->pos_z = s.position_z; out->B = B;
+        out->cv = t.cv; out->cc = t.cc; out->crl = t.crl; out->sjit = o.sustain_jitter; out->csc = t.csc;
+        memcpy(out->tb, tb, sizeof tb);
+        out->cbw[0] = K->cbw0; out->cbw[1] = K->cbw1;
+        return total;
+    }
+
     // THE ROOM'S IMAGES of the voice where it stands (_images_for)
     int nsurf_[64], surf_[64 * 8];
     double img_[3 * 64], mir_[3 * 64];
@@ -310,6 +332,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             return -(1 + i);
         NoteIn n = *tmpl;
         n.ch = ch; n.note = iv[0]; n.on = dv[0]; n.key_off = dv[1];
+        n.held = dv[1] - dv[0];             // how long the key was held
         n.vel = iv[1];
         n.damper_pedal = k->damper_pedal;
         n.mcut = 0; n.slurred = 0; n.slur_out = 0;

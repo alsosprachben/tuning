@@ -6461,7 +6461,7 @@ READING_STATS = [0, 0]  # files whose check song is the engine's own reading; wh
 
 
 def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st, eff, nx, mcut, slurred,
-                       slur_out, song=None, key_off=None, from_song=False, seat=0.0):
+                       slur_out, song=None, key_off=None, from_song=False, seat=0.0, held=0.0):
     """A piano note from the engine (native/engine.cpp's nv_note): its knock,
     tone and phantom partials, the voice built there from the note as the
     file and channel give it. (rows, qacc, azimuth, NoteOut, row0, qacc
@@ -6489,6 +6489,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.f0, n.pan, n.vel, n.chan_vol, n.effort = nt.f0, nt.pan, nt.vel, nt.chan_vol, eff
     n.on, n.off, n.seat = nt.on, nt.off, seat
     n.ch, n.note = nt.ch, nt.note           # (a flam's draw is the note's)
+    n.held = held                           # (a shake's share of the key)
     n.has_nx, n.nx = int(nx is not None), (nx if nx is not None else 0.0)
     n.mcut, n.slurred, n.slur_out = int(bool(mcut)), int(bool(slurred)), int(bool(slur_out))
     lo, hi = getattr(nt.pc, 'string_detune_range', (0.0, 0.0))
@@ -6511,7 +6512,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     npar = min(mh, int(getattr(P, 'phantom_max_order', 16)))
     _o = int(P.reflection_order) if em.REFLECT else 0
     ni = min(64, sum(6 * 5 ** k for k in range(_o)))      # the images there can be, at most
-    cap = (K.n_strike * max(1, K.n_flam) + 1) + mh * 3 * (1 + ni) + 16 + max(1, npar * (npar + 1) // 2) * (1 + ni)
+    cap = (K.n_strike * max(1, K.n_flam) + 1) + 2 * K.n_nb * K.noise_rows + mh * 3 * (1 + ni) + 16 + max(1, npar * (npar + 1) // 2) * (1 + ni)
     rows = np.empty((cap, len(EMIT_COLS)))
     q0 = [v for pr in em._QACC for v in pr]
     qacc = np.array(q0, np.float64)
@@ -8818,7 +8819,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                      _nx, _mcut, _slurred, (nt.ch, nt.note, nt.on) in _SLUR_OUT,
                                      _SONG if choked is None else None, _off_key,
                                      _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT,
-                                                  FREQ_E), _seat)
+                                                  FREQ_E), _seat, _held)
         if _wn is not None and NATIVE_TONE == 'on':
             _note_native_apply(em, props, nt, A, _wn, _VB)
         else:
@@ -8850,7 +8851,10 @@ def _prepare(path, tuner='hybrid440', sink=None):
                              nt.cc, nt.crl, 0.0, nt.csc, -1, 0, ph0=_lrng.random() * 2.0 * math.pi)
         _note_breath_noise(em, props, nt, _CBW, _VB, _slurred, bbrow_of, emit_partial)
         _note_grains(em, props, nt, A, _CBW, _GL, _GRAIN_ROWS, _VB, bbrow_of, emit_partial, random)
-        stops = _note_shake_noise(em, props, nt, _CBW, _VB, _held, emit_partial, stops)
+        if _wn is not None and NATIVE_TONE == 'on' and getattr(props, 'shake_noise', False):
+            stops = ()          # (the engine's note shook: its rows are in)
+        else:
+            stops = _note_shake_noise(em, props, nt, _CBW, _VB, _held, emit_partial, stops)
         _note_noise_events(em, props, nt, _CBW, _VB, emit_partial)
         stops = _note_pulse(em, props, nt, _VB, emit_partial, stops)
         _bnote = em.bend_row          # the note's own row, which a chest row multiplies

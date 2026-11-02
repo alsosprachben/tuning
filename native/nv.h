@@ -103,6 +103,7 @@ typedef struct {
     int measured;
     double ring_scale, mode_scatter_db;
     int jit_sus;
+    int tamb;           /* TambourineProperties: every jingle mode scattered alike, unclamped */
     int retarget;
     double decay_target;
     /* ...its modes: (ratio, linear gain) */
@@ -161,7 +162,8 @@ typedef struct {
     double level_hz[32], level_db[32];
     /* 0 a grand's constructor (the key's strings and pitch error, the B law
        above); 1 a kit drum's (SynthProperties' alone: B the class's own);
-       2 a measured mode set's (SynthProperties' alone too: the clap) */
+       2 a measured mode set's (SynthProperties' alone too: the clap); 3 a
+       harmonic series' on SynthProperties (a shaker's) */
     int kind;
     double bloom_gain, bloom_gain_slope;
     /* the stroke's chiff and jitter (chiff_volume, sustain_jitter scaled by
@@ -213,6 +215,10 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
                int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
                double *rows, int cap, double *transverse, int *ntrans, double *qacc, double *azimuth,
                PyRandom *rs, double *sjit_last);
+int nv_shake(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db, int k,
+             double held, double shake_min_s, double shake_frac, double shake_xfade_s, double rise_s,
+             double settle_db, double settle_s, double pos_x, double *rows, int cap, double *qacc,
+             double *azimuth);
 int nv_tone(const VoiceSnap *v, const ToneIn *t,
             int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
             double *rows, int cap, double *transverse, int *ntrans, double *qacc, double *azimuth);
@@ -282,6 +288,14 @@ typedef struct {
     // onset, the key-up ignored (held_texture: no earlier than the key-up)
     double gate_time;
     int held_texture;
+    // A SHAKE AS SHAPED NOISE (shake_noise: ShakenNoiseProperties), in place
+    // of the tone: noise_bands, noise_rows a band, the shake held for
+    // shake_frac of the key (shake_min_s at least), swelling in over rise_s,
+    // then the settle falling settle_db over settle_s, crossfaded over
+    // shake_xfade_s; noise_rel the rows' width
+    int shake, n_nb, noise_rows;
+    double nb_hz[32], nb_db[32];
+    double shake_min_s, shake_frac, shake_xfade_s, rise_s, settle_db, settle_s, noise_rel;
     // the strike fired strike_flam times (n_flam > 1: an ensemble clap), each
     // within flam_s and flam_db under the loudest
     int n_flam;
@@ -309,6 +323,7 @@ typedef struct {
     int from_song;                      // nv_song_play: its pitch and level from the song too...
     int song_index;                     // ...as its note there (the song's notes, in order)
     double seat;                        // a seat in the instrument (a kit's drum): its pan there, 0 none
+    double held;                        // how long its key was held, s (a shake's share of it)
 } NoteIn;
 
 // What the note's setup worked out, beside its rows.

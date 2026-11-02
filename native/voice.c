@@ -95,6 +95,8 @@ double nv_partial_jitter(const VoiceSnap *v, int harmonic)
  * held under the strongest */
 double nv_stroke_scatter_db(const VoiceSnap *v, int harmonic)
 {
+    if (v->tamb)                                /* TambourineProperties: the jingles' alike */
+        return harmonic <= v->n_modes ? v->mode_scatter_db : 0.0;
     double g = harmonic <= v->n_modes ? v->modes[harmonic - 1][1] : 0.0;
     if (harmonic > v->n_modes || g > -6.0)
         return 0.0;
@@ -141,6 +143,8 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
         return 0.0;
     if (harmonic % 2 == 0 && !v->even_db_set && v->odd_only)
         return 0.0;
+    if (v->kind == 3)                           /* the pluck comb at plucked_harmonic 0: whole */
+        return v->gain / pow((double)harmonic, v->attack_dampening) * (harmonic % 1000000 ? 1.0 : 0.0);
     int sm = harmonic;                          /* harmonic_touch 0 */
     double depth = v->strike_depth;
     if (v->strike_fills)
@@ -270,6 +274,11 @@ static double string_blend(const VoiceSnap *v, double frequency, double break_hz
 /* GrandPianoProperties.aftersound: (level, its decay rate) */
 void nv_aftersound(const VoiceSnap *v, double frequency, double decay_rate, double *out)
 {
+    if (v->kind == 3) {                         /* SynthProperties: one stage */
+        out[0] = 0.0;
+        out[1] = decay_rate;
+        return;
+    }
     if (v->kind == 2) {                         /* SynthProperties: one stage; CymbalProperties' */
         if (!v->cymbal || v->aftersound_fraction <= 0.0) {
             out[0] = 0.0;
