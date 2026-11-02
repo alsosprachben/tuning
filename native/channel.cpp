@@ -304,13 +304,22 @@ struct Song {
     // _prep_strokes expands them): each drum note whose set's key has a
     // gesture (kind[q]: 1 a rasp, 2 a cascade, 3 an impact train; par[24 q..])
     // replaced by its strokes -- each its own onset, end, velocity
-    // (max(1, int(velocity x level))), pitch and, past the first, an inner ridge
+    // (max(1, int(velocity x level))), pitch and, past the first, an inner
+    // ridge. AND A KEY THAT ALSO STRIKES ANOTHER'S SOUND (key_layers:
+    // par[24 q + 20] of them, the keys from par[24 q + 21]): each struck as
+    // the note is, before it, as _prep_strokes expands them
     void strokes(const int *kind, const double *par)
     {
         std::vector<Ev> out;
         for (const Ev &e : notes) {
+            bool in = e.drum && e.prog >= 0 && e.prog < 128 && e.note >= 0 && e.note < 128;
             int q = 128 * e.prog + e.note;
-            int kd = (e.drum && e.prog >= 0 && e.prog < 128 && e.note >= 0 && e.note < 128) ? kind[q] : 0;
+            for (int l = 0; in && l < (int)par[24 * q + 20]; l++) {
+                Ev x = e;
+                x.note = (int)par[24 * q + 21 + l];
+                out.push_back(x);
+            }
+            int kd = in ? kind[q] : 0;
             if (!kd) {
                 out.push_back(e);
                 continue;

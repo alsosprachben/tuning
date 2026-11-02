@@ -455,17 +455,22 @@ _JINGLE_OWN = {'mode_ratio': 'SynthProperties', 'series_volume': 'SynthPropertie
 
 def _modal_drum(cls):
     import tonelib as T
-    if issubclass(cls, (T.TR808Properties, T.SimmonsProperties)):
+    gam = issubclass(cls, T.ModeDecays) and issubclass(cls, (T.MetalPercussionProperties, T.StruckBarProperties))
+    if issubclass(cls, (T.TR808Properties, T.SimmonsProperties)) or gam:
         mg, mr = cls.mode_gains, cls.mode_ratios
-        # (a Simmons: the 808's without its modes' phases and aftersounds)
+        # (a Simmons: the 808's without its modes' phases and aftersounds;
+        # the gamelan's bronze -- a gong, a bonang's kettle, a gender's bar
+        # under its mallet's roll-off (the bore's) -- the Simmons')
         own = (_JINGLE_OWN if issubclass(cls, T.TR808Properties)
                else dict(_JINGLE_OWN, aftersound_partial=None, mode_phase=None))
+        if gam:
+            own = dict(own, _bore_norm='SynthProperties', mode_gains_here='SynthProperties')
         return (all(_owner(cls, n) == o for n, o in own.items())
                 and mg is not None and mr is not None and len(mg) == len(mr) <= 400
                 and len(cls.mode_decays) <= 400 and len(getattr(cls, 'mode_after', ())) <= 400
                 and len(getattr(cls, 'mode_phases', ())) <= 400
                 and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
-                and not cls.mode_stroke_tilt and not cls.bore_corner_hz and not cls.harmonic_touch
+                and not cls.mode_stroke_tilt and (gam or not cls.bore_corner_hz) and not cls.harmonic_touch
                 and not cls.pickup_points and len(cls.unison_detune or ()) <= 8)
     if issubclass(cls, T.CuicaProperties):
         return (all(_owner(cls, n) == o for n, o in _CUICA_OWN.items())
@@ -624,11 +629,13 @@ def kits():
     drum program p and key (q = 128 p + key, the set kit_for_program(p)):
     (classes, f0, seat, choke, skind, spar) -- the class the engine plays
     there (None where it does not: no drum, a drum not native, or a key with
-    more than its sound -- a layer, a gesture the song does not expand, a
-    siren, a sweep) and, for every drum the set maps, its pitch and its pan
+    more than its sound -- a gesture the song does not expand, a siren, a
+    sweep) and, for every drum the set maps, its pitch and its pan
     in the set (seat); f0 0 where none; the keys a strike on it stops
     (choke_group), as bits (choke[2 q + w], bit k: key 64 w + k); its
-    gesture (stroke_spec: skind[q], spar[24 q..])."""
+    gesture (stroke_spec: skind[q], spar[24 q..]); and the keys a strike on
+    it also sounds (key_layers), in the row's tail: spar[24 q + 20] how
+    many, spar[24 q + 21..] the keys."""
     if _KITS:
         return _KITS[0]
     import percussion_map as PCM
@@ -649,11 +656,22 @@ def kits():
             ss = stroke_spec(key, kit)
             if ss:
                 skind[q] = ss[0]
+                assert len(ss[1]) <= 20
                 spar[24 * q:24 * q + len(ss[1])] = ss[1]
-            if (kit_drum(cls) and not PCM.key_layers(key, kit) and ss is not None
+            ly = PCM.key_layers(key, kit)
+            if len(ly) > 3:
+                continue
+            spar[24 * q + 20] = len(ly)
+            spar[24 * q + 21:24 * q + 21 + len(ly)] = [float(k) for k in ly]
+            if (kit_drum(cls) and ss is not None
                     and not getattr(cls, 'siren_rotor', None) and not getattr(cls, 'alias_sweep', None)
                     and not getattr(cls, 'sounding_octaves', 0.0)):
                 classes[q] = cls
+    # (a key the engine plays only where it plays every layer with it)
+    for q in range(16384):
+        if classes[q] is not None and any(classes[128 * (q // 128) + int(k)] is None
+                                          for k in spar[24 * q + 21:24 * q + 21 + int(spar[24 * q + 20])]):
+            classes[q] = None
     _KITS.append((classes, f0, seat, choke, skind, spar))
     return _KITS[0]
 
@@ -778,7 +796,7 @@ def snapshot(props):
             s.bore_norm = p._bore_norm()
         if isinstance(p, T.SambaWhistleProperties):
             s.pea, s.pea_vibrato_cents, s.pea_vibrato_hz = 1, p.pea_vibrato_cents, p.pea_vibrato_hz
-        if isinstance(p, (T.TR808Properties, T.SimmonsProperties)):
+        if isinstance(p, T.ModeDecays):
             ma, mp = getattr(p, 'mode_after', ()), getattr(p, 'mode_phases', ())
             s.n_md, s.n_ma, s.n_mp = len(p.mode_decays), len(ma), len(mp)
             s.mode_decays[:s.n_md] = [float(x) for x in p.mode_decays]
