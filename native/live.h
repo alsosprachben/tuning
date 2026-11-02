@@ -21,6 +21,11 @@ struct Template {
     std::vector<char> fa_at;
     long long dur = 0;
     int vel = 0;
+    // A ONE-SHOT (a drum): note-off is not a stop; each row its own end
+    // from its onset (rof: its length offline, or where it falls silent);
+    // a stroked key's rows each where its stroke falls (sof)
+    bool oneshot = false;
+    std::vector<long long> rof, sof;
 };
 
 }  // namespace live

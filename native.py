@@ -288,6 +288,8 @@ def _load():
             ('nv_tcache_warm', ctypes.c_long, [ctypes.c_void_p, I, I, I, I, ctypes.c_void_p, I]),
             ('nv_tcache_get', ctypes.c_void_p, [ctypes.c_void_p, I, I, I, ctypes.POINTER(LL)]),
             ('nv_tmpl_col', ctypes.c_void_p, [ctypes.c_void_p, I, I]),
+            ('nv_tcache_kits', None, [ctypes.c_void_p, D, D, ctypes.POINTER(ctypes.c_ulonglong),
+                                      ctypes.POINTER(I), D, C]),
             ('nv_render', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, I, I, LL,
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
@@ -1788,10 +1790,12 @@ class Slab(object):
 
 class TemplateCache(object):
     """native/live.cpp's template cache: live.Patch's for a piano program --
-    each key at every velocity bucket's centre and every wheel step, built
-    once (warm) and looked up (get) -- its templates as live's dicts."""
+    or, drums, a drum set's (the program its set: each key on GM's
+    percussion channel) -- each key at every velocity bucket's centre and
+    every wheel step, built once (warm) and looked up (get) -- its
+    templates as live's dicts."""
 
-    def __init__(self, program, tuner='hybrid'):
+    def __init__(self, program, tuner='hybrid', drums=False):
         import math
         import blockrender as BR
         import damper as DM
@@ -1800,14 +1804,17 @@ class TemplateCache(object):
         import tonelib as T
         self.d = lib()
         self.program = program
-        self.keep = []
-        K = (ctypes.c_void_p * (2 * 16384))()
-        for key in range(128):
-            cls = BR.property_class_for_note(program, key)
-            k = note_class(cls) if cls is not None else None
-            if k is not None:
-                self.keep.append(k)
-                K[128 * program + key] = ctypes.addressof(k)
+        if drums:
+            K, self.keep = k_table(lambda p, k: None, programs=())
+        else:
+            self.keep = []
+            K = (ctypes.c_void_p * (2 * 16384))()
+            for key in range(128):
+                cls = BR.property_class_for_note(program, key)
+                k = note_class(cls) if cls is not None else None
+                if k is not None:
+                    self.keep.append(k)
+                    K[128 * program + key] = ctypes.addressof(k)
         t = NoteIn()
         t.sr, t.retrigger_fade, t.nyq_om = BR.SR, BR.RETRIGGER_FADE, 0.98 * math.pi
         t.sv[:] = [0.0, 1.0]
@@ -1830,6 +1837,10 @@ class TemplateCache(object):
                                       float(os.environ.get("TUNING_REGISTER", "1") or 1), DM.FULL_DB_S,
                                       DM.RESIDUAL, DM.BETA, BR.BLK, BR.RING_FLOOR, BR.RING_MAX, DM.KNEE_DB,
                                       DM.LN10_20, float(BR.XDEC_NEPERS), float(BR.SR))
+        if drums:
+            import live as LV
+            _, f0, seat, choke, skind, spar = kits()
+            self.d.nv_tcache_kits(self.p, f0, seat, choke, skind, spar, float(LV.ONESHOT_FLOOR_DB))
 
     def __del__(self):
         if getattr(self, 'p', None):
@@ -1841,14 +1852,15 @@ class TemplateCache(object):
         return self.d.nv_tcache_warm(self.p, int(self.program), int(lo), int(hi), int(nbuckets), sp, len(speeds))
 
     def get(self, note, bucket, speed=None):
-        """The template as live's dict (the piano's fields), or None."""
+        """The template as live's dict (a piano's fields, a drum's one-shot,
+        its rows' own ends and its strokes' offsets), or None."""
         import numpy as np
-        o = (LL * 3)()
+        o = (LL * 6)()
         t = self.d.nv_tcache_get(self.p, int(note), int(bucket), -1 if speed is None else int(speed), o)
         if not t:
             return None
         n = int(o[0])
-        out = dict(P=n, dur=int(o[1]), vel=int(o[2]), oneshot=False, send=None, scatter_ms=0.0, FT=None, KN=None,
+        out = dict(P=n, dur=int(o[1]), vel=int(o[2]), oneshot=bool(o[3]), send=None, scatter_ms=0.0, FT=None, KN=None,
                    panel=None, grain=None, gof=None, sof=None, cof=None, rof=None, ranks={}, rel=None,
                    rel_rank={})
 
@@ -1868,6 +1880,10 @@ class TemplateCache(object):
             out[c] = col(4, i, ctypes.c_int32)
         out["hrel"] = col(5, 0, ctypes.c_float)
         out["fa_at"] = col(6, 0, ctypes.c_int8).astype(bool)
+        if o[4]:
+            out["rof"] = col(7, 0, ctypes.c_int64)
+        if o[5]:
+            out["sof"] = col(8, 0, ctypes.c_int64)
         out["sym"] = np.zeros(n, bool)
         out["ring"] = np.zeros(n, bool)
         out["push"] = np.zeros(n, bool)

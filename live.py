@@ -3502,7 +3502,8 @@ class Patch:
             _quiet = (_lr > 0) & (np.asarray(t["sus"]) <= 0) & (np.asarray(t["gr"]) < 0)
             if _quiet.any() and _a.max() > 0:
                 _fl = _a.max() * 10.0 ** (-ONESHOT_FLOOR_DB / 20.0)
-                _ts = np.log(np.maximum(_a, _fl) / _fl) / np.where(_lr > 0, _lr, 1.0)
+                # (libm's log, element by element: native/live.cpp's to the bit)
+                _ts = _RGM._xlog(np.maximum(_a, _fl) / _fl) / np.where(_lr > 0, _lr, 1.0)
                 _end = (np.asarray(t["fa"], np.float64) + _ts * B.SR + 0.01 * B.SR).astype(np.int64)
                 t["rof"] = np.where(_quiet, np.minimum(t["rof"], _end), t["rof"])
             t["dur"] = int(t["rof"].max())

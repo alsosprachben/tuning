@@ -33,6 +33,10 @@ void *nv_song_new(void);
 void nv_song_free(void *s);
 void nv_song_tuning(void *s, long long ch, double t, const double *freq);
 void nv_song_finish(void *s, double total);
+void nv_song_kits(void *s, const double *f0, const double *seat);
+void nv_song_chokes(void *s, const unsigned long long *choke);
+void nv_song_strokes(void *s, const int *kind, const double *par);
+void nv_log_n(long n, const double *x, double *out);
 long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                      PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind, double scale,
                      double full_db_s, double residual, double beta, long long blk, double total, double ring_floor,
@@ -54,8 +58,9 @@ static void vlq(std::vector<uint8_t> &b, uint32_t v)
         b.push_back(t[--n]);
 }
 
-// _raw_template's file, as mido saves it (type 1, 480 ticks a beat, one track)
-static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int fast)
+// _raw_template's file, as mido saves it (type 1, 480 ticks a beat, one
+// track): end, the track's last delta (a drum's 18 beats: its 8 s ring)
+static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int fast, uint32_t end = 480)
 {
     std::vector<uint8_t> tr;
     auto ev = [&](uint32_t dt, std::initializer_list<uint8_t> bytes) {
@@ -70,7 +75,7 @@ static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int
         ev(0, {(uint8_t)(0xB0 | ch), 1, (uint8_t)fast});            // a wheel's step (the honky-tonk's detune)
     ev(0, {(uint8_t)(0x90 | ch), (uint8_t)note, (uint8_t)vel});
     ev(480, {(uint8_t)(0x80 | ch), (uint8_t)note, 0});
-    ev(480, {0xFF, 0x2F, 0x00});
+    ev(end, {0xFF, 0x2F, 0x00});
     std::vector<uint8_t> f = {'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 1, 0x01, 0xE0, 'M', 'T', 'r', 'k'};
     uint32_t n = (uint32_t)tr.size();
     f.push_back(n >> 24); f.push_back(n >> 16); f.push_back(n >> 8); f.push_back(n);
@@ -78,13 +83,23 @@ static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int
     return f;
 }
 
+// THE DRUM SETS, as a drum part's templates read them (native.kits): each
+// drum program's key's pitch, seat, exclusive class (two words) and
+// gesture (a kind, 24 numbers)
+struct Kits {
+    std::vector<double> f0, seat, spar;
+    std::vector<unsigned long long> choke;
+    std::vector<int> skind;
+};
+
 }  // namespace live
 }  // namespace nv
 
 extern "C" {
 
-// A key's template: program, key and velocity on channel 0 (a drum set's
-// on GM's percussion channel: not here -- piano only), the tuning freq[128],
+// A key's template: program, key and velocity on channel 0 -- or, kit
+// given, a drum set's on GM's percussion channel (its key's pitch, seat,
+// exclusive class and strokes from kit's tables: native.kits'), the tuning freq[128],
 // trim[256] (a GM file's: patch_map.program_trim, melodic then drum), fast
 // a wheel's step sent as CC1 before the note (-1 none: _raw_template's), the
 // engine's constants in tmpl (its fixed_touch set, as live builds templates)
@@ -95,16 +110,23 @@ long long nv_template(const NoteClass *const *K, const NoteIn *tmpl, const doubl
                       int program, int note, int vel, int fast, double **rowsp, const int *kind, double scale,
                       double full_db_s, double residual, double beta, long long blk, double ring_floor,
                       double ring_max, double *out, double knee_db, double ln10_20, double xdec_nepers, double SR,
-                      void **dm)
+                      void **dm, const nv::live::Kits *kit = nullptr)
 {
-    std::vector<uint8_t> f = nv::live::one_note(program, note, vel, 0, fast);
+    std::vector<uint8_t> f = kit ? nv::live::one_note(program, note, vel, 9, fast, 480 * 18)
+                                 : nv::live::one_note(program, note, vel, 0, fast);
     int err = 0;
     void *m = nv_midi_read(f.data(), (long long)f.size(), &err);
     if (!m)
         return -1000000001LL;
     void *song = nv_song_new();
     nv_song_tuning(song, -1, 0.0, freq);
+    if (kit) {
+        nv_song_kits(song, kit->f0.data(), kit->seat.data());
+        nv_song_chokes(song, kit->choke.data());
+    }
     nv_midi_song(m, song, trim);
+    if (kit)
+        nv_song_strokes(song, kit->skind.data(), kit->spar.data());
     double total = nv_midi_total(m);
     nv_song_finish(song, total);
     PyRandom rs;
@@ -160,6 +182,9 @@ struct Cache {
     double scale, full, residual, beta, ring_floor, ring_max, knee, ln10_20, xdec, SR;
     long long blk;
     std::map<std::tuple<int, int, int>, Template> tm;
+    bool drums = false;                 // a drum part: the program is its set (kit's tables)
+    Kits kit;
+    double oneshot_floor_db = 100.0;    // live.ONESHOT_FLOOR_DB
 
     // prepare's final type for an EMIT column's value (FINAL_DTYPES)
     double fin_of(int c, double x) const
@@ -177,7 +202,8 @@ struct Cache {
         double *rows = nullptr, out[48] = {0};
         void *dm[6] = {nullptr};
         long long P = nv_template(K.data(), &t, freq, trim, program, note, vel, fast, &rows, kind, scale, full,
-                                  residual, beta, blk, ring_floor, ring_max, out, knee, ln10_20, xdec, SR, dm);
+                                  residual, beta, blk, ring_floor, ring_max, out, knee, ln10_20, xdec, SR, dm,
+                                  drums ? &kit : nullptr);
         if (P < 0) {
             free(rows);
             return false;
@@ -233,6 +259,68 @@ struct Cache {
             for (long long r = 0; r < P; r++)
                 T.fa_at[r] = fa[r] == mode;
         }
+        // A STROKED KEY (a drum's gesture: every row a stroke's): each row
+        // where its stroke falls in the note (sof: its onset less its room
+        // delay, over the least of them; numpy's int64 - float32, truncated)
+        int q = 128 * program + note;
+        const NoteClass *nc = (q >= 0 && q < NV_K_DRUMS) ? K[(drums ? NV_K_DRUMS : 0) + q] : nullptr;
+        if (P && drums && kit.skind[q] != 0) {
+            const std::vector<float> &rdl = T.f4[25];
+            double mn = 0.0;
+            for (long long r = 0; r < P; r++) {
+                double b = (double)T.i8[0][r] - (double)rdl[r];
+                if (r == 0 || b < mn)
+                    mn = b;
+            }
+            T.sof.resize(P);
+            for (long long r = 0; r < P; r++)
+                T.sof[r] = (long long)((double)T.i8[0][r] - (double)rdl[r] - mn);
+        }
+        // A ONE-SHOT: each row its length offline (rof) -- but not past where
+        // it falls silent, ONESHOT_FLOOR_DB under the loudest row, where it
+        // only decays; its length the longest, counted from the press
+        T.oneshot = P && nc && nc->one_shot;
+        if (T.oneshot) {
+            T.rof.resize(P);
+            for (long long r = 0; r < P; r++)
+                T.rof[r] = T.i8[1][r] - T.i8[0][r];
+            const std::vector<float> &aL = T.f4[0], &aR = T.f4[1], &fa = T.f4[3], &lrf = T.f4[6], &sus = T.f4[9];
+            const std::vector<int32_t> &gr = T.i4[0];
+            std::vector<double> a(P), lr(P);
+            double amax = 0.0;
+            bool any_quiet = false;
+            for (long long r = 0; r < P; r++) {
+                float x = fabsf(aL[r]), y = fabsf(aR[r]);
+                a[r] = (double)(y > x ? y : x);               // np.maximum of the float32s
+                lr[r] = (double)lrf[r];
+                if (r == 0 || a[r] > amax)
+                    amax = a[r];
+                if (lr[r] > 0 && sus[r] <= 0 && gr[r] < 0)
+                    any_quiet = true;
+            }
+            if (any_quiet && amax > 0) {
+                double fl = amax * pow(10.0, -oneshot_floor_db / 20.0);
+                std::vector<double> x(P), lg(P);
+                for (long long r = 0; r < P; r++)
+                    x[r] = (a[r] > fl ? a[r] : fl) / fl;
+                nv_log_n((long)P, x.data(), lg.data());
+                for (long long r = 0; r < P; r++) {
+                    if (!(lr[r] > 0 && sus[r] <= 0 && gr[r] < 0))
+                        continue;
+                    double ts = lg[r] / (lr[r] > 0 ? lr[r] : 1.0);
+                    long long end = (long long)((double)fa[r] + ts * SR + 0.01 * SR);
+                    if (end < T.rof[r])
+                        T.rof[r] = end;
+                }
+            }
+            long long d = 0;
+            for (long long r = 0; r < P; r++) {
+                long long v = T.rof[r] + (T.sof.empty() ? 0 : T.sof[r]);
+                if (r == 0 || v > d)
+                    d = v;
+            }
+            T.dur = d;
+        }
         return true;
     }
 };
@@ -265,6 +353,22 @@ void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double 
 
 void nv_tcache_free(void *h) { delete (nv::live::Cache *)h; }
 
+// A DRUM PART'S CACHE: its program the drum set, its keys built on GM's
+// percussion channel from the sets' tables (native.kits: f0, seat, choke,
+// skind, spar), live's ONESHOT_FLOOR_DB
+void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigned long long *choke,
+                    const int *skind, const double *spar, double oneshot_floor_db)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    C->drums = true;
+    C->kit.f0.assign(f0, f0 + 16384);
+    C->kit.seat.assign(seat, seat + 16384);
+    C->kit.choke.assign(choke, choke + 2 * 16384);
+    C->kit.skind.assign(skind, skind + 16384);
+    C->kit.spar.assign(spar, spar + 24 * 16384);
+    C->oneshot_floor_db = oneshot_floor_db;
+}
+
 // Patch.warm: keys lo..hi, nb buckets (each at bucket_vel), the wheel steps
 // (nsp of them; -1 for none); the templates built. Returns how many.
 long nv_tcache_warm(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp)
@@ -287,7 +391,8 @@ long nv_tcache_warm(void *h, int program, int lo, int hi, int nb, const int *spe
     return n;
 }
 
-// Patch.get's template, or NULL: its P, dur, vel through out[3]
+// Patch.get's template, or NULL: its P, dur, vel, a one-shot, its rows'
+// own ends (rof) and its strokes' offsets (sof) there, through out[6]
 void *nv_tcache_get(void *h, int note, int bucket, int speed, long long *out)
 {
     nv::live::Cache *C = (nv::live::Cache *)h;
@@ -297,10 +402,42 @@ void *nv_tcache_get(void *h, int note, int bucket, int speed, long long *out)
     out[0] = it->second.P;
     out[1] = it->second.dur;
     out[2] = it->second.vel;
+    out[3] = it->second.oneshot;
+    out[4] = !it->second.rof.empty();
+    out[5] = !it->second.sof.empty();
     return &it->second;
 }
 
-// a template's column (live's group: 0 F8, 1 F4, 2 F4_NOTE, 3 I8, 4 I4; 5 hrel; 6 fa_at as int8)
+// tonelib.slur_fade for the part's key: (fade, chiff) s of its legato attack
+// alone at the tuning's pitch, and the voice's attack_fraction_max; 0 where
+// it has none (no legato_attack_s, no class, no pitch)
+int nv_tcache_slur_fade(void *h, int program, int note, double *out)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    if (note < 0 || note > 127 || program < 0 || program > 127)
+        return 0;
+    const NoteClass *k = C->K[(C->drums ? NV_K_DRUMS : 0) + 128 * program + note];
+    double f0 = C->freq[note];
+    if (!k || !k->legato_set || f0 <= 0.0)
+        return 0;
+    double s = k->legato_attack_s;                          // speech_time
+    if (k->speech_cycles > 0.0 && f0 > 0.0)
+        s = s + k->speech_cycles / f0;
+    double w = s;                                           // chiff_time
+    if (k->chiff_width_set || k->chiff_width_cycles > 0.0) {
+        w = k->chiff_width_set ? k->chiff_width : s;
+        if (k->chiff_width_cycles > 0.0 && f0 > 0.0) {
+            double c = k->chiff_width_cycles / f0;
+            w = c < w ? c : w;
+        }
+    }
+    out[0] = s;
+    out[1] = w;
+    out[2] = k->attack_fraction_max;
+    return 1;
+}
+
+// a template's column (live's group: 0 F8, 1 F4, 2 F4_NOTE, 3 I8, 4 I4; 5 hrel; 6 fa_at as int8; 7 rof, 8 sof)
 const void *nv_tmpl_col(void *t, int group, int index)
 {
     nv::live::Template *T = (nv::live::Template *)t;
@@ -312,6 +449,8 @@ const void *nv_tmpl_col(void *t, int group, int index)
     case 4: return T->i4[index].data();
     case 5: return T->hrel.data();
     case 6: return T->fa_at.data();
+    case 7: return T->rof.data();
+    case 8: return T->sof.data();
     }
     return nullptr;
 }

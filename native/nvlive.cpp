@@ -1,7 +1,7 @@
 // nvlive.cpp -- the native live piano: a MIDI keyboard in, audio out, no
 // Python at runtime.
 //
-//     nvlive EXPORT.nvx [--program=N] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
+//     nvlive EXPORT.nvx [--program=N [--drums]] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
 //                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
 //                       [--tuner=NAME [--a=HZ | --c=HZ]]
@@ -119,6 +119,9 @@ void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double 
                     long long blk, double ring_floor, double ring_max, double knee_db, double ln10_20,
                     double xdec_nepers, double SR);
 long nv_tcache_warm(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp);
+void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigned long long *choke,
+                    const int *skind, const double *spar, double oneshot_floor_db);
+void nv_lp_drums(void *h, int program, const unsigned long long *choke);
 void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
                 int soft_drop, int soft_top, double rate, double retrigger, long cap, double headroom,
                 const double *pan_tab, double pan_beta);
@@ -498,7 +501,14 @@ int main(int argc, char **argv)
     const double SR = E.k[K_SR];
     const long long BLK = (long long)E.k[K_BLK];
     const int program = atoi(opt(argc, argv, "program", "0").c_str());
-    const int *pp = E.part[program & 127];
+    // --drums: the part a DRUM PART (live.Patch(program, True)): the program
+    // its drum set -- one velocity bucket, no wheel step, no dampers, no una
+    // corda, keys 35-87 (live.DRUM_RANGE), its exclusive classes, no register
+    bool drums = false;
+    for (int i = 1; i < argc; i++)
+        drums = drums || !strcmp(argv[i], "--drums");
+    static const int DRUM_PART[10] = {1, 1, 1, -1, -1, -1, -1, 0, 0, 0};
+    const int *pp = drums ? DRUM_PART : E.part[program & 127];
     if (!pp[0]) {
         fprintf(stderr, "nvlive: program %d is not a native piano\n", program);
         return 1;
@@ -539,7 +549,7 @@ int main(int argc, char **argv)
     }
     // THE PART'S TEMPLATES (live.Patch.warm), built here
     std::vector<const NoteClass *> K(2 * NV_K_DRUMS, nullptr);
-    for (int q = 0; q < 16384; q++)
+    for (int q = 0; q < 2 * NV_K_DRUMS; q++)
         if (E.cmap[q] >= 0)
             K[q] = (const NoteClass *)E.classes[E.cmap[q]].data();
     NoteIn t;
@@ -553,11 +563,17 @@ int main(int argc, char **argv)
     void *cache = nv_tcache_new(K.data(), &t, E.freq.data(), E.trim.data(), E.kind.data(), E.fin.data(),
                                 E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, E.k[K_RING_FLOOR],
                                 E.k[K_RING_MAX], E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR);
+    if (drums)
+        nv_tcache_kits(cache, E.kit_f0.data(), E.kit_seat.data(), E.kit_choke.data(), E.kit_skind.data(),
+                       E.kit_spar.data(), 100.0);       // (live.ONESHOT_FLOOR_DB)
     int speeds[3] = {pp[3], pp[4], pp[5]};
-    long built = nv_tcache_warm(cache, program, 21, 96, pp[1], speeds, pp[2]);
-    fprintf(stderr, "nvlive: program %d, %ld templates\n", program, built);
+    long built = drums ? nv_tcache_warm(cache, program, 35, 87, 1, speeds, 1)
+                       : nv_tcache_warm(cache, program, 21, 96, pp[1], speeds, pp[2]);
+    fprintf(stderr, "nvlive: %s %d, %ld templates\n", drums ? "drum set" : "program", program, built);
     void *part = nv_lp_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], 16384,
                            E.headroom, E.pan.data(), E.beta);
+    if (drums)
+        nv_lp_drums(part, program, E.kit_choke.data());
     nv_lp_detune_wheel(part, pp[6] >= 0);       // the export's speed: a honky-tonk's wheel, else -1
     if (E.k.size() > K_BEND_RANGE)
         nv_lp_post(part, E.k[K_THRESH], E.k[K_BEND_RANGE], 35.0);     // (the mod range: no vibrato on a piano)
@@ -581,7 +597,7 @@ int main(int argc, char **argv)
     }
     // the free strings (live's register, its worker answering in step)
     const Export::Reg &rg = E.reg[program & 127];
-    bool noreg = false;
+    bool noreg = drums;                         // (a drum has no free strings)
     for (int i = 1; i < argc; i++)
         noreg = noreg || !strcmp(argv[i], "--no-register");
     if (rg.M > 0 && !noreg) {
@@ -976,7 +992,7 @@ int main(int argc, char **argv)
         H.frames = (int)BLK;
         H.budget_ms = budget;
         H.program = program;
-        H.program_name = program >= 0 && program < 8 ? GM[program] : "";
+        H.program_name = drums ? "GM percussion" : program >= 0 && program < 8 ? GM[program] : "";
         H.port = dev;
         H.room = E.room.empty() ? "-" : E.room;
         H.reg_modes = rg.M > 0 && !noreg ? rg.M : 0;

@@ -36,6 +36,8 @@
 #include "live.h"
 #include "nv.h"
 
+extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
+
 extern "C" double nv_damper_contact(int p, int key, int top);
 
 extern "C" {
@@ -68,7 +70,7 @@ static const char *F4N[] = {"gb", "gt", "gc", "vdl"};
 static const char *I8[] = {"non", "noff"};
 static const char *I4[] = {"gr", "cr", "br", "pl", "fx", "mk"};
 enum { NF8 = 6, NF4 = 27, NF4N = 4, NI8 = 2, NI4 = 6 };
-enum { F4_aL = 0, F4_aR = 1, F4_nf = 2, F4_re = 4, F4_logr = 6, F4_logrA = 7, F4_aft = 8, F4_sus = 9, F4_cbw = 15, F4_vd = 19, F4_vr = 20, F4_delL = 22, F4_delR = 23, F4_rdl = 25 };
+enum { F4_aL = 0, F4_aR = 1, F4_nf = 2, F4_fa = 3, F4_re = 4, F4_ch = 5, F4_logr = 6, F4_logrA = 7, F4_aft = 8, F4_sus = 9, F4_cbw = 15, F4_vd = 19, F4_vr = 20, F4_delL = 22, F4_delR = 23, F4_rdl = 25 };
 enum { F8_om = 0, F8_p0 = 1, F8_p0R = 2, F8_fmw = 3 };
 enum { I4_gr = 0, I4_cr = 1, I4_br = 2, I4_fx = 4 };
 
@@ -178,12 +180,15 @@ struct Slab {
     }
 
     // Slab.stamp_cols for a template with none of the offsets (scatter,
-    // contact, grain, stroke, a catch's own end): t_* the template's columns
-    // (n rows), key, n0, vel_scale, hrel, dur, oneshot, the template's send
-    // (NAN: none). False if the slab is full.
+    // contact, grain) but a stroked note's (sof: each row where its stroke
+    // falls) and a row's own end (rof: from its onset, where >= 0): t_* the
+    // template's columns (n rows), key, n0, vel_scale, hrel, dur, oneshot,
+    // the template's send (NAN: none), sof and rof (NULL: none). False if
+    // the slab is full.
     bool stamp(const double *const *tf8, const float *const *tf4, const long long *const *ti8,
                const int32_t *const *ti4, const float *threl, long n, Key key, long long n0, double vel_scale,
-               long long dur, bool one, double tsend, long long ch)
+               long long dur, bool one, double tsend, long long ch, const long long *sof = nullptr,
+               const long long *rof = nullptr)
     {
         if (n == 0)
             return true;
@@ -211,11 +216,15 @@ struct Slab {
             f8[F8_fmw][s] = 0.0;
             long long rd = (long long)tf4[F4_rdl][q];        // rdl.astype(int64): toward zero
             long long newnon = n0 + rd;
+            if (sof)
+                newnon += sof[q];
             double sh = tf8[F8_om][q] * (double)(ti8[0][q] - newnon);
             f8[F8_p0][s] = tf8[F8_p0][q] + sh;
             f8[F8_p0R][s] = tf8[F8_p0R][q] + sh;
             i8[0][s] = newnon;
             i8[1][s] = one ? n0 + dur + rd : IDLE;
+            if (rof && rof[q] >= 0)
+                i8[1][s] = newnon + rof[q];
             if (vel_scale != 1.0) {
                 f4[F4_aL][s] = tf4[F4_aL][q] * (float)vel_scale;
                 f4[F4_aR][s] = tf4[F4_aR][q] * (float)vel_scale;
@@ -274,7 +283,8 @@ struct Slab {
             i8p[c] = T.i8[c].data();
         for (int c = 0; c < 6; c++)
             i4p[c] = T.i4[c].data();
-        return stamp(f8p, f4p, i8p, i4p, T.hrel.data(), T.P, key, n0, vel_scale, T.dur, false, NAN, ch);
+        return stamp(f8p, f4p, i8p, i4p, T.hrel.data(), T.P, key, n0, vel_scale, T.dur, T.oneshot, NAN, ch,
+                     T.sof.empty() ? nullptr : T.sof.data(), T.rof.empty() ? nullptr : T.rof.data());
     }
 
     // THE PAN TABLE (live.pan_table: CC10 -> left and right shadow alpha, half
@@ -589,6 +599,24 @@ struct Piano {
     // does nothing else: a hammered string takes no vibrato)
     bool detune_wheel = false;
     double press_db = 8.0;                          // tonelib.PRESS_DB (live.press_db)
+    // A DRUM PART (live.Patch(program, True)): its program the drum set, and
+    // each key's exclusive class (two words a key: native.kits' choke)
+    bool drums = false;
+    int program = 0;
+    std::vector<unsigned long long> choke;
+    // LEGATO (live._legato_on): each channel's last onset group -- when it
+    // began, its keys, its last key up, whether it was a slur -- a note
+    // struck within CHORD_WINDOW_S of it a member, else slurred where one of
+    // its keys is still down or the last went up within LEGATO_GAP_S
+    struct Group {
+        long long on = 0;
+        std::set<std::pair<int, int>> keys;
+        bool has_off = false;
+        long long off = 0;
+        bool slur = false;
+    };
+    std::map<int, Group> onset_group;
+    double legato_gap_s = 0.015, chord_window_s = 0.030;    // live.LEGATO_GAP_S, CHORD_WINDOW_S
 
     Piano(long cap) : S(cap)
     {
@@ -633,8 +661,43 @@ struct Piano {
     // a key down (live's note-on, before its parts): the key held, and in
     // MONO the voice handed over -- the note sounding cut, the new key on top
     // of the held stack
+    bool legato_on(int ch, int note, long long n0)
+    {
+        auto it = onset_group.find(ch);
+        if (it != onset_group.end() && (double)(n0 - it->second.on) <= chord_window_s * rate) {
+            it->second.keys.insert(std::make_pair(ch, note));     // a chord member: the chord's answer
+            return it->second.slur;
+        }
+        bool slur = false;
+        if (it != onset_group.end()) {
+            for (auto &k : it->second.keys)
+                if (down.count(k))
+                    slur = true;
+            if (it->second.has_off && (double)(n0 - it->second.off) <= legato_gap_s * rate)
+                slur = true;
+        }
+        // (_slur_cut: no native voice cuts the note it leaves -- slur_cuts_release)
+        Group g;
+        g.on = n0;
+        g.keys.insert(std::make_pair(ch, note));
+        g.slur = slur;
+        onset_group[ch] = g;
+        return slur;
+    }
+
+    void legato_off(int ch, int note, long long n0)
+    {
+        auto it = onset_group.find(ch);
+        if (it != onset_group.end() && it->second.keys.count(std::make_pair(ch, note))) {
+            Group &g = it->second;
+            g.off = g.has_off ? std::max(g.off, n0) : n0;
+            g.has_off = true;
+        }
+    }
+
     void note_on(int ch, int note, int vel, long long n0)
     {
+        bool slur = legato_on(ch, note, n0);
         down.insert(std::make_pair(ch, note));
         pedalled.erase(std::make_pair(ch, note));
         if (mono[ch]) {
@@ -646,11 +709,13 @@ struct Piano {
             keep.push_back(std::make_pair(note, vel));
             st.swap(keep);
             int prev = mono_cur[ch];
-            if (prev >= 0 && prev != note)
+            if (prev >= 0 && prev != note) {
                 mono_cut(ch, prev, n0);
+                slur = true;                    // a handoff is a slur (_MONO_SLUR)
+            }
             mono_cur[ch] = note;
         }
-        strike(ch, note, vel, n0);
+        strike(ch, note, vel, n0, slur);
     }
 
     // live._mono_cut: the voice taken -- this note stopped now over the
@@ -669,7 +734,7 @@ struct Piano {
 
     // the part's note (live._note_on): stamped, panned, softened, pressed,
     // bent, its strings struck
-    void strike(int ch, int note, int vel, long long n0)
+    void strike(int ch, int note, int vel, long long n0, bool slur = false)
     {
         key_vel[std::make_pair(ch, note)] = vel;
         if (note < 0 || note > 127)
@@ -703,6 +768,26 @@ struct Piano {
             S.repan(slots, cpan[ch], 64, rate, true);
         if (soft[ch] && !slots.empty())
             S.soft_strings(slots, soft_drop, soft_top);
+        if (slur && !slots.empty())
+            slur_stamp(note, *T);
+        if (drums && !choke.empty()) {
+            // THE CHOKE, live (Live._note_on): the strike in an exclusive
+            // class is a note-off written into whatever of it is ringing
+            const unsigned long long *m = &choke[2 * (128 * program + note)];
+            if (m[0] | m[1]) {
+                std::vector<Key> hit;
+                for (auto &kv : S.live) {
+                    int k = (int)std::get<2>(kv.first);
+                    if (std::get<0>(kv.first) == pid && k != note && k >= 0 && k < 128
+                        && ((m[k >> 6] >> (k & 63)) & 1ULL))
+                        hit.push_back(kv.first);
+                }
+                for (const Key &k : hit) {
+                    S.oneshot.erase(k);
+                    S.release(k, n0);
+                }
+            }
+        }
         if (pressure[ch] != 0.0)
             press(slots, pressure[ch]);
         if (bend[ch] != 1.0)                // a note struck under a bend joins it
@@ -711,12 +796,38 @@ struct Piano {
             reg_strike(ch, note, n0, *T, S.last_slots);
     }
 
+    // live._slur_stamp: the slots just stamped given the voice's legato
+    // attack -- the rows whose fade is the attack's (fa_at), their fade and
+    // chiff no longer than its, under the note's caps
+    void slur_stamp(int note, const nv::live::Template &T)
+    {
+        double sf[3];
+        if (!nv_tcache_slur_fade(cache, program, note, sf))
+            return;
+        const std::vector<long> &sl = S.last_slots;
+        if ((long)sl.size() != (long)T.fa_at.size())
+            return;
+        double dur = T.dur ? T.dur / rate : 1.0;
+        float fa = (float)(std::max(1e-4, std::min(sf[0], sf[2] * dur)) * rate);
+        float chf = (float)(std::max(1e-4, std::min(sf[1], 0.45 * dur)) * rate);
+        for (size_t q = 0; q < sl.size(); q++) {
+            if (!T.fa_at[q])
+                continue;
+            long s = sl[q];
+            if (fa < S.f4[F4_fa][s])
+                S.f4[F4_fa][s] = fa;
+            if (chf < S.f4[F4_ch][s])
+                S.f4[F4_ch][s] = chf;
+        }
+    }
+
     // a key up (live's note-off): in MONO, the sounding key's voice back to
     // the last key still held (struck again), or nothing if the voice had
     // gone on already; then, as ever, the damper or the release
     void note_off(int ch, int note, long long n0)
     {
         down.erase(std::make_pair(ch, note));
+        legato_off(ch, note, n0);
         if (mono[ch]) {
             std::vector<std::pair<int, int>> &st = mono_stack[ch];
             for (size_t i = 0; i < st.size();)
@@ -730,7 +841,7 @@ struct Piano {
                 std::pair<int, int> back = st.back();
                 mono_cut(ch, note, n0);
                 mono_cur[ch] = back.first;
-                strike(ch, back.first, back.second, n0);
+                strike(ch, back.first, back.second, n0, true);     // back to a key still held: a slur too
                 return;
             }
             mono_cur[ch] = -1;                      // last key up: an ordinary release
@@ -2635,6 +2746,16 @@ void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int s
     P->S.pan_beta = pan_beta;
     P->init_tables();
     return P;
+}
+
+// The part a DRUM PART (live.Patch(program, True)): program its drum set,
+// choke[2 * (128 * program + key) + w] each key's exclusive class (native.kits')
+void nv_lp_drums(void *h, int program, const unsigned long long *choke)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    P->drums = true;
+    P->program = program;
+    P->choke.assign(choke, choke + 2 * 16384);
 }
 
 void nv_lp_free(void *h) { delete (nv::slab::Piano *)h; }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Does native/nvlive play a MIDI file as live.Live does?
 
-    python3 examples/nvlive_check.py FILE.mid [SECONDS] [--program=N] [--register] [--pedal-key=N]
+    python3 examples/nvlive_check.py FILE.mid [SECONDS] [--program=N [--drums]] [--register] [--pedal-key=N]
                                      [--gpu=cl|c] [--gpu-min=N] [--room=NAME] [--tuner=NAME]
 
 The first SECONDS (default 20) of FILE, cut as bitident cuts, its notes and
@@ -22,6 +22,8 @@ nvlive --pedal-key). --gpu: both on live.GpuRenderer's path (the samples on
 OpenCL, or "c" the C reference), from GPU-MIN busy slots (live's GPU_MIN).
 --tuner: live at that tuner, and nvlive computing it (native/tuner.cpp) in
 place of the export's, its free strings' bank built again at it.
+--drums: the part a drum part, PROGRAM its drum set (live.Live(drums=True),
+nvlive --drums): the file's notes struck on its kit, whatever their channel.
 """
 import os
 import subprocess
@@ -63,8 +65,9 @@ def main(argv):
     out = os.path.join(tmp, "nv.wav")
     reg = "register" in opt
     gmin = int(opt.get("gpu-min", L.GPU_MIN))
+    drums = "drums" in opt
     subprocess.check_call([exe, nvx, "--test", mid, out, "--program=%d" % prog, "--seconds=%r" % total]
-                          + ([] if reg else ["--no-register"])
+                          + ([] if reg else ["--no-register"]) + (["--drums"] if drums else [])
                           + (["--pedal-key=" + opt["pedal-key"]] if "pedal-key" in opt else [])
                           + (["--gpu=" + (opt["gpu"] or "cl"), "--gpu-min=%d" % gmin] if "gpu" in opt else [])
                           + (["--tuner=" + opt["tuner"]] if opt.get("tuner") else []),
@@ -73,7 +76,7 @@ def main(argv):
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
     # live.Live, fed the same events on the same blocks
     lv = L.Live(program=prog, rate=48000, frames=128, verbose=False, threads=1, gpu=False,
-                tuner=opt.get("tuner") or "hybrid")
+                tuner=opt.get("tuner") or "hybrid", drums=drums)
     lv.enable_room(room)
     lv.parts[0].patch.warm()
     lv.slab.shed = lambda n, frac: 0
