@@ -516,7 +516,7 @@ int main(int argc, char **argv)
     const int program = atoi(opt(argc, argv, "program", "0").c_str());
     // --drums: the part a DRUM PART (live.Patch(program, True)): the program
     // its drum set -- one velocity bucket, no wheel step, no dampers, no una
-    // corda, keys 35-87 (live.DRUM_RANGE), its exclusive classes, no register
+    // corda, every key (live.DRUM_RANGE), its exclusive classes, no register
     bool drums = false;
     for (int i = 1; i < argc; i++)
         drums = drums || !strcmp(argv[i], "--drums");
@@ -580,7 +580,7 @@ int main(int argc, char **argv)
         nv_tcache_kits(cache, E.kit_f0.data(), E.kit_seat.data(), E.kit_choke.data(), E.kit_skind.data(),
                        E.kit_spar.data(), 100.0);       // (live.ONESHOT_FLOOR_DB)
     int speeds[3] = {pp[3], pp[4], pp[5]};
-    long built = drums ? nv_tcache_warm(cache, program, 35, 87, 1, speeds, 1)
+    long built = drums ? nv_tcache_warm(cache, program, 0, 127, 1, speeds, 1)
                        : nv_tcache_warm(cache, program, 21, 96, pp[1], speeds, pp[2]);
     fprintf(stderr, "nvlive: %s %d, %ld templates\n", drums ? "drum set" : "program", program, built);
     // THE SLAB'S SLOTS (--slots: live's capacity, 16384; here 65536 by
@@ -607,7 +607,7 @@ int main(int argc, char **argv)
         nv_tcache_kits(dcache, E.kit_f0.data(), E.kit_seat.data(), E.kit_choke.data(), E.kit_skind.data(),
                        E.kit_spar.data(), 100.0);
         int nsp[1] = {-1};
-        long dbuilt = nv_tcache_warm(dcache, dset, 35, 87, 1, nsp, 1);
+        long dbuilt = nv_tcache_warm(dcache, dset, 0, 127, 1, nsp, 1);      // (live.DRUM_RANGE)
         if (!nodrums) {
             nv_lp_patch_range(part, 0, -1, 1u << 9, 0, 127, 0);
             nv_lp_add_patch(part, dcache, 2, 0.0, 1, -1, 0, 0, 0, 1, dset, E.kit_choke.data(), 9, 0u, 0, 127, 0);

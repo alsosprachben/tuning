@@ -2,7 +2,7 @@
 """Does the native template cache hold what live.Patch holds?
 
     python3 examples/tcache_check.py [--programs=0,1,2,3] [--keys=21-96] [--tuner=hybrid]
-    python3 examples/tcache_check.py --drums [--programs=0] [--keys=35-87]
+    python3 examples/tcache_check.py --drums [--programs=0] [--keys=0-127]
 
 live.Patch.warm builds each key of a part at every velocity bucket's centre
 and every wheel step (_raw_template, at live's 48 kHz and 128 a block); the
@@ -33,7 +33,7 @@ def main(argv):
     import native as N
     drums = "drums" in opt
     progs = [int(x) for x in (opt.get("programs") or ("0" if drums else "0,1,2,3")).split(",")]
-    lo, hi = (int(x) for x in (opt.get("keys") or ("35-87" if drums else "21-96")).split("-"))
+    lo, hi = (int(x) for x in (opt.get("keys") or ("0-127" if drums else "21-96")).split("-"))
     tuner = opt.get("tuner") or "hybrid"
     same = differ = 0
     for prog in progs:

@@ -774,8 +774,15 @@ def _fine_pool_stop():
 LIVE_AMP_LOOKAHEAD = 6
 
 MELODIC_RANGE = (21, 96)        # a keyboard
-DRUM_RANGE = (35, 87)           # every note percussion_map has a voice for
-# NOT the GM kit's 35-81. percussion_map reaches 87, and the four notes above
+DRUM_RANGE = (0, 127)           # every note percussion_map has a voice for
+# EVERY KEY A SET MAPS. GS's sets reach past GM's: their own notes below 35
+# (the metronome's click and bell, the scratches, a brush tom's swish) and
+# above 87 (the Gated SD's at 109-117, the Rap and LoFi snares), all of them
+# built offline and none live: warm() stopped at 87, and a press there found
+# no template -- silent while one was built, and nvlive never built one. A
+# full set is ~3x the rows (Hip-Hop's 110k -> 278k partials, 25 -> 61 MB),
+# under _PATCH_PARTIAL_CAP, which drops only the patches nothing plays.
+# ...AND NOT THE GM KIT'S 35-81. percussion_map reaches 87, and the four notes above
 # 81 -- bell tree, castanets, and the mute and open surdo -- were unreachable
 # live: warm() never built them, so a pad sending note 84 got a template of
 # None and silence. They are fitted voices like the rest of the kit and there
@@ -5043,10 +5050,10 @@ class Live:
     @classmethod
     def build_metro_part(cls, tuner="hybrid440", progress=None):
         """The metronome's own drum part, its click and bell BUILT -- off the
-        audio thread. Standard's 33 and 34 are GS's, under the GM drum range a
-        drum patch warms (Patch.range), so they are built here: a first beat
+        audio thread (a drum patch warms them, Patch.range; built here as
+        well, should a patch's range ever stop short of them: a first beat
         otherwise missed its template and fell silent while the builder made
-        it."""
+        it)."""
         patch = patch_for(cls.METRO_KIT, True, tuner, progress)
         b = patch.bucket(cls.METRO_VEL)
         for note in (cls.METRO_BELL, cls.METRO_CLICK):

@@ -145,8 +145,10 @@ def main(argv):
         print("%s: length %r vs %r" % (os.path.basename(args[0]), py.shape, nv.shape))
         return 1
     d = np.flatnonzero(np.any(py != nv, 1))
-    print("%s (%g s, program %d%s, %s): %d blocks, %s" % (
+    # (its peak: two silences are identical too)
+    print("%s (%g s, program %d%s, %s): %d blocks, peak %.3g, %s" % (
         os.path.basename(args[0]), secs, prog, ", register" if reg else "", room, nb,
+        float(np.max(np.abs(py))) if py.size else 0.0,
         "identical" if not len(d) else "%d frames differ from block %d (max %g)"
         % (len(d), d[0] // 128, float(np.max(np.abs(py.astype(np.float64) - nv))))))
     return 1 if len(d) else 0

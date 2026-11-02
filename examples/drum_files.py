@@ -15,8 +15,8 @@ vibraslap and the bell tree -- their strokes expanded -- the cuicas, the
 jingle bell and the mute surdo: every key of GM's 35-87) in a set whose keys they are (Standard, and sets 1 and 8,
 which keep those drums; or a program kit_for_program sends to Standard);
 or, with --sets=P,Q,..., in those sets, striking every key the engine
-plays in them (native.kits), or only those in LO..HI (--keys=35-87: live's
-DRUM_RANGE, the keys nvlive_check's two sides warm). What the drum note setup has to
+plays in them (native.kits), or only those in LO..HI (--keys=35-87: GM's
+own). What the drum note setup has to
 get right, all of it in the mix: each key's pitch and seat in its set; the
 one-shot's hold (a drum's key-up ignored, held 8 s, a re-strike of the
 same drum ending it); the hats' exclusive class (a closed or pedal hat
