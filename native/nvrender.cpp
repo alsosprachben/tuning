@@ -106,6 +106,8 @@ struct Export {
     std::vector<int> cmap, kind, fin;     // cmap: the programs' keys, then the drum sets'
     std::vector<double> kit_f0, kit_seat;
     std::vector<unsigned long long> kit_choke;
+    std::vector<int> kit_skind;
+    std::vector<double> kit_spar;
     std::string room, libs[3];
 };
 
@@ -121,6 +123,7 @@ static bool read_export(const char *path, Export &E)
     if (ok) {
         E.k.resize(nk); E.freq.resize(128); E.trim.resize(512); E.cmap.resize(2 * NV_K_DRUMS);
         E.kit_f0.resize(16384); E.kit_seat.resize(16384); E.kit_choke.resize(2 * 16384);
+        E.kit_skind.resize(16384); E.kit_spar.resize(24 * 16384);
         E.kind.resize(NCOLS); E.fin.resize(NCOLS);
         ok = fread(E.k.data(), 8, nk, f) == (size_t)nk && fread(E.freq.data(), 8, 128, f) == 128
              && fread(E.trim.data(), 8, 512, f) == 512;
@@ -131,6 +134,7 @@ static bool read_export(const char *path, Export &E)
         ok = ok && fread(E.cmap.data(), 4, 2 * NV_K_DRUMS, f) == 2 * NV_K_DRUMS
              && fread(E.kit_f0.data(), 8, 16384, f) == 16384 && fread(E.kit_seat.data(), 8, 16384, f) == 16384
              && fread(E.kit_choke.data(), 8, 2 * 16384, f) == 2 * 16384
+             && fread(E.kit_skind.data(), 4, 16384, f) == 16384 && fread(E.kit_spar.data(), 8, 24 * 16384, f) == 24 * 16384
              && fread(E.kind.data(), 4, NCOLS, f) == NCOLS
              && fread(E.fin.data(), 4, NCOLS, f) == NCOLS;
         std::string *ss[4] = {&E.room, &E.libs[0], &E.libs[1], &E.libs[2]};
@@ -332,6 +336,9 @@ int main(int argc, char **argv)
     for (int c = 0; c < 256; c++)
         if (btun[c] != 0.0 || br[c] >= 0.0)
             nv_song_channel(song, c, btun[c], nullptr, br[c] >= 0.0);
+    // A GESTURE'S STROKES (_prep_strokes): after the passes that read the
+    // notes as written, before everything that reads the strokes
+    nv_song_strokes(song, E.kit_skind.data(), E.kit_spar.data());
     nv_song_finish(song, total);
     // THE TABLE
     std::vector<const NoteClass *> K(2 * NV_K_DRUMS, nullptr);

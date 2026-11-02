@@ -85,7 +85,7 @@ typedef struct {
     int noisy;
     double hf_corner_hz, hf_order;
     int n_trim;
-    double trim[16][2];
+    double trim[32][2];
     /* AcousticSnareProperties: the head's two rates, the shell's remainder on
        the head modes alone, each partial's jitter (the wires', the head's);
        SideStickProperties: the rim's modes from rim_from (0 none) and rate */
@@ -126,6 +126,11 @@ typedef struct {
     double bore_corner_hz, bore_order, bell_cutoff_hz, bell_order, bore_norm;
     int pea;
     double pea_vibrato_cents, pea_vibrato_hz;
+    /* TunedBarProperties: only the bar's own modes sound (bar_modes: the
+       series' index, its gain) */
+    int n_bar;
+    int bar_n[16];
+    double bar_g[16];
 } VoiceSnap;
 
 typedef struct {
@@ -364,6 +369,8 @@ int nv_song_pitch_level(void *s, int index, int effort_tilt, double *out);
 void nv_song_kits(void *s, const double *f0, const double *seat);
 void nv_song_chokes(void *s, const unsigned long long *choke);
 void nv_song_legato(void *s, long long ch, int note, int k);
+void nv_song_note_stroke(void *s, int i, double ratio, int inner);
+void nv_song_strokes(void *s, const int *kind, const double *par);
 int nv_song_slur(void *s, int i, int *out);
 int nv_song_choke(void *s, long long ch, int note, double on, double *out);
 /* a note's class: K[128 * program + key], a drum set's K[16384 + 128 * program + key] */

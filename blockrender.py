@@ -6424,7 +6424,7 @@ def _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT, 
             and not (FREQ_E is not None and getattr(pc, 'tuning_family', None) == 'indian'))
 
 
-def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None, choked=None, stroked=False):
+def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None, choked=None):
     """'check': the engine's channels against the Python's for this note --
     its end once the pedals have had their say, its half-pedal band, the
     soft pedal at its onset, its key's next strike."""
@@ -6440,8 +6440,7 @@ def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None, choked=None,
         bad.append('soft')
     if song.next_same(nt.ch, nt.note, nt.on) != nx:
         bad.append('next')
-    # (not a stroke's: the song has the scrape's note, not its ridges)
-    if not stroked and song.choke(nt.ch, nt.note, nt.on) != choked:
+    if song.choke(nt.ch, nt.note, nt.on) != choked:
         bad.append('choke %r vs %r' % (choked, song.choke(nt.ch, nt.note, nt.on)))
     if cargs is not None:
         # its pitch and level: (f0, velocity, pan, channel volume, effort) as
@@ -7610,7 +7609,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             else:
                 _SONG = _NV.Song(ccs, notes, total, freq=FREQ, mts=_MTS_TL, btun=_BTUN, otun=_OTUN,
                                  faders=set(_LROW), trim=lambda _p: program_trim(_p, is_drum(_p), gs=_GS_FILE[0]),
-                                 legato=legato)
+                                 legato=legato, strokes=(stroke_pitch, inner_ridge))
     # Occurrence index per (channel, note) in ONSET order -- the same key
     # _legato_ticks used, so a note found in seconds here is the note it judged
     # in ticks there.
@@ -8433,7 +8432,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         if _SONG is not None:
             _song_check(_SONG, nt, _off_key, _mcut, _nx, _DAMP_OPEN,
                         _cargs if _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT, FREQ_E)
-                        else None, choked, (nt.ch, nt.note, nt.on) in _stroked)
+                        else None, choked)
         if choked is not None and choked < nt.off:
             nt.off = choked
         if props.inharmonicity_dynamic:

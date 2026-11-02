@@ -19,12 +19,15 @@
 // stable sort on the time alone).
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <map>
 #include <set>
 #include <tuple>
 #include <utility>
 #include <vector>
+
+#include "pycompat.h"          // a stroke train's random.Random, sum()
 
 namespace nv {
 
@@ -187,6 +190,8 @@ struct Ev {
     int vel;
     double v7, v11, pan, trim;          // the channel's CC7, CC11, CC10 at its onset; its program's trim
     int prog, drum;                     // its program, and whether a drum set's
+    double ratio = 1.0;                 // a stroke's pitch (stroke_pitch: a bell tree's bar)
+    int inner = 0;                      // a ridge after a scrape's first (inner_ridge: it chokes nothing)
 };
 
 // A file's channels and notes.
@@ -240,7 +245,8 @@ struct Song {
                 continue;
             auto k = std::make_pair(e.ch, e.note);
             kit_on[k] = e.prog;
-            ons[k].push_back(e.on);
+            if (!e.inner)
+                ons[k].push_back(e.on);
         }
         for (auto &a : ons) {
             int prog = kit_on[a.first];
@@ -291,6 +297,126 @@ struct Song {
             auto q = std::upper_bound(it->second.begin(), it->second.end(), notes[i].on);
             if (q != it->second.end() && notes[i].off >= *q - 0.02)
                 slur_out[i] = 1;
+        }
+    }
+
+    // A STRUCK OR SCRAPED GESTURE'S STROKES (percussion_map.rasp_strokes, as
+    // _prep_strokes expands them): each drum note whose set's key has a
+    // gesture (kind[q]: 1 a rasp, 2 a cascade, 3 an impact train; par[24 q..])
+    // replaced by its strokes -- each its own onset, end, velocity
+    // (max(1, int(velocity x level))), pitch and, past the first, an inner ridge
+    void strokes(const int *kind, const double *par)
+    {
+        std::vector<Ev> out;
+        for (const Ev &e : notes) {
+            int q = 128 * e.prog + e.note;
+            int kd = (e.drum && e.prog >= 0 && e.prog < 128 && e.note >= 0 && e.note < 128) ? kind[q] : 0;
+            if (!kd) {
+                out.push_back(e);
+                continue;
+            }
+            const double *p = par + 24 * q;
+            std::vector<std::array<double, 4>> st;     // (on, off, level, pitch)
+            if (kd == 1)
+                rasp(e.on, e.off, p, st);
+            else if (kd == 2)
+                cascade(e.on, e.off, p, st);
+            else
+                train(e.note, e.on, p, st);
+            for (size_t k = 0; k < st.size(); k++) {
+                Ev x = e;
+                x.on = st[k][0];
+                x.off = st[k][1];
+                long v = (long)(e.vel * st[k][2]);
+                x.vel = (int)(v > 1 ? v : 1);
+                x.ratio = st[k][3] != 1.0 ? st[k][3] : 1.0;
+                x.inner = k > 0;
+                out.push_back(x);
+            }
+        }
+        notes.swap(out);
+    }
+
+    static double shape_db(const double *shape, int n, double frac)
+    {
+        double x = frac * n - 0.5;
+        if (x <= 0.0)
+            return shape[0];
+        if (x >= n - 1)
+            return shape[n - 1];
+        int i = (int)x;
+        return shape[i] + (shape[i + 1] - shape[i]) * (x - i);
+    }
+
+    // the guiro's ridges: (dur, n, shape's length, its dB...)
+    static void rasp(double on, double off, const double *p, std::vector<std::array<double, 4>> &out)
+    {
+        double dur = p[0];
+        int n = (int)p[1], ns = (int)p[2];
+        double span = off > on ? pymax(dur, (off - on) * 0.5) : dur;
+        if (n < 2) {
+            out.push_back({on, on + span, 1.0, 1.0});
+            return;
+        }
+        std::vector<double> w;
+        for (int k = 0; k < n - 1; k++) {
+            double frac = k / (double)(n - 1);
+            double g = 1.260 - 0.330 * frac;
+            if (frac > 0.80)
+                g += 0.62 * (frac - 0.80) / 0.20;
+            w.push_back(g);
+        }
+        double scale = span / pysum(w.data(), (int)w.size());
+        double t = on;
+        for (int k = 0; k < n; k++) {
+            double frac = k / (double)(n - 1);
+            double jitter = ((double)(((unsigned long long)k * 2654435761ULL) % 1000ULL) / 1000.0 - 0.5) * 0.05;
+            double level = (0.318 + 0.400 * frac) / 0.638;
+            if (frac > 0.80)
+                level *= 1.0 - 0.30 * (frac - 0.80) / 0.20;
+            if (ns)
+                level *= pow(10.0, shape_db(p + 3, ns, frac) / 40.0);
+            double step = (k < n - 1 ? w[k] : w.back()) * scale;
+            out.push_back({t + step * jitter, t + step * 0.9, level, 1.0});
+            t += step;
+        }
+    }
+
+    // the bell tree's sweep: (span, n, semitones)
+    static void cascade(double on, double off, const double *p, std::vector<std::array<double, 4>> &out)
+    {
+        double span = p[0], semis = p[2];
+        int n = (int)p[1];
+        if (off > on)
+            span = pymax(span, (off - on) * 0.6);
+        for (int k = 0; k < n; k++) {
+            double frac = n > 1 ? k / (double)(n - 1) : 0.0;
+            double t = on + span * pow(frac, 0.85);
+            double jitter = ((double)(((unsigned long long)k * 2654435761ULL) % 1000ULL) / 1000.0 - 0.5) * 0.35
+                            * (span / (n > 1 ? n : 1));
+            double level = 0.55 + 0.45 * pow(1.0 - fabs(frac - 0.45) / 0.55, 2.0);
+            double ratio = pow(2.0, semis * frac / 12.0);
+            out.push_back({pymax(on, t + jitter), t + span / n, level, ratio});
+        }
+    }
+
+    // the vibraslap's impacts (_impact_train): (rate, secs, fall dB, jitter,
+    // scatter dB, the strike's dB, side_db set, side_db, side_slope)
+    static void train(int note, double on, const double *p, std::vector<std::array<double, 4>> &out)
+    {
+        double rate = p[0], secs = p[1], fall = p[2], jit = p[3], sc = p[4], strike = p[5];
+        bool has_side = p[6] != 0.0;
+        double side_db = p[7], side_slope = p[8];
+        PyRandom r;
+        pyr_seed(&r, (long long)note * 1000003LL + (long long)nearbyint(on * 1e4));
+        int n = (int)(rate * secs);
+        for (int k = 0; k < n; k++) {
+            double t = (k + pyr_uniform(&r, -jit, jit)) / rate;
+            double swing = -fall * t / secs;
+            double far = (has_side && k % 2) ? pymax(0.0, -swing - side_db) * side_slope : 0.0;
+            double level = pow(10.0, (swing - far + pyr_uniform(&r, -sc, sc) + (k == 0 ? strike : 0.0)) / 20.0);
+            double t0 = pymax(0.0, t);
+            out.push_back({on + t0, on + t0 + 0.9 / rate, level, pow(2.0, pyr_uniform(&r, -0.1, 0.1))});
         }
     }
 
@@ -561,7 +687,7 @@ int nv_song_pitch_level(void *s, int i, int effort_tilt, double *out)
         int q = 128 * e.prog + note;
         if (S->kit_f0.empty() || e.prog < 0 || e.prog > 127 || S->kit_f0[q] == 0.0)
             return 0;
-        out[0] = S->kit_f0[q];
+        out[0] = S->kit_f0[q] * e.ratio;
         out[5] = S->kit_seat[q];
         r = 2;
     } else {
@@ -599,6 +725,24 @@ int nv_song_soft_at(void *s, long long ch, double t)
 {
     const nv::Channel *C = ((nv::Song *)s)->get(ch);
     return C && C->soft_at(t);
+}
+
+// The drum sets' gestures expanded into their strokes (Song::strokes;
+// before nv_song_finish, after the passes that read the notes as written)
+void nv_song_strokes(void *s, const int *kind, const double *par)
+{
+    ((nv::Song *)s)->strokes(kind, par);
+}
+
+// Note i a stroke of a struck or scraped gesture (_prep_strokes): its pitch
+// ratio, and whether it is a ridge after the scrape's first
+void nv_song_note_stroke(void *s, int i, double ratio, int inner)
+{
+    nv::Song *S = (nv::Song *)s;
+    if (i >= 0 && i < (int)S->notes.size()) {
+        S->notes[i].ratio = ratio;
+        S->notes[i].inner = inner;
+    }
 }
 
 // A slurred note, as _legato_ticks found it: channel ch's key's k-th (before nv_song_finish)

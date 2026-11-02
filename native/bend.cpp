@@ -29,8 +29,8 @@ int nv_midi_n_pitch(void *p);
 void nv_midi_pitch(void *p, int i, int *iv, long *seq, double *t, double *v);
 int nv_midi_n_ccs(void *p);
 void nv_midi_cc(void *p, int i, int *iv, double *t);
-int nv_song_n_notes(void *s);
-void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv);
+int nv_midi_n_notes(void *p);
+void nv_midi_note(void *p, int i, int *iv, double *dv);
 }
 
 namespace nv {
@@ -49,20 +49,22 @@ struct P {
 extern "C" {
 
 // _BTUN: each channel's tuning (out[256]; 0 where it has none), from the
-// reader's pitch stream and the song's first notes; the bend range a channel
+// reader's pitch stream and its first notes; the bend range a channel
 // starts at, GM's
 int nv_bend_btun(void *midi, void *song, double bend_range, double *out)
 {
     using nv::bend::P;
     for (int c = 0; c < 256; c++)
         out[c] = 0.0;
+    // (the notes as the file wrote them -- before a gesture's strokes, as
+    // blockrender's passes read them)
     std::map<long long, double> first_on;
-    int nn = nv_song_n_notes(song);
+    int nn = nv_midi_n_notes(midi);
     for (int i = 0; i < nn; i++) {
-        long long ch;
-        int iv[8];
-        double dv[8];
-        nv_song_get_note(song, i, &ch, iv, dv);
+        int iv[5];
+        double dv[5];
+        nv_midi_note(midi, i, iv, dv);
+        long long ch = iv[0];
         auto it = first_on.find(ch);
         if (it == first_on.end() || dv[0] < it->second)
             first_on[ch] = dv[0];
@@ -130,7 +132,7 @@ int nv_bend_btun(void *midi, void *song, double bend_range, double *out)
 }
 
 // _prep_channel_fader for channel ch: 1 and its level at the nblk + 1 block
-// edges in L if its fader is a row, else 0. The song's notes give the spans
+// edges in L if its fader is a row, else 0. The reader's notes give the spans
 // (each to its key-up plus fader_tail); the reader's controllers, in time
 // order (in_order), the level; tau the glide
 int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr, double tau, double fader_tail,
@@ -138,13 +140,12 @@ int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr,
 {
     std::vector<std::pair<double, double>> spans;
     std::vector<double> ons;
-    int nn = nv_song_n_notes(song);
+    int nn = nv_midi_n_notes(midi);
     for (int i = 0; i < nn; i++) {
-        long long c;
-        int iv[8];
-        double dv[8];
-        nv_song_get_note(song, i, &c, iv, dv);
-        if (c != ch)
+        int iv[5];
+        double dv[5];
+        nv_midi_note(midi, i, iv, dv);
+        if (iv[0] != ch)
             continue;
         spans.push_back(std::make_pair(dv[0], dv[1] + fader_tail));
         ons.push_back(dv[0]);

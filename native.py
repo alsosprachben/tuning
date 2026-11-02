@@ -58,7 +58,7 @@ class VoiceSnap(ctypes.Structure):
                 ('click_db', C * 32), ('click_hz0', C), ('click_cal_db', C), ('click_scatter', C),
                 ('click_dbs', C), ('click_stroke_slope', C), ('stroke_ref_db', C),
                 ('slow_share', C), ('slow_dbs', C), ('slow_max_hz', C),
-                ('noisy', I), ('hf_corner_hz', C), ('hf_order', C), ('n_trim', I), ('trim', (C * 2) * 16),
+                ('noisy', I), ('hf_corner_hz', C), ('hf_order', C), ('n_trim', I), ('trim', (C * 2) * 32),
                 ('snare', I), ('fund_dbs', C), ('head_dbs', C), ('wire_jitter', C), ('head_jitter', C),
                 ('rim_from', I), ('rim_dbs', C), ('measured', I), ('ring_scale', C), ('mode_scatter_db', C),
                 ('jit_sus', I), ('tamb', I), ('retarget', I), ('decay_target', C),
@@ -67,7 +67,8 @@ class VoiceSnap(ctypes.Structure):
                 ('aftersound_fraction', C), ('aftersound_dbs', C), ('aftersound_ratio', C),
                 ('bloom_gain', C), ('bloom_banded', I), ('bloom_swell', C), ('bloom_scatter', C),
                 ('bloom_decay_dbs', C), ('bore_corner_hz', C), ('bore_order', C), ('bell_cutoff_hz', C),
-                ('bell_order', C), ('bore_norm', C), ('pea', I), ('pea_vibrato_cents', C), ('pea_vibrato_hz', C)]
+                ('bell_order', C), ('bore_norm', C), ('pea', I), ('pea_vibrato_cents', C), ('pea_vibrato_hz', C),
+                ('n_bar', I), ('bar_n', I * 16), ('bar_g', C * 16)]
 
 
 class ToneIn(ctypes.Structure):
@@ -359,6 +360,8 @@ def _load():
             ('nv_song_chokes', None, [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulonglong)]),
             ('nv_song_choke', I, [ctypes.c_void_p, LL, I, C, D]),
             ('nv_song_legato', None, [ctypes.c_void_p, LL, I, I]),
+            ('nv_song_note_stroke', None, [ctypes.c_void_p, I, C, I]),
+            ('nv_song_strokes', None, [ctypes.c_void_p, ctypes.POINTER(I), D]),
             ('nv_song_slur', I, [ctypes.c_void_p, I, ctypes.POINTER(I)]),
             ('nv_song_finish', None, [ctypes.c_void_p, C]),
             ('nv_song_note_off', C, [ctypes.c_void_p, LL, I, C, C, I, I, C, ctypes.POINTER(I)]),
@@ -429,13 +432,18 @@ def _modal_drum(cls):
                 and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
                 and not cls.mode_stroke_tilt and not cls.blare_db_per_khz and not cls.harmonic_touch
                 and not cls.pickup_points and len(cls.unison_detune or ()) <= 8)
-    # (the claps, the cymbals and hats, the woods, the triangles: the other
-    # washes are families of their own)
+    # (the claps, the cymbals and hats, the woods, the triangles, the
+    # rattles, a tuned bar's crotales: the other washes are families of their own)
     cym = issubclass(cls, T.CymbalProperties)
+    bar = issubclass(cls, T.TunedBarProperties)
     if not (issubclass(cls, T.HandClapProperties) or cym or issubclass(cls, T.WoodPercussionProperties)
-            or issubclass(cls, T.TriangleProperties)):
+            or issubclass(cls, T.TriangleProperties) or issubclass(cls, T.RattleProperties) or bar):
         return False
     own = dict(_MODAL_OWN, aftersound='CymbalProperties') if cym else _MODAL_OWN
+    if bar:
+        if len(cls.bar_modes) > 16:
+            return False
+        own = dict(own, series_volume='TunedBarProperties')
     if not issubclass(cls, T.NoisyPercussionMixin):
         # (a struck metal's: SynthProperties' own, no noise's roll-off)
         own = dict(own, harmonic_volume='SynthProperties', chiff_harmonic_gain='SynthProperties',
@@ -449,7 +457,7 @@ def _modal_drum(cls):
     return (mg is not None and mr is not None and len(mg) == len(mr) <= 320
             and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
             and not cls.mode_stroke_tilt and not cls.bore_corner_hz and not cls.harmonic_touch
-            and not cls.pickup_points and len(getattr(cls, 'band_trim_db', ())) <= 16
+            and not cls.pickup_points and len(getattr(cls, 'band_trim_db', ())) <= 32
             and len(cls.unison_detune or ()) <= 8)
 
 
@@ -478,7 +486,7 @@ def _shaken(cls):
     return (all(_owner(cls, n) == o for n, o in _SHAKEN_OWN.items())
             and cls.mode_gains is None and cls.mode_ratios is None and not cls.plucked_harmonic
             and not cls.strike_point and not cls.harmonic_touch and not cls.pickup_points
-            and cls.even_harmonic_db is None and not cls.bore_corner_hz and len(cls.band_trim_db) <= 16
+            and cls.even_harmonic_db is None and not cls.bore_corner_hz and len(cls.band_trim_db) <= 32
             and len(cls.noise_bands) <= 32 and len(cls.unison_detune or ()) <= 8)
 
 
@@ -494,16 +502,16 @@ def kit_drum(cls):
     if not issubclass(cls, T.KitDrumProperties):
         return 0
     if issubclass(cls, T.NoisyPercussionMixin) and issubclass(cls, T.MeasuredStrokeProperties):
-        if len(cls.band_trim_db) > 16:
+        if len(cls.band_trim_db) > 32:
             return 0
         own = dict(_MEASURED_OWN)
     elif issubclass(cls, T.NoisyPercussionMixin) and issubclass(cls, T.TambourineProperties):
-        if len(cls.band_trim_db) > 16:
+        if len(cls.band_trim_db) > 32:
             return 0
         own = dict(_MEASURED_OWN, partial_jitter='TambourineProperties',
                    stroke_scatter_db='TambourineProperties', harmonic_decay='TambourineProperties')
     elif issubclass(cls, T.NoisyPercussionMixin):
-        if not issubclass(cls, T.AcousticSnareProperties) or len(cls.band_trim_db) > 16:
+        if not issubclass(cls, T.AcousticSnareProperties) or len(cls.band_trim_db) > 32:
             return 0
         own = dict(_SNARE_OWN, harmonic_decay=_owner(cls, 'harmonic_decay'))
         if own['harmonic_decay'] not in ('AcousticSnareProperties', 'SideStickProperties'):
@@ -516,23 +524,67 @@ def kit_drum(cls):
             and not cls.bore_corner_hz and not cls.harmonic_touch and not cls.pickup_points)
 
 
+def stroke_spec(note, kit):
+    """The gesture percussion_map.rasp_strokes plays this set's key as, as
+    the song's strokes take it (native/channel.cpp Song::strokes): (kind,
+    [up to 24 numbers]) -- 1 a rasp (dur, n, the shape's length, its dB),
+    2 a cascade (span, n, semitones), 3 an impact train (rate, secs, fall,
+    jitter, scatter, strike dB, side set, side dB, side slope); (0, []) none;
+    None a gesture the song does not have (a roll, a voiced or patterned
+    stroke, a rattle)."""
+    import percussion_map as PCM
+    tabs = PCM.KIT_STROKES.get(kit, {}) if kit in PCM.KIT_ONLY else None
+    if tabs is None and note in PCM.KITS.get(kit, {}):
+        tabs = PCM.KIT_STROKES.get(kit, {})
+
+    def table(name, std):
+        return tabs.get(name, {}).get(note) if tabs is not None else std.get(note)
+    c = table("cascade", PCM.PERCUSSION_CASCADE)
+    if c is not None:
+        return 2, [float(c[0]), float(c[1]), float(c[2])]
+    tr = table("train", PCM.PERCUSSION_TRAIN)
+    if tr is not None:
+        rate, secs, fall, jit, sc = tr[:5]
+        strike = tr[5] if len(tr) > 5 else 0.0
+        side = tr[6] if len(tr) > 6 else None
+        slope = tr[7] if len(tr) > 7 else 0.0
+        return 3, [float(rate), float(secs), float(fall), float(jit), float(sc), float(strike),
+                   float(side is not None), float(side or 0.0), float(slope)]
+    if table("roll", PCM.PERCUSSION_ROLL) is not None:
+        return None
+    if tabs is not None and (tabs.get("voiced", {}).get(note) is not None
+                             or tabs.get("pattern", {}).get(note) is not None):
+        return None
+    if table("rattle", PCM.PERCUSSION_RATTLE) is not None:
+        return None
+    r = table("rasp", PCM.PERCUSSION_RASP)
+    if r is None:
+        return 0, []
+    shape = PCM.PERCUSSION_RASP_SHAPE.get(note) if tabs is None else None
+    if shape is not None and len(shape) > 21:
+        return None
+    return 1, [float(r[0]), float(r[1]), float(len(shape or ()))] + [float(x) for x in (shape or ())]
+
+
 _KITS = []
 
 
 def kits():
     """The drum sets as the engine's song and K tables take them, for each
     drum program p and key (q = 128 p + key, the set kit_for_program(p)):
-    (classes, f0, seat, choke) -- the class the engine plays there (None
-    where it does not: no drum, a drum not native, or a key with more than
-    its sound -- a layer, strokes, a siren, a sweep) and, for every drum the
-    set maps, its pitch and its pan in the set (seat); f0 0 where none; the
-    keys a strike on it stops (choke_group), as bits (choke[2 q + w], bit k:
-    key 64 w + k)."""
+    (classes, f0, seat, choke, skind, spar) -- the class the engine plays
+    there (None where it does not: no drum, a drum not native, or a key with
+    more than its sound -- a layer, a gesture the song does not expand, a
+    siren, a sweep) and, for every drum the set maps, its pitch and its pan
+    in the set (seat); f0 0 where none; the keys a strike on it stops
+    (choke_group), as bits (choke[2 q + w], bit k: key 64 w + k); its
+    gesture (stroke_spec: skind[q], spar[24 q..])."""
     if _KITS:
         return _KITS[0]
     import percussion_map as PCM
     classes, f0, seat = [None] * 16384, (ctypes.c_double * 16384)(), (ctypes.c_double * 16384)()
     choke = (ctypes.c_ulonglong * (2 * 16384))()
+    skind, spar = (ctypes.c_int * 16384)(), (ctypes.c_double * (24 * 16384))()
     for p in range(128):
         kit = PCM.kit_for_program(p)
         for key in range(128):
@@ -544,12 +596,15 @@ def kits():
             for k in PCM.choke_group(key, kit) or ():
                 choke[2 * q + k // 64] |= 1 << (k % 64)
             cls = d[1]
-            if (kit_drum(cls) and not PCM.key_layers(key, kit)
-                    and PCM.rasp_strokes(key, 0.0, 1.0, kit=kit) is None
+            ss = stroke_spec(key, kit)
+            if ss:
+                skind[q] = ss[0]
+                spar[24 * q:24 * q + len(ss[1])] = ss[1]
+            if (kit_drum(cls) and not PCM.key_layers(key, kit) and ss is not None
                     and not getattr(cls, 'siren_rotor', None) and not getattr(cls, 'alias_sweep', None)
                     and not getattr(cls, 'sounding_octaves', 0.0)):
                 classes[q] = cls
-    _KITS.append((classes, f0, seat, choke))
+    _KITS.append((classes, f0, seat, choke, skind, spar))
     return _KITS[0]
 
 
@@ -665,6 +720,10 @@ def snapshot(props):
             s.bore_norm = p._bore_norm()
         if isinstance(p, T.SambaWhistleProperties):
             s.pea, s.pea_vibrato_cents, s.pea_vibrato_hz = 1, p.pea_vibrato_cents, p.pea_vibrato_hz
+        if isinstance(p, T.TunedBarProperties):
+            s.n_bar = len(p.bar_modes)
+            for i, (bn, bg) in enumerate(p.bar_modes):
+                s.bar_n[i], s.bar_g[i] = int(bn), float(bg)
     elif s.kind == 1:
         # KitDrumProperties' tables, and SynthProperties' unison
         s.unison_gain = p.unison_gain
@@ -1045,12 +1104,13 @@ class Song(object):
     say, the soft pedal at its onset, its key's next strike."""
 
     def __init__(self, ccs, notes, total, freq=None, mts=None, btun=None, otun=None, faders=(), trim=None,
-                 finish=True, legato=()):
+                 finish=True, legato=(), strokes=None):
         """ccs, notes and total as blockrender's; the tuning: freq the file's
         128-key table, mts {channel: [(t, table)]}, btun {channel: ratio},
         otun {channel: 12 cents}; faders the channels whose fader is a row;
         trim(program) the program's trim on the channel volume; legato
-        _legato_ticks' {(channel, key, k)}."""
+        _legato_ticks' {(channel, key, k)}; strokes (stroke_pitch,
+        inner_ridge) as _prep_strokes made them, for its notes."""
         d = self.d = lib()
         self.p = d.nv_song_new()
         for c, evs in ccs.items():
@@ -1064,11 +1124,17 @@ class Song(object):
             d.nv_song_note(self.p, int(e[0]), int(e[1]), float(e[2]), float(e[3]), int(e[4]), float(v7),
                            float(v11), float(pan), float(trim(e[6]) if trim else 1.0), int(e[6]),
                            int(_PM.is_drum(e[6])))
-        _, kf0, kseat, kchoke = kits()
+        _, kf0, kseat, kchoke = kits()[:4]
         d.nv_song_kits(self.p, kf0, kseat)
         d.nv_song_chokes(self.p, kchoke)
         for c, n, k in legato:
             d.nv_song_legato(self.p, int(c), int(n), int(k))
+        if strokes is not None:
+            sp, ir = strokes
+            for i, e in enumerate(notes):
+                key = (e[1], e[2])
+                if key in sp or key in ir:
+                    d.nv_song_note_stroke(self.p, i, float(sp.get(key, 1.0)), int(key in ir))
         T128 = ctypes.c_double * 128
         def row(tab):           # a table as 128 numbers, 0 for a key it lacks
             return T128(*[float(tab[k]) if k in tab else 0.0 for k in range(128)])

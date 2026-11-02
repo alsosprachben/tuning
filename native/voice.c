@@ -120,6 +120,12 @@ double nv_mode_ratio(const VoiceSnap *v, int m)
 
 double nv_series_volume(const VoiceSnap *v, int harmonic)
 {
+    if (v->kind == 2 && v->n_bar) {             /* TunedBarProperties: the bar's own modes */
+        for (int i = 0; i < v->n_bar; i++)
+            if (harmonic == v->bar_n[i])
+                return v->gain * v->bar_g[i];
+        return 0.0;
+    }
     if (v->kind == 2) {                         /* SynthProperties: a measured mode set */
         if (v->max_harmonic && harmonic > v->max_harmonic)
             return 0.0;
