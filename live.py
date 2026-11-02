@@ -90,7 +90,7 @@ import register as _RGM     # the free-string register's physics (live: _reg_*)
 import damper as _DMP       # half-pedalling: each key's damper by the pedal's value
 import rtsched as _RT       # the audio thread real-time and pinned; the callbacks' probe
 from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL,
-                            kit_for_program, drum_set_name, key_layers, kit_in_map)
+                            kit_for_program, drum_set_name, kit_in_map)
 
 
 def _NVX():
@@ -5106,8 +5106,8 @@ class Live:
             at = int(round(self.metro_next))
             bell = self.metro_ring > 0 and self.metro_beat % self.metro_ring == 0
             note = self.METRO_BELL if bell else self.METRO_CLICK
-            for k in (note,) + tuple(key_layers(note, self.METRO_KIT)):
-                self._note_on(self.metro_part, GM_PERCUSSION_CHANNEL, k, self.METRO_VEL, at)
+            # (the bell's template strikes the click with it: its key's layer)
+            self._note_on(self.metro_part, GM_PERCUSSION_CHANNEL, note, self.METRO_VEL, at)
             self.metro_log.append((at, note))
             self.metro_next += period
             self.metro_beat += 1
@@ -5702,14 +5702,11 @@ class Live:
             for part in parts:
                 if part.matches(self._pc(ch), msg.note):
                     self._cut_on(part, ch, msg.note, msg.velocity, n0)
-                    # a key that also strikes another's sound (percussion_map.
-                    # KIT_LAYER): the metronome bell's tick is the click key's.
-                    # One-shots, so no key need stay down for them. The
-                    # layers of the key the part PLAYS (its transpose: a
-                    # split's drums), each struck as the key that plays it
-                    if part.patch.drums:
-                        for _ln in key_layers(msg.note + part.transpose, kit_for_program(part.patch.program)):
-                            self._note_on(part, ch, _ln - part.transpose, msg.velocity, n0)
+                    # (a key that also strikes another's sound, percussion_map.
+                    # KIT_LAYER -- the metronome bell's tick is the click
+                    # key's -- strikes it in its own template: prepare expands
+                    # the layer as a file's note does. Struck here as well,
+                    # every layer sounded twice, 6 dB hot)
             self._glide_from = None
             self._slur = False
         else:
