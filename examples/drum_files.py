@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Piano files with a drum part the engine plays: OUT_DIR/drumNN.mid
 
-    python3 examples/drum_files.py OUT_DIR [N] [--seed=S]
+    python3 examples/drum_files.py OUT_DIR [N] [--seed=S] [--sets=P,Q,...] [--keys=LO-HI]
 
 N random General MIDI files (default 12), 12-20 seconds each, written for
 examples/nvrender_check.py to render both ways:
@@ -13,7 +13,10 @@ timbales, agogos and open surdo, the whistles, the claves, wood blocks and
 castanets, the tambourine, the shakers and the triangles, the guiros, the
 vibraslap and the bell tree -- their strokes expanded -- the cuicas, the
 jingle bell and the mute surdo: every key of GM's 35-87) in a set whose keys they are (Standard, and sets 1 and 8,
-which keep those drums; or a program kit_for_program sends to Standard). What the drum note setup has to
+which keep those drums; or a program kit_for_program sends to Standard);
+or, with --sets=P,Q,..., in those sets, striking every key the engine
+plays in them (native.kits), or only those in LO..HI (--keys=35-87: live's
+DRUM_RANGE, the keys nvlive_check's two sides warm). What the drum note setup has to
 get right, all of it in the mix: each key's pitch and seat in its set; the
 one-shot's hold (a drum's key-up ignored, held 8 s, a re-strike of the
 same drum ending it); the hats' exclusive class (a closed or pedal hat
@@ -38,6 +41,16 @@ def main(argv):
     out = args[0]
     n = int(args[1]) if len(args) > 1 else 12
     rng = random.Random(int(opt.get("seed", 1)))
+    sets, all_keys = SETS, KEYS
+    if opt.get("sets"):
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        import native as N
+        sets = tuple(int(p) for p in opt["sets"].split(","))
+        cls = N.kits()[0]
+        all_keys = tuple(k for k in range(128) if any(cls[128 * p + k] is not None for p in sets))
+    if opt.get("keys"):
+        lo, hi = (int(x) for x in opt["keys"].split("-"))
+        all_keys = tuple(k for k in all_keys if lo <= k <= hi)
     os.makedirs(out, exist_ok=True)
     for k in range(n):
         tpb = 480
@@ -65,12 +78,12 @@ def main(argv):
                 t += dur + rng.uniform(0.0, 0.5)
         # THE DRUMS, on channel 10
         d = 9
-        at(0, mido.Message("program_change", channel=d, program=rng.choice(SETS)))
+        at(0, mido.Message("program_change", channel=d, program=rng.choice(sets)))
         if rng.random() < 0.5:
             at(0, mido.Message("control_change", channel=d, control=10, value=rng.randint(20, 108)))
         if rng.random() < 0.4:
             at(0, mido.Message("control_change", channel=d, control=7, value=rng.randint(60, 127)))
-        keys = rng.sample(KEYS, rng.randint(2, len(KEYS)))
+        keys = rng.sample(all_keys, rng.randint(2, len(all_keys)))
         step = rng.choice((0.25, 0.5, 0.125))
         t = rng.uniform(0.0, 0.3)
         changed = False
@@ -95,7 +108,7 @@ def main(argv):
             elif y < 0.13:
                 at(sec(t + step / 2), mido.Message("control_change", channel=d, control=120, value=0))
             elif y < 0.14 and not changed:
-                at(sec(t), mido.Message("program_change", channel=d, program=rng.choice(SETS)))
+                at(sec(t), mido.Message("program_change", channel=d, program=rng.choice(sets)))
                 changed = True
             t += step
         ev.sort(key=lambda e: (e[0], e[1]))

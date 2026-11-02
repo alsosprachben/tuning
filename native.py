@@ -62,15 +62,15 @@ class VoiceSnap(ctypes.Structure):
                 ('snare', I), ('fund_dbs', C), ('head_dbs', C), ('wire_jitter', C), ('head_jitter', C),
                 ('rim_from', I), ('rim_dbs', C), ('measured', I), ('ring_scale', C), ('mode_scatter_db', C),
                 ('jit_sus', I), ('jit_from', I), ('tamb', I), ('retarget', I), ('decay_target', C),
-                ('mm_harm', I), ('n_mm', I), ('mm_ratio', C * 320), ('mm_gain', C * 320), ('cymbal', I),
+                ('mm_harm', I), ('n_mm', I), ('mm_ratio', C * 400), ('mm_gain', C * 400), ('cymbal', I),
                 ('ring_peak_hz', C), ('ring_decay_below', C), ('ring_decay_above', C), ('ring_decay_floor', C),
                 ('aftersound_fraction', C), ('aftersound_dbs', C), ('aftersound_ratio', C),
                 ('bloom_gain', C), ('bloom_banded', I), ('bloom_swell', C), ('bloom_scatter', C),
                 ('bloom_decay_dbs', C), ('bore_corner_hz', C), ('bore_order', C), ('bell_cutoff_hz', C),
                 ('bell_order', C), ('bore_norm', C), ('pea', I), ('pea_vibrato_cents', C), ('pea_vibrato_hz', C),
                 ('n_bar', I), ('bar_n', I * 16), ('bar_g', C * 16),
-                ('n_md', I), ('n_ma', I), ('n_mp', I), ('mode_decays', C * 32), ('mode_after', (C * 2) * 32),
-                ('mode_phases', C * 32)]
+                ('n_md', I), ('n_ma', I), ('n_mp', I), ('mode_decays', C * 400), ('mode_after', (C * 2) * 400),
+                ('mode_phases', C * 400)]
 
 
 class ToneIn(ctypes.Structure):
@@ -152,7 +152,7 @@ class NoteClass(ctypes.Structure):
                 + [(f, C) for f in ('shake_min_s', 'shake_frac', 'shake_xfade_s', 'rise_s', 'settle_db',
                                     'settle_s', 'noise_rel')]
                 + [('n_flam', I), ('flam_s', C), ('flam_db', C)]
-                + [('n_ft', I), ('ft_bal', I), ('ft_t', C * 16), ('ft_db', C * 16), ('ft_c', C * 16)]
+                + [('n_ft', I), ('ft_bal', I), ('ft_t', C * 64), ('ft_db', C * 64), ('ft_c', C * 64)]
                 + [('n_layer', I), ('lay_n', I * 2), ('lay_hz', (C * 32) * 2), ('lay_db', (C * 32) * 2),
                    ('lay_rise', C * 2), ('lay_dbs', C * 2), ('lay_len', C * 2)])
 
@@ -438,9 +438,10 @@ _CUICA_OWN = {'mode_ratio': 'SynthProperties', 'series_volume': 'SynthProperties
               'partial_jitter': 'CuicaProperties', 'bore_gain': 'SynthProperties'}
 
 
-# ...AND THE JINGLE BELL'S (RfxJingleBellProperties, the TR-808 engine's:
-# each mode its own decay, aftersound and phase; its knock a burst train
-# and a layer)
+# ...AND A DRUM MACHINE'S (TR808Properties, the TR-808 engine's: the 808,
+# 909, 707, 606 and CR-78 voices, the jingle bell: each mode its own decay,
+# aftersound and phase; its knock a burst train and a layer; its sweep the
+# tension bend)
 _JINGLE_OWN = {'mode_ratio': 'SynthProperties', 'series_volume': 'SynthProperties',
                'harmonic_volume': 'SynthProperties', 'chiff_harmonic_gain': 'SynthProperties',
                'aftersound': 'SynthProperties', 'unison_voices': 'SynthProperties',
@@ -450,11 +451,11 @@ _JINGLE_OWN = {'mode_ratio': 'SynthProperties', 'series_volume': 'SynthPropertie
 
 def _modal_drum(cls):
     import tonelib as T
-    if issubclass(cls, T.RfxJingleBellProperties):
+    if issubclass(cls, T.TR808Properties):
         mg, mr = cls.mode_gains, cls.mode_ratios
         return (all(_owner(cls, n) == o for n, o in _JINGLE_OWN.items())
-                and mg is not None and mr is not None and len(mg) == len(mr) <= 32
-                and len(cls.mode_decays) <= 32 and len(cls.mode_after) <= 32 and len(cls.mode_phases) <= 32
+                and mg is not None and mr is not None and len(mg) == len(mr) <= 400
+                and len(cls.mode_decays) <= 400 and len(cls.mode_after) <= 400 and len(cls.mode_phases) <= 400
                 and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
                 and not cls.mode_stroke_tilt and not cls.bore_corner_hz and not cls.harmonic_touch
                 and not cls.pickup_points and len(cls.unison_detune or ()) <= 8)
@@ -767,7 +768,7 @@ def snapshot(props):
             s.bore_norm = p._bore_norm()
         if isinstance(p, T.SambaWhistleProperties):
             s.pea, s.pea_vibrato_cents, s.pea_vibrato_hz = 1, p.pea_vibrato_cents, p.pea_vibrato_hz
-        if isinstance(p, T.RfxJingleBellProperties):
+        if isinstance(p, T.TR808Properties):
             s.n_md, s.n_ma, s.n_mp = len(p.mode_decays), len(p.mode_after), len(p.mode_phases)
             s.mode_decays[:s.n_md] = [float(x) for x in p.mode_decays]
             for i, (sh, d) in enumerate(p.mode_after):
@@ -1051,14 +1052,14 @@ def note_class(cls):
             # ...a machine's burst train, and up to two layers
             if a == 'strike_flam_times':
                 ft = getattr(cls, 'strike_flam_times', None) or ()
-                return len(ft) <= 16 and all(len(b) in (2, 3) for b in ft)
+                return len(ft) <= 64 and all(len(b) in (2, 3) for b in ft)
             if a == 'strike_noise_layers':
                 ly = getattr(cls, 'strike_noise_layers', ()) or ()
                 return len(ly) <= 2 and all(len(l[0]) <= 32 for l in ly)
             return False
         ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF if not (drum and drum_has(a)))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT)
-              and (getattr(cls, 'mode_phase', None) is None or issubclass(cls, T.RfxJingleBellProperties))
+              and (getattr(cls, 'mode_phase', None) is None or issubclass(cls, T.TR808Properties))
               and (int(getattr(cls, 'strike_flam', 0) or 0) <= 1
                    or (int(cls.strike_flam) <= 64 and not getattr(cls, 'strike_flam_record', False)
                        and not (getattr(cls, 'strike_flam_exp_db', 0.0) or 0.0)))

@@ -111,7 +111,7 @@ typedef struct {
        harmonic series (mode_ratios None: partial m at m) */
     int mm_harm;
     int n_mm;
-    double mm_ratio[320], mm_gain[320];
+    double mm_ratio[400], mm_gain[400];         /* (a TR-606 hat: 400) */
     /* CymbalProperties: decay by octaves from the ring's peak (ring_peak_hz
        0: SynthProperties'), the aftersound's share and rate */
     int cymbal;
@@ -138,7 +138,7 @@ typedef struct {
        TR808Properties: each mode's aftersound (share, its dB/s; aftersound_
        partial) and where it starts (mode_phase, radians) */
     int n_md, n_ma, n_mp;
-    double mode_decays[32], mode_after[32][2], mode_phases[32];
+    double mode_decays[400], mode_after[400][2], mode_phases[400];
 } VoiceSnap;
 
 typedef struct {
@@ -321,7 +321,7 @@ typedef struct {
     // ...or a machine's (strike_flam_times: each burst's offset s, dB, and
     // place in the balance -- the cos/sin of its angle -- where ft_bal)
     int n_ft, ft_bal;
-    double ft_t[16], ft_db[16], ft_c[16];
+    double ft_t[64], ft_db[64], ft_c[64];
     // MORE STRUCK THINGS THAN ONE (strike_noise_layers): each its table, rise
     // s, dB/s and length s, from the note's onset
     int n_layer;
