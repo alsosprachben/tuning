@@ -85,7 +85,7 @@ static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int
 
 // THE DRUM SETS, as a drum part's templates read them (native.kits): each
 // drum program's key's pitch, seat, exclusive class (two words) and
-// gesture (a kind, 24 numbers)
+// gesture (a kind, NV_SPAR numbers)
 struct Kits {
     std::vector<double> f0, seat, spar;
     std::vector<unsigned long long> choke;
@@ -374,7 +374,7 @@ void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigne
     C->kit.seat.assign(seat, seat + 16384);
     C->kit.choke.assign(choke, choke + 2 * 16384);
     C->kit.skind.assign(skind, skind + 16384);
-    C->kit.spar.assign(spar, spar + 24 * 16384);
+    C->kit.spar.assign(spar, spar + NV_SPAR * 16384);
     C->oneshot_floor_db = oneshot_floor_db;
 }
 

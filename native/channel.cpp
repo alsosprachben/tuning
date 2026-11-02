@@ -302,11 +302,12 @@ struct Song {
 
     // A STRUCK OR SCRAPED GESTURE'S STROKES (percussion_map.rasp_strokes, as
     // _prep_strokes expands them): each drum note whose set's key has a
-    // gesture (kind[q]: 1 a rasp, 2 a cascade, 3 an impact train; par[24 q..])
+    // gesture (kind[q]: 1 a rasp, 2 a cascade, 3 an impact train, 4 a roll,
+    // 5 a pattern; par[NV_SPAR q..])
     // replaced by its strokes -- each its own onset, end, velocity
     // (max(1, int(velocity x level))), pitch and, past the first, an inner
     // ridge. AND A KEY THAT ALSO STRIKES ANOTHER'S SOUND (key_layers:
-    // par[24 q + 20] of them, the keys from par[24 q + 21]): each struck as
+    // par[NV_SPAR (q + 1) - 4] of them, the keys after): each struck as
     // the note is, before it, as _prep_strokes expands them
     void strokes(const int *kind, const double *par)
     {
@@ -314,9 +315,9 @@ struct Song {
         for (const Ev &e : notes) {
             bool in = e.drum && e.prog >= 0 && e.prog < 128 && e.note >= 0 && e.note < 128;
             int q = 128 * e.prog + e.note;
-            for (int l = 0; in && l < (int)par[24 * q + 20]; l++) {
+            for (int l = 0; in && l < (int)par[NV_SPAR * (q + 1) - 4]; l++) {
                 Ev x = e;
-                x.note = (int)par[24 * q + 21 + l];
+                x.note = (int)par[NV_SPAR * (q + 1) - 3 + l];
                 out.push_back(x);
             }
             int kd = in ? kind[q] : 0;
@@ -324,14 +325,18 @@ struct Song {
                 out.push_back(e);
                 continue;
             }
-            const double *p = par + 24 * q;
+            const double *p = par + NV_SPAR * q;
             std::vector<std::array<double, 4>> st;     // (on, off, level, pitch)
             if (kd == 1)
                 rasp(e.on, e.off, p, st);
             else if (kd == 2)
                 cascade(e.on, e.off, p, st);
-            else
+            else if (kd == 3)
                 train(e.note, e.on, p, st);
+            else if (kd == 4)
+                roll(e.note, e.on, e.off, p, st);
+            else
+                pattern(e.on, p, st);
             for (size_t k = 0; k < st.size(); k++) {
                 Ev x = e;
                 x.on = st[k][0];
@@ -406,6 +411,50 @@ struct Song {
             double level = 0.55 + 0.45 * pow(1.0 - fabs(frac - 0.45) / 0.55, 2.0);
             double ratio = pow(2.0, semis * frac / 12.0);
             out.push_back({pymax(on, t + jitter), t + span / n, level, ratio});
+        }
+    }
+
+    // a held roll (_snare_roll): (rate, bounces, bounce s, bounce dB, the
+    // other hand's dB, jitter, scatter dB, the least span, the body's, the
+    // first stroke's and the last's dB) -- every bounce a stroke, sorted
+    static void roll(int note, double on, double off, const double *p, std::vector<std::array<double, 4>> &out)
+    {
+        double rate = p[0], bounce_s = p[2], bounce_db = p[3], hand_db = p[4], jit = p[5], sc = p[6];
+        double body_db = p[8], first_db = p[9], last_db = p[10];
+        int bounces = (int)p[1];
+        PyRandom r;
+        pyr_seed(&r, (long long)note * 7919LL + (long long)nearbyint(on * 1e4));
+        double span = pymax(p[7], off - on);
+        double last_t = span - 0.5 / rate;      // the last stroke lands as it ends
+        size_t first = out.size();
+        auto stroke = [&](double t, double base, int nb) {
+            for (int b = 0; b < nb; b++) {
+                double tb = t + b * bounce_s * (1.0 + pyr_uniform(&r, -0.15, 0.15));
+                double db = base - bounce_db * b + pyr_uniform(&r, -sc, sc);
+                out.push_back({on + tb, on + tb + 0.8 * bounce_s, pow(10.0, db / 40.0), 1.0});
+            }
+        };
+        int k = 0;
+        double t = 0.0;
+        while (t < last_t) {
+            double hand = k % 2 ? -hand_db : 0.0;
+            stroke(t, k == 0 ? first_db : body_db + hand, bounces);
+            k++;
+            t = k / rate + pyr_uniform(&r, -jit, jit) / rate;
+        }
+        stroke(pymax(last_t, 0.0), last_db, 2);
+        std::sort(out.begin() + first, out.end());
+    }
+
+    // a set's pattern (_pattern): (n, then each stroke's time, dB, semitones
+    // and length -- NaN: to the next, the last 0.3 s)
+    static void pattern(double on, const double *p, std::vector<std::array<double, 4>> &out)
+    {
+        int n = (int)p[0];
+        for (int k = 0; k < n; k++) {
+            const double *st = p + 1 + 4 * k;
+            double end = !std::isnan(st[3]) ? st[0] + st[3] : k + 1 < n ? st[4] : st[0] + 0.3;
+            out.push_back({on + st[0], on + end, pow(10.0, st[1] / 40.0), pow(2.0, st[2] / 12.0)});
         }
     }
 

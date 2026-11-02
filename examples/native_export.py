@@ -23,7 +23,7 @@ itself is written here, from the classes it was checked against:
                            where the set has none: native.kits), and the
                            keys a strike on each stops (two 64-bit words),
                            and its gesture's strokes (native.stroke_spec:
-                           a kind, 24 numbers)
+                           a kind, native.SPAR numbers)
   the columns              each EMIT_COLS column's type in the table (_COL_F4,
                            _COL_I4) and in prepare's result (FINAL_DTYPES)
 

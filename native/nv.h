@@ -420,6 +420,11 @@ int nv_song_slur(void *s, int i, int *out);
 int nv_song_choke(void *s, long long ch, int note, double on, double *out);
 /* a note's class: K[128 * program + key], a drum set's K[16384 + 128 * program + key] */
 #define NV_K_DRUMS 16384
+// A DRUM KEY'S GESTURE ROW (native.kits' spar, native.SPAR): its strokes'
+// numbers from the row's start (up to NV_SPAR - 4: a pattern's 32 strokes),
+// and in its last four the keys a strike on it also sounds -- how many, then
+// up to three
+#define NV_SPAR 136
 void nv_song_cc(void *s, long long ch, double t, int cc, int v);
 void nv_song_note(void *s, long long ch, int note, double on, double off, int vel, double v7, double v11,
                   double pan, double trim, int prog, int drum);

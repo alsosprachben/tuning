@@ -602,11 +602,12 @@ def kit_drum(cls):
 def stroke_spec(note, kit):
     """The gesture percussion_map.rasp_strokes plays this set's key as, as
     the song's strokes take it (native/channel.cpp Song::strokes): (kind,
-    [up to 24 numbers]) -- 1 a rasp (dur, n, the shape's length, its dB),
-    2 a cascade (span, n, semitones), 3 an impact train (rate, secs, fall,
-    jitter, scatter, strike dB, side set, side dB, side slope); (0, []) none;
-    None a gesture the song does not have (a roll, a voiced or patterned
-    stroke, a rattle)."""
+    [up to SPAR - 4 numbers]) -- 1 a rasp (dur, n, the shape's length, its
+    dB), 2 a cascade (span, n, semitones), 3 an impact train (rate, secs,
+    fall, jitter, scatter, strike dB, side set, side dB, side slope), 4 a
+    roll (_snare_roll's eleven), 5 a pattern (n, then each stroke's time, dB,
+    semitones and length, NaN where it runs to the next); (0, []) none; None
+    a gesture the song does not have (a voiced stroke, a rattle)."""
     import percussion_map as PCM
     tabs = PCM.KIT_STROKES.get(kit, {}) if kit in PCM.KIT_ONLY else None
     if tabs is None and note in PCM.KITS.get(kit, {}):
@@ -625,11 +626,17 @@ def stroke_spec(note, kit):
         slope = tr[7] if len(tr) > 7 else 0.0
         return 3, [float(rate), float(secs), float(fall), float(jit), float(sc), float(strike),
                    float(side is not None), float(side or 0.0), float(slope)]
-    if table("roll", PCM.PERCUSSION_ROLL) is not None:
+    ro = table("roll", PCM.PERCUSSION_ROLL)
+    if ro is not None:
+        return 4, [float(x) for x in ro] + [0.0] * (11 - len(ro))
+    if tabs is not None and tabs.get("voiced", {}).get(note) is not None:
         return None
-    if tabs is not None and (tabs.get("voiced", {}).get(note) is not None
-                             or tabs.get("pattern", {}).get(note) is not None):
-        return None
+    pa = tabs.get("pattern", {}).get(note) if tabs is not None else None
+    if pa is not None:
+        if 1 + 4 * len(pa) > SPAR - 4:
+            return None
+        return 5, [float(len(pa))] + [float(x) for st in pa
+                                      for x in (st[0], st[1], st[2], st[3] if len(st) > 3 else math.nan)]
     if table("rattle", PCM.PERCUSSION_RATTLE) is not None:
         return None
     r = table("rasp", PCM.PERCUSSION_RASP)
@@ -642,6 +649,7 @@ def stroke_spec(note, kit):
 
 
 _KITS = []
+SPAR = 136          # a drum key's gesture row (native/nv.h NV_SPAR): its strokes, then its layers
 
 
 def kits():
@@ -653,15 +661,15 @@ def kits():
     sweep) and, for every drum the set maps, its pitch and its pan
     in the set (seat); f0 0 where none; the keys a strike on it stops
     (choke_group), as bits (choke[2 q + w], bit k: key 64 w + k); its
-    gesture (stroke_spec: skind[q], spar[24 q..]); and the keys a strike on
-    it also sounds (key_layers), in the row's tail: spar[24 q + 20] how
-    many, spar[24 q + 21..] the keys."""
+    gesture (stroke_spec: skind[q], spar[SPAR q..]); and the keys a strike
+    on it also sounds (key_layers), in the row's last four: spar[SPAR (q + 1)
+    - 4] how many, the keys after."""
     if _KITS:
         return _KITS[0]
     import percussion_map as PCM
     classes, f0, seat = [None] * 16384, (ctypes.c_double * 16384)(), (ctypes.c_double * 16384)()
     choke = (ctypes.c_ulonglong * (2 * 16384))()
-    skind, spar = (ctypes.c_int * 16384)(), (ctypes.c_double * (24 * 16384))()
+    skind, spar = (ctypes.c_int * 16384)(), (ctypes.c_double * (SPAR * 16384))()
     for p in range(128):
         kit = PCM.kit_for_program(p)
         for key in range(128):
@@ -676,13 +684,13 @@ def kits():
             ss = stroke_spec(key, kit)
             if ss:
                 skind[q] = ss[0]
-                assert len(ss[1]) <= 20
-                spar[24 * q:24 * q + len(ss[1])] = ss[1]
+                assert len(ss[1]) <= SPAR - 4
+                spar[SPAR * q:SPAR * q + len(ss[1])] = ss[1]
             ly = PCM.key_layers(key, kit)
             if len(ly) > 3:
                 continue
-            spar[24 * q + 20] = len(ly)
-            spar[24 * q + 21:24 * q + 21 + len(ly)] = [float(k) for k in ly]
+            spar[SPAR * (q + 1) - 4] = len(ly)
+            spar[SPAR * (q + 1) - 3:SPAR * (q + 1) - 3 + len(ly)] = [float(k) for k in ly]
             if (kit_drum(cls) and ss is not None
                     and not getattr(cls, 'siren_rotor', None) and not getattr(cls, 'alias_sweep', None)
                     and not getattr(cls, 'sounding_octaves', 0.0)):
@@ -690,7 +698,8 @@ def kits():
     # (a key the engine plays only where it plays every layer with it)
     for q in range(16384):
         if classes[q] is not None and any(classes[128 * (q // 128) + int(k)] is None
-                                          for k in spar[24 * q + 21:24 * q + 21 + int(spar[24 * q + 20])]):
+                                          for k in spar[SPAR * (q + 1) - 3:SPAR * (q + 1) - 3
+                                                        + int(spar[SPAR * (q + 1) - 4])]):
             classes[q] = None
     _KITS.append((classes, f0, seat, choke, skind, spar))
     return _KITS[0]
