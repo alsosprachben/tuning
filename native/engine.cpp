@@ -111,7 +111,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     memset(&t, 0, sizeof t);
     t.f0 = f0;
     t.non = non; t.noff = noff; t.fade = fade; t.rel = rel; t.chiff = chiff;
-    t.cv = K->chiff_volume; t.cc = K->chiff_cycle; t.crl = K->chiff_release; t.csc = f0 / 440.0;
+    t.cv = o.chiff_volume; t.cc = K->chiff_cycle; t.crl = K->chiff_release; t.csc = f0 / 440.0;
     t.li = o.left_incidence; t.ri = o.right_incidence; t.sustain_level = K->sustain_level;
     t.gr = -1; t.cr = 0; t.sr = SR;
     t.jitter_scale = (1.0 + o.pitch_jitter) * 1.0;
@@ -195,14 +195,14 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
 
     // THE TONE (_note_stops, one stop at gain 1)
     int reflect = n->reflect && !no_refl && K->reflection_order;
-    t.gain = 1.0; t.B = B; t.sjit = K->sustain_jitter; t.reflect = reflect;
+    t.gain = 1.0; t.B = B; t.sjit = o.sustain_jitter; t.reflect = reflect;
     t.cbw0 = K->cbw0; t.cbw1 = K->cbw1;
     t.pjit = K->pjit; t.sps = K->sps;
     double trans[3 * 1025];
     int ntr = 0;
     if (s.max_harmonic + 1 > 1025)
         return -2;
-    double sjit_last = K->sustain_jitter;       // (the note's sjit after its partials)
+    double sjit_last = o.sustain_jitter;        // (the note's sjit after its partials)
     int k = nv_tone_rs(&s, &t, reflect ? nimg : 0, nsurf, surf, img, mir, rows + NCOLS * total, cap - total,
                        trans, &ntr, qacc, azimuth, rs, &sjit_last);
     if (k == -2)

@@ -93,7 +93,7 @@ double nv_partial_jitter(const VoiceSnap *v, int harmonic)
 double nv_mode_ratio(const VoiceSnap *v, int m)
 {
     if (v->kind == 2)                           /* SynthProperties.mode_ratio: mode_ratios */
-        return 1 <= m && m <= v->n_modes ? v->modes[m - 1][0] : 0.0;
+        return 1 <= m && m <= v->n_mm ? v->mm_ratio[m - 1] : 0.0;
     if (v->kind == 1) {                         /* KitDrumProperties.mode_ratio */
         if (1 <= m && m <= v->n_modes)
             return v->modes[m - 1][0];
@@ -109,7 +109,7 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
     if (v->kind == 2) {                         /* SynthProperties: a measured mode set */
         if (v->max_harmonic && harmonic > v->max_harmonic)
             return 0.0;
-        return 1 <= harmonic && harmonic <= v->n_modes ? v->gain * v->modes[harmonic - 1][1] : 0.0;
+        return 1 <= harmonic && harmonic <= v->n_mm ? v->gain * v->mm_gain[harmonic - 1] : 0.0;
     }
     if (v->kind == 1) {                         /* KitDrumProperties.series_volume */
         if (1 <= harmonic && harmonic <= v->n_modes)
@@ -178,17 +178,29 @@ double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
     return s / (1.0 + pow(fn / fc, v->hammer_order)) * soundboard_gain(v, fn);
 }
 
+/* SynthProperties.harmonic_decay by where the mode sits; CymbalProperties'
+ * by octaves from the ring's peak */
+static double mode_decay(const VoiceSnap *v, int harmonic)
+{
+    if (v->cymbal && v->ring_peak_hz > 0.0) {
+        double f = v->frequency_x * pow(2.0, v->octave_position) * nv_mode_ratio(v, harmonic);
+        if (f > 0.0) {
+            double o = log(f / v->ring_peak_hz) / log(2.0);
+            double k = o < 0.0 ? v->ring_decay_below : v->ring_decay_above;
+            return (v->ring_decay_floor + k * o * o) * v->decay_register_factor;
+        }
+    }
+    double h = nv_mode_ratio(v, harmonic);
+    return (v->decay_db + v->harmonic_decay_db * h * pow(h, v->harmonic_decay_dampening)) * v->decay_register_factor;
+}
+
 double nv_harmonic_decay(const VoiceSnap *v, int harmonic)
 {
-    if (v->kind == 2) {                         /* SynthProperties, by where the mode sits */
-        double h = nv_mode_ratio(v, harmonic);
-        double base = (v->decay_db + v->harmonic_decay_db * h * pow(h, v->harmonic_decay_dampening))
-                      * v->decay_register_factor;
+    if (v->kind == 2) {                         /* a mode set's, a key's retargeted */
+        double base = mode_decay(v, harmonic);
         if (!v->retarget)
             return base;
-        double h1 = nv_mode_ratio(v, 1);
-        double first = (v->decay_db + v->harmonic_decay_db * h1 * pow(h1, v->harmonic_decay_dampening))
-                       * v->decay_register_factor;
+        double first = mode_decay(v, 1);
         return first > 0 ? base * (v->decay_target / first) : v->decay_target;
     }
     if (v->kind == 1 && v->rim_from && v->rim_from <= harmonic && harmonic <= v->n_modes)
@@ -228,9 +240,18 @@ static double string_blend(const VoiceSnap *v, double frequency, double break_hz
 /* GrandPianoProperties.aftersound: (level, its decay rate) */
 void nv_aftersound(const VoiceSnap *v, double frequency, double decay_rate, double *out)
 {
-    if (v->kind == 2) {                         /* SynthProperties: one stage */
-        out[0] = 0.0;
-        out[1] = decay_rate;
+    if (v->kind == 2) {                         /* SynthProperties: one stage; CymbalProperties' */
+        if (!v->cymbal || v->aftersound_fraction <= 0.0) {
+            out[0] = 0.0;
+            out[1] = decay_rate;
+        } else if (v->aftersound_dbs > 0.0) {
+            double s = 0.5 * v->aftersound_dbs;
+            out[0] = v->aftersound_fraction;
+            out[1] = s < decay_rate ? s : decay_rate;
+        } else {
+            out[0] = v->aftersound_fraction;
+            out[1] = decay_rate * v->aftersound_ratio;
+        }
         return;
     }
     if (v->kind == 1 && v->snare) {             /* AcousticSnareProperties: the shell's, on the head */
@@ -349,6 +370,14 @@ double nv_bloom_delay_for(const VoiceSnap *v, double frequency)
         return 0.0;
     double d = fabs(log(frequency / v->bloom_center_hz) / log(2.0) / v->bloom_octaves);
     return v->bloom_seconds * exp(-0.5 * pow(d, v->bloom_shape));
+}
+
+/* SynthProperties.bloom_gain_for: the late copy's gain at this partial */
+double nv_bloom_gain_for(const VoiceSnap *v, double frequency)
+{
+    if (!v->bloom_banded || v->bloom_seconds <= 0.0)
+        return v->bloom_gain;
+    return v->bloom_gain * nv_bloom_delay_for(v, frequency) / v->bloom_seconds;
 }
 
 /* SynthProperties._solo_vibrato / voice_vibrato: (depth, rate, phase) in
@@ -510,6 +539,14 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
     } else {
         s->bloom_seconds = c->bloom_seconds;
     }
+    s->bloom_gain = c->bloom_gain;
+    if (c->bloom_gain > 0.0 && c->bloom_gain_slope != 0.0)
+        s->bloom_gain = c->bloom_gain * pow(pymax(attack_volume, 1e-3), c->bloom_gain_slope);
+    if (c->strike_wobble_hz > 0.0 && c->strike_wobble_gain > 0.0) {
+        s->n_unison = 1;
+        s->unison_detune[0] = c->strike_wobble_hz;
+        s->unison_gain = c->strike_wobble_gain * pow(pymax(attack_volume, 1e-3), c->strike_wobble_slope);
+    }
     s->frequency_x = 415.0;
     double op = log(frequency / s->frequency_x) / log(2.0);
     s->octave_position = op;
@@ -546,6 +583,23 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
     s->gain = (c->initial_gain * pow(10.0, c->octave_gain * op / 20.0)
                * pow(10.0, (register_effort_at(c, s->frequency_x * pow(2.0, op)) + c->projection_db) / 20.0)
                * touch * channel_volume);
+    if (c->n_vtrim) {
+        /* the volume back on the square law, at the velocity it came from (_np_interp) */
+        double x = 127.0 * pow(pymax(attack_volume, 0.0), 0.5), d;
+        int n = c->n_vtrim;
+        if (x <= c->vtrim_v[0]) {
+            d = c->vtrim_db[0];
+        } else {
+            d = c->vtrim_db[n - 1];
+            for (int i = 0; i + 1 < n; i++)
+                if (x <= c->vtrim_v[i + 1]) {
+                    double x0 = c->vtrim_v[i], y0 = c->vtrim_db[i], x1 = c->vtrim_v[i + 1], y1 = c->vtrim_db[i + 1];
+                    d = y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+                    break;
+                }
+        }
+        s->gain *= pow(10.0, d / 20.0);
+    }
     /* place() */
     o->pan_angle = stage_angle(channel_pan);
     s->position_x = op * c->octave_width + c->seat_x;
@@ -556,6 +610,14 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
     o->left_incidence = e[0]; o->right_incidence = e[1];
     o->left_hrtf_delay = e[2]; o->right_hrtf_delay = e[3];
     o->attack_time = c->attack_time;
+    o->chiff_volume = c->chiff_volume;
+    o->sustain_jitter = c->sustain_jitter;
+    if (c->strike_noise_slope != 0.0 && c->chiff_volume != 0.0) {
+        /* the stroke's force: the strike's noise, and the ring's jitter with it */
+        double av = pow(pymax(attack_volume, 1e-3), c->strike_noise_slope);
+        o->chiff_volume = c->chiff_volume * av;
+        o->sustain_jitter = c->sustain_jitter * av;
+    }
     if (c->kind != 0) {
         /* a kit drum, a mode set: SynthProperties' constructor and no more;
            its B the class's coefficient (no law: inharmonicity_dynamic off) */

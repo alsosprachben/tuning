@@ -60,7 +60,12 @@ class VoiceSnap(ctypes.Structure):
                 ('slow_share', C), ('slow_dbs', C), ('slow_max_hz', C),
                 ('noisy', I), ('hf_corner_hz', C), ('hf_order', C), ('n_trim', I), ('trim', (C * 2) * 8),
                 ('snare', I), ('fund_dbs', C), ('head_dbs', C), ('wire_jitter', C), ('head_jitter', C),
-                ('rim_from', I), ('rim_dbs', C), ('retarget', I), ('decay_target', C)]
+                ('rim_from', I), ('rim_dbs', C), ('retarget', I), ('decay_target', C),
+                ('n_mm', I), ('mm_ratio', C * 320), ('mm_gain', C * 320), ('cymbal', I),
+                ('ring_peak_hz', C), ('ring_decay_below', C), ('ring_decay_above', C), ('ring_decay_floor', C),
+                ('aftersound_fraction', C), ('aftersound_dbs', C), ('aftersound_ratio', C),
+                ('bloom_gain', C), ('bloom_banded', I), ('bloom_swell', C), ('bloom_scatter', C),
+                ('bloom_decay_dbs', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -98,14 +103,19 @@ class VoiceInit(ctypes.Structure):
                                     'reference_string_max_m', 'case_string_max_m')]
                 + [('upright', I), ('n_level', I)]
                 + [(f, C) for f in ('attack_time', 'hammer_soft_s', 'hammer_hard_s')]
-                + [('level_hz', C * 32), ('level_db', C * 32)] + [('kind', I)])
+                + [('level_hz', C * 32), ('level_db', C * 32)] + [('kind', I)]
+                + [('bloom_gain', C), ('bloom_gain_slope', C)]
+                + [('chiff_volume', C), ('sustain_jitter', C), ('strike_noise_slope', C), ('n_vtrim', I),
+                   ('vtrim_v', C * 16), ('vtrim_db', C * 16)]
+                + [('strike_wobble_hz', C), ('strike_wobble_gain', C), ('strike_wobble_slope', C)])
 
 
 class VoiceNote(ctypes.Structure):
     """native/voice.c's VoiceNote: what the note setup reads of a voice besides its VoiceSnap."""
     _fields_ = [(f, C) for f in ('pitch_jitter', 'attack_jitter', 'pan_angle', 'left_incidence',
                                  'right_incidence', 'left_hrtf_delay', 'right_hrtf_delay',
-                                 'inharmonicity_coefficient', 'B', 'tension_bend', 'attack_time')]
+                                 'inharmonicity_coefficient', 'B', 'tension_bend', 'attack_time',
+                                 'chiff_volume', 'sustain_jitter')]
 
 
 class PyRandomState(ctypes.Structure):
@@ -219,7 +229,7 @@ def _load():
             ('nv_harmonic_decay', C, [P, I]), ('nv_mode_ratio', C, [P, I]),
             ('nv_aftersound', None, [P, C, C, D]), ('nv_unison_voices', I, [P, C, I, C, D]),
             ('nv_radiation_gain', C, [P, C, C, I]), ('nv_hrtf_gain', C, [P, C, C]),
-            ('nv_chiff_harmonic_gain', C, [P, C]), ('nv_bloom_delay_for', C, [P, C]),
+            ('nv_chiff_harmonic_gain', C, [P, C]), ('nv_bloom_delay_for', C, [P, C]), ('nv_bloom_gain_for', C, [P, C]),
             ('nv_voice_vibrato', I, [P, C, I, D]), ('nv_string_partial', I, [P, C, C, I, C, D]),
             ('nv_partial_decay', None, [P, C, I, D]), ('nv_unison_partial', None, [C, C, C, C, D]),
             ('nv_random_check', None, [LL, I, D]),
@@ -371,7 +381,8 @@ _SNARE_OWN = dict(_KIT_OWN, harmonic_volume='NoisyPercussionMixin', _hf_rolloff=
 
 
 # ...AND A MEASURED MODE SET'S ON SYNTHPROPERTIES, a noise's (the clap: its
-# mode silent, its sound the strike's flam), a key's decay retargeted or not
+# mode silent, its sound the strike's flam; the cymbals and hats, with
+# CymbalProperties' decay and aftersound), a key's decay retargeted or not
 _MODAL_OWN = {'mode_ratio': 'SynthProperties', 'series_volume': 'SynthProperties',
               'harmonic_volume': 'NoisyPercussionMixin', '_hf_rolloff': 'NoisyPercussionMixin',
               '_band_trim': 'NoisyPercussionMixin', 'chiff_harmonic_gain': 'NoisyPercussionMixin',
@@ -385,20 +396,23 @@ def decay_target(cls):
     dd = getattr(hd, '__defaults__', None)
     if hd is None or not dd or len(dd) != 2 or not isinstance(dd[0], type):
         return None
-    return float(dd[1]) if _owner(dd[0], 'harmonic_decay') == 'SynthProperties' else None
+    return float(dd[1]) if _owner(dd[0], 'harmonic_decay') in ('SynthProperties', 'CymbalProperties') else None
 
 
 def _modal_drum(cls):
     import tonelib as T
-    # (the claps for now: the hats and the other washes are a family of their own)
-    if not issubclass(cls, T.HandClapProperties):
+    # (the claps, the cymbals and hats: the other washes are families of their own)
+    cym = issubclass(cls, T.CymbalProperties)
+    if not (issubclass(cls, T.HandClapProperties) or cym):
         return False
-    if any(_owner(cls, n) != o for n, o in _MODAL_OWN.items()):
+    own = dict(_MODAL_OWN, aftersound='CymbalProperties') if cym else _MODAL_OWN
+    if any(_owner(cls, n) != o for n, o in own.items()):
         return False
-    if _owner(cls, 'harmonic_decay') != 'SynthProperties' and decay_target(cls) is None:
+    if (_owner(cls, 'harmonic_decay') not in ('SynthProperties', 'CymbalProperties')
+            and decay_target(cls) is None):
         return False
     mg, mr = cls.mode_gains, cls.mode_ratios
-    return (mg is not None and mr is not None and len(mg) == len(mr) <= 16
+    return (mg is not None and mr is not None and len(mg) == len(mr) <= 320
             and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
             and not cls.mode_stroke_tilt and not cls.bore_corner_hz and not cls.harmonic_touch
             and not cls.pickup_points and len(cls.band_trim_db) <= 8 and len(cls.unison_detune or ()) <= 8)
@@ -526,8 +540,11 @@ def snapshot(props):
     s.decay_db, s.harmonic_decay_db = p.decay_db, p.harmonic_decay_db
     s.harmonic_decay_dampening, s.decay_register_factor = p.harmonic_decay_dampening, p.decay_register_factor
     for f in ('chiff_harmonic_power', 'bloom_seconds', 'bloom_center_hz', 'bloom_octaves', 'bloom_shape',
-              'exp_vibrato_cents', 'solo_vibrato_spread', 'solo_vibrato_hz', 'radiation_distance', 'hrtf_beta'):
+              'exp_vibrato_cents', 'solo_vibrato_spread', 'solo_vibrato_hz', 'radiation_distance', 'hrtf_beta',
+              'bloom_gain', 'bloom_swell', 'bloom_scatter'):
         setattr(s, f, getattr(p, f))
+    s.bloom_banded = int(bool(p.bloom_banded))
+    s.bloom_decay_dbs = getattr(p, 'bloom_decay_dbs', 0.0) or 0.0
     s.kind = kit_drum(type(p))
     if s.kind == 2:
         # the measured mode set: (ratio, linear gain), SynthProperties' decay,
@@ -536,9 +553,14 @@ def snapshot(props):
         s.n_unison = len(p.unison_detune or ())
         for i, x in enumerate(p.unison_detune or ()):
             s.unison_detune[i] = x
-        s.n_modes = len(p.mode_ratios)
-        for i, (r, g) in enumerate(zip(p.mode_ratios, p.mode_gains)):
-            s.modes[i][:] = [float(r), float(g), 0.0]
+        s.n_mm = len(p.mode_ratios)
+        s.mm_ratio[:s.n_mm] = [float(r) for r in p.mode_ratios]
+        s.mm_gain[:s.n_mm] = [float(g) for g in p.mode_gains]
+        if isinstance(p, T.CymbalProperties):
+            s.cymbal = 1
+            for f in ('ring_peak_hz', 'ring_decay_below', 'ring_decay_above', 'ring_decay_floor',
+                      'aftersound_fraction', 'aftersound_dbs', 'aftersound_ratio'):
+                setattr(s, f, getattr(p, f))
         dt = decay_target(type(p))
         s.retarget, s.decay_target = int(dt is not None), dt or 0.0
         s.noisy, s.hf_corner_hz, s.hf_order = 1, p.hf_corner_hz, p.hf_order
@@ -639,8 +661,8 @@ def init_supported(cls):
         if any(_owner(cls, n) != o for n, o in _BASE_OWN.items() if n != 'inharmonicity_coefficient_func'):
             return False
         c = cls
-        return not ((c.strike_noise_slope and c.chiff_volume) or (c.bloom_gain > 0.0 and c.bloom_gain_slope)
-                    or (c.strike_wobble_hz > 0.0 and c.strike_wobble_gain > 0.0) or c.strike_volume_trim_db)
+        # (the stroke's chiff, jitter, bloom, wobble and trim are the constructor's)
+        return len(c.strike_volume_trim_db or ()) <= 16
     if not issubclass(cls, T.GrandPianoProperties) or not T.hrtf:
         return False
     if any(k.__name__ not in _INIT_OWN for k in cls.__mro__ if '__init__' in k.__dict__):
@@ -652,7 +674,7 @@ def init_supported(cls):
     c = cls
     if (issubclass(cls, T.UprightPianoProperties) and len(cls.register_level_db or ()) > 32) or c.attack_time is None:
         return False
-    return not ((c.strike_noise_slope and c.chiff_volume) or (c.bloom_gain > 0.0 and c.bloom_gain_slope)
+    return not ((c.strike_noise_slope and c.chiff_volume)
                 or (c.strike_wobble_hz > 0.0 and c.strike_wobble_gain > 0.0) or c.strike_volume_trim_db)
 
 
@@ -700,6 +722,10 @@ def _class(cls):
         c.key_jitter = int(c.kind == 0)
         c.b_law = _b_law(cls) if c.kind == 0 else 0
         c.attack_time = cls.attack_time
+        vt = sorted(cls.strike_volume_trim_db or ())
+        c.n_vtrim = len(vt)
+        for i, (v, db) in enumerate(vt):
+            c.vtrim_v[i], c.vtrim_db[i] = float(v), float(db)
         if issubclass(cls, T.UprightPianoProperties):
             c.upright = 1
             c.hammer_soft_s, c.hammer_hard_s = cls.hammer_contact_s

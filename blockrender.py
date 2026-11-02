@@ -6142,7 +6142,8 @@ def _voice_native(props, cls, f0, pan, av, cv, eff, st, nt, seat=0.0):
                               ('right_incidence', P.right_incidence), ('left_hrtf_delay', P.left_hrtf_delay),
                               ('right_hrtf_delay', P.right_hrtf_delay), ('tension_bend', P.tension_bend),
                               ('inharmonicity_coefficient', P.inharmonicity_coefficient),
-                              ('attack_time', P.attack_time))
+                              ('attack_time', P.attack_time), ('chiff_volume', P.chiff_volume),
+                              ('sustain_jitter', P.sustain_jitter))
                if getattr(o, f) != py]
         if list(_rnd.getstate()[1]) != list(st.mt) + [st.i]:
             bad.append('stream')

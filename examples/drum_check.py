@@ -87,6 +87,7 @@ def main(argv):
                     same(('hrtf', key, m, inc), p.hrtf_gain(hf, inc), d.nv_hrtf_gain(sp, hf, inc))
                 same(('chiff', key, m), p.chiff_harmonic_gain(py[0]), d.nv_chiff_harmonic_gain(sp, py[0]))
                 same(('bloom', key, m), p.bloom_delay_for(hf), d.nv_bloom_delay_for(sp, hf))
+                same(('bloom gain', key, m), p.bloom_gain_for(hf), d.nv_bloom_gain_for(sp, hf))
         for rate in (0.0, 3.5, 40.0, 300.0):
             o2 = D4()
             d.nv_aftersound(sp, f0, rate, o2)
@@ -137,7 +138,8 @@ def main(argv):
                       ('right_hrtf_delay', p.right_hrtf_delay),
                       ('inharmonicity_coefficient', p.inharmonicity_coefficient),
                       ('B', p.inharmonicity_coefficient), ('tension_bend', p.tension_bend),
-                      ('attack_time', p.attack_time)):
+                      ('attack_time', p.attack_time), ('chiff_volume', p.chiff_volume),
+                      ('sustain_jitter', p.sustain_jitter)):
             same(('init', name, f), py, getattr(o, f))
         same(('init', name, 'stream'), list(after[:624]) + [after[624]], list(st.mt) + [st.i])
     for b in bad[:12]:

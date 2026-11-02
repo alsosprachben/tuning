@@ -96,6 +96,19 @@ typedef struct {
        classes: the decay scaled so its first mode's is decay_target) */
     int retarget;
     double decay_target;
+    /* ...its modes: (ratio, linear gain) */
+    int n_mm;
+    double mm_ratio[320], mm_gain[320];
+    /* CymbalProperties: decay by octaves from the ring's peak (ring_peak_hz
+       0: SynthProperties'), the aftersound's share and rate */
+    int cymbal;
+    double ring_peak_hz, ring_decay_below, ring_decay_above, ring_decay_floor;
+    double aftersound_fraction, aftersound_dbs, aftersound_ratio;
+    /* the bloom's late copy: its gain (the stroke's, bloom_gain_slope), only
+       in its band (bloom_banded), its swell, scatter and own fall */
+    double bloom_gain;
+    int bloom_banded;
+    double bloom_swell, bloom_scatter, bloom_decay_dbs;
 } VoiceSnap;
 
 typedef struct {
@@ -134,6 +147,15 @@ typedef struct {
        above); 1 a kit drum's (SynthProperties' alone: B the class's own);
        2 a measured mode set's (SynthProperties' alone too: the clap) */
     int kind;
+    double bloom_gain, bloom_gain_slope;
+    /* the stroke's chiff and jitter (chiff_volume, sustain_jitter scaled by
+       attack_volume ** strike_noise_slope), and the volume trimmed back on
+       the square law ((velocity, dB), ascending: strike_volume_trim_db) */
+    double chiff_volume, sustain_jitter, strike_noise_slope;
+    int n_vtrim;
+    double vtrim_v[16], vtrim_db[16];
+    /* the strike's wobble: a unison voice strike_wobble_hz off, its gain the stroke's */
+    double strike_wobble_hz, strike_wobble_gain, strike_wobble_slope;
 } VoiceInit;
 
 /* what the note setup reads of the voice besides its VoiceSnap */
@@ -142,6 +164,7 @@ typedef struct {
     double left_incidence, right_incidence, left_hrtf_delay, right_hrtf_delay;
     double inharmonicity_coefficient, B;    /* the class's scaled; and the law's at the note */
     double tension_bend, attack_time;
+    double chiff_volume, sustain_jitter;    /* the note's: the stroke's (strike_noise_slope) */
 } VoiceNote;
 
 typedef struct {
