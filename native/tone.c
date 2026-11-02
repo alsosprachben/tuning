@@ -241,6 +241,8 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
         double mph = 0.0;
         if (t->sps > 0.0)                           /* where the stick landed against its nodes */
             mph = PI * (double)(pyr_genrand(rs) >> 31) * t->sps;
+        if (v->n_mp)                                /* a mode's own phase (mode_phase) */
+            mph += (1 <= m && m <= v->n_mp) ? v->mode_phases[m - 1] : 0.0;
         if (t->ssc) {                               /* how hard this stroke caught the mode */
             double ssd = nv_stroke_scatter_db(v, m);
             if (ssd > 0.0) {
@@ -374,9 +376,23 @@ int nv_shake(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, cons
  * band's with the register's tilt (reg) and the calibration (scal), decaying
  * at slr from bon for slen samples. qacc and *azimuth as nv_tone's. Returns
  * the rows written, -1 if the store was too small. */
+int nv_strike_bal(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db,
+                  double reg, double bdb, double scal, double slr, double sfade, double slen, double bon,
+                  double pos_x, double bgl, double bgr, double *rows, int cap, double *qacc, double *azimuth);
+
 int nv_strike(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db,
               double reg, double bdb, double scal, double slr, double sfade, double slen, double bon,
               double pos_x, double *rows, int cap, double *qacc, double *azimuth)
+{
+    return nv_strike_bal(v, t, nb, hz, db, reg, bdb, scal, slr, sfade, slen, bon, pos_x, 1.0, 1.0, rows, cap,
+                         qacc, azimuth);
+}
+
+/* nv_strike, the burst at its place in the balance (bgl, bgr: a machine's
+ * stereo clap's sqrt 2 cos, sin of its angle; 1 and 1 centred) */
+int nv_strike_bal(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db,
+                  double reg, double bdb, double scal, double slr, double sfade, double slen, double bon,
+                  double pos_x, double bgl, double bgr, double *rows, int cap, double *qacc, double *azimuth)
 {
     Rows R = {rows, 0, cap};
     double VB[3] = {0.0, 5.5, 0.0};
@@ -387,9 +403,33 @@ int nv_strike(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, con
             continue;
         double gM = v->gain * pow(10.0, (db[i] + reg + bdb + scal) / 20.0);
         if (!emit(v, t, &R, qacc, azimuth, NULL, 0, 2 * PI * hf / sr,
-                  gM * nv_hrtf_gain(v, hf, t->li) * 1.0, gM * nv_hrtf_gain(v, hf, t->ri) * 1.0, gM, hf,
+                  gM * nv_hrtf_gain(v, hf, t->li) * bgl, gM * nv_hrtf_gain(v, hf, t->ri) * bgr, gM, hf,
                   bon, bon + slen, sfade, 0.01 * sr, t->chiff, slr, 0.0, 0.0, 0.0, 0.0, t->cc, t->crl,
                   0.0, t->csc, -1.0, 0.0, 0.0, 0.0, VB, pos_x, 0))
+            return -1;
+    }
+    return R.n;
+}
+
+/* blockrender._note_strike_noise's LAYERS (strike_noise_layers): one
+ * layer's table (hz[], db[] of nb) as noise rows from the note's onset, its
+ * level with the register's tilt (reg), rising over fade, falling at slr for
+ * len samples; the caller sets the noise width and no images. qacc and
+ * *azimuth as nv_tone's. Returns the rows written, -1 if the store was too small. */
+int nv_layer(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db, double reg,
+             double fade, double slr, double len, double pos_x, double *rows, int cap, double *qacc, double *azimuth)
+{
+    Rows R = {rows, 0, cap};
+    double VB[3] = {0.0, 5.5, 0.0};
+    double sr = t->sr;
+    for (int i = 0; i < nb; i++) {
+        double hf = hz[i];
+        if (hf >= 0.45 * sr)
+            continue;
+        double gM = v->gain * pow(10.0, (db[i] + reg) / 20.0);
+        if (!emit(v, t, &R, qacc, azimuth, NULL, 0, 2 * PI * hf / sr, gM * nv_hrtf_gain(v, hf, t->li),
+                  gM * nv_hrtf_gain(v, hf, t->ri), gM, hf, t->non, t->non + len, fade, 0.01 * sr, t->chiff, slr,
+                  0.0, 0.0, 0.0, 0.0, t->cc, t->crl, 0.0, t->csc, -1.0, 0.0, 0.0, 0.0, VB, pos_x, 0))
             return -1;
     }
     return R.n;

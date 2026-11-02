@@ -6511,7 +6511,8 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     npar = min(mh, int(getattr(P, 'phantom_max_order', 16)))
     _o = int(P.reflection_order) if em.REFLECT else 0
     ni = min(64, sum(6 * 5 ** k for k in range(_o)))      # the images there can be, at most
-    cap = (K.n_strike * max(1, K.n_flam) + 1) + 2 * K.n_nb * K.noise_rows + mh * 3 * (1 + ni) + 16 + max(1, npar * (npar + 1) // 2) * (1 + ni)
+    cap = ((K.n_strike * max(1, K.n_flam, K.n_ft) + 1) + sum(K.lay_n[:K.n_layer]) + 2 * K.n_nb * K.noise_rows
+           + mh * 3 * (1 + ni)) + 16 + max(1, npar * (npar + 1) // 2) * (1 + ni)
     rows = np.empty((cap, len(EMIT_COLS)))
     q0 = [v for pr in em._QACC for v in pr]
     qacc = np.array(q0, np.float64)

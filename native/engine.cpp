@@ -138,13 +138,29 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         double slr = log(10.0) / 20.0 * K->strike_noise_dbs;
         double sfade = pymax(1.0, K->strike_fade_s * SR);
         double slen = K->strike_len_s * SR;
+        if (K->gate_time > 0.0 && K->one_shot)    // ...closed by a gate with the note
+            slen = pymin(slen, pymax(1.0, noff - non));
         // A FLAM (strike_flam > 1): that many strikes, each at its own offset
         // and level, drawn from the note (random.Random of its onset, key and
         // channel), the first at the onset and the loudest at the table's
-        double boff[64], bdb[64];
+        double boff[64], bdb[64], bgl[64], bgr[64];
         int nb = 1;
         boff[0] = bdb[0] = 0.0;
-        if (K->n_flam > 1) {
+        for (int b = 0; b < 64; b++)
+            bgl[b] = bgr[b] = 1.0;
+        if (K->n_ft) {
+            // ...OR A MACHINE'S (strike_flam_times): its bursts where its
+            // envelope put them, each in its own place in the balance
+            nb = K->n_ft;
+            for (int b = 0; b < nb; b++) {
+                boff[b] = K->ft_t[b];
+                bdb[b] = K->ft_db[b];
+                if (K->ft_bal) {
+                    bgl[b] = sqrt(2.0) * cos(K->ft_c[b]);
+                    bgr[b] = sqrt(2.0) * sin(K->ft_c[b]);
+                }
+            }
+        } else if (K->n_flam > 1) {
             if (K->n_flam > 64)
                 return -2;
             PyRandom fr;
@@ -170,8 +186,23 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         out->n_knock = 0;
         for (int b = 0; b < nb; b++) {
             double bon = non + K->strike_at_s * SR + boff[b] * SR;
-            int k = nv_strike(&s, &tk, K->n_strike, K->strike_hz, K->strike_db, reg, bdb[b], K->strike_cal_db,
-                              slr, sfade, slen, bon, s.position_x, rows + NCOLS * total, cap - total, qacc, azimuth);
+            int k = nv_strike_bal(&s, &tk, K->n_strike, K->strike_hz, K->strike_db, reg, bdb[b], K->strike_cal_db,
+                                  slr, sfade, slen, bon, s.position_x, bgl[b], bgr[b], rows + NCOLS * total,
+                                  cap - total, qacc, azimuth);
+            if (k < 0)
+                return -1;
+            out->n_knock += k;
+            total += k;
+        }
+        // ...AND MORE STRUCK THINGS THAN ONE (strike_noise_layers): each its
+        // own rise, fall and length, from the note's onset
+        for (int l = 0; l < K->n_layer; l++) {
+            double llen = K->lay_len[l];
+            if (K->gate_time > 0.0 && K->one_shot)
+                llen = pymin(llen, pymax(1.0, noff - non) / SR);
+            int k = nv_layer(&s, &tk, K->lay_n[l], K->lay_hz[l], K->lay_db[l], reg, pymax(1.0, K->lay_rise[l] * SR),
+                             log(10.0) / 20.0 * K->lay_dbs[l], llen * SR, s.position_x, rows + NCOLS * total,
+                             cap - total, qacc, azimuth);
             if (k < 0)
                 return -1;
             out->n_knock += k;

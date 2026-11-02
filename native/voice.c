@@ -88,7 +88,8 @@ static double band_trim(const VoiceSnap *v, int harmonic)
  * MeasuredStrokeProperties' (the modes', the rest's) */
 double nv_partial_jitter(const VoiceSnap *v, int harmonic)
 {
-    return harmonic > v->n_modes ? v->wire_jitter : v->head_jitter;
+    int from = v->jit_from ? v->jit_from : v->n_modes + 1;     /* CuicaProperties: rough_from */
+    return harmonic >= from ? v->wire_jitter : v->head_jitter;
 }
 
 /* MeasuredStrokeProperties.stroke_scatter_db: the weaker modes' spread,
@@ -106,6 +107,8 @@ double nv_stroke_scatter_db(const VoiceSnap *v, int harmonic)
 
 double nv_mode_ratio(const VoiceSnap *v, int m)
 {
+    if (v->kind == 2 && v->mm_harm)             /* SynthProperties.mode_ratio: mode_ratios None */
+        return (double)m;
     if (v->kind == 2)                           /* SynthProperties.mode_ratio: mode_ratios */
         return 1 <= m && m <= v->n_mm ? v->mm_ratio[m - 1] : 0.0;
     if (v->kind == 1) {                         /* KitDrumProperties.mode_ratio */
@@ -220,6 +223,8 @@ double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
  * by octaves from the ring's peak */
 static double mode_decay(const VoiceSnap *v, int harmonic)
 {
+    if (v->n_md && 1 <= harmonic && harmonic <= v->n_md)   /* ModeDecays */
+        return v->mode_decays[harmonic - 1] * v->decay_register_factor;
     if (v->cymbal && v->ring_peak_hz > 0.0) {
         double f = v->frequency_x * pow(2.0, v->octave_position) * nv_mode_ratio(v, harmonic);
         if (f > 0.0) {
@@ -497,7 +502,14 @@ void nv_partial_decay(const VoiceSnap *v, double f0, int m, double *out)
     double dbps = nv_harmonic_decay(v, m);
     double logr = dbps > 0 ? log(db_ratio(dbps)) : 0.0;
     double a[2];
-    if (v->kind == 1 && v->slow_max_hz != 0.0 && f0 * nv_mode_ratio(v, m) > v->slow_max_hz) {
+    if (v->n_ma) {                              /* TR808Properties.aftersound_partial */
+        a[0] = 0.0;
+        a[1] = dbps;
+        if (1 <= m && m <= v->n_ma && v->mode_after[m - 1][0] > 0.0) {
+            a[0] = v->mode_after[m - 1][0];
+            a[1] = v->mode_after[m - 1][1] * v->decay_register_factor;
+        }
+    } else if (v->kind == 1 && v->slow_max_hz != 0.0 && f0 * nv_mode_ratio(v, m) > v->slow_max_hz) {
         a[0] = 0.0;                             /* aftersound_partial: no remainder up here */
         a[1] = dbps;
     } else {

@@ -103,10 +103,13 @@ typedef struct {
     int measured;
     double ring_scale, mode_scatter_db;
     int jit_sus;
+    int jit_from;       /* partial_jitter: the rest's from this harmonic (0: past the modes) */
     int tamb;           /* TambourineProperties: every jingle mode scattered alike, unclamped */
     int retarget;
     double decay_target;
-    /* ...its modes: (ratio, linear gain) */
+    /* ...its modes: (ratio, linear gain); mm_harm, a gain table on the
+       harmonic series (mode_ratios None: partial m at m) */
+    int mm_harm;
     int n_mm;
     double mm_ratio[320], mm_gain[320];
     /* CymbalProperties: decay by octaves from the ring's peak (ring_peak_hz
@@ -131,6 +134,11 @@ typedef struct {
     int n_bar;
     int bar_n[16];
     double bar_g[16];
+    /* ModeDecays: each mode's own decay (x decay_register_factor);
+       TR808Properties: each mode's aftersound (share, its dB/s; aftersound_
+       partial) and where it starts (mode_phase, radians) */
+    int n_md, n_ma, n_mp;
+    double mode_decays[32], mode_after[32][2], mode_phases[32];
 } VoiceSnap;
 
 typedef struct {
@@ -224,6 +232,11 @@ int nv_shake(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, cons
              double held, double shake_min_s, double shake_frac, double shake_xfade_s, double rise_s,
              double settle_db, double settle_s, double pos_x, double *rows, int cap, double *qacc,
              double *azimuth);
+int nv_strike_bal(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db,
+                  double reg, double bdb, double scal, double slr, double sfade, double slen, double bon,
+                  double pos_x, double bgl, double bgr, double *rows, int cap, double *qacc, double *azimuth);
+int nv_layer(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db, double reg,
+             double fade, double slr, double len, double pos_x, double *rows, int cap, double *qacc, double *azimuth);
 int nv_tone(const VoiceSnap *v, const ToneIn *t,
             int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
             double *rows, int cap, double *transverse, int *ntrans, double *qacc, double *azimuth);
@@ -305,6 +318,15 @@ typedef struct {
     // within flam_s and flam_db under the loudest
     int n_flam;
     double flam_s, flam_db;
+    // ...or a machine's (strike_flam_times: each burst's offset s, dB, and
+    // place in the balance -- the cos/sin of its angle -- where ft_bal)
+    int n_ft, ft_bal;
+    double ft_t[16], ft_db[16], ft_c[16];
+    // MORE STRUCK THINGS THAN ONE (strike_noise_layers): each its table, rise
+    // s, dB/s and length s, from the note's onset
+    int n_layer;
+    int lay_n[2];
+    double lay_hz[2][32], lay_db[2][32], lay_rise[2], lay_dbs[2], lay_len[2];
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
