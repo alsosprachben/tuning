@@ -321,6 +321,15 @@ struct Cache {
             }
             T.dur = d;
         }
+        // A HELD TEXTURE IS A HELD NOTE (live's min_hold): its rows run until
+        // the key is up, but those that decay on their own; its gate the least
+        if (T.oneshot && nc->held_texture && nc->gate_time > 0.0) {
+            for (long long r = 0; r < P; r++)
+                if (!((double)T.f4[6][r] > 0 && T.f4[9][r] <= 0 && T.i4[0][r] < 0))
+                    T.rof[r] = -1;
+            T.oneshot = false;
+            T.min_hold = (long long)nearbyint(nc->gate_time * SR);
+        }
         return true;
     }
 };

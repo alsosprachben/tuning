@@ -54,7 +54,7 @@ class VoiceSnap(ctypes.Structure):
                 ('board_kind', I), ('board_low_order', C), ('bridge_gain', C), ('bridge_corner_hz', C),
                 ('bridge_order', C), ('bridge_force_power', C),
                 ('kind', I), ('unison_gain', C), ('n_unison', I), ('unison_detune', C * 8),
-                ('n_modes', I), ('modes', (C * 3) * 96), ('n_click', I), ('click_per_band', I),
+                ('n_modes', I), ('modes', (C * 3) * 128), ('n_click', I), ('click_per_band', I),
                 ('click_db', C * 32), ('click_hz0', C), ('click_cal_db', C), ('click_scatter', C),
                 ('click_dbs', C), ('click_stroke_slope', C), ('stroke_ref_db', C),
                 ('slow_share', C), ('slow_dbs', C), ('slow_max_hz', C),
@@ -157,7 +157,8 @@ class NoteClass(ctypes.Structure):
                 + [('n_flam', I), ('flam_s', C), ('flam_db', C)]
                 + [('n_ft', I), ('ft_bal', I), ('ft_t', C * 64), ('ft_db', C * 64), ('ft_c', C * 64)]
                 + [('n_layer', I), ('lay_n', I * 32), ('lay_hz', (C * 32) * 32), ('lay_db', (C * 32) * 32),
-                   ('lay_rise', C * 32), ('lay_dbs', C * 32), ('lay_len', C * 32), ('played_backwards', I)])
+                   ('lay_rise', C * 32), ('lay_dbs', C * 32), ('lay_len', C * 32), ('played_backwards', I)]
+                + [('n_bn', I), ('bn_rows', I), ('bn_fade_s', C), ('bn_hz', C * 64), ('bn_db', C * 64)])
 
 
 class NoteIn(ctypes.Structure):
@@ -453,6 +454,23 @@ _JINGLE_OWN = {'mode_ratio': 'SynthProperties', 'series_volume': 'SynthPropertie
                'mode_phase': 'TR808Properties', 'bore_gain': 'SynthProperties'}
 
 
+def breath_noise(cls):
+    """Whether native/tone.c's nv_breath plays cls's breath (NoteClass.n_bn):
+    a noise voice whose sound is its table alone (breath_noise_db; the scratch,
+    the weather) -- its tone silent, so its rows keep their order, and none
+    of the table's laws (a low register, an octave slope, a wobble, a slur's
+    swell) nor the other noises after it (grains, events, a pulse, a ring)."""
+    return (bool(getattr(cls, 'breath_noise_db', ())) and len(cls.breath_noise_db) <= 64
+            and 1 <= int(getattr(cls, 'breath_noise_rows', 1)) <= 8
+            and all(g == 0.0 for g in (cls.mode_gains or (1.0,)))
+            and _owner(cls, 'breath_noise_at') == 'SynthProperties'
+            and _owner(cls, '_breath_noise_rows') == 'SynthProperties'
+            and not getattr(cls, 'breath_noise_low_db', None) and not getattr(cls, 'breath_noise_octave_db', 0.0)
+            and not getattr(cls, 'breath_noise_wobble_db', 0.0) and not getattr(cls, 'breath_noise_slur', False)
+            and not any(getattr(cls, a, None) for a in ('grains', 'noise_events', 'pulse', 'ring_db',
+                                                         'struck_layer', 'touch_leak_db')))
+
+
 def _modal_drum(cls):
     import tonelib as T
     gam = issubclass(cls, T.ModeDecays) and issubclass(cls, (T.MetalPercussionProperties, T.StruckBarProperties))
@@ -490,8 +508,10 @@ def _modal_drum(cls):
     # rattles, a tuned bar's crotales: the other washes are families of their own)
     cym = issubclass(cls, T.CymbalProperties)
     bar = issubclass(cls, T.TunedBarProperties)
+    if issubclass(cls, T.BreathNoiseProperties) and not breath_noise(cls):
+        return False
     if not (issubclass(cls, T.HandClapProperties) or cym or issubclass(cls, T.WoodPercussionProperties)
-            or issubclass(cls, T.SnareDrumProperties)
+            or issubclass(cls, T.SnareDrumProperties) or issubclass(cls, T.BreathNoiseProperties)
             or issubclass(cls, T.TriangleProperties) or issubclass(cls, T.RattleProperties) or bar):
         return False
     own = dict(_MODAL_OWN, aftersound='CymbalProperties') if cym else _MODAL_OWN
@@ -575,7 +595,7 @@ def kit_drum(cls):
         own = dict(_KIT_OWN, chiff_harmonic_gain='SynthProperties')
     if any(_owner(cls, n) != o for n, o in own.items()):
         return 0
-    return int(len(cls.DRUM_MODES) <= 96 and len(cls.CLICK_DB) <= 32 and len(cls.unison_detune or ()) <= 8
+    return int(len(cls.DRUM_MODES) <= 128 and len(cls.CLICK_DB) <= 32 and len(cls.unison_detune or ()) <= 8
             and not cls.bore_corner_hz and not cls.harmonic_touch and not cls.pickup_points)
 
 
@@ -1182,6 +1202,11 @@ def note_class(cls):
         k.ssc = int(bool(getattr(cls, 'stroke_scatter', False)))
         k.gate_time = float(getattr(cls, 'gate_time', None) or 0.0)
         k.played_backwards = int(bool(getattr(cls, 'played_backwards', False)))
+        if breath_noise(cls):
+            k.n_bn, k.bn_rows, k.bn_fade_s = (len(cls.breath_noise_db), int(getattr(cls, 'breath_noise_rows', 1)),
+                                               float(cls.breath_noise_fade_s))
+            for i, (hz, db) in enumerate(cls.breath_noise_db):
+                k.bn_hz[i], k.bn_db[i] = float(hz), float(db)
         if kit_drum(cls) == 3:
             k.shake, k.n_nb, k.noise_rows = 1, len(cls.noise_bands), int(cls.noise_rows)
             for i, (f, db) in enumerate(cls.noise_bands):

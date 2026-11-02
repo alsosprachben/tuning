@@ -6515,6 +6515,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     _o = int(P.reflection_order) if em.REFLECT else 0
     ni = min(64, sum(6 * 5 ** k for k in range(_o)))      # the images there can be, at most
     cap = ((K.n_strike * max(1, K.n_flam, K.n_ft) + 1) + sum(K.lay_n[:K.n_layer]) + 2 * K.n_nb * K.noise_rows
+           + K.n_bn * K.bn_rows
            + mh * 3 * (1 + ni)) + 16 + max(1, npar * (npar + 1) // 2) * (1 + ni)
     if K.played_backwards:
         cap *= 4                            # (a row reversed: its three decays and the chiff's swell)
@@ -6576,6 +6577,12 @@ def _note_native_apply(em, props, nt, A, wn, _VB):
     if out.n_tone:
         em.radius = None
         em.pos_x = getattr(props, 'position_x', 0.0)
+
+
+def _NV_breath(cls):
+    """Whether the engine's note played cls's breath itself (native.breath_noise)."""
+    import native as _NV
+    return _NV.breath_noise(cls)
 
 
 def _note_native_check(em, nt, A, wn, B, TBN):
@@ -8854,7 +8861,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
                              _gM * props.hrtf_gain(_hf, nt.ri), _gM, _hf, nt.non, max(nt.noff, nt.non + 0.5 * SR),
                              nt.fade, nt.rel, nt.chiff, _llr, 0.0, 0.0, 0.0, 0.0,
                              nt.cc, nt.crl, 0.0, nt.csc, -1, 0, ph0=_lrng.random() * 2.0 * math.pi)
-        _note_breath_noise(em, props, nt, _CBW, _VB, _slurred, bbrow_of, emit_partial)
+        if not (_wn is not None and NATIVE_TONE == 'on' and _NV_breath(nt.pc)):
+            _note_breath_noise(em, props, nt, _CBW, _VB, _slurred, bbrow_of, emit_partial)
         _note_grains(em, props, nt, A, _CBW, _GL, _GRAIN_ROWS, _VB, bbrow_of, emit_partial, random)
         if _wn is not None and NATIVE_TONE == 'on' and getattr(props, 'shake_noise', False):
             stops = ()          # (the engine's note shook: its rows are in)

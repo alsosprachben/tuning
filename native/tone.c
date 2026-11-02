@@ -490,6 +490,32 @@ int nv_layer(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, cons
     return R.n;
 }
 
+/* blockrender._note_breath_noise: the voice's own noise (breath_noise_db),
+ * held for the note -- each band k noise rows spread across it, sharing its
+ * level -- swelling in over fade, released with the note; no images, the
+ * emitter as the knock leaves it. Returns the rows written, -1 if the store
+ * was too small. */
+int nv_breath(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db, int k, double fade,
+              double pos_x, double *rows, int cap, double *qacc, double *azimuth)
+{
+    Rows R = {rows, 0, cap};
+    double VB[3] = {0.0, 5.5, 0.0};
+    double sr = t->sr;
+    for (int i = 0; i < nb; i++)
+        for (int j = 0; j < k; j++) {
+            double hf = hz[i] * pow(2.0, ((double)j - 0.5 * (k - 1)) / (3.0 * k));
+            double d = db[i] - 10.0 * log10((double)k);
+            if (hf >= 0.45 * sr)
+                continue;
+            double gM = v->gain * pow(10.0, d / 20.0);
+            if (!emit(v, t, &R, qacc, azimuth, NULL, 0, 2 * PI * hf / sr, gM * nv_hrtf_gain(v, hf, t->li),
+                      gM * nv_hrtf_gain(v, hf, t->ri), gM, hf, t->non, t->noff, fade, t->rel, t->chiff, 0.0,
+                      0.0, 0.0, 1.0, 0.0, t->cc, t->crl, 0.0, t->csc, -1.0, 0.0, 0.0, 0.0, VB, pos_x, 0))
+                return -1;
+        }
+    return R.n;
+}
+
 /* blockrender._note_phantoms: the wound bass's phantom partials -- f_i + f_j
  * of the note's transverse partials (trans: ntrans of (hz, raw gain, dB/s),
  * nv_tone's), gain coupling v_i v_j (twice for i != j) times the radiation,

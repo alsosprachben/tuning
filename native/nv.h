@@ -75,7 +75,7 @@ typedef struct {
     /* KitDrumProperties: DRUM_MODES (ratio, dB under the first, amplitude dB/s);
        the click's CLICK_DB bands of click_per_band partials from CLICK_HZ0 */
     int n_modes;
-    double modes[96][3];
+    double modes[128][3];
     int n_click, click_per_band;
     double click_db[32];
     double click_hz0, click_cal_db, click_scatter, click_dbs, click_stroke_slope, stroke_ref_db;
@@ -250,6 +250,8 @@ int nv_strike_bal(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz,
                   double pos_x, double bgl, double bgr, double *rows, int cap, double *qacc, double *azimuth);
 int nv_layer(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db, double reg,
              double fade, double slr, double len, double pos_x, double *rows, int cap, double *qacc, double *azimuth);
+int nv_breath(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db, int k, double fade,
+              double pos_x, double *rows, int cap, double *qacc, double *azimuth);
 int nv_tone(const VoiceSnap *v, const ToneIn *t,
             int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
             double *rows, int cap, double *transverse, int *ntrans, double *qacc, double *azimuth);
@@ -341,6 +343,12 @@ typedef struct {
     int lay_n[32];
     double lay_hz[32][32], lay_db[32][32], lay_rise[32], lay_dbs[32], lay_len[32];
     int played_backwards;               // a tape played backwards: every row reversed (ToneIn.rev)
+    // THE BREATH (breath_noise_db, as breath_noise_at gives it: no low
+    // register, no octave law): its bands (Hz, dB), bn_rows noise rows a
+    // band, held for the note and swelling in over bn_fade_s
+    int n_bn, bn_rows;
+    double bn_fade_s;
+    double bn_hz[64], bn_db[64];
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.

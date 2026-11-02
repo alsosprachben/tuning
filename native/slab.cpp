@@ -573,6 +573,7 @@ struct Piano {
     double cgain[16];
     bool cgain_set[16];
     std::set<std::pair<int, int>> down, pedalled;
+    std::map<Key, long long> tex_on;    // a held texture's key: the sample it may stop (live.tex_on)
     std::vector<Ev> events;
     std::map<std::pair<int, int>, int> key_vel;     // (ch, note) -> the strike's velocity
     double pressure[16] = {};                       // channel aftertouch, 0..1
@@ -825,6 +826,8 @@ struct Piano {
         }
         if (!S.stamp_t(*T, key, n0, scale, ch))
             return;                         // the slab full: this note does not sound
+        if (T->min_hold)
+            tex_on[key] = n0 + T->min_hold; // a held texture: the least it plays
         long lj = S.live_find(key);
         std::vector<long> slots = lj >= 0 ? S.live[lj].second : std::vector<long>();
         if (cpan[ch] != 64 && !slots.empty())
@@ -925,7 +928,14 @@ struct Piano {
     {
         int pi = patch_for(ch, note);
         Use u(*this, pi < 0 ? cur : pi);
-        S.release(Key(pid, ch, note, -1), n0);
+        // (a held texture lets go no sooner than its gate)
+        long long at = n0;
+        auto tx = tex_on.find(Key(pid, ch, note, -1));
+        if (tx != tex_on.end()) {
+            at = std::max(n0, tx->second);
+            tex_on.erase(tx);
+        }
+        S.release(Key(pid, ch, note, -1), at);
         if (reg_on && cur_reg) {
             S.release(Key(pid, ch, note, REG_FORCED), n0);
             reg_damper(ch, n0, note, false);

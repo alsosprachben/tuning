@@ -26,6 +26,10 @@ struct Template {
     // a stroked key's rows each where its stroke falls (sof)
     bool oneshot = false;
     std::vector<long long> rof, sof;
+    // A HELD TEXTURE (held_texture, with a gate: the jet, the wind): a held
+    // note after all -- its rows to the key-up but those that decay on their
+    // own (rof) -- the gate the least it plays (min_hold samples; 0 none)
+    long long min_hold = 0;
 };
 
 }  // namespace live

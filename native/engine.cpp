@@ -214,6 +214,20 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         no_refl = 0;
     }
 
+    // THE BREATH (_note_breath_noise): the voice's noise held for the note
+    if (K->n_bn) {
+        ToneIn tb_ = t;
+        tb_.gain = s.gain; tb_.B = 0.0; tb_.sjit = 0.0; tb_.reflect = 0;
+        tb_.cbw0 = -0.25; tb_.cbw1 = 0.0;
+        int k = nv_breath(&s, &tb_, K->n_bn, K->bn_hz, K->bn_db, K->bn_rows, pymax(1.0, K->bn_fade_s * SR),
+                          s.position_x, rows + NCOLS * total, cap - total, qacc, azimuth);
+        if (k < 0)
+            return -1;
+        out->n_knock += k;
+        total += k;
+        no_refl = 0;
+    }
+
     // A SHAKE AS SHAPED NOISE (_note_shake_noise): in place of the tone
     if (K->shake) {
         ToneIn ts = t;
