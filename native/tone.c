@@ -60,10 +60,10 @@ static double *row_new(Rows *R)
     return R->rows + NCOLS * (R->n++);
 }
 
-/* _Emitter.emit_partial for a direct partial of this note (no reverse, no
- * fold, no hammer-on, no compressor, no GS EQ, the source at its own
- * distance), and its images. Returns 0 if the row store is full. */
-static int emit(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, double *azimuth,
+/* _Emitter.emit_partial for a direct partial of this note (no fold, no
+ * hammer-on, no compressor, no GS EQ, the source at its own distance), and
+ * its images. Returns 0 if the row store is full. */
+static int emit_fwd(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, double *azimuth,
                 const double *terms, int nterms,
                 double om, double ampL, double ampR, double ampM, double nomf, double non, double noff,
                 double fa, double re, double ch, double logr, double logrA, double aft, double sus,
@@ -150,6 +150,61 @@ static int emit(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, doub
             q[c] = irow[c];
     }
     *azimuth = direct_az;
+    return 1;
+}
+
+/* ...AND A TAPE PLAYED BACKWARDS (t->rev: _Emitter._reverse_partial): the
+ * partial of the forward note, time-reversed -- each of its decays a growth
+ * at its own rate, begun REV_FLOOR under its end (or at the onset, faded
+ * in), ending where the forward one began, mirrored about the arrival; its
+ * phase mirrored; the attack's chiff a swell of noise just before the
+ * arrival (no images). Each row a forward one, with its images. */
+static int emit(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, double *azimuth,
+                const double *terms, int nterms,
+                double om, double ampL, double ampR, double ampM, double nomf, double non, double noff,
+                double fa, double re, double ch, double logr, double logrA, double aft, double sus,
+                double cv, double cc, double crl, double sj, double csc, double gr, double cr, double ph0,
+                double player, const double *VB, double pos_x, int late)
+{
+    if (!t->rev)
+        return emit_fwd(v, t, R, qacc, azimuth, terms, nterms, om, ampL, ampR, ampM, nomf, non, noff, fa, re,
+                        ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0, player, VB, pos_x, late);
+    const double SR = t->sr, n0 = t->rev_n0, arr = t->rev_arr;
+    double end = arr - (non - n0);
+    if (end <= n0)
+        return 1;
+    double out = pymax(fa, 0.001 * SR);        /* the forward fade-in, now the cut-off */
+    out = pymin(out, 0.5 * (end - n0));
+    const double w3[3] = {(1.0 - sus) * (1.0 - aft), (1.0 - sus) * aft, sus};
+    const double lr3[3] = {logr, logrA, 0.0};
+    for (int i = 0; i < 3; i++) {
+        double w = w3[i], lr = lr3[i];
+        if (w <= 0.0)
+            continue;
+        double span = lr > 0.0 ? log(1e5) / lr * SR : end - n0;
+        double start = pymax(n0, end - span);
+        double g = w * exp(-lr * (end - start) / SR);
+        double fin = start <= n0 ? 0.01 * SR : 0.001 * SR;
+        double o_ = pymin(out, pymax(1.0, end - start));
+        if (!emit_fwd(v, t, R, qacc, azimuth, terms, nterms, om, ampL * g, ampR * g, ampM * g, nomf, start,
+                      pymax(start + 1.0, end - o_), fin, o_, 1.0, -lr, 0.0, 0.0, 0.0, cv, cc, 0.0, sj, csc, gr, cr,
+                      -ph0 - om * t->jitter_scale * (end - start), player, VB, pos_x, late))
+            return 0;
+    }
+    double jp = cv * csc * 0.25;                /* the hump's peak, r(1-r) at r = 1/2 */
+    if (jp > 0.0 && ch > 0.0) {
+        ToneIn th = *t;
+        th.cbw0 = -pymax(fabs(t->cbw0), 1e-3);
+        th.cbw1 = 0.0;
+        double start = pymax(n0, end - ch);
+        double pk = end - ch / 3.0;             /* the forward hump peaks a third in */
+        double g = jp * (1.0 - sus) * (1.0 - aft) * exp(-logr * (ch / 3.0) / SR);
+        if (!emit_fwd(v, &th, R, qacc, azimuth, NULL, 0, om, ampL * g, ampR * g, ampM * g, nomf, start,
+                      pymax(start + 1.0, pk), pymax(1.0, pk - start), pymax(1.0, end - pk), ch, 0.0, 0.0, 0.0,
+                      1.0, 0.0, cc, crl, 0.0, csc, gr, cr, -ph0 - om * t->jitter_scale * (end - start), player, VB,
+                      pos_x, late))
+            return 0;
+    }
     return 1;
 }
 

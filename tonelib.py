@@ -11856,6 +11856,7 @@ class RandomStrike:
                          channel_volume, effort + de, *a, **kw)
         self.pitch_jitter = (1.0 + self.pitch_jitter) * 2.0 ** (dc / 1200.0) - 1.0
         self.attack_jitter = self.attack_jitter + dt
+        self.rnd_draws = (dl, de, dc, dt)       # (native/voice.c's, drawn here)
 
 
 class KitDrumProperties(MembraneDrumProperties):

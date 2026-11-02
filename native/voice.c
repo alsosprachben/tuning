@@ -617,6 +617,10 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
         pyr_seed(&scratch, 0);
         rs = &scratch;
     }
+    if (c->rnd) {                       /* RandomStrike.__init__: the strike's level and effort */
+        attack_volume = attack_volume * pow(10.0, c->rnd_draws[0] / 20.0);
+        effort = effort + c->rnd_draws[1];
+    }
     *s = *tmpl;
     double eff = effort != 0.0 ? effort : c->effort;
     s->attack_volume = attack_volume;
@@ -729,6 +733,10 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
         /* a kit drum, a mode set: SynthProperties' constructor and no more;
            its B the class's coefficient (no law: inharmonicity_dynamic off) */
         o->B = o->inharmonicity_coefficient;
+        if (c->rnd) {                   /* ...and RandomStrike's: its pitch and lateness */
+            o->pitch_jitter = (1.0 + o->pitch_jitter) * pow(2.0, c->rnd_draws[2] / 1200.0) - 1.0;
+            o->attack_jitter = o->attack_jitter + c->rnd_draws[3];
+        }
         return;
     }
     /* GrandPianoProperties: the key's own strings and pitch error */

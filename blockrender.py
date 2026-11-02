@@ -6130,7 +6130,8 @@ def _voice_native(props, cls, f0, pan, av, cv, eff, st, nt, seat=0.0):
     after it compared with the C's."""
     import native as _NV
     import random as _rnd
-    got = _NV.voice(cls, f0, pan, av, cv, eff, state=st if NATIVE_TONE == 'check' else None, seat=seat)
+    got = _NV.voice(cls, f0, pan, av, cv, eff, state=st if NATIVE_TONE == 'check' else None, seat=seat,
+                    rnd=getattr(props, 'rnd_draws', None))
     if got is None:
         return None
     VOICE_STATS[0] += 1
@@ -6180,7 +6181,7 @@ def _voice_report(bad, nt):
                 '' if nt is None else ' (ch %d note %d at %.3f s)' % (nt.ch, nt.note, nt.on), ', '.join(bad)))
 
 
-def _native_ready(em, props):
+def _native_ready(em, props, reverse_ok=False):
     """(library, the voice's VoiceSnap) where the C can emit this voice's rows
     as emit_partial would -- a supported voice, and none of the emitter's
     extras in play (reverse, gong fold, hammer-on, compressor, late copy,
@@ -6190,7 +6191,7 @@ def _native_ready(em, props):
     P = props
     if d is None or getattr(P, 'directivity_radius', 0.0) > 0.0:
         return None
-    if (em.reverse is not None or em.fold is not None or em.fold_in or em.hammer_on > 0.0
+    if ((em.reverse is not None and not reverse_ok) or em.fold is not None or em.fold_in or em.hammer_on > 0.0
             or em._EFXN[0] is not None or em.late_copy or em.ring_rows or em.radius is not None):
         return None
     _part = (int(em.channel) % _GSX.VIRT) % _GSX.TONE_SEG
@@ -6474,7 +6475,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
         return None
     if T.choir_of(P, "_") or T.rank_detune_cents(P, "_", nt.note) or em.pos_x != getattr(P, 'position_x', 0.0):
         return None
-    if _native_ready(em, P) is None:
+    if _native_ready(em, P, reverse_ok=True) is None:      # (the engine plays a tape backwards)
         return None
     if em.REFLECT and P.reflection_order and NATIVE_TONE == 'check':
         # the engine makes the room's images itself (nv_images): here, Python's beside them
@@ -6489,6 +6490,8 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.on, n.off, n.seat = nt.on, nt.off, seat
     n.ch, n.note = nt.ch, nt.note           # (a flam's draw is the note's)
     n.held = held                           # (a shake's share of the key)
+    if hasattr(P, 'rnd_draws'):
+        n.rnd_draws[:] = [float(x) for x in P.rnd_draws]       # (an [RND] strike's)
     n.has_nx, n.nx = int(nx is not None), (nx if nx is not None else 0.0)
     n.mcut, n.slurred, n.slur_out = int(bool(mcut)), int(bool(slurred)), int(bool(slur_out))
     lo, hi = getattr(nt.pc, 'string_detune_range', (0.0, 0.0))
@@ -6513,6 +6516,8 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     ni = min(64, sum(6 * 5 ** k for k in range(_o)))      # the images there can be, at most
     cap = ((K.n_strike * max(1, K.n_flam, K.n_ft) + 1) + sum(K.lay_n[:K.n_layer]) + 2 * K.n_nb * K.noise_rows
            + mh * 3 * (1 + ni)) + 16 + max(1, npar * (npar + 1) // 2) * (1 + ni)
+    if K.played_backwards:
+        cap *= 4                            # (a row reversed: its three decays and the chiff's swell)
     rows = np.empty((cap, len(EMIT_COLS)))
     q0 = [v for pr in em._QACC for v in pr]
     qacc = np.array(q0, np.float64)

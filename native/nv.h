@@ -190,6 +190,12 @@ typedef struct {
     double vtrim_v[16], vtrim_db[16];
     /* the strike's wobble: a unison voice strike_wobble_hz off, its gain the stroke's */
     double strike_wobble_hz, strike_wobble_gain, strike_wobble_slope;
+    /* [RND] (tonelib.RandomStrike): each strike varied by its own stream's
+       four draws -- level dB, effort dB, cents, seconds late -- in
+       rnd_draws, the note's (its sds the class's, the caller draws) */
+    int rnd;
+    double rnd_level_db, rnd_effort_db, rnd_cents, rnd_timing_s;
+    double rnd_draws[4];
 } VoiceInit;
 
 /* what the note setup reads of the voice besides its VoiceSnap */
@@ -222,6 +228,10 @@ typedef struct {
     double sps;
     double dur;
     int ssc;            /* each mode's level scattered (stroke_scatter: random.gauss) */         /* the note's length, s: the bloom's swell is held within it */
+    /* a tape played backwards (played_backwards): every row reversed, from
+       the strike at rev_n0 to its arrival at rev_arr (_Emitter.reverse) */
+    int rev;
+    double rev_n0, rev_arr;
 } ToneIn;
 
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
@@ -330,6 +340,7 @@ typedef struct {
     int n_layer;
     int lay_n[32];
     double lay_hz[32][32], lay_db[32][32], lay_rise[32], lay_dbs[32], lay_len[32];
+    int played_backwards;               // a tape played backwards: every row reversed (ToneIn.rev)
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -354,6 +365,7 @@ typedef struct {
     int song_index;                     // ...as its note there (the song's notes, in order)
     double seat;                        // a seat in the instrument (a kit's drum): its pan there, 0 none
     double held;                        // how long its key was held, s (a shake's share of it)
+    double rnd_draws[4];                // an [RND] voice's strike (VoiceInit.rnd_draws)
 } NoteIn;
 
 // What the note's setup worked out, beside its rows.

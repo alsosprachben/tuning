@@ -83,7 +83,8 @@ class ToneIn(ctypes.Structure):
                 + [('tb', C * 3), ('gl', C * 3), ('sv', C * 2)]
                 + [(f, C) for f in ('sound_vib_depth_cents', 'vibrato_delay', 'br', 'fx', 'mk', 'fm_omega',
                                     'fm_phase', 'listener_distance', 'head_radius', 'pan_angle')]
-                + [('room_bands', C * 9), ('pjit', I), ('sps', C), ('dur', C), ('ssc', I)])
+                + [('room_bands', C * 9), ('pjit', I), ('sps', C), ('dur', C), ('ssc', I)]
+                + [('rev', I), ('rev_n0', C), ('rev_arr', C)])
 
 
 class VoiceInit(ctypes.Structure):
@@ -112,7 +113,9 @@ class VoiceInit(ctypes.Structure):
                 + [('bloom_gain', C), ('bloom_gain_slope', C)]
                 + [('chiff_volume', C), ('sustain_jitter', C), ('strike_noise_slope', C), ('n_vtrim', I),
                    ('vtrim_v', C * 16), ('vtrim_db', C * 16)]
-                + [('strike_wobble_hz', C), ('strike_wobble_gain', C), ('strike_wobble_slope', C)])
+                + [('strike_wobble_hz', C), ('strike_wobble_gain', C), ('strike_wobble_slope', C)]
+                + [('rnd', I)] + [(f, C) for f in ('rnd_level_db', 'rnd_effort_db', 'rnd_cents', 'rnd_timing_s')]
+                + [('rnd_draws', C * 4)])
 
 
 class VoiceNote(ctypes.Structure):
@@ -154,7 +157,7 @@ class NoteClass(ctypes.Structure):
                 + [('n_flam', I), ('flam_s', C), ('flam_db', C)]
                 + [('n_ft', I), ('ft_bal', I), ('ft_t', C * 64), ('ft_db', C * 64), ('ft_c', C * 64)]
                 + [('n_layer', I), ('lay_n', I * 32), ('lay_hz', (C * 32) * 32), ('lay_db', (C * 32) * 32),
-                   ('lay_rise', C * 32), ('lay_dbs', C * 32), ('lay_len', C * 32)])
+                   ('lay_rise', C * 32), ('lay_dbs', C * 32), ('lay_len', C * 32), ('played_backwards', I)])
 
 
 class NoteIn(ctypes.Structure):
@@ -167,7 +170,7 @@ class NoteIn(ctypes.Structure):
                 + [(f, C) for f in ('fx', 'mk', 'fm_omega', 'fm_phase')]
                 + [('room_bands', C * 9), ('reflect', I), ('no_reflections', I), ('ch', LL), ('note', I),
                    ('damper_pedal', I), ('key_off', C), ('planes', C * 6), ('order', I), ('from_song', I), ('song_index', I),
-                   ('seat', C), ('held', C)])
+                   ('seat', C), ('held', C), ('rnd_draws', C * 4)])
 
 
 class NoteOut(ctypes.Structure):
@@ -888,7 +891,9 @@ def init_supported(cls):
     if kit_drum(cls):
         if not T.hrtf or cls.inharmonicity_dynamic:
             return False
-        if any(k.__name__ not in ('SynthProperties', 'object') for k in cls.__mro__ if '__init__' in k.__dict__):
+        # (and [RND]'s, RandomStrike: its four draws the caller's, VoiceInit.rnd_draws)
+        if any(k.__name__ not in ('SynthProperties', 'object', 'RandomStrike') for k in cls.__mro__
+               if '__init__' in k.__dict__):
             return False
         if any(_owner(cls, n) != o for n, o in _BASE_OWN.items() if n != 'inharmonicity_coefficient_func'):
             return False
@@ -926,11 +931,12 @@ def _class(cls):
         if not init_supported(cls):
             _CLASS[cls] = False
             return None
-        st = random.getstate()
+        st, rst = random.getstate(), T.RND_STREAM.getstate()
         try:
             proto = cls(261.6, 0.0, 0.5, 1.0)
         finally:
             random.setstate(st)
+            T.RND_STREAM.setstate(rst)
         tmpl = snapshot(proto)
         if tmpl is None:
             _CLASS[cls] = False
@@ -951,6 +957,10 @@ def _class(cls):
         c.max_partial_hz = cls.max_partial_hz or 0.0
         c.sound_speed = proto.sound_speed
         c.kind = kit_drum(cls)
+        if issubclass(cls, T.RandomStrike):
+            c.rnd = 1
+            c.rnd_level_db, c.rnd_effort_db = cls.rnd_level_db, cls.rnd_effort_db
+            c.rnd_cents, c.rnd_timing_s = cls.rnd_cents, cls.rnd_timing_s
         c.key_jitter = int(c.kind == 0)
         c.b_law = _b_law(cls) if c.kind == 0 else 0
         # (none: the note's is the valve's, as blockrender's setup takes it)
@@ -987,12 +997,13 @@ def _class(cls):
     return got
 
 
-def voice(cls, frequency, channel_pan, attack_volume, channel_volume, effort=0.0, state=None, seat=0.0):
+def voice(cls, frequency, channel_pan, attack_volume, channel_volume, effort=0.0, state=None, seat=0.0, rnd=None):
     """cls(frequency, channel_pan, attack_volume, channel_volume, effort) in C:
     (VoiceSnap, VoiceNote), or None where the class is not supported. state:
     a PyRandomState for the global stream, drawn from as the constructor
     draws (None: the snapshot alone, the stream untouched). seat: a seat
-    inside the instrument (a kit's drum), placed as blockrender places it."""
+    inside the instrument (a kit's drum), placed as blockrender places it.
+    rnd: an [RND] voice's four draws (its props' rnd_draws)."""
     import tonelib as T
     d = lib()
     got = _class(cls) if d is not None else None
@@ -1007,6 +1018,8 @@ def voice(cls, frequency, channel_pan, attack_volume, channel_volume, effort=0.0
     c.soft_pedal_down = int(bool(T.soft_pedal_down))
     if seat:
         c.seat_x = c.listener_distance * math.tan(T.stage_angle(seat))
+    if rnd is not None:
+        c.rnd_draws[:] = [float(x) for x in rnd]
     s, o = VoiceSnap(), VoiceNote()
     d.nv_voice_init(ctypes.byref(c), ctypes.byref(tmpl), float(frequency), float(channel_pan),
                     float(attack_volume), float(channel_volume), float(effort),
@@ -1057,11 +1070,12 @@ def note_class(cls):
     if got is None:
         v = _class(cls)
         # (a kit drum's one-shot hold is the engine's, a snare's partials'
-        # jitter and signs, a cymbal's bloom, a hand drum's scatter, and a
-        # gate -- closing the strike's noise with it, not its layers)
+        # jitter and signs, a cymbal's bloom, a hand drum's scatter, a
+        # gate -- closing the strike's noise with it, not its layers -- and
+        # a tape played backwards)
         def drum_has(a):
             if a in ('one_shot', 'jitter_by_partial', 'strike_phase_spread', 'bloom_seconds', 'stroke_scatter',
-                     'gate_time'):
+                     'gate_time', 'played_backwards'):
                 return True
             # ...a machine's burst train, and up to 32 layers (a Simmons: 21)
             if a == 'strike_flam_times':
@@ -1149,6 +1163,7 @@ def note_class(cls):
         k.pjit = int(bool(getattr(cls, 'jitter_by_partial', False)))
         k.ssc = int(bool(getattr(cls, 'stroke_scatter', False)))
         k.gate_time = float(getattr(cls, 'gate_time', None) or 0.0)
+        k.played_backwards = int(bool(getattr(cls, 'played_backwards', False)))
         if kit_drum(cls) == 3:
             k.shake, k.n_nb, k.noise_rows = 1, len(cls.noise_bands), int(cls.noise_rows)
             for i, (f, db) in enumerate(cls.noise_bands):

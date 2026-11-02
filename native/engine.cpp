@@ -59,10 +59,11 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     c.fixed_touch = n->fixed_touch;
     if (n->seat != 0.0)                 // a seat inside the instrument, at the angle its pan names
         c.seat_x = c.listener_distance * tan(nv_stage_angle(n->seat));
-    double av = pow(n->vel / 127.0, 2.0);
+    memcpy(c.rnd_draws, n->rnd_draws, sizeof c.rnd_draws);
     VoiceSnap s;
     VoiceNote o;
-    nv_voice_init(&c, &K->tmpl, n->f0, n->pan, av, n->chan_vol, n->effort, rs, &s, &o);
+    nv_voice_init(&c, &K->tmpl, n->f0, n->pan, pow(n->vel / 127.0, 2.0), n->chan_vol, n->effort, rs, &s, &o);
+    const double av = s.attack_volume;  // (an [RND] strike's, varied)
     const double f0 = n->f0;
     double B = c.inharmonicity_dynamic ? o.B : o.inharmonicity_coefficient;
     double dur = n->off - n->on;
@@ -127,6 +128,8 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     t.br = n->br; t.fx = n->fx; t.mk = n->mk; t.fm_omega = n->fm_omega; t.fm_phase = n->fm_phase;
     t.listener_distance = c.listener_distance; t.head_radius = c.head_radius; t.pan_angle = o.pan_angle;
     memcpy(t.room_bands, n->room_bands, sizeof t.room_bands);
+    t.rev = K->played_backwards;            // (em.reverse: its rows emitted backwards)
+    t.rev_n0 = non; t.rev_arr = noff;
 
     int total = 0, no_refl = n->no_reflections;
 
@@ -352,6 +355,8 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         return keys[a] < keys[b];
     });
     long long total = 0;
+    PyRandom rnd;                           // tonelib.RND_STREAM, as prepare reseeds it
+    pyr_seed(&rnd, 0);
     for (int j = 0; j < nn; j++) {
         int i = order[j];
         long long ch;
@@ -383,6 +388,12 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         memcpy(n.planes, k->room_planes, sizeof n.planes);
         n.order = k->room_order;
         n.no_reflections = 0;
+        if (k->init.rnd) {                  // RandomStrike's draws, from the [RND] stream's
+            n.rnd_draws[0] = pyr_gauss(&rnd, 0.0, k->init.rnd_level_db);
+            n.rnd_draws[1] = pyr_gauss(&rnd, 0.0, k->init.rnd_effort_db);
+            n.rnd_draws[2] = pyr_gauss(&rnd, 0.0, k->init.rnd_cents);
+            n.rnd_draws[3] = pyr_uniform(&rnd, 0.0, k->init.rnd_timing_s);
+        }
         NoteOut out;
         int band = 0;
         long long left = cap - total;
