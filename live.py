@@ -3452,6 +3452,14 @@ class Patch:
         if t["P"] and hasattr(self._voice_class(note), "pre_pluck_s"):
             _len = (t["noff"] - t["non"]).astype(np.int64)
             t["rof"] = np.where(_len <= int(0.02 * B.SR), _len, -1).astype(np.int64)
+        # ...AND A TAPE PLAYED BACKWARDS STOPS AT ITS ARRIVAL (played_backwards:
+        # the reverse cymbal, the GS sets' reversed drums): its rows GROW, each
+        # to its own end (blockrender._reverse_rows), and the stamp held them
+        # to the key-up -- a key held 1.4 s past the arrival grew a row to inf,
+        # and the mix went NaN. Every row keeps its end; a key-up before the
+        # arrival still cuts it there (Slab.release takes the earlier).
+        if t["P"] and getattr(self._voice_class(note), "played_backwards", False):
+            t["rof"] = (t["noff"] - t["non"]).astype(np.int64)
         # ...AND THE LESLIE'S CROSSOVER COPIES (leslie.crossover_weights): rows
         # on the rotor their pitch would not pick, which leslie_arm must flip
         t["lflip"] = np.zeros(int(t["P"]), bool)
