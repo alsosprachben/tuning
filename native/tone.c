@@ -207,7 +207,7 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
                double *rows, int cap, double *transverse, int *ntrans, double *qacc, double *azimuth,
                PyRandom *rs, double *sjit_last)
 {
-    if (t->sps > 0.0 && !rs)
+    if ((t->sps > 0.0 || t->ssc) && !rs)
         return -2;
     Rows R = {rows, 0, cap};
     double terms_main[9 * 64], terms_u[9 * 64];
@@ -241,6 +241,17 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
         double mph = 0.0;
         if (t->sps > 0.0)                           /* where the stick landed against its nodes */
             mph = PI * (double)(pyr_genrand(rs) >> 31) * t->sps;
+        if (t->ssc) {                               /* how hard this stroke caught the mode */
+            double ssd = nv_stroke_scatter_db(v, m);
+            if (ssd > 0.0) {
+                if (!rs)
+                    return -2;
+                double sk = pow(10.0, pyr_gauss(rs, 0.0, ssd) / 20.0);
+                gL *= sk;
+                gR *= sk;
+                gM *= sk;
+            }
+        }
         int nt_ = 0;
         if (t->reflect) {
             nt_ = note_terms(v, t, hf, pos_x, t->pos_z, nimg, nsurf, surf, img, mir, terms_main);

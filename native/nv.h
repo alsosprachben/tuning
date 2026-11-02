@@ -19,6 +19,8 @@ extern "C" {
 typedef struct {
     uint32_t mt[624];
     int i;
+    int has_gauss;          /* random.gauss's cached second value (gauss_next) */
+    double gauss_next;
 } PyRandom;
 
 typedef struct {
@@ -73,9 +75,9 @@ typedef struct {
     /* KitDrumProperties: DRUM_MODES (ratio, dB under the first, amplitude dB/s);
        the click's CLICK_DB bands of click_per_band partials from CLICK_HZ0 */
     int n_modes;
-    double modes[16][3];
+    double modes[96][3];
     int n_click, click_per_band;
-    double click_db[16];
+    double click_db[32];
     double click_hz0, click_cal_db, click_scatter, click_dbs, click_stroke_slope, stroke_ref_db;
     double slow_share, slow_dbs, slow_max_hz;       /* slow_max_hz 0: None */
     /* NoisyPercussionMixin: the partials' and the chiff's roll-off above
@@ -83,7 +85,7 @@ typedef struct {
     int noisy;
     double hf_corner_hz, hf_order;
     int n_trim;
-    double trim[8][2];
+    double trim[16][2];
     /* AcousticSnareProperties: the head's two rates, the shell's remainder on
        the head modes alone, each partial's jitter (the wires', the head's);
        SideStickProperties: the rim's modes from rim_from (0 none) and rate */
@@ -94,6 +96,13 @@ typedef struct {
     /* kind 2 (a measured mode set on SynthProperties: modes[i] = (ratio,
        linear gain, -)): a key's decay retargeted (percussion_map's _nNN
        classes: the decay scaled so its first mode's is decay_target) */
+    /* MeasuredStrokeProperties: the modes' ring (ring_scale), each mode's
+       level scattered stroke by stroke (mode_scatter_db); which of the two
+       jitters is the note's sustain_jitter (1 the head's, a snare's; 2 the
+       rest's, a measured stroke's) */
+    int measured;
+    double ring_scale, mode_scatter_db;
+    int jit_sus;
     int retarget;
     double decay_target;
     /* ...its modes: (ratio, linear gain) */
@@ -186,7 +195,8 @@ typedef struct {
        each its strike's sign, pi * a random bit * sps (strike_phase_spread) */
     int pjit;
     double sps;
-    double dur;         /* the note's length, s: the bloom's swell is held within it */
+    double dur;
+    int ssc;            /* each mode's level scattered (stroke_scatter: random.gauss) */         /* the note's length, s: the bloom's swell is held within it */
 } ToneIn;
 
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
@@ -260,6 +270,7 @@ typedef struct {
     // spread (strike_phase_spread): the tone's (a snare's wires)
     int pjit;
     double sps;
+    int ssc;            // each mode's level scattered by stroke (stroke_scatter)
     // the strike fired strike_flam times (n_flam > 1: an ensemble clap), each
     // within flam_s and flam_db under the loudest
     int n_flam;

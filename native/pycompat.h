@@ -57,6 +57,7 @@ static void pyr_seed(PyRandom *r, long long n)
         a >>= 32;
     } while (a);
     pyr_init_by_array(r, key, klen);
+    r->has_gauss = 0;
 }
 
 static uint32_t pyr_genrand(PyRandom *r)
@@ -94,6 +95,23 @@ static double pyr_random(PyRandom *r)
 static double pyr_uniform(PyRandom *r, double a, double b)
 {
     return a + (b - a) * pyr_random(r);
+}
+
+/* random.gauss(mu, sigma): a pair from Box-Muller, the second kept */
+static double pyr_gauss(PyRandom *r, double mu, double sigma)
+{
+    double z;
+    if (r->has_gauss) {
+        z = r->gauss_next;
+        r->has_gauss = 0;
+    } else {
+        double x2pi = pyr_random(r) * (2.0 * 3.14159265358979323846);
+        double g2rad = sqrt(-2.0 * log(1.0 - pyr_random(r)));
+        z = cos(x2pi) * g2rad;
+        r->gauss_next = sin(x2pi) * g2rad;
+        r->has_gauss = 1;
+    }
+    return mu + z * sigma;
 }
 
 /* sum() of n floats, as CPython 3.12+ adds them */

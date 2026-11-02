@@ -6142,7 +6142,8 @@ def _voice_native(props, cls, f0, pan, av, cv, eff, st, nt, seat=0.0):
                               ('right_incidence', P.right_incidence), ('left_hrtf_delay', P.left_hrtf_delay),
                               ('right_hrtf_delay', P.right_hrtf_delay), ('tension_bend', P.tension_bend),
                               ('inharmonicity_coefficient', P.inharmonicity_coefficient),
-                              ('attack_time', P.attack_time), ('chiff_volume', P.chiff_volume),
+                              ('attack_time', P.attack_time if P.attack_time is not None
+                               else P.chiff_max_valve_time), ('chiff_volume', P.chiff_volume),
                               ('sustain_jitter', P.sustain_jitter))
                if getattr(o, f) != py]
         if list(_rnd.getstate()[1]) != list(st.mt) + [st.i]:
@@ -6423,7 +6424,7 @@ def _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT, 
             and not (FREQ_E is not None and getattr(pc, 'tuning_family', None) == 'indian'))
 
 
-def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None, choked=None):
+def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None, choked=None, stroked=False):
     """'check': the engine's channels against the Python's for this note --
     its end once the pedals have had their say, its half-pedal band, the
     soft pedal at its onset, its key's next strike."""
@@ -6439,7 +6440,8 @@ def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None, choked=None)
         bad.append('soft')
     if song.next_same(nt.ch, nt.note, nt.on) != nx:
         bad.append('next')
-    if song.choke(nt.ch, nt.note, nt.on) != choked:
+    # (not a stroke's: the song has the scrape's note, not its ridges)
+    if not stroked and song.choke(nt.ch, nt.note, nt.on) != choked:
         bad.append('choke %r vs %r' % (choked, song.choke(nt.ch, nt.note, nt.on)))
     if cargs is not None:
         # its pitch and level: (f0, velocity, pan, channel volume, effort) as
@@ -6544,10 +6546,10 @@ def _note_native_apply(em, props, nt, A, wn, _VB):
     NATIVE_STATS[0] += 1
     _rows_into(A, rows)
     # what the Python's partials leave: the last one's jitter, and the random
-    # stream past the strike signs (a snare's) and the bloom's scatter (a
-    # crash's) they drew
+    # stream past the strike signs (a snare's), the bloom's scatter (a
+    # crash's) and the modes' scatter (a hand drum's) they drew
     nt.sjit = out.sjit
-    if (getattr(props, 'strike_phase_spread', 0.0) > 0.0
+    if (getattr(props, 'strike_phase_spread', 0.0) > 0.0 or getattr(props, 'stroke_scatter', False)
             or (getattr(props, 'bloom_scatter', 0.0) > 0.0 and getattr(props, 'bloom_gain', 0.0) > 0.0)):
         import native as _NV
         _NV.set_random_state(wn[6])
@@ -8422,7 +8424,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         if _SONG is not None:
             _song_check(_SONG, nt, _off_key, _mcut, _nx, _DAMP_OPEN,
                         _cargs if _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT, FREQ_E)
-                        else None, choked)
+                        else None, choked, (nt.ch, nt.note, nt.on) in _stroked)
         if choked is not None and choked < nt.off:
             nt.off = choked
         if props.inharmonicity_dynamic:

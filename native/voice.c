@@ -84,10 +84,22 @@ static double band_trim(const VoiceSnap *v, int harmonic)
     return pow(10.0, db / 20.0);
 }
 
-/* AcousticSnareProperties.partial_jitter */
+/* AcousticSnareProperties.partial_jitter (the head's, the wires'),
+ * MeasuredStrokeProperties' (the modes', the rest's) */
 double nv_partial_jitter(const VoiceSnap *v, int harmonic)
 {
     return harmonic > v->n_modes ? v->wire_jitter : v->head_jitter;
+}
+
+/* MeasuredStrokeProperties.stroke_scatter_db: the weaker modes' spread,
+ * held under the strongest */
+double nv_stroke_scatter_db(const VoiceSnap *v, int harmonic)
+{
+    double g = harmonic <= v->n_modes ? v->modes[harmonic - 1][1] : 0.0;
+    if (harmonic > v->n_modes || g > -6.0)
+        return 0.0;
+    double c = -g / 2.5;
+    return c < v->mode_scatter_db ? c : v->mode_scatter_db;
 }
 
 double nv_mode_ratio(const VoiceSnap *v, int m)
@@ -203,6 +215,8 @@ double nv_harmonic_decay(const VoiceSnap *v, int harmonic)
         double first = mode_decay(v, 1);
         return first > 0 ? base * (v->decay_target / first) : v->decay_target;
     }
+    if (v->kind == 1 && v->measured && 1 <= harmonic && harmonic <= v->n_modes)
+        return 0.5 * v->ring_scale * v->modes[harmonic - 1][2];  /* MeasuredStrokeProperties' ring */
     if (v->kind == 1 && v->rim_from && v->rim_from <= harmonic && harmonic <= v->n_modes)
         return 0.5 * v->rim_dbs;                /* SideStickProperties: the rim's */
     if (v->kind == 1 && v->snare) {             /* AcousticSnareProperties: the head's two rates */
@@ -618,6 +632,10 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
         o->chiff_volume = c->chiff_volume * av;
         o->sustain_jitter = c->sustain_jitter * av;
     }
+    if (s->jit_sus == 1)                        /* partial_jitter's sustain_jitter, the note's */
+        s->head_jitter = o->sustain_jitter;
+    else if (s->jit_sus == 2)
+        s->wire_jitter = o->sustain_jitter;
     if (c->kind != 0) {
         /* a kit drum, a mode set: SynthProperties' constructor and no more;
            its B the class's coefficient (no law: inharmonicity_dynamic off) */

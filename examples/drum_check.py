@@ -69,6 +69,8 @@ def main(argv):
             same(('decay', key, m), dec, d.nv_harmonic_decay(sp, m))
             if getattr(p, 'jitter_by_partial', False):
                 same(('jitter', key, m), p.partial_jitter(m), d.nv_partial_jitter(sp, m))
+            if getattr(p, 'stroke_scatter', False):
+                same(('scatter', key, m), p.stroke_scatter_db(m), d.nv_stroke_scatter_db(sp, m))
             out = D40()
             n = d.nv_unison_voices(sp, f0, m, dec, out)
             same(('unison', key, m), [tuple(float(x) for x in v) for v in p.unison_voices(f0, m, dec)],
@@ -138,7 +140,8 @@ def main(argv):
                       ('right_hrtf_delay', p.right_hrtf_delay),
                       ('inharmonicity_coefficient', p.inharmonicity_coefficient),
                       ('B', p.inharmonicity_coefficient), ('tension_bend', p.tension_bend),
-                      ('attack_time', p.attack_time), ('chiff_volume', p.chiff_volume),
+                      ('attack_time', p.attack_time if p.attack_time is not None else p.chiff_max_valve_time),
+                      ('chiff_volume', p.chiff_volume),
                       ('sustain_jitter', p.sustain_jitter)):
             same(('init', name, f), py, getattr(o, f))
         same(('init', name, 'stream'), list(after[:624]) + [after[624]], list(st.mt) + [st.i])

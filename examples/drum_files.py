@@ -8,7 +8,8 @@ examples/nvrender_check.py to render both ways:
 one or two piano channels (programs 0-3) and channel 10 playing the kit
 drums native/voice.c has (native.kits: the kicks, the snares, the side
 stick, the toms, the hand clap and the finger snap, the hats, the crashes,
-the rides, the china and the splash) in a set whose keys they are (Standard, and sets 1 and 8,
+the rides, the china and the splash, the cowbell, the bongos, congas,
+timbales, agogos and open surdo, the claves, wood blocks and castanets) in a set whose keys they are (Standard, and sets 1 and 8,
 which keep those drums; or a program kit_for_program sends to Standard). What the drum note setup has to
 get right, all of it in the mix: each key's pitch and seat in its set; the
 one-shot's hold (a drum's key-up ignored, held 8 s, a re-strike of the
@@ -21,7 +22,8 @@ import os
 import random
 import sys
 
-KEYS = (26, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 55, 57, 59)
+KEYS = (26, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 55, 56, 57, 59,
+        60, 61, 62, 63, 64, 65, 66, 67, 68, 75, 76, 77, 85, 87)
 SETS = (0, 1, 8, 3, 20, 44, 70)
 
 
