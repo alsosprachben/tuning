@@ -197,7 +197,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     int reflect = n->reflect && !no_refl && K->reflection_order;
     t.gain = 1.0; t.B = B; t.sjit = o.sustain_jitter; t.reflect = reflect;
     t.cbw0 = K->cbw0; t.cbw1 = K->cbw1;
-    t.pjit = K->pjit; t.sps = K->sps;
+    t.pjit = K->pjit; t.sps = K->sps; t.dur = dur;
     double trans[3 * 1025];
     int ntr = 0;
     if (s.max_harmonic + 1 > 1025)
@@ -243,6 +243,9 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         n->key_off = nv::pymax(n->key_off, n->on + K->one_shot_hold);
     n->off = nv_song_note_off(song, n->ch, n->note, n->on, n->key_off, n->damper_pedal, n->mcut,
                               n->retrigger_fade, band);
+    double ck;
+    if (nv_song_choke(song, n->ch, n->note, n->on, &ck) && ck < n->off)
+        n->off = ck;                        // an exclusive class: a later strike stops it
     n->has_nx = nv_song_next_same(song, n->ch, n->note, n->on, &n->nx);
     if (!n->has_nx)
         n->nx = 0.0;

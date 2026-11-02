@@ -186,6 +186,7 @@ typedef struct {
        each its strike's sign, pi * a random bit * sps (strike_phase_spread) */
     int pjit;
     double sps;
+    double dur;         /* the note's length, s: the bloom's swell is held within it */
 } ToneIn;
 
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
@@ -324,6 +325,8 @@ int nv_song_soft_at(void *s, long long ch, double t);
 int nv_song_next_same(void *s, long long ch, int note, double on, double *out);
 int nv_song_pitch_level(void *s, int index, int effort_tilt, double *out);
 void nv_song_kits(void *s, const double *f0, const double *seat);
+void nv_song_chokes(void *s, const unsigned long long *choke);
+int nv_song_choke(void *s, long long ch, int note, double on, double *out);
 /* a note's class: K[128 * program + key], a drum set's K[16384 + 128 * program + key] */
 #define NV_K_DRUMS 16384
 void nv_song_cc(void *s, long long ch, double t, int cc, int v);

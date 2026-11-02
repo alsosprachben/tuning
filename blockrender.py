@@ -6423,7 +6423,7 @@ def _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT, 
             and not (FREQ_E is not None and getattr(pc, 'tuning_family', None) == 'indian'))
 
 
-def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None):
+def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None, choked=None):
     """'check': the engine's channels against the Python's for this note --
     its end once the pedals have had their say, its half-pedal band, the
     soft pedal at its onset, its key's next strike."""
@@ -6439,6 +6439,8 @@ def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None):
         bad.append('soft')
     if song.next_same(nt.ch, nt.note, nt.on) != nx:
         bad.append('next')
+    if song.choke(nt.ch, nt.note, nt.on) != choked:
+        bad.append('choke %r vs %r' % (choked, song.choke(nt.ch, nt.note, nt.on)))
     if cargs is not None:
         # its pitch and level: (f0, velocity, pan, channel volume, effort) as
         # the voice was built with, and a drum's seat
@@ -6542,9 +6544,11 @@ def _note_native_apply(em, props, nt, A, wn, _VB):
     NATIVE_STATS[0] += 1
     _rows_into(A, rows)
     # what the Python's partials leave: the last one's jitter, and the random
-    # stream past the strike signs they drew (a snare's)
+    # stream past the strike signs (a snare's) and the bloom's scatter (a
+    # crash's) they drew
     nt.sjit = out.sjit
-    if getattr(props, 'strike_phase_spread', 0.0) > 0.0:
+    if (getattr(props, 'strike_phase_spread', 0.0) > 0.0
+            or (getattr(props, 'bloom_scatter', 0.0) > 0.0 and getattr(props, 'bloom_gain', 0.0) > 0.0)):
         import native as _NV
         _NV.set_random_state(wn[6])
     for i, pr in enumerate(em._QACC):
@@ -8418,7 +8422,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         if _SONG is not None:
             _song_check(_SONG, nt, _off_key, _mcut, _nx, _DAMP_OPEN,
                         _cargs if _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT, FREQ_E)
-                        else None)
+                        else None, choked)
         if choked is not None and choked < nt.off:
             nt.off = choked
         if props.inharmonicity_dynamic:

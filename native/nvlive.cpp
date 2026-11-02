@@ -163,6 +163,7 @@ struct Export {
     std::vector<std::vector<unsigned char>> classes;
     std::vector<int> cmap, kind, fin;     // cmap: the programs' keys, then the drum sets'
     std::vector<double> kit_f0, kit_seat;
+    std::vector<unsigned long long> kit_choke;
     std::string room, libs[3];
     double beta = 0.0, headroom = 1.0;
     int part[128][10];
@@ -199,7 +200,7 @@ static bool read_export(const char *path, Export &E)
               && fread(&csz, 4, 1, f) == 1 && fread(&ncls, 4, 1, f) == 1 && csz == (int)sizeof(NoteClass);
     if (ok) {
         E.k.resize(nk); E.freq.resize(128); E.trim.resize(512); E.cmap.resize(2 * NV_K_DRUMS);
-        E.kit_f0.resize(16384); E.kit_seat.resize(16384);
+        E.kit_f0.resize(16384); E.kit_seat.resize(16384); E.kit_choke.resize(2 * 16384);
         E.kind.resize(NCOLS); E.fin.resize(NCOLS);
         ok = fread(E.k.data(), 8, nk, f) == (size_t)nk && fread(E.freq.data(), 8, 128, f) == 128
              && fread(E.trim.data(), 8, 512, f) == 512;
@@ -209,6 +210,7 @@ static bool read_export(const char *path, Export &E)
         }
         ok = ok && fread(E.cmap.data(), 4, 2 * NV_K_DRUMS, f) == 2 * NV_K_DRUMS
              && fread(E.kit_f0.data(), 8, 16384, f) == 16384 && fread(E.kit_seat.data(), 8, 16384, f) == 16384
+             && fread(E.kit_choke.data(), 8, 2 * 16384, f) == 2 * 16384
              && fread(E.kind.data(), 4, NCOLS, f) == NCOLS
              && fread(E.fin.data(), 4, NCOLS, f) == NCOLS;
         std::string *ss[4] = {&E.room, &E.libs[0], &E.libs[1], &E.libs[2]};

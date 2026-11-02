@@ -20,7 +20,8 @@ itself is written here, from the classes it was checked against:
                            not the engine's), then each drum set's (drum
                            program, key)
   the drum sets            each drum program's keys' pitch and seat (0
-                           where the set has none: native.kits)
+                           where the set has none: native.kits), and the
+                           keys a strike on each stops (two 64-bit words)
   the columns              each EMIT_COLS column's type in the table (_COL_F4,
                            _COL_I4) and in prepare's result (FINAL_DTYPES)
 
@@ -108,7 +109,7 @@ def main(argv):
                 classes.append(bytes(k))
             cmap.append(idx[cls])
     # ...and each drum set's keys the engine plays (native.kits), after them
-    kcls, kf0, kseat = N.kits()
+    kcls, kf0, kseat, kchoke = N.kits()
     for cls in kcls:
         k = N.note_class(cls) if cls is not None else None
         if k is None:
@@ -147,7 +148,7 @@ def main(argv):
         for c in classes:
             f.write(c)
         f.write(struct.pack("<32768i", *cmap))
-        f.write(bytes(kf0) + bytes(kseat))
+        f.write(bytes(kf0) + bytes(kseat) + bytes(kchoke))
         fin = dict(B.FINAL_DTYPES)
         f.write(struct.pack("<50i", *[1 if c in B._COL_F4 else 2 if c in B._COL_I4 else 0 for c in B.EMIT_COLS]))
         f.write(struct.pack("<50i", *[{'f8': 0, 'f4': 1, 'i8': 2, 'i4': 3}.get(fin.get(c), -1)

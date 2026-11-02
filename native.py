@@ -78,7 +78,7 @@ class ToneIn(ctypes.Structure):
                 + [('tb', C * 3), ('gl', C * 3), ('sv', C * 2)]
                 + [(f, C) for f in ('sound_vib_depth_cents', 'vibrato_delay', 'br', 'fx', 'mk', 'fm_omega',
                                     'fm_phase', 'listener_distance', 'head_radius', 'pan_angle')]
-                + [('room_bands', C * 9), ('pjit', I), ('sps', C)])
+                + [('room_bands', C * 9), ('pjit', I), ('sps', C), ('dur', C)])
 
 
 class VoiceInit(ctypes.Structure):
@@ -349,6 +349,8 @@ def _load():
             ('nv_song_channel', None, [ctypes.c_void_p, LL, C, D, I]),
             ('nv_song_pitch_level', I, [ctypes.c_void_p, I, I, D]),
             ('nv_song_kits', None, [ctypes.c_void_p, D, D]),
+            ('nv_song_chokes', None, [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulonglong)]),
+            ('nv_song_choke', I, [ctypes.c_void_p, LL, I, C, D]),
             ('nv_song_finish', None, [ctypes.c_void_p, C]),
             ('nv_song_note_off', C, [ctypes.c_void_p, LL, I, C, C, I, I, C, ctypes.POINTER(I)]),
             ('nv_song_soft_at', I, [ctypes.c_void_p, LL, C]),
@@ -446,14 +448,17 @@ _KITS = []
 def kits():
     """The drum sets as the engine's song and K tables take them, for each
     drum program p and key (q = 128 p + key, the set kit_for_program(p)):
-    (classes, f0, seat) -- the class the engine plays there (None where it
-    does not: no drum, a drum not native, or a key with more than its sound
-    -- a layer, a choke, strokes, a siren, a sweep) and, for every drum the
-    set maps, its pitch and its pan in the set (seat); f0 0 where none."""
+    (classes, f0, seat, choke) -- the class the engine plays there (None
+    where it does not: no drum, a drum not native, or a key with more than
+    its sound -- a layer, strokes, a siren, a sweep) and, for every drum the
+    set maps, its pitch and its pan in the set (seat); f0 0 where none; the
+    keys a strike on it stops (choke_group), as bits (choke[2 q + w], bit k:
+    key 64 w + k)."""
     if _KITS:
         return _KITS[0]
     import percussion_map as PCM
     classes, f0, seat = [None] * 16384, (ctypes.c_double * 16384)(), (ctypes.c_double * 16384)()
+    choke = (ctypes.c_ulonglong * (2 * 16384))()
     for p in range(128):
         kit = PCM.kit_for_program(p)
         for key in range(128):
@@ -462,13 +467,15 @@ def kits():
                 continue
             q = 128 * p + key
             f0[q], seat[q] = float(d[2]), float(d[3])
+            for k in PCM.choke_group(key, kit) or ():
+                choke[2 * q + k // 64] |= 1 << (k % 64)
             cls = d[1]
-            if (kit_drum(cls) and not PCM.key_layers(key, kit) and PCM.choke_group(key, kit) is None
+            if (kit_drum(cls) and not PCM.key_layers(key, kit)
                     and PCM.rasp_strokes(key, 0.0, 1.0, kit=kit) is None
                     and not getattr(cls, 'siren_rotor', None) and not getattr(cls, 'alias_sweep', None)
                     and not getattr(cls, 'sounding_octaves', 0.0)):
                 classes[q] = cls
-    _KITS.append((classes, f0, seat))
+    _KITS.append((classes, f0, seat, choke))
     return _KITS[0]
 
 
@@ -822,11 +829,11 @@ def note_class(cls):
     drum = kit_drum(cls)
     if got is None:
         v = _class(cls)
-        # (a kit drum's one-shot hold is the engine's, and a snare's partials'
-        # jitter and signs; a gate is not)
+        # (a kit drum's one-shot hold is the engine's, a snare's partials'
+        # jitter and signs, a cymbal's bloom; a gate is not)
         ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF
                                         if not (drum and a in ('one_shot', 'jitter_by_partial',
-                                                               'strike_phase_spread')))
+                                                               'strike_phase_spread', 'bloom_seconds')))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT)
               and getattr(cls, 'mode_phase', None) is None and (int(getattr(cls, 'strike_flam', 0) or 0) <= 1
                    or (int(cls.strike_flam) <= 64 and not getattr(cls, 'strike_flam_record', False)
@@ -943,8 +950,9 @@ class Song(object):
             d.nv_song_note(self.p, int(e[0]), int(e[1]), float(e[2]), float(e[3]), int(e[4]), float(v7),
                            float(v11), float(pan), float(trim(e[6]) if trim else 1.0), int(e[6]),
                            int(_PM.is_drum(e[6])))
-        _, kf0, kseat = kits()
+        _, kf0, kseat, kchoke = kits()
         d.nv_song_kits(self.p, kf0, kseat)
+        d.nv_song_chokes(self.p, kchoke)
         T128 = ctypes.c_double * 128
         def row(tab):           # a table as 128 numbers, 0 for a key it lacks
             return T128(*[float(tab[k]) if k in tab else 0.0 for k in range(128)])
@@ -989,6 +997,11 @@ class Song(object):
 
     def soft_at(self, ch, t):
         return bool(self.d.nv_song_soft_at(self.p, int(ch), float(t)))
+
+    def choke(self, ch, note, on):
+        """Where a later strike in its exclusive class stops this note, or None"""
+        o = ctypes.c_double(0.0)
+        return o.value if self.d.nv_song_choke(self.p, int(ch), int(note), float(on), ctypes.byref(o)) else None
 
     def next_same(self, ch, note, on):
         o = ctypes.c_double(0.0)

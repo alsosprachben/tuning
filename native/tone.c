@@ -68,7 +68,7 @@ static int emit(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, doub
                 double om, double ampL, double ampR, double ampM, double nomf, double non, double noff,
                 double fa, double re, double ch, double logr, double logrA, double aft, double sus,
                 double cv, double cc, double crl, double sj, double csc, double gr, double cr, double ph0,
-                double player, const double *VB, double pos_x)
+                double player, const double *VB, double pos_x, int late)
 {
     om = om * t->jitter_scale;
     if (t->transposed && om >= t->nyq_om)
@@ -88,7 +88,7 @@ static int emit(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, doub
         return 0;
     double row[NCOLS] = {
         om, -om * (non + dl) + ph0, -om * (non + dr) + ph0, ampL, ampR, ampM, t->channel,
-        px, pz, *azimuth, 1.0,
+        px, pz, *azimuth, late ? 0.75 : 1.0,
         nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, cbw,
         t->tb[0], t->tb[1], t->tb[2], t->gl[0], t->gl[1], t->gl[2],
         vd0, VB[1] * t->sv[1], VB[2], t->vibrato_delay, dl, dr,
@@ -138,7 +138,7 @@ static int emit(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, doub
             return 0;
         double irow[NCOLS] = {
             omi, -omi * (ni + dli) + ph0, -omi * (ni + dri) + ph0, gl_, gr_, gm, t->channel,
-            ix, iz, *azimuth, 0.0,
+            ix, iz, *azimuth, late ? 0.25 : 0.0,
             nomf, ni, fi, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, cbw,
             t->tb[0], t->tb[1], t->tb[2], t->gl[0], t->gl[1], t->gl[2],
             vd0, VB[1] * t->sv[1], VB[2], t->vibrato_delay, dli, dri,
@@ -249,8 +249,36 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
         }
         if (!emit(v, t, &R, qacc, azimuth, terms_main, nt_, 2 * PI * hf / sr, gL, gR, gM, hf, non_m, t->noff,
                   t->fade, t->rel, t->chiff, pd[1], pd[3], pd[2], t->sustain_level, cvp, t->cc, t->crl, sj,
-                  t->csc, t->gr, t->cr, mph, 0.0, VB, pos_x))
+                  t->csc, t->gr, t->cr, mph, 0.0, VB, pos_x, 0))
             return -1;
+        /* THE LATE ARRIVAL (bloom_gain): a quieter copy of the partial, its
+           arrival bloom_delay_for later (scattered from the global stream:
+           bloom_scatter), swelling in over bloom_swell of it, held within the
+           note; falling at bloom_decay_dbs where the voice sets one */
+        double pdelay = nv_bloom_delay_for(v, hf) * sr;
+        if (pdelay > 0.0 && v->bloom_gain > 0.0) {
+            double bg = nv_bloom_gain_for(v, hf);
+            double sc = v->bloom_scatter, pdl = pdelay;
+            if (sc > 0.0) {
+                if (!rs)
+                    return -2;
+                pdl = pdelay * (1.0 - sc + 2.0 * sc * pyr_random(rs));
+            }
+            double bfade = pymax(1e-4, pymin(v->bloom_swell * pdl / sr, 0.45 * t->dur)) * sr;
+            int ok;
+            if (v->bloom_decay_dbs > 0.0) {
+                double blr = log(db_ratio(v->bloom_decay_dbs));
+                ok = emit(v, t, &R, qacc, azimuth, terms_main, nt_, 2 * PI * hf / sr, gL * bg, gR * bg, gM * bg, hf,
+                          non_m + pdl, t->noff, bfade, t->rel, t->chiff, blr, blr, 0.0, 0.0, cvp, t->cc, t->crl, sj,
+                          t->csc, t->gr, t->cr, 0.0, 0.0, VB, pos_x, 1);
+            } else {
+                ok = emit(v, t, &R, qacc, azimuth, terms_main, nt_, 2 * PI * hf / sr, gL * bg, gR * bg, gM * bg, hf,
+                          non_m + pdl, t->noff, bfade, t->rel, t->chiff, pd[1], pd[3], pd[2], t->sustain_level, cvp,
+                          t->cc, t->crl, sj, t->csc, t->gr, t->cr, 0.0, 0.0, VB, pos_x, 1);
+            }
+            if (!ok)
+                return -1;
+        }
         transverse[3 * *ntrans] = hf;
         transverse[3 * *ntrans + 1] = hv;
         transverse[3 * *ntrans + 2] = pd[0];
@@ -278,7 +306,7 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
             }
             if (!emit(v, t, &R, qacc, azimuth, terms_u, ntu, 2 * PI * uf / sr, ugL, ugR, gM * gm, uf, non_u,
                       t->noff, t->fade, t->rel, t->chiff, ulr, pd[3], pd[2], t->sustain_level, cvp, t->cc,
-                      t->crl, sj, t->csc, t->gr, t->cr, 2 * PI * uph + 0.0, (double)(ui + 1), VB, pos_x))
+                      t->crl, sj, t->csc, t->gr, t->cr, 2 * PI * uph + 0.0, (double)(ui + 1), VB, pos_x, 0))
                 return -1;
         }
         pos_x = t->pos_x_props;     /* em.pos_x = the voice's position, after each harmonic */
@@ -308,7 +336,7 @@ int nv_strike(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, con
         if (!emit(v, t, &R, qacc, azimuth, NULL, 0, 2 * PI * hf / sr,
                   gM * nv_hrtf_gain(v, hf, t->li) * 1.0, gM * nv_hrtf_gain(v, hf, t->ri) * 1.0, gM, hf,
                   bon, bon + slen, sfade, 0.01 * sr, t->chiff, slr, 0.0, 0.0, 0.0, 0.0, t->cc, t->crl,
-                  0.0, t->csc, -1.0, 0.0, 0.0, 0.0, VB, pos_x))
+                  0.0, t->csc, -1.0, 0.0, 0.0, 0.0, VB, pos_x, 0))
             return -1;
     }
     return R.n;
@@ -366,7 +394,7 @@ int nv_phantom(const VoiceSnap *v, const ToneIn *t, const double *trans, int ntr
             }
             if (!emit(v, t, &R, qacc, azimuth, terms, nt_, 2 * PI * fph / sr, g, g, g, fph, t->non, t->noff,
                       t->fade, t->rel, t->chiff, lrp, lrAp, af[0], t->sustain_level, 0.0, 0.0, 0.0, 0.0, t->csc,
-                      -1.0, 0.0, 0.0, 0.0, VB, t->pos_x_props))
+                      -1.0, 0.0, 0.0, 0.0, VB, t->pos_x_props, 0))
                 return -1;
         }
     }

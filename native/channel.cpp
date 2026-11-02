@@ -204,10 +204,53 @@ struct Song {
     // THE DRUM SETS (percussion_for_note at kit_for_program): each drum
     // program's key, its pitch (0: no drum the engine knows) and its seat
     std::vector<double> kit_f0, kit_seat;
+    // ...and its EXCLUSIVE CLASSES (percussion_map.choke_group): each drum
+    // program's key, the keys a strike on it stops (bits, two words), and
+    // from them (finish) each drum channel's key's later strikes that stop
+    // it (_prep_exclusive_classes' choke_at)
+    std::vector<unsigned long long> kit_choke;
+    std::map<std::pair<long long, int>, std::vector<double>> choke_at;
+
+    bool in_group(int prog, int key, int k) const
+    {
+        const unsigned long long *m = &kit_choke[2 * (128 * prog + key)];
+        return (m[k >> 6] >> (k & 63)) & 1ULL;
+    }
+
+    void exclusive_classes()
+    {
+        choke_at.clear();
+        if (kit_choke.empty())
+            return;
+        // the notes in a choke group, by channel and key, and the set each
+        // (channel, key) was last struck in
+        std::map<std::pair<long long, int>, int> kit_on;
+        std::map<std::pair<long long, int>, std::vector<double>> ons;
+        for (const Ev &e : notes) {
+            if (!e.drum || e.prog < 0 || e.prog > 127)
+                continue;
+            const unsigned long long *m = &kit_choke[2 * (128 * e.prog + e.note)];
+            if (!(m[0] | m[1]))
+                continue;
+            auto k = std::make_pair(e.ch, e.note);
+            kit_on[k] = e.prog;
+            ons[k].push_back(e.on);
+        }
+        for (auto &a : ons) {
+            int prog = kit_on[a.first];
+            std::vector<double> later;
+            for (auto &b : ons)
+                if (b.first.first == a.first.first && in_group(prog, a.first.second, b.first.second))
+                    later.insert(later.end(), b.second.begin(), b.second.end());
+            std::sort(later.begin(), later.end());
+            choke_at[a.first] = later;
+        }
+    }
 
     void finish(double total_)
     {
         total = total_;
+        exclusive_classes();
         for (auto &c : ch)
             c.second.finish(total);
         // _next_same: the notes by onset, latest first (stable), each key's
@@ -508,6 +551,30 @@ int nv_song_soft_at(void *s, long long ch, double t)
 {
     const nv::Channel *C = ((nv::Song *)s)->get(ch);
     return C && C->soft_at(t);
+}
+
+// The drum sets' exclusive classes: choke[2 * (128 * program + key) + w],
+// bit k of word w set where a strike on key stops key 64 w + k (before
+// nv_song_finish)
+void nv_song_chokes(void *s, const unsigned long long *choke)
+{
+    ((nv::Song *)s)->kit_choke.assign(choke, choke + 2 * 16384);
+}
+
+// Where a later strike in its exclusive class stops this note (the first
+// past its onset): 1 and *out, else 0
+int nv_song_choke(void *s, long long ch, int note, double on, double *out)
+{
+    const nv::Song *S = (nv::Song *)s;
+    auto it = S->choke_at.find(std::make_pair(ch, note));
+    if (it == S->choke_at.end())
+        return 0;
+    for (double t : it->second)
+        if (t > on + 1e-4) {
+            *out = t;
+            return 1;
+        }
+    return 0;
 }
 
 int nv_song_next_same(void *s, long long ch, int note, double on, double *out)
