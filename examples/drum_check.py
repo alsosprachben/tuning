@@ -37,7 +37,7 @@ def main(argv):
     n_notes = int(argv[1]) if len(argv) > 1 else 400
     d = N.lib()
     D4 = ctypes.c_double * 4
-    D40 = ctypes.c_double * 40
+    D40 = ctypes.c_double * 80
     rng = random.Random(17)
     bad, asked = [], 0
 

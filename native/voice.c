@@ -152,6 +152,19 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
     return r;
 }
 
+/* SynthProperties.bore_gain */
+static double bore_gain(const VoiceSnap *v, double partial_hz)
+{
+    double g = 1.0;
+    if (v->bore_corner_hz != 0.0)
+        g /= 1.0 + pow(partial_hz / v->bore_corner_hz, v->bore_order);
+    if (v->bell_cutoff_hz != 0.0) {
+        double x = pow(partial_hz / v->bell_cutoff_hz, v->bell_order);
+        g *= x / (1.0 + x);
+    }
+    return g;
+}
+
 /* GrandPianoProperties.soundboard_gain */
 /* soundboard_gain: the grand's board (board_kind 0); the upright's, its low
  * roll-off of its own order (1); the electric grand's bridge and piezo (2) */
@@ -179,7 +192,10 @@ double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
     double s = nv_series_volume(v, harmonic);
     if (s == 0.0)
         return 0.0;
-    if (v->kind != 0) {                         /* SynthProperties': no bore */
+    if (v->kind != 0) {                         /* SynthProperties': its bore, if it has one */
+        if (v->bore_corner_hz != 0.0)
+            s = s * bore_gain(v, v->frequency_x * pow(2.0, v->octave_position) * nv_mode_ratio(v, harmonic))
+                * v->bore_norm;
         if (v->noisy)                           /* ...and the noise's roll-off and trim */
             return s * hf_rolloff(v, nv_mode_ratio(v, harmonic)) * band_trim(v, harmonic);
         return s;
@@ -303,6 +319,17 @@ void nv_aftersound(const VoiceSnap *v, double frequency, double decay_rate, doub
  * in out[5k..5k+4]; returns how many */
 int nv_unison_voices(const VoiceSnap *v, double frequency, int harmonic, double harmonic_decay, double *out)
 {
+    if (v->pea) {                               /* SambaWhistleProperties: the pea's comb, +-k */
+        int n = 0;
+        for (int k = 0; k < v->n_unison; k++) {
+            double g = v->unison_gain / (double)(k + 1);
+            for (int sg = 0; sg < 2; sg++, n++) {
+                out[5 * n + 0] = g; out[5 * n + 1] = sg ? -v->unison_detune[k] : v->unison_detune[k];
+                out[5 * n + 2] = 0.0; out[5 * n + 3] = harmonic_decay; out[5 * n + 4] = 0.0;
+            }
+        }
+        return n;
+    }
     if (v->kind != 0) {                         /* SynthProperties': a voice per detune */
         for (int i = 0; i < v->n_unison; i++) {
             out[5 * i + 0] = v->unison_gain; out[5 * i + 1] = v->unison_detune[i]; out[5 * i + 2] = 0.0;
@@ -412,6 +439,12 @@ static int solo_vibrato(const VoiceSnap *v, double frequency, int index, double 
 
 int nv_voice_vibrato(const VoiceSnap *v, double frequency, int index, double *out)
 {
+    if (v->pea) {                               /* SambaWhistleProperties: the pea's flutter */
+        out[0] = pow(2.0, v->pea_vibrato_cents * 1.4142 / 1200.0) - 1.0;
+        out[1] = v->pea_vibrato_hz;
+        out[2] = 0.0;
+        return 1;
+    }
     if (v->exp_vibrato_cents != 0.0) {
         double got[3];
         double rate, phase;
@@ -613,6 +646,22 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
                 }
         }
         s->gain *= pow(10.0, d / 20.0);
+    }
+    if (s->bore_corner_hz != 0.0) {
+        /* _bore_norm: the series' power at the voice's own tonal dampening,
+           unfiltered, over the bore's */
+        double f0 = s->frequency_x * pow(2.0, op), ref = 0.0, shaped = 0.0;
+        int top = s->max_harmonic ? s->max_harmonic : 64;
+        for (int h = 1; h <= top; h++) {
+            double a = nv_series_volume(s, h);
+            if (a == 0.0)
+                continue;
+            double r = a * pow((double)h, s->attack_dampening - c->tonal_dampening);
+            ref += r * r;
+            double g = a * bore_gain(s, f0 * h);
+            shaped += g * g;
+        }
+        s->bore_norm = shaped > 0.0 ? pow(ref / shaped, 0.5) : 1.0;
     }
     /* place() */
     o->pan_angle = stage_angle(channel_pan);

@@ -21,6 +21,8 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <set>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -210,6 +212,10 @@ struct Song {
     // it (_prep_exclusive_classes' choke_at)
     std::vector<unsigned long long> kit_choke;
     std::map<std::pair<long long, int>, std::vector<double>> choke_at;
+    // ITS SLURS: _legato_ticks' (channel, key, k), and from them (finish)
+    // each note's -- slurred, and a slur leaving it (_prep_slur_out)
+    std::set<std::tuple<long long, int, int>> legato;
+    std::vector<char> slurred, slur_out;
 
     bool in_group(int prog, int key, int k) const
     {
@@ -247,10 +253,52 @@ struct Song {
         }
     }
 
+    // The notes in the note loop's order (onset, channel, key), each key's
+    // k-th a slur where legato has it; and a note a slurred onset on its
+    // channel follows, sounding up to it or ending within 20 ms before
+    void slurs()
+    {
+        size_t n = notes.size();
+        slurred.assign(n, 0);
+        slur_out.assign(n, 0);
+        if (legato.empty())
+            return;
+        std::vector<int> idx(n);
+        for (size_t i = 0; i < n; i++)
+            idx[i] = (int)i;
+        std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) {
+            const Ev &x = notes[a], &y = notes[b];
+            if (x.on != y.on) return x.on < y.on;
+            if (x.ch != y.ch) return x.ch < y.ch;
+            return x.note < y.note;
+        });
+        std::map<std::pair<long long, int>, int> occ;
+        std::map<long long, std::vector<double>> sl_on;
+        for (int i : idx) {
+            int &k = occ[std::make_pair(notes[i].ch, notes[i].note)];
+            if (legato.count(std::make_tuple(notes[i].ch, notes[i].note, k))) {
+                slurred[i] = 1;
+                sl_on[notes[i].ch].push_back(notes[i].on);
+            }
+            k++;
+        }
+        for (auto &v : sl_on)
+            std::sort(v.second.begin(), v.second.end());
+        for (size_t i = 0; i < n; i++) {
+            auto it = sl_on.find(notes[i].ch);
+            if (it == sl_on.end())
+                continue;
+            auto q = std::upper_bound(it->second.begin(), it->second.end(), notes[i].on);
+            if (q != it->second.end() && notes[i].off >= *q - 0.02)
+                slur_out[i] = 1;
+        }
+    }
+
     void finish(double total_)
     {
         total = total_;
         exclusive_classes();
+        slurs();
         for (auto &c : ch)
             c.second.finish(total);
         // _next_same: the notes by onset, latest first (stable), each key's
@@ -551,6 +599,23 @@ int nv_song_soft_at(void *s, long long ch, double t)
 {
     const nv::Channel *C = ((nv::Song *)s)->get(ch);
     return C && C->soft_at(t);
+}
+
+// A slurred note, as _legato_ticks found it: channel ch's key's k-th (before nv_song_finish)
+void nv_song_legato(void *s, long long ch, int note, int k)
+{
+    ((nv::Song *)s)->legato.insert(std::make_tuple(ch, note, k));
+}
+
+// Note i's slurs: out[0] it is slurred, out[1] a slur leaves it. 0 past the notes
+int nv_song_slur(void *s, int i, int *out)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (i < 0 || i >= (int)S->slurred.size())
+        return 0;
+    out[0] = S->slurred[i];
+    out[1] = S->slur_out[i];
+    return 1;
 }
 
 // The drum sets' exclusive classes: choke[2 * (128 * program + key) + w],

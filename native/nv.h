@@ -118,6 +118,13 @@ typedef struct {
     double bloom_gain;
     int bloom_banded;
     double bloom_swell, bloom_scatter, bloom_decay_dbs;
+    /* SynthProperties' bore (bore_gain: a roll-off from bore_corner_hz, a
+       bell's high-pass from bell_cutoff_hz), renormalised to the series'
+       power (_bore_norm: the note's, the constructor's); a samba whistle's
+       pea (SambaWhistleProperties: its comb as unison voices, its vibrato) */
+    double bore_corner_hz, bore_order, bell_cutoff_hz, bell_order, bore_norm;
+    int pea;
+    double pea_vibrato_cents, pea_vibrato_hz;
 } VoiceSnap;
 
 typedef struct {
@@ -271,6 +278,10 @@ typedef struct {
     int pjit;
     double sps;
     int ssc;            // each mode's level scattered by stroke (stroke_scatter)
+    // a GATED one-shot (gate_time > 0): its note ends gate_time past its
+    // onset, the key-up ignored (held_texture: no earlier than the key-up)
+    double gate_time;
+    int held_texture;
     // the strike fired strike_flam times (n_flam > 1: an ensemble clap), each
     // within flam_s and flam_db under the loudest
     int n_flam;
@@ -337,6 +348,8 @@ int nv_song_next_same(void *s, long long ch, int note, double on, double *out);
 int nv_song_pitch_level(void *s, int index, int effort_tilt, double *out);
 void nv_song_kits(void *s, const double *f0, const double *seat);
 void nv_song_chokes(void *s, const unsigned long long *choke);
+void nv_song_legato(void *s, long long ch, int note, int k);
+int nv_song_slur(void *s, int i, int *out);
 int nv_song_choke(void *s, long long ch, int note, double on, double *out);
 /* a note's class: K[128 * program + key], a drum set's K[16384 + 128 * program + key] */
 #define NV_K_DRUMS 16384

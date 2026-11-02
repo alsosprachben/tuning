@@ -6521,6 +6521,13 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     if song is not None:
         # the note as its FILE gives it: its key-up, and the channels' answers
         n.ch, n.note, n.key_off = nt.ch, nt.note, key_off
+        if NATIVE_TONE == 'check' and nt.song_index is not None:
+            # ...and its slurs, as nv_play takes them from the song
+            got = song.slur(nt.song_index)
+            if got is not None and got != (bool(slurred), bool(slur_out)):
+                SONG_STATS[1] += 1
+                print("  native channel DIFFERS (ch %d note %d at %.3f s): slur %r vs %r"
+                      % (nt.ch, nt.note, nt.on, (bool(slurred), bool(slur_out)), got))
         n.from_song = int(bool(from_song) and nt.song_index is not None)
         n.song_index = nt.song_index if nt.song_index is not None else -1
         n.damper_pedal = K.damper_pedal
@@ -7601,7 +7608,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                   freq=FREQ, mts=_MTS_TL, btun=_BTUN, otun=_OTUN, faders=set(_LROW))
             else:
                 _SONG = _NV.Song(ccs, notes, total, freq=FREQ, mts=_MTS_TL, btun=_BTUN, otun=_OTUN,
-                                 faders=set(_LROW), trim=lambda _p: program_trim(_p, is_drum(_p), gs=_GS_FILE[0]))
+                                 faders=set(_LROW), trim=lambda _p: program_trim(_p, is_drum(_p), gs=_GS_FILE[0]),
+                                 legato=legato)
     # Occurrence index per (channel, note) in ONSET order -- the same key
     # _legato_ticks used, so a note found in seconds here is the note it judged
     # in ticks there.

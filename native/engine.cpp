@@ -239,7 +239,9 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
                  int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
                  double *rows, int cap, double *qacc, double *azimuth, NoteOut *out, int *band)
 {
-    if (K->one_shot)                    // a one-shot rings out on its own decay
+    if (K->one_shot && K->gate_time > 0.0)  // ...unless it is gated: it stops where the gate closes
+        n->key_off = K->held_texture ? nv::pymax(n->key_off, n->on + K->gate_time) : n->on + K->gate_time;
+    else if (K->one_shot)               // a one-shot rings out on its own decay
         n->key_off = nv::pymax(n->key_off, n->on + K->one_shot_hold);
     n->off = nv_song_note_off(song, n->ch, n->note, n->on, n->key_off, n->damper_pedal, n->mcut,
                               n->retrigger_fade, band);
@@ -311,6 +313,11 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         n.vel = iv[1];
         n.damper_pedal = k->damper_pedal;
         n.mcut = 0; n.slurred = 0; n.slur_out = 0;
+        int sl[2];
+        if (nv_song_slur(song, i, sl)) {        // the file's slurs (_legato_ticks, _prep_slur_out)
+            n.slurred = sl[0];
+            n.slur_out = sl[1];
+        }
         n.channel = (double)ch;
         n.br = (ch >= 0 && ch < nbr) ? br[ch] : -1.0;
         n.from_song = 1; n.song_index = i;

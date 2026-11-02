@@ -66,7 +66,8 @@ class VoiceSnap(ctypes.Structure):
                 ('ring_peak_hz', C), ('ring_decay_below', C), ('ring_decay_above', C), ('ring_decay_floor', C),
                 ('aftersound_fraction', C), ('aftersound_dbs', C), ('aftersound_ratio', C),
                 ('bloom_gain', C), ('bloom_banded', I), ('bloom_swell', C), ('bloom_scatter', C),
-                ('bloom_decay_dbs', C)]
+                ('bloom_decay_dbs', C), ('bore_corner_hz', C), ('bore_order', C), ('bell_cutoff_hz', C),
+                ('bell_order', C), ('bore_norm', C), ('pea', I), ('pea_vibrato_cents', C), ('pea_vibrato_hz', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -143,7 +144,7 @@ class NoteClass(ctypes.Structure):
                    ('detune_hi', C), ('detune_wheel', I)]
                 + [('reg_gain', C), ('reg_knock', C), ('reg_fall', C), ('damper_top', I), ('reg_floor', C),
                    ('reg_release', C), ('one_shot', I), ('one_shot_hold', C), ('pjit', I), ('sps', C),
-                   ('ssc', I), ('n_flam', I), ('flam_s', C), ('flam_db', C)])
+                   ('ssc', I), ('gate_time', C), ('held_texture', I), ('n_flam', I), ('flam_s', C), ('flam_db', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -353,6 +354,8 @@ def _load():
             ('nv_song_kits', None, [ctypes.c_void_p, D, D]),
             ('nv_song_chokes', None, [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulonglong)]),
             ('nv_song_choke', I, [ctypes.c_void_p, LL, I, C, D]),
+            ('nv_song_legato', None, [ctypes.c_void_p, LL, I, I]),
+            ('nv_song_slur', I, [ctypes.c_void_p, I, ctypes.POINTER(I)]),
             ('nv_song_finish', None, [ctypes.c_void_p, C]),
             ('nv_song_note_off', C, [ctypes.c_void_p, LL, I, C, C, I, I, C, ctypes.POINTER(I)]),
             ('nv_song_soft_at', I, [ctypes.c_void_p, LL, C]),
@@ -404,8 +407,24 @@ def decay_target(cls):
     return float(dd[1]) if _owner(dd[0], 'harmonic_decay') in ('SynthProperties', 'CymbalProperties') else None
 
 
+# ...AND A SAMBA WHISTLE'S (SambaWhistleProperties: a pipe's mode set
+# through its bore, the pea's comb and flutter)
+_WHISTLE_OWN = {'mode_ratio': 'SynthProperties', 'series_volume': 'SynthProperties',
+                'harmonic_volume': 'SynthProperties', 'bore_gain': 'SynthProperties',
+                '_bore_norm': 'SynthProperties', 'harmonic_decay': 'SynthProperties',
+                'aftersound': 'SynthProperties', 'chiff_harmonic_gain': 'SynthProperties',
+                'unison_voices': 'SambaWhistleProperties', 'voice_vibrato': 'SambaWhistleProperties'}
+
+
 def _modal_drum(cls):
     import tonelib as T
+    if issubclass(cls, T.SambaWhistleProperties):
+        mg, mr = cls.mode_gains, cls.mode_ratios
+        return (all(_owner(cls, n) == o for n, o in _WHISTLE_OWN.items())
+                and mg is not None and mr is not None and len(mg) == len(mr) <= 320
+                and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
+                and not cls.mode_stroke_tilt and not cls.blare_db_per_khz and not cls.harmonic_touch
+                and not cls.pickup_points and len(cls.unison_detune or ()) <= 8)
     # (the claps, the cymbals and hats, the woods: the other washes are
     # families of their own)
     cym = issubclass(cls, T.CymbalProperties)
@@ -587,10 +606,17 @@ def snapshot(props):
                 setattr(s, f, getattr(p, f))
         dt = decay_target(type(p))
         s.retarget, s.decay_target = int(dt is not None), dt or 0.0
-        s.noisy, s.hf_corner_hz, s.hf_order = 1, p.hf_corner_hz, p.hf_order
-        s.n_trim = len(p.band_trim_db)
-        for i, (f, db) in enumerate(p.band_trim_db):
-            s.trim[i][:] = [float(f), float(db)]
+        if isinstance(p, T.NoisyPercussionMixin):
+            s.noisy, s.hf_corner_hz, s.hf_order = 1, p.hf_corner_hz, p.hf_order
+            s.n_trim = len(p.band_trim_db)
+            for i, (f, db) in enumerate(p.band_trim_db):
+                s.trim[i][:] = [float(f), float(db)]
+        if p.bore_corner_hz:
+            s.bore_corner_hz, s.bore_order = p.bore_corner_hz, p.bore_order
+            s.bell_cutoff_hz, s.bell_order = p.bell_cutoff_hz or 0.0, p.bell_order
+            s.bore_norm = p._bore_norm()
+        if isinstance(p, T.SambaWhistleProperties):
+            s.pea, s.pea_vibrato_cents, s.pea_vibrato_hz = 1, p.pea_vibrato_cents, p.pea_vibrato_hz
     elif s.kind == 1:
         # KitDrumProperties' tables, and SynthProperties' unison
         s.unison_gain = p.unison_gain
@@ -852,11 +878,14 @@ def note_class(cls):
     if got is None:
         v = _class(cls)
         # (a kit drum's one-shot hold is the engine's, a snare's partials'
-        # jitter and signs, a cymbal's bloom; a gate is not)
-        ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF
-                                        if not (drum and a in ('one_shot', 'jitter_by_partial',
-                                                               'strike_phase_spread', 'bloom_seconds',
-                                                               'stroke_scatter')))
+        # jitter and signs, a cymbal's bloom, a hand drum's scatter, and a
+        # gate where it closes no strike's noise)
+        def drum_has(a):
+            if a in ('one_shot', 'jitter_by_partial', 'strike_phase_spread', 'bloom_seconds', 'stroke_scatter'):
+                return True
+            return a == 'gate_time' and not getattr(cls, 'strike_noise_db', None) \
+                and not getattr(cls, 'strike_noise_layers', ())
+        ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF if not (drum and drum_has(a)))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT)
               and getattr(cls, 'mode_phase', None) is None and (int(getattr(cls, 'strike_flam', 0) or 0) <= 1
                    or (int(cls.strike_flam) <= 64 and not getattr(cls, 'strike_flam_record', False)
@@ -919,6 +948,8 @@ def note_class(cls):
         k.flam_db = float(getattr(cls, 'strike_flam_db', 0.0) or 0.0)
         k.pjit = int(bool(getattr(cls, 'jitter_by_partial', False)))
         k.ssc = int(bool(getattr(cls, 'stroke_scatter', False)))
+        k.gate_time = float(getattr(cls, 'gate_time', None) or 0.0)
+        k.held_texture = int(bool(getattr(cls, 'held_texture', False)))
         k.sps = float(getattr(cls, 'strike_phase_spread', 0.0) or 0.0)
         k.one_shot = int(bool(getattr(cls, 'one_shot', False)))
         k.one_shot_hold = BR.ONE_SHOT_MIN_S
@@ -956,11 +987,12 @@ class Song(object):
     say, the soft pedal at its onset, its key's next strike."""
 
     def __init__(self, ccs, notes, total, freq=None, mts=None, btun=None, otun=None, faders=(), trim=None,
-                 finish=True):
+                 finish=True, legato=()):
         """ccs, notes and total as blockrender's; the tuning: freq the file's
         128-key table, mts {channel: [(t, table)]}, btun {channel: ratio},
         otun {channel: 12 cents}; faders the channels whose fader is a row;
-        trim(program) the program's trim on the channel volume."""
+        trim(program) the program's trim on the channel volume; legato
+        _legato_ticks' {(channel, key, k)}."""
         d = self.d = lib()
         self.p = d.nv_song_new()
         for c, evs in ccs.items():
@@ -977,6 +1009,8 @@ class Song(object):
         _, kf0, kseat, kchoke = kits()
         d.nv_song_kits(self.p, kf0, kseat)
         d.nv_song_chokes(self.p, kchoke)
+        for c, n, k in legato:
+            d.nv_song_legato(self.p, int(c), int(n), int(k))
         T128 = ctypes.c_double * 128
         def row(tab):           # a table as 128 numbers, 0 for a key it lacks
             return T128(*[float(tab[k]) if k in tab else 0.0 for k in range(128)])
@@ -1021,6 +1055,13 @@ class Song(object):
 
     def soft_at(self, ch, t):
         return bool(self.d.nv_song_soft_at(self.p, int(ch), float(t)))
+
+    def slur(self, index):
+        """(slurred, a slur leaves it) of the song's note at index, or None"""
+        o = (I * 2)()
+        if index is None or not self.d.nv_song_slur(self.p, int(index), o):
+            return None
+        return bool(o[0]), bool(o[1])
 
     def choke(self, ch, note, on):
         """Where a later strike in its exclusive class stops this note, or None"""

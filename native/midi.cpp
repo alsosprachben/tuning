@@ -22,6 +22,7 @@
 // reads it.
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cmath>
 #include <cstring>
@@ -195,7 +196,81 @@ struct Parsed {
     std::vector<std::pair<int, int>> progs;     // (channel, program) changes, for the caller
     double total = 0.0;
     int gs = 0;                 // a Roland GS exclusive before the first note (gs_setup: the file speaks GS)
+    std::vector<std::array<int, 3>> legato;    // _legato_ticks: (channel, key, k) slurred
 };
+
+// _legato_ticks: the notes that begin contiguously with what their channel
+// was playing before, judged in the file's ticks -- each track's notes paired
+// first in first out, the spans sorted, a channel's notes sharing an onset
+// one event, slurred where it starts within a 64th of a beat (a tick at
+// least) of the end of the event before it; (channel, key, k), k the key's
+// occurrence in onset order
+static void legato_ticks(const std::vector<Msg> &all, const std::vector<size_t> &starts, int tpb,
+                         std::vector<std::array<int, 3>> &out)
+{
+    double tol = std::max(1.0, tpb / 64.0);
+    struct Span {
+        long long on, off;
+        int ch, note;
+    };
+    std::vector<Span> spans;
+    for (size_t ti = 0; ti < starts.size(); ti++) {
+        size_t a = starts[ti], b = ti + 1 < starts.size() ? starts[ti + 1] : all.size();
+        std::map<std::pair<int, int>, std::vector<long long>> held;
+        for (size_t i = a; i < b; i++) {
+            const Msg &m = all[i];
+            int kind = m.status & 0xF0, ch = m.status & 0x0F;
+            if (m.status == 0xFF || m.status == 0xF0 || m.status == 0xF7)
+                continue;
+            if (kind == 0x90 && m.d1 > 0) {
+                held[std::make_pair(ch, m.d0)].push_back(m.tick);
+            } else if (kind == 0x80 || kind == 0x90) {
+                auto it = held.find(std::make_pair(ch, m.d0));
+                if (it != held.end() && !it->second.empty()) {
+                    spans.push_back(Span{it->second.front(), m.tick, ch, m.d0});
+                    it->second.erase(it->second.begin());
+                }
+            }
+        }
+    }
+    std::sort(spans.begin(), spans.end(), [](const Span &x, const Span &y) {
+        if (x.on != y.on) return x.on < y.on;
+        if (x.off != y.off) return x.off < y.off;
+        if (x.ch != y.ch) return x.ch < y.ch;
+        return x.note < y.note;
+    });
+    std::map<std::pair<int, int>, int> seen;
+    std::vector<int> order;                     // the channels as they first appear
+    std::map<int, std::vector<Span>> per;
+    for (const Span &s : spans) {
+        if (!per.count(s.ch))
+            order.push_back(s.ch);
+        per[s.ch].push_back(s);
+    }
+    for (int ch : order) {
+        const std::vector<Span> &v = per[ch];
+        bool has_prev = false;
+        long long prev = 0;
+        size_t i = 0;
+        while (i < v.size()) {
+            size_t j = i;
+            while (j < v.size() && v[j].on == v[i].on)
+                j++;
+            bool slur = has_prev && (double)(v[i].on - prev) <= tol;
+            long long mx = v[i].off;
+            for (size_t q = i; q < j; q++) {
+                int &k = seen[std::make_pair(v[q].ch, v[q].note)];
+                if (slur)
+                    out.push_back({v[q].ch, v[q].note, k});
+                k++;
+                mx = std::max(mx, v[q].off);
+            }
+            prev = mx;
+            has_prev = true;
+            i = j;
+        }
+    }
+}
 
 static const int GM_DEFAULT_VOLUME = 100, GM_DEFAULT_EXPRESSION = 127, GM_DEFAULT_PAN = 64;
 static const int PERCUSSION_CHANNEL = 9, CC84_CANCEL = 128;
@@ -215,9 +290,13 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     if (r.p > r.end)
         return -1;
     std::vector<Msg> all;
-    for (int i = 0; i < ntr; i++)
+    std::vector<size_t> starts;
+    for (int i = 0; i < ntr; i++) {
+        starts.push_back(all.size());
         if (!read_track(r, all))
             return -1;
+    }
+    legato_ticks(all, starts, tpb, P.legato);
     // merge_tracks: a stable sort on absolute tick (tracks in file order),
     // then relative ticks; fix_end_of_track: end-of-track deltas carried on
     std::stable_sort(all.begin(), all.end(), [](const Msg &a, const Msg &b) { return a.tick < b.tick; });
@@ -531,6 +610,8 @@ void nv_midi_song(void *p, void *song, const double *trim)
     for (const nv::Note &n : P->notes)
         nv_song_note(song, n.ch, n.note, n.on, n.off, n.vel, n.v7, n.v11, n.pan,
                      trim[(n.drum ? 128 : 0) + n.prog], n.prog, n.drum);
+    for (const auto &l : P->legato)
+        nv_song_legato(song, l[0], l[1], l[2]);
 }
 
 }  // extern "C"

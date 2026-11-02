@@ -294,7 +294,7 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
         transverse[3 * *ntrans + 1] = hv;
         transverse[3 * *ntrans + 2] = pd[0];
         (*ntrans)++;
-        double uv[20];
+        double uv[80];
         int nu = nv_unison_voices(v, t->f0, m, pd[0], uv);
         for (int ui = 0; ui < nu; ui++) {
             double gm = uv[5 * ui], off_hz = uv[5 * ui + 1], dr = uv[5 * ui + 2], ud = uv[5 * ui + 3];
