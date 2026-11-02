@@ -877,7 +877,7 @@ class Slab:
     shape is not allowed to vary.
     """
 
-    def __init__(self, capacity=16384, tap_capacity=None):
+    def __init__(self, capacity=65536, tap_capacity=None):
         self.cap = capacity
         # THE TAPS' SCRATCH ROWS (tapkernel.c): past the slab's own slots,
         # rewritten every block from the partials that carry a tap set, and
@@ -3999,7 +3999,7 @@ def _reap_lives():
 
 
 class Live:
-    def __init__(self, program=56, rate=48000, frames=128, capacity=16384,
+    def __init__(self, program=56, rate=48000, frames=128, capacity=65536,
                  tuner="hybrid", verbose=True, drums=False, headroom_db=4.0,
                  parts=None, threads=1, gpu=False, eastern=None):
         if _REAP is not None:
@@ -4015,7 +4015,7 @@ class Live:
         self.verbose = verbose
         # THE REGISTER IS THOUSANDS OF ROWS: a pedalled piano's free strings,
         # one per string mode -- room made for them when it is on
-        if getattr(B, 'REGISTER', False) and gpu and capacity == 16384:
+        if getattr(B, 'REGISTER', False) and gpu and capacity < 32768:
             capacity = 32768
         self.slab = Slab(capacity)
         self.slab.panel_for = self._moog_panel_for
@@ -7445,10 +7445,11 @@ class Live:
 
         OFFLINE THIS IS A PASS OVER THE FINISHED TABLE and costs one clone per
         partial. Live there is no finished table -- a template is stamped into
-        a slab with 16384 slots, and a layered string voice is ~260 partials
-        per key. So the copies are stamped like any other note, and the count
-        is CAPPED: three copies of a ten-note string chord is 10,400 slots,
-        two thirds of the slab, for an effect that is audible with one.
+        a slab with a fixed count of slots, and a layered string voice is ~260
+        partials per key. So the copies are stamped like any other note, and
+        the count is CAPPED: three copies of a ten-note string chord is 10,400
+        slots, two thirds of the old 16384-slot slab, for an effect that is
+        audible with one.
 
         A SEND IS A MIX, as offline: the wet share comes out of the dry one and
         the total is held, so CC93 does not double as a volume control.
@@ -21305,7 +21306,9 @@ def main():
                     help="a secondary tuning for the Indian instruments, e.g. raga:bel_todi/todi@c# (ragas.py)")
     ap.add_argument("--drums", action="store_true", help="GM percussion: notes are drums, not pitches")
     ap.add_argument("--headroom", type=float, default=4.0, help="dB of headroom (live cannot normalise)")
-    ap.add_argument("--capacity", type=int, default=16384, help="partial slots (layering needs more)")
+    # 65536, as nvlive's: a busy kit filled 16384 (a vibraslap's strike is
+    # 16524 rows), and a full slab drops notes -- ~0.05 ms a block more on the GPU
+    ap.add_argument("--capacity", type=int, default=65536, help="partial slots (layering needs more)")
     ap.add_argument("--threads", type=int, default=1,
                 help="split the partial table across N threads (3 is usually best; "
                      "only engages above %d occupied slots)" % PARALLEL_MIN)

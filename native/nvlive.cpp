@@ -52,8 +52,8 @@
 // next while the GPU renders this one. --gpu=c runs the samples through the
 // C reference (voice_samples) instead, to check the setup without a GPU.
 //
-// THE SLAB: --slots (65536; live's capacity is 16384, which a vibraslap's
-// strike, 16524 rows, does not fit).
+// THE SLAB: --slots (65536, live's capacity: a vibraslap's strike is 16524
+// rows).
 //
 // PRESSURE (channel aftertouch): the notes on its channel lifted by the
 // export's press_db (tonelib.PRESS_DB; --press-db=DB for Ben's session's) at
@@ -583,8 +583,8 @@ int main(int argc, char **argv)
     long built = drums ? nv_tcache_warm(cache, program, 0, 127, 1, speeds, 1)
                        : nv_tcache_warm(cache, program, 21, 96, pp[1], speeds, pp[2]);
     fprintf(stderr, "nvlive: %s %d, %ld templates\n", drums ? "drum set" : "program", program, built);
-    // THE SLAB'S SLOTS (--slots: live's capacity, 16384; here 65536 by
-    // default -- a vibraslap's strike is 16524 rows)
+    // THE SLAB'S SLOTS (--slots: live's capacity, 65536 -- a vibraslap's
+    // strike is 16524 rows)
     long slots = atol(opt(argc, argv, "slots", "65536").c_str());
     void *part = nv_lp_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], slots,
                            E.headroom, E.pan.data(), E.beta);

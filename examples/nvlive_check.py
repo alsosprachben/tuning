@@ -32,7 +32,7 @@ transposed, the piano over N..127; nvlive --split). Without either, nvlive
 --no-drums.
 --pipeline (with --gpu): both a block late, the next block's setup while the
 GPU renders this one (live's TUNING_GPU_PIPELINE=1; nvlive's default on
-OpenCL). Both slabs at --slots=N (default live's 16384); on the CPU unless --gpu.
+OpenCL). Both slabs at --slots=N (default live's 65536); on the CPU unless --gpu.
 """
 import atexit
 import os
@@ -81,7 +81,7 @@ def main(argv):
     beside = "beside" in opt
     split = int(opt.get("split") or 0)
     stp = int(opt.get("split-transpose") or 0)
-    slots = int(opt.get("slots") or 16384)
+    slots = int(opt.get("slots") or 65536)
     pipe = "pipeline" in opt and "gpu" in opt and (opt["gpu"] or "cl") == "cl"
     if pipe:
         os.environ["TUNING_GPU_PIPELINE"] = "1"
