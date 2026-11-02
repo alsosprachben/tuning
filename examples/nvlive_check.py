@@ -32,9 +32,11 @@ transposed, the piano over N..127; nvlive --split). Without either, nvlive
 --no-drums.
 --pipeline (with --gpu): both a block late, the next block's setup while the
 GPU renders this one (live's TUNING_GPU_PIPELINE=1; nvlive's default on
-OpenCL). nvlive's slab at live's 16384 slots; on the CPU unless --gpu.
+OpenCL). Both slabs at --slots=N (default live's 16384); on the CPU unless --gpu.
 """
+import atexit
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -59,6 +61,7 @@ def main(argv):
     prog = int(opt.get("program", 0))
     secs = float(args[1]) if len(args) > 1 else 20.0
     tmp = tempfile.mkdtemp(prefix="nvlivecheck")
+    atexit.register(shutil.rmtree, tmp, True)       # (an export and WAVs a run: they filled the disk)
     mid = os.path.join(tmp, "in.mid")
     BI.excerpt(args[0], secs).save(mid)
     nvx = os.path.join(tmp, "live.nvx")
@@ -78,11 +81,12 @@ def main(argv):
     beside = "beside" in opt
     split = int(opt.get("split") or 0)
     stp = int(opt.get("split-transpose") or 0)
+    slots = int(opt.get("slots") or 16384)
     pipe = "pipeline" in opt and "gpu" in opt and (opt["gpu"] or "cl") == "cl"
     if pipe:
         os.environ["TUNING_GPU_PIPELINE"] = "1"
     subprocess.check_call([exe, nvx, "--test", mid, out, "--program=%d" % prog, "--seconds=%r" % total,
-                           "--slots=16384"] + ([] if "gpu" in opt else ["--cpu"]) + ([] if pipe else ["--no-pipeline"])
+                           "--slots=%d" % slots] + ([] if "gpu" in opt else ["--cpu"]) + ([] if pipe else ["--no-pipeline"])
                           + ([] if reg else ["--no-register"]) + (["--drums"] if drums else [])
                           + ([] if (beside or drums) else ["--no-drums"])
                           + (["--split=%d" % split, "--split-transpose=%d" % stp] if split else [])
@@ -93,7 +97,7 @@ def main(argv):
     raw = open(out, "rb").read()          # float32 stereo after a 44-byte header
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
     # live.Live, fed the same events on the same blocks
-    lv = L.Live(program=prog, rate=48000, frames=128, verbose=False, threads=1, gpu=False,
+    lv = L.Live(program=prog, rate=48000, frames=128, capacity=slots, verbose=False, threads=1, gpu=False,
                 tuner=opt.get("tuner") or "hybrid", drums=drums)
     lv.enable_room(room)
     lv.parts[0].patch.warm()

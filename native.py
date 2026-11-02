@@ -153,8 +153,8 @@ class NoteClass(ctypes.Structure):
                                     'settle_s', 'noise_rel')]
                 + [('n_flam', I), ('flam_s', C), ('flam_db', C)]
                 + [('n_ft', I), ('ft_bal', I), ('ft_t', C * 64), ('ft_db', C * 64), ('ft_c', C * 64)]
-                + [('n_layer', I), ('lay_n', I * 2), ('lay_hz', (C * 32) * 2), ('lay_db', (C * 32) * 2),
-                   ('lay_rise', C * 2), ('lay_dbs', C * 2), ('lay_len', C * 2)])
+                + [('n_layer', I), ('lay_n', I * 32), ('lay_hz', (C * 32) * 32), ('lay_db', (C * 32) * 32),
+                   ('lay_rise', C * 32), ('lay_dbs', C * 32), ('lay_len', C * 32)])
 
 
 class NoteIn(ctypes.Structure):
@@ -439,7 +439,8 @@ _CUICA_OWN = {'mode_ratio': 'SynthProperties', 'series_volume': 'SynthProperties
 
 
 # ...AND A DRUM MACHINE'S (TR808Properties, the TR-808 engine's: the 808,
-# 909, 707, 606 and CR-78 voices, the jingle bell: each mode its own decay,
+# 909, 707, 606 and CR-78 voices, the jingle bell; SimmonsProperties, the
+# SDS-V's: each mode its own decay,
 # aftersound and phase; its knock a burst train and a layer; its sweep the
 # tension bend)
 _JINGLE_OWN = {'mode_ratio': 'SynthProperties', 'series_volume': 'SynthProperties',
@@ -451,11 +452,15 @@ _JINGLE_OWN = {'mode_ratio': 'SynthProperties', 'series_volume': 'SynthPropertie
 
 def _modal_drum(cls):
     import tonelib as T
-    if issubclass(cls, T.TR808Properties):
+    if issubclass(cls, (T.TR808Properties, T.SimmonsProperties)):
         mg, mr = cls.mode_gains, cls.mode_ratios
-        return (all(_owner(cls, n) == o for n, o in _JINGLE_OWN.items())
+        # (a Simmons: the 808's without its modes' phases and aftersounds)
+        own = (_JINGLE_OWN if issubclass(cls, T.TR808Properties)
+               else dict(_JINGLE_OWN, aftersound_partial=None, mode_phase=None))
+        return (all(_owner(cls, n) == o for n, o in own.items())
                 and mg is not None and mr is not None and len(mg) == len(mr) <= 400
-                and len(cls.mode_decays) <= 400 and len(cls.mode_after) <= 400 and len(cls.mode_phases) <= 400
+                and len(cls.mode_decays) <= 400 and len(getattr(cls, 'mode_after', ())) <= 400
+                and len(getattr(cls, 'mode_phases', ())) <= 400
                 and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
                 and not cls.mode_stroke_tilt and not cls.bore_corner_hz and not cls.harmonic_touch
                 and not cls.pickup_points and len(cls.unison_detune or ()) <= 8)
@@ -768,12 +773,13 @@ def snapshot(props):
             s.bore_norm = p._bore_norm()
         if isinstance(p, T.SambaWhistleProperties):
             s.pea, s.pea_vibrato_cents, s.pea_vibrato_hz = 1, p.pea_vibrato_cents, p.pea_vibrato_hz
-        if isinstance(p, T.TR808Properties):
-            s.n_md, s.n_ma, s.n_mp = len(p.mode_decays), len(p.mode_after), len(p.mode_phases)
+        if isinstance(p, (T.TR808Properties, T.SimmonsProperties)):
+            ma, mp = getattr(p, 'mode_after', ()), getattr(p, 'mode_phases', ())
+            s.n_md, s.n_ma, s.n_mp = len(p.mode_decays), len(ma), len(mp)
             s.mode_decays[:s.n_md] = [float(x) for x in p.mode_decays]
-            for i, (sh, d) in enumerate(p.mode_after):
+            for i, (sh, d) in enumerate(ma):
                 s.mode_after[i][:] = [float(sh), float(d)]
-            s.mode_phases[:s.n_mp] = [float(x) for x in p.mode_phases]
+            s.mode_phases[:s.n_mp] = [float(x) for x in mp]
         if isinstance(p, T.TunedBarProperties):
             s.n_bar = len(p.bar_modes)
             for i, (bn, bg) in enumerate(p.bar_modes):
@@ -1049,13 +1055,13 @@ def note_class(cls):
             if a in ('one_shot', 'jitter_by_partial', 'strike_phase_spread', 'bloom_seconds', 'stroke_scatter',
                      'gate_time'):
                 return True
-            # ...a machine's burst train, and up to two layers
+            # ...a machine's burst train, and up to 32 layers (a Simmons: 21)
             if a == 'strike_flam_times':
                 ft = getattr(cls, 'strike_flam_times', None) or ()
                 return len(ft) <= 64 and all(len(b) in (2, 3) for b in ft)
             if a == 'strike_noise_layers':
                 ly = getattr(cls, 'strike_noise_layers', ()) or ()
-                return len(ly) <= 2 and all(len(l[0]) <= 32 for l in ly)
+                return len(ly) <= 32 and all(len(l[0]) <= 32 for l in ly)
             return False
         ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF if not (drum and drum_has(a)))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT)

@@ -13,7 +13,9 @@ refuses (exit 2: not a piano file, a bend, a moving fader) is counted.
 --tuner: both at that tuner -- nvrender computing it (native/tuner.cpp),
 blockrender's CLI taking it by name -- and --a at that reference pitch.
 """
+import atexit
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -41,6 +43,7 @@ def main(argv):
                  if l.strip() and not l.startswith("#")]
     exe = N.build_nvrender()
     tmp = tempfile.mkdtemp(prefix="nvcheck")
+    atexit.register(shutil.rmtree, tmp, True)       # (an export and WAVs a run: they filled the disk)
     nvx = os.path.join(tmp, "piano.nvx")
     subprocess.check_call([sys.executable, os.path.join(HERE, "examples", "native_export.py"), nvx], env=env,
                           stdout=subprocess.DEVNULL)

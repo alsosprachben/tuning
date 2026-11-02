@@ -47,7 +47,8 @@ def main(argv):
         import native as N
         sets = tuple(int(p) for p in opt["sets"].split(","))
         cls = N.kits()[0]
-        all_keys = tuple(k for k in range(128) if any(cls[128 * p + k] is not None for p in sets))
+        all_keys = tuple(k for k in range(128) if any(cls[128 * p + k] is not None
+                                                       and N.note_class(cls[128 * p + k]) is not None for p in sets))
     if opt.get("keys"):
         lo, hi = (int(x) for x in opt["keys"].split("-"))
         all_keys = tuple(k for k in all_keys if lo <= k <= hi)

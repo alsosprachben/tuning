@@ -325,8 +325,8 @@ typedef struct {
     // MORE STRUCK THINGS THAN ONE (strike_noise_layers): each its table, rise
     // s, dB/s and length s, from the note's onset
     int n_layer;
-    int lay_n[2];
-    double lay_hz[2][32], lay_db[2][32], lay_rise[2], lay_dbs[2], lay_len[2];
+    int lay_n[32];
+    double lay_hz[32][32], lay_db[32][32], lay_rise[32], lay_dbs[32], lay_len[32];
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
