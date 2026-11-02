@@ -607,6 +607,59 @@ struct Piano {
     bool drums = false;
     int program = 0;
     std::vector<unsigned long long> choke;
+    // THE PART'S PATCHES (live's Parts on one slab): each its templates and
+    // settings, the channel it listens on (-1 every one, less those in excl:
+    // bits), its keys lo..hi and transpose; a note takes the last added that
+    // claims it. Patch 0 is the part as nv_lp_new made it; the members above
+    // are the patch in use (Use), patch 0's between notes
+    struct Patch {
+        void *cache;
+        long long pid;
+        double level_db;
+        int nbuckets, speed, damper_pedal, soft_drop, soft_top;
+        bool drums, reg;
+        int program;
+        std::vector<unsigned long long> choke;
+        int channel;
+        unsigned excl;
+        int lo, hi, transpose;
+    };
+    std::vector<Patch> patches;
+    int cur = 0, transpose = 0;
+    bool cur_reg = true;                            // the patch in use has the register
+
+    int patch_for(int ch, int note) const
+    {
+        for (int i = (int)patches.size() - 1; i >= 0; i--) {
+            const Patch &p = patches[i];
+            if ((p.channel < 0 || p.channel == ch) && !((p.excl >> ch) & 1u) && p.lo <= note && note <= p.hi)
+                return i;
+        }
+        return -1;
+    }
+
+    void use(int i)
+    {
+        if (i == cur)
+            return;
+        if (cur == 0 && !patches.empty())
+            patches[0].speed = speed;               // (the wheel's detune step, the piano's)
+        const Patch &p = patches[i];
+        cache = p.cache; pid = p.pid; level_db = p.level_db; nbuckets = p.nbuckets; speed = p.speed;
+        damper_pedal = p.damper_pedal; soft_drop = p.soft_drop; soft_top = p.soft_top;
+        drums = p.drums; program = p.program; cur_reg = p.reg; transpose = p.transpose;
+        choke_p = &p.choke;
+        cur = i;
+    }
+
+    // the patch a note takes, in use for a scope; the one before put back
+    struct Use {
+        Piano &P;
+        int was;
+        Use(Piano &P_, int i) : P(P_), was(P_.cur) { P.use(i); }
+        ~Use() { P.use(was); }
+    };
+    const std::vector<unsigned long long> *choke_p = &choke;
     // LEGATO (live._legato_on): each channel's last onset group -- when it
     // began, its keys, its last key up, whether it was a slur -- a note
     // struck within CHORD_WINDOW_S of it a member, else slurred where one of
@@ -742,7 +795,14 @@ struct Piano {
         key_vel[std::make_pair(ch, note)] = vel;
         if (note < 0 || note > 127)
             return;
-        const nv::live::Template *T = nv_tcache_lookup(cache, note, bucket(vel), speed);
+        int pi = patch_for(ch, note);
+        if (pi < 0)
+            return;                         // no part listens there
+        Use u(*this, pi);
+        int sn = note + transpose;          // the key the patch plays (live's snote)
+        if (sn < 0 || sn > 127)
+            return;
+        const nv::live::Template *T = nv_tcache_lookup(cache, sn, bucket(vel), speed);
         if (!T)
             return;                         // a miss: live warms it off the audio thread
         double scale = pow(10.0, level_db / 20.0) * swell * chan_gain(ch);
@@ -772,17 +832,17 @@ struct Piano {
         if (soft[ch] && !slots.empty())
             S.soft_strings(slots, soft_drop, soft_top);
         if (slur && !slots.empty())
-            slur_stamp(note, *T);
-        if (drums && !choke.empty()) {
+            slur_stamp(sn, *T);
+        if (drums && !choke_p->empty()) {
             // THE CHOKE, live (Live._note_on): the strike in an exclusive
             // class is a note-off written into whatever of it is ringing
-            const unsigned long long *m = &choke[2 * (128 * program + note)];
+            const unsigned long long *m = &(*choke_p)[2 * (128 * program + sn)];
             if (m[0] | m[1]) {
                 std::vector<Key> hit;
                 for (auto &kv : S.live) {
-                    int k = (int)std::get<2>(kv.first);
-                    if (std::get<0>(kv.first) == pid && k != note && k >= 0 && k < 128
-                        && ((m[k >> 6] >> (k & 63)) & 1ULL))
+                    int k = (int)std::get<2>(kv.first), ks = k + transpose;
+                    if (std::get<0>(kv.first) == pid && k != note && ks >= 0 && ks < 128
+                        && ((m[ks >> 6] >> (ks & 63)) & 1ULL))
                         hit.push_back(kv.first);
                 }
                 for (const Key &k : hit) {
@@ -795,7 +855,7 @@ struct Piano {
             press(slots, pressure[ch]);
         if (bend[ch] != 1.0)                // a note struck under a bend joins it
             retune(slots, n0, bend[ch]);
-        if (reg_on && reg_note[note] && !S.last_slots.empty())
+        if (reg_on && cur_reg && reg_note[note] && !S.last_slots.empty())
             reg_strike(ch, note, n0, *T, S.last_slots);
     }
 
@@ -849,6 +909,8 @@ struct Piano {
             }
             mono_cur[ch] = -1;                      // last key up: an ordinary release
         }
+        int pi = patch_for(ch, note);
+        Use u(*this, pi < 0 ? cur : pi);
         auto sq = sost.find(ch);
         if ((pedal_holds(ch, note) || (sq != sost.end() && sq->second.count(note))) && damper_pedal) {
             pedalled.insert(std::make_pair(ch, note));
@@ -861,8 +923,10 @@ struct Piano {
     // rows with it, and its damper told
     void let_go(int ch, int note, long long n0)
     {
+        int pi = patch_for(ch, note);
+        Use u(*this, pi < 0 ? cur : pi);
         S.release(Key(pid, ch, note, -1), n0);
-        if (reg_on) {
+        if (reg_on && cur_reg) {
             S.release(Key(pid, ch, note, REG_FORCED), n0);
             reg_damper(ch, n0, note, false);
         }
@@ -2856,6 +2920,9 @@ void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int s
     P->cache = cache; P->pid = pid; P->level_db = level_db; P->nbuckets = nbuckets; P->speed = speed;
     P->damper_pedal = damper_pedal; P->soft_drop = soft_drop; P->soft_top = soft_top;
     P->rate = rate; P->retrigger = retrigger;
+    P->patches.push_back(nv::slab::Piano::Patch{cache, pid, level_db, nbuckets, speed, damper_pedal, soft_drop,
+                                                 soft_top, false, true, 0, {}, -1, 0u, 0, 127, 0});
+    P->choke_p = &P->patches[0].choke;
     P->S.headroom_d = headroom;
     P->S.headroom = (float)headroom;
     memcpy(P->S.pan_tab, pan_tab, sizeof P->S.pan_tab);
@@ -2869,9 +2936,45 @@ void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int s
 void nv_lp_drums(void *h, int program, const unsigned long long *choke)
 {
     nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Piano::Patch &p = P->patches[0];
+    p.drums = true;
+    p.reg = false;
+    p.program = program;
+    p.choke.assign(choke, choke + 2 * 16384);
     P->drums = true;
     P->program = program;
-    P->choke.assign(choke, choke + 2 * 16384);
+    P->cur_reg = false;
+    P->choke_p = &p.choke;
+}
+
+// ANOTHER PATCH on the part (live's Parts beside it): its template cache,
+// part id, level, buckets, wheel step, dampers, una corda; a drum set's
+// (drums: program its set, choke its exclusive classes, as nv_lp_drums)
+// or not; the channel it listens on (-1 every one, less excl's bits), its
+// keys lo..hi, transposed. Added last, it takes the notes it claims. Its index
+int nv_lp_add_patch(void *h, void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
+                    int soft_drop, int soft_top, int drums, int program, const unsigned long long *choke, int channel,
+                    unsigned excl, int lo, int hi, int transpose)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Piano::Patch p{cache, pid, level_db, nbuckets, speed, damper_pedal, soft_drop, soft_top, drums != 0,
+                             false, program, {}, channel, excl, lo, hi, transpose};
+    if (drums && choke)
+        p.choke.assign(choke, choke + 2 * 16384);
+    P->patches.push_back(std::move(p));
+    P->choke_p = &P->patches[P->cur].choke;          // (the vector may have moved)
+    return (int)P->patches.size() - 1;
+}
+
+// a patch's channel (-1 every one, less excl's bits), keys and transpose
+void nv_lp_patch_range(void *h, int i, int channel, unsigned excl, int lo, int hi, int transpose)
+{
+    nv::slab::Piano::Patch &p = ((nv::slab::Piano *)h)->patches[i];
+    p.channel = channel;
+    p.excl = excl;
+    p.lo = lo;
+    p.hi = hi;
+    p.transpose = transpose;
 }
 
 void nv_lp_free(void *h) { delete (nv::slab::Piano *)h; }

@@ -24,6 +24,12 @@ OpenCL, or "c" the C reference), from GPU-MIN busy slots (live's GPU_MIN).
 place of the export's, its free strings' bank built again at it.
 --drums: the part a drum part, PROGRAM its drum set (live.Live(drums=True),
 nvlive --drums): the file's notes struck on its kit, whatever their channel.
+--beside: the drum set (Standard) on channel 10 beside the piano, which
+plays the file's channel 1 (live: a part on each; nvlive's default, its
+piano on every channel but 10). --split=N [--split-transpose=T]: on channel
+1, keys under N the drum set's, moved by T (live: a drum part over 0..N-1
+transposed, the piano over N..127; nvlive --split). Without either, nvlive
+--no-drums.
 --pipeline (with --gpu): both a block late, the next block's setup while the
 GPU renders this one (live's TUNING_GPU_PIPELINE=1; nvlive's default on
 OpenCL). nvlive's slab at live's 16384 slots; on the CPU unless --gpu.
@@ -69,12 +75,17 @@ def main(argv):
     reg = "register" in opt
     gmin = int(opt.get("gpu-min", L.GPU_MIN))
     drums = "drums" in opt
+    beside = "beside" in opt
+    split = int(opt.get("split") or 0)
+    stp = int(opt.get("split-transpose") or 0)
     pipe = "pipeline" in opt and "gpu" in opt and (opt["gpu"] or "cl") == "cl"
     if pipe:
         os.environ["TUNING_GPU_PIPELINE"] = "1"
     subprocess.check_call([exe, nvx, "--test", mid, out, "--program=%d" % prog, "--seconds=%r" % total,
                            "--slots=16384"] + ([] if "gpu" in opt else ["--cpu"]) + ([] if pipe else ["--no-pipeline"])
                           + ([] if reg else ["--no-register"]) + (["--drums"] if drums else [])
+                          + ([] if (beside or drums) else ["--no-drums"])
+                          + (["--split=%d" % split, "--split-transpose=%d" % stp] if split else [])
                           + (["--pedal-key=" + opt["pedal-key"]] if "pedal-key" in opt else [])
                           + (["--gpu=" + (opt["gpu"] or "cl"), "--gpu-min=%d" % gmin] if "gpu" in opt else [])
                           + (["--tuner=" + opt["tuner"]] if opt.get("tuner") else []),
@@ -86,6 +97,17 @@ def main(argv):
                 tuner=opt.get("tuner") or "hybrid", drums=drums)
     lv.enable_room(room)
     lv.parts[0].patch.warm()
+    if beside or split:
+        # the piano on channel 1 (keys from the split), the drum set beside it
+        pp = lv.parts[0].patch
+        dp = L.Patch(0, True, opt.get("tuner") or "hybrid", 0)
+        dp.warm()
+        parts = [L.Part(pp, channel=0 if beside else None, lo=split)]
+        if beside:
+            parts.append(L.Part(dp, channel=9))
+        if split:
+            parts.append(L.Part(dp, channel=0, lo=0, hi=split - 1, transpose=stp))
+        lv.set_parts(parts)
     lv.slab.shed = lambda n, frac: 0
     if "gpu" in opt:
         send = lv.renderer.send

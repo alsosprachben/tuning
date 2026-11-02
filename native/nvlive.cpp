@@ -3,6 +3,7 @@
 //
 //     nvlive EXPORT.nvx [--program=N [--drums]] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
 //                       [--cpu | --gpu[=cl|c]] [--no-pipeline] [--slots=N]
+//                       [--drum-set=P | --no-drums] [--split=N [--split-channel=C] [--split-transpose=T]]
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
 //                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
 //                       [--tuner=NAME [--a=HZ | --c=HZ]]
@@ -149,6 +150,10 @@ void nv_rt_add(void *h, int src, int arg, int dst, int keep, int channel, int la
 int nv_rt_feed(void *h, int type, int ch, int a, int b, int *out, int cap);
 void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr);
 void nv_lp_pipeline(void *h, int on);
+int nv_lp_add_patch(void *h, void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
+                    int soft_drop, int soft_top, int drums, int program, const unsigned long long *choke, int channel,
+                    unsigned excl, int lo, int hi, int transpose);
+void nv_lp_patch_range(void *h, int i, int channel, unsigned excl, int lo, int hi, int transpose);
 int nv_lp_on_gpu(void *h);
 void nv_lp_gpu_ms(void *h, double *out);
 void nv_lp_reg_async(void *h);
@@ -585,6 +590,38 @@ int main(int argc, char **argv)
                            E.headroom, E.pan.data(), E.beta);
     if (drums)
         nv_lp_drums(part, program, E.kit_choke.data());
+    // THE DRUMS BESIDE THE PIANO (live's Parts on one slab): a drum set
+    // (--drum-set=P, Standard's 0) on channel 10, the piano on every other
+    // (--no-drums: the piano alone); and --split=N, on the keyboard's channel
+    // (--split-channel, 1), its keys under N the drum set's, moved by
+    // --split-transpose=T (the hand drums, 60-87, from a low split)
+    bool nodrums = drums;
+    for (int i = 1; i < argc; i++)
+        nodrums = nodrums || !strcmp(argv[i], "--no-drums");
+    int split = atoi(opt(argc, argv, "split", "0").c_str());
+    if (!drums && (!nodrums || split > 0)) {
+        int dset = atoi(opt(argc, argv, "drum-set", "0").c_str()) & 127;
+        void *dcache = nv_tcache_new(K.data(), &t, E.freq.data(), E.trim.data(), E.kind.data(), E.fin.data(),
+                                     E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK,
+                                     E.k[K_RING_FLOOR], E.k[K_RING_MAX], E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR);
+        nv_tcache_kits(dcache, E.kit_f0.data(), E.kit_seat.data(), E.kit_choke.data(), E.kit_skind.data(),
+                       E.kit_spar.data(), 100.0);
+        int nsp[1] = {-1};
+        long dbuilt = nv_tcache_warm(dcache, dset, 35, 87, 1, nsp, 1);
+        if (!nodrums) {
+            nv_lp_patch_range(part, 0, -1, 1u << 9, 0, 127, 0);
+            nv_lp_add_patch(part, dcache, 2, 0.0, 1, -1, 0, 0, 0, 1, dset, E.kit_choke.data(), 9, 0u, 0, 127, 0);
+            fprintf(stderr, "nvlive: drum set %d on channel 10 (%ld templates)\n", dset, dbuilt);
+        }
+        if (split > 0) {
+            int sch = atoi(opt(argc, argv, "split-channel", "1").c_str()) - 1;
+            int str = atoi(opt(argc, argv, "split-transpose", "0").c_str());
+            nv_lp_add_patch(part, dcache, 3, 0.0, 1, -1, 0, 0, 0, 1, dset, E.kit_choke.data(), sch & 15, 0u, 0,
+                            split - 1, str);
+            fprintf(stderr, "nvlive: drum set %d under key %d on channel %d (transposed %+d)\n", dset, split,
+                    (sch & 15) + 1, str);
+        }
+    }
     nv_lp_detune_wheel(part, pp[6] >= 0);       // the export's speed: a honky-tonk's wheel, else -1
     if (E.k.size() > K_BEND_RANGE)
         nv_lp_post(part, E.k[K_THRESH], E.k[K_BEND_RANGE], 35.0);     // (the mod range: no vibrato on a piano)

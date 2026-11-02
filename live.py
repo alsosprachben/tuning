@@ -5696,10 +5696,12 @@ class Live:
                     self._cut_on(part, ch, msg.note, msg.velocity, n0)
                     # a key that also strikes another's sound (percussion_map.
                     # KIT_LAYER): the metronome bell's tick is the click key's.
-                    # One-shots, so no key need stay down for them
+                    # One-shots, so no key need stay down for them. The
+                    # layers of the key the part PLAYS (its transpose: a
+                    # split's drums), each struck as the key that plays it
                     if part.patch.drums:
-                        for _ln in key_layers(msg.note, kit_for_program(part.patch.program)):
-                            self._note_on(part, ch, _ln, msg.velocity, n0)
+                        for _ln in key_layers(msg.note + part.transpose, kit_for_program(part.patch.program)):
+                            self._note_on(part, ch, _ln - part.transpose, msg.velocity, n0)
             self._glide_from = None
             self._slur = False
         else:
