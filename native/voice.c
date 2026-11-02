@@ -199,8 +199,19 @@ static double soundboard_gain(const VoiceSnap *v, double fn)
     return body * high * low;
 }
 
-/* GrandPianoProperties.harmonic_volume, on SynthProperties' (no bore) */
+static double harmonic_volume(const VoiceSnap *v, int harmonic);
+
+/* the voice's harmonic_volume, and SampledBreak's: nothing at or above its Nyquist */
 double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
+{
+    double s = harmonic_volume(v, harmonic);
+    if (v->nyquist != 0.0 && !(v->frequency_x * pow(2.0, v->octave_position) * nv_mode_ratio(v, harmonic) < v->nyquist))
+        return 0.0;
+    return s;
+}
+
+/* GrandPianoProperties.harmonic_volume, on SynthProperties' (no bore) */
+static double harmonic_volume(const VoiceSnap *v, int harmonic)
 {
     double s = nv_series_volume(v, harmonic);
     if (s == 0.0)
@@ -420,9 +431,11 @@ static double chiff_harmonic_gain(const VoiceSnap *v, double harmonic)
 
 double nv_chiff_harmonic_gain(const VoiceSnap *v, double harmonic)
 {
-    if (v->noisy)                               /* NoisyPercussionMixin: the wash rolled off too */
-        return chiff_harmonic_gain(v, harmonic) * hf_rolloff(v, harmonic);
-    return chiff_harmonic_gain(v, harmonic);
+    double g = v->noisy                         /* NoisyPercussionMixin: the wash rolled off too */
+        ? chiff_harmonic_gain(v, harmonic) * hf_rolloff(v, harmonic) : chiff_harmonic_gain(v, harmonic);
+    if (v->nyquist != 0.0 && !(v->frequency_x * pow(2.0, v->octave_position) * harmonic < v->nyquist))
+        return 0.0;                             /* SampledBreak's Nyquist */
+    return g;
 }
 
 double nv_bloom_delay_for(const VoiceSnap *v, double frequency)

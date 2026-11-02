@@ -84,6 +84,9 @@ typedef struct {
        hf_corner_hz, and the band trim ((Hz, dB), log-interpolated) */
     int noisy;
     double hf_corner_hz, hf_order;
+    /* SampledBreak: nothing sounds at or above the sampler's moved Nyquist
+       (0: no sampler) */
+    double nyquist;
     int n_trim;
     double trim[32][2];
     /* AcousticSnareProperties: the head's two rates, the shell's remainder on

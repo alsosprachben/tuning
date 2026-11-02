@@ -58,7 +58,7 @@ class VoiceSnap(ctypes.Structure):
                 ('click_db', C * 32), ('click_hz0', C), ('click_cal_db', C), ('click_scatter', C),
                 ('click_dbs', C), ('click_stroke_slope', C), ('stroke_ref_db', C),
                 ('slow_share', C), ('slow_dbs', C), ('slow_max_hz', C),
-                ('noisy', I), ('hf_corner_hz', C), ('hf_order', C), ('n_trim', I), ('trim', (C * 2) * 32),
+                ('noisy', I), ('hf_corner_hz', C), ('hf_order', C), ('nyquist', C), ('n_trim', I), ('trim', (C * 2) * 32),
                 ('snare', I), ('fund_dbs', C), ('head_dbs', C), ('wire_jitter', C), ('head_jitter', C),
                 ('rim_from', I), ('rim_dbs', C), ('measured', I), ('ring_scale', C), ('mode_scatter_db', C),
                 ('jit_sus', I), ('jit_from', I), ('tamb', I), ('retarget', I), ('decay_target', C),
@@ -483,6 +483,7 @@ def _modal_drum(cls):
     cym = issubclass(cls, T.CymbalProperties)
     bar = issubclass(cls, T.TunedBarProperties)
     if not (issubclass(cls, T.HandClapProperties) or cym or issubclass(cls, T.WoodPercussionProperties)
+            or issubclass(cls, T.SnareDrumProperties)
             or issubclass(cls, T.TriangleProperties) or issubclass(cls, T.RattleProperties) or bar):
         return False
     own = dict(_MODAL_OWN, aftersound='CymbalProperties') if cym else _MODAL_OWN
@@ -728,6 +729,7 @@ def snapshot(props):
     s.bloom_banded = int(bool(p.bloom_banded))
     s.bloom_decay_dbs = getattr(p, 'bloom_decay_dbs', 0.0) or 0.0
     s.kind = kit_drum(type(p))
+    s.nyquist = p._nyquist if isinstance(p, T.SampledBreak) else 0.0
     if s.kind == 3:
         # a harmonic series on SynthProperties: the noise's roll-off, its unison
         s.unison_gain = p.unison_gain
@@ -866,9 +868,15 @@ _CLASS = {}
 
 def _owner(cls, name):
     for k in cls.__mro__:
-        if name in k.__dict__:
+        if name in k.__dict__ and not (k.__name__ == 'SampledBreak' and name in _BREAK_CUT):
             return k.__name__
     return None
+
+
+# A SAMPLED BREAK'S (tonelib.SampledBreak: a voice through a sampler) two
+# methods: the voice's own, nothing at or above the moved Nyquist
+# (VoiceSnap.nyquist), so the voice under it decides
+_BREAK_CUT = ('harmonic_volume', 'chiff_harmonic_gain')
 
 
 def init_supported(cls):
