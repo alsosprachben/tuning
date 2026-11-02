@@ -63,6 +63,9 @@ struct Api {
     cl_int (*ReleaseProgram)(cl_program);
     cl_int (*ReleaseCommandQueue)(cl_command_queue);
     cl_int (*ReleaseContext)(cl_context);
+    cl_int (*WaitForEvents)(cl_uint, const cl_event *);
+    cl_int (*ReleaseEvent)(cl_event);
+    cl_int (*Flush)(cl_command_queue);
 
     bool load()
     {
@@ -81,7 +84,7 @@ struct Api {
         SYM(CreateProgramWithSource); SYM(BuildProgram); SYM(GetProgramBuildInfo); SYM(CreateKernel);
         SYM(CreateBuffer); SYM(SetKernelArg); SYM(EnqueueNDRangeKernel); SYM(EnqueueReadBuffer);
         SYM(ReleaseMemObject); SYM(ReleaseKernel); SYM(ReleaseProgram); SYM(ReleaseCommandQueue);
-        SYM(ReleaseContext);
+        SYM(ReleaseContext); SYM(WaitForEvents); SYM(ReleaseEvent); SYM(Flush);
 #undef SYM
         return ok;
     }
@@ -106,6 +109,16 @@ struct Gpu {
     size_t acc_cap = 0;                     // floats
     std::vector<float> res;
     std::string name;
+    // PIPELINED (gpurender.Gpu.launch, collect): each slot its own buffers
+    // over its own tables, its own result, and the read it waits on
+    struct Slot {
+        Held tab[3];
+        cl_mem acc = nullptr;
+        size_t cap = 0;
+        std::vector<float> host;
+        cl_event ev = nullptr;
+        int NG = 0, frames = 0;
+    } slot[2];
 
     ~Gpu()
     {
@@ -114,6 +127,17 @@ struct Gpu {
                 cl.ReleaseMemObject(t.m);
         if (acc)
             cl.ReleaseMemObject(acc);
+        for (Slot &s : slot) {
+            if (s.ev) {
+                cl.WaitForEvents(1, &s.ev);
+                cl.ReleaseEvent(s.ev);
+            }
+            for (Held &t : s.tab)
+                if (t.m)
+                    cl.ReleaseMemObject(t.m);
+            if (s.acc)
+                cl.ReleaseMemObject(s.acc);
+        }
         if (k)
             cl.ReleaseKernel(k);
         if (prg)
@@ -230,6 +254,98 @@ struct Gpu {
         return cl.SetKernelArg(k, 6 + i, sizeof(cl_mem), &t.m) == 0;
     }
 
+    // a slot's buffer over a host table, made again when the table moves or grows
+    bool held(Held &t, const void *p, size_t n)
+    {
+        if (t.m && t.p == p && t.n == n)
+            return true;
+        if (t.m)
+            cl.ReleaseMemObject(t.m);
+        cl_int e = 0;
+        t.m = cl.CreateBuffer(ctx, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, n, const_cast<void *>(p), &e);
+        t.p = p;
+        t.n = n;
+        if (e != 0)
+            t.m = nullptr;
+        return e == 0;
+    }
+
+    // Gpu.launch: the sample pass for these tables enqueued in slot s, its
+    // result read back without waiting (collect waits) -- 0 on success. The
+    // kernel's arguments are set at each launch; samples() sets its own again
+    int launch(int s, const void *D, size_t dn, const void *C, size_t cn, const void *S, size_t sn, int nd,
+               long long n0, int frames, int send, int mg)
+    {
+        Slot &st = slot[s];
+        if (!held(st.tab[0], D, dn) || !held(st.tab[1], C, cn) || !held(st.tab[2], S, sn))
+            return -1;
+        for (int i = 0; i < 3; i++)
+            cl.SetKernelArg(k, 6 + i, sizeof(cl_mem), &st.tab[i].m);
+        for (Held &t : tab)
+            t.p = nullptr;                  // (samples() binds its own again)
+        int per = nd / 1024 + (nd % 1024 != 0);
+        per = per > 2 ? per : 2;
+        int groups = nd / per + (nd % per != 0);
+        groups = groups > 1 ? groups : 1;
+        groups = (groups / LG + (groups % LG != 0)) * LG;
+        int NG = groups / LG;
+        size_t need = (size_t)4 * NG * frames;
+        if (st.cap < need) {
+            if (st.acc)
+                cl.ReleaseMemObject(st.acc);
+            st.cap = need > 2 * st.cap ? need : 2 * st.cap;
+            cl_int e = 0;
+            st.acc = cl.CreateBuffer(ctx, CL_MEM_WRITE_ONLY, st.cap * sizeof(float), nullptr, &e);
+            if (e != 0) {
+                st.acc = nullptr;
+                st.cap = 0;
+                return -1;
+            }
+            st.host.resize(st.cap);
+        }
+        cl_ulong u0 = (cl_ulong)n0;
+        cl.SetKernelArg(k, 0, sizeof(int), &nd);
+        cl.SetKernelArg(k, 1, sizeof(int), &per);
+        cl.SetKernelArg(k, 2, sizeof(int), &frames);
+        cl.SetKernelArg(k, 3, sizeof(int), &mg);
+        cl.SetKernelArg(k, 4, sizeof(cl_ulong), &u0);
+        cl.SetKernelArg(k, 5, sizeof(int), &send);
+        cl.SetKernelArg(k, 9, sizeof(cl_mem), &st.acc);
+        size_t gs[2] = {(size_t)frames, (size_t)groups}, ls[2] = {(size_t)(frames % LK == 0 ? LK : 1), (size_t)LG};
+        if (cl.EnqueueNDRangeKernel(q, k, 2, nullptr, gs, ls, 0, nullptr, nullptr) != 0)
+            return -1;
+        if (cl.EnqueueReadBuffer(q, st.acc, 0, 0, need * sizeof(float), st.host.data(), 0, nullptr, &st.ev) != 0)
+            return -1;
+        cl.Flush(q);                        // started now, not when it is waited for
+        st.NG = NG;
+        st.frames = frames;
+        return 0;
+    }
+
+    // Gpu.collect: slot s's (L, R, SL, SR) into out[4 * frames], waited for,
+    // summed over the work-groups as samples() sums them -- 0 on success
+    int collect(int s, float *out)
+    {
+        Slot &st = slot[s];
+        if (!st.ev)
+            return -1;
+        cl_int e = cl.WaitForEvents(1, &st.ev);
+        cl.ReleaseEvent(st.ev);
+        st.ev = nullptr;
+        if (e != 0)
+            return -1;
+        int NG = st.NG, frames = st.frames;
+        for (int c = 0; c < 4; c++)
+            for (int j = 0; j < frames; j++) {
+                const float *r = st.host.data() + (size_t)c * NG * frames + j;
+                float v = r[0];
+                for (int g = 1; g < NG; g++)
+                    v += r[(size_t)g * frames];
+                out[c * frames + j] = v;
+            }
+        return 0;
+    }
+
     // Gpu.samples: (L, R, SL, SR) into out[4 * frames], each the sum over the
     // work-groups' rows in order (numpy's res.sum(1): the first, then each
     // added) -- 0 on success
@@ -308,6 +424,14 @@ int nv_cl_samples(void *h, const void *D, long dn, const void *C, long cn, const
 {
     return ((nv::gpu::Gpu *)h)->samples(D, (size_t)dn, C, (size_t)cn, S, (size_t)sn, nd, n0, frames, send, mg, out);
 }
+
+int nv_cl_launch(void *h, int slot, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
+                 long long n0, int frames, int send, int mg)
+{
+    return ((nv::gpu::Gpu *)h)->launch(slot, D, (size_t)dn, C, (size_t)cn, S, (size_t)sn, nd, n0, frames, send, mg);
+}
+
+int nv_cl_collect(void *h, int slot, float *out) { return ((nv::gpu::Gpu *)h)->collect(slot, out); }
 
 void nv_cl_free(void *h) { delete (nv::gpu::Gpu *)h; }
 

@@ -24,6 +24,9 @@ OpenCL, or "c" the C reference), from GPU-MIN busy slots (live's GPU_MIN).
 place of the export's, its free strings' bank built again at it.
 --drums: the part a drum part, PROGRAM its drum set (live.Live(drums=True),
 nvlive --drums): the file's notes struck on its kit, whatever their channel.
+--pipeline (with --gpu): both a block late, the next block's setup while the
+GPU renders this one (live's TUNING_GPU_PIPELINE=1; nvlive's default on
+OpenCL). nvlive's slab at live's 16384 slots; on the CPU unless --gpu.
 """
 import os
 import subprocess
@@ -66,7 +69,11 @@ def main(argv):
     reg = "register" in opt
     gmin = int(opt.get("gpu-min", L.GPU_MIN))
     drums = "drums" in opt
-    subprocess.check_call([exe, nvx, "--test", mid, out, "--program=%d" % prog, "--seconds=%r" % total]
+    pipe = "pipeline" in opt and "gpu" in opt and (opt["gpu"] or "cl") == "cl"
+    if pipe:
+        os.environ["TUNING_GPU_PIPELINE"] = "1"
+    subprocess.check_call([exe, nvx, "--test", mid, out, "--program=%d" % prog, "--seconds=%r" % total,
+                           "--slots=16384"] + ([] if "gpu" in opt else ["--cpu"]) + ([] if pipe else ["--no-pipeline"])
                           + ([] if reg else ["--no-register"]) + (["--drums"] if drums else [])
                           + (["--pedal-key=" + opt["pedal-key"]] if "pedal-key" in opt else [])
                           + (["--gpu=" + (opt["gpu"] or "cl"), "--gpu-min=%d" % gmin] if "gpu" in opt else [])

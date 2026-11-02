@@ -2,6 +2,7 @@
 // Python at runtime.
 //
 //     nvlive EXPORT.nvx [--program=N [--drums]] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
+//                       [--cpu | --gpu[=cl|c]] [--no-pipeline] [--slots=N]
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
 //                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
 //                       [--tuner=NAME [--a=HZ | --c=HZ]]
@@ -41,11 +42,17 @@
 // pedal, pushed into to lower the dampers: held, CC64 127; channel
 // aftertouch while it is held, 127 - pressure; up, 0.
 //
-// THE GPU (--gpu, live's --gpu): live.GpuRenderer's block -- its setup on
-// the CPU (voice_block, from the export's LGPU builds), the samples on
-// OpenCL (native/gpu.cpp, gpukernel.cl) -- for a block with 100 busy slots
-// or more (--gpu-min; live's GPU_MIN is 1000, set for Python's costs). --gpu=c runs the samples through the C
-// reference (voice_samples) instead, to check the setup without a GPU.
+// THE GPU, by default (live's --gpu; --cpu: none): live.GpuRenderer's
+// block -- its setup on the CPU (voice_block, from the export's LGPU
+// builds), the samples on OpenCL (native/gpu.cpp, gpukernel.cl) -- for a
+// block with 100 busy slots or more (--gpu-min; live's GPU_MIN is 1000, set
+// for Python's costs). PIPELINED on OpenCL (live's TUNING_GPU_PIPELINE;
+// --no-pipeline: not): every block a block late, the CPU's setup of the
+// next while the GPU renders this one. --gpu=c runs the samples through the
+// C reference (voice_samples) instead, to check the setup without a GPU.
+//
+// THE SLAB: --slots (65536; live's capacity is 16384, which a vibraslap's
+// strike, 16524 rows, does not fit).
 //
 // PRESSURE (channel aftertouch): the notes on its channel lifted by the
 // export's press_db (tonelib.PRESS_DB; --press-db=DB for Ben's session's) at
@@ -141,6 +148,7 @@ void *nv_rt_new();
 void nv_rt_add(void *h, int src, int arg, int dst, int keep, int channel, int latch, int press);
 int nv_rt_feed(void *h, int type, int ch, int a, int b, int *out, int cap);
 void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr);
+void nv_lp_pipeline(void *h, int on);
 int nv_lp_on_gpu(void *h);
 void nv_lp_gpu_ms(void *h, double *out);
 void nv_lp_reg_async(void *h);
@@ -570,7 +578,10 @@ int main(int argc, char **argv)
     long built = drums ? nv_tcache_warm(cache, program, 35, 87, 1, speeds, 1)
                        : nv_tcache_warm(cache, program, 21, 96, pp[1], speeds, pp[2]);
     fprintf(stderr, "nvlive: %s %d, %ld templates\n", drums ? "drum set" : "program", program, built);
-    void *part = nv_lp_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], 16384,
+    // THE SLAB'S SLOTS (--slots: live's capacity, 16384; here 65536 by
+    // default -- a vibraslap's strike is 16524 rows)
+    long slots = atol(opt(argc, argv, "slots", "65536").c_str());
+    void *part = nv_lp_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], slots,
                            E.headroom, E.pan.data(), E.beta);
     if (drums)
         nv_lp_drums(part, program, E.kit_choke.data());
@@ -619,14 +630,23 @@ int main(int argc, char **argv)
         }
     }
     const double master = E.k[K_MASTER];
-    // THE GPU (live.GpuRenderer), with --gpu: the setup on the CPU, the
-    // samples on OpenCL (--gpu=c: the C reference, voice_samples); a block
-    // with fewer than --gpu-min busy slots (live's GPU_MIN) on the CPU. One
-    // that cannot be had says why and plays on the CPU, as live does.
-    std::string gopt = "";
-    for (int i = 1; i < argc; i++)
+    // THE GPU (live.GpuRenderer), by default (--cpu: none): the setup on the
+    // CPU, the samples on OpenCL (--gpu=c: the C reference, voice_samples);
+    // a block with fewer than --gpu-min busy slots (live's GPU_MIN) on the
+    // CPU. One that cannot be had says why and plays on the CPU, as live
+    // does. PIPELINED on OpenCL (--no-pipeline: not), as live's
+    // TUNING_GPU_PIPELINE: a block late, the next block's setup while the
+    // GPU renders this one
+    std::string gopt = "cl";
+    bool pipe = true;
+    for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--gpu"))
             gopt = "cl";
+        if (!strcmp(argv[i], "--cpu"))
+            gopt = "";
+        if (!strcmp(argv[i], "--no-pipeline"))
+            pipe = false;
+    }
     gopt = opt(argc, argv, "gpu", gopt.c_str());
     if (!gopt.empty()) {
         std::string why;
@@ -657,7 +677,9 @@ int main(int argc, char **argv)
             // Each side's own threshold is checked by nvlive_check --gpu-min.
             long gmin = atol(opt(argc, argv, "gpu-min", "100").c_str());
             nv_lp_gpu(part, vb, vbd, vds, vs, vz, cl, gmin, atoi(opt(argc, argv, "gpu-threads", "4").c_str()));
-            fprintf(stderr, "nvlive: the GPU (%s), from %ld busy slots\n", cl ? "OpenCL" : "the C reference", gmin);
+            nv_lp_pipeline(part, cl && pipe);
+            fprintf(stderr, "nvlive: the GPU (%s), from %ld busy slots%s\n", cl ? "OpenCL" : "the C reference", gmin,
+                    cl && pipe ? ", pipelined" : "");
         } else {
             fprintf(stderr, "nvlive: no GPU (%s): the CPU\n", why.c_str());
         }

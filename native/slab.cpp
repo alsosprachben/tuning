@@ -52,6 +52,9 @@ int nv_lreg_felt(void *h, double at, const int *keys, const double *rates, int n
 int nv_lreg_answer(void *h, long *idx, double *z, double *floor_);
 void nv_lreg_forced(void *h, long *slot, double *wgt, double *beta, double *val);
 void nv_lreg_free(void *h);
+int nv_cl_launch(void *h, int slot, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
+                 long long n0, int frames, int send, int mg);
+int nv_cl_collect(void *h, int slot, float *out);
 int nv_cl_samples(void *h, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
                   long long n0, int frames, int send, int mg, float *out);
 }
@@ -2136,7 +2139,20 @@ struct Piano {
         long gpu_min = 1000;
         int nthr = 4;
         Table D, C, SB;
+        Table D2, C2, SB2;              // the pipeline's second set (its blocks take turns)
     } gp;
+    // PIPELINED (live.GpuRenderer, TUNING_GPU_PIPELINE): every block a block
+    // late, so the CPU builds block n+1's tables while the GPU renders block
+    // n -- the block started (rendered on the CPU and held, or launched on
+    // the GPU in its turn's tables) and the one started before it finished
+    bool pipeline = false;
+    int turn = 0;
+    struct GpuPend {
+        int kind = 0;                   // 0 none (the first block), 1 done on the CPU, 2 on the GPU
+        int slot = 0;
+        bool snd = false;
+        std::vector<float> L, R, SL, SR;
+    } gpend;
     bool on_gpu = false;                // did the last block go to the GPU
     bool gpu_off = false;               // the panel's: the CPU for every block
     double ms_setup = 0.0, ms_samples = 0.0;    // its two halves (live's GpuRenderer.ms_*)
@@ -2145,13 +2161,50 @@ struct Piano {
 
     bool render_gpu(long long n0, long frames, float *L, float *R, float *SL, float *SR, long long blk)
     {
+        long mg = 0;
+        long nact = setup_gpu(n0, blk, gp.D, gp.C, gp.SB, SL != nullptr, mg);
+        auto t1 = std::chrono::steady_clock::now();
+        struct Ms {
+            double &out;
+            std::chrono::steady_clock::time_point t;
+            ~Ms() { out = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t).count(); }
+        } ms{ms_samples, t1};
+        if (gp.cl) {
+            gout.resize(4 * frames);
+            if (nv_cl_samples(gp.cl, gp.D.p, gp.D.bytes(), gp.C.p, gp.C.bytes(), gp.SB.p, gp.SB.bytes(), (int)nact,
+                              n0, (int)frames, SL ? 1 : 0, (int)mg, gout.data()) != 0)
+                return false;
+            for (long k = 0; k < frames; k++) {
+                L[k] = gout[k];
+                R[k] = gout[frames + k];
+                if (SL) {
+                    SL[k] = gout[2 * frames + k];
+                    SR[k] = gout[3 * frames + k];
+                }
+            }
+        } else {
+            ((nv_vsamples_fn)gp.vs)((long)n0, (int)blk, (int)nact, gp.D.p, gp.C.p, gp.SB.p, L, R, SL, SR);
+        }
+        return true;
+    }
+
+    // the GPU block's setup (voice_block over every busy slot) into the
+    // tables D, C, SB, grown as it asks; the busy slots' count, and *mg the
+    // Moog's grid. ms_setup its time
+    long setup_gpu(long long n0, long long blk, Table &D, Table &C, Table &SB, bool snd, long &mgo)
+    {
+        if (!D.size) {                      // (a second set takes the first's record sizes)
+            D.size = gp.D.size;
+            C.size = gp.C.size;
+            SB.size = gp.SB.size;
+        }
         gidx.clear();
         for (long q = 0; q < S.cap; q++)
             if (S.busy[q])
                 gidx.push_back(q);
         long nact = (long)gidx.size();
-        if (nact > gp.D.n)
-            gp.D.make(std::max(nact, 2 * gp.D.n), gp.D.size);
+        if (nact > D.n)
+            D.make(std::max(nact, 2 * D.n), D.size);
         long mg = (blk % 128 == 0 && blk / 128 <= 64) ? 128 : blk;     // moog_grid
         long kb0 = (long)(n0 / mg);
         gnon.resize(S.cap);
@@ -2183,43 +2236,106 @@ struct Piano {
                 KN.data(), 2, kb0, S.aLp.data(), S.aRp.data(), S.i4[5].data(), MPI.data(), MPC.data(), MPR.data(),
                 MKI.data(), MPK.data(), S.f8[3].data(), S.f8[4].data(), S.f8[5].data(), sh[0], sh[1], sh[2], sh[3],
                 nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, nullptr, nullptr,
-                nullptr, nullptr, 0, S.sw.data(), SL ? 1 : 0, gidx.data(), (int)nact, gp.D.p, gp.C.p,
-                (int)gp.C.n, gp.SB.p, (int)gp.SB.n, gp.nthr, counts, 1);
+                nullptr, nullptr, 0, S.sw.data(), snd ? 1 : 0, gidx.data(), (int)nact, D.p, C.p,
+                (int)C.n, SB.p, (int)SB.n, gp.nthr, counts, 1);
             if (r == 0)
                 break;
-            if (counts[0] > gp.C.n)
-                gp.C.make(2L * counts[0], gp.C.size);
-            if (counts[1] > gp.SB.n)
-                gp.SB.make(2L * counts[1], gp.SB.size);
+            if (counts[0] > C.n)
+                C.make(2L * counts[0], C.size);
+            if (counts[1] > SB.n)
+                SB.make(2L * counts[1], SB.size);
         }
-        auto t1 = std::chrono::steady_clock::now();
-        ms_setup = std::chrono::duration<double, std::milli>(t1 - t0).count();
-        struct Ms {
-            double &out;
-            std::chrono::steady_clock::time_point t;
-            ~Ms() { out = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t).count(); }
-        } ms{ms_samples, t1};
-        if (gp.cl) {
-            gout.resize(4 * frames);
-            if (nv_cl_samples(gp.cl, gp.D.p, gp.D.bytes(), gp.C.p, gp.C.bytes(), gp.SB.p, gp.SB.bytes(), (int)nact,
-                              n0, (int)frames, SL ? 1 : 0, (int)mg, gout.data()) != 0)
-                return false;
-            for (long k = 0; k < frames; k++) {
-                L[k] = gout[k];
-                R[k] = gout[frames + k];
-                if (SL) {
-                    SL[k] = gout[2 * frames + k];
-                    SR[k] = gout[3 * frames + k];
-                }
-            }
-        } else {
-            ((nv_vsamples_fn)gp.vs)((long)n0, (int)blk, (int)nact, gp.D.p, gp.C.p, gp.SB.p, L, R, SL, SR);
-        }
-        return true;
+        ms_setup = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        mgo = mg;
+        return nact;
     }
 
+    // THE PIPELINE'S BLOCK (GpuRenderer.render, _start, _finish): this one
+    // started, the one before finished into L, R (SL, SR)
     void render(long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx, void *sd,
                 long long blk, double master_gain)
+    {
+        if (!pipeline || !gp.cl) {
+            render_now(n0, frames, L, R, SL, SR, sv, sx, sd, blk, master_gain);
+            return;
+        }
+        GpuPend cur;
+        cur.snd = SL != nullptr;
+        long hi = -1, act = 0;
+        for (long q = 0; q < S.cap; q++)
+            if (S.busy[q]) {
+                hi = q;
+                act++;
+            }
+        bool g = hi >= 0 && gp.vb && !gpu_off && act >= gp.gpu_min && frames == blk && n0 % frames == 0;
+        if (g) {
+            // set up in this turn's tables and launched, not waited for
+            Table &D = turn ? gp.D2 : gp.D, &C = turn ? gp.C2 : gp.C, &SB = turn ? gp.SB2 : gp.SB;
+            long mg = 0;
+            long nact = setup_gpu(n0, blk, D, C, SB, cur.snd, mg);
+            if (nv_cl_launch(gp.cl, turn, D.p, D.bytes(), C.p, C.bytes(), SB.p, SB.bytes(), (int)nact, n0,
+                             (int)frames, cur.snd ? 1 : 0, (int)mg) == 0) {
+                cur.kind = 2;
+                cur.slot = turn;
+                turn ^= 1;
+                S.aLp = S.f4[0];            // knobs_advance
+                S.aRp = S.f4[1];
+            } else {
+                g = false;
+            }
+        }
+        if (!g) {
+            // the CPU's, rendered now and held
+            cur.kind = 1;
+            cur.L.assign(frames, 0.0f);
+            cur.R.assign(frames, 0.0f);
+            if (cur.snd) {
+                cur.SL.assign(frames, 0.0f);
+                cur.SR.assign(frames, 0.0f);
+            }
+            render_now(n0, frames, cur.L.data(), cur.R.data(), cur.snd ? cur.SL.data() : nullptr,
+                       cur.snd ? cur.SR.data() : nullptr, sv, sx, sd, blk, master_gain);
+        }
+        on_gpu = g;
+        GpuPend prev = std::move(gpend);
+        gpend = std::move(cur);
+        // ...and the one before it, finished
+        for (long k = 0; k < frames; k++) {
+            L[k] = R[k] = 0.0f;
+            if (SL)
+                SL[k] = SR[k] = 0.0f;
+        }
+        if (prev.kind == 1) {
+            for (long k = 0; k < frames; k++) {
+                L[k] = prev.L[k];
+                R[k] = prev.R[k];
+                if (SL && prev.snd) {
+                    SL[k] = prev.SL[k];
+                    SR[k] = prev.SR[k];
+                }
+            }
+        } else if (prev.kind == 2) {
+            auto t1 = std::chrono::steady_clock::now();
+            gout.resize(4 * frames);
+            if (nv_cl_collect(gp.cl, prev.slot, gout.data()) == 0) {
+                float gn = (float)master_gain;
+                for (long k = 0; k < frames; k++) {
+                    L[k] = gout[k] * gn;
+                    R[k] = gout[frames + k] * gn;
+                    L[k] = L[k] < -1.0f ? -1.0f : (L[k] > 1.0f ? 1.0f : L[k]);
+                    R[k] = R[k] < -1.0f ? -1.0f : (R[k] > 1.0f ? 1.0f : R[k]);
+                    if (SL && prev.snd) {
+                        SL[k] = gout[2 * frames + k] * gn;
+                        SR[k] = gout[3 * frames + k] * gn;
+                    }
+                }
+            }
+            ms_samples = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count();
+        }
+    }
+
+    void render_now(long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
+                    void *sd, long long blk, double master_gain)
     {
         for (long k = 0; k < frames; k++) {
             L[k] = 0.0f;
@@ -2867,6 +2983,10 @@ void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void
     g.C.make(1024, sz[1]);
     g.SB.make(1 << 14, sz[2]);
 }
+
+// THE PIPELINE (live's TUNING_GPU_PIPELINE): on, every block a block late --
+// the CPU's setup of the next while the GPU renders this one (an OpenCL GPU's)
+void nv_lp_pipeline(void *h, int on) { ((nv::slab::Piano *)h)->pipeline = on != 0; }
 
 // The register's jobs on a worker thread of the part's own, off the audio
 // thread (live's worker process): answers placed at the pump after they are
