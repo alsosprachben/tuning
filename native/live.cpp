@@ -565,6 +565,13 @@ int nv_tcache_slur_fade(void *h, int program, int note, double *out)
 // a template's section scatter, ms (t["scatter_ms"])
 double nv_tmpl_scatter(void *t) { return ((nv::live::Template *)t)->scatter_ms; }
 
+// the tuning's pitch of a key (live's patch.freqs())
+double nv_tcache_freq(void *h, int note)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    return (note >= 0 && note < 128) ? C->freq[note] : 0.0;
+}
+
 // a program's registered organ (its classes' table: live's part.organ), NULL none
 const OrganSpec *nv_tcache_organ(void *h, int program)
 {

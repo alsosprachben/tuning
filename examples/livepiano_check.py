@@ -33,6 +33,9 @@ on one side, native.KeyPedal before the part's events on the other.
 --pressure: channel aftertouch among the controls (live's Slab.press).
 --stops: an organ's stops drawn and put in as the panel does (livetui's
 toggle_stop; the native part's nv_lp_toggle_stop), the Tremulant among them.
+On a harmonium (program 20) its stop word too (CC43-45) and the mod wheel
+(its tremolo); the tremolo's state (tr_on, its depth, baselines and sides)
+compared with the slab.
 --gpu: each side renders as live.GpuRenderer -- the setup on the CPU
 (voice_block), the samples on the OpenCL GPU ("cl": live's through pyopencl,
 the native part's through native/gpu.cpp) or the C reference ("c",
@@ -139,6 +142,7 @@ def main(argv):
         lv.set_routes(routes)
         kp = N.Router(routes)
     pk_down = set()
+    harm = bool(lv.parts[0].organ) and lv.parts[0].patch.stop_word_ccs[0] == 43
     pedal = ((0, 24, 40, 56, 72, 88, 104, 127) if opt.get("half") != "all" else tuple(range(128))) \
         if "half" in opt else (0, 127)
     M = mido.Message
@@ -165,6 +169,9 @@ def main(argv):
         for c in ("aL0", "aR0", "sg", "sre", "hrel", "vbase", "vrbase", "vsc"):
             a = np.asarray(getattr(S, c))
             if not np.array_equal(a, nv.slab.col(c).astype(a.dtype)):
+                bad.append(c)
+        for c in ("tr_dep", "tr_aL", "tr_aR", "tr_st", "tr_on"):
+            if not np.array_equal(np.asarray(getattr(S, c), np.float32), nv.slab.col(c)):
                 bad.append(c)
         if not np.array_equal(np.asarray(S.busy, np.int32), nv.slab.col("busy")):
             bad.append("busy")
@@ -258,6 +265,9 @@ def main(argv):
                 msgs.append(M("control_change", channel=ch,
                               control=rng.choice((120, 123, 123, 124, 125, 126, 126, 127)), value=0))
                 nmode += 1
+            elif "stops" in opt and harm and rng.random() < 0.4:
+                c = rng.choice((43, 43, 44, 45, 1))
+                msgs.append(M("control_change", channel=ch, control=c, value=rng.randint(0, 127)))
             elif "cc91" in opt and rng.random() < 0.3:
                 msgs.append(M("control_change", channel=ch, control=91, value=rng.randint(0, 127)))
             else:

@@ -40,6 +40,7 @@
 extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
 extern "C" int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out);
 extern "C" const OrganSpec *nv_tcache_organ(void *h, int program);
+extern "C" double nv_tcache_freq(void *h, int note);
 
 extern "C" double nv_damper_contact(int p, int key, int top);
 
@@ -155,6 +156,10 @@ struct Slab {
     std::vector<std::vector<long long>> i8;
     std::vector<std::vector<int32_t>> i4;
     std::vector<float> sw, aL0, aR0, sg, sre, hrel, vbase, vrbase, vsc;
+    // THE TREMOLO (live.Slab.tremolo_arm / tremolo_swing): a slot armed, its
+    // depth, its own baseline (captured once) and its stereo sign
+    std::vector<char> tr_on;
+    std::vector<float> tr_dep, tr_aL, tr_aR, tr_st;
     std::vector<int32_t> dk, slot_ch;
     std::vector<float> dg;                 // a damped row's weight (damper.weight)
     std::vector<float> aLp, aRp;            // pressure's columns: none on a piano, still the kernel's
@@ -199,6 +204,8 @@ struct Slab {
         dk.assign(cap, -1); slot_ch.assign(cap, -1);
         dg.assign(cap, 0.0f);
         aLp.assign(cap, 0.0f); aRp.assign(cap, 0.0f);
+        tr_on.assign(cap, 0); tr_dep.assign(cap, 0.0f); tr_aL.assign(cap, 0.0f); tr_aR.assign(cap, 0.0f);
+        tr_st.assign(cap, 1.0f);
         busy.assign(cap, 0);
         for (long i = 0; i < cap; i++)
             free.push_back(i);
@@ -278,6 +285,7 @@ struct Slab {
             slot_ch[s] = (int32_t)ch;
             vbase[s] = tf4[F4_vd][q];
             vrbase[s] = tf4[F4_vr][q];
+            tr_on[s] = 0;                       // (unarmed until its tremolo is)
         }
         // the vibrato's scale: vd over its mean (np.mean: float32, pairwise)
         std::vector<float> vd(n);
@@ -349,6 +357,7 @@ struct Slab {
             float rr = (float)(shelf(t1[1]) / shelf(t0[1]));
             aL0[sidx] *= rl; aR0[sidx] *= rr;
             f4[F4_aL][sidx] *= rl; f4[F4_aR][sidx] *= rr;
+            tr_aL[sidx] *= rl; tr_aR[sidx] *= rr;   // (the tremolo's baseline with it)
         }
         if (itd) {
             float dl = (float)((t1[2] - t0[2]) * rate);
@@ -370,6 +379,7 @@ struct Slab {
             if (i4[3][sidx] > top - drop) {
                 aL0[sidx] = 0.0f; aR0[sidx] = 0.0f;
                 f4[F4_aL][sidx] = 0.0f; f4[F4_aR][sidx] = 0.0f;
+                tr_aL[sidx] = 0.0f; tr_aR[sidx] = 0.0f;
             }
     }
 
@@ -384,7 +394,60 @@ struct Slab {
         for (long sidx : once(slots)) {
             aL0[sidx] *= r; aR0[sidx] *= r;
             f4[F4_aL][sidx] *= r; f4[F4_aR][sidx] *= r;
+            tr_aL[sidx] *= r; tr_aR[sidx] *= r;     // (the tremolo's own baseline with it)
         }
+    }
+
+    // channel_gain with a ratio a slot (a harmonium's Expression: each
+    // partial its own), float32 each
+    void channel_gain_each(const std::vector<long> &slots, const std::vector<float> &r)
+    {
+        for (size_t q = 0; q < slots.size(); q++) {
+            long s = slots[q];
+            aL0[s] *= r[q]; aR0[s] *= r[q];
+            f4[F4_aL][s] *= r[q]; f4[F4_aR][s] *= r[q];
+            tr_aL[s] *= r[q]; tr_aR[s] *= r[q];
+        }
+    }
+
+    // live.Slab.tremolo_arm: these slots swung, each's baseline captured
+    // once (a slot already armed keeps its own)
+    void tremolo_arm(const std::vector<long> &slots, double depth, bool stereo)
+    {
+        std::vector<char> fresh(slots.size());
+        for (size_t q = 0; q < slots.size(); q++)
+            fresh[q] = !tr_on[slots[q]];
+        for (size_t q = 0; q < slots.size(); q++)
+            if (fresh[q]) {
+                tr_aL[slots[q]] = f4[F4_aL][slots[q]];
+                tr_aR[slots[q]] = f4[F4_aR][slots[q]];
+            }
+        for (long s : slots) {
+            tr_on[s] = 1;
+            tr_dep[s] = (float)depth;
+            tr_st[s] = stereo ? -1.0f : 1.0f;
+        }
+    }
+
+    // live.Slab.tremolo_swing: every armed slot's level where the modulator is
+    void tremolo_swing(double phase)
+    {
+        float c0 = (float)cos(phase);
+        for (long s = 0; s < cap; s++) {
+            if (!tr_on[s] || !busy[s])
+                continue;
+            float c = c0 * tr_dep[s];
+            f4[F4_aL][s] = tr_aL[s] * (1.0f + c);
+            f4[F4_aR][s] = tr_aR[s] * (1.0f + c * tr_st[s]);
+        }
+    }
+
+    bool any_tremolo() const
+    {
+        for (long s = 0; s < cap; s++)
+            if (tr_on[s])
+                return true;
+        return false;
     }
 
     long live_find(const Key &key) const
@@ -825,6 +888,7 @@ struct Piano {
         for (int c = 0; c < 16; c++) {
             vol[c] = 100; expr[c] = 127; cpan[c] = 64; pedal_v[c] = 0;     // GM's power-on
             soft[c] = false; cgain[c] = 1.0; cgain_set[c] = false;
+            stopword[c][0] = stopword[c][1] = stopword[c][2] = -1;
         }
     }
 
@@ -1020,21 +1084,194 @@ struct Piano {
     }
 
     long dropped = 0;                           // ranks the slab had no room for (live.dropped)
-    std::vector<int> stop_posts;                // stops toggled from the panel, for the next block
+    // A HARMONIUM'S (live's): the Expression's bellows each key's ranks were
+    // stamped at (xnote), each channel's stop word as sent (CC43-45; -1 not
+    // yet), each part's wheel tremolo depth (trem_depth)
+    std::map<Key, double> xnote;
+    int stopword[16][3];
+    std::map<long long, double> trem_depth;
+
+    // live._h8: a key's 8-foot pitch against its template's lowest partial
+    double h8(int note)
+    {
+        int tgt = note + transpose;
+        double F = nv_tcache_freq(cache, tgt);
+        const nv::live::Template *t = (tgt >= 0 && tgt < 128) ? nv_tcache_lookup(cache, tgt, bucket(100), speed)
+                                                               : nullptr;
+        if (t && t->P && F > 0.0) {
+            float mn = t->f4[2][0];
+            for (long q = 1; q < t->P; q++)
+                mn = std::min(mn, t->f4[2][q]);
+            return (double)mn / F;
+        }
+        const OrganSpec *og = patches[cur].organ;
+        double m = 1e300;
+        for (int r = 0; r < og->n_rank; r++) {
+            const OrganRank &rk = og->rank[r];
+            if (rk.n_ratio && !rk.compound && rk.lo <= tgt && tgt <= rk.hi)
+                m = std::min(m, rk.ratio[0]);
+        }
+        return m < 1e300 ? m : 1.0;
+    }
+
+    // live._harmonium_stamp: the effect stops on the slots just stamped --
+    // the Expression's bellows (each partial by harmonium_expression_gain),
+    // the Percussion's hammer, the Tremolo
+    void harmonium_stamp(const nv::live::Template &T, const nv::live::Template &R, int ch, int note, int ri,
+                         const Key &key)
+    {
+        const std::vector<long> sl = S.last_slots;
+        if (sl.empty() || (long)sl.size() != R.P)
+            return;
+        const OrganSpec *og = patches[cur].organ;
+        const std::vector<char> &dr = patches[cur].drawn;
+        if (og->expr_rank >= 0 && dr[og->expr_rank]) {
+            double e = expr[ch] / 127.0, h8_ = h8(note);
+            std::vector<float> g(sl.size());
+            for (size_t q = 0; q < sl.size(); q++) {
+                double h = (double)R.hrel[q] * h8_;
+                g[q] = (float)pow(h > 1.0 ? h : 1.0, og->expr_tilt * (e - 1.0));
+            }
+            S.channel_gain_each(sl, g);
+            xnote[key] = e;
+        }
+        if (og->perc_rank >= 0 && dr[og->perc_rank] && og->rank[ri].perc) {
+            double dur = T.dur ? T.dur / rate : 1.0;
+            float fa = (float)(std::max(1e-4, std::min(og->perc_attack_s, og->afm * dur)) * rate);
+            for (long s : sl)
+                if (fa < S.f4[F4_fa][s])
+                    S.f4[F4_fa][s] = fa;
+        }
+        if (og->htrem_rank >= 0 && dr[og->htrem_rank] && og->htrem_depth > 0.0)
+            S.tremolo_arm(sl, og->htrem_depth, false);
+    }
+
+    // live's CC11 on a harmonium: the Expression's bellows moved under the
+    // notes stamped with it drawn -- each by the law's ratio between the two
+    void harmonium_bellows(int ch, int v)
+    {
+        double e = v / 127.0;
+        std::vector<Key> gone;
+        for (auto &kv : xnote) {
+            long li = S.live_find(kv.first);
+            if (li < 0 || S.live[li].second.empty()) {
+                gone.push_back(kv.first);
+                continue;
+            }
+            if (std::get<1>(kv.first) != ch || kv.second == e)
+                continue;
+            int pi = -1;
+            for (size_t q = 0; q < patches.size(); q++)
+                if (patches[q].pid == std::get<0>(kv.first))
+                    pi = (int)q;
+            if (pi < 0 || !patches[pi].organ)
+                continue;
+            Use u(*this, pi);
+            const std::vector<long> &sl = S.live[li].second;
+            double h8_ = h8((int)std::get<2>(kv.first)), tilt = patches[cur].organ->expr_tilt;
+            std::vector<float> g(sl.size());
+            for (size_t q = 0; q < sl.size(); q++) {
+                double h = (double)S.hrel[sl[q]] * h8_;
+                h = h > 1.0 ? h : 1.0;
+                g[q] = (float)(pow(h, tilt * (e - 1.0)) / pow(h, tilt * (kv.second - 1.0)));
+            }
+            S.channel_gain_each(sl, g);
+            kv.second = e;
+        }
+        for (auto &k : gone)
+            xnote.erase(k);
+    }
+
+    // live's CC43-45 on a harmonium: its stop word, a controller each seven
+    // stops, the default's bytes where none has come yet
+    void harmonium_word(int ch, int cc, int v, long long n0)
+    {
+        stopword[ch][cc - 43] = v;
+        for (size_t pi = 0; pi < patches.size(); pi++) {
+            const OrganSpec *og = patches[pi].organ;
+            if (!og || og->wccs[0] != 43 || !(patches[pi].channel < 0 || patches[pi].channel == ch))
+                continue;
+            long long word = 0;
+            for (int i = 0; i < og->n_wccs && i < 3; i++)
+                word |= (long long)(stopword[ch][i] >= 0 ? stopword[ch][i] : (og->default_stops >> (7 * i)) & 0x7F)
+                        << (7 * i);
+            std::vector<char> want(og->n_rank, 0);
+            for (int i = 0; i < og->n_rank; i++)
+                want[i] = (word >> i) & 1;
+            set_stops((int)pi, want, n0);
+        }
+    }
+
+    // live's CC1 on a voice with a tremolo (its 'tremolo' role): the depth, on
+    // the notes the part has sounding
+    void wheel_tremolo(int ch, int v)
+    {
+        for (size_t pi = 0; pi < patches.size(); pi++) {
+            const OrganSpec *og = patches[pi].organ;
+            if (!og || og->wheel_trem <= 0.0 || !(patches[pi].channel < 0 || patches[pi].channel == ch))
+                continue;
+            double d = (v / 127.0) * og->wheel_trem;
+            trem_depth[patches[pi].pid] = d;
+            std::vector<long> sl;
+            for (auto &kv : S.live)
+                if (std::get<0>(kv.first) == patches[pi].pid && std::get<1>(kv.first) == ch)
+                    sl.insert(sl.end(), kv.second.begin(), kv.second.end());
+            S.tremolo_arm(sl, d, og->wtrem_stereo);
+        }
+    }
+
+    // live's swing each block: one rate, the first part's with a wheel tremolo,
+    // else the Tremolo stop's
+    void tremolo_block(long long n0)
+    {
+        if (!S.any_tremolo())
+            return;
+        double hz = 0.0;
+        for (const Patch &p : patches)
+            if (p.organ && p.organ->wheel_trem > 0.0) {
+                hz = p.organ->wtrem_hz;
+                break;
+            }
+        if (hz == 0.0)
+            for (const Patch &p : patches)
+                if (p.organ && p.organ->htrem_depth > 0.0) {
+                    hz = p.organ->htrem_hz;
+                    break;
+                }
+        if (hz > 0.0)
+            S.tremolo_swing(2.0 * M_PI * hz * n0 / rate);
+    }
+    // the panel's stops for the next block: each the whole registration, as
+    // drawn when it was posted with the one stop toggled (livetui's
+    // request_stops) -- so a stop word in the same block is put back, as live's
+    std::vector<std::vector<char>> stop_posts;
 
     // the panel's stop toggles (live.post's set_stops), after the block's events
     void stop_toggles(long long n0)
     {
-        std::vector<int> ps;
+        std::vector<std::vector<char>> ps;
         ps.swap(stop_posts);
-        for (int rank : ps) {
-            Patch &p = patches[0];
-            if (!p.organ || rank < 0 || rank >= p.organ->n_rank)
-                continue;
-            std::vector<char> want = p.drawn;
-            want[rank] = !want[rank];
-            set_stops(0, want, n0);
-        }
+        for (auto &want : ps)
+            if (patches[0].organ)
+                set_stops(0, want, n0);
+    }
+
+    // whether a harmonium (a stop word on CC43) is a part here
+    bool harmonium_on() const
+    {
+        for (const Patch &p : patches)
+            if (p.organ && p.organ->wccs[0] == 43)
+                return true;
+        return false;
+    }
+
+    // whether a part with a wheel tremolo listens on channel ch
+    bool wheel_trem_on(int ch) const
+    {
+        for (const Patch &p : patches)
+            if (p.organ && p.organ->wheel_trem > 0.0 && (p.channel < 0 || p.channel == ch))
+                return true;
+        return false;
     }
 
     // whether an organ part listens on channel ch
@@ -1107,6 +1344,8 @@ struct Piano {
             return;
         }
         const OrganSpec *og = patches[cur].organ;
+        if (og->wccs[0] == 43)              // a harmonium's effect stops (_harmonium_stamp)
+            harmonium_stamp(T, R, ch, note, ri, key);
         if (og->wind) {
             int wr = wind_row(ri);
             if (wr > 0)
@@ -1646,6 +1885,10 @@ struct Piano {
                 cgain_set[ch] = true;
                 S.channel_gain(sounding(ch), g / std::max(was, 1e-9));
             }
+            if (cc == 11 && !xnote.empty())         // a harmonium's bellows: its Expression
+                harmonium_bellows(ch, v);
+        } else if (cc >= 43 && cc <= 45 && harmonium_on()) {
+            harmonium_word(ch, cc, v, n0);
         } else if (cc == 10) {
             int was = cpan[ch];
             if (v != was) {
@@ -1747,6 +1990,8 @@ struct Piano {
                 mono[ch] = true;
             else if (cc == 127)
                 mono[ch] = false;
+        } else if (cc == 1 && wheel_trem_on(ch)) {
+            wheel_tremolo(ch, v);
         } else if (cc == 1 && organ_on(ch)) {
             // AN ORGAN'S MOD WHEEL IS ITS CRESCENDO PEDAL (live's 'crescendo' role)
             for (size_t pi = 0; pi < patches.size(); pi++)
@@ -3109,6 +3354,7 @@ struct Piano {
             S.release(k, n0);
         damp_block(n0, blk);
         S.reap(n0, blk);
+        tremolo_block(n0);                      // (live's swing, after the reap)
     }
 };
 
@@ -3377,7 +3623,12 @@ void nv_lp_toggle_stop(void *h, int rank, long long n0)
 {
     (void)n0;
     nv::slab::Piano *P = (nv::slab::Piano *)h;
-    P->stop_posts.push_back(rank);      // (done in the next block, after its events: live.post)
+    nv::slab::Piano::Patch &p = P->patches[0];
+    if (!p.organ || rank < 0 || rank >= p.organ->n_rank)
+        return;
+    std::vector<char> want = p.drawn;   // (the registration now, as the panel sees it)
+    want[rank] = !want[rank];
+    P->stop_posts.push_back(want);      // (done in the next block, after its events: live.post)
 }
 
 // the organ's stops drawn (out[rank] 1), the count; 0 for no organ
@@ -3736,6 +3987,15 @@ void nv_slab_col(void *h, int group, int index, void *out)
     case 8:
         memcpy(out, S->dg.data(), sizeof(float) * n);
         break;
+    case 9: {                           // the tremolo's: tr_dep, tr_aL, tr_aR, tr_st, tr_on
+        if (index == 4)
+            for (long i = 0; i < n; i++)
+                ((float *)out)[i] = S->tr_on[i];
+        else
+            memcpy(out, (index == 0 ? S->tr_dep : index == 1 ? S->tr_aL : index == 2 ? S->tr_aR : S->tr_st).data(),
+                   sizeof(float) * n);
+        break;
+    }
     case 7:
         memcpy(out, (index == 0 ? S->aLp : S->aRp).data(), sizeof(float) * n);
         break;

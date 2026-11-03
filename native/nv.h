@@ -298,6 +298,10 @@ typedef struct OrganSpec {
     double expr_tilt, perc_attack_s, afm;
     int pipe_radius;        /* each pipe's own aperture (pipe_radius); 0: the class's (a reed organ's) */
     double wheel_trem;      /* the wheel's tremolo depth (tremolo_depth), 0 none */
+    /* live's tremolos: the wheel's rate and stereo (tremolo_hz, tremolo_stereo),
+       the Tremolo stop's depth and rate (stop_tremolo_depth, stop_tremolo_hz) */
+    double wtrem_hz, htrem_depth, htrem_hz;
+    int wtrem_stereo;
 } OrganSpec;
 
 /* what the note setup reads of the voice besides its VoiceSnap */
