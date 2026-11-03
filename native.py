@@ -170,7 +170,7 @@ class NoteClass(ctypes.Structure):
                 + [('bendable', I), ('snd_mask', I), ('snd_bias', C * 8), ('snd_time_range', C),
                    ('snd_rate_range', C), ('snd_delay_s', C), ('glide_mech', I), ('glide_reach', C),
                    ('porta_fast', C), ('porta_slow', C), ('porta_d_semi', C), ('porta_settle', C),
-                   ('organ', ctypes.c_void_p)])
+                   ('organ', ctypes.c_void_p), ('leslie', I), ('scanner', I), ('amp_drive', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -215,7 +215,7 @@ def _load():
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
-                                                       'npyrandom.c', 'npyrandom.h')]
+                                                       'npyrandom.c', 'npyrandom.h', 'leslie.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -228,7 +228,8 @@ def _load():
         flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
         objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
                 tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.slab.o',
-                tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o', tmp + '.tuner.o', tmp + '.bend.o']
+                tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o', tmp + '.tuner.o', tmp + '.bend.o',
+                tmp + '.leslie.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
             for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
@@ -248,6 +249,8 @@ def _load():
                                    '-o', objs[13]])
             subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'bend.cpp'),
                                    '-o', objs[14]])
+            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'leslie.cpp'),
+                                   '-o', objs[15]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl'])
         finally:
             for o in objs:
@@ -324,7 +327,12 @@ def _load():
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                               ctypes.c_void_p,
                               ctypes.c_long, C, C, C, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                              ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]),
+                              ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                              ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]),
+            ('nv_leslie_expand', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p,
+                                      ctypes.c_void_p, ctypes.c_void_p, C, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_leslie_angles', ctypes.c_long, [I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, C, I,
+                                                 ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_slab_new', ctypes.c_void_p, [ctypes.c_long, C]), ('nv_slab_free', None, [ctypes.c_void_p]),
             ('nv_slab_stamp', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                                   ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, LL, LL, LL, LL, LL, C, LL, I,
@@ -652,6 +660,23 @@ _PIPE_OWN = dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None, mo
                  inharmonicity_coefficient_for_frequency='StoppedPipeProperties')
 
 
+def tonewheel_voice(cls):
+    """Whether native/voice.c plays cls as a tonewheel (kind 4 with no body):
+    SynthProperties' plain series -- the pluck's comb at its plucked
+    harmonic, the tonal dampening, no bore -- a Hammond's wheel, or its
+    percussion tap's."""
+    import tonelib as T
+    if not issubclass(cls, T.TonewheelProperties) or issubclass(cls, T.FormantBody):
+        return False
+    own = dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None)
+    if any(_owner(cls, n) != o for n, o in own.items()):
+        return False
+    return (cls.mode_gains is None and cls.mode_ratios is None and not cls.strike_point and not cls.harmonic_touch
+            and not cls.pickup_points and not (cls.unison_detune or ()) and not cls.blare_db_per_khz
+            and not cls.bore_corner_hz and not cls.inharmonicity_dynamic and 1 <= (cls.max_harmonic or 0) <= 128
+            and len(getattr(cls, 'contact_noise_db', ()) or ()) <= 16)
+
+
 def free_reed_series(cls):
     """A free reed's flow spectrum where it is one table whatever the key
     (FreeReedProperties._reed_series with no register laws and no scatter:
@@ -696,7 +721,7 @@ def kit_drum(cls):
     piano's: 1 a kit drum, 2 a measured mode set's (the clap, the cymbals,
     the woods...), 3 a shaker, 4 a harmonic voice (a guitar); else 0."""
     import tonelib as T
-    if harmonic_voice(cls):
+    if harmonic_voice(cls) or tonewheel_voice(cls):
         return 4
     if pipe_voice(cls):
         return 2
@@ -1027,14 +1052,15 @@ def snapshot(props):
         s.bore_corner_hz, s.bore_order = p.bore_corner_hz, p.bore_order
         s.bell_cutoff_hz, s.bell_order = p.bell_cutoff_hz or 0.0, p.bell_order
         s.bore_norm = p._bore_norm()
-        s.fbody, s.formant_floor = 1, p.formant_floor
-        s.n_fm, s.n_afm, s.n_bt = len(p.formants), len(p.antiformants), len(p.body_trim_db or ())
-        for i, row in enumerate(p.formants):
-            s.fm[i][:] = [float(x) for x in row]
-        for i, row in enumerate(p.antiformants):
-            s.afm[i][:] = [float(x) for x in row]
-        for i, row in enumerate(p.body_trim_db or ()):
-            s.bt[i][:] = [float(x) for x in row]
+        if isinstance(p, T.FormantBody):
+            s.fbody, s.formant_floor = 1, p.formant_floor
+            s.n_fm, s.n_afm, s.n_bt = len(p.formants), len(p.antiformants), len(p.body_trim_db or ())
+            for i, row in enumerate(p.formants):
+                s.fm[i][:] = [float(x) for x in row]
+            for i, row in enumerate(p.antiformants):
+                s.afm[i][:] = [float(x) for x in row]
+            for i, row in enumerate(p.body_trim_db or ()):
+                s.bt[i][:] = [float(x) for x in row]
         if isinstance(p, T.SectionMixin):
             # a section: its players, their vibratos and entries, their desks
             # (section_position_x, less the voice's place: the note's is added)
@@ -1360,7 +1386,7 @@ class OrganRank(ctypes.Structure):
     _fields_ = [('n_ratio', I), ('compound', I), ('ratio', C * 8), ('gain', C), ('spec', I), ('pipe', I),
                 ('lo', I), ('hi', I), ('sp_off', C), ('sp_split', C), ('n_comp', I), ('comp_n', I * 64),
                 ('comp_hz', C * 64), ('comp_r', (C * 8) * 64), ('rel_band', (C * 3) * 128), ('detune', C * 128),
-                ('perc', I)]
+                ('perc', I), ('contact', C * 128), ('keylen', I), ('only_drawn', I), ('no_leak', I)]
 
 
 class OrganSpec(ctypes.Structure):
@@ -1378,7 +1404,8 @@ class OrganSpec(ctypes.Structure):
                 + [('fam_a', C * 32), ('fam_b', C * 32), ('expr_rank', I), ('perc_rank', I), ('htrem_rank', I),
                    ('expr_tilt', C), ('perc_attack_s', C), ('afm', C), ('pipe_radius', I), ('wheel_trem', C),
                    ('wtrem_hz', C), ('htrem_depth', C), ('htrem_hz', C), ('wtrem_stereo', I),
-                   ('wtrem_scatter', C), ('snd_mask', I)])
+                   ('wtrem_scatter', C), ('snd_mask', I), ('n_cn', I), ('leak', I), ('cn_hz', C * 16),
+                   ('cn_db', C * 16), ('cn_dbs', C), ('leak_db', C), ('phase_spread', C)])
 
 
 _ORGAN = {}
@@ -1386,8 +1413,7 @@ _ORGAN = {}
 # WHAT AN ORGAN NOTE IN C DOES NOT DO (the Python's, where a class asks): a
 # choir's strings, a tuner's rank detune, a Hammond's leak, contact and
 # percussion, a harpsichord's jacks, the wind's skirt, a rank drawn only to exist
-_ORGAN_OFF = ('string_choirs', 'rank_choirs', 'drawbar_leak_db', 'contact_noise_db',
-              'contact_spread_s', 'jack_offset_ms', 'wind_skirt_always', 'unison_shares_phase',
+_ORGAN_OFF = ('string_choirs', 'rank_choirs', 'jack_offset_ms', 'wind_skirt_always', 'unison_shares_phase',
               'feedback_harmonic', 'pre_pluck_s')
 
 
@@ -1399,9 +1425,10 @@ def organ(cls):
     if got is not None:
         return got or None
     _ORGAN[cls] = False
-    if not getattr(cls, 'registerable', False) or not pipe_voice(cls) or _class(cls) is None:
+    if (not getattr(cls, 'registerable', False) or not (pipe_voice(cls) or tonewheel_voice(cls))
+            or _class(cls) is None):
         return None
-    if any(getattr(cls, a, None) for a in _ORGAN_OFF) or getattr(cls, 'partial_phase_spread', 0.0):
+    if any(getattr(cls, a, None) for a in _ORGAN_OFF):
         return None
     p = _class(cls)[2]
     o = OrganSpec()
@@ -1428,8 +1455,10 @@ def organ(cls):
                 return None                         # (a flue-dynamic B on a rank)
             pipe = rest[2] if len(rest) > 2 else None
             kr = rest[3] if len(rest) > 3 else None
-            if any(getattr(k, 'rank_only_when_drawn', False) for k in (spec, pipe) if k is not None):
+            if pipe is not None and getattr(pipe, 'rank_only_when_drawn', False):
                 return None
+            r.only_drawn = int(spec is not None and bool(getattr(spec, 'rank_only_when_drawn', False)))
+            r.keylen, r.no_leak = len(key), int(spec is not None)
             r.gain = float(gain)
             r.lo, r.hi = (int(kr[0]), int(kr[1])) if kr is not None else (0, 127)
             if ratio is None:
@@ -1464,6 +1493,7 @@ def organ(cls):
             for nt in range(128):
                 r.rel_band[nt][:] = [T.release_band_scale(sc, key, nt, m) for m in (2, 5, 9)]
                 r.detune[nt] = T.rank_detune_cents(cls, key, nt)
+                r.contact[nt] = T.contact_offset_s(cls, key, nt)
             r.perc = int(key in (getattr(cls, 'percussion_ranks', ()) or ()))
         o.n_rank = len(ranks)
         for i, k in enumerate(pipes):
@@ -1546,6 +1576,14 @@ def organ(cls):
     o.htrem_depth = float(getattr(cls, 'stop_tremolo_depth', 0.0) or 0.0)
     o.htrem_hz = float(getattr(cls, 'stop_tremolo_hz', 0.0) or 0.0)
     o.wtrem_scatter = float(getattr(cls, 'tremolo_scatter', 0.0) or 0.0)
+    cn = getattr(cls, 'contact_noise_db', ()) or ()
+    o.n_cn = len(cn)
+    for j, (hz, db) in enumerate(cn):
+        o.cn_hz[j], o.cn_db[j] = float(hz), float(db)
+    o.cn_dbs = float(getattr(cls, 'contact_noise_dbs', 0.0) or 0.0)
+    lk = getattr(cls, 'drawbar_leak_db', None)
+    o.leak, o.leak_db = int(lk is not None), float(lk or 0.0)
+    o.phase_spread = float(getattr(cls, 'partial_phase_spread', 0.0) or 0.0)
     _sc = T.sound_controls_of(cls)
     o.snd_mask = (1 if 'attack' in _sc else 0) | (2 if 'release' in _sc else 0) | (4 if 'decay' in _sc else 0)
     o.trem_class_depth = float(getattr(cls, 'tremulant_depth', 0.0) or 0.0)
@@ -1602,7 +1640,8 @@ def note_class(cls):
                 return len(ly) <= 32 and all(len(l[0]) <= 32 for l in ly)
             return False
         # (an organ's speech and mode lock are its ranks', organ.c's)
-        org_has = (lambda a: a in ('speech_harmonic_exp', 'mode_lock_spread')) if getattr(cls, 'registerable', False) \
+        org_has = (lambda a: a in ('speech_harmonic_exp', 'mode_lock_spread', 'partial_phase_spread')) \
+            if getattr(cls, 'registerable', False) \
             else (lambda a: False)
         ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF
                                         if not (drum and drum_has(a)) and not org_has(a))
@@ -1686,6 +1725,10 @@ def note_class(cls):
         k.gate_time = float(getattr(cls, 'gate_time', None) or 0.0)
         k.played_backwards = int(bool(getattr(cls, 'played_backwards', False)))
         k.bendable = int(bool(getattr(cls, 'pitch_bendable', True)))
+        # its cabinet and amplifier (blockrender's _LESLIE_CH, _SCAN_CH, _AMP_CH)
+        k.leslie = (2 if getattr(cls, 'leslie_fast', True) else 1) if getattr(cls, 'leslie', False) else 0
+        k.scanner = 1 if getattr(cls, 'scanner', None) else 2 if getattr(cls, 'scanner_switch', False) else 0
+        k.amp_drive = float(getattr(cls, 'amp_drive', 0.0) or 0.0)
         # the sound controls it answers, and where it starts from
         sc = T.sound_controls_of(cls)
         names = [T.SOUND_CC[c] for c in sorted(T.SOUND_CC)]
@@ -2272,11 +2315,22 @@ def render(F):
     sv = fn(BR.ensure_lib().synth_voice)
     sx = fn(BR.ensure_xdec_lib().synth_voice_xdec)
     sd = fn(BR.ensure_damp_lib().synth_voice_damp)
+    # a table with a Leslie: its plain rows through synth_voice_lobe, with their lobes
+    lang = F.get('LANG')
+    if lang is not None:
+        lang = np.ascontiguousarray(lang, np.float32)
+        lsr = np.ascontiguousarray(F['lsr'], np.int32)
+        lob = [np.ascontiguousarray(F[k], np.float32) for k in ('lph', 'lfl', 'lsh', 'lnm')]
+        keep.extend([lang, lsr] + lob)
+        lobp = (ctypes.c_void_p * 4)(*[a.ctypes.data for a in lob])
+        lo = (fn(BR.ensure_lobe_lib().synth_voice_lobe), lsr.ctypes.data, lobp, lang.ctypes.data, lang.shape[1])
+    else:
+        lo = (None, None, None, None, 0)
     d.nv_render(sv, sx, sd, n, BR.BLK, int(F['nblk']), int(F['P']), D, Fp, Lp, Ip, tabs[0].ctypes.data,
                 tabs[1].ctypes.data, tabs[2].ctypes.data, tabs[3].ctypes.data,
                 None if bl is None else bl.ctypes.data, BR._NO_ROWS.ctypes.data, sh,
                 BR._chunk(), float(BR.XDEC_NEPERS), float(BR.SR), float(BR.T.master_gain),
-                *[a.ctypes.data if a is not None else None for a in dm], L.ctypes.data, R.ctypes.data)
+                *[a.ctypes.data if a is not None else None for a in dm], L.ctypes.data, R.ctypes.data, *lo)
     return L, R
 
 

@@ -173,8 +173,30 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
             continue;                               /* drawn after the key lifted */
         if (n->rank_rel1[ri])
             rel_r = 1.0;                            /* pushed in before the key-up */
-        if (!isnan(n->rank_sp[ri]))
-            non_r = (n->rank_sp[ri] + 0.0) * sr;
+        if (!isnan(n->rank_sp[ri]))                 /* ...and a Hammond's drawbar when its contact closes */
+            non_r = (n->rank_sp[ri] + rk->contact[note]) * sr;
+        /* ...AND IT BOUNCES (contact_noise_db): a burst of noise a band at
+           that contact, under its drawbar's fundamental, no images */
+        if (!isnan(n->rank_sp[ri]) && og->n_cn) {
+            ToneIn tc = tr;
+            tc.cbw0 = -0.25;
+            tc.cbw1 = 0.0;
+            tc.reflect = 0;
+            double clr = log(10.0) / 20.0 * og->cn_dbs;
+            double cref = nv_harmonic_volume(tsrc, 1) * rk->gain;
+            for (int q = 0; q < og->n_cn; q++) {
+                double hf = og->cn_hz[q];
+                if (hf >= 0.45 * sr)
+                    continue;
+                double gM = cref * pow(10.0, og->cn_db[q] / 20.0);
+                if (!emit(host, &tc, &R, qacc, azimuth, NULL, 0, 2 * PI * hf / sr, gM * nv_hrtf_gain(host, hf, tr.li),
+                          gM * nv_hrtf_gain(host, hf, tr.ri), gM, hf, non_r, non_r + 0.1 * sr, 1.0, 0.002 * sr, 0.0,
+                          clr, 0.0, 0.0, 0.0, 0.0, t->cc, t->crl, 0.0, t->csc, gr, cr, 0.0, 0.0, VB0, pos_x, 0)) {
+                    ret = -1;
+                    goto done;
+                }
+            }
+        }
         /* its place in the case, for its first partial */
         if (og->spiral) {
             double op = host->octave_position;
@@ -188,6 +210,38 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
             pos_x = rx;
         }
         double ceiling = rpp->pipe_ceiling_hz;
+        /* A HAMMOND'S LEAKAGE (drawbar_leak_db): a drawbar's closed contact
+           carries the other drawbars' wheels, each a sine under its
+           fundamental at its own random phase, on its gate and envelope */
+        if (og->leak && !rk->compound && !spv) {
+            PyRandom lr;
+            pyr_seed(&lr, (long long)rint(n->on * 1e6) * 157 + note * 23 + n->ch + 7 * rk->keylen);
+            double lref = nv_harmonic_volume(tsrc, 1) * rk->gain * pow(10.0, og->leak_db / 20.0);
+            for (int oi = 0; oi < og->n_rank; oi++) {
+                const OrganRank *ok = &og->rank[oi];
+                if (ok->n_ratio == 0 || ok->compound || oi == ri || ok->no_leak)
+                    continue;
+                double lf = f0 * ok->ratio[0];
+                if (lf >= 0.45 * sr)
+                    continue;
+                double lg = lref * nv_radiation_gain(host, lf, tr.radius, tr.has_radius);
+                int nt_ = 0;
+                if (tr.reflect) {
+                    nt_ = note_terms(host, &tr, lf, pos_x, t->pos_z, nimg, nsurf, surf, img, mir, terms);
+                    if (nt_ < 0) {
+                        ret = -2;
+                        goto done;
+                    }
+                }
+                if (!emit(host, &tr, &R, qacc, azimuth, terms, nt_, 2 * PI * lf / sr, lg * nv_hrtf_gain(host, lf, tr.li),
+                          lg * nv_hrtf_gain(host, lf, tr.ri), lg, lf, non_r, t->noff, fade_r, rel_r, 0.0, 0.0, 0.0, 0.0,
+                          t->sustain_level, 0.0, t->cc, t->crl, 0.0, t->csc, gr, cr, 2.0 * PI * pyr_random(&lr), 0.0,
+                          VB0, pos_x, 0)) {
+                    ret = -1;
+                    goto done;
+                }
+            }
+        }
         /* a mixture's footages: its composition at this pitch, or its own */
         double subs[8];
         int nsub = rk->n_ratio, comp = 0;
@@ -224,6 +278,9 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
             }
             if (rk->detune[note] != 0.0)                /* the tuner left this rank a little out (rank_detune) */
                 eff *= pow(2.0, rk->detune[note] / 1200.0);
+            PyRandom pr;                                /* each partial its own phase (partial_phase_spread) */
+            if (og->phase_spread > 0.0)
+                pyr_seed(&pr, (long long)rint(n->on * 1e6) * 151 + note * 19 + n->ch);
             for (int m = 1; m < host->max_harmonic + 1; m++) {
                 double hh[2];
                 if (!nv_string_partial(host, f0, eff, m, t->B, hh))
@@ -299,7 +356,9 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
                 }
                 if (!emit(host, &tr, &R, qacc, azimuth, terms, nt_, 2 * PI * hf / sr, gL, gR, gM, hf, non_r + 0.0,
                           t->noff, pfade, prel, chiff_r, pd[1], pd[3], pd[2], rpp == hp ? t->sustain_level
-                          : rpp->sustain_level, cvp, cc_r, t->crl, t->sjit, t->csc, gr, cr, 0.0, 0.0, VB, pos_x, 0)) {
+                          : rpp->sustain_level, cvp, cc_r, t->crl, t->sjit, t->csc, gr, cr,
+                          og->phase_spread > 0.0 ? 2.0 * PI * og->phase_spread * pyr_random(&pr) : 0.0, 0.0, VB,
+                          pos_x, 0)) {
                     ret = -1;
                     goto done;
                 }

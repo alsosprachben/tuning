@@ -187,6 +187,16 @@ def main(argv):
             f.write(o)
         f.write(struct.pack("<%di" % len(classes), *cls_organ))
         f.write(struct.pack("<128i", *prog_organ))
+        # LESL: the rotating speaker's constants (native/leslie.cpp's L_*) and the lobe's kernel
+        import leslie as LES
+        les = [LES.CROSSOVER_HZ, LES.HORN_RADIUS, LES.DRUM_RADIUS, LES.SLOW_HZ, LES.FAST_HZ, LES.DRUM_RATIO,
+               LES.C_SOUND, LES.XOVER_FLOOR, LES.HORN_FLOOR, LES.HORN_SHARPNESS, LES.DRUM_DEPTH, LES.DRUM_REF_HZ,
+               LES.HORN_SPIN_UP, LES.HORN_SPIN_DOWN, LES.DRUM_SPIN_UP, LES.DRUM_SPIN_DOWN,
+               float(bool(LES.SIDEBANDS and LES.KERNEL_LOBE)), len(LES.CABINET_DB)]
+        les += [float(x) for pt in LES.CABINET_DB for x in pt]
+        lobe = os.fsencode(B.ensure_lobe_lib()._name)
+        f.write(b"LESL" + struct.pack("<i", len(les)) + struct.pack("<%dd" % len(les), *[float(x) for x in les])
+                + struct.pack("<i", len(lobe)) + lobe)
         if "live" in opt:
             import live as L
             tab = L.pan_table()

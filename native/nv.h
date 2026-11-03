@@ -194,6 +194,12 @@ typedef struct {
        0 none), and whether the Percussion stop strikes it (percussion_ranks) */
     double detune[128];
     int perc;
+    /* A HAMMOND'S: when this drawbar's contact closes at every key
+       (contact_offset_s), its name's length (the leak's seed), whether it is
+       nothing until its channel draws it (rank_only_when_drawn: a percussion
+       tap), and whether the leak skips it (a rank with a class of its own) */
+    double contact[128];
+    int keylen, only_drawn, no_leak;
 } OrganRank;
 
 typedef struct {
@@ -306,6 +312,13 @@ typedef struct OrganSpec {
     /* the sound controllers it answers (tonelib.sound_controls_of): bit 0
        attack (CC73), 1 release (CC72), 2 decay (CC75) */
     int snd_mask;
+    /* A TONEWHEEL'S CONTACTS (tonelib.TonewheelProperties): each drawbar's
+       bounce, a noise burst a band (contact_noise_db: Hz, dB under its
+       drawbar's fundamental) falling at contact_noise_dbs; the other drawbars'
+       wheels leaking through each drawn contact (drawbar_leak_db, leak 0
+       none); each partial its own phase (partial_phase_spread, 0 none) */
+    int n_cn, leak;
+    double cn_hz[16], cn_db[16], cn_dbs, leak_db, phase_spread;
 } OrganSpec;
 
 /* what the note setup reads of the voice besides its VoiceSnap */
@@ -482,6 +495,12 @@ typedef struct {
     // A REGISTERED ORGAN (registerable): its ranks and their pipes, NULL none
     // (the caller's pointer, set after the class is made or loaded)
     const struct OrganSpec *organ;
+    // A HAMMOND'S CABINET AND AMPLIFIER: its rotating speaker (leslie: 0
+    // none, 1 starting on chorale, 2 on tremolo -- leslie_fast), its scanner
+    // (1 a setting of its own, 2 a selector a CC94 sets: scanner_switch), its
+    // valve stage's drive (amp_drive, 0 none)
+    int leslie, scanner;
+    double amp_drive;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -622,6 +641,9 @@ int nv_song_htrem(void *s, int i);
 void nv_song_add_htrem_rows(void *s, long long a, long long b);
 int nv_song_n_htrem_rows(void *s, long long *ab, int cap);
 int nv_song_organ_tremolos(void *s, int which, int *ch, double *cfg, int cap);
+void nv_song_add_leslie(void *s, long long ch, int kind);
+int nv_song_leslie(void *s, int k, long long *ch);
+int nv_song_ccs(void *s, long long ch, int cc, double *t, int *v, int cap);
 void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv);
 void nv_song_note_voice(void *s, int i, double *out);
 int nv_song_first_cc(void *s, long long ch, int cc, int *v);

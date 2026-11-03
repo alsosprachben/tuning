@@ -114,6 +114,17 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
             long long r1 = j + 1 < nn ? row0[j + 1] : nnote;
             nv_song_add_htrem_rows(song, row0[j], r1);
         }
+    // THE ROTATING SPEAKERS (_LESLIE_CH): each channel as its first note
+    // on one is played
+    for (int j = 0; j < nn; j++) {
+        long long ch;
+        int iv[4];
+        double dv[2];
+        nv_song_get_note(song, played[j], &ch, iv, dv);
+        const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[(iv[3] ? NV_K_DRUMS : 0) + 128 * iv[2] + iv[0]];
+        if (k && k->leslie)
+            nv_song_add_leslie(song, ch, k->leslie);
+    }
     out[40] = 0.0;
     out[41] = 0.0;
     const double sr = tmpl->sr;

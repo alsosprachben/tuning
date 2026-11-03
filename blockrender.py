@@ -6591,6 +6591,10 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
             n.rank_sp[i] = math.nan if sp is None else sp
             dr = rank_speak_sec(ev, nt.on, 0.0)
             n.rank_skip[i] = int(dr is not None and dr > nt.on and dr >= nt.key_off)
+            # (a rank that is nothing until its channel draws it: not there at all)
+            if (len(_r) > 1 and _r[1] is not None and getattr(_r[1], 'rank_only_when_drawn', False)
+                    and not any(v >= 0.5 for _t, v in ev)):
+                n.rank_skip[i] = 1
             if dr is not None:
                 _drawn_off = 0.0
                 for _t, _tg in ev:
@@ -6671,7 +6675,10 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
                     print("  native organ note DIFFERS (ch %d note %d at %.3f s): %s" % (nt.ch, nt.note, nt.on,
                                                                                         ', '.join(_bad)))
                     if os.environ.get('TUNING_ORGAN_DEBUG'):
-                        print('   py', list(n.rank_br[:_nr]), '\n   c ', list(_n2.rank_br[:_nr]))
+                        for f in _bad:
+                            if f.startswith('rank_'):
+                                print('   %s py' % f, list(getattr(n, f)[:_nr]), '\n   %s c ' % f,
+                                      list(getattr(_n2, f)[:_nr]))
         n.from_song = int(bool(from_song) and nt.song_index is not None)
         n.song_index = nt.song_index if nt.song_index is not None else -1
         n.damper_pedal = K.damper_pedal

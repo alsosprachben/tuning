@@ -540,12 +540,14 @@ def lobe_params(nf, horn):
         if k not in memo:
             memo[k] = beam(f) if h else drum_beam(f)
         fl[j], sh[j] = memo[k]
+    # (libm's cos and pow, not numpy's SVML: native/leslie.cpp works it out alike)
+    import native as _NV
     th = np.linspace(0.0, 2.0 * np.pi, 256, endpoint=False)
-    cc = 0.5 * (1.0 + np.cos(th))
+    cc = 0.5 * (1.0 + np.array([math.cos(x) for x in th.tolist()]))
     nrm = np.empty(len(a), np.float32)
     for i0 in range(0, len(a), 4096):
         f_, s_ = fl[i0:i0 + 4096, None], sh[i0:i0 + 4096, None]
-        nrm[i0:i0 + 4096] = (f_ + (1.0 - f_) * cc[None, :] ** (0.5 * s_)).mean(axis=1)
+        nrm[i0:i0 + 4096] = (f_ + (1.0 - f_) * _NV.xpow(cc[None, :], (0.5 * s_).astype(np.float64))).mean(axis=1)
     return fl, (0.5 * sh).astype(np.float32), (1.0 / nrm).astype(np.float32)
 
 

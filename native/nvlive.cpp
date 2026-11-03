@@ -192,6 +192,8 @@ struct Export {
         std::vector<std::vector<int>> rows;
     } stops[128];                         // LSTOP: an organ program's ranks and the panel's stop rows
     std::vector<int> cls_organ, prog_organ;   // each class's organ, each program's (-1 none, -2 not the engine's)
+    std::vector<double> les;              // LESL: the rotating speaker's constants
+    std::string lobe_lib;                 // ...and synth_voice_lobe's library
     double beta = 0.0, headroom = 1.0;
     int part[128][10];
     bool live = false;
@@ -262,6 +264,23 @@ static bool read_export(const char *path, Export &E)
             E.prog_organ.resize(128);
             ok = fread(E.organs.data(), sizeof(OrganSpec), norg, f) == (size_t)norg
                  && fread(E.cls_organ.data(), 4, ncls, f) == (size_t)ncls && fread(E.prog_organ.data(), 4, 128, f) == 128;
+        }
+        // LESL: the rotating speaker's constants (leslie.cpp's) and the lobe's kernel
+        char lt[4];
+        long pos = ftell(f);
+        if (ok && fread(lt, 1, 4, f) == 4 && !memcmp(lt, "LESL", 4)) {
+            int nl = 0, n = 0;
+            ok = fread(&nl, 4, 1, f) == 1;
+            if (ok) {
+                E.les.resize(nl);
+                ok = fread(E.les.data(), 8, nl, f) == (size_t)nl && fread(&n, 4, 1, f) == 1;
+            }
+            if (ok) {
+                E.lobe_lib.resize(n);
+                ok = fread(&E.lobe_lib[0], 1, n, f) == (size_t)n;
+            }
+        } else {
+            fseek(f, pos, SEEK_SET);
         }
         char lv[4];
         if (ok && fread(lv, 1, 4, f) == 4 && !memcmp(lv, "LIVE", 4)) {
@@ -617,8 +636,12 @@ int main(int argc, char **argv)
     // THE PART'S TEMPLATES (live.Patch.warm), built here
     std::vector<const NoteClass *> K(2 * NV_K_DRUMS, nullptr);
     for (int q = 0; q < 2 * NV_K_DRUMS; q++)
-        if (E.cmap[q] >= 0)
-            K[q] = (const NoteClass *)E.classes[E.cmap[q]].data();
+        if (E.cmap[q] >= 0) {
+            const NoteClass *k = (const NoteClass *)E.classes[E.cmap[q]].data();
+            // (a Hammond's rotor, scanner and valve are not live's here yet: Python's)
+            if (!(k->leslie || k->scanner == 1 || k->amp_drive != 0.0))
+                K[q] = k;
+        }
     NoteIn t;
     memset(&t, 0, sizeof t);
     t.sr = SR; t.retrigger_fade = E.k[K_RETRIGGER]; t.nyq_om = E.k[K_NYQ_OM];

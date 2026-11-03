@@ -80,8 +80,12 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
               float *const *f, long *const *l, int *const *ii, const float *G, const float *S, const float *BR,
               const double *BC, const float *BL, const float *noRows, const float *sh, long CHUNK, double xdec_nepers,
               double SR, double master_gain, const float *DM, const long *DMO, const long *DMB, const long *DMN,
-              float *L, float *R);
+              float *L, float *R, void *slo, const int *lsr, float *const *lob, const float *LANG, long lgn);
 void nv_buf_free(void *p);
+long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
+                           const int *nreq, const double *req, double sr, const double *L, void **lobe);
+long nv_leslie_angles(int nch, const int *nreq, const double *req, long n_samples, double sr, int blk,
+                      const double *L, float *LANG);
 }
 
 // the export's constants, in native_export.py's order
@@ -190,6 +194,8 @@ struct Export {
     std::string room, libs[3];
     std::vector<OrganSpec> organs;        // ORGN: the registered organs' tables
     std::vector<int> cls_organ, prog_organ;   // each class's organ, each program's (-1 none, -2 not the engine's)
+    std::vector<double> les;              // LESL: the rotating speaker's constants
+    std::string lobe_lib;                 // ...and synth_voice_lobe's library
 };
 
 static bool read_export(const char *path, Export &E)
@@ -238,6 +244,23 @@ static bool read_export(const char *path, Export &E)
             E.prog_organ.resize(128);
             ok = fread(E.organs.data(), sizeof(OrganSpec), norg, f) == (size_t)norg
                  && fread(E.cls_organ.data(), 4, ncls, f) == (size_t)ncls && fread(E.prog_organ.data(), 4, 128, f) == 128;
+        }
+        // LESL: the rotating speaker's constants (leslie.cpp's) and the lobe's kernel
+        char lt[4];
+        long pos = ftell(f);
+        if (ok && fread(lt, 1, 4, f) == 4 && !memcmp(lt, "LESL", 4)) {
+            int nl = 0, n = 0;
+            ok = fread(&nl, 4, 1, f) == 1;
+            if (ok) {
+                E.les.resize(nl);
+                ok = fread(E.les.data(), 8, nl, f) == (size_t)nl && fread(&n, 4, 1, f) == 1;
+            }
+            if (ok) {
+                E.lobe_lib.resize(n);
+                ok = fread(&E.lobe_lib[0], 1, n, f) == (size_t)n;
+            }
+        } else {
+            fseek(f, pos, SEEK_SET);
         }
     }
     fclose(f);
@@ -382,7 +405,14 @@ int main(int argc, char **argv)
         }
     }
     std::vector<double> first(256, INFINITY);
-    std::vector<char> drum_ch(256, 0);
+    std::vector<char> drum_ch(256, 0), c94(256, 0);
+    for (int i = 0, n = nv_midi_n_ccs(midi); i < n; i++) {
+        int iv[3];
+        double t;
+        nv_midi_cc(midi, i, iv, &t);
+        if (iv[1] == 94)
+            c94[iv[0] & 255] = 1;
+    }
     for (int i = 0, n = nv_midi_n_notes(midi); i < n; i++) {
         int iv[5];
         double dv[5];
@@ -394,6 +424,16 @@ int main(int argc, char **argv)
         if (cq < 0) {
             fprintf(stderr, "nvrender: refused: a note no native voice plays (program %d, key %d%s)\n", iv[3], iv[1],
                     iv[4] ? ", a drum" : "");
+            return 2;
+        }
+        // A HAMMOND'S AMPLIFIER AND SCANNER (tubeamp, scanner.py): Python's, for now
+        const NoteClass *nc = (const NoteClass *)E.classes[cq].data();
+        if (nc->amp_drive != 0.0) {
+            fprintf(stderr, "nvrender: refused: a valve amplifier (program %d)\n", iv[3]);
+            return 2;
+        }
+        if (nc->scanner == 1 || (nc->scanner == 2 && c94[iv[0] & 255])) {
+            fprintf(stderr, "nvrender: refused: a Hammond's scanner (program %d)\n", iv[3]);
             return 2;
         }
 
@@ -559,6 +599,45 @@ int main(int argc, char **argv)
         }
         tremolo_expand(&rows, &P, dm, chans, which == 0 ? &mask : nullptr, SR);
     }
+    // THE ROTATING SPEAKERS (_prep_rotating_speaker, leslie.expand): each
+    // Leslie channel's half-moon from its CC1s (leslie.zone), on its default
+    // speed from 0 where the first is later; the cabinet, the crossover's
+    // copies, the Doppler, each rotor row's lobe
+    std::vector<long long> lch;
+    std::vector<int> lnreq;
+    std::vector<double> lreq;
+    void *lobe[5] = {nullptr};
+    const double *LES = E.les.data();
+    for (int k = 0, nl = nv_song_leslie(song, -1, nullptr); k < nl; k++) {
+        long long c;
+        int kind = nv_song_leslie(song, k, &c);
+        int nc = nv_song_ccs(song, c, 1, nullptr, nullptr, 0);
+        std::vector<double> ct(nc);
+        std::vector<int> cv(nc);
+        nv_song_ccs(song, c, 1, ct.data(), cv.data(), nc);
+        if (E.les.empty()) {
+            fprintf(stderr, "nvrender: %s is an export from before the Leslie (native_export.py again)\n", argv[1]);
+            return 1;
+        }
+        int nq = 0;
+        if (nc == 0 || ct[0] > 0.0) {
+            lreq.push_back(0.0);
+            lreq.push_back(kind == 2 ? LES[4] : LES[3]);
+            nq++;
+        }
+        for (int q = 0; q < nc; q++) {
+            lreq.push_back(ct[q]);
+            lreq.push_back(cv[q] < 42 ? 0.0 : cv[q] < 85 ? LES[3] : LES[4]);     // leslie.zone
+            nq++;
+        }
+        lch.push_back(c);
+        lnreq.push_back(nq);
+    }
+    if (!lch.empty() && nv_leslie_expand(&rows, &P, dm, (int)lch.size(), lch.data(), lnreq.data(), lreq.data(), SR,
+                                         LES, lobe) < 0) {
+        fprintf(stderr, "nvrender: refused: a Leslie by sidebands (leslie.KERNEL_LOBE off)\n");
+        return 2;
+    }
     const long N = (long)out[0];
     const int nblk = (int)out[1];
     // ...in prepare's final types (FINAL_DTYPES)
@@ -673,11 +752,27 @@ int main(int argc, char **argv)
             put(".BL", BLr.data(), sizeof(float) * BLr.size());
         put(".sh", sh, sizeof sh);
     }
+    // ...and the rotors' angles on the kernel's grid (angle_table), the lobe's kernel
+    std::vector<float> LANG;
+    long lgn = 0;
+    void *slo = nullptr;
+    if (!lch.empty()) {
+        lgn = nv_leslie_angles((int)lch.size(), lnreq.data(), lreq.data(), N, SR, (int)BLK, LES, nullptr);
+        LANG.resize((size_t)2 * lch.size() * lgn);
+        nv_leslie_angles((int)lch.size(), lnreq.data(), lreq.data(), N, SR, (int)BLK, LES, LANG.data());
+        void *h = dlopen(E.lobe_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
+        slo = h ? dlsym(h, "synth_voice_lobe") : nullptr;
+        if (!slo) {
+            fprintf(stderr, "nvrender: no synth_voice_lobe in %s\n", E.lobe_lib.c_str());
+            return 1;
+        }
+    }
     std::vector<float> L(N), R(N);
     nv_render(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fp, lp, ip, Gt.data(), St.data(), BRr.data(), BCr.data(),
               BLr.empty() ? nullptr : BLr.data(), noRows, sh,
               (long)E.k[K_CHUNK], E.k[K_XDEC], SR, E.k[K_MASTER], (const float *)dm[2], (const long *)dm[3],
-              (const long *)dm[4], (const long *)dm[5], L.data(), R.data());
+              (const long *)dm[4], (const long *)dm[5], L.data(), R.data(), slo, (const int *)lobe[0],
+              (float *const *)(lobe + 1), LANG.empty() ? nullptr : LANG.data(), lgn);
     if (!write_wav(argv[3], L.data(), R.data(), N, (int)SR)) {
         fprintf(stderr, "nvrender: cannot write %s\n", argv[3]);
         return 1;
@@ -703,6 +798,8 @@ int main(int argc, char **argv)
     for (int q = 0; q < 6; q++)
         if (dm[q])
             nv_buf_free(dm[q]);
+    for (int q = 0; q < 5; q++)
+        free(lobe[q]);
     nv_song_free(song);
     nv_midi_free(midi);
     return 0;

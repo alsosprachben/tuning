@@ -210,6 +210,9 @@ struct Song {
     // their rows (_HT_ROWS, nv_prepare's)
     mutable std::vector<char> htrem_note;
     std::vector<std::pair<long long, long long>> htrem_rows;
+    // the rotating speakers (_LESLIE_CH): each channel as its first Leslie
+    // note came, and how it starts (1 chorale, 2 tremolo)
+    std::vector<std::pair<long long, int>> leslie;
     // ...and of each note's bellows push (blockrender's push_rows), [first, end)
     std::vector<std::pair<long long, long long>> push_rows;
     double total = 0.0;
@@ -1305,6 +1308,13 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
                 }
         n->rank_sp[ri] = sp;
         n->rank_skip[ri] = !std::isnan(sp) && sp > on && sp >= koff;
+        if (o->spec->rank[ri].only_drawn) {     // (nothing until its channel draws it: not there at all)
+            bool any = false;
+            for (auto &x : ev)
+                any = any || x.second >= 0.5;
+            if (!any)
+                n->rank_skip[ri] = 1;
+        }
         n->rank_rel1[ri] = 0;
         if (!std::isnan(sp)) {
             double drawn = 0.0;
@@ -1345,6 +1355,45 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
         S->htrem_note.resize(S->notes.size(), 0);
     S->htrem_note[i] = o->spec->expr_rank >= 0 && o->spec->htrem_depth > 0.0 && drawn_at(o->spec->htrem_rank);
     return 1;
+}
+
+// A LESLIE'S CHANNEL, as its first note on a rotating speaker arrives (kind:
+// 1 starting on chorale, 2 on tremolo); a channel already there is left
+void nv_song_add_leslie(void *s, long long ch, int kind)
+{
+    nv::Song *S = (nv::Song *)s;
+    for (const auto &x : S->leslie)
+        if (x.first == ch)
+            return;
+    S->leslie.push_back(std::make_pair(ch, kind));
+}
+
+// the Leslie channel k's (its kind; *ch), or how many with k < 0
+int nv_song_leslie(void *s, int k, long long *ch)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (k < 0)
+        return (int)S->leslie.size();
+    *ch = S->leslie[k].first;
+    return S->leslie[k].second;
+}
+
+// a channel's controller cc, in order (in_order): times and values, how many
+int nv_song_ccs(void *s, long long ch, int cc, double *t, int *v, int cap)
+{
+    const nv::Channel *C = ((nv::Song *)s)->get(ch);
+    int n = 0;
+    if (!C)
+        return 0;
+    for (const nv::CC &e : C->ccs)
+        if (e.cc == cc) {
+            if (n < cap) {
+                t[n] = e.t;
+                v[n] = e.v;
+            }
+            n++;
+        }
+    return n;
 }
 
 // note i struck with its reed organ's Tremolo stop drawn

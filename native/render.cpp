@@ -11,8 +11,9 @@
 // table order, gathered contiguous), then the master gain (in float32, as
 // numpy multiplies a float32 buffer by a Python float) and the clip.
 //
-// A piano song's table only, for now: no consonant bursts, no master volume
-// curve, no bus, Moog, Leslie or filter rows (render.cpp refuses them).
+// A table with a Leslie (leslie.cpp's lobe columns and LANG): its plain rows
+// through synth_voice_lobe (-DLESLIE_KERNEL), as synth_partials sends them.
+// No consonant bursts, no master volume curve, no bus, Moog or filter rows.
 
 #include <cstdint>
 #include <cstring>
@@ -63,6 +64,32 @@ typedef void (*damp_fn)(
     const float *sendW, float *outSL, float *outSR,
     const int *dk, const float *dg, const float *DM, const long *DMO, const long *DMB, const long *DMN);
 
+// ...and synth_voice_lobe (-DLESLIE_KERNEL): synth_voice's, then the rotor
+// rows' lobe and a moving filter's, its chunk after them
+typedef void (*lobe_fn)(
+    float *outL, float *outR, long n0, long winlen, int BLK, int nblk, int P,
+    const double *omega, const double *ph0L, const double *ph0R,
+    const float *ampL, const float *ampR, const float *nomfreq,
+    const long *non, const long *noff, const float *fadeS, const float *relS, const float *chiffS,
+    const float *logr, const float *logrA, const float *aftL, const float *susL,
+    const float *chVol, const float *chCyc, const float *chRel, const float *susJit, const float *chScale,
+    const float *chBW, const float *tbav, const float *tau, const float *tcut,
+    const float *gbav, const float *gtau, const float *gcut,
+    const float *vdep, const float *vrate, const float *vph, const float *vdl,
+    const float *delL, const float *delR,
+    const int *grow, const int *crow, const float *G, const float *S,
+    const int *brow, const float *BR, const double *BC, const float *BL,
+    const int *fxr, const float *FT, const float *KN, long knk, long kb0,
+    const float *ampLp, const float *ampRp, const int *mkr,
+    const int *MPI, const double *MPC, const float *MPR, const int *MKI, const float *MPK,
+    const double *fmw, const double *fmp, const double *fmpR,
+    float sfloor, float spow, float shmax, float shref,
+    const int *lsr, const float *lph, const float *lfl, const float *lsh, const float *lnm,
+    const float *LANG, long lgn,
+    const int *fsr, const int *fty, const float *fpa, const float *fpb, const float *fpc,
+    const float *FCT, long fgn, long CHUNK,
+    const float *sendW, float *outSL, float *outSR);
+
 // The table, column by column in prepare's final types (FINAL_DTYPES):
 // d[0..2] om p0 p0R (float64); f[] the float32 columns in VCOLS_F order; l[0..1]
 // non noff (int64); i[0..3] gr cr br (int32, and dk); damper tracks or NULL.
@@ -75,6 +102,8 @@ struct Gather {
     std::vector<float> f[NF];
     std::vector<long> l[2];
     std::vector<int> i[NI];
+    std::vector<int> lsr;               // (the Leslie's lobe columns, a table with one)
+    std::vector<float> lob[4];
 };
 
 static void gather(Gather &g, const std::vector<long long> &rows, double *const *d, float *const *f, long *const *l,
@@ -111,13 +140,15 @@ static void gather(Gather &g, const std::vector<long long> &rows, double *const 
 // rows through their kernels (sv, sx, sd), then master gain and clip. G, S,
 // BR, BC the table's swell, chest and bend rows; sh its shutter's four;
 // CHUNK the kernel's chunk; xdec_nepers, SR: _xdec_rows' test. DM etc. NULL
-// for a table with no damper tracks.
+// for a table with no damper tracks. A table with a Leslie (LANG, lgn
+// points a rotor): its plain rows through synth_voice_lobe (slo), each with
+// its lobe columns (lsr, and lob: lph lfl lsh lnm).
 int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long P, double *const *d,
               float *const *f, long *const *l, int *const *ii, const float *G, const float *S, const float *BR,
               const double *BC, const float *BL, const float *noRows, const float *sh, long CHUNK,
               double xdec_nepers, double SR,
               double master_gain, const float *DM, const long *DMO, const long *DMB, const long *DMN, float *L,
-              float *R)
+              float *R, void *slo, const int *lsr, float *const *lob, const float *LANG, long lgn)
 {
     memset(L, 0, sizeof(float) * N);
     memset(R, 0, sizeof(float) * N);
@@ -153,7 +184,25 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
         gather(g, rows, d, f, l, ii, damp);
         int n = (int)rows.size();
         auto F = [&](int c) { return g.f[c].data(); };
-        if (!damp)
+        if (LANG && fn == (voice_fn)sv) {
+            g.lsr.resize(n);
+            for (int q = 0; q < 4; q++)
+                g.lob[q].resize(n);
+            for (int k = 0; k < n; k++) {
+                g.lsr[k] = lsr[rows[k]];
+                for (int q = 0; q < 4; q++)
+                    g.lob[q][k] = lob[q][rows[k]];
+            }
+            ((lobe_fn)slo)(L, R, 0, N, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR),
+                           F(F_nf), g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA),
+                           F(F_aft), F(F_sus), F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav),
+                           F(F_tau), F(F_tcut), F(F_gb), F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl),
+                           F(F_delL), F(F_delR), g.i[I_gr].data(), g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC,
+                           BL, nullptr, noRows, noRows, 1, 0, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                           nullptr, nullptr, nullptr, nullptr, nullptr, sh[0], sh[1], sh[2], sh[3], g.lsr.data(),
+                           g.lob[0].data(), g.lob[1].data(), g.lob[2].data(), g.lob[3].data(), LANG, lgn, nullptr,
+                           nullptr, nullptr, nullptr, nullptr, nullptr, 0, CHUNK, nullptr, nullptr, nullptr);
+        } else if (!damp)
             fn(L, R, 0, N, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR), F(F_nf),
                g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA), F(F_aft), F(F_sus),
                F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav), F(F_tau), F(F_tcut), F(F_gb),
