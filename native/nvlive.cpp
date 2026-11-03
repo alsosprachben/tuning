@@ -144,6 +144,7 @@ void nv_lp_damper(void *h, double full_db_s, double residual, double knee_db, do
 void nv_lp_press_db(void *h, double db);
 void nv_lp_detune_wheel(void *h, int on);
 void nv_lp_leslie(void *h, const double *L, int n);
+void nv_lp_scan(void *h, const double *X, long n);
 void nv_tcache_leslie(void *h, const double *L, int n);
 int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, int *have);
 void nv_lp_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
@@ -653,8 +654,8 @@ int main(int argc, char **argv)
     for (int q = 0; q < 2 * NV_K_DRUMS; q++)
         if (E.cmap[q] >= 0) {
             const NoteClass *k = (const NoteClass *)E.classes[E.cmap[q]].data();
-            // (a Hammond's scanner of its own and its valve are not live's here yet: Python's)
-            if (!(((k->scanner >> 2) & 3) || k->amp_drive != 0.0))
+            // (a Hammond's valve is not live's here yet: Python's)
+            if (!(k->amp_drive != 0.0))
                 K[q] = k;
         }
     NoteIn t;
@@ -684,6 +685,8 @@ int main(int argc, char **argv)
                            E.headroom, E.pan.data(), E.beta);
     if (!E.les.empty())                         // the room's Leslie: its rotors, on chorale
         nv_lp_leslie(part, E.les.data(), (int)E.les.size());
+    if (!E.scan.empty())                        // the Hammond's scanner: its circuit's tables
+        nv_lp_scan(part, E.scan.data(), (long)E.scan.size());
     if (drums)
         nv_lp_drums(part, program, E.kit_choke.data());
     else

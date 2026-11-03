@@ -10211,11 +10211,14 @@ class Live:
         band, dry, sc, side = g
         sl = self.slab
 
+        import native as _NV
+
         def put(slots, gain, br):
+            # (libm's abs and angle, native.xabs / xangle: nvlive's)
             idx = np.asarray(slots, np.int64)
-            sl.channel_gain(idx, np.abs(gain).astype(np.float32))
-            sl.a["p0"][idx] += np.angle(gain)
-            sl.a["p0R"][idx] += np.angle(gain)
+            sl.channel_gain(idx, _NV.xabs(gain).astype(np.float32))
+            sl.a["p0"][idx] += _NV.xangle(gain)
+            sl.a["p0R"][idx] += _NV.xangle(gain)
             if br is not None:
                 sl.a["br"][idx] = np.asarray(rows)[band]
         def sidestamp():

@@ -216,9 +216,152 @@ void scanned(Scan &S, const Rev &R, double f, int depth, int band, int chorus, d
     }
 }
 
+// gains for one partial at f: its band, the dry share (dre, dim: 0 on
+// vibrato), the scanned path's mean turned back by the row's mean delay
+void gains_one(Scan &S, const Rev &R, double f, int depth, int chorus, std::map<int, double> &mdl, int *band,
+               double *dre, double *dim, double *sre, double *sim)
+{
+    double Pr[256], Pi[256];
+    *band = band_of(S, f);
+    *dre = *dim = 0.0;
+    if (chorus) {
+        const Tab &T = S.tab[1];
+        double lf = log(std::max(f, T.fg[0]));
+        double m = interp(lf, T.lg.data(), T.rm.data(), T.n, 1);
+        double p = interp(lf, T.lg.data(), T.rp.data(), T.n, 1);
+        *dre = m * cos(p);
+        *dim = m * sin(p);
+    }
+    if (!mdl.count(*band))
+        mdl[*band] = mean_delay(S, depth, *band, chorus);
+    double w;
+    scanned(S, R, f, depth, *band, chorus, Pr, Pi, &w);
+    double c0r = npmean(Pr, 256), c0i = npmean(Pi, 256);
+    double x = (-w) * mdl[*band], cm = cos(x), sm = sin(x);
+    *sre = c0r * cm - c0i * sm;
+    *sim = c0r * sm + c0i * cm;
+}
+
+// tier B for one partial at f (its level amp, its note's loudest nmax):
+// each kept component's m and complex gain, strongest first (sidebands)
+void sides_one(Scan &S, const Rev &R, double f, int depth, int band, int chorus, double md, double amp, double nmax,
+               std::vector<double> &mm, std::vector<double> &cr, std::vector<double> &ci)
+{
+    double Pr[256], Pi[256], z[512], F[512], Cr[256], Ci[256], mag[256];
+    const double kside = pow(10.0, -S.side_db / 20.0), kfloor = pow(10.0, -S.floor_db / 20.0);
+    double w;
+    scanned(S, R, f, depth, band, chorus, Pr, Pi, &w);
+    for (int j = 0; j < 256; j++) {
+        z[2 * j] = Pr[j];
+        z[2 * j + 1] = Pi[j];
+    }
+    nv_cfft(z, 256, F);
+    double x = (-w) * md, cm = cos(x), sm = sin(x);
+    double mx = 0.0;
+    for (int j = 0; j < 256; j++) {
+        double Fr = F[2 * j] / 256.0, Fi = F[2 * j + 1] / 256.0;
+        Cr[j] = Fr * cm - Fi * sm;
+        Ci[j] = Fr * sm + Fi * cm;
+        mag[j] = hypot(Cr[j], Ci[j]);
+        mx = j ? std::max(mx, mag[j]) : mag[j];
+    }
+    std::vector<int> keep;
+    for (int j = 0; j < 256; j++) {
+        int m = j < 128 ? j : j - 256;          // fftfreq
+        if (mag[j] > mx * kside && m != 0 && amp * mag[j] >= nmax * kfloor)
+            keep.push_back(j);
+    }
+    std::stable_sort(keep.begin(), keep.end(), [&](int u, int v) { return -mag[u] < -mag[v]; });
+    if ((int)keep.size() > S.max_side)
+        keep.resize(S.max_side);
+    for (int j : keep) {
+        mm.push_back((double)(j < 128 ? j : j - 256));
+        cr.push_back(Cr[j]);
+        ci.push_back(Ci[j]);
+    }
+}
+
+// the tables, loaded once per export
+std::map<const double *, Scan> loaded;
+
+Scan &scan_of(const double *X)
+{
+    auto it = loaded.find(X);
+    if (it == loaded.end())
+        it = loaded.emplace(X, load(X)).first;
+    return it->second;
+}
+
+Rev make_rev(const Scan &S)
+{
+    Rev R;
+    for (int j = 0; j < 256; j++) {
+        R.th[j] = (double)j * 2.0 * M_PI / 256.0;
+        crossfade(S, R.th[j], &R.a[j], &R.b[j], &R.eta[j]);
+    }
+    return R;
+}
+
 }  // namespace
 
 extern "C" {
+
+// LIVE'S SCANNER, one rank's data for one position (live._scan_prep): its
+// partials' bands, dry and scanned gains (dry, sc: re, im each), and tier B's
+// copies (their source rows, m and complex gain: *ns of them, malloc'd) -- the
+// note's loudest its rows' by onset less room delay (note_peaks)
+void nv_scan_prep(const double *X, long n, const float *nf, const float *aL, const float *aR, const long long *non,
+                  const float *rdl, int depth, int chorus, double sr, int *band, double *dry, double *sc, long *ns,
+                  long **src, double **mm, double **cc)
+{
+    Scan &S = scan_of(X);
+    Rev R = make_rev(S);
+    std::map<int, double> mdl;
+    for (long q = 0; q < n; q++)
+        gains_one(S, R, (double)nf[q], depth, chorus, mdl, &band[q], &dry[2 * q], &dry[2 * q + 1], &sc[2 * q],
+                  &sc[2 * q + 1]);
+    std::vector<long> so;
+    std::vector<double> mo, co;
+    if (S.sidebands && sr) {
+        std::vector<double> amp(n), key(n);
+        std::map<double, double> top;
+        for (long q = 0; q < n; q++) {
+            amp[q] = std::max(fabs((double)aL[q]), fabs((double)aR[q]));
+            key[q] = (double)non[q] - (double)rdl[q];
+            auto it = top.find(key[q]);
+            if (it == top.end() || amp[q] > it->second)
+                top[key[q]] = amp[q];
+        }
+        for (long q = 0; q < n; q++) {
+            std::vector<double> m1, r1, i1;
+            sides_one(S, R, (double)nf[q], depth, band[q], chorus, mdl[band[q]], amp[q], top[key[q]], m1, r1, i1);
+            for (size_t j = 0; j < m1.size(); j++) {
+                so.push_back(q);
+                mo.push_back(m1[j]);
+                co.push_back(r1[j]);
+                co.push_back(i1[j]);
+            }
+        }
+    }
+    *ns = (long)so.size();
+    *src = (long *)malloc(sizeof(long) * (so.size() + 1));
+    *mm = (double *)malloc(sizeof(double) * (mo.size() + 1));
+    *cc = (double *)malloc(sizeof(double) * (co.size() + 1));
+    std::copy(so.begin(), so.end(), *src);
+    std::copy(mo.begin(), mo.end(), *mm);
+    std::copy(co.begin(), co.end(), *cc);
+}
+
+// a band row's BC at two times (scanner.band_bc: live's _scanner_block)
+void nv_scan_bc(const double *X, double t0, double t1, int depth, int band, int chorus, double sr, double *c)
+{
+    Scan &S = scan_of(X);
+    double md = mean_delay(S, depth, band, chorus);
+    for (int k = 0; k < 2; k++) {
+        double th = 2.0 * M_PI * S.hz * (k ? t1 : t0);
+        c[k] = -(delay(S, th, depth, band, chorus) - md) * sr;
+    }
+}
 
 // THE SCANNER'S ROWS (scanner.rows) for a render nblk blocks long: a row per
 // band -- BR (float32) and BC -- into br[6 * nblk], bc[6 * nblk]

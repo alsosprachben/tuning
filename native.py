@@ -347,6 +347,7 @@ def _load():
             ('nv_scan_rows', None, [ctypes.c_void_p, ctypes.c_long, I, C, I, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_tcache_leslie', None, [ctypes.c_void_p, ctypes.c_void_p, I]),
             ('nv_lp_leslie', None, [ctypes.c_void_p, ctypes.c_void_p, I]),
+            ('nv_lp_scan', None, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]),
             ('nv_leslie_angles', ctypes.c_long, [I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, C, I,
                                                  ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_slab_new', ctypes.c_void_p, [ctypes.c_long, C]), ('nv_slab_free', None, [ctypes.c_void_p]),
@@ -2245,6 +2246,20 @@ def leslie_constants():
     return [float(x) for x in les + [x for pt in LES.CABINET_DB for x in pt]]
 
 
+def scan_constants():
+    """scanner.py's constants and its circuit's tables (scanner.table_d) as
+    native/scanner.cpp reads them: the export's SCAN section, and a live part's."""
+    import numpy as np
+    import scanner as SCN
+    scn = [SCN.SCAN_HZ, float(bool(SCN.SIDEBANDS)), SCN.SIDEBAND_DB, SCN.FLOOR_DB, float(SCN.MAX_SIDE)]
+    scn += list(SCN.BAND_HZ) + [float(x) for d in (1, 2, 3) for x in SCN.TAPS[d]] + [float(x) for x in SCN.PLATES]
+    for cho in (False, True):
+        fg, lg, rm, rp, mag, ph = SCN.table_d(cho)
+        scn += [float(len(fg))] + [float(x) for a in (fg, lg, rm, rp) for x in a]
+        scn += [float(x) for x in np.ascontiguousarray(mag).ravel()] + [float(x) for x in np.ascontiguousarray(ph).ravel()]
+    return [float(x) for x in scn]
+
+
 def xcos(x):
     """np.cos of x, libm's (native.xcexp of i x)."""
     import numpy as np
@@ -2737,6 +2752,9 @@ class LivePiano(object):
         self.d.nv_lp_detune_wheel(self.p, int(bool(detune_wheel)))
         L = leslie_constants()
         self.d.nv_lp_leslie(self.p, (ctypes.c_double * len(L))(*L), len(L))
+        X = scan_constants()
+        self._scan = (ctypes.c_double * len(X))(*X)
+        self.d.nv_lp_scan(self.p, self._scan, len(X))
 
     def __del__(self):
         if getattr(self, 'p', None):

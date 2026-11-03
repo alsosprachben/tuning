@@ -5,7 +5,7 @@
                                         [--half] [--pedal-key=N] [--pressure]
                                         [--gpu=c|cl] [--gpu-min=N] [--shed=N] [--wheels]
                                         [--room=NAME] [--cc91] [--thresh=X] [--rpn] [--modes]
-                                        [--routes] [--porta] [--stops]
+                                        [--routes] [--porta] [--stops] [--scan]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native piano part (native/slab.cpp: its template cache, its slab, live's
@@ -34,7 +34,8 @@ on one side, native.KeyPedal before the part's events on the other.
 --stops: an organ's stops drawn and put in as the panel does (livetui's
 toggle_stop; the native part's nv_lp_toggle_stop), the Tremulant among them.
 On a tonewheel (16-18) the Leslie's state is compared too (ls_*: its rotor
-slots, lobes and baselines), the pitch wheel its half-moon under --wheels.
+slots, lobes and baselines), the pitch wheel its half-moon under --wheels;
+--scan: the scanner's selector (CC94) among the controls.
 On a harmonium (program 20) its stop word too (CC43-45), the mod wheel
 (its tremolo) and the sound controllers it answers (CC72/73, and by GS's
 NRPNs); the tremolo's state (tr_on, its depth, baselines and sides)
@@ -80,6 +81,23 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "examples"))
 
 
+def instant_scan(lv, pt):
+    """THE SCANNER'S DATA (live._scan_prep, by the builder thread) made as the
+    press asks for it, as if the builder were instant: the native part works
+    it out at the press. pt's templates (warmed) are the ranks it knows."""
+    class _ScanG(dict):
+        def get(self, k, d=None):
+            if k not in self and k[0] in _ScanG.cols:
+                cols, n, hrel = _ScanG.cols[k[0]]
+                lv._scan_prep(cols, n, hrel, k[1], k[2])
+            return dict.get(self, k, d)
+    _ScanG.cols = {}
+    for _t in pt.templates.values():
+        for _rk, (_c, _n, _h) in (_t.get("ranks") or {}).items():
+            _ScanG.cols[id(_c)] = (_c, _n, _h)
+    lv._scan_g = _ScanG(lv._scan_g)
+
+
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith("--")]
     opt = dict(a[2:].split("=", 1) if "=" in a else (a[2:], "") for a in argv[1:] if a.startswith("--"))
@@ -99,6 +117,7 @@ def main(argv):
     part = lv.parts[0]
     pt = part.patch
     pt.warm()           # live warms off the audio thread; here, before the first press
+    instant_scan(lv, pt)
     lv.slab.shed = lambda n, frac: 0    # the governor sheds by wall-clock render time: not a reference
     lo, hi = pt.range
     cache = N.TemplateCache(prog, pt.tuner)
@@ -278,6 +297,10 @@ def main(argv):
                                value=rng.randint(0, 127))]
                 else:
                     msgs.append(M("control_change", channel=ch, control=c, value=rng.randint(0, 127)))
+            elif "scan" in opt and rng.random() < 0.3:
+                # the scanner's selector: off, V1-V3, C1-C3
+                msgs.append(M("control_change", channel=ch, control=94,
+                              value=rng.choice((0, 20, 40, 60, 80, 100, 120))))
             elif "cc91" in opt and rng.random() < 0.3:
                 msgs.append(M("control_change", channel=ch, control=91, value=rng.randint(0, 127)))
             else:

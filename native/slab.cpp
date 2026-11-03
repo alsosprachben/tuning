@@ -42,6 +42,11 @@ extern "C" int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, 
 extern "C" const OrganSpec *nv_tcache_organ(void *h, int program);
 extern "C" const NoteClass *nv_tcache_class(void *h, int program);
 extern "C" void nv_leslie_lobe_of(double f, int horn, const double *L, double *fl, double *sh);
+extern "C" void nv_scan_prep(const double *X, long n, const float *nf, const float *aL, const float *aR,
+                             const long long *non, const float *rdl, int depth, int chorus, double sr, int *band,
+                             double *dry, double *sc, long *ns, long **src, double **mm, double **cc);
+extern "C" void nv_scan_bc(const double *X, double t0, double t1, int depth, int band, int chorus, double sr,
+                           double *c);
 extern "C" double nv_tcache_freq(void *h, int note);
 
 extern "C" double nv_damper_contact(int p, int key, int top);
@@ -238,7 +243,8 @@ struct Slab {
     bool stamp(const double *const *tf8, const float *const *tf4, const long long *const *ti8,
                const int32_t *const *ti4, const float *threl, long n, Key key, long long n0, double vel_scale,
                long long dur, bool one, double tsend, long long ch, const long long *sof = nullptr,
-               const long long *rof = nullptr, double scat = 0.0, double rate = 0.0, const long long *cof = nullptr)
+               const long long *rof = nullptr, double scat = 0.0, double rate = 0.0, const long long *cof = nullptr,
+               const double *aL64 = nullptr, const double *aR64 = nullptr)
     {
         if (n == 0)
             return true;
@@ -287,7 +293,10 @@ struct Slab {
             i8[1][s] = one ? n0 + dur + rd : IDLE;
             if (rof && rof[q] >= 0)
                 i8[1][s] = newnon + rof[q];
-            if (vel_scale != 1.0) {
+            if (aL64) {                         // (levels in float64: a scanner's copy, numpy's product)
+                f4[F4_aL][s] = (float)(vel_scale != 1.0 ? aL64[q] * vel_scale : aL64[q]);
+                f4[F4_aR][s] = (float)(vel_scale != 1.0 ? aR64[q] * vel_scale : aR64[q]);
+            } else if (vel_scale != 1.0) {
                 f4[F4_aL][s] = tf4[F4_aL][q] * (float)vel_scale;
                 f4[F4_aR][s] = tf4[F4_aR][q] * (float)vel_scale;
             }
@@ -529,7 +538,7 @@ struct Slab {
     // live.Slab.leslie_params: each partial's rotor (the horn over the
     // crossover, flipped for a crossover copy), its lobe's floor and
     // sharpness, the lobe's mean (libm's cos and pow; numpy's mean)
-    void leslie_params(long n, const float *nf, const char *flip, std::vector<char> &horn, std::vector<float> &fl,
+    void leslie_params(long n, const double *nf, const char *flip, std::vector<char> &horn, std::vector<float> &fl,
                        std::vector<float> &sh, std::vector<double> &nrm) const
     {
         const double *L = les.data();
@@ -538,7 +547,7 @@ struct Slab {
         for (int k = 0; k < 256; k++)
             cc[k] = 0.5 * (1.0 + cos((double)k * (2.0 * M_PI / 256.0)));
         for (long j = 0; j < n; j++) {
-            double f = (double)nf[j];
+            double f = nf[j];
             horn[j] = (f >= L[0]) ^ (flip && flip[j]);
             double a, b;
             nv_leslie_lobe_of(f, horn[j], L, &a, &b);
@@ -572,8 +581,8 @@ struct Slab {
     // live.Slab.leslie_arm: these slots on the rotors -- their lobe, their
     // place off the cabinet (az), their baseline; their Doppler a unit at
     // FAST_HZ, then at the rotors' rates
-    void leslie_arm(const std::vector<long> &slots, const float *az, const float *nf, const char *flip, long long n,
-                    double horn_rate, double drum_rate)
+    void leslie_arm(const std::vector<long> &slots, const float *az, const float *nf32, const char *flip, long long n,
+                    double horn_rate, double drum_rate, const double *nf64 = nullptr)
     {
         if (slots.empty())
             return;
@@ -581,8 +590,10 @@ struct Slab {
         long m = (long)slots.size();
         std::vector<char> horn;
         std::vector<float> fl, sh;
-        std::vector<double> nrm;
-        leslie_params(m, nf, flip, horn, fl, sh, nrm);
+        std::vector<double> nrm, nf(m);
+        for (long q = 0; q < m; q++)
+            nf[q] = nf64 ? nf64[q] : (double)nf32[q];      // (a scanner's copy: its float64 pitch)
+        leslie_params(m, nf.data(), flip, horn, fl, sh, nrm);
         for (long q = 0; q < m; q++) {
             long s = slots[q];
             ls_on[s] = 1;
@@ -992,6 +1003,7 @@ struct Piano {
         // swell pedal (wheel_swell), its valve's drive (amp_drive)
         bool leslie = false, wheel_swell = false;
         double amp = 0.0;
+        int scanner = 0;            // NoteClass.scanner: 0 none, else 1 +2 the switch +4 x depth +16 chorus
     };
     std::vector<Patch> patches;
     // THE CABINET (live's rotor_horn, rotor_drum: LiveRotor): one Leslie in
@@ -1052,6 +1064,209 @@ struct Piano {
 
     // live's callback: the rotors a block on, every rotor slot's swing, and
     // its Doppler where the horn's rate has moved
+    // THE SCANNER (live._scan_*): its tables (the export's SCAN), each
+    // channel's CC94, the band rows of each (part, position) from the siren
+    // rows' pool, and each rank's data for a position, worked out at its
+    // first press (live prepares it off the audio thread)
+    std::vector<double> scan;
+    std::map<int, int> cc94;
+    std::map<std::tuple<int, int>, std::vector<int>> scan_row;
+    std::deque<int> siren_free = [] {
+        std::deque<int> d;
+        for (int r = 33; r < 65; r++)       // (WIND_ROWS + 1 ...)
+            d.push_back(r);
+        return d;
+    }();
+    struct ScanPrep {
+        std::vector<int> band;
+        std::vector<double> dry, sc;
+        std::vector<long> src;
+        std::vector<double> mm, cc;
+    };
+    std::map<std::tuple<const void *, int, int>, ScanPrep> scan_g;
+    long long cur_blk = 128;
+
+    // live._scan_setting: the part's position on this channel, (depth, chorus); depth 0 off
+    std::pair<int, int> scan_setting(const Patch &p, int ch) const
+    {
+        int depth = (p.scanner >> 2) & 3, cho = (p.scanner >> 4) & 1;
+        auto it = cc94.find(ch);
+        if ((p.scanner & 2) && it != cc94.end()) {
+            static const int start[7] = {0, 18, 37, 55, 73, 91, 110};
+            int pos = 0;
+            for (int q = 0; q < 7; q++)
+                if (it->second >= start[q])
+                    pos = q;
+            depth = pos == 0 ? 0 : (pos - 1) % 3 + 1;
+            cho = pos >= 4;
+        }
+        return std::make_pair(depth, cho);
+    }
+
+    // live._scanner_block: every scanner's band rows, this block
+    void scanner_block(long long n0, long long frames)
+    {
+        for (auto &kv : scan_row) {
+            int dep = std::get<0>(kv.first), cho = std::get<1>(kv.first);
+            for (int b = 0; b < 6; b++) {
+                int row = kv.second[b];
+                double c[2];
+                nv_scan_bc(scan.data(), (double)n0 / rate, (double)(n0 + frames) / rate, dep, b, cho, rate, c);
+                BRt[row] = (float)(1.0 + (c[1] - c[0]) / (double)frames);
+                BCt[row] = c[0];
+                BLt[2 * row] = BLt[2 * row + 1] = 1.0f;
+            }
+        }
+    }
+
+    // live._scan_stamp: the selector on a rank just stamped (slots dry): on
+    // vibrato its slots on their band rows at the scanned path's gain; on
+    // chorus the dry share, and a copy the scanned; tier B's copies after
+    void scan_stamp(const nv::live::Template &R, int ch, int note, int ri, long long n0, double scale,
+                    const std::vector<long> &dry_slots)
+    {
+        const Patch &p = patches[cur];
+        std::pair<int, int> st = scan_setting(p, ch);
+        if (!st.first || dry_slots.empty() || scan.empty())
+            return;
+        int dep = st.first, cho = st.second;
+        // its band rows (_scan_rows), from the pool
+        auto rk = std::make_tuple(dep, cho);
+        if (!scan_row.count(rk)) {
+            if (siren_free.size() < 6)
+                return;
+            std::vector<int> rws;
+            for (int b = 0; b < 6; b++) {
+                rws.push_back(siren_free.front());
+                siren_free.pop_front();
+            }
+            scan_row[rk] = rws;
+            scanner_block(n0, cur_blk);
+        }
+        const std::vector<int> &rows = scan_row[rk];
+        auto gk = std::make_tuple((const void *)&R, dep, cho);
+        if (!scan_g.count(gk)) {
+            ScanPrep &g = scan_g[gk];
+            long n = R.P;
+            g.band.resize(n);
+            g.dry.resize(2 * n);
+            g.sc.resize(2 * n);
+            long ns = 0, *src = nullptr;
+            double *mm = nullptr, *cc = nullptr;
+            nv_scan_prep(scan.data(), n, R.f4[2].data(), R.f4[0].data(), R.f4[1].data(), R.i8[0].data(),
+                         R.f4[25].data(), dep, cho, rate, g.band.data(), g.dry.data(), g.sc.data(), &ns, &src, &mm,
+                         &cc);
+            g.src.assign(src, src + ns);
+            g.mm.assign(mm, mm + ns);
+            g.cc.assign(cc, cc + 2 * ns);
+            free(src); free(mm); free(cc);
+        }
+        const ScanPrep &g = scan_g[gk];
+        auto put = [&](const std::vector<long> &slots, const std::vector<double> &gain, bool br) {
+            std::vector<float> r(slots.size());
+            for (size_t q = 0; q < slots.size(); q++)
+                r[q] = (float)hypot(gain[2 * q], gain[2 * q + 1]);
+            S.channel_gain_each(slots, r);
+            for (size_t q = 0; q < slots.size(); q++) {
+                long s = slots[q];
+                double a = atan2(gain[2 * q + 1], gain[2 * q]);
+                S.f8[F8_p0][s] += a;
+                S.f8[F8_p0R][s] += a;
+                if (br)
+                    S.i4[I4_br][s] = rows[g.band[q]];
+            }
+        };
+        auto sidestamp = [&]() {
+            long ns = (long)g.src.size();
+            if (!ns)
+                return;
+            // each copy: the rank's row, its pitch moved m scan steps, its level and phase by its gain
+            std::vector<double> f8c[6], aL64(ns), aR64(ns);
+            std::vector<float> f4c[27], hr(ns);
+            std::vector<long long> i8c[2], cofc;
+            std::vector<int32_t> i4c[6];
+            std::vector<char> lfl;
+            for (int c = 0; c < 6; c++) f8c[c].resize(ns);
+            for (int c = 0; c < 27; c++) f4c[c].resize(ns);
+            for (int c = 0; c < 2; c++) i8c[c].resize(ns);
+            for (int c = 0; c < 6; c++) i4c[c].resize(ns);
+            std::vector<double> dwx(ns), nf64(ns);
+            for (long j = 0; j < ns; j++) {
+                long q = g.src[j];
+                for (int c = 0; c < 6; c++) f8c[c][j] = R.f8[c][q];
+                for (int c = 0; c < 27; c++) f4c[c][j] = R.f4[c][q];
+                for (int c = 0; c < 2; c++) i8c[c][j] = R.i8[c][q];
+                for (int c = 0; c < 6; c++) i4c[c][j] = R.i4[c][q];
+                double m = g.mm[j], cr = g.cc[2 * j], ci = g.cc[2 * j + 1];
+                double om1 = R.f8[F8_om][q] + 2.0 * M_PI * scan[0] / rate * m;
+                dwx[j] = om1 - R.f8[F8_om][q];
+                f8c[F8_om][j] = om1;
+                nf64[j] = (double)R.f4[F4_nf][q] + scan[0] * m;
+                f4c[F4_nf][j] = (float)nf64[j];
+                double gm = hypot(cr, ci), an = atan2(ci, cr);
+                aL64[j] = (double)R.f4[F4_aL][q] * gm;
+                aR64[j] = (double)R.f4[F4_aR][q] * gm;
+                f8c[F8_p0][j] = R.f8[F8_p0][q] + an;
+                f8c[F8_p0R][j] = R.f8[F8_p0R][q] + an;
+                hr[j] = R.hrel[q];
+                if (!R.cof.empty()) cofc.push_back(R.cof[q]);
+                lfl.push_back(R.lflip.empty() ? 0 : R.lflip[q]);
+            }
+            const double *f8p[6]; const float *f4p[27]; const long long *i8p[2]; const int32_t *i4p[6];
+            for (int c = 0; c < 6; c++) f8p[c] = f8c[c].data();
+            for (int c = 0; c < 27; c++) f4p[c] = f4c[c].data();
+            for (int c = 0; c < 2; c++) i8p[c] = i8c[c].data();
+            for (int c = 0; c < 6; c++) i4p[c] = i4c[c].data();
+            Key sk(pid, ch, note, SCANSIDE0 + ri);
+            if (!S.stamp(f8p, f4p, i8p, i4p, hr.data(), ns, sk, n0, scale, 0, false, NAN, ch, nullptr, nullptr, 0.0,
+                         0.0, cofc.empty() ? nullptr : cofc.data(), aL64.data(), aR64.data())) {
+                dropped++;
+                return;
+            }
+            std::vector<long> ss = S.last_slots;
+            for (long j = 0; j < ns; j++) {
+                long s = ss[j];
+                S.i4[I4_br][s] = rows[g.band[g.src[j]]];
+                double turn = dwx[j] * (double)(S.i8[0][s] - i8c[0][j]);
+                S.f8[F8_p0][s] += turn;
+                S.f8[F8_p0R][s] += turn;
+            }
+            if (p.leslie && !S.les.empty()) {
+                std::vector<float> az(ns), nf32(ns);
+                for (long j = 0; j < ns; j++) {
+                    az[j] = f4c[24][j];
+                    nf32[j] = f4c[F4_nf][j];
+                }
+                S.leslie_arm(ss, az.data(), nf32.data(), lfl.data(), n0, rotor_horn.rate, rotor_drum.rate,
+                             nf64.data());
+            }
+        };
+        if (!cho) {
+            put(dry_slots, g.sc, true);
+            sidestamp();
+            return;
+        }
+        put(dry_slots, g.dry, false);
+        const double *f8p[6]; const float *f4p[27]; const long long *i8p[2]; const int32_t *i4p[6];
+        for (int c = 0; c < 6; c++) f8p[c] = R.f8[c].data();
+        for (int c = 0; c < 27; c++) f4p[c] = R.f4[c].data();
+        for (int c = 0; c < 2; c++) i8p[c] = R.i8[c].data();
+        for (int c = 0; c < 6; c++) i4p[c] = R.i4[c].data();
+        Key ck(pid, ch, note, SCAN0 + ri);
+        if (!S.stamp(f8p, f4p, i8p, i4p, R.hrel.data(), R.P, ck, n0, scale, 0, false, NAN, ch,
+                     R.sof.empty() ? nullptr : R.sof.data(), R.rof.empty() ? nullptr : R.rof.data(), 0.0, 0.0,
+                     R.cof.empty() ? nullptr : R.cof.data())) {
+            dropped++;
+            return;
+        }
+        std::vector<long> cs = S.last_slots;
+        if (p.leslie && !S.les.empty())
+            S.leslie_arm(cs, R.f4[24].data(), R.f4[2].data(), R.lflip.empty() ? nullptr : R.lflip.data(), n0,
+                         rotor_horn.rate, rotor_drum.rate);
+        put(cs, g.sc, true);
+        sidestamp();
+    }
+
     void leslie_block(long long n0, long long blk)
     {
         if (S.les.empty() || !S.any_leslie())
@@ -1073,6 +1288,7 @@ struct Piano {
         p.leslie = k && k->leslie;
         p.wheel_swell = k && k->wheel_swell;
         p.amp = k ? k->amp_drive : 0.0;
+        p.scanner = k ? k->scanner : 0;
         p.organ = og;
         if (!og)
             return;
@@ -1106,6 +1322,8 @@ struct Piano {
     int wind_next = 1;
     static const int WIND_ROWS = 32;
     static const long long RANK0 = 1000;        // a rank's slots: layer RANK0 + its index
+    static const long long SCAN0 = 2000;        // ...its scanner's copy (("scan", rank))
+    static const long long SCANSIDE0 = 3000;    // ...and tier B's copies (("scanside", rank))
     int cur = 0, transpose = 0;
     bool cur_reg = true;                            // the patch in use has the register
 
@@ -1716,6 +1934,8 @@ struct Piano {
         if (patches[cur].leslie && !S.les.empty())    // onto the rotors, at their rates now
             S.leslie_arm(S.last_slots, R.f4[24].data(), R.f4[2].data(), R.lflip.empty() ? nullptr : R.lflip.data(),
                          n0, rotor_horn.rate, rotor_drum.rate);
+        if (patches[cur].scanner)                     // the scanner's selector, last (_scan_stamp)
+            scan_stamp(R, ch, note, ri, n0, scale, std::vector<long>(S.last_slots));
     }
 
     // live._note_on's organ path: every rank drawn, in the stops' order (a
@@ -2250,6 +2470,8 @@ struct Piano {
 
     void control(int ch, int cc, int v, long long n0)
     {
+        if (cc == 94)
+            cc94[ch] = v;                           // the scanner's selector (_scan_stamp)
         if (cc == 7 || cc == 11) {
             (cc == 7 ? vol : expr)[ch] = v;
             double g = chan_gain(ch), was = cgain_set[ch] ? cgain[ch] : 1.0;
@@ -3716,6 +3938,7 @@ struct Piano {
     // live's callback for one block: its events, the sweep, the reap
     void block(long long n0, long long blk)
     {
+        cur_blk = blk;
         if (!wind_st.empty())                   // the organs' chests, before the block's events (live's callback)
             wind_block(n0, blk);
         std::vector<Ev> evs;
@@ -3749,6 +3972,8 @@ struct Piano {
             S.release(k, n0);
         damp_block(n0, blk);
         S.reap(n0, blk);
+        if (!scan_row.empty())                  // the scanners' band rows (live's _scanner_block)
+            scanner_block(n0, blk);
         tremolo_block(n0);                      // (live's swing, after the reap)
         leslie_block(n0, blk);                  // ...then the rotors'
     }
@@ -4217,6 +4442,12 @@ void nv_lp_pipeline(void *h, int on) { ((nv::slab::Piano *)h)->pipeline = on != 
 void nv_lp_reg_async(void *h) { ((nv::slab::Piano *)h)->start_reg_worker(); }
 
 // Slab.shed: the highest frac of the partials sounding at n end over 5 ms; how many
+// the scanner's constants and circuit tables (scanner.cpp's: the export's SCAN)
+void nv_lp_scan(void *h, const double *X, long n)
+{
+    ((nv::slab::Piano *)h)->scan.assign(X, X + n);
+}
+
 // the Leslie's constants (leslie.cpp's L_*): the part's rotors, on chorale
 void nv_lp_leslie(void *h, const double *L, int n)
 {

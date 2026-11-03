@@ -190,13 +190,7 @@ def main(argv):
         # LESL: the rotating speaker's constants (native/leslie.cpp's L_*) and the lobe's kernel
         les = N.leslie_constants()
         # SCAN: the scanner's constants and its circuit's tables (native/scanner.cpp's)
-        import scanner as SCN
-        scn = [SCN.SCAN_HZ, float(bool(SCN.SIDEBANDS)), SCN.SIDEBAND_DB, SCN.FLOOR_DB, float(SCN.MAX_SIDE)]
-        scn += list(SCN.BAND_HZ) + [float(x) for d in (1, 2, 3) for x in SCN.TAPS[d]] + [float(x) for x in SCN.PLATES]
-        for cho in (False, True):
-            fg, lg, rm, rp, mag, ph = SCN.table_d(cho)
-            scn += [float(len(fg))] + [float(x) for a in (fg, lg, rm, rp) for x in a]
-            scn += [float(x) for x in np.ascontiguousarray(mag).ravel()] + [float(x) for x in np.ascontiguousarray(ph).ravel()]
+        scn = N.scan_constants()
         lobe = os.fsencode(B.ensure_lobe_lib()._name)
         f.write(b"LESL" + struct.pack("<i", len(les)) + struct.pack("<%dd" % len(les), *[float(x) for x in les])
                 + struct.pack("<i", len(lobe)) + lobe)
