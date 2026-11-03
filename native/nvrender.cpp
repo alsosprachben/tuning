@@ -306,6 +306,18 @@ int main(int argc, char **argv)
         }
 
     }
+    // A CHANNEL'S CC91 IS ITS DISTANCE (blockrender's _src_dist: the first
+    // over GM's 40, or its steps): the source moved out along its ray, its
+    // images and its send with it -- Python's, past GM's default
+    for (int i = 0, n = nv_midi_n_ccs(midi); i < n; i++) {
+        int iv[3];
+        double t;
+        nv_midi_cc(midi, i, iv, &t);
+        if (iv[1] == 91 && iv[2] != 40) {
+            fprintf(stderr, "nvrender: refused: a reverb send (CC91) not at GM's 40\n");
+            return 2;
+        }
+    }
     // A DRUM CHANNEL'S WHEEL OR TUNING moves its drums (a kit drum can be
     // bent: blockrender's bend row), which the bend passes do not make
     for (int i = 0, n = nv_midi_n_pitch(midi); i < n; i++) {
