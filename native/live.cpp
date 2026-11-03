@@ -640,6 +640,19 @@ const OrganSpec *nv_tcache_organ(void *h, int program)
     return k ? k->organ : nullptr;
 }
 
+// the cache's templates, each in turn (i < n): its count with i < 0
+const nv::live::Template *nv_tcache_at(void *h, long i, long *n)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    if (n)
+        *n = (long)C->tm.size();
+    if (i < 0 || i >= (long)C->tm.size())
+        return nullptr;
+    auto it = C->tm.begin();
+    std::advance(it, i);
+    return &it->second;
+}
+
 // a program's class (its key 60's), NULL none
 const NoteClass *nv_tcache_class(void *h, int program)
 {

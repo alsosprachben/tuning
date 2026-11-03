@@ -41,6 +41,7 @@ extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
 extern "C" int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out);
 extern "C" const OrganSpec *nv_tcache_organ(void *h, int program);
 extern "C" const NoteClass *nv_tcache_class(void *h, int program);
+extern "C" const nv::live::Template *nv_tcache_at(void *h, long i, long *n);
 extern "C" void nv_leslie_lobe_of(double f, int horn, const double *L, double *fl, double *sh);
 extern "C" void nv_scan_prep(const double *X, long n, const float *nf, const float *aL, const float *aR,
                              const long long *non, const float *rdl, int depth, int chorus, double sr, int *band,
@@ -1085,6 +1086,86 @@ struct Piano {
     };
     std::map<std::tuple<const void *, int, int>, ScanPrep> scan_g;
     long long cur_blk = 128;
+    // ...WORKED OUT OFF THE AUDIO THREAD when playing (scan_async: live's
+    // builder, _scan_prefetch): every warmed rank for each position in play,
+    // a press whose rank is not ready yet playing dry, its rank queued
+    bool scan_async = false, scan_stop = false;
+    std::thread scan_thread;
+    std::mutex scan_mu;
+    std::condition_variable scan_cv;
+    std::deque<std::tuple<const nv::live::Template *, int, int>> scan_jobs;
+
+    ScanPrep make_prep(const nv::live::Template &R, int dep, int cho) const
+    {
+        ScanPrep g;
+        long n = R.P;
+        g.band.resize(n);
+        g.dry.resize(2 * n);
+        g.sc.resize(2 * n);
+        long ns = 0, *src = nullptr;
+        double *mm = nullptr, *cc = nullptr;
+        nv_scan_prep(scan.data(), n, R.f4[2].data(), R.f4[0].data(), R.f4[1].data(), R.i8[0].data(), R.f4[25].data(),
+                     dep, cho, rate, g.band.data(), g.dry.data(), g.sc.data(), &ns, &src, &mm, &cc);
+        g.src.assign(src, src + ns);
+        g.mm.assign(mm, mm + ns);
+        g.cc.assign(cc, cc + 2 * ns);
+        free(src); free(mm); free(cc);
+        return g;
+    }
+
+    void scan_worker()
+    {
+        for (;;) {
+            std::tuple<const nv::live::Template *, int, int> j;
+            {
+                std::unique_lock<std::mutex> lk(scan_mu);
+                scan_cv.wait(lk, [&] { return scan_stop || !scan_jobs.empty(); });
+                if (scan_stop)
+                    return;
+                j = scan_jobs.front();
+                scan_jobs.pop_front();
+                if (scan_g.count(std::make_tuple((const void *)std::get<0>(j), std::get<1>(j), std::get<2>(j))))
+                    continue;
+            }
+            ScanPrep g = make_prep(*std::get<0>(j), std::get<1>(j), std::get<2>(j));
+            std::lock_guard<std::mutex> lk(scan_mu);
+            scan_g[std::make_tuple((const void *)std::get<0>(j), std::get<1>(j), std::get<2>(j))] = std::move(g);
+        }
+    }
+
+    // every warmed rank of every scanner part, for this position, queued (the worker's lock held by the caller)
+    void scan_prefetch_locked(int dep, int cho)
+    {
+        for (const Patch &p : patches) {
+            if (!p.scanner || p.drums)
+                continue;
+            long n = 0;
+            nv_tcache_at(p.cache, -1, &n);
+            for (long i = 0; i < n; i++) {
+                const nv::live::Template *T = nv_tcache_at(p.cache, i, nullptr);
+                for (const nv::live::Template &R : T->ranks)
+                    if (R.P)
+                        scan_jobs.push_back(std::make_tuple(&R, dep, cho));
+            }
+        }
+    }
+
+    void start_scan_worker()
+    {
+        if (scan_async || scan.empty())
+            return;
+        scan_async = true;
+        {
+            std::lock_guard<std::mutex> lk(scan_mu);
+            for (const Patch &p : patches) {        // each voice's own position
+                int dep = (p.scanner >> 2) & 3;
+                if (p.scanner && dep)
+                    scan_prefetch_locked(dep, (p.scanner >> 4) & 1);
+            }
+        }
+        scan_thread = std::thread([this] { scan_worker(); });
+        scan_cv.notify_all();
+    }
 
     // live._scan_setting: the part's position on this channel, (depth, chorus); depth 0 off
     std::pair<int, int> scan_setting(const Patch &p, int ch) const
@@ -1145,23 +1226,24 @@ struct Piano {
         }
         const std::vector<int> &rows = scan_row[rk];
         auto gk = std::make_tuple((const void *)&R, dep, cho);
-        if (!scan_g.count(gk)) {
-            ScanPrep &g = scan_g[gk];
-            long n = R.P;
-            g.band.resize(n);
-            g.dry.resize(2 * n);
-            g.sc.resize(2 * n);
-            long ns = 0, *src = nullptr;
-            double *mm = nullptr, *cc = nullptr;
-            nv_scan_prep(scan.data(), n, R.f4[2].data(), R.f4[0].data(), R.f4[1].data(), R.i8[0].data(),
-                         R.f4[25].data(), dep, cho, rate, g.band.data(), g.dry.data(), g.sc.data(), &ns, &src, &mm,
-                         &cc);
-            g.src.assign(src, src + ns);
-            g.mm.assign(mm, mm + ns);
-            g.cc.assign(cc, cc + 2 * ns);
-            free(src); free(mm); free(cc);
+        const ScanPrep *gp = nullptr;
+        if (scan_async) {
+            // (off this thread: not ready, the press plays dry and its rank is queued)
+            std::lock_guard<std::mutex> lk(scan_mu);
+            auto it = scan_g.find(gk);
+            if (it == scan_g.end()) {
+                scan_jobs.push_front(std::make_tuple(&R, dep, cho));
+                scan_cv.notify_all();
+                return;
+            }
+            gp = &it->second;
+        } else {
+            auto it = scan_g.find(gk);
+            if (it == scan_g.end())
+                it = scan_g.emplace(gk, make_prep(R, dep, cho)).first;
+            gp = &it->second;
         }
-        const ScanPrep &g = scan_g[gk];
+        const ScanPrep &g = *gp;
         auto put = [&](const std::vector<long> &slots, const std::vector<double> &gain, bool br) {
             std::vector<float> r(slots.size());
             for (size_t q = 0; q < slots.size(); q++)
@@ -2470,8 +2552,20 @@ struct Piano {
 
     void control(int ch, int cc, int v, long long n0)
     {
-        if (cc == 94)
+        if (cc == 94) {
             cc94[ch] = v;                           // the scanner's selector (_scan_stamp)
+            if (scan_async)                         // ...its new position prepared (_scan_prefetch)
+                for (const Patch &p : patches)
+                    if (p.scanner && (p.channel < 0 || p.channel == ch)) {
+                        std::pair<int, int> st = scan_setting(p, ch);
+                        if (st.first) {
+                            std::lock_guard<std::mutex> lk(scan_mu);
+                            scan_prefetch_locked(st.first, st.second);
+                            scan_cv.notify_all();
+                        }
+                        break;
+                    }
+        }
         if (cc == 7 || cc == 11) {
             (cc == 7 ? vol : expr)[ch] = v;
             double g = chan_gain(ch), was = cgain_set[ch] ? cgain[ch] : 1.0;
@@ -2852,6 +2946,14 @@ struct Piano {
 
     ~Piano()
     {
+        if (scan_thread.joinable()) {
+            {
+                std::lock_guard<std::mutex> lk(scan_mu);
+                scan_stop = true;
+            }
+            scan_cv.notify_all();
+            scan_thread.join();
+        }
         if (reg_thread.joinable()) {
             {
                 std::lock_guard<std::mutex> lk(reg_mu);
@@ -4447,6 +4549,9 @@ void nv_lp_scan(void *h, const double *X, long n)
 {
     ((nv::slab::Piano *)h)->scan.assign(X, X + n);
 }
+
+// the scanner's data off the audio thread (nvlive playing: live's builder)
+void nv_lp_scan_async(void *h) { ((nv::slab::Piano *)h)->start_scan_worker(); }
 
 // the Leslie's constants (leslie.cpp's L_*): the part's rotors, on chorale
 void nv_lp_leslie(void *h, const double *L, int n)
