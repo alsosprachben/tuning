@@ -83,7 +83,8 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
               float *L, float *R, void *slo, const int *lsr, float *const *lob, const float *LANG, long lgn);
 void nv_buf_free(void *p);
 long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
-                           const int *nreq, const double *req, double sr, const double *L, void **lobe);
+                           const int *nreq, const double *req, double sr, const double *L, void **lobe,
+                           long long **flips, long long *nflips);
 long long nv_amp_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                         const double *drives, double sr);
 void nv_scan_rows(const double *X, long nblk, int blk, double sr, int depth, int chorus, float *br, double *bc);
@@ -703,7 +704,7 @@ int main(int argc, char **argv)
         lnreq.push_back(nq);
     }
     if (!lch.empty() && nv_leslie_expand(&rows, &P, dm, (int)lch.size(), lch.data(), lnreq.data(), lreq.data(), SR,
-                                         LES, lobe) < 0) {
+                                         LES, lobe, nullptr, nullptr) < 0) {
         fprintf(stderr, "nvrender: refused: a Leslie by sidebands (leslie.KERNEL_LOBE off)\n");
         return 2;
     }

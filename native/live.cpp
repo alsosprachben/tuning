@@ -126,7 +126,11 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                const int *kind, double scale, double full_db_s, double residual, double beta,
                                long long blk, double ring_floor, double ring_max, double *out, double knee_db,
                                double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
-                               std::vector<long long> *srows, std::vector<long long> *prows = nullptr);
+                               std::vector<long long> *srows, std::vector<long long> *prows = nullptr,
+                               const double *les = nullptr, std::vector<long long> *flips = nullptr);
+long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
+                           const int *nreq, const double *req, double sr, const double *L, void **lobe,
+                           long long **flips, long long *nflips);
 
 long long nv_template(const NoteClass *const *K, const NoteIn *tmpl, const double *freq, const double *trim,
                       int program, int note, int vel, int fast, double **rowsp, const int *kind, double scale,
@@ -146,7 +150,8 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                const int *kind, double scale, double full_db_s, double residual, double beta,
                                long long blk, double ring_floor, double ring_max, double *out, double knee_db,
                                double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
-                               std::vector<long long> *srows, std::vector<long long> *prows)
+                               std::vector<long long> *srows, std::vector<long long> *prows, const double *les,
+                               std::vector<long long> *flips)
 {
     const NoteClass *kc = (!kit && program >= 0 && program < 128) ? K[128 * program + note] : nullptr;
     const OrganSpec *og = kc ? kc->organ : nullptr;
@@ -187,6 +192,32 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         int np = nv_song_n_push_rows(song, nullptr, 0);
         prows->resize(2 * np);
         nv_song_n_push_rows(song, prows->data(), np);
+    }
+    // A ROTARY VOICE'S CABINET (_raw_template: leslie.expand with SIDEBANDS
+    // off): the cabinet's colour, the crossover's copies (leslie_flip), each
+    // row's Doppler at the rotor's speed from the file's CC1 (fast), else the
+    // voice's own -- the swing itself is the slab's
+    if (les && P >= 0 && nv_song_leslie(song, -1, nullptr) > 0) {
+        long long c;
+        int kind_ = nv_song_leslie(song, 0, &c);
+        int nc = nv_song_ccs(song, c, 1, nullptr, nullptr, 0);
+        std::vector<double> ct(nc), req;
+        std::vector<int> cv(nc);
+        nv_song_ccs(song, c, 1, ct.data(), cv.data(), nc);
+        if (nc == 0 || ct[0] > 0.0) {
+            req.push_back(0.0);
+            req.push_back(kind_ == 2 ? les[4] : les[3]);
+        }
+        for (int q = 0; q < nc; q++) {
+            req.push_back(ct[q]);
+            req.push_back(cv[q] < 42 ? 0.0 : cv[q] < 85 ? les[3] : les[4]);     // leslie.zone
+        }
+        int nq = (int)req.size() / 2;
+        long long *fl = nullptr, nfl = 0;
+        nv_leslie_expand(rowsp, &P, dm, 1, &c, &nq, req.data(), SR, les, nullptr, &fl, &nfl);
+        if (flips)
+            flips->assign(fl, fl + nfl);
+        free(fl);
     }
     nv_song_free(song);
     nv_midi_free(m);
@@ -236,6 +267,7 @@ struct Cache {
     std::map<std::tuple<int, int, int>, Template> tm;
     bool drums = false;                 // a drum part: the program is its set (kit's tables)
     Kits kit;
+    std::vector<double> les;            // the Leslie's constants (leslie.cpp's L_*), empty: none
     double oneshot_floor_db = 100.0;    // live.ONESHOT_FLOOR_DB
 
     // prepare's final type for an EMIT column's value (FINAL_DTYPES)
@@ -253,10 +285,11 @@ struct Cache {
     {
         double *rows = nullptr, out[48] = {0};
         void *dm[6] = {nullptr};
-        std::vector<long long> srows, prows;
+        std::vector<long long> srows, prows, flips;
         long long P = template_rows(K.data(), &t, freq, trim, program, note, vel, fast, &rows, kind, scale, full,
                                     residual, beta, blk, ring_floor, ring_max, out, knee, ln10_20, xdec, SR, dm,
-                                    drums ? &kit : nullptr, &srows, &prows);
+                                    drums ? &kit : nullptr, &srows, &prows, les.empty() ? nullptr : les.data(),
+                                    &flips);
         if (P < 0) {
             free(rows);
             return false;
@@ -326,6 +359,25 @@ struct Cache {
         int q = 128 * program + note;
         const NoteClass *nc = (q >= 0 && q < NV_K_DRUMS) ? K[(drums ? NV_K_DRUMS : 0) + q] : nullptr;
         T.scatter_ms = nc ? nc->tmpl.sect_onset_ms : 0.0;     // (t["scatter_ms"])
+        // the Leslie's crossover copies (t["lflip"])
+        T.lflip.assign(P, 0);
+        for (long long r : flips)
+            if (r < P)
+                T.lflip[r] = 1;
+        // A HAMMOND'S CONTACTS (t["cof"]): each row's onset less its room
+        // delay over the least (numpy: int64 - float32, as float64, truncated)
+        if (P && nc && nc->organ && nc->organ->contact_on) {
+            const std::vector<float> &rdl = T.f4[25];
+            double mn = 0.0;
+            for (long long r = 0; r < P; r++) {
+                double b = (double)T.i8[0][r] - (double)rdl[r];
+                if (r == 0 || b < mn)
+                    mn = b;
+            }
+            T.cof.resize(P);
+            for (long long r = 0; r < P; r++)
+                T.cof[r] = (long long)(((double)T.i8[0][r] - (double)rdl[r]) - mn);
+        }
         if (P && !srows.empty()) {
             const std::vector<float> &rdl = T.f4[25];
             std::vector<char> st(P, 0);
@@ -444,6 +496,9 @@ struct Cache {
                     cut(R.sof, T.sof);
                 if (!T.rof.empty())
                     cut(R.rof, T.rof);
+                if (!T.cof.empty())
+                    cut(R.cof, T.cof);
+                cut(R.lflip, T.lflip);
             }
         }
         return true;
@@ -477,6 +532,9 @@ void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double 
 }
 
 void nv_tcache_free(void *h) { delete (nv::live::Cache *)h; }
+
+// the Leslie's constants for a rotary voice's templates (the export's LESL)
+void nv_tcache_leslie(void *h, const double *L, int n) { ((nv::live::Cache *)h)->les.assign(L, L + n); }
 
 // A DRUM PART'S CACHE: its program the drum set, its keys built on GM's
 // percussion channel from the sets' tables (native.kits: f0, seat, choke,
@@ -580,6 +638,15 @@ const OrganSpec *nv_tcache_organ(void *h, int program)
         return nullptr;
     const NoteClass *k = C->K[128 * program + 60];
     return k ? k->organ : nullptr;
+}
+
+// a program's class (its key 60's), NULL none
+const NoteClass *nv_tcache_class(void *h, int program)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    if (!C || C->drums || program < 0 || program > 127)
+        return nullptr;
+    return C->K[128 * program + 60];
 }
 
 // an organ template's rank ri (t["ranks"]), its P through *n; NULL where it has none

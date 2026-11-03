@@ -170,7 +170,8 @@ class NoteClass(ctypes.Structure):
                 + [('bendable', I), ('snd_mask', I), ('snd_bias', C * 8), ('snd_time_range', C),
                    ('snd_rate_range', C), ('snd_delay_s', C), ('glide_mech', I), ('glide_reach', C),
                    ('porta_fast', C), ('porta_slow', C), ('porta_d_semi', C), ('porta_settle', C),
-                   ('organ', ctypes.c_void_p), ('leslie', I), ('scanner', I), ('amp_drive', C)])
+                   ('organ', ctypes.c_void_p), ('leslie', I), ('scanner', I), ('amp_drive', C),
+                   ('wheel_swell', I)])
 
 
 class NoteIn(ctypes.Structure):
@@ -334,7 +335,8 @@ def _load():
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]),
             ('nv_leslie_expand', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p,
-                                      ctypes.c_void_p, ctypes.c_void_p, C, ctypes.c_void_p, ctypes.c_void_p]),
+                                      ctypes.c_void_p, ctypes.c_void_p, C, ctypes.c_void_p, ctypes.c_void_p,
+                                      ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_amp_synth', None, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, ctypes.c_long,
                                     C, ctypes.c_void_p]),
             ('nv_amp_window', None, [ctypes.c_long, ctypes.c_void_p]),
@@ -343,6 +345,8 @@ def _load():
             ('nv_amp_expand', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p,
                                    ctypes.c_void_p, C]),
             ('nv_scan_rows', None, [ctypes.c_void_p, ctypes.c_long, I, C, I, I, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_tcache_leslie', None, [ctypes.c_void_p, ctypes.c_void_p, I]),
+            ('nv_lp_leslie', None, [ctypes.c_void_p, ctypes.c_void_p, I]),
             ('nv_leslie_angles', ctypes.c_long, [I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, C, I,
                                                  ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_slab_new', ctypes.c_void_p, [ctypes.c_long, C]), ('nv_slab_free', None, [ctypes.c_void_p]),
@@ -1417,7 +1421,7 @@ class OrganSpec(ctypes.Structure):
                    ('expr_tilt', C), ('perc_attack_s', C), ('afm', C), ('pipe_radius', I), ('wheel_trem', C),
                    ('wtrem_hz', C), ('htrem_depth', C), ('htrem_hz', C), ('wtrem_stereo', I),
                    ('wtrem_scatter', C), ('snd_mask', I), ('n_cn', I), ('leak', I), ('cn_hz', C * 16),
-                   ('cn_db', C * 16), ('cn_dbs', C), ('leak_db', C), ('phase_spread', C)])
+                   ('cn_db', C * 16), ('cn_dbs', C), ('leak_db', C), ('phase_spread', C), ('contact_on', I)])
 
 
 _ORGAN = {}
@@ -1596,6 +1600,7 @@ def organ(cls):
     lk = getattr(cls, 'drawbar_leak_db', None)
     o.leak, o.leak_db = int(lk is not None), float(lk or 0.0)
     o.phase_spread = float(getattr(cls, 'partial_phase_spread', 0.0) or 0.0)
+    o.contact_on = int(bool(getattr(cls, 'contact_spread_s', 0.0) or getattr(cls, 'jack_offset_ms', None)))
     _sc = T.sound_controls_of(cls)
     o.snd_mask = (1 if 'attack' in _sc else 0) | (2 if 'release' in _sc else 0) | (4 if 'decay' in _sc else 0)
     o.trem_class_depth = float(getattr(cls, 'tremulant_depth', 0.0) or 0.0)
@@ -1746,6 +1751,7 @@ def note_class(cls):
                      1 + 2 * int(bool(getattr(cls, 'scanner_switch', False)))
                      + (4 * _own[0] + 16 * int(_own[1]) if _own else 0))
         k.amp_drive = float(getattr(cls, 'amp_drive', 0.0) or 0.0)
+        k.wheel_swell = int(bool(getattr(cls, 'wheel_swell', False)))
         if k.amp_drive and (getattr(cls, 'amp_reference', None) or getattr(cls, 'amp_imbalance', None) is not None):
             _NOTE[cls] = False              # (a valve against a fixed reference, or unbalanced: Python's)
             return None
@@ -2228,6 +2234,17 @@ def xrfft(x):
     return out
 
 
+def leslie_constants():
+    """leslie.py's constants as native/leslie.cpp reads them (its L_*): the
+    export's LESL section, and a template cache's and a live part's."""
+    import leslie as LES
+    les = [LES.CROSSOVER_HZ, LES.HORN_RADIUS, LES.DRUM_RADIUS, LES.SLOW_HZ, LES.FAST_HZ, LES.DRUM_RATIO,
+           LES.C_SOUND, LES.XOVER_FLOOR, LES.HORN_FLOOR, LES.HORN_SHARPNESS, LES.DRUM_DEPTH, LES.DRUM_REF_HZ,
+           LES.HORN_SPIN_UP, LES.HORN_SPIN_DOWN, LES.DRUM_SPIN_UP, LES.DRUM_SPIN_DOWN,
+           float(bool(LES.SIDEBANDS and LES.KERNEL_LOBE)), len(LES.CABINET_DB)]
+    return [float(x) for x in les + [x for pt in LES.CABINET_DB for x in pt]]
+
+
 def xcos(x):
     """np.cos of x, libm's (native.xcexp of i x)."""
     import numpy as np
@@ -2540,7 +2557,9 @@ class Slab(object):
                                         (("non", "noff"), np.int64), (LIVE_I4, np.int32),
                                         (SLAB_BOOK, np.float32), (("dk", "slot_ch", "busy"), np.int32),
                                         (("aLp", "aRp"), np.float32), ((None, None, None, "dg"), np.float32),
-                                        (("tr_dep", "tr_aL", "tr_aR", "tr_st", "tr_on", "hs_dep"), np.float32))):
+                                        (("tr_dep", "tr_aL", "tr_aR", "tr_st", "tr_on", "hs_dep"), np.float32),
+                                        (("ls_on", "ls_horn", "ls_am", "ls_sharp", "ls_norm", "ls_ph", "ls_aL",
+                                          "ls_aR"), np.float32))):
             if name in cols:
                 out = np.empty(self.cap, dt)
                 self.d.nv_slab_col(self.p, g, cols.index(name), out.ctypes.data)
@@ -2604,6 +2623,8 @@ class TemplateCache(object):
                                       float(os.environ.get("TUNING_REGISTER", "1") or 1), DM.FULL_DB_S,
                                       DM.RESIDUAL, DM.BETA, BR.BLK, BR.RING_FLOOR, BR.RING_MAX, DM.KNEE_DB,
                                       DM.LN10_20, float(BR.XDEC_NEPERS), float(BR.SR))
+        L = leslie_constants()
+        self.d.nv_tcache_leslie(self.p, (ctypes.c_double * len(L))(*L), len(L))
         if drums:
             import live as LV
             _, f0, seat, choke, skind, spar = kits()
@@ -2714,6 +2735,8 @@ class LivePiano(object):
         import tonelib as T
         self.d.nv_lp_press_db(self.p, float(T.PRESS_DB if press_db is None else press_db))
         self.d.nv_lp_detune_wheel(self.p, int(bool(detune_wheel)))
+        L = leslie_constants()
+        self.d.nv_lp_leslie(self.p, (ctypes.c_double * len(L))(*L), len(L))
 
     def __del__(self):
         if getattr(self, 'p', None):

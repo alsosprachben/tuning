@@ -143,6 +143,8 @@ void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float 
 void nv_lp_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20);
 void nv_lp_press_db(void *h, double db);
 void nv_lp_detune_wheel(void *h, int on);
+void nv_lp_leslie(void *h, const double *L, int n);
+void nv_tcache_leslie(void *h, const double *L, int n);
 int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, int *have);
 void nv_lp_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
 void nv_lp_post(void *h, double thresh, double bend_range, double mod_cents);
@@ -651,8 +653,8 @@ int main(int argc, char **argv)
     for (int q = 0; q < 2 * NV_K_DRUMS; q++)
         if (E.cmap[q] >= 0) {
             const NoteClass *k = (const NoteClass *)E.classes[E.cmap[q]].data();
-            // (a Hammond's rotor, scanner and valve are not live's here yet: Python's)
-            if (!(k->leslie || k->scanner || k->amp_drive != 0.0))
+            // (a Hammond's scanner of its own and its valve are not live's here yet: Python's)
+            if (!(((k->scanner >> 2) & 3) || k->amp_drive != 0.0))
                 K[q] = k;
         }
     NoteIn t;
@@ -669,6 +671,8 @@ int main(int argc, char **argv)
     if (drums)
         nv_tcache_kits(cache, E.kit_f0.data(), E.kit_seat.data(), E.kit_choke.data(), E.kit_skind.data(),
                        E.kit_spar.data(), 100.0);       // (live.ONESHOT_FLOOR_DB)
+    if (!E.les.empty())                         // a rotary voice's templates through its cabinet
+        nv_tcache_leslie(cache, E.les.data(), (int)E.les.size());
     int speeds[3] = {pp[3], pp[4], pp[5]};
     long built = drums ? nv_tcache_warm(cache, program, 0, 127, 1, speeds, 1)
                        : nv_tcache_warm(cache, program, 21, 96, pp[1], speeds, pp[2]);
@@ -678,6 +682,8 @@ int main(int argc, char **argv)
     long slots = atol(opt(argc, argv, "slots", "65536").c_str());
     void *part = nv_lp_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], slots,
                            E.headroom, E.pan.data(), E.beta);
+    if (!E.les.empty())                         // the room's Leslie: its rotors, on chorale
+        nv_lp_leslie(part, E.les.data(), (int)E.les.size());
     if (drums)
         nv_lp_drums(part, program, E.kit_choke.data());
     else

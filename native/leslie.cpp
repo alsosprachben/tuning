@@ -188,13 +188,16 @@ extern "C" {
 // channels (chans[k], each with nreq[k] requests (seconds, Hz) from req0[k])
 // in leslie's order -- expand's rotor index -- and L its constants; a
 // damper's dk/dg copied with any copy. The lobe columns for every row after
-// it (malloc'd: lsr int32, lph lfl lsh lnm float32) in *lobe[0..4]. Returns
-// the copies made (the crossover's), or -1 where the export's leslie does not
-// render by the kernel's lobe.
+// it (malloc'd: lsr int32, lph lfl lsh lnm float32) in *lobe[0..4] -- or,
+// lobe NULL, none: live's template (SIDEBANDS off: the swing is live's). The
+// crossover's copies' rows into *flips (malloc'd, *nflips of them) where
+// flips is given (live's leslie_flip). Returns the copies made, or -1 where
+// the export's leslie does not render by the kernel's lobe.
 long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
-                           const int *nreq, const double *req, double sr, const double *L, void **lobe)
+                           const int *nreq, const double *req, double sr, const double *L, void **lobe,
+                           long long **flips, long long *nflips)
 {
-    if (L[L_LOBE] == 0.0)
+    if (lobe && L[L_LOBE] == 0.0)
         return -1;
     const int cOM = 0, cAL = 3, cAR = 4, cAM = 5, cMCH = 6, cAZ = 9, cNF = 11, cNON = 12, cVD = 33, cVR = 34,
               cVP = 35;
@@ -293,6 +296,14 @@ long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, co
     }
     const long long P = n + m;
     *Pp = P;
+    if (flips) {
+        *flips = (long long *)malloc(sizeof(long long) * (size_t)(m ? m : 1));
+        for (long long q = 0; q < m; q++)
+            (*flips)[q] = n + q;
+        *nflips = m;
+    }
+    if (!lobe)
+        return m;
     // lobe_columns: every row on no rotor (-1, 0, 1, 0, 1), then the rotor rows'
     int32_t *lsr = (int32_t *)malloc(sizeof(int32_t) * (size_t)(P ? P : 1));
     float *lph = (float *)malloc(sizeof(float) * (size_t)(P ? P : 1));
@@ -335,6 +346,13 @@ long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, co
     lobe[3] = lsh;
     lobe[4] = lnm;
     return m;
+}
+
+// a partial at f's lobe on the horn (else the drum): (floor, sharpness),
+// leslie.beam / drum_beam's -- live's slab reads it (Slab.leslie_params)
+void nv_leslie_lobe_of(double f, int horn, const double *L, double *fl, double *sh)
+{
+    lobe_of(f, horn != 0, L, fl, sh);
 }
 
 // angle_table: each rotor's angle (wrapped to a turn, float32) at every grid

@@ -26,6 +26,10 @@ struct Template {
     // a stroked key's rows each where its stroke falls (sof)
     bool oneshot = false;
     std::vector<long long> rof, sof;
+    // A HAMMOND'S: each drawbar's contact after the key (cof, empty: none),
+    // and the Leslie's crossover copies (lflip: on the other rotor)
+    std::vector<long long> cof;
+    std::vector<char> lflip;
     // A HELD TEXTURE (held_texture, with a gate: the jet, the wind): a held
     // note after all -- its rows to the key-up but those that decay on their
     // own (rof) -- the gate the least it plays (min_hold samples; 0 none)

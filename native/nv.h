@@ -319,6 +319,7 @@ typedef struct OrganSpec {
        none); each partial its own phase (partial_phase_spread, 0 none) */
     int n_cn, leak;
     double cn_hz[16], cn_db[16], cn_dbs, leak_db, phase_spread;
+    int contact_on;         /* its contacts close at their own instants (contact_spread_s): live's t["cof"] */
 } OrganSpec;
 
 /* what the note setup reads of the voice besides its VoiceSnap */
@@ -502,6 +503,7 @@ typedef struct {
     // (amp_drive, 0 none)
     int leslie, scanner;
     double amp_drive;
+    int wheel_swell;                    // the mod wheel its expression pedal (live's 'swell' role)
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.

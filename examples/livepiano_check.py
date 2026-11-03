@@ -33,6 +33,8 @@ on one side, native.KeyPedal before the part's events on the other.
 --pressure: channel aftertouch among the controls (live's Slab.press).
 --stops: an organ's stops drawn and put in as the panel does (livetui's
 toggle_stop; the native part's nv_lp_toggle_stop), the Tremulant among them.
+On a tonewheel (16-18) the Leslie's state is compared too (ls_*: its rotor
+slots, lobes and baselines), the pitch wheel its half-moon under --wheels.
 On a harmonium (program 20) its stop word too (CC43-45), the mod wheel
 (its tremolo) and the sound controllers it answers (CC72/73, and by GS's
 NRPNs); the tremolo's state (tr_on, its depth, baselines and sides)
@@ -171,7 +173,8 @@ def main(argv):
             a = np.asarray(getattr(S, c))
             if not np.array_equal(a, nv.slab.col(c).astype(a.dtype)):
                 bad.append(c)
-        for c in ("tr_dep", "tr_aL", "tr_aR", "tr_st", "tr_on", "hs_dep"):
+        for c in ("tr_dep", "tr_aL", "tr_aR", "tr_st", "tr_on", "hs_dep", "ls_on", "ls_horn", "ls_am", "ls_sharp",
+                  "ls_norm", "ls_ph", "ls_aL", "ls_aR"):
             if not np.array_equal(np.asarray(getattr(S, c), np.float32), nv.slab.col(c)):
                 bad.append(c)
         if not np.array_equal(np.asarray(S.busy, np.int32), nv.slab.col("busy")):

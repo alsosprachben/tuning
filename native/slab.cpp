@@ -40,6 +40,8 @@
 extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
 extern "C" int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out);
 extern "C" const OrganSpec *nv_tcache_organ(void *h, int program);
+extern "C" const NoteClass *nv_tcache_class(void *h, int program);
+extern "C" void nv_leslie_lobe_of(double f, int horn, const double *L, double *fl, double *sh);
 extern "C" double nv_tcache_freq(void *h, int note);
 
 extern "C" double nv_damper_contact(int p, int key, int top);
@@ -162,6 +164,14 @@ struct Slab {
     std::vector<float> tr_dep, tr_aL, tr_aR, tr_st;
     std::vector<float> hs_dep;                  // a harmonium's Tremolo stop: its depth and rate (live's)
     std::vector<double> hs_hz;
+    // THE LESLIE (live.Slab.leslie_arm / leslie_swing): a slot on a rotor,
+    // which (horn, else the drum), its lobe's floor, sharpness and one over
+    // its mean, its angle off the cabinet, its own baseline; two mics' angle
+    // apart (a Rotary's Separate: 0 here)
+    std::vector<char> ls_on, ls_horn;
+    std::vector<float> ls_am, ls_sharp, ls_norm, ls_ph, ls_sep, ls_aL, ls_aR;
+    std::vector<double> les;                    // the Leslie's constants (leslie.cpp's L_*)
+    double rate_ = 48000.0;                     // (live.Slab.rate: retune's clock)
     std::vector<int32_t> dk, slot_ch;
     std::vector<float> dg;                 // a damped row's weight (damper.weight)
     std::vector<float> aLp, aRp;            // pressure's columns: none on a piano, still the kernel's
@@ -209,6 +219,9 @@ struct Slab {
         tr_on.assign(cap, 0); tr_dep.assign(cap, 0.0f); tr_aL.assign(cap, 0.0f); tr_aR.assign(cap, 0.0f);
         tr_st.assign(cap, 1.0f);
         hs_dep.assign(cap, 0.0f); hs_hz.assign(cap, 0.0);
+        ls_on.assign(cap, 0); ls_horn.assign(cap, 0); ls_am.assign(cap, 0.0f); ls_sharp.assign(cap, 1.0f);
+        ls_norm.assign(cap, 1.0f); ls_ph.assign(cap, 0.0f); ls_sep.assign(cap, 0.0f); ls_aL.assign(cap, 0.0f);
+        ls_aR.assign(cap, 0.0f);
         busy.assign(cap, 0);
         for (long i = 0; i < cap; i++)
             free.push_back(i);
@@ -225,7 +238,7 @@ struct Slab {
     bool stamp(const double *const *tf8, const float *const *tf4, const long long *const *ti8,
                const int32_t *const *ti4, const float *threl, long n, Key key, long long n0, double vel_scale,
                long long dur, bool one, double tsend, long long ch, const long long *sof = nullptr,
-               const long long *rof = nullptr, double scat = 0.0, double rate = 0.0)
+               const long long *rof = nullptr, double scat = 0.0, double rate = 0.0, const long long *cof = nullptr)
     {
         if (n == 0)
             return true;
@@ -263,6 +276,8 @@ struct Slab {
             f8[F8_fmw][s] = 0.0;
             long long rd = (long long)tf4[F4_rdl][q];        // rdl.astype(int64): toward zero
             long long newnon = offs.empty() ? n0 + rd : (long long)((double)n0 + offs[ti4[3][q]]) + rd;
+            if (cof)                            // a Hammond drawbar speaks when its contact closes
+                newnon += cof[q];
             if (sof)
                 newnon += sof[q];
             double sh = tf8[F8_om][q] * (double)(ti8[0][q] - newnon);
@@ -290,6 +305,7 @@ struct Slab {
             vrbase[s] = tf4[F4_vr][q];
             tr_on[s] = 0;                       // (unarmed until its tremolo is)
             hs_dep[s] = 0.0f;
+            ls_on[s] = 0;                       // (...and off the rotors until armed)
         }
         // the vibrato's scale: vd over its mean (np.mean: float32, pairwise)
         std::vector<float> vd(n);
@@ -362,6 +378,7 @@ struct Slab {
             aL0[sidx] *= rl; aR0[sidx] *= rr;
             f4[F4_aL][sidx] *= rl; f4[F4_aR][sidx] *= rr;
             tr_aL[sidx] *= rl; tr_aR[sidx] *= rr;   // (the tremolo's baseline with it)
+            ls_aL[sidx] *= rl; ls_aR[sidx] *= rr;   // (...and the Leslie's)
         }
         if (itd) {
             float dl = (float)((t1[2] - t0[2]) * rate);
@@ -384,6 +401,7 @@ struct Slab {
                 aL0[sidx] = 0.0f; aR0[sidx] = 0.0f;
                 f4[F4_aL][sidx] = 0.0f; f4[F4_aR][sidx] = 0.0f;
                 tr_aL[sidx] = 0.0f; tr_aR[sidx] = 0.0f;
+                ls_aL[sidx] = 0.0f; ls_aR[sidx] = 0.0f;
             }
     }
 
@@ -399,6 +417,7 @@ struct Slab {
             aL0[sidx] *= r; aR0[sidx] *= r;
             f4[F4_aL][sidx] *= r; f4[F4_aR][sidx] *= r;
             tr_aL[sidx] *= r; tr_aR[sidx] *= r;     // (the tremolo's own baseline with it)
+            ls_aL[sidx] *= r; ls_aR[sidx] *= r;     // (...and the Leslie's)
         }
     }
 
@@ -411,6 +430,7 @@ struct Slab {
             aL0[s] *= r[q]; aR0[s] *= r[q];
             f4[F4_aL][s] *= r[q]; f4[F4_aR][s] *= r[q];
             tr_aL[s] *= r[q]; tr_aR[s] *= r[q];
+            ls_aL[s] *= r[q]; ls_aR[s] *= r[q];
         }
     }
 
@@ -473,6 +493,149 @@ struct Slab {
             hs_dep[s] = (float)depth;
             hs_hz[s] = hz;
         }
+    }
+
+    // live.Slab.retune for a vibrato: each slot's depth to vbase + vd x vsc
+    // and its rate to vrbase x vrs, the phase put back so neither the
+    // carrier nor the vibrato's accrued phase steps (om unchanged)
+    void retune_vib(const std::vector<long> &slots, long long n, double vd, double vrs)
+    {
+        double tn = (double)n / rate_;
+        for (long q : slots) {
+            double om0 = f8[F8_om][q];
+            double vd0 = (double)f4[F4_vd][q];
+            double vr0 = std::max((double)f4[F4_vr][q], 1e-6);
+            double vp = (double)f4[21][q];
+            double ton = (double)i8[0][q] / rate_;
+            auto extra = [&](double om, double d, double r, double ph) {
+                double w2 = 2.0 * M_PI * r;
+                double swing = cos(w2 * ton + ph) - cos(w2 * tn + ph);
+                return (om * rate_ / (2.0 * M_PI)) * d / r * swing;
+            };
+            double vr1 = std::max((double)vrbase[q] * vrs, 1e-6);
+            double vp1 = vp + 2.0 * M_PI * (vr0 - vr1) * tn;
+            double before = extra(om0, vd0, vr0, vp);
+            double vd1 = (double)vbase[q] + vd * (double)vsc[q];
+            double after = extra(om0, vd1, vr1, vp1);
+            double step = (om0 - om0) * (double)n - (after - before);
+            f8[F8_p0][q] += step;
+            f8[F8_p0R][q] += step;
+            f4[F4_vd][q] = (float)vd1;
+            f4[F4_vr][q] = (float)vr1;
+            f4[21][q] = (float)vp1;
+        }
+    }
+
+    // live.Slab.leslie_params: each partial's rotor (the horn over the
+    // crossover, flipped for a crossover copy), its lobe's floor and
+    // sharpness, the lobe's mean (libm's cos and pow; numpy's mean)
+    void leslie_params(long n, const float *nf, const char *flip, std::vector<char> &horn, std::vector<float> &fl,
+                       std::vector<float> &sh, std::vector<double> &nrm) const
+    {
+        const double *L = les.data();
+        horn.resize(n); fl.resize(n); sh.resize(n); nrm.resize(n);
+        double cc[256], g[256];
+        for (int k = 0; k < 256; k++)
+            cc[k] = 0.5 * (1.0 + cos((double)k * (2.0 * M_PI / 256.0)));
+        for (long j = 0; j < n; j++) {
+            double f = (double)nf[j];
+            horn[j] = (f >= L[0]) ^ (flip && flip[j]);
+            double a, b;
+            nv_leslie_lobe_of(f, horn[j], L, &a, &b);
+            fl[j] = (float)a;
+            sh[j] = (float)b;
+            float hs = 0.5f * sh[j], om = 1.0f - fl[j];
+            for (int k = 0; k < 256; k++)
+                g[k] = (double)fl[j] + (double)om * pow(cc[k], (double)hs);
+            nrm[j] = (0.0 + pairwise_d(g, 256)) / 256.0;
+        }
+    }
+
+    // live.Slab._doppler_to: the rotor rows' Doppler, from FAST_HZ's unit to
+    // the rotors' rates (the horns', then the drum's)
+    void doppler_to(const std::vector<long> &idx, long long n, double horn_rate, double drum_rate)
+    {
+        const double *L = les.data();
+        for (int h = 1; h >= 0; h--) {
+            std::vector<long> sub;
+            for (long s : idx)
+                if ((bool)ls_horn[s] == (bool)h)
+                    sub.push_back(s);
+            if (sub.empty())
+                continue;
+            double ref = h ? L[4] : L[4] * fabs(L[5]);
+            double vrs = std::max(h ? horn_rate : drum_rate, 1e-4) / ref;
+            retune_vib(sub, n, vrs - 1.0, vrs);
+        }
+    }
+
+    // live.Slab.leslie_arm: these slots on the rotors -- their lobe, their
+    // place off the cabinet (az), their baseline; their Doppler a unit at
+    // FAST_HZ, then at the rotors' rates
+    void leslie_arm(const std::vector<long> &slots, const float *az, const float *nf, const char *flip, long long n,
+                    double horn_rate, double drum_rate)
+    {
+        if (slots.empty())
+            return;
+        const double *L = les.data();
+        long m = (long)slots.size();
+        std::vector<char> horn;
+        std::vector<float> fl, sh;
+        std::vector<double> nrm;
+        leslie_params(m, nf, flip, horn, fl, sh, nrm);
+        for (long q = 0; q < m; q++) {
+            long s = slots[q];
+            ls_on[s] = 1;
+            ls_sep[s] = 0.0f;
+            ls_ph[s] = az[q];
+            ls_horn[s] = horn[q];
+            ls_am[s] = fl[q];
+            ls_sharp[s] = sh[q];
+            ls_norm[s] = (float)nrm[q];
+            ls_aL[s] = f4[F4_aL][s];
+            ls_aR[s] = f4[F4_aR][s];
+            double ref = horn[q] ? L[4] : L[4] * fabs(L[5]);
+            double rad = horn[q] ? L[1] : L[2];
+            vrbase[s] = (float)ref;
+            vbase[s] = (float)(2.0 * M_PI * rad * ref / L[6]);
+            vsc[s] = vbase[s];
+        }
+        doppler_to(slots, n, horn_rate, drum_rate);
+    }
+
+    // live.Slab.leslie_swing: every rotor slot's level where its rotor has got to
+    void leslie_swing(double horn_angle, double drum_angle)
+    {
+        for (long s = 0; s < cap; s++) {
+            if (!ls_on[s] || !busy[s])
+                continue;
+            double ang = ls_horn[s] ? horn_angle : drum_angle;
+            float fl = ls_am[s];
+            double c = 0.5 * (1.0 + cos(ang - (double)ls_ph[s]));
+            double g = (double)fl + (double)(1.0f - fl) * pow(c, (double)(0.5f * ls_sharp[s]));
+            g /= (double)ls_norm[s];
+            f4[F4_aL][s] = (float)((double)ls_aL[s] * g);
+            f4[F4_aR][s] = (float)((double)ls_aR[s] * g);
+        }
+    }
+
+    // live.Slab.leslie_doppler: the rotor slots' Doppler to the rotors' rates
+    void leslie_doppler(long long n, double horn_rate, double drum_rate)
+    {
+        std::vector<long> idx;
+        for (long s = 0; s < cap; s++)
+            if (ls_on[s] && busy[s])
+                idx.push_back(s);
+        if (!idx.empty())
+            doppler_to(idx, n, horn_rate, drum_rate);
+    }
+
+    bool any_leslie() const
+    {
+        for (long s = 0; s < cap; s++)
+            if (ls_on[s])
+                return true;
+        return false;
     }
 
     bool any_tremolo() const
@@ -825,12 +988,91 @@ struct Piano {
         const OrganSpec *organ = nullptr;
         std::vector<char> drawn = {};
         double cres = 0.0;
+        // A HAMMOND'S (live.Patch): on the rotors (leslie), the wheel its
+        // swell pedal (wheel_swell), its valve's drive (amp_drive)
+        bool leslie = false, wheel_swell = false;
+        double amp = 0.0;
     };
     std::vector<Patch> patches;
+    // THE CABINET (live's rotor_horn, rotor_drum: LiveRotor): one Leslie in
+    // the room, every rotor part turning with it, from chorale; the half-moon's
+    // position (STOP, CHORALE, TREMOLO) and each channel's wheel armed
+    struct LRotor {
+        double up = 0.0, down = 0.0, ratio = 1.0, rate = 0.0, target = 0.0, angle = 0.0;
+        double advance(double dt)
+        {
+            double tau = target > rate ? up : down;
+            rate += (target - rate) * (1.0 - exp(-dt / tau));
+            angle += 2.0 * M_PI * rate * ratio * dt;
+            if (angle > 1e6)
+                angle = fmod(angle, 2.0 * M_PI);
+            return angle;
+        }
+    } rotor_horn, rotor_drum;
+    int half_moon = 1;
+    std::map<int, bool> pw_armed;
+    double ls_rate = -1.0;
+
+    void leslie_start(const std::vector<double> &L)
+    {
+        S.les = L;
+        rotor_horn.up = L[12]; rotor_horn.down = L[13]; rotor_horn.ratio = 1.0;
+        rotor_drum.up = L[14]; rotor_drum.down = L[15]; rotor_drum.ratio = L[5];
+        rotor_horn.rate = rotor_horn.target = rotor_drum.rate = rotor_drum.target = L[3];
+    }
+
+    bool leslie_on(int ch) const
+    {
+        for (const Patch &p : patches)
+            if (p.leslie && (p.channel < 0 || p.channel == ch))
+                return true;
+        return false;
+    }
+
+    // live._half_moon: a flick of the wheel steps the rotors' speed, firing on
+    // the edge and re-armed near the centre (PW_FIRE, PW_REARM)
+    void half_moon_step(int ch, int pitch)
+    {
+        const double ladder[3] = {0.0, S.les[3], S.les[4]};
+        double f = pitch / 8192.0;
+        auto it = pw_armed.find(ch);
+        bool armed = it == pw_armed.end() ? true : it->second;
+        if (armed && fabs(f) >= 0.50) {
+            pw_armed[ch] = false;
+            int i = std::max(0, std::min(2, half_moon + (f > 0.0 ? 1 : -1)));
+            if (i != half_moon) {
+                half_moon = i;
+                rotor_horn.target = ladder[i];
+                rotor_drum.target = ladder[i];
+            }
+        } else if (!armed && fabs(f) <= 0.20) {
+            pw_armed[ch] = true;
+        }
+    }
+
+    // live's callback: the rotors a block on, every rotor slot's swing, and
+    // its Doppler where the horn's rate has moved
+    void leslie_block(long long n0, long long blk)
+    {
+        if (S.les.empty() || !S.any_leslie())
+            return;
+        double dt = (double)blk / rate;
+        double ah = rotor_horn.advance(dt);
+        double ad = rotor_drum.advance(dt);
+        S.leslie_swing(ah, ad);
+        if (fabs(rotor_horn.rate - ls_rate) > 0.05) {
+            S.leslie_doppler(n0, rotor_horn.rate, rotor_drum.rate);
+            ls_rate = rotor_horn.rate;
+        }
+    }
     // the organ's registration as live's Part starts it: its default stops,
     // or the crescendo's first where it has none
     static void organ_start(Patch &p, const OrganSpec *og)
     {
+        const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
+        p.leslie = k && k->leslie;
+        p.wheel_swell = k && k->wheel_swell;
+        p.amp = k ? k->amp_drive : 0.0;
         p.organ = og;
         if (!og)
             return;
@@ -1371,6 +1613,15 @@ struct Piano {
         return false;
     }
 
+    // whether a Hammond part (on a rotor, or its wheel a swell) listens on channel ch
+    bool hammond_on(int ch) const
+    {
+        for (const Patch &p : patches)
+            if ((p.leslie || p.wheel_swell) && (p.channel < 0 || p.channel == ch))
+                return true;
+        return false;
+    }
+
     // whether a part with a wheel tremolo listens on channel ch
     bool wheel_trem_on(int ch) const
     {
@@ -1445,7 +1696,8 @@ struct Piano {
         for (int c = 0; c < 6; c++)
             i4p[c] = R.i4[c].data();
         if (!S.stamp(f8p, f4p, i8p, i4p, R.hrel.data(), R.P, key, n0, scale, 0, false, NAN, ch,
-                     R.sof.empty() ? nullptr : R.sof.data(), R.rof.empty() ? nullptr : R.rof.data())) {
+                     R.sof.empty() ? nullptr : R.sof.data(), R.rof.empty() ? nullptr : R.rof.data(), 0.0, 0.0,
+                     R.cof.empty() ? nullptr : R.cof.data())) {
             dropped++;
             return;
         }
@@ -1461,6 +1713,9 @@ struct Piano {
                 for (long s : S.last_slots)
                     S.i4[I4_br][s] = wr;
         }
+        if (patches[cur].leslie && !S.les.empty())    // onto the rotors, at their rates now
+            S.leslie_arm(S.last_slots, R.f4[24].data(), R.f4[2].data(), R.lflip.empty() ? nullptr : R.lflip.data(),
+                         n0, rotor_horn.rate, rotor_drum.rate);
     }
 
     // live._note_on's organ path: every rank drawn, in the stops' order (a
@@ -1772,12 +2027,16 @@ struct Piano {
         if (ratio == prev)
             return;
         bend[ch] = ratio;
+        if (leslie_on(ch))
+            return;                         // (a rotor part's wheel is its half-moon: nothing bends)
         retune(sounding(ch), n0, ratio / prev);
     }
 
     void pitchwheel(int ch, int v, long long n0)
     {
         wheel[ch] = v;
+        if (leslie_on(ch) && !S.les.empty())   // on a rotor part the wheel is the half-moon
+            half_moon_step(ch, v);
         repitch(ch, n0);
     }
 
@@ -1978,6 +2237,7 @@ struct Piano {
         aftertouch(ch, 0);
         rpn_none[ch] = false;
         rpn_msb[ch] = rpn_lsb[ch] = 127;
+        pw_armed[ch] = true;
     }
 
     // channel aftertouch: every key sounding on the channel (live's
@@ -2112,6 +2372,19 @@ struct Piano {
                 mono[ch] = true;
             else if (cc == 127)
                 mono[ch] = false;
+        } else if (cc == 1 && hammond_on(ch)) {
+            // A HAMMOND'S MOD WHEEL (live's wheel_roles): its swell pedal --
+            // CC11's squared law on the part, the notes sounding rescaled,
+            // floored at -80 dB
+            for (const Patch &p : patches)
+                if ((p.leslie || p.wheel_swell) && (p.channel < 0 || p.channel == ch) && p.amp <= 0.0
+                    && p.wheel_swell) {
+                    double sw = std::max(pow(v / 127.0, 2.0), 1e-4), was = swell;
+                    swell = sw;
+                    if (sw != was)
+                        S.channel_gain(sounding(ch), sw / was);
+                    break;
+                }
         } else if (cc == 1 && wheel_trem_on(ch)) {
             wheel_tremolo(ch, v);
         } else if (cc == 1 && organ_on(ch)) {
@@ -3477,6 +3750,7 @@ struct Piano {
         damp_block(n0, blk);
         S.reap(n0, blk);
         tremolo_block(n0);                      // (live's swing, after the reap)
+        leslie_block(n0, blk);                  // ...then the rotors'
     }
 };
 
@@ -3943,6 +4217,12 @@ void nv_lp_pipeline(void *h, int on) { ((nv::slab::Piano *)h)->pipeline = on != 
 void nv_lp_reg_async(void *h) { ((nv::slab::Piano *)h)->start_reg_worker(); }
 
 // Slab.shed: the highest frac of the partials sounding at n end over 5 ms; how many
+// the Leslie's constants (leslie.cpp's L_*): the part's rotors, on chorale
+void nv_lp_leslie(void *h, const double *L, int n)
+{
+    ((nv::slab::Piano *)h)->leslie_start(std::vector<double>(L, L + n));
+}
+
 long nv_lp_shed(void *h, long long n, double frac) { return ((nv::slab::Piano *)h)->shed(n, frac); }
 
 // The governor: a block took ms against its budget_ms, the next starts at n;
@@ -4109,6 +4389,15 @@ void nv_slab_col(void *h, int group, int index, void *out)
     case 8:
         memcpy(out, S->dg.data(), sizeof(float) * n);
         break;
+    case 10: {                          // the Leslie's: ls_on, ls_horn (as float), ls_am, ls_sharp, ls_norm, ls_ph, ls_aL, ls_aR
+        if (index <= 1)
+            for (long i = 0; i < n; i++)
+                ((float *)out)[i] = (index == 0 ? S->ls_on : S->ls_horn)[i];
+        else
+            memcpy(out, (index == 2 ? S->ls_am : index == 3 ? S->ls_sharp : index == 4 ? S->ls_norm
+                         : index == 5 ? S->ls_ph : index == 6 ? S->ls_aL : S->ls_aR).data(), sizeof(float) * n);
+        break;
+    }
     case 9: {                           // the tremolo's: tr_dep, tr_aL, tr_aR, tr_st, tr_on, hs_dep
         if (index == 4)
             for (long i = 0; i < n; i++)

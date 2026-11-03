@@ -188,12 +188,7 @@ def main(argv):
         f.write(struct.pack("<%di" % len(classes), *cls_organ))
         f.write(struct.pack("<128i", *prog_organ))
         # LESL: the rotating speaker's constants (native/leslie.cpp's L_*) and the lobe's kernel
-        import leslie as LES
-        les = [LES.CROSSOVER_HZ, LES.HORN_RADIUS, LES.DRUM_RADIUS, LES.SLOW_HZ, LES.FAST_HZ, LES.DRUM_RATIO,
-               LES.C_SOUND, LES.XOVER_FLOOR, LES.HORN_FLOOR, LES.HORN_SHARPNESS, LES.DRUM_DEPTH, LES.DRUM_REF_HZ,
-               LES.HORN_SPIN_UP, LES.HORN_SPIN_DOWN, LES.DRUM_SPIN_UP, LES.DRUM_SPIN_DOWN,
-               float(bool(LES.SIDEBANDS and LES.KERNEL_LOBE)), len(LES.CABINET_DB)]
-        les += [float(x) for pt in LES.CABINET_DB for x in pt]
+        les = N.leslie_constants()
         # SCAN: the scanner's constants and its circuit's tables (native/scanner.cpp's)
         import scanner as SCN
         scn = [SCN.SCAN_HZ, float(bool(SCN.SIDEBANDS)), SCN.SIDEBAND_DB, SCN.FLOOR_DB, float(SCN.MAX_SIDE)]
