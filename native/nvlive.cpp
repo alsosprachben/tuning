@@ -130,6 +130,7 @@ long nv_tcache_warm(void *h, int program, int lo, int hi, int nb, const int *spe
 void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigned long long *choke,
                     const int *skind, const double *spar, double oneshot_floor_db);
 void nv_lp_drums(void *h, int program, const unsigned long long *choke);
+void nv_lp_program(void *h, int program);
 void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
                 int soft_drop, int soft_top, double rate, double retrigger, long cap, double headroom,
                 const double *pan_tab, double pan_beta);
@@ -590,6 +591,8 @@ int main(int argc, char **argv)
                            E.headroom, E.pan.data(), E.beta);
     if (drums)
         nv_lp_drums(part, program, E.kit_choke.data());
+    else
+        nv_lp_program(part, program);
     // THE DRUMS BESIDE THE PIANO (live's Parts on one slab): a drum set
     // (--drum-set=P, Standard's 0) on channel 10, the piano on every other
     // (--no-drums: the piano alone); and --split=N, on the keyboard's channel

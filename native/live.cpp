@@ -290,6 +290,7 @@ struct Cache {
         // struck with the key, at the press (0)
         int q = 128 * program + note;
         const NoteClass *nc = (q >= 0 && q < NV_K_DRUMS) ? K[(drums ? NV_K_DRUMS : 0) + q] : nullptr;
+        T.scatter_ms = nc ? nc->tmpl.sect_onset_ms : 0.0;     // (t["scatter_ms"])
         if (P && !srows.empty()) {
             const std::vector<float> &rdl = T.f4[25];
             std::vector<char> st(P, 0);
@@ -488,6 +489,34 @@ int nv_tcache_slur_fade(void *h, int program, int note, double *out)
     out[0] = s;
     out[1] = w;
     out[2] = k->attack_fraction_max;
+    return 1;
+}
+
+// a template's section scatter, ms (t["scatter_ms"])
+double nv_tmpl_scatter(void *t) { return ((nv::live::Template *)t)->scatter_ms; }
+
+// live._glide's coefficients for a press on key tgt from key src: (g, tau,
+// cutoff) at CC5 cc5 -- the class's mechanism, where it reaches -- or 0
+// where it does not glide
+int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    if (tgt < 0 || tgt > 127 || program < 0 || program > 127)
+        return 0;
+    const NoteClass *k = C->K[(C->drums ? NV_K_DRUMS : 0) + 128 * program + tgt];
+    if (!k || !k->glide_mech)
+        return 0;
+    if (src < 0 || src > 127 || C->freq[src] <= 0.0 || C->freq[tgt] <= 0.0)
+        return 0;
+    if (!isnan(k->glide_reach) && std::abs(tgt - src) > k->glide_reach + 1e-9)
+        return 0;
+    double ft = C->freq[tgt], fs = C->freq[src];
+    double v = std::min(127.0, std::max(0.0, (double)cc5)) / 127.0;
+    double t1 = k->porta_fast * pow(k->porta_slow / k->porta_fast, v);
+    double tau = k->glide_mech == 2 ? std::max(1e-4, t1) : std::max(1e-4, t1 * fabs(1.0 / fs - 1.0 / ft) / k->porta_d_semi);
+    out[0] = ft / fs - 1.0;
+    out[1] = tau;
+    out[2] = tau * k->porta_settle;
     return 1;
 }
 

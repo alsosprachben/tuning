@@ -30,6 +30,9 @@ struct Template {
     // note after all -- its rows to the key-up but those that decay on their
     // own (rof) -- the gate the least it plays (min_hold samples; 0 none)
     long long min_hold = 0;
+    // A SECTION'S ENTRY SCATTER (section_onset_ms): each player's onset drawn
+    // fresh at every press, up to this (Slab.stamp_cols' scatter_ms)
+    double scatter_ms = 0.0;
 };
 
 }  // namespace live

@@ -35,8 +35,10 @@
 
 #include "live.h"
 #include "nv.h"
+#include "pycompat.h"          // a section's entries: random.Random
 
 extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
+extern "C" int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out);
 
 extern "C" double nv_damper_contact(int p, int key, int top);
 
@@ -172,9 +174,12 @@ struct Slab {
     double send[256];
     float headroom = 1.0f;
     double headroom_d = 1.0;
+    // A SECTION'S ENTRIES ARE REDRAWN AT EVERY PRESS (live.Slab._rng)
+    PyRandom scat_rng;
 
     explicit Slab(long capacity) : cap(capacity)
     {
+        pyr_seed(&scat_rng, 0x5CA7);
         owner.assign(cap, -1);
         f8.assign(NF8, std::vector<double>(cap, 0.0));
         f4.assign(NF4, std::vector<float>(cap, 0.0f));
@@ -209,12 +214,22 @@ struct Slab {
     bool stamp(const double *const *tf8, const float *const *tf4, const long long *const *ti8,
                const int32_t *const *ti4, const float *threl, long n, Key key, long long n0, double vel_scale,
                long long dur, bool one, double tsend, long long ch, const long long *sof = nullptr,
-               const long long *rof = nullptr)
+               const long long *rof = nullptr, double scat = 0.0, double rate = 0.0)
     {
         if (n == 0)
             return true;
         if ((long)free.size() < n)
             return false;
+        // each player's entry, drawn for this press (t["pl"]: the row's player)
+        std::vector<double> offs;
+        if (scat != 0.0) {
+            int mp = 0;
+            for (long q = 0; q < n; q++)
+                mp = std::max(mp, (int)ti4[3][q]);
+            offs.resize(mp + 1);
+            for (int p = 0; p <= mp; p++)
+                offs[p] = pyr_random(&scat_rng) * scat * 0.001 * rate;
+        }
         std::vector<long> idx(n);
         for (long q = 0; q < n; q++) {
             idx[q] = free.front();
@@ -236,7 +251,7 @@ struct Slab {
             f8[F8_om][s] = tf8[F8_om][q];
             f8[F8_fmw][s] = 0.0;
             long long rd = (long long)tf4[F4_rdl][q];        // rdl.astype(int64): toward zero
-            long long newnon = n0 + rd;
+            long long newnon = offs.empty() ? n0 + rd : (long long)((double)n0 + offs[ti4[3][q]]) + rd;
             if (sof)
                 newnon += sof[q];
             double sh = tf8[F8_om][q] * (double)(ti8[0][q] - newnon);
@@ -291,7 +306,7 @@ struct Slab {
     }
 
     // stamp_cols with a cached template (its own columns, hrel, dur)
-    bool stamp_t(const nv::live::Template &T, Key key, long long n0, double vel_scale, long long ch)
+    bool stamp_t(const nv::live::Template &T, Key key, long long n0, double vel_scale, long long ch, double rate)
     {
         const double *f8p[6];
         const float *f4p[27];
@@ -306,7 +321,8 @@ struct Slab {
         for (int c = 0; c < 6; c++)
             i4p[c] = T.i4[c].data();
         return stamp(f8p, f4p, i8p, i4p, T.hrel.data(), T.P, key, n0, vel_scale, T.dur, T.oneshot, NAN, ch,
-                     T.sof.empty() ? nullptr : T.sof.data(), T.rof.empty() ? nullptr : T.rof.data());
+                     T.sof.empty() ? nullptr : T.sof.data(), T.rof.empty() ? nullptr : T.rof.data(), T.scatter_ms,
+                     rate);
     }
 
     // THE PAN TABLE (live.pan_table: CC10 -> left and right shadow alpha, half
@@ -665,6 +681,14 @@ struct Piano {
     // MONO MODE (CC126; live.mono): one voice a channel -- its held keys in
     // press order (note, velocity) and the one sounding (-1 none)
     bool mono[16] = {};
+    // PORTAMENTO (live's porta_on, porta_time, porta_src, last_on): CC65,
+    // CC5, a pending CC84's source key (-1 none), the channel's last note-on;
+    // and where the press being struck glides from (_glide_from, -1 none)
+    bool porta_on[16] = {};
+    int porta_time[16] = {};
+    int porta_src[16] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+    int last_on[16] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+    int glide_from = -1;
     std::vector<std::pair<int, int>> mono_stack[16];
     int mono_cur[16] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     // THE MOD WHEEL on a honky-tonk (live's 'detune' role): which pre-warmed
@@ -841,7 +865,16 @@ struct Piano {
             }
             mono_cur[ch] = note;
         }
+        // WHERE IT GLIDES FROM: a pending CC84, spent, else under CC65 the
+        // last note to have started
+        int src = porta_src[ch];
+        porta_src[ch] = -1;
+        if (src < 0 && porta_on[ch])
+            src = last_on[ch];
+        glide_from = src != note ? src : -1;
+        last_on[ch] = note;
         strike(ch, note, vel, n0, slur);
+        glide_from = -1;
     }
 
     // live._mono_cut: the voice taken -- this note stopped now over the
@@ -893,7 +926,7 @@ struct Piano {
                 S.release(k, n0);
             }
         }
-        if (!S.stamp_t(*T, key, n0, scale, ch))
+        if (!S.stamp_t(*T, key, n0, scale, ch, rate))
             return;                         // the slab full: this note does not sound
         if (T->min_hold)
             tex_on[key] = n0 + T->min_hold; // a held texture: the least it plays
@@ -903,6 +936,14 @@ struct Piano {
             S.repan(slots, cpan[ch], 64, rate, true);
         if (soft[ch] && !slots.empty())
             S.soft_strings(slots, soft_drop, soft_top);
+        double gl[3];                       // PORTAMENTO, stamped (live._glide)
+        if (glide_from >= 0 && !slots.empty()
+            && nv_tcache_glide(cache, program, glide_from + transpose, sn, porta_time[ch], gl))
+            for (long q : slots) {
+                S.f4n[0][q] = (float)gl[0];
+                S.f4n[1][q] = (float)gl[1];
+                S.f4n[2][q] = (float)gl[2];
+            }
         if (slur && !slots.empty())
             slur_stamp(sn, *T);
         if (drums && !choke_p->empty()) {
@@ -976,7 +1017,10 @@ struct Piano {
                 std::pair<int, int> back = st.back();
                 mono_cut(ch, note, n0);
                 mono_cur[ch] = back.first;
+                glide_from = porta_on[ch] ? note : -1;
+                last_on[ch] = back.first;
                 strike(ch, back.first, back.second, n0, true);     // back to a key still held: a slur too
+                glide_from = -1;
                 return;
             }
             mono_cur[ch] = -1;                      // last key up: an ordinary release
@@ -1274,6 +1318,7 @@ struct Piano {
     void reset_controllers(int ch, long long n0)
     {
         wheel[ch] = 0;
+        porta_src[ch] = -1;                 // a pending CC84 goes too
         repitch(ch, n0);
         static const int RESET_CC[6][2] = {{1, 0}, {11, 127}, {64, 0}, {65, 0}, {66, 0}, {67, 0}};
         for (auto &cv : RESET_CC)
@@ -1338,6 +1383,12 @@ struct Piano {
                 S.sw[q] = (float)d;
         } else if (cc == 67) {
             soft[ch] = v >= 64;
+        } else if (cc == 5) {
+            porta_time[ch] = v;
+        } else if (cc == 65) {
+            porta_on[ch] = v >= 64;
+        } else if (cc == 84) {
+            porta_src[ch] = v;              // the next note-on's source, once
         } else if (cc == 66) {
             // SOSTENUTO: a snapshot of the keys down as it goes down; up, the
             // ones it held let go where nothing else holds them
@@ -3008,6 +3059,14 @@ void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int s
     P->S.pan_beta = pan_beta;
     P->init_tables();
     return P;
+}
+
+// The part's PROGRAM, a melodic one's: the class its slurs and glides read
+void nv_lp_program(void *h, int program)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    P->patches[0].program = program;
+    P->program = program;
 }
 
 // The part a DRUM PART (live.Patch(program, True)): program its drum set,

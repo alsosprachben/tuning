@@ -305,6 +305,7 @@ def _load():
             ('nv_tcache_free', None, [ctypes.c_void_p]),
             ('nv_tcache_warm', ctypes.c_long, [ctypes.c_void_p, I, I, I, I, ctypes.c_void_p, I]),
             ('nv_tcache_get', ctypes.c_void_p, [ctypes.c_void_p, I, I, I, ctypes.POINTER(LL)]),
+            ('nv_tmpl_scatter', C, [ctypes.c_void_p]),
             ('nv_tmpl_col', ctypes.c_void_p, [ctypes.c_void_p, I, I]),
             ('nv_tcache_kits', None, [ctypes.c_void_p, D, D, ctypes.POINTER(ctypes.c_ulonglong),
                                       ctypes.POINTER(I), D, C]),
@@ -323,6 +324,7 @@ def _load():
             ('nv_slab_col', None, [ctypes.c_void_p, I, I, ctypes.c_void_p]),
             ('nv_slab_free_list', ctypes.c_long, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]),
             ('nv_lp_new', ctypes.c_void_p, [ctypes.c_void_p, LL, C, I, I, I, I, I, C, C, ctypes.c_long, C, D, C]),
+            ('nv_lp_program', None, [ctypes.c_void_p, I]),
             ('nv_lp_free', None, [ctypes.c_void_p]),
             ('nv_lp_register', None, [ctypes.c_void_p, ctypes.c_void_p, I, C, C, C, C, I, C, I, C, C, C, C, LL,
                                       ctypes.c_void_p]),
@@ -2175,7 +2177,8 @@ class TemplateCache(object):
         if not t:
             return None
         n = int(o[0])
-        out = dict(P=n, dur=int(o[1]), vel=int(o[2]), oneshot=bool(o[3]), send=None, scatter_ms=0.0, FT=None, KN=None,
+        out = dict(P=n, dur=int(o[1]), vel=int(o[2]), oneshot=bool(o[3]), send=None,
+                   scatter_ms=float(self.d.nv_tmpl_scatter(t)), FT=None, KN=None,
                    panel=None, grain=None, gof=None, sof=None, cof=None, rof=None, ranks={}, rel=None,
                    rel_rank={})
 
@@ -2223,6 +2226,7 @@ class LivePiano(object):
                                   -1 if speed is None else int(speed), int(bool(damper_pedal)), int(soft_drop),
                                   int(soft_top), float(rate), float(BR.RETRIGGER_FADE), int(capacity),
                                   float(headroom), pt, float(L._PAN_BETA))
+        self.d.nv_lp_program(self.p, int(cache.program))       # (its slurs' and glides' class)
         self.slab = Slab.__new__(Slab)
         self.slab.d, self.slab.cap, self.slab.p = self.d, capacity, self.d.nv_lp_slab(self.p)
         import damper as DMP
