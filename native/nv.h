@@ -272,6 +272,21 @@ typedef struct OrganSpec {
     OrganRank rank[32];
     double spiral_m, spiral_phase, drift_m, spatial_default[2];
     double pipe_scale_divisor, sound_speed, mode_lock_spread, mode_lock_knee, mode_lock_time;
+    /* ITS REGISTRATION (registration_blocks): the stop word's controllers
+       (wccs; the first 11 for an organ whose CC7 is its swell: swells), its
+       default, the crescendo's order (rank indices), the swell's law
+       (floor, power, hf_max, hf_ref); its family (organ_family's id) */
+    int n_wccs, wccs[4], default_stops, n_order, order[32], swells, family;
+    double swell_law[4];
+    /* ITS CHEST'S WIND (wind.py, its constants as the Python's Wind made
+       them for the export's block): a pipe organ's (wind), its scale (wsc),
+       the Tremulant's rank (-1 none) and the class's depth; the wander, the
+       sag and the regulator (has_ra), the Tremulant's beat; the pipes' draw;
+       each rank's family's pitch and level exponents */
+    int wind, trem_rank, has_ra;
+    double wsc, trem_class_depth, wander_rms, wa, wgain, ra, reg_restore, sag_max, sag_per_unit, c1, c2, g;
+    double trem_hz, trem_depth, tdecay, unit_hz, draw_exp, blk_s;
+    double fam_a[32], fam_b[32];
 } OrganSpec;
 
 /* what the note setup reads of the voice besides its VoiceSnap */
@@ -488,6 +503,7 @@ typedef struct {
     int rank_skip[32], rank_rel1[32];
     double organ_cr;
     double rank_br[32];     // each rank's bend row: its chest's wind (wrow_of), as it stands at that rank
+    double carry_radius;    // the emitter's radius from the note before (an organ's last pipe), NaN none
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -560,6 +576,14 @@ int nv_song_n_notes(void *s);
 void nv_song_snd(void *s, long long ch, double t, int cc, int v);
 void nv_song_sound(void *s, long long ch, double t, double *d);
 int nv_song_glide(void *s, int i, int *cc5);
+void nv_song_organ(void *s, long long ch, const OrganSpec *spec, const OrganSpec *const *prog_organ);
+int nv_song_n_organs(void *s);
+double nv_song_note_trim(void *s, int i);
+int nv_song_n_grows(void *s);
+int nv_song_organ_wind_rows(void *s, int row0);
+int nv_song_organ_rows(void *s, long nblk, int blk, double sr, double tau, float *G, float *S, double *sh);
+void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, float *BR, double *BC, float *BL);
+int nv_song_organ_note(void *s, int i, int family, NoteIn *n);
 int nv_song_stroked(void *s, int i);
 void nv_song_add_stroke_rows(void *s, long long a, long long b);
 int nv_song_n_stroke_rows(void *s, long long *ab, int cap);

@@ -212,11 +212,12 @@ int nv_bend_gesture(void *midi, void *song, double bend_range, int ch, long nblk
 }
 
 // _prep_channel_fader for channel ch: 1 and its level at the nblk + 1 block
-// edges in L if its fader is a row, else 0. The reader's notes give the spans
+// edges in L if its fader is a row, else 0. swell[128 * program + key]: an
+// organ's note, whose CC7 is its swell (NULL none). The reader's notes give the spans
 // (each to its key-up plus fader_tail); the reader's controllers, in time
 // order (in_order), the level; tau the glide
 int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr, double tau, double fader_tail,
-                  double stamp_s, double stamped_share, int vol0, int expr0, float *L)
+                  double stamp_s, double stamped_share, int vol0, int expr0, float *L, const unsigned char *swell)
 {
     std::vector<std::pair<double, double>> spans;
     std::vector<double> ons;
@@ -227,7 +228,9 @@ int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr,
         nv_midi_note(midi, i, iv, dv);
         if (iv[0] != ch)
             continue;
-        spans.push_back(std::make_pair(dv[0], dv[1] + fader_tail));
+        // (not an organ's note whose CC7 is its swell: _plain)
+        if (!(swell && !iv[4] && iv[3] >= 0 && iv[3] < 128 && swell[128 * iv[3] + iv[1]]))
+            spans.push_back(std::make_pair(dv[0], dv[1] + fader_tail));
         ons.push_back(dv[0]);
     }
     if (spans.empty())

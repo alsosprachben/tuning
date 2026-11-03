@@ -185,7 +185,8 @@ class NoteIn(ctypes.Structure):
                    ('damper_pedal', I), ('key_off', C), ('planes', C * 6), ('order', I), ('from_song', I), ('song_index', I),
                    ('seat', C), ('held', C), ('rnd_draws', C * 4), ('stroke_tilt', C), ('stroke_mouth', C),
                    ('stroke_morph', C), ('snd_at', C), ('snd_rt', C), ('rank_gr', C * 32), ('rank_sp', C * 32),
-                   ('rank_skip', I * 32), ('rank_rel1', I * 32), ('organ_cr', C), ('rank_br', C * 32)])
+                   ('rank_skip', I * 32), ('rank_rel1', I * 32), ('organ_cr', C), ('rank_br', C * 32),
+                   ('carry_radius', C)])
 
 
 class NoteOut(ctypes.Structure):
@@ -213,7 +214,8 @@ def _load():
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
-                                                       'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c')]
+                                                       'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
+                                                       'npyrandom.c', 'npyrandom.h')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -312,6 +314,7 @@ def _load():
             ('nv_tcache_get', ctypes.c_void_p, [ctypes.c_void_p, I, I, I, ctypes.POINTER(LL)]),
             ('nv_tmpl_scatter', C, [ctypes.c_void_p]),
             ('nv_sphere_mean', C, [C, C, C, C]),
+            ('nv_npy_normals', None, [ctypes.c_ulonglong, ctypes.c_long, ctypes.c_void_p]),
             ('nv_tmpl_col', ctypes.c_void_p, [ctypes.c_void_p, I, I]),
             ('nv_tcache_kits', None, [ctypes.c_void_p, D, D, ctypes.POINTER(ctypes.c_ulonglong),
                                       ctypes.POINTER(I), D, C]),
@@ -392,6 +395,14 @@ def _load():
             ('nv_song_strokes', None, [ctypes.c_void_p, ctypes.POINTER(I), D]),
             ('nv_song_slur', I, [ctypes.c_void_p, I, ctypes.POINTER(I)]),
             ('nv_song_finish', None, [ctypes.c_void_p, C]),
+            ('nv_song_organ', None, [ctypes.c_void_p, LL, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_song_n_organs', I, [ctypes.c_void_p]), ('nv_song_n_grows', I, [ctypes.c_void_p]),
+            ('nv_song_organ_wind_rows', I, [ctypes.c_void_p, I]),
+            ('nv_song_organ_rows', I, [ctypes.c_void_p, ctypes.c_long, I, C, C, ctypes.c_void_p, ctypes.c_void_p,
+                                       ctypes.c_void_p]),
+            ('nv_song_organ_wind', None, [ctypes.c_void_p, ctypes.c_long, I, C, ctypes.c_void_p, ctypes.c_void_p,
+                                          ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_song_organ_note', I, [ctypes.c_void_p, I, I, ctypes.c_void_p]),
             ('nv_song_note_off', C, [ctypes.c_void_p, LL, I, C, C, I, I, C, ctypes.POINTER(I)]),
             ('nv_song_soft_at', I, [ctypes.c_void_p, LL, C]),
             ('nv_song_next_same', I, [ctypes.c_void_p, LL, I, C, D]),
@@ -1325,10 +1336,17 @@ class OrganRank(ctypes.Structure):
 
 class OrganSpec(ctypes.Structure):
     """native/nv.h's OrganSpec: a registered organ's pipes and ranks."""
-    _fields_ = [('n_pipe', I), ('n_rank', I), ('spiral', I), ('own_pitch', I), ('pipe', OrganPipe * 24),
+    _fields_ = ([('n_pipe', I), ('n_rank', I), ('spiral', I), ('own_pitch', I), ('pipe', OrganPipe * 24),
                 ('rank', OrganRank * 32), ('spiral_m', C), ('spiral_phase', C), ('drift_m', C),
                 ('spatial_default', C * 2), ('pipe_scale_divisor', C), ('sound_speed', C),
-                ('mode_lock_spread', C), ('mode_lock_knee', C), ('mode_lock_time', C)]
+                ('mode_lock_spread', C), ('mode_lock_knee', C), ('mode_lock_time', C),
+                ('n_wccs', I), ('wccs', I * 4), ('default_stops', I), ('n_order', I), ('order', I * 32), ('swells', I),
+                ('family', I), ('swell_law', C * 4),
+                ('wind', I), ('trem_rank', I), ('has_ra', I)]
+                + [(f, C) for f in ('wsc', 'trem_class_depth', 'wander_rms', 'wa', 'wgain', 'ra', 'reg_restore',
+                                    'sag_max', 'sag_per_unit', 'c1', 'c2', 'g', 'trem_hz', 'trem_depth', 'tdecay',
+                                    'unit_hz', 'draw_exp', 'blk_s')]
+                + [('fam_a', C * 32), ('fam_b', C * 32)])
 
 
 _ORGAN = {}
@@ -1459,8 +1477,48 @@ def organ(cls):
     o.pipe_scale_divisor, o.sound_speed = p.pipe_scale_divisor, p.sound_speed
     o.mode_lock_spread = getattr(p, 'mode_lock_spread', 0.0)
     o.mode_lock_knee, o.mode_lock_time = p.mode_lock_knee, p.mode_lock_time
+    # ITS REGISTRATION (registration_blocks')
+    import blockrender as BR
+    wccs = tuple(getattr(p, 'stop_word_ccs', (11, 43)))
+    keys = [r[0] for r in ranks]
+    order = getattr(p, 'crescendo_order', keys)
+    if len(wccs) > 4 or len(order) > 32 or any(k not in keys for k in order) or len(set(keys)) != len(keys):
+        return None
+    o.n_wccs = len(wccs)
+    o.wccs[:len(wccs)] = list(wccs)
+    o.default_stops = int(getattr(p, 'default_stops', 1))
+    o.n_order = len(order)
+    o.order[:len(order)] = [keys.index(k) for k in order]
+    o.swells = int(wccs[0] == 11)
+    o.swell_law[:] = [float(p.swell_floor), float(p.swell_gain_power), float(p.swell_hf_max),
+                      float(p.swell_hf_ref_hz)]
+    o.family = _FAMILIES.setdefault(BR.organ_family(cls), len(_FAMILIES))
+    # ITS CHEST'S WIND (_prep_chest_wind's: a pipe organ's, wind.py's constants)
+    o.trem_rank = keys.index('tremulant') if 'tremulant' in keys else -1
+    o.trem_class_depth = float(getattr(cls, 'tremulant_depth', 0.0) or 0.0)
+    if getattr(cls, 'wind_skirt_db', None) is not None and getattr(cls, 'wind_pitch_exp', 0.0):
+        import wind as WND
+        o.wind = 1
+        o.wsc = float(BR.wind_scale_for(cls))
+        wd = WND.Wind(cls, BR.BLK / BR.SR, seed=0, scale=o.wsc, wander_scale=(1.0 if o.wsc else 0.0))
+        o.wander_rms, o.wa, o.wgain = wd.wander_rms, wd.wa, wd.wgain
+        o.has_ra, o.ra = int(wd.ra is not None), wd.ra or 0.0
+        o.reg_restore, o.sag_max, o.sag_per_unit = wd.reg_restore, wd.sag_max, wd.sag_per_unit
+        o.c1, o.c2, o.g = wd.c1, wd.c2, wd.g
+        o.trem_hz, o.trem_depth, o.tdecay = wd.trem_hz, wd.trem_depth, wd.tdecay
+        o.unit_hz, o.draw_exp, o.blk_s = WND.UNIT_HZ, WND.DRAW_EXP, wd.blk_s
+        if wd.SUB != 8:
+            return None
+        for i, r in enumerate(ranks):
+            if r[1] is None:
+                continue
+            wc = T.rank_wind_class(cls, r)
+            o.fam_a[i], o.fam_b[i] = float(wc.wind_pitch_exp), float(wc.wind_level_exp)
     _ORGAN[cls] = o
     return o
+
+
+_FAMILIES = {}              # organ_family's name -> its id (OrganSpec.family)
 
 
 def note_class(cls):

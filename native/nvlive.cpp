@@ -184,6 +184,8 @@ struct Export {
     std::vector<int> kit_skind;
     std::vector<double> kit_spar;
     std::string room, libs[3];
+    std::vector<OrganSpec> organs;        // ORGN: the registered organs' tables
+    std::vector<int> cls_organ, prog_organ;   // each class's organ, each program's (-1 none, -2 not the engine's)
     double beta = 0.0, headroom = 1.0;
     int part[128][10];
     bool live = false;
@@ -242,6 +244,18 @@ static bool read_export(const char *path, Export &E)
                 ss[i]->resize(n);
                 ok = fread(&(*ss[i])[0], 1, n, f) == (size_t)n;
             }
+        }
+        // ORGN: the registered organs' tables, each class's organ, each program's
+        char om[4];
+        int norg = 0, osz = 0;
+        ok = ok && fread(om, 1, 4, f) == 4 && !memcmp(om, "ORGN", 4) && fread(&norg, 4, 1, f) == 1
+             && fread(&osz, 4, 1, f) == 1 && osz == (int)sizeof(OrganSpec);
+        if (ok) {
+            E.organs.resize(norg);
+            E.cls_organ.resize(ncls);
+            E.prog_organ.resize(128);
+            ok = fread(E.organs.data(), sizeof(OrganSpec), norg, f) == (size_t)norg
+                 && fread(E.cls_organ.data(), 4, ncls, f) == (size_t)ncls && fread(E.prog_organ.data(), 4, 128, f) == 128;
         }
         char lv[4];
         if (ok && fread(lv, 1, 4, f) == 4 && !memcmp(lv, "LIVE", 4)) {
@@ -512,6 +526,12 @@ int main(int argc, char **argv)
         fprintf(stderr, "nvlive: %s is not a live export of this build (native_export.py --live)\n", argv[1]);
         return 1;
     }
+    // (a registered organ is stamped rank by rank, live's alone: not the engine's here)
+    for (size_t i = 0; i < E.classes.size(); i++)
+        ((NoteClass *)E.classes[i].data())->organ = nullptr;
+    for (int &q : E.cmap)
+        if (q >= 0 && E.cls_organ[q] >= 0)
+            q = -1;
     const double SR = E.k[K_SR];
     const long long BLK = (long long)E.k[K_BLK];
     const int program = atoi(opt(argc, argv, "program", "0").c_str());

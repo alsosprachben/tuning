@@ -730,3 +730,4 @@ int nv_phantom(const VoiceSnap *v, const ToneIn *t, const double *trans, int ntr
 }
 
 #include "organ.c"     /* a registered organ's note */
+#include "npyrandom.c" /* numpy's normal stream (the organ's wind) */

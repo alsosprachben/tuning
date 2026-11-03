@@ -103,8 +103,6 @@ def main(argv):
         for key in range(128):
             cls = B.property_class_for_note(prog, key)
             k = N.note_class(cls) if cls is not None else None
-            if k is not None and k.organ:
-                k = None                    # (a registered organ: not in an export yet)
             if k is None:
                 cmap.append(-1)
                 continue
@@ -116,8 +114,6 @@ def main(argv):
     kcls, kf0, kseat, kchoke, kskind, kspar = N.kits()
     for cls in kcls:
         k = N.note_class(cls) if cls is not None else None
-        if k is not None and k.organ:
-            k = None
         if k is None:
             cmap.append(-1)
             continue
@@ -125,6 +121,31 @@ def main(argv):
             idx[cls] = len(classes)
             classes.append(bytes(k))
         cmap.append(idx[cls])
+    # THE REGISTERED ORGANS (native.organ): each organ class's table, and each
+    # program's organ (property_class_for_program's: -1 none, -2 an organ the
+    # engine does not play)
+    ocls = {c: i for c, i in idx.items()}
+    organs, oidx = [], {}
+    cls_organ = [-1] * len(classes)
+    for c, i in ocls.items():
+        if getattr(c, 'registerable', False) and N.organ(c) is not None:
+            oidx[c] = len(organs)
+            organs.append(bytes(N.organ(c)))
+            cls_organ[i] = oidx[c]
+    prog_organ = []
+    for prog in range(128):
+        pc = B.property_class_for_program(prog)
+        if not getattr(pc, 'registerable', False):
+            prog_organ.append(-1)
+        elif N.organ(pc) is None or N.note_class(pc) is None:
+            prog_organ.append(-2)
+        else:
+            if pc not in oidx:
+                oidx[pc] = len(organs)
+                organs.append(bytes(N.organ(pc)))
+            prog_organ.append(oidx[pc])
+    # (live: an organ is stamped rank by rank, not yet native -- its classes not live's)
+    cmap_live = [q if q < 0 or cls_organ[q] < 0 else -1 for q in cmap]
     trims = []
     for gs in (False, True):
         trims += [float(PM.program_trim(p, False, gs=gs)) for p in range(128)]
@@ -161,6 +182,12 @@ def main(argv):
                                       for c in B.EMIT_COLS]))
         for s in [room] + libs:
             f.write(struct.pack("<i", len(s)) + s)
+        f.write(b"ORGN")
+        f.write(struct.pack("<ii", len(organs), ctypes.sizeof(N.OrganSpec)))
+        for o in organs:
+            f.write(o)
+        f.write(struct.pack("<%di" % len(classes), *cls_organ))
+        f.write(struct.pack("<128i", *prog_organ))
         if "live" in opt:
             import live as L
             tab = L.pan_table()
@@ -169,7 +196,7 @@ def main(argv):
             f.write(struct.pack("<dd", float(L._PAN_BETA), 10.0 ** (-float(sess.get("headroom_db", 4.0)) / 20.0)))
             for prog in range(128):
                 rec = [0] * 9
-                if any(cmap[128 * prog + k] >= 0 for k in range(128)):
+                if any(cmap_live[128 * prog + k] >= 0 for k in range(128)):
                     pt = L.Patch(prog, False, tuner, 0)
                     sp = [(-1 if v is None else int(v)) for v in pt.speeds][:3]
                     rec = ([1, pt.nbuckets, len(sp)] + sp + [-1] * (3 - len(sp))
@@ -180,7 +207,7 @@ def main(argv):
             f.write(b"LREG")
             for prog in range(128):
                 pc = None
-                if any(cmap[128 * prog + k] >= 0 for k in range(128)):
+                if any(cmap_live[128 * prog + k] >= 0 for k in range(128)):
                     pt = L.Patch(prog, False, tuner, 0)
                     pc = pt._voice_class(60)
                     if not B.REGISTER or pc is None or not (getattr(pc, 'register_gain', 0.0) > 0.0

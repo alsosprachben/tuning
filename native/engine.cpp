@@ -156,6 +156,12 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     }
 
     int total = 0, no_refl = n->no_reflections;
+    // THE EMITTER'S RADIUS AS THE LAST NOTE LEFT IT (an organ's last pipe):
+    // what this note emits before its tone carries it, as the Python's em.radius
+    if (!std::isnan(n->carry_radius)) {
+        t.radius = n->carry_radius;
+        t.has_radius = 1;
+    }
 
     // THE HAMMER'S KNOCK (_note_strike_noise): noise rows, no images
     out->n_knock = 0;
@@ -266,7 +272,8 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         out->n_phantom = 0;
         out->non = non; out->noff = noff; out->fade = fade; out->rel = rel; out->chiff = chiff;
         out->jitter_scale = t.jitter_scale;
-        out->dl = t.dl; out->dr = t.dr; out->li = t.li; out->ri = t.ri; out->radius = NAN; out->n_push = 0;
+        out->dl = t.dl; out->dr = t.dr; out->li = t.li; out->ri = t.ri; out->radius = n->carry_radius;
+        out->n_push = 0;
         out->pos_x = s.position_x; out->pos_z = s.position_z; out->B = B;
         out->cv = t.cv; out->cc = t.cc; out->crl = t.crl; out->sjit = o.sustain_jitter; out->csc = t.csc;
         memcpy(out->tb, tb, sizeof tb);
@@ -287,7 +294,9 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         nsurf = nsurf_; surf = surf_; img = img_; mir = mir_;
     }
 
-    // THE TONE (_note_stops, one stop at gain 1)
+    // THE TONE (_note_stops, one stop at gain 1): its partials radiate as themselves
+    t.radius = 0.0;
+    t.has_radius = 0;
     int reflect = n->reflect && !no_refl && K->reflection_order;
     t.gain = 1.0; t.B = B; t.sjit = o.sustain_jitter; t.reflect = reflect;
     t.cbw0 = K->cbw0; t.cbw1 = K->cbw1;
@@ -324,7 +333,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     out->non = non; out->noff = noff; out->fade = fade; out->rel = rel; out->chiff = chiff;
     out->jitter_scale = t.jitter_scale;
     out->dl = fin[2]; out->dr = fin[3]; out->li = fin[0]; out->ri = fin[1];
-    out->radius = fin[4];               // (an organ's last pipe: the emitter's radius after it)
+    out->radius = K->organ ? fin[4] : (out->n_tone > 0 ? NAN : n->carry_radius);  // (an organ's last pipe; none past a tone)
     out->n_push = (int)fin[5];          // ...and its push's rows, the tone's last
     out->pos_x = s.position_x; out->pos_z = s.position_z; out->B = B;
     out->cv = t.cv; out->cc = t.cc; out->crl = t.crl; out->sjit = sjit_last; out->csc = t.csc;
@@ -361,6 +370,8 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         if (!r)
             return -2;
         n->f0 = pl[0]; n->vel = pl[1]; n->pan = pl[2]; n->chan_vol = pl[3]; n->effort = pl[4];
+        if (K->organ && K->organ->swells)   // an organ's CC7 is its swell, its CC11 its stop word: 1, trimmed
+            n->chan_vol = 1.0 * nv_song_note_trim(song, n->song_index);
         if (r == 2)
             n->seat = pl[5];            // a drum: its seat in its set
     }
@@ -404,6 +415,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
     long long total = 0;
     PyRandom rnd;                           // tonelib.RND_STREAM, as prepare reseeds it
     pyr_seed(&rnd, 0);
+    double carry_radius = NAN;              // the emitter's radius note to note (an organ's last pipe)
     for (int j = 0; j < nn; j++) {
         int i = order[j];
         long long ch;
@@ -411,8 +423,8 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         double dv[2];
         nv_song_get_note(song, i, &ch, iv, dv);
         const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[(iv[3] ? NV_K_DRUMS : 0) + 128 * iv[2] + iv[0]];
-        if (!k || k->organ)
-            return -(1 + i);                // (a registered organ: its registration is not the song's yet)
+        if (!k)
+            return -(1 + i);
         NoteIn n = *tmpl;
         n.ch = ch; n.note = iv[0]; n.on = dv[0]; n.key_off = dv[1];
         n.held = dv[1] - dv[0];             // how long the key was held
@@ -428,6 +440,10 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         n.br = (ch >= 0 && ch < nbr) ? br[ch] : -1.0;
         if (nbr > 256 && k->bendable && ch >= 0 && ch < 256 && br[256 + ch] >= 0.0)
             n.br = br[256 + ch];            // a voice that bends: its channel's bend row
+        if (k->organ) {                     // A REGISTERED ORGAN: its ranks as its registration leaves them
+            if (k->bendable || !nv_song_organ_note(song, i, k->organ->family, &n))
+                return -(1 + i);
+        }
         n.from_song = 1; n.song_index = i;
         double pv[3];
         nv_song_note_voice(song, i, pv);    // a throat's pulse: its tilt, mouth and vowel
@@ -483,6 +499,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             n.rnd_draws[2] = pyr_gauss(&rnd, 0.0, k->init.rnd_cents);
             n.rnd_draws[3] = pyr_uniform(&rnd, 0.0, k->init.rnd_timing_s);
         }
+        n.carry_radius = carry_radius;
         NoteOut out;
         int band = 0;
         long long left = cap - total;
@@ -492,6 +509,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             return NV_TOO_SMALL;
         if (r < 0)
             return -(1 + i);
+        carry_radius = out.radius;
         if (played) {
             played[j] = i;
             row0[j] = total;

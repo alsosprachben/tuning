@@ -1867,11 +1867,14 @@ def bend_blocks(events, nblk):
 
 
 def onepole_blocks(events, nblk, default):
+    # libm's exp (native.xexp), not numpy's SIMD one: the gates and the swell
+    # are nvrender's too (native/organrows.cpp)
+    import native as _NVX
     bc = (np.arange(nblk) + 0.5) * BLK / SR
     out = np.empty(nblk, np.float32); segs = [(0.0, default)] + list(events); v = default
     for k, (t0, target) in enumerate(segs):
         t1 = segs[k + 1][0] if k + 1 < len(segs) else 1e18
-        m = (bc >= t0) & (bc < t1); out[m] = target + (v - target) * np.exp(-(bc[m] - t0) / TAU)
+        m = (bc >= t0) & (bc < t1); out[m] = target + (v - target) * _NVX.xexp(-(bc[m] - t0) / TAU)
         if t1 < 1e17: v = target + (v - target) * np.exp(-(t1 - t0) / TAU)
     return out
 
@@ -6466,6 +6469,59 @@ def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None, choked=None)
 # THE SOUND CONTROLS THE ENGINE TAKES (CC72, 73, 76-78): a note's times and
 # vibrato; CC71, 74 and 75 shape its finished rows (_snd_finish), Python's
 _NV_SOUND = frozenset(('attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'))
+ORGAN_STATS = [0, 0]    # organ notes whose inputs the engine's song made too, that differed
+
+
+def _organ_rows_check(song, rankev_of, Grows, Srows, sh, wrow_of, BRrows, BCrows, _BLrows, nblk):
+    """'check': the engine's song given the file's organs (nv_song_organ),
+    its gates, swells and law (nv_song_organ_rows) and its chests' wind
+    (nv_song_organ_wind) against Python's, with ==."""
+    import native as _NV
+    d = _NV.lib()
+    po = (ctypes.c_void_p * 128)()
+    for _p in range(128):
+        _pc = property_class_for_program(_p)
+        _o = _NV.organ(_pc) if getattr(_pc, 'registerable', False) else None
+        po[_p] = ctypes.addressof(_o) if _o is not None else None
+    for (_c, _fam) in rankev_of:
+        _pc = next(c for c in (property_class_for_program(p) for p in range(128))
+                   if getattr(c, 'registerable', False) and organ_family(c) == _fam)
+        _o = _NV.organ(_pc)
+        if _o is None:
+            print("  native organ: no table for %s" % _fam)
+            return
+        d.nv_song_organ(song.p, _c, ctypes.addressof(_o), po)
+    w0 = min(wrow_of.values()) if wrow_of else len(BRrows)
+    nw = d.nv_song_organ_wind_rows(song.p, w0)
+    G = np.zeros((max(1, d.nv_song_n_grows(song.p)), nblk), np.float32)
+    S = np.zeros((max(1, d.nv_song_n_organs(song.p)), nblk), np.float32)
+    shc = (ctypes.c_double * 4)(0.06, 1.6, 3.5, 1500.0)
+    d.nv_song_organ_rows(song.p, nblk, BLK, SR, TAU, G.ctypes.data, S.ctypes.data, shc)
+    bad = []
+    if len(Grows) != d.nv_song_n_grows(song.p) or not np.array_equal(np.array(Grows, np.float32), G[:len(Grows)]):
+        bad.append('gates')
+    if not np.array_equal(np.array(Srows, np.float32), S[:len(Srows)]):
+        bad.append('swells')
+    if tuple(float(x) for x in sh) != tuple(shc):
+        bad.append('law %r vs %r' % (tuple(sh), tuple(shc)))
+    if nw != len(set(wrow_of.values())):
+        bad.append('wind rows %d vs %d' % (len(set(wrow_of.values())), nw))
+    elif nw:
+        BR = np.ones((nw, nblk), np.float32); BC = np.zeros((nw, nblk)); BL = np.ones((nw, nblk + 1), np.float32)
+        d.nv_song_organ_wind(song.p, nblk, BLK, SR, G.ctypes.data, BR.ctypes.data, BC.ctypes.data, BL.ctypes.data)
+        for q in range(nw):
+            if not np.array_equal(BRrows[w0 + q], BR[q]):
+                bad.append('wind %d ratio' % q)
+            if not np.array_equal(BCrows[w0 + q], BC[q]):
+                bad.append('wind %d phase' % q)
+            if not np.array_equal(_BLrows[w0 + q], BL[q]):
+                bad.append('wind %d level' % q)
+    ORGAN_STATS[0] += 1
+    if bad:
+        ORGAN_STATS[1] += 1
+        print("  native organ rows DIFFER: %s" % ', '.join(bad[:8]))
+
+
 SONG_STATS = [0, 0]     # notes whose channel questions were checked, that differed
 READING_STATS = [0, 0]  # files whose check song is the engine's own reading; whose notes need passes it lacks
 
@@ -6515,6 +6571,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.stroke_mouth = getattr(P, 'stroke_formant_scale', math.nan)
     n.stroke_morph = getattr(P, 'stroke_formant_morph', math.nan)
     n.snd_at, n.snd_rt = em.snd_at, em.snd_rt      # (CC73 and CC72's scales)
+    n.carry_radius = em.radius if em.radius is not None else math.nan
     if nt.organ:
         # each rank: its gate row, when it speaks, whether it speaks at all,
         # and whether it was pushed in before the key-up (_note_stops')
@@ -6590,6 +6647,27 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
                 SONG_STATS[1] += 1
                 print("  native channel DIFFERS (ch %d note %d at %.3f s): slur %r vs %r"
                       % (nt.ch, nt.note, nt.on, (bool(slurred), bool(slur_out)), got))
+        if nt.organ and NATIVE_TONE == 'check' and nt.song_index is not None:
+            # ...and an organ note's ranks, as the engine's song would give them
+            _n2 = _NV.NoteIn.from_buffer_copy(n)
+            _og = _NV.organ(nt.pc)
+            if _NV.lib().nv_song_organ_note(song.p, nt.song_index, _og.family, ctypes.byref(_n2)):
+                _nr = len(stops)
+                _bad = [f for f in ('rank_gr', 'rank_sp', 'rank_skip', 'rank_rel1', 'rank_br')
+                        if not all((a == b) or (a != a and b != b)
+                                   for a, b in zip(getattr(n, f)[:_nr], getattr(_n2, f)[:_nr]))]
+                if n.organ_cr != _n2.organ_cr:
+                    _bad.append('organ_cr')
+            else:
+                _bad = ['no organ']
+            ORGAN_STATS[0] += 1
+            if _bad:
+                ORGAN_STATS[1] += 1
+                if ORGAN_STATS[1] <= 5:
+                    print("  native organ note DIFFERS (ch %d note %d at %.3f s): %s" % (nt.ch, nt.note, nt.on,
+                                                                                        ', '.join(_bad)))
+                    if os.environ.get('TUNING_ORGAN_DEBUG'):
+                        print('   py', list(n.rank_br[:_nr]), '\n   c ', list(_n2.rank_br[:_nr]))
         n.from_song = int(bool(from_song) and nt.song_index is not None)
         n.song_index = nt.song_index if nt.song_index is not None else -1
         n.damper_pedal = K.damper_pedal
@@ -7692,6 +7770,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _SONG = _NV.Song(ccs, notes, total, freq=FREQ, mts=_MTS_TL, btun=_BTUN, otun=_OTUN,
                                  faders=set(_LROW), trim=lambda _p: program_trim(_p, is_drum(_p), gs=_GS_FILE[0]),
                                  legato=legato, strokes=(stroke_pitch, inner_ridge))
+    if _SONG is not None and rankev_of:
+        _organ_rows_check(_SONG, rankev_of, Grows, Srows, sh, wrow_of, BRrows, BCrows, _BLrows, nblk)
     # Occurrence index per (channel, note) in ONSET order -- the same key
     # _legato_ticks used, so a note found in seconds here is the note it judged
     # in ticks there.

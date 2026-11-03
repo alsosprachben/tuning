@@ -238,6 +238,183 @@ struct Song {
     // ITS GLIDES (_prep_glide_sources, from finish): each note's source key, -1 none
     std::vector<int> glide_src;
 
+    // ITS REGISTERED ORGANS (_prep_organ_rows: one a channel and family): the
+    // organ's table, its ranks' gate rows from g0 and its swell row, its
+    // stop word's events -- each rank's (time, target) and the swell's --
+    // and each rank's wind row (_prep_wind_rows; -1 none)
+    struct Organ {
+        long long ch;
+        const OrganSpec *spec;
+        int g0, cr;
+        std::vector<std::vector<std::pair<double, double>>> rank_ev;
+        std::vector<std::pair<double, double>> swell_ev;
+        std::vector<int> wrow;
+    };
+    std::vector<Organ> organs;
+    int n_grows = 0;
+
+    // registration_blocks' events for an organ on channel ch: its stop word
+    // (and the crescendo, and the swell) from the channel's controllers, a
+    // program change to another of its tones recalling that tone's default
+    // (recalls: the notes' programs, prog_organ[program] their organ)
+    void organ_add(long long ch, const OrganSpec *spec, const OrganSpec *const *prog_organ)
+    {
+        Organ o;
+        o.ch = ch;
+        o.spec = spec;
+        o.g0 = n_grows;
+        o.cr = (int)organs.size();
+        n_grows += spec->n_rank;
+        int nr = spec->n_rank;
+        o.rank_ev.assign(nr, {});
+        o.wrow.assign(nr, -1);
+        // the recalls: the channel's notes by onset, a tone of this family whose default differs
+        std::vector<int> idx;
+        for (size_t i = 0; i < notes.size(); i++)
+            if (notes[i].ch == ch)
+                idx.push_back((int)i);
+        std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) { return notes[a].on < notes[b].on; });
+        std::vector<std::pair<double, int>> recalls;
+        int ds = spec->default_stops;
+        for (int i : idx) {
+            const Ev &e = notes[i];
+            const OrganSpec *q = (e.prog >= 0 && e.prog < 128 && !e.drum) ? prog_organ[e.prog] : nullptr;
+            if (q && q->family == spec->family) {
+                if (q->default_stops != ds) {
+                    recalls.push_back(std::make_pair(e.on - 1e-4, q->default_stops));
+                    ds = q->default_stops;
+                }
+            }
+        }
+        int nw = spec->n_wccs;
+        int wb[4];
+        for (int i = 0; i < nw; i++)
+            wb[i] = (spec->default_stops >> (7 * i)) & 0x7F;
+        double cres = 0.0, vol = 1.0;
+        auto emit = [&](double t) {
+            long long mask = 0;
+            for (int i = 0; i < nw; i++)
+                mask |= (long long)wb[i] << (7 * i);
+            int nd = (int)(cres * spec->n_order + 1e-9);
+            for (int ri = 0; ri < nr; ri++) {
+                bool drawn = false;
+                for (int q = 0; q < nd && q < spec->n_order; q++)
+                    if (spec->order[q] == ri)
+                        drawn = true;
+                o.rank_ev[ri].push_back(std::make_pair(t, ((mask >> ri) & 1) || drawn ? 1.0 : 0.0));
+            }
+            o.swell_ev.push_back(std::make_pair(t, vol));
+        };
+        emit(0.0);
+        struct Ce {
+            double t;
+            int cc, v;
+        };
+        std::vector<Ce> ev;
+        const Channel *C = get(ch);
+        if (C)
+            for (const CC &e : C->ccs)
+                ev.push_back(Ce{e.t, e.cc, e.v});
+        for (auto &r : recalls)
+            ev.push_back(Ce{r.first, -1, r.second});
+        if (!recalls.empty())
+            std::stable_sort(ev.begin(), ev.end(), [](const Ce &a, const Ce &b) { return a.t < b.t; });
+        for (const Ce &e : ev) {
+            int wi = -1;
+            for (int i = 0; i < nw; i++)
+                if (spec->wccs[i] == e.cc) {
+                    wi = i;
+                    break;
+                }
+            if (e.cc == -1) {
+                for (int i = 0; i < nw; i++)
+                    wb[i] = (e.v >> (7 * i)) & 0x7F;
+            } else if (wi >= 0)
+                wb[wi] = e.v;
+            else if (e.cc == 4)
+                cres = e.v / 127.0;
+            else if (e.cc == 7 && spec->swells)
+                vol = e.v / 127.0;
+            else
+                continue;
+            emit(e.t);
+        }
+        organs.push_back(std::move(o));
+    }
+
+    const OrganSpec *prog_organ[128] = {nullptr};
+
+    // onepole_blocks: events (the first the default) at the nblk block centres
+    static void onepole(const std::vector<std::pair<double, double>> &ev, long nblk, int blk, double sr, double tau,
+                        float *out)
+    {
+        double v = ev[0].second;
+        long b = 0;
+        for (size_t k = 0; k < ev.size(); k++) {
+            double t0 = k == 0 ? 0.0 : ev[k].first, target = ev[k].second;
+            double t1 = k + 1 < ev.size() ? ev[k + 1].first : 1e18;
+            for (long q = 0; q < nblk; q++) {
+                double bc = ((double)q + 0.5) * blk / sr;
+                if (bc >= t0 && bc < t1)
+                    out[q] = (float)(target + (v - target) * exp(-(bc - t0) / tau));
+            }
+            if (t1 < 1e17)
+                v = target + (v - target) * exp(-(t1 - t0) / tau);
+            (void)b;
+        }
+    }
+
+    // the wind rows' places (_prep_chest_wind, _prep_wind_rows): each
+    // channel's first organ, a pipe organ's, with its shared wind or its
+    // Tremulant drawn: a row a family of its ranks, from row0; the count
+    int organ_wind_rows(int row0)
+    {
+        int r = row0;
+        std::set<long long> seen;
+        for (Organ &o : organs) {
+            if (seen.count(o.ch))
+                continue;
+            seen.insert(o.ch);
+            const OrganSpec *sp = o.spec;
+            if (!sp->wind)
+                continue;
+            bool trem = false;
+            if (sp->trem_rank >= 0)
+                for (auto &e : o.rank_ev[sp->trem_rank])
+                    if (e.second >= 0.5)
+                        trem = true;
+            trem = trem && sp->trem_class_depth > 0.0;
+            if (!(sp->wsc != 0.0 || trem))
+                continue;
+            std::vector<std::pair<double, double>> fams;
+            std::vector<int> frow;
+            for (int ri = 0; ri < sp->n_rank; ri++) {
+                if (sp->rank[ri].n_ratio == 0)
+                    continue;
+                std::pair<double, double> ab(sp->fam_a[ri], sp->fam_b[ri]);
+                int f = -1;
+                for (size_t q = 0; q < fams.size(); q++)
+                    if (fams[q] == ab)
+                        f = (int)q;
+                if (f < 0) {
+                    fams.push_back(ab);
+                    frow.push_back(r++);
+                    f = (int)fams.size() - 1;
+                }
+                o.wrow[ri] = frow[f];
+            }
+        }
+        return r - row0;
+    }
+
+    const Organ *organ_of(long long ch, int family) const
+    {
+        for (const Organ &o : organs)
+            if (o.ch == ch && o.spec->family == family)
+                return &o;
+        return nullptr;
+    }
+
     // _snd_d: CC71-78's d (sound_offset) in force on channel c at t, 0 none
     void sound_at(long long c, double t, double *d) const
     {
@@ -884,6 +1061,248 @@ void nv_song_snd(void *s, long long ch, double t, int cc, int v)
 
 // CC71-78's d in force on channel ch at t (d[0] CC71's), 0 none
 void nv_song_sound(void *s, long long ch, double t, double *d) { ((nv::Song *)s)->sound_at(ch, t, d); }
+
+// numpy's default_rng(seed).standard_normal(n) (native/npyrandom.c)
+extern "C" void nv_npy_normals(unsigned long long seed, long n, double *out);
+
+// A REGISTERED ORGAN on channel ch (_prep_organ_rows, in its order: the
+// channels as ch_progs has them, each its organs as its programs bring
+// them), its table spec; prog_organ[program]: each program's organ, NULL
+// none (the recalls). Its registration's events, from the finished song
+void nv_song_organ(void *s, long long ch, const OrganSpec *spec, const OrganSpec *const *prog_organ)
+{
+    nv::Song *S = (nv::Song *)s;
+    for (int p = 0; p < 128; p++)
+        S->prog_organ[p] = prog_organ[p];
+    S->organ_add(ch, spec, prog_organ);
+}
+
+int nv_song_n_organs(void *s) { return (int)((nv::Song *)s)->organs.size(); }
+
+// note i's program trim (the factor its channel volume carries)
+double nv_song_note_trim(void *s, int i) { return ((nv::Song *)s)->notes[i].trim; }
+int nv_song_n_grows(void *s) { return ((nv::Song *)s)->n_grows; }
+
+// the wind rows from row0 (_prep_chest_wind's channels, a row a family): how many
+int nv_song_organ_wind_rows(void *s, int row0) { return ((nv::Song *)s)->organ_wind_rows(row0); }
+
+// THE ORGANS' ROWS, the song's length known: each rank's gate and each
+// organ's swell (onepole_blocks of their events, nblk each, in G and S);
+// sh the swell law (_prep_swell_law: the first organ's whose floor is under
+// 1, else the last's; sh left as given with none). -1: two organs with laws
+// of their own (the re-mapping is Python's)
+int nv_song_organ_rows(void *s, long nblk, int blk, double sr, double tau, float *G, float *S, double *sh)
+{
+    nv::Song *Sg = (nv::Song *)s;
+    const double *law = nullptr, *first = nullptr;
+    for (const auto &o : Sg->organs) {
+        for (int ri = 0; ri < o.spec->n_rank; ri++)
+            nv::Song::onepole(o.rank_ev[ri], nblk, blk, sr, tau, G + (long)(o.g0 + ri) * nblk);
+        nv::Song::onepole(o.swell_ev, nblk, blk, sr, tau, S + (long)o.cr * nblk);
+        if (!o.spec->swells)
+            continue;
+        if (law && (law[0] != o.spec->swell_law[0] || law[1] != o.spec->swell_law[1]))
+            return -1;
+        law = o.spec->swell_law;
+        if (!first && law[0] < 1.0)
+            first = law;
+    }
+    const double *use = first ? first : law;
+    if (use)
+        for (int q = 0; q < 4; q++)
+            sh[q] = use[q];
+    return 0;
+}
+
+static double wind_sat(double x, double m) { return m > 0.0 ? m * tanh(x / m) : x; }
+
+// THE CHEST'S WIND (_prep_chest_wind, wind.Wind.blocks, wind.pitch_level):
+// for each channel organ_wind_rows gave rows, its pipes' demand under their
+// gates (G), the pressure block by block -- the wander (numpy's normals,
+// seeded by the channel), the sag and the regulator, the Tremulant -- and a
+// row a family: its ratio (BR, nblk), its phase (BC, nblk) and its level at
+// the block edges (BL, nblk + 1), in organ_wind_rows' order
+void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, float *BR, double *BC, float *BL)
+{
+    nv::Song *Sg = (nv::Song *)s;
+    std::set<long long> seen;
+    int row = 0;
+    for (const auto &o : Sg->organs) {
+        if (seen.count(o.ch))
+            continue;
+        seen.insert(o.ch);
+        const OrganSpec *sp = o.spec;
+        int any = 0;
+        for (int ri = 0; ri < sp->n_rank; ri++)
+            any |= o.wrow[ri] >= 0;
+        if (!any)
+            continue;
+        // the demand: every note of this organ's class on the channel, each rank under its gate
+        std::vector<double> dem(nblk + 1, 0.0);
+        for (const auto &e : Sg->notes) {
+            if (e.ch != o.ch || e.drum || e.prog < 0 || e.prog > 127 || Sg->prog_organ[e.prog] != sp)
+                continue;
+            double f = 440.0 * pow(2.0, (e.note - 69) / 12.0);
+            long b0 = std::min(nblk, (long)(e.on * sr / blk)), b1 = std::min(nblk, (long)(e.off * sr / blk) + 1);
+            if (b1 <= b0)
+                continue;
+            for (int ri = 0; ri < sp->n_rank; ri++) {
+                const OrganRank &rk = sp->rank[ri];
+                if (rk.n_ratio == 0)
+                    continue;
+                double d[8];
+                for (int q = 0; q < rk.n_ratio; q++)
+                    d[q] = pow(std::max(f * rk.ratio[q], 8.0) / sp->unit_hz, sp->draw_exp);
+                double w = pysum(d, rk.n_ratio);
+                const float *g = G + (long)(o.g0 + ri) * nblk;
+                float wf = (float)w;        // (numpy: a Python float times a float32 row is float32)
+                for (long b = b0; b < b1; b++)
+                    dem[b] += (double)(wf * g[b]);
+            }
+        }
+        // the Tremulant's draw, a step a block
+        std::vector<double> trem(nblk, 0.0);
+        if (sp->trem_rank >= 0)
+            for (auto &e : o.rank_ev[sp->trem_rank])
+                for (long b = 0; b < nblk; b++)
+                    if (((double)b + 0.5) * blk / sr >= e.first)
+                        trem[b] = e.second;
+        // the pressure (Wind.blocks), SUB 8 points a block
+        std::vector<double> p((size_t)nblk * 9);
+        std::vector<double> noise;
+        if (sp->wander_rms > 0.0) {
+            noise.resize(nblk);
+            nv_npy_normals(0x5EED + (unsigned long long)o.ch, nblk, noise.data());
+        }
+        double w1 = 0.0, w2 = 0.0, s1 = 0.0, s2 = 0.0, d1 = 0.0, r1 = 0.0, te = 0.0, tph = 0.0;
+        bool was_on = false;
+        auto dev = [&]() {
+            double d = s1 - (sp->has_ra ? sp->reg_restore * r1 : 0.0);
+            return wind_sat(d, sp->sag_max);
+        };
+        for (long b = 0; b < nblk; b++) {
+            double w0 = w2;
+            if (!noise.empty()) {
+                w1 = sp->wa * w1 + (1.0 - sp->wa) * noise[b];
+                w2 = sp->wa * w2 + (1.0 - sp->wa) * w1;
+            }
+            double s0 = dev();
+            if (sp->sag_per_unit > 0.0) {
+                double sn = sp->c1 * s1 + sp->c2 * s2 + sp->g * d1;
+                s2 = s1;
+                s1 = sn;
+                d1 = dem[b] * sp->sag_per_unit;
+                if (sp->has_ra)
+                    r1 = sp->ra * r1 + (1.0 - sp->ra) * s1;
+            }
+            double sv1 = dev();
+            bool on = trem[b] >= 0.5;
+            if (on && !was_on && te < 1e-4)
+                tph = 0.0;
+            was_on = on;
+            double tgt = on ? 1.0 : 0.0;
+            double e0 = te;
+            te = tgt + (te - tgt) * sp->tdecay;
+            if (!on && te < 1e-6)
+                te = 0.0;
+            bool tr = e0 > 0.0 || te > 0.0;
+            for (int j = 0; j <= 8; j++) {
+                double fr = j / 8.0;
+                double wv = (w0 + (w2 - w0) * fr) * (sp->wgain * sp->wander_rms);
+                double sv = s0 + (sv1 - s0) * fr;
+                double tv = 0.0;
+                if (tr) {
+                    double ev = e0 + (te - e0) * fr;
+                    tv = sp->trem_depth * ev * sin(2.0 * M_PI * (tph + sp->trem_hz * sp->blk_s * fr));
+                }
+                p[(size_t)b * 9 + j] = 1.0 + wv - sv + tv;
+            }
+            tph = fmod(tph + sp->trem_hz * sp->blk_s, 1.0);
+        }
+        // a row a family (pitch_level): the ratio, its phase, the level at the edges
+        std::vector<std::pair<double, double>> fams;
+        for (int ri = 0; ri < sp->n_rank; ri++) {
+            if (o.wrow[ri] < 0)
+                continue;
+            std::pair<double, double> ab(sp->fam_a[ri], sp->fam_b[ri]);
+            if (std::find(fams.begin(), fams.end(), ab) != fams.end())
+                continue;
+            fams.push_back(ab);
+            float *R = BR + (long)row * nblk;
+            double *Cc = BC + (long)row * nblk;
+            float *L = BL + (long)row * (nblk + 1);
+            double acc = 0.0;
+            for (long b = 0; b < nblk; b++) {
+                double sum = pow(p[(size_t)b * 9], ab.first);
+                for (int j = 1; j < 8; j++)
+                    sum = sum + pow(p[(size_t)b * 9 + j], ab.first);
+                R[b] = (float)(sum / 8.0);
+                Cc[b] = acc;
+                acc += ((double)R[b] - 1.0) * blk;
+                L[b] = (float)pow(p[(size_t)b * 9], ab.second);
+            }
+            L[nblk] = (float)pow(p[(size_t)(nblk - 1) * 9 + 8], ab.second);
+            row++;
+        }
+    }
+}
+
+// AN ORGAN NOTE'S RANKS (note i of the song; its organ's family): each
+// rank's gate row, when it speaks (rank_speak_sec), whether it is drawn only
+// after the key lifted, or pushed in before the key-up, and its bend row --
+// its chest's wind where it has one, else the note's own (n->br); the swell
+// row. 0 if its channel has no such organ
+int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
+{
+    const nv::Song *S = (nv::Song *)s;
+    const nv::Ev &e = S->notes[i];
+    const nv::Song::Organ *o = S->organ_of(e.ch, family);
+    if (!o)
+        return 0;
+    double on = n->on, koff = n->key_off, br = n->br;
+    for (int ri = 0; ri < o->spec->n_rank; ri++) {
+        const auto &ev = o->rank_ev[ri];
+        n->rank_gr[ri] = o->g0 + ri;
+        // rank_speak_sec(events, on, 0.0)
+        double cur = 0.0;
+        for (auto &x : ev) {
+            if (x.first <= on)
+                cur = x.second;
+            else
+                break;
+        }
+        double sp = NAN;
+        if (cur >= 0.5)
+            sp = on + 0.0;
+        else
+            for (auto &x : ev)
+                if (x.first > on && x.second >= 0.5) {
+                    sp = x.first + 0.0;
+                    break;
+                }
+        n->rank_sp[ri] = sp;
+        n->rank_skip[ri] = !std::isnan(sp) && sp > on && sp >= koff;
+        n->rank_rel1[ri] = 0;
+        if (!std::isnan(sp)) {
+            double drawn = 0.0;
+            for (auto &x : ev) {
+                if (x.first <= koff)
+                    drawn = x.second;
+                else
+                    break;
+            }
+            n->rank_rel1[ri] = drawn < 0.5;
+        }
+        // (em.bend_row: a rank with pipes and the note in its range takes its
+        // wind's row, and every rank after keeps it until the next does)
+        const OrganRank &rk = o->spec->rank[ri];
+        if (rk.n_ratio && e.note >= rk.lo && e.note <= rk.hi && o->wrow[ri] >= 0)
+            br = (double)o->wrow[ri];
+        n->rank_br[ri] = br;
+    }
+    n->organ_cr = o->cr;
+    return 1;
+}
 
 // note i's glide: the key it glides from (-1 none), and through *cc5 the CC5 in force at its onset
 int nv_song_glide(void *s, int i, int *cc5)

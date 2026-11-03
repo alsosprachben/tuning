@@ -167,8 +167,9 @@ class Wind:
                 self.te = 0.0
             if e0 > 0.0 or self.te > 0.0:
                 ev = e0 + (self.te - e0) * frac
-                tv = self.trem_depth * ev * np.sin(
-                    2.0 * math.pi * (self.tph + self.trem_hz * self.blk_s * frac))
+                # (libm's sin, point by point: the native engine's too)
+                tv = self.trem_depth * ev * np.array(
+                    [math.sin(x) for x in 2.0 * math.pi * (self.tph + self.trem_hz * self.blk_s * frac)])
             else:
                 tv = 0.0
             self.tph = (self.tph + self.trem_hz * self.blk_s) % 1.0
@@ -183,7 +184,14 @@ def _sat(x, m):
 def pitch_level(p, a, b):
     """A family's response to pressure points p (n, SUB + 1): the frequency
     ratio each block -- its mean over the block, which is what the kernel's
-    bend row holds -- and the level at the block edges (n + 1 of them)."""
-    r = np.mean(p[:, :-1] ** a, axis=1)
-    lv = np.concatenate((p[:, 0], p[-1:, -1])) ** b
+    bend row holds -- and the level at the block edges (n + 1 of them).
+    libm's pow (native.xpow) and the mean summed point by point in order:
+    the native engine's arithmetic (native/organrows.cpp)."""
+    import native as _NV
+    q = _NV.xpow(np.ascontiguousarray(p[:, :-1]), a)
+    s = q[:, 0].copy()
+    for j in range(1, q.shape[1]):
+        s = s + q[:, j]
+    r = s / float(q.shape[1])
+    lv = _NV.xpow(np.concatenate((p[:, 0], p[-1:, -1])), b)
     return r, lv

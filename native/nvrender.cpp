@@ -32,12 +32,14 @@
 // (other instruments, the other drums), an MTS tuning select (gm2's store),
 // a drum channel's wheel or tuning (its drums would ride it).
 
+#include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -64,7 +66,9 @@ int nv_bend_btun(void *midi, void *song, double bend_range, double *out);
 int nv_bend_gesture(void *midi, void *song, double bend_range, int ch, long nblk, int blk, double sr, float *BR,
                     double *BC);
 int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr, double tau, double fader_tail,
-                  double stamp_s, double stamped_share, int vol0, int expr0, float *L);
+                  double stamp_s, double stamped_share, int vol0, int expr0, float *L, const unsigned char *swell);
+int nv_midi_n_chprogs(void *p);
+void nv_midi_chprog(void *p, int i, int *iv);
 void nv_song_channel(void *s, long long ch, double btun, const double *otun, int fader);
 void nv_song_finish(void *s, double total);
 long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
@@ -113,6 +117,8 @@ struct Export {
     std::vector<int> kit_skind;
     std::vector<double> kit_spar;
     std::string room, libs[3];
+    std::vector<OrganSpec> organs;        // ORGN: the registered organs' tables
+    std::vector<int> cls_organ, prog_organ;   // each class's organ, each program's (-1 none, -2 not the engine's)
 };
 
 static bool read_export(const char *path, Export &E)
@@ -149,6 +155,18 @@ static bool read_export(const char *path, Export &E)
                 ss[i]->resize(n);
                 ok = fread(&(*ss[i])[0], 1, n, f) == (size_t)n;
             }
+        }
+        // ORGN: the registered organs' tables, each class's organ, each program's
+        char om[4];
+        int norg = 0, osz = 0;
+        ok = ok && fread(om, 1, 4, f) == 4 && !memcmp(om, "ORGN", 4) && fread(&norg, 4, 1, f) == 1
+             && fread(&osz, 4, 1, f) == 1 && osz == (int)sizeof(OrganSpec);
+        if (ok) {
+            E.organs.resize(norg);
+            E.cls_organ.resize(ncls);
+            E.prog_organ.resize(128);
+            ok = fread(E.organs.data(), sizeof(OrganSpec), norg, f) == (size_t)norg
+                 && fread(E.cls_organ.data(), 4, ncls, f) == (size_t)ncls && fread(E.prog_organ.data(), 4, 128, f) == 128;
         }
     }
     fclose(f);
@@ -233,6 +251,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "nvrender: cannot read %s (or it is not this build's)\n", argv[1]);
         return 1;
     }
+    // each class's organ, its table here (the export's pointer was the exporter's)
+    for (size_t i = 0; i < E.classes.size(); i++)
+        ((NoteClass *)E.classes[i].data())->organ = E.cls_organ[i] >= 0 ? &E.organs[E.cls_organ[i]] : nullptr;
     // THE TUNER, if named: its table in place of the export's
     std::string tname, ra, rc;
     for (int i = 4; i < argc; i++) {
@@ -338,6 +359,48 @@ int main(int argc, char **argv)
     nv_song_kits(song, E.kit_f0.data(), E.kit_seat.data());
     nv_song_chokes(song, E.kit_choke.data());
     nv_midi_song(midi, song, E.trim.data() + (nv_midi_gs(midi) ? 256 : 0));
+    // THE REGISTERED ORGANS (_prep_organ_rows): each melodic channel's, as its
+    // programs bring them (ch_progs, uniq_programs), one a family; their stop
+    // words' events. A program whose organ the engine does not play: Python's
+    std::vector<const OrganSpec *> prog_organ(128, nullptr);
+    std::vector<unsigned char> swell(16384, 0);
+    for (int p = 0; p < 128; p++)
+        if (E.prog_organ[p] >= 0)
+            prog_organ[p] = &E.organs[E.prog_organ[p]];
+    for (int q = 0; q < 16384; q++)
+        if (E.cmap[q] >= 0 && E.cls_organ[E.cmap[q]] >= 0 && E.organs[E.cls_organ[E.cmap[q]]].swells)
+            swell[q] = 1;               // (an organ's note: its CC7 its swell, not a fader)
+    {
+        std::vector<int> chs;
+        std::map<int, std::vector<int>> uniq;
+        for (int i = 0, n = nv_midi_n_chprogs(midi); i < n; i++) {
+            int iv[2];
+            nv_midi_chprog(midi, i, iv);
+            if (!uniq.count(iv[0]))
+                chs.push_back(iv[0]);
+            std::vector<int> &u = uniq[iv[0]];
+            if (std::find(u.begin(), u.end(), iv[1]) == u.end())
+                u.push_back(iv[1]);
+        }
+        for (int c : chs) {
+            std::vector<int> fams;
+            for (int p : uniq[c]) {
+                if (E.prog_organ[p] == -2) {
+                    fprintf(stderr, "nvrender: refused: an organ the engine does not play (program %d)\n", p);
+                    return 2;
+                }
+                const OrganSpec *og = prog_organ[p];
+                if (!og || std::find(fams.begin(), fams.end(), og->family) != fams.end())
+                    continue;
+                if (!fams.empty()) {
+                    fprintf(stderr, "nvrender: refused: two organs on channel %d\n", c);
+                    return 2;
+                }
+                fams.push_back(og->family);
+                nv_song_organ(song, c, og, prog_organ.data());
+            }
+        }
+    }
     // THE BEND PASSES (native/bend.cpp): each channel's tuning, from its wheel
     // and RPNs, into its notes' f0; a fader moving under its notes, a row --
     // its notes at unity, each riding it (br)
@@ -352,11 +415,13 @@ int main(int argc, char **argv)
             br[256 + c] = (double)gch.size();
             gch.push_back(c);
         }
+    // ...then the chests' wind (_prep_wind_rows: a row a family of each organ channel's ranks)
+    const int nw = nv_song_organ_wind_rows(song, (int)gch.size());
     float one = 0.0f;
     for (int c = 0; c < 256; c++)
         if (nv_bend_fader(midi, song, c, 0, (int)BLK, SR, E.k[K_TAU], E.k[K_FADER_TAIL], E.k[K_STAMP_S],
-                          E.k[K_STAMPED_SHARE], (int)E.k[K_GM_VOL], (int)E.k[K_GM_EXPR], &one)) {
-            br[c] = (double)(gch.size() + fch.size());
+                          E.k[K_STAMPED_SHARE], (int)E.k[K_GM_VOL], (int)E.k[K_GM_EXPR], &one, swell.data())) {
+            br[c] = (double)(gch.size() + nw + fch.size());
             fch.push_back(c);
         }
     for (int c = 0; c < 256; c++)
@@ -386,7 +451,7 @@ int main(int argc, char **argv)
     double qacc[18] = {0}, az = 0.0, out[48] = {0};
     double *rows = nullptr;
     void *dm[6] = {nullptr};
-    bool rows_ = !fch.empty() || !gch.empty();
+    bool rows_ = !fch.empty() || !gch.empty() || nw;
     long long P = nv_prepare(song, K.data(), &t, rows_ ? br.data() : nullptr, rows_ ? 512 : 0, &rs, &rows,
                              qacc, &az, E.kind.data(),
                              E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, total,
@@ -455,31 +520,63 @@ int main(int argc, char **argv)
             return 1;
         }
     }
-    float G = 1.0f, S = 1.0f, noRows[16] = {0}, sh[4];
+    float noRows[16] = {0}, sh[4];
+    // THE ORGANS' GATES AND SWELLS (registration_blocks), and the swell's law
+    const int ngr = nv_song_n_grows(song), nso = nv_song_n_organs(song);
+    std::vector<float> Gt(ngr ? (size_t)ngr * nblk : 1, 1.0f), St(nso ? (size_t)nso * nblk : 1, 1.0f);
+    double shd[4];
     for (int q = 0; q < 4; q++)
-        sh[q] = (float)E.k[K_SH + q];
+        shd[q] = E.k[K_SH + q];
+    if (nso && nv_song_organ_rows(song, nblk, (int)BLK, SR, E.k[K_TAU], Gt.data(), St.data(), shd) < 0) {
+        fprintf(stderr, "nvrender: refused: two organs with swell laws of their own\n");
+        return 2;
+    }
+    for (int q = 0; q < 4; q++)
+        sh[q] = (float)shd[q];
     // the rows (_prep_bend_arrays): a gesture's ratio and phase a block (its
     // channel's fader's level at each edge, where it has one); a fader's
     // ratio 1 and phase 0, its level; no rows, one of ones and no levels
-    size_t ng = gch.size(), nr = std::max<size_t>(ng + fch.size(), 1);
+    size_t ng = gch.size(), nr = std::max<size_t>(ng + nw + fch.size(), 1);
     std::vector<float> BRr(nr * nblk, 1.0f), BLr;
     std::vector<double> BCr(nr * nblk, 0.0);
     for (size_t r = 0; r < ng; r++)
         nv_bend_gesture(midi, song, E.k[K_BEND_SEMIS], gch[r], nblk, (int)BLK, SR, BRr.data() + r * nblk,
                         BCr.data() + r * nblk);
-    if (!fch.empty()) {
+    if (!fch.empty() || nw)
         BLr.assign(nr * (nblk + 1), 1.0f);
+    if (nw)                                 // the chests' wind, after the gestures
+        nv_song_organ_wind(song, nblk, (int)BLK, SR, Gt.data(), BRr.data() + ng * nblk, BCr.data() + ng * nblk,
+                           BLr.data() + ng * (nblk + 1));
+    if (!fch.empty()) {
         for (size_t r = 0; r < fch.size(); r++) {
-            float *Lf = BLr.data() + (ng + r) * (nblk + 1);
+            float *Lf = BLr.data() + (ng + nw + r) * (nblk + 1);
             nv_bend_fader(midi, song, fch[r], nblk, (int)BLK, SR, E.k[K_TAU], E.k[K_FADER_TAIL], E.k[K_STAMP_S],
-                          E.k[K_STAMPED_SHARE], (int)E.k[K_GM_VOL], (int)E.k[K_GM_EXPR], Lf);
+                          E.k[K_STAMPED_SHARE], (int)E.k[K_GM_VOL], (int)E.k[K_GM_EXPR], Lf, swell.data());
             long gi = (long)br[256 + fch[r]];
             if (gi >= 0)                    // the channel's gesture rides its fader too
                 std::copy(Lf, Lf + nblk + 1, BLr.data() + gi * (nblk + 1));
         }
     }
+    if (const char *dp_ = getenv("TUNING_NVRENDER_DUMP")) {
+        // (a debugging dump: the table as prepared, the gates, swells and bend rows)
+        auto put = [&](const char *ext, const void *p, size_t n) {
+            FILE *df = fopen((std::string(dp_) + ext).c_str(), "wb");
+            if (df) {
+                fwrite(p, 1, n, df);
+                fclose(df);
+            }
+        };
+        put(".rows", rows, sizeof(double) * NCOLS * P);
+        put(".G", Gt.data(), sizeof(float) * Gt.size());
+        put(".S", St.data(), sizeof(float) * St.size());
+        put(".BR", BRr.data(), sizeof(float) * BRr.size());
+        put(".BC", BCr.data(), sizeof(double) * BCr.size());
+        if (!BLr.empty())
+            put(".BL", BLr.data(), sizeof(float) * BLr.size());
+        put(".sh", sh, sizeof sh);
+    }
     std::vector<float> L(N), R(N);
-    nv_render(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fp, lp, ip, &G, &S, BRr.data(), BCr.data(),
+    nv_render(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fp, lp, ip, Gt.data(), St.data(), BRr.data(), BCr.data(),
               BLr.empty() ? nullptr : BLr.data(), noRows, sh,
               (long)E.k[K_CHUNK], E.k[K_XDEC], SR, E.k[K_MASTER], (const float *)dm[2], (const long *)dm[3],
               (const long *)dm[4], (const long *)dm[5], L.data(), R.data());

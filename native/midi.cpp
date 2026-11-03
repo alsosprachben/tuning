@@ -198,6 +198,7 @@ struct Parsed {
     int gs = 0;                 // a Roland GS exclusive before the first note (gs_setup: the file speaks GS)
     std::vector<std::array<int, 3>> legato;    // _legato_ticks: (channel, key, k) slurred
     std::vector<CCEv> snd;      // sndev: CC71-78, and gmon (channel -1, cc -1), in message order
+    std::vector<std::pair<int, int>> chprogs;  // ch_progs: a melodic channel's program changes, in message order
 };
 
 // _legato_ticks: the notes that begin contiguously with what their channel
@@ -375,6 +376,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             drums[ch] = is_drums(ch);
             prog[ch] = m.d0;
             P.progs.push_back(std::make_pair(ch, m.d0));
+            if (!drums[ch])
+                P.chprogs.push_back(std::make_pair(ch, m.d0));  // (a drum set is no organ's program)
         } else if (kind == 0xB0) {
             int cc = m.d0, v = m.d1;
             P.ccs.push_back(CCEv{ch, t, cc, v});
@@ -587,6 +590,14 @@ void nv_midi_note(void *p, int i, int *iv, double *dv)
     const nv::Note &n = ((nv::Parsed *)p)->notes[i];
     iv[0] = n.ch; iv[1] = n.note; iv[2] = n.vel; iv[3] = n.prog; iv[4] = n.drum;
     dv[0] = n.on; dv[1] = n.off; dv[2] = n.v7; dv[3] = n.v11; dv[4] = n.pan;
+}
+
+// ch_progs: the program changes on melodic channels, in message order
+int nv_midi_n_chprogs(void *p) { return (int)((nv::Parsed *)p)->chprogs.size(); }
+void nv_midi_chprog(void *p, int i, int *iv)
+{
+    iv[0] = ((nv::Parsed *)p)->chprogs[i].first;
+    iv[1] = ((nv::Parsed *)p)->chprogs[i].second;
 }
 
 void nv_midi_cc(void *p, int i, int *iv, double *t)
