@@ -1054,6 +1054,12 @@ class Slab:
         self.last_slots = []
         self.free = collections.deque(range(capacity))
         self.retiring = []              # slots released, still ringing out
+        # EACH SLOT'S KEY (an id: key_id), so a slot freed while its key is
+        # still held -- a one-shot rung out under a key not yet up -- leaves
+        # that key's list: kept, a later note stamped into it was the old
+        # key's too, and a per-key step reached the wrong note
+        self.owner = np.full(capacity, -1, np.int64)
+        self.key_id, self.id_key = {}, []
         self.last_release = {}          # key -> (slots, when): the latest release of each
         # A slot can be scheduled for retirement twice -- stamp() schedules a
         # one-shot's natural end, and choking it pops `oneshot` and calls
@@ -1592,6 +1598,7 @@ class Slab:
             _sw = _rd
         a["sw"][idx] = _sw
         self.live.setdefault(key, []).extend(slots)
+        self._own(key, idx)
         # THE SLOTS JUST ALLOCATED, which is not the same as live[key]: that
         # accumulates, by design -- a key is stamped once per rank, and a
         # re-struck note adds to it rather than replacing it. Arming the rotor
@@ -2075,6 +2082,7 @@ class Slab:
         self.vrbase[idx] = 0.0
         self.vsc[idx] = 1.0
         self.live.setdefault(key, []).extend(slots)
+        self._own(key, idx)
         self.last_slots = slots
         return slots
 
@@ -2438,6 +2446,7 @@ class Slab:
         """Note-off: one write per partial. The kernel picks it up next block."""
         slots = self.live.pop(key, None)
         if not slots:
+            self.oneshot.pop(key, None)     # (a one-shot rung out under the key: _disown)
             return
         if self.oneshot.get(key):
             self.oneshot.pop(key, None)
@@ -2457,6 +2466,29 @@ class Slab:
         if len(fr):
             self.mp_toff[fr] = np.minimum(self.mp_toff[fr], float(n))   # the pitch rows' key-up
 
+    def _own(self, key, idx):
+        """The slots idx are key's (owner)."""
+        k = self.key_id.get(key)
+        if k is None:
+            k = self.key_id[key] = len(self.id_key)
+            self.id_key.append(key)
+        self.owner[idx] = k
+
+    def _disown(self, idx):
+        """Freed slots out of a key still held (owner)."""
+        own = self.owner[idx]
+        own = own[own >= 0]
+        self.owner[idx] = -1
+        for k in np.unique(own):
+            key = self.id_key[int(k)]
+            lst = self.live.get(key)
+            if not lst:
+                continue
+            arr = np.asarray(lst, np.int64)
+            gone = np.isin(arr, idx)
+            if gone.any():
+                self.live[key] = [int(s) for s in arr[~gone]]
+
     def reap(self, n):
         """Return slots whose release has finished ringing."""
         keep = []
@@ -2474,6 +2506,7 @@ class Slab:
                 if len(live):
                     self.busy[live] = False
                     self.dirty = True
+                    self._disown(live)
                 self.free.extend(int(i) for i in live)
                 # the Moog rows these slots held, returned with the last of them
                 fr = self.a["fx"][live]
@@ -9599,6 +9632,7 @@ class Live:
         if patch is not old and self.slab.live.get(ak):
             rk = (part.pid, -1, -1, "%s%d" % (self.AMP_OLD, n0))
             self.slab.live[rk] = self.slab.live.pop(ak)
+            self.slab._own(rk, np.asarray(self.slab.live[rk], np.int64))
             if ak in self.slab.oneshot:
                 self.slab.oneshot[rk] = self.slab.oneshot.pop(ak)
             self.amp_retired[rk] = (part.pid, old)

@@ -164,12 +164,18 @@ struct Slab {
     std::map<Key, int> oneshot;
     std::vector<std::pair<std::vector<long>, long long>> retiring;
     std::vector<long> last_slots;
+    // each slot's key, by id (live.Slab.owner): a slot freed while its key
+    // is still held leaves that key's list
+    std::vector<long long> owner;
+    std::map<Key, long long> key_id;
+    std::vector<Key> id_key;
     double send[256];
     float headroom = 1.0f;
     double headroom_d = 1.0;
 
     explicit Slab(long capacity) : cap(capacity)
     {
+        owner.assign(cap, -1);
         f8.assign(NF8, std::vector<double>(cap, 0.0));
         f4.assign(NF4, std::vector<float>(cap, 0.0f));
         f4n.assign(NF4N, std::vector<float>(cap, 0.0f));
@@ -277,6 +283,7 @@ struct Slab {
         }
         std::vector<long> &lv = live_of(key);
         lv.insert(lv.end(), idx.begin(), idx.end());
+        own(key, idx);
         for (long s : idx)
             i4[I4_fx][s] = -1;                  // _moog_stamp: not a Moog note
         last_slots = idx;
@@ -388,8 +395,10 @@ struct Slab {
             return;
         std::vector<long> idx = live[li].second;
         live.erase(live.begin() + li);
-        if (idx.empty())
+        if (idx.empty()) {
+            oneshot.erase(key);             // (a one-shot rung out under the key: disown)
             return;
+        }
         auto o = oneshot.find(key);
         if (o != oneshot.end()) {
             oneshot.erase(o);
@@ -401,6 +410,49 @@ struct Slab {
                 i8[1][s] = v;
         }
         retiring.push_back(std::make_pair(idx, n));
+    }
+
+    // live.Slab._own: the slots idx are key's
+    void own(const Key &key, const std::vector<long> &idx)
+    {
+        auto it = key_id.find(key);
+        long long k;
+        if (it == key_id.end()) {
+            k = (long long)id_key.size();
+            key_id[key] = k;
+            id_key.push_back(key);
+        } else {
+            k = it->second;
+        }
+        for (long s : idx)
+            owner[s] = k;
+    }
+
+    // live.Slab._disown: freed slots out of a key still held, its list's
+    // order kept
+    void disown(const std::vector<long> &idx)
+    {
+        std::vector<long long> ks;
+        for (long s : idx)
+            if (owner[s] >= 0)
+                ks.push_back(owner[s]);
+        std::set<long> gone(idx.begin(), idx.end());
+        for (long s : idx)
+            owner[s] = -1;
+        std::sort(ks.begin(), ks.end());
+        ks.erase(std::unique(ks.begin(), ks.end()), ks.end());
+        for (long long k : ks) {
+            long li = live_find(id_key[k]);
+            if (li < 0 || live[li].second.empty())
+                continue;
+            std::vector<long> &lst = live[li].second;
+            std::vector<long> kept;
+            for (long s : lst)
+                if (!gone.count(s))
+                    kept.push_back(s);
+            if (kept.size() != lst.size())
+                lst.swap(kept);
+        }
     }
 
     // Slab.reap: slots whose release has rung out, freed
@@ -420,13 +472,17 @@ struct Slab {
             }
             double tail = (double)r.second + (double)mx + (double)blk + 1.0;
             if ((double)n > tail) {
+                std::vector<long> freed;
                 for (long s : r.first) {
                     i8[0][s] = IDLE;
                     if (busy[s]) {
                         busy[s] = 0;
                         free.push_back(s);
+                        freed.push_back(s);
                     }
                 }
+                if (!freed.empty())
+                    disown(freed);
             } else {
                 keep.push_back(r);
             }
