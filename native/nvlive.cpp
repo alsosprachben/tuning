@@ -1067,7 +1067,17 @@ int main(int argc, char **argv)
             long w = A.writei(A.pcm, buf.data(), (unsigned long)BLK);
             if (w < 0) {
                 underruns += w == -32;                  // -EPIPE: the device ran dry
-                A.recover(A.pcm, (int)w, 1);
+                // RECOVER AS PORTAUDIO DOES: the device prepared again, half
+                // its buffer of silence ahead (a cushion, so one slow block in
+                // a thick passage does not run it dry again, block after
+                // block), and THIS block written after it rather than lost
+                if (A.recover(A.pcm, (int)w, 1) >= 0) {
+                    long half = std::max<long>(1, (long)((double)lat * 1e-6 * SR / 2.0 / BLK));
+                    std::vector<float> zero(2 * BLK, 0.0f);
+                    for (long q = 0; q < half; q++)
+                        A.writei(A.pcm, zero.data(), (unsigned long)BLK);
+                    A.writei(A.pcm, buf.data(), (unsigned long)BLK);
+                }
                 std::lock_guard<std::mutex> lk(pmu);
                 snap.underruns = underruns;
             }
