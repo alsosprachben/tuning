@@ -172,6 +172,29 @@ typedef struct {
     int n_pts, n_ptg, low_set, n_low, pts_n[8];
     double pts_hz[8], pts_g[8][64], low_g[64], low_hz[2], pipe_g[64];
     int n_pipe;
+    /* A FREE REED (FreeReedProperties' flow spectrum, on a kind 4 voice: the
+       accordions', the harmonica's): its geometry (gate, edge, spread over
+       reed_points gate positions, the leak), the gate's and spread's laws by
+       octave, the harmonics' scatter and its law (the harmonica's); the
+       note's series (reed_s, n_reed of them: native/reed.cpp's); the reed
+       banks (an accordion's unison: each's gain, cents and their law by
+       octave, its ratio) */
+    int reed, reed_points, n_reed, n_bank;
+    double reed_gate, reed_edge, reed_spread, reed_direct, reed_gate_oct, reed_spread_oct, reed_scatter,
+        reed_scatter_oct;
+    double reed_s[1025];                /* (a bandoneon's low key: 12 kHz of harmonics) */
+    double bank_g[4], bank_cents[4], bank_oct[4], bank_ratio[4];
+    /* ITS UPPER HARMONICS SPEAK LATE (speech_harmonic_exp: harmonic m's attack
+       m^-exp of the note's, the exponent's law by octave from 415 Hz, never
+       past 0, counted to sh_cap; 0 none) */
+    double sh_exp, sh_exp_oct;
+    int sh_cap;
+    /* A PLAYED REED'S WIND SKIRT (wind_skirt_always: the harmonica's): a noise
+       band on each of its first sk_max partials, sk_db under it rising
+       sk_hdb a harmonic octave, as wide as the wider of sk_hz and sk_rel of
+       its frequency; no images */
+    int skirt, sk_max;
+    double sk_db, sk_hdb, sk_hz, sk_rel;
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -479,6 +502,11 @@ typedef struct {
     // register, no octave law): its bands (Hz, dB), bn_rows noise rows a
     // band, held for the note and swelling in over bn_fade_s
     int n_bn, bn_rows;
+    // ...in the low register its own table, blended in by band under
+    // register_low_hz in dB (breath_noise_low_db: bn_low, NaN where it has
+    // none; bn_low_set none at all)
+    int bn_low_set;
+    double bn_low[64], bn_low_hz[2];
     double bn_fade_s;
     double bn_hz[64], bn_db[64];
     int bendable;                       // pitch_bendable: a wheel moves it (blockrender's bend row)
@@ -504,6 +532,23 @@ typedef struct {
     int leslie, scanner;
     double amp_drive;
     int wheel_swell;                    // the mod wheel its expression pedal (live's 'swell' role)
+    // A PLAYER'S BELLOWS (bellows_push_*, a standalone voice's: the
+    // accordions'): a note from silence pushes, a slur carries the push on
+    // (blockrender._push_finish) -- its gain, rise, fall, settle, tilt and
+    // its law by octave; 0 gain none
+    double push_gain, push_rise_s, push_dbs, push_settle_db, push_tilt, push_tilt_oct;
+    // THE PLAYER'S BREATH (breath_wobble_db...: a harmonica's): its notes on
+    // its channel's breath rows (breath: the tone's level or pitch wobbles;
+    // its breath noise its own row where that wobbles too), and the rows'
+    // laws -- wobble dB, Hz; the noise's dB, Hz, share; the pitch's cents,
+    // Hz, share (nv_breath_rows' p)
+    int breath;
+    double breath_p[8];
+    // ITS TREMOLO (tremolo_depth: a voice's, not an organ's): its rate and
+    // depth (the channel's first CC1 its share of it, or all of it where the
+    // stroke is the tone: trem_intrinsic), stereo, a section's scatter
+    double trem_hz, trem_depth, trem_scatter;
+    int trem_stereo, trem_intrinsic;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -549,6 +594,10 @@ typedef struct {
     // NaN: not drawn), and the Percussion stop drawn
     double organ_hx;
     int organ_perc;
+    // THE BREATH'S OWN ROW (bbr_set: the player's breath noise wobbling on
+    // its own, bbrow_of's second); else the note's
+    int bbr_set;
+    double bbr;
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -569,6 +618,7 @@ typedef struct {
     double tb[3], cbw[2];
     double radius;          /* the emitter's radius after the note (an organ's last pipe), NaN none */
     int n_push;             /* the tone's last rows that are its push (_PUSH_ROWS) */
+    double f0;              /* the note's pitch (a standalone push's, nv_play) */
 } NoteOut;
 
 int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
@@ -645,6 +695,8 @@ void nv_song_add_htrem_rows(void *s, long long a, long long b);
 int nv_song_n_htrem_rows(void *s, long long *ab, int cap);
 int nv_song_organ_tremolos(void *s, int which, int *ch, double *cfg, int cap);
 void nv_song_add_leslie(void *s, long long ch, int kind);
+void nv_song_add_trem(void *s, long long ch, const double *cfg);
+int nv_song_trems(void *s, long long *ch, double *cfg, int cap);
 void nv_song_add_amp(void *s, long long ch, double drive, int rotor);
 double nv_song_amp(void *s, int k, long long *ch, int *rotor);
 int nv_song_leslie(void *s, int k, long long *ch);

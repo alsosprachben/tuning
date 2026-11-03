@@ -2723,9 +2723,11 @@ def _prep_breath(ch_progs, crow_of, nblk):
         _ps = float(pc.breath_pitch_share)
         _pz = _ps * _tz + math.sqrt(max(0.0, 1.0 - _ps * _ps)) * _wander(pc.breath_pitch_hz)
         _pzb = 0.5 * (_pz[:-1] + _pz[1:])                 # a block's pitch: its edges' mean
-        _BREATH[ch] = (10.0 ** (pc.breath_wobble_db * _tz / 20.0),
-                       10.0 ** (pc.breath_noise_wobble_db * _nz / 20.0),
-                       2.0 ** (pc.breath_pitch_cents * _pzb / 1200.0))
+        # (libm's pow, native.xpow: numpy's is SVML, and the engine's rows are libm's)
+        import native as _NVB
+        _BREATH[ch] = (_NVB.xpow(10.0, pc.breath_wobble_db * _tz / 20.0),
+                       _NVB.xpow(10.0, pc.breath_noise_wobble_db * _nz / 20.0),
+                       _NVB.xpow(2.0, pc.breath_pitch_cents * _pzb / 1200.0))
     return _BREATH
 
 
@@ -6617,6 +6619,10 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.soft_pedal_down, n.fixed_touch = int(bool(T.soft_pedal_down)), int(bool(T.FIXED_TOUCH))
     n.sr, n.retrigger_fade, n.channel = SR, RETRIGGER_FADE, em.channel
     n.br = em.bend_row if (em.bend_row >= 0 or em.fader_row < 0) else em.fader_row
+    # ...and its breath noise's, wobbling on its own row (_note_breath_noise)
+    _bbo = getattr(em, 'bbrow_of', {})
+    if nt.ch in _bbo and getattr(P, 'breath_noise_wobble_db', 0.0) > 0.0:
+        n.bbr_set, n.bbr = 1, _bbo[nt.ch][1]
     n.nyq_om = em._NYQ_OM
     n.sv[:] = list(em._SV)
     n.sound_vib_depth_cents, n.vibrato_delay = T.SOUND_VIB_DEPTH_CENTS, em.vibrato_delay
@@ -7532,6 +7538,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     (BCrows, BRrows, _MEEND_AT, brow_of) = _prep_bend_rows(FREQ_E, _BGEST, _F, _MEEND_CH, _pwseq, nblk,
         notes, rpns)
     (_BLrows, bbrow_of) = _prep_breath_rows(BCrows, BRrows, _BREATH, brow_of, nblk)
+    em.bbrow_of = bbrow_of          # (the engine's note: its breath's own row, NoteIn.bbr)
     wrow_of = _prep_wind_rows(BCrows, BRrows, _BLrows, _WROWS, nblk, wrow_key)
     _MPE_AT = _prep_mpe_pitch(BCrows, BRrows, _mpe_member, _pitch_stream, nblk, notes)
     _PN_AT = _prep_per_note_pitch(BCrows, BRrows, _BGEST, _F, _OTUN, _sys, nblk, notes)

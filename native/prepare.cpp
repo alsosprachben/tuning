@@ -126,6 +126,15 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
             nv_song_add_amp(song, ch, k->amp_drive, k->leslie != 0);
         if (k && k->leslie)
             nv_song_add_leslie(song, ch, k->leslie);
+        if (k && !k->organ && k->trem_depth > 0.0) {    // (_note_tremolo: the channel's, set once)
+            int v;
+            double dep = k->trem_intrinsic ? k->trem_depth
+                                           : k->trem_depth * (nv_song_first_cc(song, ch, 1, &v) ? v / 127.0 : 0.0);
+            if (dep > 0.0) {
+                double cfg[4] = {k->trem_hz, dep, (double)k->trem_stereo, k->trem_scatter};
+                nv_song_add_trem(song, ch, cfg);
+            }
+        }
     }
     out[40] = 0.0;
     out[41] = 0.0;

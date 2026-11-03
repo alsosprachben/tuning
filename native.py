@@ -77,7 +77,13 @@ class VoiceSnap(ctypes.Structure):
                 ('sect_n', I), ('sect_vib', I), ('sect_seats', I), ('sect_spread_cents', C), ('sect_vib_cents', C),
                 ('sect_vib_hz', C * 2), ('sect_onset_ms', C), ('sect_ofm', C), ('sect_dx', C * 16),
                 ('n_pts', I), ('n_ptg', I), ('low_set', I), ('n_low', I), ('pts_n', I * 8), ('pts_hz', C * 8), ('pts_g', (C * 64) * 8),
-                ('low_g', C * 64), ('low_hz', C * 2), ('pipe_g', C * 64), ('n_pipe', I)]
+                ('low_g', C * 64), ('low_hz', C * 2), ('pipe_g', C * 64), ('n_pipe', I),
+                ('reed', I), ('reed_points', I), ('n_reed', I), ('n_bank', I),
+                ('reed_gate', C), ('reed_edge', C), ('reed_spread', C), ('reed_direct', C), ('reed_gate_oct', C),
+                ('reed_spread_oct', C), ('reed_scatter', C), ('reed_scatter_oct', C),
+                ('reed_s', C * 1025), ('bank_g', C * 4), ('bank_cents', C * 4), ('bank_oct', C * 4),
+                ('bank_ratio', C * 4), ('sh_exp', C), ('sh_exp_oct', C), ('sh_cap', I),
+                ('skirt', I), ('sk_max', I), ('sk_db', C), ('sk_hdb', C), ('sk_hz', C), ('sk_rel', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -166,12 +172,17 @@ class NoteClass(ctypes.Structure):
                 + [('n_ft', I), ('ft_bal', I), ('ft_t', C * 64), ('ft_db', C * 64), ('ft_c', C * 64)]
                 + [('n_layer', I), ('lay_n', I * 32), ('lay_hz', (C * 32) * 32), ('lay_db', (C * 32) * 32),
                    ('lay_rise', C * 32), ('lay_dbs', C * 32), ('lay_len', C * 32), ('played_backwards', I)]
-                + [('n_bn', I), ('bn_rows', I), ('bn_fade_s', C), ('bn_hz', C * 64), ('bn_db', C * 64)]
+                + [('n_bn', I), ('bn_rows', I), ('bn_low_set', I), ('bn_low', C * 64), ('bn_low_hz', C * 2),
+                   ('bn_fade_s', C), ('bn_hz', C * 64), ('bn_db', C * 64)]
                 + [('bendable', I), ('snd_mask', I), ('snd_bias', C * 8), ('snd_time_range', C),
                    ('snd_rate_range', C), ('snd_delay_s', C), ('glide_mech', I), ('glide_reach', C),
                    ('porta_fast', C), ('porta_slow', C), ('porta_d_semi', C), ('porta_settle', C),
                    ('organ', ctypes.c_void_p), ('leslie', I), ('scanner', I), ('amp_drive', C),
-                   ('wheel_swell', I)])
+                   ('wheel_swell', I)]
+                + [(f, C) for f in ('push_gain', 'push_rise_s', 'push_dbs', 'push_settle_db', 'push_tilt',
+                                    'push_tilt_oct')]
+                + [('breath', I), ('breath_p', C * 8), ('trem_hz', C), ('trem_depth', C), ('trem_scatter', C),
+                   ('trem_stereo', I), ('trem_intrinsic', I)])
 
 
 class NoteIn(ctypes.Structure):
@@ -187,7 +198,7 @@ class NoteIn(ctypes.Structure):
                    ('seat', C), ('held', C), ('rnd_draws', C * 4), ('stroke_tilt', C), ('stroke_mouth', C),
                    ('stroke_morph', C), ('snd_at', C), ('snd_rt', C), ('rank_gr', C * 32), ('rank_sp', C * 32),
                    ('rank_skip', I * 32), ('rank_rel1', I * 32), ('organ_cr', C), ('rank_br', C * 32),
-                   ('carry_radius', C), ('organ_hx', C), ('organ_perc', I)])
+                   ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('bbr_set', I), ('bbr', C)])
 
 
 class NoteOut(ctypes.Structure):
@@ -195,7 +206,7 @@ class NoteOut(ctypes.Structure):
     _fields_ = ([(f, I) for f in ('n_knock', 'n_tone', 'n_phantom')]
                 + [(f, C) for f in ('non', 'noff', 'fade', 'rel', 'chiff', 'jitter_scale', 'dl', 'dr', 'li',
                                     'ri', 'pos_x', 'pos_z', 'B', 'cv', 'cc', 'crl', 'sjit', 'csc')]
-                + [('tb', C * 3), ('cbw', C * 2), ('radius', C), ('n_push', I)])
+                + [('tb', C * 3), ('cbw', C * 2), ('radius', C), ('n_push', I), ('f0', C)])
 
 
 def lib():
@@ -216,7 +227,7 @@ def _load():
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
-                                                       'npyrandom.c', 'npyrandom.h', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp')]
+                                                       'npyrandom.c', 'npyrandom.h', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -230,7 +241,7 @@ def _load():
         objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
                 tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.slab.o',
                 tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o', tmp + '.tuner.o', tmp + '.bend.o',
-                tmp + '.leslie.o', tmp + '.tubeamp.o', tmp + '.scanner.o']
+                tmp + '.leslie.o', tmp + '.tubeamp.o', tmp + '.scanner.o', tmp + '.reed.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
             for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
@@ -256,6 +267,8 @@ def _load():
                                    '-o', objs[16]])
             subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'scanner.cpp'),
                                    '-o', objs[17]])
+            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'reed.cpp'),
+                                   '-o', objs[18]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl'])
         finally:
             for o in objs:
@@ -342,6 +355,8 @@ def _load():
             ('nv_amp_window', None, [ctypes.c_long, ctypes.c_void_p]),
             ('nv_rfft', I, [ctypes.c_void_p, ctypes.c_long, ctypes.c_void_p]),
             ('nv_cfft', I, [ctypes.c_void_p, ctypes.c_long, ctypes.c_void_p]),
+            ('nv_reed_series', I, [C, C, C, I, I, C, ctypes.c_void_p]),
+            ('nv_tgamma_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_amp_expand', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p,
                                    ctypes.c_void_p, C]),
             ('nv_scan_rows', None, [ctypes.c_void_p, ctypes.c_long, I, C, I, I, ctypes.c_void_p, ctypes.c_void_p]),
@@ -518,11 +533,19 @@ def breath_noise(cls):
     return (bool(getattr(cls, 'breath_noise_db', ())) and len(cls.breath_noise_db) <= 64
             and 1 <= int(getattr(cls, 'breath_noise_rows', 1)) <= 8
             # (its tone silent -- or an organ's, whose ranks follow the breath as Python's do)
-            and (all(g == 0.0 for g in (cls.mode_gains or (1.0,))) or getattr(cls, 'registerable', False))
+            # (...or a free reed's, its tone after its breath as Python's is)
+            and (all(g == 0.0 for g in (cls.mode_gains or (1.0,))) or getattr(cls, 'registerable', False)
+                 or reed_voice(cls))
             and _owner(cls, 'breath_noise_at') == 'SynthProperties'
             and _owner(cls, '_breath_noise_rows') == 'SynthProperties'
-            and not getattr(cls, 'breath_noise_low_db', None) and not getattr(cls, 'breath_noise_octave_db', 0.0)
-            and not getattr(cls, 'breath_noise_wobble_db', 0.0) and not getattr(cls, 'breath_noise_slur', False)
+            # (a low register's table only on the same bands: a free reed's)
+            and (not getattr(cls, 'breath_noise_low_db', None)
+                 or (reed_voice(cls) and len(cls.breath_noise_low_db) == len(cls.breath_noise_db)
+                     and all(a[0] == b[0] for a, b in zip(cls.breath_noise_low_db, cls.breath_noise_db))))
+            and not getattr(cls, 'breath_noise_octave_db', 0.0)
+            # (a wobble on its own row only for a free reed: NoteIn.bbr)
+            and (not getattr(cls, 'breath_noise_wobble_db', 0.0) or reed_voice(cls))
+            and not getattr(cls, 'breath_noise_slur', False)
             and not any(getattr(cls, a, None) for a in ('grains', 'noise_events', 'pulse', 'ring_db',
                                                          'struck_layer', 'touch_leak_db')))
 
@@ -638,6 +661,31 @@ _SECTION_OWN = {'section_onsets_at': 'SynthProperties', 'section_seats': 'SynthP
                 '_section_salt': 'SynthProperties'}
 
 
+def reed_voice(cls):
+    """Whether native/voice.c plays cls as a free reed (kind 4 with the flow
+    spectrum: native/reed.cpp): the accordions and the harmonica -- a
+    FormantBody's body, its reed banks (AccordionProperties.unison_voices)
+    or none, and none of the extras a harmonic voice refuses."""
+    import tonelib as T
+    if not (issubclass(cls, T.FreeReedProperties) and issubclass(cls, T.FormantBody)):
+        return False
+    own = dict(_HARMONIC_OWN, series_volume='FreeReedProperties')
+    if _owner(cls, 'unison_voices') == 'AccordionProperties':
+        own['unison_voices'] = 'AccordionProperties'
+        if len(cls.reed_bank_gain) > 4:
+            return False
+    if any(_owner(cls, n) != o for n, o in own.items()):
+        return False
+    return (cls.mode_gains is None and cls.mode_ratios is None and not cls.strike_point
+            and not cls.harmonic_touch and not cls.pickup_points and not (cls.unison_detune or ())
+            and not cls.blare_db_per_khz and bool(cls.bore_corner_hz) and 1 <= (cls.max_harmonic or 0) <= 128
+            and len(cls.formants) <= 16 and len(cls.antiformants) <= 8 and len(cls.body_trim_db or ()) <= 32
+            and not cls.inharmonicity_dynamic
+            and not any(getattr(cls, a, None) for a in ('grains', 'noise_events', 'pulse', 'ring_db', 'struck_layer',
+                                                         'touch_leak_db', 'strike_noise_db', 'release_click_db',
+                                                         'hammer_legato', 'bend_detents', 'amp_drive')))
+
+
 def harmonic_voice(cls):
     """Whether native/voice.c plays cls as a harmonic voice (kind 4): a
     plucked string's series through its pluck's comb, on a FormantBody (the
@@ -738,7 +786,7 @@ def kit_drum(cls):
     piano's: 1 a kit drum, 2 a measured mode set's (the clap, the cymbals,
     the woods...), 3 a shaker, 4 a harmonic voice (a guitar); else 0."""
     import tonelib as T
-    if harmonic_voice(cls) or tonewheel_voice(cls):
+    if harmonic_voice(cls) or tonewheel_voice(cls) or reed_voice(cls):
         return 4
     if pipe_voice(cls):
         return 2
@@ -1064,7 +1112,7 @@ def snapshot(props):
     elif s.kind == 4:
         # a harmonic voice: the pluck's comb, the body
         s.comb[0] = 0.0
-        for h in range(1, min(128, int(p.max_harmonic)) + 1):
+        for h in range(1, min(128, int(p.max_harmonic)) + 1 if not reed_voice(type(p)) else 0):   # (a reed's has none)
             s.comb[h] = T._pluck_comb(p.plucked_harmonic, p.pluck_dampening, h)
         s.bore_corner_hz, s.bore_order = p.bore_corner_hz, p.bore_order
         s.bell_cutoff_hz, s.bell_order = p.bell_cutoff_hz or 0.0, p.bell_order
@@ -1078,6 +1126,31 @@ def snapshot(props):
                 s.afm[i][:] = [float(x) for x in row]
             for i, row in enumerate(p.body_trim_db or ()):
                 s.bt[i][:] = [float(x) for x in row]
+        if reed_voice(type(p)):
+            # a free reed: its geometry and laws (the note's series, its init's), its banks
+            s.reed, s.reed_points = 1, int(p.reed_points)
+            for f in ('reed_gate', 'reed_edge', 'reed_spread', 'reed_direct', 'reed_scatter'):
+                setattr(s, f, float(getattr(p, f)))
+            s.reed_gate_oct, s.reed_spread_oct = float(p.reed_gate_per_octave), float(p.reed_spread_per_octave)
+            s.reed_scatter_oct = float(p.reed_scatter_per_octave)
+            # its upper harmonics late (speech_harmonic_exp: the bandoneon's bloom)
+            s.sh_exp = float(getattr(p, 'speech_harmonic_exp', 0.0) or 0.0)
+            s.sh_exp_oct = float(getattr(p, 'speech_harmonic_exp_per_octave', 0.0) or 0.0)
+            s.sh_cap = int(getattr(p, 'speech_harmonic_cap', None) or 0)
+            # a played reed's wind (wind_skirt_always: the harmonica's), on its first WIND_PARTIALS
+            if getattr(p, 'wind_skirt_always', False) and getattr(p, 'wind_skirt_db', None) is not None:
+                import blockrender as _BR
+                s.skirt, s.sk_max = 1, int(_BR.WIND_PARTIALS)
+                s.sk_db, s.sk_hdb = float(p.wind_skirt_db), float(p.wind_skirt_harmonic_db)
+                s.sk_hz, s.sk_rel = float(p.wind_skirt_hz), float(getattr(p, 'wind_skirt_rel', None) or 0.0)
+            ser = p._reed_series()              # (this voice's: its key's geometry)
+            s.n_reed = len(ser)
+            s.reed_s[:len(ser)] = [float(x) for x in ser]
+            if _owner(type(p), 'unison_voices') == 'AccordionProperties':
+                slope = getattr(p, 'reed_detune_per_octave', None) or (0.0,) * len(p.reed_bank_gain)
+                s.n_bank = len(p.reed_bank_gain)
+                for i, (g, c, r, o) in enumerate(zip(p.reed_bank_gain, p.reed_detune_cents, p.reed_bank_ratio, slope)):
+                    s.bank_g[i], s.bank_cents[i], s.bank_ratio[i], s.bank_oct[i] = float(g), float(c), float(r), float(o)
         if isinstance(p, T.SectionMixin):
             # a section: its players, their vibratos and entries, their desks
             # (section_position_x, less the voice's place: the note's is added)
@@ -1659,7 +1732,9 @@ def note_class(cls):
             return False
         # (an organ's speech and mode lock are its ranks', organ.c's)
         org_has = (lambda a: a in ('speech_harmonic_exp', 'mode_lock_spread', 'partial_phase_spread')) \
-            if getattr(cls, 'registerable', False) \
+            if getattr(cls, 'registerable', False) else \
+            (lambda a: a in ('speech_harmonic_exp', 'speech_harmonic_exp_per_octave', 'wind_skirt_always')) \
+            if reed_voice(cls) and getattr(cls, 'wind_attack_db', None) is None \
             else (lambda a: False)
         ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF
                                         if not (drum and drum_has(a)) and not org_has(a))
@@ -1753,6 +1828,30 @@ def note_class(cls):
                      + (4 * _own[0] + 16 * int(_own[1]) if _own else 0))
         k.amp_drive = float(getattr(cls, 'amp_drive', 0.0) or 0.0)
         k.wheel_swell = int(bool(getattr(cls, 'wheel_swell', False)))
+        # its tremolo (an ordinary voice's: _note_tremolo)
+        k.trem_depth = float(getattr(cls, 'tremolo_depth', 0.0) or 0.0)
+        k.trem_hz = float(getattr(cls, 'tremolo_hz', 0.0) or 0.0)
+        k.trem_stereo = int(bool(getattr(cls, 'tremolo_stereo', False)))
+        k.trem_scatter = float(getattr(cls, 'tremolo_scatter', 0.0) or 0.0)
+        k.trem_intrinsic = int(bool(getattr(cls, 'tremolo_intrinsic', False)))
+        # the player's breath (its rows: nv_breath_rows)
+        if (getattr(cls, 'breath_wobble_db', 0.0) > 0.0 or getattr(cls, 'breath_noise_wobble_db', 0.0) > 0.0
+                or getattr(cls, 'breath_pitch_cents', 0.0) > 0.0):
+            k.breath = 1
+            k.breath_p[:] = [float(getattr(cls, a, 0.0) or 0.0) for a in (
+                'breath_wobble_db', 'breath_wobble_hz', 'breath_noise_wobble_db', 'breath_noise_wobble_hz',
+                'breath_noise_wobble_share', 'breath_pitch_cents', 'breath_pitch_hz', 'breath_pitch_share')]
+        # a player's bellows (a standalone voice's push): its laws, the plain one's (no band, no register)
+        if getattr(cls, 'bellows_push_gain', 0.0) and not getattr(cls, 'registerable', False):
+            if (getattr(cls, 'bellows_push_every_note', False) or getattr(cls, 'bellows_push_band', None)
+                    or getattr(cls, 'bellows_push_register', None)):
+                _NOTE[cls] = False
+                return None
+            k.push_gain, k.push_rise_s, k.push_dbs = (float(cls.bellows_push_gain), float(cls.bellows_push_rise_s),
+                                                      float(cls.bellows_push_dbs))
+            k.push_settle_db = float(getattr(cls, 'bellows_push_settle_db', -20.0))
+            k.push_tilt = float(getattr(cls, 'bellows_push_tilt', 0.0))
+            k.push_tilt_oct = float(getattr(cls, 'bellows_push_tilt_per_octave', 0.0))
         if k.amp_drive and (getattr(cls, 'amp_reference', None) or getattr(cls, 'amp_imbalance', None) is not None):
             _NOTE[cls] = False              # (a valve against a fixed reference, or unbalanced: Python's)
             return None
@@ -1783,6 +1882,10 @@ def note_class(cls):
                                                float(cls.breath_noise_fade_s))
             for i, (hz, db) in enumerate(cls.breath_noise_db):
                 k.bn_hz[i], k.bn_db[i] = float(hz), float(db)
+            if getattr(cls, 'breath_noise_low_db', None):
+                k.bn_low_set = 1
+                k.bn_low[:len(cls.breath_noise_low_db)] = [float(db) for _, db in cls.breath_noise_low_db]
+                k.bn_low_hz[:] = [float(x) for x in cls.register_low_hz]
         if kit_drum(cls) == 3:
             k.shake, k.n_nb, k.noise_rows = 1, len(cls.noise_bands), int(cls.noise_rows)
             for i, (f, db) in enumerate(cls.noise_bands):
@@ -2258,6 +2361,29 @@ def scan_constants():
         scn += [float(len(fg))] + [float(x) for a in (fg, lg, rm, rp) for x in a]
         scn += [float(x) for x in np.ascontiguousarray(mag).ravel()] + [float(x) for x in np.ascontiguousarray(ph).ravel()]
     return [float(x) for x in scn]
+
+
+def xgamma(x):
+    """gamma(x) of a float, libm's tgamma (math.gamma is CPython's own)."""
+    d = lib()
+    if d is None:
+        import math
+        return math.gamma(x)
+    a, o = (C * 1)(float(x)), (C * 1)()
+    d.nv_tgamma_n(1, a, o)
+    return o[0]
+
+
+def reed_series(gate, edge, spread, points, max_harmonic, direct):
+    """FreeReedProperties._reed_series' flow spectrum from native/reed.cpp (the
+    same on every machine, and the engine's); None where there is no library."""
+    d = lib()
+    if d is None:
+        return None
+    top = min(int(max_harmonic), 4096)
+    out = (C * (top + 1))()
+    n = d.nv_reed_series(float(gate), float(edge), float(spread), int(points), int(max_harmonic), float(direct), out)
+    return tuple(out[:n])
 
 
 def xcos(x):

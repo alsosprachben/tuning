@@ -455,10 +455,30 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
             if (nt_ < 0)
                 return -1;
         }
+        /* ...its upper harmonics late (speech_harmonic_exp), counted to sh_cap */
+        double pfade = t->fade;
+        double she = v->sh_exp;
+        if (v->sh_exp_oct != 0.0)
+            she = pymin(0.0, she + v->sh_exp_oct * log2(pymax(t->f0, 1.0) / 415.0));
+        if (she != 0.0 && m > 1)
+            pfade = pymax(1.0, t->fade * pow((double)(v->sh_cap ? (m < v->sh_cap ? m : v->sh_cap) : m), -she));
         if (!emit(v, t, &R, qacc, azimuth, terms_main, nt_, 2 * PI * hf / sr, gL, gR, gM, hf, non_m, t->noff,
-                  t->fade, t->rel, t->chiff, pd[1], pd[3], pd[2], t->sustain_level, cvp, t->cc, t->crl, sj,
+                  pfade, t->rel, t->chiff, pd[1], pd[3], pd[2], t->sustain_level, cvp, t->cc, t->crl, sj,
                   t->csc, t->gr, t->cr, mph, 0.0, VB, pos_x, 0))
             return -1;
+        /* A PLAYED REED'S WIND (wind_skirt_always): a noise band on the
+           partial, as it is, no images */
+        if (v->skirt && m <= v->sk_max) {
+            double wg = pow(10.0, (v->sk_db + v->sk_hdb * log2((double)m)) / 20.0) * 1.0;
+            ToneIn ts = *t;
+            ts.cbw0 = -pymax(v->sk_hz / hf, v->sk_rel);
+            ts.cbw1 = 0.0;
+            ts.reflect = 0;
+            if (!emit(v, &ts, &R, qacc, azimuth, NULL, 0, 2 * PI * hf / sr, gL * wg, gR * wg, gM * wg, hf, non_m,
+                      t->noff, pfade, t->rel, t->chiff, pd[1], pd[3], pd[2], t->sustain_level, 0.0, t->cc, t->crl,
+                      0.0, t->csc, t->gr, t->cr, 0.0, 0.0, VB, pos_x, 0))
+                return -1;
+        }
         /* THE LATE ARRIVAL (bloom_gain): a quieter copy of the partial, its
            arrival bloom_delay_for later (scattered from the global stream:
            bloom_scatter), swelling in over bloom_swell of it, held within the
@@ -527,7 +547,7 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
                     return -1;
             }
             if (!emit(v, tp, &R, qacc, azimuth, terms_u, ntu, 2 * PI * uf / sr, ugL, ugR, gM * gm, uf, non_u,
-                      t->noff, t->fade, t->rel, t->chiff, ulr, pd[3], pd[2], t->sustain_level, cvp, t->cc,
+                      t->noff, pfade, t->rel, t->chiff, ulr, pd[3], pd[2], t->sustain_level, cvp, t->cc,
                       t->crl, sj, t->csc, t->gr, t->cr, 2 * PI * uph + 0.0, (double)(ui + 1), VB, upos, 0))
                 return -1;
         }

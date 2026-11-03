@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <map>
 #include <vector>
 
 #include "nv.h"
@@ -249,7 +250,29 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         ToneIn tb_ = t;
         tb_.gain = s.gain; tb_.B = 0.0; tb_.sjit = 0.0; tb_.reflect = 0;
         tb_.cbw0 = -0.25; tb_.cbw1 = 0.0;
-        int k = nv_breath(&s, &tb_, K->n_bn, K->bn_hz, K->bn_db, K->bn_rows, pymax(1.0, K->bn_fade_s * SR),
+        if (n->bbr_set)
+            tb_.br = n->bbr;                    // (the breath's own row, wobbling)
+        // (its table at this pitch: the low register's blended in by band, _breath_noise_rows)
+        double bdb[64];
+        for (int q = 0; q < K->n_bn; q++)
+            bdb[q] = K->bn_db[q];
+        if (K->bn_low_set) {
+            double lo = K->bn_low_hz[0], hi = K->bn_low_hz[1], w;
+            if (f0 <= lo)
+                w = 1.0;
+            else if (f0 >= hi)
+                w = 0.0;
+            else
+                w = log(hi / f0) / log(hi / lo);
+            if (w >= 1.0) {
+                for (int q = 0; q < K->n_bn; q++)
+                    bdb[q] = K->bn_low[q];      /* (the low table itself: its bands are the table's) */
+            } else if (w > 0.0) {
+                for (int q = 0; q < K->n_bn; q++)
+                    bdb[q] = w * (std::isnan(K->bn_low[q]) ? K->bn_db[q] : K->bn_low[q]) + (1.0 - w) * K->bn_db[q];
+            }
+        }
+        int k = nv_breath(&s, &tb_, K->n_bn, K->bn_hz, bdb, K->bn_rows, pymax(1.0, K->bn_fade_s * SR),
                           s.position_x, rows + NCOLS * total, cap - total, qacc, azimuth);
         if (k < 0)
             return -1;
@@ -274,6 +297,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         out->jitter_scale = t.jitter_scale;
         out->dl = t.dl; out->dr = t.dr; out->li = t.li; out->ri = t.ri; out->radius = n->carry_radius;
         out->n_push = 0;
+        out->f0 = f0;
         out->pos_x = s.position_x; out->pos_z = s.position_z; out->B = B;
         out->cv = t.cv; out->cc = t.cc; out->crl = t.crl; out->sjit = o.sustain_jitter; out->csc = t.csc;
         memcpy(out->tb, tb, sizeof tb);
@@ -335,6 +359,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     out->dl = fin[2]; out->dr = fin[3]; out->li = fin[0]; out->ri = fin[1];
     out->radius = K->organ ? fin[4] : (out->n_tone > 0 ? NAN : n->carry_radius);  // (an organ's last pipe; none past a tone)
     out->n_push = (int)fin[5];          // ...and its push's rows, the tone's last
+    out->f0 = f0;
     out->pos_x = s.position_x; out->pos_z = s.position_z; out->B = B;
     out->cv = t.cv; out->cc = t.cc; out->crl = t.crl; out->sjit = sjit_last; out->csc = t.csc;
     memcpy(out->tb, tb, sizeof tb);
@@ -378,6 +403,47 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
     return nv_note(K, n, rs, nimg, nsurf, surf, img, mir, rows, cap, qacc, azimuth, out);
 }
 
+// THE BELLOWS' PUSH of a standalone voice (blockrender._push_finish with
+// tonelib.bellows_push_weight, _rate, _env): each of the note's n rows
+// again, at its partial's weight (by its harmonic number over f0, the tilt's
+// law by octave) and the push's envelope dt seconds in (dt 0: a fresh push,
+// rising over rise_s; past it, taken over at the slur's attack, sfa
+// samples), falling at its own rate; into out (cap rows). The rows written,
+// -1 if out was too small.
+static long long push_rows(const NoteClass *k, double f0, double dt, double sfa, double sr, const double *src, long n,
+                           double *out, long long cap)
+{
+    double eps = pow(10.0, k->push_settle_db / 20.0);
+    double tilt = k->push_tilt + k->push_tilt_oct * log(nv::pymax(f0, 1e-9) / 440.0) / log(2.0);
+    double fa = k->push_rise_s * sr;
+    long long m = 0;
+    for (long j = 0; j < n; j++) {
+        const double *r = src + NCOLS * j;
+        double h = r[11] / nv::pymax(f0, 1e-9);
+        double g = k->push_gain * pow(10.0, 0.0 / 20.0);
+        double w = g * pow(nv::pymax(h, 1.0), nv::pymax(tilt, 0.0));
+        double rate = (k->push_gain <= eps || w <= eps) ? k->push_dbs
+                                                        : k->push_dbs * log(w / eps) / log(k->push_gain / eps);
+        double env = 1.0;
+        if (dt > 0.0) {
+            double rr = nv::pymax(k->push_rise_s, 1e-4);
+            env = nv::pymin(1.0, dt / rr) * pow(10.0, -rate * dt / 20.0);
+        }
+        if (w * env <= 1e-4)
+            continue;
+        if (m >= cap)
+            return -1;
+        double *o = out + NCOLS * m;
+        memcpy(o, r, sizeof(double) * NCOLS);
+        o[3] *= w * env; o[4] *= w * env; o[5] *= w * env;
+        o[14] = dt <= 0.0 ? fa : sfa;
+        o[17] = rate * log(10.0) / 20.0;
+        o[18] = 0.0; o[19] = 0.0; o[20] = 0.0;
+        m++;
+    }
+    return m;
+}
+
 // A SONG PLAYED: every note, in the note loop's order (by onset, channel and
 // key, stably), each through nv_song_play with its class (K[128 * program +
 // key], a drum set's from K[NV_K_DRUMS + ...]; every note must have one) -- the rows of the whole song's notes.
@@ -413,6 +479,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         return keys[a] < keys[b];
     });
     long long total = 0;
+    std::map<long long, double> push_t0;    // each channel's bellows' push, when it began (_PUSH_T0)
     PyRandom rnd;                           // tonelib.RND_STREAM, as prepare reseeds it
     pyr_seed(&rnd, 0);
     double carry_radius = NAN;              // the emitter's radius note to note (an organ's last pipe)
@@ -440,6 +507,15 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         n.br = (ch >= 0 && ch < nbr) ? br[ch] : -1.0;
         if (nbr > 256 && k->bendable && ch >= 0 && ch < 256 && br[256 + ch] >= 0.0)
             n.br = br[256 + ch];            // a voice that bends: its channel's bend row
+        n.bbr_set = 0;
+        if (nbr > 768 && ch >= 0 && ch < 256 && br[512 + ch] >= 0.0) {
+            if (k->breath_p[5] > 0.0 || k->breath_p[0] > 0.0)
+                n.br = br[512 + ch];        // the player's breath: the tone's level and pitch
+            if (k->breath_p[2] > 0.0) {
+                n.bbr_set = 1;              // ...and the breath noise's level, its own
+                n.bbr = br[768 + ch];
+            }
+        }
         if (k->organ) {                     // A REGISTERED ORGAN: its ranks as its registration leaves them
             if (k->bendable || !nv_song_organ_note(song, i, k->organ->family, &n))
                 return -(1 + i);
@@ -510,6 +586,30 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (r < 0)
             return -(1 + i);
         carry_radius = out.radius;
+        // A PLAYER'S BELLOWS (a standalone voice's push: _push_finish): a note
+        // from silence pushes; a slur takes the push over where it stands
+        if (k->push_gain > 0.0 && !k->organ) {
+            double dt = -1.0, sfa = 0.0;
+            if (!n.slurred) {
+                push_t0[ch] = dv[0];
+                dt = 0.0;
+            } else if (push_t0.count(ch)) {
+                dt = dv[0] - push_t0[ch];
+                double at = k->init.attack_time;
+                if (k->legato_set)
+                    at = nv::pymin(at, k->legato_attack_s);     // (slur_attack)
+                sfa = at * n.sr;
+            }
+            if (dt >= 0.0) {
+                long long m = push_rows(k, out.f0, dt, sfa, n.sr, rows + NCOLS * total, r,
+                                        rows + NCOLS * (total + r), left - r);
+                if (m < 0)
+                    return NV_TOO_SMALL;
+                if (m)
+                    nv_song_add_push_rows(song, total + r, total + r + m);
+                r += (int)m;
+            }
+        }
         if (out.n_push)                     // (an organ's push: the tone's last rows)
             nv_song_add_push_rows(song, total + out.n_knock + out.n_tone - out.n_push,
                                   total + out.n_knock + out.n_tone);

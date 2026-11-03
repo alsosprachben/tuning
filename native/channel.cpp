@@ -213,6 +213,9 @@ struct Song {
     // the rotating speakers (_LESLIE_CH): each channel as its first Leslie
     // note came, and how it starts (1 chorale, 2 tremolo)
     std::vector<std::pair<long long, int>> leslie;
+    // a voice's tremolos (_TREM_CH, an ordinary voice's): each channel's
+    // (rate, depth, stereo, scatter), the first note's to set one
+    std::vector<std::pair<long long, std::vector<double>>> trems;
     // the valve amplifiers (_AMP_CH): each channel as its first amplified
     // note came, its voice's drive, and whether it is on a rotor
     std::vector<std::pair<long long, std::pair<double, int>>> amp;
@@ -1391,6 +1394,29 @@ double nv_song_amp(void *s, int k, long long *ch, int *rotor)
     *ch = S->amp[k].first;
     *rotor = S->amp[k].second.second;
     return S->amp[k].second.first;
+}
+
+// A VOICE'S TREMOLO on a channel (rate, depth, stereo, scatter), the first
+// to arrive; a channel already set is left
+void nv_song_add_trem(void *s, long long ch, const double *cfg)
+{
+    nv::Song *S = (nv::Song *)s;
+    for (const auto &x : S->trems)
+        if (x.first == ch)
+            return;
+    S->trems.push_back(std::make_pair(ch, std::vector<double>(cfg, cfg + 4)));
+}
+
+// the voices' tremolos: channels and (rate, depth, stereo, scatter) each; how many
+int nv_song_trems(void *s, long long *ch, double *cfg, int cap)
+{
+    const nv::Song *S = (nv::Song *)s;
+    int n = (int)S->trems.size();
+    for (int q = 0; q < n && q < cap; q++) {
+        ch[q] = S->trems[q].first;
+        std::copy(S->trems[q].second.begin(), S->trems[q].second.end(), cfg + 4 * q);
+    }
+    return n;
 }
 
 // the Leslie channel k's (its kind; *ch), or how many with k < 0

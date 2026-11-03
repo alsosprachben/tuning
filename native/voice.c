@@ -216,6 +216,23 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
         return 0.0;
     if (harmonic % 2 == 0 && !v->even_db_set && v->odd_only)
         return 0.0;
+    if (v->kind == 4 && v->reed) {              /* FreeReedProperties: the flow spectrum */
+        if (harmonic >= v->n_reed)
+            return 0.0;
+        double r = v->gain * v->reed_s[harmonic];
+        if (harmonic % 2 == 0 && v->even_db_set)
+            r *= pow(10.0, v->even_harmonic_db / 20.0);
+        double q = v->reed_scatter + v->reed_scatter_oct * v->octave_position;
+        if (v->reed_scatter != 0.0 && q > 0.0 && harmonic > 1) {
+            /* each key's harmonics scattered, Random(k 7919 + h 104729 + 17).expovariate(1) */
+            long long k = (long long)nearbyint(12.0 * v->octave_position);
+            PyRandom R;
+            pyr_seed(&R, k * 7919 + (long long)harmonic * 104729 + 17);
+            double e = -log(1.0 - pyr_random(&R)) / 1.0;
+            r *= sqrt(pow(e, q) / tgamma(1.0 + q));
+        }
+        return r;
+    }
     if (v->kind == 4) {                         /* SynthProperties': the pluck's comb */
         double r = v->gain / pow((double)harmonic, v->attack_dampening) * (harmonic <= 128 ? v->comb[harmonic] : 0.0);
         if (harmonic % 2 == 0 && v->even_db_set)
@@ -537,6 +554,21 @@ int nv_unison_voices(const VoiceSnap *v, double frequency, int harmonic, double 
         }
         return n;
     }
+    if (v->n_bank) {                            /* AccordionProperties: its reed banks */
+        double octv = log((frequency > 1e-9 ? frequency : 1e-9) / 440.0) / log(2.0);
+        int n = 0;
+        for (int i = 0; i < v->n_bank; i++) {
+            if (v->bank_g[i] <= 0.0)
+                continue;
+            double cents = v->bank_cents[i] + v->bank_oct[i] * octv;
+            double det = pow(2.0, cents / 1200.0) - 1.0;
+            out[5 * n + 0] = v->bank_g[i]; out[5 * n + 1] = 0.0;
+            out[5 * n + 2] = v->bank_ratio[i] * (1.0 + det) - 1.0;
+            out[5 * n + 3] = harmonic_decay; out[5 * n + 4] = 0.0;
+            n++;
+        }
+        return n;
+    }
     if (v->kind != 0) {                         /* SynthProperties': a voice per detune */
         for (int i = 0; i < v->n_unison; i++) {
             out[5 * i + 0] = v->unison_gain; out[5 * i + 1] = v->unison_detune[i]; out[5 * i + 2] = 0.0;
@@ -750,6 +782,9 @@ void nv_random_check(long long seed, int n, double *out)
 static double pymin(double a, double b) { return b < a ? b : a; }
 static double pymax(double a, double b) { return b > a ? b : a; }
 
+int nv_reed_series_cached(double gate, double edge, double spread, int points, int max_harmonic, double direct,
+                          double *out);
+
 /* tonelib.stage_angle */
 static double stage_angle(double p)
 {
@@ -833,6 +868,20 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
         s->max_harmonic = mh > 1 ? mh : 1;
     }
     s->decay_register_factor = pow(2.0, c->decay_register_slope * op);
+    if (s->kind == 4 && s->reed) {              /* a free reed: this key's flow spectrum (_reed_series) */
+        double gate = s->reed_gate + s->reed_gate_oct * op;
+        if (s->reed_gate_oct != 0.0)
+            gate = pymin(gate, 1.08);
+        double spread = s->reed_spread;
+        if (s->reed_spread_oct != 0.0)
+            spread = pymax(0.01, spread + s->reed_spread_oct * op);
+        if (s->max_harmonic > 1024)
+            s->max_harmonic = 1024;             /* (never, at 12 kHz over A0) */
+        s->n_reed = nv_reed_series_cached(gate, s->reed_edge, spread, s->reed_points, s->max_harmonic, s->reed_direct,
+                                          s->reed_s);
+        for (int q = s->n_reed; q < 1025; q++)
+            s->reed_s[q] = 0.0;                 /* (none past this key's) */
+    }
     if (s->kind == 2 && (s->n_pts || s->low_set))  /* an organ pipe: its register's table (mode_gains_here) */
         s->n_mm = nv_mode_gains_at(s, s->frequency_x * pow(2.0, s->octave_position), s->mm_gain);
     o->pitch_jitter = c->pitch_jitter_cents != 0.0

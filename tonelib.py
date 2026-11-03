@@ -7000,6 +7000,14 @@ class FreeReedProperties(SynthProperties):
         got = _FREE_REED_CACHE.get(key)
         if got is not None:
             return got
+        # native/reed.cpp's, where the library is: the shared FFT, libm's
+        # sin and abs (numpy's FFT is not the same across its versions, its
+        # complex abs SVML here) -- the engine's own reeds
+        import native as _NV
+        got = _NV.reed_series(gate, self.reed_edge, spread, self.reed_points, self.max_harmonic, self.reed_direct)
+        if got is not None:
+            _FREE_REED_CACHE[key] = got
+            return got
         import numpy as _np
         n = 1 << 13
         t = _np.arange(n) / float(n)
@@ -7048,7 +7056,8 @@ class FreeReedProperties(SynthProperties):
             import random as _random
             k = int(round(12.0 * getattr(self, 'octave_position', 0.0)))
             e = _random.Random(k * 7919 + harmonic * 104729 + 17).expovariate(1.0)
-            v *= _m.sqrt(e ** q / _m.gamma(1.0 + q))
+            import native as _NV        # (libm's tgamma: math.gamma is CPython's own, not the engine's)
+            v *= _m.sqrt(e ** q / _NV.xgamma(1.0 + q))
         return v
 
 

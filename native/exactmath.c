@@ -57,3 +57,11 @@ void nv_cangle_n(long n, const double *z, double *out)
     for (long i = 0; i < n; i++)
         out[i] = atan2(z[2 * i + 1], z[2 * i]);
 }
+
+/* gamma of n values, libm's tgamma (tonelib's free reed scatter: CPython's
+   math.gamma is its own Lanczos sum, not libm's) */
+void nv_tgamma_n(long n, const double *x, double *out)
+{
+    for (long i = 0; i < n; i++)
+        out[i] = tgamma(x[i]);
+}
