@@ -118,6 +118,8 @@ def main(argv):
     pt = part.patch
     pt.warm()           # live warms off the audio thread; here, before the first press
     instant_scan(lv, pt)
+    import ampsync
+    ampsync.sync(lv)                # the valve in step (the native part's, its worker off)
     lv.slab.shed = lambda n, frac: 0    # the governor sheds by wall-clock render time: not a reference
     lo, hi = pt.range
     cache = N.TemplateCache(prog, pt.tuner)

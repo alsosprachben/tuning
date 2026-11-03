@@ -42,6 +42,8 @@ extern "C" int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, 
 extern "C" const OrganSpec *nv_tcache_organ(void *h, int program);
 extern "C" const NoteClass *nv_tcache_class(void *h, int program);
 extern "C" const nv::live::Template *nv_tcache_at(void *h, long i, long *n);
+extern "C" long nv_amp_live(const double *f, const double *a, const double *p, long n, double sr, double drive,
+                            double window_s, int oversample, int keep, double **out);
 extern "C" void nv_leslie_lobe_of(double f, int horn, const double *L, double *fl, double *sh);
 extern "C" void nv_scan_prep(const double *X, long n, const float *nf, const float *aL, const float *aR,
                              const long long *non, const float *rdl, int depth, int chorus, double sr, int *band,
@@ -640,6 +642,65 @@ struct Slab {
                 idx.push_back(s);
         if (!idx.empty())
             doppler_to(idx, n, horn_rate, drum_rate);
+    }
+
+    // live.Slab.stamp_amp: the valve's products (Hz, amplitude, phase at
+    // `at`) placed from n0, each a copy of the sounding slot src but its
+    // pitch, level (on src's own panning, from its baseline) and phase -- its
+    // fader, room send and channel left as the slot had them. Empty if the
+    // slab is full.
+    std::vector<long> stamp_amp(const Key &key, long src, const double *f, const double *a, const double *p, long n,
+                                long long n0, double rt, long long at)
+    {
+        std::vector<long> idx;
+        if (n == 0 || (long)free.size() < n)
+            return idx;
+        for (long q = 0; q < n; q++) {
+            idx.push_back(free.front());
+            free.pop_front();
+        }
+        double ref = 0.5 * ((double)aL0[src] + (double)aR0[src]);
+        for (long q = 0; q < n; q++) {
+            long s = idx[q];
+            busy[s] = 1;
+            dk[s] = -1;
+            ls_on[s] = 0;
+            tr_on[s] = 0;
+            hs_dep[s] = 0.0f;
+            for (int c = 0; c < NF4; c++)
+                f4[c][s] = f4[c][src];
+            for (int c = 0; c < NF4N; c++)
+                f4n[c][s] = f4n[c][src];
+            for (int c = 0; c < NI4; c++)
+                i4[c][s] = i4[c][src];
+            i4[I4_fx][s] = -1;
+            i4[5][s] = 0;                           // mk
+            i4[I4_gr][s] = -1;
+            i4[I4_br][s] = -1;
+            i4[I4_cr][s] = 0;
+            double om = 2.0 * M_PI * f[q] / rt;
+            f8[F8_om][s] = om;
+            f4[F4_nf][s] = (float)f[q];
+            f8[F8_p0][s] = p[q] - om * (double)at;
+            f8[F8_p0R][s] = f8[F8_p0][s] - om * ((double)f4[F4_delR][src] - (double)f4[F4_delL][src]);
+            i8[0][s] = n0;
+            i8[1][s] = IDLE;
+            f4[F4_rdl][s] = 0.0f;
+            double g = a[q] / std::max(ref, 1e-30);
+            f4[F4_aL][s] = (float)((double)aL0[src] * g);
+            f4[F4_aR][s] = (float)((double)aR0[src] * g);
+            aL0[s] = f4[F4_aL][s];
+            aR0[s] = f4[F4_aR][s];
+            hrel[s] = 1.0f;
+            vbase[s] = 0.0f;
+            vrbase[s] = 0.0f;
+            vsc[s] = 1.0f;
+        }
+        std::vector<long> &lv = live_of(key);
+        lv.insert(lv.end(), idx.begin(), idx.end());
+        own(key, idx);
+        last_slots = idx;
+        return idx;
     }
 
     bool any_leslie() const
@@ -1349,6 +1410,278 @@ struct Piano {
         sidestamp();
     }
 
+    // THE VALVE, LIVE (live._amp_*): a part with one is stale whenever its
+    // chord changes (amp_dirty); the pump snapshots the chord's direct sound
+    // at its level now and asks for its products -- a fast pass and the
+    // file's fine one -- and places what comes back, the fine over the fast,
+    // each crossing over the last, a result for a chord already gone
+    // dropped. In step (the checks: examples/ampsync.py) both passes answer
+    // as the job is posted and land at the next pump; playing (amp_async),
+    // on a worker of their own.
+    struct AmpOut {
+        long long pid = 0;
+        long src = 0;
+        std::vector<double> prod;           // (Hz, amplitude, phase) each
+        long long when = 0, jid = 0;
+    };
+    std::map<long long, int> drive_step;
+    std::set<long long> amp_dirty;
+    std::map<long long, long long> amp_jid, amp_start, amp_fine_placed;
+    bool amp_busy = false, amp_has_out = false;
+    AmpOut amp_out;
+    std::deque<AmpOut> amp_fine_results;
+    // the worker (amp_async)
+    bool amp_async = false, amp_stop = false;
+    std::thread amp_thread;
+    std::mutex amp_mu;
+    std::condition_variable amp_cv;
+    std::deque<AmpOut> amp_jobs, amp_ready_fast, amp_ready_fine;
+    struct AmpJob {
+        std::vector<double> f, a, p;
+        double drive = 0.0;
+    };
+    std::map<long long, AmpJob> amp_jobdata;    // jid -> its parents
+
+    static const int LIVE_DRIVE_STEPS = 8, LIVE_AMP_LOOKAHEAD = 6;
+
+    int patch_of_pid(long long id) const
+    {
+        for (size_t i = 0; i < patches.size(); i++)
+            if (patches[i].pid == id)
+                return (int)i;
+        return -1;
+    }
+
+    void amp_touch(int pi)
+    {
+        if (pi >= 0 && patches[pi].amp > 0.0)
+            amp_dirty.insert(patches[pi].pid);
+    }
+
+    long long amp_ahead() const { return patches[cur].amp > 0.0 && !patches[cur].drums ? LIVE_AMP_LOOKAHEAD * cur_blk : 0; }
+
+    // live._amp_snapshot: the chord's direct partials at their level now
+    bool amp_snapshot(long long apid, long long n0, AmpOut &job, AmpJob &jd)
+    {
+        int pi = patch_of_pid(apid);
+        Key key(apid, -1, -1, AMPK);
+        if (pi < 0) {
+            S.release(key, n0);
+            return false;
+        }
+        const Patch &p = patches[pi];
+        auto st = drive_step.find(apid);
+        double drive = st == drive_step.end() ? p.amp : p.amp * 4.0 * st->second / (double)LIVE_DRIVE_STEPS;
+        std::vector<long> slots;
+        for (auto &kv : S.live)
+            if (std::get<0>(kv.first) == apid && std::get<3>(kv.first) != AMPK)
+                slots.insert(slots.end(), kv.second.begin(), kv.second.end());
+        if (drive <= 0.0 || slots.size() < 2) {
+            S.release(key, n0);
+            return false;
+        }
+        double mn = 0.0;
+        for (size_t q = 0; q < slots.size(); q++) {
+            double dl = (double)S.f4[F4_delL][slots[q]] + (double)S.f4[F4_delR][slots[q]];
+            if (q == 0 || dl < mn)
+                mn = dl;
+        }
+        std::vector<long> idx;
+        for (long s : slots)
+            if ((double)S.f4[F4_delL][s] + (double)S.f4[F4_delR][s] <= mn + 2.0)
+                idx.push_back(s);
+        if (idx.size() < 2) {
+            S.release(key, n0);
+            return false;
+        }
+        std::vector<long> ok;
+        std::vector<double> f, aM, ph;
+        for (long s : idx) {
+            double om = S.f8[F8_om][s];
+            double fq = om * rate / (2.0 * M_PI);
+            double a = 0.5 * ((double)S.aL0[s] + (double)S.aR0[s]);
+            double t = std::max(0.0, (double)n0 - (double)S.i8[0][s]) / rate;
+            double sl = (double)S.f4[F4_sus][s], af = (double)S.f4[F4_aft][s];
+            double dc = sl + (1.0 - sl) * ((1.0 - af) * exp(-t * (double)S.f4[F4_logr][s])
+                                           + af * exp(-t * (double)S.f4[F4_logrA][s]));
+            double rx = ((double)n0 - (double)S.i8[1][s]) / std::max((double)S.f4[F4_re][s], 1.0);
+            rx = rx < 0.0 ? 0.0 : (rx > 1.0 ? 1.0 : rx);
+            a = a * dc * (1.0 - rx * rx * (3.0 - 2.0 * rx));
+            double pp = S.f8[F8_p0][s] + om * (double)n0;
+            if (fq > 20.0 && a > 0.0) {
+                ok.push_back(s);
+                f.push_back(fq);
+                aM.push_back(a);
+                ph.push_back(pp);
+            }
+        }
+        if (ok.size() < 2) {
+            S.release(key, n0);
+            return false;
+        }
+        size_t best = 0;
+        long long first = S.i8[0][ok[0]];
+        for (size_t q = 0; q < ok.size(); q++) {
+            if (aM[q] > aM[best])
+                best = q;
+            first = std::min(first, S.i8[0][ok[q]]);
+        }
+        amp_start[apid] = first;
+        job.pid = apid;
+        job.src = ok[best];
+        job.when = n0;
+        jd.f = f;
+        jd.a = aM;
+        jd.p = ph;
+        jd.drive = drive;
+        return true;
+    }
+
+    // one pass: the fast (live's 0.25 s, 150 products, no oversampling) or the fine (valvefine's)
+    static void amp_pass(const AmpJob &jd, double sr, bool fine, std::vector<double> &prod)
+    {
+        double *out = nullptr;
+        long n = nv_amp_live(jd.f.data(), jd.a.data(), jd.p.data(), (long)jd.f.size(), sr, jd.drive,
+                             fine ? 1.0 : 0.25, 1, fine ? 400 : 150, &out);
+        prod.assign(out, out + 3 * n);
+        free(out);
+    }
+
+    // live._amp_place: what came back, the products before it crossing out
+    void amp_place(long long n0, const AmpOut &o)
+    {
+        Key key(o.pid, -1, -1, AMPK);
+        long li = S.live_find(key);
+        std::vector<long> old = li >= 0 ? S.live[li].second : std::vector<long>();
+        float xf = (float)(long long)(0.020 * rate);
+        for (long s : old)
+            S.f4[F4_re][s] = xf;
+        S.release(key, n0);
+        if (o.prod.empty() || !S.busy[o.src])
+            return;
+        int pi = patch_of_pid(o.pid);
+        int nrank = (pi >= 0 && patches[pi].organ) ? patches[pi].organ->n_rank : 0;
+        bool held = false;
+        for (auto &kv : S.live) {
+            long long l = std::get<3>(kv.first);
+            if (std::get<0>(kv.first) == o.pid && (l == -1 || (l >= RANK0 && l < RANK0 + nrank)))
+                held = true;
+        }
+        if (!held)
+            return;                         // never after their notes
+        long n = (long)o.prod.size() / 3;
+        std::vector<double> f(n), a(n), p(n);
+        for (long q = 0; q < n; q++) {
+            f[q] = o.prod[3 * q];
+            a[q] = o.prod[3 * q + 1];
+            p[q] = o.prod[3 * q + 2];
+        }
+        auto as = amp_start.find(o.pid);
+        long long start = std::max(n0, as == amp_start.end() ? n0 : as->second);
+        std::vector<long> slots = S.stamp_amp(key, o.src, f.data(), a.data(), p.data(), n, start, rate, o.when);
+        if (!slots.empty() && !old.empty() && start <= n0)
+            for (long s : slots)
+                S.f4[F4_fa][s] = xf;
+        if (!slots.empty() && S.ls_on[o.src] && !S.les.empty()) {
+            std::vector<float> az(n, S.ls_ph[o.src]);
+            S.leslie_arm(slots, az.data(), nullptr, nullptr, n0, rotor_horn.rate, rotor_drum.rate, f.data());
+        }
+    }
+
+    void amp_worker()
+    {
+        for (;;) {
+            AmpOut j;
+            AmpJob jd;
+            {
+                std::unique_lock<std::mutex> lk(amp_mu);
+                amp_cv.wait(lk, [&] { return amp_stop || !amp_jobs.empty(); });
+                if (amp_stop)
+                    return;
+                j = amp_jobs.front();
+                amp_jobs.pop_front();
+                jd = amp_jobdata[j.jid];
+            }
+            AmpOut fast = j, fine = j;
+            amp_pass(jd, rate, false, fast.prod);
+            {
+                std::lock_guard<std::mutex> lk(amp_mu);
+                amp_ready_fast.push_back(fast);
+            }
+            amp_pass(jd, rate, true, fine.prod);
+            std::lock_guard<std::mutex> lk(amp_mu);
+            amp_ready_fine.push_back(fine);
+            amp_jobdata.erase(j.jid);
+        }
+    }
+
+    void start_amp_worker()
+    {
+        if (amp_async)
+            return;
+        amp_async = true;
+        amp_thread = std::thread([this] { amp_worker(); });
+    }
+
+    // live._amp_pump
+    void amp_pump(long long n0)
+    {
+        if (amp_async) {                    // (the worker's answers so far)
+            std::lock_guard<std::mutex> lk(amp_mu);
+            while (!amp_ready_fast.empty()) {
+                amp_out = amp_ready_fast.front();       // (the newest stands, as live's one amp_out)
+                amp_ready_fast.pop_front();
+                amp_has_out = true;
+            }
+            while (!amp_ready_fine.empty()) {
+                if (amp_jid[amp_ready_fine.front().pid] == amp_ready_fine.front().jid)
+                    amp_fine_results.push_back(amp_ready_fine.front());
+                amp_ready_fine.pop_front();
+            }
+        }
+        if (amp_has_out) {
+            AmpOut o = amp_out;
+            amp_has_out = false;
+            amp_busy = false;
+            auto fp = amp_fine_placed.find(o.pid);
+            if (amp_jid[o.pid] == o.jid && !(fp != amp_fine_placed.end() && fp->second == o.jid))
+                amp_place(n0, o);
+        }
+        while (!amp_fine_results.empty()) {
+            AmpOut o = amp_fine_results.front();
+            amp_fine_results.pop_front();
+            if (amp_jid[o.pid] == o.jid) {
+                amp_fine_placed[o.pid] = o.jid;
+                amp_place(n0, o);
+            }
+        }
+        if (!amp_dirty.empty() && !amp_busy) {
+            long long apid = *amp_dirty.begin();
+            amp_dirty.erase(amp_dirty.begin());
+            AmpOut job;
+            AmpJob jd;
+            if (amp_snapshot(apid, n0, job, jd)) {
+                job.jid = ++amp_jid[apid];
+                amp_busy = true;
+                if (amp_async) {
+                    std::lock_guard<std::mutex> lk(amp_mu);
+                    amp_jobdata[job.jid] = jd;
+                    amp_jobs.push_back(job);
+                    amp_cv.notify_all();
+                } else {                    // in step: both passes now, placed at the next pump
+                    amp_out = job;
+                    amp_pass(jd, rate, false, amp_out.prod);
+                    amp_has_out = true;
+                    AmpOut fine = job;
+                    amp_pass(jd, rate, true, fine.prod);
+                    amp_fine_results.push_back(fine);
+                }
+            } else {
+                amp_jid[apid] += 1;         // nothing to distort now
+            }
+        }
+    }
+
     void leslie_block(long long n0, long long blk)
     {
         if (S.les.empty() || !S.any_leslie())
@@ -1406,6 +1739,7 @@ struct Piano {
     static const long long RANK0 = 1000;        // a rank's slots: layer RANK0 + its index
     static const long long SCAN0 = 2000;        // ...its scanner's copy (("scan", rank))
     static const long long SCANSIDE0 = 3000;    // ...and tier B's copies (("scanside", rank))
+    static const long long AMPK = 4000;         // the valve's products ((pid, -1, -1, "amp"))
     int cur = 0, transpose = 0;
     bool cur_reg = true;                            // the patch in use has the register
 
@@ -1594,9 +1928,11 @@ struct Piano {
         int sn = note + transpose;          // the key the patch plays (live's snote)
         if (sn < 0 || sn > 127)
             return;
+        n0 += amp_ahead();                  // a part with a valve plays its notes late (LIVE_AMP_LOOKAHEAD)
         const nv::live::Template *T = nv_tcache_lookup(cache, sn, bucket(vel), speed);
         if (!T)
             return;                         // a miss: live warms it off the audio thread
+        amp_touch(cur);                     // (its chord changed: the valve's products are stale)
         if (patches[cur].organ) {           // a registered organ: its ranks drawn
             organ_strike(*T, ch, note, n0);
             return;
@@ -2068,6 +2404,7 @@ struct Piano {
                 S.release(k, n0);
         }
         dr = want;
+        amp_touch(pi);                      // a drawbar is a parent: the valve's products are stale
     }
 
     // live._crescendo: the mod wheel adds stops in the organ's own order
@@ -2237,6 +2574,10 @@ struct Piano {
     {
         int pi = patch_for(ch, note);
         Use u(*this, pi < 0 ? cur : pi);
+        n0 += amp_ahead();                  // (a part with a valve: late, as its notes began)
+        amp_touch(cur);
+        if (patches[cur].amp > 0.0)         // the products end with their chord, over the note's own release
+            S.release(Key(pid, -1, -1, AMPK), n0);
         if (patches[cur].organ) {           // an organ's key: each of its ranks
             std::vector<Key> ks;
             for (auto &kv : S.live)
@@ -2456,6 +2797,9 @@ struct Piano {
     // sostenuto cleared, and its register killed (_reg_channel, kill)
     void all_sound_off(int ch, long long n0)
     {
+        for (size_t pi = 0; pi < patches.size(); pi++)    // (the valve's products: their parents go)
+            if (patches[pi].channel < 0 || patches[pi].channel == ch)
+                amp_touch((int)pi);
         for (auto it = down.begin(); it != down.end();)
             it = it->first == ch ? down.erase(it) : std::next(it);
         for (auto it = pedalled.begin(); it != pedalled.end();)
@@ -2506,6 +2850,9 @@ struct Piano {
     // damper or the sostenuto rings on (pedalled), a one-shot on its own decay
     void all_notes_off(int ch, long long n0)
     {
+        for (size_t pi = 0; pi < patches.size(); pi++)
+            if (patches[pi].channel < 0 || patches[pi].channel == ch)
+                amp_touch((int)pi);
         for (auto it = down.begin(); it != down.end();)
             it = it->first == ch ? down.erase(it) : std::next(it);
         auto sq = sost.find(ch);
@@ -2689,18 +3036,28 @@ struct Piano {
             else if (cc == 127)
                 mono[ch] = false;
         } else if (cc == 1 && hammond_on(ch)) {
-            // A HAMMOND'S MOD WHEEL (live's wheel_roles): its swell pedal --
+            // A HAMMOND'S MOD WHEEL (live's wheel_roles): with a valve, its
+            // drive (LIVE_DRIVE_STEPS over the range); else its swell pedal --
             // CC11's squared law on the part, the notes sounding rescaled,
             // floored at -80 dB
-            for (const Patch &p : patches)
-                if ((p.leslie || p.wheel_swell) && (p.channel < 0 || p.channel == ch) && p.amp <= 0.0
-                    && p.wheel_swell) {
+            for (const Patch &p : patches) {
+                if (!(p.leslie || p.wheel_swell) || !(p.channel < 0 || p.channel == ch))
+                    continue;
+                if (p.amp > 0.0) {
+                    int step = (int)nearbyint(v / 127.0 * LIVE_DRIVE_STEPS);
+                    auto it = drive_step.find(p.pid);
+                    if (it == drive_step.end() || it->second != step) {
+                        drive_step[p.pid] = step;
+                        amp_dirty.insert(p.pid);
+                    }
+                } else if (p.wheel_swell) {
                     double sw = std::max(pow(v / 127.0, 2.0), 1e-4), was = swell;
                     swell = sw;
                     if (sw != was)
                         S.channel_gain(sounding(ch), sw / was);
-                    break;
                 }
+                break;
+            }
         } else if (cc == 1 && wheel_trem_on(ch)) {
             wheel_tremolo(ch, v);
         } else if (cc == 1 && organ_on(ch)) {
@@ -2946,6 +3303,14 @@ struct Piano {
 
     ~Piano()
     {
+        if (amp_thread.joinable()) {
+            {
+                std::lock_guard<std::mutex> lk(amp_mu);
+                amp_stop = true;
+            }
+            amp_cv.notify_all();
+            amp_thread.join();
+        }
         if (scan_thread.joinable()) {
             {
                 std::lock_guard<std::mutex> lk(scan_mu);
@@ -4062,13 +4427,15 @@ struct Piano {
         if (reg_on && (!reg_pend.empty() || !reg_out.empty() || reg_live || !reg_retire.empty()
                        || reg_ndone.load() > 0))
             reg_pump(n0);
+        if (!amp_dirty.empty() || amp_has_out || !amp_fine_results.empty() || amp_async)
+            amp_pump(n0);                       // the valve (live's _amp_pump)
         std::vector<Key> sw;
         for (auto &kv : S.live) {
             std::pair<int, int> ck((int)std::get<1>(kv.first), (int)std::get<2>(kv.first));
             auto sq = sost.find(ck.first);
             if (!down.count(ck) && !pedalled.count(ck) && !S.oneshot.count(kv.first)
-                && !(sq != sost.end() && sq->second.count(ck.second)))
-                sw.push_back(kv.first);
+                && !(sq != sost.end() && sq->second.count(ck.second)) && std::get<3>(kv.first) != AMPK)
+                sw.push_back(kv.first);         // (not the valve's products: not a note, its lifetime its parents')
         }
         for (auto &k : sw)
             S.release(k, n0);
@@ -4549,6 +4916,9 @@ void nv_lp_scan(void *h, const double *X, long n)
 {
     ((nv::slab::Piano *)h)->scan.assign(X, X + n);
 }
+
+// the valve's passes off the audio thread (nvlive playing: live's workers)
+void nv_lp_amp_async(void *h) { ((nv::slab::Piano *)h)->start_amp_worker(); }
 
 // the scanner's data off the audio thread (nvlive playing: live's builder)
 void nv_lp_scan_async(void *h) { ((nv::slab::Piano *)h)->start_scan_worker(); }

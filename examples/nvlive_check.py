@@ -103,6 +103,8 @@ def main(argv):
     lv.parts[0].patch.warm()
     from livepiano_check import instant_scan
     instant_scan(lv, lv.parts[0].patch)         # (the scanner's builder, instant: nvlive's works at the press)
+    import ampsync
+    ampsync.sync(lv)                            # (the valve in step, as nvlive --test answers it)
     if beside or split:
         # the piano on channel 1 (keys from the split), the drum set beside it
         pp = lv.parts[0].patch

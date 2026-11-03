@@ -146,6 +146,7 @@ void nv_lp_detune_wheel(void *h, int on);
 void nv_lp_leslie(void *h, const double *L, int n);
 void nv_lp_scan(void *h, const double *X, long n);
 void nv_lp_scan_async(void *h);
+void nv_lp_amp_async(void *h);
 void nv_tcache_leslie(void *h, const double *L, int n);
 int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, int *have);
 void nv_lp_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
@@ -655,9 +656,7 @@ int main(int argc, char **argv)
     for (int q = 0; q < 2 * NV_K_DRUMS; q++)
         if (E.cmap[q] >= 0) {
             const NoteClass *k = (const NoteClass *)E.classes[E.cmap[q]].data();
-            // (a Hammond's valve is not live's here yet: Python's)
-            if (!(k->amp_drive != 0.0))
-                K[q] = k;
+            K[q] = k;
         }
     NoteIn t;
     memset(&t, 0, sizeof t);
@@ -1020,6 +1019,7 @@ int main(int argc, char **argv)
     if (!rsync)
         nv_lp_reg_async(part);
     nv_lp_scan_async(part);                     // the scanner's data on its own thread, as live's builder
+    nv_lp_amp_async(part);                      // ...and the valve's passes, as live's workers
     fprintf(stderr, "nvlive: playing (MIDI %s, audio %s, %u us); %s\n", dev.c_str(), pcmdev.c_str(), lat,
             nopanel ? "Ctrl-C to stop" : "the panel (q to stop)");
     // WHAT THE PANEL POSTS, done between two blocks (live.post); what it

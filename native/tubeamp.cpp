@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "nv.h"
+#include "pycompat.h"
 
 namespace {
 
@@ -78,8 +79,15 @@ double pairwise(const double *a, long n)
     return pairwise(a, n2) + pairwise(a + n2, n - n2);
 }
 
-// np.sum / np.add.reduce of a contiguous float64 array: the identity, then the pairwise sum
-double npsum(const double *a, long n) { return 0.0 + pairwise(a, n); }
+// np.sum / np.add.reduce of a contiguous float64 array: the identity, then
+// each of the reduction's buffers (8192 elements) its pairwise sum, in turn
+double npsum(const double *a, long n)
+{
+    double r = 0.0;
+    for (long i = 0; i < n; i += 8192)
+        r += pairwise(a + i, std::min(8192L, n - i));
+    return r;
+}
 
 // tubeamp.curve's half: a 3/2-law triode with a floor and a ceiling
 double half(double g, double bi, double imax)
@@ -229,19 +237,22 @@ int nv_cfft(const double *z, long n, double *out)
 namespace {
 
 // tubeamp.emit: the distortion partials of these, driven at drive (against
-// the signal's own peak: no reference), the valve at imbalance
+// the signal's own peak: no reference), the valve at imbalance; its window,
+// oversampling and peaks kept the file's (WINDOW_S, OVERSAMPLE, KEEP_PEAKS)
+// or live's passes'
 std::vector<Partial> emit(const std::vector<double> &f, const std::vector<double> &a, const std::vector<double> &p,
-                          double sr, double drive, double imbalance)
+                          double sr, double drive, double imbalance, double window_s = WINDOW_S,
+                          int oversample = OVERSAMPLE, int keep = KEEP_PEAKS)
 {
     std::vector<Partial> out;
     if (f.size() < 2)
         return out;
-    long n0 = (long)nearbyint(WINDOW_S * sr);
+    long n0 = (long)nearbyint(window_s * sr);
     double lg = log((double)(n0 > 1 ? n0 : 1)) / log(2.0);
     long e2 = (long)ceil(lg);
     long n = 1L << (e2 > 8 ? e2 : 8);
-    n *= OVERSAMPLE;
-    double fs = sr * (double)OVERSAMPLE;
+    n *= oversample;
+    double fs = sr * (double)oversample;
     std::vector<double> x(n);
     nv_amp_synth(a.data(), f.data(), p.data(), (long)f.size(), n, fs, x.data());
     double pk = 0.0;
@@ -300,13 +311,13 @@ std::vector<Partial> emit(const std::vector<double> &f, const std::vector<double
     loc.swap(kept);
     if (loc.empty())
         return out;
-    if ((long)loc.size() > KEEP_PEAKS) {
+    if ((long)loc.size() > keep) {
         std::vector<long> idx(loc.size());
         for (size_t i = 0; i < idx.size(); i++)
             idx[i] = (long)i;
         std::stable_sort(idx.begin(), idx.end(), [&](long u, long v) { return -e[loc[u]] < -e[loc[v]]; });
         std::vector<long> top;
-        for (int i = 0; i < KEEP_PEAKS; i++)
+        for (int i = 0; i < keep; i++)
             top.push_back(loc[idx[i]]);
         std::sort(top.begin(), top.end());
         loc.swap(top);
@@ -345,19 +356,71 @@ std::vector<Partial> emit(const std::vector<double> &f, const std::vector<double
         double ph = atan2(R[2 * km + 1], R[2 * km]) - 2.0 * M_PI * (gc - (double)km) * (double)(n - 1) / (2.0 * (double)n);
         out.push_back(Partial{hz, sqrt(tote), ph});
     }
-    double have = 0.0;
-    for (const Partial &q : out)
-        have += q.amp * q.amp;
-    have *= 0.5;
+    std::vector<double> sq(out.size());                 // (Python's sum(): compensated, pycompat's pysum)
+    for (size_t q = 0; q < out.size(); q++)
+        sq[q] = out[q].amp * out[q].amp;
+    double have = pysum(sq.data(), (int)sq.size()) * 0.5;
     double sc = have > 0.0 ? sqrt(power / have) / (g * unit) : 0.0;
     for (Partial &q : out)
         q.amp *= sc;
     return out;
 }
 
+// tubeamp.combine: partials sharing a frequency (to tol 0.01 Hz) as one
+// complex amplitude, in key order -- their mean frequency, |z|, arg z
+void combine(const std::vector<double> &fs, const std::vector<double> &am, const std::vector<double> &ps,
+             std::vector<double> &F, std::vector<double> &A, std::vector<double> &Ph)
+{
+    size_t n = fs.size();
+    std::vector<long long> key(n);
+    std::vector<double> zr(n), zi(n);
+    for (size_t q = 0; q < n; q++) {
+        key[q] = (long long)nearbyint(fs[q] / 0.01);
+        zr[q] = am[q] * cos(ps[q]);
+        zi[q] = am[q] * sin(ps[q]);
+    }
+    std::vector<long long> uk(key);
+    std::sort(uk.begin(), uk.end());
+    uk.erase(std::unique(uk.begin(), uk.end()), uk.end());
+    size_t nu = uk.size();
+    std::vector<double> ar(nu, 0.0), ai(nu, 0.0), fsum(nu, 0.0), cnt(nu, 0.0);
+    for (size_t q = 0; q < n; q++) {
+        size_t u = (size_t)(std::lower_bound(uk.begin(), uk.end(), key[q]) - uk.begin());
+        ar[u] += zr[q];
+        ai[u] += zi[q];
+        fsum[u] += fs[q];
+        cnt[u] += 1.0;
+    }
+    F.resize(nu); A.resize(nu); Ph.resize(nu);
+    for (size_t u = 0; u < nu; u++) {
+        F[u] = fsum[u] / cnt[u];
+        A[u] = hypot(ar[u], ai[u]);
+        Ph[u] = atan2(ai[u], ar[u]);
+    }
+}
+
 }  // namespace
 
 extern "C" {
+
+// LIVE'S VALVE, one pass over a chord's snapshot (live._amp_worker, or the
+// fine pass's valvefine): the parents (f, a, phase at the snapshot) merged
+// (combine) and driven, at that pass's window, oversampling and peaks kept;
+// the products (Hz, amplitude, phase) into *out (malloc'd, 3 each). How many.
+long nv_amp_live(const double *f, const double *a, const double *p, long n, double sr, double drive,
+                 double window_s, int oversample, int keep, double **out)
+{
+    std::vector<double> F, A, Ph;
+    combine(std::vector<double>(f, f + n), std::vector<double>(a, a + n), std::vector<double>(p, p + n), F, A, Ph);
+    std::vector<Partial> got = emit(F, A, Ph, sr, drive, IMBALANCE, window_s, oversample, keep);
+    *out = (double *)malloc(sizeof(double) * 3 * (got.size() + 1));
+    for (size_t q = 0; q < got.size(); q++) {
+        (*out)[3 * q] = got[q].hz;
+        (*out)[3 * q + 1] = got[q].amp;
+        (*out)[3 * q + 2] = got[q].ph;
+    }
+    return (long)got.size();
+}
 
 // THE AMPLIFIER over a table: rows (NCOLS each, *Pp of them, realloc'd), the
 // channels (chans[k] at drives[k], in _AMP_CH's order); each channel's
@@ -402,36 +465,16 @@ long long nv_amp_expand(double **rowsp, long long *Pp, void **dm, int nch, const
             if (live.size() < 2)
                 continue;
             // combine: partials sharing a frequency (to 0.01 Hz) as one complex amplitude
-            std::vector<long long> key(live.size());
-            std::vector<double> fs(live.size()), zr(live.size()), zi(live.size());
+            std::vector<double> fs(live.size()), am(live.size()), ps(live.size());
             for (size_t q = 0; q < live.size(); q++) {
                 double om = at(live[q], cOM);
                 fs[q] = om * sr / (2.0 * M_PI);
-                double ps = at(live[q], cP0) + om * a;
-                double am = at(live[q], cAM);
-                key[q] = (long long)nearbyint(fs[q] / 0.01);
-                double c = cos(ps), si = sin(ps);
-                zr[q] = am * c;
-                zi[q] = am * si;
+                ps[q] = at(live[q], cP0) + om * a;
+                am[q] = at(live[q], cAM);
             }
-            std::vector<long long> uk(key);
-            std::sort(uk.begin(), uk.end());
-            uk.erase(std::unique(uk.begin(), uk.end()), uk.end());
-            size_t nu = uk.size();
-            std::vector<double> ar(nu, 0.0), ai(nu, 0.0), fsum(nu, 0.0), cnt(nu, 0.0);
-            for (size_t q = 0; q < live.size(); q++) {
-                size_t u = (size_t)(std::lower_bound(uk.begin(), uk.end(), key[q]) - uk.begin());
-                ar[u] += zr[q];
-                ai[u] += zi[q];
-                fsum[u] += fs[q];
-                cnt[u] += 1.0;
-            }
-            std::vector<double> F(nu), A(nu), Ph(nu);
-            for (size_t u = 0; u < nu; u++) {
-                F[u] = fsum[u] / cnt[u];
-                A[u] = hypot(ar[u], ai[u]);
-                Ph[u] = atan2(ai[u], ar[u]);
-            }
+            std::vector<double> F, A, Ph;
+            combine(fs, am, ps, F, A, Ph);
+            size_t nu = F.size();
             if (nu < 2)
                 continue;
             if ((long)nu > KEEP_PARTIALS) {
