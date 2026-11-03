@@ -302,6 +302,10 @@ typedef struct OrganSpec {
        the Tremolo stop's depth and rate (stop_tremolo_depth, stop_tremolo_hz) */
     double wtrem_hz, htrem_depth, htrem_hz;
     int wtrem_stereo;
+    double wtrem_scatter;   /* a section's (tremolo_scatter), 0 none */
+    /* the sound controllers it answers (tonelib.sound_controls_of): bit 0
+       attack (CC73), 1 release (CC72), 2 decay (CC75) */
+    int snd_mask;
 } OrganSpec;
 
 /* what the note setup reads of the voice besides its VoiceSnap */
@@ -614,6 +618,10 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n);
 int nv_song_stroked(void *s, int i);
 void nv_song_add_stroke_rows(void *s, long long a, long long b);
 int nv_song_n_stroke_rows(void *s, long long *ab, int cap);
+int nv_song_htrem(void *s, int i);
+void nv_song_add_htrem_rows(void *s, long long a, long long b);
+int nv_song_n_htrem_rows(void *s, long long *ab, int cap);
+int nv_song_organ_tremolos(void *s, int which, int *ch, double *cfg, int cap);
 void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv);
 void nv_song_note_voice(void *s, int i, double *out);
 int nv_song_first_cc(void *s, long long ch, int cc, int *v);

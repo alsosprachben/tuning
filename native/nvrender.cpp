@@ -108,6 +108,77 @@ static int col(const char *name)
     return -1;
 }
 
+// tremolo.expand: every row of a modulated channel (in mask, when given: a
+// Tremolo stop's notes) its sideband pair, appended in order -- the upper
+// then the lower, at the rate either side of the row's, each half the depth
+// (a pan's right ear the opposite sign, its mono sum none); a section's
+// players each their own rate and phase (scatter). The rows NCOLS each,
+// *P of them, realloc'd; a damper's dk/dg (dm[0], dm[1]) copied with them.
+// Returns the sidebands made.
+static long long tremolo_expand(double **rowsp, long long *Pp, void **dm, const std::map<int, std::vector<double>> &chans,
+                                const std::vector<char> *mask, double sr)
+{
+    if (chans.empty())
+        return 0;
+    const int cOM = col("om"), cP0 = col("p0"), cP0R = col("p0R"), cAL = col("aL"), cAR = col("aR"), cAM = col("aM"),
+              cMCH = col("mch"), cPL = col("pl");
+    const long long n = *Pp;
+    std::vector<double> extra;
+    std::vector<long long> src;
+    for (long long i = 0; i < n; i++) {
+        if (mask && (i >= (long long)mask->size() || !(*mask)[i]))
+            continue;
+        const double *row = *rowsp + (size_t)NCOLS * i;
+        auto it = chans.find((int)row[cMCH]);
+        if (it == chans.end())
+            continue;
+        double rate = it->second[0], depth = it->second[1], scatter = it->second[3];
+        bool stereo = it->second[2] != 0.0;
+        if (depth <= 0.0 || rate <= 0.0)
+            continue;
+        double ph = 0.0;
+        if (scatter > 0.0) {
+            PyRandom r;
+            pyr_seed(&r, 0x7E30 + (long long)it->first * 977 + (long long)row[cPL]);
+            rate = rate * (1.0 + scatter * pyr_uniform(&r, -1.0, 1.0));
+            ph = pyr_uniform(&r, 0.0, 2.0 * M_PI);
+        }
+        double dw = 2.0 * M_PI * rate / sr, half = 0.5 * depth;
+        for (double sign : {1.0, -1.0}) {
+            size_t o = extra.size();
+            extra.insert(extra.end(), row, row + NCOLS);
+            double *e = extra.data() + o;
+            e[cOM] = row[cOM] + sign * dw;
+            if (ph != 0.0) {
+                e[cP0] = row[cP0] + sign * ph;
+                e[cP0R] = row[cP0R] + sign * ph;
+            }
+            e[cAL] = row[cAL] * half;
+            e[cAR] = row[cAR] * (stereo ? -half : half);
+            e[cAM] = stereo ? 0.0 : row[cAM] * half;
+            src.push_back(i);
+        }
+    }
+    long long m = (long long)src.size();
+    if (!m)
+        return 0;
+    double *rows = (double *)realloc(*rowsp, sizeof(double) * NCOLS * (size_t)(n + m));
+    memcpy(rows + (size_t)NCOLS * n, extra.data(), sizeof(double) * extra.size());
+    *rowsp = rows;
+    if (dm[0]) {
+        int32_t *dk = (int32_t *)realloc(dm[0], sizeof(int32_t) * (size_t)(n + m));
+        float *dg = (float *)realloc(dm[1], sizeof(float) * (size_t)(n + m));
+        for (long long q = 0; q < m; q++) {
+            dk[n + q] = dk[src[q]];
+            dg[n + q] = dg[src[q]];
+        }
+        dm[0] = dk;
+        dm[1] = dg;
+    }
+    *Pp = n + m;
+    return m;
+}
+
 struct Export {
     std::vector<double> k, freq, trim;
     std::vector<std::vector<unsigned char>> classes;
@@ -415,10 +486,6 @@ int main(int argc, char **argv)
             br[256 + c] = (double)gch.size();
             gch.push_back(c);
         }
-    if (nv_song_organ_tremolo(song)) {
-        fprintf(stderr, "nvrender: refused: an organ's tremolo (its sidebands are Python's)\n");
-        return 2;
-    }
     // ...then the chests' wind (_prep_wind_rows: a row a family of each organ channel's ranks)
     const int nw = nv_song_organ_wind_rows(song, (int)gch.size());
     float one = 0.0f;
@@ -464,6 +531,33 @@ int main(int argc, char **argv)
     if (P < 0) {
         fprintf(stderr, "nvrender: refused: a note is not the engine's (%lld)\n", P);
         return 2;
+    }
+    // THE ORGANS' TREMOLOS (_prep_tremolo, after the render's length is
+    // known): a Tremolo stop's on the notes struck with it drawn, then the
+    // wheel's on its channels' rows, the stop's sidebands among them
+    for (int which = 0; which < 2; which++) {
+        int nt = nv_song_organ_tremolos(song, which, nullptr, nullptr, 0);
+        if (!nt)
+            continue;
+        std::vector<int> tch(nt);
+        std::vector<double> tcfg(4 * nt);
+        nv_song_organ_tremolos(song, which, tch.data(), tcfg.data(), nt);
+        std::map<int, std::vector<double>> chans;
+        for (int q = 0; q < nt; q++)
+            chans[tch[q]] = std::vector<double>(tcfg.begin() + 4 * q, tcfg.begin() + 4 * q + 4);
+        std::vector<char> mask;
+        if (which == 0) {
+            int nr = nv_song_n_htrem_rows(song, nullptr, 0);
+            if (!nr)
+                continue;
+            std::vector<long long> ab(2 * nr);
+            nv_song_n_htrem_rows(song, ab.data(), nr);
+            mask.assign(P, 0);
+            for (int q = 0; q < nr; q++)
+                for (long long r = ab[2 * q]; r < ab[2 * q + 1] && r < P; r++)
+                    mask[r] = 1;
+        }
+        tremolo_expand(&rows, &P, dm, chans, which == 0 ? &mask : nullptr, SR);
     }
     const long N = (long)out[0];
     const int nblk = (int)out[1];

@@ -1377,7 +1377,8 @@ class OrganSpec(ctypes.Structure):
                                     'unit_hz', 'draw_exp', 'blk_s')]
                 + [('fam_a', C * 32), ('fam_b', C * 32), ('expr_rank', I), ('perc_rank', I), ('htrem_rank', I),
                    ('expr_tilt', C), ('perc_attack_s', C), ('afm', C), ('pipe_radius', I), ('wheel_trem', C),
-                   ('wtrem_hz', C), ('htrem_depth', C), ('htrem_hz', C), ('wtrem_stereo', I)])
+                   ('wtrem_hz', C), ('htrem_depth', C), ('htrem_hz', C), ('wtrem_stereo', I),
+                   ('wtrem_scatter', C), ('snd_mask', I)])
 
 
 _ORGAN = {}
@@ -1544,6 +1545,9 @@ def organ(cls):
     o.wtrem_stereo = int(bool(getattr(cls, 'tremolo_stereo', False)))
     o.htrem_depth = float(getattr(cls, 'stop_tremolo_depth', 0.0) or 0.0)
     o.htrem_hz = float(getattr(cls, 'stop_tremolo_hz', 0.0) or 0.0)
+    o.wtrem_scatter = float(getattr(cls, 'tremolo_scatter', 0.0) or 0.0)
+    _sc = T.sound_controls_of(cls)
+    o.snd_mask = (1 if 'attack' in _sc else 0) | (2 if 'release' in _sc else 0) | (4 if 'decay' in _sc else 0)
     o.trem_class_depth = float(getattr(cls, 'tremulant_depth', 0.0) or 0.0)
     if getattr(cls, 'wind_skirt_db', None) is not None and getattr(cls, 'wind_pitch_exp', 0.0):
         import wind as WND
@@ -2422,7 +2426,7 @@ class Slab(object):
                                         (("non", "noff"), np.int64), (LIVE_I4, np.int32),
                                         (SLAB_BOOK, np.float32), (("dk", "slot_ch", "busy"), np.int32),
                                         (("aLp", "aRp"), np.float32), ((None, None, None, "dg"), np.float32),
-                                        (("tr_dep", "tr_aL", "tr_aR", "tr_st", "tr_on"), np.float32))):
+                                        (("tr_dep", "tr_aL", "tr_aR", "tr_st", "tr_on", "hs_dep"), np.float32))):
             if name in cols:
                 out = np.empty(self.cap, dt)
                 self.d.nv_slab_col(self.p, g, cols.index(name), out.ctypes.data)

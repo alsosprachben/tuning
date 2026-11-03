@@ -160,6 +160,8 @@ struct Slab {
     // depth, its own baseline (captured once) and its stereo sign
     std::vector<char> tr_on;
     std::vector<float> tr_dep, tr_aL, tr_aR, tr_st;
+    std::vector<float> hs_dep;                  // a harmonium's Tremolo stop: its depth and rate (live's)
+    std::vector<double> hs_hz;
     std::vector<int32_t> dk, slot_ch;
     std::vector<float> dg;                 // a damped row's weight (damper.weight)
     std::vector<float> aLp, aRp;            // pressure's columns: none on a piano, still the kernel's
@@ -206,6 +208,7 @@ struct Slab {
         aLp.assign(cap, 0.0f); aRp.assign(cap, 0.0f);
         tr_on.assign(cap, 0); tr_dep.assign(cap, 0.0f); tr_aL.assign(cap, 0.0f); tr_aR.assign(cap, 0.0f);
         tr_st.assign(cap, 1.0f);
+        hs_dep.assign(cap, 0.0f); hs_hz.assign(cap, 0.0);
         busy.assign(cap, 0);
         for (long i = 0; i < cap; i++)
             free.push_back(i);
@@ -286,6 +289,7 @@ struct Slab {
             vbase[s] = tf4[F4_vd][q];
             vrbase[s] = tf4[F4_vr][q];
             tr_on[s] = 0;                       // (unarmed until its tremolo is)
+            hs_dep[s] = 0.0f;
         }
         // the vibrato's scale: vd over its mean (np.mean: float32, pairwise)
         std::vector<float> vd(n);
@@ -430,15 +434,44 @@ struct Slab {
     }
 
     // live.Slab.tremolo_swing: every armed slot's level where the modulator is
-    void tremolo_swing(double phase)
+    // (wheel false: no wheel tremolo here, its swing 0); a Tremolo stop's
+    // slots then at their own rate, from the same clock n
+    void tremolo_swing(bool wheel, double phase, long long n, double rt)
     {
-        float c0 = (float)cos(phase);
+        float c0 = wheel ? (float)cos(phase) : 0.0f;
         for (long s = 0; s < cap; s++) {
             if (!tr_on[s] || !busy[s])
                 continue;
             float c = c0 * tr_dep[s];
             f4[F4_aL][s] = tr_aL[s] * (1.0f + c);
             f4[F4_aR][s] = tr_aR[s] * (1.0f + c * tr_st[s]);
+            if (hs_dep[s] > 0.0f) {
+                float g = 1.0f + (float)cos(2.0 * M_PI * hs_hz[s] * (double)n / rt) * hs_dep[s];
+                f4[F4_aL][s] *= g;
+                f4[F4_aR][s] *= g;
+            }
+        }
+    }
+
+    // live.Slab.stop_tremolo_arm: a harmonium's Tremolo stop on these slots,
+    // on tremolo_arm's baselines (a slot the wheel has not armed: depth 0)
+    void stop_tremolo_arm(const std::vector<long> &slots, double depth, double hz)
+    {
+        std::vector<char> fresh(slots.size());
+        for (size_t q = 0; q < slots.size(); q++)
+            fresh[q] = !tr_on[slots[q]];
+        for (size_t q = 0; q < slots.size(); q++)
+            if (fresh[q]) {
+                long s = slots[q];
+                tr_aL[s] = f4[F4_aL][s];
+                tr_aR[s] = f4[F4_aR][s];
+                tr_dep[s] = 0.0f;
+                tr_st[s] = 1.0f;
+            }
+        for (long s : slots) {
+            tr_on[s] = 1;
+            hs_dep[s] = (float)depth;
+            hs_hz[s] = hz;
         }
     }
 
@@ -575,8 +608,9 @@ struct Slab {
 // A PIANO PART, LIVE: live.Live's events for one piano part on its slab --
 // what _one_core, _note_on and _note_off do for a piano, block by block as
 // live's callback runs them: the block's events at its start, then the sweep
-// (a key neither down nor held released), then the reap. Not here yet: the
-// CC71-78, portamento, the other voices. MONO MODE (CC126/127), THE RPNs (bend range, fine and coarse
+// (a key neither down nor held released), then the reap. Not here yet:
+// CC71-78 but on an organ part (the harmonium's attack and release), and
+// the other voices. MONO MODE (CC126/127), THE RPNs (bend range, fine and coarse
 // tuning, the mod range), CC120, CC121, CC123, the channel-mode messages and
 // SOSTENUTO as live's. THE PITCH WHEEL
 // (live._repitch: GM's 2-semitone range) and the mod wheel, which on a piano
@@ -737,6 +771,11 @@ struct Piano {
     // fine tuning's last MSB, the mod wheel's range (cents; -1: live's)
     int rpn_msb[16], rpn_lsb[16];
     bool rpn_none[16] = {};
+    int nrpn_msb[16], nrpn_lsb[16];             // the NRPN selected (live's nrpn; 127 none)
+    // THE SOUND CONTROLLERS (live's snd): each channel's CC71-78 as its
+    // offset d (sound_offset; 0 none), cc - 71 -- read where a part answers
+    // them (OrganSpec.snd_mask: the harmonium's attack and release)
+    double snd_d[16][8] = {};
     double brange[16], fine[16] = {}, coarse[16] = {}, modrange[16];
     int fine_msb[16];
     double mod_cents = 35.0;                        // live.mod_cents (the session's)
@@ -889,6 +928,7 @@ struct Piano {
             vol[c] = 100; expr[c] = 127; cpan[c] = 64; pedal_v[c] = 0;     // GM's power-on
             soft[c] = false; cgain[c] = 1.0; cgain_set[c] = false;
             stopword[c][0] = stopword[c][1] = stopword[c][2] = -1;
+            nrpn_msb[c] = nrpn_lsb[c] = 127;
         }
     }
 
@@ -1125,6 +1165,7 @@ struct Piano {
             return;
         const OrganSpec *og = patches[cur].organ;
         const std::vector<char> &dr = patches[cur].drawn;
+        sound_stamp(og, ch, sl);            // CC73/72 first: the hammer is a min over the attack
         if (og->expr_rank >= 0 && dr[og->expr_rank]) {
             double e = expr[ch] / 127.0, h8_ = h8(note);
             std::vector<float> g(sl.size());
@@ -1143,7 +1184,7 @@ struct Piano {
                     S.f4[F4_fa][s] = fa;
         }
         if (og->htrem_rank >= 0 && dr[og->htrem_rank] && og->htrem_depth > 0.0)
-            S.tremolo_arm(sl, og->htrem_depth, false);
+            S.stop_tremolo_arm(sl, og->htrem_depth, og->htrem_hz);   // (at the stop's own rate)
     }
 
     // live's CC11 on a harmonium: the Expression's bellows moved under the
@@ -1220,8 +1261,8 @@ struct Piano {
         }
     }
 
-    // live's swing each block: one rate, the first part's with a wheel tremolo,
-    // else the Tremolo stop's
+    // live's swing each block: the wheel's at one rate (the first part's with
+    // a wheel tremolo), a Tremolo stop's slots at their own
     void tremolo_block(long long n0)
     {
         if (!S.any_tremolo())
@@ -1232,14 +1273,8 @@ struct Piano {
                 hz = p.organ->wtrem_hz;
                 break;
             }
-        if (hz == 0.0)
-            for (const Patch &p : patches)
-                if (p.organ && p.organ->htrem_depth > 0.0) {
-                    hz = p.organ->htrem_hz;
-                    break;
-                }
-        if (hz > 0.0)
-            S.tremolo_swing(2.0 * M_PI * hz * n0 / rate);
+        // (a Tremolo stop's slots at their own rate: tremolo_swing)
+        S.tremolo_swing(hz > 0.0, hz > 0.0 ? 2.0 * M_PI * hz * n0 / rate : 0.0, n0, rate);
     }
     // the panel's stops for the next block: each the whole registration, as
     // drawn when it was posted with the one stop toggled (livetui's
@@ -1254,6 +1289,77 @@ struct Piano {
         for (auto &want : ps)
             if (patches[0].organ)
                 set_stops(0, want, n0);
+    }
+
+    // tonelib.GS_SOUND_NRPN: the CC an NRPN is, -1 none
+    static int gs_sound_nrpn(int m, int l)
+    {
+        if (m != 1)
+            return -1;
+        switch (l) {
+        case 0x08: return 76;
+        case 0x09: return 77;
+        case 0x0A: return 78;
+        case 0x20: return 74;
+        case 0x21: return 71;
+        case 0x63: return 73;
+        case 0x64: return 75;
+        case 0x66: return 72;
+        }
+        return -1;
+    }
+
+    // live._sound_cc: one CC71-78 on channel ch. The release moves on the
+    // notes whose key is still down (a release already running would jump);
+    // the attack and decay are onset facts, for the next note
+    void sound_cc(int ch, int cc, int v)
+    {
+        double d = (v - 64.0) / 64.0;
+        snd_d[ch][cc - 71] = d;
+        if (cc != 72)
+            return;
+        for (size_t pi = 0; pi < patches.size(); pi++) {
+            const OrganSpec *og = patches[pi].organ;
+            if (!og || !(patches[pi].channel < 0 || patches[pi].channel == ch))
+                continue;
+            float nw = (og->snd_mask & 2) && d != 0.0 ? (float)pow(4.0, d) : 1.0f;
+            for (auto &kv : S.live) {
+                if (std::get<0>(kv.first) != patches[pi].pid || std::get<1>(kv.first) != ch)
+                    continue;
+                for (long s : kv.second) {
+                    if (S.i8[1][s] != IDLE || S.i4[4][s] >= 0)
+                        continue;
+                    S.f4[F4_re][s] *= nw / std::max(S.sre[s], 1e-12f);
+                    S.sre[s] = nw;
+                }
+            }
+        }
+    }
+
+    // live._sound_stamp on a part's slots: the times its channel asks of them
+    void sound_stamp(const OrganSpec *og, int ch, const std::vector<long> &sl)
+    {
+        const double *d = snd_d[ch];
+        bool at = (og->snd_mask & 1) && d[2] != 0.0, rl = (og->snd_mask & 2) && d[1] != 0.0,
+             dc = (og->snd_mask & 4) && d[4] != 0.0;
+        if (!(at || rl || dc))
+            return;
+        float fa = at ? (float)pow(4.0, d[2]) : 1.0f, r = rl ? (float)pow(4.0, d[1]) : 1.0f,
+              k = dc ? (float)(1.0 / pow(4.0, d[4])) : 1.0f;
+        for (long s : sl) {
+            if (S.i4[4][s] >= 0)                // (a Moog's CC71-75 are its panel)
+                continue;
+            if (at)
+                S.f4[F4_fa][s] *= fa;
+            if (rl) {
+                S.f4[F4_re][s] *= r;
+                S.sre[s] = r;
+            }
+            if (dc) {
+                S.f4[F4_logr][s] *= k;
+                S.f4[F4_logrA][s] *= k;
+            }
+        }
     }
 
     // whether a harmonium (a stop word on CC43) is a part here
@@ -1346,6 +1452,9 @@ struct Piano {
         const OrganSpec *og = patches[cur].organ;
         if (og->wccs[0] == 43)              // a harmonium's effect stops (_harmonium_stamp)
             harmonium_stamp(T, R, ch, note, ri, key);
+        auto td = trem_depth.find(pid);     // the wheel's tremolo, the wheel already up
+        if (td != trem_depth.end() && td->second > 0.0)
+            S.tremolo_arm(S.last_slots, td->second, og->wtrem_stereo);
         if (og->wind) {
             int wr = wind_row(ri);
             if (wr > 0)
@@ -1615,6 +1724,10 @@ struct Piano {
         for (long s : slots) {
             S.f4[F4_aL][s] = (float)((double)S.aL0[s] * sh);
             S.f4[F4_aR][s] = (float)((double)S.aR0[s] * sh);
+            if (S.tr_on[s]) {                   // (a tremolo's baselines with it)
+                S.tr_aL[s] = S.f4[F4_aL][s];
+                S.tr_aR[s] = S.f4[F4_aR][s];
+            }
         }
     }
 
@@ -1961,14 +2074,23 @@ struct Piano {
             }
         } else if (cc == 98 || cc == 99) {
             rpn_none[ch] = true;                    // NRPN select: no RPN takes the data
+            (cc == 99 ? nrpn_msb : nrpn_lsb)[ch] = v;
         } else if (cc == 101 || cc == 100) {
             if (rpn_none[ch]) {
                 rpn_none[ch] = false;
                 rpn_msb[ch] = rpn_lsb[ch] = 127;
             }
+            nrpn_msb[ch] = nrpn_lsb[ch] = 127;      // (live's nrpn None)
             (cc == 101 ? rpn_msb : rpn_lsb)[ch] = v;
         } else if (cc == 6 || cc == 38) {
-            rpn_data(ch, cc, v, n0);
+            int gs = rpn_none[ch] ? gs_sound_nrpn(nrpn_msb[ch], nrpn_lsb[ch]) : -1;
+            if (gs >= 0) {                          // GS's sound NRPNs: CC71-78's older address
+                if (cc == 6)
+                    sound_cc(ch, gs, v);
+            } else
+                rpn_data(ch, cc, v, n0);
+        } else if (cc >= 71 && cc <= 78) {
+            sound_cc(ch, cc, v);
         } else if (cc == 96 || cc == 97) {
             rpn_step(ch, cc == 96, n0);
         } else if (cc == 121) {
@@ -3987,10 +4109,12 @@ void nv_slab_col(void *h, int group, int index, void *out)
     case 8:
         memcpy(out, S->dg.data(), sizeof(float) * n);
         break;
-    case 9: {                           // the tremolo's: tr_dep, tr_aL, tr_aR, tr_st, tr_on
+    case 9: {                           // the tremolo's: tr_dep, tr_aL, tr_aR, tr_st, tr_on, hs_dep
         if (index == 4)
             for (long i = 0; i < n; i++)
                 ((float *)out)[i] = S->tr_on[i];
+        else if (index == 5)
+            memcpy(out, S->hs_dep.data(), sizeof(float) * n);
         else
             memcpy(out, (index == 0 ? S->tr_dep : index == 1 ? S->tr_aL : index == 2 ? S->tr_aR : S->tr_st).data(),
                    sizeof(float) * n);

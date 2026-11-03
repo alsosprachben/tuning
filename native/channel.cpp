@@ -206,6 +206,10 @@ struct Song {
     // the rows of each played note that is a gesture's stroke (nv_prepare's:
     // blockrender's stroke_rows), [first, end)
     std::vector<std::pair<long long, long long>> stroke_rows;
+    // a reed organ's notes struck with its Tremolo stop drawn (by note), and
+    // their rows (_HT_ROWS, nv_prepare's)
+    mutable std::vector<char> htrem_note;
+    std::vector<std::pair<long long, long long>> htrem_rows;
     // ...and of each note's bellows push (blockrender's push_rows), [first, end)
     std::vector<std::pair<long long, long long>> push_rows;
     double total = 0.0;
@@ -1336,7 +1340,72 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
     };
     n->organ_hx = drawn_at(o->spec->expr_rank) ? e.v11 : NAN;
     n->organ_perc = drawn_at(o->spec->perc_rank);
+    // ...and its Tremolo stop (_HTREM_CH: the notes struck with it drawn)
+    if (S->htrem_note.size() < S->notes.size())
+        S->htrem_note.resize(S->notes.size(), 0);
+    S->htrem_note[i] = o->spec->expr_rank >= 0 && o->spec->htrem_depth > 0.0 && drawn_at(o->spec->htrem_rank);
     return 1;
+}
+
+// note i struck with its reed organ's Tremolo stop drawn
+int nv_song_htrem(void *s, int i)
+{
+    const nv::Song *S = (nv::Song *)s;
+    return i >= 0 && i < (int)S->htrem_note.size() && S->htrem_note[i];
+}
+
+void nv_song_add_htrem_rows(void *s, long long a, long long b)
+{
+    ((nv::Song *)s)->htrem_rows.push_back(std::make_pair(a, b));
+}
+
+// the stop's rows, [first, end) a note (ab: 2 each), how many
+int nv_song_n_htrem_rows(void *s, long long *ab, int cap)
+{
+    const nv::Song *S = (nv::Song *)s;
+    int n = (int)S->htrem_rows.size();
+    for (int q = 0; q < n && q < cap; q++) {
+        ab[2 * q] = S->htrem_rows[q].first;
+        ab[2 * q + 1] = S->htrem_rows[q].second;
+    }
+    return n;
+}
+
+// THE ORGANS' TREMOLOS (tremolo.expand's channels), each channel's
+// (rate, depth, stereo, scatter) in cfg (4 a channel, ch[] its channel):
+// which = 0 the Tremolo stops' (_HTREM_CH: the stop's rate and depth, mono),
+// 1 the wheels' (_note_tremolo: the voice's tremolo at its depth times the
+// channel's first CC1, none without one). How many.
+int nv_song_organ_tremolos(void *s, int which, int *ch, double *cfg, int cap)
+{
+    nv::Song *S = (nv::Song *)s;
+    int n = 0;
+    for (const auto &o : S->organs) {
+        const OrganSpec *sp = o.spec;
+        double hz = 0.0, dep = 0.0, st = 0.0, sc = 0.0;
+        if (which == 0) {
+            if (sp->expr_rank < 0 || sp->htrem_depth <= 0.0)
+                continue;
+            hz = sp->htrem_hz;
+            dep = sp->htrem_depth;
+        } else {
+            int v;
+            if (sp->wheel_trem <= 0.0 || !nv_song_first_cc(s, o.ch, 1, &v))
+                continue;
+            hz = sp->wtrem_hz;
+            dep = sp->wheel_trem * (v / 127.0);
+            st = sp->wtrem_stereo ? 1.0 : 0.0;
+            sc = sp->wtrem_scatter;
+            if (dep <= 0.0)
+                continue;
+        }
+        if (n < cap) {
+            ch[n] = (int)o.ch;
+            cfg[4 * n] = hz; cfg[4 * n + 1] = dep; cfg[4 * n + 2] = st; cfg[4 * n + 3] = sc;
+        }
+        n++;
+    }
+    return n;
 }
 
 // note i's glide: the key it glides from (-1 none), and through *cc5 the CC5 in force at its onset

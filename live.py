@@ -1028,6 +1028,11 @@ class Slab:
         self.tr_on = np.zeros(capacity, bool)
         self.tr_dep = np.zeros(capacity, np.float32)
         self.tr_st = np.ones(capacity, np.float32)
+        # A HARMONIUM'S TREMOLO STOP (stop_tremolo_arm): its own bellows at its
+        # own rate, on the same baselines and multiplying the wheel's, as the
+        # file renderer's expand runs the stop's and then the channel's
+        self.hs_dep = np.zeros(capacity, np.float32)
+        self.hs_hz = np.zeros(capacity, np.float64)
         self.tr_aL = np.zeros(capacity, np.float32)
         # THE INSERTION EFFECT's MOVING FILTER (Live._filter_block): its slots,
         # their channel, and the level each would have unfiltered -- a fifth
@@ -1291,6 +1296,24 @@ class Slab:
         self.tr_dep[idx] = depth
         self.tr_st[idx] = -1.0 if stereo else 1.0
 
+    def stop_tremolo_arm(self, slots, depth, hz):
+        """A harmonium's Tremolo stop on these slots: its depth at its own
+        rate, beside whatever the wheel's tremolo does to them (tremolo_swing
+        multiplies the two). The baselines are tremolo_arm's, captured once;
+        a row the wheel has not armed swings by the stop alone."""
+        if slots is None or not len(slots):
+            return
+        idx = np.asarray(slots, dtype=np.intp)
+        fresh = idx[~self.tr_on[idx]]
+        if len(fresh):
+            self.tr_aL[fresh] = self.a["aL"][fresh]
+            self.tr_aR[fresh] = self.a["aR"][fresh]
+            self.tr_dep[fresh] = 0.0
+            self.tr_st[fresh] = 1.0
+        self.tr_on[idx] = True
+        self.hs_dep[idx] = depth
+        self.hs_hz[idx] = hz
+
     SHED_FADE = 0.005           # s: a shed partial's fade
 
     def shed(self, n, frac):
@@ -1413,17 +1436,27 @@ class Slab:
             self.a["aR"][sv[0]] = sv[2]
             self._fl_sav = None
 
-    def tremolo_swing(self, phase):
+    def tremolo_swing(self, phase, n=0, rate=48000.0):
         """Set every modulated partial's level from where the modulator has got
         to. Evaluated NOW, so a held chord follows the wheel instead of keeping
-        whatever depth it was born with."""
+        whatever depth it was born with. `phase` is the wheel's (None: no wheel
+        tremolo here); a Tremolo stop's rows then swing at their own rate from
+        the same absolute clock, n."""
         m = self.tr_on & self.busy
         if not m.any():
             return
         idx = np.flatnonzero(m)
-        c = math.cos(phase) * self.tr_dep[idx]
+        c = (math.cos(phase) if phase is not None else 0.0) * self.tr_dep[idx]
         self.a["aL"][idx] = self.tr_aL[idx] * (1.0 + c)
         self.a["aR"][idx] = self.tr_aR[idx] * (1.0 + c * self.tr_st[idx])
+        hs = self.hs_dep[idx] > 0.0
+        if hs.any():
+            ih = idx[hs]
+            for hz in np.unique(self.hs_hz[ih]):
+                q = ih[self.hs_hz[ih] == hz]
+                g = 1.0 + math.cos(2.0 * math.pi * float(hz) * n / float(rate)) * self.hs_dep[q]
+                self.a["aL"][q] *= g
+                self.a["aR"][q] *= g
 
     def leslie_swing(self, horn_angle, drum_angle):
         """Set every rotor partial's level from where the rotor has got to.
@@ -1503,6 +1536,7 @@ class Slab:
         self.fx_ch[idx] = -1
         self.ls_on[idx] = False
         self.tr_on[idx] = False
+        self.hs_dep[idx] = 0.0
         self.cv_on[idx] = False
         self.dirty = True
         a = self.a
@@ -2038,6 +2072,7 @@ class Slab:
         self.fx_ch[idx] = -1
         self.ls_on[idx] = False
         self.tr_on[idx] = False
+        self.hs_dep[idx] = 0.0
         self.cv_on[idx] = False
         self.dirty = True
         a = self.a
@@ -2113,6 +2148,13 @@ class Slab:
         shape *= 10.0 ** (gain_db * pressure / 20.0)
         self.a["aL"][idx] = self.aL0[idx] * shape
         self.a["aR"][idx] = self.aR0[idx] * shape
+        # ...AND A TREMOLO'S BASELINES: tremolo_swing assigns aL from them every
+        # block, so a press on a swinging note was gone a block later
+        on = self.tr_on[idx]
+        if on.any():
+            io = idx[on]
+            self.tr_aL[io] = self.aL0[io] * shape[on]
+            self.tr_aR[io] = self.aR0[io] * shape[on]
 
     def channel_gain(self, slots, ratio):
         """Move the channel fader under a note already sounding.
@@ -10015,7 +10057,9 @@ class Live:
             a["fa"][idx] = np.minimum(a["fa"][idx], np.float32(
                 max(1e-4, min(part.patch.percussion_attack_s, afm * dur)) * B.SR))
         if "tremolo" in part.drawn and part.patch.stop_tremolo_depth > 0.0:
-            self.slab.tremolo_arm(sl, part.patch.stop_tremolo_depth, False)
+            # at the stop's own rate (stop_tremolo_hz), not the wheel's
+            self.slab.stop_tremolo_arm(sl, part.patch.stop_tremolo_depth,
+                                       part.patch.stop_tremolo_hz)
         self.slab.dirty = True
 
     def _draw(self, part, tmpl, ch, note, rank, n0):
@@ -10037,6 +10081,11 @@ class Live:
             return
         if part.patch.stop_word_ccs[0] == 43:
             self._harmonium_stamp(part, tmpl, ch, note, rank, key, hrel)
+        # THE WHEEL'S TREMOLO on a note struck with the wheel already up, as
+        # _note_on arms one (this path returns before it)
+        _td = self.trem_depth.get(part.pid, 0.0)
+        if _td > 0.0:
+            self.slab.tremolo_arm(self.slab.last_slots, _td, part.patch.tremolo_stereo)
         if part.patch.wind_pc is not None:
             _wr = self._wind_row(part, rank)
             if _wr > 0:
@@ -10723,12 +10772,11 @@ class Live:
                 # struck mid-swing are at the same place in the cycle. Both
                 # electric pianos modulate at 5.5 Hz; if a voice ever wants its
                 # own rate this has to become per-row, as ls_ph is.
+                # (A Tremolo stop's rows at their own rate: tremolo_swing.)
                 hz = next((p.patch.tremolo_hz for p in self.parts
-                           if p.patch.tremolo_depth > 0.0), 0.0) or \
-                     next((p.patch.stop_tremolo_hz for p in self.parts
-                           if p.patch.stop_tremolo_depth > 0.0), 0.0)
-                if hz > 0.0:
-                    self.slab.tremolo_swing(2.0 * math.pi * hz * n0 / float(self.rate))
+                           if p.patch.tremolo_depth > 0.0), 0.0)
+                self.slab.tremolo_swing(2.0 * math.pi * hz * n0 / float(self.rate) if hz > 0.0 else None,
+                                        n0, float(self.rate))
             if self.slab.ls_on.any():
                 dt = frame_count / float(self.rate)
                 ah = self.rotor_horn.advance(dt)
@@ -19960,7 +20008,7 @@ def _selftest(only=""):
         _hm.on_midi(mido.Message("note_on", channel=0, note=note, velocity=100)); _hm.apply(_hm.n)
         ix = np.flatnonzero(_hm.slab.busy); a = _hm.slab.a
         r = dict(nf=a["nf"][ix].astype(np.float64), aL=a["aL"][ix].astype(np.float64),
-                 fa=a["fa"][ix].astype(np.float64), tr=int(_hm.slab.tr_on[ix].sum()),
+                 fa=a["fa"][ix].astype(np.float64), tr=int((_hm.slab.hs_dep[ix] > 0).sum()),   # (the stop's; the wheel is up)
                  keys=sorted(k[3] for k in _hm.slab.live))
         _hm.on_midi(mido.Message("note_off", channel=0, note=note, velocity=0)); _hm.apply(_hm.n)
         _hm.panic()

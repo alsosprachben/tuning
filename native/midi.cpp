@@ -325,6 +325,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     bool rxbank = true;
     std::map<std::pair<int, int>, std::vector<Note>> on;
     std::map<int, std::pair<int, int>> rsel;    // a channel's selected RPN, (MSB, LSB); absent: none
+    std::map<int, std::pair<int, int>> nsel;    // ...and NRPN (_nsel); absent: none
     // each channel's RPNs as data entry left them (parse's _rrange, _rfmsb,
     // _rfine, _rcoarse, _rmod, _rtp, _rtb; absent: power-on)
     std::map<int, double> rrange, rfine, rcoarse, rmod;
@@ -357,7 +358,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             if (!seen_note && d.size() >= 4 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12)
                 P.gs = 1;
             rxbank = lvl != 1;
-            bmsb.clear(); blsb.clear(); drums.clear(); prog.clear(); ctrl.clear(); rsel.clear();
+            bmsb.clear(); blsb.clear(); drums.clear(); prog.clear(); ctrl.clear(); rsel.clear(); nsel.clear();
             // BACK TO POWER-ON: every tuning the file set, from here (gmon)
             P.pitch.push_back(PitchEv{-1, t, seq, 9, 0.0});
             P.snd.push_back(CCEv{-1, t, -1, 0});
@@ -407,14 +408,38 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             }
             if (cc == 98 || cc == 99) {
                 rsel.erase(ch);
+                // ...unless it is one of GS's eight sound NRPNs, the same
+                // controls as CC71-78 under an older address (_nsel)
+                auto nt = nsel.find(ch);
+                std::pair<int, int> n0 = nt != nsel.end() ? nt->second : std::make_pair(127, 127);
+                nsel[ch] = cc == 99 ? std::make_pair(v, n0.second) : std::make_pair(n0.first, v);
             } else if (cc == 101 || cc == 100) {
+                nsel.erase(ch);
                 auto it = rsel.find(ch);
                 std::pair<int, int> cur = it != rsel.end() ? it->second : std::make_pair(127, 127);
                 rsel[ch] = cc == 101 ? std::make_pair(v, cur.second) : std::make_pair(cur.first, v);
             } else if (cc == 6 || cc == 38) {
                 auto it = rsel.find(ch);
-                if (it == rsel.end() || it->second == std::make_pair(0, 6))
-                    return -6;          // an NRPN's data (GS's), or MPE's configuration
+                if (it == rsel.end()) {
+                    // AN NRPN's data: GS's sound NRPNs as their CC71-78; a
+                    // drum instrument's own (GS_DRUM_NRPN) Python's; any
+                    // other nothing
+                    auto nt = nsel.find(ch);
+                    if (nt == nsel.end())
+                        continue;
+                    static const int DRUM[] = {0x18, 0x1A, 0x1C, 0x1D, 0x1E, 0x1F};
+                    for (int d : DRUM)
+                        if (nt->second.first == d && cc == 6)
+                            return -6;
+                    static const int GSN[8][3] = {{1, 0x08, 76}, {1, 0x09, 77}, {1, 0x0A, 78}, {1, 0x20, 74},
+                                                  {1, 0x21, 71}, {1, 0x63, 73}, {1, 0x64, 75}, {1, 0x66, 72}};
+                    for (auto &g : GSN)
+                        if (nt->second == std::make_pair(g[0], g[1]) && cc == 6)
+                            P.snd.push_back(CCEv{ch, t, g[2], v});
+                    continue;
+                }
+                if (it->second == std::make_pair(0, 6))
+                    return -6;          // MPE's configuration
                 // DATA ENTRY into the RPN selected (tonelib's rpn_*)
                 std::pair<int, int> sel = it->second;
                 if (sel == std::make_pair(0, 0)) {
