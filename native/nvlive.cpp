@@ -194,6 +194,7 @@ struct Export {
     std::vector<int> cls_organ, prog_organ;   // each class's organ, each program's (-1 none, -2 not the engine's)
     std::vector<double> les;              // LESL: the rotating speaker's constants
     std::string lobe_lib;                 // ...and synth_voice_lobe's library
+    std::vector<double> scan;             // SCAN: the scanner's constants and tables
     double beta = 0.0, headroom = 1.0;
     int part[128][10];
     bool live = false;
@@ -278,6 +279,18 @@ static bool read_export(const char *path, Export &E)
             if (ok) {
                 E.lobe_lib.resize(n);
                 ok = fread(&E.lobe_lib[0], 1, n, f) == (size_t)n;
+            }
+            // SCAN: the scanner's constants and circuit tables (scanner.cpp's)
+            pos = ftell(f);
+            if (ok && fread(lt, 1, 4, f) == 4 && !memcmp(lt, "SCAN", 4)) {
+                int ns = 0;
+                ok = fread(&ns, 4, 1, f) == 1;
+                if (ok) {
+                    E.scan.resize(ns);
+                    ok = fread(E.scan.data(), 8, ns, f) == (size_t)ns;
+                }
+            } else {
+                fseek(f, pos, SEEK_SET);
             }
         } else {
             fseek(f, pos, SEEK_SET);
@@ -639,7 +652,7 @@ int main(int argc, char **argv)
         if (E.cmap[q] >= 0) {
             const NoteClass *k = (const NoteClass *)E.classes[E.cmap[q]].data();
             // (a Hammond's rotor, scanner and valve are not live's here yet: Python's)
-            if (!(k->leslie || k->scanner == 1 || k->amp_drive != 0.0))
+            if (!(k->leslie || k->scanner || k->amp_drive != 0.0))
                 K[q] = k;
         }
     NoteIn t;

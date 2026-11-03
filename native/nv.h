@@ -497,8 +497,9 @@ typedef struct {
     const struct OrganSpec *organ;
     // A HAMMOND'S CABINET AND AMPLIFIER: its rotating speaker (leslie: 0
     // none, 1 starting on chorale, 2 on tremolo -- leslie_fast), its scanner
-    // (1 a setting of its own, 2 a selector a CC94 sets: scanner_switch), its
-    // valve stage's drive (amp_drive, 0 none)
+    // (0 none, else 1, +2 a selector CC94 sets -- scanner_switch -- +4 x
+    // its own depth 1-3, +16 its own on chorus), its valve stage's drive
+    // (amp_drive, 0 none)
     int leslie, scanner;
     double amp_drive;
 } NoteClass;
@@ -642,6 +643,8 @@ void nv_song_add_htrem_rows(void *s, long long a, long long b);
 int nv_song_n_htrem_rows(void *s, long long *ab, int cap);
 int nv_song_organ_tremolos(void *s, int which, int *ch, double *cfg, int cap);
 void nv_song_add_leslie(void *s, long long ch, int kind);
+void nv_song_add_amp(void *s, long long ch, double drive, int rotor);
+double nv_song_amp(void *s, int k, long long *ch, int *rotor);
 int nv_song_leslie(void *s, int k, long long *ch);
 int nv_song_ccs(void *s, long long ch, int cc, double *t, int *v, int cap);
 void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv);

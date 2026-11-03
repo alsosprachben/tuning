@@ -84,6 +84,11 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
 void nv_buf_free(void *p);
 long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                            const int *nreq, const double *req, double sr, const double *L, void **lobe);
+long long nv_amp_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
+                        const double *drives, double sr);
+void nv_scan_rows(const double *X, long nblk, int blk, double sr, int depth, int chorus, float *br, double *bc);
+long long nv_scan_expand(const double *X, double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
+                         const int *row0s, const int *depths, const int *choruses, double sr);
 long nv_leslie_angles(int nch, const int *nreq, const double *req, long n_samples, double sr, int blk,
                       const double *L, float *LANG);
 }
@@ -196,6 +201,7 @@ struct Export {
     std::vector<int> cls_organ, prog_organ;   // each class's organ, each program's (-1 none, -2 not the engine's)
     std::vector<double> les;              // LESL: the rotating speaker's constants
     std::string lobe_lib;                 // ...and synth_voice_lobe's library
+    std::vector<double> scan;             // SCAN: the scanner's constants and tables
 };
 
 static bool read_export(const char *path, Export &E)
@@ -258,6 +264,18 @@ static bool read_export(const char *path, Export &E)
             if (ok) {
                 E.lobe_lib.resize(n);
                 ok = fread(&E.lobe_lib[0], 1, n, f) == (size_t)n;
+            }
+            // SCAN: the scanner's constants and circuit tables (scanner.cpp's)
+            pos = ftell(f);
+            if (ok && fread(lt, 1, 4, f) == 4 && !memcmp(lt, "SCAN", 4)) {
+                int ns = 0;
+                ok = fread(&ns, 4, 1, f) == 1;
+                if (ok) {
+                    E.scan.resize(ns);
+                    ok = fread(E.scan.data(), 8, ns, f) == (size_t)ns;
+                }
+            } else {
+                fseek(f, pos, SEEK_SET);
             }
         } else {
             fseek(f, pos, SEEK_SET);
@@ -405,14 +423,7 @@ int main(int argc, char **argv)
         }
     }
     std::vector<double> first(256, INFINITY);
-    std::vector<char> drum_ch(256, 0), c94(256, 0);
-    for (int i = 0, n = nv_midi_n_ccs(midi); i < n; i++) {
-        int iv[3];
-        double t;
-        nv_midi_cc(midi, i, iv, &t);
-        if (iv[1] == 94)
-            c94[iv[0] & 255] = 1;
-    }
+    std::vector<char> drum_ch(256, 0);
     for (int i = 0, n = nv_midi_n_notes(midi); i < n; i++) {
         int iv[5];
         double dv[5];
@@ -426,14 +437,9 @@ int main(int argc, char **argv)
                     iv[4] ? ", a drum" : "");
             return 2;
         }
-        // A HAMMOND'S AMPLIFIER AND SCANNER (tubeamp, scanner.py): Python's, for now
         const NoteClass *nc = (const NoteClass *)E.classes[cq].data();
-        if (nc->amp_drive != 0.0) {
-            fprintf(stderr, "nvrender: refused: a valve amplifier (program %d)\n", iv[3]);
-            return 2;
-        }
-        if (nc->scanner == 1 || (nc->scanner == 2 && c94[iv[0] & 255])) {
-            fprintf(stderr, "nvrender: refused: a Hammond's scanner (program %d)\n", iv[3]);
+        if (getenv("TUNING_AMP_DRIVE") && nc->amp_drive != 0.0) {
+            fprintf(stderr, "nvrender: refused: TUNING_AMP_DRIVE (Python's audition)\n");
             return 2;
         }
 
@@ -528,11 +534,50 @@ int main(int argc, char **argv)
         }
     // ...then the chests' wind (_prep_wind_rows: a row a family of each organ channel's ranks)
     const int nw = nv_song_organ_wind_rows(song, (int)gch.size());
+    // ...then THE SCANNERS' (_prep_scanner_channels): each channel whose note
+    // has one, as the file's notes come, at its first CC94's position (the
+    // voice's own without one, or without the switch): six band rows each
+    std::vector<long long> sch;
+    std::vector<int> sdep, scho, srow;
+    for (int i = 0, n = nv_song_n_notes(song); i < n; i++) {
+        long long c;
+        int iv[4];
+        double dv[2];
+        nv_song_get_note(song, i, &c, iv, dv);
+        if (iv[3] || iv[2] < 0 || iv[2] > 127 || std::find(sch.begin(), sch.end(), c) != sch.end())
+            continue;
+        int cq = E.cmap[128 * iv[2] + iv[0]];
+        const NoteClass *k = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
+        if (!k || !k->scanner)
+            continue;
+        int depth = (k->scanner >> 2) & 3, cho = (k->scanner >> 4) & 1, v;
+        if ((k->scanner & 2) && nv_song_first_cc(song, c, 94, &v)) {
+            // scanner.setting_from_cc: off, V1-V3, C1-C3 from 0, 18, 37, 55, 73, 91, 110
+            static const int start[7] = {0, 18, 37, 55, 73, 91, 110};
+            int pos = 0;
+            for (int q = 0; q < 7; q++)
+                if (v >= start[q])
+                    pos = q;
+            depth = pos == 0 ? 0 : (pos - 1) % 3 + 1;
+            cho = pos >= 4;
+        }
+        if (!depth)
+            continue;
+        if (E.scan.empty()) {
+            fprintf(stderr, "nvrender: %s is an export from before the scanner (native_export.py again)\n", argv[1]);
+            return 1;
+        }
+        sch.push_back(c);
+        sdep.push_back(depth);
+        scho.push_back(cho);
+        srow.push_back((int)gch.size() + nw + 6 * ((int)sch.size() - 1));
+    }
+    const int nsr = 6 * (int)sch.size();
     float one = 0.0f;
     for (int c = 0; c < 256; c++)
         if (nv_bend_fader(midi, song, c, 0, (int)BLK, SR, E.k[K_TAU], E.k[K_FADER_TAIL], E.k[K_STAMP_S],
                           E.k[K_STAMPED_SHARE], (int)E.k[K_GM_VOL], (int)E.k[K_GM_EXPR], &one, swell.data())) {
-            br[c] = (double)(gch.size() + nw + fch.size());
+            br[c] = (double)(gch.size() + nw + nsr + fch.size());
             fch.push_back(c);
         }
     for (int c = 0; c < 256; c++)
@@ -562,7 +607,7 @@ int main(int argc, char **argv)
     double qacc[18] = {0}, az = 0.0, out[48] = {0};
     double *rows = nullptr;
     void *dm[6] = {nullptr};
-    bool rows_ = !fch.empty() || !gch.empty() || nw;
+    bool rows_ = !fch.empty() || !gch.empty() || nw || nsr;
     long long P = nv_prepare(song, K.data(), &t, rows_ ? br.data() : nullptr, rows_ ? 512 : 0, &rs, &rows,
                              qacc, &az, E.kind.data(),
                              E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, total,
@@ -571,6 +616,25 @@ int main(int argc, char **argv)
     if (P < 0) {
         fprintf(stderr, "nvrender: refused: a note is not the engine's (%lld)\n", P);
         return 2;
+    }
+    // THE VALVE AMPLIFIERS (_prep_amplifier, tubeamp.expand): each channel's
+    // drive its voice's -- times CC1's first (4 x cc/127) where the voice is
+    // not on a rotor -- its products appended, before the speaker sees them
+    {
+        std::vector<long long> ach;
+        std::vector<double> adr;
+        for (int k = 0, na = (int)nv_song_amp(song, -1, nullptr, nullptr); k < na; k++) {
+            long long c;
+            int rotor;
+            double drv = nv_song_amp(song, k, &c, &rotor);
+            int v;
+            if (!rotor && nv_song_first_cc(song, c, 1, &v))
+                drv *= 4.0 * v / 127.0;
+            ach.push_back(c);
+            adr.push_back(drv);
+        }
+        if (!ach.empty())
+            nv_amp_expand(&rows, &P, dm, (int)ach.size(), ach.data(), adr.data(), SR);
     }
     // THE ORGANS' TREMOLOS (_prep_tremolo, after the render's length is
     // known): a Tremolo stop's on the notes struck with it drawn, then the
@@ -599,6 +663,11 @@ int main(int argc, char **argv)
         }
         tremolo_expand(&rows, &P, dm, chans, which == 0 ? &mask : nullptr, SR);
     }
+    // THE SCANNERS (_prep_scanner, scanner.expand): each channel's partials
+    // on their band rows, the chorus's dry share and copies, tier B's copies
+    if (!sch.empty())
+        nv_scan_expand(E.scan.data(), &rows, &P, dm, (int)sch.size(), sch.data(), srow.data(), sdep.data(),
+                       scho.data(), SR);
     // THE ROTATING SPEAKERS (_prep_rotating_speaker, leslie.expand): each
     // Leslie channel's half-moon from its CC1s (leslie.zone), on its default
     // speed from 0 where the first is later; the cabinet, the crossover's
@@ -713,7 +782,7 @@ int main(int argc, char **argv)
     // the rows (_prep_bend_arrays): a gesture's ratio and phase a block (its
     // channel's fader's level at each edge, where it has one); a fader's
     // ratio 1 and phase 0, its level; no rows, one of ones and no levels
-    size_t ng = gch.size(), nr = std::max<size_t>(ng + nw + fch.size(), 1);
+    size_t ng = gch.size(), nr = std::max<size_t>(ng + nw + nsr + fch.size(), 1);
     std::vector<float> BRr(nr * nblk, 1.0f), BLr;
     std::vector<double> BCr(nr * nblk, 0.0);
     for (size_t r = 0; r < ng; r++)
@@ -724,14 +793,21 @@ int main(int argc, char **argv)
     if (nw)                                 // the chests' wind, after the gestures
         nv_song_organ_wind(song, nblk, (int)BLK, SR, Gt.data(), BRr.data() + ng * nblk, BCr.data() + ng * nblk,
                            BLr.data() + ng * (nblk + 1));
+    for (size_t q = 0; q < sch.size(); q++)     // the scanners', after the wind
+        nv_scan_rows(E.scan.data(), nblk, (int)BLK, SR, sdep[q], scho[q], BRr.data() + (size_t)srow[q] * nblk,
+                     BCr.data() + (size_t)srow[q] * nblk);
     if (!fch.empty()) {
         for (size_t r = 0; r < fch.size(); r++) {
-            float *Lf = BLr.data() + (ng + nw + r) * (nblk + 1);
+            float *Lf = BLr.data() + (ng + nw + nsr + r) * (nblk + 1);
             nv_bend_fader(midi, song, fch[r], nblk, (int)BLK, SR, E.k[K_TAU], E.k[K_FADER_TAIL], E.k[K_STAMP_S],
                           E.k[K_STAMPED_SHARE], (int)E.k[K_GM_VOL], (int)E.k[K_GM_EXPR], Lf, swell.data());
             long gi = (long)br[256 + fch[r]];
             if (gi >= 0)                    // the channel's gesture rides its fader too
                 std::copy(Lf, Lf + nblk + 1, BLr.data() + gi * (nblk + 1));
+            for (size_t q = 0; q < sch.size(); q++)     // ...and its scanner's rows
+                if (sch[q] == fch[r])
+                    for (int b = 0; b < 6; b++)
+                        std::copy(Lf, Lf + nblk + 1, BLr.data() + (size_t)(srow[q] + b) * (nblk + 1));
         }
     }
     if (const char *dp_ = getenv("TUNING_NVRENDER_DUMP")) {

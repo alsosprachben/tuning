@@ -130,42 +130,84 @@ def _table(chorus):
     rail (complex) and each tap's rail-relative response as magnitude and
     UNWRAPPED phase, so it interpolates."""
     if chorus not in _TAB:
-        fg = 10.0 * 2.0 ** (np.arange(0, int(96 * math.log2(24000 / 10.0)) + 1) / 96.0)
+        import native as _NV
+        fg = 10.0 * _NV.xpow(2.0, np.arange(0, int(96 * math.log2(24000 / 10.0)) + 1) / 96.0)
         rail = np.empty(len(fg), complex)
         rel = np.empty((len(fg), 19), complex)
         for i, f in enumerate(fg):
             r, t = taps_response(f, chorus)
             rail[i] = r
             rel[i] = np.asarray(t) - r
-        _TAB[chorus] = (fg, rail, np.abs(rel), np.unwrap(np.angle(rel), axis=0))
+        _TAB[chorus] = (fg, rail, _NV.xabs(rel), np.unwrap(_NV.xangle(rel), axis=0))
     return _TAB[chorus]
 
 
+_TABD = {}
+
+
+def table_d(chorus):
+    """The table as the scanner reads it (and native/scanner.cpp, from the
+    export): (grid, its log, the rail's magnitude and unwrapped phase, each
+    tap's), libm's log, abs and angle."""
+    if chorus not in _TABD:
+        import native as _NV
+        fg, rail, mag, ph = _table(chorus)
+        _TABD[chorus] = (fg, _NV.xlog(fg), _NV.xabs(rail), np.unwrap(_NV.xangle(rail)), mag, ph)
+    return _TABD[chorus]
+
+
+def _cs(x):
+    """(cos x, sin x), libm's (native.xcexp of i x)."""
+    import native as _NV
+    x = np.asarray(x, float)
+    z = np.zeros(x.shape, complex)
+    z.imag = x
+    e = _NV.xcexp(z)
+    return np.ascontiguousarray(e.real), np.ascontiguousarray(e.imag)
+
+
+def _cplx(re, im):
+    z = np.empty(np.shape(re), complex)
+    z.real, z.imag = re, im
+    return z
+
+
+def _lf(f, chorus):
+    import native as _NV
+    fg = table_d(chorus)[0]
+    return _NV.xlog(np.maximum(np.atleast_1d(np.asarray(f, float)), fg[0]))
+
+
 def rail_at(f, chorus):
+    """(re, im) of the rail's response at f (0 on vibrato)."""
+    f = np.atleast_1d(np.asarray(f, float))
     if not chorus:
-        return np.zeros(np.shape(f), complex)
-    fg, rail, _m, _p = _table(chorus)
-    lf = np.log(np.maximum(f, fg[0]))
-    return (np.interp(lf, np.log(fg), np.abs(rail))
-            * np.exp(1j * np.interp(lf, np.log(fg), np.unwrap(np.angle(rail)))))
+        return np.zeros(len(f)), np.zeros(len(f))
+    fg, lg, rm, rp, _m, _p = table_d(chorus)
+    lf = _lf(f, chorus)
+    m = np.interp(lf, lg, rm)
+    c, s = _cs(np.interp(lf, lg, rp))
+    return m * c, m * s
 
 
 def rel_at(f, chorus):
-    """[len(f), 19] the taps' rail-relative responses at f."""
-    fg, _r, mag, ph = _table(chorus)
-    lf = np.log(np.maximum(np.atleast_1d(f), fg[0]))
-    lg = np.log(fg)
-    out = np.empty((len(lf), 19), complex)
+    """(re, im) [len(f), 19] the taps' rail-relative responses at f."""
+    fg, lg, _rm, _rp, mag, ph = table_d(chorus)
+    lf = _lf(f, chorus)
+    re = np.empty((len(lf), 19))
+    im = np.empty((len(lf), 19))
     for k in range(19):
-        out[:, k] = np.interp(lf, lg, mag[:, k]) * np.exp(1j * np.interp(lf, lg, ph[:, k]))
-    return out
+        m = np.interp(lf, lg, mag[:, k])
+        c, s = _cs(np.interp(lf, lg, ph[:, k]))
+        re[:, k], im[:, k] = m * c, m * s
+    return re, im
 
 
 def tap_delays(f, chorus):
     """[19] each tap's phase delay (s) at f, rail-relative."""
-    fg, _r, _m, ph = _table(chorus)
+    fg, lg, _rm, _rp, _m, ph = table_d(chorus)
     lf = math.log(max(f, fg[0]))
-    return np.array([-np.interp(lf, np.log(fg), ph[:, k]) / (2.0 * np.pi * f)
+    return np.array([-np.interp(lf, lg, ph[:, k]) / (2.0 * np.pi * f)
                      for k in range(19)])
 
 
@@ -238,21 +280,32 @@ def gains(f, depth, chorus):
     scanned path's complex gain against that row: the mean over a revolution
     of the crossfaded taps' responses, turned back by the row's delay, and
     the row's mean delay put back in (the row carries only its motion)."""
+    # (each complex product written out, its parts libm's: native/scanner.cpp's arithmetic)
     f = np.atleast_1d(np.asarray(f, float))
     band = band_of(f)
-    dry = rail_at(f, chorus)
-    rel = rel_at(f, chorus)                                  # [n, 19]
+    dre, dim = rail_at(f, chorus)
+    rr, ri = rel_at(f, chorus)                               # [n, 19]
     tn = np.asarray(TAPS[depth]) - 1
     a, b, eta = crossfade(_TH)
-    sc = np.empty(len(f), complex)
+    sre, sim = np.empty(len(f)), np.empty(len(f))
     for bi in np.unique(band):
         m = band == bi
-        tau = delay(_TH, depth, bi, chorus)                  # [256]
-        S = (1.0 - eta)[None, :] * rel[m][:, tn[a]] + eta[None, :] * rel[m][:, tn[b]]
-        w = 2.0 * np.pi * f[m]
-        c0 = np.mean(S * np.exp(1j * w[:, None] * tau[None, :]), axis=1)
-        sc[m] = c0 * np.exp(-1j * w * mean_delay(depth, bi, chorus))
-    return band, dry, sc
+        Pr, Pi, w = _scanned(rr[m], ri[m], f[m], tn, a, b, eta, depth, bi, chorus)
+        c0r, c0i = Pr.mean(axis=1), Pi.mean(axis=1)
+        cm, sm = _cs((-w) * mean_delay(depth, bi, chorus))
+        sre[m], sim[m] = c0r * cm - c0i * sm, c0r * sm + c0i * cm
+    return band, _cplx(dre, dim), _cplx(sre, sim)
+
+
+def _scanned(rr, ri, f, tn, a, b, eta, depth, bi, chorus):
+    """The scanned path of partials at f over a revolution (_TH's 256 angles),
+    (re, im) [n, 256], against their band row's delay; and their 2 pi f."""
+    tau = delay(_TH, depth, bi, chorus)                      # [256]
+    Sr = (1.0 - eta)[None, :] * rr[:, tn[a]] + eta[None, :] * rr[:, tn[b]]
+    Si = (1.0 - eta)[None, :] * ri[:, tn[a]] + eta[None, :] * ri[:, tn[b]]
+    w = 2.0 * np.pi * f
+    c, s = _cs(w[:, None] * tau[None, :])
+    return Sr * c - Si * s, Sr * s + Si * c, w
 
 
 # THE CROSSFADE'S OWN MOTION (tier B): what the mean leaves out, as the
@@ -276,29 +329,29 @@ def sidebands(f, depth, chorus, amp=None, note_max=None):
     """[(m array, c array)] per partial: its scanned components other than the
     mean, kept as above (amp: each partial's level; note_max: its note's
     loudest, for FLOOR_DB), phases as gains() takes the mean's."""
+    import native as _NV
     f = np.atleast_1d(np.asarray(f, float))
     band = band_of(f)
-    rel = rel_at(f, chorus)
+    rr, ri = rel_at(f, chorus)
     tn = np.asarray(TAPS[depth]) - 1
     M = 256
-    th = np.arange(M) * 2.0 * np.pi / M
-    a, b, eta = crossfade(th)
+    a, b, eta = crossfade(_TH)
     out = [None] * len(f)
+    ms = np.fft.fftfreq(M, 1.0 / M).astype(int)
     for bi in np.unique(band):
         m_ = np.flatnonzero(band == bi)
-        tau = delay(th, depth, bi, chorus)
-        S = (1.0 - eta)[None, :] * rel[m_][:, tn[a]] + eta[None, :] * rel[m_][:, tn[b]]
-        w = 2.0 * np.pi * f[m_]
-        R = S * np.exp(1j * w[:, None] * tau[None, :])
-        C = np.fft.fft(R, axis=1) / M * np.exp(-1j * w * mean_delay(depth, bi, chorus))[:, None]
-        ms = np.fft.fftfreq(M, 1.0 / M).astype(int)
+        Pr, Pi, w = _scanned(rr[m_], ri[m_], f[m_], tn, a, b, eta, depth, bi, chorus)
+        F = _NV.xfft(_cplx(Pr, Pi))
+        cm, sm = _cs((-w) * mean_delay(depth, bi, chorus))
+        Fr, Fi = F.real / M, F.imag / M
+        C = _cplx(Fr * cm[:, None] - Fi * sm[:, None], Fr * sm[:, None] + Fi * cm[:, None])
         for row, i in enumerate(m_):
-            mag = np.abs(C[row])
+            mag = _NV.xabs(C[row])
             ok = (mag > mag.max() * 10.0 ** (-SIDEBAND_DB / 20.0)) & (ms != 0)
             if amp is not None and note_max is not None:
                 ok &= amp[i] * mag >= note_max[i] * 10.0 ** (-FLOOR_DB / 20.0)
             keep = np.flatnonzero(ok)
-            keep = keep[np.argsort(-mag[keep])][:MAX_SIDE]
+            keep = keep[np.argsort(-mag[keep], kind='stable')][:MAX_SIDE]
             out[i] = (ms[keep], C[row][keep])
     return out
 
@@ -315,14 +368,16 @@ def apply(cols, sel, row_of_band, depth, chorus, sr, peak=None):
     band, dry, sc = gains(nf, depth, chorus)
     rowsel = np.asarray(row_of_band)[band]
 
+    import native as _NV
+
     def turned(p, g):
-        return p + np.angle(g)
+        return p + _NV.xangle(g)
     side = None
     if SIDEBANDS and sr:
         side = _side_copies(cols, sel, rowsel, depth, chorus, sr, peak)
     if not chorus:
         for k in [c for c in ('aL', 'aR', 'aM') if c in cols]:
-            cols[k][sel] = cols[k][sel] * np.abs(sc)
+            cols[k][sel] = cols[k][sel] * _NV.xabs(sc)
         cols['p0'][sel] = turned(cols['p0'][sel], sc)
         cols['p0R'][sel] = turned(cols['p0R'][sel], sc)
         cols['br'][sel] = rowsel
@@ -330,8 +385,8 @@ def apply(cols, sel, row_of_band, depth, chorus, sr, peak=None):
     o = {k: np.array(v[sel], copy=True) for k, v in cols.items()}
     o['_src'] = np.asarray(sel, int)          # each copy's source row
     for k in [c for c in ('aL', 'aR', 'aM') if c in cols]:
-        o[k] = o[k] * np.abs(sc)
-        cols[k][sel] = cols[k][sel] * np.abs(dry)
+        o[k] = o[k] * _NV.xabs(sc)
+        cols[k][sel] = cols[k][sel] * _NV.xabs(dry)
     o['p0'] = turned(o['p0'], sc)
     o['p0R'] = turned(o['p0R'], sc)
     o['br'] = rowsel.astype(o['br'].dtype)
@@ -372,10 +427,11 @@ def _side_copies(cols, sel, rowsel, depth, chorus, sr, peak=None):
     dw = 2.0 * np.pi * SCAN_HZ / sr * mm
     o['om'] = o['om'] + dw
     o['nf'] = o['nf'] + SCAN_HZ * mm
+    import native as _NV
     for k in [c for c in ('aL', 'aR', 'aM') if c in cols]:
-        o[k] = o[k] * np.abs(cc)
-    o['p0'] = o['p0'] + np.angle(cc)
-    o['p0R'] = o['p0R'] + np.angle(cc)
+        o[k] = o[k] * _NV.xabs(cc)
+    o['p0'] = o['p0'] + _NV.xangle(cc)
+    o['p0R'] = o['p0R'] + _NV.xangle(cc)
     o['br'] = np.asarray(rowsel)[np.searchsorted(sel, src)].astype(o['br'].dtype)
     o['_src'] = src
     return o

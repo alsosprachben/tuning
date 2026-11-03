@@ -215,7 +215,7 @@ def _load():
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
-                                                       'npyrandom.c', 'npyrandom.h', 'leslie.cpp')]
+                                                       'npyrandom.c', 'npyrandom.h', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -229,7 +229,7 @@ def _load():
         objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
                 tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.slab.o',
                 tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o', tmp + '.tuner.o', tmp + '.bend.o',
-                tmp + '.leslie.o']
+                tmp + '.leslie.o', tmp + '.tubeamp.o', tmp + '.scanner.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
             for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
@@ -251,6 +251,10 @@ def _load():
                                    '-o', objs[14]])
             subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'leslie.cpp'),
                                    '-o', objs[15]])
+            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'tubeamp.cpp'),
+                                   '-o', objs[16]])
+            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'scanner.cpp'),
+                                   '-o', objs[17]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl'])
         finally:
             for o in objs:
@@ -331,6 +335,14 @@ def _load():
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]),
             ('nv_leslie_expand', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p,
                                       ctypes.c_void_p, ctypes.c_void_p, C, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_amp_synth', None, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, ctypes.c_long,
+                                    C, ctypes.c_void_p]),
+            ('nv_amp_window', None, [ctypes.c_long, ctypes.c_void_p]),
+            ('nv_rfft', I, [ctypes.c_void_p, ctypes.c_long, ctypes.c_void_p]),
+            ('nv_cfft', I, [ctypes.c_void_p, ctypes.c_long, ctypes.c_void_p]),
+            ('nv_amp_expand', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p,
+                                   ctypes.c_void_p, C]),
+            ('nv_scan_rows', None, [ctypes.c_void_p, ctypes.c_long, I, C, I, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_leslie_angles', ctypes.c_long, [I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, C, I,
                                                  ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_slab_new', ctypes.c_void_p, [ctypes.c_long, C]), ('nv_slab_free', None, [ctypes.c_void_p]),
@@ -1727,8 +1739,16 @@ def note_class(cls):
         k.bendable = int(bool(getattr(cls, 'pitch_bendable', True)))
         # its cabinet and amplifier (blockrender's _LESLIE_CH, _SCAN_CH, _AMP_CH)
         k.leslie = (2 if getattr(cls, 'leslie_fast', True) else 1) if getattr(cls, 'leslie', False) else 0
-        k.scanner = 1 if getattr(cls, 'scanner', None) else 2 if getattr(cls, 'scanner_switch', False) else 0
+        # (scanner: 0 none; else 1, +2 the switch, +4 x its own depth, +16 its own chorus)
+        import scanner as _SCN
+        _own = _SCN.parse(getattr(cls, 'scanner', None))
+        k.scanner = (0 if not (getattr(cls, 'scanner_switch', False) or getattr(cls, 'scanner', None)) else
+                     1 + 2 * int(bool(getattr(cls, 'scanner_switch', False)))
+                     + (4 * _own[0] + 16 * int(_own[1]) if _own else 0))
         k.amp_drive = float(getattr(cls, 'amp_drive', 0.0) or 0.0)
+        if k.amp_drive and (getattr(cls, 'amp_reference', None) or getattr(cls, 'amp_imbalance', None) is not None):
+            _NOTE[cls] = False              # (a valve against a fixed reference, or unbalanced: Python's)
+            return None
         # the sound controls it answers, and where it starts from
         sc = T.sound_controls_of(cls)
         names = [T.SOUND_CC[c] for c in sorted(T.SOUND_CC)]
@@ -2191,6 +2211,46 @@ def xpow(x, y):
     # a one-element operand is the scalar every element takes
     d.nv_pow_n(out.size, xa.ctypes.data, int(xa.size > 1), ya.ctypes.data, int(ya.size > 1), out.ctypes.data)
     return out if shape else float(out)
+
+
+def xrfft(x):
+    """The real FFT of x (its length a power of two), np.fft.rfft's layout and
+    scale: native/tubeamp.cpp's, the same on every machine (numpy's
+    pocketfft is not across its versions); numpy's where there is no library."""
+    import numpy as np
+    x = np.ascontiguousarray(x, np.float64)
+    d = lib()
+    n = len(x)
+    if d is None or n < 2 or n & (n - 1):
+        return np.fft.rfft(x)
+    out = np.empty(n // 2 + 1, np.complex128)
+    d.nv_rfft(x.ctypes.data, n, out.ctypes.data)
+    return out
+
+
+def xcos(x):
+    """np.cos of x, libm's (native.xcexp of i x)."""
+    import numpy as np
+    x = np.asarray(x, np.float64)
+    z = np.zeros(x.shape, np.complex128)
+    z.imag = x
+    return np.ascontiguousarray(xcexp(z).real)
+
+
+def xfft(z, axis=-1):
+    """np.fft.fft of z along its last axis (its length a power of two):
+    native/tubeamp.cpp's (the same on every machine), row by row."""
+    import numpy as np
+    z = np.ascontiguousarray(z, np.complex128)
+    d = lib()
+    n = z.shape[-1]
+    if d is None or n < 2 or n & (n - 1) or axis not in (-1, z.ndim - 1):
+        return np.fft.fft(z, axis=axis)
+    out = np.empty_like(z)
+    zz, oo = z.reshape(-1, n), out.reshape(-1, n)
+    for r in range(zz.shape[0]):
+        d.nv_cfft(zz[r].ctypes.data, n, oo[r].ctypes.data)
+    return out
 
 
 def xabs(z):

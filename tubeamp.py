@@ -253,14 +253,16 @@ def curve(v, bias=BIAS, imbalance=IMBALANCE, ceiling=CEILING, knee=KNEE):
     unbalanced pair's standing offset is not emitted as DC.
     """
     import numpy as np
+    import native as _NV
     a = bias * (1.0 + imbalance)
     b = bias * (1.0 - imbalance)
     imax = ceiling * bias ** EXPONENT
 
+    # (libm's pow, native.xpow: numpy's is SVML, and native/tubeamp.cpp takes libm's)
     def half(g, bi):
-        i = np.maximum(bi + g, 0.0) ** EXPONENT
+        i = _NV.xpow(np.maximum(bi + g, 0.0), EXPONENT)
         u = i / imax
-        return imax * u / (1.0 + u ** knee) ** (1.0 / knee)
+        return imax * u / _NV.xpow(1.0 + _NV.xpow(u, knee), 1.0 / knee)
 
     v = np.asarray(v, float)
     y = half(v, a) - half(-v, b)
@@ -293,6 +295,16 @@ GPU = [None]
 def _synth(a, f, p, t, fs=None):
     if GPU[0] is not None and fs:
         return GPU[0].amp_sum(a, f, p, len(t), fs)
+    import numpy as np
+    import native as _NV
+    d = _NV.lib()
+    if d is not None and fs:
+        # native/tubeamp.cpp's, t = arange(n) / fs: this loop's sum, sample by
+        # sample in the same order, on every core -- and nvrender's
+        a_, f_, p_ = (np.ascontiguousarray(v, np.float64) for v in (a, f, p))
+        x = np.empty(len(t))
+        d.nv_amp_synth(a_.ctypes.data, f_.ctypes.data, p_.ctypes.data, len(a_), len(t), float(fs), x.ctypes.data)
+        return x
     return _synth_loop(a, f, p, t)
 
 
@@ -336,6 +348,12 @@ def _window_of(n):
     would report products that are an artefact of the transform.
     """
     import numpy as np
+    import native as _NV
+    d = _NV.lib()
+    if d is not None:
+        w = np.empty(n)
+        d.nv_amp_window(n, w.ctypes.data)       # (native/tubeamp.cpp's: libm's cos)
+        return w
     k = 2.0 * np.pi * np.arange(n) / n
     return (0.35875 - 0.48829 * np.cos(k)
             + 0.14128 * np.cos(2.0 * k) - 0.01168 * np.cos(3.0 * k))
@@ -352,16 +370,25 @@ def combine(freqs, amps, phases, tol=0.01):
     drawbars on one wheel drive it three times as hard, unless they cancel.
     """
     import numpy as np
+    import native as _NV
     f = np.asarray(freqs, float)
     key = np.round(f / tol).astype(np.int64)
-    z = np.asarray(amps, float) * np.exp(1j * np.asarray(phases, float))
+    # (each part as libm makes it, summed apart: numpy's complex arithmetic
+    # and its abs and angle are SVML's, and native/tubeamp.cpp's are libm's)
+    am = np.asarray(amps, float)
+    ph = np.asarray(phases, float).tolist()
+    zr = am * np.array([math.cos(v) for v in ph])
+    zi = am * np.array([math.sin(v) for v in ph])
     uk, inv = np.unique(key, return_inverse=True)
     acc = np.zeros(len(uk), complex)
-    np.add.at(acc, inv, z)
+    ar, ai = np.zeros(len(uk)), np.zeros(len(uk))
+    np.add.at(ar, inv, zr)
+    np.add.at(ai, inv, zi)
+    acc.real, acc.imag = ar, ai
     fsum = np.zeros(len(uk))
     np.add.at(fsum, inv, f)
     cnt = np.bincount(inv, minlength=len(uk)).astype(float)
-    return (fsum / cnt), np.abs(acc), np.angle(acc)
+    return (fsum / cnt), _NV.xabs(acc), _NV.xangle(acc)
 
 
 def emit(freqs, amps, phases, sr, drive, window_s=WINDOW_S,
@@ -421,9 +448,11 @@ def emit(freqs, amps, phases, sr, drive, window_s=WINDOW_S,
     r = curve(x, **valve) - g * x
     r -= r.mean()
 
+    # (native's FFT, abs and angle: the same on every machine, and nvrender's)
+    import native as _NV
     w = _window(n)
-    R = np.fft.rfft(r * w)
-    e = np.abs(R) ** 2
+    R = _NV.xrfft(r * w)
+    e = _NV.xabs(R) ** 2
     df = fs / n
     lim = int(min(sr * 0.5, fs * 0.5) / df)
     if lim < 8:
@@ -439,8 +468,8 @@ def emit(freqs, amps, phases, sr, drive, window_s=WINDOW_S,
     # ran 29% over the true residual power, and the first version emitted 131%
     # of the distortion actually present. The unwindowed Parseval sum has no
     # such bias, so it sets the level and the spectrum only says where it goes.
-    X0 = np.fft.rfft(r)
-    power = float(2.0 * (np.abs(X0[1:lim]) ** 2).sum()) / (n * n)
+    X0 = _NV.xrfft(r)
+    power = float(2.0 * (_NV.xabs(X0[1:lim]) ** 2).sum()) / (n * n)
 
     # Peaks: local maxima, strongest first, down to `floor` of the strongest.
     inner = e[1:-1]
@@ -451,7 +480,7 @@ def emit(freqs, amps, phases, sr, drive, window_s=WINDOW_S,
     if not len(loc):
         return []
     if len(loc) > keep:
-        loc = loc[np.argsort(-e[loc])[:keep]]
+        loc = loc[np.argsort(-e[loc], kind='stable')[:keep]]
     loc = np.sort(loc)
 
     # Every bin goes to its nearest peak, so no energy falls between the
@@ -494,7 +523,7 @@ def emit(freqs, amps, phases, sr, drive, window_s=WINDOW_S,
         # up to pi/2 at half a bin. Reading the peak bin's angle and attaching
         # it to an interpolated frequency left the spectrum right and the
         # waveform uncorrelated, which is what it sounded like it would be.
-        ph = (float(np.angle(R[km]))
+        ph = (math.atan2(float(R[km].imag), float(R[km].real))
               - 2.0 * np.pi * (gc - km) * (n - 1) / (2.0 * n))
         out.append((hz, math.sqrt(tote), ph))
 
@@ -688,7 +717,7 @@ def segment(A, arrs, rows, ch, drive, a, b, sr, cols, extra, keep=KEEP_PARTIALS,
     if len(fs) < 2:
         return 0
     if len(fs) > keep:
-        sub = np.argsort(-as_)[:keep]
+        sub = np.argsort(-as_, kind='stable')[:keep]
         fs, as_, ps = fs[sub], as_[sub], ps[sub]
     src = int(live[int(np.argmax(aM[live]))])
     imb = (imbalances or {}).get(ch)

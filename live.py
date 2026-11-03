@@ -1205,9 +1205,12 @@ class Slab:
             p, q = _L.beam(float(f)) if horn[j] else _L.drum_beam(float(f))
             fl[j], sh[j] = p, q
         # mean of the lobe, so the swing is a colour and not a level change
+        # (libm's cos and pow, native.xpow: numpy's pow is SVML, and nvlive's are libm's)
+        import native as _NV
         th = np.linspace(0.0, 2.0 * np.pi, 256, endpoint=False)
-        cc = 0.5 * (1.0 + np.cos(th))
-        nrm = (fl[:, None] + (1.0 - fl[:, None]) * cc[None, :] ** (0.5 * sh[:, None])).mean(axis=1)
+        cc = 0.5 * (1.0 + np.array([math.cos(x) for x in th.tolist()]))
+        nrm = (fl[:, None] + (1.0 - fl[:, None])
+               * _NV.xpow(cc[None, :], (0.5 * sh[:, None]).astype(np.float64))).mean(axis=1)
         out = (horn, fl, sh, nrm)
         if isinstance(nf, np.ndarray):
             if len(self._ls_memo) > 65536:
@@ -1471,8 +1474,10 @@ class Slab:
         idx = np.flatnonzero(m)
         ang = np.where(self.ls_horn[idx], horn_angle, drum_angle)
         fl = self.ls_am[idx]
-        c = 0.5 * (1.0 + np.cos(ang - self.ls_ph[idx]))
-        g = fl + (1.0 - fl) * c ** (0.5 * self.ls_sharp[idx])
+        # (libm's cos and pow: nvlive's slab swings alike)
+        import native as _NV
+        c = 0.5 * (1.0 + _NV.xcos(ang - self.ls_ph[idx]))
+        g = fl + (1.0 - fl) * _NV.xpow(c, (0.5 * self.ls_sharp[idx]).astype(np.float64))
         g /= self.ls_norm[idx]
         sep = self.ls_sep[idx]
         if sep.any():

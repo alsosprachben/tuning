@@ -213,6 +213,9 @@ struct Song {
     // the rotating speakers (_LESLIE_CH): each channel as its first Leslie
     // note came, and how it starts (1 chorale, 2 tremolo)
     std::vector<std::pair<long long, int>> leslie;
+    // the valve amplifiers (_AMP_CH): each channel as its first amplified
+    // note came, its voice's drive, and whether it is on a rotor
+    std::vector<std::pair<long long, std::pair<double, int>>> amp;
     // ...and of each note's bellows push (blockrender's push_rows), [first, end)
     std::vector<std::pair<long long, long long>> push_rows;
     double total = 0.0;
@@ -1366,6 +1369,28 @@ void nv_song_add_leslie(void *s, long long ch, int kind)
         if (x.first == ch)
             return;
     S->leslie.push_back(std::make_pair(ch, kind));
+}
+
+// AN AMPLIFIER'S CHANNEL, as its first amplified note arrives (its voice's
+// amp_drive, and whether the voice is on a rotor); a channel already there is left
+void nv_song_add_amp(void *s, long long ch, double drive, int rotor)
+{
+    nv::Song *S = (nv::Song *)s;
+    for (const auto &x : S->amp)
+        if (x.first == ch)
+            return;
+    S->amp.push_back(std::make_pair(ch, std::make_pair(drive, rotor)));
+}
+
+// the amplifier channel k's drive (*ch, *rotor), or how many with k < 0
+double nv_song_amp(void *s, int k, long long *ch, int *rotor)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (k < 0)
+        return (double)S->amp.size();
+    *ch = S->amp[k].first;
+    *rotor = S->amp[k].second.second;
+    return S->amp[k].second.first;
 }
 
 // the Leslie channel k's (its kind; *ch), or how many with k < 0
