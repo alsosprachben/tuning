@@ -352,7 +352,8 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
 // key], a drum set's from K[NV_K_DRUMS + ...]; every note must have one) -- the rows of the whole song's notes.
 // tmpl: the emitter's constants for every note (rate, fades, Nyquist, the
 // room's bands, REFLECT, the glide, vibrato and sound rows' rest state);
-// br[channel]: the channel's bend (or fader) row, -1 none. The global random
+// br[channel]: the channel's fader row, -1 none; and, nbr 512, br[256 +
+// channel] its bend row, which a voice that bends rides instead. The global random
 // stream from rs, carried note to note; qacc and *azimuth too. *nrows the
 // rows written. Returns the notes played; -(1 + i) where note i is not the
 // engine's (no class, or nv_note's -2); NV_TOO_SMALL if the store was.
@@ -405,6 +406,8 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         }
         n.channel = (double)ch;
         n.br = (ch >= 0 && ch < nbr) ? br[ch] : -1.0;
+        if (nbr > 256 && k->bendable && ch >= 0 && ch < 256 && br[256 + ch] >= 0.0)
+            n.br = br[256 + ch];            // a voice that bends: its channel's bend row
         n.from_song = 1; n.song_index = i;
         double pv[3];
         nv_song_note_voice(song, i, pv);    // a throat's pulse: its tilt, mouth and vowel

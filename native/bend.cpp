@@ -46,19 +46,14 @@ struct P {
 }  // namespace bend
 }  // namespace nv
 
-extern "C" {
-
-// _BTUN: each channel's tuning (out[256]; 0 where it has none), from the
-// reader's pitch stream and its first notes; the bend range a channel
-// starts at, GM's
-int nv_bend_btun(void *midi, void *song, double bend_range, double *out)
+// EACH CHANNEL'S PITCH STREAM (_pitch_stream): (t, ratio) at each of its
+// events, for the channels with a wheel or an RPN; and each channel's first
+// note (the notes as the file wrote them -- before a gesture's strokes, as
+// blockrender's passes read them)
+static void streams(void *midi, double bend_range, std::map<int, std::vector<std::pair<double, double>>> &out,
+                    std::map<long long, double> &first_on)
 {
     using nv::bend::P;
-    for (int c = 0; c < 256; c++)
-        out[c] = 0.0;
-    // (the notes as the file wrote them -- before a gesture's strokes, as
-    // blockrender's passes read them)
-    std::map<long long, double> first_on;
     int nn = nv_midi_n_notes(midi);
     for (int i = 0; i < nn; i++) {
         int iv[5];
@@ -87,19 +82,15 @@ int nv_bend_btun(void *midi, void *song, double bend_range, double *out)
         if (iv[1] <= 3)                     // the wheel, range, fine, coarse
             by[iv[0]].push_back(P{t, seq, iv[1], v});
     }
-    int n = 0;
     for (int c : chans) {
         std::vector<P> ev = by[c];
         ev.insert(ev.end(), gmon.begin(), gmon.end());
         std::stable_sort(ev.begin(), ev.end(), [](const P &a, const P &b) {
             return a.t < b.t || (a.t == b.t && a.seq < b.seq);
         });
-        auto f = first_on.find(c);
-        if (f == first_on.end() || ev.empty())
-            continue;                       // tuning a silent channel
         double range = bend_range, wheel = 0.0, coarse = 0.0, fine = 0.0;
         bool hr = false, hw = false, hc = false, hf = false;
-        double tun = 1.0;
+        std::vector<std::pair<double, double>> &o = out[c];
         for (const P &e : ev) {
             if (e.kind == 9) {
                 hr = hw = hc = hf = false;
@@ -119,16 +110,105 @@ int nv_bend_btun(void *midi, void *song, double bend_range, double *out)
             // tonelib.channel_pitch_ratio, master tuning 0
             double st = (hr ? range : bend_range) * (hw ? wheel : 0.0) / 8192.0 + (hc ? coarse : 0.0)
                         + (hf ? fine : 0.0) / 100.0 + 0.0 + 0.0 / 100.0;
-            double r = pow(2.0, st / 12.0);
-            if (e.t <= f->second + 1e-6)
-                tun = r;                    // the last in force at the first note
+            o.push_back(std::make_pair(e.t, pow(2.0, st / 12.0)));
         }
+    }
+}
+
+// the ratio in force at the channel's first note (the last event at or
+// before it): its TUNING; 1 where it has none
+static double tuning_of(const std::vector<std::pair<double, double>> &ev, double first)
+{
+    double tun = 1.0;
+    for (auto &e : ev)
+        if (e.first <= first + 1e-6)
+            tun = e.second;
+    return tun;
+}
+
+extern "C" {
+
+// _BTUN: each channel's tuning (out[256]; 0 where it has none), from the
+// reader's pitch stream and its first notes; the bend range a channel
+// starts at, GM's
+int nv_bend_btun(void *midi, void *song, double bend_range, double *out)
+{
+    (void)song;
+    for (int c = 0; c < 256; c++)
+        out[c] = 0.0;
+    std::map<int, std::vector<std::pair<double, double>>> st;
+    std::map<long long, double> first_on;
+    streams(midi, bend_range, st, first_on);
+    int n = 0;
+    for (auto &kv : st) {
+        auto f = first_on.find(kv.first);
+        if (f == first_on.end() || kv.second.empty())
+            continue;                       // tuning a silent channel
+        double tun = tuning_of(kv.second, f->second);
         if (fabs(tun - 1.0) > 1e-12) {
-            out[c & 255] = tun;
+            out[kv.first & 255] = tun;
             n++;
         }
     }
     return n;
+}
+
+// _BGEST and bend_blocks for channel ch: 1 if its pitch MOVES while it
+// sounds -- the stream after its first note, over its tuning -- and then,
+// BR and BC not NULL, its row: each block's mean ratio (float32) and the
+// extra phase in samples at its start, the running sum of those same means
+// (C[b+1] = C[b] + (r[b]-1) BLK by construction); else 0
+int nv_bend_gesture(void *midi, void *song, double bend_range, int ch, long nblk, int blk, double sr, float *BR,
+                    double *BC)
+{
+    (void)song;
+    std::map<int, std::vector<std::pair<double, double>>> st;
+    std::map<long long, double> first_on;
+    streams(midi, bend_range, st, first_on);
+    auto s = st.find(ch);
+    auto f = first_on.find(ch);
+    if (s == st.end() || f == first_on.end() || s->second.empty())
+        return 0;
+    double tun = tuning_of(s->second, f->second);
+    std::vector<std::pair<double, double>> ev;
+    bool moves = false;
+    for (auto &e : s->second)
+        if (e.first > f->second + 1e-6) {
+            double r = e.second / tun;
+            ev.push_back(std::make_pair(e.first, r));
+            moves = moves || fabs(r - 1.0) > 1e-9;
+        }
+    if (!moves)
+        return 0;
+    if (!BR)
+        return 1;
+    std::sort(ev.begin(), ev.end());
+    size_t m = ev.size() + 1;
+    std::vector<double> ts(m), rs(m), acc(m + 1);
+    ts[0] = 0.0;
+    rs[0] = 1.0;
+    for (size_t k = 0; k < ev.size(); k++) {
+        ts[k + 1] = ev[k].first;
+        rs[k + 1] = ev[k].second;
+    }
+    double e_last = (double)nblk * blk / sr;
+    double app = (ts[m - 1] > e_last ? ts[m - 1] : e_last) + 1.0;          // max(edges[-1], ts[-1]) + 1
+    acc[0] = 0.0;
+    for (size_t k = 0; k < m; k++) {
+        double seg = (k + 1 < m ? ts[k + 1] : app) - ts[k];
+        acc[k + 1] = acc[k] + (rs[k] - 1.0) * seg;                         // np.cumsum, in order
+    }
+    std::vector<double> C(nblk + 1);
+    for (long j = 0; j <= nblk; j++) {
+        double e = (double)j * blk / sr;
+        size_t i = (size_t)(std::upper_bound(ts.begin(), ts.end(), e) - ts.begin()) - 1;
+        C[j] = (acc[i] + (rs[i] - 1.0) * (e - ts[i])) * sr;
+    }
+    for (long j = 0; j < nblk; j++) {
+        BR[j] = (float)(1.0 + (C[j + 1] - C[j]) / (double)blk);
+        BC[j] = C[j];
+    }
+    return 1;
 }
 
 // _prep_channel_fader for channel ch: 1 and its level at the nblk + 1 block

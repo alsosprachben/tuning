@@ -149,6 +149,13 @@ typedef struct {
     int throat, n_mb;
     double stroke_tilt_db, formant_scale, formant_morph, breath_volume;
     double mb[128][2];
+    /* kind 4, A HARMONIC VOICE (a guitar: SynthProperties' series and the
+       pluck's comb, comb[h], tonelib._pluck_comb's), its body a FormantBody
+       (fbody): the floor, the formants and antiformants (centre Hz, width Hz,
+       amplitude or depth), the body trim ((Hz, dB), log-interpolated) */
+    int fbody, n_fm, n_afm, n_bt;
+    double formant_floor, fm[16][3], afm[8][3], bt[32][2];
+    double comb[129];
 } VoiceSnap;
 
 typedef struct {
@@ -203,6 +210,9 @@ typedef struct {
     int rnd;
     double rnd_level_db, rnd_effort_db, rnd_cents, rnd_timing_s;
     double rnd_draws[4];
+    /* b_law 3 (a kind 4 voice's: SteelGuitarProperties' inharmonicity_law),
+       B = law_k f^law_p */
+    double law_k, law_p;
 } VoiceInit;
 
 /* what the note setup reads of the voice besides its VoiceSnap */
@@ -356,6 +366,7 @@ typedef struct {
     int n_bn, bn_rows;
     double bn_fade_s;
     double bn_hz[64], bn_db[64];
+    int bendable;                       // pitch_bendable: a wheel moves it (blockrender's bend row)
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.

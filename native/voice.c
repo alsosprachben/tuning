@@ -160,6 +160,12 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
         return 0.0;
     if (harmonic % 2 == 0 && !v->even_db_set && v->odd_only)
         return 0.0;
+    if (v->kind == 4) {                         /* SynthProperties': the pluck's comb */
+        double r = v->gain / pow((double)harmonic, v->attack_dampening) * (harmonic <= 128 ? v->comb[harmonic] : 0.0);
+        if (harmonic % 2 == 0 && v->even_db_set)
+            r *= pow(10.0, v->even_harmonic_db / 20.0);
+        return r;
+    }
     if (v->kind == 3)                           /* the pluck comb at plucked_harmonic 0: whole */
         return v->gain / pow((double)harmonic, v->attack_dampening) * (harmonic % 1000000 ? 1.0 : 0.0);
     int sm = harmonic;                          /* harmonic_touch 0 */
@@ -173,9 +179,48 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
     return r;
 }
 
-/* SynthProperties.bore_gain */
+/* a (Hz, dB) table at f, log-interpolated, held flat past its ends
+   (FormantBody._body_trim) */
+static double db_table(const double (*pts)[2], int n, double f)
+{
+    double db = 0.0;
+    if (f <= pts[0][0])
+        db = pts[0][1];
+    else if (f >= pts[n - 1][0])
+        db = pts[n - 1][1];
+    else
+        for (int i = 0; i + 1 < n; i++)
+            if (f < pts[i + 1][0]) {
+                double f0 = pts[i][0], d0 = pts[i][1], f1 = pts[i + 1][0], d1 = pts[i + 1][1];
+                db = d0 + (d1 - d0) * log(f / f0) / log(f1 / f0);
+                break;
+            }
+    return pow(10.0, db / 20.0);
+}
+
+/* SynthProperties.bore_gain; FormantBody's (fbody): the floor, each
+   resonance and antiresonance, the mouth's roll-off, the bell, the trim */
 static double bore_gain(const VoiceSnap *v, double partial_hz)
 {
+    if (v->fbody) {
+        double g = v->formant_floor;
+        for (int i = 0; i < v->n_fm; i++) {
+            double d = (partial_hz - v->fm[i][0]) / (v->fm[i][1] * 0.5);
+            g += v->fm[i][2] / (1.0 + d * d);
+        }
+        for (int i = 0; i < v->n_afm; i++) {
+            double d = (partial_hz - v->afm[i][0]) / (v->afm[i][1] * 0.5);
+            g *= 1.0 - v->afm[i][2] / (1.0 + d * d);
+        }
+        g /= 1.0 + pow(partial_hz / v->bore_corner_hz, v->bore_order);
+        if (v->bell_cutoff_hz != 0.0) {
+            double x = pow(partial_hz / v->bell_cutoff_hz, v->bell_order);
+            g *= x / (1.0 + x);
+        }
+        if (v->n_bt)
+            g *= db_table(v->bt, v->n_bt, partial_hz);
+        return g;
+    }
     double g = 1.0;
     if (v->bore_corner_hz != 0.0)
         g /= 1.0 + pow(partial_hz / v->bore_corner_hz, v->bore_order);
@@ -315,7 +360,7 @@ static double string_blend(const VoiceSnap *v, double frequency, double break_hz
 /* GrandPianoProperties.aftersound: (level, its decay rate) */
 void nv_aftersound(const VoiceSnap *v, double frequency, double decay_rate, double *out)
 {
-    if (v->kind == 3) {                         /* SynthProperties: one stage */
+    if (v->kind == 3 || v->kind == 4) {         /* SynthProperties: one stage */
         out[0] = 0.0;
         out[1] = decay_rate;
         return;
@@ -752,6 +797,8 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
         /* a kit drum, a mode set: SynthProperties' constructor and no more;
            its B the class's coefficient (no law: inharmonicity_dynamic off) */
         o->B = o->inharmonicity_coefficient;
+        if (c->b_law == 3)              /* the steel's law (inharmonicity_coefficient_for_frequency) */
+            o->B = c->law_k * pow(frequency, c->law_p);
         if (c->rnd) {                   /* ...and RandomStrike's: its pitch and lateness */
             o->pitch_jitter = (1.0 + o->pitch_jitter) * pow(2.0, c->rnd_draws[2] / 1200.0) - 1.0;
             o->attack_jitter = o->attack_jitter + c->rnd_draws[3];

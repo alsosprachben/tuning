@@ -17,9 +17,11 @@
 // (TUNING_STREAM=0).
 //
 // THE BEND PASSES (native/bend.cpp): a channel's wheel and RPNs (bend range,
-// fine and coarse tuning) as its tuning, folded into its notes (a piano
-// cannot be bent, so what moves under them moves nothing, as in
-// blockrender); a fader (CC7, CC11) moving under its notes as a row.
+// fine and coarse tuning) as its tuning, folded into its notes; what moves
+// after its first note, a GESTURE, as a bend row that a voice that bends
+// rides (a guitar; a piano cannot be bent, so under it the gesture moves
+// nothing, as in blockrender); a fader (CC7, CC11) moving under its notes as
+// a row.
 //
 // THE DRUMS the engine has (the export's kit table: a set's key, its class,
 // pitch and seat) play from the song as blockrender plays them: the kit's
@@ -59,6 +61,8 @@ int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, 
 int nv_midi_n_pitch(void *p);
 void nv_midi_pitch(void *p, int i, int *iv, long *seq, double *t, double *v);
 int nv_bend_btun(void *midi, void *song, double bend_range, double *out);
+int nv_bend_gesture(void *midi, void *song, double bend_range, int ch, long nblk, int blk, double sr, float *BR,
+                    double *BC);
 int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr, double tau, double fader_tail,
                   double stamp_s, double stamped_share, int vol0, int expr0, float *L);
 void nv_song_channel(void *s, long long ch, double btun, const double *otun, int fader);
@@ -294,11 +298,13 @@ int main(int argc, char **argv)
         if (dv[0] < first[iv[0] & 255])
             first[iv[0] & 255] = dv[0];
         drum_ch[iv[0] & 255] |= iv[4] != 0;
-        if (E.cmap[(iv[4] ? NV_K_DRUMS : 0) + 128 * iv[3] + iv[1]] < 0) {
+        int cq = E.cmap[(iv[4] ? NV_K_DRUMS : 0) + 128 * iv[3] + iv[1]];
+        if (cq < 0) {
             fprintf(stderr, "nvrender: refused: a note no native voice plays (program %d, key %d%s)\n", iv[3], iv[1],
                     iv[4] ? ", a drum" : "");
             return 2;
         }
+
     }
     // A DRUM CHANNEL'S WHEEL OR TUNING moves its drums (a kit drum can be
     // bent: blockrender's bend row), which the bend passes do not make
@@ -311,6 +317,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "nvrender: refused: a drum channel's pitch wheel or tuning\n");
             return 2;
         }
+
     }
     const double total = nv_midi_total(midi);
     // THE SONG
@@ -324,13 +331,20 @@ int main(int argc, char **argv)
     // its notes at unity, each riding it (br)
     double btun[256];
     nv_bend_btun(midi, song, E.k[K_BEND_SEMIS], btun);
-    std::vector<int> fch;
-    std::vector<double> br(256, -1.0);
+    // the rows: each channel's gesture first (_prep_bend_rows: brow_of, at
+    // br[256 + channel]), then the faders' (_LROW, at br[channel])
+    std::vector<int> fch, gch;
+    std::vector<double> br(512, -1.0);
+    for (int c = 0; c < 256; c++)
+        if (nv_bend_gesture(midi, song, E.k[K_BEND_SEMIS], c, 0, (int)BLK, SR, nullptr, nullptr)) {
+            br[256 + c] = (double)gch.size();
+            gch.push_back(c);
+        }
     float one = 0.0f;
     for (int c = 0; c < 256; c++)
         if (nv_bend_fader(midi, song, c, 0, (int)BLK, SR, E.k[K_TAU], E.k[K_FADER_TAIL], E.k[K_STAMP_S],
                           E.k[K_STAMPED_SHARE], (int)E.k[K_GM_VOL], (int)E.k[K_GM_EXPR], &one)) {
-            br[c] = (double)fch.size();
+            br[c] = (double)(gch.size() + fch.size());
             fch.push_back(c);
         }
     for (int c = 0; c < 256; c++)
@@ -360,7 +374,8 @@ int main(int argc, char **argv)
     double qacc[18] = {0}, az = 0.0, out[48] = {0};
     double *rows = nullptr;
     void *dm[6] = {nullptr};
-    long long P = nv_prepare(song, K.data(), &t, fch.empty() ? nullptr : br.data(), fch.empty() ? 0 : 256, &rs, &rows,
+    bool rows_ = !fch.empty() || !gch.empty();
+    long long P = nv_prepare(song, K.data(), &t, rows_ ? br.data() : nullptr, rows_ ? 512 : 0, &rs, &rows,
                              qacc, &az, E.kind.data(),
                              E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, total,
                              E.k[K_RING_FLOOR], E.k[K_RING_MAX], out, E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR,
@@ -431,16 +446,25 @@ int main(int argc, char **argv)
     float G = 1.0f, S = 1.0f, noRows[16] = {0}, sh[4];
     for (int q = 0; q < 4; q++)
         sh[q] = (float)E.k[K_SH + q];
-    // the rows (_prep_bend_arrays): a fader's ratio 1 and phase 0 a block, its
-    // level at each edge; no rows, one of ones and no levels
-    size_t nr = std::max<size_t>(fch.size(), 1);
+    // the rows (_prep_bend_arrays): a gesture's ratio and phase a block (its
+    // channel's fader's level at each edge, where it has one); a fader's
+    // ratio 1 and phase 0, its level; no rows, one of ones and no levels
+    size_t ng = gch.size(), nr = std::max<size_t>(ng + fch.size(), 1);
     std::vector<float> BRr(nr * nblk, 1.0f), BLr;
     std::vector<double> BCr(nr * nblk, 0.0);
+    for (size_t r = 0; r < ng; r++)
+        nv_bend_gesture(midi, song, E.k[K_BEND_SEMIS], gch[r], nblk, (int)BLK, SR, BRr.data() + r * nblk,
+                        BCr.data() + r * nblk);
     if (!fch.empty()) {
         BLr.assign(nr * (nblk + 1), 1.0f);
-        for (size_t r = 0; r < fch.size(); r++)
+        for (size_t r = 0; r < fch.size(); r++) {
+            float *Lf = BLr.data() + (ng + r) * (nblk + 1);
             nv_bend_fader(midi, song, fch[r], nblk, (int)BLK, SR, E.k[K_TAU], E.k[K_FADER_TAIL], E.k[K_STAMP_S],
-                          E.k[K_STAMPED_SHARE], (int)E.k[K_GM_VOL], (int)E.k[K_GM_EXPR], BLr.data() + r * (nblk + 1));
+                          E.k[K_STAMPED_SHARE], (int)E.k[K_GM_VOL], (int)E.k[K_GM_EXPR], Lf);
+            long gi = (long)br[256 + fch[r]];
+            if (gi >= 0)                    // the channel's gesture rides its fader too
+                std::copy(Lf, Lf + nblk + 1, BLr.data() + gi * (nblk + 1));
+        }
     }
     std::vector<float> L(N), R(N);
     nv_render(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fp, lp, ip, &G, &S, BRr.data(), BCr.data(),

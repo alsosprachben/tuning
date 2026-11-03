@@ -71,7 +71,9 @@ class VoiceSnap(ctypes.Structure):
                 ('n_bar', I), ('bar_n', I * 16), ('bar_g', C * 16),
                 ('n_md', I), ('n_ma', I), ('n_mp', I), ('mode_decays', C * 400), ('mode_after', (C * 2) * 400),
                 ('mode_phases', C * 400), ('throat', I), ('n_mb', I), ('stroke_tilt_db', C),
-                ('formant_scale', C), ('formant_morph', C), ('breath_volume', C), ('mb', (C * 2) * 128)]
+                ('formant_scale', C), ('formant_morph', C), ('breath_volume', C), ('mb', (C * 2) * 128),
+                ('fbody', I), ('n_fm', I), ('n_afm', I), ('n_bt', I), ('formant_floor', C), ('fm', (C * 3) * 16),
+                ('afm', (C * 3) * 8), ('bt', (C * 2) * 32), ('comb', C * 129)]
 
 
 class ToneIn(ctypes.Structure):
@@ -116,7 +118,7 @@ class VoiceInit(ctypes.Structure):
                    ('vtrim_v', C * 16), ('vtrim_db', C * 16)]
                 + [('strike_wobble_hz', C), ('strike_wobble_gain', C), ('strike_wobble_slope', C)]
                 + [('rnd', I)] + [(f, C) for f in ('rnd_level_db', 'rnd_effort_db', 'rnd_cents', 'rnd_timing_s')]
-                + [('rnd_draws', C * 4)])
+                + [('rnd_draws', C * 4), ('law_k', C), ('law_p', C)])
 
 
 class VoiceNote(ctypes.Structure):
@@ -159,7 +161,8 @@ class NoteClass(ctypes.Structure):
                 + [('n_ft', I), ('ft_bal', I), ('ft_t', C * 64), ('ft_db', C * 64), ('ft_c', C * 64)]
                 + [('n_layer', I), ('lay_n', I * 32), ('lay_hz', (C * 32) * 32), ('lay_db', (C * 32) * 32),
                    ('lay_rise', C * 32), ('lay_dbs', C * 32), ('lay_len', C * 32), ('played_backwards', I)]
-                + [('n_bn', I), ('bn_rows', I), ('bn_fade_s', C), ('bn_hz', C * 64), ('bn_db', C * 64)])
+                + [('n_bn', I), ('bn_rows', I), ('bn_fade_s', C), ('bn_hz', C * 64), ('bn_db', C * 64)]
+                + [('bendable', I)])
 
 
 class NoteIn(ctypes.Structure):
@@ -567,11 +570,47 @@ def _shaken(cls):
             and len(cls.noise_bands) <= 32 and len(cls.unison_detune or ()) <= 8)
 
 
-def kit_drum(cls):
-    """Which drum native/voice.c plays cls as (VoiceSnap.kind): 1 a kit
-    drum, 2 a measured mode set's (the clap, the cymbals, the woods...), 3 a
-    shaker; else 0."""
+# A HARMONIC VOICE'S METHODS (VoiceSnap.kind 4: a guitar): SynthProperties'
+# series, decay and vibrato, on a FormantBody's body
+_HARMONIC_OWN = {'series_volume': 'SynthProperties', 'harmonic_volume': 'SynthProperties',
+                 'mode_ratio': 'SynthProperties', 'harmonic_decay': 'SynthProperties',
+                 'aftersound': 'SynthProperties', 'unison_voices': 'SynthProperties',
+                 'chiff_harmonic_gain': 'SynthProperties', '_bore_norm': 'SynthProperties',
+                 'bore_gain': 'FormantBody', '_body_trim': 'FormantBody', 'voice_vibrato': 'SynthProperties',
+                 'mode_gains_here': 'SynthProperties', 'radiation_gain': 'SynthProperties',
+                 'partial_jitter': 'SynthProperties'}
+
+
+def harmonic_voice(cls):
+    """Whether native/voice.c plays cls as a harmonic voice (kind 4): a
+    plucked string's series through its pluck's comb, on a FormantBody (the
+    guitars) -- its B the class's, or the steel's law -- and none of the
+    extras a note of it would take elsewhere."""
     import tonelib as T
+    if not (issubclass(cls, T.PluckedStringProperties) and issubclass(cls, T.FormantBody)):
+        return False
+    if any(_owner(cls, n) != o for n, o in _HARMONIC_OWN.items()):
+        return False
+    law = _owner(cls, 'inharmonicity_coefficient_for_frequency')
+    if cls.inharmonicity_dynamic and not (law == 'SteelGuitarProperties' and getattr(cls, 'inharmonicity_law', None)):
+        return False
+    return (cls.mode_gains is None and cls.mode_ratios is None and not cls.strike_point
+            and not cls.harmonic_touch and not cls.pickup_points and not (cls.unison_detune or ())
+            and not cls.blare_db_per_khz and bool(cls.bore_corner_hz) and 1 <= (cls.max_harmonic or 0) <= 128
+            and len(cls.formants) <= 16 and len(cls.antiformants) <= 8 and len(cls.body_trim_db or ()) <= 32
+            and not any(getattr(cls, a, None) for a in ('breath_noise_db', 'grains', 'noise_events', 'pulse',
+                                                         'ring_db', 'struck_layer', 'touch_leak_db',
+                                                         'strike_noise_db', 'release_click_db', 'hammer_legato',
+                                                         'bend_detents', 'amp_drive')))
+
+
+def kit_drum(cls):
+    """Which voice native/voice.c plays cls as (VoiceSnap.kind) past a
+    piano's: 1 a kit drum, 2 a measured mode set's (the clap, the cymbals,
+    the woods...), 3 a shaker, 4 a harmonic voice (a guitar); else 0."""
+    import tonelib as T
+    if harmonic_voice(cls):
+        return 4
     if _modal_drum(cls):
         return 2
     if _shaken(cls):
@@ -873,6 +912,22 @@ def snapshot(props):
             s.n_bar = len(p.bar_modes)
             for i, (bn, bg) in enumerate(p.bar_modes):
                 s.bar_n[i], s.bar_g[i] = int(bn), float(bg)
+    elif s.kind == 4:
+        # a harmonic voice: the pluck's comb, the body
+        s.comb[0] = 0.0
+        for h in range(1, min(128, int(p.max_harmonic)) + 1):
+            s.comb[h] = T._pluck_comb(p.plucked_harmonic, p.pluck_dampening, h)
+        s.bore_corner_hz, s.bore_order = p.bore_corner_hz, p.bore_order
+        s.bell_cutoff_hz, s.bell_order = p.bell_cutoff_hz or 0.0, p.bell_order
+        s.bore_norm = p._bore_norm()
+        s.fbody, s.formant_floor = 1, p.formant_floor
+        s.n_fm, s.n_afm, s.n_bt = len(p.formants), len(p.antiformants), len(p.body_trim_db or ())
+        for i, row in enumerate(p.formants):
+            s.fm[i][:] = [float(x) for x in row]
+        for i, row in enumerate(p.antiformants):
+            s.afm[i][:] = [float(x) for x in row]
+        for i, row in enumerate(p.body_trim_db or ()):
+            s.bt[i][:] = [float(x) for x in row]
     elif s.kind == 1:
         if isinstance(p, T.SfxThroatProperties):
             # a throat's pulse: its tilt, mouth and vowel (the note's, nv_note), its breath
@@ -985,7 +1040,7 @@ def init_supported(cls):
     and none of the branches not ported."""
     import tonelib as T
     if kit_drum(cls):
-        if not T.hrtf or cls.inharmonicity_dynamic:
+        if not T.hrtf or (cls.inharmonicity_dynamic and kit_drum(cls) != 4):
             return False
         # (and [RND]'s, RandomStrike: its four draws the caller's, VoiceInit.rnd_draws)
         if any(k.__name__ not in ('SynthProperties', 'object', 'RandomStrike') for k in cls.__mro__
@@ -1061,6 +1116,9 @@ def _class(cls):
             c.rnd_cents, c.rnd_timing_s = cls.rnd_cents, cls.rnd_timing_s
         c.key_jitter = int(c.kind == 0)
         c.b_law = _b_law(cls) if c.kind == 0 else 0
+        if c.kind == 4 and cls.inharmonicity_dynamic:
+            c.b_law = 3                         # (the steel's law)
+            c.law_k, c.law_p = cls.inharmonicity_law
         # (none: the note's is the valve's, as blockrender's setup takes it)
         c.attack_time = cls.attack_time if cls.attack_time is not None else cls.chiff_max_valve_time
         vt = sorted(cls.strike_volume_trim_db or ())
@@ -1263,6 +1321,7 @@ def note_class(cls):
         k.ssc = int(bool(getattr(cls, 'stroke_scatter', False)))
         k.gate_time = float(getattr(cls, 'gate_time', None) or 0.0)
         k.played_backwards = int(bool(getattr(cls, 'played_backwards', False)))
+        k.bendable = int(bool(getattr(cls, 'pitch_bendable', True)))
         if breath_noise(cls):
             k.n_bn, k.bn_rows, k.bn_fade_s = (len(cls.breath_noise_db), int(getattr(cls, 'breath_noise_rows', 1)),
                                                float(cls.breath_noise_fade_s))
