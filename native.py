@@ -83,7 +83,12 @@ class VoiceSnap(ctypes.Structure):
                 ('reed_spread_oct', C), ('reed_scatter', C), ('reed_scatter_oct', C),
                 ('reed_s', C * 1025), ('bank_g', C * 4), ('bank_cents', C * 4), ('bank_oct', C * 4),
                 ('bank_ratio', C * 4), ('sh_exp', C), ('sh_exp_oct', C), ('sh_cap', I),
-                ('skirt', I), ('sk_max', I), ('sk_db', C), ('sk_hdb', C), ('sk_hz', C), ('sk_rel', C)]
+                ('skirt', I), ('sk_max', I), ('sk_db', C), ('sk_hdb', C), ('sk_hz', C), ('sk_rel', C),
+                ('ep_kind', I), ('ep_harm', I), ('ep_terms', I), ('n_tb', I), ('n_lay', I), ('ep_p', C * 5),
+                ('ep_defl', C), ('ep_defl_slope', C), ('ep_defl_power', C), ('ep_defl_max', C), ('ep_rho', C),
+                ('ep_max_hz', C), ('ep_floor_db', C), ('ep_share', C), ('tb_coeff', C), ('tb_power', C),
+                ('tb_decay', C), ('tb_ratio', C * 8), ('tb_g', C * 8), ('ep_a0', C), ('ep_r', C * 408),
+                ('ep_n', C * 400), ('ep_w', C * 400)]
 
 
 class ToneIn(ctypes.Structure):
@@ -182,7 +187,10 @@ class NoteClass(ctypes.Structure):
                 + [(f, C) for f in ('push_gain', 'push_rise_s', 'push_dbs', 'push_settle_db', 'push_tilt',
                                     'push_tilt_oct')]
                 + [('breath', I), ('breath_p', C * 8), ('trem_hz', C), ('trem_depth', C), ('trem_scatter', C),
-                   ('trem_stereo', I), ('trem_intrinsic', I), ('touch_sensitive', I)])
+                   ('trem_stereo', I), ('trem_intrinsic', I), ('touch_sensitive', I),
+                   ('cab_set', I), ('n_cab_fm', I), ('n_cab_afm', I), ('cab_floor', C), ('cab_fm', C * 3 * 4),
+                   ('cab_afm', C * 3 * 4), ('cab_corner', C), ('cab_order', C), ('cab_cut', C), ('cab_bell', C),
+                   ('cab_ref', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -227,7 +235,8 @@ def _load():
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
-                                                       'npyrandom.c', 'npyrandom.h', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp')]
+                                                       'npyrandom.c', 'npyrandom.h', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
+                                                       'epiano.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -241,7 +250,7 @@ def _load():
         objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
                 tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.slab.o',
                 tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o', tmp + '.tuner.o', tmp + '.bend.o',
-                tmp + '.leslie.o', tmp + '.tubeamp.o', tmp + '.scanner.o', tmp + '.reed.o']
+                tmp + '.leslie.o', tmp + '.tubeamp.o', tmp + '.scanner.o', tmp + '.reed.o', tmp + '.epiano.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
             for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
@@ -269,6 +278,8 @@ def _load():
                                    '-o', objs[17]])
             subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'reed.cpp'),
                                    '-o', objs[18]])
+            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'epiano.cpp'),
+                                   '-o', objs[19]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl'])
         finally:
             for o in objs:
@@ -356,6 +367,7 @@ def _load():
             ('nv_rfft', I, [ctypes.c_void_p, ctypes.c_long, ctypes.c_void_p]),
             ('nv_cfft', I, [ctypes.c_void_p, ctypes.c_long, ctypes.c_void_p]),
             ('nv_reed_series', I, [C, C, C, I, I, C, ctypes.c_void_p]),
+            ('nv_ep_layers_cached', I, [I, ctypes.c_void_p, C, C, C, C, I, I, C, C, I, ctypes.c_void_p, I]),
             ('nv_tgamma_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_amp_expand', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p,
                                    ctypes.c_void_p, C]),
@@ -686,6 +698,52 @@ def reed_voice(cls):
                                                          'hammer_legato', 'bend_detents', 'amp_drive')))
 
 
+# AN ELECTRIC PIANO'S METHODS (VoiceSnap.kind 5): its pickup's layers,
+# SynthProperties' generic rest, no body
+_EP_OWN = dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None, series_volume='ElectricPianoProperties',
+               harmonic_decay='ElectricPianoProperties', mode_phase='ElectricPianoProperties',
+               harmonic_level='ElectricPianoProperties', _level_law='ElectricPianoProperties',
+               _deflection='ElectricPianoProperties', _pickup_layers='ElectricPianoProperties')
+
+
+def ep_kind(cls):
+    """Which pickup native/epiano.cpp reads cls's through (VoiceSnap.ep_kind):
+    1 the Rhodes' tip over its magnet, 2 the Wurlitzer's slot; else 0."""
+    import tonelib as T
+    if not issubclass(cls, T.ElectricPianoProperties):
+        return 0
+    if issubclass(cls, T.RhodesProperties) and all(T._ep_owner(cls, n) is T.RhodesProperties
+                                                   for n in ('pickup_flux', '_face', '_field')):
+        return 1
+    if issubclass(cls, T.WurlitzerProperties) and T._ep_owner(cls, 'pickup_flux') is T.WurlitzerProperties:
+        return 2
+    return 0
+
+
+def ep_voice(cls):
+    """Whether native/voice.c plays cls as an electric piano (kind 5): a
+    pickup it knows (ep_kind), its layers native/epiano.cpp's -- the tonebar
+    a mode set after them -- on SynthProperties' generic rest, and none of
+    the extras but a strike's noise (the Wurlitzer's action)."""
+    import tonelib as T
+    if not ep_kind(cls) or T.ep_control or T.ep_voicing != "":
+        return False
+    if any(_owner(cls, n) != o for n, o in _EP_OWN.items()):
+        return False
+    if any(k.__name__ not in ('SynthProperties', 'ElectricPianoProperties', 'object') for k in cls.__mro__
+           if '__init__' in k.__dict__):
+        return False
+    return (cls.mode_gains is None and cls.mode_ratios is None and not cls.strike_point and not cls.harmonic_touch
+            and not cls.pickup_points and not (cls.unison_detune or ()) and not cls.blare_db_per_khz
+            and not cls.bore_corner_hz and not cls.inharmonicity_dynamic and not cls.max_partial_hz
+            and len(cls.tonebar_mode_ratios) == len(cls.tonebar_gains) <= 8
+            and cls.pickup_harmonics * cls.pickup_layer_terms <= 400
+            and not any(getattr(cls, a, None) for a in ('breath_noise_db', 'grains', 'noise_events', 'pulse',
+                                                         'ring_db', 'struck_layer', 'touch_leak_db',
+                                                         'release_click_db', 'hammer_legato', 'bend_detents',
+                                                         'amp_drive')))
+
+
 def harmonic_voice(cls):
     """Whether native/voice.c plays cls as a harmonic voice (kind 4): a
     plucked string's series through its pluck's comb, on a FormantBody (the
@@ -786,6 +844,8 @@ def kit_drum(cls):
     piano's: 1 a kit drum, 2 a measured mode set's (the clap, the cymbals,
     the woods...), 3 a shaker, 4 a harmonic voice (a guitar); else 0."""
     import tonelib as T
+    if ep_voice(cls):
+        return 5
     if harmonic_voice(cls) or tonewheel_voice(cls) or reed_voice(cls):
         return 4
     if pipe_voice(cls):
@@ -1167,6 +1227,31 @@ def snapshot(props):
                 for i in range(n):
                     rng = random.Random(0x5EA7 + i * 7919 + p._section_salt() * 65537)
                     s.sect_dx[i] = w * ((2.0 * i / float(n - 1)) - 1.0 + rng.uniform(-0.5, 0.5) / n)
+    elif s.kind == 5:
+        # an electric piano: its pickup, swing, fit and tonebar (the note's
+        # layers its init's; the prototype's here)
+        c = type(p)
+        s.ep_kind = ep_kind(c)
+        prm = p._native_flux()[1]
+        s.ep_p[:len(prm)] = [float(x) for x in prm]
+        s.ep_defl, s.ep_defl_slope = float(c.pickup_deflection), float(c.deflection_register_slope)
+        s.ep_defl_power, s.ep_defl_max = float(c.deflection_velocity_power), float(c.pickup_deflection_max)
+        s.ep_rho, s.ep_share = float(c.swing_damping), float(c.level_swing_share)
+        s.ep_harm, s.ep_terms = int(c.pickup_harmonics), int(c.pickup_layer_terms)
+        s.ep_max_hz, s.ep_floor_db = float(c.pickup_max_hz or 0.0), float(c.pickup_floor_db)
+        s.tb_coeff, s.tb_power, s.tb_decay = float(c.tonebar_hz_coeff), float(c.tonebar_hz_power), float(c.tonebar_decay_db)
+        s.n_tb = len(c.tonebar_gains)
+        for i, (r, g) in enumerate(zip(c.tonebar_mode_ratios, c.tonebar_gains)):
+            s.tb_ratio[i], s.tb_g[i] = float(r), float(g)
+        s.ep_a0 = p._deflection()
+        s.n_lay = len(p._layers)
+        for i, (k, n, w, ph) in enumerate(p._layers):
+            s.ep_n[i], s.ep_w[i] = float(n), float(w)
+        for i, r in enumerate(p.mode_ratios):
+            s.ep_r[i] = float(r)
+        s.n_mp = len(p.mode_ratios)
+        for i in range(s.n_mp):
+            s.mode_phases[i] = p.mode_phase(i + 1)
     elif s.kind == 1:
         if isinstance(p, T.SfxThroatProperties):
             # a throat's pulse: its tilt, mouth and vowel (the note's, nv_note), its breath
@@ -1284,7 +1369,7 @@ def init_supported(cls):
             return False
         # (and [RND]'s, RandomStrike: its four draws the caller's, VoiceInit.rnd_draws)
         if any(k.__name__ not in ('SynthProperties', 'object', 'RandomStrike') for k in cls.__mro__
-               if '__init__' in k.__dict__):
+               if '__init__' in k.__dict__ and not (k.__name__ == 'ElectricPianoProperties' and ep_voice(cls))):
             return False
         if any(_owner(cls, n) != o for n, o in _BASE_OWN.items() if n != 'inharmonicity_coefficient_func'):
             return False
@@ -1739,7 +1824,7 @@ def note_class(cls):
         ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF
                                         if not (drum and drum_has(a)) and not org_has(a))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT)
-              and (getattr(cls, 'mode_phase', None) is None or issubclass(cls, T.TR808Properties))
+              and (getattr(cls, 'mode_phase', None) is None or issubclass(cls, T.TR808Properties) or drum == 5)
               and (int(getattr(cls, 'strike_flam', 0) or 0) <= 1
                    or (int(cls.strike_flam) <= 64 and not getattr(cls, 'strike_flam_record', False)
                        and not (getattr(cls, 'strike_flam_exp_db', 0.0) or 0.0)))
@@ -1835,6 +1920,23 @@ def note_class(cls):
         k.trem_scatter = float(getattr(cls, 'tremolo_scatter', 0.0) or 0.0)
         k.trem_intrinsic = int(bool(getattr(cls, 'tremolo_intrinsic', False)))
         k.touch_sensitive = int(bool(getattr(cls, 'touch_sensitive', True)))
+        # its speaker cabinet (cabinet.py: _prep_cabinet), its response's terms
+        cab = getattr(cls, 'cabinet', None)
+        if cab and os.environ.get('TUNING_CABINET', '1') != '0':
+            import cabinet as _CAB
+            cb = _CAB.get(cab)
+            if len(cb.formants) > 4 or len(cb.antiformants) > 4 or cb.body_trim_db:
+                _NOTE[cls] = False
+                return None
+            k.cab_set, k.n_cab_fm, k.n_cab_afm = 1, len(cb.formants), len(cb.antiformants)
+            k.cab_floor = float(cb.formant_floor)
+            for i, row in enumerate(cb.formants):
+                k.cab_fm[i][:] = [float(x) for x in row]
+            for i, row in enumerate(cb.antiformants):
+                k.cab_afm[i][:] = [float(x) for x in row]
+            k.cab_corner, k.cab_order = float(cb.bore_corner_hz), float(cb.bore_order)
+            k.cab_cut, k.cab_bell = float(cb.bell_cutoff_hz or 0.0), float(cb.bell_order)
+            k.cab_ref = float(cb._ref)
         # the player's breath (its rows: nv_breath_rows)
         if (getattr(cls, 'breath_wobble_db', 0.0) > 0.0 or getattr(cls, 'breath_noise_wobble_db', 0.0) > 0.0
                 or getattr(cls, 'breath_pitch_cents', 0.0) > 0.0):
@@ -2385,6 +2487,20 @@ def reed_series(gate, edge, spread, points, max_harmonic, direct):
     out = (C * (top + 1))()
     n = d.nv_reed_series(float(gate), float(edge), float(spread), int(points), int(max_harmonic), float(direct), out)
     return tuple(out[:n])
+
+
+def ep_layers(kind, params, a0, rho, f0, op, harmonics, terms, max_hz, floor_db, control):
+    """ElectricPianoProperties._pickup_layers from native/epiano.cpp (the same
+    on every machine, and the engine's): ((k, n, w, phase), ...); None where
+    there is no library. kind 1 the Rhodes' pickup, 2 the Wurlitzer's slot."""
+    d = lib()
+    if d is None:
+        return None
+    p = (C * 5)(*[float(x) for x in params])
+    out = (C * (4 * 512))()
+    n = d.nv_ep_layers_cached(int(kind), p, float(a0), float(rho), float(f0), float(op), int(harmonics), int(terms),
+                              float(max_hz or 0.0), float(floor_db), int(bool(control)), out, 512)
+    return tuple((int(out[4 * q]), out[4 * q + 1], out[4 * q + 2], out[4 * q + 3]) for q in range(min(n, 512)))
 
 
 def xcos(x):

@@ -5299,6 +5299,15 @@ class ElectricGrandProperties(GrandPianoProperties):
 # max_harmonic times, and a bank asks for it once per velocity bucket.
 _EP_PICKUP_CACHE = {}
 
+
+def _ep_owner(cls, name):
+    """The class in cls's MRO that defines name (an electric piano's curve:
+    native/epiano.cpp knows the Rhodes' and the Wurlitzer's own)."""
+    for k in cls.__mro__:
+        if name in vars(k):
+            return k
+    return None
+
 # The voicing screw, in units of the field's width. This is the one adjustment a
 # Rhodes technician actually makes on the instrument, and it is the sharpest
 # falsifiable claim the measurements offer: at 0.0 the fundamental vanishes and
@@ -5482,6 +5491,11 @@ class ElectricPianoProperties(PluckedStringProperties):
         """What else the curve depends on, for the layers' cache."""
         return ()
 
+    def _native_flux(self):
+        """The curve as native/epiano.cpp knows it: (kind, its parameters), or
+        None where it is not one of its curves (this class's own Python)."""
+        return None
+
     def _deflection(self):
         """How far the tine swings, in units of the field's width.
 
@@ -5508,14 +5522,29 @@ class ElectricPianoProperties(PluckedStringProperties):
         pickup_floor_db of the loudest dropped."""
         import numpy as np
         a0 = self._deflection()
-        key = (type(self).__name__, round(self.pickup_offset, 4), round(a0, 4),
+        # (keyed on the exact swing and pitch: rounded, the first note to come
+        # gave its neighbours its layers, and an order made the sound)
+        key = (type(self).__name__, self.pickup_offset, a0,
                self.pickup_harmonics, self.pickup_layer_terms, ep_control,
                getattr(self, 'pickup_slot_q', None), getattr(self, 'pickup_slot_p', None),
-               self._flux_key(), self.swing_damping,
-               round(self.frequency_x * (2.0 ** self.octave_position), 2))
+               self._flux_key(), self.swing_damping, self.octave_position)
         out = _EP_PICKUP_CACHE.get(key)
         if out is not None:
             return out
+        # native/epiano.cpp's, where the library is and the curve is one it
+        # knows: libm, plain sums and a Householder solve in place of numpy's
+        # lstsq, so the engine's electric pianos are these (the fit the same:
+        # its powers chosen alike, its envelopes within -200 dB)
+        _ck = self._native_flux()
+        if _ck is not None:
+            import native as _NV
+            got = _NV.ep_layers(_ck[0], _ck[1], a0, self.swing_damping,
+                                self.frequency_x * (2.0 ** self.octave_position), self.octave_position,
+                                self.pickup_harmonics, self.pickup_layer_terms, self.pickup_max_hz,
+                                self.pickup_floor_db, ep_control)
+            if got is not None:
+                _EP_PICKUP_CACHE[key] = got
+                return got
         # The swing, A/A0, as it decays -- sampled GEOMETRICALLY in time from the
         # strike: a bass tine's swing loses 0.1 of its log in the first second,
         # so an even grid over its whole fall (to e^-7) left the attack between
@@ -5759,6 +5788,11 @@ class RhodesProperties(ElectricPianoProperties):
     def _flux_key(self):
         return (self.pickup_gap, self.pickup_side, self.pickup_side_depth, self.tine_arc)
 
+    def _native_flux(self):
+        if any(_ep_owner(type(self), n) is not RhodesProperties for n in ('pickup_flux', '_face', '_field')):
+            return None
+        return 1, (self.pickup_offset, self.pickup_gap, self.pickup_side, self.pickup_side_depth, self.tine_arc)
+
     def pickup_flux(self, u):
         import numpy as np
         u = np.asarray(u, dtype=float)
@@ -5932,6 +5966,11 @@ class WurlitzerProperties(ElectricPianoProperties):
 
     def pickup_flux(self, u):
         return (1.0 + abs(u) ** self.pickup_slot_p) ** (-self.pickup_slot_q)
+
+    def _native_flux(self):
+        if _ep_owner(type(self), 'pickup_flux') is not WurlitzerProperties:
+            return None
+        return 2, (self.pickup_offset, self.pickup_slot_p, self.pickup_slot_q)
 
 
 

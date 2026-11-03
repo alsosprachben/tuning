@@ -60,7 +60,27 @@ class Cabinet(T.FormantBody):
 
     def gain(self, hz):
         hz = np.maximum(np.asarray(hz, float), 1e-6)
-        return self.bore_gain(hz) / self._ref
+        return self._bore_gain_n(hz) / self._ref
+
+    def _bore_gain_n(self, hz):
+        """FormantBody.bore_gain over an array, its powers libm's (native.xpow:
+        numpy's ** is SVML, machine-specific), so each element is what the
+        scalar gives -- and the engine's cabinet (native) the same."""
+        import native as _NV
+        g = np.full(hz.shape, float(self.formant_floor))
+        for centre, bandwidth, amp in self.formants:
+            d = (hz - centre) / (bandwidth * 0.5)
+            g += amp / (1.0 + d * d)
+        for centre, bandwidth, depth in self.antiformants:
+            d = (hz - centre) / (bandwidth * 0.5)
+            g *= 1.0 - depth / (1.0 + d * d)
+        g /= 1.0 + _NV.xpow(hz / self.bore_corner_hz, self.bore_order)
+        if self.bell_cutoff_hz:
+            x = _NV.xpow(hz / self.bell_cutoff_hz, self.bell_order)
+            g *= x / (1.0 + x)
+        if self.body_trim_db:
+            g *= np.array([self._body_trim(float(f)) for f in hz.ravel()]).reshape(hz.shape)
+        return g
 
     def response_db(self, freqs):
         """For the report, and for the fizz test -- see examples/guitar.py."""

@@ -216,6 +216,8 @@ struct Song {
     // a voice's tremolos (_TREM_CH, an ordinary voice's): each channel's
     // (rate, depth, stereo, scatter), the first note's to set one
     std::vector<std::pair<long long, std::vector<double>>> trems;
+    // the speaker cabinets (_CAB_CH): each channel's, its first note's to have one
+    std::vector<std::pair<long long, const NoteClass *>> cabs;
     // the valve amplifiers (_AMP_CH): each channel as its first amplified
     // note came, its voice's drive, and whether it is on a rotor
     std::vector<std::pair<long long, std::pair<double, int>>> amp;
@@ -1405,6 +1407,28 @@ void nv_song_add_trem(void *s, long long ch, const double *cfg)
         if (x.first == ch)
             return;
     S->trems.push_back(std::make_pair(ch, std::vector<double>(cfg, cfg + 4)));
+}
+
+// A CABINET on a channel (its first note's voice's); a channel already set is left
+void nv_song_add_cab(void *s, long long ch, const NoteClass *k)
+{
+    nv::Song *S = (nv::Song *)s;
+    for (const auto &x : S->cabs)
+        if (x.first == ch)
+            return;
+    S->cabs.push_back(std::make_pair(ch, k));
+}
+
+// the cabinets: channels and the classes carrying them; how many
+int nv_song_cabs(void *s, long long *ch, const NoteClass **k, int cap)
+{
+    const nv::Song *S = (nv::Song *)s;
+    int n = (int)S->cabs.size();
+    for (int q = 0; q < n && q < cap; q++) {
+        ch[q] = S->cabs[q].first;
+        k[q] = S->cabs[q].second;
+    }
+    return n;
 }
 
 // the voices' tremolos: channels and (rate, depth, stereo, scatter) each; how many

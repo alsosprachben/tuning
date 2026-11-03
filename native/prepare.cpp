@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <vector>
 
 #include "nv.h"
@@ -126,6 +127,8 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
             nv_song_add_amp(song, ch, k->amp_drive, k->leslie != 0);
         if (k && k->leslie)
             nv_song_add_leslie(song, ch, k->leslie);
+        if (k && k->cab_set)                            // (_CAB_CH: the channel's, set once)
+            nv_song_add_cab(song, ch, k);
         if (k && !k->organ && k->trem_depth > 0.0) {    // (_note_tremolo: the channel's, set once)
             int v;
             double dep = k->trem_intrinsic ? k->trem_depth
@@ -308,3 +311,54 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
 }
 
 }  // extern "C"
+
+// cabinet.Cabinet.gain: FormantBody.bore_gain at hz (no less than 1e-6 Hz)
+// over the cabinet's level at its reference
+static double cab_gain(const NoteClass *k, double hz)
+{
+    hz = hz > 1e-6 ? hz : 1e-6;
+    double g = k->cab_floor;
+    for (int i = 0; i < k->n_cab_fm; i++) {
+        double d = (hz - k->cab_fm[i][0]) / (k->cab_fm[i][1] * 0.5);
+        g += k->cab_fm[i][2] / (1.0 + d * d);
+    }
+    for (int i = 0; i < k->n_cab_afm; i++) {
+        double d = (hz - k->cab_afm[i][0]) / (k->cab_afm[i][1] * 0.5);
+        g *= 1.0 - k->cab_afm[i][2] / (1.0 + d * d);
+    }
+    g /= 1.0 + pow(hz / k->cab_corner, k->cab_order);
+    if (k->cab_cut != 0.0) {
+        double x = pow(hz / k->cab_cut, k->cab_bell);
+        g *= x / (1.0 + x);
+    }
+    return g / k->cab_ref;
+}
+
+// THE SPEAKER CABINETS (blockrender._prep_cabinet, cabinet.expand): every row
+// on a cabinet's channel (the song's: nv_song_cabs) through its response at
+// the row's frequency -- the file's after the amplifier, before the rotors;
+// a live template's as it is built (the speaker is linear: each note through
+// it, summed, is the sum through it)
+extern "C" void nv_cabinet_pass(void *song, double *rows, long long P)
+{
+    enum { cAL = 3, cAR = 4, cAM = 5, cMCH = 6, cNF = 11 };     // (EMIT_COLS)
+    int nc = nv_song_cabs(song, nullptr, nullptr, 0);
+    if (!nc)
+        return;
+    std::vector<long long> cch(nc);
+    std::vector<const NoteClass *> cks(nc);
+    nv_song_cabs(song, cch.data(), cks.data(), nc);
+    std::map<long long, const NoteClass *> cab;
+    for (int k = 0; k < nc; k++)
+        cab[cch[k]] = cks[k];
+    for (long long r = 0; r < P; r++) {
+        double *row = rows + (size_t)NCOLS * r;
+        auto it = cab.find((long long)row[cMCH]);
+        if (it == cab.end())
+            continue;
+        double g = cab_gain(it->second, row[cNF]);
+        row[cAL] *= g;
+        row[cAR] *= g;
+        row[cAM] *= g;
+    }
+}

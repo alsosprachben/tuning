@@ -710,6 +710,10 @@ int main(int argc, char **argv)
     if (!sch.empty())
         nv_scan_expand(E.scan.data(), &rows, &P, dm, (int)sch.size(), sch.data(), srow.data(), sdep.data(),
                        scho.data(), SR);
+    // THE SPEAKER CABINETS (_prep_cabinet, cabinet.expand): every row on a
+    // cabinet's channel through its response at the row's frequency, after
+    // the amplifier, before the rotors
+    nv_cabinet_pass(song, rows, P);
     // THE ROTATING SPEAKERS (_prep_rotating_speaker, leslie.expand): each
     // Leslie channel's half-moon from its CC1s (leslie.zone), on its default
     // speed from 0 where the first is later; the cabinet, the crossover's

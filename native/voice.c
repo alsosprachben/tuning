@@ -161,8 +161,31 @@ int nv_mode_gains_at(const VoiceSnap *v, double f, double *out)
     return n;
 }
 
+/* ElectricPianoProperties._deflection: the swing at the strike, as velocity
+   (attack_volume's root) to its power, wider down the keyboard, capped */
+static double ep_deflection(const VoiceSnap *v)
+{
+    double av = v->attack_volume > 1e-4 ? v->attack_volume : 1e-4;
+    double a = v->ep_defl * pow(2.0, v->ep_defl_slope * v->octave_position) * pow(sqrt(av), v->ep_defl_power);
+    return a < v->ep_defl_max ? a : v->ep_defl_max;
+}
+
+/* ElectricPianoProperties._level_law: the level following velocity, not its square */
+static double ep_level_law(const VoiceSnap *v)
+{
+    double av = v->attack_volume > 1e-4 ? v->attack_volume : 1e-4;
+    if (v->ep_defl_power == 1.0)
+        return 1.0 / av;
+    double fr = v->ep_defl * pow(2.0, v->ep_defl_slope * v->octave_position);
+    double d = ep_deflection(v);
+    double undo = sqrt(av) * fr / (d > 1e-9 ? d : 1e-9);
+    return pow(undo, 1.0 - v->ep_share) / av;
+}
+
 double nv_mode_ratio(const VoiceSnap *v, int m)
 {
+    if (v->kind == 5)                           /* SynthProperties.mode_ratio: the note's layers, the tonebar's */
+        return 1 <= m && m <= v->n_lay + v->n_tb ? v->ep_r[m - 1] : 0.0;
     if (v->kind == 2 && v->mm_harm)             /* SynthProperties.mode_ratio: mode_ratios None */
         return (double)m;
     if (v->kind == 2)                           /* SynthProperties.mode_ratio: mode_ratios */
@@ -187,6 +210,13 @@ double nv_mode_ratio(const VoiceSnap *v, int m)
 
 double nv_series_volume(const VoiceSnap *v, int harmonic)
 {
+    if (v->kind == 5) {                         /* ElectricPianoProperties: a layer's weight, the tonebar's */
+        if (harmonic < 1 || harmonic > v->n_lay + v->n_tb)
+            return 0.0;
+        double x = harmonic > v->n_lay ? v->tb_g[harmonic - v->n_lay - 1] * ep_deflection(v)
+                                       : fabs(v->ep_w[harmonic - 1]);
+        return v->gain * x * ep_level_law(v);
+    }
     if (v->kind == 2 && v->n_bar) {             /* TunedBarProperties: the bar's own modes */
         for (int i = 0; i < v->n_bar; i++)
             if (harmonic == v->bar_n[i])
@@ -387,6 +417,11 @@ static double mode_decay(const VoiceSnap *v, int harmonic)
 
 double nv_harmonic_decay(const VoiceSnap *v, int harmonic)
 {
+    if (v->kind == 5) {                         /* ElectricPianoProperties: n D for the term A^n; the tonebar's tick */
+        if (harmonic > v->n_lay)
+            return v->tb_decay;
+        return v->harmonic_decay_db * v->ep_n[harmonic - 1] * v->decay_register_factor;
+    }
     if (v->kind == 2) {                         /* a mode set's, a key's retargeted */
         double base = mode_decay(v, harmonic);
         if (!v->retarget)
@@ -433,7 +468,7 @@ static double string_blend(const VoiceSnap *v, double frequency, double break_hz
 /* GrandPianoProperties.aftersound: (level, its decay rate) */
 void nv_aftersound(const VoiceSnap *v, double frequency, double decay_rate, double *out)
 {
-    if (v->kind == 3 || v->kind == 4) {         /* SynthProperties: one stage */
+    if (v->kind == 3 || v->kind == 4 || v->kind == 5) {     /* SynthProperties: one stage */
         out[0] = 0.0;
         out[1] = decay_rate;
         return;
@@ -784,6 +819,8 @@ static double pymax(double a, double b) { return b > a ? b : a; }
 
 int nv_reed_series_cached(double gate, double edge, double spread, int points, int max_harmonic, double direct,
                           double *out);
+int nv_ep_layers_cached(int kind, const double *p, double a0, double rho, double f0, double op, int harmonics,
+                        int terms, double max_hz, double floor_db, int control, double *out, int cap);
 
 /* tonelib.stage_angle */
 static double stage_angle(double p)
@@ -881,6 +918,32 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
                                           s->reed_s);
         for (int q = s->n_reed; q < 1025; q++)
             s->reed_s[q] = 0.0;                 /* (none past this key's) */
+    }
+    if (s->kind == 5) {                         /* an electric piano: this note's layers (ElectricPianoProperties.__init__) */
+        double lay[4 * 400], f0 = s->frequency_x * pow(2.0, op);
+        s->ep_a0 = ep_deflection(s);
+        int n = nv_ep_layers_cached(s->ep_kind, s->ep_p, s->ep_a0, s->ep_rho, f0, op, s->ep_harm, s->ep_terms,
+                                    s->ep_max_hz, s->ep_floor_db, 0, lay, 400);
+        s->n_lay = n < 400 ? n : 400;
+        double tb = s->tb_coeff * pow(frequency, s->tb_power);
+        for (int q = 0; q < s->n_lay; q++) {
+            s->ep_r[q] = lay[4 * q];
+            s->ep_n[q] = lay[4 * q + 1];
+            s->ep_w[q] = lay[4 * q + 2];
+            s->mode_phases[q] = lay[4 * q + 3] + (lay[4 * q + 2] < 0.0 ? PI : 0.0);    /* mode_phase */
+        }
+        for (int q = 0; q < s->n_tb; q++) {
+            s->ep_r[s->n_lay + q] = tb * s->tb_ratio[q] / frequency;
+            s->mode_phases[s->n_lay + q] = 0.0;
+        }
+        for (int q = s->n_lay + s->n_tb; q < 408; q++)
+            s->ep_r[q] = 0.0;
+        for (int q = s->n_lay; q < 400; q++)
+            s->ep_n[q] = s->ep_w[q] = 0.0;
+        for (int q = s->n_lay + s->n_tb; q < 400; q++)
+            s->mode_phases[q] = 0.0;
+        s->n_mp = s->n_lay + s->n_tb;
+        s->max_harmonic = s->n_lay + s->n_tb;
     }
     if (s->kind == 2 && (s->n_pts || s->low_set))  /* an organ pipe: its register's table (mode_gains_here) */
         s->n_mm = nv_mode_gains_at(s, s->frequency_x * pow(2.0, s->octave_position), s->mm_gain);

@@ -195,6 +195,18 @@ typedef struct {
        its frequency; no images */
     int skirt, sk_max;
     double sk_db, sk_hdb, sk_hz, sk_rel;
+    /* AN ELECTRIC PIANO (kind 5: ElectricPianoProperties): its pickup's curve
+       (ep_kind 1 the Rhodes', 2 the Wurlitzer's slot; ep_p its parameters),
+       the swing (pickup_deflection, its register slope, velocity power and
+       ceiling; swing_damping), the fit (pickup_harmonics, _layer_terms,
+       _max_hz, _floor_db), level_swing_share; the tonebar (its pitch law,
+       modes, gains and decay) -- and the note's: its swing (ep_a0), its
+       layers (n_lay: each a mode at ep_r, its term's power ep_n and weight
+       ep_w; the tonebar's modes after them, at ep_r too) */
+    int ep_kind, ep_harm, ep_terms, n_tb, n_lay;
+    double ep_p[5], ep_defl, ep_defl_slope, ep_defl_power, ep_defl_max, ep_rho, ep_max_hz, ep_floor_db, ep_share;
+    double tb_coeff, tb_power, tb_decay, tb_ratio[8], tb_g[8];
+    double ep_a0, ep_r[408], ep_n[400], ep_w[400];
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -550,6 +562,12 @@ typedef struct {
     double trem_hz, trem_depth, trem_scatter;
     int trem_stereo, trem_intrinsic;
     int touch_sensitive;            // velocity sets its level (a key that only opens a valve does not)
+    // ITS SPEAKER CABINET (cabinet.py, a voice's cabinet): FormantBody's
+    // response -- its floor, formants and antiformants (Hz, bandwidth, amp or
+    // depth), its top corner and order, its low cutoff and order -- over its
+    // own level at 1 kHz (cab_ref); cab_set 0 none
+    int cab_set, n_cab_fm, n_cab_afm;
+    double cab_floor, cab_fm[4][3], cab_afm[4][3], cab_corner, cab_order, cab_cut, cab_bell, cab_ref;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -697,6 +715,9 @@ int nv_song_n_htrem_rows(void *s, long long *ab, int cap);
 int nv_song_organ_tremolos(void *s, int which, int *ch, double *cfg, int cap);
 void nv_song_add_leslie(void *s, long long ch, int kind);
 void nv_song_add_trem(void *s, long long ch, const double *cfg);
+void nv_song_add_cab(void *s, long long ch, const NoteClass *k);
+int nv_song_cabs(void *s, long long *ch, const NoteClass **k, int cap);
+void nv_cabinet_pass(void *song, double *rows, long long P);
 int nv_song_trems(void *s, long long *ch, double *cfg, int cap);
 void nv_song_add_amp(void *s, long long ch, double drive, int rotor);
 double nv_song_amp(void *s, int k, long long *ch, int *rotor);

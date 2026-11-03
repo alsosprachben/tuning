@@ -195,6 +195,8 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         prows->resize(2 * np);
         nv_song_n_push_rows(song, prows->data(), np);
     }
+    if (P >= 0)                                 // the speaker cabinet (_prep_cabinet), before any rotor
+        nv_cabinet_pass(song, *rowsp, P);
     // A ROTARY VOICE'S CABINET (_raw_template: leslie.expand with SIDEBANDS
     // off): the cabinet's colour, the crossover's copies (leslie_flip), each
     // row's Doppler at the rotor's speed from the file's CC1 (fast), else the
