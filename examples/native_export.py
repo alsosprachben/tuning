@@ -103,6 +103,8 @@ def main(argv):
         for key in range(128):
             cls = B.property_class_for_note(prog, key)
             k = N.note_class(cls) if cls is not None else None
+            if k is not None and k.organ:
+                k = None                    # (a registered organ: not in an export yet)
             if k is None:
                 cmap.append(-1)
                 continue
@@ -114,6 +116,8 @@ def main(argv):
     kcls, kf0, kseat, kchoke, kskind, kspar = N.kits()
     for cls in kcls:
         k = N.note_class(cls) if cls is not None else None
+        if k is not None and k.organ:
+            k = None
         if k is None:
             cmap.append(-1)
             continue

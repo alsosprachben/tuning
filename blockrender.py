@@ -6181,7 +6181,7 @@ def _voice_report(bad, nt):
                 '' if nt is None else ' (ch %d note %d at %.3f s)' % (nt.ch, nt.note, nt.on), ', '.join(bad)))
 
 
-def _native_ready(em, props, reverse_ok=False):
+def _native_ready(em, props, reverse_ok=False, radius_ok=False):
     """(library, the voice's VoiceSnap) where the C can emit this voice's rows
     as emit_partial would -- a supported voice, and none of the emitter's
     extras in play (reverse, gong fold, hammer-on, compressor, late copy,
@@ -6192,7 +6192,7 @@ def _native_ready(em, props, reverse_ok=False):
     if d is None or getattr(P, 'directivity_radius', 0.0) > 0.0:
         return None
     if ((em.reverse is not None and not reverse_ok) or em.fold is not None or em.fold_in or em.hammer_on > 0.0
-            or em._EFXN[0] is not None or em.late_copy or em.ring_rows or em.radius is not None):
+            or em._EFXN[0] is not None or em.late_copy or em.ring_rows or (em.radius is not None and not radius_ok)):
         return None
     _part = (int(em.channel) % _GSX.VIRT) % _GSX.TONE_SEG
     if (_GS_EQ and _part not in _GS_EQ['off']) or em._src_dist(_part, P) != 1.0:
@@ -6471,7 +6471,7 @@ READING_STATS = [0, 0]  # files whose check song is the engine's own reading; wh
 
 
 def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st, eff, nx, mcut, slurred,
-                       slur_out, song=None, key_off=None, from_song=False, seat=0.0, held=0.0):
+                       slur_out, song=None, key_off=None, from_song=False, seat=0.0, held=0.0, organ=None):
     """A piano note from the engine (native/engine.cpp's nv_note): its knock,
     tone and phantom partials, the voice built there from the note as the
     file and channel give it. (rows, qacc, azimuth, NoteOut, row0, qacc
@@ -6479,15 +6479,21 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     import native as _NV
     P = props
     K = _NV.note_class(nt.pc)
-    if K is None or nt.organ or len(stops) != 1 or tuple(stops[0]) != ("_", 1.0, 1.0):
+    if K is None:
         return None
-    if _sir is not None or _als is not None or mls > 0.0:
+    if nt.organ:
+        # A REGISTERED ORGAN (organ.c): its ranks, as its registration leaves them
+        if not K.organ or organ is None or WIND or type(props) is not nt.pc:
+            return None
+    elif len(stops) != 1 or tuple(stops[0]) != ("_", 1.0, 1.0) or mls > 0.0:
+        return None
+    if _sir is not None or _als is not None:
         return None
     if (seats or onsets) and not _NV.harmonic_voice(type(P)):
         return None                         # (a section's players: a bowed string's alone)
     if T.choir_of(P, "_") or T.rank_detune_cents(P, "_", nt.note) or em.pos_x != getattr(P, 'position_x', 0.0):
         return None
-    if _native_ready(em, P, reverse_ok=True) is None:      # (the engine plays a tape backwards)
+    if _native_ready(em, P, reverse_ok=True, radius_ok=bool(nt.organ)) is None:   # (the engine plays a tape backwards)
         return None
     if em.REFLECT and P.reflection_order and NATIVE_TONE == 'check':
         # the engine makes the room's images itself (nv_images): here, Python's beside them
@@ -6509,6 +6515,34 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.stroke_mouth = getattr(P, 'stroke_formant_scale', math.nan)
     n.stroke_morph = getattr(P, 'stroke_formant_morph', math.nan)
     n.snd_at, n.snd_rt = em.snd_at, em.snd_rt      # (CC73 and CC72's scales)
+    if nt.organ:
+        # each rank: its gate row, when it speaks, whether it speaks at all,
+        # and whether it was pushed in before the key-up (_note_stops')
+        rev, grs, cr, wrow, wcombo, bnote = organ
+        aj = getattr(P, 'attack_jitter', 0.0)
+        br = n.br
+        for i, (key, ratio, *_r) in enumerate(stops):
+            n.rank_gr[i] = grs[i]
+            # the chest's wind: its row from this rank on, as _note_stops sets it
+            if (ratio is not None and not (len(_r) > 3 and _r[3] is not None and not (_r[3][0] <= nt.note <= _r[3][1]))
+                    and (nt.ch, key) in wrow):
+                _w = wrow[(nt.ch, key)]
+                br = wcombo.get((bnote, _w), _w) if bnote >= 0 else _w
+            n.rank_br[i] = br
+            ev = rev[key]
+            sp = rank_speak_sec(ev, nt.on, aj)
+            n.rank_sp[i] = math.nan if sp is None else sp
+            dr = rank_speak_sec(ev, nt.on, 0.0)
+            n.rank_skip[i] = int(dr is not None and dr > nt.on and dr >= nt.key_off)
+            if dr is not None:
+                _drawn_off = 0.0
+                for _t, _tg in ev:
+                    if _t <= nt.key_off:
+                        _drawn_off = _tg
+                    else:
+                        break
+                n.rank_rel1[i] = int(_drawn_off < 0.5)
+        n.organ_cr = cr
     n.has_nx, n.nx = int(nx is not None), (nx if nx is not None else 0.0)
     n.mcut, n.slurred, n.slur_out = int(bool(mcut)), int(bool(slurred)), int(bool(slur_out))
     lo, hi = getattr(nt.pc, 'string_detune_range', (0.0, 0.0))
@@ -6531,6 +6565,9 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     npar = min(mh, int(getattr(P, 'phantom_max_order', 16)))
     _o = int(P.reflection_order) if em.REFLECT else 0
     ni = min(64, sum(6 * 5 ** k for k in range(_o)))      # the images there can be, at most
+    if nt.organ:
+        # every rank's footages, each partial and its images, twice (the push)
+        mh = mh * sum(max(1, len(r[1]) if isinstance(r[1], (list, tuple)) else 1) for r in stops) * 2
     cap = ((K.n_strike * max(1, K.n_flam, K.n_ft) + 1) + sum(K.lay_n[:K.n_layer]) + 2 * K.n_nb * K.noise_rows
            + K.n_bn * K.bn_rows
            + mh * 3 * max(1, getattr(P, 'section_players', 1)) * (1 + ni)) + 16 \
@@ -6595,6 +6632,12 @@ def _note_native_apply(em, props, nt, A, wn, _VB):
     if out.n_tone:
         em.radius = None
         em.pos_x = getattr(props, 'position_x', 0.0)
+    if nt.organ:
+        # (an organ's: its last pipe's radius, its last rank's ears; its push made)
+        em.radius = None if math.isnan(out.radius) else out.radius
+        nt.li, nt.ri = out.li, out.ri
+        em._DL[0], em._DL[1] = out.dl, out.dr
+        em.push_pending = None
 
 
 def _NV_breath(cls):
@@ -7282,6 +7325,13 @@ def _prepare(path, tuner='hybrid440', sink=None):
     em = _Emitter()
     lib = ensure_lib(); lib.synth_voice.restype = None
     import random; random.seed(0)   # per-note pitch/timing jitter, deterministic (as the reference seeds)
+    # one directivity cache with the engine's, where it plays notes (tonelib.Q_SHARED)
+    if NATIVE_TONE != 'off':
+        import native as _NVQ
+        _dq = _NVQ.lib()
+        T.Q_SHARED = _dq.nv_sphere_mean if _dq is not None else None
+    else:
+        T.Q_SHARED = None
     T.RND_STREAM.seed(0)            # ...and the [RND] drum strikes' (tonelib.RandomStrike)
     FREQ = tuning_table(tuner)
     FREQ_E = _prep_eastern_tuning(FREQ, tuner)
@@ -8855,9 +8905,14 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                      _nx, _mcut, _slurred, (nt.ch, nt.note, nt.on) in _SLUR_OUT,
                                      _SONG if choked is None else None, _off_key,
                                      _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT,
-                                                  FREQ_E), _seat, _held)
+                                                  FREQ_E), _seat, _held,
+                                     organ=((rankev_of[nt.organ_key], [grow_of[(nt.organ_key, _r[0])] for _r in stops],
+                                             crow_of[nt.organ_key], wrow_of, wcombo, em.bend_row)
+                                            if nt.organ else None))
         if _wn is not None and NATIVE_TONE == 'on':
             _note_native_apply(em, props, nt, A, _wn, _VB)
+            if _wn[3].n_push:               # (an organ's push, the tone's last rows: recorded as _push_finish does)
+                _PUSH_ROWS.append((len(A['om']) - _wn[3].n_push, len(A['om'])))
         else:
             _pjit = _note_strike_noise(em, props, nt, _CBW, _VB, _pjit, emit_partial, random)
         _note_struck_layer(props, nt, emit_partial, random)
@@ -8914,6 +8969,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
         if _wn is None or NATIVE_TONE != 'on':
             _note_phantoms(em, props, nt, transverse, emit_partial)
         if _wn is not None and NATIVE_TONE == 'check':
+            if nt.organ and not getattr(props, 'release_click_db', None):
+                # (the push, which the next note would make before anything else: the engine's is its own)
+                _push_finish(em.push_pending); em.push_pending = None; del _PUSH_SEG[:]
             _note_native_check(em, nt, A, _wn, B, _TBN)
         # THE MECHANISM LETTING GO. On a harpsichord the key coming up is not
         # only the damper arriving: the jack falls back and its tongue brushes

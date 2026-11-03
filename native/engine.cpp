@@ -266,7 +266,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         out->n_phantom = 0;
         out->non = non; out->noff = noff; out->fade = fade; out->rel = rel; out->chiff = chiff;
         out->jitter_scale = t.jitter_scale;
-        out->dl = t.dl; out->dr = t.dr; out->li = t.li; out->ri = t.ri;
+        out->dl = t.dl; out->dr = t.dr; out->li = t.li; out->ri = t.ri; out->radius = NAN; out->n_push = 0;
         out->pos_x = s.position_x; out->pos_z = s.position_z; out->B = B;
         out->cv = t.cv; out->cc = t.cc; out->crl = t.crl; out->sjit = o.sustain_jitter; out->csc = t.csc;
         memcpy(out->tb, tb, sizeof tb);
@@ -297,7 +297,13 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     if (s.max_harmonic + 1 > 1025)
         return -2;
     double sjit_last = o.sustain_jitter;        // (the note's sjit after its partials)
-    int k = nv_tone_rs(&s, &t, reflect ? nimg : 0, nsurf, surf, img, mir, rows + NCOLS * total, cap - total,
+    int k;
+    double fin[6] = {t.li, t.ri, t.dl, t.dr, NAN, 0.0};
+    if (K->organ)                               // A REGISTERED ORGAN: its ranks, then their push
+        k = nv_organ_tone(K->organ, &s, &t, n, n->note, reflect ? nimg : 0, nsurf, surf, img, mir,
+                          rows + NCOLS * total, cap - total, qacc, azimuth, fin);
+    else
+        k = nv_tone_rs(&s, &t, reflect ? nimg : 0, nsurf, surf, img, mir, rows + NCOLS * total, cap - total,
                        trans, &ntr, qacc, azimuth, rs, &sjit_last);
     if (k == -2)
         return -2;                          // a sign to draw and no stream
@@ -317,7 +323,9 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
 
     out->non = non; out->noff = noff; out->fade = fade; out->rel = rel; out->chiff = chiff;
     out->jitter_scale = t.jitter_scale;
-    out->dl = t.dl; out->dr = t.dr; out->li = t.li; out->ri = t.ri;
+    out->dl = fin[2]; out->dr = fin[3]; out->li = fin[0]; out->ri = fin[1];
+    out->radius = fin[4];               // (an organ's last pipe: the emitter's radius after it)
+    out->n_push = (int)fin[5];          // ...and its push's rows, the tone's last
     out->pos_x = s.position_x; out->pos_z = s.position_z; out->B = B;
     out->cv = t.cv; out->cc = t.cc; out->crl = t.crl; out->sjit = sjit_last; out->csc = t.csc;
     memcpy(out->tb, tb, sizeof tb);
@@ -403,8 +411,8 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         double dv[2];
         nv_song_get_note(song, i, &ch, iv, dv);
         const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[(iv[3] ? NV_K_DRUMS : 0) + 128 * iv[2] + iv[0]];
-        if (!k)
-            return -(1 + i);
+        if (!k || k->organ)
+            return -(1 + i);                // (a registered organ: its registration is not the song's yet)
         NoteIn n = *tmpl;
         n.ch = ch; n.note = iv[0]; n.on = dv[0]; n.key_off = dv[1];
         n.held = dv[1] - dv[0];             // how long the key was held

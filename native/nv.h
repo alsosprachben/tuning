@@ -164,7 +164,33 @@ typedef struct {
        (section_position_x) */
     int sect_n, sect_vib, sect_seats;
     double sect_spread_cents, sect_vib_cents, sect_vib_hz[2], sect_onset_ms, sect_ofm, sect_dx[16];
+    /* AN ORGAN PIPE'S REGISTER (a kind 2 mode set by pitch: mode_gains_at):
+       measured tables at anchor pitches (n_pts of pts_hz, pts_g, n_ptg
+       gains each), blended in dB along log frequency; or a low register's
+       table (low_set: mode_gains_low, low_g) blended in under register_low_hz.
+       mm_gain the note's (mode_gains_here) */
+    int n_pts, n_ptg, low_set, n_low, pts_n[8];
+    double pts_hz[8], pts_g[8][64], low_g[64], low_hz[2], pipe_g[64];
+    int n_pipe;
 } VoiceSnap;
+
+/* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
+   spectrum, a named pipe): its voice's constructor and template, and what
+   its speech, chiff, ceiling and push are */
+typedef struct OrganPipe OrganPipe;
+/* AN ORGAN RANK (one of stop_ranks): its footage (or a mixture's), level,
+   spectrum and pipe (OrganPipe indices, -1: the host's), its key range, its
+   place in the case (rank_spatial), a mixture's compositions by pitch, and
+   its speech class's release, band by band, at every key */
+typedef struct {
+    int n_ratio, compound;
+    double ratio[8], gain;
+    int spec, pipe, lo, hi;
+    double sp_off, sp_split;
+    int n_comp, comp_n[8];
+    double comp_hz[8], comp_r[8][8];
+    double rel_band[128][3];
+} OrganRank;
 
 typedef struct {
     double tonal_dampening, octave_dampening;
@@ -223,6 +249,31 @@ typedef struct {
     double law_k, law_p;
 } VoiceInit;
 
+struct OrganPipe {
+    VoiceInit init;
+    VoiceSnap tmpl;
+    int attack_set, release_set, chiff_width_set, sh_cap, rank_is_pipe, rank_speech, truncate;
+    double attack_time, release_valve_time, chiff_max_valve_time, speech_cycles, chiff_width, chiff_width_cycles;
+    double chiff_volume, chiff_cycle, sustain_level, speech_harmonic_exp, speech_harmonic_exp_per_octave;
+    double pipe_ceiling_hz;
+    /* the bellows' push (bellows_push_*): its gain, rise, fall and settle,
+       its band (band_set: centre harmonic, octaves) or tilt, its register */
+    int push_band_set, n_push_reg;
+    double push_gain, push_rise_s, push_dbs, push_settle_db, push_tilt, push_tilt_oct, push_band[2];
+    double push_reg[8][2];
+};
+
+/* A REGISTERED ORGAN: its pipes (pipe[0] the host's own), its ranks, the
+   case's spiral (rank_position_x), the pipes' scale (pipe_radius), the mode
+   lock (mode_lock_*), and whether each rank speaks at its own pitch */
+typedef struct OrganSpec {
+    int n_pipe, n_rank, spiral, own_pitch;
+    OrganPipe pipe[24];
+    OrganRank rank[32];
+    double spiral_m, spiral_phase, drift_m, spatial_default[2];
+    double pipe_scale_divisor, sound_speed, mode_lock_spread, mode_lock_knee, mode_lock_time;
+} OrganSpec;
+
 /* what the note setup reads of the voice besides its VoiceSnap */
 typedef struct {
     double pitch_jitter, attack_jitter, pan_angle;
@@ -261,6 +312,10 @@ typedef struct {
        players' images, each from its own desk */
     double planes[6];
     int order;
+    /* the partial's radiating aperture (an organ pipe's: pipe_radius), when
+       has_radius; else the class's directivity_radius */
+    double radius;
+    int has_radius;
 } ToneIn;
 
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
@@ -390,6 +445,9 @@ typedef struct {
     // laws (porta_semitone_time's ends, _PORTA_D_SEMI, PORTA_SETTLE_TAUS)
     int glide_mech;
     double glide_reach, porta_fast, porta_slow, porta_d_semi, porta_settle;
+    // A REGISTERED ORGAN (registerable): its ranks and their pipes, NULL none
+    // (the caller's pointer, set after the class is made or loaded)
+    const struct OrganSpec *organ;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -421,7 +479,25 @@ typedef struct {
     // CC73 and CC72 (the sound controls the class answers): the attack's and
     // the release's time scale, 0 none
     double snd_at, snd_rt;
+    // AN ORGAN'S RANKS, as its registration leaves them for this note: each
+    // rank's gate row, when it speaks (NaN: never drawn for it -- gated
+    // shut, at the note's onset), whether it is drawn only after the key
+    // lifted (skip: it does not speak), or pushed in before the key-up
+    // (rel1: its release a sample); and the organ's swell row
+    double rank_gr[32], rank_sp[32];
+    int rank_skip[32], rank_rel1[32];
+    double organ_cr;
+    double rank_br[32];     // each rank's bend row: its chest's wind (wrow_of), as it stands at that rank
 } NoteIn;
+
+/* tone.c: an organ note's ranks (_note_stops for a registered organ), its
+   pushes after them; fin: the ears, delays and pipe radius the last rank
+   leaves the emitter (li, ri, dl, dr, radius; radius NaN: none), and how
+   many of its rows, the last, are the push */
+int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, const NoteIn *n, int note,
+                  int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
+                  double *rows, int cap, double *qacc, double *azimuth, double *fin);
+
 
 // What the note's setup worked out, beside its rows.
 typedef struct {
@@ -430,6 +506,8 @@ typedef struct {
     double dl, dr, li, ri, pos_x, pos_z, B;
     double cv, cc, crl, sjit, csc;
     double tb[3], cbw[2];
+    double radius;          /* the emitter's radius after the note (an organ's last pipe), NaN none */
+    int n_push;             /* the tone's last rows that are its push (_PUSH_ROWS) */
 } NoteOut;
 
 int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,

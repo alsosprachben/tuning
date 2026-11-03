@@ -75,7 +75,9 @@ class VoiceSnap(ctypes.Structure):
                 ('fbody', I), ('n_fm', I), ('n_afm', I), ('n_bt', I), ('formant_floor', C), ('fm', (C * 3) * 16),
                 ('afm', (C * 3) * 8), ('bt', (C * 2) * 32), ('comb', C * 129),
                 ('sect_n', I), ('sect_vib', I), ('sect_seats', I), ('sect_spread_cents', C), ('sect_vib_cents', C),
-                ('sect_vib_hz', C * 2), ('sect_onset_ms', C), ('sect_ofm', C), ('sect_dx', C * 16)]
+                ('sect_vib_hz', C * 2), ('sect_onset_ms', C), ('sect_ofm', C), ('sect_dx', C * 16),
+                ('n_pts', I), ('n_ptg', I), ('low_set', I), ('n_low', I), ('pts_n', I * 8), ('pts_hz', C * 8), ('pts_g', (C * 64) * 8),
+                ('low_g', C * 64), ('low_hz', C * 2), ('pipe_g', C * 64), ('n_pipe', I)]
 
 
 class ToneIn(ctypes.Structure):
@@ -89,7 +91,8 @@ class ToneIn(ctypes.Structure):
                 + [(f, C) for f in ('sound_vib_depth_cents', 'vibrato_delay', 'br', 'fx', 'mk', 'fm_omega',
                                     'fm_phase', 'listener_distance', 'head_radius', 'pan_angle')]
                 + [('room_bands', C * 9), ('pjit', I), ('sps', C), ('dur', C), ('ssc', I)]
-                + [('rev', I), ('rev_n0', C), ('rev_arr', C), ('planes', C * 6), ('order', I)])
+                + [('rev', I), ('rev_n0', C), ('rev_arr', C), ('planes', C * 6), ('order', I), ('radius', C),
+                   ('has_radius', I)])
 
 
 class VoiceInit(ctypes.Structure):
@@ -166,7 +169,8 @@ class NoteClass(ctypes.Structure):
                 + [('n_bn', I), ('bn_rows', I), ('bn_fade_s', C), ('bn_hz', C * 64), ('bn_db', C * 64)]
                 + [('bendable', I), ('snd_mask', I), ('snd_bias', C * 8), ('snd_time_range', C),
                    ('snd_rate_range', C), ('snd_delay_s', C), ('glide_mech', I), ('glide_reach', C),
-                   ('porta_fast', C), ('porta_slow', C), ('porta_d_semi', C), ('porta_settle', C)])
+                   ('porta_fast', C), ('porta_slow', C), ('porta_d_semi', C), ('porta_settle', C),
+                   ('organ', ctypes.c_void_p)])
 
 
 class NoteIn(ctypes.Structure):
@@ -180,7 +184,8 @@ class NoteIn(ctypes.Structure):
                 + [('room_bands', C * 9), ('reflect', I), ('no_reflections', I), ('ch', LL), ('note', I),
                    ('damper_pedal', I), ('key_off', C), ('planes', C * 6), ('order', I), ('from_song', I), ('song_index', I),
                    ('seat', C), ('held', C), ('rnd_draws', C * 4), ('stroke_tilt', C), ('stroke_mouth', C),
-                   ('stroke_morph', C), ('snd_at', C), ('snd_rt', C)])
+                   ('stroke_morph', C), ('snd_at', C), ('snd_rt', C), ('rank_gr', C * 32), ('rank_sp', C * 32),
+                   ('rank_skip', I * 32), ('rank_rel1', I * 32), ('organ_cr', C), ('rank_br', C * 32)])
 
 
 class NoteOut(ctypes.Structure):
@@ -188,7 +193,7 @@ class NoteOut(ctypes.Structure):
     _fields_ = ([(f, I) for f in ('n_knock', 'n_tone', 'n_phantom')]
                 + [(f, C) for f in ('non', 'noff', 'fade', 'rel', 'chiff', 'jitter_scale', 'dl', 'dr', 'li',
                                     'ri', 'pos_x', 'pos_z', 'B', 'cv', 'cc', 'crl', 'sjit', 'csc')]
-                + [('tb', C * 3), ('cbw', C * 2)])
+                + [('tb', C * 3), ('cbw', C * 2), ('radius', C), ('n_push', I)])
 
 
 def lib():
@@ -208,7 +213,7 @@ def _load():
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
-                                                       'tuner.cpp', 'tunertables.h', 'bend.cpp')]
+                                                       'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -306,6 +311,7 @@ def _load():
             ('nv_tcache_warm', ctypes.c_long, [ctypes.c_void_p, I, I, I, I, ctypes.c_void_p, I]),
             ('nv_tcache_get', ctypes.c_void_p, [ctypes.c_void_p, I, I, I, ctypes.POINTER(LL)]),
             ('nv_tmpl_scatter', C, [ctypes.c_void_p]),
+            ('nv_sphere_mean', C, [C, C, C, C]),
             ('nv_tmpl_col', ctypes.c_void_p, [ctypes.c_void_p, I, I]),
             ('nv_tcache_kits', None, [ctypes.c_void_p, D, D, ctypes.POINTER(ctypes.c_ulonglong),
                                       ctypes.POINTER(I), D, C]),
@@ -625,6 +631,30 @@ def harmonic_voice(cls):
                                                          'bend_detents', 'amp_drive')))
 
 
+# AN ORGAN PIPE'S METHODS (a kind 2 mode set by register): SynthProperties' all
+_PIPE_OWN = dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None, mode_gains_at='SynthProperties',
+                 mode_lock_offset_for='SynthProperties', speech_time='SynthProperties', chiff_time='SynthProperties',
+                 register_low_share='SynthProperties', _blend_db='SynthProperties',
+                 inharmonicity_coefficient_for_frequency='StoppedPipeProperties')
+
+
+def pipe_voice(cls):
+    """Whether native/voice.c plays cls as an organ pipe: a measured mode
+    set on the harmonic series, its tables by register (mode_gains_points,
+    or mode_gains_low), on SynthProperties' own methods."""
+    import tonelib as T
+    if not issubclass(cls, (T.OrganProperties, T.StoppedPipeProperties)):
+        return False
+    if any(_owner(cls, n) != o for n, o in _PIPE_OWN.items()):
+        return False
+    pts = getattr(cls, 'mode_gains_points', None) or ()
+    return (cls.mode_ratios is None and (cls.mode_gains is not None or pts)
+            and len(pts) <= 8 and all(len(g) <= 64 for _, g in pts) and len(cls.mode_gains or ()) <= 64
+            and len(cls.mode_gains_low or ()) <= 64 and not cls.mode_stroke_tilt and not cls.strike_point
+            and not cls.harmonic_touch and not cls.pickup_points and not (cls.unison_detune or ())
+            and not cls.blare_db_per_khz and not getattr(cls, 'strike_noise_db', None))
+
+
 def kit_drum(cls):
     """Which voice native/voice.c plays cls as (VoiceSnap.kind) past a
     piano's: 1 a kit drum, 2 a measured mode set's (the clap, the cymbals,
@@ -632,6 +662,8 @@ def kit_drum(cls):
     import tonelib as T
     if harmonic_voice(cls):
         return 4
+    if pipe_voice(cls):
+        return 2
     if _modal_drum(cls):
         return 2
     if _shaken(cls):
@@ -894,12 +926,27 @@ def snapshot(props):
         s.n_unison = len(p.unison_detune or ())
         for i, x in enumerate(p.unison_detune or ()):
             s.unison_detune[i] = x
-        s.n_mm = len(p.mode_gains)
+        mg = p.mode_gains_here() if pipe_voice(type(p)) else p.mode_gains
+        s.n_mm = len(mg)
         if p.mode_ratios is None:
             s.mm_harm = 1                   # (a gain table on the harmonic series)
         else:
             s.mm_ratio[:s.n_mm] = [float(r) for r in p.mode_ratios]
-        s.mm_gain[:s.n_mm] = [float(g) for g in p.mode_gains]
+        s.mm_gain[:s.n_mm] = [float(g) for g in mg]
+        if pipe_voice(type(p)):
+            # an organ pipe's register: its tables by pitch, or a low one
+            pts = getattr(p, 'mode_gains_points', None) or ()
+            s.n_pts = len(pts)
+            s.n_ptg = max((len(g) for _, g in pts), default=0)
+            for i, (f, g) in enumerate(pts):
+                s.pts_hz[i], s.pts_n[i] = float(f), len(g)
+                s.pts_g[i][:len(g)] = [float(x) for x in g]
+            s.n_pipe = len(p.mode_gains or ())
+            s.pipe_g[:s.n_pipe] = [float(x) for x in (p.mode_gains or ())]
+            if p.mode_gains_low is not None:
+                s.low_set, s.n_low = 1, len(p.mode_gains_low)
+                s.low_g[:s.n_low] = [float(x) for x in p.mode_gains_low]
+                s.low_hz[:] = [float(x) for x in p.register_low_hz]
         if isinstance(p, T.CuicaProperties):
             # its partials' jitter: the sustain's under rough_from, rough above
             s.head_jitter, s.wire_jitter, s.jit_from, s.jit_sus = (p.sustain_jitter, p.rough_jitter,
@@ -1077,7 +1124,8 @@ def init_supported(cls):
     and none of the branches not ported."""
     import tonelib as T
     if kit_drum(cls):
-        if not T.hrtf or (cls.inharmonicity_dynamic and kit_drum(cls) != 4):
+        # (a dynamic B: the steel's law, or a pipe's -- the piano's polynomial, borrowed)
+        if not T.hrtf or (cls.inharmonicity_dynamic and kit_drum(cls) != 4 and not pipe_voice(cls)):
             return False
         # (and [RND]'s, RandomStrike: its four draws the caller's, VoiceInit.rnd_draws)
         if any(k.__name__ not in ('SynthProperties', 'object', 'RandomStrike') for k in cls.__mro__
@@ -1135,7 +1183,7 @@ def _class(cls):
                 setattr(c, f, getattr(proto, f))       # (a throat's breath: the prototype's)
             elif getattr(cls, f, None) is not None:
                 setattr(c, f, getattr(cls, f) if not isinstance(getattr(cls, f), bool) else int(getattr(cls, f)))
-        if not kit_drum(cls):
+        if not kit_drum(cls) or pipe_voice(cls):
             c.ia, c.ib, c.ic, c.id, c.ie = cls.a, cls.b, cls.c, cls.d, cls.e
         c.octave_modulo = int(bool(cls.octave_modulo))
         c.inharmonicity_dynamic = int(bool(cls.inharmonicity_dynamic))
@@ -1253,6 +1301,168 @@ _NOTE_OFF = ('bloom_seconds', 'speech_harmonic_exp', 'speech_harmonic_exp_per_oc
 _NOTE_ABSENT = ('pre_pluck_s', 'feedback_harmonic')
 
 
+class OrganPipe(ctypes.Structure):
+    """native/nv.h's OrganPipe: a class an organ's ranks draw on."""
+    _fields_ = ([('init', VoiceInit), ('tmpl', VoiceSnap)]
+                + [(f, I) for f in ('attack_set', 'release_set', 'chiff_width_set', 'sh_cap', 'rank_is_pipe',
+                                    'rank_speech', 'truncate')]
+                + [(f, C) for f in ('attack_time', 'release_valve_time', 'chiff_max_valve_time', 'speech_cycles',
+                                    'chiff_width', 'chiff_width_cycles', 'chiff_volume', 'chiff_cycle',
+                                    'sustain_level', 'speech_harmonic_exp', 'speech_harmonic_exp_per_octave',
+                                    'pipe_ceiling_hz')]
+                + [('push_band_set', I), ('n_push_reg', I)]
+                + [(f, C) for f in ('push_gain', 'push_rise_s', 'push_dbs', 'push_settle_db', 'push_tilt',
+                                    'push_tilt_oct')]
+                + [('push_band', C * 2), ('push_reg', (C * 2) * 8)])
+
+
+class OrganRank(ctypes.Structure):
+    """native/nv.h's OrganRank: one of stop_ranks."""
+    _fields_ = [('n_ratio', I), ('compound', I), ('ratio', C * 8), ('gain', C), ('spec', I), ('pipe', I),
+                ('lo', I), ('hi', I), ('sp_off', C), ('sp_split', C), ('n_comp', I), ('comp_n', I * 8),
+                ('comp_hz', C * 8), ('comp_r', (C * 8) * 8), ('rel_band', (C * 3) * 128)]
+
+
+class OrganSpec(ctypes.Structure):
+    """native/nv.h's OrganSpec: a registered organ's pipes and ranks."""
+    _fields_ = [('n_pipe', I), ('n_rank', I), ('spiral', I), ('own_pitch', I), ('pipe', OrganPipe * 24),
+                ('rank', OrganRank * 32), ('spiral_m', C), ('spiral_phase', C), ('drift_m', C),
+                ('spatial_default', C * 2), ('pipe_scale_divisor', C), ('sound_speed', C),
+                ('mode_lock_spread', C), ('mode_lock_knee', C), ('mode_lock_time', C)]
+
+
+_ORGAN = {}
+
+# WHAT AN ORGAN NOTE IN C DOES NOT DO (the Python's, where a class asks): a
+# choir's strings, a tuner's rank detune, a Hammond's leak, contact and
+# percussion, a harpsichord's jacks, the wind's skirt, a rank drawn only to exist
+_ORGAN_OFF = ('string_choirs', 'rank_choirs', 'rank_detune', 'drawbar_leak_db', 'contact_noise_db',
+              'contact_spread_s', 'jack_offset_ms', 'percussion_ranks', 'wind_skirt_always', 'unison_shares_phase',
+              'feedback_harmonic', 'pre_pluck_s')
+
+
+def organ(cls):
+    """native/nv.h's OrganSpec for a registered organ cls (its stop_ranks'
+    pipes and ranks), or None where its notes are not C's: made once."""
+    import tonelib as T
+    got = _ORGAN.get(cls)
+    if got is not None:
+        return got or None
+    _ORGAN[cls] = False
+    if (not getattr(cls, 'registerable', False) or not pipe_voice(cls) or _class(cls) is None
+            or not hasattr(cls, 'pipe_radius')):
+        return None
+    if any(getattr(cls, a, None) for a in _ORGAN_OFF) or getattr(cls, 'partial_phase_spread', 0.0):
+        return None
+    p = _class(cls)[2]
+    o = OrganSpec()
+    pipes = [cls]
+
+    def pipe_of(k):
+        rk = k if k is cls else T.rank_spectrum(k)
+        if rk not in pipes:
+            if len(pipes) >= 24:
+                raise ValueError
+            pipes.append(rk)
+        return pipes.index(rk)
+
+    def protos(i):
+        return p if pipes[i] is cls else _class(pipes[i])[2]
+    try:
+        ranks = list(p.stop_ranks)
+        if len(ranks) > 32:
+            return None
+        for i, (key, ratio, gain, *rest) in enumerate(ranks):
+            r = o.rank[i]
+            spec = rest[0] if rest else None
+            if len(rest) > 1 and rest[1]:
+                return None                         # (a flue-dynamic B on a rank)
+            pipe = rest[2] if len(rest) > 2 else None
+            kr = rest[3] if len(rest) > 3 else None
+            if any(getattr(k, 'rank_only_when_drawn', False) for k in (spec, pipe) if k is not None):
+                return None
+            r.gain = float(gain)
+            r.lo, r.hi = (int(kr[0]), int(kr[1])) if kr is not None else (0, 127)
+            if ratio is None:
+                r.n_ratio = 0
+                continue
+            if isinstance(ratio, (list, tuple)):
+                r.compound, r.n_ratio = 1, len(ratio)
+                r.ratio[:len(ratio)] = [float(x) for x in ratio]
+                comp = (getattr(p, 'mixture_compositions', None) or {}).get(key)
+                if comp:
+                    r.n_comp = len(comp)
+                    for q, (hz, rs) in enumerate(comp):
+                        r.comp_hz[q], r.comp_n[q] = float(hz), len(rs)
+                        r.comp_r[q][:len(rs)] = [float(x) for x in rs]
+            else:
+                r.n_ratio, r.ratio[0] = 1, float(ratio)
+            r.spec = pipe_of(spec) if spec is not None else -1
+            r.pipe = pipe_of(pipe) if pipe is not None else -1
+            if any(_class(pipes[q]) is None for q in (r.spec, r.pipe) if q >= 0):
+                return None
+            off, split = p.rank_spatial.get(key, p.rank_spatial_default) if getattr(p, 'spiral_spatial', False) \
+                else (0.0, 0.0)
+            r.sp_off, r.sp_split = float(off), float(split)
+            # its speech class, as _note_stops resolves it, and its release band by band
+            spv = protos(r.spec) if r.spec >= 0 else None
+            rp = protos(r.pipe) if r.pipe >= 0 else (spv if (spv is not None and getattr(spv, 'rank_is_pipe', False))
+                                                      else p)
+            own = getattr(p, 'rank_speech_own_pitch', False)
+            sc = rp if rp is not p else (spv if (own and spv is not None and getattr(spv, 'rank_speech', False)) else p)
+            for nt in range(128):
+                r.rel_band[nt][:] = [T.release_band_scale(sc, key, nt, m) for m in (2, 5, 9)]
+        o.n_rank = len(ranks)
+        for i, k in enumerate(pipes):
+            v = _class(k)
+            q = o.pipe[i]
+            q.init, q.tmpl = v[0], v[1]
+            pr = v[2]
+            if (v[0].pitch_jitter_cents or v[0].timing_jitter_seconds
+                    or (getattr(pr, 'bellows_push_gain', 0.0) and not getattr(pr, 'bellows_push_every_note', False))):
+                return None
+            q.attack_set, q.attack_time = int(pr.attack_time is not None), pr.attack_time or 0.0
+            q.release_set, q.release_valve_time = int(pr.release_valve_time is not None), pr.release_valve_time or 0.0
+            q.chiff_max_valve_time, q.speech_cycles = pr.chiff_max_valve_time, pr.speech_cycles
+            q.chiff_width_set, q.chiff_width = int(pr.chiff_width is not None), pr.chiff_width or 0.0
+            q.chiff_width_cycles = pr.chiff_width_cycles
+            q.chiff_volume, q.chiff_cycle, q.sustain_level = pr.chiff_volume, pr.chiff_cycle, pr.sustain_level
+            q.speech_harmonic_exp = getattr(pr, 'speech_harmonic_exp', 0.0)
+            q.speech_harmonic_exp_per_octave = getattr(pr, 'speech_harmonic_exp_per_octave', 0.0)
+            q.sh_cap = int(getattr(pr, 'speech_harmonic_cap', None) or 0)
+            q.rank_is_pipe = int(bool(getattr(pr, 'rank_is_pipe', False)))
+            q.rank_speech = int(bool(getattr(pr, 'rank_speech', False)))
+            q.pipe_ceiling_hz = getattr(pr, 'pipe_ceiling_hz', None) or 0.0
+            q.truncate = int(getattr(pr, 'pipe_break_mode', 'fold') == 'truncate')
+            q.push_gain = float(getattr(pr, 'bellows_push_gain', 0.0) or 0.0)
+            if q.push_gain:
+                q.push_rise_s, q.push_dbs = float(pr.bellows_push_rise_s), float(pr.bellows_push_dbs)
+                q.push_settle_db = float(getattr(pr, 'bellows_push_settle_db', -20.0))
+                q.push_tilt = float(getattr(pr, 'bellows_push_tilt', 0.0))
+                q.push_tilt_oct = float(getattr(pr, 'bellows_push_tilt_per_octave', 0.0))
+                band = getattr(pr, 'bellows_push_band', None)
+                if band:
+                    q.push_band_set, q.push_band[:] = 1, [float(x) for x in band]
+                reg = getattr(pr, 'bellows_push_register', None) or ()
+                if len(reg) > 8:
+                    return None
+                q.n_push_reg = len(reg)
+                for j, (f, db) in enumerate(reg):
+                    q.push_reg[j][:] = [float(f), float(db)]
+        o.n_pipe = len(pipes)
+    except ValueError:
+        return None
+    o.spiral = int(bool(getattr(p, 'spiral_spatial', False)))
+    o.own_pitch = int(bool(getattr(p, 'rank_speech_own_pitch', False)))
+    if o.spiral:
+        o.spiral_m, o.spiral_phase, o.drift_m = p.spiral_m, p.spiral_phase, p.drift_m
+    o.pipe_scale_divisor, o.sound_speed = p.pipe_scale_divisor, p.sound_speed
+    o.mode_lock_spread = getattr(p, 'mode_lock_spread', 0.0)
+    o.mode_lock_knee, o.mode_lock_time = p.mode_lock_knee, p.mode_lock_time
+    _ORGAN[cls] = o
+    return o
+
+
 def note_class(cls):
     """native/engine.cpp's NoteClass for cls, or None where its notes are not
     the engine's: made once, its template's room kept current."""
@@ -1260,6 +1470,8 @@ def note_class(cls):
     import blockrender as BR
     got = _NOTE.get(cls)
     drum = kit_drum(cls)
+    if got is None and pipe_voice(cls) and not getattr(cls, 'registerable', False):
+        _NOTE[cls] = got = False            # (a pipe is the engine's as an organ's rank alone, for now)
     if got is None:
         v = _class(cls)
         # (a kit drum's one-shot hold is the engine's, a snare's partials'
@@ -1278,7 +1490,11 @@ def note_class(cls):
                 ly = getattr(cls, 'strike_noise_layers', ()) or ()
                 return len(ly) <= 32 and all(len(l[0]) <= 32 for l in ly)
             return False
-        ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF if not (drum and drum_has(a)))
+        # (an organ's speech and mode lock are its ranks', organ.c's)
+        org_has = (lambda a: a in ('speech_harmonic_exp', 'mode_lock_spread')) if getattr(cls, 'registerable', False) \
+            else (lambda a: False)
+        ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF
+                                        if not (drum and drum_has(a)) and not org_has(a))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT)
               and (getattr(cls, 'mode_phase', None) is None or issubclass(cls, T.TR808Properties))
               and (int(getattr(cls, 'strike_flam', 0) or 0) <= 1
@@ -1374,6 +1590,13 @@ def note_class(cls):
         k.glide_reach = math.nan if gr is None else float(gr)
         k.porta_fast, k.porta_slow = T.PORTA_SEMITONE_FAST, T.PORTA_SEMITONE_SLOW
         k.porta_d_semi, k.porta_settle = T._PORTA_D_SEMI, T.PORTA_SETTLE_TAUS
+        # a registered organ: its ranks (the pointer the engine reads; the table kept here)
+        if getattr(cls, 'registerable', False):
+            og = organ(cls)
+            if og is None:
+                _NOTE[cls] = False
+                return None
+            k.organ = ctypes.addressof(og)
         if breath_noise(cls):
             k.n_bn, k.bn_rows, k.bn_fade_s = (len(cls.breath_noise_db), int(getattr(cls, 'breath_noise_rows', 1)),
                                                float(cls.breath_noise_fade_s))
@@ -1994,8 +2217,8 @@ def template(program, note, vel, tuner='hybrid440'):
     d = lib()
     cls = BR.property_class_for_note(program, note)
     k = note_class(cls) if cls is not None else None
-    if k is None:
-        return None
+    if k is None or k.organ:
+        return None                         # (a registered organ: live stamps it rank by rank)
     K = (ctypes.c_void_p * (2 * 16384))()
     K[128 * program + note] = ctypes.addressof(k)
     t = NoteIn()
@@ -2129,6 +2352,8 @@ class TemplateCache(object):
             for key in range(128):
                 cls = BR.property_class_for_note(program, key)
                 k = note_class(cls) if cls is not None else None
+                if k is not None and k.organ:
+                    k = None                # (a registered organ: live stamps it rank by rank, Python's)
                 if k is not None:
                     self.keep.append(k)
                     K[128 * program + key] = ctypes.addressof(k)

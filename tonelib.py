@@ -247,6 +247,10 @@ def _pluck_comb(plucked_harmonic, pluck_dampening, harmonic):
 
 
 _RANK_SPECTRA = {}
+# THE DIRECTIVITY CACHE THE ENGINE KEEPS (native.nv_sphere_mean), when the
+# renderer plays notes in C: sphere_mean_directivity reads and fills it
+# instead of its own, so both see one cache in one order
+Q_SHARED = None
 
 
 def rank_spectrum(cls):
@@ -2424,6 +2428,10 @@ class SynthProperties:
         a = self.directivity_radius if radius is None else radius
         if a <= 0.0:
             return 1.0
+        if Q_SHARED is not None:
+            # THE ENGINE'S CACHE (native/tone.c): an organ note made in C
+            # filled it, and a later note here must find what it left
+            return Q_SHARED(frequency, a, self.directivity_floor, self.sound_speed)
         key = (round(a, 5), round(frequency, 1), round(self.directivity_floor, 3))
         got = self._Q_CACHE.get(key)
         if got is not None:

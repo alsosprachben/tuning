@@ -14,6 +14,10 @@
  * carried in and out, so their sums add in the same order as Python's.
  */
 #include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <pthread.h>
 #include "voice.c"
 #include "strings.c"      /* the register's string bank */
 #include "exactmath.c"    /* array math as libm does it */
@@ -52,6 +56,104 @@ static void hrtf_at(const VoiceSnap *v, const ToneIn *t, double position_x, doub
 void nv_section_seat(const VoiceSnap *v, const ToneIn *t, int i, double *out)
 {
     hrtf_at(v, t, t->pos_x_props + v->sect_dx[i], t->pos_z, t->listener_distance, out);
+}
+
+/* SynthProperties.sphere_mean_directivity: <D^2> over the sphere for a
+   piston of radius a (180 polar steps, sin-weighted) -- kept, as the
+   class's _Q_CACHE keeps it, under (round(a, 5), round(f, 1), round(floor,
+   3)) for the whole process: a radius rounding to one already asked takes
+   that one's value */
+static pthread_mutex_t q_lock = PTHREAD_MUTEX_INITIALIZER;
+static struct { char key[96]; double v; } *q_tab = NULL;
+static size_t q_n = 0, q_cap = 0;
+
+static double sphere_mean(const VoiceSnap *v, double f, double a)
+{
+    if (a <= 0.0)
+        return 1.0;
+    char key[96];
+    snprintf(key, sizeof key, "%.5f|%.1f|%.3f", a, f, v->room[2]);
+    pthread_mutex_lock(&q_lock);
+    size_t h = 5381;
+    for (const char *c = key; *c; c++)
+        h = h * 33 + (unsigned char)*c;
+    if (q_cap) {
+        for (size_t i = h & (q_cap - 1);; i = (i + 1) & (q_cap - 1)) {
+            if (!q_tab[i].key[0])
+                break;
+            if (!strcmp(q_tab[i].key, key)) {
+                double got = q_tab[i].v;
+                pthread_mutex_unlock(&q_lock);
+                return got;
+            }
+        }
+    }
+    double k = 2.0 * PI * f / v->room[4];
+    int n = 180;
+    double total = 0.0, weight = 0.0;
+    for (int i = 0; i < n; i++) {
+        double theta = (i + 0.5) * PI / n;
+        double s = sin(theta);
+        double x = fabs(k * a * s);
+        double d;
+        if (x < 1e-6)
+            d = 1.0;
+        else {
+            d = fabs(2.0 * bessel_j1(x) / x);
+            d = v->room[2] > d ? v->room[2] : d;
+        }
+        total += d * d * s;
+        weight += s;
+    }
+    double got = weight != 0.0 ? total / weight : 1.0;
+    if (2 * (q_n + 1) > q_cap) {                /* grow: rehash into twice the table */
+        size_t nc = q_cap ? 2 * q_cap : 1024;
+        void *old = q_tab;
+        size_t oc = q_cap;
+        q_tab = calloc(nc, sizeof *q_tab);
+        q_cap = nc;
+        for (size_t j = 0; j < oc; j++) {
+            char *ok = ((char *)old) + j * sizeof *q_tab;
+            if (!ok[0])
+                continue;
+            size_t hh = 5381;
+            for (const char *c = ok; *c; c++)
+                hh = hh * 33 + (unsigned char)*c;
+            size_t i = hh & (q_cap - 1);
+            while (q_tab[i].key[0])
+                i = (i + 1) & (q_cap - 1);
+            memcpy(&q_tab[i], ok, sizeof *q_tab);
+        }
+        free(old);
+    }
+    size_t i = h & (q_cap - 1);
+    while (q_tab[i].key[0])
+        i = (i + 1) & (q_cap - 1);
+    strcpy(q_tab[i].key, key);
+    q_tab[i].v = got;
+    q_n++;
+    pthread_mutex_unlock(&q_lock);
+    return got;
+}
+
+/* the cache's value for (f, a), at this floor and speed of sound (Python's
+   sphere_mean_directivity in the engine's modes: one cache for both) */
+double nv_sphere_mean(double f, double a, double floor_, double sound_speed)
+{
+    VoiceSnap v;
+    v.room[2] = floor_;
+    v.room[4] = sound_speed;
+    return sphere_mean(&v, f, a);
+}
+
+/* SynthProperties.directivity_factor(f, px, pz, radius): Q */
+static double directivity_factor(const VoiceSnap *v, double f, double px, double pz, double radius)
+{
+    double mean = sphere_mean(v, f, radius);
+    if (mean <= 0.0)
+        return 1.0;
+    double d = directivity_gain(v->room, f, px, pz, radius, 1);
+    return (d * d) / mean;
 }
 
 typedef struct {
@@ -117,7 +219,7 @@ static int emit_fwd(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, 
                 bd = d;
             }
         }
-        double q = 1.0;
+        double q = t->has_radius ? directivity_factor(v, t->room_bands[bi], px, pz, t->radius) : 1.0;
         double e = am0 * am0;
         qacc[2 * bi] += e;
         qacc[2 * bi + 1] += e / (q > 1e-6 ? q : 1e-6);
@@ -228,7 +330,7 @@ static int note_terms(const VoiceSnap *v, const ToneIn *t, double f, double px, 
     double sx = px * 1.0, sy = v->room[0] * 1.0, sz = pz * 1.0;
     double stage = sqrt(px * px + pow(t->listener_distance, 2.0) + pz * pz);
     int k = reflection_terms(v->room, v->ahz, v->alpha, v->scat,
-                             f, sx, sy, sz, 0.0, 0, nimg, nsurf, surf, img, mir, keep, g, dly);
+                             f, sx, sy, sz, t->radius, t->has_radius, nimg, nsurf, surf, img, mir, keep, g, dly);
     for (int i = 0; i < k; i++) {
         const double *im = img + 3 * keep[i];
         double e[4];
@@ -626,3 +728,5 @@ int nv_phantom(const VoiceSnap *v, const ToneIn *t, const double *trans, int ntr
     }
     return R.n;
 }
+
+#include "organ.c"     /* a registered organ's note */

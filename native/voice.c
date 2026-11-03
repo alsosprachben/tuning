@@ -105,6 +105,62 @@ double nv_stroke_scatter_db(const VoiceSnap *v, int harmonic)
     return c < v->mode_scatter_db ? c : v->mode_scatter_db;
 }
 
+/* SynthProperties._blend_db: a and b blended w of the way from b to a, in dB */
+static double blend_db(double a, double b, double w)
+{
+    if (w <= 0.0)
+        return b;
+    if (w >= 1.0)
+        return a;
+    return pow(a > 1e-12 ? a : 1e-12, w) * pow(b > 1e-12 ? b : 1e-12, 1.0 - w);
+}
+
+/* SynthProperties.mode_gains_at: an organ pipe's table for a sound at f --
+   its anchors' tables blended along log frequency, or its low register's
+   blended in; into out (64), the count returned */
+int nv_mode_gains_at(const VoiceSnap *v, double f, double *out)
+{
+    if (v->n_pts) {
+        int last = v->n_pts - 1;
+        if (f <= v->pts_hz[0] || f >= v->pts_hz[last]) {
+            int i = f <= v->pts_hz[0] ? 0 : last;
+            for (int h = 0; h < v->pts_n[i]; h++)
+                out[h] = v->pts_g[i][h];
+            return v->pts_n[i];
+        }
+        for (int i = 0; i < last; i++) {
+            double fa = v->pts_hz[i], fb = v->pts_hz[i + 1];
+            if (f <= fb) {
+                double w = log(fb / f) / log(fb / fa);
+                int n = v->pts_n[i] > v->pts_n[i + 1] ? v->pts_n[i] : v->pts_n[i + 1];
+                for (int h = 0; h < n; h++) {
+                    double x = v->pts_g[i][h], y = v->pts_g[i + 1][h];
+                    out[h] = (x != 0.0 || y != 0.0) ? blend_db(x, y, w) : 0.0;
+                }
+                return n;
+            }
+        }
+    }
+    if (!v->low_set) {
+        for (int h = 0; h < v->n_pipe; h++)
+            out[h] = v->pipe_g[h];
+        return v->n_pipe;
+    }
+    double lo = v->low_hz[0], hi = v->low_hz[1], w;
+    if (f <= lo)
+        w = 1.0;
+    else if (f >= hi)
+        w = 0.0;
+    else
+        w = log(hi / f) / log(hi / lo);
+    int n = v->n_pipe > v->n_low ? v->n_pipe : v->n_low;
+    for (int h = 0; h < n; h++) {
+        double l = h < v->n_low ? v->low_g[h] : 0.0, x = h < v->n_pipe ? v->pipe_g[h] : 0.0;
+        out[h] = (l != 0.0 || x != 0.0) ? blend_db(l, x, w) : 0.0;
+    }
+    return n;
+}
+
 double nv_mode_ratio(const VoiceSnap *v, int m)
 {
     if (v->kind == 2 && v->mm_harm)             /* SynthProperties.mode_ratio: mode_ratios None */
@@ -777,6 +833,8 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
         s->max_harmonic = mh > 1 ? mh : 1;
     }
     s->decay_register_factor = pow(2.0, c->decay_register_slope * op);
+    if (s->kind == 2 && (s->n_pts || s->low_set))  /* an organ pipe: its register's table (mode_gains_here) */
+        s->n_mm = nv_mode_gains_at(s, s->frequency_x * pow(2.0, s->octave_position), s->mm_gain);
     o->pitch_jitter = c->pitch_jitter_cents != 0.0
         ? pow(2.0, pyr_uniform(rs, -c->pitch_jitter_cents, c->pitch_jitter_cents) / 1200.0) - 1.0 : 0.0;
     o->attack_jitter = c->timing_jitter_seconds != 0.0 ? pyr_uniform(rs, 0.0, c->timing_jitter_seconds) : 0.0;
