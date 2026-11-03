@@ -186,7 +186,7 @@ class NoteIn(ctypes.Structure):
                    ('seat', C), ('held', C), ('rnd_draws', C * 4), ('stroke_tilt', C), ('stroke_mouth', C),
                    ('stroke_morph', C), ('snd_at', C), ('snd_rt', C), ('rank_gr', C * 32), ('rank_sp', C * 32),
                    ('rank_skip', I * 32), ('rank_rel1', I * 32), ('organ_cr', C), ('rank_br', C * 32),
-                   ('carry_radius', C)])
+                   ('carry_radius', C), ('organ_hx', C), ('organ_perc', I)])
 
 
 class NoteOut(ctypes.Structure):
@@ -492,7 +492,8 @@ def breath_noise(cls):
     swell) nor the other noises after it (grains, events, a pulse, a ring)."""
     return (bool(getattr(cls, 'breath_noise_db', ())) and len(cls.breath_noise_db) <= 64
             and 1 <= int(getattr(cls, 'breath_noise_rows', 1)) <= 8
-            and all(g == 0.0 for g in (cls.mode_gains or (1.0,)))
+            # (its tone silent -- or an organ's, whose ranks follow the breath as Python's do)
+            and (all(g == 0.0 for g in (cls.mode_gains or (1.0,))) or getattr(cls, 'registerable', False))
             and _owner(cls, 'breath_noise_at') == 'SynthProperties'
             and _owner(cls, '_breath_noise_rows') == 'SynthProperties'
             and not getattr(cls, 'breath_noise_low_db', None) and not getattr(cls, 'breath_noise_octave_db', 0.0)
@@ -651,17 +652,39 @@ _PIPE_OWN = dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None, mo
                  inharmonicity_coefficient_for_frequency='StoppedPipeProperties')
 
 
+def free_reed_series(cls):
+    """A free reed's flow spectrum where it is one table whatever the key
+    (FreeReedProperties._reed_series with no register laws and no scatter:
+    numpy's FFT, Python's to compute), else None."""
+    import tonelib as T
+    if (not issubclass(cls, T.FreeReedProperties) or cls.mode_gains is not None or cls.reed_gate_per_octave
+            or cls.reed_spread_per_octave or cls.reed_scatter or cls.reed_scatter_per_octave
+            or cls.even_harmonic_db is not None):
+        return None
+    return _class_proto(cls)._reed_series()
+
+
+def _class_proto(cls):
+    return cls(261.6, 0.5, 1.0, 1.0)
+
+
 def pipe_voice(cls):
     """Whether native/voice.c plays cls as an organ pipe: a measured mode
     set on the harmonic series, its tables by register (mode_gains_points,
-    or mode_gains_low), on SynthProperties' own methods."""
+    or mode_gains_low), on SynthProperties' own methods -- or a reed organ's
+    free reed, its series one table (free_reed_series)."""
     import tonelib as T
-    if not issubclass(cls, (T.OrganProperties, T.StoppedPipeProperties)):
+    if not issubclass(cls, (T.OrganProperties, T.StoppedPipeProperties, T.FreeReedProperties)):
         return False
-    if any(_owner(cls, n) != o for n, o in _PIPE_OWN.items()):
+    own = _PIPE_OWN
+    if issubclass(cls, T.FreeReedProperties):
+        own = dict(own, inharmonicity_coefficient_for_frequency=None, series_volume='FreeReedProperties')
+    if any(_owner(cls, n) != o for n, o in own.items()):
         return False
     pts = getattr(cls, 'mode_gains_points', None) or ()
-    return (cls.mode_ratios is None and (cls.mode_gains is not None or pts)
+    if issubclass(cls, T.FreeReedProperties) and cls.mode_gains is None and not free_reed_series(cls):
+        return False
+    return (cls.mode_ratios is None and (cls.mode_gains is not None or pts or issubclass(cls, T.FreeReedProperties))
             and len(pts) <= 8 and all(len(g) <= 64 for _, g in pts) and len(cls.mode_gains or ()) <= 64
             and len(cls.mode_gains_low or ()) <= 64 and not cls.mode_stroke_tilt and not cls.strike_point
             and not cls.harmonic_touch and not cls.pickup_points and not (cls.unison_detune or ())
@@ -940,6 +963,8 @@ def snapshot(props):
         for i, x in enumerate(p.unison_detune or ()):
             s.unison_detune[i] = x
         mg = p.mode_gains_here() if pipe_voice(type(p)) else p.mode_gains
+        if mg is None and pipe_voice(type(p)):
+            mg = p._reed_series()[1:]           # (a free reed's flow spectrum, harmonic 1 first)
         s.n_mm = len(mg)
         if p.mode_ratios is None:
             s.mm_harm = 1                   # (a gain table on the harmonic series)
@@ -954,8 +979,9 @@ def snapshot(props):
             for i, (f, g) in enumerate(pts):
                 s.pts_hz[i], s.pts_n[i] = float(f), len(g)
                 s.pts_g[i][:len(g)] = [float(x) for x in g]
-            s.n_pipe = len(p.mode_gains or ())
-            s.pipe_g[:s.n_pipe] = [float(x) for x in (p.mode_gains or ())]
+            pg = p.mode_gains if p.mode_gains is not None else mg      # (a free reed's: its one table)
+            s.n_pipe = len(pg)
+            s.pipe_g[:s.n_pipe] = [float(x) for x in pg]
             if p.mode_gains_low is not None:
                 s.low_set, s.n_low = 1, len(p.mode_gains_low)
                 s.low_g[:s.n_low] = [float(x) for x in p.mode_gains_low]
@@ -1332,8 +1358,9 @@ class OrganPipe(ctypes.Structure):
 class OrganRank(ctypes.Structure):
     """native/nv.h's OrganRank: one of stop_ranks."""
     _fields_ = [('n_ratio', I), ('compound', I), ('ratio', C * 8), ('gain', C), ('spec', I), ('pipe', I),
-                ('lo', I), ('hi', I), ('sp_off', C), ('sp_split', C), ('n_comp', I), ('comp_n', I * 8),
-                ('comp_hz', C * 8), ('comp_r', (C * 8) * 8), ('rel_band', (C * 3) * 128)]
+                ('lo', I), ('hi', I), ('sp_off', C), ('sp_split', C), ('n_comp', I), ('comp_n', I * 64),
+                ('comp_hz', C * 64), ('comp_r', (C * 8) * 64), ('rel_band', (C * 3) * 128), ('detune', C * 128),
+                ('perc', I)]
 
 
 class OrganSpec(ctypes.Structure):
@@ -1348,7 +1375,8 @@ class OrganSpec(ctypes.Structure):
                 + [(f, C) for f in ('wsc', 'trem_class_depth', 'wander_rms', 'wa', 'wgain', 'ra', 'reg_restore',
                                     'sag_max', 'sag_per_unit', 'c1', 'c2', 'g', 'trem_hz', 'trem_depth', 'tdecay',
                                     'unit_hz', 'draw_exp', 'blk_s')]
-                + [('fam_a', C * 32), ('fam_b', C * 32)])
+                + [('fam_a', C * 32), ('fam_b', C * 32), ('expr_rank', I), ('perc_rank', I), ('htrem_rank', I),
+                   ('expr_tilt', C), ('perc_attack_s', C), ('afm', C), ('pipe_radius', I), ('wheel_trem', C)])
 
 
 _ORGAN = {}
@@ -1356,8 +1384,8 @@ _ORGAN = {}
 # WHAT AN ORGAN NOTE IN C DOES NOT DO (the Python's, where a class asks): a
 # choir's strings, a tuner's rank detune, a Hammond's leak, contact and
 # percussion, a harpsichord's jacks, the wind's skirt, a rank drawn only to exist
-_ORGAN_OFF = ('string_choirs', 'rank_choirs', 'rank_detune', 'drawbar_leak_db', 'contact_noise_db',
-              'contact_spread_s', 'jack_offset_ms', 'percussion_ranks', 'wind_skirt_always', 'unison_shares_phase',
+_ORGAN_OFF = ('string_choirs', 'rank_choirs', 'drawbar_leak_db', 'contact_noise_db',
+              'contact_spread_s', 'jack_offset_ms', 'wind_skirt_always', 'unison_shares_phase',
               'feedback_harmonic', 'pre_pluck_s')
 
 
@@ -1369,8 +1397,7 @@ def organ(cls):
     if got is not None:
         return got or None
     _ORGAN[cls] = False
-    if (not getattr(cls, 'registerable', False) or not pipe_voice(cls) or _class(cls) is None
-            or not hasattr(cls, 'pipe_radius')):
+    if not getattr(cls, 'registerable', False) or not pipe_voice(cls) or _class(cls) is None:
         return None
     if any(getattr(cls, a, None) for a in _ORGAN_OFF) or getattr(cls, 'partial_phase_spread', 0.0):
         return None
@@ -1410,6 +1437,8 @@ def organ(cls):
                 r.compound, r.n_ratio = 1, len(ratio)
                 r.ratio[:len(ratio)] = [float(x) for x in ratio]
                 comp = (getattr(p, 'mixture_compositions', None) or {}).get(key)
+                if comp and (len(comp) > 64 or any(len(rs) > 8 for _, rs in comp)):
+                    return None
                 if comp:
                     r.n_comp = len(comp)
                     for q, (hz, rs) in enumerate(comp):
@@ -1432,6 +1461,8 @@ def organ(cls):
             sc = rp if rp is not p else (spv if (own and spv is not None and getattr(spv, 'rank_speech', False)) else p)
             for nt in range(128):
                 r.rel_band[nt][:] = [T.release_band_scale(sc, key, nt, m) for m in (2, 5, 9)]
+                r.detune[nt] = T.rank_detune_cents(cls, key, nt)
+            r.perc = int(key in (getattr(cls, 'percussion_ranks', ()) or ()))
         o.n_rank = len(ranks)
         for i, k in enumerate(pipes):
             v = _class(k)
@@ -1476,7 +1507,10 @@ def organ(cls):
     o.own_pitch = int(bool(getattr(p, 'rank_speech_own_pitch', False)))
     if o.spiral:
         o.spiral_m, o.spiral_phase, o.drift_m = p.spiral_m, p.spiral_phase, p.drift_m
-    o.pipe_scale_divisor, o.sound_speed = p.pipe_scale_divisor, p.sound_speed
+    o.pipe_radius = int(hasattr(cls, 'pipe_radius'))
+    if o.pipe_radius:
+        o.pipe_scale_divisor = p.pipe_scale_divisor
+    o.sound_speed = p.sound_speed
     o.mode_lock_spread = getattr(p, 'mode_lock_spread', 0.0)
     o.mode_lock_knee, o.mode_lock_time = p.mode_lock_knee, p.mode_lock_time
     # ITS REGISTRATION (registration_blocks')
@@ -1497,6 +1531,14 @@ def organ(cls):
     o.family = _FAMILIES.setdefault(BR.organ_family(cls), len(_FAMILIES))
     # ITS CHEST'S WIND (_prep_chest_wind's: a pipe organ's, wind.py's constants)
     o.trem_rank = keys.index('tremulant') if 'tremulant' in keys else -1
+    # A REED ORGAN'S EFFECT STOPS (the harmonium's Expression, Percussion, Tremolo)
+    o.expr_rank = keys.index('expression') if 'expression' in keys else -1
+    o.perc_rank = keys.index('percussion') if 'percussion' in keys else -1
+    o.htrem_rank = keys.index('tremolo') if 'tremolo' in keys else -1
+    o.expr_tilt = T.HARMONIUM_EXPRESSION_TILT
+    o.perc_attack_s = float(getattr(cls, 'percussion_attack_s', 0.0) or 0.0)
+    o.afm = float(getattr(cls, 'attack_fraction_max', 0.45))
+    o.wheel_trem = float(getattr(cls, 'tremolo_depth', 0.0) or 0.0)
     o.trem_class_depth = float(getattr(cls, 'tremulant_depth', 0.0) or 0.0)
     if getattr(cls, 'wind_skirt_db', None) is not None and getattr(cls, 'wind_pitch_exp', 0.0):
         import wind as WND

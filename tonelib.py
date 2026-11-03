@@ -7505,8 +7505,9 @@ def harmonium_expression_gain(h, e):
     """The Expression stop's per-partial gain: h the harmonic against the
     note's 8-foot pitch, e the bellows (CC11 / 127). Scalar or array."""
     import numpy as _np
+    import native as _NV           # (libm's pow: the native engine's)
     h = _np.maximum(_np.asarray(h, dtype=_np.float64), 1.0)
-    return h ** (HARMONIUM_EXPRESSION_TILT * (float(e) - 1.0))
+    return _NV.xpow(h, HARMONIUM_EXPRESSION_TILT * (float(e) - 1.0))
 
 
 # PERCUSSION: a hammer strikes the front 8-foot reeds as the key goes down, so

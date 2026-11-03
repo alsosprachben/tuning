@@ -1081,6 +1081,23 @@ void nv_song_organ(void *s, long long ch, const OrganSpec *spec, const OrganSpec
 
 int nv_song_n_organs(void *s) { return (int)((nv::Song *)s)->organs.size(); }
 
+// whether an organ's tremolo would sound -- its Tremolo stop drawn at any
+// time, or its wheel's on a channel that moves CC1 (tremolo.expand, Python's)
+int nv_song_organ_tremolo(void *s)
+{
+    nv::Song *S = (nv::Song *)s;
+    for (const auto &o : S->organs) {
+        if (o.spec->htrem_rank >= 0)
+            for (auto &x : o.rank_ev[o.spec->htrem_rank])
+                if (x.second >= 0.5)
+                    return 1;
+        int v;
+        if (o.spec->wheel_trem > 0.0 && nv_song_first_cc(s, o.ch, 1, &v))
+            return 1;
+    }
+    return 0;
+}
+
 // note i's program trim (the factor its channel volume carries)
 double nv_song_note_trim(void *s, int i) { return ((nv::Song *)s)->notes[i].trim; }
 int nv_song_n_grows(void *s) { return ((nv::Song *)s)->n_grows; }
@@ -1303,6 +1320,22 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
         n->rank_br[ri] = br;
     }
     n->organ_cr = o->cr;
+    // a reed organ's effect stops at its onset (stop_drawn_at): the
+    // Expression's bellows (the note's CC11), the Percussion
+    auto drawn_at = [&](int ri) {
+        if (ri < 0)
+            return false;
+        double cur = 0.0;
+        for (auto &x : o->rank_ev[ri]) {
+            if (x.first <= on)
+                cur = x.second;
+            else
+                break;
+        }
+        return cur >= 0.5;
+    };
+    n->organ_hx = drawn_at(o->spec->expr_rank) ? e.v11 : NAN;
+    n->organ_perc = drawn_at(o->spec->perc_rank);
     return 1;
 }
 

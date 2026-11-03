@@ -164,6 +164,8 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
             double hc = pipe_chiff_time(hp, f0, ha);
             chiff_r = hc > 0 ? t->chiff * (pipe_chiff_time(scp, f0s, ra) / hc) : t->chiff;
         }
+        if (n->organ_perc && rk->perc)              /* the Percussion stop's hammer: min(attack, hammer) */
+            fade_r = pymin(fade_r, pymax(1e-4, pymin(og->perc_attack_s, og->afm * t->dur)) * sr);
         double gr = n->rank_gr[ri], cr = n->organ_cr;
         tr.br = n->rank_br[ri];                     /* its chest's wind */
         double non_r = t->non;
@@ -220,6 +222,8 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
                 while (f0 * eff > ceiling && eff >= 2.0)
                     eff *= 0.5;
             }
+            if (rk->detune[note] != 0.0)                /* the tuner left this rank a little out (rank_detune) */
+                eff *= pow(2.0, rk->detune[note] / 1200.0);
             for (int m = 1; m < host->max_harmonic + 1; m++) {
                 double hh[2];
                 if (!nv_string_partial(host, f0, eff, m, t->B, hh))
@@ -245,11 +249,18 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
                     prel = rel_r * (m <= 1 ? 1.0 : rk->rel_band[note][m <= 4 ? 0 : m <= 8 ? 1 : 2]);
                 double pd[4];
                 nv_partial_decay(rp, f0, m, pd);
-                double rhz = f0 * eff;
-                double radius = rhz <= 0.0 ? 0.0 : og->sound_speed / (og->pipe_scale_divisor * rhz);
-                tr.radius = radius;
-                tr.has_radius = 1;
-                double gM = hv * rk->gain * nv_radiation_gain(host, hf, radius, 1);
+                double rhz = f0 * eff, radius = 0.0;
+                if (og->pipe_radius) {                  /* the pipe's own aperture (pipe_radius) */
+                    radius = rhz <= 0.0 ? 0.0 : og->sound_speed / (og->pipe_scale_divisor * rhz);
+                    tr.radius = radius;
+                    tr.has_radius = 1;
+                } else {
+                    tr.radius = 0.0;
+                    tr.has_radius = 0;
+                }
+                double gM = hv * rk->gain * nv_radiation_gain(host, hf, radius, og->pipe_radius);
+                if (!isnan(n->organ_hx))                /* the Expression stop (harmonium_expression_gain) */
+                    gM *= pow(h > 1.0 ? h : 1.0, og->expr_tilt * (n->organ_hx - 1.0));
                 double gL = gM * nv_hrtf_gain(host, hf, tr.li), gR = gM * nv_hrtf_gain(host, hf, tr.ri);
                 double cvp = cv_r * nv_chiff_harmonic_gain(cpv, h);
                 memcpy(tr.tb, t->tb, sizeof tr.tb);

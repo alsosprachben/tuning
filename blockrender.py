@@ -6600,6 +6600,10 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
                         break
                 n.rank_rel1[i] = int(_drawn_off < 0.5)
         n.organ_cr = cr
+        # ...and a reed organ's effect stops at its onset (_note_stops' _hx, _hperc)
+        _xe, _pe = rev.get('expression'), rev.get('percussion')
+        n.organ_hx = nt.v11 if (_xe is not None and T.stop_drawn_at(_xe, nt.on)) else math.nan
+        n.organ_perc = int(_pe is not None and T.stop_drawn_at(_pe, nt.on))
     n.has_nx, n.nx = int(nx is not None), (nx if nx is not None else 0.0)
     n.mcut, n.slurred, n.slur_out = int(bool(mcut)), int(bool(slurred)), int(bool(slur_out))
     lo, hi = getattr(nt.pc, 'string_detune_range', (0.0, 0.0))
@@ -8980,7 +8984,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _wn = None
         # (the engine's sound controls: a time or the vibrato, not the colour CC71/74/75 shape)
         if (_vst0 is not None and em.nsnap is not None and set(_sd) <= _NV_SOUND and _XP == 1.0
-                and not (_hx or _hperc)):
+                and (nt.organ or not (_hx or _hperc))):     # (an organ's effect stops are organ.c's)
             _wn = _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, _vst0, _eff,
                                      _nx, _mcut, _slurred, (nt.ch, nt.note, nt.on) in _SLUR_OUT,
                                      _SONG if choked is None else None, _off_key,

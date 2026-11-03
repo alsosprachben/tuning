@@ -415,6 +415,10 @@ int main(int argc, char **argv)
             br[256 + c] = (double)gch.size();
             gch.push_back(c);
         }
+    if (nv_song_organ_tremolo(song)) {
+        fprintf(stderr, "nvrender: refused: an organ's tremolo (its sidebands are Python's)\n");
+        return 2;
+    }
     // ...then the chests' wind (_prep_wind_rows: a row a family of each organ channel's ranks)
     const int nw = nv_song_organ_wind_rows(song, (int)gch.size());
     float one = 0.0f;

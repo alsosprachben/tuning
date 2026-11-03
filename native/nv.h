@@ -187,9 +187,13 @@ typedef struct {
     double ratio[8], gain;
     int spec, pipe, lo, hi;
     double sp_off, sp_split;
-    int n_comp, comp_n[8];
-    double comp_hz[8], comp_r[8][8];
+    int n_comp, comp_n[64];
+    double comp_hz[64], comp_r[64][8];
     double rel_band[128][3];
+    /* a reed organ's: the rank's own mistuning at every key (rank_detune_cents,
+       0 none), and whether the Percussion stop strikes it (percussion_ranks) */
+    double detune[128];
+    int perc;
 } OrganRank;
 
 typedef struct {
@@ -287,6 +291,13 @@ typedef struct OrganSpec {
     double wsc, trem_class_depth, wander_rms, wa, wgain, ra, reg_restore, sag_max, sag_per_unit, c1, c2, g;
     double trem_hz, trem_depth, tdecay, unit_hz, draw_exp, blk_s;
     double fam_a[32], fam_b[32];
+    /* A REED ORGAN'S EFFECT STOPS (the harmonium's): its Expression,
+       Percussion and Tremolo stops' ranks (-1 none), the Expression's tilt,
+       the hammer's attack and the attack's share of the note (attack_fraction_max) */
+    int expr_rank, perc_rank, htrem_rank;
+    double expr_tilt, perc_attack_s, afm;
+    int pipe_radius;        /* each pipe's own aperture (pipe_radius); 0: the class's (a reed organ's) */
+    double wheel_trem;      /* the wheel's tremolo depth (tremolo_depth), 0 none */
 } OrganSpec;
 
 /* what the note setup reads of the voice besides its VoiceSnap */
@@ -504,6 +515,10 @@ typedef struct {
     double organ_cr;
     double rank_br[32];     // each rank's bend row: its chest's wind (wrow_of), as it stands at that rank
     double carry_radius;    // the emitter's radius from the note before (an organ's last pipe), NaN none
+    // a reed organ's at its onset: the Expression stop's bellows (CC11 / 127,
+    // NaN: not drawn), and the Percussion stop drawn
+    double organ_hx;
+    int organ_perc;
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -583,6 +598,7 @@ void nv_song_sound(void *s, long long ch, double t, double *d);
 int nv_song_glide(void *s, int i, int *cc5);
 void nv_song_organ(void *s, long long ch, const OrganSpec *spec, const OrganSpec *const *prog_organ);
 int nv_song_n_organs(void *s);
+int nv_song_organ_tremolo(void *s);
 void nv_song_add_push_rows(void *s, long long a, long long b);
 int nv_song_n_push_rows(void *s, long long *ab, int cap);
 double nv_song_note_trim(void *s, int i);
