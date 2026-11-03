@@ -38,6 +38,7 @@
 #include "pycompat.h"          // a section's entries: random.Random
 
 extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
+extern "C" const NoteClass *nv_tcache_note_class(void *h, int program, int note);
 extern "C" int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out);
 extern "C" const OrganSpec *nv_tcache_organ(void *h, int program);
 extern "C" const NoteClass *nv_tcache_class(void *h, int program);
@@ -1066,6 +1067,13 @@ struct Piano {
         // A HAMMOND'S (live.Patch): on the rotors (leslie), the wheel its
         // swell pedal (wheel_swell), its valve's drive (amp_drive)
         bool leslie = false, wheel_swell = false;
+        // ...ITS TOUCH (live's Patch.touch_sensitive): whether velocity sets
+        // the level -- not on an accordion, whose key only opens a valve
+        bool touch = true;
+        // ...ITS WHEEL TREMOLO (live's Patch.tremolo_*): what a full wheel
+        // asks for, its rate, a stereo pan -- an organ's from its table
+        double wtrem = 0.0, wtrem_hz = 0.0;
+        bool wtrem_stereo = false;
         double amp = 0.0;
         int scanner = 0;            // NoteClass.scanner: 0 none, else 1 +2 the switch +4 x depth +16 chorus
     };
@@ -1760,6 +1768,10 @@ struct Piano {
         const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
         p.leslie = k && k->leslie;
         p.wheel_swell = k && k->wheel_swell;
+        p.touch = p.drums || !k || k->touch_sensitive;
+        p.wtrem = og ? og->wheel_trem : (k ? k->trem_depth : 0.0);
+        p.wtrem_hz = og ? og->wtrem_hz : (k ? k->trem_hz : 0.0);
+        p.wtrem_stereo = og ? og->wtrem_stereo != 0 : (k && k->trem_stereo);
         p.amp = k ? k->amp_drive : 0.0;
         p.scanner = k ? k->scanner : 0;
         p.organ = og;
@@ -1996,7 +2008,8 @@ struct Piano {
             return;
         }
         double scale = pow(10.0, level_db / 20.0) * swell * chan_gain(ch);
-        scale *= pow(vel / 127.0, 2.0) / std::max(pow(T->vel / 127.0, 2.0), 1e-9);    // touch: the press over the template's
+        if (patches[cur].touch)             // touch: the press over the template's (a voice without it: its own level)
+            scale *= pow(vel / 127.0, 2.0) / std::max(pow(T->vel / 127.0, 2.0), 1e-9);
         Key key(pid, ch, note, -1);
         long li = S.live_find(key);
         if (damper_pedal && li >= 0 && !S.live[li].second.empty() && !S.oneshot.count(key)) {
@@ -2031,8 +2044,12 @@ struct Piano {
                 S.f4n[1][q] = (float)gl[1];
                 S.f4n[2][q] = (float)gl[2];
             }
-        if (slur && !slots.empty())
+        if (slur && !slots.empty()) {
+            slur_push(ch, sn, n0, *T);
             slur_stamp(sn, *T);
+        } else if (!slots.empty() && std::find(T->push.begin(), T->push.end(), 1) != T->push.end()) {
+            push_t0[ch] = n0;               // A NOTE FROM SILENCE IS A PUSH OF THE BELLOWS: when it began
+        }
         if (drums && !choke_p->empty()) {
             // THE CHOKE, live (Live._note_on): the strike in an exclusive
             // class is a note-off written into whatever of it is ringing
@@ -2051,6 +2068,9 @@ struct Piano {
                 }
             }
         }
+        auto td = trem_depth.find(pid);     // the wheel's tremolo, the wheel already up
+        if (td != trem_depth.end() && td->second > 0.0)
+            S.tremolo_arm(slots, td->second, patches[cur].wtrem_stereo);
         if (pressure[ch] != 0.0)
             press(slots, pressure[ch]);
         if (bend[ch] != 1.0)                // a note struck under a bend joins it
@@ -2184,16 +2204,16 @@ struct Piano {
     void wheel_tremolo(int ch, int v)
     {
         for (size_t pi = 0; pi < patches.size(); pi++) {
-            const OrganSpec *og = patches[pi].organ;
-            if (!og || og->wheel_trem <= 0.0 || !(patches[pi].channel < 0 || patches[pi].channel == ch))
+            const Patch &p = patches[pi];
+            if (p.wtrem <= 0.0 || !(p.channel < 0 || p.channel == ch))
                 continue;
-            double d = (v / 127.0) * og->wheel_trem;
+            double d = (v / 127.0) * p.wtrem;
             trem_depth[patches[pi].pid] = d;
             std::vector<long> sl;
             for (auto &kv : S.live)
                 if (std::get<0>(kv.first) == patches[pi].pid && std::get<1>(kv.first) == ch)
                     sl.insert(sl.end(), kv.second.begin(), kv.second.end());
-            S.tremolo_arm(sl, d, og->wtrem_stereo);
+            S.tremolo_arm(sl, d, p.wtrem_stereo);
         }
     }
 
@@ -2205,8 +2225,8 @@ struct Piano {
             return;
         double hz = 0.0;
         for (const Patch &p : patches)
-            if (p.organ && p.organ->wheel_trem > 0.0) {
-                hz = p.organ->wtrem_hz;
+            if (p.wtrem > 0.0) {
+                hz = p.wtrem_hz;
                 break;
             }
         // (a Tremolo stop's slots at their own rate: tremolo_swing)
@@ -2320,7 +2340,7 @@ struct Piano {
     bool wheel_trem_on(int ch) const
     {
         for (const Patch &p : patches)
-            if (p.organ && p.organ->wheel_trem > 0.0 && (p.channel < 0 || p.channel == ch))
+            if (p.wtrem > 0.0 && (p.channel < 0 || p.channel == ch))
                 return true;
         return false;
     }
@@ -2560,6 +2580,46 @@ struct Piano {
                 BLt[2 * row + 1] = (float)pow(p[8], b);
                 st.acc[row] += ((double)BRt[row] - 1.0) * frames;
             }
+        }
+    }
+
+    // A SLURRED NOTE MAKES NO PUSH OF ITS OWN -- the bellows is already
+    // moving -- but TAKES OVER the one under way, where it stands (live's
+    // _slur_stamp, first: the template's push rows, a note from silence's,
+    // by the push's rise and their own fall since it began, their fade the
+    // legato attack's; none under way, silent)
+    std::map<int, long long> push_t0;       // channel -> sample its bellows' push began
+    void slur_push(int ch, int note, long long n0, const nv::live::Template &T)
+    {
+        const std::vector<long> &sl = S.last_slots;
+        if (T.push.empty() || sl.size() != T.push.size()
+            || std::find(T.push.begin(), T.push.end(), 1) == T.push.end())
+            return;
+        auto it = push_t0.find(ch);
+        bool on = it != push_t0.end() && n0 > it->second;
+        double dt = on ? (double)(n0 - it->second) / rate : 0.0, rise = 0.1;
+        float sfa = (float)(0.005 * rate);
+        if (on) {
+            const NoteClass *k = nv_tcache_note_class(cache, program, note);
+            if (k)
+                rise = std::max(k->push_rise_s, 1e-4);
+            double sf[3];
+            if (nv_tcache_slur_fade(cache, program, note, sf))
+                sfa = (float)(std::max(1e-4, sf[0]) * rate);
+        }
+        for (size_t q = 0; q < sl.size(); q++) {
+            if (!T.push[q])
+                continue;
+            long s = sl[q];
+            float env = 0.0f;
+            if (on) {
+                env = (float)(std::min(1.0, dt / rise) * exp(-(double)S.f4[F4_logr][s] * dt));
+                S.f4[F4_fa][s] = std::min(S.f4[F4_fa][s], sfa);
+            }
+            S.f4[F4_aL][s] *= env;
+            S.f4[F4_aR][s] *= env;
+            S.ls_aL[s] *= env;              // (a rig's cached level, which would put them back)
+            S.ls_aR[s] *= env;
         }
     }
 

@@ -611,6 +611,15 @@ void *nv_tcache_get(void *h, int note, int bucket, int speed, long long *out)
 // tonelib.slur_fade for the part's key: (fade, chiff) s of its legato attack
 // alone at the tuning's pitch, and the voice's attack_fraction_max; 0 where
 // it has none (no legato_attack_s, no class, no pitch)
+// the class a melodic program's key plays (NULL: none)
+const NoteClass *nv_tcache_note_class(void *h, int program, int note)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    if (note < 0 || note > 127 || program < 0 || program > 127)
+        return nullptr;
+    return C->K[(C->drums ? NV_K_DRUMS : 0) + 128 * program + note];
+}
+
 int nv_tcache_slur_fade(void *h, int program, int note, double *out)
 {
     nv::live::Cache *C = (nv::live::Cache *)h;

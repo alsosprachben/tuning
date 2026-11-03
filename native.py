@@ -182,7 +182,7 @@ class NoteClass(ctypes.Structure):
                 + [(f, C) for f in ('push_gain', 'push_rise_s', 'push_dbs', 'push_settle_db', 'push_tilt',
                                     'push_tilt_oct')]
                 + [('breath', I), ('breath_p', C * 8), ('trem_hz', C), ('trem_depth', C), ('trem_scatter', C),
-                   ('trem_stereo', I), ('trem_intrinsic', I)])
+                   ('trem_stereo', I), ('trem_intrinsic', I), ('touch_sensitive', I)])
 
 
 class NoteIn(ctypes.Structure):
@@ -1834,6 +1834,7 @@ def note_class(cls):
         k.trem_stereo = int(bool(getattr(cls, 'tremolo_stereo', False)))
         k.trem_scatter = float(getattr(cls, 'tremolo_scatter', 0.0) or 0.0)
         k.trem_intrinsic = int(bool(getattr(cls, 'tremolo_intrinsic', False)))
+        k.touch_sensitive = int(bool(getattr(cls, 'touch_sensitive', True)))
         # the player's breath (its rows: nv_breath_rows)
         if (getattr(cls, 'breath_wobble_db', 0.0) > 0.0 or getattr(cls, 'breath_noise_wobble_db', 0.0) > 0.0
                 or getattr(cls, 'breath_pitch_cents', 0.0) > 0.0):

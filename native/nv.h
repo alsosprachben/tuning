@@ -549,6 +549,7 @@ typedef struct {
     // stroke is the tone: trem_intrinsic), stereo, a section's scatter
     double trem_hz, trem_depth, trem_scatter;
     int trem_stereo, trem_intrinsic;
+    int touch_sensitive;            // velocity sets its level (a key that only opens a valve does not)
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
