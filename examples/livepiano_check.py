@@ -5,7 +5,7 @@
                                         [--half] [--pedal-key=N] [--pressure]
                                         [--gpu=c|cl] [--gpu-min=N] [--shed=N] [--wheels]
                                         [--room=NAME] [--cc91] [--thresh=X] [--rpn] [--modes]
-                                        [--routes] [--porta]
+                                        [--routes] [--porta] [--stops]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native piano part (native/slab.cpp: its template cache, its slab, live's
@@ -31,6 +31,8 @@ values (DM), as a track's number is handed out in a set's order, and dg.
 aftertouch while it is held) -- live.Route(("note", N), 64) through on_midi
 on one side, native.KeyPedal before the part's events on the other.
 --pressure: channel aftertouch among the controls (live's Slab.press).
+--stops: an organ's stops drawn and put in as the panel does (livetui's
+toggle_stop; the native part's nv_lp_toggle_stop), the Tremulant among them.
 --gpu: each side renders as live.GpuRenderer -- the setup on the CPU
 (voice_block), the samples on the OpenCL GPU ("cl": live's through pyopencl,
 the native part's through native/gpu.cpp) or the C reference ("c",
@@ -266,6 +268,14 @@ def main(argv):
             lv.on_midi(m)
             for x in (kp.feed(m) if kp is not None else [m]):
                 nv.event(x)
+        if "stops" in opt and lv.parts[0].organ and rng.random() < 0.15:
+            # A STOP DRAWN OR PUT IN FROM THE PANEL (livetui's toggle_stop):
+            # posted on both sides, done after the block's events
+            _pt = lv.parts[0]
+            _ri = rng.randrange(len(_pt.patch.rank_names))
+            lv.request_stops(_pt, set(_pt.drawn) ^ {_pt.patch.rank_names[_ri]})
+            nv.d.nv_lp_toggle_stop(nv.p, _ri, n0)
+            msgs = msgs + ["stop %s" % _pt.patch.rank_names[_ri]]
         got_py = lv.callback(None, 128, None, 0)[0]
         nv.block(n0, 128)
         if opt.get("room"):

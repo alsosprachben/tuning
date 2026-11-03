@@ -67,7 +67,20 @@ struct Host {
     std::function<void(const std::array<int, 7> &)> add_route;
     std::function<void(int)> del_route;
     std::function<void()> panic;                                   // every note off, now
+    // AN ORGAN'S STOPS (live's panel: Patch.stop_rows): its ranks' names, the
+    // rows as the panel lays them out (rank indices), which are drawn now,
+    // and a stop drawn or put in (posted)
+    std::vector<std::string> stop_names;
+    std::vector<std::vector<int>> stop_rows;
+    std::function<std::vector<char>()> drawn;
+    std::function<void(int)> toggle_stop;
 };
+
+// THE STOP KEYS, as livetui's on a US layout: row 0 the digits, row 1 the
+// same keys shifted; rows 2 and 3 the same after the prefix (backtick: a
+// window manager that keeps Alt never lets Alt+digit through)
+static const char STOP_DIGITS[] = "123456789", STOP_SHIFTED[] = "!@#$%^&*(";
+static const int STOP_PREFIX = '`';
 
 static const char *GLOBAL_NAMES[8] = {"master", "headroom", "limiter", "bend range", "mod depth", "aftertouch",
                                       "gpu", "room tail"};
@@ -232,6 +245,7 @@ struct Panel {
     int pane = 0;                       // 0 globals, 1 controls & routes
     int grow = 0, crow = 0;
     bool help = false;
+    bool stop_bank = false;             // the stop prefix pressed: the next stop key is rows 3-4's
     std::string msg;
     std::chrono::steady_clock::time_point msg_until;
     std::string out;                    // the frame being drawn
@@ -337,6 +351,22 @@ struct Panel {
                     cell += C("value") + b + "\x1b[0m" + (here ? C("accent") : C("accent2"))
                             + bar(hi > lo ? (H.g[i] - lo) / (hi - lo) : 0.0, 12) + "\x1b[0m";
                     row += cell + "   ";
+                }
+                line(row);
+            }
+        }
+        // an organ's stops: drawn in the accent, the rest dim, each with its key
+        if (!H.stop_names.empty()) {
+            rule("STOPS", false, stop_bank ? "rows 3-4: press a stop key" : "1-9  shift  ` then a key: rows 3-4");
+            std::vector<char> dr = H.drawn();
+            for (size_t r = 0; r < H.stop_rows.size(); r++) {
+                std::string row = "   ";
+                for (size_t i = 0; i < H.stop_rows[r].size() && i < 9; i++) {
+                    int ri = H.stop_rows[r][i];
+                    std::string key = std::string(r >= 2 ? "`" : "") + (r % 2 ? STOP_SHIFTED[i] : STOP_DIGITS[i]);
+                    bool on = ri >= 0 && ri < (int)dr.size() && dr[ri];
+                    row += (on ? C("accent") + "\x1b[1m" : C("dim")) + key + " "
+                           + (ri < (int)H.stop_names.size() ? H.stop_names[ri] : "?") + "\x1b[0m   ";
                 }
                 line(row);
             }
@@ -620,6 +650,24 @@ struct Panel {
                     adjust(-1, c == '_');
                 } else if (c == 1002 || c == 'l' || c == '=' || c == '+') {
                     adjust(1, c == '+');
+                } else if (!H.stop_names.empty() && c == STOP_PREFIX) {
+                    stop_bank = !stop_bank;
+                    say(stop_bank ? "stops: rows 3 and 4 -- press a stop key" : "stops: rows 1 and 2");
+                } else if (!H.stop_names.empty() && c > 0 && c < 128
+                           && (strchr(STOP_DIGITS, c) || strchr(STOP_SHIFTED, c))) {
+                    int row = strchr(STOP_DIGITS, c) ? 0 : 1;
+                    int i = (int)((row ? strchr(STOP_SHIFTED, c) - STOP_SHIFTED : strchr(STOP_DIGITS, c) - STOP_DIGITS));
+                    if (stop_bank) {
+                        row += 2;
+                        stop_bank = false;
+                    }
+                    if (row < (int)H.stop_rows.size() && i < (int)H.stop_rows[row].size()) {
+                        int ri = H.stop_rows[row][i];
+                        std::vector<char> dr = H.drawn();
+                        bool was = ri < (int)dr.size() && dr[ri];
+                        H.toggle_stop(ri);
+                        say(std::string(was ? "in: " : "drawn: ") + H.stop_names[ri]);
+                    }
                 } else if (c == 'P') {
                     H.panic();
                     say("all notes off");

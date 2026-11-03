@@ -30,6 +30,11 @@ struct Template {
     // note after all -- its rows to the key-up but those that decay on their
     // own (rof) -- the gate the least it plays (min_hold samples; 0 none)
     long long min_hold = 0;
+    // AN ORGAN'S KEY (t["ranks"]): the template sliced by rank -- each rank's
+    // rows (their gate row, gr, the rank's index), stamped when it is drawn;
+    // empty for a voice without ranks, P 0 for a rank with none here
+    std::vector<Template> ranks;
+    std::vector<char> push;     // the bellows' push rows (t["push"]), empty for none
     // A SECTION'S ENTRY SCATTER (section_onset_ms): each player's onset drawn
     // fresh at every press, up to this (Slab.stamp_cols' scatter_ms)
     double scatter_ms = 0.0;

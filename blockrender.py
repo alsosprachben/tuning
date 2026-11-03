@@ -6577,7 +6577,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
         # and whether it was pushed in before the key-up (_note_stops')
         rev, grs, cr, wrow, wcombo, bnote = organ
         aj = getattr(P, 'attack_jitter', 0.0)
-        br = n.br
+        br = em.bend_row if (em.bend_row >= 0 or em.fader_row < 0) else em.fader_row   # (n.br, set below)
         for i, (key, ratio, *_r) in enumerate(stops):
             n.rank_gr[i] = grs[i]
             # the chest's wind: its row from this rank on, as _note_stops sets it

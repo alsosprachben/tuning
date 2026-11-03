@@ -206,6 +206,8 @@ struct Song {
     // the rows of each played note that is a gesture's stroke (nv_prepare's:
     // blockrender's stroke_rows), [first, end)
     std::vector<std::pair<long long, long long>> stroke_rows;
+    // ...and of each note's bellows push (blockrender's push_rows), [first, end)
+    std::vector<std::pair<long long, long long>> push_rows;
     double total = 0.0;
     // ITS TUNING: the file's table, a channel's MIDI Tuning Standard tables
     // from their times (_MTS_TL), its fixed bend (_BTUN) and octave tuning (_OTUN)
@@ -1316,6 +1318,23 @@ int nv_song_glide(void *s, int i, int *cc5)
 
 // note i one of a gesture's strokes (_stroked)
 int nv_song_stroked(void *s, int i) { return ((nv::Song *)s)->notes[i].stroked; }
+
+// a note's push rows, [first, end), as nv_play made them (push_rows)
+void nv_song_add_push_rows(void *s, long long a, long long b)
+{
+    ((nv::Song *)s)->push_rows.push_back(std::make_pair(a, b));
+}
+
+int nv_song_n_push_rows(void *s, long long *ab, int cap)
+{
+    const nv::Song *S = (nv::Song *)s;
+    int n = (int)S->push_rows.size();
+    for (int k = 0; k < n && k < cap; k++) {
+        ab[2 * k] = S->push_rows[k].first;
+        ab[2 * k + 1] = S->push_rows[k].second;
+    }
+    return n;
+}
 
 // the stroke notes' rows, [first, end), as nv_prepare found them
 void nv_song_add_stroke_rows(void *s, long long a, long long b)

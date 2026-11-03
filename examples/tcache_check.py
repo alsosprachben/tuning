@@ -10,7 +10,8 @@ native cache (native/live.cpp, native.TemplateCache) builds the same. Per
 (key, bucket, step) every field a piano's template carries is compared with
 ==: the slab's columns (live.ALL_COLS, in their types), P, hrel, dur, the
 velocity it was built at, fa_at, the masks (sym, ring, push, lflip), the
-send, the scatter, and the offsets and extras a piano has none of.
+send, the scatter, an organ's ranks (each one's columns, count and hrel),
+and the offsets and extras a piano has none of.
 --drums: the programs are drum sets (live.Patch(program, True): each key on
 GM's percussion channel), and a drum's one-shot, its rows' own ends (rof)
 and its strokes' offsets (sof) are compared too.
@@ -64,7 +65,18 @@ def main(argv):
                     if (a is None) != (x is None) or (a is not None and not (
                             np.asarray(a).dtype == np.asarray(x).dtype and np.array_equal(a, x))):
                         bad.append(c)
-                if t.get("ranks") or t.get("rel_rank") or t.get("FT") is not None:
+                # an organ's ranks (t["ranks"]): each one's columns, count and hrel
+                tr, qr = t.get("ranks") or {}, q.get("ranks") or {}
+                if list(tr) != list(qr):
+                    bad.append("ranks %r vs %r" % (list(tr)[:4], list(qr)[:4]))
+                else:
+                    for nm in tr:
+                        (ca, na, ha), (cb, nb, hb) = tr[nm], qr[nm]
+                        if na != nb or not np.array_equal(ha, hb) or any(
+                                np.asarray(ca[c]).dtype != np.asarray(cb[c]).dtype
+                                or not np.array_equal(ca[c], cb[c]) for c in list(L.ALL_COLS) + ["lflip"]):
+                            bad.append("rank %s" % nm)
+                if t.get("rel_rank") or t.get("FT") is not None:
                     bad.append("a field a piano does not have")
             if bad:
                 differ += 1

@@ -545,6 +545,11 @@ typedef struct {
 /* tone.c: a section's player i's ears at its desk (section_seats) */
 void nv_section_seat(const VoiceSnap *v, const ToneIn *t, int i, double *out);
 
+/* npyrandom.c: numpy's default_rng(seed).standard_normal, draw by draw */
+void *nv_npy_new(unsigned long long seed);
+double nv_npy_next(void *g);
+void nv_npy_free(void *g);
+
 /* room.cpp: a source's image sources in the room (SynthProperties.image_sources) */
 int nv_images(const double *planes, int order, double sx, double sy, double sz, int cap,
               int *nsurf, int *surf, double *img, double *mir);
@@ -578,6 +583,8 @@ void nv_song_sound(void *s, long long ch, double t, double *d);
 int nv_song_glide(void *s, int i, int *cc5);
 void nv_song_organ(void *s, long long ch, const OrganSpec *spec, const OrganSpec *const *prog_organ);
 int nv_song_n_organs(void *s);
+void nv_song_add_push_rows(void *s, long long a, long long b);
+int nv_song_n_push_rows(void *s, long long *ab, int cap);
 double nv_song_note_trim(void *s, int i);
 int nv_song_n_grows(void *s);
 int nv_song_organ_wind_rows(void *s, int row0);

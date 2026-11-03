@@ -144,8 +144,7 @@ def main(argv):
                 oidx[pc] = len(organs)
                 organs.append(bytes(N.organ(pc)))
             prog_organ.append(oidx[pc])
-    # (live: an organ is stamped rank by rank, not yet native -- its classes not live's)
-    cmap_live = [q if q < 0 or cls_organ[q] < 0 else -1 for q in cmap]
+    cmap_live = cmap
     trims = []
     for gs in (False, True):
         trims += [float(PM.program_trim(p, False, gs=gs)) for p in range(128)]
@@ -262,6 +261,21 @@ def main(argv):
             f.write(b"LROUTE" + struct.pack("<i", len(routes)))
             for r in routes:
                 f.write(struct.pack("<7i", *N.route_args(r)))
+            # LSTOP: each organ program's stops as live's panel lays them out
+            # (Patch.stop_rows: row 0 on the digits, row 1 shifted, 2 and 3
+            # after the prefix) -- its ranks' names, and each row's ranks
+            orgs = [p for p in range(128) if prog_organ[p] >= 0]
+            f.write(b"LSTOP" + struct.pack("<i", len(orgs)))
+            for p in orgs:
+                pt = L.Patch(p, False, tuner, 0)
+                f.write(struct.pack("<ii", p, len(pt.rank_names)))
+                for nm in pt.rank_names:
+                    b = nm.encode()
+                    f.write(struct.pack("<i", len(b)) + b)
+                f.write(struct.pack("<i", len(pt.stop_rows)))
+                for row in pt.stop_rows:
+                    f.write(struct.pack("<i", len(row)) + struct.pack("<%di" % len(row),
+                                                                      *[pt.rank_names.index(n) for n in row]))
     print("native export: %d piano class(es), tuner %s, room %s -> %s" % (len(classes), tuner,
                                                                           room.decode() or "-", args[0]))
     if sess:

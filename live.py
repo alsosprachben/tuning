@@ -5930,8 +5930,12 @@ class Live:
         if part.organ:
             # A pipe organ has no touch: a key is open or shut, and the wind
             # does the rest. Velocity is deliberately ignored.
-            for rank in part.drawn:
-                self._draw(part, tmpl, ch, note, rank, n0)
+            # (In the stops' own order, not the set's: a set of names iterates
+            # by their hashes, which differ from process to process, and the
+            # slots -- so the sum -- with them. nvlive stamps in this order.)
+            for rank in part.patch.rank_names:
+                if rank in part.drawn:
+                    self._draw(part, tmpl, ch, note, rank, n0)
             if tmpl.get("rel_rank"):
                 self.held_tmpl[(part.pid, ch, note)] = (tmpl, None)   # its jacks' clicks, at key-up
             # ...AND A HARPSICHORD'S KEY LIFTS EVERY CHOIR'S DAMPER: the strings
@@ -9959,13 +9963,13 @@ class Live:
         if n0 is None:
             n0 = self.n
         want = {r for r in want if r in part.patch.rank_names} or set(part.patch.cres_order[:1])
-        for rank in want - part.drawn:
+        for rank in [r for r in part.patch.rank_names if r in want and r not in part.drawn]:   # (in order)
             for (c, note) in self._held_any():
                 if part.matches(self._pc(c), note):
                     t = part.patch.get(note + part.transpose, 127)
                     if t is not None:
                         self._draw(part, t, c, note, rank, n0)
-        for rank in part.drawn - want:
+        for rank in [r for r in part.patch.rank_names if r in part.drawn and r not in want]:
             for k in [k for k in list(self.slab.live)
                       if k[0] == part.pid and k[3] == rank]:
                 self.slab.release(k, n0)

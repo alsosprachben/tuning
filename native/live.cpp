@@ -60,7 +60,8 @@ static void vlq(std::vector<uint8_t> &b, uint32_t v)
 
 // _raw_template's file, as mido saves it (type 1, 480 ticks a beat, one
 // track): end, the track's last delta (a drum's 18 beats: its 8 s ring)
-static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int fast, uint32_t end = 480)
+static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int fast, uint32_t end = 480,
+                                     const OrganSpec *og = nullptr)
 {
     std::vector<uint8_t> tr;
     auto ev = [&](uint32_t dt, std::initializer_list<uint8_t> bytes) {
@@ -71,6 +72,20 @@ static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int
     ev(0, {(uint8_t)(0xC0 | ch), (uint8_t)program});
     ev(0, {(uint8_t)(0xB0 | ch), 7, 127});
     ev(0, {(uint8_t)(0xB0 | ch), 11, 127});
+    if (og) {
+        // AN ORGAN WITH EVERY STOP DRAWN (live._raw_template): every rank in
+        // the template, speaking at the onset; the live registration is
+        // which ranks a press stamps. Through the voice's own stop word.
+        long long w = 0;
+        if (og->wccs[0] == 11)
+            w = (1LL << (7 * og->n_wccs)) - 1;
+        else
+            for (int i = 0; i < og->n_rank; i++)
+                if (og->rank[i].n_ratio)
+                    w |= 1LL << i;
+        for (int i = 0; i < og->n_wccs; i++)
+            ev(0, {(uint8_t)(0xB0 | ch), (uint8_t)og->wccs[i], (uint8_t)((w >> (7 * i)) & 0x7F)});
+    }
     if (fast >= 0)
         ev(0, {(uint8_t)(0xB0 | ch), 1, (uint8_t)fast});            // a wheel's step (the honky-tonk's detune)
     ev(0, {(uint8_t)(0x90 | ch), (uint8_t)note, (uint8_t)vel});
@@ -111,7 +126,7 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                const int *kind, double scale, double full_db_s, double residual, double beta,
                                long long blk, double ring_floor, double ring_max, double *out, double knee_db,
                                double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
-                               std::vector<long long> *srows);
+                               std::vector<long long> *srows, std::vector<long long> *prows = nullptr);
 
 long long nv_template(const NoteClass *const *K, const NoteIn *tmpl, const double *freq, const double *trim,
                       int program, int note, int vel, int fast, double **rowsp, const int *kind, double scale,
@@ -131,10 +146,12 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                const int *kind, double scale, double full_db_s, double residual, double beta,
                                long long blk, double ring_floor, double ring_max, double *out, double knee_db,
                                double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
-                               std::vector<long long> *srows)
+                               std::vector<long long> *srows, std::vector<long long> *prows)
 {
+    const NoteClass *kc = (!kit && program >= 0 && program < 128) ? K[128 * program + note] : nullptr;
+    const OrganSpec *og = kc ? kc->organ : nullptr;
     std::vector<uint8_t> f = kit ? nv::live::one_note(program, note, vel, 9, fast, 480 * 18)
-                                 : nv::live::one_note(program, note, vel, 0, fast);
+                                 : nv::live::one_note(program, note, vel, 0, fast, 480, og);
     int err = 0;
     void *m = nv_midi_read(f.data(), (long long)f.size(), &err);
     if (!m)
@@ -146,6 +163,12 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         nv_song_chokes(song, kit->choke.data());
     }
     nv_midi_song(m, song, trim);
+    if (og) {                               // the organ on its channel, its stops all drawn
+        std::vector<const OrganSpec *> po(128, nullptr);
+        po[program] = og;
+        nv_song_organ(song, 0, og, po.data());
+        nv_song_organ_wind_rows(song, 0);   // (its rows' wind rows, as the one-note file has them)
+    }
     if (kit)
         nv_song_strokes(song, kit->skind.data(), kit->spar.data());
     double total = nv_midi_total(m);
@@ -159,6 +182,11 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         int n = nv_song_n_stroke_rows(song, nullptr, 0);
         srows->resize(2 * n);
         nv_song_n_stroke_rows(song, srows->data(), n);
+    }
+    if (prows && P >= 0) {                      // ...and its pushes' (push_rows)
+        int np = nv_song_n_push_rows(song, nullptr, 0);
+        prows->resize(2 * np);
+        nv_song_n_push_rows(song, prows->data(), np);
     }
     nv_song_free(song);
     nv_midi_free(m);
@@ -225,10 +253,10 @@ struct Cache {
     {
         double *rows = nullptr, out[48] = {0};
         void *dm[6] = {nullptr};
-        std::vector<long long> srows;
+        std::vector<long long> srows, prows;
         long long P = template_rows(K.data(), &t, freq, trim, program, note, vel, fast, &rows, kind, scale, full,
                                     residual, beta, blk, ring_floor, ring_max, out, knee, ln10_20, xdec, SR, dm,
-                                    drums ? &kit : nullptr, &srows);
+                                    drums ? &kit : nullptr, &srows, &prows);
         if (P < 0) {
             free(rows);
             return false;
@@ -288,6 +316,13 @@ struct Cache {
         // in the note (sof: its onset less its room delay, over the least of
         // the strokes'; numpy's int64 - float32, truncated) -- a layer's rows,
         // struck with the key, at the press (0)
+        // the bellows' push rows (t["push"])
+        if (P && !prows.empty()) {
+            T.push.assign(P, 0);
+            for (size_t k = 0; k < prows.size(); k += 2)
+                for (long long r = prows[k]; r < std::min(prows[k + 1], (long long)P); r++)
+                    T.push[r] = 1;
+        }
         int q = 128 * program + note;
         const NoteClass *nc = (q >= 0 && q < NV_K_DRUMS) ? K[(drums ? NV_K_DRUMS : 0) + q] : nullptr;
         T.scatter_ms = nc ? nc->tmpl.sect_onset_ms : 0.0;     // (t["scatter_ms"])
@@ -375,6 +410,41 @@ struct Cache {
                     T.rof[r] = -1;
             T.oneshot = false;
             T.min_hold = (long long)nearbyint(nc->gate_time * SR);
+        }
+        // AN ORGAN, SLICED BY RANK (_raw_template's t["ranks"]): each rank's
+        // rows, their columns and their share of hrel
+        if (nc && nc->organ && P) {
+            T.ranks.assign(nc->organ->n_rank, Template());
+            for (int ri = 0; ri < nc->organ->n_rank; ri++) {
+                std::vector<long> idx;
+                for (long long r = 0; r < P; r++)
+                    if (T.i4[0][r] == ri)
+                        idx.push_back((long)r);
+                Template &R = T.ranks[ri];
+                R.P = (long)idx.size();
+                if (!R.P)
+                    continue;
+                auto cut = [&](auto &dst, const auto &src) {
+                    dst.resize(idx.size());
+                    for (size_t q = 0; q < idx.size(); q++)
+                        dst[q] = src[idx[q]];
+                };
+                for (int c = 0; c < 6; c++)
+                    cut(R.f8[c], T.f8[c]);
+                for (int c = 0; c < 27; c++)
+                    cut(R.f4[c], T.f4[c]);
+                for (int c = 0; c < 4; c++)
+                    cut(R.f4n[c], T.f4n[c]);
+                for (int c = 0; c < 2; c++)
+                    cut(R.i8[c], T.i8[c]);
+                for (int c = 0; c < 6; c++)
+                    cut(R.i4[c], T.i4[c]);
+                cut(R.hrel, T.hrel);
+                if (!T.sof.empty())
+                    cut(R.sof, T.sof);
+                if (!T.rof.empty())
+                    cut(R.rof, T.rof);
+            }
         }
         return true;
     }
@@ -495,6 +565,26 @@ int nv_tcache_slur_fade(void *h, int program, int note, double *out)
 // a template's section scatter, ms (t["scatter_ms"])
 double nv_tmpl_scatter(void *t) { return ((nv::live::Template *)t)->scatter_ms; }
 
+// a program's registered organ (its classes' table: live's part.organ), NULL none
+const OrganSpec *nv_tcache_organ(void *h, int program)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    if (!C || C->drums || program < 0 || program > 127)
+        return nullptr;
+    const NoteClass *k = C->K[128 * program + 60];
+    return k ? k->organ : nullptr;
+}
+
+// an organ template's rank ri (t["ranks"]), its P through *n; NULL where it has none
+void *nv_tmpl_rank(void *t, int ri, long long *n)
+{
+    nv::live::Template *T = (nv::live::Template *)t;
+    if (ri < 0 || ri >= (int)T->ranks.size() || !T->ranks[ri].P)
+        return nullptr;
+    *n = T->ranks[ri].P;
+    return &T->ranks[ri];
+}
+
 // live._glide's coefficients for a press on key tgt from key src: (g, tau,
 // cutoff) at CC5 cc5 -- the class's mechanism, where it reaches -- or 0
 // where it does not glide
@@ -534,6 +624,7 @@ const void *nv_tmpl_col(void *t, int group, int index)
     case 6: return T->fa_at.data();
     case 7: return T->rof.data();
     case 8: return T->sof.data();
+    case 9: return T->push.empty() ? nullptr : T->push.data();
     }
     return nullptr;
 }

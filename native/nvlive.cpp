@@ -131,6 +131,8 @@ void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigne
                     const int *skind, const double *spar, double oneshot_floor_db);
 void nv_lp_drums(void *h, int program, const unsigned long long *choke);
 void nv_lp_program(void *h, int program);
+void nv_lp_toggle_stop(void *h, int rank, long long n0);
+int nv_lp_drawn(void *h, char *out, int cap);
 void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
                 int soft_drop, int soft_top, double rate, double retrigger, long cap, double headroom,
                 const double *pan_tab, double pan_beta);
@@ -185,6 +187,10 @@ struct Export {
     std::vector<double> kit_spar;
     std::string room, libs[3];
     std::vector<OrganSpec> organs;        // ORGN: the registered organs' tables
+    struct Stops {
+        std::vector<std::string> names;
+        std::vector<std::vector<int>> rows;
+    } stops[128];                         // LSTOP: an organ program's ranks and the panel's stop rows
     std::vector<int> cls_organ, prog_organ;   // each class's organ, each program's (-1 none, -2 not the engine's)
     double beta = 0.0, headroom = 1.0;
     int part[128][10];
@@ -321,6 +327,36 @@ static bool read_export(const char *path, Export &E)
                         if (fread(a.data(), 4, 7, f) != 7)
                             break;
                         E.routes.push_back(a);
+                    }
+                // LSTOP: each organ program's ranks' names and the panel's stop rows
+                char s5[5];
+                int no = 0;
+                if (ok && fread(s5, 1, 5, f) == 5 && !memcmp(s5, "LSTOP", 5) && fread(&no, 4, 1, f) == 1)
+                    for (int q = 0; q < no; q++) {
+                        int pg = 0, nr = 0, nrow = 0;
+                        if (fread(&pg, 4, 1, f) != 1 || fread(&nr, 4, 1, f) != 1 || pg < 0 || pg > 127)
+                            break;
+                        auto &so = E.stops[pg];
+                        for (int i = 0; i < nr; i++) {
+                            int len = 0;
+                            if (fread(&len, 4, 1, f) != 1)
+                                break;
+                            std::string nm(len, ' ');
+                            if (len && fread(&nm[0], 1, len, f) != (size_t)len)
+                                break;
+                            so.names.push_back(nm);
+                        }
+                        if (fread(&nrow, 4, 1, f) != 1)
+                            break;
+                        for (int r = 0; r < nrow; r++) {
+                            int n = 0;
+                            if (fread(&n, 4, 1, f) != 1)
+                                break;
+                            std::vector<int> row(n);
+                            if (n && fread(row.data(), 4, n, f) != (size_t)n)
+                                break;
+                            so.rows.push_back(row);
+                        }
                     }
             }
         }
@@ -526,12 +562,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "nvlive: %s is not a live export of this build (native_export.py --live)\n", argv[1]);
         return 1;
     }
-    // (a registered organ is stamped rank by rank, live's alone: not the engine's here)
+    // each class's organ, its table here (the export's pointer was the exporter's)
     for (size_t i = 0; i < E.classes.size(); i++)
-        ((NoteClass *)E.classes[i].data())->organ = nullptr;
-    for (int &q : E.cmap)
-        if (q >= 0 && E.cls_organ[q] >= 0)
-            q = -1;
+        ((NoteClass *)E.classes[i].data())->organ = E.cls_organ[i] >= 0 ? &E.organs[E.cls_organ[i]] : nullptr;
     const double SR = E.k[K_SR];
     const long long BLK = (long long)E.k[K_BLK];
     const int program = atoi(opt(argc, argv, "program", "0").c_str());
@@ -1112,6 +1145,17 @@ int main(int argc, char **argv)
         };
         H.del_route = [&](int i) { post([&, i](long long) { nv_rt_del(router, i); }); };
         H.panic = [&]() { post([&](long long n) { nv_lp_panic(part, n); }); };
+        // AN ORGAN'S STOPS (live's panel): its ranks, drawn and put in between two blocks
+        if (!drums && program >= 0 && program < 128 && !E.stops[program].names.empty()) {
+            H.stop_names = E.stops[program].names;
+            H.stop_rows = E.stops[program].rows;
+            H.drawn = [&, nr = (int)E.stops[program].names.size()]() {
+                std::vector<char> d(nr, 0);
+                nv_lp_drawn(part, d.data(), nr);
+                return d;
+            };
+            H.toggle_stop = [&](int ri) { post([&, ri](long long n) { nv_lp_toggle_stop(part, ri, n); }); };
+        }
         bool edited = false;
         auto was = H.routes;
         panel::Panel P(H);

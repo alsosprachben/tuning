@@ -39,6 +39,7 @@
 
 extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
 extern "C" int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out);
+extern "C" const OrganSpec *nv_tcache_organ(void *h, int program);
 
 extern "C" double nv_damper_contact(int p, int key, int top);
 
@@ -717,8 +718,50 @@ struct Piano {
         int channel;
         unsigned excl;
         int lo, hi, transpose;
+        // A REGISTERED ORGAN (live's part.organ): its table, its stops drawn
+        // (a rank each), the crescendo's place (part.cres)
+        const OrganSpec *organ = nullptr;
+        std::vector<char> drawn = {};
+        double cres = 0.0;
     };
     std::vector<Patch> patches;
+    // the organ's registration as live's Part starts it: its default stops,
+    // or the crescendo's first where it has none
+    static void organ_start(Patch &p, const OrganSpec *og)
+    {
+        p.organ = og;
+        if (!og)
+            return;
+        p.drawn.assign(og->n_rank, 0);
+        bool any = false;
+        for (int i = 0; i < og->n_rank; i++)
+            if ((og->default_stops >> i) & 1) {
+                p.drawn[i] = 1;
+                any = true;
+            }
+        if (!any && og->n_order)
+            p.drawn[og->order[0]] = 1;
+    }
+    // each organ key's touch at its press (live.note_touch)
+    std::map<std::pair<int, int>, double> note_touch;
+    // THE CHEST'S WIND (live.wind_st, _wind_row, _wind_block): a part's, made
+    // at its first rank drawn -- numpy's generator seeded by the part, the
+    // pressure's state, a slab row a family of its ranks (from wind_next, to
+    // WIND_ROWS), each rank's row (0 none) and each row's accrued phase
+    struct WindSt {
+        void *g = nullptr;
+        const OrganSpec *og = nullptr;
+        double w1 = 0, w2 = 0, s1 = 0, s2 = 0, d1 = 0, r1 = 0, te = 0, tph = 0;
+        bool was_on = false;
+        std::vector<std::pair<std::pair<double, double>, int>> rows;
+        std::map<int, double> acc;
+        int rank_row[32] = {0};
+    };
+    std::map<long long, WindSt> wind_st;
+    std::vector<long long> wind_order;          // the parts' wind, in the order made
+    int wind_next = 1;
+    static const int WIND_ROWS = 32;
+    static const long long RANK0 = 1000;        // a rank's slots: layer RANK0 + its index
     int cur = 0, transpose = 0;
     bool cur_reg = true;                            // the patch in use has the register
 
@@ -908,6 +951,10 @@ struct Piano {
         const nv::live::Template *T = nv_tcache_lookup(cache, sn, bucket(vel), speed);
         if (!T)
             return;                         // a miss: live warms it off the audio thread
+        if (patches[cur].organ) {           // a registered organ: its ranks drawn
+            organ_strike(*T, ch, note, n0);
+            return;
+        }
         double scale = pow(10.0, level_db / 20.0) * swell * chan_gain(ch);
         scale *= pow(vel / 127.0, 2.0) / std::max(pow(T->vel / 127.0, 2.0), 1e-9);    // touch: the press over the template's
         Key key(pid, ch, note, -1);
@@ -970,6 +1017,250 @@ struct Piano {
             retune(slots, n0, bend[ch]);
         if (reg_on && cur_reg && reg_note[note] && !S.last_slots.empty())
             reg_strike(ch, note, n0, *T, S.last_slots);
+    }
+
+    long dropped = 0;                           // ranks the slab had no room for (live.dropped)
+    std::vector<int> stop_posts;                // stops toggled from the panel, for the next block
+
+    // the panel's stop toggles (live.post's set_stops), after the block's events
+    void stop_toggles(long long n0)
+    {
+        std::vector<int> ps;
+        ps.swap(stop_posts);
+        for (int rank : ps) {
+            Patch &p = patches[0];
+            if (!p.organ || rank < 0 || rank >= p.organ->n_rank)
+                continue;
+            std::vector<char> want = p.drawn;
+            want[rank] = !want[rank];
+            set_stops(0, want, n0);
+        }
+    }
+
+    // whether an organ part listens on channel ch
+    bool organ_on(int ch) const
+    {
+        for (const Patch &p : patches)
+            if (p.organ && p.organ->n_order && (p.channel < 0 || p.channel == ch))
+                return true;
+        return false;
+    }
+
+    // live._wind_row: the slab row rank ri of this organ part rides (0: none),
+    // the part's chest made at its first rank
+    int wind_row(int ri)
+    {
+        const OrganSpec *og = patches[cur].organ;
+        auto it = wind_st.find(pid);
+        if (it == wind_st.end()) {
+            WindSt &st = wind_st[pid];
+            wind_order.push_back(pid);
+            st.og = og;
+            st.g = nv_npy_new(0x5EED + (unsigned long long)pid);
+            for (int r = 0; r < og->n_rank; r++) {
+                if (!og->rank[r].n_ratio)
+                    continue;
+                std::pair<double, double> ab(og->fam_a[r], og->fam_b[r]);
+                int row = 0;
+                for (auto &x : st.rows)
+                    if (x.first == ab)
+                        row = x.second;
+                if (!row) {
+                    if (wind_next > WIND_ROWS)
+                        continue;
+                    row = wind_next++;
+                    st.rows.push_back(std::make_pair(ab, row));
+                    st.acc[row] = 0.0;
+                }
+                st.rank_row[r] = row;
+            }
+            it = wind_st.find(pid);
+        }
+        return it->second.rank_row[ri];
+    }
+
+    // live._draw: rank ri of the key's template stamped -- at the part's gain,
+    // the channel's, and the key's touch -- on its chest's row
+    void draw_rank(const nv::live::Template &T, int ch, int note, int ri, long long n0)
+    {
+        if (ri >= (int)T.ranks.size() || !T.ranks[ri].P)
+            return;
+        const nv::live::Template &R = T.ranks[ri];
+        Key key(pid, ch, note, RANK0 + ri);
+        auto nt = note_touch.find(std::make_pair(ch, note));
+        double scale = pow(10.0, level_db / 20.0) * swell * chan_gain(ch) * (nt != note_touch.end() ? nt->second : 1.0);
+        const double *f8p[6];
+        const float *f4p[27];
+        const long long *i8p[2];
+        const int32_t *i4p[6];
+        for (int c = 0; c < 6; c++)
+            f8p[c] = R.f8[c].data();
+        for (int c = 0; c < 27; c++)
+            f4p[c] = R.f4[c].data();
+        for (int c = 0; c < 2; c++)
+            i8p[c] = R.i8[c].data();
+        for (int c = 0; c < 6; c++)
+            i4p[c] = R.i4[c].data();
+        if (!S.stamp(f8p, f4p, i8p, i4p, R.hrel.data(), R.P, key, n0, scale, 0, false, NAN, ch,
+                     R.sof.empty() ? nullptr : R.sof.data(), R.rof.empty() ? nullptr : R.rof.data())) {
+            dropped++;
+            return;
+        }
+        const OrganSpec *og = patches[cur].organ;
+        if (og->wind) {
+            int wr = wind_row(ri);
+            if (wr > 0)
+                for (long s : S.last_slots)
+                    S.i4[I4_br][s] = wr;
+        }
+    }
+
+    // live._note_on's organ path: every rank drawn, in the stops' order (a
+    // pipe organ has no touch: a key is open or shut)
+    void organ_strike(const nv::live::Template &T, int ch, int note, long long n0)
+    {
+        note_touch[std::make_pair(ch, note)] = 1.0;
+        const std::vector<char> &dr = patches[cur].drawn;
+        for (int ri = 0; ri < (int)dr.size(); ri++)
+            if (dr[ri])
+                draw_rank(T, ch, note, ri, n0);
+    }
+
+    // live.set_stops: draw and retire ranks to match want, on every key
+    // already down (each drawn at velocity 127's template), in the stops' order
+    void set_stops(int pi, std::vector<char> want, long long n0)
+    {
+        Use u(*this, pi);
+        const OrganSpec *og = patches[cur].organ;
+        bool any = false;
+        for (char w : want)
+            any = any || w;
+        if (!any && og->n_order)
+            want[og->order[0]] = 1;
+        std::vector<char> &dr = patches[cur].drawn;
+        for (int ri = 0; ri < og->n_rank; ri++) {
+            if (!want[ri] || dr[ri])
+                continue;
+            for (auto &d : down) {
+                if (patch_for(d.first, d.second) != pi)
+                    continue;
+                int sn = d.second + transpose;
+                if (sn < 0 || sn > 127)
+                    continue;
+                const nv::live::Template *T = nv_tcache_lookup(cache, sn, bucket(127), speed);
+                if (T)
+                    draw_rank(*T, d.first, d.second, ri, n0);
+            }
+        }
+        for (int ri = 0; ri < og->n_rank; ri++) {
+            if (!dr[ri] || want[ri])
+                continue;
+            std::vector<Key> ks;
+            for (auto &kv : S.live)
+                if (std::get<0>(kv.first) == pid && std::get<3>(kv.first) == RANK0 + ri)
+                    ks.push_back(kv.first);
+            for (auto &k : ks)
+                S.release(k, n0);
+        }
+        dr = want;
+    }
+
+    // live._crescendo: the mod wheel adds stops in the organ's own order
+    void crescendo(int pi, int v, long long n0)
+    {
+        Patch &p = patches[pi];
+        const OrganSpec *og = p.organ;
+        p.cres = v / 127.0;
+        int n = (int)(p.cres * og->n_order + 1e-9);
+        std::vector<char> want(og->n_rank, 0);
+        for (int q = 0; q < std::max(1, n) && q < og->n_order; q++)
+            want[og->order[q]] = 1;
+        set_stops(pi, want, n0);
+    }
+
+    // live._wind_block: every organ part's chest, one block on -- its demand
+    // from its ranks sounding, the pressure (wind.Wind.blocks for one block),
+    // a row a family: this block's ratio, the phase accrued, the level at its edges
+    void wind_block(long long n0, long long frames)
+    {
+        (void)n0;
+        for (size_t pi = 0; pi < patches.size(); pi++) {
+            auto it = wind_st.find(patches[pi].pid);
+            if (it == wind_st.end())
+                continue;
+            WindSt &st = it->second;
+            const OrganSpec *og = st.og;
+            int tp = patches[pi].transpose;
+            double dem = 0.0;
+            for (auto &kv : S.live) {
+                if (std::get<0>(kv.first) != patches[pi].pid)
+                    continue;
+                long long ri = std::get<3>(kv.first) - RANK0;
+                if (ri < 0 || ri >= og->n_rank || !og->rank[ri].n_ratio || !st.rank_row[ri])
+                    continue;
+                const OrganRank &rk = og->rank[ri];
+                double f = 440.0 * pow(2.0, (std::get<2>(kv.first) + tp - 69) / 12.0);
+                double d[8];
+                for (int q = 0; q < rk.n_ratio; q++)
+                    d[q] = pow(std::max(f * rk.ratio[q], 8.0) / og->unit_hz, og->draw_exp);
+                dem += pysum(d, rk.n_ratio);
+            }
+            bool on = og->trem_rank >= 0 && patches[pi].drawn[og->trem_rank];
+            // the pressure, SUB 8 points across this block
+            double w0 = st.w2;
+            if (og->wander_rms > 0.0) {
+                double z = nv_npy_next(st.g);
+                st.w1 = og->wa * st.w1 + (1.0 - og->wa) * z;
+                st.w2 = og->wa * st.w2 + (1.0 - og->wa) * st.w1;
+            }
+            auto dev = [&]() {
+                double d = st.s1 - (og->has_ra ? og->reg_restore * st.r1 : 0.0);
+                return og->sag_max > 0.0 ? og->sag_max * tanh(d / og->sag_max) : d;
+            };
+            double s0 = dev();
+            if (og->sag_per_unit > 0.0) {
+                double sn = og->c1 * st.s1 + og->c2 * st.s2 + og->g * st.d1;
+                st.s2 = st.s1;
+                st.s1 = sn;
+                st.d1 = dem * og->sag_per_unit;
+                if (og->has_ra)
+                    st.r1 = og->ra * st.r1 + (1.0 - og->ra) * st.s1;
+            }
+            double sv1 = dev();
+            if (on && !st.was_on && st.te < 1e-4)
+                st.tph = 0.0;
+            st.was_on = on;
+            double tgt = on ? 1.0 : 0.0, e0 = st.te;
+            st.te = tgt + (st.te - tgt) * og->tdecay;
+            if (!on && st.te < 1e-6)
+                st.te = 0.0;
+            bool tr = e0 > 0.0 || st.te > 0.0;
+            double p[9];
+            for (int j = 0; j <= 8; j++) {
+                double fr = j / 8.0;
+                double wv = (w0 + (st.w2 - w0) * fr) * (og->wgain * og->wander_rms);
+                double sv = s0 + (sv1 - s0) * fr;
+                double tv = 0.0;
+                if (tr) {
+                    double ev = e0 + (st.te - e0) * fr;
+                    tv = og->trem_depth * ev * sin(2.0 * M_PI * (st.tph + og->trem_hz * og->blk_s * fr));
+                }
+                p[j] = 1.0 + wv - sv + tv;
+            }
+            st.tph = fmod(st.tph + og->trem_hz * og->blk_s, 1.0);
+            for (auto &x : st.rows) {
+                double a = x.first.first, b = x.first.second;
+                int row = x.second;
+                double sum = pow(p[0], a);
+                for (int j = 1; j < 8; j++)
+                    sum = sum + pow(p[j], a);
+                BRt[row] = (float)(sum / 8.0);
+                BCt[row] = st.acc[row];
+                BLt[2 * row] = (float)pow(p[0], b);
+                BLt[2 * row + 1] = (float)pow(p[8], b);
+                st.acc[row] += ((double)BRt[row] - 1.0) * frames;
+            }
+        }
     }
 
     // live._slur_stamp: the slots just stamped given the voice's legato
@@ -1041,6 +1332,15 @@ struct Piano {
     {
         int pi = patch_for(ch, note);
         Use u(*this, pi < 0 ? cur : pi);
+        if (patches[cur].organ) {           // an organ's key: each of its ranks
+            std::vector<Key> ks;
+            for (auto &kv : S.live)
+                if (std::get<0>(kv.first) == pid && std::get<1>(kv.first) == ch && std::get<2>(kv.first) == note)
+                    ks.push_back(kv.first);
+            for (auto &k : ks)
+                S.release(k, n0);
+            return;
+        }
         // (a held texture lets go no sooner than its gate)
         long long at = n0;
         auto tx = tex_on.find(Key(pid, ch, note, -1));
@@ -1447,6 +1747,11 @@ struct Piano {
                 mono[ch] = true;
             else if (cc == 127)
                 mono[ch] = false;
+        } else if (cc == 1 && organ_on(ch)) {
+            // AN ORGAN'S MOD WHEEL IS ITS CRESCENDO PEDAL (live's 'crescendo' role)
+            for (size_t pi = 0; pi < patches.size(); pi++)
+                if (patches[pi].organ && patches[pi].organ->n_order && (patches[pi].channel < 0 || patches[pi].channel == ch))
+                    crescendo((int)pi, v, n0);
         } else if (cc == 1 && detune_wheel) {
             static const int steps[3] = {0, 64, 127};       // live.DETUNE_STEPS: min(), the first of a tie
             int best = steps[0];
@@ -2771,6 +3076,8 @@ struct Piano {
     // live's callback for one block: its events, the sweep, the reap
     void block(long long n0, long long blk)
     {
+        if (!wind_st.empty())                   // the organs' chests, before the block's events (live's callback)
+            wind_block(n0, blk);
         std::vector<Ev> evs;
         evs.swap(events);
         for (const Ev &e : evs) {
@@ -2785,6 +3092,8 @@ struct Piano {
             else
                 control(e.ch, e.a, e.b, n0);
         }
+        if (!stop_posts.empty())
+            stop_toggles(n0);
         if (reg_on && (!reg_pend.empty() || !reg_out.empty() || reg_live || !reg_retire.empty()
                        || reg_ndone.load() > 0))
             reg_pump(n0);
@@ -3061,12 +3370,36 @@ void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int s
     return P;
 }
 
+// AN ORGAN'S STOP drawn or put in (livetui's toggle_stop: live.set_stops
+// with the rank toggled) -- posted: done in the next block after its events,
+// as live runs what its panel posts
+void nv_lp_toggle_stop(void *h, int rank, long long n0)
+{
+    (void)n0;
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    P->stop_posts.push_back(rank);      // (done in the next block, after its events: live.post)
+}
+
+// the organ's stops drawn (out[rank] 1), the count; 0 for no organ
+int nv_lp_drawn(void *h, char *out, int cap)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    const nv::slab::Piano::Patch &p = P->patches[0];
+    if (!p.organ)
+        return 0;
+    int n = std::min((int)p.drawn.size(), cap);
+    for (int i = 0; i < n; i++)
+        out[i] = p.drawn[i];
+    return n;
+}
+
 // The part's PROGRAM, a melodic one's: the class its slurs and glides read
 void nv_lp_program(void *h, int program)
 {
     nv::slab::Piano *P = (nv::slab::Piano *)h;
     P->patches[0].program = program;
     P->program = program;
+    nv::slab::Piano::organ_start(P->patches[0], nv_tcache_organ(P->patches[0].cache, program));
 }
 
 // The part a DRUM PART (live.Patch(program, True)): program its drum set,
@@ -3099,6 +3432,8 @@ int nv_lp_add_patch(void *h, void *cache, long long pid, double level_db, int nb
                              false, program, {}, channel, excl, lo, hi, transpose};
     if (drums && choke)
         p.choke.assign(choke, choke + 2 * 16384);
+    if (!drums)
+        nv::slab::Piano::organ_start(p, nv_tcache_organ(cache, program));
     P->patches.push_back(std::move(p));
     P->choke_p = &P->patches[P->cur].choke;          // (the vector may have moved)
     return (int)P->patches.size() - 1;

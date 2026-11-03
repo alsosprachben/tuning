@@ -127,3 +127,16 @@ void nv_npy_normals(unsigned long long seed, long n, double *out)
     for (long i = 0; i < n; i++)
         out[i] = npy_standard_normal(&r);
 }
+
+/* a generator kept between calls (live's Wind: one normal a block), as a handle */
+void *nv_npy_new(unsigned long long seed)
+{
+    NpyPCG64 *r = (NpyPCG64 *)malloc(sizeof(NpyPCG64));
+    if (r)
+        npy_pcg64_seed(r, seed);
+    return r;
+}
+
+double nv_npy_next(void *g) { return npy_standard_normal((NpyPCG64 *)g); }
+
+void nv_npy_free(void *g) { free(g); }

@@ -313,6 +313,7 @@ def _load():
             ('nv_tcache_warm', ctypes.c_long, [ctypes.c_void_p, I, I, I, I, ctypes.c_void_p, I]),
             ('nv_tcache_get', ctypes.c_void_p, [ctypes.c_void_p, I, I, I, ctypes.POINTER(LL)]),
             ('nv_tmpl_scatter', C, [ctypes.c_void_p]),
+            ('nv_tmpl_rank', ctypes.c_void_p, [ctypes.c_void_p, I, ctypes.POINTER(LL)]),
             ('nv_sphere_mean', C, [C, C, C, C]),
             ('nv_npy_normals', None, [ctypes.c_ulonglong, ctypes.c_long, ctypes.c_void_p]),
             ('nv_tmpl_col', ctypes.c_void_p, [ctypes.c_void_p, I, I]),
@@ -334,6 +335,7 @@ def _load():
             ('nv_slab_free_list', ctypes.c_long, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]),
             ('nv_lp_new', ctypes.c_void_p, [ctypes.c_void_p, LL, C, I, I, I, I, I, C, C, ctypes.c_long, C, D, C]),
             ('nv_lp_program', None, [ctypes.c_void_p, I]),
+            ('nv_lp_toggle_stop', None, [ctypes.c_void_p, I, LL]),
             ('nv_lp_free', None, [ctypes.c_void_p]),
             ('nv_lp_register', None, [ctypes.c_void_p, ctypes.c_void_p, I, C, C, C, C, I, C, I, C, C, C, C, LL,
                                       ctypes.c_void_p]),
@@ -2402,6 +2404,7 @@ class TemplateCache(object):
         import tonelib as T
         self.d = lib()
         self.program = program
+        self.drums = drums
         if drums:
             K, self.keep = k_table(lambda p, k: None, programs=())
         else:
@@ -2410,8 +2413,6 @@ class TemplateCache(object):
             for key in range(128):
                 cls = BR.property_class_for_note(program, key)
                 k = note_class(cls) if cls is not None else None
-                if k is not None and k.organ:
-                    k = None                # (a registered organ: live stamps it rank by rank, Python's)
                 if k is not None:
                     self.keep.append(k)
                     K[128 * program + key] = ctypes.addressof(k)
@@ -2487,8 +2488,37 @@ class TemplateCache(object):
             out["sof"] = col(8, 0, ctypes.c_int64)
         out["sym"] = np.zeros(n, bool)
         out["ring"] = np.zeros(n, bool)
-        out["push"] = np.zeros(n, bool)
+        _pp = self.d.nv_tmpl_col(t, 9, 0)
+        out["push"] = (np.ctypeslib.as_array(ctypes.cast(_pp, ctypes.POINTER(ctypes.c_int8)), shape=(n,)).astype(bool)
+                       if _pp and n else np.zeros(n, bool))
         out["lflip"] = np.zeros(n, bool)
+        # AN ORGAN'S RANKS (t["ranks"]): {name: (its columns, P, hrel)}
+        import blockrender as BR
+        cls = BR.property_class_for_note(self.program, note) if not self.drums else None
+        if cls is not None and getattr(cls, 'registerable', False):
+            for ri, r in enumerate(cls.stop_ranks):
+                rn = LL(0)
+                rt = self.d.nv_tmpl_rank(t, ri, ctypes.byref(rn))
+                if not rt:
+                    continue
+                m = int(rn.value)
+
+                def rcol(g, i, dt, rt=rt, m=m):
+                    p = self.d.nv_tmpl_col(rt, g, i)
+                    return np.ctypeslib.as_array(ctypes.cast(p, ctypes.POINTER(dt)), shape=(m,)).copy()
+                cols = {}
+                for i, c in enumerate(LIVE_F8):
+                    cols[c] = rcol(0, i, ctypes.c_double)
+                for i, c in enumerate(LIVE_F4):
+                    cols[c] = rcol(1, i, ctypes.c_float)
+                for i, c in enumerate(LIVE_F4N):
+                    cols[c] = rcol(2, i, ctypes.c_float)
+                for i, c in enumerate(("non", "noff")):
+                    cols[c] = rcol(3, i, ctypes.c_int64)
+                for i, c in enumerate(LIVE_I4):
+                    cols[c] = rcol(4, i, ctypes.c_int32)
+                cols["lflip"] = np.zeros(m, bool)
+                out["ranks"][r[0]] = (cols, m, rcol(5, 0, ctypes.c_float))
         return out
 
 

@@ -510,6 +510,9 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (r < 0)
             return -(1 + i);
         carry_radius = out.radius;
+        if (out.n_push)                     // (an organ's push: the tone's last rows)
+            nv_song_add_push_rows(song, total + out.n_knock + out.n_tone - out.n_push,
+                                  total + out.n_knock + out.n_tone);
         if (played) {
             played[j] = i;
             row0[j] = total;
