@@ -197,6 +197,7 @@ struct Parsed {
     double total = 0.0;
     int gs = 0;                 // a Roland GS exclusive before the first note (gs_setup: the file speaks GS)
     std::vector<std::array<int, 3>> legato;    // _legato_ticks: (channel, key, k) slurred
+    std::vector<CCEv> snd;      // sndev: CC71-78, and gmon (channel -1, cc -1), in message order
 };
 
 // _legato_ticks: the notes that begin contiguously with what their channel
@@ -358,6 +359,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             bmsb.clear(); blsb.clear(); drums.clear(); prog.clear(); ctrl.clear(); rsel.clear();
             // BACK TO POWER-ON: every tuning the file set, from here (gmon)
             P.pitch.push_back(PitchEv{-1, t, seq, 9, 0.0});
+            P.snd.push_back(CCEv{-1, t, -1, 0});
             rfmsb.clear(); rrange.clear(); rmod.clear(); rfine.clear(); rcoarse.clear(); rtp.clear(); rtb.clear();
             continue;
         }
@@ -377,6 +379,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             int cc = m.d0, v = m.d1;
             P.ccs.push_back(CCEv{ch, t, cc, v});
             P.events.push_back(LiveEv{t, 2, ch, cc, v});
+            if (cc >= 71 && cc <= 78)
+                P.snd.push_back(CCEv{ch, t, cc, v});
             if (cc == 0)
                 bmsb[ch] = v;
             else if (cc == 32)
@@ -612,6 +616,8 @@ void nv_midi_song(void *p, void *song, const double *trim)
                      trim[(n.drum ? 128 : 0) + n.prog], n.prog, n.drum);
     for (const auto &l : P->legato)
         nv_song_legato(song, l[0], l[1], l[2]);
+    for (const nv::CCEv &e : P->snd)
+        nv_song_snd(song, e.ch, e.t, e.cc, e.v);
 }
 
 }  // extern "C"

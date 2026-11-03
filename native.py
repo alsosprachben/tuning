@@ -73,7 +73,9 @@ class VoiceSnap(ctypes.Structure):
                 ('mode_phases', C * 400), ('throat', I), ('n_mb', I), ('stroke_tilt_db', C),
                 ('formant_scale', C), ('formant_morph', C), ('breath_volume', C), ('mb', (C * 2) * 128),
                 ('fbody', I), ('n_fm', I), ('n_afm', I), ('n_bt', I), ('formant_floor', C), ('fm', (C * 3) * 16),
-                ('afm', (C * 3) * 8), ('bt', (C * 2) * 32), ('comb', C * 129)]
+                ('afm', (C * 3) * 8), ('bt', (C * 2) * 32), ('comb', C * 129),
+                ('sect_n', I), ('sect_vib', I), ('sect_seats', I), ('sect_spread_cents', C), ('sect_vib_cents', C),
+                ('sect_vib_hz', C * 2), ('sect_onset_ms', C), ('sect_ofm', C), ('sect_dx', C * 16)]
 
 
 class ToneIn(ctypes.Structure):
@@ -87,7 +89,7 @@ class ToneIn(ctypes.Structure):
                 + [(f, C) for f in ('sound_vib_depth_cents', 'vibrato_delay', 'br', 'fx', 'mk', 'fm_omega',
                                     'fm_phase', 'listener_distance', 'head_radius', 'pan_angle')]
                 + [('room_bands', C * 9), ('pjit', I), ('sps', C), ('dur', C), ('ssc', I)]
-                + [('rev', I), ('rev_n0', C), ('rev_arr', C)])
+                + [('rev', I), ('rev_n0', C), ('rev_arr', C), ('planes', C * 6), ('order', I)])
 
 
 class VoiceInit(ctypes.Structure):
@@ -162,7 +164,9 @@ class NoteClass(ctypes.Structure):
                 + [('n_layer', I), ('lay_n', I * 32), ('lay_hz', (C * 32) * 32), ('lay_db', (C * 32) * 32),
                    ('lay_rise', C * 32), ('lay_dbs', C * 32), ('lay_len', C * 32), ('played_backwards', I)]
                 + [('n_bn', I), ('bn_rows', I), ('bn_fade_s', C), ('bn_hz', C * 64), ('bn_db', C * 64)]
-                + [('bendable', I)])
+                + [('bendable', I), ('snd_mask', I), ('snd_bias', C * 8), ('snd_time_range', C),
+                   ('snd_rate_range', C), ('snd_delay_s', C), ('glide_mech', I), ('glide_reach', C),
+                   ('porta_fast', C), ('porta_slow', C), ('porta_d_semi', C), ('porta_settle', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -176,7 +180,7 @@ class NoteIn(ctypes.Structure):
                 + [('room_bands', C * 9), ('reflect', I), ('no_reflections', I), ('ch', LL), ('note', I),
                    ('damper_pedal', I), ('key_off', C), ('planes', C * 6), ('order', I), ('from_song', I), ('song_index', I),
                    ('seat', C), ('held', C), ('rnd_draws', C * 4), ('stroke_tilt', C), ('stroke_mouth', C),
-                   ('stroke_morph', C)])
+                   ('stroke_morph', C), ('snd_at', C), ('snd_rt', C)])
 
 
 class NoteOut(ctypes.Structure):
@@ -581,15 +585,30 @@ _HARMONIC_OWN = {'series_volume': 'SynthProperties', 'harmonic_volume': 'SynthPr
                  'partial_jitter': 'SynthProperties'}
 
 
+# ...AND A SECTION'S (SectionMixin): its players' entries and desks, SynthProperties'
+_SECTION_OWN = {'section_onsets_at': 'SynthProperties', 'section_seats': 'SynthProperties',
+                'section_position_x': 'SynthProperties', 'hrtf_at': 'SynthProperties',
+                '_section_salt': 'SynthProperties'}
+
+
 def harmonic_voice(cls):
     """Whether native/voice.c plays cls as a harmonic voice (kind 4): a
     plucked string's series through its pluck's comb, on a FormantBody (the
-    guitars) -- its B the class's, or the steel's law -- and none of the
-    extras a note of it would take elsewhere."""
+    guitars), or a bowed string's (the violin family: a section of players,
+    each a few cents off, with its own vibrato, entry and desk) -- its B the
+    class's, or the steel's law -- and none of the extras a note of it would
+    take elsewhere."""
     import tonelib as T
-    if not (issubclass(cls, T.PluckedStringProperties) and issubclass(cls, T.FormantBody)):
+    if not issubclass(cls, T.FormantBody):
         return False
-    if any(_owner(cls, n) != o for n, o in _HARMONIC_OWN.items()):
+    own = _HARMONIC_OWN
+    if issubclass(cls, (T.ViolinProperties, T.ViolaProperties, T.CelloProperties, T.ContrabassProperties)):
+        if not 1 <= cls.section_players <= 16:
+            return False
+        own = dict(own, unison_voices='SectionMixin', voice_vibrato='SectionMixin', **_SECTION_OWN)
+    elif not issubclass(cls, T.PluckedStringProperties):
+        return False
+    if any(_owner(cls, n) != o for n, o in own.items()):
         return False
     law = _owner(cls, 'inharmonicity_coefficient_for_frequency')
     if cls.inharmonicity_dynamic and not (law == 'SteelGuitarProperties' and getattr(cls, 'inharmonicity_law', None)):
@@ -928,6 +947,22 @@ def snapshot(props):
             s.afm[i][:] = [float(x) for x in row]
         for i, row in enumerate(p.body_trim_db or ()):
             s.bt[i][:] = [float(x) for x in row]
+        if isinstance(p, T.SectionMixin):
+            # a section: its players, their vibratos and entries, their desks
+            # (section_position_x, less the voice's place: the note's is added)
+            n = int(p.section_players)
+            s.sect_n, s.sect_vib = n, 1
+            s.sect_spread_cents, s.sect_vib_cents = p.section_spread_cents, p.section_vibrato_cents
+            s.sect_vib_hz[:] = [float(x) for x in p.section_vibrato_hz]
+            s.sect_onset_ms = p.section_onset_ms
+            s.sect_ofm = getattr(p, 'unison_onset_fraction_max', 0.25)
+            s.sect_seats = int(bool(p.section_width_m) and n > 1)
+            if s.sect_seats:
+                import random
+                w = p.section_width_m
+                for i in range(n):
+                    rng = random.Random(0x5EA7 + i * 7919 + p._section_salt() * 65537)
+                    s.sect_dx[i] = w * ((2.0 * i / float(n - 1)) - 1.0 + rng.uniform(-0.5, 0.5) / n)
     elif s.kind == 1:
         if isinstance(p, T.SfxThroatProperties):
             # a throat's pulse: its tilt, mouth and vowel (the note's, nv_note), its breath
@@ -1249,9 +1284,9 @@ def note_class(cls):
                        and not (getattr(cls, 'strike_flam_exp_db', 0.0) or 0.0)))
               and len(getattr(cls, 'strike_noise_db', ()) or ()) <= 32)
         if ok:
-            # a section's players and their onsets: none for one instrument (its prototype asked)
+            # a section's players and their onsets: none for one instrument, or a bowed string's
             p = v[2]
-            ok = not (hasattr(p, 'section_seats') and p.section_seats()) and not any(
+            ok = harmonic_voice(cls) or not (hasattr(p, 'section_seats') and p.section_seats()) and not any(
                 hasattr(p, 'section_onsets_at') and p.section_onsets_at(f) for f in (27.5, 261.6, 4186.0))
         if not ok:
             _NOTE[cls] = False
@@ -1322,6 +1357,21 @@ def note_class(cls):
         k.gate_time = float(getattr(cls, 'gate_time', None) or 0.0)
         k.played_backwards = int(bool(getattr(cls, 'played_backwards', False)))
         k.bendable = int(bool(getattr(cls, 'pitch_bendable', True)))
+        # the sound controls it answers, and where it starts from
+        sc = T.sound_controls_of(cls)
+        names = [T.SOUND_CC[c] for c in sorted(T.SOUND_CC)]
+        k.snd_mask = sum(1 << i for i, nm in enumerate(names) if nm in sc)
+        bias = getattr(cls, 'sound_bias', None) or {}
+        k.snd_bias[:] = [float(bias.get(nm, 0.0)) for nm in names]
+        k.snd_time_range, k.snd_rate_range, k.snd_delay_s = (T.SOUND_TIME_RANGE, T.SOUND_VIB_RATE_RANGE,
+                                                              T.SOUND_VIB_DELAY_S)
+        # its glide
+        gm = getattr(cls, 'glide_mechanism', None)
+        k.glide_mech = 0 if not gm else 2 if gm == 'circuit' else 3 if gm == 'valve' else 1
+        gr = getattr(cls, 'glide_reach_semitones', None)
+        k.glide_reach = math.nan if gr is None else float(gr)
+        k.porta_fast, k.porta_slow = T.PORTA_SEMITONE_FAST, T.PORTA_SEMITONE_SLOW
+        k.porta_d_semi, k.porta_settle = T._PORTA_D_SEMI, T.PORTA_SETTLE_TAUS
         if breath_noise(cls):
             k.n_bn, k.bn_rows, k.bn_fade_s = (len(cls.breath_noise_db), int(getattr(cls, 'breath_noise_rows', 1)),
                                                float(cls.breath_noise_fade_s))

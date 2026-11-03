@@ -6216,6 +6216,7 @@ def _tone_in(em, props, nt, gain, rank_B, sjit_n, reflect):
     P = props
     t = _NV.ToneIn()
     t.f0, t.B, t.gain = nt.f0, rank_B, gain
+    t.dur = nt.off - nt.on
     t.non, t.noff, t.fade, t.rel, t.chiff = nt.non, nt.noff, nt.fade, nt.rel, nt.chiff
     t.cv, t.cc, t.crl, t.sjit, t.csc = nt.cv, nt.cc, nt.crl, sjit_n, nt.csc
     t.li, t.ri, t.sustain_level = nt.li, nt.ri, P.sustain_level
@@ -6235,6 +6236,8 @@ def _tone_in(em, props, nt, gain, rank_B, sjit_n, reflect):
     t.listener_distance, t.head_radius = P.listener_distance, P.head_radius
     t.pan_angle = getattr(P, 'pan_angle', 0.0)
     t.room_bands[:] = list(em.ROOM_BANDS)
+    t.planes[:] = _NV.room_walls(P)         # (a section's players' images)
+    t.order = int(P.reflection_order)
     return t
 
 
@@ -6244,8 +6247,11 @@ def _tone_native(em, props, nt, stops, onsets, seats, mls, _als, _hx, _hperc, _p
     if len(stops) != 1:
         return None
     key, ratio, gain, *rest = stops[0]
-    if rest or ratio != 1.0 or nt.organ or _sir is not None or seats or onsets or mls > 0.0:
+    if rest or ratio != 1.0 or nt.organ or _sir is not None or mls > 0.0:
         return None
+    import native as _NV
+    if (seats or onsets) and not _NV.harmonic_voice(type(props)):
+        return None                         # (a section's players: a bowed string's alone)
     if _als is not None or _hx is not None or _hperc or _pjit:
         return None
     P = props
@@ -6275,7 +6281,7 @@ def _tone_native(em, props, nt, stops, onsets, seats, mls, _als, _hx, _hperc, _p
     else:
         imgs, nsurf, surf, img, mir = [], np.zeros(1, np.int32), np.zeros(1, np.int32), np.zeros(3), np.zeros(3)
     t = _tone_in(em, P, nt, gain, rank_B, sjit_n, reflect)
-    cap = (P.max_harmonic + 1) * 3 * (1 + len(imgs)) + 16
+    cap = (P.max_harmonic + 1) * 3 * max(1, getattr(P, 'section_players', 1)) * (1 + len(imgs)) + 16
     rows = np.empty((cap, len(EMIT_COLS)))
     trans = np.empty((P.max_harmonic + 1, 3))
     ntr = ctypes.c_int(0)
@@ -6457,6 +6463,9 @@ def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None, choked=None)
             print("  native channel DIFFERS (ch %d note %d at %.3f s): %s" % (nt.ch, nt.note, nt.on, ', '.join(bad)))
 
 
+# THE SOUND CONTROLS THE ENGINE TAKES (CC72, 73, 76-78): a note's times and
+# vibrato; CC71, 74 and 75 shape its finished rows (_snd_finish), Python's
+_NV_SOUND = frozenset(('attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'))
 SONG_STATS = [0, 0]     # notes whose channel questions were checked, that differed
 READING_STATS = [0, 0]  # files whose check song is the engine's own reading; whose notes need passes it lacks
 
@@ -6472,8 +6481,10 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     K = _NV.note_class(nt.pc)
     if K is None or nt.organ or len(stops) != 1 or tuple(stops[0]) != ("_", 1.0, 1.0):
         return None
-    if _sir is not None or _als is not None or seats or onsets or mls > 0.0:
+    if _sir is not None or _als is not None or mls > 0.0:
         return None
+    if (seats or onsets) and not _NV.harmonic_voice(type(P)):
+        return None                         # (a section's players: a bowed string's alone)
     if T.choir_of(P, "_") or T.rank_detune_cents(P, "_", nt.note) or em.pos_x != getattr(P, 'position_x', 0.0):
         return None
     if _native_ready(em, P, reverse_ok=True) is None:      # (the engine plays a tape backwards)
@@ -6497,6 +6508,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.stroke_tilt = getattr(P, 'stroke_tilt_db', math.nan)
     n.stroke_mouth = getattr(P, 'stroke_formant_scale', math.nan)
     n.stroke_morph = getattr(P, 'stroke_formant_morph', math.nan)
+    n.snd_at, n.snd_rt = em.snd_at, em.snd_rt      # (CC73 and CC72's scales)
     n.has_nx, n.nx = int(nx is not None), (nx if nx is not None else 0.0)
     n.mcut, n.slurred, n.slur_out = int(bool(mcut)), int(bool(slurred)), int(bool(slur_out))
     lo, hi = getattr(nt.pc, 'string_detune_range', (0.0, 0.0))
@@ -6521,7 +6533,8 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     ni = min(64, sum(6 * 5 ** k for k in range(_o)))      # the images there can be, at most
     cap = ((K.n_strike * max(1, K.n_flam, K.n_ft) + 1) + sum(K.lay_n[:K.n_layer]) + 2 * K.n_nb * K.noise_rows
            + K.n_bn * K.bn_rows
-           + mh * 3 * (1 + ni)) + 16 + max(1, npar * (npar + 1) // 2) * (1 + ni)
+           + mh * 3 * max(1, getattr(P, 'section_players', 1)) * (1 + ni)) + 16 \
+        + max(1, npar * (npar + 1) // 2) * (1 + ni)
     if K.played_backwards:
         cap *= 4                            # (a row reversed: its three decays and the chiff's swell)
     rows = np.empty((cap, len(EMIT_COLS)))
@@ -7415,6 +7428,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _GL = [0.0, 0.05, 0.0]   # per-note portamento [g = ftgt/fsrc - 1, tau, cutoff]
     _VB = [0.0, 5.5, 0.0]    # per-VOICE vibrato [depth fraction, rate Hz, phase rad]
     em.vibrato_delay = 0.0             # per-note vibrato delay, seconds (CC78); 0 = none
+    em.snd_at = em.snd_rt = 0.0        # per-note CC73 and CC72 time scales, for the engine; 0 = none
     em.jitter_scale = 1.0              # per-note pitch-jitter frequency scale (1 + pitch_jitter), times a whole transposition
     _NYQ_OM = 0.98 * math.pi  # 0.49 SR: a transposed note's rows were placed under 0.45 SR before its scale
     em.transposed = False           # this note is transposed whole: only then is the guard on (other
@@ -8543,11 +8557,14 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _sdd = dict(_sdd)
                 _sdd['brightness'] = T.mpe_timbre(_sdd.get('brightness', 0.0), _mb)
         _sd = {_k: _d for _k, _d in _sdd.items() if _k in _sctl} if _sctl else {}
+        em.snd_at = em.snd_rt = 0.0     # (the engine's: the scales, 0 none)
         if _sd:
             if 'attack' in _sd:
-                at *= T.sound_time_scale(_sd['attack'])
+                em.snd_at = T.sound_time_scale(_sd['attack'])
+                at *= em.snd_at
             if 'release' in _sd:
-                rt *= T.sound_time_scale(_sd['release'])
+                em.snd_rt = T.sound_time_scale(_sd['release'])
+                rt *= em.snd_rt
             if 'vib_depth' in _sd:
                 _SV[0] = _sd['vib_depth']
             if 'vib_rate' in _sd:
@@ -8831,7 +8848,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _MOOG_KVAR, _MOOG_MKI, _MOOG_MPC, _MOOG_MPI, _MOOG_MPK, _MOOG_MPKN, _MOOG_MPR,
                 _SND_TL, _VB, _kn_moves, _mmgr, _sbias, _sctl, _snd_d, emit_partial, stops)
         _wn = None
-        if _vst0 is not None and em.nsnap is not None and not _sd and _XP == 1.0 and not (_hx or _hperc):
+        # (the engine's sound controls: a time or the vibrato, not the colour CC71/74/75 shape)
+        if (_vst0 is not None and em.nsnap is not None and set(_sd) <= _NV_SOUND and _XP == 1.0
+                and not (_hx or _hperc)):
             _wn = _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, _vst0, _eff,
                                      _nx, _mcut, _slurred, (nt.ch, nt.note, nt.on) in _SLUR_OUT,
                                      _SONG if choked is None else None, _off_key,

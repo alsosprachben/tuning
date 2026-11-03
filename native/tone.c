@@ -48,6 +48,12 @@ static void hrtf_at(const VoiceSnap *v, const ToneIn *t, double position_x, doub
     }
 }
 
+/* SynthProperties.section_seats()[i]: player i's ears at its desk */
+void nv_section_seat(const VoiceSnap *v, const ToneIn *t, int i, double *out)
+{
+    hrtf_at(v, t, t->pos_x_props + v->sect_dx[i], t->pos_z, t->listener_distance, out);
+}
+
 typedef struct {
     double *rows;
     int n, cap;
@@ -268,6 +274,38 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
     double terms_main[9 * 64], terms_u[9 * 64];
     double sr = t->sr;
     double VB0[3] = {0.0, 5.5, 0.0};
+    /* A SECTION'S PLAYERS (SectionMixin): each one's entry (section_onsets_at)
+       and, seated, each one's ears (section_seats: hrtf_at of its desk), the
+       note's own the first player's */
+    int ns = v->sect_n > 1 ? v->sect_n : 0;
+    int ons_set = ns && v->sect_onset_ms != 0.0;
+    double ons[16], seat[16][4];
+    ToneIn tl, tu;
+    if (ons_set)
+        for (int i = 0; i < ns; i++)
+            ons[i] = nv_section_onset(v->section_salt, section_midi(t->f0), i, v->sect_onset_ms);
+    if (ns && v->sect_seats) {
+        for (int i = 0; i < ns; i++)
+            nv_section_seat(v, t, i, seat[i]);
+        tl = *t;
+        tl.li = seat[0][0]; tl.ri = seat[0][1];
+        tl.dl = seat[0][2] * sr; tl.dr = seat[0][3] * sr;
+        t = &tl;
+    }
+    /* ...and each player's images, from its own desk (the note's are the
+       first player's place: the voice's) */
+    static _Thread_local int pn_img[16], p_nsurf[16][64], p_surf[16][64 * 8];
+    static _Thread_local double p_img[16][64 * 3], p_mir[16][64 * 3];
+    if (ns && v->sect_seats && t->reflect) {
+        if (t->order > 8)
+            return -2;
+        for (int i = 1; i < ns; i++) {
+            pn_img[i] = nv_images(t->planes, t->order, (t->pos_x_props + v->sect_dx[i]) * 1.0, v->room[0] * 1.0,
+                                  t->pos_z * 1.0, 64, p_nsurf[i], p_surf[i], p_img[i], p_mir[i]);
+            if (pn_img[i] < 0)
+                return -2;              /* more than 64 images: not the C's */
+        }
+    }
     double pos_x = t->pos_x0;
     *ntrans = 0;
     for (int m = 1; m < v->max_harmonic + 1; m++) {
@@ -292,7 +330,7 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
         double sj = t->pjit ? nv_partial_jitter(v, m) : t->sjit;
         if (sjit_last)
             *sjit_last = sj;
-        double non_m = t->non + 0.0;
+        double non_m = t->non + (ons_set ? pymin(ons[0], 0.25 * t->dur) * sr : 0.0);
         double mph = 0.0;
         if (t->sps > 0.0)                           /* where the stick landed against its nodes */
             mph = PI * (double)(pyr_genrand(rs) >> 31) * t->sps;
@@ -365,16 +403,30 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
             if (uf <= 0 || uf > sr / 2)
                 continue;
             double ugL = gL * gm, ugR = gR * gm;
-            double non_u = t->non + 0.0;
+            const ToneIn *tp = t;
+            double upos = pos_x;
+            if (ns && v->sect_seats && ui + 1 < ns) {
+                /* this player's chair, its shadow read at the nominal harmonic */
+                upos = t->pos_x_props + v->sect_dx[ui + 1];
+                ugL = gM * gm * nv_hrtf_gain(v, hf, seat[ui + 1][0]);
+                ugR = gM * gm * nv_hrtf_gain(v, hf, seat[ui + 1][1]);
+                tu = *t;
+                tu.dl = seat[ui + 1][2] * sr; tu.dr = seat[ui + 1][3] * sr;
+                tp = &tu;
+            }
+            double non_u = t->non + ((ons_set && ui + 1 < ns) ? pymin(ons[ui + 1], v->sect_ofm * t->dur) * sr : 0.0);
             int ntu = 0;
             if (t->reflect) {
-                ntu = note_terms(v, t, uf, pos_x, t->pos_z, nimg, nsurf, surf, img, mir, terms_u);
+                ntu = (ns && v->sect_seats && ui + 1 < ns)
+                      ? note_terms(v, tp, uf, upos, t->pos_z, pn_img[ui + 1], p_nsurf[ui + 1], p_surf[ui + 1],
+                                   p_img[ui + 1], p_mir[ui + 1], terms_u)
+                      : note_terms(v, tp, uf, upos, t->pos_z, nimg, nsurf, surf, img, mir, terms_u);
                 if (ntu < 0)
                     return -1;
             }
-            if (!emit(v, t, &R, qacc, azimuth, terms_u, ntu, 2 * PI * uf / sr, ugL, ugR, gM * gm, uf, non_u,
+            if (!emit(v, tp, &R, qacc, azimuth, terms_u, ntu, 2 * PI * uf / sr, ugL, ugR, gM * gm, uf, non_u,
                       t->noff, t->fade, t->rel, t->chiff, ulr, pd[3], pd[2], t->sustain_level, cvp, t->cc,
-                      t->crl, sj, t->csc, t->gr, t->cr, 2 * PI * uph + 0.0, (double)(ui + 1), VB, pos_x, 0))
+                      t->crl, sj, t->csc, t->gr, t->cr, 2 * PI * uph + 0.0, (double)(ui + 1), VB, upos, 0))
                 return -1;
         }
         pos_x = t->pos_x_props;     /* em.pos_x = the voice's position, after each harmonic */

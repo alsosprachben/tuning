@@ -89,6 +89,10 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         at = at + K->speech_cycles / f0;
         rt = rt + K->speech_cycles / f0;
     }
+    if (n->snd_at != 0.0)               // CC73 and CC72, where the class answers them
+        at *= n->snd_at;
+    if (n->snd_rt != 0.0)
+        rt *= n->snd_rt;
     double fade = pymax(1e-4, pymin(at, K->attack_fraction_max * dur)) * SR;
     double rel = pymax(1e-4, K->release_fraction_set ? pymin(rt, K->release_fraction_max * dur) : rt) * SR;
     if (n->slur_out && K->slur_cuts_release)
@@ -142,6 +146,14 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     memcpy(t.room_bands, n->room_bands, sizeof t.room_bands);
     t.rev = K->played_backwards;            // (em.reverse: its rows emitted backwards)
     t.rev_n0 = non; t.rev_arr = noff;
+    memcpy(t.planes, n->planes, sizeof t.planes);
+    t.order = n->order;
+    if (s.sect_n > 1 && s.sect_seats) {     // A SECTION'S: the note's ears are its first player's desk's
+        double e[4];
+        nv_section_seat(&s, &t, 0, e);
+        t.li = e[0]; t.ri = e[1];
+        t.dl = e[2] * SR; t.dr = e[3] * SR;
+    }
 
     int total = 0, no_refl = n->no_reflections;
 
@@ -420,6 +432,43 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         memcpy(n.planes, k->room_planes, sizeof n.planes);
         n.order = k->room_order;
         n.no_reflections = 0;
+        // CC71-78 AT ITS ONSET (_snd_d), from the class's own starting point,
+        // those it answers: its times and its vibrato here; its colour
+        // (CC71, 74, 75: _snd_finish's) is Python's
+        double sd[8];
+        nv_song_sound(song, ch, dv[0], sd);
+        bool has[8];
+        for (int q = 0; q < 8; q++) {
+            sd[q] += k->snd_bias[q];
+            has[q] = ((k->snd_mask >> q) & 1) && sd[q] != 0.0;
+        }
+        if (has[0] || has[3] || has[4])
+            return -(1 + i);
+        n.snd_rt = has[1] ? pow(k->snd_time_range, sd[1]) : 0.0;
+        n.snd_at = has[2] ? pow(k->snd_time_range, sd[2]) : 0.0;
+        n.sv[1] = has[5] ? pow(k->snd_rate_range, sd[5]) : tmpl->sv[1];
+        n.sv[0] = has[6] ? sd[6] : tmpl->sv[0];
+        n.vibrato_delay = has[7] ? nv::pymax(0.0, sd[7]) * k->snd_delay_s : tmpl->vibrato_delay;
+        // ITS GLIDE (the note's portamento: _GLIDE_SRC), where its mechanism
+        // reaches -- the tuning table's own ratio, at the CC5 in force
+        int cc5 = 0, src = nv_song_glide(song, i, &cc5);
+        if (src >= 0 && k->glide_mech) {
+            if (k->glide_mech == 3 && std::abs(iv[0] - src) >= 2)
+                return -(1 + i);            // a valved gliss: a run of notes (_prep_gliss), Python's
+            double tab[128];
+            nv_song_table(song, ch, dv[0], tab);
+            if (src < 128 && tab[src] > 0.0
+                && (std::isnan(k->glide_reach) || std::abs(iv[0] - src) <= k->glide_reach + 1e-9)) {
+                double ft = tab[iv[0]], fs = tab[src];
+                double v = nv::pymin(127.0, nv::pymax(0.0, (double)cc5)) / 127.0;
+                double t1 = k->porta_fast * pow(k->porta_slow / k->porta_fast, v);
+                double tau = k->glide_mech == 2 ? nv::pymax(1e-4, t1)
+                                                : nv::pymax(1e-4, t1 * fabs(1.0 / fs - 1.0 / ft) / k->porta_d_semi);
+                n.gl[0] = ft / fs - 1.0;
+                n.gl[1] = tau;
+                n.gl[2] = tau * k->porta_settle;
+            }
+        }
         if (k->init.rnd) {                  // RandomStrike's draws, from the [RND] stream's
             n.rnd_draws[0] = pyr_gauss(&rnd, 0.0, k->init.rnd_level_db);
             n.rnd_draws[1] = pyr_gauss(&rnd, 0.0, k->init.rnd_effort_db);

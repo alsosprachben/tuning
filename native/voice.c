@@ -412,8 +412,64 @@ void nv_aftersound(const VoiceSnap *v, double frequency, double decay_rate, doub
 
 /* GrandPianoProperties.unison_voices: [(gain, offset Hz, ratio, decay, phase)]
  * in out[5k..5k+4]; returns how many */
+/* round(69 + 12 log2(f/440)): the note a section's seeds key on */
+static long long section_midi(double frequency)
+{
+    return (long long)rint(69 + 12 * log(frequency / 440.0) / log(2.0));
+}
+
+/* sum() of floats as Python's (3.12: Neumaier's compensated sum) */
+static double py_fsum(const double *x, int n)
+{
+    double r = 0.0, c = 0.0;
+    for (int i = 0; i < n; i++) {
+        double t = r + x[i];
+        if (fabs(r) >= fabs(x[i]))
+            c += (r - t) + x[i];
+        else
+            c += (x[i] - t) + r;
+        r = t;
+    }
+    if (c != 0.0 && isfinite(c))
+        r += c;
+    return r;
+}
+
+/* tonelib.section_onset: how late player index is, in seconds */
+double nv_section_onset(long long salt, long long midi, int index, double width_ms)
+{
+    if (width_ms == 0.0)
+        return 0.0;
+    uint64_t x = (uint64_t)(salt & 0xFFFFFFFFLL) * 0x9E3779B1ULL;
+    x = x + ((uint64_t)midi << 20) + (uint64_t)(long long)index;
+    x = x + 0x9E3779B97F4A7C15ULL;
+    x ^= x >> 30; x = x * 0xBF58476D1CE4E5B9ULL;
+    x ^= x >> 27; x = x * 0x94D049BB133111EBULL;
+    x ^= x >> 31;
+    return ((double)x / 18446744073709551616.0) * (width_ms / 1000.0);
+}
+
 int nv_unison_voices(const VoiceSnap *v, double frequency, int harmonic, double harmonic_decay, double *out)
 {
+    if (v->sect_n > 1) {                        /* SectionMixin: the other players */
+        int n = v->sect_n;
+        long long midi = section_midi(frequency);
+        PyRandom r;
+        pyr_seed(&r, 0x5EC0 + midi + v->section_salt * 65537);
+        double cents[16];
+        for (int i = 0; i < n - 1; i++)
+            cents[i] = pyr_uniform(&r, -v->sect_spread_cents, v->sect_spread_cents);
+        double mean = py_fsum(cents, n - 1) / (double)(n - 1);
+        for (int i = 0; i < n - 1; i++)
+            cents[i] = cents[i] - mean * (double)(n - 1) / (double)n;
+        for (int i = 0; i < n - 1; i++) {
+            out[5 * i + 0] = 1.0; out[5 * i + 1] = 0.0;
+            out[5 * i + 2] = pow(2.0, cents[i] / 1200.0) - 1.0;
+            out[5 * i + 3] = harmonic_decay;
+            out[5 * i + 4] = pyr_random(&r);
+        }
+        return n - 1;
+    }
     if (v->pea) {                               /* SambaWhistleProperties: the pea's comb, +-k */
         int n = 0;
         for (int k = 0; k < v->n_unison; k++) {
@@ -536,6 +592,17 @@ static int solo_vibrato(const VoiceSnap *v, double frequency, int index, double 
 
 int nv_voice_vibrato(const VoiceSnap *v, double frequency, int index, double *out)
 {
+    if (v->sect_vib) {                          /* SectionMixin: each player's own */
+        if (v->sect_vib_cents == 0.0)
+            return 0;
+        long long midi = section_midi(frequency);
+        PyRandom r;
+        pyr_seed(&r, 0x71B0 + midi * 64 + index + v->section_salt * 8191);
+        out[0] = (pow(2.0, v->sect_vib_cents / 1200.0) - 1.0) * pyr_uniform(&r, 0.7, 1.0);
+        out[1] = pyr_uniform(&r, v->sect_vib_hz[0], v->sect_vib_hz[1]);
+        out[2] = pyr_uniform(&r, 0.0, 6.283185307179586);
+        return 1;
+    }
     if (v->pea) {                               /* SambaWhistleProperties: the pea's flutter */
         out[0] = pow(2.0, v->pea_vibrato_cents * 1.4142 / 1200.0) - 1.0;
         out[1] = v->pea_vibrato_hz;

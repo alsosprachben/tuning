@@ -57,6 +57,7 @@ def main(argv):
         r = subprocess.run([exe, nvx, mid, nv] + tun, capture_output=True, text=True)
         if r.returncode == 2:
             refused += 1
+            print("  %s: %s" % (name, r.stderr.strip().replace("nvrender: ", "")))
             continue
         if r.returncode != 0:
             differ += 1

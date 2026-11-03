@@ -227,6 +227,142 @@ struct Song {
     // each note's -- slurred, and a slur leaving it (_prep_slur_out)
     std::set<std::tuple<long long, int, int>> legato;
     std::vector<char> slurred, slur_out;
+    // ITS SOUND CONTROLS (sndev, and gmon's resets: ch -1, cc -1), in the
+    // file's order
+    struct Snd {
+        long long ch;
+        double t;
+        int cc, v;
+    };
+    std::vector<Snd> snd;
+    // ITS GLIDES (_prep_glide_sources, from finish): each note's source key, -1 none
+    std::vector<int> glide_src;
+
+    // _snd_d: CC71-78's d (sound_offset) in force on channel c at t, 0 none
+    void sound_at(long long c, double t, double *d) const
+    {
+        for (int i = 0; i < 8; i++)
+            d[i] = 0.0;
+        for (const Snd &e : snd) {
+            if (e.ch != c && e.ch != -1)
+                continue;
+            if (e.t > t + 1e-9)
+                break;
+            if (e.cc < 0)
+                for (int i = 0; i < 8; i++)
+                    d[i] = 0.0;
+            else
+                d[e.cc - 71] = ((double)e.v - 64.0) / 64.0;
+        }
+    }
+
+    // bisect.bisect_right(a, (t, 128)) on a list of (time, value) pairs
+    static int bisect_tv(const std::vector<std::pair<double, int>> &a, double t)
+    {
+        int lo = 0, hi = (int)a.size();
+        while (lo < hi) {
+            int mid = (lo + hi) / 2;
+            if (t < a[mid].first || (t == a[mid].first && 128 < a[mid].second))
+                hi = mid;
+            else
+                lo = mid + 1;
+        }
+        return lo;
+    }
+
+    // _porta_cc5_at: the CC5 in force on channel c at t (0 before any)
+    int cc5_at(long long c, double t) const
+    {
+        const Channel *C = get(c);
+        if (!C)
+            return 0;
+        std::vector<std::pair<double, int>> ev;
+        for (const CC &e : C->ccs)
+            if (e.cc == 5)
+                ev.push_back(std::make_pair(e.t, e.v));
+        if (ev.empty())
+            return 0;
+        int i = bisect_tv(ev, t) - 1;
+        return i >= 0 ? ev[i].second : 0;
+    }
+
+    // _prep_glide_sources: where each note glides from -- the channel's
+    // latest CC84 since its last note (spent once, CC84_CANCEL none), else
+    // under CC65 its last note's key from a strictly earlier onset
+    void glides()
+    {
+        std::map<long long, std::vector<std::pair<double, double>>> on;     // CC65's spans
+        std::map<long long, std::vector<std::pair<double, int>>> ctl;       // CC84's
+        for (auto &c : ch) {
+            double dn = -1.0;
+            bool down = false;
+            for (const CC &e : c.second.ccs) {
+                if (e.cc == 84)
+                    ctl[c.first].push_back(std::make_pair(e.t, e.v));
+                if (e.cc != 65)
+                    continue;
+                if (e.v >= 64 && !down) {
+                    dn = e.t;
+                    down = true;
+                } else if (e.v < 64 && down) {
+                    on[c.first].push_back(std::make_pair(dn, e.t));
+                    down = false;
+                }
+            }
+            if (down)
+                on[c.first].push_back(std::make_pair(dn, total));
+        }
+        glide_src.assign(notes.size(), -1);
+        std::vector<int> idx;
+        for (size_t i = 0; i < notes.size(); i++)
+            if (!notes[i].inner && !notes[i].stroked)
+                idx.push_back((int)i);
+        std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) {
+            const Ev &x = notes[a], &y = notes[b];
+            if (x.on != y.on)
+                return x.on < y.on;
+            if (x.ch != y.ch)
+                return x.ch < y.ch;
+            return x.note < y.note;
+        });
+        std::map<long long, std::pair<double, int>> prev;     // the channel's last note started
+        std::map<long long, int> used;                          // ...and its last CC84 spent
+        for (int i : idx) {
+            const Ev &e = notes[i];
+            int src = -1;
+            auto ct = ctl.find(e.ch);
+            if (ct != ctl.end()) {
+                int j = bisect_tv(ct->second, e.on) - 1;
+                auto u = used.find(e.ch);
+                if (j >= 0 && j != (u == used.end() ? -1 : u->second)) {
+                    auto pv = prev.find(e.ch);
+                    if (pv == prev.end() || ct->second[j].first >= pv->second.first) {
+                        used[e.ch] = j;
+                        if (ct->second[j].second != 128)
+                            src = ct->second[j].second;
+                    }
+                }
+            }
+            if (src < 0) {
+                bool down = false;
+                auto o = on.find(e.ch);
+                if (o != on.end())
+                    for (const auto &sg : o->second)
+                        if (sg.first <= e.on && e.on < sg.second) {
+                            down = true;
+                            break;
+                        }
+                auto pv = prev.find(e.ch);
+                if (down && pv != prev.end() && pv->second.first < e.on)
+                    src = pv->second.second;
+            }
+            if (src >= 0 && src != e.note)
+                glide_src[i] = src;
+            auto pv = prev.find(e.ch);
+            if (pv == prev.end() || e.on >= pv->second.first)
+                prev[e.ch] = std::make_pair(e.on, e.note);
+        }
+    }
 
     bool in_group(int prog, int key, int k) const
     {
@@ -605,6 +741,7 @@ struct Song {
         slurs();
         for (auto &c : ch)
             c.second.finish(total);
+        glides();
         // _next_same: the notes by onset, latest first (stable), each key's
         // next strike the one seen before it
         std::vector<int> idx(notes.size());
@@ -737,6 +874,26 @@ void nv_song_note(void *s, long long ch, int note, double on, double off, int ve
 }
 
 int nv_song_n_notes(void *s) { return (int)((nv::Song *)s)->notes.size(); }
+
+// a sound controller (CC71-78) on channel ch at t, in the file's order; ch -1
+// and cc -1: GM System On or GS Reset, every channel's back to 64
+void nv_song_snd(void *s, long long ch, double t, int cc, int v)
+{
+    ((nv::Song *)s)->snd.push_back(nv::Song::Snd{ch, t, cc, v});
+}
+
+// CC71-78's d in force on channel ch at t (d[0] CC71's), 0 none
+void nv_song_sound(void *s, long long ch, double t, double *d) { ((nv::Song *)s)->sound_at(ch, t, d); }
+
+// note i's glide: the key it glides from (-1 none), and through *cc5 the CC5 in force at its onset
+int nv_song_glide(void *s, int i, int *cc5)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (i < 0 || i >= (int)S->glide_src.size() || S->glide_src[i] < 0)
+        return -1;
+    *cc5 = S->cc5_at(S->notes[i].ch, S->notes[i].on);
+    return S->glide_src[i];
+}
 
 // note i one of a gesture's strokes (_stroked)
 int nv_song_stroked(void *s, int i) { return ((nv::Song *)s)->notes[i].stroked; }

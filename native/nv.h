@@ -156,6 +156,14 @@ typedef struct {
     int fbody, n_fm, n_afm, n_bt;
     double formant_floor, fm[16][3], afm[8][3], bt[32][2];
     double comb[129];
+    /* A SECTION (SectionMixin, on a kind 4 voice: the bowed strings): sect_n
+       players, each a few cents off its neighbours (unison_voices), with a
+       vibrato of its own (voice_vibrato, sect_vib) and its own entry
+       (section_onset, the extras' capped at sect_ofm of the note); seated
+       (sect_seats) sect_dx[i] metres from the voice's place
+       (section_position_x) */
+    int sect_n, sect_vib, sect_seats;
+    double sect_spread_cents, sect_vib_cents, sect_vib_hz[2], sect_onset_ms, sect_ofm, sect_dx[16];
 } VoiceSnap;
 
 typedef struct {
@@ -243,12 +251,16 @@ typedef struct {
        each its strike's sign, pi * a random bit * sps (strike_phase_spread) */
     int pjit;
     double sps;
-    double dur;
-    int ssc;            /* each mode's level scattered (stroke_scatter: random.gauss) */         /* the note's length, s: the bloom's swell is held within it */
+    double dur;         /* the note's length, s: the bloom's swell is held within it */
+    int ssc;            /* each mode's level scattered (stroke_scatter: random.gauss) */
     /* a tape played backwards (played_backwards): every row reversed, from
        the strike at rev_n0 to its arrival at rev_arr (_Emitter.reverse) */
     int rev;
     double rev_n0, rev_arr;
+    /* the room's walls (nv_images' planes) and its order: a section's
+       players' images, each from its own desk */
+    double planes[6];
+    int order;
 } ToneIn;
 
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
@@ -367,6 +379,17 @@ typedef struct {
     double bn_fade_s;
     double bn_hz[64], bn_db[64];
     int bendable;                       // pitch_bendable: a wheel moves it (blockrender's bend row)
+    // CC71-78 AS IT ANSWERS THEM (sound_controls_of: bits in SOUND_CC's
+    // order, 71 first), its own starting point (sound_bias, d each), and
+    // tonelib's laws: time x/ snd_time_range, vibrato rate x/ snd_rate_range,
+    // its delay to snd_delay_s
+    int snd_mask;
+    double snd_bias[8], snd_time_range, snd_rate_range, snd_delay_s;
+    // ITS GLIDE (glide_mechanism: 0 none, 1 a hand's, 2 a circuit's, 3 a
+    // valve's), its reach in semitones (NaN: any), and tonelib's portamento
+    // laws (porta_semitone_time's ends, _PORTA_D_SEMI, PORTA_SETTLE_TAUS)
+    int glide_mech;
+    double glide_reach, porta_fast, porta_slow, porta_d_semi, porta_settle;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -395,6 +418,9 @@ typedef struct {
     // a throat's pulse (SfxThroatProperties): its tilt, mouth and vowel's
     // morph -- NaN, the class's own
     double stroke_tilt, stroke_mouth, stroke_morph;
+    // CC73 and CC72 (the sound controls the class answers): the attack's and
+    // the release's time scale, 0 none
+    double snd_at, snd_rt;
 } NoteIn;
 
 // What the note's setup worked out, beside its rows.
@@ -421,6 +447,9 @@ typedef struct {
     long long key, string, harm;
     double f, alpha, w, hl, hr, dl, dr, px;
 } StringMode;
+
+/* tone.c: a section's player i's ears at its desk (section_seats) */
+void nv_section_seat(const VoiceSnap *v, const ToneIn *t, int i, double *out);
 
 /* room.cpp: a source's image sources in the room (SynthProperties.image_sources) */
 int nv_images(const double *planes, int order, double sx, double sy, double sz, int cap,
@@ -450,6 +479,9 @@ void nv_song_cc(void *s, long long ch, double t, int cc, int v);
 void nv_song_note(void *s, long long ch, int note, double on, double off, int vel, double v7, double v11,
                   double pan, double trim, int prog, int drum);
 int nv_song_n_notes(void *s);
+void nv_song_snd(void *s, long long ch, double t, int cc, int v);
+void nv_song_sound(void *s, long long ch, double t, double *d);
+int nv_song_glide(void *s, int i, int *cc5);
 int nv_song_stroked(void *s, int i);
 void nv_song_add_stroke_rows(void *s, long long a, long long b);
 int nv_song_n_stroke_rows(void *s, long long *ab, int cap);
