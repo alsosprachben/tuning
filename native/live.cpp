@@ -131,6 +131,8 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
 long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                            const int *nreq, const double *req, double sr, const double *L, void **lobe,
                            long long **flips, long long *nflips);
+void nv_leslie_params(long n, const double *nf, const char *flip, const double *L, char *horn, float *fl, float *sh,
+                      double *nrm);
 
 long long nv_template(const NoteClass *const *K, const NoteIn *tmpl, const double *freq, const double *trim,
                       int program, int note, int vel, int fast, double **rowsp, const int *kind, double scale,
@@ -364,6 +366,15 @@ struct Cache {
         for (long long r : flips)
             if (r < P)
                 T.lflip[r] = 1;
+        // ...and its rows' lobes, a rotary voice's (live's leslie_params, done once here)
+        if (P && nc && nc->leslie && !les.empty()) {
+            std::vector<double> nf((size_t)P);
+            for (long long r = 0; r < P; r++)
+                nf[r] = (double)T.f4[2][r];
+            T.lhorn.resize(P); T.lfl.resize(P); T.lsh.resize(P); T.lnrm.resize(P);
+            nv_leslie_params((long)P, nf.data(), T.lflip.data(), les.data(), T.lhorn.data(), T.lfl.data(),
+                             T.lsh.data(), T.lnrm.data());
+        }
         // A HAMMOND'S CONTACTS (t["cof"]): each row's onset less its room
         // delay over the least (numpy: int64 - float32, as float64, truncated)
         if (P && nc && nc->organ && nc->organ->contact_on) {
@@ -499,6 +510,12 @@ struct Cache {
                 if (!T.cof.empty())
                     cut(R.cof, T.cof);
                 cut(R.lflip, T.lflip);
+                if (!T.lhorn.empty()) {
+                    cut(R.lhorn, T.lhorn);
+                    cut(R.lfl, T.lfl);
+                    cut(R.lsh, T.lsh);
+                    cut(R.lnrm, T.lnrm);
+                }
             }
         }
         return true;

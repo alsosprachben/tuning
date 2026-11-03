@@ -30,6 +30,11 @@ struct Template {
     // and the Leslie's crossover copies (lflip: on the other rotor)
     std::vector<long long> cof;
     std::vector<char> lflip;
+    // ...and each row's lobe, worked out at the build (live's leslie_params
+    // memo): its rotor, floor, sharpness and mean -- empty off the rotors
+    std::vector<char> lhorn;
+    std::vector<float> lfl, lsh;
+    std::vector<double> lnrm;
     // A HELD TEXTURE (held_texture, with a gate: the jet, the wind): a held
     // note after all -- its rows to the key-up but those that decay on their
     // own (rof) -- the gate the least it plays (min_hold samples; 0 none)

@@ -42,9 +42,11 @@ extern "C" int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, 
 extern "C" const OrganSpec *nv_tcache_organ(void *h, int program);
 extern "C" const NoteClass *nv_tcache_class(void *h, int program);
 extern "C" const nv::live::Template *nv_tcache_at(void *h, long i, long *n);
-extern "C" long nv_amp_live(const double *f, const double *a, const double *p, long n, double sr, double drive,
-                            double window_s, int oversample, int keep, double **out);
+extern "C" long nv_amp_live_t(const double *f, const double *a, const double *p, long n, double sr, double drive,
+                              double window_s, int oversample, int keep, double **out, unsigned threads);
 extern "C" void nv_leslie_lobe_of(double f, int horn, const double *L, double *fl, double *sh);
+extern "C" void nv_leslie_params(long n, const double *nf, const char *flip, const double *L, char *horn, float *fl,
+                                 float *sh, double *nrm);
 extern "C" void nv_scan_prep(const double *X, long n, const float *nf, const float *aL, const float *aR,
                              const long long *non, const float *rdl, int depth, int chorus, double sr, int *band,
                              double *dry, double *sc, long *ns, long **src, double **mm, double **cc);
@@ -158,6 +160,14 @@ static std::vector<long> once(const std::vector<long> &slots)
     u.erase(std::unique(u.begin(), u.end()), u.end());
     return u;
 }
+
+// a row set's Leslie lobes worked out ahead (a template's, a scanner copy's,
+// the valve's products': live's leslie_params memo), NULL none
+struct LobePre {
+    const char *horn = nullptr;
+    const float *fl = nullptr, *sh = nullptr;
+    const double *nrm = nullptr;
+};
 
 struct Slab {
     long cap;
@@ -544,23 +554,8 @@ struct Slab {
     void leslie_params(long n, const double *nf, const char *flip, std::vector<char> &horn, std::vector<float> &fl,
                        std::vector<float> &sh, std::vector<double> &nrm) const
     {
-        const double *L = les.data();
         horn.resize(n); fl.resize(n); sh.resize(n); nrm.resize(n);
-        double cc[256], g[256];
-        for (int k = 0; k < 256; k++)
-            cc[k] = 0.5 * (1.0 + cos((double)k * (2.0 * M_PI / 256.0)));
-        for (long j = 0; j < n; j++) {
-            double f = nf[j];
-            horn[j] = (f >= L[0]) ^ (flip && flip[j]);
-            double a, b;
-            nv_leslie_lobe_of(f, horn[j], L, &a, &b);
-            fl[j] = (float)a;
-            sh[j] = (float)b;
-            float hs = 0.5f * sh[j], om = 1.0f - fl[j];
-            for (int k = 0; k < 256; k++)
-                g[k] = (double)fl[j] + (double)om * pow(cc[k], (double)hs);
-            nrm[j] = (0.0 + pairwise_d(g, 256)) / 256.0;
-        }
+        nv_leslie_params(n, nf, flip, les.data(), horn.data(), fl.data(), sh.data(), nrm.data());
     }
 
     // live.Slab._doppler_to: the rotor rows' Doppler, from FAST_HZ's unit to
@@ -585,7 +580,7 @@ struct Slab {
     // place off the cabinet (az), their baseline; their Doppler a unit at
     // FAST_HZ, then at the rotors' rates
     void leslie_arm(const std::vector<long> &slots, const float *az, const float *nf32, const char *flip, long long n,
-                    double horn_rate, double drum_rate, const double *nf64 = nullptr)
+                    double horn_rate, double drum_rate, const double *nf64 = nullptr, LobePre pre = LobePre())
     {
         if (slots.empty())
             return;
@@ -594,9 +589,16 @@ struct Slab {
         std::vector<char> horn;
         std::vector<float> fl, sh;
         std::vector<double> nrm, nf(m);
-        for (long q = 0; q < m; q++)
-            nf[q] = nf64 ? nf64[q] : (double)nf32[q];      // (a scanner's copy: its float64 pitch)
-        leslie_params(m, nf.data(), flip, horn, fl, sh, nrm);
+        if (pre.horn) {                 // (worked out ahead: live's memo)
+            horn.assign(pre.horn, pre.horn + m);
+            fl.assign(pre.fl, pre.fl + m);
+            sh.assign(pre.sh, pre.sh + m);
+            nrm.assign(pre.nrm, pre.nrm + m);
+        } else {
+            for (long q = 0; q < m; q++)
+                nf[q] = nf64 ? nf64[q] : (double)nf32[q];  // (a scanner's copy: its float64 pitch)
+            leslie_params(m, nf.data(), flip, horn, fl, sh, nrm);
+        }
         for (long q = 0; q < m; q++) {
             long s = slots[q];
             ls_on[s] = 1;
@@ -1144,6 +1146,9 @@ struct Piano {
         std::vector<double> dry, sc;
         std::vector<long> src;
         std::vector<double> mm, cc;
+        std::vector<char> lhorn;            // tier B's copies' lobes (a rotary voice's), worked out with them
+        std::vector<float> lfl, lsh;
+        std::vector<double> lnrm;
     };
     std::map<std::tuple<const void *, int, int>, ScanPrep> scan_g;
     long long cur_blk = 128;
@@ -1171,6 +1176,17 @@ struct Piano {
         g.mm.assign(mm, mm + ns);
         g.cc.assign(cc, cc + 2 * ns);
         free(src); free(mm); free(cc);
+        if (!S.les.empty() && !R.lhorn.empty() && ns) {
+            std::vector<double> nf(ns);
+            std::vector<char> fl(ns);
+            for (long j = 0; j < ns; j++) {
+                nf[j] = (double)R.f4[F4_nf][g.src[j]] + scan[0] * g.mm[j];
+                fl[j] = R.lflip.empty() ? 0 : R.lflip[g.src[j]];
+            }
+            g.lhorn.resize(ns); g.lfl.resize(ns); g.lsh.resize(ns); g.lnrm.resize(ns);
+            nv_leslie_params(ns, nf.data(), fl.data(), S.les.data(), g.lhorn.data(), g.lfl.data(), g.lsh.data(),
+                             g.lnrm.data());
+        }
         return g;
     }
 
@@ -1226,6 +1242,18 @@ struct Piano {
         }
         scan_thread = std::thread([this] { scan_worker(); });
         scan_cv.notify_all();
+    }
+
+    static LobePre lobe_of_t(const nv::live::Template &R)
+    {
+        LobePre p;
+        if (!R.lhorn.empty()) {
+            p.horn = R.lhorn.data();
+            p.fl = R.lfl.data();
+            p.sh = R.lsh.data();
+            p.nrm = R.lnrm.data();
+        }
+        return p;
     }
 
     // live._scan_setting: the part's position on this channel, (depth, chorus); depth 0 off
@@ -1380,8 +1408,12 @@ struct Piano {
                     az[j] = f4c[24][j];
                     nf32[j] = f4c[F4_nf][j];
                 }
+                LobePre lp;
+                if (!g.lhorn.empty()) {
+                    lp.horn = g.lhorn.data(); lp.fl = g.lfl.data(); lp.sh = g.lsh.data(); lp.nrm = g.lnrm.data();
+                }
                 S.leslie_arm(ss, az.data(), nf32.data(), lfl.data(), n0, rotor_horn.rate, rotor_drum.rate,
-                             nf64.data());
+                             nf64.data(), lp);
             }
         };
         if (!cho) {
@@ -1405,7 +1437,7 @@ struct Piano {
         std::vector<long> cs = S.last_slots;
         if (p.leslie && !S.les.empty())
             S.leslie_arm(cs, R.f4[24].data(), R.f4[2].data(), R.lflip.empty() ? nullptr : R.lflip.data(), n0,
-                         rotor_horn.rate, rotor_drum.rate);
+                         rotor_horn.rate, rotor_drum.rate, nullptr, lobe_of_t(R));
         put(cs, g.sc, true);
         sidestamp();
     }
@@ -1423,7 +1455,24 @@ struct Piano {
         long src = 0;
         std::vector<double> prod;           // (Hz, amplitude, phase) each
         long long when = 0, jid = 0;
+        std::vector<char> lhorn;            // its products' lobes, worked out with them (on the rotors)
+        std::vector<float> lfl, lsh;
+        std::vector<double> lnrm;
     };
+
+    // the products' lobes, where the part is on the rotors (live's leslie_arm for them)
+    void amp_lobes(AmpOut &o) const
+    {
+        long n = (long)o.prod.size() / 3;
+        if (S.les.empty() || !n)
+            return;
+        std::vector<double> nf(n);
+        for (long q = 0; q < n; q++)
+            nf[q] = o.prod[3 * q];
+        o.lhorn.resize(n); o.lfl.resize(n); o.lsh.resize(n); o.lnrm.resize(n);
+        nv_leslie_params(n, nf.data(), nullptr, S.les.data(), o.lhorn.data(), o.lfl.data(), o.lsh.data(),
+                         o.lnrm.data());
+    }
     std::map<long long, int> drive_step;
     std::set<long long> amp_dirty;
     std::map<long long, long long> amp_jid, amp_start, amp_fine_placed;
@@ -1443,6 +1492,9 @@ struct Piano {
     std::map<long long, AmpJob> amp_jobdata;    // jid -> its parents
 
     static const int LIVE_DRIVE_STEPS = 8, LIVE_AMP_LOOKAHEAD = 6;
+    // the worker's synthesis threads: a share of the cores, the rest left to
+    // the audio thread and the GPU's driver (every core made them miss)
+    unsigned AMP_THREADS = 2;
 
     int patch_of_pid(long long id) const
     {
@@ -1538,11 +1590,11 @@ struct Piano {
     }
 
     // one pass: the fast (live's 0.25 s, 150 products, no oversampling) or the fine (valvefine's)
-    static void amp_pass(const AmpJob &jd, double sr, bool fine, std::vector<double> &prod)
+    static void amp_pass(const AmpJob &jd, double sr, bool fine, std::vector<double> &prod, unsigned threads = 0)
     {
         double *out = nullptr;
-        long n = nv_amp_live(jd.f.data(), jd.a.data(), jd.p.data(), (long)jd.f.size(), sr, jd.drive,
-                             fine ? 1.0 : 0.25, 1, fine ? 400 : 150, &out);
+        long n = nv_amp_live_t(jd.f.data(), jd.a.data(), jd.p.data(), (long)jd.f.size(), sr, jd.drive,
+                               fine ? 1.0 : 0.25, 1, fine ? 400 : 150, &out, threads);
         prod.assign(out, out + 3 * n);
         free(out);
     }
@@ -1584,7 +1636,11 @@ struct Piano {
                 S.f4[F4_fa][s] = xf;
         if (!slots.empty() && S.ls_on[o.src] && !S.les.empty()) {
             std::vector<float> az(n, S.ls_ph[o.src]);
-            S.leslie_arm(slots, az.data(), nullptr, nullptr, n0, rotor_horn.rate, rotor_drum.rate, f.data());
+            LobePre lp;
+            if ((long)o.lhorn.size() == n) {
+                lp.horn = o.lhorn.data(); lp.fl = o.lfl.data(); lp.sh = o.lsh.data(); lp.nrm = o.lnrm.data();
+            }
+            S.leslie_arm(slots, az.data(), nullptr, nullptr, n0, rotor_horn.rate, rotor_drum.rate, f.data(), lp);
         }
     }
 
@@ -1603,12 +1659,14 @@ struct Piano {
                 jd = amp_jobdata[j.jid];
             }
             AmpOut fast = j, fine = j;
-            amp_pass(jd, rate, false, fast.prod);
+            amp_pass(jd, rate, false, fast.prod, AMP_THREADS);
+            amp_lobes(fast);
             {
                 std::lock_guard<std::mutex> lk(amp_mu);
                 amp_ready_fast.push_back(fast);
             }
-            amp_pass(jd, rate, true, fine.prod);
+            amp_pass(jd, rate, true, fine.prod, AMP_THREADS);
+            amp_lobes(fine);
             std::lock_guard<std::mutex> lk(amp_mu);
             amp_ready_fine.push_back(fine);
             amp_jobdata.erase(j.jid);
@@ -2351,7 +2409,7 @@ struct Piano {
         }
         if (patches[cur].leslie && !S.les.empty())    // onto the rotors, at their rates now
             S.leslie_arm(S.last_slots, R.f4[24].data(), R.f4[2].data(), R.lflip.empty() ? nullptr : R.lflip.data(),
-                         n0, rotor_horn.rate, rotor_drum.rate);
+                         n0, rotor_horn.rate, rotor_drum.rate, nullptr, lobe_of_t(R));
         if (patches[cur].scanner)                     // the scanner's selector, last (_scan_stamp)
             scan_stamp(R, ch, note, ri, n0, scale, std::vector<long>(S.last_slots));
     }
@@ -3983,6 +4041,7 @@ struct Piano {
     } gpend;
     bool on_gpu = false;                // did the last block go to the GPU
     bool gpu_off = false;               // the panel's: the CPU for every block
+    bool gpu_failed_said = false;
     double ms_setup = 0.0, ms_samples = 0.0;    // its two halves (live's GpuRenderer.ms_*)
     std::vector<long> gidx, gnon, gnoff;
     std::vector<float> gout;
@@ -4021,10 +4080,10 @@ struct Piano {
     // Moog's grid. ms_setup its time
     long setup_gpu(long long n0, long long blk, Table &D, Table &C, Table &SB, bool snd, long &mgo)
     {
-        if (!D.size) {                      // (a second set takes the first's record sizes)
-            D.size = gp.D.size;
-            C.size = gp.C.size;
-            SB.size = gp.SB.size;
+        if (!D.size) {                      // (a second set made as the first: an empty table is no buffer)
+            D.make(gp.D.n, gp.D.size);
+            C.make(gp.C.n, gp.C.size);
+            SB.make(gp.SB.n, gp.SB.size);
         }
         gidx.clear();
         for (long q = 0; q < S.cap; q++)
@@ -4109,6 +4168,10 @@ struct Piano {
                 S.aLp = S.f4[0];            // knobs_advance
                 S.aRp = S.f4[1];
             } else {
+                if (!gpu_failed_said) {     // (said once: a failed launch renders on the CPU, and costs it)
+                    fprintf(stderr, "nvlive: a GPU launch failed (%ld slots): this block on the CPU\n", act);
+                    gpu_failed_said = true;
+                }
                 g = false;
             }
         }

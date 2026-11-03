@@ -8,7 +8,7 @@
 //                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
 //                       [--tuner=NAME [--a=HZ | --c=HZ]]
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
-//                       [--rt] [--reg-async] [--govern]
+//                       [--rt] [--reg-async] [--async] [--govern]
 //
 // EXPORT.nvx is examples/native_export.py --live's. At start the part's
 // templates are built (live.Patch.warm: every key 21-96 at each velocity
@@ -881,6 +881,10 @@ int main(int argc, char **argv)
             for (int q = 1; q < argc; q++) {
                 if (!strcmp(argv[q], "--reg-async"))
                     nv_lp_reg_async(part);
+                if (!strcmp(argv[q], "--async")) {         // ...and the scanner's and valve's workers, as played
+                    nv_lp_scan_async(part);
+                    nv_lp_amp_async(part);
+                }
                 if (!strcmp(argv[q], "--rt")) {
                     std::string why = rt::promote(rt::PRIO);
                     fprintf(stderr, "nvlive: %s\n", why.empty() ? "real-time, SCHED_RR 18" : ("not real-time: " + why).c_str());

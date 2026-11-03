@@ -355,6 +355,29 @@ void nv_leslie_lobe_of(double f, int horn, const double *L, double *fl, double *
     lobe_of(f, horn != 0, L, fl, sh);
 }
 
+// live.Slab.leslie_params for n partials at nf (flip: a crossover copy's
+// rotor flipped, NULL none): each's rotor (horn), its lobe's floor and
+// sharpness (float32), the lobe's mean (libm's cos and pow; numpy's mean)
+void nv_leslie_params(long n, const double *nf, const char *flip, const double *L, char *horn, float *fl, float *sh,
+                      double *nrm)
+{
+    double cc[256], g[256];
+    for (int k = 0; k < 256; k++)
+        cc[k] = 0.5 * (1.0 + cos((double)k * (2.0 * M_PI / 256.0)));
+    for (long j = 0; j < n; j++) {
+        double f = nf[j];
+        horn[j] = (f >= L[L_XOVER_HZ]) ^ (flip && flip[j]);
+        double a, b;
+        lobe_of(f, horn[j] != 0, L, &a, &b);
+        fl[j] = (float)a;
+        sh[j] = (float)b;
+        float hs = 0.5f * sh[j], om = 1.0f - fl[j];
+        for (int k = 0; k < 256; k++)
+            g[k] = (double)fl[j] + (double)om * pow(cc[k], (double)hs);
+        nrm[j] = (0.0 + pairwise(g, 256)) / 256.0;
+    }
+}
+
 // angle_table: each rotor's angle (wrapped to a turn, float32) at every grid
 // point of an n_samples render -- 2 a channel, the horn then the drum (which
 // turns the other way) -- into LANG (2 * nch * lgn); lgn = n_samples / g + 2,

@@ -124,27 +124,41 @@ struct Partial {
 
 extern "C" {
 
-// sum A cos(2 pi F t + P) over the partials, t = i / fs (np.arange(n) / fs):
-// tubeamp._synth_loop's, each sample built by the same operations in the
-// same partial order, on every core
+// the synthesis's threads (0: every core) -- live's worker takes one, so it
+// leaves the audio thread and the GPU's driver theirs
+static thread_local unsigned synth_threads = 0;
+
+// sum A cos(2 pi F t + P) over the partials, t = i / fs (np.arange(n) / fs),
+// each sample's partials added in order, on the threads given (tubeamp.py's
+// own, through native: the same sum in both renderers)
 void nv_amp_synth(const double *a, const double *f, const double *p, long np_, long n, double fs, double *x)
 {
     for (long i = 0; i < n; i++)
         x[i] = 0.0;
     const long CH = 8192;
     long nchunk = (n + CH - 1) / CH;
-    unsigned nt = std::thread::hardware_concurrency();
+    unsigned nt = synth_threads ? synth_threads : std::thread::hardware_concurrency();
     if (nt < 1)
         nt = 1;
     if ((long)nt > nchunk)
         nt = (unsigned)nchunk;
+    // EACH PARTIAL A TURNING PHASOR, anchored with libm's cos and sin at each
+    // chunk's first sample and turned by its step's after: ~10x cos per
+    // sample, which kept a chord's fast pass 70 ms where numpy's SVML had it
+    // 7; drift under 1e-11 over a chunk, the same whatever the threads
     auto job = [&](unsigned w) {
         for (long c = w; c < nchunk; c += nt) {
             long s = c * CH, e = std::min(n, s + CH);
             for (long q = 0; q < np_; q++) {
                 double A = a[q], P = p[q], W = 2.0 * M_PI * f[q];
-                for (long i = s; i < e; i++)
-                    x[i] += A * cos(W * ((double)i / fs) + P);
+                double ph = W * ((double)s / fs) + P, st = W / fs;
+                double zr = cos(ph), zi = sin(ph), rr = cos(st), ri = sin(st);
+                for (long i = s; i < e; i++) {
+                    x[i] += A * zr;
+                    double t = zr * rr - zi * ri;
+                    zi = zr * ri + zi * rr;
+                    zr = t;
+                }
             }
         }
     };
@@ -407,9 +421,20 @@ extern "C" {
 // fine pass's valvefine): the parents (f, a, phase at the snapshot) merged
 // (combine) and driven, at that pass's window, oversampling and peaks kept;
 // the products (Hz, amplitude, phase) into *out (malloc'd, 3 each). How many.
+long nv_amp_live_t(const double *f, const double *a, const double *p, long n, double sr, double drive,
+                   double window_s, int oversample, int keep, double **out, unsigned threads);
+
 long nv_amp_live(const double *f, const double *a, const double *p, long n, double sr, double drive,
                  double window_s, int oversample, int keep, double **out)
 {
+    return nv_amp_live_t(f, a, p, n, sr, drive, window_s, oversample, keep, out, 0);
+}
+
+// ...on so many threads (0: every core)
+long nv_amp_live_t(const double *f, const double *a, const double *p, long n, double sr, double drive,
+                   double window_s, int oversample, int keep, double **out, unsigned threads)
+{
+    synth_threads = threads;
     std::vector<double> F, A, Ph;
     combine(std::vector<double>(f, f + n), std::vector<double>(a, a + n), std::vector<double>(p, p + n), F, A, Ph);
     std::vector<Partial> got = emit(F, A, Ph, sr, drive, IMBALANCE, window_s, oversample, keep);
