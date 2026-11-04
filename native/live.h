@@ -44,6 +44,10 @@ struct Template {
     // empty for a voice without ranks, P 0 for a rank with none here
     std::vector<Template> ranks;
     std::vector<char> push;     // the bellows' push rows (t["push"]), empty for none
+    // A HARPSICHORD'S JACKS (t["rel_rank"]): each drawn stop's key-up click,
+    // its rows (cof its jack's offset, dur its length from the key-up), by rank
+    std::vector<Template> jacks;
+    std::vector<int> jack_rank;
     // A SECTION'S ENTRY SCATTER (section_onset_ms): each player's onset drawn
     // fresh at every press, up to this (Slab.stamp_cols' scatter_ms)
     double scatter_ms = 0.0;

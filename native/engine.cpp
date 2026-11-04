@@ -629,6 +629,14 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (r < 0)
             return -(1 + i);
         carry_radius = out.radius;
+        if (out.n_jack) {                   // each jack's click rows, the note's last (rel_jacks)
+            long long j0 = total + r - out.n_click;
+            for (int q = 0; q < out.n_jack; q++) {
+                if (out.jack_rank[q] >= 0 && out.jack_n[q])
+                    nv_song_add_rel_jack(song, j0, j0 + out.jack_n[q], out.jack_rank[q], out.jack_off[q]);
+                j0 += out.jack_n[q];
+            }
+        }
         // A PLAYER'S BELLOWS (a standalone voice's push: _push_finish): a note
         // from silence pushes; a slur takes the push over where it stands
         if (k->push_gain > 0.0 && !k->organ) {

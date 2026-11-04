@@ -196,7 +196,7 @@ class NoteClass(ctypes.Structure):
                    ('cab_set', I), ('n_cab_fm', I), ('n_cab_afm', I), ('cab_floor', C), ('cab_fm', C * 3 * 4),
                    ('cab_afm', C * 3 * 4), ('cab_corner', C), ('cab_order', C), ('cab_cut', C), ('cab_bell', C),
                    ('cab_ref', C), ('n_click', I), ('click_jacks', I), ('click_db', C), ('click_hz', C * 16),
-                   ('click_amp', C * 16), ('click_dec', C), ('click_s', C)])
+                   ('click_amp', C * 16), ('click_dec', C), ('click_s', C), ('pre_pluck', I)])
 
 
 class NoteIn(ctypes.Structure):
@@ -332,6 +332,8 @@ def _load():
             ('nv_midi_pw', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_song', None, [ctypes.c_void_p, ctypes.c_void_p, D]),
             ('nv_strings', I, [ctypes.POINTER(VoiceInit), P, D, C, C, C, ctypes.c_void_p, ctypes.c_void_p, I]),
+            ('nv_strings_og', I, [ctypes.POINTER(VoiceInit), P, ctypes.c_void_p, D, C, C, C, ctypes.c_void_p,
+                                  ctypes.c_void_p, I]),
             ('nv_exp_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_pow_n', None, [ctypes.c_long, ctypes.c_void_p, I, ctypes.c_void_p, I, ctypes.c_void_p]),
             ('nv_cabs_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
@@ -346,7 +348,8 @@ def _load():
                                 ctypes.POINTER(ctypes.c_void_p), I]),
             ('nv_template', LL, [ctypes.c_void_p, ctypes.POINTER(NoteIn), D, D, I, I, I, I,
                                  ctypes.POINTER(ctypes.POINTER(ctypes.c_double)), ctypes.c_void_p, C, C, C, C, LL,
-                                 C, C, ctypes.c_void_p, C, C, C, C, ctypes.POINTER(ctypes.c_void_p)]),
+                                 C, C, ctypes.c_void_p, C, C, C, C, ctypes.POINTER(ctypes.c_void_p),
+                                 ctypes.c_void_p]),
             ('nv_tcache_new', ctypes.c_void_p, [ctypes.c_void_p, ctypes.POINTER(NoteIn), D, D, ctypes.c_void_p,
                                                 ctypes.c_void_p, C, C, C, C, LL, C, C, C, C, C, C]),
             ('nv_tcache_free', None, [ctypes.c_void_p]),
@@ -400,6 +403,7 @@ def _load():
             ('nv_lp_register', None, [ctypes.c_void_p, ctypes.c_void_p, I, C, C, C, C, I, C, I, C, C, C, C, LL,
                                       ctypes.c_void_p]),
             ('nv_lp_reg_dropped', ctypes.c_long, [ctypes.c_void_p]),
+            ('nv_lp_reg_choirs', None, [ctypes.c_void_p, I, ctypes.c_void_p, C, I, ctypes.c_void_p]),
             ('nv_lp_event', None, [ctypes.c_void_p, I, I, I, I]),
             ('nv_lp_block', None, [ctypes.c_void_p, LL, LL]),
             ('nv_lp_slab', ctypes.c_void_p, [ctypes.c_void_p]),
@@ -428,6 +432,9 @@ def _load():
             ('nv_lreg_strike', I, [ctypes.c_void_p, LL, I, C, I, ctypes.c_void_p, ctypes.c_void_p,
                                    ctypes.c_void_p, I]),
             ('nv_lreg_release', I, [ctypes.c_void_p, LL, C, ctypes.c_void_p, I]),
+            ('nv_lreg_pluck', I, [ctypes.c_void_p, LL, I, C, I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I,
+                                  ctypes.c_void_p, I, ctypes.c_void_p]),
+            ('nv_lreg_choirs', None, [ctypes.c_void_p, I, ctypes.c_void_p, C, I, ctypes.c_void_p]),
             ('nv_lreg_damp', None, [ctypes.c_void_p, ctypes.c_void_p, I]),
             ('nv_lreg_felt', I, [ctypes.c_void_p, C, ctypes.c_void_p, ctypes.c_void_p, I]),
             ('nv_lreg_answer', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, D]),
@@ -1654,7 +1661,10 @@ class OrganSpec(ctypes.Structure):
                    ('wtrem_hz', C), ('htrem_depth', C), ('htrem_hz', C), ('wtrem_stereo', I),
                    ('wtrem_scatter', C), ('snd_mask', I), ('n_cn', I), ('leak', I), ('cn_hz', C * 16),
                    ('cn_db', C * 16), ('cn_dbs', C), ('leak_db', C), ('phase_spread', C), ('contact_on', I),
-                   ('beat_lo', C), ('beat_hi', C)])
+                   ('beat_lo', C), ('beat_hi', C), ('n_choir', I), ('choir_pipe', I * 8), ('choir_bridge', I * 8),
+                   ('choir_beat', I * 8), ('n_buff', I), ('buff', (I * 2) * 8), ('rank_choir', I * 32),
+                   ('choir_ratio', C * 8), ('cross', C), ('choir_cents', (C * 128) * 8),
+                   ('choir_stiff', (C * 128) * 8), ('choir_bname', (ctypes.c_char * 16) * 8)])
 
 
 _ORGAN = {}
@@ -1808,6 +1818,43 @@ def organ(cls):
     bh = getattr(p, 'choir_beat_hz', None)
     if bh:
         o.beat_lo, o.beat_hi = float(bh[0]), float(bh[1])
+    # ITS CHOIRS, as register.Strings builds their strings
+    chs = getattr(p, 'string_choirs', None) or ()
+    o.n_choir = len(chs)
+    o.cross = float(getattr(p, 'cross_bridge_coupling', 1.0))
+    if chs:
+        names = [c[0] for c in chs]
+        cb = getattr(p, 'choir_bridge', None) or {}
+        bc = getattr(p, 'buff_choirs', None) or {}
+        buffs = [(names.index(b), names.index(a)) for b, a in bc.items() if b in names and a in names]
+        if len(chs) > 8 or len(buffs) > 8:
+            return None
+        try:
+            for ci, (cname, ratio, ccls) in enumerate(chs):
+                if ccls is None and ratio != 1.0:
+                    return None                     # (the host's string at another footage: own_string)
+                o.choir_pipe[ci] = pipe_of(ccls) if ccls is not None else -1
+                o.choir_ratio[ci] = float(ratio)
+                o.choir_bridge[ci] = int(cb.get(cname, 0))
+                bn = bc.get(cname, cname)
+                if len(bn.encode()) >= 16:
+                    return None
+                o.choir_bname[ci].value = bn.encode()
+                o.choir_beat[ci] = int(bool(cname and bh and bn != 'A'))
+                for key in range(128):
+                    o.choir_cents[ci][key] = T.choir_cents(cls, cname, key) if cname else 0.0
+                    o.choir_stiff[ci][key] = T.choir_stiffness(cls, cname, key) if cname else 1.0
+        except ValueError:
+            return None
+        if len(pipes) != o.n_pipe:
+            return None                         # (a choir's class not among the ranks' pipes)
+        o.n_buff = len(buffs)
+        for q, (b, a) in enumerate(buffs):
+            o.buff[q][:] = [b, a]
+        rc = getattr(p, 'rank_choirs', None) or {}
+        for i, r in enumerate(ranks):
+            nm = rc.get(r[0], r[0])
+            o.rank_choir[i] = names.index(nm) if nm in names else -1
     o.spiral = int(bool(getattr(p, 'spiral_spatial', False)))
     o.own_pitch = int(bool(getattr(p, 'rank_speech_own_pitch', False)))
     if o.spiral:
@@ -2044,6 +2091,7 @@ def note_class(cls):
                 k.click_hz[i], k.click_amp[i] = float(hz), float(a)
             k.click_dec, k.click_s = float(cls.release_click_decay_db), float(cls.release_click_s)
             k.click_jacks = int(bool(getattr(cls, 'registerable', False) and getattr(cls, 'string_choirs', None)))
+        k.pre_pluck = int(hasattr(cls, 'pre_pluck_s'))
         # the player's breath (its rows: nv_breath_rows)
         if (getattr(cls, 'breath_wobble_db', 0.0) > 0.0 or getattr(cls, 'breath_noise_wobble_db', 0.0) > 0.0
                 or getattr(cls, 'breath_pitch_cents', 0.0) > 0.0):
@@ -2412,17 +2460,19 @@ def strings(cls, table, pan, chan_vol, sr):
     if got is None:
         return None
     c = VoiceInit.from_buffer_copy(got[0])
-    lo, hi = cls.string_detune_range
-    if issubclass(cls, T.HonkyTonkProperties):
-        lo, hi = lo * T.honky_detune, hi * T.honky_detune
-    c.detune_lo, c.detune_hi = lo, hi
+    if hasattr(cls, 'string_detune_range'):
+        lo, hi = cls.string_detune_range
+        if issubclass(cls, T.HonkyTonkProperties):
+            lo, hi = lo * T.honky_detune, hi * T.honky_detune
+        c.detune_lo, c.detune_hi = lo, hi
     c.fixed_touch = int(bool(T.FIXED_TOUCH))
     tab = (ctypes.c_double * 128)(*[float(table[k]) if k in table else 0.0 for k in range(128)])
     cap = 88 * 4 * 130
     out = (StringMode * cap)()
     tmp = (StringMode * cap)()
-    n = lib().nv_strings(ctypes.byref(c), ctypes.byref(got[1]), tab, float(pan), float(chan_vol), float(sr),
-                         out, tmp, cap)
+    og = organ(cls) if getattr(cls, 'string_choirs', None) else None     # (a harpsichord's choirs)
+    n = lib().nv_strings_og(ctypes.byref(c), ctypes.byref(got[1]), ctypes.addressof(og) if og is not None else None,
+                            tab, float(pan), float(chan_vol), float(sr), out, tmp, cap)
     if n < 0:
         return None
     a = np.frombuffer(out, dtype=np.dtype([('key', 'i8'), ('string', 'i8'), ('harm', 'i8')] + [
@@ -2849,7 +2899,7 @@ def template(program, note, vel, tuner='hybrid440'):
     n = d.nv_template(K, ctypes.byref(t), F, tr, int(program), int(note), int(vel), -1, ctypes.byref(buf), kind,
                       float(os.environ.get("TUNING_REGISTER", "1") or 1), DM.FULL_DB_S, DM.RESIDUAL, DM.BETA,
                       BR.BLK, BR.RING_FLOOR, BR.RING_MAX, out, DM.KNEE_DB, DM.LN10_20, float(BR.XDEC_NEPERS),
-                      float(BR.SR), dm)
+                      float(BR.SR), dm, None)       # (kit: none -- its C default is not ctypes')
     try:
         if n < 0:
             return None
@@ -3128,6 +3178,10 @@ class LivePiano(object):
         flags = (ctypes.c_int * 128)(*[int(bool(x)) for x in reg_note])
         self.d.nv_lp_register(self.p, self._modes, M, *k, int(bool(getattr(cls, 'damper_pedal', True))), rel,
                               float(DMP.FULL_DB_S), float(DMP.RESIDUAL), float(DMP.LN10_20), int(BR.BLK), flags)
+        ch = live_bank_choirs(cls)
+        if ch is not None:
+            self._choirs = ch
+            self.d.nv_lp_reg_choirs(self.p, *ch)
 
     def reg_dropped(self):
         return self.d.nv_lp_reg_dropped(self.p)
@@ -3316,9 +3370,22 @@ def live_bank_class(cls):
     if got is None:
         raise ValueError("%s is not the engine's" % cls.__name__)
     c = VoiceInit.from_buffer_copy(got[0])
-    c.detune_lo, c.detune_hi = cls.string_detune_range
+    if hasattr(cls, 'string_detune_range'):
+        c.detune_lo, c.detune_hi = cls.string_detune_range
     c.fixed_touch = int(bool(T.FIXED_TOUCH))
     return c, got[1]
+
+
+def live_bank_choirs(cls):
+    """A harpsichord's choirs as its live register couples them: (choir
+    bridges, cross_bridge_coupling, buffs as (buffed, plain) pairs, flat),
+    as ctypes arrays -- or None for one row of strings."""
+    og = organ(cls) if getattr(cls, 'string_choirs', None) else None
+    if og is None or not og.n_choir:
+        return None
+    br = (ctypes.c_long * og.n_choir)(*[og.choir_bridge[i] for i in range(og.n_choir)])
+    bf = (ctypes.c_int * max(1, 2 * og.n_buff))(*[og.buff[q][e] for q in range(og.n_buff) for e in (0, 1)])
+    return og.n_choir, br, float(og.cross), og.n_buff, bf
 
 
 def live_bank(cls, table, sr, scale=1.0):
@@ -3332,7 +3399,9 @@ def live_bank(cls, table, sr, scale=1.0):
     cap = 88 * 4 * 130
     modes = (StringMode * cap)()
     tmp = (StringMode * cap)()
-    M = lib().nv_strings(ctypes.byref(c), ctypes.byref(snap), tab, 0.0, 1.0, float(sr), modes, tmp, cap)
+    og = organ(cls) if getattr(cls, 'string_choirs', None) else None     # (a harpsichord's choirs)
+    M = lib().nv_strings_og(ctypes.byref(c), ctypes.byref(snap), ctypes.addressof(og) if og is not None else None,
+                            tab, 0.0, 1.0, float(sr), modes, tmp, cap)
     if M < 0:
         raise ValueError("too many modes")
     P = RG._isolated(cls, 261.63, 0.0, 1.0)         # live_worker's props
@@ -3355,6 +3424,9 @@ class LiveReg(object):
         self.d = lib()
         self._modes, self.M, k = live_bank(cls, table, sr, scale)
         self.p = self.d.nv_lreg_new(self._modes, self.M, float(sr), *k)
+        self._choirs = live_bank_choirs(cls)
+        if self._choirs is not None:
+            self.d.nv_lreg_choirs(self.p, *self._choirs)
         self._np = np
 
     def __del__(self):
@@ -3384,8 +3456,16 @@ class LiveReg(object):
                                     if R else np.zeros((len(self.LIVE_DRV), 0)))
         slot = np.ascontiguousarray(drv['slot'], np.int64) if R else np.zeros(1, np.int64)
         fk = self._keys(free_keys)
-        n = self.d.nv_lreg_strike(self.p, int(sid), int(key), float(at), R, cols.ctypes.data, slot.ctypes.data,
-                                  fk.ctypes.data, len(fk))
+        if plucked is not None or 'choir' in drv:
+            pk = self._keys(plucked if plucked is not None else [0])
+            chs = np.ascontiguousarray(drv['choir'], np.int64) if 'choir' in drv and R else None
+            n = self.d.nv_lreg_pluck(self.p, int(sid), int(key), float(at), R, cols.ctypes.data, slot.ctypes.data,
+                                     fk.ctypes.data, len(fk), pk.ctypes.data,
+                                     len(plucked) if plucked is not None else -1,
+                                     chs.ctypes.data if chs is not None else None)
+        else:
+            n = self.d.nv_lreg_strike(self.p, int(sid), int(key), float(at), R, cols.ctypes.data, slot.ctypes.data,
+                                      fk.ctypes.data, len(fk))
         idx, z, nf = self._answer(n)
         sl = np.empty(max(nf, 1), np.int64)
         w, b = np.empty(max(nf, 1)), np.empty(max(nf, 1))

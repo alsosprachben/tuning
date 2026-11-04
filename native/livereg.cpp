@@ -1,5 +1,6 @@
 // livereg.cpp -- the native engine's LIVE REGISTER: register.LiveChannel for
-// a piano (one row of strings: no choirs, courses, bridges or buffs), bit for
+// a piano (one row of strings) or a harpsichord (its choirs, their bridges
+// and the buff: no courses or key bridges), bit for
 // bit with the Python, whose arithmetic is libm's and spelled out (register
 // _xexp, _xabs, _xcexp, _xcmul, _xcmulr, _xcsum) and whose free part is
 // registercore.c's -- which this calls, the same code under the same flags.
@@ -144,8 +145,12 @@ struct Channel {
     int M = 0;
     double sr, kappa, knock, fall, fl;
     int top;
-    std::vector<long> key;
+    std::vector<long> key, string;
     std::vector<double> f, alpha, w, W, dw;
+    // the choirs (Strings.choir_bridges, cross, buffs): each mode's bridge
+    std::vector<long> choir_bridges = std::vector<long>(1, 0), bridge;
+    double cross = 1.0;
+    std::vector<std::pair<int, int>> buffs;     // (buffed, plain)
     std::map<int, std::vector<int>> keyidx;
     std::vector<cplx> Az, Rz;
     std::vector<double> nref, rref, krate, Rk;
@@ -215,10 +220,40 @@ struct Channel {
     }
 
     void strike(long long sid, int k, double at, int R, const double *const *drv, const long *slot,
-                const int *free_keys, int nfree)
+                const int *free_keys, int nfree, const int *plucked = nullptr, int nplucked = -1,
+                const long *rchoir = nullptr)
     {
         forced.clear();
         std::vector<char> free = mask(free_keys, nfree, k);
+        auto in_plucked = [&](long c) {
+            for (int q = 0; q < nplucked; q++)
+                if (plucked[q] == c)
+                    return true;
+            return false;
+        };
+        if (nplucked >= 0) {
+            // its own key's choirs but the plucked ones, while it is held
+            bool held = false;
+            for (int q = 0; q < nfree; q++)
+                held = held || free_keys[q] == k;
+            auto it = keyidx.find(k);
+            if (held && it != keyidx.end())
+                for (int i : it->second)
+                    if (!in_plucked(string[i] / 16))
+                        free[i] = 1;
+        }
+        if (!buffs.empty()) {               // a buff's string, or its plain one (Strings.free_choirs)
+            std::vector<char> okc(choir_bridges.size(), 1);
+            for (auto &bp : buffs) {
+                if (nplucked >= 0 && in_plucked(bp.first))
+                    okc[bp.second] = 0;
+                else
+                    okc[bp.first] = 0;
+            }
+            for (int i = 0; i < M; i++)
+                if (!okc[string[i] / 16])
+                    free[i] = 0;
+        }
         double mx = 0.0;
         for (int r = 0; r < R; r++)
             if (r == 0 || drv[D_aM][r] > mx)
@@ -271,7 +306,9 @@ struct Channel {
                     for (long q = 0; q < n; q++) {
                         int j = kp.j[q];
                         Wm[q] = W[j]; am[q] = alpha[j];
-                        double wj = w[j];                             // Strings.coupling: a piano's board
+                        double wj = w[j];                             // Strings.coupling: the board's...
+                        if (rchoir)                                   // ...across bridges at cross
+                            wj = wj * (bridge[j] == choir_bridges[rchoir[r]] ? 1.0 : cross);
                         double thr = kw * wj / ROWS_OVER;             // _coincident_x
                         close[q] = xabs(cplx(am[q] - beta, Wi - Wm[q])) < thr;
                         bj[q] = close[q] ? npmax(beta, am[q]) + thr : beta;
@@ -406,7 +443,7 @@ void *nv_lreg_new(const StringMode *modes, int M, double sr, double kappa, doubl
     C->M = M; C->sr = sr; C->kappa = kappa; C->knock = knock; C->fall = fall; C->fl = fl; C->top = top;
     for (int i = 0; i < M; i++) {
         const StringMode &q = modes[i];
-        C->key.push_back((long)q.key);
+        C->key.push_back((long)q.key); C->string.push_back((long)q.string);
         C->f.push_back(q.f); C->alpha.push_back(q.alpha); C->w.push_back(q.w);
         C->W.push_back(TAU * q.f);
         C->keyidx[(int)q.key].push_back(i);
@@ -414,6 +451,7 @@ void *nv_lreg_new(const StringMode *modes, int M, double sr, double kappa, doubl
         double f0 = 440.0 * pow(2.0, ((double)q.key - 69.0) / 12.0);
         C->dw.push_back(pow(npmax(q.f, 1e-6) / f0, beta));
     }
+    C->bridge.assign(M, 0);
     C->Az.assign(M, 0.0); C->Rz.assign(M, 0.0);
     C->nref.assign(M, 0.0); C->rref.assign(M, 0.0);
     C->krate.assign(M, 0.0); C->Rk.assign(M, 0.0);
@@ -434,6 +472,34 @@ int nv_lreg_strike(void *h, long long sid, int key, double at, int R, const doub
         drv[c] = cols + (long)c * R;
     C->strike(sid, key, at, R, drv, slot, free_keys, nfree);
     return (int)C->idx.size();
+}
+
+// ...a pluck: the choirs it plucked (nplucked < 0: None) and each row's choir (NULL: none)
+int nv_lreg_pluck(void *h, long long sid, int key, double at, int R, const double *cols, const long *slot,
+                  const int *free_keys, int nfree, const int *plucked, int nplucked, const long *rchoir)
+{
+    using namespace nv::lreg;
+    Channel *C = (Channel *)h;
+    const double *drv[ND];
+    for (int c = 0; c < ND; c++)
+        drv[c] = cols + (long)c * R;
+    C->strike(sid, key, at, R, drv, slot, free_keys, nfree, plucked, nplucked, rchoir);
+    return (int)C->idx.size();
+}
+
+// A harpsichord's choirs (register.Strings'): each choir's bridge, the
+// coupling across bridges, and the buffs (buffed, plain) pairs
+void nv_lreg_choirs(void *h, int nchoir, const long *bridges, double cross, int nbuff, const int *buffs)
+{
+    nv::lreg::Channel *C = (nv::lreg::Channel *)h;
+    C->choir_bridges.assign(bridges, bridges + nchoir);
+    C->cross = cross;
+    C->buffs.clear();
+    for (int q = 0; q < nbuff; q++)
+        C->buffs.push_back(std::make_pair(buffs[2 * q], buffs[2 * q + 1]));
+    C->bridge.assign(C->M, 0);
+    for (int i = 0; i < C->M; i++)
+        C->bridge[i] = C->choir_bridges[C->string[i] / 16];
 }
 
 int nv_lreg_release(void *h, long long sid, double at, const int *free_keys, int nfree)

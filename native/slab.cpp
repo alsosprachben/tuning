@@ -1819,6 +1819,8 @@ struct Piano {
     }
     // each organ key's touch at its press (live.note_touch)
     std::map<std::pair<int, int>, double> note_touch;
+    // a harpsichord's key down: the template it was stamped from, for its jacks' clicks (live's held_tmpl)
+    std::map<Key, const nv::live::Template *> held_jacks;
     // THE CHEST'S WIND (live.wind_st, _wind_row, _wind_block): a part's, made
     // at its first rank drawn -- numpy's generator seeded by the part, the
     // pressure's state, a slab row a family of its ranks (from wind_next, to
@@ -1840,6 +1842,7 @@ struct Piano {
     static const long long SCAN0 = 2000;        // ...its scanner's copy (("scan", rank))
     static const long long SCANSIDE0 = 3000;    // ...and tier B's copies (("scanside", rank))
     static const long long AMPK = 4000;         // the valve's products ((pid, -1, -1, "amp"))
+    static const long long KEYUP0 = 5000;       // a jack's key-up click ((pid, ch, note, "keyup:" + rank))
     int cur = 0, transpose = 0;
     bool cur_reg = true;                            // the patch in use has the register
 
@@ -2473,6 +2476,76 @@ struct Piano {
         for (int ri = 0; ri < (int)dr.size(); ri++)
             if (dr[ri])
                 draw_rank(T, ch, note, ri, n0);
+        if (!T.jacks.empty())
+            held_jacks[Key(pid, ch, note, 0)] = &T;     // its jacks' clicks, at the key-up
+        // ...AND A HARPSICHORD'S KEY LIFTS EVERY CHOIR'S DAMPER: the strings
+        // its drawn stops pluck drive the rest through the bridge, its own
+        // key's undrawn choirs among them -- the pluck's rows only (the
+        // quill's catch ends at the slip), in the stops' order
+        const OrganSpec *og = patches[cur].organ;
+        if (reg_on && cur_reg && reg_note[note] && og->n_choir) {
+            std::vector<long> sl;
+            std::map<long, long> sc;
+            std::set<int> pk;
+            for (int ri = 0; ri < og->n_rank; ri++) {
+                if (!dr[ri] || og->rank_choir[ri] < 0)
+                    continue;
+                long li = S.live_find(Key(pid, ch, note, RANK0 + ri));
+                if (li < 0)
+                    continue;
+                for (long s : S.live[li].second)
+                    if (S.i8[1][s] == IDLE && !sc.count(s)) {
+                        sc[s] = og->rank_choir[ri];
+                        sl.push_back(s);
+                        pk.insert(og->rank_choir[ri]);
+                    }
+            }
+            if (!sc.empty()) {
+                std::vector<int> pv(pk.begin(), pk.end());
+                reg_strike(ch, note, n0, T, sl, &pv, &sc);
+            }
+        }
+    }
+
+    // live._key_up_jacks: a harpsichord's jacks falling back -- one click a
+    // stop that sounded on this key, at the note's own level, a one-shot
+    void key_up_jacks(int ch, int note, long long n0, const std::set<long long> &sounded)
+    {
+        auto it = held_jacks.find(Key(pid, ch, note, 0));
+        if (it == held_jacks.end())
+            return;
+        const nv::live::Template &T = *it->second;
+        held_jacks.erase(it);
+        auto nt = note_touch.find(std::make_pair(ch, note));
+        double scale = pow(10.0, level_db / 20.0) * swell * chan_gain(ch) * (nt != note_touch.end() ? nt->second : 1.0);
+        for (size_t q = 0; q < T.jacks.size(); q++) {
+            int ri = T.jack_rank[q];
+            if (!sounded.count(RANK0 + ri))
+                continue;
+            const nv::live::Template &J = T.jacks[q];
+            const double *f8p[6];
+            const float *f4p[27];
+            const long long *i8p[2];
+            const int32_t *i4p[6];
+            for (int c = 0; c < 6; c++)
+                f8p[c] = J.f8[c].data();
+            for (int c = 0; c < 27; c++)
+                f4p[c] = J.f4[c].data();
+            for (int c = 0; c < 2; c++)
+                i8p[c] = J.i8[c].data();
+            for (int c = 0; c < 6; c++)
+                i4p[c] = J.i4[c].data();
+            Key key(pid, ch, note, KEYUP0 + ri);
+            if (!S.stamp(f8p, f4p, i8p, i4p, J.hrel.data(), J.P, key, n0, scale, J.dur, true, NAN, ch, nullptr,
+                         nullptr, 0.0, 0.0, J.cof.data()))
+                continue;
+            std::vector<long> got = S.last_slots;
+            long li = S.live_find(key);
+            if (li >= 0)
+                S.live.erase(S.live.begin() + li);      // it retires on its own; never released
+            if (cpan[ch] != 64)
+                S.repan(got, cpan[ch], 64, rate, true);
+        }
     }
 
     // live.set_stops: draw and retire ranks to match want, on every key
@@ -2728,11 +2801,17 @@ struct Piano {
             S.release(Key(pid, -1, -1, AMPK), n0);
         if (patches[cur].organ) {           // an organ's key: each of its ranks
             std::vector<Key> ks;
+            std::set<long long> sounded;
             for (auto &kv : S.live)
-                if (std::get<0>(kv.first) == pid && std::get<1>(kv.first) == ch && std::get<2>(kv.first) == note)
+                if (std::get<0>(kv.first) == pid && std::get<1>(kv.first) == ch && std::get<2>(kv.first) == note) {
                     ks.push_back(kv.first);
+                    sounded.insert(std::get<3>(kv.first));
+                }
             for (auto &k : ks)
                 S.release(k, n0);
+            key_up_jacks(ch, note, n0, sounded);
+            if (reg_on && cur_reg && reg_note[note] && patches[cur].organ->n_choir)
+                reg_damper(ch, n0, note, false);        // every choir's damper falls
             return;
         }
         // (a held texture lets go no sooner than its gate)
@@ -3417,7 +3496,14 @@ struct Piano {
         int note;
         long long at;
         std::vector<long> slots;
+        bool has_plucked = false;                   // a harpsichord's: the choirs it plucked,
+        std::vector<int> plucked;
+        std::map<long, long> slot_choir;            // ...and each slot's choir
     };
+    // a harpsichord's choirs, for its register (Strings.choir_bridges, cross, buffs)
+    std::vector<long> r_cbr;
+    double r_cross = 1.0;
+    std::vector<int> r_buffs;
     std::vector<Pend> reg_pend;
     struct Reply {
         int kind;                                   // 0 'free', 1 'forced'
@@ -3450,6 +3536,9 @@ struct Piano {
         std::vector<double> cols, rates;
         std::vector<long> d;
         std::vector<int> keys;
+        bool has_plucked = false;
+        std::vector<int> plucked;
+        std::vector<long> choir;                    // each row's (empty: none)
     };
     std::map<int, void *> lcs;                      // channel -> its register (the worker's chans)
     bool reg_async = false;
@@ -3497,6 +3586,8 @@ struct Piano {
         if (it != lcs.end())
             return it->second;
         void *h = nv_lreg_new(rmodes.data(), (int)rmodes.size(), rate, r_kappa, r_knock, r_fall, r_fl, r_top, r_beta);
+        if (!r_cbr.empty())
+            nv_lreg_choirs(h, (int)r_cbr.size(), r_cbr.data(), r_cross, (int)r_buffs.size() / 2, r_buffs.data());
         lcs[ch] = h;
         return h;
     }
@@ -3527,8 +3618,13 @@ struct Piano {
     {
         void *lc = lc_of(j.ch);
         if (j.kind == 0) {
-            int n = nv_lreg_strike(lc, j.sid, j.note, j.at, j.R, j.cols.data(), j.d.data(), j.keys.data(),
-                                   (int)j.keys.size());
+            int n = j.has_plucked || !j.choir.empty()
+                        ? nv_lreg_pluck(lc, j.sid, j.note, j.at, j.R, j.cols.data(), j.d.data(), j.keys.data(),
+                                        (int)j.keys.size(), j.plucked.data(),
+                                        j.has_plucked ? (int)j.plucked.size() : -1,
+                                        j.choir.empty() ? nullptr : j.choir.data())
+                        : nv_lreg_strike(lc, j.sid, j.note, j.at, j.R, j.cols.data(), j.d.data(), j.keys.data(),
+                                         (int)j.keys.size());
             int nf = answer(j.ch, lc, n, j.at, true, out);
             if (nf) {
                 Reply r;
@@ -3645,7 +3741,8 @@ struct Piano {
         return std::vector<int>(keys.begin(), keys.end());
     }
 
-    void reg_strike(int ch, int note, long long n0, const nv::live::Template &T, const std::vector<long> &slots)
+    void reg_strike(int ch, int note, long long n0, const nv::live::Template &T, const std::vector<long> &slots,
+                    const std::vector<int> *plucked = nullptr, const std::map<long, long> *slot_choir = nullptr)
     {
         if (!reg_of(ch)) {
             RegSt st;
@@ -3661,7 +3758,14 @@ struct Piano {
             reg_strike_of[i].second = reg_sid;
         else
             reg_strike_of.push_back(std::make_pair(std::make_pair(ch, note), reg_sid));
-        reg_pend.push_back(Pend{ch, reg_sid, note, n0, slots});
+        Pend pd{ch, reg_sid, note, n0, slots};
+        if (plucked) {
+            pd.has_plucked = true;
+            pd.plucked = *plucked;
+        }
+        if (slot_choir)
+            pd.slot_choir = *slot_choir;
+        reg_pend.push_back(std::move(pd));
     }
 
     void reg_close(RegSt &st, const std::vector<long> &modes, long long n0, double re_)
@@ -3820,6 +3924,13 @@ struct Piano {
             }
             Job j;
             j.kind = 0; j.ch = p.ch; j.sid = p.sid; j.note = p.note; j.at = (double)p.at; j.R = R;
+            j.has_plucked = p.has_plucked;
+            j.plucked = p.plucked;
+            if (!p.slot_choir.empty())              // each row's choir: the bridge it drives through
+                for (long s : d) {
+                    auto it = p.slot_choir.find(s);
+                    j.choir.push_back(it == p.slot_choir.end() ? 0 : it->second);
+                }
             j.cols.swap(cols);
             j.d.swap(d);
             j.keys = reg_free(p.ch);
@@ -4975,6 +5086,15 @@ void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, doubl
     P->r_blk = (double)blk;
     for (int k = 0; k < 128; k++)
         P->reg_note[k] = reg_note[k] != 0;
+}
+
+// a harpsichord's choirs, for its register (Strings.choir_bridges, cross, buffs)
+void nv_lp_reg_choirs(void *h, int nchoir, const long *bridges, double cross, int nbuff, const int *buffs)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    P->r_cbr.assign(bridges, bridges + nchoir);
+    P->r_cross = cross;
+    P->r_buffs.assign(buffs, buffs + 2 * nbuff);
 }
 
 // the register's rows dropped for a full slab, and whether any are placed

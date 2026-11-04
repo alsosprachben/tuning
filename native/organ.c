@@ -13,18 +13,6 @@
  */
 
 /* SynthProperties.speech_time(fixed, f) for a pipe */
-/* zlib's crc32 of n bytes (tonelib's per-key draws are seeded by it) */
-static unsigned long organ_crc32(const char *b, size_t n)
-{
-    unsigned long c = 0xFFFFFFFFUL;
-    for (size_t i = 0; i < n; i++) {
-        c ^= (unsigned char)b[i];
-        for (int k = 0; k < 8; k++)
-            c = (c >> 1) ^ (0xEDB88320UL & (0UL - (c & 1UL)));
-    }
-    return c ^ 0xFFFFFFFFUL;
-}
-
 /* tonelib.choir_partial_hz: a choir's partial m at this key off where its
    wire puts it, Hz -- Random(crc32("choir|key|m|beat")): its size, then its sign */
 static double choir_beat(const OrganSpec *og, const OrganRank *rk, int note, int m)

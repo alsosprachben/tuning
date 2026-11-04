@@ -127,7 +127,8 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                long long blk, double ring_floor, double ring_max, double *out, double knee_db,
                                double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
                                std::vector<long long> *srows, std::vector<long long> *prows = nullptr,
-                               const double *les = nullptr, std::vector<long long> *flips = nullptr);
+                               const double *les = nullptr, std::vector<long long> *flips = nullptr,
+                               std::vector<double> *jrows = nullptr);
 long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                             const double *cfg, const char *mask, long long nmask, double sr);
 long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
@@ -155,7 +156,7 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                long long blk, double ring_floor, double ring_max, double *out, double knee_db,
                                double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
                                std::vector<long long> *srows, std::vector<long long> *prows, const double *les,
-                               std::vector<long long> *flips)
+                               std::vector<long long> *flips, std::vector<double> *jrows)
 {
     const NoteClass *kc = (!kit && program >= 0 && program < 128) ? K[128 * program + note] : nullptr;
     const OrganSpec *og = kc ? kc->organ : nullptr;
@@ -191,6 +192,11 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         int n = nv_song_n_stroke_rows(song, nullptr, 0);
         srows->resize(2 * n);
         nv_song_n_stroke_rows(song, srows->data(), n);
+    }
+    if (jrows && P >= 0) {                      // ...and its jacks' clicks (rel_jacks)
+        int nj = nv_song_n_rel_jacks(song, nullptr, 0);
+        jrows->resize(4 * nj);
+        nv_song_n_rel_jacks(song, jrows->data(), nj);
     }
     if (prows && P >= 0) {                      // ...and its pushes' (push_rows)
         int np = nv_song_n_push_rows(song, nullptr, 0);
@@ -378,10 +384,11 @@ struct Cache {
         double *rows = nullptr, out[48] = {0};
         void *dm[6] = {nullptr};
         std::vector<long long> srows, prows, flips;
+        std::vector<double> jrows;
         long long P = template_rows(K.data(), &t, freq, trim, program, note, vel, fast, &rows, kind, scale, full,
                                     residual, beta, blk, ring_floor, ring_max, out, knee, ln10_20, xdec, SR, dm,
                                     drums ? &kit : nullptr, &srows, &prows, les.empty() ? nullptr : les.data(),
-                                    &flips);
+                                    &flips, &jrows);
         if (P < 0) {
             free(rows);
             return false;
@@ -508,6 +515,17 @@ struct Cache {
         // A TAPE PLAYED BACKWARDS STOPS AT ITS ARRIVAL (live's rof for
         // played_backwards): each row grows to its own end, a key-up before
         // it still cutting it there
+        // ...AND THE QUILL'S CATCH ENDS AT THE SLIP (live's rof for
+        // pre_pluck_s): a catch row keeps its length from its onset (a few
+        // ms, under 20), every other row the key's (-1)
+        if (P && nc && nc->pre_pluck) {
+            T.rof.resize(P);
+            const long long lim = (long long)(0.02 * SR);
+            for (long long r = 0; r < P; r++) {
+                long long len = T.i8[1][r] - T.i8[0][r];
+                T.rof[r] = len <= lim ? len : -1;
+            }
+        }
         if (P && nc && nc->played_backwards) {
             T.rof.resize(P);
             for (long long r = 0; r < P; r++)
@@ -606,6 +624,35 @@ struct Cache {
                     cut(R.lsh, T.lsh);
                     cut(R.lnrm, T.lnrm);
                 }
+            }
+            // ...AND ONE CLICK A JACK (t["rel_rank"]): each stop's key-up
+            // rows (no rank: gr -1), their jack's offset, their length
+            for (size_t q = 0; q + 3 < jrows.size(); q += 4) {
+                long long a = (long long)jrows[q], b = std::min((long long)jrows[q + 1], (long long)P);
+                if (a >= P || b <= a)
+                    continue;
+                Template J;
+                J.P = (long)(b - a);
+                auto cut = [&](auto &dst, const auto &src) { dst.assign(src.begin() + a, src.begin() + b); };
+                for (int c = 0; c < 6; c++)
+                    cut(J.f8[c], T.f8[c]);
+                for (int c = 0; c < 27; c++)
+                    cut(J.f4[c], T.f4[c]);
+                for (int c = 0; c < 4; c++)
+                    cut(J.f4n[c], T.f4n[c]);
+                for (int c = 0; c < 2; c++)
+                    cut(J.i8[c], T.i8[c]);
+                for (int c = 0; c < 6; c++)
+                    cut(J.i4[c], T.i4[c]);
+                cut(J.hrel, T.hrel);
+                long long co = (long long)nearbyint(jrows[q + 3] * SR);
+                J.cof.assign(J.P, co);
+                long long mx = 0;
+                for (long r = 0; r < J.P; r++)
+                    mx = r == 0 ? J.i8[1][r] - J.i8[0][r] : std::max(mx, J.i8[1][r] - J.i8[0][r]);
+                J.dur = mx + co;
+                T.jacks.push_back(J);
+                T.jack_rank.push_back((int)jrows[q + 2]);
             }
         }
         return true;

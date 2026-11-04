@@ -385,6 +385,15 @@ typedef struct OrganSpec {
     double cn_hz[16], cn_db[16], cn_dbs, leak_db, phase_spread;
     int contact_on;         /* its contacts close at their own instants (contact_spread_s): live's t["cof"] */
     double beat_lo, beat_hi;    /* a harpsichord's choirs' partials' scatter (choir_beat_hz), Hz */
+    /* ITS CHOIRS (string_choirs: n_choir 0 none), as the register's string
+       bank has them: each its pipe (the class its strings are, -1 the
+       host's), footage, bridge (choir_bridge), the name its partials scatter
+       by (a buffed choir's plain one: choir_bname, choir_beat 0 none), its
+       cents and wire at every key (choir_cents, choir_stiffness); the
+       bridges' cross coupling, the buffs (buffed, plain), each rank's choir */
+    int n_choir, choir_pipe[8], choir_bridge[8], choir_beat[8], n_buff, buff[8][2], rank_choir[32];
+    double choir_ratio[8], cross, choir_cents[8][128], choir_stiff[8][128];
+    char choir_bname[8][16];
 } OrganSpec;
 
 /* what the note setup reads of the voice besides its VoiceSnap */
@@ -608,6 +617,7 @@ typedef struct {
     // click_s; on an organ with choirs (click_jacks), one a drawn stop's jack
     int n_click, click_jacks;
     double click_db, click_hz[16], click_amp[16], click_dec, click_s;
+    int pre_pluck;          // a quill's catch (pre_pluck_s): live's catch rows end at the slip (rof)
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -749,6 +759,8 @@ void nv_song_organ(void *s, long long ch, const OrganSpec *spec, const OrganSpec
 int nv_song_n_organs(void *s);
 int nv_song_organ_tremolo(void *s);
 void nv_song_add_push_rows(void *s, long long a, long long b);
+void nv_song_add_rel_jack(void *s, long long a, long long b, int rank, double jo);
+int nv_song_n_rel_jacks(void *s, double *out, int cap);
 int nv_song_n_push_rows(void *s, long long *ab, int cap);
 double nv_song_note_trim(void *s, int i);
 int nv_song_n_grows(void *s);
@@ -784,6 +796,11 @@ int nv_song_ped_spans(void *s, long long ch, double *out, int cap);
 int nv_song_pedal_values(void *s, long long ch, double *t, int *v, int cap);
 double nv_damper_contact(int p, int key, int top);
 double nv_stage_angle(double p);
+int nv_lreg_pluck(void *h, long long sid, int key, double at, int R, const double *cols, const long *slot,
+                  const int *free_keys, int nfree, const int *plucked, int nplucked, const long *rchoir);
+void nv_lreg_choirs(void *h, int nchoir, const long *bridges, double cross, int nbuff, const int *buffs);
+int nv_strings_og(const VoiceInit *c0, const VoiceSnap *tmpl, const OrganSpec *og, const double *table, double pan,
+                  double chan_vol, double sr, StringMode *out, StringMode *tmp, int cap);
 int nv_strings(const VoiceInit *c0, const VoiceSnap *tmpl, const double *table, double pan, double chan_vol,
                double sr, StringMode *out, StringMode *tmp, int cap);
 

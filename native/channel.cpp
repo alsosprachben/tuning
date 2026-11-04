@@ -224,6 +224,8 @@ struct Song {
     std::vector<std::pair<double, double>> amp_cfg;     // (its reference peak, 0 none; its imbalance)
     // ...and of each note's bellows push (blockrender's push_rows), [first, end)
     std::vector<std::pair<long long, long long>> push_rows;
+    // ...and of each jack's key-up click (blockrender's rel_jacks): first, end, rank, offset (s)
+    std::vector<double> rel_jacks;
     double total = 0.0;
     // ITS TUNING: the file's table, a channel's MIDI Tuning Standard tables
     // from their times (_MTS_TL), its fixed bend (_BTUN) and octave tuning (_OTUN)
@@ -1562,6 +1564,22 @@ int nv_song_glide(void *s, int i, int *cc5)
 
 // note i one of a gesture's strokes (_stroked)
 int nv_song_stroked(void *s, int i) { return ((nv::Song *)s)->notes[i].stroked; }
+
+// a jack's click rows, [first, end), its rank and offset (rel_jacks)
+void nv_song_add_rel_jack(void *s, long long a, long long b, int rank, double jo)
+{
+    std::vector<double> &v = ((nv::Song *)s)->rel_jacks;
+    v.push_back((double)a); v.push_back((double)b); v.push_back((double)rank); v.push_back(jo);
+}
+
+int nv_song_n_rel_jacks(void *s, double *out, int cap)
+{
+    const std::vector<double> &v = ((nv::Song *)s)->rel_jacks;
+    int n = (int)v.size() / 4;
+    for (int k = 0; k < 4 * n && k < 4 * cap; k++)
+        out[k] = v[k];
+    return n;
+}
 
 // a note's push rows, [first, end), as nv_play made them (push_rows)
 void nv_song_add_push_rows(void *s, long long a, long long b)

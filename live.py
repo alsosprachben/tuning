@@ -5991,7 +5991,10 @@ class Live:
             if self.reg_enabled and self._reg_voice(part, note):
                 pc = part.patch._voice_class(note + part.transpose)
                 ci = {c[0]: i for i, c in enumerate(pc.string_choirs)}
-                drawn = [r for r in part.drawn if (part.pid, ch, note, r) in self.slab.live
+                # (in the stops' own order, not the set's: a set of names
+                # iterates by their hashes, process to process, and the
+                # strike's sums with it -- nvlive drives the bridge in this order)
+                drawn = [r for r in part.patch.rank_names if r in part.drawn and (part.pid, ch, note, r) in self.slab.live
                          and pc.rank_choirs.get(r, r) in ci]
                 # ...the pluck's rows only: the quill's catch ends at the slip
                 # (its own noff), and as a driver of the worker's undecaying

@@ -1,5 +1,6 @@
 // register.cpp -- the native engine's FREE-STRING REGISTER: register.Channel
-// for a piano (one row of strings: no choirs, courses, bridges or buffs),
+// for a piano (one row of strings) or a harpsichord (its choirs, their
+// bridges and the buff: no courses or key bridges),
 // bit for bit with the Python whose array math is libm's (register._xexp,
 // _xpow, _xabs) and whose heavy loops are registercore.c's -- which this
 // calls, the same code under the same flags.
@@ -175,6 +176,9 @@ struct Bridge {
 struct Strike {
     int key;
     std::vector<std::vector<double>> drv;   // [column][row], the direct rows
+    bool has_plucked = false;               // the choirs it plucked (None: every string of the key)
+    std::vector<int> plucked;
+    std::vector<long> choir;                // each direct row's choir (empty: none)
 };
 
 struct Channel {
@@ -186,6 +190,10 @@ struct Channel {
     std::vector<long> key, string;
     std::vector<double> f, alpha, w, hl, hr, dl, dr, px, W;
     std::map<int, std::vector<int>> keyidx;      // in the bank's key order
+    // the choirs (Strings.choir_bridges, cross, buffs): each mode's bridge
+    std::vector<long> choir_bridges = std::vector<long>(1, 0), bridge;
+    double cross = 1.0;
+    std::vector<std::pair<int, int>> buffs;     // (buffed, plain)
     // the class
     double kappa, knock, fall, fl, rel;
     int top;
@@ -347,19 +355,35 @@ struct Channel {
         out.push_back(x);
     }
 
-    void strike(int k, double on, double held, const double *rows, int nr)
+    void strike(int k, double on, double held, const double *rows, int nr, const int *plucked = nullptr,
+                int nplucked = -1, const long *rchoir = nullptr)
     {
-        // rows: nr rows of NC columns (EMIT_COLS), the note's rows as the table holds them
-        double n_on = on * sr;
-        holds[k].push_back(Span(n_on, held * sr));
-        sp_cache.erase(k);
+        // rows: nr rows of NC columns (EMIT_COLS), the note's rows as the table holds them;
+        // plucked: the choirs it plucked (nplucked < 0: None); rchoir: each row's choir
         Strike st;
         st.key = k;
         st.drv.assign(NC, {});
+        st.has_plucked = nplucked >= 0;
+        if (st.has_plucked)
+            st.plucked.assign(plucked, plucked + nplucked);
         for (int r = 0; r < nr; r++)
-            if (rows[NC * r + C_dr] > 0.5)
+            if (rows[NC * r + C_dr] > 0.5) {
                 for (int c = 0; c < NC; c++)
                     st.drv[c].push_back(rows[NC * r + c]);
+                if (rchoir)
+                    st.choir.push_back(rchoir[r]);
+            }
+        // ITS OWN KEY'S FREE CHOIRS ARE FREE FROM ITS BLOCK (a pluck's: the
+        // block its partials start in)
+        double n_on = on * sr;
+        if (st.has_plucked && !st.drv[0].empty()) {
+            double mn = st.drv[C_non][0];
+            for (double v : st.drv[C_non])
+                mn = pymin(mn, v);
+            n_on = pymin(n_on, (double)((long long)pyfloordiv(mn, (double)blk) * blk));
+        }
+        holds[k].push_back(Span(n_on, held * sr));
+        sp_cache.erase(k);
         if (st.drv[0].empty())
             return;
         int si = (int)strikes.size();
@@ -492,10 +516,30 @@ struct Channel {
             double floor = floor_();
             std::vector<long> fi;
             std::vector<char> free(M, 0);
-            for (auto &ki : keyidx)
-                if (ki.first != st.key && !std::isnan(span_end(ki.first, b)))
+            // (Strings.free_choirs: a buffed choir while its stop is drawn, else its plain one)
+            std::vector<char> okc(choir_bridges.size(), 1);
+            auto in_plucked = [&](long c) {
+                return std::find(st.plucked.begin(), st.plucked.end(), (int)c) != st.plucked.end();
+            };
+            for (auto &bp : buffs) {
+                if (st.has_plucked && in_plucked(bp.first))
+                    okc[bp.second] = 0;
+                else
+                    okc[bp.first] = 0;
+            }
+            for (auto &ki : keyidx) {
+                if (ki.first != st.key) {
+                    if (!std::isnan(span_end(ki.first, b)))
+                        for (int i : ki.second)
+                            if (okc[string[i] / 16])
+                                free[i] = 1;
+                } else if (st.has_plucked && !std::isnan(span_end(ki.first, b))) {
+                    // its own key: every choir but the plucked ones
                     for (int i : ki.second)
-                        free[i] = 1;
+                        if (okc[string[i] / 16] && !in_plucked(string[i] / 16))
+                            free[i] = 1;
+                }
+            }
             for (int i = 0; i < M; i++)
                 if (free[i])
                     fi.push_back(i);
@@ -503,7 +547,9 @@ struct Channel {
                 continue;
             std::vector<cplx> xfer(M, cplx(0.0, 0.0));
             // strike_drive
-            std::vector<long> choir(R, -1), cb(1, 0), bridge(M, 0);
+            std::vector<long> choir(R, -1);
+            if (!st.choir.empty())
+                choir = st.choir;
             int cap = 4 * 3 * std::max(R, 1);
             std::vector<cplx> add_s, xfer_s, f_val;
             std::vector<int> f_r;
@@ -518,7 +564,8 @@ struct Channel {
                                    drv[C_delL].data(), drv[C_noff].data(), drv[C_re].data(), drv[C_tbav].data(),
                                    drv[C_tau].data(), drv[C_tcut].data(), drv[C_aft].data(), drv[C_sus].data(),
                                    drv[C_logr].data(), drv[C_logrA].data(), choir.data(), (int)fi.size(), fi.data(),
-                                   W.data(), alpha.data(), w.data(), bridge.data(), key.data(), cb.data(), 1.0, -1,
+                                   W.data(), alpha.data(), w.data(), bridge.data(), key.data(), choir_bridges.data(),
+                                   cross, -1,
                                    -1, 1.0, kappa, floor, SPLIT, sr, b, add_s.data(), xfer_s.data(), cap,
                                    f_r.data(), f_beta.data(), f_val.data(), &lo, &lr);
                 if (nfo <= cap)
@@ -731,8 +778,23 @@ void *nv_reg_new(long long ch, const StringMode *modes, int M, double kappa, dou
     C->r_b.assign(M, 0.0); C->r_nfloor.assign(M, 0.0); C->r_closed.assign(M, INF);
     C->r_lr = C->alpha;
     C->rrow.assign(M, -1); C->has.assign(M, 0);
+    C->bridge.assign(M, 0);
     C->room(1024);
     return C;
+}
+
+// A harpsichord's choirs (register.Strings'): each choir's bridge, the
+// coupling across bridges, and the buffs (buffed, plain) pairs
+void nv_reg_choirs(void *h, int nchoir, const long *bridges, double cross, int nbuff, const int *buffs)
+{
+    nv::reg::Channel *C = (nv::reg::Channel *)h;
+    C->choir_bridges.assign(bridges, bridges + nchoir);
+    C->cross = cross;
+    C->buffs.clear();
+    for (int q = 0; q < nbuff; q++)
+        C->buffs.push_back(std::make_pair(buffs[2 * q], buffs[2 * q + 1]));
+    for (int i = 0; i < C->M; i++)
+        C->bridge[i] = C->choir_bridges[C->string[i] / 16];
 }
 
 // A half-pedalled channel's key: its free spans (seconds) and its felt (each
@@ -796,6 +858,13 @@ void nv_reg_felt_done(void *h)
 void nv_reg_strike(void *h, int key, double on, double held, const double *rows, int nr)
 {
     ((nv::reg::Channel *)h)->strike(key, on, held, rows, nr);
+}
+
+// ...a pluck: the choirs it plucked (nplucked < 0: None) and each row's choir
+void nv_reg_pluck(void *h, int key, double on, double held, const double *rows, int nr, const int *plucked,
+                  int nplucked, const long *rchoir)
+{
+    ((nv::reg::Channel *)h)->strike(key, on, held, rows, nr, plucked, nplucked, rchoir);
 }
 
 void nv_reg_finish(void *h) { ((nv::reg::Channel *)h)->advance(nv::reg::INF); }
@@ -938,12 +1007,6 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         while (chans.count(rk) && chans[rk].second != k)
             rk += 100000;
         if (!chans.count(rk)) {
-            // (a harpsichord's choirs -- string_choirs: their bridges, buffs and
-            // the strike's plucked choirs -- are register.py's alone, for now)
-            if (k->organ)
-                for (int q = 0; q < k->organ->n_rank; q++)
-                    if (k->organ->rank[q].choir[0])
-                        return -1000000000LL;
             double pl[6];
             nv_song_pitch_level(song, i, k->init.effort_tilt != 0.0, pl);
             double tab[128];
@@ -957,7 +1020,9 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
             c.detune_hi = k->detune_hi * det;
             c.fixed_touch = tmpl->fixed_touch;
             std::vector<StringMode> modes(88 * 4 * 130), tmp(88 * 4 * 130);
-            int M = nv_strings(&c, &k->tmpl, tab, pl[2], pl[3], sr, modes.data(), tmp.data(), (int)modes.size());
+            const OrganSpec *cog = k->organ && k->organ->n_choir ? k->organ : nullptr;   // (a harpsichord's choirs)
+            int M = nv_strings_og(&c, &k->tmpl, cog, tab, pl[2], pl[3], sr, modes.data(), tmp.data(),
+                                  (int)modes.size());
             if (M < 0)
                 return -1000000000LL;
             int npv = nv_song_pedal_values(song, ch, nullptr, nullptr, 0);
@@ -972,6 +1037,10 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
             void *h = nv_reg_new(rk, modes.data(), M, k->reg_gain * scale, k->reg_knock * scale, k->reg_fall,
                                  k->reg_floor, k->reg_release * sr, k->damper_top, sr, blk, ped.data(),
                                  (int)ped.size() / 2, half);
+            if (cog) {
+                std::vector<long> cbr(cog->choir_bridge, cog->choir_bridge + cog->n_choir);
+                nv_reg_choirs(h, cog->n_choir, cbr.data(), cog->cross, cog->n_buff, &cog->buff[0][0]);
+            }
             if (half) {
                 std::vector<double> pt(npv);
                 std::vector<int> pv(npv);
@@ -1034,7 +1103,41 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         if (nv_song_sost(song, ch, iv[0], dv[0], &so))
             held = pymax(dv[1], so);
         long long r0 = row0[j], r1 = j + 1 < nn ? row0[j + 1] : nr;
-        nv_reg_strike(chans[rk].first, iv[0], dv[0], held, rows + NC * r0, (int)(r1 - r0));
+        if (k->organ && k->organ->n_choir) {
+            // A PLUCK (blockrender's register_open plucked, grc): the ranks
+            // drawn at the key-down, each on its choir's string; only their
+            // rows drive the bridge
+            const OrganSpec *og = k->organ;
+            NoteIn on_;
+            memset(&on_, 0, sizeof on_);
+            on_.on = dv[0]; on_.key_off = dv[1]; on_.br = -1.0;
+            if (!nv_song_organ_note(song, i, og->family, &on_))
+                return -1000000000LL;
+            std::vector<int> pk;
+            std::map<long, long> grc;
+            for (int ri = 0; ri < og->n_rank; ri++)
+                if (!std::isnan(on_.rank_sp[ri]) && on_.rank_sp[ri] == dv[0]) {
+                    if (og->rank_choir[ri] < 0)
+                        return -1000000000LL;
+                    pk.push_back(og->rank_choir[ri]);
+                    grc[(long)on_.rank_gr[ri]] = og->rank_choir[ri];
+                }
+            std::sort(pk.begin(), pk.end());
+            pk.erase(std::unique(pk.begin(), pk.end()), pk.end());
+            std::vector<double> kept;
+            std::vector<long> rch;
+            for (long long r = r0; r < r1; r++) {
+                auto it = grc.find((long)rows[NC * r + C_gr]);
+                if (it == grc.end())
+                    continue;
+                kept.insert(kept.end(), rows + NC * r, rows + NC * (r + 1));
+                rch.push_back(it->second);
+            }
+            nv_reg_pluck(chans[rk].first, iv[0], dv[0], held, kept.data(), (int)rch.size(), pk.data(), (int)pk.size(),
+                         rch.data());
+        } else {
+            nv_reg_strike(chans[rk].first, iv[0], dv[0], held, rows + NC * r0, (int)(r1 - r0));
+        }
     }
     long long n = nr;
     for (long long rk : order) {
