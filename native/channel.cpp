@@ -255,6 +255,12 @@ struct Song {
         int cc, v;
     };
     std::vector<Snd> snd;
+    // ITS MOOGS' ROWS (_MOOG_FT, _MOOG_KN, _MOOG_KROW): each layer of each
+    // Moog note its filter row, in the notes' order; the knob rows, one a
+    // channel and panel (a row's slot 9 its index)
+    std::vector<std::array<double, 30>> mft;
+    std::vector<std::array<double, 9>> mkn;
+    std::map<std::pair<long long, std::array<double, 9>>, int> mkrow;
     // ITS GLIDES (_prep_glide_sources, from finish): each note's source key, -1 none
     std::vector<int> glide_src;
 
@@ -1077,6 +1083,60 @@ int nv_song_n_notes(void *s) { return (int)((nv::Song *)s)->notes.size(); }
 void nv_song_snd(void *s, long long ch, double t, int cc, int v)
 {
     ((nv::Song *)s)->snd.push_back(nv::Song::Snd{ch, t, cc, v});
+}
+
+// whether channel ch has a sound controller of its own (CC71-78, or GS's
+// sound NRPNs): a Moog there turns its knobs (moog.apply_gm, Python's)
+int nv_song_snd_any(void *s, long long ch)
+{
+    for (const nv::Song::Snd &e : ((nv::Song *)s)->snd)
+        if (e.ch == ch && e.cc >= 0)
+            return 1;
+    return 0;
+}
+
+// A MOOG NOTE's layer's filter row (moog.ft_row, its slot 9 the layer's), on
+// channel ch with knob row kn: the knob row found or added for the channel
+// (_MOOG_KROW) and set in slot 9, the filter row added. The next filter row's
+// index, before: nv_song_moog_n
+int nv_song_moog_n(void *s) { return (int)((nv::Song *)s)->mft.size(); }
+
+void nv_song_moog_add(void *s, long long ch, const double *ft, const double *kn)
+{
+    nv::Song *g = (nv::Song *)s;
+    std::array<double, 9> k;
+    std::copy(kn, kn + 9, k.begin());
+    auto key = std::make_pair(ch, k);
+    auto it = g->mkrow.find(key);
+    int row;
+    if (it == g->mkrow.end()) {
+        row = (int)g->mkn.size();
+        g->mkrow[key] = row;
+        g->mkn.push_back(k);
+    } else {
+        row = it->second;
+    }
+    std::array<double, 30> f;
+    std::copy(ft, ft + 30, f.begin());
+    f[9] = (double)row;
+    g->mft.push_back(f);
+}
+
+// the filter rows and knob rows as the kernel reads them (float32, flat):
+// how many of each; out NULL just counts
+int nv_song_moog_tables(void *s, float *ft, float *kn, int *nkn)
+{
+    nv::Song *g = (nv::Song *)s;
+    if (ft)
+        for (size_t r = 0; r < g->mft.size(); r++)
+            for (int j = 0; j < 30; j++)
+                ft[30 * r + j] = (float)g->mft[r][j];
+    if (kn)
+        for (size_t r = 0; r < g->mkn.size(); r++)
+            for (int j = 0; j < 9; j++)
+                kn[9 * r + j] = (float)g->mkn[r][j];
+    *nkn = (int)g->mkn.size();
+    return (int)g->mft.size();
 }
 
 // CC71-78's d in force on channel ch at t (d[0] CC71's), 0 none

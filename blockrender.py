@@ -5515,13 +5515,26 @@ def _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG
             _uvs = None if MOOG_NEUTRAL else _MG.unison(getattr(props, 'moog_unison', None), nt.f0)
             _umid = min(range(len(_uvs)), key=lambda i: abs(_uvs[i][0] - 1.0)) if _uvs else 0
             _vb0 = (_VB[0], _VB[1], _VB[2])
-            for _osc, _k, _hf, _amp, _ph, _ur, _ug, _ul, _urr, _udr in (
+            # ...FROM C where the engine has this voice and nothing moves it
+            # (moog_spec: no GM sound controllers, mod rows, valve, body or unison)
+            _mnat = (_moog_native(em, props, nt, ('a', 'b').index(_lay), _mre)
+                     if (NATIVE_TONE != 'off' and not MOOG_NEUTRAL and not _sd and _uvs is None
+                         and _mpp is None and not _msf and not _pre and _body is None) else None)
+            if _mnat is not None and NATIVE_TONE == 'on':
+                NATIVE_STATS[0] += 1
+                _rows_into(A, _mnat[0])
+                for _i, _pr in enumerate(em._QACC):
+                    _pr[0], _pr[1] = float(_mnat[1][2 * _i]), float(_mnat[1][2 * _i + 1])
+                em.azimuth = _mnat[2]
+            _mrow0 = len(A['om'])
+            for _osc, _k, _hf, _amp, _ph, _ur, _ug, _ul, _urr, _udr in (() if (_mnat is not None and NATIVE_TONE == 'on') else
+                                                                         (
                     (_o, _k0, _h, _a, _p0 + (2.0 * math.pi * _uv[2] * _k0
                                              if _o in (_MG.OSC1, _MG.OSC2, _MG.SUB) else 0.0),
                      _uv[0], _uv[1], _uv[3], _uv[4], _uv[5])
                     for _o, _k0, _h, _a, _p0 in _mparts
                     for _ui, _uv in enumerate(_uvs or ((1.0, 1.0, 0.0, 1.0, 1.0, None),))
-                    if not (_ui != _umid and _o in (_MG.NOISE, _MG.SELF))):
+                    if not (_ui != _umid and _o in (_MG.NOISE, _MG.SELF)))):
                 if _uvs:
                     # ...the voice's drift in the vibrato slot (the note's
                     # own vibrato where the voice has none)
@@ -5553,6 +5566,8 @@ def _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG
                              nt.chiff, 0.0, 0.0, 0.0, 1.0,
                              0.0 if _nz else nt.cv * props.chiff_harmonic_gain(_k),
                              nt.cc, nt.crl, nt.sjit, nt.csc, -1, 0, ph0=_ph)
+            if _mnat is not None and NATIVE_TONE == 'check':
+                _rows_check(A, _mrow0, _mnat[0], _mnat[1], _mnat[2], em, 'moog', nt)
             _CBW[0], _CBW[1] = _cbw
             # ...but not into a LIVE template (MOOG_NEUTRAL): live stamps its
             # own repeats, and a template carrying the file's would be echoed twice
@@ -5567,6 +5582,41 @@ def _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG
         em.sound_pending = None      # its CC74/71 moved the ladder, not sound_shape
         stops = ()
     return stops
+
+
+def _moog_native(em, props, nt, layer, mre):
+    """A Moog layer's partials from C (native/tone.c nv_moog_tone): (rows,
+    qacc, azimuth), or None (Python plays them). The emitter as _note_moog
+    leaves it before them: the note's filter row set, no key, no FM."""
+    import native as _NV
+    spec = _NV.moog_spec(type(props)) if _NV.kit_drum(type(props)) == 6 else None
+    if spec is None or layer >= spec.n_layer:
+        return None
+    P = props
+    if em.pos_x != getattr(P, 'position_x', 0.0):
+        return None
+    ready = _native_ready(em, P)
+    if ready is None:
+        return None
+    d, snap = ready
+    reflect = bool(em.REFLECT and P.reflection_order)
+    if reflect:
+        imgs, nsurf, surf, img, mir = P._images_for(em.pos_x * 1.0, P.radiation_distance * 1.0, em.pos_z * 1.0)
+        if len(imgs) > 64:
+            return None
+    else:
+        imgs, nsurf, surf, img, mir = [], np.zeros(1, np.int32), np.zeros(1, np.int32), np.zeros(3), np.zeros(3)
+    t = _tone_in(em, P, nt, P.gain, 0.0, nt.sjit, reflect)
+    cap = (32 + 1 + 64 + 64 + 32) * (1 + len(imgs)) + 16
+    rows = np.empty((cap, len(EMIT_COLS)))
+    qacc = np.array([v for pr in em._QACC for v in pr], np.float64)
+    az = ctypes.c_double(em.azimuth)
+    n = d.nv_moog_tone(ctypes.byref(snap), ctypes.byref(t), ctypes.byref(spec.L[layer]), float(em.moog_filter_row),
+                       float(mre), len(imgs), nsurf.ctypes.data, surf.ctypes.data, img.ctypes.data,
+                       mir.ctypes.data, rows.ctypes.data, cap, qacc.ctypes.data, ctypes.byref(az))
+    if n < 0:
+        return None
+    return rows[:n], qacc, az.value
 
 
 def _note_strike_noise(em, props, nt, _CBW, _VB, _pjit, emit_partial, random):

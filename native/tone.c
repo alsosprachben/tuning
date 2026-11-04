@@ -611,6 +611,117 @@ int nv_strike_bal(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz,
                   double reg, double bdb, double scal, double slr, double sfade, double slen, double bon,
                   double pos_x, double bgl, double bgr, double *rows, int cap, double *qacc, double *azimuth);
 
+/* Python's float floor division (float_divmod), where C's floor(a / b) can differ */
+static double py_floordiv(double vx, double wx)
+{
+    double mod = fmod(vx, wx);
+    double div = (vx - mod) / wx;
+    if (mod != 0.0) {
+        if ((wx < 0) != (mod < 0))
+            div -= 1.0;
+    }
+    double fd;
+    if (div != 0.0) {
+        fd = floor(div);
+        if (div - fd > 0.5)
+            fd += 1.0;
+    } else {
+        fd = copysign(0.0, vx / wx);
+    }
+    return fd;
+}
+
+/* A MOOG LAYER's partials (blockrender._note_moog, one layer, no unison):
+ * moog.partials in its order -- the noise bands, the ladder's own sine,
+ * OSC 1, OSC 2, the SUB -- each at its true pitch, but its head, radiation
+ * and room read at its harmonic's NOMINAL frequency (where live's
+ * knob-neutral templates read them); every one tagged with the note's
+ * filter row fx and its key (osc 4096 + k), OSC 2's with 1 -> 2 FM's
+ * modulator. A noise band is noise (a negative wash bandwidth) and has no
+ * images. The envelope columns are neutral (a 1-sample fade, the panel's
+ * release mre): the kernel's contours are the envelope. */
+int nv_moog_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, double fx, double mre, int nimg,
+                 const int *nsurf, const int *surf, const double *img, const double *mir, double *rows, int cap,
+                 double *qacc, double *azimuth)
+{
+    Rows R = {rows, 0, cap};
+    const double f0 = t0->f0, sr = t0->sr;
+    const double fmax = pymin(L->fmax_hz, sr / 2.0);
+    /* moog.partials: (osc, harmonic, Hz, amplitude, phase) */
+    static _Thread_local int po[32 + 1 + 64 + 64 + 32], pk[32 + 1 + 64 + 64 + 32];
+    static _Thread_local double phf[32 + 1 + 64 + 64 + 32], pa[32 + 1 + 64 + 64 + 32], pph[32 + 1 + 64 + 64 + 32];
+    int np = 0;
+    double f1 = f0 * L->t * L->foot1;
+    double f2 = f0 * L->t * L->foot2 * L->o2f;
+    if (L->lvl[3] > 0.0)
+        for (int k = 0; k < L->n_noise; k++)
+            if (L->noise_hz[k] <= fmax) {
+                po[np] = 4; pk[np] = k + 1; phf[np] = L->noise_hz[k]; pa[np] = L->noise_amp[k] * L->lvl[3];
+                pph[np++] = 0.0;
+            }
+    if (L->self_amp > 0.0) {
+        double fs = L->self_cut * pow(f0 / L->kb_ref_hz, L->kb_track) * L->self_eg;
+        if (fs <= fmax) {
+            po[np] = 5; pk[np] = 1; phf[np] = fs; pa[np] = L->self_amp; pph[np++] = 0.0;
+        }
+    }
+    for (int o = 1; o <= 3; o++) {
+        double f = o == 1 ? f1 : o == 2 ? f2 : f1 * 0.5;
+        double lvl = L->lvl[o - 1];
+        const double (*c)[2] = o == 1 ? L->c1 : o == 2 ? L->c2 : L->cs;
+        int nh = o == 3 ? 32 : 64;
+        if (lvl <= 0.0 || f <= 0.0)
+            continue;
+        double q = py_floordiv(fmax, f);
+        int n = q < (double)nh ? (int)q : nh;
+        if (n < 1)
+            continue;
+        for (int k = 1; k <= n; k++) {
+            double a = 2.0 * hypot(c[k - 1][0], c[k - 1][1]) * lvl;
+            if (a > 1e-9) {
+                po[np] = o; pk[np] = k; phf[np] = f * k; pa[np] = a; pph[np++] = atan2(c[k - 1][1], c[k - 1][0]);
+            }
+        }
+    }
+    /* the note's vibrato (none: the kernel's neutral one), OSC 1 as the FM's modulator */
+    double VB[3];
+    if (!nv_voice_vibrato(v, f0, 0, VB)) {
+        VB[0] = 0.0; VB[1] = 5.5; VB[2] = 0.0;
+    }
+    double fm1 = L->fm_index != 0.0 ? 2.0 * PI * f0 * L->fm_r1 / sr : 0.0;
+    double terms[9 * 64];
+    for (int i = 0; i < np; i++) {
+        int o = po[i], k = pk[i];
+        double hf = phf[i];
+        ToneIn t = *t0;
+        t.fx = fx;
+        t.mk = (double)(o * 4096 + k);
+        t.fm_omega = o == 2 ? fm1 : 0.0;
+        t.fm_phase = o == 2 ? (L->fm_index != 0.0 ? L->fm_ph : 0.0) : 0.0;
+        int nz = o == 4;
+        if (nz) {
+            t.cbw0 = -L->noise_bw;
+            t.cbw1 = 0.0;
+            t.reflect = 0;
+        }
+        double hn = (o == 1 || o == 2) ? f0 * k : o == 3 ? f0 * 0.5 * k : o == 5 ? f0 : hf;
+        double gM = v->gain * pa[i] * nv_radiation_gain(v, hn, 0.0, 0);
+        double gL = gM * nv_hrtf_gain(v, hn, t.li), gR = gM * nv_hrtf_gain(v, hn, t.ri);
+        double cv = nz ? 0.0 : t.cv * nv_chiff_harmonic_gain(v, k);
+        int nt_ = 0;
+        if (t.reflect) {
+            nt_ = note_terms(v, &t, hn, t.pos_x0, t.pos_z, nimg, nsurf, surf, img, mir, terms);
+            if (nt_ < 0)
+                return -1;
+        }
+        if (!emit(v, &t, &R, qacc, azimuth, terms, nt_, 2.0 * PI * hf / sr, gL, gR, gM, hn, t.non, t.noff, 1.0,
+                  mre, t.chiff, 0.0, 0.0, 0.0, 1.0, cv, t.cc, t.crl, t.sjit, t.csc, -1.0, 0.0, pph[i] + 0.0, 0.0,
+                  VB, t.pos_x0, 0))
+            return -1;
+    }
+    return R.n;
+}
+
 int nv_strike(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db,
               double reg, double bdb, double scal, double slr, double sfade, double slen, double bon,
               double pos_x, double *rows, int cap, double *qacc, double *azimuth)

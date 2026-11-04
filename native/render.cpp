@@ -19,6 +19,13 @@
 #include <cstring>
 #include <vector>
 
+// THE MOOG's columns of a table with one (nv.h's MoogCols, as nvrender passes it)
+typedef struct {
+    const float *FT, *KN;
+    const int *fx, *mk;
+    const double *fm[3];
+} MoogCols;
+
 extern "C" {
 
 // synthkernel.c's synth_voice (and _xdec: the same arguments)
@@ -104,7 +111,27 @@ struct Gather {
     std::vector<int> i[NI];
     std::vector<int> lsr;               // (the Leslie's lobe columns, a table with one)
     std::vector<float> lob[4];
+    std::vector<int> fx, mk;            // (a Moog's: its filter row and key, its FM's three)
+    std::vector<double> fm[3];
 };
+
+static void gather_moog(Gather &g, const std::vector<long long> &rows, const MoogCols *m)
+{
+    if (!m)
+        return;
+    size_t n = rows.size();
+    g.fx.resize(n);
+    g.mk.resize(n);
+    for (size_t k = 0; k < n; k++) {
+        g.fx[k] = m->fx[rows[k]];
+        g.mk[k] = m->mk[rows[k]];
+    }
+    for (int c = 0; c < 3; c++) {
+        g.fm[c].resize(n);
+        for (size_t k = 0; k < n; k++)
+            g.fm[c][k] = m->fm[c][rows[k]];
+    }
+}
 
 static void gather(Gather &g, const std::vector<long long> &rows, double *const *d, float *const *f, long *const *l,
                    int *const *ii, bool damp)
@@ -148,8 +175,11 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
               const double *BC, const float *BL, const float *noRows, const float *sh, long CHUNK,
               double xdec_nepers, double SR,
               double master_gain, const float *DM, const long *DMO, const long *DMB, const long *DMN, float *L,
-              float *R, void *slo, const int *lsr, float *const *lob, const float *LANG, long lgn)
+              float *R, void *slo, const int *lsr, float *const *lob, const float *LANG, long lgn,
+              const MoogCols *moog)
 {
+    if (moog && !moog->FT)
+        moog = nullptr;
     memset(L, 0, sizeof(float) * N);
     memset(R, 0, sizeof(float) * N);
     bool has_dm = DM != nullptr;
@@ -164,6 +194,8 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
             m = m && ii[I_br][r] < 0;
         if (has_dm)
             m = m && ii[I_dk][r] < 0;
+        if (moog)
+            m = m && moog->fx[r] < 0;       // (a Moog's: its contours are its envelope)
         return m;
     };
     std::vector<long long> plain, fast, damped;
@@ -182,7 +214,13 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
             return;
         Gather g;
         gather(g, rows, d, f, l, ii, damp);
+        gather_moog(g, rows, moog);
         int n = (int)rows.size();
+        // the Moog's arguments, NULL none (fx NULL: the kernel never reads FT or KN)
+        const int *mfx = moog ? g.fx.data() : nullptr, *mmk = moog ? g.mk.data() : nullptr;
+        const float *mFT = moog ? moog->FT : noRows, *mKN = moog ? moog->KN : noRows;
+        const double *mw = moog ? g.fm[0].data() : nullptr, *mp = moog ? g.fm[1].data() : nullptr;
+        const double *mpR = moog ? g.fm[2].data() : nullptr;
         auto F = [&](int c) { return g.f[c].data(); };
         if (LANG && fn == (voice_fn)sv) {
             g.lsr.resize(n);
@@ -198,8 +236,8 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                            F(F_aft), F(F_sus), F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav),
                            F(F_tau), F(F_tcut), F(F_gb), F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl),
                            F(F_delL), F(F_delR), g.i[I_gr].data(), g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC,
-                           BL, nullptr, noRows, noRows, 1, 0, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                           nullptr, nullptr, nullptr, nullptr, nullptr, sh[0], sh[1], sh[2], sh[3], g.lsr.data(),
+                           BL, mfx, mFT, mKN, 1, 0, nullptr, nullptr, mmk, nullptr, nullptr, nullptr,
+                           nullptr, nullptr, mw, mp, mpR, sh[0], sh[1], sh[2], sh[3], g.lsr.data(),
                            g.lob[0].data(), g.lob[1].data(), g.lob[2].data(), g.lob[3].data(), LANG, lgn, nullptr,
                            nullptr, nullptr, nullptr, nullptr, nullptr, 0, CHUNK, nullptr, nullptr, nullptr);
         } else if (!damp)
@@ -207,16 +245,16 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA), F(F_aft), F(F_sus),
                F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav), F(F_tau), F(F_tcut), F(F_gb),
                F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl), F(F_delL), F(F_delR), g.i[I_gr].data(),
-               g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, BL, nullptr, noRows, noRows, 1, 0, nullptr,
-               nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, sh[0], sh[1],
+               g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, BL, mfx, mFT, mKN, 1, 0, nullptr,
+               nullptr, mmk, nullptr, nullptr, nullptr, nullptr, nullptr, mw, mp, mpR, sh[0], sh[1],
                sh[2], sh[3], CHUNK, nullptr, nullptr, nullptr);
         else
             dfn(L, R, 0, N, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR), F(F_nf),
                 g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA), F(F_aft), F(F_sus),
                 F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav), F(F_tau), F(F_tcut), F(F_gb),
                 F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl), F(F_delL), F(F_delR), g.i[I_gr].data(),
-                g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, BL, nullptr, noRows, noRows, 1, 0, nullptr,
-                nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, sh[0],
+                g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, BL, mfx, mFT, mKN, 1, 0, nullptr,
+                nullptr, mmk, nullptr, nullptr, nullptr, nullptr, nullptr, mw, mp, mpR, sh[0],
                 sh[1], sh[2], sh[3], CHUNK, nullptr, nullptr, nullptr, g.i[I_dk].data(), F(F_dg), DM, DMO, DMB,
                 DMN);
     };

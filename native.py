@@ -156,6 +156,20 @@ class PyRandomState(ctypes.Structure):
     _fields_ = [('mt', ctypes.c_uint32 * 624), ('i', I), ('has_gauss', I), ('gauss_next', C)]
 
 
+class MoogLayer(ctypes.Structure):
+    """native/nv.h's MoogLayer: one Messenger's panel as a note reads it (moog_spec)."""
+    _fields_ = [('t', C), ('foot1', C), ('foot2', C), ('o2f', C), ('lvl', C * 4),
+                ('c1', (C * 2) * 64), ('c2', (C * 2) * 64), ('cs', (C * 2) * 32),
+                ('n_noise', I), ('noise_hz', C * 32), ('noise_amp', C * 32),
+                ('self_amp', C), ('self_cut', C), ('self_eg', C), ('kb_track', C),
+                ('fm_index', C), ('fm_r1', C), ('fm_ph', C), ('ft', C * 30), ('kn', C * 9), ('rel_span', C),
+                ('fmax_hz', C), ('kb_ref_hz', C), ('noise_bw', C)]
+
+
+class MoogSpec(ctypes.Structure):
+    _fields_ = [('n_layer', I), ('L', MoogLayer * 2)]
+
+
 class NoteClass(ctypes.Structure):
     """native/engine.cpp's NoteClass: what a voice class is to a note's setup."""
     _fields_ = ([('init', VoiceInit), ('tmpl', VoiceSnap), ('chiff_max_valve_time', C), ('release_valve_set', I),
@@ -196,7 +210,8 @@ class NoteClass(ctypes.Structure):
                    ('cab_set', I), ('n_cab_fm', I), ('n_cab_afm', I), ('cab_floor', C), ('cab_fm', C * 3 * 4),
                    ('cab_afm', C * 3 * 4), ('cab_corner', C), ('cab_order', C), ('cab_cut', C), ('cab_bell', C),
                    ('cab_ref', C), ('n_click', I), ('click_jacks', I), ('click_db', C), ('click_hz', C * 16),
-                   ('click_amp', C * 16), ('click_dec', C), ('click_s', C), ('pre_pluck', I)])
+                   ('click_amp', C * 16), ('click_dec', C), ('click_s', C), ('pre_pluck', I),
+                   ('moog', MoogSpec)])
 
 
 class NoteIn(ctypes.Structure):
@@ -222,7 +237,8 @@ class NoteOut(ctypes.Structure):
                 + [(f, C) for f in ('non', 'noff', 'fade', 'rel', 'chiff', 'jitter_scale', 'dl', 'dr', 'li',
                                     'ri', 'pos_x', 'pos_z', 'B', 'cv', 'cc', 'crl', 'sjit', 'csc')]
                 + [('tb', C * 3), ('cbw', C * 2), ('radius', C), ('n_push', I), ('f0', C)]
-                + [('n_click', I), ('n_jack', I), ('jack_n', I * 32), ('jack_rank', I * 32), ('jack_off', C * 32)])
+                + [('n_click', I), ('n_jack', I), ('jack_n', I * 32), ('jack_rank', I * 32), ('jack_off', C * 32),
+                   ('n_ft', I), ('ft', (C * 30) * 2)])
 
 
 def lib():
@@ -309,6 +325,9 @@ def _load():
             ('nv_tone', I, [P, ctypes.POINTER(ToneIn), I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                             ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p, ctypes.POINTER(I),
                             ctypes.c_void_p, D]),
+            ('nv_moog_tone', I, [P, ctypes.POINTER(ToneIn), ctypes.POINTER(MoogLayer), C, C, I, ctypes.c_void_p,
+                                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I,
+                                 ctypes.c_void_p, D]),
             ('nv_strike', I, [P, ctypes.POINTER(ToneIn), I, ctypes.c_void_p, ctypes.c_void_p, C, C, C, C, C, C, C,
                               C, ctypes.c_void_p, I, ctypes.c_void_p, D]),
             ('nv_voice_init', None, [ctypes.POINTER(VoiceInit), P, C, C, C, C, C, ctypes.POINTER(PyRandomState),
@@ -368,7 +387,8 @@ def _load():
                               ctypes.c_void_p,
                               ctypes.c_long, C, C, C, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                              ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]),
+                              ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long,
+                              ctypes.c_void_p]),
             ('nv_leslie_expand', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p,
                                       ctypes.c_void_p, ctypes.c_void_p, C, ctypes.c_void_p, ctypes.c_void_p,
                                       ctypes.c_void_p, ctypes.c_void_p]),
@@ -898,11 +918,99 @@ def pipe_voice(cls):
             and not cls.blare_db_per_khz and not getattr(cls, 'strike_noise_db', None))
 
 
+_MOOG = {}
+
+
+def moog_spec(cls):
+    """A Moog class's panels as its notes read them (nv.h MoogSpec), one a
+    layer (moog.layers_of), at TUNING_MOOG_PANEL's knobs as moog.panel_of
+    takes them -- or None where a panel has what the native note has not
+    (moog_voice). The waveshapes' coefficients are moog.py's own at 64 (and
+    32) harmonics: a harmonic's is the same however many are asked for."""
+    got = _MOOG.get(cls)
+    if got is None:
+        import cmath
+        import moog as MG
+        import mf104
+        spec = MoogSpec()
+        lays = MG.layers_of(cls)
+        ok = 1 <= len(lays) <= 2
+        for i, lay in enumerate(lays if ok else ()):
+            pn = MG.panel_of(cls, layer=lay)
+            if (MG.pitch_params(pn) is not None or MG.shape_flags(pn) or pn['sync']
+                    or mf104.settings(pn) is not None or len(MG.NOISE_HZ) > 32):
+                ok = False
+                break
+            L = spec.L[i]
+            L.t = 2.0 ** (MG.bipolar(pn['tune'], MG.SEMIS) / 12.0)
+            L.foot1 = MG.FOOT.get(int(pn['osc1_octave']), 1.0)
+            L.foot2 = MG.FOOT.get(int(pn['osc2_octave']), 1.0)
+            L.o2f = 2.0 ** (MG.bipolar(pn['osc2_freq'], MG.SEMIS) / 12.0)
+            L.lvl[:] = [float(pn['osc1_level']), float(pn['osc2_level']), float(pn['sub_level']),
+                        float(pn['noise_level'])]
+            for arr, c in ((L.c1, MG.osc_spectrum(pn['osc1_wave'], MG.OSC_HARMONICS)),
+                           (L.c2, MG.osc_spectrum(pn['osc2_wave'], MG.OSC_HARMONICS)),
+                           (L.cs, MG.sub_spectrum(pn['sub_wave'], MG.SUB_HARMONICS))):
+                for k, z in enumerate(c):
+                    arr[k][0], arr[k][1] = float(z.real), float(z.imag)
+            L.n_noise = len(MG.NOISE_HZ)
+            L.noise_hz[:L.n_noise] = [float(x) for x in MG.NOISE_HZ]
+            L.noise_amp[:L.n_noise] = [float(x) for x in MG.NOISE_AMP]
+            L.self_amp = MG.self_amp(pn['resonance'])
+            L.self_cut = MG.knob_cutoff(pn['cutoff'])
+            L.self_eg = 2.0 ** (MG.eg_octaves(pn['eg_amount']) * MG.sustain_level(pn['f_sustain']))
+            L.kb_track = float(pn['kb_track'])
+            L.fm_index = MG.fm_index(pn)
+            L.fm_r1 = MG.osc_ratio(pn, MG.OSC1)
+            L.fm_ph = cmath.phase(MG.osc_spectrum(pn['osc1_wave'], 1)[0]) if L.fm_index else 0.0
+            L.ft[:] = [float(x) for x in MG.ft_row(pn, MG.KB_REF_HZ, 0, False, 0)]
+            L.kn[:] = [float(x) for x in MG.kn_row(pn)]
+            L.rel_span = MG.release_span(pn)
+            L.fmax_hz, L.kb_ref_hz, L.noise_bw = MG.FMAX_HZ, MG.KB_REF_HZ, MG.NOISE_BW
+        spec.n_layer = len(lays) if ok else 0
+        got = _MOOG[cls] = spec if ok else False
+    return got or None
+
+
+def moog_voice(cls):
+    """Whether native/voice.c plays cls as a Moog (kind 6: moog.py's
+    Messenger, native/moog.cpp): SynthProperties' constructor, gains and
+    vibrato (a section's of one player), and only what the native Moog note
+    has of its panels -- the oscillators, noise, the ladder's own sine, the
+    contours and 1 -> 2 FM, one layer or two. Not yet: the mod section's
+    pitch and shape rows, SYNC, the MF-104M, a valve after the ladder, a
+    formant body, a unison."""
+    import tonelib as T
+    if not getattr(cls, 'moog', False):
+        return False
+    if any(k.__name__ not in ('SynthProperties', 'object') for k in cls.__mro__ if '__init__' in k.__dict__):
+        return False
+    if any(_owner(cls, n) != 'SynthProperties' for n in ('radiation_gain', 'hrtf_gain', 'chiff_harmonic_gain')):
+        return False
+    if _owner(cls, 'voice_vibrato') not in ('SynthProperties', 'SectionMixin'):
+        return False
+    if any(_owner(cls, n) != o for n, o in _BASE_OWN.items() if n != 'inharmonicity_coefficient_func'):
+        return False
+    if issubclass(cls, T.SectionMixin) and int(cls.section_players) > 1:
+        return False
+    if (getattr(cls, 'moog_body', None) is not None or getattr(cls, 'moog_unison', None)
+            or getattr(cls, 'amp_drive', 0.0)):
+        return False
+    # (nothing beside its partials: no knock, breath, struck layer, ring or click)
+    if any(getattr(cls, a, None) for a in ('strike_noise_db', 'breath_noise_db', 'struck_layer', 'ring_db',
+                                           'release_click_db', 'touch_leak_db', 'shake_noise')):
+        return False
+    return moog_spec(cls) is not None
+
+
 def kit_drum(cls):
     """Which voice native/voice.c plays cls as (VoiceSnap.kind) past a
     piano's: 1 a kit drum, 2 a measured mode set's (the clap, the cymbals,
-    the woods...), 3 a shaker, 4 a harmonic voice (a guitar); else 0."""
+    the woods...), 3 a shaker, 4 a harmonic voice (a guitar), 5 an electric
+    piano, 6 a Moog; else 0."""
     import tonelib as T
+    if moog_voice(cls):
+        return 6
     if ep_voice(cls):
         return 5
     if harmonic_voice(cls) or tonewheel_voice(cls) or reed_voice(cls) or electric_voice(cls):
@@ -1333,6 +1441,13 @@ def snapshot(props):
         s.n_mp = len(p.mode_ratios)
         for i in range(s.n_mp):
             s.mode_phases[i] = p.mode_phase(i + 1)
+    elif s.kind == 6:
+        # a Moog: its partials are its panel's (moog_spec); of the voice, a
+        # section's vibrato for its one player
+        if isinstance(p, T.SectionMixin):
+            s.sect_n, s.sect_vib = 1, 1
+            s.sect_vib_cents = p.section_vibrato_cents
+            s.sect_vib_hz[:] = [float(x) for x in p.section_vibrato_hz]
     elif s.kind == 1:
         if isinstance(p, T.SfxThroatProperties):
             # a throat's pulse: its tilt, mouth and vowel (the note's, nv_note), its breath
@@ -2134,6 +2249,9 @@ def note_class(cls):
         k.glide_reach = math.nan if gr is None else float(gr)
         k.porta_fast, k.porta_slow = T.PORTA_SEMITONE_FAST, T.PORTA_SEMITONE_SLOW
         k.porta_d_semi, k.porta_settle = T._PORTA_D_SEMI, T.PORTA_SETTLE_TAUS
+        # a Moog: its panels (nv.h MoogSpec, in the class itself)
+        if kit_drum(cls) == 6:
+            k.moog = moog_spec(cls)
         # a registered organ: its ranks (the pointer the engine reads; the table kept here)
         if getattr(cls, 'registerable', False):
             og = organ(cls)
@@ -2828,7 +2946,7 @@ def render(F):
                 tabs[1].ctypes.data, tabs[2].ctypes.data, tabs[3].ctypes.data,
                 None if bl is None else bl.ctypes.data, BR._NO_ROWS.ctypes.data, sh,
                 BR._chunk(), float(BR.XDEC_NEPERS), float(BR.SR), float(BR.T.master_gain),
-                *[a.ctypes.data if a is not None else None for a in dm], L.ctypes.data, R.ctypes.data, *lo)
+                *[a.ctypes.data if a is not None else None for a in dm], L.ctypes.data, R.ctypes.data, *lo, None)
     return L, R
 
 

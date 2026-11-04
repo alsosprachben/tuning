@@ -440,6 +440,36 @@ typedef struct {
     int has_radius;
 } ToneIn;
 
+/* A MOOG MESSENGER's panel as a note reads it (moog.py; native.moog_spec):
+   its knobs worked out at the class -- the waveshapes' coefficients, the
+   filter's fixed row, the knob row -- so a note has only its key to add */
+typedef struct {
+    double t, foot1, foot2, o2f;            /* TUNE's ratio, the OCTAVE switches, OSC 2 FREQ's ratio */
+    double lvl[4];                          /* OSC 1, OSC 2, SUB, NOISE levels */
+    double c1[64][2], c2[64][2], cs[32][2]; /* c_k of OSC 1, OSC 2 and the SUB (osc_spectrum, sub_spectrum) */
+    int n_noise;                            /* the noise bank (NOISE_HZ, NOISE_AMP) */
+    double noise_hz[32], noise_amp[32];
+    /* the ladder's own sine (self_amp, self_hz): its level, CUTOFF's corner,
+       2^(the contour's sustained octaves), KB TRACKING */
+    double self_amp, self_cut, self_eg, kb_track;
+    double fm_index, fm_r1, fm_ph;          /* 1 -> 2 FM: its index, OSC 1's ratio, its fundamental's phase */
+    double ft[30];                          /* moog.ft_row (slots 0, 9 and 10 the note's) */
+    double kn[9];                           /* moog.kn_row */
+    double rel_span;                        /* release_span, s */
+    double fmax_hz, kb_ref_hz, noise_bw;    /* FMAX_HZ, KB_REF_HZ, NOISE_BW */
+} MoogLayer;
+
+typedef struct {
+    int n_layer;                            /* 1, or 2 a layered voice (moog.layers_of) */
+    MoogLayer L[2];
+} MoogSpec;
+
+/* tone.c: a Moog layer's partials (blockrender._note_moog): its rows, the
+   note's filter row fx and its release (samples) on them */
+int nv_moog_tone(const VoiceSnap *v, const ToneIn *t, const MoogLayer *L, double fx, double mre, int nimg,
+                 const int *nsurf, const int *surf, const double *img, const double *mir, double *rows, int cap,
+                 double *qacc, double *azimuth);
+
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
                    double attack_volume, double channel_volume, double effort, PyRandom *rs,
                    VoiceSnap *s, VoiceNote *o);
@@ -618,6 +648,9 @@ typedef struct {
     int n_click, click_jacks;
     double click_db, click_hz[16], click_amp[16], click_dec, click_s;
     int pre_pluck;          // a quill's catch (pre_pluck_s): live's catch rows end at the slip (rof)
+    // A MOOG (moog.py; VoiceSnap.kind 6): each layer's panel as its note
+    // reads it (native.moog_spec), n_layer 0 none
+    MoogSpec moog;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -693,6 +726,10 @@ typedef struct {
        rows (jack_n), its rank (-1: one click, no jack) and offset (s) */
     int n_click, n_jack, jack_n[32], jack_rank[32];
     double jack_off[32];
+    /* a Moog's layers' filter rows (moog.ft_row), slot 9 the layer's index:
+       the caller's knob row goes there */
+    int n_ft;
+    double ft[2][30];
 } NoteOut;
 
 // tone.c: the key-up's click (nv_click, blockrender._note_release_click)
@@ -740,6 +777,17 @@ void nv_song_legato(void *s, long long ch, int note, int k);
 void nv_song_note_stroke(void *s, int i, double ratio, int inner);
 void nv_song_strokes(void *s, const int *kind, const double *par);
 int nv_song_slur(void *s, int i, int *out);
+int nv_song_snd_any(void *s, long long ch);
+/* render.cpp: THE MOOG's columns of a table with one (its filter rows FT,
+   knob rows KN): fx mk (int32), fmw fmp fmpR */
+typedef struct {
+    const float *FT, *KN;
+    const int *fx, *mk;
+    const double *fm[3];
+} MoogCols;
+int nv_song_moog_n(void *s);
+void nv_song_moog_add(void *s, long long ch, const double *ft, const double *kn);
+int nv_song_moog_tables(void *s, float *ft, float *kn, int *nkn);
 int nv_song_choke(void *s, long long ch, int note, double on, double *out);
 /* a note's class: K[128 * program + key], a drum set's K[16384 + 128 * program + key] */
 #define NV_K_DRUMS 16384

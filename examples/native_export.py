@@ -144,7 +144,10 @@ def main(argv):
                 oidx[pc] = len(organs)
                 organs.append(bytes(N.organ(pc)))
             prog_organ.append(oidx[pc])
-    cmap_live = cmap
+    # (live's: not a Moog yet -- its templates are knob-neutral, weighed by
+    # the slab from the panel, moog.weights, which nvlive does not have)
+    _moogs = {i for c, i in idx.items() if N.kit_drum(c) == 6}
+    cmap_live = [-1 if x in _moogs else x for x in cmap]
     trims = []
     for gs in (False, True):
         trims += [float(PM.program_trim(p, False, gs=gs)) for p in range(128)]

@@ -81,7 +81,8 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
               float *const *f, long *const *l, int *const *ii, const float *G, const float *S, const float *BR,
               const double *BC, const float *BL, const float *noRows, const float *sh, long CHUNK, double xdec_nepers,
               double SR, double master_gain, const float *DM, const long *DMO, const long *DMB, const long *DMN,
-              float *L, float *R, void *slo, const int *lsr, float *const *lob, const float *LANG, long lgn);
+              float *L, float *R, void *slo, const int *lsr, float *const *lob, const float *LANG, long lgn,
+              const MoogCols *moog);
 void nv_buf_free(void *p);
 long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                             const double *cfg, const char *mask, long long nmask, double sr);
@@ -852,12 +853,35 @@ int main(int argc, char **argv)
             return 1;
         }
     }
+    // THE MOOGS' ROWS (_MOOG_FT, _MOOG_KN: no knob moves, no pitch or shape
+    // rows) and their columns
+    int nkn = 0, nft = nv_song_moog_tables(song, nullptr, nullptr, &nkn);
+    std::vector<float> FT((size_t)30 * nft), KN((size_t)9 * nkn);
+    std::vector<int> fxc, mkc;
+    std::vector<double> fmc[3];
+    MoogCols mc{};
+    if (nft) {
+        nv_song_moog_tables(song, FT.data(), KN.data(), &nkn);
+        std::vector<double> v = fcol("fx");
+        fxc.assign(v.begin(), v.end());
+        v = fcol("mk");
+        mkc.assign(v.begin(), v.end());
+        const char *FMN[3] = {"fmw", "fmp", "fmpR"};
+        for (int q = 0; q < 3; q++)
+            fmc[q] = fcol(FMN[q]);
+        mc.FT = FT.data();
+        mc.KN = KN.data();
+        mc.fx = fxc.data();
+        mc.mk = mkc.data();
+        for (int q = 0; q < 3; q++)
+            mc.fm[q] = fmc[q].data();
+    }
     std::vector<float> L(N), R(N);
     nv_render(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fp, lp, ip, Gt.data(), St.data(), BRr.data(), BCr.data(),
               BLr.empty() ? nullptr : BLr.data(), noRows, sh,
               (long)E.k[K_CHUNK], E.k[K_XDEC], SR, E.k[K_MASTER], (const float *)dm[2], (const long *)dm[3],
               (const long *)dm[4], (const long *)dm[5], L.data(), R.data(), slo, (const int *)lobe[0],
-              (float *const *)(lobe + 1), LANG.empty() ? nullptr : LANG.data(), lgn);
+              (float *const *)(lobe + 1), LANG.empty() ? nullptr : LANG.data(), lgn, nft ? &mc : nullptr);
     if (!write_wav(argv[3], L.data(), R.data(), N, (int)SR)) {
         fprintf(stderr, "nvrender: cannot write %s\n", argv[3]);
         return 1;

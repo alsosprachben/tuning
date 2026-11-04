@@ -166,6 +166,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
 
     // THE HAMMER'S KNOCK (_note_strike_noise): noise rows, no images
     out->n_knock = 0;
+    out->n_ft = 0;
     if (K->n_strike) {
         double sf0 = K->strike_span_set ? pymin(pymax(f0, K->strike_span_lo), K->strike_span_hi) : f0;
         double reg = K->strike_octave_db * log2(pymax(sf0, 1.0) / 440.0);
@@ -319,6 +320,51 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     }
 
     int reflect = n->reflect && !no_refl && K->reflection_order;
+    // A MOOG (blockrender._note_moog): its layers' partials in place of the
+    // tone, each layer on its own filter row (n->fx the first's), and the
+    // rows the kernel reads them by (moog.ft_row: the key's tracking, the
+    // layer -- for the caller's knob row -- and the key)
+    out->n_ft = 0;
+    if (s.kind == 6) {
+        const MoogSpec &M = K->moog;
+        if (M.n_layer < 1 || M.n_layer > 2)
+            return -2;
+        ToneIn tm = t;
+        tm.sjit = o.sustain_jitter;
+        tm.reflect = n->reflect && K->reflection_order;     // (a noise band's own: none)
+        tm.cbw0 = K->cbw0; tm.cbw1 = K->cbw1;
+        int nm = 0;
+        for (int l = 0; l < M.n_layer; l++) {
+            const MoogLayer &L = M.L[l];
+            double mre = pymax(1.0, L.rel_span * SR);
+            int k = nv_moog_tone(&s, &tm, &L, n->fx + l, mre, nimg, nsurf, surf, img, mir, rows + NCOLS * total,
+                                 cap - total, qacc, azimuth);
+            if (k < 0)
+                return -1;
+            total += k;
+            nm += k;
+            for (int j = 0; j < 30; j++)
+                out->ft[l][j] = L.ft[j];
+            out->ft[l][0] = pow(f0 / L.kb_ref_hz, L.kb_track);
+            out->ft[l][9] = (double)l;
+            out->ft[l][10] = f0;
+        }
+        out->n_ft = M.n_layer;
+        out->n_tone = nm;
+        out->n_phantom = 0;
+        out->n_click = 0;
+        out->n_jack = 0;
+        out->non = non; out->noff = noff; out->fade = fade; out->rel = rel; out->chiff = chiff;
+        out->jitter_scale = t.jitter_scale;
+        out->dl = t.dl; out->dr = t.dr; out->li = t.li; out->ri = t.ri; out->radius = n->carry_radius;
+        out->n_push = 0;
+        out->f0 = f0;
+        out->pos_x = s.position_x; out->pos_z = s.position_z; out->B = B;
+        out->cv = t.cv; out->cc = t.cc; out->crl = t.crl; out->sjit = o.sustain_jitter; out->csc = t.csc;
+        memcpy(out->tb, tb, sizeof tb);
+        out->cbw[0] = K->cbw0; out->cbw[1] = K->cbw1;
+        return total;
+    }
     // A TOUCHED STRING'S OTHER MODES (blockrender's touch_leak_db): before
     // the tone, as the Python's (no breath or shake beside them: native.py)
     if (s.elec && s.touch > 1 && s.leak_set) {
@@ -619,6 +665,16 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             n.rnd_draws[3] = pyr_uniform(&rnd, 0.0, k->init.rnd_timing_s);
         }
         n.carry_radius = carry_radius;
+        // A MOOG: its filter rows from here (_MOOG_FT) -- where nothing turns
+        // its knobs: GM's sound controllers on its channel are Python's (apply_gm)
+        if (k->init.kind == 6) {
+            if (nv_song_snd_any(song, ch))
+                return -(1 + i);
+            for (int q = 0; q < 8; q++)
+                if (((k->snd_mask >> q) & 1) && k->snd_bias[q] != 0.0)
+                    return -(1 + i);
+            n.fx = (double)nv_song_moog_n(song);
+        }
         NoteOut out;
         int band = 0;
         long long left = cap - total;
@@ -629,6 +685,8 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (r < 0)
             return -(1 + i);
         carry_radius = out.radius;
+        for (int l = 0; l < out.n_ft; l++)     // (its layers' filter rows, each on its knob row)
+            nv_song_moog_add(song, ch, out.ft[l], k->moog.L[l].kn);
         if (out.n_jack) {                   // each jack's click rows, the note's last (rel_jacks)
             long long j0 = total + r - out.n_click;
             for (int q = 0; q < out.n_jack; q++) {
