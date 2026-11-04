@@ -182,8 +182,19 @@ static double ep_level_law(const VoiceSnap *v)
     return pow(undo, 1.0 - v->ep_share) / av;
 }
 
+/* TubularBellProperties._tube_oct: the note's octaves from tube_ref_hz, held */
+static double tube_oct(const VoiceSnap *v)
+{
+    double f = v->frequency_x * pow(2.0, v->octave_position);
+    double x = log(f / v->tube_ref_hz) / log(2.0);
+    double lo = x < 0.85 ? x : 0.85;
+    return lo > -0.6 ? lo : -0.6;
+}
+
 double nv_mode_ratio(const VoiceSnap *v, int m)
 {
+    if (v->kind == 2 && v->n_tube)              /* TubularBellProperties.mode_ratio: a line in octaves */
+        return 1 <= m && m <= v->n_tube ? v->tube[m - 1][0] + v->tube[m - 1][1] * tube_oct(v) : 0.0;
     if (v->kind == 5)                           /* SynthProperties.mode_ratio: the note's layers, the tonebar's */
         return 1 <= m && m <= v->n_lay + v->n_tb ? v->ep_r[m - 1] : 0.0;
     if (v->kind == 2 && v->mm_harm)             /* SynthProperties.mode_ratio: mode_ratios None */
@@ -244,6 +255,11 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
                                        : fabs(v->ep_w[harmonic - 1]);
         return v->gain * x * ep_level_law(v);
     }
+    if (v->kind == 2 && v->n_tube) {            /* TubularBellProperties: each mode's level, a line in octaves */
+        if (harmonic < 1 || harmonic > v->n_tube)
+            return 0.0;
+        return v->gain * pow(10.0, (v->tube[harmonic - 1][2] + v->tube[harmonic - 1][3] * tube_oct(v)) / 20.0);
+    }
     if (v->kind == 2 && v->n_bar) {             /* TunedBarProperties: the bar's own modes */
         for (int i = 0; i < v->n_bar; i++)
             if (harmonic == v->bar_n[i])
@@ -253,6 +269,8 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
     if (v->kind == 2) {                         /* SynthProperties: a measured mode set */
         if (v->max_harmonic && harmonic > v->max_harmonic)
             return 0.0;
+        if (v->or_set && harmonic == 7)         /* MusicBoxProperties: its key's octave below */
+            return v->gain * v->or_g;
         return 1 <= harmonic && harmonic <= v->n_mm ? v->gain * v->mm_gain[harmonic - 1] : 0.0;
     }
     if (v->kind == 1) {                         /* KitDrumProperties.series_volume */
@@ -1131,6 +1149,16 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
             shaped += g * g;
         }
         s->bore_norm = shaped > 0.0 ? pow(ref / shaped, 0.5) : 1.0;
+    }
+    if (s->or_set) {
+        /* MusicBoxProperties.mode_gains_here: its key's octave below */
+        double f = s->frequency_x * pow(2.0, s->octave_position);
+        long long key = (long long)nearbyint(69 + 12 * log(f / 440.0) / log(2.0));
+        PyRandom r;
+        pyr_seed(&r, key * 7919 + 10);
+        double draw = pyr_random(&r), lev = pyr_uniform(&r, s->or_db[0], s->or_db[1]);
+        int on = f / 2.0 >= s->or_lowest_hz * pow(2.0, -0.5 / 12.0) && draw < s->or_share;
+        s->or_g = on ? pow(10.0, lev / 20.0) : 0.0;
     }
     /* place() */
     o->pan_angle = stage_angle(channel_pan);

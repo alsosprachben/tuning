@@ -94,7 +94,8 @@ class VoiceSnap(ctypes.Structure):
                 ('pk_qf', C), ('lp_hz', C), ('lp_order', C), ('os_hz', C * 8), ('fret_max', C), ('pk_sp', C),
                 ('pk_q', C * 4), ('n_touch', I), ('touches', I * 4), ('touch0', I), ('touch', I), ('leak_set', I),
                 ('leak_db', C), ('leak_dbs', C), ('ml_spread', C), ('ml_knee', C), ('ml_time', C),
-                ('n_mute', I), ('mute', (C * 2) * 24)]
+                ('n_mute', I), ('mute', (C * 2) * 24), ('n_tube', I), ('tube_ref_hz', C), ('tube', (C * 4) * 16),
+                ('or_set', I), ('or_share', C), ('or_db', C * 2), ('or_lowest_hz', C), ('or_g', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -218,7 +219,8 @@ class NoteClass(ctypes.Structure):
                    ('cab_afm', C * 3 * 4), ('cab_corner', C), ('cab_order', C), ('cab_cut', C), ('cab_bell', C),
                    ('cab_ref', C), ('n_click', I), ('click_jacks', I), ('click_db', C), ('click_hz', C * 16),
                    ('click_amp', C * 16), ('click_dec', C), ('click_s', C), ('pre_pluck', I),
-                   ('moog', MoogSpec), ('brass', I), ('bn_slur', I)])
+                   ('moog', MoogSpec), ('brass', I), ('bn_slur', I),
+                   ('os_floor_db', C), ('os_max_s', C), ('tail_set', I), ('tail_db', C), ('tail_dbs', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -618,6 +620,14 @@ def _blown(cls):
     return reed_voice(cls) or wind_voice(cls) or (pipe_voice(cls) and not getattr(cls, 'registerable', False))
 
 
+def _tube(cls):
+    """A chime's tube (TubularBellProperties: its modes by register), as
+    native/voice.c reads it (VoiceSnap.tube): up to 16 modes."""
+    import tonelib as T
+    return (issubclass(cls, T.TubularBellProperties) and _owner(cls, '_tube_oct') == 'TubularBellProperties'
+            and len(cls.TUBE_MODES) <= 16)
+
+
 def _modal_drum(cls):
     import tonelib as T
     gam = issubclass(cls, T.ModeDecays) and issubclass(cls, (T.MetalPercussionProperties, T.StruckBarProperties))
@@ -630,6 +640,10 @@ def _modal_drum(cls):
                else dict(_JINGLE_OWN, aftersound_partial=None, mode_phase=None))
         if gam:
             own = dict(own, _bore_norm='SynthProperties', mode_gains_here='SynthProperties')
+            if (_owner(cls, 'mode_gains_here') == 'MusicBoxProperties' and len(cls.mode_gains) >= 7
+                    and next(k.__name__ for k in cls.__mro__[1:] if 'mode_gains_here' in k.__dict__)
+                    == 'SynthProperties'):
+                own['mode_gains_here'] = 'MusicBoxProperties'      # (a comb tooth's octave below)
         return (all(_owner(cls, n) == o for n, o in own.items())
                 and mg is not None and mr is not None and len(mg) == len(mr) <= 400
                 and len(cls.mode_decays) <= 400 and len(getattr(cls, 'mode_after', ())) <= 400
@@ -666,6 +680,8 @@ def _modal_drum(cls):
         if len(cls.bar_modes) > 16:
             return False
         own = dict(own, series_volume='TunedBarProperties')
+        if _tube(cls):
+            own = dict(own, series_volume='TubularBellProperties', mode_ratio='TubularBellProperties')
     if not issubclass(cls, T.NoisyPercussionMixin):
         # (a struck metal's: SynthProperties' own, no noise's roll-off)
         own = dict(own, harmonic_volume='SynthProperties', chiff_harmonic_gain='SynthProperties',
@@ -673,9 +689,15 @@ def _modal_drum(cls):
     if any(_owner(cls, n) != o for n, o in own.items()):
         return False
     if (_owner(cls, 'harmonic_decay') not in ('SynthProperties', 'CymbalProperties')
-            and decay_target(cls) is None):
+            and decay_target(cls) is None and not (_tube(cls) and _owner(cls, 'harmonic_decay') == 'TubularBellProperties')):
         return False
     mg, mr = cls.mode_gains, cls.mode_ratios
+    if _tube(cls) and mg is None:
+        mg = mr = ()                    # (its modes are its tube's)
+    # (a tuned bar's modes may be its bar_modes alone, on the harmonic series:
+    # the vibraphone's, the marimba's, the xylophone's)
+    if bar and mg is None and mr is None:
+        mg = mr = ()
     return (mg is not None and mr is not None and len(mg) == len(mr) <= 320
             and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
             and not cls.mode_stroke_tilt and not cls.bore_corner_hz and not cls.harmonic_touch
@@ -930,6 +952,26 @@ def wind_voice(cls):
                                                          'hammer_legato', 'bend_detents', 'amp_drive')))
 
 
+def mallet_voice(cls):
+    """Whether native/voice.c plays cls as a struck bar's plain series (kind
+    4 with no body): SynthProperties' series at the bar's stiffness -- the
+    pluck's comb at its plucked harmonic, no bore -- a glockenspiel's."""
+    import tonelib as T
+    if (not issubclass(cls, T.MalletProperties) or issubclass(cls, (T.FormantBody, T.TunedBarProperties, T.ModeDecays))
+            or issubclass(cls, T.NoisyPercussionMixin)):
+        return False
+    own = dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None)
+    if any(_owner(cls, n) != o for n, o in own.items()):
+        return False
+    return (cls.mode_gains is None and cls.mode_ratios is None and not cls.strike_point and not cls.harmonic_touch
+            and not cls.pickup_points and not (cls.unison_detune or ()) and not cls.blare_db_per_khz
+            and not cls.bore_corner_hz and not cls.inharmonicity_dynamic and 1 <= (cls.max_harmonic or 0) <= 256
+            and not any(getattr(cls, a, None) for a in ('breath_noise_db', 'grains', 'noise_events', 'pulse',
+                                                         'ring_db', 'struck_layer', 'touch_leak_db', 'strike_noise_db',
+                                                         'release_click_db', 'hammer_legato', 'bend_detents',
+                                                         'amp_drive')))
+
+
 def free_reed_series(cls):
     """A free reed's flow spectrum where it is one table whatever the key
     (FreeReedProperties._reed_series with no register laws and no scatter:
@@ -1113,7 +1155,8 @@ def kit_drum(cls):
         return 6
     if ep_voice(cls):
         return 5
-    if harmonic_voice(cls) or tonewheel_voice(cls) or reed_voice(cls) or electric_voice(cls) or wind_voice(cls):
+    if (harmonic_voice(cls) or tonewheel_voice(cls) or reed_voice(cls) or electric_voice(cls) or wind_voice(cls)
+            or mallet_voice(cls)):
         return 4
     if pipe_voice(cls):
         return 2
@@ -1389,11 +1432,12 @@ def snapshot(props):
         mg = p.mode_gains_here() if pipe_voice(type(p)) else p.mode_gains
         if mg is None and pipe_voice(type(p)):
             mg = p._reed_series()[1:]           # (a free reed's flow spectrum, harmonic 1 first)
+        mg = () if mg is None else mg       # (a tuned bar's: its bar modes on the harmonic series)
         s.n_mm = len(mg)
         if p.mode_ratios is None:
             s.mm_harm = 1                   # (a gain table on the harmonic series)
         else:
-            s.mm_ratio[:s.n_mm] = [float(r) for r in p.mode_ratios]
+            s.mm_ratio[:s.n_mm] = [float(r) for r in p.mode_ratios][:s.n_mm]   # (a tube's: its own, VoiceSnap.tube)
         s.mm_gain[:s.n_mm] = [float(g) for g in mg]
         if pipe_voice(type(p)):
             # an organ pipe's register: its tables by pitch, or a low one
@@ -1432,6 +1476,18 @@ def snapshot(props):
             s.bore_norm = p._bore_norm()
         if isinstance(p, T.SambaWhistleProperties):
             s.pea, s.pea_vibrato_cents, s.pea_vibrato_hz = 1, p.pea_vibrato_cents, p.pea_vibrato_hz
+        if _owner(type(p), 'mode_gains_here') == 'MusicBoxProperties':
+            # a comb tooth's octave below, by key (its gain the note's: nv_voice_init)
+            s.or_set, s.or_share, s.or_lowest_hz = 1, float(p.octave_ring_share), float(p.octave_ring_lowest_hz)
+            s.or_db[:] = [float(x) for x in p.octave_ring_db]
+            s.or_g = float(p.mode_gains_here()[6])
+        if _tube(type(p)):
+            # a chime's tube: its modes' lines in octaves, their decays mode_decays
+            s.n_tube, s.tube_ref_hz = len(p.TUBE_MODES), float(p.TUBE_REF_HZ)
+            for i, row in enumerate(p.TUBE_MODES):
+                s.tube[i][:] = [float(x) for x in row[:4]]
+            s.n_md = len(p.TUBE_MODES)
+            s.mode_decays[:s.n_md] = [float(row[4]) for row in p.TUBE_MODES]
         if isinstance(p, T.ModeDecays):
             ma, mp = getattr(p, 'mode_after', ()), getattr(p, 'mode_phases', ())
             s.n_md, s.n_ma, s.n_mp = len(p.mode_decays), len(ma), len(mp)
@@ -1440,8 +1496,10 @@ def snapshot(props):
                 s.mode_after[i][:] = [float(sh), float(d)]
             s.mode_phases[:s.n_mp] = [float(x) for x in mp]
         if isinstance(p, T.TunedBarProperties):
-            s.n_bar = len(p.bar_modes)
-            for i, (bn, bg) in enumerate(p.bar_modes):
+            # (a mode off the series -- the xylophone's 6.43 -- is never a harmonic: it never sounds)
+            bm = [(bn, bg) for bn, bg in p.bar_modes if bn == int(bn)]
+            s.n_bar = len(bm)
+            for i, (bn, bg) in enumerate(bm):
                 s.bar_n[i], s.bar_g[i] = int(bn), float(bg)
     elif s.kind == 4:
         # a harmonic voice: the pluck's comb, the body
@@ -1458,7 +1516,7 @@ def snapshot(props):
             s.comb[h] = T._pluck_comb(p.plucked_harmonic, p.pluck_dampening, h)
         s.bore_corner_hz, s.bore_order = p.bore_corner_hz, p.bore_order
         s.bell_cutoff_hz, s.bell_order = p.bell_cutoff_hz or 0.0, p.bell_order
-        s.bore_norm = p._bore_norm()
+        s.bore_norm = p._bore_norm() if p.bore_corner_hz else 0.0     # (read only through a bore)
         if electric_voice(type(p)):
             # an electric guitar: its pick and coils as the class has them (the note's fret moves them)
             c = type(p)
@@ -2192,7 +2250,7 @@ def note_class(cls):
         # a tape played backwards)
         def drum_has(a):
             if a in ('one_shot', 'jitter_by_partial', 'strike_phase_spread', 'bloom_seconds', 'stroke_scatter',
-                     'gate_time', 'played_backwards'):
+                     'gate_time', 'played_backwards', 'strike_noise_tail'):
                 return True
             # ...a machine's burst train, and up to 32 layers (a Simmons: 21)
             if a == 'strike_flam_times':
@@ -2270,6 +2328,9 @@ def note_class(cls):
             k.strike_len_s = getattr(cls, 'strike_noise_len_s', None) or 0.25
             k.strike_at_s = getattr(cls, 'strike_noise_at', 0.0) or 0.0
             k.strike_cal_db = getattr(cls, 'strike_noise_cal_db', 0.0) or 0.0
+            tl = getattr(cls, 'strike_noise_tail', None)
+            if tl:
+                k.tail_set, k.tail_db, k.tail_dbs = 1, float(tl[0]), float(tl[1])
         nf = int(getattr(cls, 'strike_flam', 0) or 0)
         k.n_flam = nf if nf > 1 else 0
         ft = getattr(cls, 'strike_flam_times', None) or ()
@@ -2404,6 +2465,7 @@ def note_class(cls):
         k.sps = float(getattr(cls, 'strike_phase_spread', 0.0) or 0.0)
         k.one_shot = int(bool(getattr(cls, 'one_shot', False)))
         k.one_shot_hold = BR.ONE_SHOT_MIN_S
+        k.os_floor_db, k.os_max_s = float(BR.ONE_SHOT_FLOOR_DB), float(BR.ONE_SHOT_MAX_S)
         k.damper_pedal = int(bool(getattr(cls, 'damper_pedal', True)) and not k.one_shot)
         k.detune_lo, k.detune_hi = getattr(cls, 'string_detune_range', (0.0, 0.0))
         k.detune_wheel = int(bool(getattr(cls, 'detune_wheel', False)))

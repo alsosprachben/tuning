@@ -661,6 +661,15 @@ struct Song {
             if (q != it->second.end() && notes[i].off >= *q - 0.02)
                 slur_out[i] = 1;
         }
+        // (the Python's is a set of (channel, key, onset): two strikes of one
+        // key at one onset share it -- either one's slur leaves both)
+        std::map<std::tuple<long long, int, double>, char> by_key;
+        for (size_t i = 0; i < n; i++)
+            if (slur_out[i])
+                by_key[std::make_tuple(notes[i].ch, notes[i].note, notes[i].on)] = 1;
+        for (size_t i = 0; i < n; i++)
+            if (!slur_out[i] && by_key.count(std::make_tuple(notes[i].ch, notes[i].note, notes[i].on)))
+                slur_out[i] = 1;
     }
 
     // A STRUCK OR SCRAPED GESTURE'S STROKES (percussion_map.rasp_strokes, as

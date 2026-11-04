@@ -232,6 +232,17 @@ typedef struct {
        open, n_mute (Hz, dB) log-interpolated, held flat past its ends */
     int n_mute;
     double mute[24][2];
+    /* A CHIME'S TUBE (TubularBellProperties): n_tube modes, each (ratio, its
+       slope, dB, its slope) a line in the note's octaves from tube_ref_hz,
+       held at -0.6 and 0.85 (_tube_oct); their decays are mode_decays */
+    int n_tube;
+    double tube_ref_hz, tube[16][4];
+    /* A COMB TOOTH'S OCTAVE BELOW (MusicBoxProperties.mode_gains_here): mode
+       7 sounds on a key random.Random(key 7919 + 10) chooses -- its draw
+       under or_share, an octave under the key not below or_lowest_hz -- at
+       a level drawn between or_db; the note's (or_g) set by nv_voice_init */
+    int or_set;
+    double or_share, or_db[2], or_lowest_hz, or_g;
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -691,6 +702,13 @@ typedef struct {
     MoogSpec moog;
     int brass;              // the horn's intonation (brass_fingering): 1 a trumpet's, 2 a tuba's; 0 none
     int bn_slur;            // on a slur the breath takes the legato attack (breath_noise_slur: slur_attack)
+    // a MELODIC one-shot's hold (blockrender.one_shot_ring): until its last
+    // partial is os_floor_db under its loudest, one_shot_hold to os_max_s
+    double os_floor_db, os_max_s;
+    // A SLOWER TAIL under the strike (strike_noise_tail): its bursts again,
+    // tail_db under, falling tail_dbs; tail_set 0 none
+    int tail_set;
+    double tail_db, tail_dbs;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -900,6 +918,8 @@ int nv_song_ped_spans(void *s, long long ch, double *out, int cap);
 int nv_song_pedal_values(void *s, long long ch, double *t, int *v, int cap);
 double nv_damper_contact(int p, int key, int top);
 double nv_stage_angle(double p);
+double nv_harmonic_volume(const VoiceSnap *v, int harmonic);
+void nv_partial_decay(const VoiceSnap *v, double f0, int m, double *out);
 int nv_lreg_pluck(void *h, long long sid, int key, double at, int R, const double *cols, const long *slot,
                   const int *free_keys, int nfree, const int *plucked, int nplucked, const long *rchoir);
 void nv_lreg_choirs(void *h, int nchoir, const long *bridges, double cross, int nbuff, const int *buffs);

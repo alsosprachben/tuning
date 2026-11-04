@@ -229,6 +229,21 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
             out->n_knock += k;
             total += k;
         }
+        // ...AND A SLOWER TAIL under it (strike_noise_tail): the bursts again,
+        // quieter and longer -- a music box's comb buzzing under its pin's snap
+        if (K->tail_set) {
+            double tlr = log(10.0) / 20.0 * K->tail_dbs;
+            for (int b = 0; b < nb; b++) {
+                double bon = non + K->strike_at_s * SR + boff[b] * SR;
+                int k = nv_strike_bal(&s, &tk, K->n_strike, K->strike_hz, K->strike_db, reg, bdb[b] + K->tail_db,
+                                      K->strike_cal_db, tlr, sfade, slen, bon, s.position_x, bgl[b], bgr[b],
+                                      rows + NCOLS * total, cap - total, qacc, azimuth);
+                if (k < 0)
+                    return -1;
+                out->n_knock += k;
+                total += k;
+            }
+        }
         // ...AND MORE STRUCK THINGS THAN ONE (strike_noise_layers): each its
         // own rise, fall and length, from the note's onset
         for (int l = 0; l < K->n_layer; l++) {
@@ -502,6 +517,59 @@ static double brass_cents(double target, int tuba)
     return have ? best_cents * (1.0 - 0.80) : 0.0;
 }
 
+// HOW LONG A MELODIC ONE-SHOT IS HELD (blockrender.one_shot_ring): until
+// its last partial is os_floor_db under the note's loudest -- each from its
+// own level, through either stage of its decay -- between one_shot_hold and
+// os_max_s. Its voice is the note's, built on a copy of the random stream
+// (nv_note builds it again, drawing as the Python's props did once).
+static double one_shot_ring(const NoteClass *K, const NoteIn *n, const PyRandom *rs)
+{
+    VoiceInit c = K->init;
+    c.detune_lo = n->detune_lo;
+    c.detune_hi = n->detune_hi;
+    c.soft_pedal_down = n->soft_pedal_down;
+    c.fixed_touch = n->fixed_touch;
+    if (n->seat != 0.0)
+        c.seat_x = c.listener_distance * tan(nv_stage_angle(n->seat));
+    memcpy(c.rnd_draws, n->rnd_draws, sizeof c.rnd_draws);
+    PyRandom r = *rs;
+    VoiceSnap s;
+    VoiceNote o;
+    nv_voice_init(&c, &K->tmpl, n->f0, n->pan, pow(n->vel / 127.0, 2.0), n->chan_vol, n->effort, &r, &s, &o);
+    int top_m = s.max_harmonic ? s.max_harmonic : 8;
+    if (top_m > 512)
+        top_m = 512;
+    double hv[513];
+    int hm[513];
+    int nh = 0;
+    double top = 0.0;
+    for (int m = 1; m <= top_m; m++) {
+        double v = nv_harmonic_volume(&s, m);
+        if (v != 0.0 && v > 0.0) {
+            if (nh == 0 || v > top)
+                top = v;
+            hm[nh] = m;
+            hv[nh++] = v;
+        }
+    }
+    if (!nh)
+        return K->one_shot_hold;
+    double t = 0.0;
+    for (int i = 0; i < nh; i++) {
+        double room = K->os_floor_db + 20.0 * log10(hv[i] / top);
+        if (room <= 0.0)
+            continue;
+        double pd[4];
+        nv_partial_decay(&s, n->f0, hm[i], pd);        /* dbps, logr, aftL, logrA */
+        if (pd[0] > 0)
+            t = nv::pymax(t, room / pd[0]);
+        double adbps = pd[3] * 20.0 / log(10.0);
+        if (pd[2] > 0 && adbps > 0 && room + 20.0 * log10(pd[2]) > 0.0)
+            t = nv::pymax(t, (room + 20.0 * log10(pd[2])) / adbps);
+    }
+    return nv::pymin(nv::pymax(t, K->one_shot_hold), K->os_max_s);
+}
+
 // A note as its FILE gives it: its channel's answers (native/channel.cpp's
 // Song) for its end once the pedals have had their say, its key's next
 // strike and the soft pedal at its onset, then nv_note. n's off, nx and
@@ -510,23 +578,11 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
                  int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
                  double *rows, int cap, double *qacc, double *azimuth, NoteOut *out, int *band)
 {
-    if (K->one_shot && K->gate_time > 0.0)  // ...unless it is gated: it stops where the gate closes
-        n->key_off = K->held_texture ? nv::pymax(n->key_off, n->on + K->gate_time) : n->on + K->gate_time;
-    else if (K->one_shot)               // a one-shot rings out on its own decay
-        n->key_off = nv::pymax(n->key_off, n->on + K->one_shot_hold);
-    n->off = nv_song_note_off(song, n->ch, n->note, n->on, n->key_off, n->damper_pedal, n->mcut,
-                              n->retrigger_fade, band);
-    double ck;
-    if (nv_song_choke(song, n->ch, n->note, n->on, &ck) && ck < n->off)
-        n->off = ck;                        // an exclusive class: a later strike stops it
-    n->has_nx = nv_song_next_same(song, n->ch, n->note, n->on, &n->nx);
-    if (!n->has_nx)
-        n->nx = 0.0;
-    n->soft_pedal_down = nv_song_soft_at(song, n->ch, n->on);
+    int r = 0;
     if (n->from_song) {
         // its pitch and level from the file, not the caller
         double pl[6];
-        int r = nv_song_pitch_level(song, n->song_index, K->init.effort_tilt != 0.0, pl);
+        r = nv_song_pitch_level(song, n->song_index, K->init.effort_tilt != 0.0, pl);
         if (!r)
             return -2;
         n->f0 = pl[0]; n->vel = pl[1]; n->pan = pl[2]; n->chan_vol = pl[3]; n->effort = pl[4];
@@ -537,6 +593,21 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         if (r == 2)
             n->seat = pl[5];            // a drum: its seat in its set
     }
+    if (K->one_shot && K->gate_time > 0.0)  // ...unless it is gated: it stops where the gate closes
+        n->key_off = K->held_texture ? nv::pymax(n->key_off, n->on + K->gate_time) : n->on + K->gate_time;
+    else if (K->one_shot && r == 1)     // a melodic one-shot (a bar, a bell) rings until it is gone
+        n->key_off = nv::pymax(n->key_off, n->on + one_shot_ring(K, n, rs));
+    else if (K->one_shot)               // a one-shot rings out on its own decay (a kit's: the flat hold)
+        n->key_off = nv::pymax(n->key_off, n->on + K->one_shot_hold);
+    n->off = nv_song_note_off(song, n->ch, n->note, n->on, n->key_off, n->damper_pedal, n->mcut,
+                              n->retrigger_fade, band);
+    double ck;
+    if (nv_song_choke(song, n->ch, n->note, n->on, &ck) && ck < n->off)
+        n->off = ck;                        // an exclusive class: a later strike stops it
+    n->has_nx = nv_song_next_same(song, n->ch, n->note, n->on, &n->nx);
+    if (!n->has_nx)
+        n->nx = 0.0;
+    n->soft_pedal_down = nv_song_soft_at(song, n->ch, n->on);
     return nv_note(K, n, rs, nimg, nsurf, surf, img, mir, rows, cap, qacc, azimuth, out);
 }
 
