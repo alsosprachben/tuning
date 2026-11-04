@@ -399,6 +399,8 @@ def _load():
             ('nv_lp_new', ctypes.c_void_p, [ctypes.c_void_p, LL, C, I, I, I, I, I, C, C, ctypes.c_long, C, D, C]),
             ('nv_lp_program', None, [ctypes.c_void_p, I]),
             ('nv_lp_toggle_stop', None, [ctypes.c_void_p, I, LL]),
+            ('nv_lp_swap', None, [ctypes.c_void_p, I, ctypes.c_void_p, I, I, I, I, I, I, I, I, ctypes.c_void_p,
+                                  ctypes.c_void_p]),
             ('nv_lp_free', None, [ctypes.c_void_p]),
             ('nv_lp_register', None, [ctypes.c_void_p, ctypes.c_void_p, I, C, C, C, C, I, C, I, C, C, C, C, LL,
                                       ctypes.c_void_p]),
@@ -3165,6 +3167,24 @@ class LivePiano(object):
         if getattr(self, '_cl', None):
             self.d.nv_cl_free(self._cl)
             self._cl = None
+
+    def swap(self, pi, cache, nbuckets, speed, damper_pedal, soft_drop, soft_top, detune_wheel, choke=None,
+             reg_note=None):
+        """A PATCH CHANGE (live._swap_patch), posted -- done after the next
+        block's events: patch pi on cache (a TemplateCache, warmed), its
+        buckets, wheel step (None: none), dampers, una corda and detune wheel;
+        a drum set's exclusive classes and the keys that answer the register
+        (None: as they were). The cache is kept: notes struck from it may
+        still be sounding."""
+        self._caches = getattr(self, '_caches', [])
+        self._caches.append(cache)
+        ch = None
+        if choke is not None:
+            ch = (ctypes.c_ulonglong * len(choke))(*choke)
+        rn = None if reg_note is None else (ctypes.c_int * 128)(*[int(bool(x)) for x in reg_note])
+        self.d.nv_lp_swap(self.p, int(pi), cache.p, int(cache.program), int(bool(cache.drums)), int(nbuckets),
+                          -1 if speed is None else int(speed), int(bool(damper_pedal)), int(soft_drop),
+                          int(soft_top), int(bool(detune_wheel)), ch, rn)
 
     def register(self, cls, table, rate, scale, reg_note):
         """The part's free strings, as live's register (live._reg_*) with a

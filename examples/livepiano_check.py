@@ -36,6 +36,10 @@ toggle_stop; the native part's nv_lp_toggle_stop), the Tremulant among them.
 On a tonewheel (16-18) the Leslie's state is compared too (ls_*: its rotor
 slots, lobes and baselines), the pitch wheel its half-moon under --wheels;
 --scan: the scanner's selector (CC94) among the controls.
+--programs=A,B,...: program changes among these (melodic) programs, on
+either channel -- live's builder in step (examples/patchsync.py): the swap
+posted on both sides after the block that asked for it, done after the next
+block's events, the new patch warmed whole.
 On a harmonium (program 20) its stop word too (CC43-45), the mod wheel
 (its tremolo) and the sound controllers it answers (CC72/73, and by GS's
 NRPNs); the tremolo's state (tr_on, its depth, baselines and sides)
@@ -166,6 +170,12 @@ def main(argv):
         lv.set_routes(routes)
         kp = N.Router(routes)
     pk_down = set()
+    progs = [int(x) for x in opt["programs"].split(",")] if opt.get("programs") else []
+    pcaches = {}            # live's Patch -> its native cache: one tone, one identity (live._PATCHES')
+    if progs:
+        import patchsync
+        patchsync.sync(lv)
+    nswap = 0
     harm = bool(lv.parts[0].organ) and lv.parts[0].patch.stop_word_ccs[0] == 43
     pedal = ((0, 24, 40, 56, 72, 88, 104, 127) if opt.get("half") != "all" else tuple(range(128))) \
         if "half" in opt else (0, 127)
@@ -308,6 +318,8 @@ def main(argv):
             else:
                 cc = rng.choice((7, 11, 10, 67))
                 msgs.append(M("control_change", channel=ch, control=cc, value=rng.randint(0, 127)))
+        if progs and rng.random() < 0.04:
+            msgs.append(M("program_change", channel=rng.choice((0, 0, 0, 1)), program=rng.choice(progs)))
         n0 = lv.n
         for m in msgs:
             lv.on_midi(m)
@@ -323,6 +335,24 @@ def main(argv):
             msgs = msgs + ["stop %s" % _pt.patch.rank_names[_ri]]
         got_py = lv.callback(None, 128, None, 0)[0]
         nv.block(n0, 128)
+        if progs:
+            # A PROGRAM CHANGE (live's builder, in step): the patch it asked
+            # for, posted on both sides for the next block
+            for _part, _p in patchsync.build(lv):
+                _c = pcaches.get(id(_p), (None, None))[1]
+                if _c is None:
+                    _c = N.TemplateCache(_p.program, _p.tuner)
+                    _c.warm(_p.range[0], _p.range[1], _p.nbuckets, _p.speeds)
+                    pcaches[id(_p)] = (_p, _c)
+                instant_scan(lv, _p)
+                _sp = None if _p.speeds == (None,) else _p.leslie_default
+                nv.swap(0, _c, _p.nbuckets, _sp, _p.damper_pedal, _p.soft_pedal_strings, _p.soft_pedal_top,
+                        _p.detune_wheel, reg_note=[lv._reg_voice(_part, n) for n in range(128)]
+                        if "register" in opt else None)
+                nswap += 1
+                msgs = msgs + ["program %d" % _p.program]
+                if "debug" in opt:
+                    print("    (block %d: program %d posted)" % (b, _p.program))
         if opt.get("room"):
             oL, oR = nv.output(n0, 128)
             st = np.empty(256, np.float32)
@@ -362,6 +392,14 @@ def main(argv):
         if b % every == every - 1 or b == blocks - 1:
             if compare(b):
                 print("  block %d (sample %d) DIFFERS: %s" % (b, n0, " ".join(bad[:8])))
+                if "debug" in opt and bad and bad[0].startswith("tr_"):
+                    x, y = np.asarray(getattr(lv.slab, bad[0]), np.float32), nv.slab.col(bad[0])
+                    dd = np.flatnonzero(x != y)
+                    own = {int(q): k for k, v in lv.slab.live.items() for q in v}
+                    print("    %s at %d slots, e.g. %s: live %s native %s; owners %s" % (
+                        bad[0], len(dd), dd[:4].tolist(), x[dd[:4]].tolist(), y[dd[:4]].tolist(),
+                        [own.get(int(q)) for q in dd[:4]]))
+                    print("    trem_depth %s" % dict(lv.trem_depth))
                 if "debug" in opt:
                     for c in bad[:2]:
                         if c in L.ALL_COLS:
@@ -371,6 +409,12 @@ def main(argv):
                                 c, len(dd), dd[:6].tolist(), x[dd[:6]].tolist(), y[dd[:6]].tolist()))
                     own = {int(q): k for k, v in lv.slab.live.items() for q in v}
                     print("    owners:", [own.get(int(q), "reg/retiring") for q in dd[:6]])
+                    print("    live's valve: busy %s, dirty %s, jid %s, oneshot %s, retired %s" % (
+                        lv.amp_busy, sorted(lv.amp_dirty), dict(lv.amp_jid),
+                        [str(k) for k in lv.slab.oneshot if k[1] < 0], list(lv.amp_retired)))
+                    print("    busy: live %d, native %d; live's keys %s" % (
+                        int(np.asarray(lv.slab.busy).sum()), int(nv.slab.col("busy").sum()),
+                        sorted(((str(k), len(v)) for k, v in lv.slab.live.items()), key=str)[:12]))
                 for x in log[-4:]:
                     print("    block %d at %d: %s" % (x[0], x[1], "; ".join(str(m) for m in x[2]) or "-"))
                 break
@@ -389,6 +433,8 @@ def main(argv):
         print("  room %s: %d blocks reaching the limiter's knee (%.2f)" % (opt["room"], nlim, lv.thresh))
     if "shed" in opt:
         print("  shed: %d partials" % nshed)
+    if progs:
+        print("  programs: %d changes among %s" % (nswap, ",".join(str(x) for x in progs)))
     if "gpu" in opt:
         print("  GPU (%s): live took %d blocks to it, native %d" % (opt["gpu"] or "cl", ngpu[0], ngpu[1]))
     if "half" in opt:

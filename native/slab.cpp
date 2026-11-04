@@ -1540,9 +1540,15 @@ struct Piano {
         auto st = drive_step.find(apid);
         double drive = st == drive_step.end() ? p.amp : p.amp * 4.0 * st->second / (double)LIVE_DRIVE_STEPS;
         std::vector<long> slots;
-        for (auto &kv : S.live)
-            if (std::get<0>(kv.first) == apid && std::get<3>(kv.first) != AMPK)
-                slots.insert(slots.end(), kv.second.begin(), kv.second.end());
+        for (auto &kv : S.live) {
+            const Key &k = kv.first;
+            if (std::get<0>(k) != apid || std::get<3>(k) == AMPK || std::get<3>(k) >= AMP_OLD0)
+                continue;                   // (not a valve's products, the old tones' among them)
+            auto t = key_tone.find(Key(std::get<0>(k), std::get<1>(k), std::get<2>(k), 0));
+            if (t != key_tone.end() && t->second != p.cache)
+                continue;                   // this tone's notes only
+            slots.insert(slots.end(), kv.second.begin(), kv.second.end());
+        }
         if (drive <= 0.0 || slots.size() < 2) {
             S.release(key, n0);
             return false;
@@ -1934,6 +1940,58 @@ struct Piano {
         return out;
     }
 
+    // live._sounding(ch, pids={ppid}, tone=...): ONE TONE's NOTES (key_tone) --
+    // the part's current one takes the keys no note struck; an OLD one only its own
+    std::vector<long> sounding_tone(int ch, long long ppid, const void *tone, bool old) const
+    {
+        std::vector<long> out;
+        for (auto &kv : S.live) {
+            const Key &k = kv.first;
+            if (std::get<1>(k) != ch || std::get<0>(k) != ppid)
+                continue;
+            auto t = key_tone.find(Key(std::get<0>(k), std::get<1>(k), std::get<2>(k), 0));
+            if (!(t != key_tone.end() ? t->second == tone : !old))
+                continue;
+            out.insert(out.end(), kv.second.begin(), kv.second.end());
+        }
+        return out;
+    }
+
+    // live._tone_wheel: THE MOD WHEEL ON NOTES HELD THROUGH A PROGRAM CHANGE --
+    // each old tone's own tremolo (its voice's wheel role), on its own notes
+    void tone_wheel(int ch, int v)
+    {
+        for (size_t pi = 0; pi < patches.size(); pi++) {
+            const Patch &p = patches[pi];
+            if (!(p.channel < 0 || p.channel == ch))
+                continue;
+            std::vector<const void *> olds;
+            for (auto &kv : S.live) {
+                const Key &k = kv.first;
+                if (std::get<0>(k) != p.pid || std::get<1>(k) != ch)
+                    continue;
+                auto t = key_tone.find(Key(std::get<0>(k), std::get<1>(k), std::get<2>(k), 0));
+                if (t != key_tone.end() && t->second != p.cache
+                    && std::find(olds.begin(), olds.end(), t->second) == olds.end())
+                    olds.push_back(t->second);
+            }
+            for (const void *tone : olds) {
+                auto tp = tone_prog.find(tone);
+                if (tp == tone_prog.end() || tp->second.second)
+                    continue;                           // (a drum set's: no wheel)
+                const NoteClass *k = nv_tcache_class((void *)tone, tp->second.first);
+                const OrganSpec *og = nv_tcache_organ((void *)tone, tp->second.first);
+                double dep = og ? og->wheel_trem : (k ? k->trem_depth : 0.0);
+                bool st = og ? og->wtrem_stereo != 0 : (k && k->trem_stereo);
+                if (dep <= 0.0)
+                    continue;
+                std::vector<long> sl = sounding_tone(ch, p.pid, tone, true);
+                if (!sl.empty())
+                    S.tremolo_arm(sl, v / 127.0 * dep, st);
+            }
+        }
+    }
+
     // a key down (live's note-on, before its parts): the key held, and in
     // MONO the voice handed over -- the note sounding cut, the new key on top
     // of the held stack
@@ -2028,6 +2086,8 @@ struct Piano {
         if (pi < 0)
             return;                         // no part listens there
         Use u(*this, pi);
+        key_tone[Key(pid, ch, note, 0)] = patches[cur].cache;   // (live.key_tone: the tone it was struck on)
+        tone_prog[patches[cur].cache] = std::make_pair(patches[cur].program, (int)patches[cur].drums);
         int sn = note + transpose;          // the key the patch plays (live's snote)
         if (sn < 0 || sn > 127)
             return;
@@ -2242,11 +2302,7 @@ struct Piano {
                 continue;
             double d = (v / 127.0) * p.wtrem;
             trem_depth[patches[pi].pid] = d;
-            std::vector<long> sl;
-            for (auto &kv : S.live)
-                if (std::get<0>(kv.first) == patches[pi].pid && std::get<1>(kv.first) == ch)
-                    sl.insert(sl.end(), kv.second.begin(), kv.second.end());
-            S.tremolo_arm(sl, d, p.wtrem_stereo);
+            S.tremolo_arm(sounding_tone(ch, p.pid, p.cache, false), d, p.wtrem_stereo);   // (this tone's notes)
         }
     }
 
@@ -2269,6 +2325,113 @@ struct Piano {
     // drawn when it was posted with the one stop toggled (livetui's
     // request_stops) -- so a stop word in the same block is put back, as live's
     std::vector<std::vector<char>> stop_posts;
+
+    // A PATCH CHANGE (live._swap_patch, posted: after the block's events):
+    // the patch re-pointed at another tone -- its templates (cache), its
+    // program and the part's constants for it -- keeping its pid, so notes
+    // already sounding keep the templates they were struck with
+    struct Swap {
+        int pi;
+        void *cache;
+        int program, drums, nbuckets, speed, damper_pedal, soft_drop, soft_top, detune_wheel;
+        std::vector<unsigned long long> choke;
+        std::vector<int> reg_note;          // the new tone's keys that answer the register (empty: as they were)
+    };
+    std::vector<Swap> swap_posts;
+    std::map<Key, const void *> key_tone;           // (pid, ch, note, 0) -> the cache it was struck on
+    std::map<const void *, std::pair<int, int>> tone_prog;     // a cache -> its (program, drums)
+    // the old tones' valves (live.amp_retired): retired key -> (pid, old cache), a dict's order
+    std::vector<std::pair<Key, std::pair<long long, const void *>>> amp_retired;
+    static const long long AMP_OLD0 = 1LL << 40;    // ...their layer: AMP_OLD0 + the swap's sample
+
+    void swap_patch(const Swap &w, long long n0)
+    {
+        if (w.pi < 0 || w.pi >= (int)patches.size())
+            return;
+        Patch &p = patches[w.pi];
+        long long ppid = p.pid;
+        // THE OLD TONE's VALVE GOES WITH THE OLD TONE's NOTES: its products
+        // under a key of their own, let go when the last of them is
+        Key ak(ppid, -1, -1, AMPK);
+        long li = S.live_find(ak);
+        if (w.cache != p.cache && li >= 0 && !S.live[li].second.empty()) {
+            Key rk(ppid, -1, -1, AMP_OLD0 + n0);
+            std::vector<long> sl = S.live[li].second;
+            S.live.erase(S.live.begin() + li);
+            S.live.push_back(std::make_pair(rk, sl));
+            S.own(rk, sl);
+            auto o = S.oneshot.find(ak);
+            if (o != S.oneshot.end()) {
+                int v = o->second;
+                S.oneshot.erase(o);
+                S.oneshot[rk] = v;
+            }
+            amp_retired.push_back(std::make_pair(rk, std::make_pair(ppid, (const void *)p.cache)));
+        }
+        p.cache = w.cache;
+        p.program = w.program;
+        p.drums = w.drums != 0;
+        p.nbuckets = w.nbuckets;
+        p.speed = w.speed;
+        p.damper_pedal = w.damper_pedal;
+        p.soft_drop = w.soft_drop;
+        p.soft_top = w.soft_top;
+        p.cres = 0.0;
+        if (!w.choke.empty())
+            p.choke = w.choke;
+        p.organ = nullptr;
+        p.drawn.clear();
+        if (!p.drums)
+            organ_start(p, nv_tcache_organ(p.cache, p.program));
+        if (w.pi == 0) {
+            detune_wheel = w.detune_wheel != 0;
+            if (!w.reg_note.empty())
+                for (int k = 0; k < 128; k++)
+                    reg_note[k] = w.reg_note[k] != 0;
+        }
+        if (w.pi == cur) {                      // (the patch in use: its working copy again, as use() loads it)
+            cache = p.cache; nbuckets = p.nbuckets; speed = p.speed; damper_pedal = p.damper_pedal;
+            soft_drop = p.soft_drop; soft_top = p.soft_top; drums = p.drums; program = p.program;
+        }
+        choke_p = &patches[cur].choke;
+        // ...and everything keyed to the old voice: its wheel's drive step and tremolo
+        drive_step.erase(ppid);
+        trem_depth.erase(ppid);
+        amp_dirty.erase(ppid);
+        Use u(*this, w.pi);
+        amp_touch(w.pi);
+    }
+
+    // live._amp_retire: an old tone's valve ends when the last of its notes has been let go
+    void amp_retire(long long n0)
+    {
+        for (size_t i = 0; i < amp_retired.size();) {
+            const Key &rk = amp_retired[i].first;
+            long long ppid = amp_retired[i].second.first;
+            const void *old = amp_retired[i].second.second;
+            if (S.live_find(rk) < 0) {
+                amp_retired.erase(amp_retired.begin() + i);
+                continue;
+            }
+            bool any = false;
+            for (auto &kv : S.live) {
+                const Key &k = kv.first;
+                if (std::get<0>(k) == ppid && std::get<1>(k) >= 0) {
+                    auto t = key_tone.find(Key(std::get<0>(k), std::get<1>(k), std::get<2>(k), 0));
+                    if (t != key_tone.end() && t->second == old) {
+                        any = true;
+                        break;
+                    }
+                }
+            }
+            if (!any) {
+                S.release(rk, n0);
+                amp_retired.erase(amp_retired.begin() + i);
+                continue;
+            }
+            i++;
+        }
+    }
 
     // the panel's stop toggles (live.post's set_stops), after the block's events
     void stop_toggles(long long n0)
@@ -2797,8 +2960,9 @@ struct Piano {
         Use u(*this, pi < 0 ? cur : pi);
         n0 += amp_ahead();                  // (a part with a valve: late, as its notes began)
         amp_touch(cur);
-        if (patches[cur].amp > 0.0)         // the products end with their chord, over the note's own release
-            S.release(Key(pid, -1, -1, AMPK), n0);
+        auto kt = key_tone.find(Key(pid, ch, note, 0));
+        if (patches[cur].amp > 0.0 && (kt == key_tone.end() || kt->second == patches[cur].cache))
+            S.release(Key(pid, -1, -1, AMPK), n0);  // the products end with their chord (a note of this tone's)
         if (patches[cur].organ) {           // an organ's key: each of its ranks
             std::vector<Key> ks;
             std::set<long long> sounded;
@@ -2909,6 +3073,14 @@ struct Piano {
                 if (li >= 0)
                     amps.insert(amps.end(), S.live[li].second.begin(), S.live[li].second.end());
             }
+        for (auto &ar : amp_retired)                // ...the old tones' valves too
+            for (const Patch &p : patches)
+                if (ar.second.first == p.pid && (p.channel < 0 || p.channel == ch)) {
+                    long li = S.live_find(ar.first);
+                    if (li >= 0)
+                        amps.insert(amps.end(), S.live[li].second.begin(), S.live[li].second.end());
+                    break;
+                }
         if (!amps.empty() && ratio / prev != 1.0)
             retune(amps, n0, ratio / prev);
     }
@@ -3293,7 +3465,7 @@ struct Piano {
                     double sw = std::max(pow(v / 127.0, 2.0), 1e-4), was = swell;
                     swell = sw;
                     if (sw != was)
-                        S.channel_gain(sounding(ch), sw / was);
+                        S.channel_gain(sounding_tone(ch, p.pid, p.cache, false), sw / was);
                 }
                 break;
             }
@@ -3312,6 +3484,8 @@ struct Piano {
                     best = st;
             speed = best;
         }
+        if (cc == 1 && !key_tone.empty())       // ...and the tones held from before a program change
+            tone_wheel(ch, v);
     }
 
     // THE DAMPERS IN BETWEEN (live._damp_block, _damp_open, _damp_mark;
@@ -4684,6 +4858,8 @@ struct Piano {
         cur_blk = blk;
         if (!wind_st.empty())                   // the organs' chests, before the block's events (live's callback)
             wind_block(n0, blk);
+        if (!amp_retired.empty())
+            amp_retire(n0);
         std::vector<Ev> evs;
         evs.swap(events);
         for (const Ev &e : evs) {
@@ -4700,6 +4876,12 @@ struct Piano {
         }
         if (!stop_posts.empty())
             stop_toggles(n0);
+        if (!swap_posts.empty()) {               // the patch changes posted (live.post's _swap_patch)
+            std::vector<Swap> ws;
+            ws.swap(swap_posts);
+            for (const Swap &w : ws)
+                swap_patch(w, n0);
+        }
         if (reg_on && (!reg_pend.empty() || !reg_out.empty() || reg_live || !reg_retire.empty()
                        || reg_ndone.load() > 0))
             reg_pump(n0);
@@ -4710,8 +4892,9 @@ struct Piano {
             std::pair<int, int> ck((int)std::get<1>(kv.first), (int)std::get<2>(kv.first));
             auto sq = sost.find(ck.first);
             if (!down.count(ck) && !pedalled.count(ck) && !S.oneshot.count(kv.first)
-                && !(sq != sost.end() && sq->second.count(ck.second)) && std::get<3>(kv.first) != AMPK)
-                sw.push_back(kv.first);         // (not the valve's products: not a note, its lifetime its parents')
+                && !(sq != sost.end() && sq->second.count(ck.second)) && std::get<3>(kv.first) != AMPK
+                && std::get<3>(kv.first) < AMP_OLD0)
+                sw.push_back(kv.first);         // (not a valve's products, an old tone's either: not a note)
         }
         for (auto &k : sw)
             S.release(k, n0);
@@ -5054,6 +5237,24 @@ int nv_lp_add_patch(void *h, void *cache, long long pid, double level_db, int nb
     P->patches.push_back(std::move(p));
     P->choke_p = &P->patches[P->cur].choke;          // (the vector may have moved)
     return (int)P->patches.size() - 1;
+}
+
+// A PATCH CHANGE posted (live._swap_patch, done after the next block's
+// events): patch pi on cache (warmed: the program's templates), its
+// program, a drum set or not, its buckets, wheel step, dampers, una corda,
+// the honky-tonk's detune wheel, a drum set's exclusive classes (NULL: as
+// they were), and which keys answer the register (NULL: as they were)
+void nv_lp_swap(void *h, int pi, void *cache, int program, int drums, int nbuckets, int speed, int damper_pedal,
+                int soft_drop, int soft_top, int detune_wheel, const unsigned long long *choke, const int *reg_note)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Piano::Swap w{pi, cache, program, drums, nbuckets, speed, damper_pedal, soft_drop, soft_top,
+                            detune_wheel, {}, {}};
+    if (choke)
+        w.choke.assign(choke, choke + 2 * 16384);
+    if (reg_note)
+        w.reg_note.assign(reg_note, reg_note + 128);
+    P->swap_posts.push_back(std::move(w));
 }
 
 // a patch's channel (-1 every one, less excl's bits), keys and transpose
