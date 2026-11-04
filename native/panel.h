@@ -12,7 +12,7 @@
 // adjust, - and + (_ and + by five) adjust, P is panic, ? the keys, q quits.
 //
 // Not live's: the patch tree, layers and splits, organ stops, the effect,
-// the synth, presets and scenes (one piano, its program fixed at start),
+// the synth, presets and scenes (one part, its program picked here or by MIDI),
 // and the room itself (the voices are packed in the export's room; its tail
 // can be turned off).
 //
@@ -78,6 +78,13 @@ struct Host {
     // (a program change from the keyboard: the program, its name, its stops)
     // and says what it has to say ("" nothing)
     std::function<std::string()> refresh;
+    // THE PATCH PICKER: each program's name (0-127) and each drum set's (128 +
+    // set; "" none), which are native here, whether the part is a drum set
+    // now, and a program or set asked for (posted)
+    std::vector<std::string> names;
+    std::vector<char> native;
+    bool kit = false;
+    std::function<void(int)> pick;
 };
 
 // THE STOP KEYS, as livetui's on a US layout: row 0 the digits, row 1 the
@@ -426,7 +433,7 @@ struct Panel {
         if (now < msg_until)
             line("   " + C("warn") + msg);
         else
-            line("   " + C("dim") + "tab pane  ↑↓ select  ←→ -+ adjust  P panic  ? keys  q quit");
+            line("   " + C("dim") + "tab pane  ↑↓ select  ←→ -+ adjust  p patch  P panic  ? keys  q quit");
         if (help) {
             line("");
             line(C("accent") + "  keys");
@@ -435,6 +442,7 @@ struct Panel {
             line("   left right - +    adjust the global (_ + by five)");
             line("   r                 add a route (from, to, how, replace or keep, channel)");
             line("   d                 delete the selected route");
+            line("   p                 the patch: a program or drum set, by family or / search");
             line("   P                 panic: every note off, now");
             line("   q                 quit (routes added here are kept beside the export)");
         }
@@ -604,6 +612,174 @@ struct Panel {
         say("route " + describe(r));
     }
 
+    // THE PATCH (livetui.pick_patch: its General MIDI and drum kits): a
+    // family, then its eight programs -- enter or right goes in, left or
+    // backspace comes out, "/" searches every program and set by name (the
+    // rows holding every word typed). A voice not native here is listed dim
+    // and cannot be picked. Opens on the part's own.
+    void pick_patch()
+    {
+        static const char *FAM[16] = {"Piano", "Chromatic Percussion", "Organ", "Guitar", "Bass", "Strings",
+                                      "Ensemble", "Brass", "Reed", "Pipe", "Synth Lead", "Synth Pad",
+                                      "Synth Effects", "Ethnic", "Percussive", "Sound Effects"};
+        const int here = (H.kit ? 128 : 0) + H.program;
+        auto label = [&](int sp) {
+            char b[160];
+            snprintf(b, sizeof b, "%s%3d  %-28s%s", sp == here ? "● " : "  ", sp & 127,
+                     sp < (int)H.names.size() ? H.names[sp].c_str() : "?",
+                     sp < (int)H.native.size() && H.native[sp] ? "" : "  (not native)");
+            return std::string(b);
+        };
+        std::vector<int> all;                   // every leaf, programs then sets
+        for (int sp = 0; sp < 256; sp++)
+            if (sp < 128 || (sp < (int)H.names.size() && !H.names[sp].empty()))
+                all.push_back(sp);
+        int node = H.kit ? 16 : H.program / 8;  // -1 the top; 0-15 a family; 16 the drum kits
+        int at = H.kit ? -1 : H.program % 8;
+        std::string query;
+        bool searching = false;
+        while (true) {
+            // the rows: (sp, or -1-n for node n), and their text
+            std::vector<int> ids;
+            std::vector<std::string> rows;
+            if (!query.empty()) {
+                std::vector<std::string> ws;
+                std::string w;
+                for (char c : query + " ")
+                    if (c == ' ') {
+                        if (!w.empty())
+                            ws.push_back(w);
+                        w.clear();
+                    } else {
+                        w += (char)tolower((unsigned char)c);
+                    }
+                for (int sp : all) {
+                    std::string t = (sp >= 128 ? "kit " : "") + label(sp);
+                    std::string lo;
+                    for (char c : t)
+                        lo += (char)tolower((unsigned char)c);
+                    bool ok = true;
+                    for (auto &x : ws)
+                        ok = ok && lo.find(x) != std::string::npos;
+                    if (ok) {
+                        ids.push_back(sp);
+                        rows.push_back((sp >= 128 ? "kit " : "    ") + label(sp));
+                    }
+                }
+            } else if (node < 0) {
+                for (int f = 0; f < 17; f++) {
+                    char b[96];
+                    if (f < 16)
+                        snprintf(b, sizeof b, "  %-24s %3d-%d", FAM[f], 8 * f, 8 * f + 7);
+                    else
+                        snprintf(b, sizeof b, "  %-24s %zu sets", "Drum kits", all.size() - 128);
+                    ids.push_back(-1 - f);
+                    rows.push_back(b);
+                }
+            } else if (node < 16) {
+                for (int p = 8 * node; p < 8 * node + 8; p++) {
+                    ids.push_back(p);
+                    rows.push_back(label(p));
+                }
+            } else {
+                for (int sp : all)
+                    if (sp >= 128) {
+                        ids.push_back(sp);
+                        rows.push_back(label(sp));
+                    }
+            }
+            int n = (int)ids.size();
+            if (at < 0) {                       // (onto the part's own row, else the first)
+                at = 0;
+                for (int i = 0; i < n; i++)
+                    if (ids[i] == here || (node < 0 && ids[i] == -1 - (H.kit ? 16 : H.program / 8)))
+                        at = i;
+            }
+            at = std::max(0, std::min(at, n - 1));
+            T.size();
+            int win = std::max(3, T.h - 5), top = std::max(0, std::min(at - win / 2, n - win));
+            std::string title = std::string("patch") + (query.empty() && node >= 0
+                                                            ? std::string(" › ") + (node < 16 ? FAM[node] : "Drum kits")
+                                                            : "");
+            std::string m = "\x1b[H\x1b[2J " + C("accent") + "\x1b[1m" + title + "\x1b[0m\r\n";
+            for (int i = top; i < std::min(n, top + win); i++) {
+                bool dim = ids[i] >= 0 && !(ids[i] < (int)H.native.size() && H.native[ids[i]]);
+                m += std::string(i == at ? C("sel") + " ▸" : "  ") + (dim && i != at ? C("dim") : "") + rows[i]
+                     + "\x1b[0m\x1b[K\r\n";
+            }
+            if (!n)
+                m += C("dim") + "   (nothing matches)\x1b[0m\r\n";
+            m += "\r\n";
+            if (searching || !query.empty())
+                m += C("accent") + "\x1b[1m /" + query + (searching ? "_" : "") + "\x1b[0m" + C("dim") + "   "
+                     + std::to_string(n) + " found\x1b[0m";
+            else
+                m += C("dim") + "   ↑↓ choose  enter / → in or take  ← back  / search  esc cancel\x1b[0m";
+            fwrite(m.data(), 1, m.size(), stdout);
+            fflush(stdout);
+            int c = T.key(1000);
+            if (c < 0)
+                continue;
+            if (searching && c >= 32 && c < 127 && c != '/') {
+                query += (char)c;
+                at = 0;
+                continue;
+            }
+            if (searching && (c == 127 || c == 8)) {
+                if (!query.empty())
+                    query.pop_back();
+                at = 0;
+                continue;
+            }
+            if (c == '/') {
+                searching = true;
+                continue;
+            }
+            if (c == 1000 || (!searching && c == 'k')) {
+                at = std::max(0, at - 1);
+            } else if (c == 1001 || (!searching && c == 'j')) {
+                at = std::min(n - 1, at + 1);
+            } else if (c == 10 || c == 13 || c == 1002) {
+                if (!n)
+                    continue;
+                int id = ids[at];
+                if (id < 0) {                   // in
+                    node = -1 - id;
+                    at = -1;
+                    continue;
+                }
+                if (!(id < (int)H.native.size() && H.native[id])) {
+                    say((id >= 128 ? "drum set " : "program ") + std::to_string(id & 127) + " " + H.names[id]
+                        + " is not native here");
+                    continue;
+                }
+                if (id != here) {
+                    H.pick(id);
+                    say("asked for " + std::string(id >= 128 ? "drum set " : "") + std::to_string(id & 127) + " "
+                        + H.names[id] + " (built if new, then swapped in)");
+                }
+                return;
+            } else if (c == 1003 || ((c == 127 || c == 8) && !searching)) {
+                if (!query.empty())
+                    continue;
+                if (node < 0)
+                    return;
+                at = -1;
+                node = -1;
+            } else if (c == 27) {
+                if (searching || !query.empty()) {
+                    query.clear();          // first Esc: the search
+                    searching = false;
+                    at = -1;
+                } else {
+                    return;
+                }
+            } else if (c == 'q' && !searching) {
+                return;
+            }
+        }
+    }
+
     void adjust(int delta, bool big)
     {
         if (pane != 0)
@@ -672,6 +848,8 @@ struct Panel {
                         H.toggle_stop(ri);
                         say(std::string(was ? "in: " : "drawn: ") + H.stop_names[ri]);
                     }
+                } else if (c == 'p' && H.pick) {
+                    pick_patch();
                 } else if (c == 'P') {
                     H.panic();
                     say("all notes off");

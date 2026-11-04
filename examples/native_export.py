@@ -288,7 +288,7 @@ def main(argv):
             # identity (its class at key 60, as live compares them to forget
             # the register's, -1 for no part), a harpsichord's choirs for its
             # register (native.live_bank_choirs: bridges, cross, buffs; 0
-            # none), and what the panel calls it, as a program and as a set
+            # none), and what the panel calls it, as a program and as a set ("" not a set)
             import livetui as LT
             import percussion_map as PM
             f.write(b"LPROG")
@@ -309,7 +309,7 @@ def main(argv):
                     nc, br, cross, nb, bf = chs
                     f.write(struct.pack("<i%dqdi%di" % (nc, 2 * nb), nc, *list(br), cross, nb,
                                         *list(bf)[:2 * nb]))
-                for nm in (LT.GM[prog], PM.drum_set_name(prog)):
+                for nm in (LT.GM[prog], PM.drum_set_name(prog) if prog in PM.DRUM_SETS else ""):
                     b = nm.encode()
                     f.write(struct.pack("<i", len(b)) + b)
     print("native export: %d piano class(es), tuner %s, room %s -> %s" % (len(classes), tuner,

@@ -1529,6 +1529,26 @@ int main(int argc, char **argv)
             H.toggle_stop = [&](int ri) { post([&, ri](long long n) { nv_lp_toggle_stop(part, ri, n); }); };
         };
         stops_of(shown_program);
+        // THE PICKER: every program and set, which are native, and one picked
+        // asked for on the part (posted: live's change_patch, a set or not)
+        H.names.assign(256, "");
+        H.native.assign(256, 0);
+        for (int sp = 0; sp < 256; sp++) {
+            H.names[sp] = sp < 128 ? E.prog[sp].name : E.prog[sp & 127].kit;
+            bool nat = false;
+            for (int k = 0; k < 128 && !nat; k++)
+                nat = E.cmap[(sp >= 128 ? NV_K_DRUMS : 0) + 128 * (sp & 127) + k] >= 0;
+            H.native[sp] = nat && (sp >= 128 ? !H.names[sp].empty() : E.part[sp][0] != 0);
+        }
+        H.kit = shown_program >= 128;
+        if (E.has_prog)
+            H.pick = [&](int sp) {
+                post([&, sp](long long) {
+                    const PartAt &pa = pats[0];
+                    if (pa.program != (sp & 127) || pa.drums != (sp >= 128))
+                        reqs.push_back(Req{0, sp & 127, sp >= 128});
+                });
+            };
         // ...A PROGRAM CHANGE FROM THE KEYBOARD: its name and its stops, and
         // what the builder said
         int shown = shown_program;
@@ -1538,6 +1558,7 @@ int main(int argc, char **argv)
             if (sp != shown) {
                 shown = sp;
                 H.program = sp & 127;
+                H.kit = sp >= 128;
                 H.program_name = name_of(sp);
                 stops_of(sp);
                 m = "program " + std::to_string(sp & 127) + ": " + H.program_name;
