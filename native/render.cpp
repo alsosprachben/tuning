@@ -24,6 +24,7 @@ typedef struct {
     const float *FT, *KN;
     const int *fx, *mk;
     const double *fm[3];
+    long knk, kb0;
     const int *MPI, *MKI;                   /* its pitch rows and shape rows, NULL none */
     const double *MPC;
     const float *MPR, *MPK;
@@ -222,6 +223,7 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
         // the Moog's arguments, NULL none (fx NULL: the kernel never reads FT or KN)
         const int *mfx = moog ? g.fx.data() : nullptr, *mmk = moog ? g.mk.data() : nullptr;
         const float *mFT = moog ? moog->FT : noRows, *mKN = moog ? moog->KN : noRows;
+        const long mknk = moog ? moog->knk : 1, mkb0 = moog ? moog->kb0 : 0;
         const double *mw = moog ? g.fm[0].data() : nullptr, *mp = moog ? g.fm[1].data() : nullptr;
         const double *mpR = moog ? g.fm[2].data() : nullptr;
         const int *mMPI = moog ? moog->MPI : nullptr, *mMKI = moog ? moog->MKI : nullptr;
@@ -242,7 +244,7 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                            F(F_aft), F(F_sus), F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav),
                            F(F_tau), F(F_tcut), F(F_gb), F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl),
                            F(F_delL), F(F_delR), g.i[I_gr].data(), g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC,
-                           BL, mfx, mFT, mKN, 1, 0, nullptr, nullptr, mmk, mMPI, mMPC, mMPR,
+                           BL, mfx, mFT, mKN, mknk, mkb0, nullptr, nullptr, mmk, mMPI, mMPC, mMPR,
                            mMKI, mMPK, mw, mp, mpR, sh[0], sh[1], sh[2], sh[3], g.lsr.data(),
                            g.lob[0].data(), g.lob[1].data(), g.lob[2].data(), g.lob[3].data(), LANG, lgn, nullptr,
                            nullptr, nullptr, nullptr, nullptr, nullptr, 0, CHUNK, nullptr, nullptr, nullptr);
@@ -251,7 +253,7 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA), F(F_aft), F(F_sus),
                F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav), F(F_tau), F(F_tcut), F(F_gb),
                F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl), F(F_delL), F(F_delR), g.i[I_gr].data(),
-               g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, BL, mfx, mFT, mKN, 1, 0, nullptr,
+               g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, BL, mfx, mFT, mKN, mknk, mkb0, nullptr,
                nullptr, mmk, mMPI, mMPC, mMPR, mMKI, mMPK, mw, mp, mpR, sh[0], sh[1],
                sh[2], sh[3], CHUNK, nullptr, nullptr, nullptr);
         else
@@ -259,7 +261,7 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                 g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA), F(F_aft), F(F_sus),
                 F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav), F(F_tau), F(F_tcut), F(F_gb),
                 F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl), F(F_delL), F(F_delR), g.i[I_gr].data(),
-                g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, BL, mfx, mFT, mKN, 1, 0, nullptr,
+                g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, BL, mfx, mFT, mKN, mknk, mkb0, nullptr,
                 nullptr, mmk, mMPI, mMPC, mMPR, mMKI, mMPK, mw, mp, mpR, sh[0],
                 sh[1], sh[2], sh[3], CHUNK, nullptr, nullptr, nullptr, g.i[I_dk].data(), F(F_dg), DM, DMO, DMB,
                 DMN);

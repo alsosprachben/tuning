@@ -855,14 +855,18 @@ int main(int argc, char **argv)
     }
     // THE MOOGS' ROWS (_MOOG_FT, _MOOG_KN: no knob moves, no pitch or shape
     // rows) and their columns
-    int nkn = 0, nft = nv_song_moog_tables(song, nullptr, nullptr, &nkn);
-    std::vector<float> FT((size_t)30 * nft), KN((size_t)9 * nkn);
+    int nkn = 0;
+    long knk = 1, kb0 = 0;
+    int nft = nv_song_moog_tables(song, nullptr, nullptr, &nkn, &knk, &kb0);
+    std::vector<float> FT((size_t)30 * nft), KN((size_t)9 * nkn * knk);
     std::vector<int> fxc, mkc, mpi, mki;
     std::vector<double> fmc[3], mpc;
     std::vector<float> mpr, mpk;
     MoogCols mc{};
     if (nft) {
-        nv_song_moog_tables(song, FT.data(), KN.data(), &nkn);
+        nv_song_moog_tables(song, FT.data(), KN.data(), &nkn, &knk, &kb0);
+        mc.knk = knk;
+        mc.kb0 = kb0;
         std::vector<double> v = fcol("fx");
         fxc.assign(v.begin(), v.end());
         v = fcol("mk");

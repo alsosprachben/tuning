@@ -807,6 +807,7 @@ typedef struct {
     const float *FT, *KN;
     const int *fx, *mk;
     const double *fm[3];
+    long knk, kb0;                          /* KN's entries a row, from grid point kb0 */
     const int *MPI, *MKI;                   /* its pitch rows and shape rows, NULL none */
     const double *MPC;
     const float *MPR, *MPK;
@@ -815,7 +816,9 @@ int nv_song_moog_n(void *s);
 void nv_song_moog_add(void *s, long long ch, const double *ft, const double *kn, const MoogLayer *L, double a0,
                       double toff, double end);
 int nv_song_moog_rows(void *s, int i, const MoogLayer **L, double *a0t);
-int nv_song_moog_tables(void *s, float *ft, float *kn, int *nkn);
+int nv_song_moog_tables(void *s, float *ft, float *kn, int *nkn, long *knk, long *kb0);
+void nv_song_moog_add_moving(void *s, long long ch, const double *ft, const MoogLayer *L, const void *cls,
+                             int layer, const double *bias, int mask, double sr, double a0, double toff, double end);
 int nv_song_choke(void *s, long long ch, int note, double on, double *out);
 /* a note's class: K[128 * program + key], a drum set's K[16384 + 128 * program + key] */
 #define NV_K_DRUMS 16384

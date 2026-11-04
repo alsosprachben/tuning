@@ -267,6 +267,11 @@ struct Song {
     // shape rows: moog.pitch_rows, shape_rows)
     std::vector<const MoogLayer *> mlay;
     std::vector<std::array<double, 3>> mspan;
+    // ...and a channel whose cutoff or resonance moves (_kn_moves): one knob
+    // row a channel, class and layer, its knobs at each of the channel's
+    // sound controls (_MOOG_KVAR: grid point, knob row)
+    std::map<std::tuple<long long, const void *, int>, int> mkmove;
+    std::map<int, std::vector<std::pair<long long, std::array<double, 9>>>> mkvar;
     // ITS GLIDES (_prep_glide_sources, from finish): each note's source key, -1 none
     std::vector<int> glide_src;
 
@@ -1145,6 +1150,59 @@ void nv_song_moog_add(void *s, long long ch, const double *ft, const double *kn,
     g->mft.push_back(f);
 }
 
+// ...A MOVING CHANNEL's (_kn_moves): the filter row on the knob row of its
+// channel, class (cls) and layer, made the first time -- the base panel L's
+// knobs as the channel's sound controls stand at 0 and at each of its
+// events and GM resets (_kn_at: their offsets and the class's bias, those it
+// answers, mask), each at its grid point (int(t * sr) // 128)
+void nv_song_moog_add_moving(void *s, long long ch, const double *ft, const MoogLayer *L, const void *cls,
+                             int layer, const double *bias, int mask, double sr, double a0, double toff, double end)
+{
+    nv::Song *g = (nv::Song *)s;
+    auto key = std::make_tuple(ch, cls, layer);
+    auto it = g->mkmove.find(key);
+    int row;
+    if (it == g->mkmove.end()) {
+        auto kn_at = [&](double t) {
+            double d[8];
+            g->sound_at(ch, t, d);
+            for (int q = 0; q < 8; q++) {
+                d[q] += bias[q];
+                if (!((mask >> q) & 1))
+                    d[q] = 0.0;
+            }
+            MoogLayer La;
+            nv_moog_apply(L, d, &La);
+            std::array<double, 9> k;
+            std::copy(La.kn, La.kn + 9, k.begin());
+            return k;
+        };
+        std::set<double> ts;
+        bool own = false;
+        for (const nv::Song::Snd &e : g->snd)
+            own = own || e.ch == ch;
+        for (const nv::Song::Snd &e : g->snd)
+            if (e.ch == ch || (own && e.ch == -1 && e.cc == -1))
+                ts.insert(e.t);
+        row = (int)g->mkn.size();
+        g->mkmove[key] = row;
+        std::array<double, 9> k0 = kn_at(0.0);
+        g->mkn.push_back(k0);
+        auto &tl = g->mkvar[row];
+        tl.push_back(std::make_pair(0LL, k0));
+        for (double t : ts)
+            tl.push_back(std::make_pair((long long)(t * sr) / 128, kn_at(t)));
+    } else {
+        row = it->second;
+    }
+    g->mlay.push_back(L);
+    g->mspan.push_back({a0, toff, end});
+    std::array<double, 30> f;
+    std::copy(ft, ft + 30, f.begin());
+    f[9] = (double)row;
+    g->mft.push_back(f);
+}
+
 // filter row i's panel (*L) and its note's onset, release and end (a0t[3])
 int nv_song_moog_rows(void *s, int i, const MoogLayer **L, double *a0t)
 {
@@ -1158,19 +1216,56 @@ int nv_song_moog_rows(void *s, int i, const MoogLayer **L, double *a0t)
 }
 
 // the filter rows and knob rows as the kernel reads them (float32, flat):
-// how many of each; out NULL just counts
-int nv_song_moog_tables(void *s, float *ft, float *kn, int *nkn)
+// how many filter rows, knob rows, and each knob row's entries (knk, from
+// grid point kb0: one, a table with no moving row) -- a moving row's from
+// its first change to the last of any (blockrender's KN), a constant row
+// the same entry throughout; out NULL just counts
+int nv_song_moog_tables(void *s, float *ft, float *kn, int *nkn, long *knk, long *kb0)
 {
     nv::Song *g = (nv::Song *)s;
+    long k0 = 0, nk = 1;
+    if (!g->mkvar.empty()) {
+        long long lo = 0, hi = 0;
+        bool first = true;
+        for (auto &rv : g->mkvar)
+            for (size_t q = 1; q < rv.second.size(); q++) {
+                long long gp = rv.second[q].first;
+                lo = first || gp < lo ? gp : lo;
+                hi = first || gp > hi ? gp : hi;
+                first = false;
+            }
+        k0 = (long)std::max(0LL, lo - 1);
+        nk = (long)(hi - k0 + 1);
+    }
     if (ft)
         for (size_t r = 0; r < g->mft.size(); r++)
             for (int j = 0; j < 30; j++)
                 ft[30 * r + j] = (float)g->mft[r][j];
-    if (kn)
+    if (kn) {
         for (size_t r = 0; r < g->mkn.size(); r++)
-            for (int j = 0; j < 9; j++)
-                kn[9 * r + j] = (float)g->mkn[r][j];
+            for (long e = 0; e < nk; e++)
+                for (int j = 0; j < 9; j++)
+                    kn[(r * nk + e) * 9 + j] = (float)g->mkn[r][j];
+        for (auto &rv : g->mkvar) {
+            const auto &tl = rv.second;
+            float *row = kn + (size_t)rv.first * nk * 9;
+            std::array<double, 9> cur = tl[0].second;
+            for (auto &e : tl)
+                if (e.first <= k0)
+                    cur = e.second;
+            for (long e = 0; e < nk; e++)
+                for (int j = 0; j < 9; j++)
+                    row[e * 9 + j] = (float)cur[j];
+            for (auto &e : tl)
+                if (e.first > k0)
+                    for (long x = e.first - k0; x < nk; x++)
+                        for (int j = 0; j < 9; j++)
+                            row[x * 9 + j] = (float)e.second[j];
+        }
+    }
     *nkn = (int)g->mkn.size();
+    *knk = nk;
+    *kb0 = k0;
     return (int)g->mft.size();
 }
 

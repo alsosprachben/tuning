@@ -639,9 +639,9 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         // (a Moog's: its knobs, moog.apply_gm -- on a channel whose cutoff or
         // resonance does not move after it is first set, _kn_moves)
         n.snd_moog = 0;
+        bool kmoves = false;                    // (its knob rows a timeline: _MOOG_KVAR)
         if (k->init.kind == 6) {
-            if (nv_song_snd_moves(song, ch))
-                return -(1 + i);
+            kmoves = nv_song_snd_moves(song, ch) != 0;
             for (int q = 0; q < 8; q++) {
                 n.snd_d[q] = has[q] ? sd[q] : 0.0;
                 n.snd_moog = n.snd_moog || has[q];
@@ -702,7 +702,12 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
                 nv_moog_apply(&L, n.snd_d, &La);
                 rs = La.rel_span;
             }
-            nv_song_moog_add(song, ch, out.ft[l], out.kn[l], &L, out.non, out.noff, out.noff + rs * n.sr + 4096.0);
+            if (kmoves)
+                nv_song_moog_add_moving(song, ch, out.ft[l], &L, (const void *)k, l, k->snd_bias, k->snd_mask, n.sr,
+                                        out.non, out.noff, out.noff + rs * n.sr + 4096.0);
+            else
+                nv_song_moog_add(song, ch, out.ft[l], out.kn[l], &L, out.non, out.noff,
+                                 out.noff + rs * n.sr + 4096.0);
         }
         if (out.n_jack) {                   // each jack's click rows, the note's last (rel_jacks)
             long long j0 = total + r - out.n_click;
