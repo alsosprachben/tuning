@@ -9015,7 +9015,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _pjit = _note_strike_noise(em, props, nt, _CBW, _VB, _pjit, emit_partial, random)
         _note_struck_layer(props, nt, emit_partial, random)
         _note_ring(em, props, nt, A, _RING, _VB, emit_partial, random)
-        if getattr(props, 'touch_leak_db', None) is not None and (props.harmonic_touch or 1) > 1:
+        if (getattr(props, 'touch_leak_db', None) is not None and (props.harmonic_touch or 1) > 1
+                and not (_wn is not None and NATIVE_TONE == 'on')):     # (the engine's note made them)
             # A TOUCHED STRING'S OTHER MODES (tonelib.SynthProperties.touch_leak_db):
             # the modes the finger kills sound for a moment first, at k/n of
             # the note -- between its harmonics, not on them -- each as the

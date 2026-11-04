@@ -92,7 +92,8 @@ class VoiceSnap(ctypes.Structure):
                 ('elec', I), ('n_pk', I), ('pk_vel', I), ('n_os', I), ('eg_sp', C), ('eg_depth', C),
                 ('pk_q0', C * 4), ('pk_sign', C * 4), ('pk_turns', C), ('pk_width', C), ('pk_res_hz', C),
                 ('pk_qf', C), ('lp_hz', C), ('lp_order', C), ('os_hz', C * 8), ('fret_max', C), ('pk_sp', C),
-                ('pk_q', C * 4)]
+                ('pk_q', C * 4), ('n_touch', I), ('touches', I * 4), ('touch0', I), ('touch', I), ('leak_set', I),
+                ('leak_db', C), ('leak_dbs', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -784,28 +785,34 @@ def electric_voice(cls):
     """Whether native/voice.c plays cls as an electric guitar (kind 4,
     VoiceSnap.elec): a plucked string's series through the pick's comb and
     the coils (pickup_gain), both moved by the note's fret (its __init__), no
-    body, its B the k f^p law -- and none of the extras (a touched harmonic,
-    a strike's noise)."""
+    body, its B the k f^p law -- or a TOUCHED HARMONIC's (GM 31: the note's
+    touch chosen among up to four, its series the string's modes n m, the
+    killed modes' leak, the pick's noise) -- and none of the other extras."""
     import tonelib as T
     if not issubclass(cls, T.ElectricGuitarProperties) or issubclass(cls, T.FormantBody):
         return False
-    own = dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None, harmonic_decay='ElectricGuitarProperties',
+    touched = bool(cls.harmonic_touch or getattr(cls, 'touches', ()))
+    # (GuitarHarmonicsProperties' decay is SynthProperties' own, by the partial heard)
+    own = dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None,
+               harmonic_decay='GuitarHarmonicsProperties' if touched else 'ElectricGuitarProperties',
                pickup_gain='SynthProperties', inharmonicity_coefficient_for_frequency='ElectricGuitarProperties')
     if any(_owner(cls, n) != o for n, o in own.items()):
         return False
-    if any(k.__name__ not in ('SynthProperties', 'ElectricGuitarProperties', 'object') for k in cls.__mro__
-           if '__init__' in k.__dict__):
+    inits = ('SynthProperties', 'ElectricGuitarProperties', 'object') + (('GuitarHarmonicsProperties',) if touched else ())
+    if any(k.__name__ not in inits for k in cls.__mro__ if '__init__' in k.__dict__):
+        return False
+    if touched and not (len(getattr(cls, 'touches', ()) or ()) <= 4 and cls.open_strings_hz
+                        and all(int(n) == n and n >= 1 for n in (getattr(cls, 'touches', ()) or ()))):
         return False
     pts, sg = tuple(cls.pickup_points or ()), getattr(cls, 'pickup_signs', None)
     return (cls.mode_gains is None and cls.mode_ratios is None and bool(cls.strike_point)
-            and not cls.strike_fills_with_force and not cls.harmonic_touch and 1 <= len(pts) <= 4
+            and not cls.strike_fills_with_force and 1 <= len(pts) <= 4
             and (sg is None or len(sg) == len(pts)) and len(cls.open_strings_hz or ()) <= 8
             and not (cls.unison_detune or ()) and not cls.blare_db_per_khz and not cls.bore_corner_hz
             and 1 <= (cls.max_harmonic or 0) <= 128 and not cls.max_partial_hz
             and not (cls.inharmonicity_dynamic and not getattr(cls, 'inharmonicity_law', None))
             and not any(getattr(cls, a, None) for a in ('breath_noise_db', 'grains', 'noise_events', 'pulse',
-                                                         'ring_db', 'struck_layer', 'touch_leak_db',
-                                                         'strike_noise_db', 'release_click_db', 'hammer_legato',
+                                                         'ring_db', 'struck_layer', 'release_click_db', 'hammer_legato',
                                                          'bend_detents')))
 
 
@@ -1225,6 +1232,12 @@ def snapshot(props):
             s.fret_max = float(c.fret_max)
             s.pk_sp = float(p.strike_point)                         # (the note's: its fret)
             s.pk_q[:s.n_pk] = [float(q) for q in p.pickup_points]
+            # ...touched: the touches a player chooses among, the note's, the killed modes' leak
+            s.n_touch = len(getattr(c, 'touches', ()) or ())
+            s.touches[:s.n_touch] = [int(n) for n in (getattr(c, 'touches', ()) or ())]
+            s.touch0, s.touch = int(c.harmonic_touch or 0), int(p.harmonic_touch or 0)
+            s.leak_set = int(c.touch_leak_db is not None)
+            s.leak_db, s.leak_dbs = float(c.touch_leak_db or 0.0), float(c.touch_leak_dbs)
         if isinstance(p, T.FormantBody):
             s.fbody, s.formant_floor = 1, p.formant_floor
             s.n_fm, s.n_afm, s.n_bt = len(p.formants), len(p.antiformants), len(p.body_trim_db or ())
@@ -1418,7 +1431,7 @@ def init_supported(cls):
         # (and [RND]'s, RandomStrike: its four draws the caller's, VoiceInit.rnd_draws)
         if any(k.__name__ not in ('SynthProperties', 'object', 'RandomStrike') for k in cls.__mro__
                if '__init__' in k.__dict__ and not (k.__name__ == 'ElectricPianoProperties' and ep_voice(cls))
-               and not (k.__name__ == 'ElectricGuitarProperties' and electric_voice(cls))):
+               and not (k.__name__ in ('ElectricGuitarProperties', 'GuitarHarmonicsProperties') and electric_voice(cls))):
             return False
         if any(_owner(cls, n) != o for n, o in _BASE_OWN.items() if n != 'inharmonicity_coefficient_func'):
             return False

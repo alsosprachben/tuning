@@ -318,10 +318,30 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         nsurf = nsurf_; surf = surf_; img = img_; mir = mir_;
     }
 
+    int reflect = n->reflect && !no_refl && K->reflection_order;
+    // A TOUCHED STRING'S OTHER MODES (blockrender's touch_leak_db): before
+    // the tone, as the Python's (no breath or shake beside them: native.py)
+    if (s.elec && s.touch > 1 && s.leak_set) {
+        ToneIn tl = t;
+        tl.reflect = reflect;
+        tl.gain = 1.0; tl.sjit = 0.0;
+        tl.cbw0 = K->cbw0; tl.cbw1 = K->cbw1;
+        double fs = f0 / s.touch;
+        double Bs = c.inharmonicity_dynamic ? (c.b_law == 3 ? c.law_k * pow(fs, c.law_p) : o.B)
+                                            : o.inharmonicity_coefficient;
+        PyRandom lr;
+        pyr_seed(&lr, (long long)rint(n->on * 1e6) * 149 + n->note * 17 + n->ch);
+        int k = nv_leak(&s, &tl, Bs, &lr, reflect ? nimg : 0, nsurf, surf, img, mir, rows + NCOLS * total,
+                        cap - total, qacc, azimuth);
+        if (k < 0)
+            return -1;
+        out->n_knock += k;
+        total += k;
+    }
+
     // THE TONE (_note_stops, one stop at gain 1): its partials radiate as themselves
     t.radius = 0.0;
     t.has_radius = 0;
-    int reflect = n->reflect && !no_refl && K->reflection_order;
     t.gain = 1.0; t.B = B; t.sjit = o.sustain_jitter; t.reflect = reflect;
     t.cbw0 = K->cbw0; t.cbw1 = K->cbw1;
     t.pjit = K->pjit; t.sps = K->sps; t.dur = dur; t.ssc = K->ssc;

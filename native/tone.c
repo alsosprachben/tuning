@@ -749,5 +749,54 @@ int nv_phantom(const VoiceSnap *v, const ToneIn *t, const double *trans, int ntr
     return R.n;
 }
 
+/* blockrender's A TOUCHED STRING'S OTHER MODES (touch_leak_db): the modes
+ * the touch kills (k not a multiple of it, to 48) at k/n of the note --
+ * stretched by Bs, the string's B -- each as the string would have it
+ * untouched (SynthProperties.touch_leak_modes: the pick's comb, the tilt,
+ * the coils), dying at leak_dbs; with their room images, their phases from
+ * lr (the note's own stream). qacc and *azimuth as nv_tone's. Returns the
+ * rows written, -1 if the store was too small. */
+int nv_leak(const VoiceSnap *v, const ToneIn *t, double Bs, PyRandom *lr, int nimg, const int *nsurf,
+            const int *surf, const double *img, const double *mir, double *rows, int cap, double *qacc,
+            double *azimuth)
+{
+    Rows R = {rows, 0, cap};
+    double terms[9 * 64];
+    double VB[3] = {0.0, 5.5, 0.0};
+    double sr = t->sr;
+    int n = v->touch;
+    if (n < 2 || !v->leak_set)
+        return 0;
+    double fs = t->f0 / n;
+    double lk = pow(10.0, v->leak_db / 20.0);
+    double llr = log(10.0) / 20.0 * v->leak_dbs;
+    for (int k = 1; k <= 48; k++) {
+        if (k % n == 0)
+            continue;
+        double comb = v->pk_sp != 0.0 ? (1.0 - v->eg_depth) + v->eg_depth * fabs(sin(k * PI * v->pk_sp)) : 1.0;
+        double a = v->gain / pow((double)k, v->attack_dampening) * comb;
+        if (v->n_pk)
+            a *= eg_pickup_gain(v, k);
+        a = a * lk;
+        double hf = fs * k * (Bs > 0 ? 1.0 + 0.5 * ((double)(k * k) - 1.0) * Bs : 1.0);
+        if (hf >= 0.45 * sr)
+            continue;
+        double gM = a * nv_radiation_gain(v, hf, 0.0, 0);
+        int nt_ = 0;
+        if (t->reflect) {
+            nt_ = note_terms(v, t, hf, t->pos_x_props, t->pos_z, nimg, nsurf, surf, img, mir, terms);
+            if (nt_ < 0)
+                return -1;
+        }
+        double ph0 = pyr_random(lr) * 2.0 * PI;
+        if (!emit(v, t, &R, qacc, azimuth, terms, nt_, 2 * PI * hf / sr, gM * nv_hrtf_gain(v, hf, t->li),
+                  gM * nv_hrtf_gain(v, hf, t->ri), gM, hf, t->non, pymax(t->noff, t->non + 0.5 * sr), t->fade,
+                  t->rel, t->chiff, llr, 0.0, 0.0, 0.0, 0.0, t->cc, t->crl, 0.0, t->csc, -1.0, 0.0, ph0, 0.0, VB,
+                  t->pos_x_props, 0))
+            return -1;
+    }
+    return R.n;
+}
+
 #include "organ.c"     /* a registered organ's note */
 #include "npyrandom.c" /* numpy's normal stream (the organ's wind) */

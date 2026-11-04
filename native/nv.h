@@ -213,10 +213,16 @@ typedef struct {
        pk_sign, wound pk_turns, pk_width wide, read as velocity pk_vel, loaded
        by a two-pole at pk_res_hz of Q pk_qf; a dark string's low-pass lp_hz
        of lp_order: pickup_gain), and the open strings a note is fretted from
-       (n_os of os_hz, to fret_max) -- the note's pick and coils pk_sp, pk_q */
+       (n_os of os_hz, to fret_max) -- the note's pick and coils pk_sp, pk_q;
+       A TOUCHED HARMONIC's (GuitarHarmonicsProperties): the touches a
+       player chooses among (n_touch of touches; 0: the class's touch0), the
+       note's touch, and the killed modes' leak (leak_set: touch_leak_db not
+       None) at leak_db, dying leak_dbs */
     int elec, n_pk, pk_vel, n_os;
     double eg_sp, eg_depth, pk_q0[4], pk_sign[4], pk_turns, pk_width, pk_res_hz, pk_qf, lp_hz, lp_order, os_hz[8],
         fret_max, pk_sp, pk_q[4];
+    int n_touch, touches[4], touch0, touch, leak_set;
+    double leak_db, leak_dbs;
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -438,6 +444,9 @@ int nv_strike(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, con
 int nv_phantom(const VoiceSnap *v, const ToneIn *t, const double *trans, int ntrans,
                int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
                double *rows, int cap, double *qacc, double *azimuth);
+int nv_leak(const VoiceSnap *v, const ToneIn *t, double Bs, PyRandom *lr, int nimg, const int *nsurf,
+            const int *surf, const double *img, const double *mir, double *rows, int cap, double *qacc,
+            double *azimuth);
 
 // What a voice class is to a note's setup: the constructor's constants and
 // the class's VoiceSnap, the attack/release/chiff laws, the tension bend and

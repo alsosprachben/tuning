@@ -208,7 +208,8 @@ double nv_mode_ratio(const VoiceSnap *v, int m)
     return (double)m;                           /* mode_ratios None */
 }
 
-/* SynthProperties.pickup_gain: what the coils read of string mode h */
+/* SynthProperties.pickup_gain: what the coils read of string mode h (of a
+   touched harmonic's string, its touch under the note) */
 static double eg_pickup_gain(const VoiceSnap *v, int h)
 {
     double t[4];
@@ -224,7 +225,7 @@ static double eg_pickup_gain(const VoiceSnap *v, int h)
     }
     if (v->pk_vel)
         g *= h;
-    double f = v->frequency_x * pow(2.0, v->octave_position) * h / 1.0;
+    double f = v->frequency_x * pow(2.0, v->octave_position) * h / (v->touch ? v->touch : 1);
     if (v->pk_res_hz != 0.0) {                  /* _two_pole, the coil's load */
         double x = f / v->pk_res_hz;
         g *= 1.0 / sqrt(pow(1.0 - x * x, 2.0) + pow(x / v->pk_qf, 2.0));
@@ -290,9 +291,13 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
         return r;
     }
     if (v->kind == 4 && v->elec) {              /* ElectricGuitarProperties: the pick's comb, the coils */
-        double comb = (1.0 - v->eg_depth) + v->eg_depth * fabs(sin(harmonic * PI * v->pk_sp));
-        double r = v->gain / pow((double)harmonic, v->attack_dampening) * comb;
-        r *= eg_pickup_gain(v, harmonic);
+        /* (a touched harmonic's partial m is string mode m times the touch) */
+        int sm = v->touch ? harmonic * v->touch : harmonic;
+        if (v->touch && v->max_harmonic && sm > v->max_harmonic)
+            return 0.0;
+        double comb = (1.0 - v->eg_depth) + v->eg_depth * fabs(sin(sm * PI * v->pk_sp));
+        double r = v->gain / pow((double)sm, v->attack_dampening) * comb;
+        r *= eg_pickup_gain(v, sm);
         if (harmonic % 2 == 0 && v->even_db_set)
             r *= pow(10.0, v->even_harmonic_db / 20.0);
         return r;
@@ -957,10 +962,44 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
         s->pk_sp = s->eg_sp;
         for (int q = 0; q < s->n_pk; q++)
             s->pk_q[q] = s->pk_q0[q];
+        s->touch = s->touch0;
+        if (s->n_touch) {
+            /* A TOUCHED HARMONIC (GuitarHarmonicsProperties.__init__): of the
+               touches putting the string within 4 frets of the nut (else
+               all), the one the coils and the pick reach best */
+            double fr[4], hd[4];
+            int near = 0;
+            for (int i = 0; i < s->n_touch; i++) {
+                int n = s->touches[i];
+                double fs = (double)frequency / n, o = 0.0;
+                int under = 0;
+                for (int q = 0; q < s->n_os; q++)
+                    if (s->os_hz[q] <= fs * 1.0001 && (!under || s->os_hz[q] > o)) {
+                        o = s->os_hz[q];
+                        under = 1;
+                    }
+                fr[i] = under ? 12.0 * log(fs / o) / log(2.0) : 99.0;
+                double sc = pow(2.0, fr[i] / 12.0), t[4];
+                for (int q = 0; q < s->n_pk; q++)
+                    t[q] = sin(n * PI * pymin(s->pk_q0[q] * sc, 0.5));
+                hd[i] = fabs(pysum(t, s->n_pk)) * fabs(sin(n * PI * pymin(s->eg_sp * sc, 0.5)));
+                if (fr[i] <= 4.0)
+                    near = 1;
+            }
+            int best = -1;
+            for (int i = 0; i < s->n_touch; i++) {
+                if (near && !(fr[i] <= 4.0))
+                    continue;
+                if (best < 0 || hd[i] > hd[best] || (hd[i] == hd[best] && -s->touches[i] > -s->touches[best]))
+                    best = i;
+            }
+            s->touch = s->touches[best];
+        }
         if (s->n_os) {
-            /* the highest open string at or under the note, else the lowest:
-               the pick and the coils a larger share of the shorter string */
-            double f0 = frequency / 1.0, o = 0.0, lo = s->os_hz[0];
+            /* the highest open string at or under the note (the STRING's
+               pitch: a touched harmonic sounds its touch above it), else the
+               lowest: the pick and the coils a larger share of the shorter string */
+            double f0 = frequency / (s->touch ? s->touch : 1), o = 0.0, lo = s->os_hz[0];
             int under = 0;
             for (int q = 0; q < s->n_os; q++) {
                 if (s->os_hz[q] <= f0 * 1.0001 && (!under || s->os_hz[q] > o)) {
