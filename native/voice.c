@@ -208,6 +208,32 @@ double nv_mode_ratio(const VoiceSnap *v, int m)
     return (double)m;                           /* mode_ratios None */
 }
 
+/* SynthProperties.pickup_gain: what the coils read of string mode h */
+static double eg_pickup_gain(const VoiceSnap *v, int h)
+{
+    double t[4];
+    for (int i = 0; i < v->n_pk; i++)
+        t[i] = v->pk_sign[i] * sin(h * PI * v->pk_q[i]);
+    double g = fabs(pysum(t, v->n_pk));
+    if (v->pk_turns != 1.0)
+        g *= v->pk_turns;
+    if (v->pk_width != 0.0) {
+        double x = h * PI * v->pk_width;
+        if (x > 1e-9)
+            g *= fabs(sin(x) / x);
+    }
+    if (v->pk_vel)
+        g *= h;
+    double f = v->frequency_x * pow(2.0, v->octave_position) * h / 1.0;
+    if (v->pk_res_hz != 0.0) {                  /* _two_pole, the coil's load */
+        double x = f / v->pk_res_hz;
+        g *= 1.0 / sqrt(pow(1.0 - x * x, 2.0) + pow(x / v->pk_qf, 2.0));
+    }
+    if (v->lp_hz != 0.0)
+        g /= pow(1.0 + pow(f / v->lp_hz, 2.0 * v->lp_order), 0.5);
+    return g;
+}
+
 double nv_series_volume(const VoiceSnap *v, int harmonic)
 {
     if (v->kind == 5) {                         /* ElectricPianoProperties: a layer's weight, the tonebar's */
@@ -261,6 +287,14 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
             double e = -log(1.0 - pyr_random(&R)) / 1.0;
             r *= sqrt(pow(e, q) / tgamma(1.0 + q));
         }
+        return r;
+    }
+    if (v->kind == 4 && v->elec) {              /* ElectricGuitarProperties: the pick's comb, the coils */
+        double comb = (1.0 - v->eg_depth) + v->eg_depth * fabs(sin(harmonic * PI * v->pk_sp));
+        double r = v->gain / pow((double)harmonic, v->attack_dampening) * comb;
+        r *= eg_pickup_gain(v, harmonic);
+        if (harmonic % 2 == 0 && v->even_db_set)
+            r *= pow(10.0, v->even_harmonic_db / 20.0);
         return r;
     }
     if (v->kind == 4) {                         /* SynthProperties': the pluck's comb */
@@ -918,6 +952,32 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
                                           s->reed_s);
         for (int q = s->n_reed; q < 1025; q++)
             s->reed_s[q] = 0.0;                 /* (none past this key's) */
+    }
+    if (s->kind == 4 && s->elec) {              /* an electric guitar: its fret (ElectricGuitarProperties.__init__) */
+        s->pk_sp = s->eg_sp;
+        for (int q = 0; q < s->n_pk; q++)
+            s->pk_q[q] = s->pk_q0[q];
+        if (s->n_os) {
+            /* the highest open string at or under the note, else the lowest:
+               the pick and the coils a larger share of the shorter string */
+            double f0 = frequency / 1.0, o = 0.0, lo = s->os_hz[0];
+            int under = 0;
+            for (int q = 0; q < s->n_os; q++) {
+                if (s->os_hz[q] <= f0 * 1.0001 && (!under || s->os_hz[q] > o)) {
+                    o = s->os_hz[q];
+                    under = 1;
+                }
+                if (s->os_hz[q] < lo)
+                    lo = s->os_hz[q];
+            }
+            if (!under)
+                o = lo;
+            double sc = pymin(pymax(1.0, f0 / o), pow(2.0, s->fret_max / 12.0));
+            for (int q = 0; q < s->n_pk; q++)
+                s->pk_q[q] = pymin(s->pk_q0[q] * sc, 0.5);
+            s->pk_sp = pymin(s->eg_sp * sc, 0.5);
+        }
+        s->strike_point = s->pk_sp;
     }
     if (s->kind == 5) {                         /* an electric piano: this note's layers (ElectricPianoProperties.__init__) */
         double lay[4 * 400], f0 = s->frequency_x * pow(2.0, op);

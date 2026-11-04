@@ -221,6 +221,7 @@ struct Song {
     // the valve amplifiers (_AMP_CH): each channel as its first amplified
     // note came, its voice's drive, and whether it is on a rotor
     std::vector<std::pair<long long, std::pair<double, int>>> amp;
+    std::vector<std::pair<double, double>> amp_cfg;     // (its reference peak, 0 none; its imbalance)
     // ...and of each note's bellows push (blockrender's push_rows), [first, end)
     std::vector<std::pair<long long, long long>> push_rows;
     double total = 0.0;
@@ -1378,13 +1379,22 @@ void nv_song_add_leslie(void *s, long long ch, int kind)
 
 // AN AMPLIFIER'S CHANNEL, as its first amplified note arrives (its voice's
 // amp_drive, and whether the voice is on a rotor); a channel already there is left
-void nv_song_add_amp(void *s, long long ch, double drive, int rotor)
+void nv_song_add_amp(void *s, long long ch, double drive, int rotor, double reference, double imbalance)
 {
     nv::Song *S = (nv::Song *)s;
     for (const auto &x : S->amp)
         if (x.first == ch)
             return;
     S->amp.push_back(std::make_pair(ch, std::make_pair(drive, rotor)));
+    S->amp_cfg.push_back(std::make_pair(reference, imbalance));
+}
+
+// the amplifier channel k's reference peak (0 none) and its valve's imbalance
+void nv_song_amp_cfg(void *s, int k, double *reference, double *imbalance)
+{
+    const nv::Song *S = (nv::Song *)s;
+    *reference = S->amp_cfg[k].first;
+    *imbalance = S->amp_cfg[k].second;
 }
 
 // the amplifier channel k's drive (*ch, *rotor), or how many with k < 0

@@ -207,6 +207,16 @@ typedef struct {
     double ep_p[5], ep_defl, ep_defl_slope, ep_defl_power, ep_defl_max, ep_rho, ep_max_hz, ep_floor_db, ep_share;
     double tb_coeff, tb_power, tb_decay, tb_ratio[8], tb_g[8];
     double ep_a0, ep_r[408], ep_n[400], ep_w[400];
+    /* AN ELECTRIC GUITAR'S STRING AND MAGNET (elec, on a kind 4 voice:
+       ElectricGuitarProperties): the pick's comb (at eg_sp, notched eg_depth
+       at every force: a plectrum), the coils (n_pk at pk_q0, each its sign
+       pk_sign, wound pk_turns, pk_width wide, read as velocity pk_vel, loaded
+       by a two-pole at pk_res_hz of Q pk_qf; a dark string's low-pass lp_hz
+       of lp_order: pickup_gain), and the open strings a note is fretted from
+       (n_os of os_hz, to fret_max) -- the note's pick and coils pk_sp, pk_q */
+    int elec, n_pk, pk_vel, n_os;
+    double eg_sp, eg_depth, pk_q0[4], pk_sign[4], pk_turns, pk_width, pk_res_hz, pk_qf, lp_hz, lp_order, os_hz[8],
+        fret_max, pk_sp, pk_q[4];
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -540,9 +550,11 @@ typedef struct {
     // none, 1 starting on chorale, 2 on tremolo -- leslie_fast), its scanner
     // (0 none, else 1, +2 a selector CC94 sets -- scanner_switch -- +4 x
     // its own depth 1-3, +16 its own on chorus), its valve stage's drive
-    // (amp_drive, 0 none)
+    // (amp_drive, 0 none) -- against a fixed peak (amp_reference, 0 the
+    // segment's own; the channel's fader taken back out), its pair's
+    // imbalance (amp_imbalance)
     int leslie, scanner;
-    double amp_drive;
+    double amp_drive, amp_reference, amp_imbalance;
     int wheel_swell;                    // the mod wheel its expression pedal (live's 'swell' role)
     // A PLAYER'S BELLOWS (bellows_push_*, a standalone voice's: the
     // accordions'): a note from silence pushes, a slur carries the push on
@@ -719,7 +731,8 @@ void nv_song_add_cab(void *s, long long ch, const NoteClass *k);
 int nv_song_cabs(void *s, long long *ch, const NoteClass **k, int cap);
 void nv_cabinet_pass(void *song, double *rows, long long P);
 int nv_song_trems(void *s, long long *ch, double *cfg, int cap);
-void nv_song_add_amp(void *s, long long ch, double drive, int rotor);
+void nv_song_add_amp(void *s, long long ch, double drive, int rotor, double reference, double imbalance);
+void nv_song_amp_cfg(void *s, int k, double *reference, double *imbalance);
 double nv_song_amp(void *s, int k, long long *ch, int *rotor);
 int nv_song_leslie(void *s, int k, long long *ch);
 int nv_song_ccs(void *s, long long ch, int cc, double *t, int *v, int cap);

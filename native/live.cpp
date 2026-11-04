@@ -682,6 +682,13 @@ const nv::live::Template *nv_tcache_at(void *h, long i, long *n)
 }
 
 // a program's class (its key 60's), NULL none
+// a melodic program's trim (patch_map.program_trim, the templates')
+double nv_tcache_trim(void *h, int program)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    return C && program >= 0 && program < 128 ? C->trim[program] : 1.0;
+}
+
 const NoteClass *nv_tcache_class(void *h, int program)
 {
     nv::live::Cache *C = (nv::live::Cache *)h;

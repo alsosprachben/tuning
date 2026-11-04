@@ -251,12 +251,12 @@ int nv_cfft(const double *z, long n, double *out)
 namespace {
 
 // tubeamp.emit: the distortion partials of these, driven at drive (against
-// the signal's own peak: no reference), the valve at imbalance; its window,
+// the reference peak, or the signal's own: 0), the valve at imbalance; its window,
 // oversampling and peaks kept the file's (WINDOW_S, OVERSAMPLE, KEEP_PEAKS)
 // or live's passes'
 std::vector<Partial> emit(const std::vector<double> &f, const std::vector<double> &a, const std::vector<double> &p,
                           double sr, double drive, double imbalance, double window_s = WINDOW_S,
-                          int oversample = OVERSAMPLE, int keep = KEEP_PEAKS)
+                          int oversample = OVERSAMPLE, int keep = KEEP_PEAKS, double reference = 0.0)
 {
     std::vector<Partial> out;
     if (f.size() < 2)
@@ -274,7 +274,7 @@ std::vector<Partial> emit(const std::vector<double> &f, const std::vector<double
         pk = std::max(pk, fabs(x[i]));                  // np.abs(x).max()
     if (pk <= 0.0)
         return out;
-    double unit = drive * BIAS / pk;
+    double unit = drive * BIAS / (reference != 0.0 ? reference : pk);
     for (long i = 0; i < n; i++)
         x[i] *= unit;
     Valve V(imbalance);
@@ -422,22 +422,25 @@ extern "C" {
 // (combine) and driven, at that pass's window, oversampling and peaks kept;
 // the products (Hz, amplitude, phase) into *out (malloc'd, 3 each). How many.
 long nv_amp_live_t(const double *f, const double *a, const double *p, long n, double sr, double drive,
-                   double window_s, int oversample, int keep, double **out, unsigned threads);
+                   double window_s, int oversample, int keep, double **out, unsigned threads, double reference,
+                   double imbalance);
 
 long nv_amp_live(const double *f, const double *a, const double *p, long n, double sr, double drive,
                  double window_s, int oversample, int keep, double **out)
 {
-    return nv_amp_live_t(f, a, p, n, sr, drive, window_s, oversample, keep, out, 0);
+    return nv_amp_live_t(f, a, p, n, sr, drive, window_s, oversample, keep, out, 0, 0.0, IMBALANCE);
 }
 
-// ...on so many threads (0: every core)
+// ...on so many threads (0: every core), against a reference peak (0: the
+// chord's own) through a valve of this imbalance
 long nv_amp_live_t(const double *f, const double *a, const double *p, long n, double sr, double drive,
-                   double window_s, int oversample, int keep, double **out, unsigned threads)
+                   double window_s, int oversample, int keep, double **out, unsigned threads, double reference,
+                   double imbalance)
 {
     synth_threads = threads;
     std::vector<double> F, A, Ph;
     combine(std::vector<double>(f, f + n), std::vector<double>(a, a + n), std::vector<double>(p, p + n), F, A, Ph);
-    std::vector<Partial> got = emit(F, A, Ph, sr, drive, IMBALANCE, window_s, oversample, keep);
+    std::vector<Partial> got = emit(F, A, Ph, sr, drive, imbalance, window_s, oversample, keep, reference);
     *out = (double *)malloc(sizeof(double) * 3 * (got.size() + 1));
     for (size_t q = 0; q < got.size(); q++) {
         (*out)[3 * q] = got[q].hz;
@@ -448,12 +451,13 @@ long nv_amp_live_t(const double *f, const double *a, const double *p, long n, do
 }
 
 // THE AMPLIFIER over a table: rows (NCOLS each, *Pp of them, realloc'd), the
-// channels (chans[k] at drives[k], in _AMP_CH's order); each channel's
+// channels (chans[k] at drives[k], in _AMP_CH's order; its reference peak
+// refs[k], 0 the segment's own, and its valve's imbalance imbs[k]); each channel's
 // direct rows cut at every onset and end, each segment's products appended
 // (after every channel's), a damper's dk/dg copied with them. Returns the
 // products made.
 long long nv_amp_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
-                        const double *drives, double sr)
+                        const double *drives, const double *refs, const double *imbs, double sr)
 {
     enum { cOM = 0, cP0 = 1, cP0R = 2, cAL = 3, cAR = 4, cAM = 5, cMCH = 6, cDR = 10, cNF = 11, cNON = 12,
            cNOFF = 13, cDELL = 37, cDELR = 38, cFX = 43, cMK = 44 };
@@ -521,7 +525,8 @@ long long nv_amp_expand(double **rowsp, long long *Pp, void **dm, int nch, const
             for (long long i : live)
                 if (at(i, cAM) > at(src, cAM))
                     src = i;
-            std::vector<Partial> got = emit(F, A, Ph, sr, drive, IMBALANCE);
+            std::vector<Partial> got = emit(F, A, Ph, sr, drive, imbs ? imbs[k] : IMBALANCE, WINDOW_S, OVERSAMPLE,
+                                            KEEP_PEAKS, refs ? refs[k] : 0.0);
             for (const Partial &q : got) {
                 size_t o = extra.size();
                 extra.insert(extra.end(), rows + (size_t)NCOLS * src, rows + (size_t)NCOLS * (src + 1));

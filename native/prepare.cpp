@@ -123,8 +123,13 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
         double dv[2];
         nv_song_get_note(song, played[j], &ch, iv, dv);
         const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[(iv[3] ? NV_K_DRUMS : 0) + 128 * iv[2] + iv[0]];
-        if (k && k->amp_drive != 0.0)
-            nv_song_add_amp(song, ch, k->amp_drive, k->leslie != 0);
+        if (k && k->amp_drive != 0.0) {
+            // (_note_amp_drive: the reference times the note's fader, chan_vol)
+            double ref = 0.0, pl[6];
+            if (k->amp_reference != 0.0 && nv_song_pitch_level(song, played[j], k->init.effort_tilt != 0.0, pl))
+                ref = k->amp_reference * pl[3];
+            nv_song_add_amp(song, ch, k->amp_drive, k->leslie != 0, ref, k->amp_imbalance);
+        }
         if (k && k->leslie)
             nv_song_add_leslie(song, ch, k->leslie);
         if (k && k->cab_set)                            // (_CAB_CH: the channel's, set once)
@@ -314,6 +319,14 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
 
 // cabinet.Cabinet.gain: FormantBody.bore_gain at hz (no less than 1e-6 Hz)
 // over the cabinet's level at its reference
+static double cab_gain(const NoteClass *k, double hz);
+
+// cabinet.gain at hz, for live's valve products
+extern "C" double nv_cab_gain(const NoteClass *k, double hz)
+{
+    return cab_gain(k, hz);
+}
+
 static double cab_gain(const NoteClass *k, double hz)
 {
     hz = hz > 1e-6 ? hz : 1e-6;

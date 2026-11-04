@@ -87,7 +87,7 @@ long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, co
                            const int *nreq, const double *req, double sr, const double *L, void **lobe,
                            long long **flips, long long *nflips);
 long long nv_amp_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
-                        const double *drives, double sr);
+                        const double *drives, const double *refs, const double *imbs, double sr);
 void nv_breath_rows(unsigned long long seed, long nblk, int blk, double sr, const double *p, float *br, double *bc,
                     float *tl, float *nl);
 void nv_scan_rows(const double *X, long nblk, int blk, double sr, int depth, int chorus, float *br, double *bc);
@@ -655,11 +655,14 @@ int main(int argc, char **argv)
     // not on a rotor -- its products appended, before the speaker sees them
     {
         std::vector<long long> ach;
-        std::vector<double> adr;
+        std::vector<double> adr, aref, aimb;
         for (int k = 0, na = (int)nv_song_amp(song, -1, nullptr, nullptr); k < na; k++) {
             long long c;
             int rotor;
-            double drv = nv_song_amp(song, k, &c, &rotor);
+            double drv = nv_song_amp(song, k, &c, &rotor), ref, imb;
+            nv_song_amp_cfg(song, k, &ref, &imb);
+            aref.push_back(ref);
+            aimb.push_back(imb);
             int v;
             if (!rotor && nv_song_first_cc(song, c, 1, &v))
                 drv *= 4.0 * v / 127.0;
@@ -667,7 +670,7 @@ int main(int argc, char **argv)
             adr.push_back(drv);
         }
         if (!ach.empty())
-            nv_amp_expand(&rows, &P, dm, (int)ach.size(), ach.data(), adr.data(), SR);
+            nv_amp_expand(&rows, &P, dm, (int)ach.size(), ach.data(), adr.data(), aref.data(), aimb.data(), SR);
     }
     // THE ORGANS' TREMOLOS (_prep_tremolo, after the render's length is
     // known): a Tremolo stop's on the notes struck with it drawn, then the

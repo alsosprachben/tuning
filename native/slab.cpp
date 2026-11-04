@@ -42,9 +42,12 @@ extern "C" const NoteClass *nv_tcache_note_class(void *h, int program, int note)
 extern "C" int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out);
 extern "C" const OrganSpec *nv_tcache_organ(void *h, int program);
 extern "C" const NoteClass *nv_tcache_class(void *h, int program);
+extern "C" double nv_tcache_trim(void *h, int program);
+extern "C" double nv_cab_gain(const NoteClass *k, double hz);
 extern "C" const nv::live::Template *nv_tcache_at(void *h, long i, long *n);
 extern "C" long nv_amp_live_t(const double *f, const double *a, const double *p, long n, double sr, double drive,
-                              double window_s, int oversample, int keep, double **out, unsigned threads);
+                              double window_s, int oversample, int keep, double **out, unsigned threads,
+                              double reference, double imbalance);
 extern "C" void nv_leslie_lobe_of(double f, int horn, const double *L, double *fl, double *sh);
 extern "C" void nv_leslie_params(long n, const double *nf, const char *flip, const double *L, char *horn, float *fl,
                                  float *sh, double *nrm);
@@ -1075,6 +1078,10 @@ struct Piano {
         double wtrem = 0.0, wtrem_hz = 0.0;
         bool wtrem_stereo = false;
         double amp = 0.0;
+        // ...against a fixed peak (amp_reference by the program's trim, 0 the
+        // chord's own), through a pair this unbalanced (amp_imbalance)
+        double amp_ref = 0.0, amp_imb = 0.06;
+        const NoteClass *cab = nullptr;     // its speaker (cab_set), which the templates went through
         int scanner = 0;            // NoteClass.scanner: 0 none, else 1 +2 the switch +4 x depth +16 chorus
     };
     std::vector<Patch> patches;
@@ -1495,7 +1502,7 @@ struct Piano {
     std::deque<AmpOut> amp_jobs, amp_ready_fast, amp_ready_fine;
     struct AmpJob {
         std::vector<double> f, a, p;
-        double drive = 0.0;
+        double drive = 0.0, ref = 0.0, imb = 0.06;
     };
     std::map<long long, AmpJob> amp_jobdata;    // jid -> its parents
 
@@ -1594,6 +1601,23 @@ struct Piano {
         jd.a = aM;
         jd.p = ph;
         jd.drive = drive;
+        jd.imb = p.amp_imb;
+        jd.ref = 0.0;
+        if (p.amp_ref != 0.0) {
+            // THE FADERS SET THE LEVEL, NOT THE DRIVE: the channel's, the
+            // part's and the headroom in the reference too (the part's
+            // channel, or its first sounding key's)
+            int ch = p.channel;
+            if (ch < 0) {
+                ch = 0;
+                for (auto &kv : S.live)
+                    if (std::get<0>(kv.first) == apid && std::get<1>(kv.first) >= 0 && std::get<1>(kv.first) < 256) {
+                        ch = (int)std::get<1>(kv.first);
+                        break;
+                    }
+            }
+            jd.ref = p.amp_ref * chan_gain(ch) * (pow(10.0, level_db / 20.0) * swell) * S.headroom_d;
+        }
         return true;
     }
 
@@ -1602,7 +1626,7 @@ struct Piano {
     {
         double *out = nullptr;
         long n = nv_amp_live_t(jd.f.data(), jd.a.data(), jd.p.data(), (long)jd.f.size(), sr, jd.drive,
-                               fine ? 1.0 : 0.25, 1, fine ? 400 : 150, &out, threads);
+                               fine ? 1.0 : 0.25, 1, fine ? 400 : 150, &out, threads, jd.ref, jd.imb);
         prod.assign(out, out + 3 * n);
         free(out);
     }
@@ -1636,6 +1660,9 @@ struct Piano {
             a[q] = o.prod[3 * q + 1];
             p[q] = o.prod[3 * q + 2];
         }
+        if (pi >= 0 && patches[pi].cab)     // through the speaker, as the notes were (cabinet.gain)
+            for (long q = 0; q < n; q++)
+                a[q] *= nv_cab_gain(patches[pi].cab, f[q]);
         auto as = amp_start.find(o.pid);
         long long start = std::max(n0, as == amp_start.end() ? n0 : as->second);
         std::vector<long> slots = S.stamp_amp(key, o.src, f.data(), a.data(), p.data(), n, start, rate, o.when);
@@ -1773,6 +1800,9 @@ struct Piano {
         p.wtrem_hz = og ? og->wtrem_hz : (k ? k->trem_hz : 0.0);
         p.wtrem_stereo = og ? og->wtrem_stereo != 0 : (k && k->trem_stereo);
         p.amp = k ? k->amp_drive : 0.0;
+        p.amp_ref = k && k->amp_reference != 0.0 ? k->amp_reference * nv_tcache_trim(p.cache, p.program) : 0.0;
+        p.amp_imb = k ? k->amp_imbalance : 0.06;
+        p.cab = k && k->cab_set ? k : nullptr;
         p.scanner = k ? k->scanner : 0;
         p.organ = og;
         if (!og)
@@ -2331,7 +2361,7 @@ struct Piano {
     bool hammond_on(int ch) const
     {
         for (const Patch &p : patches)
-            if ((p.leslie || p.wheel_swell) && (p.channel < 0 || p.channel == ch))
+            if ((p.leslie || p.wheel_swell || p.amp > 0.0) && (p.channel < 0 || p.channel == ch))
                 return true;
         return false;
     }
@@ -2791,6 +2821,17 @@ struct Piano {
         if (leslie_on(ch))
             return;                         // (a rotor part's wheel is its half-moon: nothing bends)
         retune(sounding(ch), n0, ratio / prev);
+        // ...AND THE VALVE'S PRODUCTS WITH THEIR PARENTS (live._repitch_amp):
+        // each a sum of multiples of theirs, so one ratio moves them exactly
+        std::vector<long> amps;
+        for (const Patch &p : patches)
+            if (p.channel < 0 || p.channel == ch) {
+                long li = S.live_find(Key(p.pid, -1, -1, AMPK));
+                if (li >= 0)
+                    amps.insert(amps.end(), S.live[li].second.begin(), S.live[li].second.end());
+            }
+        if (!amps.empty() && ratio / prev != 1.0)
+            retune(amps, n0, ratio / prev);
     }
 
     void pitchwheel(int ch, int v, long long n0)
@@ -3154,12 +3195,13 @@ struct Piano {
             else if (cc == 127)
                 mono[ch] = false;
         } else if (cc == 1 && hammond_on(ch)) {
-            // A HAMMOND'S MOD WHEEL (live's wheel_roles): with a valve, its
-            // drive (LIVE_DRIVE_STEPS over the range); else its swell pedal --
+            // A HAMMOND'S MOD WHEEL, OR AN AMPLIFIED VOICE'S (live's
+            // wheel_roles): with a valve, its drive (LIVE_DRIVE_STEPS over
+            // the range) -- a guitar amp's own gain knob; else its swell pedal --
             // CC11's squared law on the part, the notes sounding rescaled,
             // floored at -80 dB
             for (const Patch &p : patches) {
-                if (!(p.leslie || p.wheel_swell) || !(p.channel < 0 || p.channel == ch))
+                if (!(p.leslie || p.wheel_swell || p.amp > 0.0) || !(p.channel < 0 || p.channel == ch))
                     continue;
                 if (p.amp > 0.0) {
                     int step = (int)nearbyint(v / 127.0 * LIVE_DRIVE_STEPS);

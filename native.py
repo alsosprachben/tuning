@@ -88,7 +88,11 @@ class VoiceSnap(ctypes.Structure):
                 ('ep_defl', C), ('ep_defl_slope', C), ('ep_defl_power', C), ('ep_defl_max', C), ('ep_rho', C),
                 ('ep_max_hz', C), ('ep_floor_db', C), ('ep_share', C), ('tb_coeff', C), ('tb_power', C),
                 ('tb_decay', C), ('tb_ratio', C * 8), ('tb_g', C * 8), ('ep_a0', C), ('ep_r', C * 408),
-                ('ep_n', C * 400), ('ep_w', C * 400)]
+                ('ep_n', C * 400), ('ep_w', C * 400),
+                ('elec', I), ('n_pk', I), ('pk_vel', I), ('n_os', I), ('eg_sp', C), ('eg_depth', C),
+                ('pk_q0', C * 4), ('pk_sign', C * 4), ('pk_turns', C), ('pk_width', C), ('pk_res_hz', C),
+                ('pk_qf', C), ('lp_hz', C), ('lp_order', C), ('os_hz', C * 8), ('fret_max', C), ('pk_sp', C),
+                ('pk_q', C * 4)]
 
 
 class ToneIn(ctypes.Structure):
@@ -183,7 +187,7 @@ class NoteClass(ctypes.Structure):
                    ('snd_rate_range', C), ('snd_delay_s', C), ('glide_mech', I), ('glide_reach', C),
                    ('porta_fast', C), ('porta_slow', C), ('porta_d_semi', C), ('porta_settle', C),
                    ('organ', ctypes.c_void_p), ('leslie', I), ('scanner', I), ('amp_drive', C),
-                   ('wheel_swell', I)]
+                   ('amp_reference', C), ('amp_imbalance', C), ('wheel_swell', I)]
                 + [(f, C) for f in ('push_gain', 'push_rise_s', 'push_dbs', 'push_settle_db', 'push_tilt',
                                     'push_tilt_oct')]
                 + [('breath', I), ('breath_p', C * 8), ('trem_hz', C), ('trem_depth', C), ('trem_scatter', C),
@@ -776,6 +780,35 @@ def harmonic_voice(cls):
                                                          'bend_detents', 'amp_drive')))
 
 
+def electric_voice(cls):
+    """Whether native/voice.c plays cls as an electric guitar (kind 4,
+    VoiceSnap.elec): a plucked string's series through the pick's comb and
+    the coils (pickup_gain), both moved by the note's fret (its __init__), no
+    body, its B the k f^p law -- and none of the extras (a touched harmonic,
+    a strike's noise)."""
+    import tonelib as T
+    if not issubclass(cls, T.ElectricGuitarProperties) or issubclass(cls, T.FormantBody):
+        return False
+    own = dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None, harmonic_decay='ElectricGuitarProperties',
+               pickup_gain='SynthProperties', inharmonicity_coefficient_for_frequency='ElectricGuitarProperties')
+    if any(_owner(cls, n) != o for n, o in own.items()):
+        return False
+    if any(k.__name__ not in ('SynthProperties', 'ElectricGuitarProperties', 'object') for k in cls.__mro__
+           if '__init__' in k.__dict__):
+        return False
+    pts, sg = tuple(cls.pickup_points or ()), getattr(cls, 'pickup_signs', None)
+    return (cls.mode_gains is None and cls.mode_ratios is None and bool(cls.strike_point)
+            and not cls.strike_fills_with_force and not cls.harmonic_touch and 1 <= len(pts) <= 4
+            and (sg is None or len(sg) == len(pts)) and len(cls.open_strings_hz or ()) <= 8
+            and not (cls.unison_detune or ()) and not cls.blare_db_per_khz and not cls.bore_corner_hz
+            and 1 <= (cls.max_harmonic or 0) <= 128 and not cls.max_partial_hz
+            and not (cls.inharmonicity_dynamic and not getattr(cls, 'inharmonicity_law', None))
+            and not any(getattr(cls, a, None) for a in ('breath_noise_db', 'grains', 'noise_events', 'pulse',
+                                                         'ring_db', 'struck_layer', 'touch_leak_db',
+                                                         'strike_noise_db', 'release_click_db', 'hammer_legato',
+                                                         'bend_detents')))
+
+
 # AN ORGAN PIPE'S METHODS (a kind 2 mode set by register): SynthProperties' all
 _PIPE_OWN = dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None, mode_gains_at='SynthProperties',
                  mode_lock_offset_for='SynthProperties', speech_time='SynthProperties', chiff_time='SynthProperties',
@@ -846,7 +879,7 @@ def kit_drum(cls):
     import tonelib as T
     if ep_voice(cls):
         return 5
-    if harmonic_voice(cls) or tonewheel_voice(cls) or reed_voice(cls):
+    if harmonic_voice(cls) or tonewheel_voice(cls) or reed_voice(cls) or electric_voice(cls):
         return 4
     if pipe_voice(cls):
         return 2
@@ -1177,6 +1210,21 @@ def snapshot(props):
         s.bore_corner_hz, s.bore_order = p.bore_corner_hz, p.bore_order
         s.bell_cutoff_hz, s.bell_order = p.bell_cutoff_hz or 0.0, p.bell_order
         s.bore_norm = p._bore_norm()
+        if electric_voice(type(p)):
+            # an electric guitar: its pick and coils as the class has them (the note's fret moves them)
+            c = type(p)
+            s.elec, s.eg_sp, s.eg_depth = 1, float(c.strike_point), float(c.strike_depth)
+            s.n_pk = len(c.pickup_points)
+            s.pk_q0[:s.n_pk] = [float(q) for q in c.pickup_points]
+            s.pk_sign[:s.n_pk] = [float(x) for x in (getattr(c, 'pickup_signs', None) or (1.0,) * s.n_pk)]
+            s.pk_turns, s.pk_width, s.pk_vel = float(c.pickup_turns), float(c.pickup_width or 0.0), int(bool(c.pickup_velocity))
+            s.pk_res_hz, s.pk_qf = float(c.pickup_resonance_hz or 0.0), float(getattr(c, 'pickup_q', 0.0) or 0.0)
+            s.lp_hz, s.lp_order = float(c.lowpass_hz or 0.0), float(c.lowpass_order)
+            s.n_os = len(c.open_strings_hz or ())
+            s.os_hz[:s.n_os] = [float(o) for o in (c.open_strings_hz or ())]
+            s.fret_max = float(c.fret_max)
+            s.pk_sp = float(p.strike_point)                         # (the note's: its fret)
+            s.pk_q[:s.n_pk] = [float(q) for q in p.pickup_points]
         if isinstance(p, T.FormantBody):
             s.fbody, s.formant_floor = 1, p.formant_floor
             s.n_fm, s.n_afm, s.n_bt = len(p.formants), len(p.antiformants), len(p.body_trim_db or ())
@@ -1369,7 +1417,8 @@ def init_supported(cls):
             return False
         # (and [RND]'s, RandomStrike: its four draws the caller's, VoiceInit.rnd_draws)
         if any(k.__name__ not in ('SynthProperties', 'object', 'RandomStrike') for k in cls.__mro__
-               if '__init__' in k.__dict__ and not (k.__name__ == 'ElectricPianoProperties' and ep_voice(cls))):
+               if '__init__' in k.__dict__ and not (k.__name__ == 'ElectricPianoProperties' and ep_voice(cls))
+               and not (k.__name__ == 'ElectricGuitarProperties' and electric_voice(cls))):
             return False
         if any(_owner(cls, n) != o for n, o in _BASE_OWN.items() if n != 'inharmonicity_coefficient_func'):
             return False
@@ -1955,9 +2004,10 @@ def note_class(cls):
             k.push_settle_db = float(getattr(cls, 'bellows_push_settle_db', -20.0))
             k.push_tilt = float(getattr(cls, 'bellows_push_tilt', 0.0))
             k.push_tilt_oct = float(getattr(cls, 'bellows_push_tilt_per_octave', 0.0))
-        if k.amp_drive and (getattr(cls, 'amp_reference', None) or getattr(cls, 'amp_imbalance', None) is not None):
-            _NOTE[cls] = False              # (a valve against a fixed reference, or unbalanced: Python's)
-            return None
+        # its valve against a fixed reference peak (0: each segment's own), and its pair's imbalance
+        k.amp_reference = float(getattr(cls, 'amp_reference', None) or 0.0)
+        imb = getattr(cls, 'amp_imbalance', None)
+        k.amp_imbalance = float(__import__('tubeamp').IMBALANCE if imb is None else imb)
         # the sound controls it answers, and where it starts from
         sc = T.sound_controls_of(cls)
         names = [T.SOUND_CC[c] for c in sorted(T.SOUND_CC)]
