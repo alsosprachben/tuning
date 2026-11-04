@@ -1403,7 +1403,7 @@ struct Piano {
             for (int c = 0; c < 27; c++) f4p[c] = f4c[c].data();
             for (int c = 0; c < 2; c++) i8p[c] = i8c[c].data();
             for (int c = 0; c < 6; c++) i4p[c] = i4c[c].data();
-            Key sk(pid, ch, note, SCANSIDE0 + ri);
+            Key sk(pid, ch, note, SCANSIDE0 + (rank_layer(patches[cur].organ, ri) - RANK0));
             if (!S.stamp(f8p, f4p, i8p, i4p, hr.data(), ns, sk, n0, scale, 0, false, NAN, ch, nullptr, nullptr, 0.0,
                          0.0, cofc.empty() ? nullptr : cofc.data(), aL64.data(), aR64.data())) {
                 dropped++;
@@ -1442,7 +1442,7 @@ struct Piano {
         for (int c = 0; c < 27; c++) f4p[c] = R.f4[c].data();
         for (int c = 0; c < 2; c++) i8p[c] = R.i8[c].data();
         for (int c = 0; c < 6; c++) i4p[c] = R.i4[c].data();
-        Key ck(pid, ch, note, SCAN0 + ri);
+        Key ck(pid, ch, note, SCAN0 + (rank_layer(patches[cur].organ, ri) - RANK0));
         if (!S.stamp(f8p, f4p, i8p, i4p, R.hrel.data(), R.P, ck, n0, scale, 0, false, NAN, ch,
                      R.sof.empty() ? nullptr : R.sof.data(), R.rof.empty() ? nullptr : R.rof.data(), 0.0, 0.0,
                      R.cof.empty() ? nullptr : R.cof.data())) {
@@ -1650,12 +1650,24 @@ struct Piano {
         if (o.prod.empty() || !S.busy[o.src])
             return;
         int pi = patch_of_pid(o.pid);
-        int nrank = (pi >= 0 && patches[pi].organ) ? patches[pi].organ->n_rank : 0;
+        const OrganSpec *cog = pi >= 0 ? patches[pi].organ : nullptr;
         bool held = false;
         for (auto &kv : S.live) {
-            long long l = std::get<3>(kv.first);
-            if (std::get<0>(kv.first) == o.pid && (l == -1 || (l >= RANK0 && l < RANK0 + nrank)))
+            const Key &k = kv.first;
+            long long l = std::get<3>(k);
+            if (std::get<0>(k) != o.pid)
+                continue;
+            if (l == -1) {
                 held = true;
+                break;
+            }
+            // ...or a rank of THIS organ's, by its stop's name (live's `k[3] in
+            // ranks`): a rank struck on another organ, before a program
+            // change, is one of this one's only where they share a name
+            if (rank_of(cog, l) >= 0)
+                held = true;
+            if (held)
+                break;
         }
         if (!held)
             return;                         // never after their notes
@@ -1826,7 +1838,7 @@ struct Piano {
     // each organ key's touch at its press (live.note_touch)
     std::map<std::pair<int, int>, double> note_touch;
     // a harpsichord's key down: the template it was stamped from, for its jacks' clicks (live's held_tmpl)
-    std::map<Key, const nv::live::Template *> held_jacks;
+    std::map<Key, std::pair<const nv::live::Template *, const OrganSpec *>> held_jacks;   // ...and its organ
     // THE CHEST'S WIND (live.wind_st, _wind_row, _wind_block): a part's, made
     // at its first rank drawn -- numpy's generator seeded by the part, the
     // pressure's state, a slab row a family of its ranks (from wind_next, to
@@ -1843,8 +1855,12 @@ struct Piano {
     std::map<long long, WindSt> wind_st;
     std::vector<long long> wind_order;          // the parts' wind, in the order made
     int wind_next = 1;
+    // ...and an old chest's rows (live's wind_spent, wind_free): spent until
+    // no slot rides them, then free again, at rest
+    std::vector<int> wind_spent;
+    std::deque<int> wind_free;
     static const int WIND_ROWS = 32;
-    static const long long RANK0 = 1000;        // a rank's slots: layer RANK0 + its index
+    static const long long RANK0 = 1000;        // a rank's slots: layer RANK0 + its stop name's id (rank_layer)
     static const long long SCAN0 = 2000;        // ...its scanner's copy (("scan", rank))
     static const long long SCANSIDE0 = 3000;    // ...and tier B's copies (("scanside", rank))
     static const long long AMPK = 4000;         // the valve's products ((pid, -1, -1, "amp"))
@@ -2324,22 +2340,78 @@ struct Piano {
     // the panel's stops for the next block: each the whole registration, as
     // drawn when it was posted with the one stop toggled (livetui's
     // request_stops) -- so a stop word in the same block is put back, as live's
-    std::vector<std::vector<char>> stop_posts;
+    // ...and a patch change's (Swap): ONE QUEUE, done in the order posted, as
+    // live's posted commands are -- each stop request the registration by its
+    // stops' NAMES (livetui's request_stops: live.set_stops takes those of
+    // the patch then in use, a change of program between them its own)
+    struct Swap;
+    struct Post {
+        int kind;                           // 0 the stops, 1 a patch change
+        std::vector<std::string> names;
+        std::shared_ptr<Swap> swap;
+    };
+    std::vector<Post> posts;
 
     // A PATCH CHANGE (live._swap_patch, posted: after the block's events):
     // the patch re-pointed at another tone -- its templates (cache), its
     // program and the part's constants for it -- keeping its pid, so notes
     // already sounding keep the templates they were struck with
+    // A VOICE'S STRINGS for the register: a bank and its constants
+    // (nv_lp_register's), as a program change hands a new one over
+    struct Bank {
+        std::vector<StringMode> modes;
+        double kappa = 0, knock = 0, fall = 0, fl = 0, beta = 0, rel = 0;
+        int top = 128, pedals = 1;
+        std::vector<int> note;              // the keys whose classes answer (128)
+        std::vector<long> cbr;              // a harpsichord's choirs (empty: none)
+        double cross = 1.0;
+        std::vector<int> buffs;
+    };
     struct Swap {
         int pi;
         void *cache;
         int program, drums, nbuckets, speed, damper_pedal, soft_drop, soft_top, detune_wheel;
         std::vector<unsigned long long> choke;
         std::vector<int> reg_note;          // the new tone's keys that answer the register (empty: as they were)
+        std::shared_ptr<Bank> bank;         // ...ITS OWN STRINGS where they are another voice's (null: the same)
     };
-    std::vector<Swap> swap_posts;
+
     std::map<Key, const void *> key_tone;           // (pid, ch, note, 0) -> the cache it was struck on
     std::map<const void *, std::pair<int, int>> tone_prog;     // a cache -> its (program, drums)
+    // A RANK's KEY IS ITS STOP's NAME (live's k[3]): its layer RANK0 + the
+    // name's id, interned here (an organ's rank index is not one across a
+    // program change -- the Hammond's '1' and the church organ's 'reed 8'
+    // can share one)
+    std::vector<std::string> stop_names;
+    std::map<std::string, int> stop_id;
+    long long rank_layer(const OrganSpec *og, int ri)
+    {
+        const char *nm = og->rank[ri].key;
+        auto it = stop_id.find(nm);
+        if (it != stop_id.end())
+            return RANK0 + it->second;
+        int id = (int)stop_names.size();
+        stop_names.push_back(nm);
+        stop_id[nm] = id;
+        return RANK0 + id;
+    }
+    bool is_rank(long long l) const { return l >= RANK0 && l < RANK0 + (long long)stop_names.size(); }
+    // live's k[3] for a rank key: its stop's name ("" none)
+    const char *rank_name(const Key &k) const
+    {
+        long long l = std::get<3>(k);
+        return is_rank(l) ? stop_names[l - RANK0].c_str() : "";
+    }
+    // the rank of og a layer is (by its stop's name), -1 none
+    int rank_of(const OrganSpec *og, long long l)
+    {
+        if (!og || !is_rank(l))
+            return -1;
+        for (int j = 0; j < og->n_rank; j++)
+            if (stop_names[l - RANK0] == og->rank[j].key)
+                return j;
+        return -1;
+    }
     // the old tones' valves (live.amp_retired): retired key -> (pid, old cache), a dict's order
     std::vector<std::pair<Key, std::pair<long long, const void *>>> amp_retired;
     static const long long AMP_OLD0 = 1LL << 40;    // ...their layer: AMP_OLD0 + the swap's sample
@@ -2368,6 +2440,25 @@ struct Piano {
             }
             amp_retired.push_back(std::make_pair(rk, std::make_pair(ppid, (const void *)p.cache)));
         }
+        // ANOTHER ORGAN, ANOTHER CHEST (live's): the old one let go -- its
+        // notes keep the wind they had, its rows freed once they end
+        auto ws = wind_st.find(ppid);
+        if (ws != wind_st.end()) {
+            const OrganSpec *nog = w.drums ? nullptr : nv_tcache_organ(w.cache, w.program);
+            if ((nog && nog->wind ? nog : nullptr) != ws->second.og) {
+                for (auto &x : ws->second.rows)
+                    wind_spent.push_back(x.second);
+                if (ws->second.g)
+                    nv_npy_free(ws->second.g);
+                wind_st.erase(ws);
+                wind_order.erase(std::remove(wind_order.begin(), wind_order.end(), ppid), wind_order.end());
+            }
+        }
+        // ...AND OTHER STRINGS, ITS OWN FREE ONES (live._reg_forget): its free
+        // rows end at their release, its state and what is queued for it go,
+        // and the worker takes the new voice's bank
+        if (w.bank && reg_on && w.pi == 0)
+            reg_forget(w.bank, n0);
         p.cache = w.cache;
         p.program = w.program;
         p.drums = w.drums != 0;
@@ -2433,14 +2524,27 @@ struct Piano {
         }
     }
 
-    // the panel's stop toggles (live.post's set_stops), after the block's events
-    void stop_toggles(long long n0)
+    // the panel's posts (live.post's set_stops and _swap_patch), after the block's events
+    void run_posts(long long n0)
     {
-        std::vector<std::vector<char>> ps;
-        ps.swap(stop_posts);
-        for (auto &want : ps)
-            if (patches[0].organ)
-                set_stops(0, want, n0);
+        std::vector<Post> ps;
+        ps.swap(posts);
+        for (auto &q : ps) {
+            if (q.kind == 1) {
+                swap_patch(*q.swap, n0);
+                continue;
+            }
+            const OrganSpec *og = patches[0].organ;
+            if (!og)
+                continue;
+            // its names, of this organ's (none: its first in the crescendo, set_stops')
+            std::vector<char> want(og->n_rank, 0);
+            for (int ri = 0; ri < og->n_rank; ri++)
+                for (auto &nm : q.names)
+                    if (nm == og->rank[ri].key)
+                        want[ri] = 1;
+            set_stops(0, want, n0);
+        }
     }
 
     // tonelib.GS_SOUND_NRPN: the CC an NRPN is, -1 none
@@ -2570,9 +2674,14 @@ struct Piano {
                     if (x.first == ab)
                         row = x.second;
                 if (!row) {
-                    if (wind_next > WIND_ROWS)
+                    if (!wind_free.empty()) {           // a row an old chest gave back
+                        row = wind_free.front();
+                        wind_free.pop_front();
+                    } else if (wind_next > WIND_ROWS) {
                         continue;
-                    row = wind_next++;
+                    } else {
+                        row = wind_next++;
+                    }
                     st.rows.push_back(std::make_pair(ab, row));
                     st.acc[row] = 0.0;
                 }
@@ -2590,7 +2699,7 @@ struct Piano {
         if (ri >= (int)T.ranks.size() || !T.ranks[ri].P)
             return;
         const nv::live::Template &R = T.ranks[ri];
-        Key key(pid, ch, note, RANK0 + ri);
+        Key key(pid, ch, note, rank_layer(patches[cur].organ, ri));
         auto nt = note_touch.find(std::make_pair(ch, note));
         double scale = pow(10.0, level_db / 20.0) * swell * chan_gain(ch) * (nt != note_touch.end() ? nt->second : 1.0);
         const double *f8p[6];
@@ -2640,7 +2749,7 @@ struct Piano {
             if (dr[ri])
                 draw_rank(T, ch, note, ri, n0);
         if (!T.jacks.empty())
-            held_jacks[Key(pid, ch, note, 0)] = &T;     // its jacks' clicks, at the key-up
+            held_jacks[Key(pid, ch, note, 0)] = std::make_pair(&T, patches[cur].organ);   // its jacks' clicks, at the key-up
         // ...AND A HARPSICHORD'S KEY LIFTS EVERY CHOIR'S DAMPER: the strings
         // its drawn stops pluck drive the rest through the bridge, its own
         // key's undrawn choirs among them -- the pluck's rows only (the
@@ -2653,7 +2762,7 @@ struct Piano {
             for (int ri = 0; ri < og->n_rank; ri++) {
                 if (!dr[ri] || og->rank_choir[ri] < 0)
                     continue;
-                long li = S.live_find(Key(pid, ch, note, RANK0 + ri));
+                long li = S.live_find(Key(pid, ch, note, rank_layer(og, ri)));
                 if (li < 0)
                     continue;
                 for (long s : S.live[li].second)
@@ -2672,19 +2781,21 @@ struct Piano {
 
     // live._key_up_jacks: a harpsichord's jacks falling back -- one click a
     // stop that sounded on this key, at the note's own level, a one-shot
-    void key_up_jacks(int ch, int note, long long n0, const std::set<long long> &sounded)
+    void key_up_jacks(int ch, int note, long long n0, const std::set<std::string> &sounded)
     {
         auto it = held_jacks.find(Key(pid, ch, note, 0));
         if (it == held_jacks.end())
             return;
-        const nv::live::Template &T = *it->second;
+        const nv::live::Template &T = *it->second.first;
+        const OrganSpec *jog = it->second.second;
         held_jacks.erase(it);
         auto nt = note_touch.find(std::make_pair(ch, note));
         double scale = pow(10.0, level_db / 20.0) * swell * chan_gain(ch) * (nt != note_touch.end() ? nt->second : 1.0);
         for (size_t q = 0; q < T.jacks.size(); q++) {
             int ri = T.jack_rank[q];
-            if (!sounded.count(RANK0 + ri))
-                continue;
+            if (!jog || ri >= jog->n_rank || !sounded.count(jog->rank[ri].key))
+                continue;                   // (a stop that sounded on this key, by its name)
+            long long jl = rank_layer(jog, ri) - RANK0;
             const nv::live::Template &J = T.jacks[q];
             const double *f8p[6];
             const float *f4p[27];
@@ -2698,7 +2809,7 @@ struct Piano {
                 i8p[c] = J.i8[c].data();
             for (int c = 0; c < 6; c++)
                 i4p[c] = J.i4[c].data();
-            Key key(pid, ch, note, KEYUP0 + ri);
+            Key key(pid, ch, note, KEYUP0 + jl);
             if (!S.stamp(f8p, f4p, i8p, i4p, J.hrel.data(), J.P, key, n0, scale, J.dur, true, NAN, ch, nullptr,
                          nullptr, 0.0, 0.0, J.cof.data()))
                 continue;
@@ -2741,8 +2852,9 @@ struct Piano {
             if (!dr[ri] || want[ri])
                 continue;
             std::vector<Key> ks;
-            for (auto &kv : S.live)
-                if (std::get<0>(kv.first) == pid && std::get<3>(kv.first) == RANK0 + ri)
+            long long rl = rank_layer(og, ri);
+            for (auto &kv : S.live)         // (by its stop's name, as live keys it: one an old organ stamped too)
+                if (std::get<0>(kv.first) == pid && std::get<3>(kv.first) == rl)
                     ks.push_back(kv.first);
             for (auto &k : ks)
                 S.release(k, n0);
@@ -2770,6 +2882,23 @@ struct Piano {
     void wind_block(long long n0, long long frames)
     {
         (void)n0;
+        // AN OLD CHEST's ROWS, FREE AGAIN once no note rides them: at rest
+        for (size_t i = 0; i < wind_spent.size();) {
+            int row = wind_spent[i];
+            bool rides = false;
+            for (long q = 0; q < S.cap && !rides; q++)
+                rides = S.busy[q] && S.i4[I4_br][q] == row;
+            if (rides) {
+                i++;
+                continue;
+            }
+            wind_spent.erase(wind_spent.begin() + i);
+            BRt[row] = 1.0f;
+            BCt[row] = 0.0;
+            BLt[2 * row] = 1.0f;
+            BLt[2 * row + 1] = 1.0f;
+            wind_free.push_back(row);
+        }
         for (size_t pi = 0; pi < patches.size(); pi++) {
             auto it = wind_st.find(patches[pi].pid);
             if (it == wind_st.end())
@@ -2781,7 +2910,10 @@ struct Piano {
             for (auto &kv : S.live) {
                 if (std::get<0>(kv.first) != patches[pi].pid)
                     continue;
-                long long ri = std::get<3>(kv.first) - RANK0;
+                // ...A RANK BY ITS STOP's NAME (live's `k[3] in ratios`): one
+                // stamped by another organ, before a program change, draws on
+                // this chest where it shares a name with one of its ranks
+                long long ri = rank_of(og, std::get<3>(kv.first));
                 if (ri < 0 || ri >= og->n_rank || !og->rank[ri].n_ratio || !st.rank_row[ri])
                     continue;
                 const OrganRank &rk = og->rank[ri];
@@ -2965,11 +3097,11 @@ struct Piano {
             S.release(Key(pid, -1, -1, AMPK), n0);  // the products end with their chord (a note of this tone's)
         if (patches[cur].organ) {           // an organ's key: each of its ranks
             std::vector<Key> ks;
-            std::set<long long> sounded;
+            std::set<std::string> sounded;
             for (auto &kv : S.live)
                 if (std::get<0>(kv.first) == pid && std::get<1>(kv.first) == ch && std::get<2>(kv.first) == note) {
                     ks.push_back(kv.first);
-                    sounded.insert(std::get<3>(kv.first));
+                    sounded.insert(rank_name(kv.first));
                 }
             for (auto &k : ks)
                 S.release(k, n0);
@@ -3649,6 +3781,11 @@ struct Piano {
     static const long REG_PLACE_MAX = 256;
     bool reg_on = false;
     std::vector<StringMode> rmodes;
+    // (the audio thread's copy above, the worker's in wk -- each changed on
+    // its own thread, as live's worker builds its own: Bank)
+    Bank wk;                                // the worker's
+    std::shared_ptr<Bank> staged_bank;      // the next swap's (nv_lp_swap_bank)
+    bool reg_forgetting = false;            // live.reg_forgetting: the old strings' answers still coming
     double r_kappa = 0, r_knock = 0, r_fall = 0, r_fl = 0, r_beta = 0, r_rel = 0, r_full = 0, r_resid = 0,
            r_ln = 0, r_blk = 128;
     int r_top = 128, r_pedals = 1;
@@ -3680,7 +3817,7 @@ struct Piano {
     std::vector<int> r_buffs;
     std::vector<Pend> reg_pend;
     struct Reply {
-        int kind;                                   // 0 'free', 1 'forced'
+        int kind;                                   // 0 'free', 1 'forced', 2 'forgot'
         int ch, note;
         std::vector<long> modes;
         std::vector<cplx> z;
@@ -3703,7 +3840,8 @@ struct Piano {
     // (reg_async, nvlive: live's worker process, off the audio thread), its
     // answers taken up at the next pump after they are ready
     struct Job {
-        int kind;                                   // 0 strike, 1 release, 2 damp, 3 felt
+        int kind;                                   // 0 strike, 1 release, 2 damp, 3 felt, 4 forget
+        std::shared_ptr<Bank> bank;                 // ...the new strings (forget)
         int ch, note = -1, R = 0;
         long long sid = 0;
         double at = 0.0;
@@ -3759,9 +3897,10 @@ struct Piano {
         auto it = lcs.find(ch);
         if (it != lcs.end())
             return it->second;
-        void *h = nv_lreg_new(rmodes.data(), (int)rmodes.size(), rate, r_kappa, r_knock, r_fall, r_fl, r_top, r_beta);
-        if (!r_cbr.empty())
-            nv_lreg_choirs(h, (int)r_cbr.size(), r_cbr.data(), r_cross, (int)r_buffs.size() / 2, r_buffs.data());
+        void *h = nv_lreg_new(wk.modes.data(), (int)wk.modes.size(), rate, wk.kappa, wk.knock, wk.fall, wk.fl, wk.top,
+                              wk.beta);
+        if (!wk.cbr.empty())
+            nv_lreg_choirs(h, (int)wk.cbr.size(), wk.cbr.data(), wk.cross, (int)wk.buffs.size() / 2, wk.buffs.data());
         lcs[ch] = h;
         return h;
     }
@@ -3790,6 +3929,23 @@ struct Piano {
 
     void run_job(const Job &j, std::deque<Reply> &out)
     {
+        if (j.kind == 4) {
+            // a part's strings gone with its voice (live's worker 'forget'):
+            // its channels, and the new voice's bank in their place
+            for (auto &kv : lcs)
+                nv_lreg_free(kv.second);
+            lcs.clear();
+            if (j.bank)
+                wk = *j.bank;
+            Reply r;
+            r.kind = 2;
+            r.ch = -1;
+            r.note = -1;
+            r.at = j.at;
+            r.floor = 0.0;
+            out.push_back(std::move(r));
+            return;
+        }
         void *lc = lc_of(j.ch);
         if (j.kind == 0) {
             int n = j.has_plucked || !j.choir.empty()
@@ -3940,6 +4096,36 @@ struct Piano {
         if (slot_choir)
             pd.slot_choir = *slot_choir;
         reg_pend.push_back(std::move(pd));
+    }
+
+    void reg_forget(const std::shared_ptr<Bank> &b, long long n0)
+    {
+        for (RegSt &st : reg)
+            if (st.ready) {
+                std::vector<long> ms;
+                for (long m = 0; m < (long)st.slot_of.size(); m++)
+                    if (st.slot_of[m] >= 0)
+                        ms.push_back(m);
+                reg_close(st, ms, n0, r_rel);
+            }
+        reg.clear();
+        reg_strike_of.clear();
+        reg_pend.clear();
+        reg_out.clear();
+        reg_forgetting = true;
+        // the audio thread's copy: the new voice's
+        rmodes = b->modes;
+        r_kappa = b->kappa; r_knock = b->knock; r_fall = b->fall; r_fl = b->fl; r_beta = b->beta;
+        r_rel = b->rel; r_top = b->top; r_pedals = b->pedals;
+        if (b->note.size() == 128)
+            for (int k = 0; k < 128; k++)
+                reg_note[k] = b->note[k] != 0;
+        r_cbr = b->cbr; r_cross = b->cross; r_buffs = b->buffs;
+        Job j;
+        j.kind = 4;
+        j.at = (double)n0;
+        j.bank = b;
+        send_job(std::move(j));
     }
 
     void reg_close(RegSt &st, const std::vector<long> &modes, long long n0, double re_)
@@ -4151,6 +4337,12 @@ struct Piano {
 
     void reg_place(long long n0, Reply &job)
     {
+        if (job.kind == 2) {
+            reg_forgetting = false;             // its old answers all in
+            return;
+        }
+        if (reg_forgetting)
+            return;                             // an answer from the strings it had
         RegSt *stp = reg_of(job.ch);
         if (!stp || !stp->ready)
             return;
@@ -4856,7 +5048,7 @@ struct Piano {
     void block(long long n0, long long blk)
     {
         cur_blk = blk;
-        if (!wind_st.empty())                   // the organs' chests, before the block's events (live's callback)
+        if (!wind_st.empty() || !wind_spent.empty())    // the organs' chests, before the block's events (live's callback)
             wind_block(n0, blk);
         if (!amp_retired.empty())
             amp_retire(n0);
@@ -4874,14 +5066,8 @@ struct Piano {
             else
                 control(e.ch, e.a, e.b, n0);
         }
-        if (!stop_posts.empty())
-            stop_toggles(n0);
-        if (!swap_posts.empty()) {               // the patch changes posted (live.post's _swap_patch)
-            std::vector<Swap> ws;
-            ws.swap(swap_posts);
-            for (const Swap &w : ws)
-                swap_patch(w, n0);
-        }
+        if (!posts.empty())                     // the panel's posts, in their order (live.post's)
+            run_posts(n0);
         if (reg_on && (!reg_pend.empty() || !reg_out.empty() || reg_live || !reg_retire.empty()
                        || reg_ndone.load() > 0))
             reg_pump(n0);
@@ -5177,7 +5363,11 @@ void nv_lp_toggle_stop(void *h, int rank, long long n0)
         return;
     std::vector<char> want = p.drawn;   // (the registration now, as the panel sees it)
     want[rank] = !want[rank];
-    P->stop_posts.push_back(want);      // (done in the next block, after its events: live.post)
+    nv::slab::Piano::Post q{0, {}, nullptr};
+    for (int ri = 0; ri < p.organ->n_rank; ri++)
+        if (want[ri])
+            q.names.push_back(p.organ->rank[ri].key);
+    P->posts.push_back(std::move(q));   // (done in the next block, after its events: live.post)
 }
 
 // the organ's stops drawn (out[rank] 1), the count; 0 for no organ
@@ -5244,17 +5434,40 @@ int nv_lp_add_patch(void *h, void *cache, long long pid, double level_db, int nb
 // program, a drum set or not, its buckets, wheel step, dampers, una corda,
 // the honky-tonk's detune wheel, a drum set's exclusive classes (NULL: as
 // they were), and which keys answer the register (NULL: as they were)
+// ...its strings, where the new voice's are another's (live._reg_forget):
+// staged for the next nv_lp_swap -- the bank (M modes, as nv_strings makes
+// it), kappa, knock, fall, floor, the felt's BETA, its release (samples),
+// damper_top, whether it has dampers, which keys answer (128), its choirs
+// (nchoir bridges, their cross coupling, nbuff (buffed, plain) pairs; 0 none)
+void nv_lp_swap_bank(void *h, const StringMode *modes, int M, const double *k6, int top, int pedals, const int *note,
+                     int nchoir, const long *cbr, double cross, int nbuff, const int *buffs)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    auto b = std::make_shared<nv::slab::Piano::Bank>();
+    b->modes.assign(modes, modes + M);
+    b->kappa = k6[0]; b->knock = k6[1]; b->fall = k6[2]; b->fl = k6[3]; b->beta = k6[4]; b->rel = k6[5];
+    b->top = top; b->pedals = pedals;
+    b->note.assign(note, note + 128);
+    if (nchoir > 0) {
+        b->cbr.assign(cbr, cbr + nchoir);
+        b->cross = cross;
+        b->buffs.assign(buffs, buffs + 2 * nbuff);
+    }
+    P->staged_bank = b;
+}
+
 void nv_lp_swap(void *h, int pi, void *cache, int program, int drums, int nbuckets, int speed, int damper_pedal,
                 int soft_drop, int soft_top, int detune_wheel, const unsigned long long *choke, const int *reg_note)
 {
     nv::slab::Piano *P = (nv::slab::Piano *)h;
     nv::slab::Piano::Swap w{pi, cache, program, drums, nbuckets, speed, damper_pedal, soft_drop, soft_top,
-                            detune_wheel, {}, {}};
+                            detune_wheel, {}, {}, P->staged_bank};
+    P->staged_bank.reset();
     if (choke)
         w.choke.assign(choke, choke + 2 * 16384);
     if (reg_note)
         w.reg_note.assign(reg_note, reg_note + 128);
-    P->swap_posts.push_back(std::move(w));
+    P->posts.push_back(nv::slab::Piano::Post{1, {}, std::make_shared<nv::slab::Piano::Swap>(std::move(w))});
 }
 
 // a patch's channel (-1 every one, less excl's bits), keys and transpose
@@ -5282,6 +5495,8 @@ void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, doubl
     nv::slab::Piano *P = (nv::slab::Piano *)h;
     P->reg_on = true;
     P->rmodes.assign(modes, modes + M);
+    P->wk.modes = P->rmodes;                // (the worker's copy)
+    P->wk.kappa = kappa; P->wk.knock = knock; P->wk.fall = fall; P->wk.fl = fl; P->wk.top = top; P->wk.beta = beta;
     P->r_kappa = kappa; P->r_knock = knock; P->r_fall = fall; P->r_fl = fl; P->r_top = top; P->r_beta = beta;
     P->r_pedals = pedals; P->r_rel = rel; P->r_full = full_db_s; P->r_resid = residual; P->r_ln = ln10_20;
     P->r_blk = (double)blk;
@@ -5296,6 +5511,83 @@ void nv_lp_reg_choirs(void *h, int nchoir, const long *bridges, double cross, in
     P->r_cbr.assign(bridges, bridges + nchoir);
     P->r_cross = cross;
     P->r_buffs.assign(buffs, buffs + 2 * nbuff);
+    P->wk.cbr = P->r_cbr;                   // (the worker's copy)
+    P->wk.cross = cross;
+    P->wk.buffs = P->r_buffs;
+}
+
+// the chests' rows (live's wind_next, wind_spent, wind_free, each chest's rows):
+// out[0] wind_next, then the spent rows, -1, the free ones, -1, each chest's
+// rows (pid, n, rows...), to cap; the count written
+int nv_lp_wind_info(void *h, long long *out, int cap)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    std::vector<long long> v;
+    v.push_back(P->wind_next);
+    for (int r : P->wind_spent)
+        v.push_back(r);
+    v.push_back(-1);
+    for (int r : P->wind_free)
+        v.push_back(r);
+    v.push_back(-1);
+    for (auto &kv : P->wind_st) {
+        v.push_back(kv.first);
+        v.push_back((long long)kv.second.rows.size());
+        for (auto &x : kv.second.rows)
+            v.push_back(x.second);
+    }
+    int n = std::min((int)v.size(), cap);
+    for (int i = 0; i < n; i++)
+        out[i] = v[i];
+    return n;
+}
+
+// the slab's live keys in their order (live's dict's): (pid, ch, note, layer) each, and
+// a rank's stop name (live's k[3]) into names, '\n' after each; the count
+int nv_lp_live_keys(void *h, long long *out, int cap, char *names, int ncap)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    int n = 0, w = 0;
+    for (auto &kv : P->S.live) {
+        if (n >= cap)
+            break;
+        const nv::slab::Key &k = kv.first;
+        out[4 * n] = std::get<0>(k); out[4 * n + 1] = std::get<1>(k);
+        out[4 * n + 2] = std::get<2>(k); out[4 * n + 3] = std::get<3>(k);
+        const char *nm = P->rank_name(k);
+        for (const char *c = nm; *c && w < ncap - 2; c++)
+            names[w++] = *c;
+        names[w++] = '\n';
+        n++;
+    }
+    names[w] = 0;
+    return n;
+}
+
+// the first chest's state (live's wind.Wind: w1 w2 s1 s2 d1 r1 te tph); 0 for no chest
+int nv_lp_wind_state(void *h, double *out)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    if (P->wind_st.empty())
+        return 0;
+    const auto &st = P->wind_st.begin()->second;
+    double v[8] = {st.w1, st.w2, st.s1, st.s2, st.d1, st.r1, st.te, st.tph};
+    memcpy(out, v, sizeof v);
+    return 1;
+}
+
+// the bend rows' tables (live's Slab.BR, BC, BL: the wind's and the sirens'), n rows of each
+int nv_lp_bend_rows(void *h, float *br, double *bc, float *bl, int n)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    int m = std::min(n, (int)P->BRt.size());
+    for (int r = 0; r < m; r++) {
+        br[r] = P->BRt[r];
+        bc[r] = P->BCt[r];
+        bl[2 * r] = P->BLt[2 * r];
+        bl[2 * r + 1] = P->BLt[2 * r + 1];
+    }
+    return m;
 }
 
 // the register's rows dropped for a full slab, and whether any are placed

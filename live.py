@@ -4131,6 +4131,10 @@ class Live:
         self.down = set()
         self.wind_st = {}               # part id -> its chest (see _wind_block)
         self.wind_next = 1              # the slab's next free wind row
+        # ...and an old chest's rows: spent (an old organ's notes may still
+        # ride them) until no slot does, then free again, at rest (_wind_block)
+        self.wind_spent = []
+        self.wind_free = collections.deque()
         self.stuck = 0
         self.misses = 0         # templates asked for that were never built
         self.measure = False    # --latency: record MIDI-to-DAC for each note
@@ -6232,6 +6236,7 @@ class Live:
         self.reg_stop = False
         self.reg_sid = 0
         self.reg_strike_of = {}        # (pid, ch, note) -> its latest strike's id
+        self.reg_forgetting = set()    # pids whose old strings the worker is forgetting (_reg_forget)
         self.reg_live = False          # any free row to watch for the floor
         self.reg_more = False          # this block's placing is spent
         self.reg_retire = {}           # n0 -> slots closed this block (one entry each)
@@ -6290,6 +6295,35 @@ class Live:
                 self.reg_err = got[2]
             else:
                 self.reg_out.append(got)
+
+    def _reg_forget(self, part, old, n0):
+        """A PROGRAM CHANGE TO OTHER STRINGS: the part's register was built
+        for its old voice (_reg_ask: its class at key 60, its tuner), and a
+        new voice's notes must drive their own strings, not the old ones'.
+        Its free rows end at their release, its state and what is queued for
+        it go, and the worker forgets its bank -- an answer still on its way
+        from it dropped until the worker says it has (('forgot', pid)) --
+        so the next strike asks for the new voice's."""
+        pid = part.pid
+        if pid not in self.reg_asked:
+            return
+        def strings(p):
+            return None if p.drums else (p._voice_class(60), p.tuner)
+        if strings(old) == strings(part.patch):
+            return
+        for rid in [r for r in self.reg if r[0] == pid]:
+            st = self.reg.pop(rid)
+            if st['ready']:
+                self._reg_close(st, np.flatnonzero(st['slot_of'] >= 0), n0, st['rel'])
+        for k in [k for k in self.reg_strike_of if k[0] == pid]:
+            del self.reg_strike_of[k]
+        self.reg_pend = [x for x in self.reg_pend if x[0][0] != pid]
+        self.reg_out = collections.deque(m for m in self.reg_out if not (isinstance(m[1], tuple) and m[1][0] == pid))
+        self.reg_asked.discard(pid)
+        self.reg_info.pop(pid, None)
+        self.reg_forgetting.add(pid)
+        self.reg_jobs.append(('forget', pid))
+        self.reg_go.set()
 
     def _reg_voice(self, part, note):
         if part.drums:
@@ -6579,6 +6613,11 @@ class Live:
 
     def _reg_place(self, n0, job):
         kind, rid = job[0], job[1]
+        if kind == 'forgot':
+            self.reg_forgetting.discard(rid)        # (rid: the pid) its old answers all in
+            return
+        if rid[0] in self.reg_forgetting:
+            return                                  # an answer from the strings it had
         st = self.reg.get(rid)
         if st is None:
             return
@@ -9691,7 +9730,17 @@ class Live:
             if ak in self.slab.oneshot:
                 self.slab.oneshot[rk] = self.slab.oneshot.pop(ak)
             self.amp_retired[rk] = (part.pid, old)
+        # ANOTHER ORGAN, ANOTHER CHEST: the old one's wind belonged to its
+        # pipes (its ranks, their families' rows), so it is let go -- its
+        # notes keep the wind they had, its rows freed once they end -- and
+        # the new organ's made at its first rank drawn (_wind_row)
+        st = self.wind_st.get(part.pid)
+        if st is not None and getattr(patch, "wind_pc", None) is not getattr(old, "wind_pc", None):
+            del self.wind_st[part.pid]
+            self.wind_spent.extend(st["rows"].values())
         part.set_patch(patch)
+        # ...AND OTHER STRINGS, ITS OWN FREE ONES (_reg_forget)
+        self._reg_forget(part, old, n0)
         # A MOOG PROGRAM SETS THE MESSENGER to it (queued, so the audio thread
         # does not wait on MIDI)
         self.messenger_sync(part)
@@ -10161,11 +10210,15 @@ class Live:
                 wc = T.rank_wind_class(pc, r)
                 ab = (float(wc.wind_pitch_exp), float(wc.wind_level_exp))
                 if ab not in st["rows"]:
-                    if self.wind_next > WIND_ROWS:
+                    if self.wind_free:                  # a row an old chest gave back
+                        row = self.wind_free.popleft()
+                    elif self.wind_next > WIND_ROWS:
                         continue
-                    st["rows"][ab] = self.wind_next
-                    st["acc"][self.wind_next] = 0.0
-                    self.wind_next += 1
+                    else:
+                        row = self.wind_next
+                        self.wind_next += 1
+                    st["rows"][ab] = row
+                    st["acc"][row] = 0.0
                 st["rank_row"][r[0]] = st["rows"][ab]
                 st["ratios"][r[0]] = (list(r[1]) if isinstance(r[1], (list, tuple)) else [r[1]])
             self.wind_st[part.pid] = st
@@ -10436,6 +10489,18 @@ class Live:
         """Every organ part's chest, one block on: its rows for this block."""
         import wind as _WND
         sl = self.slab
+        # AN OLD CHEST's ROWS, FREE AGAIN once no note rides them: at rest (a
+        # ratio of 1, no phase, a level of 1), for the next chest made
+        if self.wind_spent:
+            br = sl.a["br"]
+            for row in list(self.wind_spent):
+                if not np.any(sl.busy & (br == row)):
+                    self.wind_spent.remove(row)
+                    sl.BR[row, 0] = 1.0
+                    sl.BC[row, 0] = 0.0
+                    sl.BL[row, 0] = 1.0
+                    sl.BL[row, 1] = 1.0
+                    self.wind_free.append(row)
         for part in self.parts:
             st = self.wind_st.get(part.pid)
             if st is None:
@@ -10762,7 +10827,7 @@ class Live:
         n0 = self.n
         t0 = time.perf_counter()
         try:
-            if self.wind_st:
+            if self.wind_st or self.wind_spent:
                 self._wind_block(n0, frame_count)
             self.apply(n0)
             self.sweep(n0)

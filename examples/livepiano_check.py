@@ -76,6 +76,7 @@ next block's start (live's Slab.shed, a tenth of what sounds), as a block
 over budget would -- the governor itself goes by the wall clock, so it is
 asked here instead.
 """
+import ctypes
 import os
 import random
 import sys
@@ -223,6 +224,21 @@ def main(argv):
                 bad.append("DM")
         if not np.array_equal(np.asarray(S.a['dg']), nv.slab.col("dg")):
             bad.append("dg")
+        # the chest's state (wind.Wind's), where each side has one
+        _ws = (ctypes.c_double * 8)()
+        _has = nv.d.nv_lp_wind_state(nv.p, _ws)
+        if bool(_has) != bool(lv.wind_st):
+            bad.append("wind chest")
+        elif _has:
+            _w = next(iter(lv.wind_st.values()))["wind"]
+            if [float(getattr(_w, a)) for a in ("w1", "w2", "s1", "s2", "d1", "r1", "te", "tph")] != list(_ws):
+                bad.append("wind state")
+        # the bend rows (the organs' wind): their tables
+        _br, _bc, _bl = nv.bend_rows(S.BR.shape[0])
+        _m = len(_br)
+        if not (np.array_equal(S.BR[:_m, 0], _br) and np.array_equal(S.BC[:_m, 0], _bc)
+                and np.array_equal(S.BL[:_m], _bl)):
+            bad.append("bend rows")
         return bad
 
     for b in range(blocks):
@@ -346,9 +362,19 @@ def main(argv):
                     pcaches[id(_p)] = (_p, _c)
                 instant_scan(lv, _p)
                 _sp = None if _p.speeds == (None,) else _p.leslie_default
+                _rn, _str = None, None
+                if "register" in opt:
+                    # its keys that answer, and ITS STRINGS where they are another voice's (live._reg_forget)
+                    import types
+                    import blockrender as BR
+                    _as = types.SimpleNamespace(drums=_p.drums, patch=_p, organ=_p.organ)
+                    _rn = [lv._reg_voice(_as, n) for n in range(128)]
+                    _sg = lambda q: None if q.drums else (q._voice_class(60), q.tuner)     # noqa: E731
+                    if _sg(_part.patch) != _sg(_p):
+                        _str = (None if _p.drums else _p._voice_class(60), BR.tuning_table(_p.tuner), 48000.0,
+                                getattr(BR, 'REGISTER_SCALE', 1.0))
                 nv.swap(0, _c, _p.nbuckets, _sp, _p.damper_pedal, _p.soft_pedal_strings, _p.soft_pedal_top,
-                        _p.detune_wheel, reg_note=[lv._reg_voice(_part, n) for n in range(128)]
-                        if "register" in opt else None)
+                        _p.detune_wheel, reg_note=_rn, strings=_str)
                 nswap += 1
                 msgs = msgs + ["program %d" % _p.program]
                 if "debug" in opt:
@@ -400,6 +426,41 @@ def main(argv):
                         bad[0], len(dd), dd[:4].tolist(), x[dd[:4]].tolist(), y[dd[:4]].tolist(),
                         [own.get(int(q)) for q in dd[:4]]))
                     print("    trem_depth %s" % dict(lv.trem_depth))
+                if "debug" in opt and "wind state" in bad:
+                    _ws = (ctypes.c_double * 8)()
+                    nv.d.nv_lp_wind_state(nv.p, _ws)
+                    _w = next(iter(lv.wind_st.values()))["wind"]
+                    print("    wind: live %s" % [float(getattr(_w, a)) for a in ("w1", "w2", "s1", "s2", "d1", "r1", "te", "tph")])
+                    print("    wind: nati %s" % list(_ws))
+                    _kk = (ctypes.c_longlong * 4096)()
+                    _nm = ctypes.create_string_buffer(65536)
+                    _nk = nv.d.nv_lp_live_keys(nv.p, _kk, 1024, _nm, 65536)
+                    _names = _nm.value.decode().split("\n")
+                    _nat = [(int(_kk[4 * i + 1]), int(_kk[4 * i + 2]), _names[i] or int(_kk[4 * i + 3]))
+                            for i in range(_nk)]
+                    _liv = [(k[1], k[2], k[3]) for k in lv.slab.live]
+                    print("    live keys %d native %d; first difference at %s" % (
+                        len(_liv), len(_nat), next((i for i, (a, b) in enumerate(zip(_liv, _nat)) if a != b), None)))
+                    _i0 = next((i for i, (a, b) in enumerate(zip(_liv, _nat)) if a != b), None)
+                    if _i0 is not None:
+                        print("    live %s\n    nati %s" % (_liv[_i0:_i0 + 6], _nat[_i0:_i0 + 6]))
+                    _st = next(iter(lv.wind_st.values()))
+                    print("    live's drawing keys: %s" % [(k, getattr(lv.key_tone.get((k[0], k[1], k[2])), 'program', None))
+                                                       for k in lv.slab.live if len(k) == 4 and k[3] in _st["ratios"]])
+                if "debug" in opt and "bend rows" in bad:
+                    _br, _bc, _bl = nv.bend_rows(lv.slab.BR.shape[0])
+                    for _r in range(len(_br)):
+                        if (lv.slab.BR[_r, 0] != _br[_r] or lv.slab.BC[_r, 0] != _bc[_r]
+                                or not np.array_equal(lv.slab.BL[_r], _bl[_r])):
+                            print("    row %d: live %s %s %s native %s %s %s" % (
+                                _r, lv.slab.BR[_r, 0], lv.slab.BC[_r, 0], lv.slab.BL[_r].tolist(), _br[_r], _bc[_r],
+                                _bl[_r].tolist()))
+                    _wi = (ctypes.c_longlong * 256)()
+                    _nw = nv.d.nv_lp_wind_info(nv.p, _wi, 256)
+                    print("    native: %s" % list(_wi[:_nw]))
+                    print("    live: wind_next %d spent %s free %s chests %s" % (
+                        lv.wind_next, lv.wind_spent, list(lv.wind_free),
+                        {k: dict(v["rows"]) for k, v in lv.wind_st.items()}))
                 if "debug" in opt:
                     for c in bad[:2]:
                         if c in L.ALL_COLS:

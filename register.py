@@ -1539,6 +1539,15 @@ class LiveWorker(object):
                                      key=Sg.key, string=Sg.string, hl=Sg.hl,
                                      hr=Sg.hr, dl=Sg.dl, dr=Sg.dr)))
             return
+        if kind == 'forget':
+            # a part's strings gone with its voice (live._reg_forget): its bank
+            # and its channels, answered so live knows its old answers are in
+            pid = job[1]
+            self.strings.pop(pid, None)
+            for rid in [r for r in self.chans if r[0] == pid]:
+                del self.chans[rid]
+            send(('forgot', pid))
+            return
         rid = job[1]
         lc = self.chans.get(rid)
         if lc is None and rid[0] in self.strings:
@@ -1576,6 +1585,7 @@ def live_worker(conn):
                                                    [+ ('forced', rid, note, forced, at)]
       ('release', rid, sid, at, free)          -> ('free', ...)
       ('damp', rid, keys); ('stop',)
+      ('forget', pid)                          -> ('forgot', pid): a part's strings gone
       ('felt', rid, at, keys, rates)           -> ('free', ...): the pedal in the band"""
     import os
     try:

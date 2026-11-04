@@ -401,10 +401,13 @@ def _load():
             ('nv_lp_toggle_stop', None, [ctypes.c_void_p, I, LL]),
             ('nv_lp_swap', None, [ctypes.c_void_p, I, ctypes.c_void_p, I, I, I, I, I, I, I, I, ctypes.c_void_p,
                                   ctypes.c_void_p]),
+            ('nv_lp_swap_bank', None, [ctypes.c_void_p, ctypes.c_void_p, I, D, I, I, ctypes.c_void_p, I,
+                                       ctypes.c_void_p, C, I, ctypes.c_void_p]),
             ('nv_lp_free', None, [ctypes.c_void_p]),
             ('nv_lp_register', None, [ctypes.c_void_p, ctypes.c_void_p, I, C, C, C, C, I, C, I, C, C, C, C, LL,
                                       ctypes.c_void_p]),
             ('nv_lp_reg_dropped', ctypes.c_long, [ctypes.c_void_p]),
+            ('nv_lp_bend_rows', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I]),
             ('nv_lp_reg_choirs', None, [ctypes.c_void_p, I, ctypes.c_void_p, C, I, ctypes.c_void_p]),
             ('nv_lp_event', None, [ctypes.c_void_p, I, I, I, I]),
             ('nv_lp_block', None, [ctypes.c_void_p, LL, LL]),
@@ -1718,6 +1721,9 @@ def organ(cls):
                 return None
             r.only_drawn = int(spec is not None and bool(getattr(spec, 'rank_only_when_drawn', False)))
             r.keylen, r.no_leak = len(key), int(spec is not None)
+            if len(key.encode()) >= 64:
+                return None
+            r.key = key.encode()                    # (every stop's name, a pipeless one's too)
             r.gain = float(gain)
             r.lo, r.hi = (int(kr[0]), int(kr[1])) if kr is not None else (0, 127)
             if ratio is None:
@@ -1765,9 +1771,6 @@ def organ(cls):
             if bc is not None and len(bc.encode()) >= 16:
                 return None
             r.choir = (bc or '').encode()
-            if len(key.encode()) >= 64:
-                return None
-            r.key = key.encode()
             r.beat = int(bool(cho and getattr(cls, 'choir_beat_hz', None) and bc != 'A'))
             r.perc = int(key in (getattr(cls, 'percussion_ranks', ()) or ()))
         o.n_rank = len(ranks)
@@ -3168,8 +3171,15 @@ class LivePiano(object):
             self.d.nv_cl_free(self._cl)
             self._cl = None
 
+    def bend_rows(self, n):
+        """The bend rows' tables (live's Slab.BR, BC, BL), their first n."""
+        import numpy as np
+        br, bc, bl = np.zeros(n, np.float32), np.zeros(n, np.float64), np.zeros(2 * n, np.float32)
+        m = self.d.nv_lp_bend_rows(self.p, br.ctypes.data, bc.ctypes.data, bl.ctypes.data, n)
+        return br[:m], bc[:m], bl[:2 * m].reshape(m, 2)
+
     def swap(self, pi, cache, nbuckets, speed, damper_pedal, soft_drop, soft_top, detune_wheel, choke=None,
-             reg_note=None):
+             reg_note=None, strings=None):
         """A PATCH CHANGE (live._swap_patch), posted -- done after the next
         block's events: patch pi on cache (a TemplateCache, warmed), its
         buckets, wheel step (None: none), dampers, una corda and detune wheel;
@@ -3182,6 +3192,28 @@ class LivePiano(object):
         if choke is not None:
             ch = (ctypes.c_ulonglong * len(choke))(*choke)
         rn = None if reg_note is None else (ctypes.c_int * 128)(*[int(bool(x)) for x in reg_note])
+        if strings is not None:
+            # ...ANOTHER VOICE's STRINGS (live._reg_forget): (its class at key 60
+            # or None, its tuning table, the rate, the register's scale) -- its
+            # bank as live's worker builds it, none for a voice without
+            import damper as DMP
+            cls, table, rate, scale = strings
+            try:
+                modes, M, k = live_bank(cls, table, rate, scale)
+            except Exception:
+                modes, M, k = (StringMode * 1)(), 0, (0.0, 0.0, 0.0, 0.0, 128, float(DMP.BETA))
+            rel = float(getattr(cls, 'release_valve_time', 0.12) or 0.12) * rate if cls is not None else 0.12 * rate
+            k6 = (ctypes.c_double * 6)(k[0], k[1], k[2], k[3], k[5], rel)
+            nt = (ctypes.c_int * 128)(*[int(bool(x)) for x in (reg_note or [0] * 128)])
+            chs = live_bank_choirs(cls) if (M and cls is not None) else None
+            self._bank = (modes, chs)
+            if chs is not None:
+                self.d.nv_lp_swap_bank(self.p, modes, M, k6, int(k[4]), int(bool(getattr(cls, 'damper_pedal', True))),
+                                       nt, chs[0], chs[1], chs[2], chs[3], chs[4])
+            else:
+                self.d.nv_lp_swap_bank(self.p, modes, M, k6, int(k[4]),
+                                       int(bool(getattr(cls, 'damper_pedal', True))) if cls is not None else 0,
+                                       nt, 0, None, 1.0, 0, None)
         self.d.nv_lp_swap(self.p, int(pi), cache.p, int(cache.program), int(bool(cache.drums)), int(nbuckets),
                           -1 if speed is None else int(speed), int(bool(damper_pedal)), int(soft_drop),
                           int(soft_top), int(bool(detune_wheel)), ch, rn)
