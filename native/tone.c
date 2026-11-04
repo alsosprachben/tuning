@@ -676,6 +676,39 @@ void nv_moog_apply(const MoogLayer *in, const double *d, MoogLayer *out)
         out->ft[5] = 4.0 * knob_tau(in, k[4]);
 }
 
+/* moog.ladder_gain_1: the ladder's |H| at f, corner fc, feedback k, mode
+ * (0 4-pole, 1 2-pole, 2 band-pass, 3 high-pass), RES BASS rb */
+static double moog_ladder_gain(const MoogLayer *L, double f, double fc, double k, int mode, int rb)
+{
+    double x = f / (fc * (mode == 2 ? L->bp_corner : mode == 3 ? L->hp_corner : 1.0));
+    double re4 = 1.0 - 6.0 * x * x + pow(x, 4.0), im4 = 4.0 * x - 4.0 * pow(x, 3.0);
+    double den = sqrt((re4 + k) * (re4 + k) + im4 * im4), num;
+    if (mode == 0)
+        num = 1.0;
+    else if (mode == 1)
+        num = 1.0 + x * x;
+    else if (mode == 2)
+        num = L->bp_gain * 4.0 * x * x;
+    else {
+        double nr = pow(x, 4.0) - x * x, ni = -2.0 * pow(x, 3.0);
+        double dr = re4 + k;
+        double d2 = dr * dr + im4 * im4;
+        double hr = L->hp_gain * (nr * dr + ni * im4) / d2 + L->hp_leak;
+        double hi = L->hp_gain * (ni * dr - nr * im4) / d2;
+        return sqrt(hr * hr + hi * hi);
+    }
+    double h = num / den;
+    if (rb && (mode == 0 || mode == 1))
+        h = h * (1.0 + k);
+    return h;
+}
+
+/* (moog_ladder_gain, for the checks) */
+double nv_moog_ladder(const MoogLayer *L, double f, double fc, double k, int mode, int rb)
+{
+    return moog_ladder_gain(L, f, fc, k, mode, rb);
+}
+
 /* A MOOG LAYER's partials (blockrender._note_moog, one layer, no unison):
  * moog.partials in its order -- the noise bands, the ladder's own sine,
  * OSC 1, OSC 2, the SUB -- each at its true pitch, but its head, radiation
@@ -759,6 +792,10 @@ int nv_moog_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, doubl
         double gM = v->gain * pa[i] * nv_radiation_gain(v, hn, 0.0, 0);
         if (L->body)                            /* through its formant body (moog_body) */
             gM *= bore_gain(v, hn) * v->bore_norm;
+        if (L->pre && o != 5) {                 /* a valve after it: the ladder at its sustain (sustain_gain) */
+            double fcs = L->self_cut * pow(f0 / L->kb_ref_hz, L->kb_track) * L->self_eg;
+            gM *= moog_ladder_gain(L, hf, pymax(fcs, 1.0), L->kn[1], (int)L->ft[7], L->ft[8] != 0.0);
+        }
         double gL = gM * nv_hrtf_gain(v, hn, t.li), gR = gM * nv_hrtf_gain(v, hn, t.ri);
         double cv = nz ? 0.0 : t.cv * nv_chiff_harmonic_gain(v, k);
         int nt_ = 0;

@@ -611,7 +611,7 @@ int main(int argc, char **argv)
             aref.push_back(ref);
             aimb.push_back(imb);
             int v;
-            if (!rotor && nv_song_first_cc(song, c, 1, &v))
+            if (!rotor && nv_song_first_cc(song, c % 256, 1, &v))     // (the part's: gsefx.part_of)
                 drv *= 4.0 * v / 127.0;
             ach.push_back(c);
             adr.push_back(drv);
@@ -676,10 +676,10 @@ int main(int argc, char **argv)
     for (int k = 0, nl = nv_song_leslie(song, -1, nullptr); k < nl; k++) {
         long long c;
         int kind = nv_song_leslie(song, k, &c);
-        int nc = nv_song_ccs(song, c, 1, nullptr, nullptr, 0);
+        int nc = nv_song_ccs(song, c % 256, 1, nullptr, nullptr, 0);     // (the part's CC1: gsefx.part_of)
         std::vector<double> ct(nc);
         std::vector<int> cv(nc);
-        nv_song_ccs(song, c, 1, ct.data(), cv.data(), nc);
+        nv_song_ccs(song, c % 256, 1, ct.data(), cv.data(), nc);
         if (E.les.empty()) {
             fprintf(stderr, "nvrender: %s is an export from before the Leslie (native_export.py again)\n", argv[1]);
             return 1;

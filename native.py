@@ -167,7 +167,8 @@ class MoogLayer(ctypes.Structure):
                 ('pitch_on', I), ('shape_on', I), ('pitch_p', C * 9), ('shape_par', C * 25),
                 ('knob', C * 5), ('span', C * 5), ('eg_v', C * 11), ('eg_log', C * 11),
                 ('atk_to_1', C), ('cut_lo', C), ('cut_oct', C), ('k_max', C), ('res_per_unit', C),
-                ('self_from', C), ('self_amp_max', C), ('eg_under', C), ('body', I)]
+                ('self_from', C), ('self_amp_max', C), ('eg_under', C), ('body', I),
+                ('pre', I), ('bp_gain', C), ('bp_corner', C), ('hp_gain', C), ('hp_corner', C), ('hp_leak', C)]
 
 
 class MoogSpec(ctypes.Structure):
@@ -329,6 +330,7 @@ def _load():
             ('nv_tone', I, [P, ctypes.POINTER(ToneIn), I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                             ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p, ctypes.POINTER(I),
                             ctypes.c_void_p, D]),
+            ('nv_moog_ladder', C, [ctypes.POINTER(MoogLayer), C, C, C, I, I]),
             ('nv_moog_apply', None, [ctypes.POINTER(MoogLayer), ctypes.c_void_p, ctypes.POINTER(MoogLayer)]),
             ('nv_moog_tone', I, [P, ctypes.POINTER(ToneIn), ctypes.POINTER(MoogLayer), C, C, I, ctypes.c_void_p,
                                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I,
@@ -973,7 +975,11 @@ def moog_spec(cls):
                 L.pitch_p[:] = [float(x) for x in pp]
             if sf:
                 L.shape_par[:] = [float(x) for x in MG.shape_params(pn)]
-            L.ft[:] = [float(x) for x in MG.ft_row(pn, MG.KB_REF_HZ, 0, False,
+            pre = bool(getattr(cls, 'amp_drive', 0.0))     # (a valve after the ladder: FT slot 11)
+            L.pre = int(pre)
+            L.bp_gain, L.bp_corner, L.hp_gain, L.hp_corner, L.hp_leak = (MG.BP_GAIN, MG.BP_CORNER, MG.HP_GAIN,
+                                                                         MG.HP_CORNER, MG.HP_LEAK)
+            L.ft[:] = [float(x) for x in MG.ft_row(pn, MG.KB_REF_HZ, 0, pre,
                                                    (MG.FT_PITCH if pp is not None else 0) | sf)]
             L.kn[:] = [float(x) for x in MG.kn_row(pn)]
             L.rel_span = MG.release_span(pn)
@@ -1019,8 +1025,8 @@ def moog_voice(cls):
     gains and vibrato (a section's of one player), and only what the native
     Moog note has of its panels -- the oscillators, noise, the ladder's own
     sine, the contours, 1 -> 2 FM, the mod section's pitch and shape rows,
-    one layer or two, a formant body (moog_bodied). Not yet: SYNC, the
-    MF-104M, a valve after the ladder, a unison."""
+    one layer or two, a formant body (moog_bodied), a valve after the ladder
+    (the file's amp on its rows). Not yet: SYNC, the MF-104M, a unison."""
     import tonelib as T
     if not getattr(cls, 'moog', False):
         return False
@@ -1034,7 +1040,7 @@ def moog_voice(cls):
         return False
     if issubclass(cls, T.SectionMixin) and int(cls.section_players) > 1:
         return False
-    if getattr(cls, 'moog_unison', None) or getattr(cls, 'amp_drive', 0.0):
+    if getattr(cls, 'moog_unison', None):
         return False
     if getattr(cls, 'moog_body', None) is not None and not moog_bodied(cls):
         return False

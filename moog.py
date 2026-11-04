@@ -935,8 +935,36 @@ def sustain_gain(panel, f0, f):
     moves the partials by H(t) / H(sustain) (FT slot 11)."""
     fcs = (knob_cutoff(panel['cutoff']) * (f0 / KB_REF_HZ) ** float(panel['kb_track'])
            * 2.0 ** (eg_octaves(panel['eg_amount']) * sustain_level(panel['f_sustain'])))
-    return ladder_gain(f, max(fcs, 1.0), knob_k(panel['resonance']),
-                       int(panel['mode']), bool(panel['res_bass']))
+    return ladder_gain_1(float(f), max(fcs, 1.0), knob_k(panel['resonance']),
+                         int(panel['mode']), bool(panel['res_bass']))
+
+
+def ladder_gain_1(f, fc, k, mode=LP4, res_bass=False):
+    """ladder_gain at one frequency, in arithmetic any machine repeats
+    (Python floats: libm's pow, a square root -- not math.hypot, whose
+    algorithm is CPython's own) -- numpy's on a scalar is its own vector
+    code, a last bit off libm's at a quarter of its inputs, which
+    native/tone.c cannot match."""
+    x = f / (fc * (BP_CORNER if mode == BP else HP_CORNER if mode == HP else 1.0))
+    re4, im4 = 1.0 - 6.0 * x * x + x ** 4, 4.0 * x - 4.0 * x ** 3
+    den = math.sqrt((re4 + k) * (re4 + k) + im4 * im4)
+    if mode == LP4:
+        num = 1.0
+    elif mode == LP2:
+        num = 1.0 + x * x
+    elif mode == BP:
+        num = BP_GAIN * 4.0 * x * x
+    else:
+        nr, ni = x ** 4 - x * x, -2.0 * x ** 3
+        dr = re4 + k
+        d2 = dr * dr + im4 * im4
+        hr = HP_GAIN * (nr * dr + ni * im4) / d2 + HP_LEAK
+        hi = HP_GAIN * (ni * dr - nr * im4) / d2
+        return math.sqrt(hr * hr + hi * hi)
+    h = num / den
+    if res_bass and mode in (LP4, LP2):
+        h = h * (1.0 + k)
+    return h
 
 
 def osc_ratio(panel, osc):

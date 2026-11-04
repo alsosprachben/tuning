@@ -123,6 +123,8 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
         double dv[2];
         nv_song_get_note(song, played[j], &ch, iv, dv);
         const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[(iv[3] ? NV_K_DRUMS : 0) + 128 * iv[2] + iv[0]];
+        const long long part = ch;
+        ch = nv_song_mix(song, played[j]);              // (each tone its own: TONE_SEG)
         if (k && k->amp_drive != 0.0) {
             // (_note_amp_drive: the reference times the note's fader, chan_vol)
             double ref = 0.0, pl[6];
@@ -137,7 +139,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
         if (k && !k->organ && k->trem_depth > 0.0) {    // (_note_tremolo: the channel's, set once)
             int v;
             double dep = k->trem_intrinsic ? k->trem_depth
-                                           : k->trem_depth * (nv_song_first_cc(song, ch, 1, &v) ? v / 127.0 : 0.0);
+                                           : k->trem_depth * (nv_song_first_cc(song, part, 1, &v) ? v / 127.0 : 0.0);
             if (dep > 0.0) {
                 double cfg[4] = {k->trem_hz, dep, (double)k->trem_stereo, k->trem_scatter};
                 nv_song_add_trem(song, ch, cfg);

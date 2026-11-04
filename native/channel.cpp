@@ -257,6 +257,7 @@ struct Song {
         int cc, v;
     };
     std::vector<Snd> snd;
+    std::vector<long long> mix;     // each note's mix channel (nv_song_mix), made at the first ask
     // ITS MOOGS' ROWS (_MOOG_FT, _MOOG_KN, _MOOG_KROW): each layer of each
     // Moog note its filter row, in the notes' order; the knob rows, one a
     // channel and panel (a row's slot 9 its index)
@@ -1812,6 +1813,42 @@ void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv)
     *ch = e.ch;
     iv[0] = e.note; iv[1] = e.vel; iv[2] = e.prog; iv[3] = e.drum;
     dv[0] = e.on; dv[1] = e.off;
+}
+
+// NOTE i's MIX CHANNEL (the note loop's em.channel, gsefx.TONE_SEG): a
+// channel's first program keeps the channel, each other one heard on it --
+// in the note loop's order (onset, channel, key), every note counted -- is
+// ch + 256 x its place. What belongs to the TONE keys on it (an amp, a
+// cabinet, a rotor, a tremolo, a scanner); what belongs to the part reads
+// ch % 256 (gsefx.part_of)
+long long nv_song_mix(void *s, int i)
+{
+    nv::Song *g = (nv::Song *)s;
+    if (g->mix.size() != g->notes.size()) {
+        size_t nn = g->notes.size();
+        std::vector<int> order(nn);
+        for (size_t q = 0; q < nn; q++)
+            order[q] = (int)q;
+        std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
+            const nv::Ev &x = g->notes[a], &y = g->notes[b];
+            if (x.on != y.on)
+                return x.on < y.on;
+            if (x.ch != y.ch)
+                return x.ch < y.ch;
+            return x.note < y.note;
+        });
+        g->mix.assign(nn, 0);
+        std::map<long long, std::vector<int>> tones;
+        for (int q : order) {
+            const nv::Ev &e = g->notes[q];
+            std::vector<int> &tl = tones[e.ch];
+            size_t ti = std::find(tl.begin(), tl.end(), e.prog) - tl.begin();
+            if (ti == tl.size())
+                tl.push_back(e.prog);
+            g->mix[q] = e.ch + (ti ? 256LL * (long long)(ti % 256) : 0LL);
+        }
+    }
+    return i >= 0 && i < (int)g->mix.size() ? g->mix[i] : -1;
 }
 
 // note i's pulse, a throat's (Ev: tilt, mouth, morph; NaN none)

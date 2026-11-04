@@ -471,6 +471,11 @@ typedef struct {
     double knob[5], span[5], eg_v[11], eg_log[11];
     double atk_to_1, cut_lo, cut_oct, k_max, res_per_unit, self_from, self_amp_max, eg_under;
     int body;                               /* through the voice's formant body (moog_body: bore x norm) */
+    /* A VALVE AFTER THE LADDER (amp_drive): the partials carry the ladder at
+       its sustain (sustain_gain, ladder_gain_1's modes: BP_GAIN, BP_CORNER,
+       HP_GAIN, HP_CORNER, HP_LEAK) */
+    int pre;
+    double bp_gain, bp_corner, hp_gain, hp_corner, hp_leak;
 } MoogLayer;
 
 typedef struct {
@@ -801,6 +806,7 @@ void nv_song_note_stroke(void *s, int i, double ratio, int inner);
 void nv_song_strokes(void *s, const int *kind, const double *par);
 int nv_song_slur(void *s, int i, int *out);
 int nv_song_snd_any(void *s, long long ch);
+long long nv_song_mix(void *s, int i);
 int nv_song_snd_moves(void *s, long long ch);
 /* render.cpp: THE MOOG's columns of a table with one (its filter rows FT,
    knob rows KN): fx mk (int32), fmw fmp fmpR */
