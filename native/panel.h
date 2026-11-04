@@ -74,6 +74,10 @@ struct Host {
     std::vector<std::vector<int>> stop_rows;
     std::function<std::vector<char>()> drawn;
     std::function<void(int)> toggle_stop;
+    // before each frame: the host brings what it changed itself up to date
+    // (a program change from the keyboard: the program, its name, its stops)
+    // and says what it has to say ("" nothing)
+    std::function<std::string()> refresh;
 };
 
 // THE STOP KEYS, as livetui's on a US layout: row 0 the digits, row 1 the
@@ -683,6 +687,11 @@ struct Panel {
             }
             auto now = std::chrono::steady_clock::now();
             if (now >= next) {
+                if (H.refresh) {
+                    std::string m = H.refresh();
+                    if (!m.empty())
+                        say(m);
+                }
                 s = H.take();
                 draw();
                 next = now + std::chrono::milliseconds(100);

@@ -168,7 +168,7 @@ struct PwEv {
 };
 
 // an event as it came, for a live replay: 0 note-on, 1 note-off, 2 control,
-// 4 the pitch wheel (a: -8192..8191)
+// 4 the pitch wheel (a: -8192..8191), 5 a program change (a: the program)
 struct LiveEv {
     double t;
     int type, ch, a, b;
@@ -379,6 +379,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             P.progs.push_back(std::make_pair(ch, m.d0));
             if (!drums[ch])
                 P.chprogs.push_back(std::make_pair(ch, m.d0));  // (a drum set is no organ's program)
+            P.events.push_back(LiveEv{t, 5, ch, m.d0, 0});
         } else if (kind == 0xB0) {
             int cc = m.d0, v = m.d1;
             P.ccs.push_back(CCEv{ch, t, cc, v});

@@ -2,7 +2,7 @@
 """Does native/nvlive play a MIDI file as live.Live does?
 
     python3 examples/nvlive_check.py FILE.mid [SECONDS] [--program=N [--drums]] [--register] [--pedal-key=N]
-                                     [--gpu=cl|c] [--gpu-min=N] [--room=NAME] [--tuner=NAME]
+                                     [--gpu=cl|c] [--gpu-min=N] [--room=NAME] [--tuner=NAME] [--programs]
 
 The first SECONDS (default 20) of FILE, cut as bitident cuts, its notes and
 controllers (the native reader's, in message order) each applied at the
@@ -14,7 +14,10 @@ by on_midi and its own callback -- its patch warmed first, its governor off
 limiter). Both in ROOM (default the hall; not the session's: the export
 is made --fresh), live's templates and the native ones built in it. Every
 sample of the two compared with ==. The file's programs are not followed: the part plays
-PROGRAM throughout, as a keyboard would. --register: the free strings too,
+PROGRAM throughout, as a keyboard would -- unless --programs: then each side
+follows them as a keyboard's program changes (live's builder in step,
+examples/patchsync.py: the patch posted for the next block, warmed whole;
+nvlive --programs builds and posts at the same place). --register: the free strings too,
 each side's register worker answering in step (examples/regsync.py; nvlive
 with its export's LREG); without, nvlive --no-register. --pedal-key=N: the
 file's key N is the sustain pedal on both sides (live.Route(("note", N), 64);
@@ -92,7 +95,8 @@ def main(argv):
                           + (["--split=%d" % split, "--split-transpose=%d" % stp] if split else [])
                           + (["--pedal-key=" + opt["pedal-key"]] if "pedal-key" in opt else [])
                           + (["--gpu=" + (opt["gpu"] or "cl"), "--gpu-min=%d" % gmin] if "gpu" in opt else [])
-                          + (["--tuner=" + opt["tuner"]] if opt.get("tuner") else []),
+                          + (["--tuner=" + opt["tuner"]] if opt.get("tuner") else [])
+                          + (["--programs"] if "programs" in opt else []),
                           stderr=subprocess.DEVNULL)
     raw = open(out, "rb").read()          # float32 stereo after a 44-byte header
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
@@ -126,6 +130,10 @@ def main(argv):
     if reg:
         import regsync
         regsync.sync(lv, lv.parts[0])
+    progs = "programs" in opt
+    if progs:
+        import patchsync
+        patchsync.sync(lv)
     dry = []
     evs = m.events()
     nb = int(total * 48000) // 128
@@ -140,10 +148,16 @@ def main(argv):
                 lv.on_midi(M("note_off", channel=ch, note=a, velocity=0))
             elif ty == 4:
                 lv.on_midi(M("pitchwheel", channel=ch, pitch=a))
+            elif ty == 5:
+                if progs:
+                    lv.on_midi(M("program_change", channel=ch, program=a))
             else:
                 lv.on_midi(M("control_change", channel=ch, control=a, value=v))
             e += 1
         dry.append(np.frombuffer(lv.callback(None, 128, None, 0)[0], np.float32).reshape(-1, 2))
+        if progs:
+            for _part, _p in patchsync.build(lv):
+                instant_scan(lv, _p)
     py = np.concatenate(dry) if dry else np.zeros((0, 2), np.float32)
     if py.shape != nv.shape:
         print("%s: length %r vs %r" % (os.path.basename(args[0]), py.shape, nv.shape))

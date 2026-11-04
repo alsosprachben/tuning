@@ -284,6 +284,34 @@ def main(argv):
                 for row in pt.stop_rows:
                     f.write(struct.pack("<i", len(row)) + struct.pack("<%di" % len(row),
                                                                       *[pt.rank_names.index(n) for n in row]))
+            # LPROG: what a PROGRAM CHANGE needs, each program's -- its strings'
+            # identity (its class at key 60, as live compares them to forget
+            # the register's, -1 for no part), a harpsichord's choirs for its
+            # register (native.live_bank_choirs: bridges, cross, buffs; 0
+            # none), and what the panel calls it, as a program and as a set
+            import livetui as LT
+            import percussion_map as PM
+            f.write(b"LPROG")
+            sids = []
+            for prog in range(128):
+                sid, chs = -1, None
+                if any(cmap_live[128 * prog + k] >= 0 for k in range(128)):
+                    pc = L.Patch(prog, False, tuner, 0)._voice_class(60)
+                    if pc not in sids:
+                        sids.append(pc)
+                    sid = sids.index(pc)
+                    if B.REGISTER and pc is not None:
+                        chs = N.live_bank_choirs(pc)
+                f.write(struct.pack("<i", sid))
+                if chs is None:
+                    f.write(struct.pack("<i", 0))
+                else:
+                    nc, br, cross, nb, bf = chs
+                    f.write(struct.pack("<i%dqdi%di" % (nc, 2 * nb), nc, *list(br), cross, nb,
+                                        *list(bf)[:2 * nb]))
+                for nm in (LT.GM[prog], PM.drum_set_name(prog)):
+                    b = nm.encode()
+                    f.write(struct.pack("<i", len(b)) + b)
     print("native export: %d piano class(es), tuner %s, room %s -> %s" % (len(classes), tuner,
                                                                           room.decode() or "-", args[0]))
     if sess:

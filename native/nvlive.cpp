@@ -101,7 +101,9 @@
 #include <cstring>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <condition_variable>
 #include <functional>
+#include <map>
 #include <sched.h>
 #include <spawn.h>
 #include <sys/resource.h>
@@ -165,6 +167,11 @@ void nv_lp_patch_range(void *h, int i, int channel, unsigned excl, int lo, int h
 int nv_lp_on_gpu(void *h);
 void nv_lp_gpu_ms(void *h, double *out);
 void nv_lp_reg_async(void *h);
+void nv_lp_reg_choirs(void *h, int nchoir, const long *bridges, double cross, int nbuff, const int *buffs);
+void nv_lp_swap_bank(void *h, const StringMode *modes, int M, const double *k6, int top, int pedals, const int *note,
+                     int nchoir, const long *cbr, double cross, int nbuff, const int *buffs);
+void nv_lp_swap(void *h, int pi, void *cache, int program, int drums, int nbuckets, int speed, int damper_pedal,
+                int soft_drop, int soft_top, int detune_wheel, const unsigned long long *choke, const int *reg_note);
 void nv_lp_set(void *h, int what, double v);
 void nv_lp_stats(void *h, double *out);
 void nv_lp_panic(void *h, long long n0);
@@ -222,6 +229,16 @@ struct Export {
     bool has_room = false;
     // LROUTE: the session's routes, nv_rt_add's seven each
     std::vector<std::array<int, 7>> routes;
+    // LPROG: what a program change needs -- each program's strings' identity
+    // (-1 no part), a harpsichord's choirs for its register, its names
+    struct Prog {
+        int sid = -1;
+        std::vector<long> cbr;
+        double cross = 1.0;
+        std::vector<int> buffs;
+        std::string name, kit;
+    } prog[128];
+    bool has_prog = false;
 };
 
 static bool read_export(const char *path, Export &E)
@@ -395,6 +412,34 @@ static bool read_export(const char *path, Export &E)
                             so.rows.push_back(row);
                         }
                     }
+                // LPROG: each program's strings, choirs and names
+                if (ok && fread(s5, 1, 5, f) == 5 && !memcmp(s5, "LPROG", 5)) {
+                    bool g = true;
+                    for (int p = 0; g && p < 128; p++) {
+                        Export::Prog &pr = E.prog[p];
+                        int nc = 0, nb = 0;
+                        g = fread(&pr.sid, 4, 1, f) == 1 && fread(&nc, 4, 1, f) == 1;
+                        if (g && nc > 0) {
+                            std::vector<long long> br(nc);
+                            g = fread(br.data(), 8, nc, f) == (size_t)nc && fread(&pr.cross, 8, 1, f) == 1
+                                && fread(&nb, 4, 1, f) == 1;
+                            pr.cbr.assign(br.begin(), br.end());
+                            if (g) {
+                                pr.buffs.resize(2 * nb);
+                                g = !nb || fread(pr.buffs.data(), 4, 2 * nb, f) == 2 * (size_t)nb;
+                            }
+                        }
+                        for (std::string *nm : {&pr.name, &pr.kit}) {
+                            int len = 0;
+                            g = g && fread(&len, 4, 1, f) == 1;
+                            if (g) {
+                                nm->assign(len, ' ');
+                                g = !len || fread(&(*nm)[0], 1, len, f) == (size_t)len;
+                            }
+                        }
+                    }
+                    E.has_prog = g;
+                }
             }
         }
     }
@@ -569,7 +614,8 @@ static void midi_reader(int fd, std::mutex *mu, std::vector<Midi> *q)
             else if (hi == 0xE0) {
                 m.type = 4;                             // the pitch wheel, -8192..8191
                 m.a = ((d[1] << 7) | d[0]) - 8192;
-            }
+            } else if (hi == 0xC0)
+                m.type = 5;                             // a program change
             if (m.type >= 0) {
                 std::lock_guard<std::mutex> lk(*mu);
                 q->push_back(m);
@@ -637,20 +683,29 @@ int main(int argc, char **argv)
         }
         for (int n = 0; n < 128; n++)
             E.freq[n] = have[n] ? F[n] : 0.0;
-        Export::Reg &rr = E.reg[program & 127];
-        if (rr.M > 0 && !rr.cinit.empty()) {
-            int cap = 88 * 4 * 130;
-            std::vector<StringMode> modes(cap), tmp(cap);
-            int M = nv_strings((const VoiceInit *)rr.cinit.data(), (const VoiceSnap *)rr.csnap.data(), E.freq.data(),
-                               0.0, 1.0, SR, modes.data(), tmp.data(), cap);
-            if (M > 0) {
-                modes.resize(M);
-                rr.modes.swap(modes);
-                rr.M = M;
-            }
-        }
         fprintf(stderr, "nvlive: tuned %s%s\n", tname.c_str(), rn >= 0 ? (rn == 69 ? " at a=" + a : " at c=" + c).c_str() : "");
     }
+    // A PROGRAM's FREE STRINGS at nvlive's tuner: the export's bank, built
+    // again (nv_strings, as live_bank does) where --tuner moved it -- once a
+    // program, the first time it is asked for
+    std::vector<char> retuned(128, 0);
+    auto retune = [&](int p) {
+        Export::Reg &rr = E.reg[p & 127];
+        if (tname.empty() || retuned[p & 127] || rr.M <= 0 || rr.cinit.empty())
+            return;
+        retuned[p & 127] = 1;
+        int cap = 88 * 4 * 130;
+        std::vector<StringMode> modes(cap), tmp(cap);
+        int M = nv_strings((const VoiceInit *)rr.cinit.data(), (const VoiceSnap *)rr.csnap.data(), E.freq.data(),
+                           0.0, 1.0, SR, modes.data(), tmp.data(), cap);
+        if (M > 0) {
+            modes.resize(M);
+            rr.modes.swap(modes);
+            rr.M = M;
+        }
+    };
+    if (!drums)
+        retune(program);
     // THE PART'S TEMPLATES (live.Patch.warm), built here
     std::vector<const NoteClass *> K(2 * NV_K_DRUMS, nullptr);
     for (int q = 0; q < 2 * NV_K_DRUMS; q++)
@@ -700,6 +755,20 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; i++)
         nodrums = nodrums || !strcmp(argv[i], "--no-drums");
     int split = atoi(opt(argc, argv, "split", "0").c_str());
+    // THE PARTS A PROGRAM CHANGE REACHES (live._listens): each patch's index,
+    // channel (-1 every one), whether it is a drum set, its program and its
+    // strings' identity (live's _voice_class(60): -1 a drum set's none), and
+    // the program posted to it, which is its own once the post has run
+    struct PartAt {
+        int pi, channel;
+        bool drums;
+        int program, sid, posted;
+    };
+    std::vector<PartAt> pats{{0, -1, drums, program, drums ? -1 : E.prog[program & 127].sid, program}};
+    // live._PATCHES: each program's templates (key p) and each drum set's
+    // (128 + set), built once and kept -- a note struck from one may sound on
+    std::map<int, void *> caches;
+    caches[(drums ? 128 : 0) + (program & 127)] = cache;
     if (!drums && (!nodrums || split > 0)) {
         int dset = atoi(opt(argc, argv, "drum-set", "0").c_str()) & 127;
         void *dcache = nv_tcache_new(K.data(), &t, E.freq.data(), E.trim.data(), E.kind.data(), E.fin.data(),
@@ -709,16 +778,19 @@ int main(int argc, char **argv)
                        E.kit_spar.data(), 100.0);
         int nsp[1] = {-1};
         long dbuilt = nv_tcache_warm(dcache, dset, 0, 127, 1, nsp, 1);      // (live.DRUM_RANGE)
+        caches[128 + dset] = dcache;
         if (!nodrums) {
             nv_lp_patch_range(part, 0, -1, 1u << 9, 0, 127, 0);
-            nv_lp_add_patch(part, dcache, 2, 0.0, 1, -1, 0, 0, 0, 1, dset, E.kit_choke.data(), 9, 0u, 0, 127, 0);
+            int pi = nv_lp_add_patch(part, dcache, 2, 0.0, 1, -1, 0, 0, 0, 1, dset, E.kit_choke.data(), 9, 0u, 0, 127, 0);
+            pats.push_back(PartAt{pi, 9, true, dset, -1, dset});
             fprintf(stderr, "nvlive: drum set %d on channel 10 (%ld templates)\n", dset, dbuilt);
         }
         if (split > 0) {
             int sch = atoi(opt(argc, argv, "split-channel", "1").c_str()) - 1;
             int str = atoi(opt(argc, argv, "split-transpose", "0").c_str());
-            nv_lp_add_patch(part, dcache, 3, 0.0, 1, -1, 0, 0, 0, 1, dset, E.kit_choke.data(), sch & 15, 0u, 0,
-                            split - 1, str);
+            int pi = nv_lp_add_patch(part, dcache, 3, 0.0, 1, -1, 0, 0, 0, 1, dset, E.kit_choke.data(), sch & 15, 0u,
+                                     0, split - 1, str);
+            pats.push_back(PartAt{pi, sch & 15, true, dset, -1, dset});
             fprintf(stderr, "nvlive: drum set %d under key %d on channel %d (transposed %+d)\n", dset, split,
                     (sch & 15) + 1, str);
         }
@@ -749,10 +821,28 @@ int main(int argc, char **argv)
     bool noreg = drums;                         // (a drum has no free strings)
     for (int i = 1; i < argc; i++)
         noreg = noreg || !strcmp(argv[i], "--no-register");
-    if (rg.M > 0 && !noreg) {
+    // ...ON WHEREVER A PROGRAM HAS STRINGS, as live's is: a part that starts
+    // on a voice without (an organ) has an empty bank, and takes a piano's
+    // at a program change
+    bool anyreg = false;
+    for (int p = 0; p < 128; p++)
+        anyreg = anyreg || E.reg[p].M > 0;
+    const bool reg_on = anyreg && !noreg;
+    if (reg_on && rg.M > 0) {
         nv_lp_register(part, rg.modes.data(), rg.M, rg.d[0], rg.d[1], rg.d[2], rg.d[3], rg.i[0], rg.d[4], rg.i[1],
                        rg.d[5], rg.d[6], rg.d[7], rg.d[8], rg.i[2], rg.note);
-        fprintf(stderr, "nvlive: the register: %d string modes\n", rg.M);
+        const Export::Prog &pr = E.prog[program & 127];
+        if (!pr.cbr.empty())                    // a harpsichord's choirs
+            nv_lp_reg_choirs(part, (int)pr.cbr.size(), pr.cbr.data(), pr.cross, (int)pr.buffs.size() / 2,
+                             pr.buffs.data());
+        fprintf(stderr, "nvlive: the register: %d string modes%s\n", rg.M,
+                pr.cbr.empty() ? "" : (", " + std::to_string(pr.cbr.size()) + " choirs").c_str());
+    } else if (reg_on) {
+        StringMode none[1];
+        int nonote[128] = {0};
+        nv_lp_register(part, none, 0, 0.0, 0.0, 0.0, 0.0, 128, E.k[K_BETA], 0, 0.12 * SR, E.k[K_FULL],
+                       E.k[K_RESIDUAL], E.k[K_LN10_20], BLK, nonote);
+        fprintf(stderr, "nvlive: the register: none for this voice, ready for one with strings\n");
     }
     nv_lp_damper(part, E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_KNEE], E.k[K_BETA], E.k[K_LN10_20]);
     nv_lp_press_db(part, atof(opt(argc, argv, "press-db",
@@ -852,6 +942,142 @@ int main(int argc, char **argv)
         for (int q = 0; q < n; q++)
             nv_lp_event(part, out[4 * q], out[4 * q + 1], out[4 * q + 2], out[4 * q + 3]);
     };
+    // PROGRAM CHANGES (live.on_midi's program_change, its _patch_worker and
+    // _swap_patch). With no bank selected (CC0 0: the capital tone, the
+    // standard map's): a part listening on the channel changes voice, a drum
+    // part its set. Notes sounding keep the templates they were struck from.
+    // A voice not native here is refused (said, and the part plays on).
+    //
+    // build(): the program's templates (live.Patch.warm), made once -- on the
+    // builder thread when playing, in step under --test
+    std::mutex cmu;                             // (caches: the builder's and this thread's)
+    auto build = [&](int prog, bool dr) -> void * {
+        int key = (dr ? 128 : 0) + (prog & 127);
+        {
+            std::lock_guard<std::mutex> lk(cmu);
+            auto it = caches.find(key);
+            if (it != caches.end())
+                return it->second;
+        }
+        bool native = false;
+        for (int k = 0; k < 128 && !native; k++)
+            native = E.cmap[(dr ? NV_K_DRUMS : 0) + 128 * (prog & 127) + k] >= 0;
+        if (!dr && !E.part[prog & 127][0])
+            native = false;
+        if (!native)
+            return nullptr;
+        void *c = nv_tcache_new(K.data(), &t, E.freq.data(), E.trim.data(), E.kind.data(), E.fin.data(),
+                                E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, E.k[K_RING_FLOOR],
+                                E.k[K_RING_MAX], E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR);
+        if (dr) {
+            nv_tcache_kits(c, E.kit_f0.data(), E.kit_seat.data(), E.kit_choke.data(), E.kit_skind.data(),
+                           E.kit_spar.data(), 100.0);
+            int nsp[1] = {-1};
+            nv_tcache_warm(c, prog & 127, 0, 127, 1, nsp, 1);
+        } else {
+            if (!E.les.empty())
+                nv_tcache_leslie(c, E.les.data(), (int)E.les.size());
+            const int *pq = E.part[prog & 127];
+            int sp[3] = {pq[3], pq[4], pq[5]};
+            nv_tcache_warm(c, prog & 127, 21, 96, pq[1], sp, pq[2]);
+            retune(prog);
+        }
+        std::lock_guard<std::mutex> lk(cmu);
+        caches[key] = c;
+        return c;
+    };
+    // swap(): a built program posted to its part (nv_lp_swap, done after the
+    // next block's events), and its strings where they are another voice's
+    // (live._reg_forget: the new voice's bank, or none)
+    std::atomic<int> shown_program(drums ? 128 + program : program);    // (what the panel shows)
+    auto swap = [&](size_t i, int prog, bool dr, void *c) {
+        PartAt &pa = pats[i];
+        static const int DRUM_P[10] = {1, 1, 1, -1, -1, -1, -1, 0, 0, 0};
+        const int *pq = dr ? DRUM_P : E.part[prog & 127];
+        int sid = dr ? -1 : E.prog[prog & 127].sid;
+        const Export::Reg &rr = E.reg[prog & 127];
+        bool regd = reg_on && pa.pi == 0;
+        int nonote[128] = {0};
+        const int *note = !dr && rr.M > 0 ? rr.note : nonote;
+        if (regd && sid != pa.sid) {
+            const Export::Prog &pr = E.prog[prog & 127];
+            if (!dr && rr.M > 0) {
+                double k6[6] = {rr.d[0], rr.d[1], rr.d[2], rr.d[3], rr.d[4], rr.d[5]};
+                nv_lp_swap_bank(part, rr.modes.data(), rr.M, k6, rr.i[0], rr.i[1], note, (int)pr.cbr.size(),
+                                pr.cbr.empty() ? nullptr : pr.cbr.data(), pr.cbr.empty() ? 1.0 : pr.cross,
+                                (int)pr.buffs.size() / 2, pr.buffs.empty() ? nullptr : pr.buffs.data());
+            } else {
+                StringMode none[1];
+                double k6[6] = {0.0, 0.0, 0.0, 0.0, E.k[K_BETA], 0.12 * SR};
+                nv_lp_swap_bank(part, none, 0, k6, 128, 0, nonote, 0, nullptr, 1.0, 0, nullptr);
+            }
+        }
+        nv_lp_swap(part, pa.pi, c, prog & 127, dr, pq[1], pq[6], pq[7], pq[8], pq[9], pq[6] >= 0,
+                   dr ? E.kit_choke.data() : nullptr, regd ? note : nullptr);
+        pa.posted = prog & 127;
+        pa.drums = dr;
+        pa.sid = sid;
+        if (pa.pi == 0)
+            shown_program = (dr ? 128 : 0) + (prog & 127);
+    };
+    // asked(): a program change heard -- each part listening that is not
+    // already that voice asks for it (live's patch_reqs, in order)
+    struct Req {
+        size_t i;
+        int prog;
+        bool dr;
+    };
+    std::vector<Req> reqs;                      // (the audio thread's, then the builder's)
+    bool told_old = false;
+    auto asked = [&](int ch, int prog) {
+        if (!E.has_prog) {                      // (an export from before LPROG: no strings to tell apart)
+            if (!told_old)
+                fprintf(stderr, "nvlive: this export has no LPROG section: program changes ignored "
+                                "(native_export.py --live again)\n");
+            told_old = true;
+            return;
+        }
+        for (size_t i = 0; i < pats.size(); i++) {
+            const PartAt &pa = pats[i];
+            if (pa.channel >= 0 && pa.channel != ch)
+                continue;
+            if (pa.program == (prog & 127))
+                continue;                       // (live: part.patch.key == want -- the patch it HAS)
+            reqs.push_back(Req{i, prog & 127, pa.drums});
+        }
+    };
+    // ...and once a block has run its posts, the programs posted are the parts'
+    auto landed = [&]() {
+        for (PartAt &pa : pats)
+            pa.program = pa.posted;
+    };
+    // the requests so far, in order, the last of a part's run only (live's
+    // coalescing): built and swapped in. Its count of swaps
+    auto settle = [&](std::vector<Req> &rq) {
+        int n = 0;
+        for (size_t q = 0; q < rq.size(); q++) {
+            bool later = false;
+            for (size_t r = q + 1; r < rq.size() && !later; r++)
+                later = rq[r].i == rq[q].i;
+            if (later)
+                continue;
+            void *c = build(rq[q].prog, rq[q].dr);
+            if (!c) {
+                fprintf(stderr, "nvlive: %s %d is not native here: the part plays on\n",
+                        rq[q].dr ? "drum set" : "program", rq[q].prog);
+                continue;
+            }
+            swap(rq[q].i, rq[q].prog, rq[q].dr, c);
+            n++;
+        }
+        rq.clear();
+        return n;
+    };
+    // --programs (--test): the file's program changes followed, as live's
+    // builder in step (examples/patchsync.py); else, as before, not
+    bool follow = false;
+    for (int i = 1; i < argc; i++)
+        follow = follow || !strcmp(argv[i], "--programs");
     float L[4096], R[4096];
     // --test: a file's events, block by block, to the dry blocks
     for (int i = 1; i + 2 < argc; i++)
@@ -893,6 +1119,7 @@ int main(int argc, char **argv)
             bool tgov = false;
             for (int q = 1; q < argc; q++)
                 tgov = tgov || !strcmp(argv[q], "--govern");
+            long nswaps = 0;
             std::vector<float> out;
             std::vector<double> ms, msr, mss, msg;      // each block's events, step and render, ms; its render;
                                                         // a GPU block's setup and samples
@@ -907,10 +1134,17 @@ int main(int argc, char **argv)
                     nv_midi_event(m, e, iv, &et);
                     if ((long long)(et * SR) / BLK > b)
                         break;                          // a later block's
-                    event(iv[0], iv[1], iv[2], iv[3]);
+                    if (iv[0] == 5) {
+                        if (follow)
+                            asked(iv[1], iv[2]);
+                    } else {
+                        event(iv[0], iv[1], iv[2], iv[3]);
+                    }
                     e++;
                 }
                 nv_lp_block(part, n0, BLK);
+                landed();
+                nswaps += settle(reqs);                 // (live's builder in step: for the next block)
                 auto t1 = std::chrono::steady_clock::now();
                 nv_lp_output(part, n0, (long)BLK, L, R, fn[0], fn[1], fn[2], BLK, master);
                 msr.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count());
@@ -963,6 +1197,8 @@ int main(int argc, char **argv)
                     fprintf(stderr, "nvlive:   the governor shed %ld partials\n", nv_lp_partials_shed(part));
             }
             nv_midi_free(m);
+            if (follow)
+                fprintf(stderr, "nvlive: %ld program change(s) followed\n", nswaps);
             FILE *wf = fopen(argv[i + 2], "wb");
             if (!wf)
                 return 1;
@@ -1041,6 +1277,55 @@ int main(int argc, char **argv)
         govern = govern && strcmp(argv[i], "--no-governor");
     double master_now = master;
     std::atomic<bool> rt_on(false);
+    // THE BUILDER (live's _patch_worker): the programs asked for, warmed off
+    // the audio thread, handed back to be swapped in between two blocks
+    std::mutex bmu;
+    std::condition_variable bcv;
+    std::vector<Req> breq;                      // asked, not yet built
+    std::vector<std::pair<Req, void *>> bdone;  // built (nullptr: not native here)
+    std::vector<std::string> notes;             // what the builder has to say
+    auto note = [&](const std::string &m) {
+        if (nopanel) {
+            fprintf(stderr, "nvlive: %s\n", m.c_str());
+            return;
+        }
+        std::lock_guard<std::mutex> lk(bmu);
+        notes.push_back(m);
+    };
+    auto builder_loop = [&]() {
+        while (!g_stop) {
+            std::vector<Req> rq;
+            {
+                std::unique_lock<std::mutex> lk(bmu);
+                bcv.wait_for(lk, std::chrono::milliseconds(100), [&] { return !breq.empty() || g_stop; });
+                rq.swap(breq);
+            }
+            for (size_t q = 0; q < rq.size() && !g_stop; q++) {
+                bool later = false;
+                for (size_t r = q + 1; r < rq.size() && !later; r++)
+                    later = rq[r].i == rq[q].i;
+                if (later)
+                    continue;                   // (only the last of a part's run)
+                bool had;
+                {
+                    std::lock_guard<std::mutex> lk(cmu);
+                    had = caches.count((rq[q].dr ? 128 : 0) + rq[q].prog) > 0;
+                }
+                auto t0 = std::chrono::steady_clock::now();
+                void *c = build(rq[q].prog, rq[q].dr);
+                std::string nm = rq[q].dr ? E.prog[rq[q].prog].kit : E.prog[rq[q].prog].name;
+                if (!c)
+                    note((rq[q].dr ? "drum set " : "program ") + std::to_string(rq[q].prog) + " (" + nm
+                         + ") is not native here: the part plays on");
+                else if (!had)
+                    note("built " + std::to_string(rq[q].prog) + " " + nm + " in "
+                         + std::to_string((int)std::chrono::duration<double, std::milli>(
+                                              std::chrono::steady_clock::now() - t0).count()) + " ms");
+                std::lock_guard<std::mutex> lk(bmu);
+                bdone.push_back(std::make_pair(rq[q], c));
+            }
+        }
+    };
     // THE AUDIO THREAD: real-time (--no-rt, TUNING_RT=0: not), block by block
     auto audio = [&]() {
         if (!nort) {
@@ -1082,9 +1367,29 @@ int main(int argc, char **argv)
                     swallow = std::make_pair(-1, -1);
                     continue;
                 }
+                if (m.type == 5) {
+                    asked(m.ch, m.a);
+                    continue;
+                }
                 event(m.type, m.ch, m.a, m.b);
             }
             nv_lp_block(part, n0, BLK);
+            landed();
+            // the programs asked for to the builder, and those it has built swapped in
+            {
+                std::unique_lock<std::mutex> lk(bmu, std::try_to_lock);
+                if (lk.owns_lock()) {
+                    if (!reqs.empty()) {
+                        breq.insert(breq.end(), reqs.begin(), reqs.end());
+                        reqs.clear();
+                        bcv.notify_one();
+                    }
+                    for (auto &d : bdone)
+                        if (d.second)
+                            swap(d.first.i, d.first.prog, d.first.dr, d.second);
+                    bdone.clear();
+                }
+            }
             nv_lp_output(part, n0, (long)BLK, L, R, fn[0], fn[1], fn[2], BLK, master_now);
             rt::busy_since = 0;
             double ms = (rt::now_ns() - t0) / 1e6;
@@ -1136,14 +1441,12 @@ int main(int argc, char **argv)
         }
     };
     std::thread player(audio);
+    std::thread builder(builder_loop);
     if (nopanel) {
         while (!g_stop)
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
     } else {
         // THE PANEL, on this thread
-        static const char *GM[8] = {"Acoustic Grand Piano", "Bright Acoustic Piano", "Electric Grand Piano",
-                                    "Honky-tonk Piano", "Electric Piano 1", "Electric Piano 2", "Harpsichord",
-                                    "Clavi"};
         panel::Host H;
         auto post = [&](std::function<void(long long)> f) {
             std::lock_guard<std::mutex> lk(pmu);
@@ -1167,8 +1470,12 @@ int main(int argc, char **argv)
         H.rate = SR;
         H.frames = (int)BLK;
         H.budget_ms = budget;
+        auto name_of = [&](int sp) {             // (sp: a program, or 128 + a drum set)
+            const Export::Prog &pr = E.prog[sp & 127];
+            return sp >= 128 ? (pr.kit.empty() ? "drum set" : pr.kit) : pr.name;
+        };
         H.program = program;
-        H.program_name = drums ? "GM percussion" : program >= 0 && program < 8 ? GM[program] : "";
+        H.program_name = name_of(shown_program);
         H.port = dev;
         H.room = E.room.empty() ? "-" : E.room;
         H.reg_modes = rg.M > 0 && !noreg ? rg.M : 0;
@@ -1207,16 +1514,40 @@ int main(int argc, char **argv)
         H.del_route = [&](int i) { post([&, i](long long) { nv_rt_del(router, i); }); };
         H.panic = [&]() { post([&](long long n) { nv_lp_panic(part, n); }); };
         // AN ORGAN'S STOPS (live's panel): its ranks, drawn and put in between two blocks
-        if (!drums && program >= 0 && program < 128 && !E.stops[program].names.empty()) {
-            H.stop_names = E.stops[program].names;
-            H.stop_rows = E.stops[program].rows;
-            H.drawn = [&, nr = (int)E.stops[program].names.size()]() {
+        auto stops_of = [&](int sp) {
+            H.stop_names.clear();
+            H.stop_rows.clear();
+            if (sp >= 128 || E.stops[sp].names.empty())
+                return;
+            H.stop_names = E.stops[sp].names;
+            H.stop_rows = E.stops[sp].rows;
+            H.drawn = [&, nr = (int)E.stops[sp].names.size()]() {
                 std::vector<char> d(nr, 0);
                 nv_lp_drawn(part, d.data(), nr);
                 return d;
             };
             H.toggle_stop = [&](int ri) { post([&, ri](long long n) { nv_lp_toggle_stop(part, ri, n); }); };
-        }
+        };
+        stops_of(shown_program);
+        // ...A PROGRAM CHANGE FROM THE KEYBOARD: its name and its stops, and
+        // what the builder said
+        int shown = shown_program;
+        H.refresh = [&]() {
+            int sp = shown_program;
+            std::string m;
+            if (sp != shown) {
+                shown = sp;
+                H.program = sp & 127;
+                H.program_name = name_of(sp);
+                stops_of(sp);
+                m = "program " + std::to_string(sp & 127) + ": " + H.program_name;
+            }
+            std::lock_guard<std::mutex> lk(bmu);
+            for (auto &x : notes)
+                m = m.empty() ? x : m + "; " + x;
+            notes.clear();
+            return m;
+        };
         bool edited = false;
         auto was = H.routes;
         panel::Panel P(H);
@@ -1242,6 +1573,8 @@ int main(int argc, char **argv)
     }
     g_stop = true;
     player.join();
+    bcv.notify_all();
+    builder.join();
     fprintf(stderr, "nvlive: %ld blocks, %ld over %.2f ms (worst %.2f), %ld underruns, %ld partials shed%s\n", blocks,
             over, budget, worst, underruns, nv_lp_partials_shed(part),
             rt::dropped ? ", real-time dropped by the guard" : "");
