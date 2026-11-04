@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "nv.h"
+#include "pycompat.h"
 
 extern "C" {
 
@@ -59,6 +60,143 @@ static long long ring_last(const double *rows, long long n, double floor_, doubl
             best = out;
     }
     return n ? (long long)ceil(best) : 0;
+}
+
+// mf104.bessel_i: I_n(x) by its series, summed as Python's sum() sums floats
+static double mf_bessel_i(int n, double x)
+{
+    double t[12];
+    for (int m = 0; m < 12; m++) {
+        double f = 1.0;                 /* factorial(m) * factorial(m + n), exact */
+        long long a = 1, b = 1;
+        for (int q = 2; q <= m; q++)
+            a *= q;
+        for (int q = 2; q <= m + n; q++)
+            b *= q;
+        f = (double)(a * b);
+        t[m] = pow(x / 2.0, (double)(2 * m + n)) / f;
+    }
+    return pysum(t, 12);
+}
+
+// mf104.delay_samples: the line's mean delay, whole grid points
+static long long mf_delay(const MoogLayer *L, double sr)
+{
+    double mean = L->mf[0] * mf_bessel_i(0, L->mf[6] * log(2.0));
+    long long g = (long long)L->mf_grid;
+    long long d = (long long)nearbyint(mean * sr / L->mf_grid) * g;
+    return d > g ? d : g;
+}
+
+// THE MF-104M's REPEATS (blockrender._prep_delays, mf104.expand): each pedal
+// note's rows copied k delays late while the repeat stays over REPEAT_FLOOR
+// of the note's loudest -- the line's filter at the partial's own pitch, the
+// note's vibrato carried or the line's LFO as one, the FM's anchor moved --
+// appended after the table, its dry rows then scaled by the pedal's dry. The
+// rows as the table holds them (kind: 1 float32, 2 int32). Returns the
+// latest sample a repeat may sound to (0 none), or -1 a note whose rows
+// have damper tracks (the C's do not copy them).
+static long long mf104_expand(void *song, double **rowsp, long long *Pp, const int *kind, double sr)
+{
+    enum { cOM = 0, cP0 = 1, cP0R = 2, cAL = 3, cAR = 4, cAM = 5, cNON = 12, cNOFF = 13, cRE = 15, cVD = 33, cVR = 34,
+           cVP = 35, cVDL = 36, cFMW = 46, cNFR = 47, cFMP = 48, cFMPR = 49 };
+    int nm = nv_song_mf104(song, -1, nullptr, nullptr, nullptr);
+    if (nm <= 0)
+        return 0;
+    auto cast = [&](double *r) {
+        for (int c = 0; c < NCOLS; c++)
+            if (kind[c] == 1)
+                r[c] = (double)(float)r[c];
+            else if (kind[c] == 2)
+                r[c] = (double)(int32_t)r[c];
+    };
+    const double TPI = 2.0 * M_PI;
+    std::vector<double> extra;
+    long long last = 0;
+    for (int q = 0; q < nm; q++) {
+        long long i0, i1;
+        const MoogLayer *L;
+        nv_song_mf104(song, q, &i0, &i1, &L);
+        double *rows = *rowsp;
+        std::vector<double> lv;
+        double top = 0.0;
+        for (long long i = i0; i < i1; i++) {
+            double l = std::max(fabs(rows[NCOLS * i + cAL]), fabs(rows[NCOLS * i + cAR]));
+            lv.push_back(l);
+            top = i == i0 ? l : std::max(top, l);       /* max(lv) */
+        }
+        const double time = L->mf[0], fc = L->mf[1], fb = L->mf[2], wet = L->mf[3], dry = L->mf[4],
+                     rate = L->mf[5], amount = L->mf[6];
+        const long long d0 = mf_delay(L, sr);
+        for (long long i = i0; i < i1; i++) {
+            const double *row = *rowsp + NCOLS * i;
+            double om = row[cOM];
+            double rel = top > 0.0 ? lv[i - i0] / top : 0.0;
+            /* mf104.repeats at the partial's own pitch */
+            double fhz = om * sr / (2.0 * M_PI);
+            double x = fabs(fhz) / fc;
+            double h = pow(1.0 + x * x, -L->mf_poles / 2.0);
+            for (int k = 1; k <= (int)L->mf_max; k++) {
+                double g = wet * pow(fb, (double)(k - 1)) * pow(h, (double)k);
+                if (g * rel < L->mf_floor)
+                    break;
+                long long d = (long long)k * d0;
+                std::vector<double> c(row, row + NCOLS);
+                c[cNON] = row[cNON] + (double)d;
+                c[cNOFF] = row[cNOFF] + (double)d;
+                c[cNFR] = c[cNON] - floor(c[cNON]);
+                c[cP0] = row[cP0] - om * (double)d;
+                c[cP0R] = row[cP0R] - om * (double)d;
+                if (row[cFMW] != 0.0) {
+                    c[cFMP] = row[cFMP] - row[cFMW] * (double)d;
+                    c[cFMPR] = row[cFMPR] - row[cFMW] * (double)d;
+                }
+                if (row[cVD] != 0.0)            /* the note's own vibrato, delayed */
+                    c[cVP] = row[cVP] - TPI * row[cVR] * (double)d / sr;
+                if (amount > 0.0) {             /* ...or the line's (mf104.lfo_vibrato), in its place */
+                    double w = 2.0 * M_PI * rate;
+                    double tau = (double)d0 / sr;
+                    double sre = 0.0, sim = 0.0;
+                    for (int j = 0; j < k; j++) {
+                        sre = sre + cos(w * (double)j * tau);
+                        sim = sim + -sin(w * (double)j * tau);
+                    }
+                    double dlt = time * 2.0 * mf_bessel_i(1, amount * log(2.0)) * hypot(sre, sim);
+                    double th = atan2(sim, sre);
+                    double f = om * sr / (2.0 * M_PI);
+                    double t_on = c[cNON] / sr;
+                    c[cVD] = w * dlt;
+                    c[cVR] = rate;
+                    c[cVP] = th - M_PI / 2.0;
+                    c[cVDL] = 0.0;
+                    double dp = -2.0 * M_PI * f * dlt * sin(w * t_on + th);
+                    c[cP0] = c[cP0] + dp;
+                    c[cP0R] = c[cP0R] + dp;
+                }
+                c[cAL] = row[cAL] * g;
+                c[cAR] = row[cAR] * g;
+                c[cAM] = row[cAM] * g;
+                cast(c.data());
+                extra.insert(extra.end(), c.begin(), c.end());
+                long long e = (long long)c[cNOFF] + (long long)ceil(row[cRE]);
+                last = std::max(last, e);
+            }
+            double *rw = *rowsp + NCOLS * i;
+            for (int cc : {cAL, cAR, cAM})
+                rw[cc] = rw[cc] * dry;
+            cast(rw);
+        }
+    }
+    long long m = (long long)extra.size() / NCOLS;
+    if (m) {
+        double *nr = (double *)realloc(*rowsp, sizeof(double) * NCOLS * (size_t)(*Pp + m));
+        if (!nr)
+            return -2;
+        memcpy(nr + NCOLS * (size_t)*Pp, extra.data(), sizeof(double) * extra.size());
+        *rowsp = nr;
+        *Pp += m;
+    }
+    return last;
 }
 
 struct Track {
@@ -152,6 +290,22 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
     long long srl = (long long)sr;
     long long N = (long long)(total * sr) + srl;
     long long nblk = N / blk + 2;
+    // THE MF-104M's REPEATS, before the length (_prep_delays): the render
+    // grows to hold the last one's release (nblk stays: the kernel clamps)
+    for (int j = 0; j < nn; j++)                        // (a pedal note's damper track: Python's)
+        if (bands[j]) {
+            long long r0 = row0[j], r1 = j + 1 < nn ? row0[j + 1] : nnote;
+            long long a, b;
+            const MoogLayer *L;
+            for (int q = 0; nv_song_mf104(song, q, &a, &b, &L); q++)
+                if (a < r1 && b > r0)
+                    return -(1 + played[j]);
+        }
+    long long mlast = mf104_expand(song, rowsp, &P, kind, sr);
+    if (mlast < -1)
+        return NV_TOO_SMALL;
+    if (mlast > 0 && mlast + srl / 2 > N)
+        N = mlast + srl / 2;
     (void)SR;
     long long rl = ring_last(*rowsp, P, ring_floor, sr);
     long long cap = (long long)((total + ring_max) * sr);

@@ -168,7 +168,8 @@ class MoogLayer(ctypes.Structure):
                 ('knob', C * 5), ('span', C * 5), ('eg_v', C * 11), ('eg_log', C * 11),
                 ('atk_to_1', C), ('cut_lo', C), ('cut_oct', C), ('k_max', C), ('res_per_unit', C),
                 ('self_from', C), ('self_amp_max', C), ('eg_under', C), ('body', I),
-                ('pre', I), ('bp_gain', C), ('bp_corner', C), ('hp_gain', C), ('hp_corner', C), ('hp_leak', C)]
+                ('pre', I), ('bp_gain', C), ('bp_corner', C), ('hp_gain', C), ('hp_corner', C), ('hp_leak', C),
+                ('mf_on', I), ('mf', C * 7), ('mf_grid', C), ('mf_max', C), ('mf_floor', C), ('mf_poles', C)]
 
 
 class MoogSpec(ctypes.Structure):
@@ -944,7 +945,9 @@ def moog_spec(cls):
         ok = 1 <= len(lays) <= 2
         for i, lay in enumerate(lays if ok else ()):
             pn = MG.panel_of(cls, layer=lay)
-            if pn['sync'] or mf104.settings(pn) is not None or len(MG.NOISE_HZ) > 32:
+            mfs = mf104.settings(pn)
+            if (pn['sync'] or len(MG.NOISE_HZ) > 32
+                    or (mfs is not None and (MG.pitch_params(pn) is not None or MG.shape_flags(pn)))):
                 ok = False
                 break
             L = spec.L[i]
@@ -994,6 +997,11 @@ def moog_spec(cls):
             L.k_max, L.res_per_unit = MG.K_MAX, MG.RES_PER_UNIT
             L.self_from, L.self_amp_max, L.eg_under = MG.SELF_FROM, MG.SELF_AMP, MG.EG_UNDER
             L.body = int(getattr(cls, 'moog_body', None) is not None)       # (the voice's bore: moog_bodied)
+            if mfs is not None:                 # the MF-104M after it (its repeats: native/prepare.cpp)
+                L.mf_on = 1
+                L.mf[:] = [float(mfs[k]) for k in ('time', 'fc', 'fb', 'wet', 'dry', 'rate', 'amount')]
+                L.mf_grid, L.mf_max, L.mf_floor, L.mf_poles = (float(mf104.GRID), float(mf104.MAX_REPEATS),
+                                                               float(mf104.REPEAT_FLOOR), float(mf104.FILTER_POLES))
         spec.n_layer = len(lays) if ok else 0
         got = _MOOG[cls] = spec if ok else False
     return got or None
@@ -1026,7 +1034,8 @@ def moog_voice(cls):
     Moog note has of its panels -- the oscillators, noise, the ladder's own
     sine, the contours, 1 -> 2 FM, the mod section's pitch and shape rows,
     one layer or two, a formant body (moog_bodied), a valve after the ladder
-    (the file's amp on its rows). Not yet: SYNC, the MF-104M, a unison."""
+    (the file's amp on its rows), the MF-104M (not on a note whose pitch or
+    shapes move). Not yet: SYNC, a unison."""
     import tonelib as T
     if not getattr(cls, 'moog', False):
         return False

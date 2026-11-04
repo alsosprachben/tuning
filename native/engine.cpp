@@ -346,6 +346,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
                 return -1;
             total += k;
             nm += k;
+            out->lay_rows[l] = k;
             for (int j = 0; j < 30; j++)
                 out->ft[l][j] = L.ft[j];
             out->ft[l][0] = pow(f0 / L.kb_ref_hz, L.kb_track);
@@ -696,8 +697,12 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (r < 0)
             return -(1 + i);
         carry_radius = out.radius;
+        long long lr0 = total;                  // (its layers' rows, from its first: an MF-104M's)
         for (int l = 0; l < out.n_ft; l++) {   // (its layers' filter rows, each on its knob row)
             const MoogLayer &L = k->moog.L[l];
+            if (L.mf_on)
+                nv_song_add_mf104(song, lr0, lr0 + out.lay_rows[l], &L);
+            lr0 += out.lay_rows[l];
             double rs = L.rel_span;
             if (n.snd_moog) {                   // (the release its knob turned: release_span)
                 MoogLayer La;

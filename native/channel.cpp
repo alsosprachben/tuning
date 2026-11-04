@@ -268,6 +268,12 @@ struct Song {
     // shape rows: moog.pitch_rows, shape_rows)
     std::vector<const MoogLayer *> mlay;
     std::vector<std::array<double, 3>> mspan;
+    // ...and THE MF-104M's notes (_MF104): each layer's rows and its panel
+    struct Mf {
+        long long r0, r1;
+        const MoogLayer *L;
+    };
+    std::vector<Mf> mf104;
     // ...and a channel whose cutoff or resonance moves (_kn_moves): one knob
     // row a channel, class and layer, its knobs at each of the channel's
     // sound controls (_MOOG_KVAR: grid point, knob row)
@@ -1202,6 +1208,26 @@ void nv_song_moog_add_moving(void *s, long long ch, const double *ft, const Moog
     std::copy(ft, ft + 30, f.begin());
     f[9] = (double)row;
     g->mft.push_back(f);
+}
+
+// A NOTE'S LAYER THROUGH THE MF-104M (_MF104): its rows [r0, r1) and its panel;
+// the i-th of them (returns 0 past the last; i < 0: how many)
+void nv_song_add_mf104(void *s, long long r0, long long r1, const MoogLayer *L)
+{
+    ((nv::Song *)s)->mf104.push_back(nv::Song::Mf{r0, r1, L});
+}
+
+int nv_song_mf104(void *s, int i, long long *r0, long long *r1, const MoogLayer **L)
+{
+    nv::Song *g = (nv::Song *)s;
+    if (i < 0)
+        return (int)g->mf104.size();
+    if (i >= (int)g->mf104.size())
+        return 0;
+    *r0 = g->mf104[i].r0;
+    *r1 = g->mf104[i].r1;
+    *L = g->mf104[i].L;
+    return 1;
 }
 
 // filter row i's panel (*L) and its note's onset, release and end (a0t[3])

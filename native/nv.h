@@ -476,6 +476,11 @@ typedef struct {
        HP_GAIN, HP_CORNER, HP_LEAK) */
     int pre;
     double bp_gain, bp_corner, hp_gain, hp_corner, hp_leak;
+    /* THE MF-104M after it (mf104.settings; mf_on 0 none): TIME (s), the
+       line's filter corner, FEEDBACK, wet, dry, LFO RATE, AMOUNT -- and
+       mf104's GRID, MAX_REPEATS, REPEAT_FLOOR, FILTER_POLES */
+    int mf_on;
+    double mf[7], mf_grid, mf_max, mf_floor, mf_poles;
 } MoogLayer;
 
 typedef struct {
@@ -756,7 +761,7 @@ typedef struct {
     double jack_off[32];
     /* a Moog's layers' filter rows (moog.ft_row), slot 9 the layer's index:
        the caller's knob row goes there */
-    int n_ft;
+    int n_ft, lay_rows[2];          /* (each layer's rows, in order) */
     double ft[2][30], kn[2][9];     /* ...and their knob rows (moog.kn_row, the knobs turned) */
 } NoteOut;
 
@@ -823,6 +828,8 @@ int nv_song_moog_n(void *s);
 void nv_song_moog_add(void *s, long long ch, const double *ft, const double *kn, const MoogLayer *L, double a0,
                       double toff, double end);
 int nv_song_moog_rows(void *s, int i, const MoogLayer **L, double *a0t);
+void nv_song_add_mf104(void *s, long long r0, long long r1, const MoogLayer *L);
+int nv_song_mf104(void *s, int i, long long *r0, long long *r1, const MoogLayer **L);
 int nv_song_moog_tables(void *s, float *ft, float *kn, int *nkn, long *knk, long *kb0);
 void nv_song_moog_add_moving(void *s, long long ch, const double *ft, const MoogLayer *L, const void *cls,
                              int layer, const double *bias, int mask, double sr, double a0, double toff, double end);
