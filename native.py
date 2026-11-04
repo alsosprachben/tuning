@@ -163,7 +163,11 @@ class MoogLayer(ctypes.Structure):
                 ('n_noise', I), ('noise_hz', C * 32), ('noise_amp', C * 32),
                 ('self_amp', C), ('self_cut', C), ('self_eg', C), ('kb_track', C),
                 ('fm_index', C), ('fm_r1', C), ('fm_ph', C), ('ft', C * 30), ('kn', C * 9), ('rel_span', C),
-                ('fmax_hz', C), ('kb_ref_hz', C), ('noise_bw', C)]
+                ('fmax_hz', C), ('kb_ref_hz', C), ('noise_bw', C),
+                ('pitch_on', I), ('shape_on', I), ('pitch_p', C * 9), ('shape_par', C * 25),
+                ('knob', C * 5), ('span', C * 5), ('eg_v', C * 11), ('eg_log', C * 11),
+                ('atk_to_1', C), ('cut_lo', C), ('cut_oct', C), ('k_max', C), ('res_per_unit', C),
+                ('self_from', C), ('self_amp_max', C), ('eg_under', C)]
 
 
 class MoogSpec(ctypes.Structure):
@@ -228,7 +232,7 @@ class NoteIn(ctypes.Structure):
                    ('stroke_morph', C), ('snd_at', C), ('snd_rt', C), ('rank_gr', C * 32), ('rank_sp', C * 32),
                    ('rank_skip', I * 32), ('rank_rel1', I * 32), ('organ_cr', C), ('rank_br', C * 32),
                    ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('bbr_set', I), ('bbr', C),
-                   ('rank_drawn_off', I * 32)])
+                   ('rank_drawn_off', I * 32), ('snd_moog', I), ('snd_d', C * 8)])
 
 
 class NoteOut(ctypes.Structure):
@@ -238,7 +242,7 @@ class NoteOut(ctypes.Structure):
                                     'ri', 'pos_x', 'pos_z', 'B', 'cv', 'cc', 'crl', 'sjit', 'csc')]
                 + [('tb', C * 3), ('cbw', C * 2), ('radius', C), ('n_push', I), ('f0', C)]
                 + [('n_click', I), ('n_jack', I), ('jack_n', I * 32), ('jack_rank', I * 32), ('jack_off', C * 32),
-                   ('n_ft', I), ('ft', (C * 30) * 2)])
+                   ('n_ft', I), ('ft', (C * 30) * 2), ('kn', (C * 9) * 2)])
 
 
 def lib():
@@ -325,6 +329,7 @@ def _load():
             ('nv_tone', I, [P, ctypes.POINTER(ToneIn), I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                             ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p, ctypes.POINTER(I),
                             ctypes.c_void_p, D]),
+            ('nv_moog_apply', None, [ctypes.POINTER(MoogLayer), ctypes.c_void_p, ctypes.POINTER(MoogLayer)]),
             ('nv_moog_tone', I, [P, ctypes.POINTER(ToneIn), ctypes.POINTER(MoogLayer), C, C, I, ctypes.c_void_p,
                                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I,
                                  ctypes.c_void_p, D]),
@@ -937,8 +942,7 @@ def moog_spec(cls):
         ok = 1 <= len(lays) <= 2
         for i, lay in enumerate(lays if ok else ()):
             pn = MG.panel_of(cls, layer=lay)
-            if (MG.pitch_params(pn) is not None or MG.shape_flags(pn) or pn['sync']
-                    or mf104.settings(pn) is not None or len(MG.NOISE_HZ) > 32):
+            if pn['sync'] or mf104.settings(pn) is not None or len(MG.NOISE_HZ) > 32:
                 ok = False
                 break
             L = spec.L[i]
@@ -963,10 +967,26 @@ def moog_spec(cls):
             L.fm_index = MG.fm_index(pn)
             L.fm_r1 = MG.osc_ratio(pn, MG.OSC1)
             L.fm_ph = cmath.phase(MG.osc_spectrum(pn['osc1_wave'], 1)[0]) if L.fm_index else 0.0
-            L.ft[:] = [float(x) for x in MG.ft_row(pn, MG.KB_REF_HZ, 0, False, 0)]
+            pp, sf = MG.pitch_params(pn), MG.shape_flags(pn)
+            L.pitch_on, L.shape_on = int(pp is not None), int(sf)
+            if pp is not None:
+                L.pitch_p[:] = [float(x) for x in pp]
+            if sf:
+                L.shape_par[:] = [float(x) for x in MG.shape_params(pn)]
+            L.ft[:] = [float(x) for x in MG.ft_row(pn, MG.KB_REF_HZ, 0, False,
+                                                   (MG.FT_PITCH if pp is not None else 0) | sf)]
             L.kn[:] = [float(x) for x in MG.kn_row(pn)]
             L.rel_span = MG.release_span(pn)
             L.fmax_hz, L.kb_ref_hz, L.noise_bw = MG.FMAX_HZ, MG.KB_REF_HZ, MG.NOISE_BW
+            # GM's sound controllers on its knobs (moog.apply_gm), and their laws
+            gs = list(MG.GM_SOUND.values())
+            L.knob[:] = [float(pn[kb]) for kb, _ in gs]
+            L.span[:] = [float(sp) for _, sp in gs]
+            L.eg_v[:] = [float(x) for x in MG._EG_V]
+            L.eg_log[:] = [float(x) for x in MG._EG_LOG]
+            L.atk_to_1, L.cut_lo, L.cut_oct = MG._ATK_TO_1, MG.CUT_LO_HZ, MG.CUT_OCT
+            L.k_max, L.res_per_unit = MG.K_MAX, MG.RES_PER_UNIT
+            L.self_from, L.self_amp_max, L.eg_under = MG.SELF_FROM, MG.SELF_AMP, MG.EG_UNDER
         spec.n_layer = len(lays) if ok else 0
         got = _MOOG[cls] = spec if ok else False
     return got or None
@@ -974,12 +994,12 @@ def moog_spec(cls):
 
 def moog_voice(cls):
     """Whether native/voice.c plays cls as a Moog (kind 6: moog.py's
-    Messenger, native/moog.cpp): SynthProperties' constructor, gains and
-    vibrato (a section's of one player), and only what the native Moog note
-    has of its panels -- the oscillators, noise, the ladder's own sine, the
-    contours and 1 -> 2 FM, one layer or two. Not yet: the mod section's
-    pitch and shape rows, SYNC, the MF-104M, a valve after the ladder, a
-    formant body, a unison."""
+    Messenger, native/tone.c nv_moog_tone): SynthProperties' constructor,
+    gains and vibrato (a section's of one player), and only what the native
+    Moog note has of its panels -- the oscillators, noise, the ladder's own
+    sine, the contours, 1 -> 2 FM, the mod section's pitch and shape rows,
+    one layer or two. Not yet: SYNC, the MF-104M, a valve after the ladder,
+    a formant body, a unison."""
     import tonelib as T
     if not getattr(cls, 'moog', False):
         return False

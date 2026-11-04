@@ -611,24 +611,69 @@ int nv_strike_bal(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz,
                   double reg, double bdb, double scal, double slr, double sfade, double slen, double bon,
                   double pos_x, double bgl, double bgr, double *rows, int cap, double *qacc, double *azimuth);
 
-/* Python's float floor division (float_divmod), where C's floor(a / b) can differ */
-static double py_floordiv(double vx, double wx)
+/* numpy.interp at one x (compiled_base.c's arr_interp: a search, then the
+ * slope's line from the point below; an exact point its own value) */
+static double np_interp(double x, const double *xp, const double *fp, int n)
 {
-    double mod = fmod(vx, wx);
-    double div = (vx - mod) / wx;
-    if (mod != 0.0) {
-        if ((wx < 0) != (mod < 0))
-            div -= 1.0;
+    if (x < xp[0])
+        return fp[0];
+    if (x > xp[n - 1])
+        return fp[n - 1];
+    int j = 0;
+    while (j + 1 < n && xp[j + 1] <= x)
+        j++;
+    if (j == n - 1 || xp[j] == x)
+        return fp[j];
+    double slope = (fp[j + 1] - fp[j]) / (xp[j + 1] - xp[j]);
+    double r = slope * (x - xp[j]) + fp[j];
+    if (isnan(r)) {
+        r = slope * (x - xp[j + 1]) + fp[j + 1];
+        if (isnan(r) && fp[j] == fp[j + 1])
+            r = fp[j];
     }
-    double fd;
-    if (div != 0.0) {
-        fd = floor(div);
-        if (div - fd > 0.5)
-            fd += 1.0;
-    } else {
-        fd = copysign(0.0, vx / wx);
+    return r;
+}
+
+static double clip01(double v) { return pymax(0.0, pymin(1.0, v)); }
+
+/* moog.knob_tau: a contour knob's time constant */
+static double knob_tau(const MoogLayer *L, double v)
+{
+    return exp(np_interp(clip01(v), L->eg_v, L->eg_log, 11));
+}
+
+void nv_moog_apply(const MoogLayer *in, const double *d, MoogLayer *out)
+{
+    *out = *in;
+    /* GM_SOUND's order: brightness, resonance, attack, release, decay */
+    static const int cc[5] = {3, 0, 2, 1, 4};
+    double k[5];
+    int moved[5];
+    for (int i = 0; i < 5; i++) {
+        k[i] = in->knob[i];
+        moved[i] = d[cc[i]] != 0.0;
+        if (moved[i])
+            k[i] = pymax(0.0, pymin(1.0, k[i] + d[cc[i]] * in->span[i]));
+        out->knob[i] = k[i];
     }
-    return fd;
+    if (moved[0]) {                             /* knob_cutoff: the knob row's, the sine's */
+        double c = in->cut_lo * pow(2.0, in->cut_oct * clip01(k[0]));
+        out->kn[0] = c;
+        out->self_cut = c;
+    }
+    if (moved[1]) {                             /* knob_k, self_amp */
+        out->kn[1] = pymin(in->k_max, in->res_per_unit * clip01(k[1]));
+        out->self_amp = in->self_amp_max * pow(pymax(0.0, (k[1] - in->self_from) / (1.0 - in->self_from)), 2.0);
+    }
+    if (moved[2])                               /* knob_attack */
+        out->ft[4] = knob_tau(in, k[2]) * in->atk_to_1;
+    if (moved[3]) {                             /* knob_time, release_span */
+        double tau = knob_tau(in, k[3]);
+        out->ft[6] = 4.0 * tau;
+        out->rel_span = tau * (log((1.0 + in->eg_under) / in->eg_under) + 1.0);
+    }
+    if (moved[4])
+        out->ft[5] = 4.0 * knob_tau(in, k[4]);
 }
 
 /* A MOOG LAYER's partials (blockrender._note_moog, one layer, no unison):
@@ -670,16 +715,22 @@ int nv_moog_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, doubl
         double lvl = L->lvl[o - 1];
         const double (*c)[2] = o == 1 ? L->c1 : o == 2 ? L->c2 : L->cs;
         int nh = o == 3 ? 32 : 64;
+        /* ITS SHAPE MOVES (FT_SHAPE): the kernel multiplies in the shape rows'
+           coefficient, so the partial carries only 2 x level */
+        int moving = (L->shape_on >> o) & 1;
         if (lvl <= 0.0 || f <= 0.0)
             continue;
         double q = py_floordiv(fmax, f);
         int n = q < (double)nh ? (int)q : nh;
+        if (o == 2 && L->pitch_on)
+            n = 64;                         /* its pitch moves: every harmonic */
         if (n < 1)
             continue;
         for (int k = 1; k <= n; k++) {
-            double a = 2.0 * hypot(c[k - 1][0], c[k - 1][1]) * lvl;
+            double cr = moving ? 1.0 : c[k - 1][0], ci = moving ? 0.0 : c[k - 1][1];
+            double a = 2.0 * hypot(cr, ci) * lvl;
             if (a > 1e-9) {
-                po[np] = o; pk[np] = k; phf[np] = f * k; pa[np] = a; pph[np++] = atan2(c[k - 1][1], c[k - 1][0]);
+                po[np] = o; pk[np] = k; phf[np] = f * k; pa[np] = a; pph[np++] = atan2(ci, cr);
             }
         }
     }

@@ -133,4 +133,24 @@ static double pysum(const double *x, int n)
     return f;
 }
 
+/* Python's float floor division (float_divmod), where C's floor(a / b) can differ */
+static inline double py_floordiv(double vx, double wx)
+{
+    double mod = fmod(vx, wx);
+    double div = (vx - mod) / wx;
+    if (mod != 0.0) {
+        if ((wx < 0) != (mod < 0))
+            div -= 1.0;
+    }
+    double fd;
+    if (div != 0.0) {
+        fd = floor(div);
+        if (div - fd > 0.5)
+            fd += 1.0;
+    } else {
+        fd = copysign(0.0, vx / wx);
+    }
+    return fd;
+}
+
 #endif

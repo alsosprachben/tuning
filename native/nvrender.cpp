@@ -857,8 +857,9 @@ int main(int argc, char **argv)
     // rows) and their columns
     int nkn = 0, nft = nv_song_moog_tables(song, nullptr, nullptr, &nkn);
     std::vector<float> FT((size_t)30 * nft), KN((size_t)9 * nkn);
-    std::vector<int> fxc, mkc;
-    std::vector<double> fmc[3];
+    std::vector<int> fxc, mkc, mpi, mki;
+    std::vector<double> fmc[3], mpc;
+    std::vector<float> mpr, mpk;
     MoogCols mc{};
     if (nft) {
         nv_song_moog_tables(song, FT.data(), KN.data(), &nkn);
@@ -871,6 +872,79 @@ int main(int argc, char **argv)
             fmc[q] = fcol(FMN[q]);
         mc.FT = FT.data();
         mc.KN = KN.data();
+        // ...ITS MOD SECTION's rows (moog.pitch_rows, shape_rows), one a filter
+        // row, through the kernel library's own (synthkernel.c), where any moves
+        void *kh = dlopen(E.libs[0].c_str(), RTLD_NOW | RTLD_LOCAL);
+        auto pcells = (void (*)(int, const double *, const double *, const double *, const double *, double, int,
+                                double *, double *))(kh ? dlsym(kh, "moog_pitch_cells") : nullptr);
+        auto srows = (void (*)(int, const double *, const double *, const double *, const long *, const int *, int,
+                               double, int, const long *, const int *, const int *, float *))(
+            kh ? dlsym(kh, "moog_shape_rows") : nullptr);
+        bool mpon = false, mkon = false;
+        for (int r = 0; r < nft; r++) {
+            int fl = (int)FT[30 * r + 12];
+            mpon = mpon || (fl & 1);
+            mkon = mkon || (fl & 14);
+        }
+        if ((mpon && !pcells) || (mkon && !srows)) {
+            fprintf(stderr, "nvrender: no moog_pitch_cells / moog_shape_rows in %s\n", E.libs[0].c_str());
+            return 1;
+        }
+        const double MGd = 128.0;           // (moog.MG: synthkernel's MOOG_GRID)
+        for (int r = 0; r < nft && (mpon || mkon); r++) {
+            const MoogLayer *Lr;
+            double sp[3];
+            nv_song_moog_rows(song, r, &Lr, sp);
+            long j0 = (long)py_floordiv(sp[0], MGd);
+            long ce = (long)-py_floordiv(-sp[2], MGd);
+            int n = (int)std::max(2L, ce - j0 + 1);
+            if (mpon) {
+                if (Lr->pitch_on) {
+                    std::vector<double> gg(n), a0(n, sp[0]), toff(n, sp[1]), Pm((size_t)9 * n), dc(n), rr(n);
+                    for (int q = 0; q < n; q++) {
+                        gg[q] = (double)(j0 + q) * MGd;
+                        std::copy(Lr->pitch_p, Lr->pitch_p + 9, Pm.begin() + 9 * q);
+                    }
+                    pcells(n, gg.data(), a0.data(), toff.data(), Pm.data(), SR, 128, dc.data(), rr.data());
+                    mpi.insert(mpi.end(), {(int)mpc.size(), (int)j0, n});
+                    double c = 0.0;
+                    for (int q = 0; q < n; q++) {
+                        if (q)
+                            c = c + dc[q - 1];
+                        mpc.push_back(c);
+                        mpr.push_back((float)rr[q]);
+                    }
+                } else {
+                    mpi.insert(mpi.end(), {0, 0, 1});
+                }
+            }
+            if (mkon) {
+                if (Lr->shape_on) {
+                    int offs[3] = {-1, -1, -1}, nslot = 0;
+                    for (int o = 0; o < 3; o++)
+                        if ((Lr->shape_on >> (o + 1)) & 1)
+                            offs[o] = 2 * 64 * nslot++;
+                    int stride = nslot * 64 * 2;
+                    std::vector<float> buf((size_t)n * stride, 0.0f);
+                    long base = 0;
+                    srows(1, Lr->shape_par, &sp[0], &sp[1], &j0, &n, 128, SR, 64, &base, &stride, offs, buf.data());
+                    mki.insert(mki.end(), {(int)mpk.size(), (int)j0, n, stride, offs[0], offs[1], offs[2]});
+                    mpk.insert(mpk.end(), buf.begin(), buf.end());
+                } else {
+                    mki.insert(mki.end(), {0, 0, 1, 0, -1, -1, -1});
+                }
+            }
+        }
+        if (mpon) {
+            if (mpc.empty())
+                mpc.push_back(0.0);
+            if (mpr.empty())
+                mpr.push_back(1.0f);
+            mc.MPI = mpi.data(); mc.MPC = mpc.data(); mc.MPR = mpr.data();
+        }
+        if (mkon) {
+            mc.MKI = mki.data(); mc.MPK = mpk.data();
+        }
         mc.fx = fxc.data();
         mc.mk = mkc.data();
         for (int q = 0; q < 3; q++)

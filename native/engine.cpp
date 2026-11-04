@@ -335,7 +335,10 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         tm.cbw0 = K->cbw0; tm.cbw1 = K->cbw1;
         int nm = 0;
         for (int l = 0; l < M.n_layer; l++) {
-            const MoogLayer &L = M.L[l];
+            MoogLayer La;
+            if (n->snd_moog)                    // its knobs as GM's sound controllers turn them
+                nv_moog_apply(&M.L[l], n->snd_d, &La);
+            const MoogLayer &L = n->snd_moog ? La : M.L[l];
             double mre = pymax(1.0, L.rel_span * SR);
             int k = nv_moog_tone(&s, &tm, &L, n->fx + l, mre, nimg, nsurf, surf, img, mir, rows + NCOLS * total,
                                  cap - total, qacc, azimuth);
@@ -348,6 +351,8 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
             out->ft[l][0] = pow(f0 / L.kb_ref_hz, L.kb_track);
             out->ft[l][9] = (double)l;
             out->ft[l][10] = f0;
+            for (int j = 0; j < 9; j++)
+                out->kn[l][j] = L.kn[j];
         }
         out->n_ft = M.n_layer;
         out->n_tone = nm;
@@ -631,7 +636,17 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             sd[q] += k->snd_bias[q];
             has[q] = ((k->snd_mask >> q) & 1) && sd[q] != 0.0;
         }
-        if (has[0] || has[3] || has[4])
+        // (a Moog's: its knobs, moog.apply_gm -- on a channel whose cutoff or
+        // resonance does not move after it is first set, _kn_moves)
+        n.snd_moog = 0;
+        if (k->init.kind == 6) {
+            if (nv_song_snd_moves(song, ch))
+                return -(1 + i);
+            for (int q = 0; q < 8; q++) {
+                n.snd_d[q] = has[q] ? sd[q] : 0.0;
+                n.snd_moog = n.snd_moog || has[q];
+            }
+        } else if (has[0] || has[3] || has[4])
             return -(1 + i);
         n.snd_rt = has[1] ? pow(k->snd_time_range, sd[1]) : 0.0;
         n.snd_at = has[2] ? pow(k->snd_time_range, sd[2]) : 0.0;
@@ -667,14 +682,8 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         n.carry_radius = carry_radius;
         // A MOOG: its filter rows from here (_MOOG_FT) -- where nothing turns
         // its knobs: GM's sound controllers on its channel are Python's (apply_gm)
-        if (k->init.kind == 6) {
-            if (nv_song_snd_any(song, ch))
-                return -(1 + i);
-            for (int q = 0; q < 8; q++)
-                if (((k->snd_mask >> q) & 1) && k->snd_bias[q] != 0.0)
-                    return -(1 + i);
+        if (k->init.kind == 6)
             n.fx = (double)nv_song_moog_n(song);
-        }
         NoteOut out;
         int band = 0;
         long long left = cap - total;
@@ -685,8 +694,16 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (r < 0)
             return -(1 + i);
         carry_radius = out.radius;
-        for (int l = 0; l < out.n_ft; l++)     // (its layers' filter rows, each on its knob row)
-            nv_song_moog_add(song, ch, out.ft[l], k->moog.L[l].kn);
+        for (int l = 0; l < out.n_ft; l++) {   // (its layers' filter rows, each on its knob row)
+            const MoogLayer &L = k->moog.L[l];
+            double rs = L.rel_span;
+            if (n.snd_moog) {                   // (the release its knob turned: release_span)
+                MoogLayer La;
+                nv_moog_apply(&L, n.snd_d, &La);
+                rs = La.rel_span;
+            }
+            nv_song_moog_add(song, ch, out.ft[l], out.kn[l], &L, out.non, out.noff, out.noff + rs * n.sr + 4096.0);
+        }
         if (out.n_jack) {                   // each jack's click rows, the note's last (rel_jacks)
             long long j0 = total + r - out.n_click;
             for (int q = 0; q < out.n_jack; q++) {

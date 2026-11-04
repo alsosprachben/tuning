@@ -24,6 +24,9 @@ typedef struct {
     const float *FT, *KN;
     const int *fx, *mk;
     const double *fm[3];
+    const int *MPI, *MKI;                   /* its pitch rows and shape rows, NULL none */
+    const double *MPC;
+    const float *MPR, *MPK;
 } MoogCols;
 
 extern "C" {
@@ -221,6 +224,9 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
         const float *mFT = moog ? moog->FT : noRows, *mKN = moog ? moog->KN : noRows;
         const double *mw = moog ? g.fm[0].data() : nullptr, *mp = moog ? g.fm[1].data() : nullptr;
         const double *mpR = moog ? g.fm[2].data() : nullptr;
+        const int *mMPI = moog ? moog->MPI : nullptr, *mMKI = moog ? moog->MKI : nullptr;
+        const double *mMPC = moog ? moog->MPC : nullptr;
+        const float *mMPR = moog ? moog->MPR : nullptr, *mMPK = moog ? moog->MPK : nullptr;
         auto F = [&](int c) { return g.f[c].data(); };
         if (LANG && fn == (voice_fn)sv) {
             g.lsr.resize(n);
@@ -236,8 +242,8 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                            F(F_aft), F(F_sus), F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav),
                            F(F_tau), F(F_tcut), F(F_gb), F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl),
                            F(F_delL), F(F_delR), g.i[I_gr].data(), g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC,
-                           BL, mfx, mFT, mKN, 1, 0, nullptr, nullptr, mmk, nullptr, nullptr, nullptr,
-                           nullptr, nullptr, mw, mp, mpR, sh[0], sh[1], sh[2], sh[3], g.lsr.data(),
+                           BL, mfx, mFT, mKN, 1, 0, nullptr, nullptr, mmk, mMPI, mMPC, mMPR,
+                           mMKI, mMPK, mw, mp, mpR, sh[0], sh[1], sh[2], sh[3], g.lsr.data(),
                            g.lob[0].data(), g.lob[1].data(), g.lob[2].data(), g.lob[3].data(), LANG, lgn, nullptr,
                            nullptr, nullptr, nullptr, nullptr, nullptr, 0, CHUNK, nullptr, nullptr, nullptr);
         } else if (!damp)
@@ -246,7 +252,7 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav), F(F_tau), F(F_tcut), F(F_gb),
                F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl), F(F_delL), F(F_delR), g.i[I_gr].data(),
                g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, BL, mfx, mFT, mKN, 1, 0, nullptr,
-               nullptr, mmk, nullptr, nullptr, nullptr, nullptr, nullptr, mw, mp, mpR, sh[0], sh[1],
+               nullptr, mmk, mMPI, mMPC, mMPR, mMKI, mMPK, mw, mp, mpR, sh[0], sh[1],
                sh[2], sh[3], CHUNK, nullptr, nullptr, nullptr);
         else
             dfn(L, R, 0, N, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR), F(F_nf),
@@ -254,7 +260,7 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                 F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav), F(F_tau), F(F_tcut), F(F_gb),
                 F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl), F(F_delL), F(F_delR), g.i[I_gr].data(),
                 g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, BL, mfx, mFT, mKN, 1, 0, nullptr,
-                nullptr, mmk, nullptr, nullptr, nullptr, nullptr, nullptr, mw, mp, mpR, sh[0],
+                nullptr, mmk, mMPI, mMPC, mMPR, mMKI, mMPK, mw, mp, mpR, sh[0],
                 sh[1], sh[2], sh[3], CHUNK, nullptr, nullptr, nullptr, g.i[I_dk].data(), F(F_dg), DM, DMO, DMB,
                 DMN);
     };

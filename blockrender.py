@@ -5516,10 +5516,10 @@ def _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG
             _umid = min(range(len(_uvs)), key=lambda i: abs(_uvs[i][0] - 1.0)) if _uvs else 0
             _vb0 = (_VB[0], _VB[1], _VB[2])
             # ...FROM C where the engine has this voice and nothing moves it
-            # (moog_spec: no GM sound controllers, mod rows, valve, body or unison)
-            _mnat = (_moog_native(em, props, nt, ('a', 'b').index(_lay), _mre)
-                     if (NATIVE_TONE != 'off' and not MOOG_NEUTRAL and not _sd and _uvs is None
-                         and _mpp is None and not _msf and not _pre and _body is None) else None)
+            # (moog_spec: no valve, body or unison)
+            _mnat = (_moog_native(em, props, nt, ('a', 'b').index(_lay), _mre, _sd)
+                     if (NATIVE_TONE != 'off' and not MOOG_NEUTRAL and _uvs is None
+                         and not _pre and _body is None) else None)
             if _mnat is not None and NATIVE_TONE == 'on':
                 NATIVE_STATS[0] += 1
                 _rows_into(A, _mnat[0])
@@ -5584,7 +5584,7 @@ def _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG
     return stops
 
 
-def _moog_native(em, props, nt, layer, mre):
+def _moog_native(em, props, nt, layer, mre, sd=None):
     """A Moog layer's partials from C (native/tone.c nv_moog_tone): (rows,
     qacc, azimuth), or None (Python plays them). The emitter as _note_moog
     leaves it before them: the note's filter row set, no key, no FM."""
@@ -5611,7 +5611,14 @@ def _moog_native(em, props, nt, layer, mre):
     rows = np.empty((cap, len(EMIT_COLS)))
     qacc = np.array([v for pr in em._QACC for v in pr], np.float64)
     az = ctypes.c_double(em.azimuth)
-    n = d.nv_moog_tone(ctypes.byref(snap), ctypes.byref(t), ctypes.byref(spec.L[layer]), float(em.moog_filter_row),
+    lay = spec.L[layer]
+    if sd:
+        # ...ITS KNOBS AS GM's SOUND CONTROLLERS TURN THEM (moog.apply_gm): sd
+        # as CC71-78's offsets, in T.SOUND_CC's order
+        dd = np.ascontiguousarray([float(sd.get(T.SOUND_CC[c], 0.0)) for c in sorted(T.SOUND_CC)], np.float64)
+        lay = _NV.MoogLayer()
+        d.nv_moog_apply(ctypes.byref(spec.L[layer]), dd.ctypes.data, ctypes.byref(lay))
+    n = d.nv_moog_tone(ctypes.byref(snap), ctypes.byref(t), ctypes.byref(lay), float(em.moog_filter_row),
                        float(mre), len(imgs), nsurf.ctypes.data, surf.ctypes.data, img.ctypes.data,
                        mir.ctypes.data, rows.ctypes.data, cap, qacc.ctypes.data, ctypes.byref(az))
     if n < 0:

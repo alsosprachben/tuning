@@ -457,12 +457,30 @@ typedef struct {
     double kn[9];                           /* moog.kn_row */
     double rel_span;                        /* release_span, s */
     double fmax_hz, kb_ref_hz, noise_bw;    /* FMAX_HZ, KB_REF_HZ, NOISE_BW */
+    /* THE MOD SECTION: OSC 2's pitch moving (pitch_params, 9) and the shapes
+       moving (shape_flags' bits, shape_params, 25) -- 0 none; their rows the
+       renderer's (synthkernel.c moog_pitch_cells, moog_shape_rows) */
+    int pitch_on, shape_on;
+    double pitch_p[9], shape_par[25];
+    /* GM's SOUND CONTROLLERS on its knobs (moog.apply_gm): CUTOFF, RESONANCE,
+       AMP ATTACK, RELEASE, DECAY as the panel has them, each one's span
+       (GM_SOUND's order), and the laws that read them -- knob_tau's table
+       (_EG_V, _EG_LOG), _ATK_TO_1, knob_cutoff's CUT_LO_HZ and CUT_OCT,
+       knob_k's K_MAX and RES_PER_UNIT, self_amp's SELF_FROM and SELF_AMP,
+       EG_UNDER */
+    double knob[5], span[5], eg_v[11], eg_log[11];
+    double atk_to_1, cut_lo, cut_oct, k_max, res_per_unit, self_from, self_amp_max, eg_under;
 } MoogLayer;
 
 typedef struct {
     int n_layer;                            /* 1, or 2 a layered voice (moog.layers_of) */
     MoogLayer L[2];
 } MoogSpec;
+
+/* tone.c: a Moog layer's panel with GM's sound controllers on it (d: CC71-78's
+   offsets, the class's own among them): the knob row, the amp contour's
+   times, the ladder's own sine and the release, from the knobs they move */
+void nv_moog_apply(const MoogLayer *in, const double *d, MoogLayer *out);
 
 /* tone.c: a Moog layer's partials (blockrender._note_moog): its rows, the
    note's filter row fx and its release (samples) on them */
@@ -701,6 +719,10 @@ typedef struct {
     int bbr_set;
     double bbr;
     int rank_drawn_off[32]; // each rank drawn at the key-up (its jack clicks: release_click_db)
+    // A MOOG's knobs as GM's sound controllers turn them (moog.apply_gm):
+    // CC71-78's offsets at its onset, the class's own; snd_moog 0 none
+    int snd_moog;
+    double snd_d[8];
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -729,7 +751,7 @@ typedef struct {
     /* a Moog's layers' filter rows (moog.ft_row), slot 9 the layer's index:
        the caller's knob row goes there */
     int n_ft;
-    double ft[2][30];
+    double ft[2][30], kn[2][9];     /* ...and their knob rows (moog.kn_row, the knobs turned) */
 } NoteOut;
 
 // tone.c: the key-up's click (nv_click, blockrender._note_release_click)
@@ -778,15 +800,21 @@ void nv_song_note_stroke(void *s, int i, double ratio, int inner);
 void nv_song_strokes(void *s, const int *kind, const double *par);
 int nv_song_slur(void *s, int i, int *out);
 int nv_song_snd_any(void *s, long long ch);
+int nv_song_snd_moves(void *s, long long ch);
 /* render.cpp: THE MOOG's columns of a table with one (its filter rows FT,
    knob rows KN): fx mk (int32), fmw fmp fmpR */
 typedef struct {
     const float *FT, *KN;
     const int *fx, *mk;
     const double *fm[3];
+    const int *MPI, *MKI;                   /* its pitch rows and shape rows, NULL none */
+    const double *MPC;
+    const float *MPR, *MPK;
 } MoogCols;
 int nv_song_moog_n(void *s);
-void nv_song_moog_add(void *s, long long ch, const double *ft, const double *kn);
+void nv_song_moog_add(void *s, long long ch, const double *ft, const double *kn, const MoogLayer *L, double a0,
+                      double toff, double end);
+int nv_song_moog_rows(void *s, int i, const MoogLayer **L, double *a0t);
 int nv_song_moog_tables(void *s, float *ft, float *kn, int *nkn);
 int nv_song_choke(void *s, long long ch, int note, double on, double *out);
 /* a note's class: K[128 * program + key], a drum set's K[16384 + 128 * program + key] */

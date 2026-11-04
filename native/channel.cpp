@@ -19,10 +19,12 @@
 // stable sort on the time alone).
 
 #include <algorithm>
+#include <cstdio>
 #include <array>
 #include <cmath>
 #include <map>
 #include <set>
+#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -261,6 +263,10 @@ struct Song {
     std::vector<std::array<double, 30>> mft;
     std::vector<std::array<double, 9>> mkn;
     std::map<std::pair<long long, std::array<double, 9>>, int> mkrow;
+    // ...and each filter row's panel, onset, release and end (its pitch and
+    // shape rows: moog.pitch_rows, shape_rows)
+    std::vector<const MoogLayer *> mlay;
+    std::vector<std::array<double, 3>> mspan;
     // ITS GLIDES (_prep_glide_sources, from finish): each note's source key, -1 none
     std::vector<int> glide_src;
 
@@ -1095,15 +1101,32 @@ int nv_song_snd_any(void *s, long long ch)
     return 0;
 }
 
+// _kn_moves: whether channel ch's cutoff or resonance (CC74, CC71) changes
+// after it is first set -- events at more than one time (to the microsecond)
+int nv_song_snd_moves(void *s, long long ch)
+{
+    std::set<std::string> ts;           // (round(t, 6): the exact value's decimal, as %.6f is)
+    for (const nv::Song::Snd &e : ((nv::Song *)s)->snd)
+        if (e.ch == ch && (e.cc == 71 || e.cc == 74)) {
+            char b[64];
+            snprintf(b, sizeof b, "%.6f", e.t);
+            ts.insert(b);
+        }
+    return ts.size() > 1;
+}
+
 // A MOOG NOTE's layer's filter row (moog.ft_row, its slot 9 the layer's), on
 // channel ch with knob row kn: the knob row found or added for the channel
 // (_MOOG_KROW) and set in slot 9, the filter row added. The next filter row's
 // index, before: nv_song_moog_n
 int nv_song_moog_n(void *s) { return (int)((nv::Song *)s)->mft.size(); }
 
-void nv_song_moog_add(void *s, long long ch, const double *ft, const double *kn)
+void nv_song_moog_add(void *s, long long ch, const double *ft, const double *kn, const MoogLayer *L, double a0,
+                      double toff, double end)
 {
     nv::Song *g = (nv::Song *)s;
+    g->mlay.push_back(L);
+    g->mspan.push_back({a0, toff, end});
     std::array<double, 9> k;
     std::copy(kn, kn + 9, k.begin());
     auto key = std::make_pair(ch, k);
@@ -1120,6 +1143,18 @@ void nv_song_moog_add(void *s, long long ch, const double *ft, const double *kn)
     std::copy(ft, ft + 30, f.begin());
     f[9] = (double)row;
     g->mft.push_back(f);
+}
+
+// filter row i's panel (*L) and its note's onset, release and end (a0t[3])
+int nv_song_moog_rows(void *s, int i, const MoogLayer **L, double *a0t)
+{
+    nv::Song *g = (nv::Song *)s;
+    if (i < 0 || i >= (int)g->mlay.size())
+        return 0;
+    *L = g->mlay[i];
+    for (int q = 0; q < 3; q++)
+        a0t[q] = g->mspan[i][q];
+    return 1;
 }
 
 // the filter rows and knob rows as the kernel reads them (float32, flat):

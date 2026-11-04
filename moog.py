@@ -414,8 +414,11 @@ _EG_LOG = np.log(np.array(EG_TAU))
 
 
 def knob_tau(v):
-    """A contour knob's time constant, seconds."""
-    return float(np.exp(np.interp(_clip01(v), _EG_V, _EG_LOG)))
+    """A contour knob's time constant, seconds. Its exp is libm's (math.exp):
+    numpy's on a scalar is its own vector code, a last bit off libm's in a
+    quarter of the knob's positions -- which native/tone.c (nv_moog_apply)
+    cannot match on another machine."""
+    return math.exp(float(np.interp(_clip01(v), _EG_V, _EG_LOG)))
 
 
 def tau_knob(tau):
