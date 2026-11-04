@@ -219,7 +219,9 @@ static int emit_fwd(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, 
                 bd = d;
             }
         }
-        double q = t->has_radius ? directivity_factor(v, t->room_bands[bi], px, pz, t->radius) : 1.0;
+        /* (no radius of its own: the class's directivity_radius, room[1]) */
+        double q = t->has_radius ? directivity_factor(v, t->room_bands[bi], px, pz, t->radius)
+                   : v->room[1] > 0.0 ? directivity_factor(v, t->room_bands[bi], px, pz, v->room[1]) : 1.0;
         double e = am0 * am0;
         qacc[2 * bi] += e;
         qacc[2 * bi + 1] += e / (q > 1e-6 ? q : 1e-6);
@@ -799,4 +801,71 @@ int nv_leak(const VoiceSnap *v, const ToneIn *t, double Bs, PyRandom *lr, int ni
 }
 
 #include "organ.c"     /* a registered organ's note */
+
+/* blockrender._note_release_click: THE KEY-UP'S CLICK -- the jack's fixed
+ * modes (K's click_hz, click_amp) at note-off (noff, samples), riding the
+ * note's gain (the last stop's, as _note_stops returns it), each above its floor; on
+ * an organ with choirs (click_jacks) one click a stop drawn at the key-up,
+ * at its jack's offset (the rank's contact) and its own phase
+ * (Random(crc32("rank|key|click"))); with their room images. The jacks'
+ * rows into out. Returns the rows written, -1 if the store was too small. */
+int nv_click(const VoiceSnap *v, const ToneIn *t, const NoteClass *K, const NoteIn *n, double noff, int nimg,
+             const int *nsurf, const int *surf, const double *img, const double *mir, double *rows, int cap,
+             double *qacc, double *azimuth, NoteOut *out)
+{
+    Rows R = {rows, 0, cap};
+    double terms[9 * 64];
+    double VB[3] = {0.0, 5.5, 0.0};
+    const OrganSpec *og = K->organ;
+    /* (_note_stops' gain: the last stop's -- an organ's last rank's, else the one stop's) */
+    double sr = t->sr, gain = og && og->n_rank ? og->rank[og->n_rank - 1].gain : 1.0;
+    double cg = gain * pow(10.0, K->click_db / 20.0);
+    double cdec = log(db_ratio(K->click_dec));
+    int nj = 0, jr[32];
+    if (og && K->click_jacks) {
+        for (int ri = 0; ri < og->n_rank && nj < 32; ri++)
+            if (n->rank_drawn_off[ri])
+                jr[nj++] = ri;
+    } else {
+        jr[nj++] = -1;
+    }
+    for (int j = 0; j < nj; j++) {
+        int j0 = R.n;
+        double jo = jr[j] >= 0 ? og->rank[jr[j]].contact[n->note] : 0.0;
+        double ph = 0.0;
+        if (jr[j] >= 0) {
+            char b[96];
+            int nb = snprintf(b, sizeof b, "%s|%d|click", og->rank[jr[j]].key, n->note);
+            PyRandom g;
+            pyr_seed(&g, (long long)organ_crc32(b, (size_t)nb));
+            ph = pyr_random(&g) * 2.0 * PI;
+        }
+        for (int q = 0; q < K->n_click; q++) {
+            double chz = K->click_hz[q];
+            if (chz >= sr / 2)
+                continue;
+            double a = cg * K->click_amp[q] * nv_radiation_gain(v, chz, 0.0, 0);
+            if (a < 3e-3 * gain)
+                continue;
+            double non = noff + jo * sr;
+            int nt_ = 0;
+            if (t->reflect) {
+                nt_ = note_terms(v, t, chz, t->pos_x_props, t->pos_z, nimg, nsurf, surf, img, mir, terms);
+                if (nt_ < 0)
+                    return -1;
+            }
+            if (!emit(v, t, &R, qacc, azimuth, terms, nt_, 2 * PI * chz / sr, a * nv_hrtf_gain(v, chz, t->li),
+                      a * nv_hrtf_gain(v, chz, t->ri), a, chz, non, non + K->click_s * sr, pymax(1e-4, 0.0005) * sr,
+                      pymax(1e-4, 0.002) * sr, t->chiff, cdec, cdec, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, t->csc, -1.0, 0.0,
+                      ph, 0.0, VB, t->pos_x_props, 0))
+                return -1;
+        }
+        out->jack_n[out->n_jack] = R.n - j0;
+        out->jack_rank[out->n_jack] = jr[j];
+        out->jack_off[out->n_jack] = jo;
+        out->n_jack++;
+    }
+    out->n_click = R.n;
+    return R.n;
+}
 #include "npyrandom.c" /* numpy's normal stream (the organ's wind) */

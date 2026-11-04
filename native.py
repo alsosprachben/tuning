@@ -195,7 +195,8 @@ class NoteClass(ctypes.Structure):
                    ('trem_stereo', I), ('trem_intrinsic', I), ('touch_sensitive', I),
                    ('cab_set', I), ('n_cab_fm', I), ('n_cab_afm', I), ('cab_floor', C), ('cab_fm', C * 3 * 4),
                    ('cab_afm', C * 3 * 4), ('cab_corner', C), ('cab_order', C), ('cab_cut', C), ('cab_bell', C),
-                   ('cab_ref', C)])
+                   ('cab_ref', C), ('n_click', I), ('click_jacks', I), ('click_db', C), ('click_hz', C * 16),
+                   ('click_amp', C * 16), ('click_dec', C), ('click_s', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -211,7 +212,8 @@ class NoteIn(ctypes.Structure):
                    ('seat', C), ('held', C), ('rnd_draws', C * 4), ('stroke_tilt', C), ('stroke_mouth', C),
                    ('stroke_morph', C), ('snd_at', C), ('snd_rt', C), ('rank_gr', C * 32), ('rank_sp', C * 32),
                    ('rank_skip', I * 32), ('rank_rel1', I * 32), ('organ_cr', C), ('rank_br', C * 32),
-                   ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('bbr_set', I), ('bbr', C)])
+                   ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('bbr_set', I), ('bbr', C),
+                   ('rank_drawn_off', I * 32)])
 
 
 class NoteOut(ctypes.Structure):
@@ -219,7 +221,8 @@ class NoteOut(ctypes.Structure):
     _fields_ = ([(f, I) for f in ('n_knock', 'n_tone', 'n_phantom')]
                 + [(f, C) for f in ('non', 'noff', 'fade', 'rel', 'chiff', 'jitter_scale', 'dl', 'dr', 'li',
                                     'ri', 'pos_x', 'pos_z', 'B', 'cv', 'cc', 'crl', 'sjit', 'csc')]
-                + [('tb', C * 3), ('cbw', C * 2), ('radius', C), ('n_push', I), ('f0', C)])
+                + [('tb', C * 3), ('cbw', C * 2), ('radius', C), ('n_push', I), ('f0', C)]
+                + [('n_click', I), ('n_jack', I), ('jack_n', I * 32), ('jack_rank', I * 32), ('jack_off', C * 32)])
 
 
 def lib():
@@ -771,13 +774,17 @@ def harmonic_voice(cls):
     law = _owner(cls, 'inharmonicity_coefficient_for_frequency')
     if cls.inharmonicity_dynamic and not (law == 'SteelGuitarProperties' and getattr(cls, 'inharmonicity_law', None)):
         return False
-    return (cls.mode_gains is None and cls.mode_ratios is None and not cls.strike_point
+    # (a quill's comb: a strike point whose notch does not fill with force --
+    # the harpsichord's, its clicks the note's key-up's)
+    return (cls.mode_gains is None and cls.mode_ratios is None
+            and not (cls.strike_point and cls.strike_fills_with_force)
             and not cls.harmonic_touch and not cls.pickup_points and not (cls.unison_detune or ())
             and not cls.blare_db_per_khz and bool(cls.bore_corner_hz) and 1 <= (cls.max_harmonic or 0) <= 128
             and len(cls.formants) <= 16 and len(cls.antiformants) <= 8 and len(cls.body_trim_db or ()) <= 32
+            and len(getattr(cls, 'release_click_modes', ()) or ()) <= 16
             and not any(getattr(cls, a, None) for a in ('breath_noise_db', 'grains', 'noise_events', 'pulse',
                                                          'ring_db', 'struck_layer', 'touch_leak_db',
-                                                         'strike_noise_db', 'release_click_db', 'hammer_legato',
+                                                         'strike_noise_db', 'hammer_legato',
                                                          'bend_detents', 'amp_drive')))
 
 
@@ -1212,7 +1219,8 @@ def snapshot(props):
     elif s.kind == 4:
         # a harmonic voice: the pluck's comb, the body
         s.comb[0] = 0.0
-        for h in range(1, min(128, int(p.max_harmonic)) + 1 if not reed_voice(type(p)) else 0):   # (a reed's has none)
+        # (a reed's has none, nor a quill's: its comb is the strike point's)
+        for h in range(1, min(128, int(p.max_harmonic)) + 1 if not (reed_voice(type(p)) or p.strike_point) else 0):
             s.comb[h] = T._pluck_comb(p.plucked_harmonic, p.pluck_dampening, h)
         s.bore_corner_hz, s.bore_order = p.bore_corner_hz, p.bore_order
         s.bell_cutoff_hz, s.bell_order = p.bell_cutoff_hz or 0.0, p.bell_order
@@ -1615,7 +1623,9 @@ class OrganPipe(ctypes.Structure):
                 + [('push_band_set', I), ('n_push_reg', I)]
                 + [(f, C) for f in ('push_gain', 'push_rise_s', 'push_dbs', 'push_settle_db', 'push_tilt',
                                     'push_tilt_oct')]
-                + [('push_band', C * 2), ('push_reg', (C * 2) * 8)])
+                + [('push_band', C * 2), ('push_reg', (C * 2) * 8)]
+                + [('n_pp', I), ('pp_partials', I), ('pp_hz', C * 8), ('pp_s', C * 8), ('pp_db', C),
+                   ('pp_snap_s', C)])
 
 
 class OrganRank(ctypes.Structure):
@@ -1623,7 +1633,8 @@ class OrganRank(ctypes.Structure):
     _fields_ = [('n_ratio', I), ('compound', I), ('ratio', C * 8), ('gain', C), ('spec', I), ('pipe', I),
                 ('lo', I), ('hi', I), ('sp_off', C), ('sp_split', C), ('n_comp', I), ('comp_n', I * 64),
                 ('comp_hz', C * 64), ('comp_r', (C * 8) * 64), ('rel_band', (C * 3) * 128), ('detune', C * 128),
-                ('perc', I), ('contact', C * 128), ('keylen', I), ('only_drawn', I), ('no_leak', I)]
+                ('perc', I), ('contact', C * 128), ('keylen', I), ('only_drawn', I), ('no_leak', I),
+                ('stiff', C * 128), ('choir', ctypes.c_char * 16), ('beat', I), ('key', ctypes.c_char * 64)]
 
 
 class OrganSpec(ctypes.Structure):
@@ -1642,16 +1653,15 @@ class OrganSpec(ctypes.Structure):
                    ('expr_tilt', C), ('perc_attack_s', C), ('afm', C), ('pipe_radius', I), ('wheel_trem', C),
                    ('wtrem_hz', C), ('htrem_depth', C), ('htrem_hz', C), ('wtrem_stereo', I),
                    ('wtrem_scatter', C), ('snd_mask', I), ('n_cn', I), ('leak', I), ('cn_hz', C * 16),
-                   ('cn_db', C * 16), ('cn_dbs', C), ('leak_db', C), ('phase_spread', C), ('contact_on', I)])
+                   ('cn_db', C * 16), ('cn_dbs', C), ('leak_db', C), ('phase_spread', C), ('contact_on', I),
+                   ('beat_lo', C), ('beat_hi', C)])
 
 
 _ORGAN = {}
 
-# WHAT AN ORGAN NOTE IN C DOES NOT DO (the Python's, where a class asks): a
-# choir's strings, a tuner's rank detune, a Hammond's leak, contact and
-# percussion, a harpsichord's jacks, the wind's skirt, a rank drawn only to exist
-_ORGAN_OFF = ('string_choirs', 'rank_choirs', 'jack_offset_ms', 'wind_skirt_always', 'unison_shares_phase',
-              'feedback_harmonic', 'pre_pluck_s')
+# WHAT AN ORGAN NOTE IN C DOES NOT DO (the Python's, where a class asks):
+# the wind's skirt, unisons sharing a phase, feedback
+_ORGAN_OFF = ('wind_skirt_always', 'unison_shares_phase', 'feedback_harmonic')
 
 
 def organ(cls):
@@ -1662,7 +1672,7 @@ def organ(cls):
     if got is not None:
         return got or None
     _ORGAN[cls] = False
-    if (not getattr(cls, 'registerable', False) or not (pipe_voice(cls) or tonewheel_voice(cls))
+    if (not getattr(cls, 'registerable', False) or not (pipe_voice(cls) or tonewheel_voice(cls) or harmonic_voice(cls))
             or _class(cls) is None):
         return None
     if any(getattr(cls, a, None) for a in _ORGAN_OFF):
@@ -1714,6 +1724,10 @@ def organ(cls):
                         r.comp_r[q][:len(rs)] = [float(x) for x in rs]
             else:
                 r.n_ratio, r.ratio[0] = 1, float(ratio)
+            # (a choir at another footage with no spectrum of its own is its own
+            # string, tonelib.own_string: not C's)
+            if getattr(p, 'string_choirs', None) and spec is None and ratio != 1.0:
+                return None
             r.spec = pipe_of(spec) if spec is not None else -1
             r.pipe = pipe_of(pipe) if pipe is not None else -1
             if any(_class(pipes[q]) is None for q in (r.spec, r.pipe) if q >= 0):
@@ -1731,6 +1745,18 @@ def organ(cls):
                 r.rel_band[nt][:] = [T.release_band_scale(sc, key, nt, m) for m in (2, 5, 9)]
                 r.detune[nt] = T.rank_detune_cents(cls, key, nt)
                 r.contact[nt] = T.contact_offset_s(cls, key, nt)
+            # its choir's wire (a harpsichord's): its stiffness, its partials' scatter
+            cho = T.choir_of(cls, key)
+            for nt in range(128):
+                r.stiff[nt] = T.choir_stiffness(cls, cho, nt) if cho else 1.0
+            bc = (getattr(cls, 'buff_choirs', None) or {}).get(cho, cho) if cho else None
+            if bc is not None and len(bc.encode()) >= 16:
+                return None
+            r.choir = (bc or '').encode()
+            if len(key.encode()) >= 64:
+                return None
+            r.key = key.encode()
+            r.beat = int(bool(cho and getattr(cls, 'choir_beat_hz', None) and bc != 'A'))
             r.perc = int(key in (getattr(cls, 'percussion_ranks', ()) or ()))
         o.n_rank = len(ranks)
         for i, k in enumerate(pipes):
@@ -1769,9 +1795,19 @@ def organ(cls):
                 q.n_push_reg = len(reg)
                 for j, (f, db) in enumerate(reg):
                     q.push_reg[j][:] = [float(f), float(db)]
+            if hasattr(pr, 'pre_pluck_s'):         # the quill's catch (HarpsiBase.pre_pluck_s's, as it is)
+                if type(pr).pre_pluck_s is not T.HarpsiBase.pre_pluck_s or not 1 <= len(pr.pre_pluck_points) <= 8:
+                    return None
+                q.n_pp, q.pp_partials = len(pr.pre_pluck_points), int(pr.pre_pluck_partials)
+                q.pp_hz[:q.n_pp] = [float(a) for a, _ in pr.pre_pluck_points]
+                q.pp_s[:q.n_pp] = [float(b) for _, b in pr.pre_pluck_points]
+                q.pp_db, q.pp_snap_s = float(pr.pre_pluck_db), float(pr.pre_pluck_snap_s)
         o.n_pipe = len(pipes)
     except ValueError:
         return None
+    bh = getattr(p, 'choir_beat_hz', None)
+    if bh:
+        o.beat_lo, o.beat_hi = float(bh[0]), float(bh[1])
     o.spiral = int(bool(getattr(p, 'spiral_spatial', False)))
     o.own_pitch = int(bool(getattr(p, 'rank_speech_own_pitch', False)))
     if o.spiral:
@@ -1878,14 +1914,15 @@ def note_class(cls):
                 return len(ly) <= 32 and all(len(l[0]) <= 32 for l in ly)
             return False
         # (an organ's speech and mode lock are its ranks', organ.c's)
-        org_has = (lambda a: a in ('speech_harmonic_exp', 'mode_lock_spread', 'partial_phase_spread')) \
+        org_has = (lambda a: a in ('speech_harmonic_exp', 'mode_lock_spread', 'partial_phase_spread',
+                                   'string_choirs', 'buff_choirs', 'directivity_radius', 'pre_pluck_s')) \
             if getattr(cls, 'registerable', False) else \
             (lambda a: a in ('speech_harmonic_exp', 'speech_harmonic_exp_per_octave', 'wind_skirt_always')) \
             if reed_voice(cls) and getattr(cls, 'wind_attack_db', None) is None \
             else (lambda a: False)
         ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF
                                         if not (drum and drum_has(a)) and not org_has(a))
-              and not any(hasattr(cls, a) for a in _NOTE_ABSENT)
+              and not any(hasattr(cls, a) for a in _NOTE_ABSENT if not org_has(a))
               and (getattr(cls, 'mode_phase', None) is None or issubclass(cls, T.TR808Properties) or drum == 5)
               and (int(getattr(cls, 'strike_flam', 0) or 0) <= 1
                    or (int(cls.strike_flam) <= 64 and not getattr(cls, 'strike_flam_record', False)
@@ -1999,6 +2036,14 @@ def note_class(cls):
             k.cab_corner, k.cab_order = float(cb.bore_corner_hz), float(cb.bore_order)
             k.cab_cut, k.cab_bell = float(cb.bell_cutoff_hz or 0.0), float(cb.bell_order)
             k.cab_ref = float(cb._ref)
+        # its key-up's click (release_click_db), a jack a drawn stop on a choired organ
+        cdb, cm = getattr(cls, 'release_click_db', None), getattr(cls, 'release_click_modes', ()) or ()
+        if cdb is not None and cm:
+            k.n_click, k.click_db = len(cm), float(cdb)
+            for i, (hz, a) in enumerate(cm):
+                k.click_hz[i], k.click_amp[i] = float(hz), float(a)
+            k.click_dec, k.click_s = float(cls.release_click_decay_db), float(cls.release_click_s)
+            k.click_jacks = int(bool(getattr(cls, 'registerable', False) and getattr(cls, 'string_choirs', None)))
         # the player's breath (its rows: nv_breath_rows)
         if (getattr(cls, 'breath_wobble_db', 0.0) > 0.0 or getattr(cls, 'breath_noise_wobble_db', 0.0) > 0.0
                 or getattr(cls, 'breath_pitch_cents', 0.0) > 0.0):

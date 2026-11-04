@@ -13,6 +13,44 @@
  */
 
 /* SynthProperties.speech_time(fixed, f) for a pipe */
+/* zlib's crc32 of n bytes (tonelib's per-key draws are seeded by it) */
+static unsigned long organ_crc32(const char *b, size_t n)
+{
+    unsigned long c = 0xFFFFFFFFUL;
+    for (size_t i = 0; i < n; i++) {
+        c ^= (unsigned char)b[i];
+        for (int k = 0; k < 8; k++)
+            c = (c >> 1) ^ (0xEDB88320UL & (0UL - (c & 1UL)));
+    }
+    return c ^ 0xFFFFFFFFUL;
+}
+
+/* tonelib.choir_partial_hz: a choir's partial m at this key off where its
+   wire puts it, Hz -- Random(crc32("choir|key|m|beat")): its size, then its sign */
+static double choir_beat(const OrganSpec *og, const OrganRank *rk, int note, int m)
+{
+    char b[64];
+    int n = snprintf(b, sizeof b, "%s|%d|%d|beat", rk->choir, note, m);
+    PyRandom g;
+    pyr_seed(&g, (long long)organ_crc32(b, (size_t)n));
+    double u = pyr_uniform(&g, og->beat_lo, og->beat_hi);
+    return u * (pyr_random(&g) < 0.5 ? 1.0 : -1.0);
+}
+
+/* HarpsiBase.pre_pluck_s: how long the quill holds the string at f0 */
+static double pre_pluck_s(const OrganPipe *p, double f0)
+{
+    int n = p->n_pp;
+    if (f0 <= p->pp_hz[0])
+        return p->pp_s[0];
+    if (f0 >= p->pp_hz[n - 1])
+        return p->pp_s[n - 1];
+    for (int i = 0; i + 1 < n; i++)
+        if (f0 <= p->pp_hz[i + 1])
+            return p->pp_s[i] + (p->pp_s[i + 1] - p->pp_s[i]) * log(f0 / p->pp_hz[i]) / log(p->pp_hz[i + 1] / p->pp_hz[i]);
+    return p->pp_s[n - 1];
+}
+
 static double pipe_speech(const OrganPipe *p, double fixed, double f)
 {
     if (p->speech_cycles > 0.0 && f > 0.0)
@@ -281,11 +319,15 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
             PyRandom pr;                                /* each partial its own phase (partial_phase_spread) */
             if (og->phase_spread > 0.0)
                 pyr_seed(&pr, (long long)rint(n->on * 1e6) * 151 + note * 19 + n->ch);
+            /* ...on a class with choirs, its choir's own wire (choir_stiffness) */
+            double rB = t->B * rk->stiff[note];
             for (int m = 1; m < host->max_harmonic + 1; m++) {
                 double hh[2];
-                if (!nv_string_partial(host, f0, eff, m, t->B, hh))
+                if (!nv_string_partial(host, f0, eff, m, rB, hh))
                     break;
                 double h = hh[0], hf = hh[1];
+                if (rk->beat)                           /* ...and its partials a little off it (choir_partial_hz) */
+                    hf += choir_beat(og, rk, note, m);
                 if (hf > sr / 2)
                     break;
                 double hv = nv_harmonic_volume(tsrc, m);
@@ -354,10 +396,29 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
                         goto done;
                     }
                 }
-                if (!emit(host, &tr, &R, qacc, azimuth, terms, nt_, 2 * PI * hf / sr, gL, gR, gM, hf, non_r + 0.0,
+                double mph = og->phase_spread > 0.0 ? 2.0 * PI * og->phase_spread * pyr_random(&pr) : 0.0;
+                double non_m = non_r + 0.0;
+                if (rpp->n_pp) {
+                    /* THE QUILL CATCHES BEFORE IT LETS GO (pre_pluck_s): the
+                       string moving quietly while the plectrum pushes it, the
+                       pluck proper at the slip, its phase continuing the catch's */
+                    double tp = pre_pluck_s(rpp, f0) * sr;
+                    if (m <= rpp->pp_partials) {
+                        double gp = pow(10.0, rpp->pp_db / 20.0);
+                        if (!emit(host, &tr, &R, qacc, azimuth, terms, nt_, 2 * PI * hf / sr, gL * gp, gR * gp,
+                                  gM * gp, hf, non_m, non_m + tp, tp, rpp->pp_snap_s * sr, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                  0.0, cc_r, t->crl, t->sjit, t->csc, gr, cr, mph, 0.0, VB, pos_x, 0)) {
+                            ret = -1;
+                            goto done;
+                        }
+                    }
+                    mph += 2 * PI * hf / sr * tp;
+                    non_m += tp;
+                    pfade = pymin(pfade, rpp->pp_snap_s * sr);
+                }
+                if (!emit(host, &tr, &R, qacc, azimuth, terms, nt_, 2 * PI * hf / sr, gL, gR, gM, hf, non_m,
                           t->noff, pfade, prel, chiff_r, pd[1], pd[3], pd[2], rpp == hp ? t->sustain_level
-                          : rpp->sustain_level, cvp, cc_r, t->crl, t->sjit, t->csc, gr, cr,
-                          og->phase_spread > 0.0 ? 2.0 * PI * og->phase_spread * pyr_random(&pr) : 0.0, 0.0, VB,
+                          : rpp->sustain_level, cvp, cc_r, t->crl, t->sjit, t->csc, gr, cr, mph, 0.0, VB,
                           pos_x, 0)) {
                     ret = -1;
                     goto done;

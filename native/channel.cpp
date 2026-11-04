@@ -1324,6 +1324,14 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
             if (!any)
                 n->rank_skip[ri] = 1;
         }
+        double doff = 0.0;                      // (drawn at the key-up: its jack clicks)
+        for (auto &x : ev) {
+            if (x.first <= koff)
+                doff = x.second;
+            else
+                break;
+        }
+        n->rank_drawn_off[ri] = doff >= 0.5;
         n->rank_rel1[ri] = 0;
         if (!std::isnan(sp)) {
             double drawn = 0.0;

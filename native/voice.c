@@ -302,6 +302,13 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
             r *= pow(10.0, v->even_harmonic_db / 20.0);
         return r;
     }
+    if (v->kind == 4 && v->strike_point != 0.0) {   /* a quill's strike comb (no fill: a plectrum) */
+        double comb = (1.0 - v->strike_depth) + v->strike_depth * fabs(sin(harmonic * PI * v->strike_point));
+        double r = v->gain / pow((double)harmonic, v->attack_dampening) * comb;
+        if (harmonic % 2 == 0 && v->even_db_set)
+            r *= pow(10.0, v->even_harmonic_db / 20.0);
+        return r;
+    }
     if (v->kind == 4) {                         /* SynthProperties': the pluck's comb */
         double r = v->gain / pow((double)harmonic, v->attack_dampening) * (harmonic <= 128 ? v->comb[harmonic] : 0.0);
         if (harmonic % 2 == 0 && v->even_db_set)

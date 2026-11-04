@@ -374,6 +374,29 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     out->n_phantom = k;
     total += k;
 
+    // THE KEY-UP'S CLICK (_note_release_click): the mechanism letting go, at
+    // the note's end, the emitter as the note leaves it
+    out->n_click = 0;
+    out->n_jack = 0;
+    if (K->n_click) {
+        ToneIn tc = t;
+        tc.li = fin[0]; tc.ri = fin[1]; tc.dl = fin[2]; tc.dr = fin[3];
+        tc.radius = 0.0;
+        tc.has_radius = 0;
+        if (K->organ && !std::isnan(fin[4])) {
+            tc.radius = fin[4];
+            tc.has_radius = 1;
+        }
+        tc.reflect = reflect;
+        tc.br = n->br;
+        tc.cbw0 = K->cbw0; tc.cbw1 = K->cbw1;
+        k = nv_click(&s, &tc, K, n, noff, reflect ? nimg : 0, nsurf, surf, img, mir, rows + NCOLS * total,
+                     cap - total, qacc, azimuth, out);
+        if (k < 0)
+            return -1;
+        total += k;
+    }
+
     out->non = non; out->noff = noff; out->fade = fade; out->rel = rel; out->chiff = chiff;
     out->jitter_scale = t.jitter_scale;
     out->dl = fin[2]; out->dr = fin[3]; out->li = fin[0]; out->ri = fin[1];

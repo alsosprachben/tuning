@@ -251,6 +251,14 @@ typedef struct {
        tap), and whether the leak skips it (a rank with a class of its own) */
     double contact[128];
     int keylen, only_drawn, no_leak;
+    /* A HARPSICHORD'S: the choir it plucks (rank_choirs, a buffed string as
+       its string: choir_of), its wire's stiffness at every key against choir
+       A's (choir_stiffness), and whether its partials scatter (choir_beat_hz:
+       not on choir A) -- each (choir, key, partial)'s own Hz, choir_partial_hz */
+    double stiff[128];
+    char choir[16];
+    int beat;
+    char key[64];           /* its stop's name (a jack's click's phase is drawn by it) */
 } OrganRank;
 
 typedef struct {
@@ -322,6 +330,11 @@ struct OrganPipe {
     int push_band_set, n_push_reg;
     double push_gain, push_rise_s, push_dbs, push_settle_db, push_tilt, push_tilt_oct, push_band[2];
     double push_reg[8][2];
+    /* THE QUILL'S CATCH (HarpsiBase.pre_pluck_s): how long it holds the
+       string by pitch (n_pp of pp_hz, pp_s, log-interpolated), the partials
+       moving meanwhile (pp_partials) at pp_db, the slip's snap pp_snap_s */
+    int n_pp, pp_partials;
+    double pp_hz[8], pp_s[8], pp_db, pp_snap_s;
 };
 
 /* A REGISTERED ORGAN: its pipes (pipe[0] the host's own), its ranks, the
@@ -371,6 +384,7 @@ typedef struct OrganSpec {
     int n_cn, leak;
     double cn_hz[16], cn_db[16], cn_dbs, leak_db, phase_spread;
     int contact_on;         /* its contacts close at their own instants (contact_spread_s): live's t["cof"] */
+    double beat_lo, beat_hi;    /* a harpsichord's choirs' partials' scatter (choir_beat_hz), Hz */
 } OrganSpec;
 
 /* what the note setup reads of the voice besides its VoiceSnap */
@@ -589,6 +603,11 @@ typedef struct {
     // own level at 1 kHz (cab_ref); cab_set 0 none
     int cab_set, n_cab_fm, n_cab_afm;
     double cab_floor, cab_fm[4][3], cab_afm[4][3], cab_corner, cab_order, cab_cut, cab_bell, cab_ref;
+    // THE KEY-UP'S CLICK (release_click_db: n_click 0 none): the jack's
+    // fixed modes (Hz, amplitude) at click_db, decaying click_dec dB/s for
+    // click_s; on an organ with choirs (click_jacks), one a drawn stop's jack
+    int n_click, click_jacks;
+    double click_db, click_hz[16], click_amp[16], click_dec, click_s;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -638,6 +657,7 @@ typedef struct {
     // its own, bbrow_of's second); else the note's
     int bbr_set;
     double bbr;
+    int rank_drawn_off[32]; // each rank drawn at the key-up (its jack clicks: release_click_db)
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -659,7 +679,16 @@ typedef struct {
     double radius;          /* the emitter's radius after the note (an organ's last pipe), NaN none */
     int n_push;             /* the tone's last rows that are its push (_PUSH_ROWS) */
     double f0;              /* the note's pitch (a standalone push's, nv_play) */
+    /* its key-up's click, its last rows (n_click; _REL_ROWS): each jack's
+       rows (jack_n), its rank (-1: one click, no jack) and offset (s) */
+    int n_click, n_jack, jack_n[32], jack_rank[32];
+    double jack_off[32];
 } NoteOut;
+
+// tone.c: the key-up's click (nv_click, blockrender._note_release_click)
+int nv_click(const VoiceSnap *v, const ToneIn *t, const NoteClass *K, const NoteIn *n, double noff, int nimg,
+             const int *nsurf, const int *surf, const double *img, const double *mir, double *rows, int cap,
+             double *qacc, double *azimuth, NoteOut *out);
 
 int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
             int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,

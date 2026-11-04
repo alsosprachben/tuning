@@ -938,6 +938,12 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         while (chans.count(rk) && chans[rk].second != k)
             rk += 100000;
         if (!chans.count(rk)) {
+            // (a harpsichord's choirs -- string_choirs: their bridges, buffs and
+            // the strike's plucked choirs -- are register.py's alone, for now)
+            if (k->organ)
+                for (int q = 0; q < k->organ->n_rank; q++)
+                    if (k->organ->rank[q].choir[0])
+                        return -1000000000LL;
             double pl[6];
             nv_song_pitch_level(song, i, k->init.effort_tilt != 0.0, pl);
             double tab[128];

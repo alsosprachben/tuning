@@ -6186,7 +6186,7 @@ def _voice_report(bad, nt):
                 '' if nt is None else ' (ch %d note %d at %.3f s)' % (nt.ch, nt.note, nt.on), ', '.join(bad)))
 
 
-def _native_ready(em, props, reverse_ok=False, radius_ok=False):
+def _native_ready(em, props, reverse_ok=False, radius_ok=False, piston_ok=False):
     """(library, the voice's VoiceSnap) where the C can emit this voice's rows
     as emit_partial would -- a supported voice, and none of the emitter's
     extras in play (reverse, gong fold, hammer-on, compressor, late copy,
@@ -6194,7 +6194,7 @@ def _native_ready(em, props, reverse_ok=False, radius_ok=False):
     import native as _NV
     d = _NV.lib()
     P = props
-    if d is None or getattr(P, 'directivity_radius', 0.0) > 0.0:
+    if d is None or (getattr(P, 'directivity_radius', 0.0) > 0.0 and not piston_ok):
         return None
     if ((em.reverse is not None and not reverse_ok) or em.fold is not None or em.fold_in or em.hammer_on > 0.0
             or em._EFXN[0] is not None or em.late_copy or em.ring_rows or (em.radius is not None and not radius_ok)):
@@ -6549,10 +6549,12 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
         return None
     if (seats or onsets) and not _NV.harmonic_voice(type(P)):
         return None                         # (a section's players: a bowed string's alone)
-    if T.choir_of(P, "_") or T.rank_detune_cents(P, "_", nt.note) or em.pos_x != getattr(P, 'position_x', 0.0):
+    # (an organ's ranks' choirs and detune are organ.c's; a lone stop's are not)
+    if ((not nt.organ and (T.choir_of(P, "_") or T.rank_detune_cents(P, "_", nt.note)))
+            or em.pos_x != getattr(P, 'position_x', 0.0)):
         return None
-    if _native_ready(em, P, reverse_ok=True, radius_ok=bool(nt.organ)) is None:   # (the engine plays a tape backwards)
-        return None
+    if _native_ready(em, P, reverse_ok=True, radius_ok=bool(nt.organ), piston_ok=bool(nt.organ)) is None:
+        return None             # (the engine plays a tape backwards, and an organ's aperture is organ.c's)
     if em.REFLECT and P.reflection_order and NATIVE_TONE == 'check':
         # the engine makes the room's images itself (nv_images): here, Python's beside them
         imgs, nsurf, surf, img, mir = P._images_for(em.pos_x * 1.0, P.radiation_distance * 1.0, em.pos_z * 1.0)
@@ -6597,13 +6599,14 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
             if (len(_r) > 1 and _r[1] is not None and getattr(_r[1], 'rank_only_when_drawn', False)
                     and not any(v >= 0.5 for _t, v in ev)):
                 n.rank_skip[i] = 1
+            _drawn_off = 0.0
+            for _t, _tg in ev:
+                if _t <= nt.key_off:
+                    _drawn_off = _tg
+                else:
+                    break
+            n.rank_drawn_off[i] = int(_drawn_off >= 0.5)      # (its jack clicks at the key-up)
             if dr is not None:
-                _drawn_off = 0.0
-                for _t, _tg in ev:
-                    if _t <= nt.key_off:
-                        _drawn_off = _tg
-                    else:
-                        break
                 n.rank_rel1[i] = int(_drawn_off < 0.5)
         n.organ_cr = cr
         # ...and a reed organ's effect stops at its onset (_note_stops' _hx, _hperc)
@@ -9067,10 +9070,18 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _SPANNED.add((nt.ch, _phrase_of(nt.ch, nt.on)[0]))
         if _wn is None or NATIVE_TONE != 'on':
             _note_phantoms(em, props, nt, transverse, emit_partial)
+        # (the engine's note ends with its key-up's click, as the Python's does)
+        cdb = getattr(props, 'release_click_db', None)
+        _eclick = _wn is not None and cdb is not None and bool(props.release_click_modes)
         if _wn is not None and NATIVE_TONE == 'check':
             if nt.organ and not getattr(props, 'release_click_db', None):
                 # (the push, which the next note would make before anything else: the engine's is its own)
                 _push_finish(em.push_pending); em.push_pending = None; del _PUSH_SEG[:]
+            if _eclick:
+                _rel0 = len(A['om'])
+                _note_release_click(props, nt, A, _REL_JACKS, cdb, emit_partial, gain, random, rankev_of)
+                if len(A['om']) > _rel0:
+                    _REL_ROWS.append((_rel0, len(A['om'])))
             _note_native_check(em, nt, A, _wn, B, _TBN)
         # THE MECHANISM LETTING GO. On a harpsichord the key coming up is not
         # only the damper arriving: the jack falls back and its tongue brushes
@@ -9084,11 +9095,23 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # at fixed frequencies, riding the note's gain so that a quiet note
         # clicks quietly. Voices that leave release_click_db at None -- every
         # voice but this one -- emit nothing and cost nothing.
-        cdb = getattr(props, 'release_click_db', None)
-        _rel0 = len(A['om'])
-        _note_release_click(props, nt, A, _REL_JACKS, cdb, emit_partial, gain, random, rankev_of)
-        if len(A['om']) > _rel0:
-            _REL_ROWS.append((_rel0, len(A['om'])))
+        if _eclick and NATIVE_TONE == 'on':
+            # the engine's: its last rows, each jack's (rank, offset) as the Python records them
+            _o = _wn[3]
+            _e = len(A['om'])
+            if _o.n_click:
+                _REL_ROWS.append((_e - _o.n_click, _e))
+            _j0 = _e - _o.n_click
+            for _q in range(_o.n_jack):
+                _jn = _o.jack_n[_q]
+                if _o.jack_rank[_q] >= 0 and _jn:
+                    _REL_JACKS.append((_j0, _j0 + _jn, props.stop_ranks[_o.jack_rank[_q]][0], _o.jack_off[_q]))
+                _j0 += _jn
+        elif not _eclick:
+            _rel0 = len(A['om'])
+            _note_release_click(props, nt, A, _REL_JACKS, cdb, emit_partial, gain, random, rankev_of)
+            if len(A['om']) > _rel0:
+                _REL_ROWS.append((_rel0, len(A['om'])))
 
     for _ev in notes:
         _build_note(_ev)
