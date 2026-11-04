@@ -95,7 +95,9 @@ class VoiceSnap(ctypes.Structure):
                 ('pk_q', C * 4), ('n_touch', I), ('touches', I * 4), ('touch0', I), ('touch', I), ('leak_set', I),
                 ('leak_db', C), ('leak_dbs', C), ('ml_spread', C), ('ml_knee', C), ('ml_time', C),
                 ('n_mute', I), ('mute', (C * 2) * 24), ('n_tube', I), ('tube_ref_hz', C), ('tube', (C * 4) * 16),
-                ('or_set', I), ('or_share', C), ('or_db', C * 2), ('or_lowest_hz', C), ('or_g', C)]
+                ('or_set', I), ('or_share', C), ('or_db', C * 2), ('or_lowest_hz', C), ('or_g', C),
+                ('dul_n', I), ('dhz_set', I), ('dul_beat', C * 2), ('dhz_db', C), ('dhz_pow', C), ('pps', C),
+                ('ushare', I)]
 
 
 class ToneIn(ctypes.Structure):
@@ -110,7 +112,7 @@ class ToneIn(ctypes.Structure):
                                     'fm_phase', 'listener_distance', 'head_radius', 'pan_angle')]
                 + [('room_bands', C * 9), ('pjit', I), ('sps', C), ('dur', C), ('ssc', I)]
                 + [('rev', I), ('rev_n0', C), ('rev_arr', C), ('planes', C * 6), ('order', I), ('radius', C),
-                   ('has_radius', I)])
+                   ('has_radius', I), ('pps_seed', ctypes.c_longlong)])
 
 
 class VoiceInit(ctypes.Structure):
@@ -141,7 +143,8 @@ class VoiceInit(ctypes.Structure):
                    ('vtrim_v', C * 16), ('vtrim_db', C * 16)]
                 + [('strike_wobble_hz', C), ('strike_wobble_gain', C), ('strike_wobble_slope', C)]
                 + [('rnd', I)] + [(f, C) for f in ('rnd_level_db', 'rnd_effort_db', 'rnd_cents', 'rnd_timing_s')]
-                + [('rnd_draws', C * 4), ('law_k', C), ('law_p', C)])
+                + [('rnd_draws', C * 4), ('law_k', C), ('law_p', C), ('bb_hz', C), ('bb_B', C),
+                   ('has_course', I), ('course', ctypes.c_ubyte * 128)])
 
 
 class VoiceNote(ctypes.Structure):
@@ -195,7 +198,10 @@ class NoteClass(ctypes.Structure):
                 + [('room_planes', C * 6), ('room_order', I), ('damper_pedal', I), ('detune_lo', C),
                    ('detune_hi', C), ('detune_wheel', I)]
                 + [('reg_gain', C), ('reg_knock', C), ('reg_fall', C), ('damper_top', I), ('reg_floor', C),
-                   ('reg_release', C), ('one_shot', I), ('one_shot_hold', C), ('pjit', I), ('sps', C),
+                   ('reg_release', C)]
+                + [('reg_keyed', I), ('reg_kb', I * 128), ('reg_partner', I * 128), ('reg_cross', C),
+                   ('reg_partner_k', C), ('reg_ktilt', C), ('reg_nkp', I), ('reg_kp_x', C * 64), ('reg_kp_db', C * 64)]
+                + [('one_shot', I), ('one_shot_hold', C), ('pjit', I), ('sps', C),
                    ('ssc', I), ('gate_time', C), ('held_texture', I), ('shake', I), ('n_nb', I),
                    ('noise_rows', I), ('nb_hz', C * 32), ('nb_db', C * 32)]
                 + [(f, C) for f in ('shake_min_s', 'shake_frac', 'shake_xfade_s', 'rise_s', 'settle_db',
@@ -440,6 +446,8 @@ def _load():
             ('nv_lp_reg_dropped', ctypes.c_long, [ctypes.c_void_p]),
             ('nv_lp_bend_rows', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I]),
             ('nv_lp_reg_choirs', None, [ctypes.c_void_p, I, ctypes.c_void_p, C, I, ctypes.c_void_p]),
+            ('nv_lp_reg_keys', None, [ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_lp_swap_bank_keys', None, [ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_lp_event', None, [ctypes.c_void_p, I, I, I, I]),
             ('nv_lp_block', None, [ctypes.c_void_p, LL, LL]),
             ('nv_lp_slab', ctypes.c_void_p, [ctypes.c_void_p]),
@@ -839,23 +847,43 @@ def harmonic_voice(cls):
         own = dict(own, unison_voices='SectionMixin', voice_vibrato='SectionMixin', **_SECTION_OWN)
     elif not issubclass(cls, T.PluckedStringProperties):
         return False
+    dul = dulcimer_voice(cls)
+    if dul:
+        # (a dulcimer's courses and its decay by each mode's frequency)
+        own = dict(own, unison_voices='HammeredDulcimerProperties', harmonic_decay='HammeredDulcimerProperties')
     if any(_owner(cls, n) != o for n, o in own.items()):
         return False
     law = _owner(cls, 'inharmonicity_coefficient_for_frequency')
-    if cls.inharmonicity_dynamic and not (law == 'SteelGuitarProperties' and getattr(cls, 'inharmonicity_law', None)):
+    if cls.inharmonicity_dynamic and not (law in ('SteelGuitarProperties', 'HammeredDulcimerProperties')
+                                          and getattr(cls, 'inharmonicity_law', None)):
         return False
     # (a quill's comb: a strike point whose notch does not fill with force --
     # the harpsichord's, its clicks the note's key-up's)
     return (cls.mode_gains is None and cls.mode_ratios is None
             and not (cls.strike_point and cls.strike_fills_with_force)
-            and not cls.harmonic_touch and not cls.pickup_points and not (cls.unison_detune or ())
+            and not cls.harmonic_touch and not cls.pickup_points and not ((cls.unison_detune or ()) and not dul)
             and not cls.blare_db_per_khz and bool(cls.bore_corner_hz) and 1 <= (cls.max_harmonic or 0) <= 128
             and len(cls.formants) <= 16 and len(cls.antiformants) <= 8 and len(cls.body_trim_db or ()) <= 32
             and len(getattr(cls, 'release_click_modes', ()) or ()) <= 16
             and not any(getattr(cls, a, None) for a in ('breath_noise_db', 'grains', 'noise_events', 'pulse',
                                                          'ring_db', 'struck_layer', 'touch_leak_db',
-                                                         'strike_noise_db', 'hammer_legato',
-                                                         'bend_detents', 'amp_drive')))
+                                                         'hammer_legato', 'bend_detents', 'amp_drive')
+                        + (() if dul else ('strike_noise_db',))))
+
+
+def dulcimer_voice(cls):
+    """A hammered dulcimer (tonelib.HammeredDulcimerProperties): its courses
+    (string_count strings, their beats drawn by key), its decay by each mode's
+    frequency, its bass bridge's B -- and, for the register, its courses'
+    keys, two bridges by key, each key's partner past the treble bridge, the
+    knock's measured profile and tilt."""
+    import tonelib as T
+    return (issubclass(cls, T.HammeredDulcimerProperties) and 2 <= int(cls.string_count) <= 9
+            and _owner(cls, 'unison_voices') == 'HammeredDulcimerProperties'
+            and _owner(cls, 'harmonic_decay') == 'HammeredDulcimerProperties'
+            and _owner(cls, 'inharmonicity_coefficient_for_frequency') == 'HammeredDulcimerProperties'
+            and _owner(cls, 'key_bridge') == 'HammeredDulcimerProperties'
+            and len(getattr(cls, 'register_knock_profile', None) or ()) <= 64)
 
 
 def electric_voice(cls):
@@ -1504,6 +1532,13 @@ def snapshot(props):
     elif s.kind == 4:
         # a harmonic voice: the pluck's comb, the body
         s.comb[0] = 0.0
+        if _owner(type(p), 'unison_voices') == 'HammeredDulcimerProperties':
+            s.dul_n, s.dul_beat[:] = int(p.string_count) - 1, [float(x) for x in p.unison_beat_hz]
+            s.unison_gain = p.unison_gain
+        if _owner(type(p), 'harmonic_decay') == 'HammeredDulcimerProperties':
+            s.dhz_set, s.dhz_db, s.dhz_pow = 1, float(p.decay_hz_db), float(p.decay_hz_power)
+        s.pps = float(getattr(p, 'partial_phase_spread', 0.0) or 0.0)
+        s.ushare = int(bool(getattr(p, 'unison_shares_phase', False)))
         # (a played pipe's modes pulled into lock: mode_lock_offset_for)
         s.ml_spread = float(getattr(p, 'mode_lock_spread', 0.0) or 0.0)
         s.ml_knee, s.ml_time = float(getattr(p, 'mode_lock_knee', 3.0)), float(getattr(p, 'mode_lock_time', 0.035))
@@ -1823,6 +1858,14 @@ def _class(cls):
         if c.kind == 4 and cls.inharmonicity_dynamic:
             c.b_law = 3                         # (the steel's law)
             c.law_k, c.law_p = cls.inharmonicity_law
+            if _owner(cls, 'inharmonicity_coefficient_for_frequency') == 'HammeredDulcimerProperties':
+                c.b_law = 4                     # (...under the dulcimer's bass bridge, its own)
+                c.bb_hz, c.bb_B = float(cls.bass_bridge_hz), float(cls.bass_bridge_B)
+        if getattr(cls, 'course_keys', None) is not None:
+            c.has_course = 1                    # (the register's strings: its courses' keys alone)
+            for kk in cls.course_keys:
+                if 0 <= int(kk) < 128:
+                    c.course[int(kk)] = 1
         # (none: the note's is the valve's, as blockrender's setup takes it)
         c.attack_time = cls.attack_time if cls.attack_time is not None else cls.chiff_max_valve_time
         vt = sorted(cls.strike_volume_trim_db or ())
@@ -2267,7 +2310,9 @@ def note_class(cls):
             (lambda a: a in ('speech_harmonic_exp', 'speech_harmonic_exp_per_octave', 'wind_skirt_always')) \
             if reed_voice(cls) and getattr(cls, 'wind_attack_db', None) is None \
             else (lambda a: a in ('mode_lock_spread', 'directivity_radius', 'wind_skirt_always')) if _blown(cls) \
-            else (lambda a: False)
+            else (lambda a: a in ('partial_phase_spread', 'unison_shares_phase', 'course_keys', 'key_bridge',
+                                  'bridge_partner', 'register_knock_tilt', 'register_knock_profile')) \
+            if dulcimer_voice(cls) else (lambda a: False)
         ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF
                                         if not (drum and drum_has(a)) and not org_has(a))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT if not org_has(a))
@@ -2476,6 +2521,20 @@ def note_class(cls):
         k.damper_top = int(getattr(cls, 'damper_top', 128))
         k.reg_floor = _RG.floor_of(cls)
         k.reg_release = float(getattr(cls, 'release_valve_time', 0.12) or 0.12)
+        kb, pt, kp = (getattr(cls, 'key_bridge', None), getattr(cls, 'bridge_partner', None),
+                      getattr(cls, 'register_knock_profile', None))
+        if kb is not None or pt or kp or getattr(cls, 'register_knock_tilt', 0.0):
+            # (register.Strings: a key's bridge, its partner, the knock's profile and tilt)
+            k.reg_keyed = 1
+            pr = v[2]
+            k.reg_kb[:] = [int(kb(pr, q)) if kb is not None else -1 for q in range(128)]
+            k.reg_partner[:] = [int((pt or {}).get(q, -1)) for q in range(128)]
+            k.reg_cross = float(getattr(cls, 'cross_bridge_coupling', 1.0))
+            k.reg_partner_k = float(getattr(cls, 'partner_coupling', 1.0))
+            k.reg_ktilt = float(getattr(cls, 'register_knock_tilt', 0.0) or 0.0)
+            k.reg_nkp = len(kp or ())
+            for i, (x, db) in enumerate(kp or ()):
+                k.reg_kp_x[i], k.reg_kp_db[i] = float(x), float(db)
         got = _NOTE[cls] = [k, None]
     if got is False:
         return None
@@ -3520,6 +3579,10 @@ class LivePiano(object):
                 self.d.nv_lp_swap_bank(self.p, modes, M, k6, int(k[4]),
                                        int(bool(getattr(cls, 'damper_pedal', True))) if cls is not None else 0,
                                        nt, 0, None, 1.0, 0, None)
+            kc = note_class(cls) if (M and cls is not None) else None
+            if kc is not None and kc.reg_keyed:
+                self._keyed = kc                # (a dulcimer's bridges by key: kept alive with the part)
+                self.d.nv_lp_swap_bank_keys(self.p, ctypes.byref(kc))
         self.d.nv_lp_swap(self.p, int(pi), cache.p, int(cache.program), int(bool(cache.drums)), int(nbuckets),
                           -1 if speed is None else int(speed), int(bool(damper_pedal)), int(soft_drop),
                           int(soft_top), int(bool(detune_wheel)), ch, rn)
@@ -3540,6 +3603,10 @@ class LivePiano(object):
         if ch is not None:
             self._choirs = ch
             self.d.nv_lp_reg_choirs(self.p, *ch)
+        kc = note_class(cls)
+        if kc is not None and kc.reg_keyed:
+            self._keyed = kc                    # (a dulcimer's bridges by key: kept alive with the part)
+            self.d.nv_lp_reg_keys(self.p, ctypes.byref(kc))
 
     def reg_dropped(self):
         return self.d.nv_lp_reg_dropped(self.p)

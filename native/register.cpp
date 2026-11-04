@@ -129,6 +129,28 @@ long long py_tuple_hash2(long long a, long long b)        // (livereg.cpp's too)
 }
 
 // numpy's RandomState(seed).uniform(0, TAU, n): MT19937 by init_genrand
+/* numpy.interp at one x (tone.c's np_interp) */
+double np_interp(double x, const double *xp, const double *fp, int n)
+{
+    if (x < xp[0])
+        return fp[0];
+    if (x > xp[n - 1])
+        return fp[n - 1];
+    int j = 0;
+    while (j + 1 < n && xp[j + 1] <= x)
+        j++;
+    if (j == n - 1 || xp[j] == x)
+        return fp[j];
+    double slope = (fp[j + 1] - fp[j]) / (xp[j + 1] - xp[j]);
+    double r = slope * (x - xp[j]) + fp[j];
+    if (std::isnan(r)) {
+        r = slope * (x - xp[j + 1]) + fp[j + 1];
+        if (std::isnan(r) && fp[j] == fp[j + 1])
+            r = fp[j];
+    }
+    return r;
+}
+
 std::vector<double> knock_phase(long long seed, int n)      // (livereg.cpp's too)
 {
     PyRandom r;
@@ -194,6 +216,13 @@ struct Channel {
     std::vector<long> choir_bridges = std::vector<long>(1, 0), bridge;
     double cross = 1.0;
     std::vector<std::pair<int, int>> buffs;     // (buffed, plain)
+    // ...or by key (Strings.keybridge: a dulcimer's two bridges, over the
+    // bank's keys), each key's partner (bridge_partner) at partner_k, the
+    // knock's measured profile (semitones, dB) and its tilt
+    std::map<int, long> kbridge;
+    std::vector<long> partner = std::vector<long>(128, -1);
+    double partner_k = 1.0, ktilt = 0.0;
+    std::vector<double> kp_x, kp_db;
     // the class
     double kappa, knock, fall, fl, rel;
     int top;
@@ -551,6 +580,10 @@ struct Channel {
             if (!st.choir.empty())
                 choir = st.choir;
             int cap = 4 * 3 * std::max(R, 1);
+            // the struck key's bridge (a dulcimer's, over the bank's keys) and its partner
+            auto kbi = kbridge.find(st.key);
+            long kb = kbi != kbridge.end() ? kbi->second : -1;
+            long pk = (st.key >= 0 && st.key < 128) ? partner[st.key] : -1;
             std::vector<cplx> add_s, xfer_s, f_val;
             std::vector<int> f_r;
             std::vector<double> f_beta;
@@ -565,8 +598,7 @@ struct Channel {
                                    drv[C_tau].data(), drv[C_tcut].data(), drv[C_aft].data(), drv[C_sus].data(),
                                    drv[C_logr].data(), drv[C_logrA].data(), choir.data(), (int)fi.size(), fi.data(),
                                    W.data(), alpha.data(), w.data(), bridge.data(), key.data(), choir_bridges.data(),
-                                   cross, -1,
-                                   -1, 1.0, kappa, floor, SPLIT, sr, b, add_s.data(), xfer_s.data(), cap,
+                                   cross, kb, pk, partner_k, kappa, floor, SPLIT, sr, b, add_s.data(), xfer_s.data(), cap,
                                    f_r.data(), f_beta.data(), f_val.data(), &lo, &lr);
                 if (nfo <= cap)
                     break;
@@ -589,9 +621,22 @@ struct Channel {
                 std::vector<double> ph = knock_phase(py_tuple_hash2(ch, si), (int)fi.size());
                 for (size_t q = 0; q < fi.size(); q++) {
                     int i = (int)fi[q];
-                    double dk = (double)std::labs(key[i] - st.key);
-                    double g = pow(10.0, -fall * dk / 20.0);
-                    double amp = ka * w[i] * g;
+                    // (Strings.coupling: across bridges, onto the struck string's partner)
+                    double cw = w[i];
+                    if (kb >= 0)
+                        cw = cw * (bridge[i] == kb ? 1.0 : cross);
+                    if (pk >= 0)
+                        cw = cw * (key[i] == pk ? partner_k : 1.0);
+                    // (Strings.knock_shape: the fall a semitone, or the measured profile; the tilt)
+                    double g;
+                    if (!kp_x.empty())
+                        g = pow(10.0, np_interp((double)(key[i] - st.key), kp_x.data(), kp_db.data(),
+                                                (int)kp_x.size()) / 20.0);
+                    else
+                        g = pow(10.0, -fall * (double)std::labs(key[i] - st.key) / 20.0);
+                    if (ktilt != 0.0)
+                        g = g * pow(f[i] / 1000.0, -ktilt);
+                    double amp = ka * cw * g;
                     double r0 = exp(0.0);              // numpy's exp(1j * p): (cos p, sin p)
                     cplx e(r0 * cos(ph[q]), r0 * sin(ph[q]));
                     add[i] += rmul_c(amp, e);
@@ -795,6 +840,33 @@ void nv_reg_choirs(void *h, int nchoir, const long *bridges, double cross, int n
         C->buffs.push_back(std::make_pair(buffs[2 * q], buffs[2 * q + 1]));
     for (int i = 0; i < C->M; i++)
         C->bridge[i] = C->choir_bridges[C->string[i] / 16];
+}
+
+// ...or a bank's bridges BY KEY (register.Strings.keybridge: kb[key], -1
+// none, over the bank's keys), the coupling across them, each key's partner
+// (-1 none) at partner_k, and the knock's measured profile (nkp (semitones,
+// dB)) and tilt
+void nv_reg_keys(void *h, const int *kb, double cross, const int *partner, double partner_k, double ktilt,
+                 int nkp, const double *kp_x, const double *kp_db)
+{
+    nv::reg::Channel *C = (nv::reg::Channel *)h;
+    C->cross = cross;
+    C->kbridge.clear();
+    bool any = false;
+    for (auto &ki : C->keyidx)
+        if (ki.first >= 0 && ki.first < 128 && kb[ki.first] >= 0) {
+            C->kbridge[ki.first] = kb[ki.first];
+            any = true;
+        }
+    if (any)
+        for (int i = 0; i < C->M; i++)
+            C->bridge[i] = C->kbridge.count((int)C->key[i]) ? C->kbridge[(int)C->key[i]] : 0;
+    for (int q = 0; q < 128; q++)
+        C->partner[q] = partner[q];
+    C->partner_k = partner_k;
+    C->ktilt = ktilt;
+    C->kp_x.assign(kp_x, kp_x + nkp);
+    C->kp_db.assign(kp_db, kp_db + nkp);
 }
 
 // A half-pedalled channel's key: its free spans (seconds) and its felt (each
@@ -1041,6 +1113,9 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
                 std::vector<long> cbr(cog->choir_bridge, cog->choir_bridge + cog->n_choir);
                 nv_reg_choirs(h, cog->n_choir, cbr.data(), cog->cross, cog->n_buff, &cog->buff[0][0]);
             }
+            if (k->reg_keyed)               // (a dulcimer's bridges, partners and knock)
+                nv_reg_keys(h, k->reg_kb, k->reg_cross, k->reg_partner, k->reg_partner_k, k->reg_ktilt,
+                            k->reg_nkp, k->reg_kp_x, k->reg_kp_db);
             if (half) {
                 std::vector<double> pt(npv);
                 std::vector<int> pv(npv);

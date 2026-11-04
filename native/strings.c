@@ -80,8 +80,8 @@ int nv_strings_og(const VoiceInit *c0, const VoiceSnap *tmpl, const OrganSpec *o
     int nch = og && og->n_choir ? og->n_choir : 1;
     for (int key = NV_KEY_LO; key < NV_KEY_HI; key++) {
         double f0 = table[key];
-        if (f0 == 0.0)
-            continue;
+        if (f0 == 0.0 || (c.has_course && !c.course[key]))
+            continue;                   /* (a bank of courses: only where it has strings) */
         VoiceSnap v;
         VoiceNote o;
         nv_voice_init(&c, tmpl, f0, pan, 1.0, chan_vol, 0.0, NULL, &v, &o);

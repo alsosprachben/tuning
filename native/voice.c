@@ -499,6 +499,10 @@ static double mode_decay(const VoiceSnap *v, int harmonic)
 
 double nv_harmonic_decay(const VoiceSnap *v, int harmonic)
 {
+    if (v->dhz_set) {                           /* HammeredDulcimerProperties: by the mode's own frequency */
+        double f = v->frequency_x * pow(2.0, v->octave_position) * harmonic;
+        return 0.5 * (v->decay_db + v->dhz_db * pow(f / 1000.0, v->dhz_pow));
+    }
     if (v->kind == 5) {                         /* ElectricPianoProperties: n D for the term A^n; the tonebar's tick */
         if (harmonic > v->n_lay)
             return v->tb_decay;
@@ -641,6 +645,17 @@ double nv_section_onset(long long salt, long long midi, int index, double width_
 
 int nv_unison_voices(const VoiceSnap *v, double frequency, int harmonic, double harmonic_decay, double *out)
 {
+    if (v->dul_n) {                             /* HammeredDulcimerProperties: the course's other strings */
+        long long key = (long long)nearbyint(69 + 12 * log2(frequency / 440.0));
+        for (int i = 0; i < v->dul_n; i++) {
+            PyRandom r;
+            pyr_seed(&r, key * 7919 + (long long)i * 104729 + harmonic);
+            double off = pyr_uniform(&r, v->dul_beat[0], v->dul_beat[1]) * (pyr_random(&r) < 0.5 ? 1.0 : -1.0);
+            out[5 * i] = v->unison_gain; out[5 * i + 1] = off; out[5 * i + 2] = 0.0;
+            out[5 * i + 3] = harmonic_decay; out[5 * i + 4] = 0.0;
+        }
+        return v->dul_n;
+    }
     if (v->sect_n > 1) {                        /* SectionMixin: the other players */
         int n = v->sect_n;
         long long midi = section_midi(frequency);
@@ -1188,6 +1203,8 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
         o->B = o->inharmonicity_coefficient;
         if (c->b_law == 3)              /* the steel's law (inharmonicity_coefficient_for_frequency) */
             o->B = c->law_k * pow(frequency, c->law_p);
+        else if (c->b_law == 4)         /* the dulcimer's: its bass bridge's own, the steel's law over it */
+            o->B = frequency < c->bb_hz ? c->bb_B : c->law_k * pow(frequency, c->law_p);
         if (c->rnd) {                   /* ...and RandomStrike's: its pitch and lateness */
             o->pitch_jitter = (1.0 + o->pitch_jitter) * pow(2.0, c->rnd_draws[2] / 1200.0) - 1.0;
             o->attack_jitter = o->attack_jitter + c->rnd_draws[3];

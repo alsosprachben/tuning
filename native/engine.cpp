@@ -415,6 +415,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     t.gain = 1.0; t.B = B; t.sjit = o.sustain_jitter; t.reflect = reflect;
     t.cbw0 = K->cbw0; t.cbw1 = K->cbw1;
     t.pjit = K->pjit; t.sps = K->sps; t.dur = dur; t.ssc = K->ssc;
+    t.pps_seed = (long long)nearbyint(n->on * 1e6) * 151 + (long long)n->note * 19 + n->ch;
     double trans[3 * 1025];
     int ntr = 0;
     if (s.max_harmonic + 1 > 1025)

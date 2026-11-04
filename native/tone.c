@@ -414,6 +414,10 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
     *ntrans = 0;
     const ToneIn *const t_note = t;
     ToneIn tml;
+    /* each partial its own phase (partial_phase_spread): the note's own stream */
+    PyRandom prng;
+    if (v->pps > 0.0)
+        pyr_seed(&prng, t->pps_seed);
     for (int m = 1; m < v->max_harmonic + 1; m++) {
         const ToneIn *t = t_note;
         double hh[2];
@@ -454,6 +458,9 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
             mph = PI * (double)(pyr_genrand(rs) >> 31) * t->sps;
         if (v->n_mp)                                /* a mode's own phase (mode_phase) */
             mph += (1 <= m && m <= v->n_mp) ? v->mode_phases[m - 1] : 0.0;
+        if (v->pps > 0.0)                           /* ...and its own, drawn (partial_phase_spread) */
+            mph += 2.0 * PI * v->pps * pyr_random(&prng);
+        double mph_course = mph;
         if (t->ssc) {                               /* how hard this stroke caught the mode */
             double ssd = nv_stroke_scatter_db(v, m);
             if (ssd > 0.0) {
@@ -564,7 +571,9 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
             }
             if (!emit(v, tp, &R, qacc, azimuth, terms_u, ntu, 2 * PI * uf / sr, ugL, ugR, gM * gm, uf, non_u,
                       t->noff, pfade, t->rel, t->chiff, ulr, pd[3], pd[2], t->sustain_level, cvp, t->cc,
-                      t->crl, sj, t->csc, t->gr, t->cr, 2 * PI * uph + 0.0, (double)(ui + 1), VB, upos, 0))
+                      t->crl, sj, t->csc, t->gr, t->cr,
+                      2 * PI * uph + (v->ushare ? mph_course : v->pps > 0.0 ? 2.0 * PI * v->pps * pyr_random(&prng) : 0.0),
+                      (double)(ui + 1), VB, upos, 0))
                 return -1;
         }
         pos_x = t->pos_x_props;     /* em.pos_x = the voice's position, after each harmonic */

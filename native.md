@@ -10,7 +10,7 @@ kept by hand in the script's TASKS.
 
 | stage | tones native | drum sets whole |
 |---|---|---|
-| GM1 | 102 of 128 | 0 of 1 |
+| GM1 | 103 of 128 | 0 of 1 |
 | GM2 | 33 of 128 | 0 of 8 |
 | SC-55 | 7 of 13 | 6 of 31 |
 | SC-88 | 77 of 193 | 0 of 2 |
@@ -29,10 +29,9 @@ What it needs first, and live's side:
 - [ ] Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)
 - [ ] Moog: SYNC, a unison (moog_unison), an MF-104M on a note whose pitch or shapes move
 
-Tones: 102 of 128 native.
+Tones: 103 of 128 native.
 
 - [ ] **Piano** -- 7 Clavi
-- [ ] **Chromatic Percussion** -- 15 Dulcimer
 - [ ] **Bass** -- 32 Acoustic Bass
 - [ ] **Strings** -- 45 Pizzicato Strings, 47 Timpani
 - [ ] **Ensemble** -- 52 Choir Aahs, 53 Voice Oohs, 55 Orchestra Hit

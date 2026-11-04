@@ -34,6 +34,7 @@ namespace reg {
 // register.cpp's: CPython's hash((a, b)) of two ints, numpy's knock phases
 long long py_tuple_hash2(long long a, long long b);
 std::vector<double> knock_phase(long long seed, int n);
+double np_interp(double x, const double *xp, const double *fp, int n);
 }  // namespace reg
 
 namespace lreg {
@@ -151,6 +152,12 @@ struct Channel {
     std::vector<long> choir_bridges = std::vector<long>(1, 0), bridge;
     double cross = 1.0;
     std::vector<std::pair<int, int>> buffs;     // (buffed, plain)
+    // ...or by key (a dulcimer's: register.cpp's), each key's partner, the
+    // knock's measured profile and its tilt
+    std::map<int, long> kbridge;
+    std::vector<long> partner = std::vector<long>(128, -1);
+    double partner_k = 1.0, ktilt = 0.0;
+    std::vector<double> kp_x, kp_db;
     std::map<int, std::vector<int>> keyidx;
     std::vector<cplx> Az, Rz;
     std::vector<double> nref, rref, krate, Rk;
@@ -225,6 +232,10 @@ struct Channel {
     {
         forced.clear();
         std::vector<char> free = mask(free_keys, nfree, k);
+        // the struck key's bridge (a dulcimer's, over the bank's keys) and its partner
+        auto kbi = kbridge.find(k);
+        const long kb = kbi != kbridge.end() ? kbi->second : -1;
+        const long pk = (k >= 0 && k < 128) ? partner[k] : -1;
         auto in_plucked = [&](long c) {
             for (int q = 0; q < nplucked; q++)
                 if (plucked[q] == c)
@@ -309,6 +320,10 @@ struct Channel {
                         double wj = w[j];                             // Strings.coupling: the board's...
                         if (rchoir)                                   // ...across bridges at cross
                             wj = wj * (bridge[j] == choir_bridges[rchoir[r]] ? 1.0 : cross);
+                        else if (kb >= 0)                             // ...a key's bridge (a dulcimer's)
+                            wj = wj * (bridge[j] == kb ? 1.0 : cross);
+                        if (pk >= 0)                                  // ...onto its string's other length
+                            wj = wj * (key[j] == pk ? partner_k : 1.0);
                         double thr = kw * wj / ROWS_OVER;             // _coincident_x
                         close[q] = xabs(cplx(am[q] - beta, Wi - Wm[q])) < thr;
                         bj[q] = close[q] ? npmax(beta, am[q]) + thr : beta;
@@ -350,8 +365,20 @@ struct Channel {
             std::vector<double> ph = nv::reg::knock_phase(nv::reg::py_tuple_hash2(KNOCK_SALT, sid), (int)fi.size());
             for (size_t q = 0; q < fi.size(); q++) {
                 int i = fi[q];
-                double dk = (double)std::labs(key[i] - k);
-                double amp = ka * w[i] * pow(10.0, -fall * dk / 20.0);
+                double cw = w[i];                           // (Strings.coupling, as the drive's)
+                if (kb >= 0)
+                    cw = cw * (bridge[i] == kb ? 1.0 : cross);
+                if (pk >= 0)
+                    cw = cw * (key[i] == pk ? partner_k : 1.0);
+                double g;                                   // (Strings.knock_shape)
+                if (!kp_x.empty())
+                    g = pow(10.0, nv::reg::np_interp((double)(key[i] - k), kp_x.data(), kp_db.data(),
+                                                     (int)kp_x.size()) / 20.0);
+                else
+                    g = pow(10.0, -fall * (double)std::labs(key[i] - k) / 20.0);
+                if (ktilt != 0.0)
+                    g = g * pow(f[i] / 1000.0, -ktilt);
+                double amp = ka * cw * g;
                 cplx m = xcmulr(xcexp(0.0, ph[q]), amp);
                 add[i] = cplx(add[i].real() + m.real(), add[i].imag() + m.imag());
             }
@@ -485,6 +512,31 @@ int nv_lreg_pluck(void *h, long long sid, int key, double at, int R, const doubl
         drv[c] = cols + (long)c * R;
     C->strike(sid, key, at, R, drv, slot, free_keys, nfree, plucked, nplucked, rchoir);
     return (int)C->idx.size();
+}
+
+// ...or the bank's bridges by key, partners, the knock's profile and tilt
+// (register.cpp's nv_reg_keys)
+void nv_lreg_keys(void *h, const int *kb, double cross, const int *partner, double partner_k, double ktilt,
+                  int nkp, const double *kp_x, const double *kp_db)
+{
+    nv::lreg::Channel *C = (nv::lreg::Channel *)h;
+    C->cross = cross;
+    C->kbridge.clear();
+    bool any = false;
+    for (auto &ki : C->keyidx)
+        if (ki.first >= 0 && ki.first < 128 && kb[ki.first] >= 0) {
+            C->kbridge[ki.first] = kb[ki.first];
+            any = true;
+        }
+    if (any)
+        for (int i = 0; i < C->M; i++)
+            C->bridge[i] = C->kbridge.count((int)C->key[i]) ? C->kbridge[(int)C->key[i]] : 0;
+    for (int q = 0; q < 128; q++)
+        C->partner[q] = partner[q];
+    C->partner_k = partner_k;
+    C->ktilt = ktilt;
+    C->kp_x.assign(kp_x, kp_x + nkp);
+    C->kp_db.assign(kp_db, kp_db + nkp);
 }
 
 // A harpsichord's choirs (register.Strings'): each choir's bridge, the

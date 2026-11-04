@@ -168,6 +168,8 @@ int nv_lp_on_gpu(void *h);
 void nv_lp_gpu_ms(void *h, double *out);
 void nv_lp_reg_async(void *h);
 void nv_lp_reg_choirs(void *h, int nchoir, const long *bridges, double cross, int nbuff, const int *buffs);
+void nv_lp_reg_keys(void *h, const NoteClass *k);
+void nv_lp_swap_bank_keys(void *h, const NoteClass *k);
 void nv_lp_swap_bank(void *h, const StringMode *modes, int M, const double *k6, int top, int pedals, const int *note,
                      int nchoir, const long *cbr, double cross, int nbuff, const int *buffs);
 void nv_lp_swap(void *h, int pi, void *cache, int program, int drums, int nbuckets, int speed, int damper_pedal,
@@ -835,6 +837,8 @@ int main(int argc, char **argv)
         if (!pr.cbr.empty())                    // a harpsichord's choirs
             nv_lp_reg_choirs(part, (int)pr.cbr.size(), pr.cbr.data(), pr.cross, (int)pr.buffs.size() / 2,
                              pr.buffs.data());
+        if (E.cmap[128 * (program & 127) + 60] >= 0)    // a dulcimer's bridges by key (its class at key 60's)
+            nv_lp_reg_keys(part, (const NoteClass *)E.classes[E.cmap[128 * (program & 127) + 60]].data());
         fprintf(stderr, "nvlive: the register: %d string modes%s\n", rg.M,
                 pr.cbr.empty() ? "" : (", " + std::to_string(pr.cbr.size()) + " choirs").c_str());
     } else if (reg_on) {
@@ -1006,6 +1010,8 @@ int main(int argc, char **argv)
                 nv_lp_swap_bank(part, rr.modes.data(), rr.M, k6, rr.i[0], rr.i[1], note, (int)pr.cbr.size(),
                                 pr.cbr.empty() ? nullptr : pr.cbr.data(), pr.cbr.empty() ? 1.0 : pr.cross,
                                 (int)pr.buffs.size() / 2, pr.buffs.empty() ? nullptr : pr.buffs.data());
+                if (E.cmap[128 * (prog & 127) + 60] >= 0)
+                    nv_lp_swap_bank_keys(part, (const NoteClass *)E.classes[E.cmap[128 * (prog & 127) + 60]].data());
             } else {
                 StringMode none[1];
                 double k6[6] = {0.0, 0.0, 0.0, 0.0, E.k[K_BETA], 0.12 * SR};

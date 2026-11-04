@@ -2366,6 +2366,7 @@ struct Piano {
         std::vector<long> cbr;              // a harpsichord's choirs (empty: none)
         double cross = 1.0;
         std::vector<int> buffs;
+        const NoteClass *keyed = nullptr;   // a dulcimer's bridges by key, partners, knock (NoteClass.reg_keyed)
     };
     struct Swap {
         int pi;
@@ -3901,6 +3902,11 @@ struct Piano {
                               wk.beta);
         if (!wk.cbr.empty())
             nv_lreg_choirs(h, (int)wk.cbr.size(), wk.cbr.data(), wk.cross, (int)wk.buffs.size() / 2, wk.buffs.data());
+        if (wk.keyed && wk.keyed->reg_keyed) {
+            const NoteClass *k = wk.keyed;
+            nv_lreg_keys(h, k->reg_kb, k->reg_cross, k->reg_partner, k->reg_partner_k, k->reg_ktilt, k->reg_nkp,
+                         k->reg_kp_x, k->reg_kp_db);
+        }
         lcs[ch] = h;
         return h;
     }
@@ -5502,6 +5508,21 @@ void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, doubl
     P->r_blk = (double)blk;
     for (int k = 0; k < 128; k++)
         P->reg_note[k] = reg_note[k] != 0;
+}
+
+// a bank's bridges by key, partners and knock (a dulcimer's: its class's
+// reg_keyed), for its register -- or, after nv_lp_swap_bank, the staged bank's
+void nv_lp_reg_keys(void *h, const NoteClass *k)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    P->wk.keyed = k;
+}
+
+void nv_lp_swap_bank_keys(void *h, const NoteClass *k)
+{
+    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    if (P->staged_bank)
+        P->staged_bank->keyed = k;
 }
 
 // a harpsichord's choirs, for its register (Strings.choir_bridges, cross, buffs)

@@ -243,6 +243,18 @@ typedef struct {
        a level drawn between or_db; the note's (or_g) set by nv_voice_init */
     int or_set;
     double or_share, or_db[2], or_lowest_hz, or_g;
+    /* A DULCIMER'S COURSE (HammeredDulcimerProperties): its other dul_n
+       strings, each beating dul_beat Hz (a draw by key, string and
+       harmonic) at unison_gain, ringing as the harmonic does; each mode's
+       decay by its own frequency (dhz_set: 0.5 (decay_db + dhz_db
+       (f/1000)^dhz_pow)) */
+    int dul_n, dhz_set;
+    double dul_beat[2], dhz_db, dhz_pow;
+    /* EACH PARTIAL ITS OWN PHASE (partial_phase_spread: pps of a turn, from
+       ToneIn.pps_seed's random.Random), a course's unisons its phase
+       (unison_shares_phase) */
+    double pps;
+    int ushare;
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -336,6 +348,13 @@ typedef struct {
     /* b_law 3 (a kind 4 voice's: SteelGuitarProperties' inharmonicity_law),
        B = law_k f^law_p */
     double law_k, law_p;
+    /* b_law 4 (HammeredDulcimerProperties'): bb_B under the bass bridge's
+       bb_hz, law_k f^law_p over it */
+    double bb_hz, bb_B;
+    /* A BANK OF COURSES (course_keys: the dulcimer's): the register's
+       strings only at the keys with course[key] set, has_course; else all */
+    int has_course;
+    unsigned char course[128];
 } VoiceInit;
 
 struct OrganPipe {
@@ -458,6 +477,7 @@ typedef struct {
        has_radius; else the class's directivity_radius */
     double radius;
     int has_radius;
+    long long pps_seed;     /* the note's partials' phases (VoiceSnap.pps): random.Random(pps_seed) */
 } ToneIn;
 
 /* A MOOG MESSENGER's panel as a note reads it (moog.py; native.moog_spec):
@@ -596,6 +616,16 @@ typedef struct {
     double reg_gain, reg_knock, reg_fall;
     int damper_top;
     double reg_floor, reg_release;
+    // ...BY KEY (a dulcimer's, reg_keyed): each key's bridge (key_bridge;
+    // -1 none), the coupling across them (cross_bridge_coupling), each key's
+    // partner past the treble bridge (bridge_partner, -1 none) at
+    // reg_partner_k; the knock by its measured profile (reg_nkp (semitones,
+    // dB) from the struck key) and its tilt by each mode's frequency
+    int reg_keyed;
+    int reg_kb[128], reg_partner[128];
+    double reg_cross, reg_partner_k, reg_ktilt;
+    int reg_nkp;
+    double reg_kp_x[64], reg_kp_db[64];
     // a one-shot (a kit drum): its note held to at least one_shot_hold past
     // its onset, the key-up ignored (ONE_SHOT_MIN_S)
     int one_shot;
@@ -923,6 +953,8 @@ void nv_partial_decay(const VoiceSnap *v, double f0, int m, double *out);
 int nv_lreg_pluck(void *h, long long sid, int key, double at, int R, const double *cols, const long *slot,
                   const int *free_keys, int nfree, const int *plucked, int nplucked, const long *rchoir);
 void nv_lreg_choirs(void *h, int nchoir, const long *bridges, double cross, int nbuff, const int *buffs);
+void nv_lreg_keys(void *h, const int *kb, double cross, const int *partner, double partner_k, double ktilt,
+                  int nkp, const double *kp_x, const double *kp_db);
 int nv_strings_og(const VoiceInit *c0, const VoiceSnap *tmpl, const OrganSpec *og, const double *table, double pan,
                   double chan_vol, double sr, StringMode *out, StringMode *tmp, int cap);
 int nv_strings(const VoiceInit *c0, const VoiceSnap *tmpl, const double *table, double pan, double chan_vol,
