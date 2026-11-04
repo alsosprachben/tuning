@@ -128,6 +128,8 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
                                std::vector<long long> *srows, std::vector<long long> *prows = nullptr,
                                const double *les = nullptr, std::vector<long long> *flips = nullptr);
+long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
+                            const double *cfg, const char *mask, long long nmask, double sr);
 long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                            const int *nreq, const double *req, double sr, const double *L, void **lobe,
                            long long **flips, long long *nflips);
@@ -195,6 +197,17 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         prows->resize(2 * np);
         nv_song_n_push_rows(song, prows->data(), np);
     }
+    if (P >= 0) {
+        // AN ORDINARY VOICE'S TREMOLO (_prep_tremolo's, _note_tremolo): the
+        // one-note file has no CC1, so an intrinsic one's (GM 44's stroke)
+        int nv_ = nv_song_trems(song, nullptr, nullptr, 0);
+        if (nv_ > 0) {
+            std::vector<long long> vch(nv_);
+            std::vector<double> vcfg(4 * nv_);
+            nv_song_trems(song, vch.data(), vcfg.data(), nv_);
+            nv_tremolo_expand(rowsp, &P, dm, nv_, vch.data(), vcfg.data(), nullptr, 0, SR);
+        }
+    }
     if (P >= 0)                                 // the speaker cabinet (_prep_cabinet), before any rotor
         nv_cabinet_pass(song, *rowsp, P);
     // A ROTARY VOICE'S CABINET (_raw_template: leslie.expand with SIDEBANDS
@@ -258,6 +271,81 @@ static int emit_col(const char *n)
         if (!strcmp(EMIT[c], n))
             return c;
     return -1;
+}
+
+// tremolo.expand: every row of a modulated channel (in mask, when given: a
+// Tremolo stop's notes) its sideband pair, appended in order -- the upper
+// then the lower, at the rate either side of the row's, each half the depth
+// (a pan's right ear the opposite sign, its mono sum none); a section's
+// players each their own rate and phase (scatter). The rows NCOLS each,
+// *P of them, realloc'd; a damper's dk/dg (dm[0], dm[1]) copied with them.
+// The channels nch of chans, each's (rate, depth, stereo, scatter) in cfg;
+// mask nmask long (NULL: every row). Returns the sidebands made.
+extern "C" long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
+                                       const double *cfg, const char *mask, long long nmask, double sr)
+{
+    if (nch <= 0)
+        return 0;
+    const int cOM = emit_col("om"), cP0 = emit_col("p0"), cP0R = emit_col("p0R"), cAL = emit_col("aL"),
+              cAR = emit_col("aR"), cAM = emit_col("aM"), cMCH = emit_col("mch"), cPL = emit_col("pl");
+    const long long n = *Pp;
+    std::vector<double> extra;
+    std::vector<long long> src;
+    for (long long i = 0; i < n; i++) {
+        if (mask && (i >= nmask || !mask[i]))
+            continue;
+        const double *row = *rowsp + (size_t)NCOLS * i;
+        int q = 0;
+        while (q < nch && chans[q] != (long long)(int)row[cMCH])
+            q++;
+        if (q == nch)
+            continue;
+        const double *c = cfg + 4 * q;
+        double rate = c[0], depth = c[1], scatter = c[3];
+        bool stereo = c[2] != 0.0;
+        if (depth <= 0.0 || rate <= 0.0)
+            continue;
+        double ph = 0.0;
+        if (scatter > 0.0) {
+            PyRandom r;
+            pyr_seed(&r, 0x7E30 + chans[q] * 977 + (long long)row[cPL]);
+            rate = rate * (1.0 + scatter * pyr_uniform(&r, -1.0, 1.0));
+            ph = pyr_uniform(&r, 0.0, 2.0 * M_PI);
+        }
+        double dw = 2.0 * M_PI * rate / sr, half = 0.5 * depth;
+        for (double sign : {1.0, -1.0}) {
+            size_t o = extra.size();
+            extra.insert(extra.end(), row, row + NCOLS);
+            double *e = extra.data() + o;
+            e[cOM] = row[cOM] + sign * dw;
+            if (ph != 0.0) {
+                e[cP0] = row[cP0] + sign * ph;
+                e[cP0R] = row[cP0R] + sign * ph;
+            }
+            e[cAL] = row[cAL] * half;
+            e[cAR] = row[cAR] * (stereo ? -half : half);
+            e[cAM] = stereo ? 0.0 : row[cAM] * half;
+            src.push_back(i);
+        }
+    }
+    long long m = (long long)src.size();
+    if (!m)
+        return 0;
+    double *rows = (double *)realloc(*rowsp, sizeof(double) * NCOLS * (size_t)(n + m));
+    memcpy(rows + (size_t)NCOLS * n, extra.data(), sizeof(double) * extra.size());
+    *rowsp = rows;
+    if (dm[0]) {
+        int32_t *dk = (int32_t *)realloc(dm[0], sizeof(int32_t) * (size_t)(n + m));
+        float *dg = (float *)realloc(dm[1], sizeof(float) * (size_t)(n + m));
+        for (long long q = 0; q < m; q++) {
+            dk[n + q] = dk[src[q]];
+            dg[n + q] = dg[src[q]];
+        }
+        dm[0] = dk;
+        dm[1] = dg;
+    }
+    *Pp = n + m;
+    return m;
 }
 
 

@@ -83,6 +83,8 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
               double SR, double master_gain, const float *DM, const long *DMO, const long *DMB, const long *DMN,
               float *L, float *R, void *slo, const int *lsr, float *const *lob, const float *LANG, long lgn);
 void nv_buf_free(void *p);
+long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
+                            const double *cfg, const char *mask, long long nmask, double sr);
 long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                            const int *nreq, const double *req, double sr, const double *L, void **lobe,
                            long long **flips, long long *nflips);
@@ -121,75 +123,19 @@ static int col(const char *name)
     return -1;
 }
 
-// tremolo.expand: every row of a modulated channel (in mask, when given: a
-// Tremolo stop's notes) its sideband pair, appended in order -- the upper
-// then the lower, at the rate either side of the row's, each half the depth
-// (a pan's right ear the opposite sign, its mono sum none); a section's
-// players each their own rate and phase (scatter). The rows NCOLS each,
-// *P of them, realloc'd; a damper's dk/dg (dm[0], dm[1]) copied with them.
-// Returns the sidebands made.
+// tremolo.expand (live.cpp's nv_tremolo_expand): each channel's (rate, depth,
+// stereo, scatter) as the library takes them
 static long long tremolo_expand(double **rowsp, long long *Pp, void **dm, const std::map<int, std::vector<double>> &chans,
                                 const std::vector<char> *mask, double sr)
 {
-    if (chans.empty())
-        return 0;
-    const int cOM = col("om"), cP0 = col("p0"), cP0R = col("p0R"), cAL = col("aL"), cAR = col("aR"), cAM = col("aM"),
-              cMCH = col("mch"), cPL = col("pl");
-    const long long n = *Pp;
-    std::vector<double> extra;
-    std::vector<long long> src;
-    for (long long i = 0; i < n; i++) {
-        if (mask && (i >= (long long)mask->size() || !(*mask)[i]))
-            continue;
-        const double *row = *rowsp + (size_t)NCOLS * i;
-        auto it = chans.find((int)row[cMCH]);
-        if (it == chans.end())
-            continue;
-        double rate = it->second[0], depth = it->second[1], scatter = it->second[3];
-        bool stereo = it->second[2] != 0.0;
-        if (depth <= 0.0 || rate <= 0.0)
-            continue;
-        double ph = 0.0;
-        if (scatter > 0.0) {
-            PyRandom r;
-            pyr_seed(&r, 0x7E30 + (long long)it->first * 977 + (long long)row[cPL]);
-            rate = rate * (1.0 + scatter * pyr_uniform(&r, -1.0, 1.0));
-            ph = pyr_uniform(&r, 0.0, 2.0 * M_PI);
-        }
-        double dw = 2.0 * M_PI * rate / sr, half = 0.5 * depth;
-        for (double sign : {1.0, -1.0}) {
-            size_t o = extra.size();
-            extra.insert(extra.end(), row, row + NCOLS);
-            double *e = extra.data() + o;
-            e[cOM] = row[cOM] + sign * dw;
-            if (ph != 0.0) {
-                e[cP0] = row[cP0] + sign * ph;
-                e[cP0R] = row[cP0R] + sign * ph;
-            }
-            e[cAL] = row[cAL] * half;
-            e[cAR] = row[cAR] * (stereo ? -half : half);
-            e[cAM] = stereo ? 0.0 : row[cAM] * half;
-            src.push_back(i);
-        }
+    std::vector<long long> ch;
+    std::vector<double> cfg;
+    for (auto &kv : chans) {
+        ch.push_back(kv.first);
+        cfg.insert(cfg.end(), kv.second.begin(), kv.second.begin() + 4);
     }
-    long long m = (long long)src.size();
-    if (!m)
-        return 0;
-    double *rows = (double *)realloc(*rowsp, sizeof(double) * NCOLS * (size_t)(n + m));
-    memcpy(rows + (size_t)NCOLS * n, extra.data(), sizeof(double) * extra.size());
-    *rowsp = rows;
-    if (dm[0]) {
-        int32_t *dk = (int32_t *)realloc(dm[0], sizeof(int32_t) * (size_t)(n + m));
-        float *dg = (float *)realloc(dm[1], sizeof(float) * (size_t)(n + m));
-        for (long long q = 0; q < m; q++) {
-            dk[n + q] = dk[src[q]];
-            dg[n + q] = dg[src[q]];
-        }
-        dm[0] = dk;
-        dm[1] = dg;
-    }
-    *Pp = n + m;
-    return m;
+    return nv_tremolo_expand(rowsp, Pp, dm, (int)ch.size(), ch.data(), cfg.data(), mask ? mask->data() : nullptr,
+                             mask ? (long long)mask->size() : 0, sr);
 }
 
 struct Export {
