@@ -73,7 +73,7 @@ class VoiceSnap(ctypes.Structure):
                 ('mode_phases', C * 400), ('throat', I), ('n_mb', I), ('stroke_tilt_db', C),
                 ('formant_scale', C), ('formant_morph', C), ('breath_volume', C), ('mb', (C * 2) * 128),
                 ('fbody', I), ('n_fm', I), ('n_afm', I), ('n_bt', I), ('formant_floor', C), ('fm', (C * 3) * 16),
-                ('afm', (C * 3) * 8), ('bt', (C * 2) * 32), ('comb', C * 129),
+                ('afm', (C * 3) * 8), ('bt', (C * 2) * 32), ('comb', C * 257),
                 ('sect_n', I), ('sect_vib', I), ('sect_seats', I), ('sect_spread_cents', C), ('sect_vib_cents', C),
                 ('sect_vib_hz', C * 2), ('sect_onset_ms', C), ('sect_ofm', C), ('sect_dx', C * 16),
                 ('n_pts', I), ('n_ptg', I), ('low_set', I), ('n_low', I), ('pts_n', I * 8), ('pts_hz', C * 8), ('pts_g', (C * 64) * 8),
@@ -93,7 +93,8 @@ class VoiceSnap(ctypes.Structure):
                 ('pk_q0', C * 4), ('pk_sign', C * 4), ('pk_turns', C), ('pk_width', C), ('pk_res_hz', C),
                 ('pk_qf', C), ('lp_hz', C), ('lp_order', C), ('os_hz', C * 8), ('fret_max', C), ('pk_sp', C),
                 ('pk_q', C * 4), ('n_touch', I), ('touches', I * 4), ('touch0', I), ('touch', I), ('leak_set', I),
-                ('leak_db', C), ('leak_dbs', C)]
+                ('leak_db', C), ('leak_dbs', C), ('ml_spread', C), ('ml_knee', C), ('ml_time', C),
+                ('n_mute', I), ('mute', (C * 2) * 24)]
 
 
 class ToneIn(ctypes.Structure):
@@ -217,7 +218,7 @@ class NoteClass(ctypes.Structure):
                    ('cab_afm', C * 3 * 4), ('cab_corner', C), ('cab_order', C), ('cab_cut', C), ('cab_bell', C),
                    ('cab_ref', C), ('n_click', I), ('click_jacks', I), ('click_db', C), ('click_hz', C * 16),
                    ('click_amp', C * 16), ('click_dec', C), ('click_s', C), ('pre_pluck', I),
-                   ('moog', MoogSpec)])
+                   ('moog', MoogSpec), ('brass', I), ('bn_slur', I)])
 
 
 class NoteIn(ctypes.Structure):
@@ -593,21 +594,28 @@ def breath_noise(cls):
     return (bool(getattr(cls, 'breath_noise_db', ())) and len(cls.breath_noise_db) <= 64
             and 1 <= int(getattr(cls, 'breath_noise_rows', 1)) <= 8
             # (its tone silent -- or an organ's, whose ranks follow the breath as Python's do)
-            # (...or a free reed's, its tone after its breath as Python's is)
+            # (...or a free reed's or a played pipe's, its tone after its breath as Python's is)
             and (all(g == 0.0 for g in (cls.mode_gains or (1.0,))) or getattr(cls, 'registerable', False)
-                 or reed_voice(cls))
+                 or _blown(cls))
             and _owner(cls, 'breath_noise_at') == 'SynthProperties'
             and _owner(cls, '_breath_noise_rows') == 'SynthProperties'
-            # (a low register's table only on the same bands: a free reed's)
+            # (a low register's table only on the same bands: a blown voice's)
             and (not getattr(cls, 'breath_noise_low_db', None)
-                 or (reed_voice(cls) and len(cls.breath_noise_low_db) == len(cls.breath_noise_db)
+                 or (_blown(cls) and len(cls.breath_noise_low_db) == len(cls.breath_noise_db)
                      and all(a[0] == b[0] for a, b in zip(cls.breath_noise_low_db, cls.breath_noise_db))))
             and not getattr(cls, 'breath_noise_octave_db', 0.0)
-            # (a wobble on its own row only for a free reed: NoteIn.bbr)
-            and (not getattr(cls, 'breath_noise_wobble_db', 0.0) or reed_voice(cls))
-            and not getattr(cls, 'breath_noise_slur', False)
+            # (a wobble on its own row only for a blown voice: NoteIn.bbr; its slur's
+            # legato attack, NoteClass.bn_slur, too)
+            and (not getattr(cls, 'breath_noise_wobble_db', 0.0) or _blown(cls))
+            and (not getattr(cls, 'breath_noise_slur', False) or _blown(cls))
             and not any(getattr(cls, a, None) for a in ('grains', 'noise_events', 'pulse', 'ring_db',
                                                          'struck_layer', 'touch_leak_db')))
+
+
+def _blown(cls):
+    """A voice whose breath the engine plays beside its tone: a free reed's,
+    a played pipe's (wind_voice), a measured pipe's outside an organ."""
+    return reed_voice(cls) or wind_voice(cls) or (pipe_voice(cls) and not getattr(cls, 'registerable', False))
 
 
 def _modal_drum(cls):
@@ -887,6 +895,41 @@ def tonewheel_voice(cls):
             and len(getattr(cls, 'contact_noise_db', ()) or ()) <= 16)
 
 
+def wind_voice(cls):
+    """Whether native/voice.c plays cls as a played pipe (kind 4): a flute's,
+    a reed's, a brass instrument's -- SynthProperties' series through the
+    bore (and a sax's or bassoon's FormantBody, a trumpet's mute), no
+    measured table, its B the pipe's; a section of them (a bowed string's
+    players) -- outside an organ, and none of the extras a harmonic voice
+    refuses."""
+    import tonelib as T
+    if (not issubclass(cls, T.StoppedPipeProperties) or issubclass(cls, T.FreeReedProperties)
+            or getattr(cls, 'registerable', False)):
+        return False
+    own = dict(_PIPE_OWN)
+    if issubclass(cls, T.SectionMixin):
+        # (a section of players: a brass section's, as a bowed string's)
+        if not 1 <= cls.section_players <= 16:
+            return False
+        own.update(unison_voices='SectionMixin', voice_vibrato='SectionMixin', **_SECTION_OWN)
+    if issubclass(cls, T.FormantBody):
+        own.update(bore_gain='FormantBody', _body_trim='FormantBody')
+    elif _owner(cls, 'bore_gain') == 'MutedTrumpetProperties' and len(cls.mute_response) <= 24:
+        own.update(bore_gain='MutedTrumpetProperties')      # (a mute in the bell)
+    if any(_owner(cls, n) != o for n, o in own.items()):
+        return False
+    pts = getattr(cls, 'mode_gains_points', None) or ()
+    return (cls.mode_gains is None and cls.mode_ratios is None and not pts and not cls.strike_point
+            and not cls.harmonic_touch and not cls.pickup_points and not (cls.unison_detune or ())
+            and not cls.blare_db_per_khz and bool(cls.bore_corner_hz) and 1 <= (cls.max_harmonic or 0) <= 256
+            and not cls.inharmonicity_dynamic and not cls.mode_stroke_tilt
+            and len(getattr(cls, 'formants', ()) or ()) <= 16 and len(getattr(cls, 'antiformants', ()) or ()) <= 8
+            and len(getattr(cls, 'body_trim_db', ()) or ()) <= 32
+            and not any(getattr(cls, a, None) for a in ('grains', 'noise_events', 'pulse', 'ring_db', 'struck_layer',
+                                                         'touch_leak_db', 'strike_noise_db', 'release_click_db',
+                                                         'hammer_legato', 'bend_detents', 'amp_drive')))
+
+
 def free_reed_series(cls):
     """A free reed's flow spectrum where it is one table whatever the key
     (FreeReedProperties._reed_series with no register laws and no scatter:
@@ -1070,7 +1113,7 @@ def kit_drum(cls):
         return 6
     if ep_voice(cls):
         return 5
-    if harmonic_voice(cls) or tonewheel_voice(cls) or reed_voice(cls) or electric_voice(cls):
+    if harmonic_voice(cls) or tonewheel_voice(cls) or reed_voice(cls) or electric_voice(cls) or wind_voice(cls):
         return 4
     if pipe_voice(cls):
         return 2
@@ -1319,6 +1362,13 @@ def snapshot(props):
     s.bloom_decay_dbs = getattr(p, 'bloom_decay_dbs', 0.0) or 0.0
     s.kind = kit_drum(type(p))
     s.nyquist = p._nyquist if isinstance(p, T.SampledBreak) else 0.0
+    # a played reed's or pipe's wind (wind_skirt_always: the harmonica's, a
+    # recorder's), on its first WIND_PARTIALS
+    if s.kind in (2, 4) and getattr(p, 'wind_skirt_always', False) and getattr(p, 'wind_skirt_db', None) is not None:
+        import blockrender as _BR
+        s.skirt, s.sk_max = 1, int(_BR.WIND_PARTIALS)
+        s.sk_db, s.sk_hdb = float(p.wind_skirt_db), float(p.wind_skirt_harmonic_db)
+        s.sk_hz, s.sk_rel = float(p.wind_skirt_hz), float(getattr(p, 'wind_skirt_rel', None) or 0.0)
     if s.kind == 3:
         # a harmonic series on SynthProperties: the noise's roll-off, its unison
         s.unison_gain = p.unison_gain
@@ -1396,8 +1446,15 @@ def snapshot(props):
     elif s.kind == 4:
         # a harmonic voice: the pluck's comb, the body
         s.comb[0] = 0.0
+        # (a played pipe's modes pulled into lock: mode_lock_offset_for)
+        s.ml_spread = float(getattr(p, 'mode_lock_spread', 0.0) or 0.0)
+        s.ml_knee, s.ml_time = float(getattr(p, 'mode_lock_knee', 3.0)), float(getattr(p, 'mode_lock_time', 0.035))
+        if _owner(type(p), 'bore_gain') == 'MutedTrumpetProperties':
+            s.n_mute = len(p.mute_response)
+            for i, (f, db) in enumerate(p.mute_response):
+                s.mute[i][:] = [float(f), float(db)]
         # (a reed's has none, nor a quill's: its comb is the strike point's)
-        for h in range(1, min(128, int(p.max_harmonic)) + 1 if not (reed_voice(type(p)) or p.strike_point) else 0):
+        for h in range(1, min(256, int(p.max_harmonic)) + 1 if not (reed_voice(type(p)) or p.strike_point) else 0):
             s.comb[h] = T._pluck_comb(p.plucked_harmonic, p.pluck_dampening, h)
         s.bore_corner_hz, s.bore_order = p.bore_corner_hz, p.bore_order
         s.bell_cutoff_hz, s.bell_order = p.bell_cutoff_hz or 0.0, p.bell_order
@@ -1443,12 +1500,6 @@ def snapshot(props):
             s.sh_exp = float(getattr(p, 'speech_harmonic_exp', 0.0) or 0.0)
             s.sh_exp_oct = float(getattr(p, 'speech_harmonic_exp_per_octave', 0.0) or 0.0)
             s.sh_cap = int(getattr(p, 'speech_harmonic_cap', None) or 0)
-            # a played reed's wind (wind_skirt_always: the harmonica's), on its first WIND_PARTIALS
-            if getattr(p, 'wind_skirt_always', False) and getattr(p, 'wind_skirt_db', None) is not None:
-                import blockrender as _BR
-                s.skirt, s.sk_max = 1, int(_BR.WIND_PARTIALS)
-                s.sk_db, s.sk_hdb = float(p.wind_skirt_db), float(p.wind_skirt_harmonic_db)
-                s.sk_hz, s.sk_rel = float(p.wind_skirt_hz), float(getattr(p, 'wind_skirt_rel', None) or 0.0)
             ser = p._reed_series()              # (this voice's: its key's geometry)
             s.n_reed = len(ser)
             s.reed_s[:len(ser)] = [float(x) for x in ser]
@@ -2133,8 +2184,6 @@ def note_class(cls):
     import blockrender as BR
     got = _NOTE.get(cls)
     drum = kit_drum(cls)
-    if got is None and pipe_voice(cls) and not getattr(cls, 'registerable', False):
-        _NOTE[cls] = got = False            # (a pipe is the engine's as an organ's rank alone, for now)
     if got is None:
         v = _class(cls)
         # (a kit drum's one-shot hold is the engine's, a snare's partials'
@@ -2159,6 +2208,7 @@ def note_class(cls):
             if getattr(cls, 'registerable', False) else \
             (lambda a: a in ('speech_harmonic_exp', 'speech_harmonic_exp_per_octave', 'wind_skirt_always')) \
             if reed_voice(cls) and getattr(cls, 'wind_attack_db', None) is None \
+            else (lambda a: a in ('mode_lock_spread', 'directivity_radius', 'wind_skirt_always')) if _blown(cls) \
             else (lambda a: False)
         ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF
                                         if not (drum and drum_has(a)) and not org_has(a))
@@ -2171,7 +2221,7 @@ def note_class(cls):
         if ok:
             # a section's players and their onsets: none for one instrument, or a bowed string's
             p = v[2]
-            ok = harmonic_voice(cls) or not (hasattr(p, 'section_seats') and p.section_seats()) and not any(
+            ok = harmonic_voice(cls) or wind_voice(cls) or not (hasattr(p, 'section_seats') and p.section_seats()) and not any(
                 hasattr(p, 'section_onsets_at') and p.section_onsets_at(f) for f in (27.5, 261.6, 4186.0))
         if not ok:
             _NOTE[cls] = False
@@ -2325,6 +2375,8 @@ def note_class(cls):
         # a Moog: its panels (nv.h MoogSpec, in the class itself)
         if kit_drum(cls) == 6:
             k.moog = moog_spec(cls)
+        # (the horn's intonation: blockrender._note_class_and_pitch's, by the class's name)
+        k.brass = (2 if 'Dark' in cls.__name__ else 1) if cls.__name__.endswith('BrassProperties') else 0
         # a registered organ: its ranks (the pointer the engine reads; the table kept here)
         if getattr(cls, 'registerable', False):
             og = organ(cls)
@@ -2335,6 +2387,7 @@ def note_class(cls):
         if breath_noise(cls):
             k.n_bn, k.bn_rows, k.bn_fade_s = (len(cls.breath_noise_db), int(getattr(cls, 'breath_noise_rows', 1)),
                                                float(cls.breath_noise_fade_s))
+            k.bn_slur = int(bool(getattr(cls, 'breath_noise_slur', False)))
             for i, (hz, db) in enumerate(cls.breath_noise_db):
                 k.bn_hz[i], k.bn_db[i] = float(hz), float(db)
             if getattr(cls, 'breath_noise_low_db', None):

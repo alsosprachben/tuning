@@ -6599,18 +6599,19 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
         # A REGISTERED ORGAN (organ.c): its ranks, as its registration leaves them
         if not K.organ or organ is None or WIND or type(props) is not nt.pc:
             return None
-    elif len(stops) != 1 or tuple(stops[0]) != ("_", 1.0, 1.0) or mls > 0.0:
+    elif len(stops) != 1 or tuple(stops[0]) != ("_", 1.0, 1.0) or (mls > 0.0 and not _NV.wind_voice(nt.pc)):
         return None
     if _sir is not None or _als is not None:
         return None
-    if (seats or onsets) and not _NV.harmonic_voice(type(P)):
-        return None                         # (a section's players: a bowed string's alone)
+    if (seats or onsets) and not (_NV.harmonic_voice(type(P)) or _NV.wind_voice(type(P))):
+        return None                         # (a section's players: a bowed string's or a wind's)
     # (an organ's ranks' choirs and detune are organ.c's; a lone stop's are not)
     if ((not nt.organ and (T.choir_of(P, "_") or T.rank_detune_cents(P, "_", nt.note)))
             or em.pos_x != getattr(P, 'position_x', 0.0)):
         return None
-    if _native_ready(em, P, reverse_ok=True, radius_ok=bool(nt.organ), piston_ok=bool(nt.organ)) is None:
-        return None             # (the engine plays a tape backwards, and an organ's aperture is organ.c's)
+    if _native_ready(em, P, reverse_ok=True, radius_ok=bool(nt.organ),
+                     piston_ok=bool(nt.organ) or _NV.wind_voice(nt.pc)) is None:
+        return None             # (the engine plays a tape backwards, and an organ's aperture is organ.c's: a horn's bell the voice's)
     if em.REFLECT and P.reflection_order and NATIVE_TONE == 'check':
         # the engine makes the room's images itself (nv_images): here, Python's beside them
         imgs, nsurf, surf, img, mir = P._images_for(em.pos_x * 1.0, P.radiation_distance * 1.0, em.pos_z * 1.0)

@@ -155,7 +155,7 @@ typedef struct {
        amplitude or depth), the body trim ((Hz, dB), log-interpolated) */
     int fbody, n_fm, n_afm, n_bt;
     double formant_floor, fm[16][3], afm[8][3], bt[32][2];
-    double comb[129];
+    double comb[257];
     /* A SECTION (SectionMixin, on a kind 4 voice: the bowed strings): sect_n
        players, each a few cents off its neighbours (unison_voices), with a
        vibrato of its own (voice_vibrato, sect_vib) and its own entry
@@ -223,6 +223,15 @@ typedef struct {
         fret_max, pk_sp, pk_q[4];
     int n_touch, touches[4], touch0, touch, leak_set;
     double leak_db, leak_dbs;
+    /* A PIPE'S MODE LOCK (mode_lock_*: a played pipe's, a reed's, a brass
+       instrument's): each harmonic above the first starting sharp by
+       ml_spread x/(1+x), x = (m/ml_knee)^2, pulled into lock over ml_time
+       (the partial's tension-bend triple) */
+    double ml_spread, ml_knee, ml_time;
+    /* A MUTE IN THE BELL (MutedTrumpetProperties.bore_gain): muted minus
+       open, n_mute (Hz, dB) log-interpolated, held flat past its ends */
+    int n_mute;
+    double mute[24][2];
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -680,6 +689,8 @@ typedef struct {
     // A MOOG (moog.py; VoiceSnap.kind 6): each layer's panel as its note
     // reads it (native.moog_spec), n_layer 0 none
     MoogSpec moog;
+    int brass;              // the horn's intonation (brass_fingering): 1 a trumpet's, 2 a tuba's; 0 none
+    int bn_slur;            // on a slur the breath takes the legato attack (breath_noise_slur: slur_attack)
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.

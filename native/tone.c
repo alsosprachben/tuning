@@ -412,7 +412,10 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
     }
     double pos_x = t->pos_x0;
     *ntrans = 0;
+    const ToneIn *const t_note = t;
+    ToneIn tml;
     for (int m = 1; m < v->max_harmonic + 1; m++) {
+        const ToneIn *t = t_note;
         double hh[2];
         if (!nv_string_partial(v, t->f0, 1.0, m, t->B, hh))
             break;
@@ -422,6 +425,17 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
         double hv = nv_harmonic_volume(v, m);
         if (hv == 0.0)
             continue;
+        /* A PIPE'S MODES START SHARP (mode_lock_offset_for): this partial's
+           tension-bend triple the lock's, where it has one */
+        if (v->ml_spread > 0.0 && m > 1) {
+            double x = pow((double)m / v->ml_knee, 2.0);
+            double mlo = v->ml_spread * (x / (1.0 + x));
+            if (mlo != 0.0) {
+                tml = *t_note;
+                tml.tb[0] = mlo; tml.tb[1] = v->ml_time; tml.tb[2] = v->ml_time * 6.0;
+                t = &tml;
+            }
+        }
         double pd[4];
         nv_partial_decay(v, t->f0, m, pd);          /* dbps, logr, aftL, logrA */
         double gM = hv * t->gain * nv_radiation_gain(v, hf, 0.0, 0);

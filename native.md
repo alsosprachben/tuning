@@ -10,12 +10,12 @@ kept by hand in the script's TASKS.
 
 | stage | tones native | drum sets whole |
 |---|---|---|
-| GM1 | 73 of 128 | 0 of 1 |
-| GM2 | 32 of 128 | 0 of 8 |
+| GM1 | 96 of 128 | 0 of 1 |
+| GM2 | 33 of 128 | 0 of 8 |
 | SC-55 | 7 of 13 | 6 of 31 |
-| SC-88 | 72 of 193 | 0 of 2 |
-| SC-88 Pro | 158 of 360 | 0 of 0 |
-| SC-8850 | 154 of 460 | 0 of 6 |
+| SC-88 | 77 of 193 | 0 of 2 |
+| SC-88 Pro | 165 of 360 | 0 of 0 |
+| SC-8850 | 161 of 460 | 0 of 6 |
 
 ## GM1
 
@@ -29,16 +29,13 @@ What it needs first, and live's side:
 - [ ] Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)
 - [ ] Moog: SYNC, a unison (moog_unison), an MF-104M on a note whose pitch or shapes move
 
-Tones: 73 of 128 native.
+Tones: 96 of 128 native.
 
 - [ ] **Piano** -- 7 Clavi
 - [ ] **Chromatic Percussion** -- 9 Glockenspiel, 10 Music Box, 11 Vibraphone, 12 Marimba, 13 Xylophone, 14 Tubular Bells, 15 Dulcimer
 - [ ] **Bass** -- 32 Acoustic Bass
 - [ ] **Strings** -- 45 Pizzicato Strings, 47 Timpani
-- [ ] **Ensemble** -- 52 Choir Aahs, 53 Voice Oohs, 54 Synth Voice, 55 Orchestra Hit
-- [ ] **Brass** -- 56 Trumpet, 57 Trombone, 58 Tuba, 59 Muted Trumpet, 60 French Horn, 61 Brass Section
-- [ ] **Reed** -- 64 Soprano Sax, 65 Alto Sax, 66 Tenor Sax, 67 Baritone Sax, 68 Oboe, 69 English Horn, 70 Bassoon, 71 Clarinet
-- [ ] **Pipe** -- 72 Piccolo, 73 Flute, 74 Recorder, 75 Pan Flute, 76 Blown Bottle, 77 Shakuhachi, 78 Whistle, 79 Ocarina
+- [ ] **Ensemble** -- 52 Choir Aahs, 53 Voice Oohs, 55 Orchestra Hit
 - [ ] **Ethnic** -- 104 Sitar, 105 Banjo, 106 Shamisen, 107 Koto, 108 Kalimba, 109 Bag pipe, 111 Shanai
 - [ ] **Percussive** -- 113 Agogo, 114 Steel Drums, 115 Woodblock, 116 Taiko Drum
 - [ ] **Sound Effects** -- 120 Guitar Fret Noise, 122 Seashore, 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter, 126 Applause, 127 Gunshot
@@ -54,7 +51,7 @@ What it needs first, and live's side:
 - [ ] Bank select (CC0/CC32) and GM2's banks (120 drums, 121 melodic) in nvrender's reader and nvlive -- the reader refuses any bank today
 - [ ] nvlive: a variation as a patch (Patch(program, drums, tuner, variation)); the picker's GM2 bank
 
-Tones: 32 of 128 native (new at this stage).
+Tones: 33 of 128 native (new at this stage).
 
 - [ ] **Piano** -- 0.8 Piano 1w, 0.16 European Pf, 1.8 Piano 2w, 2.8 Piano 3w, 3.8 Honky-tonk 2, 4.16 FM+SA EP, 4.24 Wurly, 4.8 St.Soft EP, 5.10 EP Legend, 5.16 St.FM EP, 5.32 EP Phase, 6.16 Harpsi.w, 6.24 Harpsi.o
 - [ ] **Chromatic Percussion** -- 11.8 Vibraphone w, 12.8 Marimba w, 14.8 Church Bell, 14.9 Carillon
@@ -62,7 +59,7 @@ Tones: 32 of 128 native (new at this stage).
 - [ ] **Guitar** -- 24.8 Ukulele, 24.16 Nylon Gt.o, 24.32 Nylon Gt.2, 25.8 12-str.Gt, 25.16 Mandolin, 25.33 Steel + Body, 26.8 Pedal Steel, 27.23 Mid Tone GTR, 28.24 Jazz Man, 29.4 Guitar Pinch, 30.8 Feedback Gt., 30.26 Dist Rtm GTR, 31.8 Gt. Feedback
 - [ ] **Bass** -- 33.7 Finger Slap
 - [ ] **Strings** -- 40.8 Slow Violin, 46.24 Yang Qin
-- [ ] **Ensemble** -- 48.8 Orchestra, 48.40 60s Strings, 52.32 Chorus Aahs, 53.40 Humming, 54.19 Analog Voice, 55.1 Bass Hit, 55.2 6th Hit, 55.3 Euro Hit
+- [ ] **Ensemble** -- 48.8 Orchestra, 48.40 60s Strings, 52.32 Chorus Aahs, 53.40 Humming, 55.1 Bass Hit, 55.2 6th Hit, 55.3 Euro Hit
 - [ ] **Brass** -- 56.3 Dark Trumpet, 57.1 Trombone 2, 57.4 Bright Tb, 59.2 MuteTrumpet2, 60.1 Fr.Horn 2, 61.8 Brass 2, 62.16 Oct SynBrass, 63.16 Velo Brass 1
 - [ ] **Synth Lead** -- 84.1 Wire Lead, 87.7 Delayed Lead
 - [ ] **Ethnic** -- 104.1 Sitar 2, 107.8 Taisho Koto
@@ -122,7 +119,7 @@ Drum sets: 6 of 31 with every key native (new at this stage).
 
 ## SC-88
 
-Tones: 72 of 193 native (new at this stage).
+Tones: 77 of 193 native (new at this stage).
 
 - [ ] **Piano** -- 2.1 EG+Rhodes 1, 2.2 EG+Rhodes 2, 3.8 Old Upright, 4.25 Hard Rhodes, 4.26 MellwRhodes, 5.24 Hard FM EP
 - [ ] **Chromatic Percussion** -- 11.1 Hard Vibe, 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 15.1 Santur 2, 15.8 Cimbalom
@@ -130,10 +127,9 @@ Tones: 72 of 193 native (new at this stage).
 - [ ] **Guitar** -- 24.24 VeloHarmnix, 24.40 Lequint Gt., 25.9 Nylon+Steel, 25.32 Steel Gt.2, 26.1 Mellow Gt., 28.1 MutedDis.Gt, 30.1 Dist. Gt2, 30.2 DazedGuitar, 30.9 FeedbackGt2, 30.16 PowerGuitar, 30.17 Power Gt.2, 30.18 5th Dist., 30.24 Rock Rhythm, 30.25 RockRhythm2, 31.16 Ac.Gt.Harm.
 - [ ] **Bass** -- 33.1 FingeredBs2, 33.2 Jazz Bass, 34.8 MutePickBs., 35.1 FretlessBs2, 35.2 FretlessBs3, 35.3 FretlessBs4, 35.5 Mr.Smooth, 36.8 Reso Slap, 39.9 X Wire Bass
 - [ ] **Strings** -- 44.8 SlowTremolo, 44.9 SuspenseStr
-- [ ] **Ensemble** -- 48.1 Strings 2, 48.9 Orchestra 2, 48.10 TremoloOrch, 48.11 Choir Str., 48.16 St.Strings, 48.24 VeloStrings, 49.1 Slow Str. 2, 49.8 Legato Str., 49.9 WarmStrings, 49.10 St.SlowStr., 52.8 St.Choir, 52.9 Mello Choir, 54.8 Syn.Voice, 55.8 Impact Hit, 55.9 Philly Hit, 55.10 Double Hit
-- [ ] **Brass** -- 56.1 Trumpet 2, 56.8 Flugel Horn, 56.24 Bright Tp., 56.25 Warm Tp., 58.1 Tuba 2, 60.8 Fr.HornSolo, 60.16 Horn Orch, 61.16 Brass Fall, 63.17 VeloBrass 2
-- [ ] **Reed** -- 65.8 Hyper Alto, 66.8 BreathyTnr., 71.8 Bs Clarinet
-- [ ] **Pipe** -- 75.8 Kawala
+- [ ] **Ensemble** -- 48.1 Strings 2, 48.9 Orchestra 2, 48.10 TremoloOrch, 48.11 Choir Str., 48.16 St.Strings, 48.24 VeloStrings, 49.1 Slow Str. 2, 49.8 Legato Str., 49.9 WarmStrings, 49.10 St.SlowStr., 52.8 St.Choir, 52.9 Mello Choir, 55.8 Impact Hit, 55.9 Philly Hit, 55.10 Double Hit
+- [ ] **Brass** -- 56.1 Trumpet 2, 56.24 Bright Tp., 56.25 Warm Tp., 58.1 Tuba 2, 60.8 Fr.HornSolo, 60.16 Horn Orch, 61.16 Brass Fall, 63.17 VeloBrass 2
+- [ ] **Reed** -- 66.8 BreathyTnr.
 - [ ] **Synth Lead** -- 81.16 Waspy Synth
 - [ ] **Synth Effects** -- 98.3 Round Glock, 98.5 GlocknChime, 98.18 Bell Harp, 98.19 Gamelimba, 99.2 Nylon Harp, 99.3 Harpvox, 99.5 NylonRhodes, 102.3 Echo Pan 2, 102.4 Big Panner, 102.5 Reso Panner
 - [ ] **Ethnic** -- 104.2 DetuneSitar, 104.8 Tambra, 104.16 Tamboura, 105.1 Muted Banjo, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 106.1 Tsugaru, 107.16 Kanoon, 111.1 Shanai 2, 111.8 Pungi, 111.16 Hichiriki
@@ -147,7 +143,7 @@ Drum sets: 0 of 2 with every key native (new at this stage).
 
 ## SC-88 Pro
 
-Tones: 158 of 360 native (new at this stage).
+Tones: 165 of 360 native (new at this stage).
 
 - [ ] **Piano** -- 0.24 Piano + Str., 1.16 Dance Piano, 4.9 Cho. E.Piano, 4.10 SilentRhodes, 4.17 Dist E.Piano, 6.1 Harpsichord2, 7.8 Comp Clav., 7.16 Reso Clav., 7.24 Clav.o
 - [ ] **Chromatic Percussion** -- 8.1 Pop Celesta, 11.9 Vibraphones, 15.16 Zither 1, 15.17 Zither 2, 15.24 Dulcimer
@@ -155,13 +151,13 @@ Tones: 158 of 360 native (new at this stage).
 - [ ] **Guitar** -- 25.17 Mandolin 2, 25.18 MandolinTrem, 27.1 Clean Half, 27.2 Open Hard 1, 27.3 Open Hard 2, 27.4 JC Clean Gt., 27.9 JC Chorus Gt, 27.16 TC FrontPick, 27.17 TC Rear Pick, 27.18 TC Clean ff, 27.19 TC Clean 2:, 28.2 TC Muted Gt., 29.1 Overdrive 2, 29.2 Overdrive 3, 29.3 More Drive, 29.8 LP OverDrvGt, 29.9 LP OverDrv:, 30.3 Distortion:, 30.4 Dist.Fast:, 31.9 Gt. Feedback2, 31.24 E.Bass Harm.
 - [ ] **Bass** -- 32.1 Rockabilly, 32.8 Wild A.Bass, 32.16 Bass + OHH, 33.3 Jazz Bass 2, 33.4 Rock Bass, 33.8 ChorusJazzBs, 33.16 F.Bass/Harm., 34.1 Picked Bass2, 34.2 Picked Bass3, 34.3 Picked Bass4, 34.16 P.Bass/Harm., 35.8 Wood+FlessBs, 36.1 Slap Pop, 36.9 Unison Slap, 39.11 WireStr Bass, 39.24 Sync Bass
 - [ ] **Strings** -- 40.1 Violin Atk:, 41.1 Viola Atk.:, 42.1 Cello Atk.:, 45.1 Vcs&Cbs Pizz, 45.2 Chamber Pizz, 45.3 St. Pizzicato, 45.8 Solo Pizz., 45.16 Solo Spic.
-- [ ] **Ensemble** -- 48.2 ChamberStr:, 48.3 Cello sect., 48.12 Strings+Horn, 48.32 Oct Strings1, 48.33 Oct Strings2, 50.17 Hybrid Str., 50.24 Tron Strings, 52.10 Church Choir, 52.16 Choir Hahs, 52.24 Chorus Lahs, 52.33 Male Aah+Str, 53.8 Voice Dahs, 54.9 Silent Night, 54.16 VP330 Choir, 54.17 Vinyl Choir, 55.11 Perc. Hit, 55.12 Shock Wave, 55.17 Techno Hit, 55.18 Dist. Hit, 55.19 Bam Hit, 55.20 Bit Hit, 55.21 Bim Hit, 55.22 Technorg Hit, 55.23 Rave Hit, 55.24 Strings Hit, 55.25 Stack Hit
+- [ ] **Ensemble** -- 48.2 ChamberStr:, 48.3 Cello sect., 48.12 Strings+Horn, 48.32 Oct Strings1, 48.33 Oct Strings2, 50.24 Tron Strings, 52.10 Church Choir, 52.16 Choir Hahs, 52.24 Chorus Lahs, 52.33 Male Aah+Str, 53.8 Voice Dahs, 55.11 Perc. Hit, 55.12 Shock Wave, 55.17 Techno Hit, 55.18 Dist. Hit, 55.19 Bam Hit, 55.20 Bit Hit, 55.21 Bim Hit, 55.22 Technorg Hit, 55.23 Rave Hit, 55.24 Strings Hit, 55.25 Stack Hit
 - [ ] **Brass** -- 56.2 Trumpet, 56.16 4th Trumpets, 56.32 Syn. Trumpet, 57.2 Twin bones, 57.8 Bs. Trombone, 59.8 Muted Horns, 60.2 Horn + Orche, 60.3 Wide FreHrns, 60.9 Dual Horns, 60.24 F.Horn Rip, 60.16 Synth Horn, 61.1 Brass ff, 61.2 Bones Sect., 61.9 Brass 3, 61.10 Brass sfz, 61.17 Trumpet Fall, 61.24 Octave Brass, 61.25 Brass + Reed
 - [ ] **Reed** -- 64.8 Soprano Exp., 65.9 Grow Sax, 65.16 AltoSax + Tp, 66.1 Tenor Sax, 66.9 St. Tenor Sax, 67.1 Bari. Sax, 68.8 Oboe Exp., 68.16 Multi Reed, 71.16 Multi Wind
-- [ ] **Pipe** -- 72.1 Piccolo, 72.8 Nay, 72.9 Nay Tremolo, 72.16 Di, 73.1 Flute 2, 73.2 Flute Exp., 73.3 Flt Travelso, 73.8 Flute + Vln, 73.16 Tron Flute, 75.16 Zampona, 75.17 Zampona Atk, 77.1 Shakuhachi:, 78.1 Whistle 2
+- [ ] **Pipe** -- 72.1 Piccolo, 72.16 Di, 73.1 Flute 2, 73.2 Flute Exp., 73.3 Flt Travelso, 73.8 Flute + Vln, 73.16 Tron Flute, 75.16 Zampona, 75.17 Zampona Atk, 77.1 Shakuhachi:, 78.1 Whistle 2
 - [ ] **Synth Lead** -- 81.9 Fat Saw Lead, 84.16 P5 Sync Lead, 84.17 Fat Sync Lead, 84.19 5th DecaSync, 84.20 Dirty Sync
 - [ ] **Synth Effects** -- 96.3 Anklung Pad
-- [ ] **Ethnic** -- 104.3 Sitar 3, 105.9 San Xian, 105.28 Oud+Strings, 105.32 Pi Pa, 107.1 Gu Zheng, 107.19 Kanoon+Choir, 107.24 Oct Harp, 108.8 Sanza, 109.8 Didgeridoo, 110.8 Er Hu, 110.9 Gao Hu, 111.24 Mizmar, 111.32 Suona 1, 111.33 Suona 2
+- [ ] **Ethnic** -- 104.3 Sitar 3, 105.9 San Xian, 105.28 Oud+Strings, 105.32 Pi Pa, 107.1 Gu Zheng, 107.19 Kanoon+Choir, 107.24 Oct Harp, 108.8 Sanza, 110.8 Er Hu, 110.9 Gao Hu, 111.24 Mizmar, 111.32 Suona 1, 111.33 Suona 2
 - [ ] **Percussive** -- 112.12 Jang-Gu, 113.16 Tambourine, 114.1 Island Mlt, 115.16 Angklung, 115.17 Angkl Rhythm, 115.24 Finger Snaps, 115.32 909 HandClap, 116.1 Small Taiko, 116.16 Jungle BD, 116.17 Techno BD, 116.18 Bounce, 117.16 Rash SD, 117.17 House SD, 117.18 Jungle SD, 117.19 909 SD, 118.11 606 Tom, 118.12 909 Tom, 119.2 Reverse Cym3
 - [ ] **Sound Effects** -- 120.8 Gt. FX Menu, 120.9 Bartok Pizz., 120.10 Guitar Slap, 120.11 Chord Stroke, 120.12 Biwa Stroke, 120.13 Biwa Tremolo, 122.6 Wind 2, 124.8 ScratchKey, 124.9 TapeRewind, 124.10 Phono Noise, 125.10 Calculating, 125.11 Perc. Bang, 126.7 Small Club, 126.8 ApplauseWave, 126.16 Voice One, 126.17 Voice Two, 126.18 Voice Three, 126.19 Voice Tah, 126.20 Voice Whey, 127.4 Eruption, 127.5 Big Shot
 
@@ -170,7 +166,7 @@ Drum sets: 0 of 0 with every key native (new at this stage).
 
 ## SC-8850
 
-Tones: 154 of 460 native (new at this stage).
+Tones: 161 of 460 native (new at this stage).
 
 - [ ] **Piano** -- 0.1 UprightPiano, 0.2 Mild Piano, 0.9 Mild Piano w, 0.25 Piano + Str2, 0.26 Piano+Choir1, 0.27 Piano+Choir2, 0.8 Upright P w, 1.1 Pop Piano, 1.2 Rock Piano, 1.9 Rock Piano w, 1.8 Pop Piano w, 5.1 E.Piano 3, 5.9 Detuned EP 3, 6.2 Harpsichord3, 7.1 Clav. 2, 7.2 Atk Clav.1, 7.3 Atk Clav.2, 7.17 Phase Clav, 7.38 JP8000 Clav.
 - [ ] **Chromatic Percussion** -- 10.1 Music Box 2, 10.8 St.Music Box, 13.8 Xylophone w, 14.10 Church Bell2, 14.16 Tubularbellw, 15.2 Santur 3
@@ -178,12 +174,12 @@ Tones: 154 of 460 native (new at this stage).
 - [ ] **Guitar** -- 25.10 Atk Steel Gt, 27.5 Atk CleanGt., 27.20 LP Rear Pick, 27.21 LP Rear 2, 27.22 LP RearAtack, 27.24 Chung Ruan, 27.25 Chung Ruan 2, 29.5 Attack Drive, 29.10 LP Half Drv, 29.11 LP Half Drv2, 29.12 LP Chorus, 30.5 Attack Dist
 - [ ] **Bass** -- 32.9 Atk A.Bass, 33.5 Heart Bass, 33.6 AttackFinger, 34.4 Double Pick, 37.1 Slap Bass 3, 39.30 Sync Bass 2
 - [ ] **Strings** -- 44.2 Trem Str.St., 44.10 SuspenseStr2, 45.17 StringsSpic., 46.1 Harp&Strings, 46.2 Harp St., 46.8 Uillean Harp, 46.25 Yang Qin 2
-- [ ] **Ensemble** -- 48.4 Bright Str.2, 48.5 Bright Str.3, 48.6 Quad Strings, 48.7 Mild Strings, 48.13 Str.+Flute, 48.14 Choir Str.2, 48.15 Choir Str.3, 48.17 St.Strings 2, 48.18 St.Strings 3, 48.19 Orchestra 3, 48.20 Orchestra 4, 48.34 ContraBsSect, 49.2 SlowStrings3, 49.11 St.Slow Str2, 49.12 S.Str+Choir, 49.13 S.Str+Choir2, 51.5 Hybrid Str.2, 52.11 Boys Choir 1, 52.12 Boys Choir 2, 52.13 St.BoysChoir, 52.14 Rich Choir, 53.1 Chorus Oohs, 53.2 Voice Oohs 2, 53.3 Chorus Oohs2, 53.4 OohsCodeMaj7, 53.5 OohsCodeSus4, 53.6 Jazz Scat, 53.9 JzVoice Dat, 53.10 JzVoice Bap, 53.11 JzVoice Dow, 53.12 JzVoice Thum, 53.16 VoiceLah Fem, 53.17 ChorusLahFem, 53.18 VoiceLuh Fem, 53.19 ChorusLuhFem, 53.20 VoiceLan Fem, 53.21 ChorusLanFem, 53.22 VoiceAah Fem, 53.23 VoiceUuh Fem, 53.24 Fem Lah&Lan, 53.32 VoiceWah Mal, 53.33 ChorusWahMal, 53.34 VoiceWoh Mal, 53.35 ChorusWohMal, 53.36 VoiceAah Mal, 53.37 VoiceOoh Mal, 54.1 SynVox 2, 54.2 SynVox 3, 54.10 Syn.Voice 2, 54.18 JX8P Vox, 55.13 Bounce Hit, 55.14 Drill Hit, 55.15 Thrill Hit, 55.26 Industry Hit, 55.27 Clap Hit
-- [ ] **Brass** -- 56.4 Trumpet & Nz, 56.26 Warm Tp.2, 56.27 Twin Tp., 57.3 Bones & Tuba, 57.16 Euphonium, 58.8 Tuba + Horn, 59.1 Cup Mute Tp, 59.3 MuteTrumpet3, 61.3 St. Brass ff, 61.4 Quad Brass1, 61.5 Quad Brass2, 61.12 Brass sfz 2, 61.14 FatPop Brass, 61.26 Fat + Reed, 61.32 Orch Brass, 61.33 Orch Brass 2, 61.35 St.FatPopBrs, 61.36 St.Orch Brs, 61.37 St.Orch Brs2, 61.38 St.Orch Brs3, 62.10 OrchSynBrass, 63.4 Sync Brass, 63.12 JP8000SawBrs
+- [ ] **Ensemble** -- 48.4 Bright Str.2, 48.5 Bright Str.3, 48.6 Quad Strings, 48.7 Mild Strings, 48.13 Str.+Flute, 48.14 Choir Str.2, 48.15 Choir Str.3, 48.17 St.Strings 2, 48.18 St.Strings 3, 48.19 Orchestra 3, 48.20 Orchestra 4, 48.34 ContraBsSect, 49.2 SlowStrings3, 49.11 St.Slow Str2, 49.12 S.Str+Choir, 49.13 S.Str+Choir2, 52.11 Boys Choir 1, 52.12 Boys Choir 2, 52.13 St.BoysChoir, 52.14 Rich Choir, 53.1 Chorus Oohs, 53.2 Voice Oohs 2, 53.3 Chorus Oohs2, 53.4 OohsCodeMaj7, 53.5 OohsCodeSus4, 53.6 Jazz Scat, 53.9 JzVoice Dat, 53.10 JzVoice Bap, 53.11 JzVoice Dow, 53.12 JzVoice Thum, 53.16 VoiceLah Fem, 53.17 ChorusLahFem, 53.18 VoiceLuh Fem, 53.19 ChorusLuhFem, 53.20 VoiceLan Fem, 53.21 ChorusLanFem, 53.22 VoiceAah Fem, 53.23 VoiceUuh Fem, 53.24 Fem Lah&Lan, 53.32 VoiceWah Mal, 53.33 ChorusWahMal, 53.34 VoiceWoh Mal, 53.35 ChorusWohMal, 53.36 VoiceAah Mal, 53.37 VoiceOoh Mal, 55.13 Bounce Hit, 55.14 Drill Hit, 55.15 Thrill Hit, 55.26 Industry Hit, 55.27 Clap Hit
+- [ ] **Brass** -- 56.4 Trumpet & Nz, 56.26 Warm Tp.2, 56.27 Twin Tp., 57.3 Bones & Tuba, 57.16 Euphonium, 58.8 Tuba + Horn, 59.1 Cup Mute Tp, 59.3 MuteTrumpet3, 61.3 St. Brass ff, 61.4 Quad Brass1, 61.5 Quad Brass2, 61.12 Brass sfz 2, 61.14 FatPop Brass, 61.26 Fat + Reed, 61.32 Orch Brass, 61.33 Orch Brass 2, 61.35 St.FatPopBrs, 61.36 St.Orch Brs, 61.37 St.Orch Brs2, 61.38 St.Orch Brs3, 63.4 Sync Brass, 63.12 JP8000SawBrs
 - [ ] **Reed** -- 65.17 Sax Section, 67.8 Bari & Tenor, 71.17 Quad Wind
 - [ ] **Pipe** -- 73.9 Pipe & Reed, 73.17 Indian Flute, 75.24 Tin Whistle, 75.25 TinWhtsle Nm, 75.26 TinWhtsle Or
 - [ ] **Synth Lead** -- 80.31 JP8000DistLd, 81.14 FatSawLead 2, 81.15 JP SuperSaw, 81.47 Techno Saw, 83.3 Unison SqrLd, 83.4 FatSolo Lead, 83.6 Oct.UnisonLd, 83.7 Unison SawLd, 83.9 CrowdingLead, 84.21 DualSyncLead, 86.5 JP 5th Saw
-- [ ] **Synth Pad** -- 89.11 Sync Brs.Pad, 90.4 Super Poly, 91.7 Bamboo Hit, 92.4 Steel Glass, 92.5 Bottle Stack, 95.3 Sync Pad
+- [ ] **Synth Pad** -- 89.11 Sync Brs.Pad, 90.4 Super Poly, 91.7 Bamboo Hit, 92.4 Steel Glass, 95.3 Sync Pad
 - [ ] **Synth Effects** -- 96.10 Tambra Pad, 98.22 Pizz Bell, 99.11 Tambra Atmos, 100.4 Choir Stab, 101.26 Pour Magic, 101.27 DancingDrill, 103.4 Rep.Trance
 - [ ] **Ethnic** -- 104.4 Sitar/Drone, 104.5 Sitar 4, 108.9 Bodhran, 108.10 Bodhran Mute, 109.9 Uillean Pipe, 109.10 UillnPipe Nm, 109.11 UillnPipe Or
 - [ ] **Percussive** -- 112.13 Jegogan, 112.14 Jublag, 112.15 Pemade, 112.17 Kajar, 112.18 Kelontuk, 112.19 Kelontuk Mt, 112.20 Kelontuk Sid, 112.21 Kopyak Op, 112.22 Kopyak Mt, 112.23 Ceng Ceng, 112.24 Reyoung, 112.25 Kempur, 112.32 Jngl Crash, 112.40 Crash Menu, 112.41 RideCym Menu, 112.42 RideBellMenu, 115.40 HandClapMenu, 116.9 ConcertBD Mt, 116.24 KendangWadon, 116.25 Bebarongan, 116.26 Pelegongan, 116.27 Dholak 1, 116.28 Dholak 2, 116.32 Jngl BD Roll, 116.40 Kick Menu 1, 116.41 Kick Menu 2, 116.42 Kick Menu 3, 116.43 Kick Menu 4, 117.2 Real Tom 2, 117.3 Jazz Tom, 117.4 Brush Tom, 117.24 Jngl SD Roll, 117.40 SD Menu 1, 117.41 SD Menu 2, 117.42 SD Menu 3, 117.43 SD Menu 4, 117.44 SD Menu 5, 118.13 606 Dist.Tom, 119.3 Reverse Cym4, 119.26 Rev.Tom 3, 119.27 Rev.Tom 4, 119.40 Rev.SD Menu1, 119.41 Rev.SD Menu2, 119.42 Rev.SD Menu3, 119.43 Rev.BD Menu1, 119.44 Rev.BD Menu2, 119.45 Rev.BD Menu3, 119.46 Rev.ClapMenu

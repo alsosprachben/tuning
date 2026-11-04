@@ -310,7 +310,7 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
         return r;
     }
     if (v->kind == 4 || v->kind == 6) {         /* SynthProperties': the pluck's comb (a Moog's body's norm) */
-        double r = v->gain / pow((double)harmonic, v->attack_dampening) * (harmonic <= 128 ? v->comb[harmonic] : 0.0);
+        double r = v->gain / pow((double)harmonic, v->attack_dampening) * (harmonic <= 256 ? v->comb[harmonic] : 0.0);
         if (harmonic % 2 == 0 && v->even_db_set)
             r *= pow(10.0, v->even_harmonic_db / 20.0);
         return r;
@@ -376,6 +376,24 @@ static double bore_gain(const VoiceSnap *v, double partial_hz)
     if (v->bell_cutoff_hz != 0.0) {
         double x = pow(partial_hz / v->bell_cutoff_hz, v->bell_order);
         g *= x / (1.0 + x);
+    }
+    if (v->n_mute && partial_hz > 0.0) {
+        /* the mute's response (MutedTrumpetProperties.bore_gain) */
+        const double (*t)[2] = v->mute;
+        int n = v->n_mute;
+        double x = log(partial_hz), db = 0.0;
+        if (partial_hz <= t[0][0])
+            db = t[0][1];
+        else if (partial_hz >= t[n - 1][0])
+            db = t[n - 1][1];
+        else
+            for (int i = 0; i + 1 < n; i++)
+                if (partial_hz <= t[i + 1][0]) {
+                    double f0 = t[i][0], d0 = t[i][1], f1 = t[i + 1][0], d1 = t[i + 1][1];
+                    db = d0 + (d1 - d0) * (x - log(f0)) / (log(f1) - log(f0));
+                    break;
+                }
+        g *= pow(10.0, db / 20.0);
     }
     return g;
 }

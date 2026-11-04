@@ -273,7 +273,10 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
                     bdb[q] = w * (std::isnan(K->bn_low[q]) ? K->bn_db[q] : K->bn_low[q]) + (1.0 - w) * K->bn_db[q];
             }
         }
-        int k = nv_breath(&s, &tb_, K->n_bn, K->bn_hz, bdb, K->bn_rows, pymax(1.0, K->bn_fade_s * SR),
+        // (on a slur the player never stopped blowing: the legato attack, breath_noise_slur)
+        double bfs = (n->slurred && K->bn_slur && K->legato_set) ? pymin(K->bn_fade_s, K->legato_attack_s)
+                                                                 : K->bn_fade_s;
+        int k = nv_breath(&s, &tb_, K->n_bn, K->bn_hz, bdb, K->bn_rows, pymax(1.0, bfs * SR),
                           s.position_x, rows + NCOLS * total, cap - total, qacc, azimuth);
         if (k < 0)
             return -1;
@@ -462,6 +465,43 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     return total;
 }
 
+// BRASS INTONATION FROM THE HORN (brass_fingering.cents_offset): the
+// fingering a player would choose -- the lowest harmonic within 60 cents,
+// in 25-cent bands, then the fewest valves -- and what that tube sounds,
+// less the LIP_CORRECTION a player removes. Cents sharp of target.
+static double brass_cents(double target, int tuba)
+{
+    static const double drop[5] = {0.0, 2.0, 1.0, 3.0, 5.0};
+    static const int combos3[7][3] = {{0}, {2}, {1}, {1, 2}, {2, 3}, {1, 3}, {1, 2, 3}};
+    static const int combos4[11][3] = {{0}, {2}, {1}, {1, 2}, {2, 3}, {4}, {2, 4}, {1, 4}, {1, 2, 4}, {2, 3, 4},
+                                       {1, 2, 3}};
+    const double semi = pow(2.0, 1.0 / 12.0);
+    double open_hz = tuba ? 29.14 : 116.54;
+    int nc = tuba ? 11 : 7;
+    bool have = false;
+    long long br0 = 0, br1 = 0, br2 = 0;
+    double best_cents = 0.0;
+    for (int h = 2; h <= 10; h++)
+        for (int ci = 0; ci < nc; ci++) {
+            const int *cb = tuba ? combos4[ci] : combos3[ci];
+            double add[3];
+            int len = 0;
+            for (int j = 0; j < 3 && cb[j]; j++)
+                add[len++] = pow(semi, drop[cb[j]]) - 1.0;
+            double f = open_hz * h / (1.0 + (len ? pysum(add, len) : 0.0));
+            double cents = 1200.0 * log2(target / f);
+            if (fabs(cents) > 60.0)
+                continue;
+            long long r0 = (long long)py_floordiv(fabs(cents), 25.0), r1 = len, r2 = -h;
+            if (!have || r0 < br0 || (r0 == br0 && (r1 < br1 || (r1 == br1 && r2 < br2)))) {
+                have = true;
+                br0 = r0; br1 = r1; br2 = r2;
+                best_cents = -cents;
+            }
+        }
+    return have ? best_cents * (1.0 - 0.80) : 0.0;
+}
+
 // A note as its FILE gives it: its channel's answers (native/channel.cpp's
 // Song) for its end once the pedals have had their say, its key's next
 // strike and the soft pedal at its onset, then nv_note. n's off, nx and
@@ -490,6 +530,8 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         if (!r)
             return -2;
         n->f0 = pl[0]; n->vel = pl[1]; n->pan = pl[2]; n->chan_vol = pl[3]; n->effort = pl[4];
+        if (K->brass && r == 1)             // the horn's intonation, from its fingering
+            n->f0 *= pow(2.0, brass_cents(n->f0, K->brass == 2) / 1200.0);
         if (K->organ && K->organ->swells)   // an organ's CC7 is its swell, its CC11 its stop word: 1, trimmed
             n->chan_vol = 1.0 * nv_song_note_trim(song, n->song_index);
         if (r == 2)
