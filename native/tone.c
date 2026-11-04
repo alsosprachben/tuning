@@ -757,6 +757,8 @@ int nv_moog_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, doubl
         }
         double hn = (o == 1 || o == 2) ? f0 * k : o == 3 ? f0 * 0.5 * k : o == 5 ? f0 : hf;
         double gM = v->gain * pa[i] * nv_radiation_gain(v, hn, 0.0, 0);
+        if (L->body)                            /* through its formant body (moog_body) */
+            gM *= bore_gain(v, hn) * v->bore_norm;
         double gL = gM * nv_hrtf_gain(v, hn, t.li), gR = gM * nv_hrtf_gain(v, hn, t.ri);
         double cv = nz ? 0.0 : t.cv * nv_chiff_harmonic_gain(v, k);
         int nt_ = 0;

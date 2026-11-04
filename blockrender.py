@@ -5516,10 +5516,10 @@ def _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG
             _umid = min(range(len(_uvs)), key=lambda i: abs(_uvs[i][0] - 1.0)) if _uvs else 0
             _vb0 = (_VB[0], _VB[1], _VB[2])
             # ...FROM C where the engine has this voice and nothing moves it
-            # (moog_spec: no valve, body or unison)
+            # (moog_spec: no valve or unison)
             _mnat = (_moog_native(em, props, nt, ('a', 'b').index(_lay), _mre, _sd)
                      if (NATIVE_TONE != 'off' and not MOOG_NEUTRAL and _uvs is None
-                         and not _pre and _body is None) else None)
+                         and not _pre) else None)
             if _mnat is not None and NATIVE_TONE == 'on':
                 NATIVE_STATS[0] += 1
                 _rows_into(A, _mnat[0])

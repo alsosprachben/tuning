@@ -167,7 +167,7 @@ class MoogLayer(ctypes.Structure):
                 ('pitch_on', I), ('shape_on', I), ('pitch_p', C * 9), ('shape_par', C * 25),
                 ('knob', C * 5), ('span', C * 5), ('eg_v', C * 11), ('eg_log', C * 11),
                 ('atk_to_1', C), ('cut_lo', C), ('cut_oct', C), ('k_max', C), ('res_per_unit', C),
-                ('self_from', C), ('self_amp_max', C), ('eg_under', C)]
+                ('self_from', C), ('self_amp_max', C), ('eg_under', C), ('body', I)]
 
 
 class MoogSpec(ctypes.Structure):
@@ -987,9 +987,30 @@ def moog_spec(cls):
             L.atk_to_1, L.cut_lo, L.cut_oct = MG._ATK_TO_1, MG.CUT_LO_HZ, MG.CUT_OCT
             L.k_max, L.res_per_unit = MG.K_MAX, MG.RES_PER_UNIT
             L.self_from, L.self_amp_max, L.eg_under = MG.SELF_FROM, MG.SELF_AMP, MG.EG_UNDER
+            L.body = int(getattr(cls, 'moog_body', None) is not None)       # (the voice's bore: moog_bodied)
         spec.n_layer = len(lays) if ok else 0
         got = _MOOG[cls] = spec if ok else False
     return got or None
+
+
+def moog_bodied(cls):
+    """Whether cls's Moog sounds through a FORMANT BODY the engine has: its
+    moog_body FormantBody's bore times SynthProperties' norm (bore_gain *
+    _bore_norm), on SynthProperties' series with the pluck's comb."""
+    import inspect
+    if getattr(cls, 'moog_body', None) is None:
+        return False
+    try:
+        src = inspect.getsource(cls.moog_body)
+    except (OSError, TypeError):
+        return False
+    if 'return self.bore_gain(partial_hz) * self._bore_norm()' not in src or src.count('return') != 1:
+        return False
+    if (_owner(cls, 'bore_gain') != 'FormantBody' or _owner(cls, '_bore_norm') != 'SynthProperties'
+            or _owner(cls, 'series_volume') != 'SynthProperties'):
+        return False
+    return (not cls.strike_point and cls.mode_gains is None and not cls.harmonic_touch and not cls.pickup_points
+            and cls.bore_corner_hz and 0 < int(cls.max_harmonic or 0) <= 128)
 
 
 def moog_voice(cls):
@@ -998,8 +1019,8 @@ def moog_voice(cls):
     gains and vibrato (a section's of one player), and only what the native
     Moog note has of its panels -- the oscillators, noise, the ladder's own
     sine, the contours, 1 -> 2 FM, the mod section's pitch and shape rows,
-    one layer or two. Not yet: SYNC, the MF-104M, a valve after the ladder,
-    a formant body, a unison."""
+    one layer or two, a formant body (moog_bodied). Not yet: SYNC, the
+    MF-104M, a valve after the ladder, a unison."""
     import tonelib as T
     if not getattr(cls, 'moog', False):
         return False
@@ -1013,8 +1034,9 @@ def moog_voice(cls):
         return False
     if issubclass(cls, T.SectionMixin) and int(cls.section_players) > 1:
         return False
-    if (getattr(cls, 'moog_body', None) is not None or getattr(cls, 'moog_unison', None)
-            or getattr(cls, 'amp_drive', 0.0)):
+    if getattr(cls, 'moog_unison', None) or getattr(cls, 'amp_drive', 0.0):
+        return False
+    if getattr(cls, 'moog_body', None) is not None and not moog_bodied(cls):
         return False
     # (nothing beside its partials: no knock, breath, struck layer, ring or click)
     if any(getattr(cls, a, None) for a in ('strike_noise_db', 'breath_noise_db', 'struck_layer', 'ring_db',
@@ -1463,7 +1485,23 @@ def snapshot(props):
             s.mode_phases[i] = p.mode_phase(i + 1)
     elif s.kind == 6:
         # a Moog: its partials are its panel's (moog_spec); of the voice, a
-        # section's vibrato for its one player
+        # section's vibrato for its one player -- and a formant body's bore,
+        # its series (the pluck's comb) for the bore's norm
+        if moog_bodied(type(p)):
+            s.comb[0] = 0.0
+            for h in range(1, int(p.max_harmonic) + 1):
+                s.comb[h] = T._pluck_comb(p.plucked_harmonic, p.pluck_dampening, h)
+            s.bore_corner_hz, s.bore_order = p.bore_corner_hz, p.bore_order
+            s.bell_cutoff_hz, s.bell_order = p.bell_cutoff_hz or 0.0, p.bell_order
+            s.bore_norm = p._bore_norm()
+            s.fbody, s.formant_floor = 1, p.formant_floor
+            s.n_fm, s.n_afm, s.n_bt = len(p.formants), len(p.antiformants), len(p.body_trim_db or ())
+            for i, row in enumerate(p.formants):
+                s.fm[i][:] = [float(x) for x in row]
+            for i, row in enumerate(p.antiformants):
+                s.afm[i][:] = [float(x) for x in row]
+            for i, row in enumerate(p.body_trim_db or ()):
+                s.bt[i][:] = [float(x) for x in row]
         if isinstance(p, T.SectionMixin):
             s.sect_n, s.sect_vib = 1, 1
             s.sect_vib_cents = p.section_vibrato_cents

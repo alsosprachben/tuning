@@ -470,6 +470,7 @@ typedef struct {
        EG_UNDER */
     double knob[5], span[5], eg_v[11], eg_log[11];
     double atk_to_1, cut_lo, cut_oct, k_max, res_per_unit, self_from, self_amp_max, eg_under;
+    int body;                               /* through the voice's formant body (moog_body: bore x norm) */
 } MoogLayer;
 
 typedef struct {
