@@ -459,6 +459,7 @@ def _load():
             ('nv_lp_detune_wheel', None, [ctypes.c_void_p, I]),
             ('nv_lp_room', None, [ctypes.c_void_p] * 5 + [ctypes.c_long, ctypes.c_void_p, ctypes.c_long, I]),
             ('nv_lp_post', None, [ctypes.c_void_p, C, C, C]),
+            ('nv_lp_amp_ahead', None, [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]),
             ('nv_lp_output', None, [ctypes.c_void_p, LL, ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p,
                                     ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, LL, C]),
             ('nv_lp_gpu', None, [ctypes.c_void_p] + [ctypes.c_void_p] * 6 + [ctypes.c_long, I]),
@@ -3647,6 +3648,10 @@ class LivePiano(object):
         self.d.nv_lp_room(self.p, fn(cd.conv_new), fn(cd.conv_process), fn(cd.conv_free), self._ir.ctypes.data,
                           len(self._ir), None if self._mir is None else self._mir.ctypes.data,
                           0 if self._mir is None else len(self._mir), int(frames))
+
+    def amp_ahead(self, blocks, hold=True):
+        """live.LIVE_AMP_LOOKAHEAD (blocks) and LIVE_AMP_HOLD, as a check sets them."""
+        self.d.nv_lp_amp_ahead(self.p, int(blocks), int(bool(hold)))
 
     def post(self, thresh=0.70, bend_range=2.0, mod_cents=35.0):
         """The limiter's knee (live.thresh), the pitch wheel's range and the

@@ -142,6 +142,9 @@ def main(argv):
         lv.renderer.send = send
         nv.gpu(opt["gpu"] or "cl", gmin)
     nv.post(lv.thresh, lv.bend_range, lv.mod_cents)
+    if "amp-ahead" in opt:          # the valve's lookahead (0: every note of a valve part held for its products)
+        L.LIVE_AMP_LOOKAHEAD = int(opt["amp-ahead"])
+        nv.amp_ahead(L.LIVE_AMP_LOOKAHEAD, L.LIVE_AMP_HOLD)
     if opt.get("room"):
         lv.thresh = float(opt.get("thresh", lv.thresh))
         if lv.room is not None:
