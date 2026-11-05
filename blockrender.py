@@ -5515,10 +5515,10 @@ def _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG
             _uvs = None if MOOG_NEUTRAL else _MG.unison(getattr(props, 'moog_unison', None), nt.f0)
             _umid = min(range(len(_uvs)), key=lambda i: abs(_uvs[i][0] - 1.0)) if _uvs else 0
             _vb0 = (_VB[0], _VB[1], _VB[2])
-            # ...FROM C where the engine has this voice and nothing moves it
-            # (moog_spec: no unison)
+            # ...FROM C where the engine has this voice (moog_spec), its
+            # unison's voices drawn there as moog.unison draws them
             _mnat = (_moog_native(em, props, nt, ('a', 'b').index(_lay), _mre, _sd)
-                     if (NATIVE_TONE != 'off' and not MOOG_NEUTRAL and _uvs is None) else None)
+                     if (NATIVE_TONE != 'off' and not MOOG_NEUTRAL) else None)
             if _mnat is not None and NATIVE_TONE == 'on':
                 NATIVE_STATS[0] += 1
                 _rows_into(A, _mnat[0])
@@ -5606,7 +5606,7 @@ def _moog_native(em, props, nt, layer, mre, sd=None):
     else:
         imgs, nsurf, surf, img, mir = [], np.zeros(1, np.int32), np.zeros(1, np.int32), np.zeros(3), np.zeros(3)
     t = _tone_in(em, P, nt, P.gain, 0.0, nt.sjit, reflect)
-    cap = (32 + 1 + 64 + 64 + 32) * (1 + len(imgs)) + 16
+    cap = (32 + 1 + 64 + 64 + 32) * (1 + len(imgs)) * max(1, spec.L[layer].u_n) + 16
     rows = np.empty((cap, len(EMIT_COLS)))
     qacc = np.array([v for pr in em._QACC for v in pr], np.float64)
     az = ctypes.c_double(em.azimuth)

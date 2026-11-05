@@ -750,7 +750,7 @@ double nv_moog_ladder(const MoogLayer *L, double f, double fc, double k, int mod
 static int moog_emit(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, double fx, double mre, int nimg,
                      const int *nsurf, const int *surf, const double *img, const double *mir, double *rows, int cap,
                      double *qacc, double *azimuth, int np, const int *po, const int *pk, const double *phf,
-                     const double *pa, const double *pph, int neutral);
+                     const double *pa, const double *pph, int neutral, int nu, const double *uv, int umid);
 
 /* A LIVE TEMPLATE's MOOG (blockrender's MOOG_NEUTRAL): set by the live
  * template builder around its one-note render, on its own thread */
@@ -781,8 +781,9 @@ int nv_moog_neutral_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *
         po[np] = 4; pk[np] = k + 1; phf[np] = L->noise_hz[k]; pa[np] = 1.0; pph[np++] = 0.0;
     }
     po[np] = 5; pk[np] = 1; phf[np] = f0; pa[np] = 1.0; pph[np++] = 0.0;
+    static const double UV1[9] = {1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0};
     return moog_emit(v, t0, L, fx, mre, nimg, nsurf, surf, img, mir, rows, cap, qacc, azimuth, np, po, pk, phf, pa,
-                     pph, 1);
+                     pph, 1, 1, UV1, 0);
 }
 
 int nv_moog_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, double fx, double mre, int nimg,
@@ -833,8 +834,51 @@ int nv_moog_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, doubl
             }
         }
     }
+    /* moog.unison: the note's voices, seeded on its key -- (ratio, gain,
+       phase in cycles, left, right, has drift, drift depth, rate, phase) */
+    static const double UV1[9] = {1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0};
+    static _Thread_local double uv[9 * 16];
+    int nu = L->u_n > 1 && L->u_n <= 16 ? L->u_n : 1, umid = 0;
+    if (nu > 1) {
+        PyRandom r;
+        pyr_seed(&r, 0x5A75 + (long long)nearbyint(f0 * 100.0));
+        static const double SS[7] = {-1.0, -0.5716, -0.1774, 0.0, 0.1810, 0.5650, 0.9767};
+        double sp[16], g[16], gg[16];
+        for (int i = 0; i < nu; i++)
+            sp[i] = nu == 7 ? SS[i] : -1.0 + 2.0 * i / (nu - 1);
+        int smid = 0;
+        for (int i = 1; i < nu; i++)
+            if (fabs(sp[i]) < fabs(sp[smid]))
+                smid = i;
+        for (int i = 0; i < nu; i++) {
+            g[i] = i == smid ? 1.0 : L->u_mix;
+            gg[i] = g[i] * g[i];
+        }
+        double norm = pow(pysum(gg, nu), -0.5);
+        for (int i = 0; i < nu; i++) {
+            double *w = uv + 9 * i;
+            w[0] = pow(2.0, sp[i] * L->u_cents / 1200.0);
+            double pan = pymax(-1.0, pymin(1.0, sp[i] * L->u_width));
+            double a = (pan + 1.0) * PI / 4.0;
+            w[5] = L->u_dc != 0.0;
+            if (w[5]) {
+                w[6] = (pow(2.0, L->u_dc / 1200.0) - 1.0) * pyr_uniform(&r, 0.6, 1.0);
+                w[7] = pyr_uniform(&r, L->u_dhz[0], L->u_dhz[1]);
+                w[8] = pyr_uniform(&r, 0.0, 2.0 * PI);
+            } else {
+                w[6] = w[7] = w[8] = 0.0;
+            }
+            w[1] = g[i] * norm;
+            w[2] = pyr_random(&r);
+            w[3] = cos(a) * pow(2.0, 0.5);
+            w[4] = sin(a) * pow(2.0, 0.5);
+        }
+        for (int i = 1; i < nu; i++)        /* blockrender's: the voice nearest unison */
+            if (fabs(uv[9 * i] - 1.0) < fabs(uv[9 * umid] - 1.0))
+                umid = i;
+    }
     return moog_emit(v, t0, L, fx, mre, nimg, nsurf, surf, img, mir, rows, cap, qacc, azimuth, np, po, pk, phf, pa,
-                     pph, 0);
+                     pph, 0, nu, nu > 1 ? uv : UV1, umid);
 }
 
 /* the partials of a Moog note as blockrender._note_moog emits them: (osc,
@@ -844,7 +888,7 @@ int nv_moog_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, doubl
 static int moog_emit(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, double fx, double mre, int nimg,
                      const int *nsurf, const int *surf, const double *img, const double *mir, double *rows, int cap,
                      double *qacc, double *azimuth, int np, const int *po, const int *pk, const double *phf,
-                     const double *pa, const double *pph, int neutral)
+                     const double *pa, const double *pph, int neutral, int nu, const double *uv, int umid)
 {
     Rows R = {rows, 0, cap};
     const double f0 = t0->f0, sr = t0->sr;
@@ -855,6 +899,7 @@ static int moog_emit(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, d
     }
     double fm1 = L->fm_index != 0.0 ? 2.0 * PI * f0 * L->fm_r1 / sr : 0.0;
     double terms[9 * 64];
+    double VB0[3] = {VB[0], VB[1], VB[2]};
     for (int i = 0; i < np; i++) {
         int o = po[i], k = pk[i];
         double hf = phf[i];
@@ -877,7 +922,7 @@ static int moog_emit(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, d
             double fcs = L->self_cut * pow(f0 / L->kb_ref_hz, L->kb_track) * L->self_eg;
             gM *= moog_ladder_gain(L, hf, pymax(fcs, 1.0), L->kn[1], (int)L->ft[7], L->ft[8] != 0.0);
         }
-        double gL = gM * nv_hrtf_gain(v, hn, t.li), gR = gM * nv_hrtf_gain(v, hn, t.ri);
+        double hL = nv_hrtf_gain(v, hn, t.li), hR = nv_hrtf_gain(v, hn, t.ri);
         double cv = nz ? 0.0 : t.cv * nv_chiff_harmonic_gain(v, k);
         int nt_ = 0;
         if (t.reflect) {
@@ -885,10 +930,25 @@ static int moog_emit(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, d
             if (nt_ < 0)
                 return -1;
         }
-        if (!emit(v, &t, &R, qacc, azimuth, terms, nt_, 2.0 * PI * hf / sr, gL, gR, gM, hn, t.non, t.noff, 1.0,
-                  mre, t.chiff, 0.0, 0.0, 0.0, 1.0, cv, t.cc, t.crl, t.sjit, t.csc, -1.0, 0.0, pph[i] + 0.0, 0.0,
-                  VB, t.pos_x0, 0))
-            return -1;
+        /* each voice of a unison (one, none): its detune, level, phase (k x
+           its offset on an oscillator's harmonic k), place and drift; noise
+           and the ladder's own sine the centre voice's alone */
+        for (int u = 0; u < nu; u++) {
+            const double *w = uv + 9 * u;
+            if (u != umid && (o == 4 || o == 5))
+                continue;
+            if (nu > 1) {
+                VB[0] = w[5] != 0.0 ? w[6] : VB0[0];
+                VB[1] = w[5] != 0.0 ? w[7] : VB0[1];
+                VB[2] = w[5] != 0.0 ? w[8] : VB0[2];
+            }
+            double off = (o >= 1 && o <= 3) ? 2.0 * PI * w[2] * k : 0.0;
+            double gu = gM * w[1];
+            if (!emit(v, &t, &R, qacc, azimuth, terms, nt_, 2.0 * PI * hf * w[0] / sr, gu * w[3] * hL,
+                      gu * w[4] * hR, gu, hn, t.non, t.noff, 1.0, mre, t.chiff, 0.0, 0.0, 0.0, 1.0, cv, t.cc, t.crl,
+                      t.sjit, t.csc, -1.0, 0.0, pph[i] + off, 0.0, VB, t.pos_x0, 0))
+                return -1;
+        }
     }
     return R.n;
 }

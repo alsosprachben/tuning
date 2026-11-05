@@ -179,7 +179,8 @@ class MoogLayer(ctypes.Structure):
                 ('atk_to_1', C), ('cut_lo', C), ('cut_oct', C), ('k_max', C), ('res_per_unit', C),
                 ('self_from', C), ('self_amp_max', C), ('eg_under', C), ('body', I),
                 ('pre', I), ('bp_gain', C), ('bp_corner', C), ('hp_gain', C), ('hp_corner', C), ('hp_leak', C),
-                ('mf_on', I), ('mf', C * 7), ('mf_grid', C), ('mf_max', C), ('mf_floor', C), ('mf_poles', C)]
+                ('mf_on', I), ('mf', C * 7), ('mf_grid', C), ('mf_max', C), ('mf_floor', C), ('mf_poles', C),
+                ('u_n', I), ('u_cents', C), ('u_mix', C), ('u_dc', C), ('u_dhz', C * 2), ('u_width', C)]
 
 
 class MoogSpec(ctypes.Structure):
@@ -1133,7 +1134,7 @@ def moog_spec(cls):
         for i, lay in enumerate(lays if ok else ()):
             pn = MG.panel_of(cls, layer=lay)
             mfs = mf104.settings(pn)
-            if (pn['sync'] or len(MG.NOISE_HZ) > 32
+            if (len(MG.NOISE_HZ) > 32
                     or (mfs is not None and (MG.pitch_params(pn) is not None or MG.shape_flags(pn)))):
                 ok = False
                 break
@@ -1142,10 +1143,19 @@ def moog_spec(cls):
             L.foot1 = MG.FOOT.get(int(pn['osc1_octave']), 1.0)
             L.foot2 = MG.FOOT.get(int(pn['osc2_octave']), 1.0)
             L.o2f = 2.0 ** (MG.bipolar(pn['osc2_freq'], MG.SEMIS) / 12.0)
+            # SYNC: OSC 2 restarts at each of OSC 1's periods -- it sounds on
+            # OSC 1's harmonics (f1 exactly: foot1, x 1.0), its coefficients the
+            # synced wave's at OSC 2 FREQ's ratio (moog.partials' f2 / f1, the
+            # same to sync_spectrum's 1e-4 at every key)
+            sync = bool(pn['sync'])
+            r12 = MG.osc_ratio(pn, MG.OSC2) / MG.osc_ratio(pn, MG.OSC1)
+            if sync:
+                L.foot2, L.o2f = L.foot1, 1.0
             L.lvl[:] = [float(pn['osc1_level']), float(pn['osc2_level']), float(pn['sub_level']),
                         float(pn['noise_level'])]
             for arr, c in ((L.c1, MG.osc_spectrum(pn['osc1_wave'], MG.OSC_HARMONICS)),
-                           (L.c2, MG.osc_spectrum(pn['osc2_wave'], MG.OSC_HARMONICS)),
+                           (L.c2, MG.sync_spectrum(pn['osc2_wave'], r12, MG.OSC_HARMONICS) if sync
+                            else MG.osc_spectrum(pn['osc2_wave'], MG.OSC_HARMONICS)),
                            (L.cs, MG.sub_spectrum(pn['sub_wave'], MG.SUB_HARMONICS))):
                 for k, z in enumerate(c):
                     arr[k][0], arr[k][1] = float(z.real), float(z.imag)
@@ -1184,6 +1194,12 @@ def moog_spec(cls):
             L.k_max, L.res_per_unit = MG.K_MAX, MG.RES_PER_UNIT
             L.self_from, L.self_amp_max, L.eg_under = MG.SELF_FROM, MG.SELF_AMP, MG.EG_UNDER
             L.body = int(getattr(cls, 'moog_body', None) is not None)       # (the voice's bore: moog_bodied)
+            # THE UNISON (moog.unison): its spec, each note's voices drawn in C
+            us = dict(MG.UNISON, **(getattr(cls, 'moog_unison', None) or {}))
+            L.u_n = int(us['voices'])
+            L.u_cents, L.u_mix, L.u_dc = float(us['cents']), float(us['mix']), float(us['drift_cents'])
+            L.u_dhz[:] = [float(x) for x in us['drift_hz']]
+            L.u_width = float(us['width'])
             if mfs is not None:                 # the MF-104M after it (its repeats: native/prepare.cpp)
                 L.mf_on = 1
                 L.mf[:] = [float(mfs[k]) for k in ('time', 'fc', 'fb', 'wet', 'dry', 'rate', 'amount')]
@@ -1235,7 +1251,7 @@ def moog_voice(cls):
     sine, the contours, 1 -> 2 FM, the mod section's pitch and shape rows,
     one layer or two, a formant body (moog_bodied), a valve after the ladder
     (the file's amp on its rows), the MF-104M (not on a note whose pitch or
-    shapes move). Not yet: SYNC, a unison."""
+    shapes move), SYNC (OSC 2 on OSC 1's harmonics, synced), a unison (moog.unison's voices)."""
     import tonelib as T
     if not getattr(cls, 'moog', False):
         return False
@@ -1246,8 +1262,6 @@ def moog_voice(cls):
     if _owner(cls, 'voice_vibrato') not in ('SynthProperties', 'SectionMixin'):
         return False
     if any(_owner(cls, n) != o for n, o in _BASE_OWN.items() if n != 'inharmonicity_coefficient_func'):
-        return False
-    if getattr(cls, 'moog_unison', None):
         return False
     if getattr(cls, 'moog_body', None) is not None and not moog_bodied(cls):
         return False

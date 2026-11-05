@@ -540,6 +540,14 @@ typedef struct {
        mf104's GRID, MAX_REPEATS, REPEAT_FLOOR, FILTER_POLES */
     int mf_on;
     double mf[7], mf_grid, mf_max, mf_floor, mf_poles;
+    /* THE UNISON (moog.unison, the class's moog_unison; u_n 1 none): its
+       voices, the outermost's detune, a side voice's level, each one's
+       drift (cents, its rate's range Hz) and the stereo width -- each note
+       draws its voices from its key (moog.unison's seed). SYNC needs none of
+       its own: OSC 2 is on OSC 1's harmonics (foot2 = foot1, o2f 1), its
+       coefficients the synced spectrum's (moog.sync_spectrum) */
+    int u_n;
+    double u_cents, u_mix, u_dc, u_dhz[2], u_width;
 } MoogLayer;
 
 typedef struct {
