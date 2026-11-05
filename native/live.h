@@ -48,6 +48,9 @@ struct Template {
     // its rows (cof its jack's offset, dur its length from the key-up), by rank
     std::vector<Template> jacks;
     std::vector<int> jack_rank;
+    // THE KEY-UP's ROWS (t["rel"]: release_click_*, a voice with no ranks):
+    // out of the note, their own one-shot stamped at the key-up; none, empty
+    std::vector<Template> rel;
     // A SECTION'S ENTRY SCATTER (section_onset_ms): each player's onset drawn
     // fresh at every press, up to this (Slab.stamp_cols' scatter_ms)
     double scatter_ms = 0.0;

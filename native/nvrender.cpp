@@ -393,6 +393,10 @@ int main(int argc, char **argv)
             fprintf(stderr, "nvrender: refused: TUNING_AMP_DRIVE (Python's audition)\n");
             return 2;
         }
+        if (getenv("TUNING_CLAV") && nc->clav_panel) {
+            fprintf(stderr, "nvrender: refused: TUNING_CLAV (Python's audition)\n");
+            return 2;
+        }
 
     }
     // A CHANNEL'S CC91 IS ITS DISTANCE (blockrender's _src_dist: the first
@@ -619,6 +623,8 @@ int main(int argc, char **argv)
         if (!ach.empty())
             nv_amp_expand(&rows, &P, dm, (int)ach.size(), ach.data(), adr.data(), aref.data(), aimb.data(), SR);
     }
+    // THE CLAVINET's TONE ROCKERS (_prep_clav_rockers): after the valve, before the tremolos
+    nv_clav_pass(song, rows, P);
     // THE ORGANS' TREMOLOS (_prep_tremolo, after the render's length is
     // known): a Tremolo stop's on the notes struck with it drawn, then the
     // wheel's on its channels' rows, the stop's sidebands among them

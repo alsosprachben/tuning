@@ -184,6 +184,10 @@ struct Slab {
     // depth, its own baseline (captured once) and its stereo sign
     std::vector<char> tr_on;
     std::vector<float> tr_dep, tr_aL, tr_aR, tr_st;
+    // a Clavinet's tone rockers (live's cv_*): the rows they have taken, and
+    // each one's level unfiltered, which every move recomputes from
+    std::vector<char> cv_on;
+    std::vector<float> cv_aL, cv_aR;
     std::vector<float> hs_dep;                  // a harmonium's Tremolo stop: its depth and rate (live's)
     std::vector<double> hs_hz;
     // THE LESLIE (live.Slab.leslie_arm / leslie_swing): a slot on a rotor,
@@ -242,6 +246,7 @@ struct Slab {
         dg.assign(cap, 0.0f);
         aLp.assign(cap, 0.0f); aRp.assign(cap, 0.0f);
         tr_on.assign(cap, 0); tr_dep.assign(cap, 0.0f); tr_aL.assign(cap, 0.0f); tr_aR.assign(cap, 0.0f);
+        cv_on.assign(cap, 0); cv_aL.assign(cap, 0.0f); cv_aR.assign(cap, 0.0f);
         tr_st.assign(cap, 1.0f);
         hs_dep.assign(cap, 0.0f); hs_hz.assign(cap, 0.0);
         ls_on.assign(cap, 0); ls_horn.assign(cap, 0); ls_am.assign(cap, 0.0f); ls_sharp.assign(cap, 1.0f);
@@ -333,6 +338,7 @@ struct Slab {
             vbase[s] = tf4[F4_vd][q];
             vrbase[s] = tf4[F4_vr][q];
             tr_on[s] = 0;                       // (unarmed until its tremolo is)
+            cv_on[s] = 0;                       // (...and off the rockers)
             hs_dep[s] = 0.0f;
             ls_on[s] = 0;                       // (...and off the rotors until armed)
         }
@@ -428,6 +434,7 @@ struct Slab {
             f4[F4_aL][sidx] *= rl; f4[F4_aR][sidx] *= rr;
             tr_aL[sidx] *= rl; tr_aR[sidx] *= rr;   // (the tremolo's baseline with it)
             ls_aL[sidx] *= rl; ls_aR[sidx] *= rr;   // (...and the Leslie's)
+            cv_aL[sidx] *= rl; cv_aR[sidx] *= rr;   // (...and the rockers')
         }
         if (itd) {
             float dl = (float)((t1[2] - t0[2]) * rate);
@@ -437,6 +444,35 @@ struct Slab {
                 f8[F8_p0][sidx] -= f8[F8_om][sidx] * (double)dl;
                 f8[F8_p0R][sidx] += f8[F8_om][sidx] * (double)dl;
             }
+        }
+    }
+
+    // Slab.clav_tone: the rockers on these rows, from their unfiltered level
+    // (taken the first time), never from what is there -- tonelib.
+    // clav_tone_gain in float32, as numpy has it on the float32 columns
+    void clav_tone(int setting, const std::vector<long> &slots)
+    {
+        static const float tone[5][3] = {{1200.0f, 2.0f, 0.0f}, {3000.0f, 2.0f, 0.0f}, {0.0f, 0.0f, 0.0f},
+                                         {400.0f, 2.0f, 1.0f}, {900.0f, 2.0f, 1.0f}};
+        if (slots.empty())
+            return;
+        for (long s : slots)
+            if (!cv_on[s]) {
+                cv_aL[s] = f4[F4_aL][s];
+                cv_aR[s] = f4[F4_aR][s];
+            }
+        for (long s : slots)
+            cv_on[s] = 1;
+        const float *t = tone[((setting % 5) + 5) % 5];
+        for (long s : slots) {
+            float g = 1.0f;
+            if (t[0] > 0.0f) {
+                float y = f4[F4_nf][s] / t[0];
+                float x = y * y;                // (numpy's ** 2.0: its square)
+                g = t[2] != 0.0f ? x / (1.0f + x) : 1.0f / (1.0f + x);
+            }
+            f4[F4_aL][s] = cv_aL[s] * g;
+            f4[F4_aR][s] = cv_aR[s] * g;
         }
     }
 
@@ -451,6 +487,7 @@ struct Slab {
                 f4[F4_aL][sidx] = 0.0f; f4[F4_aR][sidx] = 0.0f;
                 tr_aL[sidx] = 0.0f; tr_aR[sidx] = 0.0f;
                 ls_aL[sidx] = 0.0f; ls_aR[sidx] = 0.0f;
+                cv_aL[sidx] = 0.0f; cv_aR[sidx] = 0.0f;
             }
     }
 
@@ -467,6 +504,7 @@ struct Slab {
             f4[F4_aL][sidx] *= r; f4[F4_aR][sidx] *= r;
             tr_aL[sidx] *= r; tr_aR[sidx] *= r;     // (the tremolo's own baseline with it)
             ls_aL[sidx] *= r; ls_aR[sidx] *= r;     // (...and the Leslie's)
+            cv_aL[sidx] *= r; cv_aR[sidx] *= r;     // (...and the rockers')
         }
     }
 
@@ -480,6 +518,7 @@ struct Slab {
             f4[F4_aL][s] *= r[q]; f4[F4_aR][s] *= r[q];
             tr_aL[s] *= r[q]; tr_aR[s] *= r[q];
             ls_aL[s] *= r[q]; ls_aR[s] *= r[q];
+            cv_aL[s] *= r[q]; cv_aR[s] *= r[q];
         }
     }
 
@@ -694,6 +733,7 @@ struct Slab {
             busy[s] = 1;
             dk[s] = -1;
             ls_on[s] = 0;
+            cv_on[s] = 0;
             tr_on[s] = 0;
             hs_dep[s] = 0.0f;
             for (int c = 0; c < NF4; c++)
@@ -1122,6 +1162,7 @@ struct Piano {
         double amp_ref = 0.0, amp_imb = 0.06;
         const NoteClass *cab = nullptr;     // its speaker (cab_set), which the templates went through
         int scanner = 0;            // NoteClass.scanner: 0 none, else 1 +2 the switch +4 x depth +16 chorus
+        bool clav = false;          // a Clavinet's panel (clav_panel): CC1 its tone rockers
     };
     std::vector<Patch> patches;
     // THE CABINET (live's rotor_horn, rotor_drum: LiveRotor): one Leslie in
@@ -1528,6 +1569,7 @@ struct Piano {
                          o.lnrm.data());
     }
     std::map<long long, int> drive_step;
+    std::map<long long, int> clav_step;     // live's: a part's rockers, once its wheel has moved
     std::set<long long> amp_dirty;
     std::map<long long, long long> amp_jid, amp_start, amp_fine_placed;
     bool amp_busy = false, amp_has_out = false;
@@ -2151,6 +2193,7 @@ struct Piano {
         p.amp_imb = k ? k->amp_imbalance : 0.06;
         p.cab = k && k->cab_set ? k : nullptr;
         p.scanner = k ? k->scanner : 0;
+        p.clav = !p.drums && k && k->clav_panel;
         p.organ = og;
         if (!og)
             return;
@@ -2168,6 +2211,8 @@ struct Piano {
     std::map<std::pair<int, int>, double> note_touch;
     // a harpsichord's key down: the template it was stamped from, for its jacks' clicks (live's held_tmpl)
     std::map<Key, std::pair<const nv::live::Template *, const OrganSpec *>> held_jacks;   // ...and its organ
+    std::map<Key, std::pair<const nv::live::Template *, double>> held_rel;  // live's held_tmpl: its key-up rows, its scale
+    static const long long KEYUP_REL = 4999;    // the key-up's one-shot ((pid, ch, note, "keyup"))
     // THE CHEST'S WIND (live.wind_st, _wind_row, _wind_block): a part's, made
     // at its first rank drawn -- numpy's generator seeded by the part, the
     // pressure's state, a slab row a family of its ranks (from wind_next, to
@@ -2328,11 +2373,16 @@ struct Piano {
                 const OrganSpec *og = nv_tcache_organ((void *)tone, tp->second.first);
                 double dep = og ? og->wheel_trem : (k ? k->trem_depth : 0.0);
                 bool st = og ? og->wtrem_stereo != 0 : (k && k->trem_stereo);
-                if (dep <= 0.0)
+                bool clv = k && k->clav_panel;
+                if (dep <= 0.0 && !clv)
                     continue;
                 std::vector<long> sl = sounding_tone(ch, p.pid, tone, true);
-                if (!sl.empty())
+                if (sl.empty())
+                    continue;
+                if (dep > 0.0)
                     S.tremolo_arm(sl, v / 127.0 * dep, st);
+                if (clv)
+                    S.clav_tone((int)nearbyint(v / 127.0 * 4.0), sl);
             }
         }
     }
@@ -2489,6 +2539,8 @@ struct Piano {
             return;                         // the slab full: this note does not sound
         if (T->min_hold)
             tex_on[key] = n0 + T->min_hold; // a held texture: the least it plays
+        if (!T->rel.empty())
+            held_rel[Key(pid, ch, note, 0)] = std::make_pair(T, scale);     // its key-up rows, at the key-up
         long lj = S.live_find(key);
         std::vector<long> slots = lj >= 0 ? S.live[lj].second : std::vector<long>();
         if (cpan[ch] != 64 && !slots.empty())
@@ -2527,6 +2579,9 @@ struct Piano {
                 }
             }
         }
+        auto cs = clav_step.find(pid);      // a note struck with the rockers down joins them
+        if (cs != clav_step.end())
+            S.clav_tone(cs->second, slots);
         auto td = trem_depth.find(pid);     // the wheel's tremolo, the wheel already up
         if (td != trem_depth.end() && td->second > 0.0)
             S.tremolo_arm(slots, td->second, patches[cur].wtrem_stereo);
@@ -2839,6 +2894,7 @@ struct Piano {
         // ...and everything keyed to the old voice: its wheel's drive step and tremolo
         drive_step.erase(ppid);
         trem_depth.erase(ppid);
+        clav_step.erase(ppid);
         amp_dirty.erase(ppid);
         Use u(*this, w.pi);
         amp_touch(w.pi);
@@ -3470,10 +3526,49 @@ struct Piano {
             tex_on.erase(tx);
         }
         S.release(Key(pid, ch, note, -1), at);
+        key_up_event(ch, note, n0);
         if (reg_on && cur_reg) {
             S.release(Key(pid, ch, note, REG_FORCED), n0);
             reg_damper(ch, n0, note, false);
         }
+    }
+
+    // live._key_up_event: the mechanism letting go (release_click_*) -- the
+    // template's key-up rows stamped now, a one-shot at the note's own level
+    void key_up_event(int ch, int note, long long n0)
+    {
+        auto it = held_rel.find(Key(pid, ch, note, 0));
+        if (it == held_rel.end())
+            return;
+        const nv::live::Template &T = *it->second.first;
+        double scale = it->second.second;
+        held_rel.erase(it);
+        if (T.rel.empty() || !T.rel[0].P)
+            return;
+        const nv::live::Template &R = T.rel[0];
+        const double *f8p[6];
+        const float *f4p[27];
+        const long long *i8p[2];
+        const int32_t *i4p[6];
+        for (int c = 0; c < 6; c++)
+            f8p[c] = R.f8[c].data();
+        for (int c = 0; c < 27; c++)
+            f4p[c] = R.f4[c].data();
+        for (int c = 0; c < 2; c++)
+            i8p[c] = R.i8[c].data();
+        for (int c = 0; c < 6; c++)
+            i4p[c] = R.i4[c].data();
+        Key key(pid, ch, note, KEYUP_REL);
+        if (!S.stamp(f8p, f4p, i8p, i4p, R.hrel.data(), R.P, key, n0, scale, R.dur, true, NAN, ch,
+                     R.sof.empty() ? nullptr : R.sof.data(), R.rof.empty() ? nullptr : R.rof.data(), 0.0, 0.0,
+                     R.cof.empty() ? nullptr : R.cof.data()))
+            return;
+        std::vector<long> got = S.last_slots;
+        long li = S.live_find(key);
+        if (li >= 0)
+            S.live.erase(S.live.begin() + li);      // it retires on its own; never released
+        if (cpan[ch] != 64)
+            S.repan(got, cpan[ch], 64, rate, true);
     }
 
     // live.Slab.press at tilt 0: each slot from its baseline (aL0, aR0),
@@ -3968,6 +4063,17 @@ struct Piano {
                     best = st;
             speed = best;
         }
+        if (cc == 1)                            // A CLAVINET's TONE ROCKERS (live's 'tone' role)
+            for (const Patch &p : patches) {
+                if (!p.clav || !(p.channel < 0 || p.channel == ch))
+                    continue;
+                int step = (int)nearbyint(v / 127.0 * 4.0);
+                auto it = clav_step.find(p.pid);
+                if (it == clav_step.end() || it->second != step) {
+                    clav_step[p.pid] = step;
+                    S.clav_tone(step, sounding_tone(ch, p.pid, p.cache, false));
+                }
+            }
         if (cc == 1 && !key_tone.empty())       // ...and the tones held from before a program change
             tone_wheel(ch, v);
     }

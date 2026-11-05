@@ -258,6 +258,17 @@ typedef struct {
     /* A STROKE's TILT ON MEASURED MODES (mode_stroke_tilt: the timpani's):
        dB per octave of mode ratio per dB of stroke, about mst_ref */
     double mst, mst_ref;
+    /* A CLAVINET (ClavinetProperties.__init__, on the electric path): its
+       coil a fraction of the note's speaking length (ref_m (ref_hz/f0)^pow),
+       at bridge_m or between c0 and c1 by key, capped at qmax; sel 0
+       centre, 1 bridge, 2 both, 3 both in anti-phase. Its key-up's modes
+       (release_click_modes): the thumps, falling tdb a semitone over key
+       46, then the string's harmonics kh at ka -- the note's in vk_* */
+    int clav, cl_sel, cl_nt, cl_nk;
+    double cl_ref_m, cl_ref_hz, cl_pow, cl_bridge, cl_c0, cl_c1, cl_qmax, cl_tdb;
+    double cl_thump[8], cl_kh[8], cl_ka[8];
+    int vk_n;
+    double vk_hz[16], vk_amp[16];
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -747,6 +758,9 @@ typedef struct {
     // tail_db under, falling tail_dbs; tail_set 0 none
     int tail_set;
     double tail_db, tail_dbs;
+    // A CLAVINET's PANEL (clav_panel): its tone rockers by the part's first
+    // CC1 (_prep_clav_rockers)
+    int clav_panel;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -921,6 +935,8 @@ int nv_song_organ_tremolo(void *s);
 void nv_song_add_push_rows(void *s, long long a, long long b);
 void nv_song_add_rel_jack(void *s, long long a, long long b, int rank, double jo);
 int nv_song_n_rel_jacks(void *s, double *out, int cap);
+void nv_song_add_rel_rows(void *s, long long a, long long b);
+int nv_song_n_rel_rows(void *s, long long *out, int cap);
 int nv_song_n_push_rows(void *s, long long *ab, int cap);
 double nv_song_note_trim(void *s, int i);
 int nv_song_n_grows(void *s);
@@ -940,6 +956,9 @@ void nv_song_add_trem(void *s, long long ch, const double *cfg);
 void nv_song_add_cab(void *s, long long ch, const NoteClass *k);
 int nv_song_cabs(void *s, long long *ch, const NoteClass **k, int cap);
 void nv_cabinet_pass(void *song, double *rows, long long P);
+void nv_song_add_clav(void *s, long long ch, int setting);
+int nv_song_clavs(void *s, long long *ch, int *setting, int cap);
+void nv_clav_pass(void *song, double *rows, long long P);
 int nv_song_trems(void *s, long long *ch, double *cfg, int cap);
 void nv_song_add_amp(void *s, long long ch, double drive, int rotor, double reference, double imbalance);
 void nv_song_amp_cfg(void *s, int k, double *reference, double *imbalance);

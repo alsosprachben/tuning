@@ -274,6 +274,14 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
             nv_song_add_leslie(song, ch, k->leslie);
         if (k && k->cab_set)                            // (_CAB_CH: the channel's, set once)
             nv_song_add_cab(song, ch, k);
+        if (k && k->clav_panel) {                       // (_CLAV_CH: the part's first CC1, the rockers swept)
+            int v;
+            if (nv_song_first_cc(song, part, 1, &v)) {
+                int set = (int)nearbyint(v / 127.0 * 4.0);      // (round: half to even)
+                if (set != 2)                           // (CLAV_FLAT: all four up, nothing)
+                    nv_song_add_clav(song, ch, set);
+            }
+        }
         if (k && !k->organ && k->trem_depth > 0.0) {    // (_note_tremolo: the channel's, set once)
             int v;
             double dep = k->trem_intrinsic ? k->trem_depth
@@ -508,6 +516,40 @@ static double cab_gain(const NoteClass *k, double hz)
 // the row's frequency -- the file's after the amplifier, before the rotors;
 // a live template's as it is built (the speaker is linear: each note through
 // it, summed, is the sum through it)
+// THE CLAVINET's TONE ROCKERS (_prep_clav_rockers, tonelib.clav_tone_gain):
+// every row on the channel through the rocker's filter at its frequency --
+// CLAV_TONE's (corner, order, high-pass), darkest to brightest
+extern "C" void nv_clav_pass(void *song, double *rows, long long P)
+{
+    enum { cAL = 3, cAR = 4, cAM = 5, cMCH = 6, cNF = 11 };     // (EMIT_COLS)
+    static const double tone[5][3] = {{1200.0, 2.0, 0.0}, {3000.0, 2.0, 0.0}, {0.0, 0.0, 0.0},
+                                      {400.0, 2.0, 1.0}, {900.0, 2.0, 1.0}};
+    int nc = nv_song_clavs(song, nullptr, nullptr, 0);
+    if (!nc)
+        return;
+    std::vector<long long> cch(nc);
+    std::vector<int> cset(nc);
+    nv_song_clavs(song, cch.data(), cset.data(), nc);
+    std::map<long long, int> clav;
+    for (int k = 0; k < nc; k++)
+        clav[cch[k]] = cset[k];
+    for (long long r = 0; r < P; r++) {
+        double *row = rows + (size_t)NCOLS * r;
+        auto it = clav.find((long long)row[cMCH]);
+        if (it == clav.end())
+            continue;
+        const double *t = tone[((it->second % 5) + 5) % 5];
+        if (t[0] <= 0.0)
+            continue;
+        double y = row[cNF] / t[0];
+        double x = t[1] == 2.0 ? y * y : pow(y, t[1]);  // (numpy's x ** 2.0 is its square)
+        double g = t[2] != 0.0 ? x / (1.0 + x) : 1.0 / (1.0 + x);
+        row[cAL] *= g;
+        row[cAR] *= g;
+        row[cAM] *= g;
+    }
+}
+
 extern "C" void nv_cabinet_pass(void *song, double *rows, long long P)
 {
     enum { cAL = 3, cAR = 4, cAM = 5, cMCH = 6, cNF = 11 };     // (EMIT_COLS)

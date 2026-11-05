@@ -1064,11 +1064,13 @@ int nv_click(const VoiceSnap *v, const ToneIn *t, const NoteClass *K, const Note
             pyr_seed(&g, (long long)organ_crc32(b, (size_t)nb));
             ph = pyr_random(&g) * 2.0 * PI;
         }
-        for (int q = 0; q < K->n_click; q++) {
-            double chz = K->click_hz[q];
+        /* (a Clavinet's: the note's own, its __init__'s -- VoiceSnap.vk_*) */
+        int nk = v->vk_n ? v->vk_n : K->n_click;
+        for (int q = 0; q < nk; q++) {
+            double chz = v->vk_n ? v->vk_hz[q] : K->click_hz[q];
             if (chz >= sr / 2)
                 continue;
-            double a = cg * K->click_amp[q] * nv_radiation_gain(v, chz, 0.0, 0);
+            double a = cg * (v->vk_n ? v->vk_amp[q] : K->click_amp[q]) * nv_radiation_gain(v, chz, 0.0, 0);
             if (a < 3e-3 * gain)
                 continue;
             double non = noff + jo * sr;

@@ -128,7 +128,7 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
                                std::vector<long long> *srows, std::vector<long long> *prows = nullptr,
                                const double *les = nullptr, std::vector<long long> *flips = nullptr,
-                               std::vector<double> *jrows = nullptr);
+                               std::vector<double> *jrows = nullptr, std::vector<long long> *rrows = nullptr);
 long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                             const double *cfg, const char *mask, long long nmask, double sr);
 long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
@@ -156,7 +156,8 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                long long blk, double ring_floor, double ring_max, double *out, double knee_db,
                                double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
                                std::vector<long long> *srows, std::vector<long long> *prows, const double *les,
-                               std::vector<long long> *flips, std::vector<double> *jrows)
+                               std::vector<long long> *flips, std::vector<double> *jrows,
+                               std::vector<long long> *rrows)
 {
     const NoteClass *kc = (!kit && program >= 0 && program < 128) ? K[128 * program + note] : nullptr;
     const OrganSpec *og = kc ? kc->organ : nullptr;
@@ -192,6 +193,11 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         int n = nv_song_n_stroke_rows(song, nullptr, 0);
         srows->resize(2 * n);
         nv_song_n_stroke_rows(song, srows->data(), n);
+    }
+    if (rrows && P >= 0) {                      // ...and its key-up's rows (rel_rows)
+        int nr = nv_song_n_rel_rows(song, nullptr, 0);
+        rrows->resize(2 * nr);
+        nv_song_n_rel_rows(song, rrows->data(), nr);
     }
     if (jrows && P >= 0) {                      // ...and its jacks' clicks (rel_jacks)
         int nj = nv_song_n_rel_jacks(song, nullptr, 0);
@@ -385,10 +391,11 @@ struct Cache {
         void *dm[6] = {nullptr};
         std::vector<long long> srows, prows, flips;
         std::vector<double> jrows;
+        std::vector<long long> rrows;
         long long P = template_rows(K.data(), &t, freq, trim, program, note, vel, fast, &rows, kind, scale, full,
                                     residual, beta, blk, ring_floor, ring_max, out, knee, ln10_20, xdec, SR, dm,
                                     drums ? &kit : nullptr, &srows, &prows, les.empty() ? nullptr : les.data(),
-                                    &flips, &jrows);
+                                    &flips, &jrows, &rrows);
         if (P < 0) {
             free(rows);
             return false;
@@ -653,6 +660,71 @@ struct Cache {
                 J.dur = mx + co;
                 T.jacks.push_back(J);
                 T.jack_rank.push_back((int)jrows[q + 2]);
+            }
+        }
+        // THE KEY-UP's ROWS (live's t["rel"]: a voice with no ranks): out of
+        // the note -- every row it has, column or not -- into a one-shot of
+        // their own, its length from its first onset to its last end
+        if (!(nc && nc->organ) && T.P) {
+            long long TP = T.P;
+            std::vector<char> msk(TP, 0);
+            bool any = false;
+            for (size_t q = 0; q + 1 < rrows.size(); q += 2) {
+                long long a = rrows[q], b = std::min(rrows[q + 1], TP);
+                if (a >= TP)
+                    continue;
+                for (long long r = a; r < b; r++) {
+                    msk[r] = 1;
+                    any = true;
+                }
+            }
+            if (any) {
+                std::vector<long> in, keep;
+                for (long long r = 0; r < TP; r++)
+                    (msk[r] ? in : keep).push_back((long)r);
+                Template Rl;
+                auto split = [&](auto &dst, auto &src) {
+                    if ((long long)src.size() != TP)
+                        return;
+                    dst.resize(in.size());
+                    for (size_t q = 0; q < in.size(); q++)
+                        dst[q] = src[in[q]];
+                    std::remove_reference_t<decltype(src)> rest(keep.size());
+                    for (size_t q = 0; q < keep.size(); q++)
+                        rest[q] = src[keep[q]];
+                    src.swap(rest);
+                };
+                for (int c = 0; c < 6; c++)
+                    split(Rl.f8[c], T.f8[c]);
+                for (int c = 0; c < 27; c++)
+                    split(Rl.f4[c], T.f4[c]);
+                for (int c = 0; c < 4; c++)
+                    split(Rl.f4n[c], T.f4n[c]);
+                for (int c = 0; c < 2; c++)
+                    split(Rl.i8[c], T.i8[c]);
+                for (int c = 0; c < 6; c++)
+                    split(Rl.i4[c], T.i4[c]);
+                split(Rl.hrel, T.hrel);
+                split(Rl.fa_at, T.fa_at);
+                split(Rl.rof, T.rof);
+                split(Rl.sof, T.sof);
+                split(Rl.cof, T.cof);
+                split(Rl.lflip, T.lflip);
+                split(Rl.lhorn, T.lhorn);
+                split(Rl.lfl, T.lfl);
+                split(Rl.lsh, T.lsh);
+                split(Rl.lnrm, T.lnrm);
+                split(Rl.push, T.push);
+                Rl.P = (long)in.size();
+                long long mxo = Rl.i8[1][0], mno = Rl.i8[0][0];
+                for (long r = 0; r < Rl.P; r++) {
+                    mxo = std::max(mxo, Rl.i8[1][r]);
+                    mno = std::min(mno, Rl.i8[0][r]);
+                }
+                Rl.dur = mxo - mno;
+                Rl.oneshot = true;
+                T.P = (long)keep.size();
+                T.rel.push_back(Rl);
             }
         }
         return true;

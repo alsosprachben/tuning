@@ -220,6 +220,7 @@ struct Song {
     std::vector<std::pair<long long, std::vector<double>>> trems;
     // the speaker cabinets (_CAB_CH): each channel's, its first note's to have one
     std::vector<std::pair<long long, const NoteClass *>> cabs;
+    std::vector<std::pair<long long, int>> clavs;      // (_CLAV_CH: a Clavinet's channel, its rockers)
     // the valve amplifiers (_AMP_CH): each channel as its first amplified
     // note came, its voice's drive, and whether it is on a rotor
     std::vector<std::pair<long long, std::pair<double, int>>> amp;
@@ -228,6 +229,8 @@ struct Song {
     std::vector<std::pair<long long, long long>> push_rows;
     // ...and of each jack's key-up click (blockrender's rel_jacks): first, end, rank, offset (s)
     std::vector<double> rel_jacks;
+    // ...and each note's key-up rows, [first, end) (blockrender's rel_rows)
+    std::vector<long long> rel_rows;
     double total = 0.0;
     // ITS TUNING: the file's table, a channel's MIDI Tuning Standard tables
     // from their times (_MTS_TL), its fixed bend (_BTUN) and octave tuning (_OTUN)
@@ -1665,6 +1668,28 @@ void nv_song_add_cab(void *s, long long ch, const NoteClass *k)
     S->cabs.push_back(std::make_pair(ch, k));
 }
 
+// A CLAVINET's TONE ROCKERS on a channel (CLAV_TONE's index); a channel already set is left
+void nv_song_add_clav(void *s, long long ch, int setting)
+{
+    nv::Song *S = (nv::Song *)s;
+    for (const auto &x : S->clavs)
+        if (x.first == ch)
+            return;
+    S->clavs.push_back(std::make_pair(ch, setting));
+}
+
+// the rockers: channels and settings; how many
+int nv_song_clavs(void *s, long long *ch, int *setting, int cap)
+{
+    const nv::Song *S = (nv::Song *)s;
+    int n = (int)S->clavs.size();
+    for (int q = 0; q < n && q < cap; q++) {
+        ch[q] = S->clavs[q].first;
+        setting[q] = S->clavs[q].second;
+    }
+    return n;
+}
+
 // the cabinets: channels and the classes carrying them; how many
 int nv_song_cabs(void *s, long long *ch, const NoteClass **k, int cap)
 {
@@ -1796,6 +1821,23 @@ void nv_song_add_rel_jack(void *s, long long a, long long b, int rank, double jo
 {
     std::vector<double> &v = ((nv::Song *)s)->rel_jacks;
     v.push_back((double)a); v.push_back((double)b); v.push_back((double)rank); v.push_back(jo);
+}
+
+// a note's key-up rows, [first, end) (rel_rows)
+void nv_song_add_rel_rows(void *s, long long a, long long b)
+{
+    std::vector<long long> &v = ((nv::Song *)s)->rel_rows;
+    v.push_back(a);
+    v.push_back(b);
+}
+
+int nv_song_n_rel_rows(void *s, long long *out, int cap)
+{
+    const std::vector<long long> &v = ((nv::Song *)s)->rel_rows;
+    int n = (int)v.size() / 2;
+    for (int k = 0; k < 2 * n && k < 2 * cap; k++)
+        out[k] = v[k];
+    return n;
 }
 
 int nv_song_n_rel_jacks(void *s, double *out, int cap)

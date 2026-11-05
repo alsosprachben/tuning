@@ -97,7 +97,11 @@ class VoiceSnap(ctypes.Structure):
                 ('n_mute', I), ('mute', (C * 2) * 24), ('n_tube', I), ('tube_ref_hz', C), ('tube', (C * 4) * 16),
                 ('or_set', I), ('or_share', C), ('or_db', C * 2), ('or_lowest_hz', C), ('or_g', C),
                 ('dul_n', I), ('dhz_set', I), ('dul_beat', C * 2), ('dhz_db', C), ('dhz_pow', C), ('pps', C),
-                ('ushare', I), ('mst', C), ('mst_ref', C)]
+                ('ushare', I), ('mst', C), ('mst_ref', C),
+                ('clav', I), ('cl_sel', I), ('cl_nt', I), ('cl_nk', I),
+                ('cl_ref_m', C), ('cl_ref_hz', C), ('cl_pow', C), ('cl_bridge', C), ('cl_c0', C), ('cl_c1', C),
+                ('cl_qmax', C), ('cl_tdb', C), ('cl_thump', C * 8), ('cl_kh', C * 8), ('cl_ka', C * 8),
+                ('vk_n', I), ('vk_hz', C * 16), ('vk_amp', C * 16)]
 
 
 class ToneIn(ctypes.Structure):
@@ -227,7 +231,8 @@ class NoteClass(ctypes.Structure):
                    ('cab_ref', C), ('n_click', I), ('click_jacks', I), ('click_db', C), ('click_hz', C * 16),
                    ('click_amp', C * 16), ('click_dec', C), ('click_s', C), ('pre_pluck', I),
                    ('moog', MoogSpec), ('brass', I), ('bn_slur', I),
-                   ('os_floor_db', C), ('os_max_s', C), ('tail_set', I), ('tail_db', C), ('tail_dbs', C)])
+                   ('os_floor_db', C), ('os_max_s', C), ('tail_set', I), ('tail_db', C), ('tail_dbs', C),
+                   ('clav_panel', I)])
 
 
 class NoteIn(ctypes.Structure):
@@ -918,6 +923,36 @@ def dulcimer_voice(cls):
             and len(getattr(cls, 'register_knock_profile', None) or ()) <= 64)
 
 
+_CLAV_SEL = {'centre': 0, 'bridge': 1, 'both': 2, 'anti': 3}
+
+
+def clav_voice(cls):
+    """A Clavinet (tonelib.ClavinetProperties, GM 7) on the electric path:
+    its coil a fraction of the note's speaking length, its key-up's thumps
+    and harmonics the note's (VoiceSnap.clav) -- the pick's comb, the coil's
+    width and velocity, SynthProperties' decay and the string's B as the
+    guitars'. (Its panel's rockers, CC1, are a post-pass of their own.)"""
+    import tonelib as T
+    if not issubclass(cls, T.ClavinetProperties) or issubclass(cls, T.FormantBody):
+        return False
+    own = dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None, pickup_gain='SynthProperties',
+               inharmonicity_coefficient_for_frequency='InharmonicStringProperties')
+    if any(_owner(cls, n) != o for n, o in own.items()):
+        return False
+    if any(k.__name__ not in ('SynthProperties', 'ClavinetProperties', 'object') for k in cls.__mro__
+           if '__init__' in k.__dict__):
+        return False
+    return (cls.clav_pickup in _CLAV_SEL and cls.mode_gains is None and cls.mode_ratios is None
+            and bool(cls.strike_point) and not cls.strike_fills_with_force and not cls.harmonic_touch
+            and not cls.inharmonicity_dynamic and not (cls.unison_detune or ()) and not cls.blare_db_per_khz
+            and not cls.bore_corner_hz and 1 <= (cls.max_harmonic or 0) <= 128 and not cls.max_partial_hz
+            and not cls.pickup_resonance_hz and not cls.lowpass_hz and cls.pickup_turns == 1.0
+            and len(cls.keyup_thump_hz) <= 8 and len(cls.keyup_string_harmonics) <= 8
+            and not any(getattr(cls, a, None) for a in ('breath_noise_db', 'grains', 'noise_events', 'pulse',
+                                                         'ring_db', 'struck_layer', 'hammer_legato',
+                                                         'bend_detents', 'touch_leak_db')))
+
+
 def electric_voice(cls):
     """Whether native/voice.c plays cls as an electric guitar (kind 4,
     VoiceSnap.elec): a plucked string's series through the pick's comb and
@@ -926,6 +961,8 @@ def electric_voice(cls):
     touch chosen among up to four, its series the string's modes n m, the
     killed modes' leak, the pick's noise) -- and none of the other extras."""
     import tonelib as T
+    if clav_voice(cls):
+        return True
     if not issubclass(cls, T.ElectricGuitarProperties) or issubclass(cls, T.FormantBody):
         return False
     touched = bool(cls.harmonic_touch or getattr(cls, 'touches', ()))
@@ -1592,15 +1629,18 @@ def snapshot(props):
             # an electric guitar: its pick and coils as the class has them (the note's fret moves them)
             c = type(p)
             s.elec, s.eg_sp, s.eg_depth = 1, float(c.strike_point), float(c.strike_depth)
-            s.n_pk = len(c.pickup_points)
-            s.pk_q0[:s.n_pk] = [float(q) for q in c.pickup_points]
-            s.pk_sign[:s.n_pk] = [float(x) for x in (getattr(c, 'pickup_signs', None) or (1.0,) * s.n_pk)]
+            _pc = p if clav_voice(c) else c         # (a Clavinet's coils are the note's)
+            s.n_pk = len(_pc.pickup_points)
+            if _pc is c:
+                s.pk_q0[:s.n_pk] = [float(q) for q in c.pickup_points]
+            s.pk_sign[:s.n_pk] = [float(x) for x in (getattr(_pc, 'pickup_signs', None) or (1.0,) * s.n_pk)]
             s.pk_turns, s.pk_width, s.pk_vel = float(c.pickup_turns), float(c.pickup_width or 0.0), int(bool(c.pickup_velocity))
             s.pk_res_hz, s.pk_qf = float(c.pickup_resonance_hz or 0.0), float(getattr(c, 'pickup_q', 0.0) or 0.0)
             s.lp_hz, s.lp_order = float(c.lowpass_hz or 0.0), float(c.lowpass_order)
-            s.n_os = len(c.open_strings_hz or ())
-            s.os_hz[:s.n_os] = [float(o) for o in (c.open_strings_hz or ())]
-            s.fret_max = float(c.fret_max)
+            _osh = getattr(c, 'open_strings_hz', None) or ()
+            s.n_os = len(_osh)
+            s.os_hz[:s.n_os] = [float(o) for o in _osh]
+            s.fret_max = float(getattr(c, 'fret_max', 0.0) or 0.0)
             s.pk_sp = float(p.strike_point)                         # (the note's: its fret)
             s.pk_q[:s.n_pk] = [float(q) for q in p.pickup_points]
             # ...touched: the touches a player chooses among, the note's, the killed modes' leak
@@ -1608,7 +1648,22 @@ def snapshot(props):
             s.touches[:s.n_touch] = [int(n) for n in (getattr(c, 'touches', ()) or ())]
             s.touch0, s.touch = int(c.harmonic_touch or 0), int(p.harmonic_touch or 0)
             s.leak_set = int(c.touch_leak_db is not None)
-            s.leak_db, s.leak_dbs = float(c.touch_leak_db or 0.0), float(c.touch_leak_dbs)
+            s.leak_db, s.leak_dbs = float(c.touch_leak_db or 0.0), float(getattr(c, 'touch_leak_dbs', 0.0) or 0.0)
+            if clav_voice(c):
+                # (a Clavinet's coil and key-up by the note: nv_voice_init's)
+                s.clav, s.cl_sel = 1, _CLAV_SEL[c.clav_pickup]
+                s.cl_ref_m, s.cl_ref_hz = float(c.speaking_length_ref_m), float(c.speaking_length_ref_hz)
+                s.cl_pow, s.cl_bridge = float(c.speaking_length_power), float(c.pickup_bridge_m)
+                s.cl_c0, s.cl_c1 = (float(x) for x in c.pickup_centre_m)
+                s.cl_qmax, s.cl_tdb = float(c.pickup_fraction_max), float(c.keyup_thump_db_per_semitone)
+                s.cl_nt, s.cl_nk = len(c.keyup_thump_hz), len(c.keyup_string_harmonics)
+                s.cl_thump[:s.cl_nt] = [float(x) for x in c.keyup_thump_hz]
+                s.cl_kh[:s.cl_nk] = [float(h) for h, _ in c.keyup_string_harmonics]
+                s.cl_ka[:s.cl_nk] = [float(a) for _, a in c.keyup_string_harmonics]
+                rcm = p.release_click_modes
+                s.vk_n = len(rcm)
+                s.vk_hz[:s.vk_n] = [float(hz) for hz, _ in rcm]
+                s.vk_amp[:s.vk_n] = [float(a) for _, a in rcm]
         if isinstance(p, T.FormantBody):
             s.fbody, s.formant_floor = 1, p.formant_floor
             s.n_fm, s.n_afm, s.n_bt = len(p.formants), len(p.antiformants), len(p.body_trim_db or ())
@@ -1820,6 +1875,7 @@ def init_supported(cls):
         if any(k.__name__ not in ('SynthProperties', 'object', 'RandomStrike') for k in cls.__mro__
                if '__init__' in k.__dict__ and not (k.__name__ == 'ElectricPianoProperties' and ep_voice(cls))
                and not (k.__name__ in ('ElectricGuitarProperties', 'GuitarHarmonicsProperties') and electric_voice(cls))
+               and not (k.__name__ == 'ClavinetProperties' and clav_voice(cls))
                and not (k.__name__ in _STOPPED_INITS and stopped_voice(cls) and harmonic_voice(cls))):
             return False
         if any(_owner(cls, n) != o for n, o in _BASE_OWN.items() if n != 'inharmonicity_coefficient_func'):
@@ -2419,6 +2475,7 @@ def note_class(cls):
             tl = getattr(cls, 'strike_noise_tail', None)
             if tl:
                 k.tail_set, k.tail_db, k.tail_dbs = 1, float(tl[0]), float(tl[1])
+        k.clav_panel = int(bool(getattr(cls, 'clav_panel', False)))
         nf = int(getattr(cls, 'strike_flam', 0) or 0)
         k.n_flam = nf if nf > 1 else 0
         ft = getattr(cls, 'strike_flam_times', None) or ()
@@ -2477,6 +2534,9 @@ def note_class(cls):
             k.cab_ref = float(cb._ref)
         # its key-up's click (release_click_db), a jack a drawn stop on a choired organ
         cdb, cm = getattr(cls, 'release_click_db', None), getattr(cls, 'release_click_modes', ()) or ()
+        if clav_voice(cls) and cdb is not None:
+            # (a Clavinet's modes are the note's: VoiceSnap.vk_*, by its __init__)
+            cm = tuple((0.0, 0.0) for _ in range(len(cls.keyup_thump_hz) + len(cls.keyup_string_harmonics)))
         if cdb is not None and cm:
             k.n_click, k.click_db = len(cm), float(cdb)
             for i, (hz, a) in enumerate(cm):

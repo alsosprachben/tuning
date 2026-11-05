@@ -10,7 +10,7 @@ kept by hand in the script's TASKS.
 
 | stage | tones native | drum sets whole |
 |---|---|---|
-| GM1 | 106 of 128 | 0 of 1 |
+| GM1 | 107 of 128 | 0 of 1 |
 | GM2 | 33 of 128 | 0 of 8 |
 | SC-55 | 7 of 13 | 6 of 31 |
 | SC-88 | 77 of 193 | 0 of 2 |
@@ -29,9 +29,8 @@ What it needs first, and live's side:
 - [ ] Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)
 - [ ] Moog: SYNC, a unison (moog_unison), an MF-104M on a note whose pitch or shapes move
 
-Tones: 106 of 128 native.
+Tones: 107 of 128 native.
 
-- [ ] **Piano** -- 7 Clavi
 - [ ] **Ensemble** -- 52 Choir Aahs, 53 Voice Oohs, 55 Orchestra Hit
 - [ ] **Ethnic** -- 104 Sitar, 105 Banjo, 106 Shamisen, 107 Koto, 108 Kalimba, 109 Bag pipe, 111 Shanai
 - [ ] **Percussive** -- 113 Agogo, 114 Steel Drums, 115 Woodblock, 116 Taiko Drum

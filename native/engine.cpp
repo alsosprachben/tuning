@@ -830,6 +830,8 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
                 nv_song_moog_add(song, ch, out.ft[l], out.kn[l], &L, out.non, out.noff,
                                  out.noff + rs * n.sr + 4096.0);
         }
+        if (out.n_click)                    // the key-up's rows, the note's last (rel_rows)
+            nv_song_add_rel_rows(song, total + r - out.n_click, total + r);
         if (out.n_jack) {                   // each jack's click rows, the note's last (rel_jacks)
             long long j0 = total + r - out.n_click;
             for (int q = 0; q < out.n_jack; q++) {

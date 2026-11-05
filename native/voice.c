@@ -1108,6 +1108,37 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
                 s->pk_q[q] = pymin(s->pk_q0[q] * sc, 0.5);
             s->pk_sp = pymin(s->eg_sp * sc, 0.5);
         }
+        if (s->clav) {
+            /* ClavinetProperties.__init__: the coil on the note's speaking
+               length, and the key-up's modes */
+            double f0 = frequency;
+            double length = s->cl_ref_m * pow(s->cl_ref_hz / f0, s->cl_pow);
+            double key = 69.0 + 12.0 * log(f0 / 440.0) / log(2.0);
+            double dc = s->cl_c0 + (s->cl_c1 - s->cl_c0) * pymin(1.0, pymax(0.0, (key - 29.0) / 59.0));
+            double qb = pymin(s->cl_bridge / pymax(length, 1e-6), s->cl_qmax);
+            double qc = pymin(dc / pymax(length, 1e-6), s->cl_qmax);
+            if (s->cl_sel == 0 || s->cl_sel == 1) {
+                s->n_pk = 1;
+                s->pk_q[0] = s->cl_sel == 0 ? qc : qb;
+                s->pk_sign[0] = 1.0;
+            } else {
+                s->n_pk = 2;
+                s->pk_q[0] = qc;
+                s->pk_q[1] = qb;
+                s->pk_sign[0] = 1.0;
+                s->pk_sign[1] = s->cl_sel == 3 ? -1.0 : 1.0;
+            }
+            double mech = pow(10.0, -s->cl_tdb * pymax(0.0, key - 46.0) / 20.0);
+            s->vk_n = 0;
+            for (int i = 0; i < s->cl_nt; i++) {
+                s->vk_hz[s->vk_n] = s->cl_thump[i];
+                s->vk_amp[s->vk_n++] = mech;
+            }
+            for (int i = 0; i < s->cl_nk; i++) {
+                s->vk_hz[s->vk_n] = s->cl_kh[i] * f0;
+                s->vk_amp[s->vk_n++] = s->cl_ka[i];
+            }
+        }
         s->strike_point = s->pk_sp;
     }
     if (s->kind == 5) {                         /* an electric piano: this note's layers (ElectricPianoProperties.__init__) */
