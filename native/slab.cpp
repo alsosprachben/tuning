@@ -1,4 +1,5 @@
-// slab.cpp -- the native engine's LIVE SLAB: live.Slab's core for a piano.
+// slab.cpp -- the native engine's LIVE SLAB: live.Slab's core, and a live
+// part on it (live.Part: any native voice -- it began as the piano's).
 //
 // The slab is live's partial table: a fixed capacity of slots, each a row of
 // the kernel's columns, the free ones in a queue. A press stamps its key's
@@ -926,22 +927,22 @@ struct Slab {
 };
 
 // ---------------------------------------------------------------------------
-// A PIANO PART, LIVE: live.Live's events for one piano part on its slab --
-// what _one_core, _note_on and _note_off do for a piano, block by block as
-// live's callback runs them: the block's events at its start, then the sweep
-// (a key neither down nor held released), then the reap. Not here yet:
-// CC71-78 but on an organ part (the harmonium's attack and release), and
-// the other voices. MONO MODE (CC126/127), THE RPNs (bend range, fine and coarse
-// tuning, the mod range), CC120, CC121, CC123, the channel-mode messages and
-// SOSTENUTO as live's. THE PITCH WHEEL
-// (live._repitch: GM's 2-semitone range) and the mod wheel, which on a piano
-// is nothing but a honky-tonk's detune.
+// A PART, LIVE: live.Live's events for one part on its slab -- what
+// _one_core, _note_on and _note_off do, block by block as live's callback
+// runs them: the block's events at its start, then the sweep (a key neither
+// down nor held released), then the reap. Not here yet: CC71-78 but on an
+// organ part (the harmonium's attack and release). MONO MODE (CC126/127),
+// THE RPNs (bend range, fine and coarse tuning, the mod range), CC120,
+// CC121, CC123, the channel-mode messages and SOSTENUTO as live's. THE PITCH
+// WHEEL (live._repitch: GM's 2-semitone range) and THE MOD WHEEL by the
+// voice's role (live.wheel_roles: drive, swell, crescendo, tremolo, the
+// rockers, a honky-tonk's detune, else vibrato).
 // PRESSURE (channel aftertouch, live's Slab.press) as a level: a piano's
 // effort_tilt is 0, so its partials are not tilted, only lifted by press_db
 // at full pressure. THE DAMPERS IN BETWEEN (live._damp_block), when given damper.py's
-// numbers (nv_lp_damper): a pedalled key in the band is taken down by its
+// numbers (nv_part_damper): a pedalled key in the band is taken down by its
 // level through a damper track the kernel reads (synth_voice_damp). THE REGISTER (live's _reg_*), when given
-// one (nv_lp_register): its worker's jobs answered in step -- each as it is
+// one (nv_part_register): its worker's jobs answered in step -- each as it is
 // sent, as a worker that kept up would, so a reply is placed at the first
 // pump after its job (live's own worker answers a few blocks later, as it
 // can: the same rows, later).
@@ -1066,7 +1067,7 @@ struct Ev {
     int ch, a, b;
 };
 
-struct Piano {
+struct Part {
     Slab S;
     void *cache;
     long long pid;
@@ -1130,7 +1131,7 @@ struct Piano {
     // THE PART'S PATCHES (live's Parts on one slab): each its templates and
     // settings, the channel it listens on (-1 every one, less those in excl:
     // bits), its keys lo..hi and transpose; a note takes the last added that
-    // claims it. Patch 0 is the part as nv_lp_new made it; the members above
+    // claims it. Patch 0 is the part as nv_part_new made it; the members above
     // are the patch in use (Use), patch 0's between notes
     struct Patch {
         void *cache;
@@ -2272,9 +2273,9 @@ struct Piano {
 
     // the patch a note takes, in use for a scope; the one before put back
     struct Use {
-        Piano &P;
+        Part &P;
         int was;
-        Use(Piano &P_, int i) : P(P_), was(P_.cur) { P.use(i); }
+        Use(Part &P_, int i) : P(P_), was(P_.cur) { P.use(i); }
         ~Use() { P.use(was); }
     };
     const std::vector<unsigned long long> *choke_p = &choke;
@@ -2292,7 +2293,7 @@ struct Piano {
     std::map<int, Group> onset_group;
     double legato_gap_s = 0.015, chord_window_s = 0.030;    // live.LEGATO_GAP_S, CHORD_WINDOW_S
 
-    Piano(long cap) : S(cap)
+    Part(long cap) : S(cap)
     {
         for (int t = 0; t < DAMP_TRACKS; t++) {
             free_tracks.push_back(t);
@@ -2778,7 +2779,7 @@ struct Piano {
     // program and the part's constants for it -- keeping its pid, so notes
     // already sounding keep the templates they were struck with
     // A VOICE'S STRINGS for the register: a bank and its constants
-    // (nv_lp_register's), as a program change hands a new one over
+    // (nv_part_register's), as a program change hands a new one over
     struct Bank {
         std::vector<StringMode> modes;
         double kappa = 0, knock = 0, fall = 0, fl = 0, beta = 0, rel = 0;
@@ -4320,7 +4321,7 @@ struct Piano {
     // (the audio thread's copy above, the worker's in wk -- each changed on
     // its own thread, as live's worker builds its own: Bank)
     Bank wk;                                // the worker's
-    std::shared_ptr<Bank> staged_bank;      // the next swap's (nv_lp_swap_bank)
+    std::shared_ptr<Bank> staged_bank;      // the next swap's (nv_part_swap_bank)
     bool reg_forgetting = false;            // live.reg_forgetting: the old strings' answers still coming
     double r_kappa = 0, r_knock = 0, r_fall = 0, r_fl = 0, r_beta = 0, r_rel = 0, r_full = 0, r_resid = 0,
            r_ln = 0, r_blk = 128;
@@ -4398,7 +4399,7 @@ struct Piano {
     std::atomic<long> reg_ndone{0};
     bool reg_stop = false;
 
-    ~Piano()
+    ~Part()
     {
         if (amp_thread.joinable()) {
             {
@@ -5873,19 +5874,19 @@ struct Router {
 
 extern "C" {
 
-// A piano part on its own slab: the template cache (nv_tcache_new, warmed),
+// A part on its own slab: the template cache (nv_tcache_new, warmed),
 // its part id, level, buckets, wheel step (-1 none), dampers, una corda
 // (strings dropped, of the top), the rate, the steal-fade, the slab's
 // capacity and headroom, the pan table (128 x 3) and the head's beta
-void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
+void *nv_part_new(void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
                 int soft_drop, int soft_top, double rate, double retrigger, long cap, double headroom,
                 const double *pan_tab, double pan_beta)
 {
-    nv::slab::Piano *P = new nv::slab::Piano(cap);
+    nv::slab::Part *P = new nv::slab::Part(cap);
     P->cache = cache; P->pid = pid; P->level_db = level_db; P->nbuckets = nbuckets; P->speed = speed;
     P->damper_pedal = damper_pedal; P->soft_drop = soft_drop; P->soft_top = soft_top;
     P->rate = rate; P->retrigger = retrigger;
-    P->patches.push_back(nv::slab::Piano::Patch{cache, pid, level_db, nbuckets, speed, damper_pedal, soft_drop,
+    P->patches.push_back(nv::slab::Part::Patch{cache, pid, level_db, nbuckets, speed, damper_pedal, soft_drop,
                                                  soft_top, false, true, 0, {}, -1, 0u, 0, 127, 0});
     P->choke_p = &P->patches[0].choke;
     P->S.headroom_d = headroom;
@@ -5899,16 +5900,16 @@ void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int s
 // AN ORGAN'S STOP drawn or put in (livetui's toggle_stop: live.set_stops
 // with the rank toggled) -- posted: done in the next block after its events,
 // as live runs what its panel posts
-void nv_lp_toggle_stop(void *h, int rank, long long n0)
+void nv_part_toggle_stop(void *h, int rank, long long n0)
 {
     (void)n0;
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
-    nv::slab::Piano::Patch &p = P->patches[0];
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    nv::slab::Part::Patch &p = P->patches[0];
     if (!p.organ || rank < 0 || rank >= p.organ->n_rank)
         return;
     std::vector<char> want = p.drawn;   // (the registration now, as the panel sees it)
     want[rank] = !want[rank];
-    nv::slab::Piano::Post q{0, {}, nullptr};
+    nv::slab::Part::Post q{0, {}, nullptr};
     for (int ri = 0; ri < p.organ->n_rank; ri++)
         if (want[ri])
             q.names.push_back(p.organ->rank[ri].key);
@@ -5916,10 +5917,10 @@ void nv_lp_toggle_stop(void *h, int rank, long long n0)
 }
 
 // the organ's stops drawn (out[rank] 1), the count; 0 for no organ
-int nv_lp_drawn(void *h, char *out, int cap)
+int nv_part_drawn(void *h, char *out, int cap)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
-    const nv::slab::Piano::Patch &p = P->patches[0];
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    const nv::slab::Part::Patch &p = P->patches[0];
     if (!p.organ)
         return 0;
     int n = std::min((int)p.drawn.size(), cap);
@@ -5929,20 +5930,20 @@ int nv_lp_drawn(void *h, char *out, int cap)
 }
 
 // The part's PROGRAM, a melodic one's: the class its slurs and glides read
-void nv_lp_program(void *h, int program)
+void nv_part_program(void *h, int program)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     P->patches[0].program = program;
     P->program = program;
-    nv::slab::Piano::organ_start(P->patches[0], nv_tcache_organ(P->patches[0].cache, program));
+    nv::slab::Part::organ_start(P->patches[0], nv_tcache_organ(P->patches[0].cache, program));
 }
 
 // The part a DRUM PART (live.Patch(program, True)): program its drum set,
 // choke[2 * (128 * program + key) + w] each key's exclusive class (native.kits')
-void nv_lp_drums(void *h, int program, const unsigned long long *choke)
+void nv_part_drums(void *h, int program, const unsigned long long *choke)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
-    nv::slab::Piano::Patch &p = P->patches[0];
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    nv::slab::Part::Patch &p = P->patches[0];
     p.drums = true;
     p.reg = false;
     p.program = program;
@@ -5955,20 +5956,20 @@ void nv_lp_drums(void *h, int program, const unsigned long long *choke)
 
 // ANOTHER PATCH on the part (live's Parts beside it): its template cache,
 // part id, level, buckets, wheel step, dampers, una corda; a drum set's
-// (drums: program its set, choke its exclusive classes, as nv_lp_drums)
+// (drums: program its set, choke its exclusive classes, as nv_part_drums)
 // or not; the channel it listens on (-1 every one, less excl's bits), its
 // keys lo..hi, transposed. Added last, it takes the notes it claims. Its index
-int nv_lp_add_patch(void *h, void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
+int nv_part_add_patch(void *h, void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
                     int soft_drop, int soft_top, int drums, int program, const unsigned long long *choke, int channel,
                     unsigned excl, int lo, int hi, int transpose)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
-    nv::slab::Piano::Patch p{cache, pid, level_db, nbuckets, speed, damper_pedal, soft_drop, soft_top, drums != 0,
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    nv::slab::Part::Patch p{cache, pid, level_db, nbuckets, speed, damper_pedal, soft_drop, soft_top, drums != 0,
                              false, program, {}, channel, excl, lo, hi, transpose};
     if (drums && choke)
         p.choke.assign(choke, choke + 2 * 16384);
     if (!drums)
-        nv::slab::Piano::organ_start(p, nv_tcache_organ(cache, program));
+        nv::slab::Part::organ_start(p, nv_tcache_organ(cache, program));
     P->patches.push_back(std::move(p));
     P->choke_p = &P->patches[P->cur].choke;          // (the vector may have moved)
     return (int)P->patches.size() - 1;
@@ -5980,15 +5981,15 @@ int nv_lp_add_patch(void *h, void *cache, long long pid, double level_db, int nb
 // the honky-tonk's detune wheel, a drum set's exclusive classes (NULL: as
 // they were), and which keys answer the register (NULL: as they were)
 // ...its strings, where the new voice's are another's (live._reg_forget):
-// staged for the next nv_lp_swap -- the bank (M modes, as nv_strings makes
+// staged for the next nv_part_swap -- the bank (M modes, as nv_strings makes
 // it), kappa, knock, fall, floor, the felt's BETA, its release (samples),
 // damper_top, whether it has dampers, which keys answer (128), its choirs
 // (nchoir bridges, their cross coupling, nbuff (buffed, plain) pairs; 0 none)
-void nv_lp_swap_bank(void *h, const StringMode *modes, int M, const double *k6, int top, int pedals, const int *note,
+void nv_part_swap_bank(void *h, const StringMode *modes, int M, const double *k6, int top, int pedals, const int *note,
                      int nchoir, const long *cbr, double cross, int nbuff, const int *buffs)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
-    auto b = std::make_shared<nv::slab::Piano::Bank>();
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    auto b = std::make_shared<nv::slab::Part::Bank>();
     b->modes.assign(modes, modes + M);
     b->kappa = k6[0]; b->knock = k6[1]; b->fall = k6[2]; b->fl = k6[3]; b->beta = k6[4]; b->rel = k6[5];
     b->top = top; b->pedals = pedals;
@@ -6001,24 +6002,24 @@ void nv_lp_swap_bank(void *h, const StringMode *modes, int M, const double *k6, 
     P->staged_bank = b;
 }
 
-void nv_lp_swap(void *h, int pi, void *cache, int program, int drums, int nbuckets, int speed, int damper_pedal,
+void nv_part_swap(void *h, int pi, void *cache, int program, int drums, int nbuckets, int speed, int damper_pedal,
                 int soft_drop, int soft_top, int detune_wheel, const unsigned long long *choke, const int *reg_note)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
-    nv::slab::Piano::Swap w{pi, cache, program, drums, nbuckets, speed, damper_pedal, soft_drop, soft_top,
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    nv::slab::Part::Swap w{pi, cache, program, drums, nbuckets, speed, damper_pedal, soft_drop, soft_top,
                             detune_wheel, {}, {}, P->staged_bank};
     P->staged_bank.reset();
     if (choke)
         w.choke.assign(choke, choke + 2 * 16384);
     if (reg_note)
         w.reg_note.assign(reg_note, reg_note + 128);
-    P->posts.push_back(nv::slab::Piano::Post{1, {}, std::make_shared<nv::slab::Piano::Swap>(std::move(w))});
+    P->posts.push_back(nv::slab::Part::Post{1, {}, std::make_shared<nv::slab::Part::Swap>(std::move(w))});
 }
 
 // a patch's channel (-1 every one, less excl's bits), keys and transpose
-void nv_lp_patch_range(void *h, int i, int channel, unsigned excl, int lo, int hi, int transpose)
+void nv_part_patch_range(void *h, int i, int channel, unsigned excl, int lo, int hi, int transpose)
 {
-    nv::slab::Piano::Patch &p = ((nv::slab::Piano *)h)->patches[i];
+    nv::slab::Part::Patch &p = ((nv::slab::Part *)h)->patches[i];
     p.channel = channel;
     p.excl = excl;
     p.lo = lo;
@@ -6026,18 +6027,18 @@ void nv_lp_patch_range(void *h, int i, int channel, unsigned excl, int lo, int h
     p.transpose = transpose;
 }
 
-void nv_lp_free(void *h) { delete (nv::slab::Piano *)h; }
+void nv_part_free(void *h) { delete (nv::slab::Part *)h; }
 
 // The part's free strings (live's register): its string bank (M modes, as
 // nv_strings makes it), register.LiveChannel's constants (kappa, knock,
 // fall, floor, damper_top, the felt's BETA), the class's dampers and release
 // (samples), damper.py's FULL_DB_S, RESIDUAL, LN10_20, the block, and which
 // keys' classes answer (live._reg_voice, 128 flags)
-void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
+void nv_part_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
                     int top, double beta, int pedals, double rel, double full_db_s, double residual, double ln10_20,
                     long long blk, const int *reg_note)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     P->reg_on = true;
     P->rmodes.assign(modes, modes + M);
     P->wk.modes = P->rmodes;                // (the worker's copy)
@@ -6050,24 +6051,24 @@ void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, doubl
 }
 
 // a bank's bridges by key, partners and knock (a dulcimer's: its class's
-// reg_keyed), for its register -- or, after nv_lp_swap_bank, the staged bank's
-void nv_lp_reg_keys(void *h, const NoteClass *k)
+// reg_keyed), for its register -- or, after nv_part_swap_bank, the staged bank's
+void nv_part_reg_keys(void *h, const NoteClass *k)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     P->wk.keyed = k;
 }
 
-void nv_lp_swap_bank_keys(void *h, const NoteClass *k)
+void nv_part_swap_bank_keys(void *h, const NoteClass *k)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     if (P->staged_bank)
         P->staged_bank->keyed = k;
 }
 
 // a harpsichord's choirs, for its register (Strings.choir_bridges, cross, buffs)
-void nv_lp_reg_choirs(void *h, int nchoir, const long *bridges, double cross, int nbuff, const int *buffs)
+void nv_part_reg_choirs(void *h, int nchoir, const long *bridges, double cross, int nbuff, const int *buffs)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     P->r_cbr.assign(bridges, bridges + nchoir);
     P->r_cross = cross;
     P->r_buffs.assign(buffs, buffs + 2 * nbuff);
@@ -6079,9 +6080,9 @@ void nv_lp_reg_choirs(void *h, int nchoir, const long *bridges, double cross, in
 // the chests' rows (live's wind_next, wind_spent, wind_free, each chest's rows):
 // out[0] wind_next, then the spent rows, -1, the free ones, -1, each chest's
 // rows (pid, n, rows...), to cap; the count written
-int nv_lp_wind_info(void *h, long long *out, int cap)
+int nv_part_wind_info(void *h, long long *out, int cap)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     std::vector<long long> v;
     v.push_back(P->wind_next);
     for (int r : P->wind_spent)
@@ -6104,9 +6105,9 @@ int nv_lp_wind_info(void *h, long long *out, int cap)
 
 // the slab's live keys in their order (live's dict's): (pid, ch, note, layer) each, and
 // a rank's stop name (live's k[3]) into names, '\n' after each; the count
-int nv_lp_live_keys(void *h, long long *out, int cap, char *names, int ncap)
+int nv_part_live_keys(void *h, long long *out, int cap, char *names, int ncap)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     int n = 0, w = 0;
     for (auto &kv : P->S.live) {
         if (n >= cap)
@@ -6125,9 +6126,9 @@ int nv_lp_live_keys(void *h, long long *out, int cap, char *names, int ncap)
 }
 
 // the first chest's state (live's wind.Wind: w1 w2 s1 s2 d1 r1 te tph); 0 for no chest
-int nv_lp_wind_state(void *h, double *out)
+int nv_part_wind_state(void *h, double *out)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     if (P->wind_st.empty())
         return 0;
     const auto &st = P->wind_st.begin()->second;
@@ -6137,9 +6138,9 @@ int nv_lp_wind_state(void *h, double *out)
 }
 
 // the bend rows' tables (live's Slab.BR, BC, BL: the wind's and the sirens'), n rows of each
-int nv_lp_bend_rows(void *h, float *br, double *bc, float *bl, int n)
+int nv_part_bend_rows(void *h, float *br, double *bc, float *bl, int n)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     int m = std::min(n, (int)P->BRt.size());
     for (int r = 0; r < m; r++) {
         br[r] = P->BRt[r];
@@ -6151,23 +6152,23 @@ int nv_lp_bend_rows(void *h, float *br, double *bc, float *bl, int n)
 }
 
 // the register's rows dropped for a full slab, and whether any are placed
-long nv_lp_reg_dropped(void *h) { return ((nv::slab::Piano *)h)->reg_dropped; }
+long nv_part_reg_dropped(void *h) { return ((nv::slab::Part *)h)->reg_dropped; }
 
 // an event for the next block: 0 note-on (a key, b velocity), 1 note-off, 2 control (a cc, b value)
-void nv_lp_event(void *h, int type, int ch, int a, int b)
+void nv_part_event(void *h, int type, int ch, int a, int b)
 {
-    ((nv::slab::Piano *)h)->events.push_back(nv::slab::Ev{type, ch, a, b});
+    ((nv::slab::Part *)h)->events.push_back(nv::slab::Ev{type, ch, a, b});
 }
 
-void nv_lp_block(void *h, long long n0, long long blk) { ((nv::slab::Piano *)h)->block(n0, blk); }
+void nv_part_block(void *h, long long n0, long long blk) { ((nv::slab::Part *)h)->block(n0, blk); }
 
 // Renderer.render's block: L, R (and with SL the room's send pair) over
 // [n0, n0 + frames), through synth_voice (sv), synth_voice_xdec (sx) and
 // synth_voice_damp (sd; NULL: no row is drawn by a damper track)
-void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
+void nv_part_render(void *h, long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
                   void *sd, long long blk, double master_gain)
 {
-    ((nv::slab::Piano *)h)->render(n0, frames, L, R, SL, SR, sv, sx, sd, blk, master_gain);
+    ((nv::slab::Part *)h)->render(n0, frames, L, R, SL, SR, sv, sx, sd, blk, master_gain);
 }
 
 // THE ROUTES (live.Route, Live.on_midi): a router, its routes added in
@@ -6216,9 +6217,9 @@ void nv_rt_del(void *h, int i)
 }
 
 // the damper tracks' values (DM: 2 x 256 floats)
-void nv_lp_dm(void *h, float *out)
+void nv_part_dm(void *h, float *out)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     memcpy(out, P->DM.data(), sizeof(float) * P->DM.size());
 }
 
@@ -6227,9 +6228,9 @@ void nv_lp_dm(void *h, float *out)
 // (vs, the C reference) and voice_sizes (vz); cl an OpenCL GPU (nv_cl_new),
 // NULL to run the samples through voice_samples; a block of gpu_min busy
 // slots or more goes to it, its setup on nthr threads
-void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr)
+void nv_part_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     auto &g = P->gp;
     g.vb = vb; g.vbd = vbd; g.vds = vds; g.vs = vs; g.cl = cl; g.gpu_min = gpu_min; g.nthr = nthr;
     int sz[3];
@@ -6241,56 +6242,56 @@ void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void
 
 // THE PIPELINE (live's TUNING_GPU_PIPELINE): on, every block a block late --
 // the CPU's setup of the next while the GPU renders this one (an OpenCL GPU's)
-void nv_lp_pipeline(void *h, int on) { ((nv::slab::Piano *)h)->pipeline = on != 0; }
+void nv_part_pipeline(void *h, int on) { ((nv::slab::Part *)h)->pipeline = on != 0; }
 
 // The register's jobs on a worker thread of the part's own, off the audio
 // thread (live's worker process): answers placed at the pump after they are
 // ready, not in step -- for playing, not for the checks
-void nv_lp_reg_async(void *h) { ((nv::slab::Piano *)h)->start_reg_worker(); }
+void nv_part_reg_async(void *h) { ((nv::slab::Part *)h)->start_reg_worker(); }
 
 // Slab.shed: the highest frac of the partials sounding at n end over 5 ms; how many
 // the scanner's constants and circuit tables (scanner.cpp's: the export's SCAN)
-void nv_lp_scan(void *h, const double *X, long n)
+void nv_part_scan(void *h, const double *X, long n)
 {
-    ((nv::slab::Piano *)h)->scan.assign(X, X + n);
+    ((nv::slab::Part *)h)->scan.assign(X, X + n);
 }
 
 // the valve's passes off the audio thread (nvlive playing: live's workers)
-void nv_lp_amp_async(void *h) { ((nv::slab::Piano *)h)->start_amp_worker(); }
+void nv_part_amp_async(void *h) { ((nv::slab::Part *)h)->start_amp_worker(); }
 
 // live.LIVE_AMP_LOOKAHEAD and LIVE_AMP_HOLD, as the checks set them
-void nv_lp_amp_ahead(void *h, int blocks, int hold)
+void nv_part_amp_ahead(void *h, int blocks, int hold)
 {
-    ((nv::slab::Piano *)h)->LIVE_AMP_LOOKAHEAD = blocks;
-    ((nv::slab::Piano *)h)->LIVE_AMP_HOLD = hold != 0;
+    ((nv::slab::Part *)h)->LIVE_AMP_LOOKAHEAD = blocks;
+    ((nv::slab::Part *)h)->LIVE_AMP_HOLD = hold != 0;
 }
 
 // the scanner's data off the audio thread (nvlive playing: live's builder)
-void nv_lp_scan_async(void *h) { ((nv::slab::Piano *)h)->start_scan_worker(); }
+void nv_part_scan_async(void *h) { ((nv::slab::Part *)h)->start_scan_worker(); }
 
 // the Leslie's constants (leslie.cpp's L_*): the part's rotors, on chorale
-void nv_lp_leslie(void *h, const double *L, int n)
+void nv_part_leslie(void *h, const double *L, int n)
 {
-    ((nv::slab::Piano *)h)->leslie_start(std::vector<double>(L, L + n));
+    ((nv::slab::Part *)h)->leslie_start(std::vector<double>(L, L + n));
 }
 
-long nv_lp_shed(void *h, long long n, double frac) { return ((nv::slab::Piano *)h)->shed(n, frac); }
+long nv_part_shed(void *h, long long n, double frac) { return ((nv::slab::Part *)h)->shed(n, frac); }
 
 // The governor: a block took ms against its budget_ms, the next starts at n;
 // returns the partials it shed now
-long nv_lp_govern(void *h, double ms, double budget_ms, long long n)
+long nv_part_govern(void *h, double ms, double budget_ms, long long n)
 {
-    return ((nv::slab::Piano *)h)->govern(ms, budget_ms, n);
+    return ((nv::slab::Part *)h)->govern(ms, budget_ms, n);
 }
 
-long nv_lp_partials_shed(void *h) { return ((nv::slab::Piano *)h)->partials_shed; }
+long nv_part_partials_shed(void *h) { return ((nv::slab::Part *)h)->partials_shed; }
 
 // THE PANEL'S: a global set between blocks -- 0 headroom (dB), 1 the
 // pressure's lift (dB), 2 the limiter's knee, 3 the wheel's range, 4 the mod
 // range (cents), 5 the GPU on (1) or off, 6 the room's tail on or off
-void nv_lp_set(void *h, int what, double v)
+void nv_part_set(void *h, int what, double v)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     switch (what) {
     case 0:
         P->S.headroom_d = pow(10.0, -v / 20.0);
@@ -6311,9 +6312,9 @@ void nv_lp_set(void *h, int what, double v)
 // its samples ms, 7 channel 1's pedal, 8 sostenuto down on it, 9 mono on it,
 // 10 damper tracks, 11 a room, 12 the GPU on, 13 the tail on, 14 the bend
 // on channel 1 (cents)
-void nv_lp_stats(void *h, double *out)
+void nv_part_stats(void *h, double *out)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     long busy = 0;
     for (long q = 0; q < P->S.cap; q++)
         busy += P->S.busy[q] != 0;
@@ -6335,60 +6336,60 @@ void nv_lp_stats(void *h, double *out)
 }
 
 // live.panic, at n0
-void nv_lp_panic(void *h, long long n0) { ((nv::slab::Piano *)h)->panic(n0); }
+void nv_part_panic(void *h, long long n0) { ((nv::slab::Part *)h)->panic(n0); }
 
 // did the last block render on the GPU
-int nv_lp_on_gpu(void *h) { return ((nv::slab::Piano *)h)->on_gpu; }
+int nv_part_on_gpu(void *h) { return ((nv::slab::Part *)h)->on_gpu; }
 
 // ...and its two halves, ms: the setup (voice_block), the samples
-void nv_lp_gpu_ms(void *h, double *out)
+void nv_part_gpu_ms(void *h, double *out)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     out[0] = P->ms_setup;
     out[1] = P->ms_samples;
 }
 
 // The late room (live.RoomTail) through convolver.c's conv_new, conv_process
 // and conv_free: ir n stereo samples interleaved, mir the modes' (m 0: none)
-void nv_lp_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames)
+void nv_part_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames)
 {
-    ((nv::slab::Piano *)h)->room.reset(new nv::slab::Room(cn, cp, cf, ir, n, mir, m, frames));
+    ((nv::slab::Part *)h)->room.reset(new nv::slab::Room(cn, cp, cf, ir, n, mir, m, frames));
 }
 
 // the soft limiter's knee (live.thresh), the pitch wheel's range (live.bend_range)
 // and the mod wheel's (live.mod_cents)
-void nv_lp_post(void *h, double thresh, double bend_range, double mod_cents)
+void nv_part_post(void *h, double thresh, double bend_range, double mod_cents)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     P->thresh = thresh;
     P->bend_range = bend_range;
     P->mod_cents = mod_cents;
 }
 
 // live's callback after its events and step: the render, the room, the limiter
-void nv_lp_output(void *h, long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd,
+void nv_part_output(void *h, long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd,
                   long long blk, double master_gain)
 {
-    ((nv::slab::Piano *)h)->output(n0, frames, L, R, sv, sx, sd, blk, master_gain);
+    ((nv::slab::Part *)h)->output(n0, frames, L, R, sv, sx, sd, blk, master_gain);
 }
 
 // The mod wheel picks a honky-tonk's detune (live's 'detune' role)
-void nv_lp_detune_wheel(void *h, int on) { ((nv::slab::Piano *)h)->detune_wheel = on != 0; }
+void nv_part_detune_wheel(void *h, int on) { ((nv::slab::Part *)h)->detune_wheel = on != 0; }
 
 // Pressure's level at full aftertouch, dB (live.press_db)
-void nv_lp_press_db(void *h, double db) { ((nv::slab::Piano *)h)->press_db = db; }
+void nv_part_press_db(void *h, double db) { ((nv::slab::Part *)h)->press_db = db; }
 
 // The dampers in between (live._damp_block): damper.py's FULL_DB_S,
 // RESIDUAL, KNEE_DB, BETA and LN10_20
-void nv_lp_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20)
+void nv_part_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20)
 {
-    nv::slab::Piano *P = (nv::slab::Piano *)h;
+    nv::slab::Part *P = (nv::slab::Part *)h;
     P->dmp_on = true;
     P->dmp_full = full_db_s; P->dmp_res = residual; P->dmp_knee = knee_db; P->dmp_beta = beta; P->dmp_ln = ln10_20;
 }
 
 // the part's slab, for nv_slab_col and nv_slab_free_list
-void *nv_lp_slab(void *h) { return &((nv::slab::Piano *)h)->S; }
+void *nv_part_slab(void *h) { return &((nv::slab::Part *)h)->S; }
 
 
 void *nv_slab_new(long capacity, double headroom)

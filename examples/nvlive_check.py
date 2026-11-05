@@ -7,7 +7,7 @@
 The first SECONDS (default 20) of FILE, cut as bitident cuts, its notes and
 controllers (the native reader's, in message order) each applied at the
 start of the 128-sample block its time falls in: once through nvlive --test
-(the native live piano, from a live export: examples/native_export.py
+(the native live engine, from a live export: examples/native_export.py
 --live), once through live.Live(program, 48 kHz, 128 a block, on the CPU)
 by on_midi and its own callback -- its patch warmed first, its governor off
 -- each block's whole output (its callback's: the render, the room, the
@@ -105,7 +105,7 @@ def main(argv):
                 tuner=opt.get("tuner") or "hybrid", drums=drums)
     lv.enable_room(room)
     lv.parts[0].patch.warm()
-    from livepiano_check import instant_scan
+    from livepart_check import instant_scan
     instant_scan(lv, lv.parts[0].patch)         # (the scanner's builder, instant: nvlive's works at the press)
     import ampsync
     ampsync.sync(lv)                            # (the valve in step, as nvlive --test answers it)

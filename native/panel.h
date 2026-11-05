@@ -47,7 +47,7 @@ struct Snap {
     double ms_max = 0.0, ms_sum = 0.0;  // since the panel last looked
     long ms_n = 0;
     float peak[2] = {0.0f, 0.0f};       // since the panel last looked
-    double eng[15] = {};                // nv_lp_stats
+    double eng[15] = {};                // nv_part_stats
     bool rt = false, rt_dropped = false;
 };
 

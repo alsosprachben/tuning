@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Does the native piano part play live MIDI as live.Live does?
+"""Does the native part play live MIDI as live.Live does?
 
-    python3 examples/livepiano_check.py [BLOCKS] [--program=N] [--seed=N] [--every=N] [--render] [--register]
+    python3 examples/livepart_check.py [BLOCKS] [--program=N] [--seed=N] [--every=N] [--render] [--register]
                                         [--half] [--pedal-key=N] [--pressure]
                                         [--gpu=c|cl] [--gpu-min=N] [--shed=N] [--wheels]
                                         [--room=NAME] [--cc91] [--thresh=X] [--rpn] [--modes]
                                         [--routes] [--porta] [--stops] [--scan]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
-native piano part (native/slab.cpp: its template cache, its slab, live's
+native part (native/slab.cpp: its template cache, its slab, live's
 events for it) are fed the same random MIDI block by block -- presses and
 key-ups across the keyboard, the sustain pedal as a switch, CC7, CC11, CC10,
 CC67 -- through on_midi and live's own callback on one side and the native
@@ -32,7 +32,7 @@ aftertouch while it is held) -- live.Route(("note", N), 64) through on_midi
 on one side, native.KeyPedal before the part's events on the other.
 --pressure: channel aftertouch among the controls (live's Slab.press).
 --stops: an organ's stops drawn and put in as the panel does (livetui's
-toggle_stop; the native part's nv_lp_toggle_stop), the Tremulant among them.
+toggle_stop; the native part's nv_part_toggle_stop), the Tremulant among them.
 On a tonewheel (16-18) the Leslie's state is compared too (ls_*: its rotor
 slots, lobes and baselines), the pitch wheel its half-moon under --wheels;
 --scan: the scanner's selector (CC94) among the controls.
@@ -131,7 +131,7 @@ def main(argv):
     cache.warm(lo, hi, pt.nbuckets, pt.speeds)
     speed = None if pt.speeds == (None,) else (lv.detune_step.get(part.pid, pt.leslie_default)
                                                if pt.detune_wheel else pt.leslie_default)
-    nv = N.LivePiano(cache, part.pid, part.level_db, pt.nbuckets, speed, pt.damper_pedal, pt.soft_pedal_strings,
+    nv = N.LivePart(cache, part.pid, part.level_db, pt.nbuckets, speed, pt.damper_pedal, pt.soft_pedal_strings,
                      pt.soft_pedal_top, 48000, capacity=lv.slab.cap, headroom=lv.slab.headroom,
                      detune_wheel=pt.detune_wheel)
     ngpu = [0, 0]
@@ -229,7 +229,7 @@ def main(argv):
             bad.append("dg")
         # the chest's state (wind.Wind's), where each side has one
         _ws = (ctypes.c_double * 8)()
-        _has = nv.d.nv_lp_wind_state(nv.p, _ws)
+        _has = nv.d.nv_part_wind_state(nv.p, _ws)
         if bool(_has) != bool(lv.wind_st):
             bad.append("wind chest")
         elif _has:
@@ -350,7 +350,7 @@ def main(argv):
             _pt = lv.parts[0]
             _ri = rng.randrange(len(_pt.patch.rank_names))
             lv.request_stops(_pt, set(_pt.drawn) ^ {_pt.patch.rank_names[_ri]})
-            nv.d.nv_lp_toggle_stop(nv.p, _ri, n0)
+            nv.d.nv_part_toggle_stop(nv.p, _ri, n0)
             msgs = msgs + ["stop %s" % _pt.patch.rank_names[_ri]]
         got_py = lv.callback(None, 128, None, 0)[0]
         nv.block(n0, 128)
@@ -431,13 +431,13 @@ def main(argv):
                     print("    trem_depth %s" % dict(lv.trem_depth))
                 if "debug" in opt and "wind state" in bad:
                     _ws = (ctypes.c_double * 8)()
-                    nv.d.nv_lp_wind_state(nv.p, _ws)
+                    nv.d.nv_part_wind_state(nv.p, _ws)
                     _w = next(iter(lv.wind_st.values()))["wind"]
                     print("    wind: live %s" % [float(getattr(_w, a)) for a in ("w1", "w2", "s1", "s2", "d1", "r1", "te", "tph")])
                     print("    wind: nati %s" % list(_ws))
                     _kk = (ctypes.c_longlong * 4096)()
                     _nm = ctypes.create_string_buffer(65536)
-                    _nk = nv.d.nv_lp_live_keys(nv.p, _kk, 1024, _nm, 65536)
+                    _nk = nv.d.nv_part_live_keys(nv.p, _kk, 1024, _nm, 65536)
                     _names = _nm.value.decode().split("\n")
                     _nat = [(int(_kk[4 * i + 1]), int(_kk[4 * i + 2]), _names[i] or int(_kk[4 * i + 3]))
                             for i in range(_nk)]
@@ -459,7 +459,7 @@ def main(argv):
                                 _r, lv.slab.BR[_r, 0], lv.slab.BC[_r, 0], lv.slab.BL[_r].tolist(), _br[_r], _bc[_r],
                                 _bl[_r].tolist()))
                     _wi = (ctypes.c_longlong * 256)()
-                    _nw = nv.d.nv_lp_wind_info(nv.p, _wi, 256)
+                    _nw = nv.d.nv_part_wind_info(nv.p, _wi, 256)
                     print("    native: %s" % list(_wi[:_nw]))
                     print("    live: wind_next %d spent %s free %s chests %s" % (
                         lv.wind_next, lv.wind_spent, list(lv.wind_free),
@@ -503,7 +503,7 @@ def main(argv):
         print("  GPU (%s): live took %d blocks to it, native %d" % (opt["gpu"] or "cl", ngpu[0], ngpu[1]))
     if "half" in opt:
         print("  dampers: up to %d tracks at once, %d blocks with one" % (ntr, dmb))
-    print("live piano: %d blocks, program %d, %s%s (%d slots sounding at the end)"
+    print("live part: %d blocks, program %d, %s%s (%d slots sounding at the end)"
           % (b + 1, prog, "identical" if not bad else "differs",
              ", every block's render too" if "render" in opt and not rbad else "", sounding))
     return 1 if bad else 0

@@ -1,4 +1,4 @@
-"""Live's valve IN STEP, for the checks (livepiano_check, nvlive_check).
+"""Live's valve IN STEP, for the checks (livepart_check, nvlive_check).
 
 live.Live answers its valve on threads -- the fast pass on one, the fine
 pass in worker processes (valvefine) -- so when a chord's products land

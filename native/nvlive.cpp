@@ -1,4 +1,4 @@
-// nvlive.cpp -- the native live piano: a MIDI keyboard in, audio out, no
+// nvlive.cpp -- the native live engine: a MIDI keyboard in, audio out, no
 // Python at runtime.
 //
 //     nvlive EXPORT.nvx [--program=N [--drums]] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
@@ -131,57 +131,57 @@ void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double 
 long nv_tcache_warm(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp);
 void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigned long long *choke,
                     const int *skind, const double *spar, double oneshot_floor_db);
-void nv_lp_drums(void *h, int program, const unsigned long long *choke);
-void nv_lp_program(void *h, int program);
-void nv_lp_toggle_stop(void *h, int rank, long long n0);
-int nv_lp_drawn(void *h, char *out, int cap);
-void *nv_lp_new(void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
+void nv_part_drums(void *h, int program, const unsigned long long *choke);
+void nv_part_program(void *h, int program);
+void nv_part_toggle_stop(void *h, int rank, long long n0);
+int nv_part_drawn(void *h, char *out, int cap);
+void *nv_part_new(void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
                 int soft_drop, int soft_top, double rate, double retrigger, long cap, double headroom,
                 const double *pan_tab, double pan_beta);
-void nv_lp_event(void *h, int type, int ch, int a, int b);
-void nv_lp_block(void *h, long long n0, long long blk);
-void nv_lp_render(void *h, long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
+void nv_part_event(void *h, int type, int ch, int a, int b);
+void nv_part_block(void *h, long long n0, long long blk);
+void nv_part_render(void *h, long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
                   void *sd, long long blk, double master_gain);
-void nv_lp_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20);
-void nv_lp_press_db(void *h, double db);
-void nv_lp_detune_wheel(void *h, int on);
-void nv_lp_leslie(void *h, const double *L, int n);
-void nv_lp_scan(void *h, const double *X, long n);
-void nv_lp_scan_async(void *h);
-void nv_lp_amp_async(void *h);
+void nv_part_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20);
+void nv_part_press_db(void *h, double db);
+void nv_part_detune_wheel(void *h, int on);
+void nv_part_leslie(void *h, const double *L, int n);
+void nv_part_scan(void *h, const double *X, long n);
+void nv_part_scan_async(void *h);
+void nv_part_amp_async(void *h);
 void nv_tcache_leslie(void *h, const double *L, int n);
 int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, int *have);
-void nv_lp_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
-void nv_lp_post(void *h, double thresh, double bend_range, double mod_cents);
-void nv_lp_output(void *h, long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd,
+void nv_part_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
+void nv_part_post(void *h, double thresh, double bend_range, double mod_cents);
+void nv_part_output(void *h, long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd,
                   long long blk, double master_gain);
 void *nv_rt_new();
 void nv_rt_add(void *h, int src, int arg, int dst, int keep, int channel, int latch, int press);
 int nv_rt_feed(void *h, int type, int ch, int a, int b, int *out, int cap);
-void nv_lp_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr);
-void nv_lp_pipeline(void *h, int on);
-int nv_lp_add_patch(void *h, void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
+void nv_part_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr);
+void nv_part_pipeline(void *h, int on);
+int nv_part_add_patch(void *h, void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
                     int soft_drop, int soft_top, int drums, int program, const unsigned long long *choke, int channel,
                     unsigned excl, int lo, int hi, int transpose);
-void nv_lp_patch_range(void *h, int i, int channel, unsigned excl, int lo, int hi, int transpose);
-int nv_lp_on_gpu(void *h);
-void nv_lp_gpu_ms(void *h, double *out);
-void nv_lp_reg_async(void *h);
-void nv_lp_reg_choirs(void *h, int nchoir, const long *bridges, double cross, int nbuff, const int *buffs);
-void nv_lp_reg_keys(void *h, const NoteClass *k);
-void nv_lp_swap_bank_keys(void *h, const NoteClass *k);
-void nv_lp_swap_bank(void *h, const StringMode *modes, int M, const double *k6, int top, int pedals, const int *note,
+void nv_part_patch_range(void *h, int i, int channel, unsigned excl, int lo, int hi, int transpose);
+int nv_part_on_gpu(void *h);
+void nv_part_gpu_ms(void *h, double *out);
+void nv_part_reg_async(void *h);
+void nv_part_reg_choirs(void *h, int nchoir, const long *bridges, double cross, int nbuff, const int *buffs);
+void nv_part_reg_keys(void *h, const NoteClass *k);
+void nv_part_swap_bank_keys(void *h, const NoteClass *k);
+void nv_part_swap_bank(void *h, const StringMode *modes, int M, const double *k6, int top, int pedals, const int *note,
                      int nchoir, const long *cbr, double cross, int nbuff, const int *buffs);
-void nv_lp_swap(void *h, int pi, void *cache, int program, int drums, int nbuckets, int speed, int damper_pedal,
+void nv_part_swap(void *h, int pi, void *cache, int program, int drums, int nbuckets, int speed, int damper_pedal,
                 int soft_drop, int soft_top, int detune_wheel, const unsigned long long *choke, const int *reg_note);
-void nv_lp_set(void *h, int what, double v);
-void nv_lp_stats(void *h, double *out);
-void nv_lp_panic(void *h, long long n0);
+void nv_part_set(void *h, int what, double v);
+void nv_part_stats(void *h, double *out);
+void nv_part_panic(void *h, long long n0);
 void nv_rt_del(void *h, int i);
-long nv_lp_govern(void *h, double ms, double budget_ms, long long n);
-long nv_lp_partials_shed(void *h);
+long nv_part_govern(void *h, double ms, double budget_ms, long long n);
+long nv_part_partials_shed(void *h);
 void *nv_cl_new(const char *dir, const int *sizes, char *err, int errlen);
-void nv_lp_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
+void nv_part_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
                     int top, double beta, int pedals, double rel, double full_db_s, double residual, double ln10_20,
                     long long blk, const int *reg_note);
 }
@@ -662,7 +662,7 @@ int main(int argc, char **argv)
     static const int DRUM_PART[10] = {1, 1, 1, -1, -1, -1, -1, 0, 0, 0};
     const int *pp = drums ? DRUM_PART : E.part[program & 127];
     if (!pp[0]) {
-        fprintf(stderr, "nvlive: program %d is not a native piano\n", program);
+        fprintf(stderr, "nvlive: program %d is not native\n", program);
         return 1;
     }
     // THE TUNER (native/tuner.cpp): --tuner=NAME in place of the export's (its
@@ -738,19 +738,19 @@ int main(int argc, char **argv)
     // THE SLAB'S SLOTS (--slots: live's capacity, 65536 -- a vibraslap's
     // strike is 16524 rows)
     long slots = atol(opt(argc, argv, "slots", "65536").c_str());
-    void *part = nv_lp_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], slots,
+    void *part = nv_part_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], slots,
                            E.headroom, E.pan.data(), E.beta);
     if (!E.les.empty())                         // the room's Leslie: its rotors, on chorale
-        nv_lp_leslie(part, E.les.data(), (int)E.les.size());
+        nv_part_leslie(part, E.les.data(), (int)E.les.size());
     if (!E.scan.empty())                        // the Hammond's scanner: its circuit's tables
-        nv_lp_scan(part, E.scan.data(), (long)E.scan.size());
+        nv_part_scan(part, E.scan.data(), (long)E.scan.size());
     if (drums)
-        nv_lp_drums(part, program, E.kit_choke.data());
+        nv_part_drums(part, program, E.kit_choke.data());
     else
-        nv_lp_program(part, program);
-    // THE DRUMS BESIDE THE PIANO (live's Parts on one slab): a drum set
-    // (--drum-set=P, Standard's 0) on channel 10, the piano on every other
-    // (--no-drums: the piano alone); and --split=N, on the keyboard's channel
+        nv_part_program(part, program);
+    // THE DRUMS BESIDE THE PART (live's Parts on one slab): a drum set
+    // (--drum-set=P, Standard's 0) on channel 10, the part on every other
+    // (--no-drums: the part alone); and --split=N, on the keyboard's channel
     // (--split-channel, 1), its keys under N the drum set's, moved by
     // --split-transpose=T (the hand drums, 60-87, from a low split)
     bool nodrums = drums;
@@ -782,24 +782,24 @@ int main(int argc, char **argv)
         long dbuilt = nv_tcache_warm(dcache, dset, 0, 127, 1, nsp, 1);      // (live.DRUM_RANGE)
         caches[128 + dset] = dcache;
         if (!nodrums) {
-            nv_lp_patch_range(part, 0, -1, 1u << 9, 0, 127, 0);
-            int pi = nv_lp_add_patch(part, dcache, 2, 0.0, 1, -1, 0, 0, 0, 1, dset, E.kit_choke.data(), 9, 0u, 0, 127, 0);
+            nv_part_patch_range(part, 0, -1, 1u << 9, 0, 127, 0);
+            int pi = nv_part_add_patch(part, dcache, 2, 0.0, 1, -1, 0, 0, 0, 1, dset, E.kit_choke.data(), 9, 0u, 0, 127, 0);
             pats.push_back(PartAt{pi, 9, true, dset, -1, dset});
             fprintf(stderr, "nvlive: drum set %d on channel 10 (%ld templates)\n", dset, dbuilt);
         }
         if (split > 0) {
             int sch = atoi(opt(argc, argv, "split-channel", "1").c_str()) - 1;
             int str = atoi(opt(argc, argv, "split-transpose", "0").c_str());
-            int pi = nv_lp_add_patch(part, dcache, 3, 0.0, 1, -1, 0, 0, 0, 1, dset, E.kit_choke.data(), sch & 15, 0u,
+            int pi = nv_part_add_patch(part, dcache, 3, 0.0, 1, -1, 0, 0, 0, 1, dset, E.kit_choke.data(), sch & 15, 0u,
                                      0, split - 1, str);
             pats.push_back(PartAt{pi, sch & 15, true, dset, -1, dset});
             fprintf(stderr, "nvlive: drum set %d under key %d on channel %d (transposed %+d)\n", dset, split,
                     (sch & 15) + 1, str);
         }
     }
-    nv_lp_detune_wheel(part, pp[6] >= 0);       // the export's speed: a honky-tonk's wheel, else -1
+    nv_part_detune_wheel(part, pp[6] >= 0);       // the export's speed: a honky-tonk's wheel, else -1
     if (E.k.size() > K_BEND_RANGE)
-        nv_lp_post(part, E.k[K_THRESH], E.k[K_BEND_RANGE], 35.0);     // (the mod range: no vibrato on a piano)
+        nv_part_post(part, E.k[K_THRESH], E.k[K_BEND_RANGE], 35.0);     // (the mod range: live's default)
     // THE ROOM'S LATE TAIL (the export's: the session's room), through live's
     // convolver -- unless --dry
     bool dry = false;
@@ -810,7 +810,7 @@ int main(int argc, char **argv)
         void *cn = ch ? dlsym(ch, "conv_new") : nullptr, *cp = ch ? dlsym(ch, "conv_process") : nullptr;
         void *cf = ch ? dlsym(ch, "conv_free") : nullptr;
         if (cn && cp && cf) {
-            nv_lp_room(part, cn, cp, cf, E.ir.data(), (long)E.ir.size() / 2, E.mir.empty() ? nullptr : E.mir.data(),
+            nv_part_room(part, cn, cp, cf, E.ir.data(), (long)E.ir.size() / 2, E.mir.empty() ? nullptr : E.mir.data(),
                        (long)E.mir.size() / 2, (int)BLK);
             fprintf(stderr, "nvlive: the room's tail, %.2f s%s\n", E.ir.size() / 2 / SR,
                     E.mir.empty() ? "" : ", and its modes");
@@ -831,25 +831,25 @@ int main(int argc, char **argv)
         anyreg = anyreg || E.reg[p].M > 0;
     const bool reg_on = anyreg && !noreg;
     if (reg_on && rg.M > 0) {
-        nv_lp_register(part, rg.modes.data(), rg.M, rg.d[0], rg.d[1], rg.d[2], rg.d[3], rg.i[0], rg.d[4], rg.i[1],
+        nv_part_register(part, rg.modes.data(), rg.M, rg.d[0], rg.d[1], rg.d[2], rg.d[3], rg.i[0], rg.d[4], rg.i[1],
                        rg.d[5], rg.d[6], rg.d[7], rg.d[8], rg.i[2], rg.note);
         const Export::Prog &pr = E.prog[program & 127];
         if (!pr.cbr.empty())                    // a harpsichord's choirs
-            nv_lp_reg_choirs(part, (int)pr.cbr.size(), pr.cbr.data(), pr.cross, (int)pr.buffs.size() / 2,
+            nv_part_reg_choirs(part, (int)pr.cbr.size(), pr.cbr.data(), pr.cross, (int)pr.buffs.size() / 2,
                              pr.buffs.data());
         if (E.cmap[128 * (program & 127) + 60] >= 0)    // a dulcimer's bridges by key (its class at key 60's)
-            nv_lp_reg_keys(part, (const NoteClass *)E.classes[E.cmap[128 * (program & 127) + 60]].data());
+            nv_part_reg_keys(part, (const NoteClass *)E.classes[E.cmap[128 * (program & 127) + 60]].data());
         fprintf(stderr, "nvlive: the register: %d string modes%s\n", rg.M,
                 pr.cbr.empty() ? "" : (", " + std::to_string(pr.cbr.size()) + " choirs").c_str());
     } else if (reg_on) {
         StringMode none[1];
         int nonote[128] = {0};
-        nv_lp_register(part, none, 0, 0.0, 0.0, 0.0, 0.0, 128, E.k[K_BETA], 0, 0.12 * SR, E.k[K_FULL],
+        nv_part_register(part, none, 0, 0.0, 0.0, 0.0, 0.0, 128, E.k[K_BETA], 0, 0.12 * SR, E.k[K_FULL],
                        E.k[K_RESIDUAL], E.k[K_LN10_20], BLK, nonote);
         fprintf(stderr, "nvlive: the register: none for this voice, ready for one with strings\n");
     }
-    nv_lp_damper(part, E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_KNEE], E.k[K_BETA], E.k[K_LN10_20]);
-    nv_lp_press_db(part, atof(opt(argc, argv, "press-db",
+    nv_part_damper(part, E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_KNEE], E.k[K_BETA], E.k[K_LN10_20]);
+    nv_part_press_db(part, atof(opt(argc, argv, "press-db",
                                   std::to_string(E.k.size() > K_PRESS_DB ? E.k[K_PRESS_DB] : 8.0).c_str()).c_str()));
     void *fn[3];
     const char *FN[3] = {"synth_voice", "synth_voice_xdec", "synth_voice_damp"};
@@ -908,8 +908,8 @@ int main(int argc, char **argv)
             // off the thread: 489 blocks over 2.67 ms at 1000, none at 100.
             // Each side's own threshold is checked by nvlive_check --gpu-min.
             long gmin = atol(opt(argc, argv, "gpu-min", "100").c_str());
-            nv_lp_gpu(part, vb, vbd, vds, vs, vz, cl, gmin, atoi(opt(argc, argv, "gpu-threads", "4").c_str()));
-            nv_lp_pipeline(part, cl && pipe);
+            nv_part_gpu(part, vb, vbd, vds, vs, vz, cl, gmin, atoi(opt(argc, argv, "gpu-threads", "4").c_str()));
+            nv_part_pipeline(part, cl && pipe);
             fprintf(stderr, "nvlive: the GPU (%s), from %ld busy slots%s\n", cl ? "OpenCL" : "the C reference", gmin,
                     cl && pipe ? ", pipelined" : "");
         } else {
@@ -944,7 +944,7 @@ int main(int argc, char **argv)
         int out[4 * 16];
         int n = nv_rt_feed(router, type, ch, a, b, out, 16);
         for (int q = 0; q < n; q++)
-            nv_lp_event(part, out[4 * q], out[4 * q + 1], out[4 * q + 2], out[4 * q + 3]);
+            nv_part_event(part, out[4 * q], out[4 * q + 1], out[4 * q + 2], out[4 * q + 3]);
     };
     // PROGRAM CHANGES (live.on_midi's program_change, its _patch_worker and
     // _swap_patch). With no bank selected (CC0 0: the capital tone, the
@@ -990,7 +990,7 @@ int main(int argc, char **argv)
         caches[key] = c;
         return c;
     };
-    // swap(): a built program posted to its part (nv_lp_swap, done after the
+    // swap(): a built program posted to its part (nv_part_swap, done after the
     // next block's events), and its strings where they are another voice's
     // (live._reg_forget: the new voice's bank, or none)
     std::atomic<int> shown_program(drums ? 128 + program : program);    // (what the panel shows)
@@ -1007,18 +1007,18 @@ int main(int argc, char **argv)
             const Export::Prog &pr = E.prog[prog & 127];
             if (!dr && rr.M > 0) {
                 double k6[6] = {rr.d[0], rr.d[1], rr.d[2], rr.d[3], rr.d[4], rr.d[5]};
-                nv_lp_swap_bank(part, rr.modes.data(), rr.M, k6, rr.i[0], rr.i[1], note, (int)pr.cbr.size(),
+                nv_part_swap_bank(part, rr.modes.data(), rr.M, k6, rr.i[0], rr.i[1], note, (int)pr.cbr.size(),
                                 pr.cbr.empty() ? nullptr : pr.cbr.data(), pr.cbr.empty() ? 1.0 : pr.cross,
                                 (int)pr.buffs.size() / 2, pr.buffs.empty() ? nullptr : pr.buffs.data());
                 if (E.cmap[128 * (prog & 127) + 60] >= 0)
-                    nv_lp_swap_bank_keys(part, (const NoteClass *)E.classes[E.cmap[128 * (prog & 127) + 60]].data());
+                    nv_part_swap_bank_keys(part, (const NoteClass *)E.classes[E.cmap[128 * (prog & 127) + 60]].data());
             } else {
                 StringMode none[1];
                 double k6[6] = {0.0, 0.0, 0.0, 0.0, E.k[K_BETA], 0.12 * SR};
-                nv_lp_swap_bank(part, none, 0, k6, 128, 0, nonote, 0, nullptr, 1.0, 0, nullptr);
+                nv_part_swap_bank(part, none, 0, k6, 128, 0, nonote, 0, nullptr, 1.0, 0, nullptr);
             }
         }
-        nv_lp_swap(part, pa.pi, c, prog & 127, dr, pq[1], pq[6], pq[7], pq[8], pq[9], pq[6] >= 0,
+        nv_part_swap(part, pa.pi, c, prog & 127, dr, pq[1], pq[6], pq[7], pq[8], pq[9], pq[6] >= 0,
                    dr ? E.kit_choke.data() : nullptr, regd ? note : nullptr);
         pa.posted = prog & 127;
         pa.drums = dr;
@@ -1112,10 +1112,10 @@ int main(int argc, char **argv)
             // output then varies run to run) and --rt (this thread real-time)
             for (int q = 1; q < argc; q++) {
                 if (!strcmp(argv[q], "--reg-async"))
-                    nv_lp_reg_async(part);
+                    nv_part_reg_async(part);
                 if (!strcmp(argv[q], "--async")) {         // ...and the scanner's and valve's workers, as played
-                    nv_lp_scan_async(part);
-                    nv_lp_amp_async(part);
+                    nv_part_scan_async(part);
+                    nv_part_amp_async(part);
                 }
                 if (!strcmp(argv[q], "--rt")) {
                     std::string why = rt::promote(rt::PRIO);
@@ -1148,24 +1148,24 @@ int main(int argc, char **argv)
                     }
                     e++;
                 }
-                nv_lp_block(part, n0, BLK);
+                nv_part_block(part, n0, BLK);
                 landed();
                 nswaps += settle(reqs);                 // (live's builder in step: for the next block)
                 auto t1 = std::chrono::steady_clock::now();
-                nv_lp_output(part, n0, (long)BLK, L, R, fn[0], fn[1], fn[2], BLK, master);
+                nv_part_output(part, n0, (long)BLK, L, R, fn[0], fn[1], fn[2], BLK, master);
                 msr.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count());
                 mstep.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count());
-                if (!nv_lp_on_gpu(part))
+                if (!nv_part_on_gpu(part))
                     mcpu.push_back(msr.back());
-                if (nv_lp_on_gpu(part)) {
+                if (nv_part_on_gpu(part)) {
                     double g2[2];
-                    nv_lp_gpu_ms(part, g2);
+                    nv_part_gpu_ms(part, g2);
                     mss.push_back(g2[0]);
                     msg.push_back(g2[1]);
                 }
                 ms.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
                 if (tgov)
-                    nv_lp_govern(part, ms.back(), 1000.0 * BLK / SR, n0 + BLK);
+                    nv_part_govern(part, ms.back(), 1000.0 * BLK / SR, n0 + BLK);
                 for (long long k = 0; k < BLK; k++) {
                     out.push_back(L[k]);
                     out.push_back(R[k]);
@@ -1200,7 +1200,7 @@ int main(int argc, char **argv)
                 stat("GPU setup", mss);
                 stat("GPU samples", msg);
                 if (tgov)
-                    fprintf(stderr, "nvlive:   the governor shed %ld partials\n", nv_lp_partials_shed(part));
+                    fprintf(stderr, "nvlive:   the governor shed %ld partials\n", nv_part_partials_shed(part));
             }
             nv_midi_free(m);
             if (follow)
@@ -1263,9 +1263,9 @@ int main(int argc, char **argv)
         nopanel = nopanel || !strcmp(argv[i], "--no-panel");
     }
     if (!rsync)
-        nv_lp_reg_async(part);
-    nv_lp_scan_async(part);                     // the scanner's data on its own thread, as live's builder
-    nv_lp_amp_async(part);                      // ...and the valve's passes, as live's workers
+        nv_part_reg_async(part);
+    nv_part_scan_async(part);                     // the scanner's data on its own thread, as live's builder
+    nv_part_amp_async(part);                      // ...and the valve's passes, as live's workers
     fprintf(stderr, "nvlive: playing (MIDI %s, audio %s, %u us); %s\n", dev.c_str(), pcmdev.c_str(), lat,
             nopanel ? "Ctrl-C to stop" : "the panel (q to stop)");
     // WHAT THE PANEL POSTS, done between two blocks (live.post); what it
@@ -1379,7 +1379,7 @@ int main(int argc, char **argv)
                 }
                 event(m.type, m.ch, m.a, m.b);
             }
-            nv_lp_block(part, n0, BLK);
+            nv_part_block(part, n0, BLK);
             landed();
             // the programs asked for to the builder, and those it has built swapped in
             {
@@ -1396,11 +1396,11 @@ int main(int argc, char **argv)
                     bdone.clear();
                 }
             }
-            nv_lp_output(part, n0, (long)BLK, L, R, fn[0], fn[1], fn[2], BLK, master_now);
+            nv_part_output(part, n0, (long)BLK, L, R, fn[0], fn[1], fn[2], BLK, master_now);
             rt::busy_since = 0;
             double ms = (rt::now_ns() - t0) / 1e6;
             if (govern)
-                nv_lp_govern(part, ms, budget, n0 + BLK);
+                nv_part_govern(part, ms, budget, n0 + BLK);
             blocks++;
             over += ms > budget;
             worst = ms > worst ? ms : worst;
@@ -1422,7 +1422,7 @@ int main(int argc, char **argv)
                 snap.peak[0] = std::max(snap.peak[0], pk[0]);
                 snap.peak[1] = std::max(snap.peak[1], pk[1]);
                 if ((blocks & 7) == 0)
-                    nv_lp_stats(part, snap.eng);
+                    nv_part_stats(part, snap.eng);
                 snap.rt = rt_on && !rt::dropped;
                 snap.rt_dropped = rt::dropped > 0;
             }
@@ -1486,7 +1486,7 @@ int main(int argc, char **argv)
         H.room = E.room.empty() ? "-" : E.room;
         H.reg_modes = rg.M > 0 && !noreg ? rg.M : 0;
         double st[15];
-        nv_lp_stats(part, st);
+        nv_part_stats(part, st);
         H.has_gpu = st[12] > 0.5;
         H.has_room = st[11] > 0.5;
         H.g[0] = 20.0 * log10(std::max(master, 1e-12));
@@ -1501,13 +1501,13 @@ int main(int argc, char **argv)
             post([&, i, v](long long) {
                 switch (i) {
                 case 0: master_now = pow(10.0, v / 20.0); break;     // T.master_gain
-                case 1: nv_lp_set(part, 0, v); break;
-                case 2: nv_lp_set(part, 2, v); break;
-                case 3: nv_lp_set(part, 3, v); break;
-                case 4: nv_lp_set(part, 4, v); break;
-                case 5: nv_lp_set(part, 1, v); break;
-                case 6: nv_lp_set(part, 5, v); break;
-                case 7: nv_lp_set(part, 6, v); break;
+                case 1: nv_part_set(part, 0, v); break;
+                case 2: nv_part_set(part, 2, v); break;
+                case 3: nv_part_set(part, 3, v); break;
+                case 4: nv_part_set(part, 4, v); break;
+                case 5: nv_part_set(part, 1, v); break;
+                case 6: nv_part_set(part, 5, v); break;
+                case 7: nv_part_set(part, 6, v); break;
                 }
             });
         };
@@ -1518,7 +1518,7 @@ int main(int argc, char **argv)
             post([&, a](long long) { nv_rt_add(router, a[0], a[1], a[2], a[3], a[4], a[5], a[6]); });
         };
         H.del_route = [&](int i) { post([&, i](long long) { nv_rt_del(router, i); }); };
-        H.panic = [&]() { post([&](long long n) { nv_lp_panic(part, n); }); };
+        H.panic = [&]() { post([&](long long n) { nv_part_panic(part, n); }); };
         // AN ORGAN'S STOPS (live's panel): its ranks, drawn and put in between two blocks
         auto stops_of = [&](int sp) {
             H.stop_names.clear();
@@ -1529,10 +1529,10 @@ int main(int argc, char **argv)
             H.stop_rows = E.stops[sp].rows;
             H.drawn = [&, nr = (int)E.stops[sp].names.size()]() {
                 std::vector<char> d(nr, 0);
-                nv_lp_drawn(part, d.data(), nr);
+                nv_part_drawn(part, d.data(), nr);
                 return d;
             };
-            H.toggle_stop = [&](int ri) { post([&, ri](long long n) { nv_lp_toggle_stop(part, ri, n); }); };
+            H.toggle_stop = [&](int ri) { post([&, ri](long long n) { nv_part_toggle_stop(part, ri, n); }); };
         };
         stops_of(shown_program);
         // THE PICKER: every program and set, which are native, and one picked
@@ -1603,7 +1603,7 @@ int main(int argc, char **argv)
     bcv.notify_all();
     builder.join();
     fprintf(stderr, "nvlive: %ld blocks, %ld over %.2f ms (worst %.2f), %ld underruns, %ld partials shed%s\n", blocks,
-            over, budget, worst, underruns, nv_lp_partials_shed(part),
+            over, budget, worst, underruns, nv_part_partials_shed(part),
             rt::dropped ? ", real-time dropped by the guard" : "");
     reader.join();
     A.close(A.pcm);

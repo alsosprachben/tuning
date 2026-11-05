@@ -427,8 +427,8 @@ def _load():
                                    ctypes.c_void_p, C]),
             ('nv_scan_rows', None, [ctypes.c_void_p, ctypes.c_long, I, C, I, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_tcache_leslie', None, [ctypes.c_void_p, ctypes.c_void_p, I]),
-            ('nv_lp_leslie', None, [ctypes.c_void_p, ctypes.c_void_p, I]),
-            ('nv_lp_scan', None, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]),
+            ('nv_part_leslie', None, [ctypes.c_void_p, ctypes.c_void_p, I]),
+            ('nv_part_scan', None, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]),
             ('nv_leslie_angles', ctypes.c_long, [I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, C, I,
                                                  ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_slab_new', ctypes.c_void_p, [ctypes.c_long, C]), ('nv_slab_free', None, [ctypes.c_void_p]),
@@ -439,42 +439,42 @@ def _load():
             ('nv_slab_reap', None, [ctypes.c_void_p, LL, LL]),
             ('nv_slab_col', None, [ctypes.c_void_p, I, I, ctypes.c_void_p]),
             ('nv_slab_free_list', ctypes.c_long, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]),
-            ('nv_lp_new', ctypes.c_void_p, [ctypes.c_void_p, LL, C, I, I, I, I, I, C, C, ctypes.c_long, C, D, C]),
-            ('nv_lp_program', None, [ctypes.c_void_p, I]),
-            ('nv_lp_toggle_stop', None, [ctypes.c_void_p, I, LL]),
-            ('nv_lp_swap', None, [ctypes.c_void_p, I, ctypes.c_void_p, I, I, I, I, I, I, I, I, ctypes.c_void_p,
+            ('nv_part_new', ctypes.c_void_p, [ctypes.c_void_p, LL, C, I, I, I, I, I, C, C, ctypes.c_long, C, D, C]),
+            ('nv_part_program', None, [ctypes.c_void_p, I]),
+            ('nv_part_toggle_stop', None, [ctypes.c_void_p, I, LL]),
+            ('nv_part_swap', None, [ctypes.c_void_p, I, ctypes.c_void_p, I, I, I, I, I, I, I, I, ctypes.c_void_p,
                                   ctypes.c_void_p]),
-            ('nv_lp_swap_bank', None, [ctypes.c_void_p, ctypes.c_void_p, I, D, I, I, ctypes.c_void_p, I,
+            ('nv_part_swap_bank', None, [ctypes.c_void_p, ctypes.c_void_p, I, D, I, I, ctypes.c_void_p, I,
                                        ctypes.c_void_p, C, I, ctypes.c_void_p]),
-            ('nv_lp_free', None, [ctypes.c_void_p]),
-            ('nv_lp_register', None, [ctypes.c_void_p, ctypes.c_void_p, I, C, C, C, C, I, C, I, C, C, C, C, LL,
+            ('nv_part_free', None, [ctypes.c_void_p]),
+            ('nv_part_register', None, [ctypes.c_void_p, ctypes.c_void_p, I, C, C, C, C, I, C, I, C, C, C, C, LL,
                                       ctypes.c_void_p]),
-            ('nv_lp_reg_dropped', ctypes.c_long, [ctypes.c_void_p]),
-            ('nv_lp_bend_rows', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I]),
-            ('nv_lp_reg_choirs', None, [ctypes.c_void_p, I, ctypes.c_void_p, C, I, ctypes.c_void_p]),
-            ('nv_lp_reg_keys', None, [ctypes.c_void_p, ctypes.c_void_p]),
-            ('nv_lp_swap_bank_keys', None, [ctypes.c_void_p, ctypes.c_void_p]),
-            ('nv_lp_event', None, [ctypes.c_void_p, I, I, I, I]),
-            ('nv_lp_block', None, [ctypes.c_void_p, LL, LL]),
-            ('nv_lp_slab', ctypes.c_void_p, [ctypes.c_void_p]),
-            ('nv_lp_render', None, [ctypes.c_void_p, LL, ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p,
+            ('nv_part_reg_dropped', ctypes.c_long, [ctypes.c_void_p]),
+            ('nv_part_bend_rows', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I]),
+            ('nv_part_reg_choirs', None, [ctypes.c_void_p, I, ctypes.c_void_p, C, I, ctypes.c_void_p]),
+            ('nv_part_reg_keys', None, [ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_part_swap_bank_keys', None, [ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_part_event', None, [ctypes.c_void_p, I, I, I, I]),
+            ('nv_part_block', None, [ctypes.c_void_p, LL, LL]),
+            ('nv_part_slab', ctypes.c_void_p, [ctypes.c_void_p]),
+            ('nv_part_render', None, [ctypes.c_void_p, LL, ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p,
                                     ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                                     ctypes.c_void_p, LL, C]),
-            ('nv_lp_damper', None, [ctypes.c_void_p, C, C, C, C, C]),
-            ('nv_lp_press_db', None, [ctypes.c_void_p, C]),
-            ('nv_lp_detune_wheel', None, [ctypes.c_void_p, I]),
-            ('nv_lp_room', None, [ctypes.c_void_p] * 5 + [ctypes.c_long, ctypes.c_void_p, ctypes.c_long, I]),
-            ('nv_lp_post', None, [ctypes.c_void_p, C, C, C]),
-            ('nv_lp_amp_ahead', None, [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]),
-            ('nv_lp_output', None, [ctypes.c_void_p, LL, ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p,
+            ('nv_part_damper', None, [ctypes.c_void_p, C, C, C, C, C]),
+            ('nv_part_press_db', None, [ctypes.c_void_p, C]),
+            ('nv_part_detune_wheel', None, [ctypes.c_void_p, I]),
+            ('nv_part_room', None, [ctypes.c_void_p] * 5 + [ctypes.c_long, ctypes.c_void_p, ctypes.c_long, I]),
+            ('nv_part_post', None, [ctypes.c_void_p, C, C, C]),
+            ('nv_part_amp_ahead', None, [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]),
+            ('nv_part_output', None, [ctypes.c_void_p, LL, ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p,
                                     ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, LL, C]),
-            ('nv_lp_gpu', None, [ctypes.c_void_p] + [ctypes.c_void_p] * 6 + [ctypes.c_long, I]),
-            ('nv_lp_on_gpu', I, [ctypes.c_void_p]),
-            ('nv_lp_shed', ctypes.c_long, [ctypes.c_void_p, LL, C]),
-            ('nv_lp_govern', ctypes.c_long, [ctypes.c_void_p, C, C, LL]),
+            ('nv_part_gpu', None, [ctypes.c_void_p] + [ctypes.c_void_p] * 6 + [ctypes.c_long, I]),
+            ('nv_part_on_gpu', I, [ctypes.c_void_p]),
+            ('nv_part_shed', ctypes.c_long, [ctypes.c_void_p, LL, C]),
+            ('nv_part_govern', ctypes.c_long, [ctypes.c_void_p, C, C, LL]),
             ('nv_cl_new', ctypes.c_void_p, [ctypes.c_char_p, ctypes.c_void_p, ctypes.c_char_p, I]),
             ('nv_cl_free', None, [ctypes.c_void_p]),
-            ('nv_lp_dm', None, [ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_part_dm', None, [ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_rt_new', ctypes.c_void_p, []),
             ('nv_rt_add', None, [ctypes.c_void_p, I, I, I, I, I, I, I]),
             ('nv_rt_feed', I, [ctypes.c_void_p, I, I, I, I, ctypes.c_void_p, I]),
@@ -3302,7 +3302,7 @@ def render(F):
 
 
 def build_nvlive():
-    """native/nvlive (the live piano), built beside libnative.so when a source
+    """native/nvlive (the live engine), built beside libnative.so when a source
     is newer: its path."""
     lib()
     src = os.path.join(HERE, 'native', 'nvlive.cpp')
@@ -3397,7 +3397,7 @@ SLAB_BOOK = ("sw", "aL0", "aR0", "sg", "sre", "hrel", "vbase", "vrbase", "vsc")
 
 
 class Slab(object):
-    """native/slab.cpp's slab: live.Slab's core for a piano -- stamp, release,
+    """native/slab.cpp's slab: live.Slab's core -- stamp, release,
     reap -- and its columns read back as live.Slab's names them."""
 
     def __init__(self, capacity, headroom=1.0):
@@ -3599,8 +3599,8 @@ class TemplateCache(object):
         return out
 
 
-class LivePiano(object):
-    """native/slab.cpp's piano part, live: its template cache, its slab, and
+class LivePart(object):
+    """native/slab.cpp's part, live (live.Part: any native voice): its template cache, its slab, and
     live.Live's events for it block by block. The slab reads back as a
     native.Slab's does."""
 
@@ -3612,29 +3612,29 @@ class LivePiano(object):
         pt = (ctypes.c_double * (128 * 3))(*[float(x) for row in tab for x in row])
         self.d = lib()
         self.cache = cache
-        self.p = self.d.nv_lp_new(cache.p, int(pid), float(level_db), int(nbuckets),
+        self.p = self.d.nv_part_new(cache.p, int(pid), float(level_db), int(nbuckets),
                                   -1 if speed is None else int(speed), int(bool(damper_pedal)), int(soft_drop),
                                   int(soft_top), float(rate), float(BR.RETRIGGER_FADE), int(capacity),
                                   float(headroom), pt, float(L._PAN_BETA))
-        self.d.nv_lp_program(self.p, int(cache.program))       # (its slurs' and glides' class)
+        self.d.nv_part_program(self.p, int(cache.program))       # (its slurs' and glides' class)
         self.slab = Slab.__new__(Slab)
-        self.slab.d, self.slab.cap, self.slab.p = self.d, capacity, self.d.nv_lp_slab(self.p)
+        self.slab.d, self.slab.cap, self.slab.p = self.d, capacity, self.d.nv_part_slab(self.p)
         import damper as DMP
-        self.d.nv_lp_damper(self.p, float(DMP.FULL_DB_S), float(DMP.RESIDUAL), float(DMP.KNEE_DB), float(DMP.BETA),
+        self.d.nv_part_damper(self.p, float(DMP.FULL_DB_S), float(DMP.RESIDUAL), float(DMP.KNEE_DB), float(DMP.BETA),
                             float(DMP.LN10_20))
         import tonelib as T
-        self.d.nv_lp_press_db(self.p, float(T.PRESS_DB if press_db is None else press_db))
-        self.d.nv_lp_detune_wheel(self.p, int(bool(detune_wheel)))
+        self.d.nv_part_press_db(self.p, float(T.PRESS_DB if press_db is None else press_db))
+        self.d.nv_part_detune_wheel(self.p, int(bool(detune_wheel)))
         L = leslie_constants()
-        self.d.nv_lp_leslie(self.p, (ctypes.c_double * len(L))(*L), len(L))
+        self.d.nv_part_leslie(self.p, (ctypes.c_double * len(L))(*L), len(L))
         X = scan_constants()
         self._scan = (ctypes.c_double * len(X))(*X)
-        self.d.nv_lp_scan(self.p, self._scan, len(X))
+        self.d.nv_part_scan(self.p, self._scan, len(X))
 
     def __del__(self):
         if getattr(self, 'p', None):
             self.slab.p = None              # the part owns its slab
-            self.d.nv_lp_free(self.p)
+            self.d.nv_part_free(self.p)
             self.p = None
         if getattr(self, '_cl', None):
             self.d.nv_cl_free(self._cl)
@@ -3644,7 +3644,7 @@ class LivePiano(object):
         """The bend rows' tables (live's Slab.BR, BC, BL), their first n."""
         import numpy as np
         br, bc, bl = np.zeros(n, np.float32), np.zeros(n, np.float64), np.zeros(2 * n, np.float32)
-        m = self.d.nv_lp_bend_rows(self.p, br.ctypes.data, bc.ctypes.data, bl.ctypes.data, n)
+        m = self.d.nv_part_bend_rows(self.p, br.ctypes.data, bc.ctypes.data, bl.ctypes.data, n)
         return br[:m], bc[:m], bl[:2 * m].reshape(m, 2)
 
     def swap(self, pi, cache, nbuckets, speed, damper_pedal, soft_drop, soft_top, detune_wheel, choke=None,
@@ -3677,17 +3677,17 @@ class LivePiano(object):
             chs = live_bank_choirs(cls) if (M and cls is not None) else None
             self._bank = (modes, chs)
             if chs is not None:
-                self.d.nv_lp_swap_bank(self.p, modes, M, k6, int(k[4]), int(bool(getattr(cls, 'damper_pedal', True))),
+                self.d.nv_part_swap_bank(self.p, modes, M, k6, int(k[4]), int(bool(getattr(cls, 'damper_pedal', True))),
                                        nt, chs[0], chs[1], chs[2], chs[3], chs[4])
             else:
-                self.d.nv_lp_swap_bank(self.p, modes, M, k6, int(k[4]),
+                self.d.nv_part_swap_bank(self.p, modes, M, k6, int(k[4]),
                                        int(bool(getattr(cls, 'damper_pedal', True))) if cls is not None else 0,
                                        nt, 0, None, 1.0, 0, None)
             kc = note_class(cls) if (M and cls is not None) else None
             if kc is not None and kc.reg_keyed:
                 self._keyed = kc                # (a dulcimer's bridges by key: kept alive with the part)
-                self.d.nv_lp_swap_bank_keys(self.p, ctypes.byref(kc))
-        self.d.nv_lp_swap(self.p, int(pi), cache.p, int(cache.program), int(bool(cache.drums)), int(nbuckets),
+                self.d.nv_part_swap_bank_keys(self.p, ctypes.byref(kc))
+        self.d.nv_part_swap(self.p, int(pi), cache.p, int(cache.program), int(bool(cache.drums)), int(nbuckets),
                           -1 if speed is None else int(speed), int(bool(damper_pedal)), int(soft_drop),
                           int(soft_top), int(bool(detune_wheel)), ch, rn)
 
@@ -3701,19 +3701,19 @@ class LivePiano(object):
         self._modes, M, k = live_bank(cls, table, rate, scale)
         rel = float(getattr(cls, 'release_valve_time', 0.12) or 0.12) * rate
         flags = (ctypes.c_int * 128)(*[int(bool(x)) for x in reg_note])
-        self.d.nv_lp_register(self.p, self._modes, M, *k, int(bool(getattr(cls, 'damper_pedal', True))), rel,
+        self.d.nv_part_register(self.p, self._modes, M, *k, int(bool(getattr(cls, 'damper_pedal', True))), rel,
                               float(DMP.FULL_DB_S), float(DMP.RESIDUAL), float(DMP.LN10_20), int(BR.BLK), flags)
         ch = live_bank_choirs(cls)
         if ch is not None:
             self._choirs = ch
-            self.d.nv_lp_reg_choirs(self.p, *ch)
+            self.d.nv_part_reg_choirs(self.p, *ch)
         kc = note_class(cls)
         if kc is not None and kc.reg_keyed:
             self._keyed = kc                    # (a dulcimer's bridges by key: kept alive with the part)
-            self.d.nv_lp_reg_keys(self.p, ctypes.byref(kc))
+            self.d.nv_part_reg_keys(self.p, ctypes.byref(kc))
 
     def reg_dropped(self):
-        return self.d.nv_lp_reg_dropped(self.p)
+        return self.d.nv_part_reg_dropped(self.p)
 
     def gpu(self, backend="cl", gpu_min=1000, nthreads=4):
         """Render on the GPU, as live.GpuRenderer: the setup through
@@ -3733,11 +3733,11 @@ class LivePiano(object):
                 raise RuntimeError("native GPU: %s" % err.value.decode())
         self._cl = cl
         self._gl = (g, gd)
-        self.d.nv_lp_gpu(self.p, fn(g.voice_block), fn(gd.voice_block), fn(gd.voice_damp_set),
+        self.d.nv_part_gpu(self.p, fn(g.voice_block), fn(gd.voice_block), fn(gd.voice_damp_set),
                          fn(g.voice_samples), fn(g.voice_sizes), cl, int(gpu_min), int(nthreads))
 
     def on_gpu(self):
-        return bool(self.d.nv_lp_on_gpu(self.p))
+        return bool(self.d.nv_part_on_gpu(self.p))
 
     def room(self, ir, mir, frames):
         """live.RoomTail's late room from its IRs ((n, 2) float32; mir the
@@ -3748,18 +3748,18 @@ class LivePiano(object):
         self._ir = np.ascontiguousarray(ir, np.float32)
         self._mir = None if mir is None else np.ascontiguousarray(mir, np.float32)
         fn = lambda f: ctypes.cast(f, ctypes.c_void_p).value       # noqa: E731
-        self.d.nv_lp_room(self.p, fn(cd.conv_new), fn(cd.conv_process), fn(cd.conv_free), self._ir.ctypes.data,
+        self.d.nv_part_room(self.p, fn(cd.conv_new), fn(cd.conv_process), fn(cd.conv_free), self._ir.ctypes.data,
                           len(self._ir), None if self._mir is None else self._mir.ctypes.data,
                           0 if self._mir is None else len(self._mir), int(frames))
 
     def amp_ahead(self, blocks, hold=True):
         """live.LIVE_AMP_LOOKAHEAD (blocks) and LIVE_AMP_HOLD, as a check sets them."""
-        self.d.nv_lp_amp_ahead(self.p, int(blocks), int(bool(hold)))
+        self.d.nv_part_amp_ahead(self.p, int(blocks), int(bool(hold)))
 
     def post(self, thresh=0.70, bend_range=2.0, mod_cents=35.0):
         """The limiter's knee (live.thresh), the pitch wheel's range and the
         mod wheel's (live.bend_range, live.mod_cents)."""
-        self.d.nv_lp_post(self.p, float(thresh), float(bend_range), float(mod_cents))
+        self.d.nv_part_post(self.p, float(thresh), float(bend_range), float(mod_cents))
 
     def output(self, n0, frames):
         """live's callback after its step: the render, the room on the send,
@@ -3768,42 +3768,42 @@ class LivePiano(object):
         import blockrender as BR
         L, R = np.empty(frames, np.float32), np.empty(frames, np.float32)
         fn = lambda f: ctypes.cast(f, ctypes.c_void_p).value       # noqa: E731
-        self.d.nv_lp_output(self.p, int(n0), int(frames), L.ctypes.data, R.ctypes.data,
+        self.d.nv_part_output(self.p, int(n0), int(frames), L.ctypes.data, R.ctypes.data,
                             fn(BR.ensure_lib().synth_voice), fn(BR.ensure_xdec_lib().synth_voice_xdec),
                             fn(BR.ensure_damp_lib().synth_voice_damp), BR.BLK, float(BR.T.master_gain))
         return L, R
 
     def shed(self, n, frac):
         """live.Slab.shed: the highest frac of the partials sounding at n end."""
-        return self.d.nv_lp_shed(self.p, int(n), float(frac))
+        return self.d.nv_part_shed(self.p, int(n), float(frac))
 
     def govern(self, ms, budget_ms, n):
         """live's governor after a block of ms against budget_ms (the next at n)."""
-        return self.d.nv_lp_govern(self.p, float(ms), float(budget_ms), int(n))
+        return self.d.nv_part_govern(self.p, float(ms), float(budget_ms), int(n))
 
     def dm(self):
         """The damper tracks' values (live.Slab.DM): two a track."""
         import numpy as np
         out = np.zeros(2 * 256, np.float32)
-        self.d.nv_lp_dm(self.p, out.ctypes.data)
+        self.d.nv_part_dm(self.p, out.ctypes.data)
         return out
 
     def event(self, msg):
         """A mido message for the next block (note-on, note-off, control change,
         channel aftertouch, the pitch wheel)."""
         if msg.type == "note_on" and msg.velocity > 0:
-            self.d.nv_lp_event(self.p, 0, msg.channel, msg.note, msg.velocity)
+            self.d.nv_part_event(self.p, 0, msg.channel, msg.note, msg.velocity)
         elif msg.type in ("note_on", "note_off"):
-            self.d.nv_lp_event(self.p, 1, msg.channel, msg.note, 0)
+            self.d.nv_part_event(self.p, 1, msg.channel, msg.note, 0)
         elif msg.type == "control_change":
-            self.d.nv_lp_event(self.p, 2, msg.channel, msg.control, msg.value)
+            self.d.nv_part_event(self.p, 2, msg.channel, msg.control, msg.value)
         elif msg.type == "aftertouch":
-            self.d.nv_lp_event(self.p, 3, msg.channel, msg.value, 0)
+            self.d.nv_part_event(self.p, 3, msg.channel, msg.value, 0)
         elif msg.type == "pitchwheel":
-            self.d.nv_lp_event(self.p, 4, msg.channel, msg.pitch, 0)
+            self.d.nv_part_event(self.p, 4, msg.channel, msg.pitch, 0)
 
     def block(self, n0, blk):
-        self.d.nv_lp_block(self.p, int(n0), int(blk))
+        self.d.nv_part_block(self.p, int(n0), int(blk))
 
     def render(self, n0, frames, send=False):
         """Renderer.render's block: (L, R) float32, and with send the room's
@@ -3814,7 +3814,7 @@ class LivePiano(object):
         SL = np.empty(frames, np.float32) if send else None
         SR = np.empty(frames, np.float32) if send else None
         fn = lambda f: ctypes.cast(f, ctypes.c_void_p).value       # noqa: E731
-        self.d.nv_lp_render(self.p, int(n0), int(frames), L.ctypes.data, R.ctypes.data,
+        self.d.nv_part_render(self.p, int(n0), int(frames), L.ctypes.data, R.ctypes.data,
                             SL.ctypes.data if send else None, SR.ctypes.data if send else None,
                             fn(BR.ensure_lib().synth_voice), fn(BR.ensure_xdec_lib().synth_voice_xdec),
                             fn(BR.ensure_damp_lib().synth_voice_damp), BR.BLK,
