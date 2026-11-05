@@ -761,6 +761,9 @@ typedef struct {
     // A CLAVINET's PANEL (clav_panel): its tone rockers by the part's first
     // CC1 (_prep_clav_rockers)
     int clav_panel;
+    // ITS MOD WHEEL CAN BE A VIBRATO (wheel_vibrato: not a hammer's, a
+    // mallet's, a stick's or a noise's -- live's 'vibrato' role)
+    int wheel_vibrato;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.

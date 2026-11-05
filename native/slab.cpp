@@ -1100,6 +1100,8 @@ struct Piano {
     double brange[16], fine[16] = {}, coarse[16] = {}, modrange[16];
     int fine_msb[16];
     double mod_cents = 35.0;                        // live.mod_cents (the session's)
+    double mod_rate = 0.25;                         // live.mod_rate: the wheel's +25% rate at full
+    double vib_mod[16] = {}, vib_modw[16] = {};     // live.mod, live.modw: the wheel's depth, its fraction
     // SOSTENUTO (CC66): the keys down when it went down, held (live.sost)
     std::map<int, std::set<int>> sost;
     // MONO MODE (CC126; live.mono): one voice a channel -- its held keys in
@@ -1163,6 +1165,7 @@ struct Piano {
         const NoteClass *cab = nullptr;     // its speaker (cab_set), which the templates went through
         int scanner = 0;            // NoteClass.scanner: 0 none, else 1 +2 the switch +4 x depth +16 chorus
         bool clav = false;          // a Clavinet's panel (clav_panel): CC1 its tone rockers
+        bool wheel_vib = false;     // its wheel can be a vibrato (wheel_vibrato)
     };
     std::vector<Patch> patches;
     // THE CABINET (live's rotor_horn, rotor_drum: LiveRotor): one Leslie in
@@ -2194,6 +2197,7 @@ struct Piano {
         p.cab = k && k->cab_set ? k : nullptr;
         p.scanner = k ? k->scanner : 0;
         p.clav = !p.drums && k && k->clav_panel;
+        p.wheel_vib = !p.drums && k && k->wheel_vibrato;
         p.organ = og;
         if (!og)
             return;
@@ -2349,6 +2353,7 @@ struct Piano {
 
     // live._tone_wheel: THE MOD WHEEL ON NOTES HELD THROUGH A PROGRAM CHANGE --
     // each old tone's own tremolo (its voice's wheel role), on its own notes
+    long long n0_wheel = 0;                 // (the block's, for tone_wheel's retune)
     void tone_wheel(int ch, int v)
     {
         for (size_t pi = 0; pi < patches.size(); pi++) {
@@ -2374,7 +2379,10 @@ struct Piano {
                 double dep = og ? og->wheel_trem : (k ? k->trem_depth : 0.0);
                 bool st = og ? og->wtrem_stereo != 0 : (k && k->trem_stereo);
                 bool clv = k && k->clav_panel;
-                if (dep <= 0.0 && !clv)
+                // (its wheel a vibrato where nothing else of that voice wants it: live.wheel_roles)
+                bool vib = k && k->wheel_vibrato && !(k->amp_drive > 0.0) && !(og && og->n_order) && !(dep > 0.0)
+                           && !clv && !k->leslie && !k->wheel_swell;
+                if (dep <= 0.0 && !clv && !vib)
                     continue;
                 std::vector<long> sl = sounding_tone(ch, p.pid, tone, true);
                 if (sl.empty())
@@ -2383,6 +2391,11 @@ struct Piano {
                     S.tremolo_arm(sl, v / 127.0 * dep, st);
                 if (clv)
                     S.clav_tone((int)nearbyint(v / 127.0 * 4.0), sl);
+                if (vib) {
+                    double w = v / 127.0, cents = modrange[ch] >= 0.0 ? modrange[ch] : mod_cents;
+                    retune_v(sl, n0_wheel, false, 1.0, true, pow(2.0, cents * w / 1200.0) - 1.0, true,
+                             1.0 + mod_rate * w);
+                }
             }
         }
     }
@@ -2587,8 +2600,11 @@ struct Piano {
             S.tremolo_arm(slots, td->second, patches[cur].wtrem_stereo);
         if (pressure[ch] != 0.0)
             press(slots, pressure[ch]);
-        if (bend[ch] != 1.0)                // a note struck under a bend joins it
-            retune(slots, n0, bend[ch]);
+        {                                   // a note struck under a bend, or the wheel up, joins them
+            double b = bend[ch], v2 = vib_mod[ch], r2 = (1.0 + mod_rate * vib_modw[ch]) * 1.0;
+            if (b != 1.0 || v2 != 0.0 || r2 != 1.0)
+                retune_v(slots, n0, b != 1.0, b, v2 != 0.0, v2, r2 != 1.0, r2);
+        }
         if (reg_on && cur_reg && reg_note[note] && !S.last_slots.empty())
             reg_strike(ch, note, n0, *T, S.last_slots);
     }
@@ -3605,26 +3621,68 @@ struct Piano {
     // depth is 0, so that term is too)
     void retune(const std::vector<long> &slots, long long n, double scale)
     {
+        retune_v(slots, n, true, scale, false, 0.0, false, 0.0);
+    }
+
+    // live.Slab.retune: a sounding partial's pitch (scale), its vibrato's
+    // depth (vd: over each player's own, by vsc) and rate (vrs: of its own,
+    // the LFO's phase rotated to carry on) -- without a click: the phase now
+    // worked out, the change made, the difference put back into p0
+    void retune_v(const std::vector<long> &slots, long long n, bool has_s, double scale, bool has_vd, double vd,
+                  bool has_vrs, double vrs)
+    {
         if (slots.empty())
             return;
         double tn = (double)n / rate;
         for (long q : once(slots)) {
-            double om0 = S.f8[F8_om][q], vd = (double)S.f4[F4_vd][q];
-            double vr = std::max((double)S.f4[F4_vr][q], 1e-6), vp = (double)S.f4[21][q];   // vp
+            double om0 = S.f8[F8_om][q], vd0 = (double)S.f4[F4_vd][q];
+            double vr0 = std::max((double)S.f4[F4_vr][q], 1e-6), vp = (double)S.f4[21][q];   // vp
             double ton = (double)S.i8[0][q] / rate;
-            auto extra = [&](double om) {
-                double w2 = 2.0 * M_PI * vr;
-                double swing = cos(w2 * ton + vp) - cos(w2 * tn + vp);
-                return (om * rate / (2.0 * M_PI)) * vd / vr * swing;
+            auto extra = [&](double om, double d, double r, double ph) {
+                double w2 = 2.0 * M_PI * r;
+                double swing = cos(w2 * ton + ph) - cos(w2 * tn + ph);
+                return (om * rate / (2.0 * M_PI)) * d / r * swing;
             };
-            double before = extra(om0);
-            double om1 = om0 * scale;
-            double after = extra(om1);
+            double vr1 = has_vrs ? std::max((double)S.vrbase[q] * vrs, 1e-6) : vr0;
+            double vp1 = has_vrs ? vp + 2.0 * M_PI * (vr0 - vr1) * tn : vp;
+            double before = extra(om0, vd0, vr0, vp);
+            double om1 = has_s ? om0 * scale : om0;
+            double vd1 = has_vd ? (double)S.vbase[q] + vd * (double)S.vsc[q] : vd0;
+            double after = extra(om1, vd1, vr1, vp1);
             double step = (om0 - om1) * (double)n - (after - before);
+            // A SLOT ON A WIND ROW carries om x BC of the wind's accrued phase
+            // as well (the kernel adds it), so a new om moves that term too
+            if (has_s && S.i4[I4_br][q] >= 0)
+                step -= (om1 - om0) * BCt[S.i4[I4_br][q]];
             S.f8[F8_p0][q] += step;
             S.f8[F8_p0R][q] += step;
-            S.f8[F8_om][q] = om1;
+            if (has_s)
+                S.f8[F8_om][q] = om1;
+            if (has_vd)
+                S.f4[F4_vd][q] = (float)vd1;
+            if (has_vrs) {
+                S.f4[F4_vr][q] = (float)vr1;
+                S.f4[21][q] = (float)vp1;
+            }
         }
+    }
+
+    // live.wheel_roles' 'vibrato': a part whose wheel nothing else wants
+    bool vib_role(const Patch &p) const
+    {
+        return p.wheel_vib && !(p.amp > 0.0) && !(p.organ && p.organ->n_order) && !(p.wtrem > 0.0) && !p.clav
+               && !p.leslie && !p.wheel_swell;
+    }
+
+    // live._vib_apply: the wheel's depth and rate on one part's sounding
+    // slots (CC76/77's share: none here yet)
+    void vib_apply(const Patch &p, int ch, long long n0)
+    {
+        std::vector<long> sl = sounding_tone(ch, p.pid, p.cache, false);
+        if (sl.empty())
+            return;
+        double v = vib_mod[ch] + 0.0, w = vib_modw[ch];
+        retune_v(sl, n0, false, 1.0, true, v, true, (1.0 + mod_rate * w) * 1.0);
     }
 
     double range_of(int ch) const { return brange[ch] >= 0.0 ? brange[ch] : bend_range; }
@@ -3713,7 +3771,9 @@ struct Piano {
         } else if (l == 5) {
             double cur = modrange[ch] >= 0.0 ? modrange[ch] : mod_cents;
             modrange[ch] = cc == 6 ? (double)v * 100.0 : (double)(long)floor(cur / 100.0) * 100.0 + v * (100.0 / 128.0);
-            return;                                 // (a piano's wheel takes no vibrato to re-send)
+            if (vib_modw[ch] > 0.0)             // a wheel already up follows its new range (sent again)
+                control(ch, 1, (int)nearbyint(vib_modw[ch] * 127.0), n0);
+            return;
         } else {
             return;                                 // MTS: a gm2 part's
         }
@@ -3746,6 +3806,8 @@ struct Piano {
             coarse[ch] = v;
         } else {
             modrange[ch] = v;
+            if (vib_modw[ch] > 0.0)
+                control(ch, 1, (int)nearbyint(vib_modw[ch] * 127.0), n0);
             return;
         }
         repitch(ch, n0);
@@ -4063,6 +4125,20 @@ struct Piano {
                     best = st;
             speed = best;
         }
+        if (cc == 1) {                          // THE MOD WHEEL IS VIBRATO (live's 'vibrato' role)
+            bool any = false;
+            for (const Patch &p : patches)
+                any = any || (vib_role(p) && (p.channel < 0 || p.channel == ch));
+            if (any) {
+                double w = v / 127.0;
+                double cents = modrange[ch] >= 0.0 ? modrange[ch] : mod_cents;
+                vib_mod[ch] = pow(2.0, cents * w / 1200.0) - 1.0;
+                vib_modw[ch] = w;
+                for (const Patch &p : patches)
+                    if (vib_role(p) && (p.channel < 0 || p.channel == ch))
+                        vib_apply(p, ch, n0);
+            }
+        }
         if (cc == 1)                            // A CLAVINET's TONE ROCKERS (live's 'tone' role)
             for (const Patch &p : patches) {
                 if (!p.clav || !(p.channel < 0 || p.channel == ch))
@@ -4074,8 +4150,10 @@ struct Piano {
                     S.clav_tone(step, sounding_tone(ch, p.pid, p.cache, false));
                 }
             }
-        if (cc == 1 && !key_tone.empty())       // ...and the tones held from before a program change
+        if (cc == 1 && !key_tone.empty()) {     // ...and the tones held from before a program change
+            n0_wheel = n0;
             tone_wheel(ch, v);
+        }
     }
 
     // THE DAMPERS IN BETWEEN (live._damp_block, _damp_open, _damp_mark;
@@ -6224,6 +6302,7 @@ void nv_lp_set(void *h, int what, double v)
     case 4: P->mod_cents = v; break;
     case 5: P->gpu_off = v < 0.5; break;
     case 6: P->room_on = v >= 0.5; break;
+    case 7: P->mod_rate = v; break;
     }
 }
 

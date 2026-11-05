@@ -232,7 +232,7 @@ class NoteClass(ctypes.Structure):
                    ('click_amp', C * 16), ('click_dec', C), ('click_s', C), ('pre_pluck', I),
                    ('moog', MoogSpec), ('brass', I), ('bn_slur', I),
                    ('os_floor_db', C), ('os_max_s', C), ('tail_set', I), ('tail_db', C), ('tail_dbs', C),
-                   ('clav_panel', I)])
+                   ('clav_panel', I), ('wheel_vibrato', I)])
 
 
 class NoteIn(ctypes.Structure):
@@ -2476,6 +2476,7 @@ def note_class(cls):
             if tl:
                 k.tail_set, k.tail_db, k.tail_dbs = 1, float(tl[0]), float(tl[1])
         k.clav_panel = int(bool(getattr(cls, 'clav_panel', False)))
+        k.wheel_vibrato = int(bool(getattr(cls, 'wheel_vibrato', True)))
         nf = int(getattr(cls, 'strike_flam', 0) or 0)
         k.n_flam = nf if nf > 1 else 0
         ft = getattr(cls, 'strike_flam_times', None) or ()
