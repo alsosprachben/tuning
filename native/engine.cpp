@@ -402,6 +402,44 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         out->cbw[0] = K->cbw0; out->cbw[1] = K->cbw1;
         return total;
     }
+    // A STRUCK, PITCHED LAYER (_note_struck_layer: an orchestra hit's
+    // timpani): that class's own modes at the note moved by octaves into its
+    // range, its voice built there (drawing from the stream as its
+    // constructor does), each mode at its level against the loudest, its own
+    // rise and fall, a phase from the note's own stream
+    if (K->sl_on && K->sl) {
+        const NoteClass *L = K->sl;
+        double ft = f0;
+        while (ft >= K->sl_hi)
+            ft *= 0.5;
+        while (ft < K->sl_lo)
+            ft *= 2.0;
+        VoiceInit lc = L->init;
+        lc.fixed_touch = n->fixed_touch;
+        lc.soft_pedal_down = n->soft_pedal_down;
+        VoiceSnap ls;
+        VoiceNote lo;
+        nv_voice_init(&lc, &L->tmpl, ft, n->pan, 1.0, n->chan_vol, 0.0, rs, &ls, &lo);
+        int nm = K->sl_nm;
+        double hv[64], hmax = 0.0;
+        for (int m = 1; m <= nm && m <= 64; m++) {
+            hv[m - 1] = nv_harmonic_volume(&ls, m);
+            hmax = m == 1 ? hv[0] : pymax(hmax, hv[m - 1]);
+        }
+        if (!(nm > 0 && hmax > 0.0))
+            hmax = 1.0;
+        ToneIn tl = t;
+        tl.reflect = reflect;
+        tl.gain = 1.0; tl.sjit = 0.0;
+        tl.cbw0 = K->cbw0; tl.cbw1 = K->cbw1;
+        long long seed = (long long)nearbyint(n->on * 1e6) * 149 + (long long)n->note * 13 + n->ch;
+        int k = nv_struck(&s, &tl, &ls, nm, ft, hv, hmax, K->sl_db, K->sl_rise, K->sl_dbs, seed,
+                          reflect ? nimg : 0, nsurf, surf, img, mir, rows + NCOLS * total, cap - total, qacc, azimuth);
+        if (k < 0)
+            return k == -2 ? -2 : -1;
+        out->n_knock += k;
+        total += k;
+    }
     // A TOUCHED STRING'S OTHER MODES (blockrender's touch_leak_db): before
     // the tone, as the Python's (no breath or shake beside them: native.py)
     if (s.elec && s.touch > 1 && s.leak_set) {
@@ -437,7 +475,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     int k;
     double fin[6] = {t.li, t.ri, t.dl, t.dr, NAN, 0.0};
     if (K->organ)                               // A REGISTERED ORGAN: its ranks, then their push
-        k = nv_organ_tone(K->organ, &s, &t, n, n->note, reflect ? nimg : 0, nsurf, surf, img, mir,
+        k = nv_organ_tone(K->organ, &s, &t, n, rs, n->note, reflect ? nimg : 0, nsurf, surf, img, mir,
                           rows + NCOLS * total, cap - total, qacc, azimuth, fin);
     else
         k = nv_tone_rs(&s, &t, reflect ? nimg : 0, nsurf, surf, img, mir, rows + NCOLS * total, cap - total,
@@ -750,7 +788,9 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             }
         }
         if (k->organ) {                     // A REGISTERED ORGAN: its ranks as its registration leaves them
-            if (k->bendable || !nv_song_organ_note(song, i, k->organ->family, &n))
+            // (one that bends: only a hit's, whose ranks ride no chest -- the
+            // note's own bend row, nv_song_organ_note's br)
+            if ((k->bendable && !k->tmpl.hit_n) || !nv_song_organ_note(song, i, k->organ->family, &n))
                 return -(1 + i);
         }
         n.from_song = 1; n.song_index = i;

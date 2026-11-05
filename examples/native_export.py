@@ -121,6 +121,18 @@ def main(argv):
             idx[cls] = len(classes)
             classes.append(bytes(k))
         cmap.append(idx[cls])
+    # A STRUCK LAYER's CLASS (an orchestra hit's timpani): among the classes,
+    # and its index in the class that strikes it (NoteClass.sl_idx)
+    for cls in list(idx):
+        lcls = N._SL_CLS.get(cls)
+        if lcls is None:
+            continue
+        if lcls not in idx:
+            idx[lcls] = len(classes)
+            classes.append(bytes(N.note_class(lcls)))
+        k = N.NoteClass.from_buffer_copy(classes[idx[cls]])
+        k.sl_idx = idx[lcls]
+        classes[idx[cls]] = bytes(k)
     # THE REGISTERED ORGANS (native.organ): each organ class's table, and each
     # program's organ (property_class_for_program's: -1 none, -2 an organ the
     # engine does not play)

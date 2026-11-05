@@ -953,6 +953,43 @@ static int moog_emit(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, d
     return R.n;
 }
 
+/* blockrender._note_struck_layer's rows: another instrument's modes (ls,
+ * its voice at ft) struck with the note -- each at its level against the
+ * loudest (hv[], hmax), the note's gain times db, rising over rise s and
+ * falling dbs dB/s for 1.5 s, its phase from random.Random(seed), with the
+ * room's images. Returns the rows written: -1 the store too small, -2 more
+ * images than the C's. */
+int nv_struck(const VoiceSnap *v, const ToneIn *t, const VoiceSnap *ls, int nm, double ft, const double *hv,
+              double hmax, double db, double rise, double dbs, long long seed, int nimg, const int *nsurf,
+              const int *surf, const double *img, const double *mir, double *rows, int cap, double *qacc,
+              double *azimuth)
+{
+    Rows R = {rows, 0, cap};
+    double VB[3] = {0.0, 5.5, 0.0}, terms[9 * 64];
+    const double sr = t->sr;
+    double slr = log(10.0) / 20.0 * dbs;
+    PyRandom r;
+    pyr_seed(&r, seed);
+    for (int m = 1; m <= nm; m++) {
+        double h = hv[m - 1], hf = ft * nv_mode_ratio(ls, m);
+        if (h <= 0.0 || hf >= 0.45 * sr)
+            continue;
+        double gM = v->gain * pow(10.0, db / 20.0) * h / hmax;
+        int nt_ = 0;
+        if (t->reflect) {
+            nt_ = note_terms(v, t, hf, t->pos_x0, t->pos_z, nimg, nsurf, surf, img, mir, terms);
+            if (nt_ < 0)
+                return -2;
+        }
+        if (!emit(v, t, &R, qacc, azimuth, terms, nt_, 2 * PI * hf / sr, gM * nv_hrtf_gain(v, hf, t->li),
+                  gM * nv_hrtf_gain(v, hf, t->ri), gM, hf, t->non, t->non + 1.5 * sr, pymax(1.0, rise * sr),
+                  t->rel, 0.0, slr, 0.0, 0.0, 0.0, 0.0, t->cc, t->crl, 0.0, t->csc, -1.0, 0.0,
+                  pyr_random(&r) * 2.0 * PI, 0.0, VB, t->pos_x0, 0))
+            return -1;
+    }
+    return R.n;
+}
+
 int nv_strike(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db,
               double reg, double bdb, double scal, double slr, double sfade, double slen, double bon,
               double pos_x, double *rows, int cap, double *qacc, double *azimuth)

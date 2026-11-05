@@ -266,7 +266,7 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
                 return v->gain * v->bar_g[i];
         return 0.0;
     }
-    if (v->kind == 2) {                         /* SynthProperties: a measured mode set */
+    if (v->kind == 2 && (v->n_mm || v->or_set)) {   /* SynthProperties: a measured mode set (none: its series) */
         if (v->max_harmonic && harmonic > v->max_harmonic)
             return 0.0;
         if (v->or_set && harmonic == 7)         /* MusicBoxProperties: its key's octave below */
@@ -337,7 +337,7 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
             r *= pow(10.0, v->even_harmonic_db / 20.0);
         return r;
     }
-    if (v->kind == 4 || v->kind == 6) {         /* SynthProperties': the pluck's comb (a Moog's body's norm) */
+    if (v->kind == 4 || v->kind == 6 || v->kind == 2) {     /* SynthProperties': the pluck's comb (a Moog's body's norm; a pipe's with no table) */
         double r = v->gain / pow((double)harmonic, v->attack_dampening) * (harmonic <= 256 ? v->comb[harmonic] : 0.0);
         if (harmonic % 2 == 0 && v->even_db_set)
             r *= pow(10.0, v->even_harmonic_db / 20.0);
@@ -660,6 +660,14 @@ double nv_section_onset(long long salt, long long midi, int index, double width_
 
 int nv_unison_voices(const VoiceSnap *v, double frequency, int harmonic, double harmonic_decay, double *out)
 {
+    if (v->hit_n) {                             /* OrchestraHitProperties: the section, cents in the ratio slot */
+        for (int i = 0; i < v->hit_n; i++) {
+            out[5 * i] = v->hit_gain; out[5 * i + 1] = 0.0;
+            out[5 * i + 2] = pow(2.0, v->hit_cents[i] / 1200.0) - 1.0;
+            out[5 * i + 3] = harmonic_decay; out[5 * i + 4] = 0.0;
+        }
+        return v->hit_n;
+    }
     if (v->dul_n) {                             /* HammeredDulcimerProperties: the course's other strings */
         long long key = (long long)nearbyint(69 + 12 * log2(frequency / 440.0));
         for (int i = 0; i < v->dul_n; i++) {

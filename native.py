@@ -101,7 +101,8 @@ class VoiceSnap(ctypes.Structure):
                 ('clav', I), ('cl_sel', I), ('cl_nt', I), ('cl_nk', I),
                 ('cl_ref_m', C), ('cl_ref_hz', C), ('cl_pow', C), ('cl_bridge', C), ('cl_c0', C), ('cl_c1', C),
                 ('cl_qmax', C), ('cl_tdb', C), ('cl_thump', C * 8), ('cl_kh', C * 8), ('cl_ka', C * 8),
-                ('vk_n', I), ('vk_hz', C * 16), ('vk_amp', C * 16)]
+                ('vk_n', I), ('vk_hz', C * 16), ('vk_amp', C * 16),
+                ('hit_n', I), ('hit_cents', C * 8), ('hit_gain', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -239,7 +240,9 @@ class NoteClass(ctypes.Structure):
                    ('clav_panel', I), ('wheel_vibrato', I),
                    ('sh_et', C), ('sh_corner', C), ('sh_order', C), ('sh_sp', C), ('sh_sd', C), ('sh_B', C),
                    ('sh_mq', C), ('sh_mhz', C), ('sh_mdb', C), ('sh_popen', C), ('sh_pluck', I), ('sh_mh', I),
-                   ('sh_nopen', I), ('sh_open', C * 8), ('scatter_ms', C)])
+                   ('sh_nopen', I), ('sh_open', C * 8), ('scatter_ms', C),
+                   ('sl_on', I), ('sl_idx', I), ('sl_nm', I), ('sl_db', C), ('sl_rise', C), ('sl_dbs', C),
+                   ('sl_lo', C), ('sl_hi', C), ('sl', ctypes.c_void_p)])
 
 
 class NoteIn(ctypes.Structure):
@@ -924,6 +927,20 @@ def harmonic_voice(cls):
                         + (() if dul else ('strike_noise_db',))))
 
 
+def hit_voice(cls):
+    """An orchestra hit (tonelib.OrchestraHitProperties, GM 55): a registered
+    voice on a struck base, every rank a borrowed spectrum (so its own series
+    is never sounded), its section a few cents each way in the ratio slot
+    (unison_voices: section_cents at unison_gain) -- played as a harmonic
+    voice (kind 4) with SynthProperties' bore, through organ.c's ranks."""
+    import tonelib as T
+    H = getattr(T, 'OrchestraHitProperties', None)
+    return (H is not None and issubclass(cls, H) and getattr(cls, 'registerable', False)
+            and not issubclass(cls, T.FormantBody)
+            and _owner(cls, 'unison_voices') == 'OrchestraHitProperties' and len(cls.section_cents) <= 8
+            and all(len(r) > 3 and r[3] is not None for r in cls.stop_ranks))
+
+
 def dulcimer_voice(cls):
     """A hammered dulcimer (tonelib.HammeredDulcimerProperties): its courses
     (string_count strings, their beats drawn by key), its decay by each mode's
@@ -1117,7 +1134,11 @@ def pipe_voice(cls):
     pts = getattr(cls, 'mode_gains_points', None) or ()
     if issubclass(cls, T.FreeReedProperties) and cls.mode_gains is None and not free_reed_series(cls):
         return False
-    return (cls.mode_ratios is None and (cls.mode_gains is not None or pts or issubclass(cls, T.FreeReedProperties))
+    # (or a stopped pipe with no table at all: SynthProperties' series, a
+    # hit's flutes -- tonelib.OrchestraHitProperties' borrowed spectrum)
+    return (cls.mode_ratios is None and (cls.mode_gains is not None or pts or issubclass(cls, T.FreeReedProperties)
+                                         or (issubclass(cls, T.StoppedPipeProperties) and cls.mode_gains is None
+                                             and not cls.mode_gains_low))
             and len(pts) <= 8 and all(len(g) <= 64 for _, g in pts) and len(cls.mode_gains or ()) <= 64
             and len(cls.mode_gains_low or ()) <= 64 and not cls.mode_stroke_tilt and not cls.strike_point
             and not cls.harmonic_touch and not cls.pickup_points and not (cls.unison_detune or ())
@@ -1292,6 +1313,8 @@ def kit_drum(cls):
         return 6
     if ep_voice(cls):
         return 5
+    if hit_voice(cls):
+        return 4
     if (harmonic_voice(cls) or tonewheel_voice(cls) or reed_voice(cls) or electric_voice(cls) or wind_voice(cls)
             or mallet_voice(cls)):
         return 4
@@ -1567,7 +1590,7 @@ def snapshot(props):
         for i, x in enumerate(p.unison_detune or ()):
             s.unison_detune[i] = x
         mg = p.mode_gains_here() if pipe_voice(type(p)) else p.mode_gains
-        if mg is None and pipe_voice(type(p)):
+        if mg is None and pipe_voice(type(p)) and isinstance(p, T.FreeReedProperties):
             mg = p._reed_series()[1:]           # (a free reed's flow spectrum, harmonic 1 first)
         mg = () if mg is None else mg       # (a tuned bar's: its bar modes on the harmonic series)
         s.n_mm = len(mg)
@@ -1576,6 +1599,10 @@ def snapshot(props):
         else:
             s.mm_ratio[:s.n_mm] = [float(r) for r in p.mode_ratios][:s.n_mm]   # (a tube's: its own, VoiceSnap.tube)
         s.mm_gain[:s.n_mm] = [float(g) for g in mg]
+        if not s.n_mm and not getattr(s, 'or_set', 0) and pipe_voice(type(p)):
+            # (a stopped pipe with no table: SynthProperties' series, the pluck's comb)
+            for h in range(1, min(256, int(p.max_harmonic or 64)) + 1):
+                s.comb[h] = T._pluck_comb(p.plucked_harmonic, p.pluck_dampening, h)
         if pipe_voice(type(p)):
             # an organ pipe's register: its tables by pitch, or a low one
             pts = getattr(p, 'mode_gains_points', None) or ()
@@ -1646,6 +1673,9 @@ def snapshot(props):
         if _owner(type(p), 'unison_voices') == 'HammeredDulcimerProperties':
             s.dul_n, s.dul_beat[:] = int(p.string_count) - 1, [float(x) for x in p.unison_beat_hz]
             s.unison_gain = p.unison_gain
+        if hit_voice(type(p)):                  # (a hit's section: OrchestraHitProperties.unison_voices)
+            s.hit_n, s.hit_gain = len(p.section_cents), float(p.unison_gain)
+            s.hit_cents[:s.hit_n] = [float(x) for x in p.section_cents]
         if _owner(type(p), 'harmonic_decay') == 'HammeredDulcimerProperties':
             s.dhz_set, s.dhz_db, s.dhz_pow = 1, float(p.decay_hz_db), float(p.decay_hz_power)
         s.pps = float(getattr(p, 'partial_phase_spread', 0.0) or 0.0)
@@ -2220,7 +2250,8 @@ def organ(cls):
     if got is not None:
         return got or None
     _ORGAN[cls] = False
-    if (not getattr(cls, 'registerable', False) or not (pipe_voice(cls) or tonewheel_voice(cls) or harmonic_voice(cls))
+    if (not getattr(cls, 'registerable', False)
+            or not (pipe_voice(cls) or tonewheel_voice(cls) or harmonic_voice(cls) or hit_voice(cls))
             or _class(cls) is None):
         return None
     if any(getattr(cls, a, None) for a in _ORGAN_OFF):
@@ -2471,6 +2502,9 @@ def organ(cls):
 _FAMILIES = {}              # organ_family's name -> its id (OrganSpec.family)
 
 
+_SL_CLS = {}         # a struck layer's class, by the class it is under (native_export's sl_idx)
+
+
 def note_class(cls):
     """native/engine.cpp's NoteClass for cls, or None where its notes are not
     the engine's: made once, its template's room kept current."""
@@ -2506,6 +2540,9 @@ def note_class(cls):
             else (lambda a: a in ('partial_phase_spread', 'unison_shares_phase', 'course_keys', 'key_bridge',
                                   'bridge_partner', 'register_knock_tilt', 'register_knock_profile')) \
             if dulcimer_voice(cls) else (lambda a: False)
+        if hit_voice(cls):
+            _og = org_has
+            org_has = lambda a: _og(a) or a in ('one_shot', 'strike_phase_spread', 'strike_noise_layers')  # noqa: E731
         ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF
                                         if not (drum and drum_has(a)) and not org_has(a))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT if not org_has(a))
@@ -2706,6 +2743,20 @@ def note_class(cls):
                 _NOTE[cls] = False
                 return None
             k.organ = ctypes.addressof(og)
+        # A STRUCK, PITCHED LAYER (struck_layer): its class's NoteClass, kept
+        sl = getattr(cls, 'struck_layer', None)
+        if sl:
+            lcls = T.rank_spectrum(sl[0])
+            lk = note_class(lcls)
+            if lk is None or len(getattr(lcls, 'mode_ratios', None) or ()) > 64:
+                _NOTE[cls] = False
+                return None
+            k.sl_on, k.sl_idx = 1, -1
+            k.sl_nm = len(getattr(lcls, 'mode_ratios', None) or ()) or 8
+            k.sl_db, k.sl_rise, k.sl_dbs = float(sl[1]), float(sl[2]), float(sl[3])
+            k.sl_lo, k.sl_hi = (float(x) for x in getattr(cls, 'struck_layer_range', (73.42, 146.83)))
+            k.sl = ctypes.addressof(lk)
+            _SL_CLS[cls] = lcls
         if breath_noise(cls):
             k.n_bn, k.bn_rows, k.bn_fade_s = (len(cls.breath_noise_db), int(getattr(cls, 'breath_noise_rows', 1)),
                                                float(cls.breath_noise_fade_s))

@@ -269,6 +269,10 @@ typedef struct {
     double cl_thump[8], cl_kh[8], cl_ka[8];
     int vk_n;
     double vk_hz[16], vk_amp[16];
+    /* AN ORCHESTRA HIT's SECTION (OrchestraHitProperties.unison_voices): its
+       players a few cents each way (hit_cents, hit_n of them) at hit_gain */
+    int hit_n;
+    double hit_cents[8], hit_gain;
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -616,7 +620,7 @@ int nv_leak(const VoiceSnap *v, const ToneIn *t, double Bs, PyRandom *lr, int ni
 // What a voice class is to a note's setup: the constructor's constants and
 // the class's VoiceSnap, the attack/release/chiff laws, the tension bend and
 // the hammer's knock (strike_noise_db). "_set" flags carry Python's None.
-typedef struct {
+typedef struct NoteClass {
     VoiceInit init;
     VoiceSnap tmpl;
     double chiff_max_valve_time;
@@ -800,6 +804,13 @@ typedef struct {
     // ITS ENTRY SCATTER, LIVE (t["scatter_ms"]: the class's section_onset_ms,
     // a section's or not -- a Moog's players come in apart too)
     double scatter_ms;
+    // A STRUCK, PITCHED LAYER (struck_layer: an orchestra hit's timpani): the
+    // class whose modes it is (sl: its NoteClass, the export's sl_idx), its
+    // level (dB re the note's gain), rise (s) and fall (dB/s), the range its
+    // pitch is moved into by octaves (Hz), how many modes (sl_nm); sl_on 0 none
+    int sl_on, sl_idx, sl_nm;
+    double sl_db, sl_rise, sl_dbs, sl_lo, sl_hi;
+    const struct NoteClass *sl;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -865,7 +876,11 @@ typedef struct {
    pushes after them; fin: the ears, delays and pipe radius the last rank
    leaves the emitter (li, ri, dl, dr, radius; radius NaN: none), and how
    many of its rows, the last, are the push */
-int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, const NoteIn *n, int note,
+int nv_struck(const VoiceSnap *v, const ToneIn *t, const VoiceSnap *ls, int nm, double ft, const double *hv,
+              double hmax, double db, double rise, double dbs, long long seed, int nimg, const int *nsurf,
+              const int *surf, const double *img, const double *mir, double *rows, int cap, double *qacc,
+              double *azimuth);
+int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, const NoteIn *n, PyRandom *rs, int note,
                   int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
                   double *rows, int cap, double *qacc, double *azimuth, double *fin);
 

@@ -112,7 +112,7 @@ static void organ_build(const OrganSpec *og, int i, double f0, const NoteIn *n, 
     built[i] = 1;
 }
 
-int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, const NoteIn *n, int note,
+int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, const NoteIn *n, PyRandom *rs, int note,
                   int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
                   double *rows, int cap, double *qacc, double *azimuth, double *fin)
 {
@@ -128,7 +128,9 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
     double seg_f0[33];
     int nseg = 0;
     seg_row[0] = 0; seg_pipe[0] = hp; seg_f0[0] = f0; nseg = 1;
-    double terms[9 * 64], rterms[9 * 64];
+    double terms[9 * 64], rterms[9 * 64], terms_u[9 * 64];
+    if (t->sps > 0.0 && !rs)
+        return -2;                                  /* a sign to draw and no stream */
     static _Thread_local int r_nsurf[64], r_surf[64 * 8];
     static _Thread_local double r_img[64 * 3], r_mir[64 * 3];
     double VB0[3] = {0.0, 5.5, 0.0};
@@ -384,7 +386,11 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
                         goto done;
                     }
                 }
-                double mph = og->phase_spread > 0.0 ? 2.0 * PI * og->phase_spread * pyr_random(&pr) : 0.0;
+                /* where each player's stroke landed (strike_phase_spread: the
+                   global stream's bit), then each partial its own phase */
+                double mph = t->sps > 0.0 ? PI * (double)(pyr_genrand(rs) >> 31) * t->sps : 0.0;
+                if (og->phase_spread > 0.0)
+                    mph += 2.0 * PI * og->phase_spread * pyr_random(&pr);
                 double non_m = non_r + 0.0;
                 if (rpp->n_pp) {
                     /* THE QUILL CATCHES BEFORE IT LETS GO (pre_pluck_s): the
@@ -410,6 +416,39 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
                           pos_x, 0)) {
                     ret = -1;
                     goto done;
+                }
+                /* ...AND THE VOICE's UNISON on it (a hit's section: unison_voices),
+                   the note's release and chiff, each its own vibrato */
+                double uv[80];
+                int nu = nv_unison_voices(host, f0, m, pd[0], uv);
+                for (int ui = 0; ui < nu; ui++) {
+                    double gm = uv[5 * ui], off_hz = uv[5 * ui + 1], dr = uv[5 * ui + 2], ud = uv[5 * ui + 3];
+                    double uph = uv[5 * ui + 4];
+                    double VBu[3];
+                    if (!nv_voice_vibrato(host, f0, ui + 1, VBu)) {
+                        VBu[0] = VB0[0]; VBu[1] = VB0[1]; VBu[2] = VB0[2];
+                    }
+                    double up[2];
+                    nv_unison_partial(hf, off_hz, dr, ud, up);
+                    double uf = up[0], ulr = up[1];
+                    if (uf <= 0 || uf > sr / 2)
+                        continue;
+                    int ntu = 0;
+                    if (tr.reflect) {
+                        ntu = note_terms(host, &tr, uf, pos_x, t->pos_z, nimg, nsurf, surf, img, mir, terms_u);
+                        if (ntu < 0) {
+                            ret = -2;
+                            goto done;
+                        }
+                    }
+                    if (!emit(host, &tr, &R, qacc, azimuth, terms_u, ntu, 2 * PI * uf / sr, gL * gm, gR * gm, gM * gm,
+                              uf, non_r, t->noff, pfade, t->rel, t->chiff, ulr, pd[3], pd[2], t->sustain_level, cvp,
+                              cc_r, t->crl, t->sjit, t->csc, gr, cr,
+                              2 * PI * uph + (og->phase_spread > 0.0 ? 2.0 * PI * og->phase_spread * pyr_random(&pr) : 0.0),
+                              (double)(ui + 1), VBu, pos_x, 0)) {
+                        ret = -1;
+                        goto done;
+                    }
                 }
                 pos_x = t->pos_x_props;             /* em.pos_x, back at the voice's place after each harmonic */
             }

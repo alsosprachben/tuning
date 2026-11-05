@@ -333,6 +333,11 @@ int main(int argc, char **argv)
     // each class's organ, its table here (the export's pointer was the exporter's)
     for (size_t i = 0; i < E.classes.size(); i++)
         ((NoteClass *)E.classes[i].data())->organ = E.cls_organ[i] >= 0 ? &E.organs[E.cls_organ[i]] : nullptr;
+    for (size_t i = 0; i < E.classes.size(); i++) {     // a struck layer's class (sl_idx)
+        NoteClass *nc = (NoteClass *)E.classes[i].data();
+        nc->sl = nc->sl_on && nc->sl_idx >= 0 && nc->sl_idx < (int)E.classes.size()
+                 ? (const NoteClass *)E.classes[nc->sl_idx].data() : nullptr;
+    }
     // THE TUNER, if named: its table in place of the export's
     std::string tname, ra, rc;
     for (int i = 4; i < argc; i++) {
