@@ -355,6 +355,11 @@ typedef struct {
        strings only at the keys with course[key] set, has_course; else all */
     int has_course;
     unsigned char course[128];
+    /* A STOPPED STRING's PLUCK (stopped_pluck_point: the pizzicato's, the
+       upright's): the open strings' keys, the open-string point -- the
+       note's strike point from them; n_open 0: the template's */
+    int n_open;
+    double open_st[8], pluck_open;
 } VoiceInit;
 
 struct OrganPipe {

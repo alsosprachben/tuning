@@ -144,7 +144,8 @@ class VoiceInit(ctypes.Structure):
                 + [('strike_wobble_hz', C), ('strike_wobble_gain', C), ('strike_wobble_slope', C)]
                 + [('rnd', I)] + [(f, C) for f in ('rnd_level_db', 'rnd_effort_db', 'rnd_cents', 'rnd_timing_s')]
                 + [('rnd_draws', C * 4), ('law_k', C), ('law_p', C), ('bb_hz', C), ('bb_B', C),
-                   ('has_course', I), ('course', ctypes.c_ubyte * 128)])
+                   ('has_course', I), ('course', ctypes.c_ubyte * 128),
+                   ('n_open', I), ('open_st', C * 8), ('pluck_open', C)])
 
 
 class VoiceNote(ctypes.Structure):
@@ -831,6 +832,17 @@ def ep_voice(cls):
                                                          'amp_drive')))
 
 
+# A STOPPED STRING's CONSTRUCTOR (tonelib.stopped_pluck_point): the strike
+# point from the note's open string, nv_voice_init's (VoiceInit.open_st)
+_STOPPED_INITS = ('AcousticBassProperties', 'PizzicatoStringsProperties')
+
+
+def stopped_voice(cls):
+    """A class whose own constructor is a stopped string's pluck point alone
+    (the upright's, the pizzicato's), on at most 8 open strings."""
+    return _owner(cls, '__init__') in _STOPPED_INITS and len(getattr(cls, 'open_strings', ()) or ()) <= 8
+
+
 def harmonic_voice(cls):
     """Whether native/voice.c plays cls as a harmonic voice (kind 4): a
     plucked string's series through its pluck's comb, on a FormantBody (the
@@ -846,6 +858,12 @@ def harmonic_voice(cls):
         if not 1 <= cls.section_players <= 16:
             return False
         own = dict(own, unison_voices='SectionMixin', voice_vibrato='SectionMixin', **_SECTION_OWN)
+    elif issubclass(cls, T.PizzicatoStringsProperties):
+        # (a section plucking: its players as the bowed sections', and its slow stage)
+        if not 1 <= cls.section_players <= 16:
+            return False
+        own = dict(own, unison_voices='SectionMixin', voice_vibrato='SectionMixin',
+                   aftersound='PizzicatoStringsProperties', **_SECTION_OWN)
     elif not issubclass(cls, T.PluckedStringProperties):
         return False
     dul = dulcimer_voice(cls)
@@ -1540,6 +1558,8 @@ def snapshot(props):
             s.dhz_set, s.dhz_db, s.dhz_pow = 1, float(p.decay_hz_db), float(p.decay_hz_power)
         s.pps = float(getattr(p, 'partial_phase_spread', 0.0) or 0.0)
         s.ushare = int(bool(getattr(p, 'unison_shares_phase', False)))
+        if _owner(type(p), 'aftersound') == 'PizzicatoStringsProperties':
+            s.aftersound_fraction, s.aftersound_ratio = float(p.aftersound_fraction), float(p.aftersound_ratio)
         # (a played pipe's modes pulled into lock: mode_lock_offset_for)
         s.ml_spread = float(getattr(p, 'mode_lock_spread', 0.0) or 0.0)
         s.ml_knee, s.ml_time = float(getattr(p, 'mode_lock_knee', 3.0)), float(getattr(p, 'mode_lock_time', 0.035))
@@ -1784,7 +1804,8 @@ def init_supported(cls):
         # (and [RND]'s, RandomStrike: its four draws the caller's, VoiceInit.rnd_draws)
         if any(k.__name__ not in ('SynthProperties', 'object', 'RandomStrike') for k in cls.__mro__
                if '__init__' in k.__dict__ and not (k.__name__ == 'ElectricPianoProperties' and ep_voice(cls))
-               and not (k.__name__ in ('ElectricGuitarProperties', 'GuitarHarmonicsProperties') and electric_voice(cls))):
+               and not (k.__name__ in ('ElectricGuitarProperties', 'GuitarHarmonicsProperties') and electric_voice(cls))
+               and not (k.__name__ in _STOPPED_INITS and stopped_voice(cls) and harmonic_voice(cls))):
             return False
         if any(_owner(cls, n) != o for n, o in _BASE_OWN.items() if n != 'inharmonicity_coefficient_func'):
             return False
@@ -1862,6 +1883,12 @@ def _class(cls):
             if _owner(cls, 'inharmonicity_coefficient_for_frequency') == 'HammeredDulcimerProperties':
                 c.b_law = 4                     # (...under the dulcimer's bass bridge, its own)
                 c.bb_hz, c.bb_B = float(cls.bass_bridge_hz), float(cls.bass_bridge_B)
+        os_ = getattr(cls, 'open_strings', None) or ()
+        if stopped_voice(cls) and getattr(cls, 'pluck_open', None) and os_:
+            c.n_open = len(os_)                 # (the note's pluck point: nv_voice_init's)
+            c.open_st[:c.n_open] = [float(o) for o in os_]
+        else:
+            c.pluck_open = 0.0
         if getattr(cls, 'course_keys', None) is not None:
             c.has_course = 1                    # (the register's strings: its courses' keys alone)
             for kk in cls.course_keys:

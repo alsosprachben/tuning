@@ -554,6 +554,11 @@ static double string_blend(const VoiceSnap *v, double frequency, double break_hz
 /* GrandPianoProperties.aftersound: (level, its decay rate) */
 void nv_aftersound(const VoiceSnap *v, double frequency, double decay_rate, double *out)
 {
+    if (v->kind == 4 && v->aftersound_fraction > 0.0) {     /* PizzicatoStringsProperties': a slow share */
+        out[0] = v->aftersound_fraction;
+        out[1] = decay_rate * v->aftersound_ratio;
+        return;
+    }
     if (v->kind == 3 || v->kind == 4 || v->kind == 5) {     /* SynthProperties: one stage */
         out[0] = 0.0;
         out[1] = decay_rate;
@@ -1002,6 +1007,25 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
         s->max_harmonic = mh > 1 ? mh : 1;
     }
     s->decay_register_factor = pow(2.0, c->decay_register_slope * op);
+    if (s->kind == 4 && c->n_open > 0 && c->pluck_open != 0.0) {
+        /* stopped_pluck_point: a fixed distance from the bridge, a growing
+           fraction of what sounds, on the highest open string at or below */
+        double n = 69.0 + 12.0 * log(pymax(frequency, 1.0) / 440.0) / log(2.0);
+        int any = 0;
+        double o = 0.0, lo = c->open_st[0];
+        for (int i = 0; i < c->n_open; i++) {
+            if (c->open_st[i] <= n + 0.5 && (!any || c->open_st[i] > o)) {
+                o = c->open_st[i];
+                any = 1;
+            }
+            if (c->open_st[i] < lo)
+                lo = c->open_st[i];
+        }
+        if (!any)
+            o = lo;
+        double p = fmod(c->pluck_open * pow(2.0, (n - o) / 12.0), 1.0);
+        s->strike_point = pymax(0.02, pymin(p, 1.0 - p));
+    }
     if (s->kind == 4 && s->reed) {              /* a free reed: this key's flow spectrum (_reed_series) */
         double gate = s->reed_gate + s->reed_gate_oct * op;
         if (s->reed_gate_oct != 0.0)
