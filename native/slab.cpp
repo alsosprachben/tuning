@@ -1549,7 +1549,7 @@ struct Piano {
     std::map<long long, std::pair<AmpOut, AmpJob>> amp_fine_pending;
 
     static const int LIVE_DRIVE_STEPS = 8;
-    int LIVE_AMP_LOOKAHEAD = 6;             // (live's; the checks set it)
+    int LIVE_AMP_LOOKAHEAD = 3;             // (live's; the checks set it)
     // live.LIVE_AMP_HOLD: a valve part's note waits for its products
     bool LIVE_AMP_HOLD = true;
     double LIVE_AMP_HOLD_S = 0.060;

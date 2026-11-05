@@ -771,7 +771,11 @@ def _fine_pool_stop():
 # there is a delay in processing"). So a part with a valve plays its notes
 # this many blocks late, and its products are there when they start -- a
 # real-time effect's latency, on those parts only. 0: none.
-LIVE_AMP_LOOKAHEAD = 6
+# ...A FLOOR SINCE LIVE_AMP_HOLD: a note whose products are late waits for
+# them, so this need only cover the usual case, not the worst -- 3 blocks (8
+# ms at 128) is a note's fast pass (7 ms); a bigger chord waits as long as its
+# own takes (it was 6, 16 ms, for every note)
+LIVE_AMP_LOOKAHEAD = 3
 # ...AND A NOTE WAITS FOR ITS DISTORTION. The lookahead covers the fast pass
 # for a note or two; a big chord's (13-17 ms for 4-6 notes), or one that
 # waits behind the last chord's, can land after the attack, which then plays
