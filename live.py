@@ -1070,6 +1070,7 @@ class Slab:
         self.ls_aR = np.zeros(capacity, np.float32)
         self.last_slots = []
         self.collect = None     # a list: the slots stamp_cols places go into it too (Live's held notes)
+        self.rel_log = []       # (key, n, slots) each release since Live's pump read it (_amp_released)
         self.free = collections.deque(range(capacity))
         self.retiring = []              # slots released, still ringing out
         # EACH SLOT'S KEY (an id: key_id), so a slot freed while its key is
@@ -2517,6 +2518,15 @@ class Slab:
             if np.isin(ri, idx).any():
                 self.retiring[i] = (ri, t + d)
 
+    def retime_off(self, idx, d):
+        """A released note's end, d samples later (Live's held changes)."""
+        a = self.a
+        off = a["noff"][idx]
+        a["noff"][idx] = np.where(off != IDLE, off + d, off)
+        for i, (ri, t) in enumerate(self.retiring):
+            if np.isin(ri, idx).any():
+                self.retiring[i] = (ri, t + d)
+
     def release(self, key, n):
         """Note-off: one write per partial. The kernel picks it up next block."""
         slots = self.live.pop(key, None)
@@ -2527,6 +2537,7 @@ class Slab:
             self.oneshot.pop(key, None)
             return                      # struck: it rings out, note-off is not a stop
         idx = np.fromiter(slots, np.int64, len(slots))
+        self.rel_log.append((key, n, idx))
         # a reflection stops as late as it started -- and a row that has
         # already ended on its own (the quill's catch) is not brought back
         self.a["noff"][idx] = np.minimum(self.a["noff"][idx],
@@ -4465,8 +4476,9 @@ class Live:
         # result for a chord already gone is dropped
         self.amp_jid = {}               # pid -> its chord's number
         self.amp_start = {}             # pid -> its chord's first onset (_amp_snapshot)
-        self.amp_hold = {}              # pid -> [[(ch, note), its slots, held so far]] (LIVE_AMP_HOLD)
-        self.amp_cover = {}             # pid -> {jid: the slots its snapshot read}
+        self.amp_chg = {}               # pid -> its chord's changes no result covers yet (_amp_change)
+        self.amp_jobT = {}              # pid -> {jid: where its products take over (_amp_cross)}
+        self._amp_end = None            # (sample, crossover): where a snapshot ending the products ends them
         self.amp_shifted = {}           # (pid, ch, note) -> how far its note was held, once it plays
         self.amp_out_jid = None
         self.amp_fine_pending = {}      # pid -> (its newest chord's job, its number): waiting for a worker
@@ -5142,7 +5154,8 @@ class Live:
                 self.last_error = "moog: %s: %s" % (type(e).__name__, e)
         # (and a fine pass's result, which otherwise waited for the next chord
         # to wake the pump: it landed as its own note ended, never heard)
-        if self.amp_dirty or self.amp_out is not None or self.amp_fine_results or self.amp_hold:
+        if self.amp_dirty or self.amp_out is not None or self.amp_fine_results or self.amp_chg \
+                or self.slab.rel_log:
             try:
                 self._amp_pump(n0)
             except Exception as e:
@@ -5957,9 +5970,13 @@ class Live:
                 self.slab.release(k, n0)
         return bool(hit)
 
+    def _amp_holds(self, part):
+        """A part whose chord changes wait for its valve (LIVE_AMP_HOLD)."""
+        return (LIVE_AMP_HOLD and part is not None and not part.drums
+                and (part.patch.amp_drive > 0.0 or self._efx_od(part) is not None))
+
     def _note_on(self, part, ch, note, vel, n0):
-        if not (LIVE_AMP_HOLD and not part.drums
-                and (part.patch.amp_drive > 0.0 or self._efx_od(part) is not None)):
+        if not self._amp_holds(part):
             return self._note_on_now(part, ch, note, vel, n0)
         self.amp_shifted.pop((part.pid, ch, note), None)
         got = self.slab.collect = []
@@ -5970,73 +5987,110 @@ class Live:
         if got:
             idx = np.fromiter(got, np.int64, len(got))
             if not (self.slab.a["fx"][idx] >= 0).any():     # (a Moog's rows keep onsets of their own)
-                self.amp_hold.setdefault(part.pid, []).append([(ch, note), idx, 0])
+                self._amp_change(part.pid, "on", (ch, note), idx, int(self.slab.a["non"][idx].min()),
+                                 self.slab.a["fa"])
+
+    def _amp_change(self, pid, kind, cn, idx, T, col):
+        """THE CHORD CHANGES AT T: a note's onset ("on") or its release
+        ("off"). The products cross over there, over the note's own attack or
+        release (its loudest row's, as the products take theirs: _amp_place),
+        once a result whose snapshot came after it lands; till then the change
+        waits (_amp_hold_step). [kind, (ch, note), slots, T, crossover, the
+        last job before it, held so far]"""
+        sl = self.slab
+        src = idx[int(np.argmax(sl.aL0[idx].astype(np.float64) + sl.aR0[idx].astype(np.float64)))]
+        self.amp_chg.setdefault(pid, []).append([kind, cn, idx, int(T), max(1.0, float(col[src])),
+                                                 self.amp_jid.get(pid, 0), 0])
+
+    def _amp_released(self):
+        """The slab's releases since the last pump (Slab.rel_log): a valve
+        part's note let go -- by its key, the pedal, a steal -- is a change."""
+        log = self.slab.rel_log
+        if not log:
+            return
+        self.slab.rel_log = []
+        for key, n, idx in log:
+            if not (isinstance(key, tuple) and len(key) == 4) or key[3] == "amp" \
+                    or (isinstance(key[3], str) and key[3].startswith((self.AMP_OLD, self.EFX_SLOT))):
+                continue
+            part = next((q for q in self.parts if q.pid == key[0]), None)
+            if not self._amp_holds(part) or self.key_tone.get(key[:3], part.patch) is not part.patch:
+                continue
+            self._amp_change(key[0], "off", (key[1], key[2]), idx, n, self.slab.a["re"])
 
     def _amp_held(self, pid, ch, note):
         """How far this key's note has been held back (LIVE_AMP_HOLD): its
         key-up is as late, so it sounds as long as it was played."""
-        for e in reversed(self.amp_hold.get(pid, ())):
-            if e[0] == (ch, note):
-                return e[2]
+        for e in reversed(self.amp_chg.get(pid, ())):
+            if e[0] == "on" and e[1] == (ch, note):
+                return e[6]
         return self.amp_shifted.get((pid, ch, note), 0)
 
     def _amp_play(self, pid, ents):
         for e in ents:
-            if e[2]:
-                self.amp_shifted[(pid,) + e[0]] = e[2]
+            if e[0] == "on" and e[6]:
+                self.amp_shifted[(pid,) + e[1]] = e[6]
 
-    def _amp_unhold(self, pid, jid):
-        """A result is placed: the notes its snapshot read play."""
-        cov = self.amp_cover.get(pid)
-        if not cov or jid not in cov:
-            return
-        got = cov[jid]
-        for j in [j for j in cov if j <= jid]:
-            del cov[j]
-        hold = self.amp_hold.get(pid)
-        if hold:
-            self._amp_play(pid, [e for e in hold if np.isin(e[1], got).any()])
-            hold[:] = [e for e in hold if not np.isin(e[1], got).any()]
-            if not hold:
-                del self.amp_hold[pid]
+    def _amp_cross(self, pid, jid):
+        """Where job jid's products take over: the earliest change it covers
+        (its time, its crossover), or None -- once per job, whichever pass
+        lands first."""
+        jt = self.amp_jobT.setdefault(pid, {})
+        if jid in jt:
+            return jt[jid]
+        for j in [j for j in jt if j < jid]:
+            del jt[j]
+        chg = self.amp_chg.get(pid, [])
+        cov = [e for e in chg if e[5] < jid]
+        got = None
+        if cov:
+            e0 = min(cov, key=lambda e: e[3])
+            got = (e0[3], e0[4])
+            self._amp_play(pid, cov)
+            chg[:] = [e for e in chg if e[5] >= jid]
+            if not chg:
+                del self.amp_chg[pid]
+        jt[jid] = got
+        return got
 
     def _amp_hold_step(self, n0):
-        """Held notes due within this block, not yet covered: a block later,
-        the part's together, its products' start with them."""
+        """Changes due within this block that no result covers yet: a block
+        later, the part's together -- a note's onset, a released note's end."""
         blk = self.frames
         cap = int(LIVE_AMP_HOLD_S * self.rate)
-        a = self.slab.a
-        for pid in sorted(self.amp_hold):
-            hold = self.amp_hold[pid]
+        for pid in sorted(self.amp_chg):
+            chg = self.amp_chg[pid]
             # A NOTE LET GO BEFORE IT BEGAN (its key up, the pedal up, its
-            # tone changed): no snapshot reads a released key, so nothing would
-            # ever cover it -- it has nothing to wait for. (And one cut and
-            # its slots reaped: gone.)
+            # tone changed): no snapshot reads a released key -- its onset has
+            # nothing to wait for (its release is a change of its own). (And
+            # one cut and its slots reaped: gone.)
             part = next((q for q in self.parts if q.pid == pid), None)
             keys = [ss for k, ss in self.slab.live.items() if k[0] == pid and k[3] != "amp"]
-            gone = [e for e in hold if part is None or not self.slab.busy[e[1]].all()
-                    or self.key_tone.get((pid,) + e[0], part.patch) is not part.patch
-                    or not any(int(e[1][0]) in ss for ss in keys)]
+            gone = [e for e in chg if e[0] == "on" and (
+                part is None or not self.slab.busy[e[2]].all()
+                or self.key_tone.get((pid,) + e[1], part.patch) is not part.patch
+                or not any(int(e[2][0]) in ss for ss in keys))]
             if gone:
                 self._amp_play(pid, gone)
-                hold[:] = [e for e in hold if not any(e is g for g in gone)]
-            if not hold:
-                del self.amp_hold[pid]
+                chg[:] = [e for e in chg if not any(e is g for g in gone)]
+            if not chg:
+                del self.amp_chg[pid]
                 continue
-            on = min(int(a["non"][e[1]].min()) for e in hold)
+            on = min(e[3] for e in chg)
             if on >= n0 + blk:
                 continue
             d = n0 + blk - on
-            if max(e[2] for e in hold) + d > cap:
-                self._amp_play(pid, hold)
-                del self.amp_hold[pid]          # waited long enough: as they are
+            if max(e[6] for e in chg) + d > cap:
+                self._amp_play(pid, chg)
+                del self.amp_chg[pid]           # waited long enough: as they are
                 continue
-            for e in hold:
-                self.slab.retime(e[1], d)
-                e[2] += d
-            st = self.amp_start.get(pid)
-            if st is not None and st >= on:
-                self.amp_start[pid] = st + d
+            for e in chg:
+                if e[0] == "on":
+                    self.slab.retime(e[2], d)
+                else:
+                    self.slab.retime_off(e[2], d)
+                e[3] += d
+                e[6] += d
 
     def _note_on_now(self, part, ch, note, vel, n0):
         self.key_tone[(part.pid, ch, note)] = part.patch
@@ -8639,8 +8693,10 @@ class Live:
                 and self.key_tone.get((part.pid, ch, note), part.patch) is part.patch:
             # THE PRODUCTS END WITH THEIR CHORD, over the note's own release, as
             # the file's end at their segment's -- the new snapshot (_amp_touch)
-            # gives what is still held its own
-            self.slab.release(self._amp_key(part.pid), n0)
+            # gives what is still held its own. (Holding, the release is a
+            # change: the new snapshot's products take over there, or end there.)
+            if not self._amp_holds(part):
+                self.slab.release(self._amp_key(part.pid), n0)
         for _en in [e for c in (ch,) + tuple(c for c, tf in self.tone_fx.items() if tf['ch'] == ch)
                     for e in self.efx_notes.get(c, ())]:
             if _en[3] == note and _en[1] == math.inf:
@@ -9958,7 +10014,7 @@ class Live:
         part = next((p for p in self.parts if p.pid == pid), None)
         key = self._amp_key(pid)
         if part is None:
-            self.slab.release(key, n0)
+            self._amp_off(key, n0)
             return None
         # AN UNTOUCHED WHEEL MEANS THE VOICE AS VOICED, not silence. A guitar
         # patch has a drive because its amplifier is part of what it is, and
@@ -9992,10 +10048,9 @@ class Live:
                   and self.key_tone.get((k[0], k[1], k[2]), part.patch) is part.patch   # this tone's notes
                   and (_b_od or not (isinstance(k[3], str) and k[3].startswith(self.EFX_SLOT + "B")))]
         slots = [sl for ss in groups for sl in ss]
-        self._amp_read = np.fromiter(slots, np.int64, len(slots))
         if drive <= 0.0 or len(slots) < 2:
             # Wheel down, or nothing left to intermodulate: the stage is clean.
-            self.slab.release(key, n0)
+            self._amp_off(key, n0)
             return None
         idx = np.fromiter(slots, np.int64, len(slots))
         # THE DIRECT SOUND ONLY. The room's copies are downstream of the
@@ -10028,7 +10083,7 @@ class Live:
             keep.append(gi[dl <= dl.min() + 2.0])
         idx = np.concatenate(keep)
         if len(idx) < 2:
-            self.slab.release(key, n0)
+            self._amp_off(key, n0)
             return None
         om = self.slab.a["om"][idx].astype(np.float64)
         f = om * float(self.rate) / (2.0 * np.pi)
@@ -10057,7 +10112,7 @@ class Live:
         ph = self.slab.a["p0"][idx].astype(np.float64) + om * n0
         ok = np.flatnonzero((f > MIN_AMP_HZ) & (aM > 0.0))
         if len(ok) < 2:
-            self.slab.release(key, n0)
+            self._amp_off(key, n0)
             return None
         src = int(idx[ok[int(np.argmax(aM[ok]))]])
         # its chord's first onset: the products start no sooner (a lookahead
@@ -10080,20 +10135,47 @@ class Live:
 
     AMP_XFADE = 0.020               # s: products replacing products cross over this long
 
-    def _amp_place(self, n0, pid, key, src, out, when=None):
-        """Stamp what the worker returned. Cheap: no transform, just writes."""
+    def _amp_off(self, key, n0, at=None, xf=None):
+        """The products under key end: at `at` over xf (a change's: _amp_end
+        where a snapshot ends them), else now as they are. Products not begun
+        by then never sound (a 1-sample release from before their onset).
+        What was there."""
+        if at is None and self._amp_end is not None:
+            at, xf = self._amp_end
+        at = n0 if at is None else at
+        old = self.slab.live.get(key)
+        if old:
+            io = np.fromiter(old, np.int64, len(old))
+            a = self.slab.a
+            if xf is not None:
+                a["re"][io] = np.float32(xf)
+            a["re"][io[a["non"][io] >= at]] = np.float32(1.0)
+        self.slab.release(key, at)
+        return old
+
+    def _amp_place(self, n0, pid, key, src, out, when=None, cross=None):
+        """Stamp what the worker returned. Cheap: no transform, just writes.
+        cross: where they take over, (sample, crossover) -- their chord's
+        change (_amp_cross), or None: now."""
         # PRODUCTS REPLACING PRODUCTS (the fine pass's the fast pass's; a new
         # snapshot's the last) CROSS OVER: the old out and the new in over the
         # same AMP_XFADE from the same sample -- the kernel's release and attack
         # are one smoothstep each way, so the two sum to one throughout. Out
         # over the guitar's own release and in over its pick, both sounded for a
         # while and the squash doubled, then shifted: the attack stood out (Ben)
-        old = self.slab.live.get(key)
+        #
+        # ...AT THEIR CHORD's CHANGE (LIVE_AMP_HOLD): the note's onset, over
+        # its attack, or its release, over its release -- not when the worker
+        # answered, which put a new note's products (its squash, the chord
+        # inverted) ahead of the note and still crossing in at its attack, and
+        # left a released chord's on, or nothing, around its release (Ben:
+        # "attacks and releases are not fully covered"). A change already
+        # past crosses over now, as ever.
         xf = int(self.AMP_XFADE * self.rate)
-        if old:
-            _io = np.fromiter(old, np.int64, len(old))
-            self.slab.a["re"][_io] = np.float32(xf)
-        self.slab.release(key, n0)
+        at, xin = n0, float(xf)
+        if cross is not None and cross[0] >= n0:
+            at, xin = cross
+        old = self._amp_off(key, n0, at, xin)
         if not out or not self.slab.busy[src]:
             return
         # NEVER AFTER THEIR NOTES. Its residual at the chord's own frequencies
@@ -10130,11 +10212,12 @@ class Live:
         # its residual at the chord's own frequencies, which partly cancels the
         # chord, landed at any phase and added to it instead: more drive sounded
         # cleaner (Ben, against the file). Anchored where they were taken.
-        start = max(n0, self.amp_start.get(pid, n0))
+        start = at if cross is not None else max(n0, self.amp_start.get(pid, n0))
         slots = self.slab.stamp_amp(key, src, f, a, p, start, self.rate, at=when)
-        if slots and old and start <= n0:
+        if slots and (cross is not None or (old and start <= n0)):
             # (the note's first products keep its own attack: they start with it)
-            self.slab.a["fa"][np.fromiter(slots, np.int64, len(slots))] = np.float32(xf)
+            self.slab.a["fa"][np.fromiter(slots, np.int64, len(slots))] = np.float32(
+                xin if cross is not None else xf)
         if slots and self.slab.ls_on[src]:
             # The amplifier is UPSTREAM of the rotor, so its products swing and
             # Doppler like anything else that came out of the cabinet.
@@ -10142,6 +10225,7 @@ class Live:
                                  self.rotor_horn.rate, self.rotor_drum.rate)
 
     def _amp_pump(self, n0):
+        self._amp_released()
         out = self.amp_out
         if out is not None:
             self.amp_out = None
@@ -10154,20 +10238,25 @@ class Live:
             jid = self.amp_out_jid
             if (jid is None or self.amp_jid.get(out[0]) == jid) and not (
                     jid is not None and self.amp_fine_placed.get(out[0]) == jid):
-                self._amp_unhold(out[0], jid)
-                self._amp_place(n0, *out)
+                self._amp_place(n0, *out, cross=None if jid is None else self._amp_cross(out[0], jid))
         while self.amp_fine_results:
             jid, payload = self.amp_fine_results.popleft()
             if self.amp_jid.get(payload[0]) == jid:          # still this part's chord
                 self.amp_fine_placed[payload[0]] = jid
-                self._amp_unhold(payload[0], jid)
-                self._amp_place(n0, *payload)
+                self._amp_place(n0, *payload, cross=self._amp_cross(payload[0], jid))
         if self.amp_dirty and not self.amp_busy:
             pid = self.amp_dirty.pop()
-            job = self._amp_snapshot(pid, n0)
+            # (where it ends the products, if it does: at the changes it reads)
+            nxt = self.amp_jid.get(pid, 0) + 1
+            chg = [e for e in self.amp_chg.get(pid, ()) if e[5] < nxt]
+            e0 = min(chg, key=lambda e: e[3]) if chg else None
+            self._amp_end = None if e0 is None or e0[3] < n0 else (e0[3], e0[4])
+            try:
+                job = self._amp_snapshot(pid, n0)
+            finally:
+                self._amp_end = None
             if job is not None:
                 jid = self.amp_jid[pid] = self.amp_jid.get(pid, 0) + 1
-                self.amp_cover.setdefault(pid, {})[jid] = self._amp_read
                 self.amp_job = job + (jid,)
                 self.amp_busy = True
                 self.amp_go.set()
@@ -10177,8 +10266,8 @@ class Live:
                     self.amp_fine_go.set()
             else:
                 self.amp_jid[pid] = self.amp_jid.get(pid, 0) + 1   # nothing to distort now
-                self._amp_play(pid, self.amp_hold.pop(pid, ()))     # ...so nothing to wait for
-        if self.amp_hold:
+                self._amp_cross(pid, self.amp_jid[pid])            # ...so nothing to wait for
+        if self.amp_chg:
             self._amp_hold_step(n0)
 
     def _crescendo(self, part, ch, value, n0):

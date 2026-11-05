@@ -207,6 +207,8 @@ struct Slab {
     std::vector<std::pair<std::vector<long>, long long>> retiring;
     std::vector<long> last_slots;
     std::vector<long> *collect = nullptr;   // the slots stamp places go here too (the held notes)
+    // live.Slab.rel_log: each release since the pump read it (key, n, slots)
+    std::vector<std::tuple<Key, long long, std::vector<long>>> rel_log;
     // each slot's key, by id (live.Slab.owner): a slot freed while its key
     // is still held leaves that key's list
     std::vector<long long> owner;
@@ -780,12 +782,28 @@ struct Slab {
             oneshot.erase(o);
             return;
         }
+        rel_log.push_back(std::make_tuple(key, n, idx));
         for (long s : idx) {
             long long v = n + (long long)f4[F4_rdl][s];
             if (v < i8[1][s])
                 i8[1][s] = v;
         }
         retiring.push_back(std::make_pair(idx, n));
+    }
+
+    // live.Slab.retime_off: a released note's end, d samples later
+    void retime_off(const std::vector<long> &idx, long long d)
+    {
+        std::set<long> in(idx.begin(), idx.end());
+        for (long s : idx)
+            if (i8[1][s] != IDLE)
+                i8[1][s] += d;
+        for (auto &r : retiring)
+            for (long s : r.first)
+                if (in.count(s)) {
+                    r.second += d;
+                    break;
+                }
     }
 
     // live.Slab._own: the slots idx are key's
@@ -1535,15 +1553,27 @@ struct Piano {
     // live.LIVE_AMP_HOLD: a valve part's note waits for its products
     bool LIVE_AMP_HOLD = true;
     double LIVE_AMP_HOLD_S = 0.060;
-    struct Held {
+    // live._amp_change: a chord's change (a note's onset, or its release)
+    // no result covers yet
+    struct Chg {
+        bool on;
         int ch, note;
         std::vector<long> idx;
-        long long sh;
+        long long T;
+        double xf;
+        long long jid0, sh;
     };
-    std::map<long long, std::vector<Held>> amp_hold;
-    std::map<long long, std::map<long long, std::vector<long>>> amp_cover;
+    std::map<long long, std::vector<Chg>> amp_chg;
+    // live.amp_jobT: where each job's products take over (has, at, crossover)
+    struct Cross {
+        bool has;
+        long long at;
+        double xf;
+        Cross() : has(false), at(0), xf(0.0) {}
+    };
+    std::map<long long, std::map<long long, Cross>> amp_jobT;
+    Cross amp_end;                          // live._amp_end
     std::map<std::tuple<long long, int, int>, long long> amp_shifted;
-    std::vector<long> amp_read;
     // the worker's synthesis threads: a share of the cores, the rest left to
     // the audio thread and the GPU's driver (every core made them miss)
     unsigned AMP_THREADS = 2;
@@ -1570,7 +1600,7 @@ struct Piano {
         int pi = patch_of_pid(apid);
         Key key(apid, -1, -1, AMPK);
         if (pi < 0) {
-            S.release(key, n0);
+            amp_off(key, n0);
             return false;
         }
         const Patch &p = patches[pi];
@@ -1588,11 +1618,8 @@ struct Piano {
             groups.push_back(&kv.second);
             nslots += kv.second.size();
         }
-        amp_read.clear();
-        for (const std::vector<long> *g : groups)
-            amp_read.insert(amp_read.end(), g->begin(), g->end());
         if (drive <= 0.0 || nslots < 2) {
-            S.release(key, n0);
+            amp_off(key, n0);
             return false;
         }
         // each note's direct sound, its own shortest path (live's: the stage
@@ -1611,7 +1638,7 @@ struct Piano {
                     idx.push_back(s);
         }
         if (idx.size() < 2) {
-            S.release(key, n0);
+            amp_off(key, n0);
             return false;
         }
         std::vector<long> ok;
@@ -1636,7 +1663,7 @@ struct Piano {
             }
         }
         if (ok.size() < 2) {
-            S.release(key, n0);
+            amp_off(key, n0);
             return false;
         }
         size_t best = 0;
@@ -1684,16 +1711,45 @@ struct Piano {
         free(out);
     }
 
-    // live._amp_place: what came back, the products before it crossing out
-    void amp_place(long long n0, const AmpOut &o)
+    // live._amp_off: the products under key end -- at `at` over xf (a
+    // change's; amp_end where a snapshot ends them), else now as they are;
+    // those not begun by then never sound. What was there.
+    std::vector<long> amp_off(const Key &key, long long n0, bool has_at = false, long long at = 0,
+                              bool has_xf = false, double xfv = 0.0)
     {
-        Key key(o.pid, -1, -1, AMPK);
+        if (!has_at && amp_end.has) {
+            has_at = true;
+            at = amp_end.at;
+            has_xf = true;
+            xfv = amp_end.xf;
+        }
+        if (!has_at)
+            at = n0;
         long li = S.live_find(key);
         std::vector<long> old = li >= 0 ? S.live[li].second : std::vector<long>();
+        for (long s : old) {
+            if (has_xf)
+                S.f4[F4_re][s] = (float)xfv;
+            if (S.i8[0][s] >= at)
+                S.f4[F4_re][s] = 1.0f;
+        }
+        S.release(key, at);
+        return old;
+    }
+
+    // live._amp_place: what came back, the products before it crossing out
+    // -- at their chord's change (cross), or now
+    void amp_place(long long n0, const AmpOut &o, const Cross &cross = Cross())
+    {
+        Key key(o.pid, -1, -1, AMPK);
         float xf = (float)(long long)(0.020 * rate);
-        for (long s : old)
-            S.f4[F4_re][s] = xf;
-        S.release(key, n0);
+        long long at = n0;
+        double xin = (double)xf;
+        if (cross.has && cross.at >= n0) {
+            at = cross.at;
+            xin = cross.xf;
+        }
+        std::vector<long> old = amp_off(key, n0, true, at, true, xin);
         if (o.prod.empty() || !S.busy[o.src])
             return;
         int pi = patch_of_pid(o.pid);
@@ -1729,11 +1785,11 @@ struct Piano {
             for (long q = 0; q < n; q++)
                 a[q] *= nv_cab_gain(patches[pi].cab, f[q]);
         auto as = amp_start.find(o.pid);
-        long long start = std::max(n0, as == amp_start.end() ? n0 : as->second);
+        long long start = cross.has ? at : std::max(n0, as == amp_start.end() ? n0 : as->second);
         std::vector<long> slots = S.stamp_amp(key, o.src, f.data(), a.data(), p.data(), n, start, rate, o.when);
-        if (!slots.empty() && !old.empty() && start <= n0)
+        if (!slots.empty() && (cross.has || (!old.empty() && start <= n0)))
             for (long s : slots)
-                S.f4[F4_fa][s] = xf;
+                S.f4[F4_fa][s] = cross.has ? (float)xin : xf;
         if (!slots.empty() && S.ls_on[o.src] && !S.les.empty()) {
             std::vector<float> az(n, S.ls_ph[o.src]);
             LobePre lp;
@@ -1824,14 +1880,14 @@ struct Piano {
                 amp_ready_fine.pop_front();
             }
         }
+        amp_released();
         if (amp_has_out) {
             AmpOut o = amp_out;
             amp_has_out = false;
             amp_busy = false;
             auto fp = amp_fine_placed.find(o.pid);
             if (amp_jid[o.pid] == o.jid && !(fp != amp_fine_placed.end() && fp->second == o.jid)) {
-                amp_unhold(o.pid, o.jid);
-                amp_place(n0, o);
+                amp_place(n0, o, amp_cross(o.pid, o.jid));
             }
         }
         while (!amp_fine_results.empty()) {
@@ -1839,8 +1895,7 @@ struct Piano {
             amp_fine_results.pop_front();
             if (amp_jid[o.pid] == o.jid) {
                 amp_fine_placed[o.pid] = o.jid;
-                amp_unhold(o.pid, o.jid);
-                amp_place(n0, o);
+                amp_place(n0, o, amp_cross(o.pid, o.jid));
             }
         }
         if (!amp_dirty.empty() && !amp_busy) {
@@ -1848,9 +1903,24 @@ struct Piano {
             amp_dirty.erase(amp_dirty.begin());
             AmpOut job;
             AmpJob jd;
-            if (amp_snapshot(apid, n0, job, jd)) {
+            // (where it ends the products, if it does: at the changes it reads)
+            long long nxt = amp_jid[apid] + 1;
+            const Chg *e0 = nullptr;
+            auto ch0 = amp_chg.find(apid);
+            if (ch0 != amp_chg.end())
+                for (const Chg &e : ch0->second)
+                    if (e.jid0 < nxt && (!e0 || e.T < e0->T))
+                        e0 = &e;
+            amp_end = Cross();
+            if (e0 && e0->T >= n0) {
+                amp_end.has = true;
+                amp_end.at = e0->T;
+                amp_end.xf = e0->xf;
+            }
+            bool got = amp_snapshot(apid, n0, job, jd);
+            amp_end = Cross();
+            if (got) {
                 job.jid = ++amp_jid[apid];
-                amp_cover[apid][job.jid] = amp_read;
                 amp_busy = true;
                 if (amp_async) {
                     std::lock_guard<std::mutex> lk(amp_mu);
@@ -1867,79 +1937,134 @@ struct Piano {
                 }
             } else {
                 amp_jid[apid] += 1;         // nothing to distort now
-                auto h = amp_hold.find(apid);
-                if (h != amp_hold.end()) {  // ...so nothing to wait for
-                    amp_play(apid, h->second);
-                    amp_hold.erase(h);
-                }
+                amp_cross(apid, amp_jid[apid]);     // ...so nothing to wait for
             }
         }
-        if (!amp_hold.empty())
+        if (!amp_chg.empty())
             amp_hold_step(n0);
+    }
+
+    // live._amp_holds: a part whose chord changes wait for its valve
+    bool amp_holds(int pi) const
+    {
+        return LIVE_AMP_HOLD && pi >= 0 && !patches[pi].drums && patches[pi].amp > 0.0;
+    }
+
+    // live._amp_change: the chord changes at T -- a note's onset or its
+    // release, crossing over its loudest row's attack or release
+    void amp_change(long long apid, bool on, int ch, int note, const std::vector<long> &idx, long long T,
+                    const float *col)
+    {
+        long src = idx[0];
+        double best = 0.0;
+        for (size_t q = 0; q < idx.size(); q++) {
+            double v = (double)S.aL0[idx[q]] + (double)S.aR0[idx[q]];
+            if (q == 0 || v > best) {
+                best = v;
+                src = idx[q];
+            }
+        }
+        auto j = amp_jid.find(apid);
+        amp_chg[apid].push_back(Chg{on, ch, note, idx, T, std::max(1.0, (double)col[src]),
+                                    j == amp_jid.end() ? 0 : j->second, 0});
+    }
+
+    // live._amp_released: the slab's releases since the last pump -- a valve
+    // part's note let go (its key, the pedal, a steal) is a change
+    void amp_released()
+    {
+        if (S.rel_log.empty())
+            return;
+        std::vector<std::tuple<Key, long long, std::vector<long>>> log;
+        log.swap(S.rel_log);
+        for (auto &r : log) {
+            const Key &k = std::get<0>(r);
+            long long l = std::get<3>(k);
+            if (l == AMPK || l >= AMP_OLD0)
+                continue;
+            int pi = patch_of_pid(std::get<0>(k));
+            if (!amp_holds(pi))
+                continue;
+            auto kt = key_tone.find(Key(std::get<0>(k), std::get<1>(k), std::get<2>(k), 0));
+            if (kt != key_tone.end() && kt->second != patches[pi].cache)
+                continue;
+            amp_change(std::get<0>(k), false, (int)std::get<1>(k), (int)std::get<2>(k), std::get<2>(r),
+                       std::get<1>(r), S.f4[F4_re].data());
+        }
     }
 
     // live._amp_held: how far this key's note was held back
     long long amp_held(long long apid, int ch, int note) const
     {
-        auto h = amp_hold.find(apid);
-        if (h != amp_hold.end())
+        auto h = amp_chg.find(apid);
+        if (h != amp_chg.end())
             for (auto e = h->second.rbegin(); e != h->second.rend(); ++e)
-                if (e->ch == ch && e->note == note)
+                if (e->on && e->ch == ch && e->note == note)
                     return e->sh;
         auto s = amp_shifted.find(std::make_tuple(apid, ch, note));
         return s == amp_shifted.end() ? 0 : s->second;
     }
 
-    void amp_play(long long apid, const std::vector<Held> &ents)
+    void amp_play(long long apid, const std::vector<Chg> &ents)
     {
-        for (const Held &e : ents)
-            if (e.sh)
+        for (const Chg &e : ents)
+            if (e.on && e.sh)
                 amp_shifted[std::make_tuple(apid, e.ch, e.note)] = e.sh;
     }
 
-    // live._amp_unhold: a result placed, the notes its snapshot read play
-    void amp_unhold(long long apid, long long jid)
+    // live._amp_cross: where job jid's products take over -- the earliest
+    // change it covers -- once per job
+    Cross amp_cross(long long apid, long long jid)
     {
-        auto c = amp_cover.find(apid);
-        if (c == amp_cover.end() || !c->second.count(jid))
-            return;
-        std::set<long> got(c->second[jid].begin(), c->second[jid].end());
-        for (auto j = c->second.begin(); j != c->second.end();)
-            j = j->first <= jid ? c->second.erase(j) : std::next(j);
-        auto h = amp_hold.find(apid);
-        if (h == amp_hold.end())
-            return;
-        std::vector<Held> keep, go;
-        for (Held &e : h->second) {
-            bool any = false;
-            for (long s : e.idx)
-                if (got.count(s)) {
-                    any = true;
-                    break;
-                }
-            (any ? go : keep).push_back(e);
+        std::map<long long, Cross> &jt = amp_jobT[apid];
+        auto f = jt.find(jid);
+        if (f != jt.end())
+            return f->second;
+        for (auto j = jt.begin(); j != jt.end();)
+            j = j->first < jid ? jt.erase(j) : std::next(j);
+        Cross got;
+        auto h = amp_chg.find(apid);
+        if (h != amp_chg.end()) {
+            std::vector<Chg> cov, keep;
+            for (Chg &e : h->second)
+                (e.jid0 < jid ? cov : keep).push_back(e);
+            if (!cov.empty()) {
+                const Chg *e0 = &cov[0];
+                for (const Chg &e : cov)
+                    if (e.T < e0->T)
+                        e0 = &e;
+                got.has = true;
+                got.at = e0->T;
+                got.xf = e0->xf;
+                amp_play(apid, cov);
+                if (keep.empty())
+                    amp_chg.erase(h);
+                else
+                    h->second = keep;
+            }
         }
-        amp_play(apid, go);
-        if (keep.empty())
-            amp_hold.erase(h);
-        else
-            h->second = keep;
+        jt[jid] = got;
+        return got;
     }
 
-    // live._amp_hold_step: held notes due within this block, not yet
-    // covered, a block later -- the part's together, its products' start too
+    // live._amp_hold_step: changes due within this block that no result
+    // covers yet, a block later -- the part's together
     void amp_hold_step(long long n0)
     {
         long long blk = cur_blk;
         long long cap = (long long)(LIVE_AMP_HOLD_S * rate);
-        for (auto h = amp_hold.begin(); h != amp_hold.end();) {
-            std::vector<Held> &hold = h->second;
+        for (auto h = amp_chg.begin(); h != amp_chg.end();) {
+            std::vector<Chg> &chg = h->second;
             // a note let go before it began (its key up, the pedal up, its
-            // tone changed): no snapshot reads it, so it has nothing to wait
-            // for; one cut and reaped, gone
+            // tone changed): its onset has nothing to wait for; one cut and
+            // reaped, gone
             int pi = patch_of_pid(h->first);
-            std::vector<Held> keep, gone;
-            for (Held &e : hold) {
+            std::vector<Chg> keep, gone;
+            for (Chg &e : chg) {
+                if (!e.on) {
+                    keep.push_back(e);
+                    continue;
+                }
                 bool ok = pi >= 0;
                 for (long s : e.idx)
                     ok = ok && S.busy[s];
@@ -1965,19 +2090,14 @@ struct Piano {
                 (ok ? keep : gone).push_back(e);
             }
             amp_play(h->first, gone);
-            hold = keep;
-            if (hold.empty()) {
-                h = amp_hold.erase(h);
+            chg = keep;
+            if (chg.empty()) {
+                h = amp_chg.erase(h);
                 continue;
             }
-            long long on = 0, most = 0;
-            bool first = true;
-            for (Held &e : hold) {
-                for (long s : e.idx)
-                    if (first || S.i8[0][s] < on) {
-                        on = S.i8[0][s];
-                        first = false;
-                    }
+            long long on = chg[0].T, most = 0;
+            for (Chg &e : chg) {
+                on = std::min(on, e.T);
                 most = std::max(most, e.sh);
             }
             if (on >= n0 + blk) {
@@ -1986,17 +2106,18 @@ struct Piano {
             }
             long long d = n0 + blk - on;
             if (most + d > cap) {
-                amp_play(h->first, hold);
-                h = amp_hold.erase(h);      // waited long enough: as they are
+                amp_play(h->first, chg);
+                h = amp_chg.erase(h);       // waited long enough: as they are
                 continue;
             }
-            for (Held &e : hold) {
-                S.retime(e.idx, d);
+            for (Chg &e : chg) {
+                if (e.on)
+                    S.retime(e.idx, d);
+                else
+                    S.retime_off(e.idx, d);
+                e.T += d;
                 e.sh += d;
             }
-            auto st = amp_start.find(h->first);
-            if (st != amp_start.end() && st->second >= on)
-                st->second += d;
             ++h;
         }
     }
@@ -2304,7 +2425,7 @@ struct Piano {
     void strike(int ch, int note, int vel, long long n0, bool slur = false)
     {
         int pi = 0 <= note && note <= 127 ? patch_for(ch, note) : -1;
-        if (!(LIVE_AMP_HOLD && pi >= 0 && !patches[pi].drums && patches[pi].amp > 0.0)) {
+        if (!amp_holds(pi)) {
             strike_now(ch, note, vel, n0, slur);
             return;
         }
@@ -2314,8 +2435,12 @@ struct Piano {
         S.collect = &got;
         strike_now(ch, note, vel, n0, slur);
         S.collect = nullptr;
-        if (!got.empty())
-            amp_hold[apid].push_back(Held{ch, note, got, 0});
+        if (!got.empty()) {
+            long long T = S.i8[0][got[0]];
+            for (long s : got)
+                T = std::min(T, S.i8[0][s]);
+            amp_change(apid, true, ch, note, got, T, S.f4[F4_fa].data());
+        }
     }
 
     void strike_now(int ch, int note, int vel, long long n0, bool slur = false)
@@ -3320,7 +3445,7 @@ struct Piano {
         n0 += amp_held(pid, ch, note);      // (...and held, as long as it was played)
         amp_touch(cur);
         auto kt = key_tone.find(Key(pid, ch, note, 0));
-        if (patches[cur].amp > 0.0 && (kt == key_tone.end() || kt->second == patches[cur].cache))
+        if (patches[cur].amp > 0.0 && (kt == key_tone.end() || kt->second == patches[cur].cache) && !amp_holds(cur))
             S.release(Key(pid, -1, -1, AMPK), n0);  // the products end with their chord (a note of this tone's)
         if (patches[cur].organ) {           // an organ's key: each of its ranks
             std::vector<Key> ks;
@@ -5306,7 +5431,8 @@ struct Piano {
         if (reg_on && (!reg_pend.empty() || !reg_out.empty() || reg_live || !reg_retire.empty()
                        || reg_ndone.load() > 0))
             reg_pump(n0);
-        if (!amp_dirty.empty() || amp_has_out || !amp_fine_results.empty() || amp_async)
+        if (!amp_dirty.empty() || amp_has_out || !amp_fine_results.empty() || amp_async || !amp_chg.empty()
+            || !S.rel_log.empty())
             amp_pump(n0);                       // the valve (live's _amp_pump)
         std::vector<Key> sw;
         for (auto &kv : S.live) {
