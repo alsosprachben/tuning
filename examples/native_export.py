@@ -145,11 +145,10 @@ def main(argv):
                 organs.append(bytes(N.organ(pc)))
             prog_organ.append(oidx[pc])
     # (live's Moogs: knob-neutral templates the slab weighs from the panel,
-    # one stamp a layer -- not yet an MF-104M's repeats or a unison)
+    # one stamp a layer, an MF-104M's repeats their own keys -- not yet a unison)
     def _moog_later(c):
         sp = N.moog_spec(c)
-        return (sp is None or any(sp.L[l].mf_on for l in range(sp.n_layer))
-                or bool(getattr(c, 'moog_unison', None)))
+        return sp is None or bool(getattr(c, 'moog_unison', None))
     _moogs = {i for c, i in idx.items() if N.kit_drum(c) == 6 and _moog_later(c)}
     cmap_live = [-1 if x in _moogs else x for x in cmap]
     trims = []

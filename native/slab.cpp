@@ -3349,6 +3349,7 @@ struct Part {
         }
         if (!S.stamp_t(*T, key, n0, scale, ch, rate))
             return;                         // the slab full: this note does not sound
+        std::vector<long> lslots[2] = {S.last_slots, {}};    // each layer's (live's _lslots)
         if (T->moog) {                      // a Moog note: its rows, the panel on it (Slab._moog_stamp)
             MoogLayer La;
             S.moog_stamp(*T, pid, ch, 0, moog_panel(patches[cur], ch, La), rate);
@@ -3361,9 +3362,10 @@ struct Part {
                 double lo = INFINITY;
                 for (long s : S.last_slots)
                     lo = std::min(lo, (double)S.i8[0][s] - (double)S.f4[F4_rdl][s]);
-                if (S.stamp_t(*T, key, (long long)lo, scale, ch, rate, 0.0))
+                if (S.stamp_t(*T, key, (long long)lo, scale, ch, rate, 0.0)) {
+                    lslots[1] = S.last_slots;
                     S.moog_stamp(*T, pid, ch, 1, moog_panel(patches[cur], ch, La, 1), rate);
-                else
+                } else
                     dropped++;
             }
         }
@@ -3425,8 +3427,219 @@ struct Part {
             if (b != 1.0 || v2 != 0.0 || r2 != 1.0)
                 retune_v(slots, n0, b != 1.0, b, v2 != 0.0, v2, r2 != 1.0, r2);
         }
-        if (reg_on && cur_reg && reg_note[note] && !S.last_slots.empty())
-            reg_strike(ch, note, n0, *T, S.last_slots);
+        if (reg_on && cur_reg && reg_note[note] && !lslots[0].empty())
+            reg_strike(ch, note, n0, *T, lslots[0]);
+        if (patches[cur].moog && !slots.empty())
+            for (int ly = 0; ly < 2; ly++)          // each Messenger its own pedal
+                if (!lslots[ly].empty())
+                    mf104(patches[cur], ch, note, *T, key, lslots[ly], scale, n0, bend[ch], ly);
+    }
+
+    // THE MF-104M, LIVE (live._mf104; mf104.py): a Moog part whose panel has
+    // the pedal on stamps each repeat as its own key at the note's onset +
+    // k tau -- a future onset, silence until it arrives -- carrying only the
+    // partials whose repeat clears the floor, each at its own gain (k trips
+    // through the line's filter), as the file's expand. A copy keeps the
+    // note's vibrato, delayed, or takes the pedal LFO's in its place; it is
+    // released at the note's release plus its own delay (mf104_reap), never
+    // by the sweep, which would cut it off before it had sounded
+    static const long long MFK0 = -(1LL << 20);     // a repeat's layer: MFK0 - (n0 64 + layer 32 + k)
+    struct MfGroup {
+        Key key;
+        long direct;
+        std::vector<std::pair<Key, long long>> group;
+    };
+    std::vector<MfGroup> mf_groups;
+
+    // mf104.bessel_i: I_n(x) by its series, summed as Python's sum() sums floats
+    static double mf_bessel_i(int n, double x)
+    {
+        double t[12];
+        for (int m = 0; m < 12; m++) {
+            long long a = 1, b = 1;
+            for (int q = 2; q <= m; q++)
+                a *= q;
+            for (int q = 2; q <= m + n; q++)
+                b *= q;
+            t[m] = pow(x / 2.0, (double)(2 * m + n)) / (double)(a * b);
+        }
+        return pysum(t, 12);
+    }
+
+    // the template's rows where m (live's {c: v[m]}): every per-row column
+    static nv::live::Template sub_template(const nv::live::Template &T, const std::vector<char> &m)
+    {
+        nv::live::Template o;
+        long P = T.P;
+        auto cut = [&](auto &dst, const auto &src) {
+            dst.clear();
+            if ((long)src.size() != P)
+                return;
+            for (long q = 0; q < P; q++)
+                if (m[q])
+                    dst.push_back(src[q]);
+        };
+        for (int c = 0; c < 6; c++) cut(o.f8[c], T.f8[c]);
+        for (int c = 0; c < 27; c++) cut(o.f4[c], T.f4[c]);
+        for (int c = 0; c < 4; c++) cut(o.f4n[c], T.f4n[c]);
+        for (int c = 0; c < 2; c++) cut(o.i8[c], T.i8[c]);
+        for (int c = 0; c < 6; c++) cut(o.i4[c], T.i4[c]);
+        cut(o.hrel, T.hrel); cut(o.fa_at, T.fa_at); cut(o.rof, T.rof); cut(o.sof, T.sof); cut(o.cof, T.cof);
+        cut(o.lflip, T.lflip); cut(o.lhorn, T.lhorn); cut(o.lfl, T.lfl); cut(o.lsh, T.lsh); cut(o.lnrm, T.lnrm);
+        cut(o.push, T.push);
+        long n = 0;
+        for (long q = 0; q < P; q++)
+            n += m[q] != 0;
+        o.P = n;
+        o.dur = T.dur; o.vel = T.vel; o.oneshot = T.oneshot; o.min_hold = T.min_hold;
+        o.moog = T.moog; o.ft_f0 = T.ft_f0; o.ft_pre = T.ft_pre;
+        o.scatter_ms = 0.0;
+        return o;
+    }
+
+    void mf104(const Patch &p, int ch, int note, const nv::live::Template &T, const Key &key,
+               const std::vector<long> &slots, double scale, long long n0, double b, int layer)
+    {
+        MoogLayer La;
+        const MoogLayer *L = moog_panel(p, ch, La, layer);
+        if (!L || !L->mf_on)
+            return;
+        const double time = L->mf[0], fc = L->mf[1], fb = L->mf[2], wet = L->mf[3], dry = L->mf[4],
+                     lrate = L->mf[5], amount = L->mf[6];
+        size_t n = slots.size();
+        if ((long)n != T.P)
+            return;
+        // each partial's sounding frequency, the bend taken back out as the
+        // file's rows have it; the line's filter at it; only what sounds
+        std::vector<double> f(n), h(n), rel(n);
+        std::vector<char> snd(n);
+        double top = 0.0, fmin = 0.0;
+        bool anys = false;
+        long long on = 0;
+        for (size_t i = 0; i < n; i++) {
+            long s = slots[i];
+            f[i] = S.f8[F8_om][s] * rate / (2.0 * M_PI) / (b != 0.0 ? b : 1.0);
+            double x = fabs(f[i]) / fc;
+            h[i] = pow(1.0 + x * x, -L->mf_poles / 2.0);
+            float aL = fabsf(S.f4[F4_aL][s]), aR = fabsf(S.f4[F4_aR][s]);
+            snd[i] = (aL + aR) > 0.0f;
+            rel[i] = (double)std::max(aL, aR);
+            top = i == 0 ? rel[i] : std::max(top, rel[i]);
+            if (snd[i]) {
+                fmin = anys ? std::min(fmin, f[i]) : f[i];
+                anys = true;
+            }
+            double o = (double)S.i8[0][s] - (double)S.f4[F4_rdl][s];
+            long long oi = (long long)o;
+            on = i == 0 ? oi : std::min(on, oi);
+        }
+        if (top > 0.0)
+            for (size_t i = 0; i < n; i++)
+                rel[i] = rel[i] / top;
+        // mf104.delay_samples, mf104.repeats at the lowest that sounds
+        double mean = time * mf_bessel_i(0, amount * log(2.0));
+        long long g0 = (long long)L->mf_grid;
+        long long d0 = std::max(g0, (long long)nearbyint(mean * rate / L->mf_grid) * g0);
+        double xm = fabs(fmin) / fc, hm = pow(1.0 + xm * xm, -L->mf_poles / 2.0);
+        std::vector<std::pair<Key, long long>> group;
+        const double tpi = 2.0 * M_PI;
+        for (int k = 1; k <= (int)L->mf_max; k++) {
+            if (wet * pow(fb, (double)(k - 1)) * pow(hm, (double)k) < L->mf_floor)
+                break;
+            long long d = (long long)k * d0;
+            std::vector<double> g(n);
+            std::vector<char> m(n);
+            bool any = false;
+            for (size_t i = 0; i < n; i++) {
+                g[i] = wet * pow(fb, (double)(k - 1)) * pow(h[i], (double)k);
+                m[i] = g[i] * rel[i] >= L->mf_floor && snd[i];
+                any = any || m[i];
+            }
+            if (!any)
+                break;
+            nv::live::Template sub = sub_template(T, m);
+            Key ck(std::get<0>(key), ch, note, MFK0 - (n0 * 64 + layer * 32 + k));
+            if (!S.stamp_t(sub, ck, on + d, scale, ch, rate, 0.0)) {
+                dropped++;
+                break;
+            }
+            S.moog_stamp(sub, std::get<0>(key), ch, layer, L, rate);
+            std::vector<long> cs = S.last_slots;
+            if (cpan[ch] != 64)
+                S.repan(cs, cpan[ch], 64, rate, true);
+            std::vector<float> gm;
+            for (size_t i = 0; i < n; i++)
+                if (m[i])
+                    gm.push_back((float)g[i]);
+            S.channel_gain_each(cs, gm);
+            if (amount > 0.0) {             // the line's wobble, in place of the note's (mf104.lfo_vibrato)
+                double w = tpi * lrate, tau = (double)d0 / rate, sre = 0.0, sim = 0.0;
+                for (int j = 0; j < k; j++) {
+                    sre = sre + cos(w * (double)j * tau);
+                    sim = sim + -sin(w * (double)j * tau);
+                }
+                double dlt = time * 2.0 * mf_bessel_i(1, amount * log(2.0)) * hypot(sre, sim);
+                double th = atan2(sim, sre);
+                for (long q : cs) {
+                    double fq = S.f8[F8_om][q] * rate / (2.0 * M_PI);
+                    double t_on = (double)S.i8[0][q] / rate;
+                    S.f4[F4_vd][q] = (float)(w * dlt);
+                    S.f4[F4_vr][q] = (float)lrate;
+                    S.f4[21][q] = (float)(th - M_PI / 2.0);      // vp
+                    S.f4n[3][q] = 0.0f;                  // vdl
+                    double dp = -2.0 * M_PI * fq * dlt * sin(w * t_on + th);
+                    S.f8[F8_p0][q] += dp;
+                    S.f8[F8_p0R][q] += dp;
+                    S.vbase[q] = S.f4[F4_vd][q];
+                    S.vrbase[q] = S.f4[F4_vr][q];
+                }
+            } else {                        // the note's own vibrato, delayed
+                // (numpy 1.26's value-based casting: a Python float on a
+                // float32 column stays float32, rounded to it; a Python int
+                // too while it fits a uint16 -- past 65535 the product is
+                // float64, and so is the rest)
+                for (long q : cs) {
+                    float x = (float)tpi * S.f4[F4_vr][q];
+                    if (d <= 65535) {
+                        x = x * (float)d;
+                        x = x / (float)rate;
+                        S.f4[21][q] = S.f4[21][q] - x;
+                    } else {
+                        S.f4[21][q] = (float)((double)S.f4[21][q] - (double)x * (double)d / rate);
+                    }
+                }
+            }
+            if (b != 1.0)
+                retune(cs, n0, b);
+            group.emplace_back(ck, d);
+        }
+        if (!group.empty()) {
+            S.channel_gain(slots, dry);
+            long direct = slots[0];
+            for (long s : slots)
+                if (S.f4[F4_rdl][s] == 0.0f) {
+                    direct = s;
+                    break;
+                }
+            mf_groups.push_back(MfGroup{key, direct, group});
+        }
+    }
+
+    // live._mf104_reap: each repeat ends where its note ended, its own delay later
+    void mf104_reap()
+    {
+        std::vector<MfGroup> keep;
+        for (MfGroup &g : mf_groups) {
+            if (S.live_find(g.key) >= 0) {
+                keep.push_back(g);
+                continue;
+            }
+            long long off = S.i8[1][g.direct];
+            for (auto &c : g.group)
+                if (S.live_find(c.first) >= 0 && !S.oneshot.count(c.first))
+                    S.release(c.first, off + c.second);
+        }
+        mf_groups.swap(keep);
     }
 
     long dropped = 0;                           // ranks the slab had no room for (live.dropped)
@@ -6766,12 +6979,14 @@ struct Part {
             auto sq = sost.find(ck.first);
             if (!down.count(ck) && !pedalled.count(ck) && !S.oneshot.count(kv.first)
                 && !(sq != sost.end() && sq->second.count(ck.second)) && std::get<3>(kv.first) != AMPK
-                && std::get<3>(kv.first) < AMP_OLD0)
-                sw.push_back(kv.first);         // (not a valve's products, an old tone's either: not a note)
+                && std::get<3>(kv.first) < AMP_OLD0 && std::get<3>(kv.first) > MFK0)
+                sw.push_back(kv.first);         // (not a valve's products, an old tone's, a repeat's: not a note)
         }
         for (auto &k : sw)
             S.release(k, n0);
         damp_block(n0, blk);
+        if (!mf_groups.empty())
+            mf104_reap();
         S.reap(n0, blk);
         if (!scan_row.empty())                  // the scanners' band rows (live's _scanner_block)
             scanner_block(n0, blk);

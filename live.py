@@ -6945,7 +6945,9 @@ class Live:
         lvl = np.maximum(np.abs(a["aL"][idx0]), np.abs(a["aR"][idx0])).astype(np.float64)
         rel = lvl / lvl.max() if lvl.max() > 0.0 else lvl
         for k, d, _g in _MFD.repeats(st, float(f[snd].min()) if snd.any() else 0.0, self.rate):
-            g = st["wet"] * st["fb"] ** (k - 1) * h ** k
+            # (in libm's pow, as mf104.expand's Python floats -- numpy's own
+            # power is a last bit away on some, which native/slab.cpp cannot match)
+            g = np.array([st["wet"] * st["fb"] ** (k - 1) * x ** k for x in h])
             m = (g * rel >= _MFD.REPEAT_FLOOR) & snd
             if not m.any():
                 break

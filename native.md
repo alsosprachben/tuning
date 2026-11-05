@@ -22,7 +22,7 @@ kept by hand in the script's TASKS.
 What it needs first, and live's side:
 
 - [x] Program changes in nvlive: a builder thread, MIDI program change, the panel's picker
-- [ ] Live: the Moog (knob-neutral templates and the slab's moog.weights; the panel's knobs live)
+- [x] Live: the Moog (knob-neutral templates and the slab's moog.weights; CC71-75 its knobs; a layered voice; the MF-104M) -- a unison and SYNC wait on the files' (below)
 - [ ] Live: check the fiddle, tinkle bell, melodic tom, reverse cymbal and breath noise against live.Live
 - [ ] Live: a drum set identical to live.Live beyond the kick and toms (hats, timbales differ)
 - [ ] Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender's reader refuses it

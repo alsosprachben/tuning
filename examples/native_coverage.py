@@ -22,7 +22,8 @@ sys.path.insert(0, HERE)
 # reached, and live's side. (stage, done, text); kept by hand.
 TASKS = [
     ("GM1", True, "Program changes in nvlive: a builder thread, MIDI program change, the panel's picker"),
-    ("GM1", False, "Live: the Moog (knob-neutral templates and the slab's moog.weights; the panel's knobs live)"),
+    ("GM1", True, "Live: the Moog (knob-neutral templates and the slab's moog.weights; CC71-75 its knobs; "
+                  "a layered voice; the MF-104M) -- a unison and SYNC wait on the files' (below)"),
     ("GM1", False, "Live: check the fiddle, tinkle bell, melodic tom, reverse cymbal and breath noise against live.Live"),
     ("GM1", False, "Live: a drum set identical to live.Live beyond the kick and toms (hats, timbales differ)"),
     ("GM1", False, "Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender's reader refuses it"),
