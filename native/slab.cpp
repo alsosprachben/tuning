@@ -574,7 +574,8 @@ struct Slab {
     }
 
     // stamp_cols with a cached template (its own columns, hrel, dur)
-    bool stamp_t(const nv::live::Template &T, Key key, long long n0, double vel_scale, long long ch, double rate)
+    bool stamp_t(const nv::live::Template &T, Key key, long long n0, double vel_scale, long long ch, double rate,
+                 double scat = NAN)
     {
         const double *f8p[6];
         const float *f4p[27];
@@ -589,8 +590,8 @@ struct Slab {
         for (int c = 0; c < 6; c++)
             i4p[c] = T.i4[c].data();
         return stamp(f8p, f4p, i8p, i4p, T.hrel.data(), T.P, key, n0, vel_scale, T.dur, T.oneshot, NAN, ch,
-                     T.sof.empty() ? nullptr : T.sof.data(), T.rof.empty() ? nullptr : T.rof.data(), T.scatter_ms,
-                     rate);
+                     T.sof.empty() ? nullptr : T.sof.data(), T.rof.empty() ? nullptr : T.rof.data(),
+                     std::isnan(scat) ? T.scatter_ms : scat, rate);
     }
 
     // THE PAN TABLE (live.pan_table: CC10 -> left and right shadow alpha, half
@@ -1956,6 +1957,7 @@ struct Part {
         bool clav = false;          // a Clavinet's panel (clav_panel): CC1 its tone rockers
         bool wheel_vib = false;     // its wheel can be a vibrato (wheel_vibrato)
         const MoogLayer *moog = nullptr;    // a Moog's panel (its class's, layer A): Live._moog_panel_for
+        const MoogLayer *moog_b = nullptr;  // ...a layered one's second Messenger (moog.layers_of)
         int snd = 0;                // the CC71-78 its voice answers (NoteClass.snd_mask, SOUND_CC's order)
     };
     std::vector<Patch> patches;
@@ -2990,6 +2992,7 @@ struct Part {
         p.clav = !p.drums && k && k->clav_panel;
         p.wheel_vib = !p.drums && k && k->wheel_vibrato;
         p.moog = !p.drums && k && k->init.kind == 6 && k->moog.n_layer >= 1 ? &k->moog.L[0] : nullptr;
+        p.moog_b = p.moog && k->moog.n_layer >= 2 ? &k->moog.L[1] : nullptr;
         p.snd = !p.drums && k ? k->snd_mask : 0;
         p.organ = og;
         if (!og)
@@ -3349,6 +3352,20 @@ struct Part {
         if (T->moog) {                      // a Moog note: its rows, the panel on it (Slab._moog_stamp)
             MoogLayer La;
             S.moog_stamp(*T, pid, ch, 0, moog_panel(patches[cur], ch, La), rate);
+            // A LAYERED MOOG (moog.layers_of): the same knob-neutral template
+            // again for its second Messenger, under the same key -- so all
+            // below, and the key-up, act on both -- each stamp's rows reading
+            // its own panel; at layer A's onset, no scatter of its own (the
+            // file has the two together)
+            if (patches[cur].moog_b) {
+                double lo = INFINITY;
+                for (long s : S.last_slots)
+                    lo = std::min(lo, (double)S.i8[0][s] - (double)S.f4[F4_rdl][s]);
+                if (S.stamp_t(*T, key, (long long)lo, scale, ch, rate, 0.0))
+                    S.moog_stamp(*T, pid, ch, 1, moog_panel(patches[cur], ch, La, 1), rate);
+                else
+                    dropped++;
+            }
         }
         if (T->min_hold)
             tex_on[key] = n0 + T->min_hold; // a held texture: the least it plays
@@ -3917,13 +3934,14 @@ struct Part {
     // live._moog_panel_for (layer A): the part's panel with its channel's
     // GM sound controllers on it (moog.apply_gm) -- those its voice answers
     // at middle C (_snd_for at 60 - transpose); null if not a Moog
-    const MoogLayer *moog_panel(const Patch &p, int ch, MoogLayer &out) const
+    const MoogLayer *moog_panel(const Patch &p, int ch, MoogLayer &out, int layer = 0) const
     {
-        if (!p.moog)
+        const MoogLayer *base = layer ? p.moog_b : p.moog;
+        if (!base)
             return nullptr;
         const NoteClass *k = ch >= 0 ? key_class(p, 60) : nullptr;
         if (!k)
-            return p.moog;
+            return base;
         double d[8];
         bool any = false;
         for (int i = 0; i < 8; i++) {
@@ -3931,8 +3949,8 @@ struct Part {
             any = any || d[i] != 0.0;
         }
         if (!any)
-            return p.moog;
-        nv_moog_apply(p.moog, d, &out);
+            return base;
+        nv_moog_apply(base, d, &out);
         return &out;
     }
 
@@ -3942,34 +3960,38 @@ struct Part {
     // every one), each with its own sound controllers
     void moog_refresh(const Patch &p, long long n0, int only_ch = -2)
     {
-        std::vector<std::pair<long long, std::vector<long>>> by_ch;
-        auto at = [&](long long ch) -> std::vector<long> & {
+        // BY CHANNEL AND LAYER: a layered voice's two Messengers each with
+        // its own panel, its slots told apart by their row's layer
+        std::vector<std::pair<std::pair<long long, int>, std::vector<long>>> by_ch;
+        auto at = [&](long long ch, int lay) -> std::vector<long> & {
             for (auto &b : by_ch)
-                if (b.first == ch)
+                if (b.first == std::make_pair(ch, lay))
                     return b.second;
-            by_ch.emplace_back(ch, std::vector<long>());
+            by_ch.emplace_back(std::make_pair(ch, lay), std::vector<long>());
             return by_ch.back().second;
         };
         for (auto &kv : S.live)
             if (std::get<0>(kv.first) == p.pid && !kv.second.empty()
-                && (only_ch == -2 || std::get<1>(kv.first) == only_ch)) {
-                std::vector<long> &v = at(std::get<1>(kv.first));
-                v.insert(v.end(), kv.second.begin(), kv.second.end());
-            }
+                && (only_ch == -2 || std::get<1>(kv.first) == only_ch))
+                for (long s : kv.second) {
+                    int r = S.i4[I4_fx][s];
+                    at(std::get<1>(kv.first), r >= 0 ? S.ft_layer[r] : 0).push_back(s);
+                }
         for (auto &kk : S.kn_of)
-            if (std::get<0>(kk.first) == p.pid && std::get<2>(kk.first) == 0
-                && (only_ch == -2 || std::get<1>(kk.first) == only_ch))
-                at(std::get<1>(kk.first));
+            if (std::get<0>(kk.first) == p.pid && (only_ch == -2 || std::get<1>(kk.first) == only_ch))
+                at(std::get<1>(kk.first), std::get<2>(kk.first));
         Slab::Retune rt = [&](const std::vector<long> &idx, const std::vector<double> &sc) {
             for (size_t i = 0; i < idx.size(); i++)
                 retune(std::vector<long>(1, idx[i]), n0, sc[i]);
         };
         for (auto &b : by_ch) {
+            long long ch = b.first.first;
+            int lay = b.first.second;
             MoogLayer La;
-            const MoogLayer *L = moog_panel(p, (int)b.first, La);
+            const MoogLayer *L = moog_panel(p, (int)ch, La, lay);
             if (!L)
                 continue;
-            S.set_knobs(S.knob_row(std::make_tuple(p.pid, b.first, 0), L->kn), L->kn, true);
+            S.set_knobs(S.knob_row(std::make_tuple(p.pid, ch, lay), L->kn), L->kn, true);
             std::vector<long> idx;
             for (long s : b.second)
                 if (S.i4[I4_fx][s] >= 0)

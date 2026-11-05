@@ -144,12 +144,11 @@ def main(argv):
                 oidx[pc] = len(organs)
                 organs.append(bytes(N.organ(pc)))
             prog_organ.append(oidx[pc])
-    # (live's Moogs: knob-neutral templates the slab weighs from the panel --
-    # not yet a layered one (a second Messenger), an MF-104M's repeats or a
-    # unison)
+    # (live's Moogs: knob-neutral templates the slab weighs from the panel,
+    # one stamp a layer -- not yet an MF-104M's repeats or a unison)
     def _moog_later(c):
         sp = N.moog_spec(c)
-        return (sp is None or sp.n_layer != 1 or any(sp.L[l].mf_on for l in range(sp.n_layer))
+        return (sp is None or any(sp.L[l].mf_on for l in range(sp.n_layer))
                 or bool(getattr(c, 'moog_unison', None)))
     _moogs = {i for c, i in idx.items() if N.kit_drum(c) == 6 and _moog_later(c)}
     cmap_live = [-1 if x in _moogs else x for x in cmap]

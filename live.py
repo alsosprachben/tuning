@@ -8015,6 +8015,11 @@ class Live:
         vc = part.moog() if part is not None else None
         if vc is None:
             return None
+        # ...nor a layer the voice has not: a layered voice's second
+        # Messenger's notes still ringing after a program change to one
+        # without (88 -> 80) keep their panel, not the factory's
+        if layer not in _MG.layers_of(vc):
+            return None
         # a layered voice's second Messenger reads its own knobs (synth_b)
         knobs = dict(part.synth if layer == 'a' else part.synth_b)
         knobs.update(self.moog_glide.get(pid if layer == 'a' else (pid, layer), {}))
