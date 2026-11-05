@@ -347,7 +347,7 @@ struct Slab {
         std::vector<float> vd(n);
         for (long q = 0; q < n; q++)
             vd[q] = tf4[F4_vd][q];
-        float mv = pairwise(vd.data(), n) / (float)n;
+        float mv = (float)((double)pairwise(vd.data(), n) / (double)n);     // (np.mean: over the count in float64)
         for (long q = 0; q < n; q++)
             vsc[idx[q]] = (double)mv > 1e-12 ? vd[q] / mv : 1.0f;
         double swv = (ch >= 0 && ch < 256) ? send[ch] : 1.0;
