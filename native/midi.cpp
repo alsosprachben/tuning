@@ -154,6 +154,7 @@ struct Note {
     int vel;
     double v7, v11, pan;
     int prog, drum;
+    int mcut = 0, mslur = 0;    // mono mode's: cut off by the next (_MONO_CUT), arrived by a slur (_MONO_SLUR)
 };
 
 struct CCEv {
@@ -202,6 +203,144 @@ struct Parsed {
     std::vector<std::pair<int, int>> chprogs;  // ch_progs: a melodic channel's program changes, in message order
     std::map<int, int> parts;   // _voice_parts: a channel's voice part, by its track's name (nv_voice_body)
 };
+
+// _prep_mono_mode: MONO MODE (CC126 on, CC127 or GM System On off), each
+// channel in it a single voice -- a key pressed takes the voice (the one it
+// had cut, the handoff a slur), a key lifted that has it hands it back to
+// the last key still held (a slur), or lets it go. Its notes rewritten as
+// the spans the voice spent on each key, after the others, the way the
+// Python appends them (the song sorts them stably after)
+static void mono_mode(Parsed &P)
+{
+    std::vector<double> gm;
+    for (const CCEv &e : P.snd)
+        if (e.ch == -1 && e.cc == -1)
+            gm.push_back(e.t);
+    std::vector<int> chans;             // in the order their controllers first came (ccs' keys)
+    for (const CCEv &e : P.ccs)
+        if (std::find(chans.begin(), chans.end(), e.ch) == chans.end())
+            chans.push_back(e.ch);
+    std::vector<char> in_mono(P.notes.size(), 0);
+    std::vector<Note> mono_notes;
+    bool any = false;
+    for (int c : chans) {
+        std::vector<std::pair<double, bool>> mode;
+        for (const CCEv &e : P.ccs)
+            if (e.ch == c && (e.cc == 126 || e.cc == 127))
+                mode.emplace_back(e.t, e.cc == 126);
+        for (double t : gm)
+            mode.emplace_back(t, false);
+        std::stable_sort(mode.begin(), mode.end(), [](const std::pair<double, bool> &a,
+                                                      const std::pair<double, bool> &b) { return a.first < b.first; });
+        bool on = false;
+        for (auto &m : mode)
+            on = on || m.second;
+        if (!on)
+            continue;
+        std::vector<std::pair<double, double>> spans;
+        bool open = false;
+        double st = 0.0;
+        for (auto &m : mode) {
+            if (m.second && !open) {
+                st = m.first;
+                open = true;
+            } else if (!m.second && open) {
+                spans.emplace_back(st, m.first);
+                open = false;
+            }
+        }
+        if (open)
+            spans.emplace_back(st, P.total + 1.0);
+        auto mono_at = [&](double t) {
+            for (auto &s : spans)
+                if (s.first <= t && t < s.second)
+                    return true;
+            return false;
+        };
+        std::vector<int> mine;
+        for (size_t i = 0; i < P.notes.size(); i++)
+            if (P.notes[i].ch == c && mono_at(P.notes[i].on))
+                mine.push_back((int)i);
+        if (mine.empty())
+            continue;
+        any = true;
+        for (int i : mine)
+            in_mono[i] = 1;
+        // releases before presses at one instant (a key lifted as the next
+        // goes down is no overlap), each list in the notes' order
+        struct E {
+            double t;
+            int kind, n;
+        };
+        std::vector<E> ev;
+        for (int i : mine)
+            ev.push_back(E{P.notes[i].on, 1, i});
+        for (int i : mine)
+            ev.push_back(E{P.notes[i].off, 0, i});
+        std::stable_sort(ev.begin(), ev.end(), [](const E &a, const E &b) {
+            return a.t != b.t ? a.t < b.t : a.kind < b.kind;
+        });
+        std::vector<int> stack;
+        bool have = false;
+        int cur_n = -1;
+        double cur_t = 0.0;
+        bool cur_slur = false;
+        auto emit = [&](int src, double start, double end, bool slur, bool cut) {
+            if (end - start <= 1e-9)
+                return;
+            Note x = P.notes[src];
+            x.ch = c;
+            x.on = start;
+            x.off = end;
+            x.mslur = slur;
+            x.mcut = cut;
+            mono_notes.push_back(x);
+        };
+        for (const E &e : ev) {
+            const Note &nn = P.notes[e.n];
+            if (e.kind == 1) {
+                if (have)
+                    emit(cur_n, cur_t, e.t, cur_slur, true);
+                std::vector<int> ns;
+                for (int x : stack)
+                    if (P.notes[x].note != nn.note)
+                        ns.push_back(x);
+                ns.push_back(e.n);
+                stack.swap(ns);
+                cur_slur = have;
+                cur_n = e.n;
+                cur_t = e.t;
+                have = true;
+            } else {
+                bool top = have && P.notes[cur_n].note == nn.note;
+                std::vector<int> ns;
+                for (int x : stack)
+                    if (P.notes[x].note != nn.note)
+                        ns.push_back(x);
+                stack.swap(ns);
+                if (!top)
+                    continue;           // already replaced: nothing sounds for it
+                if (!stack.empty()) {
+                    emit(cur_n, cur_t, e.t, cur_slur, true);
+                    cur_n = stack.back();       // back to the key still down
+                    cur_t = e.t;
+                    cur_slur = true;
+                } else {
+                    emit(cur_n, cur_t, e.t, cur_slur, false);
+                    have = false;
+                }
+            }
+        }
+    }
+    if (!any)
+        return;
+    std::vector<Note> keep;
+    for (size_t i = 0; i < P.notes.size(); i++)
+        if (!in_mono[i])
+            keep.push_back(P.notes[i]);
+    keep.insert(keep.end(), mono_notes.begin(), mono_notes.end());
+    P.notes.swap(keep);
+}
 
 // _legato_ticks: the notes that begin contiguously with what their channel
 // was playing before, judged in the file's ticks -- each track's notes paired
@@ -562,11 +701,6 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         // polytouch (A0) and aftertouch (D0) carry no note or controller here
     }
     P.total = t;
-    // MONO MODE (CC126) rewrites a channel's notes as one voice
-    // (_prep_mono_mode): not here
-    for (const CCEv &e : P.ccs)
-        if (e.cc == 126)
-            return -7;
     // ALL NOTES OFF and the channel-mode messages that carry it (CC123-127,
     // _prep_notes_off): each key held on the channel lifted at the first one
     // after its onset, if that comes before its own key-up
@@ -583,6 +717,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                     n.off = *it;
             }
     }
+    mono_mode(P);
     return 0;
 }
 
@@ -673,9 +808,12 @@ void nv_midi_song(void *p, void *song, const double *trim)
     const nv::Parsed *P = (nv::Parsed *)p;
     for (const nv::CCEv &e : P->ccs)
         nv_song_cc(song, e.ch, e.t, e.cc, e.v);
-    for (const nv::Note &n : P->notes)
+    for (const nv::Note &n : P->notes) {
         nv_song_note(song, n.ch, n.note, n.on, n.off, n.vel, n.v7, n.v11, n.pan,
                      trim[(n.drum ? 128 : 0) + n.prog], n.prog, n.drum);
+        if (n.mcut || n.mslur)
+            nv_song_note_mono(song, nv_song_n_notes(song) - 1, n.mcut, n.mslur);
+    }
     for (const auto &l : P->legato)
         nv_song_legato(song, l[0], l[1], l[2]);
     for (const nv::CCEv &e : P->snd)

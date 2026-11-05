@@ -197,6 +197,7 @@ struct Ev {
     // a throat's pulse (stroke_tilt, stroke_mouth, stroke_morph): NaN, none
     double tilt = NAN, mouth = NAN, morph = NAN;
     int stroked = 0;                    // one of a gesture's strokes (_prep_strokes' _stroked)
+    int mcut = 0, mslur = 0;            // mono mode's: cut by the next, arrived by a slur
 };
 
 // A file's channels and notes.
@@ -1124,6 +1125,25 @@ double nv_song_tess(void *s, long long ch)
 
 void nv_song_set_part(void *s, long long ch, int part) { ((nv::Song *)s)->parts[ch] = part; }
 
+void nv_song_note_mono(void *s, int i, int mcut, int mslur)
+{
+    nv::Song *S = (nv::Song *)s;
+    if (i >= 0 && i < (int)S->notes.size()) {
+        S->notes[i].mcut = mcut;
+        S->notes[i].mslur = mslur;
+    }
+}
+
+int nv_song_mono(void *s, int i, int *mcut, int *mslur)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (i < 0 || i >= (int)S->notes.size())
+        return 0;
+    *mcut = S->notes[i].mcut;
+    *mslur = S->notes[i].mslur;
+    return 1;
+}
+
 int nv_song_part(void *s, long long ch)
 {
     const auto &m = ((nv::Song *)s)->parts;
@@ -1389,28 +1409,44 @@ int nv_song_organ_wind_rows(void *s, int row0) { return ((nv::Song *)s)->organ_w
 // THE ORGANS' ROWS, the song's length known: each rank's gate and each
 // organ's swell (onepole_blocks of their events, nblk each, in G and S);
 // sh the swell law (_prep_swell_law: the first organ's whose floor is under
-// 1, else the last's; sh left as given with none). -1: two organs with laws
-// of their own (the re-mapping is Python's)
+// 1, else the last's; sh left as given with none) -- ONE LAW A RENDER, EVERY
+// ORGAN ITS OWN LEVEL: an organ whose law is another has its row re-mapped
+// so the law gives the level its own would,
+//     L = f_i + (1 - f_i) s^p_i,   s' = ((L - f_g) / (1 - f_g))^(1/p_g)
+// (open where the law has no range)
 int nv_song_organ_rows(void *s, long nblk, int blk, double sr, double tau, float *G, float *S, double *sh)
 {
     nv::Song *Sg = (nv::Song *)s;
     const double *law = nullptr, *first = nullptr;
+    std::vector<std::pair<long, const double *>> laws;      // (its swell row, its law), in the organs' order
     for (const auto &o : Sg->organs) {
         for (int ri = 0; ri < o.spec->n_rank; ri++)
             nv::Song::onepole(o.rank_ev[ri], nblk, blk, sr, tau, G + (long)(o.g0 + ri) * nblk);
         nv::Song::onepole(o.swell_ev, nblk, blk, sr, tau, S + (long)o.cr * nblk);
         if (!o.spec->swells)
             continue;
-        if (law && (law[0] != o.spec->swell_law[0] || law[1] != o.spec->swell_law[1]))
-            return -1;
         law = o.spec->swell_law;
+        laws.emplace_back((long)o.cr, law);
         if (!first && law[0] < 1.0)
             first = law;
     }
     const double *use = first ? first : law;
-    if (use)
+    if (use) {
         for (int q = 0; q < 4; q++)
             sh[q] = use[q];
+        const double fg = use[0], pg = use[1];
+        auto clip = [](double x) { return x < 0.0 ? 0.0 : (x > 1.0 ? 1.0 : x); };
+        for (auto &lw : laws) {
+            const double fi = lw.second[0], pi = lw.second[1];
+            if (fi == fg && pi == pg)
+                continue;
+            float *row = S + lw.first * nblk;
+            for (long q = 0; q < nblk; q++) {
+                double L = fi + (1.0 - fi) * pow(clip((double)row[q]), pi);
+                row[q] = fg < 1.0 ? (float)pow(clip((L - fg) / (1.0 - fg)), 1.0 / pg) : 1.0f;
+            }
+        }
+    }
     return 0;
 }
 

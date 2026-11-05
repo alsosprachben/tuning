@@ -395,14 +395,12 @@ int main(int argc, char **argv)
         }
     }
     std::vector<double> first(256, INFINITY);
-    std::vector<char> drum_ch(256, 0);
     for (int i = 0, n = nv_midi_n_notes(midi); i < n; i++) {
         int iv[5];
         double dv[5];
         nv_midi_note(midi, i, iv, dv);
         if (dv[0] < first[iv[0] & 255])
             first[iv[0] & 255] = dv[0];
-        drum_ch[iv[0] & 255] |= iv[4] != 0;
         int cq = E.cmap[(iv[4] ? NV_K_DRUMS : 0) + 128 * iv[3] + iv[1]];
         if (cq < 0) {
             fprintf(stderr, "nvrender: refused: a note no native voice plays (program %d, key %d%s)\n", iv[3], iv[1],
@@ -447,19 +445,6 @@ int main(int argc, char **argv)
                 return 2;
             }
         }
-    }
-    // A DRUM CHANNEL'S WHEEL OR TUNING moves its drums (a kit drum can be
-    // bent: blockrender's bend row), which the bend passes do not make
-    for (int i = 0, n = nv_midi_n_pitch(midi); i < n; i++) {
-        int iv[2];
-        long seq;
-        double t, v;
-        nv_midi_pitch(midi, i, iv, &seq, &t, &v);
-        if (iv[0] >= 0 && drum_ch[iv[0] & 255]) {
-            fprintf(stderr, "nvrender: refused: a drum channel's pitch wheel or tuning\n");
-            return 2;
-        }
-
     }
     const double total = nv_midi_total(midi);
     // THE SONG
@@ -540,10 +525,6 @@ int main(int argc, char **argv)
             int cq = E.cmap[128 * p + 60];
             const NoteClass *k = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
             if (k && k->breath) {
-                if (std::find(gch.begin(), gch.end(), c) != gch.end()) {
-                    fprintf(stderr, "nvrender: refused: a breathing channel's pitch wheel\n");
-                    return 2;
-                }
                 br[512 + c] = (double)(gch.size() + 2 * bch.size());
                 br[768 + c] = br[512 + c] + 1.0;
                 bch.push_back(c);
@@ -672,9 +653,23 @@ int main(int argc, char **argv)
         std::vector<int> tch(nt);
         std::vector<double> tcfg(4 * nt);
         nv_song_organ_tremolos(song, which, tch.data(), tcfg.data(), nt);
+        // (each keyed by its notes' mix channels, em.channel's: an organ after
+        // another tone on its channel stands on channel + TONE_SEG k)
         std::map<int, std::vector<double>> chans;
-        for (int q = 0; q < nt; q++)
-            chans[tch[q]] = std::vector<double>(tcfg.begin() + 4 * q, tcfg.begin() + 4 * q + 4);
+        for (int q = 0; q < nt; q++) {
+            std::vector<double> cf(tcfg.begin() + 4 * q, tcfg.begin() + 4 * q + 4);
+            for (int i = 0, nn = nv_song_n_notes(song); i < nn; i++) {
+                long long ch;
+                int iv[4];
+                double dv[2];
+                nv_song_get_note(song, i, &ch, iv, dv);
+                if (ch != tch[q] || iv[3])
+                    continue;
+                int cq = E.cmap[128 * iv[2] + iv[0]];
+                if (cq >= 0 && E.cls_organ[cq] >= 0)
+                    chans[(int)nv_song_mix(song, i)] = cf;
+            }
+        }
         if (which == 1) {                   // ...and an ordinary voice's (_note_tremolo), beside the organs'
             int nv_ = nv_song_trems(song, nullptr, nullptr, 0);
             std::vector<long long> vch(nv_);
@@ -883,6 +878,22 @@ int main(int argc, char **argv)
         nv_breath_rows(9173ULL + (unsigned long long)bch[q], nblk, (int)BLK, SR, bcls[q]->breath_p,
                        BRr.data() + r0 * nblk, BCr.data() + r0 * nblk, BLr.data() + r0 * (nblk + 1), nl.data());
         std::copy(nl.begin(), nl.end(), BLr.data() + (r0 + 1) * (nblk + 1));
+        // ...TIMES THE CHANNEL's GESTURE where it has one (its wheel, its
+        // tuning): the ratio a product in float64 kept as float32, the phase
+        // the running sum of the product's (bend_blocks')
+        size_t gr = (size_t)(std::find(gch.begin(), gch.end(), bch[q]) - gch.begin());
+        if (gr < ng) {
+            float *rr = BRr.data() + r0 * nblk;
+            double *cc = BCr.data() + r0 * nblk;
+            const float *g = BRr.data() + gr * nblk;
+            for (long b = 0; b < nblk; b++)
+                rr[b] = (float)((double)g[b] * (double)rr[b]);
+            double acc = 0.0;
+            for (long b = 0; b < nblk; b++) {
+                cc[b] = acc;
+                acc = acc + ((double)rr[b] - 1.0) * (double)BLK;
+            }
+        }
     }
     if (nw)                                 // the chests' wind, after the breath
         nv_song_organ_wind(song, nblk, (int)BLK, SR, Gt.data(), BRr.data() + (ng + nbr_) * nblk,

@@ -2615,13 +2615,16 @@ def _prep_swell_law(Srows, _laws, sh):
     if _laws:
         sh = next((lw for _r, lw in _laws if lw[0] < 1.0), _laws[-1][1])
         fg, pg = sh[0], sh[1]
+        # (libm's pow, native.xpow: numpy's own is a last bit away on some,
+        # and nvrender re-maps them too -- channel.cpp's nv_song_organ_rows)
+        import native as _NVX
         for _r, (fi, pi, _hm, _hr) in _laws:
             if (fi, pi) == (fg, pg):
                 continue
             _s = np.asarray(Srows[_r], np.float64)
-            _L = fi + (1.0 - fi) * np.clip(_s, 0.0, 1.0) ** pi
+            _L = fi + (1.0 - fi) * _NVX.xpow(np.clip(_s, 0.0, 1.0), pi)
             if fg < 1.0:
-                Srows[_r] = np.clip((_L - fg) / (1.0 - fg), 0.0, 1.0) ** (1.0 / pg)
+                Srows[_r] = _NVX.xpow(np.clip((_L - fg) / (1.0 - fg), 0.0, 1.0), 1.0 / pg)
             else:
                 Srows[_r] = np.ones_like(_s)      # a law with no range: open
     return sh

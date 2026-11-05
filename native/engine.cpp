@@ -807,9 +807,13 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             n.slurred = sl[0];
             n.slur_out = sl[1];
         }
+        {
+            int mc = 0, ms = 0;                 // mono mode's handoffs (_MONO_CUT, _MONO_SLUR)
+            nv_song_mono(song, i, &mc, &ms);
+            n.mcut = mc;
+            n.slurred = n.slurred || ms;
+        }
         n.channel = (double)nv_song_mix(song, i);      // (its tone's mix channel: em.channel)
-        if (k->organ && (long long)n.channel != ch)
-            return -(1 + i);                    // (an organ after another tone on its channel: its tremolo's Python's)
         n.br = (ch >= 0 && ch < nbr) ? br[ch] : -1.0;
         if (nbr > 256 && k->bendable && ch >= 0 && ch < 256 && br[256 + ch] >= 0.0)
             n.br = br[256 + ch];            // a voice that bends: its channel's bend row

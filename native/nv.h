@@ -1010,6 +1010,9 @@ void nv_song_cc(void *s, long long ch, double t, int cc, int v);
 void nv_sound_shape(const NoteClass *k, const double *nf, long n, double db, double dr, int bright, int res,
                     double *g);
 void nv_normalise_power(const double *amp, long n, double *g);
+/* mono mode's flags on song note i (_MONO_CUT, _MONO_SLUR); and read back */
+void nv_song_note_mono(void *s, int i, int mcut, int mslur);
+int nv_song_mono(void *s, int i, int *mcut, int *mslur);
 double nv_song_tess(void *s, long long ch);
 void nv_song_set_part(void *s, long long ch, int part);
 int nv_song_part(void *s, long long ch);

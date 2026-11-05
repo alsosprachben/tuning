@@ -28,7 +28,7 @@ TASKS = [
     ("GM1", True, "Live: a drum set identical to live.Live beyond the kick and toms (the Standard set's every key, "
                   "nvlive end to end)"),
     ("GM1", False, "Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender's reader refuses it"),
-    ("GM1", False, "Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)"),
+    ("GM1", True, "Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)"),
     ("GM1", False, "Moog: an MF-104M on a note whose pitch or shapes move (SYNC and a unison: native in files)"),
     ("GM2", False, "Bank select (CC0/CC32) and GM2's banks (120 drums, 121 melodic) in nvrender's reader "
                    "and nvlive -- the reader refuses any bank today"),
