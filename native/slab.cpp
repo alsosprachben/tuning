@@ -1539,7 +1539,8 @@ struct Piano {
         const Patch &p = patches[pi];
         auto st = drive_step.find(apid);
         double drive = st == drive_step.end() ? p.amp : p.amp * 4.0 * st->second / (double)LIVE_DRIVE_STEPS;
-        std::vector<long> slots;
+        std::vector<const std::vector<long> *> groups;
+        size_t nslots = 0;
         for (auto &kv : S.live) {
             const Key &k = kv.first;
             if (std::get<0>(k) != apid || std::get<3>(k) == AMPK || std::get<3>(k) >= AMP_OLD0)
@@ -1547,22 +1548,28 @@ struct Piano {
             auto t = key_tone.find(Key(std::get<0>(k), std::get<1>(k), std::get<2>(k), 0));
             if (t != key_tone.end() && t->second != p.cache)
                 continue;                   // this tone's notes only
-            slots.insert(slots.end(), kv.second.begin(), kv.second.end());
+            groups.push_back(&kv.second);
+            nslots += kv.second.size();
         }
-        if (drive <= 0.0 || slots.size() < 2) {
+        if (drive <= 0.0 || nslots < 2) {
             S.release(key, n0);
             return false;
         }
-        double mn = 0.0;
-        for (size_t q = 0; q < slots.size(); q++) {
-            double dl = (double)S.f4[F4_delL][slots[q]] + (double)S.f4[F4_delR][slots[q]];
-            if (q == 0 || dl < mn)
-                mn = dl;
-        }
+        // each note's direct sound, its own shortest path (live's: the stage
+        // places a key by its pitch, so one minimum for the chord left out
+        // every note more than 2 samples later than the earliest)
         std::vector<long> idx;
-        for (long s : slots)
-            if ((double)S.f4[F4_delL][s] + (double)S.f4[F4_delR][s] <= mn + 2.0)
-                idx.push_back(s);
+        for (const std::vector<long> *g : groups) {
+            double mn = 0.0;
+            for (size_t q = 0; q < g->size(); q++) {
+                double dl = (double)S.f4[F4_delL][(*g)[q]] + (double)S.f4[F4_delR][(*g)[q]];
+                if (q == 0 || dl < mn)
+                    mn = dl;
+            }
+            for (long s : *g)
+                if ((double)S.f4[F4_delL][s] + (double)S.f4[F4_delR][s] <= mn + 2.0)
+                    idx.push_back(s);
+        }
         if (idx.size() < 2) {
             S.release(key, n0);
             return false;

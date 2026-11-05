@@ -9874,12 +9874,12 @@ class Live:
                 ref_e *= float(efx['level'])
         _effx = self._efx_od(part)
         _b_od = bool(_effx is not None and (_effx.get('par') or {}).get('B', {}).get('od_gain'))
-        slots = [sl for k, ss in self.slab.live.items()
-                 if k[0] == pid and k[3] != "amp"
-                 and not (isinstance(k[3], str) and k[3].startswith(self.AMP_OLD))
-                 and self.key_tone.get((k[0], k[1], k[2]), part.patch) is part.patch   # this tone's notes
-                 and (_b_od or not (isinstance(k[3], str) and k[3].startswith(self.EFX_SLOT + "B")))
-                 for sl in ss]
+        groups = [ss for k, ss in self.slab.live.items()
+                  if k[0] == pid and k[3] != "amp"
+                  and not (isinstance(k[3], str) and k[3].startswith(self.AMP_OLD))
+                  and self.key_tone.get((k[0], k[1], k[2]), part.patch) is part.patch   # this tone's notes
+                  and (_b_od or not (isinstance(k[3], str) and k[3].startswith(self.EFX_SLOT + "B")))]
+        slots = [sl for ss in groups for sl in ss]
         if drive <= 0.0 or len(slots) < 2:
             # Wheel down, or nothing left to intermodulate: the stage is clean.
             self.slab.release(key, n0)
@@ -9897,9 +9897,23 @@ class Live:
         # Offline says this as `dr > 0.5`; live has no such column, so it is
         # the shortest path -- which is what "direct" means. Nothing reflected
         # can arrive sooner than the straight line.
-        dl = (self.slab.a["delL"][idx].astype(np.float64)
-              + self.slab.a["delR"][idx].astype(np.float64))
-        idx = idx[dl <= dl.min() + 2.0]
+        #
+        # EACH NOTE's shortest path, not the chord's: the stage places a key
+        # by its pitch, so the direct sound of the guitar's keys spans ~11
+        # samples (key 40 at 570.6, 64 at 559.8, 88 at 564.2), and one minimum
+        # for all left out every note more than 2 samples later than the
+        # earliest -- a note played below a held one went in clean, and the
+        # held note's distortion was redrawn without it (Ben, live).
+        # Reflections come ~300 samples after their own note's direct sound.
+        keep = []
+        for ss in groups:
+            if not len(ss):
+                continue
+            gi = np.fromiter(ss, np.int64, len(ss))
+            dl = (self.slab.a["delL"][gi].astype(np.float64)
+                  + self.slab.a["delR"][gi].astype(np.float64))
+            keep.append(gi[dl <= dl.min() + 2.0])
+        idx = np.concatenate(keep)
         if len(idx) < 2:
             self.slab.release(key, n0)
             return None
