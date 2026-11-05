@@ -544,7 +544,20 @@ double nv_harmonic_decay(const VoiceSnap *v, int harmonic)
     }
     double h = (double)harmonic;                /* mode_ratios None */
     double base = v->decay_db + v->harmonic_decay_db * h * pow(h, v->harmonic_decay_dampening);
-    return base * v->decay_register_factor;
+    base = base * v->decay_register_factor;
+    if (v->pd_max_hz != 0.0) {                  /* PromptDecay: the prompt fall under its corner */
+        double f = v->frequency_x * pow(2.0, v->octave_position) * harmonic;
+        if (f < v->pd_max_hz)
+            return v->pd_dbs > base ? v->pd_dbs : base;     /* (max(base, prompt_dbs)) */
+    }
+    return base;
+}
+
+/* PromptDecay's ring: the law without the prompt fall */
+static double prompt_ring(const VoiceSnap *v, int harmonic)
+{
+    double h = (double)harmonic;
+    return (v->decay_db + v->harmonic_decay_db * h * pow(h, v->harmonic_decay_dampening)) * v->decay_register_factor;
 }
 
 /* GrandPianoProperties._string_blend */
@@ -896,6 +909,13 @@ void nv_partial_decay(const VoiceSnap *v, double f0, int m, double *out)
             a[0] = v->mode_after[m - 1][0];
             a[1] = v->mode_after[m - 1][1] * v->decay_register_factor;
         }
+    } else if (v->pd_max_hz != 0.0) {           /* PromptDecay.aftersound_partial: the ring under the fall */
+        a[0] = 0.0;
+        a[1] = dbps;
+        if (v->pd_share > 0.0 && f0 * m < v->pd_max_hz) {
+            a[0] = v->pd_share;
+            a[1] = prompt_ring(v, m);
+        }
     } else if (v->kind == 1 && v->slow_max_hz != 0.0 && f0 * nv_mode_ratio(v, m) > v->slow_max_hz) {
         a[0] = 0.0;                             /* aftersound_partial: no remainder up here */
         a[1] = dbps;
@@ -1130,6 +1150,32 @@ static void sung_formants(const VoiceInit *c, double frequency, VoiceSnap *s)
     for (int i = 0; i < n; i++)
         for (int j = 0; j < 3; j++)
             s->fm[i][j] = out[i][j];
+}
+
+/* _bore_norm: the series' power at the voice's own tonal dampening,
+   unfiltered, over the bore's -- at the gain the voice has now (the
+   Python's is read lazily, at the first harmonic) */
+static void bore_norm(const VoiceInit *c, VoiceSnap *s)
+{
+    double f0 = s->frequency_x * pow(2.0, s->octave_position), ref = 0.0, shaped = 0.0;
+    int top = s->max_harmonic ? s->max_harmonic : 64;
+    for (int h = 1; h <= top; h++) {
+        double a = nv_series_volume(s, h);
+        if (a == 0.0)
+            continue;
+        double r = a * pow((double)h, s->attack_dampening - c->tonal_dampening);
+        ref += r * r;
+        double g = a * bore_gain(s, f0 * h);
+        shaped += g * g;
+    }
+    s->bore_norm = shaped > 0.0 ? pow(ref / shaped, 0.5) : 1.0;
+}
+
+void nv_voice_regain(const VoiceInit *c, VoiceSnap *s, double k)
+{
+    s->gain *= k;
+    if (s->bore_corner_hz != 0.0)
+        bore_norm(c, s);
 }
 
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
@@ -1369,22 +1415,8 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
         }
         s->gain *= pow(10.0, d / 20.0);
     }
-    if (s->bore_corner_hz != 0.0) {
-        /* _bore_norm: the series' power at the voice's own tonal dampening,
-           unfiltered, over the bore's */
-        double f0 = s->frequency_x * pow(2.0, op), ref = 0.0, shaped = 0.0;
-        int top = s->max_harmonic ? s->max_harmonic : 64;
-        for (int h = 1; h <= top; h++) {
-            double a = nv_series_volume(s, h);
-            if (a == 0.0)
-                continue;
-            double r = a * pow((double)h, s->attack_dampening - c->tonal_dampening);
-            ref += r * r;
-            double g = a * bore_gain(s, f0 * h);
-            shaped += g * g;
-        }
-        s->bore_norm = shaped > 0.0 ? pow(ref / shaped, 0.5) : 1.0;
-    }
+    if (s->bore_corner_hz != 0.0)
+        bore_norm(c, s);
     if (s->or_set) {
         /* MusicBoxProperties.mode_gains_here: its key's octave below */
         double f = s->frequency_x * pow(2.0, s->octave_position);

@@ -273,6 +273,9 @@ typedef struct {
        players a few cents each way (hit_cents, hit_n of them) at hit_gain */
     int hit_n;
     double hit_cents[8], hit_gain;
+    /* A TWO-STAGE DECAY (PromptDecay): every partial under pd_max_hz falls
+       at pd_dbs at first, pd_share of it ringing on at the law; 0 none */
+    double pd_max_hz, pd_dbs, pd_share;
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -591,6 +594,9 @@ int nv_moog_tone(const VoiceSnap *v, const ToneIn *t, const MoogLayer *L, double
                  const int *nsurf, const int *surf, const double *img, const double *mir, double *rows, int cap,
                  double *qacc, double *azimuth);
 
+/* the voice's gain scaled after it is built (props.gain *= k), what was
+   read from it made again (the bore's norm) */
+void nv_voice_regain(const VoiceInit *c, VoiceSnap *s, double k);
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
                    double attack_volume, double channel_volume, double effort, PyRandom *rs,
                    VoiceSnap *s, VoiceNote *o);
@@ -879,6 +885,7 @@ typedef struct {
     double sung_hz;
     int part;
     double dist;            // its distance multiple (_src_dist: CC91 / 40, or its step at the onset); 0: 1
+    double gliss_lv;        // a valved gliss's step: its level (_GLISS), 0: none
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -1013,6 +1020,11 @@ void nv_normalise_power(const double *amp, long n, double *g);
 /* mono mode's flags on song note i (_MONO_CUT, _MONO_SLUR); and read back */
 void nv_song_note_mono(void *s, int i, int mcut, int mslur);
 int nv_song_mono(void *s, int i, int *mcut, int *mslur);
+/* the valved glisses walked (_prep_gliss): the song's notes rewritten, once;
+   and a note's step (level, smear, the step it arrives from or -1, the step's
+   time), 0 not one */
+void nv_song_gliss(void *s, const NoteClass *const *K);
+int nv_song_gliss_note(void *s, int i, double *out);
 double nv_song_tess(void *s, long long ch);
 void nv_song_set_part(void *s, long long ch, int part);
 int nv_song_part(void *s, long long ch);

@@ -228,6 +228,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
                      double ring_max, double *out, double knee_db, double ln10_20, double xdec_nepers, double SR,
                      void **dm, int with_register)
 {
+    nv_song_gliss(song, K);                 // the valved glisses walked (_prep_gliss), before the notes are counted
     long long nnote = 0;
     int nn = nv_song_n_notes(song);
     std::vector<int> played(nn), bands(nn);

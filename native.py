@@ -102,7 +102,8 @@ class VoiceSnap(ctypes.Structure):
                 ('cl_ref_m', C), ('cl_ref_hz', C), ('cl_pow', C), ('cl_bridge', C), ('cl_c0', C), ('cl_c1', C),
                 ('cl_qmax', C), ('cl_tdb', C), ('cl_thump', C * 8), ('cl_kh', C * 8), ('cl_ka', C * 8),
                 ('vk_n', I), ('vk_hz', C * 16), ('vk_amp', C * 16),
-                ('hit_n', I), ('hit_cents', C * 8), ('hit_gain', C)]
+                ('hit_n', I), ('hit_cents', C * 8), ('hit_gain', C),
+                ('pd_max_hz', C), ('pd_dbs', C), ('pd_share', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -260,7 +261,7 @@ class NoteIn(ctypes.Structure):
                    ('rank_skip', I * 32), ('rank_rel1', I * 32), ('organ_cr', C), ('rank_br', C * 32),
                    ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('bbr_set', I), ('bbr', C),
                    ('rank_drawn_off', I * 32), ('snd_moog', I), ('snd_d', C * 8),
-                   ('sung_hz', C), ('part', I), ('dist', C)])
+                   ('sung_hz', C), ('part', I), ('dist', C), ('gliss_lv', C)])
 
 
 class NoteOut(ctypes.Structure):
@@ -907,6 +908,14 @@ def harmonic_voice(cls):
     if dul:
         # (a dulcimer's courses and its decay by each mode's frequency)
         own = dict(own, unison_voices='HammeredDulcimerProperties', harmonic_decay='HammeredDulcimerProperties')
+    elif _owner(cls, 'harmonic_decay') == 'PromptDecay':
+        # (a two-stage decay, PromptDecay's, over the law it falls to)
+        _mro = cls.__mro__[cls.__mro__.index(T.PromptDecay) + 1:]
+        if next((k.__name__ for k in _mro if 'harmonic_decay' in k.__dict__), None) != 'SynthProperties':
+            return False
+        own = dict(own, harmonic_decay='PromptDecay')
+    if _owner(cls, 'aftersound_partial') not in (None, 'PromptDecay'):
+        return False
     if any(_owner(cls, n) != o for n, o in own.items()):
         return False
     law = _owner(cls, 'inharmonicity_coefficient_for_frequency')
@@ -1678,6 +1687,9 @@ def snapshot(props):
             s.hit_cents[:s.hit_n] = [float(x) for x in p.section_cents]
         if _owner(type(p), 'harmonic_decay') == 'HammeredDulcimerProperties':
             s.dhz_set, s.dhz_db, s.dhz_pow = 1, float(p.decay_hz_db), float(p.decay_hz_power)
+        if _owner(type(p), 'harmonic_decay') == 'PromptDecay' and p.prompt_max_hz:
+            s.pd_max_hz, s.pd_dbs, s.pd_share = (float(p.prompt_max_hz), float(p.prompt_dbs),
+                                                 float(p.aftersound_share))
         s.pps = float(getattr(p, 'partial_phase_spread', 0.0) or 0.0)
         s.ushare = int(bool(getattr(p, 'unison_shares_phase', False)))
         if _owner(type(p), 'aftersound') == 'PizzicatoStringsProperties':
@@ -2536,7 +2548,8 @@ def note_class(cls):
             if getattr(cls, 'registerable', False) else \
             (lambda a: a in ('speech_harmonic_exp', 'speech_harmonic_exp_per_octave', 'wind_skirt_always')) \
             if reed_voice(cls) and getattr(cls, 'wind_attack_db', None) is None \
-            else (lambda a: a in ('mode_lock_spread', 'directivity_radius', 'wind_skirt_always')) if _blown(cls) \
+            else (lambda a: a in ('mode_lock_spread', 'directivity_radius', 'wind_skirt_always',
+                                  'partial_phase_spread')) if _blown(cls) \
             else (lambda a: a in ('partial_phase_spread', 'unison_shares_phase', 'course_keys', 'key_bridge',
                                   'bridge_partner', 'register_knock_tilt', 'register_knock_profile')) \
             if dulcimer_voice(cls) else (lambda a: False)
@@ -2556,6 +2569,9 @@ def note_class(cls):
             p = v[2]
             ok = harmonic_voice(cls) or wind_voice(cls) or not (hasattr(p, 'section_seats') and p.section_seats()) and not any(
                 hasattr(p, 'section_onsets_at') and p.section_onsets_at(f) for f in (27.5, 261.6, 4186.0))
+        # (sympathetic strings: the notes nobody hit, sympathetic.expand -- not the engine's)
+        if getattr(cls, 'sympathetic_gain', 0.0):
+            ok = False
         if not ok:
             _NOTE[cls] = False
             return None
@@ -2766,7 +2782,9 @@ def note_class(cls):
             k.sl = ctypes.addressof(lk)
             _SL_CLS[cls] = lcls
         if (getattr(cls, 'reverb_distance', None) is not None or getattr(cls, 'chorus_send', None)
-                or getattr(cls, 'detuned_pair', None)):
+                or getattr(cls, 'detuned_pair', None)
+                or any(getattr(cls, a, None) for a in ('fall_cents', 'rip_cents', 'tremolo_pick_hz',
+                                                        'cut_semitones'))):
             _NOTE[cls] = False              # (its own distance, its own chorus pedal: Python's)
             return None
         if breath_noise(cls):

@@ -73,6 +73,8 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     VoiceSnap s;
     VoiceNote o;
     nv_voice_init(&c, &K->tmpl, n->f0, n->pan, pow(n->vel / 127.0, 2.0), n->chan_vol, n->effort, rs, &s, &o);
+    if (n->gliss_lv > 0.0 && n->gliss_lv != 1.0)
+        nv_voice_regain(&c, &s, n->gliss_lv);   // HALF-VALVING LOSES SUPPORT (_GLISS: the step's level)
     const double av = s.attack_volume;  // (an [RND] strike's, varied)
     if (s.throat) {
         // A THROAT'S PULSE (SfxThroatProperties), as the note sets it on the
@@ -761,6 +763,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             double *rows, long long cap, double *qacc, double *azimuth, long long *nrows, int *played,
             long long *row0, int *bands, double *offs)
 {
+    nv_song_gliss(song, K);                 // the valved glisses walked (_prep_gliss), once
     nv_refl_memo_reset();                   // (each _prepare its own _RNORM)
     int nn = nv_song_n_notes(song);
     std::vector<int> order(nn);
@@ -813,6 +816,11 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             n.mcut = mc;
             n.slurred = n.slurred || ms;
         }
+        double glv[4];
+        int is_gl = nv_song_gliss_note(song, i, glv);   // a valved gliss's step (_GLISS)
+        n.gliss_lv = is_gl ? glv[0] : 0.0;
+        if (is_gl)
+            n.slurred = 1;                  // (not retongued: every step slurs)
         n.channel = (double)nv_song_mix(song, i);      // (its tone's mix channel: em.channel)
         n.br = (ch >= 0 && ch < nbr) ? br[ch] : -1.0;
         if (nbr > 256 && k->bendable && ch >= 0 && ch < 256 && br[256 + ch] >= 0.0)
@@ -876,9 +884,20 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         // ITS GLIDE (the note's portamento: _GLIDE_SRC), where its mechanism
         // reaches -- the tuning table's own ratio, at the CC5 in force
         int cc5 = 0, src = nv_song_glide(song, i, &cc5);
-        if (src >= 0 && k->glide_mech) {
-            if (k->glide_mech == 3 && std::abs(iv[0] - src) >= 2)
-                return -(1 + i);            // a valved gliss: a run of notes (_prep_gliss), Python's
+        // A GLISS STEP's SMEAR: each rung arrives from the one below, its
+        // glide the step's time x the smear x 0.75 (_GLISS), where it is past 2 ms
+        if (is_gl && glv[1] > 0.0 && glv[2] >= 0.0) {
+            double stau = glv[3] * glv[1] * 0.75;
+            double tab[128];
+            nv_song_table(song, ch, dv[0], tab);
+            int pv = (int)glv[2];
+            if (stau > 2e-3 && tab[pv] > 0.0) {
+                n.gl[0] = tab[iv[0]] / tab[pv] - 1.0;
+                n.gl[1] = stau;
+                n.gl[2] = stau * k->porta_settle;
+            }
+        }
+        if (n.gl[0] == 0.0 && src >= 0 && k->glide_mech) {
             double tab[128];
             nv_song_table(song, ch, dv[0], tab);
             if (src < 128 && tab[src] > 0.0

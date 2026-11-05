@@ -10,11 +10,11 @@ kept by hand in the script's TASKS.
 
 | stage | tones native | drum sets whole |
 |---|---|---|
-| GM1 | 110 of 128 | 0 of 1 |
+| GM1 | 111 of 128 | 0 of 1 |
 | GM2 | 32 of 128 | 0 of 8 |
 | SC-55 | 6 of 13 | 6 of 31 |
 | SC-88 | 78 of 193 | 0 of 2 |
-| SC-88 Pro | 173 of 360 | 0 of 0 |
+| SC-88 Pro | 174 of 360 | 0 of 0 |
 | SC-8850 | 183 of 460 | 0 of 6 |
 
 ## GM1
@@ -29,9 +29,9 @@ What it needs first, and live's side:
 - [x] Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)
 - [ ] Moog: an MF-104M on a note whose pitch or shapes move (SYNC and a unison: native in files)
 
-Tones: 110 of 128 native.
+Tones: 111 of 128 native.
 
-- [ ] **Ethnic** -- 104 Sitar, 105 Banjo, 106 Shamisen, 107 Koto, 108 Kalimba, 109 Bag pipe, 111 Shanai
+- [ ] **Ethnic** -- 104 Sitar, 105 Banjo, 106 Shamisen, 107 Koto, 108 Kalimba, 109 Bag pipe
 - [ ] **Percussive** -- 113 Agogo, 114 Steel Drums, 115 Woodblock, 116 Taiko Drum
 - [ ] **Sound Effects** -- 120 Guitar Fret Noise, 122 Seashore, 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter, 126 Applause, 127 Gunshot
 
@@ -137,7 +137,7 @@ Drum sets: 0 of 2 with every key native (new at this stage).
 
 ## SC-88 Pro
 
-Tones: 173 of 360 native (new at this stage).
+Tones: 174 of 360 native (new at this stage).
 
 - [ ] **Piano** -- 0.24 Piano + Str., 1.16 Dance Piano, 4.9 Cho. E.Piano, 4.10 SilentRhodes, 4.17 Dist E.Piano, 6.1 Harpsichord2, 7.8 Comp Clav., 7.16 Reso Clav., 7.24 Clav.o
 - [ ] **Chromatic Percussion** -- 8.1 Pop Celesta, 11.9 Vibraphones, 15.16 Zither 1, 15.17 Zither 2, 15.24 Dulcimer
@@ -151,7 +151,7 @@ Tones: 173 of 360 native (new at this stage).
 - [ ] **Pipe** -- 72.1 Piccolo, 72.16 Di, 73.1 Flute 2, 73.2 Flute Exp., 73.3 Flt Travelso, 73.8 Flute + Vln, 73.16 Tron Flute, 75.16 Zampona, 75.17 Zampona Atk, 77.1 Shakuhachi:, 78.1 Whistle 2
 - [ ] **Ethnic** -- 104.3 Sitar 3, 105.9 San Xian, 105.28 Oud+Strings, 105.32 Pi Pa, 107.1 Gu Zheng, 107.19 Kanoon+Choir, 107.24 Oct Harp, 108.8 Sanza, 110.8 Er Hu, 110.9 Gao Hu, 111.24 Mizmar, 111.32 Suona 1, 111.33 Suona 2
 - [ ] **Percussive** -- 112.12 Jang-Gu, 113.16 Tambourine, 114.1 Island Mlt, 115.16 Angklung, 115.17 Angkl Rhythm, 115.24 Finger Snaps, 115.32 909 HandClap, 116.1 Small Taiko, 116.16 Jungle BD, 116.17 Techno BD, 116.18 Bounce, 117.16 Rash SD, 117.17 House SD, 117.18 Jungle SD, 117.19 909 SD, 118.11 606 Tom, 118.12 909 Tom, 119.2 Reverse Cym3
-- [ ] **Sound Effects** -- 120.8 Gt. FX Menu, 120.9 Bartok Pizz., 120.10 Guitar Slap, 120.11 Chord Stroke, 120.12 Biwa Stroke, 120.13 Biwa Tremolo, 122.6 Wind 2, 124.8 ScratchKey, 124.9 TapeRewind, 124.10 Phono Noise, 125.10 Calculating, 125.11 Perc. Bang, 126.7 Small Club, 126.8 ApplauseWave, 126.16 Voice One, 126.17 Voice Two, 126.18 Voice Three, 126.19 Voice Tah, 126.20 Voice Whey, 127.4 Eruption, 127.5 Big Shot
+- [ ] **Sound Effects** -- 120.8 Gt. FX Menu, 120.9 Bartok Pizz., 120.10 Guitar Slap, 120.11 Chord Stroke, 120.13 Biwa Tremolo, 122.6 Wind 2, 124.8 ScratchKey, 124.9 TapeRewind, 124.10 Phono Noise, 125.10 Calculating, 125.11 Perc. Bang, 126.7 Small Club, 126.8 ApplauseWave, 126.16 Voice One, 126.17 Voice Two, 126.18 Voice Three, 126.19 Voice Tah, 126.20 Voice Whey, 127.4 Eruption, 127.5 Big Shot
 
 Drum sets: 0 of 0 with every key native (new at this stage).
 

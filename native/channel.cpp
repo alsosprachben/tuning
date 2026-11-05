@@ -198,6 +198,10 @@ struct Ev {
     double tilt = NAN, mouth = NAN, morph = NAN;
     int stroked = 0;                    // one of a gesture's strokes (_prep_strokes' _stroked)
     int mcut = 0, mslur = 0;            // mono mode's: cut by the next, arrived by a slur
+    // a valved gliss's step (_GLISS): its level, the smear, the step it
+    // arrives from (-1 none) and the step's time; gl 0 not one
+    int gl = 0, gl_prev = -1;
+    double gl_lv = 1.0, gl_sm = 0.0, gl_dt = 0.0;
 };
 
 // A file's channels and notes.
@@ -515,6 +519,114 @@ struct Song {
     // _prep_glide_sources: where each note glides from -- the channel's
     // latest CC84 since its last note (spent once, CC84_CANCEL none), else
     // under CC65 its last note's key from a strictly earlier onset
+    // _prep_gliss, its valved part: a note a valve's class glides to
+    // (glide_mech 3, _GLIDE_SRC) over two semitones or more, as the run it
+    // walks -- a step a semitone from the source, evenly over its CC5's time
+    // (glide_tau 'slide', PORTA_SETTLE_TAUS; a real hold left to land on:
+    // max(GLISS_ARRIVAL_S, GLISS_ARRIVAL_FRAC of it)), each its level
+    // (quietest in the middle, by the smear CC5 opens) and the step before
+    // it; the note proper from where the run arrives. A run under 12 ms a
+    // step plays clean. The steps after the rest, as the Python appends
+    // them; what follows the gliss in the Python (the slurs' occurrences,
+    // next_same) made again on them, the glide sources carried
+    bool gliss_done = false;
+    void gliss(const NoteClass *const *K)
+    {
+        if (gliss_done)
+            return;
+        gliss_done = true;
+        std::vector<Ev> steps;
+        std::vector<char> drop(notes.size(), 0);
+        std::vector<int> gsrc_keep;
+        bool any = false;
+        for (size_t i = 0; i < notes.size(); i++) {
+            const Ev &e = notes[i];
+            int gs = i < glide_src.size() ? glide_src[i] : -1;
+            if (gs < 0 || e.drum || e.prog < 0 || e.prog > 127)
+                continue;
+            const NoteClass *k = K[128 * e.prog + e.note];
+            if (!k || k->glide_mech != 3)
+                continue;
+            int step = e.note > gs ? 1 : -1;
+            std::vector<int> path;
+            for (int p = gs; p != e.note; p += step)
+                path.push_back(p);
+            if (path.size() < 2 || e.off - e.on <= 0.0)
+                continue;
+            int cc5 = cc5_at(e.ch, e.on);
+            const std::vector<double> &F = table(e.ch, e.on);
+            double ft = F[e.note], fs = F[gs];
+            double v = pymin(127.0, pymax(0.0, (double)cc5)) / 127.0;
+            double t1 = k->porta_fast * pow(k->porta_slow / k->porta_fast, v);
+            double T = pymax(1e-4, t1 * fabs(1.0 / fs - 1.0 / ft) / k->porta_d_semi) * k->porta_settle;
+            double dur = e.off - e.on;
+            T = pymin(T, dur - pymax(0.06, 0.2 * dur));      // GLISS_ARRIVAL_S, GLISS_ARRIVAL_FRAC
+            double dt = T > 0.0 ? T / (double)path.size() : 0.0;
+            if (dt < 0.012)
+                continue;                   // faster than a valve moves: played clean
+            double sm = pymin(1.0, pymax(0.0, cc5 / 127.0));
+            int n = (int)path.size();
+            for (int q = 0; q < n; q++) {
+                double t0 = e.on + q * dt;
+                double mid = 1.0 - fabs((q + 0.5) / n * 2.0 - 1.0);
+                Ev x = e;
+                x.note = path[q];
+                x.on = t0;
+                x.off = t0 + dt * 1.35;
+                x.gl = 1;
+                x.gl_lv = 1.0 - 0.45 * sm * mid;
+                x.gl_sm = sm;
+                x.gl_prev = q ? path[q - 1] : -1;
+                x.gl_dt = dt;
+                steps.push_back(x);
+            }
+            Ev x = e;
+            x.on = e.on + T;
+            x.gl = 1;
+            x.gl_lv = 1.0;
+            x.gl_sm = sm;
+            x.gl_prev = path.back();
+            x.gl_dt = dt;
+            steps.push_back(x);
+            // (the Python drops every note of this (channel, key, onset))
+            for (size_t j = 0; j < notes.size(); j++)
+                if (notes[j].ch == e.ch && notes[j].note == e.note && notes[j].on == e.on)
+                    drop[j] = 1;
+            any = true;
+        }
+        if (!any)
+            return;
+        std::vector<Ev> out;
+        std::vector<int> gs2;
+        for (size_t i = 0; i < notes.size(); i++)
+            if (!drop[i]) {
+                out.push_back(notes[i]);
+                gs2.push_back(i < glide_src.size() ? glide_src[i] : -1);
+            }
+        for (const Ev &x : steps) {
+            out.push_back(x);
+            gs2.push_back(-1);              // (the lattice replaces the smooth glide)
+        }
+        notes.swap(out);
+        glide_src.swap(gs2);
+        mix.clear();
+        slurs();
+        next_same.clear();
+        std::vector<int> idx(notes.size());
+        for (size_t i = 0; i < idx.size(); i++)
+            idx[i] = (int)i;
+        std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) { return -notes[a].on < -notes[b].on; });
+        std::map<std::pair<long long, int>, double> seen;
+        for (int i : idx) {
+            const Ev &e = notes[i];
+            auto kk = std::make_pair(e.ch, e.note);
+            auto it = seen.find(kk);
+            if (it != seen.end())
+                next_same[NoteKey{e.ch, e.note, e.on}] = it->second;
+            seen[kk] = e.on;
+        }
+    }
+
     void glides()
     {
         std::map<long long, std::vector<std::pair<double, double>>> on;     // CC65's spans
@@ -1132,6 +1244,18 @@ void nv_song_note_mono(void *s, int i, int mcut, int mslur)
         S->notes[i].mcut = mcut;
         S->notes[i].mslur = mslur;
     }
+}
+
+void nv_song_gliss(void *s, const NoteClass *const *K) { ((nv::Song *)s)->gliss(K); }
+
+int nv_song_gliss_note(void *s, int i, double *out)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (i < 0 || i >= (int)S->notes.size() || !S->notes[i].gl)
+        return 0;
+    const nv::Ev &e = S->notes[i];
+    out[0] = e.gl_lv; out[1] = e.gl_sm; out[2] = e.gl_prev; out[3] = e.gl_dt;
+    return 1;
 }
 
 int nv_song_mono(void *s, int i, int *mcut, int *mslur)
