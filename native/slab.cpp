@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <functional>
 #include <map>
 #include <memory>
 #include <tuple>
@@ -688,6 +689,7 @@ struct Slab {
             tr_aL[sidx] *= r; tr_aR[sidx] *= r;     // (the tremolo's own baseline with it)
             ls_aL[sidx] *= r; ls_aR[sidx] *= r;     // (...and the Leslie's)
             cv_aL[sidx] *= r; cv_aR[sidx] *= r;     // (...and the rockers')
+            mo_uL[sidx] *= r; mo_uR[sidx] *= r;     // (...and a Moog's panel weights' base)
         }
     }
 
@@ -702,6 +704,7 @@ struct Slab {
             tr_aL[s] *= r[q]; tr_aR[s] *= r[q];
             ls_aL[s] *= r[q]; ls_aR[s] *= r[q];
             cv_aL[s] *= r[q]; cv_aR[s] *= r[q];
+            mo_uL[s] *= r[q]; mo_uR[s] *= r[q];
         }
     }
 
@@ -1231,11 +1234,14 @@ struct Slab {
         }
     }
 
-    // Slab.moog_retimbre at a stamp (n None): the panel on these Moog slots
-    // -- weight, phase (within 90 degrees of the last: a crossing a sign),
-    // frequency (the onset's own anchor, fraction and all) -- each against
-    // what was applied before, the swings' baselines moved with it
-    void moog_retimbre_new(const std::vector<long> &idx, const MoogLayer *L, double rate)
+    // Slab.moog_retimbre: the panel on these Moog slots -- weight, phase
+    // (within 90 degrees of the last: a crossing a sign), frequency -- each
+    // against what was applied before, the swings' baselines moved with it.
+    // At a stamp (no retune) the frequency is the onset's own anchor,
+    // fraction and all; under a sounding note it moves through retune (each
+    // slot's ratio), which keeps the phase continuous
+    using Retune = std::function<void(const std::vector<long> &, const std::vector<double> &)>;
+    void moog_retimbre(const std::vector<long> &idx, const MoogLayer *L, double rate, const Retune *retune = nullptr)
     {
         size_t n = idx.size();
         if (!n)
@@ -1257,7 +1263,12 @@ struct Slab {
         bool any = false;
         for (size_t i = 0; i < n; i++)
             any = any || fabs(rt[i] / mo_r[idx[i]] - 1.0) > 1e-12;
-        if (any)
+        if (any && retune) {
+            std::vector<double> sc(n);
+            for (size_t i = 0; i < n; i++)
+                sc[i] = rt[i] / mo_r[idx[i]];
+            (*retune)(idx, sc);
+        } else if (any)
             for (size_t i = 0; i < n; i++) {
                 long s = idx[i];
                 double sc = rt[i] / mo_r[s];
@@ -1321,6 +1332,83 @@ struct Slab {
             f4[F4_aR][s] = aR0[s] * f;
             mo_w[s] = (float)w[i];
         }
+    }
+
+    // the FT rows these slots read, each once (np.unique's: ascending)
+    std::vector<int> rows_of(const std::vector<long> &idx) const
+    {
+        std::set<int> u;
+        for (long s : idx)
+            if (i4[I4_fx][s] >= 0)
+                u.insert(i4[I4_fx][s]);
+        return std::vector<int>(u.begin(), u.end());
+    }
+
+    // Slab.moog_rows: the filter rows these slots read rebuilt from a changed
+    // panel (the contours' times, the mode, key tracking); the release span
+    // follows
+    void moog_rows(const std::vector<long> &idx, const MoogLayer *L, double rate)
+    {
+        for (int r : rows_of(idx)) {
+            float *row = &FT[r * FT_W];
+            float nrow[30];
+            ft_row(L, (double)row[10], (int)row[9], row[11] > 0.5f, (int)row[12], false, 0.0, nrow);
+            for (int j = 0; j < 30; j++)
+                row[j] = nrow[j];
+        }
+        double span = L->rel_span * rate;
+        float re = (float)(span > 1.0 ? span : 1.0);
+        for (long s : idx)
+            f4[F4_re][s] = re;
+    }
+
+    // Slab.moog_pitch: what moves OSC 2's pitch changed -- the rows carry on
+    // from where they are with the new law; turned off, a note keeps the
+    // phase it gathered (its amounts to zero)
+    void moog_pitch(const std::vector<long> &idx, const MoogLayer *L)
+    {
+        for (int r : rows_of(idx)) {
+            if (L->pitch_on) {
+                if (!mp_on[r]) {
+                    mp_on[r] = 1;
+                    mp_acc[r] = 0.0;
+                    FT[r * FT_W + 12] = (float)((int)FT[r * FT_W + 12] | 1);
+                }
+                for (int j = 0; j < 9; j++)
+                    mp_P[r * 9 + j] = L->pitch_p[j];
+            } else if (mp_on[r]) {
+                mp_P[r * 9 + 0] = 0.0;
+                mp_P[r * 9 + 5] = 0.0;
+            }
+        }
+    }
+
+    // Slab.moog_shape: which shapes move, or how, changed -- the rows' flags
+    // and parameters follow; the slots whose representation switched (a
+    // moving shape's carry 2 x level, a still one's the coefficient)
+    std::vector<long> moog_shape(const std::vector<long> &idx, const MoogLayer *L)
+    {
+        int sf = L->shape_on;
+        std::vector<long> sw;
+        for (int r : rows_of(idx)) {
+            int old = (int)FT[r * FT_W + 12];
+            if ((old & 14) != sf)
+                for (long s : idx) {
+                    if (i4[I4_fx][s] != r)
+                        continue;
+                    int osc = i4[I4_mk][s] / 4096;
+                    int bit = osc >= 1 && osc <= 3 ? 1 << osc : 0;      // FT_SHAPE
+                    if (((bit & old) != 0) != ((bit & sf) != 0))
+                        sw.push_back(s);
+                }
+            FT[r * FT_W + 12] = (float)((old & 1) | sf);
+            ms_on[r] = sf != 0;
+            ms_next[r] = -1;                // new knobs: no grid point carried over
+            if (sf)
+                for (int j = 0; j < SHAPE_W; j++)
+                    ms_par[r * SHAPE_W + j] = L->shape_par[j];
+        }
+        return sw;
     }
 
     // Slab.moog_fm: 1 -> 2 FM for the note on row r -- its row's modulator
@@ -1429,7 +1517,7 @@ struct Slab {
                 mo_ph[s] = 0.0;
                 mo_r[s] = 1.0;
             }
-            moog_retimbre_new(mo, L, rate);
+            moog_retimbre(mo, L, rate);
         }
         moog_fm(r, idx, L);
         double span = L->rel_span * rate;
@@ -3258,8 +3346,10 @@ struct Part {
         }
         if (!S.stamp_t(*T, key, n0, scale, ch, rate))
             return;                         // the slab full: this note does not sound
-        if (T->moog)                        // a Moog note: its rows, the panel on it (Slab._moog_stamp)
-            S.moog_stamp(*T, pid, ch, 0, patches[cur].moog, rate);
+        if (T->moog) {                      // a Moog note: its rows, the panel on it (Slab._moog_stamp)
+            MoogLayer La;
+            S.moog_stamp(*T, pid, ch, 0, moog_panel(patches[cur], ch, La), rate);
+        }
         if (T->min_hold)
             tex_on[key] = n0 + T->min_hold; // a held texture: the least it plays
         if (!T->rel.empty())
@@ -3824,10 +3914,106 @@ struct Part {
         }
     }
 
+    // live._moog_panel_for (layer A): the part's panel with its channel's
+    // GM sound controllers on it (moog.apply_gm) -- those its voice answers
+    // at middle C (_snd_for at 60 - transpose); null if not a Moog
+    const MoogLayer *moog_panel(const Patch &p, int ch, MoogLayer &out) const
+    {
+        if (!p.moog)
+            return nullptr;
+        const NoteClass *k = ch >= 0 ? key_class(p, 60) : nullptr;
+        if (!k)
+            return p.moog;
+        double d[8];
+        bool any = false;
+        for (int i = 0; i < 8; i++) {
+            d[i] = ((k->snd_mask >> i) & 1) ? snd_d[ch][i] : 0.0;
+            any = any || d[i] != 0.0;
+        }
+        if (!any)
+            return p.moog;
+        nv_moog_apply(p.moog, d, &out);
+        return &out;
+    }
+
+    // live._moog_refresh: a Moog part's panel changed -- its knob rows ramp
+    // to the new values over the next block, its sounding notes' filter rows
+    // are rebuilt and their partials re-weighed; per channel (only_ch, or
+    // every one), each with its own sound controllers
+    void moog_refresh(const Patch &p, long long n0, int only_ch = -2)
+    {
+        std::vector<std::pair<long long, std::vector<long>>> by_ch;
+        auto at = [&](long long ch) -> std::vector<long> & {
+            for (auto &b : by_ch)
+                if (b.first == ch)
+                    return b.second;
+            by_ch.emplace_back(ch, std::vector<long>());
+            return by_ch.back().second;
+        };
+        for (auto &kv : S.live)
+            if (std::get<0>(kv.first) == p.pid && !kv.second.empty()
+                && (only_ch == -2 || std::get<1>(kv.first) == only_ch)) {
+                std::vector<long> &v = at(std::get<1>(kv.first));
+                v.insert(v.end(), kv.second.begin(), kv.second.end());
+            }
+        for (auto &kk : S.kn_of)
+            if (std::get<0>(kk.first) == p.pid && std::get<2>(kk.first) == 0
+                && (only_ch == -2 || std::get<1>(kk.first) == only_ch))
+                at(std::get<1>(kk.first));
+        Slab::Retune rt = [&](const std::vector<long> &idx, const std::vector<double> &sc) {
+            for (size_t i = 0; i < idx.size(); i++)
+                retune(std::vector<long>(1, idx[i]), n0, sc[i]);
+        };
+        for (auto &b : by_ch) {
+            MoogLayer La;
+            const MoogLayer *L = moog_panel(p, (int)b.first, La);
+            if (!L)
+                continue;
+            S.set_knobs(S.knob_row(std::make_tuple(p.pid, b.first, 0), L->kn), L->kn, true);
+            std::vector<long> idx;
+            for (long s : b.second)
+                if (S.i4[I4_fx][s] >= 0)
+                    idx.push_back(s);
+            if (idx.empty())
+                continue;
+            S.moog_rows(idx, L, rate);
+            S.moog_pitch(idx, L);
+            std::vector<long> sw = S.moog_shape(idx, L);
+            std::vector<long> mo;
+            for (long s : idx)
+                if (S.i4[I4_mk][s] > 0)
+                    mo.push_back(s);
+            if (!mo.empty())
+                S.moog_retimbre(mo, L, rate, &rt);
+            for (long s : sw) {             // a representation switched: no ramp across it
+                S.aLp[s] = S.f4[F4_aL][s];
+                S.aRp[s] = S.f4[F4_aR][s];
+            }
+            for (int r : S.rows_of(idx))
+                S.moog_fm(r, idx, L);
+        }
+        // an amplifier after the ladder (the charang) distorts what the
+        // filter passed: its products recomputed from the new levels
+        if (p.amp > 0.0)
+            amp_dirty.insert(p.pid);
+    }
+
     void sound_cc(int ch, int cc, int v, long long n0)
     {
         double d = (v - 64.0) / 64.0;
         snd_d[ch][cc - 71] = d;
+        sound_cc_notes(ch, cc, d, n0);
+        // attack, decay, vib_delay are onset facts, for the next note --
+        // except on a Moog, where CC71-75 are its panel's knobs and move as
+        // knobs do
+        if (cc <= 75)
+            for (const Patch &p : patches)
+                if (p.moog && !p.drums && (p.channel < 0 || p.channel == ch))
+                    moog_refresh(p, n0, ch);
+    }
+
+    void sound_cc_notes(int ch, int cc, double d, long long n0)
+    {
         if (cc == 71 || cc == 74) {         // brightness, resonance: on the notes sounding
             reshape_sound(ch);
             return;

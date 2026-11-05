@@ -201,6 +201,8 @@ def main(argv):
     def compare(b):
         S = lv.slab
         for c in L.ALL_COLS + ("sw",):
+            if c in ("fmw", "fmp", "fmpR") and "render" not in opt:
+                continue        # (1 -> 2 FM's anchors are written at the render, which only --render runs natively)
             a, x = np.asarray(S.a[c]), nv.slab.col(c)
             if a.dtype != x.dtype or not np.array_equal(a, x):
                 bad.append(c)
@@ -437,6 +439,16 @@ def main(argv):
                         bad[0], len(dd), dd[:4].tolist(), x[dd[:4]].tolist(), y[dd[:4]].tolist(),
                         [own.get(int(q)) for q in dd[:4]]))
                     print("    trem_depth %s" % dict(lv.trem_depth))
+                for _c in [c for c in bad if c in ("aL", "aR", "aL0", "aR0", "re", "om", "p0", "p0R")] \
+                        if "debug" in opt else []:
+                    _x = np.asarray(lv.slab.a[_c] if _c in lv.slab.a else getattr(lv.slab, _c))
+                    _y = nv.slab.col(_c).astype(_x.dtype)
+                    _dd = np.flatnonzero(_x != _y)
+                    _own = {int(q): k for k, v in lv.slab.live.items() for q in v}
+                    print("    %s at %d slots, e.g. %s: live %s native %s; owners %s; mk %s fx %s" % (
+                        _c, len(_dd), _dd[:4].tolist(), _x[_dd[:4]].tolist(), _y[_dd[:4]].tolist(),
+                        [_own.get(int(q)) for q in _dd[:4]], lv.slab.a["mk"][_dd[:4]].tolist(),
+                        lv.slab.a["fx"][_dd[:4]].tolist()))
                 if "debug" in opt and "wind state" in bad:
                     _ws = (ctypes.c_double * 8)()
                     nv.d.nv_part_wind_state(nv.p, _ws)
