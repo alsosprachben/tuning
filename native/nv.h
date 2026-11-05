@@ -511,6 +511,11 @@ typedef struct {
     double radius;
     int has_radius;
     long long pps_seed;     /* the note's partials' phases (VoiceSnap.pps): random.Random(pps_seed) */
+    /* ITS DISTANCE as a multiple of its voice's own (_src_dist: its
+       channel's CC91 over GM's 40; 0 or 1 where it stands): the source moved
+       out along its ray, its images from there */
+    double dist;
+    long long cls;          /* its class (the NoteClass), keying _refl_norm's memo as type(props) does */
 } ToneIn;
 
 /* A MOOG MESSENGER's panel as a note reads it (moog.py; native.moog_spec):
@@ -811,6 +816,9 @@ typedef struct NoteClass {
     int sl_on, sl_idx, sl_nm;
     double sl_db, sl_rise, sl_dbs, sl_lo, sl_hi;
     const struct NoteClass *sl;
+    // ITS CHORUS's COMB (chorus.offsets_for: chorus_cents, else the default), cents
+    int n_cho;
+    double cho_cents[8];
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -870,12 +878,22 @@ typedef struct {
     // index in nv_voice_body's table)
     double sung_hz;
     int part;
+    double dist;            // its distance multiple (_src_dist: CC91 / 40, or its step at the onset); 0: 1
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
    pushes after them; fin: the ears, delays and pipe radius the last rank
    leaves the emitter (li, ri, dl, dr, radius; radius NaN: none), and how
    many of its rows, the last, are the push */
+/* blockrender's _RNORM: the reflections' normalisation memo, emptied at a
+   render's start (each _prepare its own) */
+void nv_refl_memo_reset(void);
+/* live.cpp: chorus.expand's send path -- each channel (chans, in its first
+   note's order) at its send (0..1), its comb (ncents[q] cents of
+   cents[8 q ...]): a copy of each of its rows per comb tooth, detuned,
+   delayed and swept, the dry share taken out of the rows. The copies made. */
+long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
+                           const double *sends, const int *ncents, const double *cents, double sr);
 int nv_struck(const VoiceSnap *v, const ToneIn *t, const VoiceSnap *ls, int nm, double ft, const double *hv,
               double hmax, double db, double rise, double dbs, long long seed, int nimg, const int *nsurf,
               const int *surf, const double *img, const double *mir, double *rows, int cap, double *qacc,

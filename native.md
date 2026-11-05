@@ -11,9 +11,9 @@ kept by hand in the script's TASKS.
 | stage | tones native | drum sets whole |
 |---|---|---|
 | GM1 | 110 of 128 | 0 of 1 |
-| GM2 | 34 of 128 | 0 of 8 |
-| SC-55 | 7 of 13 | 6 of 31 |
-| SC-88 | 79 of 193 | 0 of 2 |
+| GM2 | 32 of 128 | 0 of 8 |
+| SC-55 | 6 of 13 | 6 of 31 |
+| SC-88 | 78 of 193 | 0 of 2 |
 | SC-88 Pro | 173 of 360 | 0 of 0 |
 | SC-8850 | 183 of 460 | 0 of 6 |
 
@@ -23,8 +23,8 @@ What it needs first, and live's side:
 
 - [x] Program changes in nvlive: a builder thread, MIDI program change, the panel's picker
 - [x] Live: the Moog (knob-neutral templates and the slab's moog.weights; CC71-75 its knobs; a layered voice; the MF-104M) -- not yet a unison or SYNC live
-- [ ] Live: check the fiddle, tinkle bell, melodic tom, reverse cymbal and breath noise against live.Live
-- [ ] Live: a drum set identical to live.Live beyond the kick and toms (hats, timbales differ)
+- [x] Live: check the fiddle, tinkle bell, melodic tom, reverse cymbal and breath noise against live.Live
+- [x] Live: a drum set identical to live.Live beyond the kick and toms (the Standard set's every key, nvlive end to end)
 - [ ] Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender's reader refuses it
 - [ ] Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)
 - [ ] Moog: an MF-104M on a note whose pitch or shapes move (SYNC and a unison: native in files)
@@ -46,12 +46,12 @@ What it needs first, and live's side:
 - [ ] Bank select (CC0/CC32) and GM2's banks (120 drums, 121 melodic) in nvrender's reader and nvlive -- the reader refuses any bank today
 - [ ] nvlive: a variation as a patch (Patch(program, drums, tuner, variation)); the picker's GM2 bank
 
-Tones: 34 of 128 native (new at this stage).
+Tones: 32 of 128 native (new at this stage).
 
-- [ ] **Piano** -- 0.8 Piano 1w, 0.16 European Pf, 1.8 Piano 2w, 2.8 Piano 3w, 3.8 Honky-tonk 2, 4.16 FM+SA EP, 4.24 Wurly, 4.8 St.Soft EP, 5.10 EP Legend, 5.16 St.FM EP, 5.32 EP Phase, 6.16 Harpsi.w, 6.24 Harpsi.o
+- [ ] **Piano** -- 0.8 Piano 1w, 0.16 European Pf, 1.8 Piano 2w, 2.8 Piano 3w, 3.8 Honky-tonk 2, 4.16 FM+SA EP, 4.24 Wurly, 4.8 St.Soft EP, 5.8 Detuned EP 2, 5.10 EP Legend, 5.16 St.FM EP, 5.32 EP Phase, 6.16 Harpsi.w, 6.24 Harpsi.o
 - [ ] **Chromatic Percussion** -- 11.8 Vibraphone w, 12.8 Marimba w, 14.8 Church Bell, 14.9 Carillon
 - [ ] **Organ** -- 16.16 60's Organ 1, 16.8 Trem. Organ, 16.32 70's E.Organ, 17.32 Perc. Organ, 19.16 Church Org.3, 20.16 Puff Organ
-- [ ] **Guitar** -- 24.8 Ukulele, 24.16 Nylon Gt.o, 24.32 Nylon Gt.2, 25.8 12-str.Gt, 25.16 Mandolin, 25.33 Steel + Body, 26.8 Pedal Steel, 27.23 Mid Tone GTR, 28.24 Jazz Man, 29.4 Guitar Pinch, 30.8 Feedback Gt., 30.26 Dist Rtm GTR, 31.8 Gt. Feedback
+- [ ] **Guitar** -- 24.8 Ukulele, 24.16 Nylon Gt.o, 24.32 Nylon Gt.2, 25.8 12-str.Gt, 25.16 Mandolin, 25.33 Steel + Body, 26.8 Pedal Steel, 27.8 Chorus Gt., 27.23 Mid Tone GTR, 28.24 Jazz Man, 29.4 Guitar Pinch, 30.8 Feedback Gt., 30.26 Dist Rtm GTR, 31.8 Gt. Feedback
 - [ ] **Bass** -- 33.7 Finger Slap
 - [ ] **Strings** -- 40.8 Slow Violin, 46.24 Yang Qin
 - [ ] **Ensemble** -- 48.8 Orchestra, 48.40 60s Strings, 52.32 Chorus Aahs, 53.40 Humming, 55.1 Bass Hit, 55.2 6th Hit, 55.3 Euro Hit
@@ -79,9 +79,9 @@ What it needs first, and live's side:
 - [ ] The GS map (CC32 / TONE MAP-0) and kit_in_map in the reader and nvlive
 - [ ] GS's effects natively (gsefx: insertion EFX, the GS delay, chorus) -- the corpus has no GS files, so each needs GS test files
 
-Tones: 7 of 13 native (new at this stage).
+Tones: 6 of 13 native (new at this stage).
 
-- [ ] **Piano** -- 0.16 Piano 1d, 3.8 HonkyTonk w, 4.16 E.Piano 1v, 5.16 E.Piano 2v
+- [ ] **Piano** -- 0.16 Piano 1d, 3.8 HonkyTonk w, 4.8 Detuned EP1, 4.16 E.Piano 1v, 5.16 E.Piano 2v
 - [ ] **Organ** -- 16.32 Organ 4, 17.32 Organ 5
 
 Drum sets: 6 of 31 with every key native (new at this stage).
@@ -114,7 +114,7 @@ Drum sets: 6 of 31 with every key native (new at this stage).
 
 ## SC-88
 
-Tones: 79 of 193 native (new at this stage).
+Tones: 78 of 193 native (new at this stage).
 
 - [ ] **Piano** -- 2.1 EG+Rhodes 1, 2.2 EG+Rhodes 2, 3.8 Old Upright, 4.25 Hard Rhodes, 4.26 MellwRhodes, 5.24 Hard FM EP
 - [ ] **Chromatic Percussion** -- 11.1 Hard Vibe, 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 15.1 Santur 2, 15.8 Cimbalom
@@ -127,7 +127,7 @@ Tones: 79 of 193 native (new at this stage).
 - [ ] **Reed** -- 66.8 BreathyTnr.
 - [ ] **Synth Effects** -- 98.3 Round Glock, 98.5 GlocknChime, 98.18 Bell Harp, 98.19 Gamelimba, 99.2 Nylon Harp, 99.3 Harpvox, 99.5 NylonRhodes, 102.3 Echo Pan 2, 102.4 Big Panner, 102.5 Reso Panner
 - [ ] **Ethnic** -- 104.2 DetuneSitar, 104.8 Tambra, 104.16 Tamboura, 105.1 Muted Banjo, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 106.1 Tsugaru, 107.16 Kanoon, 111.1 Shanai 2, 111.8 Pungi, 111.16 Hichiriki
-- [ ] **Percussive** -- 117.1 Real Tom, 117.9 Rock Tom, 119.1 ReverseCym2, 119.8 Rev.Snare 1, 119.9 Rev.Snare 2, 119.16 Rev.Kick 1, 119.17 Rev.ConBD, 119.24 Rev.Tom 1, 119.25 Rev.Tom 2
+- [ ] **Percussive** -- 112.11 St.Gamelan, 117.1 Real Tom, 117.9 Rock Tom, 119.1 ReverseCym2, 119.8 Rev.Snare 1, 119.9 Rev.Snare 2, 119.16 Rev.Kick 1, 119.17 Rev.ConBD, 119.24 Rev.Tom 1, 119.25 Rev.Tom 2
 - [ ] **Sound Effects** -- 120.3 Gt.CutNz. 2, 120.4 Dist.CutNz., 120.5 Bass Slide, 120.6 Pick Scrape, 123.4 Kitty, 123.5 Growl, 124.7 Scratch 2, 126.6 Applause 2
 
 Drum sets: 0 of 2 with every key native (new at this stage).

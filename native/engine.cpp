@@ -158,6 +158,8 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     t.rev_n0 = non; t.rev_arr = noff;
     memcpy(t.planes, n->planes, sizeof t.planes);
     t.order = n->order;
+    t.dist = n->dist;
+    t.cls = (long long)(intptr_t)K;         // (its class: _refl_norm's memo key, type(props))
     if (s.sect_n > 1 && s.sect_seats) {     // A SECTION'S: the note's ears are its first player's desk's
         double e[4];
         nv_section_seat(&s, &t, 0, e);
@@ -339,7 +341,8 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     if (nimg < 0) {
         if (n->order > 8)
             return -2;
-        nimg = nv_images(n->planes, n->order, s.position_x * 1.0, s.radiation_distance * 1.0, s.position_z * 1.0,
+        const double dm = n->dist > 0.0 ? n->dist : 1.0;     // (moved out along its ray: _src_dist)
+        nimg = nv_images(n->planes, n->order, s.position_x * dm, s.radiation_distance * dm, s.position_z * dm,
                          64, nsurf_, surf_, img_, mir_);
         if (nimg < 0)
             return -2;                      // more than 64 images: not the engine's
@@ -713,6 +716,37 @@ static long long push_rows(const NoteClass *k, double f0, double dt, double sfa,
     return m;
 }
 
+// blockrender's _src_dist: a note's distance as a multiple of its voice's
+// own -- its part's first CC91 over GM's 40 or, where the part's CC91
+// changes, the one in force at its onset (send_steps, step_at); else the
+// voice's reverb_distance; else 1. At least 0.1.
+static double song_dist(void *song, long long ch, double on, double sr, const NoteClass *k)
+{
+    long long part = ch % 256;
+    int n = nv_song_ccs(song, part, 91, nullptr, nullptr, 0);
+    double d = NAN;
+    if (n > 0) {
+        std::vector<double> tt(n);
+        std::vector<int> vv(n);
+        nv_song_ccs(song, part, 91, tt.data(), vv.data(), n);
+        d = vv[0] / 40.0;
+        bool steps = false;
+        for (int q = 1; q < n; q++)
+            steps = steps || vv[q] != vv[0];
+        if (steps) {
+            // the last change at or before the onset's sample, before the first the first
+            long long ns = (long long)nearbyint(on * sr);
+            int q = -1;
+            for (int j = 0; j < n; j++)
+                if ((long long)nearbyint(tt[j] * sr) <= ns)
+                    q = j;
+            d = vv[q < 0 ? 0 : q] / 40.0;
+        }
+    }
+    (void)k;                    // (a voice's own reverb_distance: none is the engine's -- native.note_class)
+    return std::isnan(d) ? 1.0 : nv::pymax(0.1, d);
+}
+
 // A SONG PLAYED: every note, in the note loop's order (by onset, channel and
 // key, stably), each through nv_song_play with its class (K[128 * program +
 // key], a drum set's from K[NV_K_DRUMS + ...]; every note must have one) -- the rows of the whole song's notes.
@@ -727,6 +761,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             double *rows, long long cap, double *qacc, double *azimuth, long long *nrows, int *played,
             long long *row0, int *bands, double *offs)
 {
+    nv_refl_memo_reset();                   // (each _prepare its own _RNORM)
     int nn = nv_song_n_notes(song);
     std::vector<int> order(nn);
     std::vector<long long> chs(nn);
@@ -794,6 +829,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
                 return -(1 + i);
         }
         n.from_song = 1; n.song_index = i;
+        n.dist = song_dist(song, ch, dv[0], n.sr, k);  // its distance: its part's CC91 (_src_dist)
         n.sung_hz = nv_song_tess(song, ch);     // a sung part's tessitura, its declared part (_prep_choir_parts)
         n.part = nv_song_part(song, ch);
         double pv[3];

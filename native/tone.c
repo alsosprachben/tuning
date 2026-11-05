@@ -171,6 +171,107 @@ static double *row_new(Rows *R)
 /* _Emitter.emit_partial for a direct partial of this note (no fold, no
  * hammer-on, no compressor, no GS EQ, the source at its own distance), and
  * its images. Returns 0 if the row store is full. */
+/* blockrender's _refl_norm: sqrt(E(1) / E(d)), E = 1 + the images'
+ * energy against the direct sound, for this voice at f moved out by d --
+ * the images worked out where the source stands (kept for the last place) */
+/* ...MEMOISED AS THE PYTHON's: keyed by f rounded to 0.1 Hz (round(f, 1)),
+ * the place, the radius, d and the class, its value the first f's of the key;
+ * emptied at PREP_MEMO_MAX entries */
+typedef struct {
+    long long cls;
+    double rf, px, pz, rad, d, val;
+    int hr, used;
+} RnEntry;
+#define RN_CAP (1 << 17)
+#define RN_MAX 50000                /* blockrender.PREP_MEMO_MAX */
+static RnEntry *rn_tab;
+static int rn_n;
+static pthread_mutex_t rn_mu = PTHREAD_MUTEX_INITIALIZER;
+
+void nv_refl_memo_reset(void)
+{
+    pthread_mutex_lock(&rn_mu);
+    if (rn_tab)
+        memset(rn_tab, 0, sizeof(RnEntry) * RN_CAP);
+    rn_n = 0;
+    pthread_mutex_unlock(&rn_mu);
+}
+
+static double refl_norm_raw(const VoiceSnap *v, const ToneIn *t, double f, double px, double pz, double d);
+
+static double refl_norm(const VoiceSnap *v, const ToneIn *t, double f, double px, double pz, double d)
+{
+    char b[64];
+    snprintf(b, sizeof b, "%.1f", f);
+    double rf = strtod(b, NULL);
+    double rad = t->has_radius ? t->radius : 0.0;
+    unsigned long long h = 1469598103934665603ULL;
+    double ks[5] = {rf, px, pz, rad, d};
+    for (int i = 0; i < 5; i++) {
+        unsigned long long x;
+        memcpy(&x, &ks[i], 8);
+        h = (h ^ x) * 1099511628211ULL;
+    }
+    h = (h ^ (unsigned long long)t->cls) * 1099511628211ULL;
+    pthread_mutex_lock(&rn_mu);
+    if (!rn_tab)
+        rn_tab = (RnEntry *)calloc(RN_CAP, sizeof(RnEntry));
+    unsigned long i = (unsigned long)(h & (RN_CAP - 1));
+    while (rn_tab[i].used) {
+        RnEntry *e = &rn_tab[i];
+        if (e->cls == t->cls && e->rf == rf && e->px == px && e->pz == pz && e->rad == rad && e->hr == t->has_radius
+            && e->d == d) {
+            double v_ = e->val;
+            pthread_mutex_unlock(&rn_mu);
+            return v_;
+        }
+        i = (i + 1) & (RN_CAP - 1);
+    }
+    pthread_mutex_unlock(&rn_mu);
+    double g = refl_norm_raw(v, t, f, px, pz, d);
+    pthread_mutex_lock(&rn_mu);
+    if (rn_n >= RN_MAX) {                   /* if len(_RNORM) >= PREP_MEMO_MAX: _RNORM.clear() */
+        memset(rn_tab, 0, sizeof(RnEntry) * RN_CAP);
+        rn_n = 0;
+        i = (unsigned long)(h & (RN_CAP - 1));
+    }
+    while (rn_tab[i].used)
+        i = (i + 1) & (RN_CAP - 1);
+    RnEntry e = {t->cls, rf, px, pz, rad, d, g, t->has_radius, 1};
+    rn_tab[i] = e;
+    rn_n++;
+    pthread_mutex_unlock(&rn_mu);
+    return g;
+}
+
+static double refl_norm_raw(const VoiceSnap *v, const ToneIn *t, double f, double px, double pz, double d)
+{
+    static _Thread_local double lp[4] = {NAN, NAN, NAN, NAN};
+    static _Thread_local int ln[2], lns[2][64], ls[2][64 * 8];
+    static _Thread_local double li[2][64 * 3], lm[2][64 * 3];
+    if (!(lp[0] == px && lp[1] == pz && lp[2] == d && lp[3] == v->room[0])) {
+        for (int q = 0; q < 2; q++) {
+            double m = q ? d : 1.0;
+            ln[q] = nv_images(t->planes, t->order, px * m, v->room[0] * m, pz * m, 64, lns[q], ls[q], li[q], lm[q]);
+            if (ln[q] < 0)
+                ln[q] = 0;
+        }
+        lp[0] = px; lp[1] = pz; lp[2] = d; lp[3] = v->room[0];
+    }
+    double e[2];
+    for (int q = 0; q < 2; q++) {
+        double m = q ? d : 1.0;
+        int keep[64];
+        double g[64], dly[64], sq[64];
+        int k = reflection_terms(v->room, v->ahz, v->alpha, v->scat, f, px * m, v->room[0] * m, pz * m, t->radius,
+                                 t->has_radius, ln[q], lns[q], ls[q], li[q], lm[q], keep, g, dly);
+        for (int j = 0; j < k; j++)
+            sq[j] = g[j] * g[j];
+        e[q] = 1.0 + pysum(sq, k);
+    }
+    return sqrt(e[0] / e[1]);
+}
+
 static int emit_fwd(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, double *azimuth,
                 const double *terms, int nterms,
                 double om, double ampL, double ampR, double ampM, double nomf, double non, double noff,
@@ -183,6 +284,17 @@ static int emit_fwd(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, 
         return 1;
     double dl = t->dl, dr = t->dr, px = pos_x, pz = t->pos_z;
     double am0 = ampM;
+    double dm = t->dist > 0.0 ? t->dist : 1.0;
+    if (dm != 1.0) {
+        /* FURTHER AWAY, THE SAME BALANCE (emit_partial's _src_dist): its
+           top end across the extra air, and the direct and its early images
+           held to the energy they had at the voice's own distance */
+        double r0 = sqrt(px * px + pow(v->room[0], 2.0) + pz * pz);
+        double ga = pow(10.0, -air_db(v->room, nomf) * (dm - 1.0) * r0 / 20.0);
+        if (t->reflect)
+            ga *= refl_norm(v, t, nomf, px, pz, dm);
+        ampL *= ga; ampR *= ga; ampM *= ga;
+    }
     double rd = v->room[0];
     *azimuth = atan2(px, rd > 1e-6 ? rd : 1e-6);
     double cbw = t->cbw1 > 0.0 ? t->cbw1 / (1e-6 > nomf ? 1e-6 : nomf) : t->cbw0;
@@ -321,6 +433,9 @@ static int emit(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, doub
 /* The room's terms for this note's direct sound at frequency f: roomcore's
  * reflection_terms over the images, then each image's ears and the delay
  * past the stage (emit_partial's _terms). terms: 9 a kept image. */
+/* a note's distance multiple (_src_dist), 1 where it stands */
+static double dist_of(const ToneIn *t) { return t->dist > 0.0 ? t->dist : 1.0; }
+
 static int note_terms(const VoiceSnap *v, const ToneIn *t, double f, double px, double pz,
                       int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
                       double *terms)
@@ -329,7 +444,8 @@ static int note_terms(const VoiceSnap *v, const ToneIn *t, double f, double px, 
     double g[64], dly[64];
     if (nimg > 64)
         return -1;
-    double sx = px * 1.0, sy = v->room[0] * 1.0, sz = pz * 1.0;
+    double dm = dist_of(t);
+    double sx = px * dm, sy = v->room[0] * dm, sz = pz * dm;
     double stage = sqrt(px * px + pow(t->listener_distance, 2.0) + pz * pz);
     int k = reflection_terms(v->room, v->ahz, v->alpha, v->scat,
                              f, sx, sy, sz, t->radius, t->has_radius, nimg, nsurf, surf, img, mir, keep, g, dly);
@@ -404,8 +520,8 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
         if (t->order > 8)
             return -2;
         for (int i = 1; i < ns; i++) {
-            pn_img[i] = nv_images(t->planes, t->order, (t->pos_x_props + v->sect_dx[i]) * 1.0, v->room[0] * 1.0,
-                                  t->pos_z * 1.0, 64, p_nsurf[i], p_surf[i], p_img[i], p_mir[i]);
+            pn_img[i] = nv_images(t->planes, t->order, (t->pos_x_props + v->sect_dx[i]) * dist_of(t),
+                                  v->room[0] * dist_of(t), t->pos_z * dist_of(t), 64, p_nsurf[i], p_surf[i], p_img[i], p_mir[i]);
             if (pn_img[i] < 0)
                 return -2;              /* more than 64 images: not the C's */
         }

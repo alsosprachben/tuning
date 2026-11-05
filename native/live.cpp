@@ -301,6 +301,88 @@ static int emit_col(const char *n)
 // *P of them, realloc'd; a damper's dk/dg (dm[0], dm[1]) copied with them.
 // The channels nch of chans, each's (rate, depth, stereo, scatter) in cfg;
 // mask nmask long (NULL: every row). Returns the sidebands made.
+extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
+                                      const double *sends, const int *ncents, const double *cents, double sr)
+{
+    // chorus.py's SWEEP_HZ, DELAY_S, SWEEP_DEPTH, FLOOR
+    static const double SWEEP_HZ[4] = {0.21, 0.29, 0.17, 0.34}, DELAY_S[4] = {0.007, 0.011, 0.013, 0.017};
+    const double SWEEP_DEPTH = 0.0016, FLOOR = 0.02;
+    const int cOM = emit_col("om"), cP0 = emit_col("p0"), cP0R = emit_col("p0R"), cAL = emit_col("aL"),
+              cAR = emit_col("aR"), cAM = emit_col("aM"), cMCH = emit_col("mch"), cNF = emit_col("nf"),
+              cVD = emit_col("vd"), cVR = emit_col("vr"), cVP = emit_col("vp");
+    const long long n = *Pp;
+    double *rows = *rowsp;
+    // the columns as they were (np.array of A's): the copies are made from them
+    std::vector<double> om(n), nf(n), p0(n), p0R(n), aL(n), aR(n), aM(n);
+    for (long long i = 0; i < n; i++) {
+        const double *r = rows + (size_t)NCOLS * i;
+        om[i] = r[cOM]; nf[i] = r[cNF]; p0[i] = r[cP0]; p0R[i] = r[cP0R];
+        aL[i] = r[cAL]; aR[i] = r[cAR]; aM[i] = r[cAM];
+    }
+    std::vector<double> extra;
+    std::vector<long long> src;
+    long long made = 0;
+    for (int q = 0; q < nch; q++) {
+        double send = sends[q];
+        int nc = ncents[q];
+        if (send <= FLOOR || nc <= 0)
+            continue;
+        std::vector<long long> sel;
+        for (long long i = 0; i < n; i++)
+            if ((long long)rows[(size_t)NCOLS * i + cMCH] == chans[q])
+                sel.push_back(i);
+        if (sel.empty())
+            continue;
+        double wet = pow(send / (double)nc, 0.5), dry = pow(1.0 - send, 0.5), gain = wet;
+        for (int ci = 0; ci < nc; ci++) {
+            double ratio = pow(2.0, cents[8 * q + ci] / 1200.0);
+            double rate = SWEEP_HZ[ci % 4], delay = DELAY_S[ci % 4];
+            for (long long i : sel) {
+                if (!(nf[i] * ratio < sr * 0.5))
+                    continue;
+                size_t o = extra.size();
+                extra.insert(extra.end(), rows + (size_t)NCOLS * i, rows + (size_t)NCOLS * (i + 1));
+                double *e = extra.data() + o;
+                e[cOM] = om[i] * ratio;
+                e[cNF] = nf[i] * ratio;
+                e[cP0] = p0[i] * ratio - om[i] * ratio * delay * sr;
+                e[cP0R] = p0R[i] * ratio - om[i] * ratio * delay * sr;
+                e[cAL] = aL[i] * gain;
+                e[cAR] = aR[i] * gain;
+                e[cAM] = aM[i] * gain;
+                e[cVD] = SWEEP_DEPTH;
+                e[cVR] = rate;
+                e[cVP] = 2.0 * M_PI * ((double)ci / (double)nc);
+                src.push_back(i);
+                made++;
+            }
+        }
+        // ...and the dry share comes down by what the wet took
+        if (made && dry != 1.0)
+            for (long long i : sel)
+                for (int c : {cAL, cAR, cAM})
+                    rows[(size_t)NCOLS * i + c] = rows[(size_t)NCOLS * i + c] * dry;
+    }
+    long long m = (long long)src.size();
+    if (!m)
+        return 0;
+    rows = (double *)realloc(*rowsp, sizeof(double) * NCOLS * (size_t)(n + m));
+    memcpy(rows + (size_t)NCOLS * n, extra.data(), sizeof(double) * extra.size());
+    *rowsp = rows;
+    if (dm[0]) {
+        int32_t *dk = (int32_t *)realloc(dm[0], sizeof(int32_t) * (size_t)(n + m));
+        float *dg = (float *)realloc(dm[1], sizeof(float) * (size_t)(n + m));
+        for (long long q = 0; q < m; q++) {
+            dk[n + q] = dk[src[q]];
+            dg[n + q] = dg[src[q]];
+        }
+        dm[0] = dk;
+        dm[1] = dg;
+    }
+    *Pp = n + m;
+    return m;
+}
+
 extern "C" long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                                        const double *cfg, const char *mask, long long nmask, double sr)
 {

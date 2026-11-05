@@ -117,7 +117,7 @@ class ToneIn(ctypes.Structure):
                                     'fm_phase', 'listener_distance', 'head_radius', 'pan_angle')]
                 + [('room_bands', C * 9), ('pjit', I), ('sps', C), ('dur', C), ('ssc', I)]
                 + [('rev', I), ('rev_n0', C), ('rev_arr', C), ('planes', C * 6), ('order', I), ('radius', C),
-                   ('has_radius', I), ('pps_seed', ctypes.c_longlong)])
+                   ('has_radius', I), ('pps_seed', ctypes.c_longlong), ('dist', C), ('cls', ctypes.c_longlong)])
 
 
 class VoiceInit(ctypes.Structure):
@@ -242,7 +242,7 @@ class NoteClass(ctypes.Structure):
                    ('sh_mq', C), ('sh_mhz', C), ('sh_mdb', C), ('sh_popen', C), ('sh_pluck', I), ('sh_mh', I),
                    ('sh_nopen', I), ('sh_open', C * 8), ('scatter_ms', C),
                    ('sl_on', I), ('sl_idx', I), ('sl_nm', I), ('sl_db', C), ('sl_rise', C), ('sl_dbs', C),
-                   ('sl_lo', C), ('sl_hi', C), ('sl', ctypes.c_void_p)])
+                   ('sl_lo', C), ('sl_hi', C), ('sl', ctypes.c_void_p), ('n_cho', I), ('cho_cents', C * 8)])
 
 
 class NoteIn(ctypes.Structure):
@@ -260,7 +260,7 @@ class NoteIn(ctypes.Structure):
                    ('rank_skip', I * 32), ('rank_rel1', I * 32), ('organ_cr', C), ('rank_br', C * 32),
                    ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('bbr_set', I), ('bbr', C),
                    ('rank_drawn_off', I * 32), ('snd_moog', I), ('snd_d', C * 8),
-                   ('sung_hz', C), ('part', I)])
+                   ('sung_hz', C), ('part', I), ('dist', C)])
 
 
 class NoteOut(ctypes.Structure):
@@ -2743,6 +2743,14 @@ def note_class(cls):
                 _NOTE[cls] = False
                 return None
             k.organ = ctypes.addressof(og)
+        # ITS CHORUS's COMB (chorus.offsets_for)
+        import chorus as _CHR
+        _cc = tuple(_CHR.offsets_for(cls))
+        if len(_cc) > 8:
+            _NOTE[cls] = False
+            return None
+        k.n_cho = len(_cc)
+        k.cho_cents[:len(_cc)] = [float(x) for x in _cc]
         # A STRUCK, PITCHED LAYER (struck_layer): its class's NoteClass, kept
         sl = getattr(cls, 'struck_layer', None)
         if sl:
@@ -2757,6 +2765,10 @@ def note_class(cls):
             k.sl_lo, k.sl_hi = (float(x) for x in getattr(cls, 'struck_layer_range', (73.42, 146.83)))
             k.sl = ctypes.addressof(lk)
             _SL_CLS[cls] = lcls
+        if (getattr(cls, 'reverb_distance', None) is not None or getattr(cls, 'chorus_send', None)
+                or getattr(cls, 'detuned_pair', None)):
+            _NOTE[cls] = False              # (its own distance, its own chorus pedal: Python's)
+            return None
         if breath_noise(cls):
             k.n_bn, k.bn_rows, k.bn_fade_s = (len(cls.breath_noise_db), int(getattr(cls, 'breath_noise_rows', 1)),
                                                float(cls.breath_noise_fade_s))

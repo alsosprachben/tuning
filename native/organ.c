@@ -372,7 +372,8 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
                     if (pos_x == t->pos_x_props || !og->spiral)
                         nt_ = note_terms(host, &tr, hf, pos_x, t->pos_z, nimg, nsurf, surf, img, mir, terms);
                     else {
-                        int ni = nv_images(t->planes, t->order, pos_x * 1.0, host->room[0] * 1.0, t->pos_z * 1.0, 64,
+                        double dm = t->dist > 0.0 ? t->dist : 1.0;     /* (moved out: _src_dist) */
+                        int ni = nv_images(t->planes, t->order, pos_x * dm, host->room[0] * dm, t->pos_z * dm, 64,
                                            r_nsurf, r_surf, r_img, r_mir);
                         if (ni < 0 || t->order > 8) {
                             ret = -2;

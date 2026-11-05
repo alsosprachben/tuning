@@ -24,8 +24,9 @@ TASKS = [
     ("GM1", True, "Program changes in nvlive: a builder thread, MIDI program change, the panel's picker"),
     ("GM1", True, "Live: the Moog (knob-neutral templates and the slab's moog.weights; CC71-75 its knobs; "
                   "a layered voice; the MF-104M) -- not yet a unison or SYNC live"),
-    ("GM1", False, "Live: check the fiddle, tinkle bell, melodic tom, reverse cymbal and breath noise against live.Live"),
-    ("GM1", False, "Live: a drum set identical to live.Live beyond the kick and toms (hats, timbales differ)"),
+    ("GM1", True, "Live: check the fiddle, tinkle bell, melodic tom, reverse cymbal and breath noise against live.Live"),
+    ("GM1", True, "Live: a drum set identical to live.Live beyond the kick and toms (the Standard set's every key, "
+                  "nvlive end to end)"),
     ("GM1", False, "Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender's reader refuses it"),
     ("GM1", False, "Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)"),
     ("GM1", False, "Moog: an MF-104M on a note whose pitch or shapes move (SYNC and a unison: native in files)"),

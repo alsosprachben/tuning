@@ -71,6 +71,16 @@ def main(argv):
         bad = []
         if open(nv, "rb").read() != open(py, "rb").read():
             bad.append("wav")
+        # ...and the reverb send bus, where the channels' sends differ (CC91)
+        sn, sp = nv[:-4] + ".send.wav", py[:-4] + ".send.wav"
+        if os.path.exists(sn) != os.path.exists(sp) or (
+                os.path.exists(sp) and open(sn, "rb").read() != open(sp, "rb").read()):
+            bad.append("send.wav")
+        # ...and the reverb send bus, where the channels' sends differ (CC91)
+        sn, sp = nv[:-4] + ".send.wav", py[:-4] + ".send.wav"
+        if os.path.exists(sn) != os.path.exists(sp) or (
+                os.path.exists(sp) and open(sn, "rb").read() != open(sp, "rb").read()):
+            bad.append("send.wav")
         jn, jp = nv[:-4] + ".room.json", py[:-4] + ".room.json"
         if not os.path.exists(jn) or open(jn).read() != open(jp).read():
             bad.append("room.json")

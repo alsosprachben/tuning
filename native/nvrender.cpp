@@ -424,16 +424,28 @@ int main(int argc, char **argv)
         }
 
     }
-    // A CHANNEL'S CC91 IS ITS DISTANCE (blockrender's _src_dist: the first
-    // over GM's 40, or its steps): the source moved out along its ray, its
-    // images and its send with it -- Python's, past GM's default
-    for (int i = 0, n = nv_midi_n_ccs(midi); i < n; i++) {
-        int iv[3];
-        double t;
-        nv_midi_cc(midi, i, iv, &t);
-        if (iv[1] == 91 && iv[2] != 40) {
-            fprintf(stderr, "nvrender: refused: a reverb send (CC91) not at GM's 40\n");
-            return 2;
+    // A CHANNEL'S CC91 IS ITS DISTANCE (blockrender's _src_dist): each note
+    // moved out along its ray by the engine (NoteIn.dist), the send below.
+    // ITS CC93 IS THE CHORUS (_note_chorus_send): not the engine's yet --
+    // a part whose first CC93 is past 0, or in a GS file any, is Python's
+    {
+        std::map<int, std::vector<int>> c93;
+        for (int i = 0, n = nv_midi_n_ccs(midi); i < n; i++) {
+            int iv[3];
+            double t;
+            nv_midi_cc(midi, i, iv, &t);
+            if (iv[1] == 93)
+                c93[iv[0]].push_back(iv[2]);
+        }
+        for (auto &kv : c93) {
+            int mx = *std::max_element(kv.second.begin(), kv.second.end());
+            bool sounds = first[kv.first & 255] < 1e300;     // (a channel with notes: em.channel's)
+            // (chorus.expand: a send at FLOOR or under makes no copies)
+            (void)sounds;
+            if (nv_midi_gs(midi) && mx > 0) {         // (a Sound Canvas file's: its GS chorus device, Python's)
+                fprintf(stderr, "nvrender: refused: a GS chorus send (CC93)\n");
+                return 2;
+            }
         }
     }
     // A DRUM CHANNEL'S WHEEL OR TUNING moves its drums (a kit drum can be
@@ -691,6 +703,54 @@ int main(int argc, char **argv)
     if (!sch.empty())
         nv_scan_expand(E.scan.data(), &rows, &P, dm, (int)sch.size(), sch.data(), srow.data(), sdep.data(),
                        scho.data(), SR);
+    // THE CHORUS (_prep_chorus, chorus.expand; _note_chorus_send): each mix
+    // channel whose part's first CC93 is past 0, at that send over 127, its
+    // first note's comb (offsets_for), in the order its first note came --
+    // before the speaker, which colours the copies too
+    {
+        std::vector<long long> cch;
+        std::vector<double> csend, ccents;
+        std::vector<int> cnc;
+        std::vector<int> ord(nv_song_n_notes(song));
+        for (size_t i = 0; i < ord.size(); i++)
+            ord[i] = (int)i;
+        auto onset = [&](int i) {
+            long long ch;
+            int iv[4];
+            double dv[2];
+            nv_song_get_note(song, i, &ch, iv, dv);
+            return dv[0];
+        };
+        std::stable_sort(ord.begin(), ord.end(), [&](int a, int b) { return onset(a) < onset(b); });
+        std::set<long long> seen;
+        for (int i : ord) {
+            long long ch;
+            int iv[4];
+            double dv[2];
+            nv_song_get_note(song, i, &ch, iv, dv);
+            long long mch = nv_song_mix(song, i);
+            if (seen.count(mch))
+                continue;
+            seen.insert(mch);
+            int nc = nv_song_ccs(song, mch % 256, 93, nullptr, nullptr, 0);
+            if (nc <= 0)
+                continue;
+            std::vector<double> tt(nc);
+            std::vector<int> vv(nc);
+            nv_song_ccs(song, mch % 256, 93, tt.data(), vv.data(), nc);
+            if (vv[0] <= 0)
+                continue;
+            int cq = E.cmap[(iv[3] ? NV_K_DRUMS : 0) + 128 * iv[2] + iv[0]];
+            const NoteClass *nk = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
+            cch.push_back(mch);
+            csend.push_back(vv[0] / 127.0);
+            cnc.push_back(nk ? nk->n_cho : 0);
+            for (int q = 0; q < 8; q++)
+                ccents.push_back(nk && q < nk->n_cho ? nk->cho_cents[q] : 0.0);
+        }
+        if (!cch.empty())
+            nv_chorus_expand(&rows, &P, dm, (int)cch.size(), cch.data(), csend.data(), cnc.data(), ccents.data(), SR);
+    }
     // THE SPEAKER CABINETS (_prep_cabinet, cabinet.expand): every row on a
     // cabinet's channel through its response at the row's frequency, after
     // the amplifier, before the rotors
@@ -1001,14 +1061,128 @@ int main(int argc, char **argv)
     size_t slash = base.rfind('/');
     if (dot != std::string::npos && (slash == std::string::npos || dot > slash))
         base = base.substr(0, dot);
+    // THE REVERB SEND (blockrender's _REVERB_CH, send_steps, send_values,
+    // send_weights): each mix channel whose part sends a CC91, its first
+    // over GM's 40, in the order its first note came; a part whose CC91
+    // changes, its steps (onset samples, multiples); what the channels that
+    // sound stand at -- one value, and roomtail scales the mix; more, and the
+    // bus is rendered: the table again, each row weighted by its channel's
+    // send at its onset
+    std::vector<std::pair<long long, double>> rsend;
+    std::map<long long, std::pair<std::vector<long long>, std::vector<double>>> steps;
+    std::set<long long> heard;
+    {
+        const int cM = col("mch");
+        std::set<long long> seen;
+        auto part_cc = [&](long long part, std::vector<double> &tt, std::vector<int> &vv) {
+            int n = nv_song_ccs(song, part, 91, nullptr, nullptr, 0);
+            tt.resize(n > 0 ? n : 0);
+            vv.resize(n > 0 ? n : 0);
+            if (n > 0)
+                nv_song_ccs(song, part, 91, tt.data(), vv.data(), n);
+            return n;
+        };
+        for (long long r = 0; r < P; r++) {
+            long long c = (long long)rows[NCOLS * r + cM];
+            heard.insert(c);
+            if (seen.count(c))
+                continue;
+            seen.insert(c);
+            std::vector<double> tt;
+            std::vector<int> vv;
+            if (part_cc(c % 256, tt, vv) > 0)
+                rsend.emplace_back(c, vv[0] / 40.0);
+        }
+        for (long long c : heard) {
+            long long part = c % 256;
+            if (steps.count(part))
+                continue;
+            std::vector<double> tt;
+            std::vector<int> vv;
+            int n = part_cc(part, tt, vv);
+            bool moves = false;
+            for (int q = 1; q < n; q++)
+                moves = moves || vv[q] != vv[0];
+            if (!moves)
+                continue;
+            auto &st = steps[part];
+            for (int q = 0; q < n; q++) {
+                st.first.push_back((long long)nearbyint(tt[q] * SR));
+                st.second.push_back(vv[q] / 40.0);
+            }
+        }
+    }
+    auto rs_of = [&](long long c) {
+        for (auto &e : rsend)
+            if (e.first == c)
+                return e.second;
+        return 1.0;
+    };
+    std::set<double> svals;
+    if (!rsend.empty())
+        for (long long c : heard) {
+            auto st = steps.find(c % 256);
+            if (st != steps.end())
+                svals.insert(st->second.second.begin(), st->second.second.end());
+            else
+                svals.insert(rs_of(c));
+        }
+    if (!rsend.empty() && svals.size() > 1) {
+        // the bus: aL and aR weighted (float32, numpy's) by each row's send
+        std::vector<float> wL = fcols[0], wR = fcols[1];
+        for (long long r = 0; r < P; r++) {
+            long long c = (long long)rows[NCOLS * r + col("mch")];
+            auto st = steps.find(c % 256);
+            double g;
+            if (st != steps.end()) {
+                const std::vector<long long> &on = st->second.first;
+                long long nr = lcols[0][r];
+                long i = (long)(std::upper_bound(on.begin(), on.end(), nr) - on.begin()) - 1;
+                g = st->second.second[i > 0 ? i : 0];
+            } else {
+                g = rs_of(c);
+            }
+            float gf = (float)g;
+            wL[r] = wL[r] * gf;
+            wR[r] = wR[r] * gf;
+        }
+        float *fp2[29];
+        for (int q = 0; q < 29; q++)
+            fp2[q] = fp[q];
+        fp2[0] = wL.data();
+        fp2[1] = wR.data();
+        std::vector<float> SLb(N), SRb(N);
+        nv_render(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fp2, lp, ip, Gt.data(), St.data(), BRr.data(),
+                  BCr.data(), BLr.empty() ? nullptr : BLr.data(), noRows, sh, (long)E.k[K_CHUNK], E.k[K_XDEC], SR,
+                  E.k[K_MASTER], (const float *)dm[2], (const long *)dm[3], (const long *)dm[4], (const long *)dm[5],
+                  SLb.data(), SRb.data(), slo, (const int *)lobe[0], (float *const *)(lobe + 1),
+                  LANG.empty() ? nullptr : LANG.data(), lgn, nft ? &mc : nullptr);
+        if (!write_wav((base + ".send.wav").c_str(), SLb.data(), SRb.data(), N, (int)SR)) {
+            fprintf(stderr, "nvrender: cannot write %s.send.wav\n", base.c_str());
+            return 1;
+        }
+    }
+    std::string sendj = "{}";
+    if (!rsend.empty()) {
+        std::vector<std::pair<long long, double>> sd;
+        if (svals.size() == 1)
+            for (long long c : heard)
+                sd.emplace_back(c, *svals.begin());
+        else
+            sd = rsend;
+        sendj = "{\n";
+        for (size_t q = 0; q < sd.size(); q++)
+            sendj += "  \"" + std::to_string(sd[q].first) + "\": " + pyrepr(sd[q].second) + (q + 1 < sd.size() ? ",\n" : "\n");
+        sendj += " }";
+    }
     FILE *jf = fopen((base + ".room.json").c_str(), "w");
     if (jf) {
         fprintf(jf, "{\n \"bands\": [\n");
         for (int i = 0; i < 9; i++)
             fprintf(jf, "  {\n   \"hz\": %s,\n   \"q\": %s,\n   \"energy\": %s\n  }%s\n", pyrepr(out[4 + 3 * i]).c_str(),
                     pyrepr(out[5 + 3 * i]).c_str(), pyrepr(out[6 + 3 * i]).c_str(), i < 8 ? "," : "");
-        fprintf(jf, " ],\n \"send\": {},\n \"room_name\": \"%s\",\n \"tail_gain\": 1.0,\n \"tail_time\": 1.0\n}",
-                E.room.c_str());
+        fprintf(jf, " ],\n \"send\": %s,\n \"room_name\": \"%s\",\n \"tail_gain\": 1.0,\n \"tail_time\": 1.0\n}",
+                sendj.c_str(), E.room.c_str());
         fclose(jf);
     }
     printf("nvrender: %s: %lld partials, %.1f s\n", argv[2], P, N / SR);
