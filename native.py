@@ -97,7 +97,7 @@ class VoiceSnap(ctypes.Structure):
                 ('n_mute', I), ('mute', (C * 2) * 24), ('n_tube', I), ('tube_ref_hz', C), ('tube', (C * 4) * 16),
                 ('or_set', I), ('or_share', C), ('or_db', C * 2), ('or_lowest_hz', C), ('or_g', C),
                 ('dul_n', I), ('dhz_set', I), ('dul_beat', C * 2), ('dhz_db', C), ('dhz_pow', C), ('pps', C),
-                ('ushare', I)]
+                ('ushare', I), ('mst', C), ('mst_ref', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -638,9 +638,20 @@ def _tube(cls):
             and len(cls.TUBE_MODES) <= 16)
 
 
+def timpani_voice(cls):
+    """A kettle (tonelib.TimpaniProperties, GM 47): its membrane's measured
+    modes, each its own decay, tilted by the stroke (mode_stroke_tilt)."""
+    import tonelib as T
+    return issubclass(cls, T.TimpaniProperties) and len(cls.mode_decays or ()) <= 400
+
+
 def _modal_drum(cls):
     import tonelib as T
     gam = issubclass(cls, T.ModeDecays) and issubclass(cls, (T.MetalPercussionProperties, T.StruckBarProperties))
+    # (a kettle's membrane: its measured modes, each its own decay -- ModeDecays'
+    # arithmetic, the timpani's own copy -- and the stroke's tilt across them)
+    kettle = timpani_voice(cls)
+    gam = gam or kettle
     if issubclass(cls, (T.TR808Properties, T.SimmonsProperties)) or gam:
         mg, mr = cls.mode_gains, cls.mode_ratios
         # (a Simmons: the 808's without its modes' phases and aftersounds;
@@ -650,6 +661,8 @@ def _modal_drum(cls):
                else dict(_JINGLE_OWN, aftersound_partial=None, mode_phase=None))
         if gam:
             own = dict(own, _bore_norm='SynthProperties', mode_gains_here='SynthProperties')
+            if kettle:
+                own['harmonic_decay'] = 'TimpaniProperties'
             if (_owner(cls, 'mode_gains_here') == 'MusicBoxProperties' and len(cls.mode_gains) >= 7
                     and next(k.__name__ for k in cls.__mro__[1:] if 'mode_gains_here' in k.__dict__)
                     == 'SynthProperties'):
@@ -659,8 +672,8 @@ def _modal_drum(cls):
                 and len(cls.mode_decays) <= 400 and len(getattr(cls, 'mode_after', ())) <= 400
                 and len(getattr(cls, 'mode_phases', ())) <= 400
                 and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
-                and not cls.mode_stroke_tilt and (gam or not cls.bore_corner_hz) and not cls.harmonic_touch
-                and not cls.pickup_points and len(cls.unison_detune or ()) <= 8)
+                and (not cls.mode_stroke_tilt or kettle) and (gam or not cls.bore_corner_hz)
+                and not cls.harmonic_touch and not cls.pickup_points and len(cls.unison_detune or ()) <= 8)
     if issubclass(cls, T.CuicaProperties):
         return (all(_owner(cls, n) == o for n, o in _CUICA_OWN.items())
                 and (_owner(cls, 'harmonic_decay') == 'SynthProperties' or decay_target(cls) is not None)
@@ -1535,7 +1548,9 @@ def snapshot(props):
                 s.tube[i][:] = [float(x) for x in row[:4]]
             s.n_md = len(p.TUBE_MODES)
             s.mode_decays[:s.n_md] = [float(row[4]) for row in p.TUBE_MODES]
-        if isinstance(p, T.ModeDecays):
+        if timpani_voice(type(p)):
+            s.mst, s.mst_ref = float(p.mode_stroke_tilt), float(p.mode_stroke_ref_db)
+        if isinstance(p, T.ModeDecays) or timpani_voice(type(p)):
             ma, mp = getattr(p, 'mode_after', ()), getattr(p, 'mode_phases', ())
             s.n_md, s.n_ma, s.n_mp = len(p.mode_decays), len(ma), len(mp)
             s.mode_decays[:s.n_md] = [float(x) for x in p.mode_decays]

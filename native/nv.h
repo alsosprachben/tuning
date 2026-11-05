@@ -255,6 +255,9 @@ typedef struct {
        (unison_shares_phase) */
     double pps;
     int ushare;
+    /* A STROKE's TILT ON MEASURED MODES (mode_stroke_tilt: the timpani's):
+       dB per octave of mode ratio per dB of stroke, about mst_ref */
+    double mst, mst_ref;
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed

@@ -271,7 +271,17 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
             return 0.0;
         if (v->or_set && harmonic == 7)         /* MusicBoxProperties: its key's octave below */
             return v->gain * v->or_g;
-        return 1 <= harmonic && harmonic <= v->n_mm ? v->gain * v->mm_gain[harmonic - 1] : 0.0;
+        if (!(1 <= harmonic && harmonic <= v->n_mm))
+            return 0.0;
+        double g = v->gain * v->mm_gain[harmonic - 1];
+        if (v->mst != 0.0) {                    /* a stroke's tilt: harder, toward the top */
+            double av = v->attack_volume > 1e-6 ? v->attack_volume : 1e-6;    /* max(attack_volume, 1e-6) */
+            double sdb = 20.0 * log(av) / log(10.0);
+            if (!(sdb > -40.0))
+                sdb = -40.0;                    /* max(-40, ...) */
+            g *= pow(10.0, v->mst * log(nv_mode_ratio(v, harmonic)) / log(2.0) * (sdb - v->mst_ref) / 20.0);
+        }
+        return g;
     }
     if (v->kind == 1) {                         /* KitDrumProperties.series_volume */
         if (1 <= harmonic && harmonic <= v->n_modes)
