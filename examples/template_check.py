@@ -12,6 +12,12 @@ table's columns in prepare's final types, its length (N, nblk, P) and room
 (room_q), compared with ==. A key no native class plays is skipped. --live:
 at live's rate and block (48 kHz, 128 samples: Live sets them before it
 builds a template).
+
+A REGISTERED ORGAN is stamped rank by rank, so its key is compared as live
+holds it: live.Patch._raw_template (every stop drawn, the table sliced by
+each rank's gate row: t["ranks"]) against native.TemplateCache's (live.cpp's
+slices) -- at each velocity bucket's centre and each rotor speed the patch
+builds, every rank's columns, count and hrel. --vels is not used for them.
 """
 import contextlib
 import io
@@ -52,6 +58,63 @@ def python_template(B, T, prog, note, vel, tuner):
         TA.ENABLED = wasa
 
 
+def _organ(B, N, prog):
+    """Whether a program's notes are a registered organ's (stamped by rank)."""
+    for key in range(21, 109):
+        cls = B.property_class_for_note(prog, key)
+        k = N.note_class(cls) if cls is not None else None
+        if k is not None and k.organ:
+            return True
+    return False
+
+
+def organ_check(B, N, prog, k0, k1, tuner):
+    """A registered organ's keys, rank by rank: live's slices against the
+    native cache's. (same, differ, skipped), a template a (key, bucket, speed)."""
+    import numpy as np
+    import live as L
+    pt = L.Patch(prog, False, tuner, 0)
+    tc = N.TemplateCache(prog, tuner)
+    same = differ = skipped = 0
+    for key in range(k0, k1 + 1):
+        cls = B.property_class_for_note(prog, key)
+        k = N.note_class(cls) if cls is not None else None
+        if k is None or not k.organ:
+            skipped += pt.nbuckets * len(pt.speeds)
+            continue
+        tc.warm(key, key, pt.nbuckets, pt.speeds)
+        for b in range(pt.nbuckets):
+            for sp in pt.speeds:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    P = pt._raw_template(key, pt.bucket_vel(b), sp)
+                Q = tc.get(key, b, sp)
+                if P is None or Q is None:
+                    bad = [] if P is None and Q is None else ["missing"]
+                else:
+                    bad = [k_ for k_ in ("P",) if P[k_] != Q[k_]]
+                    pr, qr = P.get("ranks") or {}, Q.get("ranks") or {}
+                    if set(pr) != set(qr):
+                        bad.append("ranks %s vs %s" % (sorted(pr), sorted(qr)))
+                    for nm in sorted(set(pr) & set(qr)):
+                        (pc, pn, ph), (qc, qn, qh) = pr[nm], qr[nm]
+                        if pn != qn or not np.array_equal(np.asarray(ph, np.float32), np.asarray(qh, np.float32)):
+                            bad.append("%s: count/hrel" % nm)
+                            continue
+                        for c in L.ALL_COLS:
+                            if c in pc and c in qc:
+                                x, y = np.asarray(pc[c]), np.asarray(qc[c])
+                                if x.dtype != y.dtype or not np.array_equal(x, y):
+                                    bad.append("%s: %s" % (nm, c))
+                if bad:
+                    differ += 1
+                    if differ <= 10:
+                        print("  program %d key %d bucket %d speed %s DIFFERS: %s" % (prog, key, b, sp,
+                                                                                     " ".join(bad[:8])))
+                else:
+                    same += 1
+    return same, differ, skipped
+
+
 def main(argv):
     opt = dict(a[2:].split("=", 1) if "=" in a else (a[2:], "") for a in argv[1:] if a.startswith("--"))
     os.environ["TUNING_NATIVE_TONE"] = "off"
@@ -67,6 +130,11 @@ def main(argv):
     k0, k1 = (int(x) for x in (opt.get("keys") or "21-108").split("-"))
     tuner = opt.get("tuner") or "hybrid440"
     same = differ = skipped = 0
+    organs = [p for p in progs if _organ(B, N, p)]
+    progs = [p for p in progs if p not in organs]
+    for prog in organs:
+        a, b, k = organ_check(B, N, prog, k0, k1, tuner)
+        same, differ, skipped = same + a, differ + b, skipped + k
     for prog in progs:
         for key in range(k0, k1 + 1):
             for vel in vels:
@@ -79,7 +147,9 @@ def main(argv):
                 if [tuple(map(float, q)) for q in P["room_q"]] != [tuple(map(float, q)) for q in Q["room_q"]]:
                     bad.append("room_q")
                 for c in B.EMIT_COLS:
-                    if c not in P:
+                    # (br: live stamps -1 over it -- it bends through retune, never a
+                    # row -- so the template's own, a breath's rows, never reaches it)
+                    if c not in P or c == "br":
                         continue
                     a, b = np.asarray(P[c]), np.asarray(Q[c])
                     if a.dtype != b.dtype or not np.array_equal(a, b):

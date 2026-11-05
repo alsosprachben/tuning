@@ -986,6 +986,12 @@ void nv_song_cc(void *s, long long ch, double t, int cc, int v);
 /* a sung part's (blockrender._prep_choir_parts): a channel's tessitura, the
    median of its keys, in Hz (0: no notes); the part its track declares
    (1 + nv_voice_body's index, 0 none) */
+/* slab.cpp: tonelib.sound_shape (a per-partial gain for brightness db and
+   resonance dr on class k, bright/res: granted) and normalise_power (g
+   scaled so amp g carries amp's power) -- live's and the file's alike */
+void nv_sound_shape(const NoteClass *k, const double *nf, long n, double db, double dr, int bright, int res,
+                    double *g);
+void nv_normalise_power(const double *amp, long n, double *g);
 double nv_song_tess(void *s, long long ch);
 void nv_song_set_part(void *s, long long ch, int part);
 int nv_song_part(void *s, long long ch);

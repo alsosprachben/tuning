@@ -281,6 +281,14 @@ static void normalise_power(const double *amp, long n, double *g)
         g[i] *= f;
 }
 
+extern "C" void nv_sound_shape(const NoteClass *k, const double *nf, long n, double db, double dr, int bright,
+                               int res, double *g)
+{
+    sound_shape(k, nf, n, db, dr, bright != 0, res != 0, g);
+}
+
+extern "C" void nv_normalise_power(const double *amp, long n, double *g) { normalise_power(amp, n, g); }
+
 static float pairwise(const float *a, long n)
 {
     if (n < 8) {

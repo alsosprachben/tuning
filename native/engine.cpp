@@ -808,8 +808,8 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         n.order = k->room_order;
         n.no_reflections = 0;
         // CC71-78 AT ITS ONSET (_snd_d), from the class's own starting point,
-        // those it answers: its times and its vibrato here; its colour
-        // (CC71, 74, 75: _snd_finish's) is Python's
+        // those it answers: its times and its vibrato here; its colour (CC71,
+        // 74, 75) on its rows once they are made (_snd_finish, below)
         double sd[8];
         nv_song_sound(song, ch, dv[0], sd);
         bool has[8];
@@ -827,8 +827,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
                 n.snd_d[q] = has[q] ? sd[q] : 0.0;
                 n.snd_moog = n.snd_moog || has[q];
             }
-        } else if (has[0] || has[3] || has[4])
-            return -(1 + i);
+        }
         n.snd_rt = has[1] ? pow(k->snd_time_range, sd[1]) : 0.0;
         n.snd_at = has[2] ? pow(k->snd_time_range, sd[2]) : 0.0;
         n.sv[1] = has[5] ? pow(k->snd_rate_range, sd[5]) : tmpl->sv[1];
@@ -875,6 +874,36 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (r < 0)
             return -(1 + i);
         carry_radius = out.radius;
+        // CC71, 74, 75 ON THE NOTE (_snd_finish): its rows' decay by CC75's
+        // time scale, its colour by sound_shape over its partials, the power
+        // kept -- live's law (Slab's reshape) on the finished rows (doubles, as
+        // the table keeps them till its cast). Not a Moog's (its knobs), nor the bellows' push
+        // (_push_finish's, made after)
+        if (k->init.kind != 6 && (has[0] || has[3] || has[4]) && r - out.n_push > 0) {
+            enum { cAL = 3, cAR = 4, cAM = 5, cNF = 11, cLOGR = 17, cLOGRA = 18 };
+            long m = (long)(r - out.n_push);
+            double *rw = rows + NCOLS * total;
+            if (has[4]) {
+                double kk = 1.0 / pow(k->snd_time_range, sd[4]);
+                for (long j = 0; j < m; j++) {
+                    rw[NCOLS * j + cLOGR] *= kk;
+                    rw[NCOLS * j + cLOGRA] *= kk;
+                }
+            }
+            if (has[3] || has[0]) {
+                std::vector<double> nf(m), am(m), g(m);
+                for (long j = 0; j < m; j++) {
+                    nf[j] = rw[NCOLS * j + cNF];
+                    am[j] = rw[NCOLS * j + cAM];
+                }
+                nv_sound_shape(k, nf.data(), m, has[3] ? sd[3] : 0.0, has[0] ? sd[0] : 0.0, (k->snd_mask >> 3) & 1,
+                               k->snd_mask & 1, g.data());
+                nv_normalise_power(am.data(), m, g.data());
+                for (long j = 0; j < m; j++)
+                    for (int c : {cAL, cAR, cAM})
+                        rw[NCOLS * j + c] *= g[j];
+            }
+        }
         long long lr0 = total;                  // (its layers' rows, from its first: an MF-104M's)
         for (int l = 0; l < out.n_ft; l++) {   // (its layers' filter rows, each on its knob row)
             const MoogLayer &L = k->moog.L[l];
