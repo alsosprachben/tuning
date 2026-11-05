@@ -5,7 +5,7 @@
                                         [--half] [--pedal-key=N] [--pressure]
                                         [--gpu=c|cl] [--gpu-min=N] [--shed=N] [--wheels]
                                         [--room=NAME] [--cc91] [--thresh=X] [--rpn] [--modes]
-                                        [--routes] [--porta] [--stops] [--scan] [--vibcc]
+                                        [--routes] [--porta] [--stops] [--scan] [--vibcc] [--snd]
 
 live.Live(program, 48 kHz, 128 a block, on the CPU: no register) and the
 native part (native/slab.cpp: its template cache, its slab, live's
@@ -276,6 +276,10 @@ def main(argv):
                     msgs.append(M("pitchwheel", channel=ch, pitch=rng.choice((0, rng.randint(-8192, 8191)))))
                 else:
                     msgs.append(M("control_change", channel=ch, control=1, value=rng.randint(0, 127)))
+            elif "snd" in opt and rng.random() < 0.4:
+                # the sound controllers, CC71-78 (either side of 64, and back to it)
+                msgs.append(M("control_change", channel=ch, control=rng.randint(71, 78),
+                              value=rng.choice((64, rng.randint(0, 127)))))
             elif "vibcc" in opt and rng.random() < 0.4:
                 # the sound controllers' vibrato: CC76 its rate, CC77 its depth (either side of 64)
                 msgs.append(M("control_change", channel=ch, control=rng.choice((76, 77)),

@@ -9874,6 +9874,17 @@ def pluck_point_moved(p, d):
     return p * (PLUCK_DARK / p) ** (-d)
 
 
+def _apow(x, y):
+    """x ** y over an array as libm's pow (native.xpow) -- numpy's own SIMD
+    pow is a last bit away on a quarter of its values here, and differently
+    on another machine -- and y == 2 its square, as numpy's ** 2.0 is: the
+    sound controllers' shaping, which the native live part does too."""
+    if y == 2.0:
+        return x * x
+    import native
+    return native.xpow(x, y)
+
+
 def pluck_shape(cls, nf, d):
     """Per-partial gain taking a note's comb from its own pluck point to the
     moved one -- the ratio of tonelib's comb at the two, partial by partial.
@@ -9887,7 +9898,8 @@ def pluck_shape(cls, nf, d):
     B = props.inharmonicity_coefficient
     hm = np.arange(1, (props.max_harmonic or 64) + 1, dtype=np.float64)
     r = hm * (1.0 + 0.5 * (hm * hm - 1.0) * B)
-    m = hm[np.argmin(np.abs(np.log(nf / f0)[:, None] - np.log(r)[None, :]), axis=1)]
+    import native
+    m = hm[np.argmin(np.abs(native.xlog(nf / f0)[:, None] - native.xlog(r)[None, :]), axis=1)]
     dp = props.strike_depth
 
     def comb(p):
@@ -23231,11 +23243,11 @@ def sound_shape(cls, nf, d_bright, d_res):
             g *= pluck_shape(cls, nf, d_bright)
         elif et:
             k = et * (SOUND_EFFORT_DB * d_bright) / 6.0206
-            g *= (nf / max(float(nf.min()), 1e-9)) ** k
+            g *= _apow(nf / max(float(nf.min()), 1e-9), k)
         elif corner:
             order = getattr(cls, 'bore_order', 2.0)
             c2 = corner * SOUND_CORNER_RANGE ** d_bright
-            g *= (1.0 + (nf / corner) ** order) / (1.0 + (nf / c2) ** order)
+            g *= (1.0 + _apow(nf / corner, order)) / (1.0 + _apow(nf / c2, order))
     if d_res and 'resonance' in ctl:
         mq = getattr(cls, 'mute_resonance_q', 0.0)
         corner = getattr(cls, 'bore_corner_hz', 0.0)

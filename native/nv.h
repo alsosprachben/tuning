@@ -764,6 +764,15 @@ typedef struct {
     // ITS MOD WHEEL CAN BE A VIBRATO (wheel_vibrato: not a hammer's, a
     // mallet's, a stick's or a noise's -- live's 'vibrato' role)
     int wheel_vibrato;
+    // THE SOUND CONTROLLERS' SHAPING (tonelib.sound_shape, CC74 and CC71):
+    // brightness as effort (sh_et), a corner moved (sh_corner, sh_order), or
+    // -- sh_pluck -- the pluck point (pluck_shape: the class's strike point
+    // sh_sp, or a stopped string's from sh_open/sh_popen; sh_sd its depth,
+    // sh_B, sh_mh its series); resonance a mute's (sh_mq, sh_mhz, sh_mdb) or
+    // the corner's
+    double sh_et, sh_corner, sh_order, sh_sp, sh_sd, sh_B, sh_mq, sh_mhz, sh_mdb, sh_popen;
+    int sh_pluck, sh_mh, sh_nopen;
+    double sh_open[8];
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.

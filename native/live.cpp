@@ -896,6 +896,15 @@ double nv_tcache_trim(void *h, int program)
     return C && program >= 0 && program < 128 ? C->trim[program] : 1.0;
 }
 
+// the class a key of a program plays (none on a drum set's cache)
+const NoteClass *nv_tcache_class_key(void *h, int program, int key)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    if (!C || C->drums || program < 0 || program > 127 || key < 0 || key > 127)
+        return nullptr;
+    return C->K[128 * program + key];
+}
+
 const NoteClass *nv_tcache_class(void *h, int program)
 {
     nv::live::Cache *C = (nv::live::Cache *)h;

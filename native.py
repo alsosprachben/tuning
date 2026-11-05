@@ -232,7 +232,10 @@ class NoteClass(ctypes.Structure):
                    ('click_amp', C * 16), ('click_dec', C), ('click_s', C), ('pre_pluck', I),
                    ('moog', MoogSpec), ('brass', I), ('bn_slur', I),
                    ('os_floor_db', C), ('os_max_s', C), ('tail_set', I), ('tail_db', C), ('tail_dbs', C),
-                   ('clav_panel', I), ('wheel_vibrato', I)])
+                   ('clav_panel', I), ('wheel_vibrato', I),
+                   ('sh_et', C), ('sh_corner', C), ('sh_order', C), ('sh_sp', C), ('sh_sd', C), ('sh_B', C),
+                   ('sh_mq', C), ('sh_mhz', C), ('sh_mdb', C), ('sh_popen', C), ('sh_pluck', I), ('sh_mh', I),
+                   ('sh_nopen', I), ('sh_open', C * 8)])
 
 
 class NoteIn(ctypes.Structure):
@@ -2477,6 +2480,23 @@ def note_class(cls):
                 k.tail_set, k.tail_db, k.tail_dbs = 1, float(tl[0]), float(tl[1])
         k.clav_panel = int(bool(getattr(cls, 'clav_panel', False)))
         k.wheel_vibrato = int(bool(getattr(cls, 'wheel_vibrato', True)))
+        # the sound controllers' shaping (tonelib.sound_shape: nv_sound_shape)
+        k.sh_et = float(getattr(cls, 'effort_tilt', 0.0) or 0.0)
+        k.sh_corner = float(getattr(cls, 'bore_corner_hz', 0.0) or 0.0)
+        k.sh_order = float(getattr(cls, 'bore_order', 2.0))
+        k.sh_mq = float(getattr(cls, 'mute_resonance_q', 0.0) or 0.0)
+        k.sh_mhz = float(getattr(cls, 'mute_resonance_hz', 0.0) or 0.0)
+        k.sh_mdb = float(getattr(cls, 'mute_resonance_db', 0.0) or 0.0)
+        if getattr(cls, 'pluck_point_control', False):
+            # (pluck_shape's cls(f0): its strike point -- a stopped string's
+            # from the open strings, else the class's -- depth, B and series)
+            k.sh_pluck = 1
+            k.sh_sp, k.sh_sd = float(cls.strike_point), float(cls.strike_depth)
+            k.sh_B, k.sh_mh = float(cls.inharmonicity_coefficient), int(cls.max_harmonic or 64)
+            os_ = getattr(cls, 'open_strings', None) or ()
+            if stopped_voice(cls) and getattr(cls, 'pluck_open', None) and os_:
+                k.sh_nopen, k.sh_popen = len(os_), float(cls.pluck_open)
+                k.sh_open[:k.sh_nopen] = [float(o) for o in os_]
         nf = int(getattr(cls, 'strike_flam', 0) or 0)
         k.n_flam = nf if nf > 1 else 0
         ft = getattr(cls, 'strike_flam_times', None) or ()

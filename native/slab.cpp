@@ -80,6 +80,42 @@ int nv_cl_samples(void *h, const void *D, long dn, const void *C, long cn, const
                   long long n0, int frames, int send, int mg, float *out);
 }
 
+// numpy's pairwise sum of float64 (DOUBLE_pairwise_sum, PW_BLOCKSIZE 128),
+// and np.sum's 8192-element buffers each summed in turn -- tubeamp.cpp's own
+static double pairwise_d(const double *a, long n)
+{
+    if (n < 8) {
+        double r = 0.0;
+        for (long i = 0; i < n; i++)
+            r += a[i];
+        return r;
+    }
+    if (n <= 128) {
+        double r[8];
+        for (int j = 0; j < 8; j++)
+            r[j] = a[j];
+        long i = 8;
+        for (; i < n - (n % 8); i += 8)
+            for (int j = 0; j < 8; j++)
+                r[j] += a[i + j];
+        double res = ((r[0] + r[1]) + (r[2] + r[3])) + ((r[4] + r[5]) + (r[6] + r[7]));
+        for (; i < n; i++)
+            res += a[i];
+        return res;
+    }
+    long n2 = n / 2;
+    n2 -= n2 % 8;
+    return pairwise_d(a, n2) + pairwise_d(a + n2, n - n2);
+}
+
+static double npsum(const double *a, long n)
+{
+    double r = 0.0;
+    for (long i = 0; i < n; i += 8192)
+        r += pairwise_d(a + i, std::min(8192L, n - i));
+    return r;
+}
+
 namespace nv {
 namespace slab {
 
@@ -99,6 +135,150 @@ enum { F8_om = 0, F8_p0 = 1, F8_p0R = 2, F8_fmw = 3 };
 enum { I4_gr = 0, I4_cr = 1, I4_br = 2, I4_fx = 4 };
 
 // numpy's pairwise sum of a float32 array (its float accumulator), as np.mean takes it
+extern "C" void nv_log_n(long n, const double *x, double *out);   // exactmath.c: libm's log
+extern "C" const NoteClass *nv_tcache_class_key(void *h, int program, int key);
+
+// tonelib._apow: libm's pow, its square at 2 (numpy's ** 2.0)
+static double apow(double x, double y) { return y == 2.0 ? x * x : pow(x, y); }
+
+// tonelib.pluck_shape: the comb at the pluck point moved by CC74 over the
+// comb where it was (pluck_point_moved), each partial's index read off its
+// frequency under the note's stretch (the nearest in log, the first of equals)
+static void pluck_shape(const NoteClass *k, const double *nf, long n, double d, double *out)
+{
+    double f0 = nf[0];
+    for (long i = 1; i < n; i++)
+        if (nf[i] < f0)
+            f0 = nf[i];
+    f0 = f0 > 1e-9 ? f0 : 1e-9;                 // max(nf.min(), 1e-9)
+    double p0 = k->sh_sp;
+    if (k->sh_nopen > 0 && k->sh_popen != 0.0) {    // (stopped_pluck_point: cls(f0)'s)
+        double nn = 69.0 + 12.0 * log((f0 > 1.0 ? f0 : 1.0) / 440.0) / log(2.0);
+        int any = 0;
+        double o = 0.0, lo = k->sh_open[0];
+        for (int i = 0; i < k->sh_nopen; i++) {
+            if (k->sh_open[i] <= nn + 0.5 && (!any || k->sh_open[i] > o)) {
+                o = k->sh_open[i];
+                any = 1;
+            }
+            if (k->sh_open[i] < lo)
+                lo = k->sh_open[i];
+        }
+        if (!any)
+            o = lo;
+        double p = fmod(k->sh_popen * pow(2.0, (nn - o) / 12.0), 1.0);
+        double q = 1.0 - p;
+        p = q < p ? q : p;                      // min(p, 1 - p)
+        p0 = 0.02 > p ? 0.02 : p;               // max(0.02, ...)
+    }
+    double p1;                                  // pluck_point_moved
+    if (d >= 0.0) {
+        double b = 0.06 < p0 ? 0.06 : p0;       // min(PLUCK_BRIGHT, p)
+        p1 = p0 * pow(b / p0, d);
+    } else {
+        p1 = p0 * pow(0.5 / p0, -d);
+    }
+    int mh = k->sh_mh;
+    std::vector<double> r(mh), lr(mh), x(n), lx(n);
+    for (int j = 0; j < mh; j++) {
+        double hm = (double)(j + 1);
+        r[j] = hm * (1.0 + 0.5 * (hm * hm - 1.0) * k->sh_B);
+    }
+    for (long i = 0; i < n; i++)
+        x[i] = nf[i] / f0;
+    nv_log_n(mh, r.data(), lr.data());
+    nv_log_n(n, x.data(), lx.data());
+    double dp = k->sh_sd;
+    for (long i = 0; i < n; i++) {
+        int best = 0;
+        double bd = fabs(lx[i] - lr[0]);
+        for (int j = 1; j < mh; j++) {
+            double dd = fabs(lx[i] - lr[j]);
+            if (dd < bd) {
+                bd = dd;
+                best = j;
+            }
+        }
+        double m = (double)(best + 1);
+        double c1 = (1.0 - dp) + dp * fabs(sin(m * M_PI * p1));
+        double c0 = (1.0 - dp) + dp * fabs(sin(m * M_PI * p0));
+        out[i] = c1 / (c0 > 1e-3 ? c0 : 1e-3);
+    }
+}
+
+// tonelib._two_pole: |H| of a two-pole low-pass at x = f/fc, quality q
+static double two_pole(double x, double q)
+{
+    double a = 1.0 - x * x, b = x / q;
+    return 1.0 / sqrt(a * a + b * b);
+}
+
+// tonelib.sound_shape: a per-partial gain for brightness (bright: granted)
+// and resonance (res: granted), not yet normalised
+static void sound_shape(const NoteClass *k, const double *nf, long n, double db, double dr, bool bright,
+                        bool res, double *g)
+{
+    for (long i = 0; i < n; i++)
+        g[i] = 1.0;
+    if (!n)
+        return;
+    if (db != 0.0 && bright) {
+        double et = k->sh_et, corner = k->sh_corner;
+        if (k->sh_pluck) {
+            std::vector<double> ps(n);
+            pluck_shape(k, nf, n, db, ps.data());
+            for (long i = 0; i < n; i++)
+                g[i] *= ps[i];
+        } else if (et != 0.0) {
+            double kk = et * (12.0 * db) / 6.0206;
+            double mn = nf[0];
+            for (long i = 1; i < n; i++)
+                if (nf[i] < mn)
+                    mn = nf[i];
+            mn = mn > 1e-9 ? mn : 1e-9;
+            for (long i = 0; i < n; i++)
+                g[i] *= apow(nf[i] / mn, kk);
+        } else if (corner != 0.0) {
+            double order = k->sh_order, c2 = corner * pow(4.0, db);
+            for (long i = 0; i < n; i++)
+                g[i] *= (1.0 + apow(nf[i] / corner, order)) / (1.0 + apow(nf[i] / c2, order));
+        }
+    }
+    if (dr != 0.0 && res) {
+        double mq = k->sh_mq, corner = k->sh_corner;
+        if (mq != 0.0 && k->sh_mhz != 0.0) {
+            double hz = k->sh_mhz, boost = pow(10.0, k->sh_mdb / 20.0) - 1.0, q2 = mq * pow(4.0, dr);
+            for (long i = 0; i < n; i++) {
+                double r = nf[i] / hz, u = r - 1.0 / r;
+                double a = q2 * u, b = mq * u;
+                g[i] *= ((1.0 + boost / (1.0 + a * a)) / (1.0 + boost / (1.0 + b * b)));
+            }
+        } else if (corner != 0.0) {
+            double c = corner * ((db != 0.0 && bright && k->sh_et == 0.0) ? pow(4.0, db) : 1.0);
+            double q0 = pow(0.5, 0.5), q1 = q0 * pow(4.0, dr);
+            for (long i = 0; i < n; i++) {
+                double x = nf[i] / c;
+                g[i] *= two_pole(x, q1) / two_pole(x, q0);
+            }
+        }
+    }
+}
+
+// tonelib.normalise_power: g scaled so amp g carries amp's power
+static void normalise_power(const double *amp, long n, double *g)
+{
+    std::vector<double> a2(n), b2(n);
+    for (long i = 0; i < n; i++) {
+        a2[i] = amp[i] * amp[i];
+        double b = amp[i] * g[i];
+        b2[i] = b * b;
+    }
+    double p0 = npsum(a2.data(), n), p1 = npsum(b2.data(), n);
+    double f = (p1 > 0.0 && p0 > 0.0) ? pow(p0 / p1, 0.5) : 1.0;
+    for (long i = 0; i < n; i++)
+        g[i] *= f;
+}
+
 static float pairwise(const float *a, long n)
 {
     if (n < 8) {
@@ -2603,6 +2783,7 @@ struct Part {
             S.tremolo_arm(slots, td->second, patches[cur].wtrem_stereo);
         if (pressure[ch] != 0.0)
             press(slots, pressure[ch]);
+        sound_stamp_note(patches[cur], ch, sn, slots);     // the channel's CC71-78 (live._sound_stamp)
         {                                   // a note struck under a bend, or the wheel up, joins them
             double sva, svr;
             snd_vib(patches[cur], ch, slots, &sva, &svr);
@@ -2996,10 +3177,134 @@ struct Part {
     // live._sound_cc: one CC71-78 on channel ch. The release moves on the
     // notes whose key is still down (a release already running would jump);
     // the attack and decay are onset facts, for the next note
+    // the class a part plays at a key (live's part.patch._voice_class), none on drums
+    const NoteClass *key_class(const Patch &p, int key) const
+    {
+        return p.drums ? nullptr : nv_tcache_class_key(p.cache, p.program, key);
+    }
+
+    // live._sound_stamp: at note-on, what the channel's CC71-78 ask of this
+    // key's voice -- the times (attack, release, decay) and the vibrato's
+    // delay, onset facts; the brightness/resonance gain, power kept, baked
+    // into aL0 and recorded in sg (a Moog's rows its panel's: none here)
+    void sound_stamp_note(const Patch &p, int ch, int key, const std::vector<long> &slots)
+    {
+        const NoteClass *k = key_class(p, key);
+        if (!k || slots.empty())
+            return;
+        const double *d = snd_d[ch];
+        auto has = [&](int i) { return ((k->snd_mask >> i) & 1) && d[i] != 0.0; };
+        bool any = false;
+        for (int i = 0; i < 8; i++)
+            any = any || has(i);
+        if (!any)
+            return;
+        std::vector<long> idx;
+        for (long s : slots)
+            if (S.i4[I4_fx][s] < 0)
+                idx.push_back(s);
+        if (idx.empty())
+            return;
+        if (has(2)) {                       // attack: sound_time_scale
+            float f = (float)pow(4.0, d[2]);
+            for (long s : idx)
+                S.f4[F4_fa][s] *= f;
+        }
+        if (has(1)) {                       // release
+            float r = (float)pow(4.0, d[1]);
+            for (long s : idx) {
+                S.f4[F4_re][s] *= r;
+                S.sre[s] = r;
+            }
+        }
+        if (has(4)) {                       // decay
+            float kk = (float)(1.0 / pow(4.0, d[4]));
+            for (long s : idx) {
+                S.f4[F4_logr][s] *= kk;
+                S.f4[F4_logrA][s] *= kk;
+            }
+        }
+        if (has(7)) {                       // the vibrato's delay: sound_vib_delay
+            float vd = (float)((d[7] > 0.0 ? d[7] : 0.0) * 1.0);
+            for (long s : idx)
+                S.f4n[3][s] = vd;
+        }
+        if (has(3) || has(0)) {             // brightness, resonance
+            long n = (long)idx.size();
+            std::vector<double> nf(n), amp(n), g(n);
+            for (long i = 0; i < n; i++) {
+                nf[i] = (double)S.f4[F4_nf][idx[i]];
+                amp[i] = (double)S.aL0[idx[i]];
+            }
+            sound_shape(k, nf.data(), n, has(3) ? d[3] : 0.0, has(0) ? d[0] : 0.0, (k->snd_mask >> 3) & 1,
+                        k->snd_mask & 1, g.data());
+            normalise_power(amp.data(), n, g.data());
+            for (long i = 0; i < n; i++) {
+                long s = idx[i];
+                float gf = (float)g[i];
+                S.f4[F4_aL][s] *= gf;
+                S.f4[F4_aR][s] *= gf;
+                S.aL0[s] *= gf;
+                S.aR0[s] *= gf;
+                S.sg[s] = gf;
+            }
+        }
+    }
+
+    // live._reshape_sound: CC74/71 on a channel's sounding notes, each
+    // against its un-shaped baseline (aL0 over sg), as new over old -- not a
+    // plucked string's (plucked where it was plucked: the next note's)
+    void reshape_sound(int ch)
+    {
+        const double *d = snd_d[ch];
+        for (const Patch &p : patches) {
+            if (p.drums || !(p.channel < 0 || p.channel == ch))
+                continue;
+            for (auto &kv : S.live) {
+                const Key &kk = kv.first;
+                if (std::get<0>(kk) != p.pid || std::get<1>(kk) != ch || std::get<2>(kk) < 0 || kv.second.empty())
+                    continue;
+                std::vector<long> idx;
+                for (long s : kv.second)
+                    if (S.i4[I4_fx][s] < 0)
+                        idx.push_back(s);
+                if (idx.empty())
+                    continue;
+                const NoteClass *k = key_class(p, (int)std::get<2>(kk) + transpose);
+                if (!k || k->sh_pluck)
+                    continue;
+                auto has = [&](int i) { return ((k->snd_mask >> i) & 1) && d[i] != 0.0; };
+                long n = (long)idx.size();
+                std::vector<double> nf(n), base(n), g(n);
+                for (long i = 0; i < n; i++) {
+                    nf[i] = (double)S.f4[F4_nf][idx[i]];
+                    base[i] = (double)(S.aL0[idx[i]] / std::max(S.sg[idx[i]], 1e-12f));
+                }
+                sound_shape(k, nf.data(), n, has(3) ? d[3] : 0.0, has(0) ? d[0] : 0.0, (k->snd_mask >> 3) & 1,
+                            k->snd_mask & 1, g.data());
+                normalise_power(base.data(), n, g.data());
+                for (long i = 0; i < n; i++) {
+                    long s = idx[i];
+                    float gf = (float)g[i];
+                    float r = gf / std::max(S.sg[s], 1e-12f);
+                    S.f4[F4_aL][s] *= r;
+                    S.f4[F4_aR][s] *= r;
+                    S.aL0[s] *= r;
+                    S.aR0[s] *= r;
+                    S.sg[s] = gf;
+                }
+            }
+        }
+    }
+
     void sound_cc(int ch, int cc, int v, long long n0)
     {
         double d = (v - 64.0) / 64.0;
         snd_d[ch][cc - 71] = d;
+        if (cc == 71 || cc == 74) {         // brightness, resonance: on the notes sounding
+            reshape_sound(ch);
+            return;
+        }
         if (cc == 76 || cc == 77) {
             // THE VIBRATO's RATE AND DEPTH (live: _vib_apply on each part
             // whose voice answers this one), with the wheel's, written once
@@ -3010,6 +3315,24 @@ struct Part {
         }
         if (cc != 72)
             return;
+        for (const Patch &p : patches) {
+            // the release on the notes whose key is still down (live's, a
+            // voice with no ranks: each key's own grant)
+            if (p.organ || p.drums || !(p.channel < 0 || p.channel == ch))
+                continue;
+            for (auto &kv : S.live) {
+                if (std::get<0>(kv.first) != p.pid || std::get<1>(kv.first) != ch || kv.second.empty())
+                    continue;
+                const NoteClass *k = key_class(p, (int)std::get<2>(kv.first) + transpose);
+                float nw = k && ((k->snd_mask >> 1) & 1) && d != 0.0 ? (float)pow(4.0, d) : 1.0f;
+                for (long s : kv.second) {
+                    if (S.i8[1][s] != IDLE || S.i4[I4_fx][s] >= 0)
+                        continue;
+                    S.f4[F4_re][s] *= nw / std::max(S.sre[s], 1e-12f);
+                    S.sre[s] = nw;
+                }
+            }
+        }
         for (size_t pi = 0; pi < patches.size(); pi++) {
             const OrganSpec *og = patches[pi].organ;
             if (!og || !(patches[pi].channel < 0 || patches[pi].channel == ch))
