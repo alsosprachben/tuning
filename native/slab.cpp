@@ -131,8 +131,9 @@ static const char *I8[] = {"non", "noff"};
 static const char *I4[] = {"gr", "cr", "br", "pl", "fx", "mk"};
 enum { NF8 = 6, NF4 = 27, NF4N = 4, NI8 = 2, NI4 = 6 };
 enum { F4_aL = 0, F4_aR = 1, F4_nf = 2, F4_fa = 3, F4_re = 4, F4_ch = 5, F4_logr = 6, F4_logrA = 7, F4_aft = 8, F4_sus = 9, F4_cbw = 15, F4_vd = 19, F4_vr = 20, F4_delL = 22, F4_delR = 23, F4_rdl = 25 };
-enum { F8_om = 0, F8_p0 = 1, F8_p0R = 2, F8_fmw = 3 };
-enum { I4_gr = 0, I4_cr = 1, I4_br = 2, I4_fx = 4 };
+enum { F8_om = 0, F8_p0 = 1, F8_p0R = 2, F8_fmw = 3, F8_fmp = 4, F8_fmpR = 5 };
+enum { F4_nfr = 26 };
+enum { I4_gr = 0, I4_cr = 1, I4_br = 2, I4_fx = 4, I4_mk = 5 };
 
 // numpy's pairwise sum of a float32 array (its float accumulator), as np.mean takes it
 extern "C" void nv_log_n(long n, const double *x, double *out);   // exactmath.c: libm's log
@@ -428,6 +429,7 @@ struct Slab {
         aLp.assign(cap, 0.0f); aRp.assign(cap, 0.0f);
         tr_on.assign(cap, 0); tr_dep.assign(cap, 0.0f); tr_aL.assign(cap, 0.0f); tr_aR.assign(cap, 0.0f);
         cv_on.assign(cap, 0); cv_aL.assign(cap, 0.0f); cv_aR.assign(cap, 0.0f);
+        moog_alloc();
         tr_st.assign(cap, 1.0f);
         hs_dep.assign(cap, 0.0f); hs_hz.assign(cap, 0.0);
         ls_on.assign(cap, 0); ls_horn.assign(cap, 0); ls_am.assign(cap, 0.0f); ls_sharp.assign(cap, 1.0f);
@@ -1010,6 +1012,9 @@ struct Slab {
                 i8[1][s] = v;
         }
         retiring.push_back(std::make_pair(idx, n));
+        for (long s : idx)                  // the Moog rows' key-up (their pitch and shape rows')
+            if (i4[I4_fx][s] >= 0 && (double)n < mp_toff[i4[I4_fx][s]])
+                mp_toff[i4[I4_fx][s]] = (double)n;
     }
 
     // live.Slab.retime_off: a released note's end, d samples later
@@ -1071,6 +1076,499 @@ struct Slab {
     }
 
     // Slab.reap: slots whose release has rung out, freed
+    // THE MOOG's ROWS (live.Slab's): a note's filter row (FT, from a pool),
+    // its part's knob row (KN, two ends a block), its mod section's pitch
+    // (MP*) and shape (MK*, MPK) rows, its OSC 2 slots' FM source; and a
+    // Moog slot's own baseline (mo_*): its level at unit weight (the
+    // template is knob-neutral), and what the panel makes of it now
+    static const int MOOG_FT_ROWS = 1024, MOOG_KN_ROWS = 256, MOOG_MP_CAP = 65, MOOG_MK_GRID = 5,
+                     MOOG_MK_CAP = MOOG_MK_GRID * 3 * 64 * 2, FT_W = 30, KN_W = 9, SHAPE_W = 25, SHAPE_K = 64;
+    std::vector<float> FT, KN, MPR, MPK;
+    std::vector<int32_t> MPI, MKI;
+    std::vector<double> MPC;
+    std::deque<int> ft_free;
+    std::vector<int> ft_cnt, ft_layer;
+    std::vector<double> mp_a0, mp_toff, mp_acc, mp_P, ms_par;
+    std::vector<char> mp_on, ms_on;
+    std::vector<long long> ms_next, ms_nj;
+    std::map<int, std::pair<std::vector<long>, std::vector<long>>> fm_map;
+    std::vector<float> mo_uL, mo_uR, mo_w;
+    std::vector<double> mo_ph, mo_r;
+    std::map<std::tuple<long long, long long, int>, int> kn_of;     // (pid, ch, layer) -> its knob row
+
+    void moog_alloc()
+    {
+        FT.assign(MOOG_FT_ROWS * FT_W, 0.0f);
+        KN.assign(MOOG_KN_ROWS * 2 * KN_W, 0.0f);
+        MPI.assign(MOOG_FT_ROWS * 3, 0);
+        MKI.assign(MOOG_FT_ROWS * 7, 0);
+        MPC.assign(MOOG_FT_ROWS * MOOG_MP_CAP, 0.0);
+        MPR.assign(MOOG_FT_ROWS * MOOG_MP_CAP, 1.0f);
+        MPK.assign((size_t)MOOG_FT_ROWS * MOOG_MK_CAP, 0.0f);
+        for (int r = 0; r < MOOG_FT_ROWS; r++) {
+            MPI[3 * r + 2] = 1;
+            MKI[7 * r + 2] = 1;
+            MKI[7 * r + 4] = MKI[7 * r + 5] = MKI[7 * r + 6] = -1;
+            ft_free.push_back(r);
+        }
+        ft_cnt.assign(MOOG_FT_ROWS, 0);
+        ft_layer.assign(MOOG_FT_ROWS, 0);
+        mp_a0.assign(MOOG_FT_ROWS, 0.0);
+        mp_toff.assign(MOOG_FT_ROWS, INFINITY);
+        mp_acc.assign(MOOG_FT_ROWS, 0.0);
+        mp_P.assign(MOOG_FT_ROWS * 9, 0.0);
+        ms_par.assign(MOOG_FT_ROWS * SHAPE_W, 0.0);
+        mp_on.assign(MOOG_FT_ROWS, 0);
+        ms_on.assign(MOOG_FT_ROWS, 0);
+        ms_next.assign(MOOG_FT_ROWS, -1);
+        ms_nj.assign(MOOG_FT_ROWS, 0);
+        mo_uL.assign(cap, 0.0f); mo_uR.assign(cap, 0.0f); mo_w.assign(cap, 0.0f);
+        mo_ph.assign(cap, 0.0); mo_r.assign(cap, 1.0);
+    }
+
+    // Slab.knob_row: the KN row of a (part, channel[, layer]), made on first
+    // use from the knobs it is stamped with; the mapping starts again when full
+    int knob_row(const std::tuple<long long, long long, int> &pk, const double *kn)
+    {
+        auto it = kn_of.find(pk);
+        if (it != kn_of.end())
+            return it->second;
+        if ((int)kn_of.size() >= MOOG_KN_ROWS)
+            kn_of.clear();
+        int r = (int)kn_of.size();
+        kn_of[pk] = r;
+        if (kn)
+            set_knobs(r, kn, false);
+        return r;
+    }
+
+    // Slab.set_knobs: the knobs' new values the END of the next block (ramp),
+    // or both ends
+    void set_knobs(int r, const double *kn, bool ramp)
+    {
+        for (int j = 0; j < KN_W; j++) {
+            KN[(2 * r + 1) * KN_W + j] = (float)kn[j];
+            if (!ramp)
+                KN[2 * r * KN_W + j] = (float)kn[j];
+        }
+    }
+
+    // Slab.knobs_advance's knob rows: a block's end the next one's start
+    void knobs_advance()
+    {
+        for (int r = 0; r < MOOG_KN_ROWS; r++)
+            for (int j = 0; j < KN_W; j++)
+                KN[2 * r * KN_W + j] = KN[(2 * r + 1) * KN_W + j];
+    }
+
+    // moog.ft_row: a note's fixed row -- its key's tracking, the contours'
+    // times, the mode, its knob row, its key, the valve's flag, the flags,
+    // and 1 -> 2 FM's index and modulator (fm_coeffs, against phi1: OSC 1's
+    // fundamental's phase -- arg c_1 unless given -- in libm's arithmetic)
+    static void ft_row(const MoogLayer *L, double f0, int krow, bool pre, int flags, bool has_phi1, double phi1,
+                       float *out)
+    {
+        double row[30];
+        row[0] = pow(f0 / L->kb_ref_hz, L->kb_track);
+        for (int j = 1; j <= 8; j++)
+            row[j] = L->ft[j];
+        row[9] = (double)krow;
+        row[10] = f0;
+        row[11] = pre ? 1.0 : 0.0;
+        double fi = L->fm_index;
+        row[12] = (double)((flags & ~16) | (fi != 0.0 ? 16 : 0));
+        row[13] = fi;
+        double p1 = has_phi1 ? phi1 : atan2(L->c1[0][1], L->c1[0][0]);
+        for (int j = 1; j <= 8; j++) {
+            double re = 0.0, im = 0.0;
+            if (fi != 0.0) {
+                double a = 2.0 * hypot(L->c1[j - 1][0], L->c1[j - 1][1]) / (double)j;
+                double x = atan2(L->c1[j - 1][1], L->c1[j - 1][0]) - (double)j * p1;
+                re = a * cos(x);
+                im = a * sin(x);
+            }
+            row[12 + 2 * j] = re;
+            row[13 + 2 * j] = im;
+        }
+        for (int j = 0; j < 30; j++)
+            out[j] = (float)row[j];
+    }
+
+    // moog.weights: what the panel makes of each knob-neutral partial
+    // (mk = osc 4096 + k, nf its nominal Hz): its weight, phase and ratio
+    static void weights(const MoogLayer *L, const std::vector<long> &idx, const int32_t *mk, const float *nf,
+                        double fmax, double *w, double *ph, double *rt)
+    {
+        double r1 = L->t * L->foot1, r2 = L->t * L->foot2 * L->o2f;
+        double sa = L->self_amp;
+        for (size_t i = 0; i < idx.size(); i++) {
+            long s = idx[i];
+            int osc = mk[s] / 4096, k = mk[s] % 4096;
+            double f = (double)nf[s];
+            w[i] = 0.0;
+            ph[i] = 0.0;
+            rt[i] = 1.0;
+            if (osc == 4) {                     // the noise bands: level only, in hertz
+                int kk = std::min(std::max(k, 1), L->n_noise) - 1;
+                w[i] = f > fmax ? 0.0 : L->noise_amp[kk] * L->lvl[3];
+            } else if (osc == 5) {              // the ladder's own sine, at its cutoff
+                double fs = L->self_cut * pow(f / L->kb_ref_hz, L->kb_track) * L->self_eg;
+                rt[i] = fs / f;
+                w[i] = fs > fmax ? 0.0 : sa;
+            } else if (osc >= 1 && osc <= 3) {
+                int n = osc == 3 ? 32 : 64;
+                const double (*c)[2] = osc == 1 ? L->c1 : osc == 2 ? L->c2 : L->cs;
+                double r = osc == 2 ? r2 : r1;
+                bool moving = (L->shape_on >> osc) & 1;     // FT_SHAPE: the shape rows carry it
+                int kk = std::min(std::max(k, 1), n) - 1;
+                double cr = moving ? 1.0 : c[kk][0], ci = moving ? 0.0 : c[kk][1];
+                rt[i] = r;
+                w[i] = 2.0 * hypot(cr, ci) * L->lvl[osc - 1];
+                ph[i] = atan2(ci, cr);
+                if (!(osc == 2 && L->pitch_on) && f * r > fmax)
+                    w[i] = 0.0;
+            }
+        }
+    }
+
+    // Slab.moog_retimbre at a stamp (n None): the panel on these Moog slots
+    // -- weight, phase (within 90 degrees of the last: a crossing a sign),
+    // frequency (the onset's own anchor, fraction and all) -- each against
+    // what was applied before, the swings' baselines moved with it
+    void moog_retimbre_new(const std::vector<long> &idx, const MoogLayer *L, double rate)
+    {
+        size_t n = idx.size();
+        if (!n)
+            return;
+        std::vector<double> w(n), ph(n), rt(n);
+        double fmax = 0.5 * rate < L->fmax_hz ? 0.5 * rate : L->fmax_hz;    // min(FMAX_HZ, 0.5 rate)
+        weights(L, idx, i4[I4_mk].data(), f4[F4_nf].data(), fmax, w.data(), ph.data(), rt.data());
+        // an amplifier after the ladder hears it at its sustain (FT slot 11)
+        for (size_t i = 0; i < n; i++) {
+            long s = idx[i];
+            int r = i4[I4_fx][s];
+            if (r >= 0 && FT[r * FT_W + 11] > 0.5f && i4[I4_mk][s] / 4096 != 5) {
+                double f0 = (double)FT[r * FT_W + 10], f = (double)f4[F4_nf][s] * rt[i];
+                double fcs = L->self_cut * pow(f0 / L->kb_ref_hz, L->kb_track) * L->self_eg;
+                w[i] *= nv_moog_ladder_gain(L, f, fcs > 1.0 ? fcs : 1.0, L->kn[1], (int)L->ft[7],
+                                            L->ft[8] != 0.0);
+            }
+        }
+        bool any = false;
+        for (size_t i = 0; i < n; i++)
+            any = any || fabs(rt[i] / mo_r[idx[i]] - 1.0) > 1e-12;
+        if (any)
+            for (size_t i = 0; i < n; i++) {
+                long s = idx[i];
+                double sc = rt[i] / mo_r[s];
+                double om0 = f8[F8_om][s], om1 = om0 * sc;
+                double non = (double)i8[0][s] + (double)f4[F4_nfr][s];
+                f8[F8_p0][s] -= (om1 - om0) * (non + (double)f4[F4_delL][s]);
+                f8[F8_p0R][s] -= (om1 - om0) * (non + (double)f4[F4_delR][s]);
+                f8[F8_om][s] = om1;
+            }
+        for (size_t i = 0; i < n; i++)
+            mo_r[idx[i]] = rt[i];
+        for (size_t i = 0; i < n; i++) {        // a harmonic through zero changes sign, not phase
+            long s = idx[i];
+            double x = ph[i] - mo_ph[s];
+            double d = atan2(sin(x), cos(x));
+            if (fabs(d) > 0.5 * M_PI) {
+                ph[i] = ph[i] - M_PI * (d > 0.0 ? 1.0 : d < 0.0 ? -1.0 : 0.0);
+                w[i] = -w[i];
+            }
+            double dph = ph[i] - mo_ph[s];
+            f8[F8_p0][s] += dph;
+            f8[F8_p0R][s] += dph;
+            mo_ph[s] = ph[i];
+        }
+        // aftertouch rides on aL0: the note's current factor over it (np.median)
+        std::vector<float> rat;
+        for (long s : idx)
+            if (aL0[s] > 0.0f)
+                rat.push_back(f4[F4_aL][s] / aL0[s]);
+        float f = 1.0f;
+        if (!rat.empty()) {
+            std::sort(rat.begin(), rat.end());
+            size_t m = rat.size();
+            f = m % 2 ? rat[m / 2] : (float)((double)(float)(rat[m / 2 - 1] + rat[m / 2]) / 2.0);
+        }
+        // ...and the swings' own baselines move with it (by the ratio; a row
+        // that was silent set where its swing is armed)
+        for (int side = 0; side < 2; side++) {
+            std::vector<float> &uo = side ? mo_uR : mo_uL;
+            std::vector<float> &a0 = side ? aR0 : aL0;
+            std::vector<float> *bases[3] = {side ? &ls_aR : &ls_aL, side ? &tr_aR : &tr_aL, side ? &cv_aR : &cv_aL};
+            const std::vector<char> *arm[3] = {&ls_on, &tr_on, &cv_on};
+            for (size_t i = 0; i < n; i++) {
+                long s = idx[i];
+                double nw = (double)uo[s] * w[i];
+                float old = a0[s];
+                bool z = old == 0.0f;
+                float q = (float)(z ? 1.0 : nw / (double)old);
+                for (int b = 0; b < 3; b++) {
+                    (*bases[b])[s] *= q;
+                    if (z && (*arm[b])[s])
+                        (*bases[b])[s] = (float)(nw * (double)f);
+                }
+            }
+        }
+        for (size_t i = 0; i < n; i++) {
+            long s = idx[i];
+            aL0[s] = (float)((double)mo_uL[s] * w[i]);
+            aR0[s] = (float)((double)mo_uR[s] * w[i]);
+            f4[F4_aL][s] = aL0[s] * f;
+            f4[F4_aR][s] = aR0[s] * f;
+            mo_w[s] = (float)w[i];
+        }
+    }
+
+    // Slab.moog_fm: 1 -> 2 FM for the note on row r -- its row's modulator
+    // against the phase OSC 1's fundamental carries, and which OSC 1 slot
+    // each OSC 2 slot reads its angle from (same note, same room image)
+    void moog_fm(int r, const std::vector<long> &idx, const MoogLayer *L)
+    {
+        if (L->fm_index == 0.0) {
+            fm_map.erase(r);
+            FT[r * FT_W + 12] = (float)((int)FT[r * FT_W + 12] & ~16);
+            return;
+        }
+        std::vector<long> f1, o2;
+        for (long s : idx) {
+            if (i4[I4_fx][s] != r)
+                continue;
+            if (i4[I4_mk][s] == 1 * 4096 + 1)
+                f1.push_back(s);
+            if (i4[I4_mk][s] / 4096 == 2)
+                o2.push_back(s);
+        }
+        if (f1.empty() || o2.empty())
+            return;
+        float *row = &FT[r * FT_W];
+        float nrow[30];
+        ft_row(L, (double)row[10], (int)row[9], row[11] > 0.5f, (int)row[12], true, mo_ph[f1[0]], nrow);
+        for (int j = 0; j < 30; j++)
+            row[j] = nrow[j];
+        auto key = [&](long s) {            // (round(delL, 2), round(delR, 2))
+            return std::make_pair((long long)nearbyint((double)f4[F4_delL][s] * 100.0),
+                                  (long long)nearbyint((double)f4[F4_delR][s] * 100.0));
+        };
+        std::map<std::pair<long long, long long>, long> fund;
+        for (long s : f1)
+            fund[key(s)] = s;               // (a later one of the same key wins: a dict's)
+        std::vector<long> dst, src;
+        for (long s : o2) {
+            auto it = fund.find(key(s));
+            if (it != fund.end()) {
+                dst.push_back(s);
+                src.push_back(it->second);
+            }
+        }
+        fm_map[r] = std::make_pair(dst, src);
+    }
+
+    // Slab._moog_stamp: a Moog note -- its filter row, its part's knob row,
+    // the panel applied to its knob-neutral partials (T.i4's fx: its Moog
+    // rows); a full row pool leaves it unfiltered
+    void moog_stamp(const nv::live::Template &T, long long pid, long long ch, int layer, const MoogLayer *L,
+                    double rate)
+    {
+        const std::vector<long> &idx = last_slots;
+        if (!T.moog || !L || (long)T.i4[I4_fx].size() != (long)idx.size())
+            return;
+        std::vector<long> mine;
+        for (size_t q = 0; q < idx.size(); q++)
+            if (T.i4[I4_fx][q] >= 0)
+                mine.push_back(idx[q]);
+        if (mine.empty() || ft_free.empty())
+            return;
+        int r = ft_free.front();
+        ft_free.pop_front();
+        ft_layer[r] = layer;
+        int krow = knob_row(std::make_tuple(pid, ch, layer), L->kn);
+        int sf = L->shape_on;
+        ft_row(L, T.ft_f0, krow, T.ft_pre, (L->pitch_on ? 1 : 0) | sf, false, 0.0, &FT[r * FT_W]);
+        ms_on[r] = sf != 0;
+        ms_next[r] = -1;
+        if (sf)
+            for (int j = 0; j < SHAPE_W; j++)
+                ms_par[r * SHAPE_W + j] = L->shape_par[j];
+        for (long s : mine)
+            i4[I4_fx][s] = r;
+        ft_cnt[r] = (int)mine.size();
+        // the note's key, for its pitch rows: its direct sound's onset
+        long long a0 = 0;
+        bool got = false;
+        for (long s : idx)
+            if (f4[F4_rdl][s] == 0.0f && (!got || i8[0][s] < a0)) {
+                a0 = i8[0][s];
+                got = true;
+            }
+        if (!got)
+            for (long s : idx)
+                if (!got || i8[0][s] < a0) {
+                    a0 = i8[0][s];
+                    got = true;
+                }
+        mp_a0[r] = (double)a0;
+        mp_toff[r] = INFINITY;
+        mp_acc[r] = 0.0;
+        mp_on[r] = L->pitch_on != 0;
+        if (L->pitch_on)
+            for (int j = 0; j < 9; j++)
+                mp_P[r * 9 + j] = L->pitch_p[j];
+        std::vector<long> mo;
+        for (long s : idx)
+            if (i4[I4_mk][s] > 0)
+                mo.push_back(s);
+        if (!mo.empty()) {
+            for (long s : mo) {
+                mo_uL[s] = aL0[s];
+                mo_uR[s] = aR0[s];
+                mo_w[s] = 1.0f;
+                mo_ph[s] = 0.0;
+                mo_r[s] = 1.0;
+            }
+            moog_retimbre_new(mo, L, rate);
+        }
+        moog_fm(r, idx, L);
+        double span = L->rel_span * rate;
+        float re = (float)(span > 1.0 ? span : 1.0);
+        for (long s : idx) {
+            f4[F4_re][s] = re;
+            aLp[s] = f4[F4_aL][s];
+            aRp[s] = f4[F4_aR][s];
+        }
+    }
+
+    // Slab.moog_fm_block: OSC 1's frequency and phase anchors onto the OSC 2
+    // slots it modulates, this block
+    void moog_fm_block()
+    {
+        for (auto &kv : fm_map)
+            for (size_t q = 0; q < kv.second.first.size(); q++) {
+                long d = kv.second.first[q], s = kv.second.second[q];
+                f8[F8_fmw][d] = f8[F8_om][s];
+                f8[F8_fmp][d] = f8[F8_p0][s];
+                f8[F8_fmpR][d] = f8[F8_p0R][s];
+            }
+    }
+
+    // Slab.moog_pitch_block: this block's pitch rows for every note that has
+    // them -- the grid points from n0 on, one cell integral apart
+    // (synthkernel.c moog_pitch_cells)
+    void moog_pitch_block(long long n0, long long frames, double rate, void *pcells_)
+    {
+        auto pcells = (void (*)(int, const double *, const double *, const double *, const double *, double, int,
+                                double *, double *))pcells_;
+        std::vector<int> on;
+        for (int r = 0; r < MOOG_FT_ROWS; r++)
+            if (mp_on[r])
+                on.push_back(r);
+        if (on.empty() || !pcells)
+            return;
+        long long mg = (frames % 128 == 0 && frames / 128 <= 64) ? 128 : frames;
+        long long j0 = n0 / mg, nj = frames / mg + 1;
+        int m_ = (int)on.size();
+        std::vector<double> C(m_), g(m_), a0(m_), toff(m_), P(9 * m_), dc(m_), rr(m_);
+        for (int q = 0; q < m_; q++) {
+            C[q] = mp_acc[on[q]];
+            a0[q] = mp_a0[on[q]];
+            toff[q] = mp_toff[on[q]];
+            for (int j = 0; j < 9; j++)
+                P[9 * q + j] = mp_P[on[q] * 9 + j];
+        }
+        for (long long m = 0; m < nj; m++) {
+            double gg = (double)((j0 + m) * mg);
+            for (int q = 0; q < m_; q++) {
+                MPC[on[q] * MOOG_MP_CAP + m] = C[q];
+                g[q] = gg;
+            }
+            pcells(m_, g.data(), a0.data(), toff.data(), P.data(), rate, (int)mg, dc.data(), rr.data());
+            for (int q = 0; q < m_; q++) {
+                if (m < nj - 1)
+                    C[q] = C[q] + dc[q];
+                MPR[on[q] * MOOG_MP_CAP + m] = (float)rr[q];
+            }
+        }
+        for (int q = 0; q < m_; q++) {
+            int r = on[q];
+            MPI[r * 3] = r * MOOG_MP_CAP;
+            MPI[r * 3 + 1] = (int32_t)j0;
+            MPI[r * 3 + 2] = (int32_t)nj;
+            mp_acc[r] = C[q];               // this block's end the next one's start
+        }
+    }
+
+    // Slab.moog_shape_block: this block's shape rows for every note whose
+    // shape moves (synthkernel.c moog_shape_rows); a block's first grid
+    // point the last one's last, for a note whose knobs have not moved
+    void moog_shape_block(long long n0, long long frames, double rate, void *srows_)
+    {
+        auto srows = (void (*)(int, const double *, const double *, const double *, const long *, const int *, int,
+                               double, int, const long *, const int *, const int *, float *))srows_;
+        std::vector<int> on;
+        for (int r = 0; r < MOOG_FT_ROWS; r++)
+            if (ms_on[r])
+                on.push_back(r);
+        if (on.empty() || !srows)
+            return;
+        long long mg = (frames % 128 == 0 && frames / 128 <= 64) ? 128 : frames;
+        int nj = (int)std::min(frames / mg + 1, (long long)MOOG_MK_GRID);
+        long long j0 = n0 / mg;
+        int st = 3 * SHAPE_K * 2;
+        static const int FT_SHAPE[4] = {0, 2, 4, 8};
+        std::vector<int> fresh, cont;
+        for (int r : on)
+            (ms_next[r] != n0 ? fresh : cont).push_back(r);
+        auto offs_of = [&](int r, int *o) {
+            int fl = (int)ms_par[r * SHAPE_W + 0];
+            for (int i = 0; i < 3; i++)
+                o[i] = (fl & FT_SHAPE[i + 1]) ? i * SHAPE_K * 2 : -1;
+        };
+        auto run = [&](const std::vector<int> &rs, long long jj0, int nnj, long add) {
+            int m = (int)rs.size();
+            std::vector<double> par(m * SHAPE_W), a0(m), toff(m);
+            std::vector<long> j0s(m), base(m);
+            std::vector<int> njs(m), stride(m), offs(3 * m);
+            for (int q = 0; q < m; q++) {
+                int r = rs[q];
+                for (int j = 0; j < SHAPE_W; j++)
+                    par[q * SHAPE_W + j] = ms_par[r * SHAPE_W + j];
+                a0[q] = mp_a0[r];
+                toff[q] = mp_toff[r];
+                j0s[q] = (long)jj0;
+                njs[q] = nnj;
+                base[q] = (long)r * MOOG_MK_CAP + add;
+                stride[q] = st;
+                offs_of(r, &offs[3 * q]);
+            }
+            srows(m, par.data(), a0.data(), toff.data(), j0s.data(), njs.data(), (int)mg, rate, SHAPE_K, base.data(),
+                  stride.data(), offs.data(), MPK.data());
+        };
+        for (int r : cont) {
+            long last = (long)r * MOOG_MK_CAP + (ms_nj[r] - 1) * st, first = (long)r * MOOG_MK_CAP;
+            for (int j = 0; j < st; j++)
+                MPK[first + j] = MPK[last + j];
+        }
+        if (!cont.empty())
+            run(cont, j0 + 1, nj - 1, st);
+        if (!fresh.empty())
+            run(fresh, j0, nj, 0);
+        for (int r : on) {
+            ms_next[r] = n0 + frames;
+            ms_nj[r] = nj;
+            int o[3];
+            offs_of(r, o);
+            MKI[r * 7] = r * MOOG_MK_CAP;
+            MKI[r * 7 + 1] = (int32_t)j0;
+            MKI[r * 7 + 2] = nj;
+            MKI[r * 7 + 3] = st;
+            for (int i = 0; i < 3; i++)
+                MKI[r * 7 + 4 + i] = o[i];
+        }
+    }
+
     void reap(long long n, long long blk)
     {
         std::vector<std::pair<std::vector<long>, long long>> keep;
@@ -1098,6 +1596,28 @@ struct Slab {
                 }
                 if (!freed.empty())
                     disown(freed);
+                // the Moog rows these slots held, returned with the last of them
+                std::map<int, int> cnt;
+                for (long s : freed)
+                    if (i4[I4_fx][s] >= 0)
+                        cnt[i4[I4_fx][s]]++;
+                if (!cnt.empty()) {
+                    for (auto &c : cnt) {
+                        int q = c.first;
+                        ft_cnt[q] -= c.second;
+                        if (ft_cnt[q] <= 0) {
+                            ft_cnt[q] = 0;
+                            mp_on[q] = 0;
+                            ms_on[q] = 0;
+                            fm_map.erase(q);
+                            ft_free.push_back(q);
+                        }
+                    }
+                    for (long s : freed) {
+                        i4[I4_fx][s] = -1;
+                        f8[F8_fmw][s] = 0.0;
+                    }
+                }
             } else {
                 keep.push_back(r);
             }
@@ -1347,6 +1867,7 @@ struct Part {
         int scanner = 0;            // NoteClass.scanner: 0 none, else 1 +2 the switch +4 x depth +16 chorus
         bool clav = false;          // a Clavinet's panel (clav_panel): CC1 its tone rockers
         bool wheel_vib = false;     // its wheel can be a vibrato (wheel_vibrato)
+        const MoogLayer *moog = nullptr;    // a Moog's panel (its class's, layer A): Live._moog_panel_for
         int snd = 0;                // the CC71-78 its voice answers (NoteClass.snd_mask, SOUND_CC's order)
     };
     std::vector<Patch> patches;
@@ -2380,6 +2901,7 @@ struct Part {
         p.scanner = k ? k->scanner : 0;
         p.clav = !p.drums && k && k->clav_panel;
         p.wheel_vib = !p.drums && k && k->wheel_vibrato;
+        p.moog = !p.drums && k && k->init.kind == 6 && k->moog.n_layer >= 1 ? &k->moog.L[0] : nullptr;
         p.snd = !p.drums && k ? k->snd_mask : 0;
         p.organ = og;
         if (!og)
@@ -2681,7 +3203,10 @@ struct Part {
         S.collect = &got;
         strike_now(ch, note, vel, n0, slur);
         S.collect = nullptr;
-        if (!got.empty()) {
+        bool moog = false;                  // (a Moog's rows keep onsets of their own: never held)
+        for (long s : got)
+            moog = moog || S.i4[I4_fx][s] >= 0;
+        if (!got.empty() && !moog) {
             long long T = S.i8[0][got[0]];
             for (long s : got)
                 T = std::min(T, S.i8[0][s]);
@@ -2733,6 +3258,8 @@ struct Part {
         }
         if (!S.stamp_t(*T, key, n0, scale, ch, rate))
             return;                         // the slab full: this note does not sound
+        if (T->moog)                        // a Moog note: its rows, the panel on it (Slab._moog_stamp)
+            S.moog_stamp(*T, pid, ch, 0, patches[cur].moog, rate);
         if (T->min_hold)
             tex_on[key] = n0 + T->min_hold; // a held texture: the least it plays
         if (!T->rel.empty())
@@ -5463,21 +5990,16 @@ struct Part {
     std::vector<float> G = std::vector<float>(1, 1.0f), Sx = std::vector<float>(1, 1.0f);
     std::vector<float> BRt = std::vector<float>(65, 1.0f), BLt = std::vector<float>(130, 1.0f);
     std::vector<double> BCt = std::vector<double>(65, 0.0);
-    std::vector<float> FT = std::vector<float>(1024 * 30, 0.0f), KN = std::vector<float>(256 * 2 * 9, 0.0f);
-    std::vector<int32_t> MPI = std::vector<int32_t>(1024 * 3, 0), MKI = std::vector<int32_t>(1024 * 7, 0);
-    std::vector<double> MPC = std::vector<double>(1024 * 65, 0.0);
-    std::vector<float> MPR = std::vector<float>(1024 * 65, 1.0f), MPK = std::vector<float>(1024 * 1920, 0.0f);
+    // (the Moog's tables: the slab's -- live.Slab's FT, KN and the mod rows)
+    std::vector<float> &FT = S.FT, &KN = S.KN;
+    std::vector<int32_t> &MPI = S.MPI, &MKI = S.MKI;
+    std::vector<double> &MPC = S.MPC;
+    std::vector<float> &MPR = S.MPR, &MPK = S.MPK;
+    void *moog_pcells = nullptr, *moog_srows = nullptr;     // synthkernel.c's moog_pitch_cells, moog_shape_rows
     float sh[4] = {0.06f, 1.6f, 3.5f, 1500.0f};
     double xdec_nepers = 2.302585;
 
-    void init_tables()
-    {
-        for (int r = 0; r < 1024; r++) {
-            MPI[3 * r + 2] = 1;
-            MKI[7 * r + 2] = 1;
-            MKI[7 * r + 4] = MKI[7 * r + 5] = MKI[7 * r + 6] = -1;
-        }
-    }
+    void init_tables() {}                   // (the slab's own: Slab.moog_alloc)
 
     // THE GPU'S BLOCK (live.GpuRenderer._render_now, gpurender.BlockTables):
     // the setup on the CPU, voice_block over every busy slot (through the
@@ -5630,6 +6152,10 @@ struct Part {
     void render(long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx, void *sd,
                 long long blk, double master_gain)
     {
+        // the Moog's mod rows for this block, and its FM's anchors (Renderer.render's first)
+        S.moog_pitch_block(n0, frames, rate, moog_pcells);
+        S.moog_shape_block(n0, frames, rate, moog_srows);
+        S.moog_fm_block();
         if (!pipeline || !gp.cl) {
             render_now(n0, frames, L, R, SL, SR, sv, sx, sd, blk, master_gain);
             return;
@@ -5655,6 +6181,7 @@ struct Part {
                 turn ^= 1;
                 S.aLp = S.f4[0];            // knobs_advance
                 S.aRp = S.f4[1];
+                S.knobs_advance();
             } else {
                 if (!gpu_failed_said) {     // (said once: a failed launch renders on the CPU, and costs it)
                     fprintf(stderr, "nvlive: a GPU launch failed (%ld slots): this block on the CPU\n", act);
@@ -5728,7 +6255,7 @@ struct Part {
         // next block's ramp starts (aLp, aRp)
         struct Advance {
             Slab &S;
-            ~Advance() { S.aLp = S.f4[0]; S.aRp = S.f4[1]; }
+            ~Advance() { S.aLp = S.f4[0]; S.aRp = S.f4[1]; S.knobs_advance(); }
         } advance{S};
         long hi = -1;
         for (long q = 0; q < S.cap; q++)
@@ -6525,6 +7052,24 @@ void nv_part_event(void *h, int type, int ch, int a, int b)
 }
 
 void nv_part_block(void *h, long long n0, long long blk) { ((nv::slab::Part *)h)->block(n0, blk); }
+
+// the Moog's tables for a check: 0 FT, 1 KN (floats, n of them; how many there are)
+long nv_part_moog_table(void *h, int which, float *out, long n)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    const std::vector<float> &v = which == 0 ? P->S.FT : P->S.KN;
+    for (long i = 0; i < n && i < (long)v.size(); i++)
+        out[i] = v[i];
+    return (long)v.size();
+}
+
+// the kernel library's Moog row functions (synthkernel.c moog_pitch_cells,
+// moog_shape_rows), as the caller has it loaded
+void nv_part_moog_kernel(void *h, void *pcells, void *srows)
+{
+    ((nv::slab::Part *)h)->moog_pcells = pcells;
+    ((nv::slab::Part *)h)->moog_srows = srows;
+}
 
 // Renderer.render's block: L, R (and with SL the room's send pair) over
 // [n0, n0 + frames), through synth_voice (sv), synth_voice_xdec (sx) and

@@ -726,6 +726,12 @@ static double moog_ladder_gain(const MoogLayer *L, double f, double fc, double k
     return h;
 }
 
+/* moog.ladder_gain_1, for the live slab (a valve after the ladder: sustain_gain) */
+double nv_moog_ladder_gain(const MoogLayer *L, double f, double fc, double k, int mode, int rb)
+{
+    return moog_ladder_gain(L, f, fc, k, mode, rb);
+}
+
 /* (moog_ladder_gain, for the checks) */
 double nv_moog_ladder(const MoogLayer *L, double f, double fc, double k, int mode, int rb)
 {
@@ -741,11 +747,48 @@ double nv_moog_ladder(const MoogLayer *L, double f, double fc, double k, int mod
  * modulator. A noise band is noise (a negative wash bandwidth) and has no
  * images. The envelope columns are neutral (a 1-sample fade, the panel's
  * release mre): the kernel's contours are the envelope. */
+static int moog_emit(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, double fx, double mre, int nimg,
+                     const int *nsurf, const int *surf, const double *img, const double *mir, double *rows, int cap,
+                     double *qacc, double *azimuth, int np, const int *po, const int *pk, const double *phf,
+                     const double *pa, const double *pph, int neutral);
+
+/* A LIVE TEMPLATE's MOOG (blockrender's MOOG_NEUTRAL): set by the live
+ * template builder around its one-note render, on its own thread */
+static _Thread_local int moog_neutral_on = 0;
+void nv_set_moog_neutral(int on) { moog_neutral_on = on; }
+int nv_moog_neutral(void) { return moog_neutral_on; }
+
+/* blockrender._note_moog under MOOG_NEUTRAL: every harmonic at unit weight,
+ * phase 0, its NOMINAL frequency -- OSC 1 and 2 on the key, the SUB an
+ * octave under, over Nyquist too -- then the noise bands, then the
+ * ladder's own sine at the key: the live slab weighs them (moog.weights) */
+int nv_moog_neutral_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, double fx, double mre, int nimg,
+                         const int *nsurf, const int *surf, const double *img, const double *mir, double *rows,
+                         int cap, double *qacc, double *azimuth)
+{
+    static _Thread_local int po[64 + 64 + 32 + 32 + 1], pk[64 + 64 + 32 + 32 + 1];
+    static _Thread_local double phf[64 + 64 + 32 + 32 + 1], pa[64 + 64 + 32 + 32 + 1], pph[64 + 64 + 32 + 32 + 1];
+    const double f0 = t0->f0;
+    int np = 0;
+    for (int o = 1; o <= 3; o++) {
+        double fn = o == 3 ? f0 * 0.5 : f0;
+        int nh = o == 3 ? 32 : 64;
+        for (int k = 1; k <= nh; k++) {
+            po[np] = o; pk[np] = k; phf[np] = fn * k; pa[np] = 1.0; pph[np++] = 0.0;
+        }
+    }
+    for (int k = 0; k < L->n_noise; k++) {
+        po[np] = 4; pk[np] = k + 1; phf[np] = L->noise_hz[k]; pa[np] = 1.0; pph[np++] = 0.0;
+    }
+    po[np] = 5; pk[np] = 1; phf[np] = f0; pa[np] = 1.0; pph[np++] = 0.0;
+    return moog_emit(v, t0, L, fx, mre, nimg, nsurf, surf, img, mir, rows, cap, qacc, azimuth, np, po, pk, phf, pa,
+                     pph, 1);
+}
+
 int nv_moog_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, double fx, double mre, int nimg,
                  const int *nsurf, const int *surf, const double *img, const double *mir, double *rows, int cap,
                  double *qacc, double *azimuth)
 {
-    Rows R = {rows, 0, cap};
     const double f0 = t0->f0, sr = t0->sr;
     const double fmax = pymin(L->fmax_hz, sr / 2.0);
     /* moog.partials: (osc, harmonic, Hz, amplitude, phase) */
@@ -790,6 +833,21 @@ int nv_moog_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, doubl
             }
         }
     }
+    return moog_emit(v, t0, L, fx, mre, nimg, nsurf, surf, img, mir, rows, cap, qacc, azimuth, np, po, pk, phf, pa,
+                     pph, 0);
+}
+
+/* the partials of a Moog note as blockrender._note_moog emits them: (osc,
+ * harmonic, Hz, amplitude, phase) each, at the key's own harmonic for the
+ * head, radiation and body; a valve after the ladder (not a live
+ * template's: neutral) hears it at its sustain */
+static int moog_emit(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, double fx, double mre, int nimg,
+                     const int *nsurf, const int *surf, const double *img, const double *mir, double *rows, int cap,
+                     double *qacc, double *azimuth, int np, const int *po, const int *pk, const double *phf,
+                     const double *pa, const double *pph, int neutral)
+{
+    Rows R = {rows, 0, cap};
+    const double f0 = t0->f0, sr = t0->sr;
     /* the note's vibrato (none: the kernel's neutral one), OSC 1 as the FM's modulator */
     double VB[3];
     if (!nv_voice_vibrato(v, f0, 0, VB)) {
@@ -815,7 +873,7 @@ int nv_moog_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, doubl
         double gM = v->gain * pa[i] * nv_radiation_gain(v, hn, 0.0, 0);
         if (L->body)                            /* through its formant body (moog_body) */
             gM *= bore_gain(v, hn) * v->bore_norm;
-        if (L->pre && o != 5) {                 /* a valve after it: the ladder at its sustain (sustain_gain) */
+        if (L->pre && !neutral && o != 5) {     /* a valve after it: the ladder at its sustain (sustain_gain) */
             double fcs = L->self_cut * pow(f0 / L->kb_ref_hz, L->kb_track) * L->self_eg;
             gM *= moog_ladder_gain(L, hf, pymax(fcs, 1.0), L->kn[1], (int)L->ft[7], L->ft[8] != 0.0);
         }

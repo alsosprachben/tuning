@@ -235,7 +235,7 @@ class NoteClass(ctypes.Structure):
                    ('clav_panel', I), ('wheel_vibrato', I),
                    ('sh_et', C), ('sh_corner', C), ('sh_order', C), ('sh_sp', C), ('sh_sd', C), ('sh_B', C),
                    ('sh_mq', C), ('sh_mhz', C), ('sh_mdb', C), ('sh_popen', C), ('sh_pluck', I), ('sh_mh', I),
-                   ('sh_nopen', I), ('sh_open', C * 8)])
+                   ('sh_nopen', I), ('sh_open', C * 8), ('scatter_ms', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -459,6 +459,8 @@ def _load():
             ('nv_part_swap_bank_keys', None, [ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_part_event', None, [ctypes.c_void_p, I, I, I, I]),
             ('nv_part_block', None, [ctypes.c_void_p, LL, LL]),
+            ('nv_part_moog_kernel', None, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_part_moog_table', ctypes.c_long, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_long]),
             ('nv_part_slab', ctypes.c_void_p, [ctypes.c_void_p]),
             ('nv_part_render', None, [ctypes.c_void_p, LL, ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p,
                                     ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
@@ -2480,6 +2482,7 @@ def note_class(cls):
                 k.tail_set, k.tail_db, k.tail_dbs = 1, float(tl[0]), float(tl[1])
         k.clav_panel = int(bool(getattr(cls, 'clav_panel', False)))
         k.wheel_vibrato = int(bool(getattr(cls, 'wheel_vibrato', True)))
+        k.scatter_ms = float(getattr(cls, 'section_onset_ms', 0.0) or 0.0)
         # the sound controllers' shaping (tonelib.sound_shape: nv_sound_shape)
         k.sh_et = float(getattr(cls, 'effort_tilt', 0.0) or 0.0)
         k.sh_corner = float(getattr(cls, 'bore_corner_hz', 0.0) or 0.0)
@@ -3637,6 +3640,9 @@ class LivePart(object):
                                   int(soft_top), float(rate), float(BR.RETRIGGER_FADE), int(capacity),
                                   float(headroom), pt, float(L._PAN_BETA))
         self.d.nv_part_program(self.p, int(cache.program))       # (its slurs' and glides' class)
+        _kl = BR.ensure_lib()                                   # (the Moog's mod rows: the kernel's own)
+        self.d.nv_part_moog_kernel(self.p, ctypes.cast(_kl.moog_pitch_cells, ctypes.c_void_p).value,
+                                   ctypes.cast(_kl.moog_shape_rows, ctypes.c_void_p).value)
         self.slab = Slab.__new__(Slab)
         self.slab.d, self.slab.cap, self.slab.p = self.d, capacity, self.d.nv_part_slab(self.p)
         import damper as DMP

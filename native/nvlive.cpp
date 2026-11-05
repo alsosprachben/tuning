@@ -140,6 +140,7 @@ void *nv_part_new(void *cache, long long pid, double level_db, int nbuckets, int
                 const double *pan_tab, double pan_beta);
 void nv_part_event(void *h, int type, int ch, int a, int b);
 void nv_part_block(void *h, long long n0, long long blk);
+void nv_part_moog_kernel(void *h, void *pcells, void *srows);
 void nv_part_render(void *h, long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
                   void *sd, long long blk, double master_gain);
 void nv_part_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20);
@@ -860,6 +861,8 @@ int main(int argc, char **argv)
             fprintf(stderr, "nvlive: no %s in %s\n", FN[q], E.libs[q].c_str());
             return 1;
         }
+        if (q == 0)                         // (the Moog's mod rows: the kernel library's own)
+            nv_part_moog_kernel(part, dlsym(h, "moog_pitch_cells"), dlsym(h, "moog_shape_rows"));
     }
     const double master = E.k[K_MASTER];
     // THE GPU (live.GpuRenderer), by default (--cpu: none): the setup on the

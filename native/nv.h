@@ -554,6 +554,12 @@ void nv_moog_apply(const MoogLayer *in, const double *d, MoogLayer *out);
 
 /* tone.c: a Moog layer's partials (blockrender._note_moog): its rows, the
    note's filter row fx and its release (samples) on them */
+void nv_set_moog_neutral(int on);
+double nv_moog_ladder_gain(const MoogLayer *L, double f, double fc, double k, int mode, int rb);
+int nv_moog_neutral(void);
+int nv_moog_neutral_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, double fx, double mre, int nimg,
+                         const int *nsurf, const int *surf, const double *img, const double *mir, double *rows,
+                         int cap, double *qacc, double *azimuth);
 int nv_moog_tone(const VoiceSnap *v, const ToneIn *t, const MoogLayer *L, double fx, double mre, int nimg,
                  const int *nsurf, const int *surf, const double *img, const double *mir, double *rows, int cap,
                  double *qacc, double *azimuth);
@@ -773,6 +779,9 @@ typedef struct {
     double sh_et, sh_corner, sh_order, sh_sp, sh_sd, sh_B, sh_mq, sh_mhz, sh_mdb, sh_popen;
     int sh_pluck, sh_mh, sh_nopen;
     double sh_open[8];
+    // ITS ENTRY SCATTER, LIVE (t["scatter_ms"]: the class's section_onset_ms,
+    // a section's or not -- a Moog's players come in apart too)
+    double scatter_ms;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -918,6 +927,7 @@ typedef struct {
     const float *MPR, *MPK;
 } MoogCols;
 int nv_song_moog_n(void *s);
+int nv_song_moog_ft(void *s, int i, double *out);
 void nv_song_moog_add(void *s, long long ch, const double *ft, const double *kn, const MoogLayer *L, double a0,
                       double toff, double end);
 int nv_song_moog_rows(void *s, int i, const MoogLayer **L, double *a0t);

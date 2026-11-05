@@ -35,6 +35,8 @@ def python_template(B, T, prog, note, vel, tuner):
     tr.append(mido.Message("note_off", channel=0, note=note, velocity=0, time=480))
     tr.append(mido.MetaMessage("end_of_track", time=480))
     was = B.REGISTER
+    import tubeamp as TA
+    wasa, TA.ENABLED = TA.ENABLED, False    # (live's _raw_template: the valve waits for the chord)
     try:
         with contextlib.redirect_stdout(io.StringIO()):
             B.MOOG_NEUTRAL = True
@@ -47,6 +49,7 @@ def python_template(B, T, prog, note, vel, tuner):
         B.SCANNER_OFF = False
         T.FIXED_TOUCH = False
         B.REGISTER = was
+        TA.ENABLED = wasa
 
 
 def main(argv):

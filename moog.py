@@ -896,6 +896,14 @@ def fm_index(panel):
     return fm_amount_index(panel['mod_amount']) if int(panel['mod_dest']) == 0 else 0.0
 
 
+def _nv():
+    """native (libm's complex abs, angle and exp over arrays: numpy's own
+    SIMD ones are a last bit away on a third of their values here, and
+    differently on another machine -- the live part's C reads the same)."""
+    import native
+    return native
+
+
 def fm_coeffs(panel, phi1=None):
     """The modulator's B_j = (2|c_j|/j) e^{i(phi_j - j phi1)}, against the
     phase OSC 1's fundamental partial carries (phi1: arg c_1 unless given),
@@ -903,7 +911,7 @@ def fm_coeffs(panel, phi1=None):
     c = osc_spectrum(panel['osc1_wave'], FM_J)
     j = np.arange(1, FM_J + 1)
     p1 = cmath.phase(c[0]) if phi1 is None else phi1
-    return 2.0 * np.abs(c) / j * np.exp(1j * (np.angle(c) - j * p1))
+    return 2.0 * _nv().xabs(c) / j * _nv().xcexp(1j * (_nv().xangle(c) - j * p1))
 
 
 def ft_row(panel, f0, krow, pre_amp=False, flags=0, fm_phi1=None):
@@ -1015,8 +1023,8 @@ def weights(panel, mk, nf, fmax=FMAX_HZ):
             c = np.ones(n, complex)                 # the shape rows carry it
         kk = np.clip(k[m], 1, n) - 1
         rt[m] = r
-        w[m] = 2.0 * np.abs(c[kk]) * float(panel[lvl])
-        ph[m] = np.angle(c[kk])
+        w[m] = 2.0 * _nv().xabs(c[kk]) * float(panel[lvl])
+        ph[m] = _nv().xangle(c[kk])
         if not (o == OSC2 and pitch_params(panel) is not None):   # as partials() keeps them
             w[m] = np.where(np.asarray(nf, float)[m] * r > fmax, 0.0, w[m])
     return w, ph, rt

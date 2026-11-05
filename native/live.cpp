@@ -128,7 +128,8 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
                                std::vector<long long> *srows, std::vector<long long> *prows = nullptr,
                                const double *les = nullptr, std::vector<long long> *flips = nullptr,
-                               std::vector<double> *jrows = nullptr, std::vector<long long> *rrows = nullptr);
+                               std::vector<double> *jrows = nullptr, std::vector<long long> *rrows = nullptr,
+                               double *mft = nullptr);
 long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                             const double *cfg, const char *mask, long long nmask, double sr);
 long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
@@ -157,7 +158,7 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
                                std::vector<long long> *srows, std::vector<long long> *prows, const double *les,
                                std::vector<long long> *flips, std::vector<double> *jrows,
-                               std::vector<long long> *rrows)
+                               std::vector<long long> *rrows, double *mft)
 {
     const NoteClass *kc = (!kit && program >= 0 && program < 128) ? K[128 * program + note] : nullptr;
     const OrganSpec *og = kc ? kc->organ : nullptr;
@@ -187,8 +188,15 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     PyRandom rs;
     pyr_seed(&rs, 0);                       // _prepare's random.seed(0)
     double qacc[18] = {0}, az = 0.0;
+    nv_set_moog_neutral(1);                 // (a Moog's live template: knob-neutral, blockrender's MOOG_NEUTRAL)
     long long P = nv_prepare(song, K, tmpl, nullptr, 0, &rs, rowsp, qacc, &az, kind, scale, full_db_s, residual,
                              beta, blk, total, ring_floor, ring_max, out, knee_db, ln10_20, xdec_nepers, SR, dm, 0);
+    nv_set_moog_neutral(0);
+    if (mft) {                              // its Moog note's filter row (t["FT"]), NAN where none
+        if (P < 0 || !nv_song_moog_ft(song, 0, mft))
+            for (int q = 0; q < 30; q++)
+                mft[q] = NAN;
+    }
     if (srows && P >= 0) {
         int n = nv_song_n_stroke_rows(song, nullptr, 0);
         srows->resize(2 * n);
@@ -392,16 +400,22 @@ struct Cache {
         std::vector<long long> srows, prows, flips;
         std::vector<double> jrows;
         std::vector<long long> rrows;
+        double mft[30];
         long long P = template_rows(K.data(), &t, freq, trim, program, note, vel, fast, &rows, kind, scale, full,
                                     residual, beta, blk, ring_floor, ring_max, out, knee, ln10_20, xdec, SR, dm,
                                     drums ? &kit : nullptr, &srows, &prows, les.empty() ? nullptr : les.data(),
-                                    &flips, &jrows, &rrows);
+                                    &flips, &jrows, &rrows, mft);
         if (P < 0) {
             free(rows);
             return false;
         }
         T.P = (long)P;
         T.vel = vel;
+        if (!std::isnan(mft[10])) {         // a Moog note: its row's key and valve (t["FT"])
+            T.moog = true;
+            T.ft_f0 = (double)(float)mft[10];  // (prepare's FT table is float32)
+            T.ft_pre = mft[11] > 0.5;
+        }
         auto take = [&](const char *name, auto &vec) {
             int c = emit_col(name);
             vec.resize(P);
@@ -464,7 +478,7 @@ struct Cache {
         }
         int q = 128 * program + note;
         const NoteClass *nc = (q >= 0 && q < NV_K_DRUMS) ? K[(drums ? NV_K_DRUMS : 0) + q] : nullptr;
-        T.scatter_ms = nc ? nc->tmpl.sect_onset_ms : 0.0;     // (t["scatter_ms"])
+        T.scatter_ms = nc ? nc->scatter_ms : 0.0;             // (t["scatter_ms"])
         // the Leslie's crossover copies (t["lflip"])
         T.lflip.assign(P, 0);
         for (long long r : flips)

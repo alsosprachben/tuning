@@ -1145,6 +1145,17 @@ int nv_song_snd_moves(void *s, long long ch)
 // index, before: nv_song_moog_n
 int nv_song_moog_n(void *s) { return (int)((nv::Song *)s)->mft.size(); }
 
+// a Moog row's 30 values (FT), 0 where there is no row i
+int nv_song_moog_ft(void *s, int i, double *out)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (i < 0 || i >= (int)S->mft.size())
+        return 0;
+    for (int j = 0; j < 30; j++)
+        out[j] = S->mft[i][j];
+    return 1;
+}
+
 void nv_song_moog_add(void *s, long long ch, const double *ft, const double *kn, const MoogLayer *L, double a0,
                       double toff, double end)
 {

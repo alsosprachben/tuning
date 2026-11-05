@@ -352,14 +352,18 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         tm.reflect = n->reflect && K->reflection_order;     // (a noise band's own: none)
         tm.cbw0 = K->cbw0; tm.cbw1 = K->cbw1;
         int nm = 0;
-        for (int l = 0; l < M.n_layer; l++) {
+        int neutral = nv_moog_neutral();        // (a live template: layer A, knob-neutral)
+        int nl = neutral ? 1 : M.n_layer;
+        for (int l = 0; l < nl; l++) {
             MoogLayer La;
             if (n->snd_moog)                    // its knobs as GM's sound controllers turn them
                 nv_moog_apply(&M.L[l], n->snd_d, &La);
             const MoogLayer &L = n->snd_moog ? La : M.L[l];
             double mre = pymax(1.0, L.rel_span * SR);
-            int k = nv_moog_tone(&s, &tm, &L, n->fx + l, mre, nimg, nsurf, surf, img, mir, rows + NCOLS * total,
-                                 cap - total, qacc, azimuth);
+            int k = neutral ? nv_moog_neutral_tone(&s, &tm, &L, n->fx + l, mre, nimg, nsurf, surf, img, mir,
+                                                   rows + NCOLS * total, cap - total, qacc, azimuth)
+                            : nv_moog_tone(&s, &tm, &L, n->fx + l, mre, nimg, nsurf, surf, img, mir,
+                                           rows + NCOLS * total, cap - total, qacc, azimuth);
             if (k < 0)
                 return -1;
             total += k;
@@ -373,7 +377,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
             for (int j = 0; j < 9; j++)
                 out->kn[l][j] = L.kn[j];
         }
-        out->n_ft = M.n_layer;
+        out->n_ft = nl;
         out->n_tone = nm;
         out->n_phantom = 0;
         out->n_click = 0;
@@ -814,7 +818,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         long long lr0 = total;                  // (its layers' rows, from its first: an MF-104M's)
         for (int l = 0; l < out.n_ft; l++) {   // (its layers' filter rows, each on its knob row)
             const MoogLayer &L = k->moog.L[l];
-            if (L.mf_on)
+            if (L.mf_on && !nv_moog_neutral())  // (not into a live template: live stamps its own repeats)
                 nv_song_add_mf104(song, lr0, lr0 + out.lay_rows[l], &L);
             lr0 += out.lay_rows[l];
             double rs = L.rel_span;

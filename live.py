@@ -1847,7 +1847,8 @@ class Slab:
         # every odd harmonic flipping at once, a click. So a weight may be
         # negative: the phase stays within 90 degrees of the one applied and
         # the level ramps through zero, which is what the crossfade does.
-        d = np.angle(np.exp(1j * (ph - self.mo_ph[idx])))
+        # (libm's exp and atan2: numpy's own are a last bit away on a third of values)
+        d = _NVX().xangle(_NVX().xcexp(1j * (ph - self.mo_ph[idx])))
         flip = np.abs(d) > 0.5 * np.pi
         ph = np.where(flip, ph - np.pi * np.sign(d), ph)
         w = np.where(flip, -w, w)

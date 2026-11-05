@@ -51,6 +51,12 @@ struct Template {
     // THE KEY-UP's ROWS (t["rel"]: release_click_*, a voice with no ranks):
     // out of the note, their own one-shot stamped at the key-up; none, empty
     std::vector<Template> rel;
+    // A MOOG NOTE (t["FT"]: knob-neutral rows, the panel applied at the
+    // stamp): its filter row's key frequency (slot 10) and whether a valve
+    // after the ladder hears it at its sustain (slot 11); moog false: none
+    bool moog = false;
+    double ft_f0 = 0.0;
+    bool ft_pre = false;
     // A SECTION'S ENTRY SCATTER (section_onset_ms): each player's onset drawn
     // fresh at every press, up to this (Slab.stamp_cols' scatter_ms)
     double scatter_ms = 0.0;
