@@ -6344,6 +6344,7 @@ struct Part {
         S.moog_fm_block();
         if (!pipeline || !gp.cl) {
             render_now(n0, frames, L, R, SL, SR, sv, sx, sd, blk, master_gain);
+            shed_tick(n0 + frames);
             return;
         }
         GpuPend cur;
@@ -6424,6 +6425,7 @@ struct Part {
             }
             ms_samples = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count();
         }
+        shed_tick(n0 + frames);
     }
 
     void render_now(long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
@@ -6632,14 +6634,54 @@ struct Part {
             return nf[a] > nf[b] || (nf[a] == nf[b] && a < b);
         });
         float fade = (float)(SHED_FADE * rate);
+        std::vector<long> qm;
         for (long i = 0; i < k; i++) {
             long q = idx[i];
-            if (S.i4[I4_fx][q] >= 0)
-                continue;                       // a Moog row (none on a piano): its panel's, not ours
+            if (S.i4[I4_fx][q] >= 0) {
+                qm.push_back(q);
+                continue;
+            }
             S.i8[1][q] = std::min(S.i8[1][q], n);
             S.f4[F4_re][q] = std::min(S.f4[F4_re][q], fade);
         }
+        if (!qm.empty()) {
+            // A MOOG ROW's envelope is its note's (the FT row), not its own,
+            // so it is faded by its level -- every baseline to zero, so no
+            // panel or aftertouch brings it back, the kernel ramping it down
+            // over the next block -- and out of the render once that has
+            // (shed_tick)
+            std::sort(qm.begin(), qm.end());
+            for (long q : qm) {
+                S.aL0[q] = S.aR0[q] = 0.0f;
+                S.f4[F4_aL][q] = S.f4[F4_aR][q] = 0.0f;
+                S.tr_aL[q] = S.tr_aR[q] = 0.0f;
+                S.ls_aL[q] = S.ls_aR[q] = 0.0f;
+                S.cv_aL[q] = S.cv_aR[q] = 0.0f;
+                S.mo_uL[q] = S.mo_uR[q] = 0.0f;
+            }
+            shed_mo.emplace_back(n + 2 * cur_blk, qm);     // (live sets blockrender.BLK to its block)
+        }
         return k;
+    }
+
+    // live.Slab.shed_tick: the shed Moog rows whose fade has run, out of the
+    // render (their slots go with their notes, as every shed slot)
+    std::vector<std::pair<long long, std::vector<long>>> shed_mo;
+    void shed_tick(long long n)
+    {
+        if (shed_mo.empty() || shed_mo[0].first > n)
+            return;
+        std::vector<std::pair<long long, std::vector<long>>> keep;
+        for (auto &e : shed_mo) {
+            if (e.first > n) {
+                keep.push_back(e);
+                continue;
+            }
+            for (long q : e.second)
+                if (S.busy[q])
+                    S.i8[0][q] = IDLE;
+        }
+        shed_mo.swap(keep);
     }
 
     // a block took ms of budget_ms; the next starts at n
