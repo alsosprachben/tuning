@@ -1194,6 +1194,19 @@ def moog_spec(cls):
     return got or None
 
 
+def _section_desks(s, p):
+    """A section's desks on VoiceSnap s (section_position_x, less the voice's
+    place: the note's is added): sect_seats, sect_dx."""
+    import random
+    n = int(p.section_players)
+    s.sect_seats = int(bool(p.section_width_m) and n > 1)
+    if s.sect_seats:
+        w = p.section_width_m
+        for i in range(n):
+            rng = random.Random(0x5EA7 + i * 7919 + p._section_salt() * 65537)
+            s.sect_dx[i] = w * ((2.0 * i / float(n - 1)) - 1.0 + rng.uniform(-0.5, 0.5) / n)
+
+
 def moog_bodied(cls):
     """Whether cls's Moog sounds through a FORMANT BODY the engine has: its
     moog_body FormantBody's bore times SynthProperties' norm (bore_gain *
@@ -1233,8 +1246,6 @@ def moog_voice(cls):
     if _owner(cls, 'voice_vibrato') not in ('SynthProperties', 'SectionMixin'):
         return False
     if any(_owner(cls, n) != o for n, o in _BASE_OWN.items() if n != 'inharmonicity_coefficient_func'):
-        return False
-    if issubclass(cls, T.SectionMixin) and int(cls.section_players) > 1:
         return False
     if getattr(cls, 'moog_unison', None):
         return False
@@ -1706,13 +1717,7 @@ def snapshot(props):
             s.sect_vib_hz[:] = [float(x) for x in p.section_vibrato_hz]
             s.sect_onset_ms = p.section_onset_ms
             s.sect_ofm = getattr(p, 'unison_onset_fraction_max', 0.25)
-            s.sect_seats = int(bool(p.section_width_m) and n > 1)
-            if s.sect_seats:
-                import random
-                w = p.section_width_m
-                for i in range(n):
-                    rng = random.Random(0x5EA7 + i * 7919 + p._section_salt() * 65537)
-                    s.sect_dx[i] = w * ((2.0 * i / float(n - 1)) - 1.0 + rng.uniform(-0.5, 0.5) / n)
+            _section_desks(s, p)
     elif s.kind == 5:
         # an electric piano: its pickup, swing, fit and tonebar (the note's
         # layers its init's; the prototype's here)
@@ -1758,9 +1763,12 @@ def snapshot(props):
             for i, row in enumerate(p.body_trim_db or ()):
                 s.bt[i][:] = [float(x) for x in row]
         if isinstance(p, T.SectionMixin):
-            s.sect_n, s.sect_vib = 1, 1
+            # ...and a section's desks: the note is its first player, at
+            # that player's place (blockrender's em.player 0)
+            s.sect_n, s.sect_vib = int(p.section_players), 1
             s.sect_vib_cents = p.section_vibrato_cents
             s.sect_vib_hz[:] = [float(x) for x in p.section_vibrato_hz]
+            _section_desks(s, p)
     elif s.kind == 1:
         if isinstance(p, T.SfxThroatProperties):
             # a throat's pulse: its tilt, mouth and vowel (the note's, nv_note), its breath
