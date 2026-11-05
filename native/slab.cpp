@@ -1496,15 +1496,18 @@ struct Piano {
     std::deque<AmpOut> amp_fine_results;
     // the worker (amp_async)
     bool amp_async = false, amp_stop = false;
-    std::thread amp_thread;
+    std::thread amp_thread, amp_fine_thread;
     std::mutex amp_mu;
-    std::condition_variable amp_cv;
+    std::condition_variable amp_cv, amp_fine_cv;
     std::deque<AmpOut> amp_jobs, amp_ready_fast, amp_ready_fine;
     struct AmpJob {
         std::vector<double> f, a, p;
         double drive = 0.0, ref = 0.0, imb = 0.06;
     };
     std::map<long long, AmpJob> amp_jobdata;    // jid -> its parents
+    // the fine pass's waiting chords, the newest of each part (live's
+    // amp_fine_pending: an older one of the same part is passed over)
+    std::map<long long, std::pair<AmpOut, AmpJob>> amp_fine_pending;
 
     static const int LIVE_DRIVE_STEPS = 8, LIVE_AMP_LOOKAHEAD = 6;
     // the worker's synthesis threads: a share of the cores, the rest left to
@@ -1718,18 +1721,44 @@ struct Piano {
                 amp_jobs.pop_front();
                 jd = amp_jobdata[j.jid];
             }
-            AmpOut fast = j, fine = j;
+            AmpOut fast = j;
             amp_pass(jd, rate, false, fast.prod, AMP_THREADS);
             amp_lobes(fast);
+            std::lock_guard<std::mutex> lk(amp_mu);
+            amp_ready_fast.push_back(fast);
+            amp_jobdata.erase(j.jid);
+            amp_fine_pending[j.pid] = std::make_pair(j, jd);
+            amp_fine_cv.notify_all();
+        }
+    }
+
+    // THE FINE PASS ON A THREAD OF ITS OWN (live's _amp_fine_worker): on the
+    // fast pass's, the next chord's fast pass waited behind this one's 30-70
+    // ms, so a note played soon after another change -- a key let go, a
+    // second note -- sounded clean until it landed (Ben, live)
+    void amp_fine_worker()
+    {
+        for (;;) {
+            AmpOut j;
+            AmpJob jd;
             {
-                std::lock_guard<std::mutex> lk(amp_mu);
-                amp_ready_fast.push_back(fast);
+                std::unique_lock<std::mutex> lk(amp_mu);
+                amp_fine_cv.wait(lk, [&] { return amp_stop || !amp_fine_pending.empty(); });
+                if (amp_stop)
+                    return;
+                auto it = amp_fine_pending.begin();
+                for (auto q = amp_fine_pending.begin(); q != amp_fine_pending.end(); ++q)
+                    if (q->second.first.jid > it->second.first.jid)
+                        it = q;                     // (the newest chord any part waits on)
+                j = it->second.first;
+                jd = it->second.second;
+                amp_fine_pending.erase(it);
             }
+            AmpOut fine = j;
             amp_pass(jd, rate, true, fine.prod, AMP_THREADS);
             amp_lobes(fine);
             std::lock_guard<std::mutex> lk(amp_mu);
             amp_ready_fine.push_back(fine);
-            amp_jobdata.erase(j.jid);
         }
     }
 
@@ -1739,6 +1768,7 @@ struct Piano {
             return;
         amp_async = true;
         amp_thread = std::thread([this] { amp_worker(); });
+        amp_fine_thread = std::thread([this] { amp_fine_worker(); });
     }
 
     // live._amp_pump
@@ -3878,7 +3908,10 @@ struct Piano {
                 amp_stop = true;
             }
             amp_cv.notify_all();
+            amp_fine_cv.notify_all();
             amp_thread.join();
+            if (amp_fine_thread.joinable())
+                amp_fine_thread.join();
         }
         if (scan_thread.joinable()) {
             {
