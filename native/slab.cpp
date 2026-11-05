@@ -1167,6 +1167,7 @@ struct Part {
         int scanner = 0;            // NoteClass.scanner: 0 none, else 1 +2 the switch +4 x depth +16 chorus
         bool clav = false;          // a Clavinet's panel (clav_panel): CC1 its tone rockers
         bool wheel_vib = false;     // its wheel can be a vibrato (wheel_vibrato)
+        int snd = 0;                // the CC71-78 its voice answers (NoteClass.snd_mask, SOUND_CC's order)
     };
     std::vector<Patch> patches;
     // THE CABINET (live's rotor_horn, rotor_drum: LiveRotor): one Leslie in
@@ -2199,6 +2200,7 @@ struct Part {
         p.scanner = k ? k->scanner : 0;
         p.clav = !p.drums && k && k->clav_panel;
         p.wheel_vib = !p.drums && k && k->wheel_vibrato;
+        p.snd = !p.drums && k ? k->snd_mask : 0;
         p.organ = og;
         if (!og)
             return;
@@ -2602,7 +2604,9 @@ struct Part {
         if (pressure[ch] != 0.0)
             press(slots, pressure[ch]);
         {                                   // a note struck under a bend, or the wheel up, joins them
-            double b = bend[ch], v2 = vib_mod[ch], r2 = (1.0 + mod_rate * vib_modw[ch]) * 1.0;
+            double sva, svr;
+            snd_vib(patches[cur], ch, slots, &sva, &svr);
+            double b = bend[ch], v2 = vib_mod[ch] + sva, r2 = (1.0 + mod_rate * vib_modw[ch]) * svr;
             if (b != 1.0 || v2 != 0.0 || r2 != 1.0)
                 retune_v(slots, n0, b != 1.0, b, v2 != 0.0, v2, r2 != 1.0, r2);
         }
@@ -2992,10 +2996,18 @@ struct Part {
     // live._sound_cc: one CC71-78 on channel ch. The release moves on the
     // notes whose key is still down (a release already running would jump);
     // the attack and decay are onset facts, for the next note
-    void sound_cc(int ch, int cc, int v)
+    void sound_cc(int ch, int cc, int v, long long n0)
     {
         double d = (v - 64.0) / 64.0;
         snd_d[ch][cc - 71] = d;
+        if (cc == 76 || cc == 77) {
+            // THE VIBRATO's RATE AND DEPTH (live: _vib_apply on each part
+            // whose voice answers this one), with the wheel's, written once
+            for (const Patch &p : patches)
+                if (!p.drums && (p.channel < 0 || p.channel == ch) && (p.snd >> (cc - 71)) & 1)
+                    vib_apply(p, ch, n0);
+            return;
+        }
         if (cc != 72)
             return;
         for (size_t pi = 0; pi < patches.size(); pi++) {
@@ -3675,15 +3687,44 @@ struct Part {
                && !p.leslie && !p.wheel_swell;
     }
 
-    // live._vib_apply: the wheel's depth and rate on one part's sounding
-    // slots (CC76/77's share: none here yet)
+    // live._snd_vib: (depth to add, rate factor) the part's CC77/76 ask of
+    // these slots -- tonelib.sound_vib_depth_add (up to SOUND_VIB_DEPTH_CENTS
+    // upward; downward toward none, by their own depth's mean, numpy's
+    // float32 mean) and sound_vib_rate (SOUND_VIB_RATE_RANGE ** d)
+    void snd_vib(const Patch &p, int ch, const std::vector<long> &slots, double *add, double *rt) const
+    {
+        *add = 0.0;
+        *rt = 1.0;
+        if (slots.empty() || p.drums)
+            return;
+        double dd = snd_d[ch][6], dr = snd_d[ch][5];
+        if ((p.snd >> 6) & 1 && dd != 0.0) {
+            if (dd >= 0.0) {
+                *add = dd * (pow(2.0, 30.0 / 1200.0) - 1.0);
+            } else {
+                std::vector<float> vb(slots.size());
+                for (size_t q = 0; q < slots.size(); q++)
+                    vb[q] = S.vbase[slots[q]];
+                // (np.mean: the float32 sum over the count in float64, back to float32 -- numpy 1.26's)
+                float m = (float)((double)pairwise(vb.data(), (long)vb.size()) / (double)vb.size());
+                *add = dd * (double)m;
+            }
+        }
+        if ((p.snd >> 5) & 1 && dr != 0.0)
+            *rt = pow(2.0, dr);
+    }
+
+    // live._vib_apply: the wheel's depth and rate and CC76/77's, summed,
+    // on one part's sounding slots (retune sets them absolutely: once)
     void vib_apply(const Patch &p, int ch, long long n0)
     {
         std::vector<long> sl = sounding_tone(ch, p.pid, p.cache, false);
         if (sl.empty())
             return;
-        double v = vib_mod[ch] + 0.0, w = vib_modw[ch];
-        retune_v(sl, n0, false, 1.0, true, v, true, (1.0 + mod_rate * w) * 1.0);
+        double add, rt;
+        snd_vib(p, ch, sl, &add, &rt);
+        double v = vib_mod[ch] + add, w = vib_modw[ch];
+        retune_v(sl, n0, false, 1.0, true, v, true, (1.0 + mod_rate * w) * rt);
     }
 
     double range_of(int ch) const { return brange[ch] >= 0.0 ? brange[ch] : bend_range; }
@@ -4061,11 +4102,11 @@ struct Part {
             int gs = rpn_none[ch] ? gs_sound_nrpn(nrpn_msb[ch], nrpn_lsb[ch]) : -1;
             if (gs >= 0) {                          // GS's sound NRPNs: CC71-78's older address
                 if (cc == 6)
-                    sound_cc(ch, gs, v);
+                    sound_cc(ch, gs, v, n0);
             } else
                 rpn_data(ch, cc, v, n0);
         } else if (cc >= 71 && cc <= 78) {
-            sound_cc(ch, cc, v);
+            sound_cc(ch, cc, v, n0);
         } else if (cc == 96 || cc == 97) {
             rpn_step(ch, cc == 96, n0);
         } else if (cc == 121) {
