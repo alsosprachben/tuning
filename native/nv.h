@@ -276,6 +276,10 @@ typedef struct {
     /* A TWO-STAGE DECAY (PromptDecay): every partial under pd_max_hz falls
        at pd_dbs at first, pd_share of it ringing on at the law; 0 none */
     double pd_max_hz, pd_dbs, pd_share;
+    /* PLAYED AT PITCH (PlayedAtPitchMixin._band_trim): the trim read at
+       pap_hz (RECORDED_HZ) x each of its first pap_n modes' ratio; 0 none */
+    double pap_hz;
+    int pap_n;
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -624,6 +628,13 @@ int nv_strike(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, con
 int nv_phantom(const VoiceSnap *v, const ToneIn *t, const double *trans, int ntrans,
                int nimg, const int *nsurf, const int *surf, const double *img, const double *mir,
                double *rows, int cap, double *qacc, double *azimuth);
+/* tone.c: the other strings (blockrender._note_ring) -- n rows at hz
+   (tuned), db, dps; those on f0's own modes (within skip) left out; phases
+   from rr; dr 0.9 direct, 0.1 an image */
+int nv_ring(const VoiceSnap *v, const ToneIn *t, double f0, int n, const double *hz, const double *db,
+            const double *dps, double skip, int nown, const double *own_r, PyRandom *rr, int nimg,
+            const int *nsurf, const int *surf, const double *img, const double *mir, double *rows, int cap,
+            double *qacc, double *azimuth);
 int nv_leak(const VoiceSnap *v, const ToneIn *t, double Bs, PyRandom *lr, int nimg, const int *nsurf,
             const int *surf, const double *img, const double *mir, double *rows, int cap, double *qacc,
             double *azimuth);
@@ -825,6 +836,22 @@ typedef struct NoteClass {
     // ITS CHORUS's COMB (chorus.offsets_for: chorus_cents, else the default), cents
     int n_cho;
     double cho_cents[8];
+    // ITS SYMPATHETIC STRINGS, BY CONTACT (sympathetic.expand): sym_kind 1 a
+    // fixed set (sym_pitch the strings' keys, sym_d each one's drive,
+    // sym_cents its own tuning), 2 the body's neighbours (sym_pitch the
+    // offsets, sym_d their drives, strongest first); sym_floor and sym_top
+    // the set's floor and count; sym_nobend: a meend leaves them (bend_detents)
+    int sym_kind, sym_n, sym_top, sym_nobend;
+    double sym_floor;
+    int sym_pitch[32];
+    double sym_d[32], sym_cents[32];
+    // THE OTHER STRINGS (ring_db): ring_n rows, each its Hz (12-TET at A440,
+    // the note's table moves it), dB and dB/s; one on the note's own modes
+    // within ring_skip is the plucked string itself
+    int ring_n;
+    double ring_hz[48], ring_db[48], ring_dps[48], ring_skip;
+    int ring_nown;                  // the note's own modes' ratios (mode_ratios, or 1 and 2)
+    double ring_own[16];
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -886,6 +913,10 @@ typedef struct {
     int part;
     double dist;            // its distance multiple (_src_dist: CC91 / 40, or its step at the onset); 0: 1
     double gliss_lv;        // a valved gliss's step: its level (_GLISS), 0: none
+    // ITS OTHER STRINGS (ring_db), ring_on: each one's Hz in the note's
+    // table (ring_f, the class's order); fbr the channel's fader row, -1 none
+    int ring_on;
+    double ring_f[48], fbr;
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -928,6 +959,7 @@ typedef struct {
        the caller's knob row goes there */
     int n_ft, lay_rows[2];          /* (each layer's rows, in order) */
     double ft[2][30], kn[2][9];     /* ...and their knob rows (moog.kn_row, the knobs turned) */
+    int ring0, ring1;               /* its other strings' rows (_RING), from the note's first */
 } NoteOut;
 
 // tone.c: the key-up's click (nv_click, blockrender._note_release_click)

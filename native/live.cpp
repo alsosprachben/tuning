@@ -514,6 +514,18 @@ struct Cache {
         take("noff", T.i8[1]);
         for (int q = 0; q < 6; q++)
             take(I4[q], T.i4[q]);
+        {                                   // the other strings' rows (t["ring"]: _RING, dr 0.9 direct, 0.1 an image)
+            int cdr = emit_col("dr");
+            bool any = false;
+            std::vector<char> rg(P, 0);
+            for (long long r = 0; r < P; r++) {
+                double d = rows[NCOLS * r + cdr];
+                rg[r] = d == 0.9 || d == 0.1;
+                any = any || rg[r];
+            }
+            if (any)
+                T.ring.swap(rg);
+        }
         free(rows);
         for (int q = 0; q < 6; q++)
             free(dm[q]);
@@ -551,6 +563,12 @@ struct Cache {
         // in the note (sof: its onset less its room delay, over the least of
         // the strokes'; numpy's int64 - float32, truncated) -- a layer's rows,
         // struck with the key, at the press (0)
+        // the sympathetic strings' rows (t["sym"]: sym_rows, the notes' end to theirs)
+        if (P && out[42] > out[3]) {
+            T.sym.assign(P, 0);
+            for (long long r = (long long)out[3]; r < std::min((long long)out[42], (long long)P); r++)
+                T.sym[r] = 1;
+        }
         // the bellows' push rows (t["push"])
         if (P && !prows.empty()) {
             T.push.assign(P, 0);

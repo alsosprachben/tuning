@@ -44,6 +44,8 @@ struct Template {
     // empty for a voice without ranks, P 0 for a rank with none here
     std::vector<Template> ranks;
     std::vector<char> push;     // the bellows' push rows (t["push"]), empty for none
+    std::vector<char> sym;      // the sympathetic strings' rows (t["sym"]: sym_rows), empty for none
+    std::vector<char> ring;     // the other strings' rows (t["ring"]: dr 0.9 / 0.1), empty for none
     // A HARPSICHORD'S JACKS (t["rel_rank"]): each drawn stop's key-up click,
     // its rows (cof its jack's offset, dur its length from the key-up), by rank
     std::vector<Template> jacks;

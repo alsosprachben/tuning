@@ -308,7 +308,7 @@ static int emit_fwd(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, 
         return 0;
     double row[NCOLS] = {
         om, -om * (non + dl) + ph0, -om * (non + dr) + ph0, ampL, ampR, ampM, t->channel,
-        px, pz, *azimuth, late ? 0.75 : 1.0,
+        px, pz, *azimuth, late == 2 ? 0.9 : late ? 0.75 : 1.0,
         nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, cbw,
         t->tb[0], t->tb[1], t->tb[2], t->gl[0], t->gl[1], t->gl[2],
         vd0, VB[1] * t->sv[1], VB[2], t->vibrato_delay, dl, dr,
@@ -360,7 +360,7 @@ static int emit_fwd(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, 
             return 0;
         double irow[NCOLS] = {
             omi, -omi * (ni + dli) + ph0, -omi * (ni + dri) + ph0, gl_, gr_, gm, t->channel,
-            ix, iz, *azimuth, late ? 0.25 : 0.0,
+            ix, iz, *azimuth, late == 2 ? 0.1 : late ? 0.25 : 0.0,
             nomf, ni, fi, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, cbw,
             t->tb[0], t->tb[1], t->tb[2], t->gl[0], t->gl[1], t->gl[2],
             vd0, VB[1] * t->sv[1], VB[2], t->vibrato_delay, dli, dri,
@@ -1253,6 +1253,46 @@ int nv_phantom(const VoiceSnap *v, const ToneIn *t, const double *trans, int ntr
  * the coils), dying at leak_dbs; with their room images, their phases from
  * lr (the note's own stream). qacc and *azimuth as nv_tone's. Returns the
  * rows written, -1 if the store was too small. */
+int nv_ring(const VoiceSnap *v, const ToneIn *t, double f0, int n, const double *hz, const double *db,
+            const double *dps, double skip, int nown, const double *own_r, PyRandom *rr, int nimg,
+            const int *nsurf, const int *surf, const double *img, const double *mir, double *rows, int cap,
+            double *qacc, double *azimuth)
+{
+    Rows R = {rows, 0, cap};
+    double terms[9 * 64];
+    double VB[3] = {0.0, 5.5, 0.0};
+    double sr = t->sr;
+    double own[17];                 /* f0 at each of the note's own mode ratios, and 2 f0 */
+    for (int j = 0; j < nown; j++)
+        own[j] = f0 * own_r[j];
+    own[nown] = 2.0 * f0;
+    for (int q = 0; q < n; q++) {
+        double hf = hz[q];
+        if (hf >= 0.45 * sr)
+            continue;
+        int on_own = 0;
+        for (int j = 0; j <= nown; j++)
+            if (fabs(hf / own[j] - 1.0) < skip)
+                on_own = 1;
+        if (on_own)
+            continue;
+        double gM = v->gain * pow(10.0, db[q] / 20.0);
+        int nt_ = 0;
+        if (t->reflect) {
+            nt_ = note_terms(v, t, hf, t->pos_x_props, t->pos_z, nimg, nsurf, surf, img, mir, terms);
+            if (nt_ < 0)
+                return -1;
+        }
+        double ph0 = pyr_random(rr) * 2.0 * PI;
+        if (!emit(v, t, &R, qacc, azimuth, terms, nt_, 2 * PI * hf / sr, gM * nv_hrtf_gain(v, hf, t->li),
+                  gM * nv_hrtf_gain(v, hf, t->ri), gM, hf, t->non, pymax(t->noff, t->non + 4.0 * sr), t->fade,
+                  t->rel, t->chiff, log(10.0) / 20.0 * dps[q], 0.0, 0.0, 0.0, 0.0, t->cc, t->crl, 0.0, t->csc,
+                  -1.0, 0.0, ph0, 0.0, VB, t->pos_x_props, 2))
+            return -1;
+    }
+    return R.n;
+}
+
 int nv_leak(const VoiceSnap *v, const ToneIn *t, double Bs, PyRandom *lr, int nimg, const int *nsurf,
             const int *surf, const double *img, const double *mir, double *rows, int cap, double *qacc,
             double *azimuth)

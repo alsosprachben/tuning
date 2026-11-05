@@ -23,7 +23,7 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
                        PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind,
                        double scale, double full_db_s, double residual, double beta, long long blk,
                        long long *nnote, int *played_out, long long *row0_out, int *bands, double *offs,
-                       int with_register);
+                       int with_register, long long *nsym);
 
 // blockrender.ring_last over rows (NCOLS each, EMIT_COLS): the last sample any
 // sounds above floor_, 0 if none does
@@ -229,14 +229,14 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
                      void **dm, int with_register)
 {
     nv_song_gliss(song, K);                 // the valved glisses walked (_prep_gliss), before the notes are counted
-    long long nnote = 0;
+    long long nnote = 0, nsym = 0;
     int nn = nv_song_n_notes(song);
     std::vector<int> played(nn), bands(nn);
     std::vector<long long> row0(nn);
     std::vector<double> offs(nn);
     long long P = nv_play_full(song, K, tmpl, br, nbr, rs, rowsp, qacc, azimuth, kind, scale, full_db_s, residual,
                                beta, blk, &nnote, played.data(), row0.data(), bands.data(), offs.data(),
-                               with_register);
+                               with_register, &nsym);
     if (P < 0)
         return P;
     // THE STROKES' ROWS (stroke_rows): each gesture's stroke's, from its
@@ -325,6 +325,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
     out[1] = (double)nblk;
     out[2] = (double)P;
     out[3] = (double)nnote;                             /* where the notes' rows end (sym_rows) */
+    out[42] = (double)(nnote + nsym);                   /* ...and the sympathetic strings' */
     // THE HALF-PEDAL'S TRACKS (_damp_close, damper.track): each note whose
     // key-up meets the band, from its rows' fundamental and its pedal
     const double *rows = *rowsp;

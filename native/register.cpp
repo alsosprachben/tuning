@@ -1000,7 +1000,7 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
                        PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind,
                        double scale, double full_db_s, double residual, double beta, long long blk,
                        long long *nnote, int *played_out, long long *row0_out, int *bands, double *offs,
-                       int with_register)
+                       int with_register, long long *nsym)
 {
     using namespace nv::reg;
     int nn = nv_song_n_notes(song);
@@ -1061,6 +1061,10 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
     // place. A register channel is keyed by it, as _note_register keys
     // _REG_CH, and its strings' phases hash that key.
     std::map<long long, std::vector<int>> tones;
+    // THE NOTES NOBODY HIT (_SYM_CH): each mix channel's first note whose
+    // class has sympathetic strings, in the notes' order
+    std::vector<long long> sym_order;
+    std::map<long long, const NoteClass *> sym_k;
     for (int j = 0; j < nn; j++) {
         int i = played[j];
         long long ch;
@@ -1073,6 +1077,10 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
             tl.push_back(iv[2]);
         long long mix = ch + (ti ? 256LL * (long long)(ti % 256) : 0LL);
         const NoteClass *k = K[(iv[3] ? NV_K_DRUMS : 0) + 128 * iv[2] + iv[0]];
+        if (k->sym_kind && !sym_k.count(mix)) {
+            sym_k[mix] = k;
+            sym_order.push_back(mix);
+        }
         if (!with_register || !(k->reg_gain != 0.0 || k->reg_knock != 0.0))
             continue;           // (blockrender.REGISTER off: live's templates)
         long long rk = mix;
@@ -1215,6 +1223,124 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         }
     }
     long long n = nr;
+    // sympathetic.expand, before the register's: each channel's strikes (its
+    // rows by onset, 64 samples a bin; not a late copy's or a ring row's),
+    // each answered by its responders -- the strike's rows at the
+    // responder's pitch (the table's, at the strike), at its drive
+    {
+        std::vector<double> extra;
+        for (long long ch : sym_order) {
+            const NoteClass *k = sym_k[ch];
+            std::vector<long long> grp_key;
+            std::map<long long, std::vector<long long>> grp;
+            for (long long r = 0; r < nr; r++) {
+                const double *x = rows + NC * r;
+                if ((long long)x[C_mch] != ch)
+                    continue;
+                double d2 = nearbyint(x[C_dr] * 100.0) / 100.0;     // (np.round(dr, 2))
+                if (d2 == 0.75 || d2 == 0.25 || d2 == 0.9 || d2 == 0.1)
+                    continue;
+                long long g = (long long)nearbyint(x[C_non] / 64.0);
+                if (!grp.count(g))
+                    grp_key.push_back(g);
+                grp[g].push_back(r);
+            }
+            const bool fixed = k->sym_kind == 1, ring_law = k->sym_kind == 1;
+            for (long long g : grp_key) {
+                const std::vector<long long> &ix = grp[g];
+                double nmin = rows[NC * ix[0] + C_non], f0 = rows[NC * ix[0] + C_nf];
+                for (long long r : ix) {
+                    nmin = pymin(nmin, rows[NC * r + C_non]);
+                    f0 = pymin(f0, rows[NC * r + C_nf]);
+                }
+                double tab[128];
+                nv_song_table(song, ch, nmin / sr, tab);
+                // _nearest_key: the table's key nearest f0 in cents (the first of equals)
+                int drv = -1;
+                double bd = 0.0;
+                for (int q = 0; q < 128; q++) {
+                    if (!(tab[q] > 0.0))
+                        continue;
+                    double d = fabs(log2(pymax(tab[q], 1e-9) / pymax(f0, 1e-9)));
+                    if (drv < 0 || d < bd) {
+                        drv = q;
+                        bd = d;
+                    }
+                }
+                // responders(): the strings the strike is not on, over the floor,
+                // strongest first (stable), the first sym_top
+                std::vector<int> rs_s;
+                std::vector<double> rs_d, rs_c;
+                for (int q = 0; q < k->sym_n; q++) {
+                    int s = k->sym_kind == 1 ? k->sym_pitch[q] - drv : k->sym_pitch[q];
+                    if (k->sym_kind == 1 && (s == 0 || !(k->sym_d[q] >= k->sym_floor)))
+                        continue;
+                    rs_s.push_back(s);
+                    rs_d.push_back(k->sym_d[q]);
+                    rs_c.push_back(k->sym_cents[q]);
+                }
+                std::vector<int> ordr(rs_s.size());
+                for (size_t q = 0; q < ordr.size(); q++)
+                    ordr[q] = (int)q;
+                if (k->sym_kind == 1) {
+                    std::stable_sort(ordr.begin(), ordr.end(), [&](int a, int b) { return -rs_d[a] < -rs_d[b]; });
+                    if ((int)ordr.size() > k->sym_top)
+                        ordr.resize(k->sym_top);
+                }
+                auto in_tab = [&](int key) { return key >= 0 && key < 128 && tab[key] > 0.0; };
+                for (int q : ordr) {
+                    int semis = rs_s[q];
+                    double drive = rs_d[q];
+                    double tune = rs_c[q] != 0.0 ? pow(2.0, rs_c[q] / 1200.0) : 1.0;
+                    double ratio;
+                    if (fixed && drv >= 0 && in_tab(drv + semis) && f0 > 0)
+                        ratio = tab[drv + semis] / f0;
+                    else if (drv >= 0 && in_tab(drv + semis) && tab[drv] > 0)
+                        ratio = tab[drv + semis] / tab[drv];
+                    else
+                        ratio = pow(2.0, semis / 12.0);
+                    ratio *= tune;
+                    for (long long i : ix) {
+                        const double *x = rows + NC * i;
+                        if (!(x[C_nf] * ratio < sr * 0.5))
+                            continue;
+                        size_t o = extra.size();
+                        extra.insert(extra.end(), x, x + NC);
+                        double *e = extra.data() + o;
+                        e[C_om] = x[C_om] * ratio;
+                        e[C_nf] = x[C_nf] * ratio;
+                        e[C_p0] = x[C_p0] * ratio;
+                        e[C_p0R] = x[C_p0R] * ratio;
+                        if (fixed || k->sym_nobend)
+                            e[C_br] = -1;
+                        if (ring_law && e[C_aft] > 0.0) {
+                            e[C_logr] = e[C_logrA];
+                            e[C_aft] = 0.0;
+                        }
+                        e[C_aL] = x[C_aL] * drive;
+                        e[C_aR] = x[C_aR] * drive;
+                        e[C_aM] = x[C_aM] * drive;
+                        cast(e);
+                    }
+                }
+            }
+        }
+        long long m = (long long)(extra.size() / NC);
+        if (m) {
+            if (n + m > cap) {
+                cap = n + m;
+                double *grown = (double *)realloc(rows, sizeof(double) * NC * cap);
+                if (!grown)
+                    return -1000000000LL;
+                rows = grown;
+                *rowsp = rows;
+            }
+            memcpy(rows + NC * n, extra.data(), sizeof(double) * extra.size());
+            n += m;
+        }
+        if (nsym)
+            *nsym = m;
+    }
     for (long long rk : order) {
         void *h = chans[rk].first;
         nv_reg_finish(h);

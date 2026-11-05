@@ -1899,6 +1899,7 @@ struct Part {
     int fine_msb[16];
     double mod_cents = 35.0;                        // live.mod_cents (the session's)
     double mod_rate = 0.25;                         // live.mod_rate: the wheel's +25% rate at full
+    std::map<Key, std::vector<char>> sym_at;        // live.sym_at: a note's fixed open strings' rows, off the wheel
     double vib_mod[16] = {}, vib_modw[16] = {};     // live.mod, live.modw: the wheel's depth, its fraction
     // SOSTENUTO (CC66): the keys down when it went down, held (live.sost)
     std::map<int, std::set<int>> sost;
@@ -3432,6 +3433,40 @@ struct Part {
             double sva, svr;
             snd_vib(patches[cur], ch, slots, &sva, &svr);
             double b = bend[ch], v2 = vib_mod[ch] + sva, r2 = (1.0 + mod_rate * vib_modw[ch]) * svr;
+            // THE OPEN STRINGS ARE NOT ON THE WHEEL (live._fixed_sym): their
+            // rows take the note's tuning but not the pull, now or later
+            // ...AND THE RING ROWS (a banjo's other strings and head): never on the wheel
+            const NoteClass *kc = key_class(patches[cur], sn);
+            std::vector<char> sm(slots.size(), 0);
+            bool any = false;
+            if (kc && kc->sym_kind == 1 && T->sym.size() == slots.size())
+                for (size_t q = 0; q < slots.size(); q++)
+                    sm[q] = sm[q] || T->sym[q];
+            if (T->ring.size() == slots.size())
+                for (size_t q = 0; q < slots.size(); q++)
+                    sm[q] = sm[q] || T->ring[q];
+            for (char m : sm)
+                any = any || m;
+            {
+                if (any) {
+                    sym_at[key] = sm;
+                    // _wheel_share: the bend over the channel's tuning without the wheel
+                    double st0 = range_of(ch) * 0.0 / 8192.0 + coarse[ch] + fine[ch] / 100.0 + 0.0 + 0.0 / 100.0;
+                    double rest = pow(2.0, st0 / 12.0);
+                    double share = rest > 0 ? bend[ch] / rest : 1.0;
+                    double bs = b / share;
+                    for (int sel = 1; sel >= 0; sel--) {
+                        double r_ = sel ? bs : b;
+                        std::vector<long> ix;
+                        for (size_t q = 0; q < slots.size(); q++)
+                            if ((sm[q] != 0) == (sel != 0))
+                                ix.push_back(slots[q]);
+                        if (r_ != 1.0 && !ix.empty())
+                            retune(ix, n0, r_);
+                    }
+                    b = 1.0;            // applied; the vibrato below, on every row
+                }
+            }
             if (b != 1.0 || v2 != 0.0 || r2 != 1.0)
                 retune_v(slots, n0, b != 1.0, b, v2 != 0.0, v2, r2 != 1.0, r2);
         }
@@ -5021,7 +5056,26 @@ struct Part {
         bend[ch] = ratio;
         if (leslie_on(ch))
             return;                         // (a rotor part's wheel is its half-moon: nothing bends)
-        retune(sounding(ch), n0, ratio / prev);
+        // ...AND A FIXED OPEN STRING STAYS AT ITS PITCH (live._fixed_sym_slots)
+        std::set<long> fx;
+        for (auto &kv : S.live) {
+            if (std::get<1>(kv.first) != ch || kv.second.empty())
+                continue;
+            auto it = sym_at.find(kv.first);
+            if (it != sym_at.end() && it->second.size() == kv.second.size())
+                for (size_t q = 0; q < kv.second.size(); q++)
+                    if (it->second[q])
+                        fx.insert(kv.second[q]);
+        }
+        std::vector<long> sl = sounding(ch);
+        if (!fx.empty()) {
+            std::vector<long> kept;
+            for (long s : sl)
+                if (!fx.count(s))
+                    kept.push_back(s);
+            sl.swap(kept);
+        }
+        retune(sl, n0, ratio / prev);
         // ...AND THE VALVE'S PRODUCTS WITH THEIR PARENTS (live._repitch_amp):
         // each a sum of multiples of theirs, so one ratio moves them exactly
         std::vector<long> amps;

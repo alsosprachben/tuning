@@ -6684,6 +6684,15 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.soft_pedal_down, n.fixed_touch = int(bool(T.soft_pedal_down)), int(bool(T.FIXED_TOUCH))
     n.sr, n.retrigger_fade, n.channel = SR, RETRIGGER_FADE, em.channel
     n.br = em.bend_row if (em.bend_row >= 0 or em.fader_row < 0) else em.fader_row
+    # ...ITS OTHER STRINGS (ring_db: _note_ring), tuned as the notes are, on the fader's row
+    n.fbr = em.fader_row if em.fader_row >= 0 else -1
+    if getattr(P, 'ring_db', ()):
+        n.ring_on = 1
+        for _i, (_hf, _db, _dps) in enumerate(P.ring_db):
+            _rk = int(round(69.0 + 12.0 * math.log2(_hf / 440.0)))
+            if _rk in nt.freq:
+                _hf = nt.freq[_rk] * _hf / (440.0 * 2.0 ** ((_rk - 69.0) / 12.0))
+            n.ring_f[_i] = _hf
     # ...and its breath noise's, wobbling on its own row (_note_breath_noise)
     _bbo = getattr(em, 'bbrow_of', {})
     if nt.ch in _bbo and getattr(P, 'breath_noise_wobble_db', 0.0) > 0.0:
@@ -9079,13 +9088,17 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                              crow_of[nt.organ_key], wrow_of, wcombo, em.bend_row)
                                             if nt.organ else None))
         if _wn is not None and NATIVE_TONE == 'on':
+            _rb0 = len(A['om'])
             _note_native_apply(em, props, nt, A, _wn, _VB)
+            if _wn[3].ring1 > _wn[3].ring0:     # (its other strings: the engine's note made them)
+                _RING.append((_rb0 + _wn[3].ring0, _rb0 + _wn[3].ring1))
             if _wn[3].n_push:               # (an organ's push, the tone's last rows: recorded as _push_finish does)
                 _PUSH_ROWS.append((len(A['om']) - _wn[3].n_push, len(A['om'])))
         else:
             _pjit = _note_strike_noise(em, props, nt, _CBW, _VB, _pjit, emit_partial, random)
         _note_struck_layer(props, nt, emit_partial, random)
-        _note_ring(em, props, nt, A, _RING, _VB, emit_partial, random)
+        if not (_wn is not None and NATIVE_TONE == 'on'):
+            _note_ring(em, props, nt, A, _RING, _VB, emit_partial, random)
         if (getattr(props, 'touch_leak_db', None) is not None and (props.harmonic_touch or 1) > 1
                 and not (_wn is not None and NATIVE_TONE == 'on')):     # (the engine's note made them)
             # A TOUCHED STRING'S OTHER MODES (tonelib.SynthProperties.touch_leak_db):

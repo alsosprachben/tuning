@@ -103,7 +103,7 @@ class VoiceSnap(ctypes.Structure):
                 ('cl_qmax', C), ('cl_tdb', C), ('cl_thump', C * 8), ('cl_kh', C * 8), ('cl_ka', C * 8),
                 ('vk_n', I), ('vk_hz', C * 16), ('vk_amp', C * 16),
                 ('hit_n', I), ('hit_cents', C * 8), ('hit_gain', C),
-                ('pd_max_hz', C), ('pd_dbs', C), ('pd_share', C)]
+                ('pd_max_hz', C), ('pd_dbs', C), ('pd_share', C), ('pap_hz', C), ('pap_n', I)]
 
 
 class ToneIn(ctypes.Structure):
@@ -243,7 +243,11 @@ class NoteClass(ctypes.Structure):
                    ('sh_mq', C), ('sh_mhz', C), ('sh_mdb', C), ('sh_popen', C), ('sh_pluck', I), ('sh_mh', I),
                    ('sh_nopen', I), ('sh_open', C * 8), ('scatter_ms', C),
                    ('sl_on', I), ('sl_idx', I), ('sl_nm', I), ('sl_db', C), ('sl_rise', C), ('sl_dbs', C),
-                   ('sl_lo', C), ('sl_hi', C), ('sl', ctypes.c_void_p), ('n_cho', I), ('cho_cents', C * 8)])
+                   ('sl_lo', C), ('sl_hi', C), ('sl', ctypes.c_void_p), ('n_cho', I), ('cho_cents', C * 8),
+                   ('sym_kind', I), ('sym_n', I), ('sym_top', I), ('sym_nobend', I), ('sym_floor', C),
+                   ('sym_pitch', I * 32), ('sym_d', C * 32), ('sym_cents', C * 32),
+                   ('ring_n', I), ('ring_hz', C * 48), ('ring_db', C * 48), ('ring_dps', C * 48),
+                   ('ring_skip', C), ('ring_nown', I), ('ring_own', C * 16)])
 
 
 class NoteIn(ctypes.Structure):
@@ -261,7 +265,8 @@ class NoteIn(ctypes.Structure):
                    ('rank_skip', I * 32), ('rank_rel1', I * 32), ('organ_cr', C), ('rank_br', C * 32),
                    ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('bbr_set', I), ('bbr', C),
                    ('rank_drawn_off', I * 32), ('snd_moog', I), ('snd_d', C * 8),
-                   ('sung_hz', C), ('part', I), ('dist', C), ('gliss_lv', C)])
+                   ('sung_hz', C), ('part', I), ('dist', C), ('gliss_lv', C),
+                   ('ring_on', I), ('ring_f', C * 48), ('fbr', C)])
 
 
 class NoteOut(ctypes.Structure):
@@ -271,7 +276,8 @@ class NoteOut(ctypes.Structure):
                                     'ri', 'pos_x', 'pos_z', 'B', 'cv', 'cc', 'crl', 'sjit', 'csc')]
                 + [('tb', C * 3), ('cbw', C * 2), ('radius', C), ('n_push', I), ('f0', C)]
                 + [('n_click', I), ('n_jack', I), ('jack_n', I * 32), ('jack_rank', I * 32), ('jack_off', C * 32),
-                   ('n_ft', I), ('ft', (C * 30) * 2), ('kn', (C * 9) * 2)])
+                   ('n_ft', I), ('lay_rows', I * 2), ('ft', (C * 30) * 2), ('kn', (C * 9) * 2),
+                   ('ring0', I), ('ring1', I)])
 
 
 def lib():
@@ -699,6 +705,19 @@ def _modal_drum(cls):
                 and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
                 and (not cls.mode_stroke_tilt or kettle) and (gam or not cls.bore_corner_hz)
                 and not cls.harmonic_touch and not cls.pickup_points and len(cls.unison_detune or ()) <= 8)
+    # (a plucked tine: a formant body on a measured mode set -- the kalimba's)
+    if (issubclass(cls, T.FormantBody) and issubclass(cls, T.PluckedStringProperties)
+            and cls.mode_gains is not None and cls.mode_ratios is not None):
+        return (all(_owner(cls, n) == o for n, o in _HARMONIC_OWN.items())
+                and _owner(cls, 'aftersound_partial') is None
+                and len(cls.mode_gains) == len(cls.mode_ratios) <= 400
+                and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
+                and not cls.mode_stroke_tilt and not cls.harmonic_touch and not cls.pickup_points
+                and not (cls.unison_detune or ()) and not cls.inharmonicity_dynamic and not cls.blare_db_per_khz
+                and len(cls.formants) <= 16 and len(cls.antiformants) <= 8 and len(cls.body_trim_db or ()) <= 32
+                and not any(getattr(cls, a, None) for a in ('breath_noise_db', 'grains', 'noise_events', 'pulse',
+                                                             'struck_layer', 'touch_leak_db', 'hammer_legato',
+                                                             'bend_detents', 'amp_drive')))
     if issubclass(cls, T.CuicaProperties):
         return (all(_owner(cls, n) == o for n, o in _CUICA_OWN.items())
                 and (_owner(cls, 'harmonic_decay') == 'SynthProperties' or decay_target(cls) is not None)
@@ -930,10 +949,10 @@ def harmonic_voice(cls):
             and not cls.blare_db_per_khz and bool(cls.bore_corner_hz) and 1 <= (cls.max_harmonic or 0) <= 128
             and len(cls.formants) <= 16 and len(cls.antiformants) <= 8 and len(cls.body_trim_db or ()) <= 32
             and len(getattr(cls, 'release_click_modes', ()) or ()) <= 16
+            and len(getattr(cls, 'ring_db', ()) or ()) <= 48
             and not any(getattr(cls, a, None) for a in ('breath_noise_db', 'grains', 'noise_events', 'pulse',
-                                                         'ring_db', 'struck_layer', 'touch_leak_db',
-                                                         'hammer_legato', 'bend_detents', 'amp_drive')
-                        + (() if dul else ('strike_noise_db',))))
+                                                         'struck_layer', 'touch_leak_db',
+                                                         'hammer_legato', 'bend_detents', 'amp_drive')))
 
 
 def hit_voice(cls):
@@ -1339,6 +1358,8 @@ def kit_drum(cls):
         if len(cls.band_trim_db) > 32:
             return 0
         own = dict(_MEASURED_OWN)
+        if issubclass(cls, T.PlayedAtPitchMixin):
+            own['_band_trim'] = 'PlayedAtPitchMixin'        # (its colour at the recorded pitch)
         if issubclass(cls, T.SfxThroatProperties):
             # (a throat's: its mouth, its vowel and its tilt on the stroke's, its
             # breath tilted with it -- the vowel's second set as long as its first)
@@ -1594,6 +1615,15 @@ def snapshot(props):
     elif s.kind == 2:
         # the measured mode set: (ratio, linear gain), SynthProperties' decay,
         # its unison
+        if _owner(type(p), 'bore_gain') == 'FormantBody':     # (a tine's body: the kalimba's)
+            s.fbody, s.formant_floor = 1, p.formant_floor
+            s.n_fm, s.n_afm, s.n_bt = len(p.formants), len(p.antiformants), len(p.body_trim_db or ())
+            for i, row in enumerate(p.formants):
+                s.fm[i][:] = [float(x) for x in row]
+            for i, row in enumerate(p.antiformants):
+                s.afm[i][:] = [float(x) for x in row]
+            for i, row in enumerate(p.body_trim_db or ()):
+                s.bt[i][:] = [float(x) for x in row]
         s.unison_gain = p.unison_gain
         s.n_unison = len(p.unison_detune or ())
         for i, x in enumerate(p.unison_detune or ()):
@@ -1867,6 +1897,8 @@ def snapshot(props):
             s.n_trim = len(p.band_trim_db)
             for i, (f, db) in enumerate(p.band_trim_db):
                 s.trim[i][:] = [float(f), float(db)]
+            if isinstance(p, T.PlayedAtPitchMixin) and p.band_trim_db:
+                s.pap_hz, s.pap_n = float(p.RECORDED_HZ), len(p.DRUM_MODES)
         if isinstance(p, T.MeasuredStrokeProperties):
             s.measured, s.ring_scale, s.mode_scatter_db = 1, p.ring_scale, p.mode_scatter_db
             s.head_jitter, s.wire_jitter, s.jit_sus = p.mode_jitter, p.sustain_jitter, 2
@@ -2569,8 +2601,13 @@ def note_class(cls):
             p = v[2]
             ok = harmonic_voice(cls) or wind_voice(cls) or not (hasattr(p, 'section_seats') and p.section_seats()) and not any(
                 hasattr(p, 'section_onsets_at') and p.section_onsets_at(f) for f in (27.5, 261.6, 4186.0))
-        # (sympathetic strings: the notes nobody hit, sympathetic.expand -- not the engine's)
-        if getattr(cls, 'sympathetic_gain', 0.0):
+        # (sympathetic strings by coincidence, or per mode: sympathetic.expand's
+        # that are not the engine's -- its contact mode is, below)
+        if getattr(cls, 'sympathetic_gain', 0.0) > 0.0 and (
+                getattr(cls, 'sympathetic_mode', 'coincidence') != 'contact'
+                or getattr(cls, 'sympathetic_per_mode', False)
+                or getattr(cls, 'tuning_family', None) == 'indian'
+                or len(getattr(cls, 'sympathetic_strings', ()) or ()) > 32):
             ok = False
         if not ok:
             _NOTE[cls] = False
@@ -2767,6 +2804,49 @@ def note_class(cls):
             return None
         k.n_cho = len(_cc)
         k.cho_cents[:len(_cc)] = [float(x) for x in _cc]
+        # ITS OTHER STRINGS (ring_db: _note_ring)
+        _rg = getattr(cls, 'ring_db', ()) or ()
+        if len(_rg) > 48:
+            _NOTE[cls] = False
+            return None
+        k.ring_n, k.ring_skip = len(_rg), float(getattr(cls, 'ring_skip', 0.03))
+        _ro = tuple(cls.mode_ratios or (1.0, 2.0))
+        if _rg and len(_ro) > 16:
+            _NOTE[cls] = False
+            return None
+        k.ring_nown = len(_ro[:16])
+        k.ring_own[:k.ring_nown] = [float(x) for x in _ro[:16]]
+        for _i, (_hz, _db, _dps) in enumerate(_rg):
+            k.ring_hz[_i], k.ring_db[_i], k.ring_dps[_i] = float(_hz), float(_db), float(_dps)
+        # ITS SYMPATHETIC STRINGS, BY CONTACT (sympathetic.responders): a fixed
+        # set's pitches (the tonic's offsets), each string's drive and its own
+        # cents -- which answer is the strike's (its key), so the C asks -- or
+        # the body's neighbours, the same whatever is struck
+        _sg = getattr(cls, 'sympathetic_gain', 0.0)
+        if _sg > 0.0:
+            import sympathetic as _SYMP
+            k.sym_floor = float(getattr(cls, 'sympathetic_floor', 0.02))
+            k.sym_top = int(getattr(cls, 'sympathetic_max', 6))
+            k.sym_nobend = int(bool(getattr(cls, 'bend_detents', False)))
+            _st = getattr(cls, 'sympathetic_strings', ())
+            if _st:
+                _tn = int(getattr(cls, 'sympathetic_tonic', 60))
+                _sdb = tuple(getattr(cls, 'sympathetic_string_db', ())) or (0.0,) * len(_st)
+                _sct = tuple(getattr(cls, 'sympathetic_string_cents', ())) or (0.0,) * len(_st)
+                k.sym_kind, k.sym_n = 1, len(_st)
+                for _i, (_o, _db, _ct) in enumerate(zip(_st, _sdb, _sct)):
+                    k.sym_pitch[_i] = _tn + int(_o)
+                    k.sym_d[_i] = _sg * 10.0 ** (_db / 20.0)
+                    k.sym_cents[_i] = float(_ct)
+            else:
+                _rsp = _SYMP.responders(cls)
+                if len(_rsp) > 32:
+                    _NOTE[cls] = False
+                    return None
+                k.sym_kind, k.sym_n = 2, len(_rsp)
+                for _i, _it in enumerate(_rsp):
+                    k.sym_pitch[_i], k.sym_d[_i] = int(_it[0]), float(_it[1])
+                    k.sym_cents[_i] = float(_it[2]) if len(_it) > 2 else 0.0
         # A STRUCK, PITCHED LAYER (struck_layer): its class's NoteClass, kept
         sl = getattr(cls, 'struck_layer', None)
         if sl:
@@ -3408,7 +3488,7 @@ def prepare(song, classes, tmpl, br, total, scale=1.0):
         for i in range(6):
             d.nv_buf_free(dm[i])
     P.update(N=int(out[0]), nblk=int(out[1]), P=int(out[2]), total=float(total),
-             sym_rows=(int(out[3]), int(out[3])),
+             sym_rows=(int(out[3]), int(out[42])),
              room_q=[(out[4 + 3 * i], out[5 + 3 * i], out[6 + 3 * i]) for i in range(9)])
     return P
 
@@ -3576,7 +3656,7 @@ def template(program, note, vel, tuner='hybrid440'):
     dt = {c: (np.float32 if c in BR._COL_F4 else np.int32 if c in BR._COL_I4 else np.float64)
           for c in BR.EMIT_COLS}
     P = {c: rows[:, j].astype(dt[c]) for j, c in enumerate(BR.EMIT_COLS)}
-    P.update(N=int(out[0]), nblk=int(out[1]), P=int(out[2]), sym_rows=(int(out[3]), int(out[3])),
+    P.update(N=int(out[0]), nblk=int(out[1]), P=int(out[2]), sym_rows=(int(out[3]), int(out[42])),
              room_q=[(out[4 + 3 * i], out[5 + 3 * i], out[6 + 3 * i]) for i in range(9)])
     return final(P)
 

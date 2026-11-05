@@ -10,12 +10,12 @@ kept by hand in the script's TASKS.
 
 | stage | tones native | drum sets whole |
 |---|---|---|
-| GM1 | 111 of 128 | 0 of 1 |
+| GM1 | 117 of 128 | 0 of 1 |
 | GM2 | 32 of 128 | 0 of 8 |
 | SC-55 | 6 of 13 | 6 of 31 |
-| SC-88 | 78 of 193 | 0 of 2 |
+| SC-88 | 79 of 193 | 0 of 2 |
 | SC-88 Pro | 174 of 360 | 0 of 0 |
-| SC-8850 | 183 of 460 | 0 of 6 |
+| SC-8850 | 185 of 460 | 0 of 6 |
 
 ## GM1
 
@@ -29,10 +29,10 @@ What it needs first, and live's side:
 - [x] Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)
 - [ ] Moog: an MF-104M on a note whose pitch or shapes move (SYNC and a unison: native in files)
 
-Tones: 111 of 128 native.
+Tones: 117 of 128 native.
 
-- [ ] **Ethnic** -- 104 Sitar, 105 Banjo, 106 Shamisen, 107 Koto, 108 Kalimba, 109 Bag pipe
-- [ ] **Percussive** -- 113 Agogo, 114 Steel Drums, 115 Woodblock, 116 Taiko Drum
+- [ ] **Ethnic** -- 104 Sitar, 109 Bag pipe
+- [ ] **Percussive** -- 114 Steel Drums, 115 Woodblock
 - [ ] **Sound Effects** -- 120 Guitar Fret Noise, 122 Seashore, 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter, 126 Applause, 127 Gunshot
 
 Drum sets: 0 of 1 with every key native.
@@ -70,7 +70,7 @@ Drum sets: 0 of 8 with every key native (new at this stage).
 - [ ] 32 Jazz -- 114 of 115 keys native
 - [ ] 40 Brush -- 114 of 115 keys native
 - [ ] 48 Orchestra -- 114 of 115 keys native
-- [ ] 56 SFX -- 42 of 76 keys native
+- [ ] 56 SFX -- 43 of 76 keys native
 
 ## SC-55
 
@@ -96,7 +96,7 @@ Drum sets: 6 of 31 with every key native (new at this stage).
 - [ ] 33 Jazz L/R -- 116 of 117 keys native
 - [ ] 41 Brush 2 -- 114 of 115 keys native
 - [ ] 42 Brush 2 L/R -- 116 of 117 keys native
-- [ ] 49 Ethnic -- 74 of 79 keys native
+- [ ] 49 Ethnic -- 76 of 79 keys native
 - [ ] 57 Rhythm FX -- 46 of 54 keys native
 - [ ] 58 Rhythm FX 2 -- 62 of 66 keys native
 - [ ] 59 Rhythm Fx 3 -- 71 of 75 keys native
@@ -114,7 +114,7 @@ Drum sets: 6 of 31 with every key native (new at this stage).
 
 ## SC-88
 
-Tones: 78 of 193 native (new at this stage).
+Tones: 79 of 193 native (new at this stage).
 
 - [ ] **Piano** -- 2.1 EG+Rhodes 1, 2.2 EG+Rhodes 2, 3.8 Old Upright, 4.25 Hard Rhodes, 4.26 MellwRhodes, 5.24 Hard FM EP
 - [ ] **Chromatic Percussion** -- 11.1 Hard Vibe, 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 15.1 Santur 2, 15.8 Cimbalom
@@ -126,7 +126,7 @@ Tones: 78 of 193 native (new at this stage).
 - [ ] **Brass** -- 56.1 Trumpet 2, 56.24 Bright Tp., 56.25 Warm Tp., 58.1 Tuba 2, 60.8 Fr.HornSolo, 60.16 Horn Orch, 61.16 Brass Fall, 63.17 VeloBrass 2
 - [ ] **Reed** -- 66.8 BreathyTnr.
 - [ ] **Synth Effects** -- 98.3 Round Glock, 98.5 GlocknChime, 98.18 Bell Harp, 98.19 Gamelimba, 99.2 Nylon Harp, 99.3 Harpvox, 99.5 NylonRhodes, 102.3 Echo Pan 2, 102.4 Big Panner, 102.5 Reso Panner
-- [ ] **Ethnic** -- 104.2 DetuneSitar, 104.8 Tambra, 104.16 Tamboura, 105.1 Muted Banjo, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 106.1 Tsugaru, 107.16 Kanoon, 111.1 Shanai 2, 111.8 Pungi, 111.16 Hichiriki
+- [ ] **Ethnic** -- 104.2 DetuneSitar, 104.8 Tambra, 104.16 Tamboura, 105.1 Muted Banjo, 105.16 Gopichant, 105.24 Oud, 106.1 Tsugaru, 107.16 Kanoon, 111.1 Shanai 2, 111.8 Pungi, 111.16 Hichiriki
 - [ ] **Percussive** -- 112.11 St.Gamelan, 117.1 Real Tom, 117.9 Rock Tom, 119.1 ReverseCym2, 119.8 Rev.Snare 1, 119.9 Rev.Snare 2, 119.16 Rev.Kick 1, 119.17 Rev.ConBD, 119.24 Rev.Tom 1, 119.25 Rev.Tom 2
 - [ ] **Sound Effects** -- 120.3 Gt.CutNz. 2, 120.4 Dist.CutNz., 120.5 Bass Slide, 120.6 Pick Scrape, 123.4 Kitty, 123.5 Growl, 124.7 Scratch 2, 126.6 Applause 2
 
@@ -158,7 +158,7 @@ Drum sets: 0 of 0 with every key native (new at this stage).
 
 ## SC-8850
 
-Tones: 183 of 460 native (new at this stage).
+Tones: 185 of 460 native (new at this stage).
 
 - [ ] **Piano** -- 0.1 UprightPiano, 0.2 Mild Piano, 0.9 Mild Piano w, 0.25 Piano + Str2, 0.26 Piano+Choir1, 0.27 Piano+Choir2, 0.8 Upright P w, 1.1 Pop Piano, 1.2 Rock Piano, 1.9 Rock Piano w, 1.8 Pop Piano w, 5.1 E.Piano 3, 5.9 Detuned EP 3, 6.2 Harpsichord3, 7.1 Clav. 2, 7.2 Atk Clav.1, 7.3 Atk Clav.2, 7.17 Phase Clav
 - [ ] **Chromatic Percussion** -- 10.1 Music Box 2, 10.8 St.Music Box, 13.8 Xylophone w, 14.10 Church Bell2, 14.16 Tubularbellw, 15.2 Santur 3
@@ -172,7 +172,7 @@ Tones: 183 of 460 native (new at this stage).
 - [ ] **Pipe** -- 73.9 Pipe & Reed, 73.17 Indian Flute, 75.24 Tin Whistle, 75.25 TinWhtsle Nm, 75.26 TinWhtsle Or
 - [ ] **Synth Pad** -- 92.4 Steel Glass
 - [ ] **Synth Effects** -- 96.10 Tambra Pad, 99.11 Tambra Atmos, 101.26 Pour Magic, 101.27 DancingDrill
-- [ ] **Ethnic** -- 104.4 Sitar/Drone, 104.5 Sitar 4, 108.9 Bodhran, 108.10 Bodhran Mute, 109.9 Uillean Pipe, 109.10 UillnPipe Nm, 109.11 UillnPipe Or
+- [ ] **Ethnic** -- 104.4 Sitar/Drone, 104.5 Sitar 4, 109.9 Uillean Pipe, 109.10 UillnPipe Nm, 109.11 UillnPipe Or
 - [ ] **Percussive** -- 112.13 Jegogan, 112.14 Jublag, 112.15 Pemade, 112.17 Kajar, 112.18 Kelontuk, 112.19 Kelontuk Mt, 112.20 Kelontuk Sid, 112.21 Kopyak Op, 112.22 Kopyak Mt, 112.23 Ceng Ceng, 112.24 Reyoung, 112.25 Kempur, 112.32 Jngl Crash, 112.40 Crash Menu, 112.41 RideCym Menu, 112.42 RideBellMenu, 115.40 HandClapMenu, 116.9 ConcertBD Mt, 116.24 KendangWadon, 116.25 Bebarongan, 116.26 Pelegongan, 116.27 Dholak 1, 116.28 Dholak 2, 116.32 Jngl BD Roll, 116.40 Kick Menu 1, 116.41 Kick Menu 2, 116.42 Kick Menu 3, 116.43 Kick Menu 4, 117.2 Real Tom 2, 117.3 Jazz Tom, 117.4 Brush Tom, 117.24 Jngl SD Roll, 117.40 SD Menu 1, 117.41 SD Menu 2, 117.42 SD Menu 3, 117.43 SD Menu 4, 117.44 SD Menu 5, 118.13 606 Dist.Tom, 119.3 Reverse Cym4, 119.26 Rev.Tom 3, 119.27 Rev.Tom 4, 119.40 Rev.SD Menu1, 119.41 Rev.SD Menu2, 119.42 Rev.SD Menu3, 119.43 Rev.BD Menu1, 119.44 Rev.BD Menu2, 119.45 Rev.BD Menu3, 119.46 Rev.ClapMenu
 - [ ] **Sound Effects** -- 120.16 A.Bs.Nz Menu, 120.17 D.Gt.Nz Menu, 120.18 E.Gt.NzMenu1, 120.19 E.Gt.NzMenu2, 120.20 G.StrokeMenu, 120.21 Gt.SlideMenu, 120.22 A.Bs.Mute Nz, 120.23 A.Bs.TouchNz, 120.24 A.Bs.AtackNz, 120.25 TC Up Nz, 120.26 TC DownMt.Nz, 120.27 TC UpMt.Nz, 120.28 TC Down Nz, 120.29 DstGT.Up Nz, 120.30 DstGT.DwnNz1, 120.31 DstGT.DwnNz2, 120.32 DstGT.MuteNz, 120.34 Gt.StrokeNz5, 120.35 StlGt.SldNz1, 120.36 StlGt.SldNz2, 120.37 StlGt.SldNz3, 120.38 StlGt.SldNz4, 120.39 Gt.StrokeNz1, 120.40 Gt.StrokeNz2, 120.41 Gt.StrokeNz3, 120.42 Gt.StrokeNz4, 121.2 Brth Nz Menu, 121.3 Fl.Breath 1, 121.4 Fl.Breath 2, 121.5 Fl.Breath 3, 121.6 Vox Breath 1, 121.7 Vox Breath 2, 121.8 Trombone Nz, 121.9 Trumpet Nz, 122.7 Cricket, 123.6 Growl 2, 123.7 Fancy Animal, 123.8 Seal, 124.12 Scratch 3, 124.13 Scratch 4, 124.14 Scratch 5, 124.15 Scratch 6, 124.16 Scratch 7, 125.12 Burner, 125.13 Glass & Glam, 125.14 Ice Ring, 125.15 Over Blow, 125.16 Crack Bottle, 125.17 Pour Bottle, 125.18 Soda, 125.19 Open CD Tray, 125.20 Audio Switch, 125.21 Key Typing, 125.22 SL 1, 125.23 SL 2, 125.24 Car Engine 2, 125.25 Car Horn, 125.26 Boeeeen, 125.27 R.Crossing, 125.28 Compresser, 125.29 Sword Boom!, 125.30 Sword Cross, 125.31 Stab! 1, 125.32 Stab! 2, 126.9 BabyLaughing, 126.22 Voice Kikit, 126.23 Voice ComeOn, 126.24 Voice Aou, 126.25 Voice Oou, 126.26 Voice Hie, 127.6 Explosion 2
 
@@ -183,4 +183,4 @@ Drum sets: 0 of 6 with every key native (new at this stage).
 - [ ] 10 Jungle -- 122 of 123 keys native
 - [ ] 11 Techno -- 122 of 123 keys native
 - [ ] 26 Dance -- 122 of 123 keys native
-- [ ] 52 Asia -- 58 of 66 keys native
+- [ ] 52 Asia -- 63 of 66 keys native

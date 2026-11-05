@@ -67,7 +67,9 @@ static double band_trim(const VoiceSnap *v, int harmonic)
 {
     if (!v->n_trim)
         return 1.0;
-    double f = v->frequency_x * pow(2.0, v->octave_position) * nv_mode_ratio(v, harmonic);
+    double f = v->pap_hz != 0.0 && harmonic <= v->pap_n
+                   ? v->pap_hz * nv_mode_ratio(v, harmonic)      /* PlayedAtPitchMixin: the recorded pitch's */
+                   : v->frequency_x * pow(2.0, v->octave_position) * nv_mode_ratio(v, harmonic);
     int n = v->n_trim;
     double db = 0.0;
     if (f <= v->trim[0][0])

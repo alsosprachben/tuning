@@ -445,6 +445,26 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         out->n_knock += k;
         total += k;
     }
+    // THE OTHER STRINGS (_note_ring): after the struck layer, before the
+    // touch's modes and the tone, as the Python's; off the wheel (the fader's row)
+    out->ring0 = out->ring1 = (int)total;
+    if (K->ring_n && n->ring_on) {
+        ToneIn tr = t;
+        tr.reflect = reflect;
+        tr.gain = 1.0; tr.sjit = 0.0;
+        tr.cbw0 = K->cbw0; tr.cbw1 = K->cbw1;
+        tr.br = n->fbr;
+        PyRandom rr;
+        pyr_seed(&rr, (long long)rint(n->on * 1e6) * 137 + n->note * 11 + n->ch);
+        int k = nv_ring(&s, &tr, f0, K->ring_n, n->ring_f, K->ring_db, K->ring_dps, K->ring_skip,
+                        K->ring_nown, K->ring_own, &rr,
+                        reflect ? nimg : 0, nsurf, surf, img, mir, rows + NCOLS * total, cap - total, qacc, azimuth);
+        if (k < 0)
+            return -1;
+        out->n_knock += k;
+        total += k;
+        out->ring1 = (int)total;
+    }
     // A TOUCHED STRING'S OTHER MODES (blockrender's touch_leak_db): before
     // the tone, as the Python's (no breath or shake beside them: native.py)
     if (s.elec && s.touch > 1 && s.leak_set) {
@@ -823,6 +843,20 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             n.slurred = 1;                  // (not retongued: every step slurs)
         n.channel = (double)nv_song_mix(song, i);      // (its tone's mix channel: em.channel)
         n.br = (ch >= 0 && ch < nbr) ? br[ch] : -1.0;
+        n.fbr = n.br;                       // (the fader's: the other strings' row, off the wheel)
+        n.ring_on = 0;
+        if (k->ring_n) {                    // ITS OTHER STRINGS, tuned as the notes are (_note_ring)
+            double rtab[128];
+            nv_song_table(song, ch, dv[0], rtab);
+            n.ring_on = 1;
+            for (int q = 0; q < k->ring_n; q++) {
+                double hf = k->ring_hz[q];
+                int rk = (int)nearbyint(69.0 + 12.0 * log2(hf / 440.0));
+                if (rk >= 0 && rk < 128 && rtab[rk] > 0.0)
+                    hf = rtab[rk] * hf / (440.0 * pow(2.0, (rk - 69.0) / 12.0));
+                n.ring_f[q] = hf;
+            }
+        }
         if (nbr > 256 && k->bendable && ch >= 0 && ch < 256 && br[256 + ch] >= 0.0)
             n.br = br[256 + ch];            // a voice that bends: its channel's bend row
         n.bbr_set = 0;
