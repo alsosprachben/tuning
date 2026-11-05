@@ -205,6 +205,13 @@ def main(argv):
         f.write(b"LESL" + struct.pack("<i", len(les)) + struct.pack("<%dd" % len(les), *[float(x) for x in les])
                 + struct.pack("<i", len(lobe)) + lobe)
         f.write(b"SCAN" + struct.pack("<i", len(scn)) + struct.pack("<%dd" % len(scn), *scn))
+        # VBOD: the voice parts a track's name declares (tonelib.VOICE_BODIES,
+        # VOICE_CLUSTER, _NOT_A_VOICE: nv_voice_bodies_set's)
+        vbn = list(T.VOICE_BODIES)
+        blob = b"".join(os.fsencode(x) + b"\0" for x in vbn + list(T._NOT_A_VOICE))
+        f.write(b"VBOD" + struct.pack("<iii", len(vbn), len(T._NOT_A_VOICE), len(blob)) + blob
+                + struct.pack("<%dd" % len(vbn), *[float(T.VOICE_BODIES[x]) for x in vbn])
+                + struct.pack("<%dd" % len(vbn), *[float(T.VOICE_CLUSTER.get(x, 1.0)) for x in vbn]))
         if "live" in opt:
             import live as L
             tab = L.pan_table()

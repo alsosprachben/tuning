@@ -27,6 +27,7 @@
 #include <cmath>
 #include <cstring>
 #include <map>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -199,6 +200,7 @@ struct Parsed {
     std::vector<std::array<int, 3>> legato;    // _legato_ticks: (channel, key, k) slurred
     std::vector<CCEv> snd;      // sndev: CC71-78, and gmon (channel -1, cc -1), in message order
     std::vector<std::pair<int, int>> chprogs;  // ch_progs: a melodic channel's program changes, in message order
+    std::map<int, int> parts;   // _voice_parts: a channel's voice part, by its track's name (nv_voice_body)
 };
 
 // _legato_ticks: the notes that begin contiguously with what their channel
@@ -299,6 +301,29 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             return -1;
     }
     legato_ticks(all, starts, tpb, P.legato);
+    // _voice_parts: each track's first name (track or instrument), and each
+    // channel a message of it speaks on after that -- the first track that
+    // names a part for a channel declares it
+    for (size_t ti = 0; ti < starts.size(); ti++) {
+        size_t a = starts[ti], b = ti + 1 < starts.size() ? starts[ti + 1] : all.size();
+        std::string name;
+        for (size_t i = a; i < b; i++) {
+            const Msg &m = all[i];
+            if (m.status == 0xFF) {
+                if ((m.meta == 0x03 || m.meta == 0x04) && name.empty())
+                    name.assign(m.data.begin(), m.data.end());
+                continue;
+            }
+            if (m.status == 0xF0 || m.status == 0xF7)
+                continue;
+            int ch = m.status & 0x0F;
+            if (!name.empty() && !P.parts.count(ch)) {
+                int part = nv_voice_body(name.c_str());
+                if (part)
+                    P.parts[ch] = part;
+            }
+        }
+    }
     // merge_tracks: a stable sort on absolute tick (tracks in file order),
     // then relative ticks; fix_end_of_track: end-of-track deltas carried on
     std::stable_sort(all.begin(), all.end(), [](const Msg &a, const Msg &b) { return a.tick < b.tick; });
@@ -655,6 +680,8 @@ void nv_midi_song(void *p, void *song, const double *trim)
         nv_song_legato(song, l[0], l[1], l[2]);
     for (const nv::CCEv &e : P->snd)
         nv_song_snd(song, e.ch, e.t, e.cc, e.v);
+    for (const auto &pt : P->parts)
+        nv_song_set_part(song, pt.first, pt.second);
 }
 
 }  // extern "C"

@@ -979,6 +979,151 @@ static void voice_hrtf_at(const VoiceInit *c, double th, double position_x, doub
  * rewritten here). rs: the global stream (Python's random.getstate()), or
  * NULL to draw from a scratch one -- the attack jitter is then not the
  * Python's, and nothing in the VoiceSnap depends on it. */
+/* tonelib.VOICE_BODIES and VOICE_CLUSTER (each part's tract against the
+   mean singer's, its singer's-formant cluster) and _NOT_A_VOICE, as
+   native.py hands them over from tonelib (nv_voice_bodies_set) */
+#define VB_MAX 64
+static char VB_NAME[VB_MAX][32], NOT_A_VOICE[VB_MAX][32];
+static double VB_RATIO[VB_MAX], VB_CLUSTER[VB_MAX];
+static int vb_n, nav_n, vb_ready;
+
+/* names: n parts' then nn not-a-voice strings, each NUL-terminated, back to back */
+int nv_voice_bodies_set(int n, const char *names, const double *ratio, const double *cluster, int nn)
+{
+    if (n > VB_MAX || nn > VB_MAX)
+        return 0;
+    const char *p = names;
+    for (int i = 0; i < n + nn; i++) {
+        size_t l = strlen(p);
+        if (l >= 32)
+            return 0;
+        memcpy(i < n ? VB_NAME[i] : NOT_A_VOICE[i - n], p, l + 1);
+        p += l + 1;
+    }
+    for (int i = 0; i < n; i++) {
+        VB_RATIO[i] = ratio[i];
+        VB_CLUSTER[i] = cluster[i];
+    }
+    vb_n = n;
+    nav_n = nn;
+    vb_ready = 1;
+    return 1;
+}
+
+/* tonelib.voice_body: the longest part named by a word of the track's
+   lowercased name, unless it names something that is not a voice */
+int nv_voice_body(const char *name)
+{
+    if (!name || !*name || !vb_ready)
+        return 0;
+    char low[512];
+    size_t n = strlen(name);
+    if (n >= sizeof low)
+        n = sizeof low - 1;
+    for (size_t i = 0; i < n; i++) {
+        unsigned char ch = (unsigned char)name[i];
+        low[i] = (char)((ch >= 'A' && ch <= 'Z') || (ch >= 0xC0 && ch <= 0xDE && ch != 0xD7) ? ch + 32 : ch);
+    }
+    low[n] = 0;
+    for (int b = 0; b < nav_n; b++)
+        if (strstr(low, NOT_A_VOICE[b]))
+            return 0;
+    int hit = -1;
+    size_t hlen = 0;
+    int m = vb_n;
+    for (size_t i = 0; i < n;) {
+        if (low[i] < 'a' || low[i] > 'z') {
+            i++;
+            continue;
+        }
+        size_t j = i;
+        while (j < n && low[j] >= 'a' && low[j] <= 'z')
+            j++;
+        for (int k = 0; k < m; k++)
+            if (strlen(VB_NAME[k]) == j - i && !strncmp(VB_NAME[k], low + i, j - i) && (hit < 0 || j - i > hlen)) {
+                hit = k;
+                hlen = j - i;
+            }
+        i = j;
+    }
+    return hit + 1;
+}
+
+int nv_voice_part(int part, double *ratio, double *cluster)
+{
+    if (part < 1 || part > vb_n)
+        return 0;
+    *ratio = VB_RATIO[part - 1];
+    *cluster = VB_CLUSTER[part - 1];
+    return 1;
+}
+
+/* _VocalBody._formant_tune: F1 raised onto a fundamental above it, below F2 */
+static void formant_tune(double (*out)[3], int n, double f)
+{
+    if (!n || f <= out[0][0])
+        return;
+    double c = out[0][0], bw = out[0][1];
+    double ceiling = n > 1 ? out[1][0] * 0.8 : f;
+    double nw = pymin(f, ceiling);
+    if (nw > c) {
+        out[0][0] = nw;
+        out[0][1] = bw * pow(nw / c, 0.5);
+    }
+}
+
+/* _VocalBody._sung_formants: the class's vowel on this note's body -- a
+   declared part's tract, or the draw between a man's and a woman's by its
+   part's tessitura (seeded on its key), broadened where both sing */
+static void sung_formants(const VoiceInit *c, double frequency, VoiceSnap *s)
+{
+    int n = c->n_vb;
+    double out[16][3];
+    s->n_fm = n;
+    if (!n || c->vb_tract == 0.0) {
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < 3; j++)
+                s->fm[i][j] = c->vb_fm[i][j];
+        return;
+    }
+    double f0 = c->sung_hz != 0.0 ? c->sung_hz : frequency;
+    if (c->part_set) {
+        double ratio = c->part_ratio, cl = c->part_cluster;
+        for (int i = 0; i < n; i++) {
+            double ce = c->vb_fm[i][0], bw = c->vb_fm[i][1], amp = c->vb_fm[i][2];
+            double a = amp * ((ratio > 1.0 && i >= 2 && ce * ratio >= c->vb_sfhz) ? c->vb_ftop : 1.0)
+                       * (i >= 2 ? cl : 1.0);
+            out[i][0] = ce * ratio;
+            out[i][1] = bw * ratio;
+            out[i][2] = a;
+        }
+        formant_tune(out, n, f0 != 0.0 ? f0 : 1.0);
+    } else {
+        double f = f0 != 0.0 ? f0 : 1.0;
+        long long midi = (long long)nearbyint(69 + 12 * log(f / 440.0) / log(2));
+        double x = (log(f / c->vb_xhz) / log(2)) / c->vb_xoct;
+        double w = 1.0 / (1.0 + exp(-pymax(-40.0, pymin(40.0, x))));
+        double half = pow(c->vb_tract, 0.5);
+        double ratio = pow(half, 2.0 * w - 1.0);
+        PyRandom r;
+        pyr_seed(&r, 0x5117 + midi * 2654435761LL);
+        ratio *= exp(pyr_gauss(&r, 0.0, c->vb_sigma));
+        double blend = 1.0 + c->vb_mb * 4.0 * w * (1.0 - w);
+        for (int i = 0; i < n; i++) {
+            double ce = c->vb_fm[i][0], bw = c->vb_fm[i][1], a = c->vb_fm[i][2];
+            if (i >= 2 && ce * ratio >= c->vb_sfhz)
+                a *= (1.0 - w) + w * c->vb_ftop;
+            out[i][0] = ce * ratio;
+            out[i][1] = bw * ratio * blend;
+            out[i][2] = a;
+        }
+        formant_tune(out, n, f);
+    }
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < 3; j++)
+            s->fm[i][j] = out[i][j];
+}
+
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
                    double attack_volume, double channel_volume, double effort, PyRandom *rs,
                    VoiceSnap *s, VoiceNote *o)
@@ -993,6 +1138,8 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
         effort = effort + c->rnd_draws[1];
     }
     *s = *tmpl;
+    if (c->vbody)                       /* a sung voice: the note's own body (before the bore's norm) */
+        sung_formants(c, frequency, s);
     double eff = effort != 0.0 ? effort : c->effort;
     s->attack_volume = attack_volume;
     if (c->bloom_seconds > 0.0 && c->bloom_slope != 0.0) {

@@ -61,6 +61,15 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     if (n->seat != 0.0)                 // a seat inside the instrument, at the angle its pan names
         c.seat_x = c.listener_distance * tan(nv_stage_angle(n->seat));
     memcpy(c.rnd_draws, n->rnd_draws, sizeof c.rnd_draws);
+    if (c.vbody) {                      // a sung voice: its part's tessitura, and the part its file declares
+        c.sung_hz = n->sung_hz;
+        double pr, pc;
+        if (n->part && nv_voice_part(n->part, &pr, &pc)) {
+            c.part_set = 1;
+            c.part_ratio = pr;
+            c.part_cluster = pc;
+        }
+    }
     VoiceSnap s;
     VoiceNote o;
     nv_voice_init(&c, &K->tmpl, n->f0, n->pan, pow(n->vel / 127.0, 2.0), n->chan_vol, n->effort, rs, &s, &o);
@@ -537,6 +546,15 @@ static double one_shot_ring(const NoteClass *K, const NoteIn *n, const PyRandom 
     if (n->seat != 0.0)
         c.seat_x = c.listener_distance * tan(nv_stage_angle(n->seat));
     memcpy(c.rnd_draws, n->rnd_draws, sizeof c.rnd_draws);
+    if (c.vbody) {                      // a sung voice: its part's tessitura, and the part its file declares
+        c.sung_hz = n->sung_hz;
+        double pr, pc;
+        if (n->part && nv_voice_part(n->part, &pr, &pc)) {
+            c.part_set = 1;
+            c.part_ratio = pr;
+            c.part_cluster = pc;
+        }
+    }
     PyRandom r = *rs;
     VoiceSnap s;
     VoiceNote o;
@@ -736,6 +754,8 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
                 return -(1 + i);
         }
         n.from_song = 1; n.song_index = i;
+        n.sung_hz = nv_song_tess(song, ch);     // a sung part's tessitura, its declared part (_prep_choir_parts)
+        n.part = nv_song_part(song, ch);
         double pv[3];
         nv_song_note_voice(song, i, pv);    // a throat's pulse: its tilt, mouth and vowel
         n.stroke_tilt = pv[0]; n.stroke_mouth = pv[1]; n.stroke_morph = pv[2];

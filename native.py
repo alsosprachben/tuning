@@ -149,7 +149,10 @@ class VoiceInit(ctypes.Structure):
                 + [('rnd', I)] + [(f, C) for f in ('rnd_level_db', 'rnd_effort_db', 'rnd_cents', 'rnd_timing_s')]
                 + [('rnd_draws', C * 4), ('law_k', C), ('law_p', C), ('bb_hz', C), ('bb_B', C),
                    ('has_course', I), ('course', ctypes.c_ubyte * 128),
-                   ('n_open', I), ('open_st', C * 8), ('pluck_open', C)])
+                   ('n_open', I), ('open_st', C * 8), ('pluck_open', C),
+                   ('vbody', I), ('n_vb', I), ('vb_fm', (C * 3) * 16)]
+                + [(f, C) for f in ('vb_tract', 'vb_sigma', 'vb_mb', 'vb_xhz', 'vb_xoct', 'vb_ftop', 'vb_sfhz')]
+                + [('part_set', I), ('part_ratio', C), ('part_cluster', C), ('sung_hz', C)])
 
 
 class VoiceNote(ctypes.Structure):
@@ -253,7 +256,8 @@ class NoteIn(ctypes.Structure):
                    ('stroke_morph', C), ('snd_at', C), ('snd_rt', C), ('rank_gr', C * 32), ('rank_sp', C * 32),
                    ('rank_skip', I * 32), ('rank_rel1', I * 32), ('organ_cr', C), ('rank_br', C * 32),
                    ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('bbr_set', I), ('bbr', C),
-                   ('rank_drawn_off', I * 32), ('snd_moog', I), ('snd_d', C * 8)])
+                   ('rank_drawn_off', I * 32), ('snd_moog', I), ('snd_d', C * 8),
+                   ('sung_hz', C), ('part', I)])
 
 
 class NoteOut(ctypes.Structure):
@@ -359,6 +363,9 @@ def _load():
                               C, ctypes.c_void_p, I, ctypes.c_void_p, D]),
             ('nv_voice_init', None, [ctypes.POINTER(VoiceInit), P, C, C, C, C, C, ctypes.POINTER(PyRandomState),
                                      P, ctypes.POINTER(VoiceNote)]),
+            ('nv_voice_bodies_set', I, [I, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, I]),
+            ('nv_voice_body', I, [ctypes.c_char_p]),
+            ('nv_voice_part', I, [I, ctypes.POINTER(C), ctypes.POINTER(C)]),
             ('nv_note', I, [ctypes.POINTER(NoteClass), ctypes.POINTER(NoteIn), ctypes.POINTER(PyRandomState), I,
                             ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I,
                             ctypes.c_void_p, D, ctypes.POINTER(NoteOut)]),
@@ -620,7 +627,10 @@ def breath_noise(cls):
             # (...or a free reed's or a played pipe's, its tone after its breath as Python's is)
             and (all(g == 0.0 for g in (cls.mode_gains or (1.0,))) or getattr(cls, 'registerable', False)
                  or _blown(cls))
-            and _owner(cls, 'breath_noise_at') == 'SynthProperties'
+            # (a sung body's own: SynthProperties' but under a sung text's other
+            # vowel, which the engine refuses -- sung_voice)
+            and (_owner(cls, 'breath_noise_at') == 'SynthProperties'
+                 or (_owner(cls, 'breath_noise_at') == '_VocalBody' and sung_voice(cls)))
             and _owner(cls, '_breath_noise_rows') == 'SynthProperties'
             # (a low register's table only on the same bands: a blown voice's)
             and (not getattr(cls, 'breath_noise_low_db', None)
@@ -1888,6 +1898,40 @@ def _owner(cls, name):
 _BREAK_CUT = ('harmonic_volume', 'chiff_harmonic_gain')
 
 
+def sung_voice(cls):
+    """Whether cls is a sung voice whose body the engine draws per note
+    (tonelib._VocalBody: VoiceInit.vbody) -- its tract, its singer's formant,
+    its formant tuning; not a render of the source alone (TUNING_VOCAL_FLAT)."""
+    import tonelib as T
+    v = getattr(T, '_VocalBody', None)
+    if any(os.environ.get(e) for e in ('TUNING_LYRIC_LANG', 'TUNING_VOCALISE', 'TUNING_VOICE_PARTS')):
+        return False                    # (a sung text, a vocalise, declared parts: Python's)
+    ok = (v is not None and issubclass(cls, v) and not cls.vocal_flat
+          and _owner(cls, '_sung_formants') == '_VocalBody' and _owner(cls, '_formant_tune') == '_VocalBody'
+          and len(cls.formants or ()) <= 16)
+    if ok:
+        voice_bodies(lib())
+    return ok
+
+
+_VB_SET = [False]
+
+
+def voice_bodies(d):
+    """tonelib's voice parts into the engine (nv_voice_bodies_set): VOICE_BODIES'
+    names, ratios and clusters, _NOT_A_VOICE's strings -- once, the first time
+    a sung class is the engine's (the library loads before tonelib has them)."""
+    import tonelib as T
+    if _VB_SET[0] or d is None:
+        return 1
+    _VB_SET[0] = True
+    names = list(T.VOICE_BODIES)
+    blob = b"".join(os.fsencode(x) + b"\0" for x in names + list(T._NOT_A_VOICE))
+    r = (C * len(names))(*[float(T.VOICE_BODIES[x]) for x in names])
+    c = (C * len(names))(*[float(T.VOICE_CLUSTER.get(x, 1.0)) for x in names])
+    return d.nv_voice_bodies_set(len(names), blob, r, c, len(T._NOT_A_VOICE))
+
+
 def init_supported(cls):
     """Whether native/voice.c's nv_voice_init builds this class's voice: a
     piano constructor (SynthProperties', the grand's, the honky-tonk's) or a
@@ -1903,7 +1947,8 @@ def init_supported(cls):
                if '__init__' in k.__dict__ and not (k.__name__ == 'ElectricPianoProperties' and ep_voice(cls))
                and not (k.__name__ in ('ElectricGuitarProperties', 'GuitarHarmonicsProperties') and electric_voice(cls))
                and not (k.__name__ == 'ClavinetProperties' and clav_voice(cls))
-               and not (k.__name__ in _STOPPED_INITS and stopped_voice(cls) and harmonic_voice(cls))):
+               and not (k.__name__ in _STOPPED_INITS and stopped_voice(cls) and harmonic_voice(cls))
+               and not (k.__name__ == '_VocalBody' and sung_voice(cls))):
             return False
         if any(_owner(cls, n) != o for n, o in _BASE_OWN.items() if n != 'inharmonicity_coefficient_func'):
             return False
@@ -1981,6 +2026,21 @@ def _class(cls):
             if _owner(cls, 'inharmonicity_coefficient_for_frequency') == 'HammeredDulcimerProperties':
                 c.b_law = 4                     # (...under the dulcimer's bass bridge, its own)
                 c.bb_hz, c.bb_B = float(cls.bass_bridge_hz), float(cls.bass_bridge_B)
+        if sung_voice(cls):
+            # A SUNG BODY (_VocalBody): the class's vowel, its body's draw; the
+            # note's part (the file's, or the tone's own voice_part) and
+            # tessitura are its own (NoteIn.part, sung_hz)
+            c.vbody = 1
+            c.n_vb = len(cls.formants)
+            for i, row in enumerate(cls.formants):
+                c.vb_fm[i][:] = [float(x) for x in row]
+            c.vb_tract, c.vb_sigma, c.vb_mb = float(cls.tract_ratio), float(cls.tract_sigma), float(cls.mixture_broadening)
+            c.vb_xhz, c.vb_xoct = float(cls.voice_crossover_hz), float(cls.voice_crossover_oct)
+            c.vb_ftop, c.vb_sfhz = float(cls.female_top_formant), float(cls.singers_formant_hz)
+            vp = getattr(cls, 'voice_part', None)
+            if vp:
+                c.part_set = 1
+                c.part_ratio, c.part_cluster = float(T.VOICE_BODIES[vp]), float(T.VOICE_CLUSTER.get(vp, 1.0))
         os_ = getattr(cls, 'open_strings', None) or ()
         if stopped_voice(cls) and getattr(cls, 'pluck_open', None) and os_:
             c.n_open = len(os_)                 # (the note's pluck point: nv_voice_init's)
@@ -2026,13 +2086,15 @@ def _class(cls):
     return got
 
 
-def voice(cls, frequency, channel_pan, attack_volume, channel_volume, effort=0.0, state=None, seat=0.0, rnd=None):
+def voice(cls, frequency, channel_pan, attack_volume, channel_volume, effort=0.0, state=None, seat=0.0, rnd=None,
+          sung=None):
     """cls(frequency, channel_pan, attack_volume, channel_volume, effort) in C:
     (VoiceSnap, VoiceNote), or None where the class is not supported. state:
     a PyRandomState for the global stream, drawn from as the constructor
     draws (None: the snapshot alone, the stream untouched). seat: a seat
     inside the instrument (a kit's drum), placed as blockrender places it.
-    rnd: an [RND] voice's four draws (its props' rnd_draws)."""
+    rnd: an [RND] voice's four draws (its props' rnd_draws). sung: a sung
+    voice's (tessitura Hz, declared part: 1 + its VOICE_BODIES index, 0 none)."""
     import tonelib as T
     d = lib()
     got = _class(cls) if d is not None else None
@@ -2049,6 +2111,11 @@ def voice(cls, frequency, channel_pan, attack_volume, channel_volume, effort=0.0
         c.seat_x = c.listener_distance * math.tan(T.stage_angle(seat))
     if rnd is not None:
         c.rnd_draws[:] = [float(x) for x in rnd]
+    if c.vbody and sung is not None:
+        c.sung_hz = float(sung[0])
+        pr, pc = C(), C()
+        if sung[1] and d.nv_voice_part(int(sung[1]), ctypes.byref(pr), ctypes.byref(pc)):
+            c.part_set, c.part_ratio, c.part_cluster = 1, pr.value, pc.value
     s, o = VoiceSnap(), VoiceNote()
     d.nv_voice_init(ctypes.byref(c), ctypes.byref(tmpl), float(frequency), float(channel_pan),
                     float(attack_volume), float(channel_volume), float(effort),

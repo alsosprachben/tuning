@@ -205,6 +205,7 @@ struct Song {
     std::vector<Ev> notes;
     std::map<NoteKey, double> next_same, sost_held;
     std::map<long long, int> vbase;     // each channel's median velocity (_vbase)
+    std::map<long long, int> parts;     // a sung part's voice part, by its track's name (nv_voice_body)
     // the rows of each played note that is a gesture's stroke (nv_prepare's:
     // blockrender's stroke_rows), [first, end)
     std::vector<std::pair<long long, long long>> stroke_rows;
@@ -1107,6 +1108,28 @@ void nv_song_note(void *s, long long ch, int note, double on, double off, int ve
 }
 
 int nv_song_n_notes(void *s) { return (int)((nv::Song *)s)->notes.size(); }
+
+// _prep_choir_parts' _tess: a channel's median key (the upper of two), in Hz
+double nv_song_tess(void *s, long long ch)
+{
+    std::vector<int> k;
+    for (const nv::Ev &e : ((nv::Song *)s)->notes)
+        if (e.ch == ch)
+            k.push_back(e.note);
+    if (k.empty())
+        return 0.0;
+    std::sort(k.begin(), k.end());
+    return 440.0 * pow(2.0, (k[k.size() / 2] - 69) / 12.0);
+}
+
+void nv_song_set_part(void *s, long long ch, int part) { ((nv::Song *)s)->parts[ch] = part; }
+
+int nv_song_part(void *s, long long ch)
+{
+    const auto &m = ((nv::Song *)s)->parts;
+    auto it = m.find(ch);
+    return it == m.end() ? 0 : it->second;
+}
 
 // a sound controller (CC71-78) on channel ch at t, in the file's order; ch -1
 // and cc -1: GM System On or GS Reset, every channel's back to 64

@@ -228,6 +228,22 @@ static bool read_export(const char *path, Export &E)
             } else {
                 fseek(f, pos, SEEK_SET);
             }
+        // VBOD: the voice parts a track's name declares (voice.c's table)
+        {
+            long vp = ftell(f);
+            char vt[4];
+            int vh[3];
+            if (ok && fread(vt, 1, 4, f) == 4 && !memcmp(vt, "VBOD", 4) && fread(vh, 4, 3, f) == 3) {
+                std::vector<char> blob(vh[2] + 1, 0);
+                std::vector<double> vr(vh[0]), vc(vh[0]);
+                ok = fread(blob.data(), 1, vh[2], f) == (size_t)vh[2] && fread(vr.data(), 8, vh[0], f) == (size_t)vh[0]
+                     && fread(vc.data(), 8, vh[0], f) == (size_t)vh[0];
+                if (ok)
+                    nv_voice_bodies_set(vh[0], blob.data(), vr.data(), vc.data(), vh[1]);
+            } else {
+                fseek(f, vp, SEEK_SET);
+            }
+        }
         } else {
             fseek(f, pos, SEEK_SET);
         }
@@ -391,6 +407,10 @@ int main(int argc, char **argv)
         const NoteClass *nc = (const NoteClass *)E.classes[cq].data();
         if (getenv("TUNING_AMP_DRIVE") && nc->amp_drive != 0.0) {
             fprintf(stderr, "nvrender: refused: TUNING_AMP_DRIVE (Python's audition)\n");
+            return 2;
+        }
+        if (nc->init.vbody && (getenv("TUNING_LYRIC_LANG") || getenv("TUNING_VOCALISE") || getenv("TUNING_VOICE_PARTS"))) {
+            fprintf(stderr, "nvrender: refused: a sung part's text or declared parts (Python's)\n");
             return 2;
         }
         if (getenv("TUNING_CLAV") && nc->clav_panel) {

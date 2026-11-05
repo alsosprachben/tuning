@@ -4574,7 +4574,7 @@ class _Note(object):
     __slots__ = ('ch', 'note', 'on', 'off', 'vel', 'v7', 'v11', 'pan', 'prog', 'key_off', 'drum',
                  'organ', 'pc', 'organ_key', 'freq', 'chan_vol', 'efx_gain', 'f0', 'non', 'noff',
                  'fade', 'rel', 'chiff', 'cv', 'cc', 'crl', 'csc', 'sjit', 'li', 'ri', 'row0',
-                 'song_index', 'drum_plain')
+                 'song_index', 'drum_plain', 'sung')
 
 
 class _Emitter(object):
@@ -6185,14 +6185,14 @@ def _voice_native_begin(cls):
     return _NV.random_state()
 
 
-def _voice_native(props, cls, f0, pan, av, cv, eff, st, nt, seat=0.0):
+def _voice_native(props, cls, f0, pan, av, cv, eff, st, nt, seat=0.0, sung=None):
     """The voice as native/voice.c builds it (its VoiceSnap), beside props;
     in 'check', what the note setup reads of props and the random stream
     after it compared with the C's."""
     import native as _NV
     import random as _rnd
     got = _NV.voice(cls, f0, pan, av, cv, eff, state=st if NATIVE_TONE == 'check' else None, seat=seat,
-                    rnd=getattr(props, 'rnd_draws', None))
+                    rnd=getattr(props, 'rnd_draws', None), sung=sung)
     if got is None:
         return None
     VOICE_STATS[0] += 1
@@ -6624,6 +6624,8 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.f0, n.pan, n.vel, n.chan_vol, n.effort = nt.f0, nt.pan, nt.vel, nt.chan_vol, eff
     n.on, n.off, n.seat = nt.on, nt.off, seat
     n.ch, n.note = nt.ch, nt.note           # (a flam's draw is the note's)
+    if getattr(nt, 'sung', None) is not None:
+        n.sung_hz, n.part = float(nt.sung[0]), int(nt.sung[1])     # (a sung part's body)
     n.held = held                           # (a shake's share of the key)
     if hasattr(P, 'rnd_draws'):
         n.rnd_draws[:] = [float(x) for x in P.rnd_draws]       # (an [RND] strike's)
@@ -8538,6 +8540,12 @@ def _prepare(path, tuner='hybrid440', sink=None):
             nt.efx_gain = _EFXN[0].get('od_gain') or 1.0
             nt.chan_vol *= nt.efx_gain
         em.nsnap = None
+        # A SUNG PART's body (below): its tessitura and the part its track
+        # declares, for the C's voice too (native.voice's sung, NoteIn's)
+        nt.sung = None
+        if hasattr(nt.pc, '_sung_formants') and (nt.ch in _tess or nt.ch in _parts):
+            _sp = _parts.get(nt.ch)
+            nt.sung = (_tess.get(nt.ch, nt.f0), 1 + list(T.VOICE_BODIES).index(_sp) if _sp else 0)
         _vst = _voice_native_begin(nt.pc)
         _vst0 = None if _vst is None else type(_vst).from_buffer_copy(_vst)   # the stream, for the engine's note
         props = nt.pc(nt.f0, nt.pan, (nt.vel/127.0)**2, nt.chan_vol, _eff)   # pan = CC10: a turn (tonelib.stage_angle)
@@ -8549,7 +8557,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             props.place()
         if _vst is not None:
             em.nsnap = _voice_native(props, nt.pc, nt.f0, nt.pan, (nt.vel/127.0)**2, nt.chan_vol, _eff, _vst, nt,
-                                     _seat)
+                                     _seat, sung=nt.sung)
         if _EFXN[0] is not None and _EFXN[0].get('pos3d'):
             # THE PART PLACED IN 3D (gsefx: 3D Manual, 3D Auto): its angle the
             # type's, past the speakers and behind, turning at 3D Auto's speed --

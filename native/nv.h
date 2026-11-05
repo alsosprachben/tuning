@@ -374,6 +374,16 @@ typedef struct {
        note's strike point from them; n_open 0: the template's */
     int n_open;
     double open_st[8], pluck_open;
+    /* A SUNG VOICE's BODY (tonelib._VocalBody): the class's own vowel (vb_fm,
+       n_vb) and the draw between a male and a female tract -- the note's
+       formants _sung_formants' at sung_hz (its part's tessitura: the median
+       key of its channel), or a declared part's (part_set: its tract ratio
+       and singer's-formant cluster); vbody 0 none */
+    int vbody, n_vb;
+    double vb_fm[16][3];
+    double vb_tract, vb_sigma, vb_mb, vb_xhz, vb_xoct, vb_ftop, vb_sfhz;
+    int part_set;
+    double part_ratio, part_cluster, sung_hz;
 } VoiceInit;
 
 struct OrganPipe {
@@ -844,6 +854,11 @@ typedef struct {
     // CC71-78's offsets at its onset, the class's own; snd_moog 0 none
     int snd_moog;
     double snd_d[8];
+    // A SUNG VOICE (_VocalBody): its part's tessitura (Hz, 0: its own pitch)
+    // and the voice part its channel declares (part 0 none, else 1 + its
+    // index in nv_voice_body's table)
+    double sung_hz;
+    int part;
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -953,6 +968,18 @@ int nv_song_choke(void *s, long long ch, int note, double on, double *out);
 // up to three
 #define NV_SPAR 136
 void nv_song_cc(void *s, long long ch, double t, int cc, int v);
+/* a sung part's (blockrender._prep_choir_parts): a channel's tessitura, the
+   median of its keys, in Hz (0: no notes); the part its track declares
+   (1 + nv_voice_body's index, 0 none) */
+double nv_song_tess(void *s, long long ch);
+void nv_song_set_part(void *s, long long ch, int part);
+int nv_song_part(void *s, long long ch);
+/* voice.c: tonelib.voice_body over a track's name -- 1 + the part's index in
+   VOICE_BODIES' table (native.py hands it over: nv_voice_bodies_set), 0
+   none; nv_voice_part its ratio and cluster */
+int nv_voice_bodies_set(int n, const char *names, const double *ratio, const double *cluster, int nn);
+int nv_voice_body(const char *name);
+int nv_voice_part(int part, double *ratio, double *cluster);
 void nv_song_note(void *s, long long ch, int note, double on, double off, int vel, double v7, double v11,
                   double pan, double trim, int prog, int drum);
 int nv_song_n_notes(void *s);

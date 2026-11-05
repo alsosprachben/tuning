@@ -10,7 +10,7 @@ kept by hand in the script's TASKS.
 
 | stage | tones native | drum sets whole |
 |---|---|---|
-| GM1 | 107 of 128 | 0 of 1 |
+| GM1 | 109 of 128 | 0 of 1 |
 | GM2 | 34 of 128 | 0 of 8 |
 | SC-55 | 7 of 13 | 6 of 31 |
 | SC-88 | 79 of 193 | 0 of 2 |
@@ -29,9 +29,9 @@ What it needs first, and live's side:
 - [ ] Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)
 - [ ] Moog: an MF-104M on a note whose pitch or shapes move (SYNC and a unison: native in files)
 
-Tones: 107 of 128 native.
+Tones: 109 of 128 native.
 
-- [ ] **Ensemble** -- 52 Choir Aahs, 53 Voice Oohs, 55 Orchestra Hit
+- [ ] **Ensemble** -- 55 Orchestra Hit
 - [ ] **Ethnic** -- 104 Sitar, 105 Banjo, 106 Shamisen, 107 Koto, 108 Kalimba, 109 Bag pipe, 111 Shanai
 - [ ] **Percussive** -- 113 Agogo, 114 Steel Drums, 115 Woodblock, 116 Taiko Drum
 - [ ] **Sound Effects** -- 120 Guitar Fret Noise, 122 Seashore, 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter, 126 Applause, 127 Gunshot
@@ -102,7 +102,7 @@ Drum sets: 6 of 31 with every key native (new at this stage).
 - [ ] 58 Rhythm FX 2 -- 62 of 66 keys native
 - [ ] 59 Rhythm Fx 3 -- 70 of 75 keys native
 - [ ] 60 Sfx 2 -- 46 of 60 keys native
-- [ ] 61 Voice -- 67 of 83 keys native
+- [ ] 61 Voice -- 82 of 83 keys native
 - [ ] 127 CM-64/32L -- 46 of 67 keys native
 - [ ] 386 Standard 3 -- 0 of 115 keys native
 - [ ] 392 Room -- 0 of 115 keys native
