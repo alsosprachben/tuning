@@ -617,6 +617,8 @@ int nv_strike_bal(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz,
                   double pos_x, double bgl, double bgr, double *rows, int cap, double *qacc, double *azimuth);
 int nv_layer(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db, double reg,
              double fade, double slr, double len, double pos_x, double *rows, int cap, double *qacc, double *azimuth);
+int nv_grains(const VoiceSnap *v, const ToneIn *t, int ng, const double (*g)[9], long long seed, double settle,
+              double pos_x, double *rows, int cap, double *qacc, double *azimuth);
 int nv_breath(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db, int k, double fade,
               double pos_x, double *rows, int cap, double *qacc, double *azimuth);
 int nv_tone(const VoiceSnap *v, const ToneIn *t,
@@ -865,6 +867,10 @@ typedef struct NoteClass {
     double meend_range, meend_strength;
     int meend_tonic;
     double key_pan_spread;          // a wide voice (GS's "w" tones): its keys' seats, +-this 30 keys from middle C
+    // GRAINS (grains): each row lo Hz, hi Hz, a second (negative: a clock),
+    // dB, its scatter dB, dB/s, a glide's rise (0 none) and time, a cluster's sines
+    int n_grain;
+    double grain[8][9];
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -974,6 +980,7 @@ typedef struct {
     int n_ft, lay_rows[2];          /* (each layer's rows, in order) */
     double ft[2][30], kn[2][9];     /* ...and their knob rows (moog.kn_row, the knobs turned) */
     int ring0, ring1;               /* its other strings' rows (_RING), from the note's first */
+    int grain0, grain1;             /* its grains' rows (_GRAIN_ROWS: live keeps their own onsets) */
 } NoteOut;
 
 // tone.c: the key-up's click (nv_click, blockrender._note_release_click)

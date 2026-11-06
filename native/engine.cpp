@@ -321,6 +321,26 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         no_refl = 0;
     }
 
+    // GRAINS (_note_grains): the beads, the drops, the bubbles -- on the
+    // breath's swell where it has one, no images, no noise width
+    out->grain0 = out->grain1 = total;
+    if (K->n_grain) {
+        ToneIn tg = t;
+        tg.B = 0.0; tg.sjit = 0.0; tg.reflect = 0;
+        tg.cbw0 = 0.0; tg.cbw1 = 0.0;
+        if (n->bbr_set)
+            tg.br = n->bbr;
+        int k = nv_grains(&s, &tg, K->n_grain, K->grain,
+                          (long long)nearbyint(n->on * 1e6) * 139 + (long long)n->note * 13 + n->ch, K->porta_settle,
+                          s.position_x, rows + NCOLS * total, cap - total, qacc, azimuth);
+        if (k < 0)
+            return -1;
+        out->n_knock += k;
+        total += k;
+        out->grain1 = total;
+        no_refl = 0;
+    }
+
     // A SHAKE AS SHAPED NOISE (_note_shake_noise): in place of the tone
     if (K->shake) {
         ToneIn ts = t;

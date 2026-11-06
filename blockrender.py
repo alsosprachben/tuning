@@ -6809,6 +6809,12 @@ def _note_native_apply(em, props, nt, A, wn, _VB):
         em.push_pending = None
 
 
+def _NV_grains(cls):
+    """Whether the engine's note played cls's grains itself (native.grains_of)."""
+    import native as _NV
+    return bool(_NV.grains_of(cls))
+
+
 def _NV_breath(cls):
     """Whether the engine's note played cls's breath itself (native.breath_noise)."""
     import native as _NV
@@ -9125,7 +9131,12 @@ def _prepare(path, tuner='hybrid440', sink=None):
                              nt.cc, nt.crl, 0.0, nt.csc, -1, 0, ph0=_lrng.random() * 2.0 * math.pi)
         if not (_wn is not None and NATIVE_TONE == 'on' and _NV_breath(nt.pc)):
             _note_breath_noise(em, props, nt, _CBW, _VB, _slurred, bbrow_of, emit_partial)
-        _note_grains(em, props, nt, A, _CBW, _GL, _GRAIN_ROWS, _VB, bbrow_of, emit_partial, random)
+        if _wn is not None and NATIVE_TONE == 'on' and _NV_grains(nt.pc):
+            # (the engine's note dropped them: its rows are in, live's onsets from its own count)
+            _GRAIN_ROWS.append((_wn[4] + _wn[3].grain0, _wn[4] + _wn[3].grain1))
+            em.no_reflections = False
+        else:
+            _note_grains(em, props, nt, A, _CBW, _GL, _GRAIN_ROWS, _VB, bbrow_of, emit_partial, random)
         if _wn is not None and NATIVE_TONE == 'on' and getattr(props, 'shake_noise', False):
             stops = ()          # (the engine's note shook: its rows are in)
         else:

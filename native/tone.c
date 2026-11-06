@@ -1187,6 +1187,64 @@ int nv_breath(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, con
     return R.n;
 }
 
+/* blockrender._note_grains: sparse damped sines at Poisson instants (rate a
+ * second; negative, a clock: one every -1/rate s from the onset, each 7%
+ * rms off it) through the held note, each its own pitch across the band and
+ * level under its row's dB by up to its scatter, a millisecond's rise, dying
+ * at its dB/s -- or a CLUSTER (n sines at one instant, each its pitch, at
+ * 1/sqrt(n)) -- a glide from rise x its pitch where the row has one; drawn
+ * from the note (seed), no images. The caller sets the row, the noise width
+ * and the emitter. Returns the rows written, -1 if the store was too small. */
+static double pyr_expovariate(PyRandom *r, double lambd) { return -log(1.0 - pyr_random(r)) / lambd; }
+
+int nv_grains(const VoiceSnap *v, const ToneIn *t, int ng, const double (*g)[9], long long seed, double settle,
+              double pos_x, double *rows, int cap, double *qacc, double *azimuth)
+{
+    Rows R = {rows, 0, cap};
+    double VB[3] = {0.0, 5.5, 0.0};
+    double sr = t->sr;
+    PyRandom rg;
+    pyr_seed(&rg, seed);
+    double hf = 0.0;
+    for (int r = 0; r < ng; r++) {
+        double lo = g[r][0], hi = g[r][1], rate = g[r][2], db = g[r][3], dsc = g[r][4], dps = g[r][5];
+        ToneIn tg = *t;
+        if (g[r][6] > 0.0) {                /* a bubble's ring rising as it nears the surface */
+            tg.gl[0] = 1.0 / g[r][6] - 1.0;
+            tg.gl[1] = g[r][7];
+            tg.gl[2] = g[r][7] * settle;
+        }
+        double per = rate < 0.0 ? -1.0 / rate : 0.0;
+        double tt = per != 0.0 ? t->non : t->non + pyr_expovariate(&rg, rate) * sr;
+        double glr = log(10.0) / 20.0 * dps;
+        int ncl = g[r][8] > 0.0 ? (int)g[r][8] : 1;
+        double gcl = 1.0 / sqrt((double)ncl);
+        while (tt < t->noff) {
+            double gM0;
+            if (ncl == 1) {
+                hf = lo * pow(hi / lo, pyr_random(&rg));         /* (the draws in their order: pitch, then level) */
+                gM0 = v->gain * pow(10.0, (db - pyr_uniform(&rg, 0.0, dsc)) / 20.0);
+            } else {
+                gM0 = v->gain * pow(10.0, (db - pyr_uniform(&rg, 0.0, dsc)) / 20.0) * gcl;
+            }
+            for (int k = 0; k < ncl; k++) {
+                if (ncl > 1)
+                    hf = lo * pow(hi / lo, pyr_random(&rg));
+                double gM = gM0;
+                if (hf < 0.45 * sr) {
+                    double ph0 = pyr_random(&rg) * 2.0 * PI;
+                    if (!emit(v, &tg, &R, qacc, azimuth, NULL, 0, 2 * PI * hf / sr, gM * nv_hrtf_gain(v, hf, t->li),
+                              gM * nv_hrtf_gain(v, hf, t->ri), gM, hf, tt, tt + 0.1 * sr, 8.0, 0.005 * sr, t->chiff,
+                              glr, 0.0, 0.0, 0.0, 0.0, t->cc, t->crl, 0.0, t->csc, -1.0, 0.0, ph0, 0.0, VB, pos_x, 0))
+                        return -1;
+                }
+            }
+            tt += (per != 0.0 ? pymax(0.2 * per, pyr_gauss(&rg, per, 0.07 * per)) : pyr_expovariate(&rg, rate)) * sr;
+        }
+    }
+    return R.n;
+}
+
 /* blockrender._note_phantoms: the wound bass's phantom partials -- f_i + f_j
  * of the note's transverse partials (trans: ntrans of (hz, raw gain, dB/s),
  * nv_tone's), gain coupling v_i v_j (twice for i != j) times the radiation,

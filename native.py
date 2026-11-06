@@ -249,7 +249,8 @@ class NoteClass(ctypes.Structure):
                    ('ring_n', I), ('ring_hz', C * 48), ('ring_db', C * 48), ('ring_dps', C * 48),
                    ('ring_skip', C), ('ring_nown', I), ('ring_own', C * 16), ('indian', I),
                    ('sym_tonic', I), ('sym_g', C), ('sym_wmin', C), ('meend', I),
-                   ('meend_range', C), ('meend_strength', C), ('meend_tonic', I), ('key_pan_spread', C)])
+                   ('meend_range', C), ('meend_strength', C), ('meend_tonic', I), ('key_pan_spread', C),
+                   ('n_grain', I), ('grain', (C * 9) * 8)])
 
 
 class NoteIn(ctypes.Structure):
@@ -280,7 +281,7 @@ class NoteOut(ctypes.Structure):
                 + [('tb', C * 3), ('cbw', C * 2), ('radius', C), ('n_push', I), ('f0', C)]
                 + [('n_click', I), ('n_jack', I), ('jack_n', I * 32), ('jack_rank', I * 32), ('jack_off', C * 32),
                    ('n_ft', I), ('lay_rows', I * 2), ('ft', (C * 30) * 2), ('kn', (C * 9) * 2),
-                   ('ring0', I), ('ring1', I)])
+                   ('ring0', I), ('ring1', I), ('grain0', I), ('grain1', I)])
 
 
 def lib():
@@ -656,10 +657,22 @@ def breath_noise(cls):
             and not getattr(cls, 'breath_noise_octave_db', 0.0)
             # (a wobble on its own row only for a blown voice: NoteIn.bbr; its slur's
             # legato attack, NoteClass.bn_slur, too)
-            and (not getattr(cls, 'breath_noise_wobble_db', 0.0) or _blown(cls))
+            # (...or a silent tone's: the ocean drum's swell, the breath's own row)
+            and (not getattr(cls, 'breath_noise_wobble_db', 0.0) or _blown(cls)
+                 or all(g == 0.0 for g in (cls.mode_gains or (1.0,))))
             and (not getattr(cls, 'breath_noise_slur', False) or _blown(cls))
-            and not any(getattr(cls, a, None) for a in ('grains', 'noise_events', 'pulse', 'ring_db',
+            and (not getattr(cls, 'grains', None) or grains_of(cls))
+            and not any(getattr(cls, a, None) for a in ('noise_events', 'pulse', 'ring_db',
                                                          'struck_layer', 'touch_leak_db')))
+
+
+def grains_of(cls):
+    """cls's grains as the engine plays them (NoteClass.grain), () if none or
+    not: up to 8 rows of 6, 8 (a glide) or 9 (a cluster) fields."""
+    g = tuple(getattr(cls, 'grains', None) or ())
+    if len(g) > 8 or any(len(r) not in (6, 8, 9) for r in g):
+        return ()
+    return g
 
 
 def _blown(cls):
@@ -2617,7 +2630,8 @@ def note_class(cls):
         if hit_voice(cls):
             _og = org_has
             org_has = lambda a: _og(a) or a in ('one_shot', 'strike_phase_spread', 'strike_noise_layers')  # noqa: E731
-        ok = (v is not None and not any(getattr(cls, a, None) for a in _NOTE_OFF
+        ok = (v is not None and not (getattr(cls, 'grains', None) and not grains_of(cls))
+              and not any(getattr(cls, a, None) for a in _NOTE_OFF
                                         if not (drum and drum_has(a)) and not org_has(a))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT if not org_has(a))
               and (getattr(cls, 'mode_phase', None) is None or issubclass(cls, T.TR808Properties) or drum == 5)
@@ -2841,6 +2855,13 @@ def note_class(cls):
         k.meend_strength = float(getattr(cls, 'meend_strength', 0.6))
         k.meend_tonic = int(getattr(cls, 'sympathetic_tonic', 60))
         k.key_pan_spread = float(getattr(cls, 'key_pan_spread', 0.0) or 0.0)     # (a wide voice's seats)
+        # its grains (the engine's: breath_noise -- a row's six fields, eight with
+        # a glide, nine with a cluster)
+        k.n_grain = len(grains_of(cls))
+        for i, row in enumerate(grains_of(cls)):
+            k.grain[i][:] = [float(x) for x in row[:6]] + (
+                [float(row[6]), float(row[7])] if len(row) > 6 else [0.0, 0.0]) + (
+                [float(row[8])] if len(row) > 8 else [1.0])
         # ITS OTHER STRINGS (ring_db: _note_ring)
         _rg = getattr(cls, 'ring_db', ()) or ()
         if len(_rg) > 48:
