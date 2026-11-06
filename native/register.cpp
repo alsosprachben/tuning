@@ -983,7 +983,21 @@ void nv_buf_free(void *p) { free(p); }
 
 }  // extern "C"
 
+// THE FIRST STORE'S GUESS, rows a note (TUNING_NV_ROWS_PER_NOTE sets it: a
+// gate's small one plays every file again), and this thread's last play's
+// growth (nv_play_growth: the first store and the rows it needed, 0 none)
+static const long long ROWS_PER_NOTE = 1024;
+static thread_local long long g_cap0 = 0, g_need = 0;
+
 extern "C" {
+
+// how far this thread's last nv_play_full grew its store: the first store's
+// rows and the rows the song needed (0: it fit)
+void nv_play_growth(long long *cap0, long long *need)
+{
+    *cap0 = g_cap0;
+    *need = g_need;
+}
 
 // A SONG PLAYED, WITH ITS REGISTER: nv_play's note rows, cast as the table
 // stores them (kind[c]: 0 float64, 1 float32, 2 int32 -- blockrender's
@@ -1016,7 +1030,10 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
     PyRandom rs0 = *rs;
     double q0[18], az0 = *azimuth;
     memcpy(q0, qacc, sizeof q0);
-    long long cap = 1024 * (long long)(nn > 0 ? nn : 1);
+    const char *rpn = getenv("TUNING_NV_ROWS_PER_NOTE");
+    long long cap = (rpn && atoll(rpn) > 0 ? atoll(rpn) : ROWS_PER_NOTE) * (long long)(nn > 0 ? nn : 1);
+    g_cap0 = cap;
+    g_need = 0;
     double *rows = nullptr;
     int got;
     for (;;) {
@@ -1033,6 +1050,8 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
             break;
         cap *= 2;
     }
+    if (cap != g_cap0 && got >= 0)
+        g_need = nr;                        // (it grew: the rows the song needed)
     *rowsp = rows;
     if (got < 0)
         return got;

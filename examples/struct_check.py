@@ -39,7 +39,14 @@ def main():
         exe = os.path.join(tmp, name)
         r = subprocess.run(['gcc', '-I', os.path.join(HERE, 'native'), src, '-o', exe], capture_output=True, text=True)
         if r.returncode:
-            unchecked.append(name)              # (not a struct nv.h declares by that name)
+            # (not a struct nv.h declares by that name -- and nothing else: a
+            # header that does not compile checks no struct at all)
+            if any('error:' in ln and "'%s'" % cn not in ln.replace('‘', "'").replace('’', "'")
+                   for ln in r.stderr.split('\n')):
+                print(r.stderr.strip())
+                print('structs: nv.h does not compile (%s)' % name)
+                return 1
+            unchecked.append(name)
             continue
         for ln in subprocess.run([exe], capture_output=True, text=True, check=True).stdout.split('\n'):
             if ln:

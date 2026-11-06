@@ -516,6 +516,11 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
        each its own onset, capped at sect_ofm of the note */
     static _Thread_local double tons[200];
     int nons = v->tap_kind ? nv_tap_onsets(v, t->f0, tons) : 0;
+    if (v->pick_set && v->pick_stagger > 0.0) {  /* a doubled course crossed (Plectrum.section_onsets_at) */
+        tons[0] = 0.0;
+        tons[1] = v->pick_stagger;
+        nons = 2;
+    }
     if (ns && v->sect_seats) {
         for (int i = 0; i < ns; i++)
             nv_section_seat(v, t, i, seat[i]);
@@ -657,6 +662,37 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
             }
             if (!ok)
                 return -1;
+        }
+        /* FEEDBACK (Feedback): the loop's partial and its own series, a late
+           copy swelling in at the loop's onset and held, sinking at its own
+           rate, at the fundamental's pluck level */
+        if (v->fb_set) {
+            int fbk = v->fb_fixed;
+            if (!fbk) {                         /* (the harmonic nearest the loop's band: the first of equals) */
+                double best = 0.0;
+                for (int k = 1; k < 33; k++) {
+                    double d = fabs(log2(k * t->f0 / v->fb_band_hz));
+                    if (k == 1 || d < best) {
+                        best = d;
+                        fbk = k;
+                    }
+                }
+            }
+            double fbs = 0.0;
+            if (m % fbk == 0)
+                for (int i = 0; i < v->n_fbs; i++)
+                    if ((int)v->fbs[i][0] == m / fbk) {
+                        fbs = v->fbs[i][1];     /* (dict(): the last of a multiple's) */
+                    }
+            double fon = non_m + v->fb_delay * sr;
+            if (m % fbk == 0 && fbs > 0.0 && fon < t->noff && hv > 0.0) {
+                double fs = v->fb_gain * fbs * nv_harmonic_volume(v, 1) / hv;
+                double flr = v->fb_dbs > 0.0 ? log(db_ratio(v->fb_dbs)) : 0.0;
+                if (!emit(v, t, &R, qacc, azimuth, terms_main, nt_, 2 * PI * hf / sr, gL * fs, gR * fs, gM * fs, hf, fon,
+                          t->noff, pymax(1e-4, v->fb_swell) * sr, t->rel, t->chiff, flr, flr, 0.0, 0.0, cvp, t->cc,
+                          t->crl, sj, t->csc, t->gr, t->cr, 0.0, 0.0, VB, pos_x, 1))
+                    return -1;
+            }
         }
         transverse[3 * *ntrans] = hf;
         transverse[3 * *ntrans + 1] = hv;

@@ -408,7 +408,7 @@ struct Song {
         int ds = spec->default_stops;
         for (int i : idx) {
             const Ev &e = notes[i];
-            const OrganSpec *q = (e.prog >= 0 && e.prog < 128 && !e.drum) ? prog_organ[e.prog] : nullptr;
+            const OrganSpec *q = porg(e);
             if (q && q->family == spec->family) {
                 if (q->default_stops != ds) {
                     recalls.push_back(std::make_pair(e.on - 1e-4, q->default_stops));
@@ -473,6 +473,18 @@ struct Song {
     }
 
     const OrganSpec *prog_organ[128] = {nullptr};
+    std::vector<const OrganSpec *> slot_organ;      // each variation slot's organ (its tone's class's), NULL none
+
+    // the organ of note e's PROGRAM CLASS (property_class_for_program: a
+    // variation's its own), NULL none
+    const OrganSpec *porg(const Ev &e) const
+    {
+        if (e.drum || e.prog < 0 || e.prog > 127)
+            return nullptr;
+        if (e.slot >= 0)
+            return e.slot < (int)slot_organ.size() ? slot_organ[e.slot] : nullptr;
+        return prog_organ[e.prog];
+    }
 
     // onepole_blocks: events (the first the default) at the nblk block centres
     static void onepole(const std::vector<std::pair<double, double>> &ev, long nblk, int blk, double sr, double tau,
@@ -861,6 +873,36 @@ struct Song {
             y.gl_prev = e.note - 1;
             y.gl_dt = dt;
             steps.push_back(y);
+            any = true;
+        }
+        // ...AND TREMOLO PICKING (tremolo_pick_hz): a held note re-struck at
+        // the picking rate, each stroke a note of its own, down and up
+        // alternating (the up softer), its time scattered -- seeded by the
+        // note, so a render repeats
+        for (size_t i = 0; i < nn; i++) {
+            const Ev &e = notes[i];
+            if (drop[i] || e.drum || e.prog < 0 || e.prog > 127)
+                continue;
+            const NoteClass *k = K[e.kidx()];
+            if (!k || !k->tp_hz || e.off - e.on < 1.5 / k->tp_hz)
+                continue;
+            PyRandom rg;
+            pyr_seed(&rg, 0x7E3D + (long long)e.note * 977 + (long long)(e.on * 1000));
+            double per = 1.0 / k->tp_hz, jit = k->tp_jit, up = pow(10.0, k->tp_up_db / 20.0);
+            std::vector<double> ts{e.on};
+            while (ts.back() + per < e.off - 0.25 * per)
+                ts.push_back(e.on + (double)ts.size() * per + pyr_uniform(&rg, -jit, jit) * per);
+            drop_key(drop, e);
+            for (size_t q = 0; q < ts.size(); q++) {
+                Ev y = e;
+                if (q % 2) {
+                    int v = (int)nearbyint(e.vel * up);
+                    y.vel = v > 1 ? v : 1;
+                }
+                y.on = ts[q];
+                y.off = q + 1 == ts.size() ? e.off : pymin(e.off, ts[q + 1] + 0.02);
+                steps.push_back(y);
+            }
             any = true;
         }
         if (!any)
@@ -1810,6 +1852,12 @@ extern "C" void nv_npy_normals(unsigned long long seed, long n, double *out);
 // channels as ch_progs has them, each its organs as its programs bring
 // them), its table spec; prog_organ[program]: each program's organ, NULL
 // none (the recalls). Its registration's events, from the finished song
+// each variation slot's organ (n of them: its tone's class's, NULL none)
+void nv_song_slot_organs(void *s, int n, const OrganSpec *const *so)
+{
+    ((nv::Song *)s)->slot_organ.assign(so, so + n);
+}
+
 void nv_song_organ(void *s, long long ch, const OrganSpec *spec, const OrganSpec *const *prog_organ)
 {
     nv::Song *S = (nv::Song *)s;
@@ -1914,7 +1962,7 @@ void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, 
         // the demand: every note of this organ's class on the channel, each rank under its gate
         std::vector<double> dem(nblk + 1, 0.0);
         for (const auto &e : Sg->notes) {
-            if (e.ch != o.ch || e.drum || e.prog < 0 || e.prog > 127 || Sg->prog_organ[e.prog] != sp)
+            if (e.ch != o.ch || Sg->porg(e) != sp)
                 continue;
             double f = 440.0 * pow(2.0, (e.note - 69) / 12.0);
             long b0 = std::min(nblk, (long)(e.on * sr / blk)), b1 = std::min(nblk, (long)(e.off * sr / blk) + 1);

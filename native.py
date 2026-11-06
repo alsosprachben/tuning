@@ -95,7 +95,7 @@ class VoiceSnap(ctypes.Structure):
                 ('pk_qf', C), ('lp_hz', C), ('lp_order', C), ('os_hz', C * 8), ('fret_max', C), ('pk_sp', C),
                 ('pk_q', C * 4), ('n_touch', I), ('touches', I * 4), ('touch0', I), ('touch', I), ('leak_set', I),
                 ('leak_db', C), ('leak_dbs', C), ('ml_spread', C), ('ml_knee', C), ('ml_time', C),
-                ('n_mute', I), ('mute', (C * 2) * 24), ('n_tube', I), ('tube_ref_hz', C), ('tube', (C * 4) * 16),
+                ('n_mute', I), ('mute', (C * 2) * 24), ('n_tube', I), ('tube_ref_hz', C), ('tube', (C * 4) * 32),
                 ('or_set', I), ('or_share', C), ('or_db', C * 2), ('or_lowest_hz', C), ('or_g', C),
                 ('dul_n', I), ('dhz_set', I), ('dul_beat', C * 2), ('dhz_db', C), ('dhz_pow', C), ('pps', C),
                 ('ushare', I), ('mst', C), ('mst_ref', C),
@@ -107,7 +107,13 @@ class VoiceSnap(ctypes.Structure):
                 ('pd_max_hz', C), ('pd_dbs', C), ('pd_share', C), ('pap_hz', C), ('pap_n', I),
                 ('tap_kind', I), ('n_tap', I), ('n_gong', I), ('tap_drop', I), ('tap_t', C * 192),
                 ('tap_gain', C), ('tap_jit', C), ('tap_ldb', C), ('gong', I * 16),
-                ('n_hvt', I), ('hvt', C * 512), ('chiff_bore', I), ('fv_set', I), ('fv_cents', C), ('fv_hz', C)]
+                ('n_hvt', I), ('hvt', C * 512), ('chiff_bore', I), ('fv_set', I), ('fv_cents', C), ('fv_hz', C),
+                ('pick_set', I), ('pick_hz', C), ('pick_slope_db', C), ('pick_boost_max_db', C), ('pick_dbs', C),
+                ('pick_stagger', C), ('crs_kind', I), ('crs_split', C), ('crs_oct_gain', C), ('crs_oct_cents', C),
+                ('crs_uni_gain', C), ('crs_uni_cents', C), ('church', I), ('church_slope', C),
+                ('fb_set', I), ('fb_fixed', I), ('n_fbs', I), ('fb_band_hz', C), ('fb_delay', C), ('fb_swell', C),
+                ('fb_gain', C), ('fb_dbs', C), ('fbs', (C * 2) * 8), ('sw_set', I), ('sw_cents', C),
+                ('sw_hz', C * 2)]
 
 
 class ToneIn(ctypes.Structure):
@@ -268,7 +274,8 @@ class NoteClass(ctypes.Structure):
                    ('rd_set', I), ('reverb_dist', C), ('hammer', I),
                    ('fall_cents', C), ('fall_at_s', C), ('fall_s', C), ('fall_fade_db', C), ('fall_smear', C),
                    ('rip_cents', C), ('rip_s', C), ('rip_start_db', C), ('rip_smear', C),
-                   ('cho_send', C), ('pair_set', I), ('pair_lo', C), ('pair_hi', C)])
+                   ('cho_send', C), ('pair_set', I), ('pair_lo', C), ('pair_hi', C),
+                   ('tp_hz', C), ('tp_up_db', C), ('tp_jit', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -422,6 +429,7 @@ def _load():
             ('nv_midi_banked', I, [ctypes.c_void_p]), ('nv_midi_note_bsel', I, [ctypes.c_void_p, I]),
             ('nv_midi_chprog_bsel', I, [ctypes.c_void_p, I]),
             ('nv_song_vars', None, [ctypes.c_void_p, I] + [ctypes.c_void_p] * 5),
+            ('nv_song_slot_organs', None, [ctypes.c_void_p, I, ctypes.c_void_p]),
             ('nv_strings', I, [ctypes.POINTER(VoiceInit), P, D, C, C, C, ctypes.c_void_p, ctypes.c_void_p, I]),
             ('nv_strings_og', I, [ctypes.POINTER(VoiceInit), P, ctypes.c_void_p, D, C, C, C, ctypes.c_void_p,
                                   ctypes.c_void_p, I]),
@@ -617,7 +625,8 @@ _MODAL_OWN = {'mode_ratio': 'SynthProperties', 'series_volume': 'SynthProperties
 def decay_target(cls):
     """A key class's retargeted decay (percussion_map: harmonic_decay scaled
     so its first mode's is the target): the target, else None."""
-    hd = cls.__dict__.get('harmonic_decay')
+    own = next((k for k in cls.__mro__ if 'harmonic_decay' in k.__dict__), None)
+    hd = own.__dict__.get('harmonic_decay') if own is not None else None     # (a subclass's: its key class's)
     dd = getattr(hd, '__defaults__', None)
     if hd is None or not dd or len(dd) != 2 or not isinstance(dd[0], type):
         return None
@@ -703,10 +712,10 @@ def _blown(cls):
 
 def _tube(cls):
     """A chime's tube (TubularBellProperties: its modes by register), as
-    native/voice.c reads it (VoiceSnap.tube): up to 16 modes."""
+    native/voice.c reads it (VoiceSnap.tube): up to 32 modes."""
     import tonelib as T
     return (issubclass(cls, T.TubularBellProperties) and _owner(cls, '_tube_oct') == 'TubularBellProperties'
-            and len(cls.TUBE_MODES) <= 16)
+            and len(cls.TUBE_MODES) <= 32)
 
 
 def timpani_voice(cls):
@@ -818,7 +827,8 @@ def _modal_drum(cls):
     if any(_owner(cls, n) != o for n, o in own.items()):
         return False
     if (_owner(cls, 'harmonic_decay') not in ('SynthProperties', 'CymbalProperties')
-            and decay_target(cls) is None and not (_tube(cls) and _owner(cls, 'harmonic_decay') == 'TubularBellProperties')):
+            and decay_target(cls) is None
+            and not (_tube(cls) and _owner(cls, 'harmonic_decay') in ('TubularBellProperties', 'ChurchBellProperties'))):
         return False
     mg, mr = cls.mode_gains, cls.mode_ratios
     if heartbeat_voice(cls):
@@ -990,6 +1000,28 @@ def noisy_harmonic(cls):
             and len(getattr(cls, 'band_trim_db', ()) or ()) <= 32)
 
 
+def feedback_voice(cls):
+    """A guitar held into feedback (tonelib.Feedback): its loop the class's own."""
+    import tonelib as T
+    return (issubclass(cls, T.Feedback) and _owner(cls, 'feedback_harmonic') == 'Feedback'
+            and len(cls.feedback_series) <= 8 and all(int(k) == k and k >= 1 for k, _ in cls.feedback_series))
+
+
+def plectrum_voice(cls):
+    """A string struck by a pick (tonelib.Plectrum): its methods Plectrum's own."""
+    import tonelib as T
+    return (issubclass(cls, T.Plectrum) and all(_owner(cls, n) == 'Plectrum' for n in (
+        'harmonic_volume', 'harmonic_decay', 'aftersound_partial', 'section_onsets_at', 'strike_noise_db',
+        'strike_noise_dbs')))
+
+
+def class_value(cls, name, default=None):
+    """cls's name, a property read on the class (Plectrum's strike_noise_db:
+    its class's constants), else the attribute."""
+    a = getattr(cls, name, default)
+    return a.fget(cls) if isinstance(a, property) else a
+
+
 def harmonic_voice(cls):
     """Whether native/voice.c plays cls as a harmonic voice (kind 4): a
     plucked string's series through its pluck's comb, on a FormantBody (the
@@ -1025,7 +1057,18 @@ def harmonic_voice(cls):
         if next((k.__name__ for k in _mro if 'harmonic_decay' in k.__dict__), None) != 'SynthProperties':
             return False
         own = dict(own, harmonic_decay='PromptDecay')
-    if _owner(cls, 'aftersound_partial') not in (None, 'PromptDecay'):
+    if _owner(cls, 'voice_vibrato') == 'UkuleleProperties' and len(cls.string_wander_hz) == 2:
+        own = dict(own, voice_vibrato='UkuleleProperties')     # (a string's wander: VoiceSnap.sw_*)
+    if plectrum_voice(cls):
+        # (a pick's boost, fall and ring over SynthProperties' own; its courses)
+        _mro = cls.__mro__[cls.__mro__.index(T.Plectrum) + 1:]
+        if any(next((k.__name__ for k in _mro if n in k.__dict__), None) != 'SynthProperties'
+               for n in ('harmonic_volume', 'harmonic_decay', 'section_onsets_at')):
+            return False
+        own = dict(own, harmonic_volume='Plectrum', harmonic_decay='Plectrum')
+        if _owner(cls, 'unison_voices') in ('TwelveStringProperties', 'MandolinProperties'):
+            own['unison_voices'] = _owner(cls, 'unison_voices')
+    elif _owner(cls, 'aftersound_partial') not in (None, 'PromptDecay'):
         return False
     if any(_owner(cls, n) != o for n, o in own.items()):
         return False
@@ -1857,6 +1900,8 @@ def snapshot(props):
                 s.tube[i][:] = [float(x) for x in row[:4]]
             s.n_md = len(p.TUBE_MODES)
             s.mode_decays[:s.n_md] = [float(row[4]) for row in p.TUBE_MODES]
+            if _owner(type(p), 'harmonic_decay') == 'ChurchBellProperties':     # (a church bell's own law)
+                s.church, s.church_slope = 1, float(p.decay_register_slope)
         if timpani_voice(type(p)):
             s.mst, s.mst_ref = float(p.mode_stroke_tilt), float(p.mode_stroke_ref_db)
         if isinstance(p, T.ModeDecays) or timpani_voice(type(p)):
@@ -1897,6 +1942,24 @@ def snapshot(props):
             s.n_mute = len(p.mute_response)
             for i, (f, db) in enumerate(p.mute_response):
                 s.mute[i][:] = [float(f), float(db)]
+        if feedback_voice(type(p)):             # FEEDBACK: the loop's partial, its series
+            s.fb_set, s.fb_fixed = 1, int(p.feedback_fixed_harmonic or 0)
+            s.fb_band_hz, s.fb_delay, s.fb_swell = p.feedback_band_hz, p.feedback_delay_s, p.feedback_swell_s
+            s.fb_gain, s.fb_dbs = p.feedback_gain, p.feedback_dbs
+            s.n_fbs = len(p.feedback_series)
+            for i, (k, g) in enumerate(p.feedback_series):
+                s.fbs[i][:] = [float(k), float(g)]
+        if plectrum_voice(type(p)):             # A PICK, and its courses
+            s.pick_set, s.pick_hz, s.pick_slope_db = 1, p.pick_hz, p.pick_slope_db
+            s.pick_boost_max_db, s.pick_dbs, s.pick_stagger = p.pick_boost_max_db, p.pick_dbs, p.course_stagger_s
+            s.sect_ofm = getattr(p, 'unison_onset_fraction_max', 0.25)
+            _uo = _owner(type(p), 'unison_voices')
+            if _uo == 'MandolinProperties':
+                s.crs_kind, s.crs_uni_gain, s.crs_uni_cents = 1, p.unison_partner_gain, p.unison_partner_cents
+            elif _uo == 'TwelveStringProperties':
+                s.crs_kind, s.crs_split = 2, p.course_split
+                s.crs_oct_gain, s.crs_oct_cents = p.octave_partner_gain, p.octave_partner_cents
+                s.crs_uni_gain, s.crs_uni_cents = p.unison_partner_gain, p.unison_partner_cents
         # (a reed's has none, nor a quill's: its comb is the strike point's)
         for h in range(1, min(256, int(p.max_harmonic)) + 1 if not (reed_voice(type(p)) or p.strike_point) else 0):
             s.comb[h] = T._pluck_comb(p.plucked_harmonic, p.pluck_dampening, h)
@@ -2133,6 +2196,9 @@ def snapshot(props):
     fv = fixed_vibrato(type(p))
     if fv:                                      # A FIXED VIBRATO of its own
         s.fv_set, s.fv_cents, s.fv_hz = 1, fv[0], fv[1]
+    if _owner(type(p), 'voice_vibrato') == 'UkuleleProperties':     # A STRING'S WANDER
+        s.sw_set, s.sw_cents = 1, float(p.string_wander_cents)
+        s.sw_hz[:] = [float(x) for x in p.string_wander_hz]
     tk = tap_voice(type(p))
     if tk:                                      # A STRUCK VOICE REPEATED: its taps, gongs, strokes
         c = type(p)
@@ -2430,7 +2496,7 @@ _NOTE_OFF = ('bloom_seconds', 'speech_harmonic_exp', 'speech_harmonic_exp_per_oc
              'strike_noise_layers', 'transposed_from_hz', 'one_shot', 'gate_time', 'tape_length_s',
              'open_string_ring', 'course_keys', 'key_bridge', 'bridge_partner', 'buff_choirs',
              'register_knock_tilt', 'register_knock_profile')
-_NOTE_ABSENT = ('pre_pluck_s', 'feedback_harmonic')
+_NOTE_ABSENT = ('pre_pluck_s',)
 
 
 class OrganPipe(ctypes.Structure):
@@ -2818,12 +2884,13 @@ def note_class(cls):
               and not any(getattr(cls, a, None) for a in _NOTE_OFF
                                         if not (drum and drum_has(a)) and not org_has(a))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT if not org_has(a))
+              and (not hasattr(cls, 'feedback_harmonic') or feedback_voice(cls))
               and (getattr(cls, 'mode_phase', None) is None or issubclass(cls, T.TR808Properties) or drum == 5
                    or heartbeat_voice(cls))
               and (int(getattr(cls, 'strike_flam', 0) or 0) <= 1
                    or (int(cls.strike_flam) <= 64 and not getattr(cls, 'strike_flam_record', False)
                        and not (getattr(cls, 'strike_flam_exp_db', 0.0) or 0.0)))
-              and len(getattr(cls, 'strike_noise_db', ()) or ()) <= 32)
+              and len(class_value(cls, 'strike_noise_db', ()) or ()) <= 32)
         if ok:
             # a section's players and their onsets: none for one instrument, or a bowed string's
             p = v[2]
@@ -2870,12 +2937,12 @@ def note_class(cls):
         k.tbend_cut_scale = BR.TBEND_CUT_SCALE
         k.sustain_level = cls.sustain_level
         k.reflection_order = int(bool(cls.reflection_order))
-        tab = getattr(cls, 'strike_noise_db', ()) or ()
+        tab = class_value(cls, 'strike_noise_db', ()) or ()
         k.n_strike = len(tab)
         for i, b in enumerate(tab):
             k.strike_hz[i], k.strike_db[i] = float(b[0]), float(b[1])
         if tab:
-            k.strike_noise_dbs = cls.strike_noise_dbs
+            k.strike_noise_dbs = class_value(cls, 'strike_noise_dbs')
             sp = getattr(cls, 'strike_noise_span_hz', None)
             k.strike_span_set = int(bool(sp))
             if sp:
@@ -3080,6 +3147,9 @@ def note_class(cls):
         if k.fall_cents:
             k.fall_at_s, k.fall_s, k.fall_fade_db = float(cls.fall_at_s), float(cls.fall_s), float(cls.fall_fade_db)
             k.fall_smear = float(getattr(cls, 'fall_smear', 0.6))
+        k.tp_hz = float(getattr(cls, 'tremolo_pick_hz', 0.0) or 0.0)     # (tremolo picking: Song::gliss)
+        if k.tp_hz:
+            k.tp_up_db, k.tp_jit = float(cls.tremolo_pick_up_db), float(cls.tremolo_pick_jitter)
         k.rip_cents = float(getattr(cls, 'rip_cents', 0.0) or 0.0)
         if k.rip_cents:
             k.rip_s, k.rip_start_db = float(cls.rip_s), float(cls.rip_start_db)
@@ -3171,9 +3241,9 @@ def note_class(cls):
             k.sl_lo, k.sl_hi = (float(x) for x in getattr(cls, 'struck_layer_range', (73.42, 146.83)))
             k.sl = ctypes.addressof(lk)
             _SL_CLS[cls] = lcls
-        if (any(getattr(cls, a, None) for a in ('tremolo_pick_hz', 'cut_semitones'))
+        if (getattr(cls, 'cut_semitones', None)
                 or (getattr(cls, 'detuned_pair', None) and len(cls.detuned_pair) != 2)):
-            _NOTE[cls] = False              # (a tremolo picked, a cut: Python's)
+            _NOTE[cls] = False              # (a cut: Python's)
             return None
         if breath_noise(cls):
             k.n_bn, k.bn_rows, k.bn_fade_s = (len(cls.breath_noise_db), int(getattr(cls, 'breath_noise_rows', 1)),
@@ -4671,6 +4741,17 @@ def song_vars(song_p, gs):
                            (I_ * (5 * 128 * 128))(*[e for m in vgs for row in m for e in row]),
                            (I_ * (128 * 128))(*[e for row in vgm2 for e in row]))
     lib().nv_song_vars(song_p, *_SONG_VARS[key])
+    # ...and each one-tone variation's organ, its slot's (nvrender's ent_organ)
+    if 'organs' not in _SONG_VARS:
+        slots, entries = variation_tables()[:2]
+        so = (ctypes.c_void_p * max(1, len(slots)))()
+        for p, v, lys in entries[1:]:
+            pc = PM.property_class_for_program(PM.VariationProgram(p, v))
+            o = organ(pc) if len(lys) == 1 and getattr(pc, 'registerable', False) else None
+            if o is not None:
+                so[lys[0][0]] = ctypes.addressof(o)
+        _SONG_VARS['organs'] = (len(slots), so)
+    lib().nv_song_slot_organs(song_p, *_SONG_VARS['organs'])
 
 
 def sfx_prog_key(cls):
@@ -4732,8 +4813,7 @@ def variation_tables():
     # effect, a plunger's or a mouth's moving filter, a melodic note's
     # sounding octaves)
     def ok(c):
-        return (isinstance(c, type) and not getattr(c, 'registerable', False)
-                and sfx_strokes_ok(c)
+        return (isinstance(c, type) and sfx_strokes_ok(c)
                 and not any(getattr(c, a, None) for a in ('insertion_efx', 'plunger', 'mouth_states'))
                 and note_class(c) is not None)
 
@@ -4744,7 +4824,8 @@ def variation_tables():
             layer_slots, whole = [], True
             for lp, st, vlo, vhi in lys:
                 cl = [P.layer_class(lp, k) for k in range(128)]
-                whole = whole and all(ok(c) for c in cl if c is not None)
+                # (a layer's organ: Python's -- its registration is a layer class's)
+                whole = whole and all(ok(c) and not getattr(c, 'registerable', False) for c in cl if c is not None)
                 slots.append((p, v, int(lp.layer), cl))
                 layer_slots.append((len(slots) - 1, int(st), int(vlo), int(vhi)))
             if not whole:

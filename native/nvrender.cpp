@@ -82,6 +82,7 @@ int nv_meend_note(const double *wt, const int *wp, int nw, double on, double off
                   double *BC);
 int nv_bend_gesture(void *midi, void *song, double bend_range, int ch, long nblk, int blk, double sr, float *BR,
                     double *BC);
+void nv_play_growth(long long *cap0, long long *need);
 int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr, double tau, double fader_tail,
                   double stamp_s, double stamped_share, int vol0, int expr0, float *L, const unsigned char *swell);
 int nv_midi_n_chprogs(void *p);
@@ -709,18 +710,44 @@ int main(int argc, char **argv)
         }
         nv_song_vars(song, (int)E.vents.size(), nls.data(), ls.data(), vt.data(), E.vgs.data(), E.vgm2.data());
     }
+    // ...and each variation's organ, a one-tone variation's slot's (its
+    // tone's class, vents' pcls), for the song's organs
+    auto ent_organ = [&](int en) -> const OrganSpec * {
+        if (en <= 0 || en >= (int)E.vents.size() || E.vents[en].ls.size() != 1 || E.vents[en].pcls < 0)
+            return nullptr;
+        int oi = E.cls_organ[E.vents[en].pcls];
+        return oi >= 0 ? &E.organs[oi] : nullptr;
+    };
+    {
+        int ns = (int)(E.vmap.size() / 128);
+        std::vector<const OrganSpec *> so(ns, nullptr);
+        for (int en = 1; en < (int)E.vents.size(); en++)
+            if (ent_organ(en))
+                so[E.vents[en].ls[0][0]] = ent_organ(en);
+        nv_song_slot_organs(song, ns, so.data());
+    }
     nv_midi_song(midi, song, E.trim.data() + (nv_midi_gs(midi) ? 256 : 0));
     // THE REGISTERED ORGANS (_prep_organ_rows): each melodic channel's, as its
     // programs bring them (ch_progs, uniq_programs), one a family; their stop
     // words' events. A program whose organ the engine does not play: Python's
     std::vector<const OrganSpec *> prog_organ(128, nullptr);
-    std::vector<unsigned char> swell(16384, 0);
     for (int p = 0; p < 128; p++)
         if (E.prog_organ[p] >= 0)
             prog_organ[p] = &E.organs[E.prog_organ[p]];
-    for (int q = 0; q < 16384; q++)
-        if (E.cmap[q] >= 0 && E.cls_organ[E.cmap[q]] >= 0 && E.organs[E.cls_organ[E.cmap[q]]].swells)
-            swell[q] = 1;               // (an organ's note: its CC7 its swell, not a fader)
+    // (each reader's note an organ's, its CC7 its swell, not a fader: _plain,
+    // by its class -- its variation's where its bank selects one)
+    std::vector<unsigned char> swell(nv_midi_n_notes(midi), 0);
+    for (int i = 0; i < (int)swell.size(); i++) {
+        int iv[5];
+        double dv[5];
+        nv_midi_note(midi, i, iv, dv);
+        if (iv[4])
+            continue;
+        for (int q : note_ks(i, iv))
+            if (q < (int)E.cmap.size() && E.cmap[q] >= 0 && E.cls_organ[E.cmap[q]] >= 0
+                && E.organs[E.cls_organ[E.cmap[q]]].swells)
+                swell[i] = 1;
+    }
     std::vector<int> chs;               // the channels in ch_progs' order, each's programs (uniq_programs)
     std::map<int, std::vector<int>> uniq;
     std::set<int> organ_ch;
@@ -742,18 +769,21 @@ int main(int argc, char **argv)
         }
         for (int c : chs) {
             std::vector<int> fams;
-            bool var = false;
+            bool var = false;               // (a variation that is no organ)
             for (int pk : uniq[c])
-                var = var || pk >= 128;
+                var = var || (pk >= 128 && !ent_organ(pk / 128));
             for (int pk : uniq[c]) {
-                if (pk >= 128)
-                    continue;               // (a variation is no organ: variation_tables refuses them)
-                const int p = pk;
-                if (E.prog_organ[p] == -2) {
-                    fprintf(stderr, "nvrender: refused: an organ the engine does not play (program %d)\n", p);
-                    return 2;
+                const OrganSpec *og;
+                if (pk >= 128) {
+                    og = ent_organ(pk / 128);   // (a registered variation: its tone's organ)
+                } else {
+                    const int p = pk;
+                    if (E.prog_organ[p] == -2) {
+                        fprintf(stderr, "nvrender: refused: an organ the engine does not play (program %d)\n", p);
+                        return 2;
+                    }
+                    og = prog_organ[p];
                 }
-                const OrganSpec *og = prog_organ[p];
                 if (!og || std::find(fams.begin(), fams.end(), og->family) != fams.end())
                     continue;
                 if (!fams.empty()) {
@@ -984,6 +1014,13 @@ int main(int argc, char **argv)
     if (P == -3) {
         fprintf(stderr, "nvrender: refused: drones Python's (two drone classes, or phrase breaks, on a channel)\n");
         return 2;
+    }
+    {
+        long long cap0, need;               // THE ROW STORE's guess too small: said, for raising it
+        nv_play_growth(&cap0, &need);
+        if (need > 0)
+            fprintf(stderr, "nvrender: the row store grew: %lld rows needed, %lld guessed (%d notes; "
+                            "register.cpp's ROWS_PER_NOTE)\n", need, cap0, nv_song_n_notes(song));
     }
     if (P < 0) {
         fprintf(stderr, "nvrender: refused: a note is not the engine's (%lld)\n", P);

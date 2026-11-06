@@ -3563,8 +3563,10 @@ struct Part {
                 S.release(k, n0);
             }
         }
-        if (!S.stamp_t(*T, key, n0, scale, ch, rate))
+        if (!S.stamp_t(*T, key, n0, scale, ch, rate)) {
+            dropped++;
             return;                         // the slab full: this note does not sound
+        }
         std::vector<long> lslots[2] = {S.last_slots, {}};    // each layer's (live's _lslots)
         if (T->moog) {                      // a Moog note: its rows, the panel on it (Slab._moog_stamp)
             MoogLayer La;
@@ -5088,8 +5090,10 @@ struct Part {
                 i4p[c] = J.i4[c].data();
             Key key(pid, ch, note, KEYUP0 + jl);
             if (!S.stamp(f8p, f4p, i8p, i4p, J.hrel.data(), J.P, key, n0, scale, J.dur, true, NAN, ch, nullptr,
-                         nullptr, 0.0, 0.0, J.cof.data()))
+                         nullptr, 0.0, 0.0, J.cof.data())) {
+                dropped++;
                 continue;
+            }
             std::vector<long> got = S.last_slots;
             long li = S.live_find(key);
             if (li >= 0)
@@ -5442,8 +5446,10 @@ struct Part {
         Key key(pid, ch, note, KEYUP_REL);
         if (!S.stamp(f8p, f4p, i8p, i4p, R.hrel.data(), R.P, key, n0, scale, R.dur, true, NAN, ch,
                      R.sof.empty() ? nullptr : R.sof.data(), R.rof.empty() ? nullptr : R.rof.data(), 0.0, 0.0,
-                     R.cof.empty() ? nullptr : R.cof.data()))
+                     R.cof.empty() ? nullptr : R.cof.data())) {
+            dropped++;
             return;
+        }
         std::vector<long> got = S.last_slots;
         long li = S.live_find(key);
         if (li >= 0)
@@ -8406,6 +8412,9 @@ long nv_part_govern(void *h, double ms, double budget_ms, long long n)
 }
 
 long nv_part_partials_shed(void *h) { return ((nv::slab::Part *)h)->partials_shed; }
+
+// the notes (and grains, layers, ranks) the slab had no room for: --slots too small
+long nv_part_dropped(void *h) { return ((nv::slab::Part *)h)->dropped; }
 
 // THE PANEL'S: a global set between blocks -- 0 headroom (dB), 1 the
 // pressure's lift (dB), 2 the limiter's knee, 3 the wheel's range, 4 the mod

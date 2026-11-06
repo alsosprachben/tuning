@@ -454,6 +454,16 @@ static double soundboard_gain(const VoiceSnap *v, double fn)
     return body * high * low;
 }
 
+/* Plectrum._pick_db: the pick's boost on partial m, dB (0 under pick_hz) */
+static double pick_db(const VoiceSnap *v, int m)
+{
+    double f = v->frequency_x * pow(2.0, v->octave_position) * m;
+    if (f <= v->pick_hz)
+        return 0.0;
+    double b = v->pick_slope_db * log2(f / v->pick_hz);
+    return b < v->pick_boost_max_db ? b : v->pick_boost_max_db;   /* (min(max, b)) */
+}
+
 static double harmonic_volume(const VoiceSnap *v, int harmonic);
 
 /* the voice's harmonic_volume -- a throat's tilted and its vowel moved --
@@ -461,6 +471,11 @@ static double harmonic_volume(const VoiceSnap *v, int harmonic);
 double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
 {
     double s = harmonic_volume(v, harmonic);
+    if (v->pick_set) {                          /* Plectrum: the pick's boost over pick_hz */
+        double b = pick_db(v, harmonic);
+        if (b > 0.0)
+            s = s * pow(10.0, b / 20.0);
+    }
     if (v->throat && harmonic <= v->n_modes) {
         /* SfxThroatProperties': the vowel's levels moved, the pulse tilted */
         if (v->formant_morph != 0.0 && s != 0.0 && v->n_mb)
@@ -516,6 +531,10 @@ static double harmonic_volume(const VoiceSnap *v, int harmonic)
  * by octaves from the ring's peak */
 static double mode_decay(const VoiceSnap *v, int harmonic)
 {
+    if (v->church && 1 <= harmonic && harmonic <= v->n_md) {   /* ChurchBellProperties: half, by its slope */
+        double f = v->frequency_x * pow(2.0, v->octave_position);
+        return v->mode_decays[harmonic - 1] / 2.0 * pow(2.0, v->church_slope * log(f / v->tube_ref_hz) / log(2.0));
+    }
     if (v->n_md && 1 <= harmonic && harmonic <= v->n_md)   /* ModeDecays */
         return v->mode_decays[harmonic - 1] * v->decay_register_factor;
     if (v->cymbal && v->ring_peak_hz > 0.0) {
@@ -530,7 +549,18 @@ static double mode_decay(const VoiceSnap *v, int harmonic)
     return (v->decay_db + v->harmonic_decay_db * h * pow(h, v->harmonic_decay_dampening)) * v->decay_register_factor;
 }
 
+static double harmonic_decay_(const VoiceSnap *v, int harmonic);
+
 double nv_harmonic_decay(const VoiceSnap *v, int harmonic)
+{
+    double base = harmonic_decay_(v, harmonic);
+    if (v->pick_set && pick_db(v, harmonic) > 0.0)  /* Plectrum: the boost's fast fall */
+        return v->pick_dbs > base ? v->pick_dbs : base;
+    return base;
+}
+
+/* the voice's own decay, under a pick's */
+static double harmonic_decay_(const VoiceSnap *v, int harmonic)
 {
     if (v->dhz_set) {                           /* HammeredDulcimerProperties: by the mode's own frequency */
         double f = v->frequency_x * pow(2.0, v->octave_position) * harmonic;
@@ -871,11 +901,34 @@ int nv_unison_voices(const VoiceSnap *v, double frequency, int harmonic, double 
         return n;
     }
     if (v->kind != 0) {                         /* SynthProperties': a voice per detune */
+        int n = v->n_unison;
         for (int i = 0; i < v->n_unison; i++) {
             out[5 * i + 0] = v->unison_gain; out[5 * i + 1] = v->unison_detune[i]; out[5 * i + 2] = 0.0;
             out[5 * i + 3] = harmonic_decay; out[5 * i + 4] = 0.0;
         }
-        return v->n_unison;
+        /* ...and a course's partner (the mandolin's, the 12-string's) */
+        double ug = 0.0, uc = 0.0;
+        int add = 0;
+        if (v->crs_kind == 1) {
+            ug = v->crs_uni_gain; uc = v->crs_uni_cents; add = 1;
+        } else if (v->crs_kind == 2) {
+            double midi = 69 + 12 * log2((frequency > 1e-6 ? frequency : 1e-6) / 440.0);
+            if (midi >= v->crs_split - 0.5) {
+                ug = v->crs_uni_gain; uc = v->crs_uni_cents; add = 1;
+            } else if (harmonic % 2 == 0) {
+                double hm = nv_harmonic_volume(v, harmonic);
+                if (hm > 0.0) {
+                    double g = v->crs_oct_gain * nv_harmonic_volume(v, harmonic / 2) / hm;
+                    ug = g < 30.0 ? g : 30.0; uc = v->crs_oct_cents; add = 1;
+                }
+            }
+        }
+        if (add) {
+            out[5 * n + 0] = ug; out[5 * n + 1] = 0.0; out[5 * n + 2] = pow(2.0, uc / 1200.0) - 1.0;
+            out[5 * n + 3] = harmonic_decay; out[5 * n + 4] = 0.0;
+            n++;
+        }
+        return n;
     }
     double gains[2] = {v->string_gain[0] * string_blend(v, frequency, v->string_break_hz[0]),
                        v->string_gain[1] * string_blend(v, frequency, v->string_break_hz[1])};
@@ -994,6 +1047,15 @@ int nv_voice_vibrato(const VoiceSnap *v, double frequency, int index, double *ou
         out[2] = pyr_uniform(&r, 0.0, 6.283185307179586);
         return 1;
     }
+    if (v->sw_set) {                            /* UkuleleProperties: each string's wander, drawn by the key */
+        long long midi = (long long)nearbyint(69 + 12 * log(frequency / 440.0) / log(2.0));
+        PyRandom r;
+        pyr_seed(&r, 0x0CE + midi * 64 + index);
+        out[0] = (pow(2.0, v->sw_cents / 1200.0) - 1.0) * pyr_uniform(&r, 0.3, 1.0);
+        out[1] = pyr_uniform(&r, v->sw_hz[0], v->sw_hz[1]);
+        out[2] = pyr_uniform(&r, 0.0, 6.283185307179586);
+        return 1;
+    }
     if (v->fv_set) {                            /* a fixed vibrato of its own (the skid's, the scream's) */
         out[0] = pow(2.0, v->fv_cents * 1.4142 / 1200.0) - 1.0;
         out[1] = v->fv_hz;
@@ -1043,7 +1105,11 @@ void nv_partial_decay(const VoiceSnap *v, double f0, int m, double *out)
     double dbps = nv_harmonic_decay(v, m);
     double logr = dbps > 0 ? log(db_ratio(dbps)) : 0.0;
     double a[2];
-    if (v->n_ma) {                              /* TR808Properties.aftersound_partial */
+    if (v->pick_set) {                          /* Plectrum.aftersound_partial: what rings on under the boost */
+        double b = pick_db(v, m);
+        a[0] = b > 0.0 ? pow(10.0, -b / 20.0) : 0.0;
+        a[1] = b > 0.0 ? harmonic_decay_(v, m) : dbps;
+    } else if (v->n_ma) {                       /* TR808Properties.aftersound_partial */
         a[0] = 0.0;
         a[1] = dbps;
         if (1 <= m && m <= v->n_ma && v->mode_after[m - 1][0] > 0.0) {

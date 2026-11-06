@@ -2578,6 +2578,7 @@ def _prep_organ_rows(_CMXEV, ccs, ch_progs, nblk, notes):
             _orgk = (ch, organ_family(pc))
             if _orgk in rankev_of:
                 continue
+            _ORGAN_PC[_orgk] = pc         # (its class: 'check' gives the engine its table)
             # each later tone of this organ on the channel recalls its own
             # registration where its first note is (registration_blocks)
             _fam = _orgk[1]; _rcl = []; _ds = getattr(pc, 'default_stops', 1)
@@ -6536,6 +6537,9 @@ _NV_SOUND = frozenset(('attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'
 ORGAN_STATS = [0, 0]    # organ notes whose inputs the engine's song made too, that differed
 
 
+_ORGAN_PC = {}         # (channel, organ family) -> the class _prep_organ_rows registered it from
+
+
 def _organ_rows_check(song, rankev_of, Grows, Srows, sh, wrow_of, BRrows, BCrows, _BLrows, nblk):
     """'check': the engine's song given the file's organs (nv_song_organ),
     its gates, swells and law (nv_song_organ_rows) and its chests' wind
@@ -6548,8 +6552,7 @@ def _organ_rows_check(song, rankev_of, Grows, Srows, sh, wrow_of, BRrows, BCrows
         _o = _NV.organ(_pc) if getattr(_pc, 'registerable', False) else None
         po[_p] = ctypes.addressof(_o) if _o is not None else None
     for (_c, _fam) in rankev_of:
-        _pc = next(c for c in (property_class_for_program(p) for p in range(128))
-                   if getattr(c, 'registerable', False) and organ_family(c) == _fam)
+        _pc = _ORGAN_PC[(_c, _fam)]
         _o = _NV.organ(_pc)
         if _o is None:
             print("  native organ: no table for %s" % _fam)
@@ -9119,7 +9122,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _PUSH_ROWS.append((len(A['om']) - _wn[3].n_push, len(A['om'])))
         else:
             _pjit = _note_strike_noise(em, props, nt, _CBW, _VB, _pjit, emit_partial, random)
-        _note_struck_layer(props, nt, emit_partial, random)
+        if not (_wn is not None and NATIVE_TONE == 'on'):      # (the engine's note struck its layer)
+            _note_struck_layer(props, nt, emit_partial, random)
         if not (_wn is not None and NATIVE_TONE == 'on'):
             _note_ring(em, props, nt, A, _RING, _VB, emit_partial, random)
         if (getattr(props, 'touch_leak_db', None) is not None and (props.harmonic_touch or 1) > 1

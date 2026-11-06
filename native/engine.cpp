@@ -647,9 +647,14 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         total += k;
     }
 
-    // THE TONE (_note_stops, one stop at gain 1): its partials radiate as themselves
-    t.radius = 0.0;
-    t.has_radius = 0;
+    // THE TONE (_note_stops, one stop at gain 1): its partials radiate as
+    // themselves -- an organ's from its first pipe on (organ.c sets each
+    // pipe's): until then, the leakage before its first rank's partials,
+    // the emitter's radius as the last note left it (Python's em.radius)
+    if (!K->organ) {
+        t.radius = 0.0;
+        t.has_radius = 0;
+    }
     t.gain = 1.0; t.B = B; t.sjit = o.sustain_jitter; t.reflect = reflect;
     t.cbw0 = K->cbw0; t.cbw1 = K->cbw1;
     t.pjit = K->pjit; t.sps = K->sps; t.dur = dur; t.ssc = K->ssc;

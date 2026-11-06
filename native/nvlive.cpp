@@ -190,6 +190,7 @@ void nv_part_panic(void *h, long long n0);
 void nv_rt_del(void *h, int i);
 long nv_part_govern(void *h, double ms, double budget_ms, long long n);
 long nv_part_partials_shed(void *h);
+long nv_part_dropped(void *h);
 void *nv_cl_new(const char *dir, const int *sizes, char *err, int errlen);
 void nv_part_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
                     int top, double beta, int pedals, double rel, double full_db_s, double residual, double ln10_20,
@@ -1772,6 +1773,9 @@ int main(int argc, char **argv)
     fprintf(stderr, "nvlive: %ld blocks, %ld over %.2f ms (worst %.2f), %ld underruns, %ld partials shed%s\n", blocks,
             over, budget, worst, underruns, nv_part_partials_shed(part),
             rt::dropped ? ", real-time dropped by the guard" : "");
+    if (nv_part_dropped(part))              // (the slab full: notes that never sounded)
+        fprintf(stderr, "nvlive: %ld notes found the slab full (%ld slots) and did not sound: raise --slots\n",
+                nv_part_dropped(part), slots);
     reader.join();
     A.close(A.pcm);
     ::close(fd);

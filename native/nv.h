@@ -240,7 +240,7 @@ typedef struct {
        slope, dB, its slope) a line in the note's octaves from tube_ref_hz,
        held at -0.6 and 0.85 (_tube_oct); their decays are mode_decays */
     int n_tube;
-    double tube_ref_hz, tube[16][4];
+    double tube_ref_hz, tube[32][4];
     /* A COMB TOOTH'S OCTAVE BELOW (MusicBoxProperties.mode_gains_here): mode
        7 sounds on a key random.Random(key 7919 + 10) chooses -- its draw
        under or_share, an octave under the key not below or_lowest_hz -- at
@@ -302,6 +302,29 @@ typedef struct {
        voice_vibrato): its depth's cents (x 1.4142) and rate; fv_set 0 none */
     int fv_set;
     double fv_cents, fv_hz;
+    /* A PICK (Plectrum): every partial over pick_hz pick_slope_db an octave
+       louder (to pick_boost_max_db), the extra falling at pick_dbs, the rest
+       ringing on; a doubled course crossed pick_stagger s apart (0 none) */
+    int pick_set;
+    double pick_hz, pick_slope_db, pick_boost_max_db, pick_dbs, pick_stagger;
+    /* ITS COURSES' PARTNERS (unison_voices): crs_kind 1 a unison partner on
+       every harmonic (the mandolin's), 2 the 12-string's -- an octave partner
+       on the even harmonics under crs_split, a unison one from it */
+    int crs_kind;
+    double crs_split, crs_oct_gain, crs_oct_cents, crs_uni_gain, crs_uni_cents;
+    /* A CHURCH BELL's decay (ChurchBellProperties.harmonic_decay): each tube
+       mode's mode_decays / 2, by church_slope an octave from tube_ref_hz */
+    int church;
+    double church_slope;
+    /* FEEDBACK (Feedback): the loop's harmonic (fb_fixed, else the one
+       nearest fb_band_hz), its series (fbs: multiple, gain) late copies
+       fb_delay s after the pluck, swelling over fb_swell s, sinking fb_dbs */
+    int fb_set, fb_fixed, n_fbs;
+    double fb_band_hz, fb_delay, fb_swell, fb_gain, fb_dbs, fbs[8][2];
+    /* A STRING'S WANDER (the ukulele's voice_vibrato): each voice's depth up
+       to sw_cents, rate in sw_hz, phase drawn by the key; sw_set 0 none */
+    int sw_set;
+    double sw_cents, sw_hz[2];
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -950,6 +973,9 @@ typedef struct NoteClass {
     double cho_send;
     int pair_set;
     double pair_lo, pair_hi;
+    // TREMOLO PICKING (tremolo_pick_hz, 0 none): the up strokes tp_up_db,
+    // each stroke's time scattered tp_jit of a period
+    double tp_hz, tp_up_db, tp_jit;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -1205,6 +1231,7 @@ int nv_song_mono(void *s, int i, int *mcut, int *mslur);
    and a note's step (level, smear, the step it arrives from or -1, the step's
    time), 0 not one */
 void nv_song_gliss(void *s, const NoteClass *const *K);
+void nv_song_slot_organs(void *s, int n, const OrganSpec *const *so);
 void nv_song_play_mark(void *s);
 int nv_song_gliss_note(void *s, int i, double *out);
 double nv_song_tess(void *s, long long ch);
