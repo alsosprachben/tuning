@@ -1187,6 +1187,99 @@ int nv_breath(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, con
     return R.n;
 }
 
+/* tonelib.pulse_series' cache (_PULSE_CACHE): keyed by T, t0 and the period
+ * rounded to 7 places (Python's round), fmax and taper; the first series
+ * made for a key is every later one's */
+typedef struct {
+    double k[5];
+    int n;
+    double *s;
+} PulseMemo;
+static PulseMemo pulse_memo[256];
+static int pulse_nmemo = 0;
+static pthread_mutex_t pulse_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static double round7(double x)
+{
+    char b[64];
+    snprintf(b, sizeof b, "%.7f", x);
+    return strtod(b, NULL);
+}
+
+int nv_pulse_series(double T, double t0, double period, double fmax, double taper, double *out, int cap);
+
+static const double *pulse_series_memo(double T, double t0, double period, double fmax, double taper, int *n)
+{
+    double k[5] = {round7(T), round7(t0), round7(period), fmax, taper};
+    pthread_mutex_lock(&pulse_mu);
+    for (int i = 0; i < pulse_nmemo; i++)
+        if (!memcmp(pulse_memo[i].k, k, sizeof k)) {
+            *n = pulse_memo[i].n;
+            const double *s = pulse_memo[i].s;
+            pthread_mutex_unlock(&pulse_mu);
+            return s;
+        }
+    int cap = (int)nearbyint(4 * fmax * period) / 2 + 2;
+    double *s = (double *)malloc(sizeof(double) * 3 * (size_t)cap);
+    int m = s ? nv_pulse_series(T, t0, period, fmax, taper, s, cap) : -1;
+    if (m < 0 || m > cap || pulse_nmemo >= 256) {
+        free(s);
+        pthread_mutex_unlock(&pulse_mu);
+        return NULL;
+    }
+    memcpy(pulse_memo[pulse_nmemo].k, k, sizeof k);
+    pulse_memo[pulse_nmemo].n = m;
+    pulse_memo[pulse_nmemo].s = s;
+    pulse_nmemo++;
+    pthread_mutex_unlock(&pulse_mu);
+    *n = m;
+    return s;
+}
+
+/* blockrender._note_pulse: A PRESSURE PULSE (the gunshot's N-wave) -- one
+ * period of its Fourier series, every partial under one gate, opened two
+ * blocks before the pulse (or at the render's start, the pulse NON into the
+ * series) and shut a block after it, the period long enough that the next
+ * pulse falls after it has shut; its length from the key (pulse_length: the
+ * spectrum's peak on f0, within its range); each partial the voice's gain x
+ * its amplitude x the radiation, its phase the series', with its room
+ * images. Returns the rows written, -1 if the store was too small or the
+ * series could not be made. */
+int nv_pulse(const VoiceSnap *v, const ToneIn *t, double f0, double blk, double lo_ms, double hi_ms, double peak,
+             double fmax, double taper, double pos_x, int nimg, const int *nsurf, const int *surf, const double *img,
+             const double *mir, double *rows, int cap, double *qacc, double *azimuth)
+{
+    Rows R = {rows, 0, cap};
+    double terms[9 * 64];
+    double VB[3] = {0.0, 5.5, 0.0};
+    double SR = t->sr;
+    double T = pymin(hi_ms, pymax(lo_ms, 1000.0 * peak / pymax(f0, 1.0))) / 1000.0;
+    double lead = 2.0 * blk, rel = 0.002 * SR;
+    double gate = lead + T * SR + blk;
+    double per = (gate + rel + blk + 0.002 * SR) / SR;
+    double pnon = pymax(0.0, t->non - lead);
+    double t0 = t->non >= lead ? lead : t->non;
+    int ns = 0;
+    const double *s = pulse_series_memo(T, t0 / SR, per, fmax, taper, &ns);
+    if (!s)
+        return -1;
+    for (int i = 0; i < ns; i++) {
+        double hf = s[3 * i], amp = s[3 * i + 1], ph = s[3 * i + 2];
+        double gM = v->gain * amp * nv_radiation_gain(v, hf, 0.0, 0);
+        int nt_ = 0;
+        if (t->reflect) {
+            nt_ = note_terms(v, t, hf, t->pos_x_props, t->pos_z, nimg, nsurf, surf, img, mir, terms);
+            if (nt_ < 0)
+                return -1;
+        }
+        if (!emit(v, t, &R, qacc, azimuth, terms, nt_, 2 * PI * hf / SR, gM * nv_hrtf_gain(v, hf, t->li),
+                  gM * nv_hrtf_gain(v, hf, t->ri), gM, hf, pnon, pnon + gate, 1.0, rel, t->chiff, 0.0, 0.0, 0.0,
+                  1.0, 0.0, t->cc, t->crl, 0.0, t->csc, -1.0, 0.0, ph, 0.0, VB, pos_x, 0))
+            return -1;
+    }
+    return R.n;
+}
+
 /* blockrender._note_grains: sparse damped sines at Poisson instants (rate a
  * second; negative, a clock: one every -1/rate s from the onset, each 7%
  * rms off it) through the held note, each its own pitch across the band and
@@ -1464,3 +1557,4 @@ int nv_click(const VoiceSnap *v, const ToneIn *t, const NoteClass *K, const Note
     return R.n;
 }
 #include "npyrandom.c" /* numpy's normal stream (the organ's wind) */
+#include "pocketfft.c" /* numpy's rfft (the gunshot's N-wave: nv_pulse_series) */

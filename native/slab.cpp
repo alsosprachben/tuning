@@ -466,7 +466,7 @@ struct Slab {
                const int32_t *const *ti4, const float *threl, long n, Key key, long long n0, double vel_scale,
                long long dur, bool one, double tsend, long long ch, const long long *sof = nullptr,
                const long long *rof = nullptr, double scat = 0.0, double rate = 0.0, const long long *cof = nullptr,
-               const double *aL64 = nullptr, const double *aR64 = nullptr)
+               const double *aL64 = nullptr, const double *aR64 = nullptr, const long long *gof = nullptr)
     {
         if (n == 0)
             return true;
@@ -506,6 +506,8 @@ struct Slab {
             long long newnon = offs.empty() ? n0 + rd : (long long)((double)n0 + offs[ti4[3][q]]) + rd;
             if (cof)                            // a Hammond drawbar speaks when its contact closes
                 newnon += cof[q];
+            if (gof)                            // ...a grain lands where it falls in the note
+                newnon += gof[q];
             if (sof)
                 newnon += sof[q];
             double sh = tf8[F8_om][q] * (double)(ti8[0][q] - newnon);
@@ -604,7 +606,8 @@ struct Slab {
             i4p[c] = T.i4[c].data();
         return stamp(f8p, f4p, i8p, i4p, T.hrel.data(), T.P, key, n0, vel_scale, T.dur, T.oneshot, NAN, ch,
                      T.sof.empty() ? nullptr : T.sof.data(), T.rof.empty() ? nullptr : T.rof.data(),
-                     std::isnan(scat) ? T.scatter_ms : scat, rate);
+                     std::isnan(scat) ? T.scatter_ms : scat, rate, nullptr, nullptr, nullptr,
+                     T.gof.size() == (size_t)T.P ? T.gof.data() : nullptr);
     }
 
     // THE PAN TABLE (live.pan_table: CC10 -> left and right shadow alpha, half
@@ -1881,6 +1884,18 @@ struct Part {
     bool cgain_set[16];
     std::set<std::pair<int, int>> down, pedalled;
     std::map<Key, long long> tex_on;    // a held texture's key: the sample it may stop (live.tex_on)
+    // ...AND ITS GRAINS (live.tex_gen, in the order struck): the key, its
+    // template, the next grain's sample, the press's scale; one generator
+    // (live._tex_rng; one part here) and the grains' own keys (_tex_n)
+    struct TexGen {
+        Key key;
+        const nv::live::Template *T;
+        double nxt, scale;
+    };
+    std::vector<TexGen> tex_gen;
+    PyRandom tex_rng;
+    long long tex_n = 0;
+    static const long long GRAIN0 = 1LL << 32;     // a grain's layer: GRAIN0 + its number (("grain", n))
     std::vector<Ev> events;
     std::vector<std::vector<uint8_t>> sx;           // the exclusives the events name (type 6)
     std::map<std::pair<int, int>, int> key_vel;     // (ch, note) -> the strike's velocity
@@ -3123,6 +3138,7 @@ struct Part {
 
     Part(long cap) : S(cap)
     {
+        pyr_seed(&tex_rng, 0x7E47);             // (live's _tex_rng)
         for (int t = 0; t < DAMP_TRACKS; t++) {
             free_tracks.push_back(t);
             DMO[t] = 2 * t;
@@ -3402,8 +3418,18 @@ struct Part {
                     dropped++;
             }
         }
-        if (T->min_hold)
+        if (T->min_hold) {
             tex_on[key] = n0 + T->min_hold; // a held texture: the least it plays
+            if (!T->gpool.empty() && T->grate > 0.0) {
+                // its grains, from the press, for as long as it is held (tex_tick)
+                double nx = (double)n0 + tex_expo(T->grate) * rate;
+                auto it = std::find_if(tex_gen.begin(), tex_gen.end(), [&](const TexGen &g) { return g.key == key; });
+                if (it != tex_gen.end())
+                    *it = TexGen{key, T, nx, scale};        // (a dict's key keeps its place)
+                else
+                    tex_gen.push_back(TexGen{key, T, nx, scale});
+            }
+        }
         if (!T->rel.empty())
             held_rel[Key(pid, ch, note, 0)] = std::make_pair(T, scale);     // its key-up rows, at the key-up
         long lj = S.live_find(key);
@@ -5197,6 +5223,11 @@ struct Part {
         if (tx != tex_on.end()) {
             at = std::max(n0, tx->second);
             tex_on.erase(tx);
+        }
+        {                                   // ...and strikes no more grains
+            Key k(pid, ch, note, -1);
+            tex_gen.erase(std::remove_if(tex_gen.begin(), tex_gen.end(), [&](const TexGen &g) { return g.key == k; }),
+                          tex_gen.end());
         }
         S.release(Key(pid, ch, note, -1), at);
         key_up_event(ch, note, n0);
@@ -7398,6 +7429,37 @@ struct Part {
     }
 
     // live's callback for one block: its events, the sweep, the reap
+    // random.expovariate, randrange (CPython 3.12's: getrandbits' top bits, rejected past n)
+    double tex_expo(double lambd) { return -log(1.0 - pyr_random(&tex_rng)) / lambd; }
+    long tex_below(long n)
+    {
+        int k = 0;
+        while ((1L << k) <= n)
+            k++;
+        uint32_t r = pyr_genrand(&tex_rng) >> (32 - k);
+        while ((long)r >= n)
+            r = pyr_genrand(&tex_rng) >> (32 - k);
+        return (long)r;
+    }
+
+    // live._tex_tick: a held texture's grains past its template -- a drop from
+    // its pool at each Poisson instant in this block, at its own sample, under
+    // a key of its own: a one-shot that decays on its own rows' ends
+    void tex_tick(long long n0, long long blk)
+    {
+        const long long end = n0 + blk;
+        for (TexGen &g : tex_gen) {
+            while (g.nxt < (double)end) {
+                const nv::live::Template &sub = g.T->gpool[tex_below((long)g.T->gpool.size())];
+                tex_n++;
+                Key k(std::get<0>(g.key), std::get<1>(g.key), std::get<2>(g.key), GRAIN0 + tex_n);
+                if (!S.stamp_t(sub, k, std::max((long long)g.nxt, n0), g.scale, std::get<1>(g.key), rate))
+                    dropped++;
+                g.nxt += tex_expo(g.T->grate) * rate;
+            }
+        }
+    }
+
     void block(long long n0, long long blk)
     {
         cur_blk = blk;
@@ -7429,6 +7491,8 @@ struct Part {
         if (reg_on && (!reg_pend.empty() || !reg_out.empty() || reg_live || !reg_retire.empty()
                        || reg_ndone.load() > 0))
             reg_pump(n0);
+        if (!tex_gen.empty())
+            tex_tick(n0, blk);                  // a held texture's grains (live's _tex_tick)
         if (!amp_dirty.empty() || amp_has_out || !amp_fine_results.empty() || amp_async || !amp_chg.empty()
             || !S.rel_log.empty())
             amp_pump(n0);                       // the valve (live's _amp_pump)

@@ -1464,16 +1464,47 @@ int main(int argc, char **argv)
                 nv_song_ccs(song, part, 91, tt.data(), vv.data(), n);
             return n;
         };
-        for (long long r = 0; r < P; r++) {
-            long long c = (long long)rows[NCOLS * r + cM];
-            heard.insert(c);
-            if (seen.count(c))
-                continue;
-            seen.insert(c);
-            std::vector<double> tt;
-            std::vector<int> vv;
-            if (part_cc(c % 256, tt, vv) > 0)
-                rsend.emplace_back(c, vv[0] / 40.0);
+        for (long long r = 0; r < P; r++)
+            heard.insert((long long)rows[NCOLS * r + cM]);
+        {
+            int nn = nv_song_n_notes(song);
+            std::vector<int> ord(nn);
+            std::vector<double> on_(nn);
+            std::vector<long long> ch_(nn);
+            std::vector<int> key_(nn);
+            for (int i = 0; i < nn; i++) {
+                long long c;
+                int iv[4];
+                double dv[2];
+                nv_song_get_note(song, i, &c, iv, dv);
+                ord[i] = i;
+                on_[i] = dv[0];
+                ch_[i] = c;
+                key_[i] = iv[0];
+            }
+            std::stable_sort(ord.begin(), ord.end(), [&](int a, int b) {
+                if (on_[a] != on_[b])
+                    return on_[a] < on_[b];
+                if (ch_[a] != ch_[b])
+                    return ch_[a] < ch_[b];
+                return key_[a] < key_[b];
+            });
+            for (int i : ord) {
+                long long c = nv_song_mix(song, i);
+                if (seen.count(c))
+                    continue;
+                std::vector<double> tt;
+                std::vector<int> vv;
+                int cq = E.cmap[nv_song_kidx(song, i)];
+                const NoteClass *nk = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
+                if (part_cc(c % 256, tt, vv) > 0) {
+                    rsend.emplace_back(c, vv[0] / 40.0);
+                    seen.insert(c);
+                } else if (nk && nk->rd_set) {
+                    rsend.emplace_back(c, nk->reverb_dist);      // (a voice's own distance: the gunshot's)
+                    seen.insert(c);
+                }
+            }
         }
         for (long long c : heard) {
             long long part = c % 256;

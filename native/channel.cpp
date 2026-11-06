@@ -284,6 +284,8 @@ struct Song {
     std::vector<double> rel_jacks;
     // ...and each note's key-up rows, [first, end) (blockrender's rel_rows)
     std::vector<long long> rel_rows;
+    // ...and its grains' (_GRAIN_ROWS: live keeps their own onsets), [first, end)
+    std::vector<long long> grain_rows;
     double total = 0.0;
     // ITS TUNING: the file's table, a channel's MIDI Tuning Standard tables
     // from their times (_MTS_TL), its fixed bend (_BTUN) and octave tuning (_OTUN)
@@ -2079,6 +2081,25 @@ void nv_song_add_rel_jack(void *s, long long a, long long b, int rank, double jo
 {
     std::vector<double> &v = ((nv::Song *)s)->rel_jacks;
     v.push_back((double)a); v.push_back((double)b); v.push_back((double)rank); v.push_back(jo);
+}
+
+// a note's grains' rows, [first, end) (_GRAIN_ROWS); and all of them, n pairs into ab (NULL: count)
+void nv_song_add_grain_rows(void *s, long long a, long long b)
+{
+    std::vector<long long> &v = ((nv::Song *)s)->grain_rows;
+    v.push_back(a);
+    v.push_back(b);
+}
+
+int nv_song_n_grain_rows(void *s, long long *ab, int cap)
+{
+    const std::vector<long long> &v = ((nv::Song *)s)->grain_rows;
+    int n = (int)(v.size() / 2);
+    for (int k = 0; ab && k < n && k < cap; k++) {
+        ab[2 * k] = v[2 * k];
+        ab[2 * k + 1] = v[2 * k + 1];
+    }
+    return n;
 }
 
 // a note's key-up rows, [first, end) (rel_rows)

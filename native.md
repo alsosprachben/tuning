@@ -10,11 +10,11 @@ kept by hand in the script's TASKS.
 
 | stage | tones native | drum sets whole |
 |---|---|---|
-| GM1 | 122 of 128 | 1 of 1 |
+| GM1 | 123 of 128 | 1 of 1 |
 | GM2 | 57 of 128 | 5 of 8 |
 | SC-55 | 9 of 13 | 12 of 31 |
 | SC-88 | 137 of 193 | 0 of 2 |
-| SC-88 Pro | 247 of 360 | 0 of 0 |
+| SC-88 Pro | 248 of 360 | 0 of 0 |
 | SC-8850 | 265 of 460 | 2 of 6 |
 
 ## GM1
@@ -28,11 +28,25 @@ What it needs first, and live's side:
 - [ ] Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender's reader refuses it
 - [x] Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)
 - [ ] Moog: an MF-104M on a note whose pitch or shapes move (SYNC and a unison: native in files)
+- [x] Files: grains (_note_grains: the ocean drum's beads, rain, a stream, bubbles that glide, clusters) -- GM 122, the SFX sets' grain keys
+- [x] Live: the grain source -- a note's grains at their own onsets (gof), a held texture's pool struck while the key is down (gpool, _tex_tick)
+- [x] Files: numpy 1.26.4's pocketfft vendored (native/pocketfft.c), tonelib.pulse_series calling it
+- [x] GM 127 Gunshot in files: a pulse voice (kind 7), the N-wave with its images, its blast's tail, a class's own distance (reverb_distance: _src_dist, the send bus)
+- [ ] Live: a voice's own distance (live's template send, send_said, odd_until) -- nvlive leaves the gunshot silent
+- [ ] GM 123 Bird Tweet and 124 Telephone: a struck voice repeated (section_onsets_at with unison_voices: the clapper's strokes, each its own onset, level and phase; unison_drop_late; the chirp's falling tension_bend)
+- [ ] GM 125 Helicopter: a sawtooth synth's sections (SectionMixin) and its harmonic_volume
+- [ ] GM 120 Guitar Fret Noise: its own plucked-string voice (a FormantBody noise)
+- [ ] GM 109 Bagpipe: the chanter (ConicalReedProperties) and the drones (wind_skirt_always, partial_phase_spread, strike_in_s)
+- [ ] Files: two-port files (PortedMidi, meta 21) in the reader
+- [ ] Files: NRPNs and MPE in the reader
+- [ ] Files: a class's own distance and gestures (reverb_distance, chorus_send, detuned_pair, fall_cents, rip_cents, tremolo_pick_hz, cut_semitones)
+- [ ] Files: a sung part's text, vocalise and declared parts (TUNING_LYRIC_LANG, TUNING_VOCALISE, TUNING_VOICE_PARTS)
+- [ ] Files: organs -- two on a channel, an organ beside a variation, swell laws of their own
 
-Tones: 122 of 128 native.
+Tones: 123 of 128 native.
 
 - [ ] **Ethnic** -- 109 Bag pipe
-- [ ] **Sound Effects** -- 120 Guitar Fret Noise, 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter, 127 Gunshot
+- [ ] **Sound Effects** -- 120 Guitar Fret Noise, 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter
 
 Drum sets: 1 of 1 with every key native.
 
@@ -48,6 +62,8 @@ What it needs first, and live's side:
 - [x] Tuning, live: the secondary tuning (nvlive --eastern), a raga tuner's Sa and swaras, the meend
 - [x] Tuning, live: the exclusives in nvlive -- master tuning, scale/octave tuning, MTS (a real-time change and a select moving sounding keys), GM System On and GS Reset (live._sysex)
 - [x] Master volume, files and live (blockrender's _mvol, live's master_gain ramp)
+- [ ] Files: a variation that meends (a sitar's, 63.127, 104.1/4/5)
+- [ ] Files: a GM 2 drum set the engine lacks keys of (3 of 8 sets)
 
 Tones: 57 of 128 native (new at this stage).
 
@@ -66,7 +82,7 @@ Drum sets: 5 of 8 with every key native (new at this stage).
 
 - [ ] 24 Electronic -- 114 of 115 keys native
 - [ ] 25 TR-808 -- 114 of 115 keys native
-- [ ] 56 SFX -- 52 of 76 keys native
+- [ ] 56 SFX -- 55 of 76 keys native
 
 ## SC-55
 
@@ -74,6 +90,10 @@ What it needs first, and live's side:
 
 - [ ] The GS map (CC32 / TONE MAP-0) and kit_in_map in the reader and nvlive
 - [ ] GS's effects natively (gsefx: insertion EFX, the GS delay, chorus) -- the corpus has no GS files, so each needs GS test files
+- [ ] Files: GS's other exclusives -- part parameters (parse_gs_part), drum setup and the user sets, the rhythm part's assignment, TONE MAP-0 (the reader refuses them, -4)
+- [ ] Melodic SFX (patch_map.melodic_sfx, ~130 variations of 120-127): a kit's sound on a keyboard part, transposed whole (transposed_from_hz), with its one-shot, gate, noise layers and strokes
+- [ ] Melodic hits: a hand drum's or a kit's detail on a melodic voice (strike_phase_spread, stroke_scatter, jitter_by_partial, bloom_seconds, played_backwards, strike_noise_layers, one_shot and gate_time off a kit) -- dholak, kelontuk, reversed pieces, cymbal tones
+- [ ] Crowds: strike_flam_people and a recorded flam (strike_flam_record): Small Club, the applause wave, phono noise's crackle
 
 Tones: 9 of 13 native (new at this stage).
 
@@ -87,12 +107,12 @@ Drum sets: 12 of 31 with every key native (new at this stage).
 - [ ] 28 TR-606 -- 114 of 115 keys native
 - [ ] 29 TR-707 -- 114 of 115 keys native
 - [ ] 49 Ethnic -- 76 of 79 keys native
-- [ ] 57 Rhythm FX -- 46 of 54 keys native
+- [ ] 57 Rhythm FX -- 47 of 54 keys native
 - [ ] 58 Rhythm FX 2 -- 62 of 66 keys native
 - [ ] 59 Rhythm Fx 3 -- 71 of 75 keys native
-- [ ] 60 Sfx 2 -- 54 of 60 keys native
+- [ ] 60 Sfx 2 -- 55 of 60 keys native
 - [ ] 61 Voice -- 82 of 83 keys native
-- [ ] 127 CM-64/32L -- 54 of 67 keys native
+- [ ] 127 CM-64/32L -- 56 of 67 keys native
 - [ ] 386 Standard 3 -- 0 of 115 keys native
 - [ ] 392 Room -- 0 of 115 keys native
 - [ ] 393 Hip-Hop -- 0 of 115 keys native
@@ -103,6 +123,15 @@ Drum sets: 12 of 31 with every key native (new at this stage).
 - [ ] 436 Asia -- 0 of 64 keys native
 
 ## SC-88
+
+What it needs first, and live's side:
+
+- [ ] Variations that change a native family's methods (the SC-88 maps' brass, strings, guitars, flutes and cymbal menus: a subclass the engine's owner checks refuse) -- each family's overrides ported
+- [ ] Brass detail: mode_lock_spread and directivity_radius off an organ (16 brass variations)
+- [ ] Electric pianos with mode phases (mode_phase: the Detuned EPs, a Wurlitzer variation)
+- [ ] Guitars: feedback (feedback_harmonic), open strings ringing (open_string_ring), sections (chorus guitar, biwa tremolo, the gangsa pair)
+- [ ] The SFX families: siren, starship, laser, scream, heartbeat, Morse, machine gun, engine, car pass, skid, door creak, birds, fret slide (noise_events, pulse, ring_db, sweeps)
+- [ ] Dulcimer and accordion variations (course_keys, unison_shares_phase; speech_harmonic_exp)
 
 Tones: 137 of 193 native (new at this stage).
 
@@ -123,7 +152,7 @@ Drum sets: 0 of 2 with every key native (new at this stage).
 
 ## SC-88 Pro
 
-Tones: 247 of 360 native (new at this stage).
+Tones: 248 of 360 native (new at this stage).
 
 - [ ] **Piano** -- 4.9 Cho. E.Piano, 4.17 Dist E.Piano, 6.1 Harpsichord2, 7.8 Comp Clav., 7.16 Reso Clav.
 - [ ] **Chromatic Percussion** -- 11.9 Vibraphones, 15.16 Zither 1, 15.17 Zither 2
@@ -139,7 +168,7 @@ Tones: 247 of 360 native (new at this stage).
 - [ ] **Synth Effects** -- 96.4 Rattle Pad, 98.20 JUNO Bell, 100.8 Org Bell, 102.8 Pan Sequence
 - [ ] **Ethnic** -- 104.3 Sitar 3, 105.28 Oud+Strings, 105.32 Pi Pa, 107.19 Kanoon+Choir, 108.8 Sanza, 109.8 Didgeridoo
 - [ ] **Percussive** -- 112.12 Jang-Gu, 113.16 Tambourine, 115.16 Angklung, 115.24 Finger Snaps, 115.32 909 HandClap, 116.1 Small Taiko, 116.16 Jungle BD, 116.17 Techno BD, 116.18 Bounce, 117.16 Rash SD, 117.17 House SD, 117.18 Jungle SD, 117.19 909 SD, 118.11 606 Tom, 118.12 909 Tom, 119.2 Reverse Cym3
-- [ ] **Sound Effects** -- 120.8 Gt. FX Menu, 120.9 Bartok Pizz., 120.10 Guitar Slap, 120.11 Chord Stroke, 120.13 Biwa Tremolo, 122.6 Wind 2, 124.8 ScratchKey, 124.9 TapeRewind, 124.10 Phono Noise, 125.10 Calculating, 125.11 Perc. Bang, 126.7 Small Club, 126.8 ApplauseWave, 126.16 Voice One, 126.17 Voice Two, 126.18 Voice Three, 126.19 Voice Tah, 126.20 Voice Whey, 127.4 Eruption, 127.5 Big Shot
+- [ ] **Sound Effects** -- 120.8 Gt. FX Menu, 120.9 Bartok Pizz., 120.10 Guitar Slap, 120.11 Chord Stroke, 120.13 Biwa Tremolo, 122.6 Wind 2, 124.8 ScratchKey, 124.9 TapeRewind, 124.10 Phono Noise, 125.10 Calculating, 125.11 Perc. Bang, 126.7 Small Club, 126.8 ApplauseWave, 126.16 Voice One, 126.17 Voice Two, 126.18 Voice Three, 126.19 Voice Tah, 126.20 Voice Whey, 127.4 Eruption
 
 Drum sets: 0 of 0 with every key native (new at this stage).
 

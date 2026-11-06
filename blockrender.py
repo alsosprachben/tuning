@@ -6683,6 +6683,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.detune_lo, n.detune_hi = lo, hi
     n.soft_pedal_down, n.fixed_touch = int(bool(T.soft_pedal_down)), int(bool(T.FIXED_TOUCH))
     n.sr, n.retrigger_fade, n.channel = SR, RETRIGGER_FADE, em.channel
+    n.blk = float(BLK)
     n.br = em.bend_row if (em.bend_row >= 0 or em.fader_row < 0) else em.fader_row
     # ...ITS OTHER STRINGS (ring_db: _note_ring), tuned as the notes are, on the fader's row
     n.fbr = em.fader_row if em.fader_row >= 0 else -1
@@ -9142,7 +9143,10 @@ def _prepare(path, tuner='hybrid440', sink=None):
         else:
             stops = _note_shake_noise(em, props, nt, _CBW, _VB, _held, emit_partial, stops)
         _note_noise_events(em, props, nt, _CBW, _VB, emit_partial)
-        stops = _note_pulse(em, props, nt, _VB, emit_partial, stops)
+        if _wn is not None and NATIVE_TONE == 'on' and getattr(props, 'pulse', False):
+            stops = ()              # (the engine's note pulsed: its rows are in)
+        else:
+            stops = _note_pulse(em, props, nt, _VB, emit_partial, stops)
         _bnote = em.bend_row          # the note's own row, which a chest row multiplies
         # THE NOTE'S GAIN where it has no stops (a Moog, a shaken noise, a
         # pulse): the release click below rides it, and without this it rode

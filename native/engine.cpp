@@ -380,6 +380,31 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     }
 
     int reflect = n->reflect && !no_refl && K->reflection_order;
+    // A PRESSURE PULSE (_note_pulse: the gunshot's N-wave) in place of the
+    // series, with its images
+    if (K->pulse) {
+        ToneIn tp = t;
+        tp.gain = s.gain; tp.reflect = reflect;
+        tp.cbw0 = K->cbw0; tp.cbw1 = K->cbw1;      // (the note's wash width, _CBW: chiff_bandwidth or RAND_GRAN)
+        int k = nv_pulse(&s, &tp, f0, n->blk, K->pulse_lo_ms, K->pulse_hi_ms, K->pulse_peak, K->pulse_fmax,
+                         K->pulse_taper, s.position_x, reflect ? nimg : 0, nsurf, surf, img, mir,
+                         rows + NCOLS * total, cap - total, qacc, azimuth);
+        if (k < 0)
+            return -1;
+        total += k;
+        out->n_tone = 0;
+        out->n_phantom = 0;
+        out->non = non; out->noff = noff; out->fade = fade; out->rel = rel; out->chiff = chiff;
+        out->jitter_scale = t.jitter_scale;
+        out->dl = t.dl; out->dr = t.dr; out->li = t.li; out->ri = t.ri; out->radius = n->carry_radius;
+        out->n_push = 0;
+        out->f0 = f0;
+        out->pos_x = s.position_x; out->pos_z = s.position_z; out->B = B;
+        out->cv = t.cv; out->cc = t.cc; out->crl = t.crl; out->sjit = o.sustain_jitter; out->csc = t.csc;
+        memcpy(out->tb, tb, sizeof tb);
+        out->cbw[0] = K->cbw0; out->cbw[1] = K->cbw1;
+        return total;
+    }
     // A MOOG (blockrender._note_moog): its layers' partials in place of the
     // tone, each layer on its own filter row (n->fx the first's), and the
     // rows the kernel reads them by (moog.ft_row: the key's tracking, the
@@ -795,7 +820,8 @@ static double song_dist(void *song, long long ch, double on, double sr, const No
             d = vv[q < 0 ? 0 : q] / 40.0;
         }
     }
-    (void)k;                    // (a voice's own reverb_distance: none is the engine's -- native.note_class)
+    if (std::isnan(d) && k && k->rd_set)
+        d = k->reverb_dist;     // ...else the voice's own (reverb_distance: the gunshot stands back)
     return std::isnan(d) ? 1.0 : nv::pymax(0.1, d);
 }
 
@@ -1054,6 +1080,8 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         }
         if (out.n_click)                    // the key-up's rows, the note's last (rel_rows)
             nv_song_add_rel_rows(song, total + r - out.n_click, total + r);
+        if (out.grain1 > out.grain0)        // its grains' (_GRAIN_ROWS)
+            nv_song_add_grain_rows(song, total + out.grain0, total + out.grain1);
         if (out.n_jack) {                   // each jack's click rows, the note's last (rel_jacks)
             long long j0 = total + r - out.n_click;
             for (int q = 0; q < out.n_jack; q++) {

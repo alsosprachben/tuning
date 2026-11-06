@@ -134,7 +134,7 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                std::vector<long long> *srows, std::vector<long long> *prows = nullptr,
                                const double *les = nullptr, std::vector<long long> *flips = nullptr,
                                std::vector<double> *jrows = nullptr, std::vector<long long> *rrows = nullptr,
-                               double *mft = nullptr);
+                               double *mft = nullptr, std::vector<long long> *grows = nullptr);
 long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                             const double *cfg, const char *mask, long long nmask, double sr);
 long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
@@ -163,7 +163,7 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
                                std::vector<long long> *srows, std::vector<long long> *prows, const double *les,
                                std::vector<long long> *flips, std::vector<double> *jrows,
-                               std::vector<long long> *rrows, double *mft)
+                               std::vector<long long> *rrows, double *mft, std::vector<long long> *grows)
 {
     const NoteClass *kc = (!kit && program >= 0 && program < 128) ? K[128 * program + note] : nullptr;
     const OrganSpec *og = kc ? kc->organ : nullptr;
@@ -208,6 +208,11 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         int n = nv_song_n_stroke_rows(song, nullptr, 0);
         srows->resize(2 * n);
         nv_song_n_stroke_rows(song, srows->data(), n);
+    }
+    if (grows && P >= 0) {                      // ...and its grains' (_GRAIN_ROWS)
+        int ng = nv_song_n_grain_rows(song, nullptr, 0);
+        grows->resize(2 * ng);
+        nv_song_n_grain_rows(song, grows->data(), ng);
     }
     if (rrows && P >= 0) {                      // ...and its key-up's rows (rel_rows)
         int nr = nv_song_n_rel_rows(song, nullptr, 0);
@@ -491,7 +496,7 @@ struct Cache {
         void *dm[6] = {nullptr};
         std::vector<long long> srows, prows, flips;
         std::vector<double> jrows;
-        std::vector<long long> rrows;
+        std::vector<long long> rrows, grows;
         double mft[30];
         g_raga_sa = raga_sa;                // (the template's prepare: T.raga_sa_note, T.raga_spec)
         g_raga_nsw = raga_nsw;
@@ -500,7 +505,7 @@ struct Cache {
         long long P = template_rows(K.data(), &t, freq, trim, program, note, vel, fast, &rows, kind, scale, full,
                                     residual, beta, blk, ring_floor, ring_max, out, knee, ln10_20, xdec, SR, dm,
                                     drums ? &kit : nullptr, &srows, &prows, les.empty() ? nullptr : les.data(),
-                                    &flips, &jrows, &rrows, mft);
+                                    &flips, &jrows, &rrows, mft, &grows);
         if (P < 0) {
             free(rows);
             return false;
@@ -572,6 +577,37 @@ struct Cache {
                 }
             for (long long r = 0; r < P; r++)
                 T.fa_at[r] = fa[r] == mode;
+        }
+        // ITS GRAINS (t["grain"], t["gof"]): each lands where it falls in the
+        // note, its onset less the first direct row's (rdl 0, not a grain);
+        // placed at the press, a rain key's drops all fell in its first instant
+        std::vector<char> gmask;
+        if (P && !grows.empty()) {
+            gmask.assign(P, 0);
+            bool anyg = false;
+            for (size_t k = 0; k + 1 < grows.size(); k += 2)
+                for (long long r = grows[k]; r < std::min(grows[k + 1], (long long)P); r++)
+                    gmask[r] = anyg = 1;
+            if (anyg) {
+                const std::vector<float> &rdl = T.f4[25];
+                long long t0 = 0;
+                bool have = false;
+                for (long long r = 0; r < P; r++)
+                    if (rdl[r] == 0.0f && !gmask[r] && (!have || T.i8[0][r] < t0)) {
+                        t0 = T.i8[0][r];
+                        have = true;
+                    }
+                if (!have)
+                    for (long long r = 0; r < P; r++)
+                        if (r == 0 || T.i8[0][r] < t0)
+                            t0 = T.i8[0][r];
+                T.gof.assign(P, 0);
+                for (long long r = 0; r < P; r++)
+                    if (gmask[r])
+                        T.gof[r] = T.i8[0][r] - t0;
+            } else {
+                gmask.clear();
+            }
         }
         // A STROKED KEY (a drum's gesture): each stroke's rows where it falls
         // in the note (sof: its onset less its room delay, over the least of
@@ -716,6 +752,98 @@ struct Cache {
                     T.rof[r] = -1;
             T.oneshot = false;
             T.min_hold = (long long)nearbyint(nc->gate_time * SR);
+            // ...AND ITS GRAINS GO ON (t["gpool"]): the template's own drops,
+            // one one-shot a drop (its rows sharing an onset), struck by the
+            // part while the key is down at the class's own rate; the held
+            // stamp is the rest
+            double rate_g = 0.0;
+            for (int g = 0; g < nc->n_grain; g++)
+                if (nc->grain[g][2] > 0.0)
+                    rate_g += nc->grain[g][2];
+            if (!gmask.empty() && rate_g > 0.0) {
+                std::vector<long long> ons;
+                for (long long r = 0; r < P; r++)
+                    if (gmask[r])
+                        ons.push_back(T.i8[0][r]);
+                std::sort(ons.begin(), ons.end());
+                ons.erase(std::unique(ons.begin(), ons.end()), ons.end());
+                auto slice = [&](Template &D, const std::vector<long> &idx) {
+                    auto cut = [&](auto &dst, const auto &src) {
+                        dst.resize(idx.size());
+                        for (size_t q = 0; q < idx.size(); q++)
+                            dst[q] = src[idx[q]];
+                    };
+                    D.P = (long)idx.size();
+                    for (int c = 0; c < 6; c++)
+                        cut(D.f8[c], T.f8[c]);
+                    for (int c = 0; c < 27; c++)
+                        cut(D.f4[c], T.f4[c]);
+                    for (int c = 0; c < 4; c++)
+                        cut(D.f4n[c], T.f4n[c]);
+                    for (int c = 0; c < 2; c++)
+                        cut(D.i8[c], T.i8[c]);
+                    for (int c = 0; c < 6; c++)
+                        cut(D.i4[c], T.i4[c]);
+                    cut(D.hrel, T.hrel);
+                    if (!T.sof.empty())
+                        cut(D.sof, T.sof);
+                    if (!T.rof.empty())
+                        cut(D.rof, T.rof);
+                    if (!T.fa_at.empty())
+                        cut(D.fa_at, T.fa_at);
+                    if (!T.cof.empty())
+                        cut(D.cof, T.cof);
+                    if (!T.lflip.empty())
+                        cut(D.lflip, T.lflip);
+                    if (!T.push.empty())
+                        cut(D.push, T.push);
+                    if (!T.sym.empty())
+                        cut(D.sym, T.sym);
+                    if (!T.ring.empty())
+                        cut(D.ring, T.ring);
+                };
+                for (long long on : ons) {
+                    std::vector<long> idx;
+                    for (long long r = 0; r < P; r++)
+                        if (gmask[r] && T.i8[0][r] == on)
+                            idx.push_back((long)r);
+                    Template D;
+                    slice(D, idx);
+                    D.oneshot = true;
+                    D.cof.clear();
+                    D.scatter_ms = 0.0;
+                    D.vel = T.vel;
+                    long long mx = 0;
+                    for (long q = 0; q < D.P; q++)
+                        mx = q == 0 ? D.rof[q] : std::max(mx, D.rof[q]);
+                    D.dur = mx;
+                    T.gpool.push_back(std::move(D));
+                }
+                std::vector<long> keep;
+                for (long long r = 0; r < P; r++)
+                    if (!gmask[r])
+                        keep.push_back((long)r);
+                Template K2;
+                slice(K2, keep);
+                for (int c = 0; c < 6; c++)
+                    T.f8[c].swap(K2.f8[c]);
+                for (int c = 0; c < 27; c++)
+                    T.f4[c].swap(K2.f4[c]);
+                for (int c = 0; c < 4; c++)
+                    T.f4n[c].swap(K2.f4n[c]);
+                for (int c = 0; c < 2; c++)
+                    T.i8[c].swap(K2.i8[c]);
+                for (int c = 0; c < 6; c++)
+                    T.i4[c].swap(K2.i4[c]);
+                T.hrel = K2.hrel;
+                T.sof = K2.sof; T.rof = K2.rof; T.fa_at = K2.fa_at; T.cof = K2.cof; T.lflip = K2.lflip;
+                T.push = K2.push; T.sym = K2.sym; T.ring = K2.ring;
+                T.P = K2.P;
+                P = T.P;
+                T.gof.clear();
+                gmask.clear();
+            }
+            T.grate = rate_g;
         }
         // AN ORGAN, SLICED BY RANK (_raw_template's t["ranks"]): each rank's
         // rows, their columns and their share of hrel

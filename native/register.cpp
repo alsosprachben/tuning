@@ -1003,6 +1003,9 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
                        int with_register, long long *nsym)
 {
     using namespace nv::reg;
+    NoteIn tb_ = *tmpl;
+    tb_.blk = (double)blk;                  // (the render's block: a pulse's lead)
+    tmpl = &tb_;
     int nn = nv_song_n_notes(song);
     std::vector<int> played(nn);
     std::vector<long long> row0(nn);

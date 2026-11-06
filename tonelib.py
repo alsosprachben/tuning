@@ -26375,6 +26375,13 @@ def pulse_series(T, t0, period, fmax, taper):
     key = (round(T, 7), round(t0, 7), round(period, 7), fmax, taper)
     if key in _PULSE_CACHE:
         return _PULSE_CACHE[key]
+    # THE SERIES IS NATIVE'S (native.pulse_series: numpy 1.26.4's pocketfft,
+    # vendored, and libm's hypot and atan2), so the engine's gunshot is this
+    # one and neither moves with numpy; numpy's below only without the library
+    out = __import__('native').pulse_series(T, t0, period, fmax, taper)
+    if out is not None:
+        _PULSE_CACHE[key] = out
+        return out
     import numpy as np
     sr = 4 * fmax
     n = int(round(sr * period))

@@ -30,6 +30,29 @@ TASKS = [
     ("GM1", False, "Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender's reader refuses it"),
     ("GM1", True, "Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)"),
     ("GM1", False, "Moog: an MF-104M on a note whose pitch or shapes move (SYNC and a unison: native in files)"),
+    ("GM1", True, "Files: grains (_note_grains: the ocean drum's beads, rain, a stream, bubbles that glide, "
+                  "clusters) -- GM 122, the SFX sets' grain keys"),
+    ("GM1", True, "Live: the grain source -- a note's grains at their own onsets (gof), a held texture's pool "
+                  "struck while the key is down (gpool, _tex_tick)"),
+    ("GM1", True, "Files: numpy 1.26.4's pocketfft vendored (native/pocketfft.c), tonelib.pulse_series calling it"),
+    ("GM1", True, "GM 127 Gunshot in files: a pulse voice (kind 7), the N-wave with its images, its blast's tail, "
+                  "a class's own distance (reverb_distance: _src_dist, the send bus)"),
+    ("GM1", False, "Live: a voice's own distance (live's template send, send_said, odd_until) -- nvlive leaves "
+                   "the gunshot silent"),
+    ("GM1", False, "GM 123 Bird Tweet and 124 Telephone: a struck voice repeated (section_onsets_at with "
+                   "unison_voices: the clapper's strokes, each its own onset, level and phase; unison_drop_late; "
+                   "the chirp's falling tension_bend)"),
+    ("GM1", False, "GM 125 Helicopter: a sawtooth synth's sections (SectionMixin) and its harmonic_volume"),
+    ("GM1", False, "GM 120 Guitar Fret Noise: its own plucked-string voice (a FormantBody noise)"),
+    ("GM1", False, "GM 109 Bagpipe: the chanter (ConicalReedProperties) and the drones (wind_skirt_always, "
+                   "partial_phase_spread, strike_in_s)"),
+    ("GM1", False, "Files: two-port files (PortedMidi, meta 21) in the reader"),
+    ("GM1", False, "Files: NRPNs and MPE in the reader"),
+    ("GM1", False, "Files: a class's own distance and gestures (reverb_distance, chorus_send, detuned_pair, "
+                   "fall_cents, rip_cents, tremolo_pick_hz, cut_semitones)"),
+    ("GM1", False, "Files: a sung part's text, vocalise and declared parts (TUNING_LYRIC_LANG, TUNING_VOCALISE, "
+                   "TUNING_VOICE_PARTS)"),
+    ("GM1", False, "Files: organs -- two on a channel, an organ beside a variation, swell laws of their own"),
     ("GM2", True, "Bank select in files (CC0/CC32): GM2's banks (120 drums, 121 melodic) and GS's variations, "
                   "layered ones too (nvrender; nvlive refuses a bank)"),
     ("GM2", False, "Bank select in nvlive: a file's banks (live._program's variation)"),
@@ -40,9 +63,31 @@ TASKS = [
     ("GM2", True, "Tuning, live: the exclusives in nvlive -- master tuning, scale/octave tuning, MTS (a "
                   "real-time change and a select moving sounding keys), GM System On and GS Reset (live._sysex)"),
     ("GM2", True, "Master volume, files and live (blockrender's _mvol, live's master_gain ramp)"),
+    ("GM2", False, "Files: a variation that meends (a sitar's, 63.127, 104.1/4/5)"),
+    ("GM2", False, "Files: a GM 2 drum set the engine lacks keys of (3 of 8 sets)"),
     ("SC-55", False, "The GS map (CC32 / TONE MAP-0) and kit_in_map in the reader and nvlive"),
     ("SC-55", False, "GS's effects natively (gsefx: insertion EFX, the GS delay, chorus) -- the corpus has no "
                      "GS files, so each needs GS test files"),
+    ("SC-55", False, "Files: GS's other exclusives -- part parameters (parse_gs_part), drum setup and the user "
+                     "sets, the rhythm part's assignment, TONE MAP-0 (the reader refuses them, -4)"),
+    ("SC-55", False, "Melodic SFX (patch_map.melodic_sfx, ~130 variations of 120-127): a kit's sound on a "
+                     "keyboard part, transposed whole (transposed_from_hz), with its one-shot, gate, noise "
+                     "layers and strokes"),
+    ("SC-55", False, "Melodic hits: a hand drum's or a kit's detail on a melodic voice (strike_phase_spread, "
+                     "stroke_scatter, jitter_by_partial, bloom_seconds, played_backwards, strike_noise_layers, "
+                     "one_shot and gate_time off a kit) -- dholak, kelontuk, reversed pieces, cymbal tones"),
+    ("SC-55", False, "Crowds: strike_flam_people and a recorded flam (strike_flam_record): Small Club, the "
+                     "applause wave, phono noise's crackle"),
+    ("SC-88", False, "Variations that change a native family's methods (the SC-88 maps' brass, strings, guitars, "
+                     "flutes and cymbal menus: a subclass the engine's owner checks refuse) -- each family's "
+                     "overrides ported"),
+    ("SC-88", False, "Brass detail: mode_lock_spread and directivity_radius off an organ (16 brass variations)"),
+    ("SC-88", False, "Electric pianos with mode phases (mode_phase: the Detuned EPs, a Wurlitzer variation)"),
+    ("SC-88", False, "Guitars: feedback (feedback_harmonic), open strings ringing (open_string_ring), sections "
+                     "(chorus guitar, biwa tremolo, the gangsa pair)"),
+    ("SC-88", False, "The SFX families: siren, starship, laser, scream, heartbeat, Morse, machine gun, engine, "
+                     "car pass, skid, door creak, birds, fret slide (noise_events, pulse, ring_db, sweeps)"),
+    ("SC-88", False, "Dulcimer and accordion variations (course_keys, unison_shares_phase; speech_harmonic_exp)"),
 ]
 
 STAGES = (("GM1", None), ("GM2", 'gm2'), ("SC-55", 1), ("SC-88", 2), ("SC-88 Pro", 3), ("SC-8850", 4))

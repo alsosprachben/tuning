@@ -700,10 +700,10 @@ int main(int argc, char **argv)
         fprintf(stderr, "nvlive: %s is not a live export of this build (native_export.py --live)\n", argv[1]);
         return 1;
     }
-    // a key whose voice has GRAINS (NoteClass.n_grain) is not native here:
-    // live's own generator draws them (live's gpool), not yet this one
+    // a key whose voice has A DISTANCE OF ITS OWN (reverb_distance) is not
+    // native here: live's template send (t["send"], send_said) is not yet
     for (size_t q = 0; q < E.cmap.size(); q++)
-        if (E.cmap[q] >= 0 && ((const NoteClass *)E.classes[E.cmap[q]].data())->n_grain)
+        if (E.cmap[q] >= 0 && ((const NoteClass *)E.classes[E.cmap[q]].data())->rd_set)
             E.cmap[q] = -1;
     // each class's organ, its table here (the export's pointer was the exporter's)
     for (size_t i = 0; i < E.classes.size(); i++)
@@ -724,10 +724,7 @@ int main(int argc, char **argv)
         drums = drums || !strcmp(argv[i], "--drums");
     static const int DRUM_PART[10] = {1, 1, 1, -1, -1, -1, -1, 0, 0, 0};
     const int *pp = drums ? DRUM_PART : E.part[program & 127];
-    bool any_key = false;
-    for (int k = 0; k < 128 && !any_key; k++)
-        any_key = E.cmap[(drums ? NV_K_DRUMS : 0) + 128 * (program & 127) + k] >= 0;
-    if (!pp[0] || !any_key) {
+    if (!pp[0]) {
         fprintf(stderr, "nvlive: program %d is not native\n", program);
         return 1;
     }

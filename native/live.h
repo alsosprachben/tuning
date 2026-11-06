@@ -62,6 +62,13 @@ struct Template {
     // A SECTION'S ENTRY SCATTER (section_onset_ms): each player's onset drawn
     // fresh at every press, up to this (Slab.stamp_cols' scatter_ms)
     double scatter_ms = 0.0;
+    // ITS GRAINS (t["gof"]: each where it falls in the note, from its first
+    // direct row; empty none) -- or A HELD TEXTURE'S POOL (t["gpool"]: one
+    // one-shot a drop, its rows sharing an onset), struck while the key is
+    // down at grate a second (Part's tex_tick)
+    std::vector<long long> gof;
+    std::vector<Template> gpool;
+    double grate = 0.0;
 };
 
 }  // namespace live

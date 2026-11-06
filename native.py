@@ -250,7 +250,9 @@ class NoteClass(ctypes.Structure):
                    ('ring_skip', C), ('ring_nown', I), ('ring_own', C * 16), ('indian', I),
                    ('sym_tonic', I), ('sym_g', C), ('sym_wmin', C), ('meend', I),
                    ('meend_range', C), ('meend_strength', C), ('meend_tonic', I), ('key_pan_spread', C),
-                   ('n_grain', I), ('grain', (C * 9) * 8)])
+                   ('n_grain', I), ('grain', (C * 9) * 8),
+                   ('pulse', I), ('pulse_lo_ms', C), ('pulse_hi_ms', C), ('pulse_peak', C), ('pulse_fmax', C),
+                   ('pulse_taper', C), ('rd_set', I), ('reverb_dist', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -270,7 +272,7 @@ class NoteIn(ctypes.Structure):
                    ('rank_drawn_off', I * 32), ('snd_moog', I), ('snd_d', C * 8),
                    ('sung_hz', C), ('part', I), ('dist', C), ('gliss_lv', C),
                    ('ring_on', I), ('ring_f', C * 48), ('fbr', C),
-                   ('sym_drv', ctypes.c_void_p)])
+                   ('sym_drv', ctypes.c_void_p), ('blk', C)])
 
 
 class NoteOut(ctypes.Structure):
@@ -302,7 +304,7 @@ def _load():
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
-                                                       'npyrandom.c', 'npyrandom.h', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
+                                                       'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
                                                        'epiano.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
@@ -399,6 +401,7 @@ def _load():
             ('nv_midi_cc', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_pw', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_song', None, [ctypes.c_void_p, ctypes.c_void_p, D]),
+            ('nv_pulse_series', I, [C, C, C, C, C, ctypes.c_void_p, I]),
             ('nv_midi_banked', I, [ctypes.c_void_p]), ('nv_midi_note_bsel', I, [ctypes.c_void_p, I]),
             ('nv_midi_chprog_bsel', I, [ctypes.c_void_p, I]),
             ('nv_song_vars', None, [ctypes.c_void_p, I] + [ctypes.c_void_p] * 5),
@@ -1386,6 +1389,8 @@ def kit_drum(cls):
         return 2
     if _shaken(cls):
         return 3
+    if pulse_voice(cls):
+        return 7
     if not issubclass(cls, T.KitDrumProperties):
         return 0
     if issubclass(cls, T.NoisyPercussionMixin) and issubclass(cls, T.MeasuredStrokeProperties):
@@ -1418,6 +1423,17 @@ def kit_drum(cls):
         return 0
     return int(len(cls.DRUM_MODES) <= 128 and len(cls.CLICK_DB) <= 32 and len(cls.unison_detune or ()) <= 8
             and not cls.bore_corner_hz and not cls.harmonic_touch and not cls.pickup_points)
+
+
+def pulse_voice(cls):
+    """A voice whose tone is a PRESSURE PULSE (pulse: the gunshot's N-wave,
+    blockrender._note_pulse) in place of its series: kind 7, SynthProperties'
+    own construction -- its series never sounded, so its laws are not read --
+    a percussion voice's knock beside it."""
+    import tonelib as T
+    return (bool(getattr(cls, 'pulse', False)) and issubclass(cls, T.PercussionProperties)
+            and _owner(cls, 'pulse_length') == 'GunshotProperties'
+            and not issubclass(cls, (T.KitDrumProperties, T.FormantBody)))
 
 
 def _voiced_spec(syllables, f0, shape, dur, rise, fall_db, jitter=0.01, shimmer_db=0.0, bright=None,
@@ -1900,6 +1916,8 @@ def snapshot(props):
             s.sect_vib_cents = p.section_vibrato_cents
             s.sect_vib_hz[:] = [float(x) for x in p.section_vibrato_hz]
             _section_desks(s, p)
+    elif s.kind == 7:
+        pass                    # a pulse voice: SynthProperties' alone, its series not read
     elif s.kind == 1:
         if isinstance(p, T.SfxThroatProperties):
             # a throat's pulse: its tilt, mouth and vowel (the note's, nv_note), its breath
@@ -2631,6 +2649,7 @@ def note_class(cls):
             _og = org_has
             org_has = lambda a: _og(a) or a in ('one_shot', 'strike_phase_spread', 'strike_noise_layers')  # noqa: E731
         ok = (v is not None and not (getattr(cls, 'grains', None) and not grains_of(cls))
+              and (not getattr(cls, 'pulse', False) or pulse_voice(cls))
               and not any(getattr(cls, a, None) for a in _NOTE_OFF
                                         if not (drum and drum_has(a)) and not org_has(a))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT if not org_has(a))
@@ -2855,6 +2874,12 @@ def note_class(cls):
         k.meend_strength = float(getattr(cls, 'meend_strength', 0.6))
         k.meend_tonic = int(getattr(cls, 'sympathetic_tonic', 60))
         k.key_pan_spread = float(getattr(cls, 'key_pan_spread', 0.0) or 0.0)     # (a wide voice's seats)
+        if pulse_voice(cls):                    # (its N-wave: _note_pulse)
+            k.pulse = 1
+            k.pulse_lo_ms, k.pulse_hi_ms = (float(x) for x in cls.pulse_ms_range)
+            k.pulse_peak, k.pulse_fmax, k.pulse_taper = float(T.N_WAVE_PEAK), float(cls.pulse_fmax), float(cls.pulse_taper)
+        if getattr(cls, 'reverb_distance', None) is not None:    # (its own distance: _src_dist's)
+            k.rd_set, k.reverb_dist = 1, float(cls.reverb_distance)
         # its grains (the engine's: breath_noise -- a row's six fields, eight with
         # a glide, nine with a cluster)
         k.n_grain = len(grains_of(cls))
@@ -2928,7 +2953,7 @@ def note_class(cls):
             k.sl_lo, k.sl_hi = (float(x) for x in getattr(cls, 'struck_layer_range', (73.42, 146.83)))
             k.sl = ctypes.addressof(lk)
             _SL_CLS[cls] = lcls
-        if (getattr(cls, 'reverb_distance', None) is not None or getattr(cls, 'chorus_send', None)
+        if (getattr(cls, 'chorus_send', None)
                 or getattr(cls, 'detuned_pair', None)
                 or any(getattr(cls, a, None) for a in ('fall_cents', 'rip_cents', 'tremolo_pick_hz',
                                                         'cut_semitones'))):
@@ -3414,6 +3439,23 @@ def xpow(x, y):
     # a one-element operand is the scalar every element takes
     d.nv_pow_n(out.size, xa.ctypes.data, int(xa.size > 1), ya.ctypes.data, int(ya.size > 1), out.ctypes.data)
     return out if shape else float(out)
+
+
+def pulse_series(T, t0, period, fmax, taper):
+    """tonelib.pulse_series as native/pocketfft.c's nv_pulse_series: numpy
+    1.26.4's own rfft (pocketfft, vendored) of the sampled N-wave, each bin's
+    magnitude and phase libm's hypot and atan2 -- the same on every machine
+    and numpy (whose complex abs and arctan2 are its SIMD loops'). [(hz, amp,
+    phase)], or None where there is no library."""
+    d = lib()
+    if d is None:
+        return None
+    cap = int(round(4 * fmax * period)) // 2 + 2
+    out = (ctypes.c_double * (3 * cap))()
+    k = d.nv_pulse_series(float(T), float(t0), float(period), float(fmax), float(taper), out, cap)
+    if k < 0 or k > cap:
+        return None
+    return [(out[3 * i], out[3 * i + 1], out[3 * i + 2]) for i in range(k)]
 
 
 def xrfft(x):

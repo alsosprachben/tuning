@@ -617,6 +617,9 @@ int nv_strike_bal(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz,
                   double pos_x, double bgl, double bgr, double *rows, int cap, double *qacc, double *azimuth);
 int nv_layer(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db, double reg,
              double fade, double slr, double len, double pos_x, double *rows, int cap, double *qacc, double *azimuth);
+int nv_pulse(const VoiceSnap *v, const ToneIn *t, double f0, double blk, double lo_ms, double hi_ms, double peak,
+             double fmax, double taper, double pos_x, int nimg, const int *nsurf, const int *surf, const double *img,
+             const double *mir, double *rows, int cap, double *qacc, double *azimuth);
 int nv_grains(const VoiceSnap *v, const ToneIn *t, int ng, const double (*g)[9], long long seed, double settle,
               double pos_x, double *rows, int cap, double *qacc, double *azimuth);
 int nv_breath(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db, int k, double fade,
@@ -871,6 +874,13 @@ typedef struct NoteClass {
     // dB, its scatter dB, dB/s, a glide's rise (0 none) and time, a cluster's sines
     int n_grain;
     double grain[8][9];
+    // A PULSE (pulse: the gunshot's N-wave) in place of the series: its
+    // length's range (ms), its spectrum's peak x T (N_WAVE_PEAK), band and taper
+    int pulse;
+    double pulse_lo_ms, pulse_hi_ms, pulse_peak, pulse_fmax, pulse_taper;
+    // ...and A DISTANCE OF ITS OWN (reverb_distance: where its part sends no CC91)
+    int rd_set;
+    double reverb_dist;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -937,6 +947,7 @@ typedef struct {
     int ring_on;
     double ring_f[48], fbr;
     void *sym_drv;          // where its voice goes, the driver of its channel's strings (_SYM_CH), NULL not
+    double blk;             // the render's block (BLK): a pulse's lead is two of them
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -1145,6 +1156,9 @@ void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, 
 int nv_song_organ_note(void *s, int i, int family, NoteIn *n);
 int nv_song_stroked(void *s, int i);
 void nv_song_add_stroke_rows(void *s, long long a, long long b);
+/* each note's grains' rows (_GRAIN_ROWS), [first, end); n pairs into ab (NULL: count) */
+void nv_song_add_grain_rows(void *s, long long a, long long b);
+int nv_song_n_grain_rows(void *s, long long *ab, int cap);
 int nv_song_n_stroke_rows(void *s, long long *ab, int cap);
 int nv_song_htrem(void *s, int i);
 void nv_song_add_htrem_rows(void *s, long long a, long long b);
