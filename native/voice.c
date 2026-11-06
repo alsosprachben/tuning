@@ -562,6 +562,71 @@ static double prompt_ring(const VoiceSnap *v, int harmonic)
     return (v->decay_db + v->harmonic_decay_db * h * pow(h, v->harmonic_decay_dampening)) * v->decay_register_factor;
 }
 
+/* tonelib._voice_partials: (Hz, amplitude) of the voice's first 24 modes
+   (or its last), those that sound under 20 kHz */
+static int sym_partials(const VoiceSnap *v, double *f, double *a)
+{
+    double f0 = v->frequency_x * pow(2.0, v->octave_position);
+    int top = v->max_harmonic && v->max_harmonic < 24 ? v->max_harmonic : 24, n = 0;
+    for (int h = 1; h <= top; h++) {
+        double x = nv_harmonic_volume(v, h);
+        if (x <= 0.0)
+            continue;
+        double fh = f0 * nv_mode_ratio(v, h);
+        if (fh <= 0.0 || fh > 20000.0)
+            continue;
+        f[n] = fh;
+        a[n] = x;
+        n++;
+    }
+    return n;
+}
+
+double nv_sym_coupling(const VoiceSnap *drv, const VoiceSnap *rsp, double g, double wmin)
+{
+    if (g <= 0.0)
+        return 0.0;
+    double df[24], da[24], rf[24], ra[24];
+    int nd = sym_partials(drv, df, da), nr = sym_partials(rsp, rf, ra);
+    if (!nd || !nr)
+        return 0.0;
+    double ref = da[0];
+    for (int i = 1; i < nd; i++)
+        if (da[i] > ref)
+            ref = da[i];
+    if (ref == 0.0)
+        ref = 1.0;
+    double pa[24];
+    int np = 0;
+    for (int j = 1; j <= nr; j++) {
+        /* _mode_bandwidth at the mode's PLACE among the partials (j): the
+           ring, where the voice tells it from its prompt fall */
+        double r = rsp->pd_max_hz != 0.0 ? prompt_ring(rsp, j) : nv_harmonic_decay(rsp, j);
+        r = r > 1e-6 ? r : 1e-6;
+        double tau = 8.685889638 / r;
+        double bw = 1.0 / (2.0 * M_PI * tau);
+        bw = wmin > bw ? wmin : bw;
+        double d = 0.0;
+        for (int i = 0; i < nd; i++) {
+            double x = (df[i] - rf[j - 1]) / (bw > 1e-9 ? bw : 1e-9);
+            d += (da[i] / ref) / (1.0 + x * x);
+        }
+        if (d > 0.0)
+            pa[np++] = ra[j - 1] * g * d;
+    }
+    if (!np)
+        return 0.0;
+    double sq[24];
+    for (int i = 0; i < nr; i++)
+        sq[i] = ra[i] * ra[i];
+    double nat = pysum(sq, nr);
+    if (nat <= 0.0)
+        return 0.0;
+    for (int i = 0; i < np; i++)
+        sq[i] = pa[i] * pa[i];
+    return sqrt(pysum(sq, np) / nat);
+}
+
 /* GrandPianoProperties._string_blend */
 static double string_blend(const VoiceSnap *v, double frequency, double break_hz)
 {

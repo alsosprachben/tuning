@@ -104,7 +104,13 @@ def main(argv):
     for name in sorted(ragas.SYSTEMS):
         L.append("    {\"%s\", {%s}}," % (name, ", ".join(hx(c) for c in ragas.SYSTEMS[name]["cents"])))
     L.append("};")
-    L.append("static const char *RAGAS[] = {%s};\n" % ", ".join("\"%s\"" % r for r in sorted(ragas.RAGAS)))
+    L.append("// ragas.RAGAS: each raga's swaras, by index into its system's twelve")
+    L.append("struct Raga {\n    const char *name;\n    int n;\n    int idx[12];\n};")
+    L.append("static const Raga RAGAS[] = {")
+    for name in sorted(ragas.RAGAS):
+        ix = list(ragas.RAGAS[name])
+        L.append("    {\"%s\", %d, {%s}}," % (name, len(ix), ", ".join(str(int(i)) for i in ix)))
+    L.append("};\n")
     L += ["}  // namespace tuner", "}  // namespace nv", "", "#endif", ""]
     with open(out, "w") as f:
         f.write("\n".join(L))

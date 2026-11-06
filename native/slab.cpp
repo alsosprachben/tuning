@@ -59,6 +59,7 @@ extern "C" void nv_scan_prep(const double *X, long n, const float *nf, const flo
 extern "C" void nv_scan_bc(const double *X, double t0, double t1, int depth, int band, int chorus, double sr,
                            double *c);
 extern "C" double nv_tcache_freq(void *h, int note);
+extern "C" double nv_meend_cents(double nc, const double *sw, int nsw, double range_c, double pull, double strength);
 
 extern "C" double nv_damper_contact(int p, int key, int top);
 
@@ -1900,6 +1901,9 @@ struct Part {
     double mod_cents = 35.0;                        // live.mod_cents (the session's)
     double mod_rate = 0.25;                         // live.mod_rate: the wheel's +25% rate at full
     std::map<Key, std::vector<char>> sym_at;        // live.sym_at: a note's fixed open strings' rows, off the wheel
+    std::map<Key, std::pair<double, std::vector<char>>> meend_at;   // live.meend_at: (its ratio, its strings' mask)
+    int raga_sa = -1;                               // the tuner's raga (Sa's note; its swaras' cents), -1 none
+    std::vector<double> raga_sw;
     double vib_mod[16] = {}, vib_modw[16] = {};     // live.mod, live.modw: the wheel's depth, its fraction
     // SOSTENUTO (CC66): the keys down when it went down, held (live.sost)
     std::map<int, std::set<int>> sost;
@@ -3433,13 +3437,20 @@ struct Part {
             double sva, svr;
             snd_vib(patches[cur], ch, slots, &sva, &svr);
             double b = bend[ch], v2 = vib_mod[ch] + sva, r2 = (1.0 + mod_rate * vib_modw[ch]) * svr;
+            // ...OR A MEEND'S, for a voice that locks its bend to the tuning's swaras
+            double mr;
+            bool has_mr = meend_ratio(patches[cur], ch, note, &mr);
+            if (has_mr) {
+                b = b / bend[ch] * mr;
+                meend_at[key] = std::make_pair(mr, T->sym);
+            }
             // THE OPEN STRINGS ARE NOT ON THE WHEEL (live._fixed_sym): their
             // rows take the note's tuning but not the pull, now or later
             // ...AND THE RING ROWS (a banjo's other strings and head): never on the wheel
             const NoteClass *kc = key_class(patches[cur], sn);
             std::vector<char> sm(slots.size(), 0);
             bool any = false;
-            if (kc && kc->sym_kind == 1 && T->sym.size() == slots.size())
+            if (kc && (kc->sym_kind == 1 || kc->sym_kind == 3) && T->sym.size() == slots.size())
                 for (size_t q = 0; q < slots.size(); q++)
                     sm[q] = sm[q] || T->sym[q];
             if (T->ring.size() == slots.size())
@@ -3453,7 +3464,7 @@ struct Part {
                     // _wheel_share: the bend over the channel's tuning without the wheel
                     double st0 = range_of(ch) * 0.0 / 8192.0 + coarse[ch] + fine[ch] / 100.0 + 0.0 + 0.0 / 100.0;
                     double rest = pow(2.0, st0 / 12.0);
-                    double share = rest > 0 ? bend[ch] / rest : 1.0;
+                    double share = rest > 0 ? (has_mr ? mr : bend[ch]) / rest : 1.0;
                     double bs = b / share;
                     for (int sel = 1; sel >= 0; sel--) {
                         double r_ = sel ? bs : b;
@@ -4068,6 +4079,80 @@ struct Part {
     // notes whose key is still down (a release already running would jump);
     // the attack and decay are onset facts, for the next note
     // the class a part plays at a key (live's part.patch._voice_class), none on drums
+    // live._meend_part: a part whose program's class meends (bend_detents)
+    bool meend_part(const Patch &p) const
+    {
+        const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
+        return k && k->meend;
+    }
+
+    // live._meend_ratio: this note's pitch ratio under the wheel, as a meend
+    // -- the swaras above it (the raga's, else every key of the part's
+    // table), Sa the raga's or the class's, over the channel's RPN 0 range or
+    // the class's; false for a voice without detents
+    bool meend_ratio(const Patch &p, int ch, int note, double *out) const
+    {
+        int n = note + p.transpose;
+        const NoteClass *pc = key_class(p, n);
+        if (!pc || !pc->meend)
+            return false;
+        int sa;
+        std::vector<double> sw;
+        if (raga_sa >= 0) {
+            sa = raga_sa;
+            sw = raga_sw;
+        } else {
+            sa = pc->meend_tonic;
+            for (int k = 0; k < 12; k++)
+                sw.push_back(1200.0 * log2(nv_tcache_freq(p.cache, sa + k) / nv_tcache_freq(p.cache, sa)));
+        }
+        if (!(n >= 0 && n < 128 && sa >= 0 && sa < 128))
+            return false;
+        double Fn = nv_tcache_freq(p.cache, n), Fs = nv_tcache_freq(p.cache, sa);
+        if (Fn <= 0.0 || Fs <= 0.0)
+            return false;
+        double rng = brange[ch] >= 0.0 ? brange[ch] : pc->meend_range;
+        double pull = 100.0 * rng * (double)wheel[ch] / 8192.0;
+        double rest = pow(2.0, (rng * 0.0 / 8192.0 + coarse[ch] + fine[ch] / 100.0 + 0.0 + 0.0 / 100.0) / 12.0);
+        *out = rest * pow(2.0, nv_meend_cents(1200.0 * log2(Fn / Fs), sw.data(), (int)sw.size(), 100.0 * rng, pull,
+                                              pc->meend_strength) / 1200.0);
+        return true;
+    }
+
+    // live._meend_retune: each sounding meend note (of these parts) to its own
+    // ratio -- its played rows; the strings keep their pitch
+    void meend_retune(int ch, const std::set<long long> &pids, long long n0)
+    {
+        for (auto &kv : S.live) {
+            const Key &k = kv.first;
+            if (!pids.count(std::get<0>(k)) || std::get<1>(k) != ch || std::get<3>(k) != -1 || kv.second.empty())
+                continue;
+            auto got = meend_at.find(k);
+            if (got == meend_at.end())
+                continue;
+            const Patch *pp = nullptr;
+            for (const Patch &p : patches)
+                if (p.pid == std::get<0>(k))
+                    pp = &p;
+            double r;
+            if (!pp || !meend_ratio(*pp, ch, (int)std::get<2>(k), &r) || r == got->second.first)
+                continue;
+            std::vector<long> idx = kv.second;
+            auto sa = sym_at.find(k);
+            std::vector<char> sym = sa != sym_at.end() ? sa->second : got->second.second;
+            if (!sym.empty() && sym.size() == idx.size()) {
+                std::vector<long> kept;
+                for (size_t q = 0; q < idx.size(); q++)
+                    if (!sym[q])
+                        kept.push_back(idx[q]);
+                idx.swap(kept);
+            }
+            if (!idx.empty())
+                retune(idx, n0, r / got->second.first);
+            got->second = std::make_pair(r, sym);
+        }
+    }
+
     const NoteClass *key_class(const Patch &p, int key) const
     {
         return p.drums ? nullptr : nv_tcache_class_key(p.cache, p.program, key);
@@ -5051,6 +5136,14 @@ struct Part {
         double st = range_of(ch) * (double)wheel[ch] / 8192.0 + coarse[ch] + fine[ch] / 100.0 + 0.0 + 0.0 / 100.0;
         double ratio = pow(2.0, st / 12.0);
         double prev = bend[ch];
+        // A MEEND MOVES EACH NOTE BY ITS OWN SWARAS: its parts retuned key by
+        // key and kept out of the channel's ratio
+        std::set<long long> mee;
+        for (const Patch &p : patches)
+            if ((p.channel < 0 || p.channel == ch) && meend_part(p))
+                mee.insert(p.pid);
+        if (!mee.empty())
+            meend_retune(ch, mee, n0);
         if (ratio == prev)
             return;
         bend[ch] = ratio;
@@ -5059,7 +5152,7 @@ struct Part {
         // ...AND A FIXED OPEN STRING STAYS AT ITS PITCH (live._fixed_sym_slots)
         std::set<long> fx;
         for (auto &kv : S.live) {
-            if (std::get<1>(kv.first) != ch || kv.second.empty())
+            if (std::get<1>(kv.first) != ch || kv.second.empty() || mee.count(std::get<0>(kv.first)))
                 continue;
             auto it = sym_at.find(kv.first);
             if (it != sym_at.end() && it->second.size() == kv.second.size())
@@ -5067,7 +5160,10 @@ struct Part {
                     if (it->second[q])
                         fx.insert(kv.second[q]);
         }
-        std::vector<long> sl = sounding(ch);
+        std::vector<long> sl;
+        for (auto &kv : S.live)
+            if (std::get<1>(kv.first) == ch && !mee.count(std::get<0>(kv.first)))
+                sl.insert(sl.end(), kv.second.begin(), kv.second.end());
         if (!fx.empty()) {
             std::vector<long> kept;
             for (long s : sl)
@@ -7704,6 +7800,14 @@ void nv_part_amp_ahead(void *h, int blocks, int hold)
 
 // the scanner's data off the audio thread (nvlive playing: live's builder)
 void nv_part_scan_async(void *h) { ((nv::slab::Part *)h)->start_scan_worker(); }
+
+// the tuner's raga (a raga tuner's Sa and its swaras' cents: the meend's), sa -1 none
+void nv_part_raga(void *h, int sa, const double *sw, int nsw)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    P->raga_sa = sa;
+    P->raga_sw.assign(sw, sw + (nsw > 0 ? nsw : 0));
+}
 
 // the Leslie's constants (leslie.cpp's L_*): the part's rotors, on chorale
 void nv_part_leslie(void *h, const double *L, int n)

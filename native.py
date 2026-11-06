@@ -247,7 +247,9 @@ class NoteClass(ctypes.Structure):
                    ('sym_kind', I), ('sym_n', I), ('sym_top', I), ('sym_nobend', I), ('sym_floor', C),
                    ('sym_pitch', I * 32), ('sym_d', C * 32), ('sym_cents', C * 32),
                    ('ring_n', I), ('ring_hz', C * 48), ('ring_db', C * 48), ('ring_dps', C * 48),
-                   ('ring_skip', C), ('ring_nown', I), ('ring_own', C * 16)])
+                   ('ring_skip', C), ('ring_nown', I), ('ring_own', C * 16), ('indian', I),
+                   ('sym_tonic', I), ('sym_g', C), ('sym_wmin', C), ('meend', I),
+                   ('meend_range', C), ('meend_strength', C), ('meend_tonic', I)])
 
 
 class NoteIn(ctypes.Structure):
@@ -266,7 +268,8 @@ class NoteIn(ctypes.Structure):
                    ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('bbr_set', I), ('bbr', C),
                    ('rank_drawn_off', I * 32), ('snd_moog', I), ('snd_d', C * 8),
                    ('sung_hz', C), ('part', I), ('dist', C), ('gliss_lv', C),
-                   ('ring_on', I), ('ring_f', C * 48), ('fbr', C)])
+                   ('ring_on', I), ('ring_f', C * 48), ('fbr', C),
+                   ('sym_drv', ctypes.c_void_p)])
 
 
 class NoteOut(ctypes.Structure):
@@ -705,19 +708,26 @@ def _modal_drum(cls):
                 and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
                 and (not cls.mode_stroke_tilt or kettle) and (gam or not cls.bore_corner_hz)
                 and not cls.harmonic_touch and not cls.pickup_points and len(cls.unison_detune or ()) <= 8)
-    # (a plucked tine: a formant body on a measured mode set -- the kalimba's)
-    if (issubclass(cls, T.FormantBody) and issubclass(cls, T.PluckedStringProperties)
+    # (a plucked tine: a formant body on a measured mode set -- the kalimba's;
+    # or a struck metal sheet's, no body -- the steelpan's)
+    if ((issubclass(cls, T.FormantBody) or issubclass(cls, T.MetalPercussionProperties))
+            and issubclass(cls, T.PluckedStringProperties)
             and cls.mode_gains is not None and cls.mode_ratios is not None):
-        return (all(_owner(cls, n) == o for n, o in _HARMONIC_OWN.items())
+        _own = (_HARMONIC_OWN if issubclass(cls, T.FormantBody)
+                else dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None))
+        # (one it does not take goes on to the families below: a kit's triangle)
+        if (all(_owner(cls, n) == o for n, o in _own.items())
                 and _owner(cls, 'aftersound_partial') is None
                 and len(cls.mode_gains) == len(cls.mode_ratios) <= 400
                 and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
                 and not cls.mode_stroke_tilt and not cls.harmonic_touch and not cls.pickup_points
                 and not (cls.unison_detune or ()) and not cls.inharmonicity_dynamic and not cls.blare_db_per_khz
-                and len(cls.formants) <= 16 and len(cls.antiformants) <= 8 and len(cls.body_trim_db or ()) <= 32
+                and len(getattr(cls, 'formants', ()) or ()) <= 16 and len(getattr(cls, 'antiformants', ()) or ()) <= 8
+                and len(getattr(cls, 'body_trim_db', ()) or ()) <= 32
                 and not any(getattr(cls, a, None) for a in ('breath_noise_db', 'grains', 'noise_events', 'pulse',
                                                              'struck_layer', 'touch_leak_db', 'hammer_legato',
-                                                             'bend_detents', 'amp_drive')))
+                                                             'bend_detents', 'amp_drive'))):
+            return True
     if issubclass(cls, T.CuicaProperties):
         return (all(_owner(cls, n) == o for n, o in _CUICA_OWN.items())
                 and (_owner(cls, 'harmonic_decay') == 'SynthProperties' or decay_target(cls) is not None)
@@ -764,6 +774,9 @@ def _modal_drum(cls):
     # (a tuned bar's modes may be its bar_modes alone, on the harmonic series:
     # the vibraphone's, the marimba's, the xylophone's)
     if bar and mg is None and mr is None:
+        mg = mr = ()
+    # (...and a wood block's, none: its series, the pluck's comb -- GM 115's)
+    if issubclass(cls, T.WoodPercussionProperties) and mg is None and mr is None:
         mg = mr = ()
     return (mg is not None and mr is not None and len(mg) == len(mr) <= 320
             and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
@@ -952,7 +965,7 @@ def harmonic_voice(cls):
             and len(getattr(cls, 'ring_db', ()) or ()) <= 48
             and not any(getattr(cls, a, None) for a in ('breath_noise_db', 'grains', 'noise_events', 'pulse',
                                                          'struck_layer', 'touch_leak_db',
-                                                         'hammer_legato', 'bend_detents', 'amp_drive')))
+                                                         'hammer_legato', 'amp_drive')))
 
 
 def hit_voice(cls):
@@ -1638,8 +1651,9 @@ def snapshot(props):
         else:
             s.mm_ratio[:s.n_mm] = [float(r) for r in p.mode_ratios][:s.n_mm]   # (a tube's: its own, VoiceSnap.tube)
         s.mm_gain[:s.n_mm] = [float(g) for g in mg]
-        if not s.n_mm and not getattr(s, 'or_set', 0) and pipe_voice(type(p)):
-            # (a stopped pipe with no table: SynthProperties' series, the pluck's comb)
+        if not s.n_mm and not getattr(s, 'or_set', 0) and (pipe_voice(type(p))
+                                                            or isinstance(p, T.WoodPercussionProperties)):
+            # (a stopped pipe with no table, a wood block: SynthProperties' series, the pluck's comb)
             for h in range(1, min(256, int(p.max_harmonic or 64)) + 1):
                 s.comb[h] = T._pluck_comb(p.plucked_harmonic, p.pluck_dampening, h)
         if pipe_voice(type(p)):
@@ -2584,7 +2598,9 @@ def note_class(cls):
                                   'partial_phase_spread')) if _blown(cls) \
             else (lambda a: a in ('partial_phase_spread', 'unison_shares_phase', 'course_keys', 'key_bridge',
                                   'bridge_partner', 'register_knock_tilt', 'register_knock_profile')) \
-            if dulcimer_voice(cls) else (lambda a: False)
+            if dulcimer_voice(cls) \
+            else (lambda a: a in ('partial_phase_spread', 'bloom_seconds')) \
+            if harmonic_voice(cls) and _owner(cls, 'harmonic_decay') == 'PromptDecay' else (lambda a: False)
         if hit_voice(cls):
             _og = org_has
             org_has = lambda a: _og(a) or a in ('one_shot', 'strike_phase_spread', 'strike_noise_layers')  # noqa: E731
@@ -2603,10 +2619,11 @@ def note_class(cls):
                 hasattr(p, 'section_onsets_at') and p.section_onsets_at(f) for f in (27.5, 261.6, 4186.0))
         # (sympathetic strings by coincidence, or per mode: sympathetic.expand's
         # that are not the engine's -- its contact mode is, below)
+        _smode = getattr(cls, 'sympathetic_mode', 'coincidence')
         if getattr(cls, 'sympathetic_gain', 0.0) > 0.0 and (
-                getattr(cls, 'sympathetic_mode', 'coincidence') != 'contact'
+                (_smode != 'contact' and not getattr(cls, 'sympathetic_strings', ()))
                 or getattr(cls, 'sympathetic_per_mode', False)
-                or getattr(cls, 'tuning_family', None) == 'indian'
+                or (getattr(cls, 'tuning_family', None) == 'indian' and _smode == 'contact')
                 or len(getattr(cls, 'sympathetic_strings', ()) or ()) > 32):
             ok = False
         if not ok:
@@ -2804,6 +2821,11 @@ def note_class(cls):
             return None
         k.n_cho = len(_cc)
         k.cho_cents[:len(_cc)] = [float(x) for x in _cc]
+        k.indian = int(getattr(cls, 'tuning_family', None) == 'indian')     # (FREQ_E's)
+        k.meend = int(bool(getattr(cls, 'bend_detents', False)))
+        k.meend_range = float(getattr(cls, 'bend_range_semitones', T.BEND_RANGE_SEMITONES))
+        k.meend_strength = float(getattr(cls, 'meend_strength', 0.6))
+        k.meend_tonic = int(getattr(cls, 'sympathetic_tonic', 60))
         # ITS OTHER STRINGS (ring_db: _note_ring)
         _rg = getattr(cls, 'ring_db', ()) or ()
         if len(_rg) > 48:
@@ -2833,11 +2855,20 @@ def note_class(cls):
                 _tn = int(getattr(cls, 'sympathetic_tonic', 60))
                 _sdb = tuple(getattr(cls, 'sympathetic_string_db', ())) or (0.0,) * len(_st)
                 _sct = tuple(getattr(cls, 'sympathetic_string_cents', ())) or (0.0,) * len(_st)
-                k.sym_kind, k.sym_n = 1, len(_st)
-                for _i, (_o, _db, _ct) in enumerate(zip(_st, _sdb, _sct)):
-                    k.sym_pitch[_i] = _tn + int(_o)
-                    k.sym_d[_i] = _sg * 10.0 ** (_db / 20.0)
-                    k.sym_cents[_i] = float(_ct)
+                if getattr(cls, 'sympathetic_mode', 'coincidence') == 'contact':
+                    k.sym_kind, k.sym_n = 1, len(_st)
+                    for _i, (_o, _db, _ct) in enumerate(zip(_st, _sdb, _sct)):
+                        k.sym_pitch[_i] = _tn + int(_o)
+                        k.sym_d[_i] = _sg * 10.0 ** (_db / 20.0)
+                        k.sym_cents[_i] = float(_ct)
+                else:                   # (by coincidence: the C's coupling, per strike)
+                    k.sym_kind, k.sym_n, k.sym_tonic = 3, len(_st), _tn
+                    k.sym_g = _sg
+                    k.sym_wmin = float(getattr(cls, 'sympathetic_width_hz', 0.0) or 0.0)
+                    for _i, (_o, _db, _ct) in enumerate(zip(_st, _sdb, _sct)):
+                        k.sym_pitch[_i] = int(_o)
+                        k.sym_d[_i] = 10.0 ** (_db / 20.0)
+                        k.sym_cents[_i] = float(_ct)
             else:
                 _rsp = _SYMP.responders(cls)
                 if len(_rsp) > 32:

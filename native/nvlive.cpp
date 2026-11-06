@@ -152,6 +152,9 @@ void nv_part_scan_async(void *h);
 void nv_part_amp_async(void *h);
 void nv_tcache_leslie(void *h, const double *L, int n);
 int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, int *have);
+int nv_raga_info(const char *spec, double sa_hz, double *out, int *have, int *sa_note, double *sw, int *nsw);
+void nv_part_raga(void *h, int sa, const double *sw, int nsw);
+void nv_live_raga(int sa, const double *sw, int nsw);
 void nv_part_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
 void nv_part_post(void *h, double thresh, double bend_range, double mod_cents);
 void nv_part_output(void *h, long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd,
@@ -709,6 +712,20 @@ int main(int argc, char **argv)
             E.freq[n] = have[n] ? F[n] : 0.0;
         fprintf(stderr, "nvlive: tuned %s%s\n", tname.c_str(), rn >= 0 ? (rn == 69 ? " at a=" + a : " at c=" + c).c_str() : "");
     }
+    // A RAGA TUNER (T.raga_sa_note, T.raga_spec): its Sa and swaras, for the
+    // templates' strings and the meend -- before a template is built
+    int raga_sa = -1, raga_nsw = 0;
+    double raga_sw[12];
+    {
+        std::string tl = tname;
+        for (char &c : tl)
+            c = (char)tolower((unsigned char)c);
+        double rf[128];
+        int rh[128];
+        if (!(tl.compare(0, 5, "raga:") == 0 && nv_raga_info(tl.c_str(), 0.0, rf, rh, &raga_sa, raga_sw, &raga_nsw) == 0))
+            raga_sa = -1;
+        nv_live_raga(raga_sa, raga_sw, raga_nsw);
+    }
     // A PROGRAM's FREE STRINGS at nvlive's tuner: the export's bank, built
     // again (nv_strings, as live_bank does) where --tuner moved it -- once a
     // program, the first time it is asked for
@@ -764,6 +781,8 @@ int main(int argc, char **argv)
                            E.headroom, E.pan.data(), E.beta);
     if (!E.les.empty())                         // the room's Leslie: its rotors, on chorale
         nv_part_leslie(part, E.les.data(), (int)E.les.size());
+    if (raga_sa >= 0)                           // a raga tuner: its Sa and swaras, the meend's
+        nv_part_raga(part, raga_sa, raga_sw, raga_nsw);
     if (!E.scan.empty())                        // the Hammond's scanner: its circuit's tables
         nv_part_scan(part, E.scan.data(), (long)E.scan.size());
     if (drums)

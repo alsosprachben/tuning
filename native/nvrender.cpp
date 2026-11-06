@@ -60,10 +60,16 @@ void nv_midi_song(void *p, void *song, const double *trim);
 void *nv_song_new(void);
 void nv_song_free(void *s);
 void nv_song_tuning(void *s, long long ch, double t, const double *freq);
+void nv_song_eastern(void *s, const double *freq_e, int raga_on, int sa, const double *sw, int nsw);
+int nv_raga_info(const char *spec, double sa_hz, double *out, int *have, int *sa_note, double *sw, int *nsw);
 int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, int *have);
 int nv_midi_n_pitch(void *p);
+void nv_midi_pw(void *p, int i, int *iv, double *t);
 void nv_midi_pitch(void *p, int i, int *iv, long *seq, double *t, double *v);
 int nv_bend_btun(void *midi, void *song, double bend_range, double *out);
+int nv_meend_note(const double *wt, const int *wp, int nw, double on, double off, double nc, const double *sw,
+                  int nsw, double rst, double strength, long nblk, int blk, double sr, double *r0, float *BR,
+                  double *BC);
 int nv_bend_gesture(void *midi, void *song, double bend_range, int ch, long nblk, int blk, double sr, float *BR,
                     double *BC);
 int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr, double tau, double fader_tail,
@@ -339,10 +345,12 @@ int main(int argc, char **argv)
                  ? (const NoteClass *)E.classes[nc->sl_idx].data() : nullptr;
     }
     // THE TUNER, if named: its table in place of the export's
-    std::string tname, ra, rc;
+    std::string tname, ra, rc, east = getenv("TUNING_EASTERN") ? getenv("TUNING_EASTERN") : "";
     for (int i = 4; i < argc; i++) {
         if (!strncmp(argv[i], "--tuner=", 8))
             tname = argv[i] + 8;
+        else if (!strncmp(argv[i], "--eastern=", 10))
+            east = argv[i] + 10;
         else if (!strncmp(argv[i], "--a=", 4))
             ra = argv[i] + 4;
         else if (!strncmp(argv[i], "--c=", 4))
@@ -450,6 +458,33 @@ int main(int argc, char **argv)
     // THE SONG
     void *song = nv_song_new();
     nv_song_tuning(song, -1, 0.0, E.freq.data());
+    // THE SECONDARY TUNING (_prep_eastern_tuning): an 'indian' class's table,
+    // Sa at the primary's pitch for its key unless the spec names one; or the
+    // primary tuner is itself a raga's (its Sa, no second table)
+    {
+        double FE[128], sw[12];
+        int have[128], sa = -1, nsw = 0;
+        std::string tl = tname;
+        for (char &c : tl)
+            c = (char)tolower((unsigned char)c);
+        if (!east.empty()) {
+            // (FREQ.get(its Sa's key): the primary's, 0 none)
+            double probe[128];
+            int ph[128], sa0 = -1, n0 = 0;
+            double sw0[12];
+            int r = nv_raga_info(east.c_str(), 0.0, probe, ph, &sa0, sw0, &n0);
+            if (r) {
+                fprintf(stderr, "nvrender: eastern %s refused (%d)\n", east.c_str(), r);
+                return 1;
+            }
+            double sa_hz = sa0 >= 0 && sa0 < 128 ? E.freq[sa0] : 0.0;
+            nv_raga_info(east.c_str(), sa_hz, FE, have, &sa, sw, &nsw);
+            nv_song_eastern(song, FE, 1, sa, sw, nsw);
+        } else if (tl.compare(0, 5, "raga:") == 0) {
+            nv_raga_info(tl.c_str(), 0.0, FE, have, &sa, sw, &nsw);
+            nv_song_eastern(song, nullptr, 1, sa, sw, nsw);
+        }
+    }
     nv_song_kits(song, E.kit_f0.data(), E.kit_seat.data());
     nv_song_chokes(song, E.kit_choke.data());
     nv_midi_song(midi, song, E.trim.data() + (nv_midi_gs(midi) ? 256 : 0));
@@ -502,12 +537,33 @@ int main(int argc, char **argv)
     // its notes at unity, each riding it (br)
     double btun[256];
     nv_bend_btun(midi, song, E.k[K_BEND_SEMIS], btun);
+    // THE MEEND's CHANNELS (_MEEND_CH): a wheel (or a reset) on it and a note
+    // of a class that meends -- no tuning of their own, no gesture: each note
+    // its own (_prep_bend_rows' _MEEND_AT, below)
+    std::map<int, std::vector<std::pair<double, int>>> wheel;
+    for (int q = 0, nq = nv_midi_n_pws(midi); q < nq; q++) {
+        int pv[2];
+        double pt;
+        nv_midi_pw(midi, q, pv, &pt);
+        wheel[pv[0]].push_back(std::make_pair(pt, pv[1]));
+    }
+    std::set<int> mch;
+    for (int i = 0, n = nv_midi_n_notes(midi); i < n; i++) {
+        int iv[5];
+        double dv[5];
+        nv_midi_note(midi, i, iv, dv);
+        int cq = E.cmap[(iv[4] ? NV_K_DRUMS : 0) + 128 * iv[3] + iv[1]];
+        if (!iv[4] && cq >= 0 && ((const NoteClass *)E.classes[cq].data())->meend && wheel.count(iv[0]))
+            mch.insert(iv[0]);
+    }
+    for (int c : mch)
+        btun[c & 255] = 0.0;
     // the rows: each channel's gesture first (_prep_bend_rows: brow_of, at
     // br[256 + channel]), then the faders' (_LROW, at br[channel])
     std::vector<int> fch, gch;
     std::vector<double> br(512, -1.0);
     for (int c = 0; c < 256; c++)
-        if (nv_bend_gesture(midi, song, E.k[K_BEND_SEMIS], c, 0, (int)BLK, SR, nullptr, nullptr)) {
+        if (!mch.count(c) && nv_bend_gesture(midi, song, E.k[K_BEND_SEMIS], c, 0, (int)BLK, SR, nullptr, nullptr)) {
             br[256 + c] = (double)gch.size();
             gch.push_back(c);
         }
@@ -582,6 +638,73 @@ int main(int argc, char **argv)
             br[c] = (double)(gch.size() + nbr_ + nw + nsr + fch.size());
             fch.push_back(c);
         }
+    // ...and THE MEEND's NOTES, in the file's order: each one's ratio at Note
+    // On, its row after the faders' where its wheel moves
+    struct Meend {
+        int ch;
+        double on, off, nc, rst, st;
+        std::vector<double> sw;
+    };
+    std::vector<Meend> mrows;
+    const int mbase = (int)(gch.size() + nbr_ + nw + nsr + fch.size());
+    for (int i = 0, n = nv_midi_n_notes(midi); i < n && !mch.empty(); i++) {
+        int iv[5];
+        double dv[5];
+        nv_midi_note(midi, i, iv, dv);
+        int c = iv[0];
+        if (!mch.count(c) || iv[4])
+            continue;
+        int cq = E.cmap[128 * iv[3] + iv[1]];
+        const NoteClass *mk = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
+        if (!mk || !mk->meend)
+            continue;
+        double tab[128];
+        nv_song_note_table(song, c, dv[0], mk->indian, tab);
+        int ra = nv_song_raga_sa(song);
+        bool east = nv_song_has_eastern(song) != 0;
+        int sa = ra >= 0 && (mk->indian || !east) ? ra : mk->meend_tonic;
+        int nt = iv[1];
+        if (!(sa >= 0 && sa < 128 && tab[sa] > 0.0 && tab[nt] > 0.0))
+            continue;
+        Meend m;
+        m.ch = c;
+        m.on = dv[0];
+        m.off = dv[1];
+        double rsw[12];
+        int nr = nv_song_raga_sw(song, rsw);
+        if (nr >= 0 && (mk->indian || !east))
+            m.sw.assign(rsw, rsw + nr);
+        else
+            for (int k2 = 0; k2 < 12; k2++)
+                m.sw.push_back(1200.0 * log2(tab[sa + k2] / tab[sa]));
+        m.nc = 1200.0 * log2(tab[nt] / tab[sa]);
+        // the file's RPN 0 at Note On (the last at or before it), else the class's
+        m.rst = mk->meend_range;
+        for (int q = 0, nq = nv_midi_n_pitch(midi); q < nq; q++) {
+            int pv[2];
+            long sq;
+            double pt, pvv;
+            nv_midi_pitch(midi, q, pv, &sq, &pt, &pvv);
+            if (pv[0] == c && pv[1] == 1 && pt <= m.on + 1e-9)
+                m.rst = pvv;
+        }
+        m.st = mk->meend_strength;
+        std::vector<double> wt;
+        std::vector<int> wp;
+        for (auto &w : wheel[c]) {
+            wt.push_back(w.first);
+            wp.push_back(w.second);
+        }
+        double r0;
+        int moves = nv_meend_note(wt.data(), wp.data(), (int)wt.size(), m.on, m.off, m.nc, m.sw.data(),
+                                  (int)m.sw.size(), m.rst, m.st, 0, (int)BLK, SR, &r0, nullptr, nullptr);
+        double row = -1.0;
+        if (moves) {
+            row = (double)(mbase + (int)mrows.size());
+            mrows.push_back(m);
+        }
+        nv_song_meend(song, c, nt, m.on, r0, row);
+    }
     for (int c = 0; c < 256; c++)
         if (btun[c] != 0.0 || br[c] >= 0.0)
             nv_song_channel(song, c, btun[c], nullptr, br[c] >= 0.0);
@@ -609,7 +732,7 @@ int main(int argc, char **argv)
     double qacc[18] = {0}, az = 0.0, out[48] = {0};
     double *rows = nullptr;
     void *dm[6] = {nullptr};
-    bool rows_ = !fch.empty() || !gch.empty() || nw || nsr || nbr_;
+    bool rows_ = !fch.empty() || !gch.empty() || nw || nsr || nbr_ || !mrows.empty();
     long long P = nv_prepare(song, K.data(), &t, rows_ ? br.data() : nullptr, rows_ ? 1024 : 0, &rs, &rows,
                              qacc, &az, E.kind.data(),
                              E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, total,
@@ -864,7 +987,7 @@ int main(int argc, char **argv)
     // the rows (_prep_bend_arrays): a gesture's ratio and phase a block (its
     // channel's fader's level at each edge, where it has one); a fader's
     // ratio 1 and phase 0, its level; no rows, one of ones and no levels
-    size_t ng = gch.size(), nr = std::max<size_t>(ng + nbr_ + nw + nsr + fch.size(), 1);
+    size_t ng = gch.size(), nr = std::max<size_t>(ng + nbr_ + nw + nsr + fch.size() + mrows.size(), 1);
     std::vector<float> BRr(nr * nblk, 1.0f), BLr;
     std::vector<double> BCr(nr * nblk, 0.0);
     for (size_t r = 0; r < ng; r++)
@@ -921,6 +1044,19 @@ int main(int argc, char **argv)
                     for (int b = 0; b < 6; b++)
                         std::copy(Lf, Lf + nblk + 1, BLr.data() + (size_t)(srow[q] + b) * (nblk + 1));
         }
+    }
+    for (size_t q = 0; q < mrows.size(); q++) {    // the meends', last (no fader rides them: _LROW's _own)
+        const Meend &m = mrows[q];
+        std::vector<double> wt;
+        std::vector<int> wp;
+        for (auto &w : wheel[m.ch]) {
+            wt.push_back(w.first);
+            wp.push_back(w.second);
+        }
+        double r0;
+        size_t r = (size_t)mbase + q;
+        nv_meend_note(wt.data(), wp.data(), (int)wt.size(), m.on, m.off, m.nc, m.sw.data(), (int)m.sw.size(),
+                      m.rst, m.st, nblk, (int)BLK, SR, &r0, BRr.data() + r * nblk, BCr.data() + r * nblk);
     }
     if (const char *dp_ = getenv("TUNING_NVRENDER_DUMP")) {
         // (a debugging dump: the table as prepared, the gates, swells and bend rows)

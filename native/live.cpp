@@ -121,6 +121,18 @@ extern "C" {
 // and the rest as nv_prepare's. The rows in *rowsp (nv_buf_free), out[] as
 // nv_prepare's. Returns the rows, or < 0 (the file refused, a note not the
 // engine's).
+// the tuner's raga, as blockrender's prepare finds it (T.raga_sa_note: -1 none;
+// its swaras): the process's, set by nvlive from its tuner
+static int g_raga_sa = -1, g_raga_nsw = 0;
+static double g_raga_sw[12];
+extern "C" void nv_live_raga(int sa, const double *sw, int nsw)
+{
+    g_raga_sa = sa;
+    g_raga_nsw = nsw > 0 && nsw <= 12 ? nsw : 0;
+    for (int i = 0; i < g_raga_nsw; i++)
+        g_raga_sw[i] = sw[i];
+}
+
 static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, const double *freq,
                                const double *trim, int program, int note, int vel, int fast, double **rowsp,
                                const int *kind, double scale, double full_db_s, double residual, double beta,
@@ -170,6 +182,8 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         return -1000000001LL;
     void *song = nv_song_new();
     nv_song_tuning(song, -1, 0.0, freq);
+    if (g_raga_sa >= 0)
+        nv_song_eastern(song, nullptr, 1, g_raga_sa, g_raga_sw, g_raga_nsw);
     if (kit) {
         nv_song_kits(song, kit->f0.data(), kit->seat.data());
         nv_song_chokes(song, kit->choke.data());

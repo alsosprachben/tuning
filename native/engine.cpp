@@ -75,6 +75,8 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     nv_voice_init(&c, &K->tmpl, n->f0, n->pan, pow(n->vel / 127.0, 2.0), n->chan_vol, n->effort, rs, &s, &o);
     if (n->gliss_lv > 0.0 && n->gliss_lv != 1.0)
         nv_voice_regain(&c, &s, n->gliss_lv);   // HALF-VALVING LOSES SUPPORT (_GLISS: the step's level)
+    if (n->sym_drv)                     // the driver of its channel's strings (_SYM_CH: this note's props)
+        memcpy(n->sym_drv, &s, sizeof s);
     const double av = s.attack_volume;  // (an [RND] strike's, varied)
     if (s.throat) {
         // A THROAT'S PULSE (SfxThroatProperties), as the note sets it on the
@@ -668,7 +670,7 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
     if (n->from_song) {
         // its pitch and level from the file, not the caller
         double pl[6];
-        r = nv_song_pitch_level(song, n->song_index, K->init.effort_tilt != 0.0, pl);
+        r = nv_song_pitch_level_k(song, n->song_index, K->init.effort_tilt != 0.0, K->indian, pl);
         if (!r)
             return -2;
         n->f0 = pl[0]; n->vel = pl[1]; n->pan = pl[2]; n->chan_vol = pl[3]; n->effort = pl[4];
@@ -784,6 +786,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             long long *row0, int *bands, double *offs)
 {
     nv_song_gliss(song, K);                 // the valved glisses walked (_prep_gliss), once
+    nv_song_sym_reset(song);                // (the strings' drivers: this play's)
     nv_refl_memo_reset();                   // (each _prepare its own _RNORM)
     int nn = nv_song_n_notes(song);
     std::vector<int> order(nn);
@@ -844,10 +847,12 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         n.channel = (double)nv_song_mix(song, i);      // (its tone's mix channel: em.channel)
         n.br = (ch >= 0 && ch < nbr) ? br[ch] : -1.0;
         n.fbr = n.br;                       // (the fader's: the other strings' row, off the wheel)
+        n.sym_drv = k->sym_kind == 3 ? nv_song_sym_driver(song, (long long)n.channel, (int)sizeof(VoiceSnap))
+                                     : nullptr;
         n.ring_on = 0;
         if (k->ring_n) {                    // ITS OTHER STRINGS, tuned as the notes are (_note_ring)
             double rtab[128];
-            nv_song_table(song, ch, dv[0], rtab);
+            nv_song_note_table(song, ch, dv[0], k->indian, rtab);
             n.ring_on = 1;
             for (int q = 0; q < k->ring_n; q++) {
                 double hf = k->ring_hz[q];
@@ -868,6 +873,9 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
                 n.bbr = br[768 + ch];
             }
         }
+        double mrow;
+        if (nv_song_meend_row(song, i, &mrow))
+            n.br = mrow >= 0.0 ? mrow : n.fbr;  // the meend: the note's own row, or none (the fader's)
         if (k->organ) {                     // A REGISTERED ORGAN: its ranks as its registration leaves them
             // (one that bends: only a hit's, whose ranks ride no chest -- the
             // note's own bend row, nv_song_organ_note's br)
@@ -923,7 +931,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (is_gl && glv[1] > 0.0 && glv[2] >= 0.0) {
             double stau = glv[3] * glv[1] * 0.75;
             double tab[128];
-            nv_song_table(song, ch, dv[0], tab);
+            nv_song_note_table(song, ch, dv[0], k->indian, tab);
             int pv = (int)glv[2];
             if (stau > 2e-3 && tab[pv] > 0.0) {
                 n.gl[0] = tab[iv[0]] / tab[pv] - 1.0;
@@ -933,7 +941,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         }
         if (n.gl[0] == 0.0 && src >= 0 && k->glide_mech) {
             double tab[128];
-            nv_song_table(song, ch, dv[0], tab);
+            nv_song_note_table(song, ch, dv[0], k->indian, tab);
             if (src < 128 && tab[src] > 0.0
                 && (std::isnan(k->glide_reach) || std::abs(iv[0] - src) <= k->glide_reach + 1e-9)) {
                 double ft = tab[iv[0]], fs = tab[src];

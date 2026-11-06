@@ -19,6 +19,8 @@
 // channel (mt32mux: a CC7 a tick before nearly every note).
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <cmath>
 #include <map>
 #include <set>
@@ -126,6 +128,86 @@ static double tuning_of(const std::vector<std::pair<double, double>> &ev, double
     return tun;
 }
 
+// bend_blocks: per block its mean ratio of the step function (float32)
+// and the extra phase in samples at its start, the running sum of the same
+// means (C[b+1] = C[b] + (r[b]-1) BLK by construction)
+static void blocks(std::vector<std::pair<double, double>> ev, long nblk, int blk, double sr, float *BR, double *BC)
+{
+    std::sort(ev.begin(), ev.end());
+    size_t m = ev.size() + 1;
+    std::vector<double> ts(m), rs(m), acc(m + 1);
+    ts[0] = 0.0;
+    rs[0] = 1.0;
+    for (size_t k = 0; k < ev.size(); k++) {
+        ts[k + 1] = ev[k].first;
+        rs[k + 1] = ev[k].second;
+    }
+    double e_last = (double)nblk * blk / sr;
+    double app = (ts[m - 1] > e_last ? ts[m - 1] : e_last) + 1.0;          // max(edges[-1], ts[-1]) + 1
+    acc[0] = 0.0;
+    for (size_t k = 0; k < m; k++) {
+        double seg = (k + 1 < m ? ts[k + 1] : app) - ts[k];
+        acc[k + 1] = acc[k] + (rs[k] - 1.0) * seg;                         // np.cumsum, in order
+    }
+    std::vector<double> C(nblk + 1);
+    for (long j = 0; j <= nblk; j++) {
+        double e = (double)j * blk / sr;
+        size_t i = (size_t)(std::upper_bound(ts.begin(), ts.end(), e) - ts.begin()) - 1;
+        C[j] = (acc[i] + (rs[i] - 1.0) * (e - ts[i])) * sr;
+    }
+    for (long j = 0; j < nblk; j++) {
+        BR[j] = (float)(1.0 + (C[j + 1] - C[j]) / (double)blk);
+        BC[j] = C[j];
+    }
+}
+
+// tonelib.meend_detents: the swaras a pull from a note at nc (cents re Sa) can
+// reach -- 0 first, then each swara in every octave more than a cent and up
+// to range_c above the note -- each rounded to a millionth (round(x, 6): the
+// decimal's, printf's), once, ascending
+static std::vector<double> meend_detents(double nc, const double *sw, int nsw, double range_c)
+{
+    std::vector<double> out(1, 0.0);
+    for (int k = -1; k < 4; k++)
+        for (int i = 0; i < nsw; i++) {
+            double d = sw[i] + 1200.0 * k - nc;
+            if (1.0 < d && d <= range_c + 1e-6)
+                out.push_back(d);
+        }
+    for (double &x : out) {
+        char buf[64];
+        snprintf(buf, sizeof buf, "%.6f", x);
+        x = strtod(buf, nullptr);
+    }
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return out;
+}
+
+// tonelib.meend_cents: a pull of pull cents across the detents, each span's
+// ends held strength/2 each, the middle on a smoothstep; past the last, held
+static double meend_cents(double pull, const std::vector<double> &det, double strength)
+{
+    if (pull <= 0.0 || det.empty())
+        return 0.0;
+    if (strength <= 0.0)
+        return pull;
+    for (size_t i = 0; i + 1 < det.size(); i++) {
+        double a = det[i], b = det[i + 1];
+        if (pull <= b) {
+            double u = (pull - a) / (b - a > 1e-9 ? b - a : 1e-9);
+            double h = 0.5 * (strength < 0.98 ? strength : 0.98);
+            if (u <= h)
+                return a;
+            if (u >= 1.0 - h)
+                return b;
+            double v = (u - h) / (1.0 - 2.0 * h);
+            return a + (b - a) * v * v * (3.0 - 2.0 * v);
+        }
+    }
+    return det.back();
+}
+
 extern "C" {
 
 // _BTUN: each channel's tuning (out[256]; 0 where it has none), from the
@@ -182,32 +264,7 @@ int nv_bend_gesture(void *midi, void *song, double bend_range, int ch, long nblk
         return 0;
     if (!BR)
         return 1;
-    std::sort(ev.begin(), ev.end());
-    size_t m = ev.size() + 1;
-    std::vector<double> ts(m), rs(m), acc(m + 1);
-    ts[0] = 0.0;
-    rs[0] = 1.0;
-    for (size_t k = 0; k < ev.size(); k++) {
-        ts[k + 1] = ev[k].first;
-        rs[k + 1] = ev[k].second;
-    }
-    double e_last = (double)nblk * blk / sr;
-    double app = (ts[m - 1] > e_last ? ts[m - 1] : e_last) + 1.0;          // max(edges[-1], ts[-1]) + 1
-    acc[0] = 0.0;
-    for (size_t k = 0; k < m; k++) {
-        double seg = (k + 1 < m ? ts[k + 1] : app) - ts[k];
-        acc[k + 1] = acc[k] + (rs[k] - 1.0) * seg;                         // np.cumsum, in order
-    }
-    std::vector<double> C(nblk + 1);
-    for (long j = 0; j <= nblk; j++) {
-        double e = (double)j * blk / sr;
-        size_t i = (size_t)(std::upper_bound(ts.begin(), ts.end(), e) - ts.begin()) - 1;
-        C[j] = (acc[i] + (rs[i] - 1.0) * (e - ts[i])) * sr;
-    }
-    for (long j = 0; j < nblk; j++) {
-        BR[j] = (float)(1.0 + (C[j + 1] - C[j]) / (double)blk);
-        BC[j] = C[j];
-    }
+    blocks(ev, nblk, blk, sr, BR, BC);
     return 1;
 }
 
@@ -307,6 +364,49 @@ int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr,
         if (t1 < 1e17)
             v = target + (v - target) * exp(-(t1 - t0) / tau);
     }
+    return 1;
+}
+
+// tonelib.meend_cents over meend_detents: the cents a pull of pull cents puts
+// a note at nc cents re Sa, across the swaras sw within range_c (live's)
+double nv_meend_cents(double nc, const double *sw, int nsw, double range_c, double pull, double strength)
+{
+    using namespace nv::bend;
+    return meend_cents(pull, meend_detents(nc, sw, nsw, range_c), strength);
+}
+
+// _MEEND_AT for one note: its ratio at Note On (*r0) and 1 with its row (BR,
+// BC: nblk; NULL just to ask) if the wheel moves while it sounds, else 0 --
+// the channel's wheel (wt, wp: nw, in message order), the note's pitch re Sa
+// (nc cents), the swaras' cents (sw), the range (semitones), the strength
+int nv_meend_note(const double *wt, const int *wp, int nw, double on, double off, double nc, const double *sw,
+                  int nsw, double rst, double strength, long nblk, int blk, double sr, double *r0, float *BR,
+                  double *BC)
+{
+    using namespace nv::bend;
+    std::vector<double> det = meend_detents(nc, sw, nsw, 100.0 * rst);
+    auto ratio = [&](double w) { return pow(2.0, meend_cents(100.0 * rst * w / 8192.0, det, strength) / 1200.0); };
+    std::vector<std::pair<double, int>> ws;             // sorted((t, p)): by time, then value
+    for (int i = 0; i < nw; i++)
+        ws.push_back(std::make_pair(wt[i], wp[i]));
+    std::sort(ws.begin(), ws.end());
+    int w0 = 0;
+    for (auto &w : ws)
+        if (w.first <= on + 1e-9)
+            w0 = w.second;
+    *r0 = ratio((double)w0);
+    std::vector<std::pair<double, double>> mv;
+    bool moves = false;
+    for (auto &w : ws)
+        if (on + 1e-9 < w.first && w.first <= off) {
+            double r = ratio((double)w.second) / *r0;
+            mv.push_back(std::make_pair(w.first, r));
+            moves = moves || fabs(r - 1.0) > 1e-9;
+        }
+    if (!moves)
+        return 0;
+    if (BR)
+        blocks(mv, nblk, blk, sr, BR, BC);
     return 1;
 }
 

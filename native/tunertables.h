@@ -103,7 +103,52 @@ static const RagaSys RAGA_SYSTEMS[] = {
     {"saraga_todi", {0x0.0p+0, 0x1.af33333333333p+6, 0x1.9000000000000p+7, 0x1.3200000000000p+8, 0x1.9000000000000p+8, 0x1.f400000000000p+8, 0x1.2c00000000000p+9, 0x1.5da6666666666p+9, 0x1.939999999999ap+9, 0x1.c200000000000p+9, 0x1.f400000000000p+9, 0x1.1300000000000p+10}},
     {"saraga_yaman_kalyan", {0x0.0p+0, 0x1.9000000000000p+6, 0x1.88ccccccccccdp+7, 0x1.2c00000000000p+8, 0x1.8c1999999999ap+8, 0x1.f400000000000p+8, 0x1.2d4cccccccccdp+9, 0x1.5fccccccccccdp+9, 0x1.9000000000000p+9, 0x1.c200000000000p+9, 0x1.f400000000000p+9, 0x1.13d999999999ap+10}},
 };
-static const char *RAGAS[] = {"asavari", "bhairav", "bhairavi", "bilaval", "kafi", "kalyan", "khamaj", "marwa", "purvi", "saraga_abhogi", "saraga_ahir_bhairav", "saraga_bairagi", "saraga_bhairav", "saraga_bhimpalas", "saraga_bilaskhani_todi", "saraga_des", "saraga_dhani", "saraga_gaud_malhar", "saraga_jog", "saraga_kalyan", "saraga_kedar", "saraga_khamaj", "saraga_kirwani", "saraga_lagan_gandhar", "saraga_lalat", "saraga_maajh_khamaj", "saraga_madhukauns", "saraga_malkauns", "saraga_marwa", "saraga_mishra_kalingada", "saraga_miya_malhar", "saraga_puriya_dhanashree", "saraga_rageshri", "saraga_saraswati", "saraga_todi", "saraga_yaman_kalyan", "todi", "yaman"};
+// ragas.RAGAS: each raga's swaras, by index into its system's twelve
+struct Raga {
+    const char *name;
+    int n;
+    int idx[12];
+};
+static const Raga RAGAS[] = {
+    {"asavari", 7, {0, 2, 3, 5, 7, 8, 10}},
+    {"bhairav", 7, {0, 1, 4, 5, 7, 8, 11}},
+    {"bhairavi", 7, {0, 1, 3, 5, 7, 8, 10}},
+    {"bilaval", 7, {0, 2, 4, 5, 7, 9, 11}},
+    {"kafi", 7, {0, 2, 3, 5, 7, 9, 10}},
+    {"kalyan", 7, {0, 2, 4, 6, 7, 9, 11}},
+    {"khamaj", 7, {0, 2, 4, 5, 7, 9, 10}},
+    {"marwa", 6, {0, 1, 4, 6, 9, 11}},
+    {"purvi", 7, {0, 1, 4, 6, 7, 8, 11}},
+    {"saraga_abhogi", 7, {0, 2, 3, 5, 7, 9, 10}},
+    {"saraga_ahir_bhairav", 7, {0, 1, 4, 5, 7, 9, 10}},
+    {"saraga_bairagi", 5, {0, 1, 5, 7, 10}},
+    {"saraga_bhairav", 5, {0, 2, 4, 5, 7}},
+    {"saraga_bhimpalas", 7, {0, 2, 3, 5, 7, 9, 10}},
+    {"saraga_bilaskhani_todi", 7, {0, 1, 3, 5, 7, 8, 10}},
+    {"saraga_des", 5, {0, 2, 5, 7, 11}},
+    {"saraga_dhani", 5, {0, 3, 5, 7, 10}},
+    {"saraga_gaud_malhar", 6, {0, 2, 4, 5, 7, 9}},
+    {"saraga_jog", 6, {0, 3, 4, 5, 7, 10}},
+    {"saraga_kalyan", 6, {0, 2, 4, 6, 7, 11}},
+    {"saraga_kedar", 7, {0, 2, 5, 6, 7, 9, 11}},
+    {"saraga_khamaj", 7, {0, 4, 5, 7, 9, 10, 11}},
+    {"saraga_kirwani", 7, {0, 2, 3, 5, 7, 8, 11}},
+    {"saraga_lagan_gandhar", 6, {0, 2, 4, 7, 10, 11}},
+    {"saraga_lalat", 7, {0, 1, 4, 5, 6, 7, 8}},
+    {"saraga_maajh_khamaj", 5, {0, 4, 5, 7, 9}},
+    {"saraga_madhukauns", 5, {0, 3, 6, 7, 10}},
+    {"saraga_malkauns", 5, {0, 3, 5, 8, 10}},
+    {"saraga_marwa", 5, {0, 1, 6, 9, 11}},
+    {"saraga_mishra_kalingada", 5, {0, 4, 5, 7, 8}},
+    {"saraga_miya_malhar", 7, {0, 2, 5, 6, 7, 10, 11}},
+    {"saraga_puriya_dhanashree", 5, {0, 4, 6, 7, 11}},
+    {"saraga_rageshri", 5, {0, 4, 5, 9, 10}},
+    {"saraga_saraswati", 6, {0, 2, 6, 7, 9, 10}},
+    {"saraga_todi", 5, {0, 1, 3, 7, 8}},
+    {"saraga_yaman_kalyan", 6, {0, 2, 4, 6, 7, 11}},
+    {"todi", 7, {0, 1, 3, 6, 7, 8, 11}},
+    {"yaman", 7, {0, 2, 4, 6, 7, 9, 11}},
+};
 
 }  // namespace tuner
 }  // namespace nv

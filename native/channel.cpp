@@ -1138,11 +1138,27 @@ struct Song {
         return tl[i > 0 ? i : 0].second;
     }
 
+    // THE SECONDARY TUNING (FREQ_E: an 'indian' class's table, empty none),
+    // and the raga in force (T.raga_sa_note, -1 none; T.raga_spec's swaras)
+    std::vector<double> freq_e;
+    std::map<long long, std::vector<unsigned char>> sym_drv;    // each mix channel's strings' driver (_SYM_CH)
+    std::map<NoteKey, std::pair<double, double>> meend;         // _MEEND_AT: (its ratio at Note On, its row or -1)
+    int raga_sa = -1;
+    bool raga_on = false;
+    std::vector<double> raga_sw;
+    const std::vector<double> &note_table(long long c, double t, bool indian) const
+    {
+        return indian && !freq_e.empty() ? freq_e : table(c, t);
+    }
+
     // _note_class_and_pitch for a melodic note with none of its extras (no
     // per-note pitch, MPE, meend, sounding octaves, scale or brass law): f0
-    double pitch(long long c, int note, double on) const
+    double pitch(long long c, int note, double on, bool indian = false) const
     {
-        double f0 = table(c, on)[note];
+        double f0 = note_table(c, on, indian)[note];
+        auto me = meend.find(NoteKey{c, note, on});
+        if (me != meend.end())
+            f0 *= me->second.first;         // this note's meend at Note On
         auto b = btun.find(c);
         if (b != btun.end() && b->second != 0.0)
             f0 *= b->second;
@@ -2196,6 +2212,72 @@ int nv_song_first_cc(void *s, long long ch, int cc, int *v)
 }
 
 // the file's tuning (ch < 0, at 0) or a channel's MTS table from t
+int nv_song_raga_sa(void *s) { return ((nv::Song *)s)->raga_sa; }
+
+void nv_song_eastern(void *s, const double *freq_e, int raga_on, int sa, const double *sw, int nsw)
+{
+    nv::Song *S = (nv::Song *)s;
+    S->freq_e.clear();
+    if (freq_e)
+        S->freq_e.assign(freq_e, freq_e + 128);
+    S->raga_on = raga_on != 0;
+    S->raga_sa = sa;
+    S->raga_sw.assign(sw, sw + (nsw > 0 ? nsw : 0));
+}
+
+void *nv_song_sym_driver(void *s, long long mix, int size)
+{
+    nv::Song *S = (nv::Song *)s;
+    if (S->sym_drv.count(mix))
+        return nullptr;
+    std::vector<unsigned char> &b = S->sym_drv[mix];
+    b.assign((size_t)size, 0);
+    return b.data();
+}
+
+const void *nv_song_sym_get(void *s, long long mix)
+{
+    nv::Song *S = (nv::Song *)s;
+    auto it = S->sym_drv.find(mix);
+    return it == S->sym_drv.end() ? nullptr : it->second.data();
+}
+
+void nv_song_sym_reset(void *s) { ((nv::Song *)s)->sym_drv.clear(); }
+
+void nv_song_meend(void *s, long long ch, int note, double on, double r0, double row)
+{
+    ((nv::Song *)s)->meend[nv::NoteKey{ch, note, on}] = std::make_pair(r0, row);
+}
+
+int nv_song_meend_row(void *s, int i, double *row)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (i < 0 || i >= (int)S->notes.size())
+        return 0;
+    auto it = S->meend.find(nv::NoteKey{S->notes[i].ch, S->notes[i].note, S->notes[i].on});
+    if (it == S->meend.end())
+        return 0;
+    *row = it->second.second;
+    return 1;
+}
+
+int nv_song_has_eastern(void *s) { return !((nv::Song *)s)->freq_e.empty(); }
+int nv_song_raga_sw(void *s, double *sw) {
+    const nv::Song *S = (nv::Song *)s;
+    if (!S->raga_on)
+        return -1;
+    for (size_t i = 0; i < S->raga_sw.size(); i++)
+        sw[i] = S->raga_sw[i];
+    return (int)S->raga_sw.size();
+}
+
+void nv_song_note_table(void *s, long long ch, double t, int indian, double *out)
+{
+    const std::vector<double> &tab = ((nv::Song *)s)->note_table(ch, t, indian != 0);
+    for (int k = 0; k < 128; k++)
+        out[k] = tab[k];
+}
+
 void nv_song_tuning(void *s, long long ch, double t, const double *freq)
 {
     nv::Song *S = (nv::Song *)s;
@@ -2232,7 +2314,7 @@ void nv_song_kits(void *s, const double *f0, const double *seat)
 // its index in the song's notes (two can share a key, an onset and a
 // key-up). 0 if there is no such note (or a drum the sets lack); 2 for a
 // drum: its pitch its set's, not a tuning's.
-int nv_song_pitch_level(void *s, int i, int effort_tilt, double *out)
+int nv_song_pitch_level_k(void *s, int i, int effort_tilt, int indian, double *out)
 {
     const nv::Song *S = (nv::Song *)s;
     if (i < 0 || i >= (int)S->notes.size())
@@ -2251,7 +2333,7 @@ int nv_song_pitch_level(void *s, int i, int effort_tilt, double *out)
         out[5] = S->kit_seat[q];
         r = 2;
     } else {
-        out[0] = S->pitch(ch, note, on);
+        out[0] = S->pitch(ch, note, on, indian != 0);
     }
     out[1] = e.vel;
     out[2] = e.pan;
@@ -2268,6 +2350,11 @@ int nv_song_pitch_level(void *s, int i, int effort_tilt, double *out)
         eff = nv::pymax(-12.0, nv::pymin(12.0, 40.0 * log10(e.vel / (double)b)));
     out[4] = eff;
     return r;
+}
+
+int nv_song_pitch_level(void *s, int i, int effort_tilt, double *out)
+{
+    return nv_song_pitch_level_k(s, i, effort_tilt, 0, out);
 }
 
 void nv_song_finish(void *s, double total) { ((nv::Song *)s)->finish(total); }

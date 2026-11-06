@@ -1088,9 +1088,9 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
             rk += 100000;
         if (!chans.count(rk)) {
             double pl[6];
-            nv_song_pitch_level(song, i, k->init.effort_tilt != 0.0, pl);
+            nv_song_pitch_level_k(song, i, k->init.effort_tilt != 0.0, k->indian, pl);
             double tab[128];
-            nv_song_table(song, ch, dv[0], tab);
+            nv_song_note_table(song, ch, dv[0], k->indian, tab);
             VoiceInit c = k->init;
             double det = 1.0;
             int c1;
@@ -1229,6 +1229,7 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
     // responder's pitch (the table's, at the strike), at its drive
     {
         std::vector<double> extra;
+        std::map<std::pair<long long, int>, std::vector<double>> sym_cache;    // (channel, key): responders()
         for (long long ch : sym_order) {
             const NoteClass *k = sym_k[ch];
             std::vector<long long> grp_key;
@@ -1245,7 +1246,7 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
                     grp_key.push_back(g);
                 grp[g].push_back(r);
             }
-            const bool fixed = k->sym_kind == 1, ring_law = k->sym_kind == 1;
+            const bool fixed = k->sym_kind == 1 || k->sym_kind == 3, ring_law = k->sym_kind == 1;
             for (long long g : grp_key) {
                 const std::vector<long long> &ix = grp[g];
                 double nmin = rows[NC * ix[0] + C_non], f0 = rows[NC * ix[0] + C_nf];
@@ -1254,7 +1255,7 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
                     f0 = pymin(f0, rows[NC * r + C_nf]);
                 }
                 double tab[128];
-                nv_song_table(song, ch, nmin / sr, tab);
+                nv_song_note_table(song, ch, nmin / sr, k->indian, tab);   // (_F_SYM)
                 // _nearest_key: the table's key nearest f0 in cents (the first of equals)
                 int drv = -1;
                 double bd = 0.0;
@@ -1271,7 +1272,42 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
                 // strongest first (stable), the first sym_top
                 std::vector<int> rs_s;
                 std::vector<double> rs_d, rs_c;
-                for (int q = 0; q < k->sym_n; q++) {
+                if (k->sym_kind == 3) {
+                    // BY COINCIDENCE (responders, a fixed set): each string the
+                    // strike is not on, at the table's pitch (its own cents),
+                    // as loud as _coupling says, over the floor
+                    const VoiceSnap *dv_ = (const VoiceSnap *)nv_song_sym_get(song, ch);
+                    int ra = nv_song_raga_sa(song);
+                    int tonic = k->indian && ra >= 0 ? ra : k->sym_tonic;
+                    auto sc = sym_cache.find(std::make_pair(ch, drv));
+                    if (sc == sym_cache.end()) {
+                        std::vector<double> dd(k->sym_n, -1.0);
+                        for (int q = 0; q < k->sym_n && dv_; q++) {
+                            int pitch = tonic + k->sym_pitch[q], s = pitch - drv;
+                            if (s == 0)
+                                continue;
+                            double rf = pitch >= 0 && pitch < 128 && tab[pitch] > 0.0 ? tab[pitch]
+                                                                                       : f0 * pow(2.0, s / 12.0);
+                            rf *= pow(2.0, k->sym_cents[q] / 1200.0);
+                            VoiceInit rc = k->init;
+                            rc.fixed_touch = tmpl->fixed_touch;
+                            VoiceSnap rv;
+                            VoiceNote ro;
+                            nv_voice_init(&rc, &k->tmpl, rf, 0.0, 1.0, 1.0, 0.0, nullptr, &rv, &ro);
+                            dd[q] = nv_sym_coupling(dv_, &rv, k->sym_g, k->sym_wmin) * k->sym_d[q];
+                        }
+                        sc = sym_cache.emplace(std::make_pair(ch, drv), dd).first;
+                    }
+                    for (int q = 0; q < k->sym_n; q++) {
+                        int s = tonic + k->sym_pitch[q] - drv;
+                        if (s == 0 || !(sc->second[q] >= k->sym_floor))
+                            continue;
+                        rs_s.push_back(s);
+                        rs_d.push_back(sc->second[q]);
+                        rs_c.push_back(k->sym_cents[q]);
+                    }
+                }
+                for (int q = 0; q < (k->sym_kind == 3 ? 0 : k->sym_n); q++) {
                     int s = k->sym_kind == 1 ? k->sym_pitch[q] - drv : k->sym_pitch[q];
                     if (k->sym_kind == 1 && (s == 0 || !(k->sym_d[q] >= k->sym_floor)))
                         continue;
@@ -1282,7 +1318,7 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
                 std::vector<int> ordr(rs_s.size());
                 for (size_t q = 0; q < ordr.size(); q++)
                     ordr[q] = (int)q;
-                if (k->sym_kind == 1) {
+                if (k->sym_kind == 1 || k->sym_kind == 3) {
                     std::stable_sort(ordr.begin(), ordr.end(), [&](int a, int b) { return -rs_d[a] < -rs_d[b]; });
                     if ((int)ordr.size() > k->sym_top)
                         ordr.resize(k->sym_top);

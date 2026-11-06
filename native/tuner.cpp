@@ -174,7 +174,8 @@ static double path_freq(const Table &t, int midi, double A, const Ref &ref)
 }
 
 // ragas.table: the error, or 0
-static int raga_table(const std::string &spec, double *out, int *have)
+static int raga_table(const std::string &spec, double *out, int *have, double sa_hz = 0.0, int *sa_out = nullptr,
+                      double *sw = nullptr, int *nsw = nullptr)
 {
     // parse: raga:<system>[/<raga>]@<key>[:<Sa Hz>]
     std::string s = spec;
@@ -201,18 +202,25 @@ static int raga_table(const std::string &spec, double *out, int *have)
             sys = &r;
     if (!sys)
         return -5;
-    if (!raga.empty()) {
-        bool ok = false;
-        for (const char *r : RAGAS)
-            ok = ok || raga == r;
-        if (!ok)
-            return -5;
-    }
+    const Raga *rg = nullptr;           // (ragas.swaras: the named raga's, else the system's own)
+    for (const Raga &r : RAGAS)
+        if (raga.empty() ? system == r.name : raga == r.name)
+            rg = &r;
+    if (!raga.empty() && !rg)
+        return -5;
     int key = key_of(a);
     if (key < 0)
         return -2;
     int sa = 60 + key;
-    double f_sa = (has_hz && hz != 0.0) ? hz : 440.0 * pow(2.0, (sa - 69) / 12.0);
+    // (ragas.table: hz or sa_hz or 12-TET's)
+    double f_sa = (has_hz && hz != 0.0) ? hz : sa_hz != 0.0 ? sa_hz : 440.0 * pow(2.0, (sa - 69) / 12.0);
+    if (sa_out)
+        *sa_out = sa;
+    if (sw) {
+        *nsw = rg ? rg->n : 12;
+        for (int i = 0; i < *nsw; i++)
+            sw[i] = sys->cents[rg ? rg->idx[i] : i];
+    }
     for (int n = 0; n < 128; n++) {
         int d = n - sa;
         int octv = (int)floor(d / 12.0), deg = d - 12 * octv;
@@ -308,6 +316,24 @@ int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, 
             return 0;
         }
     return -1;
+}
+
+// ragas.table(spec, sa_hz) into out[128], Sa's note (sa_note: the octave
+// from middle C up) and the swaras' cents (ragas.swaras, sw[12], *nsw of
+// them): the secondary tuning's and the meend's. sa_hz 0: none. 0, or < 0 as
+// nv_tuning_table's raga specs.
+int nv_raga_info(const char *spec, double sa_hz, double *out, int *have, int *sa_note, double *sw, int *nsw)
+{
+    std::string key = spec;
+    for (char &c : key)
+        c = (char)tolower((unsigned char)c);
+    for (int n = 0; n < 128; n++) {
+        out[n] = 0.0;
+        have[n] = 0;
+    }
+    if (key.compare(0, 5, "raga:") != 0)
+        return -5;
+    return nv::tuner::raga_table(key, out, have, sa_hz, sa_note, sw, nsw);
 }
 
 }  // extern "C"

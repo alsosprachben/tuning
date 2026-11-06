@@ -267,7 +267,8 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
         if (k && k->amp_drive != 0.0) {
             // (_note_amp_drive: the reference times the note's fader, chan_vol)
             double ref = 0.0, pl[6];
-            if (k->amp_reference != 0.0 && nv_song_pitch_level(song, played[j], k->init.effort_tilt != 0.0, pl))
+            if (k->amp_reference != 0.0 && nv_song_pitch_level_k(song, played[j], k->init.effort_tilt != 0.0,
+                                                                 k->indian, pl))
                 ref = k->amp_reference * pl[3];
             nv_song_add_amp(song, ch, k->amp_drive, k->leslie != 0, ref, k->amp_imbalance);
         }

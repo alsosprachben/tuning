@@ -852,6 +852,17 @@ typedef struct NoteClass {
     double ring_hz[48], ring_db[48], ring_dps[48], ring_skip;
     int ring_nown;                  // the note's own modes' ratios (mode_ratios, or 1 and 2)
     double ring_own[16];
+    int indian;                     // tuning_family 'indian': the secondary tuning's table (FREQ_E)
+    // ...BY COINCIDENCE (sym_kind 3, a fixed set: sym_pitch the strings'
+    // offsets from sym_tonic -- Sa's, under a raga -- sym_d each one's level,
+    // 10^(dB/20)): sym_g the gain, sym_wmin the pluck's spread (Hz)
+    int sym_tonic;
+    double sym_g, sym_wmin;
+    int meend;                      // bend_detents: a wheel on its channel meends (_MEEND_CH)
+    // ...its range (bend_range_semitones, else GM's), how much each swara
+    // holds (meend_strength), its Sa without a raga (sympathetic_tonic)
+    double meend_range, meend_strength;
+    int meend_tonic;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -917,6 +928,7 @@ typedef struct {
     // table (ring_f, the class's order); fbr the channel's fader row, -1 none
     int ring_on;
     double ring_f[48], fbr;
+    void *sym_drv;          // where its voice goes, the driver of its channel's strings (_SYM_CH), NULL not
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -1001,6 +1013,30 @@ double nv_song_note_off(void *s, long long ch, int note, double on, double off, 
 int nv_song_soft_at(void *s, long long ch, double t);
 int nv_song_next_same(void *s, long long ch, int note, double on, double *out);
 int nv_song_pitch_level(void *s, int index, int effort_tilt, double *out);
+/* ...an 'indian' class's at the secondary tuning (indian 1: FREQ_E's) */
+int nv_song_pitch_level_k(void *s, int index, int effort_tilt, int indian, double *out);
+/* THE SECONDARY TUNING (FREQ_E; NULL none) and the raga in force (raga_on:
+   T.raga_spec set; sa its Sa's note, -1 none; sw its swaras' cents); and a
+   note's table: the secondary's for an 'indian' class, else the channel's */
+void nv_song_eastern(void *s, const double *freq_e, int raga_on, int sa, const double *sw, int nsw);
+int nv_song_raga_sa(void *s);          /* T.raga_sa_note, -1 none */
+int nv_song_has_eastern(void *s);       /* a secondary tuning (FREQ_E) */
+int nv_song_raga_sw(void *s, double *sw);   /* T.raga_spec's swaras' cents (sw[12]), their count; -1 none */
+/* _MEEND_AT: a note's meend -- its ratio at Note On (f0's) and its row (-1 none);
+   and song note i's row, 1 if it meends */
+void nv_song_meend(void *s, long long ch, int note, double on, double r0, double row);
+int nv_song_meend_row(void *s, int i, double *row);
+void nv_song_note_table(void *s, long long ch, double t, int indian, double *out);
+/* THE DRIVER OF A CHANNEL's STRINGS (sympathetic._coupling's: _SYM_CH's
+   props, its first note's voice): a VoiceSnap's room, once a mix channel,
+   NULL after; read back (NULL none); and all forgotten (a play again) */
+void *nv_song_sym_driver(void *s, long long mix, int size);
+const void *nv_song_sym_get(void *s, long long mix);
+void nv_song_sym_reset(void *s);
+/* voice.c: sympathetic._coupling by coincidence -- how loudly rsp rings, a
+   fraction of its own level, when drv is struck (g the gain, wmin the
+   pluck's spread) */
+double nv_sym_coupling(const VoiceSnap *drv, const VoiceSnap *rsp, double g, double wmin);
 void nv_song_kits(void *s, const double *f0, const double *seat);
 void nv_song_chokes(void *s, const unsigned long long *choke);
 void nv_song_legato(void *s, long long ch, int note, int k);
