@@ -275,7 +275,11 @@ class NoteClass(ctypes.Structure):
                    ('fall_cents', C), ('fall_at_s', C), ('fall_s', C), ('fall_fade_db', C), ('fall_smear', C),
                    ('rip_cents', C), ('rip_s', C), ('rip_start_db', C), ('rip_smear', C),
                    ('cho_send', C), ('pair_set', I), ('pair_lo', C), ('pair_hi', C),
-                   ('tp_hz', C), ('tp_up_db', C), ('tp_jit', C)])
+                   ('tp_hz', C), ('tp_up_db', C), ('tp_jit', C), ('siren', I),
+                   ('efx_set', I), ('efx_eq_set', I), ('efx_level', C), ('efx_od', C), ('efx_eq', C * 5),
+                   ('efx_rev', C), ('efx_cf', I), ('cf_p', C * 40), ('efx_dly', I), ('dly_p', C * 24),
+                   ('efx_place', C * 13), ('efx_trem', I), ('trem_cfg', C * 4),
+                   ('flt_set', I), ('flt_ty', I), ('flt_k', I), ('flt_p', C * 3), ('flt_c', C * 5)])
 
 
 class NoteIn(ctypes.Structure):
@@ -296,7 +300,8 @@ class NoteIn(ctypes.Structure):
                    ('sung_hz', C), ('part', I), ('dist', C), ('gliss_lv', C),
                    ('ring_on', I), ('ring_f', C * 48), ('fbr', C),
                    ('sym_drv', ctypes.c_void_p), ('blk', C), ('xp', C),
-                   ('hammered', I), ('reslur', I), ('hammer_on', C)])
+                   ('hammered', I), ('reslur', I), ('hammer_on', C), ('siren_set', I), ('siren_end', C),
+                   ('press', C)])
 
 
 class NoteOut(ctypes.Structure):
@@ -468,7 +473,8 @@ def _load():
                               ctypes.c_long, C, C, C, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long,
-                              ctypes.c_void_p]),
+                              ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                              ctypes.c_long]),
             ('nv_leslie_expand', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p,
                                       ctypes.c_void_p, ctypes.c_void_p, C, ctypes.c_void_p, ctypes.c_void_p,
                                       ctypes.c_void_p, ctypes.c_void_p]),
@@ -998,6 +1004,40 @@ def noisy_harmonic(cls):
             and _owner(cls, '_hf_rolloff') == 'NoisyPercussionMixin' and _owner(cls, '_band_trim') == 'NoisyPercussionMixin'
             and _owner(cls, 'chiff_harmonic_gain') in ('NoisyPercussionMixin', 'GuitarFretNoiseProperties')
             and len(getattr(cls, 'band_trim_db', ()) or ()) <= 32)
+
+
+_EFX = {}
+
+
+def efx_chain(cls):
+    """A tone's own insertion effect as the engine plays it (gsefx.chain of
+    its tone_state), or None: one with no stage past the core and an OD
+    (level, EQ, cabinet, sends) -- a chorus device, a delay, a moving
+    filter, a bus, a tremolo, a compressor, a branch or a rotary are
+    Python's -- its EQ the plain five."""
+    if cls in _EFX:
+        return _EFX[cls]
+    import gsefx as G
+    e = getattr(cls, 'insertion_efx', None)
+    ch = G.chain(G.tone_state(*e)) if e else None
+    if ch is not None and (any(ch.get(a) for a in ('bus', 'comp', 'par', 'rotary'))
+                           or (ch.get('filter') and not (
+                               (ch['filter']['ctrl'][0] == 'sweep' and not ch['filter']['ctrl'][5])
+                               or ch['filter']['ctrl'][0] == 'wah'))
+                           or (ch.get('trem') and not (
+                               len(ch['trem']) == 4 or (len(ch['trem']) == 5 and (
+                                   ch['trem'][4] is None or [tuple(x) for x in ch['trem'][4]] == [(1, 1.0, 0.0)]))))
+                           or (ch.get('dly') and not (
+                               len(ch['dly']['taps']) <= 4 and not ch['dly'].get('cross') and not ch['dly'].get('mod')
+                               and all(len(t) == 4 and isinstance(t[2], str) and t[2] in ('l', 'r', 'c')
+                                       for t in ch['dly']['taps'])))
+                           or (ch['eq'] is not None and len(ch['eq']) != 5)
+                           or (ch.get('cf') and not (len(ch['cf'][0].get('taps') or ()) <= 5 and all(
+                               isinstance(t[0], str) and t[0] in ('l', 'r', 'c')
+                               for t in (ch['cf'][0].get('taps') or (('l',), ('r',))))))):
+        ch = None
+    _EFX[cls] = ch
+    return ch
 
 
 def feedback_voice(cls):
@@ -1708,7 +1748,8 @@ def kits():
             spar[SPAR * (q + 1) - 4] = len(ly)
             spar[SPAR * (q + 1) - 3:SPAR * (q + 1) - 3 + len(ly)] = [float(k) for k in ly]
             if (kit_drum(cls) and ss is not None
-                    and not getattr(cls, 'siren_rotor', None) and not getattr(cls, 'alias_sweep', None)):
+                    and getattr(cls, 'siren_rotor', None) in (None, 'fire')
+                    and not getattr(cls, 'alias_sweep', None)):
                 classes[q] = cls
     # (a key the engine plays only where it plays every layer with it)
     for q in range(16384):
@@ -3025,6 +3066,71 @@ def note_class(cls):
         k.touch_sensitive = int(bool(getattr(cls, 'touch_sensitive', True)))
         # its speaker cabinet (cabinet.py: _prep_cabinet), its response's terms
         cab = getattr(cls, 'cabinet', None)
+        _ex = efx_chain(cls)
+        if _ex is not None:                 # ITS OWN INSERTION EFFECT (blockrender's _EFXN)
+            k.efx_set, k.efx_level, k.efx_od = 1, float(_ex['level']), float(_ex['od_gain'] or 0.0)
+            if _ex['eq'] is not None:
+                k.efx_eq_set = 1
+                k.efx_eq[:] = [float(x or 0.0) for x in _ex['eq']]      # (None: no mid band)
+            import gsefx as _GSX_
+            k.efx_rev = float(_ex['sends'].get(_GSX_.SEND_REV, 40))
+            if _ex['cabinet']:
+                cab = _ex['cabinet']        # (the effect's speaker, in the voice's place)
+            if _ex.get('cf') or _ex.get('dly'):     # (the outputs' places: gsd_place's head)
+                import gsdelay as _GSDP
+                _qp = T.StoppedPipeProperties(261.6, 0, 1, 1)
+                k.efx_place[0] = float(_qp.hrtf_beta)
+                for _s, _sd in enumerate(('l', 'r', 'c')):
+                    _li, _ri, _ld, _rd = _qp.hrtf_at(_GSDP.OUTPUT_X[_sd], 0.0, _qp.listener_distance)
+                    k.efx_place[1 + 4 * _s:5 + 4 * _s] = [_li, _ri, _ld * BR.SR, _rd * BR.SR]
+            if _ex.get('filter') and not getattr(cls, 'plunger', False):     # ITS MOVING FILTER (efxfilter)
+                _fl = _ex['filter']
+                _c = _fl['ctrl']
+                k.flt_set, k.flt_ty, k.flt_k = 1, int(_fl['ty']), 1 if _c[0] == 'sweep' else 2
+                k.flt_p[:] = [float(_fl['pa']), float(_fl['pb']), float(_fl['pc'])]
+                if _c[0] == 'sweep':
+                    k.flt_c[:] = [float(_c[1]), float(_c[2]), float(_c[3]),
+                                  float('nan') if _c[4] is None else float(bool(_c[4])), float(_c[5] or 0.0)]
+                else:
+                    k.flt_c[0] = float(_c[1])
+            if _ex.get('trem'):             # ITS TREMOLO (an Auto Pan's: the tremolo pass)
+                k.efx_trem = 1
+                k.trem_cfg[:] = [float(x) for x in tuple(_ex['trem'])[:4]]
+            if _ex.get('dly'):              # ITS DELAY (gsdelay.expand)
+                _dl = _ex['dly']
+                k.efx_dly = 1
+                k.dly_p[:5] = [float(_dl['level']), float(_dl['fb']), float(_dl['lpf'] or 0.0), float(_dl['tc']),
+                               float(len(_dl['taps']))]
+                for _i, _t in enumerate(_dl['taps']):
+                    k.dly_p[5 + 4 * _i:9 + 4 * _i] = [float(_t[0]), float(_t[1]), float('lrc'.index(_t[2])),
+                                                      float(_t[3])]
+            if _ex.get('cf'):               # ITS CHORUS DEVICE (chorus.gs_copies)
+                import chorus as _CHRX
+                import gsdelay as _GSDX
+                _dv = _ex['cf'][0]
+                _taps = _dv.get('taps') or _CHRX.GS_TAPS
+                if _ex.get('cf_share') is not None:
+                    _sh = float(_ex['cf_share'])
+                else:
+                    _a = _ex['cf'][1] if _ex['cf'] is not None else 0.0
+                    _sh = _a * _a / (1.0 + _a * _a)
+                _q = T.StoppedPipeProperties(261.6, 0, 1, 1)    # (blockrender.gsd_place's head)
+                k.efx_cf = 1
+                k.cf_p[:8] = [float(_dv['tau']), float(_dv['rate']), float(_dv['vd']), float(_dv['fb']),
+                              float(_dv['lpf'] or 0.0), _sh, float(len(_taps)), float(_q.hrtf_beta)]
+                for _s, _sd in enumerate(('l', 'r', 'c')):
+                    _li, _ri, _ld, _rd = _q.hrtf_at(_GSDX.OUTPUT_X[_sd], 0.0, _q.listener_distance)
+                    k.cf_p[8 + 4 * _s:12 + 4 * _s] = [_li, _ri, _ld * BR.SR, _rd * BR.SR]
+                for _i, _t in enumerate(_taps):
+                    k.cf_p[20 + 4 * _i:24 + 4 * _i] = [float('lrc'.index(_t[0])), float(_t[1]),
+                                                       float(_t[2]) if len(_t) > 2 else 0.0,
+                                                       float(_t[3]) if len(_t) > 3 else 1.0]
+        if getattr(cls, 'plunger', False):  # A PLUNGER (efxfilter.plunger: the channel's aftertouch)
+            import efxfilter as _EFP
+            k.flt_set, k.flt_ty, k.flt_k = 2, 2, 3
+            k.flt_p[:] = [_EFP.PLUNGER_Q, _EFP.PLUNGER_MIX, 0.0]
+            k.flt_c[:] = [_EFP.PLUNGER_CLOSED_HZ, _EFP.PLUNGER_MID_HZ, _EFP.PLUNGER_OPEN_HZ, _EFP.PLUNGER_LINEAR,
+                          _EFP.PLUNGER_GLIDE_S]
         if cab and os.environ.get('TUNING_CABINET', '1') != '0':
             import cabinet as _CAB
             cb = _CAB.get(cab)
@@ -3147,6 +3253,11 @@ def note_class(cls):
         if k.fall_cents:
             k.fall_at_s, k.fall_s, k.fall_fade_db = float(cls.fall_at_s), float(cls.fall_s), float(cls.fall_fade_db)
             k.fall_smear = float(getattr(cls, 'fall_smear', 0.6))
+        _sr = getattr(cls, 'siren_rotor', None)
+        if _sr not in (None, 'fire'):
+            _NOTE[cls] = False              # (the Helmholtz siren's air and upper disc: Python's)
+            return None
+        k.siren = int(_sr == 'fire')        # (the fire siren's rotor: nvrender's rows)
         k.tp_hz = float(getattr(cls, 'tremolo_pick_hz', 0.0) or 0.0)     # (tremolo picking: Song::gliss)
         if k.tp_hz:
             k.tp_up_db, k.tp_jit = float(cls.tremolo_pick_up_db), float(cls.tremolo_pick_jitter)
@@ -3983,7 +4094,8 @@ def render(F):
                 tabs[1].ctypes.data, tabs[2].ctypes.data, tabs[3].ctypes.data,
                 None if bl is None else bl.ctypes.data, BR._NO_ROWS.ctypes.data, sh,
                 BR._chunk(), float(BR.XDEC_NEPERS), float(BR.SR), float(BR.T.master_gain),
-                *[a.ctypes.data if a is not None else None for a in dm], L.ctypes.data, R.ctypes.data, *lo, None)
+                *[a.ctypes.data if a is not None else None for a in dm], L.ctypes.data, R.ctypes.data, *lo, None,
+                None, None, None, None, 0)
     return L, R
 
 
@@ -4814,7 +4926,8 @@ def variation_tables():
     # sounding octaves)
     def ok(c):
         return (isinstance(c, type) and sfx_strokes_ok(c)
-                and not any(getattr(c, a, None) for a in ('insertion_efx', 'plunger', 'mouth_states'))
+                and not (getattr(c, 'insertion_efx', None) and efx_chain(c) is None)
+                and not getattr(c, 'mouth_states', None)
                 and note_class(c) is not None)
 
     for (p, v) in sorted(P.VARIATIONS):

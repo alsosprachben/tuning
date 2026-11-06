@@ -13,6 +13,7 @@
 // these columns: the slab's port takes them.
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -318,9 +319,37 @@ static int emit_col(const char *n)
 // *P of them, realloc'd; a damper's dk/dg (dm[0], dm[1]) copied with them.
 // The channels nch of chans, each's (rate, depth, stereo, scatter) in cfg;
 // mask nmask long (NULL: every row). Returns the sidebands made.
+// blockrender.gsd_place's memo, the render's: (output, whole Hz) -> the
+// first frequency's (gL, gR, dL, dR) -- shared by the GS delay's repeats and
+// the chorus device's copies, in the order they ask (the delay's first)
+static std::map<std::pair<int, long long>, std::array<double, 4>> g_gsd_place;
+
+extern "C" void nv_gsd_place_reset(void) { g_gsd_place.clear(); }
+
+// output side (0 l, 1 r, 2 c) at frequency f: pl the head's beta, then each
+// output's (left incidence, right incidence, left delay, right delay)
+extern "C" void nv_gsd_place(int side, double f, const double *pl, double *out)
+{
+    auto key = std::make_pair(side, (long long)f);
+    auto it = g_gsd_place.find(key);
+    if (it == g_gsd_place.end()) {
+        const double beta = pl[0];
+        auto hg = [&](double inc) {     // (SynthProperties.hrtf_gain)
+            const double alpha_min = 0.1, theta_min = 150.0 * M_PI / 180.0;
+            double alpha = 1.0 + alpha_min / 2.0 + (1.0 - alpha_min / 2.0) * cos(inc * M_PI / theta_min);
+            double omega = 2.0 * M_PI * f;
+            return sqrt(pow(alpha * omega, 2.0) + pow(beta, 2.0)) / sqrt(pow(omega, 2.0) + pow(beta, 2.0));
+        };
+        const double *P = pl + 1 + 4 * side;
+        it = g_gsd_place.emplace(key, std::array<double, 4>{hg(P[0]), hg(P[1]), P[2], P[3]}).first;
+    }
+    for (int q = 0; q < 4; q++)
+        out[q] = it->second[q];
+}
+
 extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                                       const double *sends, const int *ncents, const double *cents,
-                                      const int *kinds, double sr)
+                                      const int *kinds, const double *gsp, double sr)
 {
     // chorus.py's SWEEP_HZ, DELAY_S, SWEEP_DEPTH, FLOOR
     static const double SWEEP_HZ[4] = {0.21, 0.29, 0.17, 0.34}, DELAY_S[4] = {0.007, 0.011, 0.013, 0.017};
@@ -340,7 +369,101 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
     std::vector<double> extra;
     std::vector<long long> src;
     long long made = 0;
+    const int cNON = emit_col("non"), cNOFF = emit_col("noff"), cNFR = emit_col("nfr"), cDL = emit_col("delL"),
+              cDR = emit_col("delR"), cFMW = emit_col("fmw"), cFMP = emit_col("fmp"), cFMPR = emit_col("fmpR"),
+              cVDL = emit_col("vdl");
     for (int q = 0; q < nch; q++) {
+        if (kinds && kinds[q] == 2) {
+            // A CHORUS DEVICE (chorus.gs_copies: a tone's insertion effect's
+            // chorus): each output's copies of the channel's rows, a pass a
+            // round of its feedback, placed at the output, the LFO free
+            const double *G = gsp + 40 * q;
+            const double tau = G[0], rate = G[1], vd = G[2], fb = G[3], lpf = G[4], share = G[5];
+            const int ntap = (int)G[6];
+            std::vector<long long> sel;
+            for (long long i = 0; i < n; i++)
+                if ((long long)rows[(size_t)NCOLS * i + cMCH] == chans[q])
+                    sel.push_back(i);
+            if (sel.empty() || !(share > 0.0))
+                continue;
+            const double fb2 = pow(fb, 2.0);
+            const double passes = fb2 < 1.0 ? (1.0 - pow(fb2, 16.0)) / (1.0 - fb2) : 16.0;
+            const double wet = sqrt(share / (double)ntap / passes);
+            std::vector<double> non(sel.size()), noff(sel.size()), ph0(sel.size()), ph0R(sel.size()), fmp(sel.size()),
+                fmpR(sel.size()), fmw(sel.size()), f(sel.size());
+            for (size_t j = 0; j < sel.size(); j++) {
+                const double *r = rows + (size_t)NCOLS * sel[j];
+                long long i = sel[j];
+                non[j] = r[cNON];
+                noff[j] = r[cNOFF];
+                ph0[j] = p0[i] + om[i] * (r[cNON] + r[cDL]);
+                ph0R[j] = p0R[i] + om[i] * (r[cNON] + r[cDR]);
+                fmp[j] = r[cFMP]; fmpR[j] = r[cFMPR]; fmw[j] = r[cFMW];
+                f[j] = om[i] * sr / (2.0 * M_PI);
+            }
+            long long made_q = 0;
+            for (int ti = 0; ti < ntap; ti++) {
+                const int side = (int)G[20 + 4 * ti];
+                const double phase = G[21 + 4 * ti], ext = G[22 + 4 * ti], dfac = G[23 + 4 * ti];
+                std::vector<std::array<double, 4>> pl(sel.size());
+                for (size_t j = 0; j < sel.size(); j++)
+                    nv_gsd_place(side, f[j], G + 7, pl[j].data());     // (the render's memo: gsd_place)
+                for (int k = 1; k <= 16; k++) {
+                    double g = wet * pow(fb, (double)(k - 1));
+                    if (fabs(g) < FLOOR * 0.5 || (k > 1 && fb == 0.0))
+                        break;
+                    double d = (k * tau + ext) * sr;
+                    for (size_t j = 0; j < sel.size(); j++) {
+                        long long i = sel[j];
+                        size_t o = extra.size();
+                        extra.insert(extra.end(), rows + (size_t)NCOLS * i, rows + (size_t)NCOLS * (i + 1));
+                        double *e = extra.data() + o;
+                        double nn = non[j] + d;
+                        e[cNON] = nn;
+                        e[cNOFF] = noff[j] + d;
+                        e[cNFR] = nn - floor(nn);
+                        e[cDL] = pl[j][2];
+                        e[cDR] = pl[j][3];
+                        e[cP0] = -om[i] * (nn + pl[j][2]) + ph0[j];
+                        e[cP0R] = -om[i] * (nn + pl[j][3]) + ph0R[j];
+                        e[cFMP] = fmp[j] - fmw[j] * d;
+                        e[cFMPR] = fmpR[j] - fmw[j] * d;
+                        double lp = 1.0;
+                        if (lpf != 0.0) {
+                            double x = f[j] / lpf;
+                            lp = 1.0 / sqrt(1.0 + x * x);
+                        }
+                        double m = fabs(aM[i]) * g * lp;
+                        e[cAL] = m * pl[j][0];
+                        e[cAR] = m * pl[j][1];
+                        e[cAM] = aM[i] * g * lp;
+                        double vk = k * vd * dfac;
+                        e[cVD] = vk < 0.5 ? vk : 0.5;                   // (min(0.5, ...))
+                        e[cVR] = rate;
+                        double vp = 2.0 * M_PI * rate * nn / sr + phase, tw = 2.0 * M_PI;
+                        double md = fmod(vp, tw);                        // (numpy's %: the divisor's sign)
+                        if (md != 0.0) {
+                            if ((tw < 0.0) != (md < 0.0))
+                                md += tw;
+                        } else {
+                            md = copysign(0.0, tw);
+                        }
+                        e[cVP] = md;
+                        e[cVDL] = 0.0;
+                        src.push_back(i);
+                        made++;
+                        made_q++;
+                    }
+                }
+            }
+            // ...and the dry share comes down by what the copies took
+            double dry = sqrt(1.0 - share);
+            if (made_q && dry != 1.0)
+                for (long long i : sel)
+                    for (int c : {cAL, cAR, cAM})
+                        rows[(size_t)NCOLS * i + c] = rows[(size_t)NCOLS * i + c] * dry;
+            continue;
+        }
         double send = sends[q];
         int nc = ncents[q];
         if (send <= FLOOR || nc <= 0)

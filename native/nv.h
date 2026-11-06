@@ -976,6 +976,34 @@ typedef struct NoteClass {
     // TREMOLO PICKING (tremolo_pick_hz, 0 none): the up strokes tp_up_db,
     // each stroke's time scattered tp_jit of a period
     double tp_hz, tp_up_db, tp_jit;
+    // A SIREN'S ROTOR (siren_rotor): 1 the fire siren's (its motor), 0 none
+    int siren;
+    // ITS OWN INSERTION EFFECT (insertion_efx: gsefx.chain of its tone_state):
+    // its output level, its OD stage's gain (0 none), its EQ (low dB, mid Hz,
+    // Q, mid dB, high dB; efx_eq_set 0 none) and its reverb send (0-127)
+    int efx_set, efx_eq_set;
+    double efx_level, efx_od, efx_eq[5], efx_rev;
+    // ...ITS CHORUS DEVICE (its 'cf': chorus.gs_copies), efx_cf 0 none: tau,
+    // rate, vd, fb, lpf (0 none), share, taps, the head's beta; each output's
+    // place (l, r, c: left and right incidence, left and right delay in
+    // samples); each tap's output (0 l, 1 r, 2 c), phase, extra delay, depth
+    int efx_cf;
+    double cf_p[40];
+    // ...ITS DELAY (its 'dly': gsdelay.expand), efx_dly 0 none: level, fb,
+    // lpf (0 none), tc, taps; each tap's tau, level, output (0 l, 1 r, 2 c),
+    // period -- and the outputs' places (efx_place: the head's beta, then l,
+    // r, c's left and right incidence, left and right delay in samples)
+    int efx_dly;
+    double dly_p[24], efx_place[13];
+    // ...ITS TREMOLO (an Auto Pan's 'trem': rate, depth, stereo, scatter), efx_trem 0 none
+    int efx_trem;
+    double trem_cfg[4];
+    // ...ITS MOVING FILTER (efxfilter: a Phaser's or wah's), flt_set 0 none:
+    // its type, control kind (1 a sweep, 2 a held pedal), parameters (pa, pb,
+    // pc) and control's (Manual Hz, octaves, rate, up: NaN a phaser's, 1 up, 0
+    // down; sens)
+    int flt_set, flt_ty, flt_k;
+    double flt_p[3], flt_c[5];
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -1049,6 +1077,11 @@ typedef struct {
     // the channel's last pick
     int hammered, reslur;
     double hammer_on;
+    // A SIREN's (_SIREN_AT): sounding until its rotor's end, siren_set 0 none
+    int siren_set;
+    double siren_end;
+    // ITS PRESSURE (_pressure_of: its polytouch, else its channel's aftertouch), 0..1
+    double press;
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -1064,9 +1097,11 @@ void nv_refl_memo_reset(void);
    delayed and swept, the dry share taken out of the rows -- or, kinds[q] 1,
    a detuned pair (chorus._pair: cents[8 q] down, cents[8 q + 1] up). The
    copies made. */
+void nv_gsd_place_reset(void);
+void nv_gsd_place(int side, double f, const double *pl, double *out);
 long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                            const double *sends, const int *ncents, const double *cents, const int *kinds,
-                           double sr);
+                           const double *gsp, double sr);
 int nv_struck(const VoiceSnap *v, const ToneIn *t, const VoiceSnap *ls, int nm, double ft, const double *hv,
               double hmax, double db, double rise, double dbs, long long seed, int nimg, const int *nsurf,
               const int *surf, const double *img, const double *mir, double *rows, int cap, double *qacc,
@@ -1233,6 +1268,12 @@ int nv_song_mono(void *s, int i, int *mcut, int *mslur);
 void nv_song_gliss(void *s, const NoteClass *const *K);
 void nv_song_slot_organs(void *s, int n, const OrganSpec *const *so);
 void nv_song_play_mark(void *s);
+void nv_song_siren(void *s, long long ch, int note, double on, double row, double end);
+void nv_song_efx_part(void *s, long long part, double on, double dist);
+void nv_song_pressure_events(void *s, long long ch, int key, int n, const double *t, const int *v);
+double nv_song_pressure(void *s, long long ch, int note, double on, double off);
+int nv_song_efx_dist(void *s, long long part, double on, double *dist);
+int nv_song_siren_of(void *s, int i, double *out);
 int nv_song_gliss_note(void *s, int i, double *out);
 double nv_song_tess(void *s, long long ch);
 void nv_song_set_part(void *s, long long ch, int part);

@@ -73,6 +73,8 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     VoiceSnap s;
     VoiceNote o;
     nv_voice_init(&c, &K->tmpl, n->f0, n->pan, pow(n->vel / 127.0, 2.0), n->chan_vol, n->effort, rs, &s, &o);
+    if (n->press != 0.0)                // ...and its level: PRESS_DB x pressure (db_amplitude)
+        nv_voice_regain(&c, &s, pow(10.0, 8.0 * n->press / 20.0));
     if (n->gliss_lv > 0.0 && n->gliss_lv != 1.0)
         nv_voice_regain(&c, &s, n->gliss_lv);   // HALF-VALVING LOSES SUPPORT (_GLISS: the step's level)
     if (n->sym_drv)                     // the driver of its channel's strings (_SYM_CH: this note's props)
@@ -839,6 +841,8 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         if (!r)
             return -2;
         n->f0 = pl[0]; n->vel = pl[1]; n->pan = pl[2]; n->chan_vol = pl[3]; n->effort = pl[4];
+        if (n->press != 0.0)                // A KEY LEANED ON: PRESS_DB of effort (its level below)
+            n->effort += 8.0 * n->press;
         if (K->brass && r == 1)             // the horn's intonation, from its fingering
             n->f0 *= pow(2.0, brass_cents(n->f0, K->brass == 2) / 1200.0);
         if (K->xf > 0.0 && r == 1) {        // A SOUND TRANSPOSED WHOLE (_XP): built at its kit's pitch
@@ -848,6 +852,10 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         }
         if (K->organ && K->organ->swells)   // an organ's CC7 is its swell, its CC11 its stop word: 1, trimmed
             n->chan_vol = 1.0 * nv_song_note_trim(song, n->song_index);
+        if (K->efx_set && r == 1) {         // ITS OWN INSERTION EFFECT: its level, its OD stage's gain (after an organ's swell)
+            n->chan_vol *= K->efx_level;
+            n->chan_vol *= K->efx_od != 0.0 ? K->efx_od : 1.0;
+        }
         if (r == 2)
             n->seat = pl[5];            // a drum: its seat in its set
         else if (K->key_pan_spread != 0.0)
@@ -859,6 +867,8 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         n->key_off = nv::pymax(n->key_off, n->on + one_shot_ring(K, n, rs));
     else if (K->one_shot)               // a one-shot rings out on its own decay (a kit's: the flat hold)
         n->key_off = nv::pymax(n->key_off, n->on + K->one_shot_hold);
+    if (n->siren_set)                   // A SIREN sounds while its rotor does (_SIREN_AT)
+        n->key_off = nv::pymax(n->on + 1e-3, n->siren_end);
     n->off = nv_song_note_off(song, n->ch, n->note, n->on, n->key_off, n->damper_pedal, n->mcut,
                               n->retrigger_fade, band);
     double ck;
@@ -921,6 +931,9 @@ static double song_dist(void *song, long long ch, double on, double sr, const No
     long long part = ch % 256;
     int n = nv_song_ccs(song, part, 91, nullptr, nullptr, 0);
     double d = NAN;
+    double ed;
+    if (nv_song_efx_dist(song, part, on, &ed))
+        return nv::pymax(0.1, ed);          // (a part's insertion effect: its send, not CC91's)
     if (n > 0) {
         std::vector<double> tt(n);
         std::vector<int> vv(n);
@@ -1065,6 +1078,13 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         double mrow;
         if (nv_song_meend_row(song, i, &mrow))
             n.br = mrow >= 0.0 ? mrow : n.fbr;  // the meend: the note's own row, or none (the fader's)
+        double sir[2];
+        n.siren_set = 0;
+        if (nv_song_siren_of(song, i, sir)) {   // a siren's rotor: its row, its end
+            n.br = sir[0];
+            n.siren_set = 1;
+            n.siren_end = sir[1];
+        }
         if (k->organ) {                     // A REGISTERED ORGAN: its ranks as its registration leaves them
             // (one that bends: only a hit's, whose ranks ride no chest -- the
             // note's own bend row, nv_song_organ_note's br)
@@ -1072,6 +1092,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
                 return -(1 + i);
         }
         n.from_song = 1; n.song_index = i;
+        n.press = nv_song_pressure(song, ch, iv[0], dv[0], dv[1]);    // (_pressure_of: to its key-up)
         n.dist = song_dist(song, ch, dv[0], n.sr, k);  // its distance: its part's CC91 (_src_dist)
         n.sung_hz = nv_song_tess(song, ch);     // a sung part's tessitura, its declared part (_prep_choir_parts)
         n.part = nv_song_part(song, ch);

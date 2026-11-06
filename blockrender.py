@@ -6594,7 +6594,8 @@ READING_STATS = [0, 0]  # files whose check song is the engine's own reading; wh
 
 
 def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st, eff, nx, mcut, slurred,
-                       slur_out, song=None, key_off=None, from_song=False, seat=0.0, held=0.0, organ=None):
+                       slur_out, song=None, key_off=None, from_song=False, seat=0.0, held=0.0, organ=None,
+                       press=0.0):
     """A piano note from the engine (native/engine.cpp's nv_note): its knock,
     tone and phantom partials, the voice built there from the note as the
     file and channel give it. (rows, qacc, azimuth, NoteOut, row0, qacc
@@ -6631,6 +6632,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     imgs, nsurf, surf, img, mir = [], np.zeros(1, np.int32), np.zeros(1, np.int32), np.zeros(3), np.zeros(3)
     n = _NV.NoteIn()
     n.f0, n.pan, n.vel, n.chan_vol, n.effort = nt.f0, nt.pan, nt.vel, nt.chan_vol, eff
+    n.press = press or 0.0              # (its pressure: the voice's gain leans with it; eff has it already)
     n.on, n.off, n.seat = nt.on, nt.off, seat
     n.ch, n.note = nt.ch, nt.note           # (a flam's draw is the note's)
     n.hammered, n.reslur, n.hammer_on = int(em.hammered), int(em.reslur), em.hammer_on
@@ -9109,7 +9111,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                      _nx, _mcut, _slurred, (nt.ch, nt.note, nt.on) in _SLUR_OUT,
                                      _SONG if choked is None else None, _off_key,
                                      _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT,
-                                                  FREQ_E), _seat, _held,
+                                                  FREQ_E), _seat, _held, press=_press,
                                      organ=((rankev_of[nt.organ_key], [grow_of[(nt.organ_key, _r[0])] for _r in stops],
                                              crow_of[nt.organ_key], wrow_of, wcombo, em.bend_row)
                                             if nt.organ else None))

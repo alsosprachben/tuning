@@ -1461,6 +1461,10 @@ struct Song {
     std::vector<double> freq_e;
     std::map<long long, std::vector<unsigned char>> sym_drv;    // each mix channel's strings' driver (_SYM_CH)
     std::map<NoteKey, std::pair<double, double>> meend;         // _MEEND_AT: (its ratio at Note On, its row or -1)
+    std::map<NoteKey, std::pair<double, double>> siren;         // _SIREN_AT: (its row, its rotor's end)
+    std::map<long long, std::pair<double, double>> efx_part;    // a part's insertion effect: (its first onset, distance)
+    // ITS PRESSURE (ats, pts): a channel's aftertouch (key -1), a key's polytouch, in message order
+    std::map<std::pair<long long, int>, std::vector<std::pair<double, int>>> press;
     int raga_sa = -1;
     bool raga_on = false;
     std::vector<double> raga_sw;
@@ -2626,6 +2630,82 @@ const void *nv_song_sym_get(void *s, long long mix)
 }
 
 void nv_song_sym_reset(void *s) { ((nv::Song *)s)->sym_drv.clear(); }
+
+// a channel's aftertouch (key -1) or a key's polytouch, in message order
+void nv_song_pressure_events(void *s, long long ch, int key, int n, const double *t, const int *v)
+{
+    auto &e = ((nv::Song *)s)->press[std::make_pair(ch, key)];
+    for (int i = 0; i < n; i++)
+        e.push_back(std::make_pair(t[i], v[i]));
+}
+
+// blockrender._pressure_of: the note's pressure, 0..1 -- its key's polytouch,
+// else its channel's aftertouch, the time-weighted mean over [on, off)
+double nv_song_pressure(void *s, long long ch, int note, double on, double off)
+{
+    const nv::Song *S = (nv::Song *)s;
+    auto it = S->press.find(std::make_pair(ch, note));
+    if (it == S->press.end() || it->second.empty())
+        it = S->press.find(std::make_pair(ch, -1));
+    if (it == S->press.end() || it->second.empty() || off <= on)
+        return 0.0;
+    std::vector<std::pair<double, int>> ev = it->second;
+    std::sort(ev.begin(), ev.end());
+    double acc = 0.0, v = 0.0, t0 = on;
+    for (const auto &e : ev) {
+        double t1 = e.first;
+        if (t1 >= off)
+            break;
+        if (t1 > t0) {
+            acc += v * (t1 - t0);
+            t0 = t1;
+        }
+        v = e.second / 127.0;
+        if (t1 <= on)
+            t0 = on;
+    }
+    acc += v * (off - t0);
+    double x = acc / (off - on);
+    double m = x < 1.0 ? x : 1.0;           // (max(0.0, min(1.0, x)))
+    return m > 0.0 ? m : 0.0;
+}
+
+// A PART'S INSERTION EFFECT (blockrender's _C91D at its first note): its
+// reverb send the part's distance from that onset on; 0 none
+void nv_song_efx_part(void *s, long long part, double on, double dist)
+{
+    ((nv::Song *)s)->efx_part.emplace(part, std::make_pair(on, dist));
+}
+
+int nv_song_efx_dist(void *s, long long part, double on, double *dist)
+{
+    const nv::Song *S = (nv::Song *)s;
+    auto it = S->efx_part.find(part);
+    if (it == S->efx_part.end() || on < it->second.first)
+        return 0;
+    *dist = it->second.second;
+    return 1;
+}
+
+// A SIREN's note (_SIREN_AT): its rotor's row, and where it ends
+void nv_song_siren(void *s, long long ch, int note, double on, double row, double end)
+{
+    ((nv::Song *)s)->siren[nv::NoteKey{ch, note, on}] = std::make_pair(row, end);
+}
+
+// note i's siren row and end (out[0], out[1]); 0 if it is no siren's
+int nv_song_siren_of(void *s, int i, double *out)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (i < 0 || i >= (int)S->notes.size())
+        return 0;
+    auto it = S->siren.find(nv::NoteKey{S->notes[i].ch, S->notes[i].note, S->notes[i].on});
+    if (it == S->siren.end())
+        return 0;
+    out[0] = it->second.first;
+    out[1] = it->second.second;
+    return 1;
+}
 
 // a play's start (nv_play): the song's play-made rows as they were before the first
 void nv_song_play_mark(void *s) { ((nv::Song *)s)->play_mark(); }

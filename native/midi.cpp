@@ -200,6 +200,8 @@ struct Parsed {
     std::vector<Note> notes;
     std::vector<CCEv> ccs;      // in message order
     std::vector<PwEv> pws;
+    std::vector<CCEv> ats;      // ats: each channel's aftertouch (D0) and CC121's 0, in message order
+    std::vector<CCEv> pts;      // pts: each key's polytouch (A0: cc its key), in message order
     std::vector<std::pair<int, int>> progs;     // (channel, program) changes, for the caller
     double total = 0.0;
     int gs = 0;                 // a Roland GS exclusive before the first note (gs_setup: the file speaks GS)
@@ -829,6 +831,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 ctrl[ch][1] = 0;
                 P.pws.push_back(PwEv{ch, t, 0});
                 P.pitch.push_back(PitchEv{ch, t, seq, 0, 0.0});
+                P.ats.push_back(CCEv{ch, t, -1, 0});        // (not polytouch: live keeps it)
                 rsel[ch] = std::make_pair(127, 127);
             }
             if (cc == 98 || cc == 99) {
@@ -960,7 +963,10 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 P.notes.push_back(n);
             }
         }
-        // polytouch (A0) and aftertouch (D0) carry no note or controller here
+        else if (kind == 0xD0)
+            P.ats.push_back(CCEv{ch, t, -1, m.d0});     // the channel's aftertouch (ats)
+        else if (kind == 0xA0)
+            P.pts.push_back(CCEv{ch, t, m.d0, m.d1});   // a key's polytouch (pts)
     }
     P.total = t;
     // ALL NOTES OFF and the channel-mode messages that carry it (CC123-127,
@@ -1142,6 +1148,37 @@ void nv_midi_note(void *p, int i, int *iv, double *dv)
 
 // note i's bank (Note.bsel: 0 the capital); any note's (a file live does not play yet)
 int nv_midi_note_bsel(void *p, int i) { return ((nv::Parsed *)p)->notes[i].bsel; }
+
+// key's polytouch (blockrender's pts[(ch, key)]), as nv_midi_ats
+int nv_midi_pts(void *p, int ch, int key, double *t, int *v, int cap)
+{
+    int n = 0;
+    for (const auto &e : ((nv::Parsed *)p)->pts)
+        if (e.ch == ch && e.cc == key) {
+            if (t && n < cap) {
+                t[n] = e.t;
+                v[n] = e.v;
+            }
+            n++;
+        }
+    return n;
+}
+
+// channel ch's aftertouch (blockrender's ats[ch]): its times and values in
+// message order, n of them into t and v (NULL: count)
+int nv_midi_ats(void *p, int ch, double *t, int *v, int cap)
+{
+    int n = 0;
+    for (const auto &e : ((nv::Parsed *)p)->ats)
+        if (e.ch == ch) {
+            if (t && n < cap) {
+                t[n] = e.t;
+                v[n] = e.v;
+            }
+            n++;
+        }
+    return n;
+}
 int nv_midi_banked(void *p) { return ((nv::Parsed *)p)->banked; }
 int nv_midi_chprog_bsel(void *p, int i) { return ((nv::Parsed *)p)->chbsel[i]; }
 

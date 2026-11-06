@@ -190,7 +190,8 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
               double xdec_nepers, double SR,
               double master_gain, const float *DM, const long *DMO, const long *DMB, const long *DMN, float *L,
               float *R, void *slo, const int *lsr, float *const *lob, const float *LANG, long lgn,
-              const MoogCols *moog)
+              const MoogCols *moog, const int *fsr, const int *fty, const float *const *fpar, const float *FCT,
+              long fgn)
 {
     if (moog && !moog->FT)
         moog = nullptr;
@@ -241,6 +242,21 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
         const float *mMPR = moog ? moog->MPR : nullptr, *mMPK = moog ? moog->MPK : nullptr;
         auto F = [&](int c) { return g.f[c].data(); };
         if (LANG && fn == (voice_fn)sv) {
+            // ...and a moving filter's columns (efxfilter: fsr, fty, fpa-c), NULL none
+            std::vector<int> gfs, gft;
+            std::vector<float> gfp[3];
+            if (FCT) {
+                gfs.resize(n);
+                gft.resize(n);
+                for (int q = 0; q < 3; q++)
+                    gfp[q].resize(n);
+                for (int k = 0; k < n; k++) {
+                    gfs[k] = fsr[rows[k]];
+                    gft[k] = fty[rows[k]];
+                    for (int q = 0; q < 3; q++)
+                        gfp[q][k] = fpar[q][rows[k]];
+                }
+            }
             g.lsr.resize(n);
             for (int q = 0; q < 4; q++)
                 g.lob[q].resize(n);
@@ -256,8 +272,10 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                            F(F_delL), F(F_delR), g.i[I_gr].data(), g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC,
                            BL, mfx, mFT, mKN, mknk, mkb0, nullptr, nullptr, mmk, mMPI, mMPC, mMPR,
                            mMKI, mMPK, mw, mp, mpR, sh[0], sh[1], sh[2], sh[3], g.lsr.data(),
-                           g.lob[0].data(), g.lob[1].data(), g.lob[2].data(), g.lob[3].data(), LANG, lgn, nullptr,
-                           nullptr, nullptr, nullptr, nullptr, nullptr, 0, CHUNK, nullptr, nullptr, nullptr);
+                           g.lob[0].data(), g.lob[1].data(), g.lob[2].data(), g.lob[3].data(), LANG, lgn,
+                           FCT ? gfs.data() : nullptr, FCT ? gft.data() : nullptr, FCT ? gfp[0].data() : nullptr,
+                           FCT ? gfp[1].data() : nullptr, FCT ? gfp[2].data() : nullptr, FCT, FCT ? fgn : 0, CHUNK,
+                           nullptr, nullptr, nullptr);
         } else if (!damp)
             fn(L, R, 0, N, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR), F(F_nf),
                g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA), F(F_aft), F(F_sus),

@@ -93,7 +93,13 @@ TASKS = [
     ("CM-64", False, "The CM-32P (the CM-64's PCM half: the U-110's tones on channels 11-16) -- Python has none yet"),
     ("CM-64", False, "The CM-32L's sound effects on the rhythm part (keys 76-108) in nvlive"),
     ("SC-55", False, "The GS map (CC32 / TONE MAP-0) and kit_in_map in the reader and nvlive"),
-    ("SC-55", False, "GS's effects natively (gsefx: insertion EFX, the GS delay, chorus) -- the corpus has no "
+    ("SC-55", True, "A tone's own insertion effect (insertion_efx) in files: its level, OD stage (the part's "
+                    "valve, its reference the effect's level), cabinet, EQ (libm's pow: gsefx.eq_gain) and "
+                    "sends; its chorus device (chorus.gs_copies: Stereo Chorus, Space D, the flanger), its delay "
+                    "(gsdelay.expand; gsd_place's memo shared), an Auto Pan's tremolo -- 51 of the maps' tones"),
+    ("SC-55", False, "A tone's own insertion effect's render-time stages: Phaser and Auto Wah (efxfilter, as the "
+                     "plunger's), Compressor and Lo-Fi (a bus) -- 7 tones; a Hexa or 3D chorus's angled voices"),
+    ("SC-55", False, "A FILE's GS effects natively (gsefx: insertion EFX, the GS delay, chorus) -- the corpus has no "
                      "GS files, so each needs GS test files"),
     ("SC-55", False, "Files: GS's other exclusives -- part parameters (parse_gs_part), drum setup and the user "
                      "sets, the rhythm part's assignment, TONE MAP-0 (the reader refuses them, -4)"),
@@ -103,8 +109,10 @@ TASKS = [
     ("SC-55", True, "SFX voices with a fixed vibrato of their own (skid, starship, scream: VoiceSnap.fv_*)"),
     ("SC-55", True, "The heartbeat: its ECG's mode phases, its blood flow's timed noise bands (noise_events)"),
     ("SC-55", True, "A drum's sounding octaves (the SFX sets' helicopter: its key a rotor, under its kit pitch)"),
-    ("SC-55", False, "The siren's rotor (siren_rotor: its rows and live's siren block) -- GM 2's 125.5, the SFX "
-                     "set's 67"),
+    ("SC-55", True, "Files: the fire siren's rotor (siren.py: its motor and coast, carried key to key, a row a "
+                    "note under the channel's fader) -- the SFX set's 67, the CM-32L's 91"),
+    ("SC-55", False, "The Helmholtz siren (GM 2's 125.5: its air from velocity and pressure, its upper disc on "
+                     "the crank) in files; live's siren block in nvlive"),
     ("GM1", True, "examples/struct_check.py: each ctypes mirror's field offsets against the C struct's (a "
                   "reordered field of the same size passed the size check silently)"),
     ("SC-55", False, "Melodic hits: a hand drum's or a kit's detail on a melodic voice (strike_phase_spread, "

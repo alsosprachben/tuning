@@ -65,6 +65,8 @@ void nv_midi_note(void *p, int i, int *iv, double *dv);
 void nv_midi_cc(void *p, int i, int *iv, double *t);
 void nv_midi_song(void *p, void *song, const double *trim);
 int nv_midi_note_bsel(void *p, int i);
+int nv_midi_ats(void *p, int ch, double *t, int *v, int cap);
+int nv_midi_pts(void *p, int ch, int key, double *t, int *v, int cap);
 int nv_midi_banked(void *p);
 int nv_midi_chprog_bsel(void *p, int i);
 void *nv_song_new(void);
@@ -99,7 +101,8 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
               const double *BC, const float *BL, const float *noRows, const float *sh, long CHUNK, double xdec_nepers,
               double SR, double master_gain, const float *DM, const long *DMO, const long *DMB, const long *DMN,
               float *L, float *R, void *slo, const int *lsr, float *const *lob, const float *LANG, long lgn,
-              const MoogCols *moog);
+              const MoogCols *moog, const int *fsr, const int *fty, const float *const *fpar, const float *FCT,
+              long fgn);
 void nv_buf_free(void *p);
 long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                             const double *cfg, const char *mask, long long nmask, double sr);
@@ -727,6 +730,25 @@ int main(int argc, char **argv)
         nv_song_slot_organs(song, ns, so.data());
     }
     nv_midi_song(midi, song, E.trim.data() + (nv_midi_gs(midi) ? 256 : 0));
+    // ITS PRESSURE (ats, pts): each channel's aftertouch, each key's polytouch
+    for (int c = 0; c < 256; c++) {
+        int na = nv_midi_ats(midi, c, nullptr, nullptr, 0);
+        if (na > 0) {
+            std::vector<double> tt(na);
+            std::vector<int> vv(na);
+            nv_midi_ats(midi, c, tt.data(), vv.data(), na);
+            nv_song_pressure_events(song, c, -1, na, tt.data(), vv.data());
+        }
+        for (int key = 0; key < 128; key++) {
+            int np = nv_midi_pts(midi, c, key, nullptr, nullptr, 0);
+            if (np <= 0)
+                continue;
+            std::vector<double> tt(np);
+            std::vector<int> vv(np);
+            nv_midi_pts(midi, c, key, tt.data(), vv.data(), np);
+            nv_song_pressure_events(song, c, key, np, tt.data(), vv.data());
+        }
+    }
     // THE REGISTERED ORGANS (_prep_organ_rows): each melodic channel's, as its
     // programs bring them (ch_progs, uniq_programs), one a family; their stop
     // words' events. A program whose organ the engine does not play: Python's
@@ -1005,7 +1027,192 @@ int main(int argc, char **argv)
     double qacc[18] = {0}, az = 0.0, out[48] = {0};
     double *rows = nullptr;
     void *dm[6] = {nullptr};
-    bool rows_ = !fch.empty() || !gch.empty() || nw || nsr || nbr_ || !mrows.empty();
+    // THE PARTS' INSERTION EFFECTS (a tone's own: blockrender's _EFXN): in the
+    // note loop's order, each part's first effect note's reverb send its
+    // distance from there on (_C91D), each mix channel's first its send
+    // bus's and its EQ's (_REVERB_CH, _EFXEQ_CH), a part's CC91 steps gone
+    std::map<long long, std::array<double, 5>> efx_eq;
+    std::map<long long, double> efx_send;
+    std::set<long long> efx_parts;
+    {
+        int nn = nv_song_n_notes(song);
+        std::vector<int> ord(nn);
+        std::vector<double> on_(nn);
+        std::vector<long long> ch_(nn);
+        std::vector<int> key_(nn);
+        for (int i = 0; i < nn; i++) {
+            long long c;
+            int iv[4];
+            double dv[2];
+            nv_song_get_note(song, i, &c, iv, dv);
+            ord[i] = i; on_[i] = dv[0]; ch_[i] = c; key_[i] = iv[0];
+        }
+        std::stable_sort(ord.begin(), ord.end(), [&](int a, int b) {
+            if (on_[a] != on_[b])
+                return on_[a] < on_[b];
+            if (ch_[a] != ch_[b])
+                return ch_[a] < ch_[b];
+            return key_[a] < key_[b];
+        });
+        std::set<long long> mseen;
+        for (int i : ord) {
+            long long c;
+            int iv[4];
+            double dv[2];
+            nv_song_get_note(song, i, &c, iv, dv);
+            int q = nv_song_kidx(song, i);
+            const NoteClass *k = (q >= 0 && q < (int)K.size()) ? K[q] : nullptr;
+            if (!k || !k->efx_set || iv[3])
+                continue;
+            long long m = nv_song_mix(song, i);
+            if (mseen.count(m))
+                continue;
+            mseen.insert(m);
+            double d = (k->efx_rev > 0.0 ? k->efx_rev : 0.0) / 40.0;
+            if (!efx_parts.count(c)) {
+                nv_song_efx_part(song, c, dv[0], d);
+                efx_parts.insert(c);
+            }
+            efx_send[m] = d;
+            if (k->efx_eq_set)
+                efx_eq[m] = {k->efx_eq[0], k->efx_eq[1], k->efx_eq[2], k->efx_eq[3], k->efx_eq[4]};
+        }
+    }
+    // THE FIRE SIRENS' ROTORS (_prep_siren, siren.py): each (channel, key)'s
+    // notes in their order, its rotor carried key to key -- wound up by its
+    // motor while held (to its gate where a held texture has one), coasting
+    // after and between presses -- a row each, after the others: its speed a
+    // block (the mean ratio), its phase summed from it, its level at each
+    // edge; the note sounding to the rotor's floor or the next press
+    struct SirRow {
+        long long ch;
+        std::vector<float> r, l;
+        std::vector<double> c;
+    };
+    std::vector<SirRow> sir;
+    const int sbase = (int)(gch.size() + nbr_ + nw + nsr + fch.size() + mrows.size());
+    {
+        auto pmx = [](double a, double b) { return b > a ? b : a; };    // (Python's max and min)
+        auto pmn = [](double a, double b) { return b < a ? b : a; };
+        const double A = 0.723, Bc = 0.0908, UK = 0.452, NE = 3.8;     // siren.FIRE
+        const double W = (A + Bc) / A, FLOOR = pow(10.0, -60.0 / 20.0);
+        auto step = [&](double u, double p, double dt) {
+            double k = A * p + Bc;
+            if (k <= 0.0)
+                return u;
+            double target = A * p * W * sqrt(pmx(p, 0.0)) / k;
+            return target + (u - target) * exp(-k * dt);
+        };
+        auto mean_over = [&](double u, double p, double dt) {
+            double k = A * p + Bc;
+            if (k <= 0.0 || dt <= 0.0)
+                return u;
+            double target = A * p * W * sqrt(pmx(p, 0.0)) / k;
+            return target + (u - target) * (1.0 - exp(-k * dt)) / (k * dt);
+        };
+        auto level = [&](double u) {
+            if (u <= 0.0)
+                return 0.0;
+            double x = pow(u / UK, NE), x1 = pow(1.0 / UK, NE);
+            return sqrt((x / (1.0 + x)) / (x1 / (1.0 + x1)));
+        };
+        auto floordiv = [](double a, double b) {    // Python's float a // b
+            double mod = fmod(a, b), div = (a - mod) / b;
+            if (mod != 0.0 && ((b < 0.0) != (mod < 0.0)))
+                div -= 1.0;
+            double f = floor(div);
+            if (div - f > 0.5)
+                f += 1.0;
+            return f;
+        };
+        const long nblk_ = (long)(((long long)(total * SR) + (long long)SR) / (long long)BLK + 2);
+        const double bdt = BLK / SR;
+        std::vector<std::pair<long long, int>> order;
+        std::map<std::pair<long long, int>, std::vector<std::tuple<double, double, int>>> byk;
+        for (int i = 0, n = nv_song_n_notes(song); i < n; i++) {
+            long long c;
+            int iv[4];
+            double dv[2];
+            nv_song_get_note(song, i, &c, iv, dv);
+            int q = nv_song_kidx(song, i);
+            const NoteClass *k = (q >= 0 && q < (int)K.size()) ? K[q] : nullptr;
+            if (!k || k->siren != 1)
+                continue;
+            auto key = std::make_pair(c, iv[0]);
+            if (!byk.count(key))
+                order.push_back(key);
+            byk[key].push_back(std::make_tuple(dv[0], dv[1], i));
+        }
+        for (const auto &key : order) {
+            auto &ns = byk[key];
+            std::stable_sort(ns.begin(), ns.end(), [](const std::tuple<double, double, int> &a,
+                                                      const std::tuple<double, double, int> &b) {
+                return std::get<0>(a) < std::get<0>(b) || (std::get<0>(a) == std::get<0>(b) && std::get<1>(a) < std::get<1>(b));
+            });
+            double u = 0.0, tprev = NAN;
+            for (size_t j = 0; j < ns.size(); j++) {
+                double on = std::get<0>(ns[j]), of = std::get<1>(ns[j]);
+                const NoteClass *k = K[nv_song_kidx(song, std::get<2>(ns[j]))];
+                if (!std::isnan(tprev) && on > tprev)
+                    u *= exp(-Bc * (on - tprev));           // (Rotor.coast)
+                double drive_end = of;
+                if (k->held_texture && k->gate_time > 0.0)
+                    drive_end = pmx(of, on + k->gate_time);
+                double cap = j + 1 < ns.size() ? std::get<0>(ns[j + 1]) : INFINITY;
+                long b0 = (long)floordiv(on * SR, (double)BLK);
+                std::vector<double> r, lv;
+                long kb = b0;
+                double end;
+                for (;;) {
+                    double tb = kb * bdt;
+                    if (tb >= cap || kb >= nblk_) {
+                        end = pmn(cap, nblk_ * bdt);
+                        break;
+                    }
+                    double tm = tb + 0.5 * bdt;
+                    double p = tm < drive_end ? 1.0 : 0.0;
+                    double l0 = level(u);
+                    double rr = mean_over(u, p, bdt);
+                    u = step(u, p, bdt);
+                    double l1 = level(u);
+                    r.push_back(rr);
+                    lv.push_back(l0);
+                    kb++;
+                    if (tb >= drive_end && l1 <= FLOOR) {
+                        end = kb * bdt;
+                        break;
+                    }
+                }
+                lv.push_back(level(u));
+                tprev = pmn(end, cap);
+                SirRow row;
+                row.ch = key.first;
+                row.r.assign(nblk_, 1.0f);
+                long nn = std::min((long)r.size(), nblk_ - b0);
+                for (long q = 0; q < nn; q++)
+                    row.r[b0 + q] = (float)r[q];
+                if (nn > 0)
+                    for (long q = b0 + nn; q < nblk_; q++)
+                        row.r[q] = (float)r[nn - 1];
+                row.l.assign(nblk_ + 1, 1.0f);
+                long nl = std::min((long)lv.size(), std::max(nn, 0L) + 1);
+                for (long q = 0; q < nl && b0 + q < nblk_ + 1; q++)
+                    row.l[b0 + q] = (float)lv[q];
+                for (long q = b0 + nl; q < nblk_ + 1; q++)
+                    row.l[q] = (float)lv[nl - 1];
+                row.c.assign(nblk_, 0.0);
+                double acc = 0.0;               // (the phase: cumsum of (ratio - 1) x BLK, from 0)
+                for (long q = 0; q + 1 < nblk_; q++) {
+                    acc = acc + ((double)row.r[q] - 1.0) * BLK;
+                    row.c[q + 1] = acc;
+                }
+                nv_song_siren(song, key.first, key.second, on, (double)(sbase + (int)sir.size()), tprev);
+                sir.push_back(std::move(row));
+            }
+        }
+    }
+    bool rows_ = !fch.empty() || !gch.empty() || nw || nsr || nbr_ || !mrows.empty() || !sir.empty();
+    nv_gsd_place_reset();                       // (blockrender's _GSD_PLACE: the render's)
     long long P = nv_prepare(song, K.data(), &t, rows_ ? br.data() : nullptr, rows_ ? 1024 : 0, &rs, &rows,
                              qacc, &az, E.kind.data(),
                              E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, total,
@@ -1113,7 +1320,7 @@ int main(int argc, char **argv)
     // colours the copies too
     {
         std::vector<long long> cch;
-        std::vector<double> csend, ccents;
+        std::vector<double> csend, ccents, cgsp;
         std::vector<int> cnc, ckind;
         std::vector<int> ord(nv_song_n_notes(song));
         for (size_t i = 0; i < ord.size(); i++)
@@ -1135,6 +1342,22 @@ int main(int argc, char **argv)
             long long mch = nv_song_mix(song, i);
             if (seen.count(mch))
                 continue;
+            {
+                // (a tone's insertion effect's chorus device: the channel's, ahead of CC93)
+                int cq0 = E.cmap[nv_song_kidx(song, i)];
+                const NoteClass *k0 = cq0 >= 0 ? (const NoteClass *)E.classes[cq0].data() : nullptr;
+                if (k0 && k0->efx_cf && !iv[3]) {
+                    seen.insert(mch);
+                    cch.push_back(mch);
+                    csend.push_back(0.0);
+                    cnc.push_back(0);
+                    ckind.push_back(2);
+                    for (int q = 0; q < 8; q++)
+                        ccents.push_back(0.0);
+                    cgsp.insert(cgsp.end(), k0->cf_p, k0->cf_p + 40);
+                    continue;
+                }
+            }
             int nc = nv_song_ccs(song, mch % 256, 93, nullptr, nullptr, 0);
             if (nc <= 0) {
                 // (no CC93: the voice's own pedal, or its pair, if it has one;
@@ -1144,6 +1367,7 @@ int main(int argc, char **argv)
                 if (!nk || !(nk->cho_send || nk->pair_set))
                     continue;
                 seen.insert(mch);
+                cgsp.insert(cgsp.end(), 40, 0.0);
                 cch.push_back(mch);
                 csend.push_back(nk->cho_send ? nk->cho_send : 1.0);
                 cnc.push_back(nk->cho_send ? nk->n_cho : 2);
@@ -1165,12 +1389,40 @@ int main(int argc, char **argv)
             csend.push_back(vv[0] / 127.0);
             cnc.push_back(nk ? nk->n_cho : 0);
             ckind.push_back(0);
+            cgsp.insert(cgsp.end(), 40, 0.0);
             for (int q = 0; q < 8; q++)
                 ccents.push_back(nk && q < nk->n_cho ? nk->cho_cents[q] : 0.0);
         }
         if (!cch.empty())
             nv_chorus_expand(&rows, &P, dm, (int)cch.size(), cch.data(), csend.data(), cnc.data(), ccents.data(),
-                             ckind.data(), SR);
+                             ckind.data(), cgsp.data(), SR);
+    }
+    // THE INSERTION EFFECTS' EQ (_prep_insertion_eq, gsefx.eq_gain): every
+    // row of an effect's mix channel, the valve's products and the copies
+    // included, at its frequency -- shelves at 400 Hz and 4 kHz, a peaking
+    // mid (the table's float64 still: the cast is the render's last)
+    if (!efx_eq.empty()) {
+        const int cM = col("mch"), cF = col("nf");
+        const int cA[3] = {col("aL"), col("aR"), col("aM")};
+        for (long long r = 0; r < P; r++) {
+            double *row = rows + NCOLS * r;
+            auto it = efx_eq.find((long long)row[cM]);
+            if (it == efx_eq.end())
+                continue;
+            const auto &e = it->second;
+            double f = row[cF];
+            double x = f / 400.0, y = f / 4000.0;
+            x = x * x;
+            y = y * y;
+            double db = e[0] / (1.0 + x) + e[4] * y / (1.0 + y);
+            if (e[1] != 0.0 && e[3] != 0.0) {
+                double u = e[2] * (f / e[1] - e[1] / (f + 1e-6 * (f <= 0.0 ? 1.0 : 0.0)));
+                db += e[3] / (1.0 + u * u);
+            }
+            double g = pow(10.0, db / 20.0);
+            for (int c : cA)
+                row[c] = row[c] * g;
+        }
     }
     // THE SPEAKER CABINETS (_prep_cabinet, cabinet.expand): every row on a
     // cabinet's channel through its response at the row's frequency, after
@@ -1290,14 +1542,24 @@ int main(int argc, char **argv)
     // the rows (_prep_bend_arrays): a gesture's ratio and phase a block (its
     // channel's fader's level at each edge, where it has one); a fader's
     // ratio 1 and phase 0, its level; no rows, one of ones and no levels
-    size_t ng = gch.size(), nr = std::max<size_t>(ng + nbr_ + nw + nsr + fch.size() + mrows.size(), 1);
+    size_t ng = gch.size(), nr = std::max<size_t>(ng + nbr_ + nw + nsr + fch.size() + mrows.size() + sir.size(), 1);
     std::vector<float> BRr(nr * nblk, 1.0f), BLr;
     std::vector<double> BCr(nr * nblk, 0.0);
     for (size_t r = 0; r < ng; r++)
         nv_bend_gesture(midi, song, E.k[K_BEND_SEMIS], gch[r], nblk, (int)BLK, SR, BRr.data() + r * nblk,
                         BCr.data() + r * nblk);
-    if (!fch.empty() || nw || nbr_)
+    if (!fch.empty() || nw || nbr_ || !sir.empty())
         BLr.assign(nr * (nblk + 1), 1.0f);
+    for (size_t q = 0; q < sir.size(); q++) {   // the sirens' rotors (their place: after the rest)
+        if ((long)sir[q].r.size() != (long)nblk) {
+            fprintf(stderr, "nvrender: refused: a siren's rows not the render's length\n");
+            return 2;
+        }
+        size_t rq = (size_t)sbase + q;
+        std::copy(sir[q].r.begin(), sir[q].r.end(), BRr.data() + rq * nblk);
+        std::copy(sir[q].c.begin(), sir[q].c.end(), BCr.data() + rq * nblk);
+        std::copy(sir[q].l.begin(), sir[q].l.end(), BLr.data() + rq * (nblk + 1));
+    }
     for (size_t q = 0; q < bch.size(); q++) {   // the breath's, after the gestures
         size_t r0 = ng + 2 * q;
         std::vector<float> nl(nblk + 1);
@@ -1346,6 +1608,12 @@ int main(int argc, char **argv)
                 if (sch[q] == fch[r])
                     for (int b = 0; b < 6; b++)
                         std::copy(Lf, Lf + nblk + 1, BLr.data() + (size_t)(srow[q] + b) * (nblk + 1));
+            for (size_t q = 0; q < sir.size(); q++)     // ...and its sirens' levels, under it
+                if (sir[q].ch == fch[r]) {
+                    float *bl = BLr.data() + ((size_t)sbase + q) * (nblk + 1);
+                    for (long e = 0; e <= nblk; e++)
+                        bl[e] = bl[e] * Lf[e];
+                }
         }
     }
     for (size_t q = 0; q < mrows.size(); q++) {    // the meends', last (no fader rides them: _LROW's _own)
@@ -1394,6 +1662,145 @@ int main(int argc, char **argv)
             return 1;
         }
     }
+    // THE MOVING FILTERS (filter_prep, efxfilter: a tone's insertion effect's
+    // Phaser or wah): each mix channel's from its first note that has one, in
+    // the note loop's order (_FILTER_CH); its control at each point of the
+    // kernel's grid (FCT, float32), its rows' type and parameters -- through
+    // synth_voice_lobe, which carries it; a table with no Leslie on no rotor
+    std::vector<float> FCT;
+    long fgn = 0;
+    std::vector<int> fsrc, ftyc;
+    std::vector<float> fpc_[3];
+    {
+        std::vector<long long> fch_, fpart_;
+        std::vector<const NoteClass *> fk_;
+        int nn = nv_song_n_notes(song);
+        std::vector<int> ord(nn);
+        std::vector<double> on_(nn);
+        std::vector<long long> ch_(nn);
+        std::vector<int> key_(nn);
+        for (int i = 0; i < nn; i++) {
+            long long c;
+            int iv[4];
+            double dv[2];
+            nv_song_get_note(song, i, &c, iv, dv);
+            ord[i] = i; on_[i] = dv[0]; ch_[i] = c; key_[i] = iv[0];
+        }
+        std::stable_sort(ord.begin(), ord.end(), [&](int a, int b) {
+            if (on_[a] != on_[b])
+                return on_[a] < on_[b];
+            if (ch_[a] != ch_[b])
+                return ch_[a] < ch_[b];
+            return key_[a] < key_[b];
+        });
+        for (int i : ord) {
+            long long c;
+            int iv[4];
+            double dv[2];
+            nv_song_get_note(song, i, &c, iv, dv);
+            int cq = E.cmap[nv_song_kidx(song, i)];
+            const NoteClass *k = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
+            long long m = nv_song_mix(song, i);
+            if (!k || !k->flt_set || iv[3] || std::find(fch_.begin(), fch_.end(), m) != fch_.end())
+                continue;
+            fch_.push_back(m);
+            fk_.push_back(k);
+            fpart_.push_back(c);
+        }
+        if (!fch_.empty()) {
+            const long grid = (BLK % 128 == 0 && BLK / 128 <= 64) ? 128 : (long)BLK;     // (leslie.rotor_grid)
+            fgn = N / grid + 2;
+            FCT.assign(fch_.size() * (size_t)fgn, 1.0f);
+            const double step = (double)grid / SR;
+            for (size_t q = 0; q < fch_.size(); q++) {
+                const NoteClass *k = fk_[q];
+                const double *c = k->flt_c;
+                // (a plunger's: the part's aftertouch, sorted, from 0 at 0 -- efxfilter.steps)
+                std::vector<double> at_t{0.0}, at_v{0.0};
+                if (k->flt_k == 3) {
+                    int na = nv_midi_ats(midi, (int)fpart_[q], nullptr, nullptr, 0);
+                    std::vector<double> tt(na > 0 ? na : 1);
+                    std::vector<int> vv(na > 0 ? na : 1);
+                    nv_midi_ats(midi, (int)fpart_[q], tt.data(), vv.data(), na);
+                    std::vector<std::pair<double, double>> ev;
+                    for (int a = 0; a < na; a++)
+                        ev.push_back(std::make_pair(tt[a], (double)vv[a]));
+                    std::sort(ev.begin(), ev.end());
+                    for (auto &e : ev) {
+                        at_t.push_back(e.first);
+                        at_v.push_back(e.second);
+                    }
+                }
+                for (long p = 0; p < fgn; p++) {
+                    double t = (double)p * step, v;
+                    if (k->flt_k == 1) {            // a sweep: its LFO about its Manual (a phaser), or up or down from it
+                        double lf = sin(2.0 * M_PI * c[2] * t);
+                        if (std::isnan(c[3]))
+                            v = c[0] * pow(2.0, c[1] * lf);
+                        else {
+                            double oc = c[1] * 0.5 * (1.0 + lf);
+                            v = c[0] * pow(2.0, (c[3] != 0.0 ? 1.0 : -1.0) * oc);
+                        }
+                    } else if (k->flt_k == 3) {     // a plunger: the hand's pressure, glided, its corner
+                        long i = (long)(std::upper_bound(at_t.begin(), at_t.end(), t) - at_t.begin()) - 1;
+                        i = i < 0 ? 0 : (i > (long)at_t.size() - 1 ? (long)at_t.size() - 1 : i);
+                        double st;
+                        if (c[4] <= 0.0 || at_v.size() < 2) {
+                            st = at_v[i];
+                        } else {
+                            double prev = at_v[i > 0 ? i - 1 : 0];
+                            double dt = t - at_t[i];
+                            double kk = exp(-(dt > 0.0 ? dt : 0.0) / c[4]);
+                            st = at_v[i] + (prev - at_v[i]) * (i > 0 ? kk : 0.0);
+                        }
+                        double x = st < 0.0 ? 0.0 : (st > 127.0 ? 127.0 : st);
+                        double u = 2.0 * x / 127.0 - 1.0;
+                        double g = c[3] * u + (1.0 - c[3]) * pow(u, 3.0);
+                        v = c[1] * pow(g < 0.0 ? c[0] / c[1] : c[2] / c[1], fabs(g));
+                    } else {
+                        v = c[0];                   // a pedal, held
+                    }
+                    FCT[q * (size_t)fgn + p] = (float)v;
+                }
+            }
+            const int cMm = col("mch");
+            fsrc.assign(P, -1);
+            ftyc.assign(P, 0);
+            for (int q = 0; q < 3; q++)
+                fpc_[q].assign(P, 0.0f);
+            for (long long r = 0; r < P; r++) {
+                long long m = (long long)rows[NCOLS * r + cMm];
+                for (size_t q = 0; q < fch_.size(); q++)
+                    if (fch_[q] == m) {
+                        fsrc[r] = (int)q;
+                        ftyc[r] = fk_[q]->flt_ty;
+                        for (int j = 0; j < 3; j++)
+                            fpc_[j][r] = (float)fk_[q]->flt_p[j];
+                        break;
+                    }
+            }
+            if (lch.empty()) {                      // (no Leslie: every row on no rotor, a 1 x 1 LANG)
+                lobe[0] = malloc(sizeof(int) * (size_t)(P > 0 ? P : 1));
+                for (long long r = 0; r < P; r++)
+                    ((int *)lobe[0])[r] = -1;
+                const float dv[4] = {0.0f, 1.0f, 0.0f, 1.0f};       // (lph, lfl, lsh, lnm: LOBE_COLS)
+                for (int q = 0; q < 4; q++) {
+                    lobe[1 + q] = malloc(sizeof(float) * (size_t)(P > 0 ? P : 1));
+                    for (long long r = 0; r < P; r++)
+                        ((float *)lobe[1 + q])[r] = dv[q];
+                }
+                LANG.assign(1, 0.0f);
+                lgn = 1;
+                void *h = dlopen(E.lobe_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
+                slo = h ? dlsym(h, "synth_voice_lobe") : nullptr;
+                if (!slo) {
+                    fprintf(stderr, "nvrender: no synth_voice_lobe in %s\n", E.lobe_lib.c_str());
+                    return 1;
+                }
+            }
+        }
+    }
+    const float *fpar[3] = {fpc_[0].data(), fpc_[1].data(), fpc_[2].data()};
     // THE MOOGS' ROWS (_MOOG_FT, _MOOG_KN: no knob moves, no pitch or shape
     // rows) and their columns
     int nkn = 0;
@@ -1507,7 +1914,9 @@ int main(int argc, char **argv)
               BLr.empty() ? nullptr : BLr.data(), noRows, sh,
               (long)E.k[K_CHUNK], E.k[K_XDEC], SR, E.k[K_MASTER], (const float *)dm[2], (const long *)dm[3],
               (const long *)dm[4], (const long *)dm[5], L.data(), R.data(), slo, (const int *)lobe[0],
-              (float *const *)(lobe + 1), LANG.empty() ? nullptr : LANG.data(), lgn, nft ? &mc : nullptr);
+              (float *const *)(lobe + 1), LANG.empty() ? nullptr : LANG.data(), lgn, nft ? &mc : nullptr,
+              FCT.empty() ? nullptr : fsrc.data(), FCT.empty() ? nullptr : ftyc.data(), fpar,
+              FCT.empty() ? nullptr : FCT.data(), fgn);
     if (!write_wav(argv[3], L.data(), R.data(), N, (int)SR)) {
         fprintf(stderr, "nvrender: cannot write %s\n", argv[3]);
         return 1;
@@ -1572,7 +1981,10 @@ int main(int argc, char **argv)
                 std::vector<int> vv;
                 int cq = E.cmap[nv_song_kidx(song, i)];
                 const NoteClass *nk = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
-                if (part_cc(c % 256, tt, vv) > 0) {
+                if (efx_send.count(c) && nk && nk->efx_set) {
+                    rsend.emplace_back(c, efx_send[c]);         // (its insertion effect's send: _REVERB_CH.setdefault)
+                    seen.insert(c);
+                } else if (part_cc(c % 256, tt, vv) > 0) {
                     rsend.emplace_back(c, vv[0] / 40.0);
                     seen.insert(c);
                 } else if (nk && nk->rd_set) {
@@ -1583,8 +1995,8 @@ int main(int argc, char **argv)
         }
         for (long long c : heard) {
             long long part = c % 256;
-            if (steps.count(part))
-                continue;
+            if (steps.count(part) || efx_parts.count(part))
+                continue;                   // (an effect's part: its send, no steps -- _REVERB_STEPS.pop)
             std::vector<double> tt;
             std::vector<int> vv;
             int n = part_cc(part, tt, vv);
@@ -1644,7 +2056,9 @@ int main(int argc, char **argv)
                   BCr.data(), BLr.empty() ? nullptr : BLr.data(), noRows, sh, (long)E.k[K_CHUNK], E.k[K_XDEC], SR,
                   E.k[K_MASTER], (const float *)dm[2], (const long *)dm[3], (const long *)dm[4], (const long *)dm[5],
                   SLb.data(), SRb.data(), slo, (const int *)lobe[0], (float *const *)(lobe + 1),
-                  LANG.empty() ? nullptr : LANG.data(), lgn, nft ? &mc : nullptr);
+                  LANG.empty() ? nullptr : LANG.data(), lgn, nft ? &mc : nullptr,
+                  FCT.empty() ? nullptr : fsrc.data(), FCT.empty() ? nullptr : ftyc.data(), fpar,
+                  FCT.empty() ? nullptr : FCT.data(), fgn);
         if (!write_wav((base + ".send.wav").c_str(), SLb.data(), SRb.data(), N, (int)SR)) {
             fprintf(stderr, "nvrender: cannot write %s.send.wav\n", base.c_str());
             return 1;

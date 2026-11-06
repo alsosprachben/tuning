@@ -199,6 +199,108 @@ static long long mf104_expand(void *song, double **rowsp, long long *Pp, const i
     return last;
 }
 
+// THE GS DELAY's REPEATS (blockrender._prep_delays, gsdelay.expand), after
+// the MF-104M's: each delayed note's rows (row0[j] to the next note's, a
+// tone's own insertion effect's 'dly'), each tap's repeats a period apart
+// while over REPEAT_FLOOR of the note's loudest partial -- its line's filter
+// on the first, placed at the tap's output (nv_gsd_place), the note's
+// vibrato and FM carried -- appended as the table holds them. Returns the
+// latest sample a repeat may sound to (0 none), -2 out of memory.
+static long long gsd_expand(const NoteClass *const *K, void *song, const int *played, const long long *row0, int nn,
+                            long long nnote, double **rowsp, long long *Pp, const int *kind, double sr)
+{
+    enum { cOM = 0, cP0 = 1, cP0R = 2, cAL = 3, cAR = 4, cAM = 5, cNON = 12, cNOFF = 13, cRE = 15, cVD = 33, cVR = 34,
+           cVP = 35, cDL = 37, cDR = 38, cFMW = 46, cNFR = 47, cFMP = 48, cFMPR = 49 };
+    const double FLOOR = pow(10.0, -60.0 / 20.0), TPI = 2.0 * M_PI;
+    auto cast = [&](double *r) {
+        for (int c = 0; c < NCOLS; c++)
+            if (kind[c] == 1)
+                r[c] = (double)(float)r[c];
+            else if (kind[c] == 2)
+                r[c] = (double)(int32_t)r[c];
+    };
+    std::vector<double> extra;
+    long long last = 0;
+    for (int j = 0; j < nn; j++) {
+        long long ch;
+        int iv[4];
+        double dv[2];
+        nv_song_get_note(song, played[j], &ch, iv, dv);
+        const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[nv_song_kidx(song, played[j])];
+        if (!k || !k->efx_set || !k->efx_dly || iv[3])
+            continue;
+        long long i0 = row0[j], i1 = j + 1 < nn ? row0[j + 1] : nnote;
+        if (i1 <= i0)
+            continue;
+        const double *D = k->dly_p;
+        const double level = D[0], fb = D[1], lpf = D[2], tc = D[3];
+        const int ntap = (int)D[4];
+        (void)tc;
+        double *rows = *rowsp;
+        std::vector<double> lv;
+        double top = 0.0;
+        for (long long i = i0; i < i1; i++) {
+            double l = std::max(fabs(rows[NCOLS * i + cAL]), fabs(rows[NCOLS * i + cAR]));
+            lv.push_back(l);
+            top = i == i0 ? l : std::max(top, l);       /* max(lv) */
+        }
+        for (long long i = i0; i < i1; i++) {
+            const double *row = *rowsp + NCOLS * i;
+            double om = row[cOM];
+            double f = om * sr / TPI;
+            double rel = top > 0.0 ? lv[i - i0] / top : 0.0;
+            double lg = lpf != 0.0 ? 1.0 / sqrt(1.0 + pow(f / lpf, 2.0)) : 1.0;     /* (lpf_gain) */
+            double g0 = 1.0 * level * lg;
+            if (g0 <= 0.0)
+                continue;
+            for (int t = 0; t < ntap; t++) {
+                const double tau = D[5 + 4 * t], tl = D[6 + 4 * t], period = D[8 + 4 * t];
+                const int side = (int)D[7 + 4 * t];
+                for (int q = 0; q < 64; q++) {
+                    double g = g0 * tl * (q ? pow(fb, (double)q) : 1.0);
+                    if (fabs(g) * rel < FLOOR || (q && fb == 0.0))
+                        break;
+                    long long d = (long long)nearbyint((tau + q * period) * sr);
+                    double pl[4];
+                    nv_gsd_place(side, f * 1.0, k->efx_place, pl);
+                    std::vector<double> c(row, row + NCOLS);
+                    c[cNON] = row[cNON] + (double)d;
+                    c[cNOFF] = row[cNOFF] + (double)d;
+                    c[cNFR] = c[cNON] - floor(c[cNON]);
+                    c[cDL] = pl[2];
+                    c[cDR] = pl[3];
+                    c[cP0] = -om * (c[cNON] + pl[2]) + (row[cP0] + om * (row[cNON] + row[cDL]));
+                    c[cP0R] = -om * (c[cNON] + pl[3]) + (row[cP0R] + om * (row[cNON] + row[cDR]));
+                    if (row[cFMW] != 0.0) {
+                        c[cFMP] = row[cFMP] - row[cFMW] * (double)d;
+                        c[cFMPR] = row[cFMPR] - row[cFMW] * (double)d;
+                    }
+                    if (row[cVD] != 0.0)        /* the note's own vibrato, delayed */
+                        c[cVP] = row[cVP] - TPI * row[cVR] * (double)d / sr;
+                    double m = fabs(row[cAM]);
+                    c[cAL] = m * g * pl[0];
+                    c[cAR] = m * g * pl[1];
+                    c[cAM] = row[cAM] * g;
+                    cast(c.data());
+                    extra.insert(extra.end(), c.begin(), c.end());
+                    long long e = (long long)c[cNOFF] + (long long)ceil(row[cRE]);
+                    last = std::max(last, e);
+                }
+            }
+        }
+    }
+    long long m = (long long)extra.size() / NCOLS;
+    if (m) {
+        double *nr = (double *)realloc(*rowsp, sizeof(double) * NCOLS * (size_t)(*Pp + m));
+        if (!nr)
+            return -2;
+        memcpy(nr + NCOLS * (size_t)*Pp, extra.data(), sizeof(double) * extra.size());
+        *rowsp = nr;
+        *Pp += m;
+    }
+    return last;
+}
+
 struct Track {
     long long r0, r1, b0;
     double f0;
@@ -266,13 +368,30 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
         const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[nv_song_kidx(song, played[j])];
         const long long part = ch;
         ch = nv_song_mix(song, played[j]);              // (each tone its own: TONE_SEG)
-        if (k && k->amp_drive != 0.0) {
-            // (_note_amp_drive: the reference times the note's fader, chan_vol)
+        // (a tone's own insertion effect, melodic: its level and OD in the note's level)
+        const bool efx = k && k->efx_set && !iv[3];
+        if (k && (k->amp_drive != 0.0 || (efx && k->efx_od != 0.0))) {
+            // (_note_amp_drive: the reference times the note's fader, chan_vol;
+            // _note_insertion_efx: an OD stage the valve where the voice has
+            // none, at PEDAL_AMP_DRIVE, its reference the voice's or the
+            // Strat's, and the effect's level after the valve in it: 'steps')
+            const bool own = k->amp_drive != 0.0;
+            double r0 = own ? k->amp_reference : (k->amp_reference != 0.0 ? k->amp_reference : 0.2289);
             double ref = 0.0, pl[6];
-            if (k->amp_reference != 0.0 && nv_song_pitch_level_k(song, played[j], k->init.effort_tilt != 0.0,
-                                                                 k->indian, pl))
-                ref = k->amp_reference * pl[3];
-            nv_song_add_amp(song, ch, k->amp_drive, k->leslie != 0, ref, k->amp_imbalance);
+            if (r0 != 0.0 && nv_song_pitch_level_k(song, played[j], k->init.effort_tilt != 0.0, k->indian, pl)) {
+                double cv = pl[3], eg = 1.0;
+                if (k->organ && k->organ->swells)   // (an organ's CC7 its swell: the note at 1, trimmed)
+                    cv = 1.0 * nv_song_note_trim(song, played[j]);
+                if (efx) {
+                    cv *= k->efx_level;
+                    eg = k->efx_od != 0.0 ? k->efx_od : 1.0;
+                    cv *= eg;
+                }
+                ref = r0 * cv / eg;
+                if (efx)
+                    ref = ref / (k->efx_level > 1e-12 ? k->efx_level : 1e-12) * k->efx_level;
+            }
+            nv_song_add_amp(song, ch, own ? k->amp_drive : 1.0, k->leslie != 0, ref, k->amp_imbalance);
         }
         if (k && k->leslie)
             nv_song_add_leslie(song, ch, k->leslie);
@@ -286,6 +405,8 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
                     nv_song_add_clav(song, ch, set);
             }
         }
+        if (efx && k->efx_trem)                         // (an insertion effect's tremolo, ahead of the voice's)
+            nv_song_add_trem(song, ch, k->trem_cfg);
         if (k && !k->organ && k->trem_depth > 0.0) {    // (_note_tremolo: the channel's, set once)
             int v;
             double dep = k->trem_intrinsic ? k->trem_depth
@@ -318,6 +439,11 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
         return NV_TOO_SMALL;
     if (mlast > 0 && mlast + srl / 2 > N)
         N = mlast + srl / 2;
+    long long glast = gsd_expand(K, song, played.data(), row0.data(), nn, nnote, rowsp, &P, kind, sr);
+    if (glast < -1)
+        return NV_TOO_SMALL;
+    if (glast > 0 && glast + srl / 2 > N)
+        N = glast + srl / 2;
     (void)SR;
     long long rl = ring_last(*rowsp, P, ring_floor, sr);
     long long cap = (long long)((total + ring_max) * sr);
