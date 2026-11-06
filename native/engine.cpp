@@ -147,7 +147,8 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     t.cv = o.chiff_volume; t.cc = K->chiff_cycle; t.crl = K->chiff_release; t.csc = f0 / 440.0;
     t.li = o.left_incidence; t.ri = o.right_incidence; t.sustain_level = K->sustain_level;
     t.gr = -1; t.cr = 0; t.sr = SR;
-    t.jitter_scale = (1.0 + o.pitch_jitter) * 1.0;
+    t.jitter_scale = (1.0 + o.pitch_jitter) * (n->xp != 0.0 ? n->xp : 1.0);
+    t.transposed = n->xp != 0.0 && n->xp != 1.0;  // (every frequency moved by the key: past Nyquist, dropped)
     t.nyq_om = n->nyq_om;
     t.dl = o.left_hrtf_delay * SR; t.dr = o.right_hrtf_delay * SR;
     t.pos_x0 = t.pos_x_props = s.position_x;
@@ -729,6 +730,11 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         n->f0 = pl[0]; n->vel = pl[1]; n->pan = pl[2]; n->chan_vol = pl[3]; n->effort = pl[4];
         if (K->brass && r == 1)             // the horn's intonation, from its fingering
             n->f0 *= pow(2.0, brass_cents(n->f0, K->brass == 2) / 1200.0);
+        if (K->xf > 0.0 && r == 1) {        // A SOUND TRANSPOSED WHOLE (_XP): built at its kit's pitch
+            n->xp = n->f0 / K->xf;
+            n->f0 = K->xf;
+            n->f0 *= nv_song_note_ratio(song, n->song_index);     // ...each stroke its own pitch (stroke_pitch)
+        }
         if (K->organ && K->organ->swells)   // an organ's CC7 is its swell, its CC11 its stop word: 1, trimmed
             n->chan_vol = 1.0 * nv_song_note_trim(song, n->song_index);
         if (r == 2)

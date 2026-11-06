@@ -893,6 +893,10 @@ typedef struct NoteClass {
     int pulse;
     double pulse_lo_ms, pulse_hi_ms, pulse_peak, pulse_fmax, pulse_taper;
     double sounding_oct;    // a melodic note's sounding octaves (sounding_octaves), 0 none
+    double xf;              // a sound transposed whole (transposed_from_hz): built at this pitch, 0 none
+    // ...ITS KIT KEY'S STROKES (sfx_strokes_of): the program whose kit has it
+    // (-1 none) and the key (-1: the note's own)
+    int sfx_prog, sfx_key;
     // ITS OWN SCALE (scale_cents): offsets from the tonic note and their cents; scale_n 0 none
     int scale_n, scale_tonic;
     int scale_off[32];
@@ -979,6 +983,7 @@ typedef struct {
     double ring_f[48], fbr;
     void *sym_drv;          // where its voice goes, the driver of its channel's strings (_SYM_CH), NULL not
     double blk;             // the render's block (BLK): a pulse's lead is two of them
+    double xp;              // ...the key's interval it is moved by (_XP), 0: 1
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -1100,6 +1105,10 @@ void nv_song_chokes(void *s, const unsigned long long *choke);
 void nv_song_legato(void *s, long long ch, int note, int k);
 void nv_song_note_stroke(void *s, int i, double ratio, int inner);
 void nv_song_strokes(void *s, const int *kind, const double *par);
+/* ...and a melodic SFX note's, its class's kit key's (K: the classes) */
+void nv_song_strokes_k(void *s, const NoteClass *const *K, const int *kind, const double *par);
+/* a note's stroke pitch (stroke_pitch: a bell tree's bar, a gallop's hoof), 1 none */
+double nv_song_note_ratio(void *s, int i);
 int nv_song_slur(void *s, int i, int *out);
 int nv_song_snd_any(void *s, long long ch);
 long long nv_song_mix(void *s, int i);

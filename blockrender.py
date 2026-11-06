@@ -3483,7 +3483,9 @@ def _prep_strokes(notes):
     stroke_morph = {}            # (note, t) -> a throat's vowel moving: toward its DRUM_MODES_B
     _sfx_strokes_of = {}         # (program, note) -> (kit, key) whose strokes a melodic SFX plays
     _stroked = set()             # (ch, note, t) of every stroke: live keeps their own onsets
-    for ev in notes:
+    _todo = list(reversed(notes))   # (a layer's events go back through: its strokes)
+    while _todo:
+        ev = _todo.pop()
         ch, note, on, off, vel, rest, pg = ev
         # A KEY THAT ALSO STRIKES ANOTHER'S SOUND (percussion_map.KIT_LAYER):
         # the metronome bell's tick is the click key's, at the bell's velocity
@@ -3492,14 +3494,14 @@ def _prep_strokes(notes):
                 expanded.append((ch, _ln, on, off, vel, rest, pg))
         # A LAYERED VARIATION (patch_map.LAYERED: GS's Orchestra): one event a
         # layer, each its own program and transposition, before anything else
-        # sees the note
+        # sees the note -- each layer's then on through the rest, so a layer
+        # that is a kit key keeps its strokes (Pour Magic's bubbles' run)
         _lys = None if is_drum(pg) else layers_of(pg)
         if _lys:
             # ...each within its velocity range (a "Velo" variation switches
             # voice with how hard the key is struck)
-            for _lp, _st, _vlo, _vhi in _lys:
-                if 0 <= note + _st <= 127 and _vlo <= vel <= _vhi:
-                    expanded.append((ch, note + _st, on, off, vel, rest, _lp))
+            _todo.extend(reversed([(ch, note + _st, on, off, vel, rest, _lp) for _lp, _st, _vlo, _vhi in _lys
+                                   if 0 <= note + _st <= 127 and _vlo <= vel <= _vhi]))
             continue
         strokes = rasp_strokes(note, on, off, kit=kit_for_program(int(pg))) if is_drum(pg) else None
         # ...AND A KIT KEY PLAYED FROM THE KEYBOARD (patch_map.melodic_sfx: a GS
@@ -6684,6 +6686,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.soft_pedal_down, n.fixed_touch = int(bool(T.soft_pedal_down)), int(bool(T.FIXED_TOUCH))
     n.sr, n.retrigger_fade, n.channel = SR, RETRIGGER_FADE, em.channel
     n.blk = float(BLK)
+    n.xp = getattr(em, 'xp', 1.0)
     n.br = em.bend_row if (em.bend_row >= 0 or em.fader_row < 0) else em.fader_row
     # ...ITS OTHER STRINGS (ring_db: _note_ring), tuned as the notes are, on the fader's row
     n.fbr = em.fader_row if em.fader_row >= 0 else -1
@@ -8851,6 +8854,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         em.reverse = (nt.non, nt.noff) if getattr(props, 'played_backwards', False) else None
         em.jitter_scale = (1.0 + getattr(props,'pitch_jitter',0.0)) * _XP
         em.transposed = _XP != 1.0
+        em.xp = _XP                    # (the engine's NoteIn.xp)
         # ...AND WHETHER THIS NOTE CAN BE BENT AT ALL. Per NOTE and not per
         # channel, because a channel can change program mid-piece (passac.mid
         # cycles six of them), so each note is judged by its own class.

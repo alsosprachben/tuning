@@ -953,13 +953,13 @@ int main(int argc, char **argv)
     }
     // A GESTURE'S STROKES (_prep_strokes): after the passes that read the
     // notes as written, before everything that reads the strokes
-    nv_song_strokes(song, E.kit_skind.data(), E.kit_spar.data());
-    nv_song_finish(song, total);
-    // THE TABLE
     std::vector<const NoteClass *> K(E.cmap.size(), nullptr);
     for (int q = 0; q < (int)E.cmap.size(); q++)
         if (E.cmap[q] >= 0)
             K[q] = (const NoteClass *)E.classes[E.cmap[q]].data();
+    nv_song_strokes_k(song, K.data(), E.kit_skind.data(), E.kit_spar.data());   // (a gesture's strokes, _prep_strokes)
+    nv_song_finish(song, total);
+    // THE TABLE
     NoteIn t;
     memset(&t, 0, sizeof t);
     t.sr = SR; t.retrigger_fade = E.k[K_RETRIGGER]; t.nyq_om = E.k[K_NYQ_OM];

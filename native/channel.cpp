@@ -952,18 +952,25 @@ struct Song {
     // ridge. AND A KEY THAT ALSO STRIKES ANOTHER'S SOUND (key_layers:
     // par[NV_SPAR (q + 1) - 4] of them, the keys after): each struck as
     // the note is, before it, as _prep_strokes expands them
-    void strokes(const int *kind, const double *par)
+    void strokes(const int *kind, const double *par, const NoteClass *const *K = nullptr)
     {
         std::vector<Ev> out;
         for (const Ev &e : notes) {
             bool in = e.drum && e.prog >= 0 && e.prog < 128 && e.note >= 0 && e.note < 128;
-            int q = 128 * e.prog + e.note;
+            int q = 128 * e.prog + e.note, kn = e.note;
+            // ...A MELODIC SFX's (sfx_strokes_of): its kit key's table, the key its generator's
+            const NoteClass *mk = (!e.drum && K) ? K[e.kidx()] : nullptr;
+            bool mel = mk && mk->sfx_prog >= 0 && e.note >= 0 && e.note < 128;
+            if (mel) {
+                kn = mk->sfx_key >= 0 ? mk->sfx_key : e.note;
+                q = 128 * mk->sfx_prog + kn;
+            }
             for (int l = 0; in && l < (int)par[NV_SPAR * (q + 1) - 4]; l++) {
                 Ev x = e;
                 x.note = (int)par[NV_SPAR * (q + 1) - 3 + l];
                 out.push_back(x);
             }
-            int kd = in ? kind[q] : 0;
+            int kd = (in || mel) ? kind[q] : 0;
             if (!kd) {
                 out.push_back(e);
                 continue;
@@ -972,7 +979,7 @@ struct Song {
             if (kd == 6) {
                 // a voice's pulses: each its tilt, mouth and vowel too
                 std::vector<std::array<double, 7>> vs;
-                voiced(e.note, e.on, p, vs);
+                voiced(kn, e.on, p, vs);
                 for (size_t k = 0; k < vs.size(); k++) {
                     Ev x = e;
                     x.on = vs[k][0];
@@ -994,9 +1001,9 @@ struct Song {
             else if (kd == 2)
                 cascade(e.on, e.off, p, st);
             else if (kd == 3)
-                train(e.note, e.on, p, st);
+                train(kn, e.on, p, st);
             else if (kd == 4)
-                roll(e.note, e.on, e.off, p, st);
+                roll(kn, e.on, e.off, p, st);
             else
                 pattern(e.on, p, st);
             for (size_t k = 0; k < st.size(); k++) {
@@ -2603,6 +2610,17 @@ int nv_song_soft_at(void *s, long long ch, double t)
 
 // The drum sets' gestures expanded into their strokes (Song::strokes;
 // before nv_song_finish, after the passes that read the notes as written)
+void nv_song_strokes_k(void *s, const NoteClass *const *K, const int *kind, const double *par)
+{
+    ((nv::Song *)s)->strokes(kind, par, K);
+}
+
+double nv_song_note_ratio(void *s, int i)
+{
+    const nv::Song *S = (nv::Song *)s;
+    return (i >= 0 && i < (int)S->notes.size()) ? S->notes[i].ratio : 1.0;
+}
+
 void nv_song_strokes(void *s, const int *kind, const double *par)
 {
     ((nv::Song *)s)->strokes(kind, par);

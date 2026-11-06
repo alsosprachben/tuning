@@ -255,7 +255,7 @@ class NoteClass(ctypes.Structure):
                    ('meend_range', C), ('meend_strength', C), ('meend_tonic', I), ('key_pan_spread', C),
                    ('n_grain', I), ('grain', (C * 9) * 8),
                    ('pulse', I), ('pulse_lo_ms', C), ('pulse_hi_ms', C), ('pulse_peak', C), ('pulse_fmax', C),
-                   ('pulse_taper', C), ('sounding_oct', C),
+                   ('pulse_taper', C), ('sounding_oct', C), ('xf', C), ('sfx_prog', I), ('sfx_key', I),
                    ('scale_n', I), ('scale_tonic', I), ('scale_off', I * 32), ('scale_c', C * 32),
                    ('si_set', I), ('si0', C), ('si1', C),
                    ('n_drone', I), ('drone_note', I * 4), ('drone_k', I * 4), ('part_break_s', C),
@@ -280,7 +280,7 @@ class NoteIn(ctypes.Structure):
                    ('rank_drawn_off', I * 32), ('snd_moog', I), ('snd_d', C * 8),
                    ('sung_hz', C), ('part', I), ('dist', C), ('gliss_lv', C),
                    ('ring_on', I), ('ring_f', C * 48), ('fbr', C),
-                   ('sym_drv', ctypes.c_void_p), ('blk', C)])
+                   ('sym_drv', ctypes.c_void_p), ('blk', C), ('xp', C)])
 
 
 class NoteOut(ctypes.Structure):
@@ -655,7 +655,7 @@ def breath_noise(cls):
             # (its tone silent -- or an organ's, whose ranks follow the breath as Python's do)
             # (...or a free reed's or a played pipe's, its tone after its breath as Python's is)
             and (all(g == 0.0 for g in (cls.mode_gains or (1.0,))) or getattr(cls, 'registerable', False)
-                 or _blown(cls))
+                 or _blown(cls) or issubclass(cls, __import__('tonelib').SfxWeatherProperties))
             # (a sung body's own: SynthProperties' but under a sung text's other
             # vowel, which the engine refuses -- sung_voice)
             and (_owner(cls, 'breath_noise_at') == 'SynthProperties'
@@ -780,10 +780,16 @@ def _modal_drum(cls):
     bar = issubclass(cls, T.TunedBarProperties)
     # (a noise voice's breath the engine's -- or none: its tone silent and its
     # sound its strike's bursts alone, an audience's applause)
-    if issubclass(cls, T.BreathNoiseProperties) and not breath_noise(cls) and not (
-            not getattr(cls, 'breath_noise_db', ()) and isinstance(cls.mode_gains, (tuple, list))
-            and cls.mode_gains and all(g == 0.0 for g in cls.mode_gains)):
-        return False
+    # ...or a WEATHER voice's: its tone sounding beside its breath, or with none (the laser)
+    if issubclass(cls, T.BreathNoiseProperties):
+        _has = bool(getattr(cls, 'breath_noise_db', ()))
+        _silent = (isinstance(cls.mode_gains, (tuple, list)) and cls.mode_gains
+                   and all(g == 0.0 for g in cls.mode_gains))
+        if (_has and not breath_noise(cls)) or (not _has and not _silent
+                                                and not issubclass(cls, T.SfxWeatherProperties)):
+            return False
+        if issubclass(cls, T.SfxWeatherProperties) and _owner(cls, 'voice_vibrato') != 'SynthProperties':
+            return False
     if not (issubclass(cls, T.HandClapProperties) or cym or issubclass(cls, T.WoodPercussionProperties)
             or issubclass(cls, T.SnareDrumProperties) or issubclass(cls, T.BreathNoiseProperties)
             or issubclass(cls, T.TriangleProperties) or issubclass(cls, T.RattleProperties) or bar):
@@ -814,7 +820,7 @@ def _modal_drum(cls):
     # (...and a wood block's, none: its series, the pluck's comb -- GM 115's)
     if issubclass(cls, T.WoodPercussionProperties) and mg is None and mr is None:
         mg = mr = ()
-    return (mg is not None and mr is not None and len(mg) == len(mr) <= 320
+    return (isinstance(mg, (tuple, list)) and isinstance(mr, (tuple, list)) and len(mg) == len(mr) <= 320
             and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
             and not cls.mode_stroke_tilt and not cls.bore_corner_hz and not cls.harmonic_touch
             and not cls.pickup_points and len(getattr(cls, 'band_trim_db', ())) <= 32
@@ -2719,6 +2725,8 @@ def note_class(cls):
             # ...a crowd's bursts through the note (no record's, no exponential levels)
             if a == 'strike_in_s':              # (a drone's strike-in: the engine's attack)
                 return True
+            if a == 'transposed_from_hz':       # (a kit's sound on a keyboard: the engine's _XP)
+                return True
             if a == 'unison_spans_part':        # (a chanter's: its unison none, the drones notes)
                 return _owner(cls, 'unison_voices') == 'BagpipeProperties'
             if a == 'unison_drop_late':         # (a telephone's strokes past the note: tone.c's)
@@ -2998,6 +3006,8 @@ def note_class(cls):
         k.drone_gain[:min(4, len(_dg))] = [float(x) for x in _dg[:4]]
         # (a melodic note's sounding octaves, in the engine's pitch; a drum's pitch is its set's)
         k.sounding_oct = float(getattr(cls, 'sounding_octaves', 0.0) or 0.0)
+        k.xf = float(getattr(cls, 'transposed_from_hz', 0.0) or 0.0)      # (a sound transposed whole: _XP)
+        k.sfx_prog, k.sfx_key = sfx_prog_key(cls)                         # (its kit key's strokes)
         if pulse_voice(cls):                    # (its N-wave: _note_pulse)
             k.pulse = 1
             k.pulse_lo_ms, k.pulse_hi_ms = (float(x) for x in cls.pulse_ms_range)
@@ -4581,6 +4591,44 @@ def song_vars(song_p, gs):
     lib().nv_song_vars(song_p, *_SONG_VARS[key])
 
 
+def sfx_prog_key(cls):
+    """A melodic SFX class's kit key, as kits()' stroke tables index it: (the
+    program whose kit it is, the key or -1 for the note's own), (-1, -1) none."""
+    so = getattr(cls, 'sfx_strokes_of', None)
+    if not so:
+        return -1, -1
+    import percussion_map as PM
+    p = next((p for p in range(128) if PM.kit_for_program(p) == so[0]), None)
+    return (-1, -1) if p is None else (p, -1 if so[1] is None else int(so[1]))
+
+
+def sfx_strokes_ok(cls):
+    """Whether the engine plays a melodic SFX class's strokes: none, or its
+    kit key's table among kits()' (stroke_spec)."""
+    if not sfx_strokes(cls):
+        return True
+    p, key = sfx_prog_key(cls)
+    if p < 0:
+        return False
+    import percussion_map as PM
+    so = cls.sfx_strokes_of
+    skind = kits()[4]
+    keys = range(128) if key < 0 else (key,)
+    return all(skind[128 * p + k] for k in keys if PM.rasp_strokes(k, 0.0, 1.0, kit=so[0]) is not None)
+
+
+def sfx_strokes(cls):
+    """Whether a melodic SFX class's kit key has strokes (sfx_strokes_of,
+    _prep_strokes' rasp_strokes: a dog's barks, the gallop's hooves): the
+    engine's melodic notes have none yet."""
+    so = getattr(cls, 'sfx_strokes_of', None)
+    if not so:
+        return False
+    import percussion_map as PM
+    keys = range(128) if so[1] is None else (so[1],)
+    return any(PM.rasp_strokes(k, 0.0, 1.0, kit=so[0]) is not None for k in keys)
+
+
 def variation_tables():
     """BANK SELECT for native/ (native_export's VARS): (slots, entries, gs, gm2).
     slots: [(program, variation key, layer or -1, [128 classes or None])] --
@@ -4603,7 +4651,7 @@ def variation_tables():
     # sounding octaves)
     def ok(c):
         return (isinstance(c, type) and not getattr(c, 'registerable', False)
-                and getattr(c, 'sfx_strokes_of', None) is None
+                and sfx_strokes_ok(c)
                 and not any(getattr(c, a, None) for a in ('insertion_efx', 'plunger', 'mouth_states'))
                 and note_class(c) is not None)
 

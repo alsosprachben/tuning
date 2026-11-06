@@ -74,9 +74,11 @@ TASKS = [
                      "GS files, so each needs GS test files"),
     ("SC-55", False, "Files: GS's other exclusives -- part parameters (parse_gs_part), drum setup and the user "
                      "sets, the rhythm part's assignment, TONE MAP-0 (the reader refuses them, -4)"),
-    ("SC-55", False, "Melodic SFX (patch_map.melodic_sfx, ~130 variations of 120-127): a kit's sound on a "
-                     "keyboard part, transposed whole (transposed_from_hz), with its one-shot, gate, noise "
-                     "layers and strokes"),
+    ("SC-55", True, "Melodic SFX (patch_map.melodic_sfx): a kit's sound on a keyboard part, transposed whole "
+                    "(transposed_from_hz: _XP), its kit key's strokes (sfx_strokes_of), the weather voices "
+                    "(a measured mode set under the noise's roll-off, its breath beside it)"),
+    ("SC-55", False, "SFX voices still Python's: a vibrato of their own (skid, starship, scream), the siren's "
+                     "rotor, the heartbeat's timed noise (noise_events)"),
     ("SC-55", False, "Melodic hits: a hand drum's or a kit's detail on a melodic voice (strike_phase_spread, "
                      "stroke_scatter, jitter_by_partial, bloom_seconds, played_backwards, strike_noise_layers, "
                      "one_shot and gate_time off a kit) -- dholak, kelontuk, reversed pieces, cymbal tones"),
