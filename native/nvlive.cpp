@@ -6,7 +6,7 @@
 //                       [--drum-set=P | --no-drums] [--split=N [--split-channel=C] [--split-transpose=T]]
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
 //                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
-//                       [--tuner=NAME [--a=HZ | --c=HZ]]
+//                       [--tuner=NAME [--a=HZ | --c=HZ]] [--eastern=SPEC]
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
 //                       [--rt] [--reg-async] [--async] [--govern]
 //
@@ -120,6 +120,12 @@
 
 extern "C" {
 void *nv_midi_read(const uint8_t *buf, long long len, int *err);
+int nv_midi_master(void *p);
+int nv_midi_sysex(void *p, int i, uint8_t *out, int cap);
+void nv_part_sysex(void *h, const uint8_t *d, int n);
+int nv_part_take_reset(void *h);
+void nv_part_mts_ref(void *h, int note, double hz);
+void nv_tcache_set_gm2(void *h, int on);
 void nv_midi_free(void *p);
 double nv_midi_total(void *p);
 int nv_midi_n_events(void *p);
@@ -153,8 +159,7 @@ void nv_part_amp_async(void *h);
 void nv_tcache_leslie(void *h, const double *L, int n);
 int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, int *have);
 int nv_raga_info(const char *spec, double sa_hz, double *out, int *have, int *sa_note, double *sw, int *nsw);
-void nv_part_raga(void *h, int sa, const double *sw, int nsw);
-void nv_live_raga(int sa, const double *sw, int nsw);
+void nv_tcache_set_raga(void *h, int sa, const double *sw, int nsw);
 void nv_part_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
 void nv_part_post(void *h, double thresh, double bend_range, double mod_cents);
 void nv_part_output(void *h, long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd,
@@ -591,15 +596,19 @@ static void on_signal(int) { g_stop = true; }
 
 struct Midi {
     int type, ch, a, b;
+    std::vector<uint8_t> x;     // an exclusive's bytes, between F0 and F7 (type 6)
 };
 
 // raw MIDI bytes from a device file: running status; note-on at velocity 0 a
-// note-off; channel aftertouch type 3; realtime and system messages skipped
+// note-off; channel aftertouch type 3; an exclusive (F0 .. F7) type 6, its
+// bytes; realtime and the other system messages skipped
 static void midi_reader(int fd, std::mutex *mu, std::vector<Midi> *q)
 {
     int status = 0, need = 0, got = 0;
     uint8_t d[2];
     uint8_t buf[256];
+    bool insx = false;                                  // inside an exclusive
+    std::vector<uint8_t> sx;
     while (!g_stop) {
         ssize_t n = read(fd, buf, sizeof buf);
         if (n <= 0) {
@@ -610,21 +619,32 @@ static void midi_reader(int fd, std::mutex *mu, std::vector<Midi> *q)
             uint8_t c = buf[i];
             if (c >= 0xF8)
                 continue;                               // realtime: clock, sensing
+            if (c == 0xF7 && insx) {                    // its end: to the part
+                insx = false;
+                std::lock_guard<std::mutex> lk(*mu);
+                q->push_back(Midi{6, -1, 0, 0, sx});
+                continue;
+            }
             if (c >= 0x80) {
+                insx = c == 0xF0;                       // (any other status ends one, cut short: dropped)
+                sx.clear();
                 status = c < 0xF0 ? c : 0;
                 int hi = c & 0xF0;
                 need = (hi == 0xC0 || hi == 0xD0) ? 1 : 2;
                 got = 0;
                 continue;
             }
-            if (!status)
-                continue;                               // inside a sysex
+            if (!status) {
+                if (insx && sx.size() < 65536)
+                    sx.push_back(c);                    // inside an exclusive
+                continue;
+            }
             d[got++] = c;
             if (got < need)
                 continue;
             got = 0;
             int hi = status & 0xF0, ch = status & 0x0F;
-            Midi m{-1, ch, d[0], need > 1 ? d[1] : 0};
+            Midi m{-1, ch, d[0], need > 1 ? d[1] : 0, {}};
             if (hi == 0x90 && d[1] > 0)
                 m.type = 0;
             else if (hi == 0x80 || hi == 0x90)
@@ -724,8 +744,57 @@ int main(int argc, char **argv)
         int rh[128];
         if (!(tl.compare(0, 5, "raga:") == 0 && nv_raga_info(tl.c_str(), 0.0, rf, rh, &raga_sa, raga_sw, &raga_nsw) == 0))
             raga_sa = -1;
-        nv_live_raga(raga_sa, raga_sw, raga_nsw);
     }
+    // THE SECONDARY TUNING (live.tuner_for: --eastern=SPEC): a part whose
+    // voice is an Indian instrument plays SPEC, Sa at its own tuner's pitch
+    // for its key ("%s:%.6f") unless SPEC names one -- unless its own tuner is
+    // a raga's already. Each program's table, and its raga, for its cache
+    std::string east = opt(argc, argv, "eastern", "");
+    if (!east.empty()) {
+        double rf[128], sw0[12];
+        int rh[128], sa0 = -1, n0 = 0;
+        if (nv_raga_info(east.c_str(), 0.0, rf, rh, &sa0, sw0, &n0)) {
+            fprintf(stderr, "nvlive: eastern %s: a bad raga spec\n", east.c_str());
+            return 1;
+        }
+    }
+    std::vector<std::vector<double>> ptab(128);
+    std::vector<int> psa(128, -1), pnsw(128, 0);
+    std::vector<std::array<double, 12>> psw(128);
+    auto tune_for = [&](int prog, bool dr) -> const double * {
+        int p = prog & 127;
+        if (raga_sa >= 0 || east.empty() || dr)
+            return E.freq.data();
+        int cq = E.cmap[128 * p + 60];
+        if (cq < 0 || !((const NoteClass *)E.classes[cq].data())->indian)
+            return E.freq.data();
+        if (ptab[p].empty()) {
+            double rf[128], sw0[12];
+            int rh[128], sa0 = -1, n0 = 0;
+            nv_raga_info(east.c_str(), 0.0, rf, rh, &sa0, sw0, &n0);
+            double f = sa0 >= 0 && sa0 < 128 ? E.freq[sa0] : 0.0, hz = 0.0;
+            if (f != 0.0) {                     // ("%s:%.6f": its Sa's pitch, as the spec's text carries it)
+                char b[64];
+                snprintf(b, sizeof b, "%.6f", f);
+                hz = strtod(b, nullptr);
+            }
+            ptab[p].resize(128);
+            nv_raga_info(east.c_str(), hz, ptab[p].data(), rh, &psa[p], psw[p].data(), &pnsw[p]);
+        }
+        return ptab[p].data();
+    };
+    std::string tl_ = tname;
+    for (char &ch_ : tl_)
+        ch_ = (char)tolower((unsigned char)ch_);
+    auto raga_for = [&](void *c, int prog, bool dr) {
+        int p = prog & 127;
+        // ...and a gm2 patch: its tuner gm2's, not the secondary tuning's (live.tuner_for)
+        nv_tcache_set_gm2(c, tl_ == "gm2" && !(!dr && psa[p] >= 0));
+        if (raga_sa >= 0)
+            nv_tcache_set_raga(c, raga_sa, raga_sw, raga_nsw);
+        else if (!dr && psa[p] >= 0)
+            nv_tcache_set_raga(c, psa[p], psw[p].data(), pnsw[p]);
+    };
     // A PROGRAM's FREE STRINGS at nvlive's tuner: the export's bank, built
     // again (nv_strings, as live_bank does) where --tuner moved it -- once a
     // program, the first time it is asked for
@@ -762,9 +831,10 @@ int main(int argc, char **argv)
         t.room_bands[i] = E.k[K_BANDS + i];
     t.reflect = E.k[K_REFLECT] != 0.0;
     t.fixed_touch = 1;                          // live builds its templates at fixed touch
-    void *cache = nv_tcache_new(K.data(), &t, E.freq.data(), E.trim.data(), E.kind.data(), E.fin.data(),
+    void *cache = nv_tcache_new(K.data(), &t, tune_for(program, drums), E.trim.data(), E.kind.data(), E.fin.data(),
                                 E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, E.k[K_RING_FLOOR],
                                 E.k[K_RING_MAX], E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR);
+    raga_for(cache, program, drums);
     if (drums)
         nv_tcache_kits(cache, E.kit_f0.data(), E.kit_seat.data(), E.kit_choke.data(), E.kit_skind.data(),
                        E.kit_spar.data(), 100.0);       // (live.ONESHOT_FLOOR_DB)
@@ -781,8 +851,12 @@ int main(int argc, char **argv)
                            E.headroom, E.pan.data(), E.beta);
     if (!E.les.empty())                         // the room's Leslie: its rotors, on chorale
         nv_part_leslie(part, E.les.data(), (int)E.les.size());
-    if (raga_sa >= 0)                           // a raga tuner: its Sa and swaras, the meend's
-        nv_part_raga(part, raga_sa, raga_sw, raga_nsw);
+    {                                           // the gm2 store's built-in tables at the tuner's reference
+        std::string a_ = opt(argc, argv, "a", ""), c_ = opt(argc, argv, "c", "");
+        if (!tname.empty() && (!a_.empty() || !c_.empty()))
+            nv_part_mts_ref(part, !a_.empty() ? 69 : 60, atof((!a_.empty() ? a_ : c_).c_str()));
+    }
+
     if (!E.scan.empty())                        // the Hammond's scanner: its circuit's tables
         nv_part_scan(part, E.scan.data(), (long)E.scan.size());
     if (drums)
@@ -1013,9 +1087,10 @@ int main(int argc, char **argv)
             native = false;
         if (!native)
             return nullptr;
-        void *c = nv_tcache_new(K.data(), &t, E.freq.data(), E.trim.data(), E.kind.data(), E.fin.data(),
+        void *c = nv_tcache_new(K.data(), &t, tune_for(prog, dr), E.trim.data(), E.kind.data(), E.fin.data(),
                                 E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, E.k[K_RING_FLOOR],
                                 E.k[K_RING_MAX], E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR);
+        raga_for(c, prog, dr);
         if (dr) {
             nv_tcache_kits(c, E.kit_f0.data(), E.kit_seat.data(), E.kit_choke.data(), E.kit_skind.data(),
                            E.kit_spar.data(), 100.0);
@@ -1095,6 +1170,15 @@ int main(int argc, char **argv)
             reqs.push_back(Req{i, prog & 127, pa.drums});
         }
     };
+    // ...and a GM System On or GS Reset the part heard: every part to program
+    // 0 (live's patch requests at a reset), its drums its own
+    auto reset_asked = [&]() {
+        if (!nv_part_take_reset(part) || !E.has_prog)
+            return;
+        for (size_t i = 0; i < pats.size(); i++)
+            if (pats[i].program != 0)
+                reqs.push_back(Req{i, 0, pats[i].drums});
+    };
     // ...and once a block has run its posts, the programs posted are the parts'
     auto landed = [&]() {
         for (PartAt &pa : pats)
@@ -1146,6 +1230,10 @@ int main(int argc, char **argv)
                 fprintf(stderr, "nvlive: the reader refused %s (%d)\n", argv[i + 1], err);
                 return 2;
             }
+            if (nv_midi_master(m) == 2) {   // (live's master_gain: a ramp, not here yet)
+                fprintf(stderr, "nvlive: refused %s: a master volume under full\n", argv[i + 1]);
+                return 2;
+            }
             int ne = nv_midi_n_events(m);
             double secs = atof(opt(argc, argv, "seconds", "0").c_str());
             if (secs <= 0)
@@ -1186,12 +1274,21 @@ int main(int argc, char **argv)
                     if (iv[0] == 5) {
                         if (follow)
                             asked(iv[1], iv[2]);
+                    } else if (iv[0] == 6) {        // an exclusive: its bytes, to the part
+                        std::vector<uint8_t> xb(65536);
+                        int xn = nv_midi_sysex(m, iv[2], xb.data(), (int)xb.size());
+                        if (xn > 0 && xn <= (int)xb.size())
+                            nv_part_sysex(part, xb.data(), xn);
                     } else {
                         event(iv[0], iv[1], iv[2], iv[3]);
                     }
                     e++;
                 }
                 nv_part_block(part, n0, BLK);
+                if (follow)
+                    reset_asked();
+                else
+                    nv_part_take_reset(part);
                 landed();
                 nswaps += settle(reqs);                 // (live's builder in step: for the next block)
                 auto t1 = std::chrono::steady_clock::now();
@@ -1420,9 +1517,14 @@ int main(int argc, char **argv)
                     asked(m.ch, m.a);
                     continue;
                 }
+                if (m.type == 6) {
+                    nv_part_sysex(part, m.x.data(), (int)m.x.size());
+                    continue;
+                }
                 event(m.type, m.ch, m.a, m.b);
             }
             nv_part_block(part, n0, BLK);
+            reset_asked();
             landed();
             // the programs asked for to the builder, and those it has built swapped in
             {

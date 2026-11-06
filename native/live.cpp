@@ -122,16 +122,9 @@ extern "C" {
 // nv_prepare's. Returns the rows, or < 0 (the file refused, a note not the
 // engine's).
 // the tuner's raga, as blockrender's prepare finds it (T.raga_sa_note: -1 none;
-// its swaras): the process's, set by nvlive from its tuner
-static int g_raga_sa = -1, g_raga_nsw = 0;
-static double g_raga_sw[12];
-extern "C" void nv_live_raga(int sa, const double *sw, int nsw)
-{
-    g_raga_sa = sa;
-    g_raga_nsw = nsw > 0 && nsw <= 12 ? nsw : 0;
-    for (int i = 0; i < g_raga_nsw; i++)
-        g_raga_sw[i] = sw[i];
-}
+// its swaras): the cache's whose template this thread is building
+static thread_local int g_raga_sa = -1, g_raga_nsw = 0;
+static thread_local double g_raga_sw[12];
 
 static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, const double *freq,
                                const double *trim, int program, int note, int vel, int fast, double **rowsp,
@@ -476,6 +469,9 @@ struct Cache {
     bool drums = false;                 // a drum part: the program is its set (kit's tables)
     Kits kit;
     std::vector<double> les;            // the Leslie's constants (leslie.cpp's L_*), empty: none
+    int raga_sa = -1, raga_nsw = 0;     // its tuner's raga (a raga tuner's: Sa's note, -1 none; the swaras)
+    int gm2 = 0;                        // its tuner is gm2's: the store's tables over it (_mts_ratio)
+    double raga_sw[12];
     double oneshot_floor_db = 100.0;    // live.ONESHOT_FLOOR_DB
 
     // prepare's final type for an EMIT column's value (FINAL_DTYPES)
@@ -497,6 +493,10 @@ struct Cache {
         std::vector<double> jrows;
         std::vector<long long> rrows;
         double mft[30];
+        g_raga_sa = raga_sa;                // (the template's prepare: T.raga_sa_note, T.raga_spec)
+        g_raga_nsw = raga_nsw;
+        for (int i = 0; i < raga_nsw; i++)
+            g_raga_sw[i] = raga_sw[i];
         long long P = template_rows(K.data(), &t, freq, trim, program, note, vel, fast, &rows, kind, scale, full,
                                     residual, beta, blk, ring_floor, ring_max, out, knee, ln10_20, xdec, SR, dm,
                                     drums ? &kit : nullptr, &srows, &prows, les.empty() ? nullptr : les.data(),
@@ -867,6 +867,29 @@ extern "C" {
 // A template cache: the classes (K[128 * program + key], the drum sets' after), the engine's
 // constants (tmpl: its fixed_touch set), the tuning, the trims, the columns'
 // table and final types, and the rest as nv_template's
+// the cache's tuner is a raga's: its Sa's note (-1 none) and swaras' cents (the
+// templates' strings, the meend's); and read back (sa, sw[12], *nsw)
+void nv_tcache_set_raga(void *h, int sa, const double *sw, int nsw)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    C->raga_sa = sa;
+    C->raga_nsw = nsw > 0 && nsw <= 12 ? nsw : 0;
+    for (int i = 0; i < C->raga_nsw; i++)
+        C->raga_sw[i] = sw[i];
+}
+
+void nv_tcache_set_gm2(void *h, int on) { ((nv::live::Cache *)h)->gm2 = on; }
+int nv_tcache_gm2(void *h) { return ((const nv::live::Cache *)h)->gm2; }
+
+int nv_tcache_get_raga(void *h, double *sw, int *nsw)
+{
+    const nv::live::Cache *C = (const nv::live::Cache *)h;
+    *nsw = C->raga_nsw;
+    for (int i = 0; i < C->raga_nsw; i++)
+        sw[i] = C->raga_sw[i];
+    return C->raga_sa;
+}
+
 void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double *freq, const double *trim,
                     const int *kind, const int *fin, double scale, double full_db_s, double residual, double beta,
                     long long blk, double ring_floor, double ring_max, double knee_db, double ln10_20,

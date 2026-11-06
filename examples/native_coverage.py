@@ -33,6 +33,13 @@ TASKS = [
     ("GM2", False, "Bank select (CC0/CC32) and GM2's banks (120 drums, 121 melodic) in nvrender's reader "
                    "and nvlive -- the reader refuses any bank today"),
     ("GM2", False, "nvlive: a variation as a patch (Patch(program, drums, tuner, variation)); the picker's GM2 bank"),
+    ("GM2", True, "Tuning, files: the secondary (eastern) tuning, the meend, master fine/coarse tuning, "
+                  "scale/octave tuning (GM 2's and GS's), MTS under gm2"),
+    ("GM2", True, "Tuning, live: the secondary tuning (nvlive --eastern), a raga tuner's Sa and swaras, the meend"),
+    ("GM2", True, "Tuning, live: the exclusives in nvlive -- master tuning, scale/octave tuning, MTS (a "
+                  "real-time change and a select moving sounding keys), GM System On and GS Reset (live._sysex)"),
+    ("GM2", False, "Master volume, files and live (blockrender's _mvol, live's master_gain ramp) -- refused "
+                   "under full today"),
     ("SC-55", False, "The GS map (CC32 / TONE MAP-0) and kit_in_map in the reader and nvlive"),
     ("SC-55", False, "GS's effects natively (gsefx: insertion EFX, the GS delay, chorus) -- the corpus has no "
                      "GS files, so each needs GS test files"),

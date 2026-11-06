@@ -53,6 +53,10 @@ double nv_midi_total(void *p);
 int nv_midi_n_notes(void *p);
 int nv_midi_n_ccs(void *p);
 int nv_midi_n_pws(void *p);
+int nv_midi_master(void *p);
+int nv_midi_otun(void *p, int ch, double *out);
+int nv_midi_n_mts(void *p);
+void nv_midi_mts(void *p, int i, double *t, long *seq, int *bank, int *prog, double *hz);
 int nv_midi_gs(void *p);
 void nv_midi_note(void *p, int i, int *iv, double *dv);
 void nv_midi_cc(void *p, int i, int *iv, double *t);
@@ -390,17 +394,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "nvrender: %s is an export from before the bend passes (native_export.py again)\n", argv[1]);
         return 1;
     }
-    // MTS's program and bank selects act under `gm2` only, through a store
-    // that is not here: such a file is Python's
-    for (int i = 0, n = nv_midi_n_pitch(midi); i < n; i++) {
-        int iv[2];
-        long seq;
-        double t, v;
-        nv_midi_pitch(midi, i, iv, &seq, &t, &v);
-        if (iv[1] == 6 || iv[1] == 7) {
-            fprintf(stderr, "nvrender: refused: an MTS tuning select (gm2's store is Python's)\n");
-            return 2;
-        }
+    if (nv_midi_master(midi) == 2) {
+        fprintf(stderr, "nvrender: refused: a master volume (Python's, after the render)\n");
+        return 2;
     }
     std::vector<double> first(256, INFINITY);
     for (int i = 0, n = nv_midi_n_notes(midi); i < n; i++) {
@@ -458,6 +454,121 @@ int main(int argc, char **argv)
     // THE SONG
     void *song = nv_song_new();
     nv_song_tuning(song, -1, 0.0, E.freq.data());
+    // THE `gm2` TUNER'S STORE (_prep_gm2_store, mts.TuningStore): the file's
+    // MTS and RPN 0/3, 0/4 and GM System On, in message order, each channel's
+    // table at each step -- a new one where its selection or its table moved
+    {
+        std::string tl = tname;
+        for (char &c : tl)
+            c = (char)tolower((unsigned char)c);
+        if (tl == "gm2") {
+            static const char *BUILTIN[] = {"even", "hybrid", "hybridharm", "hybrid440", "hybridharm440",
+                                            "stretch", "werckmeister", "sankey", "meantone", "well", "pyth", "just",
+                                            "linear", "linear5", "linearwell", "bechstein", "spiral", "semi", "path",
+                                            "dynamic"};
+            std::map<std::pair<int, int>, std::vector<double>> tabs;
+            std::map<std::pair<int, int>, long> ver;
+            long nver = 0;
+            auto table = [&](int b, int p) -> std::vector<double> & {
+                auto key = std::make_pair(b, p);
+                auto it = tabs.find(key);
+                if (it != tabs.end())
+                    return it->second;
+                std::vector<double> t(128);
+                bool built = false;
+                if (b == 0 && p >= 0 && p < (int)(sizeof BUILTIN / sizeof BUILTIN[0])) {
+                    double F[128];
+                    int have[128], all = 1;
+                    if (nv_tuning_table(BUILTIN[p], !ra.empty() ? 69 : !rc.empty() ? 60 : -1,
+                                        !ra.empty() ? atof(ra.c_str()) : !rc.empty() ? atof(rc.c_str()) : 0.0, F,
+                                        have) == 0) {
+                        for (int n = 0; n < 128; n++)
+                            all = all && have[n];
+                        if (all) {
+                            t.assign(F, F + 128);
+                            built = true;
+                        }
+                    }
+                }
+                if (!built)                 // (equal_table: GM's power-on)
+                    for (int k = 0; k < 128; k++)
+                        t[k] = 440.0 * pow(2.0, (k - 69) / 12.0);
+                ver[key] = ++nver;
+                return tabs[key] = t;
+            };
+            struct Ev {
+                double t;
+                long seq;
+                int kind, ch, v, mi;
+            };
+            std::vector<Ev> ev;
+            for (int i = 0, n = nv_midi_n_mts(midi); i < n; i++) {
+                double t, hz[128];
+                long sq;
+                int b, p;
+                nv_midi_mts(midi, i, &t, &sq, &b, &p, hz);
+                ev.push_back(Ev{t, sq, 0, -1, 0, i});
+            }
+            for (int i = 0, n = nv_midi_n_pitch(midi); i < n; i++) {
+                int iv[2];
+                long sq;
+                double t, v;
+                nv_midi_pitch(midi, i, iv, &sq, &t, &v);
+                if (iv[0] >= 0 && (iv[1] == 6 || iv[1] == 7))
+                    ev.push_back(Ev{t, sq, iv[1] == 6 ? 1 : 2, iv[0], (int)v, -1});
+                else if (iv[0] == -1 && iv[1] == 9)
+                    ev.push_back(Ev{t, sq, 3, -1, 0, -1});
+            }
+            std::stable_sort(ev.begin(), ev.end(), [](const Ev &a, const Ev &b) {
+                return a.t < b.t || (a.t == b.t && a.seq < b.seq);
+            });
+            std::set<int> chs;              // the first sixteen, and every channel a note is on
+            for (int c = 0; c < 16; c++)
+                chs.insert(c);
+            for (int i = 0, n = nv_midi_n_notes(midi); i < n; i++) {
+                int iv[5];
+                double dv[5];
+                nv_midi_note(midi, i, iv, dv);
+                chs.insert(iv[0]);
+            }
+            std::map<int, std::pair<int, int>> sel;
+            std::map<int, std::pair<std::pair<int, int>, long>> cur;
+            auto snap = [&](double t) {
+                for (int c : chs) {
+                    auto s_ = sel.count(c) ? sel[c] : std::make_pair(0, 0);
+                    std::vector<double> &tab = table(s_.first, s_.second);
+                    auto id = std::make_pair(s_, ver[s_]);
+                    auto it = cur.find(c);
+                    if (it == cur.end() || it->second != id) {
+                        cur[c] = id;
+                        nv_song_tuning(song, c, t, tab.data());
+                    }
+                }
+            };
+            snap(0.0);
+            for (const Ev &e : ev) {
+                if (e.kind == 0) {          // (load: a copy, the dump's or the changes' keys over it)
+                    double t, hz[128];
+                    long sq;
+                    int b, p;
+                    nv_midi_mts(midi, e.mi, &t, &sq, &b, &p, hz);
+                    std::vector<double> nt = table(b, p);
+                    for (int k = 0; k < 128; k++)
+                        if (!std::isnan(hz[k]))
+                            nt[k] = hz[k];
+                    tabs[std::make_pair(b, p)] = nt;
+                    ver[std::make_pair(b, p)] = ++nver;
+                } else if (e.kind == 1 || e.kind == 2) {
+                    auto s_ = sel.count(e.ch) ? sel[e.ch] : std::make_pair(0, 0);
+                    (e.kind == 1 ? s_.second : s_.first) = e.v;
+                    sel[e.ch] = s_;
+                } else {
+                    sel.clear();            // (reset_selections: the tables kept)
+                }
+                snap(e.t);
+            }
+        }
+    }
     // THE SECONDARY TUNING (_prep_eastern_tuning): an 'indian' class's table,
     // Sa at the primary's pitch for its key unless the spec names one; or the
     // primary tuner is itself a raga's (its Sa, no second table)
@@ -705,9 +816,12 @@ int main(int argc, char **argv)
         }
         nv_song_meend(song, c, nt, m.on, r0, row);
     }
-    for (int c = 0; c < 256; c++)
-        if (btun[c] != 0.0 || br[c] >= 0.0)
-            nv_song_channel(song, c, btun[c], nullptr, br[c] >= 0.0);
+    for (int c = 0; c < 256; c++) {
+        double ot[12];                      // THE CHANNEL's SCALE (_prep_octave_tuning, _OTUN)
+        bool has_ot = nv_midi_otun(midi, c, ot) != 0;
+        if (btun[c] != 0.0 || br[c] >= 0.0 || has_ot)
+            nv_song_channel(song, c, btun[c], has_ot ? ot : nullptr, br[c] >= 0.0);
+    }
     // A GESTURE'S STROKES (_prep_strokes): after the passes that read the
     // notes as written, before everything that reads the strokes
     nv_song_strokes(song, E.kit_skind.data(), E.kit_spar.data());

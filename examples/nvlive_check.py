@@ -2,7 +2,7 @@
 """Does native/nvlive play a MIDI file as live.Live does?
 
     python3 examples/nvlive_check.py FILE.mid [SECONDS] [--program=N [--drums]] [--register] [--pedal-key=N]
-                                     [--gpu=cl|c] [--gpu-min=N] [--room=NAME] [--tuner=NAME] [--programs]
+                                     [--gpu=cl|c] [--gpu-min=N] [--room=NAME] [--tuner=NAME] [--eastern=SPEC] [--programs]
 
 The first SECONDS (default 20) of FILE, cut as bitident cuts, its notes and
 controllers (the native reader's, in message order) each applied at the
@@ -25,6 +25,8 @@ nvlive --pedal-key). --gpu: both on live.GpuRenderer's path (the samples on
 OpenCL, or "c" the C reference), from GPU-MIN busy slots (live's GPU_MIN).
 --tuner: live at that tuner, and nvlive computing it (native/tuner.cpp) in
 place of the export's, its free strings' bank built again at it.
+--eastern: a secondary tuning (a raga spec) for the Indian instruments, on
+both sides (live.Live(eastern=), nvlive --eastern).
 --drums: the part a drum part, PROGRAM its drum set (live.Live(drums=True),
 nvlive --drums): the file's notes struck on its kit, whatever their channel.
 --beside: the drum set (Standard) on channel 10 beside the piano, which
@@ -73,6 +75,9 @@ def main(argv):
                            "--fresh", "--room=" + room], stdout=subprocess.DEVNULL)
     exe = N.build_nvlive()
     m = N.Midi(mid)
+    if m.master() == 2:
+        print("%s: refused: a master volume under full (nvlive's)" % os.path.basename(args[0]))
+        return 0
     if m.error:
         print("refused: %s" % N.MIDI_REFUSED.get(m.error, m.error))
         return 2
@@ -96,13 +101,14 @@ def main(argv):
                           + (["--pedal-key=" + opt["pedal-key"]] if "pedal-key" in opt else [])
                           + (["--gpu=" + (opt["gpu"] or "cl"), "--gpu-min=%d" % gmin] if "gpu" in opt else [])
                           + (["--tuner=" + opt["tuner"]] if opt.get("tuner") else [])
+                          + (["--eastern=" + opt["eastern"]] if opt.get("eastern") else [])
                           + (["--programs"] if "programs" in opt else []),
                           stderr=subprocess.DEVNULL)
     raw = open(out, "rb").read()          # float32 stereo after a 44-byte header
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
     # live.Live, fed the same events on the same blocks
     lv = L.Live(program=prog, rate=48000, frames=128, capacity=slots, verbose=False, threads=1, gpu=False,
-                tuner=opt.get("tuner") or "hybrid", drums=drums)
+                tuner=opt.get("tuner") or "hybrid", drums=drums, eastern=opt.get("eastern") or None)
     lv.enable_room(room)
     lv.parts[0].patch.warm()
     from livepart_check import instant_scan
@@ -151,6 +157,8 @@ def main(argv):
             elif ty == 5:
                 if progs:
                     lv.on_midi(M("program_change", channel=ch, program=a))
+            elif ty == 6:
+                lv.on_midi(M("sysex", data=list(m.sysex(a))))
             else:
                 lv.on_midi(M("control_change", channel=ch, control=a, value=v))
             e += 1

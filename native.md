@@ -44,6 +44,10 @@ What it needs first, and live's side:
 
 - [ ] Bank select (CC0/CC32) and GM2's banks (120 drums, 121 melodic) in nvrender's reader and nvlive -- the reader refuses any bank today
 - [ ] nvlive: a variation as a patch (Patch(program, drums, tuner, variation)); the picker's GM2 bank
+- [x] Tuning, files: the secondary (eastern) tuning, the meend, master fine/coarse tuning, scale/octave tuning (GM 2's and GS's), MTS under gm2
+- [x] Tuning, live: the secondary tuning (nvlive --eastern), a raga tuner's Sa and swaras, the meend
+- [x] Tuning, live: the exclusives in nvlive -- master tuning, scale/octave tuning, MTS (a real-time change and a select moving sounding keys), GM System On and GS Reset (live._sysex)
+- [ ] Master volume, files and live (blockrender's _mvol, live's master_gain ramp) -- refused under full today
 
 Tones: 32 of 128 native (new at this stage).
 

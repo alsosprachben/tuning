@@ -59,6 +59,10 @@ extern "C" void nv_scan_prep(const double *X, long n, const float *nf, const flo
 extern "C" void nv_scan_bc(const double *X, double t0, double t1, int depth, int band, int chorus, double sr,
                            double *c);
 extern "C" double nv_tcache_freq(void *h, int note);
+extern "C" int nv_tcache_gm2(void *h);
+extern "C" int nv_tuning_excl(const uint8_t *d, int n, int *iv, double *dv, double *hz);
+extern "C" int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, int *have);
+extern "C" int nv_tcache_get_raga(void *h, double *sw, int *nsw);
 extern "C" double nv_meend_cents(double nc, const double *sw, int nsw, double range_c, double pull, double strength);
 
 extern "C" double nv_damper_contact(int p, int key, int top);
@@ -1861,7 +1865,7 @@ struct Room {
 
 struct Ev {
     int type;               // 0 note-on, 1 note-off, 2 control change, 3 channel aftertouch (a),
-                            // 4 the pitch wheel (a, -8192..8191)
+                            // 4 the pitch wheel (a, -8192..8191), 6 an exclusive (a: its bytes' place)
     int ch, a, b;
 };
 
@@ -1878,6 +1882,7 @@ struct Part {
     std::set<std::pair<int, int>> down, pedalled;
     std::map<Key, long long> tex_on;    // a held texture's key: the sample it may stop (live.tex_on)
     std::vector<Ev> events;
+    std::vector<std::vector<uint8_t>> sx;           // the exclusives the events name (type 6)
     std::map<std::pair<int, int>, int> key_vel;     // (ch, note) -> the strike's velocity
     double pressure[16] = {};                       // channel aftertouch, 0..1
     // THE PITCH WHEEL (live._repitch): each channel's raw wheel and the ratio
@@ -1902,8 +1907,19 @@ struct Part {
     double mod_rate = 0.25;                         // live.mod_rate: the wheel's +25% rate at full
     std::map<Key, std::vector<char>> sym_at;        // live.sym_at: a note's fixed open strings' rows, off the wheel
     std::map<Key, std::pair<double, std::vector<char>>> meend_at;   // live.meend_at: (its ratio, its strings' mask)
-    int raga_sa = -1;                               // the tuner's raga (Sa's note; its swaras' cents), -1 none
-    std::vector<double> raga_sw;
+    // THE TUNINGS THE EXCLUSIVES SET (live._sysex): each channel's scale/octave
+    // table (live.sota) and the ratio last applied to each pitch class
+    // (sota_at); master fine (cents) and coarse (semitones); the gm2 store
+    // (mts.TuningStore: its tables, each channel's selection) and the ratio
+    // last applied to each key (mts_at: part, channel, sounding key)
+    std::map<int, std::array<double, 12>> sota;
+    std::map<std::pair<int, int>, double> sota_at;
+    double master_fine = 0.0, master_coarse = 0.0;
+    std::map<std::pair<int, int>, std::vector<double>> mts_tab;
+    std::map<int, std::pair<int, int>> mts_sel;
+    std::map<std::tuple<long long, int, int>, double> mts_at;
+    int mts_ref_note = -1;                          // the tuners' reference (--a, --c), -1 none
+    double mts_ref_hz = 0.0;
     double vib_mod[16] = {}, vib_modw[16] = {};     // live.mod, live.modw: the wheel's depth, its fraction
     // SOSTENUTO (CC66): the keys down when it went down, held (live.sost)
     std::map<int, std::set<int>> sost;
@@ -3436,7 +3452,10 @@ struct Part {
         {                                   // a note struck under a bend, or the wheel up, joins them
             double sva, svr;
             snd_vib(patches[cur], ch, slots, &sva, &svr);
-            double b = bend[ch], v2 = vib_mod[ch] + sva, r2 = (1.0 + mod_rate * vib_modw[ch]) * svr;
+            double b = bend[ch] * (key_ratio(patches[cur], ch, note) * 1.0);   // (the key's tuning: _key_ratio)
+            double v2 = vib_mod[ch] + sva, r2 = (1.0 + mod_rate * vib_modw[ch]) * svr;
+            if (nv_tcache_gm2(patches[cur].cache))
+                mts_at[std::make_tuple(pid, ch, note + transpose)] = mts_ratio(patches[cur], ch, note);
             // ...OR A MEEND'S, for a voice that locks its bend to the tuning's swaras
             double mr;
             bool has_mr = meend_ratio(patches[cur], ch, note, &mr);
@@ -3462,7 +3481,8 @@ struct Part {
                 if (any) {
                     sym_at[key] = sm;
                     // _wheel_share: the bend over the channel's tuning without the wheel
-                    double st0 = range_of(ch) * 0.0 / 8192.0 + coarse[ch] + fine[ch] / 100.0 + 0.0 + 0.0 / 100.0;
+                    double st0 = range_of(ch) * 0.0 / 8192.0 + coarse[ch] + fine[ch] / 100.0 + master_coarse
+                                 + master_fine / 100.0;
                     double rest = pow(2.0, st0 / 12.0);
                     double share = rest > 0 ? (has_mr ? mr : bend[ch]) / rest : 1.0;
                     double bs = b / share;
@@ -4079,6 +4099,221 @@ struct Part {
     // notes whose key is still down (a release already running would jump);
     // the attack and decay are onset facts, for the next note
     // the class a part plays at a key (live's part.patch._voice_class), none on drums
+    // mts.TuningStore.table: a bank and program's 128 Hz -- loaded, a
+    // built-in tuner's (bank 0), else equal temperament
+    std::vector<double> &mts_table(int b, int p)
+    {
+        auto key = std::make_pair(b, p);
+        auto it = mts_tab.find(key);
+        if (it != mts_tab.end())
+            return it->second;
+        static const char *BUILTIN[] = {"even", "hybrid", "hybridharm", "hybrid440", "hybridharm440", "stretch",
+                                        "werckmeister", "sankey", "meantone", "well", "pyth", "just", "linear",
+                                        "linear5", "linearwell", "bechstein", "spiral", "semi", "path", "dynamic"};
+        std::vector<double> t(128);
+        bool built = false;
+        if (b == 0 && p >= 0 && p < (int)(sizeof BUILTIN / sizeof BUILTIN[0])) {
+            double F[128];
+            int have[128], all = 1;
+            if (nv_tuning_table(BUILTIN[p], mts_ref_note, mts_ref_hz, F, have) == 0) {
+                for (int k = 0; k < 128; k++)
+                    all = all && have[k];
+                if (all) {
+                    t.assign(F, F + 128);
+                    built = true;
+                }
+            }
+        }
+        if (!built)
+            for (int k = 0; k < 128; k++)
+                t[k] = 440.0 * pow(2.0, (k - 69) / 12.0);
+        return mts_tab[key] = t;
+    }
+
+    std::pair<int, int> mts_selection(int ch) const
+    {
+        auto it = mts_sel.find(ch);
+        return it == mts_sel.end() ? std::make_pair(0, 0) : it->second;
+    }
+
+    // live._sota_ratio: this channel's scale/octave factor for one written key
+    double sota_ratio(int ch, int note) const
+    {
+        auto it = sota.find(ch);
+        return it == sota.end() ? 1.0 : pow(2.0, it->second[((note % 12) + 12) % 12] / 1200.0);
+    }
+
+    // live._mts_ratio: the gm2 store's correction for one written key (the
+    // selected table over the part's own, at the key it sounds)
+    double mts_ratio(const Patch &p, int ch, int note)
+    {
+        if (p.drums || !nv_tcache_gm2(p.cache))
+            return 1.0;
+        int key = note + p.transpose;
+        if (key < 0 || key >= 128)
+            return 1.0;
+        double base = nv_tcache_freq(p.cache, key);
+        if (base == 0.0)
+            return 1.0;
+        auto s_ = mts_selection(ch);
+        return mts_table(s_.first, s_.second)[key] / base;
+    }
+
+    // live._key_ratio: everything that tunes one key
+    double key_ratio(const Patch &p, int ch, int note) { return sota_ratio(ch, note) * mts_ratio(p, ch, note); }
+
+    // live._resota: this channel's sounding notes onto its table, each pitch
+    // class against the ratio last applied to it
+    void resota(int ch, long long n0)
+    {
+        bool moved = false;
+        for (int pc = 0; pc < 12; pc++) {
+            double want = sota_ratio(ch, pc);
+            auto it = sota_at.find(std::make_pair(ch, pc));
+            double was = it == sota_at.end() ? 1.0 : it->second;
+            if (want == was)
+                continue;
+            sota_at[std::make_pair(ch, pc)] = want;
+            std::vector<long> sl;
+            for (auto &kv : S.live)
+                if (std::get<1>(kv.first) == ch && ((std::get<2>(kv.first) % 12) + 12) % 12 == pc)
+                    sl.insert(sl.end(), kv.second.begin(), kv.second.end());
+            if (!sl.empty()) {
+                retune(sl, n0, want / was);
+                moved = true;
+            }
+        }
+        if (moved)
+            for (size_t pi = 0; pi < patches.size(); pi++)
+                if (patches[pi].channel < 0 || patches[pi].channel == ch)
+                    amp_touch((int)pi);
+    }
+
+    // live._remts: a gm2 part's sounding notes onto the tuning now in force
+    // (the keys named, else every key sounding), each against what it had
+    void remts(int ch, const std::vector<int> *keys, long long n0)
+    {
+        for (size_t pi = 0; pi < patches.size(); pi++) {
+            const Patch &p = patches[pi];
+            if (!(p.channel < 0 || p.channel == ch) || !nv_tcache_gm2(p.cache))
+                continue;
+            bool moved = false;
+            std::set<int> pk;
+            if (keys)
+                pk.insert(keys->begin(), keys->end());
+            else
+                for (auto &kv : S.live)
+                    if (std::get<0>(kv.first) == p.pid && std::get<1>(kv.first) == ch && std::get<2>(kv.first) >= 0)
+                        pk.insert((int)std::get<2>(kv.first) + p.transpose);
+            for (int key : pk) {
+                int w = key - p.transpose;
+                double want = mts_ratio(p, ch, w);
+                auto mk = std::make_tuple(p.pid, ch, key);
+                auto it = mts_at.find(mk);
+                double was = it == mts_at.end() ? 1.0 : it->second;
+                if (fabs(want - was) < 1e-15)
+                    continue;
+                std::vector<long> sl;
+                for (auto &kv : S.live)
+                    if (std::get<0>(kv.first) == p.pid && std::get<1>(kv.first) == ch && std::get<2>(kv.first) == w)
+                        sl.insert(sl.end(), kv.second.begin(), kv.second.end());
+                if (!sl.empty()) {
+                    retune(sl, n0, want / was);
+                    moved = true;
+                }
+                mts_at[mk] = want;
+            }
+            if (moved)
+                amp_touch((int)pi);
+        }
+    }
+
+    // live._sysex, its tunings: GM 2's scale/octave (each channel named, re-
+    // tuned), MTS (the store loaded; a real-time single-note change moves the
+    // keys it names on every channel playing from that program), the master
+    // (fine and coarse: every channel re-pitched; the volume: nvlive refuses
+    // it under full)
+    void sysex(const std::vector<uint8_t> &d, long long n0)
+    {
+        int iv[4] = {0, 0, 0, 0};
+        double dv[12], hz[128];
+        int tk = nv_tuning_excl(d.data(), (int)d.size(), iv, dv, hz);
+        if (tk == 4) {
+            for (int c = 0; c < 16; c++)
+                if (iv[0] & (1 << c)) {
+                    std::array<double, 12> &t = sota[c];
+                    for (int i = 0; i < 12; i++)
+                        t[i] = dv[i];
+                    resota(c, n0);
+                }
+        } else if (tk == 2) {
+            std::vector<double> cur = mts_table(iv[0], iv[1]);
+            std::vector<int> named;
+            for (int k = 0; k < 128; k++)
+                if (!std::isnan(hz[k])) {
+                    cur[k] = hz[k];
+                    named.push_back(k);
+                }
+            mts_tab[std::make_pair(iv[0], iv[1])] = cur;
+            if (iv[2])
+                for (int c = 0; c < 16; c++)
+                    if (mts_selection(c) == std::make_pair(iv[0], iv[1]))
+                        remts(c, &named, n0);
+        } else if (tk == 1 && iv[0] != 1) {
+            (iv[0] == 2 ? master_fine : master_coarse) = dv[0];
+            for (int c = 0; c < 16; c++)
+                repitch(c, n0);
+        } else if (tk == 0) {
+            // GM SYSTEM ON (gm_on_level: 09 01, 09 03) OR GS RESET (parse_gs_reset)
+            size_t n = d.size();
+            bool gm = n >= 4 && d[0] == 0x7E && d[2] == 0x09 && (d[3] == 0x01 || d[3] == 0x03);
+            bool gs = n >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12
+                      && ((d[4] == 0x40 && d[5] == 0x00 && d[6] == 0x7F && d[7] == 0x00)
+                          || (d[4] == 0x00 && d[5] == 0x00 && d[6] == 0x7F));
+            if (gm || gs)
+                power_on(n0);
+        }
+    }
+
+    // live._sysex's reset: everything let go; the device's state, then each
+    // channel's, back to power-on (the master tuning first, so each channel's
+    // re-pitch lands on it); every part asked for program 0 (reset_asked)
+    bool reset_asked = false;
+    void power_on(long long n0)
+    {
+        panic(n0);
+        for (int c = 0; c < 256; c++)
+            S.send[c] = 1.0;                    // every channel at the nominal distance
+        master_fine = master_coarse = 0.0;
+        for (int c = 0; c < 16; c++) {
+            mono[c] = false;
+            mono_stack[c].clear();
+            mono_cur[c] = -1;
+            modrange[c] = -1.0;
+            for (int i = 0; i < 8; i++)
+                snd_d[c][i] = 0.0;
+            nrpn_msb[c] = nrpn_lsb[c] = 127;
+        }
+        mts_sel.clear();                        // (the store keeps its tables)
+        for (int c = 0; c < 16; c++) {
+            reset_controllers(c, n0);
+            vol[c] = 100;
+            expr[c] = 127;
+            control(c, 10, 64, n0);
+            brange[c] = -1.0;                   // (live's bend_range, the session's, is not a file's)
+            coarse[c] = 0.0;
+            fine[c] = 0.0;
+            repitch(c, n0);
+            sota.erase(c);                      // ...and its scale: cleared, then re-applied
+            resota(c, n0);
+        }
+        for (int c = 0; c < 16; c++) {
+            cgain[c] = 1.0;
+            cgain_set[c] = false;
+        }
+        reset_asked = true;
+    }
+
     // live._meend_part: a part whose program's class meends (bend_detents)
     bool meend_part(const Patch &p) const
     {
@@ -4096,11 +4331,13 @@ struct Part {
         const NoteClass *pc = key_class(p, n);
         if (!pc || !pc->meend)
             return false;
-        int sa;
+        int sa, rn = 0;
+        double rsw[12];
         std::vector<double> sw;
-        if (raga_sa >= 0) {
-            sa = raga_sa;
-            sw = raga_sw;
+        int rsa = nv_tcache_get_raga(p.cache, rsw, &rn);       // (its tuner a raga's: the part's patch's)
+        if (rsa >= 0) {
+            sa = rsa;
+            sw.assign(rsw, rsw + rn);
         } else {
             sa = pc->meend_tonic;
             for (int k = 0; k < 12; k++)
@@ -4113,7 +4350,8 @@ struct Part {
             return false;
         double rng = brange[ch] >= 0.0 ? brange[ch] : pc->meend_range;
         double pull = 100.0 * rng * (double)wheel[ch] / 8192.0;
-        double rest = pow(2.0, (rng * 0.0 / 8192.0 + coarse[ch] + fine[ch] / 100.0 + 0.0 + 0.0 / 100.0) / 12.0);
+        double rest = pow(2.0, (rng * 0.0 / 8192.0 + coarse[ch] + fine[ch] / 100.0 + master_coarse
+                                + master_fine / 100.0) / 12.0);
         *out = rest * pow(2.0, nv_meend_cents(1200.0 * log2(Fn / Fs), sw.data(), (int)sw.size(), 100.0 * rng, pull,
                                               pc->meend_strength) / 1200.0);
         return true;
@@ -5133,7 +5371,8 @@ struct Part {
     // here), its notes moved by the change
     void repitch(int ch, long long n0)
     {
-        double st = range_of(ch) * (double)wheel[ch] / 8192.0 + coarse[ch] + fine[ch] / 100.0 + 0.0 + 0.0 / 100.0;
+        double st = range_of(ch) * (double)wheel[ch] / 8192.0 + coarse[ch] + fine[ch] / 100.0 + master_coarse
+                    + master_fine / 100.0;
         double ratio = pow(2.0, st / 12.0);
         double prev = bend[ch];
         // A MEEND MOVES EACH NOTE BY ITS OWN SWARAS: its parts retuned key by
@@ -5246,7 +5485,13 @@ struct Part {
                 control(ch, 1, (int)nearbyint(vib_modw[ch] * 127.0), n0);
             return;
         } else {
-            return;                                 // MTS: a gm2 part's
+            if (cc != 6)
+                return;                             // (rpn_tuning_program, _bank: the data entry MSB)
+            auto s_ = mts_selection(ch);
+            (l == 3 ? s_.second : s_.first) = v;
+            mts_sel[ch] = s_;
+            remts(ch, nullptr, n0);                 // ("This change takes effect immediately")
+            return;
         }
         repitch(ch, n0);
     }
@@ -5258,10 +5503,11 @@ struct Part {
             return;
         int l = rpn_lsb[ch];
         double step, lo, hi;
-        if (l == 3 || l == 4 || !rpn_step_of(l, &step, &lo, &hi))
-            return;                                 // (MTS's: a gm2 part's)
+        if (!rpn_step_of(l, &step, &lo, &hi))
+            return;
         double cur = l == 0 ? range_of(ch) : l == 1 ? fine[ch] : l == 2 ? coarse[ch]
-                                                                    : (modrange[ch] >= 0.0 ? modrange[ch] : mod_cents);
+                     : l == 3 ? (double)mts_selection(ch).second : l == 4 ? (double)mts_selection(ch).first
+                     : (modrange[ch] >= 0.0 ? modrange[ch] : mod_cents);
         double v = cur + (up ? step : -step);
         v = std::max(lo, v);                        // min(hi, max(lo, v)): Python keeps the first of equals
         v = std::min(hi, v);
@@ -5275,6 +5521,12 @@ struct Part {
             fine_msb[ch] = (int)(std::max(0L, std::min(16383L, code)) >> 7);
         } else if (l == 2) {
             coarse[ch] = v;
+        } else if (l == 3 || l == 4) {
+            auto s_ = mts_selection(ch);
+            (l == 3 ? s_.second : s_.first) = (int)v;
+            mts_sel[ch] = s_;
+            remts(ch, nullptr, n0);
+            return;
         } else {
             modrange[ch] = v;
             if (vib_modw[ch] > 0.0)
@@ -7111,8 +7363,13 @@ struct Part {
             amp_retire(n0);
         std::vector<Ev> evs;
         evs.swap(events);
+        std::vector<std::vector<uint8_t>> sxs;
+        sxs.swap(sx);
         for (const Ev &e : evs) {
-            if (e.type == 0)
+            if (e.type == 6) {
+                if (e.a >= 0 && e.a < (int)sxs.size())
+                    sysex(sxs[e.a], n0);
+            } else if (e.type == 0)
                 note_on(e.ch, e.a, e.b, n0);
             else if (e.type == 1)
                 note_off(e.ch, e.a, n0);
@@ -7674,6 +7931,31 @@ void nv_part_event(void *h, int type, int ch, int a, int b)
     ((nv::slab::Part *)h)->events.push_back(nv::slab::Ev{type, ch, a, b});
 }
 
+// an exclusive (the bytes between F0 and F7), the next of the block's events
+void nv_part_sysex(void *h, const uint8_t *d, int n)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    P->events.push_back(nv::slab::Ev{6, -1, (int)P->sx.size(), 0});
+    P->sx.push_back(std::vector<uint8_t>(d, d + n));
+}
+
+// a reset heard since last asked (every part to program 0): 1, and forgotten
+int nv_part_take_reset(void *h)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    bool r = P->reset_asked;
+    P->reset_asked = false;
+    return r ? 1 : 0;
+}
+
+// the tuners' reference for the gm2 store's built-in tables (--a: 69, --c: 60), note -1 none
+void nv_part_mts_ref(void *h, int note, double hz)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    P->mts_ref_note = note;
+    P->mts_ref_hz = hz;
+}
+
 void nv_part_block(void *h, long long n0, long long blk) { ((nv::slab::Part *)h)->block(n0, blk); }
 
 // the Moog's tables for a check: 0 FT, 1 KN (floats, n of them; how many there are)
@@ -7800,14 +8082,6 @@ void nv_part_amp_ahead(void *h, int blocks, int hold)
 
 // the scanner's data off the audio thread (nvlive playing: live's builder)
 void nv_part_scan_async(void *h) { ((nv::slab::Part *)h)->start_scan_worker(); }
-
-// the tuner's raga (a raga tuner's Sa and its swaras' cents: the meend's), sa -1 none
-void nv_part_raga(void *h, int sa, const double *sw, int nsw)
-{
-    nv::slab::Part *P = (nv::slab::Part *)h;
-    P->raga_sa = sa;
-    P->raga_sw.assign(sw, sw + (nsw > 0 ? nsw : 0));
-}
 
 // the Leslie's constants (leslie.cpp's L_*): the part's rotors, on chorale
 void nv_part_leslie(void *h, const double *L, int n)

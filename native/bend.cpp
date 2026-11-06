@@ -29,6 +29,7 @@
 extern "C" {
 int nv_midi_n_pitch(void *p);
 void nv_midi_pitch(void *p, int i, int *iv, long *seq, double *t, double *v);
+int nv_midi_master(void *p);
 int nv_midi_n_ccs(void *p);
 void nv_midi_cc(void *p, int i, int *iv, double *t);
 int nv_midi_n_notes(void *p);
@@ -68,7 +69,7 @@ static void streams(void *midi, double bend_range, std::map<int, std::vector<std
     }
     // the channels with a wheel or an RPN (pws, rpns), and every channel's stream
     std::map<int, std::vector<P>> by;
-    std::vector<P> gmon;
+    std::vector<P> gmon, mst;           // GM System On; the master's fine and coarse (every channel's)
     std::set<int> chans;
     int np = nv_midi_n_pitch(midi);
     for (int i = 0; i < np; i++) {
@@ -76,6 +77,10 @@ static void streams(void *midi, double bend_range, std::map<int, std::vector<std
         long seq;
         double t, v;
         nv_midi_pitch(midi, i, iv, &seq, &t, &v);
+        if (iv[0] == -2) {
+            mst.push_back(P{t, seq, iv[1], v});
+            continue;
+        }
         if (iv[0] < 0) {
             gmon.push_back(P{t, seq, 9, 0.0});
             continue;
@@ -84,18 +89,28 @@ static void streams(void *midi, double bend_range, std::map<int, std::vector<std
         if (iv[1] <= 3)                     // the wheel, range, fine, coarse
             by[iv[0]].push_back(P{t, seq, iv[1], v});
     }
+    if (nv_midi_master(midi))              // a master message: every channel that plays (_first_on)
+        for (auto &kv : first_on)
+            chans.insert((int)kv.first);
     for (int c : chans) {
         std::vector<P> ev = by[c];
+        ev.insert(ev.end(), mst.begin(), mst.end());
         ev.insert(ev.end(), gmon.begin(), gmon.end());
         std::stable_sort(ev.begin(), ev.end(), [](const P &a, const P &b) {
             return a.t < b.t || (a.t == b.t && a.seq < b.seq);
         });
-        double range = bend_range, wheel = 0.0, coarse = 0.0, fine = 0.0;
-        bool hr = false, hw = false, hc = false, hf = false;
+        double range = bend_range, wheel = 0.0, coarse = 0.0, fine = 0.0, mcoarse = 0.0, mfine = 0.0;
+        bool hr = false, hw = false, hc = false, hf = false, hmc = false, hmf = false;
         std::vector<std::pair<double, double>> &o = out[c];
         for (const P &e : ev) {
             if (e.kind == 9) {
-                hr = hw = hc = hf = false;
+                hr = hw = hc = hf = hmc = hmf = false;
+            } else if (e.kind == 10) {
+                mfine = e.v;
+                hmf = true;
+            } else if (e.kind == 11) {
+                mcoarse = e.v;
+                hmc = true;
             } else if (e.kind == 0) {
                 wheel = e.v;
                 hw = true;
@@ -109,9 +124,9 @@ static void streams(void *midi, double bend_range, std::map<int, std::vector<std
                 coarse = e.v;
                 hc = true;
             }
-            // tonelib.channel_pitch_ratio, master tuning 0
+            // tonelib.channel_pitch_ratio, the master's with it
             double st = (hr ? range : bend_range) * (hw ? wheel : 0.0) / 8192.0 + (hc ? coarse : 0.0)
-                        + (hf ? fine : 0.0) / 100.0 + 0.0 + 0.0 / 100.0;
+                        + (hf ? fine : 0.0) / 100.0 + (hmc ? mcoarse : 0.0) + (hmf ? mfine : 0.0) / 100.0;
             o.push_back(std::make_pair(e.t, pow(2.0, st / 12.0)));
         }
     }

@@ -392,6 +392,7 @@ def _load():
             ('nv_midi_n_notes', I, [ctypes.c_void_p]), ('nv_midi_n_ccs', I, [ctypes.c_void_p]),
             ('nv_midi_n_pws', I, [ctypes.c_void_p]), ('nv_midi_gs', I, [ctypes.c_void_p]),
             ('nv_midi_n_events', I, [ctypes.c_void_p]),
+            ('nv_midi_sysex', I, [ctypes.c_void_p, I, ctypes.c_void_p, I]), ('nv_midi_master', I, [ctypes.c_void_p]),
             ('nv_midi_event', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_note', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_cc', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
@@ -3135,10 +3136,20 @@ class Midi(object):
             out.setdefault(iv[0], []).append((t.value, iv[1], iv[2]))
         return out
 
+    def sysex(self, i):
+        """Exclusive i (an event of type 6's a): its bytes between F0 and F7."""
+        buf = (ctypes.c_uint8 * 65536)()
+        n = self.d.nv_midi_sysex(self.p, int(i), buf, 65536)
+        return bytes(buf[:n]) if n > 0 else b""
+
+    def master(self):
+        """A master message (1), a master volume under full (2), none (0)."""
+        return self.d.nv_midi_master(self.p)
+
     def events(self):
         """[(t, type, channel, a, b)] in message order: 0 note-on (key,
         velocity), 1 note-off, 2 control (number, value), 4 the pitch wheel
-        (-8192..8191)"""
+        (-8192..8191), 5 a program change, 6 an exclusive (a: sysex(a))"""
         I4 = ctypes.c_int * 4
         out = []
         for i in range(self.d.nv_midi_n_events(self.p)):

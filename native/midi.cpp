@@ -23,6 +23,8 @@
 
 #include <algorithm>
 #include <array>
+#include <limits>
+#include <set>
 #include <cstdint>
 #include <cmath>
 #include <cstring>
@@ -202,7 +204,168 @@ struct Parsed {
     std::vector<CCEv> snd;      // sndev: CC71-78, and gmon (channel -1, cc -1), in message order
     std::vector<std::pair<int, int>> chprogs;  // ch_progs: a melodic channel's program changes, in message order
     std::map<int, int> parts;   // _voice_parts: a channel's voice part, by its track's name (nv_voice_body)
+    int master = 0;             // a master message (parse_master): every channel's pitch stream then
+    int master_vol = 0;         // ...a master volume under full (Python's, after the render)
+    // sotas: each channel's scale/octave tuning, (time, twelve cents) as sent
+    std::map<int, std::vector<std::pair<double, std::array<double, 12>>>> sotas;
+    // MTS (parse_mts): each dump or single-note change, in message order --
+    // (time, seq), its bank and program, 128 Hz (NaN: keep)
+    struct Mts {
+        double t;
+        long seq;
+        int bank, prog;
+        std::array<double, 128> hz;
+    };
+    std::vector<Mts> mts;
+    std::vector<std::vector<uint8_t>> sysex;    // the live part's exclusives (events of type 6), as read
 };
+
+}  // namespace nv
+
+// THE TUNING EXCLUSIVES, one parser for the file and the live part (the bytes
+// between F0 and F7). 1 master (blockrender.parse_master: GS's 40 00 00/04/05,
+// the universal 7F dd 04 01/03/04): iv[0] 1 volume (dv[0] its gain), 2 fine
+// (cents), 3 coarse (semitones). 2 MTS (mts.parse_mts: 08 01/04 bulk dumps,
+// 05/06 scale dumps, 02/07 single-note changes): iv[0] bank, iv[1] program,
+// iv[2] a real-time single-note change, hz[128] (NaN: keep). 3 an MTS message
+// not read (nothing). 4 GM 2's scale/octave tuning (parse_sota): iv[0] the
+// channels (a bit each), dv[12] the cents. 0 none of these.
+extern "C" int nv_tuning_excl(const uint8_t *d, int n, int *iv, double *dv, double *hz)
+{
+    const double NANV = std::numeric_limits<double>::quiet_NaN();
+    // MASTER
+    bool gsh = n >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && d[4] == 0x40 && d[5] == 0x00;
+    if (gsh && d[6] == 0x04) {
+        iv[0] = 1;
+        dv[0] = pow((double)((d[7] << 7) | d[7]) / 16383.0, 2.0);
+        return 1;
+    }
+    if (gsh && d[6] == 0x05) {
+        iv[0] = 3;
+        dv[0] = (double)(std::max(0x28, std::min(0x58, (int)d[7])) - 0x40);
+        return 1;
+    }
+    if (gsh && d[6] == 0x00 && n >= 11) {
+        int nib = (d[7] & 15) << 12 | (d[8] & 15) << 8 | (d[9] & 15) << 4 | (d[10] & 15);
+        iv[0] = 2;
+        dv[0] = (double)(std::max(0x18, std::min(0x7E8, nib)) - 0x400) / 10.0;
+        return 1;
+    }
+    if (!gsh && n >= 6 && d[0] == 0x7F && d[2] == 0x04) {
+        int ll = d[4], mm = d[5];
+        if (d[3] == 0x01) {
+            iv[0] = 1;
+            dv[0] = pow((double)std::max(0, std::min(16383, (mm << 7) | ll)) / 16383.0, 2.0);
+            return 1;
+        }
+        if (d[3] == 0x03) {
+            iv[0] = 2;
+            dv[0] = (double)(((mm << 7) | ll) - 8192) / 8192.0 * 100.0;
+            return 1;
+        }
+        if (d[3] == 0x04) {
+            iv[0] = 3;
+            dv[0] = (double)(mm - 64);
+            return 1;
+        }
+    }
+    // MTS
+    if (n >= 4 && (d[0] == 0x7E || d[0] == 0x7F) && d[2] == 0x08
+        && (d[3] == 0x01 || d[3] == 0x02 || d[3] == 0x04 || d[3] == 0x05 || d[3] == 0x06 || d[3] == 0x07)) {
+        auto word = [&](int xx, int yy, int zz) {
+            if (xx == 0x7F && yy == 0x7F && zz == 0x7F)
+                return NANV;                        // no change
+            double nn = xx + ((yy << 7) | zz) / 16384.0;
+            return 440.0 * pow(2.0, (nn - 69.0) / 12.0);
+        };
+        auto xsum = [&](int m) {
+            int c = 0;
+            for (int i = 0; i < m; i++)
+                c ^= d[i];
+            return c & 0x7F;
+        };
+        for (int k = 0; k < 128; k++)
+            hz[k] = NANV;
+        iv[2] = 0;
+        int sub = d[3];
+        if ((sub == 0x05 || sub == 0x06) && d[0] == 0x7E) {
+            int m = sub == 0x05 ? 12 : 24;
+            if (n >= 6 + 16 + m + 1 && xsum(22 + m) == d[22 + m]) {
+                iv[0] = d[4];
+                iv[1] = d[5];
+                double c[12];
+                for (int i = 0; i < 12; i++)
+                    c[i] = sub == 0x05 ? (double)d[22 + i] - 64.0
+                                       : (double)(((d[22 + 2 * i] << 7) | d[23 + 2 * i]) - 8192) / 8192.0 * 100.0;
+                for (int k = 0; k < 128; k++)
+                    hz[k] = 440.0 * pow(2.0, (k - 69) / 12.0) * pow(2.0, c[k % 12] / 1200.0);
+                return 2;
+            }
+        } else if ((sub == 0x01 || sub == 0x04) && d[0] == 0x7E) {
+            int off = 4;
+            iv[0] = 0;
+            if (sub == 0x04)
+                iv[0] = d[off++];
+            if (n >= off + 1 + 16 + 384 + 1) {
+                iv[1] = d[off++];
+                off += 16;
+                if (!(sub == 0x04 && xsum(off + 384) != d[off + 384])) {
+                    for (int k = 0; k < 128; k++)
+                        hz[k] = word(d[off + 3 * k], d[off + 3 * k + 1], d[off + 3 * k + 2]);
+                    return 2;
+                }
+            }
+        } else if ((sub == 0x02 && d[0] == 0x7F) || sub == 0x07) {
+            int off = 4;
+            iv[0] = 0;
+            if (sub == 0x07)
+                iv[0] = d[off++];
+            if (n >= off + 2) {
+                iv[1] = d[off];
+                int ll = d[off + 1];
+                off += 2;
+                for (int i = 0; i < ll && off + 4 * i + 4 <= n; i++) {
+                    int k = d[off + 4 * i];
+                    double f = word(d[off + 4 * i + 1], d[off + 4 * i + 2], d[off + 4 * i + 3]);
+                    if (!std::isnan(f) && k >= 0 && k < 128)
+                        hz[k] = f;
+                }
+                iv[2] = d[0] == 0x7F;
+                return 2;
+            }
+        }
+        return 3;
+    }
+    // GM 2's SCALE/OCTAVE TUNING
+    if (n >= 7 && (d[0] == 0x7E || d[0] == 0x7F) && d[2] == 0x08 && (d[3] == 0x08 || d[3] == 0x09)) {
+        int nb = n - 7;
+        if (d[3] == 0x08 ? nb < 12 : nb < 24)
+            return 0;
+        for (int i = 0; i < 12; i++)
+            dv[i] = d[3] == 0x08 ? (double)d[7 + i] - 64.0
+                                 : (double)(((d[7 + 2 * i] << 7) | d[8 + 2 * i]) - 8192) / 8192.0 * 100.0;
+        int m = 0;
+        for (int b = 0; b < 2; b++)
+            if (d[4] & (1 << b))
+                m |= 1 << (14 + b);
+        for (int b = 0; b < 7; b++) {
+            if (d[5] & (1 << b))
+                m |= 1 << (7 + b);
+            if (d[6] & (1 << b))
+                m |= 1 << b;
+        }
+        iv[0] = m;
+        return 4;
+    }
+    return 0;
+}
+
+namespace nv {
+
+static int tuning_excl(const uint8_t *d, int n, int *iv, double *dv, double *hz)
+{
+    return nv_tuning_excl(d, n, iv, dv, hz);
+}
 
 // _prep_mono_mode: MONO MODE (CC126 on, CC127 or GM System On off), each
 // channel in it a single voice -- a key pressed takes the voice (the one it
@@ -498,6 +661,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         auto it = m.find(c);
         return it != m.end() ? it->second : d;
     };
+    std::map<int, std::array<double, 12>> gsscale;     // each GS part's scale tuning, as held
     long seq = 0;
     bool seen_note = false;
     for (const Msg &m : msgs) {
@@ -517,13 +681,77 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             bool gs = d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12
                       && ((d[4] == 0x40 && d[5] == 0x00 && d[6] == 0x7F && d[7] == 0x00)
                           || (d[4] == 0x00 && d[5] == 0x00 && d[6] == 0x7F));
+            // THE TUNING EXCLUSIVES (tuning_excl): master, MTS, GM 2's scale --
+            // each also an event for the live part (6, the bytes kept), as
+            // live._sysex reads it; a master volume only refused at less than full
+            {
+                int ti[4];
+                double td[12], th[128];
+                int tk = tuning_excl(d.data(), (int)d.size(), ti, td, th);
+                if (tk) {
+                    if (tk == 1) {
+                        bool gsh = d[0] == 0x41;
+                        if (!seen_note && gsh)
+                            P.gs = 1;
+                        P.master = 1;
+                        if (ti[0] == 1 && td[0] != 1.0)
+                            P.master_vol = 1;
+                        else if (ti[0] > 1)
+                            P.pitch.push_back(PitchEv{-2, t, seq, ti[0] == 2 ? 10 : 11, td[0]});
+                    } else if (tk == 2) {
+                        Parsed::Mts e;
+                        e.t = t;
+                        e.seq = seq;
+                        e.bank = ti[0];
+                        e.prog = ti[1];
+                        for (int k = 0; k < 128; k++)
+                            e.hz[k] = th[k];
+                        P.mts.push_back(e);
+                    } else if (tk == 4) {
+                        std::array<double, 12> c;
+                        for (int i = 0; i < 12; i++)
+                            c[i] = td[i];
+                        for (int ch2 = 0; ch2 < 16; ch2++)
+                            if (ti[0] & (1 << ch2))
+                                P.sotas[ch2].push_back(std::make_pair(t, c));
+                    }
+                    if (tk != 3) {
+                        P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});
+                        P.sysex.push_back(d);
+                    }
+                    continue;               // (an MTS message not read: nothing, as Python's)
+                }
+            }
+            // ...AND GS's SCALE TUNING C..B (parse_gs_part_state: 40 1p 40-4B,
+            // one note or several), the part's scale held and sent whole
+            if (d.size() >= 9 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && (d[4] == 0x40 || d[4] == 0x50)
+                && (d[5] >> 4) == 1 && d[6] >= 0x40 && d[6] <= 0x4B) {
+                int blk = d[5] & 0x0F;
+                int ch2 = (blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk)) + (d[4] == 0x50 ? 16 : 0);
+                if (d[4] == 0x50)
+                    return -3;          // (port B: PortedMidi's)
+                std::array<double, 12> &sc = gsscale[ch2];
+                size_t a = d[6] - 0x40, nbody = d.size() - 8;      // (the values, without the checksum)
+                for (size_t i = 0; i < nbody && a + i < 12; i++)
+                    sc[a + i] = (double)d[7 + i] - 64.0;
+                if (!seen_note)
+                    P.gs = 1;
+                P.sotas[ch2].push_back(std::make_pair(t, sc));
+                continue;
+            }
             if (!(lvl || gs))
                 return -4;              // any other exclusive: not a GM file's
             if (!seen_note && d.size() >= 4 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12)
                 P.gs = 1;
             rxbank = lvl != 1;
             bmsb.clear(); blsb.clear(); drums.clear(); prog.clear(); ctrl.clear(); rsel.clear(); nsel.clear();
-            // BACK TO POWER-ON: every tuning the file set, from here (gmon)
+            P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});     // (the live part's too)
+            P.sysex.push_back(d);
+            // BACK TO POWER-ON: every tuning the file set, from here (gmon) --
+            // each channel's scale at 0, the GS part's scale held cleared
+            for (auto &so : P.sotas)
+                so.second.push_back(std::make_pair(t, std::array<double, 12>{}));
+            gsscale.clear();
             P.pitch.push_back(PitchEv{-1, t, seq, 9, 0.0});
             P.snd.push_back(CCEv{-1, t, -1, 0});
             rfmsb.clear(); rrange.clear(); rmod.clear(); rfine.clear(); rcoarse.clear(); rtp.clear(); rtb.clear();
@@ -747,6 +975,67 @@ int nv_midi_gs(void *p) { return ((nv::Parsed *)p)->gs; }
 int nv_midi_n_notes(void *p) { return (int)((nv::Parsed *)p)->notes.size(); }
 int nv_midi_n_ccs(void *p) { return (int)((nv::Parsed *)p)->ccs.size(); }
 int nv_midi_n_pws(void *p) { return (int)((nv::Parsed *)p)->pws.size(); }
+
+// MTS message i (parse_mts): its time and seq, bank and program, 128 Hz (NaN: keep)
+int nv_midi_n_mts(void *p) { return (int)((nv::Parsed *)p)->mts.size(); }
+void nv_midi_mts(void *p, int i, double *t, long *seq, int *bank, int *prog, double *hz)
+{
+    const nv::Parsed::Mts &e = ((nv::Parsed *)p)->mts[i];
+    *t = e.t;
+    *seq = e.seq;
+    *bank = e.bank;
+    *prog = e.prog;
+    for (int k = 0; k < 128; k++)
+        hz[k] = e.hz[k];
+}
+
+// _prep_octave_tuning for channel ch: 1 and its twelve cents (out) if a
+// scale is in force at its first note (the last at or before it, by time,
+// stably; else the first sent) and not all 0, else 0
+int nv_midi_otun(void *p, int ch, double *out)
+{
+    const nv::Parsed *P = (nv::Parsed *)p;
+    auto it = P->sotas.find(ch);
+    if (it == P->sotas.end() || it->second.empty())
+        return 0;
+    double f = INFINITY;
+    for (const nv::Note &n : P->notes)
+        if (n.ch == ch && n.on < f)
+            f = n.on;
+    if (f == INFINITY)
+        return 0;
+    std::vector<std::pair<double, std::array<double, 12>>> ev = it->second;
+    std::stable_sort(ev.begin(), ev.end(), [](const std::pair<double, std::array<double, 12>> &a,
+                                              const std::pair<double, std::array<double, 12>> &b) {
+        return a.first < b.first;
+    });
+    const std::array<double, 12> *tab = &ev[0].second;
+    for (auto r = ev.rbegin(); r != ev.rend(); ++r)
+        if (r->first <= f + 1e-6) {
+            tab = &r->second;
+            break;
+        }
+    bool any = false;
+    for (int i = 0; i < 12; i++) {
+        out[i] = (*tab)[i];
+        any = any || fabs(out[i]) > 1e-9;
+    }
+    return any ? 1 : 0;
+}
+
+// a tuning exclusive (master, scale/octave, MTS) in the file: 1, else 0
+int nv_midi_tuning_excl(void *p)
+{
+    const nv::Parsed *P = (nv::Parsed *)p;
+    return P->master || !P->sotas.empty() || !P->mts.empty() ? 1 : 0;
+}
+
+// a master message (1), a master volume under full (2), none (0)
+int nv_midi_master(void *p)
+{
+    const nv::Parsed *P = (nv::Parsed *)p;
+    return P->master_vol ? 2 : P->master ? 1 : 0;
+}
 int nv_midi_n_events(void *p) { return (int)((nv::Parsed *)p)->events.size(); }
 
 // the pitch stream (PitchEv): how many; event i -- iv (channel, kind), its
@@ -763,6 +1052,18 @@ void nv_midi_pitch(void *p, int i, int *iv, long *seq, double *t, double *v)
 }
 
 // event i in message order: (type, channel, a, b), *t its time (s)
+// exclusive i (an event of type 6's a): its bytes into out (cap), its length
+int nv_midi_sysex(void *p, int i, uint8_t *out, int cap)
+{
+    const nv::Parsed *P = (nv::Parsed *)p;
+    if (i < 0 || i >= (int)P->sysex.size())
+        return -1;
+    const std::vector<uint8_t> &b = P->sysex[i];
+    for (int k = 0; k < (int)b.size() && k < cap; k++)
+        out[k] = b[k];
+    return (int)b.size();
+}
+
 void nv_midi_event(void *p, int i, int *iv, double *t)
 {
     const nv::LiveEv &e = ((nv::Parsed *)p)->events[i];
