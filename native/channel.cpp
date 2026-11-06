@@ -202,12 +202,59 @@ struct Ev {
     // arrives from (-1 none) and the step's time; gl 0 not one
     int gl = 0, gl_prev = -1;
     double gl_lv = 1.0, gl_sm = 0.0, gl_dt = 0.0;
+    int slot = -1;                      // its variation's slot (bank select: K[NV_K_VAR + 128 x slot + key]), -1 none
+    // its class's index in K: a drum set's key, a variation's, a program's
+    int kidx() const
+    {
+        return drum ? NV_K_DRUMS + 128 * prog + note : slot >= 0 ? NV_K_VAR + 128 * slot + note : 128 * prog + note;
+    }
+    // ...and the TONE it is on its part (_TONE_SEGS' key: the program, or
+    // the variation -- a layered one's each layer -- as its own)
+    int tone() const { return slot >= 0 ? 1024 + slot : prog; }
 };
 
 // A file's channels and notes.
 struct Song {
     std::map<long long, Channel> ch;
     std::vector<Ev> notes;
+    // BANK SELECT (nv_song_vars): each entry's layers (slot, semitones,
+    // lowest and highest velocity) and trim; GS's table [map][program][msb],
+    // GM 2's [program][lsb] -- entry 0 the capital tone
+    std::vector<std::vector<std::array<int, 4>>> vls;
+    std::vector<double> vtrim;
+    std::vector<int> vgs, vgm2;
+    // each channel's keys as the file wrote them (_prep_choir_parts reads
+    // the notes before a layered variation or a stroke expands them)
+    std::map<long long, std::vector<int>> wkeys;
+    // the last note's bank (the reader's bsel): its variation's slot -- a
+    // LAYERED one (patch_map.LAYERED) the note again for each layer, at its
+    // semitones, where the key is on the keyboard and the velocity in its
+    // range (_prep_strokes, before anything else sees the note); 0 refused
+    // (no table), 1 played
+    int bank(int bsel)
+    {
+        if (vgs.empty())
+            return 0;
+        Ev e = notes.back();
+        if (e.prog < 0 || e.prog > 127)
+            return 1;
+        int en = bsel <= 640 ? vgs[((size_t)((bsel - 1) / 128) * 128 + e.prog) * 128 + (bsel - 1) % 128]
+                             : vgm2[(size_t)e.prog * 128 + (bsel - 641)];
+        if (en <= 0)
+            return 1;                       // (a variation not built: the capital, as a Sound Canvas)
+        notes.pop_back();
+        for (const auto &l : vls[en]) {
+            int k = e.note + l[1];
+            if (k < 0 || k > 127 || e.vel < l[2] || e.vel > l[3])
+                continue;
+            Ev x = e;
+            x.note = k;
+            x.slot = l[0];
+            x.trim = vtrim[en];
+            notes.push_back(x);
+        }
+        return 1;
+    }
     std::map<NoteKey, double> next_same, sost_held;
     std::map<long long, int> vbase;     // each channel's median velocity (_vbase)
     std::map<long long, int> parts;     // a sung part's voice part, by its track's name (nv_voice_body)
@@ -544,7 +591,7 @@ struct Song {
             int gs = i < glide_src.size() ? glide_src[i] : -1;
             if (gs < 0 || e.drum || e.prog < 0 || e.prog > 127)
                 continue;
-            const NoteClass *k = K[128 * e.prog + e.note];
+            const NoteClass *k = K[e.kidx()];
             if (!k || k->glide_mech != 3)
                 continue;
             int step = e.note > gs ? 1 : -1;
@@ -1234,6 +1281,7 @@ void nv_song_note(void *s, long long ch, int note, double on, double off, int ve
                   double pan, double trim, int prog, int drum)
 {
     ((nv::Song *)s)->notes.push_back(nv::Ev{ch, note, on, off, vel, v7, v11, pan, trim, prog, drum});
+    ((nv::Song *)s)->wkeys[ch].push_back(note);
 }
 
 int nv_song_n_notes(void *s) { return (int)((nv::Song *)s)->notes.size(); }
@@ -1241,10 +1289,10 @@ int nv_song_n_notes(void *s) { return (int)((nv::Song *)s)->notes.size(); }
 // _prep_choir_parts' _tess: a channel's median key (the upper of two), in Hz
 double nv_song_tess(void *s, long long ch)
 {
-    std::vector<int> k;
-    for (const nv::Ev &e : ((nv::Song *)s)->notes)
-        if (e.ch == ch)
-            k.push_back(e.note);
+    auto it = ((nv::Song *)s)->wkeys.find(ch);
+    if (it == ((nv::Song *)s)->wkeys.end())
+        return 0.0;
+    std::vector<int> k = it->second;
     if (k.empty())
         return 0.0;
     std::sort(k.begin(), k.end());
@@ -2094,6 +2142,24 @@ int nv_song_n_stroke_rows(void *s, long long *ab, int cap)
 }
 
 // note i as given: (channel, key, velocity, program, drum) ints; (on, off) doubles
+void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2)
+{
+    nv::Song *g = (nv::Song *)s;
+    g->vls.assign(nent, {});
+    g->vtrim.assign(trim, trim + nent);
+    for (int e = 0, q = 0; e < nent; e++)
+        for (int l = 0; l < nls[e]; l++, q++)
+            g->vls[e].push_back(std::array<int, 4>{ls[4 * q], ls[4 * q + 1], ls[4 * q + 2], ls[4 * q + 3]});
+    g->vgs.assign(gs, gs + 5 * 128 * 128);
+    g->vgm2.assign(gm2, gm2 + 128 * 128);
+}
+
+int nv_song_note_bank(void *s, int bsel) { return ((nv::Song *)s)->bank(bsel); }
+
+int nv_song_kidx(void *s, int i) { return ((nv::Song *)s)->notes[i].kidx(); }
+
+int nv_song_tone(void *s, int i) { return ((nv::Song *)s)->notes[i].tone(); }
+
 void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv)
 {
     const nv::Ev &e = ((nv::Song *)s)->notes[i];
@@ -2129,9 +2195,9 @@ long long nv_song_mix(void *s, int i)
         for (int q : order) {
             const nv::Ev &e = g->notes[q];
             std::vector<int> &tl = tones[e.ch];
-            size_t ti = std::find(tl.begin(), tl.end(), e.prog) - tl.begin();
+            size_t ti = std::find(tl.begin(), tl.end(), e.tone()) - tl.begin();
             if (ti == tl.size())
-                tl.push_back(e.prog);
+                tl.push_back(e.tone());
             g->mix[q] = e.ch + (ti ? 256LL * (long long)(ti % 256) : 0LL);
         }
     }

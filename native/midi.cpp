@@ -157,6 +157,9 @@ struct Note {
     double v7, v11, pan;
     int prog, drum;
     int mcut = 0, mslur = 0;    // mono mode's: cut off by the next (_MONO_CUT), arrived by a slur (_MONO_SLUR)
+    // its bank (resolve_patch): 0 the capital, 1 + 128 x map + msb GS's
+    // (the map 0-4 as variation_tables keys it), 1 + 640 + lsb GM 2's
+    int bsel = 0;
 };
 
 struct CCEv {
@@ -203,9 +206,11 @@ struct Parsed {
     std::vector<std::array<int, 3>> legato;    // _legato_ticks: (channel, key, k) slurred
     std::vector<CCEv> snd;      // sndev: CC71-78, and gmon (channel -1, cc -1), in message order
     std::vector<std::pair<int, int>> chprogs;  // ch_progs: a melodic channel's program changes, in message order
+    std::vector<int> chbsel;    // ...each one's bank (Note.bsel)
     std::map<int, int> parts;   // _voice_parts: a channel's voice part, by its track's name (nv_voice_body)
     int master = 0;             // a master message (parse_master): every channel's pitch stream then
     int master_vol = 0;         // ...a master volume under full
+    int banked = 0;             // a note on a bank (Note.bsel): the file renderer's, not live's yet
     // _mvol: each master volume (time, seq, gain), and each GM System On's full (1.0)
     std::vector<std::tuple<double, long, double>> mvol;
     // sotas: each channel's scale/octave tuning, (time, twelve cents) as sent
@@ -650,7 +655,10 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     long long tempo = 500000;
     double t = 0.0;
     std::map<int, std::map<int, int>> ctrl;     // channel -> control -> value
-    std::map<int, int> prog, bmsb, blsb, drums;
+    std::map<int, int> prog, bmsb, blsb, drums, bsel;
+    // the map CC32 0 reads its bank in (blockrender.DEFAULT_MAP: TUNING_MAP)
+    const char *tmap = getenv("TUNING_MAP");
+    const int default_map = tmap && *tmap ? atoi(tmap) : 0;
     bool rxbank = true;
     std::map<std::pair<int, int>, std::vector<Note>> on;
     std::map<int, std::pair<int, int>> rsel;    // a channel's selected RPN, (MSB, LSB); absent: none
@@ -749,7 +757,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             if (!seen_note && d.size() >= 4 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12)
                 P.gs = 1;
             rxbank = lvl != 1;
-            bmsb.clear(); blsb.clear(); drums.clear(); prog.clear(); ctrl.clear(); rsel.clear(); nsel.clear();
+            bmsb.clear(); blsb.clear(); drums.clear(); prog.clear(); bsel.clear(); ctrl.clear(); rsel.clear(); nsel.clear();
             P.mvol.push_back(std::make_tuple(t, seq, 1.0));      // (the master volume back to full)
             P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});     // (the live part's too)
             P.sysex.push_back(d);
@@ -769,14 +777,32 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             return it != drums.end() ? it->second != 0 : (c % 16 == PERCUSSION_CHANNEL);
         };
         if (kind == 0xC0) {
+            // THE BANK (tonelib.resolve_patch): ignored after GM 1's System On;
+            // MSB 120 a drum set, 121 GM 2's tone by its LSB; a drum channel
+            // stays one; else GS's variation, read in the map CC32 names
+            // (or, at 0, TUNING_MAP's)
             int msb = bmsb.count(ch) ? bmsb[ch] : 0, lsb = blsb.count(ch) ? blsb[ch] : 0;
-            if ((rxbank && (msb || lsb)) || (is_drums(ch) && lsb))
-                return -5;              // a bank or a map: patch_map's
-            drums[ch] = is_drums(ch);
+            int mp = lsb ? lsb : default_map, dr = is_drums(ch), bs = 0;
+            if (!rxbank)
+                ;
+            else if (msb == 120)
+                dr = 1;
+            else if (msb == 121) {
+                dr = 0;
+                bs = lsb ? 1 + 640 + lsb : 0;
+            } else if (!dr)
+                bs = msb ? 1 + 128 * (mp >= 1 && mp <= 4 ? mp : 0) + msb : 0;
+            if (dr && msb != 120 && mp)
+                return -5;              // a drum set read in a map (kit_in_map): patch_map's
+            drums[ch] = dr;
+            bsel[ch] = bs;
+            P.banked |= rxbank && (msb || lsb);     // (a bank, or a map: live's not yet)
             prog[ch] = m.d0;
             P.progs.push_back(std::make_pair(ch, m.d0));
-            if (!drums[ch])
+            if (!drums[ch]) {
                 P.chprogs.push_back(std::make_pair(ch, m.d0));  // (a drum set is no organ's program)
+                P.chbsel.push_back(bs);
+            }
             P.events.push_back(LiveEv{t, 5, ch, m.d0, 0});
         } else if (kind == 0xB0) {
             int cc = m.d0, v = m.d1;
@@ -921,6 +947,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             n.pan = ((c.count(10) ? c[10] : GM_DEFAULT_PAN) - 64) / 63.0;
             n.prog = prog.count(ch) ? prog[ch] : 0;
             n.drum = is_drums(ch);
+            n.bsel = n.drum || !bsel.count(ch) ? 0 : bsel[ch];
+            P.banked |= n.bsel != 0;
             on[std::make_pair(ch, m.d0)].push_back(n);
         } else if (kind == 0x80 || kind == 0x90) {
             P.events.push_back(LiveEv{t, 1, ch, m.d0, 0});
@@ -1112,6 +1140,11 @@ void nv_midi_note(void *p, int i, int *iv, double *dv)
     dv[0] = n.on; dv[1] = n.off; dv[2] = n.v7; dv[3] = n.v11; dv[4] = n.pan;
 }
 
+// note i's bank (Note.bsel: 0 the capital); any note's (a file live does not play yet)
+int nv_midi_note_bsel(void *p, int i) { return ((nv::Parsed *)p)->notes[i].bsel; }
+int nv_midi_banked(void *p) { return ((nv::Parsed *)p)->banked; }
+int nv_midi_chprog_bsel(void *p, int i) { return ((nv::Parsed *)p)->chbsel[i]; }
+
 // ch_progs: the program changes on melodic channels, in message order
 int nv_midi_n_chprogs(void *p) { return (int)((nv::Parsed *)p)->chprogs.size(); }
 void nv_midi_chprog(void *p, int i, int *iv)
@@ -1143,10 +1176,14 @@ void nv_midi_song(void *p, void *song, const double *trim)
     for (const nv::CCEv &e : P->ccs)
         nv_song_cc(song, e.ch, e.t, e.cc, e.v);
     for (const nv::Note &n : P->notes) {
+        int n0 = nv_song_n_notes(song);
         nv_song_note(song, n.ch, n.note, n.on, n.off, n.vel, n.v7, n.v11, n.pan,
                      trim[(n.drum ? 128 : 0) + n.prog], n.prog, n.drum);
+        if (n.bsel)
+            nv_song_note_bank(song, n.bsel);    // its variation: its slot, or its layers
         if (n.mcut || n.mslur)
-            nv_song_note_mono(song, nv_song_n_notes(song) - 1, n.mcut, n.mslur);
+            for (int j = n0; j < nv_song_n_notes(song); j++)
+                nv_song_note_mono(song, j, n.mcut, n.mslur);
     }
     for (const auto &l : P->legato)
         nv_song_legato(song, l[0], l[1], l[2]);

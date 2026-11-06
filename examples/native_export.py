@@ -121,6 +121,33 @@ def main(argv):
             idx[cls] = len(classes)
             classes.append(bytes(k))
         cmap.append(idx[cls])
+    # ...and THE VARIATIONS (bank select: native.variation_tables), each slot's
+    # keys after them
+    vslots, ventries, vgs, vgm2 = N.variation_tables()
+    import patch_map as PM_
+    vmap = []
+    for _p, _v, _l, cl in vslots:
+        for cls in cl:
+            k = N.note_class(cls) if cls is not None else None
+            if k is None:
+                vmap.append(-1)
+                continue
+            if cls not in idx:
+                idx[cls] = len(classes)
+                classes.append(bytes(k))
+            vmap.append(idx[cls])
+    vpcls = {}
+    for _p, _v, _ls in ventries[1:]:
+        cls = PM_.property_class_for_program(PM_.VariationProgram(_p, _v))
+        k = N.note_class(cls) if isinstance(cls, type) else None
+        if k is None:
+            vpcls[(_p, _v)] = -2 if any(getattr(cls, a, 0.0) > 0.0 for a in (
+                'breath_wobble_db', 'breath_noise_wobble_db', 'breath_pitch_cents')) else -1
+            continue
+        if cls not in idx:
+            idx[cls] = len(classes)
+            classes.append(bytes(k))
+        vpcls[(_p, _v)] = idx[cls]
     # A STRUCK LAYER's CLASS (an orchestra hit's timpani): among the classes,
     # and its index in the class that strikes it (NoteClass.sl_idx)
     for cls in list(idx):
@@ -224,6 +251,29 @@ def main(argv):
         f.write(b"VBOD" + struct.pack("<iii", len(vbn), len(T._NOT_A_VOICE), len(blob)) + blob
                 + struct.pack("<%dd" % len(vbn), *[float(T.VOICE_BODIES[x]) for x in vbn])
                 + struct.pack("<%dd" % len(vbn), *[float(T.VOICE_CLUSTER.get(x, 1.0)) for x in vbn]))
+        # VARS: bank select -- the slots (program, variation, layer), their
+        # classes at each key, the entries (a slot, or a layered set: each
+        # layer's slot, semitones and velocities), GS's and GM 2's tables;
+        # its length first, so a reader that does not know it steps over it
+        vb = struct.pack("<i", len(vslots)) + b"".join(struct.pack("<iii", p, v, l) for p, v, l, _ in vslots)
+        vb += struct.pack("<%di" % len(vmap), *vmap)
+        vb += struct.pack("<i", len(ventries) - 1)
+        for _p, _v, ls in ventries[1:]:
+            vb += struct.pack("<iii", _p, _v, len(ls)) + b"".join(struct.pack("<iiii", *x) for x in ls)
+        vb += struct.pack("<%di" % (5 * 128 * 128), *[e for m in vgs for row in m for e in row])
+        vb += struct.pack("<%di" % (128 * 128), *[e for row in vgm2 for e in row])
+        # ...and each entry's trim (patch_map.program_trim: VARIATION_TRIM_DB),
+        # in a file that speaks GS and not
+        import patch_map as PM
+        for _p, _v, _ls in ventries[1:]:
+            vp = PM.VariationProgram(_p, _v)
+            vb += struct.pack("<dd", PM.program_trim(vp), PM.program_trim(vp, gs=True))
+        # ...and each entry's program class (property_class_for_program, as
+        # _prep_breath reads it): its class, -1 none the engine has and no
+        # breath, -2 one that breathes
+        for _p, _v, _ls in ventries[1:]:
+            vb += struct.pack("<i", vpcls[(_p, _v)])
+        f.write(b"VARS" + struct.pack("<i", len(vb)) + vb)
         if "live" in opt:
             import live as L
             tab = L.pan_table()

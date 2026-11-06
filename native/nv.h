@@ -864,6 +864,7 @@ typedef struct NoteClass {
     // holds (meend_strength), its Sa without a raga (sympathetic_tonic)
     double meend_range, meend_strength;
     int meend_tonic;
+    double key_pan_spread;          // a wide voice (GS's "w" tones): its keys' seats, +-this 30 keys from middle C
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -1071,6 +1072,8 @@ void nv_song_moog_add_moving(void *s, long long ch, const double *ft, const Moog
 int nv_song_choke(void *s, long long ch, int note, double on, double *out);
 /* a note's class: K[128 * program + key], a drum set's K[16384 + 128 * program + key] */
 #define NV_K_DRUMS 16384
+/* ...a variation's (bank select): K[NV_K_VAR + 128 * slot + key] */
+#define NV_K_VAR (2 * NV_K_DRUMS)
 // A DRUM KEY'S GESTURE ROW (native.kits' spar, native.SPAR): its strokes'
 // numbers from the row's start (up to NV_SPAR - 4: a pattern's 32 strokes),
 // and in its last four the keys a strike on it also sounds -- how many, then
@@ -1106,6 +1109,15 @@ int nv_voice_part(int part, double *ratio, double *cluster);
 void nv_song_note(void *s, long long ch, int note, double on, double off, int vel, double v7, double v11,
                   double pan, double trim, int prog, int drum);
 int nv_song_n_notes(void *s);
+/* BANK SELECT: the entries (each one's layers: slot, semitones, velocities;
+   nls[e] of them, entry 0 none), their trims, GS's table [map][program][msb]
+   and GM 2's [program][lsb]; the last note's bank (the reader's bsel) made
+   its variation's notes (0: no table); a note's class index in K, and its
+   tone on its part (_TONE_SEGS) */
+void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2);
+int nv_song_note_bank(void *s, int bsel);
+int nv_song_kidx(void *s, int i);
+int nv_song_tone(void *s, int i);
 void nv_song_snd(void *s, long long ch, double t, int cc, int v);
 void nv_song_sound(void *s, long long ch, double t, double *d);
 int nv_song_glide(void *s, int i, int *cc5);

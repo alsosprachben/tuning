@@ -121,6 +121,7 @@
 extern "C" {
 void *nv_midi_read(const uint8_t *buf, long long len, int *err);
 int nv_midi_master(void *p);
+int nv_midi_banked(void *p);
 int nv_midi_sysex(void *p, int i, uint8_t *out, int cap);
 void nv_part_sysex(void *h, const uint8_t *d, int n);
 int nv_part_take_reset(void *h);
@@ -337,6 +338,18 @@ static bool read_export(const char *path, Export &E)
                      && fread(vc.data(), 8, vh[0], f) == (size_t)vh[0];
                 if (ok)
                     nv_voice_bodies_set(vh[0], blob.data(), vr.data(), vc.data(), vh[1]);
+            } else {
+                fseek(f, vp, SEEK_SET);
+            }
+        }
+        // VARS: bank select (native.variation_tables) -- the slots and their
+        // classes at each key, the entries a program change selects, GS's and GM 2's tables
+        {
+            long vp = ftell(f);
+            char vt[4];
+            int vl = 0;
+            if (ok && fread(vt, 1, 4, f) == 4 && !memcmp(vt, "VARS", 4) && fread(&vl, 4, 1, f) == 1) {
+                fseek(f, vl, SEEK_CUR);      // (bank select: the file renderer's)
             } else {
                 fseek(f, vp, SEEK_SET);
             }
@@ -1228,6 +1241,10 @@ int main(int argc, char **argv)
             void *m = nv_midi_read(bytes.data(), (long long)bytes.size(), &err);
             if (!m) {
                 fprintf(stderr, "nvlive: the reader refused %s (%d)\n", argv[i + 1], err);
+                return 2;
+            }
+            if (nv_midi_banked(m)) {
+                fprintf(stderr, "nvlive: refused: %s selects a bank (the file renderer's, not live's yet)\n", argv[i + 1]);
                 return 2;
             }
             int ne = nv_midi_n_events(m);

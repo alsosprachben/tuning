@@ -1072,11 +1072,12 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         double dv[2];
         nv_song_get_note(song, i, &ch, iv, dv);
         std::vector<int> &tl = tones[ch];
-        size_t ti = std::find(tl.begin(), tl.end(), iv[2]) - tl.begin();
+        const int tk = nv_song_tone(song, i);
+        size_t ti = std::find(tl.begin(), tl.end(), tk) - tl.begin();
         if (ti == tl.size())
-            tl.push_back(iv[2]);
+            tl.push_back(tk);
         long long mix = ch + (ti ? 256LL * (long long)(ti % 256) : 0LL);
-        const NoteClass *k = K[(iv[3] ? NV_K_DRUMS : 0) + 128 * iv[2] + iv[0]];
+        const NoteClass *k = K[nv_song_kidx(song, i)];
         if (k->sym_kind && !sym_k.count(mix)) {
             sym_k[mix] = k;
             sym_order.push_back(mix);

@@ -30,8 +30,9 @@ TASKS = [
     ("GM1", False, "Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender's reader refuses it"),
     ("GM1", True, "Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)"),
     ("GM1", False, "Moog: an MF-104M on a note whose pitch or shapes move (SYNC and a unison: native in files)"),
-    ("GM2", False, "Bank select (CC0/CC32) and GM2's banks (120 drums, 121 melodic) in nvrender's reader "
-                   "and nvlive -- the reader refuses any bank today"),
+    ("GM2", True, "Bank select in files (CC0/CC32): GM2's banks (120 drums, 121 melodic) and GS's variations, "
+                  "layered ones too (nvrender; nvlive refuses a bank)"),
+    ("GM2", False, "Bank select in nvlive: a file's banks (live._program's variation)"),
     ("GM2", False, "nvlive: a variation as a patch (Patch(program, drums, tuner, variation)); the picker's GM2 bank"),
     ("GM2", True, "Tuning, files: the secondary (eastern) tuning, the meend, master fine/coarse tuning, "
                   "scale/octave tuning (GM 2's and GS's), MTS under gm2"),
@@ -61,8 +62,15 @@ def main(argv):
     def program_native(p):
         return all(native_cls(B.property_class_for_note(p, k)) for k in range(21, 109))
 
+    # a variation: native where bank select reaches it -- every key A0 to C8
+    # of each of its slots (a layered one's layers) a class the engine plays
+    # (native.variation_tables, as native_export writes them)
+    vslots, ventries = N.variation_tables()[:2]
+    vnat = {(e[0], e[1]): all(all(vslots[s][3][k] is not None for k in range(21, 109)) for s, _, _, _ in e[2])
+            for e in ventries[1:]}
+
     def variation_native(p, key):
-        return native_cls(P.variation_class(p, key)) if key else program_native(p)
+        return vnat.get((p, key), program_native(p)) if key else program_native(p)
 
     kc = N.kits()[0]
 

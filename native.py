@@ -249,7 +249,7 @@ class NoteClass(ctypes.Structure):
                    ('ring_n', I), ('ring_hz', C * 48), ('ring_db', C * 48), ('ring_dps', C * 48),
                    ('ring_skip', C), ('ring_nown', I), ('ring_own', C * 16), ('indian', I),
                    ('sym_tonic', I), ('sym_g', C), ('sym_wmin', C), ('meend', I),
-                   ('meend_range', C), ('meend_strength', C), ('meend_tonic', I)])
+                   ('meend_range', C), ('meend_strength', C), ('meend_tonic', I), ('key_pan_spread', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -398,6 +398,9 @@ def _load():
             ('nv_midi_cc', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_pw', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_song', None, [ctypes.c_void_p, ctypes.c_void_p, D]),
+            ('nv_midi_banked', I, [ctypes.c_void_p]), ('nv_midi_note_bsel', I, [ctypes.c_void_p, I]),
+            ('nv_midi_chprog_bsel', I, [ctypes.c_void_p, I]),
+            ('nv_song_vars', None, [ctypes.c_void_p, I] + [ctypes.c_void_p] * 5),
             ('nv_strings', I, [ctypes.POINTER(VoiceInit), P, D, C, C, C, ctypes.c_void_p, ctypes.c_void_p, I]),
             ('nv_strings_og', I, [ctypes.POINTER(VoiceInit), P, ctypes.c_void_p, D, C, C, C, ctypes.c_void_p,
                                   ctypes.c_void_p, I]),
@@ -2837,6 +2840,7 @@ def note_class(cls):
         k.meend_range = float(getattr(cls, 'bend_range_semitones', T.BEND_RANGE_SEMITONES))
         k.meend_strength = float(getattr(cls, 'meend_strength', 0.6))
         k.meend_tonic = int(getattr(cls, 'sympathetic_tonic', 60))
+        k.key_pan_spread = float(getattr(cls, 'key_pan_spread', 0.0) or 0.0)     # (a wide voice's seats)
         # ITS OTHER STRINGS (ring_db: _note_ring)
         _rg = getattr(cls, 'ring_db', ()) or ()
         if len(_rg) > 48:
@@ -3126,6 +3130,11 @@ class Midi(object):
     def total(self):
         return self.d.nv_midi_total(self.p)
 
+    def banked(self):
+        """True where a program change selects a bank (or a note is on one):
+        the file renderer's, not live's yet"""
+        return bool(self.d.nv_midi_banked(self.p))
+
     def notes(self):
         """[(channel, key, on, off, velocity, (v7, v11, pan), program, drum)]"""
         I5, D5 = ctypes.c_int * 5, ctypes.c_double * 5
@@ -3180,10 +3189,13 @@ class Midi(object):
 
     def song(self, total, trim, freq=None, mts=None, btun=None, otun=None, faders=()):
         """A Song (above) from this reading: trim(program, drum) the channel
-        volume's trim; the tuning as Song's."""
+        volume's trim; the tuning as Song's; a bank's variations, nvrender's
+        tables (song_vars)."""
         s = Song({}, [], None, freq=freq, mts=mts, btun=btun, otun=otun, faders=faders, finish=False)
         tr = (ctypes.c_double * 256)(*([float(trim(p, False)) for p in range(128)]
                                        + [float(trim(p, True)) for p in range(128)]))
+        if self.banked():
+            song_vars(s.p, self.d.nv_midi_gs(self.p))
         self.d.nv_midi_song(self.p, s.p, tr)
         for i, e in enumerate(self.notes()):
             s._idx.setdefault(_ev_key(e), []).append(i)
@@ -4349,3 +4361,89 @@ class LiveReg(object):
         r = self._np.ascontiguousarray(rates, self._np.float64)
         n = self.d.nv_lreg_felt(self.p, float(at), k.ctypes.data, r.ctypes.data, len(k))
         return self._answer(n)[:2]
+
+
+_SONG_VARS = {}
+
+
+def song_vars(song_p, gs):
+    """Bank select's tables into an engine song (nv_song_vars), as nvrender
+    loads them from the export's VARS: each entry's layers, its trim (in a
+    file that speaks GS or not), GS's and GM 2's tables. Made once a process."""
+    import patch_map as PM
+    key = bool(gs)
+    if key not in _SONG_VARS:
+        slots, entries, vgs, vgm2 = variation_tables()
+        nls, ls, tr = [0], [], [1.0]
+        for p, v, lys in entries[1:]:
+            nls.append(len(lys))
+            for x in lys:
+                ls.extend(int(a) for a in x)
+            tr.append(float(PM.program_trim(PM.VariationProgram(p, v), gs=key)))
+        I_, D_ = ctypes.c_int, ctypes.c_double
+        _SONG_VARS[key] = (len(nls), (I_ * len(nls))(*nls), (I_ * max(1, len(ls)))(*ls), (D_ * len(tr))(*tr),
+                           (I_ * (5 * 128 * 128))(*[e for m in vgs for row in m for e in row]),
+                           (I_ * (128 * 128))(*[e for row in vgm2 for e in row]))
+    lib().nv_song_vars(song_p, *_SONG_VARS[key])
+
+
+def variation_tables():
+    """BANK SELECT for native/ (native_export's VARS): (slots, entries, gs, gm2).
+    slots: [(program, variation key, layer or -1, [128 classes or None])] --
+    a variation's class at each key (property_class_for_note), a layered
+    one's layer's (layer_class), None where the engine does not play it;
+    entries: [None] + [(program, variation, [(slot, semitones, lowest and
+    highest velocity)])] -- what a program change selects, one slot or a
+    layered set; gs[m][p][msb] the entry GS's bank msb selects for program p
+    under map m (0: a CC32 naming no map, its bank read as is; 1-4 the Sound
+    Canvas maps: patch_map.map_bank), gm2[p][lsb] GM 2's (MSB 121), 0 the
+    capital tone. A variation the engine does not play whole -- an organ, a
+    kit's strokes borrowed (sfx_strokes_of), a key it has no class for --
+    has its slots None: its notes are refused, not played as the capital."""
+    import patch_map as P
+    import blockrender as B
+    slots, entries, ent = [], [None], {}
+
+    # (...and the note loop's own the engine has not: a tone's insertion
+    # effect, a plunger's or a mouth's moving filter, a melodic note's
+    # sounding octaves)
+    def ok(c):
+        return (isinstance(c, type) and not getattr(c, 'registerable', False)
+                and getattr(c, 'sfx_strokes_of', None) is None
+                and not any(getattr(c, a, None) for a in ('insertion_efx', 'plunger', 'mouth_states',
+                                                          'sounding_octaves'))
+                and note_class(c) is not None)
+
+    for (p, v) in sorted(P.VARIATIONS):
+        vp = P.VariationProgram(p, v)
+        lys = P.layers_of(vp)
+        if lys:
+            layer_slots, whole = [], True
+            for lp, st, vlo, vhi in lys:
+                cl = [P.layer_class(lp, k) for k in range(128)]
+                whole = whole and all(ok(c) for c in cl if c is not None)
+                slots.append((p, v, int(lp.layer), cl))
+                layer_slots.append((len(slots) - 1, int(st), int(vlo), int(vhi)))
+            if not whole:
+                for q, _, _, _ in layer_slots:
+                    slots[q] = slots[q][:3] + ([None] * 128,)
+        else:
+            cl = [B.property_class_for_note(vp, k) for k in range(128)]
+            if not all(ok(c) for c in cl if c is not None):
+                cl = [None] * 128
+            slots.append((p, v, -1, cl))
+            layer_slots = [(len(slots) - 1, 0, 0, 127)]
+        ent[(p, v)] = len(entries)
+        entries.append((p, v, layer_slots))
+    gs = [[[0] * 128 for _ in range(128)] for _ in range(5)]
+    for m in range(5):
+        for p in range(128):
+            for msb in range(1, 128):
+                vk = P.map_bank(p, msb, m if m else 0)
+                gs[m][p][msb] = ent.get((p, vk), 0) if vk else 0
+    gm2 = [[0] * 128 for _ in range(128)]
+    for p in range(128):
+        for lsb in range(1, 128):
+            vk = P.gm2_bank(p, lsb)
+            gm2[p][lsb] = ent.get((p, vk), 0) if vk else 0
+    return slots, entries, gs, gm2

@@ -75,8 +75,8 @@ def main(argv):
                            "--fresh", "--room=" + room], stdout=subprocess.DEVNULL)
     exe = N.build_nvlive()
     m = N.Midi(mid)
-    if m.error:
-        print("refused: %s" % N.MIDI_REFUSED.get(m.error, m.error))
+    if m.error or m.banked():
+        print("refused: %s" % (N.MIDI_REFUSED.get(m.error, m.error) if m.error else "a bank (not live's yet)"))
         return 2
     total = m.total() + 3.0
     out = os.path.join(tmp, "nv.wav")

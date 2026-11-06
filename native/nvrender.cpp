@@ -33,6 +33,7 @@
 // a drum channel's wheel or tuning (its drums would ride it).
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <cmath>
 #include <cstdio>
@@ -63,6 +64,9 @@ int nv_midi_gs(void *p);
 void nv_midi_note(void *p, int i, int *iv, double *dv);
 void nv_midi_cc(void *p, int i, int *iv, double *t);
 void nv_midi_song(void *p, void *song, const double *trim);
+int nv_midi_note_bsel(void *p, int i);
+int nv_midi_banked(void *p);
+int nv_midi_chprog_bsel(void *p, int i);
 void *nv_song_new(void);
 void nv_song_free(void *s);
 void nv_song_tuning(void *s, long long ch, double t, const double *freq);
@@ -165,6 +169,19 @@ struct Export {
     std::vector<double> les;              // LESL: the rotating speaker's constants
     std::string lobe_lib;                 // ...and synth_voice_lobe's library
     std::vector<double> scan;             // SCAN: the scanner's constants and tables
+    // VARS (bank select): the slots' classes at each key (cmap's, slot by
+    // slot), the entries (each layer's slot, semitones, velocities; its
+    // trims, a GS file's second), GS's table [map][program][msb] and GM 2's
+    // [program][lsb] -- entry 0 the capital tone
+    int nslot = 0;
+    std::vector<int> vmap;
+    struct VarEnt {
+        std::vector<std::array<int, 4>> ls;
+        double trim[2] = {1.0, 1.0};
+        int pcls = -1;                    // its program's class (_prep_breath's): -1 none, -2 one that breathes, not the engine's
+    };
+    std::vector<VarEnt> vents;
+    std::vector<int> vgs, vgm2;
 };
 
 static bool read_export(const char *path, Export &E)
@@ -256,6 +273,42 @@ static bool read_export(const char *path, Export &E)
                 fseek(f, vp, SEEK_SET);
             }
         }
+        // VARS: bank select (native.variation_tables) -- the slots and their
+        // classes at each key, the entries a program change selects, GS's and GM 2's tables
+        {
+            long vp = ftell(f);
+            char vt[4];
+            int vl = 0;
+            if (ok && fread(vt, 1, 4, f) == 4 && !memcmp(vt, "VARS", 4) && fread(&vl, 4, 1, f) == 1) {
+                int ns = 0, ne = 0;
+                ok = fread(&ns, 4, 1, f) == 1;
+                std::vector<int> pvl(3 * (size_t)ns);
+                ok = ok && fread(pvl.data(), 4, pvl.size(), f) == pvl.size();
+                E.vmap.resize(128 * (size_t)ns);
+                ok = ok && fread(E.vmap.data(), 4, E.vmap.size(), f) == E.vmap.size() && fread(&ne, 4, 1, f) == 1;
+                E.vents.assign(1, Export::VarEnt{});
+                for (int e = 0; ok && e < ne; e++) {
+                    int h[3];
+                    Export::VarEnt v;
+                    ok = fread(h, 4, 3, f) == 3;
+                    v.ls.resize(ok ? h[2] : 0);
+                    for (auto &l : v.ls)
+                        ok = ok && fread(l.data(), 4, 4, f) == 4;
+                    E.vents.push_back(v);
+                }
+                E.vgs.resize(5 * 128 * 128);
+                E.vgm2.resize(128 * 128);
+                ok = ok && fread(E.vgs.data(), 4, E.vgs.size(), f) == E.vgs.size()
+                     && fread(E.vgm2.data(), 4, E.vgm2.size(), f) == E.vgm2.size();
+                for (int e = 1; ok && e <= ne; e++)
+                    ok = fread(E.vents[e].trim, 8, 2, f) == 2;
+                for (int e = 1; ok && e <= ne; e++)
+                    ok = fread(&E.vents[e].pcls, 4, 1, f) == 1;
+                E.nslot = ns;
+            } else {
+                fseek(f, vp, SEEK_SET);
+            }
+        }
         } else {
             fseek(f, pos, SEEK_SET);
         }
@@ -342,6 +395,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "nvrender: cannot read %s (or it is not this build's)\n", argv[1]);
         return 1;
     }
+    // the variations' keys after the drum sets' (NV_K_VAR + 128 x slot + key)
+    E.cmap.insert(E.cmap.end(), E.vmap.begin(), E.vmap.end());
     // each class's organ, its table here (the export's pointer was the exporter's)
     for (size_t i = 0; i < E.classes.size(); i++)
         ((NoteClass *)E.classes[i].data())->organ = E.cls_organ[i] >= 0 ? &E.organs[E.cls_organ[i]] : nullptr;
@@ -397,6 +452,31 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    // BANK SELECT: the entry a bank selects for a program (Song::bank's), 0
+    // the capital; and the class indices a reader's note makes -- a
+    // variation's layers each theirs (none, where no layer takes it)
+    auto ent_of = [&](int p, int bs) -> int {
+        if (!bs || E.vgs.empty() || p < 0 || p > 127)
+            return 0;
+        return bs <= 640 ? E.vgs[((size_t)((bs - 1) / 128) * 128 + p) * 128 + (bs - 1) % 128]
+                         : E.vgm2[(size_t)p * 128 + (bs - 641)];
+    };
+    auto note_ks = [&](int i, const int *iv) -> std::vector<int> {
+        int en = iv[4] ? 0 : ent_of(iv[3], nv_midi_note_bsel(midi, i));
+        if (!en)
+            return {(iv[4] ? NV_K_DRUMS : 0) + 128 * iv[3] + iv[1]};
+        std::vector<int> r;
+        for (const auto &l : E.vents[en].ls) {
+            int k = iv[1] + l[1];
+            if (k >= 0 && k <= 127 && iv[2] >= l[2] && iv[2] <= l[3])
+                r.push_back(NV_K_VAR + 128 * l[0] + k);
+        }
+        return r;
+    };
+    if (nv_midi_banked(midi) && E.vgs.empty()) {
+        fprintf(stderr, "nvrender: %s is an export from before bank select (native_export.py again)\n", argv[1]);
+        return 1;
+    }
     std::vector<double> first(256, INFINITY);
     for (int i = 0, n = nv_midi_n_notes(midi); i < n; i++) {
         int iv[5];
@@ -404,13 +484,19 @@ int main(int argc, char **argv)
         nv_midi_note(midi, i, iv, dv);
         if (dv[0] < first[iv[0] & 255])
             first[iv[0] & 255] = dv[0];
-        int cq = E.cmap[(iv[4] ? NV_K_DRUMS : 0) + 128 * iv[3] + iv[1]];
+        const bool banked = !iv[4] && ent_of(iv[3], nv_midi_note_bsel(midi, i));
+        for (int kq : note_ks(i, iv)) {
+        int cq = E.cmap[kq];
         if (cq < 0) {
             fprintf(stderr, "nvrender: refused: a note no native voice plays (program %d, key %d%s)\n", iv[3], iv[1],
-                    iv[4] ? ", a drum" : "");
+                    iv[4] ? ", a drum" : banked ? ", a variation" : "");
             return 2;
         }
         const NoteClass *nc = (const NoteClass *)E.classes[cq].data();
+        if (banked && nc->meend) {
+            fprintf(stderr, "nvrender: refused: a variation that meends (Python's)\n");
+            return 2;
+        }
         if (getenv("TUNING_AMP_DRIVE") && nc->amp_drive != 0.0) {
             fprintf(stderr, "nvrender: refused: TUNING_AMP_DRIVE (Python's audition)\n");
             return 2;
@@ -423,7 +509,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "nvrender: refused: TUNING_CLAV (Python's audition)\n");
             return 2;
         }
-
+        }
     }
     // A CHANNEL'S CC91 IS ITS DISTANCE (blockrender's _src_dist): each note
     // moved out along its ray by the engine (NoteIn.dist), the send below.
@@ -597,6 +683,17 @@ int main(int argc, char **argv)
     }
     nv_song_kits(song, E.kit_f0.data(), E.kit_seat.data());
     nv_song_chokes(song, E.kit_choke.data());
+    if (!E.vgs.empty()) {                   // (bank select's tables, before the notes take their variations)
+        std::vector<int> nls, ls;
+        std::vector<double> vt;
+        for (const auto &v : E.vents) {
+            nls.push_back((int)v.ls.size());
+            for (const auto &l : v.ls)
+                ls.insert(ls.end(), l.begin(), l.end());
+            vt.push_back(v.trim[nv_midi_gs(midi) ? 1 : 0]);
+        }
+        nv_song_vars(song, (int)E.vents.size(), nls.data(), ls.data(), vt.data(), E.vgs.data(), E.vgm2.data());
+    }
     nv_midi_song(midi, song, E.trim.data() + (nv_midi_gs(midi) ? 256 : 0));
     // THE REGISTERED ORGANS (_prep_organ_rows): each melodic channel's, as its
     // programs bring them (ch_progs, uniq_programs), one a family; their stop
@@ -619,12 +716,24 @@ int main(int argc, char **argv)
             if (!uniq.count(iv[0]))
                 chs.push_back(iv[0]);
             std::vector<int> &u = uniq[iv[0]];
-            if (std::find(u.begin(), u.end(), iv[1]) == u.end())
-                u.push_back(iv[1]);
+            // (uniq_programs: a variation its own, program + 128 x its entry)
+            const int en = ent_of(iv[1], nv_midi_chprog_bsel(midi, i)), pk = iv[1] + 128 * en;
+            if (std::find(u.begin(), u.end(), pk) == u.end())
+                u.push_back(pk);
+            if (en && E.vents[en].pcls == -2) {
+                fprintf(stderr, "nvrender: refused: a variation's breath the engine has not (program %d)\n", iv[1]);
+                return 2;
+            }
         }
         for (int c : chs) {
             std::vector<int> fams;
-            for (int p : uniq[c]) {
+            bool var = false;
+            for (int pk : uniq[c])
+                var = var || pk >= 128;
+            for (int pk : uniq[c]) {
+                if (pk >= 128)
+                    continue;               // (a variation is no organ: variation_tables refuses them)
+                const int p = pk;
                 if (E.prog_organ[p] == -2) {
                     fprintf(stderr, "nvrender: refused: an organ the engine does not play (program %d)\n", p);
                     return 2;
@@ -634,6 +743,10 @@ int main(int argc, char **argv)
                     continue;
                 if (!fams.empty()) {
                     fprintf(stderr, "nvrender: refused: two organs on channel %d\n", c);
+                    return 2;
+                }
+                if (var) {
+                    fprintf(stderr, "nvrender: refused: an organ and a variation on channel %d\n", c);
                     return 2;
                 }
                 fams.push_back(og->family);
@@ -662,7 +775,8 @@ int main(int argc, char **argv)
         int iv[5];
         double dv[5];
         nv_midi_note(midi, i, iv, dv);
-        int cq = E.cmap[(iv[4] ? NV_K_DRUMS : 0) + 128 * iv[3] + iv[1]];
+        std::vector<int> ks = note_ks(i, iv);
+        int cq = ks.size() == 1 ? E.cmap[ks[0]] : -1;     // (a variation that meends: refused)
         if (!iv[4] && cq >= 0 && ((const NoteClass *)E.classes[cq].data())->meend && wheel.count(iv[0]))
             mch.insert(iv[0]);
     }
@@ -687,8 +801,8 @@ int main(int argc, char **argv)
     for (int c : chs) {
         if (organ_ch.count(c))
             continue;
-        for (int p : uniq[c]) {
-            int cq = E.cmap[128 * p + 60];
+        for (int pk : uniq[c]) {
+            int cq = pk >= 128 ? E.vents[pk / 128].pcls : E.cmap[128 * pk + 60];
             const NoteClass *k = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
             if (k && k->breath) {
                 br[512 + c] = (double)(gch.size() + 2 * bch.size());
@@ -714,7 +828,7 @@ int main(int argc, char **argv)
         nv_song_get_note(song, i, &c, iv, dv);
         if (iv[3] || iv[2] < 0 || iv[2] > 127 || std::find(sch.begin(), sch.end(), c) != sch.end())
             continue;
-        int cq = E.cmap[128 * iv[2] + iv[0]];
+        int cq = E.cmap[nv_song_kidx(song, i)];
         const NoteClass *k = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
         if (!k || !k->scanner)
             continue;
@@ -764,7 +878,8 @@ int main(int argc, char **argv)
         int c = iv[0];
         if (!mch.count(c) || iv[4])
             continue;
-        int cq = E.cmap[128 * iv[3] + iv[1]];
+        std::vector<int> ks = note_ks(i, iv);
+        int cq = ks.size() == 1 ? E.cmap[ks[0]] : -1;
         const NoteClass *mk = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
         if (!mk || !mk->meend)
             continue;
@@ -826,8 +941,8 @@ int main(int argc, char **argv)
     nv_song_strokes(song, E.kit_skind.data(), E.kit_spar.data());
     nv_song_finish(song, total);
     // THE TABLE
-    std::vector<const NoteClass *> K(2 * NV_K_DRUMS, nullptr);
-    for (int q = 0; q < 2 * NV_K_DRUMS; q++)
+    std::vector<const NoteClass *> K(E.cmap.size(), nullptr);
+    for (int q = 0; q < (int)E.cmap.size(); q++)
         if (E.cmap[q] >= 0)
             K[q] = (const NoteClass *)E.classes[E.cmap[q]].data();
     NoteIn t;
@@ -901,7 +1016,7 @@ int main(int argc, char **argv)
                 nv_song_get_note(song, i, &ch, iv, dv);
                 if (ch != tch[q] || iv[3])
                     continue;
-                int cq = E.cmap[128 * iv[2] + iv[0]];
+                int cq = E.cmap[nv_song_kidx(song, i)];
                 if (cq >= 0 && E.cls_organ[cq] >= 0)
                     chans[(int)nv_song_mix(song, i)] = cf;
             }
@@ -971,7 +1086,7 @@ int main(int argc, char **argv)
             nv_song_ccs(song, mch % 256, 93, tt.data(), vv.data(), nc);
             if (vv[0] <= 0)
                 continue;
-            int cq = E.cmap[(iv[3] ? NV_K_DRUMS : 0) + 128 * iv[2] + iv[0]];
+            int cq = E.cmap[nv_song_kidx(song, i)];
             const NoteClass *nk = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
             cch.push_back(mch);
             csend.push_back(vv[0] / 127.0);

@@ -261,7 +261,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
         int iv[4];
         double dv[2];
         nv_song_get_note(song, played[j], &ch, iv, dv);
-        const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[(iv[3] ? NV_K_DRUMS : 0) + 128 * iv[2] + iv[0]];
+        const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[nv_song_kidx(song, played[j])];
         const long long part = ch;
         ch = nv_song_mix(song, played[j]);              // (each tone its own: TONE_SEG)
         if (k && k->amp_drive != 0.0) {
