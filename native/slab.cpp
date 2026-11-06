@@ -415,6 +415,12 @@ struct Slab {
     std::map<Key, long long> key_id;
     std::vector<Key> id_key;
     double send[256];
+    // ...A VOICE'S OWN DISTANCE (live's send_said, odd_until): the channels
+    // that have sent a CC91 -- a template's own send applies on any other --
+    // and the sample until which the send bus must run for a slot standing
+    // at a distance its channel's send does not say
+    std::set<long long> send_said;
+    long long odd_until = 0;
     float headroom = 1.0f;
     double headroom_d = 1.0;
     // A SECTION'S ENTRIES ARE REDRAWN AT EVERY PRESS (live.Slab._rng)
@@ -549,8 +555,18 @@ struct Slab {
         for (long q = 0; q < n; q++)
             vsc[idx[q]] = (double)mv > 1e-12 ? vd[q] / mv : 1.0f;
         double swv = (ch >= 0 && ch < 256) ? send[ch] : 1.0;
-        if (!std::isnan(tsend) && ch >= 0)
+        if (!std::isnan(tsend) && ch >= 0 && !send_said.count(ch)) {
+            if (tsend != swv) {
+                // a one-shot's partials are gone a little past its noff (3 s
+                // is more than any release); a held note's end is not known,
+                // so the bus stays on
+                long long rdm = 0;
+                for (long q = 0; q < n; q++)
+                    rdm = q == 0 ? (long long)tf4[F4_rdl][q] : std::max(rdm, (long long)tf4[F4_rdl][q]);
+                odd_until = std::max(odd_until, one ? (long long)(n0 + dur + rdm + 3.0 * rate) : (1LL << 62));
+            }
             swv = tsend;
+        }
         for (long q = 0; q < n; q++)
             sw[idx[q]] = (float)swv;
         if (one) {
@@ -604,7 +620,7 @@ struct Slab {
             i8p[c] = T.i8[c].data();
         for (int c = 0; c < 6; c++)
             i4p[c] = T.i4[c].data();
-        return stamp(f8p, f4p, i8p, i4p, T.hrel.data(), T.P, key, n0, vel_scale, T.dur, T.oneshot, NAN, ch,
+        return stamp(f8p, f4p, i8p, i4p, T.hrel.data(), T.P, key, n0, vel_scale, T.dur, T.oneshot, T.send, ch,
                      T.sof.empty() ? nullptr : T.sof.data(), T.rof.empty() ? nullptr : T.rof.data(),
                      std::isnan(scat) ? T.scatter_ms : scat, rate, nullptr, nullptr, nullptr,
                      T.gof.size() == (size_t)T.P ? T.gof.data() : nullptr);
@@ -1009,6 +1025,8 @@ struct Slab {
         return live[i].second;
     }
 
+    std::map<Key, std::pair<std::vector<long>, long long>> last_release;   // live.Slab.last_release
+
     void release(Key key, long long n)
     {
         long li = live_find(key);
@@ -1026,6 +1044,8 @@ struct Slab {
             return;
         }
         rel_log.push_back(std::make_tuple(key, n, idx));
+        if (std::get<3>(key) == -1)
+            last_release[key] = std::make_pair(idx, n);     // (a played note's: for a slur to cut, Live._slur_cut)
         for (long s : idx) {
             long long v = n + (long long)f4[F4_rdl][s];
             if (v < i8[1][s])
@@ -3087,6 +3107,123 @@ struct Part {
     static const long long SCANSIDE0 = 3000;    // ...and tier B's copies (("scanside", rank))
     static const long long AMPK = 4000;         // the valve's products ((pid, -1, -1, "amp"))
     static const long long KEYUP0 = 5000;       // a jack's key-up click ((pid, ch, note, "keyup:" + rank))
+    static const long long DRONEK = 6000;       // a drone's layer ((pid, ch, -1 - i, "drone"))
+    // THE DRONES (live's drone_count, drone_quiet): how many the wheel leaves
+    // uncorked (absent: all), and when the chanter went quiet (its channel,
+    // the sample, the hold: part_break_s)
+    std::map<long long, int> drone_count;
+    struct DroneQuiet {
+        int ch;
+        long long when, hold;
+    };
+    std::map<long long, DroneQuiet> drone_quiet;
+    long misses = 0;                            // templates not warmed when asked (live.misses)
+
+    const NoteClass *drone_class() const
+    {
+        const NoteClass *k = nv_tcache_class(patches[cur].cache, patches[cur].program);
+        return (k && k->drone_wheel && !patches[cur].drums) ? k : nullptr;
+    }
+
+    // live._chanting: a chanter note sounding (the drones do not count themselves)
+    bool chanting(int ch) const
+    {
+        for (auto &kv : S.live)
+            if (std::get<0>(kv.first) == pid && std::get<1>(kv.first) == ch && std::get<3>(kv.first) != DRONEK)
+                return true;
+        return false;
+    }
+
+    // the partial nearest ref (Hz) of a template, as live finds a fundamental
+    // (numpy on the float32 column: |log(max(nf, 1e-6) / ref)|, float32)
+    static double nearest_nf(const nv::live::Template *T, double ref)
+    {
+        const std::vector<float> &nf = T->f4[2];
+        long best = 0;
+        float bv = INFINITY;
+        for (long r = 0; r < T->P; r++) {
+            float x = fabsf(logf(std::max(nf[r], 1e-6f) / (float)ref));
+            if (x < bv) {
+                bv = x;
+                best = r;
+            }
+        }
+        return (double)nf[best];
+    }
+
+    // live._tonic_hz: the tonic off its own template, times the channel's tuning
+    double tonic_hz(const NoteClass *k, int ch)
+    {
+        int n = k->scale_n ? k->scale_tonic : -1;
+        if (n < 0 || n > 127)
+            return 0.0;
+        const nv::live::Template *T = nv_tcache_lookup(patches[cur].cache, n, bucket(100), speed);
+        if (!T || !T->P)
+            return 0.0;
+        double F = nv_tcache_freq(patches[cur].cache, n);
+        double ref = F > 0.0 ? F : (double)*std::min_element(T->f4[2].begin(), T->f4[2].begin() + T->P);
+        return nearest_nf(T, ref) * key_ratio(patches[cur], ch, n);
+    }
+
+    // live._drones: the uncorked drones up, the rest corked
+    void drones(int ch, long long n0)
+    {
+        const NoteClass *k = drone_class();
+        if (!k)
+            return;
+        auto dc = drone_count.find(pid);
+        int want = dc != drone_count.end() ? dc->second : k->n_dratio;
+        double tonic = tonic_hz(k, ch);
+        if (tonic <= 0.0)
+            return;
+        for (int i = 0; i < k->n_dratio; i++) {
+            double hz = tonic * k->drone_ratio[i];
+            Key key(pid, ch, -1 - i, DRONEK);
+            bool on = S.live_find(key) >= 0;
+            if (i < want && !on) {
+                int note = i < k->n_drone ? k->drone_note[i] : (int)nearbyint(69.0 + 12.0 * log2(hz / 440.0));
+                if (note < 21 || note > 96)         // (MELODIC_RANGE)
+                    continue;
+                const nv::live::Template *T = nv_tcache_lookup(patches[cur].cache, note, bucket(100), speed);
+                if (!T) {
+                    misses++;
+                    continue;
+                }
+                double g = k->drone_gain[i];
+                if (!S.stamp_t(*T, key, n0, g * (pow(10.0, level_db / 20.0) * swell) * chan_gain(ch), ch, rate)) {
+                    dropped++;
+                    continue;
+                }
+                long li = S.live_find(key);
+                double Fd = nv_tcache_freq(patches[cur].cache, note);
+                double ref = Fd > 0.0 ? Fd : (double)*std::min_element(T->f4[2].begin(), T->f4[2].begin() + T->P);
+                double f0 = nearest_nf(T, ref);
+                if (li >= 0 && f0 > 0.0 && fabs(hz / f0 - 1.0) > 1e-9)
+                    retune(S.live[li].second, n0, hz / f0);
+            } else if (i >= want && on) {
+                S.release(key, n0);
+            }
+        }
+    }
+
+    // live._drone_reap: the bag let down once the chanter has been quiet part_break_s
+    void drone_reap(long long n0)
+    {
+        for (auto it = drone_quiet.begin(); it != drone_quiet.end();) {
+            if (n0 - it->second.when < it->second.hold) {
+                ++it;
+                continue;
+            }
+            long long qp = it->first;
+            it = drone_quiet.erase(it);
+            std::vector<Key> ks;
+            for (auto &kv : S.live)
+                if (std::get<0>(kv.first) == qp && std::get<3>(kv.first) == DRONEK)
+                    ks.push_back(kv.first);
+            for (auto &kk : ks)
+                S.release(kk, n0);
+        }
+    }
     int cur = 0, transpose = 0;
     bool cur_reg = true;                            // the patch in use has the register
 
@@ -3245,6 +3382,35 @@ struct Part {
         }
     }
 
+    // live._slur_cut: the notes a slurred one follows stop in the legato
+    // time (max(retrigger fade, legato_attack_s)) -- a key still down before
+    // it is let go, one let go this very block before its release has played
+    void slur_cut(const std::set<std::pair<int, int>> &keys, long long n0)
+    {
+        for (auto &kn : keys)
+            for (size_t pi = 0; pi < patches.size(); pi++) {
+                const Patch &p = patches[pi];
+                const NoteClass *pc = p.drums ? nullptr : nv_tcache_class_key(p.cache, p.program, kn.second + transpose);
+                if (!pc || !pc->slur_cuts_release)
+                    continue;
+                float shrt = (float)(std::max(retrigger, pc->legato_set ? pc->legato_attack_s : 0.0) * rate);
+                Key key(p.pid, kn.first, kn.second, -1);
+                std::vector<long> idx;
+                long li = S.live_find(key);
+                if (li >= 0 && !S.live[li].second.empty())
+                    idx = S.live[li].second;
+                else {
+                    auto lr = S.last_release.find(key);
+                    if (lr == S.last_release.end() || lr->second.second < n0)
+                        continue;
+                    idx = lr->second.first;
+                }
+                for (long q : idx)
+                    if (shrt < S.f4[F4_re][q])
+                        S.f4[F4_re][q] = shrt;
+            }
+    }
+
     // a key down (live's note-on, before its parts): the key held, and in
     // MONO the voice handed over -- the note sounding cut, the new key on top
     // of the held stack
@@ -3263,7 +3429,8 @@ struct Part {
             if (it->second.has_off && (double)(n0 - it->second.off) <= legato_gap_s * rate)
                 slur = true;
         }
-        // (_slur_cut: no native voice cuts the note it leaves -- slur_cuts_release)
+        if (slur)
+            slur_cut(it->second.keys, n0);  // (live._slur_cut: a voice that says so stops the note it leaves)
         Group g;
         g.on = n0;
         g.keys.insert(std::make_pair(ch, note));
@@ -3478,6 +3645,10 @@ struct Part {
             S.tremolo_arm(slots, td->second, patches[cur].wtrem_stereo);
         if (pressure[ch] != 0.0)
             press(slots, pressure[ch]);
+        if (drone_class()) {                // THE DRONES: up with the chanter (live._drones)
+            drone_quiet.erase(pid);
+            drones(ch, n0);
+        }
         sound_stamp_note(patches[cur], ch, sn, slots);     // the channel's CC71-78 (live._sound_stamp)
         {                                   // a note struck under a bend, or the wheel up, joins them
             double sva, svr;
@@ -5202,6 +5373,12 @@ struct Part {
         auto kt = key_tone.find(Key(pid, ch, note, 0));
         if (patches[cur].amp > 0.0 && (kt == key_tone.end() || kt->second == patches[cur].cache) && !amp_holds(cur))
             S.release(Key(pid, -1, -1, AMPK), n0);  // the products end with their chord (a note of this tone's)
+        if (drone_class()) {                // a chanter's key: the drones wait part_break_s (_drone_reap)
+            S.release(Key(pid, ch, note, -1), n0);
+            if (!chanting(ch))
+                drone_quiet[pid] = DroneQuiet{ch, n0, (long long)(drone_class()->part_break_s * rate)};
+            return;
+        }
         if (patches[cur].organ) {           // an organ's key: each of its ranks
             std::vector<Key> ks;
             std::set<std::string> sounded;
@@ -5358,8 +5535,9 @@ struct Part {
     // live.wheel_roles' 'vibrato': a part whose wheel nothing else wants
     bool vib_role(const Patch &p) const
     {
+        const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
         return p.wheel_vib && !(p.amp > 0.0) && !(p.organ && p.organ->n_order) && !(p.wtrem > 0.0) && !p.clav
-               && !p.leslie && !p.wheel_swell;
+               && !p.leslie && !p.wheel_swell && !(k && k->drone_wheel);
     }
 
     // live._snd_vib: (depth to add, rate factor) the part's CC77/76 ask of
@@ -5770,6 +5948,7 @@ struct Part {
             // one, on the notes sounding too
             double d = v / 40.0;
             S.send[ch] = d;
+            S.send_said.insert(ch);
             for (long q : sounding(ch))
                 S.sw[q] = (float)d;
         } else if (cc == 67) {
@@ -5900,6 +6079,23 @@ struct Part {
                         vib_apply(p, ch, n0);
             }
         }
+        if (cc == 1)                            // THE DRONES ON THE WHEEL (live's dronists), live
+            for (int pi = 0; pi < (int)patches.size(); pi++) {
+                if (!(patches[pi].channel < 0 || patches[pi].channel == ch))
+                    continue;
+                Use u(*this, pi);
+                const NoteClass *k = drone_class();
+                if (!k)
+                    continue;
+                int nd = k->n_dratio;
+                int n = std::max(0, std::min(nd, (int)nearbyint(v / 127.0 * nd)));
+                auto it = drone_count.find(pid);
+                if (it == drone_count.end() || it->second != n) {
+                    drone_count[pid] = n;
+                    if (chanting(ch))
+                        drones(ch, n0);
+                }
+            }
         if (cc == 1)                            // A CLAVINET's TONE ROCKERS (live's 'tone' role)
             for (const Patch &p : patches) {
                 if (!p.clav || !(p.channel < 0 || p.channel == ch))
@@ -7251,7 +7447,7 @@ struct Part {
     void output(long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd, long long blk,
                 double master_gain)
     {
-        bool uniform = true;
+        bool uniform = n0 >= S.odd_until;      // (a voice standing apart: the bus runs)
         for (int c = 1; c < 256 && uniform; c++)
             uniform = S.send[c] == S.send[0];
         bool snd = room && room_on && !uniform;
@@ -7502,11 +7698,14 @@ struct Part {
             auto sq = sost.find(ck.first);
             if (!down.count(ck) && !pedalled.count(ck) && !S.oneshot.count(kv.first)
                 && !(sq != sost.end() && sq->second.count(ck.second)) && std::get<3>(kv.first) != AMPK
+                && std::get<3>(kv.first) != DRONEK
                 && std::get<3>(kv.first) < AMP_OLD0 && std::get<3>(kv.first) > MFK0)
                 sw.push_back(kv.first);         // (not a valve's products, an old tone's, a repeat's: not a note)
         }
         for (auto &k : sw)
             S.release(k, n0);
+        if (!drone_quiet.empty())
+            drone_reap(n0);                     // the bag let down (live's _drone_reap, after the sweep)
         damp_block(n0, blk);
         if (!mf_groups.empty())
             mf104_reap();

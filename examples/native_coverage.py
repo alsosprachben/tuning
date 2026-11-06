@@ -37,15 +37,19 @@ TASKS = [
     ("GM1", True, "Files: numpy 1.26.4's pocketfft vendored (native/pocketfft.c), tonelib.pulse_series calling it"),
     ("GM1", True, "GM 127 Gunshot in files: a pulse voice (kind 7), the N-wave with its images, its blast's tail, "
                   "a class's own distance (reverb_distance: _src_dist, the send bus)"),
-    ("GM1", False, "Live: a voice's own distance (live's template send, send_said, odd_until) -- nvlive leaves "
-                   "the gunshot silent"),
-    ("GM1", False, "GM 123 Bird Tweet and 124 Telephone: a struck voice repeated (section_onsets_at with "
-                   "unison_voices: the clapper's strokes, each its own onset, level and phase; unison_drop_late; "
-                   "the chirp's falling tension_bend)"),
-    ("GM1", False, "GM 125 Helicopter: a sawtooth synth's sections (SectionMixin) and its harmonic_volume"),
-    ("GM1", False, "GM 120 Guitar Fret Noise: its own plucked-string voice (a FormantBody noise)"),
-    ("GM1", False, "GM 109 Bagpipe: the chanter (ConicalReedProperties) and the drones (wind_skirt_always, "
-                   "partial_phase_spread, strike_in_s)"),
+    ("GM1", True, "Live: a voice's own distance (live's template send, send_said, odd_until) -- the gunshot "
+                  "in nvlive"),
+    ("GM1", True, "GM 123 Bird Tweet and 124 Telephone, files and live: a struck voice repeated (tap_voice: the "
+                  "chirps, the clapper's strokes each its own onset, level and phase; unison_drop_late)"),
+    ("GM1", True, "GM 125 Helicopter, files and live: a played pipe with a measured series (VoiceSnap.hvt) and a "
+                  "melodic note's sounding octaves in the engine's pitch"),
+    ("GM1", True, "GM 120 Guitar Fret Noise, files and live: a noisy harmonic voice (the mixin's roll-off on a "
+                  "formant body, its wash weighted by the body: VoiceSnap.chiff_bore)"),
+    ("GM1", True, "GM 109 Bagpipe in files: the chanter (a played pipe, its own scale: scale_cents), the drones "
+                  "as notes of the part (phrases, the CC1 corking, each its own class: Ev.kover, K's drone "
+                  "region), a strike-in by the hand, a pipe's phase spread and mode lock"),
+    ("GM1", False, "Live: the bagpipe's drones (live's own held drone voices: drone_wheel, drone_ratios; templates "
+                   "built corked) -- nvlive refuses the bagpipe"),
     ("GM1", False, "Files: two-port files (PortedMidi, meta 21) in the reader"),
     ("GM1", False, "Files: NRPNs and MPE in the reader"),
     ("GM1", False, "Files: a class's own distance and gestures (reverb_distance, chorus_send, detuned_pair, "

@@ -96,6 +96,8 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
 
     // ITS TIMES: attack, release, chiff (speech_time, slur_attack, the caps)
     double at = o.attack_time;
+    if (K->si_set)                      // a strike-in set by the hand (strike_in_s): soft to hard
+        at = K->si0 + (K->si1 - K->si0) * pymin(1.0, pymax(0.0, n->vel / 127.0));
     if (n->slurred && K->legato_set)
         at = pymin(at, K->legato_attack_s);
     double rt = K->release_valve_set ? K->release_valve_time : K->chiff_max_valve_time;
@@ -721,7 +723,7 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
     if (n->from_song) {
         // its pitch and level from the file, not the caller
         double pl[6];
-        r = nv_song_pitch_level_k(song, n->song_index, K->init.effort_tilt != 0.0, K->indian, pl);
+        r = nv_song_pitch_level_kc(song, n->song_index, K->init.effort_tilt != 0.0, K, pl);
         if (!r)
             return -2;
         n->f0 = pl[0]; n->vel = pl[1]; n->pan = pl[2]; n->chan_vol = pl[3]; n->effort = pl[4];

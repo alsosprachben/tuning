@@ -354,6 +354,15 @@ static bool read_export(const char *path, Export &E)
                 fseek(f, vp, SEEK_SET);
             }
         }
+        {                                   // DRON: the file renderer's (a bagpipe's drones)
+            long dp = ftell(f);
+            char dt[4];
+            int dl = 0;
+            if (ok && fread(dt, 1, 4, f) == 4 && !memcmp(dt, "DRON", 4) && fread(&dl, 4, 1, f) == 1)
+                fseek(f, dl, SEEK_CUR);
+            else
+                fseek(f, dp, SEEK_SET);
+        }
         } else {
             fseek(f, pos, SEEK_SET);
         }
@@ -700,11 +709,6 @@ int main(int argc, char **argv)
         fprintf(stderr, "nvlive: %s is not a live export of this build (native_export.py --live)\n", argv[1]);
         return 1;
     }
-    // a key whose voice has A DISTANCE OF ITS OWN (reverb_distance) is not
-    // native here: live's template send (t["send"], send_said) is not yet
-    for (size_t q = 0; q < E.cmap.size(); q++)
-        if (E.cmap[q] >= 0 && ((const NoteClass *)E.classes[E.cmap[q]].data())->rd_set)
-            E.cmap[q] = -1;
     // each class's organ, its table here (the export's pointer was the exporter's)
     for (size_t i = 0; i < E.classes.size(); i++)
         ((NoteClass *)E.classes[i].data())->organ = E.cls_organ[i] >= 0 ? &E.organs[E.cls_organ[i]] : nullptr;

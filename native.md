@@ -10,10 +10,10 @@ kept by hand in the script's TASKS.
 
 | stage | tones native | drum sets whole |
 |---|---|---|
-| GM1 | 123 of 128 | 1 of 1 |
-| GM2 | 57 of 128 | 5 of 8 |
-| SC-55 | 9 of 13 | 12 of 31 |
-| SC-88 | 137 of 193 | 0 of 2 |
+| GM1 | 128 of 128 | 1 of 1 |
+| GM2 | 58 of 128 | 5 of 8 |
+| SC-55 | 9 of 13 | 13 of 31 |
+| SC-88 | 139 of 193 | 0 of 2 |
 | SC-88 Pro | 248 of 360 | 0 of 0 |
 | SC-8850 | 265 of 460 | 2 of 6 |
 
@@ -32,21 +32,20 @@ What it needs first, and live's side:
 - [x] Live: the grain source -- a note's grains at their own onsets (gof), a held texture's pool struck while the key is down (gpool, _tex_tick)
 - [x] Files: numpy 1.26.4's pocketfft vendored (native/pocketfft.c), tonelib.pulse_series calling it
 - [x] GM 127 Gunshot in files: a pulse voice (kind 7), the N-wave with its images, its blast's tail, a class's own distance (reverb_distance: _src_dist, the send bus)
-- [ ] Live: a voice's own distance (live's template send, send_said, odd_until) -- nvlive leaves the gunshot silent
-- [ ] GM 123 Bird Tweet and 124 Telephone: a struck voice repeated (section_onsets_at with unison_voices: the clapper's strokes, each its own onset, level and phase; unison_drop_late; the chirp's falling tension_bend)
-- [ ] GM 125 Helicopter: a sawtooth synth's sections (SectionMixin) and its harmonic_volume
-- [ ] GM 120 Guitar Fret Noise: its own plucked-string voice (a FormantBody noise)
-- [ ] GM 109 Bagpipe: the chanter (ConicalReedProperties) and the drones (wind_skirt_always, partial_phase_spread, strike_in_s)
+- [x] Live: a voice's own distance (live's template send, send_said, odd_until) -- the gunshot in nvlive
+- [x] GM 123 Bird Tweet and 124 Telephone, files and live: a struck voice repeated (tap_voice: the chirps, the clapper's strokes each its own onset, level and phase; unison_drop_late)
+- [x] GM 125 Helicopter, files and live: a played pipe with a measured series (VoiceSnap.hvt) and a melodic note's sounding octaves in the engine's pitch
+- [x] GM 120 Guitar Fret Noise, files and live: a noisy harmonic voice (the mixin's roll-off on a formant body, its wash weighted by the body: VoiceSnap.chiff_bore)
+- [x] GM 109 Bagpipe in files: the chanter (a played pipe, its own scale: scale_cents), the drones as notes of the part (phrases, the CC1 corking, each its own class: Ev.kover, K's drone region), a strike-in by the hand, a pipe's phase spread and mode lock
+- [ ] Live: the bagpipe's drones (live's own held drone voices: drone_wheel, drone_ratios; templates built corked) -- nvlive refuses the bagpipe
 - [ ] Files: two-port files (PortedMidi, meta 21) in the reader
 - [ ] Files: NRPNs and MPE in the reader
 - [ ] Files: a class's own distance and gestures (reverb_distance, chorus_send, detuned_pair, fall_cents, rip_cents, tremolo_pick_hz, cut_semitones)
 - [ ] Files: a sung part's text, vocalise and declared parts (TUNING_LYRIC_LANG, TUNING_VOCALISE, TUNING_VOICE_PARTS)
 - [ ] Files: organs -- two on a channel, an organ beside a variation, swell laws of their own
 
-Tones: 123 of 128 native.
+Tones: 128 of 128 native.
 
-- [ ] **Ethnic** -- 109 Bag pipe
-- [ ] **Sound Effects** -- 120 Guitar Fret Noise, 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter
 
 Drum sets: 1 of 1 with every key native.
 
@@ -65,7 +64,7 @@ What it needs first, and live's side:
 - [ ] Files: a variation that meends (a sitar's, 63.127, 104.1/4/5)
 - [ ] Files: a GM 2 drum set the engine lacks keys of (3 of 8 sets)
 
-Tones: 57 of 128 native (new at this stage).
+Tones: 58 of 128 native (new at this stage).
 
 - [ ] **Piano** -- 5.8 Detuned EP 2, 5.32 EP Phase, 6.8 Coupled Hps., 6.16 Harpsi.w, 6.24 Harpsi.o
 - [ ] **Chromatic Percussion** -- 14.8 Church Bell, 14.9 Carillon
@@ -76,13 +75,13 @@ Tones: 57 of 128 native (new at this stage).
 - [ ] **Synth Lead** -- 87.7 Delayed Lead
 - [ ] **Ethnic** -- 107.8 Taisho Koto
 - [ ] **Percussive** -- 115.8 Castanets, 116.8 Concert BD, 117.8 Melo. Tom 2, 118.8 808 Tom, 118.9 Elec Perc
-- [ ] **Sound Effects** -- 120.1 Gt.Cut Noise, 120.2 String Slap, 121.1 Fl.Key Click, 122.1 Rain, 122.2 Thunder, 122.3 Wind, 122.4 Stream, 122.5 Bubble, 123.1 Dog, 123.2 Horse-Gallop, 123.3 Bird 2, 124.1 Telephone 2, 124.2 DoorCreaking, 124.3 Door, 124.4 Scratch, 124.5 Wind Chimes, 125.1 Car-Engine, 125.2 Car-Stop, 125.3 Car-Pass, 125.4 Car-Crash, 125.5 Siren, 125.6 Train, 125.7 Jetplane, 125.8 Starship, 125.9 Burst Noise, 126.1 Laughing, 126.2 Screaming, 126.3 Punch, 126.4 Heart Beat, 126.5 Footsteps, 127.1 Machine Gun, 127.2 Lasergun, 127.3 Explosion
+- [ ] **Sound Effects** -- 120.1 Gt.Cut Noise, 120.2 String Slap, 121.1 Fl.Key Click, 122.1 Rain, 122.2 Thunder, 122.3 Wind, 122.4 Stream, 122.5 Bubble, 123.1 Dog, 123.2 Horse-Gallop, 123.3 Bird 2, 124.2 DoorCreaking, 124.3 Door, 124.4 Scratch, 124.5 Wind Chimes, 125.1 Car-Engine, 125.2 Car-Stop, 125.3 Car-Pass, 125.4 Car-Crash, 125.5 Siren, 125.6 Train, 125.7 Jetplane, 125.8 Starship, 125.9 Burst Noise, 126.1 Laughing, 126.2 Screaming, 126.3 Punch, 126.4 Heart Beat, 126.5 Footsteps, 127.1 Machine Gun, 127.2 Lasergun, 127.3 Explosion
 
 Drum sets: 5 of 8 with every key native (new at this stage).
 
 - [ ] 24 Electronic -- 114 of 115 keys native
 - [ ] 25 TR-808 -- 114 of 115 keys native
-- [ ] 56 SFX -- 55 of 76 keys native
+- [ ] 56 SFX -- 61 of 76 keys native
 
 ## SC-55
 
@@ -100,7 +99,7 @@ Tones: 9 of 13 native (new at this stage).
 - [ ] **Piano** -- 4.8 Detuned EP1
 - [ ] **Organ** -- 16.8 Detuned Or1, 16.32 Organ 4, 17.32 Organ 5
 
-Drum sets: 12 of 31 with every key native (new at this stage).
+Drum sets: 13 of 31 with every key native (new at this stage).
 
 - [ ] 13 House -- 122 of 123 keys native
 - [ ] 27 CR-78 -- 114 of 115 keys native
@@ -108,11 +107,10 @@ Drum sets: 12 of 31 with every key native (new at this stage).
 - [ ] 29 TR-707 -- 114 of 115 keys native
 - [ ] 49 Ethnic -- 76 of 79 keys native
 - [ ] 57 Rhythm FX -- 47 of 54 keys native
-- [ ] 58 Rhythm FX 2 -- 62 of 66 keys native
-- [ ] 59 Rhythm Fx 3 -- 71 of 75 keys native
-- [ ] 60 Sfx 2 -- 55 of 60 keys native
+- [ ] 58 Rhythm FX 2 -- 63 of 66 keys native
+- [ ] 60 Sfx 2 -- 59 of 60 keys native
 - [ ] 61 Voice -- 82 of 83 keys native
-- [ ] 127 CM-64/32L -- 56 of 67 keys native
+- [ ] 127 CM-64/32L -- 57 of 67 keys native
 - [ ] 386 Standard 3 -- 0 of 115 keys native
 - [ ] 392 Room -- 0 of 115 keys native
 - [ ] 393 Hip-Hop -- 0 of 115 keys native
@@ -133,7 +131,7 @@ What it needs first, and live's side:
 - [ ] The SFX families: siren, starship, laser, scream, heartbeat, Morse, machine gun, engine, car pass, skid, door creak, birds, fret slide (noise_events, pulse, ring_db, sweeps)
 - [ ] Dulcimer and accordion variations (course_keys, unison_shares_phase; speech_harmonic_exp)
 
-Tones: 137 of 193 native (new at this stage).
+Tones: 139 of 193 native (new at this stage).
 
 - [ ] **Chromatic Percussion** -- 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 15.1 Santur 2
 - [ ] **Organ** -- 16.1 Organ 101, 16.9 Organ 109, 16.17 60'sOrgan 2, 16.18 60'sOrgan 3, 16.24 CheeseOrgan, 16.33 Even Bar, 16.40 Organ Bass, 17.1 Organ 201, 18.8 Rotary Org., 18.16 RotaryOrg.S, 18.24 RotaryOrg.F, 19.24 Organ Flute, 19.32 Trem.Flute
@@ -143,7 +141,7 @@ Tones: 137 of 193 native (new at this stage).
 - [ ] **Reed** -- 66.8 BreathyTnr.
 - [ ] **Ethnic** -- 104.2 DetuneSitar, 105.16 Gopichant, 105.24 Oud, 107.16 Kanoon, 111.8 Pungi, 111.16 Hichiriki
 - [ ] **Percussive** -- 112.11 St.Gamelan, 117.1 Real Tom, 117.9 Rock Tom, 119.1 ReverseCym2, 119.8 Rev.Snare 1, 119.9 Rev.Snare 2, 119.16 Rev.Kick 1, 119.17 Rev.ConBD, 119.24 Rev.Tom 1, 119.25 Rev.Tom 2
-- [ ] **Sound Effects** -- 120.3 Gt.CutNz. 2, 120.4 Dist.CutNz., 120.5 Bass Slide, 120.6 Pick Scrape, 123.4 Kitty, 123.5 Growl, 124.7 Scratch 2, 126.6 Applause 2
+- [ ] **Sound Effects** -- 120.3 Gt.CutNz. 2, 120.4 Dist.CutNz., 123.4 Kitty, 123.5 Growl, 124.7 Scratch 2, 126.6 Applause 2
 
 Drum sets: 0 of 2 with every key native (new at this stage).
 

@@ -148,6 +148,12 @@ def main(argv):
             idx[cls] = len(classes)
             classes.append(bytes(k))
         vpcls[(_p, _v)] = idx[cls]
+    # ...and THE DRONES' CLASSES (native.DRONES: a bagpipe's)
+    for cls in list(N.DRONES):
+        k = N.note_class(cls)
+        if k is not None and cls not in idx:
+            idx[cls] = len(classes)
+            classes.append(bytes(k))
     # A STRUCK LAYER's CLASS (an orchestra hit's timpani): among the classes,
     # and its index in the class that strikes it (NoteClass.sl_idx)
     for cls in list(idx):
@@ -274,6 +280,19 @@ def main(argv):
         for _p, _v, _ls in ventries[1:]:
             vb += struct.pack("<i", vpcls[(_p, _v)])
         f.write(b"VARS" + struct.pack("<i", len(vb)) + vb)
+        # DRON: the drone classes (native.DRONES, registered as the bagpipes'
+        # classes were made), K's drone region
+        dmap = []
+        for cls in N.DRONES[:256]:
+            k = N.note_class(cls)
+            if k is None:
+                dmap.append(-1)
+                continue
+            if cls not in idx:
+                raise SystemExit("native_export: drone class %s met after the classes were written" % cls.__name__)
+            dmap.append(idx[cls])
+        dmap += [-1] * (256 - len(dmap))
+        f.write(b"DRON" + struct.pack("<i", 4 * 256) + struct.pack("<256i", *dmap))
         if "live" in opt:
             import live as L
             tab = L.pan_table()

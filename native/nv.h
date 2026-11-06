@@ -280,6 +280,20 @@ typedef struct {
        pap_hz (RECORDED_HZ) x each of its first pap_n modes' ratio; 0 none */
     double pap_hz;
     int pap_n;
+    /* A STRUCK VOICE REPEATED (tap_kind 1 a bird's chirps, 2 a telephone's
+       clapper): its taps (s), each voice's gain, a stroke's offset sd and
+       level range (dB, the clapper's), each mode's gong (A 0, B 1), whether
+       a stroke past the note's end is dropped; the cap on an entry is sect_ofm */
+    int tap_kind, n_tap, n_gong, tap_drop;
+    double tap_t[192], tap_gain, tap_jit, tap_ldb;
+    int gong[16];
+    /* A MEASURED SERIES (HelicopterProperties.harmonic_volume): gain x
+       hvt[h - 1], nothing past n_hvt; 0 none */
+    int n_hvt;
+    double hvt[512];
+    /* THE WASH WHERE THE BODY IS (GuitarFretNoiseProperties.chiff_harmonic_gain:
+       the body's gain at the harmonic x the roll-off, in place of the chiff's) */
+    int chiff_bore;
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -878,6 +892,23 @@ typedef struct NoteClass {
     // length's range (ms), its spectrum's peak x T (N_WAVE_PEAK), band and taper
     int pulse;
     double pulse_lo_ms, pulse_hi_ms, pulse_peak, pulse_fmax, pulse_taper;
+    double sounding_oct;    // a melodic note's sounding octaves (sounding_octaves), 0 none
+    // ITS OWN SCALE (scale_cents): offsets from the tonic note and their cents; scale_n 0 none
+    int scale_n, scale_tonic;
+    int scale_off[32];
+    double scale_c[32];
+    // A STRIKE-IN SET BY THE HAND (strike_in_s): the attack, soft to hard; si_set 0 none
+    int si_set;
+    double si0, si1;
+    // ITS DRONES (drone_classes): each one's note and class (K's index), in
+    // the order the wheel corks them; the gap that ends a phrase (part_break_s)
+    int n_drone;
+    int drone_note[4], drone_k[4];
+    double part_break_s;
+    // ...LIVE's (Patch.drone_wheel, drone_ratios, drone_gain): the wheel corks
+    // them, each sounding at the tonic x its ratio, at its gain
+    int drone_wheel, n_dratio;
+    double drone_ratio[4], drone_gain[4];
     // ...and A DISTANCE OF ITS OWN (reverb_distance: where its part sends no CC91)
     int rd_set;
     double reverb_dist;
@@ -1035,6 +1066,13 @@ int nv_song_next_same(void *s, long long ch, int note, double on, double *out);
 int nv_song_pitch_level(void *s, int index, int effort_tilt, double *out);
 /* ...an 'indian' class's at the secondary tuning (indian 1: FREQ_E's) */
 int nv_song_pitch_level_k(void *s, int index, int effort_tilt, int indian, double *out);
+/* ...a class's sounding octaves into a melodic note's pitch (after its meend) */
+int nv_song_pitch_level_ks(void *s, int index, int effort_tilt, int indian, double so, double *out);
+/* ...the note's class's own pitch: its sounding octaves and its scale */
+int nv_song_pitch_level_kc(void *s, int index, int effort_tilt, const NoteClass *K, double *out);
+/* THE DRONES (_prep_phrase_spans, _DRONE_PC): once, the song's notes given
+   the drones of each channel's drone class; 0, or -1 refused */
+int nv_song_drones(void *s, const NoteClass *const *K);
 /* THE SECONDARY TUNING (FREQ_E; NULL none) and the raga in force (raga_on:
    T.raga_spec set; sa its Sa's note, -1 none; sw its swaras' cents); and a
    note's table: the secondary's for an 'indian' class, else the channel's */
@@ -1091,7 +1129,9 @@ int nv_song_choke(void *s, long long ch, int note, double on, double *out);
 /* a note's class: K[128 * program + key], a drum set's K[16384 + 128 * program + key] */
 #define NV_K_DRUMS 16384
 /* ...a variation's (bank select): K[NV_K_VAR + 128 * slot + key] */
-#define NV_K_VAR (2 * NV_K_DRUMS)
+#define NV_K_DRONE (2 * NV_K_DRUMS)
+/* ...a drone's class (a bagpipe's: drone_classes): K[NV_K_DRONE + its index], 256 of them */
+#define NV_K_VAR (NV_K_DRONE + 256)
 // A DRUM KEY'S GESTURE ROW (native.kits' spar, native.SPAR): its strokes'
 // numbers from the row's start (up to NV_SPAR - 4: a pattern's 32 strokes),
 // and in its last four the keys a strike on it also sounds -- how many, then

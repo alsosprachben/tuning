@@ -167,6 +167,11 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
 {
     const NoteClass *kc = (!kit && program >= 0 && program < 128) ? K[128 * program + note] : nullptr;
     const OrganSpec *og = kc ? kc->organ : nullptr;
+    // (a drone-wheel program's: built with its drones CORKED -- live sounds
+    // them as its own held voices, live._raw_template's fast = 0)
+    const NoteClass *pc_ = (!kit && program >= 0 && program < 128) ? K[128 * program + 60] : nullptr;
+    if (pc_ && pc_->drone_wheel && fast < 0)
+        fast = 0;
     std::vector<uint8_t> f = kit ? nv::live::one_note(program, note, vel, 9, fast, 480 * 18)
                                  : nv::live::one_note(program, note, vel, 0, fast, 480, og);
     int err = 0;
@@ -744,6 +749,8 @@ struct Cache {
             }
             T.dur = d;
         }
+        // ITS OWN DISTANCE (t["send"]: reverb_distance, the gunshot's)
+        T.send = (nc && nc->rd_set) ? nc->reverb_dist : NAN;
         // A HELD TEXTURE IS A HELD NOTE (live's min_hold): its rows run until
         // the key is up, but those that decay on their own; its gate the least
         if (T.oneshot && nc->held_texture && nc->gate_time > 0.0) {
@@ -810,6 +817,7 @@ struct Cache {
                     Template D;
                     slice(D, idx);
                     D.oneshot = true;
+                    D.send = T.send;            // (a drop's, as the dict's scalars are)
                     D.cof.clear();
                     D.scatter_ms = 0.0;
                     D.vel = T.vel;

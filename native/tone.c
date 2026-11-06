@@ -504,6 +504,10 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
     if (ons_set)
         for (int i = 0; i < ns; i++)
             ons[i] = nv_section_onset(v->section_salt, section_midi(t->f0), i, v->sect_onset_ms);
+    /* ...OR A STRUCK VOICE'S REPEATS (the bird's chirps, the clapper's strokes):
+       each its own onset, capped at sect_ofm of the note */
+    static _Thread_local double tons[200];
+    int nons = v->tap_kind ? nv_tap_onsets(v, t->f0, tons) : 0;
     if (ns && v->sect_seats) {
         for (int i = 0; i < ns; i++)
             nv_section_seat(v, t, i, seat[i]);
@@ -650,11 +654,15 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
         transverse[3 * *ntrans + 1] = hv;
         transverse[3 * *ntrans + 2] = pd[0];
         (*ntrans)++;
-        double uv[80];
+        static _Thread_local double uv[5 * 200];
         int nu = nv_unison_voices(v, t->f0, m, pd[0], uv);
         for (int ui = 0; ui < nu; ui++) {
             double gm = uv[5 * ui], off_hz = uv[5 * ui + 1], dr = uv[5 * ui + 2], ud = uv[5 * ui + 3];
             double uph = uv[5 * ui + 4];
+            /* A STRIKE THE NOTE DOES NOT REACH, OR THAT MISSES THIS MODE, IS NOT
+               EMITTED (unison_drop_late: the telephone's) */
+            if (v->tap_drop && (gm <= 0.0 || (nons && ui + 1 < nons && tons[ui + 1] >= v->sect_ofm * t->dur)))
+                continue;
             if (!nv_voice_vibrato(v, t->f0, ui + 1, VB)) {
                 VB[0] = VB0[0]; VB[1] = VB0[1]; VB[2] = VB0[2];
             }
@@ -675,7 +683,8 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
                 tu.dl = seat[ui + 1][2] * sr; tu.dr = seat[ui + 1][3] * sr;
                 tp = &tu;
             }
-            double non_u = t->non + ((ons_set && ui + 1 < ns) ? pymin(ons[ui + 1], v->sect_ofm * t->dur) * sr : 0.0);
+            double non_u = t->non + ((ons_set && ui + 1 < ns) ? pymin(ons[ui + 1], v->sect_ofm * t->dur) * sr
+                                     : (nons && ui + 1 < nons) ? pymin(tons[ui + 1], v->sect_ofm * t->dur) * sr : 0.0);
             int ntu = 0;
             if (t->reflect) {
                 ntu = (ns && v->sect_seats && ui + 1 < ns)

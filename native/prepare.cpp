@@ -229,6 +229,8 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
                      void **dm, int with_register)
 {
     nv_song_gliss(song, K);                 // the valved glisses walked (_prep_gliss), before the notes are counted
+    if (nv_song_drones(song, K) < 0)        // ...and the drones (_DRONE_PC), after them
+        return -3;
     long long nnote = 0, nsym = 0;
     int nn = nv_song_n_notes(song);
     std::vector<int> played(nn), bands(nn);

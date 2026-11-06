@@ -69,6 +69,8 @@ struct Template {
     std::vector<long long> gof;
     std::vector<Template> gpool;
     double grate = 0.0;
+    // A DISTANCE OF ITS OWN (t["send"]: its class's reverb_distance), NAN none
+    double send = NAN;
 };
 
 }  // namespace live

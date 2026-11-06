@@ -175,6 +175,7 @@ struct Export {
     // [program][lsb] -- entry 0 the capital tone
     int nslot = 0;
     std::vector<int> vmap;
+    std::vector<int> dmap;                // DRON: K's drone region (256; none: all -1)
     struct VarEnt {
         std::vector<std::array<int, 4>> ls;
         double trim[2] = {1.0, 1.0};
@@ -309,6 +310,18 @@ static bool read_export(const char *path, Export &E)
                 fseek(f, vp, SEEK_SET);
             }
         }
+        // DRON: K's drone region (a bagpipe's drones), 256 class indices
+        {
+            long dp = ftell(f);
+            char dt[4];
+            int dl = 0;
+            if (ok && fread(dt, 1, 4, f) == 4 && !memcmp(dt, "DRON", 4) && fread(&dl, 4, 1, f) == 1 && dl == 4 * 256) {
+                E.dmap.resize(256);
+                ok = fread(E.dmap.data(), 4, 256, f) == 256;
+            } else {
+                fseek(f, dp, SEEK_SET);
+            }
+        }
         } else {
             fseek(f, pos, SEEK_SET);
         }
@@ -396,6 +409,8 @@ int main(int argc, char **argv)
         return 1;
     }
     // the variations' keys after the drum sets' (NV_K_VAR + 128 x slot + key)
+    E.dmap.resize(256, -1);                 // (the drones' region, NV_K_DRONE: before the variations)
+    E.cmap.insert(E.cmap.end(), E.dmap.begin(), E.dmap.end());
     E.cmap.insert(E.cmap.end(), E.vmap.begin(), E.vmap.end());
     // each class's organ, its table here (the export's pointer was the exporter's)
     for (size_t i = 0; i < E.classes.size(); i++)
@@ -966,6 +981,10 @@ int main(int argc, char **argv)
                              E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, total,
                              E.k[K_RING_FLOOR], E.k[K_RING_MAX], out, E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR,
                              dm, 1);
+    if (P == -3) {
+        fprintf(stderr, "nvrender: refused: drones Python's (two drone classes, or phrase breaks, on a channel)\n");
+        return 2;
+    }
     if (P < 0) {
         fprintf(stderr, "nvrender: refused: a note is not the engine's (%lld)\n", P);
         return 2;

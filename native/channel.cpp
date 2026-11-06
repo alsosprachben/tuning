@@ -203,10 +203,12 @@ struct Ev {
     int gl = 0, gl_prev = -1;
     double gl_lv = 1.0, gl_sm = 0.0, gl_dt = 0.0;
     int slot = -1;                      // its variation's slot (bank select: K[NV_K_VAR + 128 x slot + key]), -1 none
+    int kover = -1;                     // its class's own index in K (a drone's: _DRONE_PC), -1 none
     // its class's index in K: a drum set's key, a variation's, a program's
     int kidx() const
     {
-        return drum ? NV_K_DRUMS + 128 * prog + note : slot >= 0 ? NV_K_VAR + 128 * slot + note : 128 * prog + note;
+        return kover >= 0 ? kover : drum ? NV_K_DRUMS + 128 * prog + note
+                                         : slot >= 0 ? NV_K_VAR + 128 * slot + note : 128 * prog + note;
     }
     // ...and the TONE it is on its part (_TONE_SEGS' key: the program, or
     // the variation -- a layered one's each layer -- as its own)
@@ -578,6 +580,109 @@ struct Song {
     // step plays clean. The steps after the rest, as the Python appends
     // them; what follows the gliss in the Python (the slurs' occurrences,
     // next_same) made again on them, the glide sources carried
+    // THE DRONES (_prep_phrase_spans, _DRONE_PC): each channel's phrases --
+    // its notes by onset, a gap past its programs' part_break_s (2 s) a new
+    // one -- and where a program's class has drones, under each phrase the
+    // ones its first CC1 leaves uncorked (round(cc / 127 x n); all without
+    // one), from its first note-on (each a microsecond after the last) to
+    // its last note-off, at the phrase's first note's velocity, levels and
+    // program, each its own class; appended in channel, phrase, drone order
+    bool drones_done = false;
+    int drones(const NoteClass *const *K)
+    {
+        if (drones_done)
+            return 0;
+        drones_done = true;
+        std::vector<long long> chs;
+        std::map<long long, std::vector<int>> byc;
+        for (size_t i = 0; i < notes.size(); i++) {
+            if (!byc.count(notes[i].ch))
+                chs.push_back(notes[i].ch);
+            byc[notes[i].ch].push_back((int)i);
+        }
+        std::vector<Ev> add;
+        for (long long c : chs) {
+            const std::vector<int> &ix = byc[c];
+            const NoteClass *bpc = nullptr;
+            double gap = NAN;
+            for (int i : ix) {
+                // (the PROGRAM's class, property_class_for_program: a drone's
+                // own key on the part still has the chanter's drones)
+                const Ev &e = notes[i];
+                if (e.drum || e.prog < 0 || e.prog > 127)
+                    continue;
+                const NoteClass *k = K[e.slot >= 0 ? NV_K_VAR + 128 * e.slot + 60 : 128 * e.prog + 60];
+                if (!k)
+                    continue;
+                if (std::isnan(gap))
+                    gap = k->part_break_s;
+                else if (gap != k->part_break_s)
+                    return -1;                  // (programs whose phrases break differently: Python's set order)
+                if (k->n_drone) {
+                    if (bpc && bpc != k)
+                        return -1;              // (two drone classes on one channel: Python's set order)
+                    bpc = k;
+                }
+            }
+            if (!bpc || notes[ix[0]].drum)
+                continue;
+            if (std::isnan(gap))
+                gap = 2.0;
+            std::vector<std::pair<double, double>> on_off;
+            for (int i : ix)
+                on_off.push_back(std::make_pair(notes[i].on, notes[i].off));
+            std::sort(on_off.begin(), on_off.end());
+            std::vector<std::pair<double, double>> ph;
+            for (auto &p : on_off) {
+                if (!ph.empty() && p.first - ph.back().second <= gap)
+                    ph.back().second = std::max(ph.back().second, p.second);
+                else
+                    ph.push_back(p);
+            }
+            int nd = bpc->n_drone;
+            auto it = ch.find(c);
+            if (it != ch.end())
+                for (const CC &e : it->second.ccs)
+                    if (e.cc == 1) {
+                        nd = (int)nearbyint(e.v / 127.0 * bpc->n_drone);
+                        break;
+                    }
+            for (auto &p : ph) {
+                int first = -1;
+                for (int i : ix)
+                    if (p.first <= notes[i].on && notes[i].on <= p.second && (first < 0 || notes[i].on < notes[first].on))
+                        first = i;
+                for (int d = 0; d < nd; d++) {
+                    Ev x = notes[first];
+                    x.note = bpc->drone_note[d];
+                    x.on = p.first + 1e-6 * d;
+                    x.off = p.second;
+                    x.kover = bpc->drone_k[d];
+                    x.ratio = 1.0;              // (none of the first note's stroke: the drone's own note and onset)
+                    x.inner = 0;
+                    x.tilt = x.mouth = x.morph = NAN;
+                    x.slot = -1;
+                    x.mcut = x.mslur = 0;
+                    x.gl = 0;
+                    x.stroked = 0;
+                    add.push_back(x);
+                }
+            }
+        }
+        if (add.empty())
+            return 0;
+        for (const Ev &x : add) {
+            notes.push_back(x);
+            glide_src.push_back(-1);
+        }
+        // (the slurs again -- the note loop counts a drone's occurrence, and
+        // _SLUR_OUT reads them -- but not next_same: _prepare's was made
+        // before the drones, so a tenor is not cut by its twin)
+        mix.clear();
+        slurs();
+        return 0;
+    }
+
     bool gliss_done = false;
     void gliss(const NoteClass *const *K)
     {
@@ -1202,12 +1307,31 @@ struct Song {
 
     // _note_class_and_pitch for a melodic note with none of its extras (no
     // per-note pitch, MPE, meend, sounding octaves, scale or brass law): f0
-    double pitch(long long c, int note, double on, bool indian = false) const
+    // A CLASS'S OWN SCALE (scale_cents, _note_class_and_pitch): the tonic the
+    // table's tonic note x the sounding octaves x the bend x the octave
+    // tuning, in that order; a degree the scale has, the tonic x its cents
+    double scaled(long long c, int note, double on, const NoteClass *K, double f0) const
+    {
+        const int st = K->scale_tonic;
+        double tonic = note_table(c, on, K->indian != 0)[st] * (K->sounding_oct != 0.0 ? pow(2.0, K->sounding_oct) : 1.0);
+        auto b = btun.find(c);
+        tonic = tonic * ((b != btun.end() && b->second != 0.0) ? b->second : 1.0);
+        auto o = otun.find(c);
+        tonic = tonic * ((o != otun.end() && !o->second.empty()) ? pow(2.0, o->second[st % 12] / 1200.0) : 1.0);
+        for (int q = 0; q < K->scale_n; q++)
+            if (K->scale_off[q] == note - st)
+                return tonic * pow(2.0, K->scale_c[q] / 1200.0);
+        return f0;
+    }
+
+    double pitch(long long c, int note, double on, bool indian = false, double so = 0.0) const
     {
         double f0 = note_table(c, on, indian)[note];
         auto me = meend.find(NoteKey{c, note, on});
         if (me != meend.end())
             f0 *= me->second.first;         // this note's meend at Note On
+        if (so != 0.0)
+            f0 *= pow(2.0, so);             // its voice's sounding octaves (a helicopter's rotor)
         auto b = btun.find(c);
         if (b != btun.end() && b->second != 0.0)
             f0 *= b->second;
@@ -1313,6 +1437,8 @@ void nv_song_note_mono(void *s, int i, int mcut, int mslur)
 }
 
 void nv_song_gliss(void *s, const NoteClass *const *K) { ((nv::Song *)s)->gliss(K); }
+
+int nv_song_drones(void *s, const NoteClass *const *K) { return ((nv::Song *)s)->drones(K); }
 
 int nv_song_gliss_note(void *s, int i, double *out)
 {
@@ -2403,6 +2529,20 @@ void nv_song_kits(void *s, const double *f0, const double *seat)
 // drum: its pitch its set's, not a tuning's.
 int nv_song_pitch_level_k(void *s, int i, int effort_tilt, int indian, double *out)
 {
+    return nv_song_pitch_level_ks(s, i, effort_tilt, indian, 0.0, out);
+}
+
+int nv_song_pitch_level_kc(void *s, int i, int effort_tilt, const NoteClass *K, double *out)
+{
+    int r = nv_song_pitch_level_ks(s, i, effort_tilt, K->indian, K->sounding_oct, out);
+    const nv::Song *S = (nv::Song *)s;
+    if (r == 1 && K->scale_n && K->scale_tonic >= 0 && K->scale_tonic < 128)
+        out[0] = S->scaled(S->notes[i].ch, S->notes[i].note, S->notes[i].on, K, out[0]);
+    return r;
+}
+
+int nv_song_pitch_level_ks(void *s, int i, int effort_tilt, int indian, double so, double *out)
+{
     const nv::Song *S = (nv::Song *)s;
     if (i < 0 || i >= (int)S->notes.size())
         return 0;
@@ -2420,7 +2560,7 @@ int nv_song_pitch_level_k(void *s, int i, int effort_tilt, int indian, double *o
         out[5] = S->kit_seat[q];
         r = 2;
     } else {
-        out[0] = S->pitch(ch, note, on, indian != 0);
+        out[0] = S->pitch(ch, note, on, indian != 0, so);
     }
     out[1] = e.vel;
     out[2] = e.pan;

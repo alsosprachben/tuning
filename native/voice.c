@@ -250,6 +250,11 @@ static double eg_pickup_gain(const VoiceSnap *v, int h)
 
 double nv_series_volume(const VoiceSnap *v, int harmonic)
 {
+    if (v->n_hvt) {                             /* SynthProperties: mode_gains, a played pipe's measured series */
+        if (v->max_harmonic && harmonic > v->max_harmonic)
+            return 0.0;
+        return (1 <= harmonic && harmonic <= v->n_hvt) ? v->gain * v->hvt[harmonic - 1] : 0.0;
+    }
     if (v->kind == 5) {                         /* ElectricPianoProperties: a layer's weight, the tonebar's */
         if (harmonic < 1 || harmonic > v->n_lay + v->n_tb)
             return 0.0;
@@ -474,6 +479,8 @@ double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
 /* GrandPianoProperties.harmonic_volume, on SynthProperties' (no bore) */
 static double harmonic_volume(const VoiceSnap *v, int harmonic)
 {
+    if (v->n_hvt)                               /* a measured series: the table, nothing past it */
+        return harmonic <= v->n_hvt ? v->gain * v->hvt[harmonic - 1] : 0.0;
     double s = nv_series_volume(v, harmonic);
     if (s == 0.0)
         return 0.0;
@@ -738,8 +745,53 @@ double nv_section_onset(long long salt, long long midi, int index, double width_
     return ((double)x / 18446744073709551616.0) * (width_ms / 1000.0);
 }
 
+/* TelephoneRingProperties._stroke: stroke i's offset (s), level and phase
+ * (cycles), fixed by the pitch -- random.Random(round(f x 16) x 7919 + i x
+ * 104729 + 124): gauss, uniform, random, in that order */
+static void tap_stroke(const VoiceSnap *v, double frequency, int i, double *o)
+{
+    PyRandom r;
+    pyr_seed(&r, (long long)nearbyint(frequency * 16.0) * 7919 + (long long)i * 104729 + 124);
+    o[0] = pyr_gauss(&r, 0.0, v->tap_jit);
+    o[1] = pow(10.0, -pyr_uniform(&r, 0.0, v->tap_ldb) / 20.0);
+    o[2] = pyr_random(&r);
+}
+
+/* section_onsets_at for a struck voice repeated: [0] and each tap -- the
+ * clapper's moved by its stroke's offset, never before 1 ms. Returns how many */
+int nv_tap_onsets(const VoiceSnap *v, double frequency, double *ons)
+{
+    ons[0] = 0.0;
+    for (int i = 0; i < v->n_tap; i++) {
+        if (v->tap_kind == 2) {
+            double o[3];
+            tap_stroke(v, frequency, i, o);
+            double x = v->tap_t[i] + o[0];
+            ons[i + 1] = x > 0.001 ? x : 0.001;
+        } else {
+            ons[i + 1] = v->tap_t[i];
+        }
+    }
+    return v->n_tap + 1;
+}
+
 int nv_unison_voices(const VoiceSnap *v, double frequency, int harmonic, double harmonic_decay, double *out)
 {
+    if (v->tap_kind) {                          /* BirdTweet's chirps, TelephoneRing's strokes */
+        int g = (1 <= harmonic && harmonic <= v->n_gong) ? v->gong[harmonic - 1] : 0;
+        for (int i = 0; i < v->n_tap; i++) {
+            double gm = v->tap_gain, ph = 0.0;
+            if (v->tap_kind == 2) {             /* stroke i+1 rings gong (i+1) % 2, its own level and phase */
+                double o[3];
+                tap_stroke(v, frequency, i, o);
+                gm = ((i + 1) % 2 == g) ? v->tap_gain * o[1] : 0.0;
+                ph = o[2];
+            }
+            out[5 * i] = gm; out[5 * i + 1] = 0.0; out[5 * i + 2] = 0.0;
+            out[5 * i + 3] = harmonic_decay; out[5 * i + 4] = ph;
+        }
+        return v->n_tap;
+    }
     if (v->hit_n) {                             /* OrchestraHitProperties: the section, cents in the ratio slot */
         for (int i = 0; i < v->hit_n; i++) {
             out[5 * i] = v->hit_gain; out[5 * i + 1] = 0.0;
@@ -874,7 +926,9 @@ static double chiff_harmonic_gain(const VoiceSnap *v, double harmonic)
 
 double nv_chiff_harmonic_gain(const VoiceSnap *v, double harmonic)
 {
-    double g = v->noisy                         /* NoisyPercussionMixin: the wash rolled off too */
+    double g = v->chiff_bore                    /* the fret noise's: the body's gain x the roll-off */
+        ? bore_gain(v, v->frequency_x * pow(2.0, v->octave_position) * harmonic) * hf_rolloff(v, harmonic)
+        : v->noisy                              /* NoisyPercussionMixin: the wash rolled off too */
         ? chiff_harmonic_gain(v, harmonic) * hf_rolloff(v, harmonic) : chiff_harmonic_gain(v, harmonic);
     if (v->nyquist != 0.0 && !(v->frequency_x * pow(2.0, v->octave_position) * harmonic < v->nyquist))
         return 0.0;                             /* SampledBreak's Nyquist */
