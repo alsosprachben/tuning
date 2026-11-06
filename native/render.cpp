@@ -167,6 +167,16 @@ static void gather(Gather &g, const std::vector<long long> &rows, double *const 
     }
 }
 
+// THE MASTER VOLUME (master_curve): its steps (sample, gain), set before a
+// render and read by it; none, none set
+static std::vector<std::pair<long long, double>> g_mvol;
+void nv_render_mvol(const long long *s, const double *g, int n)
+{
+    g_mvol.clear();
+    for (int i = 0; i < n; i++)
+        g_mvol.push_back(std::make_pair(s[i], g[i]));
+}
+
 // The whole table [0, N) into L, R (zeroed here): plain, fast bursts, damped
 // rows through their kernels (sv, sx, sd), then master gain and clip. G, S,
 // BR, BC the table's swell, chest and bend rows; sh its shutter's four;
@@ -279,6 +289,27 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
         call((voice_fn)sx, nullptr, fast, false);
     } else {
         call((voice_fn)sv, nullptr, plain, false);
+    }
+    // THE MASTER VOLUME (master_curve: each step ramped from the gain before it
+    // over MASTER_RAMP_S, 5 ms -- int(0.005 SR) samples, float32), first
+    if (!g_mvol.empty()) {
+        long ramp = std::max(1L, (long)(0.005 * SR));
+        std::vector<float> mg(N, 1.0f);
+        double prev = 1.0;
+        for (auto &st : g_mvol) {
+            if (st.first >= N)
+                break;
+            for (long k = st.first > 0 ? (long)st.first : 0; k < N; k++) {
+                double fr = (double)(k - st.first) / (double)ramp;
+                fr = fr < 0.0 ? 0.0 : (fr > 1.0 ? 1.0 : fr);
+                mg[k] = (float)(prev + (st.second - prev) * fr);
+            }
+            prev = st.second;
+        }
+        for (long k = 0; k < N; k++) {
+            L[k] = L[k] * mg[k];
+            R[k] = R[k] * mg[k];
+        }
     }
     // the master gain, float32 (numpy: a float32 buffer times a Python float), and the clip
     float g = (float)master_gain;

@@ -720,6 +720,7 @@ typedef struct NoteClass {
     // within flam_s and flam_db under the loudest
     int n_flam;
     double flam_s, flam_db;
+    double flam_rate;       // a crowd (strike_flam_rate): bursts a second through the note, 0 none
     // ...or a machine's (strike_flam_times: each burst's offset s, dB, and
     // place in the balance -- the cos/sin of its angle -- where ft_bal)
     int n_ft, ft_bal;

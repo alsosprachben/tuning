@@ -217,7 +217,7 @@ class NoteClass(ctypes.Structure):
                    ('noise_rows', I), ('nb_hz', C * 32), ('nb_db', C * 32)]
                 + [(f, C) for f in ('shake_min_s', 'shake_frac', 'shake_xfade_s', 'rise_s', 'settle_db',
                                     'settle_s', 'noise_rel')]
-                + [('n_flam', I), ('flam_s', C), ('flam_db', C)]
+                + [('n_flam', I), ('flam_s', C), ('flam_db', C), ('flam_rate', C)]
                 + [('n_ft', I), ('ft_bal', I), ('ft_t', C * 64), ('ft_db', C * 64), ('ft_c', C * 64)]
                 + [('n_layer', I), ('lay_n', I * 32), ('lay_hz', (C * 32) * 32), ('lay_db', (C * 32) * 32),
                    ('lay_rise', C * 32), ('lay_dbs', C * 32), ('lay_len', C * 32), ('played_backwards', I)]
@@ -747,7 +747,11 @@ def _modal_drum(cls):
     # rattles, a tuned bar's crotales: the other washes are families of their own)
     cym = issubclass(cls, T.CymbalProperties)
     bar = issubclass(cls, T.TunedBarProperties)
-    if issubclass(cls, T.BreathNoiseProperties) and not breath_noise(cls):
+    # (a noise voice's breath the engine's -- or none: its tone silent and its
+    # sound its strike's bursts alone, an audience's applause)
+    if issubclass(cls, T.BreathNoiseProperties) and not breath_noise(cls) and not (
+            not getattr(cls, 'breath_noise_db', ()) and isinstance(cls.mode_gains, (tuple, list))
+            and cls.mode_gains and all(g == 0.0 for g in cls.mode_gains)):
         return False
     if not (issubclass(cls, T.HandClapProperties) or cym or issubclass(cls, T.WoodPercussionProperties)
             or issubclass(cls, T.SnareDrumProperties) or issubclass(cls, T.BreathNoiseProperties)
@@ -2582,6 +2586,11 @@ def note_class(cls):
                      'gate_time', 'played_backwards', 'strike_noise_tail'):
                 return True
             # ...a machine's burst train, and up to 32 layers (a Simmons: 21)
+            # ...a crowd's bursts through the note (no record's, no exponential levels)
+            if a == 'strike_flam_rate':
+                return (not getattr(cls, 'strike_flam_record', False)
+                        and not (getattr(cls, 'strike_flam_exp_db', 0.0) or 0.0)
+                        and int(getattr(cls, 'strike_flam', 0) or 0) <= 1)
             if a == 'strike_flam_times':
                 ft = getattr(cls, 'strike_flam_times', None) or ()
                 return len(ft) <= 64 and all(len(b) in (2, 3) for b in ft)
@@ -2714,6 +2723,7 @@ def note_class(cls):
             k.lay_rise[l], k.lay_dbs[l], k.lay_len[l] = float(rise), float(dbs), float(ln)
         k.flam_s = float(getattr(cls, 'strike_flam_s', 0.0) or 0.0)
         k.flam_db = float(getattr(cls, 'strike_flam_db', 0.0) or 0.0)
+        k.flam_rate = float(getattr(cls, 'strike_flam_rate', 0.0) or 0.0)      # (a crowd: bursts a second)
         k.pjit = int(bool(getattr(cls, 'jitter_by_partial', False)))
         k.ssc = int(bool(getattr(cls, 'stroke_scatter', False)))
         k.gate_time = float(getattr(cls, 'gate_time', None) or 0.0)

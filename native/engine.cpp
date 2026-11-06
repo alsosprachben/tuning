@@ -193,11 +193,17 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         // A FLAM (strike_flam > 1): that many strikes, each at its own offset
         // and level, drawn from the note (random.Random of its onset, key and
         // channel), the first at the onset and the loudest at the table's
-        double boff[64], bdb[64], bgl[64], bgr[64];
+        // ...OR A CROWD (strike_flam_rate): round(rate x the note's length)
+        // of them, two at least, through the whole note
+        double fspan = K->flam_s;
+        int nfl = K->n_flam;
+        if (K->flam_rate > 0.0) {
+            fspan = pymax(0.0, (noff - non) / SR);
+            nfl = std::max(2, (int)nearbyint(K->flam_rate * fspan));
+        }
+        size_t cap_b = (size_t)std::max(64, nfl);
+        std::vector<double> boff(cap_b, 0.0), bdb(cap_b, 0.0), bgl(cap_b, 1.0), bgr(cap_b, 1.0);
         int nb = 1;
-        boff[0] = bdb[0] = 0.0;
-        for (int b = 0; b < 64; b++)
-            bgl[b] = bgr[b] = 1.0;
         if (K->n_ft) {
             // ...OR A MACHINE'S (strike_flam_times): its bursts where its
             // envelope put them, each in its own place in the balance
@@ -210,14 +216,14 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
                     bgr[b] = sqrt(2.0) * sin(K->ft_c[b]);
                 }
             }
-        } else if (K->n_flam > 1) {
-            if (K->n_flam > 64)
+        } else if (nfl > 1) {
+            if (nfl > 64 && K->flam_rate <= 0.0)
                 return -2;
             PyRandom fr;
             pyr_seed(&fr, (long long)nearbyint(n->on * 1e6) * 131 + (long long)n->note * 7 + n->ch);
-            nb = K->n_flam;
+            nb = nfl;
             for (int b = 0; b < nb; b++) {
-                boff[b] = pyr_uniform(&fr, 0.0, K->flam_s);
+                boff[b] = pyr_uniform(&fr, 0.0, fspan);
                 bdb[b] = -pyr_uniform(&fr, 0.0, K->flam_db);
             }
             double t0 = boff[0], l0 = bdb[0];

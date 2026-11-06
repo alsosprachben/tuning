@@ -1915,6 +1915,10 @@ struct Part {
     std::map<int, std::array<double, 12>> sota;
     std::map<std::pair<int, int>, double> sota_at;
     double master_fine = 0.0, master_coarse = 0.0;
+    // ...and the master volume (live.master_vol) with its ramp: where it has
+    // got to, the target its step was fixed for (NaN none), the step
+    double master_vol = 1.0, mv_now = 1.0, mv_target = NAN, mv_step = 0.0;
+    std::vector<float> mv_g;
     std::map<std::pair<int, int>, std::vector<double>> mts_tab;
     std::map<int, std::pair<int, int>> mts_sel;
     std::map<std::tuple<long long, int, int>, double> mts_at;
@@ -4259,6 +4263,8 @@ struct Part {
                 for (int c = 0; c < 16; c++)
                     if (mts_selection(c) == std::make_pair(iv[0], iv[1]))
                         remts(c, &named, n0);
+        } else if (tk == 1 && iv[0] == 1) {
+            master_vol = dv[0];
         } else if (tk == 1 && iv[0] != 1) {
             (iv[0] == 2 ? master_fine : master_coarse) = dv[0];
             for (int c = 0; c < 16; c++)
@@ -4285,6 +4291,7 @@ struct Part {
         for (int c = 0; c < 256; c++)
             S.send[c] = 1.0;                    // every channel at the nominal distance
         master_fine = master_coarse = 0.0;
+        master_vol = 1.0;
         for (int c = 0; c < 16; c++) {
             mono[c] = false;
             mono_stack[c].clear();
@@ -7221,6 +7228,43 @@ struct Part {
         oSR.assign(frames, 0.0f);
         render(n0, frames, L, R, snd ? oSL.data() : nullptr, snd ? oSR.data() : nullptr, sv, sx, sd, blk,
                master_gain);
+        // THE MASTER VOLUME (live.master_gain): at its value, or ramping to it
+        double want = master_vol, now = mv_now;
+        if (want == now) {
+            float w = (float)want;
+            if (want != 1.0)
+                for (long k = 0; k < frames; k++) {
+                    L[k] = L[k] * w;
+                    R[k] = R[k] * w;
+                }
+            if (snd)                                // (the send takes exactly this)
+                for (long k = 0; k < frames; k++) {
+                    oSL[k] = oSL[k] * w;
+                    oSR[k] = oSR[k] * w;
+                }
+        } else {
+            if (!(want == mv_target)) {             // the step fixed when the target changes
+                mv_target = want;
+                long ramp = std::max(1L, (long)(0.005 * rate));        // blockrender.MASTER_RAMP_S
+                mv_step = (want - now) / (double)ramp;
+            }
+            mv_g.resize(frames);
+            double gk = now;
+            for (long k = 0; k < frames; k++) {
+                gk = now + mv_step * (double)(k + 1);
+                gk = mv_step > 0 ? std::min(gk, want) : std::max(gk, want);
+                mv_g[k] = (float)gk;
+            }
+            mv_now = gk;
+            for (long k = 0; k < frames; k++) {
+                L[k] = L[k] * mv_g[k];
+                R[k] = R[k] * mv_g[k];
+                if (snd) {
+                    oSL[k] = oSL[k] * mv_g[k];
+                    oSR[k] = oSR[k] * mv_g[k];
+                }
+            }
+        }
         if (room && room_on) {
             const float *sl = L, *sr = R;
             if (snd) {

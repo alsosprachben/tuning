@@ -205,7 +205,9 @@ struct Parsed {
     std::vector<std::pair<int, int>> chprogs;  // ch_progs: a melodic channel's program changes, in message order
     std::map<int, int> parts;   // _voice_parts: a channel's voice part, by its track's name (nv_voice_body)
     int master = 0;             // a master message (parse_master): every channel's pitch stream then
-    int master_vol = 0;         // ...a master volume under full (Python's, after the render)
+    int master_vol = 0;         // ...a master volume under full
+    // _mvol: each master volume (time, seq, gain), and each GM System On's full (1.0)
+    std::vector<std::tuple<double, long, double>> mvol;
     // sotas: each channel's scale/octave tuning, (time, twelve cents) as sent
     std::map<int, std::vector<std::pair<double, std::array<double, 12>>>> sotas;
     // MTS (parse_mts): each dump or single-note change, in message order --
@@ -694,8 +696,11 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                         if (!seen_note && gsh)
                             P.gs = 1;
                         P.master = 1;
-                        if (ti[0] == 1 && td[0] != 1.0)
-                            P.master_vol = 1;
+                        if (ti[0] == 1) {
+                            P.mvol.push_back(std::make_tuple(t, seq, td[0]));
+                            if (td[0] != 1.0)
+                                P.master_vol = 1;
+                        }
                         else if (ti[0] > 1)
                             P.pitch.push_back(PitchEv{-2, t, seq, ti[0] == 2 ? 10 : 11, td[0]});
                     } else if (tk == 2) {
@@ -745,6 +750,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 P.gs = 1;
             rxbank = lvl != 1;
             bmsb.clear(); blsb.clear(); drums.clear(); prog.clear(); ctrl.clear(); rsel.clear(); nsel.clear();
+            P.mvol.push_back(std::make_tuple(t, seq, 1.0));      // (the master volume back to full)
             P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});     // (the live part's too)
             P.sysex.push_back(d);
             // BACK TO POWER-ON: every tuning the file set, from here (gmon) --
@@ -1021,6 +1027,33 @@ int nv_midi_otun(void *p, int ch, double *out)
         any = any || fabs(out[i]) > 1e-9;
     }
     return any ? 1 : 0;
+}
+
+// _mvol: the master volume's steps (sample, gain) into s, g (cap), in the
+// file's order (time, then place); their count, 0 for a file that only ever
+// says "full"
+int nv_midi_mvol(void *p, double sr, long long *s, double *g, int cap)
+{
+    const nv::Parsed *P = (nv::Parsed *)p;
+    std::vector<std::tuple<double, long, double>> mv = P->mvol;
+    std::stable_sort(mv.begin(), mv.end(), [](const std::tuple<double, long, double> &a,
+                                              const std::tuple<double, long, double> &b) {
+        return std::get<0>(a) < std::get<0>(b) || (std::get<0>(a) == std::get<0>(b) && std::get<1>(a) < std::get<1>(b));
+    });
+    bool any = false;
+    for (auto &e : mv)
+        any = any || !(fabs(std::get<2>(e) - 1.0) < 1e-12);
+    if (!any)
+        return 0;
+    int n = 0;
+    for (auto &e : mv) {
+        if (n < cap) {
+            s[n] = (long long)nearbyint(std::get<0>(e) * sr);
+            g[n] = std::get<2>(e);
+        }
+        n++;
+    }
+    return n;
 }
 
 // a tuning exclusive (master, scale/octave, MTS) in the file: 1, else 0

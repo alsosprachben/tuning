@@ -75,9 +75,6 @@ def main(argv):
                            "--fresh", "--room=" + room], stdout=subprocess.DEVNULL)
     exe = N.build_nvlive()
     m = N.Midi(mid)
-    if m.master() == 2:
-        print("%s: refused: a master volume under full (nvlive's)" % os.path.basename(args[0]))
-        return 0
     if m.error:
         print("refused: %s" % N.MIDI_REFUSED.get(m.error, m.error))
         return 2

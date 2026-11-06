@@ -54,6 +54,8 @@ int nv_midi_n_notes(void *p);
 int nv_midi_n_ccs(void *p);
 int nv_midi_n_pws(void *p);
 int nv_midi_master(void *p);
+int nv_midi_mvol(void *p, double sr, long long *s, double *g, int cap);
+void nv_render_mvol(const long long *s, const double *g, int n);
 int nv_midi_otun(void *p, int ch, double *out);
 int nv_midi_n_mts(void *p);
 void nv_midi_mts(void *p, int i, double *t, long *seq, int *bank, int *prog, double *hz);
@@ -394,10 +396,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "nvrender: %s is an export from before the bend passes (native_export.py again)\n", argv[1]);
         return 1;
     }
-    if (nv_midi_master(midi) == 2) {
-        fprintf(stderr, "nvrender: refused: a master volume (Python's, after the render)\n");
-        return 2;
-    }
+
     std::vector<double> first(256, INFINITY);
     for (int i = 0, n = nv_midi_n_notes(midi); i < n; i++) {
         int iv[5];
@@ -1307,6 +1306,13 @@ int main(int argc, char **argv)
             mc.fm[q] = fmc[q].data();
     }
     std::vector<float> L(N), R(N);
+    {                                       // THE MASTER VOLUME (_mvol): the mix's and the send's
+        int nm = nv_midi_mvol(midi, SR, nullptr, nullptr, 0);
+        std::vector<long long> ms(nm > 0 ? nm : 1);
+        std::vector<double> mgv(nm > 0 ? nm : 1);
+        nv_midi_mvol(midi, SR, ms.data(), mgv.data(), nm);
+        nv_render_mvol(ms.data(), mgv.data(), nm);
+    }
     nv_render(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fp, lp, ip, Gt.data(), St.data(), BRr.data(), BCr.data(),
               BLr.empty() ? nullptr : BLr.data(), noRows, sh,
               (long)E.k[K_CHUNK], E.k[K_XDEC], SR, E.k[K_MASTER], (const float *)dm[2], (const long *)dm[3],

@@ -1230,10 +1230,6 @@ int main(int argc, char **argv)
                 fprintf(stderr, "nvlive: the reader refused %s (%d)\n", argv[i + 1], err);
                 return 2;
             }
-            if (nv_midi_master(m) == 2) {   // (live's master_gain: a ramp, not here yet)
-                fprintf(stderr, "nvlive: refused %s: a master volume under full\n", argv[i + 1]);
-                return 2;
-            }
             int ne = nv_midi_n_events(m);
             double secs = atof(opt(argc, argv, "seconds", "0").c_str());
             if (secs <= 0)
