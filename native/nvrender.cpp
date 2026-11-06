@@ -1070,12 +1070,14 @@ int main(int argc, char **argv)
                        scho.data(), SR);
     // THE CHORUS (_prep_chorus, chorus.expand; _note_chorus_send): each mix
     // channel whose part's first CC93 is past 0, at that send over 127, its
-    // first note's comb (offsets_for), in the order its first note came --
-    // before the speaker, which colours the copies too
+    // first note's comb (offsets_for); where the part has no CC93, the first
+    // note whose class has a pedal of its own (chorus_send) or a detuned
+    // pair -- in the order those notes came, before the speaker, which
+    // colours the copies too
     {
         std::vector<long long> cch;
         std::vector<double> csend, ccents;
-        std::vector<int> cnc;
+        std::vector<int> cnc, ckind;
         std::vector<int> ord(nv_song_n_notes(song));
         for (size_t i = 0; i < ord.size(); i++)
             ord[i] = (int)i;
@@ -1096,10 +1098,25 @@ int main(int argc, char **argv)
             long long mch = nv_song_mix(song, i);
             if (seen.count(mch))
                 continue;
-            seen.insert(mch);
             int nc = nv_song_ccs(song, mch % 256, 93, nullptr, nullptr, 0);
-            if (nc <= 0)
+            if (nc <= 0) {
+                // (no CC93: the voice's own pedal, or its pair, if it has one;
+                // else a later note's may)
+                int cq = E.cmap[nv_song_kidx(song, i)];
+                const NoteClass *nk = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
+                if (!nk || !(nk->cho_send || nk->pair_set))
+                    continue;
+                seen.insert(mch);
+                cch.push_back(mch);
+                csend.push_back(nk->cho_send ? nk->cho_send : 1.0);
+                cnc.push_back(nk->cho_send ? nk->n_cho : 2);
+                ckind.push_back(nk->cho_send ? 0 : 1);
+                for (int q = 0; q < 8; q++)
+                    ccents.push_back(nk->cho_send ? (q < nk->n_cho ? nk->cho_cents[q] : 0.0)
+                                     : q == 0 ? nk->pair_lo : q == 1 ? nk->pair_hi : 0.0);
                 continue;
+            }
+            seen.insert(mch);
             std::vector<double> tt(nc);
             std::vector<int> vv(nc);
             nv_song_ccs(song, mch % 256, 93, tt.data(), vv.data(), nc);
@@ -1110,11 +1127,13 @@ int main(int argc, char **argv)
             cch.push_back(mch);
             csend.push_back(vv[0] / 127.0);
             cnc.push_back(nk ? nk->n_cho : 0);
+            ckind.push_back(0);
             for (int q = 0; q < 8; q++)
                 ccents.push_back(nk && q < nk->n_cho ? nk->cho_cents[q] : 0.0);
         }
         if (!cch.empty())
-            nv_chorus_expand(&rows, &P, dm, (int)cch.size(), cch.data(), csend.data(), cnc.data(), ccents.data(), SR);
+            nv_chorus_expand(&rows, &P, dm, (int)cch.size(), cch.data(), csend.data(), cnc.data(), ccents.data(),
+                             ckind.data(), SR);
     }
     // THE SPEAKER CABINETS (_prep_cabinet, cabinet.expand): every row on a
     // cabinet's channel through its response at the row's frequency, after

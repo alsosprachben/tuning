@@ -52,8 +52,13 @@ TASKS = [
                    "built corked) -- nvlive refuses the bagpipe"),
     ("GM1", False, "Files: two-port files (PortedMidi, meta 21) in the reader"),
     ("GM1", False, "Files: NRPNs and MPE in the reader"),
-    ("GM1", False, "Files: a class's own distance and gestures (reverb_distance, chorus_send, detuned_pair, "
-                   "fall_cents, rip_cents, tremolo_pick_hz, cut_semitones)"),
+    ("GM1", True, "Files: a class's own distance and gestures -- reverb_distance, its own chorus pedal "
+                  "(chorus_send) and detuned pair (detuned_pair: chorus._pair), falls and rips on the valved "
+                  "lattice (fall_cents, rip_cents: Song::gliss)"),
+    ("GM1", False, "Files: tremolo picking (tremolo_pick_hz: 25.18 MandolinTrem, the biwa's) and the pipes' cut "
+                   "(cut_semitones: 109.11)"),
+    ("GM2", True, "Brass variations' blare (blare_db_per_khz: dB per kHz over a knee, renormalised) and the "
+                  "SC-88's hammer-on (hammer_legato: the fretting hand, its strings and guitars)"),
     ("GM1", False, "Files: a sung part's text, vocalise and declared parts (TUNING_LYRIC_LANG, TUNING_VOCALISE, "
                    "TUNING_VOICE_PARTS)"),
     ("GM1", False, "Files: organs -- two on a channel, an organ beside a variation, swell laws of their own"),
@@ -77,13 +82,20 @@ TASKS = [
     ("SC-55", True, "Melodic SFX (patch_map.melodic_sfx): a kit's sound on a keyboard part, transposed whole "
                     "(transposed_from_hz: _XP), its kit key's strokes (sfx_strokes_of), the weather voices "
                     "(a measured mode set under the noise's roll-off, its breath beside it)"),
-    ("SC-55", False, "SFX voices still Python's: a vibrato of their own (skid, starship, scream), the siren's "
-                     "rotor, the heartbeat's timed noise (noise_events)"),
+    ("SC-55", True, "SFX voices with a fixed vibrato of their own (skid, starship, scream: VoiceSnap.fv_*)"),
+    ("SC-55", True, "The heartbeat: its ECG's mode phases, its blood flow's timed noise bands (noise_events)"),
+    ("SC-55", True, "A drum's sounding octaves (the SFX sets' helicopter: its key a rotor, under its kit pitch)"),
+    ("SC-55", False, "The siren's rotor (siren_rotor: its rows and live's siren block) -- GM 2's 125.5, the SFX "
+                     "set's 67"),
+    ("GM1", True, "examples/struct_check.py: each ctypes mirror's field offsets against the C struct's (a "
+                  "reordered field of the same size passed the size check silently)"),
     ("SC-55", False, "Melodic hits: a hand drum's or a kit's detail on a melodic voice (strike_phase_spread, "
                      "stroke_scatter, jitter_by_partial, bloom_seconds, played_backwards, strike_noise_layers, "
                      "one_shot and gate_time off a kit) -- dholak, kelontuk, reversed pieces, cymbal tones"),
-    ("SC-55", False, "Crowds: strike_flam_people and a recorded flam (strike_flam_record): Small Club, the "
-                     "applause wave, phono noise's crackle"),
+    ("SC-55", True, "Crowds: a few people clapping (strike_flam_people, their palms ringing: "
+                    "strike_flam_people_peak) -- Small Club, the applause wave; GM 2's Electronic and TR-808 sets"),
+    ("SC-55", False, "A recorded flam (strike_flam_record) and a crackle's exponential levels (strike_flam_exp_db, "
+                     "with a gate): phono noise"),
     ("SC-88", False, "Variations that change a native family's methods (the SC-88 maps' brass, strings, guitars, "
                      "flutes and cymbal menus: a subclass the engine's owner checks refuse) -- each family's "
                      "overrides ported"),

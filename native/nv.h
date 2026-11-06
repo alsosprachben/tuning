@@ -130,6 +130,10 @@ typedef struct {
        power (_bore_norm: the note's, the constructor's); a samba whistle's
        pea (SambaWhistleProperties: its comb as unison voices, its vibrato) */
     double bore_corner_hz, bore_order, bell_cutoff_hz, bell_order, bore_norm;
+    /* BLARE (SynthProperties._blare): dB per kHz over blare_knee_hz, held at
+       +-blare_cap_db, through the bore; renormalised to the bored series'
+       power (_blare_norm). 0 dB per kHz: none */
+    double blare_db_per_khz, blare_knee_hz, blare_cap_db, blare_norm;
     int pea;
     double pea_vibrato_cents, pea_vibrato_hz;
     /* TunedBarProperties: only the bar's own modes sound (bar_modes: the
@@ -294,6 +298,10 @@ typedef struct {
     /* THE WASH WHERE THE BODY IS (GuitarFretNoiseProperties.chiff_harmonic_gain:
        the body's gain at the harmonic x the roll-off, in place of the chiff's) */
     int chiff_bore;
+    /* A FIXED VIBRATO of its own (the skid's, starship's, scream's
+       voice_vibrato): its depth's cents (x 1.4142) and rate; fv_set 0 none */
+    int fv_set;
+    double fv_cents, fv_hz;
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -537,6 +545,7 @@ typedef struct {
        out along its ray, its images from there */
     double dist;
     long long cls;          /* its class (the NoteClass), keying _refl_norm's memo as type(props) does */
+    double hammer_on;       /* a hammer-on's seconds since the pick (em.hammer_on), 0 none */
 } ToneIn;
 
 /* A MOOG MESSENGER's panel as a note reads it (moog.py; native.moog_spec):
@@ -634,6 +643,10 @@ int nv_layer(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, cons
 int nv_pulse(const VoiceSnap *v, const ToneIn *t, double f0, double blk, double lo_ms, double hi_ms, double peak,
              double fmax, double taper, double pos_x, int nimg, const int *nsurf, const int *surf, const double *img,
              const double *mir, double *rows, int cap, double *qacc, double *azimuth);
+int nv_events(const VoiceSnap *v, const ToneIn *t, int ne, const double (*ev)[4], int k, double ramp,
+              double pos_x, double *rows, int cap, double *qacc, double *azimuth);
+int nv_palm(const VoiceSnap *v, const ToneIn *t, double hz, double db, double plr, double bon, double slen,
+            double sfade, double gl, double gr, double pos_x, double *rows, int cap, double *qacc, double *azimuth);
 int nv_grains(const VoiceSnap *v, const ToneIn *t, int ng, const double (*g)[9], long long seed, double settle,
               double pos_x, double *rows, int cap, double *qacc, double *azimuth);
 int nv_breath(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db, int k, double fade,
@@ -740,6 +753,15 @@ typedef struct NoteClass {
     int n_flam;
     double flam_s, flam_db;
     double flam_rate;       // a crowd (strike_flam_rate): bursts a second through the note, 0 none
+    // A FEW PEOPLE (strike_flam_people): how many, their lowest and highest
+    // claps a second, the jitter, the dB spread; their palms' ring
+    // (strike_flam_people_peak: lowest and highest Hz, dB, Q), pk_set 0 none
+    int people_n, pk_set;
+    double people_lo, people_hi, people_jit, people_db, pk_lo, pk_hi, pk_db, pk_q;
+    // TIMED NOISE BANDS (noise_events: Hz, dB, start s, end s), noise_rows a
+    // band, ramped nev_ramp_s; their width -noise_rel (in nb's noise_rel)
+    int n_nev;
+    double nev[64][4], nev_ramp_s;
     // ...or a machine's (strike_flam_times: each burst's offset s, dB, and
     // place in the balance -- the cos/sin of its angle -- where ft_bal)
     int n_ft, ft_bal;
@@ -916,6 +938,18 @@ typedef struct NoteClass {
     // ...and A DISTANCE OF ITS OWN (reverb_distance: where its part sends no CC91)
     int rd_set;
     double reverb_dist;
+    // ...and THE FRETTING HAND (hammer_legato): a slurred note hammered on
+    int hammer;
+    // A FALL (fall_cents: held fall_at_s, then down the lattice over fall_s,
+    // fading fall_fade_db) and A RIP (rip_cents: up the lattice into the note
+    // over rip_s from rip_start_db under), each smeared; 0 cents none
+    double fall_cents, fall_at_s, fall_s, fall_fade_db, fall_smear;
+    double rip_cents, rip_s, rip_start_db, rip_smear;
+    // ITS OWN CHORUS where the part sends no CC93: a pedal (chorus_send, its
+    // comb cho_cents) or a detuned pair (detuned_pair: cents down, up)
+    double cho_send;
+    int pair_set;
+    double pair_lo, pair_hi;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -984,6 +1018,11 @@ typedef struct {
     void *sym_drv;          // where its voice goes, the driver of its channel's strings (_SYM_CH), NULL not
     double blk;             // the render's block (BLK): a pulse's lead is two of them
     double xp;              // ...the key's interval it is moved by (_XP), 0: 1
+    // A HAMMER-ON (hammer_legato): hammered over the file's slur, a mono or
+    // gliss slur besides (its attack the legato's again), the seconds since
+    // the channel's last pick
+    int hammered, reslur;
+    double hammer_on;
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -996,9 +1035,12 @@ void nv_refl_memo_reset(void);
 /* live.cpp: chorus.expand's send path -- each channel (chans, in its first
    note's order) at its send (0..1), its comb (ncents[q] cents of
    cents[8 q ...]): a copy of each of its rows per comb tooth, detuned,
-   delayed and swept, the dry share taken out of the rows. The copies made. */
+   delayed and swept, the dry share taken out of the rows -- or, kinds[q] 1,
+   a detuned pair (chorus._pair: cents[8 q] down, cents[8 q + 1] up). The
+   copies made. */
 long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
-                           const double *sends, const int *ncents, const double *cents, double sr);
+                           const double *sends, const int *ncents, const double *cents, const int *kinds,
+                           double sr);
 int nv_struck(const VoiceSnap *v, const ToneIn *t, const VoiceSnap *ls, int nm, double ft, const double *hv,
               double hmax, double db, double rise, double dbs, long long seed, int nimg, const int *nsurf,
               const int *surf, const double *img, const double *mir, double *rows, int cap, double *qacc,
@@ -1163,6 +1205,7 @@ int nv_song_mono(void *s, int i, int *mcut, int *mslur);
    and a note's step (level, smear, the step it arrives from or -1, the step's
    time), 0 not one */
 void nv_song_gliss(void *s, const NoteClass *const *K);
+void nv_song_play_mark(void *s);
 int nv_song_gliss_note(void *s, int i, double *out);
 double nv_song_tess(void *s, long long ch);
 void nv_song_set_part(void *s, long long ch, int part);

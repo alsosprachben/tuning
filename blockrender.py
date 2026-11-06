@@ -6292,6 +6292,7 @@ def _tone_in(em, props, nt, gain, rank_B, sjit_n, reflect):
     t.dl, t.dr, t.pos_x0, t.pos_x_props, t.pos_z = (em._DL[0], em._DL[1], em.pos_x, getattr(P, 'position_x', 0.0),
                                                     em.pos_z)
     t.channel = em.channel
+    t.hammer_on = em.hammer_on
     t.cbw0, t.cbw1 = em._CBW[0], em._CBW[1]
     t.tb[:] = list(em._TB)
     t.gl[:] = list(em._GL)
@@ -6629,6 +6630,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.f0, n.pan, n.vel, n.chan_vol, n.effort = nt.f0, nt.pan, nt.vel, nt.chan_vol, eff
     n.on, n.off, n.seat = nt.on, nt.off, seat
     n.ch, n.note = nt.ch, nt.note           # (a flam's draw is the note's)
+    n.hammered, n.reslur, n.hammer_on = int(em.hammered), int(em.reslur), em.hammer_on
     if getattr(nt, 'sung', None) is not None:
         n.sung_hz, n.part = float(nt.sung[0]), int(nt.sung[1])     # (a sung part's body)
     n.held = held                           # (a shake's share of the key)
@@ -6811,6 +6813,12 @@ def _note_native_apply(em, props, nt, A, wn, _VB):
         nt.li, nt.ri = out.li, out.ri
         em._DL[0], em._DL[1] = out.dl, out.dr
         em.push_pending = None
+
+
+def _NV_events(cls):
+    """Whether the engine's note played cls's timed noise bands itself (native.heartbeat_voice)."""
+    import native as _NV
+    return _NV.heartbeat_voice(cls)
 
 
 def _NV_grains(cls):
@@ -8139,6 +8147,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _FOLD_STORE = {}        # (ch, note) -> (re-strike time s, store)
     _FOLD_ON = os.environ.get('TUNING_FOLD', '1') not in ('0', 'off', '')
     em.hammer_on = 0.0            # this note's seconds since that pick, if a hammer-on; else 0
+    em.hammered = em.reslur = False     # (a hammer-on at all; a mono or gliss slur: the engine's NoteIn)
     _LFLIP = []             # rows on the Leslie rotor their pitch would not pick (the crossover's copies)
 
     def _mvol():
@@ -8743,9 +8752,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 em.fold = (int(_nx2 * SR), max(32.0, (props.attack_time or 0.004) * SR), _st2)
                 _FOLD_STORE[(nt.ch, nt.note)] = (_nx2, _st2)
         em.hammer_on = 0.0
+        em.hammered = False
         if getattr(props, 'hammer_legato', False):
             if _lgk in legato and nt.ch in _HAM_T0:
                 em.hammer_on = max(0.0, nt.on - _HAM_T0[nt.ch])
+                em.hammered = True
                 at = max(at, HAMMER_ATTACK_S)
             else:
                 _HAM_T0[nt.ch] = nt.on
@@ -8753,7 +8764,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # run -- that is what "blow through the harmonics" means -- so every
         # step takes the legato attack whether or not _legato_ticks saw it.
         # It could not have: these notes did not exist when the file was parsed.
-        if (nt.ch, nt.note, nt.on) in _GLISS or (nt.ch, nt.note, nt.on) in _MONO_SLUR:
+        em.reslur = (nt.ch, nt.note, nt.on) in _GLISS or (nt.ch, nt.note, nt.on) in _MONO_SLUR
+        if em.reslur:
             at = T.slur_attack(at, props)
             _slurred = True
         # ...AND A NOTE FROM SILENCE IS A PUSH OF THE BELLOWS (_push_finish); a
@@ -9146,7 +9158,10 @@ def _prepare(path, tuner='hybrid440', sink=None):
             stops = ()          # (the engine's note shook: its rows are in)
         else:
             stops = _note_shake_noise(em, props, nt, _CBW, _VB, _held, emit_partial, stops)
-        _note_noise_events(em, props, nt, _CBW, _VB, emit_partial)
+        if _wn is not None and NATIVE_TONE == 'on' and _NV_events(nt.pc):
+            em.no_reflections = False   # (the engine's note made its timed noise: its rows are in)
+        else:
+            _note_noise_events(em, props, nt, _CBW, _VB, emit_partial)
         if _wn is not None and NATIVE_TONE == 'on' and getattr(props, 'pulse', False):
             stops = ()              # (the engine's note pulsed: its rows are in)
         else:

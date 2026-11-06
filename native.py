@@ -67,7 +67,8 @@ class VoiceSnap(ctypes.Structure):
                 ('aftersound_fraction', C), ('aftersound_dbs', C), ('aftersound_ratio', C),
                 ('bloom_gain', C), ('bloom_banded', I), ('bloom_swell', C), ('bloom_scatter', C),
                 ('bloom_decay_dbs', C), ('bore_corner_hz', C), ('bore_order', C), ('bell_cutoff_hz', C),
-                ('bell_order', C), ('bore_norm', C), ('pea', I), ('pea_vibrato_cents', C), ('pea_vibrato_hz', C),
+                ('bell_order', C), ('bore_norm', C),
+                ('blare_db_per_khz', C), ('blare_knee_hz', C), ('blare_cap_db', C), ('blare_norm', C), ('pea', I), ('pea_vibrato_cents', C), ('pea_vibrato_hz', C),
                 ('n_bar', I), ('bar_n', I * 16), ('bar_g', C * 16),
                 ('n_md', I), ('n_ma', I), ('n_mp', I), ('mode_decays', C * 400), ('mode_after', (C * 2) * 400),
                 ('mode_phases', C * 400), ('throat', I), ('n_mb', I), ('stroke_tilt_db', C),
@@ -106,7 +107,7 @@ class VoiceSnap(ctypes.Structure):
                 ('pd_max_hz', C), ('pd_dbs', C), ('pd_share', C), ('pap_hz', C), ('pap_n', I),
                 ('tap_kind', I), ('n_tap', I), ('n_gong', I), ('tap_drop', I), ('tap_t', C * 192),
                 ('tap_gain', C), ('tap_jit', C), ('tap_ldb', C), ('gong', I * 16),
-                ('n_hvt', I), ('hvt', C * 512), ('chiff_bore', I)]
+                ('n_hvt', I), ('hvt', C * 512), ('chiff_bore', I), ('fv_set', I), ('fv_cents', C), ('fv_hz', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -121,7 +122,8 @@ class ToneIn(ctypes.Structure):
                                     'fm_phase', 'listener_distance', 'head_radius', 'pan_angle')]
                 + [('room_bands', C * 9), ('pjit', I), ('sps', C), ('dur', C), ('ssc', I)]
                 + [('rev', I), ('rev_n0', C), ('rev_arr', C), ('planes', C * 6), ('order', I), ('radius', C),
-                   ('has_radius', I), ('pps_seed', ctypes.c_longlong), ('dist', C), ('cls', ctypes.c_longlong)])
+                   ('has_radius', I), ('pps_seed', ctypes.c_longlong), ('dist', C), ('cls', ctypes.c_longlong),
+                   ('hammer_on', C)])
 
 
 class VoiceInit(ctypes.Structure):
@@ -220,7 +222,10 @@ class NoteClass(ctypes.Structure):
                    ('noise_rows', I), ('nb_hz', C * 32), ('nb_db', C * 32)]
                 + [(f, C) for f in ('shake_min_s', 'shake_frac', 'shake_xfade_s', 'rise_s', 'settle_db',
                                     'settle_s', 'noise_rel')]
-                + [('n_flam', I), ('flam_s', C), ('flam_db', C), ('flam_rate', C)]
+                + [('n_flam', I), ('flam_s', C), ('flam_db', C), ('flam_rate', C),
+                   ('people_n', I), ('pk_set', I), ('people_lo', C), ('people_hi', C), ('people_jit', C),
+                   ('people_db', C), ('pk_lo', C), ('pk_hi', C), ('pk_db', C), ('pk_q', C),
+                   ('n_nev', I), ('nev', (C * 4) * 64), ('nev_ramp_s', C)]
                 + [('n_ft', I), ('ft_bal', I), ('ft_t', C * 64), ('ft_db', C * 64), ('ft_c', C * 64)]
                 + [('n_layer', I), ('lay_n', I * 32), ('lay_hz', (C * 32) * 32), ('lay_db', (C * 32) * 32),
                    ('lay_rise', C * 32), ('lay_dbs', C * 32), ('lay_len', C * 32), ('played_backwards', I)]
@@ -260,7 +265,10 @@ class NoteClass(ctypes.Structure):
                    ('si_set', I), ('si0', C), ('si1', C),
                    ('n_drone', I), ('drone_note', I * 4), ('drone_k', I * 4), ('part_break_s', C),
                    ('drone_wheel', I), ('n_dratio', I), ('drone_ratio', C * 4), ('drone_gain', C * 4),
-                   ('rd_set', I), ('reverb_dist', C)])
+                   ('rd_set', I), ('reverb_dist', C), ('hammer', I),
+                   ('fall_cents', C), ('fall_at_s', C), ('fall_s', C), ('fall_fade_db', C), ('fall_smear', C),
+                   ('rip_cents', C), ('rip_s', C), ('rip_start_db', C), ('rip_smear', C),
+                   ('cho_send', C), ('pair_set', I), ('pair_lo', C), ('pair_hi', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -280,7 +288,8 @@ class NoteIn(ctypes.Structure):
                    ('rank_drawn_off', I * 32), ('snd_moog', I), ('snd_d', C * 8),
                    ('sung_hz', C), ('part', I), ('dist', C), ('gliss_lv', C),
                    ('ring_on', I), ('ring_f', C * 48), ('fbr', C),
-                   ('sym_drv', ctypes.c_void_p), ('blk', C), ('xp', C)])
+                   ('sym_drv', ctypes.c_void_p), ('blk', C), ('xp', C),
+                   ('hammered', I), ('reslur', I), ('hammer_on', C)])
 
 
 class NoteOut(ctypes.Structure):
@@ -788,7 +797,8 @@ def _modal_drum(cls):
         if (_has and not breath_noise(cls)) or (not _has and not _silent
                                                 and not issubclass(cls, T.SfxWeatherProperties)):
             return False
-        if issubclass(cls, T.SfxWeatherProperties) and _owner(cls, 'voice_vibrato') != 'SynthProperties':
+        if (issubclass(cls, T.SfxWeatherProperties) and _owner(cls, 'voice_vibrato') != 'SynthProperties'
+                and fixed_vibrato(cls) is None):
             return False
     if not (issubclass(cls, T.HandClapProperties) or cym or issubclass(cls, T.WoodPercussionProperties)
             or issubclass(cls, T.SnareDrumProperties) or issubclass(cls, T.BreathNoiseProperties)
@@ -811,6 +821,8 @@ def _modal_drum(cls):
             and decay_target(cls) is None and not (_tube(cls) and _owner(cls, 'harmonic_decay') == 'TubularBellProperties')):
         return False
     mg, mr = cls.mode_gains, cls.mode_ratios
+    if heartbeat_voice(cls):
+        mg = cls.ECG_GAINS                      # (its gains a property: the ECG's, fixed)
     if _tube(cls) and mg is None:
         mg = mr = ()                    # (its modes are its tube's)
     # (a tuned bar's modes may be its bar_modes alone, on the harmonic series:
@@ -890,7 +902,7 @@ def reed_voice(cls):
         return False
     return (cls.mode_gains is None and cls.mode_ratios is None and not cls.strike_point
             and not cls.harmonic_touch and not cls.pickup_points and not (cls.unison_detune or ())
-            and not cls.blare_db_per_khz and bool(cls.bore_corner_hz) and 1 <= (cls.max_harmonic or 0) <= 128
+            and bool(cls.bore_corner_hz) and 1 <= (cls.max_harmonic or 0) <= 128
             and len(cls.formants) <= 16 and len(cls.antiformants) <= 8 and len(cls.body_trim_db or ()) <= 32
             and not cls.inharmonicity_dynamic
             and not any(getattr(cls, a, None) for a in ('grains', 'noise_events', 'pulse', 'ring_db', 'struck_layer',
@@ -955,6 +967,18 @@ def stopped_voice(cls):
     return _owner(cls, '__init__') in _STOPPED_INITS and len(getattr(cls, 'open_strings', ()) or ()) <= 8
 
 
+# THE FIXED VIBRATOS (a voice_vibrato that is its class's depth and rate)
+_FIXED_VIB = {'SfxSkidProperties': ('skid_vibrato_cents', 'skid_vibrato_hz'),
+              'SfxStarshipProperties': ('starship_vibrato_cents', 'starship_vibrato_hz'),
+              'SfxScreamProperties': ('scream_vibrato_cents', 'scream_vibrato_hz')}
+
+
+def fixed_vibrato(cls):
+    """(cents, Hz) of a voice's own fixed vibrato (VoiceSnap.fv_*), None none."""
+    a = _FIXED_VIB.get(_owner(cls, 'voice_vibrato'))
+    return None if a is None else (float(getattr(cls, a[0])), float(getattr(cls, a[1])))
+
+
 def noisy_harmonic(cls):
     """A harmonic voice under NoisyPercussionMixin (the fret noise): its
     partials rolled off and trimmed after the body, its wash its own or the
@@ -1014,13 +1038,12 @@ def harmonic_voice(cls):
     return (cls.mode_gains is None and cls.mode_ratios is None
             and not (cls.strike_point and cls.strike_fills_with_force)
             and not cls.harmonic_touch and not cls.pickup_points and not ((cls.unison_detune or ()) and not dul)
-            and not cls.blare_db_per_khz and bool(cls.bore_corner_hz) and 1 <= (cls.max_harmonic or 0) <= 128
+            and bool(cls.bore_corner_hz) and 1 <= (cls.max_harmonic or 0) <= 128
             and len(cls.formants) <= 16 and len(cls.antiformants) <= 8 and len(cls.body_trim_db or ()) <= 32
             and len(getattr(cls, 'release_click_modes', ()) or ()) <= 16
             and len(getattr(cls, 'ring_db', ()) or ()) <= 48
             and not any(getattr(cls, a, None) for a in ('breath_noise_db', 'grains', 'noise_events', 'pulse',
-                                                         'struck_layer', 'touch_leak_db',
-                                                         'hammer_legato', 'amp_drive')))
+                                                         'struck_layer', 'touch_leak_db', 'amp_drive')))
 
 
 def hit_voice(cls):
@@ -1115,7 +1138,7 @@ def electric_voice(cls):
             and 1 <= (cls.max_harmonic or 0) <= 128 and not cls.max_partial_hz
             and not (cls.inharmonicity_dynamic and not getattr(cls, 'inharmonicity_law', None))
             and not any(getattr(cls, a, None) for a in ('breath_noise_db', 'grains', 'noise_events', 'pulse',
-                                                         'ring_db', 'struck_layer', 'release_click_db', 'hammer_legato',
+                                                         'ring_db', 'struck_layer', 'release_click_db',
                                                          'bend_detents')))
 
 
@@ -1181,7 +1204,7 @@ def wind_voice(cls):
     pts = getattr(cls, 'mode_gains_points', None) or ()
     return ((cls.mode_gains is None or mes) and cls.mode_ratios is None and not pts and not cls.strike_point
             and not cls.harmonic_touch and not cls.pickup_points and not (cls.unison_detune or ())
-            and not cls.blare_db_per_khz and bool(cls.bore_corner_hz)
+            and bool(cls.bore_corner_hz)
             and 1 <= (cls.max_harmonic or 0) <= (512 if mes else 256)
             and not cls.inharmonicity_dynamic and not cls.mode_stroke_tilt
             and len(getattr(cls, 'formants', ()) or ()) <= 16 and len(getattr(cls, 'antiformants', ()) or ()) <= 8
@@ -1251,7 +1274,7 @@ def pipe_voice(cls):
             and len(pts) <= 8 and all(len(g) <= 64 for _, g in pts) and len(cls.mode_gains or ()) <= 64
             and len(cls.mode_gains_low or ()) <= 64 and not cls.mode_stroke_tilt and not cls.strike_point
             and not cls.harmonic_touch and not cls.pickup_points and not (cls.unison_detune or ())
-            and not cls.blare_db_per_khz and not getattr(cls, 'strike_noise_db', None))
+            and not getattr(cls, 'strike_noise_db', None))
 
 
 _MOOG = {}
@@ -1501,6 +1524,15 @@ def drones_ok(cls):
                        and all(note_class(c) is not None for _, c in dc)))
 
 
+def heartbeat_voice(cls):
+    """The heartbeat (SfxHeartbeatProperties): its ECG a mode set with each
+    mode's own phase, its gains a property of fixed values, its blood flow
+    timed noise bands (NoteClass.nev)."""
+    return (_owner(cls, 'mode_phase') == 'SfxHeartbeatProperties' and _owner(cls, 'mode_gains') == 'SfxHeartbeatProperties'
+            and _owner(cls, 'noise_events') == 'SfxHeartbeatProperties' and len(cls.FLOW_EVENTS) <= 64
+            and len(cls.ECG_PHASES) <= 400)
+
+
 def pulse_voice(cls):
     """A voice whose tone is a PRESSURE PULSE (pulse: the gunshot's N-wave,
     blockrender._note_pulse) in place of its series: kind 7, SynthProperties'
@@ -1633,8 +1665,7 @@ def kits():
             spar[SPAR * (q + 1) - 4] = len(ly)
             spar[SPAR * (q + 1) - 3:SPAR * (q + 1) - 3 + len(ly)] = [float(k) for k in ly]
             if (kit_drum(cls) and ss is not None
-                    and not getattr(cls, 'siren_rotor', None) and not getattr(cls, 'alias_sweep', None)
-                    and not getattr(cls, 'sounding_octaves', 0.0)):
+                    and not getattr(cls, 'siren_rotor', None) and not getattr(cls, 'alias_sweep', None)):
                 classes[q] = cls
     # (a key the engine plays only where it plays every layer with it)
     for q in range(16384):
@@ -1691,6 +1722,13 @@ def _board_kind(cls):
         if 'soundboard_gain' in k.__dict__:
             return _BOARD.get(k.__name__)
     return None
+
+
+def _blare_snap(s, p):
+    """A voice's blare (SynthProperties._blare) into its snapshot: its law and its norm."""
+    if p.blare_db_per_khz:
+        s.blare_db_per_khz, s.blare_knee_hz, s.blare_cap_db = p.blare_db_per_khz, p.blare_knee_hz, p.blare_cap_db
+        s.blare_norm = p._blare_norm()
 
 
 def snapshot(props):
@@ -1804,6 +1842,7 @@ def snapshot(props):
             s.bore_corner_hz, s.bore_order = p.bore_corner_hz, p.bore_order
             s.bell_cutoff_hz, s.bell_order = p.bell_cutoff_hz or 0.0, p.bell_order
             s.bore_norm = p._bore_norm()
+            _blare_snap(s, p)
         if isinstance(p, T.SambaWhistleProperties):
             s.pea, s.pea_vibrato_cents, s.pea_vibrato_hz = 1, p.pea_vibrato_cents, p.pea_vibrato_hz
         if _owner(type(p), 'mode_gains_here') == 'MusicBoxProperties':
@@ -1864,6 +1903,8 @@ def snapshot(props):
         s.bore_corner_hz, s.bore_order = p.bore_corner_hz, p.bore_order
         s.bell_cutoff_hz, s.bell_order = p.bell_cutoff_hz or 0.0, p.bell_order
         s.bore_norm = p._bore_norm() if p.bore_corner_hz else 0.0     # (read only through a bore)
+        if p.bore_corner_hz:
+            _blare_snap(s, p)
         if electric_voice(type(p)):
             # an electric guitar: its pick and coils as the class has them (the note's fret moves them)
             c = type(p)
@@ -2085,6 +2126,13 @@ def snapshot(props):
     if s.kind == 4 and measured_series(type(p)):        # A MEASURED SERIES: its table
         s.n_hvt = len(p.mode_gains)
         s.hvt[:s.n_hvt] = [float(x) for x in p.mode_gains]
+    if s.kind == 2 and heartbeat_voice(type(p)):        # ITS MODES' OWN PHASES (the ECG's)
+        s.n_mp = len(p.mode_ratios)
+        for i in range(s.n_mp):
+            s.mode_phases[i] = p.mode_phase(i + 1)
+    fv = fixed_vibrato(type(p))
+    if fv:                                      # A FIXED VIBRATO of its own
+        s.fv_set, s.fv_cents, s.fv_hz = 1, fv[0], fv[1]
     tk = tap_voice(type(p))
     if tk:                                      # A STRUCK VOICE REPEATED: its taps, gongs, strokes
         c = type(p)
@@ -2377,7 +2425,7 @@ _NOTE = {}
 _NOTE_OFF = ('bloom_seconds', 'speech_harmonic_exp', 'speech_harmonic_exp_per_octave', 'wind_skirt_always',
              'unison_spans_part', 'unison_drop_late', 'strike_phase_spread', 'partial_phase_spread',
              'stroke_scatter', 'string_choirs', 'unison_shares_phase', 'directivity_radius', 'strike_in_s',
-             'jitter_by_partial', 'mode_lock_spread', 'played_backwards', 'fold_restrike', 'hammer_legato',
+             'jitter_by_partial', 'mode_lock_spread', 'played_backwards', 'fold_restrike',
              'strike_flam_rate', 'strike_flam_times', 'strike_flam_people', 'strike_noise_tail',
              'strike_noise_layers', 'transposed_from_hz', 'one_shot', 'gate_time', 'tape_length_s',
              'open_string_ring', 'course_keys', 'key_bridge', 'bridge_partner', 'buff_choirs',
@@ -2735,6 +2783,12 @@ def note_class(cls):
                 return (not getattr(cls, 'strike_flam_record', False)
                         and not (getattr(cls, 'strike_flam_exp_db', 0.0) or 0.0)
                         and int(getattr(cls, 'strike_flam', 0) or 0) <= 1)
+            if a == 'strike_flam_people':       # (a few people: their claps and their palms' ring)
+                pp = getattr(cls, 'strike_flam_people', None) or ()
+                pk = getattr(cls, 'strike_flam_people_peak', None)
+                return (len(pp) == 5 and (pk is None or len(pk) == 4)
+                        and not getattr(cls, 'strike_flam_record', False)
+                        and not (getattr(cls, 'strike_flam_rate', 0.0) or 0.0))
             if a == 'strike_flam_times':
                 ft = getattr(cls, 'strike_flam_times', None) or ()
                 return len(ft) <= 64 and all(len(b) in (2, 3) for b in ft)
@@ -2764,7 +2818,8 @@ def note_class(cls):
               and not any(getattr(cls, a, None) for a in _NOTE_OFF
                                         if not (drum and drum_has(a)) and not org_has(a))
               and not any(hasattr(cls, a) for a in _NOTE_ABSENT if not org_has(a))
-              and (getattr(cls, 'mode_phase', None) is None or issubclass(cls, T.TR808Properties) or drum == 5)
+              and (getattr(cls, 'mode_phase', None) is None or issubclass(cls, T.TR808Properties) or drum == 5
+                   or heartbeat_voice(cls))
               and (int(getattr(cls, 'strike_flam', 0) or 0) <= 1
                    or (int(cls.strike_flam) <= 64 and not getattr(cls, 'strike_flam_record', False)
                        and not (getattr(cls, 'strike_flam_exp_db', 0.0) or 0.0)))
@@ -2871,6 +2926,14 @@ def note_class(cls):
         k.flam_s = float(getattr(cls, 'strike_flam_s', 0.0) or 0.0)
         k.flam_db = float(getattr(cls, 'strike_flam_db', 0.0) or 0.0)
         k.flam_rate = float(getattr(cls, 'strike_flam_rate', 0.0) or 0.0)      # (a crowd: bursts a second)
+        _pp = getattr(cls, 'strike_flam_people', None)                         # (a few people clapping)
+        if _pp:
+            k.people_n = int(_pp[0])
+            k.people_lo, k.people_hi, k.people_jit, k.people_db = (float(x) for x in _pp[1:5])
+            _pk = getattr(cls, 'strike_flam_people_peak', None)
+            if _pk:
+                k.pk_set = 1
+                k.pk_lo, k.pk_hi, k.pk_db, k.pk_q = (float(x) for x in _pk)
         k.pjit = int(bool(getattr(cls, 'jitter_by_partial', False)))
         k.ssc = int(bool(getattr(cls, 'stroke_scatter', False)))
         k.gate_time = float(getattr(cls, 'gate_time', None) or 0.0)
@@ -2979,6 +3042,11 @@ def note_class(cls):
             return None
         k.n_cho = len(_cc)
         k.cho_cents[:len(_cc)] = [float(x) for x in _cc]
+        # ...its own pedal, or a detuned pair, where the part sends no CC93 (_note_chorus_send)
+        k.cho_send = float(getattr(cls, 'chorus_send', None) or 0.0)
+        _dp = getattr(cls, 'detuned_pair', None)
+        if _dp and not k.cho_send:
+            k.pair_set, k.pair_lo, k.pair_hi = 1, float(_dp[0]), float(_dp[1])
         k.indian = int(getattr(cls, 'tuning_family', None) == 'indian')     # (FREQ_E's)
         k.meend = int(bool(getattr(cls, 'bend_detents', False)))
         k.meend_range = float(getattr(cls, 'bend_range_semitones', T.BEND_RANGE_SEMITONES))
@@ -3007,6 +3075,22 @@ def note_class(cls):
         # (a melodic note's sounding octaves, in the engine's pitch; a drum's pitch is its set's)
         k.sounding_oct = float(getattr(cls, 'sounding_octaves', 0.0) or 0.0)
         k.xf = float(getattr(cls, 'transposed_from_hz', 0.0) or 0.0)      # (a sound transposed whole: _XP)
+        k.hammer = int(bool(getattr(cls, 'hammer_legato', False)))      # (the fretting hand's legato)
+        k.fall_cents = float(getattr(cls, 'fall_cents', 0.0) or 0.0)    # (a fall, a rip: Song::gliss)
+        if k.fall_cents:
+            k.fall_at_s, k.fall_s, k.fall_fade_db = float(cls.fall_at_s), float(cls.fall_s), float(cls.fall_fade_db)
+            k.fall_smear = float(getattr(cls, 'fall_smear', 0.6))
+        k.rip_cents = float(getattr(cls, 'rip_cents', 0.0) or 0.0)
+        if k.rip_cents:
+            k.rip_s, k.rip_start_db = float(cls.rip_s), float(cls.rip_start_db)
+            k.rip_smear = float(getattr(cls, 'rip_smear', 0.8))
+        if heartbeat_voice(cls):                # (its blood flow: timed noise bands)
+            _ne = v[2].noise_events
+            k.n_nev = len(_ne)
+            for i, e in enumerate(_ne):
+                k.nev[i][:] = [float(x) for x in e]
+            k.nev_ramp_s = float(cls.noise_event_ramp_s)
+            k.noise_rows, k.noise_rel = int(cls.noise_rows), float(cls.noise_rel)     # (the shake's fields)
         k.sfx_prog, k.sfx_key = sfx_prog_key(cls)                         # (its kit key's strokes)
         if pulse_voice(cls):                    # (its N-wave: _note_pulse)
             k.pulse = 1
@@ -3087,11 +3171,9 @@ def note_class(cls):
             k.sl_lo, k.sl_hi = (float(x) for x in getattr(cls, 'struck_layer_range', (73.42, 146.83)))
             k.sl = ctypes.addressof(lk)
             _SL_CLS[cls] = lcls
-        if (getattr(cls, 'chorus_send', None)
-                or getattr(cls, 'detuned_pair', None)
-                or any(getattr(cls, a, None) for a in ('fall_cents', 'rip_cents', 'tremolo_pick_hz',
-                                                        'cut_semitones'))):
-            _NOTE[cls] = False              # (its own distance, its own chorus pedal: Python's)
+        if (any(getattr(cls, a, None) for a in ('tremolo_pick_hz', 'cut_semitones'))
+                or (getattr(cls, 'detuned_pair', None) and len(cls.detuned_pair) != 2)):
+            _NOTE[cls] = False              # (a tremolo picked, a cut: Python's)
             return None
         if breath_noise(cls):
             k.n_bn, k.bn_rows, k.bn_fade_s = (len(cls.breath_noise_db), int(getattr(cls, 'breath_noise_rows', 1)),

@@ -476,6 +476,16 @@ double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
     return s;
 }
 
+/* SynthProperties._blare: a dynamic's change above the knee, dB per kHz, capped */
+static double blare(const VoiceSnap *v, double hz)
+{
+    double x = hz - v->blare_knee_hz;           /* (Python's max and min: the first unless the second is past it) */
+    double d = v->blare_db_per_khz * (x > 0.0 ? x : 0.0) / 1000.0;
+    double c = d < v->blare_cap_db ? d : v->blare_cap_db;
+    d = c > -v->blare_cap_db ? c : -v->blare_cap_db;
+    return pow(10.0, d / 20.0);
+}
+
 /* GrandPianoProperties.harmonic_volume, on SynthProperties' (no bore) */
 static double harmonic_volume(const VoiceSnap *v, int harmonic)
 {
@@ -485,9 +495,13 @@ static double harmonic_volume(const VoiceSnap *v, int harmonic)
     if (s == 0.0)
         return 0.0;
     if (v->kind != 0) {                         /* SynthProperties': its bore, if it has one */
-        if (v->bore_corner_hz != 0.0)
+        if (v->bore_corner_hz != 0.0) {
             s = s * bore_gain(v, v->frequency_x * pow(2.0, v->octave_position) * nv_mode_ratio(v, harmonic))
                 * v->bore_norm;
+            if (v->blare_db_per_khz != 0.0)     /* ...and its blare, renormalised */
+                s *= blare(v, v->frequency_x * pow(2.0, v->octave_position) * nv_mode_ratio(v, harmonic))
+                     * v->blare_norm;
+        }
         if (v->noisy)                           /* ...and the noise's roll-off and trim */
             return s * hf_rolloff(v, nv_mode_ratio(v, harmonic)) * band_trim(v, harmonic);
         return s;
@@ -980,6 +994,12 @@ int nv_voice_vibrato(const VoiceSnap *v, double frequency, int index, double *ou
         out[2] = pyr_uniform(&r, 0.0, 6.283185307179586);
         return 1;
     }
+    if (v->fv_set) {                            /* a fixed vibrato of its own (the skid's, the scream's) */
+        out[0] = pow(2.0, v->fv_cents * 1.4142 / 1200.0) - 1.0;
+        out[1] = v->fv_hz;
+        out[2] = 0.0;
+        return 1;
+    }
     if (v->pea) {                               /* SambaWhistleProperties: the pea's flutter */
         out[0] = pow(2.0, v->pea_vibrato_cents * 1.4142 / 1200.0) - 1.0;
         out[1] = v->pea_vibrato_hz;
@@ -1290,6 +1310,21 @@ static void bore_norm(const VoiceInit *c, VoiceSnap *s)
         shaped += g * g;
     }
     s->bore_norm = shaped > 0.0 ? pow(ref / shaped, 0.5) : 1.0;
+    if (s->blare_db_per_khz != 0.0) {
+        /* _blare_norm: the bored series' power over the blared */
+        ref = shaped = 0.0;
+        for (int h = 1; h <= top; h++) {
+            double a = nv_series_volume(s, h);
+            if (a == 0.0)
+                continue;
+            double hz = f0 * nv_mode_ratio(s, h);
+            a *= bore_gain(s, hz);
+            ref += a * a;
+            double g = a * blare(s, hz);
+            shaped += g * g;
+        }
+        s->blare_norm = shaped > 0.0 ? pow(ref / shaped, 0.5) : 1.0;
+    }
 }
 
 void nv_voice_regain(const VoiceInit *c, VoiceSnap *s, double k)

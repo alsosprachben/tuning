@@ -339,6 +339,32 @@ struct Song {
     // sound controls (_MOOG_KVAR: grid point, knob row)
     std::map<std::tuple<long long, const void *, int>, int> mkmove;
     std::map<int, std::vector<std::pair<long long, std::array<double, 9>>>> mkvar;
+
+    // WHAT A PLAY APPENDS (nv_play), as it stood before the first: a play
+    // again (register.cpp's, a bigger row store) rewinds to it
+    struct PlayMark {
+        bool set = false;
+        size_t push, jacks, rel, grain, mft, mkn, mlay, mspan, mf;
+        std::map<std::pair<long long, std::array<double, 9>>, int> mkrow;
+        std::map<std::tuple<long long, const void *, int>, int> mkmove;
+        std::map<int, std::vector<std::pair<long long, std::array<double, 9>>>> mkvar;
+    } pmark;
+    void play_mark()
+    {
+        PlayMark &m = pmark;
+        if (!m.set) {
+            m.set = true;
+            m.push = push_rows.size(); m.jacks = rel_jacks.size(); m.rel = rel_rows.size();
+            m.grain = grain_rows.size(); m.mft = mft.size(); m.mkn = mkn.size(); m.mlay = mlay.size();
+            m.mspan = mspan.size(); m.mf = mf104.size();
+            m.mkrow = mkrow; m.mkmove = mkmove; m.mkvar = mkvar;
+            return;
+        }
+        push_rows.resize(m.push); rel_jacks.resize(m.jacks); rel_rows.resize(m.rel);
+        grain_rows.resize(m.grain); mft.resize(m.mft); mkn.resize(m.mkn); mlay.resize(m.mlay);
+        mspan.resize(m.mspan); mf104.resize(m.mf);
+        mkrow = m.mkrow; mkmove = m.mkmove; mkvar = m.mkvar;
+    }
     // ITS GLIDES (_prep_glide_sources, from finish): each note's source key, -1 none
     std::vector<int> glide_src;
 
@@ -683,6 +709,14 @@ struct Song {
         return 0;
     }
 
+    // _GLISS_DROP: every note of e's (channel, key, onset)
+    void drop_key(std::vector<char> &drop, const Ev &e) const
+    {
+        for (size_t j = 0; j < notes.size(); j++)
+            if (notes[j].ch == e.ch && notes[j].note == e.note && notes[j].on == e.on)
+                drop[j] = 1;
+    }
+
     bool gliss_done = false;
     void gliss(const NoteClass *const *K)
     {
@@ -743,9 +777,90 @@ struct Song {
             x.gl_dt = dt;
             steps.push_back(x);
             // (the Python drops every note of this (channel, key, onset))
-            for (size_t j = 0; j < notes.size(); j++)
-                if (notes[j].ch == e.ch && notes[j].note == e.note && notes[j].on == e.on)
-                    drop[j] = 1;
+            drop_key(drop, e);
+            any = true;
+        }
+        // A FALL IS A GLISS DOWN (fall_cents: _prep_gliss's falls): the note
+        // held fall_at_s, then down the lattice a semitone a step over fall_s,
+        // each step fading fall_fade_db across the run; a key let go before
+        // the fall begins releases as any note does
+        const size_t nn = notes.size();
+        for (size_t i = 0; i < nn; i++) {
+            const Ev &e = notes[i];
+            if (drop[i] || e.drum || e.prog < 0 || e.prog > 127)
+                continue;
+            const NoteClass *k = K[e.kidx()];
+            if (!k || !k->fall_cents)
+                continue;
+            double tf = e.on + k->fall_at_s;
+            if (e.off <= tf)
+                continue;
+            int ns = (int)nearbyint(k->fall_cents / 100.0);
+            ns = ns > 2 ? ns : 2;
+            double dt = k->fall_s / ns;
+            drop_key(drop, e);
+            Ev x = e;
+            x.off = tf;
+            steps.push_back(x);
+            for (int q = 0; q < ns; q++) {
+                int p = e.note - 1 - q;
+                if (p < 0)
+                    break;
+                double t0 = tf + q * dt;
+                Ev y = e;
+                y.note = p;
+                y.on = t0;
+                y.off = t0 + dt * 1.35;
+                y.gl = 1;
+                y.gl_lv = pow(10.0, -k->fall_fade_db * (double)(q + 1) / ns / 20.0);
+                y.gl_sm = k->fall_smear;
+                y.gl_prev = e.note - q;
+                y.gl_dt = dt;
+                steps.push_back(y);
+            }
+            any = true;
+        }
+        // ...AND A RIP, the fall's mirror (rip_cents): from the onset up the
+        // lattice from rip_cents below over rip_s, crescendoing from
+        // rip_start_db under; the note proper from where the run arrives
+        for (size_t i = 0; i < nn; i++) {
+            const Ev &e = notes[i];
+            if (drop[i] || e.drum || e.prog < 0 || e.prog > 127)
+                continue;
+            const NoteClass *k = K[e.kidx()];
+            if (!k || !k->rip_cents)
+                continue;
+            int ns = (int)nearbyint(k->rip_cents / 100.0);
+            ns = ns > 2 ? ns : 2;
+            double T = k->rip_s;
+            if (e.off <= e.on + T)
+                continue;                   // a note shorter than its rip: played plain
+            double dt = T / ns;
+            drop_key(drop, e);
+            for (int q = 0; q < ns; q++) {
+                int p = e.note - ns + q;
+                if (p < 0)
+                    continue;
+                double t0 = e.on + q * dt;
+                Ev y = e;
+                y.note = p;
+                y.on = t0;
+                y.off = t0 + dt * 1.35;
+                y.gl = 1;
+                y.gl_lv = pow(10.0, -k->rip_start_db * (double)(ns - q) / ns / 20.0);
+                y.gl_sm = k->rip_smear;
+                y.gl_prev = q ? p - 1 : -1;
+                y.gl_dt = dt;
+                steps.push_back(y);
+            }
+            Ev y = e;
+            y.on = e.on + T;
+            y.gl = 1;
+            y.gl_lv = 1.0;
+            y.gl_sm = k->rip_smear;
+            y.gl_prev = e.note - 1;
+            y.gl_dt = dt;
+            steps.push_back(y);
             any = true;
         }
         if (!any)
@@ -2464,6 +2579,9 @@ const void *nv_song_sym_get(void *s, long long mix)
 
 void nv_song_sym_reset(void *s) { ((nv::Song *)s)->sym_drv.clear(); }
 
+// a play's start (nv_play): the song's play-made rows as they were before the first
+void nv_song_play_mark(void *s) { ((nv::Song *)s)->play_mark(); }
+
 void nv_song_meend(void *s, long long ch, int note, double on, double r0, double row)
 {
     ((nv::Song *)s)->meend[nv::NoteKey{ch, note, on}] = std::make_pair(r0, row);
@@ -2543,6 +2661,8 @@ int nv_song_pitch_level_kc(void *s, int i, int effort_tilt, const NoteClass *K, 
 {
     int r = nv_song_pitch_level_ks(s, i, effort_tilt, K->indian, K->sounding_oct, out);
     const nv::Song *S = (nv::Song *)s;
+    if (r == 2 && K->sounding_oct != 0.0)
+        out[0] *= pow(2.0, K->sounding_oct);   // a drum's sounding octaves (the helicopter's rotor), after its stroke's pitch
     if (r == 1 && K->scale_n && K->scale_tonic >= 0 && K->scale_tonic < 128)
         out[0] = S->scaled(S->notes[i].ch, S->notes[i].note, S->notes[i].on, K, out[0]);
     return r;

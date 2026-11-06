@@ -319,7 +319,8 @@ static int emit_col(const char *n)
 // The channels nch of chans, each's (rate, depth, stereo, scatter) in cfg;
 // mask nmask long (NULL: every row). Returns the sidebands made.
 extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
-                                      const double *sends, const int *ncents, const double *cents, double sr)
+                                      const double *sends, const int *ncents, const double *cents,
+                                      const int *kinds, double sr)
 {
     // chorus.py's SWEEP_HZ, DELAY_S, SWEEP_DEPTH, FLOOR
     static const double SWEEP_HZ[4] = {0.21, 0.29, 0.17, 0.34}, DELAY_S[4] = {0.007, 0.011, 0.013, 0.017};
@@ -350,6 +351,41 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
                 sel.push_back(i);
         if (sel.empty())
             continue;
+        if (kinds && kinds[q] == 1) {
+            // A DETUNED PAIR (chorus._pair): the rows moved down and left, a
+            // copy up and right, each at half power (pair_side), the copy
+            // delayed by the line's first delay
+            double lo = pow(2.0, cents[8 * q] / 1200.0), hi = pow(2.0, cents[8 * q + 1] / 1200.0);
+            const double PAIR_PAN = 0.5;
+            double gl0 = pow(0.5 * (1.0 - PAIR_PAN * -1), 0.5), gr0 = pow(0.5 * (1.0 + PAIR_PAN * -1), 0.5);
+            double gl1 = pow(0.5 * (1.0 - PAIR_PAN * 1), 0.5), gr1 = pow(0.5 * (1.0 + PAIR_PAN * 1), 0.5);
+            double half = pow(0.5, 0.5), delay = DELAY_S[0];
+            for (long long i : sel) {
+                double *r = rows + (size_t)NCOLS * i;
+                if (nf[i] * hi < sr * 0.5) {
+                    size_t o = extra.size();
+                    extra.insert(extra.end(), r, r + NCOLS);
+                    double *e = extra.data() + o;
+                    e[cOM] = om[i] * hi;
+                    e[cNF] = nf[i] * hi;
+                    e[cP0] = p0[i] * hi - om[i] * hi * delay * sr;
+                    e[cP0R] = p0R[i] * hi - om[i] * hi * delay * sr;
+                    e[cAL] = aL[i] * gl1;
+                    e[cAR] = aR[i] * gr1;
+                    e[cAM] = aM[i] * half;
+                    src.push_back(i);
+                    made++;
+                }
+                r[cOM] = om[i] * lo;
+                r[cNF] = nf[i] * lo;
+                r[cP0] = p0[i] * lo;
+                r[cP0R] = p0R[i] * lo;
+                r[cAL] = aL[i] * gl0;
+                r[cAR] = aR[i] * gr0;
+                r[cAM] = aM[i] * half;
+            }
+            continue;
+        }
         double wet = pow(send / (double)nc, 0.5), dry = pow(1.0 - send, 0.5), gain = wet;
         for (int ci = 0; ci < nc; ci++) {
             double ratio = pow(2.0, cents[8 * q + ci] / 1200.0);

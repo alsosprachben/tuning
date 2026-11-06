@@ -169,7 +169,7 @@ static double *row_new(Rows *R)
 }
 
 /* _Emitter.emit_partial for a direct partial of this note (no fold, no
- * hammer-on, no compressor, no GS EQ, the source at its own distance), and
+ * compressor, no GS EQ, the source at its own distance), and
  * its images. Returns 0 if the row store is full. */
 /* blockrender's _refl_norm: sqrt(E(1) / E(d)), E = 1 + the images'
  * energy against the direct sound, for this voice at f moved out by d --
@@ -294,6 +294,14 @@ static int emit_fwd(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, 
         if (t->reflect)
             ga *= refl_norm(v, t, nomf, px, pz, dm);
         ampL *= ga; ampR *= ga; ampM *= ga;
+    }
+    if (t->hammer_on > 0.0) {
+        /* A HAMMER-ON / PULL-OFF (hammer_legato): the partial where its own
+           decay has got to since the pick (logr, then the aftersound's
+           logrA), less what the fretting finger costs (HAMMER_LOSS_DB) */
+        double hg = ((1.0 - aft) * exp(-logr * t->hammer_on) + aft * exp(-logrA * t->hammer_on))
+                    * pow(10.0, -3.0 / 20.0);
+        ampL *= hg; ampR *= hg; ampM *= hg;
     }
     double rd = v->room[0];
     *azimuth = atan2(px, rd > 1e-6 ? rd : 1e-6);
@@ -1193,6 +1201,48 @@ int nv_breath(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, con
                       0.0, 0.0, 1.0, 0.0, t->cc, t->crl, 0.0, t->csc, -1.0, 0.0, 0.0, 0.0, VB, pos_x, 0))
                 return -1;
         }
+    return R.n;
+}
+
+/* blockrender._note_noise_events: TIMED NOISE BANDS -- each (Hz, dB, start
+ * s, end s) a band sounding over its own span of the note, k rows across it
+ * sharing its level, ramped in and out over ramp samples, through the
+ * radiation and the ears; no images, the emitter as the knock leaves it */
+int nv_events(const VoiceSnap *v, const ToneIn *t, int ne, const double (*ev)[4], int k, double ramp,
+              double pos_x, double *rows, int cap, double *qacc, double *azimuth)
+{
+    Rows R = {rows, 0, cap};
+    double VB[3] = {0.0, 5.5, 0.0};
+    double sr = t->sr;
+    for (int e = 0; e < ne; e++)
+        for (int j = 0; j < k; j++) {
+            double hf = ev[e][0] * pow(2.0, ((double)j - 0.5 * (k - 1)) / (3.0 * k));
+            if (hf >= 0.45 * sr)
+                continue;
+            double gM = v->gain * pow(10.0, (ev[e][1] - 10.0 * log10((double)k)) / 20.0) * nv_radiation_gain(v, hf, 0.0, 0);
+            double gl = nv_hrtf_gain(v, hf, t->li), gr = nv_hrtf_gain(v, hf, t->ri);
+            if (!emit(v, t, &R, qacc, azimuth, NULL, 0, 2 * PI * hf / sr, gM * gl, gM * gr, gM, hf,
+                      t->non + ev[e][2] * sr, t->non + ev[e][3] * sr, ramp, ramp, t->chiff, 0.0, 0.0, 0.0, 1.0, 0.0,
+                      t->cc, t->crl, 0.0, t->csc, -1.0, 0.0, 0.0, 0.0, VB, pos_x, 0))
+                return -1;
+        }
+    return R.n;
+}
+
+/* _note_strike_noise's PALMS RINGING (strike_flam_people_peak): one decaying
+ * sine at the person's pitch, at db (the caller's sum, as the Python adds
+ * it), dying at plr, through the burst's balance -- with the burst, no images */
+int nv_palm(const VoiceSnap *v, const ToneIn *t, double hz, double db, double plr, double bon, double slen,
+            double sfade, double gl, double gr, double pos_x, double *rows, int cap, double *qacc, double *azimuth)
+{
+    Rows R = {rows, 0, cap};
+    double VB[3] = {0.0, 5.5, 0.0};
+    double sr = t->sr;
+    double gM = v->gain * pow(10.0, db / 20.0);
+    if (!emit(v, t, &R, qacc, azimuth, NULL, 0, 2 * PI * hz / sr, gM * nv_hrtf_gain(v, hz, t->li) * gl,
+              gM * nv_hrtf_gain(v, hz, t->ri) * gr, gM, hz, bon, bon + slen, sfade, 0.01 * sr, t->chiff, plr, 0.0,
+              0.0, 0.0, 0.0, t->cc, t->crl, 0.0, t->csc, -1.0, 0.0, 0.0, 0.0, VB, pos_x, 0))
+        return -1;
     return R.n;
 }
 

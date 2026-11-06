@@ -100,6 +100,11 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         at = K->si0 + (K->si1 - K->si0) * pymin(1.0, pymax(0.0, n->vel / 127.0));
     if (n->slurred && K->legato_set)
         at = pymin(at, K->legato_attack_s);
+    if (n->hammered) {                  // a hammer-on: a fingertip's onset (HAMMER_ATTACK_S)
+        at = pymax(at, 0.012);
+        if (n->reslur && K->legato_set)
+            at = pymin(at, K->legato_attack_s);
+    }
     double rt = K->release_valve_set ? K->release_valve_time : K->chiff_max_valve_time;
     if (K->speech_cycles > 0.0 && f0 > 0.0) {
         at = at + K->speech_cycles / f0;
@@ -150,6 +155,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     t.jitter_scale = (1.0 + o.pitch_jitter) * (n->xp != 0.0 ? n->xp : 1.0);
     t.transposed = n->xp != 0.0 && n->xp != 1.0;  // (every frequency moved by the key: past Nyquist, dropped)
     t.nyq_om = n->nyq_om;
+    t.hammer_on = n->hammer_on;
     t.dl = o.left_hrtf_delay * SR; t.dr = o.right_hrtf_delay * SR;
     t.pos_x0 = t.pos_x_props = s.position_x;
     t.pos_z = s.position_z;
@@ -206,6 +212,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         }
         size_t cap_b = (size_t)std::max(64, nfl);
         std::vector<double> boff(cap_b, 0.0), bdb(cap_b, 0.0), bgl(cap_b, 1.0), bgr(cap_b, 1.0);
+        std::vector<double> bpk;            // each burst's palms' pitch (a person's; 0 none)
         int nb = 1;
         if (K->n_ft) {
             // ...OR A MACHINE'S (strike_flam_times): its bursts where its
@@ -218,6 +225,50 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
                     bgl[b] = sqrt(2.0) * cos(K->ft_c[b]);
                     bgr[b] = sqrt(2.0) * sin(K->ft_c[b]);
                 }
+            }
+        } else if (K->people_n > 0) {
+            // ...OR A FEW PEOPLE (strike_flam_people): each at their own
+            // steady rate, place and distance, in raggedly within 0.2 s,
+            // stopping in the note's last third; each one's palms' pitch
+            PyRandom pr;
+            pyr_seed(&pr, (long long)nearbyint(n->on * 1e6) * 137 + (long long)n->note * 11 + n->ch);
+            double pspan = pymax(0.0, (noff - non) / SR);
+            std::vector<double> bt, bl, ba;
+            for (int p = 0; p < K->people_n; p++) {
+                double per = 1.0 / pyr_uniform(&pr, K->people_lo, K->people_hi);
+                double plvl = -pyr_uniform(&pr, 0.0, K->people_db);
+                double pang = pyr_uniform(&pr, 0.08, 0.92) * 0.5 * M_PI;
+                double phz = K->pk_set ? K->pk_lo * pow(K->pk_hi / K->pk_lo, pyr_random(&pr)) : 0.0;
+                double pt = pyr_uniform(&pr, 0.0, 0.2);
+                double pend = pspan * pyr_uniform(&pr, 0.67, 1.0);
+                while (pt < pend) {
+                    bt.push_back(pt);
+                    bl.push_back(plvl + pyr_gauss(&pr, 0.0, 1.0));
+                    ba.push_back(pang);
+                    bpk.push_back(phz);
+                    pt += per * pymax(0.5, pyr_gauss(&pr, 1.0, K->people_jit));
+                }
+            }
+            if (!bt.empty()) {
+                double t0 = bt[0], l0 = bl[0];
+                for (size_t b = 1; b < bt.size(); b++) {
+                    t0 = pymin(t0, bt[b]);
+                    l0 = pymax(l0, bl[b]);
+                }
+                nb = (int)bt.size();
+                boff.assign(nb, 0.0); bdb.assign(nb, 0.0); bgl.assign(nb, 1.0); bgr.assign(nb, 1.0);
+                for (int b = 0; b < nb; b++) {
+                    boff[b] = bt[b] - t0;
+                    bdb[b] = bl[b] - l0;
+                    bgl[b] = sqrt(2.0) * cos(ba[b]);
+                    bgr[b] = sqrt(2.0) * sin(ba[b]);
+                }
+            } else {
+                nb = 1;
+                boff[0] = bdb[0] = 0.0;
+                bgl[0] = sqrt(2.0) * cos(0.25 * M_PI);
+                bgr[0] = sqrt(2.0) * sin(0.25 * M_PI);
+                bpk.assign(1, 0.0);
             }
         } else if (nfl > 1) {
             if (nfl > 64 && K->flam_rate <= 0.0)
@@ -243,6 +294,33 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         tk.gain = s.gain; tk.B = 0.0; tk.sjit = 0.0; tk.reflect = 0;
         tk.cbw0 = -0.25; tk.cbw1 = 0.0;
         out->n_knock = 0;
+        // A PERSON'S PALMS RINGING after each clap: the clap's colour at
+        // their pitch (np.interp on log Hz) + peak dB + the register's, the
+        // burst's and the calibration's, dying at 27.29 dB/s a hertz of width
+        auto palm = [&](int b, double bd, double bon) -> int {
+            double hz = bpk[b], x = log(hz), cdb;
+            int nt_ = K->n_strike;
+            if (x < log(K->strike_hz[0]))
+                cdb = K->strike_db[0];
+            else if (x > log(K->strike_hz[nt_ - 1]))
+                cdb = K->strike_db[nt_ - 1];
+            else {
+                int j = 0;
+                while (j < nt_ - 1 && !(x < log(K->strike_hz[j + 1])))
+                    j++;
+                double xj = log(K->strike_hz[j]);
+                if (j == nt_ - 1 || x == xj)
+                    cdb = K->strike_db[j];
+                else {
+                    double slope = (K->strike_db[j + 1] - K->strike_db[j]) / (log(K->strike_hz[j + 1]) - xj);
+                    cdb = slope * (x - xj) + K->strike_db[j];
+                }
+            }
+            double db = cdb + K->pk_db + reg + bd + K->strike_cal_db;
+            double plr = log(10.0) / 20.0 * 27.29 * hz / K->pk_q;
+            return nv_palm(&s, &tk, hz, db, plr, bon, slen, sfade, bgl[b], bgr[b], s.position_x,
+                           rows + NCOLS * total, cap - total, qacc, azimuth);
+        };
         for (int b = 0; b < nb; b++) {
             double bon = non + K->strike_at_s * SR + boff[b] * SR;
             int k = nv_strike_bal(&s, &tk, K->n_strike, K->strike_hz, K->strike_db, reg, bdb[b], K->strike_cal_db,
@@ -252,6 +330,13 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
                 return -1;
             out->n_knock += k;
             total += k;
+            if (b < (int)bpk.size() && bpk[b] > 0.0) {
+                k = palm(b, bdb[b], bon);
+                if (k < 0)
+                    return -1;
+                out->n_knock += k;
+                total += k;
+            }
         }
         // ...AND A SLOWER TAIL under it (strike_noise_tail): the bursts again,
         // quieter and longer -- a music box's comb buzzing under its pin's snap
@@ -266,6 +351,13 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
                     return -1;
                 out->n_knock += k;
                 total += k;
+                if (b < (int)bpk.size() && bpk[b] > 0.0) {
+                    k = palm(b, bdb[b] + K->tail_db, bon);
+                    if (k < 0)
+                        return -1;
+                    out->n_knock += k;
+                    total += k;
+                }
             }
         }
         // ...AND MORE STRUCK THINGS THAN ONE (strike_noise_layers): each its
@@ -341,6 +433,20 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         out->n_knock += k;
         total += k;
         out->grain1 = total;
+        no_refl = 0;
+    }
+
+    // TIMED NOISE BANDS (_note_noise_events: the heartbeat's blood flow),
+    // beside the partials, its width the noise's, no images
+    if (K->n_nev) {
+        ToneIn te = t;
+        te.cbw0 = -K->noise_rel; te.cbw1 = 0.0; te.reflect = 0;
+        int k = nv_events(&s, &te, K->n_nev, K->nev, K->noise_rows, K->nev_ramp_s * SR, s.position_x,
+                          rows + NCOLS * total, cap - total, qacc, azimuth);
+        if (k < 0)
+            return -1;
+        out->n_knock += k;
+        total += k;
         no_refl = 0;
     }
 
@@ -849,6 +955,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
 {
     nv_song_gliss(song, K);                 // the valved glisses walked (_prep_gliss), once
     nv_song_sym_reset(song);                // (the strings' drivers: this play's)
+    nv_song_play_mark(song);                // (its rows, Moogs and echoes: this play's, a retry's too)
     nv_refl_memo_reset();                   // (each _prepare its own _RNORM)
     int nn = nv_song_n_notes(song);
     std::vector<int> order(nn);
@@ -872,6 +979,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
     });
     long long total = 0;
     std::map<long long, double> push_t0;    // each channel's bellows' push, when it began (_PUSH_T0)
+    std::map<long long, double> ham_t0;     // each channel's last pick (_HAM_T0: hammer_legato)
     PyRandom rnd;                           // tonelib.RND_STREAM, as prepare reseeds it
     pyr_seed(&rnd, 0);
     double carry_radius = NAN;              // the emitter's radius note to note (an organ's last pipe)
@@ -895,8 +1003,10 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             n.slurred = sl[0];
             n.slur_out = sl[1];
         }
+        const int fsl = n.slurred;          // (the file's own: a hammer-on's)
+        int ms = 0;
         {
-            int mc = 0, ms = 0;                 // mono mode's handoffs (_MONO_CUT, _MONO_SLUR)
+            int mc = 0;                         // mono mode's handoffs (_MONO_CUT, _MONO_SLUR)
             nv_song_mono(song, i, &mc, &ms);
             n.mcut = mc;
             n.slurred = n.slurred || ms;
@@ -906,6 +1016,18 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         n.gliss_lv = is_gl ? glv[0] : 0.0;
         if (is_gl)
             n.slurred = 1;                  // (not retongued: every step slurs)
+        // A GUITAR'S LEGATO IS THE FRETTING HAND (hammer_legato): a note over
+        // the one before hammered, carried on from the last pick; a picked
+        // note starts the chain again
+        n.hammered = 0; n.reslur = ms || is_gl; n.hammer_on = 0.0;
+        if (k->hammer) {
+            if (fsl && ham_t0.count(ch)) {
+                n.hammered = 1;
+                n.hammer_on = nv::pymax(0.0, dv[0] - ham_t0[ch]);
+            } else {
+                ham_t0[ch] = dv[0];
+            }
+        }
         n.channel = (double)nv_song_mix(song, i);      // (its tone's mix channel: em.channel)
         n.br = (ch >= 0 && ch < nbr) ? br[ch] : -1.0;
         n.fbr = n.br;                       // (the fader's: the other strings' row, off the wheel)
