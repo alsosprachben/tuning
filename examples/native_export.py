@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Export what the native renderer needs from the Python, once: OUT.nvx
 
-    python3 examples/native_export.py OUT.nvx [--tuner=NAME] [--live [--room=NAME] [--fresh]]
+    python3 examples/native_export.py OUT.nvx [--tuner=NAME] [--room=NAME] [--live [--fresh]]
 
 native/nvrender renders a General MIDI piano file to the dry WAV and room
 sidecar blockrender writes, with no Python at runtime. What it cannot work out
@@ -29,6 +29,9 @@ itself is written here, from the classes it was checked against:
 
 The kernel libraries are blockrender's (built here if they are not yet):
 their paths go in too. Binary, little-endian, for this machine.
+
+--room: the voices packed in that room, a file's (a GS file's reverb macro
+chose it: nvrender refuses one the export's room is not).
 
 --live: for native/nvlive, at live's rate and block (48 kHz, 128 a block,
 live's tuner, hybrid, unless --tuner says), and after the rest a LIVE
@@ -91,6 +94,10 @@ def main(argv):
         if "master_db" in sess:
             import tonelib as _T
             _T.master_gain = 10.0 ** (float(sess["master_db"]) / 20.0)
+    elif opt.get("room"):
+        # A FILE'S ROOM (blockrender.prepare: a GS file's reverb macro chose it)
+        import tonelib as _T
+        _T.set_room(opt["room"])
     import damper as DM
     import native as N
     import patch_map as PM

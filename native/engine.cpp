@@ -174,6 +174,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     memcpy(t.planes, n->planes, sizeof t.planes);
     t.order = n->order;
     t.dist = n->dist;
+    memcpy(t.gs_eq, n->gs_eq, sizeof t.gs_eq);
     t.cls = (long long)(intptr_t)K;         // (its class: _refl_norm's memo key, type(props))
     if (s.sect_n > 1 && s.sect_seats) {     // A SECTION'S: the note's ears are its first player's desk's
         double e[4];
@@ -1094,6 +1095,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         n.from_song = 1; n.song_index = i;
         n.press = nv_song_pressure(song, ch, iv[0], dv[0], dv[1]);    // (_pressure_of: to its key-up)
         n.dist = song_dist(song, ch, dv[0], n.sr, k);  // its distance: its part's CC91 (_src_dist)
+        nv_song_gs_eq_of(song, ch % 256, n.gs_eq);     // the file's GS EQ, its part's (gsefx.part_of)
         n.sung_hz = nv_song_tess(song, ch);     // a sung part's tessitura, its declared part (_prep_choir_parts)
         n.part = nv_song_part(song, ch);
         double pv[3];

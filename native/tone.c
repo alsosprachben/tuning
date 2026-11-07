@@ -295,6 +295,13 @@ static int emit_fwd(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, 
             ga *= refl_norm(v, t, nomf, px, pz, dm);
         ampL *= ga; ampR *= ga; ampM *= ga;
     }
+    if (t->gs_eq[0] > 0.0) {
+        /* THE FILE'S GS EQ (gs_eq_gain): a low and a high shelf, first order,
+           at the partial's frequency -- its reflections with it */
+        double x = pow(nomf / t->gs_eq[0], 2.0), y = pow(nomf / t->gs_eq[1], 2.0);
+        double ge = pow(10.0, (t->gs_eq[2] / (1.0 + x) + t->gs_eq[3] * y / (1.0 + y)) / 20.0);
+        ampL *= ge; ampR *= ge; ampM *= ge;
+    }
     if (t->hammer_on > 0.0) {
         /* A HAMMER-ON / PULL-OFF (hammer_legato): the partial where its own
            decay has got to since the pick (logr, then the aftersound's

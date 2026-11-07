@@ -129,7 +129,7 @@ class ToneIn(ctypes.Structure):
                 + [('room_bands', C * 9), ('pjit', I), ('sps', C), ('dur', C), ('ssc', I)]
                 + [('rev', I), ('rev_n0', C), ('rev_arr', C), ('planes', C * 6), ('order', I), ('radius', C),
                    ('has_radius', I), ('pps_seed', ctypes.c_longlong), ('dist', C), ('cls', ctypes.c_longlong),
-                   ('hammer_on', C)])
+                   ('hammer_on', C), ('gs_eq', C * 4)])
 
 
 class VoiceInit(ctypes.Structure):
@@ -279,7 +279,8 @@ class NoteClass(ctypes.Structure):
                    ('efx_set', I), ('efx_eq_set', I), ('efx_level', C), ('efx_od', C), ('efx_eq', C * 5),
                    ('efx_rev', C), ('efx_cf', I), ('cf_p', C * 40), ('efx_dly', I), ('dly_p', C * 24),
                    ('efx_place', C * 13), ('efx_trem', I), ('trem_cfg', C * 4),
-                   ('flt_set', I), ('flt_ty', I), ('flt_k', I), ('flt_p', C * 3), ('flt_c', C * 5)])
+                   ('flt_set', I), ('flt_ty', I), ('flt_k', I), ('flt_p', C * 3), ('flt_c', C * 5),
+                   ('efx_bus', I), ('bus_p', C * 12)])
 
 
 class NoteIn(ctypes.Structure):
@@ -301,7 +302,7 @@ class NoteIn(ctypes.Structure):
                    ('ring_on', I), ('ring_f', C * 48), ('fbr', C),
                    ('sym_drv', ctypes.c_void_p), ('blk', C), ('xp', C),
                    ('hammered', I), ('reslur', I), ('hammer_on', C), ('siren_set', I), ('siren_end', C),
-                   ('press', C)])
+                   ('press', C), ('gs_eq', C * 4)])
 
 
 class NoteOut(ctypes.Structure):
@@ -442,6 +443,7 @@ def _load():
             ('nv_pow_n', None, [ctypes.c_long, ctypes.c_void_p, I, ctypes.c_void_p, I, ctypes.c_void_p]),
             ('nv_cabs_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_log_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_log10_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_cexp_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_cangle_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_tuning_table', I, [ctypes.c_char_p, I, C, ctypes.c_void_p, ctypes.c_void_p]),
@@ -474,7 +476,7 @@ def _load():
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long,
                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                              ctypes.c_long]),
+                              ctypes.c_long, ctypes.c_void_p, I]),
             ('nv_leslie_expand', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I, ctypes.c_void_p,
                                       ctypes.c_void_p, ctypes.c_void_p, C, ctypes.c_void_p, ctypes.c_void_p,
                                       ctypes.c_void_p, ctypes.c_void_p]),
@@ -1020,7 +1022,8 @@ def efx_chain(cls):
     import gsefx as G
     e = getattr(cls, 'insertion_efx', None)
     ch = G.chain(G.tone_state(*e)) if e else None
-    if ch is not None and (any(ch.get(a) for a in ('bus', 'comp', 'par', 'rotary'))
+    if ch is not None and (any(ch.get(a) for a in ('comp', 'par', 'rotary'))
+                           or (ch.get('bus') and ch['bus'][0] not in ('lofi', 'comp', 'limit'))
                            or (ch.get('filter') and not (
                                (ch['filter']['ctrl'][0] == 'sweep' and not ch['filter']['ctrl'][5])
                                or ch['filter']['ctrl'][0] == 'wah'))
@@ -3093,6 +3096,17 @@ def note_class(cls):
                                   float('nan') if _c[4] is None else float(bool(_c[4])), float(_c[5] or 0.0)]
                 else:
                     k.flt_c[0] = float(_c[1])
+            if _ex.get('bus'):              # ITS BUS (efxbus: Lo-Fi, a compressor or limiter)
+                import efxbus as _EBX
+                _pr = _EBX.make(_ex['bus'][0], BR.SR, **_ex['bus'][1])
+                _mx = _ex.get('bus_mix') or (0.0, 1.0)
+                if _ex['bus'][0] == 'lofi':
+                    k.efx_bus = 1
+                    k.bus_p[:4] = [_pr.step, _pr.q, _pr.pre.a or 0.0, _pr.post.a or 0.0]
+                else:
+                    k.efx_bus = 2
+                    k.bus_p[:5] = [_pr.t, _pr.r, _pr.ka, _pr.kr, _pr.mk]
+                k.bus_p[10], k.bus_p[11] = float(_mx[0]), float(_mx[1])
             if _ex.get('trem'):             # ITS TREMOLO (an Auto Pan's: the tremolo pass)
                 k.efx_trem = 1
                 k.trem_cfg[:] = [float(x) for x in tuple(_ex['trem'])[:4]]
@@ -3125,6 +3139,9 @@ def note_class(cls):
                     k.cf_p[20 + 4 * _i:24 + 4 * _i] = [float('lrc'.index(_t[0])), float(_t[1]),
                                                        float(_t[2]) if len(_t) > 2 else 0.0,
                                                        float(_t[3]) if len(_t) > 3 else 1.0]
+        if getattr(cls, 'noise_gate', None):
+            _NOTE[cls] = False              # (a noise gate's bus: Python's)
+            return None
         if getattr(cls, 'plunger', False):  # A PLUNGER (efxfilter.plunger: the channel's aftertouch)
             import efxfilter as _EFP
             k.flt_set, k.flt_ty, k.flt_k = 2, 2, 3
@@ -3756,6 +3773,17 @@ def xexp(x):
     return out
 
 
+def xlog10(x):
+    import numpy as np
+    x = np.ascontiguousarray(x, np.float64)
+    d = lib()
+    if d is None:
+        return np.log10(x)
+    out = np.empty_like(x)
+    d.nv_log10_n(x.size, x.ctypes.data, out.ctypes.data)
+    return out
+
+
 def xlog(x):
     import numpy as np
     x = np.ascontiguousarray(x, np.float64)
@@ -4095,7 +4123,7 @@ def render(F):
                 None if bl is None else bl.ctypes.data, BR._NO_ROWS.ctypes.data, sh,
                 BR._chunk(), float(BR.XDEC_NEPERS), float(BR.SR), float(BR.T.master_gain),
                 *[a.ctypes.data if a is not None else None for a in dm], L.ctypes.data, R.ctypes.data, *lo, None,
-                None, None, None, None, 0)
+                None, None, None, None, 0, None, 1)
     return L, R
 
 

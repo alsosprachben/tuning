@@ -100,9 +100,12 @@ class Compressor:
             e = k * e + (1.0 - k) * v
             env[i] = e
         self.env = e
-        db = 20.0 * np.log10(np.maximum(env, 1e-9))
+        # (libm's log10 and pow, element by element: numpy's SIMD differs in
+        # the last bit, and the engine's bus is libm's -- native.xlog10, xpow)
+        import native as _NV
+        db = 20.0 * _NV.xlog10(np.maximum(env, 1e-9))
         over = np.maximum(db - self.t, 0.0)
-        g = 10.0 ** (-over * (1.0 - 1.0 / self.r) / 20.0) * self.mk
+        g = _NV.xpow(10.0, -over * (1.0 - 1.0 / self.r) / 20.0) * self.mk
         return (L * g).astype(np.float32), (R * g).astype(np.float32)
 
 

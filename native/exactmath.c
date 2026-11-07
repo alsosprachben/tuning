@@ -28,6 +28,12 @@ void nv_cabs_n(long n, const double *z, double *out)
         out[i] = hypot(z[2 * i], z[2 * i + 1]);
 }
 
+void nv_log10_n(long n, const double *x, double *out)
+{
+    for (long i = 0; i < n; i++)
+        out[i] = log10(x[i]);
+}
+
 void nv_log_n(long n, const double *x, double *out)
 {
     for (long i = 0; i < n; i++)

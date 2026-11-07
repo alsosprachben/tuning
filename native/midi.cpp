@@ -42,6 +42,7 @@ struct Msg {
     int status, d0, d1;         // a channel message's bytes; status 0xFF meta, 0xF0 sysex
     int meta;                   // a meta event's type
     std::vector<uint8_t> data;  // a meta event's or a sysex's bytes
+    int port = 0;               // its track's MIDI port (FF 21), a two-port file's: its channels + 16 x it
 };
 
 struct Reader {
@@ -205,6 +206,10 @@ struct Parsed {
     std::vector<std::pair<int, int>> progs;     // (channel, program) changes, for the caller
     double total = 0.0;
     int gs = 0;                 // a Roland GS exclusive before the first note (gs_setup: the file speaks GS)
+    // THE GS SETUP by the first note (gs_setup), a reset back to none: the
+    // reverb's, chorus's and delay's parameters (40 01 xx: address -> value,
+    // a macro the rest gone), the EQ's (40 02 0-3), each part's EQ switch
+    std::map<int, int> gs_rv, gs_ch, gs_dl, gs_eq, gs_sw;
     std::vector<std::array<int, 3>> legato;    // _legato_ticks: (channel, key, k) slurred
     std::vector<CCEv> snd;      // sndev: CC71-78, and gmon (channel -1, cc -1), in message order
     std::vector<std::pair<int, int>> chprogs;  // ch_progs: a melodic channel's program changes, in message order
@@ -534,7 +539,7 @@ static void legato_ticks(const std::vector<Msg> &all, const std::vector<size_t> 
         std::map<std::pair<int, int>, std::vector<long long>> held;
         for (size_t i = a; i < b; i++) {
             const Msg &m = all[i];
-            int kind = m.status & 0xF0, ch = m.status & 0x0F;
+            int kind = m.status & 0xF0, ch = (m.status & 0x0F) + 16 * m.port;
             if (m.status == 0xFF || m.status == 0xF0 || m.status == 0xF7)
                 continue;
             if (kind == 0x90 && m.d1 > 0) {
@@ -611,7 +616,34 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         if (!read_track(r, all))
             return -1;
     }
-    legato_ticks(all, starts, tpb, P.legato);
+    // A TWO-PORT FILE (PortedMidi): each track's messages its port's, a
+    // part's exclusive at port B as port A would read it (40 / 50 swapped)
+    bool ported = false;
+    for (const Msg &m : all)
+        ported = ported || (m.status == 0xFF && m.meta == 0x21 && !m.data.empty() && m.data[0]);
+    if (ported) {
+        for (size_t ti = 0; ti < starts.size(); ti++) {
+            size_t a = starts[ti], b = ti + 1 < starts.size() ? starts[ti + 1] : all.size();
+            int port = 0;
+            for (size_t i = a; i < b; i++) {
+                Msg &m = all[i];
+                if (m.status == 0xFF && m.meta == 0x21 && !m.data.empty())
+                    port = m.data[0];
+                m.port = port;
+                const std::vector<uint8_t> &d = m.data;
+                if (port && m.status == 0xF0 && d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12
+                    && (d[4] == 0x40 || d[4] == 0x50) && ((d[5] & 0xF0) == 0x10 || (d[5] & 0xF0) == 0x20
+                                                          || (d[5] & 0xF0) == 0x40))
+                    m.data[4] ^= 0x10;
+            }
+        }
+        // ...its legato over the merged stream (the Python's one merged track)
+        std::vector<Msg> merged(all);
+        std::stable_sort(merged.begin(), merged.end(), [](const Msg &a, const Msg &b) { return a.tick < b.tick; });
+        legato_ticks(merged, std::vector<size_t>{0}, tpb, P.legato);
+    } else {
+        legato_ticks(all, starts, tpb, P.legato);
+    }
     // _voice_parts: each track's first name (track or instrument), and each
     // channel a message of it speaks on after that -- the first track that
     // names a part for a channel declares it
@@ -683,8 +715,6 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         if (m.status == 0xFF) {
             if (m.meta == 0x51 && m.data.size() == 3)
                 tempo = (m.data[0] << 16) | (m.data[1] << 8) | m.data[2];
-            else if (m.meta == 0x21 && !m.data.empty() && m.data[0])
-                return -3;              // a second port: PortedMidi's
             continue;
         }
         if (m.status == 0xF0) {
@@ -743,8 +773,6 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 && (d[5] >> 4) == 1 && d[6] >= 0x40 && d[6] <= 0x4B) {
                 int blk = d[5] & 0x0F;
                 int ch2 = (blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk)) + (d[4] == 0x50 ? 16 : 0);
-                if (d[4] == 0x50)
-                    return -3;          // (port B: PortedMidi's)
                 std::array<double, 12> &sc = gsscale[ch2];
                 size_t a = d[6] - 0x40, nbody = d.size() - 8;      // (the values, without the checksum)
                 for (size_t i = 0; i < nbody && a + i < 12; i++)
@@ -754,8 +782,36 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 P.sotas[ch2].push_back(std::make_pair(t, sc));
                 continue;
             }
+            // THE GS SYSTEM EFFECTS and EQ (gs_setup): read by the first note, after it nothing
+            if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12
+                && ((d[4] == 0x40 && (d[5] == 0x01 || d[5] == 0x02))
+                    || ((d[4] == 0x40 || d[4] == 0x50) && (d[5] >> 4) == 4 && d[6] == 0x20))) {
+                if (!seen_note) {
+                    P.gs = 1;
+                    int a = d[6], v = d[7];
+                    if (d[4] == 0x40 && d[5] == 0x01) {
+                        std::map<int, int> *g = a >= 0x38 && a <= 0x40 ? &P.gs_ch
+                                                : a >= 0x50 && a <= 0x5A ? &P.gs_dl
+                                                : a == 0x30 || (a >= 0x33 && a <= 0x35) ? &P.gs_rv : nullptr;
+                        if (g && (a == 0x38 || a == 0x50 || a == 0x30))
+                            g->clear();         // (a macro sets them all)
+                        if (g)
+                            (*g)[a] = v;
+                    } else if (d[4] == 0x40 && d[5] == 0x02) {
+                        if (a <= 3)
+                            P.gs_eq[a] = v;
+                    } else {
+                        int blk = d[5] & 0x0F;
+                        P.gs_sw[(blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk)) + (d[4] == 0x50 ? 16 : 0)] = v != 0;
+                    }
+                }
+                continue;
+            }
             if (!(lvl || gs))
                 return -4;              // any other exclusive: not a GM file's
+            if (gs && !seen_note) {     // (a GS reset: the setup back to none)
+                P.gs_rv.clear(); P.gs_ch.clear(); P.gs_dl.clear(); P.gs_eq.clear(); P.gs_sw.clear();
+            }
             if (!seen_note && d.size() >= 4 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12)
                 P.gs = 1;
             rxbank = lvl != 1;
@@ -773,7 +829,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             rfmsb.clear(); rrange.clear(); rmod.clear(); rfine.clear(); rcoarse.clear(); rtp.clear(); rtb.clear();
             continue;
         }
-        int ch = m.status & 0x0F, kind = m.status & 0xF0;
+        int ch = (m.status & 0x0F) + 16 * m.port, kind = m.status & 0xF0;
         auto is_drums = [&](int c) {
             auto it = drums.find(c);
             return it != drums.end() ? it->second != 0 : (c % 16 == PERCUSSION_CHANNEL);
@@ -1012,6 +1068,22 @@ void nv_midi_free(void *p) { delete (nv::Parsed *)p; }
 
 double nv_midi_total(void *p) { return ((nv::Parsed *)p)->total; }
 int nv_midi_gs(void *p) { return ((nv::Parsed *)p)->gs; }
+
+// THE GS SETUP by the first note (gs_setup): which 0 the reverb's, 1 the
+// chorus's, 2 the delay's (key their 40 01 address), 3 the EQ's (0-3), 4 a
+// part's EQ switch (key its channel) -- 1 and *v where the file set it
+int nv_midi_gs_setup(void *p, int which, int key, int *v)
+{
+    const nv::Parsed *P = (nv::Parsed *)p;
+    const std::map<int, int> *m[5] = {&P->gs_rv, &P->gs_ch, &P->gs_dl, &P->gs_eq, &P->gs_sw};
+    if (which < 0 || which > 4)
+        return 0;
+    auto it = m[which]->find(key);
+    if (it == m[which]->end())
+        return 0;
+    *v = it->second;
+    return 1;
+}
 int nv_midi_n_notes(void *p) { return (int)((nv::Parsed *)p)->notes.size(); }
 int nv_midi_n_ccs(void *p) { return (int)((nv::Parsed *)p)->ccs.size(); }
 int nv_midi_n_pws(void *p) { return (int)((nv::Parsed *)p)->pws.size(); }

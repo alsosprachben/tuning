@@ -1463,6 +1463,8 @@ struct Song {
     std::map<NoteKey, std::pair<double, double>> meend;         // _MEEND_AT: (its ratio at Note On, its row or -1)
     std::map<NoteKey, std::pair<double, double>> siren;         // _SIREN_AT: (its row, its rotor's end)
     std::map<long long, std::pair<double, double>> efx_part;    // a part's insertion effect: (its first onset, distance)
+    double gs_eq[4] = {0.0, 0.0, 0.0, 0.0};     // the file's GS EQ (gs_eq_gain), [0] 0 none
+    std::set<long long> gs_eq_off;              // ...the parts that have it off
     // ITS PRESSURE (ats, pts): a channel's aftertouch (key -1), a key's polytouch, in message order
     std::map<std::pair<long long, int>, std::vector<std::pair<double, int>>> press;
     int raga_sa = -1;
@@ -2684,6 +2686,28 @@ int nv_song_efx_dist(void *s, long long part, double on, double *dist)
     if (it == S->efx_part.end() || on < it->second.first)
         return 0;
     *dist = it->second.second;
+    return 1;
+}
+
+// THE FILE'S GS EQ (prepare's _GS_EQ): its corners and gains, and the parts
+// that switched it off
+void nv_song_gs_eq(void *s, const double *eq, int noff, const int *off)
+{
+    nv::Song *S = (nv::Song *)s;
+    for (int i = 0; i < 4; i++)
+        S->gs_eq[i] = eq[i];
+    for (int i = 0; i < noff; i++)
+        S->gs_eq_off.insert(off[i]);
+}
+
+// ...on a note of part `part`: 1 and eq where it has it
+int nv_song_gs_eq_of(void *s, long long part, double *eq)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (S->gs_eq[0] <= 0.0 || S->gs_eq_off.count(part))
+        return 0;
+    for (int i = 0; i < 4; i++)
+        eq[i] = S->gs_eq[i];
     return 1;
 }
 

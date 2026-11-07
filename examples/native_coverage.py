@@ -50,7 +50,8 @@ TASKS = [
                   "region), a strike-in by the hand, a pipe's phase spread and mode lock"),
     ("GM1", False, "Live: the bagpipe's drones (live's own held drone voices: drone_wheel, drone_ratios; templates "
                    "built corked) -- nvlive refuses the bagpipe"),
-    ("GM1", False, "Files: two-port files (PortedMidi, meta 21) in the reader"),
+    ("GM1", True, "Files: two-port files (PortedMidi, meta 21) in the reader: channel + 16 x port, port B's "
+                  "part exclusives as port A reads them, the legato over the merged stream"),
     ("GM1", False, "Files: NRPNs and MPE in the reader"),
     ("GM1", True, "Files: a class's own distance and gestures -- reverb_distance, its own chorus pedal "
                   "(chorus_send) and detuned pair (detuned_pair: chorus._pair), falls and rips on the valved "
@@ -65,7 +66,7 @@ TASKS = [
                    "registration the layer class's, its chest's wind the variation's program class's"),
     ("GM2", False, "Files: per-mode sympathetic strings (sympathetic_per_mode: 26.8 Pedal Steel; 107.8 Taisho "
                    "Koto's, with its drone stops and sweep)"),
-    ("GM2", False, "Files: a channel's moving filter (efxfilter: 59.2's plunger, a didgeridoo's mouth)"),
+    ("GM2", False, "Files: a didgeridoo's mouth (efxfilter.mouth: its seeded formant wander)"),
     ("GM2", True, "Files: the church bells (14.8-14.10: a tube's measured modes, 19 of them, a decay of their "
                   "own) and the feedback guitars (30.8, 31.8: the loop's partial and series as late copies)"),
     ("GM2", True, "Brass variations' blare (blare_db_per_khz: dB per kHz over a knee, renormalised) and the "
@@ -93,14 +94,17 @@ TASKS = [
     ("CM-64", False, "The CM-32P (the CM-64's PCM half: the U-110's tones on channels 11-16) -- Python has none yet"),
     ("CM-64", False, "The CM-32L's sound effects on the rhythm part (keys 76-108) in nvlive"),
     ("SC-55", False, "The GS map (CC32 / TONE MAP-0) and kit_in_map in the reader and nvlive"),
-    ("SC-55", True, "A tone's own insertion effect (insertion_efx) in files: its level, OD stage (the part's "
-                    "valve, its reference the effect's level), cabinet, EQ (libm's pow: gsefx.eq_gain) and "
-                    "sends; its chorus device (chorus.gs_copies: Stereo Chorus, Space D, the flanger), its delay "
-                    "(gsdelay.expand; gsd_place's memo shared), an Auto Pan's tremolo -- 51 of the maps' tones"),
-    ("SC-55", False, "A tone's own insertion effect's render-time stages: Phaser and Auto Wah (efxfilter, as the "
-                     "plunger's), Compressor and Lo-Fi (a bus) -- 7 tones; a Hexa or 3D chorus's angled voices"),
-    ("SC-55", False, "A FILE's GS effects natively (gsefx: insertion EFX, the GS delay, chorus) -- the corpus has no "
-                     "GS files, so each needs GS test files"),
+    ("SC-55", True, "A tone's own insertion effect (insertion_efx) in files, all 58 of the maps' tones: its "
+                    "level, OD stage (the part's valve), cabinet, EQ and sends; its chorus device (chorus.gs_copies) "
+                    "and delay (gsdelay.expand, gsd_place's memo shared); an Auto Pan's tremolo; a Phaser's or "
+                    "wah's moving filter (efxfilter on the lobe kernel); a bus (efxbus: Lo-Fi, a compressor -- "
+                    "its rows rendered apart, before the post)"),
+    ("GM2", True, "Files: a note's pressure (channel aftertouch, polytouch: _pressure_of) -- the reader had "
+                  "dropped them -- and the plunger's moving filter on the channel's aftertouch (59.2)"),
+    ("SC-55", True, "A FILE's GS setup (gs_setup): the reverb macro's room (an export per room), its level, "
+                    "time and a delay's feedback in the sidecar; the GS EQ on each part that has it on (gs_eq_gain)"),
+    ("SC-55", False, "A FILE's GS effects natively (gsefx: insertion EFX, 40 03 and 4p 22; the GS delay and chorus "
+                     "sends, CC94 and CC93) -- the corpus has no GS files, so each needs GS test files"),
     ("SC-55", False, "Files: GS's other exclusives -- part parameters (parse_gs_part), drum setup and the user "
                      "sets, the rhythm part's assignment, TONE MAP-0 (the reader refuses them, -4)"),
     ("SC-55", True, "Melodic SFX (patch_map.melodic_sfx): a kit's sound on a keyboard part, transposed whole "

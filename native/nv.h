@@ -569,6 +569,7 @@ typedef struct {
     double dist;
     long long cls;          /* its class (the NoteClass), keying _refl_norm's memo as type(props) does */
     double hammer_on;       /* a hammer-on's seconds since the pick (em.hammer_on), 0 none */
+    double gs_eq[4];        /* the file's GS EQ on its part (gs_eq_gain), [0] 0 none */
 } ToneIn;
 
 /* A MOOG MESSENGER's panel as a note reads it (moog.py; native.moog_spec):
@@ -1004,6 +1005,11 @@ typedef struct NoteClass {
     // down; sens)
     int flt_set, flt_ty, flt_k;
     double flt_p[3], flt_c[5];
+    // ...ITS BUS (efxbus.Bus), efx_bus 0 none: 1 Lo-Fi (step, quantum, pre
+    // and post filters' a, 0 none), 2 a compressor (threshold dB, ratio,
+    // attack and release k, makeup); bus_p[10], [11] its dry and wet
+    int efx_bus;
+    double bus_p[12];
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -1082,6 +1088,8 @@ typedef struct {
     double siren_end;
     // ITS PRESSURE (_pressure_of: its polytouch, else its channel's aftertouch), 0..1
     double press;
+    // THE FILE'S GS EQ on its part (gs_eq_gain): low and high corners, gains (dB); [0] 0 none
+    double gs_eq[4];
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -1273,6 +1281,8 @@ void nv_song_efx_part(void *s, long long part, double on, double dist);
 void nv_song_pressure_events(void *s, long long ch, int key, int n, const double *t, const int *v);
 double nv_song_pressure(void *s, long long ch, int note, double on, double off);
 int nv_song_efx_dist(void *s, long long part, double on, double *dist);
+void nv_song_gs_eq(void *s, const double *eq, int noff, const int *off);
+int nv_song_gs_eq_of(void *s, long long part, double *eq);
 int nv_song_siren_of(void *s, int i, double *out);
 int nv_song_gliss_note(void *s, int i, double *out);
 double nv_song_tess(void *s, long long ch);

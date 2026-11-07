@@ -61,6 +61,7 @@ int nv_midi_otun(void *p, int ch, double *out);
 int nv_midi_n_mts(void *p);
 void nv_midi_mts(void *p, int i, double *t, long *seq, int *bank, int *prog, double *hz);
 int nv_midi_gs(void *p);
+int nv_midi_gs_setup(void *p, int which, int key, int *v);
 void nv_midi_note(void *p, int i, int *iv, double *dv);
 void nv_midi_cc(void *p, int i, int *iv, double *t);
 void nv_midi_song(void *p, void *song, const double *trim);
@@ -102,7 +103,8 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
               double SR, double master_gain, const float *DM, const long *DMO, const long *DMB, const long *DMN,
               float *L, float *R, void *slo, const int *lsr, float *const *lob, const float *LANG, long lgn,
               const MoogCols *moog, const int *fsr, const int *fty, const float *const *fpar, const float *FCT,
-              long fgn);
+              long fgn, const unsigned char *rowsel, int post);
+void nv_render_post(float *L, float *R, long N, double SR, double master_gain, int clip);
 void nv_buf_free(void *p);
 long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                             const double *cfg, const char *mask, long long nmask, double sr);
@@ -553,6 +555,60 @@ int main(int argc, char **argv)
                 return 2;
             }
         }
+        // ...and a GS file's CC94, the GS delay's send (gsdelay): Python's
+        for (int i = 0, n = nv_midi_n_ccs(midi); i < n; i++) {
+            int iv[3];
+            double t;
+            nv_midi_cc(midi, i, iv, &t);
+            if (iv[1] == 94 && iv[2] > 0 && nv_midi_gs(midi)) {
+                fprintf(stderr, "nvrender: refused: a GS delay send (CC94)\n");
+                return 2;
+            }
+        }
+    }
+    // THE FILE'S GS SETUP (blockrender.prepare): its reverb macro's room --
+    // the export's, or another's voices (refused) -- unless TUNING_ROOM says;
+    // its level and time (a delay's feedback) for the sidecar; its EQ
+    std::string gs_tail = "\"tail_gain\": 1.0,\n \"tail_time\": 1.0";
+    double gs_eq[4] = {0.0, 0.0, 0.0, 0.0};
+    std::vector<int> gs_eq_off;
+    {
+        static const char *ROOMS[8] = {"studio", "chamber", "large_chamber", "hall", "grand_hall", "plate",
+                                       "delay", "pan_delay"};
+        static const int RTIME[8] = {80, 56, 64, 72, 64, 88, 32, 64};
+        const char *tr = getenv("TUNING_ROOM");
+        bool fx = !(tr && *tr);
+        int mac = -1, lvl = 64, tim = -1, dfb = -1, v;
+        if (fx && nv_midi_gs_setup(midi, 0, 0x30, &v))
+            mac = v;
+        if (fx && nv_midi_gs_setup(midi, 0, 0x33, &v))
+            lvl = v;
+        if (fx && nv_midi_gs_setup(midi, 0, 0x34, &v))
+            tim = v;
+        if (fx && nv_midi_gs_setup(midi, 0, 0x35, &v))
+            dfb = v;
+        if (mac >= 0 && mac <= 7 && E.room != ROOMS[mac]) {
+            fprintf(stderr, "nvrender: refused: the GS reverb's room (%s), the export's %s\n", ROOMS[mac],
+                    E.room.c_str());
+            return 2;
+        }
+        gs_tail = "\"tail_gain\": " + pyrepr(lvl / 64.0) + ",\n \"tail_time\": "
+                  + pyrepr(tim >= 0 ? pow(2.0, (tim - (mac >= 0 && mac <= 7 ? RTIME[mac] : 64)) / 64.0) : 1.0);
+        if (mac == 6 || mac == 7)
+            gs_tail += ",\n \"delay_fb\": " + std::to_string(dfb >= 0 ? dfb : mac == 6 ? 40 : 32);
+        int e[4] = {0, 0x40, 0, 0x40};
+        for (int q = 0; q < 4; q++)
+            if (nv_midi_gs_setup(midi, 3, q, &v))
+                e[q] = v;
+        if (e[1] != 0x40 || e[3] != 0x40) {
+            gs_eq[0] = e[0] ? 400.0 : 200.0;
+            gs_eq[1] = e[2] ? 6000.0 : 3000.0;
+            gs_eq[2] = std::max(-12, std::min(12, e[1] - 0x40));
+            gs_eq[3] = std::max(-12, std::min(12, e[3] - 0x40));
+            for (int c = 0; c < 32; c++)
+                if (nv_midi_gs_setup(midi, 4, c, &v) && !v)
+                    gs_eq_off.push_back(c);
+        }
     }
     const double total = nv_midi_total(midi);
     // THE SONG
@@ -730,6 +786,8 @@ int main(int argc, char **argv)
         nv_song_slot_organs(song, ns, so.data());
     }
     nv_midi_song(midi, song, E.trim.data() + (nv_midi_gs(midi) ? 256 : 0));
+    if (gs_eq[0] > 0.0)
+        nv_song_gs_eq(song, gs_eq, (int)gs_eq_off.size(), gs_eq_off.data());
     // ITS PRESSURE (ats, pts): each channel's aftertouch, each key's polytouch
     for (int c = 0; c < 256; c++) {
         int na = nv_midi_ats(midi, c, nullptr, nullptr, 0);
@@ -1902,6 +1960,169 @@ int main(int argc, char **argv)
         for (int q = 0; q < 3; q++)
             mc.fm[q] = fmc[q].data();
     }
+    // THE BUSES (render_partials, efxbus.Bus: a tone's insertion effect's
+    // Lo-Fi or compressor): each mix channel's from its first effect note, in
+    // the note loop's order (_BUS_CH); its rows rendered apart, the part
+    // through its processor at the output's scale, added back before the post
+    struct BusDef {
+        long long ch;
+        const NoteClass *k;
+    };
+    std::vector<BusDef> buses;
+    std::vector<unsigned char> busrow, rest;
+    {
+        int nn = nv_song_n_notes(song);
+        std::vector<int> ord(nn);
+        std::vector<double> on_(nn);
+        std::vector<long long> ch_(nn);
+        std::vector<int> key_(nn);
+        for (int i = 0; i < nn; i++) {
+            long long c;
+            int iv[4];
+            double dv[2];
+            nv_song_get_note(song, i, &c, iv, dv);
+            ord[i] = i; on_[i] = dv[0]; ch_[i] = c; key_[i] = iv[0];
+        }
+        std::stable_sort(ord.begin(), ord.end(), [&](int a, int b) {
+            if (on_[a] != on_[b])
+                return on_[a] < on_[b];
+            if (ch_[a] != ch_[b])
+                return ch_[a] < ch_[b];
+            return key_[a] < key_[b];
+        });
+        for (int i : ord) {
+            long long c;
+            int iv[4];
+            double dv[2];
+            nv_song_get_note(song, i, &c, iv, dv);
+            int cq = E.cmap[nv_song_kidx(song, i)];
+            const NoteClass *k = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
+            long long m = nv_song_mix(song, i);
+            bool seen = false;
+            for (auto &b : buses)
+                seen = seen || b.ch == m;
+            if (!k || !k->efx_set || !k->efx_bus || iv[3] || seen)
+                continue;
+            buses.push_back(BusDef{m, k});
+        }
+        if (!buses.empty()) {
+            const int cMb = col("mch");
+            busrow.assign(P > 0 ? P : 1, 0);
+            rest.assign(P > 0 ? P : 1, 1);
+            for (long long r = 0; r < P; r++) {
+                long long m = (long long)rows[NCOLS * r + cMb];
+                for (size_t q = 0; q < buses.size(); q++)
+                    if (buses[q].ch == m) {
+                        busrow[r] = (unsigned char)(q + 1);
+                        rest[r] = 0;
+                    }
+            }
+        }
+    }
+    // efxbus's processors on a part's signal (in, at the output's scale), into y
+    auto bus_process = [&](const NoteClass *k, std::vector<float> &x0, std::vector<float> &x1,
+                           std::vector<float> &y0, std::vector<float> &y1) {
+        const double *p = k->bus_p;
+        long n = (long)x0.size();
+        std::vector<float> *xs[2] = {&x0, &x1}, *ys[2] = {&y0, &y1};
+        if (k->efx_bus == 1) {              // LoFi: the pre filter, the hold, the bits, the post filter
+            const double step = p[0], q = p[1], pa = p[2], qa = p[3];
+            std::vector<long long> start(n);
+            for (long i = 0; i < n; i++) {
+                double kk = floor((double)i / step);
+                start[i] = (long long)ceil(kk * step);
+            }
+            for (int ear = 0; ear < 2; ear++) {
+                std::vector<double> x(n);
+                for (long i = 0; i < n; i++)
+                    x[i] = (double)(*xs[ear])[i];
+                if (pa != 0.0) {            // (scipy's lfilter, one pole: y = z + b0 x, z = a y)
+                    double z = 0.0, b0 = 1.0 - pa;
+                    for (long i = 0; i < n; i++) {
+                        double yv = z + b0 * x[i];
+                        z = x[i] * 0.0 - yv * -pa;
+                        x[i] = yv;
+                    }
+                }
+                std::vector<double> y(n);
+                for (long i = 0; i < n; i++)
+                    y[i] = nearbyint(x[start[i]] / q) * q;
+                if (qa != 0.0) {
+                    double z = 0.0, b0 = 1.0 - qa;
+                    for (long i = 0; i < n; i++) {
+                        double yv = z + b0 * y[i];
+                        z = y[i] * 0.0 - yv * -qa;
+                        y[i] = yv;
+                    }
+                }
+                ys[ear]->resize(n);
+                for (long i = 0; i < n; i++)
+                    (*ys[ear])[i] = (float)y[i];
+            }
+        } else {                            // Compressor: the envelope, its gain above the threshold
+            const double t = p[0], rr = p[1], ka = p[2], kr = p[3], mk = p[4];
+            y0.resize(n);
+            y1.resize(n);
+            double e = 0.0;
+            for (long i = 0; i < n; i++) {
+                double a = fabs((double)x0[i]), b = fabs((double)x1[i]);
+                double v = b > a ? b : a;
+                double kk = v > e ? ka : kr;
+                e = kk * e + (1.0 - kk) * v;
+                double db = 20.0 * log10(e > 1e-9 ? e : 1e-9);
+                double over = db - t > 0.0 ? db - t : 0.0;
+                double g = pow(10.0, -over * (1.0 - 1.0 / rr) / 20.0) * mk;
+                y0[i] = (float)((double)x0[i] * g);
+                y1[i] = (float)((double)x1[i] * g);
+            }
+        }
+    };
+    // the mix, or the send (fpX its level columns): the rest, then each bus's part, then the post
+    auto render_mix = [&](float *const *fpX, float *oL, float *oR) {
+        if (buses.empty()) {
+            nv_render(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fpX, lp, ip, Gt.data(), St.data(), BRr.data(),
+                      BCr.data(), BLr.empty() ? nullptr : BLr.data(), noRows, sh, (long)E.k[K_CHUNK], E.k[K_XDEC],
+                      SR, E.k[K_MASTER], (const float *)dm[2], (const long *)dm[3], (const long *)dm[4],
+                      (const long *)dm[5], oL, oR, slo, (const int *)lobe[0], (float *const *)(lobe + 1),
+                      LANG.empty() ? nullptr : LANG.data(), lgn, nft ? &mc : nullptr,
+                      FCT.empty() ? nullptr : fsrc.data(), FCT.empty() ? nullptr : ftyc.data(), fpar,
+                      FCT.empty() ? nullptr : FCT.data(), fgn, nullptr, 1);
+            return;
+        }
+        auto part = [&](const unsigned char *sel, float *pL, float *pR) {
+            nv_render(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fpX, lp, ip, Gt.data(), St.data(), BRr.data(),
+                      BCr.data(), BLr.empty() ? nullptr : BLr.data(), noRows, sh, (long)E.k[K_CHUNK], E.k[K_XDEC],
+                      SR, E.k[K_MASTER], (const float *)dm[2], (const long *)dm[3], (const long *)dm[4],
+                      (const long *)dm[5], pL, pR, slo, (const int *)lobe[0], (float *const *)(lobe + 1),
+                      LANG.empty() ? nullptr : LANG.data(), lgn, nft ? &mc : nullptr,
+                      FCT.empty() ? nullptr : fsrc.data(), FCT.empty() ? nullptr : ftyc.data(), fpar,
+                      FCT.empty() ? nullptr : FCT.data(), fgn, sel, 0);
+        };
+        part(rest.data(), oL, oR);
+        const double gain = E.k[K_MASTER];
+        const float gf = (float)gain;
+        for (size_t q = 0; q < buses.size(); q++) {
+            std::vector<unsigned char> sel(busrow.size());
+            for (size_t r = 0; r < sel.size(); r++)
+                sel[r] = busrow[r] == q + 1;
+            std::vector<float> bL(N), bR(N);
+            part(sel.data(), bL.data(), bR.data());
+            std::vector<float> xL(N), xR(N), yL, yR;
+            for (long i = 0; i < N; i++) {      // (at the output's scale: L * the master gain, float32)
+                xL[i] = bL[i] * gf;
+                xR[i] = bR[i] * gf;
+            }
+            bus_process(buses[q].k, xL, xR, yL, yR);
+            const float dry = (float)buses[q].k->bus_p[10], wet = (float)buses[q].k->bus_p[11];
+            for (long i = 0; i < N; i++) {
+                float wL = (float)((double)yL[i] / gain), wR = (float)((double)yR[i] / gain);
+                float mL = dry * bL[i] + wet * wL, mR = dry * bR[i] + wet * wR;
+                oL[i] = oL[i] + mL;
+                oR[i] = oR[i] + mR;
+            }
+        }
+        nv_render_post(oL, oR, N, SR, E.k[K_MASTER], 1);
+    };
     std::vector<float> L(N), R(N);
     {                                       // THE MASTER VOLUME (_mvol): the mix's and the send's
         int nm = nv_midi_mvol(midi, SR, nullptr, nullptr, 0);
@@ -1910,13 +2131,7 @@ int main(int argc, char **argv)
         nv_midi_mvol(midi, SR, ms.data(), mgv.data(), nm);
         nv_render_mvol(ms.data(), mgv.data(), nm);
     }
-    nv_render(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fp, lp, ip, Gt.data(), St.data(), BRr.data(), BCr.data(),
-              BLr.empty() ? nullptr : BLr.data(), noRows, sh,
-              (long)E.k[K_CHUNK], E.k[K_XDEC], SR, E.k[K_MASTER], (const float *)dm[2], (const long *)dm[3],
-              (const long *)dm[4], (const long *)dm[5], L.data(), R.data(), slo, (const int *)lobe[0],
-              (float *const *)(lobe + 1), LANG.empty() ? nullptr : LANG.data(), lgn, nft ? &mc : nullptr,
-              FCT.empty() ? nullptr : fsrc.data(), FCT.empty() ? nullptr : ftyc.data(), fpar,
-              FCT.empty() ? nullptr : FCT.data(), fgn);
+    render_mix(fp, L.data(), R.data());
     if (!write_wav(argv[3], L.data(), R.data(), N, (int)SR)) {
         fprintf(stderr, "nvrender: cannot write %s\n", argv[3]);
         return 1;
@@ -2052,13 +2267,7 @@ int main(int argc, char **argv)
         fp2[0] = wL.data();
         fp2[1] = wR.data();
         std::vector<float> SLb(N), SRb(N);
-        nv_render(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fp2, lp, ip, Gt.data(), St.data(), BRr.data(),
-                  BCr.data(), BLr.empty() ? nullptr : BLr.data(), noRows, sh, (long)E.k[K_CHUNK], E.k[K_XDEC], SR,
-                  E.k[K_MASTER], (const float *)dm[2], (const long *)dm[3], (const long *)dm[4], (const long *)dm[5],
-                  SLb.data(), SRb.data(), slo, (const int *)lobe[0], (float *const *)(lobe + 1),
-                  LANG.empty() ? nullptr : LANG.data(), lgn, nft ? &mc : nullptr,
-                  FCT.empty() ? nullptr : fsrc.data(), FCT.empty() ? nullptr : ftyc.data(), fpar,
-                  FCT.empty() ? nullptr : FCT.data(), fgn);
+        render_mix(fp2, SLb.data(), SRb.data());
         if (!write_wav((base + ".send.wav").c_str(), SLb.data(), SRb.data(), N, (int)SR)) {
             fprintf(stderr, "nvrender: cannot write %s.send.wav\n", base.c_str());
             return 1;
@@ -2083,8 +2292,8 @@ int main(int argc, char **argv)
         for (int i = 0; i < 9; i++)
             fprintf(jf, "  {\n   \"hz\": %s,\n   \"q\": %s,\n   \"energy\": %s\n  }%s\n", pyrepr(out[4 + 3 * i]).c_str(),
                     pyrepr(out[5 + 3 * i]).c_str(), pyrepr(out[6 + 3 * i]).c_str(), i < 8 ? "," : "");
-        fprintf(jf, " ],\n \"send\": %s,\n \"room_name\": \"%s\",\n \"tail_gain\": 1.0,\n \"tail_time\": 1.0\n}",
-                sendj.c_str(), E.room.c_str());
+        fprintf(jf, " ],\n \"send\": %s,\n \"room_name\": \"%s\",\n %s\n}", sendj.c_str(), E.room.c_str(),
+                gs_tail.c_str());
         fclose(jf);
     }
     printf("nvrender: %s: %lld partials, %.1f s\n", argv[2], P, N / SR);
