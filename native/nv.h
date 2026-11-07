@@ -1375,7 +1375,7 @@ int nv_song_amp_steps_of(void *s, int k, double *base, const double **starts, co
 // chains, each note's (-1 its part not on the effect, -2 on it, no chain),
 // which notes are their mix channel's first through a chain, the cabinets
 // a chain names (guitar12, bass410; null none)
-enum { NV_FXN = 160 };
+enum { NV_FXN = 208 };
 enum { NV_EFX_NAT = 64 };       /* (the export's native types: room for every one) */
 /* (the export's EFX tables past its pans' places: *9, the waves, the Hexa
    Chorus's voices, then the 3D types' two angles, (key, li, ri, dL, dR) each) */

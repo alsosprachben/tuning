@@ -237,10 +237,49 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
         bool cross = false;                 // (ping-pong: each odd repeat from the other side)
         const double *mod = nullptr;        // (a Mod Delay's LFO: rate, swing, the right's phase)
         const double *fc = nullptr;
+        std::vector<double> km;             // (a Keyboard Multi's taps, unrolled)
         const int fx = nv_song_note_fx(song, played[j], &fc);
         if (fx == -1 && k && k->efx_set && k->efx_dly && !iv[3]) {
             D = k->dly_p;                   // (a tone's own insertion delay, in the GS delay's place)
             place = k->efx_place;
+        } else if (fx >= 0 && fc[34] == 3.0) {
+            // ...a KEYBOARD MULTI's (gsefx._keyboard_multi): every path through
+            // its ring modulator (dry, either sideband at half), pitch shifter
+            // (dry, shifted) and delay (direct, each repeat) one tap of (delay,
+            // level, the centre, period, ratio, Hz) against the all-dry path,
+            // feedback none (the repeats are taps)
+            const double fm = fc[161], rd = fc[162], rw = fc[163], pd = fc[164], pw = fc[165], ra = fc[166];
+            const double base = fc[167];
+            std::vector<std::pair<double, double>> reps = {{0.0, 1.0}};
+            if (fc[160] != 0.0) {
+                const double t = fc[38], dfb = fc[36];
+                for (int q = 0; q < 64; q++) {
+                    double l = fc[35] * pow(dfb, (double)q);
+                    if (l < 1e-3)
+                        break;
+                    reps.push_back(std::make_pair((q + 1) * t, l));
+                }
+            }
+            const double rm[3][2] = {{rd, 0.0}, {0.5 * rw, fm}, {0.5 * rw, -fm}};
+            const double ps[2][2] = {{pd, 1.0}, {pw, ra}};
+            km.assign(5, 0.0);
+            km[0] = 1.0;
+            km[3] = std::max(1e-3, reps.back().first);
+            for (const auto &a : rm)
+                for (const auto &b : ps)
+                    for (const auto &rp : reps) {
+                        if (a[1] == 0.0 && b[1] == 1.0 && rp.first == 0.0)
+                            continue;       // (the part itself)
+                        double l = a[0] * b[0] * rp.second / base;
+                        if (l > 1e-4) {
+                            const double tp[6] = {rp.first, l, 2.0, rp.first, b[1], a[1] * b[1]};
+                            km.insert(km.end(), tp, tp + 6);
+                        }
+                    }
+            km[4] = (double)((km.size() - 5) / 6);
+            D = km.data();
+            place = nv_song_fx_place_of(song, &pans);
+            tw = 6;
         } else if (fx >= 0 && fc[34] != 0.0) {
             // ...the file's chain's own delay (a pitch shifter's, a delay
             // type's: its wide form at fc + 96, a cross-feedback beside it),
@@ -318,7 +357,18 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
                         break;
                     long long d = (long long)nearbyint((tau + q * period) * sr);
                     // (a pitch shifter's: each repeat by its ratio once more, k + 1 times)
-                    const double sh = tw > 4 ? pow(shr, (double)(q + 1)) : 1.0;
+                    double sh = tw > 4 ? pow(shr, (double)(q + 1)) : 1.0;
+                    // ...and a RING MODULATOR's (a Keyboard Multi's) by Hz besides:
+                    // the copy at f * ratio + Hz, a lower sideband below 0 Hz
+                    // folded back up, its phase turned
+                    const double add = tw > 5 ? D[10 + tw * t] : 0.0;
+                    bool flip = false;
+                    if (tw > 5) {
+                        if (f * sh + add == 0.0)
+                            continue;
+                        flip = f * sh + add < 0.0;
+                        sh = fabs(f * sh + add) / f;
+                    }
                     double pl[4];
                     const int sd = cross && (q % 2) && side <= 1 ? 1 - side : side;     // ('l' <-> 'r')
                     if (sd >= 300) {            // (a 3D type's side past the speakers: its angle)
@@ -342,6 +392,19 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
                     }
                     c[cP0] = -om2 * (c[cNON] + pl[2]) + (row[cP0] + om * (row[cNON] + row[cDL]));
                     c[cP0R] = -om2 * (c[cNON] + pl[3]) + (row[cP0R] + om * (row[cNON] + row[cDR]));
+                    if (tw > 5) {
+                        // the modulator's own phase where the copy starts (on
+                        // the file's clock), and a folded sideband's turn
+                        const double mp = TPI * add * c[cNON] / sr;
+                        for (int w = 0; w < 2; w++) {
+                            const int pk = w ? cP0R : cP0;
+                            const double dd = pl[2 + w];
+                            double ph0 = c[pk] + om2 * (c[cNON] + dd) + mp;
+                            if (flip)
+                                ph0 = M_PI - ph0;
+                            c[pk] = -om2 * (c[cNON] + dd) + ph0;
+                        }
+                    }
                     if (row[cFMW] != 0.0) {
                         c[cFMP] = row[cFMP] - row[cFMW] * (double)d;
                         c[cFMPR] = row[cFMPR] - row[cFMW] * (double)d;

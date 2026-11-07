@@ -147,6 +147,7 @@ long long nv_leslie_expand_gs(double **rowsp, long long *Pp, void **dm, int nch,
                               long long **flips, long long *nflips, const double *gs, const double *place);
 long nv_leslie_angles_gs(int nch, const int *nreq, const double *req, long n_samples, double sr, int blk,
                          const double *L, float *LANG, const double *gs);
+void nv_npy_noise(long long n0, long n, unsigned long long seed, int normal, double *out);
 }
 
 // the export's constants, in native_export.py's order
@@ -1493,7 +1494,11 @@ int main(int argc, char **argv)
                kModPhase, kManual, kReso, kMix, kFilType, kSens, kPeak, kPolarity, kStepRate, kDriveSw, kVowel,
                kAccel, kLoFiType, kPostFilter, kThreshold, kRatio, kRelease, kEHMix, kTPSel, kTPModWV, kTPModRT,
                kTPModDep, kAWSw, kAWFilter, kAWPeak, kAWMan, kAWDepth, kAWRate, kPHMix, kPHReso, kPHMan, kPHDepth,
-               kPHRate, kLowSlow, kLowFast, kLowAccl, kLowLevel, kHiSlow, kHiFast, kHiAccl, kHiLevel, kSeparate };
+               kPHRate, kLowSlow, kLowFast, kLowAccl, kLowLevel, kHiSlow, kHiFast, kHiAccl, kHiLevel, kSeparate,
+               kRTLSlow, kRTLFast, kRTLoAccl, kRTLoLev, kRTHSlow, kRTHFast, kRTHiAccl, kRTHiLev, kRTSept,
+               kRTSpeed, kRMMod, kRMBal, kPSCoarse, kPSFine, kPSBal, kRDetune, kRNzLev, kWPSel, kWPLPF, kWPLevel,
+               kDiscType, kDiscLPF, kDiscNzLev, kHumType, kHumLPF, kHumLevel, kMS, kPanMono, kDSDrive, kDSAmpSw,
+               kChoDly, kChoBal, kFLRate, kFLDepth, kFLDly, kFLBal, kFLFb, kDlyBal, kDlyHF };
         auto has = [&](int key) { return D[3 + key] != 0.0; };
         // ...AND ITS CONTROLLERS' (gsefx.controlled): a + or # parameter at
         // "setting value + value from controller x depth (%)/100" of its
@@ -1785,28 +1790,153 @@ int main(int argc, char **argv)
             r[6] = 1.0;
             r[7] = gain_db(g(kLowGain, 64));
             r[11] = gain_db(g(kHiGain, 64));
-        } else if (kind == 34) {
+        } else if (kind == 34 || kind == 35) {
             // ROTARY (gsefx._rotary): the part through our Leslie -- each
             // rotor's slow and fast speeds (*6), its spin times from its
             // Accl (*14: accl_tau, coasting down 1.4 times slower), the two
             // rotors' levels against the louder, the speed the file asks
-            // for, Separate the microphones' angle apart
+            // for, Separate the microphones' angle apart. The ROTARY MULTI's
+            // (its RT parameters) after its OD -- the valve's gain stage, no
+            // guitar cabinet: the Leslie is the speaker -- and its EQ
+            const bool mu = kind == 35;
             auto tau = [&](int key, int d) { return exp(1.7226 - 0.1566 * T14[clamp(g(key, d))]); };
             r[140] = 1.0;
-            r[141] = T6[clamp(g(kLowSlow, 6))];
-            r[142] = T6[clamp(g(kLowFast, 113))];
-            r[143] = T6[clamp(g(kHiSlow, 17))];
-            r[144] = T6[clamp(g(kHiFast, 120))];
-            r[145] = tau(kLowAccl, 24);
+            r[141] = T6[clamp(g(mu ? kRTLSlow : kLowSlow, 6))];
+            r[142] = T6[clamp(g(mu ? kRTLFast : kLowFast, 113))];
+            r[143] = T6[clamp(g(mu ? kRTHSlow : kHiSlow, 17))];
+            r[144] = T6[clamp(g(mu ? kRTHFast : kHiFast, 120))];
+            r[145] = tau(mu ? kRTLoAccl : kLowAccl, 24);
             r[146] = 1.4 * r[145];
-            r[147] = tau(kHiAccl, 88);
+            r[147] = tau(mu ? kRTHiAccl : kHiAccl, 88);
             r[148] = 1.4 * r[147];
-            const int llv = g(kLowLevel, 127), hlv = g(kHiLevel, 64);
+            const int llv = g(mu ? kRTLoLev : kLowLevel, 127), hlv = g(mu ? kRTHiLev : kHiLevel, 64);
             const double top = (double)std::max(std::max(llv, hlv), 1);
             r[149] = llv / top;
             r[150] = hlv / top;
-            r[151] = g(kSpeed, 0) != 0 ? 1.0 : 0.0;
-            r[152] = M_PI * g(kSeparate, 96) / 127.0;
+            r[151] = g(mu ? kRTSpeed : kSpeed, 0) != 0 ? 1.0 : 0.0;
+            r[152] = M_PI * g(mu ? kRTSept : kSeparate, 96) / 127.0;
+            r[6] = 1.0;
+            if (mu) {
+                if (g(kODSw, 1)) {
+                    r[1] = od_gain(g(kODDrive, 13), false);
+                    r[0] *= mk;
+                }
+                r[7] = gain_db(g(kEQL, 64));
+                r[8] = L[13 + clamp(g(kEQMF, 72)) / 8];
+                r[9] = L[8 + std::min(4, g(kEQMQ, 1))];
+                r[10] = gain_db(g(kEQMG, 64));
+                r[11] = gain_db(g(kEQH, 64));
+            } else {
+                r[7] = gain_db(g(kLowGain, 64));
+                r[11] = gain_db(g(kHiGain, 64));
+            }
+        } else if (kind == 37) {
+            // THE SERIES PAIRS (gsefx: OD/DS -> Chorus/Flanger/Delay, Cho/FL
+            // -> Delay, EH -> ..., Cho -> Flanger): each stage by its names --
+            // the Enhancer the part's bus (after the rest, as there), the
+            // drive the valve's gain stage and its cabinet, the chorus or
+            // flanger the chain's device (Bal its share), Cho -> Flanger's
+            // flanger a moving comb after the copies (Step Flanger's, no
+            // steps), the delay one tap (*4, Bal its dry and effect, HF *8)
+            auto fbk = [](int v) { return std::max(-0.98, std::min(0.98, (v - 64) * 2.0 / 100.0)); };
+            auto ms = [&](const double *T, int key, int d) {
+                double v = T[clamp(g(key, d))];
+                return (std::isnan(v) ? 0.0 : v) / 1000.0;
+            };
+            if (has(kEHSens)) {
+                r[25] = 5.0;
+                r[26] = exp(-2.0 * M_PI * 2000.0 / SR);
+                r[27] = 1.0 + 15.0 * g(kEHSens, 64) / 127.0;
+                r[28] = g(kEHMix, 64) / 127.0;
+            }
+            for (int ds = 0; ds < 2; ds++) {
+                const int kdr = ds ? kDSDrive : kODDrive, ksw = ds ? kDSAmpSw : kODAmpSw;
+                if (!has(kdr))
+                    continue;
+                r[1] = od_gain(g(kdr, 48), ds == 1);
+                r[0] *= mk;
+                if (g(ksw, 1))
+                    r[2] = 1.0;
+            }
+            for (int fl = 0; fl < 2; fl++) {
+                const int kra = fl ? kFLRate : kChoRate, kde = fl ? kFLDepth : kChoDepth;
+                const int kdl = fl ? kFLDly : kChoDly, kba = fl ? kFLBal : kChoBal;
+                if (fl && has(kChoRate) && has(kFLRate)) {
+                    r[50] = 1.0;
+                    r[51] = 4.0;
+                    r[52] = g(kFLBal, 64) / 127.0;
+                    r[53] = fbk(g(kFLFb, 104));
+                    r[128] = 2.0;
+                    r[129] = ms(T1, kFLDly, 16);
+                    r[130] = (g(kFLDepth, 24) + 1) / 3.2 / 1000.0 / 2.0 * (1.0 / 8.0);
+                    r[131] = T6[clamp(g(kFLRate, 11))];
+                    r[132] = NAN;
+                    continue;
+                }
+                if (!has(kra))
+                    continue;
+                const double rate = T6[clamp(g(kra, 8))];
+                const double swing = (g(kde, 64) + 1) / 3.2 / 1000.0 / 2.0 * (fl ? 1.0 / 8.0 : L[7]);
+                r[14] = 1.0;
+                r[15] = ms(T1, kdl, 10) + swing;
+                r[16] = rate;
+                r[17] = 2.0 * M_PI * rate * swing;
+                r[18] = fl ? fbk(g(kFLFb, 104)) : 0.0;
+                r[19] = 0.0;
+                r[20] = 0.0;
+                r[21] = g(kba, 64) / 127.0;
+            }
+            if (has(kDlyTime)) {
+                const double t = ms(T4, kDlyTime, 106);
+                double dw[2];
+                balance(g(kDlyBal, 37), dw);
+                const double hf = T8[clamp(g(kDlyHF, 127))];
+                r[34] = 1.0;
+                r[35] = dw[1] / std::max(dw[0], 1e-3);
+                r[36] = fbk(g(kDlyFb, 80));
+                r[37] = std::isnan(hf) ? 0.0 : hf;
+                r[38] = t;
+                r[39] = 1.0;
+                const double t1[5] = {t, 1.0, 2.0, t, 1.0};
+                std::copy(t1, t1 + 5, r + 40);
+                r[0] *= std::max(dw[0], 1e-3);
+            }
+            r[6] = 1.0;
+            r[7] = gain_db(g(kLowGain, 64));
+            r[11] = gain_db(g(kHiGain, 64));
+        } else if (kind == 36) {
+            // LO-FI 2 (gsefx: its unprinted defaults no detune, white, the
+            // noises silent and unfiltered, LP, 50 Hz, stereo, the effect
+            // alone): a part's bus (efxbus.LoFi2) -- its Type, the filter
+            // after (Fil Type, Cutoff: the export's Butterworths), the radio,
+            // the noises' levels and low passes (*11, 0 Bypass), M/S, Pan
+            const double *T11 = T14 + 128, *BW = T11 + 128, *BAND = BW + 128 * 12;
+            auto lp = [&](int key) { double v = T11[clamp(g(key, 127))]; return std::isnan(v) ? 0.0 : v; };
+            const int fil = g(kFilType, 0), cut = clamp(g(kCutoff, 32));
+            r[25] = 6.0;
+            r[176] = std::max(1, std::min(6, g(kLoFiType, 1) + 1)) - 1;
+            r[177] = fil;
+            r[178] = g(kRDetune, 0);
+            r[179] = g(kRNzLev, 64);
+            r[180] = g(kWPSel, 0);
+            r[181] = lp(kWPLPF);
+            r[182] = g(kWPLevel, 0);
+            r[183] = std::max(0, std::min(3, g(kDiscType, 0)));
+            r[184] = lp(kDiscLPF);
+            r[185] = g(kDiscNzLev, 0);
+            r[186] = g(kHumType, 0);
+            r[187] = lp(kHumLPF);
+            r[188] = g(kHumLevel, 0);
+            r[189] = g(kMS, 1);
+            r[190] = g(kPanMono, 64);
+            for (int q = 0; q < 6; q++) {
+                r[191 + q] = BW[12 * cut + (fil == 1 ? 0 : 6) + q];
+                r[197 + q] = BAND[q];
+            }
+            double dw[2];
+            balance(g(kBalance, 127), dw);
+            r[32] = dw[0];
+            r[33] = dw[1];
             r[6] = 1.0;
             r[7] = gain_db(g(kLowGain, 64));
             r[11] = gain_db(g(kHiGain, 64));
@@ -2054,6 +2184,28 @@ int main(int argc, char **argv)
                     const double t1[5] = {t * 0.005, 1.0, 2.0, t * 0.005, 1.0};
                     std::copy(t1, t1 + 5, r + 40);
                 }
+            }
+            if (has(kRMMod)) {
+                // THE KEYBOARD MULTI's RING MODULATOR, PITCH SHIFTER AND DELAY
+                // in series (_keyboard_multi), its taps unrolled by prepare
+                // (gsd_expand): the modulator's Hz (RM_HZ: 10-5000 on a log
+                // line), each stage's dry and effect by its Balance, the
+                // shift's ratio, the delay's (its own, above: 1 its level,
+                // feedback and time), the part at its all-dry path's level
+                double rdw[2], pdw[2];
+                balance(g(kRMBal, 15), rdw);
+                balance(g(kPSBal, 30), pdw);
+                const double base = std::max(rdw[0] * pdw[0], 1e-3);        // (DRY_FLOOR)
+                r[160] = r[34];
+                r[161] = 10.0 * pow(5000.0 / 10.0, clamp(g(kRMMod, 50)) / 127.0);
+                r[162] = rdw[0];
+                r[163] = rdw[1];
+                r[164] = pdw[0];
+                r[165] = pdw[1];
+                r[166] = pow(2.0, (g(kPSCoarse, 71) - 0x40) / 12.0 + (g(kPSFine, 64) - 0x40) * 2.0 / 1200.0);
+                r[167] = base;
+                r[34] = 3.0;
+                r[0] *= base;
             }
         }
         if (choice)
@@ -3470,7 +3622,7 @@ int main(int argc, char **argv)
     // effect): each part a 'part' event names, in order, its processor the
     // first chain with a bus it is on, on wherever its chain has one -- these
     // first (_BUS_CH's order), then the tones' own
-    std::vector<std::array<double, 12>> pbus_p;
+    std::vector<std::array<double, 40>> pbus_p;
     {
         std::set<long long> pp;
         for (const FxEv &e : fx_ev)
@@ -3500,9 +3652,12 @@ int main(int argc, char **argv)
                 spans.push_back(std::make_pair(start, (long long)1 << 62));
             if (!first)
                 continue;
-            std::array<double, 12> bp = {};
+            std::array<double, 40> bp = {};
             for (int q = 0; q < 5; q++)
                 bp[q] = first[26 + q];
+            if (first[25] == 6.0)               // (Lo-Fi 2's: its record past 176)
+                for (int q = 0; q < 27; q++)
+                    bp[5 + q] = first[176 + q];
             pbus_p.push_back(bp);
             buses.push_back(BusDef{c, (int)first[25], pbus_p.back().data(), first[32], first[33], true, spans});
         }
@@ -3616,6 +3771,153 @@ int main(int argc, char **argv)
                 ys[ear]->resize(n);
                 for (long i = 0; i < n; i++)
                     (*ys[ear])[i] = (float)o[i];
+            }
+        } else if (bd.kind == 6) {
+            // LO-FI 2 (efxbus.LoFi2): the radio off its station (its band,
+            // fading and wandering with the detune), the hold and bits, the
+            // noises (radio static, white or pink, a record's crackle, mains
+            // hum: each its level and low pass, keyed to the absolute sample),
+            // mono at its Pan or a stereo pair, the filter after
+            static const double RATE2[6] = {16000, 11025, 8000, 6000, 5000, 4000};
+            static const int BITS2[6] = {12, 10, 8, 7, 6, 5};
+            static const double PB[4] = {0.049922035, -0.095993537, 0.050612699, -0.004408786};
+            static const double PA[4] = {1.0, -2.494956002, 2.017265875, -0.522189400};
+            static const double HUM[6][2] = {{1, 1.0}, {2, 0.5}, {3, 0.35}, {4, 0.15}, {5, 0.2}, {7, 0.1}};
+            const double *q = p + 5;
+            const int k = (int)q[0], fil = (int)q[1], dt = (int)q[2];
+            const double full = pow(10.0, -40.0 / 20.0);           // (NOISE_FULL_DB)
+            const double det = q[2] / 127.0;
+            // (q: the record from 176 -- 0 Type, 1 Fil Type, 2 R.Detune, 3 R.Nz Lev, 4 W/P Sel, 5 W/P LPF,
+            // 6 W/P Level, 7 Disc Type, 8 Disc LPF, 9 Disc Nz Lev, 10 Hum Type, 11 Hum LPF, 12 Hum Level,
+            // 13 M/S, 14 Pan, 15-20 the filter after's b and a, 21-26 the radio's band's)
+            const double radio_amp = full * q[3] / 127.0 * det, wp_amp = full * q[6] / 127.0;
+            const double disc_amp = full * q[9] / 127.0, hum_amp = full * q[12] / 127.0;
+            // scipy's lfilter (transposed direct form II), its memory carried
+            auto lfilt = [](const double *b, const double *a, int nb, std::vector<double> &x) {
+                double z[4] = {0.0, 0.0, 0.0, 0.0};
+                for (size_t i = 0; i < x.size(); i++) {
+                    const double xn = x[i], yn = z[0] + b[0] * xn;
+                    for (int m = 0; m < nb - 2; m++)
+                        z[m] = z[m + 1] + xn * b[m + 1] - yn * a[m + 1];
+                    z[nb - 2] = xn * b[nb - 1] - yn * a[nb - 1];
+                    x[i] = yn;
+                }
+            };
+            auto lowpass = [&](double hz, std::vector<double> &x) {     // (efxbus.lowpass: one pole, 0 none)
+                if (hz == 0.0)
+                    return;
+                const double e = exp(-2.0 * M_PI * hz / SR);
+                const double b[2] = {1.0 - e, 0.0}, a[2] = {1.0, -e};
+                lfilt(b, a, 2, x);
+            };
+            auto noises = [&](int ear) {
+                const unsigned long long seed = 1000ULL * (unsigned long long)(ear + 1);
+                std::vector<double> y(n, 0.0), w(n);
+                if (radio_amp != 0.0) {
+                    nv_npy_noise(0, n, seed + 1, 1, w.data());
+                    lfilt(q + 21, q + 24, 3, w);
+                    for (long i = 0; i < n; i++)
+                        y[i] += radio_amp * w[i] * 4.5;
+                }
+                if (wp_amp != 0.0) {
+                    nv_npy_noise(0, n, seed + 2, 1, w.data());
+                    if (q[4] != 0.0) {
+                        lfilt(PB, PA, 4, w);
+                        for (long i = 0; i < n; i++)
+                            w[i] = w[i] * 11.0;
+                    }
+                    lowpass(q[5], w);
+                    for (long i = 0; i < n; i++)
+                        y[i] += wp_amp * w[i];
+                }
+                if (disc_amp != 0.0) {
+                    static const double DISC[4][3] = {{6.0, 33.3 / 60.0, 0.15}, {10.0, 45.0 / 60.0, 0.2},
+                                                      {20.0, 78.0 / 60.0, 0.5}, {14.0, 0.0, 0.1}};
+                    const double *dc = DISC[(int)q[7]];
+                    const double rate = dc[0], rev = dc[1], hiss = dc[2];
+                    std::vector<double> u(n), s(n), h(n);
+                    nv_npy_noise(0, n, seed + 3, 0, u.data());
+                    nv_npy_noise(0, n, seed + 4, 1, s.data());
+                    nv_npy_noise(0, n, seed + 5, 1, h.data());
+                    for (long i = 0; i < n; i++) {
+                        const double sg = s[i] > 0.0 ? 1.0 : s[i] < 0.0 ? -1.0 : s[i];        // (np.sign)
+                        w[i] = u[i] < rate / SR ? sg * (0.3 + 2.0 * (u[i] * SR / rate)) : 0.0;
+                        if (rev != 0.0)                                 // (the tick once a revolution)
+                            w[i] = w[i] + (floor((double)i * rev / SR) != floor((double)(i - 1) * rev / SR)
+                                           ? 2.5 : 0.0);
+                    }
+                    const double cb[2] = {1.0, 0.0}, ca[2] = {1.0, -exp(-1.0 / (0.0003 * SR))};
+                    lfilt(cb, ca, 2, w);
+                    for (long i = 0; i < n; i++)
+                        w[i] = 1.5 * w[i] + hiss * h[i];
+                    lowpass(q[8], w);
+                    for (long i = 0; i < n; i++)
+                        y[i] += disc_amp * w[i];
+                }
+                if (hum_amp != 0.0) {
+                    const double hz = q[10] != 0.0 ? 60.0 : 50.0;
+                    for (long i = 0; i < n; i++) {
+                        const double t = (double)i / SR;
+                        double hv = 0.0;
+                        for (const auto &hh : HUM)
+                            hv += hh[1] * sin(2.0 * M_PI * hh[0] * hz * t);
+                        w[i] = hv;
+                    }
+                    lowpass(q[11], w);
+                    for (long i = 0; i < n; i++)
+                        y[i] += hum_amp * w[i];
+                }
+                return y;
+            };
+            std::vector<double> xe[2];
+            for (int ear = 0; ear < 2; ear++) {
+                xe[ear].resize(n);
+                for (long i = 0; i < n; i++)
+                    xe[ear][i] = (double)(*xs[ear])[i];
+            }
+            if (dt != 0) {                      // THE RADIO OFF ITS STATION: an AM set's band, fading, wandering
+                for (int ear = 0; ear < 2; ear++) {
+                    lfilt(q + 21, q + 24, 3, xe[ear]);
+                    for (long i = 0; i < n; i++) {
+                        const double t = (double)i / SR;
+                        const double fade = (1.0 - 0.8 * det) * (1.0 + 0.3 * det * sin(2.0 * M_PI * 0.37 * t)
+                                                                 * sin(2.0 * M_PI * 0.11 * t + 1.0));
+                        xe[ear][i] = xe[ear][i] * fade;
+                    }
+                }
+            }
+            // the hold and bits (efxbus.LoFi, no filters), from float32
+            const double step = SR / RATE2[k], qq = pow(2.0, -(double)(BITS2[k] - 1));
+            std::vector<double> ye[2];
+            for (int ear = 0; ear < 2; ear++) {
+                ye[ear].resize(n);
+                for (long i = 0; i < n; i++) {
+                    const long long st = (long long)ceil(floor((double)i / step) * step);
+                    ye[ear][i] = (double)(float)(nearbyint((double)(float)xe[ear][st] / qq) * qq);
+                }
+            }
+            if (q[13] != 0.0) {                 // a stereo pair: each ear its own noises
+                for (int ear = 0; ear < 2; ear++) {
+                    std::vector<double> z = noises(ear);
+                    for (long i = 0; i < n; i++)
+                        ye[ear][i] = ye[ear][i] + z[i];
+                }
+            } else {                            // the effect mono, at its Pan
+                const double th = (std::max(0, std::min(127, (int)q[14])) - 64) / 63.0 * 0.25 * M_PI + 0.25 * M_PI;
+                const double pl = cos(th), pr = sin(th);
+                std::vector<double> z = noises(0);
+                for (long i = 0; i < n; i++) {
+                    const double m = 0.5 * (ye[0][i] + ye[1][i]) + z[i];
+                    ye[0][i] = m * pl * sqrt(2.0);
+                    ye[1][i] = m * pr * sqrt(2.0);
+                }
+            }
+            for (int ear = 0; ear < 2; ear++) {
+                if (fil)
+                    lfilt(q + 15, q + 18, 3, ye[ear]);
+                ys[ear]->resize(n);
+                for (long i = 0; i < n; i++)
+                    (*ys[ear])[i] = (float)ye[ear][i];
             }
         } else if (bd.kind == 5) {
             // ENHANCER (efxbus.Enhancer): each ear's top above the one-pole's

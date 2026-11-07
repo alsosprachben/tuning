@@ -69,6 +69,13 @@ sys.path.insert(0, HERE)
 
 MAGIC = b"NVX1"
 
+# VARIATIONS NOT LIVE YET: nvlive refuses them (a 0 VLIV record) -- 117:24,
+# Jngl SD Roll: its velocity probe (live.Patch._vel_dependent) rolls about
+# 80 bounces a second, each a whole snare stroke (21,924 rows), past 2.5 GB
+# on its own; refused until the roll is cheaper (bounces sharing a ring, or
+# quiet bounces with fewer partials -- Ben's call)
+LIVE_REFUSED = {(117, 24)}
+
 
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith("--")]
@@ -283,13 +290,15 @@ def main(argv):
             ("Stereo-EQ", 19), ("Spectrum", 20), ("Stereo Delay", 21), ("Mod Delay", 22), ("3 Tap Delay", 23),
             ("4 Tap Delay", 24), ("Tm Ctrl Delay", 25), ("3D Delay", 26), ("Phaser", 27), ("Auto Wah", 28),
             ("Step Flanger", 29), ("Humanizer", 30), ("Lo-Fi 1", 31), ("Limiter", 32), ("Enhancer", 33),
-            ("Clean Gt Multi 2", 3), ("Rhodes Multi", 3), ("Rotary", 34)]
+            ("Clean Gt Multi 2", 3), ("Rhodes Multi", 3), ("Rotary", 34), ("Rotary Multi", 35),
+            ("Keyboard Multi", 3), ("Lo-Fi 2", 36)] + [(_s, 37) for _s in _GSX.SERIES_TYPES]
+    # (a record a code: a type printed at two, the Rotary Multi's, has both)
+    _nat = [(_k, _nm, _kd) for _nm, _kd in _nat for _k in sorted(k for k, v in _GSX.TYPES.items() if v == _nm)]
     if len(_nat) > 64:
-        raise SystemExit("native_export: %d native EFX types, room for 64" % len(_nat))
+        raise SystemExit("native_export: %d native EFX records, room for 64" % len(_nat))
     _NATW = 3 + len(N.EFX_KEYS) + 20 + 8
     consts += [float(len(_nat)), float(len(N.EFX_KEYS)), float(_NATW)]
-    for _nm, _kd in _nat:
-        _k = next(k for k, v in _GSX.TYPES.items() if v == _nm)
+    for _k, _nm, _kd in _nat:
         _pn = _GSX.param_numbers(_nm)
         _df = _GSX.DEFAULTS.get(_nm, {})
         consts += [float(_k[0] * 128 + _k[1]), float(_kd), float(_nm == "Bass Multi")]
@@ -363,10 +372,25 @@ def main(argv):
         consts += [1000.0 + _a] + _side_place(_q.listener_distance
                                               * math.tan(math.radians(max(-80.0, min(80.0, _a)))))
     # ...and the delay types' times, *2, *3, *4 (ms: NaN none); a phaser's
-    # Manual *12 (Hz), the Humanizer's Accel *14
-    for _tk in (2, 3, 4, 12, 14):
+    # Manual *12 (Hz), the Humanizer's Accel *14; Lo-Fi 2's noises' LPFs *11
+    for _tk in (2, 3, 4, 12, 14, 11):
         consts += [float('nan') if _GSX.table_value(_tk, v) is None else float(_GSX.table_value(_tk, v))
                    for v in range(128)]
+    # ...and its Butterworths (efxbus.butter: scipy's own coefficients, at this
+    # rate): the filter after at each Cutoff (*9, else 630 Hz), a low pass then
+    # a high pass, b then a (3 each); the radio's band (300-3000 Hz, first order)
+    import efxbus as _EFB
+    for v in range(128):
+        _hz = _GSX.table_value(9, v) or 630.0
+        for _kd in ('low', 'high'):
+            _f = _EFB.butter(_kd, _hz, B.SR)
+            if len(_f.b) != 3 or len(_f.a) != 3:
+                raise SystemExit("native_export: a Butterworth not of three taps")
+            consts += [float(x) for x in _f.b] + [float(x) for x in _f.a]
+    _f = _EFB.butter('band', (300.0, 3000.0), B.SR, 1)
+    if len(_f.b) != 3 or len(_f.a) != 3:
+        raise SystemExit("native_export: the radio's band not of three taps")
+    consts += [float(x) for x in _f.b] + [float(x) for x in _f.a]
     room = os.fsencode(T.ROOM_NAME[0] or "")
     with open(args[0], "wb") as f:
         f.write(MAGIC)
@@ -471,7 +495,9 @@ def main(argv):
                 if _v == 127 or (_p, _v) not in PM.VARIATION_NAMES:
                     continue
                 rec = [0] * 10
-                if any(cmap_live[128 * _p + k] >= 0 for k in range(128)):
+                if (_p, _v) in LIVE_REFUSED:
+                    pass                # (refused: nvlive's "not native")
+                elif any(cmap_live[128 * _p + k] >= 0 for k in range(128)):
                     # (one variation at a time: its probe notes' per-class
                     # memos let go after it -- N.memo_scope -- or the walk
                     # held every variation's, 0.85 MB each)
