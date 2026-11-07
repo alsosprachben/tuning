@@ -1037,7 +1037,11 @@ EFX_KEYS = ("Level", "Drive", "Amp Sw", "Low Gain", "Hi Gain", "Cmp Atck", "Cmp 
             "RT Speed", "RM Mod Freq 0 - 50 - 127", "RM Bal", "PS Coarse", "PS Fine", "PS Bal", "R.Detune",
             "R.Nz Lev", "W/P Sel", "W/P LPF", "W/P Level", "Disc Type", "Disc LPF", "Disc Nz Lev", "Hum Type",
             "Hum LPF", "Hum Level", "M/S", "Pan(Mono)", "DS Drive", "DS Amp Sw",
-            "Cho Dly", "Cho Bal", "FL Rate", "FL Depth", "FL Dly", "FL Bal", "FL Fb", "Dly Bal", "Dly HF")
+            "Cho Dly", "Cho Bal", "FL Rate", "FL Depth", "FL Dly", "FL Bal", "FL Fb", "Dly Bal", "Dly HF", "OD1 Drive",
+            "OD1 Sel", "OD1 Amp Sw Off/On", "OD2 Drive", "OD2 Sel", "OD2 Amp Sw Off/On", "AW Sens", "AW Pol",
+            "Cho Level", "FL Level", "Dly Level", "OD Level", "OD1 Level", "OD2 Level", "RT Level", "PH Level",
+            "AW Level", "Cho Pan", "FL Pan", "Dly Pan", "OD Pan", "OD1 Pan", "OD2 Pan", "RT Pan", "PH Pan",
+            "AW Pan")
 
 
 def efx_chain(cls):

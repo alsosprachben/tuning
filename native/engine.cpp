@@ -977,6 +977,17 @@ static double song_dist(void *song, long long ch, double on, double sr, const No
 // WHY nv_play's last refusal (-(1 + i)): which of its checks, for the message
 static const char *g_why = "";
 extern "C" const char *nv_play_why(void) { return g_why; }
+// A PARALLEL TYPE's copies: the table's column kinds (nv_play_full's: a copy
+// is made of the rows as the table stores them; NULL makes none -- live's),
+// and each copied note's own rows' end (its copy after them, to the next note's)
+static const int *g_kind = nullptr;
+static std::map<int, long long> g_own_end;
+extern "C" void nv_play_set_kind(const int *kind) { g_kind = kind; }
+extern "C" long long nv_play_own_end(int j, long long dflt)
+{
+    auto it = g_own_end.find(j);
+    return it == g_own_end.end() ? dflt : it->second;
+}
 
 int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr, PyRandom *rs,
             double *rows, long long cap, double *qacc, double *azimuth, long long *nrows, int *played,
@@ -986,6 +997,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
     nv_song_sym_reset(song);                // (the strings' drivers: this play's)
     nv_song_play_mark(song);                // (its rows, Moogs and echoes: this play's, a retry's too)
     nv_refl_memo_reset();                   // (each _prepare its own _RNORM)
+    g_own_end.clear();
     int nn = nv_song_n_notes(song);
     std::vector<int> order(nn);
     std::vector<long long> chs(nn);
@@ -1310,6 +1322,40 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (out.n_push)                     // (an organ's push: the tone's last rows)
             nv_song_add_push_rows(song, total + out.n_knock + out.n_tone - out.n_push,
                                   total + out.n_knock + out.n_tone);
+        // A PARALLEL TYPE's NOTE (gsefx.PARALLEL_TYPES, blockrender._par_close):
+        // its rows branch A's, at A's pan; a copy of them as the table stores
+        // them (cast), at branch B's level and pan, on the part's virtual
+        // channel (+ gsefx.VIRT), after them
+        long long cp = 0;
+        {
+            const double *fc = nullptr;
+            if (g_kind && r > 0 && nv_song_note_fx(song, i, &fc) >= 0 && fc[208] != 0.0) {
+                if (2 * (long long)r > left)
+                    return NV_TOO_SMALL;
+                enum { cAL = 3, cMCH = 6 };
+                const double gb[3] = {fc[209] * fc[212], fc[209] * fc[213], fc[209] * 1.0};
+                const double ga[2] = {fc[210], fc[211]};
+                double *src = rows + NCOLS * total, *dst = rows + NCOLS * (total + r);
+                for (long long q = 0; q < r; q++) {
+                    const double *s = src + NCOLS * q;
+                    double *d = dst + NCOLS * q;
+                    for (int c = 0; c < NCOLS; c++)
+                        d[c] = g_kind[c] == 1 ? (double)(float)s[c] : g_kind[c] == 2 ? (double)(int32_t)s[c] : s[c];
+                    d[cMCH] = (double)(ch + 65536);
+                    for (int w = 0; w < 3; w++)         // (a float32 column scaled in float32: numpy's)
+                        d[cAL + w] = g_kind[cAL + w] == 1 ? (double)((float)d[cAL + w] * (float)gb[w])
+                                                          : d[cAL + w] * gb[w];
+                }
+                if (ga[0] != 1.0 || ga[1] != 1.0)      // (A's own pan, on its rows)
+                    for (long long q = 0; q < r; q++)
+                        for (int w = 0; w < 2; w++) {
+                            double *v = src + NCOLS * q + cAL + w;
+                            *v = (g_kind[cAL + w] == 1 ? (double)(float)*v : *v) * ga[w];
+                        }
+                g_own_end[j] = total + r;
+                cp = r;
+            }
+        }
         if (played) {
             played[j] = i;
             row0[j] = total;
@@ -1318,7 +1364,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             bands[j] = band;            // a half-pedalled note meeting the band: its track
             offs[j] = n.off;            // ...and where its damper lands (its end)
         }
-        total += r;
+        total += r + cp;
     }
     *nrows = total;
     return nn;

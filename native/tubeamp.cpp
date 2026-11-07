@@ -588,3 +588,7 @@ long long nv_amp_expand(double **rowsp, long long *Pp, void **dm, int nch, const
 }
 
 }  // extern "C"
+
+// the valve's imbalance where none is given (tubeamp.IMBALANCE: a
+// parallel type's branch B's, which blockrender leaves unset)
+extern "C" double nv_amp_default_imbalance(void) { return IMBALANCE; }

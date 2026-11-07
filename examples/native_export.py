@@ -264,7 +264,7 @@ def main(argv):
     # A FILE'S INSERTION EFFECT (gsefx.chain, as nvrender builds it): the
     # built types' codes (msb * 128 + lsb: how many, then 128 slots); the
     # types built natively (how many, EFX_KEYS's length, a record's width,
-    # then 64 records (every type's room): the code, the kind -- 1 Overdrive, 2 Distortion, 3 a
+    # then 96 records (every type's room): the code, the kind -- 1 Overdrive, 2 Distortion, 3 a
     # multi, 4 3D Manual, 5 the Compressor, 6 3D Auto, 7 Reverb, 8 Gate Reverb, 9 2 Pitch Shifter, 10 Fb
     # P.Shifter, 11 Space D, 12 Stereo Chorus, 13 Hexa Chorus, 14 Tremolo Chorus, 15 3D Chorus, 16 Stereo
     # Flanger, 17 Tremolo, 18 Auto Pan, 19 Stereo-EQ, 20 Spectrum, 21 Stereo Delay, 22 Mod Delay, 23 3 Tap
@@ -292,10 +292,11 @@ def main(argv):
             ("Step Flanger", 29), ("Humanizer", 30), ("Lo-Fi 1", 31), ("Limiter", 32), ("Enhancer", 33),
             ("Clean Gt Multi 2", 3), ("Rhodes Multi", 3), ("Rotary", 34), ("Rotary Multi", 35),
             ("Keyboard Multi", 3), ("Lo-Fi 2", 36)] + [(_s, 37) for _s in _GSX.SERIES_TYPES]
+    _nat += [(_s, 38) for _s in _GSX.PARALLEL_TYPES]
     # (a record a code: a type printed at two, the Rotary Multi's, has both)
     _nat = [(_k, _nm, _kd) for _nm, _kd in _nat for _k in sorted(k for k, v in _GSX.TYPES.items() if v == _nm)]
-    if len(_nat) > 64:
-        raise SystemExit("native_export: %d native EFX records, room for 64" % len(_nat))
+    if len(_nat) > 96:
+        raise SystemExit("native_export: %d native EFX records, room for 96" % len(_nat))
     _NATW = 3 + len(N.EFX_KEYS) + 20 + 8
     consts += [float(len(_nat)), float(len(N.EFX_KEYS)), float(_NATW)]
     for _k, _nm, _kd in _nat:
@@ -321,7 +322,7 @@ def main(argv):
             else:
                 raise SystemExit("native_export: %s's choice %r is not the engine's" % (_nm, _rg))
         consts += _ch
-    consts += [0.0] * (_NATW * (64 - len(_nat)))
+    consts += [0.0] * (_NATW * (96 - len(_nat)))
     _laws = (list(_GSX.OD_DB) + list(_GSX.DS_DB) + [_GSX.OD_MAKEUP_DB, _GSX.CMP_ATTACK_MS, _GSX.PEDAL_AMP_DRIVE,
              _GSX.EFX_DEPTH_SCALE] + list(_GSX.EQ_Q) + list(_GSX.EQ_FREQS))
     consts += [float(x) for x in _laws] + [0.0] * (30 - len(_laws))

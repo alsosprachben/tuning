@@ -1370,13 +1370,15 @@ int nv_song_trems(void *s, long long *ch, double *cfg, int cap);
 void nv_song_add_amp(void *s, long long ch, double drive, int rotor, double reference, double imbalance,
                      double lv0);
 void nv_song_amp_steps(void *s, long long ch);
+void nv_song_amp_steps_base(void *s, long long ch, double base);
+double nv_amp_default_imbalance(void);
 int nv_song_amp_steps_of(void *s, int k, double *base, const double **starts, const double **levels);
 // A FILE'S INSERTION EFFECT (nvrender's chains, NV_FXN doubles each): the
 // chains, each note's (-1 its part not on the effect, -2 on it, no chain),
 // which notes are their mix channel's first through a chain, the cabinets
 // a chain names (guitar12, bass410; null none)
-enum { NV_FXN = 208 };
-enum { NV_EFX_NAT = 64 };       /* (the export's native types: room for every one) */
+enum { NV_FXN = 224 };
+enum { NV_EFX_NAT = 96 };       /* (the export's native types: room for every one) */
 /* (the export's EFX tables past its pans' places: *9, the waves, the Hexa
    Chorus's voices, then the 3D types' two angles, (key, li, ri, dL, dR) each) */
 enum { NV_EFX_PANS_TO_DEG = 512 + 128 + 5 * 19 + 128 * 6 * 5 };

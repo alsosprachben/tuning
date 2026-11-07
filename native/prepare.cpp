@@ -19,6 +19,7 @@
 
 extern "C" {
 
+extern "C" long long nv_play_own_end(int j, long long dflt);
 long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                        PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind,
                        double scale, double full_db_s, double residual, double beta, long long blk,
@@ -292,10 +293,10 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
         } else if (fx >= 0) {
             // ...the file's chain: its own send to the GS delay (40 03 19)
             send = fc[13] / 127.0;
-            if (!gdev || !(send > 0.0))
-                continue;
-            D = gdev;
-            place = gplace;
+            if (gdev && send > 0.0) {
+                D = gdev;
+                place = gplace;
+            }
         } else if (gdev && !(fx == -1 && kk && kk->efx_set && !iv[3])) {
             // ...else the file's GS delay, at the part's CC94 at the onset
             // (_gsd_send: the last at or before it), a drum key's level 127
@@ -317,15 +318,45 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
             int ed[6];          // (a drum key's own delay level: _dst's, else 127)
             int dlv = iv[3] && (nv_song_dst(song, ch, iv[0], dv[0], ed) & 32) ? ed[5] : 127;
             send = v / 127.0 * (iv[3] ? dlv / 127.0 : 1.0);
-            if (!(send > 0.0))
-                continue;
-            D = gdev;
-            place = gplace;
-        } else {
-            continue;
+            if (send > 0.0) {
+                D = gdev;
+                place = gplace;
+            }
         }
-        long long i0 = row0[j], i1 = j + 1 < nn ? row0[j + 1] : nnote;
-        if (i1 <= i0)
+        // ...A PARALLEL TYPE's COPY (branch B's rows, after the note's own:
+        // _par_close): B's own delay, else the GS delay the note was sent to
+        // (not A's own), its repeats after the note's
+        const long long i1all = j + 1 < nn ? row0[j + 1] : nnote, iown = nv_play_own_end(j, i1all);
+        const double *D2 = nullptr, *place2 = nullptr, *pans2 = nullptr, *mod2 = nullptr;
+        double send2 = 1.0;
+        int tw2 = 4;
+        bool cross2 = false;
+        if (fx >= 0 && fc[208] != 0.0 && iown < i1all) {
+            const double *fb_ = fc - NV_FXN;       // (branch B's record: before A's)
+            if (fb_[34] != 0.0) {
+                D2 = fb_[34] == 2.0 ? fb_ + 96 : fb_ + 35;
+                cross2 = fb_[34] == 2.0 && fb_[121] != 0.0;
+                mod2 = fb_[34] == 2.0 && fb_[122] != 0.0 ? fb_ + 122 : nullptr;
+                place2 = nv_song_fx_place_of(song, &pans2);
+                tw2 = 5;
+            } else if (fc[34] == 0.0 && D && D == gdev) {
+                D2 = gdev;
+                place2 = gplace;
+                send2 = send;
+            }
+        }
+        for (int seg = 0; seg < 2; seg++) {
+        if (seg == 1) {
+            D = D2;
+            place = place2;
+            pans = pans2;
+            send = send2;
+            tw = tw2;
+            cross = cross2;
+            mod = mod2;
+        }
+        long long i0 = seg ? iown : row0[j], i1 = seg ? i1all : iown;
+        if (!D || i1 <= i0)
             continue;
         const double level = D[0], fb = D[1], lpf = D[2], tc = D[3];
         const int ntap = (int)D[4];
@@ -438,6 +469,7 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
                 }
             }
         }
+        }
     }
     long long m = (long long)extra.size() / NCOLS;
     if (m) {
@@ -505,7 +537,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
     // drawn, from its first row to the next note's
     for (int j = 0; j < nn; j++)
         if (nv_song_htrem(song, played[j])) {
-            long long r1 = j + 1 < nn ? row0[j + 1] : nnote;
+            long long r1 = nv_play_own_end(j, j + 1 < nn ? row0[j + 1] : nnote);     // (its own rows)
             nv_song_add_htrem_rows(song, row0[j], r1);
         }
     // THE VALVE AMPLIFIERS (_AMP_CH) and THE ROTATING SPEAKERS (_LESLIE_CH):
@@ -560,6 +592,38 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
             if (fc[2] != 0.0 && nv_song_fx_cab(song, (int)fc[2]))
                 nv_song_add_cab(song, ch, nv_song_fx_cab(song, (int)fc[2]));     // (its cabinet, ahead of the voice's)
         }
+        if (ffirst && fc[208] != 0.0) {
+            // A PARALLEL TYPE's BRANCH B on the part's virtual channel: where B
+            // drives, a valve at PEDAL_AMP_DRIVE, its reference the voice's (or
+            // the Strat's) times the part's level before the effect (_cv0),
+            // following B's level steps; B's cabinet
+            const double *fb_ = fc - NV_FXN;
+            const long long vc = ch + 65536;
+            // (...the voice's own valve where it has one -- its drive and
+            // imbalance, its reference its own, none without -- else B's)
+            const bool vown = k && k->amp_drive != 0.0;
+            double pl[6];
+            if ((vown || fb_[1] != 0.0) && k
+                && nv_song_pitch_level_k(song, played[j], k->init.effort_tilt != 0.0, k->indian, pl)) {
+                double cv = pl[3];
+                if (k->organ && k->organ->swells)
+                    cv = 1.0 * nv_song_note_trim(song, played[j]);
+                const double eg = fod != 0.0 ? fod : 1.0;
+                cv *= flv;
+                cv *= eg;
+                const double cv0 = cv / std::max(flv * eg, 1e-12);
+                const double r0 = vown ? k->amp_reference : (k->amp_reference != 0.0 ? k->amp_reference : 0.2289);
+                const double ref = r0 * cv0;
+                nv_song_add_amp(song, vc, vown ? k->amp_drive : 1.0, 0, r0 != 0.0 ? ref : 0.0,
+                                vown ? k->amp_imbalance : nv_amp_default_imbalance(), fb_[0]);
+                if (r0 != 0.0)
+                    nv_song_amp_steps_base(song, vc, ref);
+            }
+            if (fb_[2] != 0.0 && nv_song_fx_cab(song, (int)fb_[2]))
+                nv_song_add_cab(song, vc, nv_song_fx_cab(song, (int)fb_[2]));
+            else if (k && k->cab_set)
+                nv_song_add_cab(song, vc, k);           // (...else the voice's own)
+        }
         if (k && k->leslie)
             nv_song_add_leslie(song, ch, k->leslie);
         if (k && k->cab_set)                            // (_CAB_CH: the channel's, set once)
@@ -582,6 +646,29 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
                 double cfg[4] = {k->trem_hz, dep, (double)k->trem_stereo, k->trem_scatter};
                 nv_song_add_trem(song, ch, cfg);
             }
+        }
+        if (fx >= 0 && fc[208] != 0.0) {
+            // A PARALLEL TYPE's NOTE CLOSED (_par_close): the part's tremolo
+            // and rockers its virtual channel's too, where it has none yet
+            const long long vc = part + 65536;
+            const int nt_ = nv_song_trems(song, nullptr, nullptr, 0);
+            std::vector<long long> tc(nt_ > 0 ? nt_ : 1);
+            std::vector<double> tg(4 * (nt_ > 0 ? nt_ : 1));
+            nv_song_trems(song, tc.data(), tg.data(), nt_);
+            for (int q = 0; q < nt_; q++)
+                if (tc[q] == part) {
+                    nv_song_add_trem(song, vc, tg.data() + 4 * q);
+                    break;
+                }
+            const int nc_ = nv_song_clavs(song, nullptr, nullptr, 0);
+            std::vector<long long> cc_(nc_ > 0 ? nc_ : 1);
+            std::vector<int> cs_(nc_ > 0 ? nc_ : 1);
+            nv_song_clavs(song, cc_.data(), cs_.data(), nc_);
+            for (int q = 0; q < nc_; q++)
+                if (cc_[q] == part) {
+                    nv_song_add_clav(song, vc, cs_[q]);
+                    break;
+                }
         }
     }
     out[40] = 0.0;
@@ -635,7 +722,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
         int iv[4];
         double dv[2];
         nv_song_get_note(song, i, &ch, iv, dv);
-        long long r0 = row0[j], r1 = j + 1 < nn ? row0[j + 1] : nnote;
+        long long r0 = row0[j], r1 = nv_play_own_end(j, j + 1 < nn ? row0[j + 1] : nnote);
         if (r1 <= r0)
             continue;
         int key = iv[0], vel = iv[1];

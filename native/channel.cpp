@@ -2298,6 +2298,21 @@ void nv_song_amp_steps(void *s, long long ch)
     }
 }
 
+// ...A PARALLEL TYPE's BRANCH B's (its virtual channel: _AMP_REF[_vc]): its
+// reference follows its level steps from a base given whole (_ref * _cv0)
+void nv_song_amp_steps_base(void *s, long long ch, double base)
+{
+    nv::Song *S = (nv::Song *)s;
+    auto st = S->fx_steps.find(ch);
+    if (st == S->fx_steps.end())
+        return;
+    for (size_t k = 0; k < S->amp.size(); k++)
+        if (S->amp[k].first == ch) {
+            S->amp_steps[(int)k] = std::make_pair(base, st->second);
+            return;
+        }
+}
+
 // amp channel k's reference steps: how many (0 none), base, starts, levels
 int nv_song_amp_steps_of(void *s, int k, double *base, const double **starts, const double **levels)
 {
