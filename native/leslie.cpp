@@ -35,10 +35,18 @@ struct Rotor {
     std::vector<double> rate, angle;
 
     Rotor(bool horn, std::vector<std::pair<double, double>> req, const double *L)
+        : Rotor(horn ? L[L_HORN_UP] : L[L_DRUM_UP], horn ? L[L_HORN_DOWN] : L[L_DRUM_DOWN],
+                horn ? 1.0 : L[L_DRUM_RATIO], req, L)
     {
-        up = horn ? L[L_HORN_UP] : L[L_DRUM_UP];
-        down = horn ? L[L_HORN_DOWN] : L[L_DRUM_DOWN];
-        ratio = horn ? 1.0 : L[L_DRUM_RATIO];
+    }
+
+    // an insertion Rotary's (gsefx.rotary_setup): its own spin times, its
+    // drum asked its own speed (ratio -1: only turning the other way)
+    Rotor(double up_, double down_, double ratio_, std::vector<std::pair<double, double>> req, const double *L)
+    {
+        up = up_;
+        down = down_;
+        ratio = ratio_;
         angle.push_back(0.0);
         std::sort(req.begin(), req.end());
         if (req.empty())
@@ -108,6 +116,59 @@ double npmod(double a, double b)
         m = copysign(0.0, b);
     }
     return m;
+}
+
+// AN INSERTION ROTARY's channel record (gsefx.rotary_setup), GSW wide: 1,
+// the horn's spin up and down, the drum's, the drum's and horn's levels,
+// Separate given (1) and its angle, the drum's requests (after the horn's
+// in req); 0 a Leslie's
+const int GSW = 10;
+const double MIC_SHARE = 0.70710678118654752440;      // (leslie.MIC_SHARE: 0.5 ** 0.5)
+
+}  // namespace
+extern "C" void nv_gsd_place(int side, double f, const double *pl, double *out);
+namespace {
+
+// leslie._to_mic: row v as one microphone of a recorded Rotary hears it, at
+// azimuth az to the rotors, arriving from its speaker (side 0 left, 1 right:
+// the GS outputs' places) -- its ear gains and delays the speaker's, its
+// phase the line's
+void to_mic(double *v, int side, double az, const double *place, double f)
+{
+    const int cOM = 0, cP0 = 1, cP0R = 2, cAL = 3, cAR = 4, cAM = 5, cAZ = 9, cNON = 12, cDELL = 37, cDELR = 38;
+    double pl[4];
+    nv_gsd_place(side, f, place, pl);
+    double om = v[cOM], non = v[cNON];
+    double m = fabs(v[cAM]) * MIC_SHARE;
+    v[cP0] = -om * (non + pl[2]) + (v[cP0] + om * (non + v[cDELL]));
+    v[cP0R] = -om * (non + pl[3]) + (v[cP0R] + om * (non + v[cDELR]));
+    v[cDELL] = pl[2];
+    v[cDELR] = pl[3];
+    v[cAL] = m * pl[0];
+    v[cAR] = m * pl[1];
+    v[cAM] = v[cAM] * MIC_SHARE;
+    v[cAZ] = az;
+}
+
+// the rotors of channel k (horn, drum), its requests from req at *q on
+long make_rotors(int k, const int *nreq, const double *req, long q, const double *gs, const double *L,
+                 std::vector<Rotor> &out)
+{
+    std::vector<std::pair<double, double>> rq;
+    for (int j = 0; j < nreq[k]; j++, q++)
+        rq.push_back(std::make_pair(req[2 * q], req[2 * q + 1]));
+    const double *G = gs ? gs + GSW * k : nullptr;
+    if (!G || G[0] == 0.0) {
+        out.emplace_back(true, rq, L);
+        out.emplace_back(false, rq, L);
+        return q;
+    }
+    std::vector<std::pair<double, double>> rd;
+    for (int j = 0; j < (int)G[9]; j++, q++)
+        rd.push_back(std::make_pair(req[2 * q], req[2 * q + 1]));
+    out.emplace_back(G[1], G[2], 1.0, rq, L);
+    out.emplace_back(G[3], G[4], -1.0, rd, L);
+    return q;
 }
 
 // leslie.cabinet_gain
@@ -193,25 +254,35 @@ extern "C" {
 // crossover's copies' rows into *flips (malloc'd, *nflips of them) where
 // flips is given (live's leslie_flip). Returns the copies made, or -1 where
 // the export's leslie does not render by the kernel's lobe.
+long long nv_leslie_expand_gs(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
+                              const int *nreq, const double *req, double sr, const double *L, void **lobe,
+                              long long **flips, long long *nflips, const double *gs, const double *place);
+
 long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                            const int *nreq, const double *req, double sr, const double *L, void **lobe,
                            long long **flips, long long *nflips)
 {
+    return nv_leslie_expand_gs(rowsp, Pp, dm, nch, chans, nreq, req, sr, L, lobe, flips, nflips, nullptr,
+                               nullptr);
+}
+
+// ...with each channel's insertion Rotary (gs: GSW a channel, NULL none) and
+// the GS outputs' places (a recorded Rotary's microphones: K_GSPLACE's)
+long long nv_leslie_expand_gs(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
+                              const int *nreq, const double *req, double sr, const double *L, void **lobe,
+                              long long **flips, long long *nflips, const double *gs, const double *place)
+{
     if (lobe && L[L_LOBE] == 0.0)
         return -1;
-    const int cOM = 0, cAL = 3, cAR = 4, cAM = 5, cMCH = 6, cAZ = 9, cNF = 11, cNON = 12, cVD = 33, cVR = 34,
-              cVP = 35;
+    const int cOM = 0, cAL = 3, cAR = 4, cAM = 5, cMCH = 6, cAZ = 9, cDIR = 10, cNF = 11, cNON = 12, cVD = 33,
+              cVR = 34, cVP = 35;
     std::map<long long, int> rank;
     std::vector<Rotor> rotors;
     {
         long q = 0;
         for (int k = 0; k < nch; k++) {
-            std::vector<std::pair<double, double>> rq;
-            for (int j = 0; j < nreq[k]; j++, q++)
-                rq.push_back(std::make_pair(req[2 * q], req[2 * q + 1]));
             rank[chans[k]] = k;
-            rotors.emplace_back(true, rq, L);
-            rotors.emplace_back(false, rq, L);
+            q = make_rotors(k, nreq, req, q, gs, L, rotors);
         }
     }
     const long long n = *Pp;
@@ -255,6 +326,12 @@ long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, co
         double cg = cabinet_gain(f, L);
         double x4 = pow((f > 1e-9 ? f : 1e-9) / L[L_XOVER_HZ], 4.0);
         double wh = sqrt(x4 / (1.0 + x4)), wd = sqrt(1.0 / (1.0 + x4));
+        // an insertion Rotary's own balance of the rotors (its Hi/Low Level)
+        const double *G = gs && gs[GSW * it->second] != 0.0 ? gs + GSW * it->second : nullptr;
+        if (G) {
+            wh = wh * G[6];
+            wd = wd * G[5];
+        }
         double wp = horn ? wh : wd, ws = horn ? wd : wh;
         if (ws < L[L_XOVER_FLOOR]) {
             wp = 1.0;
@@ -268,6 +345,21 @@ long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, co
         }
         for (int c : {cAL, cAR, cAM})
             r[c] = r[c] * cg * wp;
+        // A RECORDED ROTARY (its Separate): the direct sound as two
+        // microphones round the cabinet hear it -- mic A to the left, mic B
+        // to the right, Separate apart -- each its own swing and Doppler
+        std::vector<double> rB, twinB;
+        if (G && G[7] != 0.0 && place && r[cDIR] > 0.5) {
+            double az0 = r[cAZ], sep = G[8];
+            rB.assign(r, r + NCOLS);
+            to_mic(rB.data(), 1, az0 + 0.5 * sep, place, f);
+            to_mic(r, 0, az0 - 0.5 * sep, place, f);
+            if (!twin.empty()) {
+                twinB = twin;
+                to_mic(twinB.data(), 1, az0 + 0.5 * sep, place, f);
+                to_mic(twin.data(), 0, az0 - 0.5 * sep, place, f);
+            }
+        }
         rotate(r, horn);
         lobes.push_back(Lobe{i, 2 * it->second + (horn ? 0 : 1), r[cAZ], f, horn});
         if (!twin.empty()) {
@@ -276,6 +368,18 @@ long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, co
             extra.insert(extra.end(), twin.begin(), twin.end());
             src.push_back(i);
             lobes.push_back(Lobe{n + pos, 2 * it->second + (horn ? 1 : 0), twin[cAZ], f, !horn});
+        }
+        // ...and mic B's: the row's, then its twin's, after them
+        for (int b = 0; b < 2; b++) {
+            std::vector<double> &vb = b ? twinB : rB;
+            if (vb.empty())
+                continue;
+            bool hb = b ? !horn : horn;
+            long long pos = (long long)src.size();
+            rotate(vb.data(), hb);
+            extra.insert(extra.end(), vb.begin(), vb.end());
+            src.push_back(i);
+            lobes.push_back(Lobe{n + pos, 2 * it->second + (hb ? 0 : 1), vb[cAZ], f, hb});
         }
     }
     long long m = (long long)src.size();
@@ -382,8 +486,18 @@ void nv_leslie_params(long n, const double *nf, const char *flip, const double *
 // point of an n_samples render -- 2 a channel, the horn then the drum (which
 // turns the other way) -- into LANG (2 * nch * lgn); lgn = n_samples / g + 2,
 // g the kernel's grid (rotor_grid). Returns lgn.
+long nv_leslie_angles_gs(int nch, const int *nreq, const double *req, long n_samples, double sr, int blk,
+                         const double *L, float *LANG, const double *gs);
+
 long nv_leslie_angles(int nch, const int *nreq, const double *req, long n_samples, double sr, int blk,
                       const double *L, float *LANG)
+{
+    return nv_leslie_angles_gs(nch, nreq, req, n_samples, sr, blk, L, LANG, nullptr);
+}
+
+// ...with each channel's insertion Rotary (gs: GSW a channel, NULL none)
+long nv_leslie_angles_gs(int nch, const int *nreq, const double *req, long n_samples, double sr, int blk,
+                         const double *L, float *LANG, const double *gs)
 {
     long gg = (blk % 128 == 0 && blk / 128 <= 64) ? 128 : blk;
     long lgn = n_samples / gg + 2;
@@ -391,11 +505,10 @@ long nv_leslie_angles(int nch, const int *nreq, const double *req, long n_sample
         return lgn;
     long q = 0;
     for (int k = 0; k < nch; k++) {
-        std::vector<std::pair<double, double>> rq;
-        for (int j = 0; j < nreq[k]; j++, q++)
-            rq.push_back(std::make_pair(req[2 * q], req[2 * q + 1]));
+        std::vector<Rotor> rs;
+        q = make_rotors(k, nreq, req, q, gs, L, rs);
         for (int h = 0; h < 2; h++) {
-            Rotor ro(h == 0, rq, L);
+            const Rotor &ro = rs[h];
             std::vector<double> kk(ro.angle.size());
             for (size_t i = 0; i < kk.size(); i++)
                 kk[i] = (double)i * ro.step;

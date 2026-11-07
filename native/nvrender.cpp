@@ -142,6 +142,11 @@ long long nv_scan_expand(const double *X, double **rowsp, long long *Pp, void **
                          const int *row0s, const int *depths, const int *choruses, double sr);
 long nv_leslie_angles(int nch, const int *nreq, const double *req, long n_samples, double sr, int blk,
                       const double *L, float *LANG);
+long long nv_leslie_expand_gs(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
+                              const int *nreq, const double *req, double sr, const double *L, void **lobe,
+                              long long **flips, long long *nflips, const double *gs, const double *place);
+long nv_leslie_angles_gs(int nch, const int *nreq, const double *req, long n_samples, double sr, int blk,
+                         const double *L, float *LANG, const double *gs);
 }
 
 // the export's constants, in native_export.py's order
@@ -1488,7 +1493,7 @@ int main(int argc, char **argv)
                kModPhase, kManual, kReso, kMix, kFilType, kSens, kPeak, kPolarity, kStepRate, kDriveSw, kVowel,
                kAccel, kLoFiType, kPostFilter, kThreshold, kRatio, kRelease, kEHMix, kTPSel, kTPModWV, kTPModRT,
                kTPModDep, kAWSw, kAWFilter, kAWPeak, kAWMan, kAWDepth, kAWRate, kPHMix, kPHReso, kPHMan, kPHDepth,
-               kPHRate };
+               kPHRate, kLowSlow, kLowFast, kLowAccl, kLowLevel, kHiSlow, kHiFast, kHiAccl, kHiLevel, kSeparate };
         auto has = [&](int key) { return D[3 + key] != 0.0; };
         // ...AND ITS CONTROLLERS' (gsefx.controlled): a + or # parameter at
         // "setting value + value from controller x depth (%)/100" of its
@@ -1506,12 +1511,27 @@ int main(int argc, char **argv)
                 auto it = cvv.find(src);
                 int cv = it != cvv.end() ? it->second : (src == 0x61 ? 64 : 0);
                 double lo = D[MK + 2 + 2 * w], hi = D[MK + 3 + 2 * w];
+                const int cho = (int)D[MK + 6 + w];
                 if (lo < 0.0) {
-                    choice = true;              // (a choice of codes: not built here)
+                    choice = true;              // (an export from before its choices)
                     return v;
                 }
                 double x = (double)v + (hi - lo) * (cv / 127.0) * dep;
                 x = std::max(lo, std::min(hi, x));
+                if (cho) {                      // A CHOICE: the nearest code, the first of a tie
+                    int best = (int)lo;
+                    double bd = fabs(lo - x);
+                    for (int c = (int)lo + 1; c <= (int)hi; c++) {
+                        if (cho == 2 && c != (int)hi)
+                            continue;
+                        double d = fabs((double)c - x);
+                        if (d < bd) {
+                            bd = d;
+                            best = c;
+                        }
+                    }
+                    return best;
+                }
                 return (int)nearbyint(x);       // (round: half to even)
             }
             return v;
@@ -1762,6 +1782,31 @@ int main(int argc, char **argv)
                     r[0] *= mk;
                 }
             }
+            r[6] = 1.0;
+            r[7] = gain_db(g(kLowGain, 64));
+            r[11] = gain_db(g(kHiGain, 64));
+        } else if (kind == 34) {
+            // ROTARY (gsefx._rotary): the part through our Leslie -- each
+            // rotor's slow and fast speeds (*6), its spin times from its
+            // Accl (*14: accl_tau, coasting down 1.4 times slower), the two
+            // rotors' levels against the louder, the speed the file asks
+            // for, Separate the microphones' angle apart
+            auto tau = [&](int key, int d) { return exp(1.7226 - 0.1566 * T14[clamp(g(key, d))]); };
+            r[140] = 1.0;
+            r[141] = T6[clamp(g(kLowSlow, 6))];
+            r[142] = T6[clamp(g(kLowFast, 113))];
+            r[143] = T6[clamp(g(kHiSlow, 17))];
+            r[144] = T6[clamp(g(kHiFast, 120))];
+            r[145] = tau(kLowAccl, 24);
+            r[146] = 1.4 * r[145];
+            r[147] = tau(kHiAccl, 88);
+            r[148] = 1.4 * r[147];
+            const int llv = g(kLowLevel, 127), hlv = g(kHiLevel, 64);
+            const double top = (double)std::max(std::max(llv, hlv), 1);
+            r[149] = llv / top;
+            r[150] = hlv / top;
+            r[151] = g(kSpeed, 0) != 0 ? 1.0 : 0.0;
+            r[152] = M_PI * g(kSeparate, 96) / 127.0;
             r[6] = 1.0;
             r[7] = gain_db(g(kLowGain, 64));
             r[11] = gain_db(g(kHiGain, 64));
@@ -2702,7 +2747,7 @@ int main(int argc, char **argv)
     // copies, the Doppler, each rotor row's lobe
     std::vector<long long> lch;
     std::vector<int> lnreq;
-    std::vector<double> lreq;
+    std::vector<double> lreq, lgs;
     void *lobe[5] = {nullptr};
     const double *LES = E.les.data();
     for (int k = 0, nl = nv_song_leslie(song, -1, nullptr); k < nl; k++) {
@@ -2729,9 +2774,57 @@ int main(int argc, char **argv)
         }
         lch.push_back(c);
         lnreq.push_back(nq);
+        lgs.insert(lgs.end(), 10, 0.0);
     }
-    if (!lch.empty() && nv_leslie_expand(&rows, &P, dm, (int)lch.size(), lch.data(), lnreq.data(), lreq.data(), SR,
-                                         LES, lobe, nullptr, nullptr) < 0) {
+    // ...AND THE INSERTION ROTARIES (rotary_setup): each mix channel's from
+    // its first note through one, each rotor asked slow or fast as the
+    // type's Speed stands at each change of the timeline; its spin times,
+    // levels and microphones the first setting's
+    {
+        const long nles = (long)lch.size();
+        int nn = nv_song_n_notes(song);
+        for (int i = 0; i < nn; i++) {
+            if (note_fx.empty() || note_fx[i] < 0 || !fx_first[i])
+                continue;
+            if (fxch[(size_t)NV_FXN * note_fx[i] + 140] == 0.0)
+                continue;
+            const long long m = nv_song_mix(song, i);
+            if (std::find(lch.begin() + nles, lch.end(), m) != lch.end())
+                continue;
+            if (std::find(lch.begin(), lch.begin() + nles, m) != lch.begin() + nles) {
+                fprintf(stderr, "nvrender: refused: a Rotary on a Leslie's channel\n");
+                return 2;
+            }
+            std::vector<double> hr, dr;
+            const double *first = nullptr;
+            for (double t : fx_ts) {
+                int pre = fx_prefix(t), cq = fx_on(m % 256, pre) ? fx_chain(pre) : -1;
+                if (cq == -3)
+                    return 2;
+                const double *sc = cq >= 0 ? fxch.data() + (size_t)NV_FXN * cq : nullptr;
+                if (!sc || sc[140] == 0.0)
+                    continue;
+                if (!first)
+                    first = sc;
+                hr.push_back(t);
+                hr.push_back(sc[151] != 0.0 ? sc[144] : sc[143]);
+                dr.push_back(t);
+                dr.push_back(sc[151] != 0.0 ? sc[142] : sc[141]);
+            }
+            if (!first)
+                continue;
+            const double gs[10] = {1.0, first[147], first[148], first[145], first[146], first[149], first[150],
+                                   1.0, first[152], (double)(dr.size() / 2)};
+            lreq.insert(lreq.end(), hr.begin(), hr.end());
+            lreq.insert(lreq.end(), dr.begin(), dr.end());
+            lch.push_back(m);
+            lnreq.push_back((int)(hr.size() / 2));
+            lgs.insert(lgs.end(), gs, gs + 10);
+        }
+    }
+    if (!lch.empty() && nv_leslie_expand_gs(&rows, &P, dm, (int)lch.size(), lch.data(), lnreq.data(), lreq.data(),
+                                            SR, LES, lobe, nullptr, nullptr, lgs.data(),
+                                            E.k.data() + K_GSPLACE) < 0) {
         fprintf(stderr, "nvrender: refused: a Leslie by sidebands (leslie.KERNEL_LOBE off)\n");
         return 2;
     }
@@ -2955,9 +3048,11 @@ int main(int argc, char **argv)
     long lgn = 0;
     void *slo = nullptr;
     if (!lch.empty()) {
-        lgn = nv_leslie_angles((int)lch.size(), lnreq.data(), lreq.data(), N, SR, (int)BLK, LES, nullptr);
+        lgn = nv_leslie_angles_gs((int)lch.size(), lnreq.data(), lreq.data(), N, SR, (int)BLK, LES, nullptr,
+                                  lgs.data());
         LANG.resize((size_t)2 * lch.size() * lgn);
-        nv_leslie_angles((int)lch.size(), lnreq.data(), lreq.data(), N, SR, (int)BLK, LES, LANG.data());
+        nv_leslie_angles_gs((int)lch.size(), lnreq.data(), lreq.data(), N, SR, (int)BLK, LES, LANG.data(),
+                            lgs.data());
         void *h = dlopen(E.lobe_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
         slo = h ? dlsym(h, "synth_voice_lobe") : nullptr;
         if (!slo) {

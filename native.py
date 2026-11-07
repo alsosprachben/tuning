@@ -1031,7 +1031,8 @@ EFX_KEYS = ("Level", "Drive", "Amp Sw", "Low Gain", "Hi Gain", "Cmp Atck", "Cmp 
             "Dly Lev 3", "Dly Lev 4", "Mod Phase", "Manual", "Reso", "Mix", "Fil Type", "Sens", "Peak", "Polarity",
             "Step Rate", "Drive Sw", "Vowel", "Accel", "Lo-Fi Type", "Post Filter", "Threshold", "Ratio", "Release",
             "EH Mix", "TP Sel", "TP Mod WV", "TP Mod RT", "TP Mod Dep", "AW Sw", "AW Filter", "AW Peak", "AW Man",
-            "AW Depth", "AW Rate", "PH Mix", "PH Reso", "PH Man", "PH Depth", "PH Rate")
+            "AW Depth", "AW Rate", "PH Mix", "PH Reso", "PH Man", "PH Depth", "PH Rate", "Low Slow", "Low Fast",
+            "Low Accl", "Low Level", "Hi Slow", "Hi Fast", "Hi Accl", "Hi Level", "Separate")
 
 
 def efx_chain(cls):

@@ -283,10 +283,10 @@ def main(argv):
             ("Stereo-EQ", 19), ("Spectrum", 20), ("Stereo Delay", 21), ("Mod Delay", 22), ("3 Tap Delay", 23),
             ("4 Tap Delay", 24), ("Tm Ctrl Delay", 25), ("3D Delay", 26), ("Phaser", 27), ("Auto Wah", 28),
             ("Step Flanger", 29), ("Humanizer", 30), ("Lo-Fi 1", 31), ("Limiter", 32), ("Enhancer", 33),
-            ("Clean Gt Multi 2", 3), ("Rhodes Multi", 3)]
+            ("Clean Gt Multi 2", 3), ("Rhodes Multi", 3), ("Rotary", 34)]
     if len(_nat) > 64:
         raise SystemExit("native_export: %d native EFX types, room for 64" % len(_nat))
-    _NATW = 3 + len(N.EFX_KEYS) + 20 + 6
+    _NATW = 3 + len(N.EFX_KEYS) + 20 + 8
     consts += [float(len(_nat)), float(len(N.EFX_KEYS)), float(_NATW)]
     for _nm, _kd in _nat:
         _k = next(k for k, v in _GSX.TYPES.items() if v == _nm)
@@ -297,9 +297,21 @@ def main(argv):
         consts += [float(_df.get(n, -1)) for n in range(1, 21)]
         _mk = _GSX.marks(_nm)
         consts += [float(_mk.get('+', 0)), float(_mk.get('#', 0))]
+        _ch = []
         for _m in ('+', '#'):
             _rg = _GSX.param_range(_nm, _mk[_m]) if _m in _mk else (0, 127)
-            consts += [-1.0, -1.0] if isinstance(_rg, list) else [float(_rg[0]), float(_rg[1])]
+            consts += [float(min(_rg)), float(max(_rg))]
+            # (a choice of codes, gsefx.controlled's nearest: 1 every code
+            # lo..hi, 2 the two ends)
+            if not isinstance(_rg, list):
+                _ch.append(0.0)
+            elif _rg == list(range(min(_rg), max(_rg) + 1)):
+                _ch.append(1.0)
+            elif _rg == [min(_rg), max(_rg)]:
+                _ch.append(2.0)
+            else:
+                raise SystemExit("native_export: %s's choice %r is not the engine's" % (_nm, _rg))
+        consts += _ch
     consts += [0.0] * (_NATW * (64 - len(_nat)))
     _laws = (list(_GSX.OD_DB) + list(_GSX.DS_DB) + [_GSX.OD_MAKEUP_DB, _GSX.CMP_ATTACK_MS, _GSX.PEDAL_AMP_DRIVE,
              _GSX.EFX_DEPTH_SCALE] + list(_GSX.EQ_Q) + list(_GSX.EQ_FREQS))
