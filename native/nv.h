@@ -651,6 +651,7 @@ int nv_moog_tone(const VoiceSnap *v, const ToneIn *t, const MoogLayer *L, double
 /* the voice's gain scaled after it is built (props.gain *= k), what was
    read from it made again (the bore's norm) */
 void nv_voice_regain(const VoiceInit *c, VoiceSnap *s, double k);
+void nv_voice_turn(const VoiceInit *c, const VoiceSnap *s, VoiceNote *o, double angle);
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
                    double attack_volume, double channel_volume, double effort, PyRandom *rs,
                    VoiceSnap *s, VoiceNote *o);
@@ -1098,6 +1099,9 @@ typedef struct {
     // the part on it with no chain built (the tone's own not played), 0 not
     int fx_set;
     double fx_level, fx_od, fx_comp[3];
+    // ...its 3D type's angle at its onset (pos3d: radians, + right), fx_p3d 0 none
+    int fx_p3d;
+    double fx_angle;
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -1115,6 +1119,7 @@ void nv_refl_memo_reset(void);
    copies made. */
 void nv_gsd_place_reset(void);
 void nv_gsd_place(int side, double f, const double *pl, double *out);
+void nv_gsd_place4(int side, double f, double beta, const double *P, double *out);
 long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                            const double *sends, const int *ncents, const double *cents, const int *kinds,
                            const double *gsp, double sr);
@@ -1221,6 +1226,9 @@ void nv_song_sym_reset(void *s);
 double nv_sym_coupling(const VoiceSnap *drv, const VoiceSnap *rsp, double g, double wmin);
 void nv_song_kits(void *s, const double *f0, const double *seat);
 void nv_song_chokes(void *s, const unsigned long long *choke);
+void nv_song_kits_n(void *s, const double *f0, const double *seat, int n);
+void nv_song_chokes_n(void *s, const unsigned long long *choke, int n);
+void nv_song_mapk_base(int base);
 void nv_song_legato(void *s, long long ch, int note, int k);
 void nv_song_note_stroke(void *s, int i, double ratio, int inner);
 void nv_song_strokes(void *s, const int *kind, const double *par);
@@ -1320,6 +1328,7 @@ int nv_song_kidx(void *s, int i);
 int nv_song_tone(void *s, int i);
 void nv_song_snd(void *s, long long ch, double t, int cc, int v);
 void nv_song_sound(void *s, long long ch, double t, double *d);
+void nv_song_cmx(void *s, int kind, long long ch, double t, double v);
 int nv_song_glide(void *s, int i, int *cc5);
 void nv_song_organ(void *s, long long ch, const OrganSpec *spec, const OrganSpec *const *prog_organ);
 int nv_song_n_organs(void *s);
@@ -1363,12 +1372,15 @@ int nv_song_amp_steps_of(void *s, int k, double *base, const double **starts, co
 // chains, each note's (-1 its part not on the effect, -2 on it, no chain),
 // which notes are their mix channel's first through a chain, the cabinets
 // a chain names (guitar12, bass410; null none)
-enum { NV_FXN = 24 };
+enum { NV_FXN = 56 };
 void nv_song_fx(void *s, int nchain, const double *chains, int nnote, const int *note_fx, const unsigned char *first,
                 const NoteClass *cab0, const NoteClass *cab1);
 int nv_song_note_fx(void *s, int i, const double **chain);
 int nv_song_note_fx_first(void *s, int i);
 const NoteClass *nv_song_fx_cab(void *s, int which);
+// ...its delay's places: the outputs' (K_GSPLACE's 13) and a pan's (128 x 4)
+void nv_song_fx_place(void *s, const double *place, const double *pans);
+const double *nv_song_fx_place_of(void *s, const double **pans);
 // ...and a mix channel's level steps over the file (its amp's reference: tubeamp.segment's 'steps')
 void nv_song_fx_steps(void *s, long long ch, int n, const double *starts, const double *levels);
 void nv_song_amp_cfg(void *s, int k, double *reference, double *imbalance);

@@ -19,6 +19,7 @@
 // channel (mt32mux: a CC7 a tick before nearly every note).
 
 #include <algorithm>
+#include <tuple>
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
@@ -32,8 +33,23 @@ void nv_midi_pitch(void *p, int i, int *iv, long *seq, double *t, double *v);
 int nv_midi_master(void *p);
 int nv_midi_n_ccs(void *p);
 void nv_midi_cc(void *p, int i, int *iv, double *t);
+int nv_midi_n_cmx(void *p);
+void nv_midi_cmx(void *p, int i, int *iv, double *dv);
 int nv_midi_n_notes(void *p);
 void nv_midi_note(void *p, int i, int *iv, double *dv);
+double nv_midi_total(void *p);
+}
+
+// the render's block grid, for the matrix's vibrato (a point a block): its
+// block and rate, given before the bend passes; and the matrix's LFO rate at
+// rest (blockrender's TREMOLO_MATRIX_HZ)
+static int g_blk = 0;
+static double g_sr = 0.0;
+static const double TREMOLO_MATRIX_HZ = 5.5;
+extern "C" void nv_bend_grid(int blk, double sr)
+{
+    g_blk = blk;
+    g_sr = sr;
 }
 
 namespace nv {
@@ -54,7 +70,7 @@ struct P {
 // note (the notes as the file wrote them -- before a gesture's strokes, as
 // blockrender's passes read them)
 static void streams(void *midi, double bend_range, std::map<int, std::vector<std::pair<double, double>>> &out,
-                    std::map<long long, double> &first_on)
+                    std::map<long long, double> &first_on, long nblk)
 {
     using nv::bend::P;
     int nn = nv_midi_n_notes(midi);
@@ -92,6 +108,21 @@ static void streams(void *midi, double bend_range, std::map<int, std::vector<std
     if (nv_midi_master(midi))              // a master message: every channel that plays (_first_on)
         for (auto &kv : first_on)
             chans.insert((int)kv.first);
+    // ...and the channels the controller matrix moves in pitch or vibrato
+    // (_CMXEV's), each [(t, value)] in order, its LFO rate with them
+    std::map<int, std::vector<std::pair<double, double>>> cpit, cvib, crate;
+    for (int i = 0, n = nv_midi_n_cmx(midi); i < n; i++) {
+        int civ[2];
+        double cdv[2];
+        nv_midi_cmx(midi, i, civ, cdv);
+        auto *m = civ[0] == 2 ? &cpit : civ[0] == 6 ? &cvib : civ[0] == 5 ? &crate : nullptr;
+        if (m)
+            (*m)[civ[1]].push_back(std::make_pair(cdv[0], cdv[1]));
+        if (civ[0] == 2 || civ[0] == 6)
+            chans.insert(civ[1]);
+    }
+    if (!cvib.empty() && nblk <= 0 && g_blk > 0)
+        nblk = (long)(nv_midi_total(midi) * g_sr / g_blk) + 2;     // (before the render's length: the file's)
     for (int c : chans) {
         std::vector<P> ev = by[c];
         ev.insert(ev.end(), mst.begin(), mst.end());
@@ -128,6 +159,69 @@ static void streams(void *midi, double bend_range, std::map<int, std::vector<std
             double st = (hr ? range : bend_range) * (hw ? wheel : 0.0) / 8192.0 + (hc ? coarse : 0.0)
                         + (hf ? fine : 0.0) / 100.0 + (hmc ? mcoarse : 0.0) + (hmf ? mfine : 0.0) / 100.0;
             o.push_back(std::make_pair(e.t, pow(2.0, st / 12.0)));
+        }
+        // ...TIMES THE CONTROLLER MATRIX's PITCH (a source other than the
+        // bend into pitch, semitones), each change a ratio event; and its
+        // VIBRATO (LFO1 pitch depth) as a sine on the same stream, a point a
+        // block wherever its depth is up
+        auto cp = cpit.find(c), cv = cvib.find(c);
+        if (cp == cpit.end() && cv == cvib.end())
+            continue;
+        static const std::vector<std::pair<double, double>> none;
+        const auto &pit = cp != cpit.end() ? cp->second : none;
+        std::vector<std::pair<double, double>> mev;
+        for (auto &e : pit)
+            mev.push_back(std::make_pair(e.first, pow(2.0, e.second / 12.0)));
+        if (cv != cvib.end()) {
+            const auto &vev = cv->second;
+            auto cr = crate.find(c);
+            auto rate_at = [&](double t) {      // (_cmx_at('rate'): 0 before any)
+                double v = 0.0;
+                if (cr != crate.end())
+                    for (auto &e : cr->second) {
+                        if (e.first > t + 1e-9)
+                            break;
+                        v = e.second;
+                    }
+                return v;
+            };
+            double pv = 0.0, psemi = 0.0, bdt2 = (double)g_blk / g_sr;
+            size_t vi = 0, pj = 0;
+            bool was = false;
+            for (long kb = 0; kb < nblk; kb++) {
+                double tb = (kb + 0.5) * bdt2;
+                while (vi < vev.size() && vev[vi].first <= tb)
+                    pv = vev[vi++].second;
+                while (pj < pit.size() && pit[pj].first <= tb)
+                    psemi = pit[pj++].second;
+                if (pv <= 0.0) {
+                    if (was)                    // (back to the plain pitch as it stops)
+                        mev.push_back(std::make_pair(kb * bdt2, pow(2.0, psemi / 12.0)));
+                    was = false;
+                    continue;
+                }
+                was = true;
+                double hz = std::max(0.5, TREMOLO_MATRIX_HZ + rate_at(tb));
+                mev.push_back(std::make_pair(kb * bdt2,
+                                             pow(2.0, (psemi * 100.0 + pv * sin(2.0 * M_PI * hz * tb)) / 1200.0)));
+            }
+            std::sort(mev.begin(), mev.end());
+        }
+        // the stream's and the matrix's, sorted (t, which, ratio): each the product of the two in force
+        std::vector<std::tuple<double, int, double>> all;
+        for (auto &e : o)
+            all.push_back(std::make_tuple(e.first, 0, e.second));
+        for (auto &e : mev)
+            all.push_back(std::make_tuple(e.first, 1, e.second));
+        std::sort(all.begin(), all.end());
+        double rb = 1.0, rm = 1.0;
+        o.clear();
+        for (auto &e : all) {
+            if (std::get<1>(e) == 0)
+                rb = std::get<2>(e);
+            else
+                rm = std::get<2>(e);
+            o.push_back(std::make_pair(std::get<0>(e), rb * rm));
         }
     }
 }
@@ -235,7 +329,7 @@ int nv_bend_btun(void *midi, void *song, double bend_range, double *out)
         out[c] = 0.0;
     std::map<int, std::vector<std::pair<double, double>>> st;
     std::map<long long, double> first_on;
-    streams(midi, bend_range, st, first_on);
+    streams(midi, bend_range, st, first_on, 0);
     int n = 0;
     for (auto &kv : st) {
         auto f = first_on.find(kv.first);
@@ -261,7 +355,7 @@ int nv_bend_gesture(void *midi, void *song, double bend_range, int ch, long nblk
     (void)song;
     std::map<int, std::vector<std::pair<double, double>>> st;
     std::map<long long, double> first_on;
-    streams(midi, bend_range, st, first_on);
+    streams(midi, bend_range, st, first_on, nblk);
     auto s = st.find(ch);
     auto f = first_on.find(ch);
     if (s == st.end() || f == first_on.end() || s->second.empty())
@@ -341,8 +435,34 @@ int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr,
     double lv = pow((v7 / 127.0) * (v11 / 127.0), 2.0);
     bool moves = false;
     std::vector<std::pair<double, double>> fev;
-    for (const E &e : ccs) {
-        if (e.cc == 7)
+    // ...and the controller matrix's AMPLITUDE (ctrlmatrix), a gain moved by
+    // the mod wheel, a CC or the pressure -- after the CC at its instant,
+    // whose change it follows (sorted by time, then CCs first, then order)
+    struct F {
+        double t;
+        int k, i, cc, v;
+        double g;
+    };
+    std::vector<F> evs;
+    for (size_t i = 0; i < ccs.size(); i++)
+        evs.push_back(F{ccs[i].t, 0, (int)i, ccs[i].cc, ccs[i].v, 0.0});
+    size_t na = 0;
+    for (int i = 0, n = nv_midi_n_cmx(midi); i < n; i++) {
+        int civ[2];
+        double cdv[2];
+        nv_midi_cmx(midi, i, civ, cdv);
+        if (civ[0] == 0 && civ[1] == ch)
+            evs.push_back(F{cdv[0], 1, (int)na++, -1, 0, cdv[1]});
+    }
+    if (na)
+        std::sort(evs.begin(), evs.end(), [](const F &a, const F &b) {
+            return std::make_tuple(a.t, a.k, a.i) < std::make_tuple(b.t, b.k, b.i);
+        });
+    double ag = 1.0;
+    for (const F &e : evs) {
+        if (e.k == 1)
+            ag = e.g;
+        else if (e.cc == 7)
             v7 = e.v;
         else if (e.cc == 11)
             v11 = e.v;
@@ -351,6 +471,8 @@ int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr,
         else
             continue;
         double g = pow((v7 / 127.0) * (v11 / 127.0), 2.0);
+        if (ag != 1.0)
+            g = g * ag;
         if (g != lv)
             for (auto &s : spans)
                 if (s.first < e.t && e.t < s.second) {

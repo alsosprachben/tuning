@@ -219,6 +219,13 @@ struct Parsed {
         int key, par, v;
     };
     std::vector<DEdit> dedit;
+    // THE CONTROLLER MATRIX's sums as they move (_cmx_upd's cmx): kind 0
+    // amp, 1 tva, 2 pitch, 3 cutoff, 4 tvf, 5 rate, 6 vib; channel, time, value
+    struct CmxEv {
+        int kind, ch;
+        double t, v;
+    };
+    std::vector<CmxEv> cmx;
     // THE INSERTION EFFECT's timeline (gsefx.parse), a reset an event too:
     // kind 0 a reset, 1 the type (a msb, b lsb), 2 a parameter (a 1-20, b),
     // 3 a send (a its address, b), 4 an effect controller's (a, b), 5 a
@@ -615,6 +622,7 @@ static const int GM_DEFAULT_VOLUME = 100, GM_DEFAULT_EXPRESSION = 127, GM_DEFAUL
 static const int PERCUSSION_CHANNEL = 9, CC84_CANCEL = 128;
 static std::vector<int> g_map_kits;     // (nv_midi_map_kits)
 static bool g_map_kits_set = false;
+static bool g_map_kits_play = false;    // (nv_midi_map_kits_play: the export has their tables)
 static const double BEND_RANGE_SEMITONES = 2.0;     // tonelib's: GM's
 
 // blockrender.parse for a GM file: < 0 where it would take a path this does not have
@@ -764,8 +772,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     std::map<int, std::map<int, int>> pat_now;
     const char *mve = getenv("TUNING_MOD_VIBRATO");
     const bool modvib = mve && *mve && strcmp(mve, "0") && strcmp(mve, "off");
-    bool cmx_moves = false;
-    auto cmx_upd = [&](int ch) {
+    auto cmx_upd = [&](double t, int ch) {
         auto mi = cmx.find(ch);
         if (mi == cmx.end())
             return;
@@ -822,7 +829,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                                                           : std::array<double, 7>{1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
         for (int q = 0; q < 7; q++)
             if (fabs(now[q] - last[q]) > 1e-9)
-                cmx_moves = true;
+                P.cmx.push_back(Parsed::CmxEv{q, ch, t, now[q]});
         cmx_last[ch] = now;
     };
     int efx_src[2] = {0, 0};
@@ -969,7 +976,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                         mi->second.reset();
                     }
                     mi->second.set(row, col, dep);
-                    cmx_upd(ch2);
+                    cmx_upd(t, ch2);
                     if (!seen_note)
                         P.gs = 1;
                     continue;
@@ -1004,7 +1011,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                         any = true;
                     }
                 if (any) {
-                    cmx_upd(ch2);
+                    cmx_upd(t, ch2);
                     continue;
                 }
             }
@@ -1069,7 +1076,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             for (auto &mc : cmx)
                 mc.second.reset();
             for (auto &mc : cmx)
-                cmx_upd(mc.first);
+                cmx_upd(t, mc.first);
             rfmsb.clear(); rrange.clear(); rmod.clear(); rfine.clear(); rcoarse.clear(); rtp.clear(); rtb.clear();
             continue;
         }
@@ -1094,21 +1101,31 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 bs = lsb ? 1 + 640 + lsb : 0;
             } else if (!dr)
                 bs = msb ? 1 + 128 * (mp >= 1 && mp <= 4 ? mp : 0) + msb : 0;
+            int dprog = m.d0;
             if (dr && msb != 120 && mp) {
                 // a drum set read in the part's map (kit_in_map): the map's own
-                // set where it has one (not the engine's), else the program
-                bool own = !g_map_kits_set;
-                for (int mk : g_map_kits)
-                    own = own || mk == 128 * mp + m.d0 || ((mp == 1 || mp == 2) && mk == 3 * 128 + m.d0);
-                if (own)
+                // set where it has one -- 128 m + p, else (maps 1, 2) 384 + p --
+                // its drum program 128 + its index (the export's MKIT), else the program
+                if (!g_map_kits_set)
                     return -5;
+                int own = -1;
+                for (size_t j = 0; j < g_map_kits.size() && own < 0; j++)
+                    if (g_map_kits[j] == 128 * mp + m.d0)
+                        own = (int)j;
+                for (size_t j = 0; j < g_map_kits.size() && own < 0; j++)
+                    if ((mp == 1 || mp == 2) && g_map_kits[j] == 3 * 128 + m.d0)
+                        own = (int)j;
+                if (own >= 0 && !g_map_kits_play)
+                    return -5;
+                if (own >= 0)
+                    dprog = 128 + own;
             }
             drums[ch] = dr;
             bsel[ch] = bs;
             if (dr)         // "When the Drum Set is changed, DRUM SETUP PARAMETER values will all be initialized"
                 P.dedit.push_back(Parsed::DEdit{ch, t, -1, -1, 0});
             P.banked |= rxbank && (msb || lsb);     // (a bank, or a map: live's not yet)
-            prog[ch] = m.d0;
+            prog[ch] = dr ? dprog : m.d0;
             P.progs.push_back(std::make_pair(ch, m.d0));
             if (!drums[ch]) {
                 P.chprogs.push_back(std::make_pair(ch, m.d0));  // (a drum set is no organ's program)
@@ -1128,7 +1145,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             else if (cc == 32)
                 blsb[ch] = v;
             ctrl[ch][cc] = v;
-            cmx_upd(ch);
+            cmx_upd(t, ch);
             if (cc == 121) {
                 for (int rc : {64, 65, 66, 67})
                     P.ccs.push_back(CCEv{ch, t, rc, 0});
@@ -1253,7 +1270,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             P.events.push_back(LiveEv{t, 4, ch, ((m.d1 << 7) | m.d0) - 8192, 0});
             efx_cv(t, ch, 0x61, ((m.d1 << 7) | m.d0) >> 7);
             bend_now[ch] = ((m.d1 << 7) | m.d0) - 8192;
-            cmx_upd(ch);
+            cmx_upd(t, ch);
         } else if (kind == 0x90 && m.d1 > 0) {
             seen_note = true;
             P.events.push_back(LiveEv{t, 0, ch, m.d0, m.d1});
@@ -1262,6 +1279,13 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             n.ch = ch; n.note = m.d0; n.on = t; n.off = 0.0; n.vel = m.d1;
             n.v7 = (c.count(7) ? c[7] : GM_DEFAULT_VOLUME) / 127.0;
             n.v11 = (c.count(11) ? c[11] : GM_DEFAULT_EXPRESSION) / 127.0;
+            {
+                // (the controller matrix's amplitude, where a matrix routes
+                // one: in the expression, which chan_vol squares -- cv)
+                auto li = cmx_last.find(ch);
+                if (li != cmx_last.end() && li->second[0] != 1.0)
+                    n.v11 = n.v11 * pow(li->second[0], 0.5);
+            }
             n.pan = ((c.count(10) ? c[10] : GM_DEFAULT_PAN) - 64) / 63.0;
             n.prog = prog.count(ch) ? prog[ch] : 0;
             n.drum = is_drums(ch);
@@ -1282,17 +1306,15 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             P.ats.push_back(CCEv{ch, t, -1, m.d0});     // the channel's aftertouch (ats)
             efx_cv(t, ch, 0x60, m.d0);
             cat_now[ch] = m.d0;
-            cmx_upd(ch);
+            cmx_upd(t, ch);
         }
         else if (kind == 0xA0) {
             P.pts.push_back(CCEv{ch, t, m.d0, m.d1});   // a key's polytouch (pts)
             pat_now[ch][m.d0] = m.d1;
-            cmx_upd(ch);
+            cmx_upd(t, ch);
         }
     }
     P.total = t;
-    if (cmx_moves)
-        return -8;              // (a controller matrix that moves: its passes are Python's)
     // ALL NOTES OFF and the channel-mode messages that carry it (CC123-127,
     // _prep_notes_off): each key held on the channel lifted at the first one
     // after its onset, if that comes before its own key-up
@@ -1319,7 +1341,7 @@ extern "C" {
 
 // A file's bytes -> a parse (nv_midi_* below read it), or NULL with *err the
 // reason (-1 a malformed file, -2 type 2, -3 ports, -4 an exclusive, -5 a
-// bank, -6 an NRPN or MPE, -7 mono mode, -8 a controller matrix that moves). The notes are parse's after
+// bank, -6 an NRPN or MPE, -7 mono mode). The notes are parse's after
 // _prep_notes_off.
 // THE DRUM INSTRUMENTS' OWN (dedit): edit i's channel, key, parameter, value
 // (iv) and time; the count
@@ -1329,6 +1351,16 @@ void nv_midi_dedit(void *p, int i, int *iv, double *t)
     const auto &e = ((nv::Parsed *)p)->dedit[i];
     iv[0] = e.ch; iv[1] = e.key; iv[2] = e.par; iv[3] = e.v;
     *t = e.t;
+}
+
+// THE CONTROLLER MATRIX's sums as they move: event i's kind and channel (iv),
+// time and value (dv); the count
+int nv_midi_n_cmx(void *p) { return (int)((nv::Parsed *)p)->cmx.size(); }
+void nv_midi_cmx(void *p, int i, int *iv, double *dv)
+{
+    const auto &e = ((nv::Parsed *)p)->cmx[i];
+    iv[0] = e.kind; iv[1] = e.ch;
+    dv[0] = e.t; dv[1] = e.v;
 }
 
 // THE INSERTION EFFECT's timeline: event i's kind, a, b (iv) and time; the count
@@ -1342,6 +1374,9 @@ void nv_midi_efx(void *p, int i, int *iv, double *t)
 
 // THE MAPS' OWN DRUM SETS (percussion_map.KITS past 127), for kit_in_map:
 // until they are given, any drum set read in a map is refused
+// ...and whether the export carries their tables (MKIT): played, else refused
+void nv_midi_map_kits_play(int on) { nv::g_map_kits_play = on != 0; }
+
 void nv_midi_map_kits(const int *ids, int n)
 {
     nv::g_map_kits.assign(ids, ids + n);
@@ -1582,7 +1617,7 @@ void nv_midi_song(void *p, void *song, const double *trim)
     for (const nv::Note &n : P->notes) {
         int n0 = nv_song_n_notes(song);
         nv_song_note(song, n.ch, n.note, n.on, n.off, n.vel, n.v7, n.v11, n.pan,
-                     trim[(n.drum ? 128 : 0) + n.prog], n.prog, n.drum);
+                     trim[(n.drum ? 128 : 0) + (n.drum && n.prog > 127 ? 0 : n.prog)], n.prog, n.drum);
         if (n.bsel)
             nv_song_note_bank(song, n.bsel);    // its variation: its slot, or its layers
         if (n.mcut || n.mslur)

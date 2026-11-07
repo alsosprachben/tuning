@@ -1672,3 +1672,4 @@ int nv_click(const VoiceSnap *v, const ToneIn *t, const NoteClass *K, const Note
 }
 #include "npyrandom.c" /* numpy's normal stream (the organ's wind) */
 #include "pocketfft.c" /* numpy's rfft (the gunshot's N-wave: nv_pulse_series) */
+#include "efxrev.c"    /* the GS insertion effect's reverbs (efxbus's: their responses, the convolution) */

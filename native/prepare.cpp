@@ -209,8 +209,8 @@ static long long mf104_expand(void *song, double **rowsp, long long *Pp, const i
 static long long gsd_expand(const NoteClass *const *K, void *song, const int *played, const long long *row0, int nn,
                             long long nnote, double **rowsp, long long *Pp, const int *kind, double sr)
 {
-    enum { cOM = 0, cP0 = 1, cP0R = 2, cAL = 3, cAR = 4, cAM = 5, cNON = 12, cNOFF = 13, cRE = 15, cVD = 33, cVR = 34,
-           cVP = 35, cDL = 37, cDR = 38, cFMW = 46, cNFR = 47, cFMP = 48, cFMPR = 49 };
+    enum { cOM = 0, cP0 = 1, cP0R = 2, cAL = 3, cAR = 4, cAM = 5, cNF = 11, cNON = 12, cNOFF = 13, cRE = 15, cVD = 33,
+           cVR = 34, cVP = 35, cDL = 37, cDR = 38, cFMW = 46, cNFR = 47, cFMP = 48, cFMPR = 49 };
     const double FLOOR = pow(10.0, -60.0 / 20.0), TPI = 2.0 * M_PI;
     auto cast = [&](double *r) {
         for (int c = 0; c < NCOLS; c++)
@@ -229,15 +229,22 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
         int iv[4];
         double dv[2];
         nv_song_get_note(song, played[j], &ch, iv, dv);
-        const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[nv_song_kidx(song, played[j])];
+        const NoteClass *k = (iv[2] < 0 || (iv[2] > 127 && !iv[3])) ? nullptr : K[nv_song_kidx(song, played[j])];
         const NoteClass *kk = K[nv_song_kidx(song, played[j])];
-        const double *D = nullptr, *place = nullptr;
+        const double *D = nullptr, *place = nullptr, *pans = nullptr;
         double send = 1.0;
+        int tw = 4;                         // (a tap's doubles: time, level, output, period[, shift])
         const double *fc = nullptr;
         const int fx = nv_song_note_fx(song, played[j], &fc);
         if (fx == -1 && k && k->efx_set && k->efx_dly && !iv[3]) {
             D = k->dly_p;                   // (a tone's own insertion delay, in the GS delay's place)
             place = k->efx_place;
+        } else if (fx >= 0 && fc[34] != 0.0) {
+            // ...the file's chain's own delay (a pitch shifter's), sent whole
+            // in the GS delay's place: its taps 5 each, a shift with them
+            D = fc + 35;
+            place = nv_song_fx_place_of(song, &pans);
+            tw = 5;
         } else if (fx >= 0) {
             // ...the file's chain: its own send to the GS delay (40 03 19)
             send = fc[13] / 127.0;
@@ -297,23 +304,34 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
             if (g0 <= 0.0)
                 continue;
             for (int t = 0; t < ntap; t++) {
-                const double tau = D[5 + 4 * t], tl = D[6 + 4 * t], period = D[8 + 4 * t];
-                const int side = (int)D[7 + 4 * t];
+                const double tau = D[5 + tw * t], tl = D[6 + tw * t], period = D[8 + tw * t];
+                const double shr = tw > 4 ? D[9 + tw * t] : 1.0;
+                const int side = (int)D[7 + tw * t];
                 for (int q = 0; q < 64; q++) {
                     double g = g0 * tl * (q ? pow(fb, (double)q) : 1.0);
                     if (fabs(g) * rel < FLOOR || (q && fb == 0.0))
                         break;
                     long long d = (long long)nearbyint((tau + q * period) * sr);
+                    // (a pitch shifter's: each repeat by its ratio once more, k + 1 times)
+                    const double sh = tw > 4 ? pow(shr, (double)(q + 1)) : 1.0;
                     double pl[4];
-                    nv_gsd_place(side, f * 1.0, place, pl);
+                    if (side >= 100)            // (a tap at a pan between the outputs)
+                        nv_gsd_place4(side, f * sh, place[0], pans + 4 * (side - 100), pl);
+                    else
+                        nv_gsd_place(side, f * sh, place, pl);
                     std::vector<double> c(row, row + NCOLS);
                     c[cNON] = row[cNON] + (double)d;
                     c[cNOFF] = row[cNOFF] + (double)d;
                     c[cNFR] = c[cNON] - floor(c[cNON]);
                     c[cDL] = pl[2];
                     c[cDR] = pl[3];
-                    c[cP0] = -om * (c[cNON] + pl[2]) + (row[cP0] + om * (row[cNON] + row[cDL]));
-                    c[cP0R] = -om * (c[cNON] + pl[3]) + (row[cP0R] + om * (row[cNON] + row[cDR]));
+                    const double om2 = om * sh;     // (a shifter's repeat at its own pitch)
+                    if (sh != 1.0) {
+                        c[cOM] = om2;
+                        c[cNF] = row[cNF] * sh;
+                    }
+                    c[cP0] = -om2 * (c[cNON] + pl[2]) + (row[cP0] + om * (row[cNON] + row[cDL]));
+                    c[cP0R] = -om2 * (c[cNON] + pl[3]) + (row[cP0R] + om * (row[cNON] + row[cDR]));
                     if (row[cFMW] != 0.0) {
                         c[cFMP] = row[cFMP] - row[cFMW] * (double)d;
                         c[cFMPR] = row[cFMPR] - row[cFMW] * (double)d;
@@ -408,7 +426,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
         int iv[4];
         double dv[2];
         nv_song_get_note(song, played[j], &ch, iv, dv);
-        const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[nv_song_kidx(song, played[j])];
+        const NoteClass *k = (iv[2] < 0 || (iv[2] > 127 && !iv[3])) ? nullptr : K[nv_song_kidx(song, played[j])];
         const long long part = ch;
         ch = nv_song_mix(song, played[j]);              // (each tone its own: TONE_SEG)
         // (a tone's own insertion effect, melodic, where the file puts its

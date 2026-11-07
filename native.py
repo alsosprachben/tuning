@@ -303,7 +303,7 @@ class NoteIn(ctypes.Structure):
                    ('sym_drv', ctypes.c_void_p), ('blk', C), ('xp', C),
                    ('hammered', I), ('reslur', I), ('hammer_on', C), ('siren_set', I), ('siren_end', C),
                    ('press', C), ('gs_eq', C * 4), ('fx_set', I), ('fx_level', C), ('fx_od', C),
-                   ('fx_comp', C * 3)])
+                   ('fx_comp', C * 3), ('fx_p3d', I), ('fx_angle', C)])
 
 
 class NoteOut(ctypes.Structure):
@@ -335,7 +335,7 @@ def _load():
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
-                                                       'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
+                                                       'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'efxrev.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
                                                        'epiano.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
@@ -466,6 +466,9 @@ def _load():
             ('nv_tmpl_rank', ctypes.c_void_p, [ctypes.c_void_p, I, ctypes.POINTER(LL)]),
             ('nv_sphere_mean', C, [C, C, C, C]),
             ('nv_npy_normals', None, [ctypes.c_ulonglong, ctypes.c_long, ctypes.c_void_p]),
+            ('nv_efx_reverb_ir', LL, [C, I, C, I, C, ctypes.c_void_p, ctypes.c_void_p, LL]),
+            ('nv_efx_gate_ir', LL, [C, I, C, C, ctypes.c_void_p, ctypes.c_void_p, LL]),
+            ('nv_efx_conv', I, [ctypes.c_void_p, LL, ctypes.c_void_p, LL, LL, LL, ctypes.c_void_p]),
             ('nv_tmpl_col', ctypes.c_void_p, [ctypes.c_void_p, I, I]),
             ('nv_tcache_kits', None, [ctypes.c_void_p, D, D, ctypes.POINTER(ctypes.c_ulonglong),
                                       ctypes.POINTER(I), D, C]),
@@ -1015,7 +1018,10 @@ _EFX = {}
 EFX_KEYS = ("Level", "Drive", "Amp Sw", "Low Gain", "Hi Gain", "Cmp Atck", "Cmp Sus", "Cmp Level", "Cmp Sw",
             "OD Sel", "OD Drive", "OD Amp Sw", "OD Sw", "EQ L Gain", "EQ M Fq", "EQ M Q", "EQ M Gain", "EQ H Gain",
             "OD L Gain", "OD H Gain", "CF Sel", "CF Rate", "CF Depth", "CF Fb", "CF Mix", "Dly Time", "Dly Fb",
-            "Dly Mix", "EH Sens", "TP Sw")
+            "Dly Mix", "EH Sens", "TP Sw", "Azimuth", "Speed", "Turn", "Clockwise", "Attack", "Sustain",
+            "Post Gain", "Type", "Pre Dly", "Time", "HF Damp", "Balance", "Gate Time", "L.Bal", "Pre Dly 1",
+            "Pre Dly 2", "EFX Pan 1", "EFX Pan 2", "Coarse 1", "Fine 1", "Coarse 2", "Fine 2", "EFX Pan",
+            "P.Coarse", "P.Fine", "Feedback", "Wah Fil", "Wah Man", "Wah Peak", "Wah Sw", "Rate", "Depth", "Phase")
 
 
 def efx_chain(cls):
@@ -1718,6 +1724,30 @@ _KITS = []
 SPAR = 136          # a drum key's gesture row (native/nv.h NV_SPAR): its strokes, then its layers
 
 
+# THE PER-CLASS MEMOS (made once a class, reused, never state): what
+# memo_scope lets go -- _FAMILIES is not one (its ids are handed out in order)
+_MEMOS = ('_CLASS', '_NOTE', '_ORGAN', '_SL_CLS', '_EFX', '_MOOG')
+
+
+class memo_scope(object):
+    """A run of per-class work whose classes are not wanted after it (the
+    export's VLIV: each variation's live.Patch, its probe notes rendered):
+    the memos as they were before it, the entries it added let go -- so a
+    walk over every variation holds one variation's, not all of theirs."""
+
+    def __enter__(self):
+        self.keep = {n: set(globals()[n]) for n in _MEMOS}
+        return self
+
+    def __exit__(self, *exc):
+        g = globals()
+        for n, ks in self.keep.items():
+            d = g[n]
+            for k in [k for k in d if k not in ks]:
+                del d[k]
+        return False
+
+
 def kits():
     """The drum sets as the engine's song and K tables take them, for each
     drum program p and key (q = 128 p + key, the set kit_for_program(p)):
@@ -1733,11 +1763,27 @@ def kits():
     if _KITS:
         return _KITS[0]
     import percussion_map as PCM
-    classes, f0, seat = [None] * 16384, (ctypes.c_double * 16384)(), (ctypes.c_double * 16384)()
-    choke = (ctypes.c_ulonglong * (2 * 16384))()
-    skind, spar = (ctypes.c_int * 16384)(), (ctypes.c_double * (SPAR * 16384))()
-    for p in range(128):
-        kit = PCM.kit_for_program(p)
+    _KITS.append(kit_tables([PCM.kit_for_program(p) for p in range(128)]))
+    return _KITS[0]
+
+
+def map_kits():
+    """The maps' own drum sets (percussion_map.KITS past 127, sorted: the
+    sets kit_in_map reads in a part's map), as kits() gives the GS sets:
+    (ids, classes, f0, seat, choke, skind, spar), set j's key at 128 j + key."""
+    import percussion_map as PCM
+    ids = sorted(k for k in PCM.KITS if k >= 128)
+    return (ids,) + kit_tables([PCM.kit_for_program(k) for k in ids])
+
+
+def kit_tables(kitlist):
+    """kits()'s tables for a list of drum sets, set p's key at q = 128 p + key."""
+    import percussion_map as PCM
+    n = 128 * len(kitlist)
+    classes, f0, seat = [None] * n, (ctypes.c_double * n)(), (ctypes.c_double * n)()
+    choke = (ctypes.c_ulonglong * (2 * n))()
+    skind, spar = (ctypes.c_int * n)(), (ctypes.c_double * (SPAR * n))()
+    for p, kit in enumerate(kitlist):
         for key in range(128):
             d = PCM.percussion_for_note(key, kit)
             if not d:
@@ -1762,13 +1808,12 @@ def kits():
                     and not getattr(cls, 'alias_sweep', None)):
                 classes[q] = cls
     # (a key the engine plays only where it plays every layer with it)
-    for q in range(16384):
+    for q in range(n):
         if classes[q] is not None and any(classes[128 * (q // 128) + int(k)] is None
                                           for k in spar[SPAR * (q + 1) - 3:SPAR * (q + 1) - 3
                                                         + int(spar[SPAR * (q + 1) - 4])]):
             classes[q] = None
-    _KITS.append((classes, f0, seat, choke, skind, spar))
-    return _KITS[0]
+    return (classes, f0, seat, choke, skind, spar)
 
 
 def k_table(classes, programs=range(128)):
@@ -3857,6 +3902,40 @@ def xcexp(z):
     return out
 
 
+def efx_ir(kind, sr, *args):
+    """efxbus's Reverb ('reverb': type, pre-delay ms, Time, HF damp Hz or
+    None) or Gate Reverb ('gate': type, pre-delay ms, gate ms) response, an
+    array per ear, from native/efxrev.c -- or None without the library."""
+    import numpy as np
+    d = lib()
+    if d is None:
+        return None
+    cap = int(10.0 * sr) + 64
+    hL, hR = np.empty(cap), np.empty(cap)
+    if kind == 'reverb':
+        rtype, pre_ms, time, damp = args
+        n = d.nv_efx_reverb_ir(float(sr), int(rtype), float(pre_ms), int(time), float(damp or 0.0),
+                               hL.ctypes.data, hR.ctypes.data, cap)
+    else:
+        gtype, pre_ms, gate_ms = args
+        n = d.nv_efx_gate_ir(float(sr), int(gtype), float(pre_ms), float(gate_ms), hL.ctypes.data, hR.ctypes.data,
+                             cap)
+    if n <= 0:
+        raise ValueError("efx_ir: %s's response past %d samples" % (kind, cap))
+    return [hL[:n].copy(), hR[:n].copy()]
+
+
+def efx_conv(x, h, k, m):
+    """(x * h)[k:k + m], native/efxrev.c's overlap-add (efxbus's reverbs)."""
+    import numpy as np
+    x = np.ascontiguousarray(x, np.float64)
+    h = np.ascontiguousarray(h, np.float64)
+    out = np.empty(int(m))
+    if lib().nv_efx_conv(x.ctypes.data, len(x), h.ctypes.data, len(h), int(k), int(m), out.ctypes.data):
+        raise ValueError("efx_conv: no plan for a response of %d" % len(h))
+    return out
+
+
 def xpow(x, y):
     import numpy as np
     xa, ya = np.asarray(x, np.float64), np.asarray(y, np.float64)
@@ -4970,10 +5049,18 @@ def variation_tables():
         lys = P.layers_of(vp)
         if lys:
             layer_slots, whole = [], True
+            # (a layer's organ: the engine's where the variation's own class
+            # is registered and the layer is of its family -- the part's
+            # registration is that class's, its layers' notes ride it -- else Python's)
+            vpc = P.property_class_for_program(vp)
+            vfam = (B.organ_family(vpc) if isinstance(vpc, type) and getattr(vpc, 'registerable', False)
+                    and organ(vpc) is not None else None)
+
+            def reg_ok(c):
+                return not getattr(c, 'registerable', False) or (vfam is not None and B.organ_family(c) == vfam)
             for lp, st, vlo, vhi in lys:
                 cl = [P.layer_class(lp, k) for k in range(128)]
-                # (a layer's organ: Python's -- its registration is a layer class's)
-                whole = whole and all(ok(c) and not getattr(c, 'registerable', False) for c in cl if c is not None)
+                whole = whole and all(ok(c) and reg_ok(c) for c in cl if c is not None)
                 slots.append((p, v, int(lp.layer), cl))
                 layer_slots.append((len(slots) - 1, int(st), int(vlo), int(vhi)))
             if not whole:

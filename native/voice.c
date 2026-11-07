@@ -1400,6 +1400,17 @@ void nv_voice_regain(const VoiceInit *c, VoiceSnap *s, double k)
         bore_norm(c, s);
 }
 
+/* A NOTE TURNED TO AN ANGLE after it is built (a GS 3D type's: props.pan_angle,
+   props.place()): its ears' incidences and delays from there */
+void nv_voice_turn(const VoiceInit *c, const VoiceSnap *s, VoiceNote *o, double angle)
+{
+    double e[4];
+    o->pan_angle = angle;
+    voice_hrtf_at(c, angle, s->position_x, e);
+    o->left_incidence = e[0]; o->right_incidence = e[1];
+    o->left_hrtf_delay = e[2]; o->right_hrtf_delay = e[3];
+}
+
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
                    double attack_volume, double channel_volume, double effort, PyRandom *rs,
                    VoiceSnap *s, VoiceNote *o)

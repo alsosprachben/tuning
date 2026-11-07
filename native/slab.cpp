@@ -8281,6 +8281,31 @@ long nv_part_moog_table(void *h, int which, float *out, long n)
     return (long)v.size();
 }
 
+// THE LIVE SLOTS' COLUMNS, for a check: each sounding slot's f8, f4, f4n, i8
+// and i4 (NF8 + NF4 + NF4N + NI8 + NI4 numbers, slab.cpp's names' order),
+// up to cap slots; how many there are
+long nv_part_slots_dump(void *h, double *out, long cap)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    const auto &S = P->S;
+    const int W = nv::slab::NF8 + nv::slab::NF4 + nv::slab::NF4N + nv::slab::NI8 + nv::slab::NI4;
+    long n = 0;
+    for (const auto &kv : S.live)
+        for (long sl : kv.second) {
+            if (n < cap) {
+                double *o = out + (size_t)W * n;
+                int c = 0;
+                for (int q = 0; q < nv::slab::NF8; q++) o[c++] = S.f8[q][sl];
+                for (int q = 0; q < nv::slab::NF4; q++) o[c++] = S.f4[q][sl];
+                for (int q = 0; q < nv::slab::NF4N; q++) o[c++] = S.f4n[q][sl];
+                for (int q = 0; q < nv::slab::NI8; q++) o[c++] = (double)S.i8[q][sl];
+                for (int q = 0; q < nv::slab::NI4; q++) o[c++] = (double)S.i4[q][sl];
+            }
+            n++;
+        }
+    return n;
+}
+
 // the kernel library's Moog row functions (synthkernel.c moog_pitch_cells,
 // moog_shape_rows), as the caller has it loaded
 void nv_part_moog_kernel(void *h, void *pcells, void *srows)

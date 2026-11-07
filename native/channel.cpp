@@ -186,6 +186,10 @@ struct NoteKey {
     }
 };
 
+// K's region of the maps' own drum sets (a drum program 128 + j's keys): the
+// export's, after the variations (nv_song_mapk_base)
+static int g_k_mapk = 0;
+
 struct Ev {
     long long ch;
     int note;
@@ -208,7 +212,7 @@ struct Ev {
     // its class's index in K: a drum set's key, a variation's, a program's
     int kidx() const
     {
-        return kover >= 0 ? kover : drum ? NV_K_DRUMS + 128 * prog + note
+        return kover >= 0 ? kover : drum ? (prog < 128 ? NV_K_DRUMS + 128 * prog : g_k_mapk + 128 * (prog - 128)) + note
                                          : slot >= 0 ? NV_K_VAR + 128 * slot + note : 128 * prog + note;
     }
     // ...and the TONE it is on its part (_TONE_SEGS' key: the program, or
@@ -292,6 +296,7 @@ struct Song {
     std::vector<int> note_fx;
     std::vector<unsigned char> fx_first;
     const NoteClass *fx_cab[2] = {nullptr, nullptr};
+    const double *fx_place = nullptr, *fx_pans = nullptr;
     std::map<long long, std::pair<std::vector<double>, std::vector<double>>> fx_steps;
     // ...and of each note's bellows push (blockrender's push_rows), [first, end)
     std::vector<std::pair<long long, long long>> push_rows;
@@ -570,8 +575,39 @@ struct Song {
         return nullptr;
     }
 
-    // _snd_d: CC71-78's d (sound_offset) in force on channel c at t, 0 none
+    // THE CONTROLLER MATRIX's sums (_CMXEV): (kind, channel) -> [(t, value)]
+    std::map<std::pair<int, long long>, std::vector<std::pair<double, double>>> cmx;
+    // _cmx_at: its value k on channel c in force at t (d before any); has: any at all
+    double cmx_at(int k, long long c, double t, double d, bool *has) const
+    {
+        auto it = cmx.find(std::make_pair(k, c));
+        *has = it != cmx.end();
+        double v = d;
+        if (*has)
+            for (const auto &e : it->second) {
+                if (e.first > t + 1e-9)
+                    break;
+                v = e.second;
+            }
+        return v;
+    }
+
+    // _snd_d: CC71-78's d (sound_offset) in force on channel c at t, 0 none --
+    // and the controller matrix's: its cutoff as brightness, its LFO1 rate as
+    // the voice's vibrato rate (x 2^d)
     void sound_at(long long c, double t, double *d) const
+    {
+        sound_cc_at(c, t, d);
+        bool has;
+        double v = cmx_at(3, c, t, 0.0, &has);
+        if (has)
+            d[3] = std::max(-1.0, std::min(1.0, d[3] + v / 9600.0));
+        v = cmx_at(5, c, t, 0.0, &has);
+        if (has)
+            d[5] = d[5] + log2(std::max(0.1, 1.0 + v / 5.5));
+    }
+
+    void sound_cc_at(long long c, double t, double *d) const
     {
         for (int i = 0; i < 8; i++)
             d[i] = 0.0;
@@ -1042,7 +1078,7 @@ struct Song {
         std::map<std::pair<long long, int>, int> kit_on;
         std::map<std::pair<long long, int>, std::vector<double>> ons;
         for (const Ev &e : notes) {
-            if (!e.drum || e.prog < 0 || e.prog > 127)
+            if (!e.drum || e.prog < 0 || 2 * (size_t)(128 * e.prog + e.note) >= kit_choke.size())
                 continue;
             const unsigned long long *m = &kit_choke[2 * (128 * e.prog + e.note)];
             if (!(m[0] | m[1]))
@@ -1126,7 +1162,7 @@ struct Song {
     {
         std::vector<Ev> out;
         for (const Ev &e : notes) {
-            bool in = e.drum && e.prog >= 0 && e.prog < 128 && e.note >= 0 && e.note < 128;
+            bool in = e.drum && e.prog >= 0 && e.prog < (int)(kit_f0.size() / 128) && e.note >= 0 && e.note < 128;
             int q = 128 * e.prog + e.note, kn = e.note;
             // ...A MELODIC SFX's (sfx_strokes_of): its kit key's table, the key its generator's
             const NoteClass *mk = (!e.drum && K) ? K[e.kidx()] : nullptr;
@@ -1895,6 +1931,12 @@ int nv_song_moog_tables(void *s, float *ft, float *kn, int *nkn, long *knk, long
 // CC71-78's d in force on channel ch at t (d[0] CC71's), 0 none
 void nv_song_sound(void *s, long long ch, double t, double *d) { ((nv::Song *)s)->sound_at(ch, t, d); }
 
+// THE CONTROLLER MATRIX's sums as they move (the reader's): kind, channel, time, value
+void nv_song_cmx(void *s, int kind, long long ch, double t, double v)
+{
+    ((nv::Song *)s)->cmx[std::make_pair(kind, ch)].push_back(std::make_pair(t, v));
+}
+
 // numpy's default_rng(seed).standard_normal(n) (native/npyrandom.c)
 extern "C" void nv_npy_normals(unsigned long long seed, long n, double *out);
 
@@ -2296,6 +2338,18 @@ int nv_song_note_fx_first(void *s, int i)
 {
     const nv::Song *S = (nv::Song *)s;
     return i >= 0 && i < (int)S->fx_first.size() ? S->fx_first[i] : 0;
+}
+
+void nv_song_fx_place(void *s, const double *place, const double *pans)
+{
+    ((nv::Song *)s)->fx_place = place;
+    ((nv::Song *)s)->fx_pans = pans;
+}
+
+const double *nv_song_fx_place_of(void *s, const double **pans)
+{
+    *pans = ((nv::Song *)s)->fx_pans;
+    return ((nv::Song *)s)->fx_place;
 }
 
 const NoteClass *nv_song_fx_cab(void *s, int which)
@@ -2949,8 +3003,15 @@ void nv_song_channel(void *s, long long ch, double btun, const double *otun, int
 void nv_song_kits(void *s, const double *f0, const double *seat)
 {
     nv::Song *S = (nv::Song *)s;
-    S->kit_f0.assign(f0, f0 + 16384);
-    S->kit_seat.assign(seat, seat + 16384);
+    nv_song_kits_n(s, f0, seat, 16384);
+}
+
+// ...the maps' own sets' after the 128 (n keys in all)
+void nv_song_kits_n(void *s, const double *f0, const double *seat, int n)
+{
+    nv::Song *S = (nv::Song *)s;
+    S->kit_f0.assign(f0, f0 + n);
+    S->kit_seat.assign(seat, seat + n);
 }
 
 // A note's pitch and level as its channel gives them: f0, velocity, pan,
@@ -2989,7 +3050,7 @@ int nv_song_pitch_level_ks(void *s, int i, int effort_tilt, int indian, double s
     out[5] = 0.0;
     if (e.drum) {
         int q = 128 * e.prog + note;
-        if (S->kit_f0.empty() || e.prog < 0 || e.prog > 127 || S->kit_f0[q] == 0.0)
+        if (S->kit_f0.empty() || e.prog < 0 || (size_t)q >= S->kit_f0.size() || S->kit_f0[q] == 0.0)
             return 0;
         int dv[6];
         int dm = S->dst(ch, note, on, dv);      // (the file's own setting of this drum: _dst)
@@ -3108,7 +3169,14 @@ int nv_song_slur(void *s, int i, int *out)
 // nv_song_finish)
 void nv_song_chokes(void *s, const unsigned long long *choke)
 {
-    ((nv::Song *)s)->kit_choke.assign(choke, choke + 2 * 16384);
+    nv_song_chokes_n(s, choke, 16384);
+}
+
+void nv_song_mapk_base(int base) { nv::g_k_mapk = base; }
+
+void nv_song_chokes_n(void *s, const unsigned long long *choke, int n)
+{
+    ((nv::Song *)s)->kit_choke.assign(choke, choke + 2 * (size_t)n);
 }
 
 // Where a later strike in its exclusive class stops this note (the first

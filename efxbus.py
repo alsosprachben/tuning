@@ -407,6 +407,13 @@ class GateReverb:
     LPF_HZ = 7000.0
 
     def __init__(self, sr, gtype=0, pre_ms=0.5, gate_ms=65.0):
+        # (its response native/efxrev.c's, as nvrender's: below, where there is no library)
+        import native as _NV
+        _h = _NV.efx_ir('gate', sr, gtype, pre_ms, gate_ms)
+        if _h is not None:
+            self.h = _h
+            self.hist = np.zeros(len(self.h[0]) - 1)
+            return
         n = max(8, int(round(gate_ms / 1000.0 * sr)))
         pre = int(round(pre_ms / 1000.0 * sr))
         u = np.arange(n) / float(n)
@@ -428,10 +435,15 @@ class GateReverb:
         """The part (mono in) through the pair of responses, its history
         carried: each window's output as the whole signal's would be."""
         from scipy.signal import fftconvolve
+        import native as _NV
         m = 0.5 * (np.asarray(L, np.float64) + np.asarray(R, np.float64))
         x = np.concatenate([self.hist, m])
         k = len(self.hist)
-        out = [fftconvolve(x, h, mode='full')[k:k + len(m)] for h in self.h]
+        # (native/efxrev.c's convolution, as nvrender's; scipy's where there is no library)
+        if _NV.lib() is not None:
+            out = [_NV.efx_conv(x, h, k, len(m)) for h in self.h]
+        else:
+            out = [fftconvolve(x, h, mode='full')[k:k + len(m)] for h in self.h]
         self.hist = x[len(x) - k:] if k else self.hist
         return out[0].astype(np.float32), out[1].astype(np.float32)
 
@@ -454,6 +466,12 @@ class Reverb(GateReverb):
 
     def __init__(self, sr, rtype=0, pre_ms=74.0, time=120, damp_hz=6300.0):
         from scipy.signal import lfilter
+        import native as _NV
+        _h = _NV.efx_ir('reverb', sr, rtype, pre_ms, time, damp_hz)
+        if _h is not None:
+            self.h = _h
+            self.hist = np.zeros(len(self.h[0]) - 1)
+            return
         ty = REVERB_TYPES.get(int(rtype), REVERB_TYPES[0])
         rt = 0.1 * 50.0 ** (max(0, min(127, int(time))) / 127.0) * ty['rt']
         n = int(min(1.2 * rt, 8.0) * sr) + 8

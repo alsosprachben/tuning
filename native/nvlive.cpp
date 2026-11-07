@@ -127,6 +127,9 @@ void nv_part_sysex(void *h, const uint8_t *d, int n);
 int nv_part_take_reset(void *h);
 void nv_part_mts_ref(void *h, int note, double hz);
 void nv_tcache_set_gm2(void *h, int on);
+void nv_tcache_set_var(void *h, int v);
+void nv_live_vars(int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2,
+                  int nslot, const OrganSpec *const *so, long long kn);
 void nv_midi_free(void *p);
 double nv_midi_total(void *p);
 int nv_midi_n_events(void *p);
@@ -212,6 +215,20 @@ struct Export {
     std::vector<double> kit_spar;
     std::string room, libs[3];
     std::vector<OrganSpec> organs;        // ORGN: the registered organs' tables
+    // VARS: bank select (the file renderer's): each slot's classes at each key, each
+    // entry's layers (slot, semitones, velocities), trims and class, GS's and GM 2's tables
+    struct VarEnt {
+        std::vector<std::array<int, 4>> ls;
+        double trim[2] = {1.0, 1.0};
+        int pcls = -1;
+    };
+    std::vector<int> vmap, vgs, vgm2, dmap;    // ...and DRON: K's drone region
+    std::vector<int> vslot_v;                   // each slot's variation key (live.Patch.variation)
+    // VNAM: the variations the picker offers: program, key, name
+    std::vector<std::array<int, 2>> vpv;
+    std::vector<std::string> vnames;
+    std::vector<std::array<int, 10>> vpart;     // VLIV: each one's live record, as part[]'s
+    std::vector<VarEnt> vents;
     struct Stops {
         std::vector<std::string> names;
         std::vector<std::vector<int>> rows;
@@ -350,7 +367,33 @@ static bool read_export(const char *path, Export &E)
             char vt[4];
             int vl = 0;
             if (ok && fread(vt, 1, 4, f) == 4 && !memcmp(vt, "VARS", 4) && fread(&vl, 4, 1, f) == 1) {
-                fseek(f, vl, SEEK_CUR);      // (bank select: the file renderer's)
+                int ns = 0, ne = 0;
+                ok = fread(&ns, 4, 1, f) == 1;
+                std::vector<int> pvl(3 * (size_t)ns);
+                ok = ok && fread(pvl.data(), 4, pvl.size(), f) == pvl.size();
+                E.vslot_v.resize(ns);
+                for (int s = 0; s < ns; s++)
+                    E.vslot_v[s] = pvl[3 * s + 1];
+                E.vmap.resize(128 * (size_t)ns);
+                ok = ok && fread(E.vmap.data(), 4, E.vmap.size(), f) == E.vmap.size() && fread(&ne, 4, 1, f) == 1;
+                E.vents.assign(1, Export::VarEnt{});
+                for (int e = 0; ok && e < ne; e++) {
+                    int h[3];
+                    Export::VarEnt v;
+                    ok = fread(h, 4, 3, f) == 3;
+                    v.ls.resize(ok ? h[2] : 0);
+                    for (auto &l : v.ls)
+                        ok = ok && fread(l.data(), 4, 4, f) == 4;
+                    E.vents.push_back(v);
+                }
+                E.vgs.resize(5 * 128 * 128);
+                E.vgm2.resize(128 * 128);
+                ok = ok && fread(E.vgs.data(), 4, E.vgs.size(), f) == E.vgs.size()
+                     && fread(E.vgm2.data(), 4, E.vgm2.size(), f) == E.vgm2.size();
+                for (int e = 1; ok && e <= ne; e++)
+                    ok = fread(E.vents[e].trim, 8, 2, f) == 2;
+                for (int e = 1; ok && e <= ne; e++)
+                    ok = fread(&E.vents[e].pcls, 4, 1, f) == 1;
             } else {
                 fseek(f, vp, SEEK_SET);
             }
@@ -359,10 +402,46 @@ static bool read_export(const char *path, Export &E)
             long dp = ftell(f);
             char dt[4];
             int dl = 0;
-            if (ok && fread(dt, 1, 4, f) == 4 && !memcmp(dt, "DRON", 4) && fread(&dl, 4, 1, f) == 1)
-                fseek(f, dl, SEEK_CUR);
-            else
+            if (ok && fread(dt, 1, 4, f) == 4 && !memcmp(dt, "DRON", 4) && fread(&dl, 4, 1, f) == 1
+                && dl == 4 * 256) {
+                E.dmap.resize(256);
+                ok = fread(E.dmap.data(), 4, 256, f) == 256;
+            } else {
                 fseek(f, dp, SEEK_SET);
+            }
+        }
+        // ...then MKIT (the file renderer's: passed) and VNAM (the picker's variations)
+        for (;;) {
+            long tp = ftell(f);
+            char tt[4];
+            int tl = 0;
+            if (!(ok && fread(tt, 1, 4, f) == 4 && fread(&tl, 4, 1, f) == 1)) {
+                fseek(f, tp, SEEK_SET);
+                break;
+            }
+            if (!memcmp(tt, "MKIT", 4)) {
+                fseek(f, tl, SEEK_CUR);
+            } else if (!memcmp(tt, "VLIV", 4)) {
+                int nv = 0;
+                ok = fread(&nv, 4, 1, f) == 1;
+                E.vpart.resize(ok ? nv : 0);
+                for (auto &r : E.vpart)
+                    ok = ok && fread(r.data(), 4, 10, f) == 10;
+            } else if (!memcmp(tt, "VNAM", 4)) {
+                int nv = 0;
+                ok = fread(&nv, 4, 1, f) == 1;
+                for (int q = 0; ok && q < nv; q++) {
+                    int h[3];
+                    ok = fread(h, 4, 3, f) == 3;
+                    std::string s(ok ? h[2] : 0, '\0');
+                    ok = ok && fread(&s[0], 1, s.size(), f) == s.size();
+                    E.vpv.push_back({h[0], h[1]});
+                    E.vnames.push_back(s);
+                }
+            } else {
+                fseek(f, tp, SEEK_SET);
+                break;
+            }
         }
         } else {
             fseek(f, pos, SEEK_SET);
@@ -728,10 +807,47 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; i++)
         drums = drums || !strcmp(argv[i], "--drums");
     static const int DRUM_PART[10] = {1, 1, 1, -1, -1, -1, -1, 0, 0, 0};
-    const int *pp = drums ? DRUM_PART : E.part[program & 127];
+    // a part's live record: its variation's (VLIV), else its program's (LIVE)
+    auto prec = [&](int prog, int var) -> const int * {
+        for (size_t j = 0; var && j < E.vpv.size() && j < E.vpart.size(); j++)
+            if (E.vpv[j][0] == (prog & 127) && E.vpv[j][1] == var)
+                return E.vpart[j].data();
+        return E.part[prog & 127];
+    };
+    const int *pp = drums ? DRUM_PART : prec(program, atoi(opt(argc, argv, "bank", "0").c_str()));
+    // a variation that is a Moog (its key 60's class): live's, not nvlive's yet
+    auto moog_var = [&](int prog, int en) {
+        if (en <= 0 || en >= (int)E.vents.size() || E.vents[en].ls.empty())
+            return false;
+        const auto &l = E.vents[en].ls[0];
+        int k = 60 + l[1];
+        int cq = k >= 0 && k <= 127 ? E.vmap[128 * (size_t)l[0] + k] : -1;
+        (void)prog;
+        return cq >= 0 && ((const NoteClass *)E.classes[cq].data())->init.kind == 6;
+    };
     if (!pp[0]) {
         fprintf(stderr, "nvlive: program %d is not native\n", program);
         return 1;
+    }
+    {
+        // ...and its variation (--bank): refused where its slots are not the
+        // engine's (an unbuilt bank is the capital tone, as live's Patch has it)
+        const int bk = drums ? 0 : atoi(opt(argc, argv, "bank", "0").c_str());
+        int en = 0;
+        if ((bk & 0x7F) && !E.vgs.empty()) {
+            int mp = bk >> 7, bs = 1 + 128 * (mp >= 1 && mp <= 4 ? mp : 0) + (bk & 0x7F);
+            en = E.vgs[((size_t)((bs - 1) / 128) * 128 + (program & 127)) * 128 + (bs - 1) % 128];
+        }
+        bool nat = true;
+        for (const auto &l : en > 0 ? E.vents[en].ls : std::vector<std::array<int, 4>>())
+            for (int k = 0; k < 128 && nat; k++)
+                nat = k + l[1] < 0 || k + l[1] > 127 || E.vmap[128 * (size_t)l[0] + k + l[1]] >= 0
+                      || E.cmap[128 * (program & 127) + k] < 0;
+        if (!nat || moog_var(program, en)) {
+            fprintf(stderr, "nvlive: program %d bank %d is not native%s\n", program, bk,
+                    nat ? " (a Moog variation: live's)" : "");
+            return 1;
+        }
     }
     // THE TUNER (native/tuner.cpp): --tuner=NAME in place of the export's (its
     // --tuner, else live's hybrid) -- any of midilib's, `hybrid@D:466`,
@@ -840,12 +956,33 @@ int main(int argc, char **argv)
     if (!drums)
         retune(program);
     // THE PART'S TEMPLATES (live.Patch.warm), built here
-    std::vector<const NoteClass *> K(2 * NV_K_DRUMS, nullptr);
-    for (int q = 0; q < 2 * NV_K_DRUMS; q++)
-        if (E.cmap[q] >= 0) {
-            const NoteClass *k = (const NoteClass *)E.classes[E.cmap[q]].data();
-            K[q] = k;
+    // (K whole: the programs', the drum sets', the drones' and the variations' -- NV_K_VAR + 128 slot + key)
+    std::vector<int> kmap(E.cmap.begin(), E.cmap.begin() + 2 * NV_K_DRUMS);
+    E.dmap.resize(256, -1);
+    kmap.insert(kmap.end(), E.dmap.begin(), E.dmap.end());
+    kmap.insert(kmap.end(), E.vmap.begin(), E.vmap.end());
+    std::vector<const NoteClass *> K(kmap.size(), nullptr);
+    for (size_t q = 0; q < kmap.size(); q++)
+        if (kmap[q] >= 0)
+            K[q] = (const NoteClass *)E.classes[kmap[q]].data();
+    if (!E.vgs.empty()) {
+        // BANK SELECT's tables for live's templates (each entry's trim a file
+        // not GS's: live's one-note file), each one-tone slot's organ (vents' pcls)
+        std::vector<int> nls, ls;
+        std::vector<double> vt;
+        for (const auto &v : E.vents) {
+            nls.push_back((int)v.ls.size());
+            for (const auto &l : v.ls)
+                ls.insert(ls.end(), l.begin(), l.end());
+            vt.push_back(v.trim[0]);
         }
+        std::vector<const OrganSpec *> so(E.vmap.size() / 128, nullptr);
+        for (size_t en = 1; en < E.vents.size(); en++)
+            if (E.vents[en].ls.size() == 1 && E.vents[en].pcls >= 0 && E.cls_organ[E.vents[en].pcls] >= 0)
+                so[E.vents[en].ls[0][0]] = &E.organs[E.cls_organ[E.vents[en].pcls]];
+        nv_live_vars((int)E.vents.size(), nls.data(), ls.data(), vt.data(), E.vgs.data(), E.vgm2.data(),
+                     (int)so.size(), so.data(), (long long)K.size());
+    }
     NoteIn t;
     memset(&t, 0, sizeof t);
     t.sr = SR; t.retrigger_fade = E.k[K_RETRIGGER]; t.nyq_om = E.k[K_NYQ_OM];
@@ -858,6 +995,10 @@ int main(int argc, char **argv)
                                 E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, E.k[K_RING_FLOOR],
                                 E.k[K_RING_MAX], E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR);
     raga_for(cache, program, drums);
+    // --bank=V: the part's variation (live.Patch's: map x 128 + bank, an unbuilt one the capital tone)
+    const int bank = drums ? 0 : atoi(opt(argc, argv, "bank", "0").c_str());
+    if (bank)
+        nv_tcache_set_var(cache, bank);
     if (drums)
         nv_tcache_kits(cache, E.kit_f0.data(), E.kit_seat.data(), E.kit_choke.data(), E.kit_skind.data(),
                        E.kit_spar.data(), 100.0);       // (live.ONESHOT_FLOOR_DB)
@@ -903,12 +1044,15 @@ int main(int argc, char **argv)
         int pi, channel;
         bool drums;
         int program, sid, posted;
+        int var = 0, posted_var = 0;            // its variation (live.Patch.variation), 0 the capital tone
     };
-    std::vector<PartAt> pats{{0, -1, drums, program, drums ? -1 : E.prog[program & 127].sid, program}};
+    const int bank0 = drums ? 0 : atoi(opt(argc, argv, "bank", "0").c_str());
+    std::vector<PartAt> pats{{0, -1, drums, program, drums ? -1 : E.prog[program & 127].sid, program, bank0, bank0}};
     // live._PATCHES: each program's templates (key p) and each drum set's
     // (128 + set), built once and kept -- a note struck from one may sound on
+    // (keyed 256 x variation + (128 a drum set's) + program)
     std::map<int, void *> caches;
-    caches[(drums ? 128 : 0) + (program & 127)] = cache;
+    caches[256 * bank0 + (drums ? 128 : 0) + (program & 127)] = cache;
     if (!drums && (!nodrums || split > 0)) {
         int dset = atoi(opt(argc, argv, "drum-set", "0").c_str()) & 127;
         void *dcache = nv_tcache_new(K.data(), &t, E.freq.data(), E.trim.data(), E.kind.data(), E.fin.data(),
@@ -1095,8 +1239,48 @@ int main(int argc, char **argv)
     // build(): the program's templates (live.Patch.warm), made once -- on the
     // builder thread when playing, in step under --test
     std::mutex cmu;                             // (caches: the builder's and this thread's)
-    auto build = [&](int prog, bool dr) -> void * {
-        int key = (dr ? 128 : 0) + (prog & 127);
+    // BANK SELECT, as live hears it: each channel's CC0 and CC32 latched until
+    // a program change reads them, Rx.BANK SELECT (off after GM 1's System
+    // On), the map CC32 0 reads in (blockrender.DEFAULT_MAP: TUNING_MAP)
+    std::map<int, int> bmsb, blsb;
+    bool rxbank = true;
+    const char *tmap_ = getenv("TUNING_MAP");
+    const int default_map = tmap_ && *tmap_ ? atoi(tmap_) : 0;
+    auto latch = [&](int type, int ch, int a, int b) {
+        if (type == 2 && a == 0)
+            bmsb[ch] = b;
+        else if (type == 2 && a == 32)
+            blsb[ch] = b;
+    };
+    // ...and a reset's (GM System On, GM 2 On, GS Reset, SC mode): the latches
+    // cleared, Rx.BANK SELECT off after GM 1's alone
+    auto sys_reset = [&](const uint8_t *x, int n) {
+        if (n > 0 && x[0] == 0xF0) {
+            x++;
+            n--;
+        }
+        int lvl = (n >= 4 && x[0] == 0x7E && x[2] == 0x09) ? (x[3] == 0x01 ? 1 : x[3] == 0x03 ? 2 : 0) : 0;
+        bool gs = n >= 8 && x[0] == 0x41 && x[2] == 0x42 && x[3] == 0x12
+                  && ((x[4] == 0x40 && x[5] == 0x00 && x[6] == 0x7F && x[7] == 0x00)
+                      || (x[4] == 0x00 && x[5] == 0x00 && x[6] == 0x7F));
+        if (!lvl && !gs)
+            return;
+        rxbank = lvl != 1;
+        bmsb.clear();
+        blsb.clear();
+    };
+    // the entry a variation key selects for a program (live.cpp's var_entry): 0 none
+    auto var_entry_of = [&](int p, int v) -> int {
+        if (!v || E.vgs.empty() || p < 0 || p > 127)
+            return 0;
+        int msb = v & 0x7F, mp = v >> 7;
+        if (!msb)
+            return 0;
+        int bs = 1 + 128 * (mp >= 1 && mp <= 4 ? mp : 0) + msb;
+        return E.vgs[((size_t)((bs - 1) / 128) * 128 + p) * 128 + (bs - 1) % 128];
+    };
+    auto build = [&](int prog, bool dr, int var) -> void * {
+        int key = 256 * var + (dr ? 128 : 0) + (prog & 127);
         {
             std::lock_guard<std::mutex> lk(cmu);
             auto it = caches.find(key);
@@ -1106,7 +1290,15 @@ int main(int argc, char **argv)
         bool native = false;
         for (int k = 0; k < 128 && !native; k++)
             native = E.cmap[(dr ? NV_K_DRUMS : 0) + 128 * (prog & 127) + k] >= 0;
-        if (!dr && !E.part[prog & 127][0])
+        if (var) {                              // (a variation's: its slots the engine's, not a Moog)
+            int en = var_entry_of(prog & 127, var);
+            native = en > 0 && !moog_var(prog, en);
+            for (const auto &l : en > 0 ? E.vents[en].ls : std::vector<std::array<int, 4>>())
+                for (int k = 0; k < 128; k++)
+                    native = native && (k + l[1] < 0 || k + l[1] > 127 || E.vmap[128 * (size_t)l[0] + k + l[1]] >= 0
+                                        || E.cmap[128 * (prog & 127) + k] < 0);
+        }
+        if (!dr && !prec(prog, var)[0])
             native = false;
         if (!native)
             return nullptr;
@@ -1114,6 +1306,8 @@ int main(int argc, char **argv)
                                 E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, E.k[K_RING_FLOOR],
                                 E.k[K_RING_MAX], E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR);
         raga_for(c, prog, dr);
+        if (var)
+            nv_tcache_set_var(c, var);
         if (dr) {
             nv_tcache_kits(c, E.kit_f0.data(), E.kit_seat.data(), E.kit_choke.data(), E.kit_skind.data(),
                            E.kit_spar.data(), 100.0);
@@ -1122,7 +1316,7 @@ int main(int argc, char **argv)
         } else {
             if (!E.les.empty())
                 nv_tcache_leslie(c, E.les.data(), (int)E.les.size());
-            const int *pq = E.part[prog & 127];
+            const int *pq = prec(prog, var);
             int sp[3] = {pq[3], pq[4], pq[5]};
             nv_tcache_warm(c, prog & 127, 21, 96, pq[1], sp, pq[2]);
             retune(prog);
@@ -1135,10 +1329,10 @@ int main(int argc, char **argv)
     // next block's events), and its strings where they are another voice's
     // (live._reg_forget: the new voice's bank, or none)
     std::atomic<int> shown_program(drums ? 128 + program : program);    // (what the panel shows)
-    auto swap = [&](size_t i, int prog, bool dr, void *c) {
+    auto swap = [&](size_t i, int prog, bool dr, int var, void *c) {
         PartAt &pa = pats[i];
         static const int DRUM_P[10] = {1, 1, 1, -1, -1, -1, -1, 0, 0, 0};
-        const int *pq = dr ? DRUM_P : E.part[prog & 127];
+        const int *pq = dr ? DRUM_P : prec(prog, var);
         int sid = dr ? -1 : E.prog[prog & 127].sid;
         const Export::Reg &rr = E.reg[prog & 127];
         bool regd = reg_on && pa.pi == 0;
@@ -1162,6 +1356,7 @@ int main(int argc, char **argv)
         nv_part_swap(part, pa.pi, c, prog & 127, dr, pq[1], pq[6], pq[7], pq[8], pq[9], pq[6] >= 0,
                    dr ? E.kit_choke.data() : nullptr, regd ? note : nullptr);
         pa.posted = prog & 127;
+        pa.posted_var = var;
         pa.drums = dr;
         pa.sid = sid;
         if (pa.pi == 0)
@@ -1173,10 +1368,25 @@ int main(int argc, char **argv)
         size_t i;
         int prog;
         bool dr;
+        int var = 0;
     };
     std::vector<Req> reqs;                      // (the audio thread's, then the builder's)
     bool told_old = false;
     auto asked = [&](int ch, int prog) {
+        // THE BANK it is read under (resolve_patch): the variation key its
+        // entry's slot has, none after GM 1's System On (Rx.BANK SELECT off)
+        int en = 0;
+        auto mi = bmsb.find(ch), li = blsb.find(ch);
+        int msb = mi != bmsb.end() ? mi->second : 0, lsb = li != blsb.end() ? li->second : 0;
+        if (rxbank && msb && !E.vgs.empty()) {
+            if (msb == 121)
+                en = lsb ? E.vgm2[(size_t)(prog & 127) * 128 + lsb] : 0;
+            else if (msb != 120) {
+                int mp = lsb ? lsb : default_map;
+                en = E.vgs[((size_t)(mp >= 1 && mp <= 4 ? mp : 0) * 128 + (prog & 127)) * 128 + msb];
+            }
+        }
+        const int var = en > 0 && !E.vents[en].ls.empty() ? E.vslot_v[E.vents[en].ls[0][0]] : 0;
         if (!E.has_prog) {                      // (an export from before LPROG: no strings to tell apart)
             if (!told_old)
                 fprintf(stderr, "nvlive: this export has no LPROG section: program changes ignored "
@@ -1188,9 +1398,10 @@ int main(int argc, char **argv)
             const PartAt &pa = pats[i];
             if (pa.channel >= 0 && pa.channel != ch)
                 continue;
-            if (pa.program == (prog & 127))
+            const int pv = pa.drums ? 0 : var;
+            if (pa.program == (prog & 127) && pa.var == pv)
                 continue;                       // (live: part.patch.key == want -- the patch it HAS)
-            reqs.push_back(Req{i, prog & 127, pa.drums});
+            reqs.push_back(Req{i, prog & 127, pa.drums, pv});
         }
     };
     // ...and a GM System On or GS Reset the part heard: every part to program
@@ -1199,13 +1410,15 @@ int main(int argc, char **argv)
         if (!nv_part_take_reset(part) || !E.has_prog)
             return;
         for (size_t i = 0; i < pats.size(); i++)
-            if (pats[i].program != 0)
-                reqs.push_back(Req{i, 0, pats[i].drums});
+            if (pats[i].program != 0 || pats[i].var != 0)
+                reqs.push_back(Req{i, 0, pats[i].drums, 0});
     };
     // ...and once a block has run its posts, the programs posted are the parts'
     auto landed = [&]() {
-        for (PartAt &pa : pats)
+        for (PartAt &pa : pats) {
             pa.program = pa.posted;
+            pa.var = pa.posted_var;
+        }
     };
     // the requests so far, in order, the last of a part's run only (live's
     // coalescing): built and swapped in. Its count of swaps
@@ -1217,13 +1430,13 @@ int main(int argc, char **argv)
                 later = rq[r].i == rq[q].i;
             if (later)
                 continue;
-            void *c = build(rq[q].prog, rq[q].dr);
+            void *c = build(rq[q].prog, rq[q].dr, rq[q].var);
             if (!c) {
                 fprintf(stderr, "nvlive: %s %d is not native here: the part plays on\n",
                         rq[q].dr ? "drum set" : "program", rq[q].prog);
                 continue;
             }
-            swap(rq[q].i, rq[q].prog, rq[q].dr, c);
+            swap(rq[q].i, rq[q].prog, rq[q].dr, rq[q].var, c);
             n++;
         }
         rq.clear();
@@ -1253,8 +1466,8 @@ int main(int argc, char **argv)
                 fprintf(stderr, "nvlive: the reader refused %s (%d)\n", argv[i + 1], err);
                 return 2;
             }
-            if (nv_midi_banked(m)) {
-                fprintf(stderr, "nvlive: refused: %s selects a bank (the file renderer's, not live's yet)\n", argv[i + 1]);
+            if (nv_midi_banked(m) && !follow) {     // (followed, its banks are live's: bank select)
+                fprintf(stderr, "nvlive: refused: %s selects a bank (only with --programs)\n", argv[i + 1]);
                 return 2;
             }
             int ne = nv_midi_n_events(m);
@@ -1300,9 +1513,12 @@ int main(int argc, char **argv)
                     } else if (iv[0] == 6) {        // an exclusive: its bytes, to the part
                         std::vector<uint8_t> xb(65536);
                         int xn = nv_midi_sysex(m, iv[2], xb.data(), (int)xb.size());
-                        if (xn > 0 && xn <= (int)xb.size())
+                        if (xn > 0 && xn <= (int)xb.size()) {
+                            sys_reset(xb.data(), xn);
                             nv_part_sysex(part, xb.data(), xn);
+                        }
                     } else {
+                        latch(iv[0], iv[1], iv[2], iv[3]);
                         event(iv[0], iv[1], iv[2], iv[3]);
                     }
                     e++;
@@ -1481,7 +1697,7 @@ int main(int argc, char **argv)
                     had = caches.count((rq[q].dr ? 128 : 0) + rq[q].prog) > 0;
                 }
                 auto t0 = std::chrono::steady_clock::now();
-                void *c = build(rq[q].prog, rq[q].dr);
+                void *c = build(rq[q].prog, rq[q].dr, rq[q].var);
                 std::string nm = rq[q].dr ? E.prog[rq[q].prog].kit : E.prog[rq[q].prog].name;
                 if (!c)
                     note((rq[q].dr ? "drum set " : "program ") + std::to_string(rq[q].prog) + " (" + nm
@@ -1541,9 +1757,11 @@ int main(int argc, char **argv)
                     continue;
                 }
                 if (m.type == 6) {
+                    sys_reset(m.x.data(), (int)m.x.size());
                     nv_part_sysex(part, m.x.data(), (int)m.x.size());
                     continue;
                 }
+                latch(m.type, m.ch, m.a, m.b);
                 event(m.type, m.ch, m.a, m.b);
             }
             nv_part_block(part, n0, BLK);
@@ -1560,7 +1778,7 @@ int main(int argc, char **argv)
                     }
                     for (auto &d : bdone)
                         if (d.second)
-                            swap(d.first.i, d.first.prog, d.first.dr, d.second);
+                            swap(d.first.i, d.first.prog, d.first.dr, d.first.var, d.second);
                     bdone.clear();
                 }
             }
@@ -1715,12 +1933,32 @@ int main(int argc, char **argv)
             H.native[sp] = nat && (sp >= 128 ? !H.names[sp].empty() : E.part[sp][0] != 0);
         }
         H.kit = shown_program >= 128;
+        // ...the variations (VNAM), native where every key of their slots the
+        // capital plays is one the engine plays too
+        H.vpv = E.vpv;
+        H.vnames = E.vnames;
+        H.vnative.assign(E.vpv.size(), 0);
+        for (size_t j = 0; j < E.vpv.size(); j++) {
+            int p = E.vpv[j][0], en = var_entry_of(p, E.vpv[j][1]);
+            bool nat = en > 0 && !moog_var(p, en) && (j < E.vpart.size() ? E.vpart[j][0] : E.part[p][0]) != 0;
+            for (const auto &l : en > 0 ? E.vents[en].ls : std::vector<std::array<int, 4>>())
+                for (int k = 0; k < 128 && nat; k++)
+                    nat = k + l[1] < 0 || k + l[1] > 127 || E.vmap[128 * (size_t)l[0] + k + l[1]] >= 0
+                          || E.cmap[128 * p + k] < 0;
+            H.vnative[j] = nat;
+        }
+        H.var = pats[0].var;
         if (E.has_prog)
             H.pick = [&](int sp) {
                 post([&, sp](long long) {
                     const PartAt &pa = pats[0];
-                    if (pa.program != (sp & 127) || pa.drums != (sp >= 128))
+                    if (sp >= 256) {            // (a variation: its program under its bank)
+                        int p = E.vpv[sp - 256][0], v = E.vpv[sp - 256][1];
+                        if (pa.program != p || pa.var != v || pa.drums)
+                            reqs.push_back(Req{0, p, false, v});
+                    } else if (pa.program != (sp & 127) || pa.drums != (sp >= 128) || pa.var) {
                         reqs.push_back(Req{0, sp & 127, sp >= 128});
+                    }
                 });
             };
         // ...A PROGRAM CHANGE FROM THE KEYBOARD: its name and its stops, and

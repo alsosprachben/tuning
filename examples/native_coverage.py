@@ -78,8 +78,11 @@ TASKS = [
     ("GM1", False, "Files: organs -- two on a channel, an organ beside a variation, swell laws of their own"),
     ("GM2", True, "Bank select in files (CC0/CC32): GM2's banks (120 drums, 121 melodic) and GS's variations, "
                   "layered ones too (nvrender; nvlive refuses a bank)"),
-    ("GM2", False, "Bank select in nvlive: a file's banks (live._program's variation)"),
-    ("GM2", False, "nvlive: a variation as a patch (Patch(program, drums, tuner, variation)); the picker's GM2 bank"),
+    ("GM2", True, "Bank select in nvlive: CC0 and CC32 latched until a program change reads them (GS's in a map, "
+                  "GM 2's by MSB 121), a variation as a patch (its templates, classes, trim and live record: "
+                  "VLIV), the picker's variations under each program (VNAM)"),
+    ("GM2", False, "nvlive: a Moog variation under a capital that is no Moog's organ (its level: live's), a "
+                   "layered variation's other layers, the maps' own drum sets"),
     ("GM2", True, "Tuning, files: the secondary (eastern) tuning, the meend, master fine/coarse tuning, "
                   "scale/octave tuning (GM 2's and GS's), MTS under gm2"),
     ("GM2", True, "Tuning, live: the secondary tuning (nvlive --eastern), a raga tuner's Sa and swaras, the meend"),
@@ -96,8 +99,8 @@ TASKS = [
     ("CM-64", False, "The CM-32P (the CM-64's PCM half: the U-110's tones on channels 11-16) -- Python has none yet"),
     ("CM-64", False, "The CM-32L's sound effects on the rhythm part (keys 76-108) in nvlive"),
     ("SC-55", True, "Files: a drum set read in a map (kit_in_map) where the map has none of its own"),
-    ("SC-55", False, "The maps' own drum sets (percussion_map.KITS past 127) in files; the GS map (CC32 / TONE "
-                     "MAP-0) in nvlive"),
+    ("SC-55", True, "The maps' own drum sets (percussion_map.KITS past 127) in files: their keys' classes and "
+                    "tables (MKIT), a drum program past 127; a drum part on the insertion effect"),
     ("SC-55", True, "A tone's own insertion effect (insertion_efx) in files, all 58 of the maps' tones: its "
                     "level, OD stage (the part's valve), cabinet, EQ and sends; its chorus device (chorus.gs_copies) "
                     "and delay (gsdelay.expand, gsd_place's memo shared); an Auto Pan's tremolo; a Phaser's or "
@@ -113,13 +116,17 @@ TASKS = [
                     "Overdrive, Distortion, the guitar and bass multis (compressor, OD into the valve, cabinet, EQ, "
                     "chorus or flanger with its mix following the file); its level's steps in the amp's reference; "
                     "its sends; its effect controllers (40 03 1B-1E: a source's values moving + and #)"),
-    ("SC-55", False, "A FILE's insertion effect's other types: 3D, the buses (Compressor, Reverb...), pitch "
-                     "shifters, the wahs and phasers, rotary, tremolo and delay types, a multi's delay; a drum part "
-                     "on it"),
+    ("SC-55", True, "A FILE's insertion effect, more types: 3D Manual and Auto (each note's angle), the "
+                    "Compressor, Reverb and Gate Reverb buses (a part's, over its spans; the reverbs' responses and "
+                    "convolution native/efxrev.c's, which efxbus shares), the pitch shifters, GTR Multi 3's wah, "
+                    "Space D, a multi's own delay"),
+    ("SC-55", False, "A FILE's insertion effect's other types: the phasers and auto wahs, rotary, tremolo and "
+                     "auto pan, the delay types, Hexa and Stereo Chorus, the Lo-Fis, Limiter, Enhancer"),
     ("SC-55", True, "Files: the rhythm part's assignment (40 1p 15); the controller matrix (40 2p, GM2 09) where "
                     "it moves nothing"),
-    ("SC-55", False, "Files: a controller matrix that moves (ctrlmatrix: its pitch, vibrato, amplitude, tremolo, "
-                     "cutoff, LFO rate; the reader refuses it, -8)"),
+    ("SC-55", True, "Files: a controller matrix that moves (ctrlmatrix): its cutoff and LFO rate in the sound "
+                    "controls, its amplitude in the level and fader, its pitch and vibrato on the pitch stream, its "
+                    "tremolo's rows; a variation that meends; a layered variation's registered layers"),
     ("SC-55", False, "Files: GS's other exclusives -- part parameters (parse_gs_part), drum setup and the user "
                      "sets, TONE MAP-0 (the reader refuses them, -4)"),
     ("SC-55", True, "Melodic SFX (patch_map.melodic_sfx): a kit's sound on a keyboard part, transposed whole "
@@ -162,6 +169,12 @@ STAGES = (("GM1", None), ("GM2", 'gm2'), ("MT-32", 'mt32'), ("CM-64", 'cm64'), (
 
 
 def main(argv):
+    # --json DIR: the coverage page's data besides (stages, tones, kits, tasks .json)
+    jdir = None
+    if "--json" in argv:
+        i = argv.index("--json")
+        jdir = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
     out = argv[1] if len(argv) > 1 else os.path.join(HERE, "native.md")
     import native as N
     import patch_map as P
@@ -186,11 +199,17 @@ def main(argv):
         return vnat.get((p, key), program_native(p)) if key else program_native(p)
 
     kc = N.kits()[0]
+    # ...and the maps' own sets (native.map_kits: past 127, their own tables)
+    mk_ids, mkc = N.map_kits()[:2]
 
     def kit_keys(prog, only=None):
         kit = PM.kit_for_program(prog)
         keys = [k for k in range(128) if PM.percussion_for_note(k, kit) and (only is None or k in only)]
-        nat = [k for k in keys if prog < 128 and native_cls(kc[128 * prog + k])]
+        if prog < 128:
+            nat = [k for k in keys if native_cls(kc[128 * prog + k])]
+        else:
+            j = mk_ids.index(prog) if prog in mk_ids else -1
+            nat = [k for k in keys if j >= 0 and native_cls(mkc[128 * j + k])]
         return keys, nat
 
     lines = ["# The native port: what remains", "",
@@ -202,6 +221,7 @@ def main(argv):
              "before it did not already bring. The work that is not a tone, and live's side, are",
              "kept by hand in the script's TASKS.", ""]
     summary = []
+    js = dict(stages=[], tones=[], kits=[], tasks=[dict(stage=s, done=bool(d), task=t) for s, d, t in TASKS])
     seen = set()            # (program, variation key) a stage before has listed
     body = []
     for stage, src in STAGES:
@@ -232,6 +252,16 @@ def main(argv):
               (k, PM.drum_set_name(k if k < 128 else k % 128)) + tuple(map(len, kit_keys(k))) for k in kits]
         kfull = sum(1 for k in ks if k[2] == k[3])
         summary.append("| %s | %d of %d | %d of %d |" % (stage, len(nat), len(new), kfull, len(ks)))
+        js['stages'].append(dict(stage=stage, order=len(js['stages']), tones_native=len(nat), tones_total=len(new),
+                                 kits_whole=kfull, kits_total=len(ks)))
+        for p, key, name in new:
+            _to = P.MT32_SET[p][1] if src == 'mt32' else p
+            js['tones'].append(dict(stage=stage, program=p, variation=key,
+                                    tone=str(p) if src is None else "%d.%d" % (p, key if key == 127 else key % 128),
+                                    name=name, family=LT.FAMILIES[14 if isinstance(_to, tuple) else _to // 8],
+                                    native=(p, key, name) in nat))
+        for s, name, nk, nn in ks:
+            js['kits'].append(dict(stage=stage, set=s, name=name, keys=nk, native_keys=nn))
         body += ["## %s" % stage, ""]
         stasks = [t for t in TASKS if t[0] == stage]
         if stasks:
@@ -260,6 +290,13 @@ def main(argv):
     with open(out, "w") as f:
         f.write("\n".join(lines))
     print("native coverage -> %s" % out)
+    if jdir:
+        import json
+        os.makedirs(jdir, exist_ok=True)
+        for k, v in js.items():
+            with open(os.path.join(jdir, k + ".json"), "w") as f:
+                json.dump(v, f, indent=0)
+        print("...and its page's data -> %s" % jdir)
     print("\n".join(summary))
     return 0
 

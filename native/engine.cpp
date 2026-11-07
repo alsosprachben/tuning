@@ -73,6 +73,8 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     VoiceSnap s;
     VoiceNote o;
     nv_voice_init(&c, &K->tmpl, n->f0, n->pan, pow(n->vel / 127.0, 2.0), n->chan_vol, n->effort, rs, &s, &o);
+    if (n->fx_set == 1 && n->fx_p3d)    // THE PART PLACED IN 3D (gsefx's pos3d): where its onset finds it
+        nv_voice_turn(&c, &s, &o, n->fx_angle);
     if (n->press != 0.0)                // ...and its level: PRESS_DB x pressure (db_amplitude)
         nv_voice_regain(&c, &s, pow(10.0, 8.0 * n->press / 20.0));
     if (n->gliss_lv > 0.0 && n->gliss_lv != 1.0)
@@ -1012,7 +1014,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         int iv[4];
         double dv[2];
         nv_song_get_note(song, i, &ch, iv, dv);
-        const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[nv_song_kidx(song, i)];
+        const NoteClass *k = (iv[2] < 0 || (iv[2] > 127 && !iv[3])) ? nullptr : K[nv_song_kidx(song, i)];
         if (!k)
             return -(1 + i);
         NoteIn n = *tmpl;
@@ -1109,6 +1111,14 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
                 n.fx_level = fc[0];
                 n.fx_od = fc[1];
                 n.fx_comp[0] = fc[3]; n.fx_comp[1] = fc[4]; n.fx_comp[2] = fc[5];
+                n.fx_p3d = fc[22] != 0.0;
+                if (n.fx_p3d) {
+                    // (math.radians(((az + 360 turn on + 180) % 360) - 180): Python's %, the divisor's sign)
+                    double x = fmod(fc[23] + 360.0 * fc[24] * dv[0] + 180.0, 360.0);
+                    if (x != 0.0 && x < 0.0)
+                        x += 360.0;
+                    n.fx_angle = (x - 180.0) * (M_PI / 180.0);
+                }
             }
         }
         n.sung_hz = nv_song_tess(song, ch);     // a sung part's tessitura, its declared part (_prep_choir_parts)
