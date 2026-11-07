@@ -570,6 +570,9 @@ typedef struct {
     long long cls;          /* its class (the NoteClass), keying _refl_norm's memo as type(props) does */
     double hammer_on;       /* a hammer-on's seconds since the pick (em.hammer_on), 0 none */
     double gs_eq[4];        /* the file's GS EQ on its part (gs_eq_gain), [0] 0 none */
+    /* A FILE'S INSERTION EFFECT's compressor (gsefx.chain's comp): its decay
+       factor, its makeup and its attack (s); [0] 0 none */
+    double fx_comp[3];
 } ToneIn;
 
 /* A MOOG MESSENGER's panel as a note reads it (moog.py; native.moog_spec):
@@ -1090,6 +1093,11 @@ typedef struct {
     double press;
     // THE FILE'S GS EQ on its part (gs_eq_gain): low and high corners, gains (dB); [0] 0 none
     double gs_eq[4];
+    // ITS PART ON THE FILE'S INSERTION EFFECT at its onset (nvrender's
+    // chains): fx_set 1 a chain (its level, OD gain, 0 none, compressor), 2
+    // the part on it with no chain built (the tone's own not played), 0 not
+    int fx_set;
+    double fx_level, fx_od, fx_comp[3];
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -1282,6 +1290,10 @@ void nv_song_pressure_events(void *s, long long ch, int key, int n, const double
 double nv_song_pressure(void *s, long long ch, int note, double on, double off);
 int nv_song_efx_dist(void *s, long long part, double on, double *dist);
 void nv_song_gs_eq(void *s, const double *eq, int noff, const int *off);
+void nv_song_gs_delay(void *s, const double *dev, const double *place);
+void nv_song_dedit(void *s, int n, const int *iv, const double *t);
+int nv_song_dst(void *s, long long ch, int key, double on, int *v);
+const double *nv_song_gs_delay_of(void *s, const double **place);
 int nv_song_gs_eq_of(void *s, long long part, double *eq);
 int nv_song_siren_of(void *s, int i, double *out);
 int nv_song_gliss_note(void *s, int i, double *out);
@@ -1343,7 +1355,22 @@ void nv_song_add_clav(void *s, long long ch, int setting);
 int nv_song_clavs(void *s, long long *ch, int *setting, int cap);
 void nv_clav_pass(void *song, double *rows, long long P);
 int nv_song_trems(void *s, long long *ch, double *cfg, int cap);
-void nv_song_add_amp(void *s, long long ch, double drive, int rotor, double reference, double imbalance);
+void nv_song_add_amp(void *s, long long ch, double drive, int rotor, double reference, double imbalance,
+                     double lv0);
+void nv_song_amp_steps(void *s, long long ch);
+int nv_song_amp_steps_of(void *s, int k, double *base, const double **starts, const double **levels);
+// A FILE'S INSERTION EFFECT (nvrender's chains, NV_FXN doubles each): the
+// chains, each note's (-1 its part not on the effect, -2 on it, no chain),
+// which notes are their mix channel's first through a chain, the cabinets
+// a chain names (guitar12, bass410; null none)
+enum { NV_FXN = 24 };
+void nv_song_fx(void *s, int nchain, const double *chains, int nnote, const int *note_fx, const unsigned char *first,
+                const NoteClass *cab0, const NoteClass *cab1);
+int nv_song_note_fx(void *s, int i, const double **chain);
+int nv_song_note_fx_first(void *s, int i);
+const NoteClass *nv_song_fx_cab(void *s, int which);
+// ...and a mix channel's level steps over the file (its amp's reference: tubeamp.segment's 'steps')
+void nv_song_fx_steps(void *s, long long ch, int n, const double *starts, const double *levels);
 void nv_song_amp_cfg(void *s, int k, double *reference, double *imbalance);
 double nv_song_amp(void *s, int k, long long *ch, int *rotor);
 int nv_song_leslie(void *s, int k, long long *ch);

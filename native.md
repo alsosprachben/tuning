@@ -41,7 +41,8 @@ What it needs first, and live's side:
 - [x] GM 109 Bagpipe in files: the chanter (a played pipe, its own scale: scale_cents), the drones as notes of the part (phrases, the CC1 corking, each its own class: Ev.kover, K's drone region), a strike-in by the hand, a pipe's phase spread and mode lock
 - [ ] Live: the bagpipe's drones (live's own held drone voices: drone_wheel, drone_ratios; templates built corked) -- nvlive refuses the bagpipe
 - [x] Files: two-port files (PortedMidi, meta 21) in the reader: channel + 16 x port, port B's part exclusives as port A reads them, the legato over the merged stream
-- [ ] Files: NRPNs and MPE in the reader
+- [x] Files: GS's drum instrument NRPNs (GS_DRUM_NRPN: a key's pitch, level, pan, delay level; reset by a GS or GM reset and a drum program change)
+- [ ] Files: MPE in the reader
 - [x] Files: a class's own distance and gestures -- reverb_distance, its own chorus pedal (chorus_send) and detuned pair (detuned_pair: chorus._pair), falls and rips on the valved lattice (fall_cents, rip_cents: Song::gliss)
 - [x] Files: tremolo picking (tremolo_pick_hz: 25.18 MandolinTrem, 27.25, 34.4, 115.16, the biwa's): its strokes in Song::gliss, seeded as the Python's
 - [ ] Files: the uilleann pipes' cut (cut_semitones: 109.11 -- _CUT_OF's legato and occurrence)
@@ -119,11 +120,16 @@ Drum sets: 1 of 1 with every key native (new at this stage).
 
 What it needs first, and live's side:
 
-- [ ] The GS map (CC32 / TONE MAP-0) and kit_in_map in the reader and nvlive
+- [x] Files: a drum set read in a map (kit_in_map) where the map has none of its own
+- [ ] The maps' own drum sets (percussion_map.KITS past 127) in files; the GS map (CC32 / TONE MAP-0) in nvlive
 - [x] A tone's own insertion effect (insertion_efx) in files, all 58 of the maps' tones: its level, OD stage (the part's valve), cabinet, EQ and sends; its chorus device (chorus.gs_copies) and delay (gsdelay.expand, gsd_place's memo shared); an Auto Pan's tremolo; a Phaser's or wah's moving filter (efxfilter on the lobe kernel); a bus (efxbus: Lo-Fi, a compressor -- its rows rendered apart, before the post)
 - [x] A FILE's GS setup (gs_setup): the reverb macro's room (an export per room), its level, time and a delay's feedback in the sidecar; the GS EQ on each part that has it on (gs_eq_gain)
-- [ ] A FILE's GS effects natively (gsefx: insertion EFX, 40 03 and 4p 22; the GS delay and chorus sends, CC94 and CC93) -- the corpus has no GS files, so each needs GS test files
-- [ ] Files: GS's other exclusives -- part parameters (parse_gs_part), drum setup and the user sets, the rhythm part's assignment, TONE MAP-0 (the reader refuses them, -4)
+- [x] A FILE's GS chorus and delay: CC93 through its chorus device (chorus.gs_device), CC94 into its delay (gsdelay.device), each note's send at its onset
+- [x] A FILE's insertion effect (gsefx: 40 03, a part's 4p 22): each note's chain at its onset -- Overdrive, Distortion, the guitar and bass multis (compressor, OD into the valve, cabinet, EQ, chorus or flanger with its mix following the file); its level's steps in the amp's reference; its sends; its effect controllers (40 03 1B-1E: a source's values moving + and #)
+- [ ] A FILE's insertion effect's other types: 3D, the buses (Compressor, Reverb...), pitch shifters, the wahs and phasers, rotary, tremolo and delay types, a multi's delay; a drum part on it
+- [x] Files: the rhythm part's assignment (40 1p 15); the controller matrix (40 2p, GM2 09) where it moves nothing
+- [ ] Files: a controller matrix that moves (ctrlmatrix: its pitch, vibrato, amplitude, tremolo, cutoff, LFO rate; the reader refuses it, -8)
+- [ ] Files: GS's other exclusives -- part parameters (parse_gs_part), drum setup and the user sets, TONE MAP-0 (the reader refuses them, -4)
 - [x] Melodic SFX (patch_map.melodic_sfx): a kit's sound on a keyboard part, transposed whole (transposed_from_hz: _XP), its kit key's strokes (sfx_strokes_of), the weather voices (a measured mode set under the noise's roll-off, its breath beside it)
 - [x] SFX voices with a fixed vibrato of their own (skid, starship, scream: VoiceSnap.fv_*)
 - [x] The heartbeat: its ECG's mode phases, its blood flow's timed noise bands (noise_events)

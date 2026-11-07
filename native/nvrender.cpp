@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <tuple>
 #include <dlfcn.h>
 #include <map>
 #include <set>
@@ -49,6 +50,13 @@
 
 extern "C" {
 void *nv_midi_read(const uint8_t *buf, long long len, int *err);
+void nv_midi_map_kits(const int *ids, int n);
+int nv_midi_n_dedit(void *p);
+void nv_midi_dedit(void *p, int i, int *iv, double *t);
+int nv_midi_n_efx(void *p);
+void nv_midi_efx(void *p, int i, int *iv, double *t);
+void nv_amp_ref_steps(int k, double base, int n, const double *starts, const double *levels);
+void nv_chorus_share_steps(int q, int n, const double *ts, const double *vals);
 void nv_midi_free(void *p);
 double nv_midi_total(void *p);
 int nv_midi_n_notes(void *p);
@@ -126,7 +134,9 @@ long nv_leslie_angles(int nch, const int *nreq, const double *req, long n_sample
 enum { K_SR, K_BLK, K_CHUNK, K_MASTER, K_RING_FLOOR, K_RING_MAX, K_XDEC, K_REG_SCALE, K_FULL, K_RESIDUAL, K_BETA,
        K_KNEE, K_LN10_20, K_RETRIGGER, K_NYQ_OM, K_SVDC, K_FIXED_TOUCH, K_REFLECT, K_BANDS, K_SH = K_BANDS + 9,
        K_PRESS_DB = K_SH + 4, K_THRESH, K_BEND_RANGE, K_TAU, K_FADER_TAIL, K_STAMP_S, K_STAMPED_SHARE,
-       K_BEND_SEMIS, K_GM_VOL, K_GM_EXPR };
+       K_BEND_SEMIS, K_GM_VOL, K_GM_EXPR, K_GSPLACE,         // (K_GSPLACE: 13, a GS chorus's outputs)
+       K_MAPKITS = K_GSPLACE + 13,                          // (the maps' own drum sets: n, then 32)
+       K_EFX = K_MAPKITS + 33, K_EFX_N = 698 };             // (a file's insertion effect's tables)
 
 // blockrender.EMIT_COLS
 static const char *COLS[NCOLS] = {
@@ -463,6 +473,12 @@ int main(int argc, char **argv)
         bytes.push_back((uint8_t)c);
     fclose(mf);
     int err = 0;
+    if (E.k.size() >= K_MAPKITS + 33) {     // (kit_in_map: the maps' own drum sets)
+        std::vector<int> mk;
+        for (int q = 0; q < (int)E.k[K_MAPKITS] && q < 32; q++)
+            mk.push_back((int)E.k[K_MAPKITS + 1 + q]);
+        nv_midi_map_kits(mk.data(), (int)mk.size());
+    }
     void *midi = nv_midi_read(bytes.data(), (long long)bytes.size(), &err);
     if (!midi) {
         fprintf(stderr, "nvrender: refused: the reader (%d)\n", err);
@@ -550,18 +566,25 @@ int main(int argc, char **argv)
             bool sounds = first[kv.first & 255] < 1e300;     // (a channel with notes: em.channel's)
             // (chorus.expand: a send at FLOOR or under makes no copies)
             (void)sounds;
-            if (nv_midi_gs(midi) && mx > 0) {         // (a Sound Canvas file's: its GS chorus device, Python's)
-                fprintf(stderr, "nvrender: refused: a GS chorus send (CC93)\n");
+            bool moves = false;
+            for (int v : kv.second)
+                moves = moves || v != kv.second[0];
+            if (nv_midi_gs(midi) && mx > 0 && moves) {     // (a Sound Canvas file's moving send: Python's)
+                fprintf(stderr, "nvrender: refused: a GS chorus send that moves (CC93)\n");
+                return 2;
+            }
+            if (nv_midi_gs(midi) && mx > 0 && E.k.size() < K_GSPLACE + 13) {
+                fprintf(stderr, "nvrender: refused: a GS chorus send (CC93), an export without its outputs\n");
                 return 2;
             }
         }
-        // ...and a GS file's CC94, the GS delay's send (gsdelay): Python's
+        // ...and a GS file's CC94, the GS delay's send (gsdelay): its outputs the export's
         for (int i = 0, n = nv_midi_n_ccs(midi); i < n; i++) {
             int iv[3];
             double t;
             nv_midi_cc(midi, i, iv, &t);
-            if (iv[1] == 94 && iv[2] > 0 && nv_midi_gs(midi)) {
-                fprintf(stderr, "nvrender: refused: a GS delay send (CC94)\n");
+            if (iv[1] == 94 && iv[2] > 0 && nv_midi_gs(midi) && E.k.size() < K_GSPLACE + 13) {
+                fprintf(stderr, "nvrender: refused: a GS delay send (CC94), an export without its outputs\n");
                 return 2;
             }
         }
@@ -570,6 +593,102 @@ int main(int argc, char **argv)
     // the export's, or another's voices (refused) -- unless TUNING_ROOM says;
     // its level and time (a delay's feedback) for the sidecar; its EQ
     std::string gs_tail = "\"tail_gain\": 1.0,\n \"tail_time\": 1.0";
+    // ...and its delay (gsdelay.device: Delay 1, then the file's), packed as
+    // NoteClass.dly_p: level, feedback, pre-LPF (0 none), time, taps; each
+    // tap's time, level, output (0 l, 1 r, 2 c) and period
+    double gs_dly[24] = {};
+    bool gs_dly_on = false;
+    {
+        const char *ge = getenv("TUNING_GS_DELAY");
+        if (nv_midi_gs(midi) && !(ge && (!*ge || !strcmp(ge, "0") || !strcmp(ge, "off")))
+            && E.k.size() >= K_GSPLACE + 13) {
+            // gsdelay.MACROS: level, pre-LPF, time (ms), ratio L, R (%), level C, L, R, feedback, to reverb
+            static const int MAC[10][10] = {
+                {64, 0, 340, 4, 4, 127, 0, 0, 16, 0}, {64, 0, 550, 4, 4, 127, 0, 0, 16, 0},
+                {64, 0, 1000, 4, 4, 127, 0, 0, 8, 0}, {64, 0, 130, 4, 4, 127, 0, 0, 8, 0},
+                {64, 0, 500, 50, 100, 0, 125, 60, 10, 0}, {64, 0, 700, 50, 100, 0, 125, 60, 7, 0},
+                {64, 0, 1000, 50, 100, 0, 120, 64, 9, 0}, {64, 0, 260, 50, 100, 0, 120, 64, 8, 0},
+                {64, 0, 700, 50, 100, 0, 114, 60, -3, 36}, {64, 0, 750, 88, 133, 97, 127, 67, -24, 0}};
+            auto time_ms = [](int v) {          // (gsdelay.time_ms: DELAY TIME CENTER -> ms)
+                v = std::max(1, std::min(0x73, v));
+                static const double T[8][3] = {{0x69, 500.0, 50.0}, {0x5A, 200.0, 20.0}, {0x50, 100.0, 10.0},
+                                               {0x46, 50.0, 5.0}, {0x37, 20.0, 2.0}, {0x2D, 10.0, 1.0},
+                                               {0x23, 5.0, 0.5}, {0x14, 2.0, 0.2}};
+                for (auto &r : T)
+                    if (v >= r[0])
+                        return r[1] + (v - r[0]) * r[2];
+                return v * 0.1;
+            };
+            auto time_value = [&](double ms) {  // (the nearest, the first of equals: min)
+                int b = 1;
+                for (int v = 2; v < 0x74; v++)
+                    if (fabs(time_ms(v) - ms) < fabs(time_ms(b) - ms))
+                        b = v;
+                return b;
+            };
+            auto ratio_value = [](double pct) {
+                return std::max(1, std::min(0x78, (int)nearbyint(pct * 24.0 / 100.0)));
+            };
+            int v, m = 0;
+            if (nv_midi_gs_setup(midi, 2, 0x50, &v))
+                m = v;
+            const int *M = MAC[m >= 0 && m <= 9 ? m : 0];
+            // pre_lpf, time, ratio_l, ratio_r, level_c, level_l, level_r, level, feedback (40 01 51-59)
+            int p[9] = {M[1], time_value(M[2]), ratio_value(M[3]), ratio_value(M[4]), M[5], M[6], M[7], M[0],
+                        M[8] + 64};
+            for (int q = 0; q < 9; q++)
+                if (nv_midi_gs_setup(midi, 2, 0x51 + q, &v))
+                    p[q] = v;
+            double tc = time_ms(p[1]) / 1000.0;
+            gs_dly[0] = p[7] / 127.0;
+            gs_dly[1] = (p[8] - 64) / 64.0;
+            gs_dly[2] = p[0] ? 12000.0 * pow(2.0, -p[0] / 1.5) : 0.0;
+            gs_dly[3] = tc;
+            int nt = 0;
+            const double rr[3] = {1.0, p[2] * 100.0 / 24.0 / 100.0, p[3] * 100.0 / 24.0 / 100.0};
+            const int lv[3] = {p[4], p[5], p[6]}, side[3] = {2, 0, 1};
+            for (int q = 0; q < 3; q++)
+                if (lv[q] > 0) {
+                    gs_dly[5 + 4 * nt] = tc * rr[q];
+                    gs_dly[6 + 4 * nt] = lv[q] / 127.0;
+                    gs_dly[7 + 4 * nt] = side[q];
+                    gs_dly[8 + 4 * nt] = tc;
+                    nt++;
+                }
+            gs_dly[4] = nt;
+            gs_dly_on = true;
+        }
+    }
+    // ...and its chorus device (chorus.gs_device: Chorus 3, then the file's):
+    // tau, rate, vd, fb, lpf (0 none), level; [0] -1 not a GS file's
+    double gs_cho[6] = {-1.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    {
+        const char *ge = getenv("TUNING_GS_CHORUS");
+        if (nv_midi_gs(midi) && !(ge && (!*ge || !strcmp(ge, "0") || !strcmp(ge, "off")))) {
+            // chorus.GS_MACROS: level, pre-LPF, feedback, delay, rate, depth
+            static const int MAC[8][6] = {{64, 0, 0, 112, 3, 5}, {64, 0, 5, 80, 9, 19}, {64, 0, 8, 80, 3, 19},
+                                          {64, 0, 16, 64, 9, 16}, {64, 0, 64, 127, 2, 24}, {64, 0, 112, 127, 1, 5},
+                                          {64, 0, 0, 127, 0, 127}, {64, 0, 80, 127, 0, 127}};
+            int v, m = 2;
+            if (nv_midi_gs_setup(midi, 1, 0x38, &v))
+                m = v;
+            int p[6];
+            for (int q = 0; q < 6; q++)
+                p[q] = MAC[m >= 0 && m <= 7 ? m : 2][q];
+            static const int ADDR[6] = {0x3A, 0x39, 0x3B, 0x3C, 0x3D, 0x3E};
+            for (int q = 0; q < 6; q++)
+                if (nv_midi_gs_setup(midi, 1, ADDR[q], &v))
+                    p[q] = v;
+            double swing = (p[5] + 1) / 3.2 / 1000.0 / 2.0;
+            double rate = p[4] * 0.122;
+            gs_cho[0] = p[3] * 0.2 / 1000.0 + swing;
+            gs_cho[1] = rate;
+            gs_cho[2] = 2.0 * M_PI * rate * swing;
+            gs_cho[3] = std::min(0.99, p[2] * 0.763 / 100.0);
+            gs_cho[4] = p[1] ? 12000.0 * pow(2.0, -p[1] / 1.5) : 0.0;
+            gs_cho[5] = p[0] / 127.0;
+        }
+    }
     double gs_eq[4] = {0.0, 0.0, 0.0, 0.0};
     std::vector<int> gs_eq_off;
     {
@@ -788,6 +907,18 @@ int main(int argc, char **argv)
     nv_midi_song(midi, song, E.trim.data() + (nv_midi_gs(midi) ? 256 : 0));
     if (gs_eq[0] > 0.0)
         nv_song_gs_eq(song, gs_eq, (int)gs_eq_off.size(), gs_eq_off.data());
+    {
+        // THE DRUM INSTRUMENTS' OWN (dedit): the song's, for each drum note's onset
+        int nd = nv_midi_n_dedit(midi);
+        std::vector<int> div(4 * (size_t)nd);
+        std::vector<double> dt(nd);
+        for (int i = 0; i < nd; i++)
+            nv_midi_dedit(midi, i, div.data() + 4 * i, dt.data() + i);
+        if (nd)
+            nv_song_dedit(song, nd, div.data(), dt.data());
+    }
+    if (gs_dly_on)
+        nv_song_gs_delay(song, gs_dly, E.k.data() + K_GSPLACE);
     // ITS PRESSURE (ats, pts): each channel's aftertouch, each key's polytouch
     for (int c = 0; c < 256; c++) {
         int na = nv_midi_ats(midi, c, nullptr, nullptr, 0);
@@ -1092,8 +1223,269 @@ int main(int argc, char **argv)
     std::map<long long, std::array<double, 5>> efx_eq;
     std::map<long long, double> efx_send;
     std::set<long long> efx_parts;
+    // ...AND THE FILE'S (blockrender's _EFXEV, gsefx.chain): each note's
+    // chain where its part is on the effect at its onset -- the last
+    // assign, none after a reset -- built from the type and parameters its
+    // onset finds (none where the type is not built: the tone's own not
+    // played either); a mix channel's first chain note sets the channel's
+    // amp, cabinet, EQ, chorus and send (_note_insertion_efx)
+    std::vector<double> fxch;                    // the chains, NV_FXN each
+    std::vector<int> note_fx;                   // each note's (-1 none, -2 on the effect with none)
+    std::vector<unsigned char> fx_first;
+    std::vector<double> fx_ts;                  // 0 and each event's time (mix_share's, the steps')
+    std::map<long long, std::vector<double>> fx_share;     // a first chain's mix channel: its share at each
+    std::map<long long, int> fx_cfn;            // a mix channel whose first chain has a chorus: that note
+    std::vector<char> fx_cabbuf[2];
+    const NoteClass *fx_cab[2] = {nullptr, nullptr};
+    struct FxEv {
+        double t;
+        int kind, a, b;
+    };
+    std::vector<FxEv> fx_ev;
+    {
+        const char *ge = getenv("TUNING_GS_EFX");
+        bool off = ge && (!*ge || !strcmp(ge, "0") || !strcmp(ge, "off"));
+        bool parts = false;
+        for (int i = 0, n = off ? 0 : nv_midi_n_efx(midi); i < n; i++) {
+            int iv[3];
+            double t;
+            nv_midi_efx(midi, i, iv, &t);
+            fx_ev.push_back(FxEv{t, iv[0], iv[1], iv[2]});
+            parts = parts || iv[0] == 5;
+        }
+        if (!parts)
+            fx_ev.clear();                      // (no part on it: nothing reads it)
+        if (!fx_ev.empty() && E.k.size() < K_EFX + K_EFX_N) {
+            fprintf(stderr, "nvrender: refused: the insertion effect (40 03), an export without its tables\n");
+            return 2;
+        }
+        std::set<double> ts = {0.0};
+        for (const FxEv &e : fx_ev)
+            ts.insert(e.t);
+        fx_ts.assign(ts.begin(), ts.end());
+        const char *cb = getenv("TUNING_CABINET");
+        for (int w = 0; w < 2 && !fx_ev.empty() && !(cb && !strcmp(cb, "0")); w++) {
+            const double *C = E.k.data() + K_EFX + 632 + 33 * w;
+            fx_cabbuf[w].assign(sizeof(NoteClass), 0);
+            NoteClass *nc = (NoteClass *)fx_cabbuf[w].data();
+            nc->cab_set = (int)C[0];
+            nc->n_cab_fm = (int)C[1];
+            nc->n_cab_afm = (int)C[2];
+            nc->cab_floor = C[3];
+            for (int r = 0; r < 4; r++)
+                for (int x = 0; x < 3; x++) {
+                    nc->cab_fm[r][x] = C[4 + 3 * r + x];
+                    nc->cab_afm[r][x] = C[16 + 3 * r + x];
+                }
+            nc->cab_corner = C[28]; nc->cab_order = C[29]; nc->cab_cut = C[30]; nc->cab_bell = C[31];
+            nc->cab_ref = C[32];
+            fx_cab[w] = nc;
+        }
+    }
+    // the events at or before t (state_at, assigned: et > t + 1e-9 stops)
+    auto fx_prefix = [&](double t) {
+        int p = 0;
+        while (p < (int)fx_ev.size() && !(fx_ev[p].t > t + 1e-9))
+            p++;
+        return p;
+    };
+    // is part c on the effect after the first `pre` events? (gsefx.assigned)
+    auto fx_on = [&](long long c, int pre) {
+        bool on = false;
+        for (int e = 0; e < pre; e++)
+            if (fx_ev[e].kind == 0)
+                on = false;
+            else if (fx_ev[e].kind == 5 && fx_ev[e].a == c)
+                on = fx_ev[e].b != 0;
+        return on;
+    };
+    // the chain after the first `pre` events (gsefx.chain of state_at): its
+    // index in fxch, -1 none (the type not built), -3 refused -- by prefix, memoised
+    std::map<int, int> fx_memo;
+    auto fx_chain = [&](int pre) -> int {
+        auto it = fx_memo.find(pre);
+        if (it != fx_memo.end())
+            return it->second;
+        int msb = 0, lsb = 0, p[21], snd[3] = {40, 0, 0};
+        int ctl[4] = {0, 0x40, 0, 0x40};        // (Src1, Dep1, Src2, Dep2: 1B-1E)
+        std::map<int, int> cvv;                 // (each source's value, 'cv')
+        for (int n = 0; n < 21; n++)
+            p[n] = -1;
+        for (int e = 0; e < pre; e++) {
+            const FxEv &v = fx_ev[e];
+            if (v.kind == 0) {
+                msb = lsb = 0;
+                for (int n = 0; n < 21; n++)
+                    p[n] = -1;
+                snd[0] = 40; snd[1] = 0; snd[2] = 0;
+                ctl[0] = 0; ctl[1] = 0x40; ctl[2] = 0; ctl[3] = 0x40;
+                cvv.clear();
+            } else if (v.kind == 1) {
+                msb = v.a; lsb = v.b;
+                for (int n = 0; n < 21; n++)
+                    p[n] = -1;
+            } else if (v.kind == 2 && v.a >= 1 && v.a <= 20) {
+                p[v.a] = v.b;
+            } else if (v.kind == 3) {
+                snd[v.a - 0x17] = v.b;
+            } else if (v.kind == 4) {
+                ctl[v.a - 0x1B] = v.b;
+            } else if (v.kind == 6) {
+                cvv[v.a] = v.b;
+            }
+        }
+        const double *X = E.k.data() + K_EFX;
+        const int code = msb * 128 + lsb;
+        bool built = false;
+        for (int q = 0; q < (int)X[0] && q < 128; q++)
+            built = built || (int)X[1 + q] == code;
+        if (!built)
+            return fx_memo[pre] = -1;
+        const double *D = nullptr;
+        for (int q = 0; q < (int)X[129] && q < 8; q++)
+            if ((int)X[130 + 59 * q] == code)
+                D = X + 130 + 59 * q;
+        auto refuse = [&](const char *why) {
+            fprintf(stderr, "nvrender: refused: the insertion effect's %s (type %02X %02X)\n", why, msb, lsb);
+            return fx_memo[pre] = -3;
+        };
+        if (!D)
+            return refuse("type");
+        const int kind = (int)D[1];
+        const bool bass = D[2] != 0.0;
+        // (EFX_KEYS's order)
+        enum { kLevel, kDrive, kAmpSw, kLowGain, kHiGain, kCmpAtck, kCmpSus, kCmpLevel, kCmpSw, kODSel, kODDrive,
+               kODAmpSw, kODSw, kEQL, kEQMF, kEQMQ, kEQMG, kEQH, kODL, kODH, kCFSel, kCFRate, kCFDepth, kCFFb,
+               kCFMix, kDlyTime, kDlyFb, kDlyMix, kEHSens, kTPSw };
+        auto has = [&](int key) { return D[3 + key] != 0.0; };
+        // ...AND ITS CONTROLLERS' (gsefx.controlled): a + or # parameter at
+        // "setting value + value from controller x depth (%)/100" of its
+        // whole range, clamped and rounded, where its controller has a source
+        const bool marked = ctl[0] != 0 || ctl[2] != 0;
+        bool choice = false;
+        auto controlled = [&](int n, int v) {
+            for (int w = 0; w < 2; w++) {
+                if ((int)D[53 + w] != n)
+                    continue;
+                int src = ctl[2 * w];
+                if (!src)
+                    continue;
+                double dep = std::max(-1.0, std::min(1.0, (ctl[2 * w + 1] - 0x40) / 63.0));
+                auto it = cvv.find(src);
+                int cv = it != cvv.end() ? it->second : (src == 0x61 ? 64 : 0);
+                double lo = D[55 + 2 * w], hi = D[56 + 2 * w];
+                if (lo < 0.0) {
+                    choice = true;              // (a choice of codes: not built here)
+                    return v;
+                }
+                double x = (double)v + (hi - lo) * (cv / 127.0) * dep;
+                x = std::max(lo, std::min(hi, x));
+                return (int)nearbyint(x);       // (round: half to even)
+            }
+            return v;
+        };
+        auto g = [&](int key, int d) {      // the file's, the type's, ours -- and its controller's
+            int n = (int)D[3 + key];
+            if (!n)
+                return d;
+            int v = p[n] >= 0 ? p[n] : D[33 + n - 1] >= 0.0 ? (int)D[33 + n - 1] : d;
+            if (marked && (n == (int)D[53] || n == (int)D[54]))
+                v = controlled(n, v);
+            return v;
+        };
+        const double *L = X + 602;
+        auto clamp = [](int v) { return v < 0 ? 0 : v > 127 ? 127 : v; };
+        auto od_gain = [&](int v, bool ds) {
+            double x = clamp(v) / 127.0, lo = ds ? L[2] : L[0], hi = ds ? L[3] : L[1];
+            return pow(10.0, (lo + (hi - lo) * x) / 20.0);
+        };
+        auto gain_db = [](int v) { return (double)std::max(-12, std::min(12, v - 64)); };
+        double r[NV_FXN] = {};
+        r[21] = -1.0;
+        r[0] = g(kLevel, 127) / 127.0;
+        const double mk = pow(10.0, L[4] / 20.0);
+        if (kind == 1 || kind == 2) {
+            r[1] = od_gain(g(kDrive, 48), kind == 2);
+            r[0] *= mk;
+            if (g(kAmpSw, 1))
+                r[2] = 1.0;
+            r[6] = 1.0;
+            r[7] = gain_db(g(kLowGain, 64));
+            r[11] = gain_db(g(kHiGain, 64));
+        } else {
+            if (has(kCmpSw) && g(kCmpSw, 1)) {
+                double sus = g(kCmpSus, 64) / 127.0;
+                r[3] = 1.0 / (1.0 + 3.0 * sus);
+                r[4] = g(kCmpLevel, 64) / 64.0;
+                r[5] = L[5] * g(kCmpAtck, 70) / 127000.0;
+            }
+            if (has(kODDrive) && g(kODSw, 1)) {
+                r[1] = od_gain(g(kODDrive, 48), g(kODSel, 0) != 0);
+                r[0] *= mk;
+                if (g(kODAmpSw, 1))
+                    r[2] = bass ? 2.0 : 1.0;
+            }
+            if (has(kEQL)) {
+                r[6] = 1.0;
+                r[7] = gain_db(g(kEQL, 64));
+                r[8] = L[13 + clamp(g(kEQMF, 64)) / 8];
+                r[9] = L[8 + std::min(4, g(kEQMQ, 1))];
+                r[10] = gain_db(g(kEQMG, 64));
+                r[11] = gain_db(g(kEQH, 64));
+            } else if (has(kODL)) {
+                r[6] = 1.0;
+                r[7] = gain_db(g(kODL, 64));
+                r[11] = gain_db(g(kODH, 64));
+            }
+            if (has(kCFRate)) {
+                // (cf_device: rate2, efx_swing, feedback; a chorus 10 ms, a flanger 1 ms)
+                bool fl = g(kCFSel, 0) != 0;
+                double rate = 0.05 * (clamp(g(kCFRate, 8)) + 1);
+                double swing = (g(kCFDepth, 40) + 1) / 3.2 / 1000.0 / 2.0 * (fl ? 1.0 / 8.0 : L[7]);
+                r[14] = 1.0;
+                r[15] = (fl ? 0.001 : 0.010) + swing;
+                r[16] = rate;
+                r[17] = 2.0 * M_PI * rate * swing;
+                r[18] = std::max(-0.98, std::min(0.98, (g(kCFFb, 64) - 64) * 2.0 / 100.0));
+                r[19] = 0.0;
+                r[20] = g(kCFMix, 0) / 127.0;
+            }
+            if (has(kEHSens))
+                return refuse("enhancer");
+            if (has(kTPSw) && g(kTPSw, 1))
+                return refuse("tremolo");
+            if (has(kDlyTime) && g(kDlyMix, 0))
+                return refuse("delay");
+        }
+        if (choice)
+            return refuse("controller on a choice");
+        r[12] = snd[0];
+        r[13] = snd[2];
+        int idx = (int)(fxch.size() / NV_FXN);
+        fxch.insert(fxch.end(), r, r + NV_FXN);
+        return fx_memo[pre] = idx;
+    };
     {
         int nn = nv_song_n_notes(song);
+        note_fx.assign(nn, -1);
+        fx_first.assign(nn, 0);
+        for (int i = 0; i < nn && !fx_ev.empty(); i++) {
+            long long c;
+            int iv[4];
+            double dv[2];
+            nv_song_get_note(song, i, &c, iv, dv);
+            int pre = fx_prefix(dv[0]);
+            if (!fx_on(c, pre))
+                continue;
+            if (iv[3]) {
+                fprintf(stderr, "nvrender: refused: a drum part on the insertion effect\n");
+                return 2;
+            }
+            int cq = fx_chain(pre);
+            if (cq == -3)
+                return 2;
+            note_fx[i] = cq >= 0 ? cq : -2;
+        }
         std::vector<int> ord(nn);
         std::vector<double> on_(nn);
         std::vector<long long> ch_(nn);
@@ -1120,21 +1512,50 @@ int main(int argc, char **argv)
             nv_song_get_note(song, i, &c, iv, dv);
             int q = nv_song_kidx(song, i);
             const NoteClass *k = (q >= 0 && q < (int)K.size()) ? K[q] : nullptr;
-            if (!k || !k->efx_set || iv[3])
+            const int fx = note_fx[i];
+            const double *fc = fx >= 0 ? fxch.data() + (size_t)NV_FXN * fx : nullptr;
+            if (!fc && !(fx == -1 && k && k->efx_set && !iv[3]))
                 continue;
             long long m = nv_song_mix(song, i);
             if (mseen.count(m))
                 continue;
             mseen.insert(m);
-            double d = (k->efx_rev > 0.0 ? k->efx_rev : 0.0) / 40.0;
-            if (!efx_parts.count(c)) {
-                nv_song_efx_part(song, c, dv[0], d);
-                efx_parts.insert(c);
-            }
+            double rv = fc ? fc[12] : k->efx_rev;
+            double d = (rv > 0.0 ? rv : 0.0) / 40.0;
+            nv_song_efx_part(song, c, dv[0], d);      // (_C91D: each mix channel's first chain sets it)
+            efx_parts.insert(c);
             efx_send[m] = d;
-            if (k->efx_eq_set)
-                efx_eq[m] = {k->efx_eq[0], k->efx_eq[1], k->efx_eq[2], k->efx_eq[3], k->efx_eq[4]};
+            if (fc ? fc[6] != 0.0 : k->efx_eq_set != 0)
+                efx_eq[m] = fc ? std::array<double, 5>{fc[7], fc[8], fc[9], fc[10], fc[11]}
+                               : std::array<double, 5>{k->efx_eq[0], k->efx_eq[1], k->efx_eq[2], k->efx_eq[3],
+                                                       k->efx_eq[4]};
+            if (fc ? fc[14] != 0.0 : k->efx_cf != 0)
+                fx_cfn[m] = i;                       // (its chorus or flanger: the channel's, _CHORUS_CH)
+            if (fc) {
+                fx_first[i] = 1;
+                // ITS LEVEL OVER THE FILE (its amp's reference: 'steps') and
+                // its chorus's share (gsefx.mix_share), at 0 and each event
+                std::vector<double> st, lv, sh;
+                for (double t : fx_ts) {
+                    int pre = fx_prefix(t), cq = fx_chain(pre);
+                    if (cq == -3)
+                        return 2;
+                    st.push_back(t * SR);
+                    lv.push_back(cq >= 0 ? fxch[(size_t)NV_FXN * cq] : fc[0]);
+                    double s = 0.0;
+                    if (fx_on(m % 256, pre) && cq >= 0) {
+                        const double *cc = fxch.data() + (size_t)NV_FXN * cq;
+                        double a = cc[14] != 0.0 ? cc[20] : 0.0;
+                        s = cc[21] >= 0.0 ? cc[21] : a * a / (1.0 + a * a);
+                    }
+                    sh.push_back(s);
+                }
+                nv_song_fx_steps(song, m, (int)st.size(), st.data(), lv.data());
+                fx_share[m] = sh;
+            }
         }
+        nv_song_fx(song, (int)(fxch.size() / NV_FXN), fxch.data(), nn, note_fx.data(), fx_first.data(),
+                   fx_cab[0], fx_cab[1]);
     }
     // THE FIRE SIRENS' ROTORS (_prep_siren, siren.py): each (channel, key)'s
     // notes in their order, its rotor carried key to key -- wound up by its
@@ -1302,6 +1723,11 @@ int main(int argc, char **argv)
             int rotor;
             double drv = nv_song_amp(song, k, &c, &rotor), ref, imb;
             nv_song_amp_cfg(song, k, &ref, &imb);
+            double sb;
+            const double *ss, *sl;
+            int ns = nv_song_amp_steps_of(song, k, &sb, &ss, &sl);
+            if (ns)                         // (its reference following the file's level: 'steps')
+                nv_amp_ref_steps((int)ach.size(), sb, ns, ss, sl);
             aref.push_back(ref);
             aimb.push_back(imb);
             int v;
@@ -1380,17 +1806,48 @@ int main(int argc, char **argv)
         std::vector<long long> cch;
         std::vector<double> csend, ccents, cgsp;
         std::vector<int> cnc, ckind;
+        std::vector<long long> csteps;          // (an entry's share steps: its mix channel's, -1 none)
         std::vector<int> ord(nv_song_n_notes(song));
         for (size_t i = 0; i < ord.size(); i++)
             ord[i] = (int)i;
-        auto onset = [&](int i) {
+        // (the note loop's order: onset, channel, key -- sorted(notes))
+        auto key = [&](int i) {
             long long ch;
             int iv[4];
             double dv[2];
             nv_song_get_note(song, i, &ch, iv, dv);
-            return dv[0];
+            return std::make_tuple(dv[0], ch, iv[0]);
         };
-        std::stable_sort(ord.begin(), ord.end(), [&](int a, int b) { return onset(a) < onset(b); });
+        std::stable_sort(ord.begin(), ord.end(), [&](int a, int b) { return key(a) < key(b); });
+        std::vector<int> rank(ord.size());
+        for (size_t p = 0; p < ord.size(); p++)
+            rank[ord[p]] = (int)p;
+        // (a mix channel's first insertion-effect chain's chorus or flanger:
+        // a tone's device, or the file's, its share following the file)
+        auto push_cf = [&](long long mch) {
+            int i0 = fx_cfn[mch];
+            cch.push_back(mch);
+            csend.push_back(0.0);
+            cnc.push_back(0);
+            ckind.push_back(2);
+            for (int q = 0; q < 8; q++)
+                ccents.push_back(0.0);
+            if (note_fx[i0] >= 0) {
+                const double *fc = fxch.data() + (size_t)NV_FXN * note_fx[i0];
+                double G[40] = {fc[15], fc[16], fc[17], fc[18], fc[19], 0.0, 2.0};
+                for (int q = 0; q < 13; q++)
+                    G[7 + q] = E.k[K_GSPLACE + q];
+                G[20] = 0.0; G[21] = 0.0; G[22] = 0.0; G[23] = 1.0;           // (GS_TAPS: left, at 0)
+                G[24] = 1.0; G[25] = M_PI; G[26] = 0.0; G[27] = 1.0;          // (...right, at pi)
+                cgsp.insert(cgsp.end(), G, G + 40);
+                csteps.push_back(mch);
+            } else {
+                int cq0 = E.cmap[nv_song_kidx(song, i0)];
+                const NoteClass *k0 = (const NoteClass *)E.classes[cq0].data();
+                cgsp.insert(cgsp.end(), k0->cf_p, k0->cf_p + 40);
+                csteps.push_back(-1);
+            }
+        };
         std::set<long long> seen;
         for (int i : ord) {
             long long ch;
@@ -1400,21 +1857,12 @@ int main(int argc, char **argv)
             long long mch = nv_song_mix(song, i);
             if (seen.count(mch))
                 continue;
-            {
-                // (a tone's insertion effect's chorus device: the channel's, ahead of CC93)
-                int cq0 = E.cmap[nv_song_kidx(song, i)];
-                const NoteClass *k0 = cq0 >= 0 ? (const NoteClass *)E.classes[cq0].data() : nullptr;
-                if (k0 && k0->efx_cf && !iv[3]) {
-                    seen.insert(mch);
-                    cch.push_back(mch);
-                    csend.push_back(0.0);
-                    cnc.push_back(0);
-                    ckind.push_back(2);
-                    for (int q = 0; q < 8; q++)
-                        ccents.push_back(0.0);
-                    cgsp.insert(cgsp.end(), k0->cf_p, k0->cf_p + 40);
-                    continue;
-                }
+            auto cfi = fx_cfn.find(mch);
+            const bool cf = cfi != fx_cfn.end();
+            if (cf && rank[i] >= rank[cfi->second]) {
+                seen.insert(mch);
+                push_cf(mch);
+                continue;
             }
             int nc = nv_song_ccs(song, mch % 256, 93, nullptr, nullptr, 0);
             if (nc <= 0) {
@@ -1425,6 +1873,11 @@ int main(int argc, char **argv)
                 if (!nk || !(nk->cho_send || nk->pair_set))
                     continue;
                 seen.insert(mch);
+                if (cf) {
+                    push_cf(mch);
+                    continue;
+                }
+                csteps.push_back(-1);
                 cgsp.insert(cgsp.end(), 40, 0.0);
                 cch.push_back(mch);
                 csend.push_back(nk->cho_send ? nk->cho_send : 1.0);
@@ -1439,18 +1892,50 @@ int main(int argc, char **argv)
             std::vector<double> tt(nc);
             std::vector<int> vv(nc);
             nv_song_ccs(song, mch % 256, 93, tt.data(), vv.data(), nc);
-            if (vv[0] <= 0)
+            if (vv[0] <= 0) {
+                if (cf)
+                    seen.erase(mch);        // (no entry: the chain's comes at its note)
                 continue;
+            }
+            if (cf) {
+                push_cf(mch);               // (an entry here, the chain's in it)
+                continue;
+            }
+            if (gs_cho[0] >= 0.0) {
+                // A SOUND CANVAS FILE'S CHORUS is its device (chorus.gs_copies):
+                // the share the device's added power takes out of the dry
+                double a = vv[0] / 127.0 * gs_cho[5];
+                if (a * a / (1.0 + a * a) <= 0.02)
+                    continue;               // (chorus.expand: a send at FLOOR or under makes no copies)
+                cch.push_back(mch);
+                csend.push_back(0.0);
+                cnc.push_back(0);
+                ckind.push_back(2);
+                for (int q = 0; q < 8; q++)
+                    ccents.push_back(0.0);
+                double G[40] = {gs_cho[0], gs_cho[1], gs_cho[2], gs_cho[3], gs_cho[4], a * a / (1.0 + a * a), 2.0};
+                for (int q = 0; q < 13; q++)
+                    G[7 + q] = E.k[K_GSPLACE + q];
+                G[20] = 0.0; G[21] = 0.0; G[22] = 0.0; G[23] = 1.0;           // (GS_TAPS: left, at 0)
+                G[24] = 1.0; G[25] = M_PI; G[26] = 0.0; G[27] = 1.0;          // (...right, at pi)
+                cgsp.insert(cgsp.end(), G, G + 40);
+                csteps.push_back(-1);
+                continue;
+            }
             int cq = E.cmap[nv_song_kidx(song, i)];
             const NoteClass *nk = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
             cch.push_back(mch);
             csend.push_back(vv[0] / 127.0);
             cnc.push_back(nk ? nk->n_cho : 0);
             ckind.push_back(0);
+            csteps.push_back(-1);
             cgsp.insert(cgsp.end(), 40, 0.0);
             for (int q = 0; q < 8; q++)
                 ccents.push_back(nk && q < nk->n_cho ? nk->cho_cents[q] : 0.0);
         }
+        for (size_t q = 0; q < csteps.size(); q++)
+            if (csteps[q] >= 0)             // (the file's chain: its share at each row's onset)
+                nv_chorus_share_steps((int)q, (int)fx_ts.size(), fx_ts.data(), fx_share[csteps[q]].data());
         if (!cch.empty())
             nv_chorus_expand(&rows, &P, dm, (int)cch.size(), cch.data(), csend.data(), cnc.data(), ccents.data(),
                              ckind.data(), cgsp.data(), SR);
@@ -2196,7 +2681,8 @@ int main(int argc, char **argv)
                 std::vector<int> vv;
                 int cq = E.cmap[nv_song_kidx(song, i)];
                 const NoteClass *nk = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
-                if (efx_send.count(c) && nk && nk->efx_set) {
+                const int nfx = note_fx[i];
+                if (efx_send.count(c) && (nfx >= 0 || (nfx == -1 && nk && nk->efx_set))) {
                     rsend.emplace_back(c, efx_send[c]);         // (its insertion effect's send: _REVERB_CH.setdefault)
                     seen.insert(c);
                 } else if (part_cc(c % 256, tt, vv) > 0) {

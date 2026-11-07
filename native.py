@@ -129,7 +129,7 @@ class ToneIn(ctypes.Structure):
                 + [('room_bands', C * 9), ('pjit', I), ('sps', C), ('dur', C), ('ssc', I)]
                 + [('rev', I), ('rev_n0', C), ('rev_arr', C), ('planes', C * 6), ('order', I), ('radius', C),
                    ('has_radius', I), ('pps_seed', ctypes.c_longlong), ('dist', C), ('cls', ctypes.c_longlong),
-                   ('hammer_on', C), ('gs_eq', C * 4)])
+                   ('hammer_on', C), ('gs_eq', C * 4), ('fx_comp', C * 3)])
 
 
 class VoiceInit(ctypes.Structure):
@@ -302,7 +302,8 @@ class NoteIn(ctypes.Structure):
                    ('ring_on', I), ('ring_f', C * 48), ('fbr', C),
                    ('sym_drv', ctypes.c_void_p), ('blk', C), ('xp', C),
                    ('hammered', I), ('reslur', I), ('hammer_on', C), ('siren_set', I), ('siren_end', C),
-                   ('press', C), ('gs_eq', C * 4)])
+                   ('press', C), ('gs_eq', C * 4), ('fx_set', I), ('fx_level', C), ('fx_od', C),
+                   ('fx_comp', C * 3)])
 
 
 class NoteOut(ctypes.Structure):
@@ -1009,6 +1010,12 @@ def noisy_harmonic(cls):
 
 
 _EFX = {}
+# a file's insertion effect's parameters by name (gsefx.chain's), the
+# export's per-type numbers in this order (nvrender's FxKey)
+EFX_KEYS = ("Level", "Drive", "Amp Sw", "Low Gain", "Hi Gain", "Cmp Atck", "Cmp Sus", "Cmp Level", "Cmp Sw",
+            "OD Sel", "OD Drive", "OD Amp Sw", "OD Sw", "EQ L Gain", "EQ M Fq", "EQ M Q", "EQ M Gain", "EQ H Gain",
+            "OD L Gain", "OD H Gain", "CF Sel", "CF Rate", "CF Depth", "CF Fb", "CF Mix", "Dly Time", "Dly Fb",
+            "Dly Mix", "EH Sens", "TP Sw")
 
 
 def efx_chain(cls):

@@ -302,6 +302,18 @@ static int emit_fwd(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, 
         double ge = pow(10.0, (t->gs_eq[2] / (1.0 + x) + t->gs_eq[3] * y / (1.0 + y)) / 20.0);
         ampL *= ge; ampR *= ge; ampM *= ge;
     }
+    if (t->fx_comp[0] > 0.0) {
+        /* THE INSERTION EFFECT's COMPRESSOR (gsefx), before its OD: its
+           sustain the decay slowed (logr, logrA), its makeup a gain, its
+           attack the onset risen over it (CMP_ATTACK_MS) */
+        logr = logr * t->fx_comp[0];
+        logrA = logrA * t->fx_comp[0];
+        ampL *= t->fx_comp[1]; ampR *= t->fx_comp[1]; ampM *= t->fx_comp[1];
+        if (t->fx_comp[2] > 0.0) {
+            double fa2 = t->fx_comp[2] * t->sr;
+            fa = fa2 > fa ? fa2 : fa;           /* (max(fa, ...): the first of equals) */
+        }
+    }
     if (t->hammer_on > 0.0) {
         /* A HAMMER-ON / PULL-OFF (hammer_legato): the partial where its own
            decay has got to since the pick (logr, then the aftersound's

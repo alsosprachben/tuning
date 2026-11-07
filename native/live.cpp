@@ -347,6 +347,15 @@ extern "C" void nv_gsd_place(int side, double f, const double *pl, double *out)
         out[q] = it->second[q];
 }
 
+// AN INSERTION EFFECT's MIX FOLLOWING THE FILE (gsefx.mix_share, chorus.expand's
+// fourth): channel q's share at each row's onset, the last time (s) at or
+// before it -- given before nv_chorus_expand (a device of kind 2), used by it
+static std::map<int, std::pair<std::vector<double>, std::vector<double>>> g_cho_steps;
+extern "C" void nv_chorus_share_steps(int q, int n, const double *ts, const double *vals)
+{
+    g_cho_steps[q] = std::make_pair(std::vector<double>(ts, ts + n), std::vector<double>(vals, vals + n));
+}
+
 extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                                       const double *sends, const int *ncents, const double *cents,
                                       const int *kinds, const double *gsp, double sr)
@@ -378,17 +387,33 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
             // chorus): each output's copies of the channel's rows, a pass a
             // round of its feedback, placed at the output, the LFO free
             const double *G = gsp + 40 * q;
-            const double tau = G[0], rate = G[1], vd = G[2], fb = G[3], lpf = G[4], share = G[5];
+            const double tau = G[0], rate = G[1], vd = G[2], fb = G[3], lpf = G[4];
             const int ntap = (int)G[6];
             std::vector<long long> sel;
             for (long long i = 0; i < n; i++)
                 if ((long long)rows[(size_t)NCOLS * i + cMCH] == chans[q])
                     sel.push_back(i);
-            if (sel.empty() || !(share > 0.0))
+            // the share: the device's, or each row's (its onset's step)
+            auto stp = g_cho_steps.find(q);
+            std::vector<double> share(sel.size(), G[5]);
+            if (stp != g_cho_steps.end()) {
+                const std::vector<double> &ts = stp->second.first, &vs = stp->second.second;
+                for (size_t j = 0; j < sel.size(); j++) {
+                    double x = rows[(size_t)NCOLS * sel[j] + cNON] / sr;
+                    long i = (long)(std::upper_bound(ts.begin(), ts.end(), x) - ts.begin()) - 1;
+                    share[j] = vs[i < 0 ? 0 : i >= (long)vs.size() ? (long)vs.size() - 1 : i];
+                }
+            }
+            bool any = false;
+            for (double x : share)
+                any = any || x > 0.0;
+            if (sel.empty() || !any)
                 continue;
             const double fb2 = pow(fb, 2.0);
             const double passes = fb2 < 1.0 ? (1.0 - pow(fb2, 16.0)) / (1.0 - fb2) : 16.0;
-            const double wet = sqrt(share / (double)ntap / passes);
+            std::vector<double> wet(sel.size());
+            for (size_t j = 0; j < sel.size(); j++)
+                wet[j] = sqrt(share[j] / (double)ntap / passes);
             std::vector<double> non(sel.size()), noff(sel.size()), ph0(sel.size()), ph0R(sel.size()), fmp(sel.size()),
                 fmpR(sel.size()), fmw(sel.size()), f(sel.size());
             for (size_t j = 0; j < sel.size(); j++) {
@@ -409,11 +434,17 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
                 for (size_t j = 0; j < sel.size(); j++)
                     nv_gsd_place(side, f[j], G + 7, pl[j].data());     // (the render's memo: gsd_place)
                 for (int k = 1; k <= 16; k++) {
-                    double g = wet * pow(fb, (double)(k - 1));
-                    if (fabs(g) < FLOOR * 0.5 || (k > 1 && fb == 0.0))
+                    const double fk = pow(fb, (double)(k - 1));
+                    bool loud = false;          // (np.all(|g| < FLOOR / 2): the pass makes nothing)
+                    for (size_t j = 0; j < sel.size(); j++)
+                        loud = loud || !(fabs(wet[j] * fk) < FLOOR * 0.5);
+                    if (!loud || (k > 1 && fb == 0.0))
                         break;
                     double d = (k * tau + ext) * sr;
                     for (size_t j = 0; j < sel.size(); j++) {
+                        const double g = wet[j] * fk;
+                        if (!(fabs(g) > 1e-12))
+                            continue;           // (a row whose mix is 0 there makes no copy)
                         long long i = sel[j];
                         size_t o = extra.size();
                         extra.insert(extra.end(), rows + (size_t)NCOLS * i, rows + (size_t)NCOLS * (i + 1));
@@ -457,11 +488,13 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
                 }
             }
             // ...and the dry share comes down by what the copies took
-            double dry = sqrt(1.0 - share);
-            if (made_q && dry != 1.0)
-                for (long long i : sel)
-                    for (int c : {cAL, cAR, cAM})
-                        rows[(size_t)NCOLS * i + c] = rows[(size_t)NCOLS * i + c] * dry;
+            if (made_q)
+                for (size_t j = 0; j < sel.size(); j++) {
+                    double dry = sqrt(1.0 - share[j]);
+                    if (dry != 1.0)
+                        for (int c : {cAL, cAR, cAM})
+                            rows[(size_t)NCOLS * sel[j] + c] = rows[(size_t)NCOLS * sel[j] + c] * dry;
+                }
             continue;
         }
         double send = sends[q];
@@ -539,6 +572,7 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
                 for (int c : {cAL, cAR, cAM})
                     rows[(size_t)NCOLS * i + c] = rows[(size_t)NCOLS * i + c] * dry;
     }
+    g_cho_steps.clear();
     long long m = (long long)src.size();
     if (!m)
         return 0;

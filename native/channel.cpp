@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <map>
 #include <set>
 #include <string>
@@ -280,6 +281,18 @@ struct Song {
     // note came, its voice's drive, and whether it is on a rotor
     std::vector<std::pair<long long, std::pair<double, int>>> amp;
     std::vector<std::pair<double, double>> amp_cfg;     // (its reference peak, 0 none; its imbalance)
+    std::vector<double> amp_lv0;    // ...its insertion effect's level when it came (_AMP_LV0), 1 none
+    // ...its reference following that level (tubeamp.segment's 'steps'): base, starts, levels
+    std::map<int, std::pair<double, std::pair<std::vector<double>, std::vector<double>>>> amp_steps;
+    // A FILE'S INSERTION EFFECT (nvrender's chains): the chains (NV_FXN each),
+    // each note's chain (-1 none, -2 on the effect with none), each note
+    // first through a chain on its mix channel, the cabinets, and each mix
+    // channel's level steps (starts in samples, levels)
+    std::vector<double> fx;
+    std::vector<int> note_fx;
+    std::vector<unsigned char> fx_first;
+    const NoteClass *fx_cab[2] = {nullptr, nullptr};
+    std::map<long long, std::pair<std::vector<double>, std::vector<double>>> fx_steps;
     // ...and of each note's bellows push (blockrender's push_rows), [first, end)
     std::vector<std::pair<long long, long long>> push_rows;
     // ...and of each jack's key-up click (blockrender's rel_jacks): first, end, rank, offset (s)
@@ -1462,9 +1475,40 @@ struct Song {
     std::map<long long, std::vector<unsigned char>> sym_drv;    // each mix channel's strings' driver (_SYM_CH)
     std::map<NoteKey, std::pair<double, double>> meend;         // _MEEND_AT: (its ratio at Note On, its row or -1)
     std::map<NoteKey, std::pair<double, double>> siren;         // _SIREN_AT: (its row, its rotor's end)
-    std::map<long long, std::pair<double, double>> efx_part;    // a part's insertion effect: (its first onset, distance)
+    // a part's insertion effect: (each mix channel's first effect note's onset, distance), in the note loop's order
+    std::map<long long, std::vector<std::pair<double, double>>> efx_part;
     double gs_eq[4] = {0.0, 0.0, 0.0, 0.0};     // the file's GS EQ (gs_eq_gain), [0] 0 none
     std::set<long long> gs_eq_off;              // ...the parts that have it off
+    // the file's GS delay (gsdelay.device, packed as NoteClass.dly_p) and its
+    // outputs' places (K_GSPLACE); gs_dly_set 0 none
+    int gs_dly_set = 0;
+    // the drum instruments' own (dedit): (channel or -1, time, key or -1 a reset, parameter, value)
+    struct DEd {
+        long long ch;
+        double t;
+        int key, par, v;
+    };
+    std::vector<DEd> dedit;
+    // drum_edit_at: what is in force for key `key` of channel ch at t -- a bit
+    // a parameter set, v[par] its value
+    int dst(long long c, int key, double t, int *v) const
+    {
+        int m = 0;
+        for (const DEd &e : dedit) {
+            if (e.t > t + 1e-9)
+                break;
+            if (e.ch != -1 && e.ch != c)
+                continue;
+            if (e.key < 0)
+                m = 0;
+            else if (e.key == key) {
+                m |= 1 << e.par;
+                v[e.par] = e.v;
+            }
+        }
+        return m;
+    }
+    double gs_dly[24] = {}, gs_dly_place[13] = {};
     // ITS PRESSURE (ats, pts): a channel's aftertouch (key -1), a key's polytouch, in message order
     std::map<std::pair<long long, int>, std::vector<std::pair<double, int>>> press;
     int raga_sa = -1;
@@ -2180,7 +2224,8 @@ void nv_song_add_leslie(void *s, long long ch, int kind)
 
 // AN AMPLIFIER'S CHANNEL, as its first amplified note arrives (its voice's
 // amp_drive, and whether the voice is on a rotor); a channel already there is left
-void nv_song_add_amp(void *s, long long ch, double drive, int rotor, double reference, double imbalance)
+void nv_song_add_amp(void *s, long long ch, double drive, int rotor, double reference, double imbalance,
+                     double lv0)
 {
     nv::Song *S = (nv::Song *)s;
     for (const auto &x : S->amp)
@@ -2188,6 +2233,80 @@ void nv_song_add_amp(void *s, long long ch, double drive, int rotor, double refe
             return;
     S->amp.push_back(std::make_pair(ch, std::make_pair(drive, rotor)));
     S->amp_cfg.push_back(std::make_pair(reference, imbalance));
+    S->amp_lv0.push_back(lv0);
+}
+
+// A FILE'S CHAIN FIRST ON CHANNEL ch (_note_insertion_efx): its amp's
+// reference, if it has one and it is not following yet, follows the
+// channel's level steps -- base the reference over its level when it came
+void nv_song_amp_steps(void *s, long long ch)
+{
+    nv::Song *S = (nv::Song *)s;
+    auto st = S->fx_steps.find(ch);
+    if (st == S->fx_steps.end())
+        return;
+    for (size_t k = 0; k < S->amp.size(); k++) {
+        if (S->amp[k].first != ch)
+            continue;
+        if (S->amp_cfg[k].first != 0.0 && !S->amp_steps.count((int)k)) {
+            double lv = S->amp_lv0[k] > 1e-12 ? S->amp_lv0[k] : 1e-12;
+            S->amp_steps[(int)k] = std::make_pair(S->amp_cfg[k].first / lv, st->second);
+        }
+        return;
+    }
+}
+
+// amp channel k's reference steps: how many (0 none), base, starts, levels
+int nv_song_amp_steps_of(void *s, int k, double *base, const double **starts, const double **levels)
+{
+    const nv::Song *S = (nv::Song *)s;
+    auto it = S->amp_steps.find(k);
+    if (it == S->amp_steps.end())
+        return 0;
+    *base = it->second.first;
+    *starts = it->second.second.first.data();
+    *levels = it->second.second.second.data();
+    return (int)it->second.second.first.size();
+}
+
+void nv_song_fx(void *s, int nchain, const double *chains, int nnote, const int *note_fx, const unsigned char *first,
+                const NoteClass *cab0, const NoteClass *cab1)
+{
+    nv::Song *S = (nv::Song *)s;
+    S->fx.assign(chains, chains + (size_t)NV_FXN * nchain);
+    S->note_fx.assign(note_fx, note_fx + nnote);
+    S->fx_first.assign(first, first + nnote);
+    S->fx_cab[0] = cab0;
+    S->fx_cab[1] = cab1;
+}
+
+// note i's chain: its index (*chain its NV_FXN doubles), -1 none, -2 its part on the effect with none
+int nv_song_note_fx(void *s, int i, const double **chain)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (i < 0 || i >= (int)S->note_fx.size())
+        return -1;
+    int q = S->note_fx[i];
+    if (q >= 0 && chain)
+        *chain = S->fx.data() + (size_t)NV_FXN * q;
+    return q;
+}
+
+int nv_song_note_fx_first(void *s, int i)
+{
+    const nv::Song *S = (nv::Song *)s;
+    return i >= 0 && i < (int)S->fx_first.size() ? S->fx_first[i] : 0;
+}
+
+const NoteClass *nv_song_fx_cab(void *s, int which)
+{
+    return which >= 1 && which <= 2 ? ((nv::Song *)s)->fx_cab[which - 1] : nullptr;
+}
+
+void nv_song_fx_steps(void *s, long long ch, int n, const double *starts, const double *levels)
+{
+    ((nv::Song *)s)->fx_steps[ch] = std::make_pair(std::vector<double>(starts, starts + n),
+                                                   std::vector<double>(levels, levels + n));
 }
 
 // the amplifier channel k's reference peak (0 none) and its valve's imbalance
@@ -2676,17 +2795,25 @@ double nv_song_pressure(void *s, long long ch, int note, double on, double off)
 // reverb send the part's distance from that onset on; 0 none
 void nv_song_efx_part(void *s, long long part, double on, double dist)
 {
-    ((nv::Song *)s)->efx_part.emplace(part, std::make_pair(on, dist));
+    ((nv::Song *)s)->efx_part[part].push_back(std::make_pair(on, dist));
 }
 
 int nv_song_efx_dist(void *s, long long part, double on, double *dist)
 {
+    // (_C91D: the last effect note's send before this one -- each mix
+    // channel's first sets it, a tone's or the file's chain)
     const nv::Song *S = (nv::Song *)s;
     auto it = S->efx_part.find(part);
-    if (it == S->efx_part.end() || on < it->second.first)
+    if (it == S->efx_part.end())
         return 0;
-    *dist = it->second.second;
-    return 1;
+    int got = 0;
+    for (const auto &e : it->second) {
+        if (on < e.first)
+            break;
+        *dist = e.second;
+        got = 1;
+    }
+    return got;
 }
 
 // THE FILE'S GS EQ (prepare's _GS_EQ): its corners and gains, and the parts
@@ -2698,6 +2825,35 @@ void nv_song_gs_eq(void *s, const double *eq, int noff, const int *off)
         S->gs_eq[i] = eq[i];
     for (int i = 0; i < noff; i++)
         S->gs_eq_off.insert(off[i]);
+}
+
+// THE FILE'S GS DELAY (prepare's _GS_DLY): its device, its outputs' places
+void nv_song_gs_delay(void *s, const double *dev, const double *place)
+{
+    nv::Song *S = (nv::Song *)s;
+    S->gs_dly_set = 1;
+    memcpy(S->gs_dly, dev, sizeof S->gs_dly);
+    memcpy(S->gs_dly_place, place, sizeof S->gs_dly_place);
+}
+
+const double *nv_song_gs_delay_of(void *s, const double **place)
+{
+    nv::Song *S = (nv::Song *)s;
+    *place = S->gs_dly_place;
+    return S->gs_dly_set ? S->gs_dly : nullptr;
+}
+
+// THE DRUM INSTRUMENTS' OWN (the reader's dedit), in message order
+void nv_song_dedit(void *s, int n, const int *iv, const double *t)
+{
+    nv::Song *S = (nv::Song *)s;
+    for (int i = 0; i < n; i++)
+        S->dedit.push_back(nv::Song::DEd{iv[4 * i], t[i], iv[4 * i + 1], iv[4 * i + 2], iv[4 * i + 3]});
+}
+
+int nv_song_dst(void *s, long long ch, int key, double on, int *v)
+{
+    return ((nv::Song *)s)->dst(ch, key, on, v);
 }
 
 // ...on a note of part `part`: 1 and eq where it has it
@@ -2835,8 +2991,24 @@ int nv_song_pitch_level_ks(void *s, int i, int effort_tilt, int indian, double s
         int q = 128 * e.prog + note;
         if (S->kit_f0.empty() || e.prog < 0 || e.prog > 127 || S->kit_f0[q] == 0.0)
             return 0;
-        out[0] = S->kit_f0[q] * e.ratio;
+        int dv[6];
+        int dm = S->dst(ch, note, on, dv);      // (the file's own setting of this drum: _dst)
+        out[0] = S->kit_f0[q];
+        if (dm & 1)
+            out[0] *= pow(2.0, dv[0] / 12.0);
+        out[0] *= e.ratio;
         out[5] = S->kit_seat[q];
+        if (dm & 4) {
+            if (dv[2] == 0) {                   // (0: a pan of its own, the same every render)
+                unsigned long long hv = ((unsigned long long)ch * 0x9E3779B1ULL)
+                                        ^ ((unsigned long long)note * 0x85EBCA6BULL)
+                                        ^ ((unsigned long long)(long long)(on * 1000.0) * 0xC2B2AE35ULL);
+                hv = ((hv ^ (hv >> 15)) * 0x2545F491ULL) & 0xFFFFFFFFULL;
+                out[5] = 2.0 * ((double)hv / 4294967295.0) - 1.0;
+            } else {
+                out[5] = (dv[2] - 64) / 63.0;
+            }
+        }
         r = 2;
     } else {
         out[0] = S->pitch(ch, note, on, indian != 0, so);
@@ -2844,6 +3016,11 @@ int nv_song_pitch_level_ks(void *s, int i, int effort_tilt, int indian, double s
     out[1] = e.vel;
     out[2] = e.pan;
     double cv = pow(e.v7 * e.v11, 2.0);
+    if (e.drum) {
+        int dv[6];
+        if (S->dst(ch, note, on, dv) & 2)
+            cv *= pow(dv[1] / 100.0, 2.0);      // (its level against the preset's 100)
+    }
     if (S->fader.count(ch))
         cv = 1.0;
     out[3] = cv * e.trim;

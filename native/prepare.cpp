@@ -221,18 +221,61 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
     };
     std::vector<double> extra;
     long long last = 0;
+    const double *gplace = nullptr;
+    const double *gdev = nv_song_gs_delay_of(song, &gplace);     // (a GS file's: _GS_DLY)
+    std::map<long long, std::pair<std::vector<double>, std::vector<int>>> c94;
     for (int j = 0; j < nn; j++) {
         long long ch;
         int iv[4];
         double dv[2];
         nv_song_get_note(song, played[j], &ch, iv, dv);
         const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[nv_song_kidx(song, played[j])];
-        if (!k || !k->efx_set || !k->efx_dly || iv[3])
+        const NoteClass *kk = K[nv_song_kidx(song, played[j])];
+        const double *D = nullptr, *place = nullptr;
+        double send = 1.0;
+        const double *fc = nullptr;
+        const int fx = nv_song_note_fx(song, played[j], &fc);
+        if (fx == -1 && k && k->efx_set && k->efx_dly && !iv[3]) {
+            D = k->dly_p;                   // (a tone's own insertion delay, in the GS delay's place)
+            place = k->efx_place;
+        } else if (fx >= 0) {
+            // ...the file's chain: its own send to the GS delay (40 03 19)
+            send = fc[13] / 127.0;
+            if (!gdev || !(send > 0.0))
+                continue;
+            D = gdev;
+            place = gplace;
+        } else if (gdev && !(fx == -1 && kk && kk->efx_set && !iv[3])) {
+            // ...else the file's GS delay, at the part's CC94 at the onset
+            // (_gsd_send: the last at or before it), a drum key's level 127
+            auto it = c94.find(ch);
+            if (it == c94.end()) {
+                int n = nv_song_ccs(song, ch, 94, nullptr, nullptr, 0);
+                std::vector<double> tt(n > 0 ? n : 0);
+                std::vector<int> vv(n > 0 ? n : 0);
+                if (n > 0)
+                    nv_song_ccs(song, ch, 94, tt.data(), vv.data(), n);
+                it = c94.emplace(ch, std::make_pair(tt, vv)).first;
+            }
+            int v = 0;
+            for (size_t q = 0; q < it->second.first.size(); q++) {
+                if (it->second.first[q] > dv[0] + 1e-9)
+                    break;
+                v = it->second.second[q];
+            }
+            int ed[6];          // (a drum key's own delay level: _dst's, else 127)
+            int dlv = iv[3] && (nv_song_dst(song, ch, iv[0], dv[0], ed) & 32) ? ed[5] : 127;
+            send = v / 127.0 * (iv[3] ? dlv / 127.0 : 1.0);
+            if (!(send > 0.0))
+                continue;
+            D = gdev;
+            place = gplace;
+        } else {
             continue;
+        }
         long long i0 = row0[j], i1 = j + 1 < nn ? row0[j + 1] : nnote;
         if (i1 <= i0)
             continue;
-        const double *D = k->dly_p;
         const double level = D[0], fb = D[1], lpf = D[2], tc = D[3];
         const int ntap = (int)D[4];
         (void)tc;
@@ -250,7 +293,7 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
             double f = om * sr / TPI;
             double rel = top > 0.0 ? lv[i - i0] / top : 0.0;
             double lg = lpf != 0.0 ? 1.0 / sqrt(1.0 + pow(f / lpf, 2.0)) : 1.0;     /* (lpf_gain) */
-            double g0 = 1.0 * level * lg;
+            double g0 = send * level * lg;
             if (g0 <= 0.0)
                 continue;
             for (int t = 0; t < ntap; t++) {
@@ -262,7 +305,7 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
                         break;
                     long long d = (long long)nearbyint((tau + q * period) * sr);
                     double pl[4];
-                    nv_gsd_place(side, f * 1.0, k->efx_place, pl);
+                    nv_gsd_place(side, f * 1.0, place, pl);
                     std::vector<double> c(row, row + NCOLS);
                     c[cNON] = row[cNON] + (double)d;
                     c[cNOFF] = row[cNOFF] + (double)d;
@@ -368,9 +411,16 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
         const NoteClass *k = (iv[2] < 0 || iv[2] > 127) ? nullptr : K[nv_song_kidx(song, played[j])];
         const long long part = ch;
         ch = nv_song_mix(song, played[j]);              // (each tone its own: TONE_SEG)
-        // (a tone's own insertion effect, melodic: its level and OD in the note's level)
-        const bool efx = k && k->efx_set && !iv[3];
-        if (k && (k->amp_drive != 0.0 || (efx && k->efx_od != 0.0))) {
+        // (a tone's own insertion effect, melodic, where the file puts its
+        // part on none -- else the file's chain its onset finds: its level
+        // and OD in the note's level; the mix channel's first chain note its
+        // amp, its level's steps and its cabinet: _note_insertion_efx)
+        const double *fc = nullptr;
+        const int fx = nv_song_note_fx(song, played[j], &fc);
+        const bool efx = fx == -1 && k && k->efx_set && !iv[3];
+        const bool ffirst = fx >= 0 && nv_song_note_fx_first(song, played[j]);
+        const double flv = fx >= 0 ? fc[0] : 1.0, fod = fx >= 0 ? fc[1] : 0.0;
+        if (k && (k->amp_drive != 0.0 || (efx && k->efx_od != 0.0) || (ffirst && fod != 0.0))) {
             // (_note_amp_drive: the reference times the note's fader, chan_vol;
             // _note_insertion_efx: an OD stage the valve where the voice has
             // none, at PEDAL_AMP_DRIVE, its reference the voice's or the
@@ -386,12 +436,22 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
                     cv *= k->efx_level;
                     eg = k->efx_od != 0.0 ? k->efx_od : 1.0;
                     cv *= eg;
+                } else if (fx >= 0) {
+                    cv *= flv;
+                    eg = fod != 0.0 ? fod : 1.0;
+                    cv *= eg;
                 }
                 ref = r0 * cv / eg;
                 if (efx)
                     ref = ref / (k->efx_level > 1e-12 ? k->efx_level : 1e-12) * k->efx_level;
             }
-            nv_song_add_amp(song, ch, own ? k->amp_drive : 1.0, k->leslie != 0, ref, k->amp_imbalance);
+            nv_song_add_amp(song, ch, own ? k->amp_drive : 1.0, k->leslie != 0, ref, k->amp_imbalance,
+                            efx ? k->efx_level : fx >= 0 ? flv : 1.0);
+        }
+        if (ffirst) {
+            nv_song_amp_steps(song, ch);                // (its reference follows the file's level: 'steps')
+            if (fc[2] != 0.0 && nv_song_fx_cab(song, (int)fc[2]))
+                nv_song_add_cab(song, ch, nv_song_fx_cab(song, (int)fc[2]));     // (its cabinet, ahead of the voice's)
         }
         if (k && k->leslie)
             nv_song_add_leslie(song, ch, k->leslie);

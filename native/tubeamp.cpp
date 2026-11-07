@@ -456,6 +456,17 @@ long nv_amp_live_t(const double *f, const double *a, const double *p, long n, do
 // direct rows cut at every onset and end, each segment's products appended
 // (after every channel's), a damper's dk/dg copied with them. Returns the
 // products made.
+// A REFERENCE THAT FOLLOWS A LEVEL AFTER THE VALVE (tubeamp.segment's
+// 'steps': a file's insertion effect's level): channel k's, given before
+// nv_amp_expand and used by it -- the reference a segment from a is base x
+// the level of the last start at or before a
+static std::map<int, std::pair<double, std::pair<std::vector<double>, std::vector<double>>>> g_amp_steps;
+void nv_amp_ref_steps(int k, double base, int n, const double *starts, const double *levels)
+{
+    g_amp_steps[k] = std::make_pair(base, std::make_pair(std::vector<double>(starts, starts + n),
+                                                         std::vector<double>(levels, levels + n)));
+}
+
 long long nv_amp_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                         const double *drives, const double *refs, const double *imbs, double sr)
 {
@@ -525,8 +536,15 @@ long long nv_amp_expand(double **rowsp, long long *Pp, void **dm, int nch, const
             for (long long i : live)
                 if (at(i, cAM) > at(src, cAM))
                     src = i;
+            double ref = refs ? refs[k] : 0.0;
+            auto st = g_amp_steps.find(k);
+            if (st != g_amp_steps.end()) {
+                const std::vector<double> &ss = st->second.second.first, &lv = st->second.second.second;
+                long i = (long)(std::upper_bound(ss.begin(), ss.end(), a) - ss.begin()) - 1;   // (bisect_right)
+                ref = st->second.first * lv[i > 0 ? i : 0];
+            }
             std::vector<Partial> got = emit(F, A, Ph, sr, drive, imbs ? imbs[k] : IMBALANCE, WINDOW_S, OVERSAMPLE,
-                                            KEEP_PEAKS, refs ? refs[k] : 0.0);
+                                            KEEP_PEAKS, ref);
             for (const Partial &q : got) {
                 size_t o = extra.size();
                 extra.insert(extra.end(), rows + (size_t)NCOLS * src, rows + (size_t)NCOLS * (src + 1));
@@ -548,6 +566,7 @@ long long nv_amp_expand(double **rowsp, long long *Pp, void **dm, int nch, const
             }
         }
     }
+    g_amp_steps.clear();
     long long m = (long long)src_of.size();
     if (m) {
         rows = (double *)realloc(*rowsp, sizeof(double) * NCOLS * (size_t)(n + m));

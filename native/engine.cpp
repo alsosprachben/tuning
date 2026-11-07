@@ -175,6 +175,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     t.order = n->order;
     t.dist = n->dist;
     memcpy(t.gs_eq, n->gs_eq, sizeof t.gs_eq);
+    memcpy(t.fx_comp, n->fx_comp, sizeof t.fx_comp);
     t.cls = (long long)(intptr_t)K;         // (its class: _refl_norm's memo key, type(props))
     if (s.sect_n > 1 && s.sect_seats) {     // A SECTION'S: the note's ears are its first player's desk's
         double e[4];
@@ -853,7 +854,10 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         }
         if (K->organ && K->organ->swells)   // an organ's CC7 is its swell, its CC11 its stop word: 1, trimmed
             n->chan_vol = 1.0 * nv_song_note_trim(song, n->song_index);
-        if (K->efx_set && r == 1) {         // ITS OWN INSERTION EFFECT: its level, its OD stage's gain (after an organ's swell)
+        if (n->fx_set == 1) {               // ITS PART'S INSERTION EFFECT, the file's chain at its onset
+            n->chan_vol *= n->fx_level;
+            n->chan_vol *= n->fx_od != 0.0 ? n->fx_od : 1.0;
+        } else if (n->fx_set == 0 && K->efx_set && r == 1) {   // ITS OWN: its level, its OD stage's gain (after an organ's swell)
             n->chan_vol *= K->efx_level;
             n->chan_vol *= K->efx_od != 0.0 ? K->efx_od : 1.0;
         }
@@ -1096,6 +1100,17 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         n.press = nv_song_pressure(song, ch, iv[0], dv[0], dv[1]);    // (_pressure_of: to its key-up)
         n.dist = song_dist(song, ch, dv[0], n.sr, k);  // its distance: its part's CC91 (_src_dist)
         nv_song_gs_eq_of(song, ch % 256, n.gs_eq);     // the file's GS EQ, its part's (gsefx.part_of)
+        {
+            // ITS PART ON THE FILE'S INSERTION EFFECT (_EFXN): the chain its onset finds
+            const double *fc = nullptr;
+            int fx = nv_song_note_fx(song, i, &fc);
+            n.fx_set = fx >= 0 ? 1 : fx == -2 ? 2 : 0;
+            if (fx >= 0) {
+                n.fx_level = fc[0];
+                n.fx_od = fc[1];
+                n.fx_comp[0] = fc[3]; n.fx_comp[1] = fc[4]; n.fx_comp[2] = fc[5];
+            }
+        }
         n.sung_hz = nv_song_tess(song, ch);     // a sung part's tessitura, its declared part (_prep_choir_parts)
         n.part = nv_song_part(song, ch);
         double pv[3];

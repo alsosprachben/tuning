@@ -52,7 +52,9 @@ TASKS = [
                    "built corked) -- nvlive refuses the bagpipe"),
     ("GM1", True, "Files: two-port files (PortedMidi, meta 21) in the reader: channel + 16 x port, port B's "
                   "part exclusives as port A reads them, the legato over the merged stream"),
-    ("GM1", False, "Files: NRPNs and MPE in the reader"),
+    ("GM1", True, "Files: GS's drum instrument NRPNs (GS_DRUM_NRPN: a key's pitch, level, pan, delay level; "
+                  "reset by a GS or GM reset and a drum program change)"),
+    ("GM1", False, "Files: MPE in the reader"),
     ("GM1", True, "Files: a class's own distance and gestures -- reverb_distance, its own chorus pedal "
                   "(chorus_send) and detuned pair (detuned_pair: chorus._pair), falls and rips on the valved "
                   "lattice (fall_cents, rip_cents: Song::gliss)"),
@@ -93,7 +95,9 @@ TASKS = [
     ("MT-32", False, "nvlive: the MT-32 set as a patch (bank 127) -- live's bank select first"),
     ("CM-64", False, "The CM-32P (the CM-64's PCM half: the U-110's tones on channels 11-16) -- Python has none yet"),
     ("CM-64", False, "The CM-32L's sound effects on the rhythm part (keys 76-108) in nvlive"),
-    ("SC-55", False, "The GS map (CC32 / TONE MAP-0) and kit_in_map in the reader and nvlive"),
+    ("SC-55", True, "Files: a drum set read in a map (kit_in_map) where the map has none of its own"),
+    ("SC-55", False, "The maps' own drum sets (percussion_map.KITS past 127) in files; the GS map (CC32 / TONE "
+                     "MAP-0) in nvlive"),
     ("SC-55", True, "A tone's own insertion effect (insertion_efx) in files, all 58 of the maps' tones: its "
                     "level, OD stage (the part's valve), cabinet, EQ and sends; its chorus device (chorus.gs_copies) "
                     "and delay (gsdelay.expand, gsd_place's memo shared); an Auto Pan's tremolo; a Phaser's or "
@@ -103,10 +107,21 @@ TASKS = [
                   "dropped them -- and the plunger's moving filter on the channel's aftertouch (59.2)"),
     ("SC-55", True, "A FILE's GS setup (gs_setup): the reverb macro's room (an export per room), its level, "
                     "time and a delay's feedback in the sidecar; the GS EQ on each part that has it on (gs_eq_gain)"),
-    ("SC-55", False, "A FILE's GS effects natively (gsefx: insertion EFX, 40 03 and 4p 22; the GS delay and chorus "
-                     "sends, CC94 and CC93) -- the corpus has no GS files, so each needs GS test files"),
+    ("SC-55", True, "A FILE's GS chorus and delay: CC93 through its chorus device (chorus.gs_device), CC94 into "
+                    "its delay (gsdelay.device), each note's send at its onset"),
+    ("SC-55", True, "A FILE's insertion effect (gsefx: 40 03, a part's 4p 22): each note's chain at its onset -- "
+                    "Overdrive, Distortion, the guitar and bass multis (compressor, OD into the valve, cabinet, EQ, "
+                    "chorus or flanger with its mix following the file); its level's steps in the amp's reference; "
+                    "its sends; its effect controllers (40 03 1B-1E: a source's values moving + and #)"),
+    ("SC-55", False, "A FILE's insertion effect's other types: 3D, the buses (Compressor, Reverb...), pitch "
+                     "shifters, the wahs and phasers, rotary, tremolo and delay types, a multi's delay; a drum part "
+                     "on it"),
+    ("SC-55", True, "Files: the rhythm part's assignment (40 1p 15); the controller matrix (40 2p, GM2 09) where "
+                    "it moves nothing"),
+    ("SC-55", False, "Files: a controller matrix that moves (ctrlmatrix: its pitch, vibrato, amplitude, tremolo, "
+                     "cutoff, LFO rate; the reader refuses it, -8)"),
     ("SC-55", False, "Files: GS's other exclusives -- part parameters (parse_gs_part), drum setup and the user "
-                     "sets, the rhythm part's assignment, TONE MAP-0 (the reader refuses them, -4)"),
+                     "sets, TONE MAP-0 (the reader refuses them, -4)"),
     ("SC-55", True, "Melodic SFX (patch_map.melodic_sfx): a kit's sound on a keyboard part, transposed whole "
                     "(transposed_from_hz: _XP), its kit key's strokes (sfx_strokes_of), the weather voices "
                     "(a measured mode set under the noise's roll-off, its breath beside it)"),
