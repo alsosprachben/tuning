@@ -238,7 +238,10 @@ class Enhancer:
         for ear, x in enumerate((L, R)):
             x = np.asarray(x, np.float64)
             hi = x - self.hp.run(x, ear)                    # above the corner
-            sat = np.tanh(self.drive * hi) / self.drive
+            # (libm's tanh, element by element: numpy's SIMD differs in the
+            # last bit, and the engine's bus is libm's -- native.xtanh)
+            import native as _NV
+            sat = _NV.xtanh(self.drive * hi) / self.drive
             out.append((x + self.mix * sat).astype(np.float32))
         return out[0], out[1]
 

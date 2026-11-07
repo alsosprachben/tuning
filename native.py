@@ -336,7 +336,7 @@ def _load():
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
                                                        'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'efxrev.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
-                                                       'epiano.cpp')]
+                                                       'epiano.cpp', 'efxchain.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -350,7 +350,8 @@ def _load():
         objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
                 tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.slab.o',
                 tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o', tmp + '.tuner.o', tmp + '.bend.o',
-                tmp + '.leslie.o', tmp + '.tubeamp.o', tmp + '.scanner.o', tmp + '.reed.o', tmp + '.epiano.o']
+                tmp + '.leslie.o', tmp + '.tubeamp.o', tmp + '.scanner.o', tmp + '.reed.o', tmp + '.epiano.o',
+                tmp + '.efxchain.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
             for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
@@ -380,6 +381,8 @@ def _load():
                                    '-o', objs[18]])
             subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'epiano.cpp'),
                                    '-o', objs[19]])
+            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'efxchain.cpp'),
+                                   '-o', objs[20]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl'])
         finally:
             for o in objs:
@@ -449,6 +452,7 @@ def _load():
             ('nv_cangle_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_tuning_table', I, [ctypes.c_char_p, I, C, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_tanhf_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_tanh_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_prepare', LL, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoteIn), D, I,
                                 ctypes.POINTER(PyRandomState), ctypes.POINTER(D), ctypes.c_void_p, D,
                                 ctypes.c_void_p, C, C, C, C, LL, C, C, C, ctypes.c_void_p, C, C, C, C,
@@ -1021,7 +1025,26 @@ EFX_KEYS = ("Level", "Drive", "Amp Sw", "Low Gain", "Hi Gain", "Cmp Atck", "Cmp 
             "Dly Mix", "EH Sens", "TP Sw", "Azimuth", "Speed", "Turn", "Clockwise", "Attack", "Sustain",
             "Post Gain", "Type", "Pre Dly", "Time", "HF Damp", "Balance", "Gate Time", "L.Bal", "Pre Dly 1",
             "Pre Dly 2", "EFX Pan 1", "EFX Pan 2", "Coarse 1", "Fine 1", "Coarse 2", "Fine 2", "EFX Pan",
-            "P.Coarse", "P.Fine", "Feedback", "Wah Fil", "Wah Man", "Wah Peak", "Wah Sw", "Rate", "Depth", "Phase")
+            "P.Coarse", "P.Fine", "Feedback", "Wah Fil", "Wah Man", "Wah Peak", "Wah Sw", "Rate", "Depth", "Phase",
+            "Pre Filter", "Cutoff", "Pre Dly Dev", "Depth Dev", "Pan Dev", "Cho Rate", "Cho Depth", "Trem Rate",
+            "Trem Sep", "Mod Wave", "Mod Rate", "Mod Depth", "Low Freq", "Hi Freq", "M1 Freq", "M1 Q", "M1 Gain",
+            "M2 Freq", "M2 Q", "M2 Gain", "Band 1", "Band 2", "Band 3", "Band 4", "Band 5", "Band 6", "Band 7",
+            "Band 8", "Width", "Dly Tm L", "Dly Tm R", "Fb Mode", "Phase L", "Phase R", "Dly Tm C", "Dly Lev C",
+            "Dly Lev L", "Dly Lev R", "Dly Tm 1", "Dly Tm 2", "Dly Tm 3", "Dly Tm 4", "Dly Lev 1", "Dly Lev 2",
+            "Dly Lev 3", "Dly Lev 4", "Mod Phase", "Manual", "Reso", "Mix", "Fil Type", "Sens", "Peak", "Polarity",
+            "Step Rate", "Drive Sw", "Vowel", "Accel", "Lo-Fi Type", "Post Filter", "Threshold", "Ratio", "Release",
+            "EH Mix", "TP Sel", "TP Mod WV", "TP Mod RT", "TP Mod Dep", "AW Sw", "AW Filter", "AW Peak", "AW Man",
+            "AW Depth", "AW Rate", "PH Mix", "PH Reso", "PH Man", "PH Depth", "PH Rate", "Low Slow", "Low Fast",
+            "Low Accl", "Low Level", "Hi Slow", "Hi Fast", "Hi Accl", "Hi Level", "Separate", "RT L Slow",
+            "RT L Fast", "RT Lo Accl", "RT Lo Lev", "RT H Slow", "RT H Fast", "RT Hi Accl", "RT Hi Lev", "RT Sept",
+            "RT Speed", "RM Mod Freq 0 - 50 - 127", "RM Bal", "PS Coarse", "PS Fine", "PS Bal", "R.Detune",
+            "R.Nz Lev", "W/P Sel", "W/P LPF", "W/P Level", "Disc Type", "Disc LPF", "Disc Nz Lev", "Hum Type",
+            "Hum LPF", "Hum Level", "M/S", "Pan(Mono)", "DS Drive", "DS Amp Sw",
+            "Cho Dly", "Cho Bal", "FL Rate", "FL Depth", "FL Dly", "FL Bal", "FL Fb", "Dly Bal", "Dly HF", "OD1 Drive",
+            "OD1 Sel", "OD1 Amp Sw Off/On", "OD2 Drive", "OD2 Sel", "OD2 Amp Sw Off/On", "AW Sens", "AW Pol",
+            "Cho Level", "FL Level", "Dly Level", "OD Level", "OD1 Level", "OD2 Level", "RT Level", "PH Level",
+            "AW Level", "Cho Pan", "FL Pan", "Dly Pan", "OD Pan", "OD1 Pan", "OD2 Pan", "RT Pan", "PH Pan",
+            "AW Pan")
 
 
 def efx_chain(cls):
@@ -3864,6 +3887,18 @@ def tuning_table(name, reference=None):
     if r:
         raise ValueError("tuner %r: %s" % (name, TUNING_ERRORS.get(r, r)))
     return {n: out[n] for n in range(128) if have[n]}
+
+
+def xtanh(x):
+    """np.tanh of float64 values, libm's tanh (numpy's SIMD differs in the last bit)."""
+    import numpy as np
+    x = np.ascontiguousarray(x, np.float64)
+    d = lib()
+    if d is None:
+        return np.tanh(x)
+    out = np.empty_like(x)
+    d.nv_tanh_n(x.size, x.ctypes.data, out.ctypes.data)
+    return out
 
 
 def xtanhf(x):

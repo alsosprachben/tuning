@@ -50,6 +50,13 @@ void nv_cexp_n(long n, const double *z, double *out)
     }
 }
 
+/* tanh of float64 values, libm's (efxbus.Enhancer's saturation) */
+void nv_tanh_n(long n, const double *x, double *out)
+{
+    for (long i = 0; i < n; i++)
+        out[i] = tanh(x[i]);
+}
+
 /* tanh of float32 values, libm's tanhf (live.limit's knee) */
 void nv_tanhf_n(long n, const float *x, float *out)
 {

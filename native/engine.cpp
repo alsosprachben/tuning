@@ -22,6 +22,8 @@
 #include <cmath>
 #include <cstring>
 #include <map>
+#include <set>
+#include <tuple>
 #include <vector>
 
 #include "nv.h"
@@ -974,6 +976,21 @@ static double song_dist(void *song, long long ch, double on, double sr, const No
 // stream from rs, carried note to note; qacc and *azimuth too. *nrows the
 // rows written. Returns the notes played; -(1 + i) where note i is not the
 // engine's (no class, or nv_note's -2); NV_TOO_SMALL if the store was.
+// WHY nv_play's last refusal (-(1 + i)): which of its checks, for the message
+static const char *g_why = "";
+extern "C" const char *nv_play_why(void) { return g_why; }
+// A PARALLEL TYPE's copies: the table's column kinds (nv_play_full's: a copy
+// is made of the rows as the table stores them; NULL makes none -- live's),
+// and each copied note's own rows' end (its copy after them, to the next note's)
+static const int *g_kind = nullptr;
+static std::map<int, long long> g_own_end;
+extern "C" void nv_play_set_kind(const int *kind) { g_kind = kind; }
+extern "C" long long nv_play_own_end(int j, long long dflt)
+{
+    auto it = g_own_end.find(j);
+    return it == g_own_end.end() ? dflt : it->second;
+}
+
 int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr, PyRandom *rs,
             double *rows, long long cap, double *qacc, double *azimuth, long long *nrows, int *played,
             long long *row0, int *bands, double *offs)
@@ -982,6 +999,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
     nv_song_sym_reset(song);                // (the strings' drivers: this play's)
     nv_song_play_mark(song);                // (its rows, Moogs and echoes: this play's, a retry's too)
     nv_refl_memo_reset();                   // (each _prepare its own _RNORM)
+    g_own_end.clear();
     int nn = nv_song_n_notes(song);
     std::vector<int> order(nn);
     std::vector<long long> chs(nn);
@@ -1003,6 +1021,48 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         return keys[a] < keys[b];
     });
     long long total = 0;
+    // THE SAME PLATE STRUCK AGAIN (fold_restrike; a gesture's plain strokes):
+    // each note's next strike of its key (_next_same: the notes by onset,
+    // latest first), the strokes with a shape of their own (by key and onset,
+    // as stroke_pitch and stroke_tilt key them), and what each key's strike
+    // leaves the next (_FOLD_STORE)
+    const char *fev = getenv("TUNING_FOLD");
+    const bool fold_on = !(fev && (!strcmp(fev, "0") || !strcmp(fev, "off") || !*fev));
+    std::vector<double> next_same(nn, NAN);
+    std::set<std::pair<int, double>> shaped;
+    {
+        std::vector<int> byon(nn);
+        for (int q = 0; q < nn; q++)
+            byon[q] = q;
+        std::stable_sort(byon.begin(), byon.end(), [&](int a, int b) { return -ons[a] < -ons[b]; });
+        std::map<std::pair<long long, int>, double> seen;
+        std::map<std::pair<std::pair<long long, int>, double>, double> nx;
+        for (int q : byon) {
+            auto kk = std::make_pair(chs[q], keys[q]);
+            auto it = seen.find(kk);
+            if (it != seen.end())
+                nx[std::make_pair(kk, ons[q])] = it->second;
+            seen[kk] = ons[q];
+            if (nv_song_stroked(song, q) && nv_song_note_shaped(song, q))
+                shaped.insert(std::make_pair(keys[q], ons[q]));
+        }
+        for (int q = 0; q < nn; q++) {
+            auto it = nx.find(std::make_pair(std::make_pair(chs[q], keys[q]), ons[q]));
+            if (it != nx.end())
+                next_same[q] = it->second;
+        }
+    }
+    // (a plain stroke at t of note i's key and channel: a stroke there, no shape)
+    std::map<std::tuple<long long, int, double>, int> stroke_at;
+    for (int q = 0; q < nn; q++)
+        if (nv_song_stroked(song, q))
+            stroke_at[std::make_tuple(chs[q], keys[q], ons[q])] = 1;
+    auto plain = [&](long long c, int key, double t) {
+        return stroke_at.count(std::make_tuple(c, key, t)) && !shaped.count(std::make_pair(key, t));
+    };
+    std::map<std::pair<long long, int>, std::pair<double, std::vector<double>>> fold_store;
+    nv_fold_begin(nullptr, 0, -1.0, 0.0);   // (no fold left over: a retry's, a refused note's)
+    nv_fold_end(nullptr);
     std::map<long long, double> push_t0;    // each channel's bellows' push, when it began (_PUSH_T0)
     std::map<long long, double> ham_t0;     // each channel's last pick (_HAM_T0: hammer_legato)
     PyRandom rnd;                           // tonelib.RND_STREAM, as prepare reseeds it
@@ -1015,8 +1075,10 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         double dv[2];
         nv_song_get_note(song, i, &ch, iv, dv);
         const NoteClass *k = (iv[2] < 0 || (iv[2] > 127 && !iv[3])) ? nullptr : K[nv_song_kidx(song, i)];
-        if (!k)
+        if (!k) {
+            g_why = "no class";
             return -(1 + i);
+        }
         NoteIn n = *tmpl;
         n.ch = ch; n.note = iv[0]; n.on = dv[0]; n.key_off = dv[1];
         n.held = dv[1] - dv[0];             // how long the key was held
@@ -1095,8 +1157,10 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (k->organ) {                     // A REGISTERED ORGAN: its ranks as its registration leaves them
             // (one that bends: only a hit's, whose ranks ride no chest -- the
             // note's own bend row, nv_song_organ_note's br)
-            if ((k->bendable && !k->tmpl.hit_n) || !nv_song_organ_note(song, i, k->organ->family, &n))
+            if ((k->bendable && !k->tmpl.hit_n) || !nv_song_organ_note(song, i, k->organ->family, &n)) {
+                g_why = k->bendable && !k->tmpl.hit_n ? "an organ that bends" : "no organ of its family on its channel";
                 return -(1 + i);
+            }
         }
         n.from_song = 1; n.song_index = i;
         n.press = nv_song_pressure(song, ch, iv[0], dv[0], dv[1]);    // (_pressure_of: to its key-up)
@@ -1205,12 +1269,43 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         NoteOut out;
         int band = 0;
         long long left = cap - total;
+        // (the fold: this strike's take of the one before, and its own left to the next)
+        bool fold_out = false;
+        const bool folds = fold_on && plain(ch, iv[0], dv[0]);
+        if (folds) {
+            std::vector<double> fin;
+            auto fs = fold_store.find(std::make_pair(ch, iv[0]));
+            if (fs != fold_store.end()) {
+                if (fabs(fs->second.first - dv[0]) < 1e-6)
+                    fin = fs->second.second;
+                fold_store.erase(fs);
+            }
+            double n2 = -1.0;
+            const double nx2 = next_same[i];
+            if (!std::isnan(nx2) && plain(ch, iv[0], nx2)) {
+                n2 = (double)(long long)(nx2 * n.sr);
+                const double at0 = k->init.attack_time != 0.0 ? k->init.attack_time : 0.004;
+                nv_fold_begin(fin.data(), (int)(fin.size() / 8), n2, std::max(32.0, at0 * n.sr));
+                fold_out = true;
+                fold_store[std::make_pair(ch, iv[0])] = std::make_pair(nx2, std::vector<double>());
+            } else {
+                nv_fold_begin(fin.data(), (int)(fin.size() / 8), -1.0, 0.0);
+            }
+        }
         int r = nv_song_play(song, k, &n, rs, -1, nullptr, nullptr, nullptr, nullptr, rows + NCOLS * total,
                              (int)(left > 0x7fffffff ? 0x7fffffff : left), qacc, azimuth, &out, &band);
+        if (folds) {
+            std::vector<double> fo((size_t)8 * nv_fold_pending());
+            nv_fold_end(fo.empty() ? nullptr : fo.data());
+            if (fold_out)
+                fold_store[std::make_pair(ch, iv[0])].second = fo;
+        }
         if (r == -1)
             return NV_TOO_SMALL;
-        if (r < 0)
+        if (r < 0) {
+            g_why = "the voice refused it";
             return -(1 + i);
+        }
         carry_radius = out.radius;
         // CC71, 74, 75 ON THE NOTE (_snd_finish): its rows' decay by CC75's
         // time scale, its colour by sound_shape over its partials, the power
@@ -1300,6 +1395,40 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (out.n_push)                     // (an organ's push: the tone's last rows)
             nv_song_add_push_rows(song, total + out.n_knock + out.n_tone - out.n_push,
                                   total + out.n_knock + out.n_tone);
+        // A PARALLEL TYPE's NOTE (gsefx.PARALLEL_TYPES, blockrender._par_close):
+        // its rows branch A's, at A's pan; a copy of them as the table stores
+        // them (cast), at branch B's level and pan, on the part's virtual
+        // channel (+ gsefx.VIRT), after them
+        long long cp = 0;
+        {
+            const double *fc = nullptr;
+            if (g_kind && r > 0 && nv_song_note_fx(song, i, &fc) >= 0 && fc[208] != 0.0) {
+                if (2 * (long long)r > left)
+                    return NV_TOO_SMALL;
+                enum { cAL = 3, cMCH = 6 };
+                const double gb[3] = {fc[209] * fc[212], fc[209] * fc[213], fc[209] * 1.0};
+                const double ga[2] = {fc[210], fc[211]};
+                double *src = rows + NCOLS * total, *dst = rows + NCOLS * (total + r);
+                for (long long q = 0; q < r; q++) {
+                    const double *s = src + NCOLS * q;
+                    double *d = dst + NCOLS * q;
+                    for (int c = 0; c < NCOLS; c++)
+                        d[c] = g_kind[c] == 1 ? (double)(float)s[c] : g_kind[c] == 2 ? (double)(int32_t)s[c] : s[c];
+                    d[cMCH] = (double)(ch + 65536);
+                    for (int w = 0; w < 3; w++)         // (a float32 column scaled in float32: numpy's)
+                        d[cAL + w] = g_kind[cAL + w] == 1 ? (double)((float)d[cAL + w] * (float)gb[w])
+                                                          : d[cAL + w] * gb[w];
+                }
+                if (ga[0] != 1.0 || ga[1] != 1.0)      // (A's own pan, on its rows)
+                    for (long long q = 0; q < r; q++)
+                        for (int w = 0; w < 2; w++) {
+                            double *v = src + NCOLS * q + cAL + w;
+                            *v = (g_kind[cAL + w] == 1 ? (double)(float)*v : *v) * ga[w];
+                        }
+                g_own_end[j] = total + r;
+                cp = r;
+            }
+        }
         if (played) {
             played[j] = i;
             row0[j] = total;
@@ -1308,7 +1437,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             bands[j] = band;            // a half-pedalled note meeting the band: its track
             offs[j] = n.off;            // ...and where its damper lands (its end)
         }
-        total += r;
+        total += r + cp;
     }
     *nrows = total;
     return nn;

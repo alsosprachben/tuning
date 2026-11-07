@@ -378,21 +378,30 @@ static int emit_col(const char *n)
 // blockrender.gsd_place's memo, the render's: (output, whole Hz) -> the
 // first frequency's (gL, gR, dL, dR) -- shared by the GS delay's repeats and
 // the chorus device's copies, in the order they ask (the delay's first)
-static std::map<std::pair<int, long long>, std::array<double, 4>> g_gsd_place;
+static std::map<std::pair<double, long long>, std::array<double, 4>> g_gsd_place;
+// (its keys as Python's: an output 10 + its index ('l', 'r', 'c'), a pan the
+// pan itself (-1..1: a pitch shifter's, a Hexa Chorus's voice), an angle 1000
+// + its degrees -- one memo, so a pan two effects share is one entry)
 
 extern "C" void nv_gsd_place_reset(void) { g_gsd_place.clear(); }
 
 // output side (0 l, 1 r, 2 c) at frequency f: pl the head's beta, then each
 // output's (left incidence, right incidence, left delay, right delay)
 extern "C" void nv_gsd_place4(int key, double f, double beta, const double *P, double *out);
+extern "C" void nv_gsd_place4k(double key, double f, double beta, const double *P, double *out);
 extern "C" void nv_gsd_place(int side, double f, const double *pl, double *out)
 {
-    nv_gsd_place4(side, f, pl[0], pl + 1 + 4 * side, out);
+    nv_gsd_place4k(10.0 + side, f, pl[0], pl + 1 + 4 * side, out);
 }
 
 // ...an output or a pan given by its incidences and delays (P: li, ri, dL,
 // dR), under its own key in the same memo (a pan's: 100 + its value)
 extern "C" void nv_gsd_place4(int side, double f, double beta, const double *P, double *out)
+{
+    nv_gsd_place4k(side >= 100 ? (side - 100 - 64) / 63.0 : 10.0 + side, f, beta, P, out);
+}
+
+extern "C" void nv_gsd_place4k(double side, double f, double beta, const double *P, double *out)
 {
     auto key = std::make_pair(side, (long long)f);
     auto it = g_gsd_place.find(key);
@@ -413,9 +422,26 @@ extern "C" void nv_gsd_place4(int side, double f, double beta, const double *P, 
 // fourth): channel q's share at each row's onset, the last time (s) at or
 // before it -- given before nv_chorus_expand (a device of kind 2), used by it
 static std::map<int, std::pair<std::vector<double>, std::vector<double>>> g_cho_steps;
+static std::map<int, bool> g_cho_samples;  // (a channel's steps in samples, step_at's; else seconds)
+// ...and its VOICES where the device's are not GS_TAPS' two (gsefx._chorus's
+// taps): each (key, li, ri, dL, dR, LFO phase, extra delay s, depth factor),
+// placed by its own incidences under its key in gsd_place's memo
+static std::map<int, std::vector<double>> g_cho_taps;
+extern "C" void nv_chorus_taps(int q, int n, const double *taps)
+{
+    g_cho_taps[q] = std::vector<double>(taps, taps + 8 * n);
+}
 extern "C" void nv_chorus_share_steps(int q, int n, const double *ts, const double *vals)
 {
     g_cho_steps[q] = std::make_pair(std::vector<double>(ts, ts + n), std::vector<double>(vals, vals + n));
+    g_cho_samples[q] = false;
+}
+
+// ...a CC93 that moves (_note_chorus_send's step table, step_at): its changes in samples
+extern "C" void nv_chorus_share_steps_n(int q, int n, const double *ts, const double *vals)
+{
+    g_cho_steps[q] = std::make_pair(std::vector<double>(ts, ts + n), std::vector<double>(vals, vals + n));
+    g_cho_samples[q] = true;
 }
 
 extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
@@ -450,7 +476,9 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
             // round of its feedback, placed at the output, the LFO free
             const double *G = gsp + 40 * q;
             const double tau = G[0], rate = G[1], vd = G[2], fb = G[3], lpf = G[4];
-            const int ntap = (int)G[6];
+            auto tov = g_cho_taps.find(q);
+            const double *TV = tov != g_cho_taps.end() ? tov->second.data() : nullptr;
+            const int ntap = TV ? (int)(tov->second.size() / 8) : (int)G[6];
             std::vector<long long> sel;
             for (long long i = 0; i < n; i++)
                 if ((long long)rows[(size_t)NCOLS * i + cMCH] == chans[q])
@@ -460,10 +488,11 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
             std::vector<double> share(sel.size(), G[5]);
             if (stp != g_cho_steps.end()) {
                 const std::vector<double> &ts = stp->second.first, &vs = stp->second.second;
+                const bool samp = g_cho_samples[q];
                 for (size_t j = 0; j < sel.size(); j++) {
-                    double x = rows[(size_t)NCOLS * sel[j] + cNON] / sr;
+                    double x = samp ? rows[(size_t)NCOLS * sel[j] + cNON] : rows[(size_t)NCOLS * sel[j] + cNON] / sr;
                     long i = (long)(std::upper_bound(ts.begin(), ts.end(), x) - ts.begin()) - 1;
-                    share[j] = vs[i < 0 ? 0 : i >= (long)vs.size() ? (long)vs.size() - 1 : i];
+                    share[j] = vs[i < 0 ? 0 : i >= (long)vs.size() ? (long)vs.size() - 1 : i];     // (before the first: the first)
                 }
             }
             bool any = false;
@@ -490,11 +519,16 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
             }
             long long made_q = 0;
             for (int ti = 0; ti < ntap; ti++) {
-                const int side = (int)G[20 + 4 * ti];
-                const double phase = G[21 + 4 * ti], ext = G[22 + 4 * ti], dfac = G[23 + 4 * ti];
+                const double *tv = TV ? TV + 8 * ti : nullptr;
+                const int side = tv ? 0 : (int)G[20 + 4 * ti];
+                const double phase = tv ? tv[5] : G[21 + 4 * ti], ext = tv ? tv[6] : G[22 + 4 * ti],
+                             dfac = tv ? tv[7] : G[23 + 4 * ti];
                 std::vector<std::array<double, 4>> pl(sel.size());
                 for (size_t j = 0; j < sel.size(); j++)
-                    nv_gsd_place(side, f[j], G + 7, pl[j].data());     // (the render's memo: gsd_place)
+                    if (tv)                     // (a voice of its own: its pan or angle)
+                        nv_gsd_place4k(tv[0], f[j], G[7], tv + 1, pl[j].data());
+                    else
+                        nv_gsd_place(side, f[j], G + 7, pl[j].data());     // (the render's memo: gsd_place)
                 for (int k = 1; k <= 16; k++) {
                     const double fk = pow(fb, (double)(k - 1));
                     bool loud = false;          // (np.all(|g| < FLOOR / 2): the pass makes nothing)
@@ -635,6 +669,8 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
                     rows[(size_t)NCOLS * i + c] = rows[(size_t)NCOLS * i + c] * dry;
     }
     g_cho_steps.clear();
+    g_cho_samples.clear();
+    g_cho_taps.clear();
     long long m = (long long)src.size();
     if (!m)
         return 0;
@@ -666,6 +702,15 @@ extern "C" void nv_tremolo_brmap(long long ch, int n, const long long *from, con
         m[from[q]] = to[q];
 }
 
+// ...and an insertion effect's (gsefx: Tremolo, Auto Pan) a WAVEFORM: its
+// harmonics (harmonic, coefficient, phase), each its own sideband pair --
+// given before nv_tremolo_expand, used by it
+static std::map<long long, std::vector<double>> g_trem_wave;
+extern "C" void nv_tremolo_wave(long long ch, int n, const double *khp)
+{
+    g_trem_wave[ch] = std::vector<double>(khp, khp + 3 * n);
+}
+
 extern "C" long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                                        const double *cfg, const char *mask, long long nmask, double sr)
 {
@@ -679,6 +724,8 @@ extern "C" long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm,
     std::vector<long long> src;
     std::map<long long, std::map<long long, long long>> brmap;
     brmap.swap(g_trem_brmap);
+    std::map<long long, std::vector<double>> wave;
+    wave.swap(g_trem_wave);
     for (long long i = 0; i < n; i++) {
         if (mask && (i >= nmask || !mask[i]))
             continue;
@@ -701,6 +748,36 @@ extern "C" long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm,
             ph = pyr_uniform(&r, 0.0, 2.0 * M_PI);
         }
         double dw = 2.0 * M_PI * rate / sr, half = 0.5 * depth;
+        auto wv = wave.find(chans[q]);
+        if (wv != wave.end()) {
+            // A WAVEFORM'S HARMONICS, each its own sideband pair: k times the
+            // rate, its coefficient's share of the depth, its phase (+ for the
+            // upper, - for the lower, as the scatter's)
+            const std::vector<double> &H = wv->second;
+            for (size_t hk = 0; hk < H.size() / 3; hk++) {
+                const double k = H[3 * hk], ck = H[3 * hk + 1], pk = H[3 * hk + 2];
+                const double hh = 0.5 * depth * ck;
+                for (double sign : {1.0, -1.0}) {
+                    size_t o = extra.size();
+                    extra.insert(extra.end(), row, row + NCOLS);
+                    double *e = extra.data() + o;
+                    e[cOM] = row[cOM] + sign * k * dw;
+                    e[cP0] = row[cP0] + sign * (k * ph + pk);
+                    e[cP0R] = row[cP0R] + sign * (k * ph + pk);
+                    e[cAL] = row[cAL] * hh;
+                    e[cAR] = row[cAR] * (stereo ? -hh : hh);
+                    e[cAM] = stereo ? 0.0 : row[cAM] * hh;
+                    auto bm = brmap.find(chans[q]);
+                    if (bm != brmap.end()) {
+                        auto it = bm->second.find((long long)row[cBR]);
+                        if (it != bm->second.end())
+                            e[cBR] = (double)it->second;
+                    }
+                    src.push_back(i);
+                }
+            }
+            continue;
+        }
         for (double sign : {1.0, -1.0}) {
             size_t o = extra.size();
             extra.insert(extra.end(), row, row + NCOLS);

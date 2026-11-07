@@ -8745,14 +8745,22 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # last pick (emit_partial); a picked note starts the chain again
         # THE SAME PLATE STRUCK AGAIN (fold_restrike; emit_partial): this
         # strike takes in what the one before left it, and leaves its own to
-        # the next strike of the key, if there is one
+        # the next strike of the key, if there is one -- a gong's, and a
+        # gesture's plain strokes (a roll's, a rasp's: the same strike
+        # repeated, no pitch, tilt or voice of its own), the next one plain too
         em.fold = em.fold_in = None
-        if _FOLD_ON and getattr(props, 'fold_restrike', False):
+        _fold_cls = getattr(props, 'fold_restrike', False)
+
+        def _plain(t):
+            return ((nt.ch, nt.note, t) in _stroked and (nt.note, t) not in stroke_pitch
+                    and (nt.note, t) not in stroke_tilt and (nt.note, t) not in stroke_mouth
+                    and (nt.note, t) not in stroke_morph)
+        if _FOLD_ON and (_fold_cls or _plain(nt.on)):
             _fs = _FOLD_STORE.pop((nt.ch, nt.note), None)
             if _fs is not None and abs(_fs[0] - nt.on) < 1e-6:
                 em.fold_in = _fs[1]
             _nx2 = _next_same.get(((nt.ch, nt.note), nt.on))
-            if _nx2 is not None:
+            if _nx2 is not None and (_fold_cls or _plain(_nx2)):
                 _st2 = {}
                 em.fold = (int(_nx2 * SR), max(32.0, (props.attack_time or 0.004) * SR), _st2)
                 _FOLD_STORE[(nt.ch, nt.note)] = (_nx2, _st2)

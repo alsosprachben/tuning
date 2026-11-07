@@ -120,8 +120,20 @@ TASKS = [
                     "Compressor, Reverb and Gate Reverb buses (a part's, over its spans; the reverbs' responses and "
                     "convolution native/efxrev.c's, which efxbus shares), the pitch shifters, GTR Multi 3's wah, "
                     "Space D, a multi's own delay"),
-    ("SC-55", False, "A FILE's insertion effect's other types: the phasers and auto wahs, rotary, tremolo and "
-                     "auto pan, the delay types, Hexa and Stereo Chorus, the Lo-Fis, Limiter, Enhancer"),
+    ("SC-55", True, "A FILE's insertion effect's other types: the chorus family, tremolo and auto pan, the six "
+                    "delay types (the Mod Delay's LFO), the phasers, auto wahs, Step Flanger and Humanizer, "
+                    "Lo-Fi 1 and 2 (numpy's noises), Limiter, Enhancer, Stereo-EQ, Spectrum, the multis (Rotary "
+                    "Multi, Keyboard Multi's ring modulator), Rotary (its mics), the twelve series pairs and the "
+                    "nine parallel pairs (branch B on the part's virtual channel); a controller on a choice"),
+    ("SC-55", True, "Strokes fold as a gong's re-strikes do (fold_restrike): a roll's, a rasp's, a laugh's plain "
+                    "strokes sound one strike's rows at a time, files and Python alike"),
+    ("SC-55", False, "The chorus types' pre-filter high pass (Pre Filter 2): Python builds none -- a model to choose"),
+    ("SC-55", False, "Live: the insertion effect in nvlive -- the chain builder shared (native/efxchain.cpp), its "
+                     "state and each note's direct gain (written, in its check); the copies as taps "
+                     "(tapkernel.c), the moving filters, comb and tremolo, a part's bus, branch B, the rotor and "
+                     "3D place, a tone's own effects, an OD's valve"),
+    ("SC-55", False, "Live: 117:24 Jngl SD Roll refused (LIVE_REFUSED: its velocity probe's table past 2.5 GB) "
+                     "-- a re-attack within a row, a gain track like the damper's, would shrink it"),
     ("SC-55", True, "Files: the rhythm part's assignment (40 1p 15); the controller matrix (40 2p, GM2 09) where "
                     "it moves nothing"),
     ("SC-55", True, "Files: a controller matrix that moves (ctrlmatrix): its cutoff and LFO rate in the sound "

@@ -45,6 +45,73 @@ struct Msg {
     int port = 0;               // its track's MIDI port (FF 21), a two-port file's: its channels + 16 x it
 };
 
+// A GS PART PARAMETER that a MIDI message carries (parse_gs_part): its channel
+// and port, and the channel messages it is (status kind, d0, d1); false if it is none
+static bool gs_part_msgs(const std::vector<uint8_t> &d, int *ch, int *port, std::vector<std::array<int, 3>> &out)
+{
+    out.clear();
+    if (!(d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && (d[4] == 0x40 || d[4] == 0x50)))
+        return false;
+    int hi = d[5] >> 4;
+    if (hi != 1 && hi != 2 && hi != 4)
+        return false;
+    int blk = d[5] & 0x0F;
+    *ch = blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk);
+    *port = d[4] == 0x50 ? 1 : 0;
+    int a = d[6], v = d[7];
+    auto C = [&](int cc, int val) { out.push_back({0xB0, cc, std::max(0, std::min(127, val))}); };
+    auto rpn = [&](int lsb, int msb6, int lsb38, bool fine) {
+        C(101, 0);
+        C(100, lsb);
+        C(6, msb6);
+        if (fine)
+            C(38, lsb38);
+        C(101, 127);
+        C(100, 127);
+    };
+    static const int TONE_MODIFY[8] = {76, 77, 74, 71, 73, 75, 72, 78};     // (GS_TONE_MODIFY_CC)
+    if (hi == 4) {                      // TONE MAP NUMBER: CC32
+        if (a != 0x00 || v > 4)
+            return false;
+        C(32, v);
+    } else if (hi == 2) {               // the controllers' destinations: the bend range, LFO1's pitch depth
+        if (a == 0x10)
+            rpn(0, std::max(0, std::min(24, v - 0x40)), 0, true);
+        else if (a == 0x04) {
+            double ct = v * 600.0 / 127.0;
+            rpn(5, (int)floor(ct / 100.0), (int)nearbyint(fmod(ct, 100.0) * 128.0 / 100.0), true);
+        } else
+            return false;
+    } else if (a == 0x00 && d.size() >= 9) {    // TONE NUMBER: CC0, then the program
+        C(0, v);
+        out.push_back({0xC0, d[8], 0});
+    } else if (a == 0x13) {             // MONO/POLY
+        if (v == 0)
+            C(126, 1);
+        else
+            C(127, 0);
+    } else if (a == 0x16) {             // PITCH KEY SHIFT: RPN 2
+        rpn(2, 64 + std::max(-24, std::min(24, v - 0x40)), 0, false);
+    } else if (a == 0x19) {
+        C(7, v);                        // PART LEVEL
+    } else if (a == 0x1C) {
+        C(10, v ? v : 64);              // PART PANPOT (0 random: centre)
+    } else if (a == 0x21) {
+        C(93, v);                       // CHORUS SEND
+    } else if (a == 0x22) {
+        C(91, v);                       // REVERB SEND
+    } else if (a == 0x2C) {
+        C(94, v);                       // DELAY SEND
+    } else if (a == 0x2A && d.size() >= 10) {   // PITCH FINE TUNE: RPN 1, MSB LSB
+        rpn(1, v, d[8], true);
+    } else if (a >= 0x30 && a <= 0x37) {
+        C(TONE_MODIFY[a - 0x30], v);    // TONE MODIFY 1-8: the sound controllers
+    } else {
+        return false;
+    }
+    return true;
+}
+
 struct Reader {
     const uint8_t *p, *end;
     bool ok = true;
@@ -714,6 +781,25 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     }
     Msg eot{accum, 0xFF, 0, 0, 0x2F, {}};
     msgs.push_back(eot);
+    {
+        // ...EACH GS PART PARAMETER's MESSAGES after it (blockrender's _inj:
+        // read next, in order, through the same code)
+        std::vector<Msg> ex;
+        ex.reserve(msgs.size());
+        std::vector<std::array<int, 3>> pm;
+        for (const Msg &m : msgs) {
+            ex.push_back(m);
+            int pch, pport;
+            if (m.status != 0xF0 || !gs_part_msgs(m.data, &pch, &pport, pm))
+                continue;
+            for (const auto &x : pm) {
+                Msg y{0, x[0] | pch, x[1], x[2], 0, {}};
+                y.port = pport;
+                ex.push_back(y);
+            }
+        }
+        msgs.swap(ex);
+    }
 
     long long tempo = 500000;
     double t = 0.0;
@@ -735,6 +821,10 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         return it != m.end() ? it->second : d;
     };
     std::map<int, std::array<double, 12>> gsscale;     // each GS part's scale tuning, as held
+    // ...its VELOCITY SENSE and KEY RANGE (parse_gs_part_state: vsd, vso, klo, khi), its TONE
+    // MAP-0 (the map CC32 0 means on it), and a drum part's map (_rmap: 0 MAP1, 1 MAP2)
+    std::map<int, std::array<int, 4>> gsstate;
+    std::map<int, int> map0, rmap;
     long seq = 0;
     bool seen_note = false;
     // ...the EFX as it stands while reading (_efxst, _efxparts): a
@@ -926,6 +1016,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 int ch2 = (blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk)) + (d[4] == 0x50 ? 16 : 0);
                 drums[ch2] = d[7] != 0;
                 if (d[7])
+                    rmap[ch2] = d[7] - 1;
+                if (d[7])
                     bsel[ch2] = 0;              // (_var: a drum part's no variation)
                 if (!seen_note)
                     P.gs = 1;
@@ -1039,12 +1131,73 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                     if (!seen_note)
                         P.gs = 1;
                     P.efx.push_back(Parsed::Efx{t, k, a, b});
+                    P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});     // (the live part's too)
+                    P.sysex.push_back(d);
                     if (k == 4 && (a == 0x1B || a == 0x1D))
                         efx_src[a == 0x1D] = b;
                     else if (k == 5 && b)
                         efx_on.insert(a);
                     else if (k == 5)
                         efx_on.erase(a);
+                    continue;
+                }
+            }
+            if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12) {
+                const bool pblk = (d[4] == 0x40 || d[4] == 0x50) && ((d[5] >> 4) == 1 || (d[5] >> 4) == 2
+                                                                   || (d[5] >> 4) == 4);
+                const int blk = d[5] & 0x0F;
+                const int pc = (blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk)) + (d[4] == 0x50 ? 16 : 0);
+                // A PART's VELOCITY SENSE and KEY RANGE (1A, 1B, 1D, 1E)
+                if (pblk && (d[5] >> 4) == 1 && d.size() >= 9
+                    && (d[6] == 0x1A || d[6] == 0x1B || d[6] == 0x1D || d[6] == 0x1E)) {
+                    auto it = gsstate.find(pc);
+                    if (it == gsstate.end())
+                        it = gsstate.emplace(pc, std::array<int, 4>{64, 64, 0, 127}).first;
+                    it->second[d[6] == 0x1A ? 0 : d[6] == 0x1B ? 1 : d[6] == 0x1D ? 2 : 3] = d[7];
+                    if (!seen_note)
+                        P.gs = 1;
+                    continue;
+                }
+                // ...its TONE MAP-0 NUMBER (4p 01, a map 1-4)
+                if (pblk && (d[5] >> 4) == 4 && d[6] == 0x01 && d[7] >= 1 && d[7] <= 4) {
+                    map0[pc] = d[7];
+                    continue;
+                }
+                // ...the controller matrix's CC1 and CC2 numbers (1p 1F/20)
+                if (pblk && (d[5] >> 4) == 1 && (d[6] == 0x1F || d[6] == 0x20)) {
+                    auto mi = cmx.find(pc);
+                    if (mi == cmx.end()) {
+                        mi = cmx.emplace(pc, Cmx()).first;
+                        mi->second.reset();
+                    }
+                    (d[6] == 0x1F ? mi->second.cc1 : mi->second.cc2) = d[7];
+                    cmx_upd(t, pc);
+                    continue;
+                }
+                // A DRUM MAP's SETUP (41/51 mp kk vv): every channel of its port
+                // playing the map, as its drum instruments' edits
+                if ((d[4] == 0x41 || d[4] == 0x51) && (d[5] >> 4) <= 1) {
+                    static const int PAR[10] = {-1, 0, 1, -2, 2, 3, 4, -2, -2, 5};   // (note, level, group, pan...)
+                    int pn = d[5] & 0x0F, par = pn < 10 ? PAR[pn] : -1;
+                    if (par == -2)
+                        return -4;      // (its exclusive group, its receive switches: Python's)
+                    if (par >= 0) {
+                        int key = d[6], v = par == 0 ? d[7] - d[6] : d[7], mp2 = d[5] >> 4;
+                        int base = d[4] == 0x51 ? 16 : 0;
+                        for (int c = base; c < base + 16; c++) {
+                            auto di = drums.find(c);
+                            bool isd = di != drums.end() ? di->second != 0 : (c % 16 == PERCUSSION_CHANNEL);
+                            if (isd && (rmap.count(c) ? rmap[c] : 0) == mp2)
+                                P.dedit.push_back(Parsed::DEdit{c, t, key, par, v});
+                        }
+                    }
+                    continue;
+                }
+                // ...and a part parameter: its messages follow it (gs_part_msgs);
+                // any other the loop leaves, as Python's
+                if (pblk) {
+                    if (!seen_note)
+                        P.gs = 1;
                     continue;
                 }
             }
@@ -1065,6 +1218,9 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             for (auto &so : P.sotas)
                 so.second.push_back(std::make_pair(t, std::array<double, 12>{}));
             gsscale.clear();
+            gsstate.clear();
+            map0.clear();
+            rmap.clear();
             P.pitch.push_back(PitchEv{-1, t, seq, 9, 0.0});
             P.snd.push_back(CCEv{-1, t, -1, 0});
             P.dedit.push_back(Parsed::DEdit{-1, t, -1, -1, 0});     // (the drum instruments' own: reset)
@@ -1091,7 +1247,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             // stays one; else GS's variation, read in the map CC32 names
             // (or, at 0, TUNING_MAP's)
             int msb = bmsb.count(ch) ? bmsb[ch] : 0, lsb = blsb.count(ch) ? blsb[ch] : 0;
-            int mp = lsb ? lsb : default_map, dr = is_drums(ch), bs = 0;
+            auto m0 = map0.find(ch);
+            int mp = lsb ? lsb : m0 != map0.end() ? m0->second : default_map, dr = is_drums(ch), bs = 0;
             if (!rxbank)
                 ;
             else if (msb == 120)
@@ -1277,6 +1434,18 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             auto &c = ctrl[ch];
             Note n;
             n.ch = ch; n.note = m.d0; n.on = t; n.off = 0.0; n.vel = m.d1;
+            {
+                // A GS PART'S KEY RANGE (outside it the part does not sound) and
+                // its VELOCITY SENSE: depth scales the velocity (64 as is), offset moves it
+                auto gi = gsstate.find(ch);
+                if (gi != gsstate.end()) {
+                    const auto &g = gi->second;
+                    if (!(g[2] <= m.d0 && m.d0 <= g[3]))
+                        continue;
+                    if (g[0] != 64 || g[1] != 64)
+                        n.vel = std::max(1, std::min(127, (int)nearbyint(m.d1 * g[0] / 64.0 + g[1] - 64)));
+                }
+            }
             n.v7 = (c.count(7) ? c[7] : GM_DEFAULT_VOLUME) / 127.0;
             n.v11 = (c.count(11) ? c[11] : GM_DEFAULT_EXPRESSION) / 127.0;
             {

@@ -145,6 +145,7 @@ void nv_part_drums(void *h, int program, const unsigned long long *choke);
 void nv_part_program(void *h, int program);
 void nv_part_toggle_stop(void *h, int rank, long long n0);
 int nv_part_drawn(void *h, char *out, int cap);
+void nv_part_efx(void *h, const double *X, double SR);
 void *nv_part_new(void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
                 int soft_drop, int soft_top, double rate, double retrigger, long cap, double headroom,
                 const double *pan_tab, double pan_beta);
@@ -203,7 +204,8 @@ void nv_part_register(void *h, const StringMode *modes, int M, double kappa, dou
 // the export's constants (native_export.py's order)
 enum { K_SR, K_BLK, K_CHUNK, K_MASTER, K_RING_FLOOR, K_RING_MAX, K_XDEC, K_REG_SCALE, K_FULL, K_RESIDUAL, K_BETA,
        K_KNEE, K_LN10_20, K_RETRIGGER, K_NYQ_OM, K_SVDC, K_FIXED_TOUCH, K_REFLECT, K_BANDS, K_SH = K_BANDS + 9,
-       K_PRESS_DB = K_SH + 4, K_THRESH, K_BEND_RANGE };
+       K_PRESS_DB = K_SH + 4, K_THRESH, K_BEND_RANGE, K_TAU, K_FADER_TAIL, K_STAMP_S, K_STAMPED_SHARE,
+       K_BEND_SEMIS, K_GM_VOL, K_GM_EXPR, K_GSPLACE, K_MAPKITS = K_GSPLACE + 13, K_EFX = K_MAPKITS + 33 };
 
 struct Export {
     std::vector<double> k, freq, trim, pan;
@@ -1015,6 +1017,8 @@ int main(int argc, char **argv)
                            E.headroom, E.pan.data(), E.beta);
     if (!E.les.empty())                         // the room's Leslie: its rotors, on chorale
         nv_part_leslie(part, E.les.data(), (int)E.les.size());
+    if (E.k.size() > (size_t)K_EFX + 132)       // the module's insertion effect (an export with its tables)
+        nv_part_efx(part, E.k.data() + K_EFX, SR);
     {                                           // the gm2 store's built-in tables at the tuner's reference
         std::string a_ = opt(argc, argv, "a", ""), c_ = opt(argc, argv, "c", "");
         if (!tname.empty() && (!a_.empty() || !c_.empty()))

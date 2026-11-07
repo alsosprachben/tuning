@@ -264,9 +264,12 @@ def main(argv):
     # A FILE'S INSERTION EFFECT (gsefx.chain, as nvrender builds it): the
     # built types' codes (msb * 128 + lsb: how many, then 128 slots); the
     # types built natively (how many, EFX_KEYS's length, a record's width,
-    # then 16 records: the code, the kind -- 1 Overdrive, 2 Distortion, 3 a
+    # then 96 records (every type's room): the code, the kind -- 1 Overdrive, 2 Distortion, 3 a
     # multi, 4 3D Manual, 5 the Compressor, 6 3D Auto, 7 Reverb, 8 Gate Reverb, 9 2 Pitch Shifter, 10 Fb
-    # P.Shifter, 11 Space D -- a bass's cabinet, each of
+    # P.Shifter, 11 Space D, 12 Stereo Chorus, 13 Hexa Chorus, 14 Tremolo Chorus, 15 3D Chorus, 16 Stereo
+    # Flanger, 17 Tremolo, 18 Auto Pan, 19 Stereo-EQ, 20 Spectrum, 21 Stereo Delay, 22 Mod Delay, 23 3 Tap
+    # Delay, 24 4 Tap Delay, 25 Tm Ctrl Delay, 26 3D Delay, 27 Phaser, 28 Auto Wah, 29 Step Flanger, 30
+    # Humanizer, 31 Lo-Fi 1, 32 Limiter, 33 Enhancer -- a bass's cabinet, each of
     # EFX_KEYS's parameter numbers, 0 none, the type's defaults 1-20, -1
     # none, and the parameters its controllers move, + then # (0 none),
     # each's range lo, hi -- -1, -1 a choice of codes); gsefx's laws (OD_DB, DS_DB, OD_MAKEUP_DB, CMP_ATTACK_MS,
@@ -282,13 +285,21 @@ def main(argv):
     _nat = [("Overdrive", 1), ("Distortion", 2), ("Bass Multi", 3), ("Clean Gt Multi 1", 3),
             ("GTR Multi 1", 3), ("GTR Multi 2", 3), ("3D Manual", 4), ("3D Auto", 6), ("Compressor", 5),
             ("Reverb", 7), ("Gate Reverb", 8), ("2 Pitch Shifter", 9), ("Fb P.Shifter", 10),
-            ("GTR Multi 3", 3), ("Space D", 11)]
-    if len(_nat) > 16:
-        raise SystemExit("native_export: %d native EFX types, room for 16" % len(_nat))
-    _NATW = 3 + len(N.EFX_KEYS) + 20 + 6
+            ("GTR Multi 3", 3), ("Space D", 11), ("Stereo Chorus", 12), ("Hexa Chorus", 13),
+            ("Tremolo Chorus", 14), ("3D Chorus", 15), ("Stereo Flanger", 16), ("Tremolo", 17), ("Auto Pan", 18),
+            ("Stereo-EQ", 19), ("Spectrum", 20), ("Stereo Delay", 21), ("Mod Delay", 22), ("3 Tap Delay", 23),
+            ("4 Tap Delay", 24), ("Tm Ctrl Delay", 25), ("3D Delay", 26), ("Phaser", 27), ("Auto Wah", 28),
+            ("Step Flanger", 29), ("Humanizer", 30), ("Lo-Fi 1", 31), ("Limiter", 32), ("Enhancer", 33),
+            ("Clean Gt Multi 2", 3), ("Rhodes Multi", 3), ("Rotary", 34), ("Rotary Multi", 35),
+            ("Keyboard Multi", 3), ("Lo-Fi 2", 36)] + [(_s, 37) for _s in _GSX.SERIES_TYPES]
+    _nat += [(_s, 38) for _s in _GSX.PARALLEL_TYPES]
+    # (a record a code: a type printed at two, the Rotary Multi's, has both)
+    _nat = [(_k, _nm, _kd) for _nm, _kd in _nat for _k in sorted(k for k, v in _GSX.TYPES.items() if v == _nm)]
+    if len(_nat) > 96:
+        raise SystemExit("native_export: %d native EFX records, room for 96" % len(_nat))
+    _NATW = 3 + len(N.EFX_KEYS) + 20 + 8
     consts += [float(len(_nat)), float(len(N.EFX_KEYS)), float(_NATW)]
-    for _nm, _kd in _nat:
-        _k = next(k for k, v in _GSX.TYPES.items() if v == _nm)
+    for _k, _nm, _kd in _nat:
         _pn = _GSX.param_numbers(_nm)
         _df = _GSX.DEFAULTS.get(_nm, {})
         consts += [float(_k[0] * 128 + _k[1]), float(_kd), float(_nm == "Bass Multi")]
@@ -296,10 +307,22 @@ def main(argv):
         consts += [float(_df.get(n, -1)) for n in range(1, 21)]
         _mk = _GSX.marks(_nm)
         consts += [float(_mk.get('+', 0)), float(_mk.get('#', 0))]
+        _ch = []
         for _m in ('+', '#'):
             _rg = _GSX.param_range(_nm, _mk[_m]) if _m in _mk else (0, 127)
-            consts += [-1.0, -1.0] if isinstance(_rg, list) else [float(_rg[0]), float(_rg[1])]
-    consts += [0.0] * (_NATW * (16 - len(_nat)))
+            consts += [float(min(_rg)), float(max(_rg))]
+            # (a choice of codes, gsefx.controlled's nearest: 1 every code
+            # lo..hi, 2 the two ends)
+            if not isinstance(_rg, list):
+                _ch.append(0.0)
+            elif _rg == list(range(min(_rg), max(_rg) + 1)):
+                _ch.append(1.0)
+            elif _rg == [min(_rg), max(_rg)]:
+                _ch.append(2.0)
+            else:
+                raise SystemExit("native_export: %s's choice %r is not the engine's" % (_nm, _rg))
+        consts += _ch
+    consts += [0.0] * (_NATW * (96 - len(_nat)))
     _laws = (list(_GSX.OD_DB) + list(_GSX.DS_DB) + [_GSX.OD_MAKEUP_DB, _GSX.CMP_ATTACK_MS, _GSX.PEDAL_AMP_DRIVE,
              _GSX.EFX_DEPTH_SCALE] + list(_GSX.EQ_Q) + list(_GSX.EQ_FREQS))
     consts += [float(x) for x in _laws] + [0.0] * (30 - len(_laws))
@@ -326,6 +349,49 @@ def main(argv):
         _x = _q.listener_distance * math.tan(T.stage_angle((v - 64) / 63.0))
         _li, _ri, _ld, _rd = _q.hrtf_at(_x, 0.0, _q.listener_distance)
         consts += [float(_li), float(_ri), float(_ld * B.SR), float(_rd * B.SR)]
+    # ...and *9 (a pre-filter's cutoff, Hz: NaN Bypass); the tremolo's waves
+    # (gsefx.WAVES: each's count, then 6 (harmonic, coefficient, phase));
+    # the Hexa Chorus's voices placed (gsd_place of a pan: each Pan Dev
+    # 0-127's six -- the pan itself, its memo's key, then incidences and
+    # delays, samples); the 3D types' sides at -60 and 60 degrees (key 1000 + a)
+    consts += [float('nan') if _GSX.table_value(9, v) is None else float(_GSX.table_value(9, v))
+               for v in range(128)]
+    for _w in _GSX.WAVES:
+        if len(_w) > 6:
+            raise SystemExit("native_export: a tremolo wave of %d harmonics, room for 6" % len(_w))
+        consts += [float(len(_w))] + [float(x) for h in _w for x in h] + [0.0] * (3 * (6 - len(_w)))
+
+    def _side_place(_x):
+        _li, _ri, _ld, _rd = _q.hrtf_at(_x, 0.0, _q.listener_distance)
+        return [float(_li), float(_ri), float(_ld * B.SR), float(_rd * B.SR)]
+    for v in range(128):
+        _pd = v / 20.0
+        for k in range(6):
+            _pan = _pd * (2.0 * k / 5.0 - 1.0)
+            consts += [float(_pan)] + _side_place(_q.listener_distance * math.tan(T.stage_angle(float(_pan))))
+    for _a in (-60.0, 60.0):
+        consts += [1000.0 + _a] + _side_place(_q.listener_distance
+                                              * math.tan(math.radians(max(-80.0, min(80.0, _a)))))
+    # ...and the delay types' times, *2, *3, *4 (ms: NaN none); a phaser's
+    # Manual *12 (Hz), the Humanizer's Accel *14; Lo-Fi 2's noises' LPFs *11
+    for _tk in (2, 3, 4, 12, 14, 11):
+        consts += [float('nan') if _GSX.table_value(_tk, v) is None else float(_GSX.table_value(_tk, v))
+                   for v in range(128)]
+    # ...and its Butterworths (efxbus.butter: scipy's own coefficients, at this
+    # rate): the filter after at each Cutoff (*9, else 630 Hz), a low pass then
+    # a high pass, b then a (3 each); the radio's band (300-3000 Hz, first order)
+    import efxbus as _EFB
+    for v in range(128):
+        _hz = _GSX.table_value(9, v) or 630.0
+        for _kd in ('low', 'high'):
+            _f = _EFB.butter(_kd, _hz, B.SR)
+            if len(_f.b) != 3 or len(_f.a) != 3:
+                raise SystemExit("native_export: a Butterworth not of three taps")
+            consts += [float(x) for x in _f.b] + [float(x) for x in _f.a]
+    _f = _EFB.butter('band', (300.0, 3000.0), B.SR, 1)
+    if len(_f.b) != 3 or len(_f.a) != 3:
+        raise SystemExit("native_export: the radio's band not of three taps")
+    consts += [float(x) for x in _f.b] + [float(x) for x in _f.a]
     room = os.fsencode(T.ROOM_NAME[0] or "")
     with open(args[0], "wb") as f:
         f.write(MAGIC)

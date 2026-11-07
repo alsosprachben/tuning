@@ -221,15 +221,17 @@ def expand(A, notes, sr, cols, place, meta=None):
                 c['aL'] = m * g * gl
                 c['aR'] = m * g * gr
                 c['aM'] = row['aM'] * g
-                for kk in keys:
-                    extra[kk].append(c[kk])
-                # (an insertion delay's tap between or past the outputs, or its
-                # modulation: the line's LFO on the copy, free-running)
+                # AN INSERTION DELAY's MODULATION (gsefx: Mod Delay): the line's
+                # LFO on the copy, free-running, the right output's at its phase
+                # (a ping-pong's: the side the repeat answers from) -- set before
+                # the copy is kept (it was set after: no Mod Delay ever moved)
                 if dev.get('mod'):
                     mr, mswing, mph = dev['mod']
                     c['vd'] = min(0.5, 2.0 * math.pi * mr * mswing)
                     c['vr'] = mr
                     c['vp'] = (tpi * mr * float(c['non']) / sr + (mph if side == 'r' else 0.0)) % tpi
+                for kk in keys:
+                    extra[kk].append(c[kk])
                 if meta is not None:
                     meta.append((i, ((len(SIDES) + 32 + tj) if tj is not None else
                                      SIDES.index(side) if side in SIDES else

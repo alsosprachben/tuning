@@ -846,6 +846,12 @@ def filter_setup(events, ch, notes=()):
     if not segs:
         return None
     f0 = segs[0][1]
+    # (a setting whose control is not the first's family -- the Humanizer's
+    # vowels after a sweep, a wah or a flanger's line, or one of those after
+    # the vowels -- cannot drive this channel: its type and its rows are the
+    # first's. Its time holds the control before it, as a setting with no
+    # filter does. It crashed the table before: a vowel read as a line)
+    segs = [(t, f) for t, f in segs if (f['ctrl'][0] == 'vowel') == (f0['ctrl'][0] == 'vowel')]
     ts = np.array([t for t, _ in segs])
     kind = f0['ctrl'][0]
     env = note_envelope(notes) if any(f['ctrl'][0] == 'sweep' and f['ctrl'][5] for _, f in segs) else None

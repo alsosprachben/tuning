@@ -61,6 +61,10 @@ void nv_midi_cmx(void *p, int i, int *iv, double *dv);
 void nv_midi_efx(void *p, int i, int *iv, double *t);
 void nv_amp_ref_steps(int k, double base, int n, const double *starts, const double *levels);
 void nv_chorus_share_steps(int q, int n, const double *ts, const double *vals);
+void nv_chorus_share_steps_n(int q, int n, const double *ts, const double *vals);
+void nv_chorus_taps(int q, int n, const double *taps);
+const char *nv_play_why(void);
+void nv_tremolo_wave(long long ch, int n, const double *khp);
 void nv_midi_free(void *p);
 double nv_midi_total(void *p);
 int nv_midi_n_notes(void *p);
@@ -138,6 +142,15 @@ long long nv_scan_expand(const double *X, double **rowsp, long long *Pp, void **
                          const int *row0s, const int *depths, const int *choruses, double sr);
 long nv_leslie_angles(int nch, const int *nreq, const double *req, long n_samples, double sr, int blk,
                       const double *L, float *LANG);
+long long nv_leslie_expand_gs(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
+                              const int *nreq, const double *req, double sr, const double *L, void **lobe,
+                              long long **flips, long long *nflips, const double *gs, const double *place);
+long nv_leslie_angles_gs(int nch, const int *nreq, const double *req, long n_samples, double sr, int blk,
+                         const double *L, float *LANG, const double *gs);
+void nv_npy_noise(long long n0, long n, unsigned long long seed, int normal, double *out);
+int nv_efx_chain(const double *X, double SR, int msb, int lsb, const int *p, const int *snd,
+                 const int *ctl, int ncv, const int *cv_src, const int *cv_val, double *rec,
+                 double *recb, int *has_b, const char **why);
 }
 
 // the export's constants, in native_export.py's order
@@ -616,10 +629,6 @@ int main(int argc, char **argv)
             bool moves = false;
             for (int v : kv.second)
                 moves = moves || v != kv.second[0];
-            if (nv_midi_gs(midi) && mx > 0 && moves) {     // (a Sound Canvas file's moving send: Python's)
-                fprintf(stderr, "nvrender: refused: a GS chorus send that moves (CC93)\n");
-                return 2;
-            }
             if (nv_midi_gs(midi) && mx > 0 && E.k.size() < K_GSPLACE + 13) {
                 fprintf(stderr, "nvrender: refused: a GS chorus send (CC93), an export without its outputs\n");
                 return 2;
@@ -937,18 +946,39 @@ int main(int argc, char **argv)
     }
     // ...and each variation's organ, a one-tone variation's slot's (its
     // tone's class, vents' pcls), for the song's organs
+    // a variation entry's PROGRAM CLASS's organ (property_class_for_program's), NULL none
     auto ent_organ = [&](int en) -> const OrganSpec * {
-        if (en <= 0 || en >= (int)E.vents.size() || E.vents[en].ls.size() != 1 || E.vents[en].pcls < 0)
+        if (en <= 0 || en >= (int)E.vents.size() || E.vents[en].pcls < 0)
             return nullptr;
         int oi = E.cls_organ[E.vents[en].pcls];
         return oi >= 0 ? &E.organs[oi] : nullptr;
     };
+    // ...and every organ it brings onto a channel (voice_classes: its own
+    // class's, then each layer's at key 60 -- an organ can be a layer of a
+    // tone whose own class is not one), in that order
+    auto ent_organs = [&](int en) -> std::vector<const OrganSpec *> {
+        std::vector<const OrganSpec *> out;
+        if (en <= 0 || en >= (int)E.vents.size())
+            return out;
+        if (const OrganSpec *o = ent_organ(en))
+            out.push_back(o);
+        for (const auto &l : E.vents[en].ls) {
+            const int kq = NV_K_VAR + 128 * l[0] + 60;
+            const int cq = kq < (int)E.cmap.size() ? E.cmap[kq] : -1;
+            if (cq >= 0 && E.cls_organ[cq] >= 0)
+                out.push_back(&E.organs[E.cls_organ[cq]]);
+        }
+        return out;
+    };
     {
+        // (each slot's notes: their program class's organ -- every layer's)
         int ns = (int)(E.vmap.size() / 128);
         std::vector<const OrganSpec *> so(ns, nullptr);
         for (int en = 1; en < (int)E.vents.size(); en++)
-            if (ent_organ(en))
-                so[E.vents[en].ls[0][0]] = ent_organ(en);
+            if (const OrganSpec *o = ent_organ(en))
+                for (const auto &l : E.vents[en].ls)
+                    if (l[0] >= 0 && l[0] < ns)
+                        so[l[0]] = o;
         nv_song_slot_organs(song, ns, so.data());
     }
     nv_midi_song(midi, song, E.trim.data() + (nv_midi_gs(midi) ? 256 : 0));
@@ -1049,32 +1079,34 @@ int main(int argc, char **argv)
             std::vector<int> fams;
             bool var = false;               // (a variation that is no organ)
             for (int pk : uniq[c])
-                var = var || (pk >= 128 && !ent_organ(pk / 128));
+                var = var || (pk >= 128 && ent_organs(pk / 128).empty());
             for (int pk : uniq[c]) {
-                const OrganSpec *og;
+                std::vector<const OrganSpec *> ogs;
                 if (pk >= 128) {
-                    og = ent_organ(pk / 128);   // (a registered variation: its tone's organ)
+                    ogs = ent_organs(pk / 128); // (a registered variation: its tone's organ, a layer's)
                 } else {
                     const int p = pk;
                     if (E.prog_organ[p] == -2) {
                         fprintf(stderr, "nvrender: refused: an organ the engine does not play (program %d)\n", p);
                         return 2;
                     }
-                    og = prog_organ[p];
+                    ogs.push_back(prog_organ[p]);
                 }
-                if (!og || std::find(fams.begin(), fams.end(), og->family) != fams.end())
-                    continue;
-                if (!fams.empty()) {
-                    fprintf(stderr, "nvrender: refused: two organs on channel %d\n", c);
-                    return 2;
+                for (const OrganSpec *og : ogs) {
+                    if (!og || std::find(fams.begin(), fams.end(), og->family) != fams.end())
+                        continue;
+                    if (!fams.empty()) {
+                        fprintf(stderr, "nvrender: refused: two organs on channel %d\n", c);
+                        return 2;
+                    }
+                    if (var) {
+                        fprintf(stderr, "nvrender: refused: an organ and a variation on channel %d\n", c);
+                        return 2;
+                    }
+                    fams.push_back(og->family);
+                    organ_ch.insert(c);
+                    nv_song_organ(song, c, og, prog_organ.data());
                 }
-                if (var) {
-                    fprintf(stderr, "nvrender: refused: an organ and a variation on channel %d\n", c);
-                    return 2;
-                }
-                fams.push_back(og->family);
-                organ_ch.insert(c);
-                nv_song_organ(song, c, og, prog_organ.data());
             }
         }
     }
@@ -1313,7 +1345,8 @@ int main(int argc, char **argv)
     // note loop's order, each part's first effect note's reverb send its
     // distance from there on (_C91D), each mix channel's first its send
     // bus's and its EQ's (_REVERB_CH, _EFXEQ_CH), a part's CC91 steps gone
-    std::map<long long, std::array<double, 5>> efx_eq;
+    std::map<long long, std::vector<double>> efx_eq;   // (lo, mid Hz, Q, mid dB, hi, lo Hz, hi Hz, mids...)
+    std::map<long long, const double *> efx_trem;       // (a mix channel's first chain's tremolo)
     std::map<long long, double> efx_send;
     std::set<long long> efx_parts;
     // ...AND THE FILE'S (blockrender's _EFXEV, gsefx.chain): each note's
@@ -1350,7 +1383,8 @@ int main(int argc, char **argv)
             fx_ev.clear();                      // (no part on it: nothing reads it)
         // (the block's layout: codes, then the records' header, records, laws, cabinets, tables)
         if (!fx_ev.empty() && (E.k.size() < K_EFX + 132
-                               || E.k.size() < K_EFX + 132 + 16 * E.k[K_EFX + 131] + 30 + 66 + 1024)) {
+                               || E.k.size() < K_EFX + 132 + NV_EFX_NAT * E.k[K_EFX + 131] + 30 + 66 + 1024
+                                                    + 128 + 5 * 19 + 128 * 6 * 5 + 2 * 5 + 5 * 128)) {
             fprintf(stderr, "nvrender: refused: the insertion effect (40 03), an export without its tables\n");
             return 2;
         }
@@ -1360,7 +1394,7 @@ int main(int argc, char **argv)
         fx_ts.assign(ts.begin(), ts.end());
         const char *cb = getenv("TUNING_CABINET");
         for (int w = 0; w < 2 && !fx_ev.empty() && !(cb && !strcmp(cb, "0")); w++) {
-            const double *C = E.k.data() + K_EFX + 132 + 16 * (size_t)E.k[K_EFX + 131] + 30 + 33 * w;
+            const double *C = E.k.data() + K_EFX + 132 + NV_EFX_NAT * (size_t)E.k[K_EFX + 131] + 30 + 33 * w;
             fx_cabbuf[w].assign(sizeof(NoteClass), 0);
             NoteClass *nc = (NoteClass *)fx_cabbuf[w].data();
             nc->cab_set = (int)C[0];
@@ -1429,281 +1463,26 @@ int main(int argc, char **argv)
                 cvv[v.a] = v.b;
             }
         }
-        const double *X = E.k.data() + K_EFX;
-        const int code = msb * 128 + lsb;
-        bool built = false;
-        for (int q = 0; q < (int)X[0] && q < 128; q++)
-            built = built || (int)X[1 + q] == code;
-        if (!built)
+        double rec[NV_FXN], recb[NV_FXN];
+        int has_b = 0;
+        const char *why = "";
+        std::vector<int> cs, cv_;
+        for (const auto &kv : cvv) {
+            cs.push_back(kv.first);
+            cv_.push_back(kv.second);
+        }
+        const int got = nv_efx_chain(E.k.data() + K_EFX, SR, msb, lsb, p, snd, ctl, (int)cs.size(), cs.data(),
+                                     cv_.data(), rec, recb, &has_b, &why);
+        if (got == -1)
             return fx_memo[pre] = -1;
-        const double *D = nullptr;
-        const int NK = (int)X[130], W = (int)X[131], DF = 3 + NK, MK = DF + 20;
-        for (int q = 0; q < (int)X[129] && q < 16; q++)
-            if ((int)X[132 + W * q] == code)
-                D = X + 132 + W * q;
-        auto refuse = [&](const char *why) {
+        if (got < 0) {
             fprintf(stderr, "nvrender: refused: the insertion effect's %s (type %02X %02X)\n", why, msb, lsb);
             return fx_memo[pre] = -3;
-        };
-        if (!D)
-            return refuse("type");
-        const int kind = (int)D[1];
-        const bool bass = D[2] != 0.0;
-        // (EFX_KEYS's order)
-        enum { kLevel, kDrive, kAmpSw, kLowGain, kHiGain, kCmpAtck, kCmpSus, kCmpLevel, kCmpSw, kODSel, kODDrive,
-               kODAmpSw, kODSw, kEQL, kEQMF, kEQMQ, kEQMG, kEQH, kODL, kODH, kCFSel, kCFRate, kCFDepth, kCFFb,
-               kCFMix, kDlyTime, kDlyFb, kDlyMix, kEHSens, kTPSw, kAzimuth, kSpeed, kTurn, kClockwise, kAttack,
-               kSustain, kPostGain, kType, kPreDly, kTime, kHFDamp, kBalance, kGateTime, kLBal, kPreDly1, kPreDly2,
-               kPan1, kPan2, kCoarse1, kFine1, kCoarse2, kFine2, kPan, kPCoarse, kPFine, kFeedback, kWahFil,
-               kWahMan, kWahPeak, kWahSw, kRate, kDepth, kPhase };
-        auto has = [&](int key) { return D[3 + key] != 0.0; };
-        // ...AND ITS CONTROLLERS' (gsefx.controlled): a + or # parameter at
-        // "setting value + value from controller x depth (%)/100" of its
-        // whole range, clamped and rounded, where its controller has a source
-        const bool marked = ctl[0] != 0 || ctl[2] != 0;
-        bool choice = false;
-        auto controlled = [&](int n, int v) {
-            for (int w = 0; w < 2; w++) {
-                if ((int)D[MK + w] != n)
-                    continue;
-                int src = ctl[2 * w];
-                if (!src)
-                    continue;
-                double dep = std::max(-1.0, std::min(1.0, (ctl[2 * w + 1] - 0x40) / 63.0));
-                auto it = cvv.find(src);
-                int cv = it != cvv.end() ? it->second : (src == 0x61 ? 64 : 0);
-                double lo = D[MK + 2 + 2 * w], hi = D[MK + 3 + 2 * w];
-                if (lo < 0.0) {
-                    choice = true;              // (a choice of codes: not built here)
-                    return v;
-                }
-                double x = (double)v + (hi - lo) * (cv / 127.0) * dep;
-                x = std::max(lo, std::min(hi, x));
-                return (int)nearbyint(x);       // (round: half to even)
-            }
-            return v;
-        };
-        auto g = [&](int key, int d) {      // the file's, the type's, ours -- and its controller's
-            int n = (int)D[3 + key];
-            if (!n)
-                return d;
-            int v = p[n] >= 0 ? p[n] : D[DF + n - 1] >= 0.0 ? (int)D[DF + n - 1] : d;
-            if (marked && (n == (int)D[MK] || n == (int)D[MK + 1]))
-                v = controlled(n, v);
-            return v;
-        };
-        const double *L = X + 132 + 16 * W;
-        const double *T6 = L + 30 + 66, *AZ = T6 + 128, *T1 = AZ + 128, *T8 = T1 + 128;    // (value tables *6, *13, *1, *8)
-        auto clamp = [](int v) { return v < 0 ? 0 : v > 127 ? 127 : v; };
-        auto od_gain = [&](int v, bool ds) {
-            double x = clamp(v) / 127.0, lo = ds ? L[2] : L[0], hi = ds ? L[3] : L[1];
-            return pow(10.0, (lo + (hi - lo) * x) / 20.0);
-        };
-        auto gain_db = [](int v) { return (double)std::max(-12, std::min(12, v - 64)); };
-        double r[NV_FXN] = {};
-        r[21] = -1.0;
-        r[33] = 1.0;                            // (a bus's dry and effect levels: the effect alone)
-        r[31] = M_PI;                           // (its chorus's right output's LFO phase: GS_TAPS's)
-        auto balance = [&](int v, double *dw) { // (gsefx.balance: "D>xE" up to D=E, past it "D x<E")
-            v = clamp(v);
-            if (v <= 0x40) {
-                dw[0] = 1.0;
-                dw[1] = std::min(1.0, 2.0 * v / 127.0);
-            } else {
-                dw[0] = std::min(1.0, 2.0 * (127 - v) / 127.0);
-                dw[1] = 1.0;
-            }
-        };
-        r[0] = g(kLevel, 127) / 127.0;
-        const double mk = pow(10.0, L[4] / 20.0);
-        if (kind == 4 || kind == 6) {
-            // THE PART PLACED IN 3D: its angle the type's Azimuth, and 3D
-            // Auto's turning at its Speed (turns a second), clockwise +
-            double turn = 0.0;
-            if (kind == 6 && g(kTurn, 1))           // (AUTO_TURN, AUTO_CLOCKWISE)
-                turn = T6[clamp(g(kSpeed, 25))] * (g(kClockwise, 1) ? 1.0 : -1.0);
-            r[22] = 1.0;
-            r[23] = AZ[clamp(g(kAzimuth, 62))];
-            r[24] = turn;
-        } else if (kind == 5) {
-            // A PART'S OWN BUS, the Compressor (efxbus.make's 'comp'): its
-            // threshold from Sustain, ratio 8, attack from Attack, release
-            // 150 ms, its makeup Post Gain's 6 dB steps
-            double a = g(kAttack, 72) / 127.0;
-            double att = 0.001 + 0.049 * a;
-            r[25] = 2.0;
-            r[26] = -10.0 - 30.0 * g(kSustain, 100) / 127.0;
-            r[27] = 8.0;
-            r[28] = exp(-1.0 / std::max(1.0, att * SR));
-            r[29] = exp(-1.0 / std::max(1.0, 0.15 * SR));
-            r[30] = pow(10.0, 6.0 * g(kPostGain, 0) / 20.0);
-            r[6] = 1.0;
-            r[7] = gain_db(g(kLowGain, 64));
-            r[11] = gain_db(g(kHiGain, 64));
-        } else if (kind == 11) {
-            // SPACE D (gsefx._chorus): the pre-delay and rate from Roland's
-            // tables (*1, *6), the depth as the system chorus's swing, its two
-            // outputs apart by its Phase; Balance its share
-            double rate = T6[clamp(g(kRate, 8))];
-            double swing = (g(kDepth, 64) + 1) / 3.2 / 1000.0 / 2.0 * L[7];
-            double pd = T1[clamp(g(kPreDly, 10))];
-            double pre = (std::isnan(pd) ? 0.0 : pd) / 1000.0;
-            r[14] = 1.0;
-            r[15] = pre + swing;
-            r[16] = rate;
-            r[17] = 2.0 * M_PI * rate * swing;
-            r[18] = 0.0;
-            r[19] = 0.0;
-            r[20] = 0.0;
-            r[21] = g(kBalance, 64) / 127.0;
-            r[31] = (2.0 * g(kPhase, (int)(180.0 / 2.0))) * (M_PI / 180.0);   // (CHORUS_PHASE_DEG; math.radians)
-            r[6] = 1.0;
-            r[7] = gain_db(g(kLowGain, 64));
-            r[11] = gain_db(g(kHiGain, 64));
-        } else if (kind == 9 || kind == 10) {
-            // THE PITCH SHIFTERS (gsdelay taps that move each repeat's pitch):
-            // 2 Pitch Shifter's two voices at their own pitch, delay and pan,
-            // L.Bal between them, no feedback; Fb P.Shifter's one, spiralling
-            // by its ratio round its feedback -- the effect at its Balance's
-            // share over the dry (DRY_FLOOR), in the GS delay's place, sent whole
-            auto pre = [&](int key, int d) {    // (table *1, ms -> s; Bypass 0)
-                double v = T1[clamp(g(key, d))];
-                return (std::isnan(v) ? 0.0 : v) / 1000.0;
-            };
-            auto side = [&](int key) { return g(key, 64) != 64 ? 100.0 + clamp(g(key, 64)) : 2.0; };
-            auto semis = [&](int co, int fi) {  // (gsefx.semitones)
-                return pow(2.0, (co - 0x40) / 12.0 + (fi - 0x40) * 2.0 / 1200.0);
-            };
-            double dw[2], *T = r + 40;
-            int nt;
-            double fb;
-            if (kind == 9) {
-                double lab[2];
-                balance(g(kLBal, 64), lab);
-                const double t1[5] = {pre(kPreDly1, 0), lab[0], side(kPan1), 1.0, semis(g(kCoarse1, 71), g(kFine1, 62))};
-                const double t2[5] = {pre(kPreDly2, 0), lab[1], side(kPan2), 1.0, semis(g(kCoarse2, 59), g(kFine2, 66))};
-                std::copy(t1, t1 + 5, T);
-                std::copy(t2, t2 + 5, T + 5);
-                nt = 2;
-                fb = 0.0;
-            } else {
-                double t = pre(kPreDly, 95);
-                const double t1[5] = {t, 1.0, side(kPan), t, semis(g(kPCoarse, 71), g(kPFine, 64))};
-                std::copy(t1, t1 + 5, T);
-                nt = 1;
-                fb = std::max(-0.98, std::min(0.98, (g(kFeedback, 84) - 64) * 2.0 / 100.0));
-            }
-            balance(g(kBalance, 64), dw);
-            const double DRY_FLOOR = 1e-3, dk = std::max(dw[0], DRY_FLOOR);
-            r[34] = 1.0;
-            r[35] = dw[1] / dk;                 // (level: the effect over the dry)
-            r[36] = fb;
-            r[37] = 0.0;                        // (no line filter)
-            r[38] = std::max(T[0], 1e-3);       // (tc: the first tap's time)
-            r[39] = nt;
-            r[0] *= dk;
-            r[6] = 1.0;
-            r[7] = gain_db(g(kLowGain, 64));
-            r[11] = gain_db(g(kHiGain, 64));
-        } else if (kind == 7 || kind == 8) {
-            // A PART'S OWN BUS, a reverb (efxbus.Reverb, GateReverb: native/efxrev.c's):
-            // Reverb's type, pre-delay, Time and HF damp; Gate Reverb's type,
-            // pre-delay and gate time (5 ms a step, 5-500 ms); dry against effect by Balance
-            r[25] = kind == 7 ? 3.0 : 4.0;
-            r[26] = g(kType, 0);
-            double pd = T1[clamp(g(kPreDly, kind == 7 ? 112 : 5))];
-            r[27] = std::isnan(pd) ? 0.0 : pd;
-            if (kind == 7) {
-                r[28] = g(kTime, 120);
-                r[29] = T8[clamp(g(kHFDamp, 104))];     // (NaN: Bypass, 20 kHz)
-            } else {
-                r[28] = 5.0 * (std::min(99, g(kGateTime, 12)) + 1);
-            }
-            balance(g(kBalance, kind == 7 ? 64 : 32), r + 32);
-            r[6] = 1.0;
-            r[7] = gain_db(g(kLowGain, 64));
-            r[11] = gain_db(g(kHiGain, 64));
-        } else if (kind == 1 || kind == 2) {
-            r[1] = od_gain(g(kDrive, 48), kind == 2);
-            r[0] *= mk;
-            if (g(kAmpSw, 1))
-                r[2] = 1.0;
-            r[6] = 1.0;
-            r[7] = gain_db(g(kLowGain, 64));
-            r[11] = gain_db(g(kHiGain, 64));
-        } else {
-            if (has(kCmpSw) && g(kCmpSw, 1)) {
-                double sus = g(kCmpSus, 64) / 127.0;
-                r[3] = 1.0 / (1.0 + 3.0 * sus);
-                r[4] = g(kCmpLevel, 64) / 64.0;
-                r[5] = L[5] * g(kCmpAtck, 70) / 127000.0;
-            }
-            if (has(kODDrive) && g(kODSw, 1)) {
-                r[1] = od_gain(g(kODDrive, 48), g(kODSel, 0) != 0);
-                r[0] *= mk;
-                if (g(kODAmpSw, 1))
-                    r[2] = bass ? 2.0 : 1.0;
-            }
-            if (has(kEQL)) {
-                r[6] = 1.0;
-                r[7] = gain_db(g(kEQL, 64));
-                r[8] = L[13 + clamp(g(kEQMF, 64)) / 8];
-                r[9] = L[8 + std::min(4, g(kEQMQ, 1))];
-                r[10] = gain_db(g(kEQMG, 64));
-                r[11] = gain_db(g(kEQH, 64));
-            } else if (has(kODL)) {
-                r[6] = 1.0;
-                r[7] = gain_db(g(kODL, 64));
-                r[11] = gain_db(g(kODH, 64));
-            }
-            if (has(kCFRate)) {
-                // (cf_device: rate2, efx_swing, feedback; a chorus 10 ms, a flanger 1 ms)
-                bool fl = g(kCFSel, 0) != 0;
-                double rate = 0.05 * (clamp(g(kCFRate, 8)) + 1);
-                double swing = (g(kCFDepth, 40) + 1) / 3.2 / 1000.0 / 2.0 * (fl ? 1.0 / 8.0 : L[7]);
-                r[14] = 1.0;
-                r[15] = (fl ? 0.001 : 0.010) + swing;
-                r[16] = rate;
-                r[17] = 2.0 * M_PI * rate * swing;
-                r[18] = std::max(-0.98, std::min(0.98, (g(kCFFb, 64) - 64) * 2.0 / 100.0));
-                r[19] = 0.0;
-                r[20] = g(kCFMix, 0) / 127.0;
-            }
-            if (has(kEHSens))
-                return refuse("enhancer");
-            if (has(kTPSw) && g(kTPSw, 1))
-                return refuse("tremolo");
-            if (has(kWahMan) && g(kWahSw, 1)) {
-                // GTR MULTI 3's WAH (efxfilter): its pedal held where Wah Man
-                // puts it, a band or low pass by Wah Fil, Peak its Q (WAH_HZ, WAH_Q)
-                r[50] = 1.0;
-                r[51] = g(kWahFil, 1) == 0 ? 2.0 : 3.0;
-                r[52] = 0.7 * pow(12.0 / 0.7, clamp(g(kWahPeak, 10)) / 127.0);
-                r[53] = 1.0;
-                r[54] = 200.0 * pow(4000.0 / 200.0, clamp(g(kWahMan, 60)) / 127.0);
-            }
-            if (has(kDlyTime)) {
-                // THE MULTI's OWN DELAY, as the GS delay's repeats: one tap, 0-635
-                // ms (5 ms a step), its feedback 0-127, its mix
-                int t = g(kDlyTime, 60), f = g(kDlyFb, 32), x = g(kDlyMix, 0);
-                if (x) {
-                    r[34] = 1.0;
-                    r[35] = x / 127.0;
-                    r[36] = f / 128.0;
-                    r[37] = 0.0;
-                    r[38] = t * 0.005;
-                    r[39] = 1.0;
-                    const double t1[5] = {t * 0.005, 1.0, 2.0, t * 0.005, 1.0};
-                    std::copy(t1, t1 + 5, r + 40);
-                }
-            }
         }
-        if (choice)
-            return refuse("controller on a choice");
-        r[12] = snd[0];
-        r[13] = snd[2];
+        if (has_b)                              // (branch B's record, just before A's: fc - NV_FXN)
+            fxch.insert(fxch.end(), recb, recb + NV_FXN);
         int idx = (int)(fxch.size() / NV_FXN);
-        fxch.insert(fxch.end(), r, r + NV_FXN);
+        fxch.insert(fxch.end(), rec, rec + NV_FXN);
         return fx_memo[pre] = idx;
     };
     {
@@ -1770,12 +1549,23 @@ int main(int argc, char **argv)
             nv_song_efx_part(song, c, dv[0], d);      // (_C91D: each mix channel's first chain sets it)
             efx_parts.insert(c);
             efx_send[m] = d;
-            if (fc ? fc[6] != 0.0 : k->efx_eq_set != 0)
-                efx_eq[m] = fc ? std::array<double, 5>{fc[7], fc[8], fc[9], fc[10], fc[11]}
-                               : std::array<double, 5>{k->efx_eq[0], k->efx_eq[1], k->efx_eq[2], k->efx_eq[3],
-                                                       k->efx_eq[4]};
+            if (fc ? fc[6] != 0.0 : k->efx_eq_set != 0) {
+                if (fc) {
+                    std::vector<double> e{fc[7], fc[8], fc[9], fc[10], fc[11], fc[60] ? fc[60] : 400.0,
+                                          fc[61] ? fc[61] : 4000.0};
+                    e.insert(e.end(), fc + 63, fc + 63 + 3 * (int)fc[62]);
+                    efx_eq[m] = e;
+                } else {
+                    efx_eq[m] = {k->efx_eq[0], k->efx_eq[1], k->efx_eq[2], k->efx_eq[3], k->efx_eq[4], 400.0,
+                                 4000.0};
+                }
+            }
+            if (fc && fc[55] != 0.0)
+                efx_trem[m] = fc;                    // (its tremolo: _TREM_CH's, at its first note)
             if (fc ? fc[14] != 0.0 : k->efx_cf != 0)
                 fx_cfn[m] = i;                       // (its chorus or flanger: the channel's, _CHORUS_CH)
+            if (fc && fc[208] != 0.0 && (fc - NV_FXN)[14] != 0.0)
+                fx_cfn[m + 65536] = i;               // (...a parallel type's branch B's, its virtual channel's)
             if (fc) {
                 fx_first[i] = 1;
                 // ITS LEVEL OVER THE FILE (its amp's reference: 'steps') and
@@ -1797,13 +1587,54 @@ int main(int argc, char **argv)
                 }
                 nv_song_fx_steps(song, m, (int)st.size(), st.data(), lv.data());
                 fx_share[m] = sh;
+                if (fc[208] != 0.0) {
+                    // ...A PARALLEL TYPE's BRANCH B's level steps (its valve's
+                    // reference): at(events, vc, t) or B's first, its level
+                    std::vector<double> lvb;
+                    for (double t : fx_ts) {
+                        int pre = fx_prefix(t), cq = fx_chain(pre);
+                        const bool on = fx_on(m % 256, pre) && cq >= 0 && fxch[(size_t)NV_FXN * cq + 208] != 0.0;
+                        lvb.push_back(on ? fxch[(size_t)NV_FXN * (cq - 1)] : (fc - NV_FXN)[0]);
+                    }
+                    nv_song_fx_steps(song, m + 65536, (int)st.size(), st.data(), lvb.data());
+                }
+                if (fc[208] != 0.0) {
+                    // ...A PARALLEL TYPE's BRANCH B's share on its virtual
+                    // channel (mix_share of it: at(events, vc, t), B or none)
+                    std::vector<double> shb;
+                    for (double t : fx_ts) {
+                        int pre = fx_prefix(t), cq = fx_chain(pre);
+                        double s = 0.0;
+                        if (fx_on(m % 256, pre) && cq >= 0 && fxch[(size_t)NV_FXN * cq + 208] != 0.0) {
+                            const double *cc = fxch.data() + (size_t)NV_FXN * (cq - 1);
+                            double a = cc[14] != 0.0 ? cc[20] : 0.0;
+                            s = cc[21] >= 0.0 ? cc[21] : a * a / (1.0 + a * a);
+                        }
+                        shb.push_back(s);
+                    }
+                    fx_share[m + 65536] = shb;
+                }
             }
         }
         nv_song_fx(song, (int)(fxch.size() / NV_FXN), fxch.data(), nn, note_fx.data(), fx_first.data(),
                    fx_cab[0], fx_cab[1]);
+        // (a parallel type's branch B -- the part's copy on its virtual
+        // channel -- takes what the voice brings to its channel; a reed
+        // organ's tremolo stop, and a Leslie's valve, not yet the engine's)
+        for (int i = 0; i < nn; i++) {
+            if (note_fx[i] < 0 || fxch[(size_t)NV_FXN * note_fx[i] + 208] == 0.0)
+                continue;
+            int cq = E.cmap[nv_song_kidx(song, i)];
+            const NoteClass *k = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
+            if (k && ((k->amp_drive != 0.0 && k->leslie) || nv_song_htrem(song, i))) {
+                fprintf(stderr, "nvrender: refused: a parallel type's branch B on a reed organ's tremolo stop "
+                                "or a Leslie's valve\n");
+                return 2;
+            }
+        }
         if (!fx_ev.empty())                     // (a chain's delay's places: the outputs', a pan's)
             nv_song_fx_place(song, E.k.data() + K_GSPLACE,
-                             E.k.data() + K_EFX + 132 + 16 * (size_t)E.k[K_EFX + 131] + 30 + 66 + 512);
+                             E.k.data() + K_EFX + 132 + NV_EFX_NAT * (size_t)E.k[K_EFX + 131] + 30 + 66 + 512);
     }
     // THE FIRE SIRENS' ROTORS (_prep_siren, siren.py): each (channel, key)'s
     // notes in their order, its rotor carried key to key -- wound up by its
@@ -1999,7 +1830,13 @@ int main(int argc, char **argv)
                             "register.cpp's ROWS_PER_NOTE)\n", need, cap0, nv_song_n_notes(song));
     }
     if (P < 0) {
-        fprintf(stderr, "nvrender: refused: a note is not the engine's (%lld)\n", P);
+        long long c = -1;
+        int iv[4] = {-1, -1, -1, 0};
+        double dv[2] = {0.0, 0.0};
+        if (-P - 1 < nv_song_n_notes(song))     // (which: its part, program, key, onset)
+            nv_song_get_note(song, (int)(-P - 1), &c, iv, dv);
+        fprintf(stderr, "nvrender: refused: a note is not the engine's (%lld: channel %lld, program %d, key %d%s, "
+                        "at %.3f s: %s)\n", P, c, iv[2], iv[0], iv[3] ? ", a drum" : "", dv[0], nv_play_why());
         return 2;
     }
     // THE VALVE AMPLIFIERS (_prep_amplifier, tubeamp.expand): each channel's
@@ -2036,7 +1873,8 @@ int main(int argc, char **argv)
     // wheel's on its channels' rows, the stop's sidebands among them
     for (int which = 0; which < 2; which++) {
         int nt = nv_song_organ_tremolos(song, which, nullptr, nullptr, 0);
-        if (!nt && !(which == 1 && (nv_song_trems(song, nullptr, nullptr, 0) || !tcfg_m.empty())))
+        if (!nt && !(which == 1 && (nv_song_trems(song, nullptr, nullptr, 0) || !tcfg_m.empty()
+                                    || !efx_trem.empty())))
             continue;
         std::vector<int> tch(nt);
         std::vector<double> tcfg(4 * nt);
@@ -2080,6 +1918,23 @@ int main(int argc, char **argv)
                 }
                 nv_tremolo_brmap(kv.first, (int)fr.size(), fr.data(), to.data());
             }
+            // ...and the insertion effect's (Tremolo, Auto Pan, the Tremolo
+            // Chorus's: after the matrix's, which keeps its channel)
+            const double *WV = E.k.data() + K_EFX + 132 + NV_EFX_NAT * (size_t)E.k[K_EFX + 131] + 30 + 66 + 1024 + 128;
+            for (auto &kv : efx_trem) {
+                if (tcfg_m.count(kv.first))
+                    continue;
+                if (chans.count((int)kv.first)) {
+                    fprintf(stderr, "nvrender: refused: an insertion effect's tremolo beside a voice's\n");
+                    return 2;
+                }
+                const double *fc = kv.second;
+                chans[(int)kv.first] = {fc[56], fc[57], fc[58], 0.0};
+                if (fc[55] == 1.0) {
+                    const double *w = WV + 19 * (int)fc[59];
+                    nv_tremolo_wave(kv.first, (int)w[0], w + 1);
+                }
+            }
         }
         std::vector<char> mask;
         if (which == 0) {
@@ -2111,6 +1966,9 @@ int main(int argc, char **argv)
         std::vector<double> csend, ccents, cgsp;
         std::vector<int> cnc, ckind;
         std::vector<long long> csteps;          // (an entry's share steps: its mix channel's, -1 none)
+        // ...or a moving CC93's (entry index: its changes in samples, their shares)
+        std::map<size_t, std::pair<std::vector<double>, std::vector<double>>> cstepn;
+        std::map<size_t, std::vector<double>> ctaps;     // (an entry's own voices: 8 each)
         std::vector<int> ord(nv_song_n_notes(song));
         for (size_t i = 0; i < ord.size(); i++)
             ord[i] = (int)i;
@@ -2138,11 +1996,39 @@ int main(int argc, char **argv)
                 ccents.push_back(0.0);
             if (note_fx[i0] >= 0) {
                 const double *fc = fxch.data() + (size_t)NV_FXN * note_fx[i0];
+                if (mch >= 65536)
+                    fc -= NV_FXN;                   // (a parallel type's branch B: its record)
                 double G[40] = {fc[15], fc[16], fc[17], fc[18], fc[19], 0.0, 2.0};
                 for (int q = 0; q < 13; q++)
                     G[7 + q] = E.k[K_GSPLACE + q];
                 G[20] = 0.0; G[21] = 0.0; G[22] = 0.0; G[23] = 1.0;           // (left, at 0)
                 G[24] = 1.0; G[25] = fc[31]; G[26] = 0.0; G[27] = 1.0;        // (...right, at its phase: pi, or Space D's)
+                // ...or the type's own voices: the Hexa Chorus's six, the 3D Chorus's two
+                const double *HX = E.k.data() + K_EFX + 132 + NV_EFX_NAT * (size_t)E.k[K_EFX + 131] + 30 + 66 + 1024
+                                   + 128 + 5 * 19;
+                std::vector<double> tv;
+                if (fc[87] == 1.0) {
+                    const double dd = fc[89], dv = (fc[90] - 0x40) / 20.0;
+                    for (int k = 0; k < 6; k++) {
+                        const double *P5 = HX + 5 * (6 * (int)fc[88] + k);
+                        tv.insert(tv.end(), P5, P5 + 5);
+                        tv.push_back(2.0 * M_PI * k / 6.0);
+                        tv.push_back(0.5 * dd * (k / 5.0 - 0.5) / 1000.0);      // (HEXA_DLY_STEP_MS)
+                        tv.push_back(std::max(0.0, 1.0 + dv * (k / 5.0 - 0.5)));
+                    }
+                } else if (fc[87] == 2.0) {
+                    for (int k = 0; k < 2; k++) {
+                        const double *P5 = HX + 5 * 128 * 6 + 5 * k;
+                        tv.insert(tv.end(), P5, P5 + 5);
+                        tv.push_back(k ? M_PI : 0.0);
+                        tv.push_back(0.0);
+                        tv.push_back(1.0);
+                    }
+                }
+                if (!tv.empty()) {
+                    G[6] = (double)(tv.size() / 8);
+                    ctaps[cch.size() - 1] = tv;
+                }
                 cgsp.insert(cgsp.end(), G, G + 40);
                 csteps.push_back(mch);
             } else {
@@ -2159,6 +2045,15 @@ int main(int argc, char **argv)
             double dv[2];
             nv_song_get_note(song, i, &ch, iv, dv);
             long long mch = nv_song_mix(song, i);
+            // (A PARALLEL TYPE's BRANCH B's chorus, on its virtual channel: at
+            // the chain's first note -- after the part's own entry where the
+            // chain made it, else ahead of what this note adds: _CHORUS_CH's order)
+            const bool vcf = note_fx[i] >= 0 && fx_first[i] && fx_cfn.count(mch + 65536)
+                             && !seen.count(mch + 65536);
+            if (vcf && (!fx_cfn.count(mch) || seen.count(mch))) {
+                seen.insert(mch + 65536);
+                push_cf(mch + 65536);
+            }
             if (seen.count(mch))
                 continue;
             auto cfi = fx_cfn.find(mch);
@@ -2166,6 +2061,10 @@ int main(int argc, char **argv)
             if (cf && rank[i] >= rank[cfi->second]) {
                 seen.insert(mch);
                 push_cf(mch);
+                if (vcf && !seen.count(mch + 65536)) {
+                    seen.insert(mch + 65536);
+                    push_cf(mch + 65536);
+                }
                 continue;
             }
             int nc = nv_song_ccs(song, mch % 256, 93, nullptr, nullptr, 0);
@@ -2196,13 +2095,51 @@ int main(int argc, char **argv)
             std::vector<double> tt(nc);
             std::vector<int> vv(nc);
             nv_song_ccs(song, mch % 256, 93, tt.data(), vv.data(), nc);
-            if (vv[0] <= 0) {
+            // (a GS file's CC93 that MOVES -- its values not all one, one past
+            // 0 -- follows the song, from its first value whatever it is)
+            bool vmoves = false;
+            int vmax = vv[0];
+            for (int v : vv) {
+                vmoves = vmoves || v != vv[0];
+                vmax = std::max(vmax, v);
+            }
+            const bool moving = gs_cho[0] >= 0.0 && vmoves && vmax > 0;
+            if (vv[0] <= 0 && !moving) {
                 if (cf)
                     seen.erase(mch);        // (no entry: the chain's comes at its note)
                 continue;
             }
             if (cf) {
                 push_cf(mch);               // (an entry here, the chain's in it)
+                continue;
+            }
+            if (moving) {
+                // ...ITS CC93 FOLLOWING THE SONG, as CC91 does (send_steps): the
+                // share each row's onset finds, through the chorus pass's own
+                // per-row share -- each change at its sample, its device's share
+                auto cshare = [&](int v) {
+                    double ca = v / 127.0 * gs_cho[5];
+                    return ca * ca / (1.0 + ca * ca);
+                };
+                std::vector<double> st, sv;
+                for (int q = 0; q < nc; q++) {
+                    st.push_back((double)(long long)nearbyint(tt[q] * SR));
+                    sv.push_back(cshare(vv[q]));
+                }
+                cstepn[cch.size()] = std::make_pair(st, sv);
+                cch.push_back(mch);
+                csend.push_back(0.0);
+                cnc.push_back(0);
+                ckind.push_back(2);
+                for (int q = 0; q < 8; q++)
+                    ccents.push_back(0.0);
+                double G[40] = {gs_cho[0], gs_cho[1], gs_cho[2], gs_cho[3], gs_cho[4], sv[0], 2.0};
+                for (int q = 0; q < 13; q++)
+                    G[7 + q] = E.k[K_GSPLACE + q];
+                G[20] = 0.0; G[21] = 0.0; G[22] = 0.0; G[23] = 1.0;           // (GS_TAPS: left, at 0)
+                G[24] = 1.0; G[25] = M_PI; G[26] = 0.0; G[27] = 1.0;          // (...right, at pi)
+                cgsp.insert(cgsp.end(), G, G + 40);
+                csteps.push_back(-1);
                 continue;
             }
             if (gs_cho[0] >= 0.0) {
@@ -2240,6 +2177,11 @@ int main(int argc, char **argv)
         for (size_t q = 0; q < csteps.size(); q++)
             if (csteps[q] >= 0)             // (the file's chain: its share at each row's onset)
                 nv_chorus_share_steps((int)q, (int)fx_ts.size(), fx_ts.data(), fx_share[csteps[q]].data());
+        for (auto &kv : ctaps)              // (a type's own voices)
+            nv_chorus_taps((int)kv.first, (int)(kv.second.size() / 8), kv.second.data());
+        for (auto &kv : cstepn)             // (a moving CC93's: its steps, in samples)
+            nv_chorus_share_steps_n((int)kv.first, (int)kv.second.first.size(), kv.second.first.data(),
+                                    kv.second.second.data());
         if (!cch.empty())
             nv_chorus_expand(&rows, &P, dm, (int)cch.size(), cch.data(), csend.data(), cnc.data(), ccents.data(),
                              ckind.data(), cgsp.data(), SR);
@@ -2258,13 +2200,16 @@ int main(int argc, char **argv)
                 continue;
             const auto &e = it->second;
             double f = row[cF];
-            double x = f / 400.0, y = f / 4000.0;
+            double x = f / e[5], y = f / e[6];
             x = x * x;
             y = y * y;
             double db = e[0] / (1.0 + x) + e[4] * y / (1.0 + y);
-            if (e[1] != 0.0 && e[3] != 0.0) {
-                double u = e[2] * (f / e[1] - e[1] / (f + 1e-6 * (f <= 0.0 ? 1.0 : 0.0)));
-                db += e[3] / (1.0 + u * u);
+            for (size_t j = 1; j < e.size(); j += j == 1 ? 6 : 3) {     // (the mid, then the type's more)
+                double mf = e[j], q = e[j + 1], mg = e[j + 2];
+                if (mf != 0.0 && mg != 0.0) {
+                    double u = q * (f / mf - mf / (f + 1e-6 * (f <= 0.0 ? 1.0 : 0.0)));
+                    db += mg / (1.0 + u * u);
+                }
             }
             double g = pow(10.0, db / 20.0);
             for (int c : cA)
@@ -2281,7 +2226,7 @@ int main(int argc, char **argv)
     // copies, the Doppler, each rotor row's lobe
     std::vector<long long> lch;
     std::vector<int> lnreq;
-    std::vector<double> lreq;
+    std::vector<double> lreq, lgs;
     void *lobe[5] = {nullptr};
     const double *LES = E.les.data();
     for (int k = 0, nl = nv_song_leslie(song, -1, nullptr); k < nl; k++) {
@@ -2308,9 +2253,66 @@ int main(int argc, char **argv)
         }
         lch.push_back(c);
         lnreq.push_back(nq);
+        lgs.insert(lgs.end(), 10, 0.0);
     }
-    if (!lch.empty() && nv_leslie_expand(&rows, &P, dm, (int)lch.size(), lch.data(), lnreq.data(), lreq.data(), SR,
-                                         LES, lobe, nullptr, nullptr) < 0) {
+    // ...AND THE INSERTION ROTARIES (rotary_setup): each mix channel's from
+    // its first note through one, each rotor asked slow or fast as the
+    // type's Speed stands at each change of the timeline; its spin times,
+    // levels and microphones the first setting's
+    {
+        const long nles = (long)lch.size();
+        int nn = nv_song_n_notes(song);
+        for (int i = 0; i < nn; i++) {
+            if (note_fx.empty() || note_fx[i] < 0 || !fx_first[i])
+                continue;
+            // (the part's, or -- a parallel type's -- branch B's on its virtual
+            // channel: at(events, vc, t), B where the chain is one)
+            const double *fc0 = fxch.data() + (size_t)NV_FXN * note_fx[i];
+            for (int br = 0; br < 2; br++) {
+            if (br && fc0[208] == 0.0)
+                break;
+            if ((br ? fc0 - NV_FXN : fc0)[140] == 0.0)
+                continue;
+            const long long m0 = nv_song_mix(song, i), m = br ? m0 + 65536 : m0;
+            if (std::find(lch.begin() + nles, lch.end(), m) != lch.end())
+                continue;
+            if (std::find(lch.begin(), lch.begin() + nles, m) != lch.begin() + nles) {
+                fprintf(stderr, "nvrender: refused: a Rotary on a Leslie's channel\n");
+                return 2;
+            }
+            std::vector<double> hr, dr;
+            const double *first = nullptr;
+            for (double t : fx_ts) {
+                int pre = fx_prefix(t), cq = fx_on(m0 % 256, pre) ? fx_chain(pre) : -1;
+                if (cq == -3)
+                    return 2;
+                const double *sc = cq >= 0 ? fxch.data() + (size_t)NV_FXN * cq : nullptr;
+                if (br && sc)
+                    sc = sc[208] != 0.0 ? sc - NV_FXN : nullptr;
+                if (!sc || sc[140] == 0.0)
+                    continue;
+                if (!first)
+                    first = sc;
+                hr.push_back(t);
+                hr.push_back(sc[151] != 0.0 ? sc[144] : sc[143]);
+                dr.push_back(t);
+                dr.push_back(sc[151] != 0.0 ? sc[142] : sc[141]);
+            }
+            if (!first)
+                continue;
+            const double gs[10] = {1.0, first[147], first[148], first[145], first[146], first[149], first[150],
+                                   1.0, first[152], (double)(dr.size() / 2)};
+            lreq.insert(lreq.end(), hr.begin(), hr.end());
+            lreq.insert(lreq.end(), dr.begin(), dr.end());
+            lch.push_back(m);
+            lnreq.push_back((int)(hr.size() / 2));
+            lgs.insert(lgs.end(), gs, gs + 10);
+            }
+        }
+    }
+    if (!lch.empty() && nv_leslie_expand_gs(&rows, &P, dm, (int)lch.size(), lch.data(), lnreq.data(), lreq.data(),
+                                            SR, LES, lobe, nullptr, nullptr, lgs.data(),
+                                            E.k.data() + K_GSPLACE) < 0) {
         fprintf(stderr, "nvrender: refused: a Leslie by sidebands (leslie.KERNEL_LOBE off)\n");
         return 2;
     }
@@ -2534,9 +2536,11 @@ int main(int argc, char **argv)
     long lgn = 0;
     void *slo = nullptr;
     if (!lch.empty()) {
-        lgn = nv_leslie_angles((int)lch.size(), lnreq.data(), lreq.data(), N, SR, (int)BLK, LES, nullptr);
+        lgn = nv_leslie_angles_gs((int)lch.size(), lnreq.data(), lreq.data(), N, SR, (int)BLK, LES, nullptr,
+                                  lgs.data());
         LANG.resize((size_t)2 * lch.size() * lgn);
-        nv_leslie_angles((int)lch.size(), lnreq.data(), lreq.data(), N, SR, (int)BLK, LES, LANG.data());
+        nv_leslie_angles_gs((int)lch.size(), lnreq.data(), lreq.data(), N, SR, (int)BLK, LES, LANG.data(),
+                            lgs.data());
         void *h = dlopen(E.lobe_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
         slo = h ? dlsym(h, "synth_voice_lobe") : nullptr;
         if (!slo) {
@@ -2561,6 +2565,7 @@ int main(int argc, char **argv)
         struct FxFlt {
             double ty, pa, pb, pc;
             std::vector<double> ts, hz;
+            std::vector<std::array<double, 6>> ctl;     // (each setting's control: kind, c1-c5)
         };
         std::vector<FxFlt> ff_;
         int nn = nv_song_n_notes(song);
@@ -2593,29 +2598,42 @@ int main(int argc, char **argv)
             if (std::find(fch_.begin(), fch_.end(), m) != fch_.end())
                 continue;
             if (note_fx[i] >= 0) {
-                const double *fc = fxch.data() + (size_t)NV_FXN * note_fx[i];
-                if (!fx_first[i] || fc[50] == 0.0)
-                    continue;
-                FxFlt F;
-                for (double t : fx_ts) {
-                    int pre = fx_prefix(t), cq = fx_on(m % 256, pre) ? fx_chain(pre) : -1;
-                    if (cq == -3)
-                        return 2;
-                    const double *sc = cq >= 0 ? fxch.data() + (size_t)NV_FXN * cq : nullptr;
-                    if (!sc || sc[50] == 0.0)
+                // (the part's, then -- a parallel type's -- branch B's on its
+                // virtual channel: at(events, vc, t), B where the chain is one)
+                const double *fc0 = fxch.data() + (size_t)NV_FXN * note_fx[i];
+                for (int br = 0; br < 2; br++) {
+                    if (br && fc0[208] == 0.0)
+                        break;
+                    const double *fc = br ? fc0 - NV_FXN : fc0;
+                    const long long mm = br ? m + 65536 : m;
+                    if (!fx_first[i] || fc[50] == 0.0 || std::find(fch_.begin(), fch_.end(), mm) != fch_.end())
                         continue;
-                    if (F.ts.empty()) {
-                        F.ty = sc[51]; F.pa = sc[52]; F.pb = sc[53]; F.pc = 0.0;
+                    FxFlt F;
+                    for (double t : fx_ts) {
+                        int pre = fx_prefix(t), cq = fx_on(m % 256, pre) ? fx_chain(pre) : -1;
+                        if (cq == -3)
+                            return 2;
+                        const double *sc = cq >= 0 ? fxch.data() + (size_t)NV_FXN * cq : nullptr;
+                        if (br && sc)
+                            sc = sc[208] != 0.0 ? sc - NV_FXN : nullptr;
+                        if (!sc || sc[50] == 0.0)
+                            continue;
+                        if (!F.ctl.empty() && (sc[128] == 3.0) != (F.ctl[0][0] == 3.0))
+                            continue;           // (not the first's family, vowel or not: filter_setup drops it)
+                        if (F.ts.empty()) {
+                            F.ty = sc[51]; F.pa = sc[52]; F.pb = sc[53]; F.pc = sc[134];
+                        }
+                        F.ts.push_back(t);
+                        F.hz.push_back(sc[54]);
+                        F.ctl.push_back({sc[128], sc[129], sc[130], sc[131], sc[132], sc[133]});
                     }
-                    F.ts.push_back(t);
-                    F.hz.push_back(sc[54]);
+                    if (F.ts.empty())
+                        continue;
+                    fch_.push_back(mm);
+                    fk_.push_back(nullptr);
+                    fpart_.push_back(c);
+                    ff_.push_back(F);
                 }
-                if (F.ts.empty())
-                    continue;
-                fch_.push_back(m);
-                fk_.push_back(nullptr);
-                fpart_.push_back(c);
-                ff_.push_back(F);
                 continue;
             }
             // (a tone's own effect's filter not where the file puts its part on one: _EFXN)
@@ -2629,17 +2647,111 @@ int main(int argc, char **argv)
         if (!fch_.empty()) {
             const long grid = (BLK % 128 == 0 && BLK / 128 <= 64) ? 128 : (long)BLK;     // (leslie.rotor_grid)
             fgn = N / grid + 2;
-            FCT.assign(fch_.size() * (size_t)fgn, 1.0f);
+            // (each channel's first row: a vowel's three, every other one)
+            std::vector<long> frow(fch_.size());
+            long nfr = 0;
+            for (size_t q = 0; q < fch_.size(); q++) {
+                frow[q] = nfr;
+                nfr += !fk_[q] && !ff_[q].ctl.empty() && ff_[q].ctl[0][0] == 3.0 ? 3 : 1;
+            }
+            FCT.assign((size_t)nfr * (size_t)fgn, 1.0f);
             const double step = (double)grid / SR;
             for (size_t q = 0; q < fch_.size(); q++) {
                 const NoteClass *k = fk_[q];
-                if (!k) {                           // (a file's wah: its pedal at the setting in force)
+                if (!k) {
+                    // A FILE's FILTER (filter_setup): each grid point's setting's
+                    // control -- a wah's pedal, a sweep's LFO on the absolute clock
+                    // (an auto wah's Sens adding the part's loudness), a flanger's
+                    // line (stepped), or the vowels' formants gliding
                     const FxFlt &F = ff_[q];
+                    float *row = FCT.data() + (size_t)frow[q] * fgn;
+                    auto seg = [&](double t) {
+                        long i = (long)(std::upper_bound(F.ts.begin(), F.ts.end(), t) - F.ts.begin()) - 1;
+                        return i < 0 ? 0 : (i > (long)F.ts.size() - 1 ? (long)F.ts.size() - 1 : i);
+                    };
+                    if (F.ctl[0][0] == 3.0) {
+                        // THE HUMANIZER (efxfilter.steps): each formant's value at
+                        // the settings, gliding at the first's time constant
+                        static const double VOWEL_F[5][3] = {{730, 1090, 2440}, {270, 2290, 3010},
+                                                             {300, 870, 2240}, {530, 1840, 2480}, {570, 840, 2410}};
+                        const double glide = F.ctl[0][2];
+                        const size_t ns = F.ts.size();
+                        for (int fk = 0; fk < 3; fk++)
+                            for (long p = 0; p < fgn; p++) {
+                                double t = (double)p * step;
+                                long i = seg(t);
+                                double vi = VOWEL_F[(int)F.ctl[i][1]][fk], v;
+                                if (glide <= 0.0 || ns < 2) {
+                                    v = vi;
+                                } else {
+                                    double prev = VOWEL_F[(int)F.ctl[i > 0 ? i - 1 : 0][1]][fk];
+                                    double kk = exp(-std::max(t - F.ts[i], 0.0) / glide);
+                                    v = vi + (prev - vi) * (i > 0 ? kk : 0.0);
+                                }
+                                row[(size_t)fk * fgn + p] = (float)v;
+                            }
+                        continue;
+                    }
+                    // (an auto wah's Sens: the part's notes' envelope, gsefx.note_envelope)
+                    std::vector<double> env;
+                    bool sens = false;
+                    for (auto &c : F.ctl)
+                        sens = sens || (c[0] == 1.0 && c[5] != 0.0);
+                    if (sens) {
+                        const double ATT = 0.005, HOLD = 0.4, REL = 0.06;   // (WAH_ENV_*)
+                        env.assign(fgn, 0.0);
+                        for (int i = 0, nn = nv_song_n_notes(song); i < nn; i++) {
+                            long long c;
+                            int iv[4];
+                            double dv[2];
+                            nv_song_get_note(song, i, &c, iv, dv);
+                            if (c != fpart_[q])
+                                continue;
+                            const double s = dv[0], e = dv[1], a = iv[1] / 127.0;
+                            const double at_end = a * exp(-(e - s) / HOLD);
+                            long p0 = (long)ceil(s / step - 1e-12), p1 = fgn;
+                            while (p0 > 0 && (double)(p0 - 1) * step >= s)
+                                p0--;                   // (searchsorted: the first point at or after s)
+                            while (p0 < fgn && (double)p0 * step < s)
+                                p0++;
+                            for (long p = p0; p < fgn; p++) {
+                                double t = (double)p * step;
+                                if (!(t < e + 8.0 * REL)) {
+                                    p1 = p;
+                                    break;
+                                }
+                                double u = t - s, lv;
+                                if (t <= e)
+                                    lv = a * std::min(1.0, u / ATT) * exp(-u / HOLD);
+                                else
+                                    lv = at_end * exp(-std::max(t - e, 0.0) / REL);
+                                env[p] = std::max(env[p], lv);
+                            }
+                            (void)p1;
+                        }
+                    }
                     for (long p = 0; p < fgn; p++) {
                         double t = (double)p * step;
-                        long i = (long)(std::upper_bound(F.ts.begin(), F.ts.end(), t) - F.ts.begin()) - 1;
-                        i = i < 0 ? 0 : (i > (long)F.ts.size() - 1 ? (long)F.ts.size() - 1 : i);
-                        FCT[q * (size_t)fgn + p] = (float)F.hz[i];
+                        long i = seg(t);
+                        const std::array<double, 6> &c = F.ctl[i];
+                        double v;
+                        if (c[0] == 1.0) {
+                            double lf = sin(2.0 * M_PI * c[3] * t);
+                            if (std::isnan(c[4])) {     // a phaser: about its Manual
+                                v = c[1] * pow(2.0, c[2] * lf);
+                            } else {                    // an auto wah: up (or down) from it
+                                double oc = c[2] * 0.5 * (1.0 + lf);
+                                if (c[5] != 0.0 && !env.empty())
+                                    oc = oc + c[5] * env[p];
+                                v = c[1] * pow(2.0, (c[4] != 0.0 ? 1.0 : -1.0) * oc);
+                            }
+                        } else if (c[0] == 2.0) {       // a flanger's line, stepped or not
+                            double held = std::isnan(c[4]) ? t : floor(t * c[4]) / c[4];
+                            v = c[1] + c[2] * 0.5 * (1.0 + sin(2.0 * M_PI * c[3] * held));
+                        } else {
+                            v = F.hz[i];                // a wah's pedal
+                        }
+                        row[p] = (float)v;
                     }
                     continue;
                 }
@@ -2689,7 +2801,7 @@ int main(int argc, char **argv)
                     } else {
                         v = c[0];                   // a pedal, held
                     }
-                    FCT[q * (size_t)fgn + p] = (float)v;
+                    FCT[(size_t)frow[q] * fgn + p] = (float)v;
                 }
             }
             const int cMm = col("mch");
@@ -2701,7 +2813,7 @@ int main(int argc, char **argv)
                 long long m = (long long)rows[NCOLS * r + cMm];
                 for (size_t q = 0; q < fch_.size(); q++)
                     if (fch_[q] == m) {
-                        fsrc[r] = (int)q;
+                        fsrc[r] = (int)frow[q];
                         if (fk_[q]) {
                             ftyc[r] = fk_[q]->flt_ty;
                             for (int j = 0; j < 3; j++)
@@ -2856,7 +2968,7 @@ int main(int argc, char **argv)
     // effect): each part a 'part' event names, in order, its processor the
     // first chain with a bus it is on, on wherever its chain has one -- these
     // first (_BUS_CH's order), then the tones' own
-    std::vector<std::array<double, 12>> pbus_p;
+    std::vector<std::array<double, 40>> pbus_p;
     {
         std::set<long long> pp;
         for (const FxEv &e : fx_ev)
@@ -2886,9 +2998,12 @@ int main(int argc, char **argv)
                 spans.push_back(std::make_pair(start, (long long)1 << 62));
             if (!first)
                 continue;
-            std::array<double, 12> bp = {};
+            std::array<double, 40> bp = {};
             for (int q = 0; q < 5; q++)
                 bp[q] = first[26 + q];
+            if (first[25] == 6.0)               // (Lo-Fi 2's: its record past 176)
+                for (int q = 0; q < 27; q++)
+                    bp[5 + q] = first[176 + q];
             pbus_p.push_back(bp);
             buses.push_back(BusDef{c, (int)first[25], pbus_p.back().data(), first[32], first[33], true, spans});
         }
@@ -3002,6 +3117,169 @@ int main(int argc, char **argv)
                 ys[ear]->resize(n);
                 for (long i = 0; i < n; i++)
                     (*ys[ear])[i] = (float)o[i];
+            }
+        } else if (bd.kind == 6) {
+            // LO-FI 2 (efxbus.LoFi2): the radio off its station (its band,
+            // fading and wandering with the detune), the hold and bits, the
+            // noises (radio static, white or pink, a record's crackle, mains
+            // hum: each its level and low pass, keyed to the absolute sample),
+            // mono at its Pan or a stereo pair, the filter after
+            static const double RATE2[6] = {16000, 11025, 8000, 6000, 5000, 4000};
+            static const int BITS2[6] = {12, 10, 8, 7, 6, 5};
+            static const double PB[4] = {0.049922035, -0.095993537, 0.050612699, -0.004408786};
+            static const double PA[4] = {1.0, -2.494956002, 2.017265875, -0.522189400};
+            static const double HUM[6][2] = {{1, 1.0}, {2, 0.5}, {3, 0.35}, {4, 0.15}, {5, 0.2}, {7, 0.1}};
+            const double *q = p + 5;
+            const int k = (int)q[0], fil = (int)q[1], dt = (int)q[2];
+            const double full = pow(10.0, -40.0 / 20.0);           // (NOISE_FULL_DB)
+            const double det = q[2] / 127.0;
+            // (q: the record from 176 -- 0 Type, 1 Fil Type, 2 R.Detune, 3 R.Nz Lev, 4 W/P Sel, 5 W/P LPF,
+            // 6 W/P Level, 7 Disc Type, 8 Disc LPF, 9 Disc Nz Lev, 10 Hum Type, 11 Hum LPF, 12 Hum Level,
+            // 13 M/S, 14 Pan, 15-20 the filter after's b and a, 21-26 the radio's band's)
+            const double radio_amp = full * q[3] / 127.0 * det, wp_amp = full * q[6] / 127.0;
+            const double disc_amp = full * q[9] / 127.0, hum_amp = full * q[12] / 127.0;
+            // scipy's lfilter (transposed direct form II), its memory carried
+            auto lfilt = [](const double *b, const double *a, int nb, std::vector<double> &x) {
+                double z[4] = {0.0, 0.0, 0.0, 0.0};
+                for (size_t i = 0; i < x.size(); i++) {
+                    const double xn = x[i], yn = z[0] + b[0] * xn;
+                    for (int m = 0; m < nb - 2; m++)
+                        z[m] = z[m + 1] + xn * b[m + 1] - yn * a[m + 1];
+                    z[nb - 2] = xn * b[nb - 1] - yn * a[nb - 1];
+                    x[i] = yn;
+                }
+            };
+            auto lowpass = [&](double hz, std::vector<double> &x) {     // (efxbus.lowpass: one pole, 0 none)
+                if (hz == 0.0)
+                    return;
+                const double e = exp(-2.0 * M_PI * hz / SR);
+                const double b[2] = {1.0 - e, 0.0}, a[2] = {1.0, -e};
+                lfilt(b, a, 2, x);
+            };
+            auto noises = [&](int ear) {
+                const unsigned long long seed = 1000ULL * (unsigned long long)(ear + 1);
+                std::vector<double> y(n, 0.0), w(n);
+                if (radio_amp != 0.0) {
+                    nv_npy_noise(0, n, seed + 1, 1, w.data());
+                    lfilt(q + 21, q + 24, 3, w);
+                    for (long i = 0; i < n; i++)
+                        y[i] += radio_amp * w[i] * 4.5;
+                }
+                if (wp_amp != 0.0) {
+                    nv_npy_noise(0, n, seed + 2, 1, w.data());
+                    if (q[4] != 0.0) {
+                        lfilt(PB, PA, 4, w);
+                        for (long i = 0; i < n; i++)
+                            w[i] = w[i] * 11.0;
+                    }
+                    lowpass(q[5], w);
+                    for (long i = 0; i < n; i++)
+                        y[i] += wp_amp * w[i];
+                }
+                if (disc_amp != 0.0) {
+                    static const double DISC[4][3] = {{6.0, 33.3 / 60.0, 0.15}, {10.0, 45.0 / 60.0, 0.2},
+                                                      {20.0, 78.0 / 60.0, 0.5}, {14.0, 0.0, 0.1}};
+                    const double *dc = DISC[(int)q[7]];
+                    const double rate = dc[0], rev = dc[1], hiss = dc[2];
+                    std::vector<double> u(n), s(n), h(n);
+                    nv_npy_noise(0, n, seed + 3, 0, u.data());
+                    nv_npy_noise(0, n, seed + 4, 1, s.data());
+                    nv_npy_noise(0, n, seed + 5, 1, h.data());
+                    for (long i = 0; i < n; i++) {
+                        const double sg = s[i] > 0.0 ? 1.0 : s[i] < 0.0 ? -1.0 : s[i];        // (np.sign)
+                        w[i] = u[i] < rate / SR ? sg * (0.3 + 2.0 * (u[i] * SR / rate)) : 0.0;
+                        if (rev != 0.0)                                 // (the tick once a revolution)
+                            w[i] = w[i] + (floor((double)i * rev / SR) != floor((double)(i - 1) * rev / SR)
+                                           ? 2.5 : 0.0);
+                    }
+                    const double cb[2] = {1.0, 0.0}, ca[2] = {1.0, -exp(-1.0 / (0.0003 * SR))};
+                    lfilt(cb, ca, 2, w);
+                    for (long i = 0; i < n; i++)
+                        w[i] = 1.5 * w[i] + hiss * h[i];
+                    lowpass(q[8], w);
+                    for (long i = 0; i < n; i++)
+                        y[i] += disc_amp * w[i];
+                }
+                if (hum_amp != 0.0) {
+                    const double hz = q[10] != 0.0 ? 60.0 : 50.0;
+                    for (long i = 0; i < n; i++) {
+                        const double t = (double)i / SR;
+                        double hv = 0.0;
+                        for (const auto &hh : HUM)
+                            hv += hh[1] * sin(2.0 * M_PI * hh[0] * hz * t);
+                        w[i] = hv;
+                    }
+                    lowpass(q[11], w);
+                    for (long i = 0; i < n; i++)
+                        y[i] += hum_amp * w[i];
+                }
+                return y;
+            };
+            std::vector<double> xe[2];
+            for (int ear = 0; ear < 2; ear++) {
+                xe[ear].resize(n);
+                for (long i = 0; i < n; i++)
+                    xe[ear][i] = (double)(*xs[ear])[i];
+            }
+            if (dt != 0) {                      // THE RADIO OFF ITS STATION: an AM set's band, fading, wandering
+                for (int ear = 0; ear < 2; ear++) {
+                    lfilt(q + 21, q + 24, 3, xe[ear]);
+                    for (long i = 0; i < n; i++) {
+                        const double t = (double)i / SR;
+                        const double fade = (1.0 - 0.8 * det) * (1.0 + 0.3 * det * sin(2.0 * M_PI * 0.37 * t)
+                                                                 * sin(2.0 * M_PI * 0.11 * t + 1.0));
+                        xe[ear][i] = xe[ear][i] * fade;
+                    }
+                }
+            }
+            // the hold and bits (efxbus.LoFi, no filters), from float32
+            const double step = SR / RATE2[k], qq = pow(2.0, -(double)(BITS2[k] - 1));
+            std::vector<double> ye[2];
+            for (int ear = 0; ear < 2; ear++) {
+                ye[ear].resize(n);
+                for (long i = 0; i < n; i++) {
+                    const long long st = (long long)ceil(floor((double)i / step) * step);
+                    ye[ear][i] = (double)(float)(nearbyint((double)(float)xe[ear][st] / qq) * qq);
+                }
+            }
+            if (q[13] != 0.0) {                 // a stereo pair: each ear its own noises
+                for (int ear = 0; ear < 2; ear++) {
+                    std::vector<double> z = noises(ear);
+                    for (long i = 0; i < n; i++)
+                        ye[ear][i] = ye[ear][i] + z[i];
+                }
+            } else {                            // the effect mono, at its Pan
+                const double th = (std::max(0, std::min(127, (int)q[14])) - 64) / 63.0 * 0.25 * M_PI + 0.25 * M_PI;
+                const double pl = cos(th), pr = sin(th);
+                std::vector<double> z = noises(0);
+                for (long i = 0; i < n; i++) {
+                    const double m = 0.5 * (ye[0][i] + ye[1][i]) + z[i];
+                    ye[0][i] = m * pl * sqrt(2.0);
+                    ye[1][i] = m * pr * sqrt(2.0);
+                }
+            }
+            for (int ear = 0; ear < 2; ear++) {
+                if (fil)
+                    lfilt(q + 15, q + 18, 3, ye[ear]);
+                ys[ear]->resize(n);
+                for (long i = 0; i < n; i++)
+                    (*ys[ear])[i] = (float)ye[ear][i];
+            }
+        } else if (bd.kind == 5) {
+            // ENHANCER (efxbus.Enhancer): each ear's top above the one-pole's
+            // corner (scipy's lfilter), saturated, its new harmonics mixed back
+            const double a = p[0], drive = p[1], mix = p[2];
+            for (int ear = 0; ear < 2; ear++) {
+                ys[ear]->resize(n);
+                double z = 0.0, b0 = 1.0 - a;
+                for (long i = 0; i < n; i++) {
+                    const double x = (double)(*xs[ear])[i];
+                    const double lp = z + b0 * x;
+                    z = x * 0.0 - lp * -a;
+                    const double hi = x - lp;
+                    const double sat = tanh(drive * hi) / drive;
+                    (*ys[ear])[i] = (float)(x + mix * sat);
+                }
             }
         } else {                            // Compressor: the envelope, its gain above the threshold
             const double t = p[0], rr = p[1], ka = p[2], kr = p[3], mk = p[4];
@@ -3139,14 +3417,13 @@ int main(int argc, char **argv)
             });
             for (int i : ord) {
                 long long c = nv_song_mix(song, i);
-                if (seen.count(c))
-                    continue;
                 std::vector<double> tt;
                 std::vector<int> vv;
                 int cq = E.cmap[nv_song_kidx(song, i)];
                 const NoteClass *nk = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
                 const int nfx = note_fx[i];
-                if (efx_send.count(c) && (nfx >= 0 || (nfx == -1 && nk && nk->efx_set))) {
+                if (seen.count(c)) {
+                } else if (efx_send.count(c) && (nfx >= 0 || (nfx == -1 && nk && nk->efx_set))) {
                     rsend.emplace_back(c, efx_send[c]);         // (its insertion effect's send: _REVERB_CH.setdefault)
                     seen.insert(c);
                 } else if (part_cc(c % 256, tt, vv) > 0) {
@@ -3156,6 +3433,15 @@ int main(int argc, char **argv)
                     rsend.emplace_back(c, nk->reverb_dist);      // (a voice's own distance: the gunshot's)
                     seen.insert(c);
                 }
+                // ...A PARALLEL TYPE's BRANCH B: its virtual channel the part's
+                // send, at the chain's first note (_REVERB_CH[_vc])
+                if (nfx >= 0 && fx_first[i] && fxch[(size_t)NV_FXN * nfx + 208] != 0.0 && !seen.count(c + 65536))
+                    for (const auto &e : rsend)
+                        if (e.first == c) {
+                            rsend.emplace_back(c + 65536, e.second);
+                            seen.insert(c + 65536);
+                            break;
+                        }
             }
         }
         for (long long c : heard) {

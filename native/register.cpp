@@ -1010,6 +1010,9 @@ void nv_play_growth(long long *cap0, long long *need)
 // scale; full_db_s, residual, beta: damper.py's felt. The rows in *rowsp
 // (malloc'd: nv_buf_free), grown as they need. Returns the rows, or < 0 as
 // nv_play (a note that is not the engine's), -1e9 if memory ran out.
+extern "C" void nv_play_set_kind(const int *kind);
+extern "C" long long nv_play_own_end(int j, long long dflt);
+
 long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                        PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind,
                        double scale, double full_db_s, double residual, double beta, long long blk,
@@ -1044,8 +1047,10 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         *rs = rs0;
         memcpy(qacc, q0, sizeof q0);
         *azimuth = az0;
+        nv_play_set_kind(kind);             // (a parallel type's copies, cast as the table)
         got = nv_play(song, K, tmpl, br, nbr, rs, rows, cap, qacc, azimuth, &nr, played.data(), row0.data(),
                       band_.data(), off_.data());
+        nv_play_set_kind(nullptr);
         if (got != NV_TOO_SMALL)
             break;
         cap *= 2;
@@ -1208,7 +1213,7 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         double held = dv[1], so;
         if (nv_song_sost(song, ch, iv[0], dv[0], &so))
             held = pymax(dv[1], so);
-        long long r0 = row0[j], r1 = j + 1 < nn ? row0[j + 1] : nr;
+        long long r0 = row0[j], r1 = nv_play_own_end(j, j + 1 < nn ? row0[j + 1] : nr);    // (its own rows)
         if (k->organ && k->organ->n_choir) {
             // A PLUCK (blockrender's register_open plucked, grc): the ranks
             // drawn at the key-down, each on its choir's string; only their
