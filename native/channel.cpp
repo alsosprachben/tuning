@@ -2716,6 +2716,15 @@ long long nv_song_mix(void *s, int i)
 }
 
 // note i's pulse, a throat's (Ev: tilt, mouth, morph; NaN none)
+// a stroke with a shape of its own -- its own pitch (stroke_pitch), or a
+// throat's tilt, mouth or vowel (stroke_tilt, _mouth, _morph: given, not
+// NaN) -- which a plain stroke's fold leaves alone
+int nv_song_note_shaped(void *s, int i)
+{
+    const nv::Ev &e = ((nv::Song *)s)->notes[i];
+    return e.ratio != 1.0 || !std::isnan(e.tilt) || !std::isnan(e.mouth) || !std::isnan(e.morph);
+}
+
 void nv_song_note_voice(void *s, int i, double *out)
 {
     const nv::Ev &e = ((nv::Song *)s)->notes[i];

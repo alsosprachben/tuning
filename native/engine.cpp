@@ -22,6 +22,8 @@
 #include <cmath>
 #include <cstring>
 #include <map>
+#include <set>
+#include <tuple>
 #include <vector>
 
 #include "nv.h"
@@ -1019,6 +1021,48 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         return keys[a] < keys[b];
     });
     long long total = 0;
+    // THE SAME PLATE STRUCK AGAIN (fold_restrike; a gesture's plain strokes):
+    // each note's next strike of its key (_next_same: the notes by onset,
+    // latest first), the strokes with a shape of their own (by key and onset,
+    // as stroke_pitch and stroke_tilt key them), and what each key's strike
+    // leaves the next (_FOLD_STORE)
+    const char *fev = getenv("TUNING_FOLD");
+    const bool fold_on = !(fev && (!strcmp(fev, "0") || !strcmp(fev, "off") || !*fev));
+    std::vector<double> next_same(nn, NAN);
+    std::set<std::pair<int, double>> shaped;
+    {
+        std::vector<int> byon(nn);
+        for (int q = 0; q < nn; q++)
+            byon[q] = q;
+        std::stable_sort(byon.begin(), byon.end(), [&](int a, int b) { return -ons[a] < -ons[b]; });
+        std::map<std::pair<long long, int>, double> seen;
+        std::map<std::pair<std::pair<long long, int>, double>, double> nx;
+        for (int q : byon) {
+            auto kk = std::make_pair(chs[q], keys[q]);
+            auto it = seen.find(kk);
+            if (it != seen.end())
+                nx[std::make_pair(kk, ons[q])] = it->second;
+            seen[kk] = ons[q];
+            if (nv_song_stroked(song, q) && nv_song_note_shaped(song, q))
+                shaped.insert(std::make_pair(keys[q], ons[q]));
+        }
+        for (int q = 0; q < nn; q++) {
+            auto it = nx.find(std::make_pair(std::make_pair(chs[q], keys[q]), ons[q]));
+            if (it != nx.end())
+                next_same[q] = it->second;
+        }
+    }
+    // (a plain stroke at t of note i's key and channel: a stroke there, no shape)
+    std::map<std::tuple<long long, int, double>, int> stroke_at;
+    for (int q = 0; q < nn; q++)
+        if (nv_song_stroked(song, q))
+            stroke_at[std::make_tuple(chs[q], keys[q], ons[q])] = 1;
+    auto plain = [&](long long c, int key, double t) {
+        return stroke_at.count(std::make_tuple(c, key, t)) && !shaped.count(std::make_pair(key, t));
+    };
+    std::map<std::pair<long long, int>, std::pair<double, std::vector<double>>> fold_store;
+    nv_fold_begin(nullptr, 0, -1.0, 0.0);   // (no fold left over: a retry's, a refused note's)
+    nv_fold_end(nullptr);
     std::map<long long, double> push_t0;    // each channel's bellows' push, when it began (_PUSH_T0)
     std::map<long long, double> ham_t0;     // each channel's last pick (_HAM_T0: hammer_legato)
     PyRandom rnd;                           // tonelib.RND_STREAM, as prepare reseeds it
@@ -1225,8 +1269,37 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         NoteOut out;
         int band = 0;
         long long left = cap - total;
+        // (the fold: this strike's take of the one before, and its own left to the next)
+        bool fold_out = false;
+        const bool folds = fold_on && plain(ch, iv[0], dv[0]);
+        if (folds) {
+            std::vector<double> fin;
+            auto fs = fold_store.find(std::make_pair(ch, iv[0]));
+            if (fs != fold_store.end()) {
+                if (fabs(fs->second.first - dv[0]) < 1e-6)
+                    fin = fs->second.second;
+                fold_store.erase(fs);
+            }
+            double n2 = -1.0;
+            const double nx2 = next_same[i];
+            if (!std::isnan(nx2) && plain(ch, iv[0], nx2)) {
+                n2 = (double)(long long)(nx2 * n.sr);
+                const double at0 = k->init.attack_time != 0.0 ? k->init.attack_time : 0.004;
+                nv_fold_begin(fin.data(), (int)(fin.size() / 8), n2, std::max(32.0, at0 * n.sr));
+                fold_out = true;
+                fold_store[std::make_pair(ch, iv[0])] = std::make_pair(nx2, std::vector<double>());
+            } else {
+                nv_fold_begin(fin.data(), (int)(fin.size() / 8), -1.0, 0.0);
+            }
+        }
         int r = nv_song_play(song, k, &n, rs, -1, nullptr, nullptr, nullptr, nullptr, rows + NCOLS * total,
                              (int)(left > 0x7fffffff ? 0x7fffffff : left), qacc, azimuth, &out, &band);
+        if (folds) {
+            std::vector<double> fo((size_t)8 * nv_fold_pending());
+            nv_fold_end(fo.empty() ? nullptr : fo.data());
+            if (fold_out)
+                fold_store[std::make_pair(ch, iv[0])].second = fo;
+        }
         if (r == -1)
             return NV_TOO_SMALL;
         if (r < 0) {

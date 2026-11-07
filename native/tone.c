@@ -161,6 +161,61 @@ typedef struct {
     int n, cap;
 } Rows;
 
+/* THE SAME PLATE STRUCK AGAIN (blockrender's fold_restrike, emit_partial):
+ * a strike's direct rows of one decay take in what the strike before left
+ * them -- each frequency (to 3 places) its rows summed as phasors, decayed
+ * to the onset -- and, where the next strike comes before they end, leave
+ * theirs to it, ending there (xf their fade). Set by nv_play a note at a
+ * time (this thread's): 8 doubles a row (key, aL, aR, aM, q0, q0R, n1, lr) */
+static __thread double *g_fin = NULL;
+static __thread char *g_fin_used = NULL;
+static __thread int g_fin_n = 0;
+static __thread double g_fn2 = -1.0, g_fxf = 0.0;
+static __thread double *g_fout = NULL;
+static __thread int g_fout_n = 0, g_fout_cap = 0;
+
+static double fold_key(double f)                /* round(f, 3): correctly rounded, as Python's */
+{
+    char b[64];
+    snprintf(b, sizeof b, "%.3f", f);
+    return strtod(b, NULL);
+}
+
+void nv_fold_begin(const double *in, int nin, double n2, double xf)
+{
+    free(g_fin);
+    free(g_fin_used);
+    g_fin = NULL;
+    g_fin_used = NULL;
+    g_fin_n = 0;
+    if (nin > 0) {
+        g_fin = (double *)malloc(sizeof(double) * 8 * (size_t)nin);
+        g_fin_used = (char *)calloc((size_t)nin, 1);
+        memcpy(g_fin, in, sizeof(double) * 8 * (size_t)nin);
+        g_fin_n = nin;
+    }
+    g_fn2 = n2;
+    g_fxf = xf;
+    g_fout_n = 0;
+}
+
+/* how many rows this strike leaves the next */
+int nv_fold_pending(void) { return g_fout_n; }
+
+/* ...those rows (8 each) into out where it is given, and the fold over */
+void nv_fold_end(double *out)
+{
+    if (out && g_fout_n)
+        memcpy(out, g_fout, sizeof(double) * 8 * (size_t)g_fout_n);
+    free(g_fin);
+    free(g_fin_used);
+    g_fin = NULL;
+    g_fin_used = NULL;
+    g_fin_n = 0;
+    g_fn2 = -1.0;
+    g_fout_n = 0;
+}
+
 static double *row_new(Rows *R)
 {
     if (R->n >= R->cap)
@@ -321,6 +376,55 @@ static int emit_fwd(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, 
         double hg = ((1.0 - aft) * exp(-logr * t->hammer_on) + aft * exp(-logrA * t->hammer_on))
                     * pow(10.0, -3.0 / 20.0);
         ampL *= hg; ampR *= hg; ampM *= hg;
+    }
+    if (g_fin_n && !late && aft == 0.0 && sus == 0.0) {
+        /* THE SAME PLATE STRUCK AGAIN: the strike before's rows at this
+           frequency, decayed to this onset, summed with this row as phasors */
+        const double key = fold_key(nomf);
+        int hit = 0;
+        const double pl = -om * (non + dl) + ph0, pr = -om * (non + dr) + ph0;
+        double zlr = ampL * cos(pl), zli = ampL * sin(pl), zrr = ampR * cos(pr), zri = ampR * sin(pr);
+        double zmr = ampM * cos(pl), zmi = ampM * sin(pl);
+        for (int i = 0; i < g_fin_n; i++) {
+            const double *o = g_fin + 8 * i;
+            if (g_fin_used[i] || o[0] != key)
+                continue;
+            g_fin_used[i] = 1;
+            hit = 1;
+            const double g = exp(-o[7] * (non - o[6]) / t->sr);
+            zlr += o[1] * g * cos(o[4]);
+            zli += o[1] * g * sin(o[4]);
+            zrr += o[2] * g * cos(o[5]);
+            zri += o[2] * g * sin(o[5]);
+            zmr += o[3] * g * cos(o[4]);
+            zmi += o[3] * g * sin(o[4]);
+        }
+        if (hit) {
+            ampL = hypot(zlr, zli);
+            ampR = hypot(zrr, zri);
+            ampM = hypot(zmr, zmi);
+            ph0 = atan2(zli, zlr) + om * (non + dl);
+        }
+    }
+    if (g_fn2 >= 0.0 && aft == 0.0 && sus == 0.0 && non + fa <= g_fn2 && g_fn2 < noff) {
+        /* ...and leaves its own to the next strike, ending where it comes */
+        if (g_fout_n == g_fout_cap) {
+            int nc = g_fout_cap ? 2 * g_fout_cap : 256;
+            double *nb = (double *)realloc(g_fout, sizeof(double) * 8 * (size_t)nc);
+            if (!nb)
+                return 0;
+            g_fout = nb;
+            g_fout_cap = nc;
+        }
+        double *o = g_fout + 8 * (g_fout_n++);
+        o[0] = fold_key(nomf);
+        o[1] = ampL; o[2] = ampR; o[3] = ampM;
+        o[4] = -om * (non + dl) + ph0;
+        o[5] = -om * (non + dr) + ph0;
+        o[6] = non;
+        o[7] = logr;
+        noff = g_fn2;
+        re = g_fxf;
     }
     double rd = v->room[0];
     *azimuth = atan2(px, rd > 1e-6 ? rd : 1e-6);

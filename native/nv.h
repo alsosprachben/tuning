@@ -1234,6 +1234,10 @@ void nv_song_chokes_n(void *s, const unsigned long long *choke, int n);
 void nv_song_mapk_base(int base);
 void nv_song_legato(void *s, long long ch, int note, int k);
 void nv_song_note_stroke(void *s, int i, double ratio, int inner);
+int nv_song_note_shaped(void *s, int i);
+void nv_fold_begin(const double *in, int nin, double n2, double xf);
+int nv_fold_pending(void);
+void nv_fold_end(double *out);
 void nv_song_strokes(void *s, const int *kind, const double *par);
 /* ...and a melodic SFX note's, its class's kit key's (K: the classes) */
 void nv_song_strokes_k(void *s, const NoteClass *const *K, const int *kind, const double *par);
