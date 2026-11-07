@@ -1235,6 +1235,20 @@ void nv_song_mapk_base(int base);
 void nv_song_legato(void *s, long long ch, int note, int k);
 void nv_song_note_stroke(void *s, int i, double ratio, int inner);
 int nv_song_note_shaped(void *s, int i);
+// the insertion effect (efxchain.cpp): its chain from a setting, a GS
+// exclusive as its event, its EQ, and the module's, live
+int nv_efx_chain(const double *X, double SR, int msb, int lsb, const int *p, const int *snd, const int *ctl,
+                 int ncv, const int *cv_src, const int *cv_val, double *rec, double *recb, int *has_b,
+                 const char **why);
+int nv_efx_parse(const unsigned char *d, int n, int *k, int *a, int *b);
+double nv_efx_eq_gain(const double *fc, double f);
+void *nv_efx_live_new(const double *X, double SR);
+void nv_efx_live_free(void *h);
+void nv_efx_live_apply(void *h, int k, int a, int b);
+int nv_efx_live_on(void *h, int ch);
+long nv_efx_live_rev(void *h);
+const double *nv_efx_live_chain(void *h, int ch, int *status, const char **why);
+void nv_efx_live_source(void *h, int src, int v);
 void nv_fold_begin(const double *in, int nin, double n2, double xf);
 int nv_fold_pending(void);
 void nv_fold_end(double *out);

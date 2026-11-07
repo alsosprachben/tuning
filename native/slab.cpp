@@ -2029,6 +2029,11 @@ struct Part {
         int snd = 0;                // the CC71-78 its voice answers (NoteClass.snd_mask, SOUND_CC's order)
     };
     std::vector<Patch> patches;
+    // THE MODULE's INSERTION EFFECT (live.efx: efxchain.cpp's), its export
+    // tables given by nvlive (nv_part_efx); NULL none -- and whether its
+    // refusal has been said
+    void *efx = nullptr;
+    bool efx_said = false;
     // THE CABINET (live's rotor_horn, rotor_drum: LiveRotor): one Leslie in
     // the room, every rotor part turning with it, from chorale; the half-moon's
     // position (STOP, CHORALE, TREMOLO) and each channel's wheel armed
@@ -3481,6 +3486,44 @@ struct Part {
         glide_from = -1;
     }
 
+    // THE INSERTION EFFECT on a note just stamped (live._efx_note, its
+    // _efx_direct): its level, its EQ at each partial's frequency, the chorus's
+    // dry share -- a gain a slot on every baseline (channel_gain)
+    void efx_note(int ch, const std::vector<long> &slots)
+    {
+        int st = -1;
+        const char *why = "";
+        const double *fc = nv_efx_live_chain(efx, ch, &st, &why);
+        if (fc && (fc[1] != 0.0 || fc[2] != 0.0)) {
+            st = -3;
+            why = "drive or cabinet, live";
+            fc = nullptr;
+        }
+        if (st == -3 && !efx_said) {
+            fprintf(stderr, "nvlive: refused: the insertion effect's %s -- played without it\n", why);
+            efx_said = true;
+        }
+        if (!fc)
+            return;
+        const bool cf = fc[14] != 0.0 && fc[18] == 0.0;     // (a chorus's copies, not a flanger's comb)
+        double sh = 0.0;
+        if (cf) {
+            const double a = fc[20];
+            sh = fc[21] >= 0.0 ? fc[21] : a * a / (1.0 + a * a);
+        }
+        std::vector<float> g(slots.size());
+        for (size_t q = 0; q < slots.size(); q++) {
+            const double f = S.f8[F8_om][slots[q]] * rate / (2.0 * M_PI);
+            double x = fc[0];
+            if (fc[6] != 0.0)
+                x = x * nv_efx_eq_gain(fc, f);
+            if (cf)
+                x = x * pow(1.0 - sh, 0.5);
+            g[q] = (float)x;
+        }
+        S.channel_gain_each(slots, g);
+    }
+
     // live._mono_cut: the voice taken -- this note stopped now over the
     // steal-fade, pedal or no pedal (its key has not come up)
     void mono_cut(int ch, int note, long long n0)
@@ -3605,6 +3648,8 @@ struct Part {
         std::vector<long> slots = lj >= 0 ? S.live[lj].second : std::vector<long>();
         if (cpan[ch] != 64 && !slots.empty())
             S.repan(slots, cpan[ch], 64, rate, true);
+        if (efx && !slots.empty() && !patches[cur].drums)
+            efx_note(ch, slots);                // the insertion effect's level and EQ (live._efx_note)
         if (soft[ch] && !slots.empty())
             S.soft_strings(slots, soft_drop, soft_top);
         double gl[3];                       // PORTAMENTO, stamped (live._glide)
@@ -4438,6 +4483,17 @@ struct Part {
     // it under full)
     void sysex(const std::vector<uint8_t> &d, long long n0)
     {
+        // THE INSERTION EFFECT (gsefx.parse, live._sysex): its type, a
+        // parameter, a send, a controller, or a part's assign
+        {
+            int ek, ea, eb;
+            if (efx && nv_efx_parse(d.data(), (int)d.size(), &ek, &ea, &eb)) {
+                if (ek == 5)
+                    ea = ea % 16;               // (a part's channel: this port's)
+                nv_efx_live_apply(efx, ek, ea, eb);
+                return;
+            }
+        }
         int iv[4] = {0, 0, 0, 0};
         double dv[12], hz[128];
         int tk = nv_tuning_excl(d.data(), (int)d.size(), iv, dv, hz);
@@ -4487,6 +4543,8 @@ struct Part {
     void power_on(long long n0)
     {
         panic(n0);
+        if (efx)                                // the insertion effect Thru, every part off it
+            nv_efx_live_apply(efx, 0, 0, 0);
         for (int c = 0; c < 256; c++)
             S.send[c] = 1.0;                    // every channel at the nominal distance
         master_fine = master_coarse = 0.0;
@@ -7674,6 +7732,17 @@ struct Part {
         std::vector<std::vector<uint8_t>> sxs;
         sxs.swap(sx);
         for (const Ev &e : evs) {
+            // (a part on the insertion effect: a controller that is one of
+            // its sources -- CC1-95, aftertouch, the bend -- its value, first:
+            // live._efx_control)
+            if (efx && e.type >= 2 && e.type <= 4 && nv_efx_live_on(efx, e.ch)) {
+                if (e.type == 2 && e.a >= 1 && e.a <= 95)
+                    nv_efx_live_source(efx, e.a, e.b);
+                else if (e.type == 3)
+                    nv_efx_live_source(efx, 96, e.a);           // (gsefx.SRC_CAF)
+                else if (e.type == 4)
+                    nv_efx_live_source(efx, 97, (e.a + 8192) >> 7);     // (gsefx.SRC_BEND)
+            }
             if (e.type == 6) {
                 if (e.a >= 0 && e.a < (int)sxs.size())
                     sysex(sxs[e.a], n0);
@@ -8111,7 +8180,22 @@ void nv_part_patch_range(void *h, int i, int channel, unsigned excl, int lo, int
     p.transpose = transpose;
 }
 
-void nv_part_free(void *h) { delete (nv::slab::Part *)h; }
+void nv_part_free(void *h)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (P->efx)
+        nv_efx_live_free(P->efx);
+    delete P;
+}
+
+// THE MODULE's INSERTION EFFECT for this engine: the export's tables (K_EFX)
+// at the render's rate
+void nv_part_efx(void *h, const double *X, double SR)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (!P->efx)
+        P->efx = nv_efx_live_new(X, SR);
+}
 
 // The part's free strings (live's register): its string bank (M modes, as
 // nv_strings makes it), register.LiveChannel's constants (kappa, knock,

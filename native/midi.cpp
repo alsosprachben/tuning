@@ -1131,6 +1131,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                     if (!seen_note)
                         P.gs = 1;
                     P.efx.push_back(Parsed::Efx{t, k, a, b});
+                    P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});     // (the live part's too)
+                    P.sysex.push_back(d);
                     if (k == 4 && (a == 0x1B || a == 0x1D))
                         efx_src[a == 0x1D] = b;
                     else if (k == 5 && b)
