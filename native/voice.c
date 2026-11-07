@@ -250,6 +250,11 @@ static double eg_pickup_gain(const VoiceSnap *v, int h)
 
 double nv_series_volume(const VoiceSnap *v, int harmonic)
 {
+    if (v->n_hvt) {                             /* SynthProperties: mode_gains, a played pipe's measured series */
+        if (v->max_harmonic && harmonic > v->max_harmonic)
+            return 0.0;
+        return (1 <= harmonic && harmonic <= v->n_hvt) ? v->gain * v->hvt[harmonic - 1] : 0.0;
+    }
     if (v->kind == 5) {                         /* ElectricPianoProperties: a layer's weight, the tonebar's */
         if (harmonic < 1 || harmonic > v->n_lay + v->n_tb)
             return 0.0;
@@ -449,6 +454,16 @@ static double soundboard_gain(const VoiceSnap *v, double fn)
     return body * high * low;
 }
 
+/* Plectrum._pick_db: the pick's boost on partial m, dB (0 under pick_hz) */
+static double pick_db(const VoiceSnap *v, int m)
+{
+    double f = v->frequency_x * pow(2.0, v->octave_position) * m;
+    if (f <= v->pick_hz)
+        return 0.0;
+    double b = v->pick_slope_db * log2(f / v->pick_hz);
+    return b < v->pick_boost_max_db ? b : v->pick_boost_max_db;   /* (min(max, b)) */
+}
+
 static double harmonic_volume(const VoiceSnap *v, int harmonic);
 
 /* the voice's harmonic_volume -- a throat's tilted and its vowel moved --
@@ -456,6 +471,11 @@ static double harmonic_volume(const VoiceSnap *v, int harmonic);
 double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
 {
     double s = harmonic_volume(v, harmonic);
+    if (v->pick_set) {                          /* Plectrum: the pick's boost over pick_hz */
+        double b = pick_db(v, harmonic);
+        if (b > 0.0)
+            s = s * pow(10.0, b / 20.0);
+    }
     if (v->throat && harmonic <= v->n_modes) {
         /* SfxThroatProperties': the vowel's levels moved, the pulse tilted */
         if (v->formant_morph != 0.0 && s != 0.0 && v->n_mb)
@@ -471,16 +491,32 @@ double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
     return s;
 }
 
+/* SynthProperties._blare: a dynamic's change above the knee, dB per kHz, capped */
+static double blare(const VoiceSnap *v, double hz)
+{
+    double x = hz - v->blare_knee_hz;           /* (Python's max and min: the first unless the second is past it) */
+    double d = v->blare_db_per_khz * (x > 0.0 ? x : 0.0) / 1000.0;
+    double c = d < v->blare_cap_db ? d : v->blare_cap_db;
+    d = c > -v->blare_cap_db ? c : -v->blare_cap_db;
+    return pow(10.0, d / 20.0);
+}
+
 /* GrandPianoProperties.harmonic_volume, on SynthProperties' (no bore) */
 static double harmonic_volume(const VoiceSnap *v, int harmonic)
 {
+    if (v->n_hvt)                               /* a measured series: the table, nothing past it */
+        return harmonic <= v->n_hvt ? v->gain * v->hvt[harmonic - 1] : 0.0;
     double s = nv_series_volume(v, harmonic);
     if (s == 0.0)
         return 0.0;
     if (v->kind != 0) {                         /* SynthProperties': its bore, if it has one */
-        if (v->bore_corner_hz != 0.0)
+        if (v->bore_corner_hz != 0.0) {
             s = s * bore_gain(v, v->frequency_x * pow(2.0, v->octave_position) * nv_mode_ratio(v, harmonic))
                 * v->bore_norm;
+            if (v->blare_db_per_khz != 0.0)     /* ...and its blare, renormalised */
+                s *= blare(v, v->frequency_x * pow(2.0, v->octave_position) * nv_mode_ratio(v, harmonic))
+                     * v->blare_norm;
+        }
         if (v->noisy)                           /* ...and the noise's roll-off and trim */
             return s * hf_rolloff(v, nv_mode_ratio(v, harmonic)) * band_trim(v, harmonic);
         return s;
@@ -495,6 +531,10 @@ static double harmonic_volume(const VoiceSnap *v, int harmonic)
  * by octaves from the ring's peak */
 static double mode_decay(const VoiceSnap *v, int harmonic)
 {
+    if (v->church && 1 <= harmonic && harmonic <= v->n_md) {   /* ChurchBellProperties: half, by its slope */
+        double f = v->frequency_x * pow(2.0, v->octave_position);
+        return v->mode_decays[harmonic - 1] / 2.0 * pow(2.0, v->church_slope * log(f / v->tube_ref_hz) / log(2.0));
+    }
     if (v->n_md && 1 <= harmonic && harmonic <= v->n_md)   /* ModeDecays */
         return v->mode_decays[harmonic - 1] * v->decay_register_factor;
     if (v->cymbal && v->ring_peak_hz > 0.0) {
@@ -509,7 +549,18 @@ static double mode_decay(const VoiceSnap *v, int harmonic)
     return (v->decay_db + v->harmonic_decay_db * h * pow(h, v->harmonic_decay_dampening)) * v->decay_register_factor;
 }
 
+static double harmonic_decay_(const VoiceSnap *v, int harmonic);
+
 double nv_harmonic_decay(const VoiceSnap *v, int harmonic)
+{
+    double base = harmonic_decay_(v, harmonic);
+    if (v->pick_set && pick_db(v, harmonic) > 0.0)  /* Plectrum: the boost's fast fall */
+        return v->pick_dbs > base ? v->pick_dbs : base;
+    return base;
+}
+
+/* the voice's own decay, under a pick's */
+static double harmonic_decay_(const VoiceSnap *v, int harmonic)
 {
     if (v->dhz_set) {                           /* HammeredDulcimerProperties: by the mode's own frequency */
         double f = v->frequency_x * pow(2.0, v->octave_position) * harmonic;
@@ -738,8 +789,53 @@ double nv_section_onset(long long salt, long long midi, int index, double width_
     return ((double)x / 18446744073709551616.0) * (width_ms / 1000.0);
 }
 
+/* TelephoneRingProperties._stroke: stroke i's offset (s), level and phase
+ * (cycles), fixed by the pitch -- random.Random(round(f x 16) x 7919 + i x
+ * 104729 + 124): gauss, uniform, random, in that order */
+static void tap_stroke(const VoiceSnap *v, double frequency, int i, double *o)
+{
+    PyRandom r;
+    pyr_seed(&r, (long long)nearbyint(frequency * 16.0) * 7919 + (long long)i * 104729 + 124);
+    o[0] = pyr_gauss(&r, 0.0, v->tap_jit);
+    o[1] = pow(10.0, -pyr_uniform(&r, 0.0, v->tap_ldb) / 20.0);
+    o[2] = pyr_random(&r);
+}
+
+/* section_onsets_at for a struck voice repeated: [0] and each tap -- the
+ * clapper's moved by its stroke's offset, never before 1 ms. Returns how many */
+int nv_tap_onsets(const VoiceSnap *v, double frequency, double *ons)
+{
+    ons[0] = 0.0;
+    for (int i = 0; i < v->n_tap; i++) {
+        if (v->tap_kind == 2) {
+            double o[3];
+            tap_stroke(v, frequency, i, o);
+            double x = v->tap_t[i] + o[0];
+            ons[i + 1] = x > 0.001 ? x : 0.001;
+        } else {
+            ons[i + 1] = v->tap_t[i];
+        }
+    }
+    return v->n_tap + 1;
+}
+
 int nv_unison_voices(const VoiceSnap *v, double frequency, int harmonic, double harmonic_decay, double *out)
 {
+    if (v->tap_kind) {                          /* BirdTweet's chirps, TelephoneRing's strokes */
+        int g = (1 <= harmonic && harmonic <= v->n_gong) ? v->gong[harmonic - 1] : 0;
+        for (int i = 0; i < v->n_tap; i++) {
+            double gm = v->tap_gain, ph = 0.0;
+            if (v->tap_kind == 2) {             /* stroke i+1 rings gong (i+1) % 2, its own level and phase */
+                double o[3];
+                tap_stroke(v, frequency, i, o);
+                gm = ((i + 1) % 2 == g) ? v->tap_gain * o[1] : 0.0;
+                ph = o[2];
+            }
+            out[5 * i] = gm; out[5 * i + 1] = 0.0; out[5 * i + 2] = 0.0;
+            out[5 * i + 3] = harmonic_decay; out[5 * i + 4] = ph;
+        }
+        return v->n_tap;
+    }
     if (v->hit_n) {                             /* OrchestraHitProperties: the section, cents in the ratio slot */
         for (int i = 0; i < v->hit_n; i++) {
             out[5 * i] = v->hit_gain; out[5 * i + 1] = 0.0;
@@ -805,11 +901,34 @@ int nv_unison_voices(const VoiceSnap *v, double frequency, int harmonic, double 
         return n;
     }
     if (v->kind != 0) {                         /* SynthProperties': a voice per detune */
+        int n = v->n_unison;
         for (int i = 0; i < v->n_unison; i++) {
             out[5 * i + 0] = v->unison_gain; out[5 * i + 1] = v->unison_detune[i]; out[5 * i + 2] = 0.0;
             out[5 * i + 3] = harmonic_decay; out[5 * i + 4] = 0.0;
         }
-        return v->n_unison;
+        /* ...and a course's partner (the mandolin's, the 12-string's) */
+        double ug = 0.0, uc = 0.0;
+        int add = 0;
+        if (v->crs_kind == 1) {
+            ug = v->crs_uni_gain; uc = v->crs_uni_cents; add = 1;
+        } else if (v->crs_kind == 2) {
+            double midi = 69 + 12 * log2((frequency > 1e-6 ? frequency : 1e-6) / 440.0);
+            if (midi >= v->crs_split - 0.5) {
+                ug = v->crs_uni_gain; uc = v->crs_uni_cents; add = 1;
+            } else if (harmonic % 2 == 0) {
+                double hm = nv_harmonic_volume(v, harmonic);
+                if (hm > 0.0) {
+                    double g = v->crs_oct_gain * nv_harmonic_volume(v, harmonic / 2) / hm;
+                    ug = g < 30.0 ? g : 30.0; uc = v->crs_oct_cents; add = 1;
+                }
+            }
+        }
+        if (add) {
+            out[5 * n + 0] = ug; out[5 * n + 1] = 0.0; out[5 * n + 2] = pow(2.0, uc / 1200.0) - 1.0;
+            out[5 * n + 3] = harmonic_decay; out[5 * n + 4] = 0.0;
+            n++;
+        }
+        return n;
     }
     double gains[2] = {v->string_gain[0] * string_blend(v, frequency, v->string_break_hz[0]),
                        v->string_gain[1] * string_blend(v, frequency, v->string_break_hz[1])};
@@ -874,7 +993,9 @@ static double chiff_harmonic_gain(const VoiceSnap *v, double harmonic)
 
 double nv_chiff_harmonic_gain(const VoiceSnap *v, double harmonic)
 {
-    double g = v->noisy                         /* NoisyPercussionMixin: the wash rolled off too */
+    double g = v->chiff_bore                    /* the fret noise's: the body's gain x the roll-off */
+        ? bore_gain(v, v->frequency_x * pow(2.0, v->octave_position) * harmonic) * hf_rolloff(v, harmonic)
+        : v->noisy                              /* NoisyPercussionMixin: the wash rolled off too */
         ? chiff_harmonic_gain(v, harmonic) * hf_rolloff(v, harmonic) : chiff_harmonic_gain(v, harmonic);
     if (v->nyquist != 0.0 && !(v->frequency_x * pow(2.0, v->octave_position) * harmonic < v->nyquist))
         return 0.0;                             /* SampledBreak's Nyquist */
@@ -926,6 +1047,21 @@ int nv_voice_vibrato(const VoiceSnap *v, double frequency, int index, double *ou
         out[2] = pyr_uniform(&r, 0.0, 6.283185307179586);
         return 1;
     }
+    if (v->sw_set) {                            /* UkuleleProperties: each string's wander, drawn by the key */
+        long long midi = (long long)nearbyint(69 + 12 * log(frequency / 440.0) / log(2.0));
+        PyRandom r;
+        pyr_seed(&r, 0x0CE + midi * 64 + index);
+        out[0] = (pow(2.0, v->sw_cents / 1200.0) - 1.0) * pyr_uniform(&r, 0.3, 1.0);
+        out[1] = pyr_uniform(&r, v->sw_hz[0], v->sw_hz[1]);
+        out[2] = pyr_uniform(&r, 0.0, 6.283185307179586);
+        return 1;
+    }
+    if (v->fv_set) {                            /* a fixed vibrato of its own (the skid's, the scream's) */
+        out[0] = pow(2.0, v->fv_cents * 1.4142 / 1200.0) - 1.0;
+        out[1] = v->fv_hz;
+        out[2] = 0.0;
+        return 1;
+    }
     if (v->pea) {                               /* SambaWhistleProperties: the pea's flutter */
         out[0] = pow(2.0, v->pea_vibrato_cents * 1.4142 / 1200.0) - 1.0;
         out[1] = v->pea_vibrato_hz;
@@ -969,7 +1105,11 @@ void nv_partial_decay(const VoiceSnap *v, double f0, int m, double *out)
     double dbps = nv_harmonic_decay(v, m);
     double logr = dbps > 0 ? log(db_ratio(dbps)) : 0.0;
     double a[2];
-    if (v->n_ma) {                              /* TR808Properties.aftersound_partial */
+    if (v->pick_set) {                          /* Plectrum.aftersound_partial: what rings on under the boost */
+        double b = pick_db(v, m);
+        a[0] = b > 0.0 ? pow(10.0, -b / 20.0) : 0.0;
+        a[1] = b > 0.0 ? harmonic_decay_(v, m) : dbps;
+    } else if (v->n_ma) {                       /* TR808Properties.aftersound_partial */
         a[0] = 0.0;
         a[1] = dbps;
         if (1 <= m && m <= v->n_ma && v->mode_after[m - 1][0] > 0.0) {
@@ -1236,6 +1376,21 @@ static void bore_norm(const VoiceInit *c, VoiceSnap *s)
         shaped += g * g;
     }
     s->bore_norm = shaped > 0.0 ? pow(ref / shaped, 0.5) : 1.0;
+    if (s->blare_db_per_khz != 0.0) {
+        /* _blare_norm: the bored series' power over the blared */
+        ref = shaped = 0.0;
+        for (int h = 1; h <= top; h++) {
+            double a = nv_series_volume(s, h);
+            if (a == 0.0)
+                continue;
+            double hz = f0 * nv_mode_ratio(s, h);
+            a *= bore_gain(s, hz);
+            ref += a * a;
+            double g = a * blare(s, hz);
+            shaped += g * g;
+        }
+        s->blare_norm = shaped > 0.0 ? pow(ref / shaped, 0.5) : 1.0;
+    }
 }
 
 void nv_voice_regain(const VoiceInit *c, VoiceSnap *s, double k)
@@ -1243,6 +1398,17 @@ void nv_voice_regain(const VoiceInit *c, VoiceSnap *s, double k)
     s->gain *= k;
     if (s->bore_corner_hz != 0.0)
         bore_norm(c, s);
+}
+
+/* A NOTE TURNED TO AN ANGLE after it is built (a GS 3D type's: props.pan_angle,
+   props.place()): its ears' incidences and delays from there */
+void nv_voice_turn(const VoiceInit *c, const VoiceSnap *s, VoiceNote *o, double angle)
+{
+    double e[4];
+    o->pan_angle = angle;
+    voice_hrtf_at(c, angle, s->position_x, e);
+    o->left_incidence = e[0]; o->right_incidence = e[1];
+    o->left_hrtf_delay = e[2]; o->right_hrtf_delay = e[3];
 }
 
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,

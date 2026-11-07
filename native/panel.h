@@ -84,6 +84,12 @@ struct Host {
     std::vector<std::string> names;
     std::vector<char> native;
     bool kit = false;
+    // ...and the variations under the programs (256 + j: program, key, name,
+    // native), the part's own now (0 the capital tone)
+    std::vector<std::array<int, 2>> vpv;
+    std::vector<std::string> vnames;
+    std::vector<char> vnative;
+    int var = 0;
     std::function<void(int)> pick;
 };
 
@@ -632,12 +638,24 @@ struct Panel {
         static const char *FAM[16] = {"Piano", "Chromatic Percussion", "Organ", "Guitar", "Bass", "Strings",
                                       "Ensemble", "Brass", "Reed", "Pipe", "Synth Lead", "Synth Pad",
                                       "Synth Effects", "Ethnic", "Percussive", "Sound Effects"};
-        const int here = (H.kit ? 128 : 0) + H.program;
-        auto nat = [&](int sp) { return sp >= 0 && sp < (int)H.native.size() && H.native[sp]; };
+        int here = (H.kit ? 128 : 0) + H.program;
+        for (size_t j = 0; j < H.vpv.size() && H.var && !H.kit; j++)
+            if (H.vpv[j][0] == H.program && H.vpv[j][1] == H.var)
+                here = 256 + (int)j;
+        auto nat = [&](int sp) {
+            return sp >= 256 ? sp - 256 < (int)H.vnative.size() && H.vnative[sp - 256]
+                             : sp >= 0 && sp < (int)H.native.size() && H.native[sp];
+        };
         auto label = [&](int sp) {
-            char b[160];
-            snprintf(b, sizeof b, "%s%s%3d  %-28s%s", sp == here ? "● " : "  ", sp >= 128 ? "set " : "",
-                     sp & 127, sp < (int)H.names.size() ? H.names[sp].c_str() : "?", nat(sp) ? "" : "  (not native)");
+            char b[200];
+            if (sp >= 256) {                    // (a variation: under its program, its bank)
+                const auto &pv = H.vpv[sp - 256];
+                snprintf(b, sizeof b, "%s     %3d.%-3d  %-28s%s", sp == here ? "● " : "  ", pv[0], pv[1] & 127,
+                         H.vnames[sp - 256].c_str(), nat(sp) ? "" : "  (not native)");
+            } else {
+                snprintf(b, sizeof b, "%s%s%3d  %-28s%s", sp == here ? "● " : "  ", sp >= 128 ? "set " : "",
+                         sp & 127, sp < (int)H.names.size() ? H.names[sp].c_str() : "?", nat(sp) ? "" : "  (not native)");
+            }
             return std::string(b);
         };
         // the whole list: (sp, or -1 a heading), its text
@@ -653,6 +671,11 @@ struct Panel {
             }
             ids0.push_back(sp);
             rows0.push_back(label(sp));
+            for (size_t j = 0; j < H.vpv.size() && !kit; j++)     // (its variations under it)
+                if (H.vpv[j][0] == sp) {
+                    ids0.push_back(256 + (int)j);
+                    rows0.push_back(label(256 + (int)j));
+                }
         }
         int at = 0;
         for (size_t i = 0; i < ids0.size(); i++)
@@ -758,15 +781,17 @@ struct Panel {
                 if (!n || ids[at] < 0)
                     continue;
                 int id = ids[at];
+                const std::string what = id >= 256 ? std::to_string(H.vpv[id - 256][0]) + "."
+                                                     + std::to_string(H.vpv[id - 256][1] & 127) + " " + H.vnames[id - 256]
+                                                   : (id >= 128 ? "drum set " : "program ") + std::to_string(id & 127)
+                                                     + " " + H.names[id];
                 if (!nat(id)) {
-                    say((id >= 128 ? "drum set " : "program ") + std::to_string(id & 127) + " " + H.names[id]
-                        + " is not native here");
+                    say(what + " is not native here");
                     continue;
                 }
                 if (id != here) {
                     H.pick(id);
-                    say("asked for " + std::string(id >= 128 ? "drum set " : "") + std::to_string(id & 127) + " "
-                        + H.names[id] + " (built if new, then swapped in)");
+                    say("asked for " + what + " (built if new, then swapped in)");
                 }
                 return;
             } else if (c == 27) {

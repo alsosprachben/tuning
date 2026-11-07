@@ -415,6 +415,12 @@ struct Slab {
     std::map<Key, long long> key_id;
     std::vector<Key> id_key;
     double send[256];
+    // ...A VOICE'S OWN DISTANCE (live's send_said, odd_until): the channels
+    // that have sent a CC91 -- a template's own send applies on any other --
+    // and the sample until which the send bus must run for a slot standing
+    // at a distance its channel's send does not say
+    std::set<long long> send_said;
+    long long odd_until = 0;
     float headroom = 1.0f;
     double headroom_d = 1.0;
     // A SECTION'S ENTRIES ARE REDRAWN AT EVERY PRESS (live.Slab._rng)
@@ -466,7 +472,7 @@ struct Slab {
                const int32_t *const *ti4, const float *threl, long n, Key key, long long n0, double vel_scale,
                long long dur, bool one, double tsend, long long ch, const long long *sof = nullptr,
                const long long *rof = nullptr, double scat = 0.0, double rate = 0.0, const long long *cof = nullptr,
-               const double *aL64 = nullptr, const double *aR64 = nullptr)
+               const double *aL64 = nullptr, const double *aR64 = nullptr, const long long *gof = nullptr)
     {
         if (n == 0)
             return true;
@@ -506,6 +512,8 @@ struct Slab {
             long long newnon = offs.empty() ? n0 + rd : (long long)((double)n0 + offs[ti4[3][q]]) + rd;
             if (cof)                            // a Hammond drawbar speaks when its contact closes
                 newnon += cof[q];
+            if (gof)                            // ...a grain lands where it falls in the note
+                newnon += gof[q];
             if (sof)
                 newnon += sof[q];
             double sh = tf8[F8_om][q] * (double)(ti8[0][q] - newnon);
@@ -547,8 +555,18 @@ struct Slab {
         for (long q = 0; q < n; q++)
             vsc[idx[q]] = (double)mv > 1e-12 ? vd[q] / mv : 1.0f;
         double swv = (ch >= 0 && ch < 256) ? send[ch] : 1.0;
-        if (!std::isnan(tsend) && ch >= 0)
+        if (!std::isnan(tsend) && ch >= 0 && !send_said.count(ch)) {
+            if (tsend != swv) {
+                // a one-shot's partials are gone a little past its noff (3 s
+                // is more than any release); a held note's end is not known,
+                // so the bus stays on
+                long long rdm = 0;
+                for (long q = 0; q < n; q++)
+                    rdm = q == 0 ? (long long)tf4[F4_rdl][q] : std::max(rdm, (long long)tf4[F4_rdl][q]);
+                odd_until = std::max(odd_until, one ? (long long)(n0 + dur + rdm + 3.0 * rate) : (1LL << 62));
+            }
             swv = tsend;
+        }
         for (long q = 0; q < n; q++)
             sw[idx[q]] = (float)swv;
         if (one) {
@@ -602,9 +620,10 @@ struct Slab {
             i8p[c] = T.i8[c].data();
         for (int c = 0; c < 6; c++)
             i4p[c] = T.i4[c].data();
-        return stamp(f8p, f4p, i8p, i4p, T.hrel.data(), T.P, key, n0, vel_scale, T.dur, T.oneshot, NAN, ch,
+        return stamp(f8p, f4p, i8p, i4p, T.hrel.data(), T.P, key, n0, vel_scale, T.dur, T.oneshot, T.send, ch,
                      T.sof.empty() ? nullptr : T.sof.data(), T.rof.empty() ? nullptr : T.rof.data(),
-                     std::isnan(scat) ? T.scatter_ms : scat, rate);
+                     std::isnan(scat) ? T.scatter_ms : scat, rate, nullptr, nullptr, nullptr,
+                     T.gof.size() == (size_t)T.P ? T.gof.data() : nullptr);
     }
 
     // THE PAN TABLE (live.pan_table: CC10 -> left and right shadow alpha, half
@@ -1006,6 +1025,8 @@ struct Slab {
         return live[i].second;
     }
 
+    std::map<Key, std::pair<std::vector<long>, long long>> last_release;   // live.Slab.last_release
+
     void release(Key key, long long n)
     {
         long li = live_find(key);
@@ -1023,6 +1044,8 @@ struct Slab {
             return;
         }
         rel_log.push_back(std::make_tuple(key, n, idx));
+        if (std::get<3>(key) == -1)
+            last_release[key] = std::make_pair(idx, n);     // (a played note's: for a slur to cut, Live._slur_cut)
         for (long s : idx) {
             long long v = n + (long long)f4[F4_rdl][s];
             if (v < i8[1][s])
@@ -1881,6 +1904,18 @@ struct Part {
     bool cgain_set[16];
     std::set<std::pair<int, int>> down, pedalled;
     std::map<Key, long long> tex_on;    // a held texture's key: the sample it may stop (live.tex_on)
+    // ...AND ITS GRAINS (live.tex_gen, in the order struck): the key, its
+    // template, the next grain's sample, the press's scale; one generator
+    // (live._tex_rng; one part here) and the grains' own keys (_tex_n)
+    struct TexGen {
+        Key key;
+        const nv::live::Template *T;
+        double nxt, scale;
+    };
+    std::vector<TexGen> tex_gen;
+    PyRandom tex_rng;
+    long long tex_n = 0;
+    static const long long GRAIN0 = 1LL << 32;     // a grain's layer: GRAIN0 + its number (("grain", n))
     std::vector<Ev> events;
     std::vector<std::vector<uint8_t>> sx;           // the exclusives the events name (type 6)
     std::map<std::pair<int, int>, int> key_vel;     // (ch, note) -> the strike's velocity
@@ -3072,6 +3107,123 @@ struct Part {
     static const long long SCANSIDE0 = 3000;    // ...and tier B's copies (("scanside", rank))
     static const long long AMPK = 4000;         // the valve's products ((pid, -1, -1, "amp"))
     static const long long KEYUP0 = 5000;       // a jack's key-up click ((pid, ch, note, "keyup:" + rank))
+    static const long long DRONEK = 6000;       // a drone's layer ((pid, ch, -1 - i, "drone"))
+    // THE DRONES (live's drone_count, drone_quiet): how many the wheel leaves
+    // uncorked (absent: all), and when the chanter went quiet (its channel,
+    // the sample, the hold: part_break_s)
+    std::map<long long, int> drone_count;
+    struct DroneQuiet {
+        int ch;
+        long long when, hold;
+    };
+    std::map<long long, DroneQuiet> drone_quiet;
+    long misses = 0;                            // templates not warmed when asked (live.misses)
+
+    const NoteClass *drone_class() const
+    {
+        const NoteClass *k = nv_tcache_class(patches[cur].cache, patches[cur].program);
+        return (k && k->drone_wheel && !patches[cur].drums) ? k : nullptr;
+    }
+
+    // live._chanting: a chanter note sounding (the drones do not count themselves)
+    bool chanting(int ch) const
+    {
+        for (auto &kv : S.live)
+            if (std::get<0>(kv.first) == pid && std::get<1>(kv.first) == ch && std::get<3>(kv.first) != DRONEK)
+                return true;
+        return false;
+    }
+
+    // the partial nearest ref (Hz) of a template, as live finds a fundamental
+    // (numpy on the float32 column: |log(max(nf, 1e-6) / ref)|, float32)
+    static double nearest_nf(const nv::live::Template *T, double ref)
+    {
+        const std::vector<float> &nf = T->f4[2];
+        long best = 0;
+        float bv = INFINITY;
+        for (long r = 0; r < T->P; r++) {
+            float x = fabsf(logf(std::max(nf[r], 1e-6f) / (float)ref));
+            if (x < bv) {
+                bv = x;
+                best = r;
+            }
+        }
+        return (double)nf[best];
+    }
+
+    // live._tonic_hz: the tonic off its own template, times the channel's tuning
+    double tonic_hz(const NoteClass *k, int ch)
+    {
+        int n = k->scale_n ? k->scale_tonic : -1;
+        if (n < 0 || n > 127)
+            return 0.0;
+        const nv::live::Template *T = nv_tcache_lookup(patches[cur].cache, n, bucket(100), speed);
+        if (!T || !T->P)
+            return 0.0;
+        double F = nv_tcache_freq(patches[cur].cache, n);
+        double ref = F > 0.0 ? F : (double)*std::min_element(T->f4[2].begin(), T->f4[2].begin() + T->P);
+        return nearest_nf(T, ref) * key_ratio(patches[cur], ch, n);
+    }
+
+    // live._drones: the uncorked drones up, the rest corked
+    void drones(int ch, long long n0)
+    {
+        const NoteClass *k = drone_class();
+        if (!k)
+            return;
+        auto dc = drone_count.find(pid);
+        int want = dc != drone_count.end() ? dc->second : k->n_dratio;
+        double tonic = tonic_hz(k, ch);
+        if (tonic <= 0.0)
+            return;
+        for (int i = 0; i < k->n_dratio; i++) {
+            double hz = tonic * k->drone_ratio[i];
+            Key key(pid, ch, -1 - i, DRONEK);
+            bool on = S.live_find(key) >= 0;
+            if (i < want && !on) {
+                int note = i < k->n_drone ? k->drone_note[i] : (int)nearbyint(69.0 + 12.0 * log2(hz / 440.0));
+                if (note < 21 || note > 96)         // (MELODIC_RANGE)
+                    continue;
+                const nv::live::Template *T = nv_tcache_lookup(patches[cur].cache, note, bucket(100), speed);
+                if (!T) {
+                    misses++;
+                    continue;
+                }
+                double g = k->drone_gain[i];
+                if (!S.stamp_t(*T, key, n0, g * (pow(10.0, level_db / 20.0) * swell) * chan_gain(ch), ch, rate)) {
+                    dropped++;
+                    continue;
+                }
+                long li = S.live_find(key);
+                double Fd = nv_tcache_freq(patches[cur].cache, note);
+                double ref = Fd > 0.0 ? Fd : (double)*std::min_element(T->f4[2].begin(), T->f4[2].begin() + T->P);
+                double f0 = nearest_nf(T, ref);
+                if (li >= 0 && f0 > 0.0 && fabs(hz / f0 - 1.0) > 1e-9)
+                    retune(S.live[li].second, n0, hz / f0);
+            } else if (i >= want && on) {
+                S.release(key, n0);
+            }
+        }
+    }
+
+    // live._drone_reap: the bag let down once the chanter has been quiet part_break_s
+    void drone_reap(long long n0)
+    {
+        for (auto it = drone_quiet.begin(); it != drone_quiet.end();) {
+            if (n0 - it->second.when < it->second.hold) {
+                ++it;
+                continue;
+            }
+            long long qp = it->first;
+            it = drone_quiet.erase(it);
+            std::vector<Key> ks;
+            for (auto &kv : S.live)
+                if (std::get<0>(kv.first) == qp && std::get<3>(kv.first) == DRONEK)
+                    ks.push_back(kv.first);
+            for (auto &kk : ks)
+                S.release(kk, n0);
+        }
+    }
     int cur = 0, transpose = 0;
     bool cur_reg = true;                            // the patch in use has the register
 
@@ -3123,6 +3275,7 @@ struct Part {
 
     Part(long cap) : S(cap)
     {
+        pyr_seed(&tex_rng, 0x7E47);             // (live's _tex_rng)
         for (int t = 0; t < DAMP_TRACKS; t++) {
             free_tracks.push_back(t);
             DMO[t] = 2 * t;
@@ -3229,6 +3382,35 @@ struct Part {
         }
     }
 
+    // live._slur_cut: the notes a slurred one follows stop in the legato
+    // time (max(retrigger fade, legato_attack_s)) -- a key still down before
+    // it is let go, one let go this very block before its release has played
+    void slur_cut(const std::set<std::pair<int, int>> &keys, long long n0)
+    {
+        for (auto &kn : keys)
+            for (size_t pi = 0; pi < patches.size(); pi++) {
+                const Patch &p = patches[pi];
+                const NoteClass *pc = p.drums ? nullptr : nv_tcache_class_key(p.cache, p.program, kn.second + transpose);
+                if (!pc || !pc->slur_cuts_release)
+                    continue;
+                float shrt = (float)(std::max(retrigger, pc->legato_set ? pc->legato_attack_s : 0.0) * rate);
+                Key key(p.pid, kn.first, kn.second, -1);
+                std::vector<long> idx;
+                long li = S.live_find(key);
+                if (li >= 0 && !S.live[li].second.empty())
+                    idx = S.live[li].second;
+                else {
+                    auto lr = S.last_release.find(key);
+                    if (lr == S.last_release.end() || lr->second.second < n0)
+                        continue;
+                    idx = lr->second.first;
+                }
+                for (long q : idx)
+                    if (shrt < S.f4[F4_re][q])
+                        S.f4[F4_re][q] = shrt;
+            }
+    }
+
     // a key down (live's note-on, before its parts): the key held, and in
     // MONO the voice handed over -- the note sounding cut, the new key on top
     // of the held stack
@@ -3247,7 +3429,8 @@ struct Part {
             if (it->second.has_off && (double)(n0 - it->second.off) <= legato_gap_s * rate)
                 slur = true;
         }
-        // (_slur_cut: no native voice cuts the note it leaves -- slur_cuts_release)
+        if (slur)
+            slur_cut(it->second.keys, n0);  // (live._slur_cut: a voice that says so stops the note it leaves)
         Group g;
         g.on = n0;
         g.keys.insert(std::make_pair(ch, note));
@@ -3380,8 +3563,10 @@ struct Part {
                 S.release(k, n0);
             }
         }
-        if (!S.stamp_t(*T, key, n0, scale, ch, rate))
+        if (!S.stamp_t(*T, key, n0, scale, ch, rate)) {
+            dropped++;
             return;                         // the slab full: this note does not sound
+        }
         std::vector<long> lslots[2] = {S.last_slots, {}};    // each layer's (live's _lslots)
         if (T->moog) {                      // a Moog note: its rows, the panel on it (Slab._moog_stamp)
             MoogLayer La;
@@ -3402,8 +3587,18 @@ struct Part {
                     dropped++;
             }
         }
-        if (T->min_hold)
+        if (T->min_hold) {
             tex_on[key] = n0 + T->min_hold; // a held texture: the least it plays
+            if (!T->gpool.empty() && T->grate > 0.0) {
+                // its grains, from the press, for as long as it is held (tex_tick)
+                double nx = (double)n0 + tex_expo(T->grate) * rate;
+                auto it = std::find_if(tex_gen.begin(), tex_gen.end(), [&](const TexGen &g) { return g.key == key; });
+                if (it != tex_gen.end())
+                    *it = TexGen{key, T, nx, scale};        // (a dict's key keeps its place)
+                else
+                    tex_gen.push_back(TexGen{key, T, nx, scale});
+            }
+        }
         if (!T->rel.empty())
             held_rel[Key(pid, ch, note, 0)] = std::make_pair(T, scale);     // its key-up rows, at the key-up
         long lj = S.live_find(key);
@@ -3452,6 +3647,10 @@ struct Part {
             S.tremolo_arm(slots, td->second, patches[cur].wtrem_stereo);
         if (pressure[ch] != 0.0)
             press(slots, pressure[ch]);
+        if (drone_class()) {                // THE DRONES: up with the chanter (live._drones)
+            drone_quiet.erase(pid);
+            drones(ch, n0);
+        }
         sound_stamp_note(patches[cur], ch, sn, slots);     // the channel's CC71-78 (live._sound_stamp)
         {                                   // a note struck under a bend, or the wheel up, joins them
             double sva, svr;
@@ -4891,8 +5090,10 @@ struct Part {
                 i4p[c] = J.i4[c].data();
             Key key(pid, ch, note, KEYUP0 + jl);
             if (!S.stamp(f8p, f4p, i8p, i4p, J.hrel.data(), J.P, key, n0, scale, J.dur, true, NAN, ch, nullptr,
-                         nullptr, 0.0, 0.0, J.cof.data()))
+                         nullptr, 0.0, 0.0, J.cof.data())) {
+                dropped++;
                 continue;
+            }
             std::vector<long> got = S.last_slots;
             long li = S.live_find(key);
             if (li >= 0)
@@ -5176,6 +5377,12 @@ struct Part {
         auto kt = key_tone.find(Key(pid, ch, note, 0));
         if (patches[cur].amp > 0.0 && (kt == key_tone.end() || kt->second == patches[cur].cache) && !amp_holds(cur))
             S.release(Key(pid, -1, -1, AMPK), n0);  // the products end with their chord (a note of this tone's)
+        if (drone_class()) {                // a chanter's key: the drones wait part_break_s (_drone_reap)
+            S.release(Key(pid, ch, note, -1), n0);
+            if (!chanting(ch))
+                drone_quiet[pid] = DroneQuiet{ch, n0, (long long)(drone_class()->part_break_s * rate)};
+            return;
+        }
         if (patches[cur].organ) {           // an organ's key: each of its ranks
             std::vector<Key> ks;
             std::set<std::string> sounded;
@@ -5197,6 +5404,11 @@ struct Part {
         if (tx != tex_on.end()) {
             at = std::max(n0, tx->second);
             tex_on.erase(tx);
+        }
+        {                                   // ...and strikes no more grains
+            Key k(pid, ch, note, -1);
+            tex_gen.erase(std::remove_if(tex_gen.begin(), tex_gen.end(), [&](const TexGen &g) { return g.key == k; }),
+                          tex_gen.end());
         }
         S.release(Key(pid, ch, note, -1), at);
         key_up_event(ch, note, n0);
@@ -5234,8 +5446,10 @@ struct Part {
         Key key(pid, ch, note, KEYUP_REL);
         if (!S.stamp(f8p, f4p, i8p, i4p, R.hrel.data(), R.P, key, n0, scale, R.dur, true, NAN, ch,
                      R.sof.empty() ? nullptr : R.sof.data(), R.rof.empty() ? nullptr : R.rof.data(), 0.0, 0.0,
-                     R.cof.empty() ? nullptr : R.cof.data()))
+                     R.cof.empty() ? nullptr : R.cof.data())) {
+            dropped++;
             return;
+        }
         std::vector<long> got = S.last_slots;
         long li = S.live_find(key);
         if (li >= 0)
@@ -5327,8 +5541,9 @@ struct Part {
     // live.wheel_roles' 'vibrato': a part whose wheel nothing else wants
     bool vib_role(const Patch &p) const
     {
+        const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
         return p.wheel_vib && !(p.amp > 0.0) && !(p.organ && p.organ->n_order) && !(p.wtrem > 0.0) && !p.clav
-               && !p.leslie && !p.wheel_swell;
+               && !p.leslie && !p.wheel_swell && !(k && k->drone_wheel);
     }
 
     // live._snd_vib: (depth to add, rate factor) the part's CC77/76 ask of
@@ -5739,6 +5954,7 @@ struct Part {
             // one, on the notes sounding too
             double d = v / 40.0;
             S.send[ch] = d;
+            S.send_said.insert(ch);
             for (long q : sounding(ch))
                 S.sw[q] = (float)d;
         } else if (cc == 67) {
@@ -5869,6 +6085,23 @@ struct Part {
                         vib_apply(p, ch, n0);
             }
         }
+        if (cc == 1)                            // THE DRONES ON THE WHEEL (live's dronists), live
+            for (int pi = 0; pi < (int)patches.size(); pi++) {
+                if (!(patches[pi].channel < 0 || patches[pi].channel == ch))
+                    continue;
+                Use u(*this, pi);
+                const NoteClass *k = drone_class();
+                if (!k)
+                    continue;
+                int nd = k->n_dratio;
+                int n = std::max(0, std::min(nd, (int)nearbyint(v / 127.0 * nd)));
+                auto it = drone_count.find(pid);
+                if (it == drone_count.end() || it->second != n) {
+                    drone_count[pid] = n;
+                    if (chanting(ch))
+                        drones(ch, n0);
+                }
+            }
         if (cc == 1)                            // A CLAVINET's TONE ROCKERS (live's 'tone' role)
             for (const Patch &p : patches) {
                 if (!p.clav || !(p.channel < 0 || p.channel == ch))
@@ -7220,7 +7453,7 @@ struct Part {
     void output(long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd, long long blk,
                 double master_gain)
     {
-        bool uniform = true;
+        bool uniform = n0 >= S.odd_until;      // (a voice standing apart: the bus runs)
         for (int c = 1; c < 256 && uniform; c++)
             uniform = S.send[c] == S.send[0];
         bool snd = room && room_on && !uniform;
@@ -7398,6 +7631,37 @@ struct Part {
     }
 
     // live's callback for one block: its events, the sweep, the reap
+    // random.expovariate, randrange (CPython 3.12's: getrandbits' top bits, rejected past n)
+    double tex_expo(double lambd) { return -log(1.0 - pyr_random(&tex_rng)) / lambd; }
+    long tex_below(long n)
+    {
+        int k = 0;
+        while ((1L << k) <= n)
+            k++;
+        uint32_t r = pyr_genrand(&tex_rng) >> (32 - k);
+        while ((long)r >= n)
+            r = pyr_genrand(&tex_rng) >> (32 - k);
+        return (long)r;
+    }
+
+    // live._tex_tick: a held texture's grains past its template -- a drop from
+    // its pool at each Poisson instant in this block, at its own sample, under
+    // a key of its own: a one-shot that decays on its own rows' ends
+    void tex_tick(long long n0, long long blk)
+    {
+        const long long end = n0 + blk;
+        for (TexGen &g : tex_gen) {
+            while (g.nxt < (double)end) {
+                const nv::live::Template &sub = g.T->gpool[tex_below((long)g.T->gpool.size())];
+                tex_n++;
+                Key k(std::get<0>(g.key), std::get<1>(g.key), std::get<2>(g.key), GRAIN0 + tex_n);
+                if (!S.stamp_t(sub, k, std::max((long long)g.nxt, n0), g.scale, std::get<1>(g.key), rate))
+                    dropped++;
+                g.nxt += tex_expo(g.T->grate) * rate;
+            }
+        }
+    }
+
     void block(long long n0, long long blk)
     {
         cur_blk = blk;
@@ -7429,6 +7693,8 @@ struct Part {
         if (reg_on && (!reg_pend.empty() || !reg_out.empty() || reg_live || !reg_retire.empty()
                        || reg_ndone.load() > 0))
             reg_pump(n0);
+        if (!tex_gen.empty())
+            tex_tick(n0, blk);                  // a held texture's grains (live's _tex_tick)
         if (!amp_dirty.empty() || amp_has_out || !amp_fine_results.empty() || amp_async || !amp_chg.empty()
             || !S.rel_log.empty())
             amp_pump(n0);                       // the valve (live's _amp_pump)
@@ -7438,11 +7704,14 @@ struct Part {
             auto sq = sost.find(ck.first);
             if (!down.count(ck) && !pedalled.count(ck) && !S.oneshot.count(kv.first)
                 && !(sq != sost.end() && sq->second.count(ck.second)) && std::get<3>(kv.first) != AMPK
+                && std::get<3>(kv.first) != DRONEK
                 && std::get<3>(kv.first) < AMP_OLD0 && std::get<3>(kv.first) > MFK0)
                 sw.push_back(kv.first);         // (not a valve's products, an old tone's, a repeat's: not a note)
         }
         for (auto &k : sw)
             S.release(k, n0);
+        if (!drone_quiet.empty())
+            drone_reap(n0);                     // the bag let down (live's _drone_reap, after the sweep)
         damp_block(n0, blk);
         if (!mf_groups.empty())
             mf104_reap();
@@ -8012,6 +8281,31 @@ long nv_part_moog_table(void *h, int which, float *out, long n)
     return (long)v.size();
 }
 
+// THE LIVE SLOTS' COLUMNS, for a check: each sounding slot's f8, f4, f4n, i8
+// and i4 (NF8 + NF4 + NF4N + NI8 + NI4 numbers, slab.cpp's names' order),
+// up to cap slots; how many there are
+long nv_part_slots_dump(void *h, double *out, long cap)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    const auto &S = P->S;
+    const int W = nv::slab::NF8 + nv::slab::NF4 + nv::slab::NF4N + nv::slab::NI8 + nv::slab::NI4;
+    long n = 0;
+    for (const auto &kv : S.live)
+        for (long sl : kv.second) {
+            if (n < cap) {
+                double *o = out + (size_t)W * n;
+                int c = 0;
+                for (int q = 0; q < nv::slab::NF8; q++) o[c++] = S.f8[q][sl];
+                for (int q = 0; q < nv::slab::NF4; q++) o[c++] = S.f4[q][sl];
+                for (int q = 0; q < nv::slab::NF4N; q++) o[c++] = S.f4n[q][sl];
+                for (int q = 0; q < nv::slab::NI8; q++) o[c++] = (double)S.i8[q][sl];
+                for (int q = 0; q < nv::slab::NI4; q++) o[c++] = (double)S.i4[q][sl];
+            }
+            n++;
+        }
+    return n;
+}
+
 // the kernel library's Moog row functions (synthkernel.c moog_pitch_cells,
 // moog_shape_rows), as the caller has it loaded
 void nv_part_moog_kernel(void *h, void *pcells, void *srows)
@@ -8143,6 +8437,9 @@ long nv_part_govern(void *h, double ms, double budget_ms, long long n)
 }
 
 long nv_part_partials_shed(void *h) { return ((nv::slab::Part *)h)->partials_shed; }
+
+// the notes (and grains, layers, ranks) the slab had no room for: --slots too small
+long nv_part_dropped(void *h) { return ((nv::slab::Part *)h)->dropped; }
 
 // THE PANEL'S: a global set between blocks -- 0 headroom (dB), 1 the
 // pressure's lift (dB), 2 the limiter's knee, 3 the wheel's range, 4 the mod

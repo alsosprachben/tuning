@@ -2578,6 +2578,7 @@ def _prep_organ_rows(_CMXEV, ccs, ch_progs, nblk, notes):
             _orgk = (ch, organ_family(pc))
             if _orgk in rankev_of:
                 continue
+            _ORGAN_PC[_orgk] = pc         # (its class: 'check' gives the engine its table)
             # each later tone of this organ on the channel recalls its own
             # registration where its first note is (registration_blocks)
             _fam = _orgk[1]; _rcl = []; _ds = getattr(pc, 'default_stops', 1)
@@ -3483,7 +3484,9 @@ def _prep_strokes(notes):
     stroke_morph = {}            # (note, t) -> a throat's vowel moving: toward its DRUM_MODES_B
     _sfx_strokes_of = {}         # (program, note) -> (kit, key) whose strokes a melodic SFX plays
     _stroked = set()             # (ch, note, t) of every stroke: live keeps their own onsets
-    for ev in notes:
+    _todo = list(reversed(notes))   # (a layer's events go back through: its strokes)
+    while _todo:
+        ev = _todo.pop()
         ch, note, on, off, vel, rest, pg = ev
         # A KEY THAT ALSO STRIKES ANOTHER'S SOUND (percussion_map.KIT_LAYER):
         # the metronome bell's tick is the click key's, at the bell's velocity
@@ -3492,14 +3495,14 @@ def _prep_strokes(notes):
                 expanded.append((ch, _ln, on, off, vel, rest, pg))
         # A LAYERED VARIATION (patch_map.LAYERED: GS's Orchestra): one event a
         # layer, each its own program and transposition, before anything else
-        # sees the note
+        # sees the note -- each layer's then on through the rest, so a layer
+        # that is a kit key keeps its strokes (Pour Magic's bubbles' run)
         _lys = None if is_drum(pg) else layers_of(pg)
         if _lys:
             # ...each within its velocity range (a "Velo" variation switches
             # voice with how hard the key is struck)
-            for _lp, _st, _vlo, _vhi in _lys:
-                if 0 <= note + _st <= 127 and _vlo <= vel <= _vhi:
-                    expanded.append((ch, note + _st, on, off, vel, rest, _lp))
+            _todo.extend(reversed([(ch, note + _st, on, off, vel, rest, _lp) for _lp, _st, _vlo, _vhi in _lys
+                                   if 0 <= note + _st <= 127 and _vlo <= vel <= _vhi]))
             continue
         strokes = rasp_strokes(note, on, off, kit=kit_for_program(int(pg))) if is_drum(pg) else None
         # ...AND A KIT KEY PLAYED FROM THE KEYBOARD (patch_map.melodic_sfx: a GS
@@ -6290,6 +6293,7 @@ def _tone_in(em, props, nt, gain, rank_B, sjit_n, reflect):
     t.dl, t.dr, t.pos_x0, t.pos_x_props, t.pos_z = (em._DL[0], em._DL[1], em.pos_x, getattr(P, 'position_x', 0.0),
                                                     em.pos_z)
     t.channel = em.channel
+    t.hammer_on = em.hammer_on
     t.cbw0, t.cbw1 = em._CBW[0], em._CBW[1]
     t.tb[:] = list(em._TB)
     t.gl[:] = list(em._GL)
@@ -6533,6 +6537,9 @@ _NV_SOUND = frozenset(('attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'
 ORGAN_STATS = [0, 0]    # organ notes whose inputs the engine's song made too, that differed
 
 
+_ORGAN_PC = {}         # (channel, organ family) -> the class _prep_organ_rows registered it from
+
+
 def _organ_rows_check(song, rankev_of, Grows, Srows, sh, wrow_of, BRrows, BCrows, _BLrows, nblk):
     """'check': the engine's song given the file's organs (nv_song_organ),
     its gates, swells and law (nv_song_organ_rows) and its chests' wind
@@ -6545,8 +6552,7 @@ def _organ_rows_check(song, rankev_of, Grows, Srows, sh, wrow_of, BRrows, BCrows
         _o = _NV.organ(_pc) if getattr(_pc, 'registerable', False) else None
         po[_p] = ctypes.addressof(_o) if _o is not None else None
     for (_c, _fam) in rankev_of:
-        _pc = next(c for c in (property_class_for_program(p) for p in range(128))
-                   if getattr(c, 'registerable', False) and organ_family(c) == _fam)
+        _pc = _ORGAN_PC[(_c, _fam)]
         _o = _NV.organ(_pc)
         if _o is None:
             print("  native organ: no table for %s" % _fam)
@@ -6588,7 +6594,8 @@ READING_STATS = [0, 0]  # files whose check song is the engine's own reading; wh
 
 
 def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st, eff, nx, mcut, slurred,
-                       slur_out, song=None, key_off=None, from_song=False, seat=0.0, held=0.0, organ=None):
+                       slur_out, song=None, key_off=None, from_song=False, seat=0.0, held=0.0, organ=None,
+                       press=0.0):
     """A piano note from the engine (native/engine.cpp's nv_note): its knock,
     tone and phantom partials, the voice built there from the note as the
     file and channel give it. (rows, qacc, azimuth, NoteOut, row0, qacc
@@ -6625,8 +6632,10 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     imgs, nsurf, surf, img, mir = [], np.zeros(1, np.int32), np.zeros(1, np.int32), np.zeros(3), np.zeros(3)
     n = _NV.NoteIn()
     n.f0, n.pan, n.vel, n.chan_vol, n.effort = nt.f0, nt.pan, nt.vel, nt.chan_vol, eff
+    n.press = press or 0.0              # (its pressure: the voice's gain leans with it; eff has it already)
     n.on, n.off, n.seat = nt.on, nt.off, seat
     n.ch, n.note = nt.ch, nt.note           # (a flam's draw is the note's)
+    n.hammered, n.reslur, n.hammer_on = int(em.hammered), int(em.reslur), em.hammer_on
     if getattr(nt, 'sung', None) is not None:
         n.sung_hz, n.part = float(nt.sung[0]), int(nt.sung[1])     # (a sung part's body)
     n.held = held                           # (a shake's share of the key)
@@ -6683,6 +6692,8 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.detune_lo, n.detune_hi = lo, hi
     n.soft_pedal_down, n.fixed_touch = int(bool(T.soft_pedal_down)), int(bool(T.FIXED_TOUCH))
     n.sr, n.retrigger_fade, n.channel = SR, RETRIGGER_FADE, em.channel
+    n.blk = float(BLK)
+    n.xp = getattr(em, 'xp', 1.0)
     n.br = em.bend_row if (em.bend_row >= 0 or em.fader_row < 0) else em.fader_row
     # ...ITS OTHER STRINGS (ring_db: _note_ring), tuned as the notes are, on the fader's row
     n.fbr = em.fader_row if em.fader_row >= 0 else -1
@@ -6807,6 +6818,18 @@ def _note_native_apply(em, props, nt, A, wn, _VB):
         nt.li, nt.ri = out.li, out.ri
         em._DL[0], em._DL[1] = out.dl, out.dr
         em.push_pending = None
+
+
+def _NV_events(cls):
+    """Whether the engine's note played cls's timed noise bands itself (native.heartbeat_voice)."""
+    import native as _NV
+    return _NV.heartbeat_voice(cls)
+
+
+def _NV_grains(cls):
+    """Whether the engine's note played cls's grains itself (native.grains_of)."""
+    import native as _NV
+    return bool(_NV.grains_of(cls))
 
 
 def _NV_breath(cls):
@@ -8129,6 +8152,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _FOLD_STORE = {}        # (ch, note) -> (re-strike time s, store)
     _FOLD_ON = os.environ.get('TUNING_FOLD', '1') not in ('0', 'off', '')
     em.hammer_on = 0.0            # this note's seconds since that pick, if a hammer-on; else 0
+    em.hammered = em.reslur = False     # (a hammer-on at all; a mono or gliss slur: the engine's NoteIn)
     _LFLIP = []             # rows on the Leslie rotor their pitch would not pick (the crossover's copies)
 
     def _mvol():
@@ -8733,9 +8757,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 em.fold = (int(_nx2 * SR), max(32.0, (props.attack_time or 0.004) * SR), _st2)
                 _FOLD_STORE[(nt.ch, nt.note)] = (_nx2, _st2)
         em.hammer_on = 0.0
+        em.hammered = False
         if getattr(props, 'hammer_legato', False):
             if _lgk in legato and nt.ch in _HAM_T0:
                 em.hammer_on = max(0.0, nt.on - _HAM_T0[nt.ch])
+                em.hammered = True
                 at = max(at, HAMMER_ATTACK_S)
             else:
                 _HAM_T0[nt.ch] = nt.on
@@ -8743,7 +8769,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # run -- that is what "blow through the harmonics" means -- so every
         # step takes the legato attack whether or not _legato_ticks saw it.
         # It could not have: these notes did not exist when the file was parsed.
-        if (nt.ch, nt.note, nt.on) in _GLISS or (nt.ch, nt.note, nt.on) in _MONO_SLUR:
+        em.reslur = (nt.ch, nt.note, nt.on) in _GLISS or (nt.ch, nt.note, nt.on) in _MONO_SLUR
+        if em.reslur:
             at = T.slur_attack(at, props)
             _slurred = True
         # ...AND A NOTE FROM SILENCE IS A PUSH OF THE BELLOWS (_push_finish); a
@@ -8844,6 +8871,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         em.reverse = (nt.non, nt.noff) if getattr(props, 'played_backwards', False) else None
         em.jitter_scale = (1.0 + getattr(props,'pitch_jitter',0.0)) * _XP
         em.transposed = _XP != 1.0
+        em.xp = _XP                    # (the engine's NoteIn.xp)
         # ...AND WHETHER THIS NOTE CAN BE BENT AT ALL. Per NOTE and not per
         # channel, because a channel can change program mid-piece (passac.mid
         # cycles six of them), so each note is judged by its own class.
@@ -9083,7 +9111,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                      _nx, _mcut, _slurred, (nt.ch, nt.note, nt.on) in _SLUR_OUT,
                                      _SONG if choked is None else None, _off_key,
                                      _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT,
-                                                  FREQ_E), _seat, _held,
+                                                  FREQ_E), _seat, _held, press=_press,
                                      organ=((rankev_of[nt.organ_key], [grow_of[(nt.organ_key, _r[0])] for _r in stops],
                                              crow_of[nt.organ_key], wrow_of, wcombo, em.bend_row)
                                             if nt.organ else None))
@@ -9096,7 +9124,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _PUSH_ROWS.append((len(A['om']) - _wn[3].n_push, len(A['om'])))
         else:
             _pjit = _note_strike_noise(em, props, nt, _CBW, _VB, _pjit, emit_partial, random)
-        _note_struck_layer(props, nt, emit_partial, random)
+        if not (_wn is not None and NATIVE_TONE == 'on'):      # (the engine's note struck its layer)
+            _note_struck_layer(props, nt, emit_partial, random)
         if not (_wn is not None and NATIVE_TONE == 'on'):
             _note_ring(em, props, nt, A, _RING, _VB, emit_partial, random)
         if (getattr(props, 'touch_leak_db', None) is not None and (props.harmonic_touch or 1) > 1
@@ -9125,13 +9154,24 @@ def _prepare(path, tuner='hybrid440', sink=None):
                              nt.cc, nt.crl, 0.0, nt.csc, -1, 0, ph0=_lrng.random() * 2.0 * math.pi)
         if not (_wn is not None and NATIVE_TONE == 'on' and _NV_breath(nt.pc)):
             _note_breath_noise(em, props, nt, _CBW, _VB, _slurred, bbrow_of, emit_partial)
-        _note_grains(em, props, nt, A, _CBW, _GL, _GRAIN_ROWS, _VB, bbrow_of, emit_partial, random)
+        if _wn is not None and NATIVE_TONE == 'on' and _NV_grains(nt.pc):
+            # (the engine's note dropped them: its rows are in, live's onsets from its own count)
+            _GRAIN_ROWS.append((_wn[4] + _wn[3].grain0, _wn[4] + _wn[3].grain1))
+            em.no_reflections = False
+        else:
+            _note_grains(em, props, nt, A, _CBW, _GL, _GRAIN_ROWS, _VB, bbrow_of, emit_partial, random)
         if _wn is not None and NATIVE_TONE == 'on' and getattr(props, 'shake_noise', False):
             stops = ()          # (the engine's note shook: its rows are in)
         else:
             stops = _note_shake_noise(em, props, nt, _CBW, _VB, _held, emit_partial, stops)
-        _note_noise_events(em, props, nt, _CBW, _VB, emit_partial)
-        stops = _note_pulse(em, props, nt, _VB, emit_partial, stops)
+        if _wn is not None and NATIVE_TONE == 'on' and _NV_events(nt.pc):
+            em.no_reflections = False   # (the engine's note made its timed noise: its rows are in)
+        else:
+            _note_noise_events(em, props, nt, _CBW, _VB, emit_partial)
+        if _wn is not None and NATIVE_TONE == 'on' and getattr(props, 'pulse', False):
+            stops = ()              # (the engine's note pulsed: its rows are in)
+        else:
+            stops = _note_pulse(em, props, nt, _VB, emit_partial, stops)
         _bnote = em.bend_row          # the note's own row, which a chest row multiplies
         # THE NOTE'S GAIN where it has no stops (a Moog, a shaken noise, a
         # pulse): the release click below rides it, and without this it rode

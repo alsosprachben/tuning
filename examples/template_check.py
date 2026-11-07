@@ -37,6 +37,9 @@ def python_template(B, T, prog, note, vel, tuner):
     tr.append(mido.Message("program_change", channel=0, program=prog, time=0))
     for cc in (7, 11):
         tr.append(mido.Message("control_change", channel=0, control=cc, value=127, time=0))
+    if getattr(B.property_class_for_program(prog), 'drone_wheel', False):
+        # (live._raw_template's: a drone-wheel program's drones corked -- live sounds them itself)
+        tr.append(mido.Message("control_change", channel=0, control=1, value=0, time=0))
     tr.append(mido.Message("note_on", channel=0, note=note, velocity=vel, time=0))
     tr.append(mido.Message("note_off", channel=0, note=note, velocity=0, time=480))
     tr.append(mido.MetaMessage("end_of_track", time=480))

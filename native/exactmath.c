@@ -28,6 +28,12 @@ void nv_cabs_n(long n, const double *z, double *out)
         out[i] = hypot(z[2 * i], z[2 * i + 1]);
 }
 
+void nv_log10_n(long n, const double *x, double *out)
+{
+    for (long i = 0; i < n; i++)
+        out[i] = log10(x[i]);
+}
+
 void nv_log_n(long n, const double *x, double *out)
 {
     for (long i = 0; i < n; i++)
@@ -42,6 +48,13 @@ void nv_cexp_n(long n, const double *z, double *out)
         out[2 * i] = e * cos(z[2 * i + 1]);
         out[2 * i + 1] = e * sin(z[2 * i + 1]);
     }
+}
+
+/* tanh of float64 values, libm's (efxbus.Enhancer's saturation) */
+void nv_tanh_n(long n, const double *x, double *out)
+{
+    for (long i = 0; i < n; i++)
+        out[i] = tanh(x[i]);
 }
 
 /* tanh of float32 values, libm's tanhf (live.limit's knee) */

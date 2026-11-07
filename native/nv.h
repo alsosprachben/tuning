@@ -130,6 +130,10 @@ typedef struct {
        power (_bore_norm: the note's, the constructor's); a samba whistle's
        pea (SambaWhistleProperties: its comb as unison voices, its vibrato) */
     double bore_corner_hz, bore_order, bell_cutoff_hz, bell_order, bore_norm;
+    /* BLARE (SynthProperties._blare): dB per kHz over blare_knee_hz, held at
+       +-blare_cap_db, through the bore; renormalised to the bored series'
+       power (_blare_norm). 0 dB per kHz: none */
+    double blare_db_per_khz, blare_knee_hz, blare_cap_db, blare_norm;
     int pea;
     double pea_vibrato_cents, pea_vibrato_hz;
     /* TunedBarProperties: only the bar's own modes sound (bar_modes: the
@@ -236,7 +240,7 @@ typedef struct {
        slope, dB, its slope) a line in the note's octaves from tube_ref_hz,
        held at -0.6 and 0.85 (_tube_oct); their decays are mode_decays */
     int n_tube;
-    double tube_ref_hz, tube[16][4];
+    double tube_ref_hz, tube[32][4];
     /* A COMB TOOTH'S OCTAVE BELOW (MusicBoxProperties.mode_gains_here): mode
        7 sounds on a key random.Random(key 7919 + 10) chooses -- its draw
        under or_share, an octave under the key not below or_lowest_hz -- at
@@ -280,6 +284,47 @@ typedef struct {
        pap_hz (RECORDED_HZ) x each of its first pap_n modes' ratio; 0 none */
     double pap_hz;
     int pap_n;
+    /* A STRUCK VOICE REPEATED (tap_kind 1 a bird's chirps, 2 a telephone's
+       clapper): its taps (s), each voice's gain, a stroke's offset sd and
+       level range (dB, the clapper's), each mode's gong (A 0, B 1), whether
+       a stroke past the note's end is dropped; the cap on an entry is sect_ofm */
+    int tap_kind, n_tap, n_gong, tap_drop;
+    double tap_t[192], tap_gain, tap_jit, tap_ldb;
+    int gong[16];
+    /* A MEASURED SERIES (HelicopterProperties.harmonic_volume): gain x
+       hvt[h - 1], nothing past n_hvt; 0 none */
+    int n_hvt;
+    double hvt[512];
+    /* THE WASH WHERE THE BODY IS (GuitarFretNoiseProperties.chiff_harmonic_gain:
+       the body's gain at the harmonic x the roll-off, in place of the chiff's) */
+    int chiff_bore;
+    /* A FIXED VIBRATO of its own (the skid's, starship's, scream's
+       voice_vibrato): its depth's cents (x 1.4142) and rate; fv_set 0 none */
+    int fv_set;
+    double fv_cents, fv_hz;
+    /* A PICK (Plectrum): every partial over pick_hz pick_slope_db an octave
+       louder (to pick_boost_max_db), the extra falling at pick_dbs, the rest
+       ringing on; a doubled course crossed pick_stagger s apart (0 none) */
+    int pick_set;
+    double pick_hz, pick_slope_db, pick_boost_max_db, pick_dbs, pick_stagger;
+    /* ITS COURSES' PARTNERS (unison_voices): crs_kind 1 a unison partner on
+       every harmonic (the mandolin's), 2 the 12-string's -- an octave partner
+       on the even harmonics under crs_split, a unison one from it */
+    int crs_kind;
+    double crs_split, crs_oct_gain, crs_oct_cents, crs_uni_gain, crs_uni_cents;
+    /* A CHURCH BELL's decay (ChurchBellProperties.harmonic_decay): each tube
+       mode's mode_decays / 2, by church_slope an octave from tube_ref_hz */
+    int church;
+    double church_slope;
+    /* FEEDBACK (Feedback): the loop's harmonic (fb_fixed, else the one
+       nearest fb_band_hz), its series (fbs: multiple, gain) late copies
+       fb_delay s after the pluck, swelling over fb_swell s, sinking fb_dbs */
+    int fb_set, fb_fixed, n_fbs;
+    double fb_band_hz, fb_delay, fb_swell, fb_gain, fb_dbs, fbs[8][2];
+    /* A STRING'S WANDER (the ukulele's voice_vibrato): each voice's depth up
+       to sw_cents, rate in sw_hz, phase drawn by the key; sw_set 0 none */
+    int sw_set;
+    double sw_cents, sw_hz[2];
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -523,6 +568,11 @@ typedef struct {
        out along its ray, its images from there */
     double dist;
     long long cls;          /* its class (the NoteClass), keying _refl_norm's memo as type(props) does */
+    double hammer_on;       /* a hammer-on's seconds since the pick (em.hammer_on), 0 none */
+    double gs_eq[4];        /* the file's GS EQ on its part (gs_eq_gain), [0] 0 none */
+    /* A FILE'S INSERTION EFFECT's compressor (gsefx.chain's comp): its decay
+       factor, its makeup and its attack (s); [0] 0 none */
+    double fx_comp[3];
 } ToneIn;
 
 /* A MOOG MESSENGER's panel as a note reads it (moog.py; native.moog_spec):
@@ -601,6 +651,7 @@ int nv_moog_tone(const VoiceSnap *v, const ToneIn *t, const MoogLayer *L, double
 /* the voice's gain scaled after it is built (props.gain *= k), what was
    read from it made again (the bore's norm) */
 void nv_voice_regain(const VoiceInit *c, VoiceSnap *s, double k);
+void nv_voice_turn(const VoiceInit *c, const VoiceSnap *s, VoiceNote *o, double angle);
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
                    double attack_volume, double channel_volume, double effort, PyRandom *rs,
                    VoiceSnap *s, VoiceNote *o);
@@ -617,6 +668,15 @@ int nv_strike_bal(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz,
                   double pos_x, double bgl, double bgr, double *rows, int cap, double *qacc, double *azimuth);
 int nv_layer(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db, double reg,
              double fade, double slr, double len, double pos_x, double *rows, int cap, double *qacc, double *azimuth);
+int nv_pulse(const VoiceSnap *v, const ToneIn *t, double f0, double blk, double lo_ms, double hi_ms, double peak,
+             double fmax, double taper, double pos_x, int nimg, const int *nsurf, const int *surf, const double *img,
+             const double *mir, double *rows, int cap, double *qacc, double *azimuth);
+int nv_events(const VoiceSnap *v, const ToneIn *t, int ne, const double (*ev)[4], int k, double ramp,
+              double pos_x, double *rows, int cap, double *qacc, double *azimuth);
+int nv_palm(const VoiceSnap *v, const ToneIn *t, double hz, double db, double plr, double bon, double slen,
+            double sfade, double gl, double gr, double pos_x, double *rows, int cap, double *qacc, double *azimuth);
+int nv_grains(const VoiceSnap *v, const ToneIn *t, int ng, const double (*g)[9], long long seed, double settle,
+              double pos_x, double *rows, int cap, double *qacc, double *azimuth);
 int nv_breath(const VoiceSnap *v, const ToneIn *t, int nb, const double *hz, const double *db, int k, double fade,
               double pos_x, double *rows, int cap, double *qacc, double *azimuth);
 int nv_tone(const VoiceSnap *v, const ToneIn *t,
@@ -721,6 +781,15 @@ typedef struct NoteClass {
     int n_flam;
     double flam_s, flam_db;
     double flam_rate;       // a crowd (strike_flam_rate): bursts a second through the note, 0 none
+    // A FEW PEOPLE (strike_flam_people): how many, their lowest and highest
+    // claps a second, the jitter, the dB spread; their palms' ring
+    // (strike_flam_people_peak: lowest and highest Hz, dB, Q), pk_set 0 none
+    int people_n, pk_set;
+    double people_lo, people_hi, people_jit, people_db, pk_lo, pk_hi, pk_db, pk_q;
+    // TIMED NOISE BANDS (noise_events: Hz, dB, start s, end s), noise_rows a
+    // band, ramped nev_ramp_s; their width -noise_rel (in nb's noise_rel)
+    int n_nev;
+    double nev[64][4], nev_ramp_s;
     // ...or a machine's (strike_flam_times: each burst's offset s, dB, and
     // place in the balance -- the cos/sin of its angle -- where ft_bal)
     int n_ft, ft_bal;
@@ -864,6 +933,87 @@ typedef struct NoteClass {
     // holds (meend_strength), its Sa without a raga (sympathetic_tonic)
     double meend_range, meend_strength;
     int meend_tonic;
+    double key_pan_spread;          // a wide voice (GS's "w" tones): its keys' seats, +-this 30 keys from middle C
+    // GRAINS (grains): each row lo Hz, hi Hz, a second (negative: a clock),
+    // dB, its scatter dB, dB/s, a glide's rise (0 none) and time, a cluster's sines
+    int n_grain;
+    double grain[8][9];
+    // A PULSE (pulse: the gunshot's N-wave) in place of the series: its
+    // length's range (ms), its spectrum's peak x T (N_WAVE_PEAK), band and taper
+    int pulse;
+    double pulse_lo_ms, pulse_hi_ms, pulse_peak, pulse_fmax, pulse_taper;
+    double sounding_oct;    // a melodic note's sounding octaves (sounding_octaves), 0 none
+    double xf;              // a sound transposed whole (transposed_from_hz): built at this pitch, 0 none
+    // ...ITS KIT KEY'S STROKES (sfx_strokes_of): the program whose kit has it
+    // (-1 none) and the key (-1: the note's own)
+    int sfx_prog, sfx_key;
+    // ITS OWN SCALE (scale_cents): offsets from the tonic note and their cents; scale_n 0 none
+    int scale_n, scale_tonic;
+    int scale_off[32];
+    double scale_c[32];
+    // A STRIKE-IN SET BY THE HAND (strike_in_s): the attack, soft to hard; si_set 0 none
+    int si_set;
+    double si0, si1;
+    // ITS DRONES (drone_classes): each one's note and class (K's index), in
+    // the order the wheel corks them; the gap that ends a phrase (part_break_s)
+    int n_drone;
+    int drone_note[4], drone_k[4];
+    double part_break_s;
+    // ...LIVE's (Patch.drone_wheel, drone_ratios, drone_gain): the wheel corks
+    // them, each sounding at the tonic x its ratio, at its gain
+    int drone_wheel, n_dratio;
+    double drone_ratio[4], drone_gain[4];
+    // ...and A DISTANCE OF ITS OWN (reverb_distance: where its part sends no CC91)
+    int rd_set;
+    double reverb_dist;
+    // ...and THE FRETTING HAND (hammer_legato): a slurred note hammered on
+    int hammer;
+    // A FALL (fall_cents: held fall_at_s, then down the lattice over fall_s,
+    // fading fall_fade_db) and A RIP (rip_cents: up the lattice into the note
+    // over rip_s from rip_start_db under), each smeared; 0 cents none
+    double fall_cents, fall_at_s, fall_s, fall_fade_db, fall_smear;
+    double rip_cents, rip_s, rip_start_db, rip_smear;
+    // ITS OWN CHORUS where the part sends no CC93: a pedal (chorus_send, its
+    // comb cho_cents) or a detuned pair (detuned_pair: cents down, up)
+    double cho_send;
+    int pair_set;
+    double pair_lo, pair_hi;
+    // TREMOLO PICKING (tremolo_pick_hz, 0 none): the up strokes tp_up_db,
+    // each stroke's time scattered tp_jit of a period
+    double tp_hz, tp_up_db, tp_jit;
+    // A SIREN'S ROTOR (siren_rotor): 1 the fire siren's (its motor), 0 none
+    int siren;
+    // ITS OWN INSERTION EFFECT (insertion_efx: gsefx.chain of its tone_state):
+    // its output level, its OD stage's gain (0 none), its EQ (low dB, mid Hz,
+    // Q, mid dB, high dB; efx_eq_set 0 none) and its reverb send (0-127)
+    int efx_set, efx_eq_set;
+    double efx_level, efx_od, efx_eq[5], efx_rev;
+    // ...ITS CHORUS DEVICE (its 'cf': chorus.gs_copies), efx_cf 0 none: tau,
+    // rate, vd, fb, lpf (0 none), share, taps, the head's beta; each output's
+    // place (l, r, c: left and right incidence, left and right delay in
+    // samples); each tap's output (0 l, 1 r, 2 c), phase, extra delay, depth
+    int efx_cf;
+    double cf_p[40];
+    // ...ITS DELAY (its 'dly': gsdelay.expand), efx_dly 0 none: level, fb,
+    // lpf (0 none), tc, taps; each tap's tau, level, output (0 l, 1 r, 2 c),
+    // period -- and the outputs' places (efx_place: the head's beta, then l,
+    // r, c's left and right incidence, left and right delay in samples)
+    int efx_dly;
+    double dly_p[24], efx_place[13];
+    // ...ITS TREMOLO (an Auto Pan's 'trem': rate, depth, stereo, scatter), efx_trem 0 none
+    int efx_trem;
+    double trem_cfg[4];
+    // ...ITS MOVING FILTER (efxfilter: a Phaser's or wah's), flt_set 0 none:
+    // its type, control kind (1 a sweep, 2 a held pedal), parameters (pa, pb,
+    // pc) and control's (Manual Hz, octaves, rate, up: NaN a phaser's, 1 up, 0
+    // down; sens)
+    int flt_set, flt_ty, flt_k;
+    double flt_p[3], flt_c[5];
+    // ...ITS BUS (efxbus.Bus), efx_bus 0 none: 1 Lo-Fi (step, quantum, pre
+    // and post filters' a, 0 none), 2 a compressor (threshold dB, ratio,
+    // attack and release k, makeup); bus_p[10], [11] its dry and wet
+    int efx_bus;
+    double bus_p[12];
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -930,6 +1080,28 @@ typedef struct {
     int ring_on;
     double ring_f[48], fbr;
     void *sym_drv;          // where its voice goes, the driver of its channel's strings (_SYM_CH), NULL not
+    double blk;             // the render's block (BLK): a pulse's lead is two of them
+    double xp;              // ...the key's interval it is moved by (_XP), 0: 1
+    // A HAMMER-ON (hammer_legato): hammered over the file's slur, a mono or
+    // gliss slur besides (its attack the legato's again), the seconds since
+    // the channel's last pick
+    int hammered, reslur;
+    double hammer_on;
+    // A SIREN's (_SIREN_AT): sounding until its rotor's end, siren_set 0 none
+    int siren_set;
+    double siren_end;
+    // ITS PRESSURE (_pressure_of: its polytouch, else its channel's aftertouch), 0..1
+    double press;
+    // THE FILE'S GS EQ on its part (gs_eq_gain): low and high corners, gains (dB); [0] 0 none
+    double gs_eq[4];
+    // ITS PART ON THE FILE'S INSERTION EFFECT at its onset (nvrender's
+    // chains): fx_set 1 a chain (its level, OD gain, 0 none, compressor), 2
+    // the part on it with no chain built (the tone's own not played), 0 not
+    int fx_set;
+    double fx_level, fx_od, fx_comp[3];
+    // ...its 3D type's angle at its onset (pos3d: radians, + right), fx_p3d 0 none
+    int fx_p3d;
+    double fx_angle;
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -942,9 +1114,18 @@ void nv_refl_memo_reset(void);
 /* live.cpp: chorus.expand's send path -- each channel (chans, in its first
    note's order) at its send (0..1), its comb (ncents[q] cents of
    cents[8 q ...]): a copy of each of its rows per comb tooth, detuned,
-   delayed and swept, the dry share taken out of the rows. The copies made. */
+   delayed and swept, the dry share taken out of the rows -- or, kinds[q] 1,
+   a detuned pair (chorus._pair: cents[8 q] down, cents[8 q + 1] up). The
+   copies made. */
+void nv_gsd_place_reset(void);
+void nv_gsd_place(int side, double f, const double *pl, double *out);
+void nv_gsd_place4(int side, double f, double beta, const double *P, double *out);
+void nv_gsd_place4k(double key, double f, double beta, const double *P, double *out);
+void nv_chorus_taps(int q, int n, const double *taps);
+void nv_tremolo_wave(long long ch, int n, const double *khp);
 long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
-                           const double *sends, const int *ncents, const double *cents, double sr);
+                           const double *sends, const int *ncents, const double *cents, const int *kinds,
+                           const double *gsp, double sr);
 int nv_struck(const VoiceSnap *v, const ToneIn *t, const VoiceSnap *ls, int nm, double ft, const double *hv,
               double hmax, double db, double rise, double dbs, long long seed, int nimg, const int *nsurf,
               const int *surf, const double *img, const double *mir, double *rows, int cap, double *qacc,
@@ -973,6 +1154,7 @@ typedef struct {
     int n_ft, lay_rows[2];          /* (each layer's rows, in order) */
     double ft[2][30], kn[2][9];     /* ...and their knob rows (moog.kn_row, the knobs turned) */
     int ring0, ring1;               /* its other strings' rows (_RING), from the note's first */
+    int grain0, grain1;             /* its grains' rows (_GRAIN_ROWS: live keeps their own onsets) */
 } NoteOut;
 
 // tone.c: the key-up's click (nv_click, blockrender._note_release_click)
@@ -1016,6 +1198,13 @@ int nv_song_next_same(void *s, long long ch, int note, double on, double *out);
 int nv_song_pitch_level(void *s, int index, int effort_tilt, double *out);
 /* ...an 'indian' class's at the secondary tuning (indian 1: FREQ_E's) */
 int nv_song_pitch_level_k(void *s, int index, int effort_tilt, int indian, double *out);
+/* ...a class's sounding octaves into a melodic note's pitch (after its meend) */
+int nv_song_pitch_level_ks(void *s, int index, int effort_tilt, int indian, double so, double *out);
+/* ...the note's class's own pitch: its sounding octaves and its scale */
+int nv_song_pitch_level_kc(void *s, int index, int effort_tilt, const NoteClass *K, double *out);
+/* THE DRONES (_prep_phrase_spans, _DRONE_PC): once, the song's notes given
+   the drones of each channel's drone class; 0, or -1 refused */
+int nv_song_drones(void *s, const NoteClass *const *K);
 /* THE SECONDARY TUNING (FREQ_E; NULL none) and the raga in force (raga_on:
    T.raga_spec set; sa its Sa's note, -1 none; sw its swaras' cents); and a
    note's table: the secondary's for an 'indian' class, else the channel's */
@@ -1040,9 +1229,16 @@ void nv_song_sym_reset(void *s);
 double nv_sym_coupling(const VoiceSnap *drv, const VoiceSnap *rsp, double g, double wmin);
 void nv_song_kits(void *s, const double *f0, const double *seat);
 void nv_song_chokes(void *s, const unsigned long long *choke);
+void nv_song_kits_n(void *s, const double *f0, const double *seat, int n);
+void nv_song_chokes_n(void *s, const unsigned long long *choke, int n);
+void nv_song_mapk_base(int base);
 void nv_song_legato(void *s, long long ch, int note, int k);
 void nv_song_note_stroke(void *s, int i, double ratio, int inner);
 void nv_song_strokes(void *s, const int *kind, const double *par);
+/* ...and a melodic SFX note's, its class's kit key's (K: the classes) */
+void nv_song_strokes_k(void *s, const NoteClass *const *K, const int *kind, const double *par);
+/* a note's stroke pitch (stroke_pitch: a bell tree's bar, a gallop's hoof), 1 none */
+double nv_song_note_ratio(void *s, int i);
 int nv_song_slur(void *s, int i, int *out);
 int nv_song_snd_any(void *s, long long ch);
 long long nv_song_mix(void *s, int i);
@@ -1071,6 +1267,10 @@ void nv_song_moog_add_moving(void *s, long long ch, const double *ft, const Moog
 int nv_song_choke(void *s, long long ch, int note, double on, double *out);
 /* a note's class: K[128 * program + key], a drum set's K[16384 + 128 * program + key] */
 #define NV_K_DRUMS 16384
+/* ...a variation's (bank select): K[NV_K_VAR + 128 * slot + key] */
+#define NV_K_DRONE (2 * NV_K_DRUMS)
+/* ...a drone's class (a bagpipe's: drone_classes): K[NV_K_DRONE + its index], 256 of them */
+#define NV_K_VAR (NV_K_DRONE + 256)
 // A DRUM KEY'S GESTURE ROW (native.kits' spar, native.SPAR): its strokes'
 // numbers from the row's start (up to NV_SPAR - 4: a pattern's 32 strokes),
 // and in its last four the keys a strike on it also sounds -- how many, then
@@ -1093,6 +1293,20 @@ int nv_song_mono(void *s, int i, int *mcut, int *mslur);
    and a note's step (level, smear, the step it arrives from or -1, the step's
    time), 0 not one */
 void nv_song_gliss(void *s, const NoteClass *const *K);
+void nv_song_slot_organs(void *s, int n, const OrganSpec *const *so);
+void nv_song_play_mark(void *s);
+void nv_song_siren(void *s, long long ch, int note, double on, double row, double end);
+void nv_song_efx_part(void *s, long long part, double on, double dist);
+void nv_song_pressure_events(void *s, long long ch, int key, int n, const double *t, const int *v);
+double nv_song_pressure(void *s, long long ch, int note, double on, double off);
+int nv_song_efx_dist(void *s, long long part, double on, double *dist);
+void nv_song_gs_eq(void *s, const double *eq, int noff, const int *off);
+void nv_song_gs_delay(void *s, const double *dev, const double *place);
+void nv_song_dedit(void *s, int n, const int *iv, const double *t);
+int nv_song_dst(void *s, long long ch, int key, double on, int *v);
+const double *nv_song_gs_delay_of(void *s, const double **place);
+int nv_song_gs_eq_of(void *s, long long part, double *eq);
+int nv_song_siren_of(void *s, int i, double *out);
 int nv_song_gliss_note(void *s, int i, double *out);
 double nv_song_tess(void *s, long long ch);
 void nv_song_set_part(void *s, long long ch, int part);
@@ -1106,8 +1320,18 @@ int nv_voice_part(int part, double *ratio, double *cluster);
 void nv_song_note(void *s, long long ch, int note, double on, double off, int vel, double v7, double v11,
                   double pan, double trim, int prog, int drum);
 int nv_song_n_notes(void *s);
+/* BANK SELECT: the entries (each one's layers: slot, semitones, velocities;
+   nls[e] of them, entry 0 none), their trims, GS's table [map][program][msb]
+   and GM 2's [program][lsb]; the last note's bank (the reader's bsel) made
+   its variation's notes (0: no table); a note's class index in K, and its
+   tone on its part (_TONE_SEGS) */
+void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2);
+int nv_song_note_bank(void *s, int bsel);
+int nv_song_kidx(void *s, int i);
+int nv_song_tone(void *s, int i);
 void nv_song_snd(void *s, long long ch, double t, int cc, int v);
 void nv_song_sound(void *s, long long ch, double t, double *d);
+void nv_song_cmx(void *s, int kind, long long ch, double t, double v);
 int nv_song_glide(void *s, int i, int *cc5);
 void nv_song_organ(void *s, long long ch, const OrganSpec *spec, const OrganSpec *const *prog_organ);
 int nv_song_n_organs(void *s);
@@ -1126,6 +1350,9 @@ void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, 
 int nv_song_organ_note(void *s, int i, int family, NoteIn *n);
 int nv_song_stroked(void *s, int i);
 void nv_song_add_stroke_rows(void *s, long long a, long long b);
+/* each note's grains' rows (_GRAIN_ROWS), [first, end); n pairs into ab (NULL: count) */
+void nv_song_add_grain_rows(void *s, long long a, long long b);
+int nv_song_n_grain_rows(void *s, long long *ab, int cap);
 int nv_song_n_stroke_rows(void *s, long long *ab, int cap);
 int nv_song_htrem(void *s, int i);
 void nv_song_add_htrem_rows(void *s, long long a, long long b);
@@ -1140,7 +1367,29 @@ void nv_song_add_clav(void *s, long long ch, int setting);
 int nv_song_clavs(void *s, long long *ch, int *setting, int cap);
 void nv_clav_pass(void *song, double *rows, long long P);
 int nv_song_trems(void *s, long long *ch, double *cfg, int cap);
-void nv_song_add_amp(void *s, long long ch, double drive, int rotor, double reference, double imbalance);
+void nv_song_add_amp(void *s, long long ch, double drive, int rotor, double reference, double imbalance,
+                     double lv0);
+void nv_song_amp_steps(void *s, long long ch);
+int nv_song_amp_steps_of(void *s, int k, double *base, const double **starts, const double **levels);
+// A FILE'S INSERTION EFFECT (nvrender's chains, NV_FXN doubles each): the
+// chains, each note's (-1 its part not on the effect, -2 on it, no chain),
+// which notes are their mix channel's first through a chain, the cabinets
+// a chain names (guitar12, bass410; null none)
+enum { NV_FXN = 160 };
+enum { NV_EFX_NAT = 64 };       /* (the export's native types: room for every one) */
+/* (the export's EFX tables past its pans' places: *9, the waves, the Hexa
+   Chorus's voices, then the 3D types' two angles, (key, li, ri, dL, dR) each) */
+enum { NV_EFX_PANS_TO_DEG = 512 + 128 + 5 * 19 + 128 * 6 * 5 };
+void nv_song_fx(void *s, int nchain, const double *chains, int nnote, const int *note_fx, const unsigned char *first,
+                const NoteClass *cab0, const NoteClass *cab1);
+int nv_song_note_fx(void *s, int i, const double **chain);
+int nv_song_note_fx_first(void *s, int i);
+const NoteClass *nv_song_fx_cab(void *s, int which);
+// ...its delay's places: the outputs' (K_GSPLACE's 13) and a pan's (128 x 4)
+void nv_song_fx_place(void *s, const double *place, const double *pans);
+const double *nv_song_fx_place_of(void *s, const double **pans);
+// ...and a mix channel's level steps over the file (its amp's reference: tubeamp.segment's 'steps')
+void nv_song_fx_steps(void *s, long long ch, int n, const double *starts, const double *levels);
 void nv_song_amp_cfg(void *s, int k, double *reference, double *imbalance);
 double nv_song_amp(void *s, int k, long long *ch, int *rotor);
 int nv_song_leslie(void *s, int k, long long *ch);

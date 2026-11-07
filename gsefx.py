@@ -846,6 +846,12 @@ def filter_setup(events, ch, notes=()):
     if not segs:
         return None
     f0 = segs[0][1]
+    # (a setting whose control is not the first's family -- the Humanizer's
+    # vowels after a sweep, a wah or a flanger's line, or one of those after
+    # the vowels -- cannot drive this channel: its type and its rows are the
+    # first's. Its time holds the control before it, as a setting with no
+    # filter does. It crashed the table before: a vowel read as a line)
+    segs = [(t, f) for t, f in segs if (f['ctrl'][0] == 'vowel') == (f0['ctrl'][0] == 'vowel')]
     ts = np.array([t for t, _ in segs])
     kind = f0['ctrl'][0]
     env = note_envelope(notes) if any(f['ctrl'][0] == 'sweep' and f['ctrl'][5] for _, f in segs) else None
@@ -1306,6 +1312,8 @@ def eq_gain(f, eq):
     (GTR Multi 2: Cmp, OD, EQ, CF) -- applied with the cabinet, to the valve's
     products too (blockrender's and streamrender's speaker pass)."""
     lo, mf, q, mg, hi = eq[:5]
+    # (an array's in libm's pow, element by element -- native.xpow -- for
+    # numpy's own SIMD pow differs in the last bit, and the engine's EQ is libm's)
     # ...and, where a type sets them (Stereo-EQ), its shelves' corners and
     # more mids: (lo, mid Hz, Q, mid dB, hi, lo Hz, hi Hz, (mid Hz, Q, dB)...)
     x = (f / (eq[5] if len(eq) > 5 else LOW_SHELF_HZ)) ** 2
@@ -1315,6 +1323,9 @@ def eq_gain(f, eq):
         if mf and mg:
             u = q * (f / mf - mf / (f + 1e-6 * (f <= 0)))
             db += mg / (1.0 + u * u)
+    if isinstance(db, np.ndarray):
+        import native as _NV
+        return _NV.xpow(10.0, db / 20.0)
     return 10.0 ** (db / 20.0)
 
 

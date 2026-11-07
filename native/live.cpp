@@ -13,6 +13,7 @@
 // these columns: the slab's port takes them.
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -36,6 +37,8 @@ void nv_song_finish(void *s, double total);
 void nv_song_kits(void *s, const double *f0, const double *seat);
 void nv_song_chokes(void *s, const unsigned long long *choke);
 void nv_song_strokes(void *s, const int *kind, const double *par);
+void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2);
+void nv_song_slot_organs(void *s, int n, const OrganSpec *const *so);
 void nv_log_n(long n, const double *x, double *out);
 long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                      PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind, double scale,
@@ -61,7 +64,7 @@ static void vlq(std::vector<uint8_t> &b, uint32_t v)
 // _raw_template's file, as mido saves it (type 1, 480 ticks a beat, one
 // track): end, the track's last delta (a drum's 18 beats: its 8 s ring)
 static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int fast, uint32_t end = 480,
-                                     const OrganSpec *og = nullptr)
+                                     const OrganSpec *og = nullptr, int bank = 0)
 {
     std::vector<uint8_t> tr;
     auto ev = [&](uint32_t dt, std::initializer_list<uint8_t> bytes) {
@@ -69,6 +72,13 @@ static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int
         tr.insert(tr.end(), bytes);
     };
     ev(0, {0xFF, 0x51, 0x03, 0x0F, 0x42, 0x40});                     // set_tempo 1000000
+    if (bank) {
+        // THE BANK FIRST, as a file selects a variation (Patch._raw_template):
+        // CC0 = bank, and a map's own tone under CC32 = map (bank_select)
+        ev(0, {(uint8_t)(0xB0 | ch), 0, (uint8_t)(bank & 0x7F)});
+        if (bank >> 7)
+            ev(0, {(uint8_t)(0xB0 | ch), 32, (uint8_t)(bank >> 7)});
+    }
     ev(0, {(uint8_t)(0xC0 | ch), (uint8_t)program});
     ev(0, {(uint8_t)(0xB0 | ch), 7, 127});
     ev(0, {(uint8_t)(0xB0 | ch), 11, 127});
@@ -124,6 +134,37 @@ extern "C" {
 // the tuner's raga, as blockrender's prepare finds it (T.raga_sa_note: -1 none;
 // its swaras): the cache's whose template this thread is building
 static thread_local int g_raga_sa = -1, g_raga_nsw = 0;
+// BANK SELECT (the export's VARS, nv_live_vars): each entry's layers (slot,
+// semitones, lowest and highest velocity) and its trim (a file not GS's:
+// live's templates), GS's [map][program][msb] and GM 2's tables, each slot's
+// organ; and the variation the template being built is of (Cache::build)
+static std::vector<int> g_var_nls, g_var_off, g_var_ls, g_var_gs, g_var_gm2;
+static std::vector<double> g_var_trim;
+static std::vector<const OrganSpec *> g_slot_organ;
+static thread_local int g_tmpl_var = 0;
+static long long g_k_n = 0;             // K's length a cache copies (0: the programs' and drum sets' only)
+
+// the entry variation key v selects for program p (the reader's bsel, Song::bank's): 0 the capital
+static int var_entry(int p, int v)
+{
+    if (!v || g_var_gs.empty() || p < 0 || p > 127)
+        return 0;
+    int msb = v & 0x7F, mp = v >> 7;
+    if (!msb)
+        return 0;
+    int bs = 1 + 128 * (mp >= 1 && mp <= 4 ? mp : 0) + msb;
+    return g_var_gs[((size_t)((bs - 1) / 128) * 128 + p) * 128 + (bs - 1) % 128];
+}
+
+// ...and the K index its key plays (its first layer's slot, at its semitones), -1 none
+static int var_kidx(int en, int key)
+{
+    if (en <= 0 || en >= (int)g_var_nls.size() || g_var_nls[en] < 1)
+        return -1;
+    const int *l = &g_var_ls[4 * (size_t)g_var_off[en]];
+    int k = key + l[1];
+    return k >= 0 && k <= 127 ? NV_K_VAR + 128 * l[0] + k : -1;
+}
 static thread_local double g_raga_sw[12];
 
 static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, const double *freq,
@@ -134,7 +175,7 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                std::vector<long long> *srows, std::vector<long long> *prows = nullptr,
                                const double *les = nullptr, std::vector<long long> *flips = nullptr,
                                std::vector<double> *jrows = nullptr, std::vector<long long> *rrows = nullptr,
-                               double *mft = nullptr);
+                               double *mft = nullptr, std::vector<long long> *grows = nullptr);
 long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                             const double *cfg, const char *mask, long long nmask, double sr);
 long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
@@ -163,12 +204,28 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                                double ln10_20, double xdec_nepers, double SR, void **dm, const nv::live::Kits *kit,
                                std::vector<long long> *srows, std::vector<long long> *prows, const double *les,
                                std::vector<long long> *flips, std::vector<double> *jrows,
-                               std::vector<long long> *rrows, double *mft)
+                               std::vector<long long> *rrows, double *mft, std::vector<long long> *grows)
 {
-    const NoteClass *kc = (!kit && program >= 0 && program < 128) ? K[128 * program + note] : nullptr;
+    // (a variation's: its first layer's slot -- var_entry, var_kidx)
+    const int ven = kit ? 0 : var_entry(program, g_tmpl_var);
+    auto kat = [&](int key) -> const NoteClass * {
+        if (kit || program < 0 || program > 127)
+            return nullptr;
+        if (ven) {
+            int q = var_kidx(ven, key);
+            return q >= 0 ? K[q] : nullptr;
+        }
+        return K[128 * program + key];
+    };
+    const NoteClass *kc = kat(note);
     const OrganSpec *og = kc ? kc->organ : nullptr;
+    // (a drone-wheel program's: built with its drones CORKED -- live sounds
+    // them as its own held voices, live._raw_template's fast = 0)
+    const NoteClass *pc_ = kat(60);
+    if (pc_ && pc_->drone_wheel && fast < 0)
+        fast = 0;
     std::vector<uint8_t> f = kit ? nv::live::one_note(program, note, vel, 9, fast, 480 * 18)
-                                 : nv::live::one_note(program, note, vel, 0, fast, 480, og);
+                                 : nv::live::one_note(program, note, vel, 0, fast, 480, og, ven ? g_tmpl_var : 0);
     int err = 0;
     void *m = nv_midi_read(f.data(), (long long)f.size(), &err);
     if (!m)
@@ -180,6 +237,11 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     if (kit) {
         nv_song_kits(song, kit->f0.data(), kit->seat.data());
         nv_song_chokes(song, kit->choke.data());
+    }
+    if (ven) {                              // (bank select's tables, before the note takes its variation)
+        nv_song_vars(song, (int)g_var_nls.size(), g_var_nls.data(), g_var_ls.data(), g_var_trim.data(),
+                     g_var_gs.data(), g_var_gm2.data());
+        nv_song_slot_organs(song, (int)g_slot_organ.size(), g_slot_organ.data());
     }
     nv_midi_song(m, song, trim);
     if (og) {                               // the organ on its channel, its stops all drawn
@@ -208,6 +270,11 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         int n = nv_song_n_stroke_rows(song, nullptr, 0);
         srows->resize(2 * n);
         nv_song_n_stroke_rows(song, srows->data(), n);
+    }
+    if (grows && P >= 0) {                      // ...and its grains' (_GRAIN_ROWS)
+        int ng = nv_song_n_grain_rows(song, nullptr, 0);
+        grows->resize(2 * ng);
+        nv_song_n_grain_rows(song, grows->data(), ng);
     }
     if (rrows && P >= 0) {                      // ...and its key-up's rows (rel_rows)
         int nr = nv_song_n_rel_rows(song, nullptr, 0);
@@ -308,8 +375,78 @@ static int emit_col(const char *n)
 // *P of them, realloc'd; a damper's dk/dg (dm[0], dm[1]) copied with them.
 // The channels nch of chans, each's (rate, depth, stereo, scatter) in cfg;
 // mask nmask long (NULL: every row). Returns the sidebands made.
+// blockrender.gsd_place's memo, the render's: (output, whole Hz) -> the
+// first frequency's (gL, gR, dL, dR) -- shared by the GS delay's repeats and
+// the chorus device's copies, in the order they ask (the delay's first)
+static std::map<std::pair<double, long long>, std::array<double, 4>> g_gsd_place;
+// (its keys as Python's: an output 10 + its index ('l', 'r', 'c'), a pan the
+// pan itself (-1..1: a pitch shifter's, a Hexa Chorus's voice), an angle 1000
+// + its degrees -- one memo, so a pan two effects share is one entry)
+
+extern "C" void nv_gsd_place_reset(void) { g_gsd_place.clear(); }
+
+// output side (0 l, 1 r, 2 c) at frequency f: pl the head's beta, then each
+// output's (left incidence, right incidence, left delay, right delay)
+extern "C" void nv_gsd_place4(int key, double f, double beta, const double *P, double *out);
+extern "C" void nv_gsd_place4k(double key, double f, double beta, const double *P, double *out);
+extern "C" void nv_gsd_place(int side, double f, const double *pl, double *out)
+{
+    nv_gsd_place4k(10.0 + side, f, pl[0], pl + 1 + 4 * side, out);
+}
+
+// ...an output or a pan given by its incidences and delays (P: li, ri, dL,
+// dR), under its own key in the same memo (a pan's: 100 + its value)
+extern "C" void nv_gsd_place4(int side, double f, double beta, const double *P, double *out)
+{
+    nv_gsd_place4k(side >= 100 ? (side - 100 - 64) / 63.0 : 10.0 + side, f, beta, P, out);
+}
+
+extern "C" void nv_gsd_place4k(double side, double f, double beta, const double *P, double *out)
+{
+    auto key = std::make_pair(side, (long long)f);
+    auto it = g_gsd_place.find(key);
+    if (it == g_gsd_place.end()) {
+        auto hg = [&](double inc) {     // (SynthProperties.hrtf_gain)
+            const double alpha_min = 0.1, theta_min = 150.0 * M_PI / 180.0;
+            double alpha = 1.0 + alpha_min / 2.0 + (1.0 - alpha_min / 2.0) * cos(inc * M_PI / theta_min);
+            double omega = 2.0 * M_PI * f;
+            return sqrt(pow(alpha * omega, 2.0) + pow(beta, 2.0)) / sqrt(pow(omega, 2.0) + pow(beta, 2.0));
+        };
+        it = g_gsd_place.emplace(key, std::array<double, 4>{hg(P[0]), hg(P[1]), P[2], P[3]}).first;
+    }
+    for (int q = 0; q < 4; q++)
+        out[q] = it->second[q];
+}
+
+// AN INSERTION EFFECT's MIX FOLLOWING THE FILE (gsefx.mix_share, chorus.expand's
+// fourth): channel q's share at each row's onset, the last time (s) at or
+// before it -- given before nv_chorus_expand (a device of kind 2), used by it
+static std::map<int, std::pair<std::vector<double>, std::vector<double>>> g_cho_steps;
+static std::map<int, bool> g_cho_samples;  // (a channel's steps in samples, step_at's; else seconds)
+// ...and its VOICES where the device's are not GS_TAPS' two (gsefx._chorus's
+// taps): each (key, li, ri, dL, dR, LFO phase, extra delay s, depth factor),
+// placed by its own incidences under its key in gsd_place's memo
+static std::map<int, std::vector<double>> g_cho_taps;
+extern "C" void nv_chorus_taps(int q, int n, const double *taps)
+{
+    g_cho_taps[q] = std::vector<double>(taps, taps + 8 * n);
+}
+extern "C" void nv_chorus_share_steps(int q, int n, const double *ts, const double *vals)
+{
+    g_cho_steps[q] = std::make_pair(std::vector<double>(ts, ts + n), std::vector<double>(vals, vals + n));
+    g_cho_samples[q] = false;
+}
+
+// ...a CC93 that moves (_note_chorus_send's step table, step_at): its changes in samples
+extern "C" void nv_chorus_share_steps_n(int q, int n, const double *ts, const double *vals)
+{
+    g_cho_steps[q] = std::make_pair(std::vector<double>(ts, ts + n), std::vector<double>(vals, vals + n));
+    g_cho_samples[q] = true;
+}
+
 extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
-                                      const double *sends, const int *ncents, const double *cents, double sr)
+                                      const double *sends, const int *ncents, const double *cents,
+                                      const int *kinds, const double *gsp, double sr)
 {
     // chorus.py's SWEEP_HZ, DELAY_S, SWEEP_DEPTH, FLOOR
     static const double SWEEP_HZ[4] = {0.21, 0.29, 0.17, 0.34}, DELAY_S[4] = {0.007, 0.011, 0.013, 0.017};
@@ -329,7 +466,133 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
     std::vector<double> extra;
     std::vector<long long> src;
     long long made = 0;
+    const int cNON = emit_col("non"), cNOFF = emit_col("noff"), cNFR = emit_col("nfr"), cDL = emit_col("delL"),
+              cDR = emit_col("delR"), cFMW = emit_col("fmw"), cFMP = emit_col("fmp"), cFMPR = emit_col("fmpR"),
+              cVDL = emit_col("vdl");
     for (int q = 0; q < nch; q++) {
+        if (kinds && kinds[q] == 2) {
+            // A CHORUS DEVICE (chorus.gs_copies: a tone's insertion effect's
+            // chorus): each output's copies of the channel's rows, a pass a
+            // round of its feedback, placed at the output, the LFO free
+            const double *G = gsp + 40 * q;
+            const double tau = G[0], rate = G[1], vd = G[2], fb = G[3], lpf = G[4];
+            auto tov = g_cho_taps.find(q);
+            const double *TV = tov != g_cho_taps.end() ? tov->second.data() : nullptr;
+            const int ntap = TV ? (int)(tov->second.size() / 8) : (int)G[6];
+            std::vector<long long> sel;
+            for (long long i = 0; i < n; i++)
+                if ((long long)rows[(size_t)NCOLS * i + cMCH] == chans[q])
+                    sel.push_back(i);
+            // the share: the device's, or each row's (its onset's step)
+            auto stp = g_cho_steps.find(q);
+            std::vector<double> share(sel.size(), G[5]);
+            if (stp != g_cho_steps.end()) {
+                const std::vector<double> &ts = stp->second.first, &vs = stp->second.second;
+                const bool samp = g_cho_samples[q];
+                for (size_t j = 0; j < sel.size(); j++) {
+                    double x = samp ? rows[(size_t)NCOLS * sel[j] + cNON] : rows[(size_t)NCOLS * sel[j] + cNON] / sr;
+                    long i = (long)(std::upper_bound(ts.begin(), ts.end(), x) - ts.begin()) - 1;
+                    share[j] = vs[i < 0 ? 0 : i >= (long)vs.size() ? (long)vs.size() - 1 : i];     // (before the first: the first)
+                }
+            }
+            bool any = false;
+            for (double x : share)
+                any = any || x > 0.0;
+            if (sel.empty() || !any)
+                continue;
+            const double fb2 = pow(fb, 2.0);
+            const double passes = fb2 < 1.0 ? (1.0 - pow(fb2, 16.0)) / (1.0 - fb2) : 16.0;
+            std::vector<double> wet(sel.size());
+            for (size_t j = 0; j < sel.size(); j++)
+                wet[j] = sqrt(share[j] / (double)ntap / passes);
+            std::vector<double> non(sel.size()), noff(sel.size()), ph0(sel.size()), ph0R(sel.size()), fmp(sel.size()),
+                fmpR(sel.size()), fmw(sel.size()), f(sel.size());
+            for (size_t j = 0; j < sel.size(); j++) {
+                const double *r = rows + (size_t)NCOLS * sel[j];
+                long long i = sel[j];
+                non[j] = r[cNON];
+                noff[j] = r[cNOFF];
+                ph0[j] = p0[i] + om[i] * (r[cNON] + r[cDL]);
+                ph0R[j] = p0R[i] + om[i] * (r[cNON] + r[cDR]);
+                fmp[j] = r[cFMP]; fmpR[j] = r[cFMPR]; fmw[j] = r[cFMW];
+                f[j] = om[i] * sr / (2.0 * M_PI);
+            }
+            long long made_q = 0;
+            for (int ti = 0; ti < ntap; ti++) {
+                const double *tv = TV ? TV + 8 * ti : nullptr;
+                const int side = tv ? 0 : (int)G[20 + 4 * ti];
+                const double phase = tv ? tv[5] : G[21 + 4 * ti], ext = tv ? tv[6] : G[22 + 4 * ti],
+                             dfac = tv ? tv[7] : G[23 + 4 * ti];
+                std::vector<std::array<double, 4>> pl(sel.size());
+                for (size_t j = 0; j < sel.size(); j++)
+                    if (tv)                     // (a voice of its own: its pan or angle)
+                        nv_gsd_place4k(tv[0], f[j], G[7], tv + 1, pl[j].data());
+                    else
+                        nv_gsd_place(side, f[j], G + 7, pl[j].data());     // (the render's memo: gsd_place)
+                for (int k = 1; k <= 16; k++) {
+                    const double fk = pow(fb, (double)(k - 1));
+                    bool loud = false;          // (np.all(|g| < FLOOR / 2): the pass makes nothing)
+                    for (size_t j = 0; j < sel.size(); j++)
+                        loud = loud || !(fabs(wet[j] * fk) < FLOOR * 0.5);
+                    if (!loud || (k > 1 && fb == 0.0))
+                        break;
+                    double d = (k * tau + ext) * sr;
+                    for (size_t j = 0; j < sel.size(); j++) {
+                        const double g = wet[j] * fk;
+                        if (!(fabs(g) > 1e-12))
+                            continue;           // (a row whose mix is 0 there makes no copy)
+                        long long i = sel[j];
+                        size_t o = extra.size();
+                        extra.insert(extra.end(), rows + (size_t)NCOLS * i, rows + (size_t)NCOLS * (i + 1));
+                        double *e = extra.data() + o;
+                        double nn = non[j] + d;
+                        e[cNON] = nn;
+                        e[cNOFF] = noff[j] + d;
+                        e[cNFR] = nn - floor(nn);
+                        e[cDL] = pl[j][2];
+                        e[cDR] = pl[j][3];
+                        e[cP0] = -om[i] * (nn + pl[j][2]) + ph0[j];
+                        e[cP0R] = -om[i] * (nn + pl[j][3]) + ph0R[j];
+                        e[cFMP] = fmp[j] - fmw[j] * d;
+                        e[cFMPR] = fmpR[j] - fmw[j] * d;
+                        double lp = 1.0;
+                        if (lpf != 0.0) {
+                            double x = f[j] / lpf;
+                            lp = 1.0 / sqrt(1.0 + x * x);
+                        }
+                        double m = fabs(aM[i]) * g * lp;
+                        e[cAL] = m * pl[j][0];
+                        e[cAR] = m * pl[j][1];
+                        e[cAM] = aM[i] * g * lp;
+                        double vk = k * vd * dfac;
+                        e[cVD] = vk < 0.5 ? vk : 0.5;                   // (min(0.5, ...))
+                        e[cVR] = rate;
+                        double vp = 2.0 * M_PI * rate * nn / sr + phase, tw = 2.0 * M_PI;
+                        double md = fmod(vp, tw);                        // (numpy's %: the divisor's sign)
+                        if (md != 0.0) {
+                            if ((tw < 0.0) != (md < 0.0))
+                                md += tw;
+                        } else {
+                            md = copysign(0.0, tw);
+                        }
+                        e[cVP] = md;
+                        e[cVDL] = 0.0;
+                        src.push_back(i);
+                        made++;
+                        made_q++;
+                    }
+                }
+            }
+            // ...and the dry share comes down by what the copies took
+            if (made_q)
+                for (size_t j = 0; j < sel.size(); j++) {
+                    double dry = sqrt(1.0 - share[j]);
+                    if (dry != 1.0)
+                        for (int c : {cAL, cAR, cAM})
+                            rows[(size_t)NCOLS * sel[j] + c] = rows[(size_t)NCOLS * sel[j] + c] * dry;
+                }
+            continue;
+        }
         double send = sends[q];
         int nc = ncents[q];
         if (send <= FLOOR || nc <= 0)
@@ -340,6 +603,41 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
                 sel.push_back(i);
         if (sel.empty())
             continue;
+        if (kinds && kinds[q] == 1) {
+            // A DETUNED PAIR (chorus._pair): the rows moved down and left, a
+            // copy up and right, each at half power (pair_side), the copy
+            // delayed by the line's first delay
+            double lo = pow(2.0, cents[8 * q] / 1200.0), hi = pow(2.0, cents[8 * q + 1] / 1200.0);
+            const double PAIR_PAN = 0.5;
+            double gl0 = pow(0.5 * (1.0 - PAIR_PAN * -1), 0.5), gr0 = pow(0.5 * (1.0 + PAIR_PAN * -1), 0.5);
+            double gl1 = pow(0.5 * (1.0 - PAIR_PAN * 1), 0.5), gr1 = pow(0.5 * (1.0 + PAIR_PAN * 1), 0.5);
+            double half = pow(0.5, 0.5), delay = DELAY_S[0];
+            for (long long i : sel) {
+                double *r = rows + (size_t)NCOLS * i;
+                if (nf[i] * hi < sr * 0.5) {
+                    size_t o = extra.size();
+                    extra.insert(extra.end(), r, r + NCOLS);
+                    double *e = extra.data() + o;
+                    e[cOM] = om[i] * hi;
+                    e[cNF] = nf[i] * hi;
+                    e[cP0] = p0[i] * hi - om[i] * hi * delay * sr;
+                    e[cP0R] = p0R[i] * hi - om[i] * hi * delay * sr;
+                    e[cAL] = aL[i] * gl1;
+                    e[cAR] = aR[i] * gr1;
+                    e[cAM] = aM[i] * half;
+                    src.push_back(i);
+                    made++;
+                }
+                r[cOM] = om[i] * lo;
+                r[cNF] = nf[i] * lo;
+                r[cP0] = p0[i] * lo;
+                r[cP0R] = p0R[i] * lo;
+                r[cAL] = aL[i] * gl0;
+                r[cAR] = aR[i] * gr0;
+                r[cAM] = aM[i] * half;
+            }
+            continue;
+        }
         double wet = pow(send / (double)nc, 0.5), dry = pow(1.0 - send, 0.5), gain = wet;
         for (int ci = 0; ci < nc; ci++) {
             double ratio = pow(2.0, cents[8 * q + ci] / 1200.0);
@@ -370,6 +668,9 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
                 for (int c : {cAL, cAR, cAM})
                     rows[(size_t)NCOLS * i + c] = rows[(size_t)NCOLS * i + c] * dry;
     }
+    g_cho_steps.clear();
+    g_cho_samples.clear();
+    g_cho_taps.clear();
     long long m = (long long)src.size();
     if (!m)
         return 0;
@@ -390,16 +691,41 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
     return m;
 }
 
+// A CONTROLLER MATRIX's TREMOLO (blockrender: _CMX_TREM): a channel's map of
+// the rows its sidebands ride instead of their parent's -- given before
+// nv_tremolo_expand, used by it
+static std::map<long long, std::map<long long, long long>> g_trem_brmap;
+extern "C" void nv_tremolo_brmap(long long ch, int n, const long long *from, const long long *to)
+{
+    auto &m = g_trem_brmap[ch];
+    for (int q = 0; q < n; q++)
+        m[from[q]] = to[q];
+}
+
+// ...and an insertion effect's (gsefx: Tremolo, Auto Pan) a WAVEFORM: its
+// harmonics (harmonic, coefficient, phase), each its own sideband pair --
+// given before nv_tremolo_expand, used by it
+static std::map<long long, std::vector<double>> g_trem_wave;
+extern "C" void nv_tremolo_wave(long long ch, int n, const double *khp)
+{
+    g_trem_wave[ch] = std::vector<double>(khp, khp + 3 * n);
+}
+
 extern "C" long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                                        const double *cfg, const char *mask, long long nmask, double sr)
 {
     if (nch <= 0)
         return 0;
     const int cOM = emit_col("om"), cP0 = emit_col("p0"), cP0R = emit_col("p0R"), cAL = emit_col("aL"),
-              cAR = emit_col("aR"), cAM = emit_col("aM"), cMCH = emit_col("mch"), cPL = emit_col("pl");
+              cAR = emit_col("aR"), cAM = emit_col("aM"), cMCH = emit_col("mch"), cPL = emit_col("pl"),
+              cBR = emit_col("br");
     const long long n = *Pp;
     std::vector<double> extra;
     std::vector<long long> src;
+    std::map<long long, std::map<long long, long long>> brmap;
+    brmap.swap(g_trem_brmap);
+    std::map<long long, std::vector<double>> wave;
+    wave.swap(g_trem_wave);
     for (long long i = 0; i < n; i++) {
         if (mask && (i >= nmask || !mask[i]))
             continue;
@@ -422,6 +748,36 @@ extern "C" long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm,
             ph = pyr_uniform(&r, 0.0, 2.0 * M_PI);
         }
         double dw = 2.0 * M_PI * rate / sr, half = 0.5 * depth;
+        auto wv = wave.find(chans[q]);
+        if (wv != wave.end()) {
+            // A WAVEFORM'S HARMONICS, each its own sideband pair: k times the
+            // rate, its coefficient's share of the depth, its phase (+ for the
+            // upper, - for the lower, as the scatter's)
+            const std::vector<double> &H = wv->second;
+            for (size_t hk = 0; hk < H.size() / 3; hk++) {
+                const double k = H[3 * hk], ck = H[3 * hk + 1], pk = H[3 * hk + 2];
+                const double hh = 0.5 * depth * ck;
+                for (double sign : {1.0, -1.0}) {
+                    size_t o = extra.size();
+                    extra.insert(extra.end(), row, row + NCOLS);
+                    double *e = extra.data() + o;
+                    e[cOM] = row[cOM] + sign * k * dw;
+                    e[cP0] = row[cP0] + sign * (k * ph + pk);
+                    e[cP0R] = row[cP0R] + sign * (k * ph + pk);
+                    e[cAL] = row[cAL] * hh;
+                    e[cAR] = row[cAR] * (stereo ? -hh : hh);
+                    e[cAM] = stereo ? 0.0 : row[cAM] * hh;
+                    auto bm = brmap.find(chans[q]);
+                    if (bm != brmap.end()) {
+                        auto it = bm->second.find((long long)row[cBR]);
+                        if (it != bm->second.end())
+                            e[cBR] = (double)it->second;
+                    }
+                    src.push_back(i);
+                }
+            }
+            continue;
+        }
         for (double sign : {1.0, -1.0}) {
             size_t o = extra.size();
             extra.insert(extra.end(), row, row + NCOLS);
@@ -434,6 +790,12 @@ extern "C" long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm,
             e[cAL] = row[cAL] * half;
             e[cAR] = row[cAR] * (stereo ? -half : half);
             e[cAM] = stereo ? 0.0 : row[cAM] * half;
+            auto bm = brmap.find(chans[q]);
+            if (bm != brmap.end()) {
+                auto it = bm->second.find((long long)row[cBR]);
+                if (it != bm->second.end())
+                    e[cBR] = (double)it->second;
+            }
             src.push_back(i);
         }
     }
@@ -467,6 +829,20 @@ struct Cache {
     long long blk;
     std::map<std::tuple<int, int, int>, Template> tm;
     bool drums = false;                 // a drum part: the program is its set (kit's tables)
+    int var = 0;                        // its variation key (live.Patch.variation: map x 128 + bank), 0 none
+
+    // the class a key plays: the variation's (its first layer's slot), else the program's
+    const NoteClass *cls(int program, int key) const
+    {
+        if (program < 0 || program > 127 || key < 0 || key > 127)
+            return nullptr;
+        int en = drums ? 0 : var_entry(program, var);
+        if (en) {
+            int q = var_kidx(en, key);
+            return q >= 0 && q < (int)K.size() ? K[q] : nullptr;
+        }
+        return K[(drums ? NV_K_DRUMS : 0) + 128 * program + key];
+    }
     Kits kit;
     std::vector<double> les;            // the Leslie's constants (leslie.cpp's L_*), empty: none
     int raga_sa = -1, raga_nsw = 0;     // its tuner's raga (a raga tuner's: Sa's note, -1 none; the swaras)
@@ -491,16 +867,17 @@ struct Cache {
         void *dm[6] = {nullptr};
         std::vector<long long> srows, prows, flips;
         std::vector<double> jrows;
-        std::vector<long long> rrows;
+        std::vector<long long> rrows, grows;
         double mft[30];
         g_raga_sa = raga_sa;                // (the template's prepare: T.raga_sa_note, T.raga_spec)
         g_raga_nsw = raga_nsw;
+        g_tmpl_var = drums ? 0 : var;       // (its variation's bank, before its program change)
         for (int i = 0; i < raga_nsw; i++)
             g_raga_sw[i] = raga_sw[i];
         long long P = template_rows(K.data(), &t, freq, trim, program, note, vel, fast, &rows, kind, scale, full,
                                     residual, beta, blk, ring_floor, ring_max, out, knee, ln10_20, xdec, SR, dm,
                                     drums ? &kit : nullptr, &srows, &prows, les.empty() ? nullptr : les.data(),
-                                    &flips, &jrows, &rrows, mft);
+                                    &flips, &jrows, &rrows, mft, &grows);
         if (P < 0) {
             free(rows);
             return false;
@@ -573,6 +950,37 @@ struct Cache {
             for (long long r = 0; r < P; r++)
                 T.fa_at[r] = fa[r] == mode;
         }
+        // ITS GRAINS (t["grain"], t["gof"]): each lands where it falls in the
+        // note, its onset less the first direct row's (rdl 0, not a grain);
+        // placed at the press, a rain key's drops all fell in its first instant
+        std::vector<char> gmask;
+        if (P && !grows.empty()) {
+            gmask.assign(P, 0);
+            bool anyg = false;
+            for (size_t k = 0; k + 1 < grows.size(); k += 2)
+                for (long long r = grows[k]; r < std::min(grows[k + 1], (long long)P); r++)
+                    gmask[r] = anyg = 1;
+            if (anyg) {
+                const std::vector<float> &rdl = T.f4[25];
+                long long t0 = 0;
+                bool have = false;
+                for (long long r = 0; r < P; r++)
+                    if (rdl[r] == 0.0f && !gmask[r] && (!have || T.i8[0][r] < t0)) {
+                        t0 = T.i8[0][r];
+                        have = true;
+                    }
+                if (!have)
+                    for (long long r = 0; r < P; r++)
+                        if (r == 0 || T.i8[0][r] < t0)
+                            t0 = T.i8[0][r];
+                T.gof.assign(P, 0);
+                for (long long r = 0; r < P; r++)
+                    if (gmask[r])
+                        T.gof[r] = T.i8[0][r] - t0;
+            } else {
+                gmask.clear();
+            }
+        }
         // A STROKED KEY (a drum's gesture): each stroke's rows where it falls
         // in the note (sof: its onset less its room delay, over the least of
         // the strokes'; numpy's int64 - float32, truncated) -- a layer's rows,
@@ -590,8 +998,7 @@ struct Cache {
                 for (long long r = prows[k]; r < std::min(prows[k + 1], (long long)P); r++)
                     T.push[r] = 1;
         }
-        int q = 128 * program + note;
-        const NoteClass *nc = (q >= 0 && q < NV_K_DRUMS) ? K[(drums ? NV_K_DRUMS : 0) + q] : nullptr;
+        const NoteClass *nc = cls(program, note);   // (its variation's, where it is one)
         T.scatter_ms = nc ? nc->scatter_ms : 0.0;             // (t["scatter_ms"])
         // the Leslie's crossover copies (t["lflip"])
         T.lflip.assign(P, 0);
@@ -708,6 +1115,8 @@ struct Cache {
             }
             T.dur = d;
         }
+        // ITS OWN DISTANCE (t["send"]: reverb_distance, the gunshot's)
+        T.send = (nc && nc->rd_set) ? nc->reverb_dist : NAN;
         // A HELD TEXTURE IS A HELD NOTE (live's min_hold): its rows run until
         // the key is up, but those that decay on their own; its gate the least
         if (T.oneshot && nc->held_texture && nc->gate_time > 0.0) {
@@ -716,6 +1125,99 @@ struct Cache {
                     T.rof[r] = -1;
             T.oneshot = false;
             T.min_hold = (long long)nearbyint(nc->gate_time * SR);
+            // ...AND ITS GRAINS GO ON (t["gpool"]): the template's own drops,
+            // one one-shot a drop (its rows sharing an onset), struck by the
+            // part while the key is down at the class's own rate; the held
+            // stamp is the rest
+            double rate_g = 0.0;
+            for (int g = 0; g < nc->n_grain; g++)
+                if (nc->grain[g][2] > 0.0)
+                    rate_g += nc->grain[g][2];
+            if (!gmask.empty() && rate_g > 0.0) {
+                std::vector<long long> ons;
+                for (long long r = 0; r < P; r++)
+                    if (gmask[r])
+                        ons.push_back(T.i8[0][r]);
+                std::sort(ons.begin(), ons.end());
+                ons.erase(std::unique(ons.begin(), ons.end()), ons.end());
+                auto slice = [&](Template &D, const std::vector<long> &idx) {
+                    auto cut = [&](auto &dst, const auto &src) {
+                        dst.resize(idx.size());
+                        for (size_t q = 0; q < idx.size(); q++)
+                            dst[q] = src[idx[q]];
+                    };
+                    D.P = (long)idx.size();
+                    for (int c = 0; c < 6; c++)
+                        cut(D.f8[c], T.f8[c]);
+                    for (int c = 0; c < 27; c++)
+                        cut(D.f4[c], T.f4[c]);
+                    for (int c = 0; c < 4; c++)
+                        cut(D.f4n[c], T.f4n[c]);
+                    for (int c = 0; c < 2; c++)
+                        cut(D.i8[c], T.i8[c]);
+                    for (int c = 0; c < 6; c++)
+                        cut(D.i4[c], T.i4[c]);
+                    cut(D.hrel, T.hrel);
+                    if (!T.sof.empty())
+                        cut(D.sof, T.sof);
+                    if (!T.rof.empty())
+                        cut(D.rof, T.rof);
+                    if (!T.fa_at.empty())
+                        cut(D.fa_at, T.fa_at);
+                    if (!T.cof.empty())
+                        cut(D.cof, T.cof);
+                    if (!T.lflip.empty())
+                        cut(D.lflip, T.lflip);
+                    if (!T.push.empty())
+                        cut(D.push, T.push);
+                    if (!T.sym.empty())
+                        cut(D.sym, T.sym);
+                    if (!T.ring.empty())
+                        cut(D.ring, T.ring);
+                };
+                for (long long on : ons) {
+                    std::vector<long> idx;
+                    for (long long r = 0; r < P; r++)
+                        if (gmask[r] && T.i8[0][r] == on)
+                            idx.push_back((long)r);
+                    Template D;
+                    slice(D, idx);
+                    D.oneshot = true;
+                    D.send = T.send;            // (a drop's, as the dict's scalars are)
+                    D.cof.clear();
+                    D.scatter_ms = 0.0;
+                    D.vel = T.vel;
+                    long long mx = 0;
+                    for (long q = 0; q < D.P; q++)
+                        mx = q == 0 ? D.rof[q] : std::max(mx, D.rof[q]);
+                    D.dur = mx;
+                    T.gpool.push_back(std::move(D));
+                }
+                std::vector<long> keep;
+                for (long long r = 0; r < P; r++)
+                    if (!gmask[r])
+                        keep.push_back((long)r);
+                Template K2;
+                slice(K2, keep);
+                for (int c = 0; c < 6; c++)
+                    T.f8[c].swap(K2.f8[c]);
+                for (int c = 0; c < 27; c++)
+                    T.f4[c].swap(K2.f4[c]);
+                for (int c = 0; c < 4; c++)
+                    T.f4n[c].swap(K2.f4n[c]);
+                for (int c = 0; c < 2; c++)
+                    T.i8[c].swap(K2.i8[c]);
+                for (int c = 0; c < 6; c++)
+                    T.i4[c].swap(K2.i4[c]);
+                T.hrel = K2.hrel;
+                T.sof = K2.sof; T.rof = K2.rof; T.fa_at = K2.fa_at; T.cof = K2.cof; T.lflip = K2.lflip;
+                T.push = K2.push; T.sym = K2.sym; T.ring = K2.ring;
+                T.P = K2.P;
+                P = T.P;
+                T.gof.clear();
+                gmask.clear();
+            }
+            T.grate = rate_g;
         }
         // AN ORGAN, SLICED BY RANK (_raw_template's t["ranks"]): each rank's
         // rows, their columns and their share of hrel
@@ -896,7 +1398,7 @@ void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double 
                     double xdec_nepers, double SR)
 {
     nv::live::Cache *C = new nv::live::Cache();
-    C->K.assign(K, K + 2 * NV_K_DRUMS);
+    C->K.assign(K, K + (g_k_n > 2 * NV_K_DRUMS ? g_k_n : 2 * NV_K_DRUMS));
     C->t = *tmpl;
     memcpy(C->freq, freq, sizeof C->freq);
     memcpy(C->trim, trim, sizeof C->trim);
@@ -977,7 +1479,7 @@ const NoteClass *nv_tcache_note_class(void *h, int program, int note)
     nv::live::Cache *C = (nv::live::Cache *)h;
     if (note < 0 || note > 127 || program < 0 || program > 127)
         return nullptr;
-    return C->K[(C->drums ? NV_K_DRUMS : 0) + 128 * program + note];
+    return C->cls(program, note);
 }
 
 int nv_tcache_slur_fade(void *h, int program, int note, double *out)
@@ -985,7 +1487,7 @@ int nv_tcache_slur_fade(void *h, int program, int note, double *out)
     nv::live::Cache *C = (nv::live::Cache *)h;
     if (note < 0 || note > 127 || program < 0 || program > 127)
         return 0;
-    const NoteClass *k = C->K[(C->drums ? NV_K_DRUMS : 0) + 128 * program + note];
+    const NoteClass *k = C->cls(program, note);
     double f0 = C->freq[note];
     if (!k || !k->legato_set || f0 <= 0.0)
         return 0;
@@ -1022,7 +1524,7 @@ const OrganSpec *nv_tcache_organ(void *h, int program)
     nv::live::Cache *C = (nv::live::Cache *)h;
     if (!C || C->drums || program < 0 || program > 127)
         return nullptr;
-    const NoteClass *k = C->K[128 * program + 60];
+    const NoteClass *k = C->cls(program, 60);
     return k ? k->organ : nullptr;
 }
 
@@ -1044,7 +1546,10 @@ const nv::live::Template *nv_tcache_at(void *h, long i, long *n)
 double nv_tcache_trim(void *h, int program)
 {
     nv::live::Cache *C = (nv::live::Cache *)h;
-    return C && program >= 0 && program < 128 ? C->trim[program] : 1.0;
+    if (!C || program < 0 || program > 127)
+        return 1.0;
+    int en = C->drums ? 0 : var_entry(program, C->var);    // (a variation's own: VARIATION_TRIM_DB)
+    return en ? g_var_trim[en] : C->trim[program];
 }
 
 // the class a key of a program plays (none on a drum set's cache)
@@ -1053,7 +1558,7 @@ const NoteClass *nv_tcache_class_key(void *h, int program, int key)
     nv::live::Cache *C = (nv::live::Cache *)h;
     if (!C || C->drums || program < 0 || program > 127 || key < 0 || key > 127)
         return nullptr;
-    return C->K[128 * program + key];
+    return C->cls(program, key);
 }
 
 const NoteClass *nv_tcache_class(void *h, int program)
@@ -1061,7 +1566,31 @@ const NoteClass *nv_tcache_class(void *h, int program)
     nv::live::Cache *C = (nv::live::Cache *)h;
     if (!C || C->drums || program < 0 || program > 127)
         return nullptr;
-    return C->K[128 * program + 60];
+    return C->cls(program, 60);
+}
+
+// A CACHE's VARIATION (live.Patch.variation), before its templates are warmed
+void nv_tcache_set_var(void *h, int v) { ((nv::live::Cache *)h)->var = v; }
+
+// BANK SELECT's tables for live's templates (the export's VARS: as nv_song_vars
+// takes them, each entry's trim live's -- a file that is not GS's), each slot's
+// organ, and K's length with the variations' region (the drones' before it)
+void nv_live_vars(int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2,
+                  int nslot, const OrganSpec *const *so, long long kn)
+{
+    g_var_nls.assign(nls, nls + nent);
+    g_var_off.assign(nent, 0);
+    int t = 0;
+    for (int e = 0; e < nent; e++) {
+        g_var_off[e] = t;
+        t += nls[e];
+    }
+    g_var_ls.assign(ls, ls + 4 * (size_t)t);
+    g_var_trim.assign(trim, trim + nent);
+    g_var_gs.assign(gs, gs + 5 * 128 * 128);
+    g_var_gm2.assign(gm2, gm2 + 128 * 128);
+    g_slot_organ.assign(so, so + nslot);
+    g_k_n = kn;
 }
 
 // an organ template's rank ri (t["ranks"]), its P through *n; NULL where it has none
@@ -1082,7 +1611,7 @@ int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out
     nv::live::Cache *C = (nv::live::Cache *)h;
     if (tgt < 0 || tgt > 127 || program < 0 || program > 127)
         return 0;
-    const NoteClass *k = C->K[(C->drums ? NV_K_DRUMS : 0) + 128 * program + tgt];
+    const NoteClass *k = C->cls(program, tgt);     // (its variation's, where it is one)
     if (!k || !k->glide_mech)
         return 0;
     if (src < 0 || src > 127 || C->freq[src] <= 0.0 || C->freq[tgt] <= 0.0)

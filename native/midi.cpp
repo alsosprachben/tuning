@@ -42,7 +42,75 @@ struct Msg {
     int status, d0, d1;         // a channel message's bytes; status 0xFF meta, 0xF0 sysex
     int meta;                   // a meta event's type
     std::vector<uint8_t> data;  // a meta event's or a sysex's bytes
+    int port = 0;               // its track's MIDI port (FF 21), a two-port file's: its channels + 16 x it
 };
+
+// A GS PART PARAMETER that a MIDI message carries (parse_gs_part): its channel
+// and port, and the channel messages it is (status kind, d0, d1); false if it is none
+static bool gs_part_msgs(const std::vector<uint8_t> &d, int *ch, int *port, std::vector<std::array<int, 3>> &out)
+{
+    out.clear();
+    if (!(d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && (d[4] == 0x40 || d[4] == 0x50)))
+        return false;
+    int hi = d[5] >> 4;
+    if (hi != 1 && hi != 2 && hi != 4)
+        return false;
+    int blk = d[5] & 0x0F;
+    *ch = blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk);
+    *port = d[4] == 0x50 ? 1 : 0;
+    int a = d[6], v = d[7];
+    auto C = [&](int cc, int val) { out.push_back({0xB0, cc, std::max(0, std::min(127, val))}); };
+    auto rpn = [&](int lsb, int msb6, int lsb38, bool fine) {
+        C(101, 0);
+        C(100, lsb);
+        C(6, msb6);
+        if (fine)
+            C(38, lsb38);
+        C(101, 127);
+        C(100, 127);
+    };
+    static const int TONE_MODIFY[8] = {76, 77, 74, 71, 73, 75, 72, 78};     // (GS_TONE_MODIFY_CC)
+    if (hi == 4) {                      // TONE MAP NUMBER: CC32
+        if (a != 0x00 || v > 4)
+            return false;
+        C(32, v);
+    } else if (hi == 2) {               // the controllers' destinations: the bend range, LFO1's pitch depth
+        if (a == 0x10)
+            rpn(0, std::max(0, std::min(24, v - 0x40)), 0, true);
+        else if (a == 0x04) {
+            double ct = v * 600.0 / 127.0;
+            rpn(5, (int)floor(ct / 100.0), (int)nearbyint(fmod(ct, 100.0) * 128.0 / 100.0), true);
+        } else
+            return false;
+    } else if (a == 0x00 && d.size() >= 9) {    // TONE NUMBER: CC0, then the program
+        C(0, v);
+        out.push_back({0xC0, d[8], 0});
+    } else if (a == 0x13) {             // MONO/POLY
+        if (v == 0)
+            C(126, 1);
+        else
+            C(127, 0);
+    } else if (a == 0x16) {             // PITCH KEY SHIFT: RPN 2
+        rpn(2, 64 + std::max(-24, std::min(24, v - 0x40)), 0, false);
+    } else if (a == 0x19) {
+        C(7, v);                        // PART LEVEL
+    } else if (a == 0x1C) {
+        C(10, v ? v : 64);              // PART PANPOT (0 random: centre)
+    } else if (a == 0x21) {
+        C(93, v);                       // CHORUS SEND
+    } else if (a == 0x22) {
+        C(91, v);                       // REVERB SEND
+    } else if (a == 0x2C) {
+        C(94, v);                       // DELAY SEND
+    } else if (a == 0x2A && d.size() >= 10) {   // PITCH FINE TUNE: RPN 1, MSB LSB
+        rpn(1, v, d[8], true);
+    } else if (a >= 0x30 && a <= 0x37) {
+        C(TONE_MODIFY[a - 0x30], v);    // TONE MODIFY 1-8: the sound controllers
+    } else {
+        return false;
+    }
+    return true;
+}
 
 struct Reader {
     const uint8_t *p, *end;
@@ -157,6 +225,9 @@ struct Note {
     double v7, v11, pan;
     int prog, drum;
     int mcut = 0, mslur = 0;    // mono mode's: cut off by the next (_MONO_CUT), arrived by a slur (_MONO_SLUR)
+    // its bank (resolve_patch): 0 the capital, 1 + 128 x map + msb GS's
+    // (the map 0-4 as variation_tables keys it), 1 + 640 + lsb GM 2's
+    int bsel = 0;
 };
 
 struct CCEv {
@@ -197,15 +268,49 @@ struct Parsed {
     std::vector<Note> notes;
     std::vector<CCEv> ccs;      // in message order
     std::vector<PwEv> pws;
+    std::vector<CCEv> ats;      // ats: each channel's aftertouch (D0) and CC121's 0, in message order
+    std::vector<CCEv> pts;      // pts: each key's polytouch (A0: cc its key), in message order
     std::vector<std::pair<int, int>> progs;     // (channel, program) changes, for the caller
     double total = 0.0;
     int gs = 0;                 // a Roland GS exclusive before the first note (gs_setup: the file speaks GS)
+    // THE GS SETUP by the first note (gs_setup), a reset back to none: the
+    // reverb's, chorus's and delay's parameters (40 01 xx: address -> value,
+    // a macro the rest gone), the EQ's (40 02 0-3), each part's EQ switch
+    std::map<int, int> gs_rv, gs_ch, gs_dl, gs_eq, gs_sw;
+    // THE DRUM INSTRUMENTS' OWN (dedit: GS_DRUM_NRPN), in message order: the
+    // channel (-1 every one), key (-1 a reset), parameter (0 pitch, 1 level,
+    // 2 pan, 3 reverb, 4 chorus, 5 delay) and value (pitch about 0)
+    struct DEdit {
+        int ch;
+        double t;
+        int key, par, v;
+    };
+    std::vector<DEdit> dedit;
+    // THE CONTROLLER MATRIX's sums as they move (_cmx_upd's cmx): kind 0
+    // amp, 1 tva, 2 pitch, 3 cutoff, 4 tvf, 5 rate, 6 vib; channel, time, value
+    struct CmxEv {
+        int kind, ch;
+        double t, v;
+    };
+    std::vector<CmxEv> cmx;
+    // THE INSERTION EFFECT's timeline (gsefx.parse), a reset an event too:
+    // kind 0 a reset, 1 the type (a msb, b lsb), 2 a parameter (a 1-20, b),
+    // 3 a send (a its address, b), 4 an effect controller's (a, b), 5 a
+    // part's assign (a its channel, b on), 6 a source's value (a its
+    // source: a CC, 0x60 aftertouch, 0x61 bend; b)
+    struct Efx {
+        double t;
+        int kind, a, b;
+    };
+    std::vector<Efx> efx;
     std::vector<std::array<int, 3>> legato;    // _legato_ticks: (channel, key, k) slurred
     std::vector<CCEv> snd;      // sndev: CC71-78, and gmon (channel -1, cc -1), in message order
     std::vector<std::pair<int, int>> chprogs;  // ch_progs: a melodic channel's program changes, in message order
+    std::vector<int> chbsel;    // ...each one's bank (Note.bsel)
     std::map<int, int> parts;   // _voice_parts: a channel's voice part, by its track's name (nv_voice_body)
     int master = 0;             // a master message (parse_master): every channel's pitch stream then
     int master_vol = 0;         // ...a master volume under full
+    int banked = 0;             // a note on a bank (Note.bsel): the file renderer's, not live's yet
     // _mvol: each master volume (time, seq, gain), and each GM System On's full (1.0)
     std::vector<std::tuple<double, long, double>> mvol;
     // sotas: each channel's scale/octave tuning, (time, twelve cents) as sent
@@ -527,7 +632,7 @@ static void legato_ticks(const std::vector<Msg> &all, const std::vector<size_t> 
         std::map<std::pair<int, int>, std::vector<long long>> held;
         for (size_t i = a; i < b; i++) {
             const Msg &m = all[i];
-            int kind = m.status & 0xF0, ch = m.status & 0x0F;
+            int kind = m.status & 0xF0, ch = (m.status & 0x0F) + 16 * m.port;
             if (m.status == 0xFF || m.status == 0xF0 || m.status == 0xF7)
                 continue;
             if (kind == 0x90 && m.d1 > 0) {
@@ -582,6 +687,9 @@ static void legato_ticks(const std::vector<Msg> &all, const std::vector<size_t> 
 
 static const int GM_DEFAULT_VOLUME = 100, GM_DEFAULT_EXPRESSION = 127, GM_DEFAULT_PAN = 64;
 static const int PERCUSSION_CHANNEL = 9, CC84_CANCEL = 128;
+static std::vector<int> g_map_kits;     // (nv_midi_map_kits)
+static bool g_map_kits_set = false;
+static bool g_map_kits_play = false;    // (nv_midi_map_kits_play: the export has their tables)
 static const double BEND_RANGE_SEMITONES = 2.0;     // tonelib's: GM's
 
 // blockrender.parse for a GM file: < 0 where it would take a path this does not have
@@ -604,7 +712,34 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         if (!read_track(r, all))
             return -1;
     }
-    legato_ticks(all, starts, tpb, P.legato);
+    // A TWO-PORT FILE (PortedMidi): each track's messages its port's, a
+    // part's exclusive at port B as port A would read it (40 / 50 swapped)
+    bool ported = false;
+    for (const Msg &m : all)
+        ported = ported || (m.status == 0xFF && m.meta == 0x21 && !m.data.empty() && m.data[0]);
+    if (ported) {
+        for (size_t ti = 0; ti < starts.size(); ti++) {
+            size_t a = starts[ti], b = ti + 1 < starts.size() ? starts[ti + 1] : all.size();
+            int port = 0;
+            for (size_t i = a; i < b; i++) {
+                Msg &m = all[i];
+                if (m.status == 0xFF && m.meta == 0x21 && !m.data.empty())
+                    port = m.data[0];
+                m.port = port;
+                const std::vector<uint8_t> &d = m.data;
+                if (port && m.status == 0xF0 && d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12
+                    && (d[4] == 0x40 || d[4] == 0x50) && ((d[5] & 0xF0) == 0x10 || (d[5] & 0xF0) == 0x20
+                                                          || (d[5] & 0xF0) == 0x40))
+                    m.data[4] ^= 0x10;
+            }
+        }
+        // ...its legato over the merged stream (the Python's one merged track)
+        std::vector<Msg> merged(all);
+        std::stable_sort(merged.begin(), merged.end(), [](const Msg &a, const Msg &b) { return a.tick < b.tick; });
+        legato_ticks(merged, std::vector<size_t>{0}, tpb, P.legato);
+    } else {
+        legato_ticks(all, starts, tpb, P.legato);
+    }
     // _voice_parts: each track's first name (track or instrument), and each
     // channel a message of it speaks on after that -- the first track that
     // names a part for a channel declares it
@@ -646,11 +781,33 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     }
     Msg eot{accum, 0xFF, 0, 0, 0x2F, {}};
     msgs.push_back(eot);
+    {
+        // ...EACH GS PART PARAMETER's MESSAGES after it (blockrender's _inj:
+        // read next, in order, through the same code)
+        std::vector<Msg> ex;
+        ex.reserve(msgs.size());
+        std::vector<std::array<int, 3>> pm;
+        for (const Msg &m : msgs) {
+            ex.push_back(m);
+            int pch, pport;
+            if (m.status != 0xF0 || !gs_part_msgs(m.data, &pch, &pport, pm))
+                continue;
+            for (const auto &x : pm) {
+                Msg y{0, x[0] | pch, x[1], x[2], 0, {}};
+                y.port = pport;
+                ex.push_back(y);
+            }
+        }
+        msgs.swap(ex);
+    }
 
     long long tempo = 500000;
     double t = 0.0;
     std::map<int, std::map<int, int>> ctrl;     // channel -> control -> value
-    std::map<int, int> prog, bmsb, blsb, drums;
+    std::map<int, int> prog, bmsb, blsb, drums, bsel;
+    // the map CC32 0 reads its bank in (blockrender.DEFAULT_MAP: TUNING_MAP)
+    const char *tmap = getenv("TUNING_MAP");
+    const int default_map = tmap && *tmap ? atoi(tmap) : 0;
     bool rxbank = true;
     std::map<std::pair<int, int>, std::vector<Note>> on;
     std::map<int, std::pair<int, int>> rsel;    // a channel's selected RPN, (MSB, LSB); absent: none
@@ -664,8 +821,119 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         return it != m.end() ? it->second : d;
     };
     std::map<int, std::array<double, 12>> gsscale;     // each GS part's scale tuning, as held
+    // ...its VELOCITY SENSE and KEY RANGE (parse_gs_part_state: vsd, vso, klo, khi), its TONE
+    // MAP-0 (the map CC32 0 means on it), and a drum part's map (_rmap: 0 MAP1, 1 MAP2)
+    std::map<int, std::array<int, 4>> gsstate;
+    std::map<int, int> map0, rmap;
     long seq = 0;
     bool seen_note = false;
+    // ...the EFX as it stands while reading (_efxst, _efxparts): a
+    // controller that is one of its effect controllers' sources, on a part
+    // on it, joins the timeline as that source's value (gsefx 'cv')
+    // THE CONTROLLER MATRIX (ctrlmatrix, blockrender's _cmx): each part's
+    // table, a source (0 mod, 1 bend, 2 cat, 3 pat, 4 cc1, 5 cc2, 100 + n
+    // a CC) and destination (GS_DESTS's 0-10) to a depth, in the order set
+    // (a reset's: the mod wheel's 47 cents, the bend's 2 semitones); the
+    // seven sums it keeps (amp, tva, pitch, cutoff, tvf, rate, vib) as last
+    // read -- any that moves from rest is a pass the engine lacks (-8)
+    struct Cmx {
+        std::vector<std::pair<std::pair<int, int>, double>> gs;
+        int cc1 = 16, cc2 = 17;
+        void reset()
+        {
+            gs.clear();
+            gs.push_back({{0, 4}, 10 * 600.0 / 127.0});
+            gs.push_back({{1, 0}, 2.0});
+            cc1 = 16; cc2 = 17;
+        }
+        void set(int src, int dest, double dep)
+        {
+            for (auto &e : gs)
+                if (e.first.first == src && e.first.second == dest) {
+                    e.second = dep;
+                    return;
+                }
+            gs.push_back({{src, dest}, dep});
+        }
+    };
+    std::map<int, Cmx> cmx;
+    std::map<int, std::array<double, 7>> cmx_last;
+    std::map<int, int> cat_now, bend_now;
+    std::map<int, std::map<int, int>> pat_now;
+    const char *mve = getenv("TUNING_MOD_VIBRATO");
+    const bool modvib = mve && *mve && strcmp(mve, "0") && strcmp(mve, "off");
+    auto cmx_upd = [&](double t, int ch) {
+        auto mi = cmx.find(ch);
+        if (mi == cmx.end())
+            return;
+        // (cells(): CC1 and CC2 resolved, zero cells left out, equal keys summed)
+        std::vector<std::pair<std::pair<int, int>, double>> cl;
+        for (const auto &e : mi->second.gs) {
+            int src = e.first.first == 4 ? 100 + mi->second.cc1 : e.first.first == 5 ? 100 + mi->second.cc2
+                                                                                      : e.first.first;
+            if (!e.second)
+                continue;
+            bool got = false;
+            for (auto &o : cl)
+                if (o.first.first == src && o.first.second == e.first.second) {
+                    o.second = o.second + e.second;
+                    got = true;
+                }
+            if (!got)
+                cl.push_back({{src, e.first.second}, 0.0 + e.second});
+        }
+        auto &c = ctrl[ch];
+        auto val = [&](int src) {
+            if (src == 0)
+                return (c.count(1) ? c[1] : 0) / 127.0;
+            if (src == 2)
+                return (cat_now.count(ch) ? cat_now[ch] : 0) / 127.0;
+            if (src == 1)
+                return (bend_now.count(ch) ? bend_now[ch] : 0) / 8192.0;
+            if (src == 3) {
+                auto pk = pat_now.find(ch);
+                if (pk == pat_now.end() || pk->second.empty())
+                    return 0.0;
+                int mx = 0;
+                for (auto &kv : pk->second)
+                    mx = std::max(mx, kv.second);
+                return mx / 127.0;
+            }
+            if (src >= 100)
+                return (c.count(src - 100) ? c[src - 100] : 0) / 127.0;
+            return 0.0;
+        };
+        auto sum = [&](int dest, int skip) {
+            double s = 0.0;
+            for (const auto &o : cl)
+                if (o.first.second == dest && o.first.first != skip)
+                    s = s + o.second * val(o.first.first);
+            return s;
+        };
+        std::array<double, 7> now = {
+            std::max(0.0, 1.0 + sum(2, -1)), std::max(0.0, std::min(1.0, sum(6, -1) + sum(10, -1))), sum(0, 1),
+            sum(1, -1), std::max(0.0, sum(5, -1) + sum(9, -1)), sum(3, -1),
+            std::max(0.0, sum(4, modvib ? -1 : 0) + sum(8, modvib ? -1 : 0))};
+        auto li = cmx_last.find(ch);
+        std::array<double, 7> last = li != cmx_last.end() ? li->second
+                                                          : std::array<double, 7>{1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+        for (int q = 0; q < 7; q++)
+            if (fabs(now[q] - last[q]) > 1e-9)
+                P.cmx.push_back(Parsed::CmxEv{q, ch, t, now[q]});
+        cmx_last[ch] = now;
+    };
+    int efx_src[2] = {0, 0};
+    std::map<int, int> efx_cvv;
+    std::set<int> efx_on;
+    auto efx_cv = [&](double t, int ch, int src, int v) {
+        if (!efx_on.count(ch) || (src != efx_src[0] && src != efx_src[1]))
+            return;
+        auto it = efx_cvv.find(src);
+        if (it != efx_cvv.end() && it->second == v)
+            return;
+        efx_cvv[src] = v;
+        P.efx.push_back(Parsed::Efx{t, 6, src, v});
+    };
     for (const Msg &m : msgs) {
         seq++;
         double delta = m.tick > 0 ? m.tick * (tempo * 1e-6 / tpb) : 0.0;
@@ -673,8 +941,6 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         if (m.status == 0xFF) {
             if (m.meta == 0x51 && m.data.size() == 3)
                 tempo = (m.data[0] << 16) | (m.data[1] << 8) | m.data[2];
-            else if (m.meta == 0x21 && !m.data.empty() && m.data[0])
-                return -3;              // a second port: PortedMidi's
             continue;
         }
         if (m.status == 0xF0) {
@@ -733,8 +999,6 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 && (d[5] >> 4) == 1 && d[6] >= 0x40 && d[6] <= 0x4B) {
                 int blk = d[5] & 0x0F;
                 int ch2 = (blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk)) + (d[4] == 0x50 ? 16 : 0);
-                if (d[4] == 0x50)
-                    return -3;          // (port B: PortedMidi's)
                 std::array<double, 12> &sc = gsscale[ch2];
                 size_t a = d[6] - 0x40, nbody = d.size() - 8;      // (the values, without the checksum)
                 for (size_t i = 0; i < nbody && a + i < 12; i++)
@@ -744,12 +1008,206 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 P.sotas[ch2].push_back(std::make_pair(t, sc));
                 continue;
             }
+            // GS's USE FOR RHYTHM PART (parse_gs_rhythm_part): the channel a
+            // drum part (either map) or a melodic one, its program kept
+            if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && (d[4] == 0x40 || d[4] == 0x50)
+                && (d[5] >> 4) == 1 && d[6] == 0x15) {
+                int blk = d[5] & 0x0F;
+                int ch2 = (blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk)) + (d[4] == 0x50 ? 16 : 0);
+                drums[ch2] = d[7] != 0;
+                if (d[7])
+                    rmap[ch2] = d[7] - 1;
+                if (d[7])
+                    bsel[ch2] = 0;              // (_var: a drum part's no variation)
+                if (!seen_note)
+                    P.gs = 1;
+                continue;
+            }
+            // THE GS SYSTEM EFFECTS and EQ (gs_setup): read by the first note, after it nothing
+            if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12
+                && ((d[4] == 0x40 && (d[5] == 0x01 || d[5] == 0x02))
+                    || ((d[4] == 0x40 || d[4] == 0x50) && (d[5] >> 4) == 4 && d[6] == 0x20))) {
+                if (!seen_note) {
+                    P.gs = 1;
+                    int a = d[6], v = d[7];
+                    if (d[4] == 0x40 && d[5] == 0x01) {
+                        std::map<int, int> *g = a >= 0x38 && a <= 0x40 ? &P.gs_ch
+                                                : a >= 0x50 && a <= 0x5A ? &P.gs_dl
+                                                : a == 0x30 || (a >= 0x33 && a <= 0x35) ? &P.gs_rv : nullptr;
+                        if (g && (a == 0x38 || a == 0x50 || a == 0x30))
+                            g->clear();         // (a macro sets them all)
+                        if (g)
+                            (*g)[a] = v;
+                    } else if (d[4] == 0x40 && d[5] == 0x02) {
+                        if (a <= 3)
+                            P.gs_eq[a] = v;
+                    } else {
+                        int blk = d[5] & 0x0F;
+                        P.gs_sw[(blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk)) + (d[4] == 0x50 ? 16 : 0)] = v != 0;
+                    }
+                }
+                continue;
+            }
+            // THE CONTROLLER MATRIX's (ctrlmatrix.parse): a GS part's 2p aa
+            // (its source row, its destination), GM2's 09 0s cells
+            if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && (d[4] == 0x40 || d[4] == 0x50)
+                && (d[5] >> 4) == 2) {
+                int blk = d[5] & 0x0F, row = d[6] >> 4, col = d[6] & 0x0F, v = d[7];
+                int ch2 = (blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk)) + (d[4] == 0x50 ? 16 : 0);
+                if (row <= 5 && col <= 10) {
+                    double dep = col == 0 ? (double)std::max(-24, std::min(24, v - 0x40))
+                                 : col == 1 ? (v - 0x40) * 9600.0 / 64.0
+                                 : col == 2 ? (v > 0x40 ? (v - 0x40) / 63.0 : (v - 0x40) / 64.0)
+                                 : (col == 3 || col == 7) ? (v - 0x40) * 10.0 / 64.0
+                                 : (col == 4 || col == 8) ? v * 600.0 / 127.0
+                                 : (col == 5 || col == 9) ? v * 2400.0 / 127.0
+                                 : v / 127.0;
+                    auto mi = cmx.find(ch2);
+                    if (mi == cmx.end()) {
+                        mi = cmx.emplace(ch2, Cmx()).first;
+                        mi->second.reset();
+                    }
+                    mi->second.set(row, col, dep);
+                    cmx_upd(t, ch2);
+                    if (!seen_note)
+                        P.gs = 1;
+                    continue;
+                }
+            }
+            if (d.size() >= 6 && d[0] == 0x7F && d[2] == 0x09 && d[3] >= 1 && d[3] <= 3) {
+                static const int GM2D[6] = {0, 1, 2, 4, 5, 6};
+                int ch2 = d[4] & 0x0F, src = d[3] == 1 ? 2 : d[3] == 2 ? 3 : -1;
+                size_t i = 5;
+                if (d[3] == 3 && d.size() >= 7) {
+                    src = 100 + d[5];
+                    i = 6;
+                }
+                bool any = false;
+                if (src >= 0)
+                    for (; i + 1 < d.size(); i += 2) {
+                        int pp = d[i], rr = d[i + 1];
+                        if (pp >= 6)
+                            continue;
+                        double dep = pp == 0 ? (double)std::max(-24, std::min(24, rr - 0x40))
+                                     : pp == 1 ? -9600.0 + rr * (9600.0 + 9450.0) / 127.0
+                                     : pp == 2 ? rr / 64.0 - 1.0
+                                     : pp == 3 ? rr * 600.0 / 127.0
+                                     : pp == 4 ? rr * 2400.0 / 127.0
+                                     : rr / 127.0;
+                        auto mi = cmx.find(ch2);
+                        if (mi == cmx.end()) {
+                            mi = cmx.emplace(ch2, Cmx()).first;
+                            mi->second.reset();
+                        }
+                        mi->second.set(src, GM2D[pp], dep);
+                        any = true;
+                    }
+                if (any) {
+                    cmx_upd(t, ch2);
+                    continue;
+                }
+            }
+            // THE INSERTION EFFECT (gsefx.parse: 40 03 aa, a part's 4p 22),
+            // its timeline kept whole -- what each note's onset finds
+            if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12) {
+                int k = -1, a = 0, b = 0;
+                if (d[4] == 0x40 && d[5] == 0x03) {
+                    int ad = d[6];
+                    if (ad == 0x00 && d.size() >= 9)
+                        k = 1, a = d[7], b = d[8];
+                    else if (ad >= 0x03 && ad <= 0x16)
+                        k = 2, a = ad - 0x02, b = d[7];
+                    else if (ad >= 0x17 && ad <= 0x19)
+                        k = 3, a = ad, b = d[7];
+                    else if (ad >= 0x1B && ad <= 0x1E)
+                        k = 4, a = ad, b = d[7];
+                    if (k < 0)
+                        continue;           // (an address gsefx.parse does not read: nothing, as Python's)
+                } else if ((d[4] == 0x40 || d[4] == 0x50) && (d[5] >> 4) == 4 && d[6] == 0x22) {
+                    int blk = d[5] & 0x0F;
+                    k = 5, a = (blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk)) + (d[4] == 0x50 ? 16 : 0), b = d[7] != 0;
+                }
+                if (k >= 0) {
+                    if (!seen_note)
+                        P.gs = 1;
+                    P.efx.push_back(Parsed::Efx{t, k, a, b});
+                    if (k == 4 && (a == 0x1B || a == 0x1D))
+                        efx_src[a == 0x1D] = b;
+                    else if (k == 5 && b)
+                        efx_on.insert(a);
+                    else if (k == 5)
+                        efx_on.erase(a);
+                    continue;
+                }
+            }
+            if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12) {
+                const bool pblk = (d[4] == 0x40 || d[4] == 0x50) && ((d[5] >> 4) == 1 || (d[5] >> 4) == 2
+                                                                   || (d[5] >> 4) == 4);
+                const int blk = d[5] & 0x0F;
+                const int pc = (blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk)) + (d[4] == 0x50 ? 16 : 0);
+                // A PART's VELOCITY SENSE and KEY RANGE (1A, 1B, 1D, 1E)
+                if (pblk && (d[5] >> 4) == 1 && d.size() >= 9
+                    && (d[6] == 0x1A || d[6] == 0x1B || d[6] == 0x1D || d[6] == 0x1E)) {
+                    auto it = gsstate.find(pc);
+                    if (it == gsstate.end())
+                        it = gsstate.emplace(pc, std::array<int, 4>{64, 64, 0, 127}).first;
+                    it->second[d[6] == 0x1A ? 0 : d[6] == 0x1B ? 1 : d[6] == 0x1D ? 2 : 3] = d[7];
+                    if (!seen_note)
+                        P.gs = 1;
+                    continue;
+                }
+                // ...its TONE MAP-0 NUMBER (4p 01, a map 1-4)
+                if (pblk && (d[5] >> 4) == 4 && d[6] == 0x01 && d[7] >= 1 && d[7] <= 4) {
+                    map0[pc] = d[7];
+                    continue;
+                }
+                // ...the controller matrix's CC1 and CC2 numbers (1p 1F/20)
+                if (pblk && (d[5] >> 4) == 1 && (d[6] == 0x1F || d[6] == 0x20)) {
+                    auto mi = cmx.find(pc);
+                    if (mi == cmx.end()) {
+                        mi = cmx.emplace(pc, Cmx()).first;
+                        mi->second.reset();
+                    }
+                    (d[6] == 0x1F ? mi->second.cc1 : mi->second.cc2) = d[7];
+                    cmx_upd(t, pc);
+                    continue;
+                }
+                // A DRUM MAP's SETUP (41/51 mp kk vv): every channel of its port
+                // playing the map, as its drum instruments' edits
+                if ((d[4] == 0x41 || d[4] == 0x51) && (d[5] >> 4) <= 1) {
+                    static const int PAR[10] = {-1, 0, 1, -2, 2, 3, 4, -2, -2, 5};   // (note, level, group, pan...)
+                    int pn = d[5] & 0x0F, par = pn < 10 ? PAR[pn] : -1;
+                    if (par == -2)
+                        return -4;      // (its exclusive group, its receive switches: Python's)
+                    if (par >= 0) {
+                        int key = d[6], v = par == 0 ? d[7] - d[6] : d[7], mp2 = d[5] >> 4;
+                        int base = d[4] == 0x51 ? 16 : 0;
+                        for (int c = base; c < base + 16; c++) {
+                            auto di = drums.find(c);
+                            bool isd = di != drums.end() ? di->second != 0 : (c % 16 == PERCUSSION_CHANNEL);
+                            if (isd && (rmap.count(c) ? rmap[c] : 0) == mp2)
+                                P.dedit.push_back(Parsed::DEdit{c, t, key, par, v});
+                        }
+                    }
+                    continue;
+                }
+                // ...and a part parameter: its messages follow it (gs_part_msgs);
+                // any other the loop leaves, as Python's
+                if (pblk) {
+                    if (!seen_note)
+                        P.gs = 1;
+                    continue;
+                }
+            }
             if (!(lvl || gs))
                 return -4;              // any other exclusive: not a GM file's
+            if (gs && !seen_note) {     // (a GS reset: the setup back to none)
+                P.gs_rv.clear(); P.gs_ch.clear(); P.gs_dl.clear(); P.gs_eq.clear(); P.gs_sw.clear();
+            }
             if (!seen_note && d.size() >= 4 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12)
                 P.gs = 1;
             rxbank = lvl != 1;
-            bmsb.clear(); blsb.clear(); drums.clear(); prog.clear(); ctrl.clear(); rsel.clear(); nsel.clear();
+            bmsb.clear(); blsb.clear(); drums.clear(); prog.clear(); bsel.clear(); ctrl.clear(); rsel.clear(); nsel.clear();
             P.mvol.push_back(std::make_tuple(t, seq, 1.0));      // (the master volume back to full)
             P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});     // (the live part's too)
             P.sysex.push_back(d);
@@ -758,29 +1216,82 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             for (auto &so : P.sotas)
                 so.second.push_back(std::make_pair(t, std::array<double, 12>{}));
             gsscale.clear();
+            gsstate.clear();
+            map0.clear();
+            rmap.clear();
             P.pitch.push_back(PitchEv{-1, t, seq, 9, 0.0});
             P.snd.push_back(CCEv{-1, t, -1, 0});
+            P.dedit.push_back(Parsed::DEdit{-1, t, -1, -1, 0});     // (the drum instruments' own: reset)
+            P.efx.push_back(Parsed::Efx{t, 0, 0, 0});              // (the insertion effect's: reset)
+            efx_src[0] = efx_src[1] = 0;
+            efx_cvv.clear();
+            efx_on.clear();
+            cat_now.clear(); bend_now.clear(); pat_now.clear();
+            for (auto &mc : cmx)
+                mc.second.reset();
+            for (auto &mc : cmx)
+                cmx_upd(t, mc.first);
             rfmsb.clear(); rrange.clear(); rmod.clear(); rfine.clear(); rcoarse.clear(); rtp.clear(); rtb.clear();
             continue;
         }
-        int ch = m.status & 0x0F, kind = m.status & 0xF0;
+        int ch = (m.status & 0x0F) + 16 * m.port, kind = m.status & 0xF0;
         auto is_drums = [&](int c) {
             auto it = drums.find(c);
             return it != drums.end() ? it->second != 0 : (c % 16 == PERCUSSION_CHANNEL);
         };
         if (kind == 0xC0) {
+            // THE BANK (tonelib.resolve_patch): ignored after GM 1's System On;
+            // MSB 120 a drum set, 121 GM 2's tone by its LSB; a drum channel
+            // stays one; else GS's variation, read in the map CC32 names
+            // (or, at 0, TUNING_MAP's)
             int msb = bmsb.count(ch) ? bmsb[ch] : 0, lsb = blsb.count(ch) ? blsb[ch] : 0;
-            if ((rxbank && (msb || lsb)) || (is_drums(ch) && lsb))
-                return -5;              // a bank or a map: patch_map's
-            drums[ch] = is_drums(ch);
-            prog[ch] = m.d0;
+            auto m0 = map0.find(ch);
+            int mp = lsb ? lsb : m0 != map0.end() ? m0->second : default_map, dr = is_drums(ch), bs = 0;
+            if (!rxbank)
+                ;
+            else if (msb == 120)
+                dr = 1;
+            else if (msb == 121) {
+                dr = 0;
+                bs = lsb ? 1 + 640 + lsb : 0;
+            } else if (!dr)
+                bs = msb ? 1 + 128 * (mp >= 1 && mp <= 4 ? mp : 0) + msb : 0;
+            int dprog = m.d0;
+            if (dr && msb != 120 && mp) {
+                // a drum set read in the part's map (kit_in_map): the map's own
+                // set where it has one -- 128 m + p, else (maps 1, 2) 384 + p --
+                // its drum program 128 + its index (the export's MKIT), else the program
+                if (!g_map_kits_set)
+                    return -5;
+                int own = -1;
+                for (size_t j = 0; j < g_map_kits.size() && own < 0; j++)
+                    if (g_map_kits[j] == 128 * mp + m.d0)
+                        own = (int)j;
+                for (size_t j = 0; j < g_map_kits.size() && own < 0; j++)
+                    if ((mp == 1 || mp == 2) && g_map_kits[j] == 3 * 128 + m.d0)
+                        own = (int)j;
+                if (own >= 0 && !g_map_kits_play)
+                    return -5;
+                if (own >= 0)
+                    dprog = 128 + own;
+            }
+            drums[ch] = dr;
+            bsel[ch] = bs;
+            if (dr)         // "When the Drum Set is changed, DRUM SETUP PARAMETER values will all be initialized"
+                P.dedit.push_back(Parsed::DEdit{ch, t, -1, -1, 0});
+            P.banked |= rxbank && (msb || lsb);     // (a bank, or a map: live's not yet)
+            prog[ch] = dr ? dprog : m.d0;
             P.progs.push_back(std::make_pair(ch, m.d0));
-            if (!drums[ch])
+            if (!drums[ch]) {
                 P.chprogs.push_back(std::make_pair(ch, m.d0));  // (a drum set is no organ's program)
+                P.chbsel.push_back(bs);
+            }
             P.events.push_back(LiveEv{t, 5, ch, m.d0, 0});
         } else if (kind == 0xB0) {
             int cc = m.d0, v = m.d1;
             P.ccs.push_back(CCEv{ch, t, cc, v});
+            if (cc >= 1 && cc <= 95)
+                efx_cv(t, ch, cc, v);
             P.events.push_back(LiveEv{t, 2, ch, cc, v});
             if (cc >= 71 && cc <= 78)
                 P.snd.push_back(CCEv{ch, t, cc, v});
@@ -789,6 +1300,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             else if (cc == 32)
                 blsb[ch] = v;
             ctrl[ch][cc] = v;
+            cmx_upd(t, ch);
             if (cc == 121) {
                 for (int rc : {64, 65, 66, 67})
                     P.ccs.push_back(CCEv{ch, t, rc, 0});
@@ -803,6 +1315,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 ctrl[ch][1] = 0;
                 P.pws.push_back(PwEv{ch, t, 0});
                 P.pitch.push_back(PitchEv{ch, t, seq, 0, 0.0});
+                P.ats.push_back(CCEv{ch, t, -1, 0});        // (not polytouch: live keeps it)
                 rsel[ch] = std::make_pair(127, 127);
             }
             if (cc == 98 || cc == 99) {
@@ -827,9 +1340,9 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                     if (nt == nsel.end())
                         continue;
                     static const int DRUM[] = {0x18, 0x1A, 0x1C, 0x1D, 0x1E, 0x1F};
-                    for (int d : DRUM)
-                        if (nt->second.first == d && cc == 6)
-                            return -6;
+                    for (int q = 0; q < 6; q++)
+                        if (nt->second.first == DRUM[q] && cc == 6)    // (a drum instrument's own: dedit)
+                            P.dedit.push_back(Parsed::DEdit{ch, t, nt->second.second, q, q == 0 ? v - 64 : v});
                     static const int GSN[8][3] = {{1, 0x08, 76}, {1, 0x09, 77}, {1, 0x0A, 78}, {1, 0x20, 74},
                                                   {1, 0x21, 71}, {1, 0x63, 73}, {1, 0x64, 75}, {1, 0x66, 72}};
                     for (auto &g : GSN)
@@ -910,17 +1423,41 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             P.pws.push_back(PwEv{ch, t, ((m.d1 << 7) | m.d0) - 8192});
             P.pitch.push_back(PitchEv{ch, t, seq, 0, (double)(((m.d1 << 7) | m.d0) - 8192)});
             P.events.push_back(LiveEv{t, 4, ch, ((m.d1 << 7) | m.d0) - 8192, 0});
+            efx_cv(t, ch, 0x61, ((m.d1 << 7) | m.d0) >> 7);
+            bend_now[ch] = ((m.d1 << 7) | m.d0) - 8192;
+            cmx_upd(t, ch);
         } else if (kind == 0x90 && m.d1 > 0) {
             seen_note = true;
             P.events.push_back(LiveEv{t, 0, ch, m.d0, m.d1});
             auto &c = ctrl[ch];
             Note n;
             n.ch = ch; n.note = m.d0; n.on = t; n.off = 0.0; n.vel = m.d1;
+            {
+                // A GS PART'S KEY RANGE (outside it the part does not sound) and
+                // its VELOCITY SENSE: depth scales the velocity (64 as is), offset moves it
+                auto gi = gsstate.find(ch);
+                if (gi != gsstate.end()) {
+                    const auto &g = gi->second;
+                    if (!(g[2] <= m.d0 && m.d0 <= g[3]))
+                        continue;
+                    if (g[0] != 64 || g[1] != 64)
+                        n.vel = std::max(1, std::min(127, (int)nearbyint(m.d1 * g[0] / 64.0 + g[1] - 64)));
+                }
+            }
             n.v7 = (c.count(7) ? c[7] : GM_DEFAULT_VOLUME) / 127.0;
             n.v11 = (c.count(11) ? c[11] : GM_DEFAULT_EXPRESSION) / 127.0;
+            {
+                // (the controller matrix's amplitude, where a matrix routes
+                // one: in the expression, which chan_vol squares -- cv)
+                auto li = cmx_last.find(ch);
+                if (li != cmx_last.end() && li->second[0] != 1.0)
+                    n.v11 = n.v11 * pow(li->second[0], 0.5);
+            }
             n.pan = ((c.count(10) ? c[10] : GM_DEFAULT_PAN) - 64) / 63.0;
             n.prog = prog.count(ch) ? prog[ch] : 0;
             n.drum = is_drums(ch);
+            n.bsel = n.drum || !bsel.count(ch) ? 0 : bsel[ch];
+            P.banked |= n.bsel != 0;
             on[std::make_pair(ch, m.d0)].push_back(n);
         } else if (kind == 0x80 || kind == 0x90) {
             P.events.push_back(LiveEv{t, 1, ch, m.d0, 0});
@@ -932,7 +1469,17 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 P.notes.push_back(n);
             }
         }
-        // polytouch (A0) and aftertouch (D0) carry no note or controller here
+        else if (kind == 0xD0) {
+            P.ats.push_back(CCEv{ch, t, -1, m.d0});     // the channel's aftertouch (ats)
+            efx_cv(t, ch, 0x60, m.d0);
+            cat_now[ch] = m.d0;
+            cmx_upd(t, ch);
+        }
+        else if (kind == 0xA0) {
+            P.pts.push_back(CCEv{ch, t, m.d0, m.d1});   // a key's polytouch (pts)
+            pat_now[ch][m.d0] = m.d1;
+            cmx_upd(t, ch);
+        }
     }
     P.total = t;
     // ALL NOTES OFF and the channel-mode messages that carry it (CC123-127,
@@ -963,6 +1510,46 @@ extern "C" {
 // reason (-1 a malformed file, -2 type 2, -3 ports, -4 an exclusive, -5 a
 // bank, -6 an NRPN or MPE, -7 mono mode). The notes are parse's after
 // _prep_notes_off.
+// THE DRUM INSTRUMENTS' OWN (dedit): edit i's channel, key, parameter, value
+// (iv) and time; the count
+int nv_midi_n_dedit(void *p) { return (int)((nv::Parsed *)p)->dedit.size(); }
+void nv_midi_dedit(void *p, int i, int *iv, double *t)
+{
+    const auto &e = ((nv::Parsed *)p)->dedit[i];
+    iv[0] = e.ch; iv[1] = e.key; iv[2] = e.par; iv[3] = e.v;
+    *t = e.t;
+}
+
+// THE CONTROLLER MATRIX's sums as they move: event i's kind and channel (iv),
+// time and value (dv); the count
+int nv_midi_n_cmx(void *p) { return (int)((nv::Parsed *)p)->cmx.size(); }
+void nv_midi_cmx(void *p, int i, int *iv, double *dv)
+{
+    const auto &e = ((nv::Parsed *)p)->cmx[i];
+    iv[0] = e.kind; iv[1] = e.ch;
+    dv[0] = e.t; dv[1] = e.v;
+}
+
+// THE INSERTION EFFECT's timeline: event i's kind, a, b (iv) and time; the count
+int nv_midi_n_efx(void *p) { return (int)((nv::Parsed *)p)->efx.size(); }
+void nv_midi_efx(void *p, int i, int *iv, double *t)
+{
+    const auto &e = ((nv::Parsed *)p)->efx[i];
+    iv[0] = e.kind; iv[1] = e.a; iv[2] = e.b;
+    *t = e.t;
+}
+
+// THE MAPS' OWN DRUM SETS (percussion_map.KITS past 127), for kit_in_map:
+// until they are given, any drum set read in a map is refused
+// ...and whether the export carries their tables (MKIT): played, else refused
+void nv_midi_map_kits_play(int on) { nv::g_map_kits_play = on != 0; }
+
+void nv_midi_map_kits(const int *ids, int n)
+{
+    nv::g_map_kits.assign(ids, ids + n);
+    nv::g_map_kits_set = true;
+}
+
 void *nv_midi_read(const uint8_t *buf, long long len, int *err)
 {
     nv::Parsed *P = new nv::Parsed();
@@ -978,6 +1565,22 @@ void nv_midi_free(void *p) { delete (nv::Parsed *)p; }
 
 double nv_midi_total(void *p) { return ((nv::Parsed *)p)->total; }
 int nv_midi_gs(void *p) { return ((nv::Parsed *)p)->gs; }
+
+// THE GS SETUP by the first note (gs_setup): which 0 the reverb's, 1 the
+// chorus's, 2 the delay's (key their 40 01 address), 3 the EQ's (0-3), 4 a
+// part's EQ switch (key its channel) -- 1 and *v where the file set it
+int nv_midi_gs_setup(void *p, int which, int key, int *v)
+{
+    const nv::Parsed *P = (nv::Parsed *)p;
+    const std::map<int, int> *m[5] = {&P->gs_rv, &P->gs_ch, &P->gs_dl, &P->gs_eq, &P->gs_sw};
+    if (which < 0 || which > 4)
+        return 0;
+    auto it = m[which]->find(key);
+    if (it == m[which]->end())
+        return 0;
+    *v = it->second;
+    return 1;
+}
 int nv_midi_n_notes(void *p) { return (int)((nv::Parsed *)p)->notes.size(); }
 int nv_midi_n_ccs(void *p) { return (int)((nv::Parsed *)p)->ccs.size(); }
 int nv_midi_n_pws(void *p) { return (int)((nv::Parsed *)p)->pws.size(); }
@@ -1112,6 +1715,42 @@ void nv_midi_note(void *p, int i, int *iv, double *dv)
     dv[0] = n.on; dv[1] = n.off; dv[2] = n.v7; dv[3] = n.v11; dv[4] = n.pan;
 }
 
+// note i's bank (Note.bsel: 0 the capital); any note's (a file live does not play yet)
+int nv_midi_note_bsel(void *p, int i) { return ((nv::Parsed *)p)->notes[i].bsel; }
+
+// key's polytouch (blockrender's pts[(ch, key)]), as nv_midi_ats
+int nv_midi_pts(void *p, int ch, int key, double *t, int *v, int cap)
+{
+    int n = 0;
+    for (const auto &e : ((nv::Parsed *)p)->pts)
+        if (e.ch == ch && e.cc == key) {
+            if (t && n < cap) {
+                t[n] = e.t;
+                v[n] = e.v;
+            }
+            n++;
+        }
+    return n;
+}
+
+// channel ch's aftertouch (blockrender's ats[ch]): its times and values in
+// message order, n of them into t and v (NULL: count)
+int nv_midi_ats(void *p, int ch, double *t, int *v, int cap)
+{
+    int n = 0;
+    for (const auto &e : ((nv::Parsed *)p)->ats)
+        if (e.ch == ch) {
+            if (t && n < cap) {
+                t[n] = e.t;
+                v[n] = e.v;
+            }
+            n++;
+        }
+    return n;
+}
+int nv_midi_banked(void *p) { return ((nv::Parsed *)p)->banked; }
+int nv_midi_chprog_bsel(void *p, int i) { return ((nv::Parsed *)p)->chbsel[i]; }
+
 // ch_progs: the program changes on melodic channels, in message order
 int nv_midi_n_chprogs(void *p) { return (int)((nv::Parsed *)p)->chprogs.size(); }
 void nv_midi_chprog(void *p, int i, int *iv)
@@ -1143,10 +1782,14 @@ void nv_midi_song(void *p, void *song, const double *trim)
     for (const nv::CCEv &e : P->ccs)
         nv_song_cc(song, e.ch, e.t, e.cc, e.v);
     for (const nv::Note &n : P->notes) {
+        int n0 = nv_song_n_notes(song);
         nv_song_note(song, n.ch, n.note, n.on, n.off, n.vel, n.v7, n.v11, n.pan,
-                     trim[(n.drum ? 128 : 0) + n.prog], n.prog, n.drum);
+                     trim[(n.drum ? 128 : 0) + (n.drum && n.prog > 127 ? 0 : n.prog)], n.prog, n.drum);
+        if (n.bsel)
+            nv_song_note_bank(song, n.bsel);    // its variation: its slot, or its layers
         if (n.mcut || n.mslur)
-            nv_song_note_mono(song, nv_song_n_notes(song) - 1, n.mcut, n.mslur);
+            for (int j = n0; j < nv_song_n_notes(song); j++)
+                nv_song_note_mono(song, j, n.mcut, n.mslur);
     }
     for (const auto &l : P->legato)
         nv_song_legato(song, l[0], l[1], l[2]);

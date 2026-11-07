@@ -75,8 +75,8 @@ def main(argv):
                            "--fresh", "--room=" + room], stdout=subprocess.DEVNULL)
     exe = N.build_nvlive()
     m = N.Midi(mid)
-    if m.error:
-        print("refused: %s" % N.MIDI_REFUSED.get(m.error, m.error))
+    if m.error or (m.banked() and "programs" not in opt):
+        print("refused: %s" % (N.MIDI_REFUSED.get(m.error, m.error) if m.error else "a bank (with --programs only)"))
         return 2
     total = m.total() + 3.0
     out = os.path.join(tmp, "nv.wav")
@@ -99,13 +99,17 @@ def main(argv):
                           + (["--gpu=" + (opt["gpu"] or "cl"), "--gpu-min=%d" % gmin] if "gpu" in opt else [])
                           + (["--tuner=" + opt["tuner"]] if opt.get("tuner") else [])
                           + (["--eastern=" + opt["eastern"]] if opt.get("eastern") else [])
-                          + (["--programs"] if "programs" in opt else []),
+                          + (["--programs"] if "programs" in opt else [])
+                          + (["--bank=" + opt["bank"]] if opt.get("bank") else []),
                           stderr=subprocess.DEVNULL)
     raw = open(out, "rb").read()          # float32 stereo after a 44-byte header
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
     # live.Live, fed the same events on the same blocks
+    # (--bank=V: the part a variation, live.Patch's: map x 128 + bank)
+    vparts = ([L.Part(L.patch_for(prog, False, opt.get("tuner") or "hybrid", variation=int(opt["bank"])))]
+              if opt.get("bank") else None)
     lv = L.Live(program=prog, rate=48000, frames=128, capacity=slots, verbose=False, threads=1, gpu=False,
-                tuner=opt.get("tuner") or "hybrid", drums=drums, eastern=opt.get("eastern") or None)
+                tuner=opt.get("tuner") or "hybrid", drums=drums, eastern=opt.get("eastern") or None, parts=vparts)
     lv.enable_room(room)
     lv.parts[0].patch.warm()
     from livepart_check import instant_scan

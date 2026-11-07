@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <map>
 #include <set>
 #include <string>
@@ -185,6 +186,10 @@ struct NoteKey {
     }
 };
 
+// K's region of the maps' own drum sets (a drum program 128 + j's keys): the
+// export's, after the variations (nv_song_mapk_base)
+static int g_k_mapk = 0;
+
 struct Ev {
     long long ch;
     int note;
@@ -202,12 +207,61 @@ struct Ev {
     // arrives from (-1 none) and the step's time; gl 0 not one
     int gl = 0, gl_prev = -1;
     double gl_lv = 1.0, gl_sm = 0.0, gl_dt = 0.0;
+    int slot = -1;                      // its variation's slot (bank select: K[NV_K_VAR + 128 x slot + key]), -1 none
+    int kover = -1;                     // its class's own index in K (a drone's: _DRONE_PC), -1 none
+    // its class's index in K: a drum set's key, a variation's, a program's
+    int kidx() const
+    {
+        return kover >= 0 ? kover : drum ? (prog < 128 ? NV_K_DRUMS + 128 * prog : g_k_mapk + 128 * (prog - 128)) + note
+                                         : slot >= 0 ? NV_K_VAR + 128 * slot + note : 128 * prog + note;
+    }
+    // ...and the TONE it is on its part (_TONE_SEGS' key: the program, or
+    // the variation -- a layered one's each layer -- as its own)
+    int tone() const { return slot >= 0 ? 1024 + slot : prog; }
 };
 
 // A file's channels and notes.
 struct Song {
     std::map<long long, Channel> ch;
     std::vector<Ev> notes;
+    // BANK SELECT (nv_song_vars): each entry's layers (slot, semitones,
+    // lowest and highest velocity) and trim; GS's table [map][program][msb],
+    // GM 2's [program][lsb] -- entry 0 the capital tone
+    std::vector<std::vector<std::array<int, 4>>> vls;
+    std::vector<double> vtrim;
+    std::vector<int> vgs, vgm2;
+    // each channel's keys as the file wrote them (_prep_choir_parts reads
+    // the notes before a layered variation or a stroke expands them)
+    std::map<long long, std::vector<int>> wkeys;
+    // the last note's bank (the reader's bsel): its variation's slot -- a
+    // LAYERED one (patch_map.LAYERED) the note again for each layer, at its
+    // semitones, where the key is on the keyboard and the velocity in its
+    // range (_prep_strokes, before anything else sees the note); 0 refused
+    // (no table), 1 played
+    int bank(int bsel)
+    {
+        if (vgs.empty())
+            return 0;
+        Ev e = notes.back();
+        if (e.prog < 0 || e.prog > 127)
+            return 1;
+        int en = bsel <= 640 ? vgs[((size_t)((bsel - 1) / 128) * 128 + e.prog) * 128 + (bsel - 1) % 128]
+                             : vgm2[(size_t)e.prog * 128 + (bsel - 641)];
+        if (en <= 0)
+            return 1;                       // (a variation not built: the capital, as a Sound Canvas)
+        notes.pop_back();
+        for (const auto &l : vls[en]) {
+            int k = e.note + l[1];
+            if (k < 0 || k > 127 || e.vel < l[2] || e.vel > l[3])
+                continue;
+            Ev x = e;
+            x.note = k;
+            x.slot = l[0];
+            x.trim = vtrim[en];
+            notes.push_back(x);
+        }
+        return 1;
+    }
     std::map<NoteKey, double> next_same, sost_held;
     std::map<long long, int> vbase;     // each channel's median velocity (_vbase)
     std::map<long long, int> parts;     // a sung part's voice part, by its track's name (nv_voice_body)
@@ -231,12 +285,27 @@ struct Song {
     // note came, its voice's drive, and whether it is on a rotor
     std::vector<std::pair<long long, std::pair<double, int>>> amp;
     std::vector<std::pair<double, double>> amp_cfg;     // (its reference peak, 0 none; its imbalance)
+    std::vector<double> amp_lv0;    // ...its insertion effect's level when it came (_AMP_LV0), 1 none
+    // ...its reference following that level (tubeamp.segment's 'steps'): base, starts, levels
+    std::map<int, std::pair<double, std::pair<std::vector<double>, std::vector<double>>>> amp_steps;
+    // A FILE'S INSERTION EFFECT (nvrender's chains): the chains (NV_FXN each),
+    // each note's chain (-1 none, -2 on the effect with none), each note
+    // first through a chain on its mix channel, the cabinets, and each mix
+    // channel's level steps (starts in samples, levels)
+    std::vector<double> fx;
+    std::vector<int> note_fx;
+    std::vector<unsigned char> fx_first;
+    const NoteClass *fx_cab[2] = {nullptr, nullptr};
+    const double *fx_place = nullptr, *fx_pans = nullptr;
+    std::map<long long, std::pair<std::vector<double>, std::vector<double>>> fx_steps;
     // ...and of each note's bellows push (blockrender's push_rows), [first, end)
     std::vector<std::pair<long long, long long>> push_rows;
     // ...and of each jack's key-up click (blockrender's rel_jacks): first, end, rank, offset (s)
     std::vector<double> rel_jacks;
     // ...and each note's key-up rows, [first, end) (blockrender's rel_rows)
     std::vector<long long> rel_rows;
+    // ...and its grains' (_GRAIN_ROWS: live keeps their own onsets), [first, end)
+    std::vector<long long> grain_rows;
     double total = 0.0;
     // ITS TUNING: the file's table, a channel's MIDI Tuning Standard tables
     // from their times (_MTS_TL), its fixed bend (_BTUN) and octave tuning (_OTUN)
@@ -288,6 +357,32 @@ struct Song {
     // sound controls (_MOOG_KVAR: grid point, knob row)
     std::map<std::tuple<long long, const void *, int>, int> mkmove;
     std::map<int, std::vector<std::pair<long long, std::array<double, 9>>>> mkvar;
+
+    // WHAT A PLAY APPENDS (nv_play), as it stood before the first: a play
+    // again (register.cpp's, a bigger row store) rewinds to it
+    struct PlayMark {
+        bool set = false;
+        size_t push, jacks, rel, grain, mft, mkn, mlay, mspan, mf;
+        std::map<std::pair<long long, std::array<double, 9>>, int> mkrow;
+        std::map<std::tuple<long long, const void *, int>, int> mkmove;
+        std::map<int, std::vector<std::pair<long long, std::array<double, 9>>>> mkvar;
+    } pmark;
+    void play_mark()
+    {
+        PlayMark &m = pmark;
+        if (!m.set) {
+            m.set = true;
+            m.push = push_rows.size(); m.jacks = rel_jacks.size(); m.rel = rel_rows.size();
+            m.grain = grain_rows.size(); m.mft = mft.size(); m.mkn = mkn.size(); m.mlay = mlay.size();
+            m.mspan = mspan.size(); m.mf = mf104.size();
+            m.mkrow = mkrow; m.mkmove = mkmove; m.mkvar = mkvar;
+            return;
+        }
+        push_rows.resize(m.push); rel_jacks.resize(m.jacks); rel_rows.resize(m.rel);
+        grain_rows.resize(m.grain); mft.resize(m.mft); mkn.resize(m.mkn); mlay.resize(m.mlay);
+        mspan.resize(m.mspan); mf104.resize(m.mf);
+        mkrow = m.mkrow; mkmove = m.mkmove; mkvar = m.mkvar;
+    }
     // ITS GLIDES (_prep_glide_sources, from finish): each note's source key, -1 none
     std::vector<int> glide_src;
 
@@ -331,7 +426,7 @@ struct Song {
         int ds = spec->default_stops;
         for (int i : idx) {
             const Ev &e = notes[i];
-            const OrganSpec *q = (e.prog >= 0 && e.prog < 128 && !e.drum) ? prog_organ[e.prog] : nullptr;
+            const OrganSpec *q = porg(e);
             if (q && q->family == spec->family) {
                 if (q->default_stops != ds) {
                     recalls.push_back(std::make_pair(e.on - 1e-4, q->default_stops));
@@ -396,6 +491,18 @@ struct Song {
     }
 
     const OrganSpec *prog_organ[128] = {nullptr};
+    std::vector<const OrganSpec *> slot_organ;      // each variation slot's organ (its tone's class's), NULL none
+
+    // the organ of note e's PROGRAM CLASS (property_class_for_program: a
+    // variation's its own), NULL none
+    const OrganSpec *porg(const Ev &e) const
+    {
+        if (e.drum || e.prog < 0 || e.prog > 127)
+            return nullptr;
+        if (e.slot >= 0)
+            return e.slot < (int)slot_organ.size() ? slot_organ[e.slot] : nullptr;
+        return prog_organ[e.prog];
+    }
 
     // onepole_blocks: events (the first the default) at the nblk block centres
     static void onepole(const std::vector<std::pair<double, double>> &ev, long nblk, int blk, double sr, double tau,
@@ -468,8 +575,39 @@ struct Song {
         return nullptr;
     }
 
-    // _snd_d: CC71-78's d (sound_offset) in force on channel c at t, 0 none
+    // THE CONTROLLER MATRIX's sums (_CMXEV): (kind, channel) -> [(t, value)]
+    std::map<std::pair<int, long long>, std::vector<std::pair<double, double>>> cmx;
+    // _cmx_at: its value k on channel c in force at t (d before any); has: any at all
+    double cmx_at(int k, long long c, double t, double d, bool *has) const
+    {
+        auto it = cmx.find(std::make_pair(k, c));
+        *has = it != cmx.end();
+        double v = d;
+        if (*has)
+            for (const auto &e : it->second) {
+                if (e.first > t + 1e-9)
+                    break;
+                v = e.second;
+            }
+        return v;
+    }
+
+    // _snd_d: CC71-78's d (sound_offset) in force on channel c at t, 0 none --
+    // and the controller matrix's: its cutoff as brightness, its LFO1 rate as
+    // the voice's vibrato rate (x 2^d)
     void sound_at(long long c, double t, double *d) const
+    {
+        sound_cc_at(c, t, d);
+        bool has;
+        double v = cmx_at(3, c, t, 0.0, &has);
+        if (has)
+            d[3] = std::max(-1.0, std::min(1.0, d[3] + v / 9600.0));
+        v = cmx_at(5, c, t, 0.0, &has);
+        if (has)
+            d[5] = d[5] + log2(std::max(0.1, 1.0 + v / 5.5));
+    }
+
+    void sound_cc_at(long long c, double t, double *d) const
     {
         for (int i = 0; i < 8; i++)
             d[i] = 0.0;
@@ -529,6 +667,117 @@ struct Song {
     // step plays clean. The steps after the rest, as the Python appends
     // them; what follows the gliss in the Python (the slurs' occurrences,
     // next_same) made again on them, the glide sources carried
+    // THE DRONES (_prep_phrase_spans, _DRONE_PC): each channel's phrases --
+    // its notes by onset, a gap past its programs' part_break_s (2 s) a new
+    // one -- and where a program's class has drones, under each phrase the
+    // ones its first CC1 leaves uncorked (round(cc / 127 x n); all without
+    // one), from its first note-on (each a microsecond after the last) to
+    // its last note-off, at the phrase's first note's velocity, levels and
+    // program, each its own class; appended in channel, phrase, drone order
+    bool drones_done = false;
+    int drones(const NoteClass *const *K)
+    {
+        if (drones_done)
+            return 0;
+        drones_done = true;
+        std::vector<long long> chs;
+        std::map<long long, std::vector<int>> byc;
+        for (size_t i = 0; i < notes.size(); i++) {
+            if (!byc.count(notes[i].ch))
+                chs.push_back(notes[i].ch);
+            byc[notes[i].ch].push_back((int)i);
+        }
+        std::vector<Ev> add;
+        for (long long c : chs) {
+            const std::vector<int> &ix = byc[c];
+            const NoteClass *bpc = nullptr;
+            double gap = NAN;
+            for (int i : ix) {
+                // (the PROGRAM's class, property_class_for_program: a drone's
+                // own key on the part still has the chanter's drones)
+                const Ev &e = notes[i];
+                if (e.drum || e.prog < 0 || e.prog > 127)
+                    continue;
+                const NoteClass *k = K[e.slot >= 0 ? NV_K_VAR + 128 * e.slot + 60 : 128 * e.prog + 60];
+                if (!k)
+                    continue;
+                if (std::isnan(gap))
+                    gap = k->part_break_s;
+                else if (gap != k->part_break_s)
+                    return -1;                  // (programs whose phrases break differently: Python's set order)
+                if (k->n_drone) {
+                    if (bpc && bpc != k)
+                        return -1;              // (two drone classes on one channel: Python's set order)
+                    bpc = k;
+                }
+            }
+            if (!bpc || notes[ix[0]].drum)
+                continue;
+            if (std::isnan(gap))
+                gap = 2.0;
+            std::vector<std::pair<double, double>> on_off;
+            for (int i : ix)
+                on_off.push_back(std::make_pair(notes[i].on, notes[i].off));
+            std::sort(on_off.begin(), on_off.end());
+            std::vector<std::pair<double, double>> ph;
+            for (auto &p : on_off) {
+                if (!ph.empty() && p.first - ph.back().second <= gap)
+                    ph.back().second = std::max(ph.back().second, p.second);
+                else
+                    ph.push_back(p);
+            }
+            int nd = bpc->n_drone;
+            auto it = ch.find(c);
+            if (it != ch.end())
+                for (const CC &e : it->second.ccs)
+                    if (e.cc == 1) {
+                        nd = (int)nearbyint(e.v / 127.0 * bpc->n_drone);
+                        break;
+                    }
+            for (auto &p : ph) {
+                int first = -1;
+                for (int i : ix)
+                    if (p.first <= notes[i].on && notes[i].on <= p.second && (first < 0 || notes[i].on < notes[first].on))
+                        first = i;
+                for (int d = 0; d < nd; d++) {
+                    Ev x = notes[first];
+                    x.note = bpc->drone_note[d];
+                    x.on = p.first + 1e-6 * d;
+                    x.off = p.second;
+                    x.kover = bpc->drone_k[d];
+                    x.ratio = 1.0;              // (none of the first note's stroke: the drone's own note and onset)
+                    x.inner = 0;
+                    x.tilt = x.mouth = x.morph = NAN;
+                    x.slot = -1;
+                    x.mcut = x.mslur = 0;
+                    x.gl = 0;
+                    x.stroked = 0;
+                    add.push_back(x);
+                }
+            }
+        }
+        if (add.empty())
+            return 0;
+        for (const Ev &x : add) {
+            notes.push_back(x);
+            glide_src.push_back(-1);
+        }
+        // (the slurs again -- the note loop counts a drone's occurrence, and
+        // _SLUR_OUT reads them -- but not next_same: _prepare's was made
+        // before the drones, so a tenor is not cut by its twin)
+        mix.clear();
+        slurs();
+        return 0;
+    }
+
+    // _GLISS_DROP: every note of e's (channel, key, onset)
+    void drop_key(std::vector<char> &drop, const Ev &e) const
+    {
+        for (size_t j = 0; j < notes.size(); j++)
+            if (notes[j].ch == e.ch && notes[j].note == e.note && notes[j].on == e.on)
+                drop[j] = 1;
+    }
+
     bool gliss_done = false;
     void gliss(const NoteClass *const *K)
     {
@@ -544,7 +793,7 @@ struct Song {
             int gs = i < glide_src.size() ? glide_src[i] : -1;
             if (gs < 0 || e.drum || e.prog < 0 || e.prog > 127)
                 continue;
-            const NoteClass *k = K[128 * e.prog + e.note];
+            const NoteClass *k = K[e.kidx()];
             if (!k || k->glide_mech != 3)
                 continue;
             int step = e.note > gs ? 1 : -1;
@@ -589,9 +838,120 @@ struct Song {
             x.gl_dt = dt;
             steps.push_back(x);
             // (the Python drops every note of this (channel, key, onset))
-            for (size_t j = 0; j < notes.size(); j++)
-                if (notes[j].ch == e.ch && notes[j].note == e.note && notes[j].on == e.on)
-                    drop[j] = 1;
+            drop_key(drop, e);
+            any = true;
+        }
+        // A FALL IS A GLISS DOWN (fall_cents: _prep_gliss's falls): the note
+        // held fall_at_s, then down the lattice a semitone a step over fall_s,
+        // each step fading fall_fade_db across the run; a key let go before
+        // the fall begins releases as any note does
+        const size_t nn = notes.size();
+        for (size_t i = 0; i < nn; i++) {
+            const Ev &e = notes[i];
+            if (drop[i] || e.drum || e.prog < 0 || e.prog > 127)
+                continue;
+            const NoteClass *k = K[e.kidx()];
+            if (!k || !k->fall_cents)
+                continue;
+            double tf = e.on + k->fall_at_s;
+            if (e.off <= tf)
+                continue;
+            int ns = (int)nearbyint(k->fall_cents / 100.0);
+            ns = ns > 2 ? ns : 2;
+            double dt = k->fall_s / ns;
+            drop_key(drop, e);
+            Ev x = e;
+            x.off = tf;
+            steps.push_back(x);
+            for (int q = 0; q < ns; q++) {
+                int p = e.note - 1 - q;
+                if (p < 0)
+                    break;
+                double t0 = tf + q * dt;
+                Ev y = e;
+                y.note = p;
+                y.on = t0;
+                y.off = t0 + dt * 1.35;
+                y.gl = 1;
+                y.gl_lv = pow(10.0, -k->fall_fade_db * (double)(q + 1) / ns / 20.0);
+                y.gl_sm = k->fall_smear;
+                y.gl_prev = e.note - q;
+                y.gl_dt = dt;
+                steps.push_back(y);
+            }
+            any = true;
+        }
+        // ...AND A RIP, the fall's mirror (rip_cents): from the onset up the
+        // lattice from rip_cents below over rip_s, crescendoing from
+        // rip_start_db under; the note proper from where the run arrives
+        for (size_t i = 0; i < nn; i++) {
+            const Ev &e = notes[i];
+            if (drop[i] || e.drum || e.prog < 0 || e.prog > 127)
+                continue;
+            const NoteClass *k = K[e.kidx()];
+            if (!k || !k->rip_cents)
+                continue;
+            int ns = (int)nearbyint(k->rip_cents / 100.0);
+            ns = ns > 2 ? ns : 2;
+            double T = k->rip_s;
+            if (e.off <= e.on + T)
+                continue;                   // a note shorter than its rip: played plain
+            double dt = T / ns;
+            drop_key(drop, e);
+            for (int q = 0; q < ns; q++) {
+                int p = e.note - ns + q;
+                if (p < 0)
+                    continue;
+                double t0 = e.on + q * dt;
+                Ev y = e;
+                y.note = p;
+                y.on = t0;
+                y.off = t0 + dt * 1.35;
+                y.gl = 1;
+                y.gl_lv = pow(10.0, -k->rip_start_db * (double)(ns - q) / ns / 20.0);
+                y.gl_sm = k->rip_smear;
+                y.gl_prev = q ? p - 1 : -1;
+                y.gl_dt = dt;
+                steps.push_back(y);
+            }
+            Ev y = e;
+            y.on = e.on + T;
+            y.gl = 1;
+            y.gl_lv = 1.0;
+            y.gl_sm = k->rip_smear;
+            y.gl_prev = e.note - 1;
+            y.gl_dt = dt;
+            steps.push_back(y);
+            any = true;
+        }
+        // ...AND TREMOLO PICKING (tremolo_pick_hz): a held note re-struck at
+        // the picking rate, each stroke a note of its own, down and up
+        // alternating (the up softer), its time scattered -- seeded by the
+        // note, so a render repeats
+        for (size_t i = 0; i < nn; i++) {
+            const Ev &e = notes[i];
+            if (drop[i] || e.drum || e.prog < 0 || e.prog > 127)
+                continue;
+            const NoteClass *k = K[e.kidx()];
+            if (!k || !k->tp_hz || e.off - e.on < 1.5 / k->tp_hz)
+                continue;
+            PyRandom rg;
+            pyr_seed(&rg, 0x7E3D + (long long)e.note * 977 + (long long)(e.on * 1000));
+            double per = 1.0 / k->tp_hz, jit = k->tp_jit, up = pow(10.0, k->tp_up_db / 20.0);
+            std::vector<double> ts{e.on};
+            while (ts.back() + per < e.off - 0.25 * per)
+                ts.push_back(e.on + (double)ts.size() * per + pyr_uniform(&rg, -jit, jit) * per);
+            drop_key(drop, e);
+            for (size_t q = 0; q < ts.size(); q++) {
+                Ev y = e;
+                if (q % 2) {
+                    int v = (int)nearbyint(e.vel * up);
+                    y.vel = v > 1 ? v : 1;
+                }
+                y.on = ts[q];
+                y.off = q + 1 == ts.size() ? e.off : pymin(e.off, ts[q + 1] + 0.02);
+                steps.push_back(y);
+            }
             any = true;
         }
         if (!any)
@@ -718,7 +1078,7 @@ struct Song {
         std::map<std::pair<long long, int>, int> kit_on;
         std::map<std::pair<long long, int>, std::vector<double>> ons;
         for (const Ev &e : notes) {
-            if (!e.drum || e.prog < 0 || e.prog > 127)
+            if (!e.drum || e.prog < 0 || 2 * (size_t)(128 * e.prog + e.note) >= kit_choke.size())
                 continue;
             const unsigned long long *m = &kit_choke[2 * (128 * e.prog + e.note)];
             if (!(m[0] | m[1]))
@@ -798,18 +1158,25 @@ struct Song {
     // ridge. AND A KEY THAT ALSO STRIKES ANOTHER'S SOUND (key_layers:
     // par[NV_SPAR (q + 1) - 4] of them, the keys after): each struck as
     // the note is, before it, as _prep_strokes expands them
-    void strokes(const int *kind, const double *par)
+    void strokes(const int *kind, const double *par, const NoteClass *const *K = nullptr)
     {
         std::vector<Ev> out;
         for (const Ev &e : notes) {
-            bool in = e.drum && e.prog >= 0 && e.prog < 128 && e.note >= 0 && e.note < 128;
-            int q = 128 * e.prog + e.note;
+            bool in = e.drum && e.prog >= 0 && e.prog < (int)(kit_f0.size() / 128) && e.note >= 0 && e.note < 128;
+            int q = 128 * e.prog + e.note, kn = e.note;
+            // ...A MELODIC SFX's (sfx_strokes_of): its kit key's table, the key its generator's
+            const NoteClass *mk = (!e.drum && K) ? K[e.kidx()] : nullptr;
+            bool mel = mk && mk->sfx_prog >= 0 && e.note >= 0 && e.note < 128;
+            if (mel) {
+                kn = mk->sfx_key >= 0 ? mk->sfx_key : e.note;
+                q = 128 * mk->sfx_prog + kn;
+            }
             for (int l = 0; in && l < (int)par[NV_SPAR * (q + 1) - 4]; l++) {
                 Ev x = e;
                 x.note = (int)par[NV_SPAR * (q + 1) - 3 + l];
                 out.push_back(x);
             }
-            int kd = in ? kind[q] : 0;
+            int kd = (in || mel) ? kind[q] : 0;
             if (!kd) {
                 out.push_back(e);
                 continue;
@@ -818,7 +1185,7 @@ struct Song {
             if (kd == 6) {
                 // a voice's pulses: each its tilt, mouth and vowel too
                 std::vector<std::array<double, 7>> vs;
-                voiced(e.note, e.on, p, vs);
+                voiced(kn, e.on, p, vs);
                 for (size_t k = 0; k < vs.size(); k++) {
                     Ev x = e;
                     x.on = vs[k][0];
@@ -840,9 +1207,9 @@ struct Song {
             else if (kd == 2)
                 cascade(e.on, e.off, p, st);
             else if (kd == 3)
-                train(e.note, e.on, p, st);
+                train(kn, e.on, p, st);
             else if (kd == 4)
-                roll(e.note, e.on, e.off, p, st);
+                roll(kn, e.on, e.off, p, st);
             else
                 pattern(e.on, p, st);
             for (size_t k = 0; k < st.size(); k++) {
@@ -1143,6 +1510,43 @@ struct Song {
     std::vector<double> freq_e;
     std::map<long long, std::vector<unsigned char>> sym_drv;    // each mix channel's strings' driver (_SYM_CH)
     std::map<NoteKey, std::pair<double, double>> meend;         // _MEEND_AT: (its ratio at Note On, its row or -1)
+    std::map<NoteKey, std::pair<double, double>> siren;         // _SIREN_AT: (its row, its rotor's end)
+    // a part's insertion effect: (each mix channel's first effect note's onset, distance), in the note loop's order
+    std::map<long long, std::vector<std::pair<double, double>>> efx_part;
+    double gs_eq[4] = {0.0, 0.0, 0.0, 0.0};     // the file's GS EQ (gs_eq_gain), [0] 0 none
+    std::set<long long> gs_eq_off;              // ...the parts that have it off
+    // the file's GS delay (gsdelay.device, packed as NoteClass.dly_p) and its
+    // outputs' places (K_GSPLACE); gs_dly_set 0 none
+    int gs_dly_set = 0;
+    // the drum instruments' own (dedit): (channel or -1, time, key or -1 a reset, parameter, value)
+    struct DEd {
+        long long ch;
+        double t;
+        int key, par, v;
+    };
+    std::vector<DEd> dedit;
+    // drum_edit_at: what is in force for key `key` of channel ch at t -- a bit
+    // a parameter set, v[par] its value
+    int dst(long long c, int key, double t, int *v) const
+    {
+        int m = 0;
+        for (const DEd &e : dedit) {
+            if (e.t > t + 1e-9)
+                break;
+            if (e.ch != -1 && e.ch != c)
+                continue;
+            if (e.key < 0)
+                m = 0;
+            else if (e.key == key) {
+                m |= 1 << e.par;
+                v[e.par] = e.v;
+            }
+        }
+        return m;
+    }
+    double gs_dly[24] = {}, gs_dly_place[13] = {};
+    // ITS PRESSURE (ats, pts): a channel's aftertouch (key -1), a key's polytouch, in message order
+    std::map<std::pair<long long, int>, std::vector<std::pair<double, int>>> press;
     int raga_sa = -1;
     bool raga_on = false;
     std::vector<double> raga_sw;
@@ -1153,12 +1557,31 @@ struct Song {
 
     // _note_class_and_pitch for a melodic note with none of its extras (no
     // per-note pitch, MPE, meend, sounding octaves, scale or brass law): f0
-    double pitch(long long c, int note, double on, bool indian = false) const
+    // A CLASS'S OWN SCALE (scale_cents, _note_class_and_pitch): the tonic the
+    // table's tonic note x the sounding octaves x the bend x the octave
+    // tuning, in that order; a degree the scale has, the tonic x its cents
+    double scaled(long long c, int note, double on, const NoteClass *K, double f0) const
+    {
+        const int st = K->scale_tonic;
+        double tonic = note_table(c, on, K->indian != 0)[st] * (K->sounding_oct != 0.0 ? pow(2.0, K->sounding_oct) : 1.0);
+        auto b = btun.find(c);
+        tonic = tonic * ((b != btun.end() && b->second != 0.0) ? b->second : 1.0);
+        auto o = otun.find(c);
+        tonic = tonic * ((o != otun.end() && !o->second.empty()) ? pow(2.0, o->second[st % 12] / 1200.0) : 1.0);
+        for (int q = 0; q < K->scale_n; q++)
+            if (K->scale_off[q] == note - st)
+                return tonic * pow(2.0, K->scale_c[q] / 1200.0);
+        return f0;
+    }
+
+    double pitch(long long c, int note, double on, bool indian = false, double so = 0.0) const
     {
         double f0 = note_table(c, on, indian)[note];
         auto me = meend.find(NoteKey{c, note, on});
         if (me != meend.end())
             f0 *= me->second.first;         // this note's meend at Note On
+        if (so != 0.0)
+            f0 *= pow(2.0, so);             // its voice's sounding octaves (a helicopter's rotor)
         auto b = btun.find(c);
         if (b != btun.end() && b->second != 0.0)
             f0 *= b->second;
@@ -1234,6 +1657,7 @@ void nv_song_note(void *s, long long ch, int note, double on, double off, int ve
                   double pan, double trim, int prog, int drum)
 {
     ((nv::Song *)s)->notes.push_back(nv::Ev{ch, note, on, off, vel, v7, v11, pan, trim, prog, drum});
+    ((nv::Song *)s)->wkeys[ch].push_back(note);
 }
 
 int nv_song_n_notes(void *s) { return (int)((nv::Song *)s)->notes.size(); }
@@ -1241,10 +1665,10 @@ int nv_song_n_notes(void *s) { return (int)((nv::Song *)s)->notes.size(); }
 // _prep_choir_parts' _tess: a channel's median key (the upper of two), in Hz
 double nv_song_tess(void *s, long long ch)
 {
-    std::vector<int> k;
-    for (const nv::Ev &e : ((nv::Song *)s)->notes)
-        if (e.ch == ch)
-            k.push_back(e.note);
+    auto it = ((nv::Song *)s)->wkeys.find(ch);
+    if (it == ((nv::Song *)s)->wkeys.end())
+        return 0.0;
+    std::vector<int> k = it->second;
     if (k.empty())
         return 0.0;
     std::sort(k.begin(), k.end());
@@ -1263,6 +1687,8 @@ void nv_song_note_mono(void *s, int i, int mcut, int mslur)
 }
 
 void nv_song_gliss(void *s, const NoteClass *const *K) { ((nv::Song *)s)->gliss(K); }
+
+int nv_song_drones(void *s, const NoteClass *const *K) { return ((nv::Song *)s)->drones(K); }
 
 int nv_song_gliss_note(void *s, int i, double *out)
 {
@@ -1505,6 +1931,12 @@ int nv_song_moog_tables(void *s, float *ft, float *kn, int *nkn, long *knk, long
 // CC71-78's d in force on channel ch at t (d[0] CC71's), 0 none
 void nv_song_sound(void *s, long long ch, double t, double *d) { ((nv::Song *)s)->sound_at(ch, t, d); }
 
+// THE CONTROLLER MATRIX's sums as they move (the reader's): kind, channel, time, value
+void nv_song_cmx(void *s, int kind, long long ch, double t, double v)
+{
+    ((nv::Song *)s)->cmx[std::make_pair(kind, ch)].push_back(std::make_pair(t, v));
+}
+
 // numpy's default_rng(seed).standard_normal(n) (native/npyrandom.c)
 extern "C" void nv_npy_normals(unsigned long long seed, long n, double *out);
 
@@ -1512,6 +1944,12 @@ extern "C" void nv_npy_normals(unsigned long long seed, long n, double *out);
 // channels as ch_progs has them, each its organs as its programs bring
 // them), its table spec; prog_organ[program]: each program's organ, NULL
 // none (the recalls). Its registration's events, from the finished song
+// each variation slot's organ (n of them: its tone's class's, NULL none)
+void nv_song_slot_organs(void *s, int n, const OrganSpec *const *so)
+{
+    ((nv::Song *)s)->slot_organ.assign(so, so + n);
+}
+
 void nv_song_organ(void *s, long long ch, const OrganSpec *spec, const OrganSpec *const *prog_organ)
 {
     nv::Song *S = (nv::Song *)s;
@@ -1616,7 +2054,7 @@ void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, 
         // the demand: every note of this organ's class on the channel, each rank under its gate
         std::vector<double> dem(nblk + 1, 0.0);
         for (const auto &e : Sg->notes) {
-            if (e.ch != o.ch || e.drum || e.prog < 0 || e.prog > 127 || Sg->prog_organ[e.prog] != sp)
+            if (e.ch != o.ch || Sg->porg(e) != sp)
                 continue;
             double f = 440.0 * pow(2.0, (e.note - 69) / 12.0);
             long b0 = std::min(nblk, (long)(e.on * sr / blk)), b1 = std::min(nblk, (long)(e.off * sr / blk) + 1);
@@ -1828,7 +2266,8 @@ void nv_song_add_leslie(void *s, long long ch, int kind)
 
 // AN AMPLIFIER'S CHANNEL, as its first amplified note arrives (its voice's
 // amp_drive, and whether the voice is on a rotor); a channel already there is left
-void nv_song_add_amp(void *s, long long ch, double drive, int rotor, double reference, double imbalance)
+void nv_song_add_amp(void *s, long long ch, double drive, int rotor, double reference, double imbalance,
+                     double lv0)
 {
     nv::Song *S = (nv::Song *)s;
     for (const auto &x : S->amp)
@@ -1836,6 +2275,92 @@ void nv_song_add_amp(void *s, long long ch, double drive, int rotor, double refe
             return;
     S->amp.push_back(std::make_pair(ch, std::make_pair(drive, rotor)));
     S->amp_cfg.push_back(std::make_pair(reference, imbalance));
+    S->amp_lv0.push_back(lv0);
+}
+
+// A FILE'S CHAIN FIRST ON CHANNEL ch (_note_insertion_efx): its amp's
+// reference, if it has one and it is not following yet, follows the
+// channel's level steps -- base the reference over its level when it came
+void nv_song_amp_steps(void *s, long long ch)
+{
+    nv::Song *S = (nv::Song *)s;
+    auto st = S->fx_steps.find(ch);
+    if (st == S->fx_steps.end())
+        return;
+    for (size_t k = 0; k < S->amp.size(); k++) {
+        if (S->amp[k].first != ch)
+            continue;
+        if (S->amp_cfg[k].first != 0.0 && !S->amp_steps.count((int)k)) {
+            double lv = S->amp_lv0[k] > 1e-12 ? S->amp_lv0[k] : 1e-12;
+            S->amp_steps[(int)k] = std::make_pair(S->amp_cfg[k].first / lv, st->second);
+        }
+        return;
+    }
+}
+
+// amp channel k's reference steps: how many (0 none), base, starts, levels
+int nv_song_amp_steps_of(void *s, int k, double *base, const double **starts, const double **levels)
+{
+    const nv::Song *S = (nv::Song *)s;
+    auto it = S->amp_steps.find(k);
+    if (it == S->amp_steps.end())
+        return 0;
+    *base = it->second.first;
+    *starts = it->second.second.first.data();
+    *levels = it->second.second.second.data();
+    return (int)it->second.second.first.size();
+}
+
+void nv_song_fx(void *s, int nchain, const double *chains, int nnote, const int *note_fx, const unsigned char *first,
+                const NoteClass *cab0, const NoteClass *cab1)
+{
+    nv::Song *S = (nv::Song *)s;
+    S->fx.assign(chains, chains + (size_t)NV_FXN * nchain);
+    S->note_fx.assign(note_fx, note_fx + nnote);
+    S->fx_first.assign(first, first + nnote);
+    S->fx_cab[0] = cab0;
+    S->fx_cab[1] = cab1;
+}
+
+// note i's chain: its index (*chain its NV_FXN doubles), -1 none, -2 its part on the effect with none
+int nv_song_note_fx(void *s, int i, const double **chain)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (i < 0 || i >= (int)S->note_fx.size())
+        return -1;
+    int q = S->note_fx[i];
+    if (q >= 0 && chain)
+        *chain = S->fx.data() + (size_t)NV_FXN * q;
+    return q;
+}
+
+int nv_song_note_fx_first(void *s, int i)
+{
+    const nv::Song *S = (nv::Song *)s;
+    return i >= 0 && i < (int)S->fx_first.size() ? S->fx_first[i] : 0;
+}
+
+void nv_song_fx_place(void *s, const double *place, const double *pans)
+{
+    ((nv::Song *)s)->fx_place = place;
+    ((nv::Song *)s)->fx_pans = pans;
+}
+
+const double *nv_song_fx_place_of(void *s, const double **pans)
+{
+    *pans = ((nv::Song *)s)->fx_pans;
+    return ((nv::Song *)s)->fx_place;
+}
+
+const NoteClass *nv_song_fx_cab(void *s, int which)
+{
+    return which >= 1 && which <= 2 ? ((nv::Song *)s)->fx_cab[which - 1] : nullptr;
+}
+
+void nv_song_fx_steps(void *s, long long ch, int n, const double *starts, const double *levels)
+{
+    ((nv::Song *)s)->fx_steps[ch] = std::make_pair(std::vector<double>(starts, starts + n),
+                                                   std::vector<double>(levels, levels + n));
 }
 
 // the amplifier channel k's reference peak (0 none) and its valve's imbalance
@@ -2033,6 +2558,25 @@ void nv_song_add_rel_jack(void *s, long long a, long long b, int rank, double jo
     v.push_back((double)a); v.push_back((double)b); v.push_back((double)rank); v.push_back(jo);
 }
 
+// a note's grains' rows, [first, end) (_GRAIN_ROWS); and all of them, n pairs into ab (NULL: count)
+void nv_song_add_grain_rows(void *s, long long a, long long b)
+{
+    std::vector<long long> &v = ((nv::Song *)s)->grain_rows;
+    v.push_back(a);
+    v.push_back(b);
+}
+
+int nv_song_n_grain_rows(void *s, long long *ab, int cap)
+{
+    const std::vector<long long> &v = ((nv::Song *)s)->grain_rows;
+    int n = (int)(v.size() / 2);
+    for (int k = 0; ab && k < n && k < cap; k++) {
+        ab[2 * k] = v[2 * k];
+        ab[2 * k + 1] = v[2 * k + 1];
+    }
+    return n;
+}
+
 // a note's key-up rows, [first, end) (rel_rows)
 void nv_song_add_rel_rows(void *s, long long a, long long b)
 {
@@ -2094,6 +2638,24 @@ int nv_song_n_stroke_rows(void *s, long long *ab, int cap)
 }
 
 // note i as given: (channel, key, velocity, program, drum) ints; (on, off) doubles
+void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2)
+{
+    nv::Song *g = (nv::Song *)s;
+    g->vls.assign(nent, {});
+    g->vtrim.assign(trim, trim + nent);
+    for (int e = 0, q = 0; e < nent; e++)
+        for (int l = 0; l < nls[e]; l++, q++)
+            g->vls[e].push_back(std::array<int, 4>{ls[4 * q], ls[4 * q + 1], ls[4 * q + 2], ls[4 * q + 3]});
+    g->vgs.assign(gs, gs + 5 * 128 * 128);
+    g->vgm2.assign(gm2, gm2 + 128 * 128);
+}
+
+int nv_song_note_bank(void *s, int bsel) { return ((nv::Song *)s)->bank(bsel); }
+
+int nv_song_kidx(void *s, int i) { return ((nv::Song *)s)->notes[i].kidx(); }
+
+int nv_song_tone(void *s, int i) { return ((nv::Song *)s)->notes[i].tone(); }
+
 void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv)
 {
     const nv::Ev &e = ((nv::Song *)s)->notes[i];
@@ -2129,9 +2691,9 @@ long long nv_song_mix(void *s, int i)
         for (int q : order) {
             const nv::Ev &e = g->notes[q];
             std::vector<int> &tl = tones[e.ch];
-            size_t ti = std::find(tl.begin(), tl.end(), e.prog) - tl.begin();
+            size_t ti = std::find(tl.begin(), tl.end(), e.tone()) - tl.begin();
             if (ti == tl.size())
-                tl.push_back(e.prog);
+                tl.push_back(e.tone());
             g->mix[q] = e.ch + (ti ? 256LL * (long long)(ti % 256) : 0LL);
         }
     }
@@ -2244,6 +2806,144 @@ const void *nv_song_sym_get(void *s, long long mix)
 
 void nv_song_sym_reset(void *s) { ((nv::Song *)s)->sym_drv.clear(); }
 
+// a channel's aftertouch (key -1) or a key's polytouch, in message order
+void nv_song_pressure_events(void *s, long long ch, int key, int n, const double *t, const int *v)
+{
+    auto &e = ((nv::Song *)s)->press[std::make_pair(ch, key)];
+    for (int i = 0; i < n; i++)
+        e.push_back(std::make_pair(t[i], v[i]));
+}
+
+// blockrender._pressure_of: the note's pressure, 0..1 -- its key's polytouch,
+// else its channel's aftertouch, the time-weighted mean over [on, off)
+double nv_song_pressure(void *s, long long ch, int note, double on, double off)
+{
+    const nv::Song *S = (nv::Song *)s;
+    auto it = S->press.find(std::make_pair(ch, note));
+    if (it == S->press.end() || it->second.empty())
+        it = S->press.find(std::make_pair(ch, -1));
+    if (it == S->press.end() || it->second.empty() || off <= on)
+        return 0.0;
+    std::vector<std::pair<double, int>> ev = it->second;
+    std::sort(ev.begin(), ev.end());
+    double acc = 0.0, v = 0.0, t0 = on;
+    for (const auto &e : ev) {
+        double t1 = e.first;
+        if (t1 >= off)
+            break;
+        if (t1 > t0) {
+            acc += v * (t1 - t0);
+            t0 = t1;
+        }
+        v = e.second / 127.0;
+        if (t1 <= on)
+            t0 = on;
+    }
+    acc += v * (off - t0);
+    double x = acc / (off - on);
+    double m = x < 1.0 ? x : 1.0;           // (max(0.0, min(1.0, x)))
+    return m > 0.0 ? m : 0.0;
+}
+
+// A PART'S INSERTION EFFECT (blockrender's _C91D at its first note): its
+// reverb send the part's distance from that onset on; 0 none
+void nv_song_efx_part(void *s, long long part, double on, double dist)
+{
+    ((nv::Song *)s)->efx_part[part].push_back(std::make_pair(on, dist));
+}
+
+int nv_song_efx_dist(void *s, long long part, double on, double *dist)
+{
+    // (_C91D: the last effect note's send before this one -- each mix
+    // channel's first sets it, a tone's or the file's chain)
+    const nv::Song *S = (nv::Song *)s;
+    auto it = S->efx_part.find(part);
+    if (it == S->efx_part.end())
+        return 0;
+    int got = 0;
+    for (const auto &e : it->second) {
+        if (on < e.first)
+            break;
+        *dist = e.second;
+        got = 1;
+    }
+    return got;
+}
+
+// THE FILE'S GS EQ (prepare's _GS_EQ): its corners and gains, and the parts
+// that switched it off
+void nv_song_gs_eq(void *s, const double *eq, int noff, const int *off)
+{
+    nv::Song *S = (nv::Song *)s;
+    for (int i = 0; i < 4; i++)
+        S->gs_eq[i] = eq[i];
+    for (int i = 0; i < noff; i++)
+        S->gs_eq_off.insert(off[i]);
+}
+
+// THE FILE'S GS DELAY (prepare's _GS_DLY): its device, its outputs' places
+void nv_song_gs_delay(void *s, const double *dev, const double *place)
+{
+    nv::Song *S = (nv::Song *)s;
+    S->gs_dly_set = 1;
+    memcpy(S->gs_dly, dev, sizeof S->gs_dly);
+    memcpy(S->gs_dly_place, place, sizeof S->gs_dly_place);
+}
+
+const double *nv_song_gs_delay_of(void *s, const double **place)
+{
+    nv::Song *S = (nv::Song *)s;
+    *place = S->gs_dly_place;
+    return S->gs_dly_set ? S->gs_dly : nullptr;
+}
+
+// THE DRUM INSTRUMENTS' OWN (the reader's dedit), in message order
+void nv_song_dedit(void *s, int n, const int *iv, const double *t)
+{
+    nv::Song *S = (nv::Song *)s;
+    for (int i = 0; i < n; i++)
+        S->dedit.push_back(nv::Song::DEd{iv[4 * i], t[i], iv[4 * i + 1], iv[4 * i + 2], iv[4 * i + 3]});
+}
+
+int nv_song_dst(void *s, long long ch, int key, double on, int *v)
+{
+    return ((nv::Song *)s)->dst(ch, key, on, v);
+}
+
+// ...on a note of part `part`: 1 and eq where it has it
+int nv_song_gs_eq_of(void *s, long long part, double *eq)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (S->gs_eq[0] <= 0.0 || S->gs_eq_off.count(part))
+        return 0;
+    for (int i = 0; i < 4; i++)
+        eq[i] = S->gs_eq[i];
+    return 1;
+}
+
+// A SIREN's note (_SIREN_AT): its rotor's row, and where it ends
+void nv_song_siren(void *s, long long ch, int note, double on, double row, double end)
+{
+    ((nv::Song *)s)->siren[nv::NoteKey{ch, note, on}] = std::make_pair(row, end);
+}
+
+// note i's siren row and end (out[0], out[1]); 0 if it is no siren's
+int nv_song_siren_of(void *s, int i, double *out)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (i < 0 || i >= (int)S->notes.size())
+        return 0;
+    auto it = S->siren.find(nv::NoteKey{S->notes[i].ch, S->notes[i].note, S->notes[i].on});
+    if (it == S->siren.end())
+        return 0;
+    out[0] = it->second.first;
+    out[1] = it->second.second;
+    return 1;
+}
+
+// a play's start (nv_play): the song's play-made rows as they were before the first
+void nv_song_play_mark(void *s) { ((nv::Song *)s)->play_mark(); }
+
 void nv_song_meend(void *s, long long ch, int note, double on, double r0, double row)
 {
     ((nv::Song *)s)->meend[nv::NoteKey{ch, note, on}] = std::make_pair(r0, row);
@@ -2303,8 +3003,15 @@ void nv_song_channel(void *s, long long ch, double btun, const double *otun, int
 void nv_song_kits(void *s, const double *f0, const double *seat)
 {
     nv::Song *S = (nv::Song *)s;
-    S->kit_f0.assign(f0, f0 + 16384);
-    S->kit_seat.assign(seat, seat + 16384);
+    nv_song_kits_n(s, f0, seat, 16384);
+}
+
+// ...the maps' own sets' after the 128 (n keys in all)
+void nv_song_kits_n(void *s, const double *f0, const double *seat, int n)
+{
+    nv::Song *S = (nv::Song *)s;
+    S->kit_f0.assign(f0, f0 + n);
+    S->kit_seat.assign(seat, seat + n);
 }
 
 // A note's pitch and level as its channel gives them: f0, velocity, pan,
@@ -2315,6 +3022,22 @@ void nv_song_kits(void *s, const double *f0, const double *seat)
 // key-up). 0 if there is no such note (or a drum the sets lack); 2 for a
 // drum: its pitch its set's, not a tuning's.
 int nv_song_pitch_level_k(void *s, int i, int effort_tilt, int indian, double *out)
+{
+    return nv_song_pitch_level_ks(s, i, effort_tilt, indian, 0.0, out);
+}
+
+int nv_song_pitch_level_kc(void *s, int i, int effort_tilt, const NoteClass *K, double *out)
+{
+    int r = nv_song_pitch_level_ks(s, i, effort_tilt, K->indian, K->sounding_oct, out);
+    const nv::Song *S = (nv::Song *)s;
+    if (r == 2 && K->sounding_oct != 0.0)
+        out[0] *= pow(2.0, K->sounding_oct);   // a drum's sounding octaves (the helicopter's rotor), after its stroke's pitch
+    if (r == 1 && K->scale_n && K->scale_tonic >= 0 && K->scale_tonic < 128)
+        out[0] = S->scaled(S->notes[i].ch, S->notes[i].note, S->notes[i].on, K, out[0]);
+    return r;
+}
+
+int nv_song_pitch_level_ks(void *s, int i, int effort_tilt, int indian, double so, double *out)
 {
     const nv::Song *S = (nv::Song *)s;
     if (i < 0 || i >= (int)S->notes.size())
@@ -2327,17 +3050,38 @@ int nv_song_pitch_level_k(void *s, int i, int effort_tilt, int indian, double *o
     out[5] = 0.0;
     if (e.drum) {
         int q = 128 * e.prog + note;
-        if (S->kit_f0.empty() || e.prog < 0 || e.prog > 127 || S->kit_f0[q] == 0.0)
+        if (S->kit_f0.empty() || e.prog < 0 || (size_t)q >= S->kit_f0.size() || S->kit_f0[q] == 0.0)
             return 0;
-        out[0] = S->kit_f0[q] * e.ratio;
+        int dv[6];
+        int dm = S->dst(ch, note, on, dv);      // (the file's own setting of this drum: _dst)
+        out[0] = S->kit_f0[q];
+        if (dm & 1)
+            out[0] *= pow(2.0, dv[0] / 12.0);
+        out[0] *= e.ratio;
         out[5] = S->kit_seat[q];
+        if (dm & 4) {
+            if (dv[2] == 0) {                   // (0: a pan of its own, the same every render)
+                unsigned long long hv = ((unsigned long long)ch * 0x9E3779B1ULL)
+                                        ^ ((unsigned long long)note * 0x85EBCA6BULL)
+                                        ^ ((unsigned long long)(long long)(on * 1000.0) * 0xC2B2AE35ULL);
+                hv = ((hv ^ (hv >> 15)) * 0x2545F491ULL) & 0xFFFFFFFFULL;
+                out[5] = 2.0 * ((double)hv / 4294967295.0) - 1.0;
+            } else {
+                out[5] = (dv[2] - 64) / 63.0;
+            }
+        }
         r = 2;
     } else {
-        out[0] = S->pitch(ch, note, on, indian != 0);
+        out[0] = S->pitch(ch, note, on, indian != 0, so);
     }
     out[1] = e.vel;
     out[2] = e.pan;
     double cv = pow(e.v7 * e.v11, 2.0);
+    if (e.drum) {
+        int dv[6];
+        if (S->dst(ch, note, on, dv) & 2)
+            cv *= pow(dv[1] / 100.0, 2.0);      // (its level against the preset's 100)
+    }
     if (S->fader.count(ch))
         cv = 1.0;
     out[3] = cv * e.trim;
@@ -2376,6 +3120,17 @@ int nv_song_soft_at(void *s, long long ch, double t)
 
 // The drum sets' gestures expanded into their strokes (Song::strokes;
 // before nv_song_finish, after the passes that read the notes as written)
+void nv_song_strokes_k(void *s, const NoteClass *const *K, const int *kind, const double *par)
+{
+    ((nv::Song *)s)->strokes(kind, par, K);
+}
+
+double nv_song_note_ratio(void *s, int i)
+{
+    const nv::Song *S = (nv::Song *)s;
+    return (i >= 0 && i < (int)S->notes.size()) ? S->notes[i].ratio : 1.0;
+}
+
 void nv_song_strokes(void *s, const int *kind, const double *par)
 {
     ((nv::Song *)s)->strokes(kind, par);
@@ -2414,7 +3169,14 @@ int nv_song_slur(void *s, int i, int *out)
 // nv_song_finish)
 void nv_song_chokes(void *s, const unsigned long long *choke)
 {
-    ((nv::Song *)s)->kit_choke.assign(choke, choke + 2 * 16384);
+    nv_song_chokes_n(s, choke, 16384);
+}
+
+void nv_song_mapk_base(int base) { nv::g_k_mapk = base; }
+
+void nv_song_chokes_n(void *s, const unsigned long long *choke, int n)
+{
+    ((nv::Song *)s)->kit_choke.assign(choke, choke + 2 * (size_t)n);
 }
 
 // Where a later strike in its exclusive class stops this note (the first

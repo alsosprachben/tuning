@@ -184,13 +184,16 @@ void nv_render_mvol(const long long *s, const double *g, int n)
 // for a table with no damper tracks. A table with a Leslie (LANG, lgn
 // points a rotor): its plain rows through synth_voice_lobe (slo), each with
 // its lobe columns (lsr, and lob: lph lfl lsh lnm).
+void nv_render_post(float *L, float *R, long N, double SR, double master_gain, int clip);
+
 int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long P, double *const *d,
               float *const *f, long *const *l, int *const *ii, const float *G, const float *S, const float *BR,
               const double *BC, const float *BL, const float *noRows, const float *sh, long CHUNK,
               double xdec_nepers, double SR,
               double master_gain, const float *DM, const long *DMO, const long *DMB, const long *DMN, float *L,
               float *R, void *slo, const int *lsr, float *const *lob, const float *LANG, long lgn,
-              const MoogCols *moog)
+              const MoogCols *moog, const int *fsr, const int *fty, const float *const *fpar, const float *FCT,
+              long fgn, const unsigned char *rowsel, int post)
 {
     if (moog && !moog->FT)
         moog = nullptr;
@@ -214,6 +217,8 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
     };
     std::vector<long long> plain, fast, damped;
     for (long long r = 0; r < P; r++) {
+        if (rowsel && !rowsel[r])
+            continue;                       // (another render's: a bus's, or the rest)
         if (has_dm && ii[I_dk][r] >= 0)
             damped.push_back(r);
         else if (xdec(r))
@@ -241,6 +246,21 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
         const float *mMPR = moog ? moog->MPR : nullptr, *mMPK = moog ? moog->MPK : nullptr;
         auto F = [&](int c) { return g.f[c].data(); };
         if (LANG && fn == (voice_fn)sv) {
+            // ...and a moving filter's columns (efxfilter: fsr, fty, fpa-c), NULL none
+            std::vector<int> gfs, gft;
+            std::vector<float> gfp[3];
+            if (FCT) {
+                gfs.resize(n);
+                gft.resize(n);
+                for (int q = 0; q < 3; q++)
+                    gfp[q].resize(n);
+                for (int k = 0; k < n; k++) {
+                    gfs[k] = fsr[rows[k]];
+                    gft[k] = fty[rows[k]];
+                    for (int q = 0; q < 3; q++)
+                        gfp[q][k] = fpar[q][rows[k]];
+                }
+            }
             g.lsr.resize(n);
             for (int q = 0; q < 4; q++)
                 g.lob[q].resize(n);
@@ -256,8 +276,10 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                            F(F_delL), F(F_delR), g.i[I_gr].data(), g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC,
                            BL, mfx, mFT, mKN, mknk, mkb0, nullptr, nullptr, mmk, mMPI, mMPC, mMPR,
                            mMKI, mMPK, mw, mp, mpR, sh[0], sh[1], sh[2], sh[3], g.lsr.data(),
-                           g.lob[0].data(), g.lob[1].data(), g.lob[2].data(), g.lob[3].data(), LANG, lgn, nullptr,
-                           nullptr, nullptr, nullptr, nullptr, nullptr, 0, CHUNK, nullptr, nullptr, nullptr);
+                           g.lob[0].data(), g.lob[1].data(), g.lob[2].data(), g.lob[3].data(), LANG, lgn,
+                           FCT ? gfs.data() : nullptr, FCT ? gft.data() : nullptr, FCT ? gfp[0].data() : nullptr,
+                           FCT ? gfp[1].data() : nullptr, FCT ? gfp[2].data() : nullptr, FCT, FCT ? fgn : 0, CHUNK,
+                           nullptr, nullptr, nullptr);
         } else if (!damp)
             fn(L, R, 0, N, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR), F(F_nf),
                g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA), F(F_aft), F(F_sus),
@@ -283,13 +305,22 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
     } else if (!fast.empty()) {
         std::vector<long long> keep;
         for (long long r = 0; r < P; r++)
-            if (!xdec(r))
+            if ((!rowsel || rowsel[r]) && !xdec(r))
                 keep.push_back(r);
         call((voice_fn)sv, nullptr, keep, false);
         call((voice_fn)sx, nullptr, fast, false);
     } else {
         call((voice_fn)sv, nullptr, plain, false);
     }
+    if (post)
+        nv_render_post(L, R, N, SR, master_gain, 1);
+    return 0;
+}
+
+// the render's last: THE MASTER VOLUME, the master gain (float32) and, clip
+// set, the clip -- nv_render's own, or after a bus's part is added
+void nv_render_post(float *L, float *R, long N, double SR, double master_gain, int clip)
+{
     // THE MASTER VOLUME (master_curve: each step ramped from the gain before it
     // over MASTER_RAMP_S, 5 ms -- int(0.005 SR) samples, float32), first
     if (!g_mvol.empty()) {
@@ -316,10 +347,11 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
     for (long k = 0; k < N; k++) {
         L[k] = L[k] * g;
         R[k] = R[k] * g;
-        L[k] = L[k] < -1.0f ? -1.0f : (L[k] > 1.0f ? 1.0f : L[k]);
-        R[k] = R[k] < -1.0f ? -1.0f : (R[k] > 1.0f ? 1.0f : R[k]);
+        if (clip) {
+            L[k] = L[k] < -1.0f ? -1.0f : (L[k] > 1.0f ? 1.0f : L[k]);
+            R[k] = R[k] < -1.0f ? -1.0f : (R[k] > 1.0f ? 1.0f : R[k]);
+        }
     }
-    return 0;
 }
 
 }  // extern "C"

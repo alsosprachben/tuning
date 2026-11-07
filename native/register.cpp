@@ -983,7 +983,21 @@ void nv_buf_free(void *p) { free(p); }
 
 }  // extern "C"
 
+// THE FIRST STORE'S GUESS, rows a note (TUNING_NV_ROWS_PER_NOTE sets it: a
+// gate's small one plays every file again), and this thread's last play's
+// growth (nv_play_growth: the first store and the rows it needed, 0 none)
+static const long long ROWS_PER_NOTE = 1024;
+static thread_local long long g_cap0 = 0, g_need = 0;
+
 extern "C" {
+
+// how far this thread's last nv_play_full grew its store: the first store's
+// rows and the rows the song needed (0: it fit)
+void nv_play_growth(long long *cap0, long long *need)
+{
+    *cap0 = g_cap0;
+    *need = g_need;
+}
 
 // A SONG PLAYED, WITH ITS REGISTER: nv_play's note rows, cast as the table
 // stores them (kind[c]: 0 float64, 1 float32, 2 int32 -- blockrender's
@@ -1003,6 +1017,9 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
                        int with_register, long long *nsym)
 {
     using namespace nv::reg;
+    NoteIn tb_ = *tmpl;
+    tb_.blk = (double)blk;                  // (the render's block: a pulse's lead)
+    tmpl = &tb_;
     int nn = nv_song_n_notes(song);
     std::vector<int> played(nn);
     std::vector<long long> row0(nn);
@@ -1013,7 +1030,10 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
     PyRandom rs0 = *rs;
     double q0[18], az0 = *azimuth;
     memcpy(q0, qacc, sizeof q0);
-    long long cap = 1024 * (long long)(nn > 0 ? nn : 1);
+    const char *rpn = getenv("TUNING_NV_ROWS_PER_NOTE");
+    long long cap = (rpn && atoll(rpn) > 0 ? atoll(rpn) : ROWS_PER_NOTE) * (long long)(nn > 0 ? nn : 1);
+    g_cap0 = cap;
+    g_need = 0;
     double *rows = nullptr;
     int got;
     for (;;) {
@@ -1030,6 +1050,8 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
             break;
         cap *= 2;
     }
+    if (cap != g_cap0 && got >= 0)
+        g_need = nr;                        // (it grew: the rows the song needed)
     *rowsp = rows;
     if (got < 0)
         return got;
@@ -1072,11 +1094,12 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         double dv[2];
         nv_song_get_note(song, i, &ch, iv, dv);
         std::vector<int> &tl = tones[ch];
-        size_t ti = std::find(tl.begin(), tl.end(), iv[2]) - tl.begin();
+        const int tk = nv_song_tone(song, i);
+        size_t ti = std::find(tl.begin(), tl.end(), tk) - tl.begin();
         if (ti == tl.size())
-            tl.push_back(iv[2]);
+            tl.push_back(tk);
         long long mix = ch + (ti ? 256LL * (long long)(ti % 256) : 0LL);
-        const NoteClass *k = K[(iv[3] ? NV_K_DRUMS : 0) + 128 * iv[2] + iv[0]];
+        const NoteClass *k = K[nv_song_kidx(song, i)];
         if (k->sym_kind && !sym_k.count(mix)) {
             sym_k[mix] = k;
             sym_order.push_back(mix);

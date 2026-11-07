@@ -9,12 +9,15 @@ CLI on the whole table on the CPU (TUNING_STREAM=0, TUNING_GPU off, the
 register on its C core) writes OUT.wav and OUT.room.json; native/nvrender,
 from an export made once (examples/native_export.py), writes its own. The
 two WAVs compared byte for byte, the sidecars text for text. A file nvrender
-refuses (exit 2: not a piano file, a bend, a moving fader) is counted.
+refuses (exit 2: not a piano file, a bend, a moving fader) is counted; one
+whose GS reverb macro chose another room is rendered again from that room's
+export (--room), made once.
 --tuner: both at that tuner -- nvrender computing it (native/tuner.cpp),
 blockrender's CLI taking it by name -- and --a at that reference pitch.
 """
 import atexit
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -55,6 +58,13 @@ def main(argv):
         nv = os.path.join(tmp, name + ".nv.wav")
         tun = (["--tuner=" + opt["tuner"]] if opt.get("tuner") else []) + (["--a=" + opt["a"]] if opt.get("a") else [])
         r = subprocess.run([exe, nvx, mid, nv] + tun, capture_output=True, text=True)
+        rm = re.search(r"the GS reverb's room \((\w+)\)", r.stderr) if r.returncode == 2 else None
+        if rm:
+            rx = os.path.join(tmp, rm.group(1) + ".nvx")
+            if not os.path.exists(rx):
+                subprocess.check_call([sys.executable, os.path.join(HERE, "examples", "native_export.py"), rx,
+                                       "--room=" + rm.group(1)], env=env, stdout=subprocess.DEVNULL)
+            r = subprocess.run([exe, rx, mid, nv] + tun, capture_output=True, text=True)
         if r.returncode == 2:
             refused += 1
             print("  %s: %s" % (name, r.stderr.strip().replace("nvrender: ", "")))

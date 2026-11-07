@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Export what the native renderer needs from the Python, once: OUT.nvx
 
-    python3 examples/native_export.py OUT.nvx [--tuner=NAME] [--live [--room=NAME] [--fresh]]
+    python3 examples/native_export.py OUT.nvx [--tuner=NAME] [--room=NAME] [--live [--fresh]]
 
 native/nvrender renders a General MIDI piano file to the dry WAV and room
 sidecar blockrender writes, with no Python at runtime. What it cannot work out
@@ -29,6 +29,9 @@ itself is written here, from the classes it was checked against:
 
 The kernel libraries are blockrender's (built here if they are not yet):
 their paths go in too. Binary, little-endian, for this machine.
+
+--room: the voices packed in that room, a file's (a GS file's reverb macro
+chose it: nvrender refuses one the export's room is not).
 
 --live: for native/nvlive, at live's rate and block (48 kHz, 128 a block,
 live's tuner, hybrid, unless --tuner says), and after the rest a LIVE
@@ -91,6 +94,10 @@ def main(argv):
         if "master_db" in sess:
             import tonelib as _T
             _T.master_gain = 10.0 ** (float(sess["master_db"]) / 20.0)
+    elif opt.get("room"):
+        # A FILE'S ROOM (blockrender.prepare: a GS file's reverb macro chose it)
+        import tonelib as _T
+        _T.set_room(opt["room"])
     import damper as DM
     import native as N
     import patch_map as PM
@@ -121,6 +128,52 @@ def main(argv):
             idx[cls] = len(classes)
             classes.append(bytes(k))
         cmap.append(idx[cls])
+    # ...and THE MAPS' OWN DRUM SETS (native.map_kits: SC-88's, SC-88 Pro's),
+    # their keys' classes among the rest (MKIT, below)
+    mk_ids, mk_cls, mk_f0, mk_seat, mk_choke, mk_skind, mk_spar = N.map_kits()
+    mk_map = []
+    for cls in mk_cls:
+        k = N.note_class(cls) if cls is not None else None
+        if k is None:
+            mk_map.append(-1)
+            continue
+        if cls not in idx:
+            idx[cls] = len(classes)
+            classes.append(bytes(k))
+        mk_map.append(idx[cls])
+    # ...and THE VARIATIONS (bank select: native.variation_tables), each slot's
+    # keys after them
+    vslots, ventries, vgs, vgm2 = N.variation_tables()
+    import patch_map as PM_
+    vmap = []
+    for _p, _v, _l, cl in vslots:
+        for cls in cl:
+            k = N.note_class(cls) if cls is not None else None
+            if k is None:
+                vmap.append(-1)
+                continue
+            if cls not in idx:
+                idx[cls] = len(classes)
+                classes.append(bytes(k))
+            vmap.append(idx[cls])
+    vpcls = {}
+    for _p, _v, _ls in ventries[1:]:
+        cls = PM_.property_class_for_program(PM_.VariationProgram(_p, _v))
+        k = N.note_class(cls) if isinstance(cls, type) else None
+        if k is None:
+            vpcls[(_p, _v)] = -2 if any(getattr(cls, a, 0.0) > 0.0 for a in (
+                'breath_wobble_db', 'breath_noise_wobble_db', 'breath_pitch_cents')) else -1
+            continue
+        if cls not in idx:
+            idx[cls] = len(classes)
+            classes.append(bytes(k))
+        vpcls[(_p, _v)] = idx[cls]
+    # ...and THE DRONES' CLASSES (native.DRONES: a bagpipe's)
+    for cls in list(N.DRONES):
+        k = N.note_class(cls)
+        if k is not None and cls not in idx:
+            idx[cls] = len(classes)
+            classes.append(bytes(k))
     # A STRUCK LAYER's CLASS (an orchestra hit's timpani): among the classes,
     # and its index in the class that strikes it (NoteClass.sl_idx)
     for cls in list(idx):
@@ -186,6 +239,122 @@ def main(argv):
     # the stamped channel's test, GM's bend range and power-on levels
     consts += [float(B.TAU), float(B.FADER_TAIL), float(B.STAMP_S), float(B.STAMPED_SHARE),
                float(T.BEND_RANGE_SEMITONES), float(T.GM_DEFAULT_VOLUME), float(T.GM_DEFAULT_EXPRESSION)]
+    # (K_GSPLACE, below) and then THE MAPS' OWN DRUM SETS (percussion_map.KITS
+    # past 127, kit_in_map's): how many, then 32 slots
+    _mk = sorted(k for k in PCM.KITS if k >= 128)
+    if len(_mk) > 32:
+        raise SystemExit("native_export: %d maps' drum sets, room for 32" % len(_mk))
+    _mapkits = [float(len(_mk))] + [float(k) for k in _mk] + [0.0] * (32 - len(_mk))
+    # a GS file's chorus device's outputs (blockrender.gsd_place's head): its
+    # beta, then the left, right and centre outputs' gains and delays (samples)
+    import gsdelay as _GSDX
+    _q = T.StoppedPipeProperties(261.6, 0, 1, 1)
+    consts += [float(_q.hrtf_beta)]
+    for _sd in ("l", "r", "c"):
+        _li, _ri, _ld, _rd = _q.hrtf_at(_GSDX.OUTPUT_X[_sd], 0.0, _q.listener_distance)
+        consts += [float(_li), float(_ri), float(_ld * B.SR), float(_rd * B.SR)]
+    consts += _mapkits
+    # A FILE'S INSERTION EFFECT (gsefx.chain, as nvrender builds it): the
+    # built types' codes (msb * 128 + lsb: how many, then 128 slots); the
+    # types built natively (how many, EFX_KEYS's length, a record's width,
+    # then 64 records (every type's room): the code, the kind -- 1 Overdrive, 2 Distortion, 3 a
+    # multi, 4 3D Manual, 5 the Compressor, 6 3D Auto, 7 Reverb, 8 Gate Reverb, 9 2 Pitch Shifter, 10 Fb
+    # P.Shifter, 11 Space D, 12 Stereo Chorus, 13 Hexa Chorus, 14 Tremolo Chorus, 15 3D Chorus, 16 Stereo
+    # Flanger, 17 Tremolo, 18 Auto Pan, 19 Stereo-EQ, 20 Spectrum, 21 Stereo Delay, 22 Mod Delay, 23 3 Tap
+    # Delay, 24 4 Tap Delay, 25 Tm Ctrl Delay, 26 3D Delay, 27 Phaser, 28 Auto Wah, 29 Step Flanger, 30
+    # Humanizer, 31 Lo-Fi 1, 32 Limiter, 33 Enhancer -- a bass's cabinet, each of
+    # EFX_KEYS's parameter numbers, 0 none, the type's defaults 1-20, -1
+    # none, and the parameters its controllers move, + then # (0 none),
+    # each's range lo, hi -- -1, -1 a choice of codes); gsefx's laws (OD_DB, DS_DB, OD_MAKEUP_DB, CMP_ATTACK_MS,
+    # PEDAL_AMP_DRIVE, EFX_DEPTH_SCALE, EQ_Q, EQ_FREQS: 30); the two
+    # cabinets a chain names (guitar12, bass410: 33 each, NoteClass's cab_*);
+    # and the value tables *6 (a rate, Hz), *13 (an azimuth, degrees), *1 and *8: 128 each
+    import gsefx as _GSX
+    import cabinet as _CABX
+    _codes = sorted(k[0] * 128 + k[1] for k, v in _GSX.TYPES.items() if v in _GSX.BUILT)
+    if len(_codes) > 128:
+        raise SystemExit("native_export: %d built EFX types, room for 128" % len(_codes))
+    consts += [float(len(_codes))] + [float(c) for c in _codes] + [0.0] * (128 - len(_codes))
+    _nat = [("Overdrive", 1), ("Distortion", 2), ("Bass Multi", 3), ("Clean Gt Multi 1", 3),
+            ("GTR Multi 1", 3), ("GTR Multi 2", 3), ("3D Manual", 4), ("3D Auto", 6), ("Compressor", 5),
+            ("Reverb", 7), ("Gate Reverb", 8), ("2 Pitch Shifter", 9), ("Fb P.Shifter", 10),
+            ("GTR Multi 3", 3), ("Space D", 11), ("Stereo Chorus", 12), ("Hexa Chorus", 13),
+            ("Tremolo Chorus", 14), ("3D Chorus", 15), ("Stereo Flanger", 16), ("Tremolo", 17), ("Auto Pan", 18),
+            ("Stereo-EQ", 19), ("Spectrum", 20), ("Stereo Delay", 21), ("Mod Delay", 22), ("3 Tap Delay", 23),
+            ("4 Tap Delay", 24), ("Tm Ctrl Delay", 25), ("3D Delay", 26), ("Phaser", 27), ("Auto Wah", 28),
+            ("Step Flanger", 29), ("Humanizer", 30), ("Lo-Fi 1", 31), ("Limiter", 32), ("Enhancer", 33),
+            ("Clean Gt Multi 2", 3), ("Rhodes Multi", 3)]
+    if len(_nat) > 64:
+        raise SystemExit("native_export: %d native EFX types, room for 64" % len(_nat))
+    _NATW = 3 + len(N.EFX_KEYS) + 20 + 6
+    consts += [float(len(_nat)), float(len(N.EFX_KEYS)), float(_NATW)]
+    for _nm, _kd in _nat:
+        _k = next(k for k, v in _GSX.TYPES.items() if v == _nm)
+        _pn = _GSX.param_numbers(_nm)
+        _df = _GSX.DEFAULTS.get(_nm, {})
+        consts += [float(_k[0] * 128 + _k[1]), float(_kd), float(_nm == "Bass Multi")]
+        consts += [float(_pn.get(x, 0)) for x in N.EFX_KEYS]
+        consts += [float(_df.get(n, -1)) for n in range(1, 21)]
+        _mk = _GSX.marks(_nm)
+        consts += [float(_mk.get('+', 0)), float(_mk.get('#', 0))]
+        for _m in ('+', '#'):
+            _rg = _GSX.param_range(_nm, _mk[_m]) if _m in _mk else (0, 127)
+            consts += [-1.0, -1.0] if isinstance(_rg, list) else [float(_rg[0]), float(_rg[1])]
+    consts += [0.0] * (_NATW * (64 - len(_nat)))
+    _laws = (list(_GSX.OD_DB) + list(_GSX.DS_DB) + [_GSX.OD_MAKEUP_DB, _GSX.CMP_ATTACK_MS, _GSX.PEDAL_AMP_DRIVE,
+             _GSX.EFX_DEPTH_SCALE] + list(_GSX.EQ_Q) + list(_GSX.EQ_FREQS))
+    consts += [float(x) for x in _laws] + [0.0] * (30 - len(_laws))
+    for _cn in ("guitar12", "bass410"):
+        _cb = _CABX.get(_cn)
+        if len(_cb.formants) > 4 or len(_cb.antiformants) > 4 or _cb.body_trim_db:
+            raise SystemExit("native_export: the %s cabinet is not the engine's" % _cn)
+        _fm = [float(x) for row in _cb.formants for x in row]
+        _af = [float(x) for row in _cb.antiformants for x in row]
+        consts += [1.0, float(len(_cb.formants)), float(len(_cb.antiformants)), float(_cb.formant_floor)]
+        consts += _fm + [0.0] * (12 - len(_fm)) + _af + [0.0] * (12 - len(_af))
+        consts += [float(_cb.bore_corner_hz), float(_cb.bore_order), float(_cb.bell_cutoff_hz or 0.0),
+                   float(_cb.bell_order), float(_cb._ref)]
+    consts += [float(_GSX.table_value(6, v)) for v in range(128)]
+    consts += [float(_GSX.azimuth(v)) for v in range(128)]
+    # ...and *1 (a pre-delay, ms) and *8 (a damping corner, Hz: NaN Bypass)
+    for _tk in (1, 8):
+        consts += [float('nan') if _GSX.table_value(_tk, v) is None else float(_GSX.table_value(_tk, v))
+                   for v in range(128)]
+    # ...and a tap at a pan between the outputs (gsd_place's: a pitch shifter's
+    # EFX Pan, (v - 64) / 63 at the pan law's angle): each v's incidences and
+    # delays (samples), 128 x 4
+    for v in range(128):
+        _x = _q.listener_distance * math.tan(T.stage_angle((v - 64) / 63.0))
+        _li, _ri, _ld, _rd = _q.hrtf_at(_x, 0.0, _q.listener_distance)
+        consts += [float(_li), float(_ri), float(_ld * B.SR), float(_rd * B.SR)]
+    # ...and *9 (a pre-filter's cutoff, Hz: NaN Bypass); the tremolo's waves
+    # (gsefx.WAVES: each's count, then 6 (harmonic, coefficient, phase));
+    # the Hexa Chorus's voices placed (gsd_place of a pan: each Pan Dev
+    # 0-127's six -- the pan itself, its memo's key, then incidences and
+    # delays, samples); the 3D types' sides at -60 and 60 degrees (key 1000 + a)
+    consts += [float('nan') if _GSX.table_value(9, v) is None else float(_GSX.table_value(9, v))
+               for v in range(128)]
+    for _w in _GSX.WAVES:
+        if len(_w) > 6:
+            raise SystemExit("native_export: a tremolo wave of %d harmonics, room for 6" % len(_w))
+        consts += [float(len(_w))] + [float(x) for h in _w for x in h] + [0.0] * (3 * (6 - len(_w)))
+
+    def _side_place(_x):
+        _li, _ri, _ld, _rd = _q.hrtf_at(_x, 0.0, _q.listener_distance)
+        return [float(_li), float(_ri), float(_ld * B.SR), float(_rd * B.SR)]
+    for v in range(128):
+        _pd = v / 20.0
+        for k in range(6):
+            _pan = _pd * (2.0 * k / 5.0 - 1.0)
+            consts += [float(_pan)] + _side_place(_q.listener_distance * math.tan(T.stage_angle(float(_pan))))
+    for _a in (-60.0, 60.0):
+        consts += [1000.0 + _a] + _side_place(_q.listener_distance
+                                              * math.tan(math.radians(max(-80.0, min(80.0, _a)))))
+    # ...and the delay types' times, *2, *3, *4 (ms: NaN none); a phaser's
+    # Manual *12 (Hz), the Humanizer's Accel *14
+    for _tk in (2, 3, 4, 12, 14):
+        consts += [float('nan') if _GSX.table_value(_tk, v) is None else float(_GSX.table_value(_tk, v))
+                   for v in range(128)]
     room = os.fsencode(T.ROOM_NAME[0] or "")
     with open(args[0], "wb") as f:
         f.write(MAGIC)
@@ -224,6 +393,85 @@ def main(argv):
         f.write(b"VBOD" + struct.pack("<iii", len(vbn), len(T._NOT_A_VOICE), len(blob)) + blob
                 + struct.pack("<%dd" % len(vbn), *[float(T.VOICE_BODIES[x]) for x in vbn])
                 + struct.pack("<%dd" % len(vbn), *[float(T.VOICE_CLUSTER.get(x, 1.0)) for x in vbn]))
+        # VARS: bank select -- the slots (program, variation, layer), their
+        # classes at each key, the entries (a slot, or a layered set: each
+        # layer's slot, semitones and velocities), GS's and GM 2's tables;
+        # its length first, so a reader that does not know it steps over it
+        vb = struct.pack("<i", len(vslots)) + b"".join(struct.pack("<iii", p, v, l) for p, v, l, _ in vslots)
+        vb += struct.pack("<%di" % len(vmap), *vmap)
+        vb += struct.pack("<i", len(ventries) - 1)
+        for _p, _v, ls in ventries[1:]:
+            vb += struct.pack("<iii", _p, _v, len(ls)) + b"".join(struct.pack("<iiii", *x) for x in ls)
+        vb += struct.pack("<%di" % (5 * 128 * 128), *[e for m in vgs for row in m for e in row])
+        vb += struct.pack("<%di" % (128 * 128), *[e for row in vgm2 for e in row])
+        # ...and each entry's trim (patch_map.program_trim: VARIATION_TRIM_DB),
+        # in a file that speaks GS and not
+        import patch_map as PM
+        for _p, _v, _ls in ventries[1:]:
+            vp = PM.VariationProgram(_p, _v)
+            vb += struct.pack("<dd", PM.program_trim(vp), PM.program_trim(vp, gs=True))
+        # ...and each entry's program class (property_class_for_program, as
+        # _prep_breath reads it): its class, -1 none the engine has and no
+        # breath, -2 one that breathes
+        for _p, _v, _ls in ventries[1:]:
+            vb += struct.pack("<i", vpcls[(_p, _v)])
+        f.write(b"VARS" + struct.pack("<i", len(vb)) + vb)
+        # DRON: the drone classes (native.DRONES, registered as the bagpipes'
+        # classes were made), K's drone region
+        dmap = []
+        for cls in N.DRONES[:256]:
+            k = N.note_class(cls)
+            if k is None:
+                dmap.append(-1)
+                continue
+            if cls not in idx:
+                raise SystemExit("native_export: drone class %s met after the classes were written" % cls.__name__)
+            dmap.append(idx[cls])
+        dmap += [-1] * (256 - len(dmap))
+        f.write(b"DRON" + struct.pack("<i", 4 * 256) + struct.pack("<256i", *dmap))
+        # MKIT: the maps' own drum sets -- how many, their ids, each key's
+        # class, pitch, seat, chokes, gesture and layers (kits()'s, set j's
+        # key at 128 j + key)
+        mb = struct.pack("<i", len(mk_ids)) + struct.pack("<%di" % len(mk_ids), *mk_ids)
+        mb += struct.pack("<%di" % len(mk_map), *mk_map)
+        mb += bytes(mk_f0) + bytes(mk_seat) + bytes(mk_choke) + bytes(mk_skind) + bytes(mk_spar)
+        f.write(b"MKIT" + struct.pack("<i", len(mb)) + mb)
+        # VNAM: the variations a picker offers (livetui's: GS's own tones and the
+        # maps' -- not the MT-32 set's, bank 127), each its program, its key
+        # (map x 128 + bank) and its name (a map's own with its map, gm_label's)
+        vn = []
+        for (_p, _v) in sorted(PM.VARIATIONS):
+            if _v == 127 or (_p, _v) not in PM.VARIATION_NAMES:
+                continue
+            _nm = PM.VARIATION_NAMES[(_p, _v)] + (" (%s)" % PM.MAP_LABELS[_v >> 7]
+                                                    if _v >> 7 in PM.MAP_LABELS else "")
+            _b = _nm.encode("utf-8")
+            vn.append(struct.pack("<iii", _p, _v, len(_b)) + _b)
+        vb2 = struct.pack("<i", len(vn)) + b"".join(vn)
+        f.write(b"VNAM" + struct.pack("<i", len(vb2)) + vb2)
+        if "live" in opt:
+            # VLIV: each of VNAM's variations' live.Patch record, as LIVE's
+            # program's (its buckets, rotor speeds, Leslie default, damper and
+            # soft pedal), 0s where its program is not live's
+            import live as _LV
+            vl = []
+            for (_p, _v) in sorted(PM.VARIATIONS):
+                if _v == 127 or (_p, _v) not in PM.VARIATION_NAMES:
+                    continue
+                rec = [0] * 10
+                if any(cmap_live[128 * _p + k] >= 0 for k in range(128)):
+                    # (one variation at a time: its probe notes' per-class
+                    # memos let go after it -- N.memo_scope -- or the walk
+                    # held every variation's, 0.85 MB each)
+                    with N.memo_scope():
+                        pt = _LV.Patch(_p, False, tuner, _v)
+                    sp = [(-1 if x is None else int(x)) for x in pt.speeds][:3]
+                    rec = ([1, pt.nbuckets, len(sp)] + sp + [-1] * (3 - len(sp))
+                           + [int(pt.leslie_default if pt.detune_wheel else -1)]
+                           + [int(bool(pt.damper_pedal)), int(pt.soft_pedal_strings), int(pt.soft_pedal_top)])
+                vl.append(struct.pack("<10i", *(rec + [0] * (10 - len(rec)))[:10]))
+            vb3 = struct.pack("<i", len(vl)) + b"".join(vl)
+            f.write(b"VLIV" + struct.pack("<i", len(vb3)) + vb3)
         if "live" in opt:
             import live as L
             tab = L.pan_table()
