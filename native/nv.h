@@ -638,7 +638,33 @@ typedef struct {
        coefficients the synced spectrum's (moog.sync_spectrum) */
     int u_n;
     double u_cents, u_mix, u_dc, u_dhz[2], u_width;
+    /* ITS PANEL: the knobs it was built from (moog.PANEL's keys, in its
+       order: NV_MK_*), what a knob turned live is built from again */
+    double pn[42];
 } MoogLayer;
+
+/* moog.PANEL's keys, in its order */
+enum {
+    NV_MK_OSC1_OCTAVE, NV_MK_OSC1_WAVE, NV_MK_OSC2_OCTAVE, NV_MK_OSC2_WAVE, NV_MK_OSC2_FREQ, NV_MK_TUNE,
+    NV_MK_SUB_WAVE, NV_MK_OSC1_LEVEL, NV_MK_OSC2_LEVEL, NV_MK_SUB_LEVEL, NV_MK_NOISE_LEVEL, NV_MK_CUTOFF,
+    NV_MK_RESONANCE, NV_MK_EG_AMOUNT, NV_MK_KB_TRACK, NV_MK_MODE, NV_MK_RES_BASS, NV_MK_F_ATTACK,
+    NV_MK_F_DECAY, NV_MK_F_SUSTAIN, NV_MK_F_RELEASE, NV_MK_A_ATTACK, NV_MK_A_DECAY, NV_MK_A_SUSTAIN,
+    NV_MK_A_RELEASE, NV_MK_GLIDE, NV_MK_SYNC, NV_MK_LFO1_RATE, NV_MK_LFO1_SHAPE, NV_MK_LFO1_DEPTH,
+    NV_MK_LFO1_DEST, NV_MK_LFO1_RESET, NV_MK_MOD_AMOUNT, NV_MK_MOD_DEST, NV_MK_MF104_ON, NV_MK_MF104_TIME,
+    NV_MK_MF104_RANGE, NV_MK_MF104_FEEDBACK, NV_MK_MF104_MIX, NV_MK_MF104_RATE, NV_MK_MF104_AMOUNT,
+    NV_MK_MF104_WAVE, NV_MK_N
+};
+
+/* tone.c: moog.py's tables by knob position (the export's MTAB): Q, then
+   osc_spectrum's (Q + 1) x 64 and sub_spectrum's (Q + 1) x 32 complex, then
+   the laws' constants (NV_MOOG_K) */
+#define NV_MOOG_K 47
+void nv_moog_tables(const double *t);
+/* tone.c: layer `out` from knob positions pn (NV_MK_N) as moog_spec fills
+   one, base the class's layer (what knobs do not set: the noise bank, the
+   body, the valve, the unison, the laws); 0, or -1 refused (SYNC, the
+   MF-104M under a moving pitch or shape, a pedal knob moved, no tables) */
+int nv_moog_build(const double *pn, const MoogLayer *base, MoogLayer *out);
 
 typedef struct {
     int n_layer;                            /* 1, or 2 a layered voice (moog.layers_of) */

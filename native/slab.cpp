@@ -2120,6 +2120,13 @@ struct Part {
         // variation's templates (nvlive's), their buckets and rotor speed
         void *dcache = nullptr;
         int dnb = 1, dspeed = -1;
+        // ...A MOOG's KNOBS, the part's own over its patch's (live's
+        // Part.synth, layer A: NV_MK_* -> value), and the panel they and any
+        // glide make (built: null while there are none); and whether it reads
+        // a Messenger's CC chart (Part.cc_map)
+        std::map<int, double> syn;
+        std::shared_ptr<MoogLayer> mb;
+        bool msgr = false;
     };
     std::vector<Patch> patches;
     // THE MODULE's INSERTION EFFECT (live.efx: efxchain.cpp's), its export
@@ -4048,6 +4055,7 @@ struct Part {
                 b = b / bend[ch] * mr;
                 meend_at[key] = std::make_pair(mr, T->sym);
             }
+            messenger_pitch(patches[cur], ch, note);     // A MESSENGER PLAYING IT, on the same pitch
             // THE OPEN STRINGS ARE NOT ON THE WHEEL (live._fixed_sym): their
             // rows take the note's tuning but not the pull, now or later
             // ...AND THE RING ROWS (a banjo's other strings and head): never on the wheel
@@ -4459,9 +4467,12 @@ struct Part {
     // the patch then in use, a change of program between them its own)
     struct Swap;
     struct Post {
-        int kind;                           // 0 the stops, 1 a patch change
+        int kind;                           // 0 the stops, 1 a patch change, 2 a Moog's knob (set_synth)
         std::vector<std::string> names;
         std::shared_ptr<Swap> swap;
+        long long pid = 0;
+        int knob = 0;
+        double old = 0.0;
     };
     std::vector<Post> posts;
 
@@ -4573,6 +4584,10 @@ struct Part {
         // and the worker takes the new voice's bank
         if (w.bank && reg_on && w.pi == 0)
             reg_forget(w.bank, n0);
+        if (w.program != p.program || w.cache != p.cache) {
+            p.syn.clear();                      // A NEW PROGRAM IS A NEW PATCH: its knobs its own (Part.set_patch)
+            p.mb.reset();
+        }
         p.cache = w.cache;
         p.program = w.program;
         p.drums = w.drums != 0;
@@ -4604,6 +4619,7 @@ struct Part {
         trem_depth.erase(ppid);
         clav_step.erase(ppid);
         amp_dirty.erase(ppid);
+        messenger_sync(p);                  // A MOOG PROGRAM SETS THE MESSENGER to it (queued)
         Use u(*this, w.pi);
         amp_touch(w.pi);
     }
@@ -4647,6 +4663,10 @@ struct Part {
         for (auto &q : ps) {
             if (q.kind == 1) {
                 swap_patch(*q.swap, n0);
+                continue;
+            }
+            if (q.kind == 2) {
+                synth_post(q, n0);
                 continue;
             }
             const OrganSpec *og = patches[0].organ;
@@ -5116,7 +5136,7 @@ struct Part {
     // at middle C (_snd_for at 60 - transpose); null if not a Moog
     const MoogLayer *moog_panel(const Patch &p, int ch, MoogLayer &out, int layer = 0) const
     {
-        const MoogLayer *base = layer ? p.moog_b : p.moog;
+        const MoogLayer *base = layer ? p.moog_b : (p.mb ? p.mb.get() : p.moog);
         if (!base)
             return nullptr;
         const NoteClass *k = ch >= 0 ? key_class(p, 60) : nullptr;
@@ -5200,7 +5220,7 @@ struct Part {
             amp_dirty.insert(p.pid);
     }
 
-    void sound_cc(int ch, int cc, int v, long long n0)
+    void sound_cc(int ch, int cc, double v, long long n0)
     {
         double d = (v - 64.0) / 64.0;
         snd_d[ch][cc - 71] = d;
@@ -6020,6 +6040,7 @@ struct Part {
         if (ratio == prev)
             return;
         bend[ch] = ratio;
+        messenger_rebend(ch);
         if (leslie_on(ch))
             return;                         // (a rotor part's wheel is its half-moon: nothing bends)
         // ...AND A FIXED OPEN STRING STAYS AT ITS PITCH (live._fixed_sym_slots)
@@ -6710,8 +6731,345 @@ struct Part {
         }
     }
 
+    // ---- the Moog's knobs (live's set_synth, _moog_tick, _messenger_cc)
+    // A KNOB TURNS, IT DOES NOT JUMP: what the notes play glides toward what
+    // was asked, MOOG_GLIDE_PER_BLOCK a block, the waveshapes, levels and
+    // pitches (MOOG_GLIDES); the octave is a switch and jumps
+    static constexpr double MOOG_GLIDE_PER_BLOCK = 0.01;
+    static bool moog_glides(int k)
+    {
+        return k == NV_MK_OSC1_WAVE || k == NV_MK_OSC2_WAVE || k == NV_MK_SUB_WAVE || k == NV_MK_OSC1_LEVEL
+               || k == NV_MK_OSC2_LEVEL || k == NV_MK_SUB_LEVEL || k == NV_MK_NOISE_LEVEL
+               || k == NV_MK_OSC2_FREQ || k == NV_MK_TUNE || k == NV_MK_MOD_AMOUNT;
+    }
+    // part pid -> {knob: where it has got to}, in the order they began (live.moog_glide)
+    std::vector<std::pair<long long, std::map<int, double>>> moog_glide;
+    bool msgr_all = false;                  // --messenger: every part reads the chart
+    bool msgr_pre107 = false;               // ...a Messenger on firmware before 1.0.7 (moog.messenger_chart)
+    bool msgr_said = false;
+    std::map<std::pair<int, int>, int> msg_msb;     // (channel, CC) -> a knob's coarse half
+    // the part's panel (moog.panel_of: its patch's, its own knobs over it),
+    // and where a knob still glides, where it has got to
+    void moog_pn(const Patch &p, bool glide, double *pn) const
+    {
+        memcpy(pn, p.moog->pn, sizeof p.moog->pn);
+        for (auto &kv : p.syn)
+            pn[kv.first] = kv.second;
+        if (glide)
+            for (auto &g : moog_glide)
+                if (g.first == p.pid)
+                    for (auto &kv : g.second)
+                        pn[kv.first] = kv.second;
+    }
+    // the panel its notes read again (_moog_panel_for's knobs)
+    void moog_rebuild(Patch &p)
+    {
+        bool gl = false;
+        for (auto &g : moog_glide)
+            gl = gl || g.first == p.pid;
+        if (!p.moog || (p.syn.empty() && !gl)) {
+            p.mb.reset();
+            return;
+        }
+        double pn[NV_MK_N];
+        moog_pn(p, true, pn);
+        auto b = std::make_shared<MoogLayer>();
+        if (nv_moog_build(pn, p.moog, b.get()) == 0)
+            p.mb = b;
+    }
+    Patch *patch_pid(long long id)
+    {
+        for (Patch &p : patches)
+            if (p.pid == id)
+                return &p;
+        return nullptr;
+    }
+    // live.set_synth (layer A, from the hardware): the part has the new
+    // value at once, so the next press steps from it; after the block's
+    // events (live.post) the notes sounding are told where they glide FROM
+    // and refreshed. Refused here: SYNC (its spectrum), and a turn that
+    // would move a pitch or shape under the MF-104M -- said, and left
+    void set_synth(Patch &p, int knob, double value)
+    {
+        if (!p.moog)
+            return;
+        double pn[NV_MK_N];
+        moog_pn(p, false, pn);
+        const double old = pn[knob];
+        std::map<int, double> was = p.syn;
+        p.syn[knob] = value;
+        double tr[NV_MK_N];
+        moog_pn(p, true, tr);
+        MoogLayer probe;
+        if (knob == NV_MK_SYNC || nv_moog_build(tr, p.moog, &probe) != 0) {
+            p.syn.swap(was);
+            if (!msgr_said)
+                fprintf(stderr, "nvlive: refused: the Messenger's %s live -- the knob left as it was\n",
+                        knob == NV_MK_SYNC ? "SYNC" : "pitch or shape under the MF-104M");
+            msgr_said = true;
+            return;
+        }
+        moog_rebuild(p);
+        Post q{2, {}, nullptr};
+        q.pid = p.pid;
+        q.knob = knob;
+        q.old = old;
+        posts.push_back(std::move(q));
+    }
+    void synth_post(const Post &q, long long n0)
+    {
+        Patch *p = patch_pid(q.pid);
+        if (!p || !p->moog)
+            return;
+        bool sounding = false;
+        for (auto &kv : S.live)
+            sounding = sounding || std::get<0>(kv.first) == q.pid;
+        if (moog_glides(q.knob) && sounding) {
+            auto it = std::find_if(moog_glide.begin(), moog_glide.end(),
+                                   [&](const std::pair<long long, std::map<int, double>> &g) { return g.first == q.pid; });
+            if (it == moog_glide.end()) {
+                moog_glide.emplace_back(q.pid, std::map<int, double>());
+                it = moog_glide.end() - 1;
+            }
+            it->second.emplace(q.knob, q.old);      // (setdefault: the first turn's start)
+            moog_rebuild(*p);
+        }
+        moog_refresh(*p, n0);
+    }
+    // live._moog_tick: one block of every gliding knob
+    void moog_tick(long long n0)
+    {
+        std::vector<long long> ids;
+        for (auto &g : moog_glide)
+            ids.push_back(g.first);
+        for (long long id : ids) {
+            auto it = std::find_if(moog_glide.begin(), moog_glide.end(),
+                                   [&](const std::pair<long long, std::map<int, double>> &g) { return g.first == id; });
+            Patch *p = patch_pid(id);
+            if (!p || !p->moog) {
+                moog_glide.erase(it);
+                continue;
+            }
+            double base[NV_MK_N];
+            moog_pn(*p, false, base);
+            std::map<int, double> &now = it->second;
+            for (auto k = now.begin(); k != now.end();) {
+                double d = base[k->first] - k->second;
+                if (fabs(d) <= MOOG_GLIDE_PER_BLOCK) {
+                    k = now.erase(k);
+                } else {
+                    k->second += d > 0 ? MOOG_GLIDE_PER_BLOCK : -MOOG_GLIDE_PER_BLOCK;
+                    ++k;
+                }
+            }
+            if (now.empty())
+                moog_glide.erase(it);
+            moog_rebuild(*p);
+            moog_refresh(*p, n0);
+        }
+    }
+    // moog.messenger_value: a Messenger CC's value as the panel knob's
+    // (kind 0 '14', 1 'tune', 2 '7', 3 'foot', 4 'track', 5 'mode', 6 'onoff')
+    static double msgr_value(int kind, int msb, int lsb)
+    {
+        switch (kind) {
+        case 0: return lsb >= 0 ? ((msb << 7) | lsb) / 16383.0 : msb / 127.0;
+        case 1: return msgr_value(0, msb, lsb) + 28.3 / (2.0 * 7.0 * 100.0);
+        case 2: return msb / 127.0;
+        case 3: { static const int F[4] = {32, 16, 8, 4}; return F[std::min(3, msb / 32)]; }
+        case 4: return msb < 64 ? 0.0 : 1.0;
+        case 5: return std::min(3, msb / 32);
+        }
+        return msb >= 64 ? 1.0 : 0.0;
+    }
+    // moog.MESSENGER_CC (its manual's Appendix A; MESSENGER_CC_PRE107 before
+    // 1.0.7: SUB WAVE on CC11, 14-bit): CC -> (knob, kind), knob -2 one the
+    // simulator does not model (taken all the same), -1 not the chart's
+    void msgr_chart(int cc, int *knob, int *kind) const
+    {
+        struct E { int cc, knob, kind; };
+        static const E C[] = {
+            {9, NV_MK_OSC1_WAVE, 0}, {14, NV_MK_OSC2_WAVE, 0}, {10, NV_MK_TUNE, 1}, {12, NV_MK_OSC2_FREQ, 0},
+            {15, NV_MK_OSC1_LEVEL, 0}, {16, NV_MK_OSC2_LEVEL, 0}, {17, NV_MK_SUB_LEVEL, 0},
+            {8, NV_MK_NOISE_LEVEL, 0}, {19, NV_MK_CUTOFF, 0}, {21, NV_MK_RESONANCE, 0},
+            {22, NV_MK_EG_AMOUNT, 0}, {23, NV_MK_F_ATTACK, 0}, {24, NV_MK_F_DECAY, 0}, {25, NV_MK_F_SUSTAIN, 0},
+            {26, NV_MK_F_RELEASE, 0}, {28, NV_MK_A_ATTACK, 0}, {29, NV_MK_A_DECAY, 0}, {30, NV_MK_A_SUSTAIN, 0},
+            {31, NV_MK_A_RELEASE, 0}, {71, NV_MK_SUB_WAVE, 2}, {75, NV_MK_OSC1_OCTAVE, 3},
+            {76, NV_MK_OSC2_OCTAVE, 3}, {78, NV_MK_KB_TRACK, 4}, {79, NV_MK_RES_BASS, 6}, {109, NV_MK_MODE, 5},
+            {13, NV_MK_MOD_AMOUNT, 0}, {72, NV_MK_MOD_DEST, 5}, {77, NV_MK_SYNC, 6}, {3, NV_MK_LFO1_RATE, 0},
+            {4, NV_MK_LFO1_DEPTH, 0}, {83, NV_MK_LFO1_SHAPE, 5}, {85, NV_MK_LFO1_DEST, 5},
+            {93, NV_MK_LFO1_RESET, 6},
+            {2, -2, 0}, {18, -2, 0}, {20, -2, 0}, {27, -2, 0}, {73, -2, 0}, {80, -2, 0}, {81, -2, 0}, {89, -2, 0},
+            {102, -2, 0}, {107, -2, 0}, {108, -2, 0}, {112, -2, 0}, {113, -2, 0}, {114, -2, 0}, {116, -2, 0},
+            {117, -2, 0}, {118, -2, 0},
+        };
+        *knob = -1;
+        *kind = 0;
+        if (msgr_pre107 && cc == 71)
+            return;
+        if (msgr_pre107 && cc == 11) {
+            *knob = NV_MK_SUB_WAVE;
+            return;
+        }
+        for (const E &e : C)
+            if (e.cc == cc) {
+                *knob = e.knob;
+                *kind = e.kind;
+                return;
+            }
+    }
+    // ---- A MESSENGER TO SET (live.open_messenger's queue): what is sent,
+    // through msgr_send (nvlive's: its thread writes it, the audio thread
+    // never waits); the pitch-bend range it is set to; the note each of its
+    // channels plays (messenger_note, in the order they began)
+    void (*msgr_send)(void *, const uint8_t *, int) = nullptr;
+    void *msgr_ctx = nullptr;
+    double msgr_bend = 2.0;
+    std::vector<std::pair<int, std::tuple<long long, int, int>>> msgr_note;
+    void msgr_put(int a, int b, int c)
+    {
+        const uint8_t m[3] = {(uint8_t)a, (uint8_t)b, (uint8_t)c};
+        msgr_send(msgr_ctx, m, 3);
+    }
+    // moog.messenger_cc_value: a knob's value as the Messenger's CC, *lo -1
+    // where it has no fine half
+    static int msgr_cc_value(int kind, double v, int *lo)
+    {
+        *lo = -1;
+        auto clip = [](double x) { double y = x < 1.0 ? x : 1.0; return y > 0.0 ? y : 0.0; };
+        switch (kind) {
+        case 0: {
+            int x = (int)nearbyint(clip(v) * 16383);
+            *lo = x & 0x7F;
+            return x >> 7;
+        }
+        case 1: return msgr_cc_value(0, v - 28.3 / (2.0 * 7.0 * 100.0), lo);
+        case 2: return (int)nearbyint(clip(v) * 127);
+        case 3: { int f = (int)v; return (f == 32 ? 0 : f == 16 ? 1 : f == 8 ? 2 : 3) * 32 + 16; }
+        case 4: return v < 0.5 ? 32 : 96;
+        case 5: return (int)v * 32 + 16;
+        }
+        return v != 0.0 ? 127 : 0;
+    }
+    // live.messenger_sync: a Moog part's panel (its patch's, its own knobs
+    // over it) as the chart's CCs on its channel, coarse halves first, in
+    // the chart's order -- or just one knob (knob >= 0)
+    void messenger_sync(const Patch &p, int knob = -1)
+    {
+        if (!msgr_send || p.drums || !p.moog)
+            return;
+        double pn[NV_MK_N];
+        moog_pn(p, false, pn);
+        const int ch = p.channel >= 0 ? p.channel : 0;
+        for (int cc = 0; cc < 128; cc++) {
+            int k, kind, lo;
+            msgr_chart(cc, &k, &kind);
+            if (k < 0 || (knob >= 0 && k != knob))
+                continue;
+            msgr_put(0xB0 | ch, cc, msgr_cc_value(kind, pn[k], &lo));
+            if (lo >= 0)
+                msgr_put(0xB0 | ch, cc + 32, lo);
+        }
+    }
+    // live.messenger_pitch: the Messenger's note bent from the equal-tempered
+    // A440 key it plays to where this part's tuner, the key's tuning and the
+    // wheel put it (its range msgr_bend); its newest note owns the channel
+    void messenger_pitch(const Patch &p, int ch, int note)
+    {
+        if (!msgr_send || p.drums || !p.moog)
+            return;
+        const int sn = note + p.transpose;
+        if (sn < 0 || sn > 127 || note < 0 || note > 127)
+            return;
+        double b = bend[ch] * (key_ratio(p, ch, note) * 1.0);
+        double ours = nv_tcache_freq(p.cache, sn) * b;
+        double et = 440.0 * pow(2.0, (note - 69) / 12.0);
+        double cents = 1200.0 * log2(ours / et);
+        int val = (int)nearbyint(cents / (100.0 * msgr_bend) * 8192);
+        const int mch = p.channel >= 0 ? p.channel : 0;
+        auto it = std::find_if(msgr_note.begin(), msgr_note.end(),
+                               [&](const std::pair<int, std::tuple<long long, int, int>> &x) { return x.first == mch; });
+        if (it != msgr_note.end())
+            it->second = std::make_tuple(p.pid, ch, note);  // (a dict's key keeps its place)
+        else
+            msgr_note.emplace_back(mch, std::make_tuple(p.pid, ch, note));
+        val = std::max(-8192, std::min(8191, val)) + 8192;
+        msgr_put(0xE0 | mch, val & 0x7F, val >> 7);
+    }
+    // live._messenger_rebend: the wheel moved on a channel -- its Messenger note follows
+    void messenger_rebend(int ch)
+    {
+        if (!msgr_send)
+            return;
+        std::vector<std::pair<int, std::tuple<long long, int, int>>> ns = msgr_note;
+        for (auto &x : ns)
+            if (std::get<1>(x.second) == ch)
+                if (Patch *p = patch_pid(std::get<0>(x.second)))
+                    messenger_pitch(*p, ch, std::get<2>(x.second));
+    }
+
+    // live._messenger_cc: a CC on a channel where a part reads the
+    // Messenger's chart -- that part's knob turned (a part that is not a Moog:
+    // the knobs with a GM sound controller, moog.MESSENGER_GM, turn that) --
+    // or false, the message General MIDI's
+    bool messenger_cc(int ch, int cc, int v, long long n0)
+    {
+        std::vector<int> mine;
+        bool hears = false, gm = false;
+        for (size_t i = 0; i < patches.size(); i++) {
+            const Patch &p = patches[i];
+            if (!(p.msgr || msgr_all) || !(p.channel < 0 || p.channel == ch))
+                continue;
+            hears = true;
+            if (!p.drums && p.moog)
+                mine.push_back((int)i);
+            else
+                gm = true;
+        }
+        if (!hears)
+            return false;
+        int knob, kind;
+        double val;
+        int hi = cc - 32, hk, hkind;
+        if (cc >= 32) {
+            msgr_chart(hi, &hk, &hkind);
+        } else {
+            hk = -1;
+            hkind = 0;
+        }
+        if (hk >= 0 && (hkind == 0 || hkind == 1)) {     // the fine half of a knob
+            auto m = msg_msb.find(std::make_pair(ch, hi));
+            if (m == msg_msb.end())
+                return true;
+            knob = hk;
+            val = msgr_value(hkind, m->second, v);
+        } else {
+            msgr_chart(cc, &knob, &kind);
+            if (knob == -1)
+                return false;                       // CC1, 7, 11, 64, 74 ...: GM's
+            if (knob == -2)
+                return true;                        // the panel's, not modelled yet
+            if (kind == 0 || kind == 1)
+                msg_msb[std::make_pair(ch, cc)] = v;
+            val = msgr_value(kind, v, -1);
+        }
+        for (int i : mine)
+            set_synth(patches[i], knob, val);
+        int gcc = knob == NV_MK_CUTOFF ? 74 : knob == NV_MK_RESONANCE ? 71 : knob == NV_MK_A_ATTACK ? 73
+                  : knob == NV_MK_A_DECAY ? 75 : knob == NV_MK_A_RELEASE ? 72 : knob == NV_MK_LFO1_RATE ? 76
+                  : knob == NV_MK_LFO1_DEPTH ? 77 : -1;
+        if (gm && gcc >= 0) {
+            double g = 127.0 * val;                 // (max(0, min(127, 127 v)), Python's)
+            g = g < 127.0 ? g : 127.0;
+            sound_cc(ch, gcc, g > 0.0 ? g : 0.0, n0);
+        }
+        return true;
+    }
+
     void control(int ch, int cc, int v, long long n0)
     {
+        if (messenger_cc(ch, cc, v, n0))
+            return;                                 // a Messenger's panel, on a part that reads its chart
         if (cc == 94) {
             cc94[ch] = v;                           // the scanner's selector (_scan_stamp)
             if (scan_async)                         // ...its new position prepared (_scan_prefetch)
@@ -8562,6 +8920,8 @@ struct Part {
             reg_pump(n0);
         if (!tex_gen.empty())
             tex_tick(n0, blk);                  // a held texture's grains (live's _tex_tick)
+        if (!moog_glide.empty())
+            moog_tick(n0);                      // the Moog's knobs gliding (live's _moog_tick)
         if (!amp_dirty.empty() || amp_has_out || !amp_fine_results.empty() || amp_async || !amp_chg.empty()
             || !S.rel_log.empty())
             amp_pump(n0);                       // the valve (live's _amp_pump)
@@ -9343,6 +9703,18 @@ long nv_part_dropped(void *h) { return ((nv::slab::Part *)h)->dropped; }
 // THE PANEL'S: a global set between blocks -- 0 headroom (dB), 1 the
 // pressure's lift (dB), 2 the limiter's knee, 3 the wheel's range, 4 the mod
 // range (cents), 5 the GPU on (1) or off, 6 the room's tail on or off
+// A MESSENGER TO SET: send(ctx, bytes, n) takes what is sent (NULL none),
+// its pitch-bend range; then every Moog part set to its panel (the start)
+void nv_part_messenger(void *h, void (*send)(void *, const uint8_t *, int), void *ctx, double bend)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    P->msgr_send = send;
+    P->msgr_ctx = ctx;
+    P->msgr_bend = bend;
+    for (const auto &p : P->patches)
+        P->messenger_sync(p);
+}
+
 void nv_part_set(void *h, int what, double v)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;
@@ -9358,6 +9730,8 @@ void nv_part_set(void *h, int what, double v)
     case 5: P->gpu_off = v < 0.5; break;
     case 6: P->room_on = v >= 0.5; break;
     case 7: P->mod_rate = v; break;
+    case 8: P->msgr_all = v >= 0.5; break;
+    case 9: P->msgr_pre107 = v >= 0.5; break;
     }
 }
 

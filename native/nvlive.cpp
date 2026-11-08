@@ -157,6 +157,8 @@ void nv_part_render(void *h, long long n0, long frames, float *L, float *R, floa
                   void *sd, long long blk, double master_gain);
 void nv_part_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20);
 void nv_part_press_db(void *h, double db);
+void nv_moog_tables(const double *t);
+void nv_part_messenger(void *h, void (*send)(void *, const uint8_t *, int), void *ctx, double bend);
 void nv_part_detune_wheel(void *h, int on);
 void nv_part_leslie(void *h, const double *L, int n);
 void nv_part_scan(void *h, const double *X, long n);
@@ -232,6 +234,7 @@ struct Export {
     std::vector<std::string> vnames;
     std::vector<std::array<int, 10>> vpart;     // VLIV: each one's live record, as part[]'s
     std::vector<std::array<int, 12>> vdrn;      // VDRN: a voice's own drone patch (program, variation, its record)
+    std::vector<double> mtab;                   // MTAB: moog.py's tables by knob position (nv_moog_tables)
     std::vector<VarEnt> vents;
     struct Stops {
         std::vector<std::string> names;
@@ -273,6 +276,54 @@ struct Export {
         std::string name, kit;
     } prog[128];
     bool has_prog = false;
+};
+
+// A MESSENGER's OUTPUT (live.open_messenger): what the audio thread queues,
+// written to the raw MIDI device by a thread of its own -- or, in --test,
+// logged with the block it was sent in (g_msgr_blk)
+static std::atomic<long long> g_msgr_blk{0};
+struct MsgrOut {
+    int fd = -1;
+    FILE *log = nullptr;
+    std::mutex mu;
+    std::condition_variable cv;
+    std::vector<uint8_t> q;
+    static void send(void *ctx, const uint8_t *b, int n)
+    {
+        MsgrOut *o = (MsgrOut *)ctx;
+        if (o->log) {
+            fprintf(o->log, "%lld", g_msgr_blk.load());
+            for (int i = 0; i < n; i++)
+                fprintf(o->log, " %d", b[i]);
+            fprintf(o->log, "\n");
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lk(o->mu);
+            o->q.insert(o->q.end(), b, b + n);
+        }
+        o->cv.notify_one();
+    }
+    void start()
+    {
+        std::thread([this] {
+            for (;;) {
+                std::vector<uint8_t> w;
+                {
+                    std::unique_lock<std::mutex> lk(mu);
+                    cv.wait(lk, [this] { return !q.empty(); });
+                    w.swap(q);
+                }
+                size_t off = 0;
+                while (off < w.size()) {
+                    ssize_t r = ::write(fd, w.data() + off, w.size() - off);
+                    if (r <= 0)
+                        break;              // (a message lost: never the audio thread's wait)
+                    off += (size_t)r;
+                }
+            }
+        }).detach();
+    }
 };
 
 static bool read_export(const char *path, Export &E)
@@ -425,6 +476,9 @@ static bool read_export(const char *path, Export &E)
             }
             if (!memcmp(tt, "MKIT", 4)) {
                 fseek(f, tl, SEEK_CUR);
+            } else if (!memcmp(tt, "MTAB", 4)) {
+                E.mtab.resize(tl / 8);
+                ok = fread(E.mtab.data(), 8, E.mtab.size(), f) == E.mtab.size();
             } else if (!memcmp(tt, "VDRN", 4)) {
                 int nv = 0;
                 ok = fread(&nv, 4, 1, f) == 1;
@@ -1137,6 +1191,37 @@ int main(int argc, char **argv)
     nv_part_damper(part, E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_KNEE], E.k[K_BETA], E.k[K_LN10_20]);
     nv_part_press_db(part, atof(opt(argc, argv, "press-db",
                                   std::to_string(E.k.size() > K_PRESS_DB ? E.k[K_PRESS_DB] : 8.0).c_str()).c_str()));
+    // A MESSENGER's CHART on every part (live's Part.cc_map "messenger"):
+    // --messenger, or --messenger=pre-1.0.7 for that firmware's; its knobs
+    // built from the export's tables (set before the panel is sent by its chart)
+    nv_moog_tables(E.mtab.size() > 1 ? E.mtab.data() : nullptr);
+    for (int i = 1; i < argc; i++)
+        if (!strcmp(argv[i], "--messenger") || !strcmp(argv[i], "--messenger=pre-1.0.7")) {
+            nv_part_set(part, 8, 1.0);
+            nv_part_set(part, 9, argv[i][11] == '=' ? 1.0 : 0.0);
+        }
+    // A MESSENGER TO SET (live.py --messenger): --messenger-out=/dev/snd/midiCxDy,
+    // written by its own thread; --messenger-bend=SEMITONES its bend range
+    // (2); in --test, --messenger-log=FILE what it would be sent, by block
+    static MsgrOut mo;
+    {
+        std::string md = opt(argc, argv, "messenger-out", ""), ml = opt(argc, argv, "messenger-log", "");
+        double mb = atof(opt(argc, argv, "messenger-bend", "2").c_str());
+        if (!ml.empty())
+            mo.log = fopen(ml.c_str(), "w");
+        else if (!md.empty() && md != "none") {
+            mo.fd = ::open(md.c_str(), O_WRONLY);
+            if (mo.fd < 0)
+                fprintf(stderr, "nvlive: no Messenger on %s -- none set\n", md.c_str());
+            else
+                mo.start();
+        }
+        if (mo.log || mo.fd >= 0) {
+            nv_part_messenger(part, MsgrOut::send, &mo, mb);
+            if (mo.fd >= 0)
+                fprintf(stderr, "nvlive: Messenger on %s: its Moog parts set\n", md.c_str());
+        }
+    }
     void *fn[3];
     const char *FN[3] = {"synth_voice", "synth_voice_xdec", "synth_voice_damp"};
     for (int q = 0; q < 3; q++) {
@@ -1575,6 +1660,7 @@ int main(int argc, char **argv)
             for (long long b = 0; b < nb; b++) {
                 auto t0 = std::chrono::steady_clock::now();
                 long long n0 = b * BLK;
+                g_msgr_blk = b;                         // (--messenger-log's block)
                 while (e < ne) {
                     int iv[4];
                     double et;

@@ -533,6 +533,10 @@ def main(argv):
                 vd.append(struct.pack("<12i", _p, _dv, *(rec + [0] * (10 - len(rec)))[:10]))
             vb4 = struct.pack("<i", len(vd)) + b"".join(vd)
             f.write(b"VDRN" + struct.pack("<i", len(vb4)) + vb4)
+            # MTAB: moog.py's spectra by knob position and its laws' constants
+            # (native.moog_tables), what a knob turned live is built from
+            mt = N.moog_tables().astype("<f8").tobytes()
+            f.write(b"MTAB" + struct.pack("<i", len(mt)) + mt)
         if "live" in opt:
             import live as L
             tab = L.pan_table()

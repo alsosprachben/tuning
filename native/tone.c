@@ -991,6 +991,215 @@ void nv_moog_apply(const MoogLayer *in, const double *d, MoogLayer *out)
         out->ft[5] = 4.0 * knob_tau(in, k[4]);
 }
 
+/* THE PANEL BUILT FROM KNOBS (native.py moog_spec's layer, moog.py's laws) */
+static const double *mtab = NULL;       /* nv_moog_tables' */
+static int mtab_q = 0;
+
+void nv_moog_tables(const double *t)
+{
+    mtab = t;
+    mtab_q = t ? (int)t[0] : 0;
+}
+
+/* the laws' constants, after the tables */
+static const double *mk_const(void) { return mtab + 1 + (size_t)(mtab_q + 1) * 96 * 2; }
+enum { MC_SEMIS, MC_EG_CURVE, MC_LFO_LO, MC_LFO_SPAN, MC_LFO_CUT, MC_LFO_PITCH, MC_LFO_KNOB, MC_MOD_PITCH,
+       MC_MOD_WAVE, MC_SUS_V, MC_SUS_T = MC_SUS_V + 6, MC_FM_V = MC_SUS_T + 6, MC_FM_I = MC_FM_V + 13,
+       MC_END = MC_FM_I + 13 };
+
+/* osc_spectrum / sub_spectrum's position: int(round(clip * Q)) */
+static int mk_q(double shape) { return (int)nearbyint(pymax(0.0, pymin(1.0, shape)) * mtab_q); }
+static const double *mk_osc(double shape) { return mtab + 1 + (size_t)mk_q(shape) * 64 * 2; }
+static const double *mk_sub(double shape)
+{
+    return mtab + 1 + (size_t)(mtab_q + 1) * 64 * 2 + (size_t)mk_q(shape) * 32 * 2;
+}
+static double mk_bipolar(double v, double span) { return (pymax(0.0, pymin(1.0, v)) - 0.5) * 2.0 * span; }
+static double mk_foot(double v)
+{
+    switch ((int)v) {
+    case 32: return 0.25;
+    case 16: return 0.5;
+    case 8: return 1.0;
+    case 4: return 2.0;
+    }
+    return 1.0;
+}
+static double mk_sustain_target(double v)
+{
+    const double *c = mk_const();
+    return np_interp(clip01(v), c + MC_SUS_V, c + MC_SUS_T, 6);
+}
+static double mk_cube(double v, double k)
+{
+    double x = clip01(v) - 0.5;
+    return k * x * x * x;
+}
+static double mk_lfo_rate(double v)
+{
+    const double *c = mk_const();
+    return c[MC_LFO_LO] * pow(c[MC_LFO_SPAN], clip01(v));
+}
+
+/* moog.pitch_params: 0 none, else p[9] */
+static int mk_pitch_params(const MoogLayer *B, const double *pn, int sync, double *p)
+{
+    const double *c = mk_const();
+    if (sync)
+        return 0;
+    double ae = (int)pn[NV_MK_MOD_DEST] == 1 ? mk_bipolar(pn[NV_MK_MOD_AMOUNT], c[MC_MOD_PITCH]) : 0.0;
+    double al = (int)pn[NV_MK_LFO1_DEST] == 1 ? mk_cube(pn[NV_MK_LFO1_DEPTH], c[MC_LFO_PITCH]) : 0.0;
+    if (ae == 0.0 && al == 0.0)
+        return 0;
+    p[0] = ae;
+    p[1] = knob_tau(B, pn[NV_MK_F_ATTACK]) * B->atk_to_1;
+    p[2] = 4.0 * knob_tau(B, pn[NV_MK_F_DECAY]);
+    p[3] = mk_sustain_target(pn[NV_MK_F_SUSTAIN]);
+    p[4] = 4.0 * knob_tau(B, pn[NV_MK_F_RELEASE]);
+    p[5] = al;
+    p[6] = mk_lfo_rate(pn[NV_MK_LFO1_RATE]);
+    p[7] = (double)(int)pn[NV_MK_LFO1_SHAPE];
+    p[8] = pn[NV_MK_LFO1_RESET] != 0.0 ? 1.0 : 0.0;
+    return 1;
+}
+
+/* moog.shape_flags: FT_SHAPE's bits (OSC 1 2, OSC 2 4, SUB 8) */
+static int mk_shape_flags(const double *pn)
+{
+    int f = 0;
+    int amt = pn[NV_MK_MOD_AMOUNT] != 0.5, dep = pn[NV_MK_LFO1_DEPTH] != 0.5;
+    int md = (int)pn[NV_MK_MOD_DEST], ld = (int)pn[NV_MK_LFO1_DEST];
+    if ((md == 2 && amt) || (pn[NV_MK_SYNC] != 0.0 && ((md == 1 && amt) || (ld == 1 && dep))))
+        f |= 4;
+    if ((md == 3 && amt) || (ld == 3 && dep))
+        f |= 8;
+    if (ld == 2 && dep)
+        f |= 2;
+    return f;
+}
+
+int nv_moog_build(const double *pn, const MoogLayer *B, MoogLayer *out)
+{
+    if (!mtab || pn[NV_MK_SYNC] != 0.0)
+        return -1;
+    for (int i = NV_MK_MF104_ON; i <= NV_MK_MF104_WAVE; i++)
+        if (pn[i] != B->pn[i])                  /* (the pedal: its settings are the class's) */
+            return -1;
+    const double *c = mk_const();
+    *out = *B;
+    MoogLayer *L = out;
+    memcpy(L->pn, pn, sizeof L->pn);
+    L->t = pow(2.0, mk_bipolar(pn[NV_MK_TUNE], c[MC_SEMIS]) / 12.0);
+    L->foot1 = mk_foot(pn[NV_MK_OSC1_OCTAVE]);
+    L->foot2 = mk_foot(pn[NV_MK_OSC2_OCTAVE]);
+    L->o2f = pow(2.0, mk_bipolar(pn[NV_MK_OSC2_FREQ], c[MC_SEMIS]) / 12.0);
+    L->lvl[0] = pn[NV_MK_OSC1_LEVEL];
+    L->lvl[1] = pn[NV_MK_OSC2_LEVEL];
+    L->lvl[2] = pn[NV_MK_SUB_LEVEL];
+    L->lvl[3] = pn[NV_MK_NOISE_LEVEL];
+    const double *o1 = mk_osc(pn[NV_MK_OSC1_WAVE]), *o2 = mk_osc(pn[NV_MK_OSC2_WAVE]);
+    const double *sb = mk_sub(pn[NV_MK_SUB_WAVE]);
+    memcpy(L->c1, o1, sizeof L->c1);
+    memcpy(L->c2, o2, sizeof L->c2);
+    memcpy(L->cs, sb, sizeof L->cs);
+    const double res = pn[NV_MK_RESONANCE];
+    L->self_amp = L->self_amp_max * pow(pymax(0.0, (res - L->self_from) / (1.0 - L->self_from)), 2.0);
+    const double cut = L->cut_lo * pow(2.0, L->cut_oct * clip01(pn[NV_MK_CUTOFF]));
+    L->self_cut = cut;
+    double x = clip01(pn[NV_MK_EG_AMOUNT]) - 0.5;
+    const double ego = c[MC_EG_CURVE] * x * fabs(x);
+    L->self_eg = pow(2.0, ego * pymax(0.0, mk_sustain_target(pn[NV_MK_F_SUSTAIN])));
+    L->kb_track = pn[NV_MK_KB_TRACK];
+    /* 1 -> 2 FM (fm_index: fm_amount_index on MOD DEST 0) */
+    double fi = 0.0;
+    if ((int)pn[NV_MK_MOD_DEST] == 0) {
+        double xm = clip01(pn[NV_MK_MOD_AMOUNT]) - 0.5;
+        fi = copysign(np_interp(0.5 + fabs(xm), c + MC_FM_V, c + MC_FM_I, 13), xm);
+    }
+    L->fm_index = fi;
+    L->fm_r1 = L->t * L->foot1;
+    L->fm_ph = fi != 0.0 ? atan2(o1[1], o1[0]) : 0.0;
+    double pp[9];
+    const int pon = mk_pitch_params(B, pn, 0, pp), sf = mk_shape_flags(pn);
+    if (B->mf_on && (pon || sf))
+        return -1;                              /* (moog_spec's refusal: the pedal under a moving note) */
+    L->pitch_on = pon;
+    L->shape_on = sf;
+    memset(L->pitch_p, 0, sizeof L->pitch_p);
+    memset(L->shape_par, 0, sizeof L->shape_par);
+    if (pon)
+        memcpy(L->pitch_p, pp, sizeof pp);
+    if (sf) {                                   /* moog.shape_params (SYNC refused: 15-24 zero) */
+        double *v = L->shape_par;
+        int md = (int)pn[NV_MK_MOD_DEST], ld = (int)pn[NV_MK_LFO1_DEST];
+        v[0] = sf;
+        v[1] = pn[NV_MK_OSC1_WAVE];
+        v[2] = pn[NV_MK_OSC2_WAVE];
+        v[3] = pn[NV_MK_SUB_WAVE];
+        v[4] = md == 2 || md == 3 ? md : 0;
+        v[5] = mk_bipolar(pn[NV_MK_MOD_AMOUNT], c[MC_MOD_WAVE]);
+        v[6] = ld == 2 ? 1 : ld == 3 ? 3 : 0;
+        v[7] = mk_cube(pn[NV_MK_LFO1_DEPTH], c[MC_LFO_KNOB]);
+        v[8] = mk_lfo_rate(pn[NV_MK_LFO1_RATE]);
+        v[9] = (int)pn[NV_MK_LFO1_SHAPE];
+        v[10] = pn[NV_MK_LFO1_RESET] != 0.0 ? 1.0 : 0.0;
+        v[11] = knob_tau(B, pn[NV_MK_F_ATTACK]) * B->atk_to_1;
+        v[12] = 4.0 * knob_tau(B, pn[NV_MK_F_DECAY]);
+        v[13] = mk_sustain_target(pn[NV_MK_F_SUSTAIN]);
+        v[14] = 4.0 * knob_tau(B, pn[NV_MK_F_RELEASE]);
+    }
+    /* moog.ft_row at KB_REF_HZ, key row 0 */
+    double *ft = L->ft;
+    ft[0] = pow(B->kb_ref_hz / B->kb_ref_hz, pn[NV_MK_KB_TRACK]);
+    ft[1] = knob_tau(B, pn[NV_MK_F_ATTACK]) * B->atk_to_1;
+    ft[2] = 4.0 * knob_tau(B, pn[NV_MK_F_DECAY]);
+    ft[3] = 4.0 * knob_tau(B, pn[NV_MK_F_RELEASE]);
+    ft[4] = knob_tau(B, pn[NV_MK_A_ATTACK]) * B->atk_to_1;
+    ft[5] = 4.0 * knob_tau(B, pn[NV_MK_A_DECAY]);
+    ft[6] = 4.0 * knob_tau(B, pn[NV_MK_A_RELEASE]);
+    ft[7] = (double)(int)pn[NV_MK_MODE];
+    ft[8] = pn[NV_MK_RES_BASS] != 0.0 ? 1.0 : 0.0;
+    ft[9] = 0.0;
+    ft[10] = B->kb_ref_hz;
+    ft[11] = B->pre ? 1.0 : 0.0;
+    ft[12] = (double)((((pon ? 1 : 0) | sf) & ~16) | (fi != 0.0 ? 16 : 0));
+    ft[13] = fi;
+    for (int j = 0; j < 8; j++) {               /* fm_coeffs: (2|c_j|/j) e^{i(arg c_j - j arg c_1)} */
+        double re = 0.0, im = 0.0;
+        if (fi != 0.0) {
+            double a, ang, z[2] = {0.0, 0.0}, e[2];
+            nv_cabs_n(1, o1 + 2 * j, &a);
+            nv_cangle_n(1, o1 + 2 * j, &ang);
+            z[1] = ang - (double)(j + 1) * L->fm_ph;
+            nv_cexp_n(1, z, e);
+            double r = 2.0 * a / (double)(j + 1), z0 = 0.0;
+            re = r * e[0] - z0 * e[1];          /* (numpy's real x complex: (r + 0i)(e), its zeros' signs) */
+            im = r * e[1] + z0 * e[0];
+        }
+        ft[14 + 2 * j] = re;
+        ft[15 + 2 * j] = im;
+    }
+    /* moog.kn_row */
+    L->kn[0] = cut;
+    L->kn[1] = pymin(L->k_max, L->res_per_unit * clip01(res));
+    L->kn[2] = ego;
+    L->kn[3] = mk_sustain_target(pn[NV_MK_F_SUSTAIN]);
+    L->kn[4] = mk_sustain_target(pn[NV_MK_A_SUSTAIN]);
+    L->kn[5] = mk_lfo_rate(pn[NV_MK_LFO1_RATE]);
+    L->kn[6] = (int)pn[NV_MK_LFO1_DEST] == 0 ? mk_cube(pn[NV_MK_LFO1_DEPTH], c[MC_LFO_CUT]) : 0.0;
+    L->kn[7] = (double)(int)pn[NV_MK_LFO1_SHAPE];
+    L->kn[8] = pn[NV_MK_LFO1_RESET] != 0.0 ? 1.0 : 0.0;
+    const double tau = knob_tau(B, pn[NV_MK_A_RELEASE]);
+    L->rel_span = tau * (log((1.0 + L->eg_under) / L->eg_under) + 1.0);
+    /* GM's sound controllers' knobs (GM_SOUND: cutoff, resonance, a_attack, a_release, a_decay) */
+    L->knob[0] = pn[NV_MK_CUTOFF];
+    L->knob[1] = res;
+    L->knob[2] = pn[NV_MK_A_ATTACK];
+    L->knob[3] = pn[NV_MK_A_RELEASE];
+    L->knob[4] = pn[NV_MK_A_DECAY];
+    return 0;
+}
+
 /* moog.ladder_gain_1: the ladder's |H| at f, corner fc, feedback k, mode
  * (0 4-pole, 1 2-pole, 2 band-pass, 3 high-pass), RES BASS rb */
 static double moog_ladder_gain(const MoogLayer *L, double f, double fc, double k, int mode, int rb)

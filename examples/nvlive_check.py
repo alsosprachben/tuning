@@ -96,6 +96,9 @@ def main(argv):
                           + ([] if (beside or drums) else ["--no-drums"])
                           + (["--split=%d" % split, "--split-transpose=%d" % stp] if split else [])
                           + (["--pedal-key=" + opt["pedal-key"]] if "pedal-key" in opt else [])
+                          + (["--messenger" + ("=pre-1.0.7" if opt["messenger"] == "pre-1.0.7" else "")]
+                             if "messenger" in opt else [])
+                          + (["--messenger-log=" + os.path.join(tmp, "msgr.log")] if "messenger-out" in opt else [])
                           + (["--gpu=" + (opt["gpu"] or "cl"), "--gpu-min=%d" % gmin] if "gpu" in opt else [])
                           + (["--tuner=" + opt["tuner"]] if opt.get("tuner") else [])
                           + (["--eastern=" + opt["eastern"]] if opt.get("eastern") else [])
@@ -134,6 +137,11 @@ def main(argv):
         lv.renderer.send = send
     if "pedal-key" in opt:
         lv.set_routes([L.Route(("note", int(opt["pedal-key"])), 64)])
+    if "messenger" in opt:
+        # every part reading a Messenger's chart (--messenger=pre-1.0.7: that firmware's)
+        for _p in lv.parts:
+            _p.cc_map = "messenger"
+        lv.messenger_firmware = "pre-1.0.7" if opt["messenger"] == "pre-1.0.7" else "1.0.7+"
     if reg:
         import regsync
         regsync.sync(lv, lv.parts[0])
@@ -141,12 +149,23 @@ def main(argv):
     if progs:
         import patchsync
         patchsync.sync(lv)
+    # --messenger-out: a Messenger set as live.open_messenger would, its queue
+    # kept with each message's block, against nvlive's --messenger-log
+    sent, blk = [], [0]
+    if "messenger-out" in opt:
+        class _Q:
+            def put(self, msg):
+                sent.append((blk[0],) + tuple(msg.bytes()))
+        lv.messenger_q = _Q()
+        for _p in lv.parts:
+            lv.messenger_sync(_p)
     dry = []
     evs = m.events()
     nb = int(total * 48000) // 128
     e = 0
     M = mido.Message
     for b in range(nb):
+        blk[0] = b
         while e < len(evs) and int(evs[e][0] * 48000) // 128 <= b:
             t, ty, ch, a, v = evs[e]
             if ty == 0:
@@ -173,6 +192,14 @@ def main(argv):
     if py.shape != nv.shape:
         print("%s: length %r vs %r" % (os.path.basename(args[0]), py.shape, nv.shape))
         return 1
+    if "messenger-out" in opt:
+        got = [tuple(int(x) for x in ln.split()) for ln in open(os.path.join(tmp, "msgr.log"))]
+        if got != sent:
+            k = next((i for i in range(min(len(got), len(sent))) if got[i] != sent[i]), min(len(got), len(sent)))
+            print("the Messenger's messages differ: %d vs %d, from #%d (nvlive %s, live %s)"
+                  % (len(got), len(sent), k, got[k:k + 3], sent[k:k + 3]))
+            return 1
+        print("the Messenger's %d messages identical" % len(sent))
     d = np.flatnonzero(np.any(py != nv, 1))
     # (its peak: two silences are identical too)
     print("%s (%g s, program %d%s, %s): %d blocks, peak %.3g, %s" % (

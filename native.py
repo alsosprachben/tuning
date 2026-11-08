@@ -198,7 +198,8 @@ class MoogLayer(ctypes.Structure):
                 ('self_from', C), ('self_amp_max', C), ('eg_under', C), ('body', I),
                 ('pre', I), ('bp_gain', C), ('bp_corner', C), ('hp_gain', C), ('hp_corner', C), ('hp_leak', C),
                 ('mf_on', I), ('mf', C * 7), ('mf_grid', C), ('mf_max', C), ('mf_floor', C), ('mf_poles', C),
-                ('u_n', I), ('u_cents', C), ('u_mix', C), ('u_dc', C), ('u_dhz', C * 2), ('u_width', C)]
+                ('u_n', I), ('u_cents', C), ('u_mix', C), ('u_dc', C), ('u_dhz', C * 2), ('u_width', C),
+                ('pn', C * 42)]
 
 
 class MoogSpec(ctypes.Structure):
@@ -412,6 +413,8 @@ def _load():
                             ctypes.c_void_p, D]),
             ('nv_moog_ladder', C, [ctypes.POINTER(MoogLayer), C, C, C, I, I]),
             ('nv_moog_apply', None, [ctypes.POINTER(MoogLayer), ctypes.c_void_p, ctypes.POINTER(MoogLayer)]),
+            ('nv_moog_tables', None, [ctypes.c_void_p]),
+            ('nv_moog_build', I, [ctypes.c_void_p, ctypes.POINTER(MoogLayer), ctypes.POINTER(MoogLayer)]),
             ('nv_moog_tone', I, [P, ctypes.POINTER(ToneIn), ctypes.POINTER(MoogLayer), C, C, I, ctypes.c_void_p,
                                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I,
                                  ctypes.c_void_p, D]),
@@ -1444,6 +1447,34 @@ def pipe_voice(cls):
 _MOOG = {}
 
 
+# moog.PANEL's keys in its order: nv.h's NV_MK_*
+MOOG_KNOBS = ('osc1_octave', 'osc1_wave', 'osc2_octave', 'osc2_wave', 'osc2_freq', 'tune', 'sub_wave',
+              'osc1_level', 'osc2_level', 'sub_level', 'noise_level', 'cutoff', 'resonance', 'eg_amount',
+              'kb_track', 'mode', 'res_bass', 'f_attack', 'f_decay', 'f_sustain', 'f_release', 'a_attack',
+              'a_decay', 'a_sustain', 'a_release', 'glide', 'sync', 'lfo1_rate', 'lfo1_shape', 'lfo1_depth',
+              'lfo1_dest', 'lfo1_reset', 'mod_amount', 'mod_dest', 'mf104_on', 'mf104_time', 'mf104_range',
+              'mf104_feedback', 'mf104_mix', 'mf104_rate', 'mf104_amount', 'mf104_wave')
+
+
+def moog_tables():
+    """nv_moog_tables' array (the export's MTAB): Q, osc_spectrum's and
+    sub_spectrum's coefficients at every knob position (moog.py caches them
+    by position: a harmonic's is the same however many are asked for), then
+    the laws' constants (tone.c's MC_*)."""
+    import numpy as np
+    import moog as MG
+    assert tuple(MG.PANEL) == MOOG_KNOBS
+    q = int(MG.Q)
+    osc = np.array([MG._osc_cached(i, 64) for i in range(q + 1)], np.complex128)
+    sub = np.array([MG._sub_cached(i, 32) for i in range(q + 1)], np.complex128)
+    k = [MG.SEMIS, MG.EG_CURVE, MG.LFO_RATE_LO, MG.LFO_RATE_SPAN, MG.LFO_CUT_CUBE, MG.LFO_PITCH_CUBE,
+         MG.LFO_KNOB_CUBE, MG.MOD_PITCH_OCTAVES, MG.MOD_WAVE_REACH]
+    k += list(MG.SUS_V) + list(MG.SUS_TARGET) + list(MG.FM_INDEX_V) + list(MG.FM_INDEX_I)
+    assert len(k) == 47 and len(MG.SUS_V) == 6 and len(MG.FM_INDEX_V) == 13
+    return np.concatenate([[float(q)], osc.view(np.float64).ravel(), sub.view(np.float64).ravel(),
+                           np.array(k, np.float64)])
+
+
 def moog_spec(cls):
     """A Moog class's panels as its notes read them (nv.h MoogSpec), one a
     layer (moog.layers_of), at TUNING_MOOG_PANEL's knobs as moog.panel_of
@@ -1527,6 +1558,7 @@ def moog_spec(cls):
             L.u_cents, L.u_mix, L.u_dc = float(us['cents']), float(us['mix']), float(us['drift_cents'])
             L.u_dhz[:] = [float(x) for x in us['drift_hz']]
             L.u_width = float(us['width'])
+            L.pn[:] = [float(pn[k]) for k in MOOG_KNOBS]      # (its panel: a knob turned live builds from it)
             if mfs is not None:                 # the MF-104M after it (its repeats: native/prepare.cpp)
                 L.mf_on = 1
                 L.mf[:] = [float(mfs[k]) for k in ('time', 'fc', 'fb', 'wet', 'dry', 'rate', 'amount')]
