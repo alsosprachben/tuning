@@ -132,6 +132,10 @@ TASKS = [
                      "state and each note's direct gain (written, in its check); the copies as taps "
                      "(tapkernel.c), the moving filters, comb and tremolo, a part's bus, branch B, the rotor and "
                      "3D place, a tone's own effects, an OD's valve"),
+    ("SC-55", False, "Files: a streaming (windowed) nvrender for whole songs -- it holds the table whole in float64, "
+                     "and a Sound Canvas song's is past memory (SHIRO's 6.4 min: 21.8M rows, ~8.7 GB; killed at the "
+                     "3.5 GB cap) where Python streams (streamrender); every native check so far a 20 s excerpt. "
+                     "Next after main's gate"),
     ("SC-55", False, "Live: 117:24 Jngl SD Roll refused (LIVE_REFUSED: its velocity probe's table past 2.5 GB) "
                      "-- a re-attack within a row, a gain track like the damper's, would shrink it"),
     ("SC-55", True, "Files: the rhythm part's assignment (40 1p 15); the controller matrix (40 2p, GM2 09) where "
