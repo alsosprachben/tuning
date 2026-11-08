@@ -496,8 +496,10 @@ def main(argv):
                 if _v == 127 or (_p, _v) not in PM.VARIATION_NAMES:
                     continue
                 rec = [0] * 10
-                if (_p, _v) in LIVE_REFUSED:
-                    pass                # (refused: nvlive's "not native")
+                _vc = PM.VARIATIONS[(_p, _v)]
+                _vc = _vc if isinstance(_vc, type) else _vc(60)     # (a picker: its key 60's)
+                if (_p, _v) in LIVE_REFUSED or (N.kit_drum(_vc) == 6 and _moog_later(_vc)):
+                    pass                # (refused: nvlive's "not native" -- a Moog's unison or SYNC, live's yet)
                 elif any(cmap_live[128 * _p + k] >= 0 for k in range(128)):
                     # (one variation at a time: its probe notes' per-class
                     # memos let go after it -- N.memo_scope -- or the walk
@@ -511,6 +513,65 @@ def main(argv):
                 vl.append(struct.pack("<10i", *(rec + [0] * (10 - len(rec)))[:10]))
             vb3 = struct.pack("<i", len(vl)) + b"".join(vl)
             f.write(b"VLIV" + struct.pack("<i", len(vb3)) + vb3)
+            # VDRN: a voice's own drone patch's live record, its variation
+            # one no picker names (the pungi's drone, Patch.drone_note_var):
+            # program, variation, then the record as VLIV's
+            vd = []
+            for (_p, _v) in sorted(PM.VARIATIONS):
+                if _v == 127 or (_p, _v) not in PM.VARIATION_NAMES or (_p, _v) in LIVE_REFUSED:
+                    continue
+                _dc = PM.VARIATIONS[(_p, _v)]
+                _dv = int(getattr(_dc, 'drone_note_variation', 0)) if getattr(_dc, 'drone_note_wheel', False) else 0
+                if not _dv or (_p, _dv) in PM.VARIATION_NAMES:
+                    continue
+                with N.memo_scope():
+                    pt = _LV.Patch(_p, False, tuner, _dv)
+                sp = [(-1 if x is None else int(x)) for x in pt.speeds][:3]
+                rec = ([1, pt.nbuckets, len(sp)] + sp + [-1] * (3 - len(sp))
+                       + [int(pt.leslie_default if pt.detune_wheel else -1)]
+                       + [int(bool(pt.damper_pedal)), int(pt.soft_pedal_strings), int(pt.soft_pedal_top)])
+                vd.append(struct.pack("<12i", _p, _dv, *(rec + [0] * (10 - len(rec)))[:10]))
+            vb4 = struct.pack("<i", len(vd)) + b"".join(vd)
+            f.write(b"VDRN" + struct.pack("<i", len(vb4)) + vb4)
+            # MTAB: moog.py's spectra by knob position and its laws' constants
+            # (native.moog_tables), what a knob turned live is built from
+            mt = N.moog_tables().astype("<f8").tobytes()
+            f.write(b"MTAB" + struct.pack("<i", len(mt)) + mt)
+            # EFXU: the panel's insertion effect (livetui.pick_efx): Roland's
+            # numbered types and families, each type's parameters -- name,
+            # its controller's mark, whether the model reads it, the value in
+            # effect where none is set (gsefx.in_effect), its raw values and
+            # each printed as his panel shows it -- as tab-separated lines
+            import gsefx as _GSX
+            ul = ["T\t%d\t%d\t%d\t%s" % (_n, _k[0], _k[1], _nm) for _n, _k, _nm in _GSX.numbered()]
+            ul += ["C\t%d\t%d\t%s" % (_a, _b, _c) for _c, _a, _b in _GSX.CATEGORIES]
+            for _n, _k, _nm in _GSX.numbered():
+                # (the model reads some only in some states -- a chorus's
+                # Cutoff with its Pre Filter on: the type fresh, then each
+                # parameter alone through its ends and middle, what it reads
+                # of those left unset)
+                _eff = {}
+                _sts = [_GSX.tone_state(_k)]
+                for _q, _pn, _rg, _d in _GSX.params(_nm):
+                    _r = _GSX.param_range(_nm, _q)
+                    _sts += [_GSX.tone_state(_k, {_q: _v}) for _v in
+                             (_r if isinstance(_r, list) else sorted({_r[0], _r[0] + 1, (_r[0] + _r[1]) // 2, _r[1]}))]
+                for _st in _sts:
+                    _GSX._USED.clear()
+                    _GSX.chain(_st)
+                    for _q, _v in _GSX._USED.items():
+                        if _q not in _st['p']:
+                            _eff.setdefault(_q, _v)
+                _mk = {v: m for m, v in _GSX.marks(_nm).items()}
+                for _q, _pn, _rg, _d in _GSX.params(_nm):
+                    _r = _GSX.param_range(_nm, _q)
+                    _vs = list(_r) if isinstance(_r, list) else list(range(_r[0], _r[1] + 1))
+                    ul.append("P\t%d\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%s" % (
+                        _k[0], _k[1], _q, _pn, _mk.get(_q, "-"), int(_q in _eff),
+                        int(_eff.get(_q, _d if _d is not None else 0)), ",".join(str(x) for x in _vs),
+                        "\x1f".join(_GSX.printed_value(_nm, _q, x) for x in _vs)))
+            ub = "\n".join(ul).encode("utf-8")
+            f.write(b"EFXU" + struct.pack("<i", len(ub)) + ub)
         if "live" in opt:
             import live as L
             tab = L.pan_table()

@@ -1473,6 +1473,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         }
         else if (kind == 0xD0) {
             P.ats.push_back(CCEv{ch, t, -1, m.d0});     // the channel's aftertouch (ats)
+            P.events.push_back(LiveEv{t, 3, ch, m.d0, 0});      // (the live part's too)
             efx_cv(t, ch, 0x60, m.d0);
             cat_now[ch] = m.d0;
             cmx_upd(t, ch);
@@ -1742,6 +1743,20 @@ int nv_midi_ats(void *p, int ch, double *t, int *v, int cap)
     int n = 0;
     for (const auto &e : ((nv::Parsed *)p)->ats)
         if (e.ch == ch) {
+            if (t && n < cap) {
+                t[n] = e.t;
+                v[n] = e.v;
+            }
+            n++;
+        }
+    return n;
+}
+// channel ch's controller cc (blockrender's ccs[ch], that controller's), as nv_midi_ats
+int nv_midi_ccs(void *p, int ch, int cc, double *t, int *v, int cap)
+{
+    int n = 0;
+    for (const auto &e : ((nv::Parsed *)p)->ccs)
+        if (e.ch == ch && e.cc == cc) {
             if (t && n < cap) {
                 t[n] = e.t;
                 v[n] = e.v;

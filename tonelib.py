@@ -2988,6 +2988,13 @@ class SynthProperties:
         v = self.gain / (sm ** self.attack_dampening) * comb
         if self.pickup_points:
             v *= self.pickup_gain(sm)
+        elif self.lowpass_hz:
+            # A LOW-PASS WITH NO PICKUP (a Mellotron's tape: the copies of
+            # copies it was, mellotron_fit's) -- pickup_gain's, which a voice
+            # without coils never reached: the partial's frequency against it,
+            # lowpass_order x 6 dB/octave above
+            f = self.frequency_x * (2.0 ** self.octave_position) * sm / (self.harmonic_touch or 1)
+            v /= (1.0 + (f / self.lowpass_hz) ** (2 * self.lowpass_order)) ** 0.5
         if harmonic % 2 == 0 and self.even_harmonic_db is not None:
             v *= 10.0 ** (self.even_harmonic_db / 20.0)
         return v

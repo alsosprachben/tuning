@@ -240,7 +240,7 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
         const double *fc = nullptr;
         std::vector<double> km;             // (a Keyboard Multi's taps, unrolled)
         const int fx = nv_song_note_fx(song, played[j], &fc);
-        if (fx == -1 && k && k->efx_set && k->efx_dly && !iv[3]) {
+        if (fx == -1 && k && k->efx_set && k->efx_dly && !iv[3] && !nv_moog_neutral()) {
             D = k->dly_p;                   // (a tone's own insertion delay, in the GS delay's place)
             place = k->efx_place;
         } else if (fx >= 0 && fc[34] == 3.0) {
@@ -297,7 +297,7 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
                 D = gdev;
                 place = gplace;
             }
-        } else if (gdev && !(fx == -1 && kk && kk->efx_set && !iv[3])) {
+        } else if (gdev && !(fx == -1 && kk && kk->efx_set && !iv[3] && !nv_moog_neutral())) {
             // ...else the file's GS delay, at the part's CC94 at the onset
             // (_gsd_send: the last at or before it), a drum key's level 127
             auto it = c94.find(ch);
@@ -556,7 +556,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
         // amp, its level's steps and its cabinet: _note_insertion_efx)
         const double *fc = nullptr;
         const int fx = nv_song_note_fx(song, played[j], &fc);
-        const bool efx = fx == -1 && k && k->efx_set && !iv[3];
+        const bool efx = fx == -1 && k && k->efx_set && !iv[3] && !nv_moog_neutral();     // (live's template: none, live's own)
         const bool ffirst = fx >= 0 && nv_song_note_fx_first(song, played[j]);
         const double flv = fx >= 0 ? fc[0] : 1.0, fod = fx >= 0 ? fc[1] : 0.0;
         if (k && (k->amp_drive != 0.0 || (efx && k->efx_od != 0.0) || (ffirst && fod != 0.0))) {

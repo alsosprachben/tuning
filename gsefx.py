@@ -747,6 +747,7 @@ WAH_ENV_ATTACK, WAH_ENV_HOLD, WAH_ENV_RELEASE = 0.005, 0.4, 0.06
 def note_envelope(notes):
     """t (s, array) -> the part's envelope 0..1 from its notes (start, end,
     velocity): each note's level, the loudest at each moment."""
+    import native as _NV           # (libm's exp: numpy's is SVML, nvrender's and nvlive's libm's)
     nts = [(float(s), float(e), v / 127.0) for s, e, v in notes]
 
     def env(t):
@@ -759,9 +760,9 @@ def note_envelope(notes):
                 continue
             tt = t[i0:i1]
             u = tt - s
-            held = a * np.minimum(1.0, u / WAH_ENV_ATTACK) * np.exp(-u / WAH_ENV_HOLD)
-            at_end = a * np.exp(-(e - s) / WAH_ENV_HOLD)
-            lv = np.where(tt <= e, held, at_end * np.exp(-np.maximum(tt - e, 0.0) / WAH_ENV_RELEASE))
+            held = a * np.minimum(1.0, u / WAH_ENV_ATTACK) * _NV.xexp(-u / WAH_ENV_HOLD)
+            at_end = a * math.exp(-(e - s) / WAH_ENV_HOLD)
+            lv = np.where(tt <= e, held, at_end * _NV.xexp(-np.maximum(tt - e, 0.0) / WAH_ENV_RELEASE))
             out[i0:i1] = np.maximum(out[i0:i1], lv)
         return out
     return env
@@ -861,6 +862,8 @@ def filter_setup(events, ch, notes=()):
         rows = [EF.steps(vt, [x[k] for x in fs], glide=f0['ctrl'][2]) for k in range(3)]
         return EF.Channel(5, f0['pa'], f0['pb'], f0['pc'], lambda t: [r(t) for r in rows], rows=3)
 
+    import native as _NV           # (libm's pow: numpy's is SVML, nvrender's and nvlive's libm's)
+
     def control(t):
         t = np.asarray(t, float)
         i = np.clip(np.searchsorted(ts, t, side='right') - 1, 0, len(segs) - 1)
@@ -873,12 +876,12 @@ def filter_setup(events, ch, notes=()):
             if c[0] == 'sweep':
                 lf = np.sin(2.0 * math.pi * c[3] * tt)
                 if c[4] is None:                      # a phaser: about its Manual
-                    out[m] = c[1] * 2.0 ** (c[2] * lf)
+                    out[m] = c[1] * _NV.xpow(2.0, c[2] * lf)
                 else:                                 # an auto wah: up (or down) from it
                     oc = c[2] * 0.5 * (1.0 + lf)
                     if c[5] and env is not None:      # ...and by the part's loudness
                         oc = oc + c[5] * env(tt)
-                    out[m] = c[1] * 2.0 ** ((1.0 if c[4] else -1.0) * oc)
+                    out[m] = c[1] * _NV.xpow(2.0, (1.0 if c[4] else -1.0) * oc)
             elif c[0] == 'wah':
                 out[m] = c[1]
             else:                                     # a flanger's line, stepped or not

@@ -384,6 +384,19 @@ struct Slab {
     // each one's level unfiltered, which every move recomputes from
     std::vector<char> cv_on;
     std::vector<float> cv_aL, cv_aR;
+    // THE MOVING FILTER (live.Slab.fl_*: Live._filter_block): a slot under
+    // one, its effect channel, the level it would have unfiltered (a fifth
+    // baseline, kept up as the others are); how many are armed (fl_on.any(),
+    // a slot's flag kept until it is stamped again)
+    std::vector<char> fl_on;
+    std::vector<int32_t> fl_ch;
+    std::vector<float> fl_aL, fl_aR;
+    long fl_n = 0;
+    // ...a MOOG ROW's |H| this block (live's _fl_mo: its level is its
+    // panel's), on its level for the render only (moog_filter_apply), and
+    // the panel's level kept to put back after (moog_filter_restore)
+    std::vector<long> flm_s;
+    std::vector<float> flm_l, flm_r, flm_aL, flm_aR;
     std::vector<float> hs_dep;                  // a harmonium's Tremolo stop: its depth and rate (live's)
     std::vector<double> hs_hz;
     // THE LESLIE (live.Slab.leslie_arm / leslie_swing): a slot on a rotor,
@@ -449,6 +462,8 @@ struct Slab {
         aLp.assign(cap, 0.0f); aRp.assign(cap, 0.0f);
         tr_on.assign(cap, 0); tr_dep.assign(cap, 0.0f); tr_aL.assign(cap, 0.0f); tr_aR.assign(cap, 0.0f);
         cv_on.assign(cap, 0); cv_aL.assign(cap, 0.0f); cv_aR.assign(cap, 0.0f);
+        fl_on.assign(cap, 0); fl_ch.assign(cap, 0); fl_aL.assign(cap, 0.0f); fl_aR.assign(cap, 0.0f);
+        fl_n = 0;
         moog_alloc();
         tr_st.assign(cap, 1.0f);
         hs_dep.assign(cap, 0.0f); hs_hz.assign(cap, 0.0);
@@ -544,6 +559,8 @@ struct Slab {
             vrbase[s] = tf4[F4_vr][q];
             tr_on[s] = 0;                       // (unarmed until its tremolo is)
             cv_on[s] = 0;                       // (...and off the rockers)
+            fl_n -= fl_on[s];
+            fl_on[s] = 0;                       // (...and no filter)
             hs_dep[s] = 0.0f;
             ls_on[s] = 0;                       // (...and off the rotors until armed)
         }
@@ -652,6 +669,7 @@ struct Slab {
             tr_aL[sidx] *= rl; tr_aR[sidx] *= rr;   // (the tremolo's baseline with it)
             ls_aL[sidx] *= rl; ls_aR[sidx] *= rr;   // (...and the Leslie's)
             cv_aL[sidx] *= rl; cv_aR[sidx] *= rr;   // (...and the rockers')
+            fl_aL[sidx] *= rl; fl_aR[sidx] *= rr;   // (...and the filter's)
         }
         if (itd) {
             float dl = (float)((t1[2] - t0[2]) * rate);
@@ -693,6 +711,72 @@ struct Slab {
         }
     }
 
+    // live.Slab.filter_arm: these partials under channel ch's moving filter,
+    // their levels now what it filters every block from here on
+    void filter_arm(const std::vector<long> &slots, int ch)
+    {
+        for (long s : slots) {
+            fl_aL[s] = f4[F4_aL][s];
+            fl_aR[s] = f4[F4_aR][s];
+            fl_ch[s] = ch;
+            fl_n += !fl_on[s];
+            fl_on[s] = 1;
+        }
+    }
+
+    // live.Slab.filter_swing: channel ch's |H| this block at each of its
+    // partials' frequency (H(f), float32; HR(f) the right ear's), on the
+    // level a swing left this block where one ran (the tremolo's, the
+    // rotors'), else on its own -- a Moog row's for the render only
+    template <class Fn, class FnR>
+    void filter_swing(int ch, double rate, Fn H, FnR HR)
+    {
+        const double k = rate / (2.0 * M_PI);
+        for (long s = 0; s < cap; s++) {
+            if (!fl_on[s] || !busy[s] || fl_ch[s] != ch)
+                continue;
+            const double f = f8[F8_om][s] * k;
+            const float hl = (float)H(f), hr = (float)HR(f);
+            if (i4[I4_fx][s] >= 0) {
+                flm_s.push_back(s);
+                flm_l.push_back(hl);
+                flm_r.push_back(hr);
+                continue;
+            }
+            if (tr_on[s] || ls_on[s]) {
+                f4[F4_aL][s] *= hl;
+                f4[F4_aR][s] *= hr;
+            } else {
+                f4[F4_aL][s] = fl_aL[s] * hl;
+                f4[F4_aR][s] = fl_aR[s] * hr;
+            }
+        }
+    }
+    template <class Fn>
+    void filter_swing(int ch, double rate, Fn H) { filter_swing(ch, rate, H, H); }
+
+    // live.Slab.moog_filter_apply / moog_filter_restore
+    void moog_filter_apply()
+    {
+        flm_aL.resize(flm_s.size());
+        flm_aR.resize(flm_s.size());
+        for (size_t q = 0; q < flm_s.size(); q++) {
+            const long s = flm_s[q];
+            flm_aL[q] = f4[F4_aL][s];
+            flm_aR[q] = f4[F4_aR][s];
+            f4[F4_aL][s] *= flm_l[q];
+            f4[F4_aR][s] *= flm_r[q];
+        }
+    }
+    void moog_filter_restore()
+    {
+        for (size_t q = 0; q < flm_s.size(); q++) {
+            f4[F4_aL][flm_s[q]] = flm_aL[q];
+            f4[F4_aR][flm_s[q]] = flm_aR[q];
+        }
+        flm_s.clear(); flm_l.clear(); flm_r.clear(); flm_aL.clear(); flm_aR.clear();
+    }
+
     // Slab.soft_strings: una corda, the `drop` highest of the instrument's `top` strings
     void soft_strings(const std::vector<long> &slots, int drop, int top)
     {
@@ -722,6 +806,7 @@ struct Slab {
             tr_aL[sidx] *= r; tr_aR[sidx] *= r;     // (the tremolo's own baseline with it)
             ls_aL[sidx] *= r; ls_aR[sidx] *= r;     // (...and the Leslie's)
             cv_aL[sidx] *= r; cv_aR[sidx] *= r;     // (...and the rockers')
+            fl_aL[sidx] *= r; fl_aR[sidx] *= r;     // (...and the filter's)
             mo_uL[sidx] *= r; mo_uR[sidx] *= r;     // (...and a Moog's panel weights' base)
         }
     }
@@ -737,6 +822,7 @@ struct Slab {
             tr_aL[s] *= r[q]; tr_aR[s] *= r[q];
             ls_aL[s] *= r[q]; ls_aR[s] *= r[q];
             cv_aL[s] *= r[q]; cv_aR[s] *= r[q];
+            fl_aL[s] *= r[q]; fl_aR[s] *= r[q];
             mo_uL[s] *= r[q]; mo_uR[s] *= r[q];
         }
     }
@@ -951,6 +1037,8 @@ struct Slab {
             long s = idx[q];
             busy[s] = 1;
             dk[s] = -1;
+            fl_n -= fl_on[s];
+            fl_on[s] = 0;                       // (...and no filter)
             ls_on[s] = 0;
             cv_on[s] = 0;
             tr_on[s] = 0;
@@ -1346,15 +1434,16 @@ struct Slab {
         for (int side = 0; side < 2; side++) {
             std::vector<float> &uo = side ? mo_uR : mo_uL;
             std::vector<float> &a0 = side ? aR0 : aL0;
-            std::vector<float> *bases[3] = {side ? &ls_aR : &ls_aL, side ? &tr_aR : &tr_aL, side ? &cv_aR : &cv_aL};
-            const std::vector<char> *arm[3] = {&ls_on, &tr_on, &cv_on};
+            std::vector<float> *bases[4] = {side ? &ls_aR : &ls_aL, side ? &tr_aR : &tr_aL, side ? &cv_aR : &cv_aL,
+                                            side ? &fl_aR : &fl_aL};
+            const std::vector<char> *arm[4] = {&ls_on, &tr_on, &cv_on, &fl_on};
             for (size_t i = 0; i < n; i++) {
                 long s = idx[i];
                 double nw = (double)uo[s] * w[i];
                 float old = a0[s];
                 bool z = old == 0.0f;
                 float q = (float)(z ? 1.0 : nw / (double)old);
-                for (int b = 0; b < 3; b++) {
+                for (int b = 0; b < 4; b++) {
                     (*bases[b])[s] *= q;
                     if (z && (*arm[b])[s])
                         (*bases[b])[s] = (float)(nw * (double)f);
@@ -2027,13 +2116,64 @@ struct Part {
         const MoogLayer *moog = nullptr;    // a Moog's panel (its class's, layer A): Live._moog_panel_for
         const MoogLayer *moog_b = nullptr;  // ...a layered one's second Messenger (moog.layers_of)
         int snd = 0;                // the CC71-78 its voice answers (NoteClass.snd_mask, SOUND_CC's order)
+        // ...A PUNGI's DRONE (live's Patch.drone_note_patch): its own
+        // variation's templates (nvlive's), their buckets and rotor speed
+        void *dcache = nullptr;
+        int dnb = 1, dspeed = -1;
+        // ...A MOOG's KNOBS, the part's own over its patch's (live's
+        // Part.synth, layer A: NV_MK_* -> value), and the panel they and any
+        // glide make (built: null while there are none); and whether it reads
+        // a Messenger's CC chart (Part.cc_map)
+        std::map<int, double> syn;
+        std::shared_ptr<MoogLayer> mb;
+        bool msgr = false;
     };
     std::vector<Patch> patches;
     // THE MODULE's INSERTION EFFECT (live.efx: efxchain.cpp's), its export
     // tables given by nvlive (nv_part_efx); NULL none -- and whether its
     // refusal has been said
     void *efx = nullptr;
+    const double *efx_x = nullptr;      // (its export tables: the tremolo's waves)
+    // ...each part's notes on it (live.efx_notes: start, end -- inf while
+    // held -- velocity, key), what an auto wah's Sens hears; and each part's
+    // moving filter over the timeline (nv_efx_live_filter), kept by its rev
+    struct EfxNote {
+        double s0, s1;
+        int vel, note;
+    };
+    std::map<int, std::vector<EfxNote>> efx_notes;
+    struct ModFlt {
+        long rev = -1;
+        int n = 0;
+        double head[4] = {0.0, 0.0, 0.0, 0.0};
+        std::vector<double> seg;
+    };
+    std::map<int, ModFlt> mflt;
     bool efx_said = false;
+    // A TONE's OWN EFFECT CHANNEL (live._tone_fx): ch + TONE_SEG x (1 + the
+    // tone's place among the channel's tones that brought one, mod 255) --
+    // what the tone brings (an insertion effect, a plunger, a mouth) on it;
+    // here its moving filter: the plunger's (flt_k 3) or the mouth's (4) --
+    // the wheel's and the hand's last moves (live keeps three), and the
+    // mouth's wander (efxfilter.MouthWander: its generator, the next draw's
+    // time, where it is headed, where it is, when last asked)
+    static const int TONE_SEG = 1 << 8;
+    struct ToneFx {
+        int ch = 0;
+        const NoteClass *k = nullptr;
+        int kind = 0;                       // flt_k: 3 the plunger, 4 the mouth; 0 no filter of its own
+        std::vector<std::pair<double, int>> wheel, at;
+        void *g = nullptr;
+        double next_t = 0.0, t = 0.0;
+        int target = -1;
+        bool have_cur = false;
+        double cur[3] = {0.0, 0.0, 0.0};
+        void *ex = nullptr;                 // its own insertion effect (efxchain.cpp's EfxLive), NULL none
+    };
+    std::map<int, ToneFx> tone_fx;
+    std::map<int, std::vector<void *>> tone_seg;
+    bool at_seen[16] = {}, wheel_seen[16] = {};     // (live's pressure, wheel_at: a channel's, once moved)
+    int wheel_v[16] = {};
     // THE CABINET (live's rotor_horn, rotor_drum: LiveRotor): one Leslie in
     // the room, every rotor part turning with it, from chorale; the half-moon's
     // position (STOP, CHORALE, TREMOLO) and each channel's wheel armed
@@ -3130,6 +3270,49 @@ struct Part {
         return (k && k->drone_wheel && !patches[cur].drums) ? k : nullptr;
     }
 
+    // THE PUNGI's DRONE (live._drone_note): one note of the part, the
+    // wheel's choice (drone_sel: its step), held across the line -- the old
+    // one let go and the new stamped on the other of two keys where the
+    // wheel has moved (dnote_at: the note sounding, dnote_k its key)
+    std::map<long long, int> drone_sel, dnote_at, dnote_k;
+    const NoteClass *dnote_class() const
+    {
+        const NoteClass *k = patches[cur].drums ? nullptr : nv_tcache_class(patches[cur].cache, patches[cur].program);
+        return (k && k->n_dchoice) ? k : nullptr;
+    }
+    void drone_note(int ch, long long n0)
+    {
+        const NoteClass *k = dnote_class();
+        const Patch &p = patches[cur];
+        if (!k || !p.dcache)
+            return;
+        auto st = drone_sel.find(pid);
+        int note = st != drone_sel.end() ? k->dchoice[st->second] : k->dchoice_def;
+        auto ki = dnote_k.find(pid);
+        int kk = ki != dnote_k.end() ? ki->second : -200;
+        Key curk(pid, ch, kk, DRONEK);
+        if (S.live_find(curk) >= 0) {
+            auto at = dnote_at.find(pid);
+            if (at != dnote_at.end() && at->second == note)
+                return;
+            S.release(curk, n0);
+            kk = -401 - kk;                 // -200 <-> -201
+        }
+        int b = (int)(100 * p.dnb / 128.0);
+        const nv::live::Template *T = nv_tcache_lookup(p.dcache, note, b < p.dnb - 1 ? b : p.dnb - 1, p.dspeed);
+        if (!T) {
+            misses++;
+            return;
+        }
+        if (!S.stamp_t(*T, Key(pid, ch, kk, DRONEK), n0, (pow(10.0, level_db / 20.0) * swell) * chan_gain(ch), ch,
+                       rate)) {
+            dropped++;
+            return;
+        }
+        dnote_at[pid] = note;
+        dnote_k[pid] = kk;
+    }
+
     // live._chanting: a chanter note sounding (the drones do not count themselves)
     bool chanting(int ch) const
     {
@@ -3454,6 +3637,90 @@ struct Part {
         }
     }
 
+    // THE UILLEANN CHANTER's CUT, live (live._cut_on, _cut_go, _cut_off):
+    // the key opens a flick cut_semi above, held cut_s, and the written note
+    // arrives from it by slur -- the chanter never stops. Live cannot know a
+    // note's length, so every note is cut; a key let go in its flick ends there
+    struct Cut {
+        long long pid;
+        int ch, cnote, note, vel;
+        long long due;
+    };
+    std::vector<Cut> cutting;
+    void cut_on(int ch, int note, int vel, long long n0, bool slur)
+    {
+        int pi = patch_for(ch, note);
+        const NoteClass *k = nullptr;
+        long long ppid = 0;
+        if (pi >= 0) {
+            const Patch &p = patches[pi];
+            k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
+            ppid = p.pid;
+        }
+        const int cs = k ? k->cut_semi : 0;
+        if (!cs || note + cs < 0 || note + cs > 127) {
+            strike(ch, note, vel, n0, slur);
+            return;
+        }
+        strike(ch, note + cs, vel, n0, slur);
+        Cut c{ppid, ch, note + cs, note, vel, n0 + (long long)nearbyint(k->cut_s * rate)};
+        auto it = std::find_if(cutting.begin(), cutting.end(),
+                               [&](const Cut &x) { return x.pid == c.pid && x.ch == c.ch && x.cnote == c.cnote; });
+        if (it != cutting.end())
+            *it = c;                        // (a dict's key keeps its place)
+        else
+            cutting.push_back(c);
+    }
+    void cut_release(long long ppid, int ch, int cnote, long long n0)
+    {
+        std::vector<Key> ks;
+        for (auto &kv : S.live)
+            if (std::get<0>(kv.first) == ppid && std::get<1>(kv.first) == ch && std::get<2>(kv.first) == cnote)
+                ks.push_back(kv.first);
+        for (const Key &k : ks)
+            S.release(k, n0);
+    }
+    // the flicks whose time is up give way to their notes, by slur
+    void cut_go(long long n0)
+    {
+        std::vector<Cut> all = cutting;
+        for (const Cut &c : all) {
+            if (c.due > n0)
+                continue;
+            cutting.erase(std::find_if(cutting.begin(), cutting.end(), [&](const Cut &x) {
+                return x.pid == c.pid && x.ch == c.ch && x.cnote == c.cnote;
+            }));
+            bool here = false;
+            for (const Patch &p : patches)
+                here = here || p.pid == c.pid;
+            if (!here)
+                continue;
+            strike(c.ch, c.note, c.vel, n0, true);
+            cut_release(c.pid, c.ch, c.cnote, n0);
+        }
+    }
+    // a key up while its flick still sounds: the flick ends, and there is no
+    // note to let go (true when that was so)
+    bool cut_off(int ch, int note, long long n0)
+    {
+        int pi = patch_for(ch, note);
+        if (pi < 0 || cutting.empty())
+            return false;
+        const long long ppid = patches[pi].pid;
+        bool hit = false;
+        for (size_t i = 0; i < cutting.size();) {
+            if (cutting[i].pid == ppid && cutting[i].ch == ch && cutting[i].note == note) {
+                Cut c = cutting[i];
+                cutting.erase(cutting.begin() + i);
+                cut_release(c.pid, c.ch, c.cnote, n0);
+                hit = true;
+            } else {
+                i++;
+            }
+        }
+        return hit;
+    }
+
     void note_on(int ch, int note, int vel, long long n0)
     {
         bool slur = legato_on(ch, note, n0);
@@ -3482,29 +3749,78 @@ struct Part {
             src = last_on[ch];
         glide_from = src != note ? src : -1;
         last_on[ch] = note;
-        strike(ch, note, vel, n0, slur);
+        cut_on(ch, note, vel, n0, slur);
         glide_from = -1;
+    }
+
+    // the chain channel ch hears now (live._efx_for), NULL where none or
+    // refused here (a drive or cabinet: played without it)
+    const double *efx_chain(int ch, int *st, const char **why)
+    {
+        const double *fc = nv_efx_live_chain(efx, ch, st, why);
+        if (fc && (fc[1] != 0.0 || fc[2] != 0.0)) {
+            *st = -3;
+            *why = "drive or cabinet, live";
+            fc = nullptr;
+        }
+        return fc;
+    }
+
+    // THE MODULE's MOVING FILTERS on a chain (live._filter_for): a
+    // flanger's comb (a chorus device with feedback), a tremolo or auto pan
+    static bool efx_moves(const double *fc)
+    {
+        return fc[50] != 0.0 || (fc[14] != 0.0 && fc[18] != 0.0) || fc[55] != 0.0;
     }
 
     // THE INSERTION EFFECT on a note just stamped (live._efx_note, its
     // _efx_direct): its level, its EQ at each partial's frequency, the chorus's
-    // dry share -- a gain a slot on every baseline (channel_gain)
-    void efx_note(int ch, const std::vector<long> &slots)
+    // dry share -- a gain a slot on every baseline (channel_gain); then its
+    // moving filters arm the rows
+    // ...a tone's own chain (its effect channel's), as efx_chain takes it
+    const double *tone_chain(const ToneFx &tf, int *st, const char **why)
     {
+        const double *fc = tf.ex ? nv_efx_live_chain(tf.ex, tf.ch, st, why) : nullptr;
+        if (fc && (fc[1] != 0.0 || fc[2] != 0.0)) {
+            *st = -3;
+            *why = "drive or cabinet, live";
+            fc = nullptr;
+        }
+        return fc;
+    }
+
+    void efx_note(int ch, int note, int vel, long long n0, const std::vector<long> &slots)
+    {
+        // THE MODULE's, where the part is on it; else THE TONE's OWN on its
+        // effect channel (live._tone_fx) -- and the tone's plunger or mouth
+        // arms its rows there either way, after the level
         int st = -1;
         const char *why = "";
-        const double *fc = nv_efx_live_chain(efx, ch, &st, &why);
-        if (fc && (fc[1] != 0.0 || fc[2] != 0.0)) {
-            st = -3;
-            why = "drive or cabinet, live";
-            fc = nullptr;
+        const double *fc = efx ? efx_chain(ch, &st, &why) : nullptr;
+        const int fxc = tone_fx_of(ch, n0);
+        int ec = ch;
+        if (st != 0 && st != -3 && fxc >= 0 && tone_fx[fxc].ex) {
+            fc = tone_chain(tone_fx[fxc], &st, &why);
+            ec = fxc;
         }
         if (st == -3 && !efx_said) {
             fprintf(stderr, "nvlive: refused: the insertion effect's %s -- played without it\n", why);
             efx_said = true;
         }
+        if (fxc >= 0 && (ec != fxc || !fc) && tone_fx[fxc].kind)
+            S.filter_arm(slots, fxc);
         if (!fc)
             return;
+        efx_direct(fc, ec, note, vel, n0, slots, ec == fxc && tone_fx[fxc].kind);
+    }
+
+    // live._efx_direct and the rest of _efx_note on a chain: its level, its
+    // EQ at each partial's frequency, the chorus's dry share -- a gain a slot
+    // on every baseline (channel_gain); the note for an auto wah's Sens; its
+    // moving filters (or the tone's own) arming the rows on channel ec
+    void efx_direct(const double *fc, int ec, int note, int vel, long long n0, const std::vector<long> &slots,
+                    bool own)
+    {
         const bool cf = fc[14] != 0.0 && fc[18] == 0.0;     // (a chorus's copies, not a flanger's comb)
         double sh = 0.0;
         if (cf) {
@@ -3522,6 +3838,31 @@ struct Part {
             g[q] = (float)x;
         }
         S.channel_gain_each(slots, g);
+        efx_notes[ec].push_back(EfxNote{(double)n0 / rate, INFINITY, vel, note});
+        if (efx_moves(fc) || own)
+            S.filter_arm(slots, ec);
+    }
+
+    // efxfilter.response type 4, a comb: |(1 - pa) + pa z / (1 - pb z)|, z =
+    // exp(-2 pi i f ctrl) (native.xcexp's) -- numpy's complex division
+    // (Smith's), the absolute libm's hypot (native.xabs)
+    static double comb_h(double f, double ctrl, double pa, double pb)
+    {
+        const double th = -2.0 * M_PI * f * ctrl;
+        const double zr = cos(th), zi = sin(th);
+        const double nr = pa * zr, ni = pa * zi;
+        const double dr = 1.0 - pb * zr, di = 0.0 - pb * zi;
+        double qr, qi;
+        if (fabs(dr) >= fabs(di)) {
+            const double rat = di / dr, scl = 1.0 / (dr + di * rat);
+            qr = (nr + ni * rat) * scl;
+            qi = (ni - nr * rat) * scl;
+        } else {
+            const double rat = dr / di, scl = 1.0 / (di + dr * rat);
+            qr = (nr * rat + ni) * scl;
+            qi = (ni * rat - nr) * scl;
+        }
+        return hypot((1.0 - pa) + qr, qi);
     }
 
     // live._mono_cut: the voice taken -- this note stopped now over the
@@ -3648,8 +3989,8 @@ struct Part {
         std::vector<long> slots = lj >= 0 ? S.live[lj].second : std::vector<long>();
         if (cpan[ch] != 64 && !slots.empty())
             S.repan(slots, cpan[ch], 64, rate, true);
-        if (efx && !slots.empty() && !patches[cur].drums)
-            efx_note(ch, slots);                // the insertion effect's level and EQ (live._efx_note)
+        if (!slots.empty() && !patches[cur].drums)
+            efx_note(ch, note, vel, n0, slots);     // the insertion effect, the module's or the tone's (live._efx_note)
         if (soft[ch] && !slots.empty())
             S.soft_strings(slots, soft_drop, soft_top);
         double gl[3];                       // PORTAMENTO, stamped (live._glide)
@@ -3695,6 +4036,9 @@ struct Part {
         if (drone_class()) {                // THE DRONES: up with the chanter (live._drones)
             drone_quiet.erase(pid);
             drones(ch, n0);
+        } else if (dnote_class()) {         // ...the pungi's (live._drone_note)
+            drone_quiet.erase(pid);
+            drone_note(ch, n0);
         }
         sound_stamp_note(patches[cur], ch, sn, slots);     // the channel's CC71-78 (live._sound_stamp)
         {                                   // a note struck under a bend, or the wheel up, joins them
@@ -3711,6 +4055,7 @@ struct Part {
                 b = b / bend[ch] * mr;
                 meend_at[key] = std::make_pair(mr, T->sym);
             }
+            messenger_pitch(patches[cur], ch, note);     // A MESSENGER PLAYING IT, on the same pitch
             // THE OPEN STRINGS ARE NOT ON THE WHEEL (live._fixed_sym): their
             // rows take the note's tuning but not the pull, now or later
             // ...AND THE RING ROWS (a banjo's other strings and head): never on the wheel
@@ -4122,9 +4467,12 @@ struct Part {
     // the patch then in use, a change of program between them its own)
     struct Swap;
     struct Post {
-        int kind;                           // 0 the stops, 1 a patch change
+        int kind;                           // 0 the stops, 1 a patch change, 2 a Moog's knob (set_synth)
         std::vector<std::string> names;
         std::shared_ptr<Swap> swap;
+        long long pid = 0;
+        int knob = 0;
+        double old = 0.0;
     };
     std::vector<Post> posts;
 
@@ -4236,6 +4584,10 @@ struct Part {
         // and the worker takes the new voice's bank
         if (w.bank && reg_on && w.pi == 0)
             reg_forget(w.bank, n0);
+        if (w.program != p.program || w.cache != p.cache) {
+            p.syn.clear();                      // A NEW PROGRAM IS A NEW PATCH: its knobs its own (Part.set_patch)
+            p.mb.reset();
+        }
         p.cache = w.cache;
         p.program = w.program;
         p.drums = w.drums != 0;
@@ -4267,6 +4619,7 @@ struct Part {
         trem_depth.erase(ppid);
         clav_step.erase(ppid);
         amp_dirty.erase(ppid);
+        messenger_sync(p);                  // A MOOG PROGRAM SETS THE MESSENGER to it (queued)
         Use u(*this, w.pi);
         amp_touch(w.pi);
     }
@@ -4310,6 +4663,10 @@ struct Part {
         for (auto &q : ps) {
             if (q.kind == 1) {
                 swap_patch(*q.swap, n0);
+                continue;
+            }
+            if (q.kind == 2) {
+                synth_post(q, n0);
                 continue;
             }
             const OrganSpec *og = patches[0].organ;
@@ -4490,7 +4847,7 @@ struct Part {
             if (efx && nv_efx_parse(d.data(), (int)d.size(), &ek, &ea, &eb)) {
                 if (ek == 5)
                     ea = ea % 16;               // (a part's channel: this port's)
-                nv_efx_live_apply(efx, ek, ea, eb);
+                nv_efx_live_apply(efx, (double)n0 / rate, ek, ea, eb);
                 return;
             }
         }
@@ -4544,7 +4901,7 @@ struct Part {
     {
         panic(n0);
         if (efx)                                // the insertion effect Thru, every part off it
-            nv_efx_live_apply(efx, 0, 0, 0);
+            nv_efx_live_apply(efx, (double)n0 / rate, 0, 0, 0);
         for (int c = 0; c < 256; c++)
             S.send[c] = 1.0;                    // every channel at the nominal distance
         master_fine = master_coarse = 0.0;
@@ -4779,7 +5136,7 @@ struct Part {
     // at middle C (_snd_for at 60 - transpose); null if not a Moog
     const MoogLayer *moog_panel(const Patch &p, int ch, MoogLayer &out, int layer = 0) const
     {
-        const MoogLayer *base = layer ? p.moog_b : p.moog;
+        const MoogLayer *base = layer ? p.moog_b : (p.mb ? p.mb.get() : p.moog);
         if (!base)
             return nullptr;
         const NoteClass *k = ch >= 0 ? key_class(p, 60) : nullptr;
@@ -4863,7 +5220,7 @@ struct Part {
             amp_dirty.insert(p.pid);
     }
 
-    void sound_cc(int ch, int cc, int v, long long n0)
+    void sound_cc(int ch, int cc, double v, long long n0)
     {
         double d = (v - 64.0) / 64.0;
         snd_d[ch][cc - 71] = d;
@@ -5413,6 +5770,8 @@ struct Part {
             }
             mono_cur[ch] = -1;                      // last key up: an ordinary release
         }
+        if (cut_off(ch, note, n0))
+            return;                                 // let go in its flick: the note never came
         int pi = patch_for(ch, note);
         Use u(*this, pi < 0 ? cur : pi);
         auto sq = sost.find(ch);
@@ -5435,10 +5794,24 @@ struct Part {
         auto kt = key_tone.find(Key(pid, ch, note, 0));
         if (patches[cur].amp > 0.0 && (kt == key_tone.end() || kt->second == patches[cur].cache) && !amp_holds(cur))
             S.release(Key(pid, -1, -1, AMPK), n0);  // the products end with their chord (a note of this tone's)
-        if (drone_class()) {                // a chanter's key: the drones wait part_break_s (_drone_reap)
+        {                                   // the auto wah's envelope lets go: ch's, and ch's tones'
+            std::vector<int> ecs{ch};
+            for (const auto &kv : tone_fx)
+                if (kv.second.ch == ch)
+                    ecs.push_back(kv.first);
+            for (int c : ecs) {
+                auto en = efx_notes.find(c);
+                if (en != efx_notes.end())
+                    for (EfxNote &e : en->second)
+                        if (e.note == note && std::isinf(e.s1))
+                            e.s1 = (double)n0 / rate;
+            }
+        }
+        if (drone_class() || dnote_class()) {   // a chanter's key: the drones wait part_break_s (_drone_reap)
+            const NoteClass *dk = drone_class() ? drone_class() : dnote_class();
             S.release(Key(pid, ch, note, -1), n0);
             if (!chanting(ch))
-                drone_quiet[pid] = DroneQuiet{ch, n0, (long long)(drone_class()->part_break_s * rate)};
+                drone_quiet[pid] = DroneQuiet{ch, n0, (long long)(dk->part_break_s * rate)};
             return;
         }
         if (patches[cur].organ) {           // an organ's key: each of its ranks
@@ -5601,7 +5974,8 @@ struct Part {
     {
         const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
         return p.wheel_vib && !(p.amp > 0.0) && !(p.organ && p.organ->n_order) && !(p.wtrem > 0.0) && !p.clav
-               && !p.leslie && !p.wheel_swell && !(k && k->drone_wheel);
+               && !p.leslie && !p.wheel_swell && !(k && k->drone_wheel) && !(k && k->flt_set == 2 && k->flt_k == 4)
+               && !(k && k->n_dchoice);
     }
 
     // live._snd_vib: (depth to add, rate factor) the part's CC77/76 ask of
@@ -5666,6 +6040,7 @@ struct Part {
         if (ratio == prev)
             return;
         bend[ch] = ratio;
+        messenger_rebend(ch);
         if (leslie_on(ch))
             return;                         // (a rotor part's wheel is its half-moon: nothing bends)
         // ...AND A FIXED OPEN STRING STAYS AT ITS PITCH (live._fixed_sym_slots)
@@ -5844,6 +6219,7 @@ struct Part {
             S.retiring.push_back(std::make_pair(orphan, n0));
         down.clear();
         pedalled.clear();
+        cutting.clear();
     }
 
     // CC120, ALL SOUND OFF (live's): the channel stopped now, pedal or no
@@ -5937,22 +6313,763 @@ struct Part {
         static const int RESET_CC[6][2] = {{1, 0}, {11, 127}, {64, 0}, {65, 0}, {66, 0}, {67, 0}};
         for (auto &cv : RESET_CC)
             control(ch, cv[0], cv[1], n0);
-        aftertouch(ch, 0);
+        aftertouch(ch, 0, n0);
         rpn_none[ch] = false;
         rpn_msb[ch] = rpn_lsb[ch] = 127;
         pw_armed[ch] = true;
     }
 
     // channel aftertouch: every key sounding on the channel (live's
-    // _press_groups: the slab's keys in order, one tilt)
-    void aftertouch(int ch, int v)
+    // _press_groups: the slab's keys in order, one tilt) -- and a plunger's
+    // hand (live._tone_ctl)
+    void aftertouch(int ch, int v, long long n0)
     {
         pressure[ch] = v / 127.0;
+        at_seen[ch] = true;
+        tone_ctl(ch, false, n0, v);
         press(sounding(ch), pressure[ch]);
+    }
+
+    // live._tone_ctl: the wheel or the hand reaching ch's tones' filters, the
+    // last three moves kept (a glide needs two)
+    void tone_ctl(int ch, bool wheel_, long long n0, int v)
+    {
+        const double t = (double)n0 / rate;
+        for (auto &kv : tone_fx) {
+            ToneFx &tf = kv.second;
+            if (tf.ch != ch || !tf.kind)
+                continue;
+            auto &l = wheel_ ? tf.wheel : tf.at;
+            l.push_back(std::make_pair(t, v));
+            if (l.size() > 3)
+                l.erase(l.begin(), l.end() - 3);
+        }
+    }
+
+    // live._tone_fx: the effect channel of the tone the part plays now on
+    // ch (a melodic tone that brings one), made the first time
+    int tone_fx_of(int ch, long long n0)
+    {
+        const Patch &p = patches[cur];
+        const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
+        if (!k || !(k->efx_raw || k->flt_set == 2))
+            return -1;
+        std::vector<void *> &lst = tone_seg[ch];
+        long ix = (long)(std::find(lst.begin(), lst.end(), p.cache) - lst.begin());
+        if (ix == (long)lst.size())
+            lst.push_back(p.cache);
+        const int fxc = ch % TONE_SEG + TONE_SEG * (1 + (int)(ix % (TONE_SEG - 1)));
+        if (!tone_fx.count(fxc)) {
+            ToneFx tf;
+            tf.ch = ch;
+            tf.k = k;
+            tf.kind = k->flt_set == 2 ? k->flt_k : 0;       // (the plunger, the mouth; a tone's effect's own: P2b)
+            const double t = (double)n0 / rate;     // (the hand and the wheel where they already are)
+            if (at_seen[ch])
+                tf.at.push_back(std::make_pair(t, (int)nearbyint(pressure[ch] * 127.0)));
+            if (wheel_seen[ch])
+                tf.wheel.push_back(std::make_pair(t, wheel_v[ch]));
+            if (tf.kind == 4)
+                tf.g = nv_npy_new((unsigned long long)(fxc + k->mouth_seed));
+            if (k->efx_raw && efx_x) {          // ITS OWN EFFECT: its setting, the part on it, at 0 (tone_events)
+                tf.ex = nv_efx_live_new(efx_x, rate);
+                nv_efx_live_apply(tf.ex, 0.0, 1, k->efx_raw_ty[0], k->efx_raw_ty[1]);
+                for (int q = 1; q <= 20; q++)
+                    if (k->efx_raw_p[q] >= 0)
+                        nv_efx_live_apply(tf.ex, 0.0, 2, q, k->efx_raw_p[q]);
+                nv_efx_live_apply(tf.ex, 0.0, 5, ch, 1);
+            }
+            tone_fx[fxc] = std::move(tf);
+        }
+        return fxc;
+    }
+
+    // a stepped control from 0 at time 0 (efxfilter.steps over [0.0] + its
+    // times, [0.0] + its values: sorted moves), at t, gliding
+    static double steps_at(std::vector<std::pair<double, int>> ev, double glide, double t)
+    {
+        std::sort(ev.begin(), ev.end());
+        std::vector<double> ts{0.0}, vs{0.0};
+        for (auto &e : ev) {
+            ts.push_back(e.first);
+            vs.push_back((double)e.second);
+        }
+        long i = (long)(std::upper_bound(ts.begin(), ts.end(), t) - ts.begin()) - 1;
+        i = i < 0 ? 0 : (i > (long)ts.size() - 1 ? (long)ts.size() - 1 : i);
+        if (glide <= 0.0 || vs.size() < 2)
+            return vs[i];
+        double prev = vs[i > 0 ? i - 1 : 0];
+        double dt = t - ts[i];
+        double kk = exp(-(dt > 0.0 ? dt : 0.0) / glide);
+        return vs[i] + (prev - vs[i]) * (i > 0 ? kk : 0.0);
+    }
+
+    // gsefx.filter_setup's control at t for part c (its settings M): the
+    // vowels' three centres gliding (efxfilter.steps), else one value -- a
+    // sweep's LFO on the absolute clock (an auto wah's Sens adding the
+    // part's loudness, note_envelope), a flanger's line (stepped), a pedal
+    void efx_control(const ModFlt &M, int c, double t, double *ctl, double *F)
+    {
+        const double *sg = M.seg.data();
+        long i = 0;
+        while (i < M.n && sg[8 * i] <= t)
+            i++;
+        i = i - 1 < 0 ? 0 : (i - 1 > M.n - 1 ? M.n - 1 : i - 1);
+        const double *s = sg + 8 * i;
+        if (sg[2] == 3.0) {
+            static const double VOWEL_F[5][3] = {{730, 1090, 2440}, {270, 2290, 3010},
+                                                 {300, 870, 2240}, {530, 1840, 2480}, {570, 840, 2410}};
+            const double glide = sg[4];
+            for (int fk = 0; fk < 3; fk++) {
+                const double vi = VOWEL_F[(int)s[3]][fk];
+                if (glide <= 0.0 || M.n < 2) {
+                    F[fk] = vi;
+                } else {
+                    const double prev = VOWEL_F[(int)sg[8 * (i > 0 ? i - 1 : 0) + 3]][fk];
+                    const double kk = exp(-std::max(t - s[0], 0.0) / glide);
+                    F[fk] = vi + (prev - vi) * (i > 0 ? kk : 0.0);
+                }
+            }
+            return;
+        }
+        const double *k = s + 2;
+        if (k[0] == 1.0) {
+            const double lf = sin(2.0 * M_PI * k[3] * t);
+            if (std::isnan(k[4])) {             // a phaser: about its Manual
+                *ctl = k[1] * pow(2.0, k[2] * lf);
+            } else {                            // an auto wah: up (or down) from it
+                double oc = k[2] * 0.5 * (1.0 + lf);
+                bool sens = false;
+                for (int q = 0; q < M.n; q++)
+                    sens = sens || (sg[8 * q + 2] == 1.0 && sg[8 * q + 7] != 0.0);
+                if (k[5] != 0.0 && sens)        // ...and by the part's loudness
+                    oc = oc + k[5] * note_env(c, t);
+                *ctl = k[1] * pow(2.0, (k[4] != 0.0 ? 1.0 : -1.0) * oc);
+            }
+        } else if (k[0] == 2.0) {               // a flanger's line, stepped or not
+            const double held = std::isnan(k[4]) ? t : floor(t * k[4]) / k[4];
+            *ctl = k[1] + k[2] * 0.5 * (1.0 + sin(2.0 * M_PI * k[3] * held));
+        } else {
+            *ctl = s[1];                        // a wah's pedal
+        }
+    }
+
+    // gsefx.note_envelope at t: the part's notes on the effect, each one's
+    // level (its velocity, attacked, held, released), the loudest
+    double note_env(int c, double t)
+    {
+        const double ATT = 0.005, HOLD = 0.4, REL = 0.06;      // (WAH_ENV_*)
+        double out = 0.0;
+        auto it = efx_notes.find(c);
+        if (it == efx_notes.end())
+            return out;
+        for (const EfxNote &e : it->second) {
+            const double s = e.s0, en = e.s1, a = e.vel / 127.0;
+            if (!(s <= t) || !(t < en + 8.0 * REL))
+                continue;
+            const double u = t - s;
+            double lv;
+            if (t <= en)
+                lv = a * std::min(1.0, u / ATT) * exp(-u / HOLD);
+            else
+                lv = a * exp(-(en - s) / HOLD) * exp(-std::max(t - en, 0.0) / REL);
+            out = std::max(out, lv);
+        }
+        return out;
+    }
+
+    // efxfilter.response for the module's filter types: 1 the phaser (N
+    // all-passes at the corner: native.xatan, xcexp, xabs), 2 and 3 a
+    // resonant low or band pass, 4 a comb, 5 the vowels' three formants
+    static double flt_h(int ty, double f, double ctrl, const double *F, double pa, double pb, double pc)
+    {
+        if (ty == 1) {
+            const double th = -2.0 * pc * atan(f / (ctrl > 1.0 ? ctrl : 1.0));
+            const double zr = cos(th), zi = sin(th);
+            const double nr = pa * zr, ni = pa * zi;
+            const double dr = 1.0 - pb * zr, di = 0.0 - pb * zi;
+            double qr, qi;
+            if (fabs(dr) >= fabs(di)) {
+                const double rat = di / dr, scl = 1.0 / (dr + di * rat);
+                qr = (nr + ni * rat) * scl;
+                qi = (ni - nr * rat) * scl;
+            } else {
+                const double rat = dr / di, scl = 1.0 / (di + dr * rat);
+                qr = (nr * rat + ni) * scl;
+                qi = (ni * rat - nr) * scl;
+            }
+            return hypot((1.0 - pa) + qr, qi);
+        }
+        if (ty == 2 || ty == 3) {
+            const double x = f / (ctrl > 1.0 ? ctrl : 1.0);
+            const double q = pa > 0.1 ? pa : 0.1;
+            const double a = 1.0 - x * x, b = x / q;
+            const double den = sqrt(a * a + b * b);
+            const double w = ty == 2 ? 1.0 / den : (x / q) / den;
+            return (1.0 - pb) + pb * w;
+        }
+        if (ty == 4)
+            return comb_h(f, ctrl, pa, pb);
+        if (ty == 5) {
+            static const double BW[3] = {80.0, 110.0, 160.0}, AM[3] = {1.0, 0.7, 0.5};
+            double h = pa;
+            for (int fk = 0; fk < 3; fk++) {
+                const double u = (f - F[fk]) / (0.5 * BW[fk]);
+                h = h + AM[fk] / (1.0 + u * u);
+            }
+            return h * pb;
+        }
+        return 1.0;
+    }
+
+    // Live._filter_block, the module's: on each part on the effect, its
+    // flanger's comb (the delay swung, the right ear half a turn on) and its
+    // tremolo or auto pan (1 + m w(t), w Roland's wave, gsefx.WAVES; a pan's
+    // right ear 1 - m w(t)), multiplied in that order
+    // A CHAIN's MOVING FILTERS at t (live._filter_for's comps, _filter_block's
+    // |H|): its filter over its timeline (h, the part pc on it; key c its
+    // channel's: its notes, its cache), its comb, its tremolo -- ear by ear
+    struct Comps {
+        bool comb = false, trem = false;
+        int fty = 0;
+        double fpa = 0.0, fpb = 0.0, fpc = 0.0, fctl = 0.0, FV[3] = {0.0, 0.0, 0.0};
+        double tl = 0.0, tr = 0.0, mix = 0.0, fb = 0.0, gl = 1.0, gr = 1.0;
+        double h(double f, bool right, double x = 1.0) const     // (x: a tone's own filter, first)
+        {
+            if (fty)
+                x = x * flt_h(fty, f, fctl, FV, fpa, fpb, fpc);
+            if (comb)
+                x = x * comb_h(f, right ? tr : tl, mix, fb);
+            if (trem)
+                x = x * (right ? gr : gl);
+            return x;
+        }
+    };
+    void chain_comps(void *h, int pc, int c, const double *fc, double t, Comps &o)
+    {
+        const bool comb = fc[14] != 0.0 && fc[18] != 0.0, trem = fc[55] != 0.0;
+        o.comb = comb;
+        o.trem = trem;
+            // ITS MOVING FILTER (gsefx.filter_setup's control at t): the
+            // settings over the timeline, the one in force at t
+            int fty = 0;
+            double fpa = 0.0, fpb = 0.0, fpc = 0.0, fctl = 0.0, FV[3] = {0.0, 0.0, 0.0};
+            if (fc[50] != 0.0) {
+                ModFlt &M = mflt[c];
+                const long rv = nv_efx_live_rev(h);
+                if (M.rev != rv) {
+                    M.seg.assign(8 * 256, 0.0);
+                    M.n = nv_efx_live_filter(h, pc, M.head, M.seg.data(), 256);
+                    M.rev = rv;
+                }
+                if (M.n)
+                    fty = M.seg[2] == 3.0 ? 5 : (int)M.head[0];     // (the vowels: VOWEL's, type 5)
+                fpa = M.head[1]; fpb = M.head[2]; fpc = M.head[3];
+                if (M.n)
+                    efx_control(M, c, t, &fctl, FV);
+            }
+            double tl = 0.0, tr = 0.0, mix = 0.0, fb = 0.0, gl = 1.0, gr = 1.0;
+            if (comb) {
+                const double rt = fc[16];
+                const double swing = fc[17] / (2.0 * M_PI * (rt > 1e-6 ? rt : 1e-6));
+                tl = fc[15] + swing * sin(2.0 * M_PI * rt * t);
+                tr = fc[15] + swing * sin(2.0 * M_PI * rt * t + M_PI);
+                const double a = fc[20];
+                mix = fc[21] >= 0.0 ? fc[21] : a * a / (1.0 + a * a);
+                fb = fc[18];
+            }
+            if (trem) {
+                static const double SINE[4] = {1.0, 1.0, 1.0, 0.0};
+                const double *wv = SINE;
+                if (fc[55] == 1.0)          // (Roland's wave; the Tremolo Chorus's the sine)
+                    wv = efx_x + 132 + NV_EFX_NAT * (size_t)efx_x[131] + 30 + 66 + 1024 + 128 + 19 * (int)fc[59];
+                const double rt = fc[56], m = fc[57];
+                double w = 0.0;
+                for (int q = 0; q < (int)wv[0]; q++)
+                    w = w + wv[2 + 3 * q] * cos(wv[1 + 3 * q] * 2.0 * M_PI * rt * t + wv[3 + 3 * q]);
+                gl = 1.0 + m * w;
+                gr = fc[58] != 0.0 ? 1.0 - m * w : 1.0 + m * w;
+            }
+            o.fty = fty; o.fpa = fpa; o.fpb = fpb; o.fpc = fpc; o.fctl = fctl;
+            o.FV[0] = FV[0]; o.FV[1] = FV[1]; o.FV[2] = FV[2];
+            o.tl = tl; o.tr = tr; o.mix = mix; o.fb = fb; o.gl = gl; o.gr = gr;
+    }
+
+    void efx_filter_block(double t)
+    {
+        for (int c = 0; c < TONE_SEG; c++) {
+            if (!nv_efx_live_on(efx, c))
+                continue;
+            int st = -1;
+            const char *why = "";
+            const double *fc = efx_chain(c, &st, &why);
+            if (!fc || !efx_moves(fc))
+                continue;
+            Comps o;
+            chain_comps(efx, c, c, fc, t, o);
+            S.filter_swing(c, rate, [&](double f) { return o.h(f, false); }, [&](double f) { return o.h(f, true); });
+        }
+    }
+
+    // Live._filter_block, the tones' own: each tone's filter at the block's
+    // middle, |H| on its rows -- the plunger's corner (efxfilter.plunger, the
+    // hand's last moves), the mouth's three centres (the wheel's vowel once it
+    // has moved, else the wander: efxfilter.mouth_live)
+    void filter_block(long long n0, long long frames)
+    {
+        if ((tone_fx.empty() && !(efx && nv_efx_live_parts(efx))) || S.fl_n == 0)
+            return;
+        const double t = ((double)n0 + 0.5 * (double)frames) / rate;
+        if (efx)
+            efx_filter_block(t);
+        tone_filter_block(t);
+        for (auto &kv : efx_notes) {        // the notes an auto wah no longer hears
+            std::vector<EfxNote> &l = kv.second;
+            if (!l.empty() && l[0].s1 < t - 4.0) {
+                std::vector<EfxNote> keep;
+                for (const EfxNote &e : l)
+                    if (e.s1 >= t - 4.0)
+                        keep.push_back(e);
+                l.swap(keep);
+            }
+        }
+    }
+
+    void tone_filter_block(double t)
+    {
+        for (auto &kv : tone_fx) {
+            ToneFx &tf = kv.second;
+            const NoteClass *k = tf.k;
+            // ITS OWN EFFECT's (live._filter_for: none where the part is on
+            // the module's -- the module's takes the tone's place)
+            Comps o;
+            bool chain = false;
+            if (tf.ex && !(efx && nv_efx_live_on(efx, tf.ch))) {
+                int st = -1;
+                const char *why = "";
+                const double *fc = tone_chain(tf, &st, &why);
+                if (fc && efx_moves(fc)) {
+                    chain_comps(tf.ex, tf.ch, kv.first, fc, t, o);
+                    chain = true;
+                }
+            }
+            if (!tf.kind && !chain)
+                continue;
+            if (!tf.kind) {
+                S.filter_swing(kv.first, rate, [&](double f) { return o.h(f, false); },
+                               [&](double f) { return o.h(f, true); });
+                continue;
+            }
+            const double pa = k->flt_p[0], pb = k->flt_p[1];
+            if (tf.kind == 3) {
+                const double *c = k->flt_c;
+                double st = steps_at(tf.at, c[4], t);
+                double x = st < 0.0 ? 0.0 : (st > 127.0 ? 127.0 : st);
+                double u = 2.0 * x / 127.0 - 1.0;
+                double g = c[3] * u + (1.0 - c[3]) * pow(u, 3.0);
+                const double ctrl = c[1] * pow(g < 0.0 ? c[0] / c[1] : c[2] / c[1], fabs(g));
+                const double q = pa > 0.1 ? pa : 0.1;
+                auto own = [&](double f) {      // (efxfilter.response, type 2)
+                    double xx = f / (ctrl > 1.0 ? ctrl : 1.0);
+                    double a = 1.0 - xx * xx, b = xx / q;
+                    double w = 1.0 / sqrt(a * a + b * b);
+                    return (1.0 - pb) + pb * w;
+                };
+                S.filter_swing(kv.first, rate, [&](double f) { return chain ? o.h(f, false, own(f)) : own(f); },
+                               [&](double f) { return chain ? o.h(f, true, own(f)) : own(f); });
+                continue;
+            }
+            const int nm = k->n_mouth;
+            double F[3];
+            if (!tf.wheel.empty()) {
+                // the wheel's vowel (efxfilter.mouth_wheel): the states closed
+                // to open along it, between two the centres interpolated
+                double pos = steps_at(tf.wheel, k->mouth_glide, t);
+                double x = pos < 0.0 ? 0.0 : (pos > 127.0 ? 127.0 : pos);
+                double u = x / 127.0 * (double)(nm - 1);
+                long j = (long)floor(u);
+                j = j < nm - 2 ? j : nm - 2;
+                double w = u - (double)j;
+                for (int fk = 0; fk < 3; fk++)
+                    F[fk] = k->mouth_wst[j][fk] * (1.0 - w) + k->mouth_wst[j + 1][fk] * w;
+            } else {
+                // the wander (efxfilter.MouthWander): a state drawn by its
+                // share, held a log-normal dwell, glided to from where it was
+                while (tf.next_t <= t) {
+                    const double r = nv_npy_uniform(tf.g);
+                    int i = 0;
+                    while (i < nm && k->mouth_cdf[i] <= r)
+                        i++;
+                    tf.target = i < nm ? i : nm - 1;
+                    tf.next_t += k->mouth_dw[0] * exp(k->mouth_dw[1] * nv_npy_next(tf.g));
+                }
+                const double *tg = k->mouth_st[tf.target];
+                if (!tf.have_cur || k->mouth_glide <= 0.0) {
+                    for (int fk = 0; fk < 3; fk++)
+                        tf.cur[fk] = tg[fk];
+                    tf.have_cur = true;
+                } else {
+                    double kk = exp(-(t - tf.t > 0.0 ? t - tf.t : 0.0) / k->mouth_glide);
+                    for (int fk = 0; fk < 3; fk++)
+                        tf.cur[fk] = tg[fk] + (tf.cur[fk] - tg[fk]) * kk;
+                }
+                tf.t = t;
+                for (int fk = 0; fk < 3; fk++)
+                    F[fk] = tf.cur[fk];
+            }
+            auto own = [&](double f) {          // (efxfilter.response, type 5: VOWEL)
+                static const double BW[3] = {80.0, 110.0, 160.0}, AM[3] = {1.0, 0.7, 0.5};
+                double h = pa;
+                for (int fk = 0; fk < 3; fk++) {
+                    double u = (f - F[fk]) / (0.5 * BW[fk]);
+                    h = h + AM[fk] / (1.0 + u * u);
+                }
+                return h * pb;
+            };
+            S.filter_swing(kv.first, rate, [&](double f) { return chain ? o.h(f, false, own(f)) : own(f); },
+                           [&](double f) { return chain ? o.h(f, true, own(f)) : own(f); });
+        }
+    }
+
+    // ---- the Moog's knobs (live's set_synth, _moog_tick, _messenger_cc)
+    // A KNOB TURNS, IT DOES NOT JUMP: what the notes play glides toward what
+    // was asked, MOOG_GLIDE_PER_BLOCK a block, the waveshapes, levels and
+    // pitches (MOOG_GLIDES); the octave is a switch and jumps
+    static constexpr double MOOG_GLIDE_PER_BLOCK = 0.01;
+    static bool moog_glides(int k)
+    {
+        return k == NV_MK_OSC1_WAVE || k == NV_MK_OSC2_WAVE || k == NV_MK_SUB_WAVE || k == NV_MK_OSC1_LEVEL
+               || k == NV_MK_OSC2_LEVEL || k == NV_MK_SUB_LEVEL || k == NV_MK_NOISE_LEVEL
+               || k == NV_MK_OSC2_FREQ || k == NV_MK_TUNE || k == NV_MK_MOD_AMOUNT;
+    }
+    // part pid -> {knob: where it has got to}, in the order they began (live.moog_glide)
+    std::vector<std::pair<long long, std::map<int, double>>> moog_glide;
+    bool msgr_all = false;                  // --messenger: every part reads the chart
+    bool msgr_pre107 = false;               // ...a Messenger on firmware before 1.0.7 (moog.messenger_chart)
+    bool msgr_said = false;
+    std::map<std::pair<int, int>, int> msg_msb;     // (channel, CC) -> a knob's coarse half
+    // the part's panel (moog.panel_of: its patch's, its own knobs over it),
+    // and where a knob still glides, where it has got to
+    void moog_pn(const Patch &p, bool glide, double *pn) const
+    {
+        memcpy(pn, p.moog->pn, sizeof p.moog->pn);
+        for (auto &kv : p.syn)
+            pn[kv.first] = kv.second;
+        if (glide)
+            for (auto &g : moog_glide)
+                if (g.first == p.pid)
+                    for (auto &kv : g.second)
+                        pn[kv.first] = kv.second;
+    }
+    // the panel its notes read again (_moog_panel_for's knobs)
+    void moog_rebuild(Patch &p)
+    {
+        bool gl = false;
+        for (auto &g : moog_glide)
+            gl = gl || g.first == p.pid;
+        if (!p.moog || (p.syn.empty() && !gl)) {
+            p.mb.reset();
+            return;
+        }
+        double pn[NV_MK_N];
+        moog_pn(p, true, pn);
+        auto b = std::make_shared<MoogLayer>();
+        if (nv_moog_build(pn, p.moog, b.get()) == 0)
+            p.mb = b;
+    }
+    Patch *patch_pid(long long id)
+    {
+        for (Patch &p : patches)
+            if (p.pid == id)
+                return &p;
+        return nullptr;
+    }
+    // live.set_synth (layer A, from the hardware): the part has the new
+    // value at once, so the next press steps from it; after the block's
+    // events (live.post) the notes sounding are told where they glide FROM
+    // and refreshed. Refused here: SYNC (its spectrum), and a turn that
+    // would move a pitch or shape under the MF-104M -- said, and left
+    void set_synth(Patch &p, int knob, double value)
+    {
+        if (!p.moog)
+            return;
+        double pn[NV_MK_N];
+        moog_pn(p, false, pn);
+        const double old = pn[knob];
+        std::map<int, double> was = p.syn;
+        p.syn[knob] = value;
+        double tr[NV_MK_N];
+        moog_pn(p, true, tr);
+        MoogLayer probe;
+        if (knob == NV_MK_SYNC || nv_moog_build(tr, p.moog, &probe) != 0) {
+            p.syn.swap(was);
+            if (!msgr_said)
+                fprintf(stderr, "nvlive: refused: the Messenger's %s live -- the knob left as it was\n",
+                        knob == NV_MK_SYNC ? "SYNC" : "pitch or shape under the MF-104M");
+            msgr_said = true;
+            return;
+        }
+        moog_rebuild(p);
+        Post q{2, {}, nullptr};
+        q.pid = p.pid;
+        q.knob = knob;
+        q.old = old;
+        posts.push_back(std::move(q));
+    }
+    void synth_post(const Post &q, long long n0)
+    {
+        Patch *p = patch_pid(q.pid);
+        if (!p || !p->moog)
+            return;
+        bool sounding = false;
+        for (auto &kv : S.live)
+            sounding = sounding || std::get<0>(kv.first) == q.pid;
+        if (moog_glides(q.knob) && sounding) {
+            auto it = std::find_if(moog_glide.begin(), moog_glide.end(),
+                                   [&](const std::pair<long long, std::map<int, double>> &g) { return g.first == q.pid; });
+            if (it == moog_glide.end()) {
+                moog_glide.emplace_back(q.pid, std::map<int, double>());
+                it = moog_glide.end() - 1;
+            }
+            it->second.emplace(q.knob, q.old);      // (setdefault: the first turn's start)
+            moog_rebuild(*p);
+        }
+        moog_refresh(*p, n0);
+    }
+    // live._moog_tick: one block of every gliding knob
+    void moog_tick(long long n0)
+    {
+        std::vector<long long> ids;
+        for (auto &g : moog_glide)
+            ids.push_back(g.first);
+        for (long long id : ids) {
+            auto it = std::find_if(moog_glide.begin(), moog_glide.end(),
+                                   [&](const std::pair<long long, std::map<int, double>> &g) { return g.first == id; });
+            Patch *p = patch_pid(id);
+            if (!p || !p->moog) {
+                moog_glide.erase(it);
+                continue;
+            }
+            double base[NV_MK_N];
+            moog_pn(*p, false, base);
+            std::map<int, double> &now = it->second;
+            for (auto k = now.begin(); k != now.end();) {
+                double d = base[k->first] - k->second;
+                if (fabs(d) <= MOOG_GLIDE_PER_BLOCK) {
+                    k = now.erase(k);
+                } else {
+                    k->second += d > 0 ? MOOG_GLIDE_PER_BLOCK : -MOOG_GLIDE_PER_BLOCK;
+                    ++k;
+                }
+            }
+            if (now.empty())
+                moog_glide.erase(it);
+            moog_rebuild(*p);
+            moog_refresh(*p, n0);
+        }
+    }
+    // moog.messenger_value: a Messenger CC's value as the panel knob's
+    // (kind 0 '14', 1 'tune', 2 '7', 3 'foot', 4 'track', 5 'mode', 6 'onoff')
+    static double msgr_value(int kind, int msb, int lsb)
+    {
+        switch (kind) {
+        case 0: return lsb >= 0 ? ((msb << 7) | lsb) / 16383.0 : msb / 127.0;
+        case 1: return msgr_value(0, msb, lsb) + 28.3 / (2.0 * 7.0 * 100.0);
+        case 2: return msb / 127.0;
+        case 3: { static const int F[4] = {32, 16, 8, 4}; return F[std::min(3, msb / 32)]; }
+        case 4: return msb < 64 ? 0.0 : 1.0;
+        case 5: return std::min(3, msb / 32);
+        }
+        return msb >= 64 ? 1.0 : 0.0;
+    }
+    // moog.MESSENGER_CC (its manual's Appendix A; MESSENGER_CC_PRE107 before
+    // 1.0.7: SUB WAVE on CC11, 14-bit): CC -> (knob, kind), knob -2 one the
+    // simulator does not model (taken all the same), -1 not the chart's
+    void msgr_chart(int cc, int *knob, int *kind) const
+    {
+        struct E { int cc, knob, kind; };
+        static const E C[] = {
+            {9, NV_MK_OSC1_WAVE, 0}, {14, NV_MK_OSC2_WAVE, 0}, {10, NV_MK_TUNE, 1}, {12, NV_MK_OSC2_FREQ, 0},
+            {15, NV_MK_OSC1_LEVEL, 0}, {16, NV_MK_OSC2_LEVEL, 0}, {17, NV_MK_SUB_LEVEL, 0},
+            {8, NV_MK_NOISE_LEVEL, 0}, {19, NV_MK_CUTOFF, 0}, {21, NV_MK_RESONANCE, 0},
+            {22, NV_MK_EG_AMOUNT, 0}, {23, NV_MK_F_ATTACK, 0}, {24, NV_MK_F_DECAY, 0}, {25, NV_MK_F_SUSTAIN, 0},
+            {26, NV_MK_F_RELEASE, 0}, {28, NV_MK_A_ATTACK, 0}, {29, NV_MK_A_DECAY, 0}, {30, NV_MK_A_SUSTAIN, 0},
+            {31, NV_MK_A_RELEASE, 0}, {71, NV_MK_SUB_WAVE, 2}, {75, NV_MK_OSC1_OCTAVE, 3},
+            {76, NV_MK_OSC2_OCTAVE, 3}, {78, NV_MK_KB_TRACK, 4}, {79, NV_MK_RES_BASS, 6}, {109, NV_MK_MODE, 5},
+            {13, NV_MK_MOD_AMOUNT, 0}, {72, NV_MK_MOD_DEST, 5}, {77, NV_MK_SYNC, 6}, {3, NV_MK_LFO1_RATE, 0},
+            {4, NV_MK_LFO1_DEPTH, 0}, {83, NV_MK_LFO1_SHAPE, 5}, {85, NV_MK_LFO1_DEST, 5},
+            {93, NV_MK_LFO1_RESET, 6},
+            {2, -2, 0}, {18, -2, 0}, {20, -2, 0}, {27, -2, 0}, {73, -2, 0}, {80, -2, 0}, {81, -2, 0}, {89, -2, 0},
+            {102, -2, 0}, {107, -2, 0}, {108, -2, 0}, {112, -2, 0}, {113, -2, 0}, {114, -2, 0}, {116, -2, 0},
+            {117, -2, 0}, {118, -2, 0},
+        };
+        *knob = -1;
+        *kind = 0;
+        if (msgr_pre107 && cc == 71)
+            return;
+        if (msgr_pre107 && cc == 11) {
+            *knob = NV_MK_SUB_WAVE;
+            return;
+        }
+        for (const E &e : C)
+            if (e.cc == cc) {
+                *knob = e.knob;
+                *kind = e.kind;
+                return;
+            }
+    }
+    // ---- A MESSENGER TO SET (live.open_messenger's queue): what is sent,
+    // through msgr_send (nvlive's: its thread writes it, the audio thread
+    // never waits); the pitch-bend range it is set to; the note each of its
+    // channels plays (messenger_note, in the order they began)
+    void (*msgr_send)(void *, const uint8_t *, int) = nullptr;
+    void *msgr_ctx = nullptr;
+    double msgr_bend = 2.0;
+    std::vector<std::pair<int, std::tuple<long long, int, int>>> msgr_note;
+    void msgr_put(int a, int b, int c)
+    {
+        const uint8_t m[3] = {(uint8_t)a, (uint8_t)b, (uint8_t)c};
+        msgr_send(msgr_ctx, m, 3);
+    }
+    // moog.messenger_cc_value: a knob's value as the Messenger's CC, *lo -1
+    // where it has no fine half
+    static int msgr_cc_value(int kind, double v, int *lo)
+    {
+        *lo = -1;
+        auto clip = [](double x) { double y = x < 1.0 ? x : 1.0; return y > 0.0 ? y : 0.0; };
+        switch (kind) {
+        case 0: {
+            int x = (int)nearbyint(clip(v) * 16383);
+            *lo = x & 0x7F;
+            return x >> 7;
+        }
+        case 1: return msgr_cc_value(0, v - 28.3 / (2.0 * 7.0 * 100.0), lo);
+        case 2: return (int)nearbyint(clip(v) * 127);
+        case 3: { int f = (int)v; return (f == 32 ? 0 : f == 16 ? 1 : f == 8 ? 2 : 3) * 32 + 16; }
+        case 4: return v < 0.5 ? 32 : 96;
+        case 5: return (int)v * 32 + 16;
+        }
+        return v != 0.0 ? 127 : 0;
+    }
+    // live.messenger_sync: a Moog part's panel (its patch's, its own knobs
+    // over it) as the chart's CCs on its channel, coarse halves first, in
+    // the chart's order -- or just one knob (knob >= 0)
+    void messenger_sync(const Patch &p, int knob = -1)
+    {
+        if (!msgr_send || p.drums || !p.moog)
+            return;
+        double pn[NV_MK_N];
+        moog_pn(p, false, pn);
+        const int ch = p.channel >= 0 ? p.channel : 0;
+        for (int cc = 0; cc < 128; cc++) {
+            int k, kind, lo;
+            msgr_chart(cc, &k, &kind);
+            if (k < 0 || (knob >= 0 && k != knob))
+                continue;
+            msgr_put(0xB0 | ch, cc, msgr_cc_value(kind, pn[k], &lo));
+            if (lo >= 0)
+                msgr_put(0xB0 | ch, cc + 32, lo);
+        }
+    }
+    // live.messenger_pitch: the Messenger's note bent from the equal-tempered
+    // A440 key it plays to where this part's tuner, the key's tuning and the
+    // wheel put it (its range msgr_bend); its newest note owns the channel
+    void messenger_pitch(const Patch &p, int ch, int note)
+    {
+        if (!msgr_send || p.drums || !p.moog)
+            return;
+        const int sn = note + p.transpose;
+        if (sn < 0 || sn > 127 || note < 0 || note > 127)
+            return;
+        double b = bend[ch] * (key_ratio(p, ch, note) * 1.0);
+        double ours = nv_tcache_freq(p.cache, sn) * b;
+        double et = 440.0 * pow(2.0, (note - 69) / 12.0);
+        double cents = 1200.0 * log2(ours / et);
+        int val = (int)nearbyint(cents / (100.0 * msgr_bend) * 8192);
+        const int mch = p.channel >= 0 ? p.channel : 0;
+        auto it = std::find_if(msgr_note.begin(), msgr_note.end(),
+                               [&](const std::pair<int, std::tuple<long long, int, int>> &x) { return x.first == mch; });
+        if (it != msgr_note.end())
+            it->second = std::make_tuple(p.pid, ch, note);  // (a dict's key keeps its place)
+        else
+            msgr_note.emplace_back(mch, std::make_tuple(p.pid, ch, note));
+        val = std::max(-8192, std::min(8191, val)) + 8192;
+        msgr_put(0xE0 | mch, val & 0x7F, val >> 7);
+    }
+    // live._messenger_rebend: the wheel moved on a channel -- its Messenger note follows
+    void messenger_rebend(int ch)
+    {
+        if (!msgr_send)
+            return;
+        std::vector<std::pair<int, std::tuple<long long, int, int>>> ns = msgr_note;
+        for (auto &x : ns)
+            if (std::get<1>(x.second) == ch)
+                if (Patch *p = patch_pid(std::get<0>(x.second)))
+                    messenger_pitch(*p, ch, std::get<2>(x.second));
+    }
+
+    // live._messenger_cc: a CC on a channel where a part reads the
+    // Messenger's chart -- that part's knob turned (a part that is not a Moog:
+    // the knobs with a GM sound controller, moog.MESSENGER_GM, turn that) --
+    // or false, the message General MIDI's
+    bool messenger_cc(int ch, int cc, int v, long long n0)
+    {
+        std::vector<int> mine;
+        bool hears = false, gm = false;
+        for (size_t i = 0; i < patches.size(); i++) {
+            const Patch &p = patches[i];
+            if (!(p.msgr || msgr_all) || !(p.channel < 0 || p.channel == ch))
+                continue;
+            hears = true;
+            if (!p.drums && p.moog)
+                mine.push_back((int)i);
+            else
+                gm = true;
+        }
+        if (!hears)
+            return false;
+        int knob, kind;
+        double val;
+        int hi = cc - 32, hk, hkind;
+        if (cc >= 32) {
+            msgr_chart(hi, &hk, &hkind);
+        } else {
+            hk = -1;
+            hkind = 0;
+        }
+        if (hk >= 0 && (hkind == 0 || hkind == 1)) {     // the fine half of a knob
+            auto m = msg_msb.find(std::make_pair(ch, hi));
+            if (m == msg_msb.end())
+                return true;
+            knob = hk;
+            val = msgr_value(hkind, m->second, v);
+        } else {
+            msgr_chart(cc, &knob, &kind);
+            if (knob == -1)
+                return false;                       // CC1, 7, 11, 64, 74 ...: GM's
+            if (knob == -2)
+                return true;                        // the panel's, not modelled yet
+            if (kind == 0 || kind == 1)
+                msg_msb[std::make_pair(ch, cc)] = v;
+            val = msgr_value(kind, v, -1);
+        }
+        for (int i : mine)
+            set_synth(patches[i], knob, val);
+        int gcc = knob == NV_MK_CUTOFF ? 74 : knob == NV_MK_RESONANCE ? 71 : knob == NV_MK_A_ATTACK ? 73
+                  : knob == NV_MK_A_DECAY ? 75 : knob == NV_MK_A_RELEASE ? 72 : knob == NV_MK_LFO1_RATE ? 76
+                  : knob == NV_MK_LFO1_DEPTH ? 77 : -1;
+        if (gm && gcc >= 0) {
+            double g = 127.0 * val;                 // (max(0, min(127, 127 v)), Python's)
+            g = g < 127.0 ? g : 127.0;
+            sound_cc(ch, gcc, g > 0.0 ? g : 0.0, n0);
+        }
+        return true;
     }
 
     void control(int ch, int cc, int v, long long n0)
     {
+        if (messenger_cc(ch, cc, v, n0))
+            return;                                 // a Messenger's panel, on a part that reads its chart
         if (cc == 94) {
             cc94[ch] = v;                           // the scanner's selector (_scan_stamp)
             if (scan_async)                         // ...its new position prepared (_scan_prefetch)
@@ -6129,6 +7246,17 @@ struct Part {
                     best = st;
             speed = best;
         }
+        if (cc == 1) {                          // the wheel's last (live's wheel_at), and THE MOUTH (its 'mouth' role)
+            wheel_seen[ch] = true;
+            wheel_v[ch] = v;
+            bool mouth = false;
+            for (const Patch &p : patches) {
+                const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
+                mouth = mouth || ((p.channel < 0 || p.channel == ch) && k && k->flt_set == 2 && k->flt_k == 4);
+            }
+            if (mouth)
+                tone_ctl(ch, true, n0, v);
+        }
         if (cc == 1) {                          // THE MOD WHEEL IS VIBRATO (live's 'vibrato' role)
             bool any = false;
             for (const Patch &p : patches)
@@ -6158,6 +7286,22 @@ struct Part {
                     drone_count[pid] = n;
                     if (chanting(ch))
                         drones(ch, n0);
+                }
+            }
+        if (cc == 1)                            // THE PUNGI's DRONE NOTE ON THE WHEEL (live's 'drone note')
+            for (int pi = 0; pi < (int)patches.size(); pi++) {
+                if (!(patches[pi].channel < 0 || patches[pi].channel == ch))
+                    continue;
+                Use u(*this, pi);
+                const NoteClass *k = dnote_class();
+                if (!k)
+                    continue;
+                const int ns = k->n_dchoice, st = std::min(ns - 1, v * ns / 128);   // (even steps over the choices)
+                auto it = drone_sel.find(pid);
+                if (it == drone_sel.end() || it->second != st) {
+                    drone_sel[pid] = st;
+                    if (chanting(ch))
+                        drone_note(ch, n0);
                 }
             }
         if (cc == 1)                            // A CLAVINET's TONE ROCKERS (live's 'tone' role)
@@ -7281,6 +8425,15 @@ struct Part {
     void render(long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx, void *sd,
                 long long blk, double master_gain)
     {
+        // THE MOOG ROWS under a moving filter (live's moog_filter_apply before
+        // the render, _restore in its finally): their |H| for this render, the
+        // panel's level back after it -- after knobs_advance has carried the
+        // filtered end into aLp
+        struct MoogFlt {
+            Slab &S;
+            ~MoogFlt() { S.moog_filter_restore(); }
+        } moog_flt{S};
+        S.moog_filter_apply();
         // the Moog's mod rows for this block, and its FM's anchors (Renderer.render's first)
         S.moog_pitch_block(n0, frames, rate, moog_pcells);
         S.moog_shape_block(n0, frames, rate, moog_srows);
@@ -7637,6 +8790,7 @@ struct Part {
                 S.tr_aL[q] = S.tr_aR[q] = 0.0f;
                 S.ls_aL[q] = S.ls_aR[q] = 0.0f;
                 S.cv_aL[q] = S.cv_aR[q] = 0.0f;
+                S.fl_aL[q] = S.fl_aR[q] = 0.0f;
                 S.mo_uL[q] = S.mo_uR[q] = 0.0f;
             }
             shed_mo.emplace_back(n + 2 * cur_blk, qm);     // (live sets blockrender.BLK to its block)
@@ -7725,6 +8879,8 @@ struct Part {
         cur_blk = blk;
         if (!wind_st.empty() || !wind_spent.empty())    // the organs' chests, before the block's events (live's callback)
             wind_block(n0, blk);
+        if (!cutting.empty())
+            cut_go(n0);                         // the flicks due give way to their notes (live._cut_go)
         if (!amp_retired.empty())
             amp_retire(n0);
         std::vector<Ev> evs;
@@ -7737,11 +8893,11 @@ struct Part {
             // live._efx_control)
             if (efx && e.type >= 2 && e.type <= 4 && nv_efx_live_on(efx, e.ch)) {
                 if (e.type == 2 && e.a >= 1 && e.a <= 95)
-                    nv_efx_live_source(efx, e.a, e.b);
+                    nv_efx_live_source(efx, (double)n0 / rate, e.a, e.b);
                 else if (e.type == 3)
-                    nv_efx_live_source(efx, 96, e.a);           // (gsefx.SRC_CAF)
+                    nv_efx_live_source(efx, (double)n0 / rate, 96, e.a);        // (gsefx.SRC_CAF)
                 else if (e.type == 4)
-                    nv_efx_live_source(efx, 97, (e.a + 8192) >> 7);     // (gsefx.SRC_BEND)
+                    nv_efx_live_source(efx, (double)n0 / rate, 97, (e.a + 8192) >> 7);  // (gsefx.SRC_BEND)
             }
             if (e.type == 6) {
                 if (e.a >= 0 && e.a < (int)sxs.size())
@@ -7751,7 +8907,7 @@ struct Part {
             else if (e.type == 1)
                 note_off(e.ch, e.a, n0);
             else if (e.type == 3)
-                aftertouch(e.ch, e.a);
+                aftertouch(e.ch, e.a, n0);
             else if (e.type == 4)
                 pitchwheel(e.ch, e.a, n0);
             else
@@ -7764,6 +8920,8 @@ struct Part {
             reg_pump(n0);
         if (!tex_gen.empty())
             tex_tick(n0, blk);                  // a held texture's grains (live's _tex_tick)
+        if (!moog_glide.empty())
+            moog_tick(n0);                      // the Moog's knobs gliding (live's _moog_tick)
         if (!amp_dirty.empty() || amp_has_out || !amp_fine_results.empty() || amp_async || !amp_chg.empty()
             || !S.rel_log.empty())
             amp_pump(n0);                       // the valve (live's _amp_pump)
@@ -7774,8 +8932,11 @@ struct Part {
             if (!down.count(ck) && !pedalled.count(ck) && !S.oneshot.count(kv.first)
                 && !(sq != sost.end() && sq->second.count(ck.second)) && std::get<3>(kv.first) != AMPK
                 && std::get<3>(kv.first) != DRONEK
-                && std::get<3>(kv.first) < AMP_OLD0 && std::get<3>(kv.first) > MFK0)
-                sw.push_back(kv.first);         // (not a valve's products, an old tone's, a repeat's: not a note)
+                && std::get<3>(kv.first) < AMP_OLD0 && std::get<3>(kv.first) > MFK0
+                && std::none_of(cutting.begin(), cutting.end(), [&](const Cut &c) {
+                       return c.pid == std::get<0>(kv.first) && c.ch == ck.first && c.cnote == ck.second;
+                   }))
+                sw.push_back(kv.first);         // (not a valve's products, an old tone's, a repeat's, a flick: not a note)
         }
         for (auto &k : sw)
             S.release(k, n0);
@@ -7789,6 +8950,7 @@ struct Part {
             scanner_block(n0, blk);
         tremolo_block(n0);                      // (live's swing, after the reap)
         leslie_block(n0, blk);                  // ...then the rotors'
+        filter_block(n0, blk);                  // ...then the moving filters, on the levels they left
     }
 };
 
@@ -8083,6 +9245,18 @@ int nv_part_drawn(void *h, char *out, int cap)
 }
 
 // The part's PROGRAM, a melodic one's: the class its slurs and glides read
+// a patch's pungi drone: its own variation's templates (live's
+// Patch.drone_note_patch), their buckets and rotor speed; NULL none
+void nv_part_drone_patch(void *h, int pi, void *cache, int nbuckets, int speed)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size())
+        return;
+    P->patches[pi].dcache = cache;
+    P->patches[pi].dnb = nbuckets > 0 ? nbuckets : 1;
+    P->patches[pi].dspeed = speed;
+}
+
 void nv_part_program(void *h, int program)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;
@@ -8195,6 +9369,29 @@ void nv_part_efx(void *h, const double *X, double SR)
     nv::slab::Part *P = (nv::slab::Part *)h;
     if (!P->efx)
         P->efx = nv_efx_live_new(X, SR);
+    P->efx_x = X;
+}
+
+// THE MODULE's INSERTION EFFECT as a panel shows it (nv_efx_live_state;
+// the audio thread's), and its revision: -1 where the export has none
+int nv_part_efx_state(void *h, int *o, int cap, const char **why)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (!P->efx)
+        return -1;
+    int n = nv_efx_live_state(P->efx, o, cap, why);
+    const double *fc = n > 0 && o[n - 1] == 0 ? nv_efx_live_rec(P->efx) : nullptr;
+    if (fc && (fc[1] != 0.0 || fc[2] != 0.0)) {     // (refused as efx_chain refuses it)
+        o[n - 1] = -3;
+        *why = "drive or cabinet, live";
+    }
+    return n;
+}
+
+long nv_part_efx_rev(void *h)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    return P->efx ? nv_efx_live_rev(P->efx) : -1;
 }
 
 // The part's free strings (live's register): its string bank (M modes, as
@@ -8528,6 +9725,18 @@ long nv_part_dropped(void *h) { return ((nv::slab::Part *)h)->dropped; }
 // THE PANEL'S: a global set between blocks -- 0 headroom (dB), 1 the
 // pressure's lift (dB), 2 the limiter's knee, 3 the wheel's range, 4 the mod
 // range (cents), 5 the GPU on (1) or off, 6 the room's tail on or off
+// A MESSENGER TO SET: send(ctx, bytes, n) takes what is sent (NULL none),
+// its pitch-bend range; then every Moog part set to its panel (the start)
+void nv_part_messenger(void *h, void (*send)(void *, const uint8_t *, int), void *ctx, double bend)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    P->msgr_send = send;
+    P->msgr_ctx = ctx;
+    P->msgr_bend = bend;
+    for (const auto &p : P->patches)
+        P->messenger_sync(p);
+}
+
 void nv_part_set(void *h, int what, double v)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;
@@ -8543,6 +9752,8 @@ void nv_part_set(void *h, int what, double v)
     case 5: P->gpu_off = v < 0.5; break;
     case 6: P->room_on = v >= 0.5; break;
     case 7: P->mod_rate = v; break;
+    case 8: P->msgr_all = v >= 0.5; break;
+    case 9: P->msgr_pre107 = v >= 0.5; break;
     }
 }
 

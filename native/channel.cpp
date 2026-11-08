@@ -203,6 +203,7 @@ struct Ev {
     double tilt = NAN, mouth = NAN, morph = NAN;
     int stroked = 0;                    // one of a gesture's strokes (_prep_strokes' _stroked)
     int mcut = 0, mslur = 0;            // mono mode's: cut by the next, arrived by a slur
+    int cut_of = -1;                    // a cut's flick: the written note it opens (_CUT_OF), -1 none
     // a valved gliss's step (_GLISS): its level, the smear, the step it
     // arrives from (-1 none) and the step's time; gl 0 not one
     int gl = 0, gl_prev = -1;
@@ -675,6 +676,9 @@ struct Song {
     // its last note-off, at the phrase's first note's velocity, levels and
     // program, each its own class; appended in channel, phrase, drone order
     bool drones_done = false;
+    // A LIVE TEMPLATE's one note (blockrender's markers NO_PART_DRONES,
+    // NO_CUT): the pungi's drone and the uilleann's cut are live's own
+    bool no_part_drones = false, no_cut = false;
     int drones(const NoteClass *const *K)
     {
         if (drones_done)
@@ -713,6 +717,8 @@ struct Song {
             }
             if (!bpc || notes[ix[0]].drum)
                 continue;
+            if (bpc->n_dchoice && no_part_drones)
+                continue;                       // (live's template: live sounds the drone itself)
             if (std::isnan(gap))
                 gap = 2.0;
             std::vector<std::pair<double, double>> on_off;
@@ -727,13 +733,19 @@ struct Song {
                     ph.push_back(p);
             }
             int nd = bpc->n_drone;
+            int dsel = bpc->n_dchoice ? bpc->dchoice_def : -1;
             auto it = ch.find(c);
             if (it != ch.end())
                 for (const CC &e : it->second.ccs)
                     if (e.cc == 1) {
-                        nd = (int)nearbyint(e.v / 127.0 * bpc->n_drone);
+                        if (bpc->n_dchoice)     // (the wheel chooses the pungi's note: even steps)
+                            dsel = bpc->dchoice[std::min(bpc->n_dchoice - 1, (int)e.v * bpc->n_dchoice / 128)];
+                        else                    // (the wheel corks them: even shares)
+                            nd = (int)nearbyint(e.v / 127.0 * bpc->n_drone);
                         break;
                     }
+            if (bpc->n_dchoice)
+                nd = 1;                         // (one drone, never corked)
             for (auto &p : ph) {
                 int first = -1;
                 for (int i : ix)
@@ -741,7 +753,7 @@ struct Song {
                         first = i;
                 for (int d = 0; d < nd; d++) {
                     Ev x = notes[first];
-                    x.note = bpc->drone_note[d];
+                    x.note = dsel >= 0 ? dsel : bpc->drone_note[d];
                     x.on = p.first + 1e-6 * d;
                     x.off = p.second;
                     x.kover = bpc->drone_k[d];
@@ -750,6 +762,7 @@ struct Song {
                     x.tilt = x.mouth = x.morph = NAN;
                     x.slot = -1;
                     x.mcut = x.mslur = 0;
+                    x.cut_of = -1;
                     x.gl = 0;
                     x.stroked = 0;
                     add.push_back(x);
@@ -954,6 +967,31 @@ struct Song {
             }
             any = true;
         }
+        // ...AND A CUT (cut_semi: the uilleann's ornament): a flicked upper
+        // finger -- the note cut_semi above for cut_s at the onset, slurred
+        // into the note (a chanter never stops), which then sounds from there
+        for (size_t i = 0; i < nn; i++) {
+            const Ev &e = notes[i];
+            if (drop[i] || e.drum || e.prog < 0 || e.prog > 127)
+                continue;
+            const NoteClass *k = K[e.kidx()];
+            if (no_cut || !k || !k->cut_semi || e.off - e.on < 3.0 * k->cut_s || e.note + k->cut_semi < 0
+                || e.note + k->cut_semi > 127)
+                continue;
+            drop_key(drop, e);
+            Ev y = e;                       // the flick: the written note's onset and legato
+            y.note = e.note + k->cut_semi;
+            y.off = e.on + k->cut_s;
+            y.mcut = y.mslur = 0;
+            y.cut_of = e.note;
+            steps.push_back(y);
+            Ev w = e;                       // the note, arrived by slur
+            w.on = e.on + k->cut_s;
+            w.mcut = 0;
+            w.mslur = 1;
+            steps.push_back(w);
+            any = true;
+        }
         if (!any)
             return;
         std::vector<Ev> out;
@@ -1118,15 +1156,23 @@ struct Song {
             if (x.ch != y.ch) return x.ch < y.ch;
             return x.note < y.note;
         });
-        std::map<std::pair<long long, int>, int> occ;
+        std::map<std::pair<long long, int>, int> occ, pocc;
         std::map<long long, std::vector<double>> sl_on;
         for (int i : idx) {
-            int &k = occ[std::make_pair(notes[i].ch, notes[i].note)];
-            if (legato.count(std::make_tuple(notes[i].ch, notes[i].note, k))) {
+            const Ev &e = notes[i];
+            // the note's own slur (the note loop's _occ): a cut's flick is its
+            // written note's, and no occurrence of its own pitch
+            const int wn = e.cut_of >= 0 ? e.cut_of : e.note;
+            int &k = occ[std::make_pair(e.ch, wn)];
+            if (legato.count(std::make_tuple(e.ch, wn, k)))
                 slurred[i] = 1;
-                sl_on[notes[i].ch].push_back(notes[i].on);
-            }
-            k++;
+            if (e.cut_of < 0)
+                k++;
+            // ...and the slurs that end notes (_prep_slur_out): every note counted
+            int &pk = pocc[std::make_pair(e.ch, e.note)];
+            if (legato.count(std::make_tuple(e.ch, e.note, pk)))
+                sl_on[e.ch].push_back(e.on);
+            pk++;
         }
         for (auto &v : sl_on)
             std::sort(v.second.begin(), v.second.end());
@@ -1646,6 +1692,11 @@ struct Song {
 extern "C" {
 
 void *nv_song_new(void) { return new nv::Song(); }
+void nv_song_live_template(void *s, int no_cut, int no_part_drones)
+{
+    ((nv::Song *)s)->no_cut = no_cut != 0;
+    ((nv::Song *)s)->no_part_drones = no_part_drones != 0;
+}
 void nv_song_free(void *s) { delete (nv::Song *)s; }
 
 void nv_song_cc(void *s, long long ch, double t, int cc, int v)

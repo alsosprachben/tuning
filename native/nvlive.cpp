@@ -143,9 +143,12 @@ void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigne
                     const int *skind, const double *spar, double oneshot_floor_db);
 void nv_part_drums(void *h, int program, const unsigned long long *choke);
 void nv_part_program(void *h, int program);
+void nv_part_drone_patch(void *h, int pi, void *cache, int nbuckets, int speed);
 void nv_part_toggle_stop(void *h, int rank, long long n0);
 int nv_part_drawn(void *h, char *out, int cap);
 void nv_part_efx(void *h, const double *X, double SR);
+int nv_part_efx_state(void *h, int *o, int cap, const char **why);
+long nv_part_efx_rev(void *h);
 void *nv_part_new(void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
                 int soft_drop, int soft_top, double rate, double retrigger, long cap, double headroom,
                 const double *pan_tab, double pan_beta);
@@ -156,6 +159,8 @@ void nv_part_render(void *h, long long n0, long frames, float *L, float *R, floa
                   void *sd, long long blk, double master_gain);
 void nv_part_damper(void *h, double full_db_s, double residual, double knee_db, double beta, double ln10_20);
 void nv_part_press_db(void *h, double db);
+void nv_moog_tables(const double *t);
+void nv_part_messenger(void *h, void (*send)(void *, const uint8_t *, int), void *ctx, double bend);
 void nv_part_detune_wheel(void *h, int on);
 void nv_part_leslie(void *h, const double *L, int n);
 void nv_part_scan(void *h, const double *X, long n);
@@ -229,7 +234,10 @@ struct Export {
     // VNAM: the variations the picker offers: program, key, name
     std::vector<std::array<int, 2>> vpv;
     std::vector<std::string> vnames;
+    std::string efxu;                           // EFXU: the panel's insertion-effect tables (panel::efx_tables)
     std::vector<std::array<int, 10>> vpart;     // VLIV: each one's live record, as part[]'s
+    std::vector<std::array<int, 12>> vdrn;      // VDRN: a voice's own drone patch (program, variation, its record)
+    std::vector<double> mtab;                   // MTAB: moog.py's tables by knob position (nv_moog_tables)
     std::vector<VarEnt> vents;
     struct Stops {
         std::vector<std::string> names;
@@ -271,6 +279,54 @@ struct Export {
         std::string name, kit;
     } prog[128];
     bool has_prog = false;
+};
+
+// A MESSENGER's OUTPUT (live.open_messenger): what the audio thread queues,
+// written to the raw MIDI device by a thread of its own -- or, in --test,
+// logged with the block it was sent in (g_msgr_blk)
+static std::atomic<long long> g_msgr_blk{0};
+struct MsgrOut {
+    int fd = -1;
+    FILE *log = nullptr;
+    std::mutex mu;
+    std::condition_variable cv;
+    std::vector<uint8_t> q;
+    static void send(void *ctx, const uint8_t *b, int n)
+    {
+        MsgrOut *o = (MsgrOut *)ctx;
+        if (o->log) {
+            fprintf(o->log, "%lld", g_msgr_blk.load());
+            for (int i = 0; i < n; i++)
+                fprintf(o->log, " %d", b[i]);
+            fprintf(o->log, "\n");
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lk(o->mu);
+            o->q.insert(o->q.end(), b, b + n);
+        }
+        o->cv.notify_one();
+    }
+    void start()
+    {
+        std::thread([this] {
+            for (;;) {
+                std::vector<uint8_t> w;
+                {
+                    std::unique_lock<std::mutex> lk(mu);
+                    cv.wait(lk, [this] { return !q.empty(); });
+                    w.swap(q);
+                }
+                size_t off = 0;
+                while (off < w.size()) {
+                    ssize_t r = ::write(fd, w.data() + off, w.size() - off);
+                    if (r <= 0)
+                        break;              // (a message lost: never the audio thread's wait)
+                    off += (size_t)r;
+                }
+            }
+        }).detach();
+    }
 };
 
 static bool read_export(const char *path, Export &E)
@@ -423,6 +479,18 @@ static bool read_export(const char *path, Export &E)
             }
             if (!memcmp(tt, "MKIT", 4)) {
                 fseek(f, tl, SEEK_CUR);
+            } else if (!memcmp(tt, "EFXU", 4)) {
+                E.efxu.resize(tl);
+                ok = fread(&E.efxu[0], 1, tl, f) == (size_t)tl;
+            } else if (!memcmp(tt, "MTAB", 4)) {
+                E.mtab.resize(tl / 8);
+                ok = fread(E.mtab.data(), 8, E.mtab.size(), f) == E.mtab.size();
+            } else if (!memcmp(tt, "VDRN", 4)) {
+                int nv = 0;
+                ok = fread(&nv, 4, 1, f) == 1;
+                E.vdrn.resize(ok ? nv : 0);
+                for (auto &r : E.vdrn)
+                    ok = ok && fread(r.data(), 4, 12, f) == 12;
             } else if (!memcmp(tt, "VLIV", 4)) {
                 int nv = 0;
                 ok = fread(&nv, 4, 1, f) == 1;
@@ -814,19 +882,12 @@ int main(int argc, char **argv)
         for (size_t j = 0; var && j < E.vpv.size() && j < E.vpart.size(); j++)
             if (E.vpv[j][0] == (prog & 127) && E.vpv[j][1] == var)
                 return E.vpart[j].data();
+        for (const auto &d : E.vdrn)            // (a voice's own drone patch)
+            if (var && d[0] == (prog & 127) && d[1] == var)
+                return d.data() + 2;
         return E.part[prog & 127];
     };
     const int *pp = drums ? DRUM_PART : prec(program, atoi(opt(argc, argv, "bank", "0").c_str()));
-    // a variation that is a Moog (its key 60's class): live's, not nvlive's yet
-    auto moog_var = [&](int prog, int en) {
-        if (en <= 0 || en >= (int)E.vents.size() || E.vents[en].ls.empty())
-            return false;
-        const auto &l = E.vents[en].ls[0];
-        int k = 60 + l[1];
-        int cq = k >= 0 && k <= 127 ? E.vmap[128 * (size_t)l[0] + k] : -1;
-        (void)prog;
-        return cq >= 0 && ((const NoteClass *)E.classes[cq].data())->init.kind == 6;
-    };
     if (!pp[0]) {
         fprintf(stderr, "nvlive: program %d is not native\n", program);
         return 1;
@@ -845,9 +906,8 @@ int main(int argc, char **argv)
             for (int k = 0; k < 128 && nat; k++)
                 nat = k + l[1] < 0 || k + l[1] > 127 || E.vmap[128 * (size_t)l[0] + k + l[1]] >= 0
                       || E.cmap[128 * (program & 127) + k] < 0;
-        if (!nat || moog_var(program, en)) {
-            fprintf(stderr, "nvlive: program %d bank %d is not native%s\n", program, bk,
-                    nat ? " (a Moog variation: live's)" : "");
+        if (!nat || !pp[0]) {
+            fprintf(stderr, "nvlive: program %d bank %d is not native\n", program, bk);
             return 1;
         }
     }
@@ -1137,6 +1197,39 @@ int main(int argc, char **argv)
     nv_part_damper(part, E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_KNEE], E.k[K_BETA], E.k[K_LN10_20]);
     nv_part_press_db(part, atof(opt(argc, argv, "press-db",
                                   std::to_string(E.k.size() > K_PRESS_DB ? E.k[K_PRESS_DB] : 8.0).c_str()).c_str()));
+    // A MESSENGER's CHART on every part (live's Part.cc_map "messenger"):
+    // --messenger, or --messenger=pre-1.0.7 for that firmware's; its knobs
+    // built from the export's tables (set before the panel is sent by its chart)
+    nv_moog_tables(E.mtab.size() > 1 ? E.mtab.data() : nullptr);
+    for (int i = 1; i < argc; i++)
+        if (!strcmp(argv[i], "--messenger") || !strcmp(argv[i], "--messenger=pre-1.0.7")) {
+            nv_part_set(part, 8, 1.0);
+            nv_part_set(part, 9, argv[i][11] == '=' ? 1.0 : 0.0);
+        }
+    // A MESSENGER TO SET (live.py --messenger): --messenger-out=/dev/snd/midiCxDy,
+    // written by its own thread; --messenger-bend=SEMITONES its bend range
+    // (2); in --test, --messenger-log=FILE what it would be sent, by block
+    // (never destroyed: its detached thread waits on mo.cv, and glibc's
+    // pthread_cond_destroy at exit would wait for it -- a hang on quitting)
+    MsgrOut &mo = *new MsgrOut;
+    {
+        std::string md = opt(argc, argv, "messenger-out", ""), ml = opt(argc, argv, "messenger-log", "");
+        double mb = atof(opt(argc, argv, "messenger-bend", "2").c_str());
+        if (!ml.empty())
+            mo.log = fopen(ml.c_str(), "w");
+        else if (!md.empty() && md != "none") {
+            mo.fd = ::open(md.c_str(), O_WRONLY);
+            if (mo.fd < 0)
+                fprintf(stderr, "nvlive: no Messenger on %s -- none set\n", md.c_str());
+            else
+                mo.start();
+        }
+        if (mo.log || mo.fd >= 0) {
+            nv_part_messenger(part, MsgrOut::send, &mo, mb);
+            if (mo.fd >= 0)
+                fprintf(stderr, "nvlive: Messenger on %s: its Moog parts set\n", md.c_str());
+        }
+    }
     void *fn[3];
     const char *FN[3] = {"synth_voice", "synth_voice_xdec", "synth_voice_damp"};
     for (int q = 0; q < 3; q++) {
@@ -1283,6 +1376,64 @@ int main(int argc, char **argv)
         int bs = 1 + 128 * (mp >= 1 && mp <= 4 ? mp : 0) + msb;
         return E.vgs[((size_t)((bs - 1) / 128) * 128 + p) * 128 + (bs - 1) % 128];
     };
+    // the class a program's variation sounds at key 60 (live's Patch pc)
+    auto cls60 = [&](int prog, int var) -> const NoteClass * {
+        int cq = -1;
+        int en = var ? var_entry_of(prog & 127, var) : 0;
+        if (en > 0 && en < (int)E.vents.size() && !E.vents[en].ls.empty()) {
+            const auto &l = E.vents[en].ls[0];
+            int k = 60 + l[1];
+            cq = k >= 0 && k <= 127 ? E.vmap[128 * (size_t)l[0] + k] : -1;
+        } else if (!var) {
+            cq = E.cmap[128 * (prog & 127) + 60];
+        }
+        return cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
+    };
+    // THE PUNGI's DRONE PATCH (live's Patch.drone_note_patch): its own
+    // variation's templates over the choices' range (drone_note_choices)
+    auto build_drone = [&](int prog, const NoteClass *k) -> void * {
+        const int dv = k->dchoice_var, key = 256 * dv + (prog & 127);
+        {
+            std::lock_guard<std::mutex> lk(cmu);
+            auto it = caches.find(key);
+            if (it != caches.end())
+                return it->second;
+        }
+        const int *pq = prec(prog, dv);
+        if (!pq[0] || var_entry_of(prog & 127, dv) <= 0)
+            return nullptr;
+        void *c = nv_tcache_new(K.data(), &t, tune_for(prog, false), E.trim.data(), E.kind.data(), E.fin.data(),
+                                E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, E.k[K_RING_FLOOR],
+                                E.k[K_RING_MAX], E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR);
+        raga_for(c, prog, false);
+        nv_tcache_set_var(c, dv);
+        int lo = 127, hi = 0;
+        for (int q = 0; q < k->n_dchoice; q++) {
+            lo = std::min(lo, k->dchoice[q]);
+            hi = std::max(hi, k->dchoice[q]);
+        }
+        int sp[3] = {pq[3], pq[4], pq[5]};
+        nv_tcache_warm(c, prog & 127, lo, hi, pq[1], sp, pq[2]);
+        std::lock_guard<std::mutex> lk(cmu);
+        caches[key] = c;
+        return c;
+    };
+    // ...given to a part's patch (nvlive's start, swap): its record's buckets and speed
+    auto attach_drone = [&](int pi, int prog, bool dr, int var) {
+        const NoteClass *k = dr ? nullptr : cls60(prog, var);
+        void *dc = nullptr;
+        int nb = 1, sp = -1;
+        if (k && k->n_dchoice && k->dchoice_var) {
+            const int key = 256 * k->dchoice_var + (prog & 127);
+            std::lock_guard<std::mutex> lk(cmu);
+            auto it = caches.find(key);
+            dc = it != caches.end() ? it->second : nullptr;
+            const int *pq = prec(prog, k->dchoice_var);
+            nb = pq[1];
+            sp = pq[6];
+        }
+        nv_part_drone_patch(part, pi, dc, nb, sp);
+    };
     auto build = [&](int prog, bool dr, int var) -> void * {
         int key = 256 * var + (dr ? 128 : 0) + (prog & 127);
         {
@@ -1294,9 +1445,9 @@ int main(int argc, char **argv)
         bool native = false;
         for (int k = 0; k < 128 && !native; k++)
             native = E.cmap[(dr ? NV_K_DRUMS : 0) + 128 * (prog & 127) + k] >= 0;
-        if (var) {                              // (a variation's: its slots the engine's, not a Moog)
+        if (var) {                              // (a variation's: its slots the engine's)
             int en = var_entry_of(prog & 127, var);
-            native = en > 0 && !moog_var(prog, en);
+            native = en > 0;
             for (const auto &l : en > 0 ? E.vents[en].ls : std::vector<std::array<int, 4>>())
                 for (int k = 0; k < 128; k++)
                     native = native && (k + l[1] < 0 || k + l[1] > 127 || E.vmap[128 * (size_t)l[0] + k + l[1]] >= 0
@@ -1325,6 +1476,11 @@ int main(int argc, char **argv)
             nv_tcache_warm(c, prog & 127, 21, 96, pq[1], sp, pq[2]);
             retune(prog);
         }
+        if (!dr) {                              // A PUNGI's DRONE: its own patch, beside (Patch.warm's)
+            const NoteClass *k60 = cls60(prog, var);
+            if (k60 && k60->n_dchoice && k60->dchoice_var)
+                build_drone(prog, k60);
+        }
         std::lock_guard<std::mutex> lk(cmu);
         caches[key] = c;
         return c;
@@ -1333,6 +1489,9 @@ int main(int argc, char **argv)
     // next block's events), and its strings where they are another voice's
     // (live._reg_forget: the new voice's bank, or none)
     std::atomic<int> shown_program(drums ? 128 + program : program);    // (what the panel shows)
+    std::atomic<int> shown_var(drums ? 0 : bank0);                        // (...its variation, 0 the capital tone)
+    std::atomic<int> last_ctl_code{0};                                    // (the panel's EFX learn)
+    std::atomic<long long> last_ctl_ns{0};
     auto swap = [&](size_t i, int prog, bool dr, int var, void *c) {
         PartAt &pa = pats[i];
         static const int DRUM_P[10] = {1, 1, 1, -1, -1, -1, -1, 0, 0, 0};
@@ -1359,13 +1518,22 @@ int main(int argc, char **argv)
         }
         nv_part_swap(part, pa.pi, c, prog & 127, dr, pq[1], pq[6], pq[7], pq[8], pq[9], pq[6] >= 0,
                    dr ? E.kit_choke.data() : nullptr, regd ? note : nullptr);
+        attach_drone(pa.pi, prog, dr, var);     // (a pungi's drone patch, built with it)
         pa.posted = prog & 127;
         pa.posted_var = var;
         pa.drums = dr;
         pa.sid = sid;
-        if (pa.pi == 0)
+        if (pa.pi == 0) {
+            shown_var = dr ? 0 : var;
             shown_program = (dr ? 128 : 0) + (prog & 127);
+        }
     };
+    if (!drums) {                               // the starting patch's pungi drone, as build() makes them
+        const NoteClass *k0 = cls60(program, bank0);
+        if (k0 && k0->n_dchoice && k0->dchoice_var)
+            build_drone(program, k0);
+        attach_drone(0, program, false, bank0);
+    }
     // asked(): a program change heard -- each part listening that is not
     // already that voice asks for it (live's patch_reqs, in order)
     struct Req {
@@ -1505,6 +1673,7 @@ int main(int argc, char **argv)
             for (long long b = 0; b < nb; b++) {
                 auto t0 = std::chrono::steady_clock::now();
                 long long n0 = b * BLK;
+                g_msgr_blk = b;                         // (--messenger-log's block)
                 while (e < ne) {
                     int iv[4];
                     double et;
@@ -1756,6 +1925,13 @@ int main(int argc, char **argv)
                     swallow = std::make_pair(-1, -1);
                     continue;
                 }
+                // the last controller the hardware moved: the EFX panel's learn
+                // (live.on_midi's last_ctl: CC 1-95, aftertouch, the wheel past 1024)
+                if ((m.type == 2 && m.a >= 1 && m.a <= 95) || m.type == 3 || (m.type == 4 && abs(m.a) > 1024)) {
+                    last_ctl_code = m.type == 2 ? m.a : m.type == 3 ? 0x60 : 0x61;
+                    last_ctl_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                      std::chrono::steady_clock::now().time_since_epoch()).count();
+                }
                 if (m.type == 5) {
                     asked(m.ch, m.a);
                     continue;
@@ -1813,6 +1989,16 @@ int main(int argc, char **argv)
                 snap.peak[1] = std::max(snap.peak[1], pk[1]);
                 if ((blocks & 7) == 0)
                     nv_part_stats(part, snap.eng);
+                // the insertion effect, when it changed (the panel's)
+                const long er = nv_part_efx_rev(part);
+                if (er != snap.efx_rev && er >= 0) {
+                    int o[512];
+                    const char *why = "";
+                    int no = nv_part_efx_state(part, o, 512, &why);
+                    snap.efx.assign(o, o + std::max(0, no));
+                    snap.efx_why = why ? why : "";
+                    snap.efx_rev = er;
+                }
                 snap.rt = rt_on && !rt::dropped;
                 snap.rt_dropped = rt::dropped > 0;
             }
@@ -1870,8 +2056,15 @@ int main(int argc, char **argv)
             const Export::Prog &pr = E.prog[sp & 127];
             return sp >= 128 ? (pr.kit.empty() ? "drum set" : pr.kit) : pr.name;
         };
+        // ...a variation by its own name (VNAM), its program's otherwise
+        auto shown_name = [&](int sp, int v) {
+            for (size_t j = 0; j < E.vpv.size() && v && sp < 128; j++)
+                if (E.vpv[j][0] == sp && E.vpv[j][1] == v)
+                    return E.vnames[j];
+            return name_of(sp);
+        };
         H.program = program;
-        H.program_name = name_of(shown_program);
+        H.program_name = shown_name(shown_program, shown_var);
         H.port = dev;
         H.room = E.room.empty() ? "-" : E.room;
         H.reg_modes = rg.M > 0 && !noreg ? rg.M : 0;
@@ -1944,14 +2137,24 @@ int main(int argc, char **argv)
         H.vnative.assign(E.vpv.size(), 0);
         for (size_t j = 0; j < E.vpv.size(); j++) {
             int p = E.vpv[j][0], en = var_entry_of(p, E.vpv[j][1]);
-            bool nat = en > 0 && !moog_var(p, en) && (j < E.vpart.size() ? E.vpart[j][0] : E.part[p][0]) != 0;
+            bool nat = en > 0 && (j < E.vpart.size() ? E.vpart[j][0] : E.part[p][0]) != 0;
             for (const auto &l : en > 0 ? E.vents[en].ls : std::vector<std::array<int, 4>>())
                 for (int k = 0; k < 128 && nat; k++)
                     nat = k + l[1] < 0 || k + l[1] > 127 || E.vmap[128 * (size_t)l[0] + k + l[1]] >= 0
                           || E.cmap[128 * p + k] < 0;
             H.vnative[j] = nat;
         }
-        H.var = pats[0].var;
+        H.var = shown_var;
+        H.channel = pats[0].channel;
+        // THE INSERTION EFFECT: its tables, a setting sent as the GS exclusive
+        // a file would carry (live.efx_send: into the block's events), the
+        // controller last moved (the learn)
+        panel::efx_tables(H, E.efxu);
+        if (!H.efx_types.empty())
+            H.efx_send = [&](const std::vector<uint8_t> &m) {
+                post([&, m](long long) { nv_part_sysex(part, m.data(), (int)m.size()); });
+            };
+        H.last_ctl = [&]() { return std::make_pair(last_ctl_code.load(), last_ctl_ns.load()); };
         if (E.has_prog)
             H.pick = [&](int sp) {
                 post([&, sp](long long) {
@@ -1967,17 +2170,20 @@ int main(int argc, char **argv)
             };
         // ...A PROGRAM CHANGE FROM THE KEYBOARD: its name and its stops, and
         // what the builder said
-        int shown = shown_program;
+        int shown = shown_program, shown_v = shown_var;
         H.refresh = [&]() {
-            int sp = shown_program;
+            int sp = shown_program, sv = sp >= 128 ? 0 : shown_var.load();
             std::string m;
-            if (sp != shown) {
+            if (sp != shown || sv != shown_v) {
                 shown = sp;
+                shown_v = sv;
                 H.program = sp & 127;
                 H.kit = sp >= 128;
-                H.program_name = name_of(sp);
+                H.var = sv;
+                H.program_name = shown_name(sp, sv);
                 stops_of(sp);
-                m = "program " + std::to_string(sp & 127) + ": " + H.program_name;
+                m = (sp >= 128 ? "drum set " : "program ") + std::to_string(sp & 127)
+                    + (sv ? "." + std::to_string(sv & 127) : "") + ": " + H.program_name;
             }
             std::lock_guard<std::mutex> lk(bmu);
             for (auto &x : notes)

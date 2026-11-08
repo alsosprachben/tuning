@@ -295,6 +295,11 @@ typedef struct {
        hvt[h - 1], nothing past n_hvt; 0 none */
     int n_hvt;
     double hvt[512];
+    /* ...a played pipe's table UNDER ITS BORE (SynthProperties' series over
+       mode_gains_here, the bore after: the blown reeds'), each note's from
+       pipe_g and its low register's (nv_mode_gains_at) at init; 0 the
+       helicopter's, the table whole */
+    int hvt_bore;
     /* THE WASH WHERE THE BODY IS (GuitarFretNoiseProperties.chiff_harmonic_gain:
        the body's gain at the harmonic x the roll-off, in place of the chiff's) */
     int chiff_bore;
@@ -302,6 +307,11 @@ typedef struct {
        voice_vibrato): its depth's cents (x 1.4142) and rate; fv_set 0 none */
     int fv_set;
     double fv_cents, fv_hz;
+    /* A MELLOTRON's CAPSTAN WOW (MellotronMixin.voice_vibrato): the voice's
+       own vibrato where it has depth, else this one, every key alike (cents,
+       Hz, phase 0); wow_set 0 none */
+    int wow_set;
+    double wow_cents, wow_hz;
     /* A PICK (Plectrum): every partial over pick_hz pick_slope_db an octave
        louder (to pick_boost_max_db), the extra falling at pick_dbs, the rest
        ringing on; a doubled course crossed pick_stagger s apart (0 none) */
@@ -309,9 +319,12 @@ typedef struct {
     double pick_hz, pick_slope_db, pick_boost_max_db, pick_dbs, pick_stagger;
     /* ITS COURSES' PARTNERS (unison_voices): crs_kind 1 a unison partner on
        every harmonic (the mandolin's), 2 the 12-string's -- an octave partner
-       on the even harmonics under crs_split, a unison one from it */
+       on the even harmonics under crs_split, a unison one from it; 3 the
+       kanun's two strings, one sharp, one flat, 4 the oud's partner, either
+       side, at crs_uni_gain -- each course's cents drawn in crs_lo..crs_hi by
+       random.Random(crs_seed + the key) */
     int crs_kind;
-    double crs_split, crs_oct_gain, crs_oct_cents, crs_uni_gain, crs_uni_cents;
+    double crs_split, crs_oct_gain, crs_oct_cents, crs_uni_gain, crs_uni_cents, crs_seed, crs_lo, crs_hi;
     /* A CHURCH BELL's decay (ChurchBellProperties.harmonic_decay): each tube
        mode's mode_decays / 2, by church_slope an octave from tube_ref_hz */
     int church;
@@ -368,6 +381,7 @@ typedef struct {
     int octave_modulo;
     double octave_width, seat_x, decay_register_slope;
     double pitch_jitter_cents, timing_jitter_seconds;
+    double tape_key_cents;      /* a Mellotron's strip: each key's own tuning, +- (0 none) */
     double tension_bend, tension_bend_max, tension_bend_ref_hz, tension_bend_slope;
     int inharmonicity_dynamic;
     double inharmonicity_coefficient, ia, ib, ic, id, ie;   /* a + b x + c x^2 + d/x + e/x^2 */
@@ -624,7 +638,33 @@ typedef struct {
        coefficients the synced spectrum's (moog.sync_spectrum) */
     int u_n;
     double u_cents, u_mix, u_dc, u_dhz[2], u_width;
+    /* ITS PANEL: the knobs it was built from (moog.PANEL's keys, in its
+       order: NV_MK_*), what a knob turned live is built from again */
+    double pn[42];
 } MoogLayer;
+
+/* moog.PANEL's keys, in its order */
+enum {
+    NV_MK_OSC1_OCTAVE, NV_MK_OSC1_WAVE, NV_MK_OSC2_OCTAVE, NV_MK_OSC2_WAVE, NV_MK_OSC2_FREQ, NV_MK_TUNE,
+    NV_MK_SUB_WAVE, NV_MK_OSC1_LEVEL, NV_MK_OSC2_LEVEL, NV_MK_SUB_LEVEL, NV_MK_NOISE_LEVEL, NV_MK_CUTOFF,
+    NV_MK_RESONANCE, NV_MK_EG_AMOUNT, NV_MK_KB_TRACK, NV_MK_MODE, NV_MK_RES_BASS, NV_MK_F_ATTACK,
+    NV_MK_F_DECAY, NV_MK_F_SUSTAIN, NV_MK_F_RELEASE, NV_MK_A_ATTACK, NV_MK_A_DECAY, NV_MK_A_SUSTAIN,
+    NV_MK_A_RELEASE, NV_MK_GLIDE, NV_MK_SYNC, NV_MK_LFO1_RATE, NV_MK_LFO1_SHAPE, NV_MK_LFO1_DEPTH,
+    NV_MK_LFO1_DEST, NV_MK_LFO1_RESET, NV_MK_MOD_AMOUNT, NV_MK_MOD_DEST, NV_MK_MF104_ON, NV_MK_MF104_TIME,
+    NV_MK_MF104_RANGE, NV_MK_MF104_FEEDBACK, NV_MK_MF104_MIX, NV_MK_MF104_RATE, NV_MK_MF104_AMOUNT,
+    NV_MK_MF104_WAVE, NV_MK_N
+};
+
+/* tone.c: moog.py's tables by knob position (the export's MTAB): Q, then
+   osc_spectrum's (Q + 1) x 64 and sub_spectrum's (Q + 1) x 32 complex, then
+   the laws' constants (NV_MOOG_K) */
+#define NV_MOOG_K 47
+void nv_moog_tables(const double *t);
+/* tone.c: layer `out` from knob positions pn (NV_MK_N) as moog_spec fills
+   one, base the class's layer (what knobs do not set: the noise bank, the
+   body, the valve, the unison, the laws); 0, or -1 refused (SYNC, the
+   MF-104M under a moving pitch or shape, a pedal knob moved, no tables) */
+int nv_moog_build(const double *pn, const MoogLayer *base, MoogLayer *out);
 
 typedef struct {
     int n_layer;                            /* 1, or 2 a layered voice (moog.layers_of) */
@@ -759,6 +799,7 @@ typedef struct NoteClass {
     // its onset, the key-up ignored (ONE_SHOT_MIN_S)
     int one_shot;
     double one_shot_hold;
+    double tape_s;          // a Mellotron's tape: a key held longer falls silent there (tape_length_s), 0 none
     // each partial its own jitter (jitter_by_partial), its strike's sign
     // spread (strike_phase_spread): the tone's (a snare's wires)
     int pjit;
@@ -781,6 +822,7 @@ typedef struct NoteClass {
     int n_flam;
     double flam_s, flam_db;
     double flam_rate;       // a crowd (strike_flam_rate): bursts a second through the note, 0 none
+    double flam_exp;        // ...their levels exponential in dB (strike_flam_exp_db: a reed's crackle), 0 uniform
     // A FEW PEOPLE (strike_flam_people): how many, their lowest and highest
     // claps a second, the jitter, the dB spread; their palms' ring
     // (strike_flam_people_peak: lowest and highest Hz, dB, Q), pk_set 0 none
@@ -959,6 +1001,12 @@ typedef struct NoteClass {
     int n_drone;
     int drone_note[4], drone_k[4];
     double part_break_s;
+    // ...or ONE THE WHEEL CHOOSES THE NOTE OF (a pungi's drone_note_wheel):
+    // the first CC1 in even steps over these choices, the default with none;
+    // the drone_k[0] class, never corked; n_dchoice 0 none
+    int n_dchoice, dchoice_def;
+    int dchoice[16];
+    int dchoice_var;            // live's: the drone's own patch, this variation (Patch.drone_note_var)
     // ...LIVE's (Patch.drone_wheel, drone_ratios, drone_gain): the wheel corks
     // them, each sounding at the tonic x its ratio, at its gain
     int drone_wheel, n_dratio;
@@ -973,6 +1021,10 @@ typedef struct NoteClass {
     // over rip_s from rip_start_db under), each smeared; 0 cents none
     double fall_cents, fall_at_s, fall_s, fall_fade_db, fall_smear;
     double rip_cents, rip_s, rip_start_db, rip_smear;
+    // A CUT (cut_semitones: the uilleann's ornament): the note cut_semi above
+    // for cut_s at the onset, slurred into the note; cut_semi 0 none
+    int cut_semi;
+    double cut_s;
     // ITS OWN CHORUS where the part sends no CC93: a pedal (chorus_send, its
     // comb cho_cents) or a detuned pair (detuned_pair: cents down, up)
     double cho_send;
@@ -988,6 +1040,9 @@ typedef struct NoteClass {
     // Q, mid dB, high dB; efx_eq_set 0 none) and its reverb send (0-127)
     int efx_set, efx_eq_set;
     double efx_level, efx_od, efx_eq[5], efx_rev;
+    // ...AS SET (live's: nvlive builds its chain, gsefx.chain(tone_state)):
+    // efx_raw 0 none, else its type (msb, lsb) and parameters 1-20 (-1 unset)
+    int efx_raw, efx_raw_ty[2], efx_raw_p[21];
     // ...ITS CHORUS DEVICE (its 'cf': chorus.gs_copies), efx_cf 0 none: tau,
     // rate, vd, fb, lpf (0 none), share, taps, the head's beta; each output's
     // place (l, r, c: left and right incidence, left and right delay in
@@ -1009,6 +1064,12 @@ typedef struct NoteClass {
     // down; sens)
     int flt_set, flt_ty, flt_k;
     double flt_p[3], flt_c[5];
+    // ...A DIDGERIDOO's MOUTH (flt_k 4: efxfilter.mouth, VOWEL's three rows):
+    // its states' centres, their choice's cdf (numpy's, of the shares), the
+    // centres sorted closed to open (the wheel's), the dwell's median and log
+    // spread, the glide, the seed's offset (MOUTH_SEED_OFFSET); n_mouth 0 none
+    int n_mouth, mouth_seed;
+    double mouth_st[16][3], mouth_cdf[16], mouth_wst[16][3], mouth_dw[2], mouth_glide;
     // ...ITS BUS (efxbus.Bus), efx_bus 0 none: 1 Lo-Fi (step, quantum, pre
     // and post filters' a, 0 none), 2 a compressor (threshold dB, ratio,
     // attack and release k, makeup); bus_p[10], [11] its dry and wet
@@ -1184,6 +1245,7 @@ void nv_section_seat(const VoiceSnap *v, const ToneIn *t, int i, double *out);
 /* npyrandom.c: numpy's default_rng(seed).standard_normal, draw by draw */
 void *nv_npy_new(unsigned long long seed);
 double nv_npy_next(void *g);
+double nv_npy_uniform(void *g);
 void nv_npy_free(void *g);
 
 /* room.cpp: a source's image sources in the room (SynthProperties.image_sources) */
@@ -1244,11 +1306,15 @@ int nv_efx_parse(const unsigned char *d, int n, int *k, int *a, int *b);
 double nv_efx_eq_gain(const double *fc, double f);
 void *nv_efx_live_new(const double *X, double SR);
 void nv_efx_live_free(void *h);
-void nv_efx_live_apply(void *h, int k, int a, int b);
+void nv_efx_live_apply(void *h, double t, int k, int a, int b);
+int nv_efx_live_parts(void *h);
+int nv_efx_live_filter(void *h, int ch, double *head, double *seg, int cap);
 int nv_efx_live_on(void *h, int ch);
 long nv_efx_live_rev(void *h);
+int nv_efx_live_state(void *h, int *o, int cap, const char **why);
+const double *nv_efx_live_rec(void *h);
 const double *nv_efx_live_chain(void *h, int ch, int *status, const char **why);
-void nv_efx_live_source(void *h, int src, int v);
+void nv_efx_live_source(void *h, double t, int src, int v);
 void nv_fold_begin(const double *in, int nin, double n2, double xf);
 int nv_fold_pending(void);
 void nv_fold_end(double *out);
