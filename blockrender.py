@@ -3448,7 +3448,9 @@ def _prep_alias_sweep(BCrows, BRrows, nblk, notes):
         _af0, _af1, _aT, _afs, _anh = _asw
         _ab0 = int(_on * SR) // BLK
         _atb = (np.arange(nblk) - _ab0 + 0.5) * BLK / float(SR)
-        _af = _af0 * (_af1 / _af0) ** np.clip(_atb / _aT, 0.0, 1.0)
+        # (libm's pow, as the engine's: numpy's own array power is SVML's)
+        import native as _NVX
+        _af = _af0 * _NVX.xpow(_af1 / _af0, np.clip(_atb / _aT, 0.0, 1.0))
         _rws = []
         for _ak in range(1, int(_anh) + 1):
             _nom = T.alias_fold(_ak * _af0, _afs)

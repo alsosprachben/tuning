@@ -131,7 +131,7 @@ class ToneIn(ctypes.Structure):
                 + [('room_bands', C * 9), ('pjit', I), ('sps', C), ('dur', C), ('ssc', I)]
                 + [('rev', I), ('rev_n0', C), ('rev_arr', C), ('planes', C * 6), ('order', I), ('radius', C),
                    ('has_radius', I), ('pps_seed', ctypes.c_longlong), ('dist', C), ('cls', ctypes.c_longlong),
-                   ('hammer_on', C), ('gs_eq', C * 4), ('fx_comp', C * 3)])
+                   ('hammer_on', C), ('gs_eq', C * 4), ('fx_comp', C * 3), ('alias_br', C * 32), ('n_alias', I)])
 
 
 class VoiceInit(ctypes.Structure):
@@ -287,7 +287,7 @@ class NoteClass(ctypes.Structure):
                    ('flt_set', I), ('flt_ty', I), ('flt_k', I), ('flt_p', C * 3), ('flt_c', C * 5),
                    ('n_mouth', I), ('mouth_seed', I), ('mouth_st', C * 3 * 16), ('mouth_cdf', C * 16),
                    ('mouth_wst', C * 3 * 16), ('mouth_dw', C * 2), ('mouth_glide', C),
-                   ('efx_bus', I), ('bus_p', C * 12)])
+                   ('efx_bus', I), ('bus_p', C * 12), ('fold_restrike', I), ('alias_sweep', C * 5)])
 
 
 class NoteIn(ctypes.Structure):
@@ -310,7 +310,7 @@ class NoteIn(ctypes.Structure):
                    ('sym_drv', ctypes.c_void_p), ('blk', C), ('xp', C),
                    ('hammered', I), ('reslur', I), ('hammer_on', C), ('siren_set', I), ('siren_end', C),
                    ('press', C), ('gs_eq', C * 4), ('fx_set', I), ('fx_level', C), ('fx_od', C),
-                   ('fx_comp', C * 3), ('fx_p3d', I), ('fx_angle', C)])
+                   ('fx_comp', C * 3), ('fx_p3d', I), ('fx_angle', C), ('alias_br', C * 32), ('n_alias', I)])
 
 
 class NoteOut(ctypes.Structure):
@@ -855,7 +855,11 @@ def _modal_drum(cls):
                    _hf_rolloff=None, _band_trim=None)
     if any(_owner(cls, n) != o for n, o in own.items()):
         return False
+    # (a TAM-TAM: a cymbal's, each measured mode its own decay -- ModeDecays,
+    # past them the cymbal's ring -- and the stroke's tilt across them)
+    gong = cym and issubclass(cls, T.ModeDecays) and len(cls.mode_decays) <= 400
     if (_owner(cls, 'harmonic_decay') not in ('SynthProperties', 'CymbalProperties')
+            and not (gong and _owner(cls, 'harmonic_decay') == 'ModeDecays')
             and decay_target(cls) is None
             and not (_tube(cls) and _owner(cls, 'harmonic_decay') in ('TubularBellProperties', 'ChurchBellProperties'))):
         return False
@@ -873,7 +877,7 @@ def _modal_drum(cls):
         mg = mr = ()
     return (isinstance(mg, (tuple, list)) and isinstance(mr, (tuple, list)) and len(mg) == len(mr) <= 320
             and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
-            and not cls.mode_stroke_tilt and not cls.bore_corner_hz and not cls.harmonic_touch
+            and (not cls.mode_stroke_tilt or gong) and not cls.bore_corner_hz and not cls.harmonic_touch
             and not cls.pickup_points and len(getattr(cls, 'band_trim_db', ())) <= 32
             and len(cls.unison_detune or ()) <= 8)
 
@@ -1904,8 +1908,7 @@ def kit_tables(kitlist):
             spar[SPAR * (q + 1) - 4] = len(ly)
             spar[SPAR * (q + 1) - 3:SPAR * (q + 1) - 3 + len(ly)] = [float(k) for k in ly]
             if (kit_drum(cls) and ss is not None
-                    and getattr(cls, 'siren_rotor', None) in (None, 'fire')
-                    and not getattr(cls, 'alias_sweep', None)):
+                    and getattr(cls, 'siren_rotor', None) in (None, 'fire')):
                 classes[q] = cls
     # (a key the engine plays only where it plays every layer with it)
     for q in range(n):
@@ -2098,7 +2101,8 @@ def snapshot(props):
             s.mode_decays[:s.n_md] = [float(row[4]) for row in p.TUBE_MODES]
             if _owner(type(p), 'harmonic_decay') == 'ChurchBellProperties':     # (a church bell's own law)
                 s.church, s.church_slope = 1, float(p.decay_register_slope)
-        if timpani_voice(type(p)):
+        if timpani_voice(type(p)) or (isinstance(p, T.CymbalProperties) and isinstance(p, T.ModeDecays)
+                                      and p.mode_stroke_tilt):
             s.mst, s.mst_ref = float(p.mode_stroke_tilt), float(p.mode_stroke_ref_db)
         if isinstance(p, T.ModeDecays) or timpani_voice(type(p)):
             ma, mp = getattr(p, 'mode_after', ()), getattr(p, 'mode_phases', ())
@@ -3049,7 +3053,7 @@ def note_class(cls):
         # a tape played backwards)
         def drum_has(a):
             if a in ('one_shot', 'jitter_by_partial', 'strike_phase_spread', 'bloom_seconds', 'stroke_scatter',
-                     'gate_time', 'played_backwards', 'strike_noise_tail'):
+                     'gate_time', 'played_backwards', 'strike_noise_tail', 'fold_restrike'):
                 return True
             # ...a machine's burst train, and up to 32 layers (a Simmons: 21)
             # ...a crowd's bursts through the note (no record's, no exponential levels)
@@ -3124,6 +3128,9 @@ def note_class(cls):
             return None
         k = NoteClass()
         k.init = v[0]
+        k.fold_restrike = int(bool(getattr(cls, 'fold_restrike', False)))     # (a gong: emit_partial's _fold_cls)
+        _asw = getattr(cls, 'alias_sweep', None)                        # (an aliasing sweep's: _prep_alias_sweep's)
+        k.alias_sweep[:] = [float(x) for x in _asw] if _asw else [0.0] * 5
         k.chiff_max_valve_time = cls.chiff_max_valve_time
         k.release_valve_set = int(cls.release_valve_time is not None)
         k.release_valve_time = cls.release_valve_time or 0.0

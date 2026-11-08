@@ -1559,6 +1559,7 @@ struct Song {
     std::map<long long, std::vector<unsigned char>> sym_drv;    // each mix channel's strings' driver (_SYM_CH)
     std::map<NoteKey, std::pair<double, double>> meend;         // _MEEND_AT: (its ratio at Note On, its row or -1)
     std::map<NoteKey, std::pair<double, double>> siren;         // _SIREN_AT: (its row, its rotor's end)
+    std::map<NoteKey, std::vector<double>> alias;               // _ALIAS_AT: its harmonics' rows (-1 none)
     // a part's insertion effect: (each mix channel's first effect note's onset, distance), in the note loop's order
     std::map<long long, std::vector<std::pair<double, double>>> efx_part;
     double gs_eq[4] = {0.0, 0.0, 0.0, 0.0};     // the file's GS EQ (gs_eq_gain), [0] 0 none
@@ -3014,6 +3015,27 @@ int nv_song_gs_eq_of(void *s, long long part, double *eq)
     for (int i = 0; i < 4; i++)
         eq[i] = S->gs_eq[i];
     return 1;
+}
+
+// AN ALIASING SWEEP's note (_ALIAS_AT): its harmonics' rows, by harmonic (-1 none)
+void nv_song_alias(void *s, long long ch, int note, double on, const double *rows, int n)
+{
+    ((nv::Song *)s)->alias[nv::NoteKey{ch, note, on}] = std::vector<double>(rows, rows + n);
+}
+
+// note i's: how many (0 none), up to cap into out
+int nv_song_alias_of(void *s, int i, double *out, int cap)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (i < 0 || i >= (int)S->notes.size())
+        return 0;
+    auto it = S->alias.find(nv::NoteKey{S->notes[i].ch, S->notes[i].note, S->notes[i].on});
+    if (it == S->alias.end())
+        return 0;
+    int n = (int)it->second.size();
+    for (int q = 0; q < n && q < cap; q++)
+        out[q] = it->second[q];
+    return n < cap ? n : cap;
 }
 
 // A SIREN's note (_SIREN_AT): its rotor's row, and where it ends

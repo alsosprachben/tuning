@@ -171,6 +171,9 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     memcpy(t.sv, n->sv, sizeof t.sv);
     t.sound_vib_depth_cents = n->sound_vib_depth_cents; t.vibrato_delay = n->vibrato_delay;
     t.br = n->br; t.fx = n->fx; t.mk = n->mk; t.fm_omega = n->fm_omega; t.fm_phase = n->fm_phase;
+    t.n_alias = n->n_alias;
+    for (int q = 0; q < n->n_alias && q < 32; q++)
+        t.alias_br[q] = n->alias_br[q];
     t.listener_distance = c.listener_distance; t.head_radius = c.head_radius; t.pan_angle = o.pan_angle;
     memcpy(t.room_bands, n->room_bands, sizeof t.room_bands);
     t.rev = K->played_backwards;            // (em.reverse: its rows emitted backwards)
@@ -1161,6 +1164,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             n.siren_set = 1;
             n.siren_end = sir[1];
         }
+        n.n_alias = nv_song_alias_of(song, i, n.alias_br, 32);     // an aliasing sweep's rows, by harmonic
         if (k->organ) {                     // A REGISTERED ORGAN: its ranks as its registration leaves them
             // (one that bends: only a hit's, whose ranks ride no chest -- the
             // note's own bend row, nv_song_organ_note's br)
@@ -1278,7 +1282,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         long long left = cap - total;
         // (the fold: this strike's take of the one before, and its own left to the next)
         bool fold_out = false;
-        const bool folds = fold_on && plain(ch, iv[0], dv[0]);
+        const bool folds = fold_on && (k->fold_restrike || plain(ch, iv[0], dv[0]));    // (a gong's, or a plain stroke)
         if (folds) {
             std::vector<double> fin;
             auto fs = fold_store.find(std::make_pair(ch, iv[0]));
@@ -1289,7 +1293,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             }
             double n2 = -1.0;
             const double nx2 = next_same[i];
-            if (!std::isnan(nx2) && plain(ch, iv[0], nx2)) {
+            if (!std::isnan(nx2) && (k->fold_restrike || plain(ch, iv[0], nx2))) {
                 n2 = (double)(long long)(nx2 * n.sr);
                 const double at0 = k->init.attack_time != 0.0 ? k->init.attack_time : 0.004;
                 nv_fold_begin(fin.data(), (int)(fin.size() / 8), n2, std::max(32.0, at0 * n.sr));

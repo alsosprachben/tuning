@@ -1814,7 +1814,70 @@ int main(int argc, char **argv)
             }
         tcfg_m[c] = {std::max(0.5, 5.5 + rv), pk, 0.0, 0.0};
     }
-    bool rows_ = !fch.empty() || !gch.empty() || nw || nsr || nbr_ || !mrows.empty() || !sir.empty() || !trows.empty();
+    // AN ALIASING SWEEP's ROWS (_prep_alias_sweep): a sawtooth swept from
+    // f0 to f1 over T s through a sampler at fs with no filter -- each
+    // harmonic folded about fs/2, its ratio to where it sat at the onset
+    // block by block (from the onset's block's middle), its phase the cumsum
+    // of (ratio - 1) x BLK; after the tremolos' rows
+    struct AliasRow {
+        std::vector<float> r;
+        std::vector<double> c;
+    };
+    std::vector<AliasRow> arows;
+    const int abase = tbase + (int)trows.size();
+    {
+        const long nblk_ = (long)(((long long)(total * SR) + (long long)SR) / (long long)BLK + 2);
+        auto fold = [](double f, double fs) {           // tonelib.alias_fold (Python's float %: fmod here)
+            f = fmod(f, fs);
+            return f > fs / 2.0 ? fs - f : f;
+        };
+        for (int i = 0, n = nv_song_n_notes(song); i < n; i++) {
+            long long c;
+            int iv[4];
+            double dv[2];
+            nv_song_get_note(song, i, &c, iv, dv);
+            int q = nv_song_kidx(song, i);
+            const NoteClass *k = (q >= 0 && q < (int)K.size()) ? K[q] : nullptr;
+            if (!k || k->alias_sweep[4] <= 0.0)
+                continue;
+            const double f0 = k->alias_sweep[0], f1 = k->alias_sweep[1], T = k->alias_sweep[2], fs = k->alias_sweep[3];
+            const int nh = (int)k->alias_sweep[4];
+            const long long ab0 = (long long)(dv[0] * SR) / BLK;
+            std::vector<double> atb(nblk_), af(nblk_);
+            for (long b = 0; b < nblk_; b++) {
+                atb[b] = ((double)(b - ab0) + 0.5) * (double)BLK / SR;
+                double x = atb[b] / T;
+                x = x < 0.0 ? 0.0 : (x > 1.0 ? 1.0 : x);        // (np.clip)
+                af[b] = f0 * pow(f1 / f0, x);
+            }
+            std::vector<double> rws;
+            for (int h = 1; h <= nh; h++) {
+                const double nom = fold(h * f0, fs);
+                if (nom < 20.0) {
+                    rws.push_back(-1.0);
+                    continue;
+                }
+                AliasRow row;
+                row.r.resize(nblk_);
+                row.c.assign(nblk_, 0.0);
+                for (long b = 0; b < nblk_; b++) {
+                    double fk = fmod(h * af[b], fs);
+                    fk = fk > fs / 2.0 ? fs - fk : fk;
+                    row.r[b] = (float)(atb[b] > 0.0 ? fk / nom : 1.0);
+                }
+                double acc = 0.0;
+                for (long b = 0; b + 1 < nblk_; b++) {
+                    acc = acc + ((double)row.r[b] - 1.0) * BLK;
+                    row.c[b + 1] = acc;
+                }
+                rws.push_back((double)(abase + (int)arows.size()));
+                arows.push_back(std::move(row));
+            }
+            nv_song_alias(song, c, iv[0], dv[0], rws.data(), (int)rws.size());
+        }
+    }
+    bool rows_ = !fch.empty() || !gch.empty() || nw || nsr || nbr_ || !mrows.empty() || !sir.empty() || !trows.empty()
+                 || !arows.empty();
     nv_gsd_place_reset();                       // (blockrender's _GSD_PLACE: the render's)
     long long P = nv_prepare(song, K.data(), &t, rows_ ? br.data() : nullptr, rows_ ? 1024 : 0, &rs, &rows,
                              qacc, &az, E.kind.data(),
@@ -2406,7 +2469,7 @@ int main(int argc, char **argv)
     // channel's fader's level at each edge, where it has one); a fader's
     // ratio 1 and phase 0, its level; no rows, one of ones and no levels
     size_t ng = gch.size(), nr = std::max<size_t>(ng + nbr_ + nw + nsr + fch.size() + mrows.size() + sir.size()
-                                                  + trows.size(), 1);
+                                                  + trows.size() + arows.size(), 1);
     std::vector<float> BRr(nr * nblk, 1.0f), BLr;
     std::vector<double> BCr(nr * nblk, 0.0);
     for (size_t r = 0; r < ng; r++)
@@ -2414,6 +2477,14 @@ int main(int argc, char **argv)
                         BCr.data() + r * nblk);
     if (!fch.empty() || nw || nbr_ || !sir.empty() || !trows.empty())
         BLr.assign(nr * (nblk + 1), 1.0f);
+    for (size_t q = 0; q < arows.size(); q++) {  // the aliasing sweeps' (theirs: after the tremolos')
+        if ((long)arows[q].r.size() != (long)nblk) {
+            fprintf(stderr, "nvrender: refused: an aliasing sweep's rows not the render's length\n");
+            return 2;
+        }
+        std::copy(arows[q].r.begin(), arows[q].r.end(), BRr.data() + ((size_t)abase + q) * nblk);
+        std::copy(arows[q].c.begin(), arows[q].c.end(), BCr.data() + ((size_t)abase + q) * nblk);
+    }
     for (size_t q = 0; q < sir.size(); q++) {   // the sirens' rotors (their place: after the rest)
         if ((long)sir[q].r.size() != (long)nblk) {
             fprintf(stderr, "nvrender: refused: a siren's rows not the render's length\n");

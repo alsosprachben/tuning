@@ -696,6 +696,13 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
                 t = &tml;
             }
         }
+        /* AN ALIASING SWEEP's harmonic on its own folded row (_ALIAS_AT; -1 none) */
+        if (t_note->n_alias > 0) {
+            if (t != &tml)
+                tml = *t;
+            tml.br = m - 1 < t_note->n_alias ? t_note->alias_br[m - 1] : -1.0;
+            t = &tml;
+        }
         double pd[4];
         nv_partial_decay(v, t->f0, m, pd);          /* dbps, logr, aftL, logrA */
         double gM = hv * t->gain * nv_radiation_gain(v, hf, 0.0, 0);
