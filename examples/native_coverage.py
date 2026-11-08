@@ -24,6 +24,9 @@ TASKS = [
     ("GM1", True, "Program changes in nvlive: a builder thread, MIDI program change, the panel's picker"),
     ("GM1", True, "Live: the Moog (knob-neutral templates and the slab's moog.weights; CC71-75 its knobs; "
                   "a layered voice; the MF-104M) -- not yet a unison or SYNC live"),
+    ("GM1", True, "Live: the Moog Messenger both ways (live._messenger_cc, messenger_sync/_pitch): its chart "
+                  "turns a part's knobs (the panel rebuilt in C from the export's MTAB, the knob's glide; both "
+                  "firmwares), the panel and each note's bend sent back (--messenger-out) -- not SYNC's knob"),
     ("GM1", True, "Live: check the fiddle, tinkle bell, melodic tom, reverse cymbal and breath noise against live.Live"),
     ("GM1", True, "Live: a drum set identical to live.Live beyond the kick and toms (the Standard set's every key, "
                   "nvlive end to end)"),
