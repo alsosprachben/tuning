@@ -1203,7 +1203,9 @@ int main(int argc, char **argv)
     // A MESSENGER TO SET (live.py --messenger): --messenger-out=/dev/snd/midiCxDy,
     // written by its own thread; --messenger-bend=SEMITONES its bend range
     // (2); in --test, --messenger-log=FILE what it would be sent, by block
-    static MsgrOut mo;
+    // (never destroyed: its detached thread waits on mo.cv, and glibc's
+    // pthread_cond_destroy at exit would wait for it -- a hang on quitting)
+    MsgrOut &mo = *new MsgrOut;
     {
         std::string md = opt(argc, argv, "messenger-out", ""), ml = opt(argc, argv, "messenger-log", "");
         double mb = atof(opt(argc, argv, "messenger-bend", "2").c_str());
