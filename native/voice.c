@@ -223,6 +223,15 @@ double nv_mode_ratio(const VoiceSnap *v, int m)
 
 /* SynthProperties.pickup_gain: what the coils read of string mode h (of a
    touched harmonic's string, its touch under the note) */
+/* SynthProperties.series_volume's LOW PASS where a voice has no pickup (a
+   Mellotron's tape: lowpass_hz, lowpass_order x 6 dB/octave above it): the
+   divisor at string mode sm's frequency */
+static double lp_div(const VoiceSnap *v, int sm)
+{
+    double f = v->frequency_x * pow(2.0, v->octave_position) * sm / (v->touch ? v->touch : 1);
+    return pow(1.0 + pow(f / v->lp_hz, 2.0 * v->lp_order), 0.5);
+}
+
 static double eg_pickup_gain(const VoiceSnap *v, int h)
 {
     double t[4];
@@ -340,24 +349,34 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
     if (v->kind == 4 && v->strike_point != 0.0) {   /* a quill's strike comb (no fill: a plectrum) */
         double comb = (1.0 - v->strike_depth) + v->strike_depth * fabs(sin(harmonic * PI * v->strike_point));
         double r = v->gain / pow((double)harmonic, v->attack_dampening) * comb;
+        if (v->lp_hz != 0.0 && !v->elec)
+            r /= lp_div(v, harmonic);
         if (harmonic % 2 == 0 && v->even_db_set)
             r *= pow(10.0, v->even_harmonic_db / 20.0);
         return r;
     }
     if (v->kind == 4 || v->kind == 6 || v->kind == 2) {     /* SynthProperties': the pluck's comb (a Moog's body's norm; a pipe's with no table) */
         double r = v->gain / pow((double)harmonic, v->attack_dampening) * (harmonic <= 256 ? v->comb[harmonic] : 0.0);
+        if (v->lp_hz != 0.0 && !v->elec)
+            r /= lp_div(v, harmonic);
         if (harmonic % 2 == 0 && v->even_db_set)
             r *= pow(10.0, v->even_harmonic_db / 20.0);
         return r;
     }
-    if (v->kind == 3)                           /* the pluck comb at plucked_harmonic 0: whole */
-        return v->gain / pow((double)harmonic, v->attack_dampening) * (harmonic % 1000000 ? 1.0 : 0.0);
+    if (v->kind == 3) {                         /* the pluck comb at plucked_harmonic 0: whole */
+        double r = v->gain / pow((double)harmonic, v->attack_dampening) * (harmonic % 1000000 ? 1.0 : 0.0);
+        if (v->lp_hz != 0.0 && !v->elec)
+            r /= lp_div(v, harmonic);
+        return r;
+    }
     int sm = harmonic;                          /* harmonic_touch 0 */
     double depth = v->strike_depth;
     if (v->strike_fills)
         depth *= (1.0 - v->strike_fill_fraction * v->attack_volume);
     double comb = (1.0 - depth) + depth * fabs(sin(sm * PI * v->strike_point));
     double r = v->gain / pow((double)sm, v->attack_dampening) * comb;
+    if (v->lp_hz != 0.0 && !v->elec)
+        r /= lp_div(v, sm);
     if (harmonic % 2 == 0 && v->even_db_set)
         r *= pow(10.0, v->even_harmonic_db / 20.0);
     return r;
@@ -504,7 +523,7 @@ static double blare(const VoiceSnap *v, double hz)
 /* GrandPianoProperties.harmonic_volume, on SynthProperties' (no bore) */
 static double harmonic_volume(const VoiceSnap *v, int harmonic)
 {
-    if (v->n_hvt)                               /* a measured series: the table, nothing past it */
+    if (v->n_hvt && !v->hvt_bore)               /* a measured series: the table, nothing past it */
         return harmonic <= v->n_hvt ? v->gain * v->hvt[harmonic - 1] : 0.0;
     double s = nv_series_volume(v, harmonic);
     if (s == 0.0)
@@ -928,6 +947,32 @@ int nv_unison_voices(const VoiceSnap *v, double frequency, int harmonic, double 
             out[5 * n + 3] = harmonic_decay; out[5 * n + 4] = 0.0;
             n++;
         }
+        if (v->crs_kind == 3 || v->crs_kind == 4) {
+            /* THE KANUN's COURSE (KanunProperties.unison_voices): the key's two
+               strings, one sharp, one flat; the OUD's (OudProperties'): one
+               partner either side -- each from random.Random(seed + key) */
+            const int midi = (int)nearbyint(69 + 12 * log((double)frequency / 440.0) / log(2));
+            PyRandom rng;
+            pyr_seed(&rng, (long long)v->crs_seed + midi);
+            double cs[2];
+            int nc = 1;
+            if (v->crs_kind == 3) {
+                cs[0] = pyr_uniform(&rng, v->crs_lo, v->crs_hi);
+                cs[1] = -pyr_uniform(&rng, v->crs_lo, v->crs_hi);
+                nc = 2;
+            } else {
+                const double c = pyr_uniform(&rng, v->crs_lo, v->crs_hi);
+                cs[0] = c * (pyr_random(&rng) < 0.5 ? 1.0 : -1.0);
+            }
+            for (int q = 0; q < nc; q++) {
+                out[5 * n + 0] = v->crs_kind == 3 ? 1.0 : v->crs_uni_gain;
+                out[5 * n + 1] = 0.0;
+                out[5 * n + 2] = pow(2.0, cs[q] / 1200.0) - 1.0;
+                out[5 * n + 3] = harmonic_decay;
+                out[5 * n + 4] = 0.0;
+                n++;
+            }
+        }
         return n;
     }
     double gains[2] = {v->string_gain[0] * string_blend(v, frequency, v->string_break_hz[0]),
@@ -1034,7 +1079,23 @@ static int solo_vibrato(const VoiceSnap *v, double frequency, int index, double 
     return 1;
 }
 
+static int voice_vibrato_base(const VoiceSnap *v, double frequency, int index, double *out);
+
+/* SynthProperties.voice_vibrato, and a MELLOTRON's over it (MellotronMixin):
+   the voice's own where it has depth, else the capstan's wow */
 int nv_voice_vibrato(const VoiceSnap *v, double frequency, int index, double *out)
+{
+    const int got = voice_vibrato_base(v, frequency, index, out);
+    if (v->wow_set && !(got && out[0] != 0.0)) {
+        out[0] = pow(2.0, v->wow_cents / 1200.0) - 1.0;
+        out[1] = v->wow_hz;
+        out[2] = 0.0;
+        return 1;
+    }
+    return got;
+}
+
+static int voice_vibrato_base(const VoiceSnap *v, double frequency, int index, double *out)
 {
     if (v->sect_vib) {                          /* SectionMixin: each player's own */
         if (v->sect_vib_cents == 0.0)
@@ -1603,9 +1664,19 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
     }
     if (s->kind == 2 && (s->n_pts || s->low_set))  /* an organ pipe: its register's table (mode_gains_here) */
         s->n_mm = nv_mode_gains_at(s, s->frequency_x * pow(2.0, s->octave_position), s->mm_gain);
+    if (s->kind == 4 && s->hvt_bore)            /* a blown reed's table, at its register (mode_gains_here) */
+        s->n_hvt = nv_mode_gains_at(s, s->frequency_x * pow(2.0, s->octave_position), s->hvt);
     o->pitch_jitter = c->pitch_jitter_cents != 0.0
         ? pow(2.0, pyr_uniform(rs, -c->pitch_jitter_cents, c->pitch_jitter_cents) / 1200.0) - 1.0 : 0.0;
     o->attack_jitter = c->timing_jitter_seconds != 0.0 ? pyr_uniform(rs, 0.0, c->timing_jitter_seconds) : 0.0;
+    if (c->tape_key_cents != 0.0) {
+        /* A MELLOTRON's STRIP (MellotronMixin.__init__): each key's own
+           tuning, random.Random(0x7A9E0 + the key), over the note's draw */
+        const int km = (int)nearbyint(69 + 12 * log(frequency / 440.0) / log(2));
+        PyRandom tr;
+        pyr_seed(&tr, 0x7A9E0 + (long long)km);
+        o->pitch_jitter = pow(2.0, pyr_uniform(&tr, -c->tape_key_cents, c->tape_key_cents) / 1200.0) - 1.0;
+    }
     o->tension_bend = c->tension_bend;
     if (c->tension_bend != 0.0) {
         double tbs = c->tension_bend > 0.0 ? 1.0 : -1.0;

@@ -60,7 +60,10 @@ TASKS = [
                   "lattice (fall_cents, rip_cents: Song::gliss)"),
     ("GM1", True, "Files: tremolo picking (tremolo_pick_hz: 25.18 MandolinTrem, 27.25, 34.4, 115.16, the "
                   "biwa's): its strokes in Song::gliss, seeded as the Python's"),
-    ("GM1", False, "Files: the uilleann pipes' cut (cut_semitones: 109.11 -- _CUT_OF's legato and occurrence)"),
+    ("GM1", True, "Files: the uilleann pipes' cut (cut_semitones: 109.11, Song::gliss -- the flick takes the "
+                  "written note's legato, _CUT_OF) and the pungi's wheel-chosen drone (111.8, Song::drones)"),
+    ("GM1", False, "Live: the uilleann's cut (Live._cut_on) and the pungi's drone (Live._drone_note) -- "
+                   "109.11 and 111.8 refused in live (LIVE_REFUSED)"),
     ("GM2", True, "Registered variations in files (GS's organs, harpsichords and hits, the MT-32 set's): a "
                   "variation's organ as a program's (Song::porg, nvrender's organ pass, the fader's swell by the "
                   "note's class); a layered one's organ still Python's"),

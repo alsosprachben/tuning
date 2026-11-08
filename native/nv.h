@@ -295,6 +295,11 @@ typedef struct {
        hvt[h - 1], nothing past n_hvt; 0 none */
     int n_hvt;
     double hvt[512];
+    /* ...a played pipe's table UNDER ITS BORE (SynthProperties' series over
+       mode_gains_here, the bore after: the blown reeds'), each note's from
+       pipe_g and its low register's (nv_mode_gains_at) at init; 0 the
+       helicopter's, the table whole */
+    int hvt_bore;
     /* THE WASH WHERE THE BODY IS (GuitarFretNoiseProperties.chiff_harmonic_gain:
        the body's gain at the harmonic x the roll-off, in place of the chiff's) */
     int chiff_bore;
@@ -302,6 +307,11 @@ typedef struct {
        voice_vibrato): its depth's cents (x 1.4142) and rate; fv_set 0 none */
     int fv_set;
     double fv_cents, fv_hz;
+    /* A MELLOTRON's CAPSTAN WOW (MellotronMixin.voice_vibrato): the voice's
+       own vibrato where it has depth, else this one, every key alike (cents,
+       Hz, phase 0); wow_set 0 none */
+    int wow_set;
+    double wow_cents, wow_hz;
     /* A PICK (Plectrum): every partial over pick_hz pick_slope_db an octave
        louder (to pick_boost_max_db), the extra falling at pick_dbs, the rest
        ringing on; a doubled course crossed pick_stagger s apart (0 none) */
@@ -309,9 +319,12 @@ typedef struct {
     double pick_hz, pick_slope_db, pick_boost_max_db, pick_dbs, pick_stagger;
     /* ITS COURSES' PARTNERS (unison_voices): crs_kind 1 a unison partner on
        every harmonic (the mandolin's), 2 the 12-string's -- an octave partner
-       on the even harmonics under crs_split, a unison one from it */
+       on the even harmonics under crs_split, a unison one from it; 3 the
+       kanun's two strings, one sharp, one flat, 4 the oud's partner, either
+       side, at crs_uni_gain -- each course's cents drawn in crs_lo..crs_hi by
+       random.Random(crs_seed + the key) */
     int crs_kind;
-    double crs_split, crs_oct_gain, crs_oct_cents, crs_uni_gain, crs_uni_cents;
+    double crs_split, crs_oct_gain, crs_oct_cents, crs_uni_gain, crs_uni_cents, crs_seed, crs_lo, crs_hi;
     /* A CHURCH BELL's decay (ChurchBellProperties.harmonic_decay): each tube
        mode's mode_decays / 2, by church_slope an octave from tube_ref_hz */
     int church;
@@ -368,6 +381,7 @@ typedef struct {
     int octave_modulo;
     double octave_width, seat_x, decay_register_slope;
     double pitch_jitter_cents, timing_jitter_seconds;
+    double tape_key_cents;      /* a Mellotron's strip: each key's own tuning, +- (0 none) */
     double tension_bend, tension_bend_max, tension_bend_ref_hz, tension_bend_slope;
     int inharmonicity_dynamic;
     double inharmonicity_coefficient, ia, ib, ic, id, ie;   /* a + b x + c x^2 + d/x + e/x^2 */
@@ -759,6 +773,7 @@ typedef struct NoteClass {
     // its onset, the key-up ignored (ONE_SHOT_MIN_S)
     int one_shot;
     double one_shot_hold;
+    double tape_s;          // a Mellotron's tape: a key held longer falls silent there (tape_length_s), 0 none
     // each partial its own jitter (jitter_by_partial), its strike's sign
     // spread (strike_phase_spread): the tone's (a snare's wires)
     int pjit;
@@ -781,6 +796,7 @@ typedef struct NoteClass {
     int n_flam;
     double flam_s, flam_db;
     double flam_rate;       // a crowd (strike_flam_rate): bursts a second through the note, 0 none
+    double flam_exp;        // ...their levels exponential in dB (strike_flam_exp_db: a reed's crackle), 0 uniform
     // A FEW PEOPLE (strike_flam_people): how many, their lowest and highest
     // claps a second, the jitter, the dB spread; their palms' ring
     // (strike_flam_people_peak: lowest and highest Hz, dB, Q), pk_set 0 none
@@ -959,6 +975,11 @@ typedef struct NoteClass {
     int n_drone;
     int drone_note[4], drone_k[4];
     double part_break_s;
+    // ...or ONE THE WHEEL CHOOSES THE NOTE OF (a pungi's drone_note_wheel):
+    // the first CC1 in even steps over these choices, the default with none;
+    // the drone_k[0] class, never corked; n_dchoice 0 none
+    int n_dchoice, dchoice_def;
+    int dchoice[16];
     // ...LIVE's (Patch.drone_wheel, drone_ratios, drone_gain): the wheel corks
     // them, each sounding at the tonic x its ratio, at its gain
     int drone_wheel, n_dratio;
@@ -973,6 +994,10 @@ typedef struct NoteClass {
     // over rip_s from rip_start_db under), each smeared; 0 cents none
     double fall_cents, fall_at_s, fall_s, fall_fade_db, fall_smear;
     double rip_cents, rip_s, rip_start_db, rip_smear;
+    // A CUT (cut_semitones: the uilleann's ornament): the note cut_semi above
+    // for cut_s at the onset, slurred into the note; cut_semi 0 none
+    int cut_semi;
+    double cut_s;
     // ITS OWN CHORUS where the part sends no CC93: a pedal (chorus_send, its
     // comb cho_cents) or a detuned pair (detuned_pair: cents down, up)
     double cho_send;

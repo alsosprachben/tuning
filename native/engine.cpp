@@ -286,13 +286,18 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
             nb = nfl;
             for (int b = 0; b < nb; b++) {
                 boff[b] = pyr_uniform(&fr, 0.0, fspan);
-                bdb[b] = -pyr_uniform(&fr, 0.0, K->flam_db);
+                // ...ITS LEVELS EXPONENTIAL in dB under the loudest (a reed's
+                // crackle: random.expovariate, held within strike_flam_db)
+                bdb[b] = K->flam_exp > 0.0 ? -pymin(-log(1.0 - pyr_random(&fr)) / (1.0 / K->flam_exp), K->flam_db)
+                                           : -pyr_uniform(&fr, 0.0, K->flam_db);
             }
             double t0 = boff[0], l0 = bdb[0];
             for (int b = 1; b < nb; b++) {
                 t0 = pymin(t0, boff[b]);
                 l0 = pymax(l0, bdb[b]);
             }
+            if (K->flam_exp > 0.0)
+                t0 = 0.0;               // (a crackle keeps its draw's times: no click on the onset)
             for (int b = 0; b < nb; b++) {
                 boff[b] -= t0;
                 bdb[b] -= l0;
@@ -876,6 +881,8 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         n->key_off = nv::pymax(n->key_off, n->on + one_shot_ring(K, n, rs));
     else if (K->one_shot)               // a one-shot rings out on its own decay (a kit's: the flat hold)
         n->key_off = nv::pymax(n->key_off, n->on + K->one_shot_hold);
+    else if (K->tape_s > 0.0)           // A MELLOTRON's TAPE RUNS OUT: a key held past its strip falls silent
+        n->key_off = nv::pymin(n->key_off, n->on + K->tape_s);
     if (n->siren_set)                   // A SIREN sounds while its rotor does (_SIREN_AT)
         n->key_off = nv::pymax(n->on + 1e-3, n->siren_end);
     n->off = nv_song_note_off(song, n->ch, n->note, n->on, n->key_off, n->damper_pedal, n->mcut,

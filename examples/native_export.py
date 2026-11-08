@@ -74,7 +74,9 @@ MAGIC = b"NVX1"
 # 80 bounces a second, each a whole snare stroke (21,924 rows), past 2.5 GB
 # on its own; refused until the roll is cheaper (bounces sharing a ring, or
 # quiet bounces with fewer partials -- Ben's call)
-LIVE_REFUSED = {(117, 24)}
+# 111.8 Pungi and 109.11 UillnPipe Or: their wheel-chosen drone and cut
+# (Live._drone_note, Live._cut_on) are files' only yet
+LIVE_REFUSED = {(117, 24), (111, 8), (109, 11)}
 
 
 def main(argv):
