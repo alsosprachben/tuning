@@ -22,6 +22,17 @@ sys.path.insert(0, HERE)
 # reached, and live's side. (stage, done, text); kept by hand.
 TASKS = [
     ("GM1", True, "Program changes in nvlive: a builder thread, MIDI program change, the panel's picker"),
+    ("GM1", False, "nvlive's panel at livetui's (a switch is not a control: each a panel control and a library "
+                   "call) -- done: the patch picker and its variations, globals, routes, stops, the insertion "
+                   "effect (x); open: parts (layers, splits: each one's channel, range, transpose, level, mute), "
+                   "the tuner and Eastern tuning, the synth (Moog, Messenger) pane, scenes, presets and the "
+                   "session, mod rate, threads, the metronome, the standard, the devices"),
+    ("GM1", False, "Live: the room switched while playing (live.set_room): every room in the export (LROOMS), "
+                   "its tail drawn natively at the stage's directivity (native/roomtail.cpp, bit for bit "
+                   "roomtail.py's), the templates built again in it, the tail crossfaded -- built, its checks "
+                   "pending"),
+    ("GM1", False, "nvlive's host as a library (nv_host_*: the export, the builder, parts, programs, the room, "
+                   "rebuilding, tuning, the devices) beside nv_part_*, for a GUI; nvlive its terminal client"),
     ("GM1", True, "Live: the Moog (knob-neutral templates and the slab's moog.weights; CC71-75 its knobs; "
                   "a layered voice; the MF-104M) -- not yet a unison or SYNC live"),
     ("GM1", True, "Live: the Moog Messenger both ways (live._messenger_cc, messenger_sync/_pitch): its chart "
@@ -150,12 +161,13 @@ TASKS = [
     ("SC-55", False, "Live: the rest of the insertion effect in nvlive -- the chain builder shared "
                      "(native/efxchain.cpp), its state and each note's direct gain, the moving filters done; "
                      "a Moog's rows under a moving filter, a tone's own insertion effect done; the copies "
-                     "as taps (tapkernel.c), a drive or cabinet, a part's bus (Lo-Fi), branch B, the rotor "
-                     "and 3D place, an OD's valve"),
+                     "as taps (tapkernel.c: written, its checks pending), a drive or cabinet, a part's bus "
+                     "(Lo-Fi), branch B, the rotor and 3D place, an OD's valve, a Keyboard Multi's copies"),
     ("SC-55", False, "Files: a streaming (windowed) nvrender for whole songs -- it holds the table whole in float64, "
                      "and a Sound Canvas song's is past memory (SHIRO's 6.4 min: 21.8M rows, ~8.7 GB; killed at the "
-                     "3.5 GB cap) where Python streams (streamrender); every native check so far a 20 s excerpt. "
-                     "Next after main's gate"),
+                     "3.5 GB cap) where Python streams every file (streamrender: its port is the work -- "
+                     "a sink, order keys, each pass at its horizon, windows); every native check so far a 20 s "
+                     "excerpt"),
     ("SC-55", False, "Live: 117:24 Jngl SD Roll refused (LIVE_REFUSED: its velocity probe's table past 2.5 GB) "
                      "-- a re-attack within a row, a gain track like the damper's, would shrink it"),
     ("SC-55", True, "Files: the rhythm part's assignment (40 1p 15); the controller matrix (40 2p, GM2 09) where "
