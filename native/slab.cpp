@@ -720,26 +720,29 @@ struct Slab {
     }
 
     // live.Slab.filter_swing: channel ch's |H| this block at each of its
-    // partials' frequency (H(f), float32), on the level a swing left this
-    // block where one ran (the tremolo's, the rotors'), else on its own.
-    // (A Moog row, its panel's level, the module's filters': P2b)
-    template <class Fn>
-    void filter_swing(int ch, double rate, Fn H)
+    // partials' frequency (H(f), float32; HR(f) the right ear's), on the
+    // level a swing left this block where one ran (the tremolo's, the
+    // rotors'), else on its own. (A Moog row, its panel's level: P2b)
+    template <class Fn, class FnR>
+    void filter_swing(int ch, double rate, Fn H, FnR HR)
     {
         const double k = rate / (2.0 * M_PI);
         for (long s = 0; s < cap; s++) {
             if (!fl_on[s] || !busy[s] || fl_ch[s] != ch || i4[I4_fx][s] >= 0)
                 continue;
-            const float h = (float)H(f8[F8_om][s] * k);
+            const double f = f8[F8_om][s] * k;
+            const float hl = (float)H(f), hr = (float)HR(f);
             if (tr_on[s] || ls_on[s]) {
-                f4[F4_aL][s] *= h;
-                f4[F4_aR][s] *= h;
+                f4[F4_aL][s] *= hl;
+                f4[F4_aR][s] *= hr;
             } else {
-                f4[F4_aL][s] = fl_aL[s] * h;
-                f4[F4_aR][s] = fl_aR[s] * h;
+                f4[F4_aL][s] = fl_aL[s] * hl;
+                f4[F4_aR][s] = fl_aR[s] * hr;
             }
         }
     }
+    template <class Fn>
+    void filter_swing(int ch, double rate, Fn H) { filter_swing(ch, rate, H, H); }
 
     // Slab.soft_strings: una corda, the `drop` highest of the instrument's `top` strings
     void soft_strings(const std::vector<long> &slots, int drop, int top)
@@ -2086,6 +2089,22 @@ struct Part {
     // tables given by nvlive (nv_part_efx); NULL none -- and whether its
     // refusal has been said
     void *efx = nullptr;
+    const double *efx_x = nullptr;      // (its export tables: the tremolo's waves)
+    // ...each part's notes on it (live.efx_notes: start, end -- inf while
+    // held -- velocity, key), what an auto wah's Sens hears; and each part's
+    // moving filter over the timeline (nv_efx_live_filter), kept by its rev
+    struct EfxNote {
+        double s0, s1;
+        int vel, note;
+    };
+    std::map<int, std::vector<EfxNote>> efx_notes;
+    struct ModFlt {
+        long rev = -1;
+        int n = 0;
+        double head[4] = {0.0, 0.0, 0.0, 0.0};
+        std::vector<double> seg;
+    };
+    std::map<int, ModFlt> mflt;
     bool efx_said = false;
     // A TONE's OWN EFFECT CHANNEL (live._tone_fx): ch + TONE_SEG x (1 + the
     // tone's place among the channel's tones that brought one, mod 255) --
@@ -3562,19 +3581,35 @@ struct Part {
         glide_from = -1;
     }
 
+    // the chain channel ch hears now (live._efx_for), NULL where none or
+    // refused here (a drive or cabinet: played without it)
+    const double *efx_chain(int ch, int *st, const char **why)
+    {
+        const double *fc = nv_efx_live_chain(efx, ch, st, why);
+        if (fc && (fc[1] != 0.0 || fc[2] != 0.0)) {
+            *st = -3;
+            *why = "drive or cabinet, live";
+            fc = nullptr;
+        }
+        return fc;
+    }
+
+    // THE MODULE's MOVING FILTERS on a chain (live._filter_for): a
+    // flanger's comb (a chorus device with feedback), a tremolo or auto pan
+    static bool efx_moves(const double *fc)
+    {
+        return fc[50] != 0.0 || (fc[14] != 0.0 && fc[18] != 0.0) || fc[55] != 0.0;
+    }
+
     // THE INSERTION EFFECT on a note just stamped (live._efx_note, its
     // _efx_direct): its level, its EQ at each partial's frequency, the chorus's
-    // dry share -- a gain a slot on every baseline (channel_gain)
-    void efx_note(int ch, const std::vector<long> &slots)
+    // dry share -- a gain a slot on every baseline (channel_gain); then its
+    // moving filters arm the rows
+    void efx_note(int ch, int note, int vel, long long n0, const std::vector<long> &slots)
     {
         int st = -1;
         const char *why = "";
-        const double *fc = nv_efx_live_chain(efx, ch, &st, &why);
-        if (fc && (fc[1] != 0.0 || fc[2] != 0.0)) {
-            st = -3;
-            why = "drive or cabinet, live";
-            fc = nullptr;
-        }
+        const double *fc = efx_chain(ch, &st, &why);
         if (st == -3 && !efx_said) {
             fprintf(stderr, "nvlive: refused: the insertion effect's %s -- played without it\n", why);
             efx_said = true;
@@ -3598,6 +3633,31 @@ struct Part {
             g[q] = (float)x;
         }
         S.channel_gain_each(slots, g);
+        efx_notes[ch].push_back(EfxNote{(double)n0 / rate, INFINITY, vel, note});
+        if (efx_moves(fc))
+            S.filter_arm(slots, ch);
+    }
+
+    // efxfilter.response type 4, a comb: |(1 - pa) + pa z / (1 - pb z)|, z =
+    // exp(-2 pi i f ctrl) (native.xcexp's) -- numpy's complex division
+    // (Smith's), the absolute libm's hypot (native.xabs)
+    static double comb_h(double f, double ctrl, double pa, double pb)
+    {
+        const double th = -2.0 * M_PI * f * ctrl;
+        const double zr = cos(th), zi = sin(th);
+        const double nr = pa * zr, ni = pa * zi;
+        const double dr = 1.0 - pb * zr, di = 0.0 - pb * zi;
+        double qr, qi;
+        if (fabs(dr) >= fabs(di)) {
+            const double rat = di / dr, scl = 1.0 / (dr + di * rat);
+            qr = (nr + ni * rat) * scl;
+            qi = (ni - nr * rat) * scl;
+        } else {
+            const double rat = dr / di, scl = 1.0 / (di + dr * rat);
+            qr = (nr * rat + ni) * scl;
+            qi = (ni * rat - nr) * scl;
+        }
+        return hypot((1.0 - pa) + qr, qi);
     }
 
     // live._mono_cut: the voice taken -- this note stopped now over the
@@ -3725,7 +3785,7 @@ struct Part {
         if (cpan[ch] != 64 && !slots.empty())
             S.repan(slots, cpan[ch], 64, rate, true);
         if (efx && !slots.empty() && !patches[cur].drums)
-            efx_note(ch, slots);                // the insertion effect's level and EQ (live._efx_note)
+            efx_note(ch, note, vel, n0, slots);     // the insertion effect's level and EQ (live._efx_note)
         if (!slots.empty() && !patches[cur].drums) {
             // ...and THE TONE's OWN (live._tone_fx): its plunger or mouth arms
             // the rows on its effect channel, after the module's level
@@ -4573,7 +4633,7 @@ struct Part {
             if (efx && nv_efx_parse(d.data(), (int)d.size(), &ek, &ea, &eb)) {
                 if (ek == 5)
                     ea = ea % 16;               // (a part's channel: this port's)
-                nv_efx_live_apply(efx, ek, ea, eb);
+                nv_efx_live_apply(efx, (double)n0 / rate, ek, ea, eb);
                 return;
             }
         }
@@ -4627,7 +4687,7 @@ struct Part {
     {
         panic(n0);
         if (efx)                                // the insertion effect Thru, every part off it
-            nv_efx_live_apply(efx, 0, 0, 0);
+            nv_efx_live_apply(efx, (double)n0 / rate, 0, 0, 0);
         for (int c = 0; c < 256; c++)
             S.send[c] = 1.0;                    // every channel at the nominal distance
         master_fine = master_coarse = 0.0;
@@ -5518,6 +5578,11 @@ struct Part {
         auto kt = key_tone.find(Key(pid, ch, note, 0));
         if (patches[cur].amp > 0.0 && (kt == key_tone.end() || kt->second == patches[cur].cache) && !amp_holds(cur))
             S.release(Key(pid, -1, -1, AMPK), n0);  // the products end with their chord (a note of this tone's)
+        auto en = efx_notes.find(ch);
+        if (en != efx_notes.end())
+            for (EfxNote &e : en->second)
+                if (e.note == note && std::isinf(e.s1))
+                    e.s1 = (double)n0 / rate;   // the auto wah's envelope lets go
         if (drone_class()) {                // a chanter's key: the drones wait part_break_s (_drone_reap)
             S.release(Key(pid, ch, note, -1), n0);
             if (!chanting(ch))
@@ -6103,15 +6168,227 @@ struct Part {
         return vs[i] + (prev - vs[i]) * (i > 0 ? kk : 0.0);
     }
 
+    // gsefx.filter_setup's control at t for part c (its settings M): the
+    // vowels' three centres gliding (efxfilter.steps), else one value -- a
+    // sweep's LFO on the absolute clock (an auto wah's Sens adding the
+    // part's loudness, note_envelope), a flanger's line (stepped), a pedal
+    void efx_control(const ModFlt &M, int c, double t, double *ctl, double *F)
+    {
+        const double *sg = M.seg.data();
+        long i = 0;
+        while (i < M.n && sg[8 * i] <= t)
+            i++;
+        i = i - 1 < 0 ? 0 : (i - 1 > M.n - 1 ? M.n - 1 : i - 1);
+        const double *s = sg + 8 * i;
+        if (sg[2] == 3.0) {
+            static const double VOWEL_F[5][3] = {{730, 1090, 2440}, {270, 2290, 3010},
+                                                 {300, 870, 2240}, {530, 1840, 2480}, {570, 840, 2410}};
+            const double glide = sg[4];
+            for (int fk = 0; fk < 3; fk++) {
+                const double vi = VOWEL_F[(int)s[3]][fk];
+                if (glide <= 0.0 || M.n < 2) {
+                    F[fk] = vi;
+                } else {
+                    const double prev = VOWEL_F[(int)sg[8 * (i > 0 ? i - 1 : 0) + 3]][fk];
+                    const double kk = exp(-std::max(t - s[0], 0.0) / glide);
+                    F[fk] = vi + (prev - vi) * (i > 0 ? kk : 0.0);
+                }
+            }
+            return;
+        }
+        const double *k = s + 2;
+        if (k[0] == 1.0) {
+            const double lf = sin(2.0 * M_PI * k[3] * t);
+            if (std::isnan(k[4])) {             // a phaser: about its Manual
+                *ctl = k[1] * pow(2.0, k[2] * lf);
+            } else {                            // an auto wah: up (or down) from it
+                double oc = k[2] * 0.5 * (1.0 + lf);
+                bool sens = false;
+                for (int q = 0; q < M.n; q++)
+                    sens = sens || (sg[8 * q + 2] == 1.0 && sg[8 * q + 7] != 0.0);
+                if (k[5] != 0.0 && sens)        // ...and by the part's loudness
+                    oc = oc + k[5] * note_env(c, t);
+                *ctl = k[1] * pow(2.0, (k[4] != 0.0 ? 1.0 : -1.0) * oc);
+            }
+        } else if (k[0] == 2.0) {               // a flanger's line, stepped or not
+            const double held = std::isnan(k[4]) ? t : floor(t * k[4]) / k[4];
+            *ctl = k[1] + k[2] * 0.5 * (1.0 + sin(2.0 * M_PI * k[3] * held));
+        } else {
+            *ctl = s[1];                        // a wah's pedal
+        }
+    }
+
+    // gsefx.note_envelope at t: the part's notes on the effect, each one's
+    // level (its velocity, attacked, held, released), the loudest
+    double note_env(int c, double t)
+    {
+        const double ATT = 0.005, HOLD = 0.4, REL = 0.06;      // (WAH_ENV_*)
+        double out = 0.0;
+        auto it = efx_notes.find(c);
+        if (it == efx_notes.end())
+            return out;
+        for (const EfxNote &e : it->second) {
+            const double s = e.s0, en = e.s1, a = e.vel / 127.0;
+            if (!(s <= t) || !(t < en + 8.0 * REL))
+                continue;
+            const double u = t - s;
+            double lv;
+            if (t <= en)
+                lv = a * std::min(1.0, u / ATT) * exp(-u / HOLD);
+            else
+                lv = a * exp(-(en - s) / HOLD) * exp(-std::max(t - en, 0.0) / REL);
+            out = std::max(out, lv);
+        }
+        return out;
+    }
+
+    // efxfilter.response for the module's filter types: 1 the phaser (N
+    // all-passes at the corner: native.xatan, xcexp, xabs), 2 and 3 a
+    // resonant low or band pass, 4 a comb, 5 the vowels' three formants
+    static double flt_h(int ty, double f, double ctrl, const double *F, double pa, double pb, double pc)
+    {
+        if (ty == 1) {
+            const double th = -2.0 * pc * atan(f / (ctrl > 1.0 ? ctrl : 1.0));
+            const double zr = cos(th), zi = sin(th);
+            const double nr = pa * zr, ni = pa * zi;
+            const double dr = 1.0 - pb * zr, di = 0.0 - pb * zi;
+            double qr, qi;
+            if (fabs(dr) >= fabs(di)) {
+                const double rat = di / dr, scl = 1.0 / (dr + di * rat);
+                qr = (nr + ni * rat) * scl;
+                qi = (ni - nr * rat) * scl;
+            } else {
+                const double rat = dr / di, scl = 1.0 / (di + dr * rat);
+                qr = (nr * rat + ni) * scl;
+                qi = (ni * rat - nr) * scl;
+            }
+            return hypot((1.0 - pa) + qr, qi);
+        }
+        if (ty == 2 || ty == 3) {
+            const double x = f / (ctrl > 1.0 ? ctrl : 1.0);
+            const double q = pa > 0.1 ? pa : 0.1;
+            const double a = 1.0 - x * x, b = x / q;
+            const double den = sqrt(a * a + b * b);
+            const double w = ty == 2 ? 1.0 / den : (x / q) / den;
+            return (1.0 - pb) + pb * w;
+        }
+        if (ty == 4)
+            return comb_h(f, ctrl, pa, pb);
+        if (ty == 5) {
+            static const double BW[3] = {80.0, 110.0, 160.0}, AM[3] = {1.0, 0.7, 0.5};
+            double h = pa;
+            for (int fk = 0; fk < 3; fk++) {
+                const double u = (f - F[fk]) / (0.5 * BW[fk]);
+                h = h + AM[fk] / (1.0 + u * u);
+            }
+            return h * pb;
+        }
+        return 1.0;
+    }
+
+    // Live._filter_block, the module's: on each part on the effect, its
+    // flanger's comb (the delay swung, the right ear half a turn on) and its
+    // tremolo or auto pan (1 + m w(t), w Roland's wave, gsefx.WAVES; a pan's
+    // right ear 1 - m w(t)), multiplied in that order
+    void efx_filter_block(double t)
+    {
+        for (int c = 0; c < TONE_SEG; c++) {
+            if (!nv_efx_live_on(efx, c))
+                continue;
+            int st = -1;
+            const char *why = "";
+            const double *fc = efx_chain(c, &st, &why);
+            if (!fc || !efx_moves(fc))
+                continue;
+            const bool comb = fc[14] != 0.0 && fc[18] != 0.0, trem = fc[55] != 0.0;
+            // ITS MOVING FILTER (gsefx.filter_setup's control at t): the
+            // settings over the timeline, the one in force at t
+            int fty = 0;
+            double fpa = 0.0, fpb = 0.0, fpc = 0.0, fctl = 0.0, FV[3] = {0.0, 0.0, 0.0};
+            if (fc[50] != 0.0) {
+                ModFlt &M = mflt[c];
+                const long rv = nv_efx_live_rev(efx);
+                if (M.rev != rv) {
+                    M.seg.assign(8 * 256, 0.0);
+                    M.n = nv_efx_live_filter(efx, c, M.head, M.seg.data(), 256);
+                    M.rev = rv;
+                }
+                if (M.n)
+                    fty = M.seg[2] == 3.0 ? 5 : (int)M.head[0];     // (the vowels: VOWEL's, type 5)
+                fpa = M.head[1]; fpb = M.head[2]; fpc = M.head[3];
+                if (M.n)
+                    efx_control(M, c, t, &fctl, FV);
+            }
+            double tl = 0.0, tr = 0.0, mix = 0.0, fb = 0.0, gl = 1.0, gr = 1.0;
+            if (comb) {
+                const double rt = fc[16];
+                const double swing = fc[17] / (2.0 * M_PI * (rt > 1e-6 ? rt : 1e-6));
+                tl = fc[15] + swing * sin(2.0 * M_PI * rt * t);
+                tr = fc[15] + swing * sin(2.0 * M_PI * rt * t + M_PI);
+                const double a = fc[20];
+                mix = fc[21] >= 0.0 ? fc[21] : a * a / (1.0 + a * a);
+                fb = fc[18];
+            }
+            if (trem) {
+                static const double SINE[4] = {1.0, 1.0, 1.0, 0.0};
+                const double *wv = SINE;
+                if (fc[55] == 1.0)          // (Roland's wave; the Tremolo Chorus's the sine)
+                    wv = efx_x + 132 + NV_EFX_NAT * (size_t)efx_x[131] + 30 + 66 + 1024 + 128 + 19 * (int)fc[59];
+                const double rt = fc[56], m = fc[57];
+                double w = 0.0;
+                for (int q = 0; q < (int)wv[0]; q++)
+                    w = w + wv[2 + 3 * q] * cos(wv[1 + 3 * q] * 2.0 * M_PI * rt * t + wv[3 + 3 * q]);
+                gl = 1.0 + m * w;
+                gr = fc[58] != 0.0 ? 1.0 - m * w : 1.0 + m * w;
+            }
+            S.filter_swing(c, rate, [&](double f) {
+                double h = 1.0;
+                if (fty)
+                    h = h * flt_h(fty, f, fctl, FV, fpa, fpb, fpc);
+                if (comb)
+                    h = h * comb_h(f, tl, mix, fb);
+                if (trem)
+                    h = h * gl;
+                return h;
+            }, [&](double f) {
+                double h = 1.0;
+                if (fty)
+                    h = h * flt_h(fty, f, fctl, FV, fpa, fpb, fpc);
+                if (comb)
+                    h = h * comb_h(f, tr, mix, fb);
+                if (trem)
+                    h = h * gr;
+                return h;
+            });
+        }
+    }
+
     // Live._filter_block, the tones' own: each tone's filter at the block's
     // middle, |H| on its rows -- the plunger's corner (efxfilter.plunger, the
     // hand's last moves), the mouth's three centres (the wheel's vowel once it
     // has moved, else the wander: efxfilter.mouth_live)
     void filter_block(long long n0, long long frames)
     {
-        if (tone_fx.empty() || S.fl_n == 0)
+        if ((tone_fx.empty() && !(efx && nv_efx_live_parts(efx))) || S.fl_n == 0)
             return;
         const double t = ((double)n0 + 0.5 * (double)frames) / rate;
+        if (efx)
+            efx_filter_block(t);
+        tone_filter_block(t);
+        for (auto &kv : efx_notes) {        // the notes an auto wah no longer hears
+            std::vector<EfxNote> &l = kv.second;
+            if (!l.empty() && l[0].s1 < t - 4.0) {
+                std::vector<EfxNote> keep;
+                for (const EfxNote &e : l)
+                    if (e.s1 >= t - 4.0)
+                        keep.push_back(e);
+                l.swap(keep);
+            }
+        }
+    }
+
+    void tone_filter_block(double t)
+    {
         for (auto &kv : tone_fx) {
             ToneFx &tf = kv.second;
             const NoteClass *k = tf.k;
@@ -7982,11 +8259,11 @@ struct Part {
             // live._efx_control)
             if (efx && e.type >= 2 && e.type <= 4 && nv_efx_live_on(efx, e.ch)) {
                 if (e.type == 2 && e.a >= 1 && e.a <= 95)
-                    nv_efx_live_source(efx, e.a, e.b);
+                    nv_efx_live_source(efx, (double)n0 / rate, e.a, e.b);
                 else if (e.type == 3)
-                    nv_efx_live_source(efx, 96, e.a);           // (gsefx.SRC_CAF)
+                    nv_efx_live_source(efx, (double)n0 / rate, 96, e.a);        // (gsefx.SRC_CAF)
                 else if (e.type == 4)
-                    nv_efx_live_source(efx, 97, (e.a + 8192) >> 7);     // (gsefx.SRC_BEND)
+                    nv_efx_live_source(efx, (double)n0 / rate, 97, (e.a + 8192) >> 7);  // (gsefx.SRC_BEND)
             }
             if (e.type == 6) {
                 if (e.a >= 0 && e.a < (int)sxs.size())
@@ -8441,6 +8718,7 @@ void nv_part_efx(void *h, const double *X, double SR)
     nv::slab::Part *P = (nv::slab::Part *)h;
     if (!P->efx)
         P->efx = nv_efx_live_new(X, SR);
+    P->efx_x = X;
 }
 
 // The part's free strings (live's register): its string bank (M modes, as

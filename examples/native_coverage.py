@@ -135,11 +135,16 @@ TASKS = [
     ("SC-55", True, "Live: a tone's own moving filter in nvlive -- the plunger (59.2, aftertouch) and the "
                     "didgeridoo's mouth (109.8, its wander or the wheel's vowel) on the tone's effect channel "
                     "(live._tone_fx), |H| each block on the rows' unfiltered level (Slab.filter_arm/swing)"),
-    ("SC-55", False, "Live: the insertion effect in nvlive -- the chain builder shared (native/efxchain.cpp), its "
-                     "state and each note's direct gain (written, in its check); the copies as taps "
-                     "(tapkernel.c), the module's moving filters, comb and tremolo (P2b, on P2a's filter "
-                     "path), a part's bus, branch B, the rotor and 3D place, a tone's own insertion effect, "
-                     "an OD's valve"),
+    ("SC-55", True, "Live: the module's moving filters in nvlive -- Phaser, Auto Wah (its Sens from the part's "
+                    "notes), the wahs' pedal, Step Flanger, Humanizer (gsefx.filter_setup over live's own EFX "
+                    "timeline, compacted as _efx_event does), a flanger's feedback comb, Tremolo and Auto Pan "
+                    "(Roland's waves; the Tremolo Chorus's): |H| each block on P2a's path, both ears; the "
+                    "responses and controls on libm in Python too (native.xatan/xcexp/xabs/xpow/xexp)"),
+    ("SC-55", False, "Live: the rest of the insertion effect in nvlive -- the chain builder shared "
+                     "(native/efxchain.cpp), its state and each note's direct gain, the moving filters done; "
+                     "the copies as taps (tapkernel.c), a Moog's rows under a moving filter "
+                     "(moog_filter_apply), a part's bus, branch B, the rotor and 3D place, a tone's own "
+                     "insertion effect, an OD's valve"),
     ("SC-55", False, "Files: a streaming (windowed) nvrender for whole songs -- it holds the table whole in float64, "
                      "and a Sound Canvas song's is past memory (SHIRO's 6.4 min: 21.8M rows, ~8.7 GB; killed at the "
                      "3.5 GB cap) where Python streams (streamrender); every native check so far a 20 s excerpt. "

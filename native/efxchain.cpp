@@ -1020,6 +1020,64 @@ struct EfxLive {
         rev++;
     }
     bool on(int ch) const { return std::find(parts.begin(), parts.end(), ch) != parts.end(); }
+    // THE TIMELINE (live.efx_events, _efx_event): each setting as it came,
+    // past 64 compacted to a snapshot of what stood two seconds before the
+    // newest (its type, parameters, sends, controllers, sources, the parts
+    // on it) and what came after -- what a part's moving filter reads
+    struct Ev {
+        double t;
+        int k, a, b;
+    };
+    std::vector<Ev> evs;
+    void event(double t, int k, int a, int b)
+    {
+        apply(k, a, b);
+        evs.push_back(Ev{t, k, a, b});
+        if (evs.size() <= 64)
+            return;
+        const double cut = t - 2.0;
+        EfxLive R(X, SR);
+        std::vector<Ev> snap;
+        for (const Ev &e : evs)
+            if (e.t <= cut)
+                R.apply(e.k, e.a, e.b);
+        snap.push_back(Ev{cut, 1, R.msb, R.lsb});
+        for (int q = 1; q <= 20; q++)
+            if (R.p[q] >= 0)
+                snap.push_back(Ev{cut, 2, q, R.p[q]});
+        for (int q = 0; q < 3; q++)
+            snap.push_back(Ev{cut, 3, 0x17 + q, R.snd[q]});
+        for (int q = 0; q < 4; q++)
+            snap.push_back(Ev{cut, 4, 0x1B + q, R.ctl[q]});
+        for (const auto &kv : R.cvv)
+            snap.push_back(Ev{cut, 6, kv.first, kv.second});
+        std::vector<int> ps = R.parts;
+        std::sort(ps.begin(), ps.end());
+        for (int c : ps)
+            snap.push_back(Ev{cut, 5, c, 1});
+        for (const Ev &e : evs)
+            if (e.t > cut)
+                snap.push_back(e);
+        evs.swap(snap);
+    }
+    // gsefx.at(events, ch, t): the chain part ch hears at t into rec (0),
+    // where it is on the effect then and its type built (-1 not, -3 refused)
+    int chain_at(double t, int ch, double *out)
+    {
+        EfxLive R(X, SR);
+        for (const Ev &e : evs) {
+            if (e.t > t + 1e-9)
+                break;
+            R.apply(e.k, e.a, e.b);
+        }
+        if (!R.on(ch))
+            return -1;
+        const double *r = R.chain();
+        if (!r)
+            return R.status;
+        memcpy(out, r, sizeof(double) * NV_FXN);
+        return 0;
+    }
     const double *chain()
     {
         if (built_rev != rev) {
@@ -1039,7 +1097,42 @@ struct EfxLive {
 
 extern "C" void *nv_efx_live_new(const double *X, double SR) { return new EfxLive(X, SR); }
 extern "C" void nv_efx_live_free(void *h) { delete (EfxLive *)h; }
-extern "C" void nv_efx_live_apply(void *h, int k, int a, int b) { ((EfxLive *)h)->apply(k, a, b); }
+extern "C" void nv_efx_live_apply(void *h, double t, int k, int a, int b) { ((EfxLive *)h)->event(t, k, a, b); }
+extern "C" int nv_efx_live_parts(void *h) { return (int)((EfxLive *)h)->parts.size(); }
+
+// gsefx.filter_setup's settings for part ch over the timeline: each time
+// (0 and the events') whose chain has a moving filter of the first's family
+// (vowels or not) -- its time, pedal Hz and control (kind, c1-c5), 8 each
+// into seg; the first's type and parameters (ty, pa, pb, pc) into head.
+// Their count, 0 none
+extern "C" int nv_efx_live_filter(void *h, int ch, double *head, double *seg, int cap)
+{
+    EfxLive *E = (EfxLive *)h;
+    std::vector<double> ts{0.0};
+    for (const auto &e : E->evs)
+        ts.push_back(e.t);
+    std::sort(ts.begin(), ts.end());
+    ts.erase(std::unique(ts.begin(), ts.end()), ts.end());
+    std::vector<double> sc(NV_FXN);
+    int n = 0;
+    for (double t : ts) {
+        if (E->chain_at(t, ch, sc.data()) != 0 || sc[50] == 0.0)
+            continue;
+        if (n && (sc[128] == 3.0) != (seg[2] == 3.0))
+            continue;                   // (not the first's family: filter_setup drops it)
+        if (!n) {
+            head[0] = sc[51]; head[1] = sc[52]; head[2] = sc[53]; head[3] = sc[134];
+        }
+        if (n >= cap)
+            break;
+        double *s = seg + 8 * n++;
+        s[0] = t;
+        s[1] = sc[54];
+        for (int q = 0; q < 6; q++)
+            s[2 + q] = sc[128 + q];
+    }
+    return n;
+}
 extern "C" int nv_efx_live_on(void *h, int ch) { return ((EfxLive *)h)->on(ch); }
 extern "C" long nv_efx_live_rev(void *h) { return ((EfxLive *)h)->rev; }
 
@@ -1062,7 +1155,7 @@ extern "C" const double *nv_efx_live_chain(void *h, int ch, int *status, const c
 // ...its controllers' sources (gsefx: CC1-95, aftertouch, bend): the value
 // of one, as a file's joins the timeline (live._efx_control) -- where it is
 // one of the two and has moved
-extern "C" void nv_efx_live_source(void *h, int src, int v)
+extern "C" void nv_efx_live_source(void *h, double t, int src, int v)
 {
     EfxLive *E = (EfxLive *)h;
     if (src != E->ctl[0] && src != E->ctl[2])
@@ -1070,5 +1163,5 @@ extern "C" void nv_efx_live_source(void *h, int src, int v)
     auto it = E->cvv.find(src);
     if (it != E->cvv.end() && it->second == v)
         return;
-    E->apply(6, src, v);
+    E->event(t, 6, src, v);
 }

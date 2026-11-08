@@ -56,10 +56,11 @@ def wah_q(v):
 def response(ty, f, ctrl, pa, pb, pc):
     """|H| at frequency f for control value(s) ctrl -- the kernel's filter_grid,
     in numpy (the peak bound, the checks)."""
+    import native as _NV           # (libm's atan, exp and abs: numpy's are SVML, nvlive's libm's)
     f = np.asarray(f, float)
     if ty == 1:
-        z = np.exp(-1j * 2.0 * pc * np.arctan(f / np.maximum(ctrl, 1.0)))
-        return np.abs((1.0 - pa) + pa * z / (1.0 - pb * z))
+        z = _NV.xcexp(-1j * 2.0 * pc * _NV.xatan(f / np.maximum(ctrl, 1.0)))
+        return _NV.xabs((1.0 - pa) + pa * z / (1.0 - pb * z))
     if ty in (2, 3):
         x = f / np.maximum(ctrl, 1.0)
         q = max(pa, 0.1)
@@ -67,8 +68,8 @@ def response(ty, f, ctrl, pa, pb, pc):
         w = 1.0 / den if ty == 2 else (x / q) / den
         return (1.0 - pb) + pb * w
     if ty == 4:
-        z = np.exp(-1j * 2.0 * math.pi * f * ctrl)
-        return np.abs((1.0 - pa) + pa * z / (1.0 - pb * z))
+        z = _NV.xcexp(-1j * 2.0 * math.pi * f * ctrl)
+        return _NV.xabs((1.0 - pa) + pa * z / (1.0 - pb * z))
     if ty == 5:
         F = np.asarray(ctrl, float).reshape(3, -1)
         h = pa
@@ -176,8 +177,9 @@ def plunger(pressure, closed_hz=PLUNGER_CLOSED_HZ, mid_hz=PLUNGER_MID_HZ, open_h
         ev = sorted(pressure)
         st = steps([0.0] + [t_ for t_, _v in ev], [0.0] + [float(v) for _t, v in ev], glide=glide)
         u = 2.0 * np.clip(st(t), 0.0, 127.0) / 127.0 - 1.0
-        g = linear * u + (1.0 - linear) * u ** 3
-        return mid_hz * np.where(g < 0.0, closed_hz / mid_hz, open_hz / mid_hz) ** np.abs(g)
+        import native as _NV       # (libm's pow: numpy's is SVML, nvlive's libm's)
+        g = linear * u + (1.0 - linear) * _NV.xpow(u, 3.0)
+        return mid_hz * _NV.xpow(np.where(g < 0.0, closed_hz / mid_hz, open_hz / mid_hz), np.abs(g))
     return Channel(2, q, mix, 0.0, corner)
 
 
@@ -314,7 +316,8 @@ def steps(times, values, glide=0.0):
         i = np.clip(np.searchsorted(times, t, side='right') - 1, 0, len(values) - 1)
         if glide <= 0.0 or len(values) < 2:
             return values[i]
+        import native as _NV       # (libm's exp: numpy's is SVML, nvrender's and nvlive's libm's)
         prev = values[np.maximum(i - 1, 0)]
-        k = np.exp(-np.maximum(t - times[i], 0.0) / glide)
+        k = _NV.xexp(-np.maximum(t - times[i], 0.0) / glide).reshape(np.shape(i))
         return values[i] + (prev - values[i]) * np.where(i > 0, k, 0.0)
     return at

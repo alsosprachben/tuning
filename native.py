@@ -452,6 +452,7 @@ def _load():
             ('nv_exp_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_pow_n', None, [ctypes.c_long, ctypes.c_void_p, I, ctypes.c_void_p, I, ctypes.c_void_p]),
             ('nv_cabs_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_atan_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_log_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_log10_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_cexp_n', None, [ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]),
@@ -3939,6 +3940,18 @@ def xexp(x):
         return np.exp(x)
     out = np.empty_like(x)
     d.nv_exp_n(x.size, x.ctypes.data, out.ctypes.data)
+    return out
+
+
+def xatan(x):
+    """np.arctan of float64 values, libm's atan (numpy's is SVML)."""
+    import numpy as np
+    x = np.ascontiguousarray(x, np.float64)
+    d = lib()
+    if d is None:
+        return np.arctan(x)
+    out = np.empty_like(x)
+    d.nv_atan_n(x.size, x.ctypes.data, out.ctypes.data)
     return out
 
 
