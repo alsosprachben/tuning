@@ -83,6 +83,9 @@ void nv_midi_cc(void *p, int i, int *iv, double *t);
 void nv_midi_song(void *p, void *song, const double *trim);
 int nv_midi_note_bsel(void *p, int i);
 int nv_midi_ats(void *p, int ch, double *t, int *v, int cap);
+int nv_midi_ccs(void *p, int ch, int cc, double *t, int *v, int cap);
+extern "C" void nv_mouth_track(unsigned long long seed, int n, const double *st, const double *cdf,
+                               const double *dwell, double glide, double step, long lgn, float *out);
 int nv_midi_pts(void *p, int ch, int key, double *t, int *v, int cap);
 int nv_midi_banked(void *p);
 int nv_midi_chprog_bsel(void *p, int i);
@@ -2652,7 +2655,8 @@ int main(int argc, char **argv)
             long nfr = 0;
             for (size_t q = 0; q < fch_.size(); q++) {
                 frow[q] = nfr;
-                nfr += !fk_[q] && !ff_[q].ctl.empty() && ff_[q].ctl[0][0] == 3.0 ? 3 : 1;
+                nfr += (!fk_[q] && !ff_[q].ctl.empty() && ff_[q].ctl[0][0] == 3.0)
+                       || (fk_[q] && fk_[q]->flt_k == 4) ? 3 : 1;
             }
             FCT.assign((size_t)nfr * (size_t)fgn, 1.0f);
             const double step = (double)grid / SR;
@@ -2752,6 +2756,57 @@ int main(int argc, char **argv)
                             v = F.hz[i];                // a wah's pedal
                         }
                         row[p] = (float)v;
+                    }
+                    continue;
+                }
+                if (k->flt_k == 4) {
+                    // A DIDGERIDOO's MOUTH (efxfilter.mouth): the part's mod wheel
+                    // where the file moves it -- the states closed to open along
+                    // it, between two the centres interpolated, moving at the
+                    // glide -- else its seeded wander (nv_mouth_track), the
+                    // channel the seed
+                    float *row = FCT.data() + (size_t)frow[q] * fgn;
+                    const int nm = k->n_mouth;
+                    int nc = nv_midi_ccs(midi, (int)fpart_[q], 1, nullptr, nullptr, 0);
+                    if (nc <= 0) {
+                        nv_mouth_track((unsigned long long)(fch_[q] + k->mouth_seed), nm, &k->mouth_st[0][0],
+                                       k->mouth_cdf, k->mouth_dw, k->mouth_glide, step, fgn, row);
+                        continue;
+                    }
+                    std::vector<double> tt(nc);
+                    std::vector<int> vv(nc);
+                    nv_midi_ccs(midi, (int)fpart_[q], 1, tt.data(), vv.data(), nc);
+                    std::vector<std::pair<double, double>> ev;
+                    for (int a = 0; a < nc; a++)
+                        ev.push_back(std::make_pair(tt[a], (double)vv[a]));
+                    std::sort(ev.begin(), ev.end());
+                    std::vector<double> wt{0.0}, wv{0.0};
+                    for (auto &e : ev) {
+                        wt.push_back(e.first);
+                        wv.push_back(e.second);
+                    }
+                    const double gl = k->mouth_glide;
+                    for (long p = 0; p < fgn; p++) {
+                        double t = (double)p * step;
+                        long i = (long)(std::upper_bound(wt.begin(), wt.end(), t) - wt.begin()) - 1;
+                        i = i < 0 ? 0 : (i > (long)wt.size() - 1 ? (long)wt.size() - 1 : i);
+                        double pos;
+                        if (gl <= 0.0) {
+                            pos = wv[i];
+                        } else {
+                            double prev = wv[i > 0 ? i - 1 : 0];
+                            double dt = t - wt[i];
+                            double kk = exp(-(dt > 0.0 ? dt : 0.0) / gl);
+                            pos = wv[i] + (prev - wv[i]) * (i > 0 ? kk : 0.0);
+                        }
+                        double x = pos < 0.0 ? 0.0 : (pos > 127.0 ? 127.0 : pos);
+                        double u = x / 127.0 * (double)(nm - 1);
+                        long j = (long)floor(u);
+                        j = j < nm - 2 ? j : nm - 2;
+                        double w = u - (double)j;
+                        for (int fk = 0; fk < 3; fk++)
+                            row[(size_t)fk * fgn + p] = (float)(k->mouth_wst[j][fk] * (1.0 - w)
+                                                                 + k->mouth_wst[j + 1][fk] * w);
                     }
                     continue;
                 }

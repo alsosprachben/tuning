@@ -384,6 +384,14 @@ struct Slab {
     // each one's level unfiltered, which every move recomputes from
     std::vector<char> cv_on;
     std::vector<float> cv_aL, cv_aR;
+    // THE MOVING FILTER (live.Slab.fl_*: Live._filter_block): a slot under
+    // one, its effect channel, the level it would have unfiltered (a fifth
+    // baseline, kept up as the others are); how many are armed (fl_on.any(),
+    // a slot's flag kept until it is stamped again)
+    std::vector<char> fl_on;
+    std::vector<int32_t> fl_ch;
+    std::vector<float> fl_aL, fl_aR;
+    long fl_n = 0;
     std::vector<float> hs_dep;                  // a harmonium's Tremolo stop: its depth and rate (live's)
     std::vector<double> hs_hz;
     // THE LESLIE (live.Slab.leslie_arm / leslie_swing): a slot on a rotor,
@@ -449,6 +457,8 @@ struct Slab {
         aLp.assign(cap, 0.0f); aRp.assign(cap, 0.0f);
         tr_on.assign(cap, 0); tr_dep.assign(cap, 0.0f); tr_aL.assign(cap, 0.0f); tr_aR.assign(cap, 0.0f);
         cv_on.assign(cap, 0); cv_aL.assign(cap, 0.0f); cv_aR.assign(cap, 0.0f);
+        fl_on.assign(cap, 0); fl_ch.assign(cap, 0); fl_aL.assign(cap, 0.0f); fl_aR.assign(cap, 0.0f);
+        fl_n = 0;
         moog_alloc();
         tr_st.assign(cap, 1.0f);
         hs_dep.assign(cap, 0.0f); hs_hz.assign(cap, 0.0);
@@ -544,6 +554,8 @@ struct Slab {
             vrbase[s] = tf4[F4_vr][q];
             tr_on[s] = 0;                       // (unarmed until its tremolo is)
             cv_on[s] = 0;                       // (...and off the rockers)
+            fl_n -= fl_on[s];
+            fl_on[s] = 0;                       // (...and no filter)
             hs_dep[s] = 0.0f;
             ls_on[s] = 0;                       // (...and off the rotors until armed)
         }
@@ -652,6 +664,7 @@ struct Slab {
             tr_aL[sidx] *= rl; tr_aR[sidx] *= rr;   // (the tremolo's baseline with it)
             ls_aL[sidx] *= rl; ls_aR[sidx] *= rr;   // (...and the Leslie's)
             cv_aL[sidx] *= rl; cv_aR[sidx] *= rr;   // (...and the rockers')
+            fl_aL[sidx] *= rl; fl_aR[sidx] *= rr;   // (...and the filter's)
         }
         if (itd) {
             float dl = (float)((t1[2] - t0[2]) * rate);
@@ -693,6 +706,41 @@ struct Slab {
         }
     }
 
+    // live.Slab.filter_arm: these partials under channel ch's moving filter,
+    // their levels now what it filters every block from here on
+    void filter_arm(const std::vector<long> &slots, int ch)
+    {
+        for (long s : slots) {
+            fl_aL[s] = f4[F4_aL][s];
+            fl_aR[s] = f4[F4_aR][s];
+            fl_ch[s] = ch;
+            fl_n += !fl_on[s];
+            fl_on[s] = 1;
+        }
+    }
+
+    // live.Slab.filter_swing: channel ch's |H| this block at each of its
+    // partials' frequency (H(f), float32), on the level a swing left this
+    // block where one ran (the tremolo's, the rotors'), else on its own.
+    // (A Moog row, its panel's level, the module's filters': P2b)
+    template <class Fn>
+    void filter_swing(int ch, double rate, Fn H)
+    {
+        const double k = rate / (2.0 * M_PI);
+        for (long s = 0; s < cap; s++) {
+            if (!fl_on[s] || !busy[s] || fl_ch[s] != ch || i4[I4_fx][s] >= 0)
+                continue;
+            const float h = (float)H(f8[F8_om][s] * k);
+            if (tr_on[s] || ls_on[s]) {
+                f4[F4_aL][s] *= h;
+                f4[F4_aR][s] *= h;
+            } else {
+                f4[F4_aL][s] = fl_aL[s] * h;
+                f4[F4_aR][s] = fl_aR[s] * h;
+            }
+        }
+    }
+
     // Slab.soft_strings: una corda, the `drop` highest of the instrument's `top` strings
     void soft_strings(const std::vector<long> &slots, int drop, int top)
     {
@@ -722,6 +770,7 @@ struct Slab {
             tr_aL[sidx] *= r; tr_aR[sidx] *= r;     // (the tremolo's own baseline with it)
             ls_aL[sidx] *= r; ls_aR[sidx] *= r;     // (...and the Leslie's)
             cv_aL[sidx] *= r; cv_aR[sidx] *= r;     // (...and the rockers')
+            fl_aL[sidx] *= r; fl_aR[sidx] *= r;     // (...and the filter's)
             mo_uL[sidx] *= r; mo_uR[sidx] *= r;     // (...and a Moog's panel weights' base)
         }
     }
@@ -737,6 +786,7 @@ struct Slab {
             tr_aL[s] *= r[q]; tr_aR[s] *= r[q];
             ls_aL[s] *= r[q]; ls_aR[s] *= r[q];
             cv_aL[s] *= r[q]; cv_aR[s] *= r[q];
+            fl_aL[s] *= r[q]; fl_aR[s] *= r[q];
             mo_uL[s] *= r[q]; mo_uR[s] *= r[q];
         }
     }
@@ -951,6 +1001,8 @@ struct Slab {
             long s = idx[q];
             busy[s] = 1;
             dk[s] = -1;
+            fl_n -= fl_on[s];
+            fl_on[s] = 0;                       // (...and no filter)
             ls_on[s] = 0;
             cv_on[s] = 0;
             tr_on[s] = 0;
@@ -1346,15 +1398,16 @@ struct Slab {
         for (int side = 0; side < 2; side++) {
             std::vector<float> &uo = side ? mo_uR : mo_uL;
             std::vector<float> &a0 = side ? aR0 : aL0;
-            std::vector<float> *bases[3] = {side ? &ls_aR : &ls_aL, side ? &tr_aR : &tr_aL, side ? &cv_aR : &cv_aL};
-            const std::vector<char> *arm[3] = {&ls_on, &tr_on, &cv_on};
+            std::vector<float> *bases[4] = {side ? &ls_aR : &ls_aL, side ? &tr_aR : &tr_aL, side ? &cv_aR : &cv_aL,
+                                            side ? &fl_aR : &fl_aL};
+            const std::vector<char> *arm[4] = {&ls_on, &tr_on, &cv_on, &fl_on};
             for (size_t i = 0; i < n; i++) {
                 long s = idx[i];
                 double nw = (double)uo[s] * w[i];
                 float old = a0[s];
                 bool z = old == 0.0f;
                 float q = (float)(z ? 1.0 : nw / (double)old);
-                for (int b = 0; b < 3; b++) {
+                for (int b = 0; b < 4; b++) {
                     (*bases[b])[s] *= q;
                     if (z && (*arm[b])[s])
                         (*bases[b])[s] = (float)(nw * (double)f);
@@ -2034,6 +2087,29 @@ struct Part {
     // refusal has been said
     void *efx = nullptr;
     bool efx_said = false;
+    // A TONE's OWN EFFECT CHANNEL (live._tone_fx): ch + TONE_SEG x (1 + the
+    // tone's place among the channel's tones that brought one, mod 255) --
+    // what the tone brings (an insertion effect, a plunger, a mouth) on it;
+    // here its moving filter: the plunger's (flt_k 3) or the mouth's (4) --
+    // the wheel's and the hand's last moves (live keeps three), and the
+    // mouth's wander (efxfilter.MouthWander: its generator, the next draw's
+    // time, where it is headed, where it is, when last asked)
+    static const int TONE_SEG = 1 << 8;
+    struct ToneFx {
+        int ch = 0;
+        const NoteClass *k = nullptr;
+        int kind = 0;                       // flt_k: 3 the plunger, 4 the mouth; 0 no filter of its own
+        std::vector<std::pair<double, int>> wheel, at;
+        void *g = nullptr;
+        double next_t = 0.0, t = 0.0;
+        int target = -1;
+        bool have_cur = false;
+        double cur[3] = {0.0, 0.0, 0.0};
+    };
+    std::map<int, ToneFx> tone_fx;
+    std::map<int, std::vector<void *>> tone_seg;
+    bool at_seen[16] = {}, wheel_seen[16] = {};     // (live's pressure, wheel_at: a channel's, once moved)
+    int wheel_v[16] = {};
     // THE CABINET (live's rotor_horn, rotor_drum: LiveRotor): one Leslie in
     // the room, every rotor part turning with it, from chorale; the half-moon's
     // position (STOP, CHORALE, TREMOLO) and each channel's wheel armed
@@ -3650,6 +3726,13 @@ struct Part {
             S.repan(slots, cpan[ch], 64, rate, true);
         if (efx && !slots.empty() && !patches[cur].drums)
             efx_note(ch, slots);                // the insertion effect's level and EQ (live._efx_note)
+        if (!slots.empty() && !patches[cur].drums) {
+            // ...and THE TONE's OWN (live._tone_fx): its plunger or mouth arms
+            // the rows on its effect channel, after the module's level
+            int fxc = tone_fx_of(ch, n0);
+            if (fxc >= 0 && tone_fx[fxc].kind)
+                S.filter_arm(slots, fxc);
+        }
         if (soft[ch] && !slots.empty())
             S.soft_strings(slots, soft_drop, soft_top);
         double gl[3];                       // PORTAMENTO, stamped (live._glide)
@@ -5601,7 +5684,7 @@ struct Part {
     {
         const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
         return p.wheel_vib && !(p.amp > 0.0) && !(p.organ && p.organ->n_order) && !(p.wtrem > 0.0) && !p.clav
-               && !p.leslie && !p.wheel_swell && !(k && k->drone_wheel);
+               && !p.leslie && !p.wheel_swell && !(k && k->drone_wheel) && !(k && k->flt_set == 2 && k->flt_k == 4);
     }
 
     // live._snd_vib: (depth to add, rate factor) the part's CC77/76 ask of
@@ -5937,18 +6020,168 @@ struct Part {
         static const int RESET_CC[6][2] = {{1, 0}, {11, 127}, {64, 0}, {65, 0}, {66, 0}, {67, 0}};
         for (auto &cv : RESET_CC)
             control(ch, cv[0], cv[1], n0);
-        aftertouch(ch, 0);
+        aftertouch(ch, 0, n0);
         rpn_none[ch] = false;
         rpn_msb[ch] = rpn_lsb[ch] = 127;
         pw_armed[ch] = true;
     }
 
     // channel aftertouch: every key sounding on the channel (live's
-    // _press_groups: the slab's keys in order, one tilt)
-    void aftertouch(int ch, int v)
+    // _press_groups: the slab's keys in order, one tilt) -- and a plunger's
+    // hand (live._tone_ctl)
+    void aftertouch(int ch, int v, long long n0)
     {
         pressure[ch] = v / 127.0;
+        at_seen[ch] = true;
+        tone_ctl(ch, false, n0, v);
         press(sounding(ch), pressure[ch]);
+    }
+
+    // live._tone_ctl: the wheel or the hand reaching ch's tones' filters, the
+    // last three moves kept (a glide needs two)
+    void tone_ctl(int ch, bool wheel_, long long n0, int v)
+    {
+        const double t = (double)n0 / rate;
+        for (auto &kv : tone_fx) {
+            ToneFx &tf = kv.second;
+            if (tf.ch != ch || !tf.kind)
+                continue;
+            auto &l = wheel_ ? tf.wheel : tf.at;
+            l.push_back(std::make_pair(t, v));
+            if (l.size() > 3)
+                l.erase(l.begin(), l.end() - 3);
+        }
+    }
+
+    // live._tone_fx: the effect channel of the tone the part plays now on
+    // ch (a melodic tone that brings one), made the first time
+    int tone_fx_of(int ch, long long n0)
+    {
+        const Patch &p = patches[cur];
+        const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
+        if (!k || !(k->efx_set || k->flt_set))
+            return -1;
+        std::vector<void *> &lst = tone_seg[ch];
+        long ix = (long)(std::find(lst.begin(), lst.end(), p.cache) - lst.begin());
+        if (ix == (long)lst.size())
+            lst.push_back(p.cache);
+        const int fxc = ch % TONE_SEG + TONE_SEG * (1 + (int)(ix % (TONE_SEG - 1)));
+        if (!tone_fx.count(fxc)) {
+            ToneFx tf;
+            tf.ch = ch;
+            tf.k = k;
+            tf.kind = k->flt_set == 2 ? k->flt_k : 0;       // (the plunger, the mouth; a tone's effect's own: P2b)
+            const double t = (double)n0 / rate;     // (the hand and the wheel where they already are)
+            if (at_seen[ch])
+                tf.at.push_back(std::make_pair(t, (int)nearbyint(pressure[ch] * 127.0)));
+            if (wheel_seen[ch])
+                tf.wheel.push_back(std::make_pair(t, wheel_v[ch]));
+            if (tf.kind == 4)
+                tf.g = nv_npy_new((unsigned long long)(fxc + k->mouth_seed));
+            tone_fx[fxc] = std::move(tf);
+        }
+        return fxc;
+    }
+
+    // a stepped control from 0 at time 0 (efxfilter.steps over [0.0] + its
+    // times, [0.0] + its values: sorted moves), at t, gliding
+    static double steps_at(std::vector<std::pair<double, int>> ev, double glide, double t)
+    {
+        std::sort(ev.begin(), ev.end());
+        std::vector<double> ts{0.0}, vs{0.0};
+        for (auto &e : ev) {
+            ts.push_back(e.first);
+            vs.push_back((double)e.second);
+        }
+        long i = (long)(std::upper_bound(ts.begin(), ts.end(), t) - ts.begin()) - 1;
+        i = i < 0 ? 0 : (i > (long)ts.size() - 1 ? (long)ts.size() - 1 : i);
+        if (glide <= 0.0 || vs.size() < 2)
+            return vs[i];
+        double prev = vs[i > 0 ? i - 1 : 0];
+        double dt = t - ts[i];
+        double kk = exp(-(dt > 0.0 ? dt : 0.0) / glide);
+        return vs[i] + (prev - vs[i]) * (i > 0 ? kk : 0.0);
+    }
+
+    // Live._filter_block, the tones' own: each tone's filter at the block's
+    // middle, |H| on its rows -- the plunger's corner (efxfilter.plunger, the
+    // hand's last moves), the mouth's three centres (the wheel's vowel once it
+    // has moved, else the wander: efxfilter.mouth_live)
+    void filter_block(long long n0, long long frames)
+    {
+        if (tone_fx.empty() || S.fl_n == 0)
+            return;
+        const double t = ((double)n0 + 0.5 * (double)frames) / rate;
+        for (auto &kv : tone_fx) {
+            ToneFx &tf = kv.second;
+            const NoteClass *k = tf.k;
+            if (!tf.kind)
+                continue;
+            const double pa = k->flt_p[0], pb = k->flt_p[1];
+            if (tf.kind == 3) {
+                const double *c = k->flt_c;
+                double st = steps_at(tf.at, c[4], t);
+                double x = st < 0.0 ? 0.0 : (st > 127.0 ? 127.0 : st);
+                double u = 2.0 * x / 127.0 - 1.0;
+                double g = c[3] * u + (1.0 - c[3]) * pow(u, 3.0);
+                const double ctrl = c[1] * pow(g < 0.0 ? c[0] / c[1] : c[2] / c[1], fabs(g));
+                const double q = pa > 0.1 ? pa : 0.1;
+                S.filter_swing(kv.first, rate, [&](double f) {     // (efxfilter.response, type 2)
+                    double xx = f / (ctrl > 1.0 ? ctrl : 1.0);
+                    double a = 1.0 - xx * xx, b = xx / q;
+                    double w = 1.0 / sqrt(a * a + b * b);
+                    return (1.0 - pb) + pb * w;
+                });
+                continue;
+            }
+            const int nm = k->n_mouth;
+            double F[3];
+            if (!tf.wheel.empty()) {
+                // the wheel's vowel (efxfilter.mouth_wheel): the states closed
+                // to open along it, between two the centres interpolated
+                double pos = steps_at(tf.wheel, k->mouth_glide, t);
+                double x = pos < 0.0 ? 0.0 : (pos > 127.0 ? 127.0 : pos);
+                double u = x / 127.0 * (double)(nm - 1);
+                long j = (long)floor(u);
+                j = j < nm - 2 ? j : nm - 2;
+                double w = u - (double)j;
+                for (int fk = 0; fk < 3; fk++)
+                    F[fk] = k->mouth_wst[j][fk] * (1.0 - w) + k->mouth_wst[j + 1][fk] * w;
+            } else {
+                // the wander (efxfilter.MouthWander): a state drawn by its
+                // share, held a log-normal dwell, glided to from where it was
+                while (tf.next_t <= t) {
+                    const double r = nv_npy_uniform(tf.g);
+                    int i = 0;
+                    while (i < nm && k->mouth_cdf[i] <= r)
+                        i++;
+                    tf.target = i < nm ? i : nm - 1;
+                    tf.next_t += k->mouth_dw[0] * exp(k->mouth_dw[1] * nv_npy_next(tf.g));
+                }
+                const double *tg = k->mouth_st[tf.target];
+                if (!tf.have_cur || k->mouth_glide <= 0.0) {
+                    for (int fk = 0; fk < 3; fk++)
+                        tf.cur[fk] = tg[fk];
+                    tf.have_cur = true;
+                } else {
+                    double kk = exp(-(t - tf.t > 0.0 ? t - tf.t : 0.0) / k->mouth_glide);
+                    for (int fk = 0; fk < 3; fk++)
+                        tf.cur[fk] = tg[fk] + (tf.cur[fk] - tg[fk]) * kk;
+                }
+                tf.t = t;
+                for (int fk = 0; fk < 3; fk++)
+                    F[fk] = tf.cur[fk];
+            }
+            S.filter_swing(kv.first, rate, [&](double f) {     // (efxfilter.response, type 5: VOWEL)
+                static const double BW[3] = {80.0, 110.0, 160.0}, AM[3] = {1.0, 0.7, 0.5};
+                double h = pa;
+                for (int fk = 0; fk < 3; fk++) {
+                    double u = (f - F[fk]) / (0.5 * BW[fk]);
+                    h = h + AM[fk] / (1.0 + u * u);
+                }
+                return h * pb;
+            });
+        }
     }
 
     void control(int ch, int cc, int v, long long n0)
@@ -6128,6 +6361,17 @@ struct Part {
                 if (abs(st - v) < abs(best - v))
                     best = st;
             speed = best;
+        }
+        if (cc == 1) {                          // the wheel's last (live's wheel_at), and THE MOUTH (its 'mouth' role)
+            wheel_seen[ch] = true;
+            wheel_v[ch] = v;
+            bool mouth = false;
+            for (const Patch &p : patches) {
+                const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
+                mouth = mouth || ((p.channel < 0 || p.channel == ch) && k && k->flt_set == 2 && k->flt_k == 4);
+            }
+            if (mouth)
+                tone_ctl(ch, true, n0, v);
         }
         if (cc == 1) {                          // THE MOD WHEEL IS VIBRATO (live's 'vibrato' role)
             bool any = false;
@@ -7637,6 +7881,7 @@ struct Part {
                 S.tr_aL[q] = S.tr_aR[q] = 0.0f;
                 S.ls_aL[q] = S.ls_aR[q] = 0.0f;
                 S.cv_aL[q] = S.cv_aR[q] = 0.0f;
+                S.fl_aL[q] = S.fl_aR[q] = 0.0f;
                 S.mo_uL[q] = S.mo_uR[q] = 0.0f;
             }
             shed_mo.emplace_back(n + 2 * cur_blk, qm);     // (live sets blockrender.BLK to its block)
@@ -7751,7 +7996,7 @@ struct Part {
             else if (e.type == 1)
                 note_off(e.ch, e.a, n0);
             else if (e.type == 3)
-                aftertouch(e.ch, e.a);
+                aftertouch(e.ch, e.a, n0);
             else if (e.type == 4)
                 pitchwheel(e.ch, e.a, n0);
             else
@@ -7789,6 +8034,7 @@ struct Part {
             scanner_block(n0, blk);
         tremolo_block(n0);                      // (live's swing, after the reap)
         leslie_block(n0, blk);                  // ...then the rotors'
+        filter_block(n0, blk);                  // ...then the moving filters, on the levels they left
     }
 };
 

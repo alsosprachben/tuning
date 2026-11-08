@@ -71,7 +71,8 @@ TASKS = [
                    "registration the layer class's, its chest's wind the variation's program class's"),
     ("GM2", False, "Files: per-mode sympathetic strings (sympathetic_per_mode: 26.8 Pedal Steel; 107.8 Taisho "
                    "Koto's, with its drone stops and sweep)"),
-    ("GM2", False, "Files: a didgeridoo's mouth (efxfilter.mouth: its seeded formant wander)"),
+    ("GM2", True, "Files: a didgeridoo's mouth (efxfilter.mouth: VOWEL's rows, its seeded wander -- "
+                  "numpy's choice and dwell, scipy's glide -- or the part's wheel)"),
     ("GM2", True, "Files: the church bells (14.8-14.10: a tube's measured modes, 19 of them, a decay of their "
                   "own) and the feedback guitars (30.8, 31.8: the loop's partial and series as late copies)"),
     ("GM2", True, "Brass variations' blare (blare_db_per_khz: dB per kHz over a knee, renormalised) and the "
@@ -131,10 +132,14 @@ TASKS = [
     ("SC-55", True, "Strokes fold as a gong's re-strikes do (fold_restrike): a roll's, a rasp's, a laugh's plain "
                     "strokes sound one strike's rows at a time, files and Python alike"),
     ("SC-55", False, "The chorus types' pre-filter high pass (Pre Filter 2): Python builds none -- a model to choose"),
+    ("SC-55", True, "Live: a tone's own moving filter in nvlive -- the plunger (59.2, aftertouch) and the "
+                    "didgeridoo's mouth (109.8, its wander or the wheel's vowel) on the tone's effect channel "
+                    "(live._tone_fx), |H| each block on the rows' unfiltered level (Slab.filter_arm/swing)"),
     ("SC-55", False, "Live: the insertion effect in nvlive -- the chain builder shared (native/efxchain.cpp), its "
                      "state and each note's direct gain (written, in its check); the copies as taps "
-                     "(tapkernel.c), the moving filters, comb and tremolo, a part's bus, branch B, the rotor and "
-                     "3D place, a tone's own effects, an OD's valve"),
+                     "(tapkernel.c), the module's moving filters, comb and tremolo (P2b, on P2a's filter "
+                     "path), a part's bus, branch B, the rotor and 3D place, a tone's own insertion effect, "
+                     "an OD's valve"),
     ("SC-55", False, "Files: a streaming (windowed) nvrender for whole songs -- it holds the table whole in float64, "
                      "and a Sound Canvas song's is past memory (SHIRO's 6.4 min: 21.8M rows, ~8.7 GB; killed at the "
                      "3.5 GB cap) where Python streams (streamrender); every native check so far a 20 s excerpt. "

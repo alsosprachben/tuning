@@ -1034,6 +1034,12 @@ typedef struct NoteClass {
     // down; sens)
     int flt_set, flt_ty, flt_k;
     double flt_p[3], flt_c[5];
+    // ...A DIDGERIDOO's MOUTH (flt_k 4: efxfilter.mouth, VOWEL's three rows):
+    // its states' centres, their choice's cdf (numpy's, of the shares), the
+    // centres sorted closed to open (the wheel's), the dwell's median and log
+    // spread, the glide, the seed's offset (MOUTH_SEED_OFFSET); n_mouth 0 none
+    int n_mouth, mouth_seed;
+    double mouth_st[16][3], mouth_cdf[16], mouth_wst[16][3], mouth_dw[2], mouth_glide;
     // ...ITS BUS (efxbus.Bus), efx_bus 0 none: 1 Lo-Fi (step, quantum, pre
     // and post filters' a, 0 none), 2 a compressor (threshold dB, ratio,
     // attack and release k, makeup); bus_p[10], [11] its dry and wet
@@ -1209,6 +1215,7 @@ void nv_section_seat(const VoiceSnap *v, const ToneIn *t, int i, double *out);
 /* npyrandom.c: numpy's default_rng(seed).standard_normal, draw by draw */
 void *nv_npy_new(unsigned long long seed);
 double nv_npy_next(void *g);
+double nv_npy_uniform(void *g);
 void nv_npy_free(void *g);
 
 /* room.cpp: a source's image sources in the room (SynthProperties.image_sources) */

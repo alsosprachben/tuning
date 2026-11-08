@@ -284,6 +284,8 @@ class NoteClass(ctypes.Structure):
                    ('efx_rev', C), ('efx_cf', I), ('cf_p', C * 40), ('efx_dly', I), ('dly_p', C * 24),
                    ('efx_place', C * 13), ('efx_trem', I), ('trem_cfg', C * 4),
                    ('flt_set', I), ('flt_ty', I), ('flt_k', I), ('flt_p', C * 3), ('flt_c', C * 5),
+                   ('n_mouth', I), ('mouth_seed', I), ('mouth_st', C * 3 * 16), ('mouth_cdf', C * 16),
+                   ('mouth_wst', C * 3 * 16), ('mouth_dw', C * 2), ('mouth_glide', C),
                    ('efx_bus', I), ('bus_p', C * 12)])
 
 
@@ -3284,6 +3286,27 @@ def note_class(cls):
             k.flt_p[:] = [_EFP.PLUNGER_Q, _EFP.PLUNGER_MIX, 0.0]
             k.flt_c[:] = [_EFP.PLUNGER_CLOSED_HZ, _EFP.PLUNGER_MID_HZ, _EFP.PLUNGER_OPEN_HZ, _EFP.PLUNGER_LINEAR,
                           _EFP.PLUNGER_GLIDE_S]
+        elif getattr(cls, 'mouth_states', None):   # A DIDGERIDOO's MOUTH (efxfilter.mouth: the wander, or the wheel)
+            import efxfilter as _EFP
+            import numpy as _np
+            st = cls.mouth_states
+            if len(st) > 16:
+                _NOTE[cls] = False
+                return None
+            k.flt_set, k.flt_ty, k.flt_k = 2, 5, 4
+            k.flt_p[:] = [float(cls.mouth_floor), float(_EFP.mouth_gain(st, cls.mouth_floor)), 0.0]
+            _p = _np.asarray([s_[3] for s_ in st], float)
+            _p = _p / _p.sum()
+            _cdf = _p.cumsum()                      # (Generator.choice's)
+            _cdf /= _cdf[-1]
+            k.n_mouth, k.mouth_seed = len(st), int(_EFP.MOUTH_SEED_OFFSET[0])
+            for i, s_ in enumerate(st):
+                k.mouth_st[i][:] = [float(x) for x in s_[:3]]
+                k.mouth_cdf[i] = float(_cdf[i])
+            for i, s_ in enumerate(sorted(s_[:3] for s_ in st)):
+                k.mouth_wst[i][:] = [float(x) for x in s_]
+            k.mouth_dw[:] = [float(x) for x in cls.mouth_dwell_s]
+            k.mouth_glide = float(cls.mouth_glide_s)
         if cab and os.environ.get('TUNING_CABINET', '1') != '0':
             import cabinet as _CAB
             cb = _CAB.get(cab)
@@ -3772,7 +3795,8 @@ class Midi(object):
 
     def events(self):
         """[(t, type, channel, a, b)] in message order: 0 note-on (key,
-        velocity), 1 note-off, 2 control (number, value), 4 the pitch wheel
+        velocity), 1 note-off, 2 control (number, value), 3 the channel's
+        aftertouch (value), 4 the pitch wheel
         (-8192..8191), 5 a program change, 6 an exclusive (a: sysex(a))"""
         I4 = ctypes.c_int * 4
         out = []
@@ -5141,12 +5165,10 @@ def variation_tables():
     slots, entries, ent = [], [None], {}
 
     # (...and the note loop's own the engine has not: a tone's insertion
-    # effect, a plunger's or a mouth's moving filter, a melodic note's
-    # sounding octaves)
+    # effect, a melodic note's sounding octaves)
     def ok(c):
         return (isinstance(c, type) and sfx_strokes_ok(c)
                 and not (getattr(c, 'insertion_efx', None) and efx_chain(c) is None)
-                and not getattr(c, 'mouth_states', None)
                 and note_class(c) is not None)
 
     for (p, v) in sorted(P.VARIATIONS):

@@ -10,6 +10,7 @@
  */
 #include <math.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include "npyrandom.h"
 
 typedef struct {
@@ -163,7 +164,65 @@ void *nv_npy_new(unsigned long long seed)
 
 double nv_npy_next(void *g) { return npy_standard_normal((NpyPCG64 *)g); }
 
+/* ...its random() (Generator.random: a choice's draw) */
+double nv_npy_uniform(void *g) { return pcg_next_double((NpyPCG64 *)g); }
+
 void nv_npy_free(void *g) { free(g); }
+
+/* A DIDGERIDOO's MOUTH WANDERING (efxfilter.mouth_track): at lgn points
+   step apart from 0, its three centres -- a state drawn by its share
+   (default_rng(seed).choice(n, p): its random() against the cdf, searchsorted
+   right), held dwell[0] x exp(dwell[1] x a normal), until past the last point
+   and a second; then each centre through scipy's lfilter([1 - a], [1, -a])
+   from rest at the first (a = exp(-step / glide)), as float32 rows:
+   out[k x lgn + p] */
+void nv_mouth_track(unsigned long long seed, int n, const double *st, const double *cdf,
+                    const double *dwell, double glide, double step, long lgn, float *out)
+{
+    NpyPCG64 r;
+    npy_pcg64_seed(&r, seed);
+    const double T = lgn > 0 ? (double)(lgn - 1) * step : 0.0;
+    long cap = 64, nt = 0;
+    double *times = (double *)malloc(sizeof(double) * cap);
+    int *picks = (int *)malloc(sizeof(int) * cap);
+    double now = 0.0;
+    while (now <= T + 1.0) {
+        if (nt == cap) {
+            cap *= 2;
+            times = (double *)realloc(times, sizeof(double) * cap);
+            picks = (int *)realloc(picks, sizeof(int) * cap);
+        }
+        const double u = pcg_next_double(&r);
+        int i = 0;
+        while (i < n && cdf[i] <= u)
+            i++;
+        times[nt] = now;
+        picks[nt++] = i < n ? i : n - 1;
+        now += dwell[0] * exp(dwell[1] * npy_standard_normal(&r));
+    }
+    const double a = exp(-step / glide), b0 = 1.0 - a;
+    for (int k = 0; k < 3; k++) {
+        long j = 0;
+        double z = 0.0;
+        for (long p = 0; p < lgn; p++) {
+            const double t = (double)p * step;
+            while (j + 1 < nt && times[j + 1] <= t)
+                j++;
+            const double x = st[3 * picks[j] + k];
+            if (lgn < 2 || glide <= 0.0) {
+                out[k * lgn + p] = (float)x;
+                continue;
+            }
+            if (p == 0)
+                z = a * x;                      /* (zi: from rest at the first) */
+            const double y = z + b0 * x;
+            z = y * a;
+            out[k * lgn + p] = (float)y;
+        }
+    }
+    free(times);
+    free(picks);
+}
 
 /* efxbus.noise: n samples from absolute sample n0, each chunk (8192) of
    them default_rng([seed, chunk]) -- its standard_normal (uniform 0: its
