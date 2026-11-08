@@ -1311,6 +1311,8 @@ int nv_efx_live_parts(void *h);
 int nv_efx_live_filter(void *h, int ch, double *head, double *seg, int cap);
 int nv_efx_live_on(void *h, int ch);
 long nv_efx_live_rev(void *h);
+int nv_efx_live_state(void *h, int *o, int cap, const char **why);
+const double *nv_efx_live_rec(void *h);
 const double *nv_efx_live_chain(void *h, int ch, int *status, const char **why);
 void nv_efx_live_source(void *h, double t, int src, int v);
 void nv_fold_begin(const double *in, int nin, double n2, double xf);

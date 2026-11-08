@@ -147,6 +147,8 @@ void nv_part_drone_patch(void *h, int pi, void *cache, int nbuckets, int speed);
 void nv_part_toggle_stop(void *h, int rank, long long n0);
 int nv_part_drawn(void *h, char *out, int cap);
 void nv_part_efx(void *h, const double *X, double SR);
+int nv_part_efx_state(void *h, int *o, int cap, const char **why);
+long nv_part_efx_rev(void *h);
 void *nv_part_new(void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
                 int soft_drop, int soft_top, double rate, double retrigger, long cap, double headroom,
                 const double *pan_tab, double pan_beta);
@@ -232,6 +234,7 @@ struct Export {
     // VNAM: the variations the picker offers: program, key, name
     std::vector<std::array<int, 2>> vpv;
     std::vector<std::string> vnames;
+    std::string efxu;                           // EFXU: the panel's insertion-effect tables (panel::efx_tables)
     std::vector<std::array<int, 10>> vpart;     // VLIV: each one's live record, as part[]'s
     std::vector<std::array<int, 12>> vdrn;      // VDRN: a voice's own drone patch (program, variation, its record)
     std::vector<double> mtab;                   // MTAB: moog.py's tables by knob position (nv_moog_tables)
@@ -476,6 +479,9 @@ static bool read_export(const char *path, Export &E)
             }
             if (!memcmp(tt, "MKIT", 4)) {
                 fseek(f, tl, SEEK_CUR);
+            } else if (!memcmp(tt, "EFXU", 4)) {
+                E.efxu.resize(tl);
+                ok = fread(&E.efxu[0], 1, tl, f) == (size_t)tl;
             } else if (!memcmp(tt, "MTAB", 4)) {
                 E.mtab.resize(tl / 8);
                 ok = fread(E.mtab.data(), 8, E.mtab.size(), f) == E.mtab.size();
@@ -1483,6 +1489,9 @@ int main(int argc, char **argv)
     // next block's events), and its strings where they are another voice's
     // (live._reg_forget: the new voice's bank, or none)
     std::atomic<int> shown_program(drums ? 128 + program : program);    // (what the panel shows)
+    std::atomic<int> shown_var(drums ? 0 : bank0);                        // (...its variation, 0 the capital tone)
+    std::atomic<int> last_ctl_code{0};                                    // (the panel's EFX learn)
+    std::atomic<long long> last_ctl_ns{0};
     auto swap = [&](size_t i, int prog, bool dr, int var, void *c) {
         PartAt &pa = pats[i];
         static const int DRUM_P[10] = {1, 1, 1, -1, -1, -1, -1, 0, 0, 0};
@@ -1514,8 +1523,10 @@ int main(int argc, char **argv)
         pa.posted_var = var;
         pa.drums = dr;
         pa.sid = sid;
-        if (pa.pi == 0)
+        if (pa.pi == 0) {
+            shown_var = dr ? 0 : var;
             shown_program = (dr ? 128 : 0) + (prog & 127);
+        }
     };
     if (!drums) {                               // the starting patch's pungi drone, as build() makes them
         const NoteClass *k0 = cls60(program, bank0);
@@ -1914,6 +1925,13 @@ int main(int argc, char **argv)
                     swallow = std::make_pair(-1, -1);
                     continue;
                 }
+                // the last controller the hardware moved: the EFX panel's learn
+                // (live.on_midi's last_ctl: CC 1-95, aftertouch, the wheel past 1024)
+                if ((m.type == 2 && m.a >= 1 && m.a <= 95) || m.type == 3 || (m.type == 4 && abs(m.a) > 1024)) {
+                    last_ctl_code = m.type == 2 ? m.a : m.type == 3 ? 0x60 : 0x61;
+                    last_ctl_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                      std::chrono::steady_clock::now().time_since_epoch()).count();
+                }
                 if (m.type == 5) {
                     asked(m.ch, m.a);
                     continue;
@@ -1971,6 +1989,16 @@ int main(int argc, char **argv)
                 snap.peak[1] = std::max(snap.peak[1], pk[1]);
                 if ((blocks & 7) == 0)
                     nv_part_stats(part, snap.eng);
+                // the insertion effect, when it changed (the panel's)
+                const long er = nv_part_efx_rev(part);
+                if (er != snap.efx_rev && er >= 0) {
+                    int o[512];
+                    const char *why = "";
+                    int no = nv_part_efx_state(part, o, 512, &why);
+                    snap.efx.assign(o, o + std::max(0, no));
+                    snap.efx_why = why ? why : "";
+                    snap.efx_rev = er;
+                }
                 snap.rt = rt_on && !rt::dropped;
                 snap.rt_dropped = rt::dropped > 0;
             }
@@ -2028,8 +2056,15 @@ int main(int argc, char **argv)
             const Export::Prog &pr = E.prog[sp & 127];
             return sp >= 128 ? (pr.kit.empty() ? "drum set" : pr.kit) : pr.name;
         };
+        // ...a variation by its own name (VNAM), its program's otherwise
+        auto shown_name = [&](int sp, int v) {
+            for (size_t j = 0; j < E.vpv.size() && v && sp < 128; j++)
+                if (E.vpv[j][0] == sp && E.vpv[j][1] == v)
+                    return E.vnames[j];
+            return name_of(sp);
+        };
         H.program = program;
-        H.program_name = name_of(shown_program);
+        H.program_name = shown_name(shown_program, shown_var);
         H.port = dev;
         H.room = E.room.empty() ? "-" : E.room;
         H.reg_modes = rg.M > 0 && !noreg ? rg.M : 0;
@@ -2109,7 +2144,17 @@ int main(int argc, char **argv)
                           || E.cmap[128 * p + k] < 0;
             H.vnative[j] = nat;
         }
-        H.var = pats[0].var;
+        H.var = shown_var;
+        H.channel = pats[0].channel;
+        // THE INSERTION EFFECT: its tables, a setting sent as the GS exclusive
+        // a file would carry (live.efx_send: into the block's events), the
+        // controller last moved (the learn)
+        panel::efx_tables(H, E.efxu);
+        if (!H.efx_types.empty())
+            H.efx_send = [&](const std::vector<uint8_t> &m) {
+                post([&, m](long long) { nv_part_sysex(part, m.data(), (int)m.size()); });
+            };
+        H.last_ctl = [&]() { return std::make_pair(last_ctl_code.load(), last_ctl_ns.load()); };
         if (E.has_prog)
             H.pick = [&](int sp) {
                 post([&, sp](long long) {
@@ -2125,17 +2170,20 @@ int main(int argc, char **argv)
             };
         // ...A PROGRAM CHANGE FROM THE KEYBOARD: its name and its stops, and
         // what the builder said
-        int shown = shown_program;
+        int shown = shown_program, shown_v = shown_var;
         H.refresh = [&]() {
-            int sp = shown_program;
+            int sp = shown_program, sv = sp >= 128 ? 0 : shown_var.load();
             std::string m;
-            if (sp != shown) {
+            if (sp != shown || sv != shown_v) {
                 shown = sp;
+                shown_v = sv;
                 H.program = sp & 127;
                 H.kit = sp >= 128;
-                H.program_name = name_of(sp);
+                H.var = sv;
+                H.program_name = shown_name(sp, sv);
                 stops_of(sp);
-                m = "program " + std::to_string(sp & 127) + ": " + H.program_name;
+                m = (sp >= 128 ? "drum set " : "program ") + std::to_string(sp & 127)
+                    + (sv ? "." + std::to_string(sv & 127) : "") + ": " + H.program_name;
             }
             std::lock_guard<std::mutex> lk(bmu);
             for (auto &x : notes)

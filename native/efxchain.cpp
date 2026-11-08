@@ -1136,6 +1136,37 @@ extern "C" int nv_efx_live_filter(void *h, int ch, double *head, double *seg, in
 extern "C" int nv_efx_live_on(void *h, int ch) { return ((EfxLive *)h)->on(ch); }
 extern "C" long nv_efx_live_rev(void *h) { return ((EfxLive *)h)->rev; }
 
+// its chain whoever hears it (NULL none: Thru, unbuilt or refused)
+extern "C" const double *nv_efx_live_rec(void *h) { return ((EfxLive *)h)->chain(); }
+
+// THE STATE A PANEL SHOWS (livetui.pick_efx's live.efx): into o, its type
+// (msb, lsb), parameters 1-20 (-1 unset), sends, controllers, the channels
+// on it (count, each), the sources' values (count, each source and value),
+// then its chain's status (0 built, -1 none, -3 refused: *why). The count
+// written, -1 past cap
+extern "C" int nv_efx_live_state(void *h, int *o, int cap, const char **why)
+{
+    EfxLive *E = (EfxLive *)h;
+    std::vector<int> v = {E->msb, E->lsb};
+    for (int q = 1; q <= 20; q++)
+        v.push_back(E->p[q]);
+    v.insert(v.end(), E->snd, E->snd + 3);
+    v.insert(v.end(), E->ctl, E->ctl + 4);
+    v.push_back((int)E->parts.size());
+    v.insert(v.end(), E->parts.begin(), E->parts.end());
+    v.push_back((int)E->cvv.size());
+    for (const auto &kv : E->cvv) {
+        v.push_back(kv.first);
+        v.push_back(kv.second);
+    }
+    v.push_back(E->msb || E->lsb ? (E->chain() ? 0 : E->status) : -1);
+    *why = E->msb || E->lsb ? E->why : "";
+    if ((int)v.size() > cap)
+        return -1;
+    std::copy(v.begin(), v.end(), o);
+    return (int)v.size();
+}
+
 // the chain channel ch hears now (live._efx_for): its record, NULL where
 // ch is not on the effect or its type is Thru, unbuilt or refused here
 // (*status: 0, -1, -3; *why the refusal's)

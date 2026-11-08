@@ -537,6 +537,41 @@ def main(argv):
             # (native.moog_tables), what a knob turned live is built from
             mt = N.moog_tables().astype("<f8").tobytes()
             f.write(b"MTAB" + struct.pack("<i", len(mt)) + mt)
+            # EFXU: the panel's insertion effect (livetui.pick_efx): Roland's
+            # numbered types and families, each type's parameters -- name,
+            # its controller's mark, whether the model reads it, the value in
+            # effect where none is set (gsefx.in_effect), its raw values and
+            # each printed as his panel shows it -- as tab-separated lines
+            import gsefx as _GSX
+            ul = ["T\t%d\t%d\t%d\t%s" % (_n, _k[0], _k[1], _nm) for _n, _k, _nm in _GSX.numbered()]
+            ul += ["C\t%d\t%d\t%s" % (_a, _b, _c) for _c, _a, _b in _GSX.CATEGORIES]
+            for _n, _k, _nm in _GSX.numbered():
+                # (the model reads some only in some states -- a chorus's
+                # Cutoff with its Pre Filter on: the type fresh, then each
+                # parameter alone through its ends and middle, what it reads
+                # of those left unset)
+                _eff = {}
+                _sts = [_GSX.tone_state(_k)]
+                for _q, _pn, _rg, _d in _GSX.params(_nm):
+                    _r = _GSX.param_range(_nm, _q)
+                    _sts += [_GSX.tone_state(_k, {_q: _v}) for _v in
+                             (_r if isinstance(_r, list) else sorted({_r[0], _r[0] + 1, (_r[0] + _r[1]) // 2, _r[1]}))]
+                for _st in _sts:
+                    _GSX._USED.clear()
+                    _GSX.chain(_st)
+                    for _q, _v in _GSX._USED.items():
+                        if _q not in _st['p']:
+                            _eff.setdefault(_q, _v)
+                _mk = {v: m for m, v in _GSX.marks(_nm).items()}
+                for _q, _pn, _rg, _d in _GSX.params(_nm):
+                    _r = _GSX.param_range(_nm, _q)
+                    _vs = list(_r) if isinstance(_r, list) else list(range(_r[0], _r[1] + 1))
+                    ul.append("P\t%d\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%s" % (
+                        _k[0], _k[1], _q, _pn, _mk.get(_q, "-"), int(_q in _eff),
+                        int(_eff.get(_q, _d if _d is not None else 0)), ",".join(str(x) for x in _vs),
+                        "\x1f".join(_GSX.printed_value(_nm, _q, x) for x in _vs)))
+            ub = "\n".join(ul).encode("utf-8")
+            f.write(b"EFXU" + struct.pack("<i", len(ub)) + ub)
         if "live" in opt:
             import live as L
             tab = L.pan_table()

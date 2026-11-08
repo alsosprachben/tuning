@@ -11,7 +11,13 @@
 // the pedals). Tab moves between the panes, the arrows (or hjkl) select and
 // adjust, - and + (_ and + by five) adjust, P is panic, ? the keys, q quits.
 //
-// Not live's: the patch tree, layers and splits, organ stops, the effect,
+// The patch picker (p) lists every program, its variations and the drum
+// sets; x is the insertion effect (livetui.pick_efx): the part on it or off,
+// its type by Roland's families, each parameter as his panel prints it, the
+// two controllers and the sends -- each sent as the GS message a file would
+// carry.
+//
+// Not live's: the patch tree, layers and splits, a tone's own effect shown,
 // the synth, presets and scenes (one part, its program picked here or by MIDI),
 // and the room itself (the voices are packed in the export's room; its tail
 // can be turned off).
@@ -23,6 +29,7 @@
 #ifndef NV_PANEL_H
 #define NV_PANEL_H
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -30,11 +37,13 @@
 #include <cstring>
 #include <deque>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <string>
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <termios.h>
+#include <thread>
 #include <unistd.h>
 #include <vector>
 
@@ -48,6 +57,11 @@ struct Snap {
     long ms_n = 0;
     float peak[2] = {0.0f, 0.0f};       // since the panel last looked
     double eng[15] = {};                // nv_part_stats
+    // the insertion effect when it last changed (nv_part_efx_state: empty
+    // none in the export), its revision and why its chain is refused
+    std::vector<int> efx;
+    std::string efx_why;
+    long efx_rev = -1;
     bool rt = false, rt_dropped = false;
 };
 
@@ -91,6 +105,124 @@ struct Host {
     std::vector<char> vnative;
     int var = 0;
     std::function<void(int)> pick;
+    // THE INSERTION EFFECT's tables (the export's EFXU: gsefx's numbered
+    // types, families and each type's parameters), the GS exclusive the
+    // panel sends (posted, as a file's), the channel the part listens on (-1
+    // all), and the last controller moved (gsefx's source code: CC 1-95,
+    // 0x60 aftertouch, 0x61 the wheel; and when, steady_clock ns)
+    struct EfxType {
+        int num, msb, lsb;
+        std::string name;
+    };
+    struct EfxCat {
+        int a, b;
+        std::string name;
+    };
+    struct EfxParam {
+        int n;
+        std::string name;
+        char mark;                      // '+' or '#': moved by that controller; '-' neither
+        bool read;                      // the model reads it (gsefx.in_effect has it)
+        int fresh;                      // its value in effect where none is set
+        std::vector<int> vals;          // the raw values it takes
+        std::vector<std::string> shown; // ...each as Roland's panel prints it
+    };
+    std::vector<EfxType> efx_types;
+    std::vector<EfxCat> efx_cats;
+    std::map<std::pair<int, int>, std::vector<EfxParam>> efx_params;
+    std::function<void(const std::vector<uint8_t> &)> efx_send;
+    std::function<std::pair<int, long long>()> last_ctl;
+    int channel = -1;
+};
+
+// the export's EFXU into the host's tables (native_export.py's lines)
+static void efx_tables(Host &H, const std::string &txt)
+{
+    auto split = [](const std::string &s, char d) {
+        std::vector<std::string> f;
+        size_t a = 0;
+        for (size_t b; (b = s.find(d, a)) != std::string::npos; a = b + 1)
+            f.push_back(s.substr(a, b - a));
+        f.push_back(s.substr(a));
+        return f;
+    };
+    for (const std::string &ln : split(txt, '\n')) {
+        std::vector<std::string> f = split(ln, '\t');
+        if (f[0] == "T" && f.size() == 5) {
+            H.efx_types.push_back({atoi(f[1].c_str()), atoi(f[2].c_str()), atoi(f[3].c_str()), f[4]});
+        } else if (f[0] == "C" && f.size() == 4) {
+            H.efx_cats.push_back({atoi(f[1].c_str()), atoi(f[2].c_str()), f[3]});
+        } else if (f[0] == "P" && f.size() == 10) {
+            Host::EfxParam p{atoi(f[3].c_str()), f[4], f[5].empty() ? '-' : f[5][0], f[6] == "1", atoi(f[7].c_str()),
+                             {}, split(f[9], '\x1f')};
+            for (const std::string &v : split(f[8], ','))
+                p.vals.push_back(atoi(v.c_str()));
+            if (p.vals.size() == p.shown.size())
+                H.efx_params[std::make_pair(atoi(f[1].c_str()), atoi(f[2].c_str()))].push_back(p);
+        }
+    }
+}
+
+// gsefx's addresses: the sends from the effect, its two controllers
+static const int EFX_SEND[3] = {0x17, 0x18, 0x19};
+static const int EFX_CTL_SRC1 = 0x1B, EFX_CTL_DEP1 = 0x1C, EFX_CTL_SRC2 = 0x1D, EFX_CTL_DEP2 = 0x1E;
+static const int EFX_SRC_CAF = 0x60, EFX_SRC_BEND = 0x61;
+
+// gsefx.message: the GS DT1 exclusive (no F0/F7) for an EFX setting --
+// kind 't' type (a msb, b lsb), 'p' parameter (a 1-20, b), 's' a send or
+// controller (a its address, b), 'c' a part (a channel, b on)
+static std::vector<uint8_t> efx_message(char kind, int a, int b)
+{
+    std::vector<uint8_t> body;
+    if (kind == 't') {
+        body = {0x40, 0x03, 0x00, (uint8_t)a, (uint8_t)b};
+    } else if (kind == 'p') {
+        body = {0x40, 0x03, (uint8_t)(0x02 + a), (uint8_t)b};
+    } else if (kind == 's') {
+        body = {0x40, 0x03, (uint8_t)a, (uint8_t)b};
+    } else {
+        int ch = a % 16, blk = ch == 9 ? 0 : ch < 9 ? ch + 1 : ch;
+        body = {(uint8_t)(a >= 16 ? 0x50 : 0x40), (uint8_t)(0x40 | blk), 0x22, (uint8_t)(b ? 1 : 0)};
+    }
+    int sum = 0;
+    for (uint8_t x : body)
+        sum += x;
+    std::vector<uint8_t> m = {0x41, 0x10, 0x42, 0x12};
+    m.insert(m.end(), body.begin(), body.end());
+    m.push_back((uint8_t)((128 - sum % 128) % 128));
+    return m;
+}
+
+// the state nv_part_efx_state wrote, read back
+struct EfxView {
+    bool has = false;
+    int msb = 0, lsb = 0, p[21], snd[3] = {40, 0, 0}, ctl[4] = {0, 0x40, 0, 0x40};
+    std::vector<int> parts;
+    std::map<int, int> cv;
+    int status = -1;
+    explicit EfxView(const std::vector<int> &o)
+    {
+        for (int q = 0; q < 21; q++)
+            p[q] = -1;
+        if (o.size() < 31)
+            return;
+        has = true;
+        msb = o[0];
+        lsb = o[1];
+        for (int q = 1; q <= 20; q++)
+            p[q] = o[1 + q];
+        for (int q = 0; q < 3; q++)
+            snd[q] = o[22 + q];
+        for (int q = 0; q < 4; q++)
+            ctl[q] = o[25 + q];
+        size_t i = 29, np = (size_t)o[i++];
+        for (size_t q = 0; q < np && i < o.size(); q++)
+            parts.push_back(o[i++]);
+        size_t nc = i < o.size() ? (size_t)o[i++] : 0;
+        for (size_t q = 0; q < nc && i + 1 < o.size(); q++, i += 2)
+            cv[o[i]] = o[i + 1];
+        status = i < o.size() ? o[i] : -1;
+    }
 };
 
 // THE STOP KEYS, as livetui's on a US layout: row 0 the digits, row 1 the
@@ -357,9 +489,26 @@ struct Panel {
         line(" " + C("accent") + "\x1b[1m◆ tuning native\x1b[0m  " + C("dim") + b + "   " + H.port + "   " + lamp);
         // the part
         rule("PART", false);
-        snprintf(b, sizeof b, "   %d  %s", H.program, H.program_name.c_str());
+        if (H.var && !H.kit)                    // (a variation: its program, its bank)
+            snprintf(b, sizeof b, "   %d.%d  %s", H.program, H.var & 127, H.program_name.c_str());
+        else
+            snprintf(b, sizeof b, "   %s%d  %s", H.kit ? "set " : "", H.program, H.program_name.c_str());
         line(C("value") + b + "\x1b[0m" + C("dim") + "   " + H.tuner + "   room " + H.room
              + (H.reg_modes ? "   register " + std::to_string(H.reg_modes) + " string modes" : "   no register"));
+        // the insertion effect: its type, the part on it or not, and why it
+        // is not heard where it is refused here (x opens it)
+        if (!s.efx.empty()) {
+            EfxView v(s.efx);
+            std::string nm = efx_name(v.msb, v.lsb), st;
+            if (nm != "Thru") {
+                st = efx_on(v) ? "   part on it" : "   part not on it";
+                if (v.status == -3)
+                    st += C("warn") + "   not native live: " + s.efx_why;
+                else if (v.status != 0)
+                    st += C("warn") + "   not built live";
+            }
+            line("   " + C("label") + "efx  " + C("value") + nm + "\x1b[0m" + C("dim") + st + C("dim") + "   (x)");
+        }
         // the globals
         if (pane == 0 || T.h > 30) {
             rule("GLOBALS", pane == 0, "←→ -+ adjust");
@@ -449,7 +598,7 @@ struct Panel {
         if (now < msg_until)
             line("   " + C("warn") + msg);
         else
-            line("   " + C("dim") + "tab pane  ↑↓ select  ←→ -+ adjust  p patch  P panic  ? keys  q quit");
+            line("   " + C("dim") + "tab pane  ↑↓ select  ←→ -+ adjust  p patch  x efx  P panic  ? keys  q quit");
         if (help) {
             line("");
             line(C("accent") + "  keys");
@@ -458,7 +607,8 @@ struct Panel {
             line("   left right - +    adjust the global (_ + by five)");
             line("   r                 add a route (from, to, how, replace or keep, channel)");
             line("   d                 delete the selected route");
-            line("   p                 the patch: every program and drum set, / to search");
+            line("   p                 the patch: every program, its variations, the drum sets; / to search");
+            line("   x                 the insertion effect: the part on it, its type, parameters, controllers, sends");
             line("   P                 panic: every note off, now");
             line("   q                 quit (routes added here are kept beside the export)");
         }
@@ -468,22 +618,38 @@ struct Panel {
     }
 
     // -- questions --
-    // a menu over the bottom of the screen: the index, or -1 (Esc, q)
-    int menu(const std::string &title, const std::vector<std::string> &items)
+    // a menu over the bottom of the screen: the index, or -1 (Esc, q) --
+    // opened on start, the rows head marks headings (never chosen), a long
+    // one scrolled
+    int menu(const std::string &title, const std::vector<std::string> &items, int start = 0,
+             const std::vector<char> &head = {})
     {
-        int at = 0;
+        const int n = (int)items.size();
+        auto is_head = [&](int i) { return i < (int)head.size() && head[i]; };
+        auto step = [&](int at, int d) {
+            for (int j = at + d; j >= 0 && j < n; j += d)
+                if (!is_head(j))
+                    return j;
+            return at;
+        };
+        int at = std::max(0, std::min(start, n - 1));
+        if (is_head(at))
+            at = step(at, 1);
         while (true) {
+            T.size();
+            int win = std::max(3, T.h - 4), top = std::max(0, std::min(at - win / 2, n - win));
             std::string m = "\x1b[H\x1b[2J " + C("accent") + "\x1b[1m" + title + "\x1b[0m\r\n";
-            for (size_t i = 0; i < items.size(); i++)
-                m += std::string((int)i == at ? C("sel") + " ▸ " : "   ") + items[i] + "\x1b[0m\x1b[K\r\n";
+            for (int i = top; i < std::min(n, top + win); i++)
+                m += is_head(i) ? C("accent2") + "   " + items[i] + "\x1b[0m\x1b[K\r\n"
+                                : std::string(i == at ? C("sel") + " ▸ " : "   ") + items[i] + "\x1b[0m\x1b[K\r\n";
             m += C("dim") + "\r\n   ↑↓ choose  enter take  esc back\x1b[0m";
             fwrite(m.data(), 1, m.size(), stdout);
             fflush(stdout);
             int c = T.key(1000);
             if (c == 1000 || c == 'k')
-                at = std::max(0, at - 1);
+                at = step(at, -1);
             else if (c == 1001 || c == 'j')
-                at = std::min((int)items.size() - 1, at + 1);
+                at = step(at, 1);
             else if (c == 10 || c == 13)
                 return at;
             else if (c == 27 || c == 'q')
@@ -677,6 +843,31 @@ struct Panel {
                     rows0.push_back(label(256 + (int)j));
                 }
         }
+        pick_list("patch", ids0, rows0, here, nat, [&](int id) {
+            const std::string what = id >= 256 ? std::to_string(H.vpv[id - 256][0]) + "."
+                                                 + std::to_string(H.vpv[id - 256][1] & 127) + " " + H.vnames[id - 256]
+                                               : (id >= 128 ? "drum set " : "program ") + std::to_string(id & 127)
+                                                 + " " + H.names[id];
+            if (!nat(id)) {
+                say(what + " is not native here");
+                return false;
+            }
+            if (id != here) {
+                H.pick(id);
+                say("asked for " + what + " (built if new, then swapped in)");
+            }
+            return true;
+        });
+    }
+
+    // A LIST TO PICK FROM (the patch's, the effect types'): rows under
+    // headings (id -1), opened on here, the arrows (page up/down, home/end)
+    // through it; "/" searches by the words typed; Enter hands the row's id to
+    // accept, which closes the list by returning true. A row dim_not says
+    // false of is drawn dim.
+    void pick_list(const std::string &title, const std::vector<int> &ids0, const std::vector<std::string> &rows0,
+                   int here, const std::function<bool(int)> &dim_not, const std::function<bool(int)> &accept)
+    {
         int at = 0;
         for (size_t i = 0; i < ids0.size(); i++)
             if (ids0[i] == here)
@@ -721,14 +912,14 @@ struct Panel {
                 at++;                           // (never on a heading)
             T.size();
             int win = std::max(3, T.h - 4), top = std::max(0, std::min(at - win / 2, n - win));
-            std::string m = "\x1b[H\x1b[2J " + C("accent") + "\x1b[1mpatch" + "\x1b[0m" + C("dim") + "   "
+            std::string m = "\x1b[H\x1b[2J " + C("accent") + "\x1b[1m" + title + "\x1b[0m" + C("dim") + "   "
                             + std::to_string(at + 1) + "/" + std::to_string(n) + "\x1b[0m\r\n";
             for (int i = top; i < std::min(n, top + win); i++) {
                 if (ids[i] < 0) {
                     m += C("accent2") + rows[i] + "\x1b[0m\x1b[K\r\n";
                     continue;
                 }
-                m += std::string(i == at ? C("sel") + " ▸" : "  ") + (!nat(ids[i]) && i != at ? C("dim") : "")
+                m += std::string(i == at ? C("sel") + " ▸" : "  ") + (!dim_not(ids[i]) && i != at ? C("dim") : "")
                      + rows[i] + "\x1b[0m\x1b[K\r\n";
             }
             if (!n)
@@ -778,22 +969,8 @@ struct Panel {
             } else if (c == 1008) {
                 at = n - 1;
             } else if (c == 10 || c == 13) {
-                if (!n || ids[at] < 0)
-                    continue;
-                int id = ids[at];
-                const std::string what = id >= 256 ? std::to_string(H.vpv[id - 256][0]) + "."
-                                                     + std::to_string(H.vpv[id - 256][1] & 127) + " " + H.vnames[id - 256]
-                                                   : (id >= 128 ? "drum set " : "program ") + std::to_string(id & 127)
-                                                     + " " + H.names[id];
-                if (!nat(id)) {
-                    say(what + " is not native here");
-                    continue;
-                }
-                if (id != here) {
-                    H.pick(id);
-                    say("asked for " + what + " (built if new, then swapped in)");
-                }
-                return;
+                if (n && ids[at] >= 0 && accept(ids[at]))
+                    return;
             } else if (c == 27) {
                 if (searching || !query.empty()) {
                     query.clear();              // first Esc: the search
@@ -807,6 +984,337 @@ struct Panel {
                 }
             } else if (c == 'q' && !searching) {
                 return;
+            }
+        }
+    }
+
+    // ---- THE INSERTION EFFECT (livetui.pick_efx) ----
+    std::string efx_name(int msb, int lsb) const
+    {
+        if (!msb && !lsb)
+            return "Thru";
+        for (const auto &t : H.efx_types)
+            if (t.msb == msb && t.lsb == lsb)
+                return t.name;
+        char b[32];
+        snprintf(b, sizeof b, "type %02X %02X", msb, lsb);
+        return b;
+    }
+    int efx_num(int msb, int lsb) const
+    {
+        for (const auto &t : H.efx_types)
+            if (t.msb == msb && t.lsb == lsb)
+                return t.num;
+        return 0;
+    }
+    // the channels the part listens on (livetui.efx_channels)
+    std::vector<int> efx_channels() const
+    {
+        std::vector<int> c;
+        for (int ch = 0; ch < 16; ch++)
+            if (H.channel < 0 || H.channel == ch)
+                c.push_back(ch);
+        return c;
+    }
+    bool efx_on(const EfxView &v) const
+    {
+        for (int ch : efx_channels())
+            if (std::find(v.parts.begin(), v.parts.end(), ch) == v.parts.end())
+                return false;
+        return true;
+    }
+    // the raw value a parameter stands at: the one set, else the one in
+    // effect, moved by its controller (gsefx.controlled) where it has one
+    int efx_value(const EfxView &v, const Host::EfxParam &p) const
+    {
+        int x = p.n >= 1 && p.n <= 20 && v.p[p.n] >= 0 ? v.p[p.n] : p.fresh;
+        if (!p.read || p.mark == '-' || (!v.ctl[0] && !v.ctl[2]))
+            return x;
+        int which = p.mark == '+' ? 0 : 2, src = v.ctl[which];
+        if (!src)
+            return x;
+        double dep = std::max(-1.0, std::min(1.0, (v.ctl[which + 1] - 0x40) / 63.0));
+        auto it = v.cv.find(src);
+        double cv = it != v.cv.end() ? it->second : src == EFX_SRC_BEND ? 64 : 0;
+        int lo = *std::min_element(p.vals.begin(), p.vals.end()), hi = *std::max_element(p.vals.begin(), p.vals.end());
+        double y = std::max((double)lo, std::min((double)hi, x + (hi - lo) * (cv / 127.0) * dep));
+        if ((int)p.vals.size() == hi - lo + 1)
+            return (int)nearbyint(y);
+        int best = p.vals[0];
+        for (int r : p.vals)
+            if (fabs(r - y) < fabs(best - y))
+                best = r;
+        return best;
+    }
+    static std::string efx_printed(const Host::EfxParam &p, int x)
+    {
+        size_t k = 0;
+        for (size_t i = 0; i < p.vals.size(); i++)
+            if (abs(p.vals[i] - x) < abs(p.vals[k] - x))
+                k = i;
+        return p.shown.empty() ? std::to_string(x) : p.shown[k];
+    }
+    static std::string src_label(int code)
+    {
+        return !code ? "off" : code <= 95 ? "CC" + std::to_string(code) : code == EFX_SRC_CAF ? "aftertouch" : "bend";
+    }
+    // a setting sent, then the state seen back (live's _efx_wait: the audio
+    // thread applies it as hardware's message, the panel reads it after)
+    void efx_send(char kind, int a, int b)
+    {
+        long rev = s.efx_rev;
+        H.efx_send(efx_message(kind, a, b));
+        auto t0 = std::chrono::steady_clock::now();
+        while (std::chrono::steady_clock::now() - t0 < std::chrono::milliseconds(100)) {
+            Snap n = H.take();
+            s.efx = n.efx;
+            s.efx_why = n.efx_why;
+            s.efx_rev = n.efx_rev;
+            if (s.efx_rev != rev)
+                break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+    }
+
+    void pick_efx()
+    {
+        if (!H.efx_send || s.efx.empty()) {
+            say("the export has no insertion effect");
+            return;
+        }
+        int i = 0;
+        while (true) {
+            EfxView v(s.efx);
+            const std::string name = efx_name(v.msb, v.lsb);
+            const int num = efx_num(v.msb, v.lsb);
+            const bool on = efx_on(v);
+            std::vector<std::string> rows;
+            std::vector<char> head;
+            std::vector<std::array<int, 3>> what;           // (kind, a, b): 0 part, 1 type, 2 param, 3 ctl, 4 send
+            char b[160];
+            auto add = [&](const std::string &r, int k, int a = 0, int c = 0) {
+                rows.push_back(r);
+                head.push_back(k < 0);
+                what.push_back({k, a, c});
+            };
+            add(std::string("part on the EFX (") + (H.channel < 0 ? "all channels" : "channel " + std::to_string(H.channel + 1))
+                    + "):  " + (on ? "yes" : "no"), 0);
+            if (num)
+                snprintf(b, sizeof b, "type:  %02d %s", num, name.c_str());
+            else
+                snprintf(b, sizeof b, "type:  %s", name.c_str());
+            add(b, 1);
+            auto pit = H.efx_params.find(std::make_pair(v.msb, v.lsb));
+            if (name != "Thru" && pit != H.efx_params.end()) {
+                const auto &ps = pit->second;
+                add("-- parameters", -1);
+                for (size_t q = 0; q < ps.size(); q++) {
+                    snprintf(b, sizeof b, "%-16.16s %s", ps[q].name.c_str(), efx_printed(ps[q], efx_value(v, ps[q])).c_str());
+                    add(b, 2, (int)q);
+                }
+                add("-- its controllers (a knob the instrument does not use)", -1);
+                for (int which = 1; which <= 2; which++) {
+                    char mk = which == 1 ? '+' : '#';
+                    std::string pname = "-";
+                    for (const auto &p : ps)
+                        if (p.mark == mk)
+                            pname = p.name;
+                    int src = v.ctl[which == 1 ? 0 : 2], dep = v.ctl[which == 1 ? 1 : 3];
+                    std::string desc = src ? src_label(src) + ", " : "off";
+                    if (src) {
+                        snprintf(b, sizeof b, "%+d%%", (int)nearbyint(std::max(-1.0, std::min(1.0, (dep - 0x40) / 63.0)) * 100));
+                        desc += b;
+                    }
+                    snprintf(b, sizeof b, "%c %-13.13s %s", mk, pname.c_str(), desc.c_str());
+                    add(b, 3, which);
+                }
+                add("-- sends from the EFX", -1);
+                static const char *SN[3] = {"to reverb", "to chorus", "to delay"};
+                for (int q = 0; q < 3; q++) {
+                    snprintf(b, sizeof b, "%-16s %d", SN[q], v.snd[q]);
+                    add(b, 4, q);
+                }
+            }
+            std::string title = "insertion effect";
+            if (v.status == -3)
+                title += "   (not native live: " + s.efx_why + ")";
+            else if (name != "Thru" && v.status != 0)
+                title += "   (not built live)";
+            int got = menu(title, rows, i, head);
+            if (got < 0)
+                return;
+            i = got;
+            const auto &w = what[got];
+            if (w[0] == 0) {
+                for (int ch : efx_channels())
+                    efx_send('c', ch, !on);
+            } else if (w[0] == 1) {
+                pick_efx_type(v);
+            } else if (w[0] == 2) {
+                const auto &p = pit->second[w[1]];
+                edit_efx(p.name, p.vals, [&](int x) { return efx_printed(p, x); }, efx_value(v, p),
+                         [&](int x) { efx_send('p', p.n, x); });
+            } else if (w[0] == 3) {
+                std::string pname = "-";
+                for (const auto &p : pit->second)
+                    if (p.mark == (w[1] == 1 ? '+' : '#'))
+                        pname = p.name;
+                pick_efx_ctl(v, w[1], pname);
+            } else if (w[0] == 4) {
+                static const char *SN[3] = {"to reverb", "to chorus", "to delay"};
+                std::vector<int> all(128);
+                for (int x = 0; x < 128; x++)
+                    all[x] = x;
+                edit_efx(SN[w[1]], all, [](int x) { return std::to_string(x); }, v.snd[w[1]],
+                         [&](int x) { efx_send('s', EFX_SEND[w[1]], x); });
+            }
+        }
+    }
+
+    // the type, under Roland's families; "/" searches every type by name
+    void pick_efx_type(const EfxView &v)
+    {
+        std::vector<int> ids{-1, 0};
+        std::vector<std::string> rows{"── 00", "  00 Thru"};
+        for (const auto &c : H.efx_cats) {
+            ids.push_back(-1);
+            rows.push_back("── " + c.name);
+            for (size_t j = 0; j < H.efx_types.size(); j++) {
+                const auto &t = H.efx_types[j];
+                if (t.num < c.a || t.num > c.b)
+                    continue;
+                char b[120];
+                snprintf(b, sizeof b, "%s%02d %s   (%s)", t.msb == v.msb && t.lsb == v.lsb ? "● " : "  ", t.num,
+                         t.name.c_str(), c.name.c_str());
+                ids.push_back(1 + (int)j);
+                rows.push_back(b);
+            }
+        }
+        int here = 0;
+        for (size_t j = 0; j < H.efx_types.size(); j++)
+            if (H.efx_types[j].msb == v.msb && H.efx_types[j].lsb == v.lsb)
+                here = 1 + (int)j;
+        pick_list("insertion effect type", ids, rows, here, [](int) { return true; }, [&](int id) {
+            int msb = id ? H.efx_types[id - 1].msb : 0, lsb = id ? H.efx_types[id - 1].lsb : 0;
+            if (msb != v.msb || lsb != v.lsb) {
+                efx_send('t', msb, lsb);
+                say("EFX: " + efx_name(msb, lsb));
+            }
+            return true;
+        });
+    }
+
+    // an effect controller (livetui.pick_efx_ctl): what moves its parameter
+    // -- learnt (move the knob, pedal or wheel), or picked -- and how far
+    void pick_efx_ctl(const EfxView &v, int which, const std::string &pname)
+    {
+        const int sa = which == 1 ? EFX_CTL_SRC1 : EFX_CTL_SRC2, da = which == 1 ? EFX_CTL_DEP1 : EFX_CTL_DEP2;
+        const int cur = v.ctl[which == 1 ? 0 : 2], dep = v.ctl[which == 1 ? 1 : 3];
+        std::vector<std::string> opts{"learn: move a knob, pedal or wheel now", "off"};
+        std::vector<int> codes{-1, 0};
+        for (int c = 1; c <= 95; c++) {
+            opts.push_back("CC" + std::to_string(c));
+            codes.push_back(c);
+        }
+        opts.push_back("aftertouch");
+        codes.push_back(EFX_SRC_CAF);
+        opts.push_back("bend");
+        codes.push_back(EFX_SRC_BEND);
+        char b[64];
+        snprintf(b, sizeof b, "depth: %+d%%", (int)nearbyint((dep - 64) / 63.0 * 100));
+        opts.push_back(b);
+        codes.push_back(-2);
+        int start = 1;
+        for (size_t j = 0; j < codes.size(); j++)
+            if (codes[j] == cur)
+                start = (int)j;
+        int got = menu(pname + " moved by", opts, start);
+        if (got < 0)
+            return;
+        int code = codes[got];
+        if (code == -2) {
+            std::vector<int> all(128);
+            for (int x = 0; x < 128; x++)
+                all[x] = x;
+            edit_efx("depth", all, [](int x) {
+                char t[16];
+                snprintf(t, sizeof t, "%+d%%", (int)nearbyint((x - 64) / 63.0 * 100));
+                return std::string(t);
+            }, dep, [&](int x) { efx_send('s', da, x); });
+            return;
+        }
+        if (code == -1) {                               // learn
+            long long t0 = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                               std::chrono::steady_clock::now().time_since_epoch()).count();
+            std::string m = "\x1b[H\x1b[2J " + C("accent") + "move the knob, pedal or wheel for " + pname + "\x1b[0m"
+                            + C("dim") + "   (esc: back)\x1b[0m";
+            fwrite(m.data(), 1, m.size(), stdout);
+            fflush(stdout);
+            auto until = std::chrono::steady_clock::now() + std::chrono::seconds(8);
+            while (code < 0 && std::chrono::steady_clock::now() < until) {
+                auto lc = H.last_ctl ? H.last_ctl() : std::make_pair(0, 0LL);
+                if (lc.first && lc.second > t0)
+                    code = lc.first;
+                else if (T.key(50) == 27)
+                    return;
+            }
+            if (code < 0) {
+                say("nothing moved");
+                return;
+            }
+        }
+        efx_send('s', sa, code);
+        if (code && dep == 0x40)
+            efx_send('s', da, 0x7F);                    // (a source with no depth does nothing: +100%)
+        say(pname + " moved by " + src_label(code));
+    }
+
+    // one value (livetui.edit_efx): left/right (page up/down by ten), digits a
+    // raw value; each move sent, so it is heard as it goes; Enter keeps it,
+    // Esc puts back what it was
+    void edit_efx(const std::string &nm, const std::vector<int> &vals, const std::function<std::string(int)> &show,
+                  int v0, const std::function<void(int)> &send)
+    {
+        size_t j = 0;
+        for (size_t i = 0; i < vals.size(); i++)
+            if (abs(vals[i] - v0) < abs(vals[j] - v0))
+                j = i;
+        const size_t j0 = j;
+        while (true) {
+            char b[200];
+            snprintf(b, sizeof b, " %s:  %s   (raw %d)", nm.c_str(), show(vals[j]).c_str(), vals[j]);
+            std::string m = "\x1b[H\x1b[2J" + C("sel") + "\x1b[1m" + b + "\x1b[0m\r\n\r\n" + C("dim")
+                            + "   ←→ -+ step  pgup pgdn ten  digits a raw value  enter keep  esc back\x1b[0m";
+            fwrite(m.data(), 1, m.size(), stdout);
+            fflush(stdout);
+            int c = T.key(1000);
+            size_t k = j;
+            if (c == 1002 || c == 'l' || c == '+' || c == '=')
+                k = std::min(vals.size() - 1, j + 1);
+            else if (c == 1003 || c == 'h' || c == '-')
+                k = j ? j - 1 : 0;
+            else if (c == 1006)
+                k = j >= 10 ? j - 10 : 0;
+            else if (c == 1005)
+                k = std::min(vals.size() - 1, j + 10);
+            else if (c >= '0' && c <= '9') {
+                std::string got;
+                if (prompt(nm + " raw value = " + std::string(1, (char)c), got)) {
+                    int x = atoi((std::string(1, (char)c) + got).c_str());
+                    for (size_t i = 0; i < vals.size(); i++)
+                        if (abs(vals[i] - x) < abs(vals[k] - x))
+                            k = i;
+                }
+            } else if (c == 10 || c == 13) {
+                return;
+            } else if (c == 27) {
+                if (j != j0)
+                    send(vals[j0]);
+                return;
+            }
+            if (k != j) {
+                j = k;
+                send(vals[j]);
             }
         }
     }
@@ -881,6 +1389,8 @@ struct Panel {
                     }
                 } else if (c == 'p' && H.pick) {
                     pick_patch();
+                } else if (c == 'x' || c == 'X') {
+                    pick_efx();
                 } else if (c == 'P') {
                     H.panic();
                     say("all notes off");

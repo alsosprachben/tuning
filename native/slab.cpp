@@ -9372,6 +9372,28 @@ void nv_part_efx(void *h, const double *X, double SR)
     P->efx_x = X;
 }
 
+// THE MODULE's INSERTION EFFECT as a panel shows it (nv_efx_live_state;
+// the audio thread's), and its revision: -1 where the export has none
+int nv_part_efx_state(void *h, int *o, int cap, const char **why)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (!P->efx)
+        return -1;
+    int n = nv_efx_live_state(P->efx, o, cap, why);
+    const double *fc = n > 0 && o[n - 1] == 0 ? nv_efx_live_rec(P->efx) : nullptr;
+    if (fc && (fc[1] != 0.0 || fc[2] != 0.0)) {     // (refused as efx_chain refuses it)
+        o[n - 1] = -3;
+        *why = "drive or cabinet, live";
+    }
+    return n;
+}
+
+long nv_part_efx_rev(void *h)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    return P->efx ? nv_efx_live_rev(P->efx) : -1;
+}
+
 // The part's free strings (live's register): its string bank (M modes, as
 // nv_strings makes it), register.LiveChannel's constants (kappa, knock,
 // fall, floor, damper_top, the felt's BETA), the class's dampers and release
