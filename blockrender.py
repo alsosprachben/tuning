@@ -1129,15 +1129,23 @@ _MPE_NOT_FANNED = frozenset((0, 6, 32, 38, 74, 96, 97, 98, 99, 100, 101, 126, 12
 # as a hold down a key"). live marks its template files with this marker; the
 # bagpipe's are corked by its own CC1 = 0 instead, as before
 NO_PART_DRONES = "tuning:no-part-drones"
+# ...NOR THE UILLEANN'S CUT: a one-note template is a whole note, long enough
+# to be cut, and live plays the flick itself (Live._cut_on) -- built with
+# it, every live note was cut twice
+NO_CUT = "tuning:no-cut"
+
+
+def _has_marker(path, text):
+    try:
+        mid = _open_midi(path)
+        return any(m.type == 'marker' and getattr(m, 'text', '') == text for m in mid)
+    except Exception:
+        return False
 
 
 def _no_part_drones(path):
     """Does the file say its part drones are someone else's (live's)?"""
-    try:
-        mid = _open_midi(path)
-        return any(m.type == 'marker' and getattr(m, 'text', '') == NO_PART_DRONES for m in mid)
-    except Exception:
-        return False
+    return _has_marker(path, NO_PART_DRONES)
 
 
 def _open_midi(path):
@@ -3814,7 +3822,7 @@ def _prep_glide_sources(_PORTA_CTL, _porta_on_at, notes):
     return _GLIDE_SRC
 
 
-def _prep_gliss(_F, _GLIDE_SRC, _MONO_SLUR, _porta_cc5_at, notes):
+def _prep_gliss(_F, _GLIDE_SRC, _MONO_SLUR, _porta_cc5_at, notes, no_cut=False):
     """A VALVED GLISS WALKS THE HARMONICS: glisses, rips, falls and cuts
     rewritten as the real notes they run through. Returns (_CUT_OF, _GLISS, notes)."""
     # ---------------------------------- A VALVED GLISS WALKS THE HARMONICS
@@ -3998,7 +4006,7 @@ def _prep_gliss(_F, _GLIDE_SRC, _MONO_SLUR, _porta_cc5_at, notes):
         _pcc = property_class_for_note(_e[6], _e[1])
         _cs = int(getattr(_pcc, 'cut_semitones', 0) or 0)
         _cT = float(getattr(_pcc, 'cut_s', 0.03))
-        if not _cs or _e[3] - _e[2] < 3.0 * _cT or not 0 <= _e[1] + _cs <= 127:
+        if no_cut or not _cs or _e[3] - _e[2] < 3.0 * _cT or not 0 <= _e[1] + _cs <= 127:
             continue
         _GLISS_DROP.add(_k3)
         _GLISS_STEPS.append((_e[0], _e[1] + _cs, _e[2], _e[2] + _cT, _e[4], _e[5], _e[6]))
@@ -7827,7 +7835,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
 
     _GLIDE_SRC = _prep_glide_sources(_PORTA_CTL, _porta_on_at, notes)
 
-    (_CUT_OF, _GLISS, notes) = _prep_gliss(_F, _GLIDE_SRC, _MONO_SLUR, _porta_cc5_at, notes)
+    (_CUT_OF, _GLISS, notes) = _prep_gliss(_F, _GLIDE_SRC, _MONO_SLUR, _porta_cc5_at, notes,
+                                           no_cut=_has_marker(path, NO_CUT))
 
     (_damp_close, _damper_falls, _damper_lands, _pedal_damping_of, _pedal_spans_of,
         _sound_off) = _prep_damper_helpers(A, _DAMP_OPEN, _DAMP_TRACKS, _PEDV_CH, _PED_CH, _SOFF_CH, nblk,

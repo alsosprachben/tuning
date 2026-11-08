@@ -272,7 +272,7 @@ class NoteClass(ctypes.Structure):
                    ('scale_n', I), ('scale_tonic', I), ('scale_off', I * 32), ('scale_c', C * 32),
                    ('si_set', I), ('si0', C), ('si1', C),
                    ('n_drone', I), ('drone_note', I * 4), ('drone_k', I * 4), ('part_break_s', C),
-                   ('n_dchoice', I), ('dchoice_def', I), ('dchoice', I * 16),
+                   ('n_dchoice', I), ('dchoice_def', I), ('dchoice', I * 16), ('dchoice_var', I),
                    ('drone_wheel', I), ('n_dratio', I), ('drone_ratio', C * 4), ('drone_gain', C * 4),
                    ('rd_set', I), ('reverb_dist', C), ('hammer', I),
                    ('fall_cents', C), ('fall_at_s', C), ('fall_s', C), ('fall_fade_db', C), ('fall_smear', C),
@@ -281,7 +281,7 @@ class NoteClass(ctypes.Structure):
                    ('cho_send', C), ('pair_set', I), ('pair_lo', C), ('pair_hi', C),
                    ('tp_hz', C), ('tp_up_db', C), ('tp_jit', C), ('siren', I),
                    ('efx_set', I), ('efx_eq_set', I), ('efx_level', C), ('efx_od', C), ('efx_eq', C * 5),
-                   ('efx_rev', C), ('efx_cf', I), ('cf_p', C * 40), ('efx_dly', I), ('dly_p', C * 24),
+                   ('efx_rev', C), ('efx_raw', I), ('efx_raw_ty', I * 2), ('efx_raw_p', I * 21), ('efx_cf', I), ('cf_p', C * 40), ('efx_dly', I), ('dly_p', C * 24),
                    ('efx_place', C * 13), ('efx_trem', I), ('trem_cfg', C * 4),
                    ('flt_set', I), ('flt_ty', I), ('flt_k', I), ('flt_p', C * 3), ('flt_c', C * 5),
                    ('n_mouth', I), ('mouth_seed', I), ('mouth_st', C * 3 * 16), ('mouth_cdf', C * 16),
@@ -3208,6 +3208,13 @@ def note_class(cls):
         k.touch_sensitive = int(bool(getattr(cls, 'touch_sensitive', True)))
         # its speaker cabinet (cabinet.py: _prep_cabinet), its response's terms
         cab = getattr(cls, 'cabinet', None)
+        _ie = getattr(cls, 'insertion_efx', None)
+        if _ie:                             # (as set: live's chain, nvlive's to build -- gsefx.tone_state)
+            k.efx_raw = 1
+            k.efx_raw_ty[:] = [int(_ie[0][0]), int(_ie[0][1])]
+            k.efx_raw_p[:] = [-1] * 21
+            for _pn, _pv in (_ie[1] or {}).items():
+                k.efx_raw_p[int(_pn)] = int(_pv)
         _ex = efx_chain(cls)
         if _ex is not None:                 # ITS OWN INSERTION EFFECT (blockrender's _EFXN)
             k.efx_set, k.efx_level, k.efx_od = 1, float(_ex['level']), float(_ex['od_gain'] or 0.0)
@@ -3420,6 +3427,7 @@ def note_class(cls):
             _chs = [int(x) for x in cls.drone_note_choices]
             k.n_dchoice, k.dchoice_def = len(_chs), int(cls.drone_note_default)
             k.dchoice[:len(_chs)] = _chs
+            k.dchoice_var = int(getattr(cls, 'drone_note_variation', 0))   # (live's: its own patch)
         k.drone_wheel = int(bool(getattr(cls, 'drone_wheel', False)))     # (live's: Patch.drone_wheel)
         _dr = tuple(getattr(cls, 'drone_ratios', ()) or ())
         k.n_dratio = min(4, len(_dr))

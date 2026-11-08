@@ -48,8 +48,8 @@ TASKS = [
     ("GM1", True, "GM 109 Bagpipe in files: the chanter (a played pipe, its own scale: scale_cents), the drones "
                   "as notes of the part (phrases, the CC1 corking, each its own class: Ev.kover, K's drone "
                   "region), a strike-in by the hand, a pipe's phase spread and mode lock"),
-    ("GM1", False, "Live: the bagpipe's drones (live's own held drone voices: drone_wheel, drone_ratios; templates "
-                   "built corked) -- nvlive refuses the bagpipe"),
+    ("GM1", True, "Live: the bagpipe's drones (live's own held drone voices: drone_wheel, drone_ratios; templates "
+                  "built corked)"),
     ("GM1", True, "Files: two-port files (PortedMidi, meta 21) in the reader: channel + 16 x port, port B's "
                   "part exclusives as port A reads them, the legato over the merged stream"),
     ("GM1", True, "Files: GS's drum instrument NRPNs (GS_DRUM_NRPN: a key's pitch, level, pan, delay level; "
@@ -62,8 +62,9 @@ TASKS = [
                   "biwa's): its strokes in Song::gliss, seeded as the Python's"),
     ("GM1", True, "Files: the uilleann pipes' cut (cut_semitones: 109.11, Song::gliss -- the flick takes the "
                   "written note's legato, _CUT_OF) and the pungi's wheel-chosen drone (111.8, Song::drones)"),
-    ("GM1", False, "Live: the uilleann's cut (Live._cut_on) and the pungi's drone (Live._drone_note) -- "
-                   "109.11 and 111.8 refused in live (LIVE_REFUSED)"),
+    ("GM1", True, "Live: the uilleann's cut (Live._cut_on: the flick, its key spared by the sweep) and the "
+                  "pungi's drone (Live._drone_note, its own variation's templates: VDRN) -- their templates "
+                  "without them (NO_CUT, NO_PART_DRONES)"),
     ("GM2", True, "Registered variations in files (GS's organs, harpsichords and hits, the MT-32 set's): a "
                   "variation's organ as a program's (Song::porg, nvrender's organ pass, the fader's swell by the "
                   "note's class); a layered one's organ still Python's"),
@@ -87,6 +88,8 @@ TASKS = [
                   "VLIV), the picker's variations under each program (VNAM)"),
     ("GM2", False, "nvlive: a Moog variation under a capital that is no Moog's organ (its level: live's), a "
                    "layered variation's other layers, the maps' own drum sets"),
+    ("GM2", True, "nvlive: the Moog variations (VLIV), plain and layered, a tone's own Auto Pan -- live "
+                  "templates without the tone's effect (MOOG_NEUTRAL); a unison's and SYNC's refused"),
     ("GM2", True, "Tuning, files: the secondary (eastern) tuning, the meend, master fine/coarse tuning, "
                   "scale/octave tuning (GM 2's and GS's), MTS under gm2"),
     ("GM2", True, "Tuning, live: the secondary tuning (nvlive --eastern), a raga tuner's Sa and swaras, the meend"),
@@ -142,9 +145,9 @@ TASKS = [
                     "responses and controls on libm in Python too (native.xatan/xcexp/xabs/xpow/xexp)"),
     ("SC-55", False, "Live: the rest of the insertion effect in nvlive -- the chain builder shared "
                      "(native/efxchain.cpp), its state and each note's direct gain, the moving filters done; "
-                     "the copies as taps (tapkernel.c), a Moog's rows under a moving filter "
-                     "(moog_filter_apply), a part's bus, branch B, the rotor and 3D place, a tone's own "
-                     "insertion effect, an OD's valve"),
+                     "a Moog's rows under a moving filter, a tone's own insertion effect done; the copies "
+                     "as taps (tapkernel.c), a drive or cabinet, a part's bus (Lo-Fi), branch B, the rotor "
+                     "and 3D place, an OD's valve"),
     ("SC-55", False, "Files: a streaming (windowed) nvrender for whole songs -- it holds the table whole in float64, "
                      "and a Sound Canvas song's is past memory (SHIRO's 6.4 min: 21.8M rows, ~8.7 GB; killed at the "
                      "3.5 GB cap) where Python streams (streamrender); every native check so far a 20 s excerpt. "

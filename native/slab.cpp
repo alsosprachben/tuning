@@ -392,6 +392,11 @@ struct Slab {
     std::vector<int32_t> fl_ch;
     std::vector<float> fl_aL, fl_aR;
     long fl_n = 0;
+    // ...a MOOG ROW's |H| this block (live's _fl_mo: its level is its
+    // panel's), on its level for the render only (moog_filter_apply), and
+    // the panel's level kept to put back after (moog_filter_restore)
+    std::vector<long> flm_s;
+    std::vector<float> flm_l, flm_r, flm_aL, flm_aR;
     std::vector<float> hs_dep;                  // a harmonium's Tremolo stop: its depth and rate (live's)
     std::vector<double> hs_hz;
     // THE LESLIE (live.Slab.leslie_arm / leslie_swing): a slot on a rotor,
@@ -722,16 +727,22 @@ struct Slab {
     // live.Slab.filter_swing: channel ch's |H| this block at each of its
     // partials' frequency (H(f), float32; HR(f) the right ear's), on the
     // level a swing left this block where one ran (the tremolo's, the
-    // rotors'), else on its own. (A Moog row, its panel's level: P2b)
+    // rotors'), else on its own -- a Moog row's for the render only
     template <class Fn, class FnR>
     void filter_swing(int ch, double rate, Fn H, FnR HR)
     {
         const double k = rate / (2.0 * M_PI);
         for (long s = 0; s < cap; s++) {
-            if (!fl_on[s] || !busy[s] || fl_ch[s] != ch || i4[I4_fx][s] >= 0)
+            if (!fl_on[s] || !busy[s] || fl_ch[s] != ch)
                 continue;
             const double f = f8[F8_om][s] * k;
             const float hl = (float)H(f), hr = (float)HR(f);
+            if (i4[I4_fx][s] >= 0) {
+                flm_s.push_back(s);
+                flm_l.push_back(hl);
+                flm_r.push_back(hr);
+                continue;
+            }
             if (tr_on[s] || ls_on[s]) {
                 f4[F4_aL][s] *= hl;
                 f4[F4_aR][s] *= hr;
@@ -743,6 +754,28 @@ struct Slab {
     }
     template <class Fn>
     void filter_swing(int ch, double rate, Fn H) { filter_swing(ch, rate, H, H); }
+
+    // live.Slab.moog_filter_apply / moog_filter_restore
+    void moog_filter_apply()
+    {
+        flm_aL.resize(flm_s.size());
+        flm_aR.resize(flm_s.size());
+        for (size_t q = 0; q < flm_s.size(); q++) {
+            const long s = flm_s[q];
+            flm_aL[q] = f4[F4_aL][s];
+            flm_aR[q] = f4[F4_aR][s];
+            f4[F4_aL][s] *= flm_l[q];
+            f4[F4_aR][s] *= flm_r[q];
+        }
+    }
+    void moog_filter_restore()
+    {
+        for (size_t q = 0; q < flm_s.size(); q++) {
+            f4[F4_aL][flm_s[q]] = flm_aL[q];
+            f4[F4_aR][flm_s[q]] = flm_aR[q];
+        }
+        flm_s.clear(); flm_l.clear(); flm_r.clear(); flm_aL.clear(); flm_aR.clear();
+    }
 
     // Slab.soft_strings: una corda, the `drop` highest of the instrument's `top` strings
     void soft_strings(const std::vector<long> &slots, int drop, int top)
@@ -2083,6 +2116,10 @@ struct Part {
         const MoogLayer *moog = nullptr;    // a Moog's panel (its class's, layer A): Live._moog_panel_for
         const MoogLayer *moog_b = nullptr;  // ...a layered one's second Messenger (moog.layers_of)
         int snd = 0;                // the CC71-78 its voice answers (NoteClass.snd_mask, SOUND_CC's order)
+        // ...A PUNGI's DRONE (live's Patch.drone_note_patch): its own
+        // variation's templates (nvlive's), their buckets and rotor speed
+        void *dcache = nullptr;
+        int dnb = 1, dspeed = -1;
     };
     std::vector<Patch> patches;
     // THE MODULE's INSERTION EFFECT (live.efx: efxchain.cpp's), its export
@@ -2124,6 +2161,7 @@ struct Part {
         int target = -1;
         bool have_cur = false;
         double cur[3] = {0.0, 0.0, 0.0};
+        void *ex = nullptr;                 // its own insertion effect (efxchain.cpp's EfxLive), NULL none
     };
     std::map<int, ToneFx> tone_fx;
     std::map<int, std::vector<void *>> tone_seg;
@@ -3225,6 +3263,49 @@ struct Part {
         return (k && k->drone_wheel && !patches[cur].drums) ? k : nullptr;
     }
 
+    // THE PUNGI's DRONE (live._drone_note): one note of the part, the
+    // wheel's choice (drone_sel: its step), held across the line -- the old
+    // one let go and the new stamped on the other of two keys where the
+    // wheel has moved (dnote_at: the note sounding, dnote_k its key)
+    std::map<long long, int> drone_sel, dnote_at, dnote_k;
+    const NoteClass *dnote_class() const
+    {
+        const NoteClass *k = patches[cur].drums ? nullptr : nv_tcache_class(patches[cur].cache, patches[cur].program);
+        return (k && k->n_dchoice) ? k : nullptr;
+    }
+    void drone_note(int ch, long long n0)
+    {
+        const NoteClass *k = dnote_class();
+        const Patch &p = patches[cur];
+        if (!k || !p.dcache)
+            return;
+        auto st = drone_sel.find(pid);
+        int note = st != drone_sel.end() ? k->dchoice[st->second] : k->dchoice_def;
+        auto ki = dnote_k.find(pid);
+        int kk = ki != dnote_k.end() ? ki->second : -200;
+        Key curk(pid, ch, kk, DRONEK);
+        if (S.live_find(curk) >= 0) {
+            auto at = dnote_at.find(pid);
+            if (at != dnote_at.end() && at->second == note)
+                return;
+            S.release(curk, n0);
+            kk = -401 - kk;                 // -200 <-> -201
+        }
+        int b = (int)(100 * p.dnb / 128.0);
+        const nv::live::Template *T = nv_tcache_lookup(p.dcache, note, b < p.dnb - 1 ? b : p.dnb - 1, p.dspeed);
+        if (!T) {
+            misses++;
+            return;
+        }
+        if (!S.stamp_t(*T, Key(pid, ch, kk, DRONEK), n0, (pow(10.0, level_db / 20.0) * swell) * chan_gain(ch), ch,
+                       rate)) {
+            dropped++;
+            return;
+        }
+        dnote_at[pid] = note;
+        dnote_k[pid] = kk;
+    }
+
     // live._chanting: a chanter note sounding (the drones do not count themselves)
     bool chanting(int ch) const
     {
@@ -3549,6 +3630,90 @@ struct Part {
         }
     }
 
+    // THE UILLEANN CHANTER's CUT, live (live._cut_on, _cut_go, _cut_off):
+    // the key opens a flick cut_semi above, held cut_s, and the written note
+    // arrives from it by slur -- the chanter never stops. Live cannot know a
+    // note's length, so every note is cut; a key let go in its flick ends there
+    struct Cut {
+        long long pid;
+        int ch, cnote, note, vel;
+        long long due;
+    };
+    std::vector<Cut> cutting;
+    void cut_on(int ch, int note, int vel, long long n0, bool slur)
+    {
+        int pi = patch_for(ch, note);
+        const NoteClass *k = nullptr;
+        long long ppid = 0;
+        if (pi >= 0) {
+            const Patch &p = patches[pi];
+            k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
+            ppid = p.pid;
+        }
+        const int cs = k ? k->cut_semi : 0;
+        if (!cs || note + cs < 0 || note + cs > 127) {
+            strike(ch, note, vel, n0, slur);
+            return;
+        }
+        strike(ch, note + cs, vel, n0, slur);
+        Cut c{ppid, ch, note + cs, note, vel, n0 + (long long)nearbyint(k->cut_s * rate)};
+        auto it = std::find_if(cutting.begin(), cutting.end(),
+                               [&](const Cut &x) { return x.pid == c.pid && x.ch == c.ch && x.cnote == c.cnote; });
+        if (it != cutting.end())
+            *it = c;                        // (a dict's key keeps its place)
+        else
+            cutting.push_back(c);
+    }
+    void cut_release(long long ppid, int ch, int cnote, long long n0)
+    {
+        std::vector<Key> ks;
+        for (auto &kv : S.live)
+            if (std::get<0>(kv.first) == ppid && std::get<1>(kv.first) == ch && std::get<2>(kv.first) == cnote)
+                ks.push_back(kv.first);
+        for (const Key &k : ks)
+            S.release(k, n0);
+    }
+    // the flicks whose time is up give way to their notes, by slur
+    void cut_go(long long n0)
+    {
+        std::vector<Cut> all = cutting;
+        for (const Cut &c : all) {
+            if (c.due > n0)
+                continue;
+            cutting.erase(std::find_if(cutting.begin(), cutting.end(), [&](const Cut &x) {
+                return x.pid == c.pid && x.ch == c.ch && x.cnote == c.cnote;
+            }));
+            bool here = false;
+            for (const Patch &p : patches)
+                here = here || p.pid == c.pid;
+            if (!here)
+                continue;
+            strike(c.ch, c.note, c.vel, n0, true);
+            cut_release(c.pid, c.ch, c.cnote, n0);
+        }
+    }
+    // a key up while its flick still sounds: the flick ends, and there is no
+    // note to let go (true when that was so)
+    bool cut_off(int ch, int note, long long n0)
+    {
+        int pi = patch_for(ch, note);
+        if (pi < 0 || cutting.empty())
+            return false;
+        const long long ppid = patches[pi].pid;
+        bool hit = false;
+        for (size_t i = 0; i < cutting.size();) {
+            if (cutting[i].pid == ppid && cutting[i].ch == ch && cutting[i].note == note) {
+                Cut c = cutting[i];
+                cutting.erase(cutting.begin() + i);
+                cut_release(c.pid, c.ch, c.cnote, n0);
+                hit = true;
+            } else {
+                i++;
+            }
+        }
+        return hit;
+    }
+
     void note_on(int ch, int note, int vel, long long n0)
     {
         bool slur = legato_on(ch, note, n0);
@@ -3577,7 +3742,7 @@ struct Part {
             src = last_on[ch];
         glide_from = src != note ? src : -1;
         last_on[ch] = note;
-        strike(ch, note, vel, n0, slur);
+        cut_on(ch, note, vel, n0, slur);
         glide_from = -1;
     }
 
@@ -3605,17 +3770,50 @@ struct Part {
     // _efx_direct): its level, its EQ at each partial's frequency, the chorus's
     // dry share -- a gain a slot on every baseline (channel_gain); then its
     // moving filters arm the rows
+    // ...a tone's own chain (its effect channel's), as efx_chain takes it
+    const double *tone_chain(const ToneFx &tf, int *st, const char **why)
+    {
+        const double *fc = tf.ex ? nv_efx_live_chain(tf.ex, tf.ch, st, why) : nullptr;
+        if (fc && (fc[1] != 0.0 || fc[2] != 0.0)) {
+            *st = -3;
+            *why = "drive or cabinet, live";
+            fc = nullptr;
+        }
+        return fc;
+    }
+
     void efx_note(int ch, int note, int vel, long long n0, const std::vector<long> &slots)
     {
+        // THE MODULE's, where the part is on it; else THE TONE's OWN on its
+        // effect channel (live._tone_fx) -- and the tone's plunger or mouth
+        // arms its rows there either way, after the level
         int st = -1;
         const char *why = "";
-        const double *fc = efx_chain(ch, &st, &why);
+        const double *fc = efx ? efx_chain(ch, &st, &why) : nullptr;
+        const int fxc = tone_fx_of(ch, n0);
+        int ec = ch;
+        if (st != 0 && st != -3 && fxc >= 0 && tone_fx[fxc].ex) {
+            fc = tone_chain(tone_fx[fxc], &st, &why);
+            ec = fxc;
+        }
         if (st == -3 && !efx_said) {
             fprintf(stderr, "nvlive: refused: the insertion effect's %s -- played without it\n", why);
             efx_said = true;
         }
+        if (fxc >= 0 && (ec != fxc || !fc) && tone_fx[fxc].kind)
+            S.filter_arm(slots, fxc);
         if (!fc)
             return;
+        efx_direct(fc, ec, note, vel, n0, slots, ec == fxc && tone_fx[fxc].kind);
+    }
+
+    // live._efx_direct and the rest of _efx_note on a chain: its level, its
+    // EQ at each partial's frequency, the chorus's dry share -- a gain a slot
+    // on every baseline (channel_gain); the note for an auto wah's Sens; its
+    // moving filters (or the tone's own) arming the rows on channel ec
+    void efx_direct(const double *fc, int ec, int note, int vel, long long n0, const std::vector<long> &slots,
+                    bool own)
+    {
         const bool cf = fc[14] != 0.0 && fc[18] == 0.0;     // (a chorus's copies, not a flanger's comb)
         double sh = 0.0;
         if (cf) {
@@ -3633,9 +3831,9 @@ struct Part {
             g[q] = (float)x;
         }
         S.channel_gain_each(slots, g);
-        efx_notes[ch].push_back(EfxNote{(double)n0 / rate, INFINITY, vel, note});
-        if (efx_moves(fc))
-            S.filter_arm(slots, ch);
+        efx_notes[ec].push_back(EfxNote{(double)n0 / rate, INFINITY, vel, note});
+        if (efx_moves(fc) || own)
+            S.filter_arm(slots, ec);
     }
 
     // efxfilter.response type 4, a comb: |(1 - pa) + pa z / (1 - pb z)|, z =
@@ -3784,15 +3982,8 @@ struct Part {
         std::vector<long> slots = lj >= 0 ? S.live[lj].second : std::vector<long>();
         if (cpan[ch] != 64 && !slots.empty())
             S.repan(slots, cpan[ch], 64, rate, true);
-        if (efx && !slots.empty() && !patches[cur].drums)
-            efx_note(ch, note, vel, n0, slots);     // the insertion effect's level and EQ (live._efx_note)
-        if (!slots.empty() && !patches[cur].drums) {
-            // ...and THE TONE's OWN (live._tone_fx): its plunger or mouth arms
-            // the rows on its effect channel, after the module's level
-            int fxc = tone_fx_of(ch, n0);
-            if (fxc >= 0 && tone_fx[fxc].kind)
-                S.filter_arm(slots, fxc);
-        }
+        if (!slots.empty() && !patches[cur].drums)
+            efx_note(ch, note, vel, n0, slots);     // the insertion effect, the module's or the tone's (live._efx_note)
         if (soft[ch] && !slots.empty())
             S.soft_strings(slots, soft_drop, soft_top);
         double gl[3];                       // PORTAMENTO, stamped (live._glide)
@@ -3838,6 +4029,9 @@ struct Part {
         if (drone_class()) {                // THE DRONES: up with the chanter (live._drones)
             drone_quiet.erase(pid);
             drones(ch, n0);
+        } else if (dnote_class()) {         // ...the pungi's (live._drone_note)
+            drone_quiet.erase(pid);
+            drone_note(ch, n0);
         }
         sound_stamp_note(patches[cur], ch, sn, slots);     // the channel's CC71-78 (live._sound_stamp)
         {                                   // a note struck under a bend, or the wheel up, joins them
@@ -5556,6 +5750,8 @@ struct Part {
             }
             mono_cur[ch] = -1;                      // last key up: an ordinary release
         }
+        if (cut_off(ch, note, n0))
+            return;                                 // let go in its flick: the note never came
         int pi = patch_for(ch, note);
         Use u(*this, pi < 0 ? cur : pi);
         auto sq = sost.find(ch);
@@ -5578,15 +5774,24 @@ struct Part {
         auto kt = key_tone.find(Key(pid, ch, note, 0));
         if (patches[cur].amp > 0.0 && (kt == key_tone.end() || kt->second == patches[cur].cache) && !amp_holds(cur))
             S.release(Key(pid, -1, -1, AMPK), n0);  // the products end with their chord (a note of this tone's)
-        auto en = efx_notes.find(ch);
-        if (en != efx_notes.end())
-            for (EfxNote &e : en->second)
-                if (e.note == note && std::isinf(e.s1))
-                    e.s1 = (double)n0 / rate;   // the auto wah's envelope lets go
-        if (drone_class()) {                // a chanter's key: the drones wait part_break_s (_drone_reap)
+        {                                   // the auto wah's envelope lets go: ch's, and ch's tones'
+            std::vector<int> ecs{ch};
+            for (const auto &kv : tone_fx)
+                if (kv.second.ch == ch)
+                    ecs.push_back(kv.first);
+            for (int c : ecs) {
+                auto en = efx_notes.find(c);
+                if (en != efx_notes.end())
+                    for (EfxNote &e : en->second)
+                        if (e.note == note && std::isinf(e.s1))
+                            e.s1 = (double)n0 / rate;
+            }
+        }
+        if (drone_class() || dnote_class()) {   // a chanter's key: the drones wait part_break_s (_drone_reap)
+            const NoteClass *dk = drone_class() ? drone_class() : dnote_class();
             S.release(Key(pid, ch, note, -1), n0);
             if (!chanting(ch))
-                drone_quiet[pid] = DroneQuiet{ch, n0, (long long)(drone_class()->part_break_s * rate)};
+                drone_quiet[pid] = DroneQuiet{ch, n0, (long long)(dk->part_break_s * rate)};
             return;
         }
         if (patches[cur].organ) {           // an organ's key: each of its ranks
@@ -5749,7 +5954,8 @@ struct Part {
     {
         const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
         return p.wheel_vib && !(p.amp > 0.0) && !(p.organ && p.organ->n_order) && !(p.wtrem > 0.0) && !p.clav
-               && !p.leslie && !p.wheel_swell && !(k && k->drone_wheel) && !(k && k->flt_set == 2 && k->flt_k == 4);
+               && !p.leslie && !p.wheel_swell && !(k && k->drone_wheel) && !(k && k->flt_set == 2 && k->flt_k == 4)
+               && !(k && k->n_dchoice);
     }
 
     // live._snd_vib: (depth to add, rate factor) the part's CC77/76 ask of
@@ -5992,6 +6198,7 @@ struct Part {
             S.retiring.push_back(std::make_pair(orphan, n0));
         down.clear();
         pedalled.clear();
+        cutting.clear();
     }
 
     // CC120, ALL SOUND OFF (live's): the channel stopped now, pedal or no
@@ -6124,7 +6331,7 @@ struct Part {
     {
         const Patch &p = patches[cur];
         const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
-        if (!k || !(k->efx_set || k->flt_set))
+        if (!k || !(k->efx_raw || k->flt_set == 2))
             return -1;
         std::vector<void *> &lst = tone_seg[ch];
         long ix = (long)(std::find(lst.begin(), lst.end(), p.cache) - lst.begin());
@@ -6143,6 +6350,14 @@ struct Part {
                 tf.wheel.push_back(std::make_pair(t, wheel_v[ch]));
             if (tf.kind == 4)
                 tf.g = nv_npy_new((unsigned long long)(fxc + k->mouth_seed));
+            if (k->efx_raw && efx_x) {          // ITS OWN EFFECT: its setting, the part on it, at 0 (tone_events)
+                tf.ex = nv_efx_live_new(efx_x, rate);
+                nv_efx_live_apply(tf.ex, 0.0, 1, k->efx_raw_ty[0], k->efx_raw_ty[1]);
+                for (int q = 1; q <= 20; q++)
+                    if (k->efx_raw_p[q] >= 0)
+                        nv_efx_live_apply(tf.ex, 0.0, 2, q, k->efx_raw_p[q]);
+                nv_efx_live_apply(tf.ex, 0.0, 5, ch, 1);
+            }
             tone_fx[fxc] = std::move(tf);
         }
         return fxc;
@@ -6290,27 +6505,40 @@ struct Part {
     // flanger's comb (the delay swung, the right ear half a turn on) and its
     // tremolo or auto pan (1 + m w(t), w Roland's wave, gsefx.WAVES; a pan's
     // right ear 1 - m w(t)), multiplied in that order
-    void efx_filter_block(double t)
+    // A CHAIN's MOVING FILTERS at t (live._filter_for's comps, _filter_block's
+    // |H|): its filter over its timeline (h, the part pc on it; key c its
+    // channel's: its notes, its cache), its comb, its tremolo -- ear by ear
+    struct Comps {
+        bool comb = false, trem = false;
+        int fty = 0;
+        double fpa = 0.0, fpb = 0.0, fpc = 0.0, fctl = 0.0, FV[3] = {0.0, 0.0, 0.0};
+        double tl = 0.0, tr = 0.0, mix = 0.0, fb = 0.0, gl = 1.0, gr = 1.0;
+        double h(double f, bool right, double x = 1.0) const     // (x: a tone's own filter, first)
+        {
+            if (fty)
+                x = x * flt_h(fty, f, fctl, FV, fpa, fpb, fpc);
+            if (comb)
+                x = x * comb_h(f, right ? tr : tl, mix, fb);
+            if (trem)
+                x = x * (right ? gr : gl);
+            return x;
+        }
+    };
+    void chain_comps(void *h, int pc, int c, const double *fc, double t, Comps &o)
     {
-        for (int c = 0; c < TONE_SEG; c++) {
-            if (!nv_efx_live_on(efx, c))
-                continue;
-            int st = -1;
-            const char *why = "";
-            const double *fc = efx_chain(c, &st, &why);
-            if (!fc || !efx_moves(fc))
-                continue;
-            const bool comb = fc[14] != 0.0 && fc[18] != 0.0, trem = fc[55] != 0.0;
+        const bool comb = fc[14] != 0.0 && fc[18] != 0.0, trem = fc[55] != 0.0;
+        o.comb = comb;
+        o.trem = trem;
             // ITS MOVING FILTER (gsefx.filter_setup's control at t): the
             // settings over the timeline, the one in force at t
             int fty = 0;
             double fpa = 0.0, fpb = 0.0, fpc = 0.0, fctl = 0.0, FV[3] = {0.0, 0.0, 0.0};
             if (fc[50] != 0.0) {
                 ModFlt &M = mflt[c];
-                const long rv = nv_efx_live_rev(efx);
+                const long rv = nv_efx_live_rev(h);
                 if (M.rev != rv) {
                     M.seg.assign(8 * 256, 0.0);
-                    M.n = nv_efx_live_filter(efx, c, M.head, M.seg.data(), 256);
+                    M.n = nv_efx_live_filter(h, pc, M.head, M.seg.data(), 256);
                     M.rev = rv;
                 }
                 if (M.n)
@@ -6341,25 +6569,24 @@ struct Part {
                 gl = 1.0 + m * w;
                 gr = fc[58] != 0.0 ? 1.0 - m * w : 1.0 + m * w;
             }
-            S.filter_swing(c, rate, [&](double f) {
-                double h = 1.0;
-                if (fty)
-                    h = h * flt_h(fty, f, fctl, FV, fpa, fpb, fpc);
-                if (comb)
-                    h = h * comb_h(f, tl, mix, fb);
-                if (trem)
-                    h = h * gl;
-                return h;
-            }, [&](double f) {
-                double h = 1.0;
-                if (fty)
-                    h = h * flt_h(fty, f, fctl, FV, fpa, fpb, fpc);
-                if (comb)
-                    h = h * comb_h(f, tr, mix, fb);
-                if (trem)
-                    h = h * gr;
-                return h;
-            });
+            o.fty = fty; o.fpa = fpa; o.fpb = fpb; o.fpc = fpc; o.fctl = fctl;
+            o.FV[0] = FV[0]; o.FV[1] = FV[1]; o.FV[2] = FV[2];
+            o.tl = tl; o.tr = tr; o.mix = mix; o.fb = fb; o.gl = gl; o.gr = gr;
+    }
+
+    void efx_filter_block(double t)
+    {
+        for (int c = 0; c < TONE_SEG; c++) {
+            if (!nv_efx_live_on(efx, c))
+                continue;
+            int st = -1;
+            const char *why = "";
+            const double *fc = efx_chain(c, &st, &why);
+            if (!fc || !efx_moves(fc))
+                continue;
+            Comps o;
+            chain_comps(efx, c, c, fc, t, o);
+            S.filter_swing(c, rate, [&](double f) { return o.h(f, false); }, [&](double f) { return o.h(f, true); });
         }
     }
 
@@ -6392,8 +6619,26 @@ struct Part {
         for (auto &kv : tone_fx) {
             ToneFx &tf = kv.second;
             const NoteClass *k = tf.k;
-            if (!tf.kind)
+            // ITS OWN EFFECT's (live._filter_for: none where the part is on
+            // the module's -- the module's takes the tone's place)
+            Comps o;
+            bool chain = false;
+            if (tf.ex && !(efx && nv_efx_live_on(efx, tf.ch))) {
+                int st = -1;
+                const char *why = "";
+                const double *fc = tone_chain(tf, &st, &why);
+                if (fc && efx_moves(fc)) {
+                    chain_comps(tf.ex, tf.ch, kv.first, fc, t, o);
+                    chain = true;
+                }
+            }
+            if (!tf.kind && !chain)
                 continue;
+            if (!tf.kind) {
+                S.filter_swing(kv.first, rate, [&](double f) { return o.h(f, false); },
+                               [&](double f) { return o.h(f, true); });
+                continue;
+            }
             const double pa = k->flt_p[0], pb = k->flt_p[1];
             if (tf.kind == 3) {
                 const double *c = k->flt_c;
@@ -6403,12 +6648,14 @@ struct Part {
                 double g = c[3] * u + (1.0 - c[3]) * pow(u, 3.0);
                 const double ctrl = c[1] * pow(g < 0.0 ? c[0] / c[1] : c[2] / c[1], fabs(g));
                 const double q = pa > 0.1 ? pa : 0.1;
-                S.filter_swing(kv.first, rate, [&](double f) {     // (efxfilter.response, type 2)
+                auto own = [&](double f) {      // (efxfilter.response, type 2)
                     double xx = f / (ctrl > 1.0 ? ctrl : 1.0);
                     double a = 1.0 - xx * xx, b = xx / q;
                     double w = 1.0 / sqrt(a * a + b * b);
                     return (1.0 - pb) + pb * w;
-                });
+                };
+                S.filter_swing(kv.first, rate, [&](double f) { return chain ? o.h(f, false, own(f)) : own(f); },
+                               [&](double f) { return chain ? o.h(f, true, own(f)) : own(f); });
                 continue;
             }
             const int nm = k->n_mouth;
@@ -6449,7 +6696,7 @@ struct Part {
                 for (int fk = 0; fk < 3; fk++)
                     F[fk] = tf.cur[fk];
             }
-            S.filter_swing(kv.first, rate, [&](double f) {     // (efxfilter.response, type 5: VOWEL)
+            auto own = [&](double f) {          // (efxfilter.response, type 5: VOWEL)
                 static const double BW[3] = {80.0, 110.0, 160.0}, AM[3] = {1.0, 0.7, 0.5};
                 double h = pa;
                 for (int fk = 0; fk < 3; fk++) {
@@ -6457,7 +6704,9 @@ struct Part {
                     h = h + AM[fk] / (1.0 + u * u);
                 }
                 return h * pb;
-            });
+            };
+            S.filter_swing(kv.first, rate, [&](double f) { return chain ? o.h(f, false, own(f)) : own(f); },
+                           [&](double f) { return chain ? o.h(f, true, own(f)) : own(f); });
         }
     }
 
@@ -6679,6 +6928,22 @@ struct Part {
                     drone_count[pid] = n;
                     if (chanting(ch))
                         drones(ch, n0);
+                }
+            }
+        if (cc == 1)                            // THE PUNGI's DRONE NOTE ON THE WHEEL (live's 'drone note')
+            for (int pi = 0; pi < (int)patches.size(); pi++) {
+                if (!(patches[pi].channel < 0 || patches[pi].channel == ch))
+                    continue;
+                Use u(*this, pi);
+                const NoteClass *k = dnote_class();
+                if (!k)
+                    continue;
+                const int ns = k->n_dchoice, st = std::min(ns - 1, v * ns / 128);   // (even steps over the choices)
+                auto it = drone_sel.find(pid);
+                if (it == drone_sel.end() || it->second != st) {
+                    drone_sel[pid] = st;
+                    if (chanting(ch))
+                        drone_note(ch, n0);
                 }
             }
         if (cc == 1)                            // A CLAVINET's TONE ROCKERS (live's 'tone' role)
@@ -7802,6 +8067,15 @@ struct Part {
     void render(long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx, void *sd,
                 long long blk, double master_gain)
     {
+        // THE MOOG ROWS under a moving filter (live's moog_filter_apply before
+        // the render, _restore in its finally): their |H| for this render, the
+        // panel's level back after it -- after knobs_advance has carried the
+        // filtered end into aLp
+        struct MoogFlt {
+            Slab &S;
+            ~MoogFlt() { S.moog_filter_restore(); }
+        } moog_flt{S};
+        S.moog_filter_apply();
         // the Moog's mod rows for this block, and its FM's anchors (Renderer.render's first)
         S.moog_pitch_block(n0, frames, rate, moog_pcells);
         S.moog_shape_block(n0, frames, rate, moog_srows);
@@ -8247,6 +8521,8 @@ struct Part {
         cur_blk = blk;
         if (!wind_st.empty() || !wind_spent.empty())    // the organs' chests, before the block's events (live's callback)
             wind_block(n0, blk);
+        if (!cutting.empty())
+            cut_go(n0);                         // the flicks due give way to their notes (live._cut_go)
         if (!amp_retired.empty())
             amp_retire(n0);
         std::vector<Ev> evs;
@@ -8296,8 +8572,11 @@ struct Part {
             if (!down.count(ck) && !pedalled.count(ck) && !S.oneshot.count(kv.first)
                 && !(sq != sost.end() && sq->second.count(ck.second)) && std::get<3>(kv.first) != AMPK
                 && std::get<3>(kv.first) != DRONEK
-                && std::get<3>(kv.first) < AMP_OLD0 && std::get<3>(kv.first) > MFK0)
-                sw.push_back(kv.first);         // (not a valve's products, an old tone's, a repeat's: not a note)
+                && std::get<3>(kv.first) < AMP_OLD0 && std::get<3>(kv.first) > MFK0
+                && std::none_of(cutting.begin(), cutting.end(), [&](const Cut &c) {
+                       return c.pid == std::get<0>(kv.first) && c.ch == ck.first && c.cnote == ck.second;
+                   }))
+                sw.push_back(kv.first);         // (not a valve's products, an old tone's, a repeat's, a flick: not a note)
         }
         for (auto &k : sw)
             S.release(k, n0);
@@ -8606,6 +8885,18 @@ int nv_part_drawn(void *h, char *out, int cap)
 }
 
 // The part's PROGRAM, a melodic one's: the class its slurs and glides read
+// a patch's pungi drone: its own variation's templates (live's
+// Patch.drone_note_patch), their buckets and rotor speed; NULL none
+void nv_part_drone_patch(void *h, int pi, void *cache, int nbuckets, int speed)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size())
+        return;
+    P->patches[pi].dcache = cache;
+    P->patches[pi].dnb = nbuckets > 0 ? nbuckets : 1;
+    P->patches[pi].dspeed = speed;
+}
+
 void nv_part_program(void *h, int program)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;

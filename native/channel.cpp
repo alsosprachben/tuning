@@ -676,6 +676,9 @@ struct Song {
     // its last note-off, at the phrase's first note's velocity, levels and
     // program, each its own class; appended in channel, phrase, drone order
     bool drones_done = false;
+    // A LIVE TEMPLATE's one note (blockrender's markers NO_PART_DRONES,
+    // NO_CUT): the pungi's drone and the uilleann's cut are live's own
+    bool no_part_drones = false, no_cut = false;
     int drones(const NoteClass *const *K)
     {
         if (drones_done)
@@ -714,6 +717,8 @@ struct Song {
             }
             if (!bpc || notes[ix[0]].drum)
                 continue;
+            if (bpc->n_dchoice && no_part_drones)
+                continue;                       // (live's template: live sounds the drone itself)
             if (std::isnan(gap))
                 gap = 2.0;
             std::vector<std::pair<double, double>> on_off;
@@ -970,7 +975,7 @@ struct Song {
             if (drop[i] || e.drum || e.prog < 0 || e.prog > 127)
                 continue;
             const NoteClass *k = K[e.kidx()];
-            if (!k || !k->cut_semi || e.off - e.on < 3.0 * k->cut_s || e.note + k->cut_semi < 0
+            if (no_cut || !k || !k->cut_semi || e.off - e.on < 3.0 * k->cut_s || e.note + k->cut_semi < 0
                 || e.note + k->cut_semi > 127)
                 continue;
             drop_key(drop, e);
@@ -1687,6 +1692,11 @@ struct Song {
 extern "C" {
 
 void *nv_song_new(void) { return new nv::Song(); }
+void nv_song_live_template(void *s, int no_cut, int no_part_drones)
+{
+    ((nv::Song *)s)->no_cut = no_cut != 0;
+    ((nv::Song *)s)->no_part_drones = no_part_drones != 0;
+}
 void nv_song_free(void *s) { delete (nv::Song *)s; }
 
 void nv_song_cc(void *s, long long ch, double t, int cc, int v)

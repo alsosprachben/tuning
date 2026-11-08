@@ -143,6 +143,7 @@ void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigne
                     const int *skind, const double *spar, double oneshot_floor_db);
 void nv_part_drums(void *h, int program, const unsigned long long *choke);
 void nv_part_program(void *h, int program);
+void nv_part_drone_patch(void *h, int pi, void *cache, int nbuckets, int speed);
 void nv_part_toggle_stop(void *h, int rank, long long n0);
 int nv_part_drawn(void *h, char *out, int cap);
 void nv_part_efx(void *h, const double *X, double SR);
@@ -230,6 +231,7 @@ struct Export {
     std::vector<std::array<int, 2>> vpv;
     std::vector<std::string> vnames;
     std::vector<std::array<int, 10>> vpart;     // VLIV: each one's live record, as part[]'s
+    std::vector<std::array<int, 12>> vdrn;      // VDRN: a voice's own drone patch (program, variation, its record)
     std::vector<VarEnt> vents;
     struct Stops {
         std::vector<std::string> names;
@@ -423,6 +425,12 @@ static bool read_export(const char *path, Export &E)
             }
             if (!memcmp(tt, "MKIT", 4)) {
                 fseek(f, tl, SEEK_CUR);
+            } else if (!memcmp(tt, "VDRN", 4)) {
+                int nv = 0;
+                ok = fread(&nv, 4, 1, f) == 1;
+                E.vdrn.resize(ok ? nv : 0);
+                for (auto &r : E.vdrn)
+                    ok = ok && fread(r.data(), 4, 12, f) == 12;
             } else if (!memcmp(tt, "VLIV", 4)) {
                 int nv = 0;
                 ok = fread(&nv, 4, 1, f) == 1;
@@ -814,19 +822,12 @@ int main(int argc, char **argv)
         for (size_t j = 0; var && j < E.vpv.size() && j < E.vpart.size(); j++)
             if (E.vpv[j][0] == (prog & 127) && E.vpv[j][1] == var)
                 return E.vpart[j].data();
+        for (const auto &d : E.vdrn)            // (a voice's own drone patch)
+            if (var && d[0] == (prog & 127) && d[1] == var)
+                return d.data() + 2;
         return E.part[prog & 127];
     };
     const int *pp = drums ? DRUM_PART : prec(program, atoi(opt(argc, argv, "bank", "0").c_str()));
-    // a variation that is a Moog (its key 60's class): live's, not nvlive's yet
-    auto moog_var = [&](int prog, int en) {
-        if (en <= 0 || en >= (int)E.vents.size() || E.vents[en].ls.empty())
-            return false;
-        const auto &l = E.vents[en].ls[0];
-        int k = 60 + l[1];
-        int cq = k >= 0 && k <= 127 ? E.vmap[128 * (size_t)l[0] + k] : -1;
-        (void)prog;
-        return cq >= 0 && ((const NoteClass *)E.classes[cq].data())->init.kind == 6;
-    };
     if (!pp[0]) {
         fprintf(stderr, "nvlive: program %d is not native\n", program);
         return 1;
@@ -845,9 +846,8 @@ int main(int argc, char **argv)
             for (int k = 0; k < 128 && nat; k++)
                 nat = k + l[1] < 0 || k + l[1] > 127 || E.vmap[128 * (size_t)l[0] + k + l[1]] >= 0
                       || E.cmap[128 * (program & 127) + k] < 0;
-        if (!nat || moog_var(program, en)) {
-            fprintf(stderr, "nvlive: program %d bank %d is not native%s\n", program, bk,
-                    nat ? " (a Moog variation: live's)" : "");
+        if (!nat || !pp[0]) {
+            fprintf(stderr, "nvlive: program %d bank %d is not native\n", program, bk);
             return 1;
         }
     }
@@ -1283,6 +1283,64 @@ int main(int argc, char **argv)
         int bs = 1 + 128 * (mp >= 1 && mp <= 4 ? mp : 0) + msb;
         return E.vgs[((size_t)((bs - 1) / 128) * 128 + p) * 128 + (bs - 1) % 128];
     };
+    // the class a program's variation sounds at key 60 (live's Patch pc)
+    auto cls60 = [&](int prog, int var) -> const NoteClass * {
+        int cq = -1;
+        int en = var ? var_entry_of(prog & 127, var) : 0;
+        if (en > 0 && en < (int)E.vents.size() && !E.vents[en].ls.empty()) {
+            const auto &l = E.vents[en].ls[0];
+            int k = 60 + l[1];
+            cq = k >= 0 && k <= 127 ? E.vmap[128 * (size_t)l[0] + k] : -1;
+        } else if (!var) {
+            cq = E.cmap[128 * (prog & 127) + 60];
+        }
+        return cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
+    };
+    // THE PUNGI's DRONE PATCH (live's Patch.drone_note_patch): its own
+    // variation's templates over the choices' range (drone_note_choices)
+    auto build_drone = [&](int prog, const NoteClass *k) -> void * {
+        const int dv = k->dchoice_var, key = 256 * dv + (prog & 127);
+        {
+            std::lock_guard<std::mutex> lk(cmu);
+            auto it = caches.find(key);
+            if (it != caches.end())
+                return it->second;
+        }
+        const int *pq = prec(prog, dv);
+        if (!pq[0] || var_entry_of(prog & 127, dv) <= 0)
+            return nullptr;
+        void *c = nv_tcache_new(K.data(), &t, tune_for(prog, false), E.trim.data(), E.kind.data(), E.fin.data(),
+                                E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, E.k[K_RING_FLOOR],
+                                E.k[K_RING_MAX], E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR);
+        raga_for(c, prog, false);
+        nv_tcache_set_var(c, dv);
+        int lo = 127, hi = 0;
+        for (int q = 0; q < k->n_dchoice; q++) {
+            lo = std::min(lo, k->dchoice[q]);
+            hi = std::max(hi, k->dchoice[q]);
+        }
+        int sp[3] = {pq[3], pq[4], pq[5]};
+        nv_tcache_warm(c, prog & 127, lo, hi, pq[1], sp, pq[2]);
+        std::lock_guard<std::mutex> lk(cmu);
+        caches[key] = c;
+        return c;
+    };
+    // ...given to a part's patch (nvlive's start, swap): its record's buckets and speed
+    auto attach_drone = [&](int pi, int prog, bool dr, int var) {
+        const NoteClass *k = dr ? nullptr : cls60(prog, var);
+        void *dc = nullptr;
+        int nb = 1, sp = -1;
+        if (k && k->n_dchoice && k->dchoice_var) {
+            const int key = 256 * k->dchoice_var + (prog & 127);
+            std::lock_guard<std::mutex> lk(cmu);
+            auto it = caches.find(key);
+            dc = it != caches.end() ? it->second : nullptr;
+            const int *pq = prec(prog, k->dchoice_var);
+            nb = pq[1];
+            sp = pq[6];
+        }
+        nv_part_drone_patch(part, pi, dc, nb, sp);
+    };
     auto build = [&](int prog, bool dr, int var) -> void * {
         int key = 256 * var + (dr ? 128 : 0) + (prog & 127);
         {
@@ -1294,9 +1352,9 @@ int main(int argc, char **argv)
         bool native = false;
         for (int k = 0; k < 128 && !native; k++)
             native = E.cmap[(dr ? NV_K_DRUMS : 0) + 128 * (prog & 127) + k] >= 0;
-        if (var) {                              // (a variation's: its slots the engine's, not a Moog)
+        if (var) {                              // (a variation's: its slots the engine's)
             int en = var_entry_of(prog & 127, var);
-            native = en > 0 && !moog_var(prog, en);
+            native = en > 0;
             for (const auto &l : en > 0 ? E.vents[en].ls : std::vector<std::array<int, 4>>())
                 for (int k = 0; k < 128; k++)
                     native = native && (k + l[1] < 0 || k + l[1] > 127 || E.vmap[128 * (size_t)l[0] + k + l[1]] >= 0
@@ -1324,6 +1382,11 @@ int main(int argc, char **argv)
             int sp[3] = {pq[3], pq[4], pq[5]};
             nv_tcache_warm(c, prog & 127, 21, 96, pq[1], sp, pq[2]);
             retune(prog);
+        }
+        if (!dr) {                              // A PUNGI's DRONE: its own patch, beside (Patch.warm's)
+            const NoteClass *k60 = cls60(prog, var);
+            if (k60 && k60->n_dchoice && k60->dchoice_var)
+                build_drone(prog, k60);
         }
         std::lock_guard<std::mutex> lk(cmu);
         caches[key] = c;
@@ -1359,6 +1422,7 @@ int main(int argc, char **argv)
         }
         nv_part_swap(part, pa.pi, c, prog & 127, dr, pq[1], pq[6], pq[7], pq[8], pq[9], pq[6] >= 0,
                    dr ? E.kit_choke.data() : nullptr, regd ? note : nullptr);
+        attach_drone(pa.pi, prog, dr, var);     // (a pungi's drone patch, built with it)
         pa.posted = prog & 127;
         pa.posted_var = var;
         pa.drums = dr;
@@ -1366,6 +1430,12 @@ int main(int argc, char **argv)
         if (pa.pi == 0)
             shown_program = (dr ? 128 : 0) + (prog & 127);
     };
+    if (!drums) {                               // the starting patch's pungi drone, as build() makes them
+        const NoteClass *k0 = cls60(program, bank0);
+        if (k0 && k0->n_dchoice && k0->dchoice_var)
+            build_drone(program, k0);
+        attach_drone(0, program, false, bank0);
+    }
     // asked(): a program change heard -- each part listening that is not
     // already that voice asks for it (live's patch_reqs, in order)
     struct Req {
@@ -1944,7 +2014,7 @@ int main(int argc, char **argv)
         H.vnative.assign(E.vpv.size(), 0);
         for (size_t j = 0; j < E.vpv.size(); j++) {
             int p = E.vpv[j][0], en = var_entry_of(p, E.vpv[j][1]);
-            bool nat = en > 0 && !moog_var(p, en) && (j < E.vpart.size() ? E.vpart[j][0] : E.part[p][0]) != 0;
+            bool nat = en > 0 && (j < E.vpart.size() ? E.vpart[j][0] : E.part[p][0]) != 0;
             for (const auto &l : en > 0 ? E.vents[en].ls : std::vector<std::array<int, 4>>())
                 for (int k = 0; k < 128 && nat; k++)
                     nat = k + l[1] < 0 || k + l[1] > 127 || E.vmap[128 * (size_t)l[0] + k + l[1]] >= 0

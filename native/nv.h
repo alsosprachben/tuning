@@ -980,6 +980,7 @@ typedef struct NoteClass {
     // the drone_k[0] class, never corked; n_dchoice 0 none
     int n_dchoice, dchoice_def;
     int dchoice[16];
+    int dchoice_var;            // live's: the drone's own patch, this variation (Patch.drone_note_var)
     // ...LIVE's (Patch.drone_wheel, drone_ratios, drone_gain): the wheel corks
     // them, each sounding at the tonic x its ratio, at its gain
     int drone_wheel, n_dratio;
@@ -1013,6 +1014,9 @@ typedef struct NoteClass {
     // Q, mid dB, high dB; efx_eq_set 0 none) and its reverb send (0-127)
     int efx_set, efx_eq_set;
     double efx_level, efx_od, efx_eq[5], efx_rev;
+    // ...AS SET (live's: nvlive builds its chain, gsefx.chain(tone_state)):
+    // efx_raw 0 none, else its type (msb, lsb) and parameters 1-20 (-1 unset)
+    int efx_raw, efx_raw_ty[2], efx_raw_p[21];
     // ...ITS CHORUS DEVICE (its 'cf': chorus.gs_copies), efx_cf 0 none: tau,
     // rate, vd, fb, lpf (0 none), share, taps, the head's beta; each output's
     // place (l, r, c: left and right incidence, left and right delay in

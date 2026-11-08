@@ -3449,6 +3449,10 @@ class Patch:
             # and inserts no part drone (B.NO_PART_DRONES). CC1 cannot cork it,
             # as the bagpipe's does -- on a pungi the wheel chooses the note
             tr.append(mido.MetaMessage("marker", text=B.NO_PART_DRONES, time=0))
+        if self.cut[0]:
+            # THE CUT IS LIVE'S TOO (_cut_on), so the template is the plain
+            # note: blockrender reads this marker and cuts nothing (B.NO_CUT)
+            tr.append(mido.MetaMessage("marker", text=B.NO_CUT, time=0))
         if fast is not None:
             # CC1 is the half-moon switch on a tonewheel voice; blockrender
             # reads it through leslie.zone() and gives every partial the

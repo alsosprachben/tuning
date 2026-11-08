@@ -31,6 +31,7 @@ void nv_midi_free(void *p);
 double nv_midi_total(void *p);
 void nv_midi_song(void *p, void *song, const double *trim);
 void *nv_song_new(void);
+void nv_song_live_template(void *s, int no_cut, int no_part_drones);
 void nv_song_free(void *s);
 void nv_song_tuning(void *s, long long ch, double t, const double *freq);
 void nv_song_finish(void *s, double total);
@@ -231,6 +232,8 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     if (!m)
         return -1000000001LL;
     void *song = nv_song_new();
+    if (pc_ && (pc_->cut_semi || pc_->n_dchoice))   // (live's markers: the cut and the pungi's drone live's own)
+        nv_song_live_template(song, pc_->cut_semi != 0, pc_->n_dchoice != 0);
     nv_song_tuning(song, -1, 0.0, freq);
     if (g_raga_sa >= 0)
         nv_song_eastern(song, nullptr, 1, g_raga_sa, g_raga_sw, g_raga_nsw);

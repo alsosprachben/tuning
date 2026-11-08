@@ -866,7 +866,7 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         if (n->fx_set == 1) {               // ITS PART'S INSERTION EFFECT, the file's chain at its onset
             n->chan_vol *= n->fx_level;
             n->chan_vol *= n->fx_od != 0.0 ? n->fx_od : 1.0;
-        } else if (n->fx_set == 0 && K->efx_set && r == 1) {   // ITS OWN: its level, its OD stage's gain (after an organ's swell)
+        } else if (n->fx_set == 0 && K->efx_set && r == 1 && !nv_moog_neutral()) {   // ITS OWN: its level, its OD stage's gain (not a live template's)
             n->chan_vol *= K->efx_level;
             n->chan_vol *= K->efx_od != 0.0 ? K->efx_od : 1.0;
         }
