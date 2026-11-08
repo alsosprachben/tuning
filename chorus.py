@@ -171,8 +171,11 @@ def expand(A, channels, sr, cols=None, place=None):
                 extra['vr'][-1] = rate
                 extra['vp'][-1] = 2.0 * np.pi * (ci / float(len(cents)))
                 made += 1
-        # ...and the dry share comes down by what the wet took.
-        if made and dry != 1.0:
+        # ...and the dry share comes down by what the wet took -- the
+        # channel's, whatever copies this or another channel made: it was
+        # `made and`, the copies of every channel so far, so a channel's level
+        # hung on the channels walked before it, which a stream cannot know
+        if dry != 1.0:
             for k in ('aL', 'aR', 'aM'):
                 col = A[k]
                 for i in rows:

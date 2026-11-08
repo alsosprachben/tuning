@@ -46,7 +46,7 @@ WURLITZER_HZ = 5.5
 ENABLED = True
 
 
-def expand(A, channels, sr, cols, rows=None, meta=None):
+def expand(A, channels, sr, cols, rows=None, meta=None, cfgs=None):
     """Give every partial of a modulated voice its sideband pair, in place.
 
     `channels` is {midi_channel: (rate_hz, depth, stereo)} or, for a SECTION,
@@ -72,7 +72,10 @@ def expand(A, channels, sr, cols, rows=None, meta=None):
     and every partial of one player agrees.
     """
     # meta: a list given by the streaming renderer, which records (source row,
-    # 0 for the upper sideband and 1 for the lower) for every row appended
+    # 0 for the upper sideband and 1 for the lower) for every row appended.
+    # cfgs: each row's own setting in the channel's place (a harmonium's
+    # Tremolo stop is read at each note-on: two voices on a channel, two
+    # tremolos), None where the row has none
     if not ENABLED or not channels:
         return 0
     n = len(A['om'])
@@ -87,7 +90,7 @@ def expand(A, channels, sr, cols, rows=None, meta=None):
         if rows is not None and (i >= len(rows) or not rows[i]):
             continue
         ch = int(A['mch'][i])
-        cfg = channels.get(ch)
+        cfg = cfgs[i] if cfgs is not None else channels.get(ch)
         if cfg is None:
             continue
         # ...and an insertion effect's (gsefx: Tremolo, Auto Pan) a waveform:

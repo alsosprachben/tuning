@@ -665,8 +665,9 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
                 made++;
             }
         }
-        // ...and the dry share comes down by what the wet took
-        if (made && dry != 1.0)
+        // ...and the dry share comes down by what the wet took -- the
+        // channel's, whatever copies were made (chorus.expand's)
+        if (dry != 1.0)
             for (long long i : sel)
                 for (int c : {cAL, cAR, cAM})
                     rows[(size_t)NCOLS * i + c] = rows[(size_t)NCOLS * i + c] * dry;
@@ -714,6 +715,12 @@ extern "C" void nv_tremolo_wave(long long ch, int n, const double *khp)
     g_trem_wave[ch] = std::vector<double>(khp, khp + 3 * n);
 }
 
+// ...and EACH ROW's OWN SETTING in its channel's place (tremolo.expand's
+// cfgs: a harmonium note's Tremolo stop, read at its note-on), 4 a row
+// (rate NaN: none), given before nv_tremolo_expand, used by it
+static std::vector<double> g_trem_rcfg;
+extern "C" void nv_tremolo_row_cfg(long long n, const double *cfg4) { g_trem_rcfg.assign(cfg4, cfg4 + 4 * n); }
+
 extern "C" long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                                        const double *cfg, const char *mask, long long nmask, double sr)
 {
@@ -729,16 +736,30 @@ extern "C" long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm,
     brmap.swap(g_trem_brmap);
     std::map<long long, std::vector<double>> wave;
     wave.swap(g_trem_wave);
+    std::vector<double> rcfg;
+    rcfg.swap(g_trem_rcfg);
+    std::vector<long long> chq(chans, chans + nch);
     for (long long i = 0; i < n; i++) {
         if (mask && (i >= nmask || !mask[i]))
             continue;
         const double *row = *rowsp + (size_t)NCOLS * i;
         int q = 0;
-        while (q < nch && chans[q] != (long long)(int)row[cMCH])
-            q++;
-        if (q == nch)
-            continue;
-        const double *c = cfg + 4 * q;
+        const double *c;
+        if (!rcfg.empty()) {                // (the row's own: its channel needs no entry)
+            if (4 * i + 3 >= (long long)rcfg.size() || std::isnan(rcfg[4 * i]))
+                continue;
+            c = rcfg.data() + 4 * i;
+            chq.push_back((long long)(int)row[cMCH]);
+            q = (int)chq.size() - 1;
+        } else {
+            while (q < nch && chans[q] != (long long)(int)row[cMCH])
+                q++;
+            if (q == nch)
+                continue;
+            c = cfg + 4 * q;
+        }
+        const long long *chans_ = chq.data();
+        (void)chans_;
         double rate = c[0], depth = c[1], scatter = c[3];
         bool stereo = c[2] != 0.0;
         if (depth <= 0.0 || rate <= 0.0)
@@ -746,12 +767,12 @@ extern "C" long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm,
         double ph = 0.0;
         if (scatter > 0.0) {
             PyRandom r;
-            pyr_seed(&r, 0x7E30 + chans[q] * 977 + (long long)row[cPL]);
+            pyr_seed(&r, 0x7E30 + chq[q] * 977 + (long long)row[cPL]);
             rate = rate * (1.0 + scatter * pyr_uniform(&r, -1.0, 1.0));
             ph = pyr_uniform(&r, 0.0, 2.0 * M_PI);
         }
         double dw = 2.0 * M_PI * rate / sr, half = 0.5 * depth;
-        auto wv = wave.find(chans[q]);
+        auto wv = wave.find(chq[q]);
         if (wv != wave.end()) {
             // A WAVEFORM'S HARMONICS, each its own sideband pair: k times the
             // rate, its coefficient's share of the depth, its phase (+ for the
@@ -770,7 +791,7 @@ extern "C" long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm,
                     e[cAL] = row[cAL] * hh;
                     e[cAR] = row[cAR] * (stereo ? -hh : hh);
                     e[cAM] = stereo ? 0.0 : row[cAM] * hh;
-                    auto bm = brmap.find(chans[q]);
+                    auto bm = brmap.find(chq[q]);
                     if (bm != brmap.end()) {
                         auto it = bm->second.find((long long)row[cBR]);
                         if (it != bm->second.end())
@@ -793,7 +814,7 @@ extern "C" long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm,
             e[cAL] = row[cAL] * half;
             e[cAR] = row[cAR] * (stereo ? -half : half);
             e[cAM] = stereo ? 0.0 : row[cAM] * half;
-            auto bm = brmap.find(chans[q]);
+            auto bm = brmap.find(chq[q]);
             if (bm != brmap.end()) {
                 auto it = bm->second.find((long long)row[cBR]);
                 if (it != bm->second.end())

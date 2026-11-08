@@ -538,7 +538,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
     for (int j = 0; j < nn; j++)
         if (nv_song_htrem(song, played[j])) {
             long long r1 = nv_play_own_end(j, j + 1 < nn ? row0[j + 1] : nnote);     // (its own rows)
-            nv_song_add_htrem_rows(song, row0[j], r1);
+            nv_song_add_htrem_rows(song, row0[j], r1, played[j]);
         }
     // THE VALVE AMPLIFIERS (_AMP_CH) and THE ROTATING SPEAKERS (_LESLIE_CH):
     // each channel as its first note through one is played

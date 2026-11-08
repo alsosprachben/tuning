@@ -1945,11 +1945,22 @@ int main(int argc, char **argv)
             if (!nr)
                 continue;
             std::vector<long long> ab(2 * nr);
+            std::vector<double> hc(2 * nr);
             nv_song_n_htrem_rows(song, ab.data(), nr);
+            nv_song_htrem_rows_cfg(song, hc.data(), nr);
             mask.assign(P, 0);
+            // (each note's rows at its own stop's rate and depth, mono -- a
+            // voice changed on the channel another tremolo, not the last one's)
+            std::vector<double> rc(4 * (size_t)P, NAN);
             for (int q = 0; q < nr; q++)
-                for (long long r = ab[2 * q]; r < ab[2 * q + 1] && r < P; r++)
+                for (long long r = ab[2 * q]; r < ab[2 * q + 1] && r < P; r++) {
                     mask[r] = 1;
+                    rc[4 * r] = hc[2 * q];
+                    rc[4 * r + 1] = hc[2 * q + 1];
+                    rc[4 * r + 2] = 0.0;
+                    rc[4 * r + 3] = 0.0;
+                }
+            nv_tremolo_row_cfg(P, rc.data());
         }
         tremolo_expand(&rows, &P, dm, chans, which == 0 ? &mask : nullptr, SR);
     }

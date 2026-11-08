@@ -4484,10 +4484,14 @@ def _prep_tremolo(A, _HTREM_CH, _HT_ROWS, _TREM_CH, _pcols):
     # tremolo.py, which argues both placements.
     if _HT_ROWS:
         import tremolo as _TRM
+        # (each note's rows at the setting its note-on read: a voice
+        # changed on the channel is another tremolo, not the last one's)
         _hm = np.zeros(len(A['om']), bool)
-        for _a, _b in _HT_ROWS:
+        _hc = [None] * len(A['om'])
+        for _a, _b, _c in _HT_ROWS:
             _hm[_a:_b] = True
-        _nt = _TRM.expand(A, _HTREM_CH, SR, _pcols, rows=_hm)
+            _hc[_a:_b] = [_c] * (_b - _a)
+        _nt = _TRM.expand(A, _HTREM_CH, SR, _pcols, rows=_hm, cfgs=_hc)
         if _nt:
             print("  harmonium tremolo: %d notes, %d sidebands" % (len(_HT_ROWS), _nt))
     if _TREM_CH:
@@ -8369,7 +8373,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _damp_close(_pre)
         nt.key_off = nt.off           # when the KEY came up, before any pedal held it
         if em.htrem_pending is not None:
-            _HT_ROWS.append((em.htrem_pending, _pre)); em.htrem_pending = None
+            _HT_ROWS.append((em.htrem_pending, _pre, em.htrem_cfg)); em.htrem_pending = None
         if sink is not None:            # the last note's rows are final
             if em.stream_row0 is not None:
                 # ...and every note to come starts at or after this one
@@ -9116,6 +9120,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _HTREM_CH[em.channel] = (float(props.stop_tremolo_hz),
                                  float(props.stop_tremolo_depth), False)
                 em.htrem_pending = len(A['om'])
+                em.htrem_cfg = _HTREM_CH[em.channel]    # (this note's own: _HT_ROWS keeps it)
         transverse = []   # (freq, raw gain, decay dbps) of the main partials, for phantom pairing
         stops = _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG_KROW,
                 _MOOG_KVAR, _MOOG_MKI, _MOOG_MPC, _MOOG_MPI, _MOOG_MPK, _MOOG_MPKN, _MOOG_MPR,
@@ -9258,7 +9263,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _snd_finish(em.sound_pending)      # the last note's CC71/74/75, as the loop gives the others
     _push_finish(em.push_pending)
     if em.htrem_pending is not None:
-        _HT_ROWS.append((em.htrem_pending, len(A['om']))); em.htrem_pending = None
+        _HT_ROWS.append((em.htrem_pending, len(A['om']), em.htrem_cfg)); em.htrem_pending = None
     # the last strike's rows end here -- before the stream hears them
     if em.register_open is not None:
         em.register_open['rows'] = (em.register_open['rows'][0], len(A['om'])); em.register_open = None
