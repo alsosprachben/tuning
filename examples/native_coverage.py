@@ -211,6 +211,27 @@ TASKS = [
     ("SC-88", False, "The SFX families: siren, starship, laser, scream, heartbeat, Morse, machine gun, engine, "
                      "car pass, skid, door creak, birds, fret slide (noise_events, pulse, ring_db, sweeps)"),
     ("SC-88", False, "Dulcimer and accordion variations (course_keys, unison_shares_phase; speech_harmonic_exp)"),
+    # A SUPERSET OF THE SOUND CANVAS (Ben, 2026-11-09): every GS message an SC-8850 receives doing
+    # what Roland's does (or more) in files and live, and every front-panel control a TUI one --
+    # Python first (the oracle), then native
+    ("SC-55", False, "Sound Canvas superset, files: the GS messages the reader ignores -- a part's RX. CHANNEL "
+                     "(another channel's notes: Roland's own layering), its Rx switches (pitch bend, volume, "
+                     "program change... off), ASSIGN MODE (a repeated note's retrigger), the CC1/CC2 "
+                     "CONTROLLER NUMBERS its matrix reads, MASTER PAN, VOICE RESERVE (accepted: we have more), "
+                     "the display's text and 16x16 dot pages (45 xx: Falcom's and Konami's files send them)"),
+    ("SC-55", False, "Sound Canvas superset, live: what a sequencer sends that live ignores and a file render "
+                     "honours -- the system reverb, chorus and delay (macros and parameters), the GS EQ, "
+                     "drum setup and the user drum sets, the controller matrix (each to verify first)"),
+    ("SC-55", False, "Sound Canvas superset, the controllers: the Rx switches, CC1/CC2 controller numbers and "
+                     "the controller matrix go into the wheel's CC-route design (the wheel's functions on CCs of "
+                     "their own, live's wheel a route to them, a file's CC1 GM's modulation; the insertion "
+                     "effect's control sources the model: a controller, a destination, a depth)"),
+    ("SC-8850", False, "Sound Canvas superset, the panel (livetui, then nvlive): per-part pan, reverb/chorus/"
+                       "delay sends and velocity sense as part columns; a system-effects page (reverb type, "
+                       "time, character, pre-LPF; chorus and delay types and parameters; the master EQ); "
+                       "per-part level meters (the 16 bars); the display (a sequencer's text and dot pages); "
+                       "the map (SC-55/88/88Pro/8850) in the picker and a GS Reset; solo beside mute; user "
+                       "tones and drum sets edited and stored"),
 ]
 
 # MT-32 and CM-64 between GM 2 and the Sound Canvas, in the hardware's own
