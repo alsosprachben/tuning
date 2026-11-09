@@ -344,7 +344,7 @@ def _load():
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
                                                        'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'efxrev.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
-                                                       'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp')]
+                                                       'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostint.h', 'hostlive.h', 'host.h')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -359,7 +359,7 @@ def _load():
                 tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.slab.o',
                 tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o', tmp + '.tuner.o', tmp + '.bend.o',
                 tmp + '.leslie.o', tmp + '.tubeamp.o', tmp + '.scanner.o', tmp + '.reed.o', tmp + '.epiano.o',
-                tmp + '.efxchain.o', tmp + '.roomtail.o']
+                tmp + '.efxchain.o', tmp + '.roomtail.o', tmp + '.host.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
             for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
@@ -394,6 +394,9 @@ def _load():
             # roomtail.py's late field (live.room_irs's), drawn natively
             subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'roomtail.cpp'),
                                    '-o', objs[21]])
+            # the live host (host.h: nvlive's, as a library)
+            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'host.cpp'),
+                                   '-o', objs[22]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl'])
         finally:
             for o in objs:
@@ -4422,7 +4425,9 @@ def build_nvlive():
     exe = os.path.join(HERE, 'nvlive')
     so = os.path.join(HERE, 'libnative.so')
     hdr = os.path.join(HERE, 'native', 'panel.h')
-    if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(hdr),
+    hint = os.path.join(HERE, 'native', 'hostint.h')
+    hlive = os.path.join(HERE, 'native', 'hostlive.h')
+    if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(hdr), os.path.getmtime(hint), os.path.getmtime(hlive),
                                       os.path.getmtime(so)) > os.path.getmtime(exe):
         tmp = '%s.%d.tmp' % (exe, os.getpid())
         subprocess.check_call(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin',
