@@ -1083,6 +1083,12 @@ typedef struct NoteClass {
     // AN ALIASING SWEEP (alias_sweep: start Hz, end Hz, seconds, the
     // sampler's rate, harmonics; [4] 0 none): each harmonic its own folded row
     double alias_sweep[5];
+    // A RECORD's CLICKS (strike_flam_record: blockrender._record_clicks): one
+    // timeline a revolution (rec_per s) at a time, a click clicking again a
+    // revolution on with rec_pr's probability; their levels from rec_q's
+    // quantiles (percent, dB; n_rq 0: uniform under flam_db)
+    int flam_record, n_rq;
+    double rec_per, rec_pr, rec_qx[8], rec_qy[8];
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.

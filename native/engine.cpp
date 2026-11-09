@@ -19,6 +19,7 @@
 // max/min (pymax/pymin below) and its ** as libm's pow.
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <map>
@@ -33,6 +34,72 @@ namespace nv {
 
 static double pymin(double a, double b) { return b < a ? b : a; }
 static double pymax(double a, double b) { return b > a ? b : a; }
+
+// numpy.interp for one x on ascending xp (a quantile table): fp's ends past
+// them, the point where x falls on one, else the line between (slope first)
+static double np_interp1(double x, const double *xp, const double *fp, int n)
+{
+    if (x > xp[n - 1])
+        return fp[n - 1];
+    if (x < xp[0])
+        return fp[0];
+    int j = 0;
+    while (j + 1 < n && xp[j + 1] <= x)
+        j++;
+    if (j == n - 1 || xp[j] == x)
+        return fp[j];
+    const double slope = (fp[j + 1] - fp[j]) / (xp[j + 1] - xp[j]);
+    return slope * (x - xp[j]) + fp[j];
+}
+
+// A RECORD's CLICKS to t_end s (blockrender._record_clicks): (t, dB,
+// balance) on one timeline, drawn a revolution at a time from a seed of that
+// revolution (random.Random(0xD15C0 + rev)) -- each of the last revolution's
+// clicks clicking again a revolution on with rec_pr's probability, its
+// level moved +-1 dB, its balance kept, then round(rate x rev_per) new ones:
+// a level from the quantiles (or uniform under flam_db), a time uniform in
+// the revolution, a balance over the quarter turn. Kept for the process and
+// extended, as Python's _RECORD (one key a voice's settings)
+static const std::vector<std::array<double, 3>> &record_clicks(const NoteClass *K, double t_end)
+{
+    struct Tl {
+        std::vector<std::array<double, 3>> clicks, last;
+        long rev = 0;
+    };
+    static std::map<std::vector<double>, Tl> tls;
+    std::vector<double> key{K->flam_rate, K->rec_per, K->rec_pr, K->flam_db, (double)K->n_rq};
+    for (int q = 0; q < K->n_rq; q++) {
+        key.push_back(K->rec_qx[q]);
+        key.push_back(K->rec_qy[q]);
+    }
+    Tl &st = tls[key];
+    const double per = K->rec_per, pr = K->rec_pr;
+    while ((double)st.rev * per < t_end + per) {
+        const long r = st.rev;
+        PyRandom rr;
+        pyr_seed(&rr, 0xD15C0 + r);
+        std::vector<std::array<double, 3>> nw;
+        for (const auto &c : st.last)
+            if (pyr_random(&rr) < pr) {
+                const double l = c[1] + pyr_uniform(&rr, -1.0, 1.0);
+                nw.push_back({c[0] + per, l, c[2]});
+            }
+        const long n = (long)nearbyint(K->flam_rate * per);
+        for (long q = 0; q < n; q++) {
+            const double u = pyr_random(&rr);
+            const double lv = K->n_rq ? np_interp1(100.0 * u, K->rec_qx, K->rec_qy, K->n_rq) : -K->flam_db * u;
+            const double t = (double)r * per + pyr_random(&rr) * per;
+            nw.push_back({t, lv, pyr_uniform(&rr, 0.0, 0.5 * M_PI)});
+        }
+        st.clicks.insert(st.clicks.end(), nw.begin(), nw.end());
+        st.last.clear();
+        for (const auto &c : nw)
+            if ((double)r * per <= c[0] && c[0] < (double)(r + 1) * per)
+                st.last.push_back(c);
+        st.rev++;
+    }
+    return st.clicks;
+}
 
 }  // namespace nv
 
@@ -225,7 +292,29 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         std::vector<double> boff(cap_b, 0.0), bdb(cap_b, 0.0), bgl(cap_b, 1.0), bgr(cap_b, 1.0);
         std::vector<double> bpk;            // each burst's palms' pitch (a person's; 0 none)
         int nb = 1;
-        if (K->n_ft) {
+        if (K->flam_record && K->flam_rate > 0.0) {
+            // A RECORD'S CLICKS (blockrender._record_clicks): ONE timeline for
+            // the voice, every note sounding meets the same clicks at the
+            // same instants -- those within it, in the timeline's order, each
+            // at its drawn level (not renormalised) and in its own place in
+            // the balance; none: one silent burst
+            const std::vector<std::array<double, 3>> &rc = nv::record_clicks(K, noff / SR);
+            const double a0 = non / SR, a1 = noff / SR;
+            std::vector<std::array<double, 3>> got;
+            for (const auto &c : rc)
+                if (a0 <= c[0] && c[0] < a1)
+                    got.push_back({c[0] - a0, c[1], c[2]});
+            if (got.empty())
+                got.push_back({0.0, -200.0, 0.25 * M_PI});
+            nb = (int)got.size();
+            boff.assign(nb, 0.0); bdb.assign(nb, 0.0); bgl.assign(nb, 1.0); bgr.assign(nb, 1.0);
+            for (int b = 0; b < nb; b++) {
+                boff[b] = got[b][0];
+                bdb[b] = got[b][1];
+                bgl[b] = sqrt(2.0) * cos(got[b][2]);
+                bgr[b] = sqrt(2.0) * sin(got[b][2]);
+            }
+        } else if (K->n_ft) {
             // ...OR A MACHINE'S (strike_flam_times): its bursts where its
             // envelope put them, each in its own place in the balance
             nb = K->n_ft;

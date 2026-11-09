@@ -287,7 +287,8 @@ class NoteClass(ctypes.Structure):
                    ('flt_set', I), ('flt_ty', I), ('flt_k', I), ('flt_p', C * 3), ('flt_c', C * 5),
                    ('n_mouth', I), ('mouth_seed', I), ('mouth_st', C * 3 * 16), ('mouth_cdf', C * 16),
                    ('mouth_wst', C * 3 * 16), ('mouth_dw', C * 2), ('mouth_glide', C),
-                   ('efx_bus', I), ('bus_p', C * 12), ('fold_restrike', I), ('alias_sweep', C * 5)])
+                   ('efx_bus', I), ('bus_p', C * 12), ('fold_restrike', I), ('alias_sweep', C * 5),
+                      ('flam_record', I), ('n_rq', I), ('rec_per', C), ('rec_pr', C), ('rec_qx', C * 8), ('rec_qy', C * 8)])
 
 
 class NoteIn(ctypes.Structure):
@@ -3065,9 +3066,9 @@ def note_class(cls):
                 return _owner(cls, 'unison_voices') == 'BagpipeProperties'
             if a == 'unison_drop_late':         # (a telephone's strokes past the note: tone.c's)
                 return bool(tap_voice(cls))
-            if a == 'strike_flam_rate':
-                return (not getattr(cls, 'strike_flam_record', False)
-                        and int(getattr(cls, 'strike_flam', 0) or 0) <= 1)
+            if a == 'strike_flam_rate':         # (a crowd's, or a record's clicks: their table at most 8)
+                return (int(getattr(cls, 'strike_flam', 0) or 0) <= 1
+                        and len(getattr(cls, 'strike_flam_levels', ()) or ()) <= 8)
             if a == 'strike_flam_people':       # (a few people: their claps and their palms' ring)
                 pp = getattr(cls, 'strike_flam_people', None) or ()
                 pk = getattr(cls, 'strike_flam_people_peak', None)
@@ -3215,6 +3216,13 @@ def note_class(cls):
         k.flam_db = float(getattr(cls, 'strike_flam_db', 0.0) or 0.0)
         k.flam_rate = float(getattr(cls, 'strike_flam_rate', 0.0) or 0.0)      # (a crowd: bursts a second)
         k.flam_exp = float(getattr(cls, 'strike_flam_exp_db', 0.0) or 0.0)    # (...a crackle's levels)
+        if getattr(cls, 'strike_flam_record', False):          # (...or a record's clicks: _record_clicks)
+            k.flam_record = 1
+            k.rec_per, k.rec_pr = [float(x) for x in (getattr(cls, 'strike_flam_recur', None) or (1.8, 0.0))]
+            _rq = tuple(getattr(cls, 'strike_flam_levels', ()) or ())
+            k.n_rq = len(_rq)
+            for _i, (_qa, _qb) in enumerate(_rq):
+                k.rec_qx[_i], k.rec_qy[_i] = float(_qa), float(_qb)
         _pp = getattr(cls, 'strike_flam_people', None)                         # (a few people clapping)
         if _pp:
             k.people_n = int(_pp[0])
