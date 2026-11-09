@@ -72,6 +72,30 @@ import numpy as np
 
 import tonelib as T
 
+# LIBM'S ARITHMETIC, NOT NUMPY'S: numpy's array exp, power, cos and complex
+# abs are SVML on an AVX-512 machine and differ from libm in the last bit, so
+# the tail is drawn with native's libm wrappers -- what nvlive's own drawing
+# (native/roomtail.cpp) computes, bit for bit
+def _xexp(x):
+    import native as _N
+    return _N.xexp(x)
+
+
+def _xpow(x, y):
+    import native as _N
+    return _N.xpow(x, y)
+
+
+def _xcos(x):
+    import native as _N
+    return _N.xcos(x)
+
+
+def _xabs(z):
+    import native as _N
+    return _N.xabs(z)
+
+
 OCTAVES = (63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0)
 
 
@@ -215,10 +239,10 @@ def build_ir(props, sr, q=2.0, seed=0, channels=2, band_q=None):
             band /= math.sqrt(max(float(np.mean(band * band)), 1e-30))
             ms = float(np.mean(spar * spar))
             spar = spar / math.sqrt(ms) if ms > 0.0 else spar
-            spec_share = (1.0 - scatter_at(props, fc)) ** order
+            spec_share = _xpow(1.0 - scatter_at(props, fc), order)
             spec_share[order < 2.0] = 0.0
             band = np.sqrt(1.0 - spec_share) * band + np.sqrt(spec_share) * spar
-            band *= gate * np.exp(-6.907755 * t / max(t60, 1e-3))
+            band *= gate * _xexp(-6.907755 * t / max(t60, 1e-3))
             # NORMALISE THE MEAN-SQUARE GAIN IN THE BAND, NOT THE TOTAL ENERGY.
             # sum(h^2) is the integral of |H|^2 over the band, so equating it to
             # the ratio gives a band that is too loud by the reciprocal of the
@@ -241,6 +265,34 @@ def build_ir(props, sr, q=2.0, seed=0, channels=2, band_q=None):
         spec = np.fft.rfft(ir, 2 * n, axis=0) * hp2[:, None]
         ir = np.fft.irfft(spec, 2 * n, axis=0)[:n]
     return ir, bands, onset
+
+
+# WHAT THE TAIL DEPENDS ON BESIDES THE STAGE, for nvlive's own drawing
+# (native/roomtail.cpp, live.room_irs's twin): the room's kind, volume, the
+# source's distance, the first reflection, the mean free path, Schroeder's
+# frequency, the speed of sound, the box and the two positions modal_ir
+# takes, and each octave's T60, room constant R and scattering. The stage's
+# directivity (band_q) is the caller's.
+TAIL_KINDS = {'diffuse': 0, 'plate': 1, 'delay': 2, 'pan_delay': 3, 'none': -1}
+
+
+def tail_spec(props):
+    volume, areas = room_of(props)
+    surface = sum(areas.values())
+    r = props.radiation_distance
+    out = [0.0, float(TAIL_KINDS[getattr(T.SynthProperties, 'room_tail', 'diffuse')]), volume, r,
+           first_reflection(props), 4.0 * volume / max(sum(room_of(props)[1].values()), 1e-6), schroeder(props),
+           props.sound_speed,
+           props.room_left + props.room_right, props.room_front + props.room_back,
+           props.room_ceiling + props.room_floor,
+           props.room_left, props.room_back, props.room_floor,
+           props.room_left + 0.0, props.room_back + props.radiation_distance, props.room_floor + 0.0]
+    for f, t60, _ratio in decay_and_level(props, 1.0):
+        absorbed = sum(a * props._octave_interp(props.SURFACE_ALPHA[s], f) for s, a in areas.items())
+        mean = absorbed / surface
+        out += [t60, surface * mean / max(1e-6, 1.0 - mean), scatter_at(props, f)]
+    out[0] = float(len(out))
+    return out
 
 
 def first_reflection(props):
@@ -349,12 +401,12 @@ def modal_ir(props, sr, source_x=0.0, source_z=0.0, channels=2, q_low=1.0):
     t = np.arange(n) / float(sr)
     ir = np.zeros((n, channels))
     for f, a, t60 in modes:
-        env = a * np.exp(-6.907755 * t / max(t60, 1e-3))
+        env = a * _xexp(-6.907755 * t / max(t60, 1e-3))
         for ci in range(channels):
             # A half-wavelength apart at these frequencies is nothing, so the
             # two ears see the same modal field -- correct, and audibly so:
             # room bass is mono.
-            ir[:, ci] += env * np.cos(2.0 * math.pi * f * t)
+            ir[:, ci] += env * _xcos(2.0 * math.pi * f * t)
     # The spectrum is MEASURED below, never multiplied: reading it is free of
     # the wrap that shaping it caused.
     spec = np.fft.rfft(ir, axis=0)
@@ -373,7 +425,7 @@ def modal_ir(props, sr, source_x=0.0, source_z=0.0, channels=2, q_low=1.0):
         # from the sidecar, as the tail is. This was q=1 whatever the render
         # measured, so the modes did not follow the parts that fed them.
         target = decay_and_level(props, q_low)[0][2]
-        power = float((np.abs(spec[band, :]) ** 2).mean())
+        power = float((_xabs(spec[band, :]) ** 2).mean())
         if power > 0.0:
             # No 1/sqrt(n): convolution multiplies the spectrum by H, so the
             # mean of |H|^2 across the band IS the mean-square gain. Including
@@ -473,7 +525,7 @@ def plate_ir(sr, t500=PLATE_T500, channels=2, seed=0):
         if lo >= hi:
             continue
         sos = butter(4, [lo, hi], btype='band', fs=sr, output='sos')
-        env = 10.0 ** (-3.0 * t / plate_t60(f, t500))
+        env = _xpow(10.0, -3.0 * t / plate_t60(f, t500))
         for c in range(channels):
             ir[:, c] += sosfiltfilt(sos, rng.standard_normal(n)) * env
     k = max(1, int(0.0005 * sr))
@@ -517,6 +569,29 @@ def device_ir(kind, room_ir, sr, tail_time, delay_fb, seed):
         fb = delay_fb if delay_fb is not None else {'delay': 40, 'pan_delay': 32}[kind]
         ir = echo_ir(sr, fb, kind == 'pan_delay', ch)
     return ir * math.sqrt(_octave_energy(room_ir, sr) / max(_octave_energy(ir, sr), 1e-30))
+
+
+def device_spec(sr, t500=PLATE_T500):
+    """A device's tail's fixed parts, for nvlive's own drawing (native/
+    roomtail.cpp): the plate's length, then each of its octaves (T60, its
+    band-pass as second-order sections and their sosfilt_zi), then
+    _octave_energy's band-passes the same way."""
+    from scipy.signal import butter, sosfilt_zi
+    out = [0.0, float(int(sr * min(10.0, 1.2 * max(plate_t60(f, t500) for f in PLATE_OCTAVES))))]
+
+    def bands(fs_, t60=None):
+        got = []
+        for f in fs_:
+            lo, hi = f / math.sqrt(2.0), min(f * math.sqrt(2.0), 0.45 * sr)
+            if lo >= hi:
+                continue
+            sos = butter(4, [lo, hi], btype='band', fs=sr, output='sos')
+            got.append(([plate_t60(f, t500)] if t60 else []) + [float(len(sos))]
+                       + [float(v) for v in sos.ravel()] + [float(v) for v in sosfilt_zi(sos).ravel()])
+        return [float(len(got))] + [v for g in got for v in g]
+    out += bands(PLATE_OCTAVES, True) + bands((125, 250, 500, 1000, 2000))
+    out[0] = float(len(out))
+    return out
 
 
 def _octave_energy(ir, sr):

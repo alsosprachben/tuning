@@ -74,7 +74,10 @@ struct Host {
     std::string port, room, program_name, tuner;
     // the globals: master dB, headroom dB, limiter, bend range, mod depth,
     // aftertouch dB, the GPU (1 on), the room's tail (1 on)
-    double g[8];
+    double g[9];
+    // ...and THE ROOM (live's global 'room': live.ROOM_NAMES the export
+    // carries, g[8] the index of the one now; a step asks the builder for it)
+    std::vector<std::string> rooms;
     bool has_gpu = false, has_room = false;
     std::function<void(int, double)> set_global;                  // posted by the panel itself
     std::vector<std::array<int, 7>> routes;                        // the panel's copy (nv_rt_add's seven)
@@ -231,12 +234,13 @@ struct EfxView {
 static const char STOP_DIGITS[] = "123456789", STOP_SHIFTED[] = "!@#$%^&*(";
 static const int STOP_PREFIX = '`';
 
-static const char *GLOBAL_NAMES[8] = {"master", "headroom", "limiter", "bend range", "mod depth", "aftertouch",
-                                      "gpu", "room tail"};
-static const char *GLOBAL_UNITS[8] = {"dB", "dB", "", "st", "cents", "dB", "onoff", "onoff"};
-static const double GLOBAL_RANGE[8][3] = {{-60.0, 0.0, 0.5}, {0.0, 24.0, 0.5}, {0.10, 1.00, 0.02},
-                                          {0.0, 24.0, 0.5}, {0.0, 200.0, 5.0}, {0.0, 24.0, 0.5},
-                                          {0.0, 1.0, 1.0}, {0.0, 1.0, 1.0}};
+static const int NGLOBALS = 9;
+static const char *GLOBAL_NAMES[NGLOBALS] = {"master", "headroom", "limiter", "bend range", "mod depth", "aftertouch",
+                                             "gpu", "room tail", "room"};
+static const char *GLOBAL_UNITS[NGLOBALS] = {"dB", "dB", "", "st", "cents", "dB", "onoff", "onoff", "room"};
+static const double GLOBAL_RANGE[NGLOBALS][3] = {{-60.0, 0.0, 0.5}, {0.0, 24.0, 0.5}, {0.10, 1.00, 0.02},
+                                                 {0.0, 24.0, 0.5}, {0.0, 200.0, 5.0}, {0.0, 24.0, 0.5},
+                                                 {0.0, 1.0, 1.0}, {0.0, 1.0, 1.0}, {0.0, 0.0, 1.0}};
 
 // live.CONTROLS: the destinations, in the panel's order, (key, label)
 static const std::pair<int, const char *> CONTROLS[] = {
@@ -468,6 +472,10 @@ struct Panel {
         double v = H.g[i];
         if (!strcmp(GLOBAL_UNITS[i], "onoff"))
             return v >= 0.5 ? "on" : "off";
+        if (!strcmp(GLOBAL_UNITS[i], "room")) {
+            int k = (int)v;
+            return k >= 0 && k < (int)H.rooms.size() ? H.rooms[k] : "-";
+        }
         if (i == 2)
             snprintf(b, sizeof b, "%.2f", v);
         else if (i == 4)
@@ -512,14 +520,16 @@ struct Panel {
         // the globals
         if (pane == 0 || T.h > 30) {
             rule("GLOBALS", pane == 0, "←→ -+ adjust");
-            int half = 4;
+            int half = (NGLOBALS + 1) / 2;
             for (int r = 0; r < half; r++) {
                 std::string row;
                 for (int c = 0; c < 2; c++) {
                     int i = r + c * half;
+                    if (i >= NGLOBALS)
+                        continue;
                     bool here = pane == 0 && grow == i;
-                    bool na = (i == 6 && !H.has_gpu) || (i == 7 && !H.has_room);
-                    double lo = GLOBAL_RANGE[i][0], hi = GLOBAL_RANGE[i][1];
+                    bool na = (i == 6 && !H.has_gpu) || (i == 7 && !H.has_room) || (i == 8 && H.rooms.empty());
+                    double lo = GLOBAL_RANGE[i][0], hi = i == 8 ? (double)H.rooms.size() - 1.0 : GLOBAL_RANGE[i][1];
                     snprintf(b, sizeof b, "%-11s", GLOBAL_NAMES[i]);
                     std::string cell = std::string(here ? C("accent") + " ▸ \x1b[1m" : "   ") + "\x1b[0m"
                                        + (here ? C("accent") + "\x1b[1m" : C("label")) + b + "\x1b[0m";
@@ -1324,12 +1334,16 @@ struct Panel {
         if (pane != 0)
             return;
         int i = grow;
-        if ((i == 6 && !H.has_gpu) || (i == 7 && !H.has_room)) {
-            say(i == 6 ? "gpu: not available (--gpu at start)" : "room tail: the export has none");
+        if ((i == 6 && !H.has_gpu) || (i == 7 && !H.has_room) || (i == 8 && H.rooms.empty())) {
+            say(i == 6 ? "gpu: not available (--gpu at start)" : i == 7 ? "room tail: the export has none"
+                                                                       : "room: the export carries no rooms");
             return;
         }
-        double v = H.g[i] + delta * GLOBAL_RANGE[i][2] * (big ? 5 : 1);
-        v = std::max(GLOBAL_RANGE[i][0], std::min(GLOBAL_RANGE[i][1], v));
+        const double hi = i == 8 ? (double)H.rooms.size() - 1.0 : GLOBAL_RANGE[i][1];
+        double v = H.g[i] + delta * GLOBAL_RANGE[i][2] * (big && i != 8 ? 5 : 1);
+        v = std::max(GLOBAL_RANGE[i][0], std::min(hi, v));
+        if (i == 8 && v != H.g[i])
+            say("room: " + H.rooms[(int)v] + " -- every patch built again in it, the tail crossfaded");
         if (i == 2)
             v = std::round(v * 100.0) / 100.0;
         H.g[i] = v;
@@ -1362,7 +1376,7 @@ struct Panel {
                         crow = std::max(0, crow - 1);
                 } else if (c == 1001 || c == 'j') {
                     if (pane == 0)
-                        grow = std::min(7, grow + 1);
+                        grow = std::min(NGLOBALS - 1, grow + 1);
                     else
                         crow = std::min(std::max(0, (int)H.routes.size() - 1), crow + 1);
                 } else if (c == 1003 || c == 'h' || c == '-' || c == '_') {

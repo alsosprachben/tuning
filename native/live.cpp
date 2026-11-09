@@ -852,6 +852,7 @@ struct Cache {
     double scale, full, residual, beta, ring_floor, ring_max, knee, ln10_20, xdec, SR;
     long long blk;
     std::map<std::tuple<int, int, int>, Template> tm;
+    long nseq = 0;                      // (the templates built so far: each one's seq)
     bool drums = false;                 // a drum part: the program is its set (kit's tables)
     int var = 0;                        // its variation key (live.Patch.variation: map x 128 + bank), 0 none
 
@@ -908,6 +909,9 @@ struct Cache {
         }
         T.P = (long)P;
         T.vel = vel;
+        for (int q = 0; q < 27; q++)
+            T.room_q[q] = out[4 + q];
+        T.seq = nseq++;
         if (!std::isnan(mft[10])) {         // a Moog note: its row's key and valve (t["FT"])
             T.moog = true;
             T.ft_f0 = (double)(float)mft[10];  // (prepare's FT table is float32)
@@ -1475,6 +1479,21 @@ long nv_tcache_warm(void *h, int program, int lo, int hi, int nb, const int *spe
                 }
             }
     return n;
+}
+
+// live._room_band_q's part of a cache: every template's room_q (27 each:
+// band, Q, energy), in the order they were built, into out (cap
+// templates); how many there are
+long nv_tcache_room_q(void *h, double *out, long cap)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    std::vector<const nv::live::Template *> ts;
+    for (const auto &kv : C->tm)
+        ts.push_back(&kv.second);
+    std::sort(ts.begin(), ts.end(), [](const nv::live::Template *a, const nv::live::Template *b) { return a->seq < b->seq; });
+    for (long i = 0; i < (long)ts.size() && i < cap; i++)
+        memcpy(out + 27 * i, ts[i]->room_q, sizeof(double) * 27);
+    return (long)ts.size();
 }
 
 // Patch.get's template, or NULL: its P, dur, vel, a one-shot, its rows'

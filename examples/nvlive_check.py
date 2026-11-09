@@ -103,7 +103,8 @@ def main(argv):
                           + (["--tuner=" + opt["tuner"]] if opt.get("tuner") else [])
                           + (["--eastern=" + opt["eastern"]] if opt.get("eastern") else [])
                           + (["--programs"] if "programs" in opt else [])
-                          + (["--bank=" + opt["bank"]] if opt.get("bank") else []),
+                          + (["--bank=" + opt["bank"]] if opt.get("bank") else [])
+                          + (["--room-at=" + opt["room-at"]] if opt.get("room-at") else []),
                           stderr=subprocess.DEVNULL)
     raw = open(out, "rb").read()          # float32 stereo after a 44-byte header
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
@@ -146,9 +147,18 @@ def main(argv):
         import regsync
         regsync.sync(lv, lv.parts[0])
     progs = "programs" in opt
-    if progs:
-        import patchsync
-        patchsync.sync(lv)
+    # --room-at=S:NAME[,S:NAME...]: live.set_room at the block S falls in,
+    # before its events -- its builder in step (_room_switch, then the parts'
+    # patches built in the new room and their swaps posted: patchsync's)
+    room_at = {}
+    for it in (opt.get("room-at") or "").split(","):
+        if ":" in it:
+            s_, nm = it.split(":", 1)
+            room_at[int(float(s_) * 48000) // 128] = nm
+    # the builder in step always: a reset (GS Reset, GM System On) asks every
+    # part for program 0, as a program change does
+    import patchsync
+    patchsync.sync(lv)
     # --messenger-out: a Messenger set as live.open_messenger would, its queue
     # kept with each message's block, against nvlive's --messenger-log
     sent, blk = [], [0]
@@ -166,6 +176,11 @@ def main(argv):
     M = mido.Message
     for b in range(nb):
         blk[0] = b
+        if b in room_at:
+            lv.set_room(room_at[b])
+            lv._room_switch()
+            for _part, _p in patchsync.build(lv):
+                instant_scan(lv, _p)
         while e < len(evs) and int(evs[e][0] * 48000) // 128 <= b:
             t, ty, ch, a, v = evs[e]
             if ty == 0:
@@ -188,6 +203,8 @@ def main(argv):
         if progs:
             for _part, _p in patchsync.build(lv):
                 instant_scan(lv, _p)
+        else:
+            lv.patch_reqs.clear()       # (a reset's program 0: nvlive follows none without --programs)
     py = np.concatenate(dry) if dry else np.zeros((0, 2), np.float32)
     if py.shape != nv.shape:
         print("%s: length %r vs %r" % (os.path.basename(args[0]), py.shape, nv.shape))

@@ -8647,6 +8647,23 @@ struct Part {
     // output when the channels' CC91s differ, else the dry mix times their
     // one distance -- and the soft limiter's knee
     std::unique_ptr<Room> room;
+    // A ROOM SWITCHED TO (live._room_install): the old tail crossfaded out
+    // over room_xf_n blocks (ROOM_XFADE_S), the new one in; the old freed off
+    // the audio thread (room_trash: the builder's, live's _room_trash)
+    std::unique_ptr<Room> room_prev;
+    int room_xf = 0, room_xf_n = 1;
+    std::vector<std::unique_ptr<Room>> room_trash;
+    std::mutex room_mu;                             // (room_trash: the audio thread's and the builder's)
+    void room_install(Room *r, long long frames)
+    {
+        std::lock_guard<std::mutex> lk(room_mu);
+        if (room_prev)
+            room_trash.push_back(std::move(room_prev));
+        room_prev = std::move(room);
+        room.reset(r);
+        room_xf_n = std::max(1, (int)(0.15 * rate / (double)frames));
+        room_xf = room_xf_n;
+    }
     double thresh = 0.70;                           // live.thresh
     std::vector<float> oSL, oSR, oA, oB, oWL, oWR;
 
@@ -8667,7 +8684,8 @@ struct Part {
         bool uniform = n0 >= S.odd_until;      // (a voice standing apart: the bus runs)
         for (int c = 1; c < 256 && uniform; c++)
             uniform = S.send[c] == S.send[0];
-        bool snd = room && room_on && !uniform;
+        const bool any_room = (room || room_prev) && room_on;
+        bool snd = any_room && !uniform;
         oSL.assign(frames, 0.0f);
         oSR.assign(frames, 0.0f);
         render(n0, frames, L, R, snd ? oSL.data() : nullptr, snd ? oSR.data() : nullptr, sv, sx, sd, blk,
@@ -8709,7 +8727,7 @@ struct Part {
                 }
             }
         }
-        if (room && room_on) {
+        if (any_room) {
             const float *sl = L, *sr = R;
             if (snd) {
                 sl = oSL.data();                    // (times the master volume's 1.0)
@@ -8725,9 +8743,40 @@ struct Part {
                 sl = oA.data();
                 sr = oB.data();
             }
-            oWL.resize(frames);
-            oWR.resize(frames);
-            room->process(sl, sr, oWL.data(), oWR.data());
+            // live._room_add: the new tail, faded in while a switch's
+            // crossfade runs, and the old one faded out -- float32 as numpy's
+            oWL.assign(frames, 0.0f);
+            oWR.assign(frames, 0.0f);
+            oA.resize(frames);
+            oB.resize(frames);
+            const float xf = (float)room_xf, xn = (float)room_xf_n;
+            if (room) {
+                room->process(sl, sr, oA.data(), oB.data());
+                if (room_xf > 0)
+                    for (long k = 0; k < frames; k++) {
+                        const float g = 1.0f - (xf - (float)k / (float)frames) / xn;
+                        oA[k] = oA[k] * g;
+                        oB[k] = oB[k] * g;
+                    }
+                for (long k = 0; k < frames; k++) {
+                    oWL[k] = oWL[k] + oA[k];
+                    oWR[k] = oWR[k] + oB[k];
+                }
+            }
+            if (room_prev) {
+                room_prev->process(sl, sr, oA.data(), oB.data());
+                for (long k = 0; k < frames; k++) {
+                    const float g = (xf - (float)k / (float)frames) / xn;
+                    oWL[k] = oWL[k] + oA[k] * g;
+                    oWR[k] = oWR[k] + oB[k] * g;
+                }
+                if (--room_xf <= 0) {
+                    std::lock_guard<std::mutex> lk(room_mu);
+                    room_trash.push_back(std::move(room_prev));
+                }
+            } else if (room_xf > 0) {
+                room_xf--;
+            }
             for (long k = 0; k < frames; k++) {
                 L[k] = L[k] + oWL[k];
                 R[k] = R[k] + oWR[k];
@@ -9804,6 +9853,29 @@ void nv_part_gpu_ms(void *h, double *out)
 void nv_part_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames)
 {
     ((nv::slab::Part *)h)->room.reset(new nv::slab::Room(cn, cp, cf, ir, n, mir, m, frames));
+}
+
+// A ROOM's TAIL made (off the audio thread: its convolvers and their thread),
+// NULL none; installed on the audio thread between two blocks (nv_part_room_set:
+// live._room_install's crossfade), the old freed later off it (nv_part_room_reap)
+void *nv_room_new(void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames)
+{
+    return n > 0 ? new nv::slab::Room(cn, cp, cf, ir, n, mir, m, frames) : nullptr;
+}
+
+void nv_part_room_set(void *h, void *room, long long frames)
+{
+    ((nv::slab::Part *)h)->room_install((nv::slab::Room *)room, frames);
+}
+
+void nv_part_room_reap(void *h)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    std::vector<std::unique_ptr<nv::slab::Room>> gone;
+    {
+        std::lock_guard<std::mutex> lk(P->room_mu);
+        gone.swap(P->room_trash);
+    }
 }
 
 // the soft limiter's knee (live.thresh), the pitch wheel's range (live.bend_range)

@@ -14,6 +14,11 @@ namespace live {
 // 27; F4_NOTE gb gt gc vdl; I8 non noff; I4 gr cr br pl fx mk), hrel, fa_at
 struct Template {
     long P = 0;
+    // ITS ROOM's Q (prepare's room_q: each octave's band, Q and direct energy)
+    // and when it was built (live's Patch.templates is a dict: its order is
+    // the build's), what the room's tail is drawn at (live._room_band_q)
+    double room_q[27] = {};
+    long seq = 0;
     std::vector<double> f8[6];
     std::vector<float> f4[27], f4n[4], hrel;
     std::vector<long long> i8[2];

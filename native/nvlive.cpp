@@ -171,6 +171,14 @@ int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, 
 int nv_raga_info(const char *spec, double sa_hz, double *out, int *have, int *sa_note, double *sw, int *nsw);
 void nv_tcache_set_raga(void *h, int sa, const double *sw, int nsw);
 void nv_part_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
+void *nv_room_new(void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
+void nv_part_room_set(void *h, void *room, long long frames);
+void nv_part_room_reap(void *h);
+long nv_tcache_room_q(void *h, double *out, long cap);
+long nv_room_tail_ir(const double *sp, const double *bq, int has_bq, int sr, int seed, double **out);
+long nv_room_tail_modes(const double *sp, const double *bq, int has_bq, int sr, double **out, int *nmodes);
+long nv_room_tail_device(const double *sp, const double *dv, const double *bq, int has_bq, int sr, double **out);
+void nv_room_tail_free(double *p);
 void nv_part_post(void *h, double thresh, double bend_range, double mod_cents);
 void nv_part_output(void *h, long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd,
                   long long blk, double master_gain);
@@ -213,6 +221,20 @@ enum { K_SR, K_BLK, K_CHUNK, K_MASTER, K_RING_FLOOR, K_RING_MAX, K_XDEC, K_REG_S
        K_BEND_SEMIS, K_GM_VOL, K_GM_EXPR, K_GSPLACE, K_MAPKITS = K_GSPLACE + 13, K_EFX = K_MAPKITS + 33 };
 
 struct Export {
+    // LROOMS: every room live can switch to -- the class records' byte
+    // ranges a room sets, how many classes, the device tails' filters, and
+    // each room's name, whether it reflects, its tail's spec and (where it
+    // reflects) every class's ranges in it
+    struct RoomData {
+        std::string name;
+        bool reflect = true;
+        std::vector<double> spec;
+        std::vector<uint8_t> fields;
+    };
+    std::vector<std::pair<int, int>> room_rng;
+    int room_ncls = 0;
+    std::vector<double> room_dev;
+    std::vector<RoomData> rooms;
     std::vector<double> k, freq, trim, pan;
     std::vector<std::vector<unsigned char>> classes;
     std::vector<int> cmap, kind, fin;     // cmap: the programs' keys, then the drum sets'
@@ -574,7 +596,58 @@ static bool read_export(const char *path, Export &E)
                 }
                 char r6[6];
                 int nr = 0;
-                if (ok && fread(r6, 1, 6, f) == 6 && !memcmp(r6, "LROUTE", 6) && fread(&nr, 4, 1, f) == 1)
+                bool got6 = ok && fread(r6, 1, 6, f) == 6;
+                if (got6 && !memcmp(r6, "LROOMS", 6)) {
+                    long long rl = 0;
+                    std::vector<uint8_t> rb;
+                    if (fread(&rl, 8, 1, f) == 1 && rl > 0) {
+                        rb.resize((size_t)rl);
+                        if (fread(rb.data(), 1, rb.size(), f) != rb.size())
+                            rb.clear();
+                    }
+                    size_t at = 0;
+                    auto i32 = [&]() { int v = 0; if (at + 4 <= rb.size()) memcpy(&v, &rb[at], 4); at += 4; return v; };
+                    auto f64s = [&](int n) {
+                        std::vector<double> v(n > 0 ? n : 0);
+                        if (n > 0 && at + 8 * (size_t)n <= rb.size())
+                            memcpy(v.data(), &rb[at], 8 * (size_t)n);
+                        at += 8 * (size_t)(n > 0 ? n : 0);
+                        return v;
+                    };
+                    if (!rb.empty()) {
+                        int nf = i32(), per = 0;
+                        for (int q = 0; q < nf; q++) {
+                            int o = i32(), z = i32();
+                            E.room_rng.push_back(std::make_pair(o, z));
+                            per += z;
+                        }
+                        E.room_ncls = i32();
+                        E.room_dev = f64s(i32());
+                        int nrm = i32();
+                        for (int q = 0; q < nrm && at <= rb.size(); q++) {
+                            Export::RoomData rd;
+                            int ln = i32();
+                            if (ln > 0 && at + ln <= rb.size())
+                                rd.name.assign((const char *)&rb[at], ln);
+                            at += ln > 0 ? ln : 0;
+                            rd.reflect = i32() != 0;
+                            rd.spec = f64s(i32());
+                            if (rd.reflect) {
+                                size_t nb = (size_t)per * E.room_ncls;
+                                if (at + nb <= rb.size())
+                                    rd.fields.assign(rb.begin() + at, rb.begin() + at + nb);
+                                at += nb;
+                            }
+                            E.rooms.push_back(std::move(rd));
+                        }
+                        if (at != rb.size()) {
+                            fprintf(stderr, "nvlive: the export's rooms are not this build's: no room switching\n");
+                            E.rooms.clear();
+                        }
+                    }
+                    got6 = fread(r6, 1, 6, f) == 6;
+                }
+                if (got6 && !memcmp(r6, "LROUTE", 6) && fread(&nr, 4, 1, f) == 1)
                     for (int q = 0; q < nr; q++) {
                         std::array<int, 7> a;
                         if (fread(a.data(), 4, 7, f) != 7)
@@ -1151,10 +1224,15 @@ int main(int argc, char **argv)
     bool dry = false;
     for (int i = 1; i < argc; i++)
         dry = dry || !strcmp(argv[i], "--dry");
-    if (!dry && E.has_room && !E.ir.empty()) {
+    void *conv_cn = nullptr, *conv_cp = nullptr, *conv_cf = nullptr;     // (live's convolver: a room switched to's too)
+    if (E.has_room && !E.conv_lib.empty()) {
         void *ch = dlopen(E.conv_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
-        void *cn = ch ? dlsym(ch, "conv_new") : nullptr, *cp = ch ? dlsym(ch, "conv_process") : nullptr;
-        void *cf = ch ? dlsym(ch, "conv_free") : nullptr;
+        conv_cn = ch ? dlsym(ch, "conv_new") : nullptr;
+        conv_cp = ch ? dlsym(ch, "conv_process") : nullptr;
+        conv_cf = ch ? dlsym(ch, "conv_free") : nullptr;
+    }
+    if (!dry && E.has_room && !E.ir.empty()) {
+        void *cn = conv_cn, *cp = conv_cp, *cf = conv_cf;
         if (cn && cp && cf) {
             nv_part_room(part, cn, cp, cf, E.ir.data(), (long)E.ir.size() / 2, E.mir.empty() ? nullptr : E.mir.data(),
                        (long)E.mir.size() / 2, (int)BLK);
@@ -1614,6 +1692,144 @@ int main(int argc, char **argv)
         rq.clear();
         return n;
     };
+    // THE ROOM (live.set_room, _room_switch): any the export carries (LROOMS).
+    // On the builder (in step under --test): the new room's tail drawn at the
+    // stage's directivity from the templates the parts have now
+    // (_room_band_q: native/roomtail.cpp, as roomtail.py draws it); the room
+    // put on every class (its walls, its voice snapshot's room: dry, the
+    // reflections off and the classes as they were); every built patch let go
+    // (live's _PATCHES.clear() -- their notes keep the templates they were
+    // struck from, so the caches are kept, not freed) and each part's built
+    // again in it and swapped in; the tail crossfaded in after the swaps'
+    // block's events (_room_install)
+    std::string room_now = E.room.empty() ? "hall" : E.room;
+    std::vector<void *> cache_grave;
+    auto room_band_q = [&](double *bq) {
+        double acc[9][2] = {};
+        bool seen[9] = {};
+        std::vector<double> rq;
+        for (const PartAt &pa : pats) {
+            void *c = nullptr;
+            {
+                std::lock_guard<std::mutex> lk(cmu);
+                auto it = caches.find(256 * (pa.drums ? 0 : pa.posted_var) + (pa.drums ? 128 : 0) + (pa.posted & 127));
+                c = it != caches.end() ? it->second : nullptr;
+            }
+            if (!c)
+                continue;
+            long n = nv_tcache_room_q(c, nullptr, 0);
+            rq.resize(27 * (size_t)n);
+            nv_tcache_room_q(c, rq.data(), n);
+            for (long t_ = 0; t_ < n; t_++)
+                for (int i = 0; i < 9; i++) {
+                    const double q = rq[27 * t_ + 3 * i + 1], e = rq[27 * t_ + 3 * i + 2];
+                    if (e > 0.0) {
+                        seen[i] = true;
+                        acc[i][0] += e;
+                        acc[i][1] += e / std::max(q, 1e-6);
+                    }
+                }
+        }
+        int has = 0;
+        for (int i = 0; i < 9; i++) {
+            bq[i] = seen[i] && acc[i][1] > 0.0 ? acc[i][0] / acc[i][1] : NAN;
+            has = has || !std::isnan(bq[i]);
+        }
+        return has;
+    };
+    // its tail (live.room_irs, build_room_tail): the diffuse field and its
+    // modes, or a device's; NULL none (dry, outdoors, --dry, no convolver)
+    auto room_tail = [&](const Export::RoomData &rd, const double *bq, int has) -> void * {
+        if (dry || !rd.reflect || rd.spec.empty() || !(conv_cn && conv_cp && conv_cf))
+            return nullptr;
+        const int kind = (int)rd.spec[1];
+        if (kind < 0)
+            return nullptr;
+        double *ir = nullptr, *mir = nullptr;
+        long n = kind == 0 ? nv_room_tail_ir(rd.spec.data(), bq, has, (int)SR, 0, &ir)
+                           : nv_room_tail_device(rd.spec.data(), E.room_dev.data(), bq, has, (int)SR, &ir);
+        if (n <= 0)
+            return nullptr;
+        std::vector<float> f(2 * (size_t)n), fm;
+        for (long q = 0; q < 2 * n; q++)
+            f[q] = (float)ir[q];
+        nv_room_tail_free(ir);
+        long m = 0;
+        if (kind == 0) {
+            int nm = 0;
+            m = nv_room_tail_modes(rd.spec.data(), bq, has, (int)SR, &mir, &nm);
+            if (nm > 0 && rd.spec[6] > 25.0 && m > 0) {         // (use_modes: some, and Schroeder over 25 Hz)
+                fm.resize(2 * (size_t)m);
+                for (long q = 0; q < 2 * m; q++)
+                    fm[q] = (float)mir[q];
+            } else {
+                m = 0;
+            }
+            nv_room_tail_free(mir);
+        }
+        return nv_room_new(conv_cn, conv_cp, conv_cf, f.data(), n, m ? fm.data() : nullptr, m, (int)BLK);
+    };
+    // the switch: false if the room is not one the export has or the room
+    // already; *tail the tail to install (NULL none); each part's new patch
+    // handed to give (in step: swap now; playing: the audio thread's)
+    auto room_switch = [&](const std::string &name, void **tail,
+                           const std::function<void(size_t, int, bool, int, void *)> &give) -> bool {
+        const Export::RoomData *rd = nullptr;
+        for (const auto &r : E.rooms)
+            if (r.name == name)
+                rd = &r;
+        if (!rd || name == room_now)
+            return false;
+        double bq[9];
+        int has = room_band_q(bq);
+        *tail = room_tail(*rd, bq, has);
+        if (rd->reflect && E.room_ncls == (int)E.classes.size()) {
+            int per = 0;
+            for (const auto &rg : E.room_rng)
+                per += rg.second;
+            for (int c = 0; c < E.room_ncls; c++) {
+                uint8_t *dst = E.classes[c].data();
+                const uint8_t *src = rd->fields.data() + (size_t)per * c;
+                for (const auto &rg : E.room_rng) {
+                    memcpy(dst + rg.first, src, rg.second);
+                    src += rg.second;
+                }
+            }
+        }
+        t.reflect = rd->reflect;
+        room_now = name;
+        {
+            std::lock_guard<std::mutex> lk(cmu);
+            for (auto &kv : caches)
+                cache_grave.push_back(kv.second);
+            caches.clear();
+        }
+        for (size_t i = 0; i < pats.size(); i++) {
+            const PartAt &pa = pats[i];
+            void *c = build(pa.posted, pa.drums, pa.drums ? 0 : pa.posted_var);
+            if (c)
+                give(i, pa.posted, pa.drums, pa.drums ? 0 : pa.posted_var, c);
+        }
+        return true;
+    };
+    // --room-at=S:NAME[,S:NAME...] (--test): a room switched to at the block
+    // second S falls in, before its events -- live.set_room's, its builder in step
+    std::vector<std::pair<long long, std::string>> room_at;
+    {
+        std::string ra = opt(argc, argv, "room-at", "");
+        size_t a = 0;
+        while (a < ra.size()) {
+            size_t b = ra.find(',', a);
+            std::string it = ra.substr(a, b == std::string::npos ? std::string::npos : b - a);
+            size_t c = it.find(':');
+            if (c != std::string::npos)
+                room_at.push_back(std::make_pair((long long)(atof(it.substr(0, c).c_str()) * SR) / BLK,
+                                                 it.substr(c + 1)));
+            if (b == std::string::npos)
+                break;
+            a = b + 1;
+        }
+    }
     // --programs (--test): the file's program changes followed, as live's
     // builder in step (examples/patchsync.py); else, as before, not
     bool follow = false;
@@ -1674,6 +1890,22 @@ int main(int argc, char **argv)
                 auto t0 = std::chrono::steady_clock::now();
                 long long n0 = b * BLK;
                 g_msgr_blk = b;                         // (--messenger-log's block)
+                void *room_new = nullptr;
+                bool room_go = false;
+                const std::string *room_want = nullptr;     // (two in a block: the last, as live's queue)
+                for (const auto &ra : room_at)
+                    if (ra.first == b)
+                        room_want = &ra.second;
+                if (room_want) {
+                    if (room_switch(*room_want, &room_new, [&](size_t i_, int p_, bool d_, int v_, void *c_) {
+                            swap(i_, p_, d_, v_, c_);
+                        })) {
+                        room_go = true;
+                        fprintf(stderr, "nvlive: room %s at block %lld\n", room_want->c_str(), b);
+                    } else {
+                        fprintf(stderr, "nvlive: room %s: not this export's, or the room already\n", room_want->c_str());
+                    }
+                }
                 while (e < ne) {
                     int iv[4];
                     double et;
@@ -1697,6 +1929,9 @@ int main(int argc, char **argv)
                     e++;
                 }
                 nv_part_block(part, n0, BLK);
+                if (room_go)                            // (the tail installed after the block's events, as live's post)
+                    nv_part_room_set(part, room_new, BLK);
+                nv_part_room_reap(part);
                 if (follow)
                     reset_asked();
                 else
@@ -1841,6 +2076,16 @@ int main(int argc, char **argv)
     std::condition_variable bcv;
     std::vector<Req> breq;                      // asked, not yet built
     std::vector<std::pair<Req, void *>> bdone;  // built (nullptr: not native here)
+    // ...a ROOM asked for (the panel's), and the tail its switch drew, for
+    // the audio thread to install ahead of the parts' new patches (live's
+    // _room_install, posted before the swaps); the room now, by its index
+    std::string room_req;
+    void *room_ready = nullptr;
+    bool room_ready_go = false;
+    std::atomic<int> room_idx(-1);
+    for (size_t q = 0; q < E.rooms.size(); q++)
+        if (E.rooms[q].name == room_now)
+            room_idx = (int)q;
     std::vector<std::string> notes;             // what the builder has to say
     auto note = [&](const std::string &m) {
         if (nopanel) {
@@ -1855,8 +2100,38 @@ int main(int argc, char **argv)
             std::vector<Req> rq;
             {
                 std::unique_lock<std::mutex> lk(bmu);
-                bcv.wait_for(lk, std::chrono::milliseconds(100), [&] { return !breq.empty() || g_stop; });
+                bcv.wait_for(lk, std::chrono::milliseconds(100),
+                             [&] { return !breq.empty() || !room_req.empty() || g_stop; });
                 rq.swap(breq);
+            }
+            nv_part_room_reap(part);                    // (an old tail, let go off the audio thread)
+            std::string rname;
+            {
+                std::lock_guard<std::mutex> lk(bmu);
+                rname.swap(room_req);
+            }
+            if (!rname.empty()) {                       // A ROOM (live._room_switch, on its patch worker)
+                auto t0 = std::chrono::steady_clock::now();
+                void *tl = nullptr;
+                int nb_ = 0;
+                bool ok = room_switch(rname, &tl, [&](size_t i_, int p_, bool d_, int v_, void *c_) {
+                    std::lock_guard<std::mutex> lk(bmu);
+                    bdone.push_back(std::make_pair(Req{i_, p_, d_, v_}, c_));
+                    nb_++;
+                });
+                if (ok) {
+                    {
+                        std::lock_guard<std::mutex> lk(bmu);
+                        room_ready = tl;
+                        room_ready_go = true;
+                    }
+                    for (size_t q = 0; q < E.rooms.size(); q++)
+                        if (E.rooms[q].name == rname)
+                            room_idx = (int)q;
+                    note("room " + rname + ": " + std::to_string(nb_) + " patch(es) built in "
+                         + std::to_string((int)std::chrono::duration<double, std::milli>(
+                                              std::chrono::steady_clock::now() - t0).count()) + " ms");
+                }
             }
             for (size_t q = 0; q < rq.size() && !g_stop; q++) {
                 bool later = false;
@@ -1955,6 +2230,11 @@ int main(int argc, char **argv)
                         breq.insert(breq.end(), reqs.begin(), reqs.end());
                         reqs.clear();
                         bcv.notify_one();
+                    }
+                    if (room_ready_go) {        // (the room's tail first, as live's posts run)
+                        nv_part_room_set(part, room_ready, BLK);
+                        room_ready = nullptr;
+                        room_ready_go = false;
                     }
                     for (auto &d : bdone)
                         if (d.second)
@@ -2080,7 +2360,19 @@ int main(int argc, char **argv)
         H.g[5] = E.k.size() > K_PRESS_DB ? E.k[K_PRESS_DB] : 8.0;
         H.g[6] = H.has_gpu ? 1.0 : 0.0;
         H.g[7] = H.has_room ? 1.0 : 0.0;
+        for (const auto &r : E.rooms)
+            H.rooms.push_back(r.name);
+        H.g[8] = room_idx;
         H.set_global = [&](int i, double v) {
+            if (i == 8) {                               // THE ROOM: the builder's (live.set_room)
+                int k = (int)v;
+                if (k >= 0 && k < (int)E.rooms.size()) {
+                    std::lock_guard<std::mutex> lk(bmu);
+                    room_req = E.rooms[k].name;
+                }
+                bcv.notify_one();
+                return;
+            }
             post([&, i, v](long long) {
                 switch (i) {
                 case 0: master_now = pow(10.0, v / 20.0); break;     // T.master_gain
@@ -2170,8 +2462,14 @@ int main(int argc, char **argv)
             };
         // ...A PROGRAM CHANGE FROM THE KEYBOARD: its name and its stops, and
         // what the builder said
-        int shown = shown_program, shown_v = shown_var;
+        int shown = shown_program, shown_v = shown_var, shown_room = room_idx;
         H.refresh = [&]() {
+            if (room_idx != shown_room) {               // (a room switched to: its name, its global)
+                shown_room = room_idx;
+                H.g[8] = shown_room;
+                if (shown_room >= 0 && shown_room < (int)E.rooms.size())
+                    H.room = E.rooms[shown_room].name;
+            }
             int sp = shown_program, sv = sp >= 128 ? 0 : shown_var.load();
             std::string m;
             if (sp != shown || sv != shown_v) {
