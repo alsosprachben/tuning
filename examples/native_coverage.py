@@ -27,12 +27,13 @@ TASKS = [
                    "effect (x); open: parts (layers, splits: each one's channel, range, transpose, level, mute), "
                    "the tuner and Eastern tuning, the synth (Moog, Messenger) pane, scenes, presets and the "
                    "session, mod rate, threads, the metronome, the standard, the devices"),
-    ("GM1", False, "Live: the room switched while playing (live.set_room): every room in the export (LROOMS), "
-                   "its tail drawn natively at the stage's directivity (native/roomtail.cpp, bit for bit "
-                   "roomtail.py's), the templates built again in it, the tail crossfaded -- built, its checks "
-                   "pending"),
+    ("GM1", True, "Live: the room switched while playing (live.set_room): every room in the export (LROOMS), "
+                  "its tail drawn natively at the stage's directivity (native/roomtail.cpp, bit for bit "
+                  "roomtail.py's), the templates built again in it, the tail crossfaded"),
     ("GM1", False, "nvlive's host as a library (nv_host_*: the export, the builder, parts, programs, the room, "
-                   "rebuilding, tuning, the devices) beside nv_part_*, for a GUI; nvlive its terminal client"),
+                   "rebuilding, tuning, the devices) beside nv_part_*, for a GUI; nvlive its terminal client "
+                   "-- 2a-2f done (host_check: the library against live.py); 2g, the picker, the globals and "
+                   "panic, in its checks"),
     ("GM1", True, "Live: the Moog (knob-neutral templates and the slab's moog.weights; CC71-75 its knobs; "
                   "a layered voice; the MF-104M) -- not yet a unison or SYNC live"),
     ("GM1", True, "Live: the Moog Messenger both ways (live._messenger_cc, messenger_sync/_pitch): its chart "
@@ -162,11 +163,12 @@ TASKS = [
                     "timeline, compacted as _efx_event does), a flanger's feedback comb, Tremolo and Auto Pan "
                     "(Roland's waves; the Tremolo Chorus's): |H| each block on P2a's path, both ears; the "
                     "responses and controls on libm in Python too (native.xatan/xcexp/xabs/xpow/xexp)"),
-    ("SC-55", False, "Live: the rest of the insertion effect in nvlive -- the chain builder shared "
-                     "(native/efxchain.cpp), its state and each note's direct gain, the moving filters done; "
-                     "a Moog's rows under a moving filter, a tone's own insertion effect done; the copies "
-                     "as taps (tapkernel.c: written, its checks pending), a drive or cabinet, a part's bus "
-                     "(Lo-Fi), branch B, the rotor and 3D place, an OD's valve, a Keyboard Multi's copies"),
+    ("SC-55", False, "Live: the rest of the insertion effect in nvlive -- done: the chain builder shared "
+                     "(native/efxchain.cpp), its state and each note's direct gain, the moving filters, a Moog's "
+                     "rows under a moving filter, a tone's own insertion effect (an organ's too), the copies as "
+                     "taps, the rotor (Separate's two mics) and the 3D place, the drive and cabinet and an OD's "
+                     "valve, the compressor, a part's bus (Lo-Fi 1/2, compressor, limiter, enhancer, gate, "
+                     "reverb); open: a parallel type's branch B, a Keyboard Multi's copies"),
     ("SC-55", False, "Files: a streaming (windowed) nvrender for whole songs -- it holds the table whole in float64, "
                      "and a Sound Canvas song's is past memory (SHIRO's 6.4 min: 21.8M rows, ~8.7 GB; killed at the "
                      "3.5 GB cap) where Python streams every file (streamrender: its port is the work -- "
@@ -244,14 +246,14 @@ TASKS = [
 # tone's state the worst of its features' ("yes" where it has only what is
 # done: level, EQ, the moving filters, a flanger's comb, tremolo and pan)
 LIVE_EFX = (
-    ("bus", "not yet", "the part's bus (Lo-Fi, compressor, gate, reverb)"),
+    ("bus", "yes", "the part's bus (Lo-Fi, compressor, gate, reverb)"),
     ("par", "not yet", "a parallel type's branch B"),
     ("kbm", "not yet", "the Keyboard Multi's copies"),
     ("comp", "not yet", "a multi's compressor (Python's live plays none either)"),
-    ("rotary", "checks pending", "the rotor"),
-    ("pos3d", "checks pending", "the 3D place"),
-    ("od", "checks pending", "the drive and cabinet"),
-    ("copies", "checks pending", "the copies (taps)"),
+    ("rotary", "yes", "the rotor"),
+    ("pos3d", "yes", "the 3D place"),
+    ("od", "yes", "the drive and cabinet"),
+    ("copies", "yes", "the copies (taps)"),
 )
 _LIVE_RANK = {"yes": 0, "checks pending": 1, "not yet": 2}
 

@@ -7052,6 +7052,9 @@ struct Part {
             S.i8[1][q] = std::min(S.i8[1][q], n0 + (long long)S.f4[F4_rdl][q]);
         if (!orphan.empty())
             S.retiring.push_back(std::make_pair(orphan, n0));
+        for (long q : orphan)                   // (a Moog row's key-up is its pitch row's: live's)
+            if (S.i4[I4_fx][q] >= 0 && (double)n0 < S.mp_toff[S.i4[I4_fx][q]])
+                S.mp_toff[S.i4[I4_fx][q]] = (double)n0;
         down.clear();
         pedalled.clear();
         cutting.clear();

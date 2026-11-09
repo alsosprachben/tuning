@@ -343,10 +343,9 @@ int nv_host::run(int argc, char **argv)
     } else {
         // THE PANEL, on this thread
         panel::Host H;
-        auto post = [&](std::function<void(long long)> f) {
-            std::lock_guard<std::mutex> lk(pmu);
-            posted.push_back(std::move(f));
-        };
+        auto post = [&](std::function<void(long long)> f) { this->post(std::move(f)); };
+        globals_init();
+        patches_init();
         H.take = [&]() {
             std::lock_guard<std::mutex> lk(pmu);
             panel::Snap s = snap;
@@ -381,44 +380,13 @@ int nv_host::run(int argc, char **argv)
         H.port = dev;
         H.room = E.room.empty() ? "-" : E.room;
         H.reg_modes = rg0->M > 0 && !noreg ? rg0->M : 0;
-        double st[15];
-        nv_part_stats(part, st);
-        H.has_gpu = st[12] > 0.5;
-        H.has_room = st[11] > 0.5;
-        H.g[0] = 20.0 * log10(std::max(master, 1e-12));
-        H.g[1] = -20.0 * log10(std::max(E.headroom, 1e-12));
-        H.g[2] = E.k.size() > K_THRESH ? E.k[K_THRESH] : 0.70;
-        H.g[3] = E.k.size() > K_BEND_RANGE ? E.k[K_BEND_RANGE] : 2.0;
-        H.g[4] = 35.0;
-        H.g[5] = E.k.size() > K_PRESS_DB ? E.k[K_PRESS_DB] : 8.0;
-        H.g[6] = H.has_gpu ? 1.0 : 0.0;
-        H.g[7] = H.has_room ? 1.0 : 0.0;
+        H.has_gpu = gval[6] > 0.5;
+        H.has_room = gval[7] > 0.5;
+        for (int i = 0; i < 9; i++)
+            H.g[i] = gval[i];
         for (const auto &r : E.rooms)
             H.rooms.push_back(r.name);
-        H.g[8] = room_idx;
-        H.set_global = [&](int i, double v) {
-            if (i == 8) {                               // THE ROOM: the builder's (live.set_room)
-                int k = (int)v;
-                if (k >= 0 && k < (int)E.rooms.size()) {
-                    std::lock_guard<std::mutex> lk(bmu);
-                    room_req = E.rooms[k].name;
-                }
-                bcv.notify_one();
-                return;
-            }
-            post([&, i, v](long long) {
-                switch (i) {
-                case 0: master_now = pow(10.0, v / 20.0); break;     // T.master_gain
-                case 1: nv_part_set(part, 0, v); break;
-                case 2: nv_part_set(part, 2, v); break;
-                case 3: nv_part_set(part, 3, v); break;
-                case 4: nv_part_set(part, 4, v); break;
-                case 5: nv_part_set(part, 1, v); break;
-                case 6: nv_part_set(part, 5, v); break;
-                case 7: nv_part_set(part, 6, v); break;
-                }
-            });
-        };
+        H.set_global = [&](int i, double v) { set_global(i, v); };
         H.routes = E.routes;
         if (!pks.empty())
             H.routes.push_back(pedal_route);
@@ -426,7 +394,7 @@ int nv_host::run(int argc, char **argv)
             post([&, a](long long) { nv_rt_add(router, a[0], a[1], a[2], a[3], a[4], a[5], a[6]); });
         };
         H.del_route = [&](int i) { post([&, i](long long) { nv_rt_del(router, i); }); };
-        H.panic = [&]() { post([&](long long n) { nv_part_panic(part, n); }); };
+        H.panic = [&]() { panic(); };
         // AN ORGAN'S STOPS (live's panel): its ranks, drawn and put in between two blocks
         auto stops_of = [&](int sp) {
             H.stop_names.clear();
@@ -445,30 +413,14 @@ int nv_host::run(int argc, char **argv)
         stops_of(shown_program);
         // THE PICKER: every program and set, which are native, and one picked
         // asked for on the part (posted: live's change_patch, a set or not)
-        H.names.assign(256, "");
-        H.native.assign(256, 0);
-        for (int sp = 0; sp < 256; sp++) {
-            H.names[sp] = sp < 128 ? E.prog[sp].name : E.prog[sp & 127].kit;
-            bool nat = false;
-            for (int k = 0; k < 128 && !nat; k++)
-                nat = E.cmap[(sp >= 128 ? NV_K_DRUMS : 0) + 128 * (sp & 127) + k] >= 0;
-            H.native[sp] = nat && (sp >= 128 ? !H.names[sp].empty() : E.part[sp][0] != 0);
-        }
+        H.names = pnames;
+        H.native.assign(pnative.begin(), pnative.end());
         H.kit = shown_program >= 128;
         // ...the variations (VNAM), native where every key of their slots the
         // capital plays is one the engine plays too
         H.vpv = E.vpv;
         H.vnames = E.vnames;
-        H.vnative.assign(E.vpv.size(), 0);
-        for (size_t j = 0; j < E.vpv.size(); j++) {
-            int p = E.vpv[j][0], en = var_entry_of(p, E.vpv[j][1]);
-            bool nat = en > 0 && (j < E.vpart.size() ? E.vpart[j][0] : E.part[p][0]) != 0;
-            for (const auto &l : en > 0 ? E.vents[en].ls : std::vector<std::array<int, 4>>())
-                for (int k = 0; k < 128 && nat; k++)
-                    nat = k + l[1] < 0 || k + l[1] > 127 || E.vmap[128 * (size_t)l[0] + k + l[1]] >= 0
-                          || E.cmap[128 * p + k] < 0;
-            H.vnative[j] = nat;
-        }
+        H.vnative.assign(vnative.begin(), vnative.end());
         H.var = shown_var;
         H.channel = pats[0].channel;
         // THE INSERTION EFFECT: its tables, a setting sent as the GS exclusive
@@ -481,18 +433,7 @@ int nv_host::run(int argc, char **argv)
             };
         H.last_ctl = [&]() { return std::make_pair(last_ctl_code.load(), last_ctl_ns.load()); };
         if (E.has_prog)
-            H.pick = [&](int sp) {
-                post([&, sp](long long) {
-                    const PartAt &pa = pats[0];
-                    if (sp >= 256) {            // (a variation: its program under its bank)
-                        int p = E.vpv[sp - 256][0], v = E.vpv[sp - 256][1];
-                        if (pa.program != p || pa.var != v || pa.drums)
-                            reqs.push_back(Req{0, p, false, v});
-                    } else if (pa.program != (sp & 127) || pa.drums != (sp >= 128) || pa.var) {
-                        reqs.push_back(Req{0, sp & 127, sp >= 128});
-                    }
-                });
-            };
+            H.pick = [&](int sp) { pick(sp); };
         // ...A PROGRAM CHANGE FROM THE KEYBOARD: its name and its stops, and
         // what the builder said
         int shown = shown_program, shown_v = shown_var, shown_room = room_idx;

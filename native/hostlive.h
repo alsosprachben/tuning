@@ -535,6 +535,19 @@ struct nv_host {
     const Export::Reg *rg0;                 // (the start's register)
     int open(int argc, char **argv);        // (-1: opened, else the exit code)
     void start();                           // the workers and the builder, for playing
+    // what the panel and a GUI change, between two blocks (live.post)
+    void post(std::function<void(long long)> f);
+    double gval[9] = {};                    // the globals as they stand (livetui.GLOBALS: the panel's g)
+    void globals_init();
+    void set_global(int i, double v);
+    // the patches: every program and set, and the variations, which are native
+    std::vector<std::string> pnames;
+    std::vector<char> pnative, vnative;
+    void patches_init();
+    void pick(int sp);                      // sp: a program, 128 + a set, 256 + a variation (vpv's)
+    void panic();
+    std::atomic<bool> builder_busy{false};
+    int building();
     MidiParse midi_in;                      // (nv_host_midi's)
     std::mutex midi_in_mu;
     long long play_n0 = 0;                  // (nv_host_render's)

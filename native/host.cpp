@@ -1486,6 +1486,7 @@ void nv_host::start()
                 bcv.wait_for(lk, std::chrono::milliseconds(100),
                              [&] { return !breq.empty() || !room_req.empty() || g_stop; });
                 rq.swap(breq);
+                builder_busy = !rq.empty() || !room_req.empty();
             }
             nv_part_room_reap(part);                    // (an old tail, let go off the audio thread)
             std::string rname;
@@ -1540,9 +1541,124 @@ void nv_host::start()
                 std::lock_guard<std::mutex> lk(bmu);
                 bdone.push_back(std::make_pair(rq[q], c));
             }
+            builder_busy = false;
         }
     };
     builder = std::thread(builder_loop);
+}
+
+// ---- what the panel and a GUI change (the panel's hooks call these) ----
+void nv_host::post(std::function<void(long long)> f)
+{
+    std::lock_guard<std::mutex> lk(pmu);
+    posted.push_back(std::move(f));
+}
+
+// the globals where they start (the panel's g: master dB, headroom dB, the
+// limiter's knee, the wheel's range, mod cents, aftertouch dB, the GPU, the
+// room's tail, the room)
+void nv_host::globals_init()
+{
+    double st[15];
+    nv_part_stats(part, st);
+    gval[0] = 20.0 * log10(std::max(master, 1e-12));
+    gval[1] = -20.0 * log10(std::max(E.headroom, 1e-12));
+    gval[2] = E.k.size() > K_THRESH ? E.k[K_THRESH] : 0.70;
+    gval[3] = E.k.size() > K_BEND_RANGE ? E.k[K_BEND_RANGE] : 2.0;
+    gval[4] = 35.0;
+    gval[5] = E.k.size() > K_PRESS_DB ? E.k[K_PRESS_DB] : 8.0;
+    gval[6] = st[12] > 0.5 ? 1.0 : 0.0;
+    gval[7] = st[11] > 0.5 ? 1.0 : 0.0;
+    gval[8] = room_idx;
+}
+
+void nv_host::set_global(int i, double v)
+{
+    if (i < 0 || i > 8)
+        return;
+    if (i == 8) {                               // THE ROOM: the builder's (live.set_room)
+        int k = (int)v;
+        if (k >= 0 && k < (int)E.rooms.size()) {
+            std::lock_guard<std::mutex> lk(bmu);
+            room_req = E.rooms[k].name;
+        }
+        bcv.notify_one();
+        return;
+    }
+    gval[i] = v;
+    post([this, i, v](long long) {
+        switch (i) {
+        case 0: master_now = pow(10.0, v / 20.0); break;     // T.master_gain
+        case 1: nv_part_set(part, 0, v); break;
+        case 2: nv_part_set(part, 2, v); break;
+        case 3: nv_part_set(part, 3, v); break;
+        case 4: nv_part_set(part, 4, v); break;
+        case 5: nv_part_set(part, 1, v); break;
+        case 6: nv_part_set(part, 5, v); break;
+        case 7: nv_part_set(part, 6, v); break;
+        }
+    });
+}
+
+// THE PICKER's: every program and set, which are native; the variations
+// (VNAM), native where every key of their slots the capital plays is one
+// the engine plays too
+void nv_host::patches_init()
+{
+    pnames.assign(256, "");
+    pnative.assign(256, 0);
+    for (int sp = 0; sp < 256; sp++) {
+        pnames[sp] = sp < 128 ? E.prog[sp].name : E.prog[sp & 127].kit;
+        bool nat = false;
+        for (int k = 0; k < 128 && !nat; k++)
+            nat = E.cmap[(sp >= 128 ? NV_K_DRUMS : 0) + 128 * (sp & 127) + k] >= 0;
+        pnative[sp] = nat && (sp >= 128 ? !pnames[sp].empty() : E.part[sp][0] != 0);
+    }
+    vnative.assign(E.vpv.size(), 0);
+    for (size_t j = 0; j < E.vpv.size(); j++) {
+        int p = E.vpv[j][0], en = var_entry_of(p, E.vpv[j][1]);
+        bool nat = en > 0 && (j < E.vpart.size() ? E.vpart[j][0] : E.part[p][0]) != 0;
+        for (const auto &l : en > 0 ? E.vents[en].ls : std::vector<std::array<int, 4>>())
+            for (int k = 0; k < 128 && nat; k++)
+                nat = k + l[1] < 0 || k + l[1] > 127 || E.vmap[128 * (size_t)l[0] + k + l[1]] >= 0
+                      || E.cmap[128 * p + k] < 0;
+        vnative[j] = nat;
+    }
+}
+
+// a patch for the part, asked for between two blocks (live's change_patch)
+void nv_host::pick(int sp)
+{
+    if (!E.has_prog)
+        return;
+    post([this, sp](long long) {
+        const PartAt &pa = pats[0];
+        if (sp >= 256) {                        // (a variation: its program under its bank)
+            int p = E.vpv[sp - 256][0], v = E.vpv[sp - 256][1];
+            if (pa.program != p || pa.var != v || pa.drums)
+                reqs.push_back(Req{0, p, false, v});
+        } else if (pa.program != (sp & 127) || pa.drums != (sp >= 128) || pa.var) {
+            reqs.push_back(Req{0, sp & 127, sp >= 128});
+        }
+    });
+}
+
+void nv_host::panic()
+{
+    post([this](long long n) { nv_part_panic(part, n); });
+}
+
+// what is still to land: posts not yet run, builds asked for, being built,
+// built and not yet swapped in, a room asked for
+int nv_host::building()
+{
+    int n = builder_busy ? 1 : 0;
+    {
+        std::lock_guard<std::mutex> lk(pmu);
+        n += (int)posted.size();
+    }
+    std::lock_guard<std::mutex> lk(bmu);
+    return n + (int)breq.size() + (int)bdone.size() + (room_req.empty() ? 0 : 1);
 }
 
 // ---- THE C API (host.h): over nv_host, as nvlive drives it ----
@@ -1562,6 +1678,8 @@ nv_host *nv_host_open_args(int argc, char **argv, char *err, int errlen)
         h->rsync = h->rsync || !strcmp(argv[i], "--reg-sync");
     h->nopanel = false;                     // (the builder's notes queued: nv_host_message)
     h->play_buf.assign(2 * h->BLK, 0.0f);
+    h->globals_init();
+    h->patches_init();
     return h;
 }
 
@@ -1664,5 +1782,68 @@ void nv_host_set_room(nv_host *h, const char *name)
             return;
         }
 }
+
+int nv_host_global_count(void) { return 9; }
+
+void nv_host_set_global(nv_host *h, int which, double v) { h->set_global(which, v); }
+
+double nv_host_global(const nv_host *h, int which)
+{
+    if (which < 0 || which > 8)
+        return 0.0;
+    return which == 8 ? (double)h->room_idx : h->gval[which];
+}
+
+int nv_host_patches(nv_host *h, nv_host_patch *out, int cap)
+{
+    if (h->pnames.empty())
+        h->patches_init();
+    int n = 0;
+    for (int sp = 0; sp < 256; sp++) {
+        if (h->pnames[sp].empty())
+            continue;
+        if (out && n < cap) {
+            nv_host_patch &o = out[n];
+            o.program = sp & 127;
+            o.variation = 0;
+            o.drums = sp >= 128;
+            o.native = h->pnative[sp];
+            o.pick = sp;
+            snprintf(o.name, sizeof o.name, "%s", h->pnames[sp].c_str());
+        }
+        n++;
+    }
+    for (size_t j = 0; j < h->E.vpv.size(); j++) {
+        if (out && n < cap) {
+            nv_host_patch &o = out[n];
+            o.program = h->E.vpv[j][0];
+            o.variation = h->E.vpv[j][1];
+            o.drums = 0;
+            o.native = h->vnative[j];
+            o.pick = 256 + (int)j;
+            snprintf(o.name, sizeof o.name, "%s", j < h->E.vnames.size() ? h->E.vnames[j].c_str() : "");
+        }
+        n++;
+    }
+    return n;
+}
+
+void nv_host_pick(nv_host *h, int pick) { h->pick(pick); }
+
+void nv_host_patch_now(const nv_host *h, int *program, int *variation, int *drums)
+{
+    const int sp = h->shown_program;
+    if (program)
+        *program = sp & 127;
+    if (drums)
+        *drums = sp >= 128;
+    if (variation)
+        *variation = sp >= 128 ? 0 : h->shown_var.load();
+}
+
+void nv_host_panic(nv_host *h) { h->panic(); }
+
+int nv_host_building(nv_host *h) { return h->building(); }
+void *nv_host_part(nv_host *h) { return h->part; }
 
 }  // extern "C"
