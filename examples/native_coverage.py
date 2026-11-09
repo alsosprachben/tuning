@@ -217,6 +217,58 @@ TASKS = [
 # order: the MT-32's 128 tones (GS bank 127, patch_map.MT32_SET) and its
 # rhythm part's keys (the CM-32L set's own drums, 35-75); the CM-64's CM-32L
 # adds the set's sound effects (CM32L_SFX), its CM-32P half (PCM) a task
+# A TONE's OWN INSERTION EFFECT, LIVE (kept by hand, as TASKS): what of a
+# tone's own effect (its class's insertion_efx, gsefx.chain of it) nvlive plays
+# as live.py does -- each feature of the chain with where its port stands, the
+# tone's state the worst of its features' ("yes" where it has only what is
+# done: level, EQ, the moving filters, a flanger's comb, tremolo and pan)
+LIVE_EFX = (
+    ("bus", "not yet", "the part's bus (Lo-Fi, compressor, gate, reverb)"),
+    ("par", "not yet", "a parallel type's branch B"),
+    ("kbm", "not yet", "the Keyboard Multi's copies"),
+    ("comp", "not yet", "a multi's compressor (Python's live plays none either)"),
+    ("rotary", "checks pending", "the rotor"),
+    ("pos3d", "checks pending", "the 3D place"),
+    ("od", "checks pending", "the drive and cabinet"),
+    ("copies", "checks pending", "the copies (taps)"),
+)
+_LIVE_RANK = {"yes": 0, "checks pending": 1, "not yet": 2}
+
+
+def tone_effect_live(fx):
+    """(the type's name, its live state, what stands in its way) for a tone's
+    own effect (insertion_efx); ("", "none", "") without one"""
+    if not fx:
+        return "", "none", ""
+    import gsefx as G
+    ch = G.chain(G.tone_state(*fx)) or {}
+    name = ch.get("name") or ""
+    has = lambda k: ch.get(k) not in (None, False, 0, {}, [], ())
+    feats = set()
+    if has("bus") or has("bus_mix"):
+        feats.add("bus")
+    if has("par"):
+        feats.add("par")
+    if name == "Keyboard Multi":
+        feats.add("kbm")
+    if has("comp"):
+        feats.add("comp")
+    for k in ("rotary", "pos3d"):
+        if has(k):
+            feats.add(k)
+    if has("od_gain") or has("cabinet"):
+        feats.add("od")
+    if (has("cf") and not ch["cf"][0].get("fb")) or has("dly"):
+        feats.add("copies")
+    state, why = "yes", []
+    for f, st, what in LIVE_EFX:
+        if f in feats:
+            why.append(what)
+            if _LIVE_RANK[st] > _LIVE_RANK[state]:
+                state = st
+    return name, state, "; ".join(why)
+
+
 STAGES = (("GM1", None), ("GM2", 'gm2'), ("MT-32", 'mt32'), ("CM-64", 'cm64'), ("SC-55", 1), ("SC-88", 2),
           ("SC-88 Pro", 3), ("SC-8850", 4))
 
@@ -247,6 +299,23 @@ def main(argv):
     vslots, ventries = N.variation_tables()[:2]
     vnat = {(e[0], e[1]): all(all(vslots[s][3][k] is not None for k in range(21, 109)) for s, _, _, _ in e[2])
             for e in ventries[1:]}
+
+    # each tone's own effect (insertion_efx): a variation's from its slots'
+    # classes (the first with one), a program's from its class at middle C
+    vfx = {}
+    for e in ventries[1:]:
+        for sl, _, _, _ in e[2]:
+            c = vslots[sl][3][60]
+            fx = getattr(c, "insertion_efx", None) if c is not None else None
+            if fx:
+                vfx[(e[0], e[1])] = fx
+                break
+
+    def tone_fx(p, key):
+        if key:
+            return vfx.get((p, key))
+        c = B.property_class_for_note(p, 60)
+        return getattr(c, "insertion_efx", None) if isinstance(c, type) else None
 
     def variation_native(p, key):
         return vnat.get((p, key), program_native(p)) if key else program_native(p)
@@ -309,10 +378,12 @@ def main(argv):
                                  kits_whole=kfull, kits_total=len(ks)))
         for p, key, name in new:
             _to = P.MT32_SET[p][1] if src == 'mt32' else p
+            _fxn, _fxs, _fxw = tone_effect_live(tone_fx(p, key) if src != 'mt32' else None)
             js['tones'].append(dict(stage=stage, program=p, variation=key,
                                     tone=str(p) if src is None else "%d.%d" % (p, key if key == 127 else key % 128),
                                     name=name, family=LT.FAMILIES[14 if isinstance(_to, tuple) else _to // 8],
-                                    native=(p, key, name) in nat))
+                                    native=(p, key, name) in nat, own_effect=_fxn, effect_live=_fxs,
+                                    effect_note=_fxw))
         for s, name, nk, nn in ks:
             js['kits'].append(dict(stage=stage, set=s, name=name, keys=nk, native_keys=nn))
         body += ["## %s" % stage, ""]
