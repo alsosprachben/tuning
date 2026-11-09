@@ -2675,6 +2675,7 @@ struct Part {
                          o.lnrm.data());
     }
     std::map<long long, int> drive_step;
+    bool wheel_reset = false;               // a reset's CC1 = 0: only the roles whose rest is 0
     std::map<long long, int> clav_step;     // live's: a part's rockers, once its wheel has moved
     std::set<long long> amp_dirty;
     std::map<long long, long long> amp_jid, amp_start, amp_fine_placed;
@@ -7145,8 +7146,48 @@ struct Part {
         porta_src[ch] = -1;                 // a pending CC84 goes too
         repitch(ch, n0);
         static const int RESET_CC[6][2] = {{1, 0}, {11, 127}, {64, 0}, {65, 0}, {66, 0}, {67, 0}};
-        for (auto &cv : RESET_CC)
+        for (auto &cv : RESET_CC) {
+            wheel_reset = cv[0] == 1;
             control(ch, cv[0], cv[1], n0);
+        }
+        wheel_reset = false;
+        // ...AND THE WHEEL's OTHER ROLES BACK UNTOUCHED (live's): the swell open
+        // (its notes rescaled), the valve its own drive, the rockers, the detune
+        // and the drones the voice's own; the registration left as it is
+        if (hammond_on(ch))
+            for (const Patch &p : patches) {
+                if (!(p.leslie || p.wheel_swell || p.amp > 0.0) || !(p.channel < 0 || p.channel == ch))
+                    continue;
+                if (!(p.amp > 0.0) && p.wheel_swell && swell != 1.0) {
+                    const double was = swell;
+                    swell = 1.0;
+                    S.channel_gain(sounding_tone(ch, p.pid, p.cache, false), 1.0 / was);
+                }
+                break;
+            }
+        for (const Patch &p : patches) {
+            if (!(p.channel < 0 || p.channel == ch))
+                continue;
+            if (p.amp > 0.0 && drive_step.erase(p.pid))
+                amp_dirty.insert(p.pid);
+            if (p.clav)
+                clav_step.erase(p.pid);
+        }
+        if (detune_wheel)
+            for (const Patch &p : patches)
+                if (p.cache == cache) {
+                    speed = p.speed;
+                    break;
+                }
+        for (int pi = 0; pi < (int)patches.size(); pi++) {
+            if (!(patches[pi].channel < 0 || patches[pi].channel == ch))
+                continue;
+            Use u(*this, pi);
+            if (drone_class() && drone_count.erase(pid) && chanting(ch))
+                drones(ch, n0);
+            if (dnote_class() && drone_sel.erase(pid) && chanting(ch))
+                drone_note(ch, n0);
+        }
         aftertouch(ch, 0, n0);
         rpn_none[ch] = false;
         rpn_msb[ch] = rpn_lsb[ch] = 127;
@@ -8041,7 +8082,7 @@ struct Part {
                 mono[ch] = true;
             else if (cc == 127)
                 mono[ch] = false;
-        } else if (cc == 1 && hammond_on(ch)) {
+        } else if (cc == 1 && !wheel_reset && hammond_on(ch)) {
             // A HAMMOND'S MOD WHEEL, OR AN AMPLIFIED VOICE'S (live's
             // wheel_roles): with a valve, its drive (LIVE_DRIVE_STEPS over
             // the range) -- a guitar amp's own gain knob; else its swell pedal --
@@ -8067,12 +8108,12 @@ struct Part {
             }
         } else if (cc == 1 && wheel_trem_on(ch)) {
             wheel_tremolo(ch, v);
-        } else if (cc == 1 && organ_on(ch)) {
+        } else if (cc == 1 && !wheel_reset && organ_on(ch)) {
             // AN ORGAN'S MOD WHEEL IS ITS CRESCENDO PEDAL (live's 'crescendo' role)
             for (size_t pi = 0; pi < patches.size(); pi++)
                 if (patches[pi].organ && patches[pi].organ->n_order && (patches[pi].channel < 0 || patches[pi].channel == ch))
                     crescendo((int)pi, v, n0);
-        } else if (cc == 1 && detune_wheel) {
+        } else if (cc == 1 && !wheel_reset && detune_wheel) {
             static const int steps[3] = {0, 64, 127};       // live.DETUNE_STEPS: min(), the first of a tie
             int best = steps[0];
             for (int st : steps)
@@ -8105,7 +8146,7 @@ struct Part {
                         vib_apply(p, ch, n0);
             }
         }
-        if (cc == 1)                            // THE DRONES ON THE WHEEL (live's dronists), live
+        if (cc == 1 && !wheel_reset)            // THE DRONES ON THE WHEEL (live's dronists), live
             for (int pi = 0; pi < (int)patches.size(); pi++) {
                 if (!(patches[pi].channel < 0 || patches[pi].channel == ch))
                     continue;
@@ -8122,7 +8163,7 @@ struct Part {
                         drones(ch, n0);
                 }
             }
-        if (cc == 1)                            // THE PUNGI's DRONE NOTE ON THE WHEEL (live's 'drone note')
+        if (cc == 1 && !wheel_reset)            // THE PUNGI's DRONE NOTE ON THE WHEEL (live's 'drone note')
             for (int pi = 0; pi < (int)patches.size(); pi++) {
                 if (!(patches[pi].channel < 0 || patches[pi].channel == ch))
                     continue;
@@ -8138,7 +8179,7 @@ struct Part {
                         drone_note(ch, n0);
                 }
             }
-        if (cc == 1)                            // A CLAVINET's TONE ROCKERS (live's 'tone' role)
+        if (cc == 1 && !wheel_reset)            // A CLAVINET's TONE ROCKERS (live's 'tone' role)
             for (const Patch &p : patches) {
                 if (!p.clav || !(p.channel < 0 || p.channel == ch))
                     continue;
