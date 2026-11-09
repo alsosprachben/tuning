@@ -391,6 +391,10 @@ bool read_export(const char *path, Export &E)
                     }
                     E.has_prog = g;
                 }
+                // LP3D: live.pan_at's head (the 3D types')
+                char s4[4];
+                if (ok && fread(s4, 1, 4, f) == 4 && !memcmp(s4, "LP3D", 4))
+                    E.has_p3d = fread(E.p3d, 8, 4, f) == 4;
             }
         }
     }
@@ -630,6 +634,8 @@ int nv_host::open(int argc, char **argv)
         nv_part_leslie(part, E.les.data(), (int)E.les.size());
     if (E.k.size() > (size_t)K_EFX + 132)       // the module's insertion effect (an export with its tables)
         nv_part_efx(part, E.k.data() + K_EFX, SR);
+    if (E.has_p3d)                              // (a 3D type's place: live.pan_at's head)
+        nv_part_place3d(part, E.p3d);
     {                                           // the gm2 store's built-in tables at the tuner's reference
         std::string a_ = opt(argc, argv, "a", ""), c_ = opt(argc, argv, "c", "");
         if (!tname.empty() && (!a_.empty() || !c_.empty()))

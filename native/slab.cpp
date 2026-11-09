@@ -689,7 +689,15 @@ struct Slab {
         if (slots.empty() || cc == was)
             return;
         auto clamp = [](int v) { return v < 0 ? 0 : (v > 127 ? 127 : v); };
-        const double *t1 = pan_tab[clamp(cc)], *t0 = pan_tab[clamp(was)];
+        repan_rows(slots, pan_tab[clamp(cc)], pan_tab[clamp(was)], rate, itd);
+    }
+
+    // ...from row t0 to row t1 (alpha left, alpha right, half itd): a CC's,
+    // or a place of its own (live.pan_at's: a 3D type's)
+    void repan_rows(const std::vector<long> &slots, const double *t1, const double *t0, double rate, bool itd)
+    {
+        if (slots.empty())
+            return;
         double b2 = pan_beta * pan_beta;
         const std::vector<long> u = once(slots);
         for (long sidx : u) {
@@ -1034,8 +1042,18 @@ struct Slab {
             double c = 0.5 * (1.0 + cos(ang - (double)ls_ph[s]));
             double g = (double)fl + (double)(1.0f - fl) * pow(c, (double)(0.5f * ls_sharp[s]));
             g /= (double)ls_norm[s];
-            f4[F4_aL][s] = (float)((double)ls_aL[s] * g);
-            f4[F4_aR][s] = (float)((double)ls_aR[s] * g);
+            double gl = g, gr = g;
+            if (ls_sep[s] != 0.0f) {
+                // THE RECORDED ROTARY's two mics (Separate): each ear its own,
+                // half the spacing either side -- its own swing
+                const double hs = (double)(0.5f * ls_sep[s]), d = ang - (double)ls_ph[s];
+                const double ex = (double)(0.5f * ls_sharp[s]);
+                const double cl = 0.5 * (1.0 + cos(d + hs)), cr = 0.5 * (1.0 + cos(d - hs));
+                gl = ((double)fl + (double)(1.0f - fl) * pow(cl, ex)) / (double)ls_norm[s];
+                gr = ((double)fl + (double)(1.0f - fl) * pow(cr, ex)) / (double)ls_norm[s];
+            }
+            f4[F4_aL][s] = (float)((double)ls_aL[s] * gl);
+            f4[F4_aR][s] = (float)((double)ls_aR[s] * gr);
         }
     }
 
@@ -2706,11 +2724,89 @@ struct Part {
 
     void amp_touch(int pi)
     {
-        if (pi >= 0 && patches[pi].amp > 0.0)
+        if (pi >= 0 && valved(pi))
             amp_dirty.insert(patches[pi].pid);
     }
 
-    long long amp_ahead() const { return patches[cur].amp > 0.0 && !patches[cur].drums ? LIVE_AMP_LOOKAHEAD * cur_blk : 0; }
+    long long amp_ahead() { return !patches[cur].drums && valved(cur) ? LIVE_AMP_LOOKAHEAD * cur_blk : 0; }
+
+    // a part on a valve: its voice's own (amp_drive), or its insertion
+    // effect's OD stage (live._efx_od)
+    bool valved(int pi) { return patches[pi].amp > 0.0 || efx_od(pi) != nullptr; }
+
+    // live._efx_od: the chain with an OD stage this part plays through, or
+    // NULL -- its channel's, or (a part on every channel) the first of the
+    // effect's channels it is sounding on, else the first of them; or, the
+    // part on none of them, its TONE's own (Rock Piano's Overdrive)
+    const double *efx_od(int pi)
+    {
+        const Patch &p = patches[pi];
+        const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
+        if (k && k->efx_raw && !(p.channel >= 0 && efx && nv_efx_live_on(efx, p.channel))) {
+            for (auto &kv : tone_fx)            // (its chain: the tone's, where a note of it has built it)
+                if (kv.second.k == k && kv.second.ex) {
+                    const double *fc = efx_for(kv.first);
+                    return fc && fc[1] != 0.0 ? fc : nullptr;
+                }
+            return nullptr;
+        }
+        if (!efx || !nv_efx_live_parts(efx))
+            return nullptr;
+        std::vector<int> chs;
+        if (p.channel >= 0) {
+            chs.push_back(p.channel);
+        } else {
+            std::set<int> on;
+            for (auto &kv : S.live) {
+                const int c = (int)std::get<1>(kv.first);
+                if (std::get<0>(kv.first) == p.pid && c >= 0 && c < 16 && nv_efx_live_on(efx, c))
+                    on.insert(c);
+            }
+            if (on.empty())
+                for (int c = 0; c < 16; c++)
+                    if (nv_efx_live_on(efx, c))
+                        on.insert(c);
+            chs.assign(on.begin(), on.end());
+        }
+        for (int c : chs) {
+            const double *fc = efx_for(c);
+            if (fc && fc[1] != 0.0)
+                return fc;
+        }
+        return nullptr;
+    }
+
+    // the type's speaker (the export's cabinets: guitar12, bass410), as
+    // nvrender builds them -- NULL under TUNING_CABINET=0
+    std::vector<char> fx_cabbuf[2];
+    const NoteClass *fx_cab_k[2] = {nullptr, nullptr};
+    const NoteClass *efx_cab(double which)
+    {
+        const int w = (int)which - 1;
+        if (w < 0 || w > 1 || !efx_x)
+            return nullptr;
+        const char *cb = getenv("TUNING_CABINET");
+        if (cb && !strcmp(cb, "0"))
+            return nullptr;
+        if (!fx_cab_k[w]) {
+            const double *C = efx_x + 132 + NV_EFX_NAT * (size_t)efx_x[131] + 30 + 33 * w;
+            fx_cabbuf[w].assign(sizeof(NoteClass), 0);
+            NoteClass *nc = (NoteClass *)fx_cabbuf[w].data();
+            nc->cab_set = (int)C[0];
+            nc->n_cab_fm = (int)C[1];
+            nc->n_cab_afm = (int)C[2];
+            nc->cab_floor = C[3];
+            for (int r = 0; r < 4; r++)
+                for (int x = 0; x < 3; x++) {
+                    nc->cab_fm[r][x] = C[4 + 3 * r + x];
+                    nc->cab_afm[r][x] = C[16 + 3 * r + x];
+                }
+            nc->cab_corner = C[28]; nc->cab_order = C[29]; nc->cab_cut = C[30]; nc->cab_bell = C[31];
+            nc->cab_ref = C[32];
+            fx_cab_k[w] = nc;
+        }
+        return fx_cab_k[w];
+    }
 
     // live._amp_snapshot: the chord's direct partials at their level now
     bool amp_snapshot(long long apid, long long n0, AmpOut &job, AmpJob &jd)
@@ -2724,6 +2820,23 @@ struct Part {
         const Patch &p = patches[pi];
         auto st = drive_step.find(apid);
         double drive = st == drive_step.end() ? p.amp : p.amp * 4.0 * st->second / (double)LIVE_DRIVE_STEPS;
+        // THE INSERTION EFFECT's OD: its gain already in the notes' level
+        // (efx_direct); the valve the voice's own, or -- a voice with none --
+        // one at its edge (gsefx.PEDAL_AMP_DRIVE), measured against the
+        // Strat's level (0.2289 x the program's trim); either reference
+        // carries the type's Level
+        const double *od = efx_od(pi);
+        double ref_e = 0.0;
+        if (od) {
+            if (drive <= 0.0) {
+                drive = efx_x[132 + NV_EFX_NAT * (size_t)efx_x[131] + 6];
+                ref_e = 0.2289 * nv_tcache_trim(p.cache, p.program);
+            } else {
+                ref_e = p.amp_ref;
+            }
+            if (ref_e != 0.0)
+                ref_e *= od[0];
+        }
         std::vector<const std::vector<long> *> groups;
         size_t nslots = 0;
         for (auto &kv : S.live) {
@@ -2801,7 +2914,8 @@ struct Part {
         jd.drive = drive;
         jd.imb = p.amp_imb;
         jd.ref = 0.0;
-        if (p.amp_ref != 0.0) {
+        const double aref = od ? ref_e : p.amp_ref;
+        if (aref != 0.0) {
             // THE FADERS SET THE LEVEL, NOT THE DRIVE: the channel's, the
             // part's and the headroom in the reference too (the part's
             // channel, or its first sounding key's)
@@ -2814,7 +2928,7 @@ struct Part {
                         break;
                     }
             }
-            jd.ref = p.amp_ref * chan_gain(ch) * (pow(10.0, level_db / 20.0) * swell) * S.headroom_d;
+            jd.ref = aref * chan_gain(ch) * (pow(10.0, level_db / 20.0) * swell) * S.headroom_d;
         }
         return true;
     }
@@ -2899,9 +3013,20 @@ struct Part {
             a[q] = o.prod[3 * q + 1];
             p[q] = o.prod[3 * q + 2];
         }
-        if (pi >= 0 && patches[pi].cab)     // through the speaker, as the notes were (cabinet.gain)
+        const double *odp = pi >= 0 ? efx_od(pi) : nullptr;
+        const NoteClass *pcab = pi >= 0 ? patches[pi].cab : nullptr;
+        if (odp) {
+            // the type's speaker where the voice has none, and its EQ -- AFTER
+            // the valve, so on its products too (gsefx.eq_gain)
+            if (!pcab)
+                pcab = efx_cab(odp[2]);
+            if (odp[6] != 0.0)
+                for (long q = 0; q < n; q++)
+                    a[q] *= nv_efx_eq_gain(odp, f[q]);
+        }
+        if (pcab)                           // through the speaker, as the notes were (cabinet.gain)
             for (long q = 0; q < n; q++)
-                a[q] *= nv_cab_gain(patches[pi].cab, f[q]);
+                a[q] *= nv_cab_gain(pcab, f[q]);
         auto as = amp_start.find(o.pid);
         long long start = cross.has ? at : std::max(n0, as == amp_start.end() ? n0 : as->second);
         std::vector<long> slots = S.stamp_amp(key, o.src, f.data(), a.data(), p.data(), n, start, rate, o.when);
@@ -3065,7 +3190,7 @@ struct Part {
     // live._amp_holds: a part whose chord changes wait for its valve
     bool amp_holds(int pi) const
     {
-        return LIVE_AMP_HOLD && pi >= 0 && !patches[pi].drums && patches[pi].amp > 0.0;
+        return LIVE_AMP_HOLD && pi >= 0 && !patches[pi].drums && const_cast<Part *>(this)->valved(pi);
     }
 
     // live._amp_change: the chord changes at T -- a note's onset or its
@@ -3821,15 +3946,11 @@ struct Part {
     }
 
     // the chain channel ch hears now (live._efx_for), NULL where none or
-    // refused here (a drive or cabinet: played without it)
+    // refused here (a Keyboard Multi's copies: played without it)
     const double *efx_chain(int ch, int *st, const char **why)
     {
         const double *fc = nv_efx_live_chain(efx, ch, st, why);
-        if (fc && (fc[1] != 0.0 || fc[2] != 0.0)) {
-            *st = -3;
-            *why = "drive or cabinet, live";
-            fc = nullptr;
-        } else if (fc && fc[34] == 3.0) {
+        if (fc && fc[34] == 3.0) {
             *st = -3;
             *why = "a Keyboard Multi's copies, live";
             fc = nullptr;
@@ -3852,11 +3973,7 @@ struct Part {
     const double *tone_chain(const ToneFx &tf, int *st, const char **why)
     {
         const double *fc = tf.ex ? nv_efx_live_chain(tf.ex, tf.ch, st, why) : nullptr;
-        if (fc && (fc[1] != 0.0 || fc[2] != 0.0)) {
-            *st = -3;
-            *why = "drive or cabinet, live";
-            fc = nullptr;
-        } else if (fc && fc[34] == 3.0) {
+        if (fc && fc[34] == 3.0) {
             *st = -3;
             *why = "a Keyboard Multi's copies, live";
             fc = nullptr;
@@ -3887,7 +4004,7 @@ struct Part {
         *ecp = ec;
         if (!fc)
             return nullptr;
-        efx_direct(fc, ec, note, vel, n0, slots, ec == fxc && tone_fx[fxc].kind);
+        efx_direct(fc, ec, note, vel, n0, slots, ec == fxc && tone_fx[fxc].kind, cpan[ch]);
         return fc;
     }
 
@@ -4187,7 +4304,7 @@ struct Part {
     // on every baseline (channel_gain); the note for an auto wah's Sens; its
     // moving filters (or the tone's own) arming the rows on channel ec
     void efx_direct(const double *fc, int ec, int note, int vel, long long n0, const std::vector<long> &slots,
-                    bool own)
+                    bool own, int cp)
     {
         const bool cf = fc[14] != 0.0 && fc[18] == 0.0;     // (a chorus's copies, not a flanger's comb)
         double sh = 0.0;
@@ -4196,9 +4313,16 @@ struct Part {
             sh = fc[21] >= 0.0 ? fc[21] : a * a / (1.0 + a * a);
         }
         std::vector<float> g(slots.size());
+        const NoteClass *fcab = fc[2] != 0.0 && !patches[cur].cab ? efx_cab(fc[2]) : nullptr;
         for (size_t q = 0; q < slots.size(); q++) {
             const double f = S.f8[F8_om][slots[q]] * rate / (2.0 * M_PI);
             double x = fc[0];
+            if (fc[3] != 0.0)
+                x = x * fc[4];                  // ITS COMPRESSOR's makeup, before the OD
+            if (fc[1] != 0.0)
+                x = x * fc[1];                  // ITS OD STAGE's GAIN, in front of the valve
+            if (fcab)
+                x = x * nv_cab_gain(fcab, f);   // ...and the type's speaker, on a voice with none
             if (fc[6] != 0.0)
                 x = x * nv_efx_eq_gain(fc, f);
             if (cf)
@@ -4206,9 +4330,149 @@ struct Part {
             g[q] = (float)x;
         }
         S.channel_gain_each(slots, g);
+        if (fc[3] != 0.0) {
+            // ITS COMPRESSOR (a multi's Cmp stage), as the file has it: its
+            // sustain the decay slowed, its attack the onset's rise (float32)
+            const float cs = (float)fc[3], ca = (float)(fc[5] * rate);
+            for (long s : slots) {
+                S.f4[F4_logr][s] = S.f4[F4_logr][s] * cs;
+                S.f4[F4_logrA][s] = S.f4[F4_logrA][s] * cs;
+                if (fc[5] > 0.0)
+                    S.f4[F4_fa][s] = std::max(S.f4[F4_fa][s], ca);
+            }
+        }
         efx_notes[ec].push_back(EfxNote{(double)n0 / rate, INFINITY, vel, note});
+        if (fc[22] != 0.0 && has_p3d)
+            efx_place3d(fc, slots, cp, n0);
+        if (fc[140] != 0.0)
+            efx_rotary_arm(fc, slots, note, n0);
         if (efx_moves(fc) || own)
             S.filter_arm(slots, ec);
+    }
+
+    // live.pan_at: (alpha left, alpha right, half itd) for a source at angle
+    // (radians, + right) -- tonelib's hrtf_at(0, angle=) on the stopped pipe's
+    // head (Woodworth), the shadow's alpha as pan_table has each CC10's
+    double p3d[4] = {0.0, 0.0, 0.0, 0.0};
+    bool has_p3d = false;
+    void pan_at(double angle, double *out) const
+    {
+        const double z = p3d[0], hr = p3d[2], c = p3d[3];
+        double x = 0.0, y = p3d[1];
+        const double th = angle;
+        if (th != 0.0) {
+            const double x1 = x * cos(th) + y * sin(th), y1 = -x * sin(th) + y * cos(th);
+            x = x1;
+            y = y1;
+        }
+        const double distance = std::max(sqrt(pow(x, 2.0) + y * y + z * z), hr);
+        const double base_delay = distance / c;
+        const double cos_to_right = x / distance;
+        auto woodworth = [&](double ct, double *inc, double *del) {
+            const double theta = acos(std::max(-1.0, std::min(1.0, ct)));
+            const double offset = theta <= M_PI / 2.0 ? -cos(theta) : (theta - M_PI / 2.0);
+            *inc = theta;
+            *del = base_delay + offset * hr / c;
+        };
+        double li, ld, ri, rd;
+        woodworth(-cos_to_right, &li, &ld);
+        woodworth(cos_to_right, &ri, &rd);
+        const double amin = 0.1, tmin = 150.0 * M_PI / 180.0;
+        out[0] = 1.0 + amin / 2.0 + (1.0 - amin / 2.0) * cos(li * M_PI / tmin);
+        out[1] = 1.0 + amin / 2.0 + (1.0 - amin / 2.0) * cos(ri * M_PI / tmin);
+        out[2] = (ld - rd) / 2.0;
+    }
+
+    // Python's float % (a floor modulo: the divisor's sign)
+    static double py_fmod(double a, double b)
+    {
+        double m = fmod(a, b);
+        if (m != 0.0) {
+            if ((b < 0.0) != (m < 0.0))
+                m += b;
+        } else {
+            m = copysign(0.0, b);
+        }
+        return m;
+    }
+
+    // live._efx_place3d: the part at the type's azimuth (r[23], degrees), 3D
+    // Auto's turning at r[24] turns a second, each note where its onset finds
+    // it -- a repan from the channel's pan to the place
+    void efx_place3d(const double *fc, const std::vector<long> &slots, int cp, long long n0)
+    {
+        const double az = fc[23], turn = fc[24];
+        const double t = (double)n0 / rate;
+        const double ang = (py_fmod(az + 360.0 * turn * t + 180.0, 360.0) - 180.0) * (M_PI / 180.0);
+        double row[3];
+        pan_at(ang, row);
+        S.repan_rows(slots, row, S.pan_tab[std::max(0, std::min(127, cp))], rate, true);
+    }
+
+    // live._efx_rotary_arm: a Rotary type's part on the rotors -- each partial
+    // leaving at its own angle (default_rng(note * 7919 + n).uniform(0, 2 pi):
+    // PCG64), the drum and horn at their levels (r[149], r[150]), the two mics
+    // at Separate (r[152])
+    void efx_rotary_arm(const double *fc, const std::vector<long> &slots, int note, long long n0)
+    {
+        efx_rotary_sync();
+        if (slots.empty())
+            return;
+        const long m = (long)slots.size();
+        void *g = nv_npy_new((unsigned long long)((long long)note * 7919 + m));
+        std::vector<float> az(m), nf(m), lv(m);
+        for (long q = 0; q < m; q++)
+            az[q] = (float)(0.0 + (2.0 * M_PI - 0.0) * nv_npy_uniform(g));
+        nv_npy_free(g);
+        for (long q = 0; q < m; q++)
+            nf[q] = S.f4[F4_nf][slots[q]];
+        S.leslie_arm(slots, az.data(), nf.data(), nullptr, n0, rotor_horn.rate, rotor_drum.rate);
+        for (long q = 0; q < m; q++)
+            lv[q] = (float)(S.ls_horn[slots[q]] ? fc[150] : fc[149]);
+        S.channel_gain_each(slots, lv);
+        for (long q = 0; q < m; q++)
+            S.ls_sep[slots[q]] = (float)fc[152];
+    }
+
+    // live._efx_rotary_sync: the rotors at the Rotary type's speeds -- slow or
+    // fast as its Speed stands (r[151]) -- and its spin times; back to the
+    // organ's when it goes. Once a revision of the effect, as live keys it
+    long rot_rev = -2;
+    int rot_has = -1;
+    bool rot_saved = false;
+    double rot_dflt[4] = {0.0, 0.0, 0.0, 0.0};
+    void efx_rotary_sync()
+    {
+        const double *rt = nullptr;
+        for (int c : efx_chans()) {
+            const double *ex = efx_for(c);
+            if (ex && ex[140] != 0.0) {
+                rt = ex;
+                break;
+            }
+        }
+        const long rev = efx ? nv_efx_live_rev(efx) : -1;
+        if (rev == rot_rev && (rt != nullptr) == (rot_has == 1))
+            return;
+        rot_rev = rev;
+        rot_has = rt != nullptr;
+        if (!rot_saved) {
+            rot_dflt[0] = rotor_horn.up; rot_dflt[1] = rotor_horn.down;
+            rot_dflt[2] = rotor_drum.up; rot_dflt[3] = rotor_drum.down;
+            rot_saved = true;
+        }
+        if (!rt) {
+            rotor_horn.up = rot_dflt[0]; rotor_horn.down = rot_dflt[1];
+            rotor_drum.up = rot_dflt[2]; rotor_drum.down = rot_dflt[3];
+            return;
+        }
+        const bool fast = rt[151] != 0.0;
+        const double hz = fast ? rt[144] : rt[143];
+        const double dz = fast ? rt[142] : rt[141];
+        rotor_horn.target = hz;
+        rotor_drum.target = dz / std::max(fabs(rotor_drum.ratio), 1e-9);
+        rotor_horn.up = rt[147]; rotor_horn.down = rt[148];
+        rotor_drum.up = rt[145]; rotor_drum.down = rt[146];
     }
 
     // efxfilter.response type 4, a comb: |(1 - pa) + pa z / (1 - pb z)|, z =
@@ -4293,7 +4557,7 @@ struct Part {
             return;                         // a miss: live warms it off the audio thread
         amp_touch(cur);                     // (its chord changed: the valve's products are stale)
         if (patches[cur].organ) {           // a registered organ: its ranks drawn
-            organ_strike(*T, ch, note, n0);
+            organ_strike(*T, ch, note, vel, n0);
             return;
         }
         double scale = pow(10.0, level_db / 20.0) * swell * chan_gain(ch);
@@ -5809,7 +6073,7 @@ struct Part {
 
     // live._note_on's organ path: every rank drawn, in the stops' order (a
     // pipe organ has no touch: a key is open or shut)
-    void organ_strike(const nv::live::Template &T, int ch, int note, long long n0)
+    void organ_strike(const nv::live::Template &T, int ch, int note, int vel, long long n0)
     {
         note_touch[std::make_pair(ch, note)] = 1.0;
         const std::vector<char> &dr = patches[cur].drawn;
@@ -5843,6 +6107,24 @@ struct Part {
             if (!sc.empty()) {
                 std::vector<int> pv(pk.begin(), pk.end());
                 reg_strike(ch, note, n0, T, sl, &pv, &sc);
+            }
+        }
+        // ...AND ITS EFFECT, the module's or the tone's own (live's organ path:
+        // Bit Hit's Lo-Fi on an orchestra hit's sections), on every drawn rank,
+        // in the stops' order -- then its copies (_tap_arm)
+        std::vector<long> rs;
+        for (int ri = 0; ri < (int)dr.size(); ri++) {
+            if (!dr[ri])
+                continue;
+            long li = S.live_find(Key(pid, ch, note, rank_layer(og, ri)));
+            if (li >= 0)
+                rs.insert(rs.end(), S.live[li].second.begin(), S.live[li].second.end());
+        }
+        if (!rs.empty()) {
+            int ec = ch;
+            if (efx_note(ch, note, vel, n0, rs, &ec)) {
+                tap_tables();
+                tap_arm(ec, rs);
             }
         }
     }
@@ -6166,7 +6448,7 @@ struct Part {
         n0 += amp_held(pid, ch, note);      // (...and held, as long as it was played)
         amp_touch(cur);
         auto kt = key_tone.find(Key(pid, ch, note, 0));
-        if (patches[cur].amp > 0.0 && (kt == key_tone.end() || kt->second == patches[cur].cache) && !amp_holds(cur))
+        if (valved(cur) && (kt == key_tone.end() || kt->second == patches[cur].cache) && !amp_holds(cur))
             S.release(Key(pid, -1, -1, AMPK), n0);  // the products end with their chord (a note of this tone's)
         {                                   // the auto wah's envelope lets go: ch's, and ch's tones'
             std::vector<int> ecs{ch};
@@ -9403,6 +9685,8 @@ struct Part {
             scanner_block(n0, blk);
         tremolo_block(n0);                      // (live's swing, after the reap)
         leslie_block(n0, blk);                  // ...then the rotors'
+        if ((efx && nv_efx_live_parts(efx)) || !tone_fx.empty() || S.tap_m)
+            efx_rotary_sync();                  // (the Rotary type's rotors: live._efx_rotary_sync)
         filter_block(n0, blk);                  // ...then the moving filters, on the levels they left
     }
 };
@@ -9834,14 +10118,19 @@ int nv_part_efx_state(void *h, int *o, int cap, const char **why)
         return -1;
     int n = nv_efx_live_state(P->efx, o, cap, why);
     const double *fc = n > 0 && o[n - 1] == 0 ? nv_efx_live_rec(P->efx) : nullptr;
-    if (fc && (fc[1] != 0.0 || fc[2] != 0.0)) {     // (refused as efx_chain refuses it)
-        o[n - 1] = -3;
-        *why = "drive or cabinet, live";
-    } else if (fc && fc[34] == 3.0) {
+    if (fc && fc[34] == 3.0) {                       // (refused as efx_chain refuses it)
         o[n - 1] = -3;
         *why = "a Keyboard Multi's copies, live";
     }
     return n;
+}
+
+// live.pan_at's head for a 3D type's place (the export's LP3D)
+void nv_part_place3d(void *h, const double *q)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    memcpy(P->p3d, q, sizeof P->p3d);
+    P->has_p3d = true;
 }
 
 long nv_part_efx_rev(void *h)

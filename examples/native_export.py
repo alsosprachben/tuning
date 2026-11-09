@@ -728,6 +728,11 @@ def main(argv):
                 for nm in (LT.GM[prog], PM.drum_set_name(prog) if prog in PM.DRUM_SETS else ""):
                     b = nm.encode()
                     f.write(struct.pack("<i", len(b)) + b)
+            # LP3D: live.pan_at's head (a 3D type's place, Live._efx_place3d): the
+            # stopped pipe's height and distance, the head's radius, the speed of sound
+            _q3 = T.StoppedPipeProperties(261.63, 0.0, 1.0, 1.0)
+            f.write(b"LP3D" + struct.pack("<4d", float(_q3.position_z), float(_q3.listener_distance),
+                                           float(_q3.head_radius), float(_q3.sound_speed)))
     print("native export: %d piano class(es), tuner %s, room %s -> %s" % (len(classes), tuner,
                                                                           room.decode() or "-", args[0]))
     if sess:

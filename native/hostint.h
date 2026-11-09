@@ -18,6 +18,9 @@ enum { K_SR, K_BLK, K_CHUNK, K_MASTER, K_RING_FLOOR, K_RING_MAX, K_XDEC, K_REG_S
        K_BEND_SEMIS, K_GM_VOL, K_GM_EXPR, K_GSPLACE, K_MAPKITS = K_GSPLACE + 13, K_EFX = K_MAPKITS + 33 };
 
 struct Export {
+    // LP3D: live.pan_at's head (z, distance, radius, sound speed)
+    double p3d[4] = {0.0, 0.0, 0.0, 0.0};
+    bool has_p3d = false;
     // LROOMS: every room live can switch to -- the class records' byte
     // ranges a room sets, how many classes, the device tails' filters, and
     // each room's name, whether it reflects, its tail's spec and (where it

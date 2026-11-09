@@ -1501,10 +1501,12 @@ class Slab:
         if sep.any():
             # THE RECORDED ROTARY's two mics (gsefx Rotary's Separate): each ear
             # its own mic, half the spacing either side -- its own swing
-            cl = 0.5 * (1.0 + np.cos(ang - self.ls_ph[idx] + 0.5 * sep))
-            cr = 0.5 * (1.0 + np.cos(ang - self.ls_ph[idx] - 0.5 * sep))
-            gl = (fl + (1.0 - fl) * cl ** (0.5 * self.ls_sharp[idx])) / self.ls_norm[idx]
-            gr = (fl + (1.0 - fl) * cr ** (0.5 * self.ls_sharp[idx])) / self.ls_norm[idx]
+            # (libm's cos and pow too, as above)
+            cl = 0.5 * (1.0 + _NV.xcos(ang - self.ls_ph[idx] + 0.5 * sep))
+            cr = 0.5 * (1.0 + _NV.xcos(ang - self.ls_ph[idx] - 0.5 * sep))
+            ex = (0.5 * self.ls_sharp[idx]).astype(np.float64)
+            gl = (fl + (1.0 - fl) * _NV.xpow(cl, ex)) / self.ls_norm[idx]
+            gr = (fl + (1.0 - fl) * _NV.xpow(cr, ex)) / self.ls_norm[idx]
             self.a["aL"][idx] = self.ls_aL[idx] * np.where(sep != 0, gl, g)
             self.a["aR"][idx] = self.ls_aR[idx] * np.where(sep != 0, gr, g)
             return
@@ -6186,8 +6188,11 @@ class Live:
                     self._reg_strike(part, ch, note, n0, tmpl, list(sc),
                                      sorted(set(sc.values())), sc)
             # ...AND ITS EFFECT, the module's or the tone's own (Bit Hit's
-            # Lo-Fi on an orchestra hit's sections), on every drawn rank
-            _rs = [s_ for r in part.drawn for s_ in self.slab.live.get((part.pid, ch, note, r), ())]
+            # Lo-Fi on an orchestra hit's sections), on every drawn rank -- in
+            # the stops' order (a set of names iterates in the hash's order,
+            # which changes from process to process)
+            _rs = [s_ for r in part.patch.rank_names if r in part.drawn
+                   for s_ in self.slab.live.get((part.pid, ch, note, r), ())]
             if _rs:
                 _cp = part.pan if part.pan is not None else self.cpan.get(ch, T.GM_DEFAULT_PAN)
                 _efx, _ec = self._efx_note(part, ch, note, vel, _rs, _cp, n0)
@@ -7121,6 +7126,16 @@ class Live:
         idx = np.fromiter(slots, np.int64, len(slots))
         f = a["om"][idx].astype(np.float64) * self.rate / (2.0 * math.pi)
         g = np.full(len(idx), float(ex['level']))
+        # ITS COMPRESSOR (a multi's Cmp stage, before its OD), as the file has
+        # it (blockrender's _EFXN): its sustain the decay slowed, its makeup a
+        # gain, its attack the onset's rise -- the columns float32, as stamped
+        if ex.get('comp') is not None:
+            _cs, _cl, _ca = ex['comp']
+            g *= float(_cl)
+            a["logr"][idx] = a["logr"][idx] * np.float32(_cs)
+            a["logrA"][idx] = a["logrA"][idx] * np.float32(_cs)
+            if _ca > 0.0:
+                a["fa"][idx] = np.maximum(a["fa"][idx], np.float32(_ca * self.rate))
         # ITS OD STAGE'S GAIN, in front of the valve (_amp_snapshot): into the
         # note's level, so the valve is driven harder and comes out louder,
         # saturating at its ceiling, as a pedal does (blockrender's _EFG)

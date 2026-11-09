@@ -62,6 +62,7 @@ void nv_part_drone_patch(void *h, int pi, void *cache, int nbuckets, int speed);
 void nv_part_toggle_stop(void *h, int rank, long long n0);
 int nv_part_drawn(void *h, char *out, int cap);
 void nv_part_efx(void *h, const double *X, double SR);
+void nv_part_place3d(void *h, const double *q);
 int nv_part_efx_state(void *h, int *o, int cap, const char **why);
 long nv_part_efx_rev(void *h);
 void *nv_part_new(void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
