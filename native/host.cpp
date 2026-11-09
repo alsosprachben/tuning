@@ -1362,9 +1362,10 @@ void nv_host::render_block(long long n0, float *buf, bool step)
     }
     nv_part_block(part, n0, BLK);
     if (step) {                         // (the tail installed after the block's events, as live's post)
-        if (step_room)
+        if (step_room_go)
             nv_part_room_set(part, step_room, BLK);
         step_room = nullptr;
+        step_room_go = false;
         nv_part_room_reap(part);
     }
     if (asks)

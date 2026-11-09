@@ -51,6 +51,39 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "examples"))
 
 
+def live_export(tmp, room):
+    """the live export at ROOM (--fresh), its path. With NV_EXPORT_CACHE set:
+    made once in that directory for this tree's sources, ROOM and the TUNING_*
+    environment, and the same file handed to every later check (a batch's
+    checks share one export; a perturbed tree's sources make another);
+    without, made in TMP"""
+    cmd = [sys.executable, os.path.join(HERE, "examples", "native_export.py"), None, "--live", "--fresh",
+           "--room=" + room]
+    cache = os.environ.get("NV_EXPORT_CACHE")
+    if not cache:
+        cmd[2] = os.path.join(tmp, "live.nvx")
+        subprocess.check_call(cmd, stdout=subprocess.DEVNULL)
+        return cmd[2]
+    import glob
+    import hashlib
+    h = hashlib.sha256()
+    for d, pats in (("", ("*.py",)), ("examples", ("*.py",)), ("native", ("*.c", "*.cpp", "*.h", "*.cl"))):
+        for p in sorted(f for pat in pats for f in glob.glob(os.path.join(HERE, d, pat))):
+            h.update(os.path.relpath(p, HERE).encode() + b"\0")
+            with open(p, "rb") as f:
+                h.update(f.read())
+    for k in sorted(k for k in os.environ if k.startswith("TUNING_")):
+        h.update(("%s=%s\0" % (k, os.environ[k])).encode())
+    h.update(HERE.encode() + b"\0" + room.encode())   # (the export names the tree's libraries)
+    os.makedirs(cache, exist_ok=True)
+    out = os.path.join(cache, "live-%s.nvx" % h.hexdigest()[:20])
+    if not os.path.exists(out):
+        cmd[2] = out + ".part"
+        subprocess.check_call(cmd, stdout=subprocess.DEVNULL)
+        os.replace(out + ".part", out)                  # (a killed export never handed on)
+    return out
+
+
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith("--")]
     opt = dict(a[2:].split("=", 1) if "=" in a else (a[2:], "") for a in argv[1:] if a.startswith("--"))
@@ -69,10 +102,8 @@ def main(argv):
     atexit.register(shutil.rmtree, tmp, True)       # (an export and WAVs a run: they filled the disk)
     mid = os.path.join(tmp, "in.mid")
     BI.excerpt(args[0], secs).save(mid)
-    nvx = os.path.join(tmp, "live.nvx")
     room = opt.get("room") or "hall"
-    subprocess.check_call([sys.executable, os.path.join(HERE, "examples", "native_export.py"), nvx, "--live",
-                           "--fresh", "--room=" + room], stdout=subprocess.DEVNULL)
+    nvx = live_export(tmp, room)
     exe = N.build_nvlive()
     m = N.Midi(mid)
     if m.error or (m.banked() and "programs" not in opt):
@@ -199,6 +230,8 @@ def main(argv):
             else:
                 lv.on_midi(M("control_change", channel=ch, control=a, value=v))
             e += 1
+        lv.slab.tap_cap = lv.slab.tap_ucap         # (the copies' governor off too: live._callback's
+                                                   # cut on a slow block; nvlive cuts none in --test)
         dry.append(np.frombuffer(lv.callback(None, 128, None, 0)[0], np.float32).reshape(-1, 2))
         if progs:
             for _part, _p in patchsync.build(lv):

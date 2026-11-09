@@ -57,9 +57,8 @@ def main():
     try:
         mid = os.path.join(tmp, "in.mid")
         BI.excerpt(args[0], secs).save(mid)
-        nvx = os.path.join(tmp, "live.nvx")
-        subprocess.check_call([sys.executable, os.path.join(HERE, "examples", "native_export.py"), nvx, "--live",
-                               "--fresh", "--room=hall"], stdout=subprocess.DEVNULL)
+        from nvlive_check import live_export
+        nvx = live_export(tmp, "hall")
         exe = N.build_nvlive()
         d = N.lib()
         d.nv_midi_read.restype = ctypes.c_void_p

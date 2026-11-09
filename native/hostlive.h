@@ -542,6 +542,7 @@ struct nv_host {
     void render_block(long long n0, float *buf, bool step = false);
     bool asks = true;
     void *step_room = nullptr;
+    bool step_room_go = false;               // (a switch to install: dry's tail is none)
     long step_swaps = 0;
     double last_step_ms = 0.0, last_out_ms = 0.0;    // (the block's events and step; its render)
     int run(int argc, char **argv);

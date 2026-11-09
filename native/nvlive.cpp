@@ -168,6 +168,7 @@ int nv_host::run(int argc, char **argv)
                             swap(i_, p_, d_, v_, c_);
                         })) {
                         step_room = room_new;
+                        step_room_go = true;
                         fprintf(stderr, "nvlive: room %s at block %lld\n", room_want->c_str(), b);
                     } else {
                         fprintf(stderr, "nvlive: room %s: not this export's, or the room already\n", room_want->c_str());

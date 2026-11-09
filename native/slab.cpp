@@ -67,6 +67,20 @@ extern "C" double nv_meend_cents(double nc, const double *sw, int nsw, double ra
 
 extern "C" double nv_damper_contact(int p, int key, int top);
 
+// tapkernel.c (live.py's, built with libnative under its own flags): the
+// insertion effect's copies written into the scratch rows
+extern "C" int tap_expand(int ncol, void **colp, const int *colsz, int nsrc, const int64_t *src, const int32_t *set,
+                          double *om, double *p0, double *p0R, int64_t *non, int64_t *noff, float *nf, float *aL,
+                          float *aR, float *vd, float *vr, float *vp, float *vdl, float *delL, float *delR,
+                          int32_t *fx, int32_t *gr, int32_t *br, const int32_t *ts, const double *eq,
+                          const int32_t *eqo, const int32_t *nmid, const double *dry, const double *al0,
+                          const double *ar0, const int64_t *tD, const double *tg, const double *tfc,
+                          const double *tr, const double *thz, const double *tal1, const double *tar1,
+                          const double *tdl, const double *tvd, const double *tvr, const double *tph,
+                          const float *re, double floor, int64_t n0, int64_t n1, double beta, double sr,
+                          int64_t idle, int64_t dst0, int cap, int identity, int moog_w, int64_t ucap,
+                          int64_t *units);
+
 extern "C" {
 // livereg.cpp: register.LiveChannel
 void *nv_lreg_new(const StringMode *modes, int M, double sr, double kappa, double knock, double fall, double fl,
@@ -371,6 +385,19 @@ struct LobePre {
 
 struct Slab {
     long cap;
+    // THE TAPS' SCRATCH ROWS (live.Slab.tcap: tapkernel.c): past the slots,
+    // in every kernel column (f8, f4, f4n, i8, i4, sw, aLp, aRp, dk, dg),
+    // rewritten every block from the partials that carry a tap set and
+    // rendered as rows -- never handed out, never busy, never reaped
+    long tcap;
+    std::vector<int32_t> tp;                // each slot's tap set (its channel's), -1 none
+    std::vector<long long> tpx;             // ...and its longest tap: the slot is held that much longer
+    long tap_m = 0;                         // scratch rows written for this block
+    // ...their cost at most, in units (TAP_MOOG_COST; the budget governor's),
+    // and this block's
+    static const int TAP_MOOG_COST = 3;
+    long long tap_ucap = 0, tap_cap = 0, tap_u = 0;
+    bool tap_on = false;                    // a tap table stands (live's tap_tab is not None)
     std::vector<std::vector<double>> f8;
     std::vector<std::vector<float>> f4, f4n;
     std::vector<std::vector<long long>> i8;
@@ -439,27 +466,32 @@ struct Slab {
     // A SECTION'S ENTRIES ARE REDRAWN AT EVERY PRESS (live.Slab._rng)
     PyRandom scat_rng;
 
-    explicit Slab(long capacity) : cap(capacity)
+    explicit Slab(long capacity, long tap_capacity = -1) : cap(capacity)
     {
+        tcap = tap_capacity < 0 ? 4 * capacity : tap_capacity;
+        tp.assign(cap, -1);
+        tpx.assign(cap, 0);
+        tap_ucap = tap_cap = (long long)tcap * TAP_MOOG_COST;
+        const long full = cap + tcap;           // (the kernel's columns: the slots, then the scratch rows)
         pyr_seed(&scat_rng, 0x5CA7);
         owner.assign(cap, -1);
-        f8.assign(NF8, std::vector<double>(cap, 0.0));
-        f4.assign(NF4, std::vector<float>(cap, 0.0f));
-        f4n.assign(NF4N, std::vector<float>(cap, 0.0f));
-        i8.assign(NI8, std::vector<long long>(cap, IDLE));
-        i4.assign(NI4, std::vector<int32_t>(cap, 0));
+        f8.assign(NF8, std::vector<double>(full, 0.0));
+        f4.assign(NF4, std::vector<float>(full, 0.0f));
+        f4n.assign(NF4N, std::vector<float>(full, 0.0f));
+        i8.assign(NI8, std::vector<long long>(full, IDLE));
+        i4.assign(NI4, std::vector<int32_t>(full, 0));
         // live.Slab's rest: no gate, bend row or Moog filter row (-1); unit
         // gains, harmonic ratio and vibrato scale; the vibrato at 5.5 Hz
         for (int c : {I4_gr, I4_br, I4_fx})
-            i4[c].assign(cap, -1);
-        f4[F4_cbw].assign(cap, 100000.0f);      // the wash's width: blockrender.RAND_GRAN, never 0
-        sw.assign(cap, 1.0f);
+            i4[c].assign(full, -1);
+        f4[F4_cbw].assign(full, 100000.0f);     // the wash's width: blockrender.RAND_GRAN, never 0
+        sw.assign(full, 1.0f);
         aL0.assign(cap, 0.0f); aR0.assign(cap, 0.0f); sg.assign(cap, 1.0f); sre.assign(cap, 1.0f);
         hrel.assign(cap, 1.0f); vbase.assign(cap, 0.0f); vsc.assign(cap, 1.0f);
         vrbase.assign(cap, 1.0f * 5.5f);
-        dk.assign(cap, -1); slot_ch.assign(cap, -1);
-        dg.assign(cap, 0.0f);
-        aLp.assign(cap, 0.0f); aRp.assign(cap, 0.0f);
+        dk.assign(full, -1); slot_ch.assign(cap, -1);
+        dg.assign(full, 0.0f);
+        aLp.assign(full, 0.0f); aRp.assign(full, 0.0f);
         tr_on.assign(cap, 0); tr_dep.assign(cap, 0.0f); tr_aL.assign(cap, 0.0f); tr_aR.assign(cap, 0.0f);
         cv_on.assign(cap, 0); cv_aL.assign(cap, 0.0f); cv_aR.assign(cap, 0.0f);
         fl_on.assign(cap, 0); fl_ch.assign(cap, 0); fl_aL.assign(cap, 0.0f); fl_aR.assign(cap, 0.0f);
@@ -512,6 +544,7 @@ struct Slab {
             long s = idx[q];
             busy[s] = 1;
             dk[s] = -1;
+            tp[s] = -1;                         // (a fresh slot carries no taps)
             for (int c = 0; c < NF4; c++)
                 f4[c][s] = tf4[c][q];
             for (int c = 0; c < NI4; c++)
@@ -1037,6 +1070,7 @@ struct Slab {
             long s = idx[q];
             busy[s] = 1;
             dk[s] = -1;
+            tp[s] = -1;                         // (a fresh slot carries no taps)
             fl_n -= fl_on[s];
             fl_on[s] = 0;                       // (...and no filter)
             ls_on[s] = 0;
@@ -1282,6 +1316,14 @@ struct Slab {
     }
 
     // Slab.knobs_advance's knob rows: a block's end the next one's start
+    // ...and the Moog partials' levels: each slot's now where the next
+    // block's ramp starts (the slots alone: live's view, not the scratch rows)
+    void levels_advance()
+    {
+        std::copy(f4[F4_aL].begin(), f4[F4_aL].begin() + cap, aLp.begin());
+        std::copy(f4[F4_aR].begin(), f4[F4_aR].begin() + cap, aRp.begin());
+    }
+
     void knobs_advance()
     {
         for (int r = 0; r < MOOG_KN_ROWS; r++)
@@ -1798,10 +1840,17 @@ struct Slab {
                 }
             }
             double tail = (double)r.second + (double)mx + (double)blk + 1.0;
+            if (tap_on) {                       // its taps' copies ring that much on
+                long long tx = 0;
+                for (size_t q = 0; q < r.first.size(); q++)
+                    tx = q == 0 ? tpx[r.first[q]] : std::max(tx, tpx[r.first[q]]);
+                tail += (double)tx;
+            }
             if ((double)n > tail) {
                 std::vector<long> freed;
                 for (long s : r.first) {
                     i8[0][s] = IDLE;
+                    tp[s] = -1;
                     if (busy[s]) {
                         busy[s] = 0;
                         free.push_back(s);
@@ -2134,6 +2183,24 @@ struct Part {
     // refusal has been said
     void *efx = nullptr;
     const double *efx_x = nullptr;      // (its export tables: the tremolo's waves)
+    // ...ITS COPIES AS REFERENCED TAPS (live.EFX_TAPS: _tap_tables, _tap_arm,
+    // Slab.tap_fill): one tap set an effect channel (the module's parts, the
+    // tones' own), flattened for tapkernel.c's tap_expand -- rebuilt when
+    // the effect, its parts, the tones' channels or a part's pan move; a
+    // slot carries its channel's set (S.tp) and its copies are written each
+    // block from it as it stands
+    struct TapTab {
+        std::vector<int32_t> ts, eqo, nmid;
+        std::vector<double> eq, dry, al0, ar0, g, fc, r, hz, al1, ar1, dl, vd, vr, ph;
+        std::vector<int64_t> D, dmax;
+    };
+    std::unique_ptr<TapTab> tap_tab;
+    std::map<int, int> tap_sid;             // an effect channel's tap set
+    std::vector<long long> tap_key;
+    bool tap_keyed = false;
+    std::vector<void *> tap_colp;           // (tap_expand's generic columns: every kernel column it does not name)
+    std::vector<int> tap_colsz;
+    long tap_shed = 0;                      // blocks the governor cut the copies on
     // ...each part's notes on it (live.efx_notes: start, end -- inf while
     // held -- velocity, key), what an auto wah's Sens hears; and each part's
     // moving filter over the timeline (nv_efx_live_filter), kept by its rev
@@ -3762,6 +3829,10 @@ struct Part {
             *st = -3;
             *why = "drive or cabinet, live";
             fc = nullptr;
+        } else if (fc && fc[34] == 3.0) {
+            *st = -3;
+            *why = "a Keyboard Multi's copies, live";
+            fc = nullptr;
         }
         return fc;
     }
@@ -3785,11 +3856,15 @@ struct Part {
             *st = -3;
             *why = "drive or cabinet, live";
             fc = nullptr;
+        } else if (fc && fc[34] == 3.0) {
+            *st = -3;
+            *why = "a Keyboard Multi's copies, live";
+            fc = nullptr;
         }
         return fc;
     }
 
-    void efx_note(int ch, int note, int vel, long long n0, const std::vector<long> &slots)
+    const double *efx_note(int ch, int note, int vel, long long n0, const std::vector<long> &slots, int *ecp)
     {
         // THE MODULE's, where the part is on it; else THE TONE's OWN on its
         // effect channel (live._tone_fx) -- and the tone's plunger or mouth
@@ -3809,9 +3884,302 @@ struct Part {
         }
         if (fxc >= 0 && (ec != fxc || !fc) && tone_fx[fxc].kind)
             S.filter_arm(slots, fxc);
+        *ecp = ec;
         if (!fc)
-            return;
+            return nullptr;
         efx_direct(fc, ec, note, vel, n0, slots, ec == fxc && tone_fx[fxc].kind);
+        return fc;
+    }
+
+    // ---- THE COPIES AS TAPS (live._tap_list, _tap_tables, _tap_arm) ----
+    // live._side_cc: an output's side as a CC10 on the +-30 degree stage --
+    // the record's codes: 0 'l', 1 'r', 2 'c', 100 + v a pan (v), 300/301
+    // the 3D Delay's -60/+60 degrees
+    static int side_cc(int code)
+    {
+        if (code == 0)
+            return 0;
+        if (code == 1)
+            return 127;
+        if (code >= 100 && code < 300)
+            return code - 100;
+        if (code == 300 || code == 301)
+            return pan_cc(std::max(-1.0, std::min(1.0, (code == 300 ? -60.0 : 60.0) / 30.0)));
+        return 64;                          // (T.GM_DEFAULT_PAN)
+    }
+    static int pan_cc(double x)             // (a pan -1..1, as _side_cc rounds it)
+    {
+        return (int)nearbyint(64 + 63 * std::max(-1.0, std::min(1.0, x)));
+    }
+    struct Tap {
+        long long D;
+        double g, fc, r, hz;
+        int cc;                             // its side's CC10
+        double vd, vr, ph;                  // its LFO (vd < 0: none)
+    };
+    // the chain's copies, partial-independent (live._tap_list): the delay's
+    // taps and their repeats (gsdelay's law, REPEAT_FLOOR), the chorus's
+    // voices (chorus.gs_copies', EFX_CF_PASSES 1) where it is no comb
+    std::vector<Tap> tap_list(const double *fc) const
+    {
+        std::vector<Tap> out;
+        const double REPEAT_FLOOR = pow(10.0, -60.0 / 20.0);
+        const double *Dv = fc[34] == 1.0 ? fc + 35 : fc[34] == 2.0 ? fc + 96 : nullptr;
+        if (Dv) {
+            const bool cross = fc[34] == 2.0 && fc[121] != 0.0;
+            const double *mod = fc[34] == 2.0 && fc[122] != 0.0 ? fc + 122 : nullptr;
+            const double level = Dv[0], fb = Dv[1], lpf = Dv[2];
+            const int ntap = (int)Dv[4];
+            for (int t = 0; t < ntap; t++) {
+                const double *T = Dv + 5 + 5 * t;
+                const double tau = T[0], lv = T[1], period = T[3], shift = T[4];
+                const int side = (int)T[2];
+                for (int k = 0; k < 64; k++) {              // (gsdelay.MAX_REPEATS)
+                    if (k && fb == 0.0)
+                        break;
+                    const double g = level * lv * (k ? pow(fb, (double)k) : 1.0);
+                    if (fabs(g) < REPEAT_FLOOR)
+                        break;
+                    const int sd = cross && (k % 2) && side <= 1 ? 1 - side : side;
+                    Tap tp{(long long)nearbyint((tau + k * period) * rate), g, lpf, pow(shift, (double)(k + 1)), 0.0,
+                           side_cc(sd), -1.0, 0.0, 0.0};
+                    if (mod) {
+                        const double mr = mod[0], mswing = mod[1], mph = mod[2];
+                        tp.vd = std::min(0.5, 2.0 * M_PI * mr * mswing);
+                        tp.vr = mr;
+                        tp.ph = sd == 1 ? mph : 0.0;
+                    }
+                    out.push_back(tp);
+                }
+            }
+        }
+        if (fc[14] != 0.0 && fc[18] == 0.0) {
+            const double a = fc[20], sh = fc[21] >= 0.0 ? fc[21] : a * a / (1.0 + a * a);
+            if (sh > 0.0) {
+                const double tau = fc[15], crate = fc[16], cvd = fc[17], fb = fc[18], lpf = fc[19];
+                const double fb2 = pow(fb, 2.0);
+                const double passes = fb2 < 1.0 ? (1.0 - pow(fb2, 16.0)) / (1.0 - fb2) : 16.0;   // (GS_MAX_PASSES)
+                // its voices (side CC10, LFO phase, extra delay s, depth factor): the
+                // Hexa Chorus's six, the 3D Chorus's two, else left and right at its phase
+                std::vector<std::array<double, 4>> taps;
+                if (fc[87] == 1.0) {
+                    const double pd = fc[88] / 20.0, dd = fc[89], dv = (fc[90] - 0x40) / 20.0;
+                    for (int k = 0; k < 6; k++)
+                        taps.push_back({(double)pan_cc(pd * (2.0 * k / 5.0 - 1.0)), 2.0 * M_PI * k / 6.0,
+                                        0.5 * dd * (k / 5.0 - 0.5) / 1000.0,
+                                        std::max(0.0, 1.0 + dv * (k / 5.0 - 0.5))});
+                } else if (fc[87] == 2.0) {
+                    taps.push_back({(double)pan_cc(-60.0 / 30.0), 0.0, 0.0, 1.0});
+                    taps.push_back({(double)pan_cc(60.0 / 30.0), M_PI, 0.0, 1.0});
+                } else {
+                    taps.push_back({0.0, 0.0, 0.0, 1.0});
+                    taps.push_back({127.0, fc[31], 0.0, 1.0});
+                }
+                const double wet = pow(sh / (double)taps.size() / passes, 0.5);
+                for (const auto &tv : taps) {
+                    const int k = 1;
+                    const double g = wet * pow(fb, (double)(k - 1));
+                    if (fabs(g) < 0.02 * 0.5)               // (chorus.FLOOR)
+                        continue;
+                    out.push_back(Tap{(long long)nearbyint((k * tau + tv[2]) * rate), g, lpf, 1.0, 0.0, (int)tv[0],
+                                      std::min(0.5, k * cvd * tv[3]), crate, tv[1]});
+                }
+            }
+        }
+        return out;
+    }
+
+    // live._efx_chans, sorted: the module's parts on it and the tones' own
+    // effect channels (a parallel type's branch B: not here yet)
+    std::vector<int> efx_chans() const
+    {
+        std::set<int> c;
+        if (efx) {
+            int pl[64];
+            int n = nv_efx_live_part_list(efx, pl, 64);
+            for (int i = 0; i < n && i < 64; i++)
+                c.insert(pl[i]);
+        }
+        for (const auto &kv : tone_fx)
+            c.insert(kv.first);
+        return std::vector<int>(c.begin(), c.end());
+    }
+    // ...the chain channel c hears (live._efx_for): its tone's own, or the module's
+    const double *efx_for(int c)
+    {
+        int st = -1;
+        const char *why = "";
+        if (c >= TONE_SEG) {
+            auto it = tone_fx.find(c);
+            return it != tone_fx.end() ? tone_chain(it->second, &st, &why) : nullptr;
+        }
+        return efx ? efx_chain(c, &st, &why) : nullptr;
+    }
+
+    // live._tap_tables: the tap sets, one an effect channel, flattened --
+    // rebuilt when the effect, its parts, the tones' channels or a part's
+    // pan has moved; loudest first in each set, so a capped block keeps the
+    // loudest
+    void tap_tables()
+    {
+        std::vector<int> chans = efx_chans();
+        std::set<int> pcs;
+        for (int c : chans)
+            pcs.insert(c % TONE_SEG);
+        std::vector<long long> key{efx ? nv_efx_live_rev(efx) : -1, (long long)chans.size()};
+        key.insert(key.end(), chans.begin(), chans.end());
+        for (int pc : pcs)
+            key.push_back(pc < 16 ? cpan[pc] : 64);
+        if (tap_keyed && key == tap_key)
+            return;
+        tap_keyed = true;
+        tap_key = key;
+        auto clamp = [](int v) { return v < 0 ? 0 : v > 127 ? 127 : v; };
+        const int NS = std::max(1, (int)chans.size());
+        tap_sid.clear();
+        for (size_t i = 0; i < chans.size(); i++)
+            tap_sid[chans[i]] = (int)i;
+        std::unique_ptr<TapTab> t(new TapTab);
+        t->ts.assign(NS + 1, 0);
+        t->eqo.assign(NS, -1);
+        t->nmid.assign(NS, 0);
+        t->dry.assign(NS, 1.0);
+        t->al0.assign(NS, 0.0);
+        t->ar0.assign(NS, 0.0);
+        t->dmax.assign(NS, 0);
+        int n = 0;
+        for (int i = 0; i < NS; i++) {
+            t->ts[i] = n;
+            const double *fc = i < (int)chans.size() ? efx_for(chans[i]) : nullptr;
+            if (!fc)
+                continue;
+            const int pc = chans[i] % TONE_SEG;
+            const double *p0 = S.pan_tab[clamp(pc < 16 ? cpan[pc] : 64)];
+            t->al0[i] = p0[0];
+            t->ar0[i] = p0[1];
+            if (fc[14] != 0.0 && fc[18] == 0.0) {
+                const double a = fc[20], sh = fc[21] >= 0.0 ? fc[21] : a * a / (1.0 + a * a);
+                t->dry[i] = pow(1.0 - sh, 0.5);
+            }
+            if (fc[6] != 0.0) {
+                // (lo, hi, their corners, then each mid (Hz, Q, dB), "or" as live's)
+                std::vector<std::array<double, 3>> mids{{fc[8], fc[9], fc[10]}};
+                for (int j = 0; j < (int)fc[62]; j++)
+                    mids.push_back({fc[63 + 3 * j], fc[64 + 3 * j], fc[65 + 3 * j]});
+                t->eqo[i] = (int)t->eq.size();
+                t->nmid[i] = (int)mids.size();
+                t->eq.insert(t->eq.end(), {fc[7], fc[11], fc[60] != 0.0 ? fc[60] : 400.0, fc[61] != 0.0 ? fc[61] : 4000.0});
+                for (const auto &m : mids)
+                    t->eq.insert(t->eq.end(), {m[0] != 0.0 ? m[0] : 0.0, m[1] != 0.0 ? m[1] : 1.0, m[2] != 0.0 ? m[2] : 0.0});
+            }
+            std::vector<Tap> taps = tap_list(fc);
+            std::stable_sort(taps.begin(), taps.end(), [](const Tap &x, const Tap &y) { return -fabs(x.g) < -fabs(y.g); });
+            for (const Tap &tp : taps) {
+                const double *p1 = S.pan_tab[clamp(tp.cc)];
+                t->D.push_back(tp.D);
+                t->g.push_back(tp.g);
+                t->fc.push_back(tp.fc);
+                t->r.push_back(tp.r);
+                t->hz.push_back(tp.hz);
+                t->al1.push_back(p1[0]);
+                t->ar1.push_back(p1[1]);
+                t->dl.push_back((p1[2] - p0[2]) * rate);
+                t->vd.push_back(tp.vd);
+                t->vr.push_back(tp.vr);
+                t->ph.push_back(tp.ph);
+                t->dmax[i] = std::max(t->dmax[i], (int64_t)tp.D);
+                n++;
+            }
+        }
+        t->ts[NS] = n;
+        if (!n) {
+            tap_tab.reset();
+            S.tap_on = false;
+            return;
+        }
+        if (t->eq.empty())
+            t->eq.push_back(0.0);
+        tap_tab = std::move(t);
+        S.tap_on = true;
+    }
+
+    // live._tap_arm: these slots on channel ec's tap set, if it has taps
+    void tap_arm(int ec, const std::vector<long> &slots)
+    {
+        auto it = tap_sid.find(ec);
+        if (!tap_tab || it == tap_sid.end() || tap_tab->ts[it->second + 1] <= tap_tab->ts[it->second])
+            return;
+        for (long s : slots) {
+            S.tp[s] = it->second;
+            S.tpx[s] = tap_tab->dmax[it->second];
+        }
+    }
+
+    // Slab.tap_fill: every partial with a tap set written once a tap into
+    // the scratch rows, from the partial as it now stands (tap_expand) --
+    // tap_m the rows the renderers add; rows left from a busier block idle
+    void tap_fill(long long n0, long long frames)
+    {
+        long m = 0;
+        int64_t units = 0;
+        if (tap_tab) {
+            std::vector<int64_t> src;
+            std::vector<int32_t> set;
+            for (long q = 0; q < S.cap; q++)
+                if (S.tp[q] >= 0) {
+                    src.push_back(q);
+                    set.push_back(S.tp[q]);
+                }
+            if (!src.empty()) {
+                if (tap_colp.empty()) {
+                    auto add = [&](void *p, int sz) {
+                        tap_colp.push_back(p);
+                        tap_colsz.push_back(sz);
+                    };
+                    for (int c : {F8_fmw, F8_fmp, F8_fmpR})
+                        add(S.f8[c].data(), 8);
+                    for (int c = 0; c < NF4; c++)
+                        if (c != F4_aL && c != F4_aR && c != F4_nf && c != F4_vd && c != F4_vr && c != 21
+                            && c != F4_delL && c != F4_delR)
+                            add(S.f4[c].data(), 4);
+                    for (int c = 0; c < 3; c++)
+                        add(S.f4n[c].data(), 4);
+                    for (int c : {(int)I4_cr, 3, (int)I4_mk})
+                        add(S.i4[c].data(), 4);
+                    add(S.sw.data(), 4);
+                    add(S.aLp.data(), 4);
+                    add(S.aRp.data(), 4);
+                    add(S.dk.data(), 4);
+                    add(S.dg.data(), 4);
+                }
+                const TapTab &T = *tap_tab;
+                m = tap_expand((int)tap_colp.size(), tap_colp.data(), tap_colsz.data(), (int)src.size(), src.data(),
+                               set.data(), S.f8[F8_om].data(), S.f8[F8_p0].data(), S.f8[F8_p0R].data(),
+                               (int64_t *)S.i8[0].data(), (int64_t *)S.i8[1].data(), S.f4[F4_nf].data(),
+                               S.f4[F4_aL].data(), S.f4[F4_aR].data(), S.f4[F4_vd].data(), S.f4[F4_vr].data(),
+                               S.f4[21].data(), S.f4n[3].data(), S.f4[F4_delL].data(), S.f4[F4_delR].data(),
+                               S.i4[I4_fx].data(), S.i4[I4_gr].data(), S.i4[I4_br].data(), T.ts.data(), T.eq.data(),
+                               T.eqo.data(), T.nmid.data(), T.dry.data(), T.al0.data(), T.ar0.data(), T.D.data(),
+                               T.g.data(), T.fc.data(), T.r.data(), T.hz.data(), T.al1.data(), T.ar1.data(),
+                               T.dl.data(), T.vd.data(), T.vr.data(), T.ph.data(), S.f4[F4_re].data(),
+                               pow(10.0, -60.0 / 20.0), n0, n0 + frames, S.pan_beta, rate, IDLE, S.cap,
+                               (int)S.tcap, 0, Slab::TAP_MOOG_COST, S.tap_cap, &units);
+            }
+        }
+        S.tap_u = m ? units : 0;
+        for (long q = S.cap + m; q < S.cap + S.tap_m; q++)
+            S.i8[0][q] = IDLE;
+        S.tap_m = m;
+    }
+
+    // live's callback, after the moving filters and the Moog's under them:
+    // the tap sets as they stand, then this block's copies
+    void tap_block(long long n0, long long frames)
+    {
+        if ((efx && nv_efx_live_parts(efx)) || !tone_fx.empty() || S.tap_m) {
+            tap_tables();
+            tap_fill(n0, frames);
+        }
     }
 
     // live._efx_direct and the rest of _efx_note on a chain: its level, its
@@ -3989,8 +4357,10 @@ struct Part {
         std::vector<long> slots = lj >= 0 ? S.live[lj].second : std::vector<long>();
         if (cpan[ch] != 64 && !slots.empty())
             S.repan(slots, cpan[ch], 64, rate, true);
+        const double *efx_fc = nullptr;     // the insertion effect, the module's or the tone's (live._efx_note)
+        int efx_ec = ch;
         if (!slots.empty() && !patches[cur].drums)
-            efx_note(ch, note, vel, n0, slots);     // the insertion effect, the module's or the tone's (live._efx_note)
+            efx_fc = efx_note(ch, note, vel, n0, slots, &efx_ec);
         if (soft[ch] && !slots.empty())
             S.soft_strings(slots, soft_drop, soft_top);
         double gl[3];                       // PORTAMENTO, stamped (live._glide)
@@ -4100,6 +4470,10 @@ struct Part {
             for (int ly = 0; ly < 2; ly++)          // each Messenger its own pedal
                 if (!lslots[ly].empty())
                     mf104(patches[cur], ch, note, *T, key, lslots[ly], scale, n0, bend[ch], ly);
+        if (efx_fc) {                           // ITS COPIES: the slots on the channel's tap set (live._tap_arm)
+            tap_tables();
+            tap_arm(efx_ec, slots);
+        }
     }
 
     // THE MF-104M, LIVE (live._mf104; mf104.py): a Moog part whose panel has
@@ -8372,14 +8746,16 @@ struct Part {
         for (long q = 0; q < S.cap; q++)
             if (S.busy[q])
                 gidx.push_back(q);
+        for (long q = S.cap; q < S.cap + S.tap_m; q++)
+            gidx.push_back(q);              // (...and the taps' scratch rows)
         long nact = (long)gidx.size();
         if (nact > D.n)
             D.make(std::max(nact, 2 * D.n), D.size);
         long mg = (blk % 128 == 0 && blk / 128 <= 64) ? 128 : blk;     // moog_grid
         long kb0 = (long)(n0 / mg);
-        gnon.resize(S.cap);
-        gnoff.resize(S.cap);
-        for (long q = 0; q < S.cap; q++) {
+        gnon.resize(S.cap + S.tap_m);
+        gnoff.resize(S.cap + S.tap_m);
+        for (long q = 0; q < S.cap + S.tap_m; q++) {
             gnon[q] = (long)S.i8[0][q];
             gnoff[q] = (long)S.i8[1][q];
         }
@@ -8396,7 +8772,7 @@ struct Part {
         auto t0 = std::chrono::steady_clock::now();
         while (true) {
             int r = ((nv_vblock_fn)vb)(
-                (long)n0, (int)blk, 1, (int)S.cap, S.f8[0].data(), S.f8[1].data(), S.f8[2].data(), F4[0].data(),
+                (long)n0, (int)blk, 1, (int)(S.cap + S.tap_m), S.f8[0].data(), S.f8[1].data(), S.f8[2].data(), F4[0].data(),
                 F4[1].data(), F4[2].data(), gnon.data(), gnoff.data(), F4[3].data(), F4[4].data(), F4[5].data(),
                 F4[6].data(), F4[7].data(), F4[8].data(), F4[9].data(), F4[10].data(), F4[11].data(),
                 F4[12].data(), F4[13].data(), F4[14].data(), F4[15].data(), F4[16].data(), F4[17].data(),
@@ -8434,6 +8810,7 @@ struct Part {
             ~MoogFlt() { S.moog_filter_restore(); }
         } moog_flt{S};
         S.moog_filter_apply();
+        tap_block(n0, frames);                  // the insertion effect's copies (live's tap_fill)
         // the Moog's mod rows for this block, and its FM's anchors (Renderer.render's first)
         S.moog_pitch_block(n0, frames, rate, moog_pcells);
         S.moog_shape_block(n0, frames, rate, moog_srows);
@@ -8462,8 +8839,7 @@ struct Part {
                 cur.kind = 2;
                 cur.slot = turn;
                 turn ^= 1;
-                S.aLp = S.f4[0];            // knobs_advance
-                S.aRp = S.f4[1];
+                S.levels_advance();         // knobs_advance
                 S.knobs_advance();
             } else {
                 if (!gpu_failed_said) {     // (said once: a failed launch renders on the CPU, and costs it)
@@ -8539,7 +8915,7 @@ struct Part {
         // next block's ramp starts (aLp, aRp)
         struct Advance {
             Slab &S;
-            ~Advance() { S.aLp = S.f4[0]; S.aRp = S.f4[1]; S.knobs_advance(); }
+            ~Advance() { S.levels_advance(); S.knobs_advance(); }
         } advance{S};
         long hi = -1;
         for (long q = 0; q < S.cap; q++)
@@ -8624,6 +9000,19 @@ struct Part {
             call(sx, xr.data(), (long)xr.size(), false, false);
         } else {
             call(sv, nullptr, hi, true, false);
+        }
+        if (S.tap_m) {                      // the taps' scratch rows (Slab.tap_fill), after
+            std::vector<long> xr2, keep2, dm2;
+            for (long q = S.cap; q < S.cap + S.tap_m; q++)
+                (S.dk[q] >= 0 && sd ? dm2 : fast(q) ? xr2 : keep2).push_back(q);
+            if (!dm2.empty()) {
+                call(sv, keep2.data(), (long)keep2.size(), false, false);
+                call(sx, xr2.data(), (long)xr2.size(), false, false);
+                call(sd, dm2.data(), (long)dm2.size(), false, true);
+            } else {
+                call(sv, keep2.data(), (long)keep2.size(), false, false);
+                call(sx, xr2.data(), (long)xr2.size(), false, false);
+            }
         }
 #undef VOICE_ARGS
         }
@@ -8870,6 +9259,21 @@ struct Part {
     // a block took ms of budget_ms; the next starts at n
     long govern(double ms, double budget_ms, long long n)
     {
+        // THE INSERTION EFFECT's COPIES ARE THE LOAD THAT CAN GIVE (live's
+        // callback): over 85% of the slot, the next block writes 30% less of
+        // them, counted by cost; back an eighth at a time once four blocks
+        // running are under 70%
+        if (S.tap_m || S.tap_cap < S.tap_ucap) {
+            bool calm = ms < 0.7 * budget_ms;
+            for (int i = 0; i < ms_n; i++)
+                calm = calm && ms_hist[i] < 0.7 * budget_ms;
+            if (ms > 0.85 * budget_ms && S.tap_m) {
+                S.tap_cap = (long long)((double)std::min(S.tap_cap, S.tap_u) * 0.7);
+                tap_shed++;
+            } else if (calm && S.tap_cap < S.tap_ucap) {
+                S.tap_cap = std::min(S.tap_ucap, S.tap_cap + std::max(256LL, S.tap_cap / 8));
+            }
+        }
         if (ms_n == 4) {
             for (int i = 0; i < 3; i++)
                 ms_hist[i] = ms_hist[i + 1];
@@ -8881,7 +9285,7 @@ struct Part {
             return 0;
         double o[4] = {ms_hist[0], ms_hist[1], ms_hist[2], ms_hist[3]};
         std::sort(o, o + 4);
-        if (!(o[1] > 0.95 * budget_ms))
+        if (S.tap_m || !(o[1] > 0.95 * budget_ms))     // (...the notes' own partials only with no copies left)
             return 0;
         long k = shed(n, 0.1);
         if (k) {
@@ -9433,6 +9837,9 @@ int nv_part_efx_state(void *h, int *o, int cap, const char **why)
     if (fc && (fc[1] != 0.0 || fc[2] != 0.0)) {     // (refused as efx_chain refuses it)
         o[n - 1] = -3;
         *why = "drive or cabinet, live";
+    } else if (fc && fc[34] == 3.0) {
+        o[n - 1] = -3;
+        *why = "a Keyboard Multi's copies, live";
     }
     return n;
 }

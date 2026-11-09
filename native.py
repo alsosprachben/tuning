@@ -345,7 +345,7 @@ def _load():
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
                                                        'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'efxrev.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
                                                        'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostint.h', 'hostlive.h', 'host.h')]
-            + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
+            + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c'), os.path.join(HERE, 'tapkernel.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
         tmp = '%s.%d.tmp' % (so, os.getpid())
@@ -359,7 +359,7 @@ def _load():
                 tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.slab.o',
                 tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o', tmp + '.tuner.o', tmp + '.bend.o',
                 tmp + '.leslie.o', tmp + '.tubeamp.o', tmp + '.scanner.o', tmp + '.reed.o', tmp + '.epiano.o',
-                tmp + '.efxchain.o', tmp + '.roomtail.o', tmp + '.host.o']
+                tmp + '.efxchain.o', tmp + '.tapkernel.o', tmp + '.roomtail.o', tmp + '.host.o']
         try:
             subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
             for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
@@ -391,12 +391,16 @@ def _load():
                                    '-o', objs[19]])
             subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'efxchain.cpp'),
                                    '-o', objs[20]])
+            # live.py's tap kernel (the insertion effect's copies), under ITS
+            # flags (live.ensure_tap_lib's): the same arithmetic
+            subprocess.check_call(['gcc', '-O3', '-march=native', '-fPIC', '-c', os.path.join(HERE, 'tapkernel.c'),
+                                   '-o', objs[21]])
             # roomtail.py's late field (live.room_irs's), drawn natively
             subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'roomtail.cpp'),
-                                   '-o', objs[21]])
+                                   '-o', objs[22]])
             # the live host (host.h: nvlive's, as a library)
             subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'host.cpp'),
-                                   '-o', objs[22]])
+                                   '-o', objs[23]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl'])
         finally:
             for o in objs:

@@ -1326,6 +1326,7 @@ void *nv_efx_live_new(const double *X, double SR);
 void nv_efx_live_free(void *h);
 void nv_efx_live_apply(void *h, double t, int k, int a, int b);
 int nv_efx_live_parts(void *h);
+int nv_efx_live_part_list(void *h, int *out, int cap);
 int nv_efx_live_filter(void *h, int ch, double *head, double *seg, int cap);
 int nv_efx_live_on(void *h, int ch);
 long nv_efx_live_rev(void *h);
