@@ -112,11 +112,11 @@ TASKS = [
                   "real-time change and a select moving sounding keys), GM System On and GS Reset (live._sysex)"),
     ("GM2", True, "Master volume, files and live (blockrender's _mvol, live's master_gain ramp)"),
     ("GM2", False, "Files: a variation that meends (a sitar's, 63.127, 104.1/4/5)"),
-    ("GM2", False, "Files: a GM 2 drum set the engine lacks keys of (1 of 8: the SFX set's Phonograph Noise, "
-                   "its record's clicks, strike_flam_record -- ported, its checks pending)"),
-    ("SC-55", False, "The drum keys the maps' sets lack: the tam-tams (Ethnic 45, 46, 48; both Asia sets' 73-75; "
-                     "Rhythm FX's Reverse Gong) and Rhythm FX's Alias (an aliasing sweep a harmonic a row) -- "
-                     "ported, identical in nvrender and nvlive, its negatives and commit pending"),
+    ("GM2", True, "Every GM 2 drum set's keys native (the last, the SFX set's Phonograph Noise: its record's "
+                  "clicks, strike_flam_record), nvrender and nvlive"),
+    ("SC-55", True, "The drum keys the maps' sets lacked: the tam-tams (Ethnic 45, 46, 48; both Asia sets' 73-75; "
+                    "Rhythm FX's Reverse Gong: a cymbal's ModeDecays, its stroke tilt, its restrike folded) and "
+                    "Rhythm FX's Alias (an aliasing sweep a harmonic a row), nvrender and nvlive"),
     ("MT-32", True, "An mt32mux file (a part a patch stamped before each note): its stamped channels' CC7 a "
                     "snapshot, not a fader (bend.cpp, STAMPED_SHARE)"),
     ("MT-32", False, "nvrender over mt32mux's own renders (Holst's planets: examples/mars.py ...), checked against "
@@ -171,7 +171,8 @@ TASKS = [
                      "and a Sound Canvas song's is past memory (SHIRO's 6.4 min: 21.8M rows, ~8.7 GB; killed at the "
                      "3.5 GB cap) where Python streams every file (streamrender: its port is the work -- "
                      "a sink, order keys, each pass at its horizon, windows); every native check so far a 20 s "
-                     "excerpt"),
+                     "excerpt; the two whole-table quirks the stream fell back on are fixed, chorus and the "
+                     "harmonium's tremolo, so streamed equals whole with no fallback"),
     ("SC-55", False, "Live: 117:24 Jngl SD Roll refused (LIVE_REFUSED: its velocity probe's table past 2.5 GB) "
                      "-- a re-attack within a row, a gain track like the damper's, would shrink it"),
     ("SC-55", True, "Files: the rhythm part's assignment (40 1p 15); the controller matrix (40 2p, GM2 09) where "
