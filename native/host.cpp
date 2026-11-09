@@ -708,6 +708,7 @@ int nv_host::open(int argc, char **argv)
         conv_cp = ch ? dlsym(ch, "conv_process") : nullptr;
         conv_cf = ch ? dlsym(ch, "conv_free") : nullptr;
     }
+    nv_part_conv(part, conv_cn, conv_cp, conv_cf);   // (a bus's reverb: live's Convolver)
     if (!dry && E.has_room && !E.ir.empty()) {
         void *cn = conv_cn, *cp = conv_cp, *cf = conv_cf;
         if (cn && cp && cf) {

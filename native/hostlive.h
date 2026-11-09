@@ -89,6 +89,7 @@ void nv_tcache_set_raga(void *h, int sa, const double *sw, int nsw);
 void nv_part_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
 void *nv_room_new(void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
 void nv_part_room_set(void *h, void *room, long long frames);
+void nv_part_conv(void *h, void *cn, void *cp, void *cf);
 void nv_part_room_reap(void *h);
 long nv_tcache_room_q(void *h, double *out, long cap);
 long nv_room_tail_ir(const double *sp, const double *bq, int has_bq, int sr, int seed, double **out);

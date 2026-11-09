@@ -2098,6 +2098,7 @@ class Slab:
         self.tpx[idx] = 0
         self.fl_on[idx] = False         # ...and no filter
         self.fx_ch[idx] = -1
+        self.slot_ch[idx] = self.slot_ch[src]   # its parent's part (not the slot's last note's)
         self.ls_on[idx] = False
         self.tr_on[idx] = False
         self.hs_dep[idx] = 0.0

@@ -337,6 +337,69 @@ def lib():
     return _LIB[0] or None
 
 
+
+def _build_objects(units):
+    """Each unit (name, compiler and flags, source) compiled to .nvbuild/NAME.o
+    unless its stamp still holds -- the hash of its command and of the contents
+    of every file the compiler read for it (its -MMD list) -- the stale ones at
+    once (NV_BUILD_JOBS, default the cores, at most 8). Each written under a
+    name of this process's and moved in whole, so builds running side by side
+    never see a half-written object. Returns the objects, in the units' order."""
+    import concurrent.futures
+    import hashlib
+    bdir = os.path.join(HERE, '.nvbuild')
+    os.makedirs(bdir, exist_ok=True)
+
+    def stamp(cmd, dep):
+        try:
+            with open(dep) as f:
+                text = f.read().replace('\\\n', ' ')
+        except OSError:
+            return None
+        h = hashlib.sha256('\0'.join(cmd).encode())
+        for path in text.split(':', 1)[1].split() if ':' in text else ():
+            try:
+                with open(path, 'rb') as f:
+                    h.update(path.encode() + b'\0' + hashlib.sha256(f.read()).digest())
+            except OSError:
+                return None
+        return h.hexdigest()
+
+    def held(name, cmd):
+        o, d, st = (os.path.join(bdir, name + x) for x in ('.o', '.d', '.stamp'))
+        try:
+            with open(st) as f:
+                old = f.read()
+        except OSError:
+            return False
+        return os.path.exists(o) and old == stamp(cmd, d)
+
+    def compile_one(name, cmd, src):
+        o, d, st = (os.path.join(bdir, name + x) for x in ('.o', '.d', '.stamp'))
+        pid = '.%d.tmp' % os.getpid()
+        try:
+            subprocess.check_call(cmd + ['-c', src, '-o', o + pid, '-MMD', '-MF', d + pid])
+            # (the .d names the object it was written as: the stamp reads only its list)
+            new = stamp(cmd + ['-c', src], d + pid)
+            os.replace(o + pid, o)
+            os.replace(d + pid, d)
+            with open(st + pid, 'w') as f:
+                f.write(new or '')
+            os.replace(st + pid, st)
+        finally:
+            for x in (o + pid, d + pid, st + pid):
+                if os.path.exists(x):
+                    os.remove(x)
+
+    todo = [(n, c + ['-c', s], c, s) for n, c, s in units]
+    stale = [(n, c, s) for n, key, c, s in todo if not held(n, key)]
+    if stale:
+        jobs = int(os.environ.get('NV_BUILD_JOBS') or min(8, os.cpu_count() or 1))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(jobs, len(stale)))) as ex:
+            for f in [ex.submit(compile_one, n, c, s) for n, c, s in stale]:
+                f.result()
+    return [os.path.join(bdir, n + '.o') for n, c, s in units]
+
 def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
@@ -344,7 +407,7 @@ def _load():
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
                                                        'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'efxrev.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
-                                                       'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostint.h', 'hostlive.h', 'host.h')]
+                                                       'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostint.h', 'hostlive.h', 'host.h', 'livebus.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c'), os.path.join(HERE, 'tapkernel.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -355,57 +418,32 @@ def _load():
         # The C core (tone.c, with voice.c) and the C++ engine (engine.cpp)
         # under the same flags, linked into one library.
         flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
-        objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
-                tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.slab.o',
-                tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o', tmp + '.tuner.o', tmp + '.bend.o',
-                tmp + '.leslie.o', tmp + '.tubeamp.o', tmp + '.scanner.o', tmp + '.reed.o', tmp + '.epiano.o',
-                tmp + '.efxchain.o', tmp + '.tapkernel.o', tmp + '.roomtail.o', tmp + '.host.o']
+        cxx = ['g++', '-std=c++17'] + flags
+        nat = lambda f: os.path.join(HERE, 'native', f)
+        units = ([('tone', ['gcc'] + flags, nat('tone.c'))]
+                 + [(f[:-4], cxx, nat(f)) for f in ('engine.cpp', 'channel.cpp', 'room.cpp', 'midi.cpp', 'register.cpp',
+                                                    'prepare.cpp', 'render.cpp', 'live.cpp', 'slab.cpp')]
+                 # register.py's C core, under ITS flags (register._load_core's): the same arithmetic
+                 + [('registercore', ['gcc', '-O3', '-march=native', '-ffp-contract=off', '-fopenmp-simd',
+                                      '-fno-math-errno', '-mprefer-vector-width=512', '-fPIC'],
+                     os.path.join(HERE, 'registercore.c'))]
+                 + [(f[:-4], cxx, nat(f)) for f in ('livereg.cpp', 'gpu.cpp', 'tuner.cpp', 'bend.cpp', 'leslie.cpp',
+                                                    'tubeamp.cpp', 'scanner.cpp', 'reed.cpp', 'epiano.cpp',
+                                                    'efxchain.cpp')]
+                 # live.py's tap kernel (the insertion effect's copies), under ITS
+                 # flags (live.ensure_tap_lib's): the same arithmetic
+                 + [('tapkernel', ['gcc', '-O3', '-march=native', '-fPIC'], os.path.join(HERE, 'tapkernel.c'))]
+                 # roomtail.py's late field (live.room_irs's), drawn natively; the
+                 # live host (host.h: nvlive's, as a library); a part's own bus live
+                 # (live.LiveBus: efxbus's processors, block by block)
+                 + [(f[:-4], cxx, nat(f)) for f in ('roomtail.cpp', 'host.cpp', 'livebus.cpp')])
+        objs = _build_objects(units)
         try:
-            subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
-            for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
-                                           for f in ('register.cpp', 'prepare.cpp', 'render.cpp', 'live.cpp',
-                                                     'slab.cpp')],
-                              objs[1:10]):
-                subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', src, '-o', o])
-            # register.py's C core, under ITS flags (register._load_core's): the same arithmetic
-            subprocess.check_call(['gcc', '-O3', '-march=native', '-ffp-contract=off', '-fopenmp-simd',
-                                   '-fno-math-errno', '-mprefer-vector-width=512', '-fPIC', '-c',
-                                   os.path.join(HERE, 'registercore.c'), '-o', objs[10]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'livereg.cpp'),
-                                   '-o', objs[11]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'gpu.cpp'),
-                                   '-o', objs[12]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'tuner.cpp'),
-                                   '-o', objs[13]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'bend.cpp'),
-                                   '-o', objs[14]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'leslie.cpp'),
-                                   '-o', objs[15]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'tubeamp.cpp'),
-                                   '-o', objs[16]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'scanner.cpp'),
-                                   '-o', objs[17]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'reed.cpp'),
-                                   '-o', objs[18]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'epiano.cpp'),
-                                   '-o', objs[19]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'efxchain.cpp'),
-                                   '-o', objs[20]])
-            # live.py's tap kernel (the insertion effect's copies), under ITS
-            # flags (live.ensure_tap_lib's): the same arithmetic
-            subprocess.check_call(['gcc', '-O3', '-march=native', '-fPIC', '-c', os.path.join(HERE, 'tapkernel.c'),
-                                   '-o', objs[21]])
-            # roomtail.py's late field (live.room_irs's), drawn natively
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'roomtail.cpp'),
-                                   '-o', objs[22]])
-            # the live host (host.h: nvlive's, as a library)
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'host.cpp'),
-                                   '-o', objs[23]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl'])
-        finally:
-            for o in objs:
-                if os.path.exists(o):
-                    os.remove(o)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            raise
         os.replace(tmp, so)
     d = ctypes.CDLL(so)
     P = ctypes.POINTER(VoiceSnap)

@@ -67,11 +67,16 @@ def live_export(tmp, room):
     import glob
     import hashlib
     h = hashlib.sha256()
+    pin = dict(x.split("=", 1) for x in os.environ.get("NV_EXPORT_KEY_PIN", "").split() if "=" in x)
     for d, pats in (("", ("*.py",)), ("examples", ("*.py",)), ("native", ("*.c", "*.cpp", "*.h", "*.cl"))):
         for p in sorted(f for pat in pats for f in glob.glob(os.path.join(HERE, d, pat))):
-            h.update(os.path.relpath(p, HERE).encode() + b"\0")
-            with open(p, "rb") as f:
-                h.update(f.read())
+            rel = os.path.relpath(p, HERE)
+            h.update(rel.encode() + b"\0")
+            if rel in pin:                              # (a change the export never runs: the clean file's)
+                h.update(bytes.fromhex(pin[rel]))
+            else:
+                with open(p, "rb") as f:
+                    h.update(hashlib.sha256(f.read()).digest())
     for k in sorted(k for k in os.environ if k.startswith("TUNING_")):
         h.update(("%s=%s\0" % (k, os.environ[k])).encode())
     h.update(HERE.encode() + b"\0" + room.encode())   # (the export names the tree's libraries)
