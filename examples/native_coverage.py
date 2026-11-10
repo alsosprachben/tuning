@@ -22,6 +22,18 @@ sys.path.insert(0, HERE)
 # reached, and live's side. (stage, done, text); kept by hand.
 TASKS = [
     ("GM1", True, "Program changes in nvlive: a builder thread, MIDI program change, the panel's picker"),
+    ("GM1", False, "nvlive's panel at livetui's (a switch is not a control: each a panel control and a library "
+                   "call) -- done: the patch picker and its variations, globals, routes, stops, the insertion "
+                   "effect (x); open: parts (layers, splits: each one's channel, range, transpose, level, mute), "
+                   "the tuner and Eastern tuning, the synth (Moog, Messenger) pane, scenes, presets and the "
+                   "session, mod rate, threads, the metronome, the standard, the devices"),
+    ("GM1", True, "Live: the room switched while playing (live.set_room): every room in the export (LROOMS), "
+                  "its tail drawn natively at the stage's directivity (native/roomtail.cpp, bit for bit "
+                  "roomtail.py's), the templates built again in it, the tail crossfaded"),
+    ("GM1", False, "nvlive's host as a library (nv_host_*: the export, the builder, parts, programs, the room, "
+                   "rebuilding, tuning, the devices) beside nv_part_*, for a GUI; nvlive its terminal client "
+                   "-- 2a-2f done (host_check: the library against live.py); 2g, the picker, the globals and "
+                   "panic, in its checks"),
     ("GM1", True, "Live: the Moog (knob-neutral templates and the slab's moog.weights; CC71-75 its knobs; "
                   "a layered voice; the MF-104M) -- not yet a unison or SYNC live"),
     ("GM1", True, "Live: the Moog Messenger both ways (live._messenger_cc, messenger_sync/_pitch): its chart "
@@ -101,7 +113,11 @@ TASKS = [
                   "real-time change and a select moving sounding keys), GM System On and GS Reset (live._sysex)"),
     ("GM2", True, "Master volume, files and live (blockrender's _mvol, live's master_gain ramp)"),
     ("GM2", False, "Files: a variation that meends (a sitar's, 63.127, 104.1/4/5)"),
-    ("GM2", False, "Files: a GM 2 drum set the engine lacks keys of (3 of 8 sets)"),
+    ("GM2", True, "Every GM 2 drum set's keys native (the last, the SFX set's Phonograph Noise: its record's "
+                  "clicks, strike_flam_record), nvrender and nvlive"),
+    ("SC-55", True, "The drum keys the maps' sets lacked: the tam-tams (Ethnic 45, 46, 48; both Asia sets' 73-75; "
+                    "Rhythm FX's Reverse Gong: a cymbal's ModeDecays, its stroke tilt, its restrike folded) and "
+                    "Rhythm FX's Alias (an aliasing sweep a harmonic a row), nvrender and nvlive"),
     ("MT-32", True, "An mt32mux file (a part a patch stamped before each note): its stamped channels' CC7 a "
                     "snapshot, not a fader (bend.cpp, STAMPED_SHARE)"),
     ("MT-32", False, "nvrender over mt32mux's own renders (Holst's planets: examples/mars.py ...), checked against "
@@ -147,15 +163,18 @@ TASKS = [
                     "timeline, compacted as _efx_event does), a flanger's feedback comb, Tremolo and Auto Pan "
                     "(Roland's waves; the Tremolo Chorus's): |H| each block on P2a's path, both ears; the "
                     "responses and controls on libm in Python too (native.xatan/xcexp/xabs/xpow/xexp)"),
-    ("SC-55", False, "Live: the rest of the insertion effect in nvlive -- the chain builder shared "
-                     "(native/efxchain.cpp), its state and each note's direct gain, the moving filters done; "
-                     "a Moog's rows under a moving filter, a tone's own insertion effect done; the copies "
-                     "as taps (tapkernel.c), a drive or cabinet, a part's bus (Lo-Fi), branch B, the rotor "
-                     "and 3D place, an OD's valve"),
+    ("SC-55", False, "Live: the rest of the insertion effect in nvlive -- done: the chain builder shared "
+                     "(native/efxchain.cpp), its state and each note's direct gain, the moving filters, a Moog's "
+                     "rows under a moving filter, a tone's own insertion effect (an organ's too), the copies as "
+                     "taps, the rotor (Separate's two mics) and the 3D place, the drive and cabinet and an OD's "
+                     "valve, the compressor, a part's bus (Lo-Fi 1/2, compressor, limiter, enhancer, gate, "
+                     "reverb); open: a parallel type's branch B, a Keyboard Multi's copies"),
     ("SC-55", False, "Files: a streaming (windowed) nvrender for whole songs -- it holds the table whole in float64, "
                      "and a Sound Canvas song's is past memory (SHIRO's 6.4 min: 21.8M rows, ~8.7 GB; killed at the "
-                     "3.5 GB cap) where Python streams (streamrender); every native check so far a 20 s excerpt. "
-                     "Next after main's gate"),
+                     "3.5 GB cap) where Python streams every file (streamrender: its port is the work -- "
+                     "a sink, order keys, each pass at its horizon, windows); every native check so far a 20 s "
+                     "excerpt; the two whole-table quirks the stream fell back on are fixed, chorus and the "
+                     "harmonium's tremolo, so streamed equals whole with no fallback"),
     ("SC-55", False, "Live: 117:24 Jngl SD Roll refused (LIVE_REFUSED: its velocity probe's table past 2.5 GB) "
                      "-- a re-attack within a row, a gain track like the damper's, would shrink it"),
     ("SC-55", True, "Files: the rhythm part's assignment (40 1p 15); the controller matrix (40 2p, GM2 09) where "
@@ -194,12 +213,85 @@ TASKS = [
     ("SC-88", False, "The SFX families: siren, starship, laser, scream, heartbeat, Morse, machine gun, engine, "
                      "car pass, skid, door creak, birds, fret slide (noise_events, pulse, ring_db, sweeps)"),
     ("SC-88", False, "Dulcimer and accordion variations (course_keys, unison_shares_phase; speech_harmonic_exp)"),
+    # A SUPERSET OF THE SOUND CANVAS (Ben, 2026-11-09): every GS message an SC-8850 receives doing
+    # what Roland's does (or more) in files and live, and every front-panel control a TUI one --
+    # Python first (the oracle), then native
+    ("SC-55", False, "Sound Canvas superset, files: the GS messages the reader ignores -- a part's RX. CHANNEL "
+                     "(another channel's notes: Roland's own layering), its Rx switches (pitch bend, volume, "
+                     "program change... off), ASSIGN MODE (a repeated note's retrigger), the CC1/CC2 "
+                     "CONTROLLER NUMBERS its matrix reads, MASTER PAN, VOICE RESERVE (accepted: we have more), "
+                     "the display's text and 16x16 dot pages (45 xx: Falcom's and Konami's files send them)"),
+    ("SC-55", False, "Sound Canvas superset, live: what a sequencer sends that live ignores and a file render "
+                     "honours -- the system reverb, chorus and delay (macros and parameters), the GS EQ, "
+                     "drum setup and the user drum sets, the controller matrix (each to verify first)"),
+    ("SC-55", False, "Sound Canvas superset, the controllers: the Rx switches, CC1/CC2 controller numbers and "
+                     "the controller matrix go into the wheel's CC-route design (the wheel's functions on CCs of "
+                     "their own, live's wheel a route to them, a file's CC1 GM's modulation; the insertion "
+                     "effect's control sources the model: a controller, a destination, a depth)"),
+    ("SC-8850", False, "Sound Canvas superset, the panel (livetui, then nvlive): per-part pan, reverb/chorus/"
+                       "delay sends and velocity sense as part columns; a system-effects page (reverb type, "
+                       "time, character, pre-LPF; chorus and delay types and parameters; the master EQ); "
+                       "per-part level meters (the 16 bars); the display (a sequencer's text and dot pages); "
+                       "the map (SC-55/88/88Pro/8850) in the picker and a GS Reset; solo beside mute; user "
+                       "tones and drum sets edited and stored"),
 ]
 
 # MT-32 and CM-64 between GM 2 and the Sound Canvas, in the hardware's own
 # order: the MT-32's 128 tones (GS bank 127, patch_map.MT32_SET) and its
 # rhythm part's keys (the CM-32L set's own drums, 35-75); the CM-64's CM-32L
 # adds the set's sound effects (CM32L_SFX), its CM-32P half (PCM) a task
+# A TONE's OWN INSERTION EFFECT, LIVE (kept by hand, as TASKS): what of a
+# tone's own effect (its class's insertion_efx, gsefx.chain of it) nvlive plays
+# as live.py does -- each feature of the chain with where its port stands, the
+# tone's state the worst of its features' ("yes" where it has only what is
+# done: level, EQ, the moving filters, a flanger's comb, tremolo and pan)
+LIVE_EFX = (
+    ("bus", "yes", "the part's bus (Lo-Fi, compressor, gate, reverb)"),
+    ("par", "not yet", "a parallel type's branch B"),
+    ("kbm", "not yet", "the Keyboard Multi's copies"),
+    ("comp", "not yet", "a multi's compressor (Python's live plays none either)"),
+    ("rotary", "yes", "the rotor"),
+    ("pos3d", "yes", "the 3D place"),
+    ("od", "yes", "the drive and cabinet"),
+    ("copies", "yes", "the copies (taps)"),
+)
+_LIVE_RANK = {"yes": 0, "checks pending": 1, "not yet": 2}
+
+
+def tone_effect_live(fx):
+    """(the type's name, its live state, what stands in its way) for a tone's
+    own effect (insertion_efx); ("", "none", "") without one"""
+    if not fx:
+        return "", "none", ""
+    import gsefx as G
+    ch = G.chain(G.tone_state(*fx)) or {}
+    name = ch.get("name") or ""
+    has = lambda k: ch.get(k) not in (None, False, 0, {}, [], ())
+    feats = set()
+    if has("bus") or has("bus_mix"):
+        feats.add("bus")
+    if has("par"):
+        feats.add("par")
+    if name == "Keyboard Multi":
+        feats.add("kbm")
+    if has("comp"):
+        feats.add("comp")
+    for k in ("rotary", "pos3d"):
+        if has(k):
+            feats.add(k)
+    if has("od_gain") or has("cabinet"):
+        feats.add("od")
+    if (has("cf") and not ch["cf"][0].get("fb")) or has("dly"):
+        feats.add("copies")
+    state, why = "yes", []
+    for f, st, what in LIVE_EFX:
+        if f in feats:
+            why.append(what)
+            if _LIVE_RANK[st] > _LIVE_RANK[state]:
+                state = st
+    return name, state, "; ".join(why)
+
+
 STAGES = (("GM1", None), ("GM2", 'gm2'), ("MT-32", 'mt32'), ("CM-64", 'cm64'), ("SC-55", 1), ("SC-88", 2),
           ("SC-88 Pro", 3), ("SC-8850", 4))
 
@@ -230,6 +322,23 @@ def main(argv):
     vslots, ventries = N.variation_tables()[:2]
     vnat = {(e[0], e[1]): all(all(vslots[s][3][k] is not None for k in range(21, 109)) for s, _, _, _ in e[2])
             for e in ventries[1:]}
+
+    # each tone's own effect (insertion_efx): a variation's from its slots'
+    # classes (the first with one), a program's from its class at middle C
+    vfx = {}
+    for e in ventries[1:]:
+        for sl, _, _, _ in e[2]:
+            c = vslots[sl][3][60]
+            fx = getattr(c, "insertion_efx", None) if c is not None else None
+            if fx:
+                vfx[(e[0], e[1])] = fx
+                break
+
+    def tone_fx(p, key):
+        if key:
+            return vfx.get((p, key))
+        c = B.property_class_for_note(p, 60)
+        return getattr(c, "insertion_efx", None) if isinstance(c, type) else None
 
     def variation_native(p, key):
         return vnat.get((p, key), program_native(p)) if key else program_native(p)
@@ -292,10 +401,12 @@ def main(argv):
                                  kits_whole=kfull, kits_total=len(ks)))
         for p, key, name in new:
             _to = P.MT32_SET[p][1] if src == 'mt32' else p
+            _fxn, _fxs, _fxw = tone_effect_live(tone_fx(p, key) if src != 'mt32' else None)
             js['tones'].append(dict(stage=stage, program=p, variation=key,
                                     tone=str(p) if src is None else "%d.%d" % (p, key if key == 127 else key % 128),
                                     name=name, family=LT.FAMILIES[14 if isinstance(_to, tuple) else _to // 8],
-                                    native=(p, key, name) in nat))
+                                    native=(p, key, name) in nat, own_effect=_fxn, effect_live=_fxs,
+                                    effect_note=_fxw))
         for s, name, nk, nn in ks:
             js['kits'].append(dict(stage=stage, set=s, name=name, keys=nk, native_keys=nn))
         body += ["## %s" % stage, ""]

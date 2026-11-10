@@ -1501,10 +1501,12 @@ class Slab:
         if sep.any():
             # THE RECORDED ROTARY's two mics (gsefx Rotary's Separate): each ear
             # its own mic, half the spacing either side -- its own swing
-            cl = 0.5 * (1.0 + np.cos(ang - self.ls_ph[idx] + 0.5 * sep))
-            cr = 0.5 * (1.0 + np.cos(ang - self.ls_ph[idx] - 0.5 * sep))
-            gl = (fl + (1.0 - fl) * cl ** (0.5 * self.ls_sharp[idx])) / self.ls_norm[idx]
-            gr = (fl + (1.0 - fl) * cr ** (0.5 * self.ls_sharp[idx])) / self.ls_norm[idx]
+            # (libm's cos and pow too, as above)
+            cl = 0.5 * (1.0 + _NV.xcos(ang - self.ls_ph[idx] + 0.5 * sep))
+            cr = 0.5 * (1.0 + _NV.xcos(ang - self.ls_ph[idx] - 0.5 * sep))
+            ex = (0.5 * self.ls_sharp[idx]).astype(np.float64)
+            gl = (fl + (1.0 - fl) * _NV.xpow(cl, ex)) / self.ls_norm[idx]
+            gr = (fl + (1.0 - fl) * _NV.xpow(cr, ex)) / self.ls_norm[idx]
             self.a["aL"][idx] = self.ls_aL[idx] * np.where(sep != 0, gl, g)
             self.a["aR"][idx] = self.ls_aR[idx] * np.where(sep != 0, gr, g)
             return
@@ -2096,6 +2098,7 @@ class Slab:
         self.tpx[idx] = 0
         self.fl_on[idx] = False         # ...and no filter
         self.fx_ch[idx] = -1
+        self.slot_ch[idx] = self.slot_ch[src]   # its parent's part (not the slot's last note's)
         self.ls_on[idx] = False
         self.tr_on[idx] = False
         self.hs_dep[idx] = 0.0
@@ -5407,6 +5410,10 @@ class Live:
                 # branch and for the panel that shows it.
                 here = [p for p in parts if self._listens(p, ch)]
                 roles = {p.pid: self.wheel_roles(p) for p in here}
+                if self._wheel_reset:
+                    # A RESET's CC1 = 0 (_reset_controllers) is the rest only of
+                    # the roles whose rest IS 0; the others it puts back untouched
+                    roles = {k: [r for r in v if r in self._WHEEL_ZERO_REST] for k, v in roles.items()}
                 amped = [p for p in here if 'drive' in roles[p.pid]]
                 organs = [p for p in here if 'crescendo' in roles[p.pid]]
                 tremmed = [p for p in here if 'tremolo' in roles[p.pid]]
@@ -6186,8 +6193,11 @@ class Live:
                     self._reg_strike(part, ch, note, n0, tmpl, list(sc),
                                      sorted(set(sc.values())), sc)
             # ...AND ITS EFFECT, the module's or the tone's own (Bit Hit's
-            # Lo-Fi on an orchestra hit's sections), on every drawn rank
-            _rs = [s_ for r in part.drawn for s_ in self.slab.live.get((part.pid, ch, note, r), ())]
+            # Lo-Fi on an orchestra hit's sections), on every drawn rank -- in
+            # the stops' order (a set of names iterates in the hash's order,
+            # which changes from process to process)
+            _rs = [s_ for r in part.patch.rank_names if r in part.drawn
+                   for s_ in self.slab.live.get((part.pid, ch, note, r), ())]
             if _rs:
                 _cp = part.pan if part.pan is not None else self.cpan.get(ch, T.GM_DEFAULT_PAN)
                 _efx, _ec = self._efx_note(part, ch, note, vel, _rs, _cp, n0)
@@ -7121,6 +7131,16 @@ class Live:
         idx = np.fromiter(slots, np.int64, len(slots))
         f = a["om"][idx].astype(np.float64) * self.rate / (2.0 * math.pi)
         g = np.full(len(idx), float(ex['level']))
+        # ITS COMPRESSOR (a multi's Cmp stage, before its OD), as the file has
+        # it (blockrender's _EFXN): its sustain the decay slowed, its makeup a
+        # gain, its attack the onset's rise -- the columns float32, as stamped
+        if ex.get('comp') is not None:
+            _cs, _cl, _ca = ex['comp']
+            g *= float(_cl)
+            a["logr"][idx] = a["logr"][idx] * np.float32(_cs)
+            a["logrA"][idx] = a["logrA"][idx] * np.float32(_cs)
+            if _ca > 0.0:
+                a["fa"][idx] = np.maximum(a["fa"][idx], np.float32(_ca * self.rate))
         # ITS OD STAGE'S GAIN, in front of the valve (_amp_snapshot): into the
         # note's level, so the valve is driven harder and comes out louder,
         # saturating at its ceiling, as a pedal does (blockrender's _EFG)
@@ -9493,6 +9513,9 @@ class Live:
     # that logic would be wrong within a week. Contains no CC121 and no sysex,
     # so _reset_controllers cannot recurse.
     _RESET_CC = ((1, 0), (11, 127), (64, 0), (65, 0), (66, 0), (67, 0))
+    # ...but the wheel is a route (wheel_roles), and 0 is the rest only of these
+    _WHEEL_ZERO_REST = ('vibrato', 'tremolo', 'mouth', 'crank', 'drone stop')
+    _wheel_reset = False
 
     def _reset_controllers(self, n0, ch):
         """CC121. Modulation, expression, pedals, bend, pressure, RPN select.
@@ -9514,12 +9537,36 @@ class Live:
         # range, and GM's reset list does not name it either.
         self.porta_src.pop(ch, None)
         for cc, v in self._RESET_CC:
+            self._wheel_reset = cc == 1
             try:
                 self._one_core(n0, mido.Message("control_change", channel=ch,
                                            control=cc, value=v))
             except Exception as e:
                 self.errors += 1
                 self.last_error = "%s: %s" % (type(e).__name__, e)
+        self._wheel_reset = False
+        # ...AND THE WHEEL's OTHER ROLES BACK UNTOUCHED: the swell pedal open
+        # (its notes rescaled as the CC1 branch rescales them), the valve its
+        # own drive, the rockers, the detune and the drones the voice's own;
+        # the registration left as it is
+        for p in self.parts:
+            if not self._listens(p, ch):
+                continue
+            roles = self.wheel_roles(p)
+            if 'swell' in roles and p.swell != 1.0:
+                was = p.swell
+                p.swell = 1.0
+                self.slab.channel_gain(self._sounding(ch, pids={p.pid}, tone=p.patch), 1.0 / was)
+            if 'drive' in roles and self.drive_step.pop(p.pid, None) is not None:
+                self.amp_dirty.add(p.pid)
+            if 'tone' in roles:
+                self.clav_step.pop(p.pid, None)
+            if 'detune' in roles:
+                self.detune_step.pop(p.pid, None)
+            if 'drones' in roles and self.drone_count.pop(p.pid, None) is not None and self._chanting(p, ch):
+                self._drones(p, ch, n0)
+            if 'drone note' in roles and self.drone_sel.pop(p.pid, None) is not None and self._chanting(p, ch):
+                self._drone_note(p, ch, n0)
         try:
             self._one_core(n0, mido.Message("aftertouch", channel=ch, value=0))
         except Exception:

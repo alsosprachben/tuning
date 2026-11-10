@@ -2222,6 +2222,24 @@ int nv_pocket_rfft(const double *x, int n, double *out)
     return fail ? -1 : 0;
 }
 
+/* numpy.fft.irfft(c, n) (norm None: fct 1/n): the n real samples from the
+ * n/2 + 1 complex bins in c (re, im pairs) -- numpy's _raw_fft pads the bins
+ * with zeros to n and execute_real_backward packs them r0, r1, i1, r2, ...
+ * 0, or -1 where it could not plan. */
+int nv_pocket_irfft(const double *c, int n, double *out)
+{
+    rfft_plan plan = make_rfft_plan((size_t)n);
+    if (!plan)
+        return -1;
+    const int have = 2 * (n / 2 + 1);           /* (the bins given, as doubles) */
+    for (int j = 1; j < n; j++)                 /* (dptr + 2 .. n, the padding zeros past the bins) */
+        out[j] = j + 1 < have ? c[j + 1] : 0.0;
+    out[0] = c[0];
+    int fail = rfft_backward(plan, out, 1.0 / (double)n) != 0;
+    destroy_rfft_plan(plan);
+    return fail ? -1 : 0;
+}
+
 /* tonelib.pulse_series: an N-wave of T s from t0 in a period of `period` s
  * as cosines (hz, amp, phase) at the harmonics of 1/period up to fmax,
  * tapered from `taper` -- sampled at 4 fmax, rfft'd and scaled 2/n, each

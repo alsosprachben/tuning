@@ -11,20 +11,24 @@ kept by hand in the script's TASKS.
 | stage | tones native | drum sets whole |
 |---|---|---|
 | GM1 | 128 of 128 | 1 of 1 |
-| GM2 | 123 of 128 | 7 of 8 |
+| GM2 | 125 of 128 | 8 of 8 |
 | MT-32 | 128 of 128 | 1 of 1 |
 | CM-64 | 0 of 0 | 1 of 1 |
-| SC-55 | 13 of 13 | 20 of 30 |
-| SC-88 | 180 of 193 | 0 of 2 |
-| SC-88 Pro | 336 of 360 | 0 of 0 |
-| SC-8850 | 449 of 460 | 5 of 6 |
+| SC-55 | 13 of 13 | 30 of 30 |
+| SC-88 | 188 of 193 | 2 of 2 |
+| SC-88 Pro | 358 of 360 | 0 of 0 |
+| SC-8850 | 460 of 460 | 6 of 6 |
 
 ## GM1
 
 What it needs first, and live's side:
 
 - [x] Program changes in nvlive: a builder thread, MIDI program change, the panel's picker
+- [ ] nvlive's panel at livetui's (a switch is not a control: each a panel control and a library call) -- done: the patch picker and its variations, globals, routes, stops, the insertion effect (x); open: parts (layers, splits: each one's channel, range, transpose, level, mute), the tuner and Eastern tuning, the synth (Moog, Messenger) pane, scenes, presets and the session, mod rate, threads, the metronome, the standard, the devices
+- [x] Live: the room switched while playing (live.set_room): every room in the export (LROOMS), its tail drawn natively at the stage's directivity (native/roomtail.cpp, bit for bit roomtail.py's), the templates built again in it, the tail crossfaded
+- [ ] nvlive's host as a library (nv_host_*: the export, the builder, parts, programs, the room, rebuilding, tuning, the devices) beside nv_part_*, for a GUI; nvlive its terminal client -- 2a-2f done (host_check: the library against live.py); 2g, the picker, the globals and panic, in its checks
 - [x] Live: the Moog (knob-neutral templates and the slab's moog.weights; CC71-75 its knobs; a layered voice; the MF-104M) -- not yet a unison or SYNC live
+- [x] Live: the Moog Messenger both ways (live._messenger_cc, messenger_sync/_pitch): its chart turns a part's knobs (the panel rebuilt in C from the export's MTAB, the knob's glide; both firmwares), the panel and each note's bend sent back (--messenger-out: the panel heard on the Messenger itself; its notes' bends not yet tried there) -- not SYNC's knob
 - [x] Live: check the fiddle, tinkle bell, melodic tom, reverse cymbal and breath noise against live.Live
 - [x] Live: a drum set identical to live.Live beyond the kick and toms (the Standard set's every key, nvlive end to end)
 - [ ] Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender's reader refuses it
@@ -39,13 +43,14 @@ What it needs first, and live's side:
 - [x] GM 125 Helicopter, files and live: a played pipe with a measured series (VoiceSnap.hvt) and a melodic note's sounding octaves in the engine's pitch
 - [x] GM 120 Guitar Fret Noise, files and live: a noisy harmonic voice (the mixin's roll-off on a formant body, its wash weighted by the body: VoiceSnap.chiff_bore)
 - [x] GM 109 Bagpipe in files: the chanter (a played pipe, its own scale: scale_cents), the drones as notes of the part (phrases, the CC1 corking, each its own class: Ev.kover, K's drone region), a strike-in by the hand, a pipe's phase spread and mode lock
-- [ ] Live: the bagpipe's drones (live's own held drone voices: drone_wheel, drone_ratios; templates built corked) -- nvlive refuses the bagpipe
+- [x] Live: the bagpipe's drones (live's own held drone voices: drone_wheel, drone_ratios; templates built corked)
 - [x] Files: two-port files (PortedMidi, meta 21) in the reader: channel + 16 x port, port B's part exclusives as port A reads them, the legato over the merged stream
 - [x] Files: GS's drum instrument NRPNs (GS_DRUM_NRPN: a key's pitch, level, pan, delay level; reset by a GS or GM reset and a drum program change)
 - [ ] Files: MPE in the reader
 - [x] Files: a class's own distance and gestures -- reverb_distance, its own chorus pedal (chorus_send) and detuned pair (detuned_pair: chorus._pair), falls and rips on the valved lattice (fall_cents, rip_cents: Song::gliss)
 - [x] Files: tremolo picking (tremolo_pick_hz: 25.18 MandolinTrem, 27.25, 34.4, 115.16, the biwa's): its strokes in Song::gliss, seeded as the Python's
-- [ ] Files: the uilleann pipes' cut (cut_semitones: 109.11 -- _CUT_OF's legato and occurrence)
+- [x] Files: the uilleann pipes' cut (cut_semitones: 109.11, Song::gliss -- the flick takes the written note's legato, _CUT_OF) and the pungi's wheel-chosen drone (111.8, Song::drones)
+- [x] Live: the uilleann's cut (Live._cut_on: the flick, its key spared by the sweep) and the pungi's drone (Live._drone_note, its own variation's templates: VDRN) -- their templates without them (NO_CUT, NO_PART_DRONES)
 - [ ] Files: a sung part's text, vocalise and declared parts (TUNING_LYRIC_LANG, TUNING_VOCALISE, TUNING_VOICE_PARTS)
 - [ ] Files: organs -- two on a channel, an organ beside a variation, swell laws of their own
 - [x] examples/struct_check.py: each ctypes mirror's field offsets against the C struct's (a reordered field of the same size passed the size check silently)
@@ -63,31 +68,29 @@ What it needs first, and live's side:
 - [x] Registered variations in files (GS's organs, harpsichords and hits, the MT-32 set's): a variation's organ as a program's (Song::porg, nvrender's organ pass, the fader's swell by the note's class); a layered one's organ still Python's
 - [ ] Files: layered registered variations (55.2 6th Hit, 6.24 Harpsi.o) -- a layer's organ: its registration the layer class's, its chest's wind the variation's program class's
 - [ ] Files: per-mode sympathetic strings (sympathetic_per_mode: 26.8 Pedal Steel; 107.8 Taisho Koto's, with its drone stops and sweep)
-- [ ] Files: a didgeridoo's mouth (efxfilter.mouth: its seeded formant wander)
+- [x] Files: a didgeridoo's mouth (efxfilter.mouth: VOWEL's rows, its seeded wander -- numpy's choice and dwell, scipy's glide -- or the part's wheel)
 - [x] Files: the church bells (14.8-14.10: a tube's measured modes, 19 of them, a decay of their own) and the feedback guitars (30.8, 31.8: the loop's partial and series as late copies)
 - [x] Brass variations' blare (blare_db_per_khz: dB per kHz over a knee, renormalised) and the SC-88's hammer-on (hammer_legato: the fretting hand, its strings and guitars)
 - [x] Bank select in files (CC0/CC32): GM2's banks (120 drums, 121 melodic) and GS's variations, layered ones too (nvrender; nvlive refuses a bank)
-- [ ] Bank select in nvlive: a file's banks (live._program's variation)
-- [ ] nvlive: a variation as a patch (Patch(program, drums, tuner, variation)); the picker's GM2 bank
+- [x] Bank select in nvlive: CC0 and CC32 latched until a program change reads them (GS's in a map, GM 2's by MSB 121), a variation as a patch (its templates, classes, trim and live record: VLIV), the picker's variations under each program (VNAM)
+- [ ] nvlive: a Moog variation under a capital that is no Moog's organ (its level: live's), a layered variation's other layers, the maps' own drum sets
+- [x] nvlive: the Moog variations (VLIV), plain and layered, a tone's own Auto Pan -- live templates without the tone's effect (MOOG_NEUTRAL); a unison's and SYNC's refused
 - [x] Tuning, files: the secondary (eastern) tuning, the meend, master fine/coarse tuning, scale/octave tuning (GM 2's and GS's), MTS under gm2
 - [x] Tuning, live: the secondary tuning (nvlive --eastern), a raga tuner's Sa and swaras, the meend
 - [x] Tuning, live: the exclusives in nvlive -- master tuning, scale/octave tuning, MTS (a real-time change and a select moving sounding keys), GM System On and GS Reset (live._sysex)
 - [x] Master volume, files and live (blockrender's _mvol, live's master_gain ramp)
 - [ ] Files: a variation that meends (a sitar's, 63.127, 104.1/4/5)
-- [ ] Files: a GM 2 drum set the engine lacks keys of (3 of 8 sets)
+- [x] Every GM 2 drum set's keys native (the last, the SFX set's Phonograph Noise: its record's clicks, strike_flam_record), nvrender and nvlive
 - [x] Files: a note's pressure (channel aftertouch, polytouch: _pressure_of) -- the reader had dropped them -- and the plunger's moving filter on the channel's aftertouch (59.2)
 
-Tones: 123 of 128 native (new at this stage).
+Tones: 125 of 128 native (new at this stage).
 
-- [ ] **Piano** -- 6.24 Harpsi.o
 - [ ] **Guitar** -- 26.8 Pedal Steel
-- [ ] **Ensemble** -- 55.2 6th Hit
 - [ ] **Ethnic** -- 107.8 Taisho Koto
 - [ ] **Sound Effects** -- 125.5 Siren
 
-Drum sets: 7 of 8 with every key native (new at this stage).
+Drum sets: 8 of 8 with every key native (new at this stage).
 
-- [ ] 56 SFX -- 75 of 76 keys native
 
 ## MT-32
 
@@ -120,15 +123,24 @@ Drum sets: 1 of 1 with every key native (new at this stage).
 
 What it needs first, and live's side:
 
+- [x] The drum keys the maps' sets lacked: the tam-tams (Ethnic 45, 46, 48; both Asia sets' 73-75; Rhythm FX's Reverse Gong: a cymbal's ModeDecays, its stroke tilt, its restrike folded) and Rhythm FX's Alias (an aliasing sweep a harmonic a row), nvrender and nvlive
 - [x] Files: a drum set read in a map (kit_in_map) where the map has none of its own
-- [ ] The maps' own drum sets (percussion_map.KITS past 127) in files; the GS map (CC32 / TONE MAP-0) in nvlive
+- [x] The maps' own drum sets (percussion_map.KITS past 127) in files: their keys' classes and tables (MKIT), a drum program past 127; a drum part on the insertion effect
 - [x] A tone's own insertion effect (insertion_efx) in files, all 58 of the maps' tones: its level, OD stage (the part's valve), cabinet, EQ and sends; its chorus device (chorus.gs_copies) and delay (gsdelay.expand, gsd_place's memo shared); an Auto Pan's tremolo; a Phaser's or wah's moving filter (efxfilter on the lobe kernel); a bus (efxbus: Lo-Fi, a compressor -- its rows rendered apart, before the post)
 - [x] A FILE's GS setup (gs_setup): the reverb macro's room (an export per room), its level, time and a delay's feedback in the sidecar; the GS EQ on each part that has it on (gs_eq_gain)
 - [x] A FILE's GS chorus and delay: CC93 through its chorus device (chorus.gs_device), CC94 into its delay (gsdelay.device), each note's send at its onset
 - [x] A FILE's insertion effect (gsefx: 40 03, a part's 4p 22): each note's chain at its onset -- Overdrive, Distortion, the guitar and bass multis (compressor, OD into the valve, cabinet, EQ, chorus or flanger with its mix following the file); its level's steps in the amp's reference; its sends; its effect controllers (40 03 1B-1E: a source's values moving + and #)
-- [ ] A FILE's insertion effect's other types: 3D, the buses (Compressor, Reverb...), pitch shifters, the wahs and phasers, rotary, tremolo and delay types, a multi's delay; a drum part on it
+- [x] A FILE's insertion effect, more types: 3D Manual and Auto (each note's angle), the Compressor, Reverb and Gate Reverb buses (a part's, over its spans; the reverbs' responses and convolution native/efxrev.c's, which efxbus shares), the pitch shifters, GTR Multi 3's wah, Space D, a multi's own delay
+- [x] A FILE's insertion effect's other types: the chorus family, tremolo and auto pan, the six delay types (the Mod Delay's LFO), the phasers, auto wahs, Step Flanger and Humanizer, Lo-Fi 1 and 2 (numpy's noises), Limiter, Enhancer, Stereo-EQ, Spectrum, the multis (Rotary Multi, Keyboard Multi's ring modulator), Rotary (its mics), the twelve series pairs and the nine parallel pairs (branch B on the part's virtual channel); a controller on a choice
+- [x] Strokes fold as a gong's re-strikes do (fold_restrike): a roll's, a rasp's, a laugh's plain strokes sound one strike's rows at a time, files and Python alike
+- [ ] The chorus types' pre-filter high pass (Pre Filter 2): Python builds none -- a model to choose
+- [x] Live: a tone's own moving filter in nvlive -- the plunger (59.2, aftertouch) and the didgeridoo's mouth (109.8, its wander or the wheel's vowel) on the tone's effect channel (live._tone_fx), |H| each block on the rows' unfiltered level (Slab.filter_arm/swing)
+- [x] Live: the module's moving filters in nvlive -- Phaser, Auto Wah (its Sens from the part's notes), the wahs' pedal, Step Flanger, Humanizer (gsefx.filter_setup over live's own EFX timeline, compacted as _efx_event does), a flanger's feedback comb, Tremolo and Auto Pan (Roland's waves; the Tremolo Chorus's): |H| each block on P2a's path, both ears; the responses and controls on libm in Python too (native.xatan/xcexp/xabs/xpow/xexp)
+- [ ] Live: the rest of the insertion effect in nvlive -- done: the chain builder shared (native/efxchain.cpp), its state and each note's direct gain, the moving filters, a Moog's rows under a moving filter, a tone's own insertion effect (an organ's too), the copies as taps, the rotor (Separate's two mics) and the 3D place, the drive and cabinet and an OD's valve, the compressor, a part's bus (Lo-Fi 1/2, compressor, limiter, enhancer, gate, reverb); open: a parallel type's branch B, a Keyboard Multi's copies
+- [ ] Files: a streaming (windowed) nvrender for whole songs -- it holds the table whole in float64, and a Sound Canvas song's is past memory (SHIRO's 6.4 min: 21.8M rows, ~8.7 GB; killed at the 3.5 GB cap) where Python streams every file (streamrender: its port is the work -- a sink, order keys, each pass at its horizon, windows); every native check so far a 20 s excerpt; the two whole-table quirks the stream fell back on are fixed, chorus and the harmonium's tremolo, so streamed equals whole with no fallback
+- [ ] Live: 117:24 Jngl SD Roll refused (LIVE_REFUSED: its velocity probe's table past 2.5 GB) -- a re-attack within a row, a gain track like the damper's, would shrink it
 - [x] Files: the rhythm part's assignment (40 1p 15); the controller matrix (40 2p, GM2 09) where it moves nothing
-- [ ] Files: a controller matrix that moves (ctrlmatrix: its pitch, vibrato, amplitude, tremolo, cutoff, LFO rate; the reader refuses it, -8)
+- [x] Files: a controller matrix that moves (ctrlmatrix): its cutoff and LFO rate in the sound controls, its amplitude in the level and fader, its pitch and vibrato on the pitch stream, its tremolo's rows; a variation that meends; a layered variation's registered layers
 - [ ] Files: GS's other exclusives -- part parameters (parse_gs_part), drum setup and the user sets, TONE MAP-0 (the reader refuses them, -4)
 - [x] Melodic SFX (patch_map.melodic_sfx): a kit's sound on a keyboard part, transposed whole (transposed_from_hz: _XP), its kit key's strokes (sfx_strokes_of), the weather voices (a measured mode set under the noise's roll-off, its breath beside it)
 - [x] SFX voices with a fixed vibrato of their own (skid, starship, scream: VoiceSnap.fv_*)
@@ -139,22 +151,15 @@ What it needs first, and live's side:
 - [ ] Melodic hits: a hand drum's or a kit's detail on a melodic voice (strike_phase_spread, stroke_scatter, jitter_by_partial, bloom_seconds, played_backwards, strike_noise_layers, one_shot and gate_time off a kit) -- dholak, kelontuk, reversed pieces, cymbal tones
 - [x] Crowds: a few people clapping (strike_flam_people, their palms ringing: strike_flam_people_peak) -- Small Club, the applause wave; GM 2's Electronic and TR-808 sets
 - [ ] A recorded flam (strike_flam_record) and a crackle's exponential levels (strike_flam_exp_db, with a gate): phono noise
+- [ ] Sound Canvas superset, files: the GS messages the reader ignores -- a part's RX. CHANNEL (another channel's notes: Roland's own layering), its Rx switches (pitch bend, volume, program change... off), ASSIGN MODE (a repeated note's retrigger), the CC1/CC2 CONTROLLER NUMBERS its matrix reads, MASTER PAN, VOICE RESERVE (accepted: we have more), the display's text and 16x16 dot pages (45 xx: Falcom's and Konami's files send them)
+- [ ] Sound Canvas superset, live: what a sequencer sends that live ignores and a file render honours -- the system reverb, chorus and delay (macros and parameters), the GS EQ, drum setup and the user drum sets, the controller matrix (each to verify first)
+- [ ] Sound Canvas superset, the controllers: the Rx switches, CC1/CC2 controller numbers and the controller matrix go into the wheel's CC-route design (the wheel's functions on CCs of their own, live's wheel a route to them, a file's CC1 GM's modulation; the insertion effect's control sources the model: a controller, a destination, a depth)
 
 Tones: 13 of 13 native (new at this stage).
 
 
-Drum sets: 20 of 30 with every key native (new at this stage).
+Drum sets: 30 of 30 with every key native (new at this stage).
 
-- [ ] 49 Ethnic -- 76 of 79 keys native
-- [ ] 57 Rhythm FX -- 51 of 54 keys native
-- [ ] 386 Standard 3 -- 0 of 115 keys native
-- [ ] 392 Room -- 0 of 115 keys native
-- [ ] 393 Hip-Hop -- 0 of 115 keys native
-- [ ] 394 Jungle -- 0 of 115 keys native
-- [ ] 395 Techno -- 0 of 115 keys native
-- [ ] 410 Dance -- 0 of 115 keys native
-- [ ] 416 Jazz -- 0 of 115 keys native
-- [ ] 436 Asia -- 0 of 64 keys native
 
 ## SC-88
 
@@ -167,44 +172,33 @@ What it needs first, and live's side:
 - [ ] The SFX families: siren, starship, laser, scream, heartbeat, Morse, machine gun, engine, car pass, skid, door creak, birds, fret slide (noise_events, pulse, ring_db, sweeps)
 - [ ] Dulcimer and accordion variations (course_keys, unison_shares_phase; speech_harmonic_exp)
 
-Tones: 180 of 193 native (new at this stage).
+Tones: 188 of 193 native (new at this stage).
 
 - [ ] **Chromatic Percussion** -- 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum
 - [ ] **Guitar** -- 28.1 MutedDis.Gt
-- [ ] **Ensemble** -- 55.8 Impact Hit, 55.9 Philly Hit, 55.10 Double Hit
 - [ ] **Reed** -- 66.8 BreathyTnr.
-- [ ] **Ethnic** -- 105.16 Gopichant, 105.24 Oud, 107.16 Kanoon, 111.8 Pungi, 111.16 Hichiriki
 
-Drum sets: 0 of 2 with every key native (new at this stage).
+Drum sets: 2 of 2 with every key native (new at this stage).
 
-- [ ] 281 TR-808 -- 0 of 115 keys native
-- [ ] 282 Dance -- 0 of 115 keys native
 
 ## SC-88 Pro
 
-Tones: 336 of 360 native (new at this stage).
+Tones: 358 of 360 native (new at this stage).
 
-- [ ] **Chromatic Percussion** -- 15.16 Zither 1, 15.17 Zither 2
-- [ ] **Organ** -- 16.27 Hybrid Organ, 16.48 5th Organ, 16.9 Organ. o, 17.9 Octave Organ
-- [ ] **Ensemble** -- 50.24 Tron Strings, 55.11 Perc. Hit, 55.12 Shock Wave, 55.17 Techno Hit, 55.19 Bam Hit, 55.21 Bim Hit, 55.22 Technorg Hit, 55.23 Rave Hit, 55.25 Stack Hit
-- [ ] **Reed** -- 65.9 Grow Sax
-- [ ] **Pipe** -- 73.16 Tron Flute
-- [ ] **Synth Effects** -- 100.8 Org Bell
-- [ ] **Ethnic** -- 105.28 Oud+Strings, 105.32 Pi Pa, 107.19 Kanoon+Choir, 109.8 Didgeridoo
-- [ ] **Sound Effects** -- 124.10 Phono Noise, 125.10 Calculating
+- [ ] **Ensemble** -- 55.22 Technorg Hit
+- [ ] **Sound Effects** -- 125.10 Calculating
 
 Drum sets: 0 of 0 with every key native (new at this stage).
 
 
 ## SC-8850
 
-Tones: 449 of 460 native (new at this stage).
+What it needs first, and live's side:
 
-- [ ] **Chromatic Percussion** -- 10.1 Music Box 2, 10.8 St.Music Box
-- [ ] **Ensemble** -- 55.13 Bounce Hit, 55.14 Drill Hit, 55.15 Thrill Hit, 55.26 Industry Hit, 55.27 Clap Hit
-- [ ] **Synth Effects** -- 100.4 Choir Stab
-- [ ] **Ethnic** -- 109.9 Uillean Pipe, 109.10 UillnPipe Nm, 109.11 UillnPipe Or
+- [ ] Sound Canvas superset, the panel (livetui, then nvlive): per-part pan, reverb/chorus/delay sends and velocity sense as part columns; a system-effects page (reverb type, time, character, pre-LPF; chorus and delay types and parameters; the master EQ); per-part level meters (the 16 bars); the display (a sequencer's text and dot pages); the map (SC-55/88/88Pro/8850) in the picker and a GS Reset; solo beside mute; user tones and drum sets edited and stored
 
-Drum sets: 5 of 6 with every key native (new at this stage).
+Tones: 460 of 460 native (new at this stage).
 
-- [ ] 52 Asia -- 63 of 66 keys native
+
+Drum sets: 6 of 6 with every key native (new at this stage).
+

@@ -272,7 +272,9 @@ struct Song {
     // a reed organ's notes struck with its Tremolo stop drawn (by note), and
     // their rows (_HT_ROWS, nv_prepare's)
     mutable std::vector<char> htrem_note;
+    mutable std::vector<std::array<double, 2>> htrem_cfg;      // (each note's: its stop's rate and depth)
     std::vector<std::pair<long long, long long>> htrem_rows;
+    std::vector<std::array<double, 2>> htrem_rows_cfg;
     // the rotating speakers (_LESLIE_CH): each channel as its first Leslie
     // note came, and how it starts (1 chorale, 2 tremolo)
     std::vector<std::pair<long long, int>> leslie;
@@ -1557,6 +1559,7 @@ struct Song {
     std::map<long long, std::vector<unsigned char>> sym_drv;    // each mix channel's strings' driver (_SYM_CH)
     std::map<NoteKey, std::pair<double, double>> meend;         // _MEEND_AT: (its ratio at Note On, its row or -1)
     std::map<NoteKey, std::pair<double, double>> siren;         // _SIREN_AT: (its row, its rotor's end)
+    std::map<NoteKey, std::vector<double>> alias;               // _ALIAS_AT: its harmonics' rows (-1 none)
     // a part's insertion effect: (each mix channel's first effect note's onset, distance), in the note loop's order
     std::map<long long, std::vector<std::pair<double, double>>> efx_part;
     double gs_eq[4] = {0.0, 0.0, 0.0, 0.0};     // the file's GS EQ (gs_eq_gain), [0] 0 none
@@ -2301,6 +2304,9 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
     if (S->htrem_note.size() < S->notes.size())
         S->htrem_note.resize(S->notes.size(), 0);
     S->htrem_note[i] = o->spec->expr_rank >= 0 && o->spec->htrem_depth > 0.0 && drawn_at(o->spec->htrem_rank);
+    if (S->htrem_cfg.size() < S->notes.size())
+        S->htrem_cfg.resize(S->notes.size());
+    S->htrem_cfg[i] = {o->spec->htrem_hz, o->spec->htrem_depth};     // (the note's own: _HT_ROWS keeps it)
     return 1;
 }
 
@@ -2550,8 +2556,11 @@ int nv_song_htrem(void *s, int i)
     return i >= 0 && i < (int)S->htrem_note.size() && S->htrem_note[i];
 }
 
-void nv_song_add_htrem_rows(void *s, long long a, long long b)
+void nv_song_add_htrem_rows(void *s, long long a, long long b, int note)
 {
+    nv::Song *Sn = (nv::Song *)s;
+    Sn->htrem_rows_cfg.push_back(note >= 0 && note < (int)Sn->htrem_cfg.size() ? Sn->htrem_cfg[note]
+                                                                             : std::array<double, 2>{0.0, 0.0});
     ((nv::Song *)s)->htrem_rows.push_back(std::make_pair(a, b));
 }
 
@@ -2563,6 +2572,18 @@ int nv_song_n_htrem_rows(void *s, long long *ab, int cap)
     for (int q = 0; q < n && q < cap; q++) {
         ab[2 * q] = S->htrem_rows[q].first;
         ab[2 * q + 1] = S->htrem_rows[q].second;
+    }
+    return n;
+}
+
+// ...and each one's setting: its note's stop's rate and depth (2 a span)
+int nv_song_htrem_rows_cfg(void *s, double *cfg2, int cap)
+{
+    const nv::Song *S = (nv::Song *)s;
+    int n = (int)S->htrem_rows_cfg.size();
+    for (int q = 0; q < n && q < cap; q++) {
+        cfg2[2 * q] = S->htrem_rows_cfg[q][0];
+        cfg2[2 * q + 1] = S->htrem_rows_cfg[q][1];
     }
     return n;
 }
@@ -2994,6 +3015,27 @@ int nv_song_gs_eq_of(void *s, long long part, double *eq)
     for (int i = 0; i < 4; i++)
         eq[i] = S->gs_eq[i];
     return 1;
+}
+
+// AN ALIASING SWEEP's note (_ALIAS_AT): its harmonics' rows, by harmonic (-1 none)
+void nv_song_alias(void *s, long long ch, int note, double on, const double *rows, int n)
+{
+    ((nv::Song *)s)->alias[nv::NoteKey{ch, note, on}] = std::vector<double>(rows, rows + n);
+}
+
+// note i's: how many (0 none), up to cap into out
+int nv_song_alias_of(void *s, int i, double *out, int cap)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (i < 0 || i >= (int)S->notes.size())
+        return 0;
+    auto it = S->alias.find(nv::NoteKey{S->notes[i].ch, S->notes[i].note, S->notes[i].on});
+    if (it == S->alias.end())
+        return 0;
+    int n = (int)it->second.size();
+    for (int q = 0; q < n && q < cap; q++)
+        out[q] = it->second[q];
+    return n < cap ? n : cap;
 }
 
 // A SIREN's note (_SIREN_AT): its rotor's row, and where it ends

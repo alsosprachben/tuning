@@ -587,6 +587,8 @@ typedef struct {
     /* A FILE'S INSERTION EFFECT's compressor (gsefx.chain's comp): its decay
        factor, its makeup and its attack (s); [0] 0 none */
     double fx_comp[3];
+    double alias_br[32];    /* an aliasing sweep's rows by harmonic (NoteIn's), n_alias 0 none */
+    int n_alias;
 } ToneIn;
 
 /* A MOOG MESSENGER's panel as a note reads it (moog.py; native.moog_spec):
@@ -1075,6 +1077,18 @@ typedef struct NoteClass {
     // attack and release k, makeup); bus_p[10], [11] its dry and wet
     int efx_bus;
     double bus_p[12];
+    // THE SAME PLATE STRUCK AGAIN (fold_restrike: a gong): each strike of the
+    // key folds into the next, as a gesture's plain strokes do
+    int fold_restrike;
+    // AN ALIASING SWEEP (alias_sweep: start Hz, end Hz, seconds, the
+    // sampler's rate, harmonics; [4] 0 none): each harmonic its own folded row
+    double alias_sweep[5];
+    // A RECORD's CLICKS (strike_flam_record: blockrender._record_clicks): one
+    // timeline a revolution (rec_per s) at a time, a click clicking again a
+    // revolution on with rec_pr's probability; their levels from rec_q's
+    // quantiles (percent, dB; n_rq 0: uniform under flam_db)
+    int flam_record, n_rq;
+    double rec_per, rec_pr, rec_qx[8], rec_qy[8];
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -1163,6 +1177,10 @@ typedef struct {
     // ...its 3D type's angle at its onset (pos3d: radians, + right), fx_p3d 0 none
     int fx_p3d;
     double fx_angle;
+    // ...ITS ALIASING SWEEP's rows (_ALIAS_AT): harmonic m on alias_br[m - 1]
+    // (-1 none), n_alias of them; 0 none
+    double alias_br[32];
+    int n_alias;
 } NoteIn;
 
 /* tone.c: an organ note's ranks (_note_stops for a registered organ), its
@@ -1308,6 +1326,7 @@ void *nv_efx_live_new(const double *X, double SR);
 void nv_efx_live_free(void *h);
 void nv_efx_live_apply(void *h, double t, int k, int a, int b);
 int nv_efx_live_parts(void *h);
+int nv_efx_live_part_list(void *h, int *out, int cap);
 int nv_efx_live_filter(void *h, int ch, double *head, double *seg, int cap);
 int nv_efx_live_on(void *h, int ch);
 long nv_efx_live_rev(void *h);
@@ -1380,6 +1399,8 @@ void nv_song_gliss(void *s, const NoteClass *const *K);
 void nv_song_slot_organs(void *s, int n, const OrganSpec *const *so);
 void nv_song_play_mark(void *s);
 void nv_song_siren(void *s, long long ch, int note, double on, double row, double end);
+void nv_song_alias(void *s, long long ch, int note, double on, const double *rows, int n);
+int nv_song_alias_of(void *s, int i, double *out, int cap);
 void nv_song_efx_part(void *s, long long part, double on, double dist);
 void nv_song_pressure_events(void *s, long long ch, int key, int n, const double *t, const int *v);
 double nv_song_pressure(void *s, long long ch, int note, double on, double off);
@@ -1439,8 +1460,10 @@ void nv_song_add_grain_rows(void *s, long long a, long long b);
 int nv_song_n_grain_rows(void *s, long long *ab, int cap);
 int nv_song_n_stroke_rows(void *s, long long *ab, int cap);
 int nv_song_htrem(void *s, int i);
-void nv_song_add_htrem_rows(void *s, long long a, long long b);
+void nv_song_add_htrem_rows(void *s, long long a, long long b, int note);
 int nv_song_n_htrem_rows(void *s, long long *ab, int cap);
+int nv_song_htrem_rows_cfg(void *s, double *cfg2, int cap);
+void nv_tremolo_row_cfg(long long n, const double *cfg4);
 int nv_song_organ_tremolos(void *s, int which, int *ch, double *cfg, int cap);
 void nv_song_add_leslie(void *s, long long ch, int kind);
 void nv_song_add_trem(void *s, long long ch, const double *cfg);

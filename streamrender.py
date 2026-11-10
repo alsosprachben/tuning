@@ -329,7 +329,7 @@ class Stream:
         self.ready = []             # rows final for the per-row passes
         self.store = []             # rows through every pass, still to sound
         self._shadow = []           # (rows, last end, bytes) a chunk the old rule would hold
-        self.ht_seen = {}
+        self.ht_cfgs, self.ht_ix = [], {}  # the harmonium tremolo's settings, as the notes read them
         self.rotors = {}
         self.wi = 0
 
@@ -428,7 +428,7 @@ class Stream:
                 raise NeedLoudest()
         mf = [(a - i0, b - i0, st) for a, b, st in fx['mf104'] if i0 <= a < i1]
         gsd = [(a - i0, b - i0, dv, sd) for a, b, dv, sd in fx.get('gsdelay', ()) if i0 <= a < i1]
-        ht = [(a - i0, b - i0) for a, b in self.ctx['ht_rows'] if i0 <= a < i1]
+        ht = [(a - i0, b - i0, c) for a, b, c in self.ctx['ht_rows'] if i0 <= a < i1]
         note = dict(r=r, mf=mf, gsd=gsd, ht=ht, wait=0)
         sym = fx['sympathetic']
         if sym:
@@ -637,8 +637,11 @@ class Stream:
                 out['ht'] = np.zeros(len(src), bool)
                 self._final(out, ht=False)
         r['ht'] = np.zeros(len(r['om']), bool)
-        for a, b in note['ht']:
-            r['ht'][a:b] = True
+        for a, b, c in note['ht']:              # (each note its setting: an index into ht_cfgs)
+            if c not in self.ht_ix:
+                self.ht_ix[c] = len(self.ht_cfgs)
+                self.ht_cfgs.append(c)
+            r['ht'][a:b] = self.ht_ix[c]
         self._final(r, ht=None)
 
     def _mf_dup(self, fx, d):
@@ -760,9 +763,7 @@ class Stream:
                     v = r[col]; v[sel] *= g
         parts = [r]
         # HARMONIUM TREMOLO: the notes played with the stop drawn
-        if fx['htremolo'] and r['ht'].any():
-            for ch, v in fx['htremolo'].items():
-                self.ht_seen.setdefault(ch, set()).add(tuple(v))
+        if fx['htremolo'] and (r['ht'] >= 0).any():
             parts.append(self._tremolo(r, fx['htremolo'], 4, rows=r['ht']))
         # TREMOLO
         if fx['tremolo']:
@@ -832,7 +833,8 @@ class Stream:
         n0 = len(r['om'])
         meta = []
         TR.expand(mini, channels, self.B.SR, self.cols,
-                  rows=None if rows is None else list(r['ht']), meta=meta)
+                  rows=None if rows is None else list(r['ht'] >= 0), meta=meta,
+                  cfgs=None if rows is None else [self.ht_cfgs[j] if j >= 0 else None for j in r['ht']])
         if not meta:
             return None
         out = _appended(mini, r, self.cols, n0)
@@ -999,17 +1001,10 @@ class Stream:
         return _cat(outs)
 
     def check(self):
-        """What the stream assumed, checked against what the file turned out to be."""
-        chans = self.ctx['effects']['chorus']
-        total = 0
-        for ch in chans:
-            total += self.made.get(ch, 0)
-            if ch in self.dried and total == 0:
-                raise NotStreamable("chorus: a channel dried before any copy existed")
-        for ch, seen in self.ht_seen.items():
-            final = tuple(self.ctx['effects']['htremolo'].get(ch, ()))
-            if seen != {final}:
-                raise NotStreamable("harmonium tremolo settings changed mid-file")
+        """What the stream assumed, checked against what the file turned out
+        to be: nothing now -- a chorus channel's dry share no longer hangs on
+        the copies other channels made, and each harmonium note keeps its own
+        tremolo, in the whole table as here."""
 
     # -- the store and the windows --------------------------------------------
     def _zend(self, r):

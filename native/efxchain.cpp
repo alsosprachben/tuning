@@ -1100,6 +1100,15 @@ extern "C" void nv_efx_live_free(void *h) { delete (EfxLive *)h; }
 extern "C" void nv_efx_live_apply(void *h, double t, int k, int a, int b) { ((EfxLive *)h)->event(t, k, a, b); }
 extern "C" int nv_efx_live_parts(void *h) { return (int)((EfxLive *)h)->parts.size(); }
 
+// the channels on it, as many as fit (their count)
+extern "C" int nv_efx_live_part_list(void *h, int *out, int cap)
+{
+    const std::vector<int> &p = ((EfxLive *)h)->parts;
+    for (int i = 0; i < (int)p.size() && i < cap; i++)
+        out[i] = p[i];
+    return (int)p.size();
+}
+
 // gsefx.filter_setup's settings for part ch over the timeline: each time
 // (0 and the events') whose chain has a moving filter of the first's family
 // (vowels or not) -- its time, pedal Hz and control (kind, c1-c5), 8 each

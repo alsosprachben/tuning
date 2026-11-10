@@ -102,19 +102,24 @@ def check(name, f, tuner="hybridmean:440"):
     Lw, Rw = B.synth_window(p, 0, p['N'])
     tw = time.time() - t
     same = Ls.tobytes() == Lw.tobytes() and Rs.tobytes() == Rw.tobytes()
-    # the send, as blockrender's own second render makes it
-    g = np.ones(p['P'], np.float32)
-    for c, v in p['reverb_send'].items():
-        g[p['mch'] == c] = v
+    # the send, as blockrender's own second render makes it (its command
+    # line's .send.wav): each row at its channel's send where its note began
+    # (send_weights: CC91's steps, a tone's channel its part's), the buses,
+    # the master fader, then the master gain, as the mix has it -- this
+    # reference had kept the channels' last sends and no master gain
+    import tonelib as T
+    g = B.send_weights(p['reverb_send'], p.get('reverb_steps'), p['mch'], p['non'])
     p['aL'] = p['aL'] * g
     p['aR'] = p['aR'] * g
     bl = np.zeros(p['N'], np.float32)
     br = np.zeros(p['N'], np.float32)
-    B.synth_partials(p, 0, p['N'], 0, p['P'], bl, br)
+    B.render_partials(p, 0, p['N'], bl, br)
     mg = B.master_curve(p.get('mvol'), 0, p['N'])
     if mg is not None:
         bl *= mg
         br *= mg
+    bl *= T.master_gain
+    br *= T.master_gain
     send_same = s.SL.tobytes() == bl.tobytes() and s.SR.tobytes() == br.tobytes()
     print("%s: %d rows, at most %d live; streamed %.1fs, whole %.1fs; mix %s, send %s"
           % (name, p['P'], s.peak_live, ts, tw, "identical" if same else "DIFFERS",

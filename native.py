@@ -131,7 +131,7 @@ class ToneIn(ctypes.Structure):
                 + [('room_bands', C * 9), ('pjit', I), ('sps', C), ('dur', C), ('ssc', I)]
                 + [('rev', I), ('rev_n0', C), ('rev_arr', C), ('planes', C * 6), ('order', I), ('radius', C),
                    ('has_radius', I), ('pps_seed', ctypes.c_longlong), ('dist', C), ('cls', ctypes.c_longlong),
-                   ('hammer_on', C), ('gs_eq', C * 4), ('fx_comp', C * 3)])
+                   ('hammer_on', C), ('gs_eq', C * 4), ('fx_comp', C * 3), ('alias_br', C * 32), ('n_alias', I)])
 
 
 class VoiceInit(ctypes.Structure):
@@ -287,7 +287,8 @@ class NoteClass(ctypes.Structure):
                    ('flt_set', I), ('flt_ty', I), ('flt_k', I), ('flt_p', C * 3), ('flt_c', C * 5),
                    ('n_mouth', I), ('mouth_seed', I), ('mouth_st', C * 3 * 16), ('mouth_cdf', C * 16),
                    ('mouth_wst', C * 3 * 16), ('mouth_dw', C * 2), ('mouth_glide', C),
-                   ('efx_bus', I), ('bus_p', C * 12)])
+                   ('efx_bus', I), ('bus_p', C * 12), ('fold_restrike', I), ('alias_sweep', C * 5),
+                      ('flam_record', I), ('n_rq', I), ('rec_per', C), ('rec_pr', C), ('rec_qx', C * 8), ('rec_qy', C * 8)])
 
 
 class NoteIn(ctypes.Structure):
@@ -310,7 +311,7 @@ class NoteIn(ctypes.Structure):
                    ('sym_drv', ctypes.c_void_p), ('blk', C), ('xp', C),
                    ('hammered', I), ('reslur', I), ('hammer_on', C), ('siren_set', I), ('siren_end', C),
                    ('press', C), ('gs_eq', C * 4), ('fx_set', I), ('fx_level', C), ('fx_od', C),
-                   ('fx_comp', C * 3), ('fx_p3d', I), ('fx_angle', C)])
+                   ('fx_comp', C * 3), ('fx_p3d', I), ('fx_angle', C), ('alias_br', C * 32), ('n_alias', I)])
 
 
 class NoteOut(ctypes.Structure):
@@ -336,6 +337,69 @@ def lib():
     return _LIB[0] or None
 
 
+
+def _build_objects(units):
+    """Each unit (name, compiler and flags, source) compiled to .nvbuild/NAME.o
+    unless its stamp still holds -- the hash of its command and of the contents
+    of every file the compiler read for it (its -MMD list) -- the stale ones at
+    once (NV_BUILD_JOBS, default the cores, at most 8). Each written under a
+    name of this process's and moved in whole, so builds running side by side
+    never see a half-written object. Returns the objects, in the units' order."""
+    import concurrent.futures
+    import hashlib
+    bdir = os.path.join(HERE, '.nvbuild')
+    os.makedirs(bdir, exist_ok=True)
+
+    def stamp(cmd, dep):
+        try:
+            with open(dep) as f:
+                text = f.read().replace('\\\n', ' ')
+        except OSError:
+            return None
+        h = hashlib.sha256('\0'.join(cmd).encode())
+        for path in text.split(':', 1)[1].split() if ':' in text else ():
+            try:
+                with open(path, 'rb') as f:
+                    h.update(path.encode() + b'\0' + hashlib.sha256(f.read()).digest())
+            except OSError:
+                return None
+        return h.hexdigest()
+
+    def held(name, cmd):
+        o, d, st = (os.path.join(bdir, name + x) for x in ('.o', '.d', '.stamp'))
+        try:
+            with open(st) as f:
+                old = f.read()
+        except OSError:
+            return False
+        return os.path.exists(o) and old == stamp(cmd, d)
+
+    def compile_one(name, cmd, src):
+        o, d, st = (os.path.join(bdir, name + x) for x in ('.o', '.d', '.stamp'))
+        pid = '.%d.tmp' % os.getpid()
+        try:
+            subprocess.check_call(cmd + ['-c', src, '-o', o + pid, '-MMD', '-MF', d + pid])
+            # (the .d names the object it was written as: the stamp reads only its list)
+            new = stamp(cmd + ['-c', src], d + pid)
+            os.replace(o + pid, o)
+            os.replace(d + pid, d)
+            with open(st + pid, 'w') as f:
+                f.write(new or '')
+            os.replace(st + pid, st)
+        finally:
+            for x in (o + pid, d + pid, st + pid):
+                if os.path.exists(x):
+                    os.remove(x)
+
+    todo = [(n, c + ['-c', s], c, s) for n, c, s in units]
+    stale = [(n, c, s) for n, key, c, s in todo if not held(n, key)]
+    if stale:
+        jobs = int(os.environ.get('NV_BUILD_JOBS') or min(8, os.cpu_count() or 1))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(jobs, len(stale)))) as ex:
+            for f in [ex.submit(compile_one, n, c, s) for n, c, s in stale]:
+                f.result()
+    return [os.path.join(bdir, n + '.o') for n, c, s in units]
+
 def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
@@ -343,8 +407,8 @@ def _load():
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
                                                        'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'efxrev.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
-                                                       'epiano.cpp', 'efxchain.cpp')]
-            + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c')])
+                                                       'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostint.h', 'hostlive.h', 'host.h', 'livebus.cpp')]
+            + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c'), os.path.join(HERE, 'tapkernel.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
         tmp = '%s.%d.tmp' % (so, os.getpid())
@@ -354,47 +418,32 @@ def _load():
         # The C core (tone.c, with voice.c) and the C++ engine (engine.cpp)
         # under the same flags, linked into one library.
         flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
-        objs = [tmp + '.tone.o', tmp + '.engine.o', tmp + '.channel.o', tmp + '.room.o', tmp + '.midi.o',
-                tmp + '.register.o', tmp + '.prepare.o', tmp + '.render.o', tmp + '.live.o', tmp + '.slab.o',
-                tmp + '.registercore.o', tmp + '.livereg.o', tmp + '.gpu.o', tmp + '.tuner.o', tmp + '.bend.o',
-                tmp + '.leslie.o', tmp + '.tubeamp.o', tmp + '.scanner.o', tmp + '.reed.o', tmp + '.epiano.o',
-                tmp + '.efxchain.o']
+        cxx = ['g++', '-std=c++17'] + flags
+        nat = lambda f: os.path.join(HERE, 'native', f)
+        units = ([('tone', ['gcc'] + flags, nat('tone.c'))]
+                 + [(f[:-4], cxx, nat(f)) for f in ('engine.cpp', 'channel.cpp', 'room.cpp', 'midi.cpp', 'register.cpp',
+                                                    'prepare.cpp', 'render.cpp', 'live.cpp', 'slab.cpp')]
+                 # register.py's C core, under ITS flags (register._load_core's): the same arithmetic
+                 + [('registercore', ['gcc', '-O3', '-march=native', '-ffp-contract=off', '-fopenmp-simd',
+                                      '-fno-math-errno', '-mprefer-vector-width=512', '-fPIC'],
+                     os.path.join(HERE, 'registercore.c'))]
+                 + [(f[:-4], cxx, nat(f)) for f in ('livereg.cpp', 'gpu.cpp', 'tuner.cpp', 'bend.cpp', 'leslie.cpp',
+                                                    'tubeamp.cpp', 'scanner.cpp', 'reed.cpp', 'epiano.cpp',
+                                                    'efxchain.cpp')]
+                 # live.py's tap kernel (the insertion effect's copies), under ITS
+                 # flags (live.ensure_tap_lib's): the same arithmetic
+                 + [('tapkernel', ['gcc', '-O3', '-march=native', '-fPIC'], os.path.join(HERE, 'tapkernel.c'))]
+                 # roomtail.py's late field (live.room_irs's), drawn natively; the
+                 # live host (host.h: nvlive's, as a library); a part's own bus live
+                 # (live.LiveBus: efxbus's processors, block by block)
+                 + [(f[:-4], cxx, nat(f)) for f in ('roomtail.cpp', 'host.cpp', 'livebus.cpp')])
+        objs = _build_objects(units)
         try:
-            subprocess.check_call(['gcc'] + flags + ['-c', srcs[0], '-o', objs[0]])
-            for src, o in zip(srcs[4:8] + [os.path.join(HERE, 'native', f)
-                                           for f in ('register.cpp', 'prepare.cpp', 'render.cpp', 'live.cpp',
-                                                     'slab.cpp')],
-                              objs[1:10]):
-                subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', src, '-o', o])
-            # register.py's C core, under ITS flags (register._load_core's): the same arithmetic
-            subprocess.check_call(['gcc', '-O3', '-march=native', '-ffp-contract=off', '-fopenmp-simd',
-                                   '-fno-math-errno', '-mprefer-vector-width=512', '-fPIC', '-c',
-                                   os.path.join(HERE, 'registercore.c'), '-o', objs[10]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'livereg.cpp'),
-                                   '-o', objs[11]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'gpu.cpp'),
-                                   '-o', objs[12]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'tuner.cpp'),
-                                   '-o', objs[13]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'bend.cpp'),
-                                   '-o', objs[14]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'leslie.cpp'),
-                                   '-o', objs[15]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'tubeamp.cpp'),
-                                   '-o', objs[16]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'scanner.cpp'),
-                                   '-o', objs[17]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'reed.cpp'),
-                                   '-o', objs[18]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'epiano.cpp'),
-                                   '-o', objs[19]])
-            subprocess.check_call(['g++', '-std=c++17'] + flags + ['-c', os.path.join(HERE, 'native', 'efxchain.cpp'),
-                                   '-o', objs[20]])
             subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl'])
-        finally:
-            for o in objs:
-                if os.path.exists(o):
-                    os.remove(o)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            raise
         os.replace(tmp, so)
     d = ctypes.CDLL(so)
     P = ctypes.POINTER(VoiceSnap)
@@ -855,7 +904,11 @@ def _modal_drum(cls):
                    _hf_rolloff=None, _band_trim=None)
     if any(_owner(cls, n) != o for n, o in own.items()):
         return False
+    # (a TAM-TAM: a cymbal's, each measured mode its own decay -- ModeDecays,
+    # past them the cymbal's ring -- and the stroke's tilt across them)
+    gong = cym and issubclass(cls, T.ModeDecays) and len(cls.mode_decays) <= 400
     if (_owner(cls, 'harmonic_decay') not in ('SynthProperties', 'CymbalProperties')
+            and not (gong and _owner(cls, 'harmonic_decay') == 'ModeDecays')
             and decay_target(cls) is None
             and not (_tube(cls) and _owner(cls, 'harmonic_decay') in ('TubularBellProperties', 'ChurchBellProperties'))):
         return False
@@ -873,7 +926,7 @@ def _modal_drum(cls):
         mg = mr = ()
     return (isinstance(mg, (tuple, list)) and isinstance(mr, (tuple, list)) and len(mg) == len(mr) <= 320
             and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
-            and not cls.mode_stroke_tilt and not cls.bore_corner_hz and not cls.harmonic_touch
+            and (not cls.mode_stroke_tilt or gong) and not cls.bore_corner_hz and not cls.harmonic_touch
             and not cls.pickup_points and len(getattr(cls, 'band_trim_db', ())) <= 32
             and len(cls.unison_detune or ()) <= 8)
 
@@ -1904,8 +1957,7 @@ def kit_tables(kitlist):
             spar[SPAR * (q + 1) - 4] = len(ly)
             spar[SPAR * (q + 1) - 3:SPAR * (q + 1) - 3 + len(ly)] = [float(k) for k in ly]
             if (kit_drum(cls) and ss is not None
-                    and getattr(cls, 'siren_rotor', None) in (None, 'fire')
-                    and not getattr(cls, 'alias_sweep', None)):
+                    and getattr(cls, 'siren_rotor', None) in (None, 'fire')):
                 classes[q] = cls
     # (a key the engine plays only where it plays every layer with it)
     for q in range(n):
@@ -2098,7 +2150,8 @@ def snapshot(props):
             s.mode_decays[:s.n_md] = [float(row[4]) for row in p.TUBE_MODES]
             if _owner(type(p), 'harmonic_decay') == 'ChurchBellProperties':     # (a church bell's own law)
                 s.church, s.church_slope = 1, float(p.decay_register_slope)
-        if timpani_voice(type(p)):
+        if timpani_voice(type(p)) or (isinstance(p, T.CymbalProperties) and isinstance(p, T.ModeDecays)
+                                      and p.mode_stroke_tilt):
             s.mst, s.mst_ref = float(p.mode_stroke_tilt), float(p.mode_stroke_ref_db)
         if isinstance(p, T.ModeDecays) or timpani_voice(type(p)):
             ma, mp = getattr(p, 'mode_after', ()), getattr(p, 'mode_phases', ())
@@ -2641,6 +2694,7 @@ def _class(cls):
         t.ahz[:] = [float(x) for x in AHZ]
         t.alpha[:] = [float(x) for x in ALPHA]
         t.scat[:] = [float(x) for x in SCAT]
+        t.radiation_distance = float(got[2].radiation_distance)     # (the room's listener distance too)
         got[3] = room
     return got
 
@@ -3049,7 +3103,7 @@ def note_class(cls):
         # a tape played backwards)
         def drum_has(a):
             if a in ('one_shot', 'jitter_by_partial', 'strike_phase_spread', 'bloom_seconds', 'stroke_scatter',
-                     'gate_time', 'played_backwards', 'strike_noise_tail'):
+                     'gate_time', 'played_backwards', 'strike_noise_tail', 'fold_restrike'):
                 return True
             # ...a machine's burst train, and up to 32 layers (a Simmons: 21)
             # ...a crowd's bursts through the note (no record's, no exponential levels)
@@ -3061,9 +3115,9 @@ def note_class(cls):
                 return _owner(cls, 'unison_voices') == 'BagpipeProperties'
             if a == 'unison_drop_late':         # (a telephone's strokes past the note: tone.c's)
                 return bool(tap_voice(cls))
-            if a == 'strike_flam_rate':
-                return (not getattr(cls, 'strike_flam_record', False)
-                        and int(getattr(cls, 'strike_flam', 0) or 0) <= 1)
+            if a == 'strike_flam_rate':         # (a crowd's, or a record's clicks: their table at most 8)
+                return (int(getattr(cls, 'strike_flam', 0) or 0) <= 1
+                        and len(getattr(cls, 'strike_flam_levels', ()) or ()) <= 8)
             if a == 'strike_flam_people':       # (a few people: their claps and their palms' ring)
                 pp = getattr(cls, 'strike_flam_people', None) or ()
                 pk = getattr(cls, 'strike_flam_people_peak', None)
@@ -3124,6 +3178,9 @@ def note_class(cls):
             return None
         k = NoteClass()
         k.init = v[0]
+        k.fold_restrike = int(bool(getattr(cls, 'fold_restrike', False)))     # (a gong: emit_partial's _fold_cls)
+        _asw = getattr(cls, 'alias_sweep', None)                        # (an aliasing sweep's: _prep_alias_sweep's)
+        k.alias_sweep[:] = [float(x) for x in _asw] if _asw else [0.0] * 5
         k.chiff_max_valve_time = cls.chiff_max_valve_time
         k.release_valve_set = int(cls.release_valve_time is not None)
         k.release_valve_time = cls.release_valve_time or 0.0
@@ -3208,6 +3265,13 @@ def note_class(cls):
         k.flam_db = float(getattr(cls, 'strike_flam_db', 0.0) or 0.0)
         k.flam_rate = float(getattr(cls, 'strike_flam_rate', 0.0) or 0.0)      # (a crowd: bursts a second)
         k.flam_exp = float(getattr(cls, 'strike_flam_exp_db', 0.0) or 0.0)    # (...a crackle's levels)
+        if getattr(cls, 'strike_flam_record', False):          # (...or a record's clicks: _record_clicks)
+            k.flam_record = 1
+            k.rec_per, k.rec_pr = [float(x) for x in (getattr(cls, 'strike_flam_recur', None) or (1.8, 0.0))]
+            _rq = tuple(getattr(cls, 'strike_flam_levels', ()) or ())
+            k.n_rq = len(_rq)
+            for _i, (_qa, _qb) in enumerate(_rq):
+                k.rec_qx[_i], k.rec_qy[_i] = float(_qa), float(_qb)
         _pp = getattr(cls, 'strike_flam_people', None)                         # (a few people clapping)
         if _pp:
             k.people_n = int(_pp[0])
@@ -4403,7 +4467,9 @@ def build_nvlive():
     exe = os.path.join(HERE, 'nvlive')
     so = os.path.join(HERE, 'libnative.so')
     hdr = os.path.join(HERE, 'native', 'panel.h')
-    if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(hdr),
+    hint = os.path.join(HERE, 'native', 'hostint.h')
+    hlive = os.path.join(HERE, 'native', 'hostlive.h')
+    if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(hdr), os.path.getmtime(hint), os.path.getmtime(hlive),
                                       os.path.getmtime(so)) > os.path.getmtime(exe):
         tmp = '%s.%d.tmp' % (exe, os.getpid())
         subprocess.check_call(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin',

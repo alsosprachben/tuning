@@ -641,6 +641,45 @@ def main(argv):
                 else:
                     a = np.ascontiguousarray(a, np.float32)
                     f.write(struct.pack("<i", len(a)) + a.tobytes())
+            # LROOMS: EVERY ROOM live can switch to (live.set_room, ROOM_NAMES):
+            # the byte ranges of a class record the room sets (its walls and
+            # their order; its voice snapshot's room, band corners, absorption,
+            # scattering and the listener's distance), the class count, the device tails' filters
+            # (roomtail.device_spec), then each room's name, whether it
+            # reflects (dry: off, the classes as they were), its tail's spec
+            # (roomtail.tail_spec: what does not depend on the stage) and, where
+            # it reflects, every class's ranges in it -- the export's own room
+            # last set again, as the rest of the export expects
+            import roomtail as _RTL
+            import tonelib as _T
+            _was = _T.ROOM_NAME[0]
+            _VS = N.VoiceSnap
+            _t0 = N.NoteClass.tmpl.offset
+            rng = [(N.NoteClass.room_planes.offset, N.NoteClass.room_planes.size),
+                   (N.NoteClass.room_order.offset, N.NoteClass.room_order.size)]
+            rng += [(_t0 + getattr(_VS, _f).offset, getattr(_VS, _f).size)
+                    for _f in ("room", "ahz", "alpha", "scat", "radiation_distance")]
+            ordered = sorted(idx.items(), key=lambda kv: kv[1])
+            rb = struct.pack("<i", len(rng)) + b"".join(struct.pack("<ii", o, z) for o, z in rng)
+            rb += struct.pack("<i", len(classes))
+            dsp = _RTL.device_spec(48000)
+            rb += struct.pack("<i", len(dsp)) + struct.pack("<%dd" % len(dsp), *dsp)
+            rb += struct.pack("<i", len(L.ROOM_NAMES))
+            for _rn in L.ROOM_NAMES:
+                _nb = _rn.encode()
+                rb += struct.pack("<i", len(_nb)) + _nb
+                if _rn == "dry":
+                    rb += struct.pack("<ii", 0, 0)
+                    continue
+                _T.set_room(_rn)
+                tsp = _RTL.tail_spec(_T.StoppedPipeProperties(261.6, 0, 1, 1))
+                rb += struct.pack("<ii", 1, len(tsp)) + struct.pack("<%dd" % len(tsp), *tsp)
+                for _cls, _i in ordered:
+                    _kb = bytes(N.note_class(_cls))
+                    rb += b"".join(_kb[o:o + z] for o, z in rng)
+            if _was:
+                _T.set_room(_was)
+            f.write(b"LROOMS" + struct.pack("<q", len(rb)) + rb)
             # LROUTE: the session's routes (live.Route), each as nv_rt_add takes it
             routes = [L.Route.from_dict(r) for r in sess.get("routes", [])]
             f.write(b"LROUTE" + struct.pack("<i", len(routes)))
@@ -689,6 +728,11 @@ def main(argv):
                 for nm in (LT.GM[prog], PM.drum_set_name(prog) if prog in PM.DRUM_SETS else ""):
                     b = nm.encode()
                     f.write(struct.pack("<i", len(b)) + b)
+            # LP3D: live.pan_at's head (a 3D type's place, Live._efx_place3d): the
+            # stopped pipe's height and distance, the head's radius, the speed of sound
+            _q3 = T.StoppedPipeProperties(261.63, 0.0, 1.0, 1.0)
+            f.write(b"LP3D" + struct.pack("<4d", float(_q3.position_z), float(_q3.listener_distance),
+                                           float(_q3.head_radius), float(_q3.sound_speed)))
     print("native export: %d piano class(es), tuner %s, room %s -> %s" % (len(classes), tuner,
                                                                           room.decode() or "-", args[0]))
     if sess:
