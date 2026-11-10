@@ -51,12 +51,68 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "examples"))
 
 
+# THE NATIVE FILES THE EXPORT NEVER RUNS: the live engine's own, which only
+# nvlive and the host library compile (coverage of an export, -O1 --coverage:
+# 0 lines run in each). Every other native file keys an export -- the headers
+# among them, the format it writes. A file the export starts to call into
+# comes off this list (and covtree's coverage says which).
+EXPORT_NOT_RUN = frozenset(("native/slab.cpp", "native/host.cpp", "native/host.h", "native/hostint.h",
+                            "native/hostlive.h", "native/livebus.cpp", "native/live.cpp", "native/roomtail.cpp",
+                            "native/nvlive.cpp"))
+EXPORT_CACHE_MAX = 8e9          # (bytes: past it, the least recently used exports go)
+
+
+def _export_digest(rels, pin):
+    """sha256 over the files named (relative to HERE), each by its contents --
+    or by a pinned digest (NV_EXPORT_KEY_PIN: rel=hex, the clean file's for a
+    change the export never runs)"""
+    import hashlib
+    h = hashlib.sha256()
+    for rel in sorted(set(rels)):
+        h.update(rel.encode() + b"\0")
+        p = os.path.join(HERE, rel)
+        if rel in pin:
+            h.update(bytes.fromhex(pin[rel]))
+        elif os.path.exists(p):
+            with open(p, "rb") as f:
+                h.update(hashlib.sha256(f.read()).digest())
+        else:
+            h.update(b"(gone)")
+    return h.hexdigest()
+
+
+def _export_native():
+    """the native files that key an export (all but EXPORT_NOT_RUN)"""
+    import glob
+    return [os.path.relpath(p, HERE) for pat in ("*.c", "*.cpp", "*.h", "*.cl", "*.inc")
+            for p in glob.glob(os.path.join(HERE, "native", pat))
+            if os.path.relpath(p, HERE) not in EXPORT_NOT_RUN]
+
+
+def _export_prune(cache, keep):
+    """the cache under EXPORT_CACHE_MAX: the exports least recently used go
+    first (never `keep`, the one just handed over)"""
+    import glob
+    fs = sorted(glob.glob(os.path.join(cache, "live-*.nvx")), key=lambda f: os.stat(f).st_atime)
+    total = sum(os.path.getsize(f) for f in fs)
+    for f in fs:
+        if total <= EXPORT_CACHE_MAX:
+            break
+        if f != keep:
+            total -= os.path.getsize(f)
+            os.remove(f)
+
+
 def live_export(tmp, room):
     """the live export at ROOM (--fresh), its path. With NV_EXPORT_CACHE set:
-    made once in that directory for this tree's sources, ROOM and the TUNING_*
-    environment, and the same file handed to every later check (a batch's
-    checks share one export; a perturbed tree's sources make another);
-    without, made in TMP"""
+    made once in that directory and handed to every later check whose tree
+    has the same sources -- the Python files the export LOADED (it lists them,
+    NV_EXPORT_DEPS, beside the export: a check script, or a module the export
+    never imports, changes nothing) and every native file but EXPORT_NOT_RUN
+    -- at the same ROOM, TUNING_* environment and tree (the export names the
+    tree's libraries). A change can only add an import through a file already
+    listed, so a listed file's digest changing is what makes another export.
+    Without NV_EXPORT_CACHE: made in TMP"""
     cmd = [sys.executable, os.path.join(HERE, "examples", "native_export.py"), None, "--live", "--fresh",
            "--room=" + room]
     cache = os.environ.get("NV_EXPORT_CACHE")
@@ -64,28 +120,40 @@ def live_export(tmp, room):
         cmd[2] = os.path.join(tmp, "live.nvx")
         subprocess.check_call(cmd, stdout=subprocess.DEVNULL)
         return cmd[2]
-    import glob
     import hashlib
-    h = hashlib.sha256()
     pin = dict(x.split("=", 1) for x in os.environ.get("NV_EXPORT_KEY_PIN", "").split() if "=" in x)
-    for d, pats in (("", ("*.py",)), ("examples", ("*.py",)), ("native", ("*.c", "*.cpp", "*.h", "*.cl"))):
-        for p in sorted(f for pat in pats for f in glob.glob(os.path.join(HERE, d, pat))):
-            rel = os.path.relpath(p, HERE)
-            h.update(rel.encode() + b"\0")
-            if rel in pin:                              # (a change the export never runs: the clean file's)
-                h.update(bytes.fromhex(pin[rel]))
-            else:
-                with open(p, "rb") as f:
-                    h.update(hashlib.sha256(f.read()).digest())
+    k0 = hashlib.sha256()
     for k in sorted(k for k in os.environ if k.startswith("TUNING_")):
-        h.update(("%s=%s\0" % (k, os.environ[k])).encode())
-    h.update(HERE.encode() + b"\0" + room.encode())   # (the export names the tree's libraries)
+        k0.update(("%s=%s\0" % (k, os.environ[k])).encode())
+    k0.update(os.path.realpath(HERE).encode() + b"\0" + room.encode())
+    k0 = k0.hexdigest()[:16]
     os.makedirs(cache, exist_ok=True)
-    out = os.path.join(cache, "live-%s.nvx" % h.hexdigest()[:20])
-    if not os.path.exists(out):
-        cmd[2] = out + ".part"
-        subprocess.check_call(cmd, stdout=subprocess.DEVNULL)
-        os.replace(out + ".part", out)                  # (a killed export never handed on)
+    deps_f = os.path.join(cache, "live-%s.deps" % k0)
+    nat = _export_native()
+
+    def named(deps):
+        return os.path.join(cache, "live-%s-%s.nvx" % (k0, _export_digest(deps + nat, pin)[:20]))
+
+    if os.path.exists(deps_f):
+        with open(deps_f) as f:
+            deps = f.read().split()
+        out = named(deps)
+        if os.path.exists(out):
+            os.utime(out)                               # (used: the last to go)
+            return out
+    part = os.path.join(cache, "live-%s-%d.part" % (k0, os.getpid()))
+    dp = part + ".deps"
+    cmd[2] = part
+    subprocess.check_call(cmd, stdout=subprocess.DEVNULL, env=dict(os.environ, NV_EXPORT_DEPS=dp))
+    with open(dp) as f:
+        deps = f.read().split()
+    os.remove(dp)
+    out = named(deps)
+    os.replace(part, out)                               # (a killed export never handed on)
+    with open(deps_f + ".tmp", "w") as f:
+        f.write("".join(r + "\n" for r in deps))
+    os.replace(deps_f + ".tmp", deps_f)
+    _export_prune(cache, out)
     return out
 
 

@@ -742,5 +742,26 @@ def main(argv):
     return 0
 
 
+def write_deps(path):
+    """NV_EXPORT_DEPS: the repository's Python files this export loaded (the
+    modules in sys.modules, this script among them), one path per line,
+    relative -- what nvlive_check.live_export keys a cached export on"""
+    here = os.path.realpath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    got = set()
+    for m in list(sys.modules.values()):
+        f = getattr(m, "__file__", None)
+        if not f or not f.endswith(".py"):
+            continue
+        f = os.path.realpath(f)
+        if f.startswith(here + os.sep):
+            got.add(os.path.relpath(f, here))
+    got.add(os.path.relpath(os.path.realpath(os.path.abspath(__file__)), here))
+    with open(path, "w") as fh:
+        fh.write("".join(r + "\n" for r in sorted(got)))
+
+
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    _r = main(sys.argv)
+    if os.environ.get("NV_EXPORT_DEPS"):
+        write_deps(os.environ["NV_EXPORT_DEPS"])
+    sys.exit(_r)
