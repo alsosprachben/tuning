@@ -467,6 +467,77 @@ void nv_amp_ref_steps(int k, double base, int n, const double *starts, const dou
                                                          std::vector<double>(levels, levels + n)));
 }
 
+// ONE SEGMENT's PRODUCTS (nv_amp_expand's, a stream's): the rows sounding
+// through [a, b] (live: nl rows, NCOLS each, as the table orders them)
+// combined, the loudest KEEP_PARTIALS kept, the valve's products made from
+// the loudest row (*src_i its place in live); malloc'd into *out, NCOLS
+// each; how many returned
+long nv_amp_segment(const double *const *live, long nl, double a, double b, double drive, double ref, double imb,
+                    double sr, double **out, long *src_i)
+{
+    enum { cOM = 0, cP0 = 1, cP0R = 2, cAL = 3, cAR = 4, cAM = 5, cNF = 11, cNON = 12, cNOFF = 13, cDELL = 37,
+           cDELR = 38, cFX = 43, cMK = 44 };
+    *out = nullptr;
+    *src_i = 0;
+    // combine: partials sharing a frequency (to 0.01 Hz) as one complex amplitude
+    std::vector<double> fs(nl), am(nl), ps(nl);
+    for (long q = 0; q < nl; q++) {
+        double om = live[q][cOM];
+        fs[q] = om * sr / (2.0 * M_PI);
+        ps[q] = live[q][cP0] + om * a;
+        am[q] = live[q][cAM];
+    }
+    std::vector<double> F, A, Ph;
+    combine(fs, am, ps, F, A, Ph);
+    size_t nu = F.size();
+    if (nu < 2)
+        return 0;
+    if ((long)nu > KEEP_PARTIALS) {
+        std::vector<size_t> idx(nu);
+        for (size_t q = 0; q < nu; q++)
+            idx[q] = q;
+        std::stable_sort(idx.begin(), idx.end(), [&](size_t u, size_t v) { return -A[u] < -A[v]; });
+        std::vector<double> F2, A2, P2;
+        for (int q = 0; q < KEEP_PARTIALS; q++) {
+            F2.push_back(F[idx[q]]);
+            A2.push_back(A[idx[q]]);
+            P2.push_back(Ph[idx[q]]);
+        }
+        F.swap(F2);
+        A.swap(A2);
+        Ph.swap(P2);
+    }
+    long si = 0;
+    for (long q = 0; q < nl; q++)
+        if (live[q][cAM] > live[si][cAM])
+            si = q;
+    *src_i = si;
+    const double *src = live[si];
+    std::vector<Partial> got = emit(F, A, Ph, sr, drive, imb, WINDOW_S, OVERSAMPLE, KEEP_PEAKS, ref);
+    if (got.empty())
+        return 0;
+    double *o = (double *)malloc(sizeof(double) * NCOLS * got.size());
+    for (size_t q = 0; q < got.size(); q++) {
+        double *e = o + (size_t)NCOLS * q;
+        memcpy(e, src, sizeof(double) * NCOLS);
+        double w = 2.0 * M_PI * got[q].hz / sr;
+        e[cOM] = w;
+        e[cNF] = got[q].hz;
+        e[cNON] = (double)(long long)a;
+        e[cNOFF] = (double)(long long)b;
+        e[cP0] = got[q].ph - w * a;
+        e[cP0R] = got[q].ph - w * a - w * (src[cDELR] - src[cDELL]);
+        e[cFX] = -1.0;
+        e[cMK] = 0.0;
+        double sc = got[q].amp / std::max(src[cAM], 1e-12);
+        e[cAL] = src[cAL] * sc;
+        e[cAR] = src[cAR] * sc;
+        e[cAM] = got[q].amp;
+    }
+    *out = o;
+    return (long)got.size();
+}
+
 long long nv_amp_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                         const double *drives, const double *refs, const double *imbs, double sr)
 {
@@ -504,38 +575,6 @@ long long nv_amp_expand(double **rowsp, long long *Pp, void **dm, int nch, const
                     live.push_back(i);
             if (live.size() < 2)
                 continue;
-            // combine: partials sharing a frequency (to 0.01 Hz) as one complex amplitude
-            std::vector<double> fs(live.size()), am(live.size()), ps(live.size());
-            for (size_t q = 0; q < live.size(); q++) {
-                double om = at(live[q], cOM);
-                fs[q] = om * sr / (2.0 * M_PI);
-                ps[q] = at(live[q], cP0) + om * a;
-                am[q] = at(live[q], cAM);
-            }
-            std::vector<double> F, A, Ph;
-            combine(fs, am, ps, F, A, Ph);
-            size_t nu = F.size();
-            if (nu < 2)
-                continue;
-            if ((long)nu > KEEP_PARTIALS) {
-                std::vector<size_t> idx(nu);
-                for (size_t q = 0; q < nu; q++)
-                    idx[q] = q;
-                std::stable_sort(idx.begin(), idx.end(), [&](size_t u, size_t v) { return -A[u] < -A[v]; });
-                std::vector<double> F2, A2, P2;
-                for (int q = 0; q < KEEP_PARTIALS; q++) {
-                    F2.push_back(F[idx[q]]);
-                    A2.push_back(A[idx[q]]);
-                    P2.push_back(Ph[idx[q]]);
-                }
-                F.swap(F2);
-                A.swap(A2);
-                Ph.swap(P2);
-            }
-            long long src = live[0];
-            for (long long i : live)
-                if (at(i, cAM) > at(src, cAM))
-                    src = i;
             double ref = refs ? refs[k] : 0.0;
             auto st = g_amp_steps.find(k);
             if (st != g_amp_steps.end()) {
@@ -543,27 +582,19 @@ long long nv_amp_expand(double **rowsp, long long *Pp, void **dm, int nch, const
                 long i = (long)(std::upper_bound(ss.begin(), ss.end(), a) - ss.begin()) - 1;   // (bisect_right)
                 ref = st->second.first * lv[i > 0 ? i : 0];
             }
-            std::vector<Partial> got = emit(F, A, Ph, sr, drive, imbs ? imbs[k] : IMBALANCE, WINDOW_S, OVERSAMPLE,
-                                            KEEP_PEAKS, ref);
-            for (const Partial &q : got) {
-                size_t o = extra.size();
-                extra.insert(extra.end(), rows + (size_t)NCOLS * src, rows + (size_t)NCOLS * (src + 1));
-                double *e = extra.data() + o;
-                double w = 2.0 * M_PI * q.hz / sr;
-                e[cOM] = w;
-                e[cNF] = q.hz;
-                e[cNON] = (double)(long long)a;
-                e[cNOFF] = (double)(long long)b;
-                e[cP0] = q.ph - w * a;
-                e[cP0R] = q.ph - w * a - w * (at(src, cDELR) - at(src, cDELL));
-                e[cFX] = -1.0;
-                e[cMK] = 0.0;
-                double sc = q.amp / std::max(at(src, cAM), 1e-12);
-                e[cAL] = at(src, cAL) * sc;
-                e[cAR] = at(src, cAR) * sc;
-                e[cAM] = q.amp;
-                src_of.push_back(src);
+            std::vector<const double *> lp(live.size());
+            for (size_t q = 0; q < live.size(); q++)
+                lp[q] = rows + (size_t)NCOLS * live[q];
+            double *got = nullptr;
+            long si = 0;
+            long ng = nv_amp_segment(lp.data(), (long)lp.size(), a, b, drive, ref, imbs ? imbs[k] : IMBALANCE, sr,
+                                     &got, &si);
+            if (ng > 0) {
+                extra.insert(extra.end(), got, got + (size_t)NCOLS * ng);
+                for (long q = 0; q < ng; q++)
+                    src_of.push_back(live[si]);
             }
+            free(got);
         }
     }
     g_amp_steps.clear();

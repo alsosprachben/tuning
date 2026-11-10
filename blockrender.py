@@ -2134,7 +2134,9 @@ def gsd_place(side, f):
     frequency f: (gL, gR, dL, dR samples) -- the head model's, for a source
     at the field's middle or side, as a pan of 0 or +-1 places one. A side
     may be a pan (-1..1) itself: a voice between the outputs (a Hexa
-    Chorus's), at the angle the pan law puts it (tonelib.stage_angle)."""
+    Chorus's), at the angle the pan law puts it (tonelib.stage_angle).
+    Memoised by whole Hz, each entry at that whole Hz: whichever row asks
+    first, a stream's in time order or the whole table's, it is the same."""
     k = (side, int(f))
     v = _GSD_PLACE.get(k)
     if v is None:
@@ -2149,7 +2151,8 @@ def gsd_place(side, f):
               if isinstance(side, tuple)
               else q.listener_distance * math.tan(T.stage_angle(float(side))))
         li, ri, ld, rd = q.hrtf_at(_x, 0.0, q.listener_distance)
-        v = _GSD_PLACE[k] = (q.hrtf_gain(f, li), q.hrtf_gain(f, ri), ld * SR, rd * SR)
+        fw = float(k[1])
+        v = _GSD_PLACE[k] = (q.hrtf_gain(fw, li), q.hrtf_gain(fw, ri), ld * SR, rd * SR)
     return v
 
 

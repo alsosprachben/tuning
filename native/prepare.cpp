@@ -20,6 +20,8 @@
 extern "C" {
 
 extern "C" long long nv_play_own_end(int j, long long dflt);
+extern "C" const void *nv_play_get_sink(void);
+extern "C" void nv_stream_refuse(const char *why);
 long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                        PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind,
                        double scale, double full_db_s, double residual, double beta, long long blk,
@@ -63,6 +65,13 @@ static long long ring_last(const double *rows, long long n, double floor_, doubl
     return n ? (long long)ceil(best) : 0;
 }
 
+// ...for the streaming render, note by note (a maximum: the whole table's
+// is the greatest of its notes')
+extern "C" long long nv_ring_last(const double *rows, long long n, double floor_, double sr)
+{
+    return ring_last(rows, n, floor_, sr);
+}
+
 // mf104.bessel_i: I_n(x) by its series, summed as Python's sum() sums floats
 static double mf_bessel_i(int n, double x)
 {
@@ -97,13 +106,13 @@ static long long mf_delay(const MoogLayer *L, double sr)
 // rows as the table holds them (kind: 1 float32, 2 int32). Returns the
 // latest sample a repeat may sound to (0 none), or -1 a note whose rows
 // have damper tracks (the C's do not copy them).
-static long long mf104_expand(void *song, double **rowsp, long long *Pp, const int *kind, double sr)
+// ONE LAYER's repeats (rows [i0, i1) of rows, in the table's numbering, cast):
+// appended to extra, its dry rows scaled in place; the latest sample in last
+static void mf_layer(const MoogLayer *L, double *rows, long long i0, long long i1, const int *kind, double sr,
+                     std::vector<double> &extra, long long &last)
 {
     enum { cOM = 0, cP0 = 1, cP0R = 2, cAL = 3, cAR = 4, cAM = 5, cNON = 12, cNOFF = 13, cRE = 15, cVD = 33, cVR = 34,
            cVP = 35, cVDL = 36, cFMW = 46, cNFR = 47, cFMP = 48, cFMPR = 49 };
-    int nm = nv_song_mf104(song, -1, nullptr, nullptr, nullptr);
-    if (nm <= 0)
-        return 0;
     auto cast = [&](double *r) {
         for (int c = 0; c < NCOLS; c++)
             if (kind[c] == 1)
@@ -112,81 +121,88 @@ static long long mf104_expand(void *song, double **rowsp, long long *Pp, const i
                 r[c] = (double)(int32_t)r[c];
     };
     const double TPI = 2.0 * M_PI;
+    std::vector<double> lv;
+    double top = 0.0;
+    for (long long i = i0; i < i1; i++) {
+        double l = std::max(fabs(rows[NCOLS * i + cAL]), fabs(rows[NCOLS * i + cAR]));
+        lv.push_back(l);
+        top = i == i0 ? l : std::max(top, l);       /* max(lv) */
+    }
+    const double time = L->mf[0], fc = L->mf[1], fb = L->mf[2], wet = L->mf[3], dry = L->mf[4],
+                 rate = L->mf[5], amount = L->mf[6];
+    const long long d0 = mf_delay(L, sr);
+    for (long long i = i0; i < i1; i++) {
+        const double *row = rows + NCOLS * i;
+        double om = row[cOM];
+        double rel = top > 0.0 ? lv[i - i0] / top : 0.0;
+        /* mf104.repeats at the partial's own pitch */
+        double fhz = om * sr / (2.0 * M_PI);
+        double x = fabs(fhz) / fc;
+        double h = pow(1.0 + x * x, -L->mf_poles / 2.0);
+        for (int k = 1; k <= (int)L->mf_max; k++) {
+            double g = wet * pow(fb, (double)(k - 1)) * pow(h, (double)k);
+            if (g * rel < L->mf_floor)
+                break;
+            long long d = (long long)k * d0;
+            std::vector<double> c(row, row + NCOLS);
+            c[cNON] = row[cNON] + (double)d;
+            c[cNOFF] = row[cNOFF] + (double)d;
+            c[cNFR] = c[cNON] - floor(c[cNON]);
+            c[cP0] = row[cP0] - om * (double)d;
+            c[cP0R] = row[cP0R] - om * (double)d;
+            if (row[cFMW] != 0.0) {
+                c[cFMP] = row[cFMP] - row[cFMW] * (double)d;
+                c[cFMPR] = row[cFMPR] - row[cFMW] * (double)d;
+            }
+            if (row[cVD] != 0.0)            /* the note's own vibrato, delayed */
+                c[cVP] = row[cVP] - TPI * row[cVR] * (double)d / sr;
+            if (amount > 0.0) {             /* ...or the line's (mf104.lfo_vibrato), in its place */
+                double w = 2.0 * M_PI * rate;
+                double tau = (double)d0 / sr;
+                double sre = 0.0, sim = 0.0;
+                for (int j = 0; j < k; j++) {
+                    sre = sre + cos(w * (double)j * tau);
+                    sim = sim + -sin(w * (double)j * tau);
+                }
+                double dlt = time * 2.0 * mf_bessel_i(1, amount * log(2.0)) * hypot(sre, sim);
+                double th = atan2(sim, sre);
+                double f = om * sr / (2.0 * M_PI);
+                double t_on = c[cNON] / sr;
+                c[cVD] = w * dlt;
+                c[cVR] = rate;
+                c[cVP] = th - M_PI / 2.0;
+                c[cVDL] = 0.0;
+                double dp = -2.0 * M_PI * f * dlt * sin(w * t_on + th);
+                c[cP0] = c[cP0] + dp;
+                c[cP0R] = c[cP0R] + dp;
+            }
+            c[cAL] = row[cAL] * g;
+            c[cAR] = row[cAR] * g;
+            c[cAM] = row[cAM] * g;
+            cast(c.data());
+            extra.insert(extra.end(), c.begin(), c.end());
+            long long e = (long long)c[cNOFF] + (long long)ceil(row[cRE]);
+            last = std::max(last, e);
+        }
+        double *rw = rows + NCOLS * i;
+        for (int cc : {cAL, cAR, cAM})
+            rw[cc] = rw[cc] * dry;
+        cast(rw);
+    }
+}
+
+static long long mf104_expand(void *song, double **rowsp, long long *Pp, const int *kind, double sr)
+{
+    int nm = nv_song_mf104(song, -1, nullptr, nullptr, nullptr);
+    if (nm <= 0)
+        return 0;
     std::vector<double> extra;
     long long last = 0;
     for (int q = 0; q < nm; q++) {
         long long i0, i1;
         const MoogLayer *L;
         nv_song_mf104(song, q, &i0, &i1, &L);
-        double *rows = *rowsp;
-        std::vector<double> lv;
-        double top = 0.0;
-        for (long long i = i0; i < i1; i++) {
-            double l = std::max(fabs(rows[NCOLS * i + cAL]), fabs(rows[NCOLS * i + cAR]));
-            lv.push_back(l);
-            top = i == i0 ? l : std::max(top, l);       /* max(lv) */
-        }
-        const double time = L->mf[0], fc = L->mf[1], fb = L->mf[2], wet = L->mf[3], dry = L->mf[4],
-                     rate = L->mf[5], amount = L->mf[6];
-        const long long d0 = mf_delay(L, sr);
-        for (long long i = i0; i < i1; i++) {
-            const double *row = *rowsp + NCOLS * i;
-            double om = row[cOM];
-            double rel = top > 0.0 ? lv[i - i0] / top : 0.0;
-            /* mf104.repeats at the partial's own pitch */
-            double fhz = om * sr / (2.0 * M_PI);
-            double x = fabs(fhz) / fc;
-            double h = pow(1.0 + x * x, -L->mf_poles / 2.0);
-            for (int k = 1; k <= (int)L->mf_max; k++) {
-                double g = wet * pow(fb, (double)(k - 1)) * pow(h, (double)k);
-                if (g * rel < L->mf_floor)
-                    break;
-                long long d = (long long)k * d0;
-                std::vector<double> c(row, row + NCOLS);
-                c[cNON] = row[cNON] + (double)d;
-                c[cNOFF] = row[cNOFF] + (double)d;
-                c[cNFR] = c[cNON] - floor(c[cNON]);
-                c[cP0] = row[cP0] - om * (double)d;
-                c[cP0R] = row[cP0R] - om * (double)d;
-                if (row[cFMW] != 0.0) {
-                    c[cFMP] = row[cFMP] - row[cFMW] * (double)d;
-                    c[cFMPR] = row[cFMPR] - row[cFMW] * (double)d;
-                }
-                if (row[cVD] != 0.0)            /* the note's own vibrato, delayed */
-                    c[cVP] = row[cVP] - TPI * row[cVR] * (double)d / sr;
-                if (amount > 0.0) {             /* ...or the line's (mf104.lfo_vibrato), in its place */
-                    double w = 2.0 * M_PI * rate;
-                    double tau = (double)d0 / sr;
-                    double sre = 0.0, sim = 0.0;
-                    for (int j = 0; j < k; j++) {
-                        sre = sre + cos(w * (double)j * tau);
-                        sim = sim + -sin(w * (double)j * tau);
-                    }
-                    double dlt = time * 2.0 * mf_bessel_i(1, amount * log(2.0)) * hypot(sre, sim);
-                    double th = atan2(sim, sre);
-                    double f = om * sr / (2.0 * M_PI);
-                    double t_on = c[cNON] / sr;
-                    c[cVD] = w * dlt;
-                    c[cVR] = rate;
-                    c[cVP] = th - M_PI / 2.0;
-                    c[cVDL] = 0.0;
-                    double dp = -2.0 * M_PI * f * dlt * sin(w * t_on + th);
-                    c[cP0] = c[cP0] + dp;
-                    c[cP0R] = c[cP0R] + dp;
-                }
-                c[cAL] = row[cAL] * g;
-                c[cAR] = row[cAR] * g;
-                c[cAM] = row[cAM] * g;
-                cast(c.data());
-                extra.insert(extra.end(), c.begin(), c.end());
-                long long e = (long long)c[cNOFF] + (long long)ceil(row[cRE]);
-                last = std::max(last, e);
-            }
-            double *rw = *rowsp + NCOLS * i;
-            for (int cc : {cAL, cAR, cAM})
-                rw[cc] = rw[cc] * dry;
-            cast(rw);
-        }
+        mf_layer(L, *rowsp, i0, i1, kind, sr, extra, last);
     }
     long long m = (long long)extra.size() / NCOLS;
     if (m) {
@@ -200,6 +216,45 @@ static long long mf104_expand(void *song, double **rowsp, long long *Pp, const i
     return last;
 }
 
+// A STREAM's MF-104M: each note's layers as it lands (rows [i0, i1) at R, cast,
+// in the table's numbering) -- its dry rows scaled in place, its repeats into
+// *out (malloc'd, NCOLS each; NULL none), the latest sample in *last. The
+// layers registered as the play goes (nv_song_add_mf104), walked in order.
+struct MfCursor {
+    void *song;
+    const int *kind;
+    double sr;
+    int next = 0;
+};
+extern "C" void *nv_mf104_new(void *song, const int *kind, double sr)
+{
+    MfCursor *c = new MfCursor;
+    c->song = song;
+    c->kind = kind;
+    c->sr = sr;
+    return c;
+}
+extern "C" long nv_mf104_note(void *h, double *R, long long i0, long long i1, double **out, long long *last)
+{
+    MfCursor &c = *(MfCursor *)h;
+    std::vector<double> ex;
+    long long l = 0, a, b;
+    const MoogLayer *L;
+    while (nv_song_mf104(c.song, c.next, &a, &b, &L) && a < i1) {
+        if (a >= i0 && b <= i1)
+            mf_layer(L, R - NCOLS * i0, a, b, c.kind, c.sr, ex, l);
+        c.next++;
+    }
+    *last = l;
+    *out = nullptr;
+    if (ex.empty())
+        return 0;
+    *out = (double *)malloc(sizeof(double) * ex.size());
+    memcpy(*out, ex.data(), sizeof(double) * ex.size());
+    return (long)(ex.size() / NCOLS);
+}
+extern "C" void nv_mf104_free(void *h) { delete (MfCursor *)h; }
+
 // THE GS DELAY's REPEATS (blockrender._prep_delays, gsdelay.expand), after
 // the MF-104M's: each delayed note's rows (row0[j] to the next note's, a
 // tone's own insertion effect's 'dly'), each tap's repeats a period apart
@@ -207,9 +262,27 @@ static long long mf104_expand(void *song, double **rowsp, long long *Pp, const i
 // on the first, placed at the tap's output (nv_gsd_place), the note's
 // vibrato and FM carried -- appended as the table holds them. Returns the
 // latest sample a repeat may sound to (0 none), -2 out of memory.
-static long long gsd_expand(const NoteClass *const *K, void *song, const int *played, const long long *row0, int nn,
-                            long long nnote, double **rowsp, long long *Pp, const int *kind, double sr)
+struct GsdCtx {
+    const NoteClass *const *K = nullptr;
+    void *song = nullptr;
+    const int *kind = nullptr;
+    double sr = 0.0;
+    const double *gdev = nullptr, *gplace = nullptr;
+    std::map<long long, std::pair<std::vector<double>, std::vector<int>>> c94;
+};
+// ONE NOTE's repeats (j its place in the play, ni the song's note): its rows
+// [n0, i1all) at R (cast), its own to iown -- appended to extra, the latest
+// sample a repeat may sound to in last; probe: 1 where it has any, none made
+static int gsd_note(GsdCtx &X, int j, int ni, const double *R, long long n0, long long iown, long long i1all,
+                    std::vector<double> &extra, long long &last, bool probe = false)
 {
+    (void)j;
+    const NoteClass *const *K = X.K;
+    void *song = X.song;
+    const int *kind = X.kind;
+    const double sr = X.sr;
+    const double *gdev = X.gdev, *gplace = X.gplace;
+    auto &c94 = X.c94;
     enum { cOM = 0, cP0 = 1, cP0R = 2, cAL = 3, cAR = 4, cAM = 5, cNF = 11, cNON = 12, cNOFF = 13, cRE = 15, cVD = 33,
            cVR = 34, cVP = 35, cDL = 37, cDR = 38, cFMW = 46, cNFR = 47, cFMP = 48, cFMPR = 49 };
     const double FLOOR = pow(10.0, -60.0 / 20.0), TPI = 2.0 * M_PI;
@@ -220,18 +293,13 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
             else if (kind[c] == 2)
                 r[c] = (double)(int32_t)r[c];
     };
-    std::vector<double> extra;
-    long long last = 0;
-    const double *gplace = nullptr;
-    const double *gdev = nv_song_gs_delay_of(song, &gplace);     // (a GS file's: _GS_DLY)
-    std::map<long long, std::pair<std::vector<double>, std::vector<int>>> c94;
-    for (int j = 0; j < nn; j++) {
+    {
         long long ch;
         int iv[4];
         double dv[2];
-        nv_song_get_note(song, played[j], &ch, iv, dv);
-        const NoteClass *k = (iv[2] < 0 || (iv[2] > 127 && !iv[3])) ? nullptr : K[nv_song_kidx(song, played[j])];
-        const NoteClass *kk = K[nv_song_kidx(song, played[j])];
+        nv_song_get_note(song, ni, &ch, iv, dv);
+        const NoteClass *k = (iv[2] < 0 || (iv[2] > 127 && !iv[3])) ? nullptr : K[nv_song_kidx(song, ni)];
+        const NoteClass *kk = K[nv_song_kidx(song, ni)];
         const double *D = nullptr, *place = nullptr, *pans = nullptr;
         double send = 1.0;
         int tw = 4;                         // (a tap's doubles: time, level, output, period[, shift])
@@ -239,7 +307,7 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
         const double *mod = nullptr;        // (a Mod Delay's LFO: rate, swing, the right's phase)
         const double *fc = nullptr;
         std::vector<double> km;             // (a Keyboard Multi's taps, unrolled)
-        const int fx = nv_song_note_fx(song, played[j], &fc);
+        const int fx = nv_song_note_fx(song, ni, &fc);
         if (fx == -1 && k && k->efx_set && k->efx_dly && !iv[3] && !nv_moog_neutral()) {
             D = k->dly_p;                   // (a tone's own insertion delay, in the GS delay's place)
             place = k->efx_place;
@@ -326,7 +394,6 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
         // ...A PARALLEL TYPE's COPY (branch B's rows, after the note's own:
         // _par_close): B's own delay, else the GS delay the note was sent to
         // (not A's own), its repeats after the note's
-        const long long i1all = j + 1 < nn ? row0[j + 1] : nnote, iown = nv_play_own_end(j, i1all);
         const double *D2 = nullptr, *place2 = nullptr, *pans2 = nullptr, *mod2 = nullptr;
         double send2 = 1.0;
         int tw2 = 4;
@@ -345,6 +412,8 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
                 send2 = send;
             }
         }
+        if (probe && (D || D2))
+            return 1;
         for (int seg = 0; seg < 2; seg++) {
         if (seg == 1) {
             D = D2;
@@ -355,13 +424,13 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
             cross = cross2;
             mod = mod2;
         }
-        long long i0 = seg ? iown : row0[j], i1 = seg ? i1all : iown;
+        long long i0 = seg ? iown : n0, i1 = seg ? i1all : iown;
         if (!D || i1 <= i0)
             continue;
         const double level = D[0], fb = D[1], lpf = D[2], tc = D[3];
         const int ntap = (int)D[4];
         (void)tc;
-        double *rows = *rowsp;
+        const double *rows = R - NCOLS * n0;     // (the table's numbering: rows[NCOLS * i])
         std::vector<double> lv;
         double top = 0.0;
         for (long long i = i0; i < i1; i++) {
@@ -370,7 +439,7 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
             top = i == i0 ? l : std::max(top, l);       /* max(lv) */
         }
         for (long long i = i0; i < i1; i++) {
-            const double *row = *rowsp + NCOLS * i;
+            const double *row = rows + NCOLS * i;
             double om = row[cOM];
             double f = om * sr / TPI;
             double rel = top > 0.0 ? lv[i - i0] / top : 0.0;
@@ -471,6 +540,26 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
         }
         }
     }
+    return 0;
+}
+
+static long long gsd_expand(const NoteClass *const *K, void *song, const int *played, const long long *row0, int nn,
+                            long long nnote, double **rowsp, long long *Pp, const int *kind, double sr,
+                            bool probe = false)    // (probe: 1 at the first note with a delay, no rows touched)
+{
+    GsdCtx X;
+    X.K = K;
+    X.song = song;
+    X.kind = kind;
+    X.sr = sr;
+    X.gdev = nv_song_gs_delay_of(song, &X.gplace);     // (a GS file's: _GS_DLY)
+    std::vector<double> extra;
+    long long last = 0;
+    for (int j = 0; j < nn; j++) {
+        const long long i1all = j + 1 < nn ? row0[j + 1] : nnote, iown = nv_play_own_end(j, i1all);
+        if (gsd_note(X, j, played[j], *rowsp + NCOLS * row0[j], row0[j], iown, i1all, extra, last, probe))
+            return 1;
+    }
     long long m = (long long)extra.size() / NCOLS;
     if (m) {
         double *nr = (double *)realloc(*rowsp, sizeof(double) * NCOLS * (size_t)(*Pp + m));
@@ -482,6 +571,34 @@ static long long gsd_expand(const NoteClass *const *K, void *song, const int *pl
     }
     return last;
 }
+
+// A STREAM's DELAYS: gsd_note for one note at a time -- its repeats into *out
+// (malloc'd, NCOLS each; NULL none), the latest sample in *last
+extern "C" void *nv_gsd_new(const NoteClass *const *K, void *song, const int *kind, double sr)
+{
+    GsdCtx *X = new GsdCtx;
+    X->K = K;
+    X->song = song;
+    X->kind = kind;
+    X->sr = sr;
+    X->gdev = nv_song_gs_delay_of(song, &X->gplace);
+    return X;
+}
+extern "C" long nv_gsd_note(void *h, int j, int ni, const double *R, long long i0, long long iown, long long i1,
+                            double **out, long long *last)
+{
+    std::vector<double> ex;
+    long long l = 0;
+    gsd_note(*(GsdCtx *)h, j, ni, R, i0, iown, i1, ex, l);
+    *last = l;
+    *out = nullptr;
+    if (ex.empty())
+        return 0;
+    *out = (double *)malloc(sizeof(double) * ex.size());
+    memcpy(*out, ex.data(), sizeof(double) * ex.size());
+    return (long)(ex.size() / NCOLS);
+}
+extern "C" void nv_gsd_free(void *h) { delete (GsdCtx *)h; }
 
 struct Track {
     long long r0, r1, b0;
@@ -497,6 +614,110 @@ static double threshold_db(double c, double knee)
     if (c >= 1.0)
         return -INFINITY;
     return -knee * c / (1.0 - c);
+}
+
+// A NOTE's TRACK (damper.track, _damp_close): from its own rows (nr of them,
+// rows its first) -- the one nearest its key's fundamental -- its pedal's
+// values, its key-up to where its damper lands; b0, f0 and dc into T. The
+// whole render's loop and a stream's (nv_damp_track) alike.
+static bool damp_track(void *song, int i, const double *rows, long long nr, double land, double SR, long long blk,
+                       long long nblk, double full_db_s, double residual, double knee_db, Track &T)
+{
+    enum { C_nf = 11, C_non = 12, C_logr = 17, C_logrA = 18, C_aft = 19, C_sus = 20, C_gr = 39 };
+    if (nr <= 0)
+        return false;
+    long long ch;
+    int iv[4];
+    double dv[2];
+    nv_song_get_note(song, i, &ch, iv, dv);
+    int key = iv[0], vel = iv[1];
+    double on = dv[0], off = dv[1];
+    double f0 = 440.0 * pow(2.0, (key - 69) / 12.0);
+    long long jb = 0;
+    double best = 0.0;
+    for (long long r = 0; r < nr; r++) {
+        double nf = rows[NCOLS * r + C_nf];
+        double v = fabs(log((nf > 1e-3 ? nf : 1e-3) / f0));     /* np.maximum, then |log| */
+        if (r == 0 || v < best) {
+            best = v;
+            jb = r;
+        }
+    }
+    const double *R = rows + NCOLS * jb;
+    double lr = R[C_logr], lra = R[C_logrA], af = R[C_aft], su = R[C_sus];
+    double vdb = 40.0 * log10((vel > 1 ? vel : 1) / 127.0);
+    long long b0 = (long long)(off * SR) / blk;
+    long long b1 = (long long)ceil(land * SR / blk);
+    if (nblk < b1)
+        b1 = nblk;
+    int npv = nv_song_pedal_values(song, ch, nullptr, nullptr, 0);
+    std::vector<double> pt(npv);
+    std::vector<int> pv(npv);
+    nv_song_pedal_values(song, ch, pt.data(), pv.data(), npv);
+    auto pedal_at = [&](double t) {
+        int q = (int)(std::upper_bound(pt.begin(), pt.end(), t) - pt.begin()) - 1;
+        return q >= 0 ? pv[q] : 0;
+    };
+    auto lvl = [&](double tt) {
+        double x = tt - on;
+        x = 0.0 > x ? 0.0 : x;
+        double dc = su + (1.0 - su) * ((1.0 - af) * exp(-lr * x) + af * exp(-lra * x));
+        return vdb + 20.0 * log10(1e-12 > dc ? 1e-12 : dc);
+    };
+    long long ne = b1 - b0 + 1;
+    std::vector<double> edges(ne > 0 ? ne : 0), dc(edges.size(), 0.0);
+    for (long long q = 0; q < ne; q++)
+        edges[q] = (double)((b0 + q) * blk) / SR;
+    double acc = 0.0;
+    for (long long q = 0; q + 1 < ne; q++) {
+        double c = nv_damper_contact(pedal_at(edges[q]), key, 128);
+        if (c >= 1.0) {
+            for (long long z = q; z < ne; z++)
+                dc[z] = acc;
+            break;
+        }
+        if (c > 0.0) {
+            bool over = lvl(edges[q]) - acc > threshold_db(c, knee_db);
+            double r_ = full_db_s * c;
+            acc += (over ? r_ : r_ * residual) * (edges[q + 1] - edges[q]);
+        }
+        dc[q + 1] = acc;
+    }
+
+    T.b0 = b0;
+    T.f0 = f0;
+    T.dc.assign(dc.begin(), dc.end());
+    return true;
+}
+
+// PASS A's NOTES, kept for its replay: each played note's index, whether
+// it meets the half-pedal's band, where its damper lands
+static std::vector<int> g_sn_i, g_sn_band;
+static std::vector<double> g_sn_land;
+extern "C" int nv_stream_note(int j, int *i, int *band, double *land)
+{
+    if (j < 0 || j >= (int)g_sn_i.size())
+        return 0;
+    *i = g_sn_i[j];
+    *band = g_sn_band[j];
+    *land = g_sn_land[j];
+    return 1;
+}
+// ...a stream's track for note i: its own rows; b0, f0, dc (cap floats) out;
+// dc's length returned (0 none, -(length) cap too small)
+extern "C" long nv_damp_track(void *song, int i, const double *rows, long long nr, double land, double SR,
+                              long long blk, long long nblk, double full_db_s, double residual, double knee_db,
+                              long long *b0, double *f0, float *dc, long cap)
+{
+    Track T;
+    if (!damp_track(song, i, rows, nr, land, SR, blk, nblk, full_db_s, residual, knee_db, T))
+        return 0;
+    if ((long)T.dc.size() > cap)
+        return -(long)T.dc.size();
+    *b0 = T.b0;
+    *f0 = T.f0;
+    std::copy(T.dc.begin(), T.dc.end(), dc);
+    return (long)T.dc.size();
 }
 
 // THE TABLE for a piano song: its rows (nv_play_full) into *rowsp, and
@@ -525,9 +746,11 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
                                with_register, &nsym);
     if (P < 0)
         return P;
+    const bool stream = nv_play_get_sink() != nullptr;  // (a stream's play: no table here)
     // THE STROKES' ROWS (stroke_rows): each gesture's stroke's, from its
     // first row to the next note's
-    for (int j = 0; j < nn; j++)
+    // (a stream's: none -- its strokes are notes, these ranges live's templates' alone)
+    for (int j = 0; j < nn && !stream; j++)
         if (nv_song_stroked(song, played[j])) {
             long long r1 = j + 1 < nn ? row0[j + 1] : nnote;
             if (r1 > row0[j])
@@ -688,6 +911,30 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
                 if (a < r1 && b > r0)
                     return -(1 + played[j]);
         }
+    if (stream) {
+        // the passes that read the table: refused where they would act
+        // (the MF-104M's repeats the stream's own, note by note: nv_mf104_note)
+        // (an insertion effect's work the passes', each refusing its own; the
+        // delays' repeats the stream's own, note by note: nv_gsd_note)
+        g_sn_i.assign(played.begin(), played.begin() + nn);     // (pass A's notes, for its replay's tracks)
+        g_sn_band.assign(bands.begin(), bands.begin() + nn);
+        g_sn_land.assign(offs.begin(), offs.begin() + nn);
+        out[0] = (double)N;                 // (the ring's end: the stream's own scan)
+        out[1] = (double)nblk;
+        out[2] = (double)P;
+        out[3] = (double)nnote;
+        out[42] = (double)nnote;
+        out[40] = out[41] = 0.0;            // (no damper tracks)
+        for (int i = 0; i < 6; i++)
+            dm[i] = nullptr;
+        for (int i = 0; i < 9; i++) {       // the room's bands, from the play's tallies
+            double d = qacc[2 * i], r = qacc[2 * i + 1];
+            out[4 + 3 * i] = tmpl->room_bands[i];
+            out[4 + 3 * i + 1] = r > 0.0 ? d / r : 1.0;
+            out[4 + 3 * i + 2] = d;
+        }
+        return P;
+    }
     long long mlast = mf104_expand(song, rowsp, &P, kind, sr);
     if (mlast < -1)
         return NV_TOO_SMALL;
@@ -725,62 +972,10 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
         long long r0 = row0[j], r1 = nv_play_own_end(j, j + 1 < nn ? row0[j + 1] : nnote);
         if (r1 <= r0)
             continue;
-        int key = iv[0], vel = iv[1];
-        double on = dv[0], off = dv[1], land = offs[j];
-        double f0 = 440.0 * pow(2.0, (key - 69) / 12.0);
-        long long jb = r0;
-        double best = 0.0;
-        for (long long r = r0; r < r1; r++) {
-            double nf = rows[NCOLS * r + C_nf];
-            double v = fabs(log((nf > 1e-3 ? nf : 1e-3) / f0));     /* np.maximum, then |log| */
-            if (r == r0 || v < best) {
-                best = v;
-                jb = r;
-            }
-        }
-        const double *R = rows + NCOLS * jb;
-        double lr = R[C_logr], lra = R[C_logrA], af = R[C_aft], su = R[C_sus];
-        double vdb = 40.0 * log10((vel > 1 ? vel : 1) / 127.0);
-        long long b0 = (long long)(off * SR) / blk;
-        long long b1 = (long long)ceil(land * SR / blk);
-        if (nblk < b1)
-            b1 = nblk;
-        int npv = nv_song_pedal_values(song, ch, nullptr, nullptr, 0);
-        std::vector<double> pt(npv);
-        std::vector<int> pv(npv);
-        nv_song_pedal_values(song, ch, pt.data(), pv.data(), npv);
-        auto pedal_at = [&](double t) {
-            int q = (int)(std::upper_bound(pt.begin(), pt.end(), t) - pt.begin()) - 1;
-            return q >= 0 ? pv[q] : 0;
-        };
-        auto lvl = [&](double tt) {
-            double x = tt - on;
-            x = 0.0 > x ? 0.0 : x;
-            double dc = su + (1.0 - su) * ((1.0 - af) * exp(-lr * x) + af * exp(-lra * x));
-            return vdb + 20.0 * log10(1e-12 > dc ? 1e-12 : dc);
-        };
-        long long ne = b1 - b0 + 1;
-        std::vector<double> edges(ne > 0 ? ne : 0), dc(edges.size(), 0.0);
-        for (long long q = 0; q < ne; q++)
-            edges[q] = (double)((b0 + q) * blk) / SR;
-        double acc = 0.0;
-        for (long long q = 0; q + 1 < ne; q++) {
-            double c = nv_damper_contact(pedal_at(edges[q]), key, 128);
-            if (c >= 1.0) {
-                for (long long z = q; z < ne; z++)
-                    dc[z] = acc;
-                break;
-            }
-            if (c > 0.0) {
-                bool over = lvl(edges[q]) - acc > threshold_db(c, knee_db);
-                double r_ = full_db_s * c;
-                acc += (over ? r_ : r_ * residual) * (edges[q + 1] - edges[q]);
-            }
-            dc[q + 1] = acc;
-        }
         Track T;
-        T.r0 = r0; T.r1 = r1; T.b0 = b0; T.f0 = f0;
-        T.dc.assign(dc.begin(), dc.end());
+        if (!damp_track(song, i, rows + NCOLS * r0, r1 - r0, offs[j], SR, blk, nblk, full_db_s, residual, knee_db, T))
+            continue;
+        T.r0 = r0; T.r1 = r1;
         tracks.push_back(T);
     }
     // ...ONTO THE ROWS (onto_tracks): a note's own rows take its track, but a

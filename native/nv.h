@@ -338,13 +338,6 @@ typedef struct {
        to sw_cents, rate in sw_hz, phase drawn by the key; sw_set 0 none */
     int sw_set;
     double sw_cents, sw_hz[2];
-    /* A STRUCK BAR's MODES BY REGISTER: its gains from the register's tables
-       (mm_pts: nv_mode_gains_at at the note's pitch, mode_gains_here); its
-       ratios by its own law (mr_law 1 the balafon's: each upper mode
-       max(lo, a + b log2(f / mr_ref)); 2 the log drum's: modes 1-3 the
-       harmonics, the body's modes mr_body Hz over the note's) */
-    int mm_pts, mr_law;
-    double mr_a[2], mr_b[2], mr_lo[2], mr_ref, mr_body[3];
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -1096,23 +1089,6 @@ typedef struct NoteClass {
     // quantiles (percent, dB; n_rq 0: uniform under flam_db)
     int flam_record, n_rq;
     double rec_per, rec_pr, rec_qx[8], rec_qy[8];
-    // THE BREATH ACROSS THE REGISTER (breath_noise_octave_db): every band
-    // bn_oct dB an octave from bn_ref Hz (0: the table as it is)
-    double bn_oct, bn_ref;
-    // A PALM-MUTED OPEN STRING RINGS ON (open_string_ring): the open strings'
-    // pitches (osr_n of osr_open, ascending), the ring at most osr_cap s
-    int osr_n;
-    double osr_open[8], osr_cap;
-    // ITS OWN NOISE GATE, keyed (efxbus.NoiseGate, noise_gate): ng_p 0 hold
-    // (samples), 1 the peak's fall (dB a sample), 2 a body (1) or none, 3 its
-    // sustain_db, 4 ratio, 5 make-up, 6 floor, 7-8 the body's poles, 9-10 the
-    // gain's (open, close), 11 the peak at the start (dB)
-    int ng_set;
-    double ng_p[12];
-    // SYMPATHY PER MODE (sympathetic_per_mode): each copied mode as loud as
-    // it coincides with the strike's partials, Lorentzians sym_bw Hz wide
-    int sym_per_mode;
-    double sym_bw;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.
@@ -1299,8 +1275,6 @@ double nv_song_note_off(void *s, long long ch, int note, double on, double off, 
                         double retrigger_fade, int *band);
 int nv_song_soft_at(void *s, long long ch, double t);
 int nv_song_next_same(void *s, long long ch, int note, double on, double *out);
-double nv_song_string_free(void *s, long long ch, int note, double on, const double *open, int nopen, double cap,
-                           double fade);
 int nv_song_pitch_level(void *s, int index, int effort_tilt, double *out);
 /* ...an 'indian' class's at the secondary tuning (indian 1: FREQ_E's) */
 int nv_song_pitch_level_k(void *s, int index, int effort_tilt, int indian, double *out);

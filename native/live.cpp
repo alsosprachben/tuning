@@ -378,8 +378,8 @@ static int emit_col(const char *n)
 // *P of them, realloc'd; a damper's dk/dg (dm[0], dm[1]) copied with them.
 // The channels nch of chans, each's (rate, depth, stereo, scatter) in cfg;
 // mask nmask long (NULL: every row). Returns the sidebands made.
-// blockrender.gsd_place's memo, the render's: (output, whole Hz) -> the
-// first frequency's (gL, gR, dL, dR) -- shared by the GS delay's repeats and
+// blockrender.gsd_place's memo, the render's: (output, whole Hz) -> that
+// whole Hz's (gL, gR, dL, dR) -- whoever asks first -- shared by the GS delay's repeats and
 // the chorus device's copies, in the order they ask (the delay's first)
 static std::map<std::pair<double, long long>, std::array<double, 4>> g_gsd_place;
 // (its keys as Python's: an output 10 + its index ('l', 'r', 'c'), a pan the
@@ -412,7 +412,7 @@ extern "C" void nv_gsd_place4k(double side, double f, double beta, const double 
         auto hg = [&](double inc) {     // (SynthProperties.hrtf_gain)
             const double alpha_min = 0.1, theta_min = 150.0 * M_PI / 180.0;
             double alpha = 1.0 + alpha_min / 2.0 + (1.0 - alpha_min / 2.0) * cos(inc * M_PI / theta_min);
-            double omega = 2.0 * M_PI * f;
+            double omega = 2.0 * M_PI * (double)key.second;
             return sqrt(pow(alpha * omega, 2.0) + pow(beta, 2.0)) / sqrt(pow(omega, 2.0) + pow(beta, 2.0));
         };
         it = g_gsd_place.emplace(key, std::array<double, 4>{hg(P[0]), hg(P[1]), P[2], P[3]}).first;
@@ -695,6 +695,171 @@ extern "C" long long nv_chorus_expand(double **rowsp, long long *Pp, void **dm, 
     return m;
 }
 
+// ONE ROW through channel q's chorus (nv_chorus_expand's, a stream's): a
+// plain chorus's copies (kind 0: each voice ci at its cents, its sweep) or a
+// detuned pair's (kind 1: the row moved down and left, its copy up and
+// right), from the row as it was; its dry share taken off it. The copies
+// into cp (NCOLS each, at most 8), their voice in ci; how many returned
+// (-1: a chorus device, a stream's to refuse)
+extern "C" int nv_chorus_row(double *r, int kind, double send, int nc, const double *cents, double sr, double *cp,
+                             int *ci_out)
+{
+    static const double SWEEP_HZ[4] = {0.21, 0.29, 0.17, 0.34}, DELAY_S[4] = {0.007, 0.011, 0.013, 0.017};
+    const double SWEEP_DEPTH = 0.0016, FLOOR = 0.02;
+    const int cOM = emit_col("om"), cP0 = emit_col("p0"), cP0R = emit_col("p0R"), cAL = emit_col("aL"),
+              cAR = emit_col("aR"), cAM = emit_col("aM"), cNF = emit_col("nf"), cVD = emit_col("vd"),
+              cVR = emit_col("vr"), cVP = emit_col("vp");
+    if (kind == 2)
+        return -1;
+    if (send <= FLOOR || nc <= 0)
+        return 0;
+    const double om = r[cOM], nf = r[cNF], p0 = r[cP0], p0R = r[cP0R], aL = r[cAL], aR = r[cAR], aM = r[cAM];
+    int made = 0;
+    if (kind == 1) {
+        double lo = pow(2.0, cents[0] / 1200.0), hi = pow(2.0, cents[1] / 1200.0);
+        const double PAIR_PAN = 0.5;
+        double gl0 = pow(0.5 * (1.0 - PAIR_PAN * -1), 0.5), gr0 = pow(0.5 * (1.0 + PAIR_PAN * -1), 0.5);
+        double gl1 = pow(0.5 * (1.0 - PAIR_PAN * 1), 0.5), gr1 = pow(0.5 * (1.0 + PAIR_PAN * 1), 0.5);
+        double half = pow(0.5, 0.5), delay = DELAY_S[0];
+        if (nf * hi < sr * 0.5) {
+            double *e = cp;
+            memcpy(e, r, sizeof(double) * NCOLS);
+            e[cOM] = om * hi;
+            e[cNF] = nf * hi;
+            e[cP0] = p0 * hi - om * hi * delay * sr;
+            e[cP0R] = p0R * hi - om * hi * delay * sr;
+            e[cAL] = aL * gl1;
+            e[cAR] = aR * gr1;
+            e[cAM] = aM * half;
+            ci_out[0] = 0;
+            made = 1;
+        }
+        r[cOM] = om * lo;
+        r[cNF] = nf * lo;
+        r[cP0] = p0 * lo;
+        r[cP0R] = p0R * lo;
+        r[cAL] = aL * gl0;
+        r[cAR] = aR * gr0;
+        r[cAM] = aM * half;
+        return made;
+    }
+    double wet = pow(send / (double)nc, 0.5), dry = pow(1.0 - send, 0.5), gain = wet;
+    for (int ci = 0; ci < nc; ci++) {
+        double ratio = pow(2.0, cents[ci] / 1200.0);
+        double rate = SWEEP_HZ[ci % 4], delay = DELAY_S[ci % 4];
+        if (!(nf * ratio < sr * 0.5))
+            continue;
+        double *e = cp + (size_t)NCOLS * made;
+        memcpy(e, r, sizeof(double) * NCOLS);
+        e[cOM] = om * ratio;
+        e[cNF] = nf * ratio;
+        e[cP0] = p0 * ratio - om * ratio * delay * sr;
+        e[cP0R] = p0R * ratio - om * ratio * delay * sr;
+        e[cAL] = aL * gain;
+        e[cAR] = aR * gain;
+        e[cAM] = aM * gain;
+        e[cVD] = SWEEP_DEPTH;
+        e[cVR] = rate;
+        e[cVP] = 2.0 * M_PI * ((double)ci / (double)nc);
+        ci_out[made] = ci;
+        made++;
+    }
+    if (dry != 1.0)
+        for (int c : {cAL, cAR, cAM})
+            r[c] = r[c] * dry;
+    return made;
+}
+
+// ONE ROW through a CHORUS DEVICE (nv_chorus_expand's kind 2, a stream's): G
+// its record (40), TV its own voices (8 each, ntv of them; NULL: G's taps),
+// share the row's at its onset, kmax the passes its channel makes (its
+// loudest row's); the copies into cp (NCOLS each, cap of them), each's tap *
+// 17 + pass in ix; returned. Where any copy is made (kmax > 0), the row's dry
+// share comes off it, as the whole pass takes it off every row of the channel.
+extern "C" int nv_chorus_dev_row(double *r, const double *G, const double *TV, int ntv, double share, int kmax,
+                                 double sr, double *cp, int *ix, int cap)
+{
+    const int cOM = emit_col("om"), cP0 = emit_col("p0"), cP0R = emit_col("p0R"), cAL = emit_col("aL"),
+              cAR = emit_col("aR"), cAM = emit_col("aM"), cVD = emit_col("vd"), cVR = emit_col("vr"),
+              cVP = emit_col("vp"), cNON = emit_col("non"), cNOFF = emit_col("noff"), cNFR = emit_col("nfr"),
+              cDL = emit_col("delL"), cDR = emit_col("delR"), cFMW = emit_col("fmw"), cFMP = emit_col("fmp"),
+              cFMPR = emit_col("fmpR"), cVDL = emit_col("vdl");
+    if (kmax <= 0)
+        return 0;
+    const double tau = G[0], rate = G[1], vd = G[2], fb = G[3], lpf = G[4];
+    const int ntap = TV ? ntv : (int)G[6];
+    const double fb2 = pow(fb, 2.0);
+    const double passes = fb2 < 1.0 ? (1.0 - pow(fb2, 16.0)) / (1.0 - fb2) : 16.0;
+    const double wet = sqrt(share / (double)ntap / passes);
+    const double om = r[cOM], p0 = r[cP0], p0R = r[cP0R], aM = r[cAM];
+    const double non = r[cNON], noff = r[cNOFF];
+    const double ph0 = p0 + om * (r[cNON] + r[cDL]), ph0R = p0R + om * (r[cNON] + r[cDR]);
+    const double fmp = r[cFMP], fmpR = r[cFMPR], fmw = r[cFMW];
+    const double f = om * sr / (2.0 * M_PI);
+    int made = 0;
+    for (int ti = 0; ti < ntap; ti++) {
+        const double *tv = TV ? TV + 8 * ti : nullptr;
+        const int side = tv ? 0 : (int)G[20 + 4 * ti];
+        const double phase = tv ? tv[5] : G[21 + 4 * ti], ext = tv ? tv[6] : G[22 + 4 * ti],
+                     dfac = tv ? tv[7] : G[23 + 4 * ti];
+        double pl[4];
+        if (tv)
+            nv_gsd_place4k(tv[0], f, G[7], tv + 1, pl);
+        else
+            nv_gsd_place(side, f, G + 7, pl);
+        for (int k = 1; k <= kmax; k++) {
+            const double fk = pow(fb, (double)(k - 1));
+            const double d = (k * tau + ext) * sr;
+            const double g = wet * fk;
+            if (!(fabs(g) > 1e-12))
+                continue;
+            if (made >= cap)
+                return -1;
+            double *e = cp + (size_t)NCOLS * made;
+            memcpy(e, r, sizeof(double) * NCOLS);
+            double nn = non + d;
+            e[cNON] = nn;
+            e[cNOFF] = noff + d;
+            e[cNFR] = nn - floor(nn);
+            e[cDL] = pl[2];
+            e[cDR] = pl[3];
+            e[cP0] = -om * (nn + pl[2]) + ph0;
+            e[cP0R] = -om * (nn + pl[3]) + ph0R;
+            e[cFMP] = fmp - fmw * d;
+            e[cFMPR] = fmpR - fmw * d;
+            double lp = 1.0;
+            if (lpf != 0.0) {
+                double x = f / lpf;
+                lp = 1.0 / sqrt(1.0 + x * x);
+            }
+            double m = fabs(aM) * g * lp;
+            e[cAL] = m * pl[0];
+            e[cAR] = m * pl[1];
+            e[cAM] = aM * g * lp;
+            double vk = k * vd * dfac;
+            e[cVD] = vk < 0.5 ? vk : 0.5;
+            e[cVR] = rate;
+            double vp = 2.0 * M_PI * rate * nn / sr + phase, tw = 2.0 * M_PI;
+            double md = fmod(vp, tw);
+            if (md != 0.0) {
+                if ((tw < 0.0) != (md < 0.0))
+                    md += tw;
+            } else {
+                md = copysign(0.0, tw);
+            }
+            e[cVP] = md;
+            e[cVDL] = 0.0;
+            ix[made] = ti * 17 + k;
+            made++;
+        }
+    }
+    double dry = sqrt(1.0 - share);
+    if (dry != 1.0)
+        for (int c : {cAL, cAR, cAM})
+            r[c] = r[c] * dry;
+    return made;
+}
+
 // A CONTROLLER MATRIX's TREMOLO (blockrender: _CMX_TREM): a channel's map of
 // the rows its sidebands ride instead of their parent's -- given before
 // nv_tremolo_expand, used by it
@@ -720,6 +885,60 @@ extern "C" void nv_tremolo_wave(long long ch, int n, const double *khp)
 // (rate NaN: none), given before nv_tremolo_expand, used by it
 static std::vector<double> g_trem_rcfg;
 extern "C" void nv_tremolo_row_cfg(long long n, const double *cfg4) { g_trem_rcfg.assign(cfg4, cfg4 + 4 * n); }
+
+// ONE ROW's SIDEBANDS (nv_tremolo_expand's, a stream's): c its setting (rate,
+// depth, stereo, scatter), ch its channel (the scatter's seed), H its waveform's
+// harmonics (nh of them; NULL: the plain pair) -- into out (NCOLS each, at most
+// 2 nh or 2), in the whole pass's order; returned
+extern "C" int nv_tremolo_row(const double *row, const double *c, long long ch, const double *H, int nh, double sr,
+                              double *out)
+{
+    const int cOM = emit_col("om"), cP0 = emit_col("p0"), cP0R = emit_col("p0R"), cAL = emit_col("aL"),
+              cAR = emit_col("aR"), cAM = emit_col("aM"), cPL = emit_col("pl");
+    double rate = c[0], depth = c[1], scatter = c[3];
+    const bool stereo = c[2] != 0.0;
+    if (depth <= 0.0 || rate <= 0.0)
+        return 0;
+    double ph = 0.0;
+    if (scatter > 0.0) {
+        PyRandom r;
+        pyr_seed(&r, 0x7E30 + ch * 977 + (long long)row[cPL]);
+        rate = rate * (1.0 + scatter * pyr_uniform(&r, -1.0, 1.0));
+        ph = pyr_uniform(&r, 0.0, 2.0 * M_PI);
+    }
+    const double dw = 2.0 * M_PI * rate / sr, half = 0.5 * depth;
+    int m = 0;
+    if (H) {
+        for (int hk = 0; hk < nh; hk++) {
+            const double k = H[3 * hk], ck = H[3 * hk + 1], pk = H[3 * hk + 2];
+            const double hh = 0.5 * depth * ck;
+            for (double sign : {1.0, -1.0}) {
+                double *e = out + (size_t)NCOLS * m++;
+                memcpy(e, row, sizeof(double) * NCOLS);
+                e[cOM] = row[cOM] + sign * k * dw;
+                e[cP0] = row[cP0] + sign * (k * ph + pk);
+                e[cP0R] = row[cP0R] + sign * (k * ph + pk);
+                e[cAL] = row[cAL] * hh;
+                e[cAR] = row[cAR] * (stereo ? -hh : hh);
+                e[cAM] = stereo ? 0.0 : row[cAM] * hh;
+            }
+        }
+        return m;
+    }
+    for (double sign : {1.0, -1.0}) {
+        double *e = out + (size_t)NCOLS * m++;
+        memcpy(e, row, sizeof(double) * NCOLS);
+        e[cOM] = row[cOM] + sign * dw;
+        if (ph != 0.0) {
+            e[cP0] = row[cP0] + sign * ph;
+            e[cP0R] = row[cP0R] + sign * ph;
+        }
+        e[cAL] = row[cAL] * half;
+        e[cAR] = row[cAR] * (stereo ? -half : half);
+        e[cAM] = stereo ? 0.0 : row[cAM] * half;
+    }
+    return m;
+}
 
 extern "C" long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                                        const double *cfg, const char *mask, long long nmask, double sr)

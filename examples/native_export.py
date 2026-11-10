@@ -74,10 +74,7 @@ MAGIC = b"NVX1"
 # 80 bounces a second, each a whole snare stroke (21,924 rows), past 2.5 GB
 # on its own; refused until the roll is cheaper (bounces sharing a ring, or
 # quiet bounces with fewer partials -- Ben's call)
-# -- and 125:10, the Morse keyboard: nvlive's templates carry no melodic SFX's
-# strokes (live.cpp gives its template song a kit's only), live.py's do -- its
-# characters; refused until nvlive's melodic notes take their kit key's strokes
-LIVE_REFUSED = {(117, 24), (125, 10)}
+LIVE_REFUSED = {(117, 24)}
 
 
 def main(argv):

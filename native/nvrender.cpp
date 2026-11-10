@@ -34,6 +34,7 @@
 
 #include <algorithm>
 #include <array>
+#include <climits>
 #include <charconv>
 #include <cmath>
 #include <cstdio>
@@ -41,7 +42,9 @@
 #include <cstring>
 #include <tuple>
 #include <dlfcn.h>
+#include <functional>
 #include <map>
+#include <unistd.h>
 #include <set>
 #include <string>
 #include <vector>
@@ -130,7 +133,63 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
               const MoogCols *moog, const int *fsr, const int *fty, const float *const *fpar, const float *FCT,
               long fgn, const unsigned char *rowsel, int post);
 void nv_render_post(float *L, float *R, long N, double SR, double master_gain, int clip);
+int nv_render_win(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long P, double *const *d,
+                  float *const *f, long *const *l, int *const *ii, const float *G, const float *S, const float *BR,
+                  const double *BC, const float *BL, const float *noRows, const float *sh, long CHUNK,
+                  double xdec_nepers, double SR, double master_gain, const float *DM, const long *DMO,
+                  const long *DMB, const long *DMN, float *L, float *R, void *slo, const int *lsr,
+                  float *const *lob, const float *LANG, long lgn, const MoogCols *moog, const int *fsr,
+                  const int *fty, const float *const *fpar, const float *FCT, long fgn,
+                  const unsigned char *rowsel, int post, long n0, long wn, const long long *live,
+                  long long nlive);
 void nv_buf_free(void *p);
+void *nv_livebus_raw_new(int kind, const double *p, double sr);
+void nv_livebus_raw(void *h, const float *x0, const float *x1, long n, float *y0, float *y1);
+void nv_livebus_free(void *h);
+void nv_render_post_win(float *L, float *R, long n0, long N, double SR, double master_gain, int clip);
+// THE STREAMING RENDER (--stream): engine.cpp's sink and refusals, register.cpp's replay,
+// prepare.cpp's ring
+void nv_play_set_sink(const void *s);
+void nv_play_set_reg_sink(const void *s);
+double nv_cab_gain(const NoteClass *k, double f);
+int nv_stream_note(int j, int *i, int *band, double *land);
+long nv_damp_track(void *song, int i, const double *rows, long long nr, double land, double SR, long long blk,
+                   long long nblk, double full_db_s, double residual, double knee_db, long long *b0, double *f0,
+                   float *dc, long cap);
+long long nv_play_own_end(int j, long long dflt);
+int nv_chorus_row(double *r, int kind, double send, int nc, const double *cents, double sr, double *cp, int *ci_out);
+void *nv_leslie_new(int nch, const long long *chans, const int *nreq, const double *req, double sr, const double *L,
+                    const double *gs, const double *place);
+void nv_leslie_free(void *h);
+int nv_leslie_row(void *h, double *r, double *cp, float *lob, int *on);
+long nv_amp_segment(const double *const *live, long nl, double a, double b, double drive, double ref, double imb,
+                    double sr, double **out, long *src_i);
+void nv_stream_refuse(const char *why);
+const char *nv_stream_why(void);
+void nv_stream_reset(void);
+long long nv_play_replay(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
+                         PyRandom *rs, double *qacc, double *azimuth, const int *kind, long long blk);
+long long nv_ring_last(const double *rows, long long n, double floor_, double sr);
+void *nv_gsd_new(const NoteClass *const *K, void *song, const int *kind, double sr);
+long nv_gsd_note(void *h, int j, int ni, const double *R, long long i0, long long iown, long long i1, double **out,
+                 long long *last);
+void nv_gsd_free(void *h);
+void *nv_mf104_new(void *song, const int *kind, double sr);
+long nv_mf104_note(void *h, double *R, long long i0, long long i1, double **out, long long *last);
+void nv_mf104_free(void *h);
+int nv_tremolo_row(const double *row, const double *c, long long ch, const double *H, int nh, double sr, double *out);
+void *nv_scan_new(const double *X);
+void nv_scan_row(void *h, double *r, int depth, int chorus, int row0, double nmax, double sr, double *cp, int *nch,
+                 int *nsd);
+// a stream's scanner channel: its mix channel, band rows, depth, chorus
+struct ScanCh {
+    long long ch;
+    int row0, depth, chorus;
+};
+int nv_chorus_dev_row(double *r, const double *G, const double *TV, int ntv, double share, int kmax, double sr,
+                      double *cp, int *ix, int cap);
+int nv_play_sink_note(void);
+long long nv_play_own_end(int j, long long dflt);
 long long nv_tremolo_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
                             const double *cfg, const char *mask, long long nmask, double sr);
 long long nv_leslie_expand(double **rowsp, long long *Pp, void **dm, int nch, const long long *chans,
@@ -184,6 +243,153 @@ static int col(const char *name)
 
 // tremolo.expand (live.cpp's nv_tremolo_expand): each channel's (rate, depth,
 // stereo, scatter) as the library takes them
+// AN INSERTION EFFECT's EQ on one row (gsefx.eq_gain: e = lo dB, mid Hz, Q, mid dB, hi dB, lo Hz,
+// hi Hz, the type's more mids): its gain at the row's frequency on aL, aR, aM (EMIT_COLS)
+static void eq_row(const std::vector<double> &e, double *row)
+{
+    double f = row[11];
+    double x = f / e[5], y = f / e[6];
+    x = x * x;
+    y = y * y;
+    double db = e[0] / (1.0 + x) + e[4] * y / (1.0 + y);
+    for (size_t j = 1; j < e.size(); j += j == 1 ? 6 : 3) {     // (the mid, then the type's more)
+        double mf = e[j], q = e[j + 1], mg = e[j + 2];
+        if (mf != 0.0 && mg != 0.0) {
+            double u = q * (f / mf - mf / (f + 1e-6 * (f <= 0.0 ? 1.0 : 0.0)));
+            db += mg / (1.0 + u * u);
+        }
+    }
+    double g = pow(10.0, db / 20.0);
+    for (int c : {3, 4, 5})
+        row[c] = row[c] * g;
+}
+
+// --stream: the streaming render (what it does not reproduce yet refuses it: nv_stream_refuse)
+static bool g_stream = false;
+static bool g_stream_why_only = false;      // (--stream-why: the scan's reasons, no render)
+// a note's rows as a sink is handed them (engine.cpp's NvPlaySink)
+struct StreamSinkDesc {
+    void *ctx;
+    void (*note)(void *ctx, const double *at, long long i0, long long i1, double next_on);
+};
+static void stream_cast(double *r, const int *kind)    // (nv_play_full's cast: as the table holds them)
+{
+    for (int c = 0; c < NCOLS; c++)
+        if (kind[c] == 1)
+            r[c] = (double)(float)r[c];
+        else if (kind[c] == 2)
+            r[c] = (double)(int32_t)r[c];
+}
+// a stream's register sink (register.cpp's RegSinkDesc): a channel's ready
+// rows with their (phase, seq), and the horizon after each note
+struct StreamRegDesc {
+    void *ctx;
+    void (*rows)(void *ctx, int rank, const double *rows, const long long *phase, const long long *seq, long n);
+    void (*horizon)(void *ctx, double h);
+};
+// A STREAM's CHORUS DEVICE (a kind 2 entry): its record, its own voices, its
+// share's steps (none: G[5]; samp: in samples, else seconds) and the passes its
+// channel makes (pass A's loudest row's)
+struct StreamDev {
+    std::vector<double> G, TV, ts, vs;
+    bool samp = false;
+    int kmax = 0;
+    double share_at(double non, double sr) const
+    {
+        if (ts.empty())
+            return G[5];
+        double x = samp ? non : non / sr;
+        long i = (long)(std::upper_bound(ts.begin(), ts.end(), x) - ts.begin()) - 1;
+        return vs[i < 0 ? 0 : i >= (long)vs.size() ? (long)vs.size() - 1 : i];
+    }
+};
+// PASS A: the scan -- the ring's end and the channels heard, nothing kept
+struct StreamScan {
+    const int *kind = nullptr;
+    double floor_ = 0.0, sr = 0.0;
+    int cM = 0;
+    long long rl = 0, rows = 0;
+    std::set<long long> heard;
+    std::vector<double> buf;
+    void *gsd = nullptr;                    // (the delays' repeats: their ring and their last)
+    void *mf = nullptr;                     // (the MF-104M's: its layers walked as they land)
+    std::map<long long, std::vector<double>> nons;      // (each channel's onsets: a chorus device's loudest)
+    std::map<long long, double> noffs;      // (...and its last release: an amplifier's products end by it)
+    std::set<long long> regch;              // (the register's channels: a scanner's refusal)
+    void rec(const double *x, long n)
+    {
+        for (long r = 0; r < n; r++) {
+            const long long m_ = (long long)x[NCOLS * r + cM];
+            auto nf_ = noffs.find(m_);
+            if (nf_ == noffs.end())
+                noffs[m_] = x[NCOLS * r + 13];
+            else
+                nf_->second = std::max(nf_->second, x[NCOLS * r + 13]);
+            std::vector<double> &v = nons[m_];
+            double t = x[NCOLS * r + 12];
+            if (v.empty() || v.back() != t)
+                v.push_back(t);
+        }
+    }
+    int jn = 0;
+    long long glast = 0;
+    static void note(void *c_, const double *at, long long i0, long long i1, double)
+    {
+        StreamScan &c = *(StreamScan *)c_;
+        long long n = i1 - i0;
+        if (n <= 0)
+            return;
+        c.buf.assign(at, at + NCOLS * n);
+        for (long long r = 0; r < n; r++) {
+            stream_cast(c.buf.data() + NCOLS * r, c.kind);
+            c.heard.insert((long long)c.buf[NCOLS * r + c.cM]);
+        }
+        c.rec(c.buf.data(), n);
+        if (c.mf) {                         // (the MF-104M's: its dry share, its repeats)
+            double *g = nullptr;
+            long long gl = 0;
+            long m = nv_mf104_note(c.mf, c.buf.data(), i0, i1, &g, &gl);
+            if (m > 0) {
+                c.rec(g, m);
+                c.rl = std::max(c.rl, nv_ring_last(g, m, c.floor_, c.sr));
+                c.rows += m;
+            }
+            free(g);
+            c.glast = std::max(c.glast, gl);
+        }
+        c.rl = std::max(c.rl, nv_ring_last(c.buf.data(), n, c.floor_, c.sr));
+        c.rows += n;
+        const int j = c.jn++;
+        if (c.gsd) {
+            double *g = nullptr;
+            long long gl = 0;
+            long m = nv_gsd_note(c.gsd, j, nv_play_sink_note(), c.buf.data(), i0, nv_play_own_end(j, i1), i1, &g, &gl);
+            if (m > 0) {
+                c.rec(g, m);
+                c.rl = std::max(c.rl, nv_ring_last(g, m, c.floor_, c.sr));
+                c.rows += m;
+            }
+            free(g);
+            c.glast = std::max(c.glast, gl);
+        }
+    }
+    // ...and the register's strings' (cast already)
+    static void reg_rows(void *c_, int, const double *at, const long long *, const long long *, long n)
+    {
+        StreamScan &c = *(StreamScan *)c_;
+        if (n <= 0)
+            return;
+        for (long r = 0; r < n; r++) {
+            c.heard.insert((long long)at[NCOLS * r + c.cM]);
+            c.regch.insert((long long)at[NCOLS * r + c.cM]);
+        }
+        c.rec(at, n);
+        c.rl = std::max(c.rl, nv_ring_last(at, n, c.floor_, c.sr));
+        c.rows += n;
+    }
+    static void reg_horizon(void *, double) {}
+};
+
 static long long tremolo_expand(double **rowsp, long long *Pp, void **dm, const std::map<int, std::vector<double>> &chans,
                                 const std::vector<char> *mask, double sr)
 {
@@ -496,9 +702,16 @@ int main(int argc, char **argv)
     }
     // THE TUNER, if named: its table in place of the export's
     std::string tname, ra, rc, east = getenv("TUNING_EASTERN") ? getenv("TUNING_EASTERN") : "";
+    long win = 0;                           // --window=W: the table rendered W samples at a time
     for (int i = 4; i < argc; i++) {
         if (!strncmp(argv[i], "--tuner=", 8))
             tname = argv[i] + 8;
+        else if (!strncmp(argv[i], "--window=", 9))
+            win = atol(argv[i] + 9);
+        else if (!strcmp(argv[i], "--stream-why"))
+            g_stream = g_stream_why_only = true;
+        else if (!strcmp(argv[i], "--stream"))
+            g_stream = true;
         else if (!strncmp(argv[i], "--eastern=", 10))
             east = argv[i] + 10;
         else if (!strncmp(argv[i], "--a=", 4))
@@ -1879,14 +2092,42 @@ int main(int argc, char **argv)
     bool rows_ = !fch.empty() || !gch.empty() || nw || nsr || nbr_ || !mrows.empty() || !sir.empty() || !trows.empty()
                  || !arows.empty();
     nv_gsd_place_reset();                       // (blockrender's _GSD_PLACE: the render's)
+    StreamScan scan;
+    StreamSinkDesc scan_d{&scan, &StreamScan::note};
+    StreamRegDesc scan_r{&scan, &StreamScan::reg_rows, &StreamScan::reg_horizon};
+    if (g_stream) {                             // PASS A: the scan
+        nv_stream_reset();
+        scan.gsd = nv_gsd_new(K.data(), song, E.kind.data(), SR);
+        scan.mf = nv_mf104_new(song, E.kind.data(), SR);
+        scan.kind = E.kind.data();
+        scan.floor_ = E.k[K_RING_FLOOR];
+        scan.sr = SR;
+        scan.cM = col("mch");
+        nv_play_set_sink(&scan_d);
+        nv_play_set_reg_sink(&scan_r);
+    }
     long long P = nv_prepare(song, K.data(), &t, rows_ ? br.data() : nullptr, rows_ ? 1024 : 0, &rs, &rows,
                              qacc, &az, E.kind.data(),
                              E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, total,
                              E.k[K_RING_FLOOR], E.k[K_RING_MAX], out, E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR,
                              dm, 1);
+    nv_play_set_sink(nullptr);
+    nv_play_set_reg_sink(nullptr);
     if (P == -3) {
         fprintf(stderr, "nvrender: refused: drones Python's (two drone classes, or phrase breaks, on a channel)\n");
         return 2;
+    }
+    if (g_stream && P >= 0) {
+        // the table is the stream's: the passes see none, and the length is
+        // the scan's ring (prepare.cpp's: min(ring + BLK, (total + RING_MAX) SR))
+        P = 0;
+        long long cap_ = (long long)((total + E.k[K_RING_MAX]) * SR);
+        long long rl_ = scan.rl + BLK < cap_ ? scan.rl + BLK : cap_;
+        if (scan.rows && rl_ > (long long)out[0])
+            out[0] = (double)rl_;
+        const long long srl_ = (long long)SR;     // (the delays' last repeat's release: prepare's glast)
+        if (scan.glast > 0 && scan.glast + srl_ / 2 > (long long)out[0])
+            out[0] = (double)(scan.glast + srl_ / 2);
     }
     {
         long long cap0, need;               // THE ROW STORE's guess too small: said, for raising it
@@ -1905,9 +2146,18 @@ int main(int argc, char **argv)
                         "at %.3f s: %s)\n", P, c, iv[2], iv[0], iv[3] ? ", a drum" : "", dv[0], nv_play_why());
         return 2;
     }
+    // (a stream's choruses: each channel's kind, send, voices and cents -- Pass::add)
+    std::vector<long long> s_cch;
+    std::vector<int> s_ckind, s_cnc;
+    std::vector<double> s_csend, s_ccents;
+    std::vector<StreamDev> s_cdev;
     // THE VALVE AMPLIFIERS (_prep_amplifier, tubeamp.expand): each channel's
     // drive its voice's -- times CC1's first (4 x cc/127) where the voice is
     // not on a rotor -- its products appended, before the speaker sees them
+    // (a stream's: the settings kept, its segments walked as it goes -- Pass)
+    std::vector<long long> s_ach;
+    std::vector<double> s_adr, s_aref, s_aimb, s_asb;
+    std::vector<std::vector<double>> s_ass, s_asl;
     {
         std::vector<long long> ach;
         std::vector<double> adr, aref, aimb;
@@ -1921,6 +2171,9 @@ int main(int argc, char **argv)
             int ns = nv_song_amp_steps_of(song, k, &sb, &ss, &sl);
             if (ns)                         // (its reference following the file's level: 'steps')
                 nv_amp_ref_steps((int)ach.size(), sb, ns, ss, sl);
+            s_asb.push_back(ns ? sb : 0.0);
+            s_ass.push_back(ns ? std::vector<double>(ss, ss + ns) : std::vector<double>());
+            s_asl.push_back(ns ? std::vector<double>(sl, sl + ns) : std::vector<double>());
             aref.push_back(ref);
             aimb.push_back(imb);
             int v;
@@ -1929,14 +2182,24 @@ int main(int argc, char **argv)
             ach.push_back(c);
             adr.push_back(drv);
         }
+        s_ach = ach;
+        s_adr = adr;
+        s_aref = aref;
+        s_aimb = aimb;
         if (!ach.empty())
             nv_amp_expand(&rows, &P, dm, (int)ach.size(), ach.data(), adr.data(), aref.data(), aimb.data(), SR);
     }
     // THE CLAVINET's TONE ROCKERS (_prep_clav_rockers): after the valve, before the tremolos
+    if (g_stream && nv_song_clavs(song, nullptr, nullptr, 0))
+        nv_stream_refuse("a clavinet's rockers");
     nv_clav_pass(song, rows, P);
     // THE ORGANS' TREMOLOS (_prep_tremolo, after the render's length is
     // known): a Tremolo stop's on the notes struck with it drawn, then the
     // wheel's on its channels' rows, the stop's sidebands among them
+    // (a stream's: each pass's settings, row by row in Pass::add -- the stop's ranges,
+    // the channels' settings and waveforms)
+    std::vector<std::array<double, 4>> s_ht;            // (first row, end, rate, depth)
+    std::map<long long, std::vector<double>> s_tch, s_twave;
     for (int which = 0; which < 2; which++) {
         int nt = nv_song_organ_tremolos(song, which, nullptr, nullptr, 0);
         if (!nt && !(which == 1 && (nv_song_trems(song, nullptr, nullptr, 0) || !tcfg_m.empty()
@@ -1999,6 +2262,7 @@ int main(int argc, char **argv)
                 if (fc[55] == 1.0) {
                     const double *w = WV + 19 * (int)fc[59];
                     nv_tremolo_wave(kv.first, (int)w[0], w + 1);
+                    s_twave[kv.first] = std::vector<double>(w + 1, w + 1 + 3 * (int)w[0]);
                 }
             }
         }
@@ -2011,6 +2275,9 @@ int main(int argc, char **argv)
             std::vector<double> hc(2 * nr);
             nv_song_n_htrem_rows(song, ab.data(), nr);
             nv_song_htrem_rows_cfg(song, hc.data(), nr);
+            if (g_stream)
+                for (int q = 0; q < nr; q++)
+                    s_ht.push_back({(double)ab[2 * q], (double)ab[2 * q + 1], hc[2 * q], hc[2 * q + 1]});
             mask.assign(P, 0);
             // (each note's rows at its own stop's rate and depth, mono -- a
             // voice changed on the channel another tremolo, not the last one's)
@@ -2025,10 +2292,25 @@ int main(int argc, char **argv)
                 }
             nv_tremolo_row_cfg(P, rc.data());
         }
+        if (g_stream && which == 1) {
+            for (auto &kv : chans)
+                s_tch[kv.first] = kv.second;
+            if (!tcfg_m.empty())
+                nv_stream_refuse("a controller matrix's tremolo");
+            if (!s_ht.empty() && !s_tch.empty())
+                nv_stream_refuse("a tremolo stop's notes beside a channel's tremolo");
+        }
         tremolo_expand(&rows, &P, dm, chans, which == 0 ? &mask : nullptr, SR);
     }
     // THE SCANNERS (_prep_scanner, scanner.expand): each channel's partials
     // on their band rows, the chorus's dry share and copies, tier B's copies
+    std::vector<ScanCh> s_scn;              // (a stream's: row by row in Pass::add, held by note)
+    if (g_stream)
+        for (size_t q = 0; q < sch.size(); q++) {
+            if (std::find(s_ach.begin(), s_ach.end(), sch[q]) != s_ach.end() || scan.regch.count(sch[q]))
+                nv_stream_refuse("a scanner on a register's or an amplifier's channel");
+            s_scn.push_back(ScanCh{sch[q], srow[q], sdep[q], scho[q]});
+        }
     if (!sch.empty())
         nv_scan_expand(E.scan.data(), &rows, &P, dm, (int)sch.size(), sch.data(), srow.data(), sdep.data(),
                        scho.data(), SR);
@@ -2259,6 +2541,66 @@ int main(int argc, char **argv)
         for (auto &kv : cstepn)             // (a moving CC93's: its steps, in samples)
             nv_chorus_share_steps_n((int)kv.first, (int)kv.second.first.size(), kv.second.first.data(),
                                     kv.second.second.data());
+        if (g_stream)                       // (a stream's: row by row -- Pass::add; a device refused)
+            for (size_t q = 0; q < cch.size(); q++) {
+                StreamDev D;
+                if (ckind[q] == 2) {
+                    // the channel's passes, from its loudest row's share (nv_chorus_expand's
+                    // np.all(|g| < FLOOR / 2) break, every row's): pass A's onsets
+                    D.G.assign(cgsp.begin() + 40 * q, cgsp.begin() + 40 * q + 40);
+                    if (ctaps.count(q))
+                        D.TV = ctaps[q];
+                    if (csteps[q] >= 0) {
+                        D.ts = fx_ts;
+                        D.vs = fx_share[csteps[q]];
+                    } else if (cstepn.count(q)) {
+                        D.ts = cstepn[q].first;
+                        D.vs = cstepn[q].second;
+                        D.samp = true;
+                    }
+                    double mx = 0.0, lo = INFINITY;
+                    bool rows_ = false, any = false;
+                    auto it = scan.nons.find(cch[q]);
+                    if (it != scan.nons.end())
+                        for (double t : it->second) {
+                            double sh = D.share_at(t, SR);
+                            mx = rows_ ? std::max(mx, sh) : sh;
+                            rows_ = true;
+                            any = any || sh > 0.0;
+                            lo = std::min(lo, t);
+                        }
+                    if (rows_ && !D.ts.empty() && std::find(s_ach.begin(), s_ach.end(), cch[q]) != s_ach.end()) {
+                        // (the products' onsets: inside [lo, the last release] -- the share's
+                        // highest there no higher than the rows', or refused)
+                        const double hi = scan.noffs[cch[q]];
+                        double top = D.share_at(lo, SR);
+                        const double u0 = D.samp ? lo : lo / SR, u1 = D.samp ? hi : hi / SR;
+                        for (size_t i = 0; i < D.ts.size(); i++)
+                            if (D.ts[i] > u0 && D.ts[i] <= u1)
+                                top = std::max(top, D.vs[std::min(i, D.vs.size() - 1)]);
+                        if (top > mx || (top > 0.0 && !any))
+                            nv_stream_refuse("a chorus device's share rising on an amplifier's channel");
+                    }
+                    if (rows_ && any) {
+                        const int ntap = !D.TV.empty() ? (int)(D.TV.size() / 8) : (int)D.G[6];
+                        const double fb = D.G[3], fb2 = pow(fb, 2.0);
+                        const double passes = fb2 < 1.0 ? (1.0 - pow(fb2, 16.0)) / (1.0 - fb2) : 16.0;
+                        const double w = sqrt(mx / (double)ntap / passes);
+                        for (int k = 1; k <= 16; k++) {
+                            const double fk = pow(fb, (double)(k - 1));
+                            if (fabs(w * fk) < 0.02 * 0.5 || (k > 1 && fb == 0.0))
+                                break;
+                            D.kmax = k;
+                        }
+                    }
+                }
+                s_cdev.push_back(D);
+                s_cch.push_back(cch[q]);
+                s_ckind.push_back(ckind[q]);
+                s_csend.push_back(csend[q]);
+                s_cnc.push_back(cnc[q]);
+                s_ccents.insert(s_ccents.end(), ccents.begin() + 8 * q, ccents.begin() + 8 * q + 8);
+            }
         if (!cch.empty())
             nv_chorus_expand(&rows, &P, dm, (int)cch.size(), cch.data(), csend.data(), cnc.data(), ccents.data(),
                              ckind.data(), cgsp.data(), SR);
@@ -2267,36 +2609,19 @@ int main(int argc, char **argv)
     // row of an effect's mix channel, the valve's products and the copies
     // included, at its frequency -- shelves at 400 Hz and 4 kHz, a peaking
     // mid (the table's float64 still: the cast is the render's last)
-    if (!efx_eq.empty()) {
-        const int cM = col("mch"), cF = col("nf");
-        const int cA[3] = {col("aL"), col("aR"), col("aM")};
+    if (!efx_eq.empty()) {                  // (a stream's rows take it in its store: Pass::add)
+        const int cM = col("mch");
         for (long long r = 0; r < P; r++) {
             double *row = rows + NCOLS * r;
             auto it = efx_eq.find((long long)row[cM]);
-            if (it == efx_eq.end())
-                continue;
-            const auto &e = it->second;
-            double f = row[cF];
-            double x = f / e[5], y = f / e[6];
-            x = x * x;
-            y = y * y;
-            double db = e[0] / (1.0 + x) + e[4] * y / (1.0 + y);
-            for (size_t j = 1; j < e.size(); j += j == 1 ? 6 : 3) {     // (the mid, then the type's more)
-                double mf = e[j], q = e[j + 1], mg = e[j + 2];
-                if (mf != 0.0 && mg != 0.0) {
-                    double u = q * (f / mf - mf / (f + 1e-6 * (f <= 0.0 ? 1.0 : 0.0)));
-                    db += mg / (1.0 + u * u);
-                }
-            }
-            double g = pow(10.0, db / 20.0);
-            for (int c : cA)
-                row[c] = row[c] * g;
+            if (it != efx_eq.end())
+                eq_row(it->second, row);
         }
     }
     // THE SPEAKER CABINETS (_prep_cabinet, cabinet.expand): every row on a
     // cabinet's channel through its response at the row's frequency, after
     // the amplifier, before the rotors
-    nv_cabinet_pass(song, rows, P);
+    nv_cabinet_pass(song, rows, P);         // (a stream's rows take it in its store: Pass::add)
     // THE ROTATING SPEAKERS (_prep_rotating_speaker, leslie.expand): each
     // Leslie channel's half-moon from its CC1s (leslie.zone), on its default
     // speed from 0 where the first is later; the cabinet, the crossover's
@@ -2387,6 +2712,11 @@ int main(int argc, char **argv)
             }
         }
     }
+    // (a stream's rotors: its rows through them one at a time -- Pass::add)
+    void *s_les = g_stream && !lch.empty()
+                      ? nv_leslie_new((int)lch.size(), lch.data(), lnreq.data(), lreq.data(), SR, LES, lgs.data(),
+                                      E.k.data() + K_GSPLACE)
+                      : nullptr;
     if (!lch.empty() && nv_leslie_expand_gs(&rows, &P, dm, (int)lch.size(), lch.data(), lnreq.data(), lreq.data(),
                                             SR, LES, lobe, nullptr, nullptr, lgs.data(),
                                             E.k.data() + K_GSPLACE) < 0) {
@@ -2741,6 +3071,8 @@ int main(int argc, char **argv)
                        || (fk_[q] && fk_[q]->flt_k == 4) ? 3 : 1;
             }
             FCT.assign((size_t)nfr * (size_t)fgn, 1.0f);
+            if (g_stream)
+                nv_stream_refuse("a moving filter");
             const double step = (double)grid / SR;
             for (size_t q = 0; q < fch_.size(); q++) {
                 const NoteClass *k = fk_[q];
@@ -2996,6 +3328,7 @@ int main(int argc, char **argv)
     std::vector<double> fmc[3], mpc;
     std::vector<float> mpr, mpk;
     MoogCols mc{};
+    // (a stream's: these tables pass A's, each window its rows' columns -- Pass's render_to)
     if (nft) {
         nv_song_moog_tables(song, FT.data(), KN.data(), &nkn, &knk, &kb0);
         mc.knk = knk;
@@ -3098,7 +3431,6 @@ int main(int argc, char **argv)
         double dry, wet;
         bool part;                          // a part's (every tone of it), else a mix channel's
         std::vector<std::pair<long long, long long>> spans;     // (samples) where it is on, a part's
-        std::vector<std::pair<long long, long long>> keys;      // a keyed gate's: the channel's keys (samples)
     };
     std::vector<BusDef> buses;
     std::vector<unsigned char> busrow, rest;
@@ -3177,23 +3509,6 @@ int main(int argc, char **argv)
             bool seen = false;
             for (auto &b : buses)
                 seen = seen || (!b.part && b.ch == m);
-            if (k && k->ng_set && !seen) {
-                // A VOICE's OWN GATE (blockrender: TONE_BUS + its mix channel,
-                // before its insertion effect's), keyed by the channel's notes as played
-                BusDef bd{m, 7, k->ng_p, 0.0, 1.0, false, {}, {}};
-                for (int j = 0; j < nn; j++) {
-                    long long c2;
-                    int iv2[4];
-                    double dv2[2];
-                    nv_song_get_note(song, j, &c2, iv2, dv2);
-                    if (c2 == c)
-                        bd.keys.push_back(std::make_pair((long long)nearbyint(dv2[0] * SR),
-                                                         (long long)nearbyint(dv2[1] * SR)));
-                }
-                std::sort(bd.keys.begin(), bd.keys.end());
-                buses.push_back(bd);
-                seen = true;
-            }
             if (!k || !k->efx_set || !k->efx_bus || iv[3] || seen || note_fx[i] != -1)
                 continue;
             buses.push_back(BusDef{m, k->efx_bus, k->bus_p, k->bus_p[10], k->bus_p[11], false, {}});
@@ -3255,67 +3570,6 @@ int main(int argc, char **argv)
                 ys[ear]->resize(n);
                 for (long i = 0; i < n; i++)
                     (*ys[ear])[i] = (float)y[i];
-            }
-        } else if (bd.kind == 7) {          // efxbus.NoiseGate, keyed: the body's compressor, the gate's poles
-            const long long hold = (long long)p[0];
-            const double c = p[1];
-            std::vector<double> L(n), R(n), x(n), ref(n), g(n, 1.0);
-            for (long i = 0; i < n; i++) {
-                L[i] = (double)(*xs[0])[i];
-                R[i] = (double)(*xs[1])[i];
-                const double a = fabs(L[i]), b = fabs(R[i]);
-                x[i] = b > a ? b : a;               // np.maximum(|L|, |R|)
-            }
-            // the running peak (dB): a peak held, falling c a sample, from p[11]
-            double acc = -INFINITY;
-            for (long i = 0; i < n; i++) {
-                const double m = (double)i;
-                const double lv = 20.0 * log10(x[i] > 1e-12 ? x[i] : 1e-12);
-                const double t = lv + m * c;
-                acc = (i == 0 || t > acc) ? t : acc;    // (np.maximum.accumulate)
-                double r = acc - m * c;
-                const double fl = p[11] - (m + 1.0) * c;
-                ref[i] = fl > r ? fl : r;
-            }
-            // efxbus._Pole: lfilter([1 - a], [1, -a]) from a x[0], as its first window starts it
-            auto pole = [&](double a, const std::vector<double> &in) {
-                std::vector<double> y(n);
-                double zz = a * in[0];
-                const double b0 = 1.0 - a;
-                for (long i = 0; i < n; i++) {
-                    const double yv = zz + b0 * in[i];
-                    zz = in[i] * 0.0 - yv * -a;
-                    y[i] = yv;
-                }
-                return y;
-            };
-            if (p[2] != 0.0) {                      // the body: over sustain_db under the peak, to 1/ratio
-                std::vector<double> e0 = pole(p[7], x), e1 = pole(p[8], x);
-                for (long i = 0; i < n; i++) {
-                    const double env = e1[i] > e0[i] ? e1[i] : e0[i];
-                    double over = 20.0 * log10(env > 1e-12 ? env : 1e-12) - (ref[i] + p[3]);
-                    over = over > 0.0 ? over : 0.0;
-                    g[i] = pow(10.0, -over * (1.0 - 1.0 / p[4]) / 20.0) * p[5];
-                }
-            }
-            // keyed: open over each key's span, held hold past its key-up
-            std::vector<double> tgt(n, p[6]);
-            for (const auto &kk : bd.keys) {
-                if (!(kk.first < (long long)n && kk.second + hold > 0))
-                    continue;
-                long long a0 = kk.first > 0 ? kk.first : 0;
-                long long a1 = std::min((long long)n, kk.second + hold);
-                a1 = a1 > 0 ? a1 : 0;
-                for (long long i = a0; i < a1; i++)
-                    tgt[i] = 1.0;
-            }
-            std::vector<double> o0 = pole(p[9], tgt), o1 = pole(p[10], tgt);
-            for (int ear = 0; ear < 2; ear++)
-                ys[ear]->resize(n);
-            for (long i = 0; i < n; i++) {
-                const double gg = g[i] * (o1[i] > o0[i] ? o1[i] : o0[i]);
-                (*ys[0])[i] = (float)(L[i] * gg);
-                (*ys[1])[i] = (float)(R[i] * gg);
             }
         } else if (bd.kind == 3 || bd.kind == 4) {
             // A REVERB (efxbus.Reverb, GateReverb): the part (mono in) through
@@ -3516,7 +3770,39 @@ int main(int argc, char **argv)
         }
     };
     // the mix, or the send (fpX its level columns): the rest, then each bus's part, then the post
+    // --window: each row's last sample, as the kernel stops (streamrender.zend,
+    // on the final float32 columns), and a BLK past it to spare
+    std::vector<long long> zend;
+    if (win > 0 && buses.empty()) {
+        zend.resize(P);
+        for (long long r = 0; r < P; r++) {
+            float dl = std::max(0.0f, std::max(fcols[26][r], fcols[27][r]));     // delL, delR
+            zend[r] = (long long)lcols[1][r] + (long long)fcols[4][r] + (long long)ceilf(dl) + 2 * BLK;
+        }
+    } else if (win > 0)
+        fprintf(stderr, "nvrender: --window: a part's bus (its processors hold no state across windows): whole\n");
     auto render_mix = [&](float *const *fpX, float *oL, float *oR) {
+        if (buses.empty() && win > 0) {
+            const long CH = (long)E.k[K_CHUNK];
+            const long W = (win + CH - 1) / CH * CH;
+            std::vector<long long> live;
+            for (long w0 = 0; w0 < N; w0 += W) {
+                const long wn = std::min(W, N - w0);
+                live.clear();
+                for (long long r = 0; r < P; r++)
+                    if (lcols[0][r] < w0 + wn && zend[r] > w0)
+                        live.push_back(r);
+                nv_render_win(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fpX, lp, ip, Gt.data(), St.data(),
+                              BRr.data(), BCr.data(), BLr.empty() ? nullptr : BLr.data(), noRows, sh,
+                              (long)E.k[K_CHUNK], E.k[K_XDEC], SR, E.k[K_MASTER], (const float *)dm[2],
+                              (const long *)dm[3], (const long *)dm[4], (const long *)dm[5], oL + w0, oR + w0, slo,
+                              (const int *)lobe[0], (float *const *)(lobe + 1), LANG.empty() ? nullptr : LANG.data(),
+                              lgn, nft ? &mc : nullptr, FCT.empty() ? nullptr : fsrc.data(),
+                              FCT.empty() ? nullptr : ftyc.data(), fpar, FCT.empty() ? nullptr : FCT.data(), fgn,
+                              nullptr, 1, w0, wn, live.data(), (long long)live.size());
+            }
+            return;
+        }
         if (buses.empty()) {
             nv_render(fn[0], fn[1], fn[2], N, (int)BLK, nblk, P, dp, fpX, lp, ip, Gt.data(), St.data(), BRr.data(),
                       BCr.data(), BLr.empty() ? nullptr : BLr.data(), noRows, sh, (long)E.k[K_CHUNK], E.k[K_XDEC],
@@ -3574,7 +3860,857 @@ int main(int argc, char **argv)
         nv_midi_mvol(midi, SR, ms.data(), mgv.data(), nm);
         nv_render_mvol(ms.data(), mgv.data(), nm);
     }
-    render_mix(fp, L.data(), R.data());
+    // --STREAM: what it cannot reproduce sends the file to the whole render
+    if (g_stream_why_only) {
+        printf("%s\n", nv_stream_why()[0] ? nv_stream_why() : "streams");
+        return 0;
+    }
+    if (g_stream && nv_stream_why()[0]) {
+        fprintf(stderr, "nvrender: --stream: %s: rendered whole\n", nv_stream_why());
+        std::vector<char *> av;
+        for (int i = 0; i < argc; i++)
+            if (strcmp(argv[i], "--stream"))
+                av.push_back(argv[i]);
+        av.push_back(nullptr);
+        execv("/proc/self/exe", av.data());
+        fprintf(stderr, "nvrender: --stream: cannot run the whole render\n");
+        return 1;
+    }
+    // PASS B: the notes again, each window rendered once nothing to come can
+    // reach it. wt: the send's weight of a row (its channel, onset), NULL the mix
+    auto stream_pass = [&](const std::function<float(long long, long long)> *wt, float *oL, float *oR) {
+        struct Store {
+            std::vector<double> d;          // (row-major, cast as the table holds them)
+            std::vector<long long> non, zend;
+            std::vector<std::array<float, 5>> lob;      // (each row's lobe: rotor, azimuth, floor, sharpness, 1/mean)
+            std::vector<std::array<long long, 16>> key; // (each row's table key; a copy's its source's and its place)
+            std::vector<int> dk;                        // (each row's damper track, -1 none, and its weight)
+            std::vector<float> dg;
+        };
+        struct Pass {
+            Store st;
+            std::vector<Store> reg;                 // (each register channel's, in `order`)
+            std::vector<std::vector<std::pair<long long, long long>>> rkey;    // (their (phase, seq))
+            long long hz = LLONG_MAX;               // (the register's horizon)
+            std::map<long long, const NoteClass *> cab;     // (the cabinets' channels: nv_cabinet_pass's)
+            void *les = nullptr;                    // (the rotors: nv_leslie_row)
+            const std::map<long long, std::vector<double>> *eq = nullptr;     // (the insertion EQs' channels)
+            // THE HALF-PEDAL's TRACKS (onto_tracks, as each banded note lands): the
+            // tracks used so far and their table; the note to come; the laws' constants
+            void *song = nullptr;
+            int jn = 0, ntr = 0;
+            long long nblkv = 0;
+            double dfull = 0.0, dres = 0.0, dknee = 0.0, dln = 0.0, dbeta = 0.0, dxdec = 0.0;
+            std::vector<float> DM;
+            std::vector<long> DMO, DMB, DMN;
+            Store lescp;                            // (the Leslie's copies, after the table's rows)
+            Store gsdst;                            // (the delays' repeats, after the register's: (j, seq))
+            void *gsd = nullptr;
+            Store mfst;                             // (the MF-104M's repeats, before the delays')
+            void *mf = nullptr;
+            Store tremst;                           // (the tremolos' sidebands, after the products)
+            const std::vector<std::array<double, 4>> *ht = nullptr;
+            const std::map<long long, std::vector<double>> *tch = nullptr, *twave = nullptr;
+            std::vector<long long> nprod;           // (each amplifier channel's products so far: their keys)
+            // THE AMPLIFIERS' (streamrender._amplifier): each channel's rows as the
+            // table orders them, its edge walked to, its next start; its products' store
+            struct AmpCh {
+                std::vector<double> d;
+                std::vector<int> dk;
+                std::vector<float> dg;
+                std::vector<std::array<long long, 4>> key;
+                double edge = -INFINITY, next = INFINITY;
+                bool walked = false;
+            };
+            std::vector<AmpCh> amp;
+            std::vector<Store> ampst;
+            const std::vector<long long> *ach = nullptr;
+            const std::vector<double> *adr, *aref, *aimb, *asb;
+            const std::vector<std::vector<double>> *ass, *asl;
+            double hraw = INFINITY;                 // (the register's horizon, unfloored)
+            void amp_take(const double *x, std::array<long long, 4> k, int dkv = -1, float dgv = 0.0f)
+            {
+                if (!ach || x[10] <= 0.5)
+                    return;
+                for (size_t q = 0; q < ach->size(); q++)
+                    if ((long long)x[6] == (*ach)[q]) {
+                        if ((*adr)[q] <= 0.0)
+                            return;
+                        amp[q].d.insert(amp[q].d.end(), x, x + NCOLS);
+                        amp[q].key.push_back(k);
+                        amp[q].dk.push_back(dkv);
+                        amp[q].dg.push_back(dgv);
+                        return;
+                    }
+            }
+            void amp_advance(double H)              // (every segment ending at or before H walked)
+            {
+                for (size_t q = 0; ach && q < ach->size(); q++) {
+                    AmpCh &c = amp[q];
+                    const size_t nr = c.key.size();
+                    if (!nr)
+                        continue;
+                    std::vector<size_t> ord(nr);
+                    for (size_t r = 0; r < nr; r++)
+                        ord[r] = r;
+                    std::stable_sort(ord.begin(), ord.end(), [&](size_t u, size_t v) { return c.key[u] < c.key[v]; });
+                    std::vector<double> edges;
+                    for (size_t r = 0; r < nr; r++) {
+                        edges.push_back(c.d[NCOLS * r + 12]);
+                        edges.push_back(c.d[NCOLS * r + 13]);
+                    }
+                    if (c.walked)
+                        edges.push_back(c.edge);
+                    std::sort(edges.begin(), edges.end());
+                    edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+                    edges.erase(std::remove_if(edges.begin(), edges.end(), [&](double e) { return e < c.edge; }),
+                                edges.end());
+                    double last = c.edge;
+                    bool any = false;
+                    for (size_t s = 0; s + 1 < edges.size(); s++) {
+                        const double a = edges[s], b = edges[s + 1];
+                        if (b > H)
+                            break;
+                        last = b;
+                        any = true;
+                        if (b - a < SR * 0.01)
+                            continue;
+                        std::vector<const double *> live;
+                        std::vector<size_t> lix;
+                        for (size_t r : ord) {
+                            const double *x = c.d.data() + NCOLS * r;
+                            if (x[12] <= a + 1e-6 && x[13] >= b - 1e-6) {
+                                live.push_back(x);
+                                lix.push_back(r);
+                            }
+                        }
+                        if (live.size() < 2)
+                            continue;
+                        double ref = (*aref)[q];
+                        const std::vector<double> &ss = (*ass)[q], &sl = (*asl)[q];
+                        if (!ss.empty()) {
+                            long i = (long)(std::upper_bound(ss.begin(), ss.end(), a) - ss.begin()) - 1;
+                            ref = (*asb)[q] * sl[i > 0 ? i : 0];
+                        }
+                        double *got = nullptr;
+                        long si = 0;
+                        long ng = nv_amp_segment(live.data(), (long)live.size(), a, b, (*adr)[q], ref, (*aimb)[q], SR,
+                                                 &got, &si);
+                        for (long g = 0; g < ng; g++)
+                            add(ampst[q], got + NCOLS * g, false, {2, (long long)q, nprod[q]++, 0, 0, 0, 0, 0}, false,
+                                c.dk[lix[si]], c.dg[lix[si]]);
+                        free(got);
+                    }
+                    if (any) {
+                        c.edge = last;
+                        c.walked = true;
+                        std::vector<double> d2;
+                        std::vector<std::array<long long, 4>> k2;
+                        std::vector<int> dk2;
+                        std::vector<float> dg2;
+                        for (size_t r = 0; r < nr; r++)
+                            if (!(c.d[NCOLS * r + 13] <= last + 1e-6)) {
+                                d2.insert(d2.end(), c.d.begin() + NCOLS * r, c.d.begin() + NCOLS * (r + 1));
+                                k2.push_back(c.key[r]);
+                                dk2.push_back(c.dk[r]);
+                                dg2.push_back(c.dg[r]);
+                            }
+                        c.d.swap(d2);
+                        c.key.swap(k2);
+                        c.dk.swap(dk2);
+                        c.dg.swap(dg2);
+                    }
+                    c.next = c.walked ? c.edge : (edges.empty() ? INFINITY : edges[0]);
+                }
+            }
+            long long amp_next() const
+            {
+                double m = INFINITY;
+                for (const AmpCh &c : amp)
+                    m = std::min(m, c.next);
+                return std::isinf(m) ? LLONG_MAX : (long long)floor(m);
+            }
+            std::function<void(long long)> render_to;
+            const int *kind;
+            double SR;
+            long long N, BLK;
+            // the chorus's: each channel's (kind, send, voices, cents) and its copies' store
+            const std::vector<long long> *cch = nullptr;
+            const std::vector<int> *ckind, *cnc;
+            const std::vector<double> *csend, *ccents;
+            const std::vector<StreamDev> *cdev = nullptr;
+            Store chocp;
+            // THE SCANNER's HOLD: a scanner channel's rows, till their note's group is whole
+            struct Pend {
+                Store *t;
+                size_t q;
+                std::array<long long, 14> k;
+                int dk;
+                float dg;
+                std::vector<double> x;
+            };
+            std::vector<Pend> pend;
+            const std::vector<ScanCh> *scn = nullptr;
+            void *scanh = nullptr;
+            Store scanst;                           // (the scanner's copies: after the tremolos')
+            void scan_flush(double lim)             // (each group whose onset less delay is before lim)
+            {
+                std::vector<Pend> go, keep;
+                for (Pend &p_ : pend)
+                    (p_.x[12] - p_.x[45] < lim ? go : keep).push_back(std::move(p_));
+                pend.swap(keep);
+                if (go.empty())
+                    return;
+                std::map<std::pair<size_t, double>, double> top;     // (note_peaks: the group's loudest)
+                for (Pend &p_ : go) {
+                    const double a = std::max(fabs(p_.x[3]), fabs(p_.x[4]));
+                    auto key_ = std::make_pair(p_.q, p_.x[12] - p_.x[45]);
+                    auto it = top.find(key_);
+                    if (it == top.end() || a > it->second)
+                        top[key_] = a;
+                }
+                for (Pend &p_ : go) {
+                    const ScanCh &c = (*scn)[p_.q];
+                    std::vector<double> cp((size_t)NCOLS * 80);
+                    int nch = 0, nsd = 0;
+                    nv_scan_row(scanh, p_.x.data(), c.depth, c.chorus, c.row0, top[std::make_pair(p_.q, p_.x[12] - p_.x[45])],
+                                SR, cp.data(), &nch, &nsd);
+                    finish(*p_.t, p_.x.data(), p_.k, false, p_.dk, p_.dg);
+                    const std::array<long long, 14> &k = p_.k;
+                    for (int m = 0; m < nch + nsd; m++)
+                        add(scanst, cp.data() + (size_t)NCOLS * m, false,
+                            {2, (1LL << 42) + 2 * (long long)p_.q + (m < nch ? 0 : 1), k[0], k[1], k[2], k[3], k[4],
+                             k[5], k[6], k[7], k[8], k[9], k[10], m < nch ? 0 : m - nch},
+                            false, -1, 0.0f, true, true);
+                }
+            }
+            void add(Store &t, const double *row, bool cast, std::array<long long, 14> k = {}, bool copy = false,
+                     int dkv = -1, float dgv = 0.0f, bool notrem = false, bool noscan = false)
+            {
+                double xb[NCOLS];
+                memcpy(xb, row, sizeof xb);
+                if (cast)
+                    stream_cast(xb, kind);
+                double *x = xb;
+                // THE TREMOLOS (after the amplifier, before the chorus: nv_tremolo_expand's
+                // two passes): a stop's note rows, else the channel's; the sidebands their own
+                // rows after the table's -- through the chorus and on, not the tremolo again
+                if (!notrem && !copy && (ht || tch)) {
+                    const double *c = nullptr;
+                    double c4[4];
+                    const long long chk = (long long)(int)x[6];
+                    long long base = 0;
+                    if (ht && !ht->empty() && k[0] == 0)
+                        for (const auto &h : *ht)
+                            if ((double)k[1] >= h[0] && (double)k[1] < h[1]) {
+                                c4[0] = h[2]; c4[1] = h[3]; c4[2] = 0.0; c4[3] = 0.0;
+                                c = c4;
+                                base = 1LL << 40;
+                                break;
+                            }
+                    if (!c && tch) {
+                        auto it = tch->find(chk);
+                        if (it != tch->end()) {
+                            c = it->second.data();
+                            base = 1LL << 41;
+                        }
+                    }
+                    if (c) {
+                        const std::vector<double> *H = nullptr;
+                        if (twave) {
+                            auto w = twave->find(chk);
+                            if (w != twave->end())
+                                H = &w->second;
+                        }
+                        const int nh = H ? (int)(H->size() / 3) : 0;
+                        std::vector<double> tb((size_t)NCOLS * (H ? 2 * nh : 2));
+                        const int nm = nv_tremolo_row(x, c, chk, H ? H->data() : nullptr, nh, SR, tb.data());
+                        for (int m = 0; m < nm; m++)
+                            add(tremst, tb.data() + (size_t)NCOLS * m, false,
+                                {2, base + k[0], k[1], k[2], k[3], (long long)m}, false, dkv, dgv, true);
+                    }
+                }
+                if (!noscan && !copy && scn)        // (THE SCANNER: its channel's rows held)
+                    for (size_t q = 0; q < scn->size(); q++)
+                        if ((long long)x[6] == (*scn)[q].ch && x[41] < 0) {
+                            pend.push_back(Pend{&t, q, k, dkv, dgv, std::vector<double>(x, x + NCOLS)});
+                            return;
+                        }
+                finish(t, x, k, copy, dkv, dgv);
+            }
+            void finish(Store &t, const double *xin, const std::array<long long, 14> &k, bool copy, int dkv,
+                        float dgv)
+            {
+                t.dk.push_back(dkv);
+                t.dg.push_back(dgv);
+                size_t o = t.d.size();
+                t.d.insert(t.d.end(), xin, xin + NCOLS);
+                double *x = t.d.data() + o;
+                // THE CHORUS (before the cabinet, as the whole render's passes): the row's
+                // copies keyed after the table's rows, its dry share off it -- not a copy's
+                if (cch && !copy)
+                    for (size_t q = 0; q < cch->size(); q++)
+                        if ((long long)x[6] == (*cch)[q] && (*ckind)[q] == 2) {
+                            // A CHORUS DEVICE: each tap's passes, keyed (tap * 17 + pass)
+                            const StreamDev &D = (*cdev)[q];
+                            if (D.kmax > 0) {
+                                const int ntv = (int)(D.TV.size() / 8);
+                                const int cap = (D.TV.empty() ? (int)D.G[6] : ntv) * 16;
+                                std::vector<double> dcp((size_t)NCOLS * cap);
+                                std::vector<int> dix(cap);
+                                int nm = nv_chorus_dev_row(x, D.G.data(), D.TV.empty() ? nullptr : D.TV.data(), ntv,
+                                                           D.share_at(x[12], SR), D.kmax, SR, dcp.data(), dix.data(),
+                                                           cap);
+                                for (int m = 0; m < nm; m++)
+                                    add(chocp, dcp.data() + NCOLS * m, false,
+                                        {3, (long long)q, dix[m], k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], k[8], k[9], k[10]}, true, dkv, dgv);
+                            }
+                            break;
+                        } else if ((long long)x[6] == (*cch)[q]) {
+                            double ccp[8 * NCOLS];
+                            int cis[8];
+                            int nm = nv_chorus_row(x, (*ckind)[q], (*csend)[q], (*cnc)[q], ccents->data() + 8 * q, SR,
+                                                   ccp, cis);
+                            for (int m = 0; m < nm; m++)
+                                add(chocp, ccp + NCOLS * m, false, {3, (long long)q, cis[m], k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], k[8], k[9], k[10]},
+                                    true, dkv, dgv);
+                            break;
+                        }
+                if (eq) {                           // (THE INSERTION EQ: after the chorus, before the cabinet)
+                    auto ie = eq->find((long long)x[6]);
+                    if (ie != eq->end())
+                        eq_row(ie->second, x);
+                }
+                auto cb = cab.find((long long)x[6]);   // (THE CABINET: EMIT_COLS' mch, nf, aL, aR, aM)
+                if (cb != cab.end()) {
+                    double g = nv_cab_gain(cb->second, x[11]);
+                    x[3] *= g;
+                    x[4] *= g;
+                    x[5] *= g;
+                }
+                // THE ROTORS (nv_leslie_row: the whole render's pass, after the cabinet): the
+                // row rotated, its lobe kept; its copies after the table, keyed by its place
+                std::array<float, 5> lb = {-1.0f, 0.0f, 1.0f, 0.0f, 1.0f};
+                double cp[3 * NCOLS];
+                float lob[4 * 5];
+                int ncp = 0, on = 0;
+                if (les) {
+                    ncp = nv_leslie_row(les, x, cp, lob, &on);
+                    if (on)
+                        std::copy(lob, lob + 5, lb.begin());
+                }
+                t.lob.push_back(lb);
+                {                                   // (its table key: a window takes its rows in this order)
+                    std::array<long long, 16> kk = {};
+                    std::copy(k.begin(), k.end(), kk.begin());
+                    t.key.push_back(kk);
+                }
+                for (int q = 0; q < ncp; q++) {
+                    raw(lescp, cp + NCOLS * q);
+                    lescp.dk.push_back(dkv);
+                    lescp.dg.push_back(dgv);
+                    std::array<float, 5> lc;
+                    std::copy(lob + 5 * (q + 1), lob + 5 * (q + 2), lc.begin());
+                    lescp.lob.push_back(lc);
+                    std::array<long long, 16> kk = {};
+                    std::copy(k.begin(), k.end(), kk.begin());
+                    kk[14] = q;
+                    lescp.key.push_back(kk);
+                }
+                // the kernel's last sample (streamrender.zend, on the final
+                // float32 columns) and a BLK to spare
+                float dl = std::max(0.0f, std::max((float)x[37], (float)x[38]));
+                t.non.push_back((long long)x[12]);
+                t.zend.push_back((long long)x[13] + (long long)(float)x[15] + (long long)ceilf(dl) + 2 * BLK);
+            }
+            void raw(Store &t, const double *row)
+            {
+                t.d.insert(t.d.end(), row, row + NCOLS);
+                const double *x = t.d.data() + t.d.size() - NCOLS;
+                float dl = std::max(0.0f, std::max((float)x[37], (float)x[38]));
+                t.non.push_back((long long)x[12]);
+                t.zend.push_back((long long)x[13] + (long long)(float)x[15] + (long long)ceilf(dl) + 2 * BLK);
+            }
+            static void note(void *c_, const double *at, long long i0, long long i1, double next_on)
+            {
+                Pass &p = *(Pass *)c_;
+                double buf[NCOLS];
+                // THE HALF-PEDAL's TRACK, a banded note's: from its own rows (cast), its
+                // place among those used once a row of it takes it (onto_tracks)
+                const int j = p.jn++;
+                int ni = 0, band = 0, tix = -1;
+                double land = 0.0, tf0 = 0.0;
+                long long r1 = i1;
+                std::vector<double> nb;
+                if (p.song && nv_stream_note(j, &ni, &band, &land) && band) {
+                    r1 = nv_play_own_end(j, i1);
+                    if (r1 > i1)
+                        r1 = i1;
+                    if (r1 > i0) {
+                        nb.assign(at, at + NCOLS * (r1 - i0));
+                        for (long long r = 0; r < r1 - i0; r++)
+                            stream_cast(nb.data() + NCOLS * r, p.kind);
+                        std::vector<float> dc(4096);
+                        long long b0 = 0;
+                        long nd = nv_damp_track(p.song, ni, nb.data(), r1 - i0, land, p.SR, p.BLK, p.nblkv, p.dfull,
+                                                p.dres, p.dknee, &b0, &tf0, dc.data(), (long)dc.size());
+                        if (nd < 0) {
+                            dc.resize(-nd);
+                            nd = nv_damp_track(p.song, ni, nb.data(), r1 - i0, land, p.SR, p.BLK, p.nblkv, p.dfull,
+                                               p.dres, p.dknee, &b0, &tf0, dc.data(), (long)dc.size());
+                        }
+                        if (nd > 0) {
+                            bool any = false;   // (a row of it not a burst no damper reaches: fast_rows)
+                            for (long long r = 0; r < r1 - i0 && !any; r++) {
+                                const double *R_ = nb.data() + NCOLS * r;
+                                float lr32 = (float)R_[17];
+                                bool fast = (float)R_[20] <= 0 && (float)R_[19] <= 0
+                                            && (float)(lr32 * (float)p.BLK) > (float)(p.dxdec * p.SR) && R_[39] < 0;
+                                any = !fast;
+                            }
+                            if (any) {
+                                tix = p.ntr++;
+                                p.DMO.push_back((long)p.DM.size());
+                                p.DMB.push_back((long)b0);
+                                p.DMN.push_back(nd);
+                                p.DM.insert(p.DM.end(), dc.begin(), dc.begin() + nd);
+                            }
+                        }
+                    }
+                }
+                // THE MF-104M (before anything reads the note's rows: its dry share on
+                // them, its repeats after the register's, before the delays')
+                std::vector<double> cb(at, at + NCOLS * (i1 > i0 ? i1 - i0 : 0));
+                for (long long r = 0; r < i1 - i0; r++)
+                    stream_cast(cb.data() + NCOLS * r, p.kind);
+                double *mg = nullptr;
+                long long ml = 0;
+                const long mm = p.mf && i1 > i0 ? nv_mf104_note(p.mf, cb.data(), i0, i1, &mg, &ml) : 0;
+                for (long long r = 0; r < i1 - i0; r++) {
+                    memcpy(buf, cb.data() + NCOLS * r, sizeof buf);
+                    int dkv = -1;
+                    float dgv = 0.0f;
+                    if (tix >= 0 && i0 + r < r1) {
+                        float lr32 = (float)buf[17];
+                        bool fast = (float)buf[20] <= 0 && (float)buf[19] <= 0
+                                    && (float)(lr32 * (float)p.BLK) > (float)(p.dxdec * p.SR) && buf[39] < 0;
+                        if (!fast) {
+                            double nf = (double)(float)buf[11];
+                            double x = (nf > 1e-6 ? nf : 1e-6) / (tf0 > 1e-6 ? tf0 : 1e-6);
+                            dkv = tix;
+                            dgv = (float)(p.dln * pow(x, p.dbeta));
+                        }
+                    }
+                    p.amp_take(buf, {0, i0 + r, 0, 0}, dkv, dgv);     // (the amplifier's copy, before the cabinet)
+                    p.add(p.st, buf, false, {0, i0 + r, 0, 0, 0, 0, 0, 0}, false, dkv, dgv);
+                }
+                for (long q = 0; q < mm; q++) {
+                    p.amp_take(mg + NCOLS * q, {1, (1LL << 40) - 1, j, q});
+                    p.add(p.mfst, mg + NCOLS * q, false, {1, (1LL << 40) - 1, j, q, 0, 0, 0, 0});
+                }
+                free(mg);
+                if (p.gsd && i1 > i0) {             // THE DELAYS' REPEATS (gsd_expand's, this note's)
+                    double *g = nullptr;
+                    long long gl = 0;
+                    long m = nv_gsd_note(p.gsd, j, nv_play_sink_note(), cb.data(), i0, nv_play_own_end(j, i1), i1, &g,
+                                         &gl);
+                    for (long q = 0; q < m; q++) {
+                        p.amp_take(g + NCOLS * q, {1, 1LL << 40, j, q});
+                        p.add(p.gsdst, g + NCOLS * q, false, {1, 1LL << 40, j, q, 0, 0, 0, 0});
+                    }
+                    free(g);
+                }
+                long long T = std::isnan(next_on) ? p.N : std::min(p.N, (long long)(next_on * p.SR));
+                p.scan_flush(std::isnan(next_on) ? INFINITY : (double)T);     // (the scanner's groups closed)
+                if (p.ach && !p.ach->empty())       // (_amp_horizon: the next onset, the register's; at the end, all)
+                    p.amp_advance(std::isnan(next_on) ? INFINITY : std::min((double)T, p.hraw));
+                p.render_to(std::min(std::min(T, p.hz), p.amp_next()));
+            }
+            static void reg_rows(void *c_, int rank, const double *at, const long long *ph, const long long *sq, long n)
+            {
+                Pass &p = *(Pass *)c_;
+                if ((int)p.reg.size() <= rank) {
+                    p.reg.resize(rank + 1);
+                    p.rkey.resize(rank + 1);
+                }
+                for (long r = 0; r < n; r++) {
+                    p.amp_take(at + NCOLS * r, {1, (long long)rank, ph[r], sq[r]});
+                    p.add(p.reg[rank], at + NCOLS * r, false, {1, (long long)rank, ph[r], sq[r], 0, 0, 0, 0});
+                    p.rkey[rank].push_back(std::make_pair(ph[r], sq[r]));
+                }
+            }
+            static void reg_horizon(void *c_, double h)
+            {
+                Pass &p = *(Pass *)c_;     // (floor(min(T, pending_min)): streamrender's)
+                p.hz = std::isinf(h) ? LLONG_MAX : (long long)floor(h);
+                p.hraw = h;
+            }
+        };
+        const long CH = (long)E.k[K_CHUNK];
+        const long W = 8 * CH;
+        long w0 = 0;
+        Pass ps;
+        {
+            int nc = nv_song_cabs(song, nullptr, nullptr, 0);
+            std::vector<long long> cch(nc);
+            std::vector<const NoteClass *> cks(nc);
+            if (nc)
+                nv_song_cabs(song, cch.data(), cks.data(), nc);
+            for (int q = 0; q < nc; q++)
+                ps.cab[cch[q]] = cks[q];
+        }
+        ps.kind = E.kind.data();
+        ps.ach = &s_ach;                    // (the amplifiers' settings, pass A's)
+        ps.adr = &s_adr;
+        ps.aref = &s_aref;
+        ps.aimb = &s_aimb;
+        ps.asb = &s_asb;
+        ps.ass = &s_ass;
+        ps.asl = &s_asl;
+        ps.amp.assign(s_ach.size(), {});
+        ps.ampst.assign(s_ach.size(), {});
+        ps.nprod.assign(s_ach.size(), 0);
+        ps.les = s_les;
+        ps.gsd = scan.gsd;
+        ps.mf = nv_mf104_new(song, E.kind.data(), SR);  // (pass B's own walk: the replay registers them again)
+        ps.eq = efx_eq.empty() ? nullptr : &efx_eq;
+        ps.song = song;                     // (the half-pedal's tracks: pass A's notes, prepare's laws)
+        ps.nblkv = nblk;
+        ps.dfull = E.k[K_FULL];
+        ps.dres = E.k[K_RESIDUAL];
+        ps.dknee = E.k[K_KNEE];
+        ps.dln = E.k[K_LN10_20];
+        ps.dbeta = E.k[K_BETA];
+        ps.dxdec = E.k[K_XDEC];
+        ps.cch = &s_cch;                    // (the choruses' settings)
+        ps.ckind = &s_ckind;
+        ps.cnc = &s_cnc;
+        ps.csend = &s_csend;
+        ps.ccents = &s_ccents;
+        ps.cdev = &s_cdev;
+        ps.ht = s_ht.empty() ? nullptr : &s_ht;
+        ps.tch = s_tch.empty() ? nullptr : &s_tch;
+        ps.twave = &s_twave;
+        if (!s_scn.empty()) {
+            ps.scn = &s_scn;
+            ps.scanh = nv_scan_new(E.scan.data());
+        }
+        ps.SR = SR;
+        ps.N = N;
+        ps.BLK = BLK;
+        const int cMch = col("mch");
+        // A PART'S BUSES (render_mix's, window by window): each its processor's
+        // state, this pass's own (the mix's, the send's)
+        std::vector<void *> bush(buses.size(), nullptr);
+        for (size_t q = 0; q < buses.size(); q++)
+            bush[q] = nv_livebus_raw_new(buses[q].kind, buses[q].p, SR);
+        // ...each bus's part, whole-length (stage 1 writes it, stage 2 mixes it); a
+        // reverb's responses, its mono history (nh - 1 zeros, then the part), its block B
+        std::vector<std::vector<float>> busL(buses.size()), busR(buses.size());
+        std::vector<std::vector<double>> revL(buses.size()), revR(buses.size()), revX(buses.size());
+        std::vector<long long> revN(buses.size(), 0), revB(buses.size(), 0);
+        for (size_t q = 0; q < buses.size(); q++) {
+            busL[q].assign(N, 0.0f);
+            busR[q].assign(N, 0.0f);
+            if (buses[q].kind == 3 || buses[q].kind == 4) {
+                const double *p = buses[q].p;
+                const long long cap = (long long)(10.0 * SR) + 64;
+                revL[q].assign(cap, 0.0);
+                revR[q].assign(cap, 0.0);
+                long long nh = buses[q].kind == 3
+                    ? nv_efx_reverb_ir(SR, (int)p[0], p[1], (int)p[2], p[3], revL[q].data(), revR[q].data(), cap)
+                    : nv_efx_gate_ir(SR, (int)p[0], p[1], p[2], revL[q].data(), revR[q].data(), cap);
+                revN[q] = nh;
+                long long F = 1;
+                while (F < 2 * nh)
+                    F <<= 1;
+                revB[q] = F - nh + 1;
+                revX[q].assign((size_t)(nh - 1 + N), 0.0);
+            }
+        }
+        long wm = 0;                        // (stage 2: mixed and posted up to here)
+        auto stage2 = [&](long done) {      // (the parts rendered up to done)
+            while (wm < N && wm < done) {
+                const long wn2 = std::min((long)W, N - wm);
+                bool ready = true;
+                for (size_t q = 0; q < buses.size() && ready; q++)
+                    if (revN[q] > 0 && done < N) {
+                        const long long t = revN[q] - 1 + wm + wn2 - 1, B = revB[q];
+                        const long long need = t / B * B + B - revN[q];     // (the last input its blocks read)
+                        ready = need < done;
+                    }
+                if (!ready || wm + wn2 > done)
+                    return;
+                const double gain = E.k[K_MASTER];
+                for (size_t q = 0; q < buses.size(); q++) {
+                    std::vector<float> yL(wn2), yR(wn2);
+                    if (revN[q] > 0) {
+                        std::vector<double> o(wn2);
+                        const long long nh = revN[q];
+                        nv_efx_conv(revX[q].data(), (long long)revX[q].size(), revL[q].data(), nh, nh - 1 + wm, wn2,
+                                    o.data());
+                        for (long i = 0; i < wn2; i++)
+                            yL[i] = (float)o[i];
+                        nv_efx_conv(revX[q].data(), (long long)revX[q].size(), revR[q].data(), nh, nh - 1 + wm, wn2,
+                                    o.data());
+                        for (long i = 0; i < wn2; i++)
+                            yR[i] = (float)o[i];
+                    } else {
+                        const float gf = (float)gain;
+                        std::vector<float> xL(wn2), xR(wn2);
+                        for (long i = 0; i < wn2; i++) {
+                            xL[i] = busL[q][wm + i] * gf;
+                            xR[i] = busR[q][wm + i] * gf;
+                        }
+                        nv_livebus_raw(bush[q], xL.data(), xR.data(), wn2, yL.data(), yR.data());
+                    }
+                    const float dry = (float)buses[q].dry, wet = (float)buses[q].wet;
+                    for (long i = 0; i < wn2; i++) {
+                        bool on = !buses[q].part;
+                        for (auto &sp : buses[q].spans)
+                            on = on || (wm + i >= sp.first && wm + i < sp.second);
+                        const float bl = busL[q][wm + i], br = busR[q][wm + i];
+                        float wL = (float)((double)yL[i] / gain), wR = (float)((double)yR[i] / gain);
+                        float mL = on ? dry * bl + wet * wL : bl, mR = on ? dry * br + wet * wR : br;
+                        oL[wm + i] = oL[wm + i] + mL;
+                        oR[wm + i] = oR[wm + i] + mR;
+                    }
+                }
+                nv_render_post_win(oL + wm, oR + wm, wm, wn2, SR, E.k[K_MASTER], 1);
+                wm += wn2;
+            }
+        };
+        ps.render_to = [&](long long T) {
+            while (w0 < N && (w0 + W <= T || T >= N)) {
+                const long wn = std::min((long)W, N - w0);
+                Store &s = ps.st;
+                // the window's rows as the whole table orders them: the notes',
+                // then each register channel in `order`, its rows by (phase, seq)
+                std::vector<const double *> live;
+                std::vector<const std::array<float, 5> *> llob;    // (each live row's lobe)
+                std::vector<int> wdk;                       // (...its damper track and weight)
+                std::vector<float> wdg;
+                auto take = [&](Store &g, size_t r) {
+                    live.push_back(g.d.data() + NCOLS * r);
+                    llob.push_back(&g.lob[r]);
+                    wdk.push_back(g.dk[r]);
+                    wdg.push_back(g.dg[r]);
+                };
+                {                                   // (every store's rows, by their table key)
+                    std::vector<std::pair<Store *, size_t>> ix;
+                    auto from = [&](Store &g) {
+                        for (size_t r = 0; r < g.non.size(); r++)
+                            if (g.non[r] < w0 + wn && g.zend[r] > w0)
+                                ix.push_back(std::make_pair(&g, r));
+                    };
+                    from(s);
+                    for (Store &g : ps.reg)
+                        from(g);
+                    from(ps.mfst);
+                    from(ps.gsdst);
+                    for (Store &g : ps.ampst)
+                        from(g);
+                    from(ps.tremst);
+                    from(ps.scanst);
+                    from(ps.chocp);
+                    std::sort(ix.begin(), ix.end(), [&](const std::pair<Store *, size_t> &u,
+                                                        const std::pair<Store *, size_t> &v) {
+                        return u.first->key[u.second] < v.first->key[v.second];
+                    });
+                    for (auto &pr : ix)
+                        take(*pr.first, pr.second);
+                }
+                {                                   // (the Leslie's copies, after: by their source's place)
+                    Store &g = ps.lescp;
+                    std::vector<size_t> ix;
+                    for (size_t r = 0; r < g.non.size(); r++)
+                        if (g.non[r] < w0 + wn && g.zend[r] > w0)
+                            ix.push_back(r);
+                    std::sort(ix.begin(), ix.end(), [&](size_t a, size_t b) { return g.key[a] < g.key[b]; });
+                    for (size_t r : ix)
+                        take(g, r);
+                }
+                const long long n = (long long)live.size();
+                // the rotors' lobe columns, the window's rows'
+                std::vector<int> wlsr;
+                std::vector<float> wlb[4];
+                float *wlob[4] = {nullptr, nullptr, nullptr, nullptr};
+                if (ps.les) {
+                    wlsr.resize(n);
+                    for (int q = 0; q < 4; q++)
+                        wlb[q].resize(n);
+                    for (long long k = 0; k < n; k++) {
+                        wlsr[k] = (int)(*llob[k])[0];
+                        for (int q = 0; q < 4; q++)
+                            wlb[q][k] = (*llob[k])[q + 1];
+                    }
+                    for (int q = 0; q < 4; q++)
+                        wlob[q] = wlb[q].data();
+                }
+                // the window's table, in prepare's final types (as fcol)
+                auto tcol = [&](int c) {
+                    std::vector<double> v(n);
+                    for (long long k = 0; k < n; k++) {
+                        double x = live[k][c];
+                        switch (E.fin[c]) {
+                        case 1: x = (double)(float)x; break;
+                        case 2: x = (double)(long long)x; break;
+                        case 3: x = (double)(int32_t)x; break;
+                        }
+                        v[k] = x;
+                    }
+                    return v;
+                };
+                std::vector<double> wd[3];
+                for (int q = 0; q < 3; q++)
+                    wd[q] = tcol(col(DN[q]));
+                std::vector<std::vector<float>> wf(29);
+                for (int q = 0; q < 28; q++) {
+                    std::vector<double> v = tcol(col(VF[q]));
+                    wf[q].assign(v.begin(), v.end());
+                }
+                if (wt)                         // the send: each row's level at its channel's send
+                    for (long long k = 0; k < n; k++) {
+                        float g = (*wt)((long long)live[k][cMch], (long long)live[k][12]);
+                        wf[0][k] = wf[0][k] * g;
+                        wf[1][k] = wf[1][k] * g;
+                    }
+                std::vector<long> wl[2];
+                for (int q = 0; q < 2; q++) {
+                    std::vector<double> v = tcol(col(LN[q]));
+                    wl[q].assign(v.begin(), v.end());
+                }
+                std::vector<int> wi[3];
+                for (int q = 0; q < 3; q++) {
+                    std::vector<double> v = tcol(col(IN[q]));
+                    wi[q].assign(v.begin(), v.end());
+                }
+                // THE MOOGS' columns, the window's rows' (fcol's casts): the tables pass A's
+                MoogCols wmc = mc;
+                std::vector<int> wfx, wmk;
+                std::vector<double> wfm[3];
+                if (nft) {
+                    std::vector<double> v = tcol(col("fx"));
+                    wfx.assign(v.begin(), v.end());
+                    v = tcol(col("mk"));
+                    wmk.assign(v.begin(), v.end());
+                    const char *FMN[3] = {"fmw", "fmp", "fmpR"};
+                    for (int q = 0; q < 3; q++)
+                        wfm[q] = tcol(col(FMN[q]));
+                    wmc.fx = wfx.data();
+                    wmc.mk = wmk.data();
+                    for (int q = 0; q < 3; q++)
+                        wmc.fm[q] = wfm[q].data();
+                }
+                double *wdp[3] = {wd[0].data(), wd[1].data(), wd[2].data()};
+                float *wfp[29];
+                for (int q = 0; q < 29; q++)
+                    wfp[q] = wf[q].empty() ? nullptr : wf[q].data();
+                if (ps.ntr)                         // (the damper's weights: dm[1]'s, the window's rows')
+                    wfp[28] = wdg.data();
+                long *wlp[2] = {wl[0].data(), wl[1].data()};
+                int *wip[4] = {wi[0].data(), wi[1].data(), wi[2].data(), ps.ntr ? wdk.data() : nullptr};
+                auto winr = [&](const unsigned char *sel, int post, float *L_, float *R_) {
+                    nv_render_win(fn[0], fn[1], fn[2], N, (int)BLK, nblk, n, wdp, wfp, wlp, wip, Gt.data(), St.data(),
+                                  BRr.data(), BCr.data(), BLr.empty() ? nullptr : BLr.data(), noRows, sh,
+                                  (long)E.k[K_CHUNK], E.k[K_XDEC], SR, E.k[K_MASTER], ps.ntr ? ps.DM.data() : nullptr,
+                                  ps.ntr ? ps.DMO.data() : nullptr, ps.ntr ? ps.DMB.data() : nullptr,
+                                  ps.ntr ? ps.DMN.data() : nullptr, L_, R_, slo, ps.les ? wlsr.data() : nullptr,
+                                  ps.les ? (float *const *)wlob : nullptr, LANG.empty() ? nullptr : LANG.data(), lgn,
+                                  nft ? &wmc : nullptr,
+                                  nullptr, nullptr, nullptr, nullptr, 0, sel, post, w0, wn, nullptr, 0);
+                };
+                if (buses.empty()) {
+                    winr(nullptr, 1, oL + w0, oR + w0);
+                } else {
+                    // the rest, then each bus's part through its processor, then the post
+                    std::vector<unsigned char> wb(n > 0 ? n : 1, 0), sel(n > 0 ? n : 1);
+                    for (long long r = 0; r < n; r++) {
+                        const long long m = (long long)live[r][cMch];
+                        for (size_t q = 0; q < buses.size(); q++)
+                            if (buses[q].part ? m % 256 == buses[q].ch : buses[q].ch == m) {
+                                if (wb[r]) {
+                                    fprintf(stderr, "nvrender: refused: a row on two buses (a part's and its tone's)\n");
+                                    exit(2);
+                                }
+                                wb[r] = (unsigned char)(q + 1);
+                            }
+                    }
+                    for (long long r = 0; r < n; r++)
+                        sel[r] = wb[r] == 0;
+                    winr(sel.data(), 0, oL + w0, oR + w0);
+                    const float gf = (float)E.k[K_MASTER];
+                    for (size_t q = 0; q < buses.size(); q++) {     // STAGE 1: each bus's part, kept
+                        for (long long r = 0; r < n; r++)
+                            sel[r] = wb[r] == q + 1;
+                        winr(sel.data(), 0, busL[q].data() + w0, busR[q].data() + w0);
+                        if (revN[q] > 0)            // (a reverb's mono history, at the output's scale)
+                            for (long i = 0; i < wn; i++)
+                                revX[q][revN[q] - 1 + w0 + i] =
+                                    0.5 * ((double)(busL[q][w0 + i] * gf) + (double)(busR[q][w0 + i] * gf));
+                    }
+                }
+                w0 += wn;
+                if (!buses.empty())
+                    stage2(w0);                     // STAGE 2: the windows every bus can give, in order
+                // the rows past the window let go of (each store compacted once half
+                // are gone: its rows, lobes and keys -- a register channel's its own keys too)
+                auto compact = [&](Store &g, std::vector<std::pair<long long, long long>> *rk) {
+                    size_t gd = 0;
+                    for (size_t r = 0; r < g.zend.size(); r++)
+                        gd += g.zend[r] <= w0;
+                    if (!gd || 2 * gd < g.zend.size())
+                        return;
+                    Store t;
+                    std::vector<std::pair<long long, long long>> tk;
+                    for (size_t r = 0; r < g.zend.size(); r++)
+                        if (g.zend[r] > w0) {
+                            t.d.insert(t.d.end(), g.d.begin() + NCOLS * r, g.d.begin() + NCOLS * (r + 1));
+                            t.non.push_back(g.non[r]);
+                            t.zend.push_back(g.zend[r]);
+                            t.lob.push_back(g.lob[r]);
+                            t.dk.push_back(g.dk[r]);
+                            t.dg.push_back(g.dg[r]);
+                            if (!g.key.empty())
+                                t.key.push_back(g.key[r]);
+                            if (rk)
+                                tk.push_back((*rk)[r]);
+                        }
+                    g = std::move(t);
+                    if (rk)
+                        rk->swap(tk);
+                };
+                compact(s, nullptr);
+                for (Store &g : ps.ampst)
+                    compact(g, nullptr);
+                for (size_t q = 0; q < ps.reg.size(); q++)
+                    compact(ps.reg[q], &ps.rkey[q]);
+                compact(ps.chocp, nullptr);
+                compact(ps.lescp, nullptr);
+                compact(ps.gsdst, nullptr);
+                compact(ps.mfst, nullptr);
+                compact(ps.tremst, nullptr);
+                compact(ps.scanst, nullptr);
+            }
+        };
+        StreamSinkDesc pd{&ps, &Pass::note};
+        StreamRegDesc prd{&ps, &Pass::reg_rows, &Pass::reg_horizon};
+        nv_play_set_sink(&pd);
+        nv_play_set_reg_sink(&prd);
+        long long got = nv_play_replay(song, K.data(), &t, rows_ ? br.data() : nullptr, rows_ ? 1024 : 0, &rs, qacc,
+                                       &az, E.kind.data(), BLK);
+        nv_play_set_sink(nullptr);
+        nv_play_set_reg_sink(nullptr);
+        ps.render_to(N);                    // (a song with no notes: its silence)
+        return got;
+    };
+    if (g_stream) {
+        if (stream_pass(nullptr, L.data(), R.data()) < 0) {
+            fprintf(stderr, "nvrender: --stream: the replay failed\n");
+            return 1;
+        }
+    } else
+        render_mix(fp, L.data(), R.data());
     if (!write_wav(argv[3], L.data(), R.data(), N, (int)SR)) {
         fprintf(stderr, "nvrender: cannot write %s\n", argv[3]);
         return 1;
@@ -3608,6 +4744,8 @@ int main(int argc, char **argv)
         };
         for (long long r = 0; r < P; r++)
             heard.insert((long long)rows[NCOLS * r + cM]);
+        if (g_stream)                       // (the stream's table: the scan heard them)
+            heard.insert(scan.heard.begin(), scan.heard.end());
         {
             int nn = nv_song_n_notes(song);
             std::vector<int> ord(nn);
@@ -3719,7 +4857,25 @@ int main(int argc, char **argv)
         fp2[0] = wL.data();
         fp2[1] = wR.data();
         std::vector<float> SLb(N), SRb(N);
-        render_mix(fp2, SLb.data(), SRb.data());
+        if (g_stream) {
+            std::function<float(long long, long long)> wfn = [&](long long c, long long nr) {
+                auto st = steps.find(c % 256);
+                double g;
+                if (st != steps.end()) {
+                    const std::vector<long long> &on = st->second.first;
+                    long i = (long)(std::upper_bound(on.begin(), on.end(), nr) - on.begin()) - 1;
+                    g = st->second.second[i > 0 ? i : 0];
+                } else {
+                    g = rs_of(c);
+                }
+                return (float)g;
+            };
+            if (stream_pass(&wfn, SLb.data(), SRb.data()) < 0) {
+                fprintf(stderr, "nvrender: --stream: the send's replay failed\n");
+                return 1;
+            }
+        } else
+            render_mix(fp2, SLb.data(), SRb.data());
         if (!write_wav((base + ".send.wav").c_str(), SLb.data(), SRb.data(), N, (int)SR)) {
             fprintf(stderr, "nvrender: cannot write %s.send.wav\n", base.c_str());
             return 1;

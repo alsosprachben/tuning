@@ -3312,32 +3312,6 @@ int nv_song_choke(void *s, long long ch, int note, double on, double *out)
     return 0;
 }
 
-// A PALM-MUTED OPEN STRING (blockrender._string_free): when the string open
-// pitch `note` lies on (open[], ascending: the last at or under it) next
-// sounds on channel ch after `on` -- a note from its open pitch up to the
-// next string's -- fade before it, at most cap s after on
-double nv_song_string_free(void *s, long long ch, int note, double on, const double *open, int nopen, double cap,
-                           double fade)
-{
-    const nv::Song *S = (nv::Song *)s;
-    auto str = [&](int k) { return (int)(std::upper_bound(open, open + nopen, (double)k) - open) - 1; };
-    const int si = str(note);
-    double end = on + cap;
-    bool any = false;
-    double t = 0.0;
-    for (const nv::Ev &e : S->notes)        // (the channel's notes by (onset, key): the first on the string)
-        if (e.ch == ch && e.on > on + 1e-9 && str(e.note) == si && (!any || e.on < t)) {
-            t = e.on;
-            any = true;
-        }
-    if (any) {
-        double x = t - fade;
-        x = x > on ? x : on;                // max(_on, t - RETRIGGER_FADE)
-        end = x < end ? x : end;
-    }
-    return end;
-}
-
 int nv_song_next_same(void *s, long long ch, int note, double on, double *out)
 {
     const nv::Song *S = (nv::Song *)s;

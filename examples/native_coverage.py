@@ -169,12 +169,21 @@ TASKS = [
                      "taps, the rotor (Separate's two mics) and the 3D place, the drive and cabinet and an OD's "
                      "valve, the compressor, a part's bus (Lo-Fi 1/2, compressor, limiter, enhancer, gate, "
                      "reverb); open: a parallel type's branch B, a Keyboard Multi's copies"),
-    ("SC-55", False, "Files: a streaming (windowed) nvrender for whole songs -- it holds the table whole in float64, "
-                     "and a Sound Canvas song's is past memory (SHIRO's 6.4 min: 21.8M rows, ~8.7 GB; killed at the "
-                     "3.5 GB cap) where Python streams every file (streamrender: its port is the work -- "
-                     "a sink, order keys, each pass at its horizon, windows); every native check so far a 20 s "
-                     "excerpt; the two whole-table quirks the stream fell back on are fixed, chorus and the "
-                     "harmonium's tremolo, so streamed equals whole with no fallback"),
+    ("SC-55", False, "Files: a streaming (windowed) nvrender for whole songs (--stream) -- it held the table whole "
+                     "in float64, and a Sound Canvas song's is past memory (SHIRO's 6.4 min: 21.8M rows, ~8.7 GB). "
+                     "Done, in checks to bank: the scan and replay, order keys, each pass at its horizon, windows; "
+                     "the GS delay's and an MF-104's repeats, the chorus device, a part's bus (its reverbs at the "
+                     "FFT block's lag), the tremolo, the scanner; two order bugs found on the way (the GS delay's "
+                     "place memo, a pluck's hold a block early -- Python's stream had it too). Streamed equals "
+                     "whole on 167 of 167 corpus windows and 64 of 66 GS files (2 refused: a variation no native voice "
+                     "plays). OPEN: SHIRO full length was killed at the 3.5 GB cap within seconds -- tables "
+                     "still held for the whole song (to measure, then bound). Open (rendered whole): a controller "
+                     "matrix's tremolo, a tremolo stop beside a channel tremolo, a scanner on a register's or an "
+                     "amplifier's channel, a chorus share rising on an amplifier's channel, a clavinet's rockers, "
+                     "a moving filter"),
+    ("SC-55", False, "Files and live: every SC-88Pro insertion type measured on its own file "
+                     "(examples/gs_efx_files.py, efx_coverage.py: Python vs native, stream vs whole, live vs "
+                     "live.Live) -- only 8 of the 65 occur in a real song; the first full run overnight"),
     ("SC-55", False, "Live: 117:24 Jngl SD Roll refused (LIVE_REFUSED: its velocity probe's table past 2.5 GB) "
                      "-- a re-attack within a row, a gain track like the damper's, would shrink it"),
     ("SC-55", True, "Files: the rhythm part's assignment (40 1p 15); the controller matrix (40 2p, GM2 09) where "

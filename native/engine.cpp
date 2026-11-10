@@ -509,11 +509,6 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
                     bdb[q] = w * (std::isnan(K->bn_low[q]) ? K->bn_db[q] : K->bn_low[q]) + (1.0 - w) * K->bn_db[q];
             }
         }
-        if (K->bn_oct != 0.0) {             // (breath_noise_at: across the register, d dB an octave)
-            const double d = K->bn_oct * log(f0 / K->bn_ref) / log(2.0);
-            for (int q = 0; q < K->n_bn; q++)
-                bdb[q] = bdb[q] + d;
-        }
         // (on a slur the player never stopped blowing: the legato attack, breath_noise_slur)
         double bfs = (n->slurred && K->bn_slur && K->legato_set) ? pymin(K->bn_fade_s, K->legato_attack_s)
                                                                  : K->bn_fade_s;
@@ -982,13 +977,6 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         n->key_off = nv::pymin(n->key_off, n->on + K->tape_s);
     if (n->siren_set)                   // A SIREN sounds while its rotor does (_SIREN_AT)
         n->key_off = nv::pymax(n->on + 1e-3, n->siren_end);
-    if (K->osr_n && !K->one_shot)       // A PALM-MUTED OPEN STRING rings on till its string sounds again
-        for (int q = 0; q < K->osr_n; q++)
-            if ((double)n->note == K->osr_open[q]) {
-                n->key_off = nv::pymax(n->key_off, nv_song_string_free(song, n->ch, n->note, n->on, K->osr_open,
-                                                                       K->osr_n, K->osr_cap, 0.004));
-                break;                  // (blockrender.RETRIGGER_FADE)
-            }
     n->off = nv_song_note_off(song, n->ch, n->note, n->on, n->key_off, n->damper_pedal, n->mcut,
                               n->retrigger_fade, band);
     double ck;
@@ -1102,6 +1090,40 @@ extern "C" long long nv_play_own_end(int j, long long dflt)
     return it == g_own_end.end() ? dflt : it->second;
 }
 
+// THE STREAMING RENDER'S SINK (nv_play_set_sink): each note's rows handed
+// over the moment they are final -- rows [i0, i1) in the whole table's
+// numbering, at `at`, with the next note's onset as the song stores it (NAN
+// after the last) -- after which the store is written from its start again,
+// so it holds one note. NULL: the whole table, as before.
+struct NvPlaySink {
+    void *ctx;
+    void (*note)(void *ctx, const double *at, long long i0, long long i1, double next_on);
+};
+static const NvPlaySink *g_sink = nullptr;
+static int g_sink_ni = -1;              // (the song's note the sink is being handed)
+extern "C" int nv_play_sink_note(void) { return g_sink_ni; }
+void nv_play_set_sink(const void *s) { g_sink = (const NvPlaySink *)s; }
+const void *nv_play_get_sink(void) { return g_sink; }
+// WHAT A STREAM DOES NOT REPRODUCE (yet): every distinct thing met, in
+// order, "; " between; the stream's caller renders the file whole instead
+static char g_stream_why[1024];
+void nv_stream_refuse(const char *why)
+{
+    if (strstr(g_stream_why, why))
+        return;
+    size_t n = strlen(g_stream_why);
+    if (n && n + 2 < sizeof g_stream_why) {
+        g_stream_why[n++] = ';';
+        g_stream_why[n++] = ' ';
+        g_stream_why[n] = 0;
+    }
+    for (size_t i = 0; n + 1 < sizeof g_stream_why && why[i]; i++)
+        g_stream_why[n++] = why[i];
+    g_stream_why[n] = 0;
+}
+const char *nv_stream_why(void) { return g_stream_why; }
+void nv_stream_reset(void) { g_stream_why[0] = 0; }
+
 int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr, PyRandom *rs,
             double *rows, long long cap, double *qacc, double *azimuth, long long *nrows, int *played,
             long long *row0, int *bands, double *offs)
@@ -1132,6 +1154,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         return keys[a] < keys[b];
     });
     long long total = 0;
+    long long base = 0;                     // (the store's first row, in the table's numbering: a sink's)
     // THE SAME PLATE STRUCK AGAIN (fold_restrike; a gesture's plain strokes):
     // each note's next strike of its key (_next_same: the notes by onset,
     // latest first), the strokes with a shape of their own (by key and onset,
@@ -1380,7 +1403,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             n.fx = (double)nv_song_moog_n(song);
         NoteOut out;
         int band = 0;
-        long long left = cap - total;
+        long long left = cap - (total - base);
         // (the fold: this strike's take of the one before, and its own left to the next)
         bool fold_out = false;
         const bool folds = fold_on && (k->fold_restrike || plain(ch, iv[0], dv[0]));    // (a gong's, or a plain stroke)
@@ -1404,7 +1427,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
                 nv_fold_begin(fin.data(), (int)(fin.size() / 8), -1.0, 0.0);
             }
         }
-        int r = nv_song_play(song, k, &n, rs, -1, nullptr, nullptr, nullptr, nullptr, rows + NCOLS * total,
+        int r = nv_song_play(song, k, &n, rs, -1, nullptr, nullptr, nullptr, nullptr, rows + NCOLS * (total - base),
                              (int)(left > 0x7fffffff ? 0x7fffffff : left), qacc, azimuth, &out, &band);
         if (folds) {
             std::vector<double> fo((size_t)8 * nv_fold_pending());
@@ -1427,7 +1450,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (k->init.kind != 6 && (has[0] || has[3] || has[4]) && r - out.n_push > 0) {
             enum { cAL = 3, cAR = 4, cAM = 5, cNF = 11, cLOGR = 17, cLOGRA = 18 };
             long m = (long)(r - out.n_push);
-            double *rw = rows + NCOLS * total;
+            double *rw = rows + NCOLS * (total - base);
             if (has[4]) {
                 double kk = 1.0 / pow(k->snd_time_range, sd[4]);
                 for (long j = 0; j < m; j++) {
@@ -1495,8 +1518,8 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
                 sfa = at * n.sr;
             }
             if (dt >= 0.0) {
-                long long m = push_rows(k, out.f0, dt, sfa, n.sr, rows + NCOLS * total, r,
-                                        rows + NCOLS * (total + r), left - r);
+                long long m = push_rows(k, out.f0, dt, sfa, n.sr, rows + NCOLS * (total - base), r,
+                                        rows + NCOLS * (total + r - base), left - r);
                 if (m < 0)
                     return NV_TOO_SMALL;
                 if (m)
@@ -1520,7 +1543,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
                 enum { cAL = 3, cMCH = 6 };
                 const double gb[3] = {fc[209] * fc[212], fc[209] * fc[213], fc[209] * 1.0};
                 const double ga[2] = {fc[210], fc[211]};
-                double *src = rows + NCOLS * total, *dst = rows + NCOLS * (total + r);
+                double *src = rows + NCOLS * (total - base), *dst = rows + NCOLS * (total + r - base);
                 for (long long q = 0; q < r; q++) {
                     const double *s = src + NCOLS * q;
                     double *d = dst + NCOLS * q;
@@ -1549,7 +1572,13 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             bands[j] = band;            // a half-pedalled note meeting the band: its track
             offs[j] = n.off;            // ...and where its damper lands (its end)
         }
+        g_sink_ni = i;
+        if (g_sink)
+            g_sink->note(g_sink->ctx, rows + NCOLS * (total - base), total, total + r + cp,
+                         j + 1 < nn ? ons[order[j + 1]] : NAN);
         total += r + cp;
+        if (g_sink)
+            base = total;
     }
     *nrows = total;
     return nn;

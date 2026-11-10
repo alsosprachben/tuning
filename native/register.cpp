@@ -443,6 +443,18 @@ struct Channel {
         return e;
     }
 
+    // register.Channel.pending_min: the next event, an open row's onset, a
+    // waiting bridge's -- no row still to come starts before it
+    double pending_min() const
+    {
+        double e = next_event_d();
+        for (long r : open)
+            e = pymin(e, c_non[r]);
+        for (const Bridge &br : bridges)
+            e = pymin(e, br.n0);
+        return e;
+    }
+
     void update(const std::vector<char> &m, long long bl, const std::vector<cplx> &add, const std::vector<char> *force)
     {
         double b = (double)bl;
@@ -979,6 +991,52 @@ long nv_reg_take(void *h, double *out, long cap)
 
 void nv_reg_free(void *h) { delete (nv::reg::Channel *)h; }
 
+// A STREAM's (register.Channel.advance / pending_min / take): the channel
+// worked to T; the horizon; and the rows final so far, each with its (phase,
+// seq) -- 0 and its seq a free or bridge row, 1 and its fseq a forced one --
+// handed out ONCE (unlike nv_reg_take): -(rows) if cap is too small, nothing taken
+void nv_reg_advance(void *h, double T) { ((nv::reg::Channel *)h)->advance(T); }
+
+double nv_reg_pending_min(void *h) { return ((nv::reg::Channel *)h)->pending_min(); }
+
+long nv_reg_take_ready(void *h, double *out, long cap, long long *phase, long long *seq)
+{
+    using namespace nv::reg;
+    Channel *C = (Channel *)h;
+    long n = nv_reg_take(h, out, cap);
+    if (n < 0)
+        return n;
+    std::vector<long> ids = C->out_rows;
+    std::stable_sort(ids.begin(), ids.end(), [&](long a, long b) { return C->c_seq[a] < C->c_seq[b]; });
+    std::vector<Forced> fo = C->out;
+    std::stable_sort(fo.begin(), fo.end(), [](const Forced &a, const Forced &b) { return a.seq < b.seq; });
+    for (size_t q = 0; q < ids.size(); q++) {
+        phase[q] = 0;
+        seq[q] = C->c_seq[ids[q]];
+    }
+    for (size_t q = 0; q < fo.size(); q++) {
+        phase[ids.size() + q] = 1;
+        seq[ids.size() + q] = fo[q].seq;
+    }
+    C->out_rows.clear();
+    C->out.clear();
+    return n;
+}
+
+// A STREAM's SAFE HORIZON for a channel (streamrender._register's): a pluck's
+// hold starts at its partials' block, up to a block before its onset, so a
+// stream advances to floor(T / blk) * blk - blk; INF as it is
+double reg_safe(void *h, double T)
+{
+    if (T == nv::reg::INF)
+        return T;
+    const double b = (double)((nv::reg::Channel *)h)->blk;
+    return nv::reg::pyfloordiv(T, b) * b - b;
+}
+
+// a channel's copy, as it stands (TUNING_NV_REG_INC's twin)
+void *nv_reg_copy(void *h) { return new nv::reg::Channel(*(nv::reg::Channel *)h); }
+
 void nv_buf_free(void *p) { free(p); }
 
 }  // extern "C"
@@ -1011,44 +1069,345 @@ void nv_play_growth(long long *cap0, long long *need)
 // (malloc'd: nv_buf_free), grown as they need. Returns the rows, or < 0 as
 // nv_play (a note that is not the engine's), -1e9 if memory ran out.
 extern "C" void nv_play_set_kind(const int *kind);
+extern "C" void nv_play_set_sink(const void *s);
+extern "C" const void *nv_play_get_sink(void);
+extern "C" void nv_stream_refuse(const char *why);
+// A STREAM's replay (nv_play_replay): the state its first play began from, and the store that fit
+static PyRandom g_rp_rs;
+static double g_rp_q[18], g_rp_az;
+static long long g_rp_cap = 0;
+// TUNING_NV_SINK_TEST's sink: every note's rows appended to a table of its own
+namespace {
+struct Collect {
+    double *rows = nullptr;
+    long long n = 0, cap = 0;
+    bool fail = false;
+    static void note(void *c_, const double *at, long long i0, long long i1, double)
+    {
+        Collect &c = *(Collect *)c_;
+        if (c.fail || i0 != c.n) {          // (rows handed out of order: the hook is wrong)
+            c.fail = true;
+            return;
+        }
+        if (i1 > c.cap) {
+            long long nc = std::max(i1, 2 * c.cap + 1024);
+            double *g = (double *)realloc(c.rows, sizeof(double) * nv::reg::NC * nc);
+            if (!g) {
+                c.fail = true;
+                return;
+            }
+            c.rows = g;
+            c.cap = nc;
+        }
+        memcpy(c.rows + nv::reg::NC * i0, at, sizeof(double) * nv::reg::NC * (i1 - i0));
+        c.n = i1;
+    }
+};
+struct SinkDesc {
+    void *ctx;
+    void (*note)(void *, const double *, long long, long long, double);
+};
+}  // namespace
 extern "C" long long nv_play_own_end(int j, long long dflt);
 
-namespace {
-// numpy's pairwise sum (DOUBLE_pairwise_sum, PW_BLOCKSIZE 128), stride 1 -- tubeamp.cpp's
-double sym_pairwise(const double *a, long n)
-{
-    if (n < 8) {
-        double r = 0.0;
-        for (long i = 0; i < n; i++)
-            r += a[i];
-        return r;
+// THE REGISTER's FEED (nv_play_full's, lifted so a stream drives it too): a
+// note's strike or pluck on its channel, the channel made at its first note;
+// the whole render loops it over its table, a stream's sink note by note
+struct RegFeed {
+    void *song = nullptr;
+    const NoteClass *const *K = nullptr;
+    const NoteIn *tmpl = nullptr;
+    double sr = 0.0, total = 0.0, beta = 0.0, full_db_s = 0.0, residual = 0.0, scale = 0.0, LN10_20 = 0.0;
+    long long blk = 0;
+    int with_register = 0, nn = 0;
+    std::vector<long long> order;                    // the channels, as made
+    std::map<long long, std::pair<void *, const NoteClass *>> chans;
+    std::map<long long, std::vector<int>> tones;
+    std::vector<long long> sym_order;
+    std::map<long long, const NoteClass *> sym_k;
+    bool inc = false;
+    std::map<long long, void *> twin;
+    std::map<long long, std::vector<double>> trows;
+    std::map<long long, std::vector<std::pair<long long, long long>>> tkey;
+    const double *rb = nullptr;                     // (the note's rows: row r at rb + NC (r - roff))
+    long long roff = 0;
+    const double *RB(long long r) const { return rb + nv::reg::NC * (r - roff); }
+
+    void init(void *song_, const NoteClass *const *K_, const NoteIn *tmpl_, double beta_, double full_db_s_,
+              double residual_, double scale_, long long blk_, int with_register_)
+    {
+        song = song_; K = K_; tmpl = tmpl_; beta = beta_; full_db_s = full_db_s_; residual = residual_;
+        scale = scale_; blk = blk_; with_register = with_register_;
+        sr = tmpl->sr; total = nv_song_total(song); LN10_20 = log(10.0) / 20.0;
+        nn = nv_song_n_notes(song);
+        const char *incv = getenv("TUNING_NV_REG_INC");
+        inc = incv && *incv && strcmp(incv, "0") != 0;
     }
-    if (n <= 128) {
-        double r[8];
-        for (int j = 0; j < 8; j++)
-            r[j] = a[j];
-        long i = 8;
-        for (; i < n - (n % 8); i += 8)
-            for (int j = 0; j < 8; j++)
-                r[j] += a[i + j];
-        double res = ((r[0] + r[1]) + (r[2] + r[3])) + ((r[4] + r[5]) + (r[6] + r[7]));
-        for (; i < n; i++)
-            res += a[i];
-        return res;
+    void reset()
+    {
+        for (auto &kv : chans)
+            nv_reg_free(kv.second.first);
+        for (auto &kv : twin)
+            nv_reg_free(kv.second);
+        order.clear(); chans.clear(); tones.clear(); sym_order.clear(); sym_k.clear();
+        twin.clear(); trows.clear(); tkey.clear();
     }
-    long n2 = n / 2;
-    n2 -= n2 % 8;
-    return sym_pairwise(a, n2) + sym_pairwise(a + n2, n - n2);
-}
-// np.sum of a contiguous row: the identity, then each 8192's pairwise sum
-double sym_npsum(const double *a, long n)
-{
-    double r = 0.0;
-    for (long i = 0; i < n; i += 8192)
-        r += sym_pairwise(a + i, std::min(8192L, n - i));
-    return r;
-}
-}  // namespace
+    void twin_take(long long rk)
+    {
+        using namespace nv::reg;
+        void *t = twin[rk];
+        long need = -nv_reg_take(t, nullptr, 0);
+        if (need <= 0)
+            return;
+        std::vector<double> o((size_t)NC * need);
+        std::vector<long long> ph(need), sq(need);
+        nv_reg_take_ready(t, o.data(), need, ph.data(), sq.data());
+        trows[rk].insert(trows[rk].end(), o.begin(), o.end());
+        for (long q = 0; q < need; q++)
+            tkey[rk].push_back(std::make_pair(ph[q], sq[q]));
+    }
+    // note j (the song's note i): its own rows r0..r1
+    long long note(int j, int i, const double *rb_, long long roff_, long long r0, long long r1)
+    {
+        using namespace nv::reg;
+        rb = rb_;
+        roff = roff_;
+    long long ch;
+    int iv[4];
+    double dv[2];
+    nv_song_get_note(song, i, &ch, iv, dv);
+    if (inc)                            // (a stream's horizon: this note's onset, int(on * SR))
+        for (long long rk : order) {
+            nv_reg_advance(twin[rk], reg_safe(twin[rk], (double)(long long)(dv[0] * sr)));
+            twin_take(rk);
+        }
+    std::vector<int> &tl = tones[ch];
+    const int tk = nv_song_tone(song, i);
+    size_t ti = std::find(tl.begin(), tl.end(), tk) - tl.begin();
+    if (ti == tl.size())
+        tl.push_back(tk);
+    long long mix = ch + (ti ? 256LL * (long long)(ti % 256) : 0LL);
+    const NoteClass *k = K[nv_song_kidx(song, i)];
+    if (k->sym_kind && !sym_k.count(mix)) {
+        sym_k[mix] = k;
+        sym_order.push_back(mix);
+    }
+    if (!with_register || !(k->reg_gain != 0.0 || k->reg_knock != 0.0))
+        return 0;           // (blockrender.REGISTER off: live's templates)
+    long long rk = mix;
+    while (chans.count(rk) && chans[rk].second != k)
+        rk += 100000;
+    if (!chans.count(rk)) {
+        double pl[6];
+        nv_song_pitch_level_k(song, i, k->init.effort_tilt != 0.0, k->indian, pl);
+        double tab[128];
+        nv_song_note_table(song, ch, dv[0], k->indian, tab);
+        VoiceInit c = k->init;
+        double det = 1.0;
+        int c1;
+        if (k->detune_wheel && nv_song_first_cc(song, ch, 1, &c1))
+            det = c1 / 64.0;
+        c.detune_lo = k->detune_lo * det;
+        c.detune_hi = k->detune_hi * det;
+        c.fixed_touch = tmpl->fixed_touch;
+        std::vector<StringMode> modes(88 * 4 * 130), tmp(88 * 4 * 130);
+        const OrganSpec *cog = k->organ && k->organ->n_choir ? k->organ : nullptr;   // (a harpsichord's choirs)
+        int M = nv_strings_og(&c, &k->tmpl, cog, tab, pl[2], pl[3], sr, modes.data(), tmp.data(),
+                              (int)modes.size());
+        if (M < 0)
+            return -1000000000LL;
+        int npv = nv_song_pedal_values(song, ch, nullptr, nullptr, 0);
+        bool half = k->damper_pedal && npv > 0;
+        std::vector<double> ped;
+        if (k->damper_pedal && !half) {
+            int np = nv_song_ped_spans(song, ch, nullptr, 0);
+            ped.resize(2 * np + 2);
+            nv_song_ped_spans(song, ch, ped.data(), np);
+            ped.resize(2 * np);
+        }
+        void *h = nv_reg_new(rk, modes.data(), M, k->reg_gain * scale, k->reg_knock * scale, k->reg_fall,
+                             k->reg_floor, k->reg_release * sr, k->damper_top, sr, blk, ped.data(),
+                             (int)ped.size() / 2, half);
+        if (cog) {
+            std::vector<long> cbr(cog->choir_bridge, cog->choir_bridge + cog->n_choir);
+            nv_reg_choirs(h, cog->n_choir, cbr.data(), cog->cross, cog->n_buff, &cog->buff[0][0]);
+        }
+        if (k->reg_keyed)               // (a dulcimer's bridges, partners and knock)
+            nv_reg_keys(h, k->reg_kb, k->reg_cross, k->reg_partner, k->reg_partner_k, k->reg_ktilt,
+                        k->reg_nkp, k->reg_kp_x, k->reg_kp_db);
+        if (half) {
+            std::vector<double> pt(npv);
+            std::vector<int> pv(npv);
+            nv_song_pedal_values(song, ch, pt.data(), pv.data(), npv);
+            // the felt's weight per mode: (max(f, 1e-6) / the key's f0) ** BETA
+            std::vector<double> dw(M);
+            for (int q = 0; q < M; q++) {
+                double f0 = 440.0 * pow(2.0, ((double)modes[q].key - 69.0) / 12.0);
+                dw[q] = pow(pymax(modes[q].f, 1e-6) / f0, beta);
+            }
+            std::set<int> bank;
+            for (int q = 0; q < M; q++)
+                bank.insert((int)modes[q].key);
+            for (int key = 0; key < 128; key++) {
+                // _pedal_spans_of: free while the key's contact is under 1
+                std::vector<double> sp;
+                bool on = false;
+                double a = 0.0;
+                for (int q = 0; q < npv; q++) {
+                    bool fr = nv_damper_contact(pv[q], key, k->damper_top) < 1.0;
+                    if (fr && !on) {
+                        a = pt[q];
+                        on = true;
+                    } else if (!fr && on) {
+                        sp.push_back(a);
+                        sp.push_back(pt[q]);
+                        on = false;
+                    }
+                }
+                if (on) {
+                    sp.push_back(a);
+                    sp.push_back(pymax(total, a));
+                }
+                // _pedal_damping_of: the residual felt under the band, per move
+                std::vector<double> bk, rate;
+                if (bank.count(key)) {
+                    bool anyr = false;
+                    for (int q = 0; q < npv; q++) {
+                        double cn = nv_damper_contact(pv[q], key, k->damper_top);
+                        double r_ = cn < 1.0 ? full_db_s * cn * residual * LN10_20 : 0.0;
+                        rate.push_back(r_);
+                        bk.push_back(pt[q] * sr);
+                        if (r_ != 0.0)
+                            anyr = true;
+                    }
+                    if (!anyr) {
+                        bk.clear();
+                        rate.clear();
+                    }
+                }
+                nv_reg_key_pedal(h, key, sp.data(), (int)sp.size() / 2, bk.data(), rate.data(), (int)rate.size(),
+                                 dw.data());
+            }
+            nv_reg_felt_done(h);
+        }
+        chans[rk] = std::make_pair(h, k);
+        order.push_back(rk);
+        if (inc)
+            twin[rk] = nv_reg_copy(h);
+    }
+    double held = dv[1], so;
+    if (nv_song_sost(song, ch, iv[0], dv[0], &so))
+        held = pymax(dv[1], so);
+    if (k->organ && k->organ->n_choir) {
+        // A PLUCK (blockrender's register_open plucked, grc): the ranks
+        // drawn at the key-down, each on its choir's string; only their
+        // rows drive the bridge
+        const OrganSpec *og = k->organ;
+        NoteIn on_;
+        memset(&on_, 0, sizeof on_);
+        on_.on = dv[0]; on_.key_off = dv[1]; on_.br = -1.0;
+        if (!nv_song_organ_note(song, i, og->family, &on_))
+            return -1000000000LL;
+        std::vector<int> pk;
+        std::map<long, long> grc;
+        for (int ri = 0; ri < og->n_rank; ri++)
+            if (!std::isnan(on_.rank_sp[ri]) && on_.rank_sp[ri] == dv[0]) {
+                if (og->rank_choir[ri] < 0)
+                    return -1000000000LL;
+                pk.push_back(og->rank_choir[ri]);
+                grc[(long)on_.rank_gr[ri]] = og->rank_choir[ri];
+            }
+        std::sort(pk.begin(), pk.end());
+        pk.erase(std::unique(pk.begin(), pk.end()), pk.end());
+        std::vector<double> kept;
+        std::vector<long> rch;
+        for (long long r = r0; r < r1; r++) {
+            auto it = grc.find((long)RB(r)[C_gr]);
+            if (it == grc.end())
+                continue;
+            kept.insert(kept.end(), RB(r), RB(r) + NC);
+            rch.push_back(it->second);
+        }
+        nv_reg_pluck(chans[rk].first, iv[0], dv[0], held, kept.data(), (int)rch.size(), pk.data(), (int)pk.size(),
+                     rch.data());
+        if (inc)
+            nv_reg_pluck(twin[rk], iv[0], dv[0], held, kept.data(), (int)rch.size(), pk.data(), (int)pk.size(),
+                         rch.data());
+    } else {
+        nv_reg_strike(chans[rk].first, iv[0], dv[0], held, RB(r0), (int)(r1 - r0));
+        if (inc)
+            nv_reg_strike(twin[rk], iv[0], dv[0], held, RB(r0), (int)(r1 - r0));
+    }
+        return 0;
+    }
+};
+
+// A STREAM's REGISTER SINK (nvrender's): a channel's ready rows (its place
+// in `order`, each row's phase and seq) and the horizon after each note
+struct RegSinkDesc {
+    void *ctx;
+    void (*rows)(void *ctx, int rank, const double *rows, const long long *phase, const long long *seq, long n);
+    void (*horizon)(void *ctx, double h);
+};
+static const RegSinkDesc *g_reg_sink = nullptr;
+extern "C" void nv_play_set_reg_sink(const void *s) { g_reg_sink = (const RegSinkDesc *)s; }
+// the feed's settings, kept from a stream's scan for its replay
+static double g_rp_beta, g_rp_full, g_rp_resid, g_rp_scale;
+static int g_rp_reg = 0;
+
+// A STREAM's SINK, WRAPPED: each note's rows cast and fed, every channel
+// advanced to the next onset (int(on * SR): streamrender's), its final rows
+// handed on, the horizon with them; then the note's rows to the stream
+struct RegSink {
+    const SinkDesc *ext = nullptr;
+    RegFeed F;
+    const int *played = nullptr, *kind = nullptr;
+    int j = 0;
+    long long fail = 0;
+    std::vector<double> buf;
+    static void note(void *c_, const double *at, long long i0, long long i1, double next_on)
+    {
+        using namespace nv::reg;
+        RegSink &w = *(RegSink *)c_;
+        int j = w.j++;
+        if (!w.fail) {
+            w.buf.assign(at, at + NC * (i1 - i0));
+            for (long long r = 0; r < i1 - i0; r++)
+                for (int c = 0; c < NC; c++)
+                    if (w.kind[c] == 1)
+                        w.buf[NC * r + c] = (double)(float)w.buf[NC * r + c];
+                    else if (w.kind[c] == 2)
+                        w.buf[NC * r + c] = (double)(int32_t)w.buf[NC * r + c];
+            long long rc = w.F.note(j, w.played[j], w.buf.data(), i0, i0, nv_play_own_end(j, i1));
+            if (rc < 0)
+                w.fail = rc;
+        }
+        if (!w.fail) {
+            const double T = std::isnan(next_on) ? INF : (double)(long long)(next_on * w.F.sr);
+            double hz = T;
+            for (size_t q = 0; q < w.F.order.size(); q++) {
+                void *h = w.F.chans[w.F.order[q]].first;
+                nv_reg_advance(h, reg_safe(h, T));      // (streamrender._register's safe horizon)
+                long need = -nv_reg_take(h, nullptr, 0);
+                if (need > 0) {
+                    std::vector<double> o((size_t)NC * need);
+                    std::vector<long long> ph(need), sq(need);
+                    nv_reg_take_ready(h, o.data(), need, ph.data(), sq.data());
+                    for (long r = 0; r < need; r++)
+                        for (int c = 0; c < NC; c++)
+                            if (w.kind[c] == 1)
+                                o[NC * r + c] = (double)(float)o[NC * r + c];
+                            else if (w.kind[c] == 2)
+                                o[NC * r + c] = (double)(int32_t)o[NC * r + c];
+                    g_reg_sink->rows(g_reg_sink->ctx, (int)q, o.data(), ph.data(), sq.data(), need);
+                }
+                hz = pymin(hz, nv_reg_pending_min(h));
+            }
+            g_reg_sink->horizon(g_reg_sink->ctx, hz);
+        }
+        w.ext->note(w.ext->ctx, at, i0, i1, next_on);
+    }
+};
 
 long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                        PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind,
@@ -1076,6 +1435,31 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
     g_need = 0;
     double *rows = nullptr;
     int got;
+    // TUNING_NV_SINK_TEST=1: the notes through the sink, the store one note's
+    // (ROWS_PER_NOTE x 64 to begin), the table rebuilt from what it was handed
+    const char *stv = getenv("TUNING_NV_SINK_TEST");
+    bool sink_test = stv && *stv && strcmp(stv, "0") != 0;
+    if (sink_test) {
+        cap = (rpn && atoll(rpn) > 0 ? atoll(rpn) : ROWS_PER_NOTE) * 64LL;
+        g_cap0 = cap;
+    }
+    Collect col;
+    SinkDesc sd{&col, &Collect::note};
+    const void *ext = nv_play_get_sink();   // (a stream's: kept across the sink test's own)
+    if (ext) {
+        sink_test = false;
+        cap = (rpn && atoll(rpn) > 0 ? atoll(rpn) : ROWS_PER_NOTE) * 64LL;    // (its store: a note's)
+        g_cap0 = cap;
+    }
+    RegSink rsk;                            // (a stream's sink, its register fed as it goes)
+    SinkDesc rsd{&rsk, &RegSink::note};
+    const bool reg_stream = ext && g_reg_sink && with_register;
+    if (reg_stream) {
+        rsk.ext = (const SinkDesc *)ext;
+        rsk.kind = kind;
+        rsk.F.init(song, K, tmpl, beta, full_db_s, residual, scale, blk, with_register);
+        g_rp_beta = beta; g_rp_full = full_db_s; g_rp_resid = residual; g_rp_scale = scale; g_rp_reg = with_register;
+    }
     for (;;) {
         free(rows);
         rows = (double *)malloc(sizeof(double) * NC * cap);
@@ -1084,16 +1468,38 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         *rs = rs0;
         memcpy(qacc, q0, sizeof q0);
         *azimuth = az0;
+        free(col.rows);
+        col = Collect();
         nv_play_set_kind(kind);             // (a parallel type's copies, cast as the table)
+        if (reg_stream) {                   // (each try from the start: its channels anew)
+            rsk.F.reset();
+            rsk.j = 0;
+            rsk.fail = 0;
+            rsk.played = played.data();
+        }
+        nv_play_set_sink(sink_test ? (const void *)&sd : reg_stream ? (const void *)&rsd : ext);
         got = nv_play(song, K, tmpl, br, nbr, rs, rows, cap, qacc, azimuth, &nr, played.data(), row0.data(),
                       band_.data(), off_.data());
+        nv_play_set_sink(ext);
         nv_play_set_kind(nullptr);
         if (got != NV_TOO_SMALL)
             break;
         cap *= 2;
     }
+    if (sink_test) {
+        free(rows);
+        if (col.fail || (got >= 0 && col.n != nr)) {
+            fprintf(stderr, "nv_play_full: the sink test's rows came out wrong (%lld of %lld)\n", col.n, nr);
+            free(col.rows);
+            return -1000000000LL;
+        }
+        rows = col.rows ? col.rows : (double *)malloc(sizeof(double) * NC);
+        col.rows = nullptr;
+    }
     if (cap != g_cap0 && got >= 0)
         g_need = nr;                        // (it grew: the rows the song needed)
+    if (sink_test)
+        cap = col.cap > 0 ? col.cap : 1;    // (the table's room, not the store's: the strings come after)
     *rowsp = rows;
     if (got < 0)
         return got;
@@ -1106,6 +1512,26 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
             bands[j] = band_[j];
             offs[j] = off_[j];
         }
+    if (ext) {
+        // A STREAM: every note's rows went to its sink, so nothing below has a
+        // table to read. The strings that would need one are refused.
+        for (int j = 0; j < nn; j++) {
+            const NoteClass *k = K[nv_song_kidx(song, played[j])];
+            if (with_register && (k->reg_gain != 0.0 || k->reg_knock != 0.0) && !reg_stream)
+                nv_stream_refuse("the register's strings");
+            if (k->sym_kind)
+                nv_stream_refuse("sympathetic strings");
+        }
+        if (rsk.fail)
+            return rsk.fail;
+        g_rp_rs = rs0;                      // (the replay's start, and the store that fit)
+        memcpy(g_rp_q, q0, sizeof g_rp_q);
+        g_rp_az = az0;
+        g_rp_cap = cap;
+        if (nsym)
+            *nsym = 0;
+        return nr;
+    }
     auto cast = [&](double *r) {
         for (int c = 0; c < NC; c++)
             if (kind[c] == 1)
@@ -1117,176 +1543,22 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         cast(rows + NC * r);
     const double sr = tmpl->sr, total = nv_song_total(song);
     const double LN10_20 = log(10.0) / 20.0;
-    std::vector<long long> order;                    // the channels, as made
-    std::map<long long, std::pair<void *, const NoteClass *>> chans;
-    // EACH TONE ITS OWN MIX CHANNEL (the note loop's em.channel, gsefx.TONE_SEG):
-    // a channel's first program keeps the channel, each other one heard on it
-    // -- in the note loop's order, every note counted -- is ch + 256 x its
-    // place. A register channel is keyed by it, as _note_register keys
-    // _REG_CH, and its strings' phases hash that key.
-    std::map<long long, std::vector<int>> tones;
-    // THE NOTES NOBODY HIT (_SYM_CH): each mix channel's first note whose
-    // class has sympathetic strings, in the notes' order
-    std::vector<long long> sym_order;
-    std::map<long long, const NoteClass *> sym_k;
+    RegFeed F_;
+    F_.init(song, K, tmpl, beta, full_db_s, residual, scale, blk, with_register);
     for (int j = 0; j < nn; j++) {
-        int i = played[j];
-        long long ch;
-        int iv[4];
-        double dv[2];
-        nv_song_get_note(song, i, &ch, iv, dv);
-        std::vector<int> &tl = tones[ch];
-        const int tk = nv_song_tone(song, i);
-        size_t ti = std::find(tl.begin(), tl.end(), tk) - tl.begin();
-        if (ti == tl.size())
-            tl.push_back(tk);
-        long long mix = ch + (ti ? 256LL * (long long)(ti % 256) : 0LL);
-        const NoteClass *k = K[nv_song_kidx(song, i)];
-        if (k->sym_kind && !sym_k.count(mix)) {
-            sym_k[mix] = k;
-            sym_order.push_back(mix);
-        }
-        if (!with_register || !(k->reg_gain != 0.0 || k->reg_knock != 0.0))
-            continue;           // (blockrender.REGISTER off: live's templates)
-        long long rk = mix;
-        while (chans.count(rk) && chans[rk].second != k)
-            rk += 100000;
-        if (!chans.count(rk)) {
-            double pl[6];
-            nv_song_pitch_level_k(song, i, k->init.effort_tilt != 0.0, k->indian, pl);
-            double tab[128];
-            nv_song_note_table(song, ch, dv[0], k->indian, tab);
-            VoiceInit c = k->init;
-            double det = 1.0;
-            int c1;
-            if (k->detune_wheel && nv_song_first_cc(song, ch, 1, &c1))
-                det = c1 / 64.0;
-            c.detune_lo = k->detune_lo * det;
-            c.detune_hi = k->detune_hi * det;
-            c.fixed_touch = tmpl->fixed_touch;
-            std::vector<StringMode> modes(88 * 4 * 130), tmp(88 * 4 * 130);
-            const OrganSpec *cog = k->organ && k->organ->n_choir ? k->organ : nullptr;   // (a harpsichord's choirs)
-            int M = nv_strings_og(&c, &k->tmpl, cog, tab, pl[2], pl[3], sr, modes.data(), tmp.data(),
-                                  (int)modes.size());
-            if (M < 0)
-                return -1000000000LL;
-            int npv = nv_song_pedal_values(song, ch, nullptr, nullptr, 0);
-            bool half = k->damper_pedal && npv > 0;
-            std::vector<double> ped;
-            if (k->damper_pedal && !half) {
-                int np = nv_song_ped_spans(song, ch, nullptr, 0);
-                ped.resize(2 * np + 2);
-                nv_song_ped_spans(song, ch, ped.data(), np);
-                ped.resize(2 * np);
-            }
-            void *h = nv_reg_new(rk, modes.data(), M, k->reg_gain * scale, k->reg_knock * scale, k->reg_fall,
-                                 k->reg_floor, k->reg_release * sr, k->damper_top, sr, blk, ped.data(),
-                                 (int)ped.size() / 2, half);
-            if (cog) {
-                std::vector<long> cbr(cog->choir_bridge, cog->choir_bridge + cog->n_choir);
-                nv_reg_choirs(h, cog->n_choir, cbr.data(), cog->cross, cog->n_buff, &cog->buff[0][0]);
-            }
-            if (k->reg_keyed)               // (a dulcimer's bridges, partners and knock)
-                nv_reg_keys(h, k->reg_kb, k->reg_cross, k->reg_partner, k->reg_partner_k, k->reg_ktilt,
-                            k->reg_nkp, k->reg_kp_x, k->reg_kp_db);
-            if (half) {
-                std::vector<double> pt(npv);
-                std::vector<int> pv(npv);
-                nv_song_pedal_values(song, ch, pt.data(), pv.data(), npv);
-                // the felt's weight per mode: (max(f, 1e-6) / the key's f0) ** BETA
-                std::vector<double> dw(M);
-                for (int q = 0; q < M; q++) {
-                    double f0 = 440.0 * pow(2.0, ((double)modes[q].key - 69.0) / 12.0);
-                    dw[q] = pow(pymax(modes[q].f, 1e-6) / f0, beta);
-                }
-                std::set<int> bank;
-                for (int q = 0; q < M; q++)
-                    bank.insert((int)modes[q].key);
-                for (int key = 0; key < 128; key++) {
-                    // _pedal_spans_of: free while the key's contact is under 1
-                    std::vector<double> sp;
-                    bool on = false;
-                    double a = 0.0;
-                    for (int q = 0; q < npv; q++) {
-                        bool fr = nv_damper_contact(pv[q], key, k->damper_top) < 1.0;
-                        if (fr && !on) {
-                            a = pt[q];
-                            on = true;
-                        } else if (!fr && on) {
-                            sp.push_back(a);
-                            sp.push_back(pt[q]);
-                            on = false;
-                        }
-                    }
-                    if (on) {
-                        sp.push_back(a);
-                        sp.push_back(pymax(total, a));
-                    }
-                    // _pedal_damping_of: the residual felt under the band, per move
-                    std::vector<double> bk, rate;
-                    if (bank.count(key)) {
-                        bool anyr = false;
-                        for (int q = 0; q < npv; q++) {
-                            double cn = nv_damper_contact(pv[q], key, k->damper_top);
-                            double r_ = cn < 1.0 ? full_db_s * cn * residual * LN10_20 : 0.0;
-                            rate.push_back(r_);
-                            bk.push_back(pt[q] * sr);
-                            if (r_ != 0.0)
-                                anyr = true;
-                        }
-                        if (!anyr) {
-                            bk.clear();
-                            rate.clear();
-                        }
-                    }
-                    nv_reg_key_pedal(h, key, sp.data(), (int)sp.size() / 2, bk.data(), rate.data(), (int)rate.size(),
-                                     dw.data());
-                }
-                nv_reg_felt_done(h);
-            }
-            chans[rk] = std::make_pair(h, k);
-            order.push_back(rk);
-        }
-        double held = dv[1], so;
-        if (nv_song_sost(song, ch, iv[0], dv[0], &so))
-            held = pymax(dv[1], so);
-        long long r0 = row0[j], r1 = nv_play_own_end(j, j + 1 < nn ? row0[j + 1] : nr);    // (its own rows)
-        if (k->organ && k->organ->n_choir) {
-            // A PLUCK (blockrender's register_open plucked, grc): the ranks
-            // drawn at the key-down, each on its choir's string; only their
-            // rows drive the bridge
-            const OrganSpec *og = k->organ;
-            NoteIn on_;
-            memset(&on_, 0, sizeof on_);
-            on_.on = dv[0]; on_.key_off = dv[1]; on_.br = -1.0;
-            if (!nv_song_organ_note(song, i, og->family, &on_))
-                return -1000000000LL;
-            std::vector<int> pk;
-            std::map<long, long> grc;
-            for (int ri = 0; ri < og->n_rank; ri++)
-                if (!std::isnan(on_.rank_sp[ri]) && on_.rank_sp[ri] == dv[0]) {
-                    if (og->rank_choir[ri] < 0)
-                        return -1000000000LL;
-                    pk.push_back(og->rank_choir[ri]);
-                    grc[(long)on_.rank_gr[ri]] = og->rank_choir[ri];
-                }
-            std::sort(pk.begin(), pk.end());
-            pk.erase(std::unique(pk.begin(), pk.end()), pk.end());
-            std::vector<double> kept;
-            std::vector<long> rch;
-            for (long long r = r0; r < r1; r++) {
-                auto it = grc.find((long)rows[NC * r + C_gr]);
-                if (it == grc.end())
-                    continue;
-                kept.insert(kept.end(), rows + NC * r, rows + NC * (r + 1));
-                rch.push_back(it->second);
-            }
-            nv_reg_pluck(chans[rk].first, iv[0], dv[0], held, kept.data(), (int)rch.size(), pk.data(), (int)pk.size(),
-                         rch.data());
-        } else {
-            nv_reg_strike(chans[rk].first, iv[0], dv[0], held, rows + NC * r0, (int)(r1 - r0));
-        }
+        long long rc_ = F_.note(j, played[j], rows, 0, row0[j], nv_play_own_end(j, j + 1 < nn ? row0[j + 1] : nr));
+        if (rc_ < 0)
+            return rc_;
     }
+    auto &order = F_.order;
+    auto &chans = F_.chans;
+    auto &sym_order = F_.sym_order;
+    auto &sym_k = F_.sym_k;
+    auto &twin = F_.twin;
+    auto &trows = F_.trows;
+    auto &tkey = F_.tkey;
+    const bool inc = F_.inc;
+    auto twin_take = [&](long long rk) { F_.twin_take(rk); };
     long long n = nr;
     // sympathetic.expand, before the register's: each channel's strikes (its
     // rows by onset, 64 samples a bin; not a late copy's or a ring row's),
@@ -1401,42 +1673,6 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
                     else
                         ratio = pow(2.0, semis / 12.0);
                     ratio *= tune;
-                    // PER MODE (sympathetic_per_mode): each kept mode's weight, its
-                    // coincidence with the strike's partials, the best at 1
-                    std::vector<double> wk;
-                    if (k->sym_per_mode) {
-                        double admax = 0.0;
-                        bool first = true;
-                        for (long long d : ix) {
-                            const double a = fabs(rows[NC * d + C_aM]);
-                            if (first || a > admax)
-                                admax = a;
-                            first = false;
-                        }
-                        if (admax == 0.0)
-                            admax = 1.0;            // (ad.max() or 1.0)
-                        std::vector<double> row(ix.size());
-                        for (long long i : ix) {
-                            const double fk = rows[NC * i + C_nf] * ratio;
-                            if (!(fk < sr * 0.5))
-                                continue;
-                            size_t t = 0;
-                            for (long long d : ix) {
-                                const double dd = (rows[NC * d + C_nf] - fk) / k->sym_bw;
-                                row[t++] = (fabs(rows[NC * d + C_aM]) / admax) / (1.0 + dd * dd);
-                            }
-                            wk.push_back(sym_npsum(row.data(), (long)row.size()));
-                        }
-                        double wmax = 0.0;
-                        for (size_t q2 = 0; q2 < wk.size(); q2++)
-                            if (q2 == 0 || wk[q2] > wmax)
-                                wmax = wk[q2];
-                        if (wmax == 0.0)
-                            wmax = 1.0;             // (wk.max() or 1.0)
-                        for (double &w : wk)
-                            w = w / wmax;
-                    }
-                    size_t n_i = 0;
                     for (long long i : ix) {
                         const double *x = rows + NC * i;
                         if (!(x[C_nf] * ratio < sr * 0.5))
@@ -1454,11 +1690,9 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
                             e[C_logr] = e[C_logrA];
                             e[C_aft] = 0.0;
                         }
-                        const double dk = k->sym_per_mode ? drive * wk[n_i] : drive;
-                        n_i++;
-                        e[C_aL] = x[C_aL] * dk;
-                        e[C_aR] = x[C_aR] * dk;
-                        e[C_aM] = x[C_aM] * dk;
+                        e[C_aL] = x[C_aL] * drive;
+                        e[C_aR] = x[C_aR] * drive;
+                        e[C_aM] = x[C_aM] * drive;
                         cast(e);
                     }
                 }
@@ -1480,6 +1714,38 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         if (nsym)
             *nsym = m;
     }
+    if (inc) {
+        long bad = 0, all = 0;
+        for (long long rk : order) {
+            void *h = chans[rk].first;
+            nv_reg_finish(twin[rk]);
+            twin_take(rk);
+            nv_reg_free(twin[rk]);
+            nv_reg_finish(h);               // (the whole render's: finish is advance(INF), again harmless)
+            long need = -nv_reg_take(h, nullptr, 0);
+            std::vector<double> w((size_t)NC * (need > 0 ? need : 0));
+            if (need > 0)
+                nv_reg_take(h, w.data(), need);
+            std::vector<long> ix(tkey[rk].size());
+            for (size_t q = 0; q < ix.size(); q++)
+                ix[q] = (long)q;
+            std::stable_sort(ix.begin(), ix.end(), [&](long a, long b) { return tkey[rk][a] < tkey[rk][b]; });
+            long n_ = (long)ix.size(), first = -1;
+            if (n_ != (need > 0 ? need : 0))
+                first = 0;
+            for (long q = 0; first < 0 && q < n_; q++)
+                if (memcmp(&trows[rk][(size_t)NC * ix[q]], &w[(size_t)NC * q], sizeof(double) * NC) != 0)
+                    first = q;
+            all += need > 0 ? need : 0;
+            if (first >= 0) {
+                bad++;
+                fprintf(stderr, "reg inc: channel %lld: DIFFERS (%ld rows taken as it went, %ld whole; first at %ld)\n",
+                        rk, n_, need, first);
+            }
+        }
+        fprintf(stderr, "reg inc: %zu channel(s), %ld rows: %s\n", order.size(), all,
+                bad ? "DIFFER" : "identical taken as it went");
+    }
     for (long long rk : order) {
         void *h = chans[rk].first;
         nv_reg_finish(h);
@@ -1499,6 +1765,47 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
         n += got2;
     }
     return n;
+}
+
+// A STREAM's RENDER PASS: the notes played again, from the state the last
+// nv_play_full (a stream's) began at, into the sink set now -- the same rows,
+// in the same order. Returns the rows, or < 0 as nv_play.
+long long nv_play_replay(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
+                         PyRandom *rs, double *qacc, double *azimuth, const int *kind, long long blk)
+{
+    NoteIn tb_ = *tmpl;
+    tb_.blk = (double)blk;
+    int nn = nv_song_n_notes(song);
+    std::vector<int> played(nn);
+    std::vector<long long> row0(nn);
+    std::vector<int> band_(nn);
+    std::vector<double> off_(nn);
+    double *rows = (double *)malloc(sizeof(double) * nv::reg::NC * (g_rp_cap > 0 ? g_rp_cap : 1));
+    if (!rows)
+        return -1000000000LL;
+    *rs = g_rp_rs;
+    memcpy(qacc, g_rp_q, sizeof g_rp_q);
+    *azimuth = g_rp_az;
+    long long nr = 0;
+    const void *ext = nv_play_get_sink();
+    RegSink rsk;
+    SinkDesc rsd{&rsk, &RegSink::note};
+    if (ext && g_reg_sink && g_rp_reg) {
+        rsk.ext = (const SinkDesc *)ext;
+        rsk.kind = kind;
+        rsk.played = played.data();
+        rsk.F.init(song, K, &tb_, g_rp_beta, g_rp_full, g_rp_resid, g_rp_scale, blk, g_rp_reg);
+        nv_play_set_sink(&rsd);
+    }
+    nv_play_set_kind(kind);
+    int got = nv_play(song, K, &tb_, br, nbr, rs, rows, g_rp_cap, qacc, azimuth, &nr, played.data(), row0.data(),
+                      band_.data(), off_.data());
+    nv_play_set_kind(nullptr);
+    nv_play_set_sink(ext);
+    if (got >= 0 && rsk.fail)
+        got = (int)rsk.fail;
+    free(rows);
+    return got < 0 ? got : nr;
 }
 
 }  // extern "C"

@@ -392,6 +392,29 @@ void nv_livebus_process(void *h, const float *L, const float *R, double gain, fl
     }
 }
 
+// A FILE's BUS, STREAMED (nvrender --stream): its processor (kind, p in
+// NoteClass.bus_p's layout: p[0..4], Lo-Fi 2's record from p[5]) on windows of
+// the part's signal at the output's scale, its state carried -- the raw output
+// (bus_process's y), any length a call; NULL for the reverbs
+void *nv_livebus_raw_new(int kind, const double *p, double sr)
+{
+    std::vector<double> fc(203, 0.0);
+    fc[25] = kind;
+    for (int i = 0; i < 5; i++)
+        fc[26 + i] = p[i];
+    if (kind == 6)
+        for (int i = 0; i < 27; i++)
+            fc[176 + i] = p[5 + i];
+    fc[33] = 1.0;
+    return nv_livebus_new(fc.data(), sr, 1, nullptr, nullptr, nullptr);
+}
+void nv_livebus_raw(void *h, const float *x0, const float *x1, long n, float *y0, float *y1)
+{
+    Bus *b = (Bus *)h;
+    b->frames = (int)n;
+    b->process_raw(x0, x1, 1.0f, y0, y1);
+}
+
 void nv_livebus_free(void *h)
 {
     Bus *b = (Bus *)h;

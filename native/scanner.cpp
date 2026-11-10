@@ -1,3 +1,4 @@
+#include <array>
 // scanner.cpp -- THE HAMMOND SCANNER (scanner.py) for a file render: each
 // scanned channel's band rows (rows: the moving delay as a bend row a band,
 // on the motor's clock from 0), and the pass over the finished table
@@ -350,6 +351,127 @@ void nv_scan_prep(const double *X, long n, const float *nf, const float *aL, con
     std::copy(so.begin(), so.end(), *src);
     std::copy(mo.begin(), mo.end(), *mm);
     std::copy(co.begin(), co.end(), *cc);
+}
+
+// THE SCANNER, ONE ROW (nv_scan_expand's body, a stream's): r on its band (no
+// chorus) or its dry share (chorus); its copies into cp -- the scanned copy
+// (chorus: *nch 1) then tier B's (*nsd, strongest first) -- from the row as it
+// was; nmax its note's loudest (note_peaks); row0 the channel's band rows
+void *nv_scan_new(const double *X)
+{
+    struct H {
+        Scan *S;
+        Rev R;
+        std::map<std::array<int, 3>, double> mdl;
+    };
+    H *h = new H;
+    h->S = &scan_of(X);
+    h->R = make_rev(*h->S);
+    return h;
+}
+void nv_scan_row(void *hv, double *r, int depth, int chorus, int row0, double nmax, double sr, double *cp, int *nch,
+                 int *nsd)
+{
+    enum { cOM = 0, cP0 = 1, cP0R = 2, cAL = 3, cAR = 4, cAM = 5, cNF = 11, cBR = 41 };
+    struct H {
+        Scan *S;
+        Rev R;
+        std::map<std::array<int, 3>, double> mdl;
+    };
+    H &h = *(H *)hv;
+    Scan &S = *h.S;
+    const Rev &R = h.R;
+    std::vector<double> Pr(256), Pi(256);
+    const double f = r[cNF];
+    const int band = band_of(S, f);
+    double dre = 0.0, dim = 0.0;
+    if (chorus) {
+        const Tab &T = S.tab[1];
+        double lf = log(std::max(f, T.fg[0]));
+        double m = interp(lf, T.lg.data(), T.rm.data(), T.n, 1);
+        double p = interp(lf, T.lg.data(), T.rp.data(), T.n, 1);
+        dre = m * cos(p);
+        dim = m * sin(p);
+    }
+    const std::array<int, 3> mk = {depth, band, chorus};
+    if (!h.mdl.count(mk))
+        h.mdl[mk] = mean_delay(S, depth, band, chorus);
+    const double mdl = h.mdl[mk];
+    double w;
+    scanned(S, R, f, depth, band, chorus, Pr.data(), Pi.data(), &w);
+    double c0r = npmean(Pr.data(), 256), c0i = npmean(Pi.data(), 256);
+    double x = (-w) * mdl, cm = cos(x), sm = sin(x);
+    const double sre = c0r * cm - c0i * sm, sim = c0r * sm + c0i * cm;
+    std::vector<double> side;
+    if (S.sidebands && sr) {
+        const double amp = std::max(fabs(r[cAL]), fabs(r[cAR]));
+        const double kside = pow(10.0, -S.side_db / 20.0), kfloor = pow(10.0, -S.floor_db / 20.0);
+        std::vector<double> z(512), F(512), Cr(256), Ci(256), mag(256);
+        double w2;
+        scanned(S, R, f, depth, band, chorus, Pr.data(), Pi.data(), &w2);
+        for (int j = 0; j < 256; j++) {
+            z[2 * j] = Pr[j];
+            z[2 * j + 1] = Pi[j];
+        }
+        nv_cfft(z.data(), 256, F.data());
+        double x2 = (-w2) * mdl, cm2 = cos(x2), sm2 = sin(x2);
+        double mx = 0.0;
+        for (int j = 0; j < 256; j++) {
+            double Fr = F[2 * j] / 256.0, Fi = F[2 * j + 1] / 256.0;
+            Cr[j] = Fr * cm2 - Fi * sm2;
+            Ci[j] = Fr * sm2 + Fi * cm2;
+            mag[j] = hypot(Cr[j], Ci[j]);
+            mx = j ? std::max(mx, mag[j]) : mag[j];
+        }
+        std::vector<int> keep;
+        for (int j = 0; j < 256; j++) {
+            int m = j < 128 ? j : j - 256;
+            if (mag[j] > mx * kside && m != 0 && amp * mag[j] >= nmax * kfloor)
+                keep.push_back(j);
+        }
+        std::stable_sort(keep.begin(), keep.end(), [&](int u, int v) { return -mag[u] < -mag[v]; });
+        if ((int)keep.size() > S.max_side)
+            keep.resize(S.max_side);
+        for (int j : keep) {
+            double mm = (double)(j < 128 ? j : j - 256);
+            size_t o = side.size();
+            side.insert(side.end(), r, r + NCOLS);
+            double *e = side.data() + o;
+            e[cOM] = e[cOM] + 2.0 * M_PI * S.hz / sr * mm;
+            e[cNF] = e[cNF] + S.hz * mm;
+            double g = hypot(Cr[j], Ci[j]), ang = atan2(Ci[j], Cr[j]);
+            for (int c : {cAL, cAR, cAM})
+                e[c] = e[c] * g;
+            e[cP0] = e[cP0] + ang;
+            e[cP0R] = e[cP0R] + ang;
+            e[cBR] = (double)(row0 + band);
+        }
+    }
+    const double gs = hypot(sre, sim), as = atan2(sim, sre);
+    *nch = 0;
+    if (!chorus) {
+        for (int c : {cAL, cAR, cAM})
+            r[c] = r[c] * gs;
+        r[cP0] = r[cP0] + as;
+        r[cP0R] = r[cP0R] + as;
+        r[cBR] = (double)(row0 + band);
+    } else {
+        double *e = cp;
+        memcpy(e, r, sizeof(double) * NCOLS);
+        for (int c : {cAL, cAR, cAM})
+            e[c] = e[c] * gs;
+        e[cP0] = e[cP0] + as;
+        e[cP0R] = e[cP0R] + as;
+        e[cBR] = (double)(row0 + band);
+        double gd = hypot(dre, dim), ad = atan2(dim, dre);
+        for (int c : {cAL, cAR, cAM})
+            r[c] = r[c] * gd;
+        r[cP0] = r[cP0] + ad;
+        r[cP0R] = r[cP0R] + ad;
+        *nch = 1;
+    }
+    memcpy(cp + (size_t)NCOLS * *nch, side.data(), sizeof(double) * side.size());
+    *nsd = (int)(side.size() / NCOLS);
 }
 
 // a band row's BC at two times (scanner.band_bc: live's _scanner_block)

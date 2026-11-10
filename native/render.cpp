@@ -185,6 +185,16 @@ void nv_render_mvol(const long long *s, const double *g, int n)
 // points a rotor): its plain rows through synth_voice_lobe (slo), each with
 // its lobe columns (lsr, and lob: lph lfl lsh lnm).
 void nv_render_post(float *L, float *R, long N, double SR, double master_gain, int clip);
+void nv_render_post_win(float *L, float *R, long n0, long N, double SR, double master_gain, int clip);
+int nv_render_win(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long P, double *const *d,
+                  float *const *f, long *const *l, int *const *ii, const float *G, const float *S, const float *BR,
+                  const double *BC, const float *BL, const float *noRows, const float *sh, long CHUNK,
+                  double xdec_nepers, double SR,
+                  double master_gain, const float *DM, const long *DMO, const long *DMB, const long *DMN, float *L,
+                  float *R, void *slo, const int *lsr, float *const *lob, const float *LANG, long lgn,
+                  const MoogCols *moog, const int *fsr, const int *fty, const float *const *fpar, const float *FCT,
+                  long fgn, const unsigned char *rowsel, int post, long n0, long wn, const long long *live,
+                  long long nlive);
 
 int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long P, double *const *d,
               float *const *f, long *const *l, int *const *ii, const float *G, const float *S, const float *BR,
@@ -195,10 +205,32 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
               const MoogCols *moog, const int *fsr, const int *fty, const float *const *fpar, const float *FCT,
               long fgn, const unsigned char *rowsel, int post)
 {
+    return nv_render_win(sv, sx, sd, N, BLK, nblk, P, d, f, l, ii, G, S, BR, BC, BL, noRows, sh, CHUNK, xdec_nepers,
+                         SR, master_gain, DM, DMO, DMB, DMN, L, R, slo, lsr, lob, LANG, lgn, moog, fsr, fty, fpar,
+                         FCT, fgn, rowsel, post, 0, N, nullptr, 0);
+}
+
+// A WINDOW of it (the streaming render's): absolute samples [n0, n0+wn) into
+// L, R (wn long, zeroed here), from the rows in `live` -- ascending row
+// numbers, the rows that can sound in the window (NULL: every row). The
+// kernel renders its own window (synth_voice's n0, winlen) and a row adds
+// nothing outside its span, so the window's samples are the whole render's.
+int nv_render_win(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long P, double *const *d,
+                  float *const *f, long *const *l, int *const *ii, const float *G, const float *S, const float *BR,
+                  const double *BC, const float *BL, const float *noRows, const float *sh, long CHUNK,
+                  double xdec_nepers, double SR,
+                  double master_gain, const float *DM, const long *DMO, const long *DMB, const long *DMN, float *L,
+                  float *R, void *slo, const int *lsr, float *const *lob, const float *LANG, long lgn,
+                  const MoogCols *moog, const int *fsr, const int *fty, const float *const *fpar, const float *FCT,
+                  long fgn, const unsigned char *rowsel, int post, long n0, long wn, const long long *live,
+                  long long nlive)
+{
+    (void)N;
     if (moog && !moog->FT)
         moog = nullptr;
-    memset(L, 0, sizeof(float) * N);
-    memset(R, 0, sizeof(float) * N);
+    memset(L, 0, sizeof(float) * wn);
+    memset(R, 0, sizeof(float) * wn);
+    const long long nr = live ? nlive : P;
     bool has_dm = DM != nullptr;
     // _xdec_rows: falling more than XDEC_NEPERS a block, no sustain, no gate,
     // not riding a row where the table has levels (BL: a fader's), and (with
@@ -216,7 +248,8 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
         return m;
     };
     std::vector<long long> plain, fast, damped;
-    for (long long r = 0; r < P; r++) {
+    for (long long k = 0; k < nr; k++) {
+        const long long r = live ? live[k] : k;
         if (rowsel && !rowsel[r])
             continue;                       // (another render's: a bus's, or the rest)
         if (has_dm && ii[I_dk][r] >= 0)
@@ -269,7 +302,7 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                 for (int q = 0; q < 4; q++)
                     g.lob[q][k] = lob[q][rows[k]];
             }
-            ((lobe_fn)slo)(L, R, 0, N, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR),
+            ((lobe_fn)slo)(L, R, n0, wn, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR),
                            F(F_nf), g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA),
                            F(F_aft), F(F_sus), F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav),
                            F(F_tau), F(F_tcut), F(F_gb), F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl),
@@ -281,7 +314,7 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                            FCT ? gfp[1].data() : nullptr, FCT ? gfp[2].data() : nullptr, FCT, FCT ? fgn : 0, CHUNK,
                            nullptr, nullptr, nullptr);
         } else if (!damp)
-            fn(L, R, 0, N, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR), F(F_nf),
+            fn(L, R, n0, wn, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR), F(F_nf),
                g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA), F(F_aft), F(F_sus),
                F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav), F(F_tau), F(F_tcut), F(F_gb),
                F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl), F(F_delL), F(F_delR), g.i[I_gr].data(),
@@ -289,7 +322,7 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
                nullptr, mmk, mMPI, mMPC, mMPR, mMKI, mMPK, mw, mp, mpR, sh[0], sh[1],
                sh[2], sh[3], CHUNK, nullptr, nullptr, nullptr);
         else
-            dfn(L, R, 0, N, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR), F(F_nf),
+            dfn(L, R, n0, wn, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR), F(F_nf),
                 g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA), F(F_aft), F(F_sus),
                 F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav), F(F_tau), F(F_tcut), F(F_gb),
                 F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp), F(F_vdl), F(F_delL), F(F_delR), g.i[I_gr].data(),
@@ -304,22 +337,30 @@ int nv_render(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long long
         call(nullptr, (damp_fn)sd, damped, true);
     } else if (!fast.empty()) {
         std::vector<long long> keep;
-        for (long long r = 0; r < P; r++)
+        for (long long k = 0; k < nr; k++) {
+            const long long r = live ? live[k] : k;
             if ((!rowsel || rowsel[r]) && !xdec(r))
                 keep.push_back(r);
+        }
         call((voice_fn)sv, nullptr, keep, false);
         call((voice_fn)sx, nullptr, fast, false);
     } else {
         call((voice_fn)sv, nullptr, plain, false);
     }
     if (post)
-        nv_render_post(L, R, N, SR, master_gain, 1);
+        nv_render_post_win(L, R, n0, wn, SR, master_gain, 1);
     return 0;
 }
 
 // the render's last: THE MASTER VOLUME, the master gain (float32) and, clip
 // set, the clip -- nv_render's own, or after a bus's part is added
 void nv_render_post(float *L, float *R, long N, double SR, double master_gain, int clip)
+{
+    nv_render_post_win(L, R, 0, N, SR, master_gain, clip);
+}
+
+// ...of a window: L, R hold absolute samples [n0, n0+N)
+void nv_render_post_win(float *L, float *R, long n0, long N, double SR, double master_gain, int clip)
 {
     // THE MASTER VOLUME (master_curve: each step ramped from the gain before it
     // over MASTER_RAMP_S, 5 ms -- int(0.005 SR) samples, float32), first
@@ -328,12 +369,12 @@ void nv_render_post(float *L, float *R, long N, double SR, double master_gain, i
         std::vector<float> mg(N, 1.0f);
         double prev = 1.0;
         for (auto &st : g_mvol) {
-            if (st.first >= N)
+            if (st.first >= n0 + N)
                 break;
-            for (long k = st.first > 0 ? (long)st.first : 0; k < N; k++) {
+            for (long k = std::max(st.first > 0 ? (long)st.first : 0L, n0); k < n0 + N; k++) {
                 double fr = (double)(k - st.first) / (double)ramp;
                 fr = fr < 0.0 ? 0.0 : (fr > 1.0 ? 1.0 : fr);
-                mg[k] = (float)(prev + (st.second - prev) * fr);
+                mg[k - n0] = (float)(prev + (st.second - prev) * fr);
             }
             prev = st.second;
         }

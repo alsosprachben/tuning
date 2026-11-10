@@ -597,7 +597,10 @@ class Stream:
 
     def _register(self, T):
         for rank, (ch, C) in enumerate(self.reg.items()):
-            C.advance(T)
+            # (to a SAFE horizon: a pluck's hold starts at its partials' block,
+            # up to a block before its onset -- a note to come may free a
+            # string at a release before T; the end's inf as it is)
+            C.advance(T if T == float('inf') else (T // C.blk) * C.blk - C.blk)
             got = C.take()
             if got is None:
                 continue
