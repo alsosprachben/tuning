@@ -1013,6 +1013,43 @@ void nv_play_growth(long long *cap0, long long *need)
 extern "C" void nv_play_set_kind(const int *kind);
 extern "C" long long nv_play_own_end(int j, long long dflt);
 
+namespace {
+// numpy's pairwise sum (DOUBLE_pairwise_sum, PW_BLOCKSIZE 128), stride 1 -- tubeamp.cpp's
+double sym_pairwise(const double *a, long n)
+{
+    if (n < 8) {
+        double r = 0.0;
+        for (long i = 0; i < n; i++)
+            r += a[i];
+        return r;
+    }
+    if (n <= 128) {
+        double r[8];
+        for (int j = 0; j < 8; j++)
+            r[j] = a[j];
+        long i = 8;
+        for (; i < n - (n % 8); i += 8)
+            for (int j = 0; j < 8; j++)
+                r[j] += a[i + j];
+        double res = ((r[0] + r[1]) + (r[2] + r[3])) + ((r[4] + r[5]) + (r[6] + r[7]));
+        for (; i < n; i++)
+            res += a[i];
+        return res;
+    }
+    long n2 = n / 2;
+    n2 -= n2 % 8;
+    return sym_pairwise(a, n2) + sym_pairwise(a + n2, n - n2);
+}
+// np.sum of a contiguous row: the identity, then each 8192's pairwise sum
+double sym_npsum(const double *a, long n)
+{
+    double r = 0.0;
+    for (long i = 0; i < n; i += 8192)
+        r += sym_pairwise(a + i, std::min(8192L, n - i));
+    return r;
+}
+}  // namespace
+
 long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                        PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind,
                        double scale, double full_db_s, double residual, double beta, long long blk,
@@ -1364,6 +1401,42 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
                     else
                         ratio = pow(2.0, semis / 12.0);
                     ratio *= tune;
+                    // PER MODE (sympathetic_per_mode): each kept mode's weight, its
+                    // coincidence with the strike's partials, the best at 1
+                    std::vector<double> wk;
+                    if (k->sym_per_mode) {
+                        double admax = 0.0;
+                        bool first = true;
+                        for (long long d : ix) {
+                            const double a = fabs(rows[NC * d + C_aM]);
+                            if (first || a > admax)
+                                admax = a;
+                            first = false;
+                        }
+                        if (admax == 0.0)
+                            admax = 1.0;            // (ad.max() or 1.0)
+                        std::vector<double> row(ix.size());
+                        for (long long i : ix) {
+                            const double fk = rows[NC * i + C_nf] * ratio;
+                            if (!(fk < sr * 0.5))
+                                continue;
+                            size_t t = 0;
+                            for (long long d : ix) {
+                                const double dd = (rows[NC * d + C_nf] - fk) / k->sym_bw;
+                                row[t++] = (fabs(rows[NC * d + C_aM]) / admax) / (1.0 + dd * dd);
+                            }
+                            wk.push_back(sym_npsum(row.data(), (long)row.size()));
+                        }
+                        double wmax = 0.0;
+                        for (size_t q2 = 0; q2 < wk.size(); q2++)
+                            if (q2 == 0 || wk[q2] > wmax)
+                                wmax = wk[q2];
+                        if (wmax == 0.0)
+                            wmax = 1.0;             // (wk.max() or 1.0)
+                        for (double &w : wk)
+                            w = w / wmax;
+                    }
+                    size_t n_i = 0;
                     for (long long i : ix) {
                         const double *x = rows + NC * i;
                         if (!(x[C_nf] * ratio < sr * 0.5))
@@ -1381,9 +1454,11 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
                             e[C_logr] = e[C_logrA];
                             e[C_aft] = 0.0;
                         }
-                        e[C_aL] = x[C_aL] * drive;
-                        e[C_aR] = x[C_aR] * drive;
-                        e[C_aM] = x[C_aM] * drive;
+                        const double dk = k->sym_per_mode ? drive * wk[n_i] : drive;
+                        n_i++;
+                        e[C_aL] = x[C_aL] * dk;
+                        e[C_aR] = x[C_aR] * dk;
+                        e[C_aM] = x[C_aM] * dk;
                         cast(e);
                     }
                 }

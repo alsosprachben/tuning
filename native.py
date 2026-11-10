@@ -115,7 +115,8 @@ class VoiceSnap(ctypes.Structure):
                 ('church', I), ('church_slope', C),
                 ('fb_set', I), ('fb_fixed', I), ('n_fbs', I), ('fb_band_hz', C), ('fb_delay', C), ('fb_swell', C),
                 ('fb_gain', C), ('fb_dbs', C), ('fbs', (C * 2) * 8), ('sw_set', I), ('sw_cents', C),
-                ('sw_hz', C * 2)]
+                ('sw_hz', C * 2), ('mm_pts', I), ('mr_law', I), ('mr_a', C * 2), ('mr_b', C * 2), ('mr_lo', C * 2),
+                ('mr_ref', C), ('mr_body', C * 3)]
 
 
 class ToneIn(ctypes.Structure):
@@ -288,7 +289,9 @@ class NoteClass(ctypes.Structure):
                    ('n_mouth', I), ('mouth_seed', I), ('mouth_st', C * 3 * 16), ('mouth_cdf', C * 16),
                    ('mouth_wst', C * 3 * 16), ('mouth_dw', C * 2), ('mouth_glide', C),
                    ('efx_bus', I), ('bus_p', C * 12), ('fold_restrike', I), ('alias_sweep', C * 5),
-                      ('flam_record', I), ('n_rq', I), ('rec_per', C), ('rec_pr', C), ('rec_qx', C * 8), ('rec_qy', C * 8)])
+                      ('flam_record', I), ('n_rq', I), ('rec_per', C), ('rec_pr', C), ('rec_qx', C * 8), ('rec_qy', C * 8),
+                      ('bn_oct', C), ('bn_ref', C), ('osr_n', I), ('osr_open', C * 8), ('osr_cap', C),
+                      ('ng_set', I), ('ng_p', C * 12), ('sym_per_mode', I), ('sym_bw', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -758,7 +761,7 @@ def breath_noise(cls):
             and (not getattr(cls, 'breath_noise_low_db', None)
                  or (_blown(cls) and len(cls.breath_noise_low_db) == len(cls.breath_noise_db)
                      and all(a[0] == b[0] for a, b in zip(cls.breath_noise_low_db, cls.breath_noise_db))))
-            and not getattr(cls, 'breath_noise_octave_db', 0.0)
+            # (an octave law -- BreathyTnr.'s: the engine's, NoteClass.bn_oct)
             # (a wobble on its own row only for a blown voice: NoteIn.bbr; its slur's
             # legato attack, NoteClass.bn_slur, too)
             # (...or a silent tone's: the ocean drum's swell, the breath's own row)
@@ -800,6 +803,26 @@ def timpani_voice(cls):
     return issubclass(cls, T.TimpaniProperties) and len(cls.mode_decays or ()) <= 400
 
 
+def _bar_by_register(cls):
+    """A ModeDecays struck bar whose modes go by register (the balafon's, the
+    log drum's): its mode_gains_points within the anchors' tables (8 x 64),
+    its own mode_ratio the balafon's or the log drum's -- or neither, its
+    gains the register's alone"""
+    import tonelib as T
+    if not (issubclass(cls, T.ModeDecays) and issubclass(cls, T.StruckBarProperties)):
+        return False
+    pts = getattr(cls, 'mode_gains_points', None) or ()
+    mro = _owner(cls, 'mode_ratio')
+    if mro == 'BalafonProperties' and len(getattr(cls, 'mode_ratio_laws', ())) != 2:
+        return False
+    if mro == 'LogDrumProperties' and len(getattr(cls, 'body_modes_hz', ())) != 3:
+        return False
+    return ((pts or mro in ('BalafonProperties', 'LogDrumProperties'))
+            and mro in ('SynthProperties', 'BalafonProperties', 'LogDrumProperties')
+            and len(pts) <= 8 and all(len(g) <= 64 for _, g in pts)
+            and all(len(g) == len(cls.mode_gains) for _, g in pts))
+
+
 def _modal_drum(cls):
     import tonelib as T
     gam = issubclass(cls, T.ModeDecays) and issubclass(cls, (T.MetalPercussionProperties, T.StruckBarProperties))
@@ -827,12 +850,17 @@ def _modal_drum(cls):
                 own['mode_gains_here'] = 'MusicBoxProperties'      # (a comb tooth's octave below)
         if tap_voice(cls):                      # (its repeats its own: VoiceSnap.tap_*)
             own = dict(own, unison_voices=_owner(cls, 'unison_voices'))
+        # (a struck bar's modes by register: its gains' tables and its ratios' own law)
+        bar = gam and _bar_by_register(cls)
+        if bar:
+            own = dict(own, mode_ratio=_owner(cls, 'mode_ratio'))
         return (all(_owner(cls, n) == o for n, o in own.items())
                 and mg is not None and mr is not None and len(mg) == len(mr) <= 400
                 and len(cls.mode_decays) <= 400 and len(getattr(cls, 'mode_after', ())) <= 400
                 and len(getattr(cls, 'mode_phases', ())) <= 400
-                and not getattr(cls, 'mode_gains_points', None) and cls.mode_gains_low is None
-                and (not cls.mode_stroke_tilt or kettle) and (gam or not cls.bore_corner_hz)
+                and (not getattr(cls, 'mode_gains_points', None) or bar) and cls.mode_gains_low is None
+                and (not cls.mode_stroke_tilt or kettle or (gam and issubclass(cls, T.StruckBarProperties)))
+                and (gam or not cls.bore_corner_hz)
                 and not cls.harmonic_touch and not cls.pickup_points and len(cls.unison_detune or ()) <= 8)
     # (a plucked tine: a formant body on a measured mode set -- the kalimba's;
     # or a struck metal sheet's, no body -- the steelpan's)
@@ -2150,9 +2178,26 @@ def snapshot(props):
             s.mode_decays[:s.n_md] = [float(row[4]) for row in p.TUBE_MODES]
             if _owner(type(p), 'harmonic_decay') == 'ChurchBellProperties':     # (a church bell's own law)
                 s.church, s.church_slope = 1, float(p.decay_register_slope)
-        if timpani_voice(type(p)) or (isinstance(p, T.CymbalProperties) and isinstance(p, T.ModeDecays)
-                                      and p.mode_stroke_tilt):
+        if timpani_voice(type(p)) or (isinstance(p, (T.CymbalProperties, T.StruckBarProperties))
+                                      and isinstance(p, T.ModeDecays) and p.mode_stroke_tilt):
             s.mst, s.mst_ref = float(p.mode_stroke_tilt), float(p.mode_stroke_ref_db)
+        if _bar_by_register(type(p)):
+            # a struck bar's modes by register: its gains' tables by pitch, its ratios' law
+            pts = getattr(p, 'mode_gains_points', None) or ()
+            if pts:
+                s.mm_pts, s.n_pts = 1, len(pts)
+                s.n_ptg = max(len(g) for _, g in pts)
+                for i, (f, g) in enumerate(pts):
+                    s.pts_hz[i], s.pts_n[i] = float(f), len(g)
+                    s.pts_g[i][:len(g)] = [float(x) for x in g]
+            mro = _owner(type(p), 'mode_ratio')
+            if mro == 'BalafonProperties':
+                s.mr_law, s.mr_ref = 1, 415.0
+                for i, (a, b, lo) in enumerate(p.mode_ratio_laws):
+                    s.mr_a[i], s.mr_b[i], s.mr_lo[i] = float(a), float(b), float(lo)
+            elif mro == 'LogDrumProperties':
+                s.mr_law = 2
+                s.mr_body[:] = [float(x) for x in p.body_modes_hz]
         if isinstance(p, T.ModeDecays) or timpani_voice(type(p)):
             ma, mp = getattr(p, 'mode_after', ()), getattr(p, 'mode_phases', ())
             s.n_md, s.n_ma, s.n_mp = len(p.mode_decays), len(ma), len(mp)
@@ -2764,7 +2809,7 @@ _NOTE_OFF = ('bloom_seconds', 'speech_harmonic_exp', 'speech_harmonic_exp_per_oc
              'jitter_by_partial', 'mode_lock_spread', 'played_backwards', 'fold_restrike',
              'strike_flam_rate', 'strike_flam_times', 'strike_flam_people', 'strike_noise_tail',
              'strike_noise_layers', 'transposed_from_hz', 'one_shot', 'gate_time',
-             'open_string_ring', 'course_keys', 'key_bridge', 'bridge_partner', 'buff_choirs',
+             'course_keys', 'key_bridge', 'bridge_partner', 'buff_choirs',
              'register_knock_tilt', 'register_knock_profile')
 _NOTE_ABSENT = ('pre_pluck_s',)
 
@@ -3169,7 +3214,6 @@ def note_class(cls):
         _smode = getattr(cls, 'sympathetic_mode', 'coincidence')
         if getattr(cls, 'sympathetic_gain', 0.0) > 0.0 and (
                 (_smode != 'contact' and not getattr(cls, 'sympathetic_strings', ()))
-                or getattr(cls, 'sympathetic_per_mode', False)
                 or (getattr(cls, 'tuning_family', None) == 'indian' and _smode == 'contact')
                 or len(getattr(cls, 'sympathetic_strings', ()) or ()) > 32):
             ok = False
@@ -3382,8 +3426,18 @@ def note_class(cls):
                                                        float(_t[2]) if len(_t) > 2 else 0.0,
                                                        float(_t[3]) if len(_t) > 3 else 1.0]
         if getattr(cls, 'noise_gate', None):
-            _NOTE[cls] = False              # (a noise gate's bus: Python's)
-            return None
+            # ITS OWN GATE, keyed (efxbus.NoiseGate, its settings as Python makes them); unkeyed, Python's
+            _ngkw = dict(cls.noise_gate)
+            if not _ngkw.pop('keyed', False):
+                _NOTE[cls] = False
+                return None
+            import efxbus as _EB
+            _ng = _EB.NoiseGate(BR.SR, **_ngkw)
+            k.ng_set = 1
+            k.ng_p[:] = [float(_ng.hold), float(_ng.fall), 0.0 if _ng.sus is None else 1.0,
+                         float(_ng.sus or 0.0), float(_ng.ratio), float(_ng.mk), float(_ng.floor),
+                         float(_ng.cmp[0].a), float(_ng.cmp[1].a), float(_ng.gain[0].a), float(_ng.gain[1].a),
+                         float(_ng.ref)]
         if getattr(cls, 'plunger', False):  # A PLUNGER (efxfilter.plunger: the channel's aftertouch)
             import efxfilter as _EFP
             k.flt_set, k.flt_ty, k.flt_k = 2, 2, 3
@@ -3597,6 +3651,8 @@ def note_class(cls):
             k.sym_floor = float(getattr(cls, 'sympathetic_floor', 0.02))
             k.sym_top = int(getattr(cls, 'sympathetic_max', 6))
             k.sym_nobend = int(bool(getattr(cls, 'bend_detents', False)))
+            k.sym_per_mode = int(bool(getattr(cls, 'sympathetic_per_mode', False)))     # (by coincidence, per mode)
+            k.sym_bw = float(getattr(cls, 'sympathetic_width_hz', 0.0) or 1.0)
             _st = getattr(cls, 'sympathetic_strings', ())
             if _st:
                 _tn = int(getattr(cls, 'sympathetic_tonic', 60))
@@ -3642,10 +3698,19 @@ def note_class(cls):
         if getattr(cls, 'detuned_pair', None) and len(cls.detuned_pair) != 2:
             _NOTE[cls] = False
             return None
+        _osr = getattr(cls, 'open_string_ring', None)
+        if _osr:                            # (a palm-muted open string: blockrender's _string_free)
+            if len(_osr[0]) > 8 or list(_osr[0]) != sorted(_osr[0]):
+                _NOTE[cls] = False
+                return None
+            k.osr_n, k.osr_cap = len(_osr[0]), float(_osr[1])
+            k.osr_open[:k.osr_n] = [float(x) for x in _osr[0]]
         if breath_noise(cls):
             k.n_bn, k.bn_rows, k.bn_fade_s = (len(cls.breath_noise_db), int(getattr(cls, 'breath_noise_rows', 1)),
                                                float(cls.breath_noise_fade_s))
             k.bn_slur = int(bool(getattr(cls, 'breath_noise_slur', False)))
+            k.bn_oct = float(getattr(cls, 'breath_noise_octave_db', 0.0) or 0.0)     # (the octave law)
+            k.bn_ref = float(getattr(cls, 'breath_noise_ref_hz', 440.0))
             for i, (hz, db) in enumerate(cls.breath_noise_db):
                 k.bn_hz[i], k.bn_db[i] = float(hz), float(db)
             if getattr(cls, 'breath_noise_low_db', None):
@@ -5236,6 +5301,10 @@ def sfx_prog_key(cls):
         return -1, -1
     import percussion_map as PM
     p = next((p for p in range(128) if PM.kit_for_program(p) == so[0]), None)
+    if p is None and so[0] >= 128:
+        # (a map's own set -- the Morse keyboard's: after the programs', in map_kits' order)
+        ids = sorted(k for k in PM.KITS if k >= 128)
+        p = 128 + ids.index(so[0]) if so[0] in ids else None
     return (-1, -1) if p is None else (p, -1 if so[1] is None else int(so[1]))
 
 
@@ -5249,9 +5318,9 @@ def sfx_strokes_ok(cls):
         return False
     import percussion_map as PM
     so = cls.sfx_strokes_of
-    skind = kits()[4]
+    skind, q0 = (kits()[4], 128 * p) if p < 128 else (map_kits()[5], 128 * (p - 128))
     keys = range(128) if key < 0 else (key,)
-    return all(skind[128 * p + k] for k in keys if PM.rasp_strokes(k, 0.0, 1.0, kit=so[0]) is not None)
+    return all(skind[q0 + k] for k in keys if PM.rasp_strokes(k, 0.0, 1.0, kit=so[0]) is not None)
 
 
 def sfx_strokes(cls):

@@ -199,6 +199,25 @@ double nv_mode_ratio(const VoiceSnap *v, int m)
         return 1 <= m && m <= v->n_tube ? v->tube[m - 1][0] + v->tube[m - 1][1] * tube_oct(v) : 0.0;
     if (v->kind == 5)                           /* SynthProperties.mode_ratio: the note's layers, the tonebar's */
         return 1 <= m && m <= v->n_lay + v->n_tb ? v->ep_r[m - 1] : 0.0;
+    if (v->kind == 2 && v->mr_law == 1) {       /* BalafonProperties.mode_ratio: the upper modes by octave */
+        if (m == 1)
+            return 1.0;
+        if (2 <= m && m <= 3) {
+            double oc = log(v->frequency_x * pow(2.0, v->octave_position) / v->mr_ref) / log(2.0);
+            double x = v->mr_a[m - 2] + v->mr_b[m - 2] * oc;
+            return x > v->mr_lo[m - 2] ? x : v->mr_lo[m - 2];     /* max(lo, a + b oc) */
+        }
+        return 0.0;
+    }
+    if (v->kind == 2 && v->mr_law == 2) {       /* LogDrumProperties.mode_ratio: the body's modes in Hz */
+        if (1 <= m && m <= 3)
+            return (double)m;
+        if (4 <= m && m <= 6)
+            return v->mr_body[m - 4] / (v->frequency_x * pow(2.0, v->octave_position));
+        if (m == 7)
+            return v->mr_body[0] / (v->frequency_x * pow(2.0, v->octave_position));
+        return 0.0;
+    }
     if (v->kind == 2 && v->mm_harm)             /* SynthProperties.mode_ratio: mode_ratios None */
         return (double)m;
     if (v->kind == 2)                           /* SynthProperties.mode_ratio: mode_ratios */
@@ -287,9 +306,18 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
             return 0.0;
         if (v->or_set && harmonic == 7)         /* MusicBoxProperties: its key's octave below */
             return v->gain * v->or_g;
-        if (!(1 <= harmonic && harmonic <= v->n_mm))
-            return 0.0;
-        double g = v->gain * v->mm_gain[harmonic - 1];
+        double g;
+        if (v->mm_pts) {                        /* mode_gains_here: the register's tables at the note's pitch */
+            double here[64];
+            int n = nv_mode_gains_at(v, v->frequency_x * pow(2.0, v->octave_position), here);
+            if (!(1 <= harmonic && harmonic <= n))
+                return 0.0;
+            g = v->gain * here[harmonic - 1];
+        } else {
+            if (!(1 <= harmonic && harmonic <= v->n_mm))
+                return 0.0;
+            g = v->gain * v->mm_gain[harmonic - 1];
+        }
         if (v->mst != 0.0) {                    /* a stroke's tilt: harder, toward the top */
             double av = v->attack_volume > 1e-6 ? v->attack_volume : 1e-6;    /* max(attack_volume, 1e-6) */
             double sdb = 20.0 * log(av) / log(10.0);

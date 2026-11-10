@@ -3098,6 +3098,7 @@ int main(int argc, char **argv)
         double dry, wet;
         bool part;                          // a part's (every tone of it), else a mix channel's
         std::vector<std::pair<long long, long long>> spans;     // (samples) where it is on, a part's
+        std::vector<std::pair<long long, long long>> keys;      // a keyed gate's: the channel's keys (samples)
     };
     std::vector<BusDef> buses;
     std::vector<unsigned char> busrow, rest;
@@ -3176,6 +3177,23 @@ int main(int argc, char **argv)
             bool seen = false;
             for (auto &b : buses)
                 seen = seen || (!b.part && b.ch == m);
+            if (k && k->ng_set && !seen) {
+                // A VOICE's OWN GATE (blockrender: TONE_BUS + its mix channel,
+                // before its insertion effect's), keyed by the channel's notes as played
+                BusDef bd{m, 7, k->ng_p, 0.0, 1.0, false, {}, {}};
+                for (int j = 0; j < nn; j++) {
+                    long long c2;
+                    int iv2[4];
+                    double dv2[2];
+                    nv_song_get_note(song, j, &c2, iv2, dv2);
+                    if (c2 == c)
+                        bd.keys.push_back(std::make_pair((long long)nearbyint(dv2[0] * SR),
+                                                         (long long)nearbyint(dv2[1] * SR)));
+                }
+                std::sort(bd.keys.begin(), bd.keys.end());
+                buses.push_back(bd);
+                seen = true;
+            }
             if (!k || !k->efx_set || !k->efx_bus || iv[3] || seen || note_fx[i] != -1)
                 continue;
             buses.push_back(BusDef{m, k->efx_bus, k->bus_p, k->bus_p[10], k->bus_p[11], false, {}});
@@ -3237,6 +3255,67 @@ int main(int argc, char **argv)
                 ys[ear]->resize(n);
                 for (long i = 0; i < n; i++)
                     (*ys[ear])[i] = (float)y[i];
+            }
+        } else if (bd.kind == 7) {          // efxbus.NoiseGate, keyed: the body's compressor, the gate's poles
+            const long long hold = (long long)p[0];
+            const double c = p[1];
+            std::vector<double> L(n), R(n), x(n), ref(n), g(n, 1.0);
+            for (long i = 0; i < n; i++) {
+                L[i] = (double)(*xs[0])[i];
+                R[i] = (double)(*xs[1])[i];
+                const double a = fabs(L[i]), b = fabs(R[i]);
+                x[i] = b > a ? b : a;               // np.maximum(|L|, |R|)
+            }
+            // the running peak (dB): a peak held, falling c a sample, from p[11]
+            double acc = -INFINITY;
+            for (long i = 0; i < n; i++) {
+                const double m = (double)i;
+                const double lv = 20.0 * log10(x[i] > 1e-12 ? x[i] : 1e-12);
+                const double t = lv + m * c;
+                acc = (i == 0 || t > acc) ? t : acc;    // (np.maximum.accumulate)
+                double r = acc - m * c;
+                const double fl = p[11] - (m + 1.0) * c;
+                ref[i] = fl > r ? fl : r;
+            }
+            // efxbus._Pole: lfilter([1 - a], [1, -a]) from a x[0], as its first window starts it
+            auto pole = [&](double a, const std::vector<double> &in) {
+                std::vector<double> y(n);
+                double zz = a * in[0];
+                const double b0 = 1.0 - a;
+                for (long i = 0; i < n; i++) {
+                    const double yv = zz + b0 * in[i];
+                    zz = in[i] * 0.0 - yv * -a;
+                    y[i] = yv;
+                }
+                return y;
+            };
+            if (p[2] != 0.0) {                      // the body: over sustain_db under the peak, to 1/ratio
+                std::vector<double> e0 = pole(p[7], x), e1 = pole(p[8], x);
+                for (long i = 0; i < n; i++) {
+                    const double env = e1[i] > e0[i] ? e1[i] : e0[i];
+                    double over = 20.0 * log10(env > 1e-12 ? env : 1e-12) - (ref[i] + p[3]);
+                    over = over > 0.0 ? over : 0.0;
+                    g[i] = pow(10.0, -over * (1.0 - 1.0 / p[4]) / 20.0) * p[5];
+                }
+            }
+            // keyed: open over each key's span, held hold past its key-up
+            std::vector<double> tgt(n, p[6]);
+            for (const auto &kk : bd.keys) {
+                if (!(kk.first < (long long)n && kk.second + hold > 0))
+                    continue;
+                long long a0 = kk.first > 0 ? kk.first : 0;
+                long long a1 = std::min((long long)n, kk.second + hold);
+                a1 = a1 > 0 ? a1 : 0;
+                for (long long i = a0; i < a1; i++)
+                    tgt[i] = 1.0;
+            }
+            std::vector<double> o0 = pole(p[9], tgt), o1 = pole(p[10], tgt);
+            for (int ear = 0; ear < 2; ear++)
+                ys[ear]->resize(n);
+            for (long i = 0; i < n; i++) {
+                const double gg = g[i] * (o1[i] > o0[i] ? o1[i] : o0[i]);
+                (*ys[0])[i] = (float)(L[i] * gg);
+                (*ys[1])[i] = (float)(R[i] * gg);
             }
         } else if (bd.kind == 3 || bd.kind == 4) {
             // A REVERB (efxbus.Reverb, GateReverb): the part (mono in) through
