@@ -47,9 +47,11 @@
 #include <unistd.h>
 #include <set>
 #include <string>
+#include <sys/mman.h>
 #include <vector>
 
 #include "pycompat.h"
+#include "gpufile.h"
 
 struct NvSirRow {                       // (nv_song_sirens: a rotor's row -- nvrender.cpp's twin)
     long long ch;
@@ -273,8 +275,45 @@ static void eq_row(const std::vector<double> &e, double *row)
 }
 
 // --stream: the streaming render (what it does not reproduce yet refuses it: nv_stream_refuse)
+// A STREAMED ROW, STORED IN ITS TABLE's TYPES (streamrender's store: typed
+// columns, each the dtype prepare gives it -- FINAL_DTYPES): float32 where the
+// column is, int32 and int64 where those are, float64 for the rest. A window
+// reads every column cast to that type anyway, so nothing a sample sees moves;
+// a row is about half the 50 float64s it was
+static int g_pk[NCOLS], g_po[NCOLS], g_rowB = 8 * NCOLS;
+static void pack_layout(const int *fin)
+{
+    int o = 0;
+    for (int c = 0; c < NCOLS; c++) {
+        g_pk[c] = fin[c] == 1 || fin[c] == 3 ? fin[c] : fin[c] == 2 ? 2 : 0;
+        g_po[c] = o;
+        o += g_pk[c] == 1 || g_pk[c] == 3 ? 4 : 8;
+    }
+    g_rowB = o;
+}
+static void pack_row(const double *x, unsigned char *b)
+{
+    for (int c = 0; c < NCOLS; c++)
+        switch (g_pk[c]) {
+        case 1: { float v = (float)x[c]; memcpy(b + g_po[c], &v, 4); break; }
+        case 2: { long long v = (long long)x[c]; memcpy(b + g_po[c], &v, 8); break; }
+        case 3: { int32_t v = (int32_t)x[c]; memcpy(b + g_po[c], &v, 4); break; }
+        default: memcpy(b + g_po[c], &x[c], 8);
+        }
+}
+static inline double unpack(const unsigned char *b, int c)
+{
+    switch (g_pk[c]) {
+    case 1: { float v; memcpy(&v, b + g_po[c], 4); return (double)v; }
+    case 2: { long long v; memcpy(&v, b + g_po[c], 8); return (double)v; }
+    case 3: { int32_t v; memcpy(&v, b + g_po[c], 4); return (double)v; }
+    default: { double v; memcpy(&v, b + g_po[c], 8); return v; }
+    }
+}
+
 static bool g_stream = false;
 static bool g_stream_why_only = false;      // (--stream-why: the scan's reasons, no render)
+static bool g_gpu = false;                  // (--gpu: the stream's windows on the GPU, gpufile.h)
 // a note's rows as a sink is handed them (engine.cpp's NvPlaySink)
 struct StreamSinkDesc {
     void *ctx;
@@ -411,9 +450,17 @@ static long long tremolo_expand(double **rowsp, long long *Pp, void **dm, const 
                              mask ? (long long)mask->size() : 0, sr);
 }
 
+// A CLASS IN THE EXPORT, mapped from the file where it lies (copy on write):
+// only the classes a song plays are ever read in -- prepare's way, which
+// builds the voices a file uses and no others
+struct ClassRef {
+    unsigned char *p = nullptr;
+    unsigned char *data() const { return p; }
+};
+
 struct Export {
     std::vector<double> k, freq, trim;
-    std::vector<std::vector<unsigned char>> classes;
+    std::vector<ClassRef> classes;
     std::vector<int> cmap, kind, fin;     // cmap: the programs' keys, then the drum sets'
     std::vector<double> kit_f0, kit_seat;
     std::vector<int> mk_ids, mk_map;            // MKIT: the maps' own drum sets, their keys' classes
@@ -458,9 +505,18 @@ static bool read_export(const char *path, Export &E)
         E.kind.resize(NCOLS); E.fin.resize(NCOLS);
         ok = fread(E.k.data(), 8, nk, f) == (size_t)nk && fread(E.freq.data(), 8, 128, f) == 128
              && fread(E.trim.data(), 8, 512, f) == 512;
-        for (int i = 0; ok && i < ncls; i++) {
-            E.classes.emplace_back(csz);
-            ok = fread(E.classes.back().data(), 1, csz, f) == (size_t)csz;
+        if (ok) {                           // (the classes mapped, not read: nothing loaded until used)
+            const long off = ftell(f);
+            fseek(f, 0, SEEK_END);
+            const long len = ftell(f);
+            void *m = len > off ? mmap(nullptr, (size_t)len, PROT_READ | PROT_WRITE, MAP_PRIVATE, fileno(f), 0)
+                                : MAP_FAILED;
+            ok = m != MAP_FAILED && off + (long)csz * ncls <= len && off % alignof(NoteClass) == 0;
+            if (ok)                         // (no readahead: a class's few fields, not the classes around it)
+                madvise(m, (size_t)len, MADV_RANDOM);
+            for (int i = 0; ok && i < ncls; i++)
+                E.classes.push_back(ClassRef{(unsigned char *)m + off + (long)csz * i});
+            ok = ok && fseek(f, off + (long)csz * ncls, SEEK_SET) == 0;
         }
         ok = ok && fread(E.cmap.data(), 4, 2 * NV_K_DRUMS, f) == 2 * NV_K_DRUMS
              && fread(E.kit_f0.data(), 8, 16384, f) == 16384 && fread(E.kit_seat.data(), 8, 16384, f) == 16384
@@ -720,6 +776,8 @@ int main(int argc, char **argv)
             g_stream = g_stream_why_only = true;
         else if (!strcmp(argv[i], "--stream"))
             g_stream = true;
+        else if (!strcmp(argv[i], "--gpu"))
+            g_gpu = g_stream = true;        // (the GPU renders the stream's windows: streamrender's gpu=)
         else if (!strncmp(argv[i], "--eastern=", 10))
             east = argv[i] + 10;
         else if (!strncmp(argv[i], "--a=", 4))
@@ -3666,13 +3724,13 @@ int main(int argc, char **argv)
     };
     // the mix, or the send (fpX its level columns): the rest, then each bus's part, then the post
     // --window: each row's last sample, as the kernel stops (streamrender.zend,
-    // on the final float32 columns), and a BLK past it to spare
+    // on the final float32 columns)
     std::vector<long long> zend;
     if (win > 0 && buses.empty()) {
         zend.resize(P);
         for (long long r = 0; r < P; r++) {
             float dl = std::max(0.0f, std::max(fcols[26][r], fcols[27][r]));     // delL, delR
-            zend[r] = (long long)lcols[1][r] + (long long)fcols[4][r] + (long long)ceilf(dl) + 2 * BLK;
+            zend[r] = (long long)lcols[1][r] + (long long)fcols[4][r] + (long long)ceilf(dl) + BLK;
         }
     } else if (win > 0)
         fprintf(stderr, "nvrender: --window: a part's bus (its processors hold no state across windows): whole\n");
@@ -3747,7 +3805,7 @@ int main(int argc, char **argv)
         }
         nv_render_post(oL, oR, N, SR, E.k[K_MASTER], 1);
     };
-    std::vector<float> L(N), R(N);
+    std::vector<float> L(g_stream ? 0 : N), R(g_stream ? 0 : N);     // (a stream writes as it goes)
     {                                       // THE MASTER VOLUME (_mvol): the mix's and the send's
         int nm = nv_midi_mvol(midi, SR, nullptr, nullptr, 0);
         std::vector<long long> ms(nm > 0 ? nm : 1);
@@ -3773,9 +3831,11 @@ int main(int argc, char **argv)
     }
     // PASS B: the notes again, each window rendered once nothing to come can
     // reach it. wt: the send's weight of a row (its channel, onset), NULL the mix
-    auto stream_pass = [&](const std::function<float(long long, long long)> *wt, float *oL, float *oR) {
+    pack_layout(E.fin.data());
+    auto stream_pass = [&](const std::function<float(long long, long long)> *wt, const char *opath,
+                           const char *spath) {
         struct Store {
-            std::vector<double> d;          // (row-major, cast as the table holds them)
+            std::vector<unsigned char> d;   // (row-major, each column in its table type: pack_row)
             std::vector<long long> non, zend;
             std::vector<std::array<float, 5>> lob;      // (each row's lobe: rotor, azimuth, floor, sharpness, 1/mean)
             std::vector<std::array<long long, 16>> key; // (each row's table key; a copy's its source's and its place)
@@ -3843,8 +3903,10 @@ int main(int argc, char **argv)
                 for (size_t q = 0; ach && q < ach->size(); q++) {
                     AmpCh &c = amp[q];
                     const size_t nr = c.key.size();
-                    if (!nr)
+                    if (!nr) {
+                        c.next = INFINITY;
                         continue;
+                    }
                     std::vector<size_t> ord(nr);
                     for (size_t r = 0; r < nr; r++)
                         ord[r] = r;
@@ -3899,6 +3961,11 @@ int main(int argc, char **argv)
                     if (any) {
                         c.edge = last;
                         c.walked = true;
+                    }
+                    if (c.walked) {
+                        // A ROW ENDING AT THE EDGE IS DONE (streamrender._amplifier): in no
+                        // segment to come -- and a channel left with none holds no one
+                        // back, or a part falling silent froze the render at its last row
                         std::vector<double> d2;
                         std::vector<std::array<long long, 4>> k2;
                         std::vector<int> dk2;
@@ -3915,7 +3982,7 @@ int main(int argc, char **argv)
                         c.dk.swap(dk2);
                         c.dg.swap(dg2);
                     }
-                    c.next = c.walked ? c.edge : (edges.empty() ? INFINITY : edges[0]);
+                    c.next = c.key.empty() ? INFINITY : c.walked ? c.edge : (edges.empty() ? INFINITY : edges[0]);
                 }
             }
             long long amp_next() const
@@ -4038,9 +4105,9 @@ int main(int argc, char **argv)
             {
                 t.dk.push_back(dkv);
                 t.dg.push_back(dgv);
-                size_t o = t.d.size();
-                t.d.insert(t.d.end(), xin, xin + NCOLS);
-                double *x = t.d.data() + o;
+                double xl[NCOLS];               // (the row's passes in float64, then stored packed)
+                memcpy(xl, xin, sizeof xl);
+                double *x = xl;
                 // THE CHORUS (before the cabinet, as the whole render's passes): the row's
                 // copies keyed after the table's rows, its dry share off it -- not a copy's
                 if (cch && !copy)
@@ -4113,18 +4180,23 @@ int main(int argc, char **argv)
                     lescp.key.push_back(kk);
                 }
                 // the kernel's last sample (streamrender.zend, on the final
-                // float32 columns) and a BLK to spare
+                // float32 columns)
                 float dl = std::max(0.0f, std::max((float)x[37], (float)x[38]));
                 t.non.push_back((long long)x[12]);
-                t.zend.push_back((long long)x[13] + (long long)(float)x[15] + (long long)ceilf(dl) + 2 * BLK);
+                t.zend.push_back((long long)x[13] + (long long)(float)x[15] + (long long)ceilf(dl) + BLK);
+                const size_t o = t.d.size();
+                t.d.resize(o + g_rowB);
+                pack_row(x, t.d.data() + o);
             }
             void raw(Store &t, const double *row)
             {
-                t.d.insert(t.d.end(), row, row + NCOLS);
-                const double *x = t.d.data() + t.d.size() - NCOLS;
+                const size_t o = t.d.size();
+                t.d.resize(o + g_rowB);
+                pack_row(row, t.d.data() + o);
+                const double *x = row;
                 float dl = std::max(0.0f, std::max((float)x[37], (float)x[38]));
                 t.non.push_back((long long)x[12]);
-                t.zend.push_back((long long)x[13] + (long long)(float)x[15] + (long long)ceilf(dl) + 2 * BLK);
+                t.zend.push_back((long long)x[13] + (long long)(float)x[15] + (long long)ceilf(dl) + BLK);
             }
             static void note(void *c_, const double *at, long long i0, long long i1, double next_on)
             {
@@ -4242,7 +4314,13 @@ int main(int argc, char **argv)
             }
         };
         const long CH = (long)E.k[K_CHUNK];
-        const long W = 8 * CH;
+        const char *srows = getenv("TUNING_STREAM_ROWS");
+        const long long row_budget = srows && atoll(srows) > 0 ? atoll(srows) : 300000;
+        // THE BATCH (streamrender.BATCH, TUNING_STREAM_BATCH): 8 kernel chunks a
+        // render; any size renders the same samples on the CPU, a smaller one
+        // holds fewer notes' rows at once
+        const char *swin = getenv("TUNING_STREAM_BATCH");
+        const long W = (swin && atol(swin) > 0 ? atol(swin) : 8) * CH;
         long w0 = 0;
         Pass ps;
         {
@@ -4296,97 +4374,239 @@ int main(int argc, char **argv)
         const int cMch = col("mch");
         // A PART'S BUSES (render_mix's, window by window): each its processor's
         // state, this pass's own (the mix's, the send's)
-        std::vector<void *> bush(buses.size(), nullptr);
-        for (size_t q = 0; q < buses.size(); q++)
-            bush[q] = nv_livebus_raw_new(buses[q].kind, buses[q].p, SR);
-        // ...each bus's part, whole-length (stage 1 writes it, stage 2 mixes it); a
-        // reverb's responses, its mono history (nh - 1 zeros, then the part), its block B
-        std::vector<std::vector<float>> busL(buses.size()), busR(buses.size());
-        std::vector<std::vector<double>> revL(buses.size()), revR(buses.size()), revX(buses.size());
-        std::vector<long long> revN(buses.size(), 0), revB(buses.size(), 0);
-        for (size_t q = 0; q < buses.size(); q++) {
-            busL[q].assign(N, 0.0f);
-            busR[q].assign(N, 0.0f);
-            if (buses[q].kind == 3 || buses[q].kind == 4) {
-                const double *p = buses[q].p;
-                const long long cap = (long long)(10.0 * SR) + 64;
-                revL[q].assign(cap, 0.0);
-                revR[q].assign(cap, 0.0);
-                long long nh = buses[q].kind == 3
-                    ? nv_efx_reverb_ir(SR, (int)p[0], p[1], (int)p[2], p[3], revL[q].data(), revR[q].data(), cap)
-                    : nv_efx_gate_ir(SR, (int)p[0], p[1], p[2], revL[q].data(), revR[q].data(), cap);
-                revN[q] = nh;
-                long long F = 1;
-                while (F < 2 * nh)
-                    F <<= 1;
-                revB[q] = F - nh + 1;
-                revX[q].assign((size_t)(nh - 1 + N), 0.0);
+        // (the mix's set, and the send's when it renders: Python's one pass, both
+        // from the same rows -- streamrender._render's procs[ch][0] and [1])
+        struct BusSet {
+            std::vector<void *> bush;
+            std::vector<std::vector<float>> busL, busR;
+            std::vector<std::vector<double>> revL, revR, revX;
+            std::vector<long long> revN, revB, revO;
+            long long busO = 0;
+            long wm = 0;                    // (stage 2: mixed and posted up to here)
+            // ITS OUTPUT, written as it is final (streamrender's WavOut: write_wav's
+            // bytes, a window at a time), held from outO until then
+            std::vector<float> outL, outR;
+            long long outO = 0, done = 0;
+            FILE *wf = nullptr;
+        };
+        auto make_set = [&](const char *path) {
+            BusSet b;
+            b.wf = fopen(path, "wb");
+            if (b.wf) {                     // (write_wav's header, for the N frames to come)
+                uint32_t data = (uint32_t)(N * 2 * 4);
+                auto u32 = [&](uint32_t v) { fwrite(&v, 4, 1, b.wf); };
+                auto u16 = [&](uint16_t v) { fwrite(&v, 2, 1, b.wf); };
+                fwrite("RIFF", 1, 4, b.wf); u32(36 + data); fwrite("WAVE", 1, 4, b.wf);
+                fwrite("fmt ", 1, 4, b.wf); u32(16); u16(1); u16(2); u32((uint32_t)SR); u32((uint32_t)SR * 8);
+                u16(8); u16(32);
+                fwrite("data", 1, 4, b.wf); u32(data);
             }
+            b.bush.assign(buses.size(), nullptr);
+            for (size_t q = 0; q < buses.size(); q++)
+                b.bush[q] = nv_livebus_raw_new(buses[q].kind, buses[q].p, SR);
+            // ...each bus's part (stage 1 writes it, stage 2 mixes it), held from
+            // b.busO, the first sample stage 2 has yet to mix; a reverb's responses,
+            // its mono history (nh - 1 zeros, then the part) held from b.revO, a
+            // whole block B of it (the convolution's blocks fall where they did
+            // over the whole history, so its sums are the whole render's), its block B
+            b.busL.assign(buses.size(), {}); b.busR.assign(buses.size(), {});
+            b.revL.assign(buses.size(), {}); b.revR.assign(buses.size(), {}); b.revX.assign(buses.size(), {});
+            b.revN.assign(buses.size(), 0); b.revB.assign(buses.size(), 0); b.revO.assign(buses.size(), 0);
+            b.busO = 0;
+            for (size_t q = 0; q < buses.size(); q++) {
+                if (buses[q].kind == 3 || buses[q].kind == 4) {
+                    const double *p = buses[q].p;
+                    const long long cap = (long long)(10.0 * SR) + 64;
+                    b.revL[q].assign(cap, 0.0);
+                    b.revR[q].assign(cap, 0.0);
+                    long long nh = buses[q].kind == 3
+                        ? nv_efx_reverb_ir(SR, (int)p[0], p[1], (int)p[2], p[3], b.revL[q].data(), b.revR[q].data(), cap)
+                        : nv_efx_gate_ir(SR, (int)p[0], p[1], p[2], b.revL[q].data(), b.revR[q].data(), cap);
+                    b.revN[q] = nh;
+                    long long F = 1;
+                    while (F < 2 * nh)
+                        F <<= 1;
+                    b.revB[q] = F - nh + 1;
+                    b.revX[q].assign((size_t)(nh - 1), 0.0);
+                }
+            }
+            return b;
+        };
+        // THE GPU (--gpu: streamrender's gpu=, gpurender.FileRenderer a window at a time)
+        static GpuFile *gpuf = nullptr;
+        if (g_gpu && !gpuf) {
+            char exe[4096];
+            ssize_t ln = readlink("/proc/self/exe", exe, sizeof exe - 1);
+            std::string dir = ln > 0 ? std::string(exe, ln) : std::string(".");
+            dir = dir.substr(0, dir.rfind('/'));
+            gpuf = new GpuFile();
+            std::string why = gpuf->open(dir, (int)SR);
+            if (!why.empty()) {
+                fprintf(stderr, "nvrender: --gpu: %s\n", why.c_str());
+                exit(1);
+            }
+            gpuf->bend_levels(BLr.empty() ? nullptr : BLr.data(), (long)nr, (long)nblk + 1);
         }
-        long wm = 0;                        // (stage 2: mixed and posted up to here)
-        auto stage2 = [&](long done) {      // (the parts rendered up to done)
-            while (wm < N && wm < done) {
-                const long wn2 = std::min((long)W, N - wm);
+        BusSet bset[2];
+        bset[0] = make_set(opath);
+        const int nset = spath ? 2 : 1;
+        if (spath)
+            bset[1] = make_set(spath);
+        for (int q = 0; q < nset; q++)
+            if (!bset[q].wf) {
+                fprintf(stderr, "nvrender: cannot write %s\n", q ? spath : opath);
+                exit(1);
+            }
+        // a set's output at [s0, s0 + n): its place, held; and out once final
+        auto out_at = [&](BusSet &b, long long s0, long long n_) {
+            if ((long long)b.outL.size() < s0 + n_ - b.outO) {
+                b.outL.resize(s0 + n_ - b.outO, 0.0f);
+                b.outR.resize(s0 + n_ - b.outO, 0.0f);
+            }
+            return std::make_pair(b.outL.data() + (s0 - b.outO), b.outR.data() + (s0 - b.outO));
+        };
+        auto out_emit = [&](BusSet &b, long long s0, long long n_) {
+            std::vector<int32_t> buf(2 * n_);
+            for (long long i = 0; i < n_; i++)
+                for (int c = 0; c < 2; c++) {
+                    double x = c ? (double)b.outR[s0 - b.outO + i] : (double)b.outL[s0 - b.outO + i];
+                    x = x < -1.0 ? -1.0 : (x > 1.0 ? 1.0 : x);         // np.clip
+                    buf[2 * i + c] = (int32_t)(x * 2147483647.0);    // astype('<i4'): toward zero
+                }
+            fwrite(buf.data(), 4, buf.size(), b.wf);
+            b.done = s0 + n_;
+            if (2 * (b.done - b.outO) > (long long)b.outL.size()) {     // (let go once half are out)
+                b.outL.erase(b.outL.begin(), b.outL.begin() + (b.done - b.outO));
+                b.outR.erase(b.outR.begin(), b.outR.begin() + (b.done - b.outO));
+                b.outO = b.done;
+            }
+        };
+        auto stage2 = [&](BusSet &b, long done) {      // (the parts rendered up to done)
+            while (b.wm < N && b.wm < done) {
+                const long wn2 = std::min((long)W, N - b.wm);
                 bool ready = true;
                 for (size_t q = 0; q < buses.size() && ready; q++)
-                    if (revN[q] > 0 && done < N) {
-                        const long long t = revN[q] - 1 + wm + wn2 - 1, B = revB[q];
-                        const long long need = t / B * B + B - revN[q];     // (the last input its blocks read)
+                    if (b.revN[q] > 0 && done < N) {
+                        const long long t = b.revN[q] - 1 + b.wm + wn2 - 1, B = b.revB[q];
+                        const long long need = t / B * B + B - b.revN[q];     // (the last input its blocks read)
                         ready = need < done;
                     }
-                if (!ready || wm + wn2 > done)
+                if (!ready || b.wm + wn2 > done)
                     return;
                 const double gain = E.k[K_MASTER];
                 for (size_t q = 0; q < buses.size(); q++) {
                     std::vector<float> yL(wn2), yR(wn2);
-                    if (revN[q] > 0) {
+                    if (b.revN[q] > 0) {
                         std::vector<double> o(wn2);
-                        const long long nh = revN[q];
-                        nv_efx_conv(revX[q].data(), (long long)revX[q].size(), revL[q].data(), nh, nh - 1 + wm, wn2,
-                                    o.data());
+                        const long long nh = b.revN[q];
+                        const long long xo = b.revO[q], nx = nh - 1 + N - xo;     // (the whole history's length)
+                        nv_efx_conv(b.revX[q].data(), nx, b.revL[q].data(), nh, nh - 1 + b.wm - xo, wn2, o.data());
                         for (long i = 0; i < wn2; i++)
                             yL[i] = (float)o[i];
-                        nv_efx_conv(revX[q].data(), (long long)revX[q].size(), revR[q].data(), nh, nh - 1 + wm, wn2,
-                                    o.data());
+                        nv_efx_conv(b.revX[q].data(), nx, b.revR[q].data(), nh, nh - 1 + b.wm - xo, wn2, o.data());
                         for (long i = 0; i < wn2; i++)
                             yR[i] = (float)o[i];
                     } else {
                         const float gf = (float)gain;
                         std::vector<float> xL(wn2), xR(wn2);
                         for (long i = 0; i < wn2; i++) {
-                            xL[i] = busL[q][wm + i] * gf;
-                            xR[i] = busR[q][wm + i] * gf;
+                            xL[i] = b.busL[q][b.wm - b.busO + i] * gf;
+                            xR[i] = b.busR[q][b.wm - b.busO + i] * gf;
                         }
-                        nv_livebus_raw(bush[q], xL.data(), xR.data(), wn2, yL.data(), yR.data());
+                        nv_livebus_raw(b.bush[q], xL.data(), xR.data(), wn2, yL.data(), yR.data());
                     }
                     const float dry = (float)buses[q].dry, wet = (float)buses[q].wet;
                     for (long i = 0; i < wn2; i++) {
                         bool on = !buses[q].part;
                         for (auto &sp : buses[q].spans)
-                            on = on || (wm + i >= sp.first && wm + i < sp.second);
-                        const float bl = busL[q][wm + i], br = busR[q][wm + i];
+                            on = on || (b.wm + i >= sp.first && b.wm + i < sp.second);
+                        const float bl = b.busL[q][b.wm - b.busO + i], br = b.busR[q][b.wm - b.busO + i];
                         float wL = (float)((double)yL[i] / gain), wR = (float)((double)yR[i] / gain);
                         float mL = on ? dry * bl + wet * wL : bl, mR = on ? dry * br + wet * wR : br;
-                        oL[wm + i] = oL[wm + i] + mL;
-                        oR[wm + i] = oR[wm + i] + mR;
+                        float *oL_ = b.outL.data() + (b.wm - b.outO), *oR_ = b.outR.data() + (b.wm - b.outO);
+                        oL_[i] = oL_[i] + mL;
+                        oR_[i] = oR_[i] + mR;
                     }
                 }
-                nv_render_post_win(oL + wm, oR + wm, wm, wn2, SR, E.k[K_MASTER], 1);
-                wm += wn2;
+                nv_render_post_win(b.outL.data() + (b.wm - b.outO), b.outR.data() + (b.wm - b.outO), b.wm, wn2, SR,
+                                   E.k[K_MASTER], 1);
+                out_emit(b, b.wm, wn2);
+                b.wm += wn2;
+                // what no later window reads let go of: the parts before b.wm, and
+                // a reverb's whole blocks that end before its next output can
+                // reach back (block b0 reaches b0 + B + nh - 2) -- once half are gone
+                if (2 * (b.wm - b.busO) > (long long)(b.busL.empty() ? 0 : b.busL[0].size())) {
+                    for (size_t q = 0; q < buses.size(); q++) {
+                        b.busL[q].erase(b.busL[q].begin(), b.busL[q].begin() + (b.wm - b.busO));
+                        b.busR[q].erase(b.busR[q].begin(), b.busR[q].begin() + (b.wm - b.busO));
+                    }
+                    b.busO = b.wm;
+                }
+                for (size_t q = 0; q < buses.size(); q++) {
+                    const long long B = b.revB[q];
+                    if (b.revN[q] <= 0 || b.wm - B < 0)
+                        continue;
+                    const long long xo = (b.wm - B) / B * B;      // (blocks before it: b0 + B + nh - 2 < nh - 1 + b.wm)
+                    if (xo > b.revO[q] && 2 * (xo - b.revO[q]) > (long long)b.revX[q].size()) {
+                        b.revX[q].erase(b.revX[q].begin(), b.revX[q].begin() + (xo - b.revO[q]));
+                        b.revO[q] = xo;
+                    }
+                }
             }
         };
+        // THE ROW BUDGET (streamrender's ROW_BUDGET, TUNING_STREAM_ROWS): a batch
+        // sounding more rows than that renders in halves, each half judged
+        // again (_render: its first nw / 2 windows, then the rest), and the
+        // next batch begins where the whole one would have -- the same samples,
+        // each row's copies for the kernel fewer, and the GPU's windows where
+        // FileRenderer's fall. A render adds no rows, so the halves are planned
+        // before any is rendered
+        auto sounding = [&](long long a, long long b) {
+            size_t nl = 0;
+            auto from = [&](const Store &g) {
+                for (size_t r = 0; r < g.non.size(); r++)
+                    nl += g.non[r] < b && g.zend[r] > a;
+            };
+            from(ps.st);
+            for (Store &g : ps.reg)
+                from(g);
+            from(ps.mfst);
+            from(ps.gsdst);
+            for (Store &g : ps.ampst)
+                from(g);
+            from(ps.tremst);
+            from(ps.scanst);
+            from(ps.chocp);
+            from(ps.lescp);
+            return nl;
+        };
+        std::vector<std::pair<long long, long>> spans;      // (the batch's pieces, last first)
+        std::function<void(long long, long)> plan = [&](long long wi, long nw) {
+            const long long a = wi * CH, b = std::min((long long)N, a + (long long)nw * CH);
+            if (b <= a)
+                return;
+            if (nw > 1 && sounding(a, b) > (size_t)row_budget) {
+                plan(wi, nw / 2);
+                plan(wi + nw / 2, nw - nw / 2);
+                return;
+            }
+            spans.insert(spans.begin(), std::make_pair(a, (long)(b - a)));
+        };
         ps.render_to = [&](long long T) {
-            while (w0 < N && (w0 + W <= T || T >= N)) {
-                const long wn = std::min((long)W, N - w0);
+            while (!spans.empty() || (w0 < N && (w0 + W <= T || T >= N))) {
+                if (spans.empty())
+                    plan(w0 / CH, W / CH);
+                long wn = spans.back().second;      // (w0, its start)
+                spans.pop_back();
                 Store &s = ps.st;
                 // the window's rows as the whole table orders them: the notes',
                 // then each register channel in `order`, its rows by (phase, seq)
-                std::vector<const double *> live;
+                std::vector<const unsigned char *> live;
                 std::vector<const std::array<float, 5> *> llob;    // (each live row's lobe)
                 std::vector<int> wdk;                       // (...its damper track and weight)
                 std::vector<float> wdg;
                 auto take = [&](Store &g, size_t r) {
-                    live.push_back(g.d.data() + NCOLS * r);
+                    live.push_back(g.d.data() + (size_t)g_rowB * r);
                     llob.push_back(&g.lob[r]);
                     wdk.push_back(g.dk[r]);
                     wdg.push_back(g.dg[r]);
@@ -4446,7 +4666,7 @@ int main(int argc, char **argv)
                 auto tcol = [&](int c) {
                     std::vector<double> v(n);
                     for (long long k = 0; k < n; k++) {
-                        double x = live[k][c];
+                        double x = unpack(live[k], c);
                         switch (E.fin[c]) {
                         case 1: x = (double)(float)x; break;
                         case 2: x = (double)(long long)x; break;
@@ -4464,12 +4684,6 @@ int main(int argc, char **argv)
                     std::vector<double> v = tcol(col(VF[q]));
                     wf[q].assign(v.begin(), v.end());
                 }
-                if (wt)                         // the send: each row's level at its channel's send
-                    for (long long k = 0; k < n; k++) {
-                        float g = (*wt)((long long)live[k][cMch], (long long)live[k][12]);
-                        wf[0][k] = wf[0][k] * g;
-                        wf[1][k] = wf[1][k] * g;
-                    }
                 std::vector<long> wl[2];
                 for (int q = 0; q < 2; q++) {
                     std::vector<double> v = tcol(col(LN[q]));
@@ -4515,39 +4729,158 @@ int main(int argc, char **argv)
                                   nft ? &wmc : nullptr,
                                   nullptr, nullptr, nullptr, nullptr, 0, sel, post, w0, wn, nullptr, 0);
                 };
-                if (buses.empty()) {
-                    winr(nullptr, 1, oL + w0, oR + w0);
-                } else {
-                    // the rest, then each bus's part through its processor, then the post
-                    std::vector<unsigned char> wb(n > 0 ? n : 1, 0), sel(n > 0 ? n : 1);
-                    for (long long r = 0; r < n; r++) {
-                        const long long m = (long long)live[r][cMch];
-                        for (size_t q = 0; q < buses.size(); q++)
-                            if (buses[q].part ? m % 256 == buses[q].ch : buses[q].ch == m) {
-                                if (wb[r]) {
-                                    fprintf(stderr, "nvrender: refused: a row on two buses (a part's and its tone's)\n");
-                                    exit(2);
+                // the window into a set's outputs: the rest, each bus's part kept (stage 1)
+                auto emit = [&](BusSet &b) {
+                    if (buses.empty()) {
+                        auto o = out_at(b, w0, wn);
+                        winr(nullptr, 1, o.first, o.second);
+                        out_emit(b, w0, wn);
+                    } else {
+                        // the rest, then each bus's part through its processor, then the post
+                        std::vector<unsigned char> wb(n > 0 ? n : 1, 0), sel(n > 0 ? n : 1);
+                        for (long long r = 0; r < n; r++) {
+                            const long long m = (long long)unpack(live[r], cMch);
+                            for (size_t q = 0; q < buses.size(); q++)
+                                if (buses[q].part ? m % 256 == buses[q].ch : buses[q].ch == m) {
+                                    if (wb[r]) {
+                                        fprintf(stderr, "nvrender: refused: a row on two buses (a part's and its tone's)\n");
+                                        exit(2);
+                                    }
+                                    wb[r] = (unsigned char)(q + 1);
                                 }
-                                wb[r] = (unsigned char)(q + 1);
-                            }
-                    }
-                    for (long long r = 0; r < n; r++)
-                        sel[r] = wb[r] == 0;
-                    winr(sel.data(), 0, oL + w0, oR + w0);
-                    const float gf = (float)E.k[K_MASTER];
-                    for (size_t q = 0; q < buses.size(); q++) {     // STAGE 1: each bus's part, kept
+                        }
                         for (long long r = 0; r < n; r++)
-                            sel[r] = wb[r] == q + 1;
-                        winr(sel.data(), 0, busL[q].data() + w0, busR[q].data() + w0);
-                        if (revN[q] > 0)            // (a reverb's mono history, at the output's scale)
-                            for (long i = 0; i < wn; i++)
-                                revX[q][revN[q] - 1 + w0 + i] =
-                                    0.5 * ((double)(busL[q][w0 + i] * gf) + (double)(busR[q][w0 + i] * gf));
+                            sel[r] = wb[r] == 0;
+                        auto o = out_at(b, w0, wn);
+                        winr(sel.data(), 0, o.first, o.second);
+                        const float gf = (float)E.k[K_MASTER];
+                        for (size_t q = 0; q < buses.size(); q++) {     // STAGE 1: each bus's part, kept
+                            for (long long r = 0; r < n; r++)
+                                sel[r] = wb[r] == q + 1;
+                            b.busL[q].resize(w0 + wn - b.busO, 0.0f);
+                            b.busR[q].resize(w0 + wn - b.busO, 0.0f);
+                            winr(sel.data(), 0, b.busL[q].data() + (w0 - b.busO), b.busR[q].data() + (w0 - b.busO));
+                            if (b.revN[q] > 0) {          // (a reverb's mono history, at the output's scale)
+                                b.revX[q].resize(b.revN[q] - 1 + w0 + wn - b.revO[q], 0.0);
+                                for (long i = 0; i < wn; i++)
+                                    b.revX[q][b.revN[q] - 1 + w0 + i - b.revO[q]] =
+                                        0.5 * ((double)(b.busL[q][w0 - b.busO + i] * gf) + (double)(b.busR[q][w0 - b.busO + i] * gf));
+                            }
+                        }
                     }
+                };
+                if (gpuf) {
+                    // THE WINDOW ON THE GPU: each selection once, the mix and the send
+                    // from the same launch (the send weights the kernel's own), into the
+                    // sets as the CPU's renders go
+                    GfTable gt;
+                    gt.P = n;
+                    for (int q = 0; q < 3; q++)
+                        gt.d[q] = wdp[q];
+                    for (int q = 0; q < 29; q++)
+                        gt.f[q] = wfp[q];
+                    gt.l[0] = wlp[0];
+                    gt.l[1] = wlp[1];
+                    for (int q = 0; q < 4; q++)
+                        gt.i[q] = wip[q];
+                    if (nft) {
+                        gt.fx = wmc.fx; gt.mk = wmc.mk; gt.FT = wmc.FT; gt.KN = wmc.KN; gt.knk = wmc.knk;
+                        gt.kb0 = wmc.kb0; gt.MPI = wmc.MPI; gt.MKI = wmc.MKI; gt.MPC = wmc.MPC; gt.MPR = wmc.MPR;
+                        gt.MPK = wmc.MPK;
+                        for (int q = 0; q < 3; q++)
+                            gt.fm[q] = wmc.fm[q];
+                    }
+                    if (ps.les) {
+                        gt.lsr = wlsr.data();
+                        for (int q = 0; q < 4; q++)
+                            gt.lob[q] = wlob[q];
+                    }
+                    std::vector<float> sw;
+                    if (nset > 1) {
+                        sw.resize(n > 0 ? n : 1);
+                        for (long long k = 0; k < n; k++)
+                            sw[k] = (*wt)((long long)unpack(live[k], cMch), (long long)unpack(live[k], 12));
+                    }
+                    std::vector<float> o4((size_t)4 * wn);
+                    auto g4 = [&](const unsigned char *sel) {
+                        if (gpuf->render(gt, sel, w0, wn, nset > 1 ? sw.data() : nullptr, (int)BLK, (int)nblk,
+                                         Gt.data(), St.data(), BRr.data(), BCr.data(),
+                                         BLr.empty() ? nullptr : BLr.data(), sh, LANG.empty() ? nullptr : LANG.data(),
+                                         lgn, ps.ntr ? ps.DM.data() : nullptr, ps.ntr ? ps.DMO.data() : nullptr,
+                                         ps.ntr ? ps.DMB.data() : nullptr, ps.ntr ? ps.DMN.data() : nullptr, SR,
+                                         o4.data()) != 0) {
+                            fprintf(stderr, "nvrender: --gpu: the GPU failed at %.3f s\n", w0 / SR);
+                            exit(1);
+                        }
+                    };
+                    if (buses.empty()) {
+                        g4(nullptr);
+                        for (int q = 0; q < nset; q++) {
+                            auto o = out_at(bset[q], w0, wn);
+                            memcpy(o.first, o4.data() + (size_t)(2 * q) * wn, sizeof(float) * wn);
+                            memcpy(o.second, o4.data() + (size_t)(2 * q + 1) * wn, sizeof(float) * wn);
+                            nv_render_post_win(o.first, o.second, w0, wn, SR, E.k[K_MASTER], 1);
+                            out_emit(bset[q], w0, wn);
+                        }
+                    } else {
+                        std::vector<unsigned char> wb(n > 0 ? n : 1, 0), sel(n > 0 ? n : 1);
+                        for (long long r = 0; r < n; r++) {
+                            const long long m = (long long)unpack(live[r], cMch);
+                            for (size_t q = 0; q < buses.size(); q++)
+                                if (buses[q].part ? m % 256 == buses[q].ch : buses[q].ch == m) {
+                                    if (wb[r]) {
+                                        fprintf(stderr, "nvrender: refused: a row on two buses (a part's and its tone's)\n");
+                                        exit(2);
+                                    }
+                                    wb[r] = (unsigned char)(q + 1);
+                                }
+                        }
+                        for (long long r = 0; r < n; r++)
+                            sel[r] = wb[r] == 0;
+                        g4(sel.data());
+                        for (int q = 0; q < nset; q++) {
+                            auto o = out_at(bset[q], w0, wn);
+                            memcpy(o.first, o4.data() + (size_t)(2 * q) * wn, sizeof(float) * wn);
+                            memcpy(o.second, o4.data() + (size_t)(2 * q + 1) * wn, sizeof(float) * wn);
+                        }
+                        const float gf = (float)E.k[K_MASTER];
+                        for (size_t bq = 0; bq < buses.size(); bq++) {     // STAGE 1: each bus's part, kept
+                            for (long long r = 0; r < n; r++)
+                                sel[r] = wb[r] == bq + 1;
+                            g4(sel.data());
+                            for (int q = 0; q < nset; q++) {
+                                BusSet &b = bset[q];
+                                b.busL[bq].resize(w0 + wn - b.busO, 0.0f);
+                                b.busR[bq].resize(w0 + wn - b.busO, 0.0f);
+                                memcpy(b.busL[bq].data() + (w0 - b.busO), o4.data() + (size_t)(2 * q) * wn,
+                                       sizeof(float) * wn);
+                                memcpy(b.busR[bq].data() + (w0 - b.busO), o4.data() + (size_t)(2 * q + 1) * wn,
+                                       sizeof(float) * wn);
+                                if (b.revN[bq] > 0) {
+                                    b.revX[bq].resize(b.revN[bq] - 1 + w0 + wn - b.revO[bq], 0.0);
+                                    for (long i = 0; i < wn; i++)
+                                        b.revX[bq][b.revN[bq] - 1 + w0 + i - b.revO[bq]] =
+                                            0.5 * ((double)(b.busL[bq][w0 - b.busO + i] * gf)
+                                                   + (double)(b.busR[bq][w0 - b.busO + i] * gf));
+                                }
+                            }
+                        }
+                    }
+                } else {
+                emit(bset[0]);
+                if (nset > 1) {                 // the send: each row's level at its channel's send
+                    for (long long k = 0; k < n; k++) {
+                        float g = (*wt)((long long)unpack(live[k], cMch), (long long)unpack(live[k], 12));
+                        wf[0][k] = wf[0][k] * g;
+                        wf[1][k] = wf[1][k] * g;
+                    }
+                    emit(bset[1]);
+                }
                 }
                 w0 += wn;
                 if (!buses.empty())
-                    stage2(w0);                     // STAGE 2: the windows every bus can give, in order
+                    for (int q = 0; q < nset; q++)
+                        stage2(bset[q], w0);                     // STAGE 2: the windows every bus can give, in order
                 // the rows past the window let go of (each store compacted once half
                 // are gone: its rows, lobes and keys -- a register channel's its own keys too)
                 auto compact = [&](Store &g, std::vector<std::pair<long long, long long>> *rk) {
@@ -4560,7 +4893,7 @@ int main(int argc, char **argv)
                     std::vector<std::pair<long long, long long>> tk;
                     for (size_t r = 0; r < g.zend.size(); r++)
                         if (g.zend[r] > w0) {
-                            t.d.insert(t.d.end(), g.d.begin() + NCOLS * r, g.d.begin() + NCOLS * (r + 1));
+                            t.d.insert(t.d.end(), g.d.begin() + (size_t)g_rowB * r, g.d.begin() + (size_t)g_rowB * (r + 1));
                             t.non.push_back(g.non[r]);
                             t.zend.push_back(g.zend[r]);
                             t.lob.push_back(g.lob[r]);
@@ -4597,16 +4930,18 @@ int main(int argc, char **argv)
         nv_play_set_sink(nullptr);
         nv_play_set_reg_sink(nullptr);
         ps.render_to(N);                    // (a song with no notes: its silence)
+        for (int q = 0; q < nset; q++) {
+            if (bset[q].done != N) {
+                fprintf(stderr, "nvrender: --stream: %lld of %ld frames written\n", bset[q].done, N);
+                got = -1;
+            }
+            fclose(bset[q].wf);
+        }
         return got;
     };
-    if (g_stream) {
-        if (stream_pass(nullptr, L.data(), R.data()) < 0) {
-            fprintf(stderr, "nvrender: --stream: the replay failed\n");
-            return 1;
-        }
-    } else
+    if (!g_stream)                          // (a stream's: one pass with the send, once it is known)
         render_mix(fp, L.data(), R.data());
-    if (!write_wav(argv[3], L.data(), R.data(), N, (int)SR)) {
+    if (!g_stream && !write_wav(argv[3], L.data(), R.data(), N, (int)SR)) {
         fprintf(stderr, "nvrender: cannot write %s\n", argv[3]);
         return 1;
     }
@@ -4727,6 +5062,28 @@ int main(int argc, char **argv)
             else
                 svals.insert(rs_of(c));
         }
+    if (g_stream) {
+        // THE STREAM's ONE PASS (streamrender's): the mix, and the send where
+        // the channels heard send differently, window by window from the same rows
+        const bool send_ = !rsend.empty() && svals.size() > 1;
+        std::function<float(long long, long long)> wfn = [&](long long c, long long nr) {
+            auto st = steps.find(c % 256);
+            double g;
+            if (st != steps.end()) {
+                const std::vector<long long> &on = st->second.first;
+                long i = (long)(std::upper_bound(on.begin(), on.end(), nr) - on.begin()) - 1;
+                g = st->second.second[i > 0 ? i : 0];
+            } else {
+                g = rs_of(c);
+            }
+            return (float)g;
+        };
+        const std::string spath = base + ".send.wav";
+        if (stream_pass(send_ ? &wfn : nullptr, argv[3], send_ ? spath.c_str() : nullptr) < 0) {
+            fprintf(stderr, "nvrender: --stream: the replay failed\n");
+            return 1;
+        }
+    }
     if (!rsend.empty() && svals.size() > 1) {
         // the bus: aL and aR weighted (float32, numpy's) by each row's send
         std::vector<float> wL = fcols[0], wR = fcols[1];
@@ -4751,27 +5108,10 @@ int main(int argc, char **argv)
             fp2[q] = fp[q];
         fp2[0] = wL.data();
         fp2[1] = wR.data();
-        std::vector<float> SLb(N), SRb(N);
-        if (g_stream) {
-            std::function<float(long long, long long)> wfn = [&](long long c, long long nr) {
-                auto st = steps.find(c % 256);
-                double g;
-                if (st != steps.end()) {
-                    const std::vector<long long> &on = st->second.first;
-                    long i = (long)(std::upper_bound(on.begin(), on.end(), nr) - on.begin()) - 1;
-                    g = st->second.second[i > 0 ? i : 0];
-                } else {
-                    g = rs_of(c);
-                }
-                return (float)g;
-            };
-            if (stream_pass(&wfn, SLb.data(), SRb.data()) < 0) {
-                fprintf(stderr, "nvrender: --stream: the send's replay failed\n");
-                return 1;
-            }
-        } else
+        std::vector<float> SLb(g_stream ? 0 : N), SRb(g_stream ? 0 : N);
+        if (!g_stream)                      // (a stream's: written in its one pass)
             render_mix(fp2, SLb.data(), SRb.data());
-        if (!write_wav((base + ".send.wav").c_str(), SLb.data(), SRb.data(), N, (int)SR)) {
+        if (!g_stream && !write_wav((base + ".send.wav").c_str(), SLb.data(), SRb.data(), N, (int)SR)) {
             fprintf(stderr, "nvrender: cannot write %s.send.wav\n", base.c_str());
             return 1;
         }

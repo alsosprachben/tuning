@@ -374,13 +374,18 @@ class FileRenderer:
     # is done. The CPU path keeps every row (its hashes are the corpus's).
     RETIRE_FLOOR = 1e-6
     BEND_RETIRE_FLOOR = 3e-7         # rows on a bend row: see _audible_end
-    # A WINDOW'S DESCRIPTORS HAVE A BUDGET: active rows x blocks, 184 bytes
+    # A WINDOW'S DESCRIPTORS HAVE A BUDGET: active rows x blocks, a VDESC
     # each. Tokei at 3:44 had ~590 000 rows sounding, and 32 blocks of them
     # asked for a table past the 3.25 GB the Iris allocates in one buffer --
     # the render died there after 55 minutes (and two such tables, one a
     # window, are what a 7.5 GB laptop cannot hold). Past the budget a window
     # takes fewer blocks, down to one: memory bounded however dense the file.
-    DESC_BUDGET = 768 << 20
+    # It counts what a descriptor really costs: its own bytes, the result it
+    # brings back -- at most BLK bytes on the GPU and as many on the host
+    # (groups of 2 or more, LG to a work-group, 4 floats a sample) -- and its
+    # share of a group, 8. Counted as the descriptor alone, the old 768 MB
+    # was ~5 GB in all: full SHIRO in the studio room went past a 3.5 GB cap.
+    DESC_BUDGET = 384 << 20
 
     def __init__(self, prep, gpu=None, window_blocks=32, setup_threads=None):
         cl = __import__("pyopencl")
@@ -526,7 +531,7 @@ class FileRenderer:
         nact = len(self.active)
         if not nact:
             return 0, [0] * nb, b1
-        cap = max(nact, self.DESC_BUDGET // VDESC.itemsize)
+        cap = max(nact, self.DESC_BUDGET // (VDESC.itemsize + 2 * B.BLK + VGROUP.itemsize // 2))
         if nact * nb > cap:
             # fewer blocks, so the table stays inside its budget (rows that
             # begin after the shortened window are already in the active set,

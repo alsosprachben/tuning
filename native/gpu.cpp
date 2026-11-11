@@ -104,6 +104,10 @@ struct Gpu {
     cl_command_queue q = nullptr;
     cl_program prg = nullptr;
     cl_kernel k = nullptr;
+    cl_kernel kw = nullptr;                 // voices_win: a file's window of blocks (gpurender.FileRenderer)
+    Held wtab[4];                           // ...over its G, D, C, S
+    cl_mem wacc = nullptr;
+    size_t wacc_cap = 0;
     Held tab[3];
     cl_mem acc = nullptr;
     size_t acc_cap = 0;                     // floats
@@ -138,6 +142,13 @@ struct Gpu {
             if (s.acc)
                 cl.ReleaseMemObject(s.acc);
         }
+        for (Held &t : wtab)
+            if (t.m)
+                cl.ReleaseMemObject(t.m);
+        if (wacc)
+            cl.ReleaseMemObject(wacc);
+        if (kw)
+            cl.ReleaseKernel(kw);
         if (k)
             cl.ReleaseKernel(k);
         if (prg)
@@ -233,7 +244,55 @@ struct Gpu {
             return false;
         }
         cl.SetKernelArg(k, 10, 4 * LG * LK * sizeof(float), nullptr);     // local: the work-group's sums
+        kw = cl.CreateKernel(prg, "voices_win", &e);
+        if (e != 0) {
+            err = "no kernel `voices_win`";
+            return false;
+        }
+        cl.SetKernelArg(kw, 9, 4 * LG * LK * sizeof(float), nullptr);
         return true;
+    }
+
+    // FileRenderer._launch and _collect, waited for: a window's ng groups
+    // (G: d0, d1, the block's offset; ng a multiple of LG) over its tables,
+    // blocks of `frames` from n0; res[4][ng / LG][frames], each work-group's
+    // sums as the kernel leaves them (the caller adds a block's up) -- 0 on success
+    int win(const void *G, size_t gn, const void *D, size_t dn, const void *C, size_t cn, const void *S, size_t sn,
+            int ng, int frames, int mg, long long n0, int send, float *res)
+    {
+        const void *p[4] = {G, D, C, S};
+        size_t n[4] = {gn, dn, cn, sn};
+        for (int i = 0; i < 4; i++)
+            if (!held(wtab[i], p[i], n[i]))
+                return -1;
+        const int nwg = ng / LG;
+        size_t need = (size_t)4 * nwg * frames;
+        if (wacc_cap < need) {
+            if (wacc)
+                cl.ReleaseMemObject(wacc);
+            wacc_cap = need > 2 * wacc_cap ? need : 2 * wacc_cap;
+            cl_int e = 0;
+            wacc = cl.CreateBuffer(ctx, CL_MEM_WRITE_ONLY, wacc_cap * sizeof(float), nullptr, &e);
+            if (e != 0) {
+                wacc = nullptr;
+                wacc_cap = 0;
+                return -1;
+            }
+        }
+        cl_ulong u0 = (cl_ulong)n0;
+        cl.SetKernelArg(kw, 0, sizeof(int), &frames);
+        cl.SetKernelArg(kw, 1, sizeof(int), &mg);
+        cl.SetKernelArg(kw, 2, sizeof(cl_ulong), &u0);
+        cl.SetKernelArg(kw, 3, sizeof(int), &send);
+        for (int i = 0; i < 4; i++)
+            cl.SetKernelArg(kw, 4 + i, sizeof(cl_mem), &wtab[i].m);
+        cl.SetKernelArg(kw, 8, sizeof(cl_mem), &wacc);
+        size_t gs[2] = {(size_t)frames, (size_t)ng}, ls[2] = {(size_t)LK, (size_t)LG};
+        if (cl.EnqueueNDRangeKernel(q, kw, 2, nullptr, gs, ls, 0, nullptr, nullptr) != 0)
+            return -1;
+        if (cl.EnqueueReadBuffer(q, wacc, CL_TRUE, 0, need * sizeof(float), res, 0, nullptr, nullptr) != 0)
+            return -1;
+        return 0;
     }
 
     bool over(int i, const void *p, size_t n)
@@ -434,5 +493,11 @@ int nv_cl_launch(void *h, int slot, const void *D, long dn, const void *C, long 
 int nv_cl_collect(void *h, int slot, float *out) { return ((nv::gpu::Gpu *)h)->collect(slot, out); }
 
 void nv_cl_free(void *h) { delete (nv::gpu::Gpu *)h; }
+
+int nv_cl_win(void *h, const void *G, long gn, const void *D, long dn, const void *C, long cn, const void *S, long sn,
+              int ng, int frames, int mg, long long n0, int send, float *res)
+{
+    return ((nv::gpu::Gpu *)h)->win(G, gn, D, dn, C, cn, S, sn, ng, frames, mg, n0, send, res);
+}
 
 }  // extern "C"
