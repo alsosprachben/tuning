@@ -2931,6 +2931,25 @@ int main(int argc, char **argv)
     long fgn = 0;
     std::vector<int> fsrc, ftyc;
     std::vector<float> fpc_[3];
+    // (...and each filtered channel's row, type and parameters, for a stream's
+    // windows -- filter_prep's EF.columns -- with fmx, the most it lifts any
+    // frequency: efxfilter.peak, the GPU's retirement's bound)
+    struct FltCh {
+        long long ch;
+        int row, ty;
+        float p[3], mx;
+    };
+    std::vector<FltCh> fltch;
+    auto flt_peak = [](int ty, double pa, double pb, double pc) {
+        (void)pc;
+        if (ty == 1 || ty == 4)
+            return std::max(1.0, (1.0 - pa) + pa / std::max(1e-3, 1.0 - std::fabs(pb)));
+        if (ty == 2 || ty == 3)
+            return std::max(1.0, (1.0 - pb) + pb * std::max(pa, 1.0));
+        if (ty == 5)
+            return std::max(1.0, pb * (pa + 1.0 + 0.7 + 0.5));
+        return 1.0;
+    };
     {
         std::vector<long long> fch_, fpart_;
         std::vector<const NoteClass *> fk_;
@@ -3030,8 +3049,6 @@ int main(int argc, char **argv)
                        || (fk_[q] && fk_[q]->flt_k == 4) ? 3 : 1;
             }
             FCT.assign((size_t)nfr * (size_t)fgn, 1.0f);
-            if (g_stream)
-                nv_stream_refuse("a moving filter");
             const double step = (double)grid / SR;
             for (size_t q = 0; q < fch_.size(); q++) {
                 const NoteClass *k = fk_[q];
@@ -3231,6 +3248,26 @@ int main(int argc, char **argv)
                     }
                     FCT[(size_t)frow[q] * fgn + p] = (float)v;
                 }
+            }
+            for (size_t q = 0; q < fch_.size(); q++) {
+                FltCh c;
+                double p[3];
+                c.ch = fch_[q];
+                c.row = (int)frow[q];
+                if (fk_[q]) {
+                    c.ty = fk_[q]->flt_ty;
+                    for (int j = 0; j < 3; j++)
+                        p[j] = fk_[q]->flt_p[j];
+                } else {
+                    c.ty = (int)ff_[q].ty;
+                    p[0] = ff_[q].pa;
+                    p[1] = ff_[q].pb;
+                    p[2] = ff_[q].pc;
+                }
+                for (int j = 0; j < 3; j++)
+                    c.p[j] = (float)p[j];
+                c.mx = (float)flt_peak(c.ty, p[0], p[1], p[2]);
+                fltch.push_back(c);
             }
             const int cMm = col("mch");
             fsrc.assign(P, -1);
@@ -4656,7 +4693,7 @@ int main(int argc, char **argv)
                 std::vector<int> wlsr;
                 std::vector<float> wlb[4];
                 float *wlob[4] = {nullptr, nullptr, nullptr, nullptr};
-                if (ps.les) {
+                if (ps.les || !fltch.empty()) {
                     wlsr.resize(n);
                     for (int q = 0; q < 4; q++)
                         wlb[q].resize(n);
@@ -4667,6 +4704,32 @@ int main(int argc, char **argv)
                     }
                     for (int q = 0; q < 4; q++)
                         wlob[q] = wlb[q].data();
+                }
+                // THE MOVING FILTERS' columns, the window's rows' (filter_prep:
+                // EF.columns of their channels; the control table the whole file's)
+                std::vector<int> wfsr, wfty;
+                std::vector<float> wflp[3], wfmx;
+                const float *wfpp[3] = {nullptr, nullptr, nullptr};
+                if (!fltch.empty()) {
+                    wfsr.assign(n, -1);
+                    wfty.assign(n, 0);
+                    for (int q = 0; q < 3; q++)
+                        wflp[q].assign(n, 0.0f);
+                    wfmx.assign(n, 1.0f);
+                    for (long long k = 0; k < n; k++) {
+                        const long long m = (long long)unpack(live[k], cMch);
+                        for (const FltCh &c : fltch)
+                            if (c.ch == m) {
+                                wfsr[k] = c.row;
+                                wfty[k] = c.ty;
+                                for (int q = 0; q < 3; q++)
+                                    wflp[q][k] = c.p[q];
+                                wfmx[k] = c.mx;
+                                break;
+                            }
+                    }
+                    for (int q = 0; q < 3; q++)
+                        wfpp[q] = wflp[q].data();
                 }
                 // the window's table, in prepare's final types (as fcol)
                 auto tcol = [&](int c) {
@@ -4730,10 +4793,11 @@ int main(int argc, char **argv)
                                   BRr.data(), BCr.data(), BLr.empty() ? nullptr : BLr.data(), noRows, sh,
                                   (long)E.k[K_CHUNK], E.k[K_XDEC], SR, E.k[K_MASTER], ps.ntr ? ps.DM.data() : nullptr,
                                   ps.ntr ? ps.DMO.data() : nullptr, ps.ntr ? ps.DMB.data() : nullptr,
-                                  ps.ntr ? ps.DMN.data() : nullptr, L_, R_, slo, ps.les ? wlsr.data() : nullptr,
-                                  ps.les ? (float *const *)wlob : nullptr, LANG.empty() ? nullptr : LANG.data(), lgn,
-                                  nft ? &wmc : nullptr,
-                                  nullptr, nullptr, nullptr, nullptr, 0, sel, post, w0, wn, nullptr, 0);
+                                  ps.ntr ? ps.DMN.data() : nullptr, L_, R_, slo, wlsr.empty() ? nullptr : wlsr.data(),
+                                  wlsr.empty() ? nullptr : (float *const *)wlob, LANG.empty() ? nullptr : LANG.data(), lgn,
+                                  nft ? &wmc : nullptr, wfsr.empty() ? nullptr : wfsr.data(),
+                                  wfsr.empty() ? nullptr : wfty.data(), (const float *const *)wfpp,
+                                  wfsr.empty() ? nullptr : FCT.data(), wfsr.empty() ? 0 : fgn, sel, post, w0, wn, nullptr, 0);
                 };
                 // the window into a set's outputs: the rest, each bus's part kept (stage 1)
                 auto emit = [&](BusSet &b) {
@@ -4796,7 +4860,14 @@ int main(int argc, char **argv)
                         for (int q = 0; q < 3; q++)
                             gt.fm[q] = wmc.fm[q];
                     }
-                    if (ps.les) {
+                    if (!wfsr.empty()) {
+                        gt.fsr = wfsr.data();
+                        gt.fty = wfty.data();
+                        for (int q = 0; q < 3; q++)
+                            gt.fp[q] = wflp[q].data();
+                        gt.fmx = wfmx.data();
+                    }
+                    if (!wlsr.empty()) {
                         gt.lsr = wlsr.data();
                         for (int q = 0; q < 4; q++)
                             gt.lob[q] = wlob[q];
@@ -4812,7 +4883,8 @@ int main(int argc, char **argv)
                         if (gpuf->render(gt, sel, w0, wn, nset > 1 ? sw.data() : nullptr, (int)BLK, (int)nblk,
                                          Gt.data(), St.data(), BRr.data(), BCr.data(),
                                          BLr.empty() ? nullptr : BLr.data(), sh, LANG.empty() ? nullptr : LANG.data(),
-                                         lgn, ps.ntr ? ps.DM.data() : nullptr, ps.ntr ? ps.DMO.data() : nullptr,
+                                         lgn, wfsr.empty() ? nullptr : FCT.data(), wfsr.empty() ? 0 : fgn,
+                                         ps.ntr ? ps.DM.data() : nullptr, ps.ntr ? ps.DMO.data() : nullptr,
                                          ps.ntr ? ps.DMB.data() : nullptr, ps.ntr ? ps.DMN.data() : nullptr, SR,
                                          o4.data()) != 0) {
                             fprintf(stderr, "nvrender: --gpu: the GPU failed at %.3f s\n", w0 / SR);

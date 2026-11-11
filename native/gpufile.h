@@ -73,6 +73,8 @@ struct GfTable {
     const double *fm[3] = {nullptr, nullptr, nullptr};
     const int *lsr = nullptr;               // a rotor's lobe columns, NULL none
     const float *lob[4] = {nullptr, nullptr, nullptr, nullptr};     // lph lfl lsh lnm
+    const int *fsr = nullptr, *fty = nullptr;       // a moving filter's columns, NULL none
+    const float *fp[3] = {nullptr, nullptr, nullptr}, *fmx = nullptr;   // fpa fpb fpc, and its peak
 };
 
 struct GpuFile {
@@ -187,8 +189,8 @@ struct GpuFile {
     // 0, or -1 where the GPU failed
     int render(const GfTable &t, const unsigned char *sel, long long n0, long long wn, const float *sendW,
                int BLK, int nblk, const float *Gt, const float *St, const float *BR, const double *BC,
-               const float *BL, const float *sh, const float *LANG, long lgn, const float *DM, const long *DMO,
-               const long *DMB, const long *DMN, double SR, float *out)
+               const float *BL, const float *sh, const float *LANG, long lgn, const float *FCT, long fgn,
+               const float *DM, const long *DMO, const long *DMB, const long *DMN, double SR, float *out)
     {
         memset(out, 0, sizeof(float) * 4 * wn);
         // the rows, by onset (stable), and each one's end: as voice_partial.inc
@@ -215,6 +217,8 @@ struct GpuFile {
                     lift = std::max((double)BLmax[(size_t)br * BLcols + bb], 0.0);
                 }
             }
+            if (FCT && t.fsr && t.fmx && t.fsr[r] >= 0)     // (a moving filter can lift a row: at most fmx)
+                lift = lift * (double)t.fmx[r];
             if (LANG && t.lsr && t.lsr[r] >= 0)
                 lift = lift * (double)t.lob[3][r];
             a = a * lift;
@@ -290,8 +294,10 @@ struct GpuFile {
                            t.MPI ? t.MPR : nullptr, t.MKI, t.MKI ? t.MPK : nullptr, t.fx ? t.fm[0] : nullptr,
                            t.fx ? t.fm[1] : nullptr, t.fx ? t.fm[2] : nullptr, sh[0], sh[1], sh[2], sh[3],
                            LANG ? t.lsr : nullptr, LANG ? t.lob[0] : nullptr, LANG ? t.lob[1] : nullptr,
-                           LANG ? t.lob[2] : nullptr, LANG ? t.lob[3] : nullptr, LANG, LANG ? lgn : 0, nullptr,
-                           nullptr, nullptr, nullptr, nullptr, nullptr, 0, sendW ? sendW : &zero_, sendW ? 1 : 0,
+                           LANG ? t.lob[2] : nullptr, LANG ? t.lob[3] : nullptr, LANG, LANG ? lgn : 0,
+                           FCT ? t.fsr : nullptr, FCT ? t.fty : nullptr, FCT ? t.fp[0] : nullptr,
+                           FCT ? t.fp[1] : nullptr, FCT ? t.fp[2] : nullptr, FCT, FCT ? fgn : 0,
+                           sendW ? sendW : &zero_, sendW ? 1 : 0,
                            active.data(), (int)nact, D.p, C.p, (int)C.n, SB.p, (int)SB.n, nthr, counts, (int)nbk);
                 if (r == 0)
                     break;
