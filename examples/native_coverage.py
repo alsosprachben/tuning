@@ -163,12 +163,13 @@ TASKS = [
                     "timeline, compacted as _efx_event does), a flanger's feedback comb, Tremolo and Auto Pan "
                     "(Roland's waves; the Tremolo Chorus's): |H| each block on P2a's path, both ears; the "
                     "responses and controls on libm in Python too (native.xatan/xcexp/xabs/xpow/xexp)"),
-    ("SC-55", False, "Live: the rest of the insertion effect in nvlive -- done: the chain builder shared "
+    ("SC-55", True, "Live: the rest of the insertion effect in nvlive -- the chain builder shared "
                      "(native/efxchain.cpp), its state and each note's direct gain, the moving filters, a Moog's "
                      "rows under a moving filter, a tone's own insertion effect (an organ's too), the copies as "
                      "taps, the rotor (Separate's two mics) and the 3D place, the drive and cabinet and an OD's "
                      "valve, the compressor, a part's bus (Lo-Fi 1/2, compressor, limiter, enhancer, gate, "
-                     "reverb); open: a parallel type's branch B, a Keyboard Multi's copies"),
+                     "reverb), a parallel type's branch B (a second stamp on the part's virtual channel, "
+                     "released with its note), a Keyboard Multi's copies (its taps unrolled as prepare's)"),
     ("SC-55", False, "Files: a streaming (windowed) nvrender for whole songs (--stream) -- it held the table whole "
                      "in float64, and a Sound Canvas song's is past memory (SHIRO's 6.4 min: 21.8M rows, ~8.7 GB). "
                      "Done, in checks to bank: the scan and replay, order keys, each pass at its horizon, windows; "
@@ -181,9 +182,11 @@ TASKS = [
                      "matrix's tremolo, a tremolo stop beside a channel tremolo, a scanner on a register's or an "
                      "amplifier's channel, a chorus share rising on an amplifier's channel, a clavinet's rockers, "
                      "a moving filter"),
-    ("SC-55", False, "Files and live: every SC-88Pro insertion type measured on its own file "
-                     "(examples/gs_efx_files.py, efx_coverage.py: Python vs native, stream vs whole, live vs "
-                     "live.Live) -- only 8 of the 65 occur in a real song; the first full run overnight"),
+    ("SC-55", True, "Files and live: every SC-88Pro insertion type measured on its own file "
+                    "(examples/gs_efx_files.py, efx_coverage.py: Python vs native, stream vs whole, live vs "
+                    "live.Live) -- only 8 of the 65 occur in a real song. Python vs native 63 of 65 identical "
+                    "(2 refused by design), streamed equals whole on 63 (50 streamed, 13 rendered whole), "
+                    "live 65 of 65"),
     ("SC-55", False, "Live: 117:24 Jngl SD Roll refused (LIVE_REFUSED: its velocity probe's table past 2.5 GB) "
                      "-- a re-attack within a row, a gain track like the damper's, would shrink it"),
     ("SC-55", True, "Files: the rhythm part's assignment (40 1p 15); the controller matrix (40 2p, GM2 09) where "

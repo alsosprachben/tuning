@@ -429,7 +429,14 @@ struct Song {
         int ds = spec->default_stops;
         for (int i : idx) {
             const Ev &e = notes[i];
+            // (voice_classes' first of this family: a layer's organ too)
             const OrganSpec *q = porg(e);
+            if (e.slot >= 0 && e.slot < (int)slot_orgs.size())
+                for (const OrganSpec *c : slot_orgs[e.slot])
+                    if (c->family == spec->family) {
+                        q = c;
+                        break;
+                    }
             if (q && q->family == spec->family) {
                 if (q->default_stops != ds) {
                     recalls.push_back(std::make_pair(e.on - 1e-4, q->default_stops));
@@ -495,6 +502,8 @@ struct Song {
 
     const OrganSpec *prog_organ[128] = {nullptr};
     std::vector<const OrganSpec *> slot_organ;      // each variation slot's organ (its tone's class's), NULL none
+    // ...and every organ its tone brings (voice_classes: its class's, each layer's), for the recalls
+    std::vector<std::vector<const OrganSpec *>> slot_orgs;
 
     // the organ of note e's PROGRAM CLASS (property_class_for_program: a
     // variation's its own), NULL none
@@ -769,6 +778,65 @@ struct Song {
                     x.stroked = 0;
                     add.push_back(x);
                 }
+            }
+        }
+        // THE TAISHOGOTO's STRUCK DRONE (its last stop: the channel's first
+        // CC1 in even shares, its default with none): the open string under
+        // every stroke, a chord's one, re-struck by the next, the last left
+        // to ring; drone_strike_db under the stroke (velocity, square law)
+        for (long long c : chs) {
+            std::vector<int> cn;
+            for (int i : byc[c]) {
+                const Ev &e = notes[i];
+                const NoteClass *k = e.drum ? nullptr : K[e.kidx()];
+                if (k && k->n_dstop)
+                    cn.push_back(i);
+            }
+            if (cn.empty())
+                continue;
+            std::stable_sort(cn.begin(), cn.end(), [&](int a, int b) { return notes[a].on < notes[b].on; });
+            const NoteClass *tk = K[notes[cn[0]].kidx()];
+            int stop = tk->dstop_def;
+            auto it = ch.find(c);
+            if (it != ch.end())
+                for (const CC &e : it->second.ccs)
+                    if (e.cc == 1) {
+                        stop = std::min(tk->n_dstop - 1, (int)(e.v * tk->n_dstop / 128));
+                        break;
+                    }
+            if (stop < tk->n_dstop - 1)
+                continue;
+            const double dv = pow(10.0, tk->dstr_db / 40.0);
+            std::vector<double> starts;
+            for (int i : cn)
+                starts.push_back(notes[i].on);
+            std::sort(starts.begin(), starts.end());
+            starts.erase(std::unique(starts.begin(), starts.end()), starts.end());
+            for (int i : cn) {
+                const Ev &e = notes[i];
+                bool chord = false;             // (a drone already at this onset: _d[2] - 1e-6 == the onset)
+                for (const Ev &d : add)
+                    if (d.ch == c && d.on - 1e-6 == e.on)
+                        chord = true;
+                if (chord)
+                    continue;
+                auto nx = std::upper_bound(starts.begin(), starts.end(), e.on);
+                const double ring = e.on + tk->dstr_ring;
+                const double doff = std::min(nx != starts.end() ? *nx : ring, ring);
+                Ev x = e;
+                x.note = tk->dstr_note;
+                x.on = e.on + 1e-6;
+                x.off = doff;
+                x.vel = std::max(1, (int)nearbyint(e.vel * dv));
+                x.kover = tk->dstr_k;
+                x.ratio = 1.0;
+                x.inner = 0;
+                x.tilt = x.mouth = x.morph = NAN;
+                x.mcut = x.mslur = 0;
+                x.cut_of = -1;
+                x.gl = 0;
+                x.stroked = 0;
+                add.push_back(x);
             }
         }
         if (add.empty())
@@ -1559,6 +1627,7 @@ struct Song {
     std::map<long long, std::vector<unsigned char>> sym_drv;    // each mix channel's strings' driver (_SYM_CH)
     std::map<NoteKey, std::pair<double, double>> meend;         // _MEEND_AT: (its ratio at Note On, its row or -1)
     std::map<NoteKey, std::pair<double, double>> siren;         // _SIREN_AT: (its row, its rotor's end)
+    std::map<NoteKey, double> siren_up;                         // ...its upper disc's row (the crank's)
     std::map<NoteKey, std::vector<double>> alias;               // _ALIAS_AT: its harmonics' rows (-1 none)
     // a part's insertion effect: (each mix channel's first effect note's onset, distance), in the note loop's order
     std::map<long long, std::vector<std::pair<double, double>>> efx_part;
@@ -2002,6 +2071,15 @@ extern "C" void nv_npy_normals(unsigned long long seed, long n, double *out);
 void nv_song_slot_organs(void *s, int n, const OrganSpec *const *so)
 {
     ((nv::Song *)s)->slot_organ.assign(so, so + n);
+}
+
+// ...and each slot's every organ (n slots; slot i's from off[i] to off[i + 1] of og)
+void nv_song_slot_orgs(void *s, int n, const int *off, const OrganSpec *const *og)
+{
+    nv::Song *S = (nv::Song *)s;
+    S->slot_orgs.assign(n, {});
+    for (int i = 0; i < n; i++)
+        S->slot_orgs[i].assign(og + off[i], og + off[i + 1]);
 }
 
 void nv_song_organ(void *s, long long ch, const OrganSpec *spec, const OrganSpec *const *prog_organ)
@@ -3055,7 +3133,55 @@ int nv_song_siren_of(void *s, int i, double *out)
         return 0;
     out[0] = it->second.first;
     out[1] = it->second.second;
+    auto iu = S->siren_up.find(it->first);
+    out[2] = iu == S->siren_up.end() ? -1.0 : iu->second;
     return 1;
+}
+
+// ...a double siren's upper disc's row
+void nv_song_siren_up(void *s, long long ch, int note, double on, double row)
+{
+    ((nv::Song *)s)->siren_up[nv::NoteKey{ch, note, on}] = row;
+}
+
+// a channel's controller cc's events, in its order: up to cap, their count
+int nv_song_cc_get(void *s, long long ch, int cc, int cap, double *t, int *v)
+{
+    const nv::Song *S = (nv::Song *)s;
+    auto it = S->ch.find(ch);
+    if (it == S->ch.end())
+        return 0;
+    int n = 0;
+    for (const nv::CC &e : it->second.ccs)
+        if (e.cc == cc) {
+            if (n < cap) {
+                t[n] = e.t;
+                v[n] = e.v;
+            }
+            n++;
+        }
+    return n;
+}
+
+// a key's pressure events (key -1: its channel's aftertouch), sorted as
+// Python's tuples sort: up to cap of them, their count
+int nv_song_press_get(void *s, long long ch, int key, int cap, double *t, int *v)
+{
+    const nv::Song *S = (nv::Song *)s;
+    auto it = S->press.find(std::make_pair(ch, key));
+    if (it == S->press.end())
+        return 0;
+    std::vector<std::pair<double, int>> ev = it->second;
+    std::sort(ev.begin(), ev.end());
+    int n = 0;
+    for (const auto &e : ev) {
+        if (n < cap) {
+            t[n] = e.first;
+            v[n] = e.second;
+        }
+        n++;
+    }
+    return n;
 }
 
 // a play's start (nv_play): the song's play-made rows as they were before the first

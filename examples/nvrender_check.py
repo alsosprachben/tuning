@@ -11,7 +11,9 @@ from an export made once (examples/native_export.py), writes its own. The
 two WAVs compared byte for byte, the sidecars text for text. A file nvrender
 refuses (exit 2: not a piano file, a bend, a moving fader) is counted; one
 whose GS reverb macro chose another room is rendered again from that room's
-export (--room), made once.
+export (--room), made once. With NV_EXPORT_CACHE set, the exports come from
+that cache (nvlive_check.cached_export): a file at a time costs one export,
+not one a file.
 --tuner: both at that tuner -- nvrender computing it (native/tuner.cpp),
 blockrender's CLI taking it by name -- and --a at that reference pitch.
 """
@@ -47,9 +49,8 @@ def main(argv):
     exe = N.build_nvrender()
     tmp = tempfile.mkdtemp(prefix="nvcheck")
     atexit.register(shutil.rmtree, tmp, True)       # (an export and WAVs a run: they filled the disk)
-    nvx = os.path.join(tmp, "piano.nvx")
-    subprocess.check_call([sys.executable, os.path.join(HERE, "examples", "native_export.py"), nvx], env=env,
-                          stdout=subprocess.DEVNULL)
+    from nvlive_check import cached_export
+    nvx = cached_export(tmp)
     same = differ = refused = 0
     for path in files:
         name = os.path.splitext(os.path.basename(path))[0]
@@ -60,10 +61,7 @@ def main(argv):
         r = subprocess.run([exe, nvx, mid, nv] + tun, capture_output=True, text=True)
         rm = re.search(r"the GS reverb's room \((\w+)\)", r.stderr) if r.returncode == 2 else None
         if rm:
-            rx = os.path.join(tmp, rm.group(1) + ".nvx")
-            if not os.path.exists(rx):
-                subprocess.check_call([sys.executable, os.path.join(HERE, "examples", "native_export.py"), rx,
-                                       "--room=" + rm.group(1)], env=env, stdout=subprocess.DEVNULL)
+            rx = cached_export(tmp, rm.group(1))
             r = subprocess.run([exe, rx, mid, nv] + tun, capture_output=True, text=True)
         if r.returncode == 2:
             refused += 1

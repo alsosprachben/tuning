@@ -44,6 +44,7 @@ extern "C" const NoteClass *nv_tcache_note_class(void *h, int program, int note)
 extern "C" int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out);
 extern "C" const OrganSpec *nv_tcache_organ(void *h, int program);
 extern "C" const NoteClass *nv_tcache_class(void *h, int program);
+extern "C" const NoteClass *nv_tcache_key_class(void *h, int program, int key);
 extern "C" double nv_tcache_trim(void *h, int program);
 extern "C" double nv_cab_gain(const NoteClass *k, double hz);
 extern "C" void *nv_livebus_new(const double *fc, double sr, int frames, void *cn, void *cp, void *cf);
@@ -875,6 +876,21 @@ struct Slab {
             cv_aL[s] *= r[q]; cv_aR[s] *= r[q];
             fl_aL[s] *= r[q]; fl_aR[s] *= r[q];
             mo_uL[s] *= r[q]; mo_uR[s] *= r[q];
+        }
+    }
+
+    // live.Slab.ear_gain: a gain on each ear of these slots, every baseline
+    // with it (as channel_gain's): a parallel type's branch at its pan
+    void ear_gain(const std::vector<long> &slots, double gl, double gr)
+    {
+        if (slots.empty() || (gl == 1.0 && gr == 1.0))
+            return;
+        const float l = (float)gl, r = (float)gr;
+        for (long s : once(slots)) {
+            aL0[s] *= l; f4[F4_aL][s] *= l; tr_aL[s] *= l; ls_aL[s] *= l; cv_aL[s] *= l; fl_aL[s] *= l;
+            mo_uL[s] *= l;
+            aR0[s] *= r; f4[F4_aR][s] *= r; tr_aR[s] *= r; ls_aR[s] *= r; cv_aR[s] *= r; fl_aR[s] *= r;
+            mo_uR[s] *= r;
         }
     }
 
@@ -2056,9 +2072,90 @@ struct Room {
 
 struct Ev {
     int type;               // 0 note-on, 1 note-off, 2 control change, 3 channel aftertouch (a),
-                            // 4 the pitch wheel (a, -8192..8191), 6 an exclusive (a: its bytes' place)
+                            // 4 the pitch wheel (a, -8192..8191), 6 an exclusive (a: its bytes' place),
+                            // 7 a key's polytouch (a the key, b the value)
     int ch, a, b;
 };
+
+// THE SIREN's ROTOR (siren.py, as live steps it): kind 1 the fire siren's
+// (its motor; FIRE), 2 the Helmholtz double siren's (its air; HELMHOLTZ) --
+// du/dt = a p (W sqrt(p) - u) - b u, the chest's air after the key's
+struct SirenModel {
+    double a, b, uk, n, air_tau;
+};
+static const SirenModel SIREN_FIRE = {0.723, 0.0908, 0.452, 3.8, 0.0};
+static const SirenModel SIREN_HELM = {1.50, 0.17, 0.0, 0.0, 0.04};
+static const double SIREN_FLOOR_DB = 60.0, SIREN_U_LOW = 0.12;
+struct SirenRot {
+    int kind = 1;
+    double u = 0.0, air = 0.0;
+    SirenRot() {}
+    explicit SirenRot(int k) : kind(k) {}
+    const SirenModel &m() const { return kind == 1 ? SIREN_FIRE : SIREN_HELM; }
+};
+static double siren_target(double p, const SirenModel &m, double k)
+{
+    return m.a * p * ((m.a + m.b) / m.a) * sqrt(std::max(p, 0.0)) / k;     // (a p W sqrt(p) / k: w_top)
+}
+static double siren_step(double u, double p, double dt, const SirenModel &m)
+{
+    const double k = m.a * p + m.b;
+    if (k <= 0.0)
+        return u;
+    const double t = siren_target(p, m, k);
+    return t + (u - t) * exp(-k * dt);
+}
+static double siren_mean(double u, double p, double dt, const SirenModel &m)
+{
+    const double k = m.a * p + m.b;
+    if (k <= 0.0 || dt <= 0.0)
+        return u;
+    const double t = siren_target(p, m, k);
+    return t + (u - t) * (1.0 - exp(-k * dt)) / (k * dt);
+}
+static double siren_air(double air, double p, double dt, const SirenModel &m)
+{
+    if (m.air_tau <= 0.0)
+        return p;
+    return p + (air - p) * exp(-dt / m.air_tau);
+}
+static double siren_level(const SirenRot &r)
+{
+    if (r.kind == 1) {                  // fire_level: self-pumped, 1 at full speed
+        const SirenModel &m = SIREN_FIRE;
+        if (r.u <= 0.0)
+            return 0.0;
+        const double x = pow(r.u / m.uk, m.n), x1 = pow(1.0 / m.uk, m.n);
+        return sqrt((x / (1.0 + x)) / (x1 / (1.0 + x1)));
+    }
+    // blown_level: the jet's speed, the disc chopping it once it turns
+    return sqrt(std::max(r.air, 0.0)) * (r.u * r.u / (r.u * r.u + SIREN_U_LOW * SIREN_U_LOW));
+}
+// Rotor.block: dt seconds at drive p -- the mean speed over it, the levels at its ends
+static double siren_rot_block(SirenRot &r, double p, double dt, double *l0, double *l1)
+{
+    *l0 = siren_level(r);
+    const double mr = siren_mean(r.u, p, dt, r.m());
+    r.u = siren_step(r.u, p, dt, r.m());
+    r.air = siren_air(r.air, p, dt, r.m());
+    *l1 = siren_level(r);
+    return mr;
+}
+// Rotor.coast: dt seconds with no air (between two presses)
+static void siren_coast(SirenRot &r, double dt)
+{
+    r.u *= exp(-r.m().b * dt);
+    r.air = siren_air(r.air, 0.0, dt, r.m());
+}
+// the crank (CC1): the upper chest's angle, and its phase as samples of the note's own time
+static double siren_crank_angle(int cc1)
+{
+    return M_PI / 12.0 * std::max(0, std::min(127, cc1)) / 127.0;
+}
+static double siren_crank_samples(double theta, double f_rev, double sr)
+{
+    return theta * sr / (2.0 * M_PI * f_rev);
+}
 
 struct Part {
     Slab S;
@@ -2255,6 +2352,7 @@ struct Part {
     // mouth's wander (efxfilter.MouthWander: its generator, the next draw's
     // time, where it is headed, where it is, when last asked)
     static const int TONE_SEG = 1 << 8;
+    static const int VIRT = 1 << 16;        // (gsefx.VIRT: ch + VIRT a parallel type's branch B)
     struct ToneFx {
         int ch = 0;
         const NoteClass *k = nullptr;
@@ -2342,6 +2440,31 @@ struct Part {
             d.push_back(r);
         return d;
     }();
+    // THE SIRENS (live's siren_st, siren_mem, siren_retire): (pid, ch, note)
+    // the sounding note's rotor and rows, in the order struck (a dict's); a
+    // rotor let go remembered with the sample it was, still turning; rows of a
+    // note just ended waiting for its fade -- and a siren's air beside the
+    // channel's pressure: each key's polytouch, the channel's CC2
+    typedef std::tuple<long long, int, int> SKey;
+    struct SirenSt {
+        SirenRot rot;
+        std::vector<int> rows;
+        bool down = true, ends = false;
+        long long drive_end = 0;
+        double pv = 1.0, acc[2] = {0.0, 0.0}, frev = 0.0, dl = 0.0;
+    };
+    std::vector<std::pair<SKey, SirenSt>> siren_st;
+    std::map<SKey, std::pair<SirenRot, long long>> siren_mem;
+    std::vector<std::pair<long long, std::vector<int>>> siren_retire;
+    std::map<std::pair<int, int>, double> ppress;
+    double cc2v[16] = {};
+    std::vector<std::pair<SKey, SirenSt>>::iterator siren_find(const SKey &k)
+    {
+        return std::find_if(siren_st.begin(), siren_st.end(), [&](const std::pair<SKey, SirenSt> &x) {
+            return x.first == k;
+        });
+    }
+    bool siren_of(long long p, int ch, int note) { return siren_find(SKey(p, ch, note)) != siren_st.end(); }
     struct ScanPrep {
         std::vector<int> band;
         std::vector<double> dry, sc;
@@ -2852,9 +2975,13 @@ struct Part {
         }
         std::vector<const std::vector<long> *> groups;
         size_t nslots = 0;
+        // (a parallel type's branch B is in the chord where B has an OD of its own)
+        const double *odb = od && od[208] != 0.0 && efx ? nv_efx_live_rec_b(efx) : nullptr;
+        const bool b_od = odb && odb[1] != 0.0;
         for (auto &kv : S.live) {
             const Key &k = kv.first;
-            if (std::get<0>(k) != apid || std::get<3>(k) == AMPK || std::get<3>(k) >= AMP_OLD0)
+            if (std::get<0>(k) != apid || std::get<3>(k) == AMPK
+                || (std::get<3>(k) >= AMP_OLD0 && !(b_od && std::get<3>(k) >= EFXB0)))
                 continue;                   // (not a valve's products, the old tones' among them)
             auto t = key_tone.find(Key(std::get<0>(k), std::get<1>(k), std::get<2>(k), 0));
             if (t != key_tone.end() && t->second != p.cache)
@@ -3958,16 +4085,10 @@ struct Part {
         glide_from = -1;
     }
 
-    // the chain channel ch hears now (live._efx_for), NULL where none or
-    // refused here (a Keyboard Multi's copies: played without it)
+    // the chain channel ch hears now (live._efx_for), NULL where none
     const double *efx_chain(int ch, int *st, const char **why)
     {
         const double *fc = nv_efx_live_chain(efx, ch, st, why);
-        if (fc && fc[34] == 3.0) {
-            *st = -3;
-            *why = "a Keyboard Multi's copies, live";
-            fc = nullptr;
-        }
         return fc;
     }
 
@@ -3983,14 +4104,9 @@ struct Part {
     // dry share -- a gain a slot on every baseline (channel_gain); then its
     // moving filters arm the rows
     // ...a tone's own chain (its effect channel's), as efx_chain takes it
-    const double *tone_chain(const ToneFx &tf, int *st, const char **why)
+    const double *tone_chain(const ToneFx &tf, int *st, const char **why, bool virt = false)
     {
-        const double *fc = tf.ex ? nv_efx_live_chain(tf.ex, tf.ch, st, why) : nullptr;
-        if (fc && fc[34] == 3.0) {
-            *st = -3;
-            *why = "a Keyboard Multi's copies, live";
-            fc = nullptr;
-        }
+        const double *fc = tf.ex ? nv_efx_live_chain(tf.ex, tf.ch + (virt ? VIRT : 0), st, why) : nullptr;
         return fc;
     }
 
@@ -4058,6 +4174,35 @@ struct Part {
         std::vector<Tap> out;
         const double REPEAT_FLOOR = pow(10.0, -60.0 / 20.0);
         const double *Dv = fc[34] == 1.0 ? fc + 35 : fc[34] == 2.0 ? fc + 96 : nullptr;
+        if (fc[34] == 3.0) {
+            // a KEYBOARD MULTI's (gsefx._keyboard_multi, as prepare unrolls it):
+            // every path through its ring modulator, pitch shifter and delay a
+            // tap at the centre -- its ratio, and the modulator's Hz times it
+            const double fm = fc[161], rd = fc[162], rw = fc[163], pd = fc[164], pw = fc[165], ra = fc[166];
+            const double base = fc[167];
+            std::vector<std::pair<double, double>> reps = {{0.0, 1.0}};
+            if (fc[160] != 0.0) {
+                const double t = fc[38], dfb = fc[36];
+                for (int q = 0; q < 64; q++) {
+                    double l = fc[35] * pow(dfb, (double)q);
+                    if (l < 1e-3)
+                        break;
+                    reps.push_back(std::make_pair((q + 1) * t, l));
+                }
+            }
+            const double rm[3][2] = {{rd, 0.0}, {0.5 * rw, fm}, {0.5 * rw, -fm}};
+            const double ps[2][2] = {{pd, 1.0}, {pw, ra}};
+            for (const auto &a : rm)
+                for (const auto &b : ps)
+                    for (const auto &rp : reps) {
+                        if (a[1] == 0.0 && b[1] == 1.0 && rp.first == 0.0)
+                            continue;               // (the part itself)
+                        const double l = a[0] * b[0] * rp.second / base;
+                        if (l > 1e-4 && fabs(l) >= REPEAT_FLOOR)
+                            out.push_back(Tap{(long long)nearbyint(rp.first * rate), l, 0.0, b[1], a[1] * b[1],
+                                              side_cc(2), -1.0, 0.0, 0.0});
+                    }
+        }
         if (Dv) {
             const bool cross = fc[34] == 2.0 && fc[121] != 0.0;
             const double *mod = fc[34] == 2.0 && fc[122] != 0.0 ? fc + 122 : nullptr;
@@ -4123,8 +4268,8 @@ struct Part {
     }
 
     // live._efx_chans, sorted: the module's parts on it and the tones' own
-    // effect channels (a parallel type's branch B: not here yet)
-    std::vector<int> efx_chans() const
+    // effect channels -- and a parallel type's branch B of each (c + VIRT)
+    std::vector<int> efx_chans()
     {
         std::set<int> c;
         if (efx) {
@@ -4135,16 +4280,24 @@ struct Part {
         }
         for (const auto &kv : tone_fx)
             c.insert(kv.first);
+        std::vector<int> base(c.begin(), c.end());
+        for (int b : base) {
+            const double *ex = efx_for(b);
+            if (ex && ex[208] != 0.0)
+                c.insert(b + VIRT);
+        }
         return std::vector<int>(c.begin(), c.end());
     }
-    // ...the chain channel c hears (live._efx_for): its tone's own, or the module's
+    // ...the chain channel c hears (live._efx_for): its tone's own, or the
+    // module's -- a virtual channel (c + VIRT) the branch B of its part's
     const double *efx_for(int c)
     {
         int st = -1;
         const char *why = "";
-        if (c >= TONE_SEG) {
-            auto it = tone_fx.find(c);
-            return it != tone_fx.end() ? tone_chain(it->second, &st, &why) : nullptr;
+        const int base = c % VIRT;
+        if (base >= TONE_SEG) {
+            auto it = tone_fx.find(base);
+            return it != tone_fx.end() ? tone_chain(it->second, &st, &why, c >= VIRT) : nullptr;
         }
         return efx ? efx_chain(c, &st, &why) : nullptr;
     }
@@ -4478,12 +4631,10 @@ struct Part {
         }
     }
 
-    // live._efx_direct and the rest of _efx_note on a chain: its level, its
-    // EQ at each partial's frequency, the chorus's dry share -- a gain a slot
-    // on every baseline (channel_gain); the note for an auto wah's Sens; its
-    // moving filters (or the tone's own) arming the rows on channel ec
-    void efx_direct(const double *fc, int ec, int note, int vel, long long n0, const std::vector<long> &slots,
-                    bool own, int cp)
+    // live._efx_direct: a chain's level, its compressor, its OD stage's
+    // gain, its speaker, its EQ at each partial's frequency, the chorus's
+    // dry share -- a gain a slot on every baseline (channel_gain)
+    void efx_gain(const double *fc, const std::vector<long> &slots)
     {
         const bool cf = fc[14] != 0.0 && fc[18] == 0.0;     // (a chorus's copies, not a flanger's comb)
         double sh = 0.0;
@@ -4520,6 +4671,16 @@ struct Part {
                     S.f4[F4_fa][s] = std::max(S.f4[F4_fa][s], ca);
             }
         }
+    }
+
+    // live._efx_direct and the rest of _efx_note on a chain: its level, its
+    // EQ at each partial's frequency, the chorus's dry share -- a gain a slot
+    // on every baseline (channel_gain); the note for an auto wah's Sens; its
+    // moving filters (or the tone's own) arming the rows on channel ec
+    void efx_direct(const double *fc, int ec, int note, int vel, long long n0, const std::vector<long> &slots,
+                    bool own, int cp)
+    {
+        efx_gain(fc, slots);
         efx_notes[ec].push_back(EfxNote{(double)n0 / rate, INFINITY, vel, note});
         if (fc[22] != 0.0 && has_p3d)
             efx_place3d(fc, slots, cp, n0);
@@ -4527,6 +4688,54 @@ struct Part {
             efx_rotary_arm(fc, slots, note, n0);
         if (efx_moves(fc) || own)
             S.filter_arm(slots, ec);
+    }
+
+    // A PARALLEL TYPE's BRANCH B (live._efx_branch; gsefx.PARALLEL_TYPES),
+    // live as the file has it: the note again, struck with it, on the part's
+    // virtual channel (ec + VIRT) -- so the filter, the rotor, the taps take
+    // it as a part of its own, its chain branch B's -- at B's level, OD and
+    // speaker; each branch at its own pan; let go with the note (mf104_reap)
+    static const long long EFXB0 = 1LL << 48;       // its layer: EFXB0 + n0 (("efxB_%d", n0))
+    void efx_branch(const double *fc, int ec, int ch, int note, const nv::live::Template &T, const Key &key,
+                    const std::vector<long> &slots, double scale, long long n0, double b, int cp)
+    {
+        const int vch = ec + VIRT;
+        const double *fb = efx_for(vch);
+        if (!fb || slots.empty())
+            return;
+        long long on = 0;
+        for (size_t i = 0; i < slots.size(); i++) {
+            long long o = (long long)((double)S.i8[0][slots[i]] - (double)S.f4[F4_rdl][slots[i]]);
+            on = i == 0 ? o : std::min(on, o);
+        }
+        Key kb(std::get<0>(key), ch, note, EFXB0 + n0);
+        if (!S.stamp_t(T, kb, on, scale, ch, rate, 0.0)) {
+            dropped++;
+            return;
+        }
+        std::vector<long> sb = S.last_slots;
+        for (long q : sb)
+            S.slot_ch[q] = vch;
+        if (cp != 64)
+            S.repan(sb, cp, 64, rate, true);
+        efx_gain(fb, sb);
+        S.ear_gain(slots, fc[210], fc[211]);
+        S.ear_gain(sb, fc[212], fc[213]);
+        if (b != 0.0 && b != 1.0)
+            retune(sb, n0, b);
+        if (fb[140] != 0.0)
+            efx_rotary_arm(fb, sb, note, n0);
+        if (efx_moves(fb))
+            S.filter_arm(sb, vch);
+        tap_tables();
+        tap_arm(vch, sb);
+        long direct = slots[0];
+        for (long q : slots)
+            if (S.f4[F4_rdl][q] == 0.0f) {
+                direct = q;
+                break;
+            }
+        mf_groups.push_back(MfGroup{key, direct, {std::make_pair(kb, 0LL)}});
     }
 
     // live.pan_at: (alpha left, alpha right, half itd) for a source at angle
@@ -4735,6 +4944,11 @@ struct Part {
         if (!T)
             return;                         // a miss: live warms it off the audio thread
         amp_touch(cur);                     // (its chord changed: the valve's products are stale)
+        {
+            const NoteClass *skc = nv_tcache_key_class(patches[cur].cache, patches[cur].program, sn);
+            if (skc && skc->siren)          // A SIREN's key: its rotor (live._siren_on)
+                siren_on(ch, note, vel, n0, skc->siren, sn);
+        }
         if (patches[cur].organ) {           // a registered organ: its ranks drawn
             organ_strike(*T, ch, note, vel, n0);
             return;
@@ -4761,6 +4975,12 @@ struct Part {
         if (!S.stamp_t(*T, key, n0, scale, ch, rate)) {
             dropped++;
             return;                         // the slab full: this note does not sound
+        }
+        {
+            auto si = siren_find(SKey(pid, ch, note));      // a siren's slots on its rotor's row
+            if (si != siren_st.end() && !si->second.rows.empty())
+                for (long s : S.last_slots)
+                    S.i4[I4_br][s] = si->second.rows[0];
         }
         std::vector<long> lslots[2] = {S.last_slots, {}};    // each layer's (live's _lslots)
         if (T->moog) {                      // a Moog note: its rows, the panel on it (Slab._moog_stamp)
@@ -4854,6 +5074,7 @@ struct Part {
             drone_note(ch, n0);
         }
         sound_stamp_note(patches[cur], ch, sn, slots);     // the channel's CC71-78 (live._sound_stamp)
+        double b_left = 1.0;                // (the bend left to apply: a parallel type's branch B takes it)
         {                                   // a note struck under a bend, or the wheel up, joins them
             double sva, svr;
             snd_vib(patches[cur], ch, slots, &sva, &svr);
@@ -4906,6 +5127,7 @@ struct Part {
             }
             if (b != 1.0 || v2 != 0.0 || r2 != 1.0)
                 retune_v(slots, n0, b != 1.0, b, v2 != 0.0, v2, r2 != 1.0, r2);
+            b_left = b;
         }
         if (reg_on && cur_reg && reg_note[note] && !lslots[0].empty())
             reg_strike(ch, note, n0, *T, lslots[0]);
@@ -4916,6 +5138,8 @@ struct Part {
         if (efx_fc) {                           // ITS COPIES: the slots on the channel's tap set (live._tap_arm)
             tap_tables();
             tap_arm(efx_ec, slots);
+            if (efx_fc[208] != 0.0)             // ...and a parallel type's branch B (live._efx_branch)
+                efx_branch(efx_fc, efx_ec, ch, note, *T, key, slots, scale, n0, b_left, cpan[ch]);
         }
     }
 
@@ -5120,8 +5344,11 @@ struct Part {
             }
             long long off = S.i8[1][g.direct];
             for (auto &c : g.group)
-                if (S.live_find(c.first) >= 0 && !S.oneshot.count(c.first))
+                if (S.live_find(c.first) >= 0 && !S.oneshot.count(c.first)) {
                     S.release(c.first, off + c.second);
+                    if (std::get<3>(c.first) >= EFXB0)
+                        amp_dirty.insert(std::get<0>(c.first));     // (branch B going: the valve's chord changed)
+                }
         }
         mf_groups.swap(keep);
     }
@@ -6243,6 +6470,14 @@ struct Part {
                 for (long s : S.last_slots)
                     S.i4[I4_br][s] = wr;
         }
+        {
+            auto si = siren_find(SKey(pid, ch, note));      // each row of holes turns with its own disc
+            if (si != siren_st.end() && !si->second.rows.empty()) {
+                int rw = (og->siren_up >> ri) & 1 ? si->second.rows.back() : si->second.rows[0];
+                for (long s : S.last_slots)
+                    S.i4[I4_br][s] = rw;
+            }
+        }
         if (patches[cur].leslie && !S.les.empty())    // onto the rotors, at their rates now
             S.leslie_arm(S.last_slots, R.f4[24].data(), R.f4[2].data(), R.lflip.empty() ? nullptr : R.lflip.data(),
                          n0, rotor_horn.rate, rotor_drum.rate, nullptr, lobe_of_t(R));
@@ -6642,6 +6877,28 @@ struct Part {
                             e.s1 = (double)n0 / rate;
             }
         }
+        {
+            // A SIREN's KEY-UP ENDS ITS DRIVE, not its sound: the fire siren
+            // coasts (no sooner than its GS length), the double siren's air
+            // runs out -- and siren_block lets the note go when it has
+            auto si = siren_find(SKey(pid, ch, note));
+            if (si != siren_st.end() && si->second.down) {
+                si->second.down = false;
+                long long at = n0;
+                auto tx = tex_on.find(Key(pid, ch, note, -1));
+                if (tx != tex_on.end()) {
+                    at = std::max(n0, tx->second);
+                    tex_on.erase(tx);
+                }
+                si->second.ends = true;
+                si->second.drive_end = at;
+                Key k(pid, ch, note, -1);
+                tex_gen.erase(std::remove_if(tex_gen.begin(), tex_gen.end(),
+                                             [&](const TexGen &g) { return g.key == k; }),
+                              tex_gen.end());
+                return;
+            }
+        }
         if (drone_class() || dnote_class()) {   // a chanter's key: the drones wait part_break_s (_drone_reap)
             const NoteClass *dk = drone_class() ? drone_class() : dnote_class();
             S.release(Key(pid, ch, note, -1), n0);
@@ -6808,7 +7065,8 @@ struct Part {
     bool vib_role(const Patch &p) const
     {
         const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
-        return p.wheel_vib && !(p.amp > 0.0) && !(p.organ && p.organ->n_order) && !(p.wtrem > 0.0) && !p.clav
+        return p.wheel_vib && !(p.amp > 0.0) && !(p.organ && (p.organ->n_order || p.organ->siren_up))
+               && !(p.wtrem > 0.0) && !p.clav
                && !p.leslie && !p.wheel_swell && !(k && k->drone_wheel) && !(k && k->flt_set == 2 && k->flt_k == 4)
                && !(k && k->n_dchoice);
     }
@@ -7205,7 +7463,175 @@ struct Part {
         pressure[ch] = v / 127.0;
         at_seen[ch] = true;
         tone_ctl(ch, false, n0, v);
-        press(sounding(ch), pressure[ch]);
+        press(pressed(ch, -1), pressure[ch]);
+    }
+
+    // a key's polytouch: its slots (live's _press_groups(ch, note)) -- and a
+    // siren's air (ppress)
+    void polytouch(int ch, int note, int v)
+    {
+        ppress[std::make_pair(ch, note)] = v / 127.0;
+        press(pressed(ch, note), v / 127.0);
+    }
+
+    // the slots a pressure reaches: the channel's (a key's, note >= 0), a
+    // siren's none -- its pressure is its air (live's _press_groups)
+    std::vector<long> pressed(int ch, int note) const
+    {
+        if (siren_st.empty() && note < 0)
+            return sounding(ch);
+        std::vector<long> out;
+        for (auto &kv : S.live)
+            if (std::get<1>(kv.first) == ch && (note < 0 || std::get<2>(kv.first) == note)
+                && std::none_of(siren_st.begin(), siren_st.end(), [&](const std::pair<SKey, SirenSt> &x) {
+                       return x.first == SKey(std::get<0>(kv.first), ch, (int)std::get<2>(kv.first));
+                   }))
+                out.insert(out.end(), kv.second.begin(), kv.second.end());
+        return out;
+    }
+
+    // ---- the sirens (siren.py; live's _siren_on, _siren_end, _siren_block) ----
+    // a siren key goes down: its rotor -- the one still turning under this key
+    // if it was let go and is coasting, else at rest -- and its rows; a note
+    // still sounding on the key let go here (the disc is one disc)
+    void siren_on(int ch, int note, int vel, long long n0, int kind, int sn)
+    {
+        SKey k(pid, ch, note);
+        SirenRot rot;
+        bool have = false;
+        auto it = siren_find(k);
+        if (it != siren_st.end()) {
+            SirenSt old = it->second;
+            siren_st.erase(it);
+            rot = old.rot;
+            have = true;
+            siren_end(k, old, n0);
+        } else {
+            auto m = siren_mem.find(k);
+            if (m != siren_mem.end()) {
+                rot = m->second.first;
+                have = true;
+                siren_coast(rot, (double)std::max(0LL, n0 - m->second.second) / rate);
+                siren_mem.erase(m);
+            }
+        }
+        if (!have)
+            rot = SirenRot(kind);
+        const OrganSpec *og = patches[cur].organ;
+        size_t nrow = og && og->siren_up ? 2 : 1;
+        SirenSt st;
+        st.rot = rot;
+        if (siren_free.size() >= nrow)
+            for (size_t q = 0; q < nrow; q++) {
+                st.rows.push_back(siren_free.front());
+                siren_free.pop_front();
+            }
+        double f = 440.0 * pow(2.0, (sn - 69) / 12.0);
+        st.pv = std::max(vel / 127.0, 1e-3);
+        st.frev = f / 12.0;
+        if (nrow == 2) {
+            st.dl = siren_crank_samples(siren_crank_angle(wheel_v[ch]), st.frev, rate);
+            st.acc[1] = st.dl;
+        }
+        for (int r : st.rows) {
+            BRt[r] = 1.0f;
+            BCt[r] = 0.0;
+            BLt[2 * r] = BLt[2 * r + 1] = 0.0f;
+        }
+        siren_st.push_back(std::make_pair(k, st));
+    }
+
+    // a siren note let go: its slots fade on their own release, its rows
+    // freed once they have (siren_retire), its rotor remembered
+    void siren_end(const SKey &k, const SirenSt &st, long long n0)
+    {
+        std::vector<Key> ks;
+        for (auto &kv : S.live)
+            if (std::get<0>(kv.first) == std::get<0>(k) && std::get<1>(kv.first) == std::get<1>(k)
+                && std::get<2>(kv.first) == std::get<2>(k))
+                ks.push_back(kv.first);
+        for (auto &q : ks)
+            S.release(q, n0);
+        if (!st.rows.empty())
+            siren_retire.push_back(std::make_pair(n0 + (long long)(0.5 * rate), st.rows));
+        siren_mem[k] = std::make_pair(st.rot, n0);
+    }
+
+    // every sounding siren's rotor one callback on: its rows for this block
+    // (the same model, the same steps, as nvrender's)
+    void siren_block(long long n0, long long frames)
+    {
+        const double dt = (double)frames / rate;
+        while (!siren_retire.empty() && siren_retire[0].first <= n0) {
+            for (int r : siren_retire[0].second)
+                siren_free.push_back(r);
+            siren_retire.erase(siren_retire.begin());
+        }
+        std::vector<SKey> ks;
+        for (auto &x : siren_st)
+            ks.push_back(x.first);
+        for (const SKey &k : ks) {
+            auto it = siren_find(k);
+            if (it == siren_st.end())
+                continue;
+            const int ch = std::get<1>(k), note = std::get<2>(k);
+            bool held = false;
+            for (auto &kv : S.live)
+                held = held || (std::get<0>(kv.first) == std::get<0>(k) && std::get<1>(kv.first) == ch
+                                && std::get<2>(kv.first) == note);
+            if (!held) {                    // its slots taken from it (a reset, a panic): let it go
+                SirenSt st = it->second;
+                siren_st.erase(it);
+                siren_end(k, st, n0);
+                continue;
+            }
+            SirenSt &st = it->second;
+            const bool drive = st.down || (st.ends && n0 < st.drive_end);
+            double p;
+            if (!drive) {
+                p = 0.0;
+            } else if (st.rot.kind == 1) {
+                p = 1.0;
+            } else {
+                auto pp = ppress.find(std::make_pair(ch, note));
+                p = std::max(std::max(st.pv, pressure[ch]),
+                             std::max(pp != ppress.end() ? pp->second : 0.0, cc2v[ch]));
+            }
+            double l0, l1;
+            const double r = siren_rot_block(st.rot, p, dt, &l0, &l1);
+            if (st.rot.kind != 1) {
+                const double g = 1.0 / sqrt(st.pv);   // the velocity's gain is the onset's level
+                l0 *= g;
+                l1 *= g;
+            }
+            if (!st.rows.empty()) {
+                const int lo = st.rows[0];
+                BRt[lo] = (float)r;
+                BCt[lo] = st.acc[0];
+                BLt[2 * lo] = (float)l0;
+                BLt[2 * lo + 1] = (float)l1;
+                st.acc[0] += ((double)BRt[lo] - 1.0) * frames;
+                if (st.rows.size() > 1) {
+                    const int up = st.rows[1];
+                    const double dl = siren_crank_samples(siren_crank_angle(wheel_v[ch]), st.frev, rate);
+                    BRt[up] = (float)(r + (dl - st.dl) / frames);
+                    BCt[up] = st.acc[1];
+                    BLt[2 * up] = (float)l0;
+                    BLt[2 * up + 1] = (float)l1;
+                    st.acc[1] += ((double)BRt[up] - 1.0) * frames;
+                    st.dl = dl;
+                }
+            }
+            if (!drive) {
+                const bool done = st.rot.kind == 1 ? siren_level(st.rot) <= pow(10.0, -SIREN_FLOOR_DB / 20.0)
+                                                   : st.rot.air <= 1e-3 * st.pv;
+                if (done) {
+                    SirenSt cp = st;
+                    siren_st.erase(it);
+                    siren_end(k, cp, n0 + frames);
+                }
+            }
+        }
     }
 
     // live._tone_ctl: the wheel or the hand reaching ch's tones' filters, the
@@ -7338,7 +7764,7 @@ struct Part {
     {
         const double ATT = 0.005, HOLD = 0.4, REL = 0.06;      // (WAH_ENV_*)
         double out = 0.0;
-        auto it = efx_notes.find(c);
+        auto it = efx_notes.find(c % VIRT);     // (branch B hears its part's notes)
         if (it == efx_notes.end())
             return out;
         for (const EfxNote &e : it->second) {
@@ -7486,6 +7912,19 @@ struct Part {
             Comps o;
             chain_comps(efx, c, c, fc, t, o);
             S.filter_swing(c, rate, [&](double f) { return o.h(f, false); }, [&](double f) { return o.h(f, true); });
+        }
+        for (int c = 0; c < TONE_SEG; c++) {    // ...and each part's branch B (a parallel type's)
+            if (!nv_efx_live_on(efx, c))
+                continue;
+            int st = -1;
+            const char *why = "";
+            const double *fc = efx_chain(c + VIRT, &st, &why);
+            if (!fc || !efx_moves(fc))
+                continue;
+            Comps o;
+            chain_comps(efx, c + VIRT, c + VIRT, fc, t, o);
+            S.filter_swing(c + VIRT, rate, [&](double f) { return o.h(f, false); },
+                           [&](double f) { return o.h(f, true); });
         }
     }
 
@@ -8113,8 +8552,10 @@ struct Part {
             wheel_tremolo(ch, v);
         } else if (cc == 1 && !wheel_reset && organ_on(ch)) {
             // AN ORGAN'S MOD WHEEL IS ITS CRESCENDO PEDAL (live's 'crescendo' role)
+            // (not the double siren's: its wheel is the crank and nothing else)
             for (size_t pi = 0; pi < patches.size(); pi++)
-                if (patches[pi].organ && patches[pi].organ->n_order && (patches[pi].channel < 0 || patches[pi].channel == ch))
+                if (patches[pi].organ && patches[pi].organ->n_order && !patches[pi].organ->siren_up
+                    && (patches[pi].channel < 0 || patches[pi].channel == ch))
                     crescendo((int)pi, v, n0);
         } else if (cc == 1 && !wheel_reset && detune_wheel) {
             static const int steps[3] = {0, 64, 127};       // live.DETUNE_STEPS: min(), the first of a tie
@@ -8124,6 +8565,8 @@ struct Part {
                     best = st;
             speed = best;
         }
+        if (cc == 2)
+            cc2v[ch] = v / 127.0;               // breath: a siren's air (siren_block)
         if (cc == 1) {                          // the wheel's last (live's wheel_at), and THE MOUTH (its 'mouth' role)
             wheel_seen[ch] = true;
             wheel_v[ch] = v;
@@ -9919,6 +10362,8 @@ struct Part {
                 note_off(e.ch, e.a, n0);
             else if (e.type == 3)
                 aftertouch(e.ch, e.a, n0);
+            else if (e.type == 7)
+                polytouch(e.ch, e.a, e.b);
             else if (e.type == 4)
                 pitchwheel(e.ch, e.a, n0);
             else
@@ -9944,6 +10389,7 @@ struct Part {
                 && !(sq != sost.end() && sq->second.count(ck.second)) && std::get<3>(kv.first) != AMPK
                 && std::get<3>(kv.first) != DRONEK
                 && std::get<3>(kv.first) < AMP_OLD0 && std::get<3>(kv.first) > MFK0
+                && !siren_of(std::get<0>(kv.first), ck.first, ck.second)
                 && std::none_of(cutting.begin(), cutting.end(), [&](const Cut &c) {
                        return c.pid == std::get<0>(kv.first) && c.ch == ck.first && c.cnote == ck.second;
                    }))
@@ -9956,6 +10402,8 @@ struct Part {
         damp_block(n0, blk);
         if (!mf_groups.empty())
             mf104_reap();
+        if (!siren_st.empty() || !siren_retire.empty())
+            siren_block(n0, blk);               // the sirens' rotors (live's _siren_block, before the reap)
         S.reap(n0, blk);
         if (!scan_row.empty())                  // the scanners' band rows (live's _scanner_block)
             scanner_block(n0, blk);
@@ -10393,11 +10841,6 @@ int nv_part_efx_state(void *h, int *o, int cap, const char **why)
     if (!P->efx)
         return -1;
     int n = nv_efx_live_state(P->efx, o, cap, why);
-    const double *fc = n > 0 && o[n - 1] == 0 ? nv_efx_live_rec(P->efx) : nullptr;
-    if (fc && fc[34] == 3.0) {                       // (refused as efx_chain refuses it)
-        o[n - 1] = -3;
-        *why = "a Keyboard Multi's copies, live";
-    }
     return n;
 }
 

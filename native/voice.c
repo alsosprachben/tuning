@@ -947,6 +947,22 @@ int nv_unison_voices(const VoiceSnap *v, double frequency, int harmonic, double 
             out[5 * n + 3] = harmonic_decay; out[5 * n + 4] = 0.0;
             n++;
         }
+        if (v->crs_kind == 5 && harmonic % 2 == 0) {
+            /* THE TAISHOGOTO's TRIO (TaishoKotoProperties.unison_voices): the
+               trio's k-th harmonics on the string's 2k-th, each a third of
+               the sum's power */
+            double hm = nv_harmonic_volume(v, harmonic);
+            if (hm > 0.0) {
+                double g = v->crs_oct_gain * nv_harmonic_volume(v, harmonic / 2) / hm;
+                g = (g < 30.0 ? g : 30.0) / pow((double)v->crs_ntrio, 0.5);
+                for (int q = 0; q < v->crs_ntrio; q++) {
+                    out[5 * n + 0] = g; out[5 * n + 1] = 0.0;
+                    out[5 * n + 2] = pow(2.0, v->crs_trio[q] / 1200.0) - 1.0;
+                    out[5 * n + 3] = harmonic_decay; out[5 * n + 4] = 0.0;
+                    n++;
+                }
+            }
+        }
         if (v->crs_kind == 3 || v->crs_kind == 4) {
             /* THE KANUN's COURSE (KanunProperties.unison_voices): the key's two
                strings, one sharp, one flat; the OUD's (OudProperties'): one

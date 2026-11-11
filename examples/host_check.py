@@ -41,6 +41,8 @@ def encode(iv, sysex):
         return bytes([0xE0 | ch, v & 127, v >> 7])
     if t == 5:
         return bytes([0xC0 | ch, a])
+    if t == 7:
+        return bytes([0xA0 | ch, a, b])
     if t == 6:
         return b"\xF0" + sysex + b"\xF7"
     return b""

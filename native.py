@@ -115,7 +115,9 @@ class VoiceSnap(ctypes.Structure):
                 ('church', I), ('church_slope', C),
                 ('fb_set', I), ('fb_fixed', I), ('n_fbs', I), ('fb_band_hz', C), ('fb_delay', C), ('fb_swell', C),
                 ('fb_gain', C), ('fb_dbs', C), ('fbs', (C * 2) * 8), ('sw_set', I), ('sw_cents', C),
-                ('sw_hz', C * 2)]
+                ('sw_hz', C * 2), ('mm_pts', I), ('mr_law', I), ('mr_a', C * 2), ('mr_b', C * 2), ('mr_lo', C * 2),
+                ('mr_ref', C), ('mr_body', C * 3), ('crs_ntrio', I), ('crs_trio', C * 4),
+                ('swp_set', I), ('swp_share', C), ('swp_tog', C * 2), ('swp_swept', C * 2), ('swp_step', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -288,7 +290,11 @@ class NoteClass(ctypes.Structure):
                    ('n_mouth', I), ('mouth_seed', I), ('mouth_st', C * 3 * 16), ('mouth_cdf', C * 16),
                    ('mouth_wst', C * 3 * 16), ('mouth_dw', C * 2), ('mouth_glide', C),
                    ('efx_bus', I), ('bus_p', C * 12), ('fold_restrike', I), ('alias_sweep', C * 5),
-                      ('flam_record', I), ('n_rq', I), ('rec_per', C), ('rec_pr', C), ('rec_qx', C * 8), ('rec_qy', C * 8)])
+                      ('flam_record', I), ('n_rq', I), ('rec_per', C), ('rec_pr', C), ('rec_qx', C * 8), ('rec_qy', C * 8),
+                      ('bn_oct', C), ('bn_ref', C), ('osr_n', I), ('osr_open', C * 8), ('osr_cap', C),
+                      ('ng_set', I), ('ng_p', C * 12), ('sym_per_mode', I), ('sym_bw', C),
+                      ('n_dstop', I), ('dstop_def', I), ('dstr_note', I), ('dstr_k', I), ('dstr_db', C),
+                      ('dstr_ring', C)])
 
 
 class NoteIn(ctypes.Structure):
@@ -1166,11 +1172,23 @@ def feedback_voice(cls):
 
 
 def plectrum_voice(cls):
-    """A string struck by a pick (tonelib.Plectrum): its methods Plectrum's own."""
+    """A string struck by a pick (tonelib.Plectrum): its methods Plectrum's own
+    -- or the taishogoto's (TaishoKotoProperties: its volume Plectrum's where
+    its low string is not tilted, its onsets the pick's sweep, VoiceSnap.swp_*)."""
     import tonelib as T
-    return (issubclass(cls, T.Plectrum) and all(_owner(cls, n) == 'Plectrum' for n in (
+    return (issubclass(cls, T.Plectrum) and all(_owner(cls, n) == 'Plectrum' or taisho_voice(cls) and (
+        n in ('harmonic_volume', 'section_onsets_at') and _owner(cls, n) == 'TaishoKotoProperties') for n in (
         'harmonic_volume', 'harmonic_decay', 'aftersound_partial', 'section_onsets_at', 'strike_noise_db',
         'strike_noise_dbs')))
+
+
+def taisho_voice(cls):
+    """The taishogoto (tonelib.TaishoKotoProperties): its octave trio, its
+    sweep, an untilted low string (its harmonic_volume then Plectrum's)."""
+    import tonelib as T
+    K = getattr(T, 'TaishoKotoProperties', None)
+    return (K is not None and issubclass(cls, K) and _owner(cls, 'unison_voices') == 'TaishoKotoProperties'
+            and not getattr(cls, 'low_string_tilt_db', 0.0) and 1 <= len(cls.octave_trio_cents) <= 4)
 
 
 def class_value(cls, name, default=None):
@@ -1223,8 +1241,9 @@ def harmonic_voice(cls):
         if any(next((k.__name__ for k in _mro if n in k.__dict__), None) != 'SynthProperties'
                for n in ('harmonic_volume', 'harmonic_decay', 'section_onsets_at')):
             return False
-        own = dict(own, harmonic_volume='Plectrum', harmonic_decay='Plectrum')
-        if _owner(cls, 'unison_voices') in ('TwelveStringProperties', 'MandolinProperties'):
+        own = dict(own, harmonic_volume=_owner(cls, 'harmonic_volume') if taisho_voice(cls) else 'Plectrum',
+                   harmonic_decay='Plectrum')
+        if _owner(cls, 'unison_voices') in ('TwelveStringProperties', 'MandolinProperties', 'TaishoKotoProperties'):
             own['unison_voices'] = _owner(cls, 'unison_voices')
     elif _owner(cls, 'aftersound_partial') not in (None, 'PromptDecay'):
         return False
@@ -1326,6 +1345,14 @@ def electric_voice(cls):
     own = dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None,
                harmonic_decay='GuitarHarmonicsProperties' if touched else 'ElectricGuitarProperties',
                pickup_gain='SynthProperties', inharmonicity_coefficient_for_frequency='ElectricGuitarProperties')
+    if plectrum_voice(cls) and not touched:
+        # (a pick over the electric's own -- the pedal steel's bar and pick,
+        # GM 2's 26.8: Plectrum's boost, fall and ring wrapping them, VoiceSnap.pick_*)
+        _mro = cls.__mro__[cls.__mro__.index(T.Plectrum) + 1:]
+        if any(next((k.__name__ for k in _mro if n in k.__dict__), None) != own[n]
+               for n in ('harmonic_volume', 'harmonic_decay')):
+            return False
+        own = dict(own, harmonic_volume='Plectrum', harmonic_decay='Plectrum')
     if any(_owner(cls, n) != o for n, o in own.items()):
         return False
     inits = ('SynthProperties', 'ElectricGuitarProperties', 'object') + (('GuitarHarmonicsProperties',) if touched else ())
@@ -2209,6 +2236,15 @@ def snapshot(props):
                 s.crs_kind, s.crs_split = 2, p.course_split
                 s.crs_oct_gain, s.crs_oct_cents = p.octave_partner_gain, p.octave_partner_cents
                 s.crs_uni_gain, s.crs_uni_cents = p.unison_partner_gain, p.unison_partner_cents
+            elif _uo == 'TaishoKotoProperties':
+                # (every even harmonic its octave trio, each a third of the sum's power)
+                s.crs_kind, s.crs_oct_gain = 5, p.octave_partner_gain
+                s.crs_ntrio = len(p.octave_trio_cents)
+                s.crs_trio[:s.crs_ntrio] = [float(c) for c in p.octave_trio_cents]
+            if _owner(type(p), 'section_onsets_at') == 'TaishoKotoProperties':
+                s.swp_set, s.swp_share, s.swp_step = 1, p.sweep_share, p.sweep_step_s
+                s.swp_tog[:] = [float(x) for x in p.sweep_together_s]
+                s.swp_swept[:] = [float(x) for x in p.sweep_swept_s]
         _uo = _owner(type(p), 'unison_voices')
         if _uo in ('KanunProperties', 'OudProperties'):
             # THE KANUN's COURSES, two strings a key, one sharp, one flat; the
@@ -2815,7 +2851,8 @@ class OrganSpec(ctypes.Structure):
                    ('beat_lo', C), ('beat_hi', C), ('n_choir', I), ('choir_pipe', I * 8), ('choir_bridge', I * 8),
                    ('choir_beat', I * 8), ('n_buff', I), ('buff', (I * 2) * 8), ('rank_choir', I * 32),
                    ('choir_ratio', C * 8), ('cross', C), ('choir_cents', (C * 128) * 8),
-                   ('choir_stiff', (C * 128) * 8), ('choir_bname', (ctypes.c_char * 16) * 8)])
+                   ('choir_stiff', (C * 128) * 8), ('choir_bname', (ctypes.c_char * 16) * 8),
+                   ('siren_up', I)])
 
 
 _ORGAN = {}
@@ -2823,6 +2860,14 @@ _ORGAN = {}
 # WHAT AN ORGAN NOTE IN C DOES NOT DO (the Python's, where a class asks):
 # the wind's skirt, unisons sharing a phase, feedback
 _ORGAN_OFF = ('wind_skirt_always', 'unison_shares_phase', 'feedback_harmonic')
+
+
+def siren_host(cls):
+    """Helmholtz's double siren (tonelib.HelmholtzSirenProperties): a mode set
+    (kind 2) whose rows of holes are registered ranks, its rotor fed by air,
+    its upper disc's ranks on the crank's row (nvrender's)."""
+    return (getattr(cls, 'siren_rotor', None) == 'helmholtz' and getattr(cls, 'registerable', False)
+            and kit_drum(cls) == 2 and len(getattr(cls, 'stop_ranks', ())) <= 32)
 
 
 def organ(cls):
@@ -2834,7 +2879,8 @@ def organ(cls):
         return got or None
     _ORGAN[cls] = False
     if (not getattr(cls, 'registerable', False)
-            or not (pipe_voice(cls) or tonewheel_voice(cls) or harmonic_voice(cls) or hit_voice(cls))
+            or not (pipe_voice(cls) or tonewheel_voice(cls) or harmonic_voice(cls) or hit_voice(cls)
+                    or siren_host(cls))
             or _class(cls) is None):
         return None
     if any(getattr(cls, a, None) for a in _ORGAN_OFF):
@@ -2920,6 +2966,8 @@ def organ(cls):
             r.choir = (bc or '').encode()
             r.beat = int(bool(cho and getattr(cls, 'choir_beat_hz', None) and bc != 'A'))
             r.perc = int(key in (getattr(cls, 'percussion_ranks', ()) or ()))
+            if key in (getattr(cls, 'siren_upper', ()) or ()):
+                o.siren_up |= 1 << i                # (the upper disc's: the crank's row)
         o.n_rank = len(ranks)
         for i, k in enumerate(pipes):
             v = _class(k)
@@ -3149,6 +3197,8 @@ def note_class(cls):
             org_has = lambda a: _og(a) or a in ('one_shot', 'strike_phase_spread', 'strike_noise_layers')  # noqa: E731
         ok = (v is not None and not (getattr(cls, 'grains', None) and not grains_of(cls))
               and drones_ok(cls) and len(getattr(cls, 'scale_cents', None) or ()) <= 32
+              and (not getattr(cls, 'drone_stops', None)
+                   or note_class(getattr(T, cls.drone_strike_class)) is not None)
               and (not getattr(cls, 'pulse', False) or pulse_voice(cls))
               and not any(getattr(cls, a, None) for a in _NOTE_OFF
                                         if not (drum and drum_has(a)) and not org_has(a))
@@ -3525,6 +3575,13 @@ def note_class(cls):
             k.dchoice[:len(_chs)] = _chs
             k.dchoice_var = int(getattr(cls, 'drone_note_variation', 0))   # (live's: its own patch)
         k.drone_wheel = int(bool(getattr(cls, 'drone_wheel', False)))     # (live's: Patch.drone_wheel)
+        _dst = tuple(getattr(cls, 'drone_stops', ()) or ())
+        if _dst:                                # (the wheel's drone stops: the taishogoto's struck drone)
+            import tonelib as _TL
+            k.n_dstop, k.dstop_def = len(_dst), int(cls.drone_stop_default)
+            k.dstr_note, k.dstr_db = int(cls.drone_strike_note), float(cls.drone_strike_db)
+            k.dstr_ring = float(cls.drone_strike_ring_s)
+            k.dstr_k = NV_K_DRONE + drone_index(getattr(_TL, cls.drone_strike_class))
         _dr = tuple(getattr(cls, 'drone_ratios', ()) or ())
         k.n_dratio = min(4, len(_dr))
         k.drone_ratio[:k.n_dratio] = [float(x) for x in _dr[:4]]
@@ -3539,10 +3596,10 @@ def note_class(cls):
             k.fall_at_s, k.fall_s, k.fall_fade_db = float(cls.fall_at_s), float(cls.fall_s), float(cls.fall_fade_db)
             k.fall_smear = float(getattr(cls, 'fall_smear', 0.6))
         _sr = getattr(cls, 'siren_rotor', None)
-        if _sr not in (None, 'fire'):
-            _NOTE[cls] = False              # (the Helmholtz siren's air and upper disc: Python's)
+        if _sr not in (None, 'fire') and not siren_host(cls):
+            _NOTE[cls] = False              # (another siren's rotor: Python's)
             return None
-        k.siren = int(_sr == 'fire')        # (the fire siren's rotor: nvrender's rows)
+        k.siren = {'fire': 1, 'helmholtz': 2}.get(_sr, 0)     # (its rotor: nvrender's rows)
         k.tp_hz = float(getattr(cls, 'tremolo_pick_hz', 0.0) or 0.0)     # (tremolo picking: Song::gliss)
         if k.tp_hz:
             k.tp_up_db, k.tp_jit = float(cls.tremolo_pick_up_db), float(cls.tremolo_pick_jitter)
@@ -3902,7 +3959,8 @@ class Midi(object):
         """[(t, type, channel, a, b)] in message order: 0 note-on (key,
         velocity), 1 note-off, 2 control (number, value), 3 the channel's
         aftertouch (value), 4 the pitch wheel
-        (-8192..8191), 5 a program change, 6 an exclusive (a: sysex(a))"""
+        (-8192..8191), 5 a program change, 6 an exclusive (a: sysex(a)), 7 a
+        key's polytouch (key, value)"""
         I4 = ctypes.c_int * 4
         out = []
         for i in range(self.d.nv_midi_n_events(self.p)):
@@ -5302,8 +5360,12 @@ def variation_tables():
             vfam = (B.organ_family(vpc) if isinstance(vpc, type) and getattr(vpc, 'registerable', False)
                     and organ(vpc) is not None else None)
 
+            # (a layer of another family -- Technorg Hit's organ stab on the
+            # orchestra hit -- its own registration on the channel, as
+            # _prep_organ_rows keys them: (channel, organ_family))
             def reg_ok(c):
-                return not getattr(c, 'registerable', False) or (vfam is not None and B.organ_family(c) == vfam)
+                return (not getattr(c, 'registerable', False) or (vfam is not None and B.organ_family(c) == vfam)
+                        or organ(c) is not None)
             for lp, st, vlo, vhi in lys:
                 cl = [P.layer_class(lp, k) for k in range(128)]
                 whole = whole and all(ok(c) and reg_ok(c) for c in cl if c is not None)

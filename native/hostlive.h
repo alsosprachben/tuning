@@ -44,7 +44,8 @@ void nv_part_mts_ref(void *h, int note, double hz);
 void nv_tcache_set_gm2(void *h, int on);
 void nv_tcache_set_var(void *h, int v);
 void nv_live_vars(int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2,
-                  int nslot, const OrganSpec *const *so, long long kn);
+                  int nslot, const OrganSpec *const *so, const int *soff, const OrganSpec *const *sog,
+                  long long kn);
 void nv_midi_free(void *p);
 double nv_midi_total(void *p);
 int nv_midi_n_events(void *p);
@@ -308,7 +309,7 @@ struct Midi {
 };
 
 // raw MIDI bytes from a device file: running status; note-on at velocity 0 a
-// note-off; channel aftertouch type 3; an exclusive (F0 .. F7) type 6, its
+// note-off; channel aftertouch type 3, a key's polytouch 7; an exclusive (F0 .. F7) type 6, its
 // bytes; realtime and the other system messages skipped
 struct MidiParse {
     int status = 0, need = 0, got = 0;
@@ -355,6 +356,8 @@ struct MidiParse {
                 m.type = 2;
             else if (hi == 0xD0)
                 m.type = 3;
+            else if (hi == 0xA0)
+                m.type = 7;                             // a key's polytouch (a the key, b the value)
             else if (hi == 0xE0) {
                 m.type = 4;                             // the pitch wheel, -8192..8191
                 m.a = ((d[1] << 7) | d[0]) - 8192;

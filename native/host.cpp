@@ -598,12 +598,38 @@ int nv_host::open(int argc, char **argv)
                 ls.insert(ls.end(), l.begin(), l.end());
             vt.push_back(v.trim[0]);
         }
-        std::vector<const OrganSpec *> so(E.vmap.size() / 128, nullptr);
-        for (size_t en = 1; en < E.vents.size(); en++)
-            if (E.vents[en].ls.size() == 1 && E.vents[en].pcls >= 0 && E.cls_organ[E.vents[en].pcls] >= 0)
-                so[E.vents[en].ls[0][0]] = &E.organs[E.cls_organ[E.vents[en].pcls]];
+        // (as nvrender gives its song them: each slot its entry's program
+        // class's organ, and every organ the entry brings -- voice_classes:
+        // its class's, then each layer's at key 60 -- for the recalls)
+        const int ns = (int)(E.vmap.size() / 128);
+        std::vector<const OrganSpec *> so(ns, nullptr);
+        std::vector<std::vector<const OrganSpec *>> per(ns);
+        for (size_t en = 1; en < E.vents.size(); en++) {
+            const OrganSpec *o = E.vents[en].pcls >= 0 && E.cls_organ[E.vents[en].pcls] >= 0
+                                 ? &E.organs[E.cls_organ[E.vents[en].pcls]] : nullptr;
+            std::vector<const OrganSpec *> eo;
+            if (o)
+                eo.push_back(o);
+            for (const auto &l : E.vents[en].ls) {   // (K's class there: the live export's cmap stops
+                const long long kq = NV_K_VAR + 128LL * l[0] + 60;     // at the drum sets)
+                if (l[0] >= 0 && kq < (long long)K.size() && K[kq] && K[kq]->organ)
+                    eo.push_back(K[kq]->organ);
+            }
+            for (const auto &l : E.vents[en].ls)
+                if (l[0] >= 0 && l[0] < ns) {
+                    if (o)
+                        so[l[0]] = o;
+                    per[l[0]] = eo;
+                }
+        }
+        std::vector<int> soff(1, 0);
+        std::vector<const OrganSpec *> sog;
+        for (int i = 0; i < ns; i++) {
+            sog.insert(sog.end(), per[i].begin(), per[i].end());
+            soff.push_back((int)sog.size());
+        }
         nv_live_vars((int)E.vents.size(), nls.data(), ls.data(), vt.data(), E.vgs.data(), E.vgm2.data(),
-                     (int)so.size(), so.data(), (long long)K.size());
+                     ns, so.data(), soff.data(), sog.data(), (long long)K.size());
     }
     memset(&t, 0, sizeof t);
     t.sr = SR; t.retrigger_fade = E.k[K_RETRIGGER]; t.nyq_om = E.k[K_NYQ_OM];

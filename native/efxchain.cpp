@@ -972,6 +972,7 @@ extern "C" double nv_efx_eq_gain(const double *fc, double f)
 // when the setting changes (efx_rev)
 namespace {
 struct EfxLive {
+    static const int VIRT = 1 << 16;        // (gsefx.VIRT: ch + VIRT a part's branch B)
     const double *X;
     double SR;
     int msb = 0, lsb = 0, p[21], snd[3] = {40, 0, 0}, ctl[4] = {0, 0x40, 0, 0x40};
@@ -1070,11 +1071,16 @@ struct EfxLive {
                 break;
             R.apply(e.k, e.a, e.b);
         }
-        if (!R.on(ch))
+        if (!R.on(ch % VIRT))
             return -1;
         const double *r = R.chain();
         if (!r)
             return R.status;
+        if (ch >= VIRT) {                   // (a virtual channel: a parallel type's branch B)
+            if (!R.has_b)
+                return -1;
+            r = R.recb;
+        }
         memcpy(out, r, sizeof(double) * NV_FXN);
         return 0;
     }
@@ -1147,6 +1153,12 @@ extern "C" long nv_efx_live_rev(void *h) { return ((EfxLive *)h)->rev; }
 
 // its chain whoever hears it (NULL none: Thru, unbuilt or refused)
 extern "C" const double *nv_efx_live_rec(void *h) { return ((EfxLive *)h)->chain(); }
+// ...and its branch B's, a parallel type's (NULL none)
+extern "C" const double *nv_efx_live_rec_b(void *h)
+{
+    EfxLive *E = (EfxLive *)h;
+    return E->chain() && E->has_b ? E->recb : nullptr;
+}
 
 // THE STATE A PANEL SHOWS (livetui.pick_efx's live.efx): into o, its type
 // (msb, lsb), parameters 1-20 (-1 unset), sends, controllers, the channels
@@ -1178,17 +1190,25 @@ extern "C" int nv_efx_live_state(void *h, int *o, int cap, const char **why)
 
 // the chain channel ch hears now (live._efx_for): its record, NULL where
 // ch is not on the effect or its type is Thru, unbuilt or refused here
-// (*status: 0, -1, -3; *why the refusal's)
+// (*status: 0, -1, -3; *why the refusal's) -- a virtual channel (ch +
+// gsefx.VIRT) its part's branch B, NULL (-1) where the type has none
 extern "C" const double *nv_efx_live_chain(void *h, int ch, int *status, const char **why)
 {
     EfxLive *E = (EfxLive *)h;
-    if (!E->on(ch)) {
+    if (!E->on(ch % EfxLive::VIRT)) {
         *status = -1;
         return nullptr;
     }
     const double *r = E->chain();
     *status = E->status;
     *why = E->why;
+    if (r && ch >= EfxLive::VIRT) {
+        if (!E->has_b) {
+            *status = -1;
+            return nullptr;
+        }
+        r = E->recb;
+    }
     return r;
 }
 

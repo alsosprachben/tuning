@@ -51,6 +51,14 @@
 
 #include "pycompat.h"
 
+struct NvSirRow {                       // (nv_song_sirens: a rotor's row -- nvrender.cpp's twin)
+    long long ch;
+    std::vector<float> r, l;
+    std::vector<double> c;
+};
+void nv_song_sirens(void *song, const NoteClass *const *K, int nK, double total, double SR, long long BLK, int sbase,
+                    std::vector<NvSirRow> *sirp);
+
 extern "C" {
 void *nv_midi_read(const uint8_t *buf, long long len, int *err);
 void nv_midi_map_kits(const int *ids, int n);
@@ -1196,6 +1204,20 @@ int main(int argc, char **argv)
                     if (l[0] >= 0 && l[0] < ns)
                         so[l[0]] = o;
         nv_song_slot_organs(song, ns, so.data());
+        std::vector<int> off(1, 0);
+        std::vector<const OrganSpec *> og;
+        std::vector<std::vector<const OrganSpec *>> per(ns);
+        for (int en = 1; en < (int)E.vents.size(); en++) {
+            std::vector<const OrganSpec *> eo = ent_organs(en);
+            for (const auto &l : E.vents[en].ls)
+                if (l[0] >= 0 && l[0] < ns)
+                    per[l[0]] = eo;
+        }
+        for (int i = 0; i < ns; i++) {
+            og.insert(og.end(), per[i].begin(), per[i].end());
+            off.push_back((int)og.size());
+        }
+        nv_song_slot_orgs(song, ns, off.data(), og.data());
     }
     nv_midi_song(midi, song, E.trim.data() + (nv_midi_gs(midi) ? 256 : 0));
     if (gs_eq[0] > 0.0)
@@ -1311,10 +1333,6 @@ int main(int argc, char **argv)
                 for (const OrganSpec *og : ogs) {
                     if (!og || std::find(fams.begin(), fams.end(), og->family) != fams.end())
                         continue;
-                    if (!fams.empty()) {
-                        fprintf(stderr, "nvrender: refused: two organs on channel %d\n", c);
-                        return 2;
-                    }
                     if (var) {
                         fprintf(stderr, "nvrender: refused: an organ and a variation on channel %d\n", c);
                         return 2;
@@ -1858,133 +1876,10 @@ int main(int argc, char **argv)
     // after and between presses -- a row each, after the others: its speed a
     // block (the mean ratio), its phase summed from it, its level at each
     // edge; the note sounding to the rotor's floor or the next press
-    struct SirRow {
-        long long ch;
-        std::vector<float> r, l;
-        std::vector<double> c;
-    };
+    typedef NvSirRow SirRow;
     std::vector<SirRow> sir;
     const int sbase = (int)(gch.size() + nbr_ + nw + nsr + fch.size() + mrows.size());
-    {
-        auto pmx = [](double a, double b) { return b > a ? b : a; };    // (Python's max and min)
-        auto pmn = [](double a, double b) { return b < a ? b : a; };
-        const double A = 0.723, Bc = 0.0908, UK = 0.452, NE = 3.8;     // siren.FIRE
-        const double W = (A + Bc) / A, FLOOR = pow(10.0, -60.0 / 20.0);
-        auto step = [&](double u, double p, double dt) {
-            double k = A * p + Bc;
-            if (k <= 0.0)
-                return u;
-            double target = A * p * W * sqrt(pmx(p, 0.0)) / k;
-            return target + (u - target) * exp(-k * dt);
-        };
-        auto mean_over = [&](double u, double p, double dt) {
-            double k = A * p + Bc;
-            if (k <= 0.0 || dt <= 0.0)
-                return u;
-            double target = A * p * W * sqrt(pmx(p, 0.0)) / k;
-            return target + (u - target) * (1.0 - exp(-k * dt)) / (k * dt);
-        };
-        auto level = [&](double u) {
-            if (u <= 0.0)
-                return 0.0;
-            double x = pow(u / UK, NE), x1 = pow(1.0 / UK, NE);
-            return sqrt((x / (1.0 + x)) / (x1 / (1.0 + x1)));
-        };
-        auto floordiv = [](double a, double b) {    // Python's float a // b
-            double mod = fmod(a, b), div = (a - mod) / b;
-            if (mod != 0.0 && ((b < 0.0) != (mod < 0.0)))
-                div -= 1.0;
-            double f = floor(div);
-            if (div - f > 0.5)
-                f += 1.0;
-            return f;
-        };
-        const long nblk_ = (long)(((long long)(total * SR) + (long long)SR) / (long long)BLK + 2);
-        const double bdt = BLK / SR;
-        std::vector<std::pair<long long, int>> order;
-        std::map<std::pair<long long, int>, std::vector<std::tuple<double, double, int>>> byk;
-        for (int i = 0, n = nv_song_n_notes(song); i < n; i++) {
-            long long c;
-            int iv[4];
-            double dv[2];
-            nv_song_get_note(song, i, &c, iv, dv);
-            int q = nv_song_kidx(song, i);
-            const NoteClass *k = (q >= 0 && q < (int)K.size()) ? K[q] : nullptr;
-            if (!k || k->siren != 1)
-                continue;
-            auto key = std::make_pair(c, iv[0]);
-            if (!byk.count(key))
-                order.push_back(key);
-            byk[key].push_back(std::make_tuple(dv[0], dv[1], i));
-        }
-        for (const auto &key : order) {
-            auto &ns = byk[key];
-            std::stable_sort(ns.begin(), ns.end(), [](const std::tuple<double, double, int> &a,
-                                                      const std::tuple<double, double, int> &b) {
-                return std::get<0>(a) < std::get<0>(b) || (std::get<0>(a) == std::get<0>(b) && std::get<1>(a) < std::get<1>(b));
-            });
-            double u = 0.0, tprev = NAN;
-            for (size_t j = 0; j < ns.size(); j++) {
-                double on = std::get<0>(ns[j]), of = std::get<1>(ns[j]);
-                const NoteClass *k = K[nv_song_kidx(song, std::get<2>(ns[j]))];
-                if (!std::isnan(tprev) && on > tprev)
-                    u *= exp(-Bc * (on - tprev));           // (Rotor.coast)
-                double drive_end = of;
-                if (k->held_texture && k->gate_time > 0.0)
-                    drive_end = pmx(of, on + k->gate_time);
-                double cap = j + 1 < ns.size() ? std::get<0>(ns[j + 1]) : INFINITY;
-                long b0 = (long)floordiv(on * SR, (double)BLK);
-                std::vector<double> r, lv;
-                long kb = b0;
-                double end;
-                for (;;) {
-                    double tb = kb * bdt;
-                    if (tb >= cap || kb >= nblk_) {
-                        end = pmn(cap, nblk_ * bdt);
-                        break;
-                    }
-                    double tm = tb + 0.5 * bdt;
-                    double p = tm < drive_end ? 1.0 : 0.0;
-                    double l0 = level(u);
-                    double rr = mean_over(u, p, bdt);
-                    u = step(u, p, bdt);
-                    double l1 = level(u);
-                    r.push_back(rr);
-                    lv.push_back(l0);
-                    kb++;
-                    if (tb >= drive_end && l1 <= FLOOR) {
-                        end = kb * bdt;
-                        break;
-                    }
-                }
-                lv.push_back(level(u));
-                tprev = pmn(end, cap);
-                SirRow row;
-                row.ch = key.first;
-                row.r.assign(nblk_, 1.0f);
-                long nn = std::min((long)r.size(), nblk_ - b0);
-                for (long q = 0; q < nn; q++)
-                    row.r[b0 + q] = (float)r[q];
-                if (nn > 0)
-                    for (long q = b0 + nn; q < nblk_; q++)
-                        row.r[q] = (float)r[nn - 1];
-                row.l.assign(nblk_ + 1, 1.0f);
-                long nl = std::min((long)lv.size(), std::max(nn, 0L) + 1);
-                for (long q = 0; q < nl && b0 + q < nblk_ + 1; q++)
-                    row.l[b0 + q] = (float)lv[q];
-                for (long q = b0 + nl; q < nblk_ + 1; q++)
-                    row.l[q] = (float)lv[nl - 1];
-                row.c.assign(nblk_, 0.0);
-                double acc = 0.0;               // (the phase: cumsum of (ratio - 1) x BLK, from 0)
-                for (long q = 0; q + 1 < nblk_; q++) {
-                    acc = acc + ((double)row.r[q] - 1.0) * BLK;
-                    row.c[q + 1] = acc;
-                }
-                nv_song_siren(song, key.first, key.second, on, (double)(sbase + (int)sir.size()), tprev);
-                sir.push_back(std::move(row));
-            }
-        }
-    }
+    nv_song_sirens(song, K.data(), (int)K.size(), total, SR, BLK, sbase, &sir);
     // THE MATRIX'S TREMOLO's ROWS (_prep_matrix_tremolo): for each channel
     // whose depth peaks past 0, a row for each row its notes can ride -- its
     // gesture's, its fader's, its breath's, none (-1) -- after the sirens'

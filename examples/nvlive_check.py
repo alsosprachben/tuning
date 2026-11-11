@@ -93,7 +93,7 @@ def _export_prune(cache, keep):
     """the cache under EXPORT_CACHE_MAX: the exports least recently used go
     first (never `keep`, the one just handed over)"""
     import glob
-    fs = sorted(glob.glob(os.path.join(cache, "live-*.nvx")), key=lambda f: os.stat(f).st_atime)
+    fs = sorted(glob.glob(os.path.join(cache, "*-*.nvx")), key=lambda f: os.stat(f).st_atime)
     total = sum(os.path.getsize(f) for f in fs)
     for f in fs:
         if total <= EXPORT_CACHE_MAX:
@@ -104,7 +104,13 @@ def _export_prune(cache, keep):
 
 
 def live_export(tmp, room):
-    """the live export at ROOM (--fresh), its path. With NV_EXPORT_CACHE set:
+    """the live export at ROOM (--fresh), its path: cached_export's"""
+    return cached_export(tmp, room, True)
+
+
+def cached_export(tmp, room=None, live=False):
+    """the export at ROOM (live: --live --fresh; else a file's, ROOM None its
+    default), its path. With NV_EXPORT_CACHE set:
     made once in that directory and handed to every later check whose tree
     has the same sources -- the Python files the export LOADED (it lists them,
     NV_EXPORT_DEPS, beside the export: a check script, or a module the export
@@ -113,11 +119,12 @@ def live_export(tmp, room):
     tree's libraries). A change can only add an import through a file already
     listed, so a listed file's digest changing is what makes another export.
     Without NV_EXPORT_CACHE: made in TMP"""
-    cmd = [sys.executable, os.path.join(HERE, "examples", "native_export.py"), None, "--live", "--fresh",
-           "--room=" + room]
+    kind = "live" if live else "file"
+    cmd = ([sys.executable, os.path.join(HERE, "examples", "native_export.py"), None]
+           + (["--live", "--fresh"] if live else []) + (["--room=" + room] if room else []))
     cache = os.environ.get("NV_EXPORT_CACHE")
     if not cache:
-        cmd[2] = os.path.join(tmp, "live.nvx")
+        cmd[2] = os.path.join(tmp, "%s-%s.nvx" % (kind, room or "default"))
         subprocess.check_call(cmd, stdout=subprocess.DEVNULL)
         return cmd[2]
     import hashlib
@@ -125,14 +132,16 @@ def live_export(tmp, room):
     k0 = hashlib.sha256()
     for k in sorted(k for k in os.environ if k.startswith("TUNING_")):
         k0.update(("%s=%s\0" % (k, os.environ[k])).encode())
-    k0.update(os.path.realpath(HERE).encode() + b"\0" + room.encode())
+    k0.update(os.path.realpath(HERE).encode() + b"\0" + (room or "").encode())
+    if not live:
+        k0.update(b"\0file")                       # (a file's export: another key from a live one's)
     k0 = k0.hexdigest()[:16]
     os.makedirs(cache, exist_ok=True)
-    deps_f = os.path.join(cache, "live-%s.deps" % k0)
+    deps_f = os.path.join(cache, "%s-%s.deps" % (kind, k0))
     nat = _export_native()
 
     def named(deps):
-        return os.path.join(cache, "live-%s-%s.nvx" % (k0, _export_digest(deps + nat, pin)[:20]))
+        return os.path.join(cache, "%s-%s-%s.nvx" % (kind, k0, _export_digest(deps + nat, pin)[:20]))
 
     if os.path.exists(deps_f):
         with open(deps_f) as f:
@@ -141,7 +150,7 @@ def live_export(tmp, room):
         if os.path.exists(out):
             os.utime(out)                               # (used: the last to go)
             return out
-    part = os.path.join(cache, "live-%s-%d.part" % (k0, os.getpid()))
+    part = os.path.join(cache, "%s-%s-%d.part" % (kind, k0, os.getpid()))
     dp = part + ".deps"
     cmd[2] = part
     subprocess.check_call(cmd, stdout=subprocess.DEVNULL, env=dict(os.environ, NV_EXPORT_DEPS=dp))
@@ -295,6 +304,8 @@ def main(argv):
                 lv.on_midi(M("aftertouch", channel=ch, value=a))
             elif ty == 4:
                 lv.on_midi(M("pitchwheel", channel=ch, pitch=a))
+            elif ty == 7:
+                lv.on_midi(M("polytouch", channel=ch, note=a, value=v))
             elif ty == 5:
                 if progs:
                     lv.on_midi(M("program_change", channel=ch, program=a))

@@ -644,6 +644,16 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
         tons[1] = v->pick_stagger;
         nons = 2;
     }
+    if (v->swp_set) {                           /* ...or swept (TaishoKotoProperties.section_onsets_at) */
+        PyRandom rng;
+        pyr_seed(&rng, (long long)nearbyint(t->f0 * 16.0) * 6151 + 1078);
+        const double *lh = pyr_random(&rng) < v->swp_share ? v->swp_swept : v->swp_tog;
+        const double d = pyr_uniform(&rng, lh[0], lh[1]);
+        tons[0] = 0.0;
+        for (int i = 0; i < v->crs_ntrio; i++)
+            tons[1 + i] = d + i * v->swp_step;
+        nons = 1 + v->crs_ntrio;
+    }
     if (ns && v->sect_seats) {
         for (int i = 0; i < ns; i++)
             nv_section_seat(v, t, i, seat[i]);

@@ -1281,7 +1281,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         double mrow;
         if (nv_song_meend_row(song, i, &mrow))
             n.br = mrow >= 0.0 ? mrow : n.fbr;  // the meend: the note's own row, or none (the fader's)
-        double sir[2];
+        double sir[3];
         n.siren_set = 0;
         if (nv_song_siren_of(song, i, sir)) {   // a siren's rotor: its row, its end
             n.br = sir[0];
@@ -1291,11 +1291,16 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         n.n_alias = nv_song_alias_of(song, i, n.alias_br, 32);     // an aliasing sweep's rows, by harmonic
         if (k->organ) {                     // A REGISTERED ORGAN: its ranks as its registration leaves them
             // (one that bends: only a hit's, whose ranks ride no chest -- the
-            // note's own bend row, nv_song_organ_note's br)
-            if ((k->bendable && !k->tmpl.hit_n) || !nv_song_organ_note(song, i, k->organ->family, &n)) {
-                g_why = k->bendable && !k->tmpl.hit_n ? "an organ that bends" : "no organ of its family on its channel";
+            // note's own bend row, nv_song_organ_note's br; or a siren's, whose
+            // ranks ride its rotor's rows)
+            bool bends = k->bendable && !k->tmpl.hit_n && !n.siren_set;
+            if (bends || !nv_song_organ_note(song, i, k->organ->family, &n)) {
+                g_why = bends ? "an organ that bends" : "no organ of its family on its channel";
                 return -(1 + i);
             }
+            if (n.siren_set && sir[2] >= 0.0)   // (a double siren: each row of holes on its own disc's row)
+                for (int ri = 0; ri < k->organ->n_rank; ri++)
+                    n.rank_br[ri] = (k->organ->siren_up >> ri) & 1 ? sir[2] : sir[0];
         }
         n.from_song = 1; n.song_index = i;
         n.press = nv_song_pressure(song, ch, iv[0], dv[0], dv[1]);    // (_pressure_of: to its key-up)

@@ -1,3 +1,4 @@
+#include <climits>
 // live.cpp -- the native engine's LIVE side. First piece: a key's TEMPLATE.
 //
 // live.py makes each key's note once, at each velocity it is played at, and
@@ -35,11 +36,20 @@ void nv_song_live_template(void *s, int no_cut, int no_part_drones);
 void nv_song_free(void *s);
 void nv_song_tuning(void *s, long long ch, double t, const double *freq);
 void nv_song_finish(void *s, double total);
+int nv_song_n_notes(void *s);
+int nv_song_kidx(void *s, int i);
+void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv);
+void nv_song_table(void *s, long long ch, double t, double *out);
+void nv_song_siren(void *s, long long ch, int note, double on, double row, double end);
+void nv_song_siren_up(void *s, long long ch, int note, double on, double row);
+int nv_song_cc_get(void *s, long long ch, int cc, int cap, double *t, int *v);
+int nv_song_press_get(void *s, long long ch, int key, int cap, double *t, int *v);
 void nv_song_kits(void *s, const double *f0, const double *seat);
 void nv_song_chokes(void *s, const unsigned long long *choke);
 void nv_song_strokes(void *s, const int *kind, const double *par);
 void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2);
 void nv_song_slot_organs(void *s, int n, const OrganSpec *const *so);
+void nv_song_slot_orgs(void *s, int n, const int *off, const OrganSpec *const *og);
 void nv_log_n(long n, const double *x, double *out);
 long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                      PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind, double scale,
@@ -142,6 +152,8 @@ static thread_local int g_raga_sa = -1, g_raga_nsw = 0;
 static std::vector<int> g_var_nls, g_var_off, g_var_ls, g_var_gs, g_var_gm2;
 static std::vector<double> g_var_trim;
 static std::vector<const OrganSpec *> g_slot_organ;
+static std::vector<int> g_slot_off;                 // ...and every organ its tone brings (nv_song_slot_orgs')
+static std::vector<const OrganSpec *> g_slot_og;
 static thread_local int g_tmpl_var = 0;
 static long long g_k_n = 0;             // K's length a cache copies (0: the programs' and drum sets' only)
 
@@ -197,6 +209,256 @@ long long nv_template(const NoteClass *const *K, const NoteIn *tmpl, const doubl
 
 }  // extern "C"
 
+struct NvSirRow {                       // (nv_song_sirens: a rotor's row -- nvrender.cpp's twin)
+    long long ch;
+    std::vector<float> r, l;
+    std::vector<double> c;
+};
+
+// THE FIRE SIRENS' ROTORS (_prep_siren, siren.py): each (channel, key)'s
+// notes in their order, its rotor carried key to key -- wound up by its
+// motor while held (to its gate where a held texture has one), coasting
+// after and between presses -- a row each, after the others: its speed a
+// block (the mean ratio), its phase summed from it, its level at each
+// edge; the note sounding to the rotor's floor or the next press
+// -- in the library, so live's templates make them as a file's render does:
+// sbase the first siren row's index, the rows into *sirp
+void nv_song_sirens(void *song, const NoteClass *const *K, int nK, double total, double SR, long long BLK, int sbase,
+                    std::vector<NvSirRow> *sirp)
+{
+    typedef NvSirRow SirRow;
+    std::vector<NvSirRow> &sir = *sirp;
+    auto pmx = [](double a, double b) { return b > a ? b : a; };    // (Python's max and min)
+    auto pmn = [](double a, double b) { return b < a ? b : a; };
+    // siren.FIRE, siren.HELMHOLTZ (its air_tau; U_LOW its tone's fade-in)
+    double A = 0.723, Bc = 0.0908, W = (A + Bc) / A, TAU = 0.0;
+    const double UK = 0.452, NE = 3.8, FLOOR = pow(10.0, -60.0 / 20.0), ULOW = 0.12;
+    auto model = [&](int kind) {
+        A = kind == 2 ? 1.50 : 0.723;
+        Bc = kind == 2 ? 0.17 : 0.0908;
+        TAU = kind == 2 ? 0.04 : 0.0;
+        W = (A + Bc) / A;
+    };
+    auto air_step = [&](double air, double p, double dt) {
+        return TAU <= 0.0 ? p : p + (air - p) * exp(-dt / TAU);
+    };
+    auto blown = [&](double u, double air) {
+        return sqrt(pmx(air, 0.0)) * (u * u / (u * u + ULOW * ULOW));
+    };
+    // (_stepv: the last event at or before tt, d before any)
+    auto stepv = [](const std::vector<std::pair<double, int>> &ev, double tt) {
+        double x = 0.0;
+        for (const auto &e : ev) {
+            if (e.first <= tt + 1e-9)
+                x = e.second;
+            else
+                break;
+        }
+        return x;
+    };
+    auto press = [&](long long c, int key) {
+        std::vector<std::pair<double, int>> ev;
+        int n = nv_song_press_get(song, c, key, 0, nullptr, nullptr);
+        std::vector<double> t(n);
+        std::vector<int> v(n);
+        nv_song_press_get(song, c, key, n, t.data(), v.data());
+        for (int q = 0; q < n; q++)
+            ev.push_back(std::make_pair(t[q], v[q]));
+        return ev;
+    };
+    auto cc_ev = [&](long long c, int cc) {     // (sorted((t, v) for the channel's cc): Python's tuples)
+        std::vector<std::pair<double, int>> ev;
+        int n = nv_song_cc_get(song, c, cc, 0, nullptr, nullptr);
+        std::vector<double> t(n);
+        std::vector<int> v(n);
+        nv_song_cc_get(song, c, cc, n, t.data(), v.data());
+        for (int q = 0; q < n; q++)
+            ev.push_back(std::make_pair(t[q], v[q]));
+        std::sort(ev.begin(), ev.end());
+        return ev;
+    };
+    auto step = [&](double u, double p, double dt) {
+        double k = A * p + Bc;
+        if (k <= 0.0)
+            return u;
+        double target = A * p * W * sqrt(pmx(p, 0.0)) / k;
+        return target + (u - target) * exp(-k * dt);
+    };
+    auto mean_over = [&](double u, double p, double dt) {
+        double k = A * p + Bc;
+        if (k <= 0.0 || dt <= 0.0)
+            return u;
+        double target = A * p * W * sqrt(pmx(p, 0.0)) / k;
+        return target + (u - target) * (1.0 - exp(-k * dt)) / (k * dt);
+    };
+    auto level = [&](double u) {
+        if (u <= 0.0)
+            return 0.0;
+        double x = pow(u / UK, NE), x1 = pow(1.0 / UK, NE);
+        return sqrt((x / (1.0 + x)) / (x1 / (1.0 + x1)));
+    };
+    auto floordiv = [](double a, double b) {    // Python's float a // b
+        double mod = fmod(a, b), div = (a - mod) / b;
+        if (mod != 0.0 && ((b < 0.0) != (mod < 0.0)))
+            div -= 1.0;
+        double f = floor(div);
+        if (div - f > 0.5)
+            f += 1.0;
+        return f;
+    };
+    const long nblk_ = (long)(((long long)(total * SR) + (long long)SR) / (long long)BLK + 2);
+    const double bdt = BLK / SR;
+    // (keyed (channel, key, kind) as _sir_keys is: kind 1 the fire siren's, 2 the Helmholtz's)
+    typedef std::tuple<long long, int, int> SirKey;
+    std::vector<SirKey> order;
+    std::map<SirKey, std::vector<std::tuple<double, double, int>>> byk;
+    for (int i = 0, n = nv_song_n_notes(song); i < n; i++) {
+        long long c;
+        int iv[4];
+        double dv[2];
+        nv_song_get_note(song, i, &c, iv, dv);
+        int q = nv_song_kidx(song, i);
+        const NoteClass *k = (q >= 0 && q < nK) ? K[q] : nullptr;
+        if (!k || !k->siren)
+            continue;
+        auto key = std::make_tuple(c, iv[0], k->siren);
+        if (!byk.count(key))
+            order.push_back(key);
+        byk[key].push_back(std::make_tuple(dv[0], dv[1], i));
+    }
+    for (const auto &key : order) {
+        auto &ns = byk[key];
+        const long long kc = std::get<0>(key);
+        const int kind = std::get<2>(key);
+        model(kind);
+        auto vel_of = [&](int i) {
+            long long c;
+            int iv[4];
+            double dv[2];
+            nv_song_get_note(song, i, &c, iv, dv);
+            return iv[1];
+        };
+        std::stable_sort(ns.begin(), ns.end(), [&](const std::tuple<double, double, int> &a,
+                                                   const std::tuple<double, double, int> &b) {
+            if (std::get<0>(a) != std::get<0>(b))
+                return std::get<0>(a) < std::get<0>(b);
+            if (std::get<1>(a) != std::get<1>(b))
+                return std::get<1>(a) < std::get<1>(b);
+            return vel_of(std::get<2>(a)) < vel_of(std::get<2>(b));   // (then the velocity: the tuples')
+        });
+        // the air's sources (the Helmholtz siren's): the channel's
+        // aftertouch, the key's, CC2 -- and the crank, CC1
+        std::vector<std::pair<double, int>> at, pt, c2, c1;
+        if (kind == 2) {
+            at = press(kc, -1);
+            pt = press(kc, std::get<1>(key));
+            c2 = cc_ev(kc, 2);
+            c1 = cc_ev(kc, 1);
+        }
+        double u = 0.0, air = 0.0, tprev = NAN;
+        for (size_t j = 0; j < ns.size(); j++) {
+            double on = std::get<0>(ns[j]), of = std::get<1>(ns[j]);
+            const NoteClass *k = K[nv_song_kidx(song, std::get<2>(ns[j]))];
+            const double pv = vel_of(std::get<2>(ns[j])) / 127.0;
+            if (!std::isnan(tprev) && on > tprev) {
+                u *= exp(-Bc * (on - tprev));           // (Rotor.coast)
+                air = air_step(air, 0.0, on - tprev);
+            }
+            double drive_end = of;
+            if (k->held_texture && k->gate_time > 0.0)
+                drive_end = pmx(of, on + k->gate_time);
+            double cap = j + 1 < ns.size() ? std::get<0>(ns[j + 1]) : INFINITY;
+            long b0 = (long)floordiv(on * SR, (double)BLK);
+            std::vector<double> r, lv;
+            long kb = b0;
+            double end;
+            for (;;) {
+                double tb = kb * bdt;
+                if (tb >= cap || kb >= nblk_) {
+                    end = pmn(cap, nblk_ * bdt);
+                    break;
+                }
+                double tm = tb + 0.5 * bdt;
+                double p = 0.0;
+                if (tm < drive_end)
+                    p = kind == 1 ? 1.0 : pmx(pmx(pmx(pv, stepv(at, tm) / 127.0), stepv(pt, tm) / 127.0),
+                                              stepv(c2, tm) / 127.0);
+                double l0 = kind == 1 ? level(u) : blown(u, air);
+                double rr = mean_over(u, p, bdt);
+                u = step(u, p, bdt);
+                air = air_step(air, p, bdt);
+                double l1 = kind == 1 ? level(u) : blown(u, air);
+                r.push_back(rr);
+                lv.push_back(l0);
+                kb++;
+                if (tb >= drive_end) {
+                    if (kind == 1 ? l1 <= FLOOR : air <= 1e-3 * pmx(pv, 1e-3)) {
+                        end = kb * bdt;
+                        break;
+                    }
+                }
+            }
+            lv.push_back(kind == 1 ? level(u) : blown(u, air));
+            if (kind == 2)                  // (the velocity's gain is the onset's level)
+                for (double &x : lv)
+                    x = x / sqrt(pmx(pv, 1e-3));
+            tprev = pmn(end, cap);
+            SirRow row;
+            row.ch = kc;
+            row.r.assign(nblk_, 1.0f);
+            long nn = std::min((long)r.size(), nblk_ - b0);
+            for (long q = 0; q < nn; q++)
+                row.r[b0 + q] = (float)r[q];
+            if (nn > 0)
+                for (long q = b0 + nn; q < nblk_; q++)
+                    row.r[q] = (float)r[nn - 1];
+            row.l.assign(nblk_ + 1, 1.0f);
+            long nl = std::min((long)lv.size(), std::max(nn, 0L) + 1);
+            for (long q = 0; q < nl && b0 + q < nblk_ + 1; q++)
+                row.l[b0 + q] = (float)lv[q];
+            for (long q = b0 + nl; q < nblk_ + 1; q++)
+                row.l[q] = (float)lv[nl - 1];
+            row.c.assign(nblk_, 0.0);
+            double acc = 0.0;               // (the phase: cumsum of (ratio - 1) x BLK, from 0)
+            for (long q = 0; q + 1 < nblk_; q++) {
+                acc = acc + ((double)row.r[q] - 1.0) * BLK;
+                row.c[q + 1] = acc;
+            }
+            nv_song_siren(song, kc, std::get<1>(key), on, (double)(sbase + (int)sir.size()), tprev);
+            const bool upper = k->organ && k->organ->siren_up;
+            SirRow up;
+            if (upper) {
+                // THE CRANK (siren.crank_samples): the upper chest's angle as
+                // samples of phase at each block's start, from the wheel --
+                // its ratio the lower's moved while the wheel moves, its
+                // phase the lower's plus the angle, exactly
+                double tab[128];
+                nv_song_table(song, kc, on, tab);
+                const double frev = tab[std::get<1>(key)] / 12.0;
+                std::vector<double> dl(nblk_ + 1, 0.0);
+                for (long q = b0; q < std::min(b0 + nn + 1, nblk_ + 1); q++) {
+                    int c1v = (int)stepv(c1, q * bdt);
+                    double th = (M_PI / 12.0) * (double)std::max(0, std::min(127, c1v)) / 127.0;
+                    dl[q] = th * SR / (2.0 * M_PI * frev);
+                }
+                up.ch = kc;
+                up.r.resize(nblk_);
+                up.c.resize(nblk_);
+                for (long q = 0; q < nblk_; q++) {
+                    up.r[q] = (float)((double)row.r[q] + (dl[q + 1] - dl[q]) / BLK);
+                    up.c[q] = row.c[q] + dl[q];
+                }
+                up.l = row.l;
+            }
+            sir.push_back(std::move(row));
+            if (upper) {
+                nv_song_siren_up(song, kc, std::get<1>(key), on, (double)(sbase + (int)sir.size()));
+                sir.push_back(std::move(up));
+            }
+        }
+    }
+}
+
 // ...and its strokes' rows (srows: [first, end) pairs, the song's stroke_rows)
 static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, const double *freq,
                                const double *trim, int program, int note, int vel, int fast, double **rowsp,
@@ -245,18 +507,40 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         nv_song_vars(song, (int)g_var_nls.size(), g_var_nls.data(), g_var_ls.data(), g_var_trim.data(),
                      g_var_gs.data(), g_var_gm2.data());
         nv_song_slot_organs(song, (int)g_slot_organ.size(), g_slot_organ.data());
+        nv_song_slot_orgs(song, (int)g_slot_organ.size(), g_slot_off.data(), g_slot_og.data());
     }
     nv_midi_song(m, song, trim);
-    if (og) {                               // the organ on its channel, its stops all drawn
+    // THE ORGANS ON ITS CHANNEL, its stops all drawn: the key's class's -- or
+    // a variation's every organ, a family each (nvrender's ent_organs: the
+    // Technorg Hit's drawbar layer is another family than its hit's)
+    std::vector<const OrganSpec *> ogs;
+    if (ven && g_var_nls[ven] >= 1) {
+        const int sl = g_var_ls[4 * (size_t)g_var_off[ven]];
+        if (sl >= 0 && sl + 1 < (int)g_slot_off.size())
+            ogs.assign(g_slot_og.begin() + g_slot_off[sl], g_slot_og.begin() + g_slot_off[sl + 1]);
+    }
+    if (ogs.empty() && og)
+        ogs.push_back(og);
+    if (!ogs.empty()) {
         std::vector<const OrganSpec *> po(128, nullptr);
         po[program] = og;
-        nv_song_organ(song, 0, og, po.data());
+        std::vector<int> fams;
+        for (const OrganSpec *o : ogs) {
+            if (std::find(fams.begin(), fams.end(), o->family) != fams.end())
+                continue;
+            fams.push_back(o->family);
+            nv_song_organ(song, 0, o, po.data());
+        }
         nv_song_organ_wind_rows(song, 0);   // (its rows' wind rows, as the one-note file has them)
     }
     if (kit)
         nv_song_strokes(song, kit->skind.data(), kit->spar.data());
     double total = nv_midi_total(m);
     nv_song_finish(song, total);
+    {                                       // a siren's rotor: its note's row and its end (_prep_siren)
+        std::vector<NvSirRow> sir;
+        nv_song_sirens(song, K, INT_MAX, total, SR, blk, 0, &sir);
+    }
     PyRandom rs;
     pyr_seed(&rs, 0);                       // _prepare's random.seed(0)
     double qacc[18] = {0}, az = 0.0;
@@ -1823,6 +2107,13 @@ const NoteClass *nv_tcache_class_key(void *h, int program, int key)
     return C->cls(program, key);
 }
 
+// ...a drum set's key's too (live.Patch._voice_class: percussion_for_note's class)
+const NoteClass *nv_tcache_key_class(void *h, int program, int key)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    return C ? C->cls(program, key) : nullptr;
+}
+
 const NoteClass *nv_tcache_class(void *h, int program)
 {
     nv::live::Cache *C = (nv::live::Cache *)h;
@@ -1838,7 +2129,8 @@ void nv_tcache_set_var(void *h, int v) { ((nv::live::Cache *)h)->var = v; }
 // takes them, each entry's trim live's -- a file that is not GS's), each slot's
 // organ, and K's length with the variations' region (the drones' before it)
 void nv_live_vars(int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2,
-                  int nslot, const OrganSpec *const *so, long long kn)
+                  int nslot, const OrganSpec *const *so, const int *soff, const OrganSpec *const *sog,
+                  long long kn)
 {
     g_var_nls.assign(nls, nls + nent);
     g_var_off.assign(nent, 0);
@@ -1852,6 +2144,8 @@ void nv_live_vars(int nent, const int *nls, const int *ls, const double *trim, c
     g_var_gs.assign(gs, gs + 5 * 128 * 128);
     g_var_gm2.assign(gm2, gm2 + 128 * 128);
     g_slot_organ.assign(so, so + nslot);
+    g_slot_off.assign(soff, soff + nslot + 1);
+    g_slot_og.assign(sog, sog + soff[nslot]);
     g_k_n = kn;
 }
 

@@ -183,6 +183,8 @@ def main(argv):
                     lv.on_midi(M("aftertouch", channel=ch, value=a))
                 elif ty == 4:
                     lv.on_midi(M("pitchwheel", channel=ch, pitch=a))
+                elif ty == 7:
+                    lv.on_midi(M("polytouch", channel=ch, note=a, value=v))
                 elif ty == 6:
                     lv.on_midi(M("sysex", data=list(m.sysex(a))))
                 elif ty != 5:

@@ -1480,6 +1480,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         }
         else if (kind == 0xA0) {
             P.pts.push_back(CCEv{ch, t, m.d0, m.d1});   // a key's polytouch (pts)
+            P.events.push_back(LiveEv{t, 7, ch, m.d0, m.d1});   // (the live part's too: a siren's air)
             pat_now[ch][m.d0] = m.d1;
             cmx_upd(t, ch);
         }
