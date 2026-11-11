@@ -468,7 +468,7 @@ struct Export {
     std::vector<int> kit_skind;
     std::vector<double> kit_spar;
     std::string room, libs[3];
-    std::vector<OrganSpec> organs;        // ORGN: the registered organs' tables
+    OrganSpec *organs = nullptr;          // ORGA: the registered organs' tables, mapped as the classes
     std::vector<int> cls_organ, prog_organ;   // each class's organ, each program's (-1 none, -2 not the engine's)
     std::vector<double> les;              // LESL: the rotating speaker's constants
     std::string lobe_lib;                 // ...and synth_voice_lobe's library
@@ -505,12 +505,14 @@ static bool read_export(const char *path, Export &E)
         E.kind.resize(NCOLS); E.fin.resize(NCOLS);
         ok = fread(E.k.data(), 8, nk, f) == (size_t)nk && fread(E.freq.data(), 8, 128, f) == 128
              && fread(E.trim.data(), 8, 512, f) == 512;
+        void *m = MAP_FAILED;
+        long len = 0;
         if (ok) {                           // (the classes mapped, not read: nothing loaded until used)
             const long off = ftell(f);
             fseek(f, 0, SEEK_END);
-            const long len = ftell(f);
-            void *m = len > off ? mmap(nullptr, (size_t)len, PROT_READ | PROT_WRITE, MAP_PRIVATE, fileno(f), 0)
-                                : MAP_FAILED;
+            len = ftell(f);
+            m = len > off ? mmap(nullptr, (size_t)len, PROT_READ | PROT_WRITE, MAP_PRIVATE, fileno(f), 0)
+                          : MAP_FAILED;
             ok = m != MAP_FAILED && off + (long)csz * ncls <= len && off % alignof(NoteClass) == 0;
             if (ok)                         // (no readahead: a class's few fields, not the classes around it)
                 madvise(m, (size_t)len, MADV_RANDOM);
@@ -533,16 +535,20 @@ static bool read_export(const char *path, Export &E)
                 ok = fread(&(*ss[i])[0], 1, n, f) == (size_t)n;
             }
         }
-        // ORGN: the registered organs' tables, each class's organ, each program's
+        // ORGA: the registered organs' tables -- after their pad, mapped where
+        // they lie (an organ's pages read in as its notes play) -- each class's
+        // organ, each program's
         char om[4];
-        int norg = 0, osz = 0;
-        ok = ok && fread(om, 1, 4, f) == 4 && !memcmp(om, "ORGN", 4) && fread(&norg, 4, 1, f) == 1
-             && fread(&osz, 4, 1, f) == 1 && osz == (int)sizeof(OrganSpec);
+        int norg = 0, osz = 0, opad = 0;
+        ok = ok && fread(om, 1, 4, f) == 4 && !memcmp(om, "ORGA", 4) && fread(&norg, 4, 1, f) == 1
+             && fread(&osz, 4, 1, f) == 1 && osz == (int)sizeof(OrganSpec) && fread(&opad, 4, 1, f) == 1;
         if (ok) {
-            E.organs.resize(norg);
+            const long ooff = ftell(f) + opad;
+            ok = ooff % (long)alignof(OrganSpec) == 0 && ooff + (long)sizeof(OrganSpec) * norg <= len;
+            E.organs = (OrganSpec *)((unsigned char *)m + ooff);
             E.cls_organ.resize(ncls);
             E.prog_organ.resize(128);
-            ok = fread(E.organs.data(), sizeof(OrganSpec), norg, f) == (size_t)norg
+            ok = ok && fseek(f, ooff + (long)sizeof(OrganSpec) * norg, SEEK_SET) == 0
                  && fread(E.cls_organ.data(), 4, ncls, f) == (size_t)ncls && fread(E.prog_organ.data(), 4, 128, f) == 128;
         }
         // LESL: the rotating speaker's constants (leslie.cpp's) and the lobe's kernel

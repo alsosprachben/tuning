@@ -65,11 +65,12 @@ bool read_export(const char *path, Export &E)
                 ok = fread(&(*ss[i])[0], 1, n, f) == (size_t)n;
             }
         }
-        // ORGN: the registered organs' tables, each class's organ, each program's
+        // ORGA: the registered organs' tables (after their pad), each class's organ, each program's
         char om[4];
-        int norg = 0, osz = 0;
-        ok = ok && fread(om, 1, 4, f) == 4 && !memcmp(om, "ORGN", 4) && fread(&norg, 4, 1, f) == 1
-             && fread(&osz, 4, 1, f) == 1 && osz == (int)sizeof(OrganSpec);
+        int norg = 0, osz = 0, opad = 0;
+        ok = ok && fread(om, 1, 4, f) == 4 && !memcmp(om, "ORGA", 4) && fread(&norg, 4, 1, f) == 1
+             && fread(&osz, 4, 1, f) == 1 && osz == (int)sizeof(OrganSpec) && fread(&opad, 4, 1, f) == 1
+             && fseek(f, opad, SEEK_CUR) == 0;
         if (ok) {
             E.organs.resize(norg);
             E.cls_organ.resize(ncls);

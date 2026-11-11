@@ -409,8 +409,12 @@ def main(argv):
                                       for c in B.EMIT_COLS]))
         for s in [room] + libs:
             f.write(struct.pack("<i", len(s)) + s)
-        f.write(b"ORGN")
+        # ORGA: the organs' tables, padded to their alignment (the pad's count
+        # said) -- nvrender maps them from the file, as it maps the classes
+        f.write(b"ORGA")
         f.write(struct.pack("<ii", len(organs), ctypes.sizeof(N.OrganSpec)))
+        pad = -(f.tell() + 4) % ctypes.alignment(N.OrganSpec)
+        f.write(struct.pack("<i", pad) + bytes(pad))
         for o in organs:
             f.write(o)
         f.write(struct.pack("<%di" % len(classes), *cls_organ))

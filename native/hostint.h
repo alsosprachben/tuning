@@ -43,7 +43,7 @@ struct Export {
     std::vector<int> kit_skind;
     std::vector<double> kit_spar;
     std::string room, libs[3];
-    std::vector<OrganSpec> organs;        // ORGN: the registered organs' tables
+    std::vector<OrganSpec> organs;        // ORGA: the registered organs' tables
     // VARS: bank select (the file renderer's): each slot's classes at each key, each
     // entry's layers (slot, semitones, velocities), trims and class, GS's and GM 2's tables
     struct VarEnt {
