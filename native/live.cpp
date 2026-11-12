@@ -47,6 +47,9 @@ int nv_song_press_get(void *s, long long ch, int key, int cap, double *t, int *v
 void nv_song_kits(void *s, const double *f0, const double *seat);
 void nv_song_chokes(void *s, const unsigned long long *choke);
 void nv_song_strokes(void *s, const int *kind, const double *par);
+void nv_song_chokes_n(void *s, const unsigned long long *choke, int n);
+void nv_song_kits_n(void *s, const double *f0, const double *seat, int n);
+void nv_song_strokes_k(void *s, const NoteClass *const *K, const int *kind, const double *par);
 void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2);
 void nv_song_slot_organs(void *s, int n, const OrganSpec *const *so);
 void nv_song_slot_orgs(void *s, int n, const int *off, const OrganSpec *const *og);
@@ -156,6 +159,11 @@ static std::vector<int> g_slot_off;                 // ...and every organ its to
 static std::vector<const OrganSpec *> g_slot_og;
 static thread_local int g_tmpl_var = 0;
 static long long g_k_n = 0;             // K's length a cache copies (0: the programs' and drum sets' only)
+// THE MAPS' OWN DRUM SETS (the export's MKIT: a drum program 128 + j): their
+// keys' region of K and how many (nv_tcache_mapk); the sets' tables are
+// then 128 x (128 + n) keys long
+static int g_mapk_base = 0, g_mapk_n = 0;
+static std::vector<int> g_mapk_ids;  // (their ids, 128 x map + program: a template selects one by them)
 
 // the entry variation key v selects for program p (the reader's bsel, Song::bank's): 0 the capital
 static int var_entry(int p, int v)
@@ -179,6 +187,10 @@ static int var_kidx(int en, int key)
     return k >= 0 && k <= 127 ? NV_K_VAR + 128 * l[0] + k : -1;
 }
 static thread_local double g_raga_sw[12];
+// A MELODIC NOTE THAT BORROWS A KIT KEY'S STROKES (sfx_strokes_of: the Morse
+// keyboard's characters): the drum sets' tables its template's song reads, as
+// a file's song has them (nvrender's) -- set by a melodic cache that has them
+static thread_local const nv::live::Kits *g_tmpl_stk = nullptr;
 
 static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, const double *freq,
                                const double *trim, int program, int note, int vel, int fast, double **rowsp,
@@ -487,7 +499,11 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     const NoteClass *pc_ = kat(60);
     if (pc_ && pc_->drone_wheel && fast < 0)
         fast = 0;
-    std::vector<uint8_t> f = kit ? nv::live::one_note(program, note, vel, 9, fast, 480 * 18)
+    // (a map's own set, 128 + j: as a file selects it -- CC32 = its map, then
+    // its program -- and the reader's kit_in_map plays it; live._raw_template's)
+    const int mid = kit && program >= 128 && program - 128 < (int)g_mapk_ids.size() ? g_mapk_ids[program - 128] : -1;
+    std::vector<uint8_t> f = mid >= 0 ? nv::live::one_note(mid & 127, note, vel, 9, fast, 480 * 18, nullptr, 128 * (mid >> 7))
+                           : kit ? nv::live::one_note(program, note, vel, 9, fast, 480 * 18)
                                  : nv::live::one_note(program, note, vel, 0, fast, 480, og, ven ? g_tmpl_var : 0);
     int err = 0;
     void *m = nv_midi_read(f.data(), (long long)f.size(), &err);
@@ -499,9 +515,13 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     nv_song_tuning(song, -1, 0.0, freq);
     if (g_raga_sa >= 0)
         nv_song_eastern(song, nullptr, 1, g_raga_sa, g_raga_sw, g_raga_nsw);
-    if (kit) {
-        nv_song_kits(song, kit->f0.data(), kit->seat.data());
-        nv_song_chokes(song, kit->choke.data());
+    // (a melodic note's borrowed strokes: the sets' tables, as a file's song has them)
+    const nv::live::Kits *stk = !kit && g_tmpl_stk && pc_ && pc_->sfx_prog >= 0 ? g_tmpl_stk : nullptr;
+    if (kit || stk) {
+        const nv::live::Kits *kt = kit ? kit : stk;
+        // (every set's keys: the 128's and the maps' own after them, nvrender's)
+        nv_song_kits_n(song, kt->f0.data(), kt->seat.data(), (int)kt->f0.size());
+        nv_song_chokes_n(song, kt->choke.data(), (int)kt->f0.size());
     }
     if (ven) {                              // (bank select's tables, before the note takes its variation)
         nv_song_vars(song, (int)g_var_nls.size(), g_var_nls.data(), g_var_ls.data(), g_var_trim.data(),
@@ -535,6 +555,8 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     }
     if (kit)
         nv_song_strokes(song, kit->skind.data(), kit->spar.data());
+    else if (stk)                           // (its class's kit key: nvrender's nv_song_strokes_k)
+        nv_song_strokes_k(song, K, stk->skind.data(), stk->spar.data());
     double total = nv_midi_total(m);
     nv_song_finish(song, total);
     {                                       // a siren's rotor: its note's row and its end (_prep_siren)
@@ -1362,6 +1384,8 @@ struct Cache {
     // the class a key plays: the variation's (its first layer's slot), else the program's
     const NoteClass *cls(int program, int key) const
     {
+        if (drums && program >= 128 && program < 128 + g_mapk_n && key >= 0 && key <= 127)
+            return K[g_mapk_base + 128 * (program - 128) + key];    // (a map's own set)
         if (program < 0 || program > 127 || key < 0 || key > 127)
             return nullptr;
         int en = drums ? 0 : var_entry(program, var);
@@ -1400,6 +1424,7 @@ struct Cache {
         g_raga_sa = raga_sa;                // (the template's prepare: T.raga_sa_note, T.raga_spec)
         g_raga_nsw = raga_nsw;
         g_tmpl_var = drums ? 0 : var;       // (its variation's bank, before its program change)
+        g_tmpl_stk = !drums && !kit.f0.empty() ? &kit : nullptr;   // (a melodic cache's borrowed strokes)
         for (int i = 0; i < raga_nsw; i++)
             g_raga_sw[i] = raga_sw[i];
         long long P = template_rows(K.data(), &t, freq, trim, program, note, vel, fast, &rows, kind, scale, full,
@@ -1954,12 +1979,36 @@ void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigne
 {
     nv::live::Cache *C = (nv::live::Cache *)h;
     C->drums = true;
-    C->kit.f0.assign(f0, f0 + 16384);
-    C->kit.seat.assign(seat, seat + 16384);
-    C->kit.choke.assign(choke, choke + 2 * 16384);
-    C->kit.skind.assign(skind, skind + 16384);
-    C->kit.spar.assign(spar, spar + NV_SPAR * 16384);
+    const size_t nk = 128 * (size_t)(128 + g_mapk_n);    // (the maps' own sets after the 128)
+    C->kit.f0.assign(f0, f0 + nk);
+    C->kit.seat.assign(seat, seat + nk);
+    C->kit.choke.assign(choke, choke + 2 * nk);
+    C->kit.skind.assign(skind, skind + nk);
+    C->kit.spar.assign(spar, spar + NV_SPAR * nk);
     C->oneshot_floor_db = oneshot_floor_db;
+}
+
+// A MELODIC CACHE's DRUM SETS' TABLES, for a note that borrows a kit key's
+// strokes (sfx_strokes_of): nv_tcache_kits's, the cache staying melodic
+void nv_tcache_stroke_kits(void *h, const double *f0, const double *seat, const unsigned long long *choke,
+                           const int *skind, const double *spar)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    const size_t nk = 128 * (size_t)(128 + g_mapk_n);
+    C->kit.f0.assign(f0, f0 + nk);
+    C->kit.seat.assign(seat, seat + nk);
+    C->kit.choke.assign(choke, choke + 2 * nk);
+    C->kit.skind.assign(skind, skind + nk);
+    C->kit.spar.assign(spar, spar + NV_SPAR * nk);
+}
+
+// THE MAPS' OWN DRUM SETS: their keys' region of K (base), how many (n) --
+// set before any drum set's cache, as the sets' tables are as long
+void nv_tcache_mapk(int base, int n, const int *ids)
+{
+    g_mapk_base = base;
+    g_mapk_n = n;
+    g_mapk_ids.assign(ids, ids + n);
 }
 
 // Patch.warm: keys lo..hi, nb buckets (each at bucket_vel), the wheel steps

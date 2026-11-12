@@ -44,6 +44,7 @@
 #include <dlfcn.h>
 #include <functional>
 #include <map>
+#include "gsdisplay.h"
 #include <unistd.h>
 #include <set>
 #include <string>
@@ -80,6 +81,8 @@ const char *nv_play_why(void);
 void nv_tremolo_wave(long long ch, int n, const double *khp);
 void nv_midi_free(void *p);
 double nv_midi_total(void *p);
+int nv_midi_display_n(void *p);
+const uint8_t *nv_midi_display(void *p, int i, int *n, double *t);
 int nv_midi_n_notes(void *p);
 int nv_midi_n_ccs(void *p);
 int nv_midi_n_pws(void *p);
@@ -5295,6 +5298,26 @@ int main(int argc, char **argv)
         fprintf(jf, " ],\n \"send\": %s,\n \"room_name\": \"%s\",\n %s\n}", sendj.c_str(), E.room.c_str(),
                 gs_tail.c_str());
         fclose(jf);
+    }
+    // THE SOUND CANVAS'S DISPLAY as text beside the render (blockrender's
+    // OUT.display.txt, gsdisplay.timeline's lines) -- where the file writes any
+    {
+        gsd::Display D;
+        std::vector<std::string> lines;
+        for (int i = 0; i < nv_midi_display_n(midi); i++) {
+            int n = 0;
+            double t = 0.0;
+            const uint8_t *d = nv_midi_display(midi, i, &n, &t);
+            gsd::timeline_add(D, d, (size_t)n, t, lines);
+        }
+        if (!lines.empty()) {
+            FILE *df = fopen((base + ".display.txt").c_str(), "w");
+            if (df) {
+                for (const std::string &l : lines)
+                    fprintf(df, "%s\n", l.c_str());
+                fclose(df);
+            }
+        }
     }
     printf("nvrender: %s: %lld partials, %.1f s\n", argv[2], P, N / SR);
     nv_buf_free(rows);

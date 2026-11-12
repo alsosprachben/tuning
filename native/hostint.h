@@ -17,7 +17,35 @@ enum { K_SR, K_BLK, K_CHUNK, K_MASTER, K_RING_FLOOR, K_RING_MAX, K_XDEC, K_REG_S
        K_PRESS_DB = K_SH + 4, K_THRESH, K_BEND_RANGE, K_TAU, K_FADER_TAIL, K_STAMP_S, K_STAMPED_SHARE,
        K_BEND_SEMIS, K_GM_VOL, K_GM_EXPR, K_GSPLACE, K_MAPKITS = K_GSPLACE + 13, K_EFX = K_MAPKITS + 33 };
 
+// A RECORD IN THE MAPPED EXPORT (read_export maps the file copy-on-write):
+// only the pages touched are in memory, and only those a host writes (a
+// class's organ, its struck layer, a room's fields) are its own copies
+struct Mapped {
+    unsigned char *p = nullptr;
+    size_t n = 0;
+    unsigned char *data() { return p; }
+    const unsigned char *data() const { return p; }
+    size_t size() const { return n; }
+};
+// ...and an array of records in it (the organs')
+template <class T> struct MappedArr {
+    T *p = nullptr;
+    size_t n = 0;
+    T &operator[](size_t i) { return p[i]; }
+    const T &operator[](size_t i) const { return p[i]; }
+    T *data() { return p; }
+    const T *data() const { return p; }
+    size_t size() const { return n; }
+    bool empty() const { return n == 0; }
+    T *begin() { return p; }
+    T *end() { return p + n; }
+    const T *begin() const { return p; }
+    const T *end() const { return p + n; }
+};
+
 struct Export {
+    void *map = nullptr;                  // the whole file, mapped (MAP_PRIVATE)
+    size_t map_n = 0;
     // LP3D: live.pan_at's head (z, distance, radius, sound speed)
     double p3d[4] = {0.0, 0.0, 0.0, 0.0};
     bool has_p3d = false;
@@ -36,14 +64,18 @@ struct Export {
     std::vector<double> room_dev;
     std::vector<RoomData> rooms;
     std::vector<double> k, freq, trim, pan;
-    std::vector<std::vector<unsigned char>> classes;
+    std::vector<Mapped> classes;          // (each in the map, csz bytes)
     std::vector<int> cmap, kind, fin;     // cmap: the programs' keys, then the drum sets'
     std::vector<double> kit_f0, kit_seat;
     std::vector<unsigned long long> kit_choke;
     std::vector<int> kit_skind;
     std::vector<double> kit_spar;
+    // MKIT: the maps' own drum sets (a drum program 128 + j: percussion_map's
+    // id mk_ids[j]), their keys' classes; MKNM their names
+    std::vector<int> mk_ids, mk_map;
+    std::vector<std::string> mk_names;
     std::string room, libs[3];
-    std::vector<OrganSpec> organs;        // ORGA: the registered organs' tables
+    MappedArr<OrganSpec> organs;          // ORGA: the registered organs' tables (in the map)
     // VARS: bank select (the file renderer's): each slot's classes at each key, each
     // entry's layers (slot, semitones, velocities), trims and class, GS's and GM 2's tables
     struct VarEnt {

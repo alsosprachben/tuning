@@ -20,6 +20,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
+#include <climits>
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -38,6 +39,7 @@
 #include "live.h"
 #include "nv.h"
 #include "pycompat.h"          // a section's entries: random.Random
+#include "gsdisplay.h"         // the Sound Canvas's display
 
 extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
 extern "C" const NoteClass *nv_tcache_note_class(void *h, int program, int note);
@@ -2451,6 +2453,9 @@ struct Part {
     double cgain[16];
     bool cgain_set[16];
     std::set<std::pair<int, int>> down, pedalled;
+    // A PALM-MUTED OPEN STRING RINGING ON past its key (live's open_ring):
+    // (part id, channel, key) -> (its string, the sample it stops at the latest)
+    std::map<std::tuple<long long, int, int>, std::pair<int, long long>> open_ring;
     std::map<Key, long long> tex_on;    // a held texture's key: the sample it may stop (live.tex_on)
     // ...AND ITS GRAINS (live.tex_gen, in the order struck): the key, its
     // template, the next grain's sample, the press's scale; one generator
@@ -4301,6 +4306,8 @@ struct Part {
     void cut_on(int ch, int note, int vel, long long n0, bool slur)
     {
         int pi = patch_for(ch, note);
+        if (!open_ring.empty() && pi >= 0)
+            open_ring_stop(pi, ch, note, n0);       // (a string an open one rings on: it stops)
         const NoteClass *k = nullptr;
         long long ppid = 0;
         if (pi >= 0) {
@@ -4352,6 +4359,93 @@ struct Part {
     }
     // a key up while its flick still sounds: the flick ends, and there is no
     // note to let go (true when that was so)
+    // live._open_string: the patch's key as a palm-muted open string's -- its
+    // string (-1: not one that rings on), and whether the key is that string's open pitch
+    int open_string(int pi, int note, bool *open) const
+    {
+        *open = false;
+        if (pi < 0)
+            return -1;
+        const Patch &p = patches[pi];
+        const int sn = note + p.transpose;
+        const NoteClass *k = p.drums || sn < 0 || sn > 127 ? nullptr : key_class(p, sn);
+        if (!k || k->osr_n <= 0 || k->one_shot)
+            return -1;
+        int s = -1;
+        for (int i = 0; i < k->osr_n; i++)          // (np.searchsorted, side right, less 1)
+            if (k->osr_open[i] <= (double)sn)
+                s = i;
+        for (int i = 0; i < k->osr_n; i++)
+            *open = *open || k->osr_open[i] == (double)sn;
+        return s;
+    }
+    // live._open_ring_hold: a key up on a palm-muted open string -- held on
+    // until that string sounds again or its cap after the onset; true where so
+    bool open_ring_hold(int pi, int ch, int note)
+    {
+        bool open = false;
+        const int s = open_string(pi, note, &open);
+        if (s < 0 || !open)
+            return false;
+        const long long id = patches[pi].pid;
+        long long on = LLONG_MAX;
+        for (auto &kv : S.live)
+            if (std::get<0>(kv.first) == id && std::get<1>(kv.first) == ch && std::get<2>(kv.first) == note)
+                for (long q : kv.second)
+                    on = std::min(on, (long long)S.i8[0][q]);
+        if (on == LLONG_MAX)
+            return false;
+        const NoteClass *k = key_class(patches[pi], note + patches[pi].transpose);
+        open_ring[std::make_tuple(id, ch, note)] = std::make_pair(s, on + (long long)nearbyint(k->osr_cap * rate));
+        return true;
+    }
+    void open_ring_release(const std::tuple<long long, int, int> &rk, long long n0, bool fade)
+    {
+        const float fd = (float)(retrigger * rate);
+        std::vector<Key> ks;
+        for (auto &kv : S.live)
+            if (std::get<0>(kv.first) == std::get<0>(rk) && std::get<1>(kv.first) == std::get<1>(rk)
+                && std::get<2>(kv.first) == std::get<2>(rk))
+                ks.push_back(kv.first);
+        for (const Key &k : ks) {
+            long li = S.live_find(k);
+            if (fade && li >= 0)
+                for (long q : S.live[li].second)
+                    if (fd < S.f4[F4_re][q])
+                        S.f4[F4_re][q] = fd;
+            S.release(k, n0);
+        }
+    }
+    // live._open_ring_stop: a note on a string an open one rings on stops it now, in the steal fade
+    void open_ring_stop(int pi, int ch, int note, long long n0)
+    {
+        bool open = false;
+        const int s = open_string(pi, note, &open);
+        if (s < 0)
+            return;
+        const long long id = patches[pi].pid;
+        std::vector<std::tuple<long long, int, int>> gone;
+        for (auto &kv : open_ring)
+            if (std::get<0>(kv.first) == id && std::get<1>(kv.first) == ch && kv.second.first == s)
+                gone.push_back(kv.first);
+        for (auto &rk : gone) {
+            open_ring.erase(rk);
+            open_ring_release(rk, n0, true);
+        }
+    }
+    // live._open_ring_tick: those whose cap has come let go, their own release
+    void open_ring_tick(long long n0)
+    {
+        std::vector<std::tuple<long long, int, int>> gone;
+        for (auto &kv : open_ring)
+            if (kv.second.second <= n0)
+                gone.push_back(kv.first);
+        for (auto &rk : gone) {
+            open_ring.erase(rk);
+            open_ring_release(rk, n0, false);
+        }
+    }
+
     bool cut_off(int ch, int note, long long n0)
     {
         int pi = patch_for(ch, note);
@@ -6358,8 +6452,44 @@ struct Part {
     // keys it names on every channel playing from that program), the master
     // (fine and coarse: every channel re-pitched; the volume: nvlive refuses
     // it under full)
+    // THE SOUND CANVAS'S DISPLAY (gsdisplay.Display): the text and dot pages
+    // a GS file writes to the module's LCD, for the panel (nv_part_display);
+    // the sound untouched. Written on the audio thread, read on the panel's
+    // under a sequence count (odd: being written)
+    struct GsDisplay {
+        uint8_t mem[5][128] = {};
+        int steps = 6;                      // the display time, 0.48 s a step
+        char text[33] = {};
+        double text_at = -1.0, page_at = -1.0;
+        int page = 0;
+    } gsd;
+    std::atomic<unsigned> gsd_seq{0};
+    static double gsd_now()
+    {
+        return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+    gsd::Display gsd_live;                  // (the audio thread's; gsd its snapshot for the panel)
+    // gsdisplay.parse and Display.apply (gsdisplay.h): true where it was one
+    // of the display's; its state then published for the panel
+    bool gs_display(const std::vector<uint8_t> &d)
+    {
+        if (!gsd_live.apply(d.data(), d.size(), gsd_now()))
+            return false;
+        gsd_seq.fetch_add(1);
+        memcpy(gsd.mem, gsd_live.mem, sizeof gsd.mem);
+        gsd.steps = gsd_live.steps;
+        snprintf(gsd.text, sizeof gsd.text, "%s", gsd_live.text.c_str());
+        gsd.text_at = gsd_live.text_at;
+        gsd.page_at = gsd_live.page_at;
+        gsd.page = gsd_live.page;
+        gsd_seq.fetch_add(1);
+        return true;
+    }
+
     void sysex(const std::vector<uint8_t> &d, long long n0)
     {
+        if (gs_display(d))
+            return;
         // THE INSERTION EFFECT (gsefx.parse, live._sysex): its type, a
         // parameter, a send, a controller, or a part's assign
         {
@@ -7339,6 +7469,8 @@ struct Part {
                     held = true;
                     continue;
                 }
+                if (open_ring_hold(i, ch, note))
+                    continue;                       // an open string: the palm, not the key, stops it
                 let_go(ch, note, n0);
             }
             if (held)
@@ -7354,6 +7486,8 @@ struct Part {
             pedalled.insert(std::make_pair(ch, note));
             return;
         }
+        if (open_ring_hold(pi < 0 ? cur : pi, ch, note))
+            return;                                 // an open string: the palm, not the key, stops it
         let_go(ch, note, n0);
     }
 
@@ -7876,6 +8010,7 @@ struct Part {
         down.clear();
         pedalled.clear();
         cutting.clear();
+        open_ring.clear();
     }
 
     // CC120, ALL SOUND OFF (live's): the channel stopped now, pedal or no
@@ -7890,6 +8025,8 @@ struct Part {
             it = it->first == ch ? down.erase(it) : std::next(it);
         for (auto it = pedalled.begin(); it != pedalled.end();)
             it = it->first == ch ? pedalled.erase(it) : std::next(it);
+        for (auto it = open_ring.begin(); it != open_ring.end();)
+            it = std::get<1>(it->first) == ch ? open_ring.erase(it) : std::next(it);
         sost.erase(ch);
         pedal_v[ch] = 0;
         float fade = (float)(retrigger * rate);
@@ -11069,6 +11206,8 @@ struct Part {
             metro_tick(n0, blk);                // the metronome's beats (live's _metro_tick)
         if (!moog_glide.empty())
             moog_tick(n0);                      // the Moog's knobs gliding (live's _moog_tick)
+        if (!open_ring.empty())
+            open_ring_tick(n0);                 // the open strings' caps (live's _open_ring_tick)
         lfo2_tick(n0, blk);                     // each Moog part's LFO 2 (live's _lfo2_tick)
         if (!amp_dirty.empty() || amp_has_out || !amp_fine_results.empty() || amp_async || !amp_chg.empty()
             || !S.rel_log.empty())
@@ -11082,6 +11221,7 @@ struct Part {
                 && std::get<3>(kv.first) != DRONEK
                 && std::get<3>(kv.first) < AMP_OLD0 && std::get<3>(kv.first) > MFK0
                 && !siren_of(std::get<0>(kv.first), ck.first, ck.second)
+                && !open_ring.count(std::make_tuple((long long)std::get<0>(kv.first), ck.first, ck.second))
                 && std::none_of(cutting.begin(), cutting.end(), [&](const Cut &c) {
                        return c.pid == std::get<0>(kv.first) && c.ch == ck.first && c.cnote == ck.second;
                    }))
@@ -12034,6 +12174,43 @@ void nv_part_dm(void *h, float *out)
 // (vs, the C reference) and voice_sizes (vz); cl an OpenCL GPU (nv_cl_new),
 // NULL to run the samples through voice_samples; a block of gpu_min busy
 // slots or more goes to it, its setup on nthr threads
+// THE SOUND CANVAS'S DISPLAY (gsdisplay.Display.showing): what it shows now --
+// the text (33 bytes, "" none) and how long it has shown, the page's 16 x 16
+// dots (rows[16 r + c], 0/1; *page 0 none); its display time, s. 1 read, 0
+// none to show
+int nv_part_display(void *h, char *text, double *text_age, int *page, unsigned char *rows)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    nv::slab::Part::GsDisplay g;
+    for (int tries = 0; tries < 100; tries++) {
+        unsigned s0 = P->gsd_seq.load();
+        if (s0 & 1)
+            continue;
+        g = P->gsd;
+        if (P->gsd_seq.load() == s0)
+            break;
+    }
+    const double now = nv::slab::Part::gsd_now(), hold = g.steps * 0.48;
+    text[0] = 0;
+    *page = 0;
+    *text_age = 0.0;
+    if (g.text_at >= 0.0 && now - g.text_at < hold && g.text[0]) {
+        memcpy(text, g.text, 33);
+        *text_age = now - g.text_at;
+    }
+    if (g.page && g.page_at >= 0.0 && now - g.page_at < hold) {
+        *page = g.page;
+        const uint8_t *m = g.mem[(g.page + 1) / 2 - 1] + (g.page % 2 ? 0 : 0x40);
+        for (int r = 0; r < 16; r++)
+            for (int c = 0; c < 16; c++) {
+                const int s = c / 5;
+                const uint8_t b = m[16 * s + r];
+                rows[16 * r + c] = s < 3 ? (b & (0x10 >> (c % 5))) != 0 : (b & 0x10) != 0;
+            }
+    }
+    return text[0] || *page;
+}
+
 // THE MOOG EXTENSIONS' KERNELS (blockrender.ensure_moogx_lib, ensure_gpu_moogx_lib):
 // synth_voice_moogx (smx), and the GPU build's voice_block, voice_damp_set and
 // voice_moogx_set (vbm, vmd, vmm; NULL: none)

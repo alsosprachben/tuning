@@ -49,6 +49,10 @@ void nv_live_vars(int nent, const int *nls, const int *ls, const double *trim, c
                   long long kn);
 void nv_midi_free(void *p);
 double nv_midi_total(void *p);
+void nv_midi_map_kits(const int *ids, int n);
+void nv_midi_map_kits_play(int on);
+int nv_midi_display_n(void *p);
+const uint8_t *nv_midi_display(void *p, int i, int *n, double *t);
 int nv_midi_n_events(void *p);
 void nv_midi_event(void *p, int i, int *iv, double *t);
 void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double *freq, const double *trim,
@@ -120,6 +124,14 @@ int nv_rt_feed(void *h, int type, int ch, int a, int b, int *out, int cap);
 void nv_part_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr);
 // the Moog extensions' kernels: synth_voice_moogx, the GPU build's voice_block, voice_damp_set, voice_moogx_set
 void nv_part_moogx(void *h, void *smx, void *vbm, void *vmd, void *vmm);
+// the maps' own drum sets: their keys' region of K, how many (live.cpp's) and the song's
+void nv_tcache_mapk(int base, int n, const int *ids);
+// a melodic cache's drum sets' tables, for a note that borrows a kit key's strokes
+void nv_tcache_stroke_kits(void *h, const double *f0, const double *seat, const unsigned long long *choke,
+                           const int *skind, const double *spar);
+void nv_song_mapk_base(int base);
+// the Sound Canvas's display now: its text, how long shown, its page's dots
+int nv_part_display(void *h, char *text, double *text_age, int *page, unsigned char *rows);
 void nv_part_pipeline(void *h, int on);
 int nv_part_add_patch(void *h, void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
                     int soft_drop, int soft_top, int drums, int program, const unsigned long long *choke, int channel,
@@ -521,12 +533,17 @@ struct nv_host {
     const char * tmap_;
     std::atomic<int> default_map{0};        // THE STANDARD (live.std_map): the map CC32 0 reads in -- global 13
     std::function<void(int type, int ch, int a, int b)> latch;
-    std::function<void(const uint8_t *x, int n)> sys_reset;
+    std::function<bool(const uint8_t *x, int n)> sys_reset;
     std::function<int(int p, int v)> var_entry_of;
     std::function<const NoteClass *(int prog, int var)> cls60;
     std::function<void *(int prog, const NoteClass *k)> build_drone;
     std::function<void(int pi, int prog, bool dr, int var)> attach_drone;
     std::function<void *(int prog, bool dr, int var)> build;
+    // percussion_map.kit_in_map: the drum set a program selects in map mp --
+    // the map's own (a drum program 128 + j) where it has one, else the
+    // program; and a drum set's name, a map's own included
+    int kit_in_map(int prog, int mp) const;
+    std::string kit_name(int prog) const;
     std::atomic<int> shown_program;
     std::atomic<int> shown_var;
     std::atomic<int> last_ctl_code;

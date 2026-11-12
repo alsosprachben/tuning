@@ -16,6 +16,12 @@ that cache (nvlive_check.cached_export): a file at a time costs one export,
 not one a file.
 --tuner: both at that tuner -- nvrender computing it (native/tuner.cpp),
 blockrender's CLI taking it by name -- and --a at that reference pitch.
+--state=PATH: each file's word appended there as it comes (FILE<TAB>word),
+and a file it already holds not run again -- so a run killed (the machine
+short of memory) loses at most the file it was on, and the next resumes;
+run a file a process (examples/corpus_check.sh) and a kill costs that file
+alone. The display's text (OUT.display.txt) is compared too, where either
+side writes one.
 """
 import atexit
 import os
@@ -52,7 +58,25 @@ def main(argv):
     from nvlive_check import cached_export
     nvx = cached_export(tmp)
     same = differ = refused = 0
+    state = opt.get("state")
+    done = {}
+    if state and os.path.exists(state):
+        for ln in open(state):
+            if "\t" in ln:
+                f_, w_ = ln.rstrip("\n").split("\t", 1)
+                done[f_] = w_
+
+    def word(path, w):
+        if state:
+            with open(state, "a") as fh:
+                fh.write("%s\t%s\n" % (path, w))
     for path in files:
+        if path in done:
+            w_ = done[path]
+            same += w_.startswith("identical")
+            differ += w_.startswith(("DIFFERS", "nvrender failed"))
+            refused += not w_.startswith(("identical", "DIFFERS", "nvrender failed"))
+            continue
         name = os.path.splitext(os.path.basename(path))[0]
         mid = os.path.join(tmp, name + ".mid")
         BI.excerpt(path, seconds).save(mid)
@@ -65,11 +89,13 @@ def main(argv):
             r = subprocess.run([exe, rx, mid, nv] + tun, capture_output=True, text=True)
         if r.returncode == 2:
             refused += 1
-            print("  %s: %s" % (name, r.stderr.strip().replace("nvrender: ", "")))
+            print("  %s: %s" % (name, r.stderr.strip().replace("nvrender: ", "")), flush=True)
+            word(path, "refused: " + r.stderr.strip().replace("nvrender: ", "").replace("\n", " "))
             continue
         if r.returncode != 0:
             differ += 1
-            print("  %s: nvrender failed: %s" % (name, r.stderr.strip()))
+            print("  %s: nvrender failed: %s" % (name, r.stderr.strip()), flush=True)
+            word(path, "nvrender failed: " + r.stderr.strip().replace("\n", " "))
             continue
         py = os.path.join(tmp, name + ".py.wav")
         cli = ([opt.get("tuner") or "hybrid440"] + (["a=" + opt["a"]] if opt.get("a") else [])
@@ -87,13 +113,20 @@ def main(argv):
         jn, jp = nv[:-4] + ".room.json", py[:-4] + ".room.json"
         if not os.path.exists(jn) or open(jn).read() != open(jp).read():
             bad.append("room.json")
+        # ...and the display's text (gsdisplay: OUT.display.txt), where either writes one
+        dn, dp = nv[:-4] + ".display.txt", py[:-4] + ".display.txt"
+        if os.path.exists(dn) != os.path.exists(dp) or (
+                os.path.exists(dp) and open(dn).read() != open(dp).read()):
+            bad.append("display.txt")
         if bad:
             differ += 1
-            print("  %s: DIFFERS: %s" % (name, ", ".join(bad)))
+            print("  %s: DIFFERS: %s" % (name, ", ".join(bad)), flush=True)
+            word(path, "DIFFERS: " + ", ".join(bad))
         else:
             same += 1
-            print("  %s: identical (%d bytes)" % (name, os.path.getsize(nv)))
-        for f in (nv, py, jn, jp):
+            print("  %s: identical (%d bytes)" % (name, os.path.getsize(nv)), flush=True)
+            word(path, "identical")
+        for f in (nv, py, jn, jp, dn, dp):
             if os.path.exists(f):
                 os.remove(f)
     print("nvrender: %d files identical, %d differ, %d refused" % (same, differ, refused))

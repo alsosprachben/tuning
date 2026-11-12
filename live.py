@@ -85,6 +85,7 @@ import mf104 as _MFD
 import moog as _MG
 import tonelib as T
 import gsefx as _GSX
+import gsdisplay as _GSDISP
 import gsdelay as _GSD
 import register as _RGM     # the free-string register's physics (live: _reg_*)
 import damper as _DMP       # half-pedalling: each key's damper by the pedal's value
@@ -3477,7 +3478,15 @@ class Patch:
             if _b32:
                 tr.append(mido.Message("control_change", channel=ch, control=32,
                                        value=_b32, time=0))
-        tr.append(mido.Message("program_change", channel=ch, program=self.program, time=0))
+        _prog = self.program
+        if self.drums and _prog >= 128:
+            # A MAP'S OWN DRUM SET (kit_in_map's 128 x map + program): selected
+            # as a file selects it, CC32 = the map, and blockrender's
+            # kit_in_map reads it back (a program change carries 0-127 only)
+            tr.append(mido.Message("control_change", channel=ch, control=0, value=0, time=0))
+            tr.append(mido.Message("control_change", channel=ch, control=32, value=_prog // 128, time=0))
+            _prog %= 128
+        tr.append(mido.Message("program_change", channel=ch, program=_prog, time=0))
         # THE CHANNEL'S VOLUME AT FULL. The stamp applies it (Live._chan_gain:
         # (CC7 x CC11)^2, the file's own law), so a template built at GM's
         # power-on 100 carried 0.62 of it already: every live note sat 4.1 dB
@@ -4307,6 +4316,10 @@ class Live:
         self.key_vel = {}       # (pid, ch, note) -> the strike's velocity (the damper's level model)
         self.damp_tracks = {}   # (pid, ch, note) -> a half-pedalled note's damper track (_damp_block)
         self.pedalled = set()   # keys whose damper the pedal is holding off
+        # A PALM-MUTED OPEN STRING RINGING ON past its key (open_string_ring:
+        # blockrender's _string_free, live): (part id, channel, key) -> (its
+        # string, the sample its ring is stopped at the latest)
+        self.open_ring = {}
         self.n = 0                       # absolute sample clock
         # TUNING_TAP=path: every block the callback hands the sound card, as
         # raw interleaved float32 at the engine's rate (path), with the
@@ -4432,6 +4445,9 @@ class Live:
         self.efx = _GSX.fresh_state()
         self.efx_parts = set()
         self.efx_rev = 0
+        # THE SOUND CANVAS'S DISPLAY (gsdisplay): the text and dot pages a GS
+        # file writes to the module's LCD, for the panel; the sound untouched
+        self.display = _GSDISP.Display()
         self._efx_tc, self._efx_tc_rev = {}, 0     # the copies' templates (_efx_tmpl)
         self._efx_q = collections.deque()            # copies to stamp ahead of their onsets
         self._busp, self._bus_key = None, None       # a part's own bus (_bus_block)
@@ -5149,6 +5165,7 @@ class Live:
                 self.slab.mp_toff[fr] = np.minimum(self.slab.mp_toff[fr], float(n0))
         self.down.clear()
         self.pedalled.clear()
+        self.open_ring.clear()
         self.cutting.clear()
         for p in self.parts:
             self._amp_touch(p)
@@ -5277,6 +5294,12 @@ class Live:
             except Exception as e:
                 self.errors += 1
                 self.last_error = "moog: %s: %s" % (type(e).__name__, e)
+        if self.open_ring:
+            try:
+                self._open_ring_tick(n0)
+            except Exception as e:
+                self.errors += 1
+                self.last_error = "open strings: %s: %s" % (type(e).__name__, e)
         try:
             self._lfo2_tick(n0)
         except Exception as e:
@@ -5854,6 +5877,7 @@ class Live:
                     self._amp_touch(p)
                 self.down = {k for k in self.down if k[0] != ch}
                 self.pedalled = {k for k in self.pedalled if k[0] != ch}
+                self.open_ring = {k: v for k, v in self.open_ring.items() if k[1] != ch}
                 self.sost.pop(ch, None)
                 self.pedal[ch] = False
                 self.pedal_v.pop(ch, None)
@@ -5977,6 +6001,8 @@ class Live:
             self._slur = _slur
             for part in parts:
                 if part.matches(self._pc(ch), msg.note):
+                    if self.open_ring:          # (a string an open one rings on: it stops)
+                        self._open_ring_stop(part, ch, msg.note, n0)
                     self._cut_on(part, ch, msg.note, msg.velocity, n0)
                     # (a key that also strikes another's sound, percussion_map.
                     # KIT_LAYER -- the metronome bell's tick is the click
@@ -6038,6 +6064,8 @@ class Live:
                     # stops when the key does.
                     pedalled = True
                     continue
+                if self._open_ring_hold(part, ch, msg.note):
+                    continue            # an open string: the palm, not the key, stops it
                 self._note_off(part, ch, msg.note, n0)
             if pedalled:
                 self.pedalled.add((ch, msg.note))
@@ -6104,6 +6132,57 @@ class Live:
                 self._slur = False
             for k in self._cut_keys(part.pid, ck[1], ck[2]):
                 self.slab.release(k, n0)
+
+    def _open_string(self, part, note):
+        """(its string, the open pitches, the cap s) where this key of the part
+        is a palm-muted open string that rings on (open_string_ring), else None."""
+        sn = note + part.transpose
+        pc = part.patch._voice_class(sn) if not part.drums else None
+        osr = getattr(pc, 'open_string_ring', None) if pc is not None else None
+        if not osr or getattr(pc, 'one_shot', False):
+            return None
+        return int(np.searchsorted(osr[0], sn, side='right') - 1), osr[0], float(osr[1])
+
+    def _open_ring_hold(self, part, ch, note):
+        """A KEY UP ON A PALM-MUTED OPEN STRING (blockrender's _string_free):
+        it sounds on at its muted decay -- the palm, not a finger, is on it --
+        until that string is played again or its cap after the onset. True
+        where it was one (held, the note not let go)."""
+        o = self._open_string(part, note)
+        if o is None or note + part.transpose not in o[1]:
+            return False
+        sl = [i for k, v in self.slab.live.items() if k[0] == part.pid and k[1] == ch and k[2] == note for i in v]
+        if not sl:
+            return False
+        on = int(self.slab.a["non"][np.fromiter(sl, np.int64, len(sl))].min())
+        self.open_ring[(part.pid, ch, note)] = (o[0], on + int(round(o[2] * self.rate)))
+        return True
+
+    def _open_ring_stop(self, part, ch, note, n0):
+        """A note on a string an open one still rings on: that one stops now,
+        in the steal fade (blockrender's: its end the new onset less
+        RETRIGGER_FADE)."""
+        o = self._open_string(part, note)
+        if o is None:
+            return
+        for rk in [rk for rk, v in self.open_ring.items() if rk[0] == part.pid and rk[1] == ch and v[0] == o[0]]:
+            del self.open_ring[rk]
+            self._open_ring_release(rk, n0, fade=True)
+
+    def _open_ring_release(self, rk, n0, fade=False):
+        _fade = np.float32(B.RETRIGGER_FADE * self.rate)
+        for k in [k for k in list(self.slab.live) if (k[0], k[1], k[2]) == rk]:
+            _sl = self.slab.live.get(k)
+            if fade and _sl:
+                _ix = np.fromiter(_sl, np.int64, len(_sl))
+                self.slab.a["re"][_ix] = np.minimum(self.slab.a["re"][_ix], _fade)
+            self.slab.release(k, n0)
+
+    def _open_ring_tick(self, n0):
+        """The open strings whose cap has come: let go, their own release."""
+        for rk in [rk for rk, v in self.open_ring.items() if v[1] <= n0]:
+            del self.open_ring[rk]
+            self._open_ring_release(rk, n0)
 
     def _cut_off(self, part, ch, note, n0):
         """A key up while its flick still sounds: the flick ends, and there
@@ -9863,6 +9942,10 @@ class Live:
         # THE INSERTION EFFECT (gsefx.parse, the file renderer's own reader):
         # its type, a parameter, a send, or a part's assign -- the state the
         # effect stages read (efx_chain)
+        _gd = _GSDISP.parse(d)
+        if _gd is not None:
+            self.display.apply(_gd, time.monotonic())
+            return
         _gx = _GSX.parse(d)
         if _gx is not None:
             if _gx[0] == 'part':
@@ -11099,6 +11182,7 @@ class Live:
                   and (k[1], k[2]) not in self.pedalled
                   and (k[0], k[1], k[2]) not in self.siren_st
                   and (k[0], k[1], k[2]) not in self.cutting
+                  and (k[0], k[1], k[2]) not in self.open_ring
                   and not self.slab.oneshot.get(k)]:
             self.slab.release(k, n)
             self.stuck += 1

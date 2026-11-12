@@ -40,8 +40,10 @@ transposed, the piano over N..127; nvlive --split). Without either, nvlive
 --pipeline (with --gpu): both a block late, the next block's setup while the
 GPU renders this one (live's TUNING_GPU_PIPELINE=1; nvlive's default on
 OpenCL). Both slabs at --slots=N (default live's 65536); on the CPU unless --gpu.
+--keep=DIR: both sides' outputs saved there (py.npy, nv.npy).
 """
 import atexit
+import ctypes
 import os
 import shutil
 import subprocess
@@ -189,6 +191,9 @@ def main(argv):
     room = opt.get("room") or "hall"
     nvx = live_export(tmp, room)
     exe = N.build_nvlive()
+    mk = N.map_kits()[0]            # (the maps' own drum sets, as nvlive hands its reader them: the live export plays them)
+    N.lib().nv_midi_map_kits((ctypes.c_int * len(mk))(*mk), len(mk))
+    N.lib().nv_midi_map_kits_play(1)
     m = N.Midi(mid)
     if m.error or (m.banked() and "programs" not in opt):
         print("refused: %s" % (N.MIDI_REFUSED.get(m.error, m.error) if m.error else "a bank (with --programs only)"))
@@ -344,6 +349,10 @@ def main(argv):
                   % (len(got), len(sent), k, got[k:k + 3], sent[k:k + 3]))
             return 1
         print("the Messenger's %d messages identical" % len(sent))
+    if opt.get("keep"):                 # (both sides' blocks, float32 stereo: py.npy and nv.npy)
+        os.makedirs(opt["keep"], exist_ok=True)
+        np.save(os.path.join(opt["keep"], "py.npy"), py)
+        np.save(os.path.join(opt["keep"], "nv.npy"), nv)
     d = np.flatnonzero(np.any(py != nv, 1))
     # (its peak: two silences are identical too)
     print("%s (%g s, program %d%s, %s): %d blocks, peak %.3g, %s" % (

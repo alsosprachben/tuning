@@ -156,6 +156,9 @@ struct Host {
     std::function<void(int, int, int)> synth_forget;
     std::function<int(int)> synth_send;
     std::function<std::string()> messenger_line, messenger_firmware;
+    // THE SOUND CANVAS'S DISPLAY (gsdisplay): its lines now -- the text's
+    // 16-column window, then the page in half blocks -- or none
+    std::function<std::vector<std::string>()> display;
     // THE ON-SCREEN CONTROLS (livetui's, the controls pane): the list (the
     // host's, saved with the session), one sent, a switch's state as the
     // engine has it on a channel
@@ -1445,6 +1448,22 @@ struct Panel {
                 add(kv[0], kv[1]);
         line(kl);
         out += "\x1b[J";
+        // THE SOUND CANVAS'S DISPLAY (livetui.draw_display): a box at the top
+        // right while the module would show something, over what is there
+        if (H.display && T.w >= 60 && T.h >= 14) {
+            const std::vector<std::string> dl = H.display();
+            if (!dl.empty()) {
+                const int x = T.w - 20;
+                auto at = [&](int r, const std::string &s) {
+                    out += "\x1b[" + std::to_string(r) + ";" + std::to_string(x) + "H" + s + "\x1b[0m";
+                };
+                at(3, C("dim") + "┌─ SC display ─────┐");
+                for (size_t i = 0; i < dl.size(); i++)
+                    at(4 + (int)i, C("dim") + "│ " + C("value") + "\x1b[1m" + dl[i]
+                                       + std::string(std::max(0, 16 - cols(dl[i])), ' ') + "\x1b[0m" + C("dim") + " │");
+                at(4 + (int)dl.size(), C("dim") + "└──────────────────┘");
+            }
+        }
         fwrite(out.data(), 1, out.size(), stdout);
         fflush(stdout);
     }

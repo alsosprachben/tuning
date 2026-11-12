@@ -264,6 +264,13 @@ struct PitchEv {
 
 struct Parsed {
     std::vector<LiveEv> events;     // the notes and controllers in message order
+    // THE SOUND CANVAS'S DISPLAY (gsdisplay): its messages (model 45H) and
+    // their times, for the render's text (OUT.display.txt); nothing sounds of them
+    struct Disp {
+        double t;
+        std::vector<uint8_t> d;
+    };
+    std::vector<Disp> disp;
     std::vector<PitchEv> pitch;
     std::vector<Note> notes;
     std::vector<CCEv> ccs;      // in message order
@@ -1107,6 +1114,12 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                     continue;
                 }
             }
+            // THE SOUND CANVAS'S DISPLAY (model 45H): kept for the render's
+            // text, and nothing else -- Python reads no sound in it either
+            if (d.size() >= 4 && d[0] == 0x41 && d[2] == 0x45 && d[3] == 0x12) {
+                P.disp.push_back(Parsed::Disp{t, d});
+                continue;
+            }
             // THE INSERTION EFFECT (gsefx.parse: 40 03 aa, a part's 4p 22),
             // its timeline kept whole -- what each note's onset finds
             if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12) {
@@ -1568,6 +1581,17 @@ void *nv_midi_read(const uint8_t *buf, long long len, int *err)
 void nv_midi_free(void *p) { delete (nv::Parsed *)p; }
 
 double nv_midi_total(void *p) { return ((nv::Parsed *)p)->total; }
+
+// the Sound Canvas's display messages (gsdisplay): how many, and the i-th --
+// its bytes (*n of them) and its time, s
+int nv_midi_display_n(void *p) { return (int)((nv::Parsed *)p)->disp.size(); }
+const uint8_t *nv_midi_display(void *p, int i, int *n, double *t)
+{
+    const auto &v = ((nv::Parsed *)p)->disp[i];
+    *n = (int)v.d.size();
+    *t = v.t;
+    return v.d.data();
+}
 int nv_midi_gs(void *p) { return ((nv::Parsed *)p)->gs; }
 
 // THE GS SETUP by the first note (gs_setup): which 0 the reverb's, 1 the

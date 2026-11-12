@@ -28,6 +28,25 @@ TASKS = [
                    "tuner, the synth (Moog, Messenger) pane and M, scenes, presets and the shared session, mod "
                    "rate, the metronome, the standard, the devices (--port), mouse and touch; open: threads, the "
                    "Eastern tuning on the panel"),
+    ("GM2", False, "Restore c2111e6's six tones, lost when be5a996 was committed from an older tree (the "
+                   "page had said SC-88 193 of 193): 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum (struck bars "
+                   "by register), 66.8 BreathyTnr. (the breath's octave law), 28.1 MutedDis.Gt (open strings, its "
+                   "own gate), 125.10 Calculating (the Morse keyboard's strokes) -- and with them sympathy per "
+                   "mode, which makes 26.8 Pedal Steel and 107.8 Taisho Koto whole: replayed onto today's tree "
+                   "(structs 0 misplaced; every stage whole), its checks under way (each tone Python vs native, "
+                   "live, the corpus)"),
+    ("GM1", False, "Live: the synth variations nvlive greyed as not native -- a Moog's SYNC (13: Sync Bass, P5 "
+                   "Sync Lead, Wire Lead...) and unison (16: JP SuperSaw, Super Poly, the JP-8000 stacks...). "
+                   "SYNC done (moog.weights' synced spectrum the kernel's C, native's rebuild, the shape rows' "
+                   "sweep, the lock under a held note; native vs live identical on P5 Sync Lead, a lead's SYNC "
+                   "turned live, Sync Bass on the GPU path); unison written (the C draw shared with the files, "
+                   "each voice a stamp of its own), its checks to come. The page's tone counts are the files'; "
+                   "a live count beside them is to come"),
+    ("SC-88", False, "Live: what c2111e6's tones play in files only -- 28.1 MutedDis.Gt's open strings "
+                     "ringing on, 125.10 Calculating's Morse strokes. Written, its checks to come: an open "
+                     "string held past its key until its string sounds again or its cap (live._open_ring_*, "
+                     "both engines); a melodic cache whose class borrows a kit key's strokes gives its "
+                     "template's song the sets' tables (nv_tcache_stroke_kits), 125.10 no longer refused"),
     ("GM1", True, "Live: the Messenger's performance controls, measured on Ben's unit (messenger_perf.py) -- GLIDE "
                   "(a lag in cents, detached notes too), HOLD, A and F ENV VEL, LFO 2 (rate, pitch, cutoff, amp, "
                   "the wheel its depth), F and A ENV LOOP, MULTI-TRIG (carry on, or recharge from where it was); "
@@ -36,10 +55,10 @@ TASKS = [
     ("GM1", True, "Live: the room switched while playing (live.set_room): every room in the export (LROOMS), "
                   "its tail drawn natively at the stage's directivity (native/roomtail.cpp, bit for bit "
                   "roomtail.py's), the templates built again in it, the tail crossfaded"),
-    ("GM1", False, "nvlive's host as a library (nv_host_*: the export, the builder, parts, programs, the room, "
+    ("GM1", True, "nvlive's host as a library (nv_host_*: the export, the builder, parts, programs, the room, "
                    "rebuilding, tuning, the devices) beside nv_part_*, for a GUI; nvlive its terminal client "
                    "-- 2a-2f done (host_check: the library against live.py); 2g, the picker, the globals and "
-                   "panic, in its checks"),
+                   "panic, in its checks -- all of it: host_api_check 0 failed, 2g's picker, globals and panic among them"),
     ("GM1", True, "Live: the Moog (knob-neutral templates and the slab's moog.weights; CC71-75 its knobs; "
                   "a layered voice; the MF-104M) -- not yet a unison or SYNC live"),
     ("GM1", True, "Live: the Moog Messenger both ways (live._messenger_cc, messenger_sync/_pitch): its chart "
@@ -92,8 +111,8 @@ TASKS = [
                   "note's class); a layered one's organ still Python's"),
     ("GM2", False, "Files: layered registered variations (55.2 6th Hit, 6.24 Harpsi.o) -- a layer's organ: its "
                    "registration the layer class's, its chest's wind the variation's program class's"),
-    ("GM2", False, "Files: per-mode sympathetic strings (sympathetic_per_mode: 26.8 Pedal Steel; 107.8 Taisho "
-                   "Koto's, with its drone stops and sweep)"),
+    ("GM2", True, "Files: per-mode sympathetic strings (sympathetic_per_mode: 26.8 Pedal Steel; 107.8 Taisho "
+                   "Koto's, with its drone stops and sweep) -- done with c2111e6's restore"),
     ("GM2", True, "Files: a didgeridoo's mouth (efxfilter.mouth: VOWEL's rows, its seeded wander -- "
                   "numpy's choice and dwell, scipy's glide -- or the part's wheel)"),
     ("GM2", True, "Files: the church bells (14.8-14.10: a tube's measured modes, 19 of them, a decay of their "
@@ -109,7 +128,8 @@ TASKS = [
                   "GM 2's by MSB 121), a variation as a patch (its templates, classes, trim and live record: "
                   "VLIV), the picker's variations under each program (VNAM)"),
     ("GM2", False, "nvlive: a Moog variation under a capital that is no Moog's organ (its level: live's), a "
-                   "layered variation's other layers, the maps' own drum sets"),
+                   "layered variation's other layers -- and the maps' own drum sets, written (MKIT read, "
+                   "kit_in_map at a program change and the picker, their names: MKNM), its checks to come"),
     ("GM2", True, "nvlive: the Moog variations (VLIV), plain and layered, a tone's own Auto Pan -- live "
                   "templates without the tone's effect (MOOG_NEUTRAL); a unison's and SYNC's refused"),
     ("GM2", True, "Tuning, files: the secondary (eastern) tuning, the meend, master fine/coarse tuning, "
@@ -176,7 +196,7 @@ TASKS = [
                      "valve, the compressor, a part's bus (Lo-Fi 1/2, compressor, limiter, enhancer, gate, "
                      "reverb), a parallel type's branch B (a second stamp on the part's virtual channel, "
                      "released with its note), a Keyboard Multi's copies (its taps unrolled as prepare's)"),
-    ("SC-55", False, "Files: a streaming (windowed) nvrender for whole songs (--stream) -- it held the table whole "
+    ("SC-55", True, "Files: a streaming (windowed) nvrender for whole songs (--stream) -- it held the table whole "
                      "in float64, and a Sound Canvas song's is past memory (SHIRO's 6.4 min: 21.8M rows, ~8.7 GB). "
                      "Done, in checks to bank: the scan and replay, order keys, each pass at its horizon, windows; "
                      "the GS delay's and an MF-104's repeats, the chorus device, a part's bus (its reverbs at the "
@@ -187,7 +207,7 @@ TASKS = [
                      "still held for the whole song (to measure, then bound). Open (rendered whole): a controller "
                      "matrix's tremolo, a tremolo stop beside a channel tremolo, a scanner on a register's or an "
                      "amplifier's channel, a chorus share rising on an amplifier's channel, a clavinet's rockers, "
-                     "a moving filter"),
+                     "a moving filter -- committed (be5a996); only SHIRO at full length still meets the cap"),
     ("SC-55", True, "Files and live: every SC-88Pro insertion type measured on its own file "
                     "(examples/gs_efx_files.py, efx_coverage.py: Python vs native, stream vs whole, live vs "
                     "live.Live) -- only 8 of the 65 occur in a real song. Python vs native 63 of 65 identical "
@@ -210,27 +230,27 @@ TASKS = [
     ("SC-55", True, "A drum's sounding octaves (the SFX sets' helicopter: its key a rotor, under its kit pitch)"),
     ("SC-55", True, "Files: the fire siren's rotor (siren.py: its motor and coast, carried key to key, a row a "
                     "note under the channel's fader) -- the SFX set's 67, the CM-32L's 91"),
-    ("SC-55", False, "The Helmholtz siren (GM 2's 125.5: its air from velocity and pressure, its upper disc on "
-                     "the crank) in files; live's siren block in nvlive"),
+    ("SC-55", True, "The Helmholtz siren (GM 2's 125.5: its air from velocity and pressure, its upper disc on "
+                     "the crank) in files; live's siren block in nvlive -- done (269553e: its air, the crank's upper disc)"),
     ("GM1", True, "examples/struct_check.py: each ctypes mirror's field offsets against the C struct's (a "
                   "reordered field of the same size passed the size check silently)"),
-    ("SC-55", False, "Melodic hits: a hand drum's or a kit's detail on a melodic voice (strike_phase_spread, "
+    ("SC-55", True, "Melodic hits: a hand drum's or a kit's detail on a melodic voice (strike_phase_spread, "
                      "stroke_scatter, jitter_by_partial, bloom_seconds, played_backwards, strike_noise_layers, "
-                     "one_shot and gate_time off a kit) -- dholak, kelontuk, reversed pieces, cymbal tones"),
+                     "one_shot and gate_time off a kit) -- dholak, kelontuk, reversed pieces, cymbal tones -- every tone that needs one native (coverage whole); each detail still gated to the voices that use it"),
     ("SC-55", True, "Crowds: a few people clapping (strike_flam_people, their palms ringing: "
                     "strike_flam_people_peak) -- Small Club, the applause wave; GM 2's Electronic and TR-808 sets"),
-    ("SC-55", False, "A recorded flam (strike_flam_record) and a crackle's exponential levels (strike_flam_exp_db, "
-                     "with a gate): phono noise"),
-    ("SC-88", False, "Variations that change a native family's methods (the SC-88 maps' brass, strings, guitars, "
+    ("SC-55", True, "A recorded flam (strike_flam_record) and a crackle's exponential levels (strike_flam_exp_db, "
+                     "with a gate): phono noise -- every drum set whole"),
+    ("SC-88", True, "Variations that change a native family's methods (the SC-88 maps' brass, strings, guitars, "
                      "flutes and cymbal menus: a subclass the engine's owner checks refuse) -- each family's "
-                     "overrides ported"),
-    ("SC-88", False, "Brass detail: mode_lock_spread and directivity_radius off an organ (16 brass variations)"),
-    ("SC-88", False, "Electric pianos with mode phases (mode_phase: the Detuned EPs, a Wurlitzer variation)"),
-    ("SC-88", False, "Guitars: feedback (feedback_harmonic), open strings ringing (open_string_ring), sections "
-                     "(chorus guitar, biwa tremolo, the gangsa pair)"),
-    ("SC-88", False, "The SFX families: siren, starship, laser, scream, heartbeat, Morse, machine gun, engine, "
-                     "car pass, skid, door creak, birds, fret slide (noise_events, pulse, ring_db, sweeps)"),
-    ("SC-88", False, "Dulcimer and accordion variations (course_keys, unison_shares_phase; speech_harmonic_exp)"),
+                     "overrides ported -- every variation native in files (coverage whole)"),
+    ("SC-88", True, "Brass detail: mode_lock_spread and directivity_radius off an organ (16 brass variations) -- every brass variation native in files"),
+    ("SC-88", True, "Electric pianos with mode phases (mode_phase: the Detuned EPs, a Wurlitzer variation) -- every EP variation native in files"),
+    ("SC-88", True, "Guitars: feedback (feedback_harmonic), open strings ringing (open_string_ring), sections "
+                     "(chorus guitar, biwa tremolo, the gangsa pair) -- every guitar variation native in files (open strings: files only, live has none)"),
+    ("SC-88", True, "The SFX families: siren, starship, laser, scream, heartbeat, Morse, machine gun, engine, "
+                     "car pass, skid, door creak, birds, fret slide (noise_events, pulse, ring_db, sweeps) -- every SFX tone native in files (the Morse keyboard's strokes: files only)"),
+    ("SC-88", True, "Dulcimer and accordion variations (course_keys, unison_shares_phase; speech_harmonic_exp) -- every variation native in files"),
     # A SUPERSET OF THE SOUND CANVAS (Ben, 2026-11-09): every GS message an SC-8850 receives doing
     # what Roland's does (or more) in files and live, and every front-panel control a TUI one --
     # Python first (the oracle), then native
@@ -238,7 +258,9 @@ TASKS = [
                      "(another channel's notes: Roland's own layering), its Rx switches (pitch bend, volume, "
                      "program change... off), ASSIGN MODE (a repeated note's retrigger), the CC1/CC2 "
                      "CONTROLLER NUMBERS its matrix reads, MASTER PAN, VOICE RESERVE (accepted: we have more), "
-                     "the display's text and 16x16 dot pages (45 xx: Falcom's and Konami's files send them)"),
+                     "the display's text and 16x16 dot pages (45 xx) -- these written: read and kept (the "
+                     "reader no longer refuses them), and a render's OUT.display.txt (gsdisplay.timeline; "
+                     "nvrender's the same, line for line)"),
     ("SC-55", False, "Sound Canvas superset, live: what a sequencer sends that live ignores and a file render "
                      "honours -- the system reverb, chorus and delay (macros and parameters), the GS EQ, "
                      "drum setup and the user drum sets, the controller matrix (each to verify first)"),
@@ -249,7 +271,8 @@ TASKS = [
     ("SC-8850", False, "Sound Canvas superset, the panel (livetui, then nvlive): per-part pan, reverb/chorus/"
                        "delay sends and velocity sense as part columns; a system-effects page (reverb type, "
                        "time, character, pre-LPF; chorus and delay types and parameters; the master EQ); "
-                       "per-part level meters (the 16 bars); the display (a sequencer's text and dot pages); "
+                       "per-part level meters (the 16 bars); the display (a sequencer's text and dot pages: written, "
+                       "both TUIs' SC display box); "
                        "the map (SC-55/88/88Pro/8850) in the picker and a GS Reset; solo beside mute; user "
                        "tones and drum sets edited and stored"),
 ]

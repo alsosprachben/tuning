@@ -30,6 +30,7 @@ import moog as MG
 import mf104 as MFD
 import percussion_map as PM
 import gsefx as GSX
+import gsdisplay as GSD
 import patch_map as PMAP
 from variation_desc import VARIATION_DESC, CAPITAL_DESC
 
@@ -2141,6 +2142,32 @@ class TUI:
         else:
             self.draw_globals(scr, y, w, bottom)
         self.draw_meters(scr, w, h, s)
+        self.draw_display(scr, w, h)
+
+    def draw_display(self, scr, w, h):
+        """THE SOUND CANVAS'S DISPLAY (gsdisplay): what a GS file writes to
+        the module's LCD -- its text and a dot page -- in a box at the top
+        right while the module would show it, over what is there."""
+        L, C = self.live, self.C
+        dp = getattr(L, "display", None)
+        if dp is None or w < 60 or h < 14:
+            return
+        now = time.monotonic()
+        text, rows = dp.showing(now)
+        if text is None and rows is None:
+            return
+        lines = []
+        if text is not None:
+            lines.append(GSD.text_window(text, dp.text_at, now))
+        if rows is not None:
+            lines += GSD.half_blocks(rows)
+        x, y = w - 21, 2
+        self.addstr(scr, y, x, "\u250c\u2500 SC display " + "\u2500" * 5 + "\u2510", C("dim"))
+        for i, ln in enumerate(lines):
+            self.addstr(scr, y + 1 + i, x, "\u2502 ", C("dim"))
+            self.addstr(scr, y + 1 + i, x + 2, "%-16s" % ln, C("value") | curses.A_BOLD)
+            self.addstr(scr, y + 1 + i, x + 18, " \u2502", C("dim"))
+        self.addstr(scr, y + 1 + len(lines), x, "\u2514" + "\u2500" * 18 + "\u2518", C("dim"))
 
     def draw_header(self, scr, w, s):
         """The top line: the name, the stream, the eastern tuning, the port,

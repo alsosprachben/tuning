@@ -27,6 +27,8 @@
 #include <vector>
 #include "panel.h"
 #include "pycompat.h"
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include "hostint.h"
 
 namespace nvh {
@@ -34,6 +36,21 @@ namespace nvh {
 bool read_export(const char *path, Export &E)
 {
     FILE *f = fopen(path, "rb");
+    // THE FILE MAPPED, copy on write: the classes and organs (nine tenths of
+    // it) used where they lie, only the pages a session touches in memory
+    if (f) {
+        struct stat st;
+        if (fstat(fileno(f), &st) == 0 && st.st_size > 0) {
+            void *m = mmap(nullptr, (size_t)st.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fileno(f), 0);
+            if (m != MAP_FAILED) {
+                E.map = m;
+                E.map_n = (size_t)st.st_size;
+            }
+        }
+    }
+    auto in_map = [&](long off, size_t n) -> unsigned char * {
+        return E.map && off >= 0 && (size_t)off + n <= E.map_n ? (unsigned char *)E.map + off : nullptr;
+    };
     if (!f)
         return false;
     char magic[4];
@@ -47,9 +64,12 @@ bool read_export(const char *path, Export &E)
         E.kind.resize(NCOLS); E.fin.resize(NCOLS);
         ok = fread(E.k.data(), 8, nk, f) == (size_t)nk && fread(E.freq.data(), 8, 128, f) == 128
              && fread(E.trim.data(), 8, 512, f) == 512;
-        for (int i = 0; ok && i < ncls; i++) {
-            E.classes.emplace_back(csz);
-            ok = fread(E.classes.back().data(), 1, csz, f) == (size_t)csz;
+        {
+            const long c0 = ftell(f);
+            unsigned char *b = in_map(c0, (size_t)ncls * (size_t)csz);
+            ok = ok && b && fseek(f, (long)ncls * csz, SEEK_CUR) == 0;
+            for (int i = 0; ok && i < ncls; i++)
+                E.classes.push_back(Mapped{b + (size_t)i * csz, (size_t)csz});
         }
         ok = ok && fread(E.cmap.data(), 4, 2 * NV_K_DRUMS, f) == 2 * NV_K_DRUMS
              && fread(E.kit_f0.data(), 8, 16384, f) == 16384 && fread(E.kit_seat.data(), 8, 16384, f) == 16384
@@ -73,11 +93,14 @@ bool read_export(const char *path, Export &E)
              && fread(&osz, 4, 1, f) == 1 && osz == (int)sizeof(OrganSpec) && fread(&opad, 4, 1, f) == 1
              && fseek(f, opad, SEEK_CUR) == 0;
         if (ok) {
-            E.organs.resize(norg);
+            const long o0 = ftell(f);
+            unsigned char *b = in_map(o0, (size_t)norg * sizeof(OrganSpec));
+            ok = b && (o0 % alignof(OrganSpec)) == 0 && fseek(f, (long)norg * (long)sizeof(OrganSpec), SEEK_CUR) == 0;
+            E.organs.p = (OrganSpec *)b;
+            E.organs.n = ok ? (size_t)norg : 0;
             E.cls_organ.resize(ncls);
             E.prog_organ.resize(128);
-            ok = fread(E.organs.data(), sizeof(OrganSpec), norg, f) == (size_t)norg
-                 && fread(E.cls_organ.data(), 4, ncls, f) == (size_t)ncls && fread(E.prog_organ.data(), 4, 128, f) == 128;
+            ok = ok && fread(E.cls_organ.data(), 4, ncls, f) == (size_t)ncls && fread(E.prog_organ.data(), 4, 128, f) == 128;
         }
         // LESL: the rotating speaker's constants (leslie.cpp's) and the lobe's kernel
         char lt[4];
@@ -181,7 +204,33 @@ bool read_export(const char *path, Export &E)
                 break;
             }
             if (!memcmp(tt, "MKIT", 4)) {
-                fseek(f, tl, SEEK_CUR);
+                // the maps' own drum sets: their ids, keys' classes, and their
+                // tables after the 128 sets' (set 128 + j's: nvrender's reading)
+                int nm = 0;
+                ok = fread(&nm, 4, 1, f) == 1 && nm >= 0 && nm <= 64;
+                const size_t n = 128 * (size_t)(ok ? nm : 0);
+                E.mk_ids.resize(ok ? nm : 0);
+                E.mk_map.resize(n);
+                std::vector<double> f0(n), seat(n), spar(NV_SPAR * n);
+                std::vector<unsigned long long> chk(2 * n);
+                std::vector<int> sk(n);
+                ok = ok && fread(E.mk_ids.data(), 4, nm, f) == (size_t)nm && fread(E.mk_map.data(), 4, n, f) == n
+                     && fread(f0.data(), 8, n, f) == n && fread(seat.data(), 8, n, f) == n
+                     && fread(chk.data(), 8, 2 * n, f) == 2 * n && fread(sk.data(), 4, n, f) == n
+                     && fread(spar.data(), 8, NV_SPAR * n, f) == NV_SPAR * n;
+                E.kit_f0.insert(E.kit_f0.end(), f0.begin(), f0.end());
+                E.kit_seat.insert(E.kit_seat.end(), seat.begin(), seat.end());
+                E.kit_choke.insert(E.kit_choke.end(), chk.begin(), chk.end());
+                E.kit_skind.insert(E.kit_skind.end(), sk.begin(), sk.end());
+                E.kit_spar.insert(E.kit_spar.end(), spar.begin(), spar.end());
+            } else if (!memcmp(tt, "MKNM", 4)) {
+                for (size_t j = 0; ok && j < E.mk_ids.size(); j++) {
+                    int ln = 0;
+                    ok = fread(&ln, 4, 1, f) == 1 && ln >= 0 && ln < 256;
+                    std::string s(ok ? ln : 0, '\0');
+                    ok = ok && (ln == 0 || fread(&s[0], 1, ln, f) == (size_t)ln);
+                    E.mk_names.push_back(s);
+                }
             } else if (!memcmp(tt, "EFXU", 4)) {
                 E.efxu.resize(tl);
                 ok = fread(&E.efxu[0], 1, tl, f) == (size_t)tl;
@@ -595,6 +644,15 @@ int nv_host::open(int argc, char **argv)
     E.dmap.resize(256, -1);
     kmap.insert(kmap.end(), E.dmap.begin(), E.dmap.end());
     kmap.insert(kmap.end(), E.vmap.begin(), E.vmap.end());
+    // ...and the maps' own drum sets' (a drum program 128 + j), after them
+    // (nvrender's mapk_base), for live's caches and its templates' song
+    const int mapk_base = (int)kmap.size();
+    kmap.insert(kmap.end(), E.mk_map.begin(), E.mk_map.end());
+    nv_tcache_mapk(mapk_base, (int)E.mk_ids.size(), E.mk_ids.data());
+    // (the reader's too: a file's -- and a template's -- CC32 selects them, kit_in_map)
+    nv_midi_map_kits(E.mk_ids.data(), (int)E.mk_ids.size());
+    nv_midi_map_kits_play(!E.mk_ids.empty());
+    nv_song_mapk_base(mapk_base);
     K = std::vector<const NoteClass *>(kmap.size(), nullptr);
     for (size_t q = 0; q < kmap.size(); q++)
         if (kmap[q] >= 0)
@@ -987,8 +1045,8 @@ int nv_host::open(int argc, char **argv)
             blsb[ch] = b;
     };
     // ...and a reset's (GM System On, GM 2 On, GS Reset, SC mode): the latches
-    // cleared, Rx.BANK SELECT off after GM 1's alone
-    sys_reset = [&](const uint8_t *x, int n) {
+    // cleared, Rx.BANK SELECT off after GM 1's alone; true where it was one
+    sys_reset = [&](const uint8_t *x, int n) -> bool {
         if (n > 0 && x[0] == 0xF0) {
             x++;
             n--;
@@ -998,10 +1056,11 @@ int nv_host::open(int argc, char **argv)
                   && ((x[4] == 0x40 && x[5] == 0x00 && x[6] == 0x7F && x[7] == 0x00)
                       || (x[4] == 0x00 && x[5] == 0x00 && x[6] == 0x7F));
         if (!lvl && !gs)
-            return;
+            return false;
         rxbank = lvl != 1;
         bmsb.clear();
         blsb.clear();
+        return true;
     };
     // the entry a variation key selects for a program (live.cpp's var_entry): 0 none
     var_entry_of = [&](int p, int v) -> int {
@@ -1072,7 +1131,9 @@ int nv_host::open(int argc, char **argv)
         nv_part_drone_patch(part, pi, dc, nb, sp);
     };
     build = [&](int prog, bool dr, int var) -> void * {
-        int key = 256 * var + (dr ? 128 : 0) + (prog & 127);
+        // (a map's own drum set, 128 + j, a key past every program's and variation's)
+        const bool mapk = dr && prog >= 128;
+        int key = mapk ? 256 * (4096 + prog) + 128 : 256 * var + (dr ? 128 : 0) + (prog & 127);
         {
             std::lock_guard<std::mutex> lk(cmu);
             auto it = caches.find(key);
@@ -1080,8 +1141,14 @@ int nv_host::open(int argc, char **argv)
                 return it->second;
         }
         bool native = false;
-        for (int k = 0; k < 128 && !native; k++)
-            native = E.cmap[(dr ? NV_K_DRUMS : 0) + 128 * (prog & 127) + k] >= 0;
+        if (mapk) {
+            const size_t j = (size_t)(prog - 128);
+            for (int k = 0; k < 128 && !native && j < E.mk_ids.size(); k++)
+                native = E.mk_map[128 * j + k] >= 0;
+        } else {
+            for (int k = 0; k < 128 && !native; k++)
+                native = E.cmap[(dr ? NV_K_DRUMS : 0) + 128 * (prog & 127) + k] >= 0;
+        }
         if (var) {                              // (a variation's: its slots the engine's)
             int en = var_entry_of(prog & 127, var);
             native = en > 0;
@@ -1104,7 +1171,7 @@ int nv_host::open(int argc, char **argv)
         auto begin = [&](long total) {
             std::lock_guard<std::mutex> lk(bmu);
             bp_name = (dr ? "drum set " : "program ") + std::to_string(prog & 127) + " "
-                      + (dr ? E.prog[prog & 127].kit : E.prog[prog & 127].name);
+                      + (dr ? kit_name(prog) : E.prog[prog & 127].name);
             __atomic_store_n(&bp_done, 0L, __ATOMIC_RELAXED);
             __atomic_store_n(&bp_total, total, __ATOMIC_RELEASE);
         };
@@ -1113,10 +1180,16 @@ int nv_host::open(int argc, char **argv)
                            E.kit_spar.data(), 100.0);
             int nsp[1] = {-1};
             begin(128);
-            nv_tcache_warm_p(c, prog & 127, 0, 127, 1, nsp, 1, &bp_done);
+            nv_tcache_warm_p(c, prog, 0, 127, 1, nsp, 1, &bp_done);
         } else {
             if (!E.les.empty())
                 nv_tcache_leslie(c, E.les.data(), (int)E.les.size());
+            {                                   // (a note that borrows a kit key's strokes: the sets' tables)
+                const NoteClass *k60 = cls60(prog, var);
+                if (k60 && k60->sfx_prog >= 0)
+                    nv_tcache_stroke_kits(c, E.kit_f0.data(), E.kit_seat.data(), E.kit_choke.data(),
+                                          E.kit_skind.data(), E.kit_spar.data());
+            }
             const int *pq = prec(prog, var);
             int sp[3] = {pq[3], pq[4], pq[5]};
             begin(76L * pq[1] * pq[2]);
@@ -1168,7 +1241,7 @@ int nv_host::open(int argc, char **argv)
                 nv_part_swap_bank(part, none, 0, k6, 128, 0, nonote, 0, nullptr, 1.0, 0, nullptr);
             }
         }
-        nv_part_swap(part, pa.pi, c, prog & 127, dr, pq[1], pq[6], pq[7], pq[8], pq[9], pq[6] >= 0,
+        nv_part_swap(part, pa.pi, c, dr ? prog : prog & 127, dr, pq[1], pq[6], pq[7], pq[8], pq[9], pq[6] >= 0,
                    dr ? E.kit_choke.data() : nullptr, regd ? note : nullptr);
         attach_drone(pa.pi, prog, dr, var);     // (a pungi's drone patch, built with it)
         // A PRESET's STOPS, for this organ -- again at each swap of it (the
@@ -1182,7 +1255,7 @@ int nv_host::open(int argc, char **argv)
         } else if (pa.pi == 0) {
             pending_drawn_prog = -1;
         }
-        pa.posted = prog & 127;
+        pa.posted = dr ? prog : prog & 127;
         pa.posted_var = var;
         pa.drums = dr;
         pa.sid = sid;
@@ -1227,15 +1300,22 @@ int nv_host::open(int argc, char **argv)
             if (pa.gone || (pa.channel >= 0 && pa.channel != ch))
                 continue;
             const int pv = pa.drums ? 0 : var;
-            if (pa.is(prog & 127, pa.drums, pv))
+            // a drum set in the map, where it has its own (live's kit_in_map:
+            // CC32's map, else the standard's -- not GM 2's drum bank)
+            const int pp = pa.drums && msb != 120 ? kit_in_map(prog & 127, lsb ? lsb : (int)default_map)
+                                                  : prog & 127;
+            if (pa.is(pp, pa.drums, pv))
                 continue;                       // (live: part.patch.key == want -- but the patch it WILL have)
-            ask(i, prog & 127, pa.drums, pv);
+            ask(i, pp, pa.drums, pv);
         }
     };
-    // ...and a GM System On or GS Reset the part heard: every part to program
-    // 0 (live's patch requests at a reset), its drums its own
+    // ...and a GM System On or GS Reset: every part to program 0 (live's
+    // patch requests at a reset, its drums its own) -- asked where it falls
+    // among the block's events, as live's _sysex asks, so a program change
+    // after it in the same block is the one built (a file's GS Reset, then
+    // its drum set: the set was lost to the reset's program 0)
     reset_asked = [&]() {
-        if (!nv_part_take_reset(part) || !E.has_prog)
+        if (!E.has_prog)
             return;
         for (size_t i = 0; i < pats.size(); i++)
             if (!pats[i].gone && !pats[i].is(0, pats[i].drums, 0))
@@ -1544,7 +1624,8 @@ void nv_host::render_block(long long n0, float *buf, bool step)
             continue;
         }
         if (m.type == 6) {
-            sys_reset(m.x.data(), (int)m.x.size());
+            if (sys_reset(m.x.data(), (int)m.x.size()) && asks)
+                reset_asked();
             nv_part_sysex(part, m.x.data(), (int)m.x.size());
             continue;
         }
@@ -1559,10 +1640,7 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         step_room_go = false;
         nv_part_room_reap(part);
     }
-    if (asks)
-        reset_asked();
-    else
-        nv_part_take_reset(part);
+    nv_part_take_reset(part);           // (its reset asked at its place, above)
     landed();
     if (step) {
         step_swaps += settle(reqs);     // (live's builder in step: for the next block)
@@ -1772,7 +1850,7 @@ void nv_host::start()
                 }
                 auto t0 = std::chrono::steady_clock::now();
                 void *c = build(rq[q].prog, rq[q].dr, rq[q].var);
-                std::string nm = rq[q].dr ? E.prog[rq[q].prog].kit : E.prog[rq[q].prog].name;
+                std::string nm = rq[q].dr ? kit_name(rq[q].prog) : E.prog[rq[q].prog].name;
                 if (!c)
                     note((rq[q].dr ? "drum set " : "program ") + std::to_string(rq[q].prog) + " (" + nm
                          + ") is not native here: the part plays on");
@@ -1935,6 +2013,29 @@ void nv_host::patches_init()
 void nv_host::pick(int sp) { pick_row(0, sp); }
 
 // ...for any part (livetui's PATCH column)
+int nv_host::kit_in_map(int prog, int mp) const
+{
+    if (mp) {
+        for (size_t j = 0; j < E.mk_ids.size(); j++)
+            if (E.mk_ids[j] == 128 * mp + prog)
+                return 128 + (int)j;
+        if (mp == 1 || mp == 2)
+            for (size_t j = 0; j < E.mk_ids.size(); j++)
+                if (E.mk_ids[j] == 3 * 128 + prog)
+                    return 128 + (int)j;
+    }
+    return prog;
+}
+
+std::string nv_host::kit_name(int prog) const
+{
+    if (prog >= 128) {
+        const size_t j = (size_t)(prog - 128);
+        return j < E.mk_names.size() && !E.mk_names[j].empty() ? E.mk_names[j] : "drum set";
+    }
+    return prog >= 0 && E.prog[prog].kit.size() ? E.prog[prog].kit : "drum set";
+}
+
 void nv_host::pick_row(size_t row, int sp)
 {
     if (!E.has_prog)
@@ -1947,8 +2048,10 @@ void nv_host::pick_row(size_t row, int sp)
             int p = E.vpv[sp - 256][0], v = E.vpv[sp - 256][1];
             if (!pa.is(p, false, v))
                 ask(row, p, false, v);
-        } else if (!pa.is(sp & 127, sp >= 128, 0)) {
-            ask(row, sp & 127, sp >= 128, 0);
+        } else {
+            const int p = sp >= 128 ? kit_in_map(sp & 127, (int)default_map) : sp;    // (livetui's pick)
+            if (!pa.is(p, sp >= 128, 0))
+                ask(row, p, sp >= 128, 0);
         }
     });
 }
@@ -2110,7 +2213,7 @@ std::vector<panel::PartRow> nv_host::part_rows()
         r.level = pa.level;
         r.muted = pa.muted;
         r.touch_fixed = pa.fixed < 0 ? !nv_part_patch_touch_sensitive(part, pa.pi) : pa.fixed != 0;
-        r.name = pa.drums ? (E.prog[r.program].kit.empty() ? "drum set" : E.prog[r.program].kit) : E.prog[r.program].name;
+        r.name = pa.drums ? kit_name(r.program) : E.prog[r.program].name;
         for (size_t j = 0; j < E.vpv.size() && r.var; j++)
             if (E.vpv[j][0] == r.program && E.vpv[j][1] == r.var)
                 r.name = E.vnames[j];

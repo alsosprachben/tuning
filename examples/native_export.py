@@ -74,10 +74,10 @@ MAGIC = b"NVX1"
 # 80 bounces a second, each a whole snare stroke (21,924 rows), past 2.5 GB
 # on its own; refused until the roll is cheaper (bounces sharing a ring, or
 # quiet bounces with fewer partials -- Ben's call)
-# -- and 125:10, the Morse keyboard: nvlive's templates carry no melodic SFX's
-# strokes (live.cpp gives its template song a kit's only), live.py's do -- its
-# characters; refused until nvlive's melodic notes take their kit key's strokes
-LIVE_REFUSED = {(117, 24), (125, 10)}
+# (125:10, the Morse keyboard, played since: a melodic cache whose class
+# borrows a kit key's strokes gives its template's song the sets' tables,
+# nv_tcache_stroke_kits)
+LIVE_REFUSED = {(117, 24)}
 
 
 def main(argv):
@@ -482,6 +482,10 @@ def main(argv):
         mb += struct.pack("<%di" % len(mk_map), *mk_map)
         mb += bytes(mk_f0) + bytes(mk_seat) + bytes(mk_choke) + bytes(mk_skind) + bytes(mk_spar)
         f.write(b"MKIT" + struct.pack("<i", len(mb)) + mb)
+        # MKNM: their names (percussion_map.drum_set_name), for nvlive's panel
+        _nb = b"".join(struct.pack("<i", len(_s)) + _s
+                       for _s in (PCM.drum_set_name(_k).encode("utf-8") for _k in mk_ids))
+        f.write(b"MKNM" + struct.pack("<i", len(_nb)) + _nb)
         # VNAM: the variations a picker offers (livetui's: GS's own tones and the
         # maps' -- not the MT-32 set's, bank 127), each its program, its key
         # (map x 128 + bank) and its name (a map's own with its map, gm_label's)

@@ -10121,6 +10121,16 @@ if __name__=="__main__":
         L,R,total,P,kdt=render(inp,tuner)
         write_wav(outp, L, R)
     dt=time.time()-t0
+    # THE SOUND CANVAS'S DISPLAY (gsdisplay): what the file writes to the
+    # module's LCD, as text beside the render (OUT.display.txt) -- where it
+    # writes any
+    try:
+        import gsdisplay as _GSDISP
+        _nd = _GSDISP.write_text(inp, os.path.splitext(outp)[0] + '.display.txt')
+        if _nd:
+            print("  display: %d lines -> %s" % (_nd, os.path.splitext(outp)[0] + '.display.txt'))
+    except Exception as _e:
+        print("  display: not read (%s)" % _e)
     _rq = _LAST_PREP.get('room_q')
     _rs = _LAST_PREP.get('reverb_send') or {}
     if _rq:

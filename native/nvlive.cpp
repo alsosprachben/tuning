@@ -629,6 +629,36 @@ int nv_host::run(int argc, char **argv)
         };
         H.messenger_reads = [&]() { return msgr_reads; };
         H.messenger_read = [&](bool on) { messenger_reading(on); };
+        H.display = [&]() {
+            // gsdisplay.text_window and half_blocks
+            std::vector<std::string> dl;
+            char text[33];
+            double age = 0.0;
+            int page = 0;
+            unsigned char rows[256];
+            if (!nv_part_display(part, text, &age, &page, rows))
+                return dl;
+            const std::string t = text;
+            if (!t.empty()) {
+                if (t.size() <= 16) {
+                    dl.push_back(t);
+                } else {
+                    const std::string loop = t + "    ", two = loop + loop;
+                    const size_t k = (size_t)(age / 0.3) % loop.size();
+                    dl.push_back(two.substr(k, 16));
+                }
+            }
+            if (page)
+                for (int r = 0; r < 16; r += 2) {
+                    std::string ln;
+                    for (int c = 0; c < 16; c++) {
+                        const bool tp = rows[16 * r + c], bt = rows[16 * (r + 1) + c];
+                        ln += tp && bt ? "█" : tp ? "▀" : bt ? "▄" : " ";
+                    }
+                    dl.push_back(ln);
+                }
+            return dl;
+        };
         H.messenger_line = [&]() {
             return msgr_out.empty() ? std::string()
                                     : "sets the Messenger on " + msgr_out + ", " + (msgr_pre107 ? "pre-1.0.7" : "1.0.7+")

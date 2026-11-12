@@ -489,6 +489,7 @@ def _load():
                                  ctypes.POINTER(I)]),
             ('nv_images', I, [D, I, C, C, C, I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_read', ctypes.c_void_p, [ctypes.c_char_p, LL, ctypes.POINTER(I)]),
+            ('nv_midi_map_kits', None, [ctypes.POINTER(I), I]), ('nv_midi_map_kits_play', None, [I]),
             ('nv_midi_free', None, [ctypes.c_void_p]), ('nv_midi_total', C, [ctypes.c_void_p]),
             ('nv_midi_n_notes', I, [ctypes.c_void_p]), ('nv_midi_n_ccs', I, [ctypes.c_void_p]),
             ('nv_midi_n_pws', I, [ctypes.c_void_p]), ('nv_midi_gs', I, [ctypes.c_void_p]),
