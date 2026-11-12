@@ -22,6 +22,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <cstdarg>
 #include <unistd.h>
 #include <vector>
 #include "panel.h"
@@ -358,10 +359,19 @@ bool read_export(const char *path, Export &E)
                             int n = 0;
                             if (fread(&n, 4, 1, f) != 1)
                                 break;
-                            std::vector<int> row(n);
-                            if (n && fread(row.data(), 4, n, f) != (size_t)n)
+                            std::vector<int> got(n), row, brk;
+                            if (n && fread(got.data(), 4, n, f) != (size_t)n)
                                 break;
+                            for (int x : got) {         // (-1: the voice's line break, not a stop)
+                                if (x < 0) {
+                                    if (!row.empty())
+                                        brk.push_back((int)row.size());
+                                } else {
+                                    row.push_back(x);
+                                }
+                            }
                             so.rows.push_back(row);
+                            so.breaks.push_back(brk);
                         }
                     }
                 // LPROG: each program's strings, choirs and names
@@ -545,6 +555,7 @@ int nv_host::open(int argc, char **argv)
         }
         return ptab[p].data();
     };
+    tuner_now = tname.empty() ? "hybrid" : tname;   // (the export's: live's hybrid, unless --tuner)
     tl_ = tname;
     for (char &ch_ : tl_)
         ch_ = (char)tolower((unsigned char)ch_);
@@ -716,6 +727,9 @@ int nv_host::open(int argc, char **argv)
             int pi = nv_part_add_patch(part, dcache, 3, 0.0, 1, -1, 0, 0, 0, 1, dset, E.kit_choke.data(), sch & 15, 0u,
                                      0, split - 1, str);
             pats.push_back(PartAt{pi, sch & 15, true, dset, -1, dset});
+            // ...and the part from the split up (live: Part(lo=split)) -- a key
+            // under it, every patch that claims it sounding, is the drums' alone
+            nv_part_patch_range(part, 0, -1, nodrums ? 0u : 1u << 9, split, 127, 0);
             fprintf(stderr, "nvlive: drum set %d under key %d on channel %d (transposed %+d)\n", dset, split,
                     (sch & 15) + 1, str);
         }
@@ -893,6 +907,10 @@ int nv_host::open(int argc, char **argv)
         fclose(rf);
         fprintf(stderr, "nvlive: the routes kept in %s\n", routes_file.c_str());
     }
+    if (session_routes_set) {                   // (the session's, as live's: they win)
+        E.routes = session_routes;
+        fprintf(stderr, "nvlive: the routes from the session\n");
+    }
     router = nv_rt_new();
     for (auto &a : E.routes)
         nv_rt_add(router, a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
@@ -1044,19 +1062,30 @@ int nv_host::open(int argc, char **argv)
         raga_for(c, prog, dr);
         if (var)
             nv_tcache_set_var(c, var);
+        // (its progress, for the panel: every key, bucket and speed it warms)
+        auto begin = [&](long total) {
+            std::lock_guard<std::mutex> lk(bmu);
+            bp_name = (dr ? "drum set " : "program ") + std::to_string(prog & 127) + " "
+                      + (dr ? E.prog[prog & 127].kit : E.prog[prog & 127].name);
+            __atomic_store_n(&bp_done, 0L, __ATOMIC_RELAXED);
+            __atomic_store_n(&bp_total, total, __ATOMIC_RELEASE);
+        };
         if (dr) {
             nv_tcache_kits(c, E.kit_f0.data(), E.kit_seat.data(), E.kit_choke.data(), E.kit_skind.data(),
                            E.kit_spar.data(), 100.0);
             int nsp[1] = {-1};
-            nv_tcache_warm(c, prog & 127, 0, 127, 1, nsp, 1);
+            begin(128);
+            nv_tcache_warm_p(c, prog & 127, 0, 127, 1, nsp, 1, &bp_done);
         } else {
             if (!E.les.empty())
                 nv_tcache_leslie(c, E.les.data(), (int)E.les.size());
             const int *pq = prec(prog, var);
             int sp[3] = {pq[3], pq[4], pq[5]};
-            nv_tcache_warm(c, prog & 127, 21, 96, pq[1], sp, pq[2]);
+            begin(76L * pq[1] * pq[2]);
+            nv_tcache_warm_p(c, prog & 127, 21, 96, pq[1], sp, pq[2], &bp_done);
             retune(prog);
         }
+        __atomic_store_n(&bp_total, 0L, __ATOMIC_RELEASE);
         if (!dr) {                              // A PUNGI's DRONE: its own patch, beside (Patch.warm's)
             const NoteClass *k60 = cls60(prog, var);
             if (k60 && k60->n_dchoice && k60->dchoice_var)
@@ -1074,6 +1103,8 @@ int nv_host::open(int argc, char **argv)
     last_ctl_code = 0;  // (the panel's EFX learn)
     last_ctl_ns = 0;
     swap = [&](size_t i, int prog, bool dr, int var, void *c) {
+        if (recording)
+            rec("s %lld part %zu program %d var %d drums %d", snap.n0, i, prog, var, (int)dr);
         PartAt &pa = pats[i];
         static const int DRUM_P[10] = {1, 1, 1, -1, -1, -1, -1, 0, 0, 0};
         const int *pq = dr ? DRUM_P : prec(prog, var);
@@ -1082,7 +1113,7 @@ int nv_host::open(int argc, char **argv)
         bool regd = reg_on && pa.pi == 0;
         int nonote[128] = {0};
         const int *note = !dr && rr.M > 0 ? rr.note : nonote;
-        if (regd && sid != pa.sid) {
+        if (regd && (sid != pa.sid || retune_bank.exchange(false))) {
             const Export::Prog &pr = E.prog[prog & 127];
             if (!dr && rr.M > 0) {
                 double k6[6] = {rr.d[0], rr.d[1], rr.d[2], rr.d[3], rr.d[4], rr.d[5]};
@@ -1145,9 +1176,9 @@ int nv_host::open(int argc, char **argv)
             if (pa.channel >= 0 && pa.channel != ch)
                 continue;
             const int pv = pa.drums ? 0 : var;
-            if (pa.program == (prog & 127) && pa.var == pv)
-                continue;                       // (live: part.patch.key == want -- the patch it HAS)
-            reqs.push_back(Req{i, prog & 127, pa.drums, pv});
+            if (pa.is(prog & 127, pa.drums, pv))
+                continue;                       // (live: part.patch.key == want -- but the patch it WILL have)
+            ask(i, prog & 127, pa.drums, pv);
         }
     };
     // ...and a GM System On or GS Reset the part heard: every part to program
@@ -1156,8 +1187,8 @@ int nv_host::open(int argc, char **argv)
         if (!nv_part_take_reset(part) || !E.has_prog)
             return;
         for (size_t i = 0; i < pats.size(); i++)
-            if (pats[i].program != 0 || pats[i].var != 0)
-                reqs.push_back(Req{i, 0, pats[i].drums, 0});
+            if (!pats[i].is(0, pats[i].drums, 0))
+                ask(i, 0, pats[i].drums, 0);
     };
     // ...and once a block has run its posts, the programs posted are the parts'
     landed = [&]() {
@@ -1180,9 +1211,11 @@ int nv_host::open(int argc, char **argv)
             if (!c) {
                 fprintf(stderr, "nvlive: %s %d is not native here: the part plays on\n",
                         rq[q].dr ? "drum set" : "program", rq[q].prog);
+                answered(rq[q].i, rq[q].prog, rq[q].dr, rq[q].var);
                 continue;
             }
             swap(rq[q].i, rq[q].prog, rq[q].dr, rq[q].var, c);
+            answered(rq[q].i, rq[q].prog, rq[q].dr, rq[q].var);
             n++;
         }
         rq.clear();
@@ -1307,6 +1340,47 @@ int nv_host::open(int argc, char **argv)
         }
         return true;
     };
+    tuner_switch = [&](const std::string &name,
+                       const std::function<void(size_t, int, bool, int, void *)> &give) -> bool {
+        double F[128];
+        int have[128];
+        if (name == tuner_now || nv_tuning_table(name.c_str(), -1, 0.0, F, have))
+            return false;
+        for (int n = 0; n < 128; n++)
+            E.freq[n] = have[n] ? F[n] : 0.0;
+        tname = name;
+        tl_ = name;
+        for (char &ch_ : tl_)
+            ch_ = (char)tolower((unsigned char)ch_);
+        double rf[128];                         // (a raga tuner's Sa and swaras, as at the start)
+        int rh[128];
+        raga_sa = -1;
+        raga_nsw = 0;
+        if (!(tl_.compare(0, 5, "raga:") == 0 && nv_raga_info(tl_.c_str(), 0.0, rf, rh, &raga_sa, raga_sw, &raga_nsw) == 0))
+            raga_sa = -1;
+        ptab.assign(128, std::vector<double>());    // (the secondary tuning's Sa: at the new pitches)
+        psa.assign(128, -1);
+        pnsw.assign(128, 0);
+        retuned.assign(128, 0);                 // (each program's free strings, at the new pitches)
+        {
+            std::lock_guard<std::mutex> lk(cmu);
+            for (auto &kv : caches)
+                cache_grave.push_back(kv.second);
+            caches.clear();
+        }
+        {
+            std::lock_guard<std::mutex> lk(bmu);
+            tuner_now = name;
+        }
+        retune_bank = true;
+        for (size_t i = 0; i < pats.size(); i++) {
+            const PartAt &pa = pats[i];
+            void *c = build(pa.posted, pa.drums, pa.drums ? 0 : pa.posted_var);
+            if (c)
+                give(i, pa.posted, pa.drums, pa.drums ? 0 : pa.posted_var, c);
+        }
+        return true;
+    };
     // --room-at=S:NAME[,S:NAME...] (--test): a room switched to at the block
     // second S falls in, before its events -- live.set_room's, its builder in step
     {
@@ -1341,11 +1415,36 @@ int nv_host::open(int argc, char **argv)
     return -1;
 }
 
+void nv_host::rec(const char *fmt, ...)
+{
+    char line[256];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(line, sizeof line, fmt, ap);
+    va_end(ap);
+    std::lock_guard<std::mutex> lk(rec_mu);
+    recq.emplace_back(line);
+}
+
 // ONE BLOCK, the audio thread's: the panel's posts, the keyboard's events,
 // the builder's patches swapped in, the render (into buf, interleaved),
 // the governor and the panel's snapshot
 void nv_host::render_block(long long n0, float *buf, bool step)
 {
+    // THE KERNEL ON THIS THREAD ALONE: synth_voice's chunks are an OpenMP
+    // loop, and a block is one chunk -- nothing to share, but handed to a
+    // worker that sleeps (or spins against the GPU's setup threads) it waited
+    // milliseconds: a coupled harpsichord's chord, on the CPU below the GPU's
+    // threshold, ran 10-25 ms a block. Each chunk writes its own samples, so
+    // one thread renders the same bits. Set once, on the thread that renders
+    // (the OpenMP the kernels loaded, found where they put it)
+    static thread_local bool omp_one = false;
+    if (!omp_one) {
+        omp_one = true;
+        if (void *g = dlopen("libgomp.so.1", RTLD_NOW | RTLD_NOLOAD))
+            if (auto f = (void (*)(int))dlsym(g, "omp_set_num_threads"))
+                f(1);
+    }
     long long t0 = rt::now_ns();
     rt::busy_since = t0;
     std::vector<std::function<void(long long)>> todo;
@@ -1360,6 +1459,9 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         std::lock_guard<std::mutex> lk(mu);
         evs.swap(q);
     }
+    if (recording)
+        for (const Midi &m : evs)
+            rec("e %lld %d %d %d %d", n0, m.type, m.ch, m.a, m.b);
     for (const Midi &m : evs) {
         // LEARNING A KEY (live._learn_take): the next press taken, and
         // neither it nor its release plays
@@ -1424,9 +1526,11 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                     room_ready = nullptr;
                     room_ready_go = false;
                 }
-                for (auto &d : bdone)
+                for (auto &d : bdone) {
                     if (d.second)
                         swap(d.first.i, d.first.prog, d.first.dr, d.first.var, d.second);
+                    answered(d.first.i, d.first.prog, d.first.dr, d.first.var);
+                }
                 bdone.clear();
             }
         }
@@ -1448,6 +1552,12 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         buf[2 * k + 1] = R[k];
         pk[0] = std::max(pk[0], fabsf(L[k]));
         pk[1] = std::max(pk[1], fabsf(R[k]));
+    }
+    if (recording && (blocks % 24 == 0 || ms > budget)) {
+        double st[15];
+        nv_part_stats(part, st);
+        rec("b %lld %.3f busy %.0f keys %.0f shed %.0f peak %.5f pedal %.0f mono %.0f gpu %.0f", n0, ms, st[0], st[1],
+            st[2], pk[0], st[7], st[9], st[4]);
     }
     {
         std::lock_guard<std::mutex> lk(pmu);
@@ -1511,9 +1621,9 @@ void nv_host::start()
             {
                 std::unique_lock<std::mutex> lk(bmu);
                 bcv.wait_for(lk, std::chrono::milliseconds(100),
-                             [&] { return !breq.empty() || !room_req.empty() || g_stop; });
+                             [&] { return !breq.empty() || !room_req.empty() || !tuner_req.empty() || g_stop; });
                 rq.swap(breq);
-                builder_busy = !rq.empty() || !room_req.empty();
+                builder_busy = !rq.empty() || !room_req.empty() || !tuner_req.empty();
             }
             nv_part_room_reap(part);                    // (an old tail, let go off the audio thread)
             std::string rname;
@@ -1544,6 +1654,26 @@ void nv_host::start()
                                               std::chrono::steady_clock::now() - t0).count()) + " ms");
                 }
             }
+            std::string tn;                             // A TUNER (livetui's TUNER column), after a room
+            {
+                std::lock_guard<std::mutex> lk(bmu);
+                tn.swap(tuner_req);
+            }
+            if (!tn.empty()) {
+                auto t0 = std::chrono::steady_clock::now();
+                int nb_ = 0;
+                bool ok = tuner_switch(tn, [&](size_t i_, int p_, bool d_, int v_, void *c_) {
+                    std::lock_guard<std::mutex> lk(bmu);
+                    bdone.push_back(std::make_pair(Req{i_, p_, d_, v_}, c_));
+                    nb_++;
+                });
+                if (ok)
+                    note("tuner " + tn + ": " + std::to_string(nb_) + " patch(es) built in "
+                         + std::to_string((int)std::chrono::duration<double, std::milli>(
+                                              std::chrono::steady_clock::now() - t0).count()) + " ms");
+                else if (tn != tuner_now)
+                    note("tuner " + tn + ": not one nvlive can make");
+            }
             for (size_t q = 0; q < rq.size() && !g_stop; q++) {
                 bool later = false;
                 for (size_t r = q + 1; r < rq.size() && !later; r++)
@@ -1553,7 +1683,7 @@ void nv_host::start()
                 bool had;
                 {
                     std::lock_guard<std::mutex> lk(cmu);
-                    had = caches.count((rq[q].dr ? 128 : 0) + rq[q].prog) > 0;
+                    had = caches.count(256 * (rq[q].dr ? 0 : rq[q].var) + (rq[q].dr ? 128 : 0) + rq[q].prog) > 0;
                 }
                 auto t0 = std::chrono::steady_clock::now();
                 void *c = build(rq[q].prog, rq[q].dr, rq[q].var);
@@ -1572,6 +1702,17 @@ void nv_host::start()
         }
     };
     builder = std::thread(builder_loop);
+}
+
+// a tuner asked for (the panel's): built on the builder, as a room is
+void nv_host::set_tuner(const std::string &name)
+{
+    {
+        std::lock_guard<std::mutex> lk(bmu);
+        tuner_req = name;
+        tuner_asked = name;
+    }
+    bcv.notify_one();
 }
 
 // ---- what the panel and a GUI change (the panel's hooks call these) ----
@@ -1608,6 +1749,7 @@ void nv_host::set_global(int i, double v)
         if (k >= 0 && k < (int)E.rooms.size()) {
             std::lock_guard<std::mutex> lk(bmu);
             room_req = E.rooms[k].name;
+            room_asked = k;
         }
         bcv.notify_one();
         return;
@@ -1662,12 +1804,25 @@ void nv_host::pick(int sp)
         const PartAt &pa = pats[0];
         if (sp >= 256) {                        // (a variation: its program under its bank)
             int p = E.vpv[sp - 256][0], v = E.vpv[sp - 256][1];
-            if (pa.program != p || pa.var != v || pa.drums)
-                reqs.push_back(Req{0, p, false, v});
-        } else if (pa.program != (sp & 127) || pa.drums != (sp >= 128) || pa.var) {
-            reqs.push_back(Req{0, sp & 127, sp >= 128});
+            if (!pa.is(p, false, v))
+                ask(0, p, false, v);
+        } else if (!pa.is(sp & 127, sp >= 128, 0)) {
+            ask(0, sp & 127, sp >= 128, 0);
         }
     });
+}
+
+// the build under way: templates done of its total, and its name; false none
+bool nv_host::progress(long *done, long *total, std::string *name)
+{
+    long t = __atomic_load_n(&bp_total, __ATOMIC_ACQUIRE);
+    if (t <= 0)
+        return false;
+    *total = t;
+    *done = std::min(t, __atomic_load_n(&bp_done, __ATOMIC_RELAXED));
+    std::lock_guard<std::mutex> lk(bmu);
+    *name = bp_name;
+    return true;
 }
 
 void nv_host::panic()
@@ -1685,7 +1840,7 @@ int nv_host::building()
         n += (int)posted.size();
     }
     std::lock_guard<std::mutex> lk(bmu);
-    return n + (int)breq.size() + (int)bdone.size() + (room_req.empty() ? 0 : 1);
+    return n + (int)breq.size() + (int)bdone.size() + (room_req.empty() ? 0 : 1) + (tuner_req.empty() ? 0 : 1);
 }
 
 // ---- THE C API (host.h): over nv_host, as nvlive drives it ----
@@ -1871,6 +2026,15 @@ void nv_host_patch_now(const nv_host *h, int *program, int *variation, int *drum
 void nv_host_panic(nv_host *h) { h->panic(); }
 
 int nv_host_building(nv_host *h) { return h->building(); }
+int nv_host_progress(nv_host *h, long *done, long *total, char *name, int cap)
+{
+    std::string nm;
+    if (!h->progress(done, total, &nm))
+        return 0;
+    if (name && cap > 0)
+        snprintf(name, (size_t)cap, "%s", nm.c_str());
+    return 1;
+}
 void *nv_host_part(nv_host *h) { return h->part; }
 
 }  // extern "C"

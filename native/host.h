@@ -86,6 +86,10 @@ void nv_host_panic(nv_host *h);
 /* how much is still to land -- programs and a room asked for, building,
    built and not yet swapped in: a GUI's spinner (0 settled) */
 int nv_host_building(nv_host *h);
+/* the build under way, a progress bar's: templates done of its total, and
+   what it is ("program 19 Church Organ"; cap bytes of it into name). 1 while
+   one builds, 0 none */
+int nv_host_progress(nv_host *h, long *done, long *total, char *name, int cap);
 /* the live part it plays (native.py's nv_part_*: a check reads its slab) */
 void *nv_host_part(nv_host *h);
 

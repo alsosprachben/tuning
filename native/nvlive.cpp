@@ -8,7 +8,7 @@
 //                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
 //                       [--tuner=NAME [--a=HZ | --c=HZ]] [--eastern=SPEC]
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
-//                       [--rt] [--reg-async] [--async] [--govern]
+//                       [--rt] [--reg-async] [--async] [--govern] [--paced] [--build-async] [--tuner-at=S:NAME]
 //
 // EXPORT.nvx is examples/native_export.py --live's. At start the part's
 // templates are built (live.Patch.warm: every key 21-96 at each velocity
@@ -147,6 +147,27 @@ int nv_host::run(int argc, char **argv)
             for (int q = 1; q < argc; q++)
                 tgov = tgov || !strcmp(argv[q], "--govern");
             govern = tgov;
+            // --paced: each block started at its time as played (a block's
+            // length after the one before), not as soon as the last ends --
+            // the machine idling between them, as it does under a keyboard
+            bool paced = false;
+            for (int q = 1; q < argc; q++)
+                paced = paced || !strcmp(argv[q], "--paced");
+            // --build-async (with --programs): the programs built on the
+            // builder thread, as played -- swapped in when ready, the blocks
+            // going on meanwhile (best --paced; the output then varies run to run)
+            bool basync = false;
+            for (int q = 1; q < argc; q++)
+                basync = basync || !strcmp(argv[q], "--build-async");
+            if (basync)
+                start();
+            if (session_on) {                   // (--session=PATH named: taken, and written at the end)
+                globals_init();
+                session_apply();
+            }
+            std::string trec = opt(argc, argv, "record", "");      // (--record: written at the end)
+            recording = !trec.empty();
+            const auto tstart = std::chrono::steady_clock::now();
             asks = follow;
             std::vector<float> out;
             std::vector<float> buf(2 * BLK);
@@ -155,6 +176,8 @@ int nv_host::run(int argc, char **argv)
             std::vector<double> mstep, mcpu;            // the step (events, register, dampers); a CPU block's render
             int e = 0;
             for (long long b = 0; b < nb; b++) {
+                if (paced)
+                    std::this_thread::sleep_until(tstart + std::chrono::nanoseconds((long long)((double)(b * BLK) * 1e9 / SR)));
                 auto t0 = std::chrono::steady_clock::now();
                 long long n0 = b * BLK;
                 g_msgr_blk = b;                         // (--messenger-log's block)
@@ -162,6 +185,18 @@ int nv_host::run(int argc, char **argv)
                 for (const auto &ra : room_at)
                     if (ra.first == b)
                         room_want = &ra.second;
+                {                                       // --tuner-at=S:NAME: a tuner switched to, in step
+                    std::string ta = opt(argc, argv, "tuner-at", "");
+                    size_t c = ta.find(':');
+                    if (c != std::string::npos && (long long)(atof(ta.substr(0, c).c_str()) * SR) / BLK == b) {
+                        int nb_ = 0;
+                        tuner_switch(ta.substr(c + 1), [&](size_t i_, int p_, bool d_, int v_, void *c_) {
+                            swap(i_, p_, d_, v_, c_);
+                            nb_++;
+                        });
+                        fprintf(stderr, "nvlive: tuner %s at block %lld (%d patch(es))\n", ta.substr(c + 1).c_str(), b, nb_);
+                    }
+                }
                 if (room_want) {
                     void *room_new = nullptr;
                     if (room_switch(*room_want, &room_new, [&](size_t i_, int p_, bool d_, int v_, void *c_) {
@@ -197,7 +232,7 @@ int nv_host::run(int argc, char **argv)
                         e++;
                     }
                 }
-                render_block(n0, buf.data(), true);
+                render_block(n0, buf.data(), !basync);
                 msr.push_back(last_out_ms);
                 mstep.push_back(last_step_ms);
                 if (!nv_part_on_gpu(part))
@@ -243,6 +278,21 @@ int nv_host::run(int argc, char **argv)
                     fprintf(stderr, "nvlive:   the governor shed %ld partials\n", nv_part_partials_shed(part));
             }
             nv_midi_free(m);
+            if (session_on) {
+                std::vector<std::array<int, 7>> rs(E.routes.begin(), E.routes.end());
+                session_save(rs);
+            }
+            if (basync) {
+                g_stop = true;
+                bcv.notify_all();
+                builder.join();
+            }
+            if (recording)
+                if (FILE *rf = fopen(trec.c_str(), "w")) {
+                    for (auto &l : recq)
+                        fprintf(rf, "%s\n", l.c_str());
+                    fclose(rf);
+                }
             if (follow)
                 fprintf(stderr, "nvlive: %ld program change(s) followed\n", step_swaps);
             FILE *wf = fopen(argv[i + 2], "wb");
@@ -302,6 +352,32 @@ int nv_host::run(int argc, char **argv)
     fprintf(stderr, "nvlive: playing (MIDI %s, audio %s, %u us); %s\n", dev.c_str(), pcmdev.c_str(), lat,
             nopanel ? "Ctrl-C to stop" : "the panel (q to stop)");
     start();                                      // the workers and the builder
+    std::thread recorder;
+    std::string recf = opt(argc, argv, "record", "");
+    if (!recf.empty()) {
+        if (FILE *rf = fopen(recf.c_str(), "w")) {
+            recording = true;
+            recorder = std::thread([this, rf]() {
+                while (true) {
+                    bool last = g_stop;
+                    std::vector<std::string> got;
+                    {
+                        std::lock_guard<std::mutex> lk(rec_mu);
+                        got.swap(recq);
+                    }
+                    for (auto &l : got)
+                        fprintf(rf, "%s\n", l.c_str());
+                    fflush(rf);
+                    if (last)
+                        break;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                }
+                fclose(rf);
+            });
+        } else {
+            fprintf(stderr, "nvlive: cannot write %s\n", recf.c_str());
+        }
+    }
     // THE AUDIO THREAD: real-time (--no-rt, TUNING_RT=0: not), block by block
     audio = [&]() {
         if (!nort) {
@@ -338,13 +414,20 @@ int nv_host::run(int argc, char **argv)
     };
     player = std::thread(audio);
     if (nopanel) {
+        globals_init();
+        session_apply();
         while (!g_stop)
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::vector<std::array<int, 7>> rs;
+        for (auto &a : E.routes)
+            rs.push_back(a);
+        session_save(rs);
     } else {
         // THE PANEL, on this thread
         panel::Host H;
         auto post = [&](std::function<void(long long)> f) { this->post(std::move(f)); };
         globals_init();
+        session_apply();
         patches_init();
         H.take = [&]() {
             std::lock_guard<std::mutex> lk(pmu);
@@ -362,6 +445,7 @@ int nv_host::run(int argc, char **argv)
             return learning == 2 ? std::make_pair(learnt_ch.load(), learnt_note.load()) : std::make_pair(-1, -1);
         };
         H.rate = SR;
+        H.slots = slots;
         H.frames = (int)BLK;
         H.budget_ms = budget;
         auto name_of = [&](int sp) {             // (sp: a program, or 128 + a drum set)
@@ -399,10 +483,12 @@ int nv_host::run(int argc, char **argv)
         auto stops_of = [&](int sp) {
             H.stop_names.clear();
             H.stop_rows.clear();
+            H.stop_breaks.clear();
             if (sp >= 128 || E.stops[sp].names.empty())
                 return;
             H.stop_names = E.stops[sp].names;
             H.stop_rows = E.stops[sp].rows;
+            H.stop_breaks = E.stops[sp].breaks;
             H.drawn = [&, nr = (int)E.stops[sp].names.size()]() {
                 std::vector<char> d(nr, 0);
                 nv_part_drawn(part, d.data(), nr);
@@ -434,10 +520,36 @@ int nv_host::run(int argc, char **argv)
         H.last_ctl = [&]() { return std::make_pair(last_ctl_code.load(), last_ctl_ns.load()); };
         if (E.has_prog)
             H.pick = [&](int sp) { pick(sp); };
+        H.tuner = tuner_now;
+        H.set_tuner = [&](const std::string &nm) { set_tuner(nm); };
+        H.progress = [&](long &d, long &t, std::string &nm) { return progress(&d, &t, &nm); };
         // ...A PROGRAM CHANGE FROM THE KEYBOARD: its name and its stops, and
         // what the builder said
         int shown = shown_program, shown_v = shown_var, shown_room = room_idx;
+        auto routes_now = [&]() {               // (the panel's, --pedal-key's own not among them)
+            std::vector<std::array<int, 7>> rs;
+            bool skipped = pks.empty();
+            for (auto &a : H.routes) {
+                if (!skipped && a == pedal_route) {
+                    skipped = true;
+                    continue;
+                }
+                rs.push_back(a);
+            }
+            return rs;
+        };
+        auto saved_at = std::chrono::steady_clock::now();
         H.refresh = [&]() {
+            {                                           // (a tuner switched to: its name)
+                std::lock_guard<std::mutex> lk(bmu);
+                H.tuner = tuner_now;
+            }
+            // THE SESSION, saved as it changes: at most every 2 s, on this
+            // thread (livetui's _loop)
+            if (std::chrono::steady_clock::now() - saved_at >= std::chrono::seconds(2)) {
+                saved_at = std::chrono::steady_clock::now();
+                session_save(routes_now());
+            }
             if (room_idx != shown_room) {               // (a room switched to: its name, its global)
                 shown_room = room_idx;
                 H.g[8] = shown_room;
@@ -468,6 +580,7 @@ int nv_host::run(int argc, char **argv)
         panel::Panel P(H);
         P.run([&]() { return !g_stop.load(); });
         g_stop = true;
+        session_save(routes_now());             // (and once more on the way out)
         edited = H.routes != was;
         // ROUTES ADDED OR TAKEN AWAY HERE are kept beside the export, and read
         // back the next time (--pedal-key's own not among them)
@@ -497,13 +610,318 @@ int nv_host::run(int argc, char **argv)
         fprintf(stderr, "nvlive: %ld notes found the slab full (%ld slots) and did not sound: raise --slots\n",
                 nv_part_dropped(part), slots);
     reader.join();
+    if (recorder.joinable())
+        recorder.join();
     A.close(A.pcm);
     ::close(fd);
     fprintf(stderr, "nvlive: stopped\n");
     return 0;
 }
 
+// ---- THE SESSION (session.h): live's session.json, shared with live.py ----
+
+// a live.Route as Route.to_dict writes it, from nv_rt_add's seven; a null
+// for one whose destination live has no name for (-99)
+static sess::J route_dict(const std::array<int, 7> &a)
+{
+    static const char *HALF[3] = {"up", "down", "both"};
+    sess::J src = sess::arr();
+    switch (a[0]) {
+    case 0: src.a = {sess::str("cc"), sess::integer(a[1])}; break;
+    case 1: src.a = {sess::str("bend"), sess::str(HALF[std::max(0, std::min(2, a[1]))])}; break;
+    case 2: src.a = {sess::str("pressure")}; break;
+    default: src.a = {sess::str("note"), sess::integer(a[1])}; break;
+    }
+    if (a[2] == -99)
+        return sess::null();
+    sess::J d = sess::obj();
+    d.o["src"] = src;
+    d.o["dst"] = a[2] == -1 ? sess::str("bend") : a[2] == -2 ? sess::str("pressure") : a[2] == -3 ? sess::str("mono")
+                                                                                    : sess::integer(a[2]);
+    d.o["keep"] = sess::boolean(a[3] != 0);
+    d.o["channel"] = a[4] < 0 ? sess::null() : sess::integer(a[4]);
+    d.o["latch"] = sess::boolean(a[5] != 0);
+    d.o["press"] = sess::boolean(a[6] != 0);
+    return d;
+}
+
+// ...and back (native.route_args): false for one nvlive cannot take
+static bool route_args(const sess::J &d, std::array<int, 7> &a)
+{
+    const sess::J *src = d.get("src"), *dst = d.get("dst");
+    if (!src || !src->is(sess::J::ARR) || src->a.empty() || !src->a[0].is(sess::J::STR) || !dst)
+        return false;
+    const std::string k = src->a[0].s;
+    const sess::J *arg = src->a.size() > 1 ? &src->a[1] : nullptr;
+    if (k == "cc" && arg)
+        a = {0, (int)arg->i(), 0, 0, -1, 0, 1};
+    else if (k == "bend")
+        a = {1, !arg || arg->s == "up" ? 0 : arg->s == "down" ? 1 : 2, 0, 0, -1, 0, 1};
+    else if (k == "pressure")
+        a = {2, 0, 0, 0, -1, 0, 1};
+    else if (k == "note" && arg)
+        a = {3, (int)arg->i(), 0, 0, -1, 0, 1};
+    else
+        return false;
+    a[2] = dst->is(sess::J::STR) ? (dst->s == "bend" ? -1 : dst->s == "pressure" ? -2 : dst->s == "mono" ? -3 : -99)
+                                 : (int)dst->i();
+    const sess::J *x;
+    a[3] = (x = d.get("keep")) && x->d() != 0.0;
+    a[4] = (x = d.get("channel")) && x->is(sess::J::NUM) ? (int)x->i() : -1;
+    a[5] = (x = d.get("latch")) && x->d() != 0.0;
+    a[6] = (x = d.get("press")) ? x->d() != 0.0 : 1;
+    return true;
+}
+
+// what the session holds that the part takes once playing (live.apply_preset):
+// the globals, the room, the insertion effect (efx_recall's messages), the
+// organ's drawn stops, and each channel's mix (the scene: recall_scene)
+void nv_host::session_apply()
+{
+    if (!session.is(sess::J::OBJ))
+        return;
+    const sess::J *x;
+    static const char *KEYS[6] = {"master_db", "headroom_db", "thresh", "bend_range", "mod_cents", "press_db"};
+    for (int i = 0; i < 6; i++)
+        if ((x = session.get(KEYS[i])) && x->is(sess::J::NUM)) {
+            double v = std::max(panel::GLOBAL_RANGE[i][0], std::min(panel::GLOBAL_RANGE[i][1], x->d()));
+            if (v != gval[i])
+                set_global(i, v);
+        }
+    if ((x = session.get("room")) && x->is(sess::J::STR))
+        for (size_t q = 0; q < E.rooms.size(); q++)
+            if (E.rooms[q].name == x->s && (int)q != room_idx)
+                set_global(8, (double)q);           // (the builder's: every patch built again in it)
+    if ((x = session.get("efx")) && x->is(sess::J::OBJ)) {
+        auto send = [&](char kind, int a, int b) {
+            std::vector<uint8_t> m = panel::efx_message(kind, a, b);
+            post([this, m](long long) { nv_part_sysex(part, m.data(), (int)m.size()); });
+        };
+        const sess::J *t = x->get("type");
+        if (t && t->is(sess::J::ARR) && t->a.size() == 2)
+            send('t', (int)t->a[0].i(), (int)t->a[1].i());
+        for (const char *k : {"p", "send", "ctl"})
+            if (const sess::J *l = x->get(k))
+                for (const sess::J &kv : l->a)
+                    if (kv.is(sess::J::ARR) && kv.a.size() == 2)
+                        send(k[0] == 'p' ? 'p' : 's', (int)kv.a[0].i(), (int)kv.a[1].i());
+        std::vector<int> want;
+        if (const sess::J *l = x->get("parts"))
+            for (const sess::J &c : l->a)
+                want.push_back((int)c.i());
+        for (int ch = 0; ch < 16; ch++)
+            send('c', ch, std::find(want.begin(), want.end(), ch) != want.end());
+    }
+    // THE ORGAN's STOPS: drawn as the part's were (parts[0].drawn, by name)
+    const sess::J *parts = session.get("parts");
+    const int sp = shown_program;
+    if (parts && parts->is(sess::J::ARR) && !parts->a.empty() && sp < 128 && !E.stops[sp].names.empty()) {
+        const sess::J *dn = parts->a[0].get("drawn"), *pg = parts->a[0].get("program");
+        if (dn && dn->is(sess::J::ARR) && pg && pg->i() == sp) {
+            const auto &names = E.stops[sp].names;
+            std::vector<char> want(names.size(), 0);
+            for (size_t ri = 0; ri < names.size(); ri++)
+                for (const sess::J &n : dn->a)
+                    want[ri] = want[ri] || (n.is(sess::J::STR) && n.s == names[ri]);
+            post([this, want](long long) { nv_part_set_drawn(part, want.data(), (int)want.size()); });
+        }
+    }
+    // EACH CHANNEL's MIX (live.recall_scene): the scene's controllers, as the
+    // keyboard's would arrive
+    if ((x = session.get("chanstate")) && x->is(sess::J::ARR)) {
+        std::lock_guard<std::mutex> lk(mu);
+        for (const sess::J &e : x->a) {
+            int ch, cc, v;
+            if (e.is(sess::J::STR) && sscanf(e.s.c_str(), "control_change channel=%d control=%d value=%d", &ch, &cc, &v) == 3)
+                q.push_back(Midi{2, ch, cc, v, {}});
+        }
+    }
+}
+
+// the session as it stands: what nvlive owns set, every other key kept
+sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
+{
+    sess::J j = session.is(sess::J::OBJ) ? session : sess::obj();
+    j.o["master_db"] = sess::real(std::round(gval[0] * 100.0) / 100.0);
+    static const char *KEYS[6] = {"master_db", "headroom_db", "thresh", "bend_range", "mod_cents", "press_db"};
+    for (int i = 1; i < 6; i++)
+        j.o[KEYS[i]] = sess::real(gval[i]);
+    const int rm = room_asked >= 0 ? (int)room_asked : (int)room_idx;    // (one asked for is the room, building or not)
+    if (rm >= 0 && rm < (int)E.rooms.size())
+        j.o["room"] = sess::str(E.rooms[rm].name);
+    sess::J ra = sess::arr();
+    for (const auto &a : routes) {
+        sess::J d = route_dict(a);
+        if (d.is(sess::J::OBJ))
+            ra.a.push_back(d);
+    }
+    j.o["routes"] = ra;
+    // the insertion effect (live.efx_from), as the audio thread last showed it
+    std::vector<int> st;
+    {
+        std::lock_guard<std::mutex> lk(pmu);
+        st = snap.efx;
+    }
+    panel::EfxView v(st);
+    if (v.has) {
+        sess::J e = sess::obj(), ps = sess::arr(), sd = sess::arr(), ct = sess::arr(), pa = sess::arr();
+        e.o["type"] = sess::arr();
+        e.o["type"].a = {sess::integer(v.msb), sess::integer(v.lsb)};
+        auto pair = [](int k, int x) {
+            sess::J p = sess::arr();
+            p.a = {sess::integer(k), sess::integer(x)};
+            return p;
+        };
+        for (int q = 1; q <= 20; q++)
+            if (v.p[q] >= 0)
+                ps.a.push_back(pair(q, v.p[q]));
+        for (int q = 0; q < 3; q++)
+            sd.a.push_back(pair(panel::EFX_SEND[q], v.snd[q]));
+        for (int q = 0; q < 4; q++)
+            ct.a.push_back(pair(panel::EFX_CTL_SRC1 + q, v.ctl[q]));
+        std::vector<int> on = v.parts;
+        std::sort(on.begin(), on.end());
+        for (int c : on)
+            pa.a.push_back(sess::integer(c));
+        e.o["p"] = ps;
+        e.o["send"] = sd;
+        e.o["ctl"] = ct;
+        e.o["parts"] = pa;
+        j.o["efx"] = e;
+    }
+    // THE PART (parts[0], live.Part.to_dict): its program, set or variation,
+    // its stops; the other parts, and the part's other keys, as they were
+    sess::J &parts = j.o["parts"];
+    if (!parts.is(sess::J::ARR))
+        parts = sess::arr();
+    if (parts.a.empty() || !parts.a[0].is(sess::J::OBJ)) {
+        sess::J p = sess::obj();
+        p.o["tuner"] = sess::str("hybrid");
+        p.o["channel"] = sess::null();
+        p.o["lo"] = sess::integer(0);
+        p.o["hi"] = sess::integer(127);
+        p.o["transpose"] = sess::integer(0);
+        p.o["level_db"] = sess::real(0.0);
+        p.o["muted"] = sess::boolean(false);
+        parts.a.insert(parts.a.begin(), p);
+    }
+    sess::J &p0 = parts.a[0];
+    const int sp = shown_program, sv = sp >= 128 ? 0 : shown_var.load();
+    p0.o["program"] = sess::integer(sp & 127);
+    {                                           // (the tuner it plays: the session's, --tuner's, the panel's)
+        std::lock_guard<std::mutex> lk(bmu);
+        p0.o["tuner"] = sess::str(!tuner_asked.empty() ? tuner_asked : tuner_now);
+    }
+    p0.o["drums"] = sess::boolean(sp >= 128);
+    if (sv)
+        p0.o["bank"] = sess::integer(sv);
+    else
+        p0.o.erase("bank");
+    sess::J dn = sess::arr();
+    if (sp < 128 && !E.stops[sp].names.empty()) {
+        const auto &names = E.stops[sp].names;
+        std::vector<char> d(names.size(), 0);
+        nv_part_drawn(part, d.data(), (int)names.size());
+        std::vector<std::string> on;
+        for (size_t ri = 0; ri < names.size(); ri++)
+            if (d[ri])
+                on.push_back(names[ri]);
+        std::sort(on.begin(), on.end());
+        for (auto &n : on)
+            dn.a.push_back(sess::str(n));
+    }
+    p0.o["drawn"] = dn;
+    return j;
+}
+
+// written when it changed (live.save_session: atomically; never raises). The
+// first write over a session nvlive did not make keeps it beside, once.
+bool nv_host::session_save(const std::vector<std::array<int, 7>> &routes)
+{
+    if (!session_on)
+        return false;
+    sess::J j = session_state(routes);
+    std::string text = sess::dump(j);
+    if (text == session_written)
+        return true;
+    if (session_written.empty() && access(session_path.c_str(), F_OK) == 0) {
+        const std::string bak = session_path + ".before-nvlive";
+        if (access(bak.c_str(), F_OK) != 0) {
+            sess::J old;
+            if (sess::load(session_path, old))
+                sess::save(bak, old);
+        }
+    }
+    if (!sess::save(session_path, j))
+        return false;
+    session_written = text;
+    session = j;
+    return true;
+}
+
+// THE SESSION before the part is built: its program (unless --program,
+// --drums or --bank says otherwise) and its routes. --session=PATH, else
+// session.json beside nvlive (live's: beside live.py); --fresh: not read
+// (but written, as live's); --test: neither.
 int main(int argc, char **argv)
 {
-    return (new nv_host())->run(argc, argv);    // (never freed: its threads run to the end)
+    nv_host *h = new nv_host();                 // (never freed: its threads run to the end)
+    std::vector<char *> args(argv, argv + argc);
+    std::vector<std::string> extra;
+    bool test = false, fresh = false, given = false, tuned = false;
+    std::string sp;
+    for (int i = 1; i < argc; i++) {
+        test = test || !strcmp(argv[i], "--test");
+        fresh = fresh || !strcmp(argv[i], "--fresh");
+        given = given || !strncmp(argv[i], "--program=", 10) || !strcmp(argv[i], "--drums") || !strncmp(argv[i], "--bank=", 7);
+        tuned = tuned || !strncmp(argv[i], "--tuner=", 8);
+        if (!strncmp(argv[i], "--session=", 10))
+            sp = argv[i] + 10;
+    }
+    if (!test || !sp.empty()) {                 // (--test: only a session named)
+        if (sp.empty()) {
+            char exe[4096];
+            ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
+            std::string d = n > 0 ? std::string(exe, (size_t)n) : std::string(".");
+            sp = d.substr(0, d.rfind('/') == std::string::npos ? 0 : d.rfind('/'));
+            sp = (sp.empty() ? "." : sp) + "/session.json";
+        }
+        h->session_path = sp;
+        h->session_on = true;
+        if (!fresh && access(sp.c_str(), F_OK) == 0) {
+            if (!sess::load(sp, h->session)) {          // (live's: set aside as .bad)
+                rename(sp.c_str(), (sp + ".bad").c_str());
+                fprintf(stderr, "nvlive: %s would not parse: set aside as .bad\n", sp.c_str());
+                h->session = sess::J();
+            } else {
+                fprintf(stderr, "nvlive: the session from %s\n", sp.c_str());
+                const sess::J *parts = h->session.get("parts");
+                const sess::J *p0 = parts && parts->is(sess::J::ARR) && !parts->a.empty() ? &parts->a[0] : nullptr;
+                if (p0 && p0->is(sess::J::OBJ) && !given) {
+                    const sess::J *pg = p0->get("program"), *dr = p0->get("drums"), *bk = p0->get("bank");
+                    if (pg && pg->is(sess::J::NUM))
+                        extra.push_back("--program=" + std::to_string(pg->i()));
+                    if (dr && dr->d() != 0.0)
+                        extra.push_back("--drums");
+                    if (bk && bk->i())
+                        extra.push_back("--bank=" + std::to_string(bk->i()));
+                }
+                // THE PART's TUNER (live.Part's), unless --tuner says otherwise
+                const sess::J *tn = p0 && p0->is(sess::J::OBJ) ? p0->get("tuner") : nullptr;
+                if (tn && tn->is(sess::J::STR) && !tn->s.empty() && !tuned)
+                    extra.push_back("--tuner=" + tn->s);
+                if (const sess::J *rs = h->session.get("routes")) {
+                    for (const sess::J &r : rs->a) {
+                        std::array<int, 7> a;
+                        if (route_args(r, a))
+                            h->session_routes.push_back(a);
+                    }
+                    h->session_routes_set = true;
+                }
+            }
+        }
+    }
+    for (auto &x : extra)
+        args.push_back(&x[0]);
+    return h->run((int)args.size(), args.data());
 }

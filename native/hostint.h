@@ -64,6 +64,7 @@ struct Export {
     struct Stops {
         std::vector<std::string> names;
         std::vector<std::vector<int>> rows;
+        std::vector<std::vector<int>> breaks;   // each row's line breaks: a new line at its stop i
     } stops[128];                         // LSTOP: an organ program's ranks and the panel's stop rows
     std::vector<int> cls_organ, prog_organ;   // each class's organ, each program's (-1 none, -2 not the engine's)
     std::vector<double> les;              // LESL: the rotating speaker's constants

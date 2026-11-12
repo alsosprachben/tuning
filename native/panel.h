@@ -67,9 +67,12 @@ struct Snap {
 
 struct Host {
     std::function<Snap()> take;                                    // the latest, peaks and times reset
+    // the build under way (done, total, what): false none -- a pick's bar
+    std::function<bool(long &, long &, std::string &)> progress;
     std::function<std::pair<int, int>()> learnt;                  // a key pressed since learning was armed
     std::function<void(bool)> learn;                               // arm (or cancel) learning a key
     double rate = 48000.0, budget_ms = 2.67;
+    long slots = 65536;                                            // the slab's (voices used of these)
     int frames = 128, program = 0, reg_modes = 0;
     std::string port, room, program_name, tuner;
     // the globals: master dB, headroom dB, limiter, bend range, mod depth,
@@ -89,6 +92,7 @@ struct Host {
     // and a stop drawn or put in (posted)
     std::vector<std::string> stop_names;
     std::vector<std::vector<int>> stop_rows;
+    std::vector<std::vector<int>> stop_breaks;                     // each row's line breaks (the voice's groups)
     std::function<std::vector<char>()> drawn;
     std::function<void(int)> toggle_stop;
     // before each frame: the host brings what it changed itself up to date
@@ -108,6 +112,7 @@ struct Host {
     std::vector<char> vnative;
     int var = 0;
     std::function<void(int)> pick;
+    std::function<void(const std::string &)> set_tuner;          // a tuner asked for (built, then swapped in)
     // THE INSERTION EFFECT's tables (the export's EFXU: gsefx's numbered
     // types, families and each type's parameters), the GS exclusive the
     // panel sends (posted, as a file's), the channel the part listens on (-1
@@ -242,6 +247,38 @@ static const double GLOBAL_RANGE[NGLOBALS][3] = {{-60.0, 0.0, 0.5}, {0.0, 24.0, 
                                                  {0.0, 24.0, 0.5}, {0.0, 200.0, 5.0}, {0.0, 24.0, 0.5},
                                                  {0.0, 1.0, 1.0}, {0.0, 1.0, 1.0}, {0.0, 0.0, 1.0}};
 
+// THE TUNERS (livetui.TUNERS, TUNER_NOTE): the name, what it is for
+static const char *TUNERS[][2] = {
+    {"hybrid440", "A=440, the default: the hybrid temperament at concert pitch"},
+    {"hybrid", "A=415, the same temperament at baroque pitch"},
+    {"hybridharm", "pure 2:1 octaves -- right for mode-locked pipes"},
+    {"hybridharm440", "pure 2:1 octaves at concert pitch"},
+    {"hybridmean", "the hybrid's chains bridged by a mean third: no wolf, pure octaves"},
+    {"hybridmeanpiano", "hybridmean on a Steinway's stretched octaves, A=440"},
+    {"stretchedhelmholtz", "two pure-fifth chains joined by inharmonic octaves, A=440"},
+    {"gm2", "a GM 2 device: equal A=440, and the FILE owns the tuning (MTS)"},
+    {"even", "equal temperament, A=440"},
+    {"stretch", "pure fifths, the comma taken into stretched octaves, A=415"},
+    {"werckmeister", "Werckmeister III, from Sankey's published cents, A=415"},
+    {"sankey", "Sankey's consonance-found Scarlatti tuning, A=415"},
+    {"meantone", "quarter-comma, A=415"},
+    {"just", "pure ratios from the tonic"},
+    {"pyth", "pure fifths"},
+    {"well", "a circulating well temperament"},
+    {"linear", "linear in cents"},
+    {"linear5", "linear over five fifths"},
+    {"linearwell", "linear well temperament"},
+    {"bechstein", "measured from a Bechstein"},
+    {"spiral", "the spiral of fifths, unclosed"},
+    {"semi", "semitone-based"},
+    {"dynamic", "solved once over the keyboard (only midi.py retunes per chord)"},
+    {"path", "follows a written path of notes"},
+    {"raga:et@c#", "Indian, Sa C#: equal (Serra 2011: sung Hindustani sits nearest it)"},
+    {"raga:just5@c#", "Indian, Sa C#: 5-limit just (theory)"},
+    {"raga:pythagorean@c#", "Indian, Sa C#: Pythagorean (theory)"},
+    {"raga:bel_todi/todi@c#", "Indian, Sa C#: Todi as Bel measured it, near Pythagorean"}};
+static const int NTUNERS = sizeof(TUNERS) / sizeof(TUNERS[0]);
+
 // live.CONTROLS: the destinations, in the panel's order, (key, label)
 static const std::pair<int, const char *> CONTROLS[] = {
     {64, "sustain"}, {66, "sostenuto"}, {67, "soft"}, {65, "portamento"}, {-3, "mono"}, {1, "mod wheel"},
@@ -319,10 +356,26 @@ static std::string describe(const std::array<int, 7> &r)
 }
 
 // ---- the terminal ----------------------------------------------------------
+// THE MOUSE (and a touchscreen, which a terminal hears as one; livetui's):
+// button-event tracking -- presses, releases, drags with a button down, the
+// wheel -- in SGR coordinates (ESC [ < b ; x ; y M, m for a release).
+// TUNING_MOUSE=0 leaves the terminal's own.
+static const char *MOUSE_ON = "\x1b[?1002h\x1b[?1006h";
+static const char *MOUSE_OFF = "\x1b[?1006l\x1b[?1002l";
+static const int KEY_MOUSE = 2000;      // (Term::key: a report, in Term::m)
+
+// one report: kind press | release | drag | wheel, the button (0 left), the
+// cell (x, y, from 0), and for the wheel dy (+1 up, -1 down)
+struct Mouse {
+    enum Kind { PRESS, RELEASE, DRAG, WHEEL } kind = PRESS;
+    int button = 0, x = 0, y = 0, dy = 0;
+};
+
 struct Term {
     termios old{};
-    bool on = false;
+    bool on = false, mouse = false;
     int w = 80, h = 24;
+    Mouse m;                            // the last report (key's KEY_MOUSE)
 
     void enter()
     {
@@ -333,6 +386,10 @@ struct Term {
         t.c_cc[VTIME] = 0;
         tcsetattr(0, TCSANOW, &t);
         fputs("\x1b[?1049h\x1b[?25l", stdout);       // the alternate screen, no cursor
+        const char *tm = getenv("TUNING_MOUSE");
+        mouse = !(tm && !strcmp(tm, "0"));
+        if (mouse)
+            fputs(MOUSE_ON, stdout);
         fflush(stdout);
         on = true;
     }
@@ -341,6 +398,8 @@ struct Term {
     {
         if (!on)
             return;
+        if (mouse)
+            fputs(MOUSE_OFF, stdout);
         fputs("\x1b[?25h\x1b[?1049l", stdout);
         fflush(stdout);
         tcsetattr(0, TCSANOW, &old);
@@ -356,8 +415,42 @@ struct Term {
         }
     }
 
+    // the rest of an SGR mouse report, after ESC [ <: KEY_MOUSE (in m), or -1
+    // (a report cut short or not one: dropped)
+    int mouse_report()
+    {
+        std::string body;
+        for (int i = 0; i < 24; i++) {
+            fd_set f;
+            FD_ZERO(&f);
+            FD_SET(0, &f);
+            timeval t{0, 20000};
+            unsigned char c;
+            if (select(1, &f, nullptr, nullptr, &t) <= 0 || read(0, &c, 1) != 1)
+                return -1;
+            if (c == 'M' || c == 'm') {
+                int b, x, y;
+                if (sscanf(body.c_str(), "%d;%d;%d", &b, &x, &y) != 3)
+                    return -1;
+                m = Mouse();
+                m.button = b & 3;
+                m.x = x - 1;
+                m.y = y - 1;
+                if (b & 64) {                       // the wheel: 64 up, 65 down
+                    m.kind = Mouse::WHEEL;
+                    m.dy = (b & 1) == 0 ? 1 : -1;
+                } else {
+                    m.kind = c == 'm' ? Mouse::RELEASE : (b & 32) ? Mouse::DRAG : Mouse::PRESS;
+                }
+                return KEY_MOUSE;
+            }
+            body += (char)c;
+        }
+        return -1;
+    }
+
     // one key within ms (-1 none): arrows as 1000+ (up down right left), shift-tab 1004,
-    // page up and down 1005-1006, home and end 1007-1008
+    // page up and down 1005-1006, home and end 1007-1008; a mouse report KEY_MOUSE (in m)
     int key(int ms)
     {
         fd_set f;
@@ -381,6 +474,8 @@ struct Term {
             return 27;
         if (read(0, &s[1], 1) != 1)
             return 27;
+        if (s[0] == '[' && s[1] == '<')
+            return mouse_report();
         if (s[1] >= '1' && s[1] <= '8') {           // ESC [ n ~: page up 5, down 6, home 1/7, end 4/8
             unsigned char t;
             if (read(0, &t, 1) != 1 || t != '~')
@@ -415,10 +510,50 @@ struct Panel {
     Snap s;
     double lev[2] = {-90.0, -90.0}, hold[2] = {-90.0, -90.0};
     std::chrono::steady_clock::time_point held_at[2];
-    std::deque<double> cpu;             // the load, a frame a column
+    std::deque<double> cpu;             // the load, its worst each 0.2 s (livetui._cpu_hist)
+    double cpu_acc = 0.0;
+    int cpu_n = 0;
     std::chrono::steady_clock::time_point last;
+    int nrow = 0, nlimit = 1 << 30;     // rows drawn; the last the panes may have
+    std::map<std::string, std::pair<long, std::chrono::steady_clock::time_point>> health;
+    // WHAT A TAP DOES (livetui.hit): this frame's rows and columns, each an
+    // action -- drawn later is on top
+    enum HitKind { H_PANE, H_KEY, H_GLOBAL, H_GBAR, H_STOP, H_ROUTE };
+    struct Hit {
+        int y, x0, x1;
+        HitKind kind;
+        int a, b;
+    };
+    std::vector<Hit> hits;
+    int drag_global = -1, drag_y = 0;  // a global being dragged: up is more
+    bool quit = false;
 
     explicit Panel(Host &h) : H(h) {}
+
+    void hit(int y, int x0, int x1, HitKind k, int a = 0, int b = 0) { hits.push_back(Hit{y, x0, x1, k, a, b}); }
+    const Hit *hit_at(int y, int x) const
+    {
+        for (auto it = hits.rbegin(); it != hits.rend(); ++it)
+            if (it->y == y && it->x0 <= x && x < it->x1)
+                return &*it;
+        return nullptr;
+    }
+
+    // cells on the screen a drawn string takes: its escapes none
+    static int vcols(const std::string &x)
+    {
+        int n = 0;
+        for (size_t i = 0; i < x.size(); i++) {
+            if (x[i] == '\x1b') {
+                while (i + 1 < x.size() && !isalpha((unsigned char)x[i + 1]))
+                    i++;
+                i++;
+                continue;
+            }
+            n += ((unsigned char)x[i] & 0xC0) != 0x80;
+        }
+        return n;
+    }
 
     void say(const std::string &m, double secs = 3.0)
     {
@@ -438,13 +573,65 @@ struct Panel {
         if (!strcmp(what, "warn")) return "\x1b[38;5;214m";
         if (!strcmp(what, "bad")) return "\x1b[38;5;203m";
         if (!strcmp(what, "sel")) return "\x1b[7m";
+        if (!strcmp(what, "faint")) return "\x1b[38;5;238m";
+        // a stop's button (livetui's btn, btnkey): raised grey, its key dimmer;
+        // drawn, filled in the accent
+        if (!strcmp(what, "btn")) return "\x1b[38;5;252;48;5;237m";
+        if (!strcmp(what, "btnkey")) return "\x1b[38;5;243;48;5;237m";
+        if (!strcmp(what, "btnon")) return "\x1b[38;5;234;48;5;45m\x1b[1m";
         return "";
     }
 
-    void line(const std::string &txt) { out += txt + "\x1b[0m\x1b[K\r\n"; }
-
-    void rule(const std::string &name, bool here, const std::string &right = "")
+    void line(const std::string &txt)
     {
+        if (nrow >= nlimit)
+            return;                         // (past the panes' rows: the bottom's)
+        out += txt + "\x1b[0m\x1b[K" + (nrow + 1 < T.h ? "\r\n" : "");    // (the last row: no newline, no scroll)
+        nrow++;
+    }
+
+    // cells on the screen a string takes (UTF-8: a code point each)
+    static int cols(const std::string &x)
+    {
+        int n = 0;
+        for (unsigned char c : x)
+            n += (c & 0xC0) != 0x80;
+        return n;
+    }
+
+    // ONE SIDE OF THE STEREO METER (livetui.level_meter): dB over -48..0,
+    // each cell coloured by where it sits (green to -18, amber to -6, red
+    // above), the held peak a bright tick, the level in figures after it
+    std::string level_meter(const char *lab, double db, double hold_db, int n) const
+    {
+        static const char *E8[8] = {" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉"};
+        const double fl = -48.0;
+        double f = std::max(0.0, std::min(1.0, (db - fl) / -fl)), hf = std::max(0.0, std::min(1.0, (hold_db - fl) / -fl));
+        auto zone = [&](int c) {
+            double top = fl + (-fl) * (c + 1) / n;
+            return top <= -18.0 ? C("ok") : top <= -6.0 ? C("warn") : C("bad");
+        };
+        std::vector<std::string> cell(n);
+        int full = (int)(f * n);
+        for (int c = 0; c < n; c++)
+            cell[c] = c < full ? zone(c) + "█"
+                      : (c == full && f * n - full > 0.0) ? zone(c) + E8[std::min(7, (int)((f * n - full) * 8))]
+                                                          : C("faint") + "·";
+        int hi = std::min(n - 1, (int)(hf * n));
+        if (hold_db > -90.0 && hi >= full)
+            cell[hi] = zone(hi) + "\x1b[1m│\x1b[22m";
+        std::string m = C("label") + lab + " ";
+        for (auto &x : cell)
+            m += x;
+        char b[16];
+        snprintf(b, sizeof b, db > -90.0 ? " %6.1f" : "   -inf", db);
+        return m + "\x1b[0m" + b;
+    }
+
+    void rule(const std::string &name, bool here, const std::string &right = "", int to_pane = -1)
+    {
+        if (to_pane >= 0)
+            hit(nrow, 0, 4 + cols(name), H_PANE, to_pane);
         int n = T.w - 6 - (int)name.size() - (int)right.size();
         std::string bar;
         for (int i = 0; i < std::max(2, n); i++)
@@ -489,6 +676,9 @@ struct Panel {
     {
         T.size();
         out = "\x1b[H";
+        nrow = 0;
+        nlimit = std::max(1, T.h - 5);
+        hits.clear();
         char b[256];
         // the header
         snprintf(b, sizeof b, "%.0f kHz · %d frames · %.1f ms", H.rate / 1000.0, H.frames, H.budget_ms);
@@ -501,6 +691,12 @@ struct Panel {
             snprintf(b, sizeof b, "   %d.%d  %s", H.program, H.var & 127, H.program_name.c_str());
         else
             snprintf(b, sizeof b, "   %s%d  %s", H.kit ? "set " : "", H.program, H.program_name.c_str());
+        if (H.pick)
+            hit(nrow, 0, T.w, H_KEY, 'p');          // (a tap on the program: the patch list)
+        if (H.set_tuner) {                          // (...on the tuner: the tuners)
+            const int tx = cols(b) + 3;
+            hit(nrow, tx, tx + cols(H.tuner), H_KEY, 't');
+        }
         line(C("value") + b + "\x1b[0m" + C("dim") + "   " + H.tuner + "   room " + H.room
              + (H.reg_modes ? "   register " + std::to_string(H.reg_modes) + " string modes" : "   no register"));
         // the insertion effect: its type, the part on it or not, and why it
@@ -519,7 +715,7 @@ struct Panel {
         }
         // the globals
         if (pane == 0 || T.h > 30) {
-            rule("GLOBALS", pane == 0, "←→ -+ adjust");
+            rule("GLOBALS", pane == 0, "←→ -+ adjust", 0);
             int half = (NGLOBALS + 1) / 2;
             for (int r = 0; r < half; r++) {
                 std::string row;
@@ -534,8 +730,12 @@ struct Panel {
                     std::string cell = std::string(here ? C("accent") + " ▸ \x1b[1m" : "   ") + "\x1b[0m"
                                        + (here ? C("accent") + "\x1b[1m" : C("label")) + b + "\x1b[0m";
                     snprintf(b, sizeof b, "%9s ", na ? "-" : fmt_global(i).c_str());
-                    cell += C("value") + b + "\x1b[0m" + (here ? C("accent") : C("accent2"))
-                            + bar(hi > lo ? (H.g[i] - lo) / (hi - lo) : 0.0, 12) + "\x1b[0m";
+                    cell += C("value") + b + "\x1b[0m";
+                    const int x0 = vcols(row), xb = x0 + vcols(cell);
+                    hit(nrow, x0, xb, H_GLOBAL, i);         // (the name and value: select it)
+                    hit(nrow, xb, xb + 12, H_GBAR, i);      // (the bar: set it where touched)
+                    cell += (here ? C("accent") : C("accent2")) + bar(hi > lo ? (H.g[i] - lo) / (hi - lo) : 0.0, 12)
+                            + "\x1b[0m";
                     row += cell + "   ";
                 }
                 line(row);
@@ -544,29 +744,111 @@ struct Panel {
         // an organ's stops: drawn in the accent, the rest dim, each with its key
         if (!H.stop_names.empty()) {
             rule("STOPS", false, stop_bank ? "rows 3-4: press a stop key" : "1-9  shift  ` then a key: rows 3-4");
+            // THE STOPS AS BUTTONS (livetui.stops_grid): one width for every
+            // stop, so the columns line up down the whole registration; each
+            // key row starts its own line, wrapped where the screen ends; a
+            // blank line between key rows where there is room
             std::vector<char> dr = H.drawn();
-            for (size_t r = 0; r < H.stop_rows.size(); r++) {
-                std::string row = "   ";
-                for (size_t i = 0; i < H.stop_rows[r].size() && i < 9; i++) {
+            auto key_of = [](size_t r, size_t i) {
+                return i < 9 && r < 4 ? std::string(r >= 2 ? "`" : "") + (r % 2 ? STOP_SHIFTED[i] : STOP_DIGITS[i])
+                                      : std::string();
+            };
+            const int X0 = 3, GAP = 1;
+            int bw = 8;
+            for (size_t r = 0; r < H.stop_rows.size(); r++)
+                for (size_t i = 0; i < H.stop_rows[r].size(); i++) {
                     int ri = H.stop_rows[r][i];
-                    std::string key = std::string(r >= 2 ? "`" : "") + (r % 2 ? STOP_SHIFTED[i] : STOP_DIGITS[i]);
-                    bool on = ri >= 0 && ri < (int)dr.size() && dr[ri];
-                    row += (on ? C("accent") + "\x1b[1m" : C("dim")) + key + " "
-                           + (ri < (int)H.stop_names.size() ? H.stop_names[ri] : "?") + "\x1b[0m   ";
+                    std::string nm = ri >= 0 && ri < (int)H.stop_names.size() ? H.stop_names[ri] : "?";
+                    std::string k = key_of(r, i);
+                    bw = std::max(bw, cols(k) + (k.empty() ? 0 : 1) + cols(nm) + 2);
                 }
-                line(row);
+            bw = std::min(bw, std::max(8, T.w - X0 - 2));
+            const int per = std::max(1, (T.w - X0 - 2 + GAP) / (bw + GAP));
+            // each key row's lines: [first, end) runs of its stops, a new one at
+            // a voice's break or where the screen ends
+            auto brk = [&](size_t r, size_t i) {
+                return r < H.stop_breaks.size()
+                       && std::find(H.stop_breaks[r].begin(), H.stop_breaks[r].end(), (int)i) != H.stop_breaks[r].end();
+            };
+            std::vector<std::vector<std::pair<size_t, size_t>>> runs(H.stop_rows.size());
+            int nlines = 0;
+            for (size_t r = 0; r < H.stop_rows.size(); r++) {
+                size_t a = 0;
+                for (size_t i = 1; i <= H.stop_rows[r].size(); i++)
+                    if (i == H.stop_rows[r].size() || brk(r, i) || (int)(i - a) == per) {
+                        runs[r].push_back(std::make_pair(a, i));
+                        a = i;
+                    }
+                nlines += (int)runs[r].size();
+            }
+            // (the routes below keep their rows: blank lines only where they fit)
+            const bool gaps = nrow + nlines + (int)H.stop_rows.size() - 1 + 3 + (int)H.routes.size() <= nlimit;
+            for (size_t r = 0; r < H.stop_rows.size(); r++) {
+                if (r && gaps)
+                    line("");
+                for (const auto &run : runs[r]) {
+                    const size_t i0 = run.first;
+                    std::string row(X0, ' ');
+                    for (size_t i = i0; i < run.second; i++) {
+                        int ri = H.stop_rows[r][i];
+                        bool on = ri >= 0 && ri < (int)dr.size() && dr[ri];
+                        std::string k = key_of(r, i);
+                        std::string nm = ri >= 0 && ri < (int)H.stop_names.size() ? H.stop_names[ri] : "?";
+                        std::string txt = " " + (k.empty() ? "" : k + " ") + nm;
+                        while (cols(txt) < bw)
+                            txt += " ";
+                        const int x = X0 + (int)(i - i0) * (bw + GAP);
+                        hit(nrow, x, x + bw, H_STOP, ri);
+                        std::string face = on ? C("btnon") : C("btn");
+                        if (!k.empty())                 // (the key dimmer on a raised button)
+                            row += face + " " + (on ? "" : C("btnkey")) + k + face + txt.substr(1 + k.size());
+                        else
+                            row += face + txt;
+                        row += "\x1b[0m" + std::string(GAP, ' ');
+                    }
+                    line(row);
+                }
             }
         }
         // the routes
-        rule("CONTROLS & ROUTES", pane == 1, "r add  d delete");
+        rule("CONTROLS & ROUTES", pane == 1, "r add  d delete", 1);
         if (H.routes.empty())
             line("   " + C("dim") + "no routes -- r adds one (a key as the sustain pedal: from a key, to sustain)");
         for (size_t i = 0; i < H.routes.size(); i++) {
             bool here = pane == 1 && crow == (int)i;
+            hit(nrow, 0, T.w, H_ROUTE, (int)i);
             line(std::string(here ? C("accent") + " ▸ " : "   ") + "\x1b[0m" + (here ? C("value") : C("label"))
                  + describe(H.routes[i]));
         }
-        // the output, at the bottom
+        // THE HELP (?), over the panes: the bottom stays where it is
+        if (help) {
+            out = "\x1b[H";                 // (the panes drawn above: not shown)
+            nrow = 0;
+            hits.clear();                   // (a tap anywhere closes it)
+            line(" " + C("accent") + "\x1b[1m◆ tuning native\x1b[0m  " + C("dim") + "keys   (any key closes)");
+            line("");
+            line("   tab / shift-tab   globals -> controls and routes");
+            line("   up down (k j)     select a global or a route");
+            line("   left right - +    adjust the global (_ + by five)");
+            line("   r                 add a route (from, to, how, replace or keep, channel)");
+            line("   d                 delete the selected route");
+            line("   p                 the patch: every program, its variations, the drum sets; / to search");
+            line("   t                 the tuner: every temperament live has; the patches built again in it");
+            line("   x                 the insertion effect: the part on it, its type, parameters, controllers, sends");
+            line("   P                 panic: every note off, now");
+            line("   q                 quit (routes added here are kept beside the export)");
+            line("");
+            line("   the mouse or a touch: tap a pane's title, a global (drag it up or down, or");
+            line("   the wheel, to change it; tap its bar to set it), a stop, a route, a key below;");
+            line("   in a list, tap a row to take it");
+        }
+        // THE OUTPUT SECTION SITS ON THE BOTTOM (livetui.draw_meters), where it
+        // does not move as the panes grow: the stereo meter, the peak, the CPU's
+        // last seconds as a sparkline, the voices, the health -- then the
+        // message line and the pane's keys
+        nlimit = 1 << 30;
+        while (nrow < T.h - 5)
+            line("");
         rule("OUTPUT", false);
         auto now = std::chrono::steady_clock::now();
         double dt = std::chrono::duration<double>(now - last).count();
@@ -579,49 +861,127 @@ struct Panel {
                 held_at[c] = now;
             }
         }
-        for (int c = 0; c < 2; c++) {
-            snprintf(b, sizeof b, "%6.1f dB  peak %6.1f", lev[c], hold[c]);
-            std::string col = hold[c] > -1.0 ? C("bad") : hold[c] > -6.0 ? C("warn") : C("ok");
-            line(std::string("   ") + C("label") + (c ? "R " : "L ") + col + bar((lev[c] + 60.0) / 60.0, 40) + "\x1b[0m "
-                 + C("value") + b);
+        const int mn = T.w >= 118 ? 26 : 12, px = mn + 13;
+        const double pk = std::max(hold[0], hold[1]);
+        // (the CPU: the block's worst against its budget, the worst of each 0.2 s)
+        cpu_acc = std::max(cpu_acc, s.ms_max / std::max(H.budget_ms, 1e-9));
+        if (++cpu_n >= 2) {
+            cpu.push_back(cpu_acc);
+            cpu_acc = 0.0;
+            cpu_n = 0;
         }
-        double mean = s.ms_n ? s.ms_sum / s.ms_n : 0.0;
-        cpu.push_back(s.ms_max / H.budget_ms);
-        while ((int)cpu.size() > 24)
+        const int x = px + 15, sw = std::max(6, std::min(50, T.w - x - 33));
+        while ((int)cpu.size() > sw)
             cpu.pop_front();
-        std::string spark;
         static const char *SP[8] = {"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
-        for (double x : cpu)
-            spark += SP[std::max(0, std::min(7, (int)(x * 8)))];
-        snprintf(b, sizeof b, " %.2f ms (worst %.2f) of %.2f  %s", mean, s.ms_max, H.budget_ms,
-                 s.eng[4] > 0.5 ? "GPU" : "CPU");
-        line("   " + C("label") + "load " + (s.ms_max > H.budget_ms ? C("bad") : C("accent2")) + spark + "\x1b[0m"
-             + C("value") + b);
-        snprintf(b, sizeof b, "   over %ld  underruns %ld  shed %.0f  dropped %.0f  partials %.0f  keys %.0f", s.over,
-                 s.underruns, s.eng[2], s.eng[3], s.eng[0], s.eng[1]);
-        line(C("dim") + b);
-        snprintf(b, sizeof b, "   pedal %3.0f %s  sostenuto %s  mono %s  dampers %.0f  bend %+.0f cents", s.eng[7],
-                 s.eng[7] >= 127 ? "●" : s.eng[7] > 0 ? "◐" : "○", s.eng[8] > 0.5 ? "●" : "○",
-                 s.eng[9] > 0.5 ? "●" : "○", s.eng[10], s.eng[14]);
-        line(C("dim") + b);
-        // the message, and the keys
-        if (now < msg_until)
-            line("   " + C("warn") + msg);
-        else
-            line("   " + C("dim") + "tab pane  ↑↓ select  ←→ -+ adjust  p patch  x efx  P panic  ? keys  q quit");
-        if (help) {
-            line("");
-            line(C("accent") + "  keys");
-            line("   tab / shift-tab   globals -> controls and routes");
-            line("   up down (k j)     select a global or a route");
-            line("   left right - +    adjust the global (_ + by five)");
-            line("   r                 add a route (from, to, how, replace or keep, channel)");
-            line("   d                 delete the selected route");
-            line("   p                 the patch: every program, its variations, the drum sets; / to search");
-            line("   x                 the insertion effect: the part on it, its type, parameters, controllers, sends");
-            line("   P                 panic: every note off, now");
-            line("   q                 quit (routes added here are kept beside the export)");
+        std::string spark;
+        for (double v : cpu)
+            spark += (v < 0.5 ? C("ok") : v < 0.85 ? C("warn") : C("bad"))
+                     + SP[std::max(0, std::min(7, (int)(std::min(1.0, v) * 7.999)))];
+        auto pad = [&](std::string t, int to) {         // (to the column: fixed places, as livetui's)
+            int n = cols(t);
+            return t + std::string(std::max(1, to - n), ' ');
+        };
+        double mean = s.ms_n ? s.ms_sum / s.ms_n : 0.0, load = s.ms_max / std::max(H.budget_ms, 1e-9);
+        snprintf(b, sizeof b, "%5.2f/%.2f ms  max %5.1f", mean, H.budget_ms, s.ms_max);
+        std::string r1 = pad(" " + level_meter("L", lev[0], hold[0], mn), px + 1);
+        r1 += C("label") + "peak " + (pk > -0.1 ? C("bad") : C("value"));
+        char pb[16];
+        snprintf(pb, sizeof pb, pk > -90.0 ? "%+.1f dB" : "  -inf", pk);
+        r1 = pad(r1 + pb + "\x1b[0m", x + 1) + C("label") + "cpu " + spark + std::string(sw - (int)cpu.size() + 1, ' ')
+             + (load > 0.85 ? C("bad") : C("value")) + b + "\x1b[0m  "
+             + (s.eng[4] > 0.5 ? C("accent2") + "\x1b[1mgpu" : C("dim") + "cpu");
+        line(r1);
+        // the voices, and the health: each count not zero, amber (red, the ones
+        // that lose notes) for 10 s after it rose, then grey (livetui's)
+        std::string r2 = pad(" " + level_meter("R", lev[1], hold[1], mn), px + 1);
+        r2 = pad(r2 + (pk > -0.1 ? C("bad") + "\x1b[1mCLIP\x1b[0m" : ""), x + 1);
+        snprintf(b, sizeof b, "%.0f/%ld", s.eng[0], H.slots);
+        r2 += C("label") + "voices " + (s.eng[0] > 0.9 * H.slots ? C("bad") : C("value")) + b + "\x1b[0m";
+        r2 = pad(r2, x + 23);
+        struct Hk { const char *key, *lab; double v; bool worse; };
+        const Hk hk[] = {{"under", "under", (double)s.underruns, false}, {"late", "late", (double)s.over, false},
+                         {"drop", "drop", s.eng[3], true}, {"pshed", "shed", s.eng[2], false}};
+        std::string items;
+        bool fresh = false;
+        for (const Hk &k : hk) {
+            long v = (long)k.v;
+            auto it = health.find(k.key);
+            if (it == health.end())
+                it = health.emplace(k.key, std::make_pair(0L, now - std::chrono::hours(1))).first;
+            if (v > it->second.first)
+                it->second = std::make_pair(v, now);
+            else if (v < it->second.first)
+                it->second.first = v;
+            if (v) {
+                bool recent = std::chrono::duration<double>(now - it->second.second).count() < 10.0;
+                fresh = fresh || recent;
+                items += (recent ? (k.worse ? C("bad") : C("warn")) : C("dim")) + k.lab + " " + std::to_string(v)
+                         + "\x1b[0m  ";
+            }
         }
+        r2 += (fresh ? C("warn") : C("ok")) + "● \x1b[0m" + (items.empty() ? C("ok") + "clean\x1b[0m" : items);
+        // (the native panel's own: the pedals, dim, after the health)
+        snprintf(b, sizeof b, "   pedal %s sost %s mono %s bend %+.0f", s.eng[7] >= 127 ? "●" : s.eng[7] > 0 ? "◐" : "○",
+                 s.eng[8] > 0.5 ? "●" : "○", s.eng[9] > 0.5 ? "●" : "○", s.eng[14]);
+        line(r2 + C("dim") + b);
+        // THE MESSAGE LINE: a build under way (its bar, as livetui's builder's),
+        // else the newest message for its time
+        long pd = 0, pt = 0;
+        std::string pn;
+        if (H.progress && H.progress(pd, pt, pn)) {
+            const int W = 20;
+            double fr = (double)pd / std::max(pt, 1L);
+            std::string bar;
+            for (int i = 0; i < W; i++)
+                bar += i < (int)(fr * W) ? C("accent") + "█" : C("faint") + "─";
+            snprintf(b, sizeof b, " %d%%", (int)(fr * 100));
+            line(" " + C("accent") + "\x1b[1m◌ building " + pn + "\x1b[0m  " + bar + "\x1b[0m" + C("accent") + b);
+        } else if (now < msg_until) {
+            line(" " + C("ok") + msg);
+        } else {
+            line("");
+        }
+        // THE PANE'S KEYS (livetui.PANE_KEYS): always there, on the last line
+        static const char *K0[][2] = {{"tab", "pane"}, {"↑↓", "global"}, {"←→ -/+", "change"}, {"p", "patch"},
+                                      {"t", "tuner"}, {"x", "efx"}, {"P", "panic"}, {"?", "help"}, {"q", "quit"}};
+        static const char *K1[][2] = {{"tab", "pane"}, {"↑↓", "route"}, {"r", "add"}, {"d", "del"}, {"p", "patch"},
+                                      {"t", "tuner"}, {"x", "efx"}, {"P", "panic"}, {"?", "help"}, {"q", "quit"}};
+        std::string kl = " ";
+        int kx = 1;
+        // WHAT A TAP ON A HINT PRESSES (livetui.HINT_CODES; q is not here: a
+        // stray tap must not quit) -- a pair, each half its own
+        auto codes = [](const std::string &k) -> std::vector<int> {
+            if (k == "tab") return {9};
+            if (k == "↑↓") return {1000, 1001};
+            if (k == "←→ -/+") return {1003, 1002};
+            if (k == "q") return {};
+            if (cols(k) == 1) return {(unsigned char)k[0]};
+            return {};
+        };
+        auto add = [&](const char *k, const char *w) {
+            int n = cols(k) + cols(w) + 4;
+            if (kx + n >= T.w - 1)
+                return;
+            std::vector<int> cs = codes(k);
+            const int y = nrow, kn = cols(k), end = kx + kn + 1 + cols(w);
+            if (cs.size() == 1) {
+                hit(y, kx, end, H_KEY, cs[0]);
+            } else if (cs.size() == 2) {
+                int half = std::max(1, kn / 2);
+                hit(y, kx, kx + half, H_KEY, cs[0]);
+                hit(y, kx + kn - half, end, H_KEY, cs[1]);
+            }
+            kl += C("accent") + k + " " + C("dim") + w + "\x1b[0m   ";
+            kx += n;
+        };
+        if (pane == 0)
+            for (auto &kv : K0)
+                add(kv[0], kv[1]);
+        else
+            for (auto &kv : K1)
+                add(kv[0], kv[1]);
+        line(kl);
         out += "\x1b[J";
         fwrite(out.data(), 1, out.size(), stdout);
         fflush(stdout);
@@ -656,6 +1016,20 @@ struct Panel {
             fwrite(m.data(), 1, m.size(), stdout);
             fflush(stdout);
             int c = T.key(1000);
+            if (c == KEY_MOUSE) {
+                // A TAP ON A ROW takes it (Enter); on the foot, back; the wheel moves
+                const Mouse &mm = T.m;
+                if (mm.kind == Mouse::WHEEL) {
+                    at = step(at, -mm.dy);
+                } else if (mm.kind == Mouse::PRESS) {
+                    int k = mm.y - 1;
+                    if (k >= 0 && k < win && top + k < n && !is_head(top + k))
+                        return top + k;
+                    if (mm.y >= std::min(n - top, win) + 2)
+                        return -1;
+                }
+                continue;
+            }
             if (c == 1000 || c == 'k')
                 at = step(at, -1);
             else if (c == 1001 || c == 'j')
@@ -870,6 +1244,35 @@ struct Panel {
         });
     }
 
+    // THE TUNER (livetui's TUNER column, its picker): every tuner live has,
+    // each with what it is for; Enter (a tap) asks for it -- the patches
+    // built again in it on the builder, the bar while they build
+    void pick_tuner()
+    {
+        std::vector<int> ids{-1};
+        std::vector<std::string> rows{"── Western"};
+        int here = 0;
+        for (int i = 0; i < NTUNERS; i++) {
+            if (!strncmp(TUNERS[i][0], "raga:", 5) && (i == 0 || strncmp(TUNERS[i - 1][0], "raga:", 5))) {
+                ids.push_back(-1);
+                rows.push_back("── Indian (a raga's intonation, Sa on C#)");
+            }
+            char b[200];
+            snprintf(b, sizeof b, "%s%-22s %s", H.tuner == TUNERS[i][0] ? "● " : "  ", TUNERS[i][0], TUNERS[i][1]);
+            ids.push_back(i);
+            rows.push_back(b);
+            if (H.tuner == TUNERS[i][0])
+                here = i;
+        }
+        pick_list("tuner", ids, rows, here, [](int) { return true; }, [&](int id) {
+            if (H.tuner != TUNERS[id][0]) {
+                H.set_tuner(TUNERS[id][0]);
+                say(std::string("tuner ") + TUNERS[id][0] + " -- every patch built again in it");
+            }
+            return true;
+        });
+    }
+
     // A LIST TO PICK FROM (the patch's, the effect types'): rows under
     // headings (id -1), opened on here, the arrows (page up/down, home/end)
     // through it; "/" searches by the words typed; Enter hands the row's id to
@@ -944,6 +1347,33 @@ struct Panel {
             int c = T.key(1000);
             if (c < 0)
                 continue;
+            if (c == KEY_MOUSE) {
+                // A TAP ON A ROW takes it (Enter); on the foot, cancel; the wheel moves
+                const Mouse &mm = T.m;
+                if (mm.kind == Mouse::WHEEL && n) {
+                    int j = std::max(0, std::min(n - 1, at - mm.dy));
+                    while (j > 0 && j < n - 1 && ids[j] < 0)
+                        j -= mm.dy;
+                    if (ids[j] >= 0)
+                        at = j;
+                } else if (mm.kind == Mouse::PRESS) {
+                    int k = mm.y - 1;
+                    int shown = std::min(n - top, win);
+                    if (k >= 0 && k < shown && ids[top + k] >= 0) {
+                        at = top + k;
+                        if (accept(ids[at]))
+                            return;
+                    } else if (mm.y >= shown + 1 + (n ? 0 : 1)) {
+                        if (searching || !query.empty()) {
+                            query.clear();
+                            searching = false;
+                        } else {
+                            return;
+                        }
+                    }
+                }
+                continue;
+            }
             if (searching && c >= 32 && c < 127 && c != '/') {
                 query += (char)c;
                 at = 0;
@@ -1299,6 +1729,13 @@ struct Panel {
             fflush(stdout);
             int c = T.key(1000);
             size_t k = j;
+            if (c == KEY_MOUSE) {
+                if (T.m.kind == Mouse::PRESS)
+                    return;                     // (a tap keeps it, as Enter)
+                if (T.m.kind == Mouse::WHEEL)
+                    k = T.m.dy > 0 ? std::min(vals.size() - 1, j + 1) : (j ? j - 1 : 0);
+                c = -1;
+            }
             if (c == 1002 || c == 'l' || c == '+' || c == '=')
                 k = std::min(vals.size() - 1, j + 1);
             else if (c == 1003 || c == 'h' || c == '-')
@@ -1350,19 +1787,93 @@ struct Panel {
         H.set_global(i, v);
     }
 
-    // the panel until q: drawn ten times a second, between keys
-    void run(const std::function<bool()> &going)
+    // a global set where its bar was touched (livetui.set_by_bar): f of its range
+    void set_by_bar(int i, double f)
     {
-        T.enter();
-        last = std::chrono::steady_clock::now();
-        auto next = last;
-        while (going()) {
-            int c = T.key(20);
-            if (c >= 0) {
+        const double lo = GLOBAL_RANGE[i][0], hi = i == 8 ? (double)H.rooms.size() - 1.0 : GLOBAL_RANGE[i][1];
+        const double st = i == 8 ? 1.0 : GLOBAL_RANGE[i][2];
+        double want = lo + std::max(0.0, std::min(1.0, f)) * (hi - lo);
+        int steps = (int)std::lround((want - H.g[i]) / st);
+        if (steps)
+            adjust(steps, false);
+    }
+
+    // what a tap, a drag, a release or the wheel does where it lands
+    // (livetui.mouse): select (a pane's title, a global, a route); drag a
+    // global up or down, or the wheel, to change it; tap its bar to set it; a
+    // stop drawn or put in; a key hint is its key
+    void mouse(const Mouse &m)
+    {
+        if (help) {
+            if (m.kind == Mouse::PRESS)
+                help = false;
+            return;
+        }
+        if (m.kind == Mouse::RELEASE) {
+            drag_global = -1;
+            return;
+        }
+        if (m.kind == Mouse::DRAG) {
+            if (drag_global >= 0 && m.y != drag_y) {
+                grow = drag_global;
+                adjust(drag_y - m.y, false);         // (up is more)
+                drag_y = m.y;
+            }
+            return;
+        }
+        const Hit *h = hit_at(m.y, m.x);
+        if (!h)
+            return;
+        if (m.kind == Mouse::WHEEL) {
+            if (h->kind == H_GLOBAL || h->kind == H_GBAR) {
+                pane = 0;
+                grow = h->a;
+                adjust(m.dy, false);
+            } else if (h->kind == H_ROUTE && !H.routes.empty()) {
+                pane = 1;
+                crow = std::max(0, std::min((int)H.routes.size() - 1, crow - m.dy));
+            }
+            return;
+        }
+        switch (h->kind) {                      // a press
+        case H_PANE: pane = h->a; break;
+        case H_KEY: press(h->a); break;
+        case H_GLOBAL:
+            pane = 0;
+            grow = h->a;
+            drag_global = h->a;
+            drag_y = m.y;
+            break;
+        case H_GBAR:
+            pane = 0;
+            grow = h->a;
+            set_by_bar(h->a, (m.x - h->x0 + 0.5) / std::max(1, h->x1 - h->x0));
+            drag_global = h->a;
+            drag_y = m.y;
+            break;
+        case H_STOP: toggle_stop(h->a); break;
+        case H_ROUTE:
+            pane = 1;
+            crow = h->a;
+            break;
+        }
+    }
+
+    void toggle_stop(int ri)
+    {
+        std::vector<char> dr = H.drawn();
+        bool was = ri < (int)dr.size() && dr[ri];
+        H.toggle_stop(ri);
+        say(std::string(was ? "in: " : "drawn: ") + H.stop_names[ri]);
+    }
+
+    // a key, from the keyboard or a tapped hint
+    void press(int c)
+    {
                 if (help) {
                     help = false;
                 } else if (c == 'q') {
-                    break;
+                    quit = true;
                 } else if (c == '?') {
                     help = true;
                 } else if (c == 9) {
@@ -1394,15 +1905,12 @@ struct Panel {
                         row += 2;
                         stop_bank = false;
                     }
-                    if (row < (int)H.stop_rows.size() && i < (int)H.stop_rows[row].size()) {
-                        int ri = H.stop_rows[row][i];
-                        std::vector<char> dr = H.drawn();
-                        bool was = ri < (int)dr.size() && dr[ri];
-                        H.toggle_stop(ri);
-                        say(std::string(was ? "in: " : "drawn: ") + H.stop_names[ri]);
-                    }
+                    if (row < (int)H.stop_rows.size() && i < (int)H.stop_rows[row].size())
+                        toggle_stop(H.stop_rows[row][i]);
                 } else if (c == 'p' && H.pick) {
                     pick_patch();
+                } else if (c == 't' && H.set_tuner) {
+                    pick_tuner();
                 } else if (c == 'x' || c == 'X') {
                     pick_efx();
                 } else if (c == 'P') {
@@ -1417,7 +1925,20 @@ struct Panel {
                     H.routes.erase(H.routes.begin() + i);
                     crow = std::max(0, std::min(crow, (int)H.routes.size() - 1));
                 }
-            }
+    }
+
+    // the panel until q: drawn ten times a second, between keys
+    void run(const std::function<bool()> &going)
+    {
+        T.enter();
+        last = std::chrono::steady_clock::now();
+        auto next = last;
+        while (going() && !quit) {
+            int c = T.key(20);
+            if (c == KEY_MOUSE)
+                mouse(T.m);
+            else if (c >= 0)
+                press(c);
             auto now = std::chrono::steady_clock::now();
             if (now >= next) {
                 if (H.refresh) {

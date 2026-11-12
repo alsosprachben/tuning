@@ -691,7 +691,9 @@ def main(argv):
                 f.write(struct.pack("<7i", *N.route_args(r)))
             # LSTOP: each organ program's stops as live's panel lays them out
             # (Patch.stop_rows: row 0 on the digits, row 1 shifted, 2 and 3
-            # after the prefix) -- its ranks' names, and each row's ranks
+            # after the prefix) -- its ranks' names, and each row's ranks, -1
+            # where the voice breaks the line (a "|" in Patch.stop_row_lines:
+            # livetui.stops_grid's groups; not a stop, no key)
             orgs = [p for p in range(128) if prog_organ[p] >= 0]
             f.write(b"LSTOP" + struct.pack("<i", len(orgs)))
             for p in orgs:
@@ -700,10 +702,10 @@ def main(argv):
                 for nm in pt.rank_names:
                     b = nm.encode()
                     f.write(struct.pack("<i", len(b)) + b)
-                f.write(struct.pack("<i", len(pt.stop_rows)))
-                for row in pt.stop_rows:
-                    f.write(struct.pack("<i", len(row)) + struct.pack("<%di" % len(row),
-                                                                      *[pt.rank_names.index(n) for n in row]))
+                f.write(struct.pack("<i", len(pt.stop_row_lines)))
+                for row in pt.stop_row_lines:
+                    f.write(struct.pack("<i", len(row)) + struct.pack(
+                        "<%di" % len(row), *[-1 if n == "|" else pt.rank_names.index(n) for n in row]))
             # LPROG: what a PROGRAM CHANGE needs, each program's -- its strings'
             # identity (its class at key 60, as live compares them to forget
             # the register's, -1 for no part), a harpsichord's choirs for its

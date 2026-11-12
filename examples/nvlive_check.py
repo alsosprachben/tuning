@@ -58,7 +58,7 @@ sys.path.insert(0, os.path.join(HERE, "examples"))
 # comes off this list (and covtree's coverage says which).
 EXPORT_NOT_RUN = frozenset(("native/slab.cpp", "native/host.cpp", "native/host.h", "native/hostint.h",
                             "native/hostlive.h", "native/livebus.cpp", "native/live.cpp", "native/roomtail.cpp",
-                            "native/nvlive.cpp"))
+                            "native/nvlive.cpp", "native/session.h"))
 EXPORT_CACHE_MAX = 8e9          # (bytes: past it, the least recently used exports go)
 
 
@@ -322,6 +322,7 @@ def main(argv):
                 instant_scan(lv, _p)
         else:
             lv.patch_reqs.clear()       # (a reset's program 0: nvlive follows none without --programs)
+            lv.patch_want.clear()
     py = np.concatenate(dry) if dry else np.zeros((0, 2), np.float32)
     if py.shape != nv.shape:
         print("%s: length %r vs %r" % (os.path.basename(args[0]), py.shape, nv.shape))

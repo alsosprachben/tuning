@@ -2266,6 +2266,9 @@ struct Part {
         int channel;
         unsigned excl;
         int lo, hi, transpose;
+        // ...muted (live's part.muted: it claims no key), or gone (a part
+        // taken away: its notes let go, its place kept so no index moves)
+        bool muted = false, gone = false;
         // A REGISTERED ORGAN (live's part.organ): its table, its stops drawn
         // (a rank each), the crescendo's place (part.cres)
         const OrganSpec *organ = nullptr;
@@ -3747,15 +3750,43 @@ struct Part {
     int cur = 0, transpose = 0;
     bool cur_reg = true;                            // the patch in use has the register
 
+    // does patch i take channel ch's key note (live's Part.matches)
+    bool claims(int i, int ch, int note) const
+    {
+        const Patch &p = patches[i];
+        return !p.muted && !p.gone && (p.channel < 0 || p.channel == ch) && !((p.excl >> ch) & 1u) && p.lo <= note
+               && note <= p.hi;
+    }
+
+    // the patch a note goes to: the one a layer's loop is on (force_pi), else
+    // the last added that claims it
+    int force_pi = -1;
     int patch_for(int ch, int note) const
     {
-        for (int i = (int)patches.size() - 1; i >= 0; i--) {
-            const Patch &p = patches[i];
-            if ((p.channel < 0 || p.channel == ch) && !((p.excl >> ch) & 1u) && p.lo <= note && note <= p.hi)
+        if (force_pi >= 0)
+            return force_pi;
+        for (int i = (int)patches.size() - 1; i >= 0; i--)
+            if (claims(i, ch, note))
                 return i;
-        }
         return -1;
     }
+
+    // EVERY PATCH THE KEY REACHES, in order (live's `for part in parts: if
+    // part.matches`): a layer each -- and a Force puts the note on one of them
+    std::vector<int> claimers(int ch, int note) const
+    {
+        std::vector<int> out;
+        for (int i = 0; i < (int)patches.size(); i++)
+            if (claims(i, ch, note))
+                out.push_back(i);
+        return out;
+    }
+    struct Force {
+        Part &P;
+        int was;
+        Force(Part &P_, int i) : P(P_), was(P_.force_pi) { P.force_pi = i; }
+        ~Force() { P.force_pi = was; }
+    };
 
     void use(int i)
     {
@@ -4081,7 +4112,14 @@ struct Part {
             src = last_on[ch];
         glide_from = src != note ? src : -1;
         last_on[ch] = note;
-        cut_on(ch, note, vel, n0, slur);
+        std::vector<int> cl = claimers(ch, note);
+        if (cl.size() <= 1)
+            cut_on(ch, note, vel, n0, slur);
+        else
+            for (int i : cl) {
+                Force f(*this, i);
+                cut_on(ch, note, vel, n0, slur);
+            }
         glide_from = -1;
     }
 
@@ -4896,7 +4934,14 @@ struct Part {
                     if (fade < S.f4[F4_re][q])
                         S.f4[F4_re][q] = fade;
         pedalled.erase(std::make_pair(ch, note));
-        let_go(ch, note, n0);
+        std::vector<int> cl = claimers(ch, note);
+        if (cl.size() <= 1)
+            let_go(ch, note, n0);
+        else
+            for (int i : cl) {
+                Force f(*this, i);
+                let_go(ch, note, n0);
+            }
     }
 
     // the part's note (live._note_on): stamped, panned, softened, pressed,
@@ -6604,7 +6649,7 @@ struct Part {
             if (!want[ri] || dr[ri])
                 continue;
             for (auto &d : down) {
-                if (patch_for(d.first, d.second) != pi)
+                if (!claims(pi, d.first, d.second))
                     continue;
                 int sn = d.second + transpose;
                 if (sn < 0 || sn > 127)
@@ -6834,11 +6879,37 @@ struct Part {
                 mono_cur[ch] = back.first;
                 glide_from = porta_on[ch] ? note : -1;
                 last_on[ch] = back.first;
-                strike(ch, back.first, back.second, n0, true);     // back to a key still held: a slur too
+                std::vector<int> cl = claimers(ch, back.first);
+                if (cl.size() <= 1)
+                    strike(ch, back.first, back.second, n0, true);     // back to a key still held: a slur too
+                else
+                    for (int i : cl) {
+                        Force f(*this, i);
+                        strike(ch, back.first, back.second, n0, true);
+                    }
                 glide_from = -1;
                 return;
             }
             mono_cur[ch] = -1;                      // last key up: an ordinary release
+        }
+        std::vector<int> cl = claimers(ch, note);
+        if (cl.size() > 1) {                        // A LAYER EACH (live's loop): its flick, its pedal, its release
+            bool held = false;
+            for (int i : cl) {
+                Force f(*this, i);
+                if (cut_off(ch, note, n0))
+                    continue;
+                Use u(*this, i);
+                auto sq = sost.find(ch);
+                if ((pedal_holds(ch, note) || (sq != sost.end() && sq->second.count(note))) && damper_pedal) {
+                    held = true;
+                    continue;
+                }
+                let_go(ch, note, n0);
+            }
+            if (held)
+                pedalled.insert(std::make_pair(ch, note));
+            return;
         }
         if (cut_off(ch, note, n0))
             return;                                 // let go in its flick: the note never came
@@ -9899,9 +9970,16 @@ struct Part {
             return S.f4[9][q] <= 0 && S.f4[8][q] <= 0 && (float)(lr * (float)blk) > (float)(xdec_nepers * rate)
                    && S.i4[0][q] < 0 && S.i4[2][q] < 0 && S.dk[q] < 0 && S.i4[4][q] < 0;
         };
+        // ONLY THE BUSY SLOTS (as the GPU's setup packs them): an idle one
+        // adds nothing (the kernel adds its rows in order, a row out of its
+        // window skipped), but gathering it costs ~40 columns -- and after a
+        // thick passage a few voices can sit high on the slab: a coupled
+        // harpsichord's chord, 16-64 slots near the top, gathered 40,000 deep,
+        // ran 10-25 ms a block on the CPU
         std::vector<long> xr, keep, dm;
         for (long q = 0; q < hi; q++)
-            (S.dk[q] >= 0 && sd ? dm : fast(q) ? xr : keep).push_back(q);
+            if (S.busy[q])
+                (S.dk[q] >= 0 && sd ? dm : fast(q) ? xr : keep).push_back(q);
 #define VOICE_ARGS L, R, (long)n0, frames, (int)blk, 1, (int)n, gd(S.f8[0], 0), gd(S.f8[1], 1), gd(S.f8[2], 2), \
     gf(F4[0]), gf(F4[1]), gf(F4[2]), gl(S.i8[0], 0), gl(S.i8[1], 1), gf(F4[3]), gf(F4[4]), gf(F4[5]), gf(F4[6]), \
     gf(F4[7]), gf(F4[8]), gf(F4[9]), gf(F4[10]), gf(F4[11]), gf(F4[12]), gf(F4[13]), gf(F4[14]), gf(F4[15]), \
@@ -9957,6 +10035,8 @@ struct Part {
         } else if (!xr.empty()) {
             call(sv, keep.data(), (long)keep.size(), false, false);
             call(sx, xr.data(), (long)xr.size(), false, false);
+        } else if (2 * (long)keep.size() < hi) {
+            call(sv, keep.data(), (long)keep.size(), false, false);    // (sparse: the busy ones gathered)
         } else {
             call(sv, nullptr, hi, true, false);
         }
@@ -10692,6 +10772,21 @@ void nv_part_toggle_stop(void *h, int rank, long long n0)
     P->posts.push_back(std::move(q));   // (done in the next block, after its events: live.post)
 }
 
+// THE WHOLE REGISTRATION at once (a session's: want[rank] 1 drawn): one post,
+// so stops set together are not each toggled from the same registration
+void nv_part_set_drawn(void *h, const char *want, int n)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    nv::slab::Part::Patch &p = P->patches[0];
+    if (!p.organ)
+        return;
+    nv::slab::Part::Post q{0, {}, nullptr};
+    for (int ri = 0; ri < p.organ->n_rank && ri < n; ri++)
+        if (want[ri])
+            q.names.push_back(p.organ->rank[ri].key);
+    P->posts.push_back(std::move(q));   // (done in the next block, after its events: live.post)
+}
+
 // the organ's stops drawn (out[rank] 1), the count; 0 for no organ
 int nv_part_drawn(void *h, char *out, int cap)
 {
@@ -10807,12 +10902,48 @@ void nv_part_swap(void *h, int pi, void *cache, int program, int drums, int nbuc
 // a patch's channel (-1 every one, less excl's bits), keys and transpose
 void nv_part_patch_range(void *h, int i, int channel, unsigned excl, int lo, int hi, int transpose)
 {
-    nv::slab::Part::Patch &p = ((nv::slab::Part *)h)->patches[i];
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    nv::slab::Part::Patch &p = P->patches[i];
     p.channel = channel;
     p.excl = excl;
     p.lo = lo;
     p.hi = hi;
     p.transpose = transpose;
+    if (P->cur == i)                        // (the patch in use: the part's copy too)
+        P->transpose = transpose;
+}
+
+// A PATCH's LEVEL AND MUTE (live's part.level_db, part.muted), read as a
+// note is struck: what already sounds keeps its own
+void nv_part_patch_level(void *h, int i, double level_db, int muted)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (i < 0 || i >= (int)P->patches.size())
+        return;
+    P->patches[i].level_db = level_db;
+    P->patches[i].muted = muted != 0;
+    if (P->cur == i)
+        P->level_db = level_db;
+}
+
+// A PATCH TAKEN AWAY (live.set_parts: a part no longer in the set): it
+// claims no key from now, and its notes are let go at n0 (live's go, a
+// block after the swap) -- its place kept, so no other patch's index moves
+void nv_part_patch_gone(void *h, int i, long long n0)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (i <= 0 || i >= (int)P->patches.size() || P->patches[i].gone)
+        return;                             // (patch 0 is the part itself: never taken)
+    P->patches[i].gone = true;
+    const long long pid = P->patches[i].pid;
+    std::vector<nv::slab::Key> ks;
+    for (auto &kv : P->S.live)
+        if (std::get<0>(kv.first) == pid)
+            ks.push_back(kv.first);
+    for (auto &k : ks) {
+        P->S.oneshot.erase(k);
+        P->S.release(k, n0);
+    }
 }
 
 void nv_part_free(void *h)

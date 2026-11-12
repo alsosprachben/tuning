@@ -4129,6 +4129,28 @@ def _reap_lives():
         gc.collect()
 
 
+# THE KERNEL ON THE AUDIO THREAD ALONE. synth_voice's chunks are an OpenMP
+# loop, and a live block is one chunk -- nothing to share, but handed to a
+# worker that sleeps (or spins against other threads) it waited milliseconds:
+# a coupled harpsichord's chord, on the CPU, ran 10-25 ms a block (nvlive,
+# native/host.cpp's render_block, the same kernel). Each chunk writes its own
+# samples, so one thread renders the same bits. Set once on each thread that
+# runs the callback, through the OpenMP the kernels loaded (one per process);
+# the builder's threads keep theirs.
+_OMP_ONE = threading.local()
+
+
+def _omp_one_thread():
+    if getattr(_OMP_ONE, "done", False):
+        return
+    _OMP_ONE.done = True
+    try:
+        import ctypes
+        ctypes.CDLL("libgomp.so.1").omp_set_num_threads(1)
+    except (OSError, AttributeError):
+        pass
+
+
 class Live:
     def __init__(self, program=56, rate=48000, frames=128, capacity=65536,
                  tuner="hybrid", verbose=True, drums=False, headroom_db=4.0,
@@ -4508,6 +4530,7 @@ class Live:
         # ...and the same division for program changes: the audio thread may
         # queue a voice change, never build one. See _patch_worker.
         self.patch_reqs = collections.deque()      # (pid, (program, drums, tuner))
+        self.patch_want = {}                       # pid -> the last asked for, until swapped in (_ask_patch)
         self.warm_reqs = collections.deque(maxlen=256)   # (patch, note, bucket, axis)
         self.patch_go = threading.Event()
         self.patch_stop = False
@@ -4562,6 +4585,8 @@ class Live:
         # order is deliberate: swap first, so nothing new is stamped for a part
         # that is going, then release a block later.
         self.parts = tuple(parts)
+        for _pid in [q for q in self.patch_want if q not in keep]:
+            del self.patch_want[_pid]           # (a part gone: nothing on its way to it)
         self._pin_patches()
         # A NEW MOOG PROGRAM SETS THE MESSENGER. The TUI changes a program by
         # rebuilding the part set and swapping it in here, not by _swap_patch,
@@ -5799,9 +5824,7 @@ class Live:
                 _pp = kit_in_map(_prog, _map) if _pd and _msb != T.GM2_DRUM_BANK else _prog
                 want = (_pp, _pd, self._tuner_for(_pp, _pd, part.base_tuner),
                         patch_variation(_pp, _pd, _var))
-                if part.patch.key == want:
-                    continue
-                self.patch_reqs.append((part.pid, want))
+                self._ask_patch(part, want)
             if self.patch_reqs:
                 self.patch_go.set()
         elif msg.type == "note_on" and msg.velocity > 0:
@@ -7863,8 +7886,7 @@ class Live:
         for part in self.parts:
             want = (part.program, part.drums,
                     self._tuner_for(part.program, part.drums, part.base_tuner), part.variation)
-            if part.patch.key != want:
-                self.patch_reqs.append((part.pid, want))
+            self._ask_patch(part, want)
         if self.patch_reqs:
             self.patch_go.set()
         self.dirty = True
@@ -9663,8 +9685,7 @@ class Live:
                 want = (part.program, bool(mode),
                         self._tuner_for(part.program, bool(mode), part.base_tuner),
                         patch_variation(part.program, bool(mode), part.variation))
-                if part.patch.key != want:
-                    self.patch_reqs.append((part.pid, want))
+                self._ask_patch(part, want)
             if self.patch_reqs:
                 self.patch_go.set()
             return
@@ -9741,8 +9762,7 @@ class Live:
         self.efx_rev += 1
         for part in self.parts:
             want = (0, part.drums, self._tuner_for(0, part.drums, part.base_tuner), 0)
-            if part.patch.key != want:
-                self.patch_reqs.append((part.pid, want))
+            self._ask_patch(part, want)
         if self.patch_reqs:
             self.patch_go.set()
 
@@ -9812,8 +9832,8 @@ class Live:
             _PATCHES.clear()
         # Every part re-built in the new room. Notes sounding keep the old
         # reflections, as a program change keeps its old voice.
-        for part in self.parts:
-            self.patch_reqs.append((part.pid, part.patch.key))
+        for part in self.parts:     # (a program on its way stays the one built)
+            self.patch_reqs.append((part.pid, self.patch_want.get(part.pid, part.patch.key)))
         self._room_install(None if name == "dry"
                            else build_room_tail(self.rate, self.frames, self._room_band_q()))
 
@@ -9890,6 +9910,7 @@ class Live:
                     continue
                 part = next((q for q in self.parts if q.pid == pid), None)
                 if part is None:
+                    self.patch_want.pop(pid, None)
                     continue        # the rig was rebuilt under us; drop it
                 try:
                     with _PATCH_LOCK:
@@ -9910,6 +9931,8 @@ class Live:
                 except Exception as e:
                     self.patch_err = "%s: %s" % (type(e).__name__, e)
                     self.patch_label = None
+                    if self.patch_want.get(pid) == want:
+                        del self.patch_want[pid]        # (never coming: the part keeps what it has)
             self._fill_misses()
             self._scan_prefetch()
             _gc_freeze()        # what this pass built, out of the collector's sweep
@@ -9937,6 +9960,16 @@ class Live:
                 # safe against the audio thread under the GIL.
                 patch.templates[(note, bucket, axis)] = t
                 patch.partials += t["P"]
+
+    def _ask_patch(self, part, want):
+        """PART to play WANT -- unless that is what it will have: the last
+        asked for and not yet swapped in, else its patch. Against the patch
+        alone, a pick back to the sounding voice while another was on its way
+        was dropped, and the other landed over it."""
+        if self.patch_want.get(part.pid, part.patch.key) == want:
+            return
+        self.patch_want[part.pid] = want
+        self.patch_reqs.append((part.pid, want))
 
     def _swap_patch(self, part, patch, n0):
         """Point a part at a new voice, on the audio thread.
@@ -9970,6 +10003,8 @@ class Live:
             del self.wind_st[part.pid]
             self.wind_spent.extend(st["rows"].values())
         part.set_patch(patch)
+        if self.patch_want.get(part.pid) == patch.key:
+            del self.patch_want[part.pid]       # (what it asked for last: arrived)
         # ...AND OTHER STRINGS, ITS OWN FREE ONES (_reg_forget)
         self._reg_forget(part, old, n0)
         # A MOOG PROGRAM SETS THE MESSENGER to it (queued, so the audio thread
@@ -10981,6 +11016,7 @@ class Live:
     # PANIC_DUMP (the first few, then one in ten seconds).
     def callback(self, in_data, frame_count, time_info, status):
         t_in = time.perf_counter()
+        _omp_one_thread()
         self._cb_busy = True
         rt = self.rt
         if rt is not None:

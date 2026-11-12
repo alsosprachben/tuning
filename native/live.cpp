@@ -1964,13 +1964,18 @@ void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigne
 
 // Patch.warm: keys lo..hi, nb buckets (each at bucket_vel), the wheel steps
 // (nsp of them; -1 for none); the templates built. Returns how many.
-long nv_tcache_warm(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp)
+// ...counting each (key, bucket, speed) into *done as it goes (NULL: not
+// counted) -- (hi - lo + 1) x nb x nsp in all: a builder's progress, read
+// by another thread
+long nv_tcache_warm_p(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp, long *done)
 {
     nv::live::Cache *C = (nv::live::Cache *)h;
     long n = 0;
     for (int note = lo; note <= hi; note++)
         for (int b = 0; b < nb; b++)
             for (int q = 0; q < nsp; q++) {
+                if (done)
+                    __atomic_fetch_add(done, 1L, __ATOMIC_RELAXED);
                 auto k = std::make_tuple(note, b, speeds[q]);
                 if (C->tm.count(k))
                     continue;
@@ -1982,6 +1987,11 @@ long nv_tcache_warm(void *h, int program, int lo, int hi, int nb, const int *spe
                 }
             }
     return n;
+}
+
+long nv_tcache_warm(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp)
+{
+    return nv_tcache_warm_p(h, program, lo, hi, nb, speeds, nsp, nullptr);
 }
 
 // live._room_band_q's part of a cache: every template's room_q (27 each:

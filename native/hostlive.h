@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "panel.h"
+#include "session.h"
 #include "pycompat.h"
 
 extern "C" {
@@ -55,6 +56,7 @@ void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double 
                     long long blk, double ring_floor, double ring_max, double knee_db, double ln10_20,
                     double xdec_nepers, double SR);
 long nv_tcache_warm(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp);
+long nv_tcache_warm_p(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp, long *done);
 void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigned long long *choke,
                     const int *skind, const double *spar, double oneshot_floor_db);
 void nv_part_drums(void *h, int program, const unsigned long long *choke);
@@ -62,6 +64,7 @@ void nv_part_program(void *h, int program);
 void nv_part_drone_patch(void *h, int pi, void *cache, int nbuckets, int speed);
 void nv_part_toggle_stop(void *h, int rank, long long n0);
 int nv_part_drawn(void *h, char *out, int cap);
+void nv_part_set_drawn(void *h, const char *want, int n);
 void nv_part_efx(void *h, const double *X, double SR);
 void nv_part_place3d(void *h, const double *q);
 int nv_part_efx_state(void *h, int *o, int cap, const char **why);
@@ -109,6 +112,8 @@ int nv_part_add_patch(void *h, void *cache, long long pid, double level_db, int 
                     int soft_drop, int soft_top, int drums, int program, const unsigned long long *choke, int channel,
                     unsigned excl, int lo, int hi, int transpose);
 void nv_part_patch_range(void *h, int i, int channel, unsigned excl, int lo, int hi, int transpose);
+void nv_part_patch_level(void *h, int i, double level_db, int muted);
+void nv_part_patch_gone(void *h, int i, long long n0);
 int nv_part_on_gpu(void *h);
 void nv_part_gpu_ms(void *h, double *out);
 void nv_part_reg_async(void *h);
@@ -404,7 +409,33 @@ struct nv_host {
         bool drums;
         int program, sid, posted;
         int var = 0, posted_var = 0;            // its variation (live.Patch.variation), 0 the capital tone
+        // the last asked for and not yet swapped in (-1 none): a program
+        // change is against it, not against what sounds -- else a pick back
+        // to the sounding patch while another builds is dropped, and the
+        // build lands over it
+        int want = -1, want_var = 0;
+        bool want_dr = false;
+        bool is(int prog, bool dr, int v) const
+        {
+            return want >= 0 ? want == prog && want_dr == dr && want_var == v
+                             : program == prog && drums == dr && var == v;
+        }
     };
+    void ask(size_t i, int prog, bool dr, int v)
+    {
+        pats[i].want = prog;
+        pats[i].want_dr = dr;
+        pats[i].want_var = v;
+        reqs.push_back(Req{i, prog, dr, v});
+    }
+    // a request done (swapped in, or not native): the part wants nothing more
+    // if it was the last asked
+    void answered(size_t i, int prog, bool dr, int v)
+    {
+        PartAt &pa = pats[i];
+        if (pa.want == prog && pa.want_dr == dr && pa.want_var == v)
+            pa.want = -1;
+    }
     struct Req {
         size_t i;
         int prog;
@@ -489,6 +520,13 @@ struct nv_host {
     std::function<int(double *bq)> room_band_q;
     std::function<void *(const Export::RoomData &rd, const double *bq, int has)> room_tail;
     std::function<bool(const std::string &name, void **tail, const std::function<void(size_t, int, bool, int, void *)> &give)> room_switch;
+    // THE TUNER, switched while playing (livetui's TUNER column): the table
+    // made again, every patch let go and the parts' built again in it on the
+    // builder (as a room); notes sounding keep the tuning they were struck in
+    std::function<bool(const std::string &name, const std::function<void(size_t, int, bool, int, void *)> &give)> tuner_switch;
+    std::string tuner_req, tuner_now, tuner_asked;   // (asked: the panel's, for the session)
+    std::atomic<bool> retune_bank{false};             // (the free strings' bank too, at the next swap)
+    void set_tuner(const std::string &name);
     std::vector<std::pair<long long, std::string>> room_at;
     bool follow;
     float L[4096];
@@ -551,6 +589,11 @@ struct nv_host {
     void panic();
     std::atomic<bool> builder_busy{false};
     int building();
+    // THE BUILD UNDER WAY (the panel's progress): templates done of the
+    // total, and what it is (bmu); total 0 none
+    long bp_done = 0, bp_total = 0;
+    std::string bp_name;
+    bool progress(long *done, long *total, std::string *name);
     MidiParse midi_in;                      // (nv_host_midi's)
     std::mutex midi_in_mu;
     long long play_n0 = 0;                  // (nv_host_render's)
@@ -558,6 +601,26 @@ struct nv_host {
     // (in step, --test's: the room's tail to install after the block, the
     // programs asked for built in step; asks: a program change heard)
     void render_block(long long n0, float *buf, bool step = false);
+    // --record=FILE: what was played, as it was taken -- each event, each
+    // swap, and the blocks (time, slots, shed, peak) -- written by its own
+    // thread (nvlive's), for a replay through --test
+    // THE SESSION (live's session.json, shared with live.py; session.h):
+    // read in main before the part is built, its program the part's and its
+    // routes the router's; the rest applied once playing (session_apply);
+    // written back at quit and every 2 s it changed (session_save)
+    sess::J session;
+    bool session_on = false;
+    int room_asked = -1;                    // a room asked for (set_global 8), until it is the room
+    std::string session_path, session_written;
+    std::vector<std::array<int, 7>> session_routes;
+    bool session_routes_set = false;
+    void session_apply();
+    sess::J session_state(const std::vector<std::array<int, 7>> &routes);
+    bool session_save(const std::vector<std::array<int, 7>> &routes);
+    bool recording = false;
+    std::mutex rec_mu;
+    std::vector<std::string> recq;
+    void rec(const char *fmt, ...);
     bool asks = true;
     void *step_room = nullptr;
     bool step_room_go = false;               // (a switch to install: dry's tail is none)
