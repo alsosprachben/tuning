@@ -28,25 +28,22 @@ TASKS = [
                    "tuner, the synth (Moog, Messenger) pane and M, scenes, presets and the shared session, mod "
                    "rate, the metronome, the standard, the devices (--port), mouse and touch; open: threads, the "
                    "Eastern tuning on the panel"),
-    ("GM2", False, "Restore c2111e6's six tones, lost when be5a996 was committed from an older tree (the "
-                   "page had said SC-88 193 of 193): 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum (struck bars "
-                   "by register), 66.8 BreathyTnr. (the breath's octave law), 28.1 MutedDis.Gt (open strings, its "
-                   "own gate), 125.10 Calculating (the Morse keyboard's strokes) -- and with them sympathy per "
-                   "mode, which makes 26.8 Pedal Steel and 107.8 Taisho Koto whole: replayed onto today's tree "
-                   "(structs 0 misplaced; every stage whole), its checks under way (each tone Python vs native, "
-                   "live, the corpus)"),
-    ("GM1", False, "Live: the synth variations nvlive greyed as not native -- a Moog's SYNC (13: Sync Bass, P5 "
-                   "Sync Lead, Wire Lead...) and unison (16: JP SuperSaw, Super Poly, the JP-8000 stacks...). "
-                   "SYNC done (moog.weights' synced spectrum the kernel's C, native's rebuild, the shape rows' "
-                   "sweep, the lock under a held note; native vs live identical on P5 Sync Lead, a lead's SYNC "
-                   "turned live, Sync Bass on the GPU path); unison written (the C draw shared with the files, "
-                   "each voice a stamp of its own), its checks to come. The page's tone counts are the files'; "
-                   "a live count beside them is to come"),
-    ("SC-88", False, "Live: what c2111e6's tones play in files only -- 28.1 MutedDis.Gt's open strings "
-                     "ringing on, 125.10 Calculating's Morse strokes. Written, its checks to come: an open "
-                     "string held past its key until its string sounds again or its cap (live._open_ring_*, "
-                     "both engines); a melodic cache whose class borrows a kit key's strokes gives its "
-                     "template's song the sets' tables (nv_tcache_stroke_kits), 125.10 no longer refused"),
+    ("GM2", True, "Restore c2111e6's six tones, lost when be5a996 was committed from an older tree: 12.16 "
+                  "Barafon, 12.17 Barafon 2, 12.24 Log drum, 66.8 BreathyTnr., 28.1 MutedDis.Gt, 125.10 Calculating "
+                  "-- and with them sympathy per mode (26.8 Pedal Steel, 107.8 Taisho Koto whole). Replayed onto "
+                  "today's tree: every stage whole again, each tone Python vs native in files and live, the corpus "
+                  "167/167"),
+    ("GM1", True, "Live: the synth variations nvlive greyed as not native -- a Moog's SYNC (13: Sync Bass, P5 "
+                  "Sync Lead, Wire Lead...) and unison (16: JP SuperSaw, Super Poly, the JP-8000 stacks...): "
+                  "moog.weights' synced spectrum the kernel's C, the shape rows' sweep, the lock under a held "
+                  "note; each unison voice a stamp of its own. Native vs live identical on P5 Sync Lead, a lead's "
+                  "SYNC turned live, Sync Bass and JP SuperSaw on the GPU path, Super Poly, JP8000 Clav., "
+                  "DualSyncLead. The page's tone counts are the files'; a live count beside them is to come"),
+    ("SC-88", True, "Live: what c2111e6's tones played in files only -- 28.1 MutedDis.Gt's open strings ringing "
+                    "on (held past the key until the string sounds again or its cap: live._open_ring_*, both "
+                    "engines) and 125.10 Calculating's Morse strokes (a melodic note's borrowed strokes: the "
+                    "sets' tables and the class table, nv_song_strokes_k, as nvrender's) -- native vs live "
+                    "identical, 125.10 no longer refused"),
     ("GM1", True, "Live: the Messenger's performance controls, measured on Ben's unit (messenger_perf.py) -- GLIDE "
                   "(a lag in cents, detached notes too), HOLD, A and F ENV VEL, LFO 2 (rate, pitch, cutoff, amp, "
                   "the wheel its depth), F and A ENV LOOP, MULTI-TRIG (carry on, or recharge from where it was); "
@@ -128,8 +125,17 @@ TASKS = [
                   "GM 2's by MSB 121), a variation as a patch (its templates, classes, trim and live record: "
                   "VLIV), the picker's variations under each program (VNAM)"),
     ("GM2", False, "nvlive: a Moog variation under a capital that is no Moog's organ (its level: live's), a "
-                   "layered variation's other layers -- and the maps' own drum sets, written (MKIT read, "
-                   "kit_in_map at a program change and the picker, their names: MKNM), its checks to come"),
+                   "layered variation's other layers"),
+    ("GM2", True, "Live: the maps' own drum sets (MKIT read, MKNM their names; kit_in_map at a program change and "
+                  "in the picker): a set's template selects it as a file does, CC32 then the program (live.py's "
+                  "had raised on program 281 and played nothing); a GS Reset's program 0 asked where it falls "
+                  "among a block's events, not after the program change that follows it -- native vs live "
+                  "identical across the maps' sets"),
+    ("SC-55", True, "The Sound Canvas display: a file's text and 16x16 dot pages (model 45: gsdisplay.py, "
+                    "native/gsdisplay.h) shown in both panels' SC display box, and written beside a render as "
+                    "OUT.display.txt (blockrender and nvrender, byte for byte)"),
+    ("GM1", True, "The export memory-mapped in the host (MAP_PRIVATE): nvlive's peak 1.26 -> 0.72 GB, its "
+                  "output identical"),
     ("GM2", True, "nvlive: the Moog variations (VLIV), plain and layered, a tone's own Auto Pan -- live "
                   "templates without the tone's effect (MOOG_NEUTRAL); a unison's and SYNC's refused"),
     ("GM2", True, "Tuning, files: the secondary (eastern) tuning, the meend, master fine/coarse tuning, "
