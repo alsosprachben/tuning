@@ -1371,7 +1371,10 @@ struct Panel {
         // that lose notes) for 10 s after it rose, then grey (livetui's)
         std::string r2 = pad(" " + level_meter("R", lev[1], hold[1], mn), px + 1);
         r2 = pad(r2 + (pk > -0.1 ? C("bad") + "\x1b[1mCLIP\x1b[0m" : ""), x + 1);
-        snprintf(b, sizeof b, "%.0f/%ld", s.eng[0], H.slots);
+        {                                       // (the count right-aligned to the slab's width: the text after it stays put)
+            const int dw = snprintf(nullptr, 0, "%ld", H.slots);
+            snprintf(b, sizeof b, "%*.0f/%ld", dw, s.eng[0], H.slots);
+        }
         r2 += C("label") + "voices " + (s.eng[0] > 0.9 * H.slots ? C("bad") : C("value")) + b + "\x1b[0m";
         r2 = pad(r2, x + 23);
         struct Hk { const char *key, *lab; double v; bool worse; };

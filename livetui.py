@@ -2643,7 +2643,7 @@ class TUI:
             self.addstr(scr, y + 1, fx + len(fig) + 6, "x%d" % s["threads"], C("dim"))
         use = s["used"] / float(max(s["cap"], 1))
         self.addstr(scr, y + 2, x, "voices", C("label"))
-        self.addstr(scr, y + 2, x + 7, "%d/%d" % (s["used"], s["cap"]),
+        self.addstr(scr, y + 2, x + 7, "%*d/%d" % (len(str(s["cap"])), s["used"], s["cap"]),     # (right-aligned: the rest stays put)
                     C("bad") if use > 0.9 else C("text"))
         # THE HEALTH: each count that is not zero, amber (red for the ones
         # that lose notes) for 10 s after it rose, then grey -- a record
