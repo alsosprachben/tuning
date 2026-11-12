@@ -24,9 +24,15 @@ TASKS = [
     ("GM1", True, "Program changes in nvlive: a builder thread, MIDI program change, the panel's picker"),
     ("GM1", False, "nvlive's panel at livetui's (a switch is not a control: each a panel control and a library "
                    "call) -- done: the patch picker and its variations, globals, routes, stops, the insertion "
-                   "effect (x); open: parts (layers, splits: each one's channel, range, transpose, level, mute), "
-                   "the tuner and Eastern tuning, the synth (Moog, Messenger) pane, scenes, presets and the "
-                   "session, mod rate, threads, the metronome, the standard, the devices"),
+                   "effect (x), parts (layers, splits, channel, range, transpose, level, mute, fixed touch), the "
+                   "tuner, the synth (Moog, Messenger) pane and M, scenes, presets and the shared session, mod "
+                   "rate, the metronome, the standard, the devices (--port), mouse and touch; open: threads, the "
+                   "Eastern tuning on the panel"),
+    ("GM1", True, "Live: the Messenger's performance controls, measured on Ben's unit (messenger_perf.py) -- GLIDE "
+                  "(a lag in cents, detached notes too), HOLD, A and F ENV VEL, LFO 2 (rate, pitch, cutoff, amp, "
+                  "the wheel its depth), F and A ENV LOOP, MULTI-TRIG (carry on, or recharge from where it was); "
+                  "the loops, F ENV VEL and the contours' age and start level in a kernel entry of their own "
+                  "(synth_voice_moogx), Python and native alike"),
     ("GM1", True, "Live: the room switched while playing (live.set_room): every room in the export (LROOMS), "
                   "its tail drawn natively at the stage's directivity (native/roomtail.cpp, bit for bit "
                   "roomtail.py's), the templates built again in it, the tail crossfaded"),
