@@ -783,10 +783,20 @@ def parse(path):
     _inj = []
 
     def _stream():
+        if CM64:
+            for _m in cm64_init():          # (the CM-64 map's parts, before the file: CM64)
+                yield _m, True
         for _m in mid:
+            if CM64 and _m.type == 'control_change' and _m.control == 10:
+                _m = _m.copy(value=cm64_pan(_m.value))      # (a CM-64's pan, mirrored)
             yield _m, False
             while _inj:
                 yield _inj.pop(0), True
+    if CM64:
+        # (the CM-64 map's mod wheel depth, each part's matrix: CM64_MOD_PITCH_CENTS)
+        for _mc in range(16):
+            _cmx.setdefault(_mc, _CMX.Matrix()).apply('cell', ('mod', 'lfo1_pitch', CM64_MOD_PITCH_CENTS))
+            _cmx_upd(t, _mc)
     for msg, _mpe_done in _stream():
         t += msg.time
         _seq += 1
@@ -1453,6 +1463,43 @@ def gm_on_level(data):
 # set it per part -- 0 ours (patch_map.map_bank), 1 SC-55, 2 SC-88, 3 SC-88
 # Pro, 4 SC-8850. `blockrender.py ... --map N`, or TUNING_MAP.
 DEFAULT_MAP = int(os.environ.get('TUNING_MAP', '0') or 0)
+# THE CM-64 SOUND MAP (--map cm64; TUNING_CM64=1): a file written for Roland's
+# CM-64 sends no bank select -- it plays what the module is. A Sound Canvas's
+# "Init CM-64" (SC-88Pro OM p.114) sets every part, here sent before the
+# file's first message (CM64_INIT): parts 1-9 the MT-32 set (bank 127), part
+# 10 the CM-64/32L set, parts 11-16 the CM-32P's (bank 126), each its pan,
+# reverb 64, chorus 0 and a bend range of 12; banks read in the SC-55 map.
+# And its PAN THE CM-64's, not the Sound Canvas's: "this unit's pan settings
+# are opposite to those of the CM-64" (p.115), so every pan is mirrored.
+# The CM-64's own exclusives change nothing, as on the Sound Canvas
+CM64 = os.environ.get('TUNING_CM64', '') == '1'
+# ...and the mod wheel's LFO pitch depth the map sets every part ("Mod LFO
+# Pch: +4"; cents, the pitch unit -- Ben), in the controller matrix's cell
+CM64_MOD_PITCH_CENTS = 4.0
+# (each part's (bank, program, pan): the table's, PC and pans as GS values)
+CM64_PARTS = ((127, 0, 64), (127, 68, 54), (127, 48, 54), (127, 95, 54), (127, 78, 54), (127, 41, 18),
+              (127, 3, 91), (127, 110, 1), (127, 122, 127), (0, 127, 64),
+              (126, 27, 64), (126, 29, 81), (126, 0, 64), (126, 37, 99), (126, 13, 27), (126, 46, 45))
+
+
+def cm64_pan(v):
+    """A CM-64's pan as the Sound Canvas's (mirrored: L64 R63 about 64)."""
+    return max(0, min(127, 128 - int(v)))
+
+
+def cm64_init():
+    """The messages "Init CM-64" amounts to, every part's: its bank (CC0, the
+    SC-55 map's CC32 1), program, pan (a CM-64's, mirrored as the file's
+    are), level 100, reverb 64, chorus 0, bend range 12 (RPN 0, then null)."""
+    out = []
+    for ch, (bank, prog, pan) in enumerate(CM64_PARTS):
+        cc = lambda c, v: mido.Message('control_change', channel=ch, control=c, value=v, time=0)
+        if ch != 9:
+            out += [cc(0, bank), cc(32, 1)]
+        out += [mido.Message('program_change', channel=ch, program=prog, time=0),
+                cc(7, 100), cc(10, cm64_pan(pan)), cc(91, 64), cc(93, 0),
+                cc(101, 0), cc(100, 0), cc(6, 12), cc(38, 0), cc(101, 127), cc(100, 127)]
+    return out
 
 
 MAP_WORDS = {'ours': 0, 'sc55': 1, 'sc-55': 1, 'sc88': 2, 'sc-88': 2, 'sc88pro': 3, 'sc-88pro': 3,
@@ -10020,7 +10067,12 @@ if __name__=="__main__":
         # THE STANDARD map 0 plays (DEFAULT_MAP): ours, sc55, sc88, sc88pro,
         # sc8850, or the map's number
         _i = sys.argv.index('--map')
-        DEFAULT_MAP = map_number(sys.argv[_i + 1])
+        if sys.argv[_i + 1].strip().lower().replace('-', '') == 'cm64':
+            # THE CM-64 SOUND MAP: its parts set, banks in the SC-55 map (CM64)
+            CM64, DEFAULT_MAP = True, 1
+            os.environ['TUNING_CM64'] = '1'
+        else:
+            DEFAULT_MAP = map_number(sys.argv[_i + 1])
         os.environ['TUNING_MAP'] = str(DEFAULT_MAP)     # ...for `import blockrender` elsewhere too
         del sys.argv[_i:_i + 2]
     inp,outp=sys.argv[1],sys.argv[2]; tuner=sys.argv[3] if len(sys.argv)>3 else 'hybrid440'

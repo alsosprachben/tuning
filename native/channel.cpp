@@ -210,6 +210,11 @@ struct Ev {
     double gl_lv = 1.0, gl_sm = 0.0, gl_dt = 0.0;
     int slot = -1;                      // its variation's slot (bank select: K[NV_K_VAR + 128 x slot + key]), -1 none
     int kover = -1;                     // its class's own index in K (a drone's: _DRONE_PC), -1 none
+    // A USER DRUM SET's key (user_drum): its source's kit index (128 set +
+    // key, -1 none) and its own settings, as dst's (a bit a parameter: 0
+    // pitch, 1 level, 2 pan, 6 rx note on), the file's edits over them
+    int uq = -1, umask = 0;
+    int uv[9] = {0};
     // its class's index in K: a drum set's key, a variation's, a program's
     int kidx() const
     {
@@ -1688,6 +1693,8 @@ struct Song {
     int dst(long long c, int key, double t, int *v) const
     {
         int m = 0;
+        for (int q = 0; q < 9; q++)
+            v[q] = 0;
         for (const DEd &e : dedit) {
             if (e.t > t + 1e-9)
                 break;
@@ -1701,6 +1708,25 @@ struct Song {
             }
         }
         return m;
+    }
+    // ...and a USER SET's key's: its own settings, the file's over them
+    // (pitch adding), as blockrender's _own -- else dst's alone
+    int udst(const Ev &e, double t, int *v) const
+    {
+        int m = dst(e.ch, e.note, t, v);
+        if (e.uq < 0)
+            return m;
+        int w[9];
+        for (int q = 0; q < 9; q++)
+            w[q] = (e.umask >> q) & 1 ? e.uv[q] : 0;
+        if (m & 1)
+            w[0] = ((e.umask & 1) ? e.uv[0] : 0) + v[0];
+        for (int q = 1; q < 9; q++)
+            if ((m >> q) & 1)
+                w[q] = v[q];
+        for (int q = 0; q < 9; q++)
+            v[q] = w[q];
+        return m | e.umask;
     }
     double gs_dly[24] = {}, gs_dly_place[13] = {};
     // ITS PRESSURE (ats, pts): a channel's aftertouch (key -1), a key's polytouch, in message order
@@ -2900,6 +2926,18 @@ int nv_song_kidx(void *s, int i) { return ((nv::Song *)s)->notes[i].kidx(); }
 
 int nv_song_tone(void *s, int i) { return ((nv::Song *)s)->notes[i].tone(); }
 
+// NOTE i A USER SET's KEY (user_drum): its source's kit index (128 set + key)
+// for its class and pitch, and its own settings (a bit a parameter, dst's)
+void nv_song_user_drum(void *s, int i, int uq, int umask, const int *uv)
+{
+    nv::Ev &e = ((nv::Song *)s)->notes[i];
+    e.uq = uq;
+    e.kover = NV_K_DRUMS + uq;
+    e.umask = umask;
+    for (int q = 0; q < 9; q++)
+        e.uv[q] = uv[q];
+}
+
 void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv)
 {
     const nv::Ev &e = ((nv::Song *)s)->notes[i];
@@ -3359,6 +3397,19 @@ int nv_song_pitch_level_kc(void *s, int i, int effort_tilt, const NoteClass *K, 
     return r;
 }
 
+// Whether a note is received: 0 for a drum key its set or the file's drum
+// setup turns off (Rx. Note On, rxon 0) -- Python's prep drops it, as it
+// drops an unmapped drum
+int nv_song_received(void *s, int i)
+{
+    const nv::Song *S = (nv::Song *)s;
+    const nv::Ev &e = S->notes[i];
+    if (!e.drum)
+        return 1;
+    int dv[9];
+    return !((S->udst(e, e.on, dv) & 64) && dv[6] == 0);
+}
+
 int nv_song_pitch_level_ks(void *s, int i, int effort_tilt, int indian, double so, double *out)
 {
     const nv::Song *S = (nv::Song *)s;
@@ -3371,11 +3422,13 @@ int nv_song_pitch_level_ks(void *s, int i, int effort_tilt, int indian, double s
     int r = 1;
     out[5] = 0.0;
     if (e.drum) {
-        int q = 128 * e.prog + note;
+        int q = e.uq >= 0 ? e.uq : 128 * e.prog + note;     // (a user set's key: its source's)
         if (S->kit_f0.empty() || e.prog < 0 || (size_t)q >= S->kit_f0.size() || S->kit_f0[q] == 0.0)
             return 0;
-        int dv[6];
-        int dm = S->dst(ch, note, on, dv);      // (the file's own setting of this drum: _dst)
+        int dv[9];
+        int dm = S->udst(e, on, dv);            // (the file's own setting of this drum: _dst)
+        if ((dm & 64) && dv[6] == 0)
+            return 0;                           // the kit told not to receive this key
         out[0] = S->kit_f0[q];
         if (dm & 1)
             out[0] *= pow(2.0, dv[0] / 12.0);
@@ -3400,8 +3453,8 @@ int nv_song_pitch_level_ks(void *s, int i, int effort_tilt, int indian, double s
     out[2] = e.pan;
     double cv = pow(e.v7 * e.v11, 2.0);
     if (e.drum) {
-        int dv[6];
-        if (S->dst(ch, note, on, dv) & 2)
+        int dv[9];
+        if (S->udst(e, on, dv) & 2)
             cv *= pow(dv[1] / 100.0, 2.0);      // (its level against the preset's 100)
     }
     if (S->fader.count(ch))

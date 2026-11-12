@@ -69,6 +69,8 @@ void nv_midi_map_kits_play(int on);
 void nv_song_mapk_base(int base);
 int nv_midi_n_dedit(void *p);
 void nv_midi_dedit(void *p, int i, int *iv, double *t);
+int nv_midi_user_drum(void *p, int set, int key, int *iv);
+void nv_song_user_drum(void *s, int i, int uq, int umask, const int *uv);
 int nv_midi_n_efx(void *p);
 int nv_midi_n_cmx(void *p);
 void nv_midi_cmx(void *p, int i, int *iv, double *dv);
@@ -851,6 +853,10 @@ int main(int argc, char **argv)
         int en = iv[4] ? 0 : ent_of(iv[3], nv_midi_note_bsel(midi, i));
         if (!en && iv[4] && iv[3] > 127)        // (a map's own drum set)
             return {mapk_base + 128 * (iv[3] - 128) + iv[1]};
+        int u[13];
+        if (!en && iv[4] && (iv[3] == 64 || iv[3] == 65)
+            && ((nv_midi_user_drum(midi, iv[3] - 64, iv[1], u) >> 12) & 1))     // (a user set's key: its source's)
+            return {NV_K_DRUMS + 128 * ((nv_midi_user_drum(midi, iv[3] - 64, iv[1], u) >> 11) & 1 ? u[11] : 0) + u[12]};
         if (!en)
             return {(iv[4] ? NV_K_DRUMS : 0) + 128 * iv[3] + iv[1]};
         std::vector<int> r;
@@ -1379,9 +1385,8 @@ int main(int argc, char **argv)
         }
         for (int c : chs) {
             std::vector<int> fams;
-            bool var = false;               // (a variation that is no organ)
-            for (int pk : uniq[c])
-                var = var || (pk >= 128 && ent_organs(pk / 128).empty());
+            // (a variation that is no organ beside an organ: its notes no organ's,
+            // the organ's rows built as Python's _prep_organ_rows builds them)
             for (int pk : uniq[c]) {
                 std::vector<const OrganSpec *> ogs;
                 if (pk >= 128) {
@@ -1397,10 +1402,6 @@ int main(int argc, char **argv)
                 for (const OrganSpec *og : ogs) {
                     if (!og || std::find(fams.begin(), fams.end(), og->family) != fams.end())
                         continue;
-                    if (var) {
-                        fprintf(stderr, "nvrender: refused: an organ and a variation on channel %d\n", c);
-                        return 2;
-                    }
                     fams.push_back(og->family);
                     organ_ch.insert(c);
                     nv_song_organ(song, c, og, prog_organ.data());
@@ -1607,6 +1608,31 @@ int main(int argc, char **argv)
         if (E.cmap[q] >= 0)
             K[q] = (const NoteClass *)E.classes[E.cmap[q]].data();
     nv_song_strokes_k(song, K.data(), E.kit_skind.data(), E.kit_spar.data());   // (a gesture's strokes, _prep_strokes)
+    // ...and A USER DRUM SET's keys (user_drum: GS's sets 65 and 66, programs
+    // 64 and 65), each stroke and layer as its own key: another set's key --
+    // its class, pitch and seat -- with its own play note (as pitch), level,
+    // pan and receive switch, the file's drum edits over them
+    for (int i = 0, nn = nv_song_n_notes(song); i < nn; i++) {
+        long long c;
+        int iv[4];
+        double dv[2];
+        nv_song_get_note(song, i, &c, iv, dv);
+        int u[13] = {0};
+        int m = iv[3] && (iv[2] == 64 || iv[2] == 65) ? nv_midi_user_drum(midi, iv[2] - 64, iv[0], u) : 0;
+        if (!((m >> 12) & 1))
+            continue;
+        const int sset = (m >> 11) & 1 ? u[11] : 0, snote = u[12];
+        int uv[9] = {0}, um = 0;
+        if ((m >> 1) & 1)
+            uv[0] = u[1] - snote, um |= 1;          // (its play note: its pitch from the source's)
+        if ((m >> 2) & 1)
+            uv[1] = u[2], um |= 2;
+        if ((m >> 4) & 1)
+            uv[2] = u[4], um |= 4;
+        if ((m >> 8) & 1)
+            uv[6] = u[8], um |= 64;
+        nv_song_user_drum(song, i, 128 * sset + snote, um, uv);
+    }
     // ...then the valved glisses and the drones (_prep_gliss, _DRONE_PC), as
     // Python walks them: before every table kept by note (the matrix's, the
     // insertion chains'), which index the notes as walked (nv_prepare's

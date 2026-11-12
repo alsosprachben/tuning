@@ -165,7 +165,11 @@ TASKS = [
                      "blockrender"),
     ("MT-32", True, "nvlive: the MT-32 set as a patch (bank 127): by bank select, and the picker's (its 128 "
                     "tones marked MT-32) -- native vs live identical"),
-    ("CM-64", False, "The CM-32P (the CM-64's PCM half: the U-110's tones on channels 11-16) -- Python has none yet"),
+    ("CM-64", False, "The CM-32P (the CM-64's PCM half: the U-110's tones on channels 11-16): its 64 tones on bank "
+                     "126 as the Sound Canvas's SC-55 map plays them (each a GS tone, under the CM-32P's name: CM-32P "
+                     "OM pp.7-8, SC-8850 OM p.186); --map cm64 (TUNING_CM64) the CM-64 sound map's parts before a "
+                     "file (SC-88Pro OM p.114), pans mirrored, its exclusives ignored; the pickers' CM-32P -- written, "
+                     "its checks to come"),
     ("CM-64", True, "The CM-32L's sound effects on the rhythm part (keys 76-108) in nvlive -- native vs live "
                     "identical"),
     ("SC-55", True, "Files: a drum set read in a map (kit_in_map) where the map has none of its own"),
@@ -543,7 +547,8 @@ def main(argv):
             tones = [(p, 127, P.VARIATION_NAMES[(p, 127)]) for p in range(128)]
             kits = [(127, "MT-32 rhythm part", set(PM.CM32L_DRUMS))]
         elif src == 'cm64':
-            tones = []
+            # the CM-32P's 64 (bank 126: the Sound Canvas's SC-55 map of it)
+            tones = [(p, 126, P.VARIATION_NAMES[(p, 126)]) for p in range(len(P.CM32P_SET))]
             kits = [(127, "CM-32L sound effects", set(PM.KITS[127]) - set(PM.CM32L_DRUMS))]
         else:
             tones = sorted({(p, P.map_bank(p, b, src), P.MAP_NAMES[src][(p, b)]) for (p, b) in P.MAP_NAMES[src]
@@ -577,7 +582,7 @@ def main(argv):
                 stage, js['live'][-1]['tones_live'], len(new), _tl.count("bank select"),
                 js['live'][-1]['kits_live'], len(ks), _out and "; ".join(_out) or "--"))
         for i, (p, key, name) in enumerate(new):
-            _to = P.MT32_SET[p][1] if src == 'mt32' else p
+            _to = P.MT32_SET[p][1] if src == 'mt32' else P.CM32P_SET[p][1][0] if src == 'cm64' else p
             _fxn, _fxs, _fxw = tone_effect_live(tone_fx(p, key) if src != 'mt32' else None)
             js['tones'].append(dict(stage=stage, program=p, variation=key,
                                     tone=str(p) if src is None else "%d.%d" % (p, key if key >= 126 else key % 128),
@@ -601,7 +606,7 @@ def main(argv):
         fam = {}
         for p, key, name in rest:
             # (the MT-32's by the voice it plays here: its GM program's family, a kit key's percussion)
-            _to = P.MT32_SET[p][1] if src == 'mt32' else p
+            _to = P.MT32_SET[p][1] if src == 'mt32' else P.CM32P_SET[p][1][0] if src == 'cm64' else p
             fam.setdefault(14 if isinstance(_to, tuple) else _to // 8, []).append((p, key, name))
         for f in sorted(fam):
             items = ", ".join(("%d %s" % (p, name)) if src is None else ("%d.%d %s" % (p, key if key >= 126 else key % 128, name))

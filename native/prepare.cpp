@@ -390,7 +390,7 @@ static int gsd_note(GsdCtx &X, int j, int ni, const double *R, long long n0, lon
                     break;
                 v = it->second.second[q];
             }
-            int ed[6];          // (a drum key's own delay level: _dst's, else 127)
+            int ed[9];          // (a drum key's own delay level: _dst's, else 127)
             int dlv = iv[3] && (nv_song_dst(song, ch, iv[0], dv[0], ed) & 32) ? ed[5] : 127;
             send = v / 127.0 * (iv[3] ? dlv / 127.0 : 1.0);
             if (send > 0.0) {

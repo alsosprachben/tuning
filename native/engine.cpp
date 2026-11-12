@@ -1225,6 +1225,8 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             g_why = "no class";
             return -(1 + i);
         }
+        if (!nv_song_received(song, i))
+            continue;                       // the kit told not to receive this key
         NoteIn n = *tmpl;
         n.ch = ch; n.note = iv[0]; n.on = dv[0]; n.key_off = dv[1];
         n.held = dv[1] - dv[0];             // how long the key was held
@@ -1262,7 +1264,10 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             }
         }
         n.channel = (double)nv_song_mix(song, i);      // (its tone's mix channel: em.channel)
-        n.br = (ch >= 0 && ch < nbr) ? br[ch] : -1.0;
+        // the channel's fader -- not an organ's whose CC11 is its stop word and
+        // CC7 its swell (its own rows: registration_blocks), as blockrender's
+        // note takes em.fader_row
+        n.br = (ch >= 0 && ch < nbr && !(k->organ && k->organ->swells)) ? br[ch] : -1.0;
         n.fbr = n.br;                       // (the fader's: the other strings' row, off the wheel)
         n.sym_drv = k->sym_kind == 3 ? nv_song_sym_driver(song, (long long)n.channel, (int)sizeof(VoiceSnap))
                                      : nullptr;

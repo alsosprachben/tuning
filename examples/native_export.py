@@ -495,7 +495,7 @@ def main(argv):
                 continue
             _nm = PM.VARIATION_NAMES[(_p, _v)] + (" (%s)" % PM.MAP_LABELS[_v >> 7]
                                                     if _v >> 7 in PM.MAP_LABELS else
-                                                    " (MT-32)" if _v == 127 else "")
+                                                    " (MT-32)" if _v == 127 else " (CM-32P)" if _v == 126 else "")
             _b = _nm.encode("utf-8")
             vn.append(struct.pack("<iii", _p, _v, len(_b)) + _b)
         vb2 = struct.pack("<i", len(vn)) + b"".join(vn)

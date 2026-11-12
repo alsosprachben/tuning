@@ -1102,6 +1102,48 @@ for _i, (_nm, _to) in enumerate(MT32_SET):
         VARIATIONS[(_i, 127)] = aliased_variation(_to)
         VARIATION_TRIM_DB[(_i, 127)] = PROGRAM_TRIM_DB.get(_to, 0.0)
 
+# GS BANK 126: THE CM-32P (the CM-64's PCM half, its parts on channels 11-16)
+# -- the Sound Canvas's own map of it, SC-55 map (SC-8850 OM p.186, "SC-55 Map
+# (CM-64 Sound Map)"): each of its 64 internal tones a GS tone of the SC-55
+# map, under the CM-32P's own name (CM-32P OM pp.7-8). Programs 65-128 are a
+# PCM card's (SN-U110), none: the capital, as a Sound Canvas plays a number
+# it has no tone at. Each entry: (the CM-32P's name, (GS program, its SC-55
+# map bank)).
+CM32P_SET = (
+    ("A.PIANO 1", (1, 0)), ("A.PIANO 2", (1, 0)), ("A.PIANO 3", (1, 0)), ("A.PIANO 4", (3, 0)),
+    ("A.PIANO 5", (0, 0)), ("A.PIANO 7", (1, 0)), ("A.PIANO 9", (1, 0)), ("E.PIANO 1", (4, 0)),
+    ("E.PIANO 3", (4, 8)), ("E.PIANO 5", (5, 0)), ("A.GUITAR 1", (25, 0)), ("A.GUITAR 3", (25, 0)),
+    ("A.GUITAR 4", (25, 8)), ("E.GUITAR 1", (28, 8)), ("E.GUITAR 2", (28, 0)), ("SLAP 3", (36, 0)),
+    ("SLAP 4", (36, 0)), ("SLAP 5", (36, 0)), ("SLAP 6", (36, 0)), ("SLAP 9", (37, 0)),
+    ("SLAP 10", (37, 0)), ("SLAP 11", (37, 0)), ("SLAP 12", (37, 0)), ("FINGERED 1", (33, 0)),
+    ("FINGERED 2", (33, 0)), ("PICKED 1", (34, 0)), ("PICKED 2", (34, 0)), ("FRETLESS 1", (35, 0)),
+    ("AC.BASS", (32, 0)), ("CHOIR 1", (52, 0)), ("CHOIR 2", (52, 0)), ("CHOIR 3", (52, 0)),
+    ("CHOIR 4", (52, 0)), ("STRINGS 1", (49, 0)), ("STRINGS 2", (48, 0)), ("STRINGS 3", (50, 8)),
+    ("STRINGS 4", (50, 8)), ("E.ORGAN 2", (16, 0)), ("E.ORGAN 4", (16, 0)), ("E.ORGAN 6", (16, 0)),
+    ("E.ORGAN 8", (17, 0)), ("E.ORGAN 9", (16, 0)), ("E.ORGAN 10", (16, 0)), ("E.ORGAN 11", (17, 0)),
+    ("E.ORGAN 12", (17, 0)), ("E.ORGAN 13", (17, 0)), ("SOFT TP 1", (56, 0)), ("SOFT TP 3", (56, 0)),
+    ("TP / TRB 1", (57, 0)), ("TP / TRB 2", (57, 0)), ("TP / TRB 3", (57, 0)), ("TP / TRB 4", (57, 0)),
+    ("TP / TRB 5", (57, 0)), ("TP / TRB 6", (57, 0)), ("SAX 1", (65, 0)), ("SAX 2", (66, 0)),
+    ("SAX 3", (67, 0)), ("SAX 5", (65, 0)), ("BRASS 1", (61, 0)), ("BRASS 2", (61, 0)),
+    ("BRASS 3", (61, 8)), ("BRASS 4", (61, 8)), ("BRASS 5", (61, 0)), ("ORCHE HIT", (55, 0)),
+)
+assert len(CM32P_SET) == 64
+
+
+def aliased_tone(program, bank, gsmap):
+    """VARIATIONS entry: another tone's voice -- `program` on `bank` read in
+    map `gsmap` (map_bank: its key, or the capital) -- note by note (its router)."""
+    def pick(note, _p=program, _b=bank, _m=gsmap):
+        _k = map_bank(_p, _b, _m)
+        return property_class_for_note(VariationProgram(_p, _k) if _k else _p, note)
+    return pick
+
+
+for _i, (_nm, (_tp, _tb)) in enumerate(CM32P_SET):
+    VARIATION_NAMES[(_i, 126)] = _nm
+    VARIATIONS[(_i, 126)] = aliased_tone(_tp, _tb, 1)
+    VARIATION_TRIM_DB[(_i, 126)] = None      # (its tone's: set below, once map_bank is)
+
 # GS 125.9 "Burst Noise": a hiss and low bursts, fitted to GeneralUser's own
 # (tonelib.SfxBurstNoiseProperties); at the SFX set's level until levelled
 from tonelib import SfxBurstNoiseProperties as _SBN
@@ -2760,6 +2802,8 @@ def map_bank(program, bank, gsmap):
     `gsmap` (CC32). 0 is the capital tone."""
     if not bank or gsmap not in MAP_NAMES:
         return bank
+    if gsmap == 1 and bank in (126, 127):
+        return bank          # (the SC-55 map's CM-64 banks: the CM-32P's 126, the MT-32's 127 -- SC-8850 OM p.186)
     p = int(program) & 0x7F
     if (p, bank) not in MAP_NAMES[gsmap]:
         return 0
@@ -2773,6 +2817,13 @@ def map_bank(program, bank, gsmap):
                 return own
         return 0
     return bank
+
+
+# ...the CM-32P's tones' trims (bank 126, above): each its SC-55 map tone's
+for _i, (_nm, (_tp, _tb)) in enumerate(CM32P_SET):
+    _tk = map_bank(_tp, _tb, 1)
+    VARIATION_TRIM_DB[(_i, 126)] = (VARIATION_TRIM_DB.get((_tp, _tk), PROGRAM_TRIM_DB.get(_tp, 0.0)) if _tk
+                                   else PROGRAM_TRIM_DB.get(_tp, 0.0))
 
 
 def _map_norm(name):

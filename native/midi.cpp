@@ -287,6 +287,10 @@ struct Parsed {
     // THE DRUM INSTRUMENTS' OWN (dedit: GS_DRUM_NRPN), in message order: the
     // channel (-1 every one), key (-1 a reset), parameter (0 pitch, 1 level,
     // 2 pan, 3 reverb, 4 chorus, 5 delay) and value (pitch about 0)
+    // THE USER DRUM SETS (parse_gs_user_drum: 21 dp kk vv): (set 0/1, key) ->
+    // its parameters as sent, by number (1 play note ... C source note); the
+    // whole file's, as Python's uset
+    std::map<std::pair<int, int>, std::map<int, int>> uset;
     struct DEdit {
         int ch;
         double t;
@@ -807,6 +811,36 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         }
         msgs.swap(ex);
     }
+    // THE CM-64 SOUND MAP (blockrender.CM64, TUNING_CM64=1): "Init CM-64"'s
+    // messages before the file's (cm64_init: each part's bank, its SC-55
+    // map, program, level, pan, sends and bend range 12), and every pan a
+    // CM-64's, mirrored (cm64_pan); its own exclusives change nothing, below
+    const char *cm64e = getenv("TUNING_CM64");
+    const bool cm64 = cm64e && !strcmp(cm64e, "1");
+    if (cm64) {
+        static const int PARTS[16][3] = {{127, 0, 64}, {127, 68, 54}, {127, 48, 54}, {127, 95, 54}, {127, 78, 54},
+                                         {127, 41, 18}, {127, 3, 91}, {127, 110, 1}, {127, 122, 127}, {0, 127, 64},
+                                         {126, 27, 64}, {126, 29, 81}, {126, 0, 64}, {126, 37, 99}, {126, 13, 27},
+                                         {126, 46, 45}};
+        auto pan = [](int v) { return std::max(0, std::min(127, 128 - v)); };
+        std::vector<Msg> ex;
+        for (int ch = 0; ch < 16; ch++) {
+            auto cc = [&](int c, int v) { ex.push_back(Msg{0, 0xB0 | ch, c, v, 0, {}}); };
+            if (ch != 9) {
+                cc(0, PARTS[ch][0]);
+                cc(32, 1);
+            }
+            ex.push_back(Msg{0, 0xC0 | ch, PARTS[ch][1], 0, 0, {}});
+            cc(7, 100); cc(10, pan(PARTS[ch][2])); cc(91, 64); cc(93, 0);
+            cc(101, 0); cc(100, 0); cc(6, 12); cc(38, 0); cc(101, 127); cc(100, 127);
+        }
+        for (Msg m : msgs) {
+            if ((m.status & 0xF0) == 0xB0 && m.d0 == 10)
+                m.d1 = pan(m.d1);
+            ex.push_back(m);
+        }
+        msgs.swap(ex);
+    }
 
     long long tempo = 500000;
     double t = 0.0;
@@ -941,6 +975,16 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         efx_cvv[src] = v;
         P.efx.push_back(Parsed::Efx{t, 6, src, v});
     };
+    if (cm64)                               // (the CM-64 map's mod wheel depth, each part's matrix: 4 cents)
+        for (int ch = 0; ch < 16; ch++) {
+            auto mi = cmx.find(ch);
+            if (mi == cmx.end()) {
+                mi = cmx.emplace(ch, Cmx()).first;
+                mi->second.reset();
+            }
+            mi->second.set(0, 4, 4.0);
+            cmx_upd(t, ch);
+        }
     for (const Msg &m : msgs) {
         seq++;
         double delta = m.tick > 0 ? m.tick * (tempo * 1e-6 / tpb) : 0.0;
@@ -1187,13 +1231,20 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                     cmx_upd(t, pc);
                     continue;
                 }
+                // A USER DRUM SET's key (21 dp kk vv: set p, its parameter d):
+                // another set's key and its own settings (user_drum), the file's whole
+                if (d[4] == 0x21 && (d[5] >> 4) <= 1 && (d[5] & 0x0F) >= 1 && (d[5] & 0x0F) <= 12) {
+                    P.uset[std::make_pair(d[5] >> 4, (int)d[6])][d[5] & 0x0F] = d[7];
+                    continue;
+                }
                 // A DRUM MAP's SETUP (41/51 mp kk vv): every channel of its port
                 // playing the map, as its drum instruments' edits
                 if ((d[4] == 0x41 || d[4] == 0x51) && (d[5] >> 4) <= 1) {
-                    static const int PAR[10] = {-1, 0, 1, -2, 2, 3, 4, -2, -2, 5};   // (note, level, group, pan...)
+                    // (note, level, group, pan, sends, the receive switches: the
+                    // song's dst parameters -- 0 pitch, 1 level, 2 pan, 3-5 the sends,
+                    // 6 rx note on, 7 the exclusive group, 8 rx note off)
+                    static const int PAR[10] = {-1, 0, 1, 7, 2, 3, 4, 8, 6, 5};
                     int pn = d[5] & 0x0F, par = pn < 10 ? PAR[pn] : -1;
-                    if (par == -2)
-                        return -4;      // (its exclusive group, its receive switches: Python's)
                     if (par >= 0) {
                         int key = d[6], v = par == 0 ? d[7] - d[6] : d[7], mp2 = d[5] >> 4;
                         int base = d[4] == 0x51 ? 16 : 0;
@@ -1214,6 +1265,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                     continue;
                 }
             }
+            if (cm64 && d.size() >= 3 && d[0] == 0x41 && d[2] == 0x16)
+                continue;               // (the CM-64's own -- the MT-32 family's, 16H: changes nothing, as on a Sound Canvas)
             if (!(lvl || gs))
                 return -4;              // any other exclusive: not a GM file's
             if (gs && !seen_note) {     // (a GS reset: the setup back to none)
@@ -1530,6 +1583,21 @@ extern "C" {
 // THE DRUM INSTRUMENTS' OWN (dedit): edit i's channel, key, parameter, value
 // (iv) and time; the count
 int nv_midi_n_dedit(void *p) { return (int)((nv::Parsed *)p)->dedit.size(); }
+// USER DRUM SET s's key (0 or 1: GS's sets 65 and 66, programs 64 and 65):
+// its parameters by number (iv[1..12]) and a bit a parameter set, 0 none
+int nv_midi_user_drum(void *p, int set, int key, int *iv)
+{
+    const auto &u = ((nv::Parsed *)p)->uset;
+    auto it = u.find(std::make_pair(set, key));
+    if (it == u.end())
+        return 0;
+    int m = 0;
+    for (const auto &kv : it->second) {
+        m |= 1 << kv.first;
+        iv[kv.first] = kv.second;
+    }
+    return m;
+}
 void nv_midi_dedit(void *p, int i, int *iv, double *t)
 {
     const auto &e = ((nv::Parsed *)p)->dedit[i];

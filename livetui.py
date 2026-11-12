@@ -92,10 +92,11 @@ def built_variations(p):
     """The GS variations under program p that are built (patch_map.VARIATIONS),
     in bank order: the ones a picker offers. Only GS's own (VARIATION_NAMES) --
     not a voice's internal bank (107.9, the taishogoto's drone string) -- and
-    not bank 127, the MT-32 set: another instrument's tones on the same
-    numbers, which the picker lists as a section of its own (mt32_tones)."""
+    not banks 127 and 126, the MT-32 set and the CM-32P's: another
+    instrument's tones on the same numbers, which the picker lists as
+    sections of their own (mt32_tones, cm32p_tones)."""
     return sorted(v for (q, v) in PMAP.VARIATIONS
-                  if q == p and v < 127 and (q, v) in PMAP.VARIATION_NAMES)
+                  if q == p and v < 126 and (q, v) in PMAP.VARIATION_NAMES)
 
 
 def map_tones():
@@ -115,6 +116,16 @@ def mt32_tones():
     for i, (nm, to) in enumerate(getattr(PMAP, "MT32_SET", ())):
         plays = ("kit key %d" % to[1]) if isinstance(to, tuple) else gm_label(to)
         out.append((i, nm, plays))
+    return out
+
+
+def cm32p_tones():
+    """[(program, CM-32P tone, what it plays)] of bank 126 (patch_map.CM32P_SET:
+    the CM-64's PCM half, as the Sound Canvas's SC-55 map plays it)."""
+    out = []
+    for i, (nm, (tp, tb)) in enumerate(getattr(PMAP, "CM32P_SET", ())):
+        k = PMAP.map_bank(tp, tb, 1)
+        out.append((i, nm, gm_label(tp, k)))
     return out
 
 
@@ -176,6 +187,12 @@ def patch_tree():
                kids=[dict(label=row(i, 127, nm, "(plays %s)" % plays), pick=(False, i, 127, "mt32"))
                      for i, nm, plays in tones[8 * k:8 * k + 8]])
           for k in range(len(tones) // 8)]
+    # ...and THE CM-64's PCM HALF, the CM-32P (bank 126): its 64 tones, by eight
+    pcm = cm32p_tones()
+    cm = [dict(label="%3d-%-3d %s ..." % (8 * k, 8 * k + 7, pcm[8 * k][1]),
+               kids=[dict(label=row(i, 126, nm, "(plays %s)" % plays), pick=(False, i, 126, "cm32p"))
+                     for i, nm, plays in pcm[8 * k:8 * k + 8]])
+          for k in range(len(pcm) // 8)]
     # (a map's own copy of a set -- the SC-88 Pro's, kept before the SC-8850
     # revised it -- is the set's number in that standard: kit_in_map picks it)
     kits = [dict(label="%3d %s" % (k, PM.drum_set_name(k)), pick=(True, k, 0, None))
@@ -187,6 +204,7 @@ def patch_tree():
                         crumb="Level %d %s" % (m, SC_LEVELS[m]),
                         kids=families("sc%d" % m, sc(m))) for m in sorted(SC_LEVELS)]),
         dict(label="MT-32 / CM-32L        its 128 tones (bank 127)", crumb="MT-32", kids=mt),
+        dict(label="CM-64 PCM (CM-32P)    its 64 tones (bank 126)", crumb="CM-32P", kids=cm),
         dict(label="Drum kits             %d sets" % len(kits), crumb="Drum kits", kids=kits)])
 
 
@@ -797,6 +815,8 @@ class TUI:
                 s["std"] = std
         if delta is not None and s.get("std") == "mt32" and not s.get("drums"):
             s["bank"] = 127
+        if delta is not None and s.get("std") == "cm32p" and not s.get("drums"):
+            s["bank"] = 126             # (the CM-32P's tones stay the CM-32P's)
         if drums is not None:
             s["drums"] = drums
             if program is not None:

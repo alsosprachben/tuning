@@ -1329,6 +1329,8 @@ double nv_song_string_free(void *s, long long ch, int note, double on, const dou
 int nv_song_pitch_level(void *s, int index, int effort_tilt, double *out);
 /* ...an 'indian' class's at the secondary tuning (indian 1: FREQ_E's) */
 int nv_song_pitch_level_k(void *s, int index, int effort_tilt, int indian, double *out);
+/* ...whether a note is received (0: a drum key its set or the drum setup turns off) */
+int nv_song_received(void *s, int index);
 /* ...a class's sounding octaves into a melodic note's pitch (after its meend) */
 int nv_song_pitch_level_ks(void *s, int index, int effort_tilt, int indian, double so, double *out);
 /* ...the note's class's own pitch: its sounding octaves and its scale */
