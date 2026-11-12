@@ -1516,6 +1516,52 @@ int nv_host::open(int argc, char **argv)
         }
         return true;
     };
+    // THE EASTERN TUNING, switched (live.set_eastern): a bad spec refused
+    // before anything moves; each Indian voice's table and cache let go, and
+    // the parts playing one built again
+    east_now = east;
+    east_switch = [&](const std::string &spec,
+                      const std::function<void(size_t, int, bool, int, void *)> &give) -> bool {
+        if (spec == east)
+            return false;
+        if (!spec.empty()) {
+            double rf[128], sw0[12];
+            int rh[128], sa0 = -1, n0_ = 0;
+            if (nv_raga_info(spec.c_str(), 0.0, rf, rh, &sa0, sw0, &n0_))
+                return false;
+        }
+        auto indian = [&](int p) {
+            int cq = E.cmap[128 * (p & 127) + 60];
+            return cq >= 0 && ((const NoteClass *)E.classes[cq].data())->indian;
+        };
+        east = spec;
+        ptab.assign(128, std::vector<double>());
+        psa.assign(128, -1);
+        pnsw.assign(128, 0);
+        {
+            std::lock_guard<std::mutex> lk(cmu);
+            for (auto it = caches.begin(); it != caches.end();) {
+                if (!(it->first & 128) && indian(it->first & 127)) {
+                    cache_grave.push_back(it->second);
+                    it = caches.erase(it);
+                } else
+                    ++it;
+            }
+        }
+        {
+            std::lock_guard<std::mutex> lk(bmu);
+            east_now = spec;
+        }
+        for (size_t i = 0; i < pats.size(); i++) {
+            const PartAt &pa = pats[i];
+            if (pa.gone || pa.drums || !indian(pa.posted))
+                continue;
+            void *c = build(pa.posted, false, pa.posted_var);
+            if (c)
+                give(i, pa.posted, false, pa.posted_var, c);
+        }
+        return true;
+    };
     // --room-at=S:NAME[,S:NAME...] (--test): a room switched to at the block
     // second S falls in, before its events -- live.set_room's, its builder in step
     {
@@ -1771,9 +1817,10 @@ void nv_host::start()
             {
                 std::unique_lock<std::mutex> lk(bmu);
                 bcv.wait_for(lk, std::chrono::milliseconds(100),
-                             [&] { return !breq.empty() || !room_req.empty() || !tuner_req.empty() || !add_req.empty() || g_stop; });
+                             [&] { return !breq.empty() || !room_req.empty() || !tuner_req.empty() || east_req_set
+                                          || !add_req.empty() || g_stop; });
                 rq.swap(breq);
-                builder_busy = !rq.empty() || !room_req.empty() || !tuner_req.empty() || !add_req.empty();
+                builder_busy = !rq.empty() || !room_req.empty() || !tuner_req.empty() || east_req_set || !add_req.empty();
             }
             nv_part_room_reap(part);                    // (an old tail, let go off the audio thread)
             std::string rname;
@@ -1823,6 +1870,30 @@ void nv_host::start()
                                               std::chrono::steady_clock::now() - t0).count()) + " ms");
                 else if (tn != tuner_now)
                     note("tuner " + tn + ": not one nvlive can make");
+            }
+            std::string es;                             // THE EASTERN TUNING (livetui's E), after a tuner
+            bool eset = false;
+            {
+                std::lock_guard<std::mutex> lk(bmu);
+                if (east_req_set) {
+                    es.swap(east_req);
+                    east_req_set = false;
+                    eset = true;
+                }
+            }
+            if (eset) {
+                auto t0 = std::chrono::steady_clock::now();
+                int nb_ = 0;
+                bool ok = east_switch(es, [&](size_t i_, int p_, bool d_, int v_, void *c_) {
+                    std::lock_guard<std::mutex> lk(bmu);
+                    bdone.push_back(std::make_pair(Req{i_, p_, d_, v_}, c_));
+                    nb_++;
+                });
+                if (ok)
+                    note("eastern " + (es.empty() ? std::string("off") : es) + ": " + std::to_string(nb_)
+                         + " part(s) built again in "
+                         + std::to_string((int)std::chrono::duration<double, std::milli>(
+                                              std::chrono::steady_clock::now() - t0).count()) + " ms");
             }
             std::vector<PartSpec> adds;                 // PARTS ADDED (layer, split, the session's)
             {
@@ -1893,6 +1964,34 @@ void nv_host::set_tuner(const std::string &name)
         tuner_asked = name;
     }
     bcv.notify_one();
+}
+
+// the Eastern tuning asked for (the panel's E, a preset's): built on the
+// builder, as a tuner is -- a bad spec said and refused there
+void nv_host::set_eastern(const std::string &spec)
+{
+    {
+        std::lock_guard<std::mutex> lk(bmu);
+        east_req = spec;
+        east_req_set = true;
+        east_asked = spec;
+    }
+    bcv.notify_one();
+}
+
+// does a part on this voice play the Eastern tuning now (live.tuner_for's
+// test: an Indian instrument, not a drum set, the rig's tuner no raga)
+bool nv_host::east_part(int prog, bool drums)
+{
+    std::string e;
+    {
+        std::lock_guard<std::mutex> lk(bmu);
+        e = east_now;
+    }
+    if (e.empty() || drums || raga_sa >= 0)
+        return false;
+    int cq = E.cmap[128 * (prog & 127) + 60];
+    return cq >= 0 && ((const NoteClass *)E.classes[cq].data())->indian;
 }
 
 // ---- what the panel and a GUI change (the panel's hooks call these) ----
@@ -2404,7 +2503,7 @@ int nv_host::building()
     }
     std::lock_guard<std::mutex> lk(bmu);
     return n + (int)breq.size() + (int)bdone.size() + (room_req.empty() ? 0 : 1) + (tuner_req.empty() ? 0 : 1)
-           + (int)add_req.size() + (int)add_done.size();
+           + (east_req_set ? 1 : 0) + (int)add_req.size() + (int)add_done.size();
 }
 
 // ---- THE C API (host.h): over nv_host, as nvlive drives it ----

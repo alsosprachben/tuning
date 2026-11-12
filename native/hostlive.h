@@ -104,6 +104,8 @@ void nv_part_amp_async(void *h);
 void nv_tcache_leslie(void *h, const double *L, int n);
 int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, int *have);
 int nv_raga_info(const char *spec, double sa_hz, double *out, int *have, int *sa_note, double *sw, int *nsw);
+extern "C" const char *nv_raga_system_name(int i);
+extern "C" const char *nv_raga_name(int i, int *n, const int **idx);
 void nv_tcache_set_raga(void *h, int sa, const double *sw, int nsw);
 void nv_part_room(void *h, void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
 void *nv_room_new(void *cn, void *cp, void *cf, const float *ir, long n, const float *mir, long m, int frames);
@@ -567,6 +569,15 @@ struct nv_host {
     std::string tuner_req, tuner_now, tuner_asked;   // (asked: the panel's, for the session)
     std::atomic<bool> retune_bank{false};             // (the free strings' bank too, at the next swap)
     void set_tuner(const std::string &name);
+    // THE EASTERN TUNING, switched while playing (livetui's E: live.set_eastern):
+    // the parts whose voice is an Indian instrument built again in it -- or
+    // back in their own tuner, the spec empty -- on the builder; the rest
+    // untouched; notes sounding keep the tuning they were struck in
+    std::function<bool(const std::string &spec, const std::function<void(size_t, int, bool, int, void *)> &give)> east_switch;
+    std::string east_req, east_now, east_asked;      // (east_now: the builder's, under bmu)
+    bool east_req_set = false;
+    void set_eastern(const std::string &spec);
+    bool east_part(int prog, bool drums);             // does this voice play the Eastern tuning now
     // THE SCENE (live.scene_from): each channel's captured controls as they
     // reached the part (the audio thread's), an event put past the routes
     std::map<std::pair<int, int>, int> chanlatch;

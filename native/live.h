@@ -76,6 +76,15 @@ struct Template {
     double grate = 0.0;
     // A DISTANCE OF ITS OWN (t["send"]: its class's reverb_distance), NAN none
     double send = NAN;
+    // A HELD ROLL (t["roll"]: percussion_map.RollSteps), struck as it goes:
+    // its gesture's kind (4 a hand roll, 7 a machine roll; 0 none) and
+    // fields, its one hit (roll_hit[0]), that hit's level in the template
+    // and its kit key
+    int roll_kind = 0;
+    std::vector<double> roll_par;
+    std::vector<Template> roll_hit;
+    double roll_lv0 = 0.0;
+    int roll_key = -1;
 };
 
 }  // namespace live

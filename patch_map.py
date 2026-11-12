@@ -2734,6 +2734,15 @@ VARIATION_TRIM_DB[(35, 3)] = PROGRAM_TRIM_DB.get(35, 0.0) + 9.5
 #     3", "Acid Bass")
 from gs_map_names import MAP_NAMES
 MAP_LABELS = {1: "SC-55", 2: "SC-88", 3: "SC-88Pro", 4: "SC-8850"}
+# ...and a built tone of ours no SC-55 page names (the SC-88's 123.4 Kitty
+# and 123.5 Growl, the SC-88 Pro's 125.10 Calculating) takes the first map's
+# name that has it, so a picker offers it (live played it by bank select only)
+for (_p, _b) in list(VARIATIONS):
+    if 0 < _b < 127 and (_p, _b) not in VARIATION_NAMES:
+        for _m in (2, 3, 4):
+            if (_p, _b) in MAP_NAMES[_m]:
+                VARIATION_NAMES[(_p, _b)] = MAP_NAMES[_m][(_p, _b)]
+                break
 MAP_OTHER = {
     1: {(3, 8), (4, 16), (5, 16), (62, 16), (63, 16)},
     2: {(4, 8), (39, 8)},

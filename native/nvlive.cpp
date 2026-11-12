@@ -6,7 +6,7 @@
 //                       [--drum-set=P | --no-drums] [--split=N [--split-channel=C] [--split-transpose=T]]
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
 //                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
-//                       [--tuner=NAME [--a=HZ | --c=HZ]] [--eastern=SPEC]
+//                       [--tuner=NAME [--a=HZ | --c=HZ]] [--eastern=SPEC] [--eastern-at=S:SPEC]
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
 //                       [--rt] [--reg-async] [--async] [--govern] [--paced] [--build-async] [--tuner-at=S:NAME] [--preset-at=S:NAME] [--metronome=BPM[:RING]]
 //
@@ -229,6 +229,19 @@ int nv_host::run(int argc, char **argv)
                             nb_++;
                         });
                         fprintf(stderr, "nvlive: tuner %s at block %lld (%d patch(es))\n", ta.substr(c + 1).c_str(), b, nb_);
+                    }
+                }
+                {                                       // --eastern-at=S:SPEC: the Eastern tuning switched to, in step ("off": none)
+                    std::string ea = opt(argc, argv, "eastern-at", "");
+                    size_t c = ea.find(':');
+                    if (c != std::string::npos && (long long)(atof(ea.substr(0, c).c_str()) * SR) / BLK == b) {
+                        std::string sp = ea.substr(c + 1);
+                        int nb_ = 0;
+                        east_switch(sp == "off" ? std::string() : sp, [&](size_t i_, int p_, bool d_, int v_, void *c_) {
+                            swap(i_, p_, d_, v_, c_);
+                            nb_++;
+                        });
+                        fprintf(stderr, "nvlive: eastern %s at block %lld (%d patch(es))\n", sp.c_str(), b, nb_);
                     }
                 }
                 if (room_want) {
@@ -610,6 +623,9 @@ int nv_host::run(int argc, char **argv)
             H.pick = [&](int sp) { pick(sp); };
         H.tuner = tuner_now;
         H.set_tuner = [&](const std::string &nm) { set_tuner(nm); };
+        H.eastern = east_now;
+        H.set_eastern = [&](const std::string &sp) { set_eastern(sp); };
+        H.east_part = [&](int prog, bool dr) { return east_part(prog, dr); };
         // THE PARTS (livetui's PARTS pane)
         H.parts = [&]() { return part_rows(); };
         // THE SYNTH (livetui's synth pane)
@@ -750,9 +766,10 @@ int nv_host::run(int argc, char **argv)
         };
         auto saved_at = std::chrono::steady_clock::now();
         H.refresh = [&]() {
-            {                                           // (a tuner switched to: its name)
+            {                                           // (a tuner switched to: its name; the Eastern tuning's)
                 std::lock_guard<std::mutex> lk(bmu);
                 H.tuner = tuner_now;
+                H.eastern = east_now;
             }
             // THE SESSION, saved as it changes: at most every 2 s, on this
             // thread (livetui's _loop)
@@ -1067,6 +1084,17 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
             E.routes = rs;
             routes_replaced = all;
         }
+        // ...THE EASTERN TUNING (live.apply_preset: before the parts it tunes)
+        const sess::J *ea = setup.get("eastern");
+        if (ea && (ea->is(sess::J::STR) || ea->is(sess::J::NUL))) {
+            std::string want = ea->is(sess::J::STR) ? ea->s : std::string(), cur;
+            {
+                std::lock_guard<std::mutex> lk(bmu);
+                cur = east_req_set ? east_asked : east_now;
+            }
+            if (want != cur)
+                set_eastern(want);
+        }
         // ...THE TUNER (the first part's, live's per part; nvlive's one)
         const sess::J *ps = setup.get("parts");
         const sess::J *tn = ps && ps->is(sess::J::ARR) && !ps->a.empty() ? ps->a[0].get("tuner") : nullptr;
@@ -1277,6 +1305,10 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
         j.o[KEYS[i]] = sess::real(gval[i]);
     j.o["mod_rate"] = sess::real(gval[9]);
     j.o["std_map"] = sess::integer(default_map);
+    {                                           // the rig's Eastern tuning (live.preset_from's: "" off)
+        std::lock_guard<std::mutex> lk(bmu);
+        j.o["eastern"] = sess::str(east_req_set ? east_asked : east_now);
+    }
     {                                           // the on-screen controls (live's screen_controls, as dicts)
         sess::J cs = sess::arr();
         for (const auto &c : screen_controls) {

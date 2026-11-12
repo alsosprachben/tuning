@@ -820,10 +820,21 @@ STROKES = {
     # TELEPHONE 2: an electronic trill, two tones a minor third apart at 20 a
     # second, for 0.8 s
     'Telephone 2': {"pattern": tuple((0.025 * i, 0.0, 3.0 * (i % 2), 0.025) for i in range(32))},
-    # THE JUNGLE ROLLS: the kick and the snare rolled as Standard's snare roll
-    # (percussion_map.PERCUSSION_ROLL[25]) is, while the key is held
-    'Jungle Kick Roll': {"roll": (13.5, 6, 0.009, 3.0, 1.5, 0.08, 2.0, 0.3, -14.0, -4.0, 0.0)},
-    'Jungle Snare Roll': {"roll": (13.5, 6, 0.009, 3.0, 1.5, 0.08, 2.0, 0.3, -14.0, -4.0, 0.0)},
+    # THE JUNGLE ROLLS: a sampler's, not a drummer's -- the break's kick or
+    # snare re-triggered by the sequencer while the key is held, 32nds of a
+    # 170 bpm break (~23 a second, Ben's pick): one clean hit a step, even,
+    # each at the note's velocity, no hands, no buzz, no accents (Standard's
+    # hand roll, PERCUSSION_ROLL[25], had been theirs: a kick with stick
+    # bounces) -- STEADY AND SWELLING, as the 909 roll does (percussion_map.
+    # _build_roll): a key does not know the bar, so a rate that doubled on a
+    # clock would step off the beat (Ben: "steady roll that swells, accented
+    # last hit"); the hits rising -12 to -3 dB across the roll, +-1 dB each,
+    # one in ten flammed 18 ms after at -6 dB, the closing hit at 0. (No
+    # first accent: that is the hand roll's, Standard's and Ethnic's). Fields:
+    # rate, swell s, its first dB and its top, scatter, a flam's chance, delay
+    # and dB, the least span, the closing hit's dB
+    'Jungle Kick Roll': {"build": (23.0, 2.0, -12.0, -3.0, 1.0, 0.1, 0.018, -6.0, 0.3, 0.0)},
+    'Jungle Snare Roll': {"build": (23.0, 2.0, -12.0, -3.0, 1.0, 0.1, 0.018, -6.0, 0.3, 0.0)},
     'Bounce': {"pattern": _BOUNCE},
     'Reverse Bounce': {"pattern": _REV_BOUNCE},
 }

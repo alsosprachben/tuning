@@ -69,15 +69,14 @@ sys.path.insert(0, HERE)
 
 MAGIC = b"NVX1"
 
-# VARIATIONS NOT LIVE YET: nvlive refuses them (a 0 VLIV record) -- 117:24,
-# Jngl SD Roll: its velocity probe (live.Patch._vel_dependent) rolls about
-# 80 bounces a second, each a whole snare stroke (21,924 rows), past 2.5 GB
-# on its own; refused until the roll is cheaper (bounces sharing a ring, or
-# quiet bounces with fewer partials -- Ben's call)
+# VARIATIONS NOT LIVE YET: nvlive refuses them (a 0 VLIV record) -- none now.
+# (117:24, Jngl SD Roll, was: its velocity probe rolled a whole break snare,
+# 21,924 rows, at every step, past 2.5 GB; a held roll is struck as it goes
+# since -- one hit kept, live.Patch's t["roll"] -- its velocity its level)
 # (125:10, the Morse keyboard, played since: a melodic cache whose class
 # borrows a kit key's strokes gives its template's song the sets' tables,
 # nv_tcache_stroke_kits)
-LIVE_REFUSED = {(117, 24)}
+LIVE_REFUSED = set()
 
 
 def main(argv):
@@ -486,15 +485,17 @@ def main(argv):
         _nb = b"".join(struct.pack("<i", len(_s)) + _s
                        for _s in (PCM.drum_set_name(_k).encode("utf-8") for _k in mk_ids))
         f.write(b"MKNM" + struct.pack("<i", len(_nb)) + _nb)
-        # VNAM: the variations a picker offers (livetui's: GS's own tones and the
-        # maps' -- not the MT-32 set's, bank 127), each its program, its key
-        # (map x 128 + bank) and its name (a map's own with its map, gm_label's)
+        # VNAM: the variations a picker offers (livetui's: GS's own tones, the
+        # maps' and the MT-32 set's, bank 127 -- its own section there,
+        # mt32_tones), each its program, its key (map x 128 + bank) and its
+        # name (a map's own with its map, gm_label's; the MT-32's marked so)
         vn = []
         for (_p, _v) in sorted(PM.VARIATIONS):
-            if _v == 127 or (_p, _v) not in PM.VARIATION_NAMES:
+            if (_p, _v) not in PM.VARIATION_NAMES:
                 continue
             _nm = PM.VARIATION_NAMES[(_p, _v)] + (" (%s)" % PM.MAP_LABELS[_v >> 7]
-                                                    if _v >> 7 in PM.MAP_LABELS else "")
+                                                    if _v >> 7 in PM.MAP_LABELS else
+                                                    " (MT-32)" if _v == 127 else "")
             _b = _nm.encode("utf-8")
             vn.append(struct.pack("<iii", _p, _v, len(_b)) + _b)
         vb2 = struct.pack("<i", len(vn)) + b"".join(vn)
@@ -506,7 +507,7 @@ def main(argv):
             import live as _LV
             vl = []
             for (_p, _v) in sorted(PM.VARIATIONS):
-                if _v == 127 or (_p, _v) not in PM.VARIATION_NAMES:
+                if (_p, _v) not in PM.VARIATION_NAMES:
                     continue
                 rec = [0] * 10
                 _vc = PM.VARIATIONS[(_p, _v)]

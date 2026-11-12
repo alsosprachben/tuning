@@ -1411,6 +1411,36 @@ def _snare_roll(note, on, off, rate, bounces, bounce_s, bounce_db, hand_db, jit,
     return out
 
 
+def _build_roll(note, on, off, rate, swell_s, lo_db, hi_db, scatter_db, flam_p, flam_s,
+                flam_db, min_s, last_db):
+    """(start, end, level, pitch) for a held MACHINE roll that SWELLS: a
+    sampler's hit re-triggered by the sequencer, as long as the key is held
+    -- MEASURED on three takes (~/Documents/refs/jungle_roll: a UK hardcore
+    roll, a 130 bpm snare build, a 909 roll): no stick, so no bounces and
+    no hands; the hits even, the odd one flammed (the 909's, a grace hit
+    flam_s after). Their builds double the rate on the bar line, which a
+    key cannot know, so the 909's way: a steady rate and a crescendo (Ben:
+    "steady roll that swells, accented last hit"). Each hit's dB rises from
+    lo_db to hi_db over the first swell_s seconds -- from the press, as live
+    must, not knowing the key-up -- and holds there, +-scatter_db, a flam
+    at flam_db re it with chance flam_p; and the closing hit, accented, the
+    step that reaches the lift."""
+    import random
+    rng = random.Random(note * 7919 + int(round(on * 1e4)))
+    span = max(min_s, off - on)
+    out = []
+    t = 0.0
+    while t + 1.0 / rate < span:            # (the closing hit is the step that reaches the lift)
+        db = lo_db + (hi_db - lo_db) * min(1.0, t / swell_s) + rng.uniform(-scatter_db, scatter_db)
+        out.append((on + t, on + t + 0.8 / rate, 10.0 ** (db / 40.0), 1.0))
+        if rng.uniform(0.0, 1.0) < flam_p:
+            out.append((on + t + flam_s, on + t + flam_s + 0.8 / rate, 10.0 ** ((db + flam_db) / 40.0), 1.0))
+        t += 1.0 / rate
+    out.append((on + t, on + t + 0.8 / rate, 10.0 ** (last_db / 40.0), 1.0))
+    out.sort()
+    return out
+
+
 def _impact_train(note, on, rate, secs, fall_db, jit, scatter_db, strike_db=0.0,
                   side_db=None, side_slope=0.0):
     """(start, end, level, pitch) for a PERCUSSION_TRAIN note: impacts at a
@@ -1702,6 +1732,75 @@ def _pattern(on, strokes):
     return out
 
 
+def roll_of(note, kit=0):
+    """("roll", PERCUSSION_ROLL's fields) or ("build", _build_roll's) where set
+    kit's key rolls while held, else None -- rasp_strokes' own lookup, for
+    live, which strikes a held roll a step at a time (RollSteps)"""
+    tabs = KIT_STROKES.get(kit, {}) if kit in KIT_ONLY else None
+    if tabs is None and note in KITS.get(kit, {}):
+        tabs = KIT_STROKES.get(kit, {})
+
+    def table(name, std):
+        return tabs.get(name, {}).get(note) if tabs is not None else std.get(note)
+    if table("cascade", PERCUSSION_CASCADE) is not None or table("train", PERCUSSION_TRAIN) is not None:
+        return None
+    roll = table("roll", PERCUSSION_ROLL)
+    if roll is not None:
+        return ("roll", tuple(roll))
+    build = tabs.get("build", {}).get(note) if tabs is not None else None
+    return ("build", tuple(build)) if build is not None else None
+
+
+class RollSteps:
+    """A held roll struck as it goes (live): _snare_roll's or _build_roll's
+    gesture a step at a time, from the press, not knowing the key-up -- each
+    step (s from the press, level) as rasp_strokes would place it, the
+    closing stroke when told the key is up. Seeded by the note and the
+    press's sample, so native/slab.cpp's walks the same steps."""
+
+    def __init__(self, kind, par, note, seed):
+        import random
+        self.kind, self.p = kind, tuple(float(x) for x in par)
+        self.rng = random.Random(note * 7919 + int(seed))
+        self.k, self.t = 0, 0.0
+
+    def min_span(self):
+        return self.p[7] if self.kind == "roll" else self.p[8]
+
+    def next(self):
+        """the next stroke's hits [(s, level)] and when the one after falls"""
+        p, r, k, t = self.p, self.rng, self.k, self.t
+        out = []
+        if self.kind == "roll":
+            rate, bounces, bounce_s, bounce_db, hand_db, jit, sc = p[0], int(p[1]), p[2], p[3], p[4], p[5], p[6]
+            base = p[9] if k == 0 else p[8] + (-hand_db if k % 2 else 0.0)
+            for b in range(bounces):
+                tb = t + b * bounce_s * (1.0 + r.uniform(-0.15, 0.15))
+                out.append((tb, 10.0 ** ((base - bounce_db * b + r.uniform(-sc, sc)) / 40.0)))
+            self.k = k + 1
+            self.t = self.k / rate + r.uniform(-jit, jit) / rate
+        else:
+            rate, swell_s, lo, hi, sc, fp, fs, fd = p[:8]
+            db = lo + (hi - lo) * min(1.0, t / swell_s) + r.uniform(-sc, sc)
+            out.append((t, 10.0 ** (db / 40.0)))
+            if r.uniform(0.0, 1.0) < fp:
+                out.append((t + fs, 10.0 ** ((db + fd) / 40.0)))
+            self.k = k + 1
+            self.t = t + 1.0 / rate
+        return out
+
+    def close(self, at):
+        """the closing stroke's hits, the key up at `at` s from the press"""
+        p, r = self.p, self.rng
+        if self.kind == "roll":
+            out = []
+            for b in range(2):
+                tb = at + b * p[2] * (1.0 + r.uniform(-0.15, 0.15))
+                out.append((tb, 10.0 ** ((p[10] - p[3] * b + r.uniform(-p[6], p[6])) / 40.0)))
+            return out
+        return [(at, 10.0 ** (p[9] / 40.0))]
+
+
 def rasp_strokes(note, on, off, rng=None, kit=0):
     """[(on, off, level)] for one scraped note, or None if it is not scraped.
 
@@ -1765,6 +1864,9 @@ def rasp_strokes(note, on, off, rng=None, kit=0):
     roll = table("roll", PERCUSSION_ROLL)
     if roll is not None:
         return _snare_roll(note, on, off, *roll)
+    build = tabs.get("build", {}).get(note) if tabs is not None else None
+    if build is not None:
+        return _build_roll(note, on, off, *build)
 
     voiced = tabs.get("voiced", {}).get(note) if tabs is not None else None
     if voiced is not None:

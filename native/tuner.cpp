@@ -322,6 +322,25 @@ int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, 
 // from middle C up) and the swaras' cents (ragas.swaras, sw[12], *nsw of
 // them): the secondary tuning's and the meend's. sa_hz 0: none. 0, or < 0 as
 // nv_tuning_table's raga specs.
+// THE EASTERN TUNING'S CHOICES (livetui.pick_eastern): system i's name
+// (ragas.SYSTEMS, NULL past the last), and raga i's -- its swaras' count and
+// their indices into its system's twelve (ragas.RAGAS)
+extern "C" const char *nv_raga_system_name(int i)
+{
+    return i >= 0 && i < (int)(sizeof nv::tuner::RAGA_SYSTEMS / sizeof nv::tuner::RAGA_SYSTEMS[0]) ? nv::tuner::RAGA_SYSTEMS[i].name : nullptr;
+}
+
+extern "C" const char *nv_raga_name(int i, int *n, const int **idx)
+{
+    if (i < 0 || i >= (int)(sizeof nv::tuner::RAGAS / sizeof nv::tuner::RAGAS[0]))
+        return nullptr;
+    if (n)
+        *n = nv::tuner::RAGAS[i].n;
+    if (idx)
+        *idx = nv::tuner::RAGAS[i].idx;
+    return nv::tuner::RAGAS[i].name;
+}
+
 int nv_raga_info(const char *spec, double sa_hz, double *out, int *have, int *sa_note, double *sw, int *nsw)
 {
     std::string key = spec;

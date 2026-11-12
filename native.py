@@ -1905,6 +1905,9 @@ def stroke_spec(note, kit):
         return 3, [float(rate), float(secs), float(fall), float(jit), float(sc), float(strike),
                    float(side is not None), float(side or 0.0), float(slope)]
     ro = table("roll", PCM.PERCUSSION_ROLL)
+    bu = tabs.get("build", {}).get(note) if tabs is not None and ro is None else None
+    if bu is not None:
+        return 7, [float(x) for x in bu]
     if ro is not None:
         return 4, [float(x) for x in ro] + [0.0] * (11 - len(ro))
     vo = tabs.get("voiced", {}).get(note) if tabs is not None else None

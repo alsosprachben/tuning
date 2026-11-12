@@ -355,6 +355,13 @@ struct Song {
         const MoogLayer *L;
     };
     std::vector<Mf> mf104;
+    // ...and a REPEAT's own filter row (_prep_delays' _mf_dup): a note whose
+    // pitch or shape rows move (FT slot 12's flags 1 | 14) has each repeat D
+    // samples late read a copy of its row, its pitch and shape rows D / GRID
+    // grid points later -- one a (row, D), appended: row -> (its parent, the
+    // pitch rows' offset, the shape rows')
+    std::map<int, std::array<long long, 3>> mdup;
+    std::map<std::pair<int, long long>, int> mdupk;
     // ...and a channel whose cutoff or resonance moves (_kn_moves): one knob
     // row a channel, class and layer, its knobs at each of the channel's
     // sound controls (_MOOG_KVAR: grid point, knob row)
@@ -385,6 +392,10 @@ struct Song {
         grain_rows.resize(m.grain); mft.resize(m.mft); mkn.resize(m.mkn); mlay.resize(m.mlay);
         mspan.resize(m.mspan); mf104.resize(m.mf);
         mkrow = m.mkrow; mkmove = m.mkmove; mkvar = m.mkvar;
+        for (auto it = mdup.begin(); it != mdup.end();)     // (a repeat's rows: past the mark, gone)
+            it = it->first >= (int)m.mft ? mdup.erase(it) : std::next(it);
+        for (auto it = mdupk.begin(); it != mdupk.end();)
+            it = it->second >= (int)m.mft ? mdupk.erase(it) : std::next(it);
     }
     // ITS GLIDES (_prep_glide_sources, from finish): each note's source key, -1 none
     std::vector<int> glide_src;
@@ -690,6 +701,7 @@ struct Song {
     // A LIVE TEMPLATE's one note (blockrender's markers NO_PART_DRONES,
     // NO_CUT): the pungi's drone and the uilleann's cut are live's own
     bool no_part_drones = false, no_cut = false;
+    bool roll_first = false;        // (ROLL_FIRST: a held roll's live template, its first stroke alone)
     int drones(const NoteClass *const *K)
     {
         if (drones_done)
@@ -1268,7 +1280,8 @@ struct Song {
     // A STRUCK OR SCRAPED GESTURE'S STROKES (percussion_map.rasp_strokes, as
     // _prep_strokes expands them): each drum note whose set's key has a
     // gesture (kind[q]: 1 a rasp, 2 a cascade, 3 an impact train, 4 a roll,
-    // 5 a pattern, 6 a voice's pulses; par[NV_SPAR q..])
+    // 5 a pattern, 6 a voice's pulses, 7 a machine roll that swells;
+    // par[NV_SPAR q..])
     // replaced by its strokes -- each its own onset, end, velocity
     // (max(1, int(velocity x level))), pitch and, past the first, an inner
     // ridge. AND A KEY THAT ALSO STRIKES ANOTHER'S SOUND (key_layers:
@@ -1326,8 +1339,12 @@ struct Song {
                 train(kn, e.on, p, st);
             else if (kd == 4)
                 roll(kn, e.on, e.off, p, st);
+            else if (kd == 7)
+                build(kn, e.on, e.off, p, st);
             else
                 pattern(e.on, p, st);
+            if (roll_first && st.size() > 1)
+                st.resize(1);               // (a held roll's live template: its first hit, ROLL_FIRST)
             for (size_t k = 0; k < st.size(); k++) {
                 Ev x = e;
                 x.on = st[k][0];
@@ -1435,6 +1452,29 @@ struct Song {
             t = k / rate + pyr_uniform(&r, -jit, jit) / rate;
         }
         stroke(pymax(last_t, 0.0), last_db, 2);
+        std::sort(out.begin() + first, out.end());
+    }
+
+    // a held machine roll that swells (_build_roll): (rate, the swell's s,
+    // its first dB and its top, scatter dB, a flam's chance, its delay and
+    // dB, the least span, the closing hit's dB) -- sorted
+    static void build(int note, double on, double off, const double *p, std::vector<std::array<double, 4>> &out)
+    {
+        double rate = p[0], swell_s = p[1], lo_db = p[2], hi_db = p[3], sc = p[4];
+        double flam_p = p[5], flam_s = p[6], flam_db = p[7], last_db = p[9];
+        PyRandom r;
+        pyr_seed(&r, (long long)note * 7919LL + (long long)nearbyint(on * 1e4));
+        double span = pymax(p[8], off - on);
+        size_t first = out.size();
+        double t = 0.0;
+        while (t + 1.0 / rate < span) {         // (the closing hit is the step that reaches the lift)
+            double db = lo_db + (hi_db - lo_db) * pymin(1.0, t / swell_s) + pyr_uniform(&r, -sc, sc);
+            out.push_back({on + t, on + t + 0.8 / rate, pow(10.0, db / 40.0), 1.0});
+            if (pyr_uniform(&r, 0.0, 1.0) < flam_p)
+                out.push_back({on + t + flam_s, on + t + flam_s + 0.8 / rate, pow(10.0, (db + flam_db) / 40.0), 1.0});
+            t += 1.0 / rate;
+        }
+        out.push_back({on + t, on + t + 0.8 / rate, pow(10.0, last_db / 40.0), 1.0});
         std::sort(out.begin() + first, out.end());
     }
 
@@ -1769,6 +1809,7 @@ void nv_song_live_template(void *s, int no_cut, int no_part_drones)
     ((nv::Song *)s)->no_cut = no_cut != 0;
     ((nv::Song *)s)->no_part_drones = no_part_drones != 0;
 }
+void nv_song_roll_first(void *s) { ((nv::Song *)s)->roll_first = true; }
 void nv_song_free(void *s) { delete (nv::Song *)s; }
 
 void nv_song_cc(void *s, long long ch, double t, int cc, int v)
@@ -1982,6 +2023,44 @@ int nv_song_mf104(void *s, int i, long long *r0, long long *r1, const MoogLayer 
     *r0 = g->mf104[i].r0;
     *r1 = g->mf104[i].r1;
     *L = g->mf104[i].L;
+    return 1;
+}
+
+// A REPEAT's filter row (mf104.expand's dup_fx, _prep_delays' _mf_dup): -1
+// where row fx's note has no pitch or shape rows (the repeat keeps fx), else
+// a copy of it -- one a (fx, D), D / mf104.GRID grid points later
+int nv_song_moog_dup(void *s, int fx, long long d)
+{
+    nv::Song *g = (nv::Song *)s;
+    if (fx < 0 || fx >= (int)g->mft.size())
+        return -1;
+    const int fl = (int)(float)g->mft[fx][12];
+    if (!(fl & (1 | 14)))
+        return -1;
+    auto key = std::make_pair(fx, d);
+    auto it = g->mdupk.find(key);
+    if (it != g->mdupk.end())
+        return it->second;
+    const long long gq = d / 128;           // (d // mf104.GRID: d a whole number of them)
+    const int r = (int)g->mft.size();
+    g->mft.push_back(g->mft[fx]);
+    g->mlay.push_back(g->mlay[fx]);
+    g->mspan.push_back(g->mspan[fx]);
+    g->mdup[r] = {fx, fl & 1 ? gq : 0, fl & 14 ? gq : 0};
+    g->mdupk[key] = r;
+    return r;
+}
+
+// ...and whether row r is one: its parent, its pitch rows' offset and its shape rows'
+int nv_song_moog_dup_of(void *s, int r, int *parent, long long *gp, long long *gs)
+{
+    nv::Song *g = (nv::Song *)s;
+    auto it = g->mdup.find(r);
+    if (it == g->mdup.end())
+        return 0;
+    *parent = (int)it->second[0];
+    *gp = it->second[1];
+    *gs = it->second[2];
     return 1;
 }
 

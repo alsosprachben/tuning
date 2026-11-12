@@ -33,6 +33,7 @@ double nv_midi_total(void *p);
 void nv_midi_song(void *p, void *song, const double *trim);
 void *nv_song_new(void);
 void nv_song_live_template(void *s, int no_cut, int no_part_drones);
+void nv_song_roll_first(void *s);
 void nv_song_free(void *s);
 void nv_song_tuning(void *s, long long ch, double t, const double *freq);
 void nv_song_finish(void *s, double total);
@@ -519,6 +520,12 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     const nv::live::Kits *stk = !kit && g_tmpl_stk && pc_ && pc_->sfx_prog >= 0 ? g_tmpl_stk : nullptr;
     if (kit || stk) {
         const nv::live::Kits *kt = kit ? kit : stk;
+        // (A HELD ROLL's template: its first hit alone -- live._raw_template's
+        // ROLL_FIRST; the rest struck as the key is held)
+        const int rq = kit ? 128 * program + note
+                           : kc && kc->sfx_prog >= 0 ? 128 * kc->sfx_prog + (kc->sfx_key >= 0 ? kc->sfx_key : note) : -1;
+        if (rq >= 0 && rq < (int)kt->skind.size() && (kt->skind[rq] == 4 || kt->skind[rq] == 7))
+            nv_song_roll_first(song);
         // (every set's keys: the 128's and the maps' own after them, nvrender's)
         nv_song_kits_n(song, kt->f0.data(), kt->seat.data(), (int)kt->f0.size());
         nv_song_chokes_n(song, kt->choke.data(), (int)kt->f0.size());
@@ -1401,6 +1408,7 @@ struct Cache {
     int gm2 = 0;                        // its tuner is gm2's: the store's tables over it (_mts_ratio)
     double raga_sw[12];
     double oneshot_floor_db = 100.0;    // live.ONESHOT_FLOOR_DB
+    long roll_hit_rows = 4096;          // live.ROLL_HIT_ROWS
 
     // prepare's final type for an EMIT column's value (FINAL_DTYPES)
     double fin_of(int c, double x) const
@@ -1774,6 +1782,112 @@ struct Cache {
                 gmask.clear();
             }
             T.grate = rate_g;
+        }
+        // A HELD ROLL IS STRUCK AS IT GOES (t["roll"]: percussion_map.RollSteps):
+        // one hit kept -- the template's first, at its strongest roll_hit_rows
+        // rows by their energy -- struck at each of the gesture's steps while
+        // the key is held (Part's roll_tick); the held stamp is nothing. Its
+        // gesture the kit key's (a drum set's own, or a melodic SFX's: its
+        // cache's borrowed tables), kind 4 or 7 of the export's
+        if (P && !T.sof.empty() && !kit.skind.empty()) {
+            int q = -1, rk = note;
+            if (drums)
+                q = 128 * program + note;
+            else if (nc && nc->sfx_prog >= 0) {
+                rk = nc->sfx_key >= 0 ? nc->sfx_key : note;
+                q = 128 * nc->sfx_prog + rk;
+            }
+            const int rkind = q >= 0 && q < (int)kit.skind.size() ? kit.skind[q] : 0;
+            if (rkind == 4 || rkind == 7) {
+                const double *rp = kit.spar.data() + (size_t)NV_SPAR * q;
+                std::vector<long> h;
+                for (long long r = 0; r < P; r++)
+                    if (T.sof[r] == 0)
+                        h.push_back((long)r);
+                if ((long)h.size() > roll_hit_rows) {
+                    std::vector<double> e(P, 0.0);
+                    for (long r : h) {
+                        double a = std::max(std::fabs((double)T.f4[0][r]), std::fabs((double)T.f4[1][r]));
+                        e[r] = a * a / (2.0 * std::max((double)T.f4[6][r], 1e-3));
+                    }
+                    std::stable_sort(h.begin(), h.end(), [&](long x, long y) { return e[x] > e[y]; });
+                    h.resize(roll_hit_rows);
+                    std::sort(h.begin(), h.end());
+                }
+                Template D;
+                auto cut = [&](auto &dst, const auto &src) {
+                    dst.resize(h.size());
+                    for (size_t j = 0; j < h.size(); j++)
+                        dst[j] = src[h[j]];
+                };
+                D.P = (long)h.size();
+                for (int c = 0; c < 6; c++)
+                    cut(D.f8[c], T.f8[c]);
+                for (int c = 0; c < 27; c++)
+                    cut(D.f4[c], T.f4[c]);
+                for (int c = 0; c < 4; c++)
+                    cut(D.f4n[c], T.f4n[c]);
+                for (int c = 0; c < 2; c++)
+                    cut(D.i8[c], T.i8[c]);
+                for (int c = 0; c < 6; c++)
+                    cut(D.i4[c], T.i4[c]);
+                cut(D.hrel, T.hrel);
+                if (!T.rof.empty())
+                    cut(D.rof, T.rof);
+                if (!T.lflip.empty())
+                    cut(D.lflip, T.lflip);
+                if (!T.push.empty())
+                    cut(D.push, T.push);
+                if (!T.sym.empty())
+                    cut(D.sym, T.sym);
+                if (!T.ring.empty())
+                    cut(D.ring, T.ring);
+                D.oneshot = true;
+                D.send = T.send;
+                D.scatter_ms = 0.0;
+                D.vel = T.vel;
+                std::copy(T.room_q, T.room_q + 27, D.room_q);
+                D.seq = T.seq;
+                long long mx = 0;
+                if (!D.rof.empty())
+                    for (long j = 0; j < D.P; j++)
+                        mx = j == 0 ? D.rof[j] : std::max(mx, D.rof[j]);
+                else
+                    for (long j = 0; j < D.P; j++)
+                        mx = j == 0 ? D.i8[1][j] - D.i8[0][j] : std::max(mx, D.i8[1][j] - D.i8[0][j]);
+                D.dur = mx;
+                // ...its level in the template: the gesture's first hit, the
+                // note struck at 0 s (rasp_strokes': its seed note x 7919)
+                PyRandom r0;
+                pyr_seed(&r0, (long long)rk * 7919LL);
+                double db0;
+                if (rkind == 4) {
+                    pyr_uniform(&r0, -0.15, 0.15);
+                    db0 = rp[9] - rp[3] * 0.0 + pyr_uniform(&r0, -rp[6], rp[6]);
+                } else
+                    db0 = rp[2] + (rp[3] - rp[2]) * std::min(1.0, 0.0 / rp[1]) + pyr_uniform(&r0, -rp[4], rp[4]);
+                T.roll_lv0 = pow(10.0, db0 / 40.0);
+                T.roll_kind = rkind;
+                T.roll_par.assign(rp, rp + (rkind == 4 ? 11 : 10));
+                T.roll_key = rk;
+                T.roll_hit.clear();
+                T.roll_hit.push_back(std::move(D));
+                for (int c = 0; c < 6; c++)
+                    T.f8[c].clear();
+                for (int c = 0; c < 27; c++)
+                    T.f4[c].clear();
+                for (int c = 0; c < 4; c++)
+                    T.f4n[c].clear();
+                for (int c = 0; c < 2; c++)
+                    T.i8[c].clear();
+                for (int c = 0; c < 6; c++)
+                    T.i4[c].clear();
+                T.hrel.clear();
+                T.sof.clear(); T.rof.clear(); T.fa_at.clear(); T.cof.clear(); T.lflip.clear();
+                T.push.clear(); T.sym.clear(); T.ring.clear();
+                T.P = 0;
+                P = 0;
+            }
         }
         // AN ORGAN, SLICED BY RANK (_raw_template's t["ranks"]): each rank's
         // rows, their columns and their share of hrel

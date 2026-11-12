@@ -1164,6 +1164,11 @@ NO_PART_DRONES = "tuning:no-part-drones"
 # to be cut, and live plays the flick itself (Live._cut_on) -- built with
 # it, every live note was cut twice
 NO_CUT = "tuning:no-cut"
+# ...AND A HELD ROLL'S TEMPLATE IS ITS FIRST HIT (live.Patch._raw_template):
+# live strikes the rest as the key is held (percussion_map.RollSteps), so a
+# roll's note keeps only its first stroke -- the whole half-second roll of a
+# break snare was 548k rows a key, 76 keys a melodic roll's
+ROLL_FIRST = "tuning:roll-first"
 
 
 def _has_marker(path, text):
@@ -3513,7 +3518,7 @@ def _prep_bend_arrays(BCrows, BRrows, _BLrows, nblk):
     return (BC, BL, BR)
 
 
-def _prep_strokes(notes):
+def _prep_strokes(notes, roll_first=False):
     """SCRAPED instruments expanded into their ridge impacts (and the SFX
     strokes) before anything else reads the note list. Returns (_stroked,
     inner_ridge, notes, stroke_morph, stroke_mouth, stroke_pitch, stroke_tilt)."""
@@ -3568,6 +3573,8 @@ def _prep_strokes(notes):
                 strokes = rasp_strokes(note if _sk[1] is None else _sk[1], on, off, kit=_sk[0])
         if strokes is None:
             expanded.append(ev); continue
+        if roll_first:
+            strokes = strokes[:1]       # (a held roll's live template: its first hit, ROLL_FIRST)
         for k, st in enumerate(strokes):
             t0, t1, lvl = st[0], st[1], st[2]
             # A swept instrument gives each stroke its own PITCH -- a bell tree's
@@ -7843,7 +7850,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
 
 
     (_stroked, inner_ridge, notes, stroke_morph, stroke_mouth, stroke_pitch,
-        stroke_tilt) = _prep_strokes(notes)
+        stroke_tilt) = _prep_strokes(notes, _has_marker(path, ROLL_FIRST))
 
     choke_at = _prep_exclusive_classes(inner_ridge, notes)
 

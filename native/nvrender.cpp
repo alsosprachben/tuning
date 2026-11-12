@@ -190,6 +190,7 @@ void nv_gsd_free(void *h);
 void *nv_mf104_new(void *song, const int *kind, double sr);
 long nv_mf104_note(void *h, double *R, long long i0, long long i1, double **out, long long *last);
 void nv_mf104_free(void *h);
+int nv_song_moog_dup_of(void *s, int r, int *parent, long long *gp, long long *gs);
 int nv_tremolo_row(const double *row, const double *c, long long ch, const double *H, int nh, double sr, double *out);
 void *nv_scan_new(const double *X);
 void nv_scan_row(void *h, double *r, int depth, int chorus, int row0, double nmax, double sr, double *cp, int *nch,
@@ -881,10 +882,6 @@ int main(int argc, char **argv)
             return 2;
         }
         const NoteClass *nc = (const NoteClass *)E.classes[cq].data();
-        if (banked && nc->meend && nks.size() != 1) {     // (a layered one: the meend rows read one slot)
-            fprintf(stderr, "nvrender: refused: a layered variation that meends (Python's)\n");
-            return 2;
-        }
         if (getenv("TUNING_AMP_DRIVE") && nc->amp_drive != 0.0) {
             fprintf(stderr, "nvrender: refused: TUNING_AMP_DRIVE (Python's audition)\n");
             return 2;
@@ -1427,13 +1424,24 @@ int main(int argc, char **argv)
         nv_midi_pw(midi, q, pv, &pt);
         wheel[pv[0]].push_back(std::make_pair(pt, pv[1]));
     }
+    // (a note's class for its meend: _prep_bend_rows reads the note before
+    // its layers part, property_class_for_note(its program, its key) -- one
+    // slot's at its key; a LAYERED variation's, its program's class (vents'
+    // pcls: Sitar/Drone's sitar) -- and every layer of it, sharing its
+    // channel, key and onset, rides that one meend: the tamboura too)
+    auto meend_cls = [&](int i, const int *iv) -> int {
+        std::vector<int> ks = note_ks(i, iv);
+        if (ks.size() == 1)
+            return E.cmap[ks[0]];
+        const int en = iv[4] ? 0 : ent_of(iv[3], nv_midi_note_bsel(midi, i));
+        return en ? E.vents[en].pcls : -1;
+    };
     std::set<int> mch;
     for (int i = 0, n = nv_midi_n_notes(midi); i < n; i++) {
         int iv[5];
         double dv[5];
         nv_midi_note(midi, i, iv, dv);
-        std::vector<int> ks = note_ks(i, iv);
-        int cq = ks.size() == 1 ? E.cmap[ks[0]] : -1;     // (a layered variation that meends: refused)
+        int cq = meend_cls(i, iv);
         if (!iv[4] && cq >= 0 && ((const NoteClass *)E.classes[cq].data())->meend && wheel.count(iv[0]))
             mch.insert(iv[0]);
     }
@@ -1535,8 +1543,7 @@ int main(int argc, char **argv)
         int c = iv[0];
         if (!mch.count(c) || iv[4])
             continue;
-        std::vector<int> ks = note_ks(i, iv);
-        int cq = ks.size() == 1 ? E.cmap[ks[0]] : -1;
+        int cq = meend_cls(i, iv);
         const NoteClass *mk = cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
         if (!mk || !mk->meend)
             continue;
@@ -3360,7 +3367,29 @@ int main(int argc, char **argv)
             return 1;
         }
         const double MGd = 128.0;           // (moog.MG: synthkernel's MOOG_GRID)
+        // (where each row's own entries start: a repeat's row copies its
+        // parent's, its pitch and shape rows its delay later -- _mf_dup's)
+        std::vector<size_t> mpi_at(nft, 0), mki_at(nft, 0);
         for (int r = 0; r < nft && (mpon || mkon); r++) {
+            int par;
+            long long gp, gs;
+            if (nv_song_moog_dup_of(song, r, &par, &gp, &gs)) {
+                if (mpon) {
+                    std::vector<int> e(mpi.begin() + mpi_at[par], mpi.begin() + mpi_at[par] + 3);
+                    e[1] += (int)gp;
+                    mpi_at[r] = mpi.size();
+                    mpi.insert(mpi.end(), e.begin(), e.end());
+                }
+                if (mkon) {
+                    std::vector<int> e(mki.begin() + mki_at[par], mki.begin() + mki_at[par] + 7);
+                    e[1] += (int)gs;
+                    mki_at[r] = mki.size();
+                    mki.insert(mki.end(), e.begin(), e.end());
+                }
+                continue;
+            }
+            mpi_at[r] = mpi.size();
+            mki_at[r] = mki.size();
             const MoogLayer *Lr;
             double sp[3];
             nv_song_moog_rows(song, r, &Lr, sp);

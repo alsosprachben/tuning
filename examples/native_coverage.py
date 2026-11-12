@@ -26,8 +26,9 @@ TASKS = [
                    "call) -- done: the patch picker and its variations, globals, routes, stops, the insertion "
                    "effect (x), parts (layers, splits, channel, range, transpose, level, mute, fixed touch), the "
                    "tuner, the synth (Moog, Messenger) pane and M, scenes, presets and the shared session, mod "
-                   "rate, the metronome, the standard, the devices (--port), mouse and touch; open: threads, the "
-                   "Eastern tuning on the panel"),
+                   "rate, the metronome, the standard, the devices (--port), mouse and touch, the Eastern tuning "
+                   "(E: system, raga and Sa, the Indian voices' parts built again in it, in presets and the "
+                   "session; native vs live identical switched mid-phrase); open: threads"),
     ("GM2", True, "Restore c2111e6's six tones, lost when be5a996 was committed from an older tree: 12.16 "
                   "Barafon, 12.17 Barafon 2, 12.24 Log drum, 66.8 BreathyTnr., 28.1 MutedDis.Gt, 125.10 Calculating "
                   "-- and with them sympathy per mode (26.8 Pedal Steel, 107.8 Taisho Koto whole). Replayed onto "
@@ -67,7 +68,10 @@ TASKS = [
                   "nvlive end to end)"),
     ("GM1", False, "Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender's reader refuses it"),
     ("GM1", True, "Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)"),
-    ("GM1", False, "Moog: an MF-104M on a note whose pitch or shapes move (SYNC and a unison: native in files)"),
+    ("GM1", True, "Moog: an MF-104M on a note whose pitch or shapes move -- each repeat its own filter row, its "
+                  "pitch and shape rows its delay later (_prep_delays' _mf_dup; nv_song_moog_dup); nvrender vs "
+                  "blockrender identical on Heaven II's shape LFO and three tones bent under their echoes (no "
+                  "MF-104M tone moves its pitch rows yet)"),
     ("GM1", True, "Files: grains (_note_grains: the ocean drum's beads, rain, a stream, bubbles that glide, "
                   "clusters) -- GM 122, the SFX sets' grain keys"),
     ("GM1", True, "Live: the grain source -- a note's grains at their own onsets (gof), a held texture's pool "
@@ -106,8 +110,9 @@ TASKS = [
     ("GM2", True, "Registered variations in files (GS's organs, harpsichords and hits, the MT-32 set's): a "
                   "variation's organ as a program's (Song::porg, nvrender's organ pass, the fader's swell by the "
                   "note's class); a layered one's organ still Python's"),
-    ("GM2", False, "Files: layered registered variations (55.2 6th Hit, 6.24 Harpsi.o) -- a layer's organ: its "
-                   "registration the layer class's, its chest's wind the variation's program class's"),
+    ("GM2", True, "Files: layered registered variations (55.2 6th Hit, 6.24 Harpsi.o) -- a layer's organ: its "
+                  "registration the layer class's, its chest's wind the variation's program class's (nvrender "
+                  "vs blockrender identical on both)"),
     ("GM2", True, "Files: per-mode sympathetic strings (sympathetic_per_mode: 26.8 Pedal Steel; 107.8 Taisho "
                    "Koto's, with its drone stops and sweep) -- done with c2111e6's restore"),
     ("GM2", True, "Files: a didgeridoo's mouth (efxfilter.mouth: VOWEL's rows, its seeded wander -- "
@@ -124,8 +129,10 @@ TASKS = [
     ("GM2", True, "Bank select in nvlive: CC0 and CC32 latched until a program change reads them (GS's in a map, "
                   "GM 2's by MSB 121), a variation as a patch (its templates, classes, trim and live record: "
                   "VLIV), the picker's variations under each program (VNAM)"),
-    ("GM2", False, "nvlive: a Moog variation under a capital that is no Moog's organ (its level: live's), a "
-                   "layered variation's other layers"),
+    ("GM2", True, "nvlive: a Moog variation under a capital that is no Moog's organ (its level: live's), a "
+                  "layered variation's other layers -- native vs live identical (a harpsichord's, a clavinet's, "
+                  "the drawbar organ's, a hit's, a trumpet's, a harp's, a phone's Moog; strings, choirs, brass "
+                  "and hit stacks, an organ's and a map's own)"),
     ("GM2", True, "Live: the maps' own drum sets (MKIT read, MKNM their names; kit_in_map at a program change and "
                   "in the picker): a set's template selects it as a file does, CC32 then the program (live.py's "
                   "had raised on program 281 and played nothing); a GS Reset's program 0 asked where it falls "
@@ -144,7 +151,9 @@ TASKS = [
     ("GM2", True, "Tuning, live: the exclusives in nvlive -- master tuning, scale/octave tuning, MTS (a "
                   "real-time change and a select moving sounding keys), GM System On and GS Reset (live._sysex)"),
     ("GM2", True, "Master volume, files and live (blockrender's _mvol, live's master_gain ramp)"),
-    ("GM2", False, "Files: a variation that meends (a sitar's, 63.127, 104.1/4/5)"),
+    ("GM2", True, "Files: a variation that meends (a sitar's, 63.127, 104.1/4/5) -- 104.4 Sitar/Drone's, a "
+                  "layered one, had been refused: its note's meend read as Python's, before its layers part (the "
+                  "variation's class), every layer riding it; nvrender vs blockrender identical on all four"),
     ("GM2", True, "Every GM 2 drum set's keys native (the last, the SFX set's Phonograph Noise: its record's "
                   "clicks, strike_flam_record), nvrender and nvlive"),
     ("SC-55", True, "The drum keys the maps' sets lacked: the tam-tams (Ethnic 45, 46, 48; both Asia sets' 73-75; "
@@ -154,9 +163,11 @@ TASKS = [
                     "snapshot, not a fader (bend.cpp, STAMPED_SHARE)"),
     ("MT-32", False, "nvrender over mt32mux's own renders (Holst's planets: examples/mars.py ...), checked against "
                      "blockrender"),
-    ("MT-32", False, "nvlive: the MT-32 set as a patch (bank 127) -- live's bank select first"),
+    ("MT-32", True, "nvlive: the MT-32 set as a patch (bank 127): by bank select, and the picker's (its 128 "
+                    "tones marked MT-32) -- native vs live identical"),
     ("CM-64", False, "The CM-32P (the CM-64's PCM half: the U-110's tones on channels 11-16) -- Python has none yet"),
-    ("CM-64", False, "The CM-32L's sound effects on the rhythm part (keys 76-108) in nvlive"),
+    ("CM-64", True, "The CM-32L's sound effects on the rhythm part (keys 76-108) in nvlive -- native vs live "
+                    "identical"),
     ("SC-55", True, "Files: a drum set read in a map (kit_in_map) where the map has none of its own"),
     ("SC-55", True, "The maps' own drum sets (percussion_map.KITS past 127) in files: their keys' classes and "
                     "tables (MKIT), a drum program past 127; a drum part on the insertion effect"),
@@ -219,15 +230,25 @@ TASKS = [
                     "live.Live) -- only 8 of the 65 occur in a real song. Python vs native 63 of 65 identical "
                     "(2 refused by design), streamed equals whole on 63 (50 streamed, 13 rendered whole), "
                     "live 65 of 65"),
-    ("SC-55", False, "Live: 117:24 Jngl SD Roll refused (LIVE_REFUSED: its velocity probe's table past 2.5 GB) "
-                     "-- a re-attack within a row, a gain track like the damper's, would shrink it"),
+    ("SC-55", True, "Live: a HELD ROLL struck as it goes (percussion_map.RollSteps, live._roll_tick): every roll "
+                    "key -- Standard's and Ethnic's hand rolls, the Jungle sets' machine rolls -- sustains while "
+                    "held and closes on the key-up, as in files; a template its first hit (ROLL_FIRST), at its "
+                    "strongest 4096 rows; its velocity its level. 117:24 Jngl SD Roll live (it was refused, its "
+                    "probe past 2.5 GB; the Jungle keys' half-second roll had not fitted the slab). Native vs "
+                    "live identical, drum keys and the keyboard's"),
+    ("SC-55", True, "Files: the Jungle rolls a sampler's (Ben's A/B): a steady 23 a second, swelling -12 to -3 dB "
+                    "over 2 s, +-1 dB, one in ten flammed, the closing hit accented -- measured on three takes "
+                    "(~/Documents/refs/jungle_roll); Standard's and Ethnic's keep the hand roll"),
     ("SC-55", True, "Files: the rhythm part's assignment (40 1p 15); the controller matrix (40 2p, GM2 09) where "
                     "it moves nothing"),
     ("SC-55", True, "Files: a controller matrix that moves (ctrlmatrix): its cutoff and LFO rate in the sound "
                     "controls, its amplitude in the level and fader, its pitch and vibrato on the pitch stream, its "
                     "tremolo's rows; a variation that meends; a layered variation's registered layers"),
-    ("SC-55", False, "Files: GS's other exclusives -- part parameters (parse_gs_part), drum setup and the user "
-                     "sets, TONE MAP-0 (the reader refuses them, -4)"),
+    ("SC-55", False, "Files: GS's other exclusives -- part parameters, TONE MAP-0 and drum setup's levels, pans "
+                     "and sends read; what is left: the USER DRUM SETS (21 dp kk vv: a key another set's, its own "
+                     "pitch, level, pan and receive switch -- user_drum) and drum setup's exclusive group and "
+                     "receive switches. Measured: of 304 files (~/Music, ~/Downloads/midi) the reader refuses one "
+                     "for an exclusive, SENSATIO's mpp2 (its user sets); mpp5's reads"),
     ("SC-55", True, "Melodic SFX (patch_map.melodic_sfx): a kit's sound on a keyboard part, transposed whole "
                     "(transposed_from_hz: _XP), its kit key's strokes (sfx_strokes_of), the weather voices "
                     "(a measured mode set under the noise's roll-off, its breath beside it)"),
@@ -339,6 +360,71 @@ def tone_effect_live(fx):
     return name, state, "; ".join(why)
 
 
+# LIVE (nvlive): what the native player offers and plays, read from the
+# player itself -- a host opened on a live export (native_export.py --live),
+# its patch list (nv_host_patches: every program, set and variation, each
+# native or not, as its picker greys them). A tone the list leaves out that
+# bank select still reaches (as live's resolve_patch) is "bank select"; the
+# maps' own drum sets are reached so (kit_in_map). Beside each stage, the
+# live checks that hold it to Python's live, every sample (nvlive_check.py;
+# kept by hand, as TASKS): what was played, identical.
+LIVE_CHECKS = {
+    "GM1": "piano (CPU and GPU), organ, program switching, a Moog's SYNC (P5 Sync Lead), unison "
+           "(JP SuperSaw), its LFO 2, loops and multi-trigger; Standard's Snare Roll held and tapped",
+    "GM2": "c2111e6's restored GM 2 tones; MutedDis.Gt's open strings; layered variations; Moog "
+           "variations under other capitals; the Eastern tuning switched on a sitar",
+    "MT-32": "six MT-32 tones by bank select (CC0 127), a phrase each",
+    "CM-64": "the CM-32L set's sound effects, keys 76-108",
+    "SC-88": "c2111e6's restored SC-88 tones; the maps' own drum sets",
+    "SC-88 Pro": "Calculating (the Morse keyboard)",
+    "SC-8850": "Jngl SD Roll held and tapped from the keyboard; the Jungle rolls on their drum keys",
+}
+
+
+def live_patches(nvx):
+    """nvlive's patch list from the export NVX: [dict(program, variation,
+    drums, native, name)] -- a host opened in a process of its own (it holds
+    the export and is never freed), capped as every heavy job"""
+    import json
+    import subprocess
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        out = os.path.join(td, "patches.json")
+        subprocess.check_call(["systemd-run", "--user", "--scope", "-q", "-p", "MemoryMax=3500M",
+                               "-p", "MemorySwapMax=0", sys.executable, os.path.abspath(__file__),
+                               "--patches", nvx, out], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        with open(out) as f:
+            return json.load(f)
+
+
+def _patches_child(nvx, out):
+    import ctypes
+    import json
+    import native as N
+
+    class Patch(ctypes.Structure):
+        _fields_ = [("program", ctypes.c_int), ("variation", ctypes.c_int), ("drums", ctypes.c_int),
+                    ("native", ctypes.c_int), ("pick", ctypes.c_int), ("name", ctypes.c_char * 64)]
+    d = N.lib()
+    vp, cp, ci = ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int
+    d.nv_host_open_args.restype = vp
+    d.nv_host_open_args.argtypes = [ci, ctypes.POINTER(cp), cp, ci]
+    d.nv_host_patches.argtypes = [vp, vp, ci]
+    av = [b"nvlive", os.fsencode(nvx), b"--program=0", b"--cpu", b"--no-pipeline", b"--no-register",
+          b"--no-governor"]
+    err = ctypes.create_string_buffer(256)
+    h = d.nv_host_open_args(len(av), (cp * len(av))(*av), err, 256)
+    if not h:
+        raise SystemExit("native_coverage: the host refused %s: %s" % (nvx, err.value.decode()))
+    n = d.nv_host_patches(h, None, 0)
+    pt = (Patch * n)()
+    d.nv_host_patches(h, pt, n)
+    with open(out, "w") as f:
+        json.dump([dict(program=x.program, variation=x.variation, drums=x.drums, native=x.native,
+                        name=x.name.decode("utf-8", "replace")) for x in pt], f)
+    os._exit(0)                 # (the host's threads run on: not joined)
+
+
 STAGES = (("GM1", None), ("GM2", 'gm2'), ("MT-32", 'mt32'), ("CM-64", 'cm64'), ("SC-55", 1), ("SC-88", 2),
           ("SC-88 Pro", 3), ("SC-8850", 4))
 
@@ -349,6 +435,14 @@ def main(argv):
     if "--json" in argv:
         i = argv.index("--json")
         jdir = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
+    if len(argv) > 3 and argv[1] == "--patches":
+        return _patches_child(argv[2], argv[3])
+    # --live NVX: the live table besides, from nvlive's own patch list
+    lp = None
+    if "--live" in argv:
+        i = argv.index("--live")
+        lp = live_patches(argv[i + 1])
         argv = argv[:i] + argv[i + 2:]
     out = argv[1] if len(argv) > 1 else os.path.join(HERE, "native.md")
     import native as N
@@ -413,6 +507,27 @@ def main(argv):
              "before it did not already bring. The work that is not a tone, and live's side, are",
              "kept by hand in the script's TASKS.", ""]
     summary = []
+    # ...live's: each tone as nvlive's list has it ("picker": offered and
+    # native; "bank select": not listed, reached by CC0; "refused"; "no")
+    lsum = []
+    if lp is not None:
+        from native_export import LIVE_REFUSED
+        lprog = {(x["program"], bool(x["drums"])): bool(x["native"]) for x in lp if not x["variation"]}
+        lvar = {(x["program"], x["variation"]): bool(x["native"]) for x in lp if x["variation"]}
+
+    def tone_live(p, key):
+        if (p, key) in LIVE_REFUSED:
+            return "refused"
+        if not key:
+            return "picker" if lprog.get((p, False)) else "no"
+        if (p, key) in lvar:
+            return "picker" if lvar[(p, key)] else "no"
+        return "bank select" if variation_native(p, key) else "no"
+
+    def kit_live(s, nk, nn):
+        if nn < nk:
+            return "no"
+        return ("picker" if lprog.get((s, True)) else "no") if s < 128 else "bank select"
     js = dict(stages=[], tones=[], kits=[], tasks=[dict(stage=s, done=bool(d), task=t) for s, d, t in TASKS])
     seen = set()            # (program, variation key) a stage before has listed
     body = []
@@ -446,16 +561,35 @@ def main(argv):
         summary.append("| %s | %d of %d | %d of %d |" % (stage, len(nat), len(new), kfull, len(ks)))
         js['stages'].append(dict(stage=stage, order=len(js['stages']), tones_native=len(nat), tones_total=len(new),
                                  kits_whole=kfull, kits_total=len(ks)))
-        for p, key, name in new:
+        if lp is not None:
+            _tl = [tone_live(p, key) for p, key, _ in new]
+            _kl = [kit_live(s, nk, nn) for s, _, nk, nn in ks]
+            _out = ["%s %s (%s)" % ("%d" % p if src is None else "%d.%d" % (p, key if key >= 126 else key % 128),
+                                    name, st) for (p, key, name), st in zip(new, _tl) if st in ("no", "refused")]
+            _out += ["drum set %s %s" % (s, name) for (s, name, _, _), st in zip(ks, _kl) if st == "no"]
+            js.setdefault('live', []).append(dict(
+                stage=stage, order=len(js['live']), tones_total=len(new),
+                tones_live=sum(st in ("picker", "bank select") for st in _tl),
+                tones_picker=_tl.count("picker"), tones_bank=_tl.count("bank select"),
+                kits_total=len(ks), kits_live=sum(st != "no" for st in _kl),
+                not_live="; ".join(_out), checked=LIVE_CHECKS.get(stage, "")))
+            lsum.append("| %s | %d of %d (%d by bank select only) | %d of %d | %s |" % (
+                stage, js['live'][-1]['tones_live'], len(new), _tl.count("bank select"),
+                js['live'][-1]['kits_live'], len(ks), _out and "; ".join(_out) or "--"))
+        for i, (p, key, name) in enumerate(new):
             _to = P.MT32_SET[p][1] if src == 'mt32' else p
             _fxn, _fxs, _fxw = tone_effect_live(tone_fx(p, key) if src != 'mt32' else None)
             js['tones'].append(dict(stage=stage, program=p, variation=key,
-                                    tone=str(p) if src is None else "%d.%d" % (p, key if key == 127 else key % 128),
+                                    tone=str(p) if src is None else "%d.%d" % (p, key if key >= 126 else key % 128),
                                     name=name, family=LT.FAMILIES[14 if isinstance(_to, tuple) else _to // 8],
                                     native=(p, key, name) in nat, own_effect=_fxn, effect_live=_fxs,
                                     effect_note=_fxw))
-        for s, name, nk, nn in ks:
+            if lp is not None:
+                js['tones'][-1]['live'] = _tl[i]
+        for j, (s, name, nk, nn) in enumerate(ks):
             js['kits'].append(dict(stage=stage, set=s, name=name, keys=nk, native_keys=nn))
+            if lp is not None:
+                js['kits'][-1]['live'] = _kl[j]
         body += ["## %s" % stage, ""]
         stasks = [t for t in TASKS if t[0] == stage]
         if stasks:
@@ -470,7 +604,7 @@ def main(argv):
             _to = P.MT32_SET[p][1] if src == 'mt32' else p
             fam.setdefault(14 if isinstance(_to, tuple) else _to // 8, []).append((p, key, name))
         for f in sorted(fam):
-            items = ", ".join(("%d %s" % (p, name)) if src is None else ("%d.%d %s" % (p, key if key == 127 else key % 128, name))
+            items = ", ".join(("%d %s" % (p, name)) if src is None else ("%d.%d %s" % (p, key if key >= 126 else key % 128, name))
                               for p, key, name in fam[f])
             body.append("- [ ] **%s** -- %s" % (LT.FAMILIES[f], items))
         body.append("")
@@ -480,7 +614,11 @@ def main(argv):
             if nn < nk:
                 body.append("- [ ] %d %s -- %d of %d keys native" % (s, name, nn, nk))
         body.append("")
-    lines += ["| stage | tones native | drum sets whole |", "|---|---|---|"] + summary + [""] + body
+    lines += ["| stage | tones native | drum sets whole |", "|---|---|---|"] + summary + [""]
+    if lsum:
+        lines += ["Live (nvlive, from its own patch list):", "",
+                  "| stage | tones live | drum sets live | not live |", "|---|---|---|---|"] + lsum + [""]
+    lines += body
     with open(out, "w") as f:
         f.write("\n".join(lines))
     print("native coverage -> %s" % out)
@@ -492,6 +630,8 @@ def main(argv):
                 json.dump(v, f, indent=0)
         print("...and its page's data -> %s" % jdir)
     print("\n".join(summary))
+    if lsum:
+        print("live:\n" + "\n".join(lsum))
     return 0
 
 

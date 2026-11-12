@@ -41,6 +41,8 @@ transposed, the piano over N..127; nvlive --split). Without either, nvlive
 GPU renders this one (live's TUNING_GPU_PIPELINE=1; nvlive's default on
 OpenCL). Both slabs at --slots=N (default live's 65536); on the CPU unless --gpu.
 --keep=DIR: both sides' outputs saved there (py.npy, nv.npy).
+--eastern-at=S:SPEC: the Eastern tuning switched to SPEC ("off": none) at
+second S on both sides (live.set_eastern, nvlive --eastern-at): the panel's E.
 """
 import atexit
 import ctypes
@@ -225,6 +227,7 @@ def main(argv):
                           + (["--programs"] if "programs" in opt else [])
                           + (["--bank=" + opt["bank"]] if opt.get("bank") else [])
                           + (["--room-at=" + opt["room-at"]] if opt.get("room-at") else [])
+                          + (["--eastern-at=" + opt["eastern-at"]] if opt.get("eastern-at") else [])
                           + (["--metronome=" + opt["metronome"]] if opt.get("metronome") else [])
                           + (["--fixed-touch=" + opt["fixed-touch"]] if opt.get("fixed-touch") else []),
                           stderr=subprocess.DEVNULL)
@@ -277,6 +280,12 @@ def main(argv):
     # --room-at=S:NAME[,S:NAME...]: live.set_room at the block S falls in,
     # before its events -- its builder in step (_room_switch, then the parts'
     # patches built in the new room and their swaps posted: patchsync's)
+    # --eastern-at=S:SPEC: live.set_eastern at the block S falls in, before
+    # its events ("off": none) -- the panel's E, its builder in step
+    east_b, east_spec = -1, None
+    if opt.get("eastern-at"):
+        _s, east_spec = opt["eastern-at"].split(":", 1)
+        east_b = int(float(_s) * 48000) // 128
     room_at = {}
     for it in (opt.get("room-at") or "").split(","):
         if ":" in it:
@@ -306,6 +315,10 @@ def main(argv):
         if b in room_at:
             lv.set_room(room_at[b])
             lv._room_switch()
+            for _part, _p in patchsync.build(lv):
+                instant_scan(lv, _p)
+        if b == east_b:
+            lv.set_eastern(None if east_spec == "off" else east_spec)
             for _part, _p in patchsync.build(lv):
                 instant_scan(lv, _p)
         while e < len(evs) and int(evs[e][0] * 48000) // 128 <= b:

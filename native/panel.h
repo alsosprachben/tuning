@@ -47,6 +47,9 @@
 #include <unistd.h>
 #include <vector>
 
+extern "C" const char *nv_raga_system_name(int i);                  // (tuner.cpp: the Eastern tuning's choices)
+extern "C" const char *nv_raga_name(int i, int *n, const int **idx);
+
 namespace panel {
 
 // what the audio thread hands the panel after each block
@@ -133,6 +136,11 @@ struct Host {
     int var = 0;
     std::function<void(int)> pick;
     std::function<void(const std::string &)> set_tuner;          // a tuner asked for (built, then swapped in)
+    // THE EASTERN TUNING (livetui's E): the rig's spec ("" off), one asked
+    // for (built, then swapped in), and whether a part's voice plays it now
+    std::string eastern;
+    std::function<void(const std::string &)> set_eastern;
+    std::function<bool(int, bool)> east_part;
     // THE PARTS (livetui's PARTS pane): the rows, a part's columns set, one
     // layered, split, taken away (false: why), a program asked for a part
     std::function<std::vector<PartRow>()> parts;
@@ -1052,7 +1060,8 @@ struct Panel {
         snprintf(b, sizeof b, "%.0f kHz · %d frames · %.1f ms", H.rate / 1000.0, H.frames, H.budget_ms);
         std::string lamp = s.rt ? C("ok") + "● RT18" : s.rt_dropped ? C("bad") + "● rt dropped"
                                                                           : C("dim") + "● rt off";
-        line(" " + C("accent") + "\x1b[1m◆ tuning native\x1b[0m  " + C("dim") + b + "   " + H.port + "   " + lamp);
+        line(" " + C("accent") + "\x1b[1m◆ tuning native\x1b[0m  " + C("dim") + b + "   " + H.port + "   " + lamp
+             + (H.eastern.empty() ? std::string() : "   " + C("accent2") + "eastern " + H.eastern));
         // THE PARTS (livetui's PARTS pane): a row a part, its columns; the
         // selected cell in the selection's colour, a muted part dim
         if (H.parts)
@@ -1281,6 +1290,7 @@ struct Panel {
             line("   d                 delete the selected control or route");
             line("   p                 the patch: every program, its variations, the drum sets; / to search");
             line("   t                 the tuner: every temperament live has; the patches built again in it");
+            line("   E                 the EASTERN tuning: a raga system and Sa for every Indian voice");
             line("   x                 the insertion effect: the part on it, its type, parameters, controllers, sends");
             line("   P                 panic: every note off, now");
             line("   q                 quit (routes added here are kept beside the export)");
@@ -1397,7 +1407,8 @@ struct Panel {
                                       {"0", "zero"}, {"D", "defaults"}, {"B", "layer"}, {"M", "Messenger"},
                                       {"T", "send"}, {"?", "help"}, {"q", "quit"}};
         static const char *K0[][2] = {{"tab", "pane"}, {"↑↓", "global"}, {"←→ -/+", "change"}, {"p", "patch"},
-                                      {"t", "tuner"}, {"x", "efx"}, {"P", "panic"}, {"?", "help"}, {"q", "quit"}};
+                                      {"t", "tuner"}, {"E", "eastern"}, {"x", "efx"}, {"P", "panic"}, {"?", "help"},
+                                      {"q", "quit"}};
         static const char *K1[][2] = {{"tab", "pane"}, {"a", "control"}, {"r", "route"}, {"d", "del"}, {"space", "toggle"},
                                       {"-/+", "step"}, {"⏎", "value"}, {"b", "hotkey"}, {"?", "help"}, {"q", "quit"}};
         std::string kl = " ";
@@ -1763,6 +1774,95 @@ struct Panel {
             }
             return true;
         });
+    }
+
+    // THE EASTERN TUNING (livetui.pick_eastern): a SYSTEM of swara positions
+    // (theory, Bel's Todi, the 27 measured from Saraga), a RAGA (its swaras:
+    // the meend's detents) and where SA sits -- every part whose voice is an
+    // Indian instrument plays it, the rest keep their own tuner
+    void pick_eastern()
+    {
+        static const char *SW[12] = {"Sa", "re", "Re", "ga", "Ga", "Ma", "Ma'", "Pa", "dha", "Dha", "ni", "Ni"};
+        static const char *KEYS[12] = {"c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"};
+        std::vector<std::string> systems, ragas;
+        for (int i = 0; nv_raga_system_name(i); i++)
+            systems.push_back(nv_raga_system_name(i));
+        std::stable_sort(systems.begin(), systems.end(), [](const std::string &a, const std::string &b) {
+            bool sa = !a.compare(0, 7, "saraga_"), sb = !b.compare(0, 7, "saraga_");
+            return sa != sb ? sb : a < b;
+        });
+        for (int i = 0; nv_raga_name(i, nullptr, nullptr); i++)
+            if (strncmp(nv_raga_name(i, nullptr, nullptr), "saraga_", 7))
+                ragas.push_back(nv_raga_name(i, nullptr, nullptr));
+        std::sort(ragas.begin(), ragas.end());
+        // ...where it stands now ("raga:<system>[/<raga>]@<key>")
+        std::string cur = H.eastern, cs, cr;
+        int ck = 1;
+        if (!cur.compare(0, 5, "raga:")) {
+            std::string b = cur.substr(5), k;
+            size_t at = b.find('@');
+            if (at != std::string::npos) {
+                k = b.substr(at + 1, b.find(':', at) == std::string::npos ? std::string::npos : b.find(':', at) - at - 1);
+                b = b.substr(0, at);
+            }
+            size_t sl = b.find('/');
+            cs = b.substr(0, sl);
+            cr = sl == std::string::npos ? "" : b.substr(sl + 1);
+            for (int i = 0; i < 12; i++)
+                if (k == KEYS[i])
+                    ck = i;
+        }
+        std::vector<std::string> items{"off -- every part on its own tuner"};
+        int start = 0;
+        for (size_t i = 0; i < systems.size(); i++) {
+            items.push_back(systems[i]);
+            if (systems[i] == cs)
+                start = (int)i + 1;
+        }
+        int pick = menu("Eastern tuning: system", items, start);
+        if (pick < 0)
+            return;
+        if (pick == 0) {
+            H.set_eastern("");
+            say("Eastern tuning off: every part on its own tuner");
+            return;
+        }
+        const std::string system = systems[pick - 1];
+        bool own = false;
+        for (int i = 0; nv_raga_name(i, nullptr, nullptr); i++)
+            own = own || system == nv_raga_name(i, nullptr, nullptr);
+        std::vector<std::string> ritems{own ? "(its own swaras)" : "(all twelve swaras)"};
+        int rstart = 0;
+        for (size_t q = 0; q < ragas.size(); q++) {
+            int n = 0;
+            const int *idx = nullptr;
+            for (int i = 0; nv_raga_name(i, nullptr, nullptr); i++)
+                if (ragas[q] == nv_raga_name(i, nullptr, nullptr))
+                    nv_raga_name(i, &n, &idx);
+            std::string row = ragas[q];
+            row.resize(std::max<size_t>(row.size(), 10), ' ');
+            for (int j = 0; j < n; j++)
+                row += std::string(" ") + SW[idx[j]];
+            ritems.push_back(row);
+            if (ragas[q] == cr)
+                rstart = (int)q + 1;
+        }
+        int rp = menu("Eastern tuning: raga (the meend's detents)", ritems, rstart);
+        if (rp < 0)
+            return;
+        std::vector<std::string> kitems;
+        for (const char *k : KEYS) {
+            std::string u = k;
+            for (char &ch : u)
+                ch = (char)toupper((unsigned char)ch);
+            kitems.push_back(u);
+        }
+        int kp = menu("Eastern tuning: Sa", kitems, ck);
+        if (kp < 0)
+            return;
+        std::string spec = "raga:" + system + (rp ? "/" + ragas[rp - 1] : std::string()) + "@" + KEYS[kp];
+        H.set_eastern(spec);
+        say("Eastern tuning " + spec + ": the Indian voices' parts built again in it");
     }
 
     // A LIST TO PICK FROM (the patch's, the effect types'): rows under
@@ -2307,7 +2407,13 @@ struct Panel {
         case 3: return key_name(r.hi);
         case 4: snprintf(b, sizeof b, "%+d", r.tr); return b;
         case 5: snprintf(b, sizeof b, "%+.1f dB", r.level); return b;
-        case 6: return H.tuner;
+        case 6:
+            // a part sounding the rig's Eastern tuning says so (E sets it: livetui's)
+            if (H.east_part && H.east_part(r.program, r.drums)) {
+                std::string s = H.eastern.substr(H.eastern.compare(0, 5, "raga:") ? 0 : 5);
+                return "E " + s.substr(0, s.find('@'));
+            }
+            return H.tuner;
         case 7: return r.touch_fixed ? "fixed" : "vel";
         case 8: {
             if (r.index != 0 || H.stop_names.empty() || !H.drawn)
@@ -3117,6 +3223,8 @@ struct Panel {
                     pick_patch();
                 } else if (c == 't' && H.set_tuner) {
                     pick_tuner();
+                } else if (c == 'E' && H.set_eastern) {
+                    pick_eastern();
                 } else if (c == 'x' || c == 'X') {
                     pick_efx();
                 } else if (c == 'S' || c == 'L' || c == 'N' || c == 'R') {

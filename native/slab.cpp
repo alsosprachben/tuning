@@ -2469,6 +2469,65 @@ struct Part {
     PyRandom tex_rng;
     long long tex_n = 0;
     static const long long GRAIN0 = 1LL << 32;     // a grain's layer: GRAIN0 + its number (("grain", n))
+    // A HELD ROLL (live.roll_gen, in the order struck): its key, template,
+    // its steps (percussion_map.RollSteps: their generator seeded by the key
+    // and the press's sample, the stroke counted, the next stroke's s), the
+    // press's sample and scale, the key-up's s from the press (NAN: held),
+    // its hits' own keys (("roll", n)) counted
+    struct RollGen {
+        Key key;
+        const nv::live::Template *T;
+        PyRandom r;
+        long long k = 0;
+        double t = 0.0;
+        long long at = 0;
+        double scale = 1.0, close = NAN;
+        long long n = 0;
+    };
+    std::vector<RollGen> roll_gen;
+    static const long long ROLL0 = 2LL << 32;      // a roll's hit's layer: ROLL0 + its number
+
+    // the next stroke's hits [(s, level)] (RollSteps.next), and the step on
+    static std::vector<std::pair<double, double>> roll_next(RollGen &g)
+    {
+        const std::vector<double> &p = g.T->roll_par;
+        std::vector<std::pair<double, double>> out;
+        if (g.T->roll_kind == 4) {
+            const double rate = p[0], bounce_s = p[2], bounce_db = p[3], hand_db = p[4], jit = p[5], sc = p[6];
+            const int bounces = (int)p[1];
+            const double base = g.k == 0 ? p[9] : p[8] + (g.k % 2 ? -hand_db : 0.0);
+            for (int b = 0; b < bounces; b++) {
+                double tb = g.t + b * bounce_s * (1.0 + pyr_uniform(&g.r, -0.15, 0.15));
+                out.push_back({tb, pow(10.0, (base - bounce_db * b + pyr_uniform(&g.r, -sc, sc)) / 40.0)});
+            }
+            g.k++;
+            g.t = (double)g.k / rate + pyr_uniform(&g.r, -jit, jit) / rate;
+        } else {
+            const double rate = p[0], swell_s = p[1], lo = p[2], hi = p[3], sc = p[4], fp = p[5], fs = p[6], fd = p[7];
+            const double db = lo + (hi - lo) * std::min(1.0, g.t / swell_s) + pyr_uniform(&g.r, -sc, sc);
+            out.push_back({g.t, pow(10.0, db / 40.0)});
+            if (pyr_uniform(&g.r, 0.0, 1.0) < fp)
+                out.push_back({g.t + fs, pow(10.0, (db + fd) / 40.0)});
+            g.k++;
+            g.t = g.t + 1.0 / rate;
+        }
+        return out;
+    }
+
+    // ...and the closing stroke's (RollSteps.close), the key up at s from the press
+    static std::vector<std::pair<double, double>> roll_close(RollGen &g, double at)
+    {
+        const std::vector<double> &p = g.T->roll_par;
+        std::vector<std::pair<double, double>> out;
+        if (g.T->roll_kind == 4)
+            for (int b = 0; b < 2; b++) {
+                double tb = at + b * p[2] * (1.0 + pyr_uniform(&g.r, -0.15, 0.15));
+                out.push_back({tb, pow(10.0, (p[10] - p[3] * b + pyr_uniform(&g.r, -p[6], p[6])) / 40.0)});
+            }
+        else
+            out.push_back({at, pow(10.0, p[9] / 40.0)});
+        return out;
+    }
     std::vector<Ev> events;
     std::vector<std::vector<uint8_t>> sx;           // the exclusives the events name (type 6)
     std::map<std::pair<int, int>, int> key_vel;     // (ch, note) -> the strike's velocity
@@ -5442,6 +5501,21 @@ struct Part {
                 S.release(k, n0);
             }
         }
+        if (T->roll_kind) {
+            // A HELD ROLL: struck as it goes, from the press (roll_tick)
+            RollGen g;
+            g.key = Key(pid, ch, note, -1);
+            g.T = T;
+            pyr_seed(&g.r, (long long)T->roll_key * 7919LL + n0);
+            g.at = n0;
+            g.scale = scale;
+            auto it = std::find_if(roll_gen.begin(), roll_gen.end(), [&](const RollGen &x) { return x.key == g.key; });
+            if (it != roll_gen.end())
+                *it = g;                    // (a dict's key keeps its place)
+            else
+                roll_gen.push_back(g);
+            return;
+        }
         if (!S.stamp_t(*T, key, n0, scale, ch, rate)) {
             dropped++;
             return;                         // the slab full: this note does not sound
@@ -7560,6 +7634,13 @@ struct Part {
                 reg_damper(ch, n0, note, false);        // every choir's damper falls
             return;
         }
+        {                                   // a held roll closes at the key-up (no sooner than its least span)
+            Key k(pid, ch, note, -1);
+            for (RollGen &g : roll_gen)
+                if (g.key == k && std::isnan(g.close))
+                    g.close = std::max((double)(n0 - g.at) / rate,
+                                       g.T->roll_par[g.T->roll_kind == 4 ? 7 : 8]);
+        }
         // (a held texture lets go no sooner than its gate)
         long long at = n0;
         auto tx = tex_on.find(Key(pid, ch, note, -1));
@@ -8008,6 +8089,7 @@ struct Part {
             if (S.i4[I4_fx][q] >= 0 && (double)n0 < S.mp_toff[S.i4[I4_fx][q]])
                 S.mp_toff[S.i4[I4_fx][q]] = (double)n0;
         down.clear();
+        roll_gen.clear();                       // (a held roll strikes no more)
         pedalled.clear();
         cutting.clear();
         open_ring.clear();
@@ -11139,6 +11221,35 @@ struct Part {
     // live._tex_tick: a held texture's grains past its template -- a drop from
     // its pool at each Poisson instant in this block, at its own sample, under
     // a key of its own: a one-shot that decays on its own rows' ends
+    // A HELD ROLL's strokes falling in this block (live._roll_tick): each hit
+    // the template's one hit at its own sample, its level the step's over the
+    // template's, squared; past the key-up, the closing stroke, and it is done
+    void roll_tick(long long n0, long long blk)
+    {
+        const long long end = n0 + blk;
+        for (size_t i = 0; i < roll_gen.size();) {
+            RollGen &g = roll_gen[i];
+            const nv::live::Template &hit = g.T->roll_hit[0];
+            auto strike = [&](const std::vector<std::pair<double, double>> &hs) {
+                for (const auto &h : hs) {
+                    g.n++;
+                    Key k(std::get<0>(g.key), std::get<1>(g.key), std::get<2>(g.key), ROLL0 + g.n);
+                    if (!S.stamp_t(hit, k, g.at + (long long)nearbyint(h.first * rate),
+                                   g.scale * pow(h.second / g.T->roll_lv0, 2.0), std::get<1>(g.key), rate))
+                        dropped++;
+                }
+            };
+            while ((double)g.at + g.t * rate < (double)end && (std::isnan(g.close) || g.t < g.close))
+                strike(roll_next(g));
+            if (!std::isnan(g.close) && (double)g.at + g.close * rate < (double)end) {
+                strike(roll_close(g, g.close));
+                roll_gen.erase(roll_gen.begin() + i);
+                continue;
+            }
+            i++;
+        }
+    }
+
     void tex_tick(long long n0, long long blk)
     {
         const long long end = n0 + blk;
@@ -11202,6 +11313,8 @@ struct Part {
             reg_pump(n0);
         if (!tex_gen.empty())
             tex_tick(n0, blk);                  // a held texture's grains (live's _tex_tick)
+        if (!roll_gen.empty())
+            roll_tick(n0, blk);                 // a held roll's strokes (live's _roll_tick)
         if (metro_bpm > 0.0 && metro_pi >= 0)
             metro_tick(n0, blk);                // the metronome's beats (live's _metro_tick)
         if (!moog_glide.empty())

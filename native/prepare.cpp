@@ -98,6 +98,8 @@ static long long mf_delay(const MoogLayer *L, double sr)
     return d > g ? d : g;
 }
 
+extern "C" int nv_song_moog_dup(void *s, int fx, long long d);     // (channel.cpp: a repeat's own filter row)
+
 // THE MF-104M's REPEATS (blockrender._prep_delays, mf104.expand): each pedal
 // note's rows copied k delays late while the repeat stays over REPEAT_FLOOR
 // of the note's loudest -- the line's filter at the partial's own pitch, the
@@ -108,11 +110,11 @@ static long long mf_delay(const MoogLayer *L, double sr)
 // have damper tracks (the C's do not copy them).
 // ONE LAYER's repeats (rows [i0, i1) of rows, in the table's numbering, cast):
 // appended to extra, its dry rows scaled in place; the latest sample in last
-static void mf_layer(const MoogLayer *L, double *rows, long long i0, long long i1, const int *kind, double sr,
-                     std::vector<double> &extra, long long &last)
+static void mf_layer(void *song, const MoogLayer *L, double *rows, long long i0, long long i1, const int *kind,
+                     double sr, std::vector<double> &extra, long long &last)
 {
     enum { cOM = 0, cP0 = 1, cP0R = 2, cAL = 3, cAR = 4, cAM = 5, cNON = 12, cNOFF = 13, cRE = 15, cVD = 33, cVR = 34,
-           cVP = 35, cVDL = 36, cFMW = 46, cNFR = 47, cFMP = 48, cFMPR = 49 };
+           cVP = 35, cVDL = 36, cFX = 43, cFMW = 46, cNFR = 47, cFMP = 48, cFMPR = 49 };
     auto cast = [&](double *r) {
         for (int c = 0; c < NCOLS; c++)
             if (kind[c] == 1)
@@ -179,6 +181,11 @@ static void mf_layer(const MoogLayer *L, double *rows, long long i0, long long i
             c[cAL] = row[cAL] * g;
             c[cAR] = row[cAR] * g;
             c[cAM] = row[cAM] * g;
+            if ((int)row[cFX] >= 0) {       /* a note whose pitch or shape rows move: its own row, D later */
+                int nf = nv_song_moog_dup(song, (int)row[cFX], d);
+                if (nf >= 0)
+                    c[cFX] = (double)nf;
+            }
             cast(c.data());
             extra.insert(extra.end(), c.begin(), c.end());
             long long e = (long long)c[cNOFF] + (long long)ceil(row[cRE]);
@@ -202,7 +209,7 @@ static long long mf104_expand(void *song, double **rowsp, long long *Pp, const i
         long long i0, i1;
         const MoogLayer *L;
         nv_song_mf104(song, q, &i0, &i1, &L);
-        mf_layer(L, *rowsp, i0, i1, kind, sr, extra, last);
+        mf_layer(song, L, *rowsp, i0, i1, kind, sr, extra, last);
     }
     long long m = (long long)extra.size() / NCOLS;
     if (m) {
@@ -242,7 +249,7 @@ extern "C" long nv_mf104_note(void *h, double *R, long long i0, long long i1, do
     const MoogLayer *L;
     while (nv_song_mf104(c.song, c.next, &a, &b, &L) && a < i1) {
         if (a >= i0 && b <= i1)
-            mf_layer(L, R - NCOLS * i0, a, b, c.kind, c.sr, ex, l);
+            mf_layer(c.song, L, R - NCOLS * i0, a, b, c.kind, c.sr, ex, l);
         c.next++;
     }
     *last = l;

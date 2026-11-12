@@ -3393,10 +3393,28 @@ class Patch:
         self.warmed = False
         # Measured, not assumed: 8 bands if this voice's timbre moves with
         # velocity, 1 if velocity is pure gain. See _vel_dependent().
-        self.nbuckets = 1 if drums else (8 if self._vel_dependent() else 1)
+        # (A HELD ROLL'S velocity is its level, as a drum set's: one band,
+        # and no probe -- a melodic roll's template is hundreds of thousands
+        # of rows, the probe two of them: Jngl SD Roll's past 2.5 GB)
+        self.nbuckets = 1 if drums or self._roll(60) is not None else (8 if self._vel_dependent() else 1)
         self.range = DRUM_RANGE if drums else MELODIC_RANGE
 
     # ---- template construction (NEVER on the audio thread) ------------------
+    def _roll(self, note):
+        """((kind, fields), the kit key) of the held roll this key strikes
+        (percussion_map.roll_of) -- a drum set's own key, or the kit key a
+        melodic SFX plays (sfx_strokes_of: Jngl SD Roll's) -- else None"""
+        import percussion_map as _PMR
+        if self.drums:
+            g = _PMR.roll_of(note, _PMR.kit_for_program(int(self.program)))
+            return (g, note) if g is not None else None
+        sk = getattr(self._voice_class(note), "sfx_strokes_of", None)
+        if not sk:
+            return None
+        k = note if sk[1] is None else sk[1]
+        g = _PMR.roll_of(k, sk[0])
+        return (g, k) if g is not None else None
+
     def _vel_dependent(self):
         """Does this voice's SPECTRUM change with velocity, or only its level?
 
@@ -3537,6 +3555,10 @@ class Patch:
             # THE CUT IS LIVE'S TOO (_cut_on), so the template is the plain
             # note: blockrender reads this marker and cuts nothing (B.NO_CUT)
             tr.append(mido.MetaMessage("marker", text=B.NO_CUT, time=0))
+        if self._roll(note) is not None:
+            # A HELD ROLL IS LIVE'S (_roll_tick): the template is its first
+            # hit alone, the one hit it keeps (B.ROLL_FIRST)
+            tr.append(mido.MetaMessage("marker", text=B.ROLL_FIRST, time=0))
         if fast is not None:
             # CC1 is the half-moon switch on a tonewheel voice; blockrender
             # reads it through leslie.zone() and gives every partial the
@@ -3784,6 +3806,42 @@ class Patch:
             t["grate"] = float(_rate)
         t["send"] = getattr(self._voice_class(note), "reverb_distance", None)
         t["scatter_ms"] = getattr(self._voice_class(note), "section_onset_ms", 0.0) or 0.0
+        # A HELD ROLL IS STRUCK AS IT GOES (percussion_map.RollSteps): one hit
+        # kept -- the template's first, at its strongest ROLL_HIT_ROWS rows
+        # (a break snare's room is 22k rows of its 22k: at 23 hits a second the
+        # slab would hold 150k) -- struck at each of the gesture's steps while
+        # the key is held, at the step's level, the closing stroke at the
+        # key-up (_roll_tick). Its velocity is its level (one band); the held
+        # stamp is nothing
+        t["roll"] = None
+        _rl = self._roll(note) if t["P"] and t.get("sof") is not None else None
+        if _rl is not None:
+            import percussion_map as _PMR
+            (_kind, _par), _rk = _rl
+            _P = int(t["P"])
+            _h = np.flatnonzero(t["sof"] == 0)
+            if len(_h) > ROLL_HIT_ROWS:
+                _a = np.maximum(np.abs(t["aL"][_h]), np.abs(t["aR"][_h])).astype(np.float64)
+                _e = _a * _a / (2.0 * np.maximum(np.asarray(t["logr"], np.float64)[_h], 1e-3))
+                _h = np.sort(_h[np.argsort(-_e, kind="stable")[:ROLL_HIT_ROWS]])
+            hit = {k: (v[_h] if isinstance(v, np.ndarray) and v.ndim == 1 and len(v) == _P else v)
+                   for k, v in t.items() if k not in ("gpool", "ranks", "rel_rank", "roll")}
+            hit.update(P=len(_h), oneshot=True, sof=None, gof=None, cof=None, scatter_ms=0.0, min_hold=None,
+                       rel=None)
+            hit["dur"] = int(hit["rof"].max()) if hit.get("rof") is not None else \
+                int((hit["noff"] - hit["non"]).max())
+            # ...its level in the template: the gesture's first hit, the note
+            # struck at 0 s (rasp_strokes'; a drum key's, or the melodic SFX's kit key's)
+            _kit = (_PMR.kit_for_program(int(self.program)) if self.drums
+                    else getattr(self._voice_class(note), "sfx_strokes_of")[0])
+            _lv0 = float(_PMR.rasp_strokes(_rk, 0.0, 0.5, kit=_kit)[0][2])
+            t["roll"] = (_kind, _par, hit, _lv0, _rk)
+            for k in list(t.keys()):
+                v = t[k]
+                if isinstance(v, np.ndarray) and v.ndim == 1 and len(v) == _P:
+                    t[k] = v[:0]
+            t["P"] = 0
+            t["sof"] = None
         # WHICH PARTIALS' FADE IS THE ATTACK, for a slur to shorten (_slur_stamp):
         # those sharing the note's main fade. A bloom copy swells in on its own
         # schedule, which a slur does not touch offline either.
@@ -3988,6 +4046,10 @@ def tuner_for(program, drums, tuner, eastern):
 # How far under a one-shot template's loudest row a decaying row is let go
 # (Patch: its rof): a hundred dB is under the float kernel's own noise.
 ONESHOT_FLOOR_DB = 100.0
+# A HELD ROLL'S HIT (_raw_template's t["roll"]): its strongest rows, by their
+# energy -- the break snare's 22k (its room 98% of them) to 4096, ~91% of its
+# energy, so 23 hits a second, each ringing ~0.3 s, hold ~30k slots
+ROLL_HIT_ROWS = 4096
 
 
 class Part:
@@ -4368,6 +4430,9 @@ class Live:
         self.scan_reqs = collections.deque()    # (cols, n, hrel, depth, chorus?): the builder's to prepare
         self.cc2 = {}                    # ch -> breath controller, 0..1
         self.tex_gen = {}                # (pid, ch, note) -> [part, template, next grain's sample, scale]
+        # (pid, ch, note) -> a held roll: [part, template, its RollSteps, the
+        # press's sample, scale, the key-up's s from the press (None: held), hits struck]
+        self.roll_gen = {}
         self._tex_rng = _random.Random(0x7E47)
         self._tex_n = 0
         self.events = collections.deque()
@@ -5164,6 +5229,7 @@ class Live:
             if len(fr):
                 self.slab.mp_toff[fr] = np.minimum(self.slab.mp_toff[fr], float(n0))
         self.down.clear()
+        self.roll_gen.clear()              # (a held roll strikes no more)
         self.pedalled.clear()
         self.open_ring.clear()
         self.cutting.clear()
@@ -5282,6 +5348,12 @@ class Live:
             except Exception as e:
                 self.errors += 1
                 self.last_error = "texture: %s: %s" % (type(e).__name__, e)
+        if self.roll_gen:
+            try:
+                self._roll_tick(n0)
+            except Exception as e:
+                self.errors += 1
+                self.last_error = "roll: %s: %s" % (type(e).__name__, e)
         if self.metro_bpm > 0 and self.metro_part is not None:
             try:
                 self._metro_tick(n0)
@@ -5377,6 +5449,31 @@ class Live:
                     self.dropped += 1
                 nxt += rng.expovariate(tmpl["grate"]) * B.SR
             g[2] = nxt              # the first instant past this block, for the next
+
+    def _roll_tick(self, n0):
+        """A held roll's strokes falling in this block (percussion_map.RollSteps):
+        each hit its template's one hit, at its own sample, its level the
+        step's over the template's (a drum's square law: velocity x level, the
+        level squared), under a key of its own -- a one-shot, as a grain is;
+        past the key-up, the closing stroke, and the roll is done."""
+        end = n0 + self.frames
+        for k, g in list(self.roll_gen.items()):
+            part, tmpl, st, at, scale, close, n = g
+            hit, lv0 = tmpl["roll"][2], tmpl["roll"][3]
+
+            def strike(hits):
+                nonlocal n
+                for s, lv in hits:
+                    n += 1
+                    if not self.slab.stamp(hit, k + (("roll", n),), at + int(round(s * self.rate)),
+                                           scale * (lv / lv0) ** 2):
+                        self.dropped += 1
+            while at + st.t * self.rate < end and (close is None or st.t < close):
+                strike(st.next())
+            g[6] = n
+            if close is not None and at + close * self.rate < end:
+                strike(st.close(close))
+                del self.roll_gen[k]
 
     def set_metro_level(self, db):
         """The metronome's volume, dB on its own part -- a part's level, read
@@ -6439,6 +6536,13 @@ class Live:
                 self.slab.a["re"][_ix] = np.minimum(self.slab.a["re"][_ix],
                                                     np.float32(B.RETRIGGER_FADE * self.rate))
                 self.slab.release(_k, n0)
+        if tmpl.get("roll") is not None:
+            # A HELD ROLL: struck as it goes, from the press (_roll_tick)
+            import percussion_map as _PMR
+            self.roll_gen[(part.pid, ch, note)] = [
+                part, tmpl, _PMR.RollSteps(tmpl["roll"][0], tmpl["roll"][1], tmpl["roll"][4], n0),
+                n0, scale, None, 0]
+            return
         if not self.slab.stamp(tmpl, key, n0, scale):
             self.dropped += 1
             return                  # slab full: this note does not sound
@@ -9079,6 +9183,10 @@ class Live:
             if self.reg_enabled and self._reg_voice(part, note):
                 self._reg_damper(part, ch, n0, released=note)   # every choir's damper falls
         else:
+            # a held roll closes at the key-up (no sooner than its least span)
+            _rg = self.roll_gen.get((part.pid, ch, note))
+            if _rg is not None and _rg[5] is None:
+                _rg[5] = max((n0 - _rg[3]) / float(self.rate), _rg[2].min_span())
             # a held texture lets go no sooner than its gate (min_hold), and
             # strikes no more grains
             _at = max(n0, self.tex_on.pop((part.pid, ch, note), n0))
