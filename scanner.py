@@ -470,11 +470,12 @@ def expand(A, channels, sr, cols=None):
 
 
 # ------------------------------------------------------------- the switch
-# THE B-3's SELECTOR, on CC94 (GM: "Effects 4 Depth", formerly Celeste/Detune
-# -- the organ's own celeste): seven positions, each a zone of the controller,
-# a value at its start selecting it. 0 is off (the vibrato tablets down).
+# THE B-3's SELECTOR, on CC81 (General Purpose 6: tonelib.WHEEL_CC -- it was
+# CC94, GM's "Effects 4 Depth", which GS reads as its delay send): seven
+# positions, each a zone of the controller, a value at its start selecting
+# it. 0 is off (the vibrato tablets down).
 POSITIONS = (("off", 0), ("V1", 18), ("V2", 37), ("V3", 55), ("C1", 73), ("C2", 91), ("C3", 110))
-SWITCH_CC = 94
+SWITCH_CC = 81
 
 
 def setting_from_cc(v):

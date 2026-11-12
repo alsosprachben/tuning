@@ -1205,7 +1205,7 @@ struct RegFeed {
         VoiceInit c = k->init;
         double det = 1.0;
         int c1;
-        if (k->detune_wheel && nv_song_first_cc(song, ch, 1, &c1))
+        if (k->detune_wheel && nv_song_first_cc(song, ch, NV_CC_DETUNE, &c1))
             det = c1 / 64.0;
         c.detune_lo = k->detune_lo * det;
         c.detune_hi = k->detune_hi * det;

@@ -161,6 +161,10 @@ struct Host {
     // chart flipped (the new one's name)
     std::function<int(int, int, double *, char *)> synth_get;
     std::function<void(int, int, int, double)> synth_set;
+    // AN ORGAN's DRIVE KNOB (livetui.organ_part, live.set_drive): read (out:
+    // in use, the voice's, the knob's; 1 a tonewheel organ's), set (<0 the voice's)
+    std::function<int(int, double *)> drive_get;
+    std::function<void(int, double)> drive_set;
     std::function<void(int, int, int)> synth_forget;
     std::function<int(int)> synth_send;
     std::function<std::string()> messenger_line, messenger_firmware;
@@ -599,7 +603,8 @@ static std::string synth_fmt(const std::string &kind, double v, const double *pn
 static const std::pair<int, const char *> CONTROLS[] = {
     {64, "sustain"}, {66, "sostenuto"}, {67, "soft"}, {65, "portamento"}, {-3, "mono"}, {1, "mod wheel"},
     {11, "expression"}, {7, "volume"}, {10, "pan"}, {5, "portamento time"}, {93, "chorus"},
-    {94, "scanner (V/C)"}, {74, "brightness"}, {71, "resonance"}, {73, "attack"}, {75, "decay"},
+    {81, "scanner (V/C)"}, {4, "crescendo"}, {12, "drive"}, {13, "detune"}, {18, "drones"}, {19, "mouth"},
+    {20, "crank"}, {70, "tone (rockers)"}, {80, "rotor speed"}, {92, "tremolo depth"}, {74, "brightness"}, {71, "resonance"}, {73, "attack"}, {75, "decay"},
     {72, "release"}, {76, "vibrato rate"}, {77, "vibrato depth"}, {78, "vibrato delay"}, {-1, "pitch wheel"},
     {-2, "aftertouch"}};
 static const int NCONTROLS = sizeof(CONTROLS) / sizeof(CONTROLS[0]);
@@ -609,8 +614,10 @@ static const int NCONTROLS = sizeof(CONTROLS) / sizeof(CONTROLS[0]);
 static int control_default(int key)
 {
     switch (key) {
-    case 11: return 127;
+    case 11: case 18: return 127;
     case 7: return 100;
+    case 12: return 32;
+    case 13: return 64;
     case 10: case 74: case 71: case 73: case 75: case 72: case 76: case 77: case 78: return 64;
     }
     return 0;
@@ -618,12 +625,12 @@ static int control_default(int key)
 static std::string control_kind(int key)
 {
     if (key == 64 || key == 66 || key == 67 || key == 65 || key == -3) return "switch";
-    if (key == 94) return "selector";
+    if (key == 81) return "selector";
     if (key == -1) return "bend";
     if (key == -2) return "pressure";
     return "continuous";
 }
-// scanner.POSITIONS: the Hammond's vibrato/chorus selector (CC94), each one's start
+// scanner.POSITIONS: the Hammond's vibrato/chorus selector (CC81), each one's start
 static const char *SCAN_NAMES[7] = {"off", "V1", "V2", "V3", "C1", "C2", "C3"};
 static const int SCAN_STARTS[7] = {0, 18, 37, 55, 73, 91, 110};
 // THE KEYS A CONTROL MAY BE BOUND TO (livetui.HOTKEYS_FREE): what the panel
@@ -2207,6 +2214,18 @@ struct Panel {
             snl = H.synth_get(r->index, slayer, spn, sown);
         }
         char b[200];
+        // A TONEWHEEL ORGAN: its drive knob (livetui's, in draw_sound_controls)
+        odrv = (!snl && r && !r->drums && H.drive_get) ? H.drive_get(r->index, odv) : 0;
+        if (odrv == 1) {
+            snprintf(b, sizeof b, "part %d, %s", prow + 1, r->name.c_str());
+            line("  " + C("accent2") + "\x1b[1mORGAN\x1b[0m  " + C("dim") + b);
+            snprintf(b, sizeof b, "%.2f", odv[0]);
+            char vb[96];
+            snprintf(vb, sizeof vb, "the valve before the rotors  (-/+ turn, space: the voice's %.2f)", odv[1]);
+            line("  \x1b[7mdrive\x1b[0m " + C("ok") + bar(odv[0] / ORGAN_DRIVE_MAX, 9) + "\x1b[0m  \x1b[1m"
+                 + (odv[2] >= 0.0 ? C("warn") : std::string()) + b + "\x1b[0m  " + C("dim") + vb);
+            return;
+        }
         if (!r || !snl) {
             line("   " + C("dim")
                  + (r && r->drums ? "a drum part answers only decay -- the synth panel is for a melodic part"
@@ -2284,9 +2303,23 @@ struct Panel {
         kind = SYNTH_KNOBS[srow][3];
         return k >= 0;
     }
+    // AN ORGAN's DRIVE (livetui.ORGAN_DRIVE_MAX, organ_part): its knob's
+    // reading, its travel, a twentieth a step (a quarter)
+    static constexpr double ORGAN_DRIVE_MAX = 3.0;
+    int odrv = 0;
+    double odv[3] = {0.0, 0.0, -1.0};
     // - and + (livetui.synth_bump): a switch its next position, a knob by a hundredth (a tenth)
     void synth_bump(int delta, bool big)
     {
+        if (odrv == 1 && H.drive_set) {        // (an organ's drive knob)
+            const PartRow *r = synth_row();
+            const double v = std::max(0.0, std::min(ORGAN_DRIVE_MAX, odv[0] + delta * (big ? 0.25 : 0.05)));
+            if (r) {
+                odv[0] = odv[2] = std::round(v * 100.0) / 100.0;
+                H.drive_set(r->index, odv[0]);
+            }
+            return;
+        }
         const PartRow *r;
         int k;
         std::string kind;
@@ -2324,6 +2357,14 @@ struct Panel {
     // space, 0, D, B, T, F, M (livetui's synth keys)
     void synth_key(int c)
     {
+        if (odrv == 1 && c == ' ' && H.drive_set) {     // (an organ's drive: the voice's again)
+            if (const PartRow *r = synth_row()) {
+                H.drive_set(r->index, -1.0);
+                odv[0] = odv[1];
+                odv[2] = -1.0;
+            }
+            return;
+        }
         const PartRow *r;
         int k;
         std::string kind;

@@ -77,6 +77,9 @@ void nv_part_synth_forget(void *h, int pi, int layer, int knob);
 void nv_part_synth_set_later(void *h, int pi, int layer, int knob, double v);
 int nv_part_synth_send(void *h, int pi);
 void nv_part_patch_touch(void *h, int pi, int fixed);
+void nv_part_drive(void *h, int pi, double v);
+void nv_part_drive_later(void *h, int pi, double v);
+int nv_part_drive_get(void *h, int pi, double *out);
 int nv_part_patch_touch_sensitive(void *h, int pi);
 void nv_part_switches(void *h, int ch, int *out);
 void nv_part_set_drawn_names(void *h, const char *const *names, int n);
@@ -452,6 +455,7 @@ struct nv_host {
         bool muted = false, gone = false;
         long long pid = 1;
         int fixed = -1;                         // its fixed touch (live's part.fixed_touch: -1 the patch's way)
+        double drive = -1.0;                    // an organ's drive knob (live's Part.drive: <0 the voice's)
         bool is(int prog, bool dr, int v) const
         {
             return want >= 0 ? want == prog && want_dr == dr && want_var == v
@@ -460,6 +464,8 @@ struct nv_host {
     };
     void ask(size_t i, int prog, bool dr, int v)
     {
+        if (!pats[i].is(prog, dr, v))
+            pats[i].drive = -1.0;               // (a new program: its drive the voice's, as the slab's swap has it)
         pats[i].want = prog;
         pats[i].want_dr = dr;
         pats[i].want_var = v;
@@ -597,6 +603,7 @@ struct nv_host {
         bool metro = false;                 // (the metronome's own drum part: no row, no key)
         std::map<int, double> syn[2];       // (its knobs, layers A and B: a session's or preset's)
         int fixed = -1;                     // (its fixed touch)
+        double drive = -1.0;                // (an organ's drive knob: <0 the voice's)
     };
     std::vector<PartSpec> add_req;
     std::vector<std::pair<PartSpec, void *>> add_done;
@@ -610,6 +617,8 @@ struct nv_host {
     bool part_delete(size_t row, std::string &why);
     void pick_row(size_t row, int sp);
     void part_touch(size_t row, int fixed);         // (livetui.toggle_touch: 1 fixed, 0 velocity)
+    void part_drive(size_t row, double v);          // (an organ's drive knob, live.set_drive: <0 the voice's)
+    int drive_state(size_t row, double *out);       // (nv_part_drive_get's: 1 an organ's, 0 not, -1 unread)
     void messenger_reading(bool on);                // (livetui's M: every part reads a Messenger's chart)
     // THE ON-SCREEN CONTROLS (live's screen_controls; the session's "controls"):
     // the panel's, one sent past the routes (every channel, or its own)
