@@ -223,8 +223,7 @@ def main(argv):
     def _moog_later(c):
         import moog as MG
         sp = N.moog_spec(c)
-        return (sp is None or bool(getattr(c, 'moog_unison', None))
-                or any(MG.panel_of(c, layer=l)['sync'] for l in MG.layers_of(c)))
+        return sp is None or bool(getattr(c, 'moog_unison', None))
     _moogs = {i for c, i in idx.items() if N.kit_drum(c) == 6 and _moog_later(c)}
     cmap_live = [-1 if x in _moogs else x for x in cmap]
     trims = []
@@ -506,7 +505,7 @@ def main(argv):
                 _vc = PM.VARIATIONS[(_p, _v)]
                 _vc = _vc if isinstance(_vc, type) else _vc(60)     # (a picker: its key 60's)
                 if (_p, _v) in LIVE_REFUSED or (N.kit_drum(_vc) == 6 and _moog_later(_vc)):
-                    pass                # (refused: nvlive's "not native" -- a Moog's unison or SYNC, live's yet)
+                    pass                # (refused: nvlive's "not native" -- a Moog's unison, live's yet)
                 elif any(cmap_live[128 * _p + k] >= 0 for k in range(128)):
                     # (one variation at a time: its probe notes' per-class
                     # memos let go after it -- N.memo_scope -- or the walk

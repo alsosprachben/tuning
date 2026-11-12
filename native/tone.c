@@ -1095,9 +1095,14 @@ static int mk_shape_flags(const double *pn)
     return f;
 }
 
+/* the kernel library's moog_coeff_rows (synthkernel.c): a synced OSC 2's
+   coefficients, as live's moog.weights takes them (nv_moog_coeff sets it) */
+static void (*mk_coeff)(int, const int *, const double *, const double *, int, float *) = NULL;
+void nv_moog_coeff(void *fn) { mk_coeff = (void (*)(int, const int *, const double *, const double *, int, float *))fn; }
+
 int nv_moog_build(const double *pn, const MoogLayer *B, MoogLayer *out)
 {
-    if (!mtab || pn[NV_MK_SYNC] != 0.0)
+    if (!mtab || (pn[NV_MK_SYNC] != 0.0 && !mk_coeff))
         return -1;
     for (int i = NV_MK_MF104_ON; i <= NV_MK_MF104_WAVE; i++)
         if (pn[i] != B->pn[i])                  /* (the pedal: its settings are the class's) */
@@ -1119,6 +1124,24 @@ int nv_moog_build(const double *pn, const MoogLayer *B, MoogLayer *out)
     memcpy(L->c1, o1, sizeof L->c1);
     memcpy(L->c2, o2, sizeof L->c2);
     memcpy(L->cs, sb, sizeof L->cs);
+    /* SYNC: OSC 2 restarts at each of OSC 1's periods -- on OSC 1's harmonics
+       (foot1, x 1.0), its coefficients the synced wave's at OSC 2 FREQ's
+       ratio (moog.osc_ratio's, OSC 2 over OSC 1) */
+    const int sync = pn[NV_MK_SYNC] != 0.0;
+    double r12 = 0.0;
+    if (sync) {
+        r12 = (L->t * L->foot2 * L->o2f) / (L->t * L->foot1);
+        float cf[128];
+        const int kind = 0;
+        const double s2 = pn[NV_MK_OSC2_WAVE];
+        mk_coeff(1, &kind, &s2, &r12, 64, cf);
+        for (int k = 0; k < 64; k++) {
+            L->c2[k][0] = (double)cf[2 * k];
+            L->c2[k][1] = (double)cf[2 * k + 1];
+        }
+        L->foot2 = L->foot1;
+        L->o2f = 1.0;
+    }
     const double res = pn[NV_MK_RESONANCE];
     L->self_amp = L->self_amp_max * pow(pymax(0.0, (res - L->self_from) / (1.0 - L->self_from)), 2.0);
     const double cut = L->cut_lo * pow(2.0, L->cut_oct * clip01(pn[NV_MK_CUTOFF]));
@@ -1136,8 +1159,8 @@ int nv_moog_build(const double *pn, const MoogLayer *B, MoogLayer *out)
     L->fm_index = fi;
     L->fm_r1 = L->t * L->foot1;
     L->fm_ph = fi != 0.0 ? atan2(o1[1], o1[0]) : 0.0;
-    double pp[9];
-    const int pon = mk_pitch_params(B, pn, 0, pp), sf = mk_shape_flags(pn);
+    double pp[9], pq[9];
+    const int pon = mk_pitch_params(B, pn, sync, pp), sf = mk_shape_flags(pn);
     if (B->mf_on && (pon || sf))
         return -1;                              /* (moog_spec's refusal: the pedal under a moving note) */
     L->pitch_on = pon;
@@ -1146,7 +1169,7 @@ int nv_moog_build(const double *pn, const MoogLayer *B, MoogLayer *out)
     memset(L->shape_par, 0, sizeof L->shape_par);
     if (pon)
         memcpy(L->pitch_p, pp, sizeof pp);
-    if (sf) {                                   /* moog.shape_params (SYNC refused: 15-24 zero) */
+    if (sf) {                                   /* moog.shape_params */
         double *v = L->shape_par;
         int md = (int)pn[NV_MK_MOD_DEST], ld = (int)pn[NV_MK_LFO1_DEST];
         v[0] = sf;
@@ -1164,6 +1187,11 @@ int nv_moog_build(const double *pn, const MoogLayer *B, MoogLayer *out)
         v[12] = 4.0 * knob_tau(B, pn[NV_MK_F_DECAY]);
         v[13] = mk_sustain_target(pn[NV_MK_F_SUSTAIN]);
         v[14] = 4.0 * knob_tau(B, pn[NV_MK_F_RELEASE]);
+        /* the sync sweep: OSC 2's ratio, and what moves it (moog.shape_params:
+           pitch_params as though free) */
+        v[15] = sync ? r12 : 0.0;
+        if (sync && mk_pitch_params(B, pn, 0, pq))
+            memcpy(v + 16, pq, sizeof pq);
     }
     /* moog.ft_row at KB_REF_HZ, key row 0 */
     double *ft = L->ft;

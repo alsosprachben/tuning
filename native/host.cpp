@@ -847,7 +847,8 @@ int nv_host::open(int argc, char **argv)
             return 1;
         }
         if (q == 0)                         // (the Moog's mod rows: the kernel library's own)
-            nv_part_moog_kernel(part, dlsym(h, "moog_pitch_cells"), dlsym(h, "moog_shape_rows"));
+            nv_part_moog_kernel(part, dlsym(h, "moog_pitch_cells"), dlsym(h, "moog_shape_rows"),
+                                dlsym(h, "moog_coeff_rows"));
     }
     // THE MOOG EXTENSIONS' KERNELS (a note's loops, its contours' age, its
     // filter contour's depth: blockrender.ensure_moogx_lib, which the export

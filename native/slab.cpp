@@ -1652,7 +1652,8 @@ struct Slab {
     // fraction and all; under a sounding note it moves through retune (each
     // slot's ratio), which keeps the phase continuous
     using Retune = std::function<void(const std::vector<long> &, const std::vector<double> &)>;
-    void moog_retimbre(const std::vector<long> &idx, const MoogLayer *L, double rate, const Retune *retune = nullptr)
+    void moog_retimbre(const std::vector<long> &idx, const MoogLayer *L, double rate, const Retune *retune = nullptr,
+                       long long lock_n = -1)
     {
         size_t n = idx.size();
         if (!n)
@@ -1743,6 +1744,39 @@ struct Slab {
             f4[F4_aL][s] = aL0[s] * f;
             f4[F4_aR][s] = aR0[s] * f;
             mo_w[s] = (float)w[i];
+        }
+        if (lock_n >= 0 && L->pn[NV_MK_SYNC] != 0.0)
+            sync_lock(idx, lock_n);
+    }
+
+    // Slab._moog_sync_lock: SYNC under a held note -- each OSC 2 harmonic k
+    // put at k times its own OSC 1 fundamental's phase plus the synced
+    // wave's, per ear and per room image (the same note row and delays)
+    void sync_lock(const std::vector<long> &idx, long long n)
+    {
+        std::vector<long> f1;
+        for (long s : idx)
+            if (i4[I4_mk][s] == 4096 + 1)
+                f1.push_back(s);
+        for (long i : idx) {
+            if (i4[I4_mk][i] / 4096 != 2)
+                continue;
+            long j = -1;
+            for (long q : f1)
+                if (i4[I4_fx][q] == i4[I4_fx][i] && f4[F4_delL][q] == f4[F4_delL][i]
+                    && f4[F4_delR][q] == f4[F4_delR][i])
+                    j = q;                  // (the last, as a dict built in order keeps)
+            if (j < 0)
+                continue;
+            const int k = i4[I4_mk][i] % 4096;
+            for (int col = 0; col < 2; col++) {
+                std::vector<double> &p0 = col ? f8[F8_p0R] : f8[F8_p0];
+                double th1 = p0[j] + f8[F8_om][j] * (double)n - mo_ph[j];
+                double want = k * th1 + mo_ph[i];
+                double have = p0[i] + f8[F8_om][i] * (double)n;
+                double d = want - have;
+                p0[i] += d - 2.0 * M_PI * floor(d / (2.0 * M_PI) + 0.5);
+            }
         }
     }
 
@@ -5998,6 +6032,7 @@ struct Part {
         p.drawn.clear();
         if (!p.drums)
             organ_start(p, nv_tcache_organ(p.cache, p.program));
+            moog_sync_build(p);
         if (keep_reg)
             p.drawn = kept;
         if (w.pi == 0) {
@@ -6609,7 +6644,7 @@ struct Part {
                 if (S.i4[I4_mk][s] > 0)
                     mo.push_back(s);
             if (!mo.empty())
-                S.moog_retimbre(mo, L, rate, &rt);
+                S.moog_retimbre(mo, L, rate, &rt, n0);
             for (long s : sw) {             // a representation switched: no ramp across it
                 S.aLp[s] = S.f4[F4_aL][s];
                 S.aRp[s] = S.f4[F4_aR][s];
@@ -8525,6 +8560,14 @@ struct Part {
                         pn[kv.first] = kv.second;
     }
     // the panel its notes read again (_moog_panel_for's knobs), each layer
+    // A SYNCED Messenger plays its panel as live builds it (moog.weights'
+    // C coefficients), not the export's file-render spectrum: after a patch
+    // is set up (organ_start), its layers built again
+    void moog_sync_build(Patch &p)
+    {
+        if (p.moog && (p.moog->pn[NV_MK_SYNC] != 0.0 || (p.moog_b && p.moog_b->pn[NV_MK_SYNC] != 0.0)))
+            moog_rebuild(p);
+    }
     void moog_rebuild(Patch &p)
     {
         for (int layer = 0; layer < 2; layer++) {
@@ -8533,7 +8576,7 @@ struct Part {
             bool gl = false;
             for (auto &g : moog_glide)
                 gl = gl || g.first == std::make_pair(p.pid, layer);
-            if (!m || ((layer ? p.syn_b : p.syn).empty() && !gl)) {
+            if (!m || ((layer ? p.syn_b : p.syn).empty() && !gl && m->pn[NV_MK_SYNC] == 0.0)) {
                 mb.reset();
                 continue;
             }
@@ -8571,11 +8614,11 @@ struct Part {
         double tr[NV_MK_N];
         moog_pn(p, true, tr, layer);
         MoogLayer probe;
-        if (knob == NV_MK_SYNC || nv_moog_build(tr, m, &probe) != 0) {
+        if (nv_moog_build(tr, m, &probe) != 0) {
             syn.swap(was);
             if (!msgr_said)
                 fprintf(stderr, "nvlive: refused: the Messenger's %s live -- the knob left as it was\n",
-                        knob == NV_MK_SYNC ? "SYNC" : "pitch or shape under the MF-104M");
+                        "pitch or shape under the MF-104M");
             msgr_said = true;
             return false;
         }
@@ -11459,6 +11502,7 @@ void nv_part_program(void *h, int program)
     P->patches[0].program = program;
     P->program = program;
     nv::slab::Part::organ_start(P->patches[0], nv_tcache_organ(P->patches[0].cache, program));
+    P->moog_sync_build(P->patches[0]);
 }
 
 // The part a DRUM PART (live.Patch(program, True)): program its drum set,
@@ -11491,8 +11535,10 @@ int nv_part_add_patch(void *h, void *cache, long long pid, double level_db, int 
                              false, program, {}, channel, excl, lo, hi, transpose};
     if (drums && choke)
         p.choke.assign(choke, choke + 2 * 16384);
-    if (!drums)
+    if (!drums) {
         nv::slab::Part::organ_start(p, nv_tcache_organ(cache, program));
+        P->moog_sync_build(p);
+    }
     P->patches.push_back(std::move(p));
     P->choke_p = &P->patches[P->cur].choke;          // (the vector may have moved)
     return (int)P->patches.size() - 1;
@@ -11833,8 +11879,9 @@ long nv_part_slots_dump(void *h, double *out, long cap)
 
 // the kernel library's Moog row functions (synthkernel.c moog_pitch_cells,
 // moog_shape_rows), as the caller has it loaded
-void nv_part_moog_kernel(void *h, void *pcells, void *srows)
+void nv_part_moog_kernel(void *h, void *pcells, void *srows, void *crows)
 {
+    nv_moog_coeff(crows);           // (a synced OSC 2's coefficients: nv_moog_build's)
     ((nv::slab::Part *)h)->moog_pcells = pcells;
     ((nv::slab::Part *)h)->moog_srows = srows;
 }

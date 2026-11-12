@@ -1055,7 +1055,10 @@ def weights(panel, mk, nf, fmax=FMAX_HZ):
         if not m.any():
             continue
         if o == OSC2 and sync:              # on OSC 1's harmonics, synced
-            c = sync_spectrum(panel[shape], r12, n)
+            # (the kernel library's C, moog_coeff_rows -- sync_spectrum's to
+            # 1e-6, float32 -- so native/tone.c's rebuild is the same, bit
+            # for bit; only live re-weighs a note, a file keeps partials')
+            c = coeff_rows(0, panel[shape], r12, n)[0]
             r = osc_ratio(panel, OSC1)
         else:
             c = spec(panel[shape], n)

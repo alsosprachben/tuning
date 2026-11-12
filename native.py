@@ -594,7 +594,7 @@ def _load():
             ('nv_part_swap_bank_keys', None, [ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_part_event', None, [ctypes.c_void_p, I, I, I, I]),
             ('nv_part_block', None, [ctypes.c_void_p, LL, LL]),
-            ('nv_part_moog_kernel', None, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_part_moog_kernel', None, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_part_moog_table', ctypes.c_long, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_long]),
             ('nv_part_slab', ctypes.c_void_p, [ctypes.c_void_p]),
             ('nv_part_render', None, [ctypes.c_void_p, LL, ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p,
@@ -4846,7 +4846,8 @@ class LivePart(object):
         self.d.nv_part_program(self.p, int(cache.program))       # (its slurs' and glides' class)
         _kl = BR.ensure_lib()                                   # (the Moog's mod rows: the kernel's own)
         self.d.nv_part_moog_kernel(self.p, ctypes.cast(_kl.moog_pitch_cells, ctypes.c_void_p).value,
-                                   ctypes.cast(_kl.moog_shape_rows, ctypes.c_void_p).value)
+                                   ctypes.cast(_kl.moog_shape_rows, ctypes.c_void_p).value,
+                                   ctypes.cast(_kl.moog_coeff_rows, ctypes.c_void_p).value)
         # (the Moog extensions' kernel: a note's loops, its contours' age, its filter contour's depth)
         self.d.nv_part_moogx(self.p, ctypes.cast(BR.ensure_moogx_lib().synth_voice_moogx, ctypes.c_void_p).value,
                              None, None, None)

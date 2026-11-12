@@ -687,6 +687,8 @@ void nv_moog_tables(const double *t);
    body, the valve, the unison, the laws); 0, or -1 refused (SYNC, the
    MF-104M under a moving pitch or shape, a pedal knob moved, no tables) */
 int nv_moog_build(const double *pn, const MoogLayer *base, MoogLayer *out);
+/* the kernel library's moog_coeff_rows, for a synced OSC 2 in nv_moog_build */
+void nv_moog_coeff(void *fn);
 
 typedef struct {
     int n_layer;                            /* 1, or 2 a layered voice (moog.layers_of) */
