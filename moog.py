@@ -528,6 +528,47 @@ def lfo_rate_knob(hz):
     return _clip01(math.log(max(float(hz), LFO_RATE_LO) / LFO_RATE_LO) / math.log(LFO_RATE_SPAN))
 
 
+# GLIDE, measured (examples/messenger_perf.py glide, 2026-11-11, a triangle
+# so the fundamental tracks cleanly, A2 to A3): a lag on the 1 V/oct control
+# voltage -- the pitch settles exponentially IN CENTS (fitted 10-90% within
+# 0.005 neper rms, where an exponential in hertz or in length is off by 0.02),
+# as long for an octave as for a step -- with this time constant at each CC5
+# position. Under ~40 it is quicker than the tracker (heard as none); it
+# steepens at the top (5 s at full, where a geometric law through the middle
+# gives 2.4), so a table, log-interpolated. It glides between DETACHED notes
+# too, from the last key whatever the gap: the lag holds the voltage the last
+# key left. The bottom three are the geometric law run on down; 0 is none.
+GLIDE_CC = (0.0, 16.0, 32.0, 48.0, 64.0, 80.0, 96.0, 112.0, 127.0)
+GLIDE_TAU = (0.0021, 0.0045, 0.0110, 0.027, 0.062, 0.146, 0.355, 1.02, 5.03)
+_GLIDE_V = np.array(GLIDE_CC) / 127.0
+_GLIDE_LOG = np.array([math.log(t) for t in GLIDE_TAU])     # (libm's, as native/slab.cpp's)
+
+
+def knob_glide_tau(v):
+    """GLIDE: the lag's time constant in cents, seconds -- 0 for no glide
+    (the knob at its end)."""
+    v = _clip01(v)
+    if v <= 0.0:
+        return 0.0
+    return math.exp(float(np.interp(v, _GLIDE_V, _GLIDE_LOG)))
+
+
+def glide_tau_knob(tau):
+    if tau <= 0.0:
+        return 0.0
+    return float(np.interp(math.log(tau), _GLIDE_LOG, _GLIDE_V))
+
+
+def glide_kernel_tau(tau, f_target, f_source):
+    """The kernel's glide is exponential in LENGTH (1/f: tonelib.glide_g), the
+    lag's in cents: the kernel's time constant that puts the glide half way
+    in cents (the geometric mean) when the lag does -- tau ln 2 / ln(1 + sqrt
+    R), R the ratio travelled: 0.79 tau for an octave up, 1.30 down, tau for a
+    step. The ends agree; the middle is off at most 0.02 neper."""
+    R = float(f_target) / float(f_source)
+    return tau * math.log(2.0) / math.log(1.0 + math.sqrt(R))
+
+
 # LFO 1, measured (examples/messenger_fit.py lfo; a slow LFO from the key,
 # the cutoff by noise in 0.25 s windows, the pitch tracked): the TRIANGLE
 # swings both ways about the panel; the SAWTOOTH (falling, as Moog names it),
@@ -1095,10 +1136,14 @@ MESSENGER_CC = {
     13: ('mod_amount', '14'), 72: ('mod_dest', 'mode'),
     77: ('sync', 'onoff'), 3: ('lfo1_rate', '14'), 4: ('lfo1_depth', '14'),
     83: ('lfo1_shape', 'mode'), 85: ('lfo1_dest', 'mode'), 93: ('lfo1_reset', 'onoff'),
-    2: None, 18: None, 20: None, 27: None,
-    73: None, 80: None, 81: None, 89: None,
-    102: None, 107: None, 108: None, 112: None, 113: None, 114: None, 116: None,
-    117: None, 118: None,
+    5: ('glide', '14'),
+    112: ('f_loop', 'onoff'), 113: ('a_loop', 'onoff'), 80: ('f_vel', 'onoff'),
+    27: ('lfo2_rate', '14'), 116: ('lfo2_pitch', 'onoff'), 117: ('lfo2_cut', 'onoff'),
+    118: ('lfo2_amp', 'onoff'),
+    2: None, 18: None, 20: None,
+    73: None, 89: None,
+    81: ('a_vel', 'onoff'),
+    102: None, 107: None, 108: None, 114: ('multitrig', 'onoff'),
 }
 # THE OCTAVE SWITCH RISES WITH ITS CC: 0-31 is 32', 32-63 16', 64-95 8',
 # 96-127 4' -- measured on Ben's Messenger (1.1.0), A4 sounding at 112, 225,
@@ -1180,13 +1225,15 @@ def messenger_cc_value(kind, v):
 def messenger_messages(panel, firmware='1.0.7+', knobs=None):
     """[(CC, value)] that set a Messenger's panel to `panel` -- every knob its
     chart carries (or just `knobs`), the coarse half of a 14-bit knob first, as
-    the hardware reads them. What the Messenger has no CC for (GLIDE here, the
-    MF-104M, which is another box) is not sent."""
+    the hardware reads them. What the Messenger has no CC for (the MF-104M,
+    which is another box) is not sent."""
     chart, _lsb = messenger_chart(firmware)
     out = []
     for cc, ent in sorted(chart.items()):
         if ent is None or (knobs is not None and ent[0] not in knobs):
             continue
+        if ent[0] == 'a_vel' and panel[ent[0]] < 0.0:
+            continue                    # (the voice's own touch: the hardware's switch left as it is)
         hi, lo = messenger_cc_value(ent[1], panel[ent[0]])
         out.append((cc, hi))
         if lo is not None:
@@ -1395,6 +1442,124 @@ def convert_v5(knobs, context=None):
 
 
 PANEL = convert_v1(PANEL_V1)
+# A ENV VEL, a switch the hardware has: -1 the voice's own touch (the GM
+# law every synth follows), 0 off (the level fixed, velocity 127's), 1 on --
+# the Messenger's law (a_vel_gain). Last, so the native knob order (NV_MK_*)
+# only grows.
+PANEL['a_vel'] = -1.0
+# LFO 2, the left-hand controller's: its RATE knob and the three DESTINATION
+# switches (lfo2_rate, lfo2_pitch, lfo2_cut, lfo2_amp), the MOD wheel its depth
+PANEL.update(lfo2_rate=0.5, lfo2_pitch=False, lfo2_cut=False, lfo2_amp=False)
+# THE CONTOURS' SWITCHES: F ENV LOOP, A ENV LOOP, F ENV VEL, MULTI-TRIG
+PANEL.update(f_loop=False, a_loop=False, f_vel=False, multitrig=True)
+
+# F ENV VEL ON, measured (examples/messenger_perf.py vel: a held filter
+# contour's brightness at each velocity, inverted through the ladder into
+# the contour's octaves -- and the level the closing filter costs agreed with
+# the take's, -5.6 dB at 40): velocity scales the contour's depth by
+# (v/127)^F_VEL_POWER (0.37 of it at 40, 0.55 at 60, 0.83 at 100).
+F_VEL_POWER = 0.8
+# MULTI-TRIG, measured (examples/messenger_perf.py trig): off, a key pressed
+# while another is held -- or let go back to one still held -- takes the
+# voice over WITHOUT starting its contours again (no step at the handoff);
+# on, they start again (+4.9 dB at a held one's sustain, +7.9 at a return).
+# Off, live carries the old note's contours' age into the new one
+# (Live._legato_age, mx_row's age). On (the default), they start again --
+# CHARGED FROM WHERE THE OLD NOTE'S HAD GOT TO, as an analog contour
+# retriggered does (synthkernel.c moog_held_from; mx_row's start levels).
+# A NOTE'S OWN ROW for the kernel's Moog extensions (synthkernel.c MX_W,
+# synth_voice_moogx): its contours' age at its onset, F ENV LOOP, A ENV LOOP,
+# the filter contour's depth less 1, the amp and filter contours' levels at
+# its start. All zero: the note as it always was.
+MX_W = 6
+MX_LOOP_DK = 3.37
+
+
+def mx_row(panel, vel=127, age=0.0, l0a=0.0, l0f=0.0):
+    """A Moog note's MX row: its loops from the panel, its filter contour's
+    depth from its velocity where F ENV VEL is on, its contours' age and
+    start levels."""
+    return [float(age), 1.0 if panel['f_loop'] else 0.0, 1.0 if panel['a_loop'] else 0.0,
+            (float(vel) / 127.0) ** F_VEL_POWER - 1.0 if panel['f_vel'] else 0.0, float(l0a), float(l0f)]
+
+
+def held_level(tt, A, D, S, l0=0.0, loop=False, R=0.0):
+    """A held contour's level tt s in, as the kernel draws it (moog_held,
+    moog_held_from, moog_loop_at), in double -- where a retrigger takes it
+    over. A, D, R the kernel's times (the attack's to 1, four time constants
+    each after), S the decay's target; from l0, or looping."""
+    T, K, U = ATTACK_TARGET, _ATK_TO_1, EG_UNDER
+    A, D, R = max(A, 1e-6), max(D, 1e-6), max(R, 1e-6)
+    if tt < 0.0:
+        return 0.0
+    if loop:
+        Td = MX_LOOP_DK * D * 0.25
+        h = held_level(A + Td, A, D, S)
+        tt = math.fmod(tt, A + Td + R * 0.25 * math.log((h + U) / U))
+        if tt >= A + Td:
+            return max(0.0, (h + U) * math.exp(-(tt - A - Td) / (R * 0.25)) - U)
+        l0 = 0.0
+    ta = A / K
+    if l0 > 0.0:
+        A1 = 0.0 if l0 >= 1.0 else ta * math.log((T - l0) / (T - 1.0))
+        if tt < A1:
+            return T - (T - l0) * math.exp(-tt / ta)
+    else:
+        A1 = A
+        if tt < A:
+            return T * (1.0 - math.exp(-tt / ta))
+    return max(0.0, S + (1.0 - S) * math.exp(-(tt - A1) / (D * 0.25)))
+
+# LFO 2, measured (examples/messenger_perf.py lfo2, lfo2slow, lfo2dest;
+# 2026-11-11): a TRIANGLE ("a triangle wave modulation source", the manual),
+# free-running, its rate from CC27 on this curve (the slow end timed from its
+# ramps, 63 cents a second at 0 over a +-684 cent swing; the manual's "around
+# .05 Hz to around 12 Hz"), log-interpolated. The MOD WHEEL scales the pitch
+# and the cutoff by its SQUARE (a half wheel 0.255 and 0.266 of the full
+# swing) and the amplitude a little less steeply (LFO2_AMP_POWER: 0.32 off at
+# a half wheel, 0.14 at a quarter). At full wheel: the pitch +-684 cents, the
+# cutoff +-4.6 octaves, and the level down to nothing at the trough (the
+# triangle's -1), unchanged at its +1.
+LFO2_CC = (0.0, 16.0, 32.0, 48.0, 64.0, 80.0, 96.0, 112.0, 127.0)
+LFO2_HZ = (0.023, 0.042, 0.20, 0.643, 1.50, 2.94, 5.08, 8.0, 11.72)
+_LFO2_V = np.array(LFO2_CC) / 127.0
+_LFO2_LOG = np.array([math.log(h) for h in LFO2_HZ])       # (libm's, as native/slab.cpp's)
+LFO2_PITCH_CENTS, LFO2_CUT_OCT, LFO2_AMP_POWER = 684.0, 4.6, 1.55
+
+
+def knob_lfo2_rate(v):
+    """LFO 2 RATE, Hz."""
+    return math.exp(float(np.interp(_clip01(v), _LFO2_V, _LFO2_LOG)))
+
+
+def lfo2_mods(panel, wheel, x):
+    """LFO 2 at phase x (cycles) under the mod wheel (0..1): (the pitch
+    ratio, the cutoff's factor, the level's gain) -- 1 each where its switch
+    is off."""
+    x = x % 1.0
+    tri = 1.0 - 4.0 * abs(x - 0.5)
+    d = wheel * wheel
+    pr = 2.0 ** (LFO2_PITCH_CENTS * d * tri / 1200.0) if panel['lfo2_pitch'] else 1.0
+    cf = 2.0 ** (LFO2_CUT_OCT * d * tri) if panel['lfo2_cut'] else 1.0
+    ag = 1.0 - wheel ** LFO2_AMP_POWER * (1.0 - tri) * 0.5 if panel['lfo2_amp'] else 1.0
+    return pr, cf, ag
+
+
+def lfo2_on(panel):
+    """Whether LFO 2 goes anywhere: then the mod wheel is its depth."""
+    return bool(panel['lfo2_pitch'] or panel['lfo2_cut'] or panel['lfo2_amp'])
+
+# A ENV VEL ON, measured (examples/messenger_perf.py vel, 2026-11-11, the
+# level 0.25-0.55 s into each note against velocity 127's, the same as the
+# switch off): about LINEAR in velocity, 20 log10(v/127), from 25 up, and
+# plunging under it (-44.5 dB at 10). A table, interpolated in dB.
+A_VEL_V = (1.0, 10.0, 25.0, 40.0, 60.0, 80.0, 100.0, 127.0)
+A_VEL_DB = (-80.0, -44.5, -15.1, -10.7, -6.9, -4.3, -2.2, 0.0)
+
+
+def a_vel_gain(vel):
+    """A ENV VEL on: the amplitude at key velocity `vel` re 127's."""
+    return 10.0 ** (float(np.interp(float(vel), A_VEL_V, A_VEL_DB)) / 20.0)
 MG = 128                 # the grid the kernel reads rows on (synthkernel MOOG_GRID)
 
 

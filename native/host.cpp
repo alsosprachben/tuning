@@ -701,6 +701,7 @@ int nv_host::open(int argc, char **argv)
     // the program posted to it, which is its own once the post has run
     bank0 = drums ? 0 : atoi(opt(argc, argv, "bank", "0").c_str());
     pats = std::vector<PartAt>{{0, -1, drums, program, drums ? -1 : E.prog[program & 127].sid, program, bank0, bank0}};
+    pats.reserve(64);                           // (parts added while the builder reads them: never moved)
     // live._PATCHES: each program's templates (key p) and each drum set's
     // (128 + set), built once and kept -- a note struck from one may sound on
     // (keyed 256 x variation + (128 a drum set's) + program)
@@ -717,8 +718,10 @@ int nv_host::open(int argc, char **argv)
         caches[128 + dset] = dcache;
         if (!nodrums) {
             nv_part_patch_range(part, 0, -1, 1u << 9, 0, 127, 0);
+            pats[0].excl = 1u << 9;
             int pi = nv_part_add_patch(part, dcache, 2, 0.0, 1, -1, 0, 0, 0, 1, dset, E.kit_choke.data(), 9, 0u, 0, 127, 0);
             pats.push_back(PartAt{pi, 9, true, dset, -1, dset});
+            pats.back().pid = 2;
             fprintf(stderr, "nvlive: drum set %d on channel 10 (%ld templates)\n", dset, dbuilt);
         }
         if (split > 0) {
@@ -727,9 +730,13 @@ int nv_host::open(int argc, char **argv)
             int pi = nv_part_add_patch(part, dcache, 3, 0.0, 1, -1, 0, 0, 0, 1, dset, E.kit_choke.data(), sch & 15, 0u,
                                      0, split - 1, str);
             pats.push_back(PartAt{pi, sch & 15, true, dset, -1, dset});
+            pats.back().pid = 3;
+            pats.back().hi = split - 1;
+            pats.back().tr = str;
             // ...and the part from the split up (live: Part(lo=split)) -- a key
             // under it, every patch that claims it sounding, is the drums' alone
             nv_part_patch_range(part, 0, -1, nodrums ? 0u : 1u << 9, split, 127, 0);
+            pats[0].lo = split;
             fprintf(stderr, "nvlive: drum set %d under key %d on channel %d (transposed %+d)\n", dset, split,
                     (sch & 15) + 1, str);
         }
@@ -803,6 +810,8 @@ int nv_host::open(int argc, char **argv)
         if (!strcmp(argv[i], "--messenger") || !strcmp(argv[i], "--messenger=pre-1.0.7")) {
             nv_part_set(part, 8, 1.0);
             nv_part_set(part, 9, argv[i][11] == '=' ? 1.0 : 0.0);
+            msgr_reads = true;
+            msgr_pre107 = argv[i][11] == '=';
         }
     // A MESSENGER TO SET (live.py --messenger): --messenger-out=/dev/snd/midiCxDy,
     // written by its own thread; --messenger-bend=SEMITONES its bend range
@@ -826,6 +835,7 @@ int nv_host::open(int argc, char **argv)
             nv_part_messenger(part, MsgrOut::send, &mo, mb);
             if (mo.fd >= 0)
                 fprintf(stderr, "nvlive: Messenger on %s: its Moog parts set\n", md.c_str());
+            msgr_out = mo.fd >= 0 ? md : "a log";
         }
     }
     const char *FN[3] = {"synth_voice", "synth_voice_xdec", "synth_voice_damp"};
@@ -838,6 +848,21 @@ int nv_host::open(int argc, char **argv)
         }
         if (q == 0)                         // (the Moog's mod rows: the kernel library's own)
             nv_part_moog_kernel(part, dlsym(h, "moog_pitch_cells"), dlsym(h, "moog_shape_rows"));
+    }
+    // THE MOOG EXTENSIONS' KERNELS (a note's loops, its contours' age, its
+    // filter contour's depth: blockrender.ensure_moogx_lib, which the export
+    // builds), beside the damper's: none, and those rows play as they were
+    auto beside = [](const std::string &p, const char *was, const char *now) {
+        size_t at = p.rfind(was);
+        return at == std::string::npos ? std::string() : p.substr(0, at) + now + p.substr(at + strlen(was));
+    };
+    {
+        std::string ml = beside(E.libs[2], "libsynthdamp_", "libsynthmoogx_");
+        void *h = ml.empty() ? nullptr : dlopen(ml.c_str(), RTLD_NOW | RTLD_LOCAL);
+        void *smx = h ? dlsym(h, "synth_voice_moogx") : nullptr;
+        if (!smx)
+            fprintf(stderr, "nvlive: no synth_voice_moogx in %s: a Moog's loops do not loop\n", ml.c_str());
+        nv_part_moogx(part, smx, nullptr, nullptr, nullptr);
     }
     master = E.k[K_MASTER];
     // THE GPU (live.GpuRenderer), by default (--cpu: none): the setup on the
@@ -887,6 +912,18 @@ int nv_host::open(int argc, char **argv)
             // Each side's own threshold is checked by nvlive_check --gpu-min.
             long gmin = atol(opt(argc, argv, "gpu-min", "100").c_str());
             nv_part_gpu(part, vb, vbd, vds, vs, vz, cl, gmin, atoi(opt(argc, argv, "gpu-threads", "4").c_str()));
+            {                               // (the Moog extensions' build of the setup)
+                std::string gm = beside(E.gpu_damp_lib, "libsynthgpudamp_", "libsynthgpumoogx_");
+                void *hm = gm.empty() ? nullptr : dlopen(gm.c_str(), RTLD_NOW | RTLD_LOCAL);
+                void *smx = nullptr;
+                {
+                    std::string ml = beside(E.libs[2], "libsynthdamp_", "libsynthmoogx_");
+                    void *h = ml.empty() ? nullptr : dlopen(ml.c_str(), RTLD_NOW | RTLD_LOCAL);
+                    smx = h ? dlsym(h, "synth_voice_moogx") : nullptr;
+                }
+                nv_part_moogx(part, smx, hm ? dlsym(hm, "voice_block") : nullptr,
+                              hm ? dlsym(hm, "voice_damp_set") : nullptr, hm ? dlsym(hm, "voice_moogx_set") : nullptr);
+            }
             nv_part_pipeline(part, cl && pipe);
             fprintf(stderr, "nvlive: the GPU (%s), from %ld busy slots%s\n", cl ? "OpenCL" : "the C reference", gmin,
                     cl && pipe ? ", pipelined" : "");
@@ -926,7 +963,7 @@ int nv_host::open(int argc, char **argv)
         int out[4 * 16];
         int n = nv_rt_feed(router, type, ch, a, b, out, 16);
         for (int q = 0; q < n; q++)
-            nv_part_event(part, out[4 * q], out[4 * q + 1], out[4 * q + 2], out[4 * q + 3]);
+            engine_event(out[4 * q], out[4 * q + 1], out[4 * q + 2], out[4 * q + 3]);
     };
     // PROGRAM CHANGES (live.on_midi's program_change, its _patch_worker and
     // _swap_patch). With no bank selected (CC0 0: the capital tone, the
@@ -1103,6 +1140,8 @@ int nv_host::open(int argc, char **argv)
     last_ctl_code = 0;  // (the panel's EFX learn)
     last_ctl_ns = 0;
     swap = [&](size_t i, int prog, bool dr, int var, void *c) {
+        if (i >= pats.size() || pats[i].gone)
+            return;                             // (a part taken away meanwhile)
         if (recording)
             rec("s %lld part %zu program %d var %d drums %d", snap.n0, i, prog, var, (int)dr);
         PartAt &pa = pats[i];
@@ -1131,6 +1170,17 @@ int nv_host::open(int argc, char **argv)
         nv_part_swap(part, pa.pi, c, prog & 127, dr, pq[1], pq[6], pq[7], pq[8], pq[9], pq[6] >= 0,
                    dr ? E.kit_choke.data() : nullptr, regd ? note : nullptr);
         attach_drone(pa.pi, prog, dr, var);     // (a pungi's drone patch, built with it)
+        // A PRESET's STOPS, for this organ -- again at each swap of it (the
+        // preset's tuner rebuilds it after its program: live builds the two
+        // as one patch), until another program or a stop drawn by hand
+        if (pa.pi == 0 && !dr && prog == pending_drawn_prog) {
+            std::vector<const char *> nm;
+            for (const auto &x : pending_drawn)
+                nm.push_back(x.c_str());
+            nv_part_set_drawn_names(part, nm.data(), (int)nm.size());
+        } else if (pa.pi == 0) {
+            pending_drawn_prog = -1;
+        }
         pa.posted = prog & 127;
         pa.posted_var = var;
         pa.drums = dr;
@@ -1159,7 +1209,7 @@ int nv_host::open(int argc, char **argv)
             if (msb == 121)
                 en = lsb ? E.vgm2[(size_t)(prog & 127) * 128 + lsb] : 0;
             else if (msb != 120) {
-                int mp = lsb ? lsb : default_map;
+                int mp = lsb ? lsb : (int)default_map;
                 en = E.vgs[((size_t)(mp >= 1 && mp <= 4 ? mp : 0) * 128 + (prog & 127)) * 128 + msb];
             }
         }
@@ -1173,7 +1223,7 @@ int nv_host::open(int argc, char **argv)
         }
         for (size_t i = 0; i < pats.size(); i++) {
             const PartAt &pa = pats[i];
-            if (pa.channel >= 0 && pa.channel != ch)
+            if (pa.gone || (pa.channel >= 0 && pa.channel != ch))
                 continue;
             const int pv = pa.drums ? 0 : var;
             if (pa.is(prog & 127, pa.drums, pv))
@@ -1187,7 +1237,7 @@ int nv_host::open(int argc, char **argv)
         if (!nv_part_take_reset(part) || !E.has_prog)
             return;
         for (size_t i = 0; i < pats.size(); i++)
-            if (!pats[i].is(0, pats[i].drums, 0))
+            if (!pats[i].gone && !pats[i].is(0, pats[i].drums, 0))
                 ask(i, 0, pats[i].drums, 0);
     };
     // ...and once a block has run its posts, the programs posted are the parts'
@@ -1334,6 +1384,8 @@ int nv_host::open(int argc, char **argv)
         }
         for (size_t i = 0; i < pats.size(); i++) {
             const PartAt &pa = pats[i];
+            if (pa.gone)
+                continue;
             void *c = build(pa.posted, pa.drums, pa.drums ? 0 : pa.posted_var);
             if (c)
                 give(i, pa.posted, pa.drums, pa.drums ? 0 : pa.posted_var, c);
@@ -1375,6 +1427,8 @@ int nv_host::open(int argc, char **argv)
         retune_bank = true;
         for (size_t i = 0; i < pats.size(); i++) {
             const PartAt &pa = pats[i];
+            if (pa.gone)
+                continue;
             void *c = build(pa.posted, pa.drums, pa.drums ? 0 : pa.posted_var);
             if (c)
                 give(i, pa.posted, pa.drums, pa.drums ? 0 : pa.posted_var, c);
@@ -1511,6 +1565,20 @@ void nv_host::render_block(long long n0, float *buf, bool step)
     landed();
     if (step) {
         step_swaps += settle(reqs);     // (live's builder in step: for the next block)
+        std::vector<PartSpec> adds;     // ...and the parts added (the session's), built and added in step
+        {
+            std::lock_guard<std::mutex> lk(bmu);
+            adds.swap(add_req);
+        }
+        for (const PartSpec &sp : adds)
+            part_added(sp, build(sp.program, sp.drums, sp.var));
+        std::string tn;                 // ...and a tuner asked for (a preset's), switched in step
+        {
+            std::lock_guard<std::mutex> lk(bmu);
+            tn.swap(tuner_req);
+        }
+        if (!tn.empty())
+            tuner_switch(tn, [&](size_t i_, int p_, bool d_, int v_, void *c_) { swap(i_, p_, d_, v_, c_); });
     } else {
         // the programs asked for to the builder, and those it has built swapped in
         {
@@ -1532,6 +1600,9 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                     answered(d.first.i, d.first.prog, d.first.dr, d.first.var);
                 }
                 bdone.clear();
+                for (auto &d : add_done)                // (the parts built: added)
+                    part_added(d.first, d.second);
+                add_done.clear();
             }
         }
     }
@@ -1621,9 +1692,9 @@ void nv_host::start()
             {
                 std::unique_lock<std::mutex> lk(bmu);
                 bcv.wait_for(lk, std::chrono::milliseconds(100),
-                             [&] { return !breq.empty() || !room_req.empty() || !tuner_req.empty() || g_stop; });
+                             [&] { return !breq.empty() || !room_req.empty() || !tuner_req.empty() || !add_req.empty() || g_stop; });
                 rq.swap(breq);
-                builder_busy = !rq.empty() || !room_req.empty() || !tuner_req.empty();
+                builder_busy = !rq.empty() || !room_req.empty() || !tuner_req.empty() || !add_req.empty();
             }
             nv_part_room_reap(part);                    // (an old tail, let go off the audio thread)
             std::string rname;
@@ -1674,6 +1745,19 @@ void nv_host::start()
                 else if (tn != tuner_now)
                     note("tuner " + tn + ": not one nvlive can make");
             }
+            std::vector<PartSpec> adds;                 // PARTS ADDED (layer, split, the session's)
+            {
+                std::lock_guard<std::mutex> lk(bmu);
+                adds.swap(add_req);
+            }
+            for (const PartSpec &sp : adds) {
+                void *c = build(sp.program, sp.drums, sp.var);
+                if (!c)
+                    note(std::string(sp.drums ? "drum set " : "program ") + std::to_string(sp.program)
+                         + " is not native here: no part added");
+                std::lock_guard<std::mutex> lk(bmu);
+                add_done.push_back(std::make_pair(sp, c));
+            }
             for (size_t q = 0; q < rq.size() && !g_stop; q++) {
                 bool later = false;
                 for (size_t r = q + 1; r < rq.size() && !later; r++)
@@ -1704,6 +1788,23 @@ void nv_host::start()
     builder = std::thread(builder_loop);
 }
 
+// AN EVENT PAST THE ROUTES, into the part -- and a captured control's last
+// value latched as it goes (live._see: CAPTURE_CC, what a scene keeps; CC121
+// resets the ones it resets). The audio thread's
+static const int CAPTURE_CC[] = {0, 32, 1, 5, 7, 10, 11, 43, 44, 45, 65, 91, 93};
+void nv_host::engine_event(int type, int ch, int a, int b)
+{
+    if (type == 2) {
+        for (int c : CAPTURE_CC)
+            if (a == c)
+                chanlatch[std::make_pair(ch, a)] = b;
+        if (a == 121)
+            for (int c : {1, 11, 65})
+                chanlatch.erase(std::make_pair(ch, c));
+    }
+    nv_part_event(part, type, ch, a, b);
+}
+
 // a tuner asked for (the panel's): built on the builder, as a room is
 void nv_host::set_tuner(const std::string &name)
 {
@@ -1730,7 +1831,7 @@ void nv_host::globals_init()
     double st[15];
     nv_part_stats(part, st);
     gval[0] = 20.0 * log10(std::max(master, 1e-12));
-    gval[1] = -20.0 * log10(std::max(E.headroom, 1e-12));
+    gval[1] = std::round(-20.0 * log10(std::max(E.headroom, 1e-12)) * 1e9) / 1e9;    // (4.0, not 3.9999999999999996)
     gval[2] = E.k.size() > K_THRESH ? E.k[K_THRESH] : 0.70;
     gval[3] = E.k.size() > K_BEND_RANGE ? E.k[K_BEND_RANGE] : 2.0;
     gval[4] = 35.0;
@@ -1738,12 +1839,45 @@ void nv_host::globals_init()
     gval[6] = st[12] > 0.5 ? 1.0 : 0.0;
     gval[7] = st[11] > 0.5 ? 1.0 : 0.0;
     gval[8] = room_idx;
+    gval[9] = 0.25;                             // live.mod_rate: the wheel's vibrato +25% faster at full
+    // (10-12, the metronome: off, no bell, 0 dB -- kept as they are: its own)
+    gval[13] = default_map;
 }
 
 void nv_host::set_global(int i, double v)
 {
-    if (i < 0 || i > 8)
+    if (i < 0 || i > 13)
         return;
+    if (i == 13) {                              // THE STANDARD (live.std_map): read at the next program change
+        gval[i] = std::max(0.0, std::min(4.0, std::round(v)));
+        default_map = (int)gval[i];
+        return;
+    }
+    if (i == 10 || i == 11) {                   // THE METRONOME (livetui.metronome): built the first time it is on
+        gval[i] = v;
+        const double bpm = gval[10];
+        const int ring = (int)gval[11];
+        if (metro_pi >= 0) {
+            post([this, bpm, ring](long long) { nv_part_metronome(part, -1, bpm, ring); });
+        } else if (bpm > 0.0 && !metro_building) {
+            metro_building = true;              // (one build: it starts on the tempo and ring of its arrival)
+            PartSpec sp;
+            sp.drums = true;
+            sp.channel = 9;
+            sp.level = gval[12];
+            sp.metro = true;
+            part_add(sp);
+        }
+        return;
+    }
+    if (i == 12) {                              // ...its level (live.set_metro_level: its part's)
+        gval[i] = v;
+        if (metro_pi >= 0) {
+            const int pi = metro_pi;
+            post([this, pi, v](long long) { nv_part_patch_level(part, pi, v, 0); });
+        }
+        return;
+    }
     if (i == 8) {                               // THE ROOM: the builder's (live.set_room)
         int k = (int)v;
         if (k >= 0 && k < (int)E.rooms.size()) {
@@ -1765,6 +1899,7 @@ void nv_host::set_global(int i, double v)
         case 5: nv_part_set(part, 1, v); break;
         case 6: nv_part_set(part, 5, v); break;
         case 7: nv_part_set(part, 6, v); break;
+        case 9: nv_part_set(part, 7, v); break;     // live.mod_rate
         }
     });
 }
@@ -1796,20 +1931,344 @@ void nv_host::patches_init()
 }
 
 // a patch for the part, asked for between two blocks (live's change_patch)
-void nv_host::pick(int sp)
+void nv_host::pick(int sp) { pick_row(0, sp); }
+
+// ...for any part (livetui's PATCH column)
+void nv_host::pick_row(size_t row, int sp)
 {
     if (!E.has_prog)
         return;
-    post([this, sp](long long) {
-        const PartAt &pa = pats[0];
+    post([this, row, sp](long long) {
+        if (row >= pats.size() || pats[row].gone)
+            return;
+        const PartAt &pa = pats[row];
         if (sp >= 256) {                        // (a variation: its program under its bank)
             int p = E.vpv[sp - 256][0], v = E.vpv[sp - 256][1];
             if (!pa.is(p, false, v))
-                ask(0, p, false, v);
+                ask(row, p, false, v);
         } else if (!pa.is(sp & 127, sp >= 128, 0)) {
-            ask(0, sp & 127, sp >= 128, 0);
+            ask(row, sp & 127, sp >= 128, 0);
         }
     });
+}
+
+// ---- A MOOG PART's KNOBS (livetui's synth pane) ----
+
+// its panel on a layer, read on the audio thread between two blocks (or
+// here, when no blocks are coming): its layers, 0 not a Moog
+int nv_host::synth_state(size_t row, int layer, double *pn, char *own)
+{
+    int pi;
+    {
+        std::lock_guard<std::mutex> lk(parts_mu);
+        if (row >= pats.size() || pats[row].gone || pats[row].drums)
+            return 0;
+        pi = pats[row].pi;
+    }
+    struct Got {
+        double pn[NV_MK_N];
+        char own[NV_MK_N];
+        int n = 0;
+        std::atomic<bool> done{false};
+    };
+    auto got = std::make_shared<Got>();
+    auto take = [this, got, pi, layer](long long) {
+        got->n = nv_part_synth_get(part, pi, layer, got->pn, got->own);
+        got->done = true;
+    };
+    if (scene_inline)
+        take(0);
+    else
+        post(take);
+    for (int i = 0; i < 200 && !got->done && !g_stop; i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::lock_guard<std::mutex> lk(synth_mu);
+    const size_t key = row * 2 + (size_t)layer;
+    if (got->done) {                            // (read: kept, for a save the audio cannot answer -- a quit's)
+        SynthRead &c = synth_cache[key];
+        c.n = got->n;
+        memcpy(c.pn, got->pn, sizeof c.pn);
+        memcpy(c.own, got->own, sizeof c.own);
+    }
+    auto it = synth_cache.find(key);
+    if (it == synth_cache.end())
+        return -1;                              // (never read: unknown)
+    if (!it->second.n)
+        return 0;
+    memcpy(pn, it->second.pn, sizeof it->second.pn);
+    memcpy(own, it->second.own, sizeof it->second.own);
+    return it->second.n;
+}
+
+static int part_pi(nv_host &h, size_t row)
+{
+    std::lock_guard<std::mutex> lk(h.parts_mu);
+    return row < h.pats.size() && !h.pats[row].gone ? h.pats[row].pi : -1;
+}
+
+void nv_host::synth_set(size_t row, int layer, int knob, double v)
+{
+    const int pi = part_pi(*this, row);
+    if (pi >= 0)
+        post([this, pi, layer, knob, v](long long) { nv_part_synth_set(part, pi, layer, knob, v); });
+}
+
+void nv_host::synth_forget(size_t row, int layer, int knob)
+{
+    const int pi = part_pi(*this, row);
+    if (pi >= 0)
+        post([this, pi, layer, knob](long long) { nv_part_synth_forget(part, pi, layer, knob); });
+}
+
+int nv_host::synth_send(size_t row)
+{
+    const int pi = part_pi(*this, row);
+    if (pi < 0)
+        return 0;
+    auto sent = std::make_shared<std::atomic<int>>(-1);
+    post([this, pi, sent](long long) { *sent = nv_part_synth_send(part, pi); });
+    for (int i = 0; i < 200 && *sent < 0 && !g_stop; i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    return std::max(0, sent->load());
+}
+
+// ---- THE PARTS (livetui's PARTS pane) ----
+
+// A PART's FIXED TOUCH (livetui.toggle_touch): the host's copy now, the
+// patch's between two blocks
+void nv_host::part_touch(size_t row, int fixed)
+{
+    int pi;
+    {
+        std::lock_guard<std::mutex> lk(parts_mu);
+        if (row >= pats.size() || pats[row].gone)
+            return;
+        pats[row].fixed = fixed;
+        pi = pats[row].pi;
+    }
+    post([this, pi, fixed](long long) { nv_part_patch_touch(part, pi, fixed); });
+}
+
+// A MESSENGER's CHART read on every part (livetui's M, live's cc_map
+// "messenger": nvlive's for all its parts at once, --messenger's)
+void nv_host::messenger_reading(bool on)
+{
+    msgr_reads = on;
+    const double v = on ? 1.0 : 0.0;
+    post([this, v](long long) { nv_part_set(part, 8, v); });
+}
+
+// AN ON-SCREEN CONTROL SENT (livetui.send_control, live.control_message):
+// past the routes, to every channel or its own -- mono on as CC126 1, off as
+// CC127 0 (both carry an All Sounds Off: switching it stops what the channel holds)
+void nv_host::control_send(int key, int value, int channel)
+{
+    int type, a, b;
+    if (key == -1) {                            // the pitch wheel
+        type = 4;
+        a = std::max(-8192, std::min(8191, value));
+        b = 0;
+    } else if (key == -2) {                     // aftertouch
+        type = 3;
+        a = std::max(0, std::min(127, value));
+        b = 0;
+    } else if (key == -3) {                     // mono
+        type = 2;
+        a = value >= 64 ? 126 : 127;
+        b = value >= 64 ? 1 : 0;
+    } else {
+        type = 2;
+        a = key;
+        b = std::max(0, std::min(127, value));
+    }
+    post([this, type, a, b, channel](long long) {
+        for (int ch = 0; ch < 16; ch++)
+            if (channel < 0 || channel == ch)
+                engine_event(type, ch, a, b);
+    });
+}
+
+// what the panel shows of each part still there (its index the host's)
+std::vector<panel::PartRow> nv_host::part_rows()
+{
+    std::vector<panel::PartRow> out;
+    std::lock_guard<std::mutex> lk(parts_mu);
+    for (size_t i = 0; i < pats.size(); i++) {
+        const PartAt &pa = pats[i];
+        if (pa.gone)
+            continue;
+        panel::PartRow r;
+        r.index = (int)i;
+        r.program = pa.program & 127;
+        r.var = pa.drums ? 0 : pa.var;
+        r.drums = pa.drums;
+        r.channel = pa.channel;
+        r.lo = pa.lo;
+        r.hi = pa.hi;
+        r.tr = pa.tr;
+        r.level = pa.level;
+        r.muted = pa.muted;
+        r.touch_fixed = pa.fixed < 0 ? !nv_part_patch_touch_sensitive(part, pa.pi) : pa.fixed != 0;
+        r.name = pa.drums ? (E.prog[r.program].kit.empty() ? "drum set" : E.prog[r.program].kit) : E.prog[r.program].name;
+        for (size_t j = 0; j < E.vpv.size() && r.var; j++)
+            if (E.vpv[j][0] == r.program && E.vpv[j][1] == r.var)
+                r.name = E.vnames[j];
+        out.push_back(r);
+    }
+    return out;
+}
+
+// a part's channel (-1 every one), keys, transpose, level and mute: the
+// host's copy now, the patch's between two blocks (read as a note is struck)
+void nv_host::part_set(size_t row, int channel, int lo, int hi, int tr, double level, bool muted)
+{
+    int pi;
+    unsigned excl;
+    {
+        std::lock_guard<std::mutex> lk(parts_mu);
+        if (row >= pats.size() || pats[row].gone)
+            return;
+        PartAt &pa = pats[row];
+        pa.channel = channel;
+        pa.lo = lo;
+        pa.hi = hi;
+        pa.tr = tr;
+        pa.level = level;
+        pa.muted = muted;
+        pi = pa.pi;
+        excl = channel >= 0 ? 0u : pa.excl;
+    }
+    post([this, pi, channel, excl, lo, hi, tr, level, muted](long long) {
+        nv_part_patch_range(part, pi, channel, excl, lo, hi, tr);
+        nv_part_patch_level(part, pi, level, muted);
+    });
+}
+
+// A PART ADDED (livetui's a and s): its program built on the builder (as a
+// program change's), then the patch added between two blocks
+void nv_host::part_add(const PartSpec &sp)
+{
+    {
+        std::lock_guard<std::mutex> lk(bmu);
+        add_req.push_back(sp);
+    }
+    bcv.notify_one();
+}
+
+static const int HOST_DRUM_P[10] = {1, 1, 1, -1, -1, -1, -1, 0, 0, 0};    // (a drum set's live record)
+
+// ...on the audio thread, between two blocks: the patch added last (it takes
+// the notes it claims), the host's row with it
+void nv_host::part_added(const PartSpec &sp, void *c)
+{
+    if (!c)
+        return;
+    if (sp.metro) {                             // THE METRONOME's part (live.build_metro_part): Standard's kit, hidden
+        int pi = nv_part_add_patch(part, c, 4, gval[12], HOST_DRUM_P[1], HOST_DRUM_P[6], HOST_DRUM_P[7],
+                                   HOST_DRUM_P[8], HOST_DRUM_P[9], 1, 0, E.kit_choke.data(), 9, 0u, 0, 127, 0);
+        nv_part_patch_level(part, pi, gval[12], 0);
+        nv_part_metronome(part, pi, gval[10], (int)gval[11]);
+        metro_pi = pi;
+        return;
+    }
+    const int *pq = sp.drums ? HOST_DRUM_P : prec(sp.program, sp.var);
+    const long long pid = next_pid++;
+    int pi = nv_part_add_patch(part, c, pid, sp.level, pq[1], pq[6], pq[7], pq[8], pq[9], sp.drums, sp.program,
+                               sp.drums ? E.kit_choke.data() : nullptr, sp.channel, sp.channel >= 0 ? 0u : sp.excl,
+                               sp.lo, sp.hi, sp.tr);
+    nv_part_patch_level(part, pi, sp.level, sp.muted);
+    nv_part_patch_touch(part, pi, sp.fixed);
+    attach_drone(pi, sp.program, sp.drums, sp.var);
+    for (int layer = 0; layer < 2; layer++)    // (its knobs: once the patch is in)
+        for (const auto &kv : sp.syn[layer])
+            nv_part_synth_set_later(part, pi, layer, kv.first, kv.second);
+    PartAt pa{pi, sp.channel, sp.drums, sp.program, sp.drums ? -1 : E.prog[sp.program & 127].sid, sp.program,
+              sp.var, sp.var};
+    pa.excl = sp.excl;
+    pa.lo = sp.lo;
+    pa.hi = sp.hi;
+    pa.tr = sp.tr;
+    pa.level = sp.level;
+    pa.muted = sp.muted;
+    pa.pid = pid;
+    pa.fixed = sp.fixed;
+    std::lock_guard<std::mutex> lk(parts_mu);
+    pats.push_back(pa);                         // (reserved: the builder may be reading the rest)
+}
+
+static nv_host::PartSpec spec_of(const nv_host::PartAt &pa)
+{
+    nv_host::PartSpec sp;
+    sp.program = pa.program & 127;
+    sp.var = pa.drums ? 0 : pa.var;
+    sp.drums = pa.drums;
+    sp.channel = pa.channel;
+    sp.excl = pa.excl;
+    sp.lo = pa.lo;
+    sp.hi = pa.hi;
+    sp.tr = pa.tr;
+    sp.level = pa.level;
+    sp.muted = pa.muted;
+    sp.fixed = pa.fixed;
+    return sp;
+}
+
+// livetui.add_part: the part copied -- same keys, same channel
+bool nv_host::part_layer(size_t row)
+{
+    PartSpec sp;
+    {
+        std::lock_guard<std::mutex> lk(parts_mu);
+        if (row >= pats.size() || pats[row].gone)
+            return false;
+        sp = spec_of(pats[row]);
+    }
+    part_add(sp);
+    return true;
+}
+
+// livetui.split_here: the part's keys cut in two, the upper half a new part
+bool nv_host::part_split(size_t row, std::string &why)
+{
+    PartSpec sp;
+    {
+        std::lock_guard<std::mutex> lk(parts_mu);
+        if (row >= pats.size() || pats[row].gone)
+            return false;
+        sp = spec_of(pats[row]);
+    }
+    const int mid = (sp.lo + sp.hi) / 2;
+    if (mid <= sp.lo || mid >= sp.hi) {
+        why = "range too small to split";
+        return false;
+    }
+    part_set(row, sp.channel, sp.lo, mid, sp.tr, sp.level, sp.muted);
+    sp.lo = mid + 1;
+    part_add(sp);
+    return true;
+}
+
+// livetui.del_part: the part taken away, its notes let go (its index kept);
+// never the first -- the part itself, its free strings with it
+bool nv_host::part_delete(size_t row, std::string &why)
+{
+    int pi;
+    {
+        std::lock_guard<std::mutex> lk(parts_mu);
+        if (row >= pats.size() || pats[row].gone)
+            return false;
+        if (pats[row].pi == 0) {
+            why = "the first part carries the free strings: it stays (change its patch or mute it)";
+            return false;
+        }
+        pi = pats[row].pi;
+    }
+    post([this, row, pi](long long n0) {
+        nv_part_patch_gone(part, pi, n0);
+        std::lock_guard<std::mutex> lk(parts_mu);
+        pats[row].gone = true;
+    });
+    return true;
 }
 
 // the build under way: templates done of its total, and its name; false none
@@ -1840,7 +2299,8 @@ int nv_host::building()
         n += (int)posted.size();
     }
     std::lock_guard<std::mutex> lk(bmu);
-    return n + (int)breq.size() + (int)bdone.size() + (room_req.empty() ? 0 : 1) + (tuner_req.empty() ? 0 : 1);
+    return n + (int)breq.size() + (int)bdone.size() + (room_req.empty() ? 0 : 1) + (tuner_req.empty() ? 0 : 1)
+           + (int)add_req.size() + (int)add_done.size();
 }
 
 // ---- THE C API (host.h): over nv_host, as nvlive drives it ----
@@ -1971,7 +2431,7 @@ void nv_host_set_global(nv_host *h, int which, double v) { h->set_global(which, 
 
 double nv_host_global(const nv_host *h, int which)
 {
-    if (which < 0 || which > 8)
+    if (which < 0 || which > 13)
         return 0.0;
     return which == 8 ? (double)h->room_idx : h->gval[which];
 }

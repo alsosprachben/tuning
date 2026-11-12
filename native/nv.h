@@ -660,7 +660,7 @@ typedef struct {
     double u_cents, u_mix, u_dc, u_dhz[2], u_width;
     /* ITS PANEL: the knobs it was built from (moog.PANEL's keys, in its
        order: NV_MK_*), what a knob turned live is built from again */
-    double pn[42];
+    double pn[51];
 } MoogLayer;
 
 /* moog.PANEL's keys, in its order */
@@ -672,7 +672,9 @@ enum {
     NV_MK_A_RELEASE, NV_MK_GLIDE, NV_MK_SYNC, NV_MK_LFO1_RATE, NV_MK_LFO1_SHAPE, NV_MK_LFO1_DEPTH,
     NV_MK_LFO1_DEST, NV_MK_LFO1_RESET, NV_MK_MOD_AMOUNT, NV_MK_MOD_DEST, NV_MK_MF104_ON, NV_MK_MF104_TIME,
     NV_MK_MF104_RANGE, NV_MK_MF104_FEEDBACK, NV_MK_MF104_MIX, NV_MK_MF104_RATE, NV_MK_MF104_AMOUNT,
-    NV_MK_MF104_WAVE, NV_MK_N
+    NV_MK_MF104_WAVE, NV_MK_A_VEL,
+    NV_MK_LFO2_RATE, NV_MK_LFO2_PITCH, NV_MK_LFO2_CUT, NV_MK_LFO2_AMP,
+    NV_MK_F_LOOP, NV_MK_A_LOOP, NV_MK_F_VEL, NV_MK_MULTITRIG, NV_MK_N
 };
 
 /* tone.c: moog.py's tables by knob position (the export's MTAB): Q, then

@@ -65,6 +65,17 @@ void nv_part_drone_patch(void *h, int pi, void *cache, int nbuckets, int speed);
 void nv_part_toggle_stop(void *h, int rank, long long n0);
 int nv_part_drawn(void *h, char *out, int cap);
 void nv_part_set_drawn(void *h, const char *want, int n);
+void nv_part_chanstate(void *h, double *out);
+void nv_part_metronome(void *h, int pi, double bpm, int ring);
+int nv_part_synth_get(void *h, int pi, int layer, double *pn, char *own);
+int nv_part_synth_set(void *h, int pi, int layer, int knob, double v);
+void nv_part_synth_forget(void *h, int pi, int layer, int knob);
+void nv_part_synth_set_later(void *h, int pi, int layer, int knob, double v);
+int nv_part_synth_send(void *h, int pi);
+void nv_part_patch_touch(void *h, int pi, int fixed);
+int nv_part_patch_touch_sensitive(void *h, int pi);
+void nv_part_switches(void *h, int ch, int *out);
+void nv_part_set_drawn_names(void *h, const char *const *names, int n);
 void nv_part_efx(void *h, const double *X, double SR);
 void nv_part_place3d(void *h, const double *q);
 int nv_part_efx_state(void *h, int *o, int cap, const char **why);
@@ -107,6 +118,8 @@ void *nv_rt_new();
 void nv_rt_add(void *h, int src, int arg, int dst, int keep, int channel, int latch, int press);
 int nv_rt_feed(void *h, int type, int ch, int a, int b, int *out, int cap);
 void nv_part_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr);
+// the Moog extensions' kernels: synth_voice_moogx, the GPU build's voice_block, voice_damp_set, voice_moogx_set
+void nv_part_moogx(void *h, void *smx, void *vbm, void *vmd, void *vmm);
 void nv_part_pipeline(void *h, int on);
 int nv_part_add_patch(void *h, void *cache, long long pid, double level_db, int nbuckets, int speed, int damper_pedal,
                     int soft_drop, int soft_top, int drums, int program, const unsigned long long *choke, int channel,
@@ -415,6 +428,16 @@ struct nv_host {
         // build lands over it
         int want = -1, want_var = 0;
         bool want_dr = false;
+        // ITS PLACE ON THE KEYBOARD (livetui's PARTS columns), the host's copy
+        // of the patch's: the channel bits it leaves out (a drum set beside
+        // it: 10's), its keys, transpose, level, mute; taken away (its index
+        // kept); its part id (the slab's keys)
+        unsigned excl = 0;
+        int lo = 0, hi = 127, tr = 0;
+        double level = 0.0;
+        bool muted = false, gone = false;
+        long long pid = 1;
+        int fixed = -1;                         // its fixed touch (live's part.fixed_touch: -1 the patch's way)
         bool is(int prog, bool dr, int v) const
         {
             return want >= 0 ? want == prog && want_dr == dr && want_var == v
@@ -496,7 +519,7 @@ struct nv_host {
     std::map<int, int> blsb;
     bool rxbank;
     const char * tmap_;
-    int default_map;
+    std::atomic<int> default_map{0};        // THE STANDARD (live.std_map): the map CC32 0 reads in -- global 13
     std::function<void(int type, int ch, int a, int b)> latch;
     std::function<void(const uint8_t *x, int n)> sys_reset;
     std::function<int(int p, int v)> var_entry_of;
@@ -527,6 +550,61 @@ struct nv_host {
     std::string tuner_req, tuner_now, tuner_asked;   // (asked: the panel's, for the session)
     std::atomic<bool> retune_bank{false};             // (the free strings' bank too, at the next swap)
     void set_tuner(const std::string &name);
+    // THE SCENE (live.scene_from): each channel's captured controls as they
+    // reached the part (the audio thread's), an event put past the routes
+    std::map<std::pair<int, int>, int> chanlatch;
+    void engine_event(int type, int ch, int a, int b);
+    // THE PARTS (livetui's PARTS pane): read by the panel under parts_mu, changed
+    // by posts (between two blocks); a part added built on the builder first
+    // (add_req -> add_done), then added between two blocks
+    std::mutex parts_mu;
+    struct PartSpec {
+        int program = 0, var = 0;
+        bool drums = false;
+        int channel = -1;
+        unsigned excl = 0;
+        int lo = 0, hi = 127, tr = 0;
+        double level = 0.0;
+        bool muted = false;
+        bool metro = false;                 // (the metronome's own drum part: no row, no key)
+        std::map<int, double> syn[2];       // (its knobs, layers A and B: a session's or preset's)
+        int fixed = -1;                     // (its fixed touch)
+    };
+    std::vector<PartSpec> add_req;
+    std::vector<std::pair<PartSpec, void *>> add_done;
+    long long next_pid = 10;
+    std::vector<panel::PartRow> part_rows();
+    void part_set(size_t row, int channel, int lo, int hi, int tr, double level, bool muted);
+    void part_add(const PartSpec &sp);
+    void part_added(const PartSpec &sp, void *c);
+    bool part_layer(size_t row);
+    bool part_split(size_t row, std::string &why);
+    bool part_delete(size_t row, std::string &why);
+    void pick_row(size_t row, int sp);
+    void part_touch(size_t row, int fixed);         // (livetui.toggle_touch: 1 fixed, 0 velocity)
+    void messenger_reading(bool on);                // (livetui's M: every part reads a Messenger's chart)
+    // THE ON-SCREEN CONTROLS (live's screen_controls; the session's "controls"):
+    // the panel's, one sent past the routes (every channel, or its own)
+    std::vector<panel::ScreenControl> screen_controls;
+    void control_send(int key, int value, int channel);
+    // A MOOG PART's KNOBS (livetui's synth pane): a part's panel on a layer
+    // read between two blocks (its layers; 0 not a Moog), one turned, one put
+    // back to the patch's, the whole sent to a Messenger
+    int synth_state(size_t row, int layer, double *pn, char *own);   // (-1: not read, and never was)
+    struct SynthRead {
+        int n = 0;
+        double pn[42];
+        char own[42];
+    };
+    std::map<size_t, SynthRead> synth_cache;        // (row x 2 + layer: the last read -- what a quit saves)
+    std::mutex synth_mu;
+    void synth_set(size_t row, int layer, int knob, double v);
+    void synth_forget(size_t row, int layer, int knob);
+    int synth_send(size_t row);
+    // THE MESSENGER (live's): one set from the panel (--messenger-out; "" none),
+    // its knobs read on every part (--messenger), the chart's firmware
+    std::string msgr_out;
+    bool msgr_reads = false, msgr_pre107 = false;
     std::vector<std::pair<long long, std::string>> room_at;
     bool follow;
     float L[4096];
@@ -578,7 +656,10 @@ struct nv_host {
     void start();                           // the workers and the builder, for playing
     // what the panel and a GUI change, between two blocks (live.post)
     void post(std::function<void(long long)> f);
-    double gval[9] = {};                    // the globals as they stand (livetui.GLOBALS: the panel's g)
+    double gval[14] = {};                   // the globals as they stand (livetui.GLOBALS: the panel's g; 9 mod
+                                            // rate, 10-12 the metronome: bpm, ring, level; 13 the standard)
+    std::atomic<int> metro_pi{-1};          // the metronome's patch (-1 not built)
+    bool metro_building = false;
     void globals_init();
     void set_global(int i, double v);
     // the patches: every program and set, and the variations, which are native
@@ -615,6 +696,16 @@ struct nv_host {
     std::vector<std::array<int, 7>> session_routes;
     bool session_routes_set = false;
     void session_apply();
+    void apply_setup(const sess::J &d, bool at_start);   // (a session's at the start; a preset's while playing)
+    // SCENES AND PRESETS (live's scenes.json, presets.json, beside the session)
+    std::vector<std::string> scene_cached;
+    bool scene_inline = false;              // (no blocks to come: --test's end, read here)
+    std::vector<std::string> scene_now();
+    int scene_recall(const std::vector<std::string> &events);
+    std::string presets_path() const, scenes_path() const;
+    std::vector<std::string> pending_drawn; // a preset's stops (names), for its organ once it is swapped in
+    int pending_drawn_prog = -1;
+    std::vector<std::array<int, 7>> routes_replaced;     // (a preset's routes, for the panel's copy)
     sess::J session_state(const std::vector<std::array<int, 7>> &routes);
     bool session_save(const std::vector<std::array<int, 7>> &routes);
     bool recording = false;

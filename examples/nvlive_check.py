@@ -35,6 +35,8 @@ piano on every channel but 10). --split=N [--split-transpose=T]: on channel
 1, keys under N the drum set's, moved by T (live: a drum part over 0..N-1
 transposed, the piano over N..127; nvlive --split). Without either, nvlive
 --no-drums.
+--metronome=BPM[:RING]: the metronome on both sides from the first block
+(live.set_metronome with its own part, nvlive --metronome).
 --pipeline (with --gpu): both a block late, the next block's setup while the
 GPU renders this one (live's TUNING_GPU_PIPELINE=1; nvlive's default on
 OpenCL). Both slabs at --slots=N (default live's 65536); on the CPU unless --gpu.
@@ -217,7 +219,9 @@ def main(argv):
                           + (["--eastern=" + opt["eastern"]] if opt.get("eastern") else [])
                           + (["--programs"] if "programs" in opt else [])
                           + (["--bank=" + opt["bank"]] if opt.get("bank") else [])
-                          + (["--room-at=" + opt["room-at"]] if opt.get("room-at") else []),
+                          + (["--room-at=" + opt["room-at"]] if opt.get("room-at") else [])
+                          + (["--metronome=" + opt["metronome"]] if opt.get("metronome") else [])
+                          + (["--fixed-touch=" + opt["fixed-touch"]] if opt.get("fixed-touch") else []),
                           stderr=subprocess.DEVNULL)
     raw = open(out, "rb").read()          # float32 stereo after a 44-byte header
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
@@ -233,6 +237,11 @@ def main(argv):
     instant_scan(lv, lv.parts[0].patch)         # (the scanner's builder, instant: nvlive's works at the press)
     import ampsync
     ampsync.sync(lv)                            # (the valve in step, as nvlive --test answers it)
+    if opt.get("fixed-touch"):                  # --fixed-touch=0|1: the part's switch (live's part.fixed_touch)
+        lv.parts[0].fixed_touch = opt["fixed-touch"] == "1"
+    if opt.get("metronome"):                    # --metronome=BPM[:RING]: live's, from its first block (nvlive --metronome)
+        _mb, _, _mr = opt["metronome"].partition(":")
+        lv.set_metronome(float(_mb), int(_mr or 0), L.Live.build_metro_part(opt.get("tuner") or "hybrid"))
     if beside or split:
         # the piano on channel 1 (keys from the split), the drum set beside it
         pp = lv.parts[0].patch

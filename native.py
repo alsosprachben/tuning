@@ -201,7 +201,7 @@ class MoogLayer(ctypes.Structure):
                 ('pre', I), ('bp_gain', C), ('bp_corner', C), ('hp_gain', C), ('hp_corner', C), ('hp_leak', C),
                 ('mf_on', I), ('mf', C * 7), ('mf_grid', C), ('mf_max', C), ('mf_floor', C), ('mf_poles', C),
                 ('u_n', I), ('u_cents', C), ('u_mix', C), ('u_dc', C), ('u_dhz', C * 2), ('u_width', C),
-                ('pn', C * 42)]
+                ('pn', C * 51)]
 
 
 class MoogSpec(ctypes.Structure):
@@ -609,6 +609,7 @@ def _load():
             ('nv_part_output', None, [ctypes.c_void_p, LL, ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p,
                                     ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, LL, C]),
             ('nv_part_gpu', None, [ctypes.c_void_p] + [ctypes.c_void_p] * 6 + [ctypes.c_long, I]),
+            ('nv_part_moogx', None, [ctypes.c_void_p] * 5),
             ('nv_part_on_gpu', I, [ctypes.c_void_p]),
             ('nv_part_shed', ctypes.c_long, [ctypes.c_void_p, LL, C]),
             ('nv_part_govern', ctypes.c_long, [ctypes.c_void_p, C, C, LL]),
@@ -1533,7 +1534,8 @@ MOOG_KNOBS = ('osc1_octave', 'osc1_wave', 'osc2_octave', 'osc2_wave', 'osc2_freq
               'kb_track', 'mode', 'res_bass', 'f_attack', 'f_decay', 'f_sustain', 'f_release', 'a_attack',
               'a_decay', 'a_sustain', 'a_release', 'glide', 'sync', 'lfo1_rate', 'lfo1_shape', 'lfo1_depth',
               'lfo1_dest', 'lfo1_reset', 'mod_amount', 'mod_dest', 'mf104_on', 'mf104_time', 'mf104_range',
-              'mf104_feedback', 'mf104_mix', 'mf104_rate', 'mf104_amount', 'mf104_wave')
+              'mf104_feedback', 'mf104_mix', 'mf104_rate', 'mf104_amount', 'mf104_wave', 'a_vel',
+              'lfo2_rate', 'lfo2_pitch', 'lfo2_cut', 'lfo2_amp', 'f_loop', 'a_loop', 'f_vel', 'multitrig')
 
 
 def moog_tables():
@@ -4845,6 +4847,9 @@ class LivePart(object):
         _kl = BR.ensure_lib()                                   # (the Moog's mod rows: the kernel's own)
         self.d.nv_part_moog_kernel(self.p, ctypes.cast(_kl.moog_pitch_cells, ctypes.c_void_p).value,
                                    ctypes.cast(_kl.moog_shape_rows, ctypes.c_void_p).value)
+        # (the Moog extensions' kernel: a note's loops, its contours' age, its filter contour's depth)
+        self.d.nv_part_moogx(self.p, ctypes.cast(BR.ensure_moogx_lib().synth_voice_moogx, ctypes.c_void_p).value,
+                             None, None, None)
         self.slab = Slab.__new__(Slab)
         self.slab.d, self.slab.cap, self.slab.p = self.d, capacity, self.d.nv_part_slab(self.p)
         import damper as DMP
@@ -4963,6 +4968,9 @@ class LivePart(object):
         self._gl = (g, gd)
         self.d.nv_part_gpu(self.p, fn(g.voice_block), fn(gd.voice_block), fn(gd.voice_damp_set),
                          fn(g.voice_samples), fn(g.voice_sizes), cl, int(gpu_min), int(nthreads))
+        gm = BR.ensure_gpu_moogx_lib()          # (the Moog extensions' build of the setup)
+        self.d.nv_part_moogx(self.p, fn(BR.ensure_moogx_lib().synth_voice_moogx), fn(gm.voice_block),
+                             fn(gm.voice_damp_set), fn(gm.voice_moogx_set))
 
     def on_gpu(self):
         return bool(self.d.nv_part_on_gpu(self.p))

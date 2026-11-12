@@ -103,7 +103,15 @@ class BlockTables:
         # damper's build, its tracks handed over first; every other table
         # through this one's own library, as it always did
         lib = self.lib
-        if prep.get('DM') is not None and len(idx) and (prep['dk'][idx] >= 0).any():
+        dmp = prep.get('DM') is not None and len(idx) and (prep['dk'][idx] >= 0).any()
+        mxo = prep.get('MXON')
+        if mxo is not None and mxo.any() and len(idx) and mxo[prep['fx'][idx][prep['fx'][idx] >= 0]].any():
+            # ...AND A TABLE WITH MOOG NOTE ROWS (moog.mx_row) through the
+            # extensions' build, which has the damper's too
+            lib = B.ensure_gpu_moogx_lib()
+            lib.voice_moogx_set(prep['MX'].ctypes.data_as(ctypes.POINTER(ctypes.c_float)))
+            lib.voice_damp_set(*(B._damp_args(prep, sl) if dmp else (None,) * 6))
+        elif dmp:
             lib = B.ensure_gpu_damp_lib()
             lib.voice_damp_set(*B._damp_args(prep, sl))
         while True:

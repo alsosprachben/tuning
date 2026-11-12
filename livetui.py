@@ -3488,6 +3488,7 @@ SYNTH_KNOBS = (
     ("MOD", "mod_amount", "amount", "modamt"),
     ("MOD", "mod_dest", "dest", "moddest"),
     ("TUNE", "tune", "tune", "semi"),
+    ("GLIDE", "glide", "glide", "glide"),
     ("SUB", "sub_wave", "wave", "subwave"),
     ("MIXER", "osc1_level", "osc 1", "level"),
     ("MIXER", "osc2_level", "osc 2", "level"),
@@ -3503,15 +3504,25 @@ SYNTH_KNOBS = (
     ("F ENV", "f_decay", "decay", "time"),
     ("F ENV", "f_sustain", "sustain", "sustain"),
     ("F ENV", "f_release", "release", "time"),
+    ("F ENV", "f_loop", "loop", "onoff"),
+    ("F ENV", "f_vel", "vel", "onoff"),
     ("A ENV", "a_attack", "attack", "atime"),
     ("A ENV", "a_decay", "decay", "time"),
     ("A ENV", "a_sustain", "sustain", "sustain"),
     ("A ENV", "a_release", "release", "time"),
+    ("A ENV", "a_vel", "vel", "avel"),
+    ("A ENV", "a_loop", "loop", "onoff"),
+    ("A ENV", "multitrig", "multi-trig", "onoff"),
     ("LFO 1", "lfo1_rate", "rate", "lfohz"),
     ("LFO 1", "lfo1_shape", "shape", "lfoshape"),
     ("LFO 1", "lfo1_depth", "depth", "lfodepth"),
     ("LFO 1", "lfo1_dest", "dest", "lfodest"),
     ("LFO 1", "lfo1_reset", "kb reset", "onoff"),
+    # LFO 2, the left-hand controller's: the MOD wheel its depth where it goes
+    ("LFO 2", "lfo2_rate", "rate", "lfo2hz"),
+    ("LFO 2", "lfo2_pitch", "pitch", "onoff"),
+    ("LFO 2", "lfo2_cut", "cutoff", "onoff"),
+    ("LFO 2", "lfo2_amp", "amp", "onoff"),
     # THE MF-104M ANALOG DELAY after it (mf104.py): Moog's own echo, saved with
     # the part and its preset like every knob here
     ("MF-104", "mf104_on", "delay", "onoff"),
@@ -3525,7 +3536,7 @@ SYNTH_KNOBS = (
 SYNTH_STEPS = {"foot": (32, 16, 8, 4), "track": (0.0, 1.0),
                "mode": (0, 1, 2, 3), "onoff": (False, True),
                "lfoshape": (0, 1, 2, 3), "lfodest": (0, 1, 2, 3), "moddest": (0, 1, 2, 3),
-               "mfrange": (0, 1)}
+               "mfrange": (0, 1), "avel": (-1.0, 0.0, 1.0)}
 
 
 def synth_fmt(kind, v, pan=None):
@@ -3577,6 +3588,15 @@ def synth_fmt(kind, v, pan=None):
         return "on" if v else "off"
     if kind == "lfohz":
         return "%.2f Hz" % MG.knob_lfo_rate(v)
+    if kind == "lfo2hz":
+        return "%.2f Hz" % MG.knob_lfo2_rate(v)
+    if kind == "glide":                   # the lag's time constant (moog.knob_glide_tau)
+        t = MG.knob_glide_tau(v)
+        if t <= 0.0:
+            return "off"
+        return ("%.2f s" % t) if t >= 1.0 else "%d ms" % round(t * 1000)
+    if kind == "avel":                    # A ENV VEL: the voice's own touch, or the Messenger's switch
+        return "voice" if v < 0.0 else ("on" if v >= 0.5 else "off")
     if kind == "lfoshape":
         return MG.LFO_SHAPES[int(v)]
     if kind == "lfodepth":                # its reach where it is sent (a cube: moog.lfo_*_octaves)

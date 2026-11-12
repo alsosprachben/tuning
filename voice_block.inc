@@ -418,6 +418,14 @@
                     float toff=(float)(off-a)/SRATE_F;
                     float big=0.f;
                     const int* mpi = pm ? MPI+(long)fxp*3 : 0;
+#ifdef MOOGX_PASS
+                    // the note's own row (synth_voice_moogx): its contours' age
+                    // at its onset, its loops, its filter contour's depth
+                    const float* mx = MX ? MX+(long)fxp*MX_W : 0;
+                    const float mxo = mx ? mx[0] : 0.f, mxe = mx ? 1.f+mx[3] : 1.f;
+                    const int mfl = mx && mx[1]!=0.f, mal = mx && mx[2]!=0.f;
+                    const float mla = mx ? mx[4] : 0.f, mlf = mx ? mx[5] : 0.f;
+#endif
                     for(int j=0;j<nj;j++){
                         long nn=(long)(j0+j)*mg;
                         long ki=(long)(j0+j)-kb0; if(ki<0)ki=0; if(ki>knk-1)ki=knk-1;
@@ -440,8 +448,13 @@
                             fade *= fr<0.40f ? 1.f : fr>0.45f ? 0.f : (0.45f-fr)*20.f;
                         }
                         float t=(float)(nn-a)/SRATE_F;
+#ifdef MOOGX_PASS
+                        float fe=moog_adsr_x(t+mxo,fA,fD,kn[3],fR,toff+mxo,mfl,mlf);
+                        float fc=kn[0]*kbf*exp2f(kn[2]*mxe*fe);
+#else
                         float fe=moog_adsr(t,fA,fD,kn[3],fR,toff);
                         float fc=kn[0]*kbf*exp2f(kn[2]*fe);
+#endif
                         if(kn[6]!=0.f && kn[5]>0.f){
                             // LFO 1 on the cutoff: from the key (KB RESET) or
                             // free-running on the absolute clock (moog.lfo)
@@ -462,8 +475,13 @@
                             float fcs=kn[0]*kbf*exp2f(kn[2]*fmaxf(kn[3],0.f)); if(fcs<1.f)fcs=1.f;
                             h/=fmaxf(moog_ladder(fhz/fcs,kn[1],mode,rb),1e-12f);
                         }
+#ifdef MOOGX_PASS
+                        gLm[j]=moog_adsr_x((float)(nn-a-dL)/SRATE_F+mxo,aA,aD,kn[4],aR2,toffL+mxo,mal,mla)*h;
+                        gRm[j]=moog_adsr_x((float)(nn-a-dR)/SRATE_F+mxo,aA,aD,kn[4],aR2,toffR+mxo,mal,mla)*h;
+#else
                         gLm[j]=moog_adsr((float)(nn-a-dL)/SRATE_F,aA,aD,kn[4],aR2,toffL)*h;
                         gRm[j]=moog_adsr((float)(nn-a-dR)/SRATE_F,aA,aD,kn[4],aR2,toffR)*h;
+#endif
                         big=fmaxf(big,fmaxf(gLm[j],gRm[j]));
                     }
                     // silent for the whole block: above a closed ladder the

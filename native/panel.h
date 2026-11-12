@@ -65,6 +65,26 @@ struct Snap {
     bool rt = false, rt_dropped = false;
 };
 
+// AN ON-SCREEN CONTROL (live's screen_controls): its control (CONTROLS' key:
+// a CC, -1 the pitch wheel, -2 aftertouch, -3 mono), its channel (-1 every
+// one), its value, its hotkey (0 none)
+struct ScreenControl {
+    int key = 0, channel = -1, value = 0, hotkey = 0;
+};
+
+// A PART as the PARTS pane shows it (livetui's row): its program, variation
+// or drum set, its channel (-1 every one), keys, transpose, level, mute, its
+// name; index its place in the host's list
+struct PartRow {
+    int index = 0, program = 0, var = 0;
+    bool drums = false;
+    int channel = -1, lo = 0, hi = 127, tr = 0;
+    double level = 0.0;
+    bool muted = false;
+    bool touch_fixed = true;            // (live.Part.touch_fixed: its switch, else the patch's way)
+    std::string name;
+};
+
 struct Host {
     std::function<Snap()> take;                                    // the latest, peaks and times reset
     // the build under way (done, total, what): false none -- a pick's bar
@@ -77,7 +97,7 @@ struct Host {
     std::string port, room, program_name, tuner;
     // the globals: master dB, headroom dB, limiter, bend range, mod depth,
     // aftertouch dB, the GPU (1 on), the room's tail (1 on)
-    double g[9];
+    double g[14];
     // ...and THE ROOM (live's global 'room': live.ROOM_NAMES the export
     // carries, g[8] the index of the one now; a step asks the builder for it)
     std::vector<std::string> rooms;
@@ -113,6 +133,35 @@ struct Host {
     int var = 0;
     std::function<void(int)> pick;
     std::function<void(const std::string &)> set_tuner;          // a tuner asked for (built, then swapped in)
+    // THE PARTS (livetui's PARTS pane): the rows, a part's columns set, one
+    // layered, split, taken away (false: why), a program asked for a part
+    std::function<std::vector<PartRow>()> parts;
+    std::function<void(int, int, int, int, int, double, bool)> part_set;     // index, ch, lo, hi, tr, level, muted
+    std::function<bool(int)> part_layer;
+    std::function<bool(int, std::string &)> part_split, part_delete;
+    std::function<void(int, int)> pick_part;                                 // index, sp
+    std::function<void(int, bool)> part_touch;                               // index, fixed (livetui.toggle_touch)
+    std::function<bool()> messenger_reads;                                   // (every part reads a Messenger's chart)
+    std::function<void(bool)> messenger_read;
+    // PRESETS AND SCENES (live's presets.json and scenes.json): saved under a
+    // name, the names, one loaded or recalled -- each says what it did
+    std::function<std::string(const std::string &)> save_preset, load_preset, save_scene, recall_scene;
+    std::function<std::vector<std::string>()> preset_names, scene_names;
+    // THE SYNTH (livetui's synth pane): a part's knobs on a layer (its layers,
+    // 0 not a Moog), one turned, one put back to the patch's, the whole sent
+    // to a Messenger (0: none to set); the Messenger's line; its firmware's
+    // chart flipped (the new one's name)
+    std::function<int(int, int, double *, char *)> synth_get;
+    std::function<void(int, int, int, double)> synth_set;
+    std::function<void(int, int, int)> synth_forget;
+    std::function<int(int)> synth_send;
+    std::function<std::string()> messenger_line, messenger_firmware;
+    // THE ON-SCREEN CONTROLS (livetui's, the controls pane): the list (the
+    // host's, saved with the session), one sent, a switch's state as the
+    // engine has it on a channel
+    std::vector<ScreenControl> *controls = nullptr;
+    std::function<void(int, int, int)> control_send;                         // key, value, channel
+    std::function<bool(int, int)> switch_on;                                 // key, channel
     // THE INSERTION EFFECT's tables (the export's EFXU: gsefx's numbered
     // types, families and each type's parameters), the GS exclusive the
     // panel sends (posted, as a file's), the channel the part listens on (-1
@@ -239,13 +288,29 @@ struct EfxView {
 static const char STOP_DIGITS[] = "123456789", STOP_SHIFTED[] = "!@#$%^&*(";
 static const int STOP_PREFIX = '`';
 
-static const int NGLOBALS = 9;
+// THE GLOBALS, by the host's numbers (nv_host_global's: 9 came last, mod
+// rate), shown in livetui.GLOBALS' order (GLOBAL_ORDER)
+static const int NGLOBALS = 14;
 static const char *GLOBAL_NAMES[NGLOBALS] = {"master", "headroom", "limiter", "bend range", "mod depth", "aftertouch",
-                                             "gpu", "room tail", "room"};
-static const char *GLOBAL_UNITS[NGLOBALS] = {"dB", "dB", "", "st", "cents", "dB", "onoff", "onoff", "room"};
+                                             "gpu", "room tail", "room", "mod rate", "metronome", "ring",
+                                             "metro level", "standard"};
+static const char *GLOBAL_UNITS[NGLOBALS] = {"dB", "dB", "", "st", "cents", "dB", "onoff", "onoff", "room", "%",
+                                             "bpm", "ring", "dB", "std"};
 static const double GLOBAL_RANGE[NGLOBALS][3] = {{-60.0, 0.0, 0.5}, {0.0, 24.0, 0.5}, {0.10, 1.00, 0.02},
                                                  {0.0, 24.0, 0.5}, {0.0, 200.0, 5.0}, {0.0, 24.0, 0.5},
-                                                 {0.0, 1.0, 1.0}, {0.0, 1.0, 1.0}, {0.0, 0.0, 1.0}};
+                                                 {0.0, 1.0, 1.0}, {0.0, 1.0, 1.0}, {0.0, 0.0, 1.0},
+                                                 {0.0, 1.5, 0.05}, {0.0, 300.0, 1.0}, {0.0, 16.0, 1.0},
+                                                 {-40.0, 12.0, 0.5}, {0.0, 4.0, 1.0}};
+// (livetui's order: mod rate after mod depth; the metronome, its ring and level last)
+static const int GLOBAL_ORDER[NGLOBALS] = {0, 1, 2, 3, 4, 9, 5, 8, 6, 7, 10, 11, 12, 13};
+static const char *STD_NAMES[5] = {"ours", "SC-55", "SC-88", "SC-88Pro", "SC-8850"};     // (livetui's)
+static int global_pos(int i)
+{
+    for (int k = 0; k < NGLOBALS; k++)
+        if (GLOBAL_ORDER[k] == i)
+            return k;
+    return 0;
+}
 
 // THE TUNERS (livetui.TUNERS, TUNER_NOTE): the name, what it is for
 static const char *TUNERS[][2] = {
@@ -279,6 +344,246 @@ static const char *TUNERS[][2] = {
     {"raga:bel_todi/todi@c#", "Indian, Sa C#: Todi as Bel measured it, near Pythagorean"}};
 static const int NTUNERS = sizeof(TUNERS) / sizeof(TUNERS[0]);
 
+// THE PARTS' COLUMNS (livetui.COLS, COL_W): what can be changed about a part,
+// every one by the same - and +; Enter picks (patch, tuner) or takes a value
+static const char *PCOLS[] = {"patch", "ch", "lo", "hi", "tr", "level", "tuner", "touch", "stops", "efx"};
+static const int PCOL_W[] = {33, 4, 5, 5, 4, 8, 11, 6, 11, 5};
+static const int NPCOLS = 10;
+static const double LEVEL_DB_MIN = -60.0, LEVEL_DB_MAX = 24.0;   // (livetui's)
+
+// ---- THE SYNTH PANE (livetui's SYNTH_KNOBS, synth_fmt) ----
+// moog.PANEL's keys in its order (nv.h's NV_MK_*: native.MOOG_KNOBS, asserted equal)
+static const char *MK_NAMES[51] = {
+    "osc1_octave", "osc1_wave", "osc2_octave", "osc2_wave", "osc2_freq", "tune", "sub_wave", "osc1_level",
+    "osc2_level", "sub_level", "noise_level", "cutoff", "resonance", "eg_amount", "kb_track", "mode", "res_bass",
+    "f_attack", "f_decay", "f_sustain", "f_release", "a_attack", "a_decay", "a_sustain", "a_release", "glide", "sync",
+    "lfo1_rate", "lfo1_shape", "lfo1_depth", "lfo1_dest", "lfo1_reset", "mod_amount", "mod_dest", "mf104_on",
+    "mf104_time", "mf104_range", "mf104_feedback", "mf104_mix", "mf104_rate", "mf104_amount", "mf104_wave",
+    "a_vel", "lfo2_rate", "lfo2_pitch", "lfo2_cut", "lfo2_amp", "f_loop", "a_loop", "f_vel", "multitrig"};
+static int mk_index(const char *name)
+{
+    for (int k = 0; k < 51; k++)
+        if (!strcmp(MK_NAMES[k], name))
+            return k;
+    return -1;
+}
+// (section, knob, label, kind), livetui.SYNTH_KNOBS
+static const char *SYNTH_KNOBS[][4] = {
+    {"OSC 1", "osc1_octave", "octave", "foot"}, {"OSC 1", "osc1_wave", "wave", "wave"},
+    {"OSC 2", "osc2_octave", "octave", "foot"}, {"OSC 2", "osc2_wave", "wave", "wave"},
+    {"OSC 2", "osc2_freq", "freq", "semi"}, {"OSC 2", "sync", "sync 1>2", "onoff"},
+    {"MOD", "mod_amount", "amount", "modamt"}, {"MOD", "mod_dest", "dest", "moddest"},
+    {"TUNE", "tune", "tune", "semi"}, {"GLIDE", "glide", "glide", "glide"}, {"SUB", "sub_wave", "wave", "subwave"},
+    {"MIXER", "osc1_level", "osc 1", "level"}, {"MIXER", "osc2_level", "osc 2", "level"},
+    {"MIXER", "sub_level", "sub", "level"}, {"MIXER", "noise_level", "noise", "level"},
+    {"FILTER", "cutoff", "cutoff", "hz"}, {"FILTER", "resonance", "resonance", "level"},
+    {"FILTER", "eg_amount", "eg amount", "oct"}, {"FILTER", "kb_track", "kb track", "track"},
+    {"FILTER", "mode", "mode", "mode"}, {"FILTER", "res_bass", "res bass", "onoff"},
+    {"F ENV", "f_attack", "attack", "atime"}, {"F ENV", "f_decay", "decay", "time"},
+    {"F ENV", "f_sustain", "sustain", "sustain"}, {"F ENV", "f_release", "release", "time"},
+    {"F ENV", "f_loop", "loop", "onoff"}, {"F ENV", "f_vel", "vel", "onoff"},
+    {"A ENV", "a_attack", "attack", "atime"}, {"A ENV", "a_decay", "decay", "time"},
+    {"A ENV", "a_sustain", "sustain", "sustain"}, {"A ENV", "a_release", "release", "time"},
+    {"A ENV", "a_vel", "vel", "avel"}, {"A ENV", "a_loop", "loop", "onoff"},
+    {"A ENV", "multitrig", "multi-trig", "onoff"},
+    {"LFO 1", "lfo1_rate", "rate", "lfohz"}, {"LFO 1", "lfo1_shape", "shape", "lfoshape"},
+    {"LFO 1", "lfo1_depth", "depth", "lfodepth"}, {"LFO 1", "lfo1_dest", "dest", "lfodest"},
+    {"LFO 1", "lfo1_reset", "kb reset", "onoff"},
+    {"LFO 2", "lfo2_rate", "rate", "lfo2hz"}, {"LFO 2", "lfo2_pitch", "pitch", "onoff"},
+    {"LFO 2", "lfo2_cut", "cutoff", "onoff"}, {"LFO 2", "lfo2_amp", "amp", "onoff"},
+    {"MF-104", "mf104_on", "delay", "onoff"}, {"MF-104", "mf104_time", "time", "mftime"},
+    {"MF-104", "mf104_range", "range", "mfrange"}, {"MF-104", "mf104_feedback", "feedback", "mffb"},
+    {"MF-104", "mf104_mix", "mix", "level"}, {"MF-104", "mf104_rate", "lfo rate", "mfhz"},
+    {"MF-104", "mf104_amount", "lfo amount", "mfoct"}};
+static const int NSYNTH = sizeof(SYNTH_KNOBS) / sizeof(SYNTH_KNOBS[0]);
+
+// livetui.SYNTH_STEPS: a switch's positions (empty: a knob, 0..1)
+static std::vector<double> synth_steps(const std::string &kind)
+{
+    if (kind == "foot") return {32, 16, 8, 4};
+    if (kind == "track" || kind == "onoff" || kind == "mfrange") return {0, 1};
+    if (kind == "avel") return {-1, 0, 1};
+    if (kind == "mode" || kind == "lfoshape" || kind == "lfodest" || kind == "moddest") return {0, 1, 2, 3};
+    return {};
+}
+static bool synth_centred(const std::string &kind)     // (livetui.SYNTH_CENTRED: a centre detent)
+{
+    return kind == "semi" || kind == "oct" || kind == "modamt" || kind == "lfodepth";
+}
+
+// moog.py's laws for the panel's words (and mf104.py's): the knob in its own terms
+namespace moogfmt {
+static double clip01(double v) { return std::max(0.0, std::min(1.0, v)); }
+static double interp(double x, const double *xs, const double *ys, int n)     // (numpy.interp)
+{
+    if (x <= xs[0]) return ys[0];
+    if (x >= xs[n - 1]) return ys[n - 1];
+    for (int i = 1; i < n; i++)
+        if (x <= xs[i])
+            return ys[i - 1] + (ys[i] - ys[i - 1]) * (x - xs[i - 1]) / (xs[i] - xs[i - 1]);
+    return ys[n - 1];
+}
+static const double EG_V[11] = {0.0, 0.1, 0.2, 0.30000000000000004, 0.4, 0.5, 0.6000000000000001,
+                                0.7000000000000001, 0.8, 0.9, 1.0};
+static const double EG_LOG[11] = {-6.907755278982137, -4.006333684899388, -3.0966581921439515, -2.432693778341066,
+                                  -1.8540604954254343, -1.3302921710046056, -0.8344803566765893,
+                                  -0.3581045367483269, 0.128393214768399, 0.6376344706296865, 1.7369512327330598};
+static double knob_tau(double v) { return exp(interp(clip01(v), EG_V, EG_LOG, 11)); }
+static double knob_attack(double v) { return knob_tau(v) * 3.5361166995615254; }
+static double knob_time(double v) { return 4.0 * knob_tau(v); }
+static const double SUS_V[6] = {0.0, 0.25, 0.5, 0.75, 0.9, 1.0};
+static const double SUS_TARGET[6] = {-0.055, 0.006, 0.23, 0.5466, 0.8015, 1.0};
+static double sustain_level(double v) { return std::max(0.0, interp(clip01(v), SUS_V, SUS_TARGET, 6)); }
+static double knob_cutoff(double v) { return 7.9 * pow(2.0, 11.38 * clip01(v)); }
+static double knob_lfo_rate(double v) { return 0.05 * pow(870.0, clip01(v)); }
+static const double CC9[9] = {0.0, 16.0 / 127, 32.0 / 127, 48.0 / 127, 64.0 / 127, 80.0 / 127, 96.0 / 127,
+                              112.0 / 127, 1.0};
+static double knob_lfo2_rate(double v)          // (moog.LFO2_HZ, log-interpolated)
+{
+    static const double H[9] = {0.023, 0.042, 0.20, 0.643, 1.50, 2.94, 5.08, 8.0, 11.72};
+    double l[9];
+    for (int i = 0; i < 9; i++)
+        l[i] = log(H[i]);
+    return exp(interp(clip01(v), CC9, l, 9));
+}
+static double knob_glide_tau(double v)          // (moog.GLIDE_TAU, log-interpolated; 0 none)
+{
+    static const double T[9] = {0.0021, 0.0045, 0.0110, 0.027, 0.062, 0.146, 0.355, 1.02, 5.03};
+    double l[9];
+    for (int i = 0; i < 9; i++)
+        l[i] = log(T[i]);
+    return v <= 0.0 ? 0.0 : exp(interp(clip01(v), CC9, l, 9));
+}
+static double cube(double v, double k)
+{
+    double x = clip01(v) - 0.5;
+    return k * x * x * x;
+}
+static double eg_octaves(double v)
+{
+    double x = clip01(v) - 0.5;
+    return 45.0 * x * fabs(x);
+}
+static double bipolar(double v, double span) { return (std::max(0.0, std::min(1.0, v)) - 0.5) * 2.0 * span; }
+static const double TRI = 0.335, SAW = 0.5, SQUARE = 0.68, PULSE_MIN = 0.025, SUB_SQUARE = 0.3, SUB_PULSE_MIN = 0.0033;
+static const char *LFO_SHAPES[4] = {"triangle", "sawtooth", "ramp", "square"};
+static const char *LFO_DESTS[4] = {"cutoff", "osc 2 freq", "osc 1 wave", "sub wave"};
+static const char *MOD_DESTS[4] = {"1>2 FM", "F ENV>OSC 2 FREQ", "F ENV>OSC 2 WAVE", "F ENV>SUB WAVE"};
+static double mf_time(double v, int rng)
+{
+    const double lo = rng ? 0.08 : 0.04, hi = rng ? 0.8 : 0.4;
+    return lo * pow(hi / lo, clip01(v));
+}
+}  // namespace moogfmt
+
+// livetui.synth_fmt: a Messenger knob's value in the panel's own terms (the
+// pedal's TIME against its RANGE, LFO 1's depth where it is sent: pn the panel)
+static std::string synth_fmt(const std::string &kind, double v, const double *pn)
+{
+    using namespace moogfmt;
+    char b[64];
+    auto rnd = [](double x) { return (long)std::nearbyint(x); };      // (Python's round: half to even)
+    if (kind == "mftime") {
+        snprintf(b, sizeof b, "%ld ms", rnd(1000 * mf_time(v, (int)pn[mk_index("mf104_range")])));
+    } else if (kind == "mfrange") {
+        return (int)v ? "long" : "short";
+    } else if (kind == "mffb") {
+        snprintf(b, sizeof b, "%.2f", 0.98 * std::min(1.0, clip01(v) / 0.8));
+    } else if (kind == "mfhz") {
+        snprintf(b, sizeof b, "%.2f Hz", 0.05 * pow(50.0 / 0.05, clip01(v)));
+    } else if (kind == "mfoct") {
+        snprintf(b, sizeof b, "%.2f oct", 1.0 * clip01(v) / 0.9);
+    } else if (kind == "foot") {
+        snprintf(b, sizeof b, "%d'", (int)v);
+    } else if (kind == "wave") {
+        if (v < TRI - 1e-9) {
+            snprintf(b, sizeof b, "fold %ld%%", rnd(100 * (TRI - v) / TRI));
+        } else if (fabs(v - TRI) < 1e-9) {
+            return "triangle";
+        } else if (fabs(v - SAW) < 1e-9) {
+            return "saw";
+        } else if (fabs(v - SQUARE) < 1e-9) {
+            return "square";
+        } else if (v < SAW) {
+            return "tri>saw";
+        } else if (v < SQUARE) {
+            return "saw>sq";
+        } else {
+            snprintf(b, sizeof b, "pulse %ld%%", rnd(100 * (0.5 - (0.5 - PULSE_MIN) * (v - SQUARE) / (1 - SQUARE))));
+        }
+    } else if (kind == "subwave") {
+        if (fabs(v - SUB_SQUARE) < 1e-9)
+            return "square";
+        if (v < SUB_SQUARE)
+            return v < 1e-9 ? "triangle" : "tri>sq";
+        snprintf(b, sizeof b, "pulse %ld%%", rnd(100 * (0.5 - (0.5 - SUB_PULSE_MIN) * (v - SUB_SQUARE) / (1 - SUB_SQUARE))));
+    } else if (kind == "semi") {
+        snprintf(b, sizeof b, "%+.2f st", bipolar(v, 7.0));
+    } else if (kind == "level") {
+        snprintf(b, sizeof b, "%.2f", v);
+    } else if (kind == "hz") {
+        double f = knob_cutoff(v);
+        if (f >= 1000)
+            snprintf(b, sizeof b, "%.1f kHz", f / 1000.0);
+        else
+            snprintf(b, sizeof b, "%ld Hz", rnd(f));
+    } else if (kind == "oct") {
+        snprintf(b, sizeof b, "%+.1f oct", eg_octaves(v));
+    } else if (kind == "track") {
+        const double r3 = std::nearbyint(v * 1000.0) / 1000.0;
+        return r3 == 0.0 ? "off" : r3 == 1.0 ? "1:1" : "2/3";
+    } else if (kind == "mode") {
+        static const char *M[4] = {"4P LP", "2P LP", "BP", "HP"};
+        return M[std::max(0, std::min(3, (int)v))];
+    } else if (kind == "onoff") {
+        return v != 0.0 ? "on" : "off";
+    } else if (kind == "lfohz") {
+        snprintf(b, sizeof b, "%.2f Hz", knob_lfo_rate(v));
+    } else if (kind == "lfo2hz") {
+        snprintf(b, sizeof b, "%.2f Hz", knob_lfo2_rate(v));
+    } else if (kind == "glide") {
+        const double t = knob_glide_tau(v);
+        if (t <= 0.0)
+            return "off";
+        if (t >= 1.0)
+            snprintf(b, sizeof b, "%.2f s", t);
+        else
+            snprintf(b, sizeof b, "%ld ms", rnd(t * 1000));
+    } else if (kind == "avel") {
+        return v < 0.0 ? "voice" : v >= 0.5 ? "on" : "off";
+    } else if (kind == "lfoshape") {
+        return LFO_SHAPES[std::max(0, std::min(3, (int)v))];
+    } else if (kind == "lfodepth") {
+        const int dest = (int)pn[mk_index("lfo1_dest")];
+        if (dest == 1)
+            snprintf(b, sizeof b, "%+.2f oct", cube(v, 37.2));
+        else if (dest >= 2)
+            snprintf(b, sizeof b, "%+.3f", cube(v, 7.809694793536804));
+        else
+            snprintf(b, sizeof b, "%+.2f oct", cube(v, 87.0));
+    } else if (kind == "lfodest") {
+        return LFO_DESTS[std::max(0, std::min(3, (int)v))];
+    } else if (kind == "moddest") {
+        return MOD_DESTS[std::max(0, std::min(3, (int)v))];
+    } else if (kind == "modamt") {
+        snprintf(b, sizeof b, "%+.0f%%", bipolar(v, 100.0));
+    } else if (kind == "sustain") {
+        double lv = sustain_level(v);
+        if (lv < 0.005)
+            return "closed";
+        snprintf(b, sizeof b, "%.0f%%", 100.0 * lv);
+    } else if (kind == "time" || kind == "atime") {
+        double t = kind == "atime" ? knob_attack(v) : knob_time(v);
+        if (t >= 1.0)
+            snprintf(b, sizeof b, "%.2f s", t);
+        else
+            snprintf(b, sizeof b, "%ld ms", rnd(t * 1000));
+    } else {
+        snprintf(b, sizeof b, "%.2f", v);
+    }
+    return b;
+}
+
 // live.CONTROLS: the destinations, in the panel's order, (key, label)
 static const std::pair<int, const char *> CONTROLS[] = {
     {64, "sustain"}, {66, "sostenuto"}, {67, "soft"}, {65, "portamento"}, {-3, "mono"}, {1, "mod wheel"},
@@ -287,6 +592,32 @@ static const std::pair<int, const char *> CONTROLS[] = {
     {72, "release"}, {76, "vibrato rate"}, {77, "vibrato depth"}, {78, "vibrato delay"}, {-1, "pitch wheel"},
     {-2, "aftertouch"}};
 static const int NCONTROLS = sizeof(CONTROLS) / sizeof(CONTROLS[0]);
+
+// live.CONTROLS' defaults and kinds: each control's resting value, and
+// switch, selector (the scanner's), bend, pressure or continuous
+static int control_default(int key)
+{
+    switch (key) {
+    case 11: return 127;
+    case 7: return 100;
+    case 10: case 74: case 71: case 73: case 75: case 72: case 76: case 77: case 78: return 64;
+    }
+    return 0;
+}
+static std::string control_kind(int key)
+{
+    if (key == 64 || key == 66 || key == 67 || key == 65 || key == -3) return "switch";
+    if (key == 94) return "selector";
+    if (key == -1) return "bend";
+    if (key == -2) return "pressure";
+    return "continuous";
+}
+// scanner.POSITIONS: the Hammond's vibrato/chorus selector (CC94), each one's start
+static const char *SCAN_NAMES[7] = {"off", "V1", "V2", "V3", "C1", "C2", "C3"};
+static const int SCAN_STARTS[7] = {0, 18, 37, 55, 73, 91, 110};
+// THE KEYS A CONTROL MAY BE BOUND TO (livetui.HOTKEYS_FREE): what the panel
+// does not use itself, in any pane -- a bound key fires from every pane
+static const char HOTKEYS_FREE[] = "cefginouvwyz[];',./ACGHIJKOQUVWYZ";
 
 static bool control_switch(int key)
 {
@@ -500,8 +831,16 @@ struct Term {
 struct Panel {
     Host &H;
     Term T;
-    int pane = 0;                       // 0 globals, 1 controls & routes
+    // THE PANES, livetui's order: the parts, the globals, the controls and routes
+    enum { P_PARTS = 0, P_GLOBALS = 1, P_ROUTES = 2, P_SYNTH = 3, NPANES = 4 };
+    int srow = 0, slayer = 0;           // the synth pane's knob and layer (livetui's srow, slayer)
+    double spn[51] = {};                // the selected part's panel as last read, its own knobs
+    char sown[51] = {};
+    int snl = 0;                        // (its layers; 0 not a Moog)
+    int pane = P_PARTS;
     int grow = 0, crow = 0;
+    int prow = 0, pcol = 0;             // the PARTS pane's row and column (livetui's row, col)
+    std::vector<PartRow> prows;         // the parts as last drawn
     bool help = false;
     bool stop_bank = false;             // the stop prefix pressed: the next stop key is rows 3-4's
     std::string msg;
@@ -518,7 +857,7 @@ struct Panel {
     std::map<std::string, std::pair<long, std::chrono::steady_clock::time_point>> health;
     // WHAT A TAP DOES (livetui.hit): this frame's rows and columns, each an
     // action -- drawn later is on top
-    enum HitKind { H_PANE, H_KEY, H_GLOBAL, H_GBAR, H_STOP, H_ROUTE };
+    enum HitKind { H_PANE, H_KEY, H_GLOBAL, H_GBAR, H_STOP, H_ROUTE, H_CELL, H_KNOB, H_KBAR };
     struct Hit {
         int y, x0, x1;
         HitKind kind;
@@ -526,6 +865,8 @@ struct Panel {
     };
     std::vector<Hit> hits;
     int drag_global = -1, drag_y = 0;  // a global being dragged: up is more
+    int drag_cell = -1;                 // ...or a part's cell (its column)
+    int drag_knob = -1;                 // ...or a synth knob
     bool quit = false;
 
     explicit Panel(Host &h) : H(h) {}
@@ -599,6 +940,16 @@ struct Panel {
         return n;
     }
 
+    // ...cut to n cells, at a code point
+    static std::string fit(const std::string &x, int n)
+    {
+        size_t i = 0;
+        for (int k = 0; i < x.size(); i++)
+            if (((unsigned char)x[i] & 0xC0) != 0x80 && k++ == n)
+                break;
+        return x.substr(0, i);
+    }
+
     // ONE SIDE OF THE STEREO METER (livetui.level_meter): dB over -48..0,
     // each cell coloured by where it sits (green to -18, amber to -6, red
     // above), the held peak a bright tick, the level in figures after it
@@ -659,14 +1010,28 @@ struct Panel {
         double v = H.g[i];
         if (!strcmp(GLOBAL_UNITS[i], "onoff"))
             return v >= 0.5 ? "on" : "off";
+        if (!strcmp(GLOBAL_UNITS[i], "std"))
+            return STD_NAMES[std::max(0, std::min(4, (int)std::lround(v)))];
         if (!strcmp(GLOBAL_UNITS[i], "room")) {
             int k = (int)v;
             return k >= 0 && k < (int)H.rooms.size() ? H.rooms[k] : "-";
         }
         if (i == 2)
             snprintf(b, sizeof b, "%.2f", v);
-        else if (i == 4)
-            snprintf(b, sizeof b, "%.0f %s", v, GLOBAL_UNITS[i]);
+        else if (!strcmp(GLOBAL_UNITS[i], "cents"))             // (livetui.fmt's)
+            snprintf(b, sizeof b, "%.0f c", v);
+        else if (!strcmp(GLOBAL_UNITS[i], "%"))
+            snprintf(b, sizeof b, "+%.0f%%", v * 100.0);
+        else if (!strcmp(GLOBAL_UNITS[i], "bpm") && v <= 0.0)
+            return "off";
+        else if (!strcmp(GLOBAL_UNITS[i], "bpm"))
+            snprintf(b, sizeof b, "%d bpm", (int)std::lround(v));
+        else if (!strcmp(GLOBAL_UNITS[i], "ring") && v <= 0.0)
+            return "no bell";
+        else if (!strcmp(GLOBAL_UNITS[i], "ring"))
+            snprintf(b, sizeof b, "bell /%d", (int)std::lround(v));
+        else if (!strcmp(GLOBAL_UNITS[i], "dB"))
+            snprintf(b, sizeof b, "%+.1f dB", v);
         else
             snprintf(b, sizeof b, "%.1f %s", v, GLOBAL_UNITS[i]);
         return b;
@@ -685,20 +1050,46 @@ struct Panel {
         std::string lamp = s.rt ? C("ok") + "● RT18" : s.rt_dropped ? C("bad") + "● rt dropped"
                                                                           : C("dim") + "● rt off";
         line(" " + C("accent") + "\x1b[1m◆ tuning native\x1b[0m  " + C("dim") + b + "   " + H.port + "   " + lamp);
-        // the part
-        rule("PART", false);
-        if (H.var && !H.kit)                    // (a variation: its program, its bank)
-            snprintf(b, sizeof b, "   %d.%d  %s", H.program, H.var & 127, H.program_name.c_str());
-        else
-            snprintf(b, sizeof b, "   %s%d  %s", H.kit ? "set " : "", H.program, H.program_name.c_str());
-        if (H.pick)
-            hit(nrow, 0, T.w, H_KEY, 'p');          // (a tap on the program: the patch list)
-        if (H.set_tuner) {                          // (...on the tuner: the tuners)
-            const int tx = cols(b) + 3;
-            hit(nrow, tx, tx + cols(H.tuner), H_KEY, 't');
+        // THE PARTS (livetui's PARTS pane): a row a part, its columns; the
+        // selected cell in the selection's colour, a muted part dim
+        if (H.parts)
+            prows = H.parts();
+        prow = std::max(0, std::min(prow, (int)prows.size() - 1));
+        rule("PARTS", pane == P_PARTS, std::to_string(prows.size()) + (prows.size() == 1 ? " part" : " parts"), P_PARTS);
+        {
+            std::string hd = "   #  ";
+            for (int c = 0; c < NPCOLS; c++) {
+                std::string t = PCOLS[c];
+                hd += t + std::string(std::max(1, PCOL_W[c] - cols(t)), ' ');
+            }
+            line(C("label") + hd);
         }
-        line(C("value") + b + "\x1b[0m" + C("dim") + "   " + H.tuner + "   room " + H.room
-             + (H.reg_modes ? "   register " + std::to_string(H.reg_modes) + " string modes" : "   no register"));
+        for (size_t i = 0; i < prows.size(); i++) {
+            const PartRow &r = prows[i];
+            const bool sel = (int)i == prow, here = pane == P_PARTS && sel;
+            std::string row = (here ? C("accent") : C("faint")) + (sel ? "▌" : " ") + "\x1b[0m ";
+            snprintf(b, sizeof b, "%2zu", i + 1);
+            row += (here ? C("accent") + "\x1b[1m" : C("dim")) + b + "\x1b[0m  ";
+            hit(nrow, 0, 6, H_CELL, (int)i, -1);
+            int x = 6;
+            for (int c = 0; c < NPCOLS; c++) {
+                std::string t = part_cell(r, c);
+                t = fit(t, PCOL_W[c] - 1);
+                std::string at = r.muted ? C("dim") : c == 0 ? C("accent2") : C("label");
+                if (here && c == pcol)
+                    at = C("sel");
+                else if (here)
+                    at += "\x1b[1m";
+                row += at + t + std::string(PCOL_W[c] - cols(t), ' ') + "\x1b[0m";
+                hit(nrow, x, x + PCOL_W[c], H_CELL, (int)i, c);
+                x += PCOL_W[c];
+            }
+            if (r.muted)
+                row += C("warn") + "muted";
+            line(row);
+        }
+        line("   " + C("dim") + "room " + H.room
+             + (H.reg_modes ? " · register " + std::to_string(H.reg_modes) + " string modes" : " · no register"));
         // the insertion effect: its type, the part on it or not, and why it
         // is not heard where it is refused here (x opens it)
         if (!s.efx.empty()) {
@@ -714,16 +1105,19 @@ struct Panel {
             line("   " + C("label") + "efx  " + C("value") + nm + "\x1b[0m" + C("dim") + st + C("dim") + "   (x)");
         }
         // the globals
-        if (pane == 0 || T.h > 30) {
-            rule("GLOBALS", pane == 0, "←→ -+ adjust", 0);
+        if (pane == P_SYNTH)
+            draw_synth();
+        if (pane == P_PARTS || pane == P_GLOBALS || (pane == P_ROUTES && T.h > 34)) {
+            rule("GLOBALS", pane == P_GLOBALS, "←→ -+ adjust", P_GLOBALS);
             int half = (NGLOBALS + 1) / 2;
             for (int r = 0; r < half; r++) {
                 std::string row;
                 for (int c = 0; c < 2; c++) {
-                    int i = r + c * half;
-                    if (i >= NGLOBALS)
+                    const int pos = r + c * half;
+                    if (pos >= NGLOBALS)
                         continue;
-                    bool here = pane == 0 && grow == i;
+                    const int i = GLOBAL_ORDER[pos];
+                    bool here = pane == P_GLOBALS && grow == pos;
                     bool na = (i == 6 && !H.has_gpu) || (i == 7 && !H.has_room) || (i == 8 && H.rooms.empty());
                     double lo = GLOBAL_RANGE[i][0], hi = i == 8 ? (double)H.rooms.size() - 1.0 : GLOBAL_RANGE[i][1];
                     snprintf(b, sizeof b, "%-11s", GLOBAL_NAMES[i]);
@@ -742,7 +1136,7 @@ struct Panel {
             }
         }
         // an organ's stops: drawn in the accent, the rest dim, each with its key
-        if (!H.stop_names.empty()) {
+        if (!H.stop_names.empty() && pane != P_SYNTH) {
             rule("STOPS", false, stop_bank ? "rows 3-4: press a stop key" : "1-9  shift  ` then a key: rows 3-4");
             // THE STOPS AS BUTTONS (livetui.stops_grid): one width for every
             // stop, so the columns line up down the whole registration; each
@@ -811,14 +1205,54 @@ struct Panel {
             }
         }
         // the routes
-        rule("CONTROLS & ROUTES", pane == 1, "r add  d delete", 1);
-        if (H.routes.empty())
-            line("   " + C("dim") + "no routes -- r adds one (a key as the sustain pedal: from a key, to sustain)");
-        for (size_t i = 0; i < H.routes.size(); i++) {
-            bool here = pane == 1 && crow == (int)i;
-            hit(nrow, 0, T.w, H_ROUTE, (int)i);
-            line(std::string(here ? C("accent") + " ▸ " : "   ") + "\x1b[0m" + (here ? C("value") : C("label"))
-                 + describe(H.routes[i]));
+        // (the globals and the routes each in their pane; both where the screen has the room)
+        if (pane == P_ROUTES || (pane != P_SYNTH && T.h > 34)) {
+            // (livetui.draw_controls: the on-screen controls, then the routes)
+            rule("CONTROLS & ROUTES", pane == P_ROUTES, "", P_ROUTES);
+            const int nc = ctl_count();
+            line(std::string(" ") + (pane == P_ROUTES ? C("accent2") : C("dim")) + "\x1b[1mon screen\x1b[0m     " + C("dim")
+                 + (nc ? "a add   space toggle   -/+ step   enter value   b hotkey" : "none yet -- tab here and press a"));
+            for (int i = 0; i < nc; i++) {
+                const ScreenControl &c = (*H.controls)[i];
+                const bool here = pane == P_ROUTES && crow == i;
+                const char *lab = control_label(c.key);
+                char hd[64];
+                snprintf(hd, sizeof hd, "%s %-16s ch %-3s", here ? ">" : " ", lab ? lab : "?",
+                         c.channel < 0 ? "all" : std::to_string(c.channel + 1).c_str());
+                std::string row = std::string(here ? C("sel") : "") + hd + "\x1b[0m ";
+                const std::string kind = control_kind(c.key);
+                if (kind == "switch") {
+                    const bool on = H.switch_on && H.switch_on(c.key, c.channel);
+                    row += on ? C("ok") + "\x1b[1m\x1b[7m ON \x1b[0m" : C("dim") + " off\x1b[0m";
+                } else if (kind == "selector") {
+                    int pos = 0;
+                    for (int q = 0; q < 7; q++)
+                        if (c.value >= SCAN_STARTS[q])
+                            pos = q;
+                    for (int q = 0; q < 7; q++)
+                        row += (here ? C("ok") : "") + (q == pos ? std::string("[") + SCAN_NAMES[q] + "]" : std::string(" ") + SCAN_NAMES[q] + " ")
+                               + "\x1b[0m ";
+                } else {
+                    const double lo = kind == "bend" ? -8192 : 0, hi = kind == "bend" ? 8191 : 127;
+                    char vb[16];
+                    snprintf(vb, sizeof vb, "%5d ", c.value);
+                    row += (here ? C("ok") : "") + vb + bar((c.value - lo) / (hi - lo), 16) + "\x1b[0m";
+                }
+                if (c.hotkey)
+                    row += "   " + C("warn") + "key " + std::string(1, (char)c.hotkey) + "\x1b[0m";
+                hit(nrow, 0, T.w, H_ROUTE, i);
+                line(row);
+            }
+            line(std::string(" ") + (pane == P_ROUTES ? C("accent2") : C("dim")) + "\x1b[1mroutes\x1b[0m        " + C("dim")
+                 + "r add   d delete  -- a route rewrites the keyboard's own controls before the engine sees them");
+            if (H.routes.empty())
+                line("   " + C("dim") + "none: every control means what it says");
+            for (size_t i = 0; i < H.routes.size(); i++) {
+                bool here = pane == P_ROUTES && crow == nc + (int)i;
+                hit(nrow, 0, T.w, H_ROUTE, nc + (int)i);
+                line(std::string(here ? C("accent") + " ▸ " : "   ") + "\x1b[0m" + (here ? C("value") : C("label"))
+                     + describe(H.routes[i]));
+            }
         }
         // THE HELP (?), over the panes: the bottom stays where it is
         if (help) {
@@ -827,11 +1261,21 @@ struct Panel {
             hits.clear();                   // (a tap anywhere closes it)
             line(" " + C("accent") + "\x1b[1m◆ tuning native\x1b[0m  " + C("dim") + "keys   (any key closes)");
             line("");
-            line("   tab / shift-tab   globals -> controls and routes");
-            line("   up down (k j)     select a global or a route");
-            line("   left right - +    adjust the global (_ + by five)");
+            line("   tab / shift-tab   parts -> globals -> controls and routes -> synth");
+            line("   up down (k j)     select a part, a global or a route");
+            line("   parts: left right a column, - + change it (_ + coarse), enter pick or type a value");
+            line("          a layer (same keys, same channel), s split, d delete, m mute");
+            line("   globals: left right - +  adjust (_ + by five)");
+            line("   S L               a preset saved, loaded (presets.json, live's)");
+            line("   synth: up down a knob, - + turn (_ + coarse), space the patch's, 0 zero, D defaults,");
+            line("          B the other layer, T the panel to the Messenger, F its firmware's chart");
+            line("   N R               a scene (each channel's controls) saved, recalled (scenes.json)");
+            line("   a                 an on-screen control: a pedal, a CC, the wheel, aftertouch, or MONO --");
+            line("                     switched either way, mono stops what the channel holds (the spec's rule)");
+            line("   space - + enter   toggle a switch (else back to its default), step it, type a value");
+            line("   b                 bind it a hotkey -- it works from every pane");
             line("   r                 add a route (from, to, how, replace or keep, channel)");
-            line("   d                 delete the selected route");
+            line("   d                 delete the selected control or route");
             line("   p                 the patch: every program, its variations, the drum sets; / to search");
             line("   t                 the tuner: every temperament live has; the patches built again in it");
             line("   x                 the insertion effect: the part on it, its type, parameters, controllers, sends");
@@ -943,10 +1387,16 @@ struct Panel {
             line("");
         }
         // THE PANE'S KEYS (livetui.PANE_KEYS): always there, on the last line
+        static const char *KP[][2] = {{"tab", "pane"}, {"↑↓", "part"}, {"←→", "column"}, {"-/+", "change"},
+                                      {"⏎", "pick"}, {"a", "layer"}, {"s", "split"}, {"d", "del"}, {"m", "mute"},
+                                      {"S/L", "preset"}, {"N/R", "scene"}, {"?", "help"}, {"q", "quit"}};
+        static const char *KS[][2] = {{"tab", "pane"}, {"↑↓", "knob"}, {"-/+", "turn"}, {"space", "patch's"},
+                                      {"0", "zero"}, {"D", "defaults"}, {"B", "layer"}, {"M", "Messenger"},
+                                      {"T", "send"}, {"?", "help"}, {"q", "quit"}};
         static const char *K0[][2] = {{"tab", "pane"}, {"↑↓", "global"}, {"←→ -/+", "change"}, {"p", "patch"},
                                       {"t", "tuner"}, {"x", "efx"}, {"P", "panic"}, {"?", "help"}, {"q", "quit"}};
-        static const char *K1[][2] = {{"tab", "pane"}, {"↑↓", "route"}, {"r", "add"}, {"d", "del"}, {"p", "patch"},
-                                      {"t", "tuner"}, {"x", "efx"}, {"P", "panic"}, {"?", "help"}, {"q", "quit"}};
+        static const char *K1[][2] = {{"tab", "pane"}, {"a", "control"}, {"r", "route"}, {"d", "del"}, {"space", "toggle"},
+                                      {"-/+", "step"}, {"⏎", "value"}, {"b", "hotkey"}, {"?", "help"}, {"q", "quit"}};
         std::string kl = " ";
         int kx = 1;
         // WHAT A TAP ON A HINT PRESSES (livetui.HINT_CODES; q is not here: a
@@ -955,6 +1405,12 @@ struct Panel {
             if (k == "tab") return {9};
             if (k == "↑↓") return {1000, 1001};
             if (k == "←→ -/+") return {1003, 1002};
+            if (k == "←→") return {1003, 1002};
+            if (k == "-/+") return {'-', '='};
+            if (k == "⏎") return {13};
+            if (k == "S/L") return {'S', 'L'};
+            if (k == "space") return {' '};
+            if (k == "N/R") return {'N', 'R'};
             if (k == "q") return {};
             if (cols(k) == 1) return {(unsigned char)k[0]};
             return {};
@@ -975,7 +1431,13 @@ struct Panel {
             kl += C("accent") + k + " " + C("dim") + w + "\x1b[0m   ";
             kx += n;
         };
-        if (pane == 0)
+        if (pane == P_PARTS)
+            for (auto &kv : KP)
+                add(kv[0], kv[1]);
+        else if (pane == P_SYNTH)
+            for (auto &kv : KS)
+                add(kv[0], kv[1]);
+        else if (pane == P_GLOBALS)
             for (auto &kv : K0)
                 add(kv[0], kv[1]);
         else
@@ -1174,7 +1636,7 @@ struct Panel {
         std::array<int, 7> r = {src, arg, dst, k == 1, ch, latch, 1};
         H.add_route(r);
         H.routes.push_back(r);
-        crow = (int)H.routes.size() - 1;
+        crow = ctl_count() + (int)H.routes.size() - 1;
         say("route " + describe(r));
     }
 
@@ -1188,9 +1650,14 @@ struct Panel {
         static const char *FAM[16] = {"Piano", "Chromatic Percussion", "Organ", "Guitar", "Bass", "Strings",
                                       "Ensemble", "Brass", "Reed", "Pipe", "Synth Lead", "Synth Pad",
                                       "Synth Effects", "Ethnic", "Percussive", "Sound Effects"};
-        int here = (H.kit ? 128 : 0) + H.program;
-        for (size_t j = 0; j < H.vpv.size() && H.var && !H.kit; j++)
-            if (H.vpv[j][0] == H.program && H.vpv[j][1] == H.var)
+        // (the selected part's: the first's when there are no rows)
+        const bool have_row = !prows.empty() && H.pick_part;
+        const PartRow pr = have_row ? prows[prow] : PartRow();
+        const int hp = have_row ? pr.program : H.program, hv = have_row ? pr.var : H.var;
+        const bool hk = have_row ? pr.drums : H.kit;
+        int here = (hk ? 128 : 0) + hp;
+        for (size_t j = 0; j < H.vpv.size() && hv && !hk; j++)
+            if (H.vpv[j][0] == hp && H.vpv[j][1] == hv)
                 here = 256 + (int)j;
         auto nat = [&](int sp) {
             return sp >= 256 ? sp - 256 < (int)H.vnative.size() && H.vnative[sp - 256]
@@ -1221,13 +1688,15 @@ struct Panel {
             }
             ids0.push_back(sp);
             rows0.push_back(label(sp));
-            for (size_t j = 0; j < H.vpv.size() && !kit; j++)     // (its variations under it)
-                if (H.vpv[j][0] == sp) {
+            const int stdm = std::max(0, std::min(4, (int)std::lround(H.g[13])));
+            for (size_t j = 0; j < H.vpv.size() && !kit; j++)     // (its variations under it: the standard's, and GS's own)
+                if (H.vpv[j][0] == sp && ((H.vpv[j][1] >> 7) == 0 || (H.vpv[j][1] >> 7) == stdm)) {
                     ids0.push_back(256 + (int)j);
                     rows0.push_back(label(256 + (int)j));
                 }
         }
-        pick_list("patch", ids0, rows0, here, nat, [&](int id) {
+        pick_list(std::string("patch   (standard ") + STD_NAMES[std::max(0, std::min(4, (int)std::lround(H.g[13])))] + ")",
+                  ids0, rows0, here, nat, [&](int id) {
             const std::string what = id >= 256 ? std::to_string(H.vpv[id - 256][0]) + "."
                                                  + std::to_string(H.vpv[id - 256][1] & 127) + " " + H.vnames[id - 256]
                                                : (id >= 128 ? "drum set " : "program ") + std::to_string(id & 127)
@@ -1237,8 +1706,12 @@ struct Panel {
                 return false;
             }
             if (id != here) {
-                H.pick(id);
-                say("asked for " + what + " (built if new, then swapped in)");
+                if (have_row)
+                    H.pick_part(pr.index, id);
+                else
+                    H.pick(id);
+                say((have_row && prows.size() > 1 ? "part " + std::to_string(prow + 1) + ": " : std::string())
+                    + "asked for " + what + " (built if new, then swapped in)");
             }
             return true;
         });
@@ -1425,6 +1898,620 @@ struct Panel {
             } else if (c == 'q' && !searching) {
                 return;
             }
+        }
+    }
+
+    // ---- THE ON-SCREEN CONTROLS (livetui's controls pane) ----
+    int ctl_count() const { return H.controls ? (int)H.controls->size() : 0; }
+    int ctl_rows() const { return ctl_count() + (int)H.routes.size(); }
+    ScreenControl *ctl_sel()
+    {
+        return crow >= 0 && crow < ctl_count() ? &(*H.controls)[crow] : nullptr;
+    }
+    // livetui.send_control: set it, send it (every channel for 'all')
+    void ctl_send(ScreenControl &c, int v)
+    {
+        const std::string kind = control_kind(c.key);
+        c.value = kind == "bend" ? std::max(-8192, std::min(8191, v)) : std::max(0, std::min(127, v));
+        if (H.control_send)
+            H.control_send(c.key, c.value, c.channel);
+    }
+    // livetui.fire (a hotkey): a switch toggles; a continuous control jumps
+    // between its default and full travel
+    void ctl_fire(ScreenControl &c)
+    {
+        const std::string kind = control_kind(c.key);
+        const char *lab = control_label(c.key);
+        if (kind == "switch") {
+            const bool on = !(H.switch_on && H.switch_on(c.key, c.channel));
+            ctl_send(c, on ? 127 : 0);
+            say(std::string(lab ? lab : "?") + (on ? " down" : " up"));
+        } else {
+            const int d = control_default(c.key), top = kind == "bend" ? 8191 : 127;
+            ctl_send(c, c.value != d ? d : top);
+            say(std::string(lab ? lab : "?") + " " + std::to_string(c.value));
+        }
+    }
+    // a, b, space, enter, d (livetui's controls keys)
+    void add_control()
+    {
+        if (!H.controls)
+            return;
+        std::vector<std::string> items;
+        for (auto &c : CONTROLS) {
+            char b[64];
+            snprintf(b, sizeof b, "%-16s %s", c.second,
+                     c.first >= 0 ? ("cc" + std::to_string(c.first)).c_str() : c.first == -3 ? "mono" : c.first == -1 ? "bend" : "pressure");
+            items.push_back(b);
+        }
+        int i = menu("add an on-screen control", items);
+        if (i < 0)
+            return;
+        std::string t;
+        if (!prompt(std::string(CONTROLS[i].second) + " channel (1-16, blank = all): ", t))
+            return;
+        int ch = -1;
+        if (!t.empty() && t != "all") {
+            ch = atoi(t.c_str()) - 1;
+            if (ch < 0 || ch > 15) {
+                say("not a channel: " + t);
+                return;
+            }
+        }
+        // (it starts at its default and SENDS NOTHING: adding a control must
+        // not change the sound until it is moved)
+        H.controls->push_back(ScreenControl{CONTROLS[i].first, ch, control_default(CONTROLS[i].first), 0});
+        crow = ctl_count() - 1;
+        say(std::string("added ") + CONTROLS[i].second);
+    }
+    void ctl_bump(int delta, bool big)
+    {
+        ScreenControl *c = ctl_sel();
+        if (!c)
+            return;
+        const std::string kind = control_kind(c->key);
+        if (kind == "switch") {
+            if ((delta > 0) != (H.switch_on && H.switch_on(c->key, c->channel)))
+                ctl_fire(*c);
+            return;
+        }
+        if (kind == "selector") {               // (its next position that way)
+            int i = 0;
+            for (int q = 0; q < 7; q++)
+                if (c->value >= SCAN_STARTS[q])
+                    i = q;
+            i = std::max(0, std::min(6, i + (delta > 0 ? 1 : -1)));
+            ctl_send(*c, SCAN_STARTS[i]);
+            say(std::string(control_label(c->key)) + " " + SCAN_NAMES[i]);
+            return;
+        }
+        ctl_send(*c, c->value + delta * (kind == "bend" ? 128 : 1) * (big ? 8 : 1));
+    }
+    void ctl_space()
+    {
+        ScreenControl *c = ctl_sel();
+        if (!c)
+            return;
+        if (control_kind(c->key) == "switch") {
+            ctl_fire(*c);
+        } else {
+            ctl_send(*c, control_default(c->key));
+            say(std::string(control_label(c->key)) + " back to " + std::to_string(control_default(c->key)));
+        }
+    }
+    void ctl_type()
+    {
+        ScreenControl *c = ctl_sel();
+        if (!c)
+            return;
+        std::string t;
+        const bool bend = control_kind(c->key) == "bend";
+        if (!prompt(std::string(control_label(c->key)) + " (" + (bend ? "-8192..8191" : "0-127") + "): ", t) || t.empty())
+            return;
+        char *end = nullptr;
+        long v = strtol(t.c_str(), &end, 10);
+        if (!end || *end) {
+            say("not a number: " + t);
+            return;
+        }
+        ctl_send(*c, (int)v);
+    }
+    void bind_hotkey()
+    {
+        ScreenControl *c = ctl_sel();
+        if (!c) {
+            say("a hotkey belongs to an on-screen control");
+            return;
+        }
+        std::string m = "\x1b[H\x1b[2J " + C("accent") + "press the key for " + control_label(c->key) + "\x1b[0m" + C("dim")
+                        + "   (esc: none)\x1b[0m";
+        fwrite(m.data(), 1, m.size(), stdout);
+        fflush(stdout);
+        int k;
+        while ((k = T.key(1000)) < 0 || k == KEY_MOUSE) {
+        }
+        if (k == 27) {
+            c->hotkey = 0;
+            say("no hotkey");
+            return;
+        }
+        if (k <= 0 || k > 127 || !strchr(HOTKEYS_FREE, k)) {
+            say(std::string("that is the panel's own key; free: ") + HOTKEYS_FREE, 6);
+            return;
+        }
+        for (auto &o : *H.controls)
+            if (&o != c && o.hotkey == k) {
+                say(std::string("'") + (char)k + "' is already " + control_label(o.key), 6);
+                return;
+            }
+        c->hotkey = k;
+        say(std::string("'") + (char)k + "' -> " + control_label(c->key));
+    }
+    void ctl_delete()
+    {
+        const int nc = ctl_count();
+        if (crow < nc) {
+            if (nc) {
+                say(std::string("removed ") + control_label((*H.controls)[crow].key));
+                H.controls->erase(H.controls->begin() + crow);
+            }
+        } else if (!H.routes.empty()) {
+            int i = std::min(crow - nc, (int)H.routes.size() - 1);
+            say("removed route " + describe(H.routes[i]));
+            H.del_route(i);
+            H.routes.erase(H.routes.begin() + i);
+        }
+        crow = std::max(0, std::min(crow, ctl_rows() - 1));
+    }
+
+    // ---- THE SYNTH PANE (livetui.draw_synth) ----
+    // a centre-detent knob's bar (livetui.signed_bar): n cells either side of a mark
+    static std::string signed_bar(double v, int n)
+    {
+        const double d = 2.0 * (std::max(0.0, std::min(1.0, v)) - 0.5);
+        if (d >= 0.0)
+            return std::string(n, ' ') + "│" + bar(d, n);
+        std::string l;
+        const int full = (int)std::lround(-d * n);
+        for (int i = 0; i < n; i++)
+            l += i >= n - full ? "█" : "·";
+        return l + "│" + std::string(n, ' ');
+    }
+    const PartRow *synth_row() const { return prows.empty() ? nullptr : &prows[prow]; }
+    void draw_synth()
+    {
+        rule("SYNTH", pane == P_SYNTH, "", P_SYNTH);
+        const PartRow *r = synth_row();
+        snl = r && H.synth_get ? H.synth_get(r->index, slayer, spn, sown) : 0;
+        if (snl && slayer >= snl) {
+            slayer = 0;
+            snl = H.synth_get(r->index, slayer, spn, sown);
+        }
+        char b[200];
+        if (!r || !snl) {
+            line("   " + C("dim")
+                 + (r && r->drums ? "a drum part answers only decay -- the synth panel is for a melodic part"
+                                  : std::string("part ") + std::to_string(prow + 1) + (r ? ", " + r->name : "")
+                                        + " is not a Moog: the synth panel turns a Moog's knobs"));
+            return;
+        }
+        const bool layered = snl > 1;
+        snprintf(b, sizeof b, "part %d, %s%s", prow + 1, r->name.c_str(), layered ? "  (layered -- B: the other)" : "");
+        const bool reads = H.messenger_reads && H.messenger_reads();
+        line("  " + C("accent2") + "\x1b[1m" + (layered ? std::string("MOOG MESSENGER ") + (slayer ? "B" : "A") : "MOOG MESSENGER")
+             + "\x1b[0m  " + C("dim") + b + "   " + (reads ? C("ok") + "reads a Messenger on every part  (M: stop)"
+                                                        : C("dim") + "M: read a Messenger's knobs"));
+        const int half = (NSYNTH + 1) / 2, xw = std::max(40, T.w / 2);
+        std::string last[2];
+        for (int rr = 0; rr < half; rr++) {
+            std::string row;
+            int cx = 0;
+            for (int c = 0; c < 2; c++) {
+                const int i = rr + c * half;
+                if (i >= NSYNTH)
+                    continue;
+                const int x = c ? xw : 2;
+                if (cx < x) {
+                    row += std::string(x - cx, ' ');
+                    cx = x;
+                }
+                const std::string sec = SYNTH_KNOBS[i][0], kind = SYNTH_KNOBS[i][3];
+                const int k = mk_index(SYNTH_KNOBS[i][1]);
+                const bool here = i == srow, own = k >= 0 && sown[k];
+                std::string t = sec != last[c] ? sec : "";
+                last[c] = sec;
+                row += "\x1b[1m" + t + "\x1b[0m" + std::string(7 - cols(t), ' ');
+                char lab[16];
+                snprintf(lab, sizeof lab, "%-10s", SYNTH_KNOBS[i][2]);
+                row += std::string(here ? C("sel") : "") + lab + "\x1b[0m" + " ";
+                const std::string v = k >= 0 ? synth_fmt(kind, spn[k], spn) : "-";
+                char vb[32];
+                snprintf(vb, sizeof vb, "%10s", fit(v, 10).c_str());
+                row += std::string(here ? "\x1b[1m" : "") + (k >= 0 && sown[k] == 2 ? C("dim") : own ? C("warn") : C("value"))
+                       + vb + "\x1b[0m" + (k >= 0 && sown[k] == 2 ? C("bad") + "*" + "\x1b[0m" : " ");
+                hit(nrow, x, x + 29, H_KNOB, i);
+                std::string bar_s;
+                if (k >= 0 && synth_centred(kind))
+                    bar_s = (here ? C("ok") : C("dim")) + signed_bar(spn[k], 4);
+                else if (k >= 0 && synth_steps(kind).empty()) {
+                    bar_s = (here ? C("ok") : C("dim")) + bar(spn[k], 9);
+                    hit(nrow, x + 29, x + 38, H_KBAR, i);
+                }
+                row += bar_s + "\x1b[0m";
+                cx = x + 29 + (bar_s.empty() ? 0 : 9);
+                if (k >= 0 && synth_centred(kind))
+                    cx = x + 29 + 9;
+            }
+            line(row);
+        }
+        // THE MESSENGER THIS PANEL SETS, if one is plugged in (--messenger-out)
+        bool kept = false;
+        for (int q = 0; q < 51; q++)
+            kept = kept || sown[q] == 2;
+        if (kept)
+            line("  " + C("bad") + "*" + C("dim") + " the part's, not heard natively (an MF-104M under a moved pitch or shape) -- kept, and saved");
+        const std::string ml = H.messenger_line ? H.messenger_line() : "";
+        line("  " + (ml.empty() ? C("dim") + "no Messenger to set (nvlive --messenger-out=/dev/snd/midiCxDy)"
+                                : C("ok") + ml));
+    }
+
+    // the selected knob (livetui's synth_*): its part, layer, index and kind
+    bool synth_sel(const PartRow *&r, int &k, std::string &kind)
+    {
+        r = synth_row();
+        if (!r || !snl || !H.synth_set)
+            return false;
+        k = mk_index(SYNTH_KNOBS[srow][1]);
+        kind = SYNTH_KNOBS[srow][3];
+        return k >= 0;
+    }
+    // - and + (livetui.synth_bump): a switch its next position, a knob by a hundredth (a tenth)
+    void synth_bump(int delta, bool big)
+    {
+        const PartRow *r;
+        int k;
+        std::string kind;
+        if (!synth_sel(r, k, kind))
+            return;
+        double v = spn[k];
+        std::vector<double> st = synth_steps(kind);
+        if (!st.empty()) {
+            size_t i = 0;
+            for (size_t j = 0; j < st.size(); j++)
+                if (fabs(st[j] - v) < fabs(st[i] - v))
+                    i = j;
+            v = st[std::max(0, std::min((int)st.size() - 1, (int)i + (delta > 0 ? 1 : -1)))];
+        } else {
+            v = std::max(0.0, std::min(1.0, v + delta * (big ? 0.1 : 0.01)));
+        }
+        H.synth_set(r->index, slayer, k, v);
+        spn[k] = v;                             // (the part has it at once: the next press steps from it)
+        sown[k] = 1;
+    }
+    // a knob set where its bar was touched (livetui.set_by_bar's kbar)
+    void synth_by_bar(int i, double f)
+    {
+        srow = i;
+        const PartRow *r;
+        int k;
+        std::string kind;
+        if (!synth_sel(r, k, kind) || !synth_steps(kind).empty())
+            return;
+        const double v = std::max(0.0, std::min(1.0, f));
+        H.synth_set(r->index, slayer, k, v);
+        spn[k] = v;
+        sown[k] = 1;
+    }
+    // space, 0, D, B, T, F, M (livetui's synth keys)
+    void synth_key(int c)
+    {
+        const PartRow *r;
+        int k;
+        std::string kind;
+        const std::string sec = SYNTH_KNOBS[srow][0], lab = SYNTH_KNOBS[srow][2];
+        if (c == 'B') {
+            if (snl < 2) {
+                say("this voice is one Messenger -- no second layer");
+            } else {
+                slayer ^= 1;
+                say(std::string("editing layer ") + (slayer ? "B  (the Messenger plugged in is layer A)" : "A"));
+            }
+            return;
+        }
+        if (c == 'F') {
+            if (H.messenger_firmware) {
+                const std::string fw = H.messenger_firmware();
+                say("the Messenger's chart: firmware " + fw + " (SUB WAVE on CC" + (fw == "pre-1.0.7" ? "11" : "71") + ")");
+            }
+            return;
+        }
+        if (c == 'M') {                         // livetui.synth_hardware: nvlive's for every part at once
+            if (H.messenger_read && H.messenger_reads) {
+                const bool on = !H.messenger_reads();
+                H.messenger_read(on);
+                say(on ? "every part reads a Messenger's knobs (its chart) -- M: General MIDI CCs again"
+                       : "General MIDI CCs again");
+            }
+            return;
+        }
+        if (!synth_sel(r, k, kind))
+            return;
+        if (c == ' ') {                         // the patch's setting (livetui.synth_reset)
+            H.synth_forget(r->index, slayer, k);
+            sown[k] = 0;
+        } else if (c == '0') {                  // its zero (livetui.synth_zero)
+            double v;
+            if (synth_centred(kind))
+                v = 0.5;
+            else if (kind == "onoff")
+                v = 0.0;
+            else if (!synth_steps(kind).empty()) {
+                say(sec + " " + lab + " has no zero");
+                return;
+            } else
+                v = 0.0;
+            H.synth_set(r->index, slayer, k, v);
+            spn[k] = v;
+            sown[k] = 1;
+        } else if (c == 'D') {                  // every knob on this layer back to the patch (livetui.synth_defaults)
+            int n = 0;
+            for (int q = 0; q < 51; q++)
+                if (sown[q]) {
+                    H.synth_forget(r->index, slayer, q);
+                    sown[q] = 0;
+                    n++;
+                }
+            say("part " + std::to_string(prow + 1) + (snl > 1 ? std::string(" layer ") + (slayer ? "B" : "A") : "") + ": "
+                + std::to_string(n) + (n == 1 ? " knob" : " knobs") + " back to the patch");
+        } else if (c == 'T') {                  // the whole panel to the Messenger (livetui.synth_send)
+            say(H.synth_send && H.synth_send(r->index) ? "part " + std::to_string(prow + 1) + ": its panel to the Messenger"
+                                                       : "no Messenger to set (nvlive --messenger-out=/dev/snd/midiCxDy)");
+        }
+    }
+
+    // ---- THE PARTS (livetui's PARTS pane) ----
+    // a cell's text (livetui.cell)
+    std::string part_cell(const PartRow &r, int c) const
+    {
+        char b[160];
+        switch (c) {
+        case 0:
+            if (r.drums)
+                return "-- " + r.name + " kit";
+            if (r.var)
+                snprintf(b, sizeof b, "%3d.%d %s", r.program, r.var & 127, r.name.c_str());
+            else
+                snprintf(b, sizeof b, "%3d %s", r.program, r.name.c_str());
+            return b;
+        case 1: return r.channel < 0 ? "all" : std::to_string(r.channel + 1);
+        case 2: return key_name(r.lo);
+        case 3: return key_name(r.hi);
+        case 4: snprintf(b, sizeof b, "%+d", r.tr); return b;
+        case 5: snprintf(b, sizeof b, "%+.1f dB", r.level); return b;
+        case 6: return H.tuner;
+        case 7: return r.touch_fixed ? "fixed" : "vel";
+        case 8: {
+            if (r.index != 0 || H.stop_names.empty() || !H.drawn)
+                return "-";
+            std::vector<char> dr = H.drawn();
+            std::string t;
+            for (const auto &row : H.stop_rows)
+                for (int ri : row)
+                    if (ri >= 0 && ri < (int)dr.size() && dr[ri])
+                        t += (t.empty() ? "" : " ") + H.stop_names[ri];
+            return t.empty() ? "none" : t;
+        }
+        case 9: {                               // (livetui: on, some of its channels, none)
+            if (s.efx.empty())
+                return "-";
+            EfxView v(s.efx);
+            int on = 0, n = 0;
+            for (int ch = 0; ch < 16; ch++)
+                if (r.channel == ch || (r.channel < 0 && !(r.index == 0 && ch == 9 && has_drums_beside()))) {
+                    n++;
+                    on += std::find(v.parts.begin(), v.parts.end(), ch) != v.parts.end();
+                }
+            return !on ? "-" : on == n ? "on" : "some";
+        }
+        }
+        return "";
+    }
+    bool has_drums_beside() const
+    {
+        for (const auto &r : prows)
+            if (r.drums && r.channel == 9)
+                return true;
+        return false;
+    }
+
+    // - and + on the selected cell (livetui.adjust): the next program (or set,
+    // past those not native here), a channel, the keys (by twelve with _/+),
+    // transpose, level (3 dB), the next tuner
+    void part_adjust(int delta, bool big)
+    {
+        if (prows.empty() || !H.part_set)
+            return;
+        PartRow r = prows[prow];
+        const int step = delta * (big && pcol >= 2 && pcol <= 4 ? 12 : 1);
+        switch (pcol) {
+        case 0: {
+            if (!H.pick_part)
+                return;
+            const int base = r.drums ? 128 : 0;
+            int sp = base + r.program;
+            for (int k = 0; k < (big ? 8 : 1); k++) {
+                int q = sp;
+                do
+                    q += delta > 0 ? 1 : -1;
+                while (q >= base && q < base + 128 && !(q < (int)H.native.size() && H.native[q]));
+                if (q < base || q >= base + 128)
+                    break;
+                sp = q;
+            }
+            if (sp != base + r.program) {
+                H.pick_part(r.index, sp);
+                say("part " + std::to_string(prow + 1) + ": " + (r.drums ? "set " : "program ") + std::to_string(sp & 127)
+                    + " " + (sp < (int)H.names.size() ? H.names[sp] : "") + " (built if new, then swapped in)");
+            }
+            return;
+        }
+        case 1: {                               // (0 is every channel: what one keyboard wants)
+            int c = r.channel < 0 ? 0 : r.channel + 1;
+            c = std::max(0, std::min(16, c + delta));
+            r.channel = c == 0 ? -1 : c - 1;
+            break;
+        }
+        case 2: r.lo = std::max(0, std::min(r.hi, r.lo + step)); break;
+        case 3: r.hi = std::max(r.lo, std::min(127, r.hi + step)); break;
+        case 4: r.tr = std::max(-48, std::min(48, r.tr + step)); break;
+        case 5: r.level = std::max(LEVEL_DB_MIN, std::min(LEVEL_DB_MAX, r.level + delta * (big ? 3.0 : 0.5))); break;
+        case 6: {
+            if (!H.set_tuner)
+                return;
+            int k = 0;
+            for (int i = 0; i < NTUNERS; i++)
+                if (H.tuner == TUNERS[i][0])
+                    k = i;
+            k = std::max(0, std::min(NTUNERS - 1, k + delta));
+            if (H.tuner != TUNERS[k][0]) {
+                H.set_tuner(TUNERS[k][0]);
+                say(std::string("tuner ") + TUNERS[k][0] + " -- every patch built again in it");
+            }
+            return;
+        }
+        case 7: part_touch_toggle(r); return;
+        case 8: say("stops: the buttons below, or their keys"); return;
+        default: say("efx: x opens the insertion effect"); return;
+        }
+        H.part_set(r.index, r.channel, r.lo, r.hi, r.tr, r.level, r.muted);
+        prows[prow] = r;                        // (so presses within a frame add up)
+    }
+
+    // FIXED TOUCH, on any part (livetui.toggle_touch): on, velocity does not
+    // set its level; off, it does -- each patch starting its own way
+    void part_touch_toggle(const PartRow &r)
+    {
+        if (!H.part_touch)
+            return;
+        const bool now = !r.touch_fixed;
+        H.part_touch(r.index, now);
+        prows[prow].touch_fixed = now;
+        say("part " + std::to_string(prow + 1) + ": " + (now ? "fixed touch -- the key sets no level" : "velocity sets the level"));
+    }
+
+    // Enter on the selected cell: a picker (patch, tuner, the effect), or a
+    // value typed (livetui's: every column answers Enter with something)
+    void part_enter()
+    {
+        if (prows.empty())
+            return;
+        PartRow r = prows[prow];
+        std::string t;
+        switch (pcol) {
+        case 0: if (H.pick || H.pick_part) pick_patch(); return;
+        case 6: if (H.set_tuner) pick_tuner(); return;
+        case 7: part_touch_toggle(r); return;
+        case 8: say("stops: the buttons below, or their keys"); return;
+        case 9: pick_efx(); return;
+        case 1:
+            if (!prompt("channel (1-16, or all): ", t))
+                return;
+            if (t == "all" || t.empty()) {
+                r.channel = -1;
+            } else {
+                int c = atoi(t.c_str());
+                if (c < 1 || c > 16) {
+                    say("not a channel: " + t);
+                    return;
+                }
+                r.channel = c - 1;
+            }
+            break;
+        case 2:
+        case 3: {
+            if (!prompt(std::string(pcol == 2 ? "lowest" : "highest") + " key (C1, F#2, or 0-127): ", t))
+                return;
+            int n = parse_note(t);
+            if (n < 0) {
+                say("not a key: " + t);
+                return;
+            }
+            if (pcol == 2)
+                r.lo = std::min(n, r.hi);
+            else
+                r.hi = std::max(n, r.lo);
+            break;
+        }
+        case 4:
+            if (!prompt("transpose (semitones, -48 to 48): ", t))
+                return;
+            r.tr = std::max(-48, std::min(48, atoi(t.c_str())));
+            break;
+        case 5:
+            if (!prompt("level (dB, -60 to 24): ", t))
+                return;
+            r.level = std::max(LEVEL_DB_MIN, std::min(LEVEL_DB_MAX, atof(t.c_str())));
+            break;
+        }
+        H.part_set(r.index, r.channel, r.lo, r.hi, r.tr, r.level, r.muted);
+        prows[prow] = r;
+    }
+
+    // S, L, N, R (livetui's): a preset saved and loaded, a scene saved and recalled
+    void presets_key(int c)
+    {
+        std::string t;
+        if (c == 'S' && H.save_preset) {
+            if (prompt("save preset as: ", t) && !t.empty())
+                say(H.save_preset(t));
+        } else if (c == 'N' && H.save_scene) {
+            if (prompt("save scene as: ", t) && !t.empty())
+                say(H.save_scene(t));
+        } else if ((c == 'L' && H.load_preset) || (c == 'R' && H.recall_scene)) {
+            std::vector<std::string> ns = c == 'L' ? H.preset_names() : H.scene_names();
+            if (ns.empty()) {
+                say(c == 'L' ? "no presets in presets.json yet -- S saves one" : "no scenes in scenes.json yet -- N saves one");
+                return;
+            }
+            int i = menu(c == 'L' ? "load preset" : "recall scene", ns);
+            if (i >= 0) {
+                say(c == 'L' ? H.load_preset(ns[i]) : H.recall_scene(ns[i]));
+                if (c == 'L')
+                    prow = 0;
+            }
+        }
+    }
+
+    // a, s, d, m (livetui's): layer, split, delete, mute
+    void part_key(int c)
+    {
+        if (prows.empty())
+            return;
+        const PartRow r = prows[prow];
+        std::string why;
+        if (c == 'a' && H.part_layer) {
+            if (H.part_layer(r.index)) {
+                prow = (int)prows.size();
+                say("layered -- same keys, same channel; change its patch or zone");
+            }
+        } else if (c == 's' && H.part_split) {
+            if (H.part_split(r.index, why)) {
+                say("split at " + key_name((r.lo + r.hi) / 2) + " -- now change the upper part's patch");
+                prow = (int)prows.size();
+            } else if (!why.empty()) {
+                say(why);
+            }
+        } else if (c == 'd' && H.part_delete) {
+            if (prows.size() <= 1)
+                say("the last part cannot be removed");
+            else if (H.part_delete(r.index, why))
+                prow = std::max(0, prow - 1);
+            else if (!why.empty())
+                say(why);
+        } else if (c == 'm' && H.part_set) {
+            H.part_set(r.index, r.channel, r.lo, r.hi, r.tr, r.level, !r.muted);
+            prows[prow].muted = !r.muted;
+            say(std::string("part ") + std::to_string(prow + 1) + (r.muted ? " unmuted" : " muted"));
         }
     }
 
@@ -1768,9 +2855,21 @@ struct Panel {
 
     void adjust(int delta, bool big)
     {
-        if (pane != 0)
+        if (pane == P_PARTS) {
+            part_adjust(delta, big);
             return;
-        int i = grow;
+        }
+        if (pane == P_SYNTH) {
+            synth_bump(delta, big);
+            return;
+        }
+        if (pane == P_ROUTES) {
+            ctl_bump(delta, big);
+            return;
+        }
+        if (pane != P_GLOBALS)
+            return;
+        int i = GLOBAL_ORDER[grow];
         if ((i == 6 && !H.has_gpu) || (i == 7 && !H.has_room) || (i == 8 && H.rooms.empty())) {
             say(i == 6 ? "gpu: not available (--gpu at start)" : i == 7 ? "room tail: the export has none"
                                                                        : "room: the export carries no rooms");
@@ -1781,6 +2880,11 @@ struct Panel {
         v = std::max(GLOBAL_RANGE[i][0], std::min(hi, v));
         if (i == 8 && v != H.g[i])
             say("room: " + H.rooms[(int)v] + " -- every patch built again in it, the tail crossfaded");
+        if (i == 13 && v != H.g[i])
+            say(std::string("standard: ") + STD_NAMES[(int)std::lround(v)]
+                + " -- program changes read its banks; the patch picker opens in it");
+        if (i == 10 && v > 0.0 && v < 20.0)     // (off and 20 bpm are neighbours: nothing slower is a metronome)
+            v = H.g[i] < 20.0 ? 20.0 : 0.0;
         if (i == 2)
             v = std::round(v * 100.0) / 100.0;
         H.g[i] = v;
@@ -1810,13 +2914,24 @@ struct Panel {
             return;
         }
         if (m.kind == Mouse::RELEASE) {
-            drag_global = -1;
+            drag_global = drag_cell = drag_knob = -1;
             return;
         }
         if (m.kind == Mouse::DRAG) {
             if (drag_global >= 0 && m.y != drag_y) {
+                pane = P_GLOBALS;
                 grow = drag_global;
                 adjust(drag_y - m.y, false);         // (up is more)
+                drag_y = m.y;
+            } else if (drag_cell >= 0 && m.y != drag_y) {
+                pane = P_PARTS;
+                pcol = drag_cell;
+                adjust(drag_y - m.y, false);
+                drag_y = m.y;
+            } else if (drag_knob >= 0 && m.y != drag_y) {
+                pane = P_SYNTH;
+                srow = drag_knob;
+                adjust(drag_y - m.y, false);
                 drag_y = m.y;
             }
             return;
@@ -1826,12 +2941,25 @@ struct Panel {
             return;
         if (m.kind == Mouse::WHEEL) {
             if (h->kind == H_GLOBAL || h->kind == H_GBAR) {
-                pane = 0;
-                grow = h->a;
+                pane = P_GLOBALS;
+                grow = global_pos(h->a);
                 adjust(m.dy, false);
-            } else if (h->kind == H_ROUTE && !H.routes.empty()) {
-                pane = 1;
-                crow = std::max(0, std::min((int)H.routes.size() - 1, crow - m.dy));
+            } else if (h->kind == H_ROUTE) {
+                pane = P_ROUTES;
+                crow = h->a;
+                if (crow < ctl_count())
+                    ctl_bump(m.dy, false);
+            } else if (h->kind == H_CELL) {
+                pane = P_PARTS;
+                prow = h->a;
+                if (h->b >= 0) {
+                    pcol = h->b;
+                    adjust(m.dy, false);
+                }
+            } else if (h->kind == H_KNOB || h->kind == H_KBAR) {
+                pane = P_SYNTH;
+                srow = h->a;
+                adjust(m.dy, false);
             }
             return;
         }
@@ -1839,23 +2967,57 @@ struct Panel {
         case H_PANE: pane = h->a; break;
         case H_KEY: press(h->a); break;
         case H_GLOBAL:
-            pane = 0;
-            grow = h->a;
-            drag_global = h->a;
+            pane = P_GLOBALS;
+            grow = global_pos(h->a);
+            drag_global = grow;
             drag_y = m.y;
             break;
         case H_GBAR:
-            pane = 0;
-            grow = h->a;
+            pane = P_GLOBALS;
+            grow = global_pos(h->a);
             set_by_bar(h->a, (m.x - h->x0 + 0.5) / std::max(1, h->x1 - h->x0));
-            drag_global = h->a;
+            drag_global = grow;
             drag_y = m.y;
             break;
         case H_STOP: toggle_stop(h->a); break;
-        case H_ROUTE:
-            pane = 1;
+        case H_ROUTE: {                         // a control or a route: selected; a control tapped again, space
+            const bool was = pane == P_ROUTES && crow == h->a;
+            pane = P_ROUTES;
             crow = h->a;
+            if (was && crow < ctl_count())
+                ctl_space();
             break;
+        }
+        case H_KNOB: {                          // a knob: selected; a switch tapped again, its next position
+            const bool was = pane == P_SYNTH && srow == h->a;
+            pane = P_SYNTH;
+            srow = h->a;
+            if (was && !synth_steps(SYNTH_KNOBS[h->a][3]).empty())
+                synth_bump(1, false);
+            drag_knob = h->a;
+            drag_y = m.y;
+            break;
+        }
+        case H_KBAR:                            // a knob's bar: set where touched
+            pane = P_SYNTH;
+            synth_by_bar(h->a, (m.x - h->x0 + 0.5) / std::max(1, h->x1 - h->x0));
+            drag_knob = h->a;
+            drag_y = m.y;
+            break;
+        case H_CELL: {                          // a part's cell: selected; tapped again, Enter
+            const bool was = pane == P_PARTS && prow == h->a && (h->b < 0 || pcol == h->b);
+            pane = P_PARTS;
+            prow = h->a;
+            if (h->b >= 0)
+                pcol = h->b;
+            if (was && h->b >= 0) {
+                part_enter();
+            } else if (h->b >= 0) {
+                drag_cell = h->b;
+                drag_y = m.y;
+            }
+            break;
+        }
         }
     }
 
@@ -1870,6 +3032,13 @@ struct Panel {
     // a key, from the keyboard or a tapped hint
     void press(int c)
     {
+                if (!help && H.controls && c > 0 && c < 128 && strchr(HOTKEYS_FREE, c)) {
+                    for (auto &sc : *H.controls)       // A BOUND KEY, from every pane (livetui's)
+                        if (sc.hotkey == c) {
+                            ctl_fire(sc);
+                            return;
+                        }
+                }
                 if (help) {
                     help = false;
                 } else if (c == 'q') {
@@ -1877,19 +3046,37 @@ struct Panel {
                 } else if (c == '?') {
                     help = true;
                 } else if (c == 9) {
-                    pane = (pane + 1) % 2;
+                    pane = (pane + 1) % NPANES;
                 } else if (c == 1004) {
-                    pane = (pane + 1) % 2;
+                    pane = (pane + NPANES - 1) % NPANES;
                 } else if (c == 1000 || c == 'k') {
-                    if (pane == 0)
+                    if (pane == P_PARTS)
+                        prow = std::max(0, prow - 1);
+                    else if (pane == P_SYNTH)
+                        srow = std::max(0, srow - 1);
+                    else if (pane == P_GLOBALS)
                         grow = std::max(0, grow - 1);
                     else
                         crow = std::max(0, crow - 1);
                 } else if (c == 1001 || c == 'j') {
-                    if (pane == 0)
+                    if (pane == P_PARTS)
+                        prow = std::min(std::max(0, (int)prows.size() - 1), prow + 1);
+                    else if (pane == P_SYNTH)
+                        srow = std::min(NSYNTH - 1, srow + 1);
+                    else if (pane == P_GLOBALS)
                         grow = std::min(NGLOBALS - 1, grow + 1);
                     else
-                        crow = std::min(std::max(0, (int)H.routes.size() - 1), crow + 1);
+                        crow = std::min(std::max(0, ctl_rows() - 1), crow + 1);
+                } else if (pane == P_PARTS && (c == 1003 || c == 'h')) {
+                    pcol = std::max(0, pcol - 1);       // (the parts: the arrows move along the columns)
+                } else if (pane == P_PARTS && (c == 1002 || c == 'l')) {
+                    pcol = std::min(NPCOLS - 1, pcol + 1);
+                } else if (pane == P_PARTS && (c == 10 || c == 13)) {
+                    part_enter();
+                } else if (pane == P_PARTS && (c == 'a' || c == 's' || c == 'd' || c == 'm')) {
+                    part_key(c);
+                } else if (pane == P_SYNTH && (c == ' ' || c == '0' || c == 'D' || c == 'B' || c == 'T' || c == 'F' || c == 'M')) {
+                    synth_key(c);
                 } else if (c == 1003 || c == 'h' || c == '-' || c == '_') {
                     adjust(-1, c == '_');
                 } else if (c == 1002 || c == 'l' || c == '=' || c == '+') {
@@ -1913,17 +3100,23 @@ struct Panel {
                     pick_tuner();
                 } else if (c == 'x' || c == 'X') {
                     pick_efx();
+                } else if (c == 'S' || c == 'L' || c == 'N' || c == 'R') {
+                    presets_key(c);
                 } else if (c == 'P') {
                     H.panic();
                     say("all notes off");
-                } else if (pane == 1 && c == 'r') {
+                } else if (pane == P_ROUTES && c == 'r') {
                     add_route();
-                } else if (pane == 1 && c == 'd' && !H.routes.empty()) {
-                    int i = std::min(crow, (int)H.routes.size() - 1);
-                    say("removed route " + describe(H.routes[i]));
-                    H.del_route(i);
-                    H.routes.erase(H.routes.begin() + i);
-                    crow = std::max(0, std::min(crow, (int)H.routes.size() - 1));
+                } else if (pane == P_ROUTES && c == 'd') {
+                    ctl_delete();
+                } else if (pane == P_ROUTES && c == 'a') {
+                    add_control();
+                } else if (pane == P_ROUTES && c == 'b') {
+                    bind_hotkey();
+                } else if (pane == P_ROUTES && c == ' ') {
+                    ctl_space();
+                } else if (pane == P_ROUTES && (c == 10 || c == 13)) {
+                    ctl_type();
                 }
     }
 

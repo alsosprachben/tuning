@@ -232,6 +232,9 @@ def main(argv):
         trims += [float(PM.program_trim(p, False, gs=gs)) for p in range(128)]
         trims += [float(PM.program_trim(PCM.DrumProgram(p), True, gs=gs)) for p in range(128)]
     libs = [os.fsencode(getattr(B, f)()._name) for f in ("ensure_lib", "ensure_xdec_lib", "ensure_damp_lib")]
+    # (and the Moog extensions' builds beside them: nvlive finds them by name)
+    B.ensure_moogx_lib()
+    B.ensure_gpu_moogx_lib()
     sh = (0.06, 1.6, 3.5, 1500.0)
     consts = [float(B.SR), float(B.BLK), float(B._chunk()), float(T.master_gain), float(B.RING_FLOOR),
               float(B.RING_MAX), float(B.XDEC_NEPERS), float(os.environ.get("TUNING_REGISTER", "1") or 1),

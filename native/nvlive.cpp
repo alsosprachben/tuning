@@ -1,14 +1,14 @@
 // nvlive.cpp -- the native live engine: a MIDI keyboard in, audio out, no
 // Python at runtime.
 //
-//     nvlive EXPORT.nvx [--program=N [--drums]] [--midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
+//     nvlive EXPORT.nvx [--program=N [--drums]] [--port=NAME | --midi=/dev/snd/midiCxDy] [--device=default] [--latency-ms=10]
 //                       [--cpu | --gpu[=cl|c]] [--no-pipeline] [--slots=N]
 //                       [--drum-set=P | --no-drums] [--split=N [--split-channel=C] [--split-transpose=T]]
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
 //                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
 //                       [--tuner=NAME [--a=HZ | --c=HZ]] [--eastern=SPEC]
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
-//                       [--rt] [--reg-async] [--async] [--govern] [--paced] [--build-async] [--tuner-at=S:NAME]
+//                       [--rt] [--reg-async] [--async] [--govern] [--paced] [--build-async] [--tuner-at=S:NAME] [--preset-at=S:NAME] [--metronome=BPM[:RING]]
 //
 // EXPORT.nvx is examples/native_export.py --live's. At start the part's
 // templates are built (live.Patch.warm: every key 21-96 at each velocity
@@ -97,6 +97,28 @@ int nv_host::run(int argc, char **argv)
     int rc = open(argc, argv);
     if (rc != -1)
         return rc;
+    // --fixed-touch=0|1 (live's part.fixed_touch on the first part)
+    {
+        std::string ft = opt(argc, argv, "fixed-touch", "");
+        if (!ft.empty())
+            part_touch(0, atoi(ft.c_str()) ? 1 : 0);
+    }
+    // --metronome=BPM[:RING] (live's): its part built now, before the first
+    // block -- so it strikes from beat one there, as live's set before its first callback
+    {
+        std::string mt = opt(argc, argv, "metronome", "");
+        if (!mt.empty() && atof(mt.c_str()) > 0.0) {
+            size_t c = mt.find(':');
+            gval[10] = atof(mt.c_str());
+            gval[11] = c == std::string::npos ? 0.0 : (double)atoi(mt.c_str() + c + 1);
+            PartSpec sp;
+            sp.drums = true;
+            sp.channel = 9;
+            sp.metro = true;
+            part_added(sp, build(0, true, 0));
+            fprintf(stderr, "nvlive: the metronome at %g bpm, the bell every %g\n", gval[10], gval[11]);
+        }
+    }
     // --programs (--test): the file's program changes followed, as live's
     // builder in step (examples/patchsync.py); else, as before, not
     follow = false;
@@ -185,6 +207,18 @@ int nv_host::run(int argc, char **argv)
                 for (const auto &ra : room_at)
                     if (ra.first == b)
                         room_want = &ra.second;
+                {                                       // --preset-at=S:NAME: a preset loaded (presets.json beside the session)
+                    std::string pa = opt(argc, argv, "preset-at", "");
+                    size_t c = pa.find(':');
+                    if (session_on && c != std::string::npos && (long long)(atof(pa.substr(0, c).c_str()) * SR) / BLK == b) {
+                        sess::J d;
+                        const sess::J *p = sess::load(presets_path(), d) ? d.get(pa.substr(c + 1)) : nullptr;
+                        if (p && p->is(sess::J::OBJ)) {
+                            apply_setup(*p, false);
+                            fprintf(stderr, "nvlive: preset %s at block %lld\n", pa.substr(c + 1).c_str(), b);
+                        }
+                    }
+                }
                 {                                       // --tuner-at=S:NAME: a tuner switched to, in step
                     std::string ta = opt(argc, argv, "tuner-at", "");
                     size_t c = ta.find(':');
@@ -280,6 +314,7 @@ int nv_host::run(int argc, char **argv)
             nv_midi_free(m);
             if (session_on) {
                 std::vector<std::array<int, 7>> rs(E.routes.begin(), E.routes.end());
+                scene_inline = true;            // (the blocks are done: the scene read here)
                 session_save(rs);
             }
             if (basync) {
@@ -311,15 +346,63 @@ int nv_host::run(int argc, char **argv)
             return 0;
         }
     // LIVE: the keyboard in, ALSA out
+    // THE KEYBOARD (live.pick_port): --midi=/dev/snd/midiCxDy, else the raw
+    // MIDI device whose name (/proc/asound/cardC/midiD's first line, as ALSA
+    // names it) holds --port=NAME, any case -- else the first that is not a
+    // loopback; a --port that matches nothing says so
     dev = opt(argc, argv, "midi", "");
+    std::string port_name;
     if (dev.empty()) {
-        for (int c = 0; c < 8 && dev.empty(); c++)
-            for (int d = 0; d < 4 && dev.empty(); d++) {
-                char p[64];
+        std::vector<std::pair<std::string, std::string>> ds;    // (path, name)
+        for (int c = 0; c < 8; c++)
+            for (int d = 0; d < 4; d++) {
+                char p[64], q[64];
                 snprintf(p, sizeof p, "/dev/snd/midiC%dD%d", c, d);
-                if (access(p, R_OK) == 0)
-                    dev = p;
+                if (access(p, R_OK) != 0)
+                    continue;
+                snprintf(q, sizeof q, "/proc/asound/card%d/midi%d", c, d);
+                std::string nm;
+                if (FILE *f = fopen(q, "r")) {
+                    char ln[256];
+                    if (fgets(ln, sizeof ln, f))
+                        nm = ln;
+                    fclose(f);
+                }
+                while (!nm.empty() && (nm.back() == '\n' || nm.back() == ' '))
+                    nm.pop_back();
+                ds.push_back(std::make_pair(std::string(p), nm.empty() ? std::string(p + 9) : nm));
             }
+        auto lower = [](std::string x) {
+            for (char &ch : x)
+                ch = (char)tolower((unsigned char)ch);
+            return x;
+        };
+        const std::string want = lower(opt(argc, argv, "port", ""));
+        for (const auto &d : ds)
+            if (!want.empty() && lower(d.second).find(want) != std::string::npos) {
+                dev = d.first;
+                port_name = d.second;
+                break;
+            }
+        if (dev.empty()) {
+            for (const auto &d : ds)
+                if (lower(d.second).find("midi through") == std::string::npos) {
+                    dev = d.first;
+                    port_name = d.second;
+                    break;
+                }
+            if (dev.empty() && !ds.empty()) {
+                dev = ds[0].first;
+                port_name = ds[0].second;
+            }
+            if (!want.empty()) {
+                std::string all;
+                for (const auto &d : ds)
+                    all += (all.empty() ? "" : ", ") + d.second;
+                fprintf(stderr, "nvlive: no MIDI input matches '%s'; using %s (inputs: %s)\n",
+                        opt(argc, argv, "port", "").c_str(), port_name.empty() ? "none" : port_name.c_str(), all.c_str());
+            }
+        }
     }
     fd = dev.empty() ? -1 : ::open(dev.c_str(), O_RDONLY | O_NONBLOCK);
     if (fd < 0) {
@@ -461,12 +544,12 @@ int nv_host::run(int argc, char **argv)
         };
         H.program = program;
         H.program_name = shown_name(shown_program, shown_var);
-        H.port = dev;
+        H.port = port_name.empty() ? dev : port_name;     // (its name, as live's header shows the port's)
         H.room = E.room.empty() ? "-" : E.room;
         H.reg_modes = rg0->M > 0 && !noreg ? rg0->M : 0;
         H.has_gpu = gval[6] > 0.5;
         H.has_room = gval[7] > 0.5;
-        for (int i = 0; i < 9; i++)
+        for (int i = 0; i < panel::NGLOBALS; i++)
             H.g[i] = gval[i];
         for (const auto &r : E.rooms)
             H.rooms.push_back(r.name);
@@ -494,7 +577,12 @@ int nv_host::run(int argc, char **argv)
                 nv_part_drawn(part, d.data(), nr);
                 return d;
             };
-            H.toggle_stop = [&](int ri) { post([&, ri](long long n) { nv_part_toggle_stop(part, ri, n); }); };
+            H.toggle_stop = [&](int ri) {
+                post([&, ri](long long n) {
+                    pending_drawn_prog = -1;            // (a stop drawn by hand: a preset's no longer)
+                    nv_part_toggle_stop(part, ri, n);
+                });
+            };
         };
         stops_of(shown_program);
         // THE PICKER: every program and set, which are native, and one picked
@@ -522,6 +610,42 @@ int nv_host::run(int argc, char **argv)
             H.pick = [&](int sp) { pick(sp); };
         H.tuner = tuner_now;
         H.set_tuner = [&](const std::string &nm) { set_tuner(nm); };
+        // THE PARTS (livetui's PARTS pane)
+        H.parts = [&]() { return part_rows(); };
+        // THE SYNTH (livetui's synth pane)
+        H.synth_get = [&](int i, int lay, double *pn, char *own) { return synth_state((size_t)i, lay, pn, own); };
+        H.synth_set = [&](int i, int lay, int k, double v) { synth_set((size_t)i, lay, k, v); };
+        H.synth_forget = [&](int i, int lay, int k) { synth_forget((size_t)i, lay, k); };
+        H.synth_send = [&](int i) { return synth_send((size_t)i); };
+        H.part_touch = [&](int i, bool fx) { part_touch((size_t)i, fx ? 1 : 0); };
+        // THE ON-SCREEN CONTROLS (livetui's): the host's list, sent past the routes
+        H.controls = &screen_controls;
+        H.control_send = [&](int key, int v, int ch) { control_send(key, v, ch); };
+        H.switch_on = [&](int key, int ch) {
+            int sw[5];
+            nv_part_switches(part, ch < 0 ? 0 : ch, sw);
+            return key == 64 ? sw[0] != 0 : key == 66 ? sw[1] != 0 : key == 67 ? sw[2] != 0
+                 : key == 65 ? sw[3] != 0 : key == -3 ? sw[4] != 0 : false;
+        };
+        H.messenger_reads = [&]() { return msgr_reads; };
+        H.messenger_read = [&](bool on) { messenger_reading(on); };
+        H.messenger_line = [&]() {
+            return msgr_out.empty() ? std::string()
+                                    : "sets the Messenger on " + msgr_out + ", " + (msgr_pre107 ? "pre-1.0.7" : "1.0.7+")
+                                          + " chart  (T: send the panel  F: firmware)";
+        };
+        H.messenger_firmware = [&]() {
+            msgr_pre107 = !msgr_pre107;
+            const double v = msgr_pre107 ? 1.0 : 0.0;
+            post([this, v](long long) { nv_part_set(part, 9, v); });
+            return std::string(msgr_pre107 ? "pre-1.0.7" : "1.0.7+");
+        };
+        H.part_set = [&](int i, int ch, int lo, int hi, int tr, double lv, bool mu) { part_set((size_t)i, ch, lo, hi, tr, lv, mu); };
+        H.part_layer = [&](int i) { return part_layer((size_t)i); };
+        H.part_split = [&](int i, std::string &why) { return part_split((size_t)i, why); };
+        H.part_delete = [&](int i, std::string &why) { return part_delete((size_t)i, why); };
+        if (E.has_prog)
+            H.pick_part = [&](int i, int sp) { pick_row((size_t)i, sp); };
         H.progress = [&](long &d, long &t, std::string &nm) { return progress(&d, &t, &nm); };
         // ...A PROGRAM CHANGE FROM THE KEYBOARD: its name and its stops, and
         // what the builder said
@@ -537,6 +661,62 @@ int nv_host::run(int argc, char **argv)
                 rs.push_back(a);
             }
             return rs;
+        };
+        // PRESETS AND SCENES (live's presets.json, scenes.json, beside the session)
+        auto names_in = [](const std::string &path) {
+            std::vector<std::string> ns;
+            sess::J d;
+            if (sess::load(path, d))
+                for (const auto &kv : d.o)
+                    ns.push_back(kv.first);
+            return ns;
+        };
+        auto put = [](const std::string &path, const std::string &name, const sess::J &v) {
+            sess::J d;
+            if (!sess::load(path, d))
+                d = sess::obj();
+            d.o[name] = v;
+            return sess::save(path, d);
+        };
+        auto base = [](const std::string &p) { return p.substr(p.rfind('/') + 1); };
+        H.save_preset = [&, put, base](const std::string &name) {
+            if (!put(presets_path(), name, session_state(routes_now())))
+                return std::string("could not write ") + presets_path();
+            return "saved '" + name + "' to " + base(presets_path());
+        };
+        H.preset_names = [&, names_in]() { return names_in(presets_path()); };
+        H.load_preset = [&](const std::string &name) {
+            sess::J d;
+            const sess::J *p = sess::load(presets_path(), d) ? d.get(name) : nullptr;
+            if (!p || !p->is(sess::J::OBJ))
+                return "no preset '" + name + "'";
+            routes_replaced = H.routes;
+            apply_setup(*p, false);
+            H.routes = routes_replaced;
+            for (int i = 0; i < panel::NGLOBALS; i++)
+                H.g[i] = gval[i];
+            return "loading '" + name + "'";
+        };
+        H.save_scene = [&, put, base](const std::string &name) {
+            std::vector<std::string> ev = scene_now();
+            sess::J a = sess::arr();
+            for (const auto &e : ev)
+                a.a.push_back(sess::str(e));
+            if (!put(scenes_path(), name, a))
+                return std::string("could not write ") + scenes_path();
+            return "scene '" + name + "': " + std::to_string(ev.size()) + " events -> " + base(scenes_path());
+        };
+        H.scene_names = [&, names_in]() { return names_in(scenes_path()); };
+        H.recall_scene = [&](const std::string &name) {
+            sess::J d;
+            const sess::J *p = sess::load(scenes_path(), d) ? d.get(name) : nullptr;
+            if (!p || !p->is(sess::J::ARR))
+                return "no scene '" + name + "'";
+            std::vector<std::string> ev;
+            for (const auto &e : p->a)
+                if (e.is(sess::J::STR))
+                    ev.push_back(e.s);
+            return "scene '" + name + "': " + std::to_string(scene_recall(ev)) + " events";
         };
         auto saved_at = std::chrono::steady_clock::now();
         H.refresh = [&]() {
@@ -678,9 +858,198 @@ static bool route_args(const sess::J &d, std::array<int, 7> &a)
 // organ's drawn stops, and each channel's mix (the scene: recall_scene)
 void nv_host::session_apply()
 {
-    if (!session.is(sess::J::OBJ))
-        return;
+    if (session.is(sess::J::OBJ))
+        apply_setup(session, true);
+}
+
+// ---- SCENES AND PRESETS (live's) ----
+
+static std::string beside(const std::string &path, const char *name)
+{
+    size_t k = path.rfind('/');
+    return (k == std::string::npos ? std::string(".") : path.substr(0, k)) + "/" + name;
+}
+std::string nv_host::presets_path() const { return beside(session_path, "presets.json"); }
+std::string nv_host::scenes_path() const { return beside(session_path, "scenes.json"); }
+
+static std::string cc_text(int ch, int c, int v)
+{
+    return "control_change channel=" + std::to_string(ch) + " control=" + std::to_string(c) + " value="
+           + std::to_string(std::max(0, std::min(127, v))) + " time=0";
+}
+
+// live._rpn_events: an RPN set, then the null RPN
+static void rpn_text(std::vector<std::string> &ev, int ch, int lsb, int msb_val, int lsb_val)
+{
+    ev.push_back(cc_text(ch, 101, 0));
+    ev.push_back(cc_text(ch, 100, lsb));
+    ev.push_back(cc_text(ch, 6, msb_val));
+    if (lsb_val >= 0)
+        ev.push_back(cc_text(ch, 38, lsb_val));
+    ev.push_back(cc_text(ch, 101, 127));
+    ev.push_back(cc_text(ch, 100, 127));
+}
+
+// THE SCENE NOW (live.scene_from), in mido's text form: the captured
+// controls as they reached the part, then each channel's sound controllers,
+// its tuning RPNs and mono, read from the engine between two blocks -- the
+// last one taken when the audio is not running. An organ's mod wheel (the
+// crescendo: its registration is the part's drawn stops) left out
+std::vector<std::string> nv_host::scene_now()
+{
+    struct Got {
+        std::vector<double> st = std::vector<double>(16 * 13, 0.0);
+        std::map<std::pair<int, int>, int> latch;
+        std::atomic<bool> done{false};
+    };
+    auto got = std::make_shared<Got>();
+    auto take = [this, got](long long) {
+        nv_part_chanstate(part, got->st.data());
+        got->latch = chanlatch;
+        got->done = true;
+    };
+    if (scene_inline)
+        take(0);
+    else
+        post(take);
+    for (int i = 0; i < 200 && !got->done && !g_stop; i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (!got->done)
+        return scene_cached;
+    const int sp = shown_program;
+    const bool cres = sp < 128 && !E.stops[sp].names.empty();
+    std::vector<std::string> ev;
+    for (const auto &kv : got->latch) {
+        const int ch = kv.first.first, c = kv.first.second;
+        if (c == 1 && cres && (pats[0].channel < 0 || pats[0].channel == ch))
+            continue;
+        ev.push_back(cc_text(ch, c, kv.second));
+    }
+    static const int SND_BY_NAME[8] = {73, 74, 75, 72, 71, 78, 77, 76};    // (attack .. vib_rate: sorted by name)
+    for (int ch = 0; ch < 16; ch++) {
+        const double *o = got->st.data() + 13 * ch;
+        for (int c : SND_BY_NAME)
+            if (o[c - 71] != 0.0)
+                ev.push_back(cc_text(ch, c, (int)std::nearbyint(o[c - 71] * 64.0 + 64.0)));
+        if (o[8] >= 0.0) {
+            int msb = (int)o[8], lsb = (int)std::nearbyint((o[8] - msb) * 100.0);
+            rpn_text(ev, ch, 0, msb, lsb ? lsb : -1);
+        }
+        if (o[9] != 0.0) {
+            int code = std::max(0, std::min(16383, (int)std::nearbyint(o[9] / 100.0 * 8192.0) + 8192));
+            rpn_text(ev, ch, 1, code >> 7, code & 127);
+        }
+        if (o[10] != 0.0)
+            rpn_text(ev, ch, 2, std::max(0, std::min(127, (int)std::nearbyint(o[10]) + 64)), -1);
+        if (o[11] >= 0.0) {
+            int msb = (int)std::floor(o[11] / 100.0), lsb = (int)std::nearbyint((o[11] - msb * 100.0) / (100.0 / 128.0));
+            rpn_text(ev, ch, 5, msb, lsb ? lsb : -1);
+        }
+        if (o[12] != 0.0)
+            ev.push_back(cc_text(ch, 126, 1));
+    }
+    scene_cached = ev;
+    return ev;
+}
+
+// A SCENE PUT BACK (live.recall_scene): its events past the routes (they are
+// already what the part received), mono changed only where it differs (both
+// mode messages carry an All Sounds Off), a channel the scene leaves
+// polyphonic put back to poly; an organ's mod wheel never replayed
+int nv_host::scene_recall(const std::vector<std::string> &events)
+{
+    std::vector<std::array<int, 3>> cc;
+    for (const auto &e : events) {
+        int ch, c, v;
+        if (sscanf(e.c_str(), "control_change channel=%d control=%d value=%d", &ch, &c, &v) == 3)
+            cc.push_back({ch & 15, c, v});
+    }
+    const int sp = shown_program;
+    const bool cres = sp < 128 && !E.stops[sp].names.empty();
+    const int pch = pats[0].channel;
+    post([this, cc, cres, pch](long long) {
+        double st[16 * 13];
+        nv_part_chanstate(part, st);
+        bool want_mono[16] = {};
+        for (const auto &m : cc)
+            if (m[1] == 126)
+                want_mono[m[0]] = true;
+        for (const auto &m : cc) {
+            if (m[1] == 1 && cres && (pch < 0 || pch == m[0]))
+                continue;
+            if (m[1] == 126 || m[1] == 127) {
+                if ((m[1] == 126) != (st[13 * m[0] + 12] != 0.0))
+                    engine_event(2, m[0], m[1], m[2]);
+                continue;
+            }
+            engine_event(2, m[0], m[1], m[2]);
+        }
+        for (int ch = 0; ch < 16; ch++)
+            if (st[13 * ch + 12] != 0.0 && !want_mono[ch])
+                engine_event(2, ch, 127, 0);
+    });
+    int n = 0;
+    for (const auto &m : cc)
+        n += !(m[1] == 1 && cres && (pch < 0 || pch == m[0]));
+    return n;
+}
+
+// A SETUP TAKEN (live.apply_preset): a session's at the start (the part's
+// program already taken, the routes already the router's), or a preset's
+// while playing -- then the parts set again (every one but the first and the
+// drums nvlive keeps beside it taken away, the first's program asked for,
+// the rest added), the routes replaced, the tuner switched; the stops for
+// the first part's organ once it is in
+void nv_host::apply_setup(const sess::J &setup, bool at_start)
+{
     const sess::J *x;
+    const sess::J &session = setup;         // (the code below reads it by the session's name)
+    if (!at_start) {
+        // THE PARTS AWAY: all but the first and the drums kept beside it
+        std::vector<size_t> away;
+        {
+            std::lock_guard<std::mutex> lk(parts_mu);
+            for (size_t i = 0; i < pats.size(); i++)
+                if (!pats[i].gone && pats[i].pi != 0 && pats[i].pid != 2 && pats[i].pid != 3)
+                    away.push_back(i);
+        }
+        std::string why;
+        for (size_t i : away)
+            part_delete(i, why);
+        // ...THE ROUTES REPLACED (--pedal-key's own kept)
+        if ((x = setup.get("routes")) && x->is(sess::J::ARR)) {
+            std::vector<std::array<int, 7>> rs;
+            for (const sess::J &r : x->a) {
+                std::array<int, 7> a;
+                if (route_args(r, a))
+                    rs.push_back(a);
+            }
+            const size_t had = E.routes.size() + (pks.empty() ? 0 : 1);
+            std::vector<std::array<int, 7>> all = rs;
+            if (!pks.empty())
+                all.push_back(pedal_route);
+            post([this, had, all](long long) {
+                for (size_t q = had; q-- > 0;)
+                    nv_rt_del(router, (int)q);
+                for (const auto &a : all)
+                    nv_rt_add(router, a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
+            });
+            E.routes = rs;
+            routes_replaced = all;
+        }
+        // ...THE TUNER (the first part's, live's per part; nvlive's one)
+        const sess::J *ps = setup.get("parts");
+        const sess::J *tn = ps && ps->is(sess::J::ARR) && !ps->a.empty() ? ps->a[0].get("tuner") : nullptr;
+        if (tn && tn->is(sess::J::STR) && !tn->s.empty()) {
+            std::string cur;
+            {
+                std::lock_guard<std::mutex> lk(bmu);
+                cur = tuner_now;
+            }
+            if (tn->s != cur)
+                set_tuner(tn->s);
+        }
+    }
     static const char *KEYS[6] = {"master_db", "headroom_db", "thresh", "bend_range", "mod_cents", "press_db"};
     for (int i = 0; i < 6; i++)
         if ((x = session.get(KEYS[i])) && x->is(sess::J::NUM)) {
@@ -688,6 +1057,36 @@ void nv_host::session_apply()
             if (v != gval[i])
                 set_global(i, v);
         }
+    if ((x = session.get("controls")) && x->is(sess::J::ARR)) {        // THE ON-SCREEN CONTROLS (live's)
+        screen_controls.clear();
+        for (const sess::J &c : x->a) {
+            const sess::J *k = c.get("key"), *ch = c.get("channel"), *v = c.get("value"), *hk = c.get("hotkey");
+            if (!k)
+                continue;
+            int key;
+            if (k->is(sess::J::NUM))
+                key = (int)k->i();
+            else if (k->is(sess::J::STR) && (k->s == "mono" || k->s == "bend" || k->s == "pressure"))
+                key = k->s == "mono" ? -3 : k->s == "bend" ? -1 : -2;
+            else
+                continue;
+            if (!panel::control_label(key))
+                continue;                       // (not the catalogue's)
+            panel::ScreenControl sc;
+            sc.key = key;
+            sc.channel = ch && ch->is(sess::J::NUM) ? (int)ch->i() & 15 : -1;
+            sc.value = v && v->is(sess::J::NUM) ? (int)v->i() : panel::control_default(key);
+            sc.hotkey = hk && hk->is(sess::J::STR) && hk->s.size() == 1 ? (unsigned char)hk->s[0] : 0;
+            screen_controls.push_back(sc);
+        }
+    }
+    if ((x = session.get("std_map")) && x->is(sess::J::NUM))           // THE STANDARD (live.std_map)
+        set_global(13, x->d());
+    if ((x = session.get("mod_rate")) && x->is(sess::J::NUM)) {       // (the host's ninth: live.mod_rate)
+        double v = std::max(panel::GLOBAL_RANGE[9][0], std::min(panel::GLOBAL_RANGE[9][1], x->d()));
+        if (v != gval[9])
+            set_global(9, v);
+    }
     if ((x = session.get("room")) && x->is(sess::J::STR))
         for (size_t q = 0; q < E.rooms.size(); q++)
             if (E.rooms[q].name == x->s && (int)q != room_idx)
@@ -712,29 +1111,129 @@ void nv_host::session_apply()
         for (int ch = 0; ch < 16; ch++)
             send('c', ch, std::find(want.begin(), want.end(), ch) != want.end());
     }
-    // THE ORGAN's STOPS: drawn as the part's were (parts[0].drawn, by name)
+    // THE PARTS (live.Part.to_dict's): the first's place, level and mute on
+    // the part; each after it added -- a drum set on channel 10 the drums
+    // nvlive keeps beside the part (its own, not live's: never written back)
     const sess::J *parts = session.get("parts");
-    const int sp = shown_program;
-    if (parts && parts->is(sess::J::ARR) && !parts->a.empty() && sp < 128 && !E.stops[sp].names.empty()) {
-        const sess::J *dn = parts->a[0].get("drawn"), *pg = parts->a[0].get("program");
-        if (dn && dn->is(sess::J::ARR) && pg && pg->i() == sp) {
-            const auto &names = E.stops[sp].names;
+    if (parts && parts->is(sess::J::ARR))
+        for (size_t k = 0; k < parts->a.size(); k++) {
+            const sess::J &pd = parts->a[k];
+            if (!pd.is(sess::J::OBJ))
+                continue;
+            auto num = [&](const char *key, double dflt) {
+                const sess::J *v = pd.get(key);
+                return v && v->is(sess::J::NUM) ? v->d() : dflt;
+            };
+            const sess::J *chv = pd.get("channel"), *dv = pd.get("drums"), *mv = pd.get("muted");
+            PartSpec sp;
+            sp.program = (int)num("program", 0) & 127;
+            sp.var = (int)num("bank", 0);
+            sp.drums = dv && dv->d() != 0.0;
+            sp.channel = chv && chv->is(sess::J::NUM) ? (int)chv->i() & 15 : -1;
+            sp.lo = std::max(0, std::min(127, (int)num("lo", 0)));
+            sp.hi = std::max(sp.lo, std::min(127, (int)num("hi", 127)));
+            sp.tr = std::max(-48, std::min(48, (int)num("transpose", 0)));
+            sp.level = std::max(panel::LEVEL_DB_MIN, std::min(panel::LEVEL_DB_MAX, num("level_db", 0.0)));
+            sp.muted = mv && mv->d() != 0.0;
+            {                                   // its fixed touch (live's part.fixed_touch; absent, the patch's way)
+                const sess::J *ft = pd.get("fixed_touch");
+                sp.fixed = ft && (ft->is(sess::J::BOOL) || ft->is(sess::J::NUM)) ? (ft->d() != 0.0 ? 1 : 0) : -1;
+                const sess::J *cm = pd.get("cc_map");   // (a Messenger read on it: nvlive reads one on every part)
+                if (cm && cm->is(sess::J::STR) && cm->s == "messenger" && !msgr_reads)
+                    messenger_reading(true);
+            }
+            // ITS KNOBS (live.Part's synth, synth_b): by moog.PANEL's names, in
+            // the measured Messenger's units (synth_units 6) -- older ones live
+            // converts once on load, which nvlive leaves to it
+            {
+                const sess::J *su = pd.get("synth_units");
+                const int units = su && su->is(sess::J::NUM) ? (int)su->i() : 1;
+                bool any = false;
+                for (int lay = 0; lay < 2; lay++) {
+                    const sess::J *sy = pd.get(lay ? "synth_b" : "synth");
+                    if (!sy || !sy->is(sess::J::OBJ))
+                        continue;
+                    for (const auto &kv : sy->o) {
+                        const int mk = panel::mk_index(kv.first.c_str());
+                        if (mk >= 0 && (kv.second.is(sess::J::NUM) || kv.second.is(sess::J::BOOL))) {
+                            sp.syn[lay][mk] = kv.second.d();
+                            any = true;
+                        }
+                    }
+                }
+                if (any && units < 6) {
+                    fprintf(stderr, "nvlive: part %zu's knobs are in older units (synth_units %d): left as the patch's "
+                                    "-- open the session in live.py once to convert them\n", k + 1, units);
+                    sp.syn[0].clear();
+                    sp.syn[1].clear();
+                }
+            }
+            if (k == 0) {                       // (its knobs, behind its program: posted after its swap)
+                for (int lay = 0; lay < 2; lay++)
+                    for (const auto &kv : sp.syn[lay]) {
+                        const int mk = kv.first, l = lay;
+                        const double v = kv.second;
+                        post([this, l, mk, v](long long) { nv_part_synth_set_later(part, pats[0].pi, l, mk, v); });
+                    }
+            }
+            if (k == 0) {                       // (at the start its program is the part's already)
+                part_set(0, sp.channel, sp.lo, sp.hi, sp.tr, sp.level, sp.muted);
+                part_touch(0, sp.fixed);
+                if (!at_start) {
+                    int code = (sp.drums ? 128 : 0) + sp.program;
+                    for (size_t j = 0; j < E.vpv.size() && sp.var && !sp.drums; j++)
+                        if (E.vpv[j][0] == sp.program && E.vpv[j][1] == sp.var)
+                            code = 256 + (int)j;
+                    pick_row(0, code);
+                }
+                continue;
+            }
+            size_t beside = pats.size();
+            for (size_t i = 0; i < pats.size(); i++)
+                if (pats[i].pid == 2 && sp.drums && sp.channel == 9)
+                    beside = i;
+            if (beside < pats.size()) {
+                part_set(beside, 9, sp.lo, sp.hi, sp.tr, sp.level, sp.muted);
+                pick_row(beside, 128 + sp.program);
+                continue;
+            }
+            sp.excl = sp.channel < 0 ? pats[0].excl : 0u;
+            if (sp.drums)
+                sp.var = 0;
+            part_add(sp);
+        }
+    // THE ORGAN's STOPS: drawn as the part's were (parts[0].drawn, by name) --
+    // now if the organ is in, else once it is swapped in (pending_drawn)
+    if (parts && parts->is(sess::J::ARR) && !parts->a.empty()) {
+        const sess::J *dn = parts->a[0].get("drawn"), *pg = parts->a[0].get("program"), *dv = parts->a[0].get("drums");
+        const int want_p = pg && pg->is(sess::J::NUM) ? (int)pg->i() & 127 : -1;
+        if (dn && dn->is(sess::J::ARR) && want_p >= 0 && !(dv && dv->d() != 0.0) && !E.stops[want_p].names.empty()) {
+            const auto &names = E.stops[want_p].names;
             std::vector<char> want(names.size(), 0);
             for (size_t ri = 0; ri < names.size(); ri++)
                 for (const sess::J &n : dn->a)
                     want[ri] = want[ri] || (n.is(sess::J::STR) && n.s == names[ri]);
-            post([this, want](long long) { nv_part_set_drawn(part, want.data(), (int)want.size()); });
+            if (want_p == shown_program)
+                post([this, want](long long) { nv_part_set_drawn(part, want.data(), (int)want.size()); });
+            if (!at_start || want_p != shown_program) {
+                std::vector<std::string> w;
+                for (size_t ri = 0; ri < names.size(); ri++)
+                    if (want[ri])
+                        w.push_back(names[ri]);
+                post([this, w, want_p](long long) {     // (the swap reads it, on this thread)
+                    pending_drawn = w;
+                    pending_drawn_prog = want_p;
+                });
+            }
         }
     }
-    // EACH CHANNEL's MIX (live.recall_scene): the scene's controllers, as the
-    // keyboard's would arrive
+    // EACH CHANNEL's MIX (live.recall_scene): past the routes
     if ((x = session.get("chanstate")) && x->is(sess::J::ARR)) {
-        std::lock_guard<std::mutex> lk(mu);
-        for (const sess::J &e : x->a) {
-            int ch, cc, v;
-            if (e.is(sess::J::STR) && sscanf(e.s.c_str(), "control_change channel=%d control=%d value=%d", &ch, &cc, &v) == 3)
-                q.push_back(Midi{2, ch, cc, v, {}});
-        }
+        std::vector<std::string> ev;
+        for (const sess::J &e : x->a)
+            if (e.is(sess::J::STR))
+                ev.push_back(e.s);
+        scene_recall(ev);
     }
 }
 
@@ -746,6 +1245,20 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
     static const char *KEYS[6] = {"master_db", "headroom_db", "thresh", "bend_range", "mod_cents", "press_db"};
     for (int i = 1; i < 6; i++)
         j.o[KEYS[i]] = sess::real(gval[i]);
+    j.o["mod_rate"] = sess::real(gval[9]);
+    j.o["std_map"] = sess::integer(default_map);
+    {                                           // the on-screen controls (live's screen_controls, as dicts)
+        sess::J cs = sess::arr();
+        for (const auto &c : screen_controls) {
+            sess::J d = sess::obj();
+            d.o["key"] = c.key >= 0 ? sess::integer(c.key) : sess::str(c.key == -3 ? "mono" : c.key == -1 ? "bend" : "pressure");
+            d.o["channel"] = c.channel < 0 ? sess::null() : sess::integer(c.channel);
+            d.o["value"] = sess::integer(c.value);
+            d.o["hotkey"] = c.hotkey ? sess::str(std::string(1, (char)c.hotkey)) : sess::null();
+            cs.a.push_back(d);
+        }
+        j.o["controls"] = cs;
+    }
     const int rm = room_asked >= 0 ? (int)room_asked : (int)room_idx;    // (one asked for is the room, building or not)
     if (rm >= 0 && rm < (int)E.rooms.size())
         j.o["room"] = sess::str(E.rooms[rm].name);
@@ -756,6 +1269,13 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
             ra.a.push_back(d);
     }
     j.o["routes"] = ra;
+    // each channel's mix (live.scene_from)
+    {
+        sess::J cs = sess::arr();
+        for (const auto &e : scene_now())
+            cs.a.push_back(sess::str(e));
+        j.o["chanstate"] = cs;
+    }
     // the insertion effect (live.efx_from), as the audio thread last showed it
     std::vector<int> st;
     {
@@ -789,22 +1309,105 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
         e.o["parts"] = pa;
         j.o["efx"] = e;
     }
-    // THE PART (parts[0], live.Part.to_dict): its program, set or variation,
-    // its stops; the other parts, and the part's other keys, as they were
+    // THE PARTS (live.Part.to_dict): each one's program, set or variation,
+    // its place, level and mute, the first's stops; each one's other keys as
+    // they were -- the drums nvlive keeps beside the part not among them
+    // (its own: live's rig has none)
     sess::J &parts = j.o["parts"];
     if (!parts.is(sess::J::ARR))
         parts = sess::arr();
-    if (parts.a.empty() || !parts.a[0].is(sess::J::OBJ)) {
-        sess::J p = sess::obj();
-        p.o["tuner"] = sess::str("hybrid");
-        p.o["channel"] = sess::null();
-        p.o["lo"] = sess::integer(0);
-        p.o["hi"] = sess::integer(127);
-        p.o["transpose"] = sess::integer(0);
-        p.o["level_db"] = sess::real(0.0);
-        p.o["muted"] = sess::boolean(false);
-        parts.a.insert(parts.a.begin(), p);
+    std::vector<PartAt> rows;
+    std::vector<size_t> at;                     // (each one's index: its knobs read by it)
+    {
+        std::lock_guard<std::mutex> lk(parts_mu);
+        for (size_t i = 0; i < pats.size(); i++)
+            if (!pats[i].gone && pats[i].pid != 2 && pats[i].pid != 3) {
+                rows.push_back(pats[i]);
+                at.push_back(i);
+            }
     }
+    parts.a.resize(rows.size());
+    for (size_t k = 0; k < rows.size(); k++) {
+        sess::J &pd = parts.a[k];
+        if (!pd.is(sess::J::OBJ)) {
+            pd = sess::obj();
+            pd.o["tuner"] = sess::str("hybrid");
+            pd.o["drawn"] = sess::arr();
+        }
+        const PartAt &pa = rows[k];
+        const int vk = pa.drums ? 0 : (k == 0 ? (shown_program >= 128 ? 0 : shown_var.load()) : pa.var);
+        pd.o["program"] = sess::integer((k == 0 ? shown_program.load() : pa.program) & 127);
+        pd.o["drums"] = sess::boolean(k == 0 ? shown_program >= 128 : pa.drums);
+        if (vk)
+            pd.o["bank"] = sess::integer(vk);
+        else
+            pd.o.erase("bank");
+        pd.o["channel"] = pa.channel < 0 ? sess::null() : sess::integer(pa.channel);
+        pd.o["lo"] = sess::integer(pa.lo);
+        pd.o["hi"] = sess::integer(pa.hi);
+        pd.o["transpose"] = sess::integer(pa.tr);
+        pd.o["level_db"] = sess::real(pa.level);
+        pd.o["muted"] = sess::boolean(pa.muted);
+        if (pa.fixed >= 0)                      // (live writes it only when set)
+            pd.o["fixed_touch"] = sess::boolean(pa.fixed != 0);
+        else
+            pd.o.erase("fixed_touch");
+        if (msgr_reads && k == 0)               // (a Messenger read: the first part's cc_map, live's per part)
+            pd.o["cc_map"] = sess::str("messenger");
+        else if (!msgr_reads)
+            pd.o.erase("cc_map");
+        // ITS OWN KNOBS (live's synth, synth_b, synth_units 6), by moog.PANEL's
+        // names: a switch as live keeps it (on/off a bool; an octave, a mode,
+        // a shape an int), a knob a float -- a value already there kept as written
+        bool anyk = false;
+        for (int lay = 0; lay < 2; lay++) {
+            double pn[42];
+            char own[42];
+            const char *key = lay ? "synth_b" : "synth";
+            const int n = pa.drums ? 0 : synth_state(at[k], lay, pn, own);
+            if (n < 0)                          // (never read, and the audio does not answer: as they were)
+                continue;
+            if (n <= lay) {                     // (not a Moog, or no layer B)
+                pd.o.erase(key);
+                continue;
+            }
+            sess::J sy = sess::obj();
+            const sess::J *had = pd.get(key);
+            for (int q = 0; q < 42; q++) {
+                if (!own[q])
+                    continue;
+                const char *nm = panel::MK_NAMES[q];
+                const sess::J *old = had ? had->get(nm) : nullptr;
+                if (old && (old->is(sess::J::NUM) || old->is(sess::J::BOOL)) && old->d() == pn[q]) {
+                    sy.o[nm] = *old;
+                    continue;
+                }
+                std::string kind;
+                for (int i = 0; i < panel::NSYNTH; i++)
+                    if (!strcmp(panel::SYNTH_KNOBS[i][1], nm))
+                        kind = panel::SYNTH_KNOBS[i][3];
+                if (kind == "onoff")
+                    sy.o[nm] = sess::boolean(pn[q] != 0.0);
+                else if (kind == "foot" || kind == "mode" || kind == "lfoshape" || kind == "lfodest" || kind == "moddest"
+                         || kind == "mfrange")
+                    sy.o[nm] = sess::integer((long)pn[q]);
+                else
+                    sy.o[nm] = sess::real(pn[q]);
+            }
+            if (sy.o.empty()) {
+                pd.o.erase(key);
+            } else {
+                pd.o[key] = sy;
+                anyk = true;
+            }
+        }
+        if (anyk)
+            pd.o["synth_units"] = sess::integer(6);
+        else if (!pd.get("synth") && !pd.get("synth_b"))
+            pd.o.erase("synth_units");
+    }
+    if (parts.a.empty())
+        return j;
     sess::J &p0 = parts.a[0];
     const int sp = shown_program, sv = sp >= 128 ? 0 : shown_var.load();
     p0.o["program"] = sess::integer(sp & 127);

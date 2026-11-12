@@ -950,6 +950,21 @@ class Slab:
         self.ft_layer = ['a'] * MOOG_FT_ROWS
         self.KN = np.zeros(MOOG_KN_ROWS * 2 * _MG.KN_W, np.float32)
         self.kn_of = {}                 # (part id, channel) -> its KN row
+        # ...each row's knobs as its panel has them, and LFO 2 on them
+        # (Live._lfo2_tick): the cutoff's factor, the level's gain
+        # ...and each NOTE's row of the kernel's Moog extensions (moog.mx_row:
+        # its loops, its contours' age, its filter contour's depth), with what
+        # it is made from that the panel does not say
+        self.MX = np.zeros(MOOG_FT_ROWS * _MG.MX_W, np.float32)
+        self.mx_on = np.zeros(MOOG_FT_ROWS, bool)
+        self.mx_vel = np.full(MOOG_FT_ROWS, 127, np.int32)
+        self.mx_age = np.zeros(MOOG_FT_ROWS)
+        self.mx_l0a = np.zeros(MOOG_FT_ROWS)
+        self.mx_l0f = np.zeros(MOOG_FT_ROWS)
+        self.kn_base = [None] * MOOG_KN_ROWS
+        self.kn_cf = np.ones(MOOG_KN_ROWS)
+        self.kn_ag = np.ones(MOOG_KN_ROWS, np.float32)
+        self._l2_sav = None
         # THE MOD SECTION'S PITCH ROWS (moog.pitch_rows), per sounding note:
         # this block's grid points of OSC 2's ratio and accumulated extra phase,
         # appended block by block from the same cell integral the file
@@ -1450,6 +1465,32 @@ class Slab:
         a["aL"][idx] *= hl
         a["aR"][idx] *= hr
 
+    def lfo2_amp_apply(self):
+        """LFO 2's level on the Moog rows of the parts it swings, for the
+        render only (lfo2_amp_restore after it, once knobs_advance has carried
+        the swung end into aLp, as moog_filter_apply's)."""
+        self._l2_sav = None
+        if not (self.kn_ag != 1.0).any():
+            return
+        a = self.a
+        idx = np.flatnonzero(self.busy & (a["fx"] >= 0))
+        if not len(idx):
+            return
+        kr = self.FT[a["fx"][idx].astype(np.int64) * _MG.FT_W + 9].astype(np.int64)
+        g = self.kn_ag[kr]
+        m = g != 1.0
+        idx, g = idx[m], g[m]
+        self._l2_sav = (idx, a["aL"][idx].copy(), a["aR"][idx].copy())
+        a["aL"][idx] *= g
+        a["aR"][idx] *= g
+
+    def lfo2_amp_restore(self):
+        sv = self._l2_sav
+        if sv is not None:
+            self.a["aL"][sv[0]] = sv[1]
+            self.a["aR"][sv[0]] = sv[2]
+            self._l2_sav = None
+
     def moog_filter_restore(self):
         sv = self._fl_sav
         if sv is not None:
@@ -1533,7 +1574,8 @@ class Slab:
                      BR=self.BR, BC=self.BC, BL=self.BL, sh=self.sh,
                      FT=self.FT, KN=self.KN, knk=2, kb0=0,
                      MPI=self.MPI, MPC=self.MPC, MPR=self.MPR, MKI=self.MKI, MPK=self.MPK,
-                     DM=self.DM, DMO=self.DMO, DMB=self.DMB, DMN=self.DMN)
+                     DM=self.DM, DMO=self.DMO, DMB=self.DMB, DMN=self.DMN,
+                     MX=self.MX, MXON=self.mx_on)
             self._prep_cache = d
         return self._prep_cache
 
@@ -1681,6 +1723,8 @@ class Slab:
             if len(self.kn_of) >= MOOG_KN_ROWS:
                 self.kn_of.clear()
             r = self.kn_of[pk] = len(self.kn_of)
+            self.kn_cf[r] = 1.0
+            self.kn_ag[r] = 1.0
             if kn is not None:
                 self.set_knobs(r, kn, ramp=False)
         return r
@@ -1690,7 +1734,11 @@ class Slab:
         new values are the END of the next block, which starts from where the
         last one ended; without, both ends -- no ramp from nothing."""
         W = _MG.KN_W
+        self.kn_base[r] = kn
         v = np.asarray(kn, np.float32)[:W]
+        if self.kn_cf[r] != 1.0:
+            v = v.copy()
+            v[0] = float(kn[0]) * self.kn_cf[r]
         self.KN[(2 * r + 1) * W:(2 * r + 2) * W] = v
         if not ramp:
             self.KN[2 * r * W:(2 * r + 1) * W] = v
@@ -1731,6 +1779,10 @@ class Slab:
                                                 (_MG.FT_PITCH if pp is not None else 0) | sf)
         self.ms_on[r] = bool(sf)
         self.ms_next[r] = -1
+        self.mx_vel[r] = 127
+        self.mx_age[r] = 0.0
+        self.mx_l0a[r] = self.mx_l0f[r] = 0.0
+        self.mx_write(r, panel)
         if sf:
             self.ms_par[r] = _MG.shape_params(panel)
         a["fx"][idx[m]] = r
@@ -2076,7 +2128,27 @@ class Slab:
                 continue
             row = self.FT[r * W:(r + 1) * W]
             row[:] = _MG.ft_row(panel, float(row[10]), int(row[9]), row[11] > 0.5, int(row[12]))
+            self.mx_write(int(r), panel)
         a["re"][idx] = np.float32(max(1.0, _MG.release_span(panel) * self.rate))
+
+    def mx_write(self, r, panel):
+        """FT row r's note row of the kernel's Moog extensions (moog.mx_row),
+        from the panel and the note's velocity and age."""
+        v = _MG.mx_row(panel, int(self.mx_vel[r]), float(self.mx_age[r]), float(self.mx_l0a[r]), float(self.mx_l0f[r]))
+        self.MX[r * _MG.MX_W:(r + 1) * _MG.MX_W] = v
+        self.mx_on[r] = any(x != 0.0 for x in v)
+
+    def contour_at(self, r, t, amp):
+        """FT row r's note's amp (or filter) contour, held, t s into it
+        (its age included): moog.held_level with its row's times, its knob
+        row's sustain, its loop and its start level."""
+        W, KW, F = _MG.FT_W, _MG.KN_W, self.FT
+        kr = int(F[r * W + 9])
+        o = 4 if amp else 1
+        S = float(self.KN[(2 * kr + 1) * KW + (4 if amp else 3)])
+        return _MG.held_level(t, float(F[r * W + o]), float(F[r * W + o + 1]), S,
+                              float(self.mx_l0a[r] if amp else self.mx_l0f[r]),
+                              bool(self.MX[r * _MG.MX_W + (2 if amp else 1)] != 0.0), float(F[r * W + o + 2]))
 
     def stamp_amp(self, key, src, freqs, amps, phases, n0, rate, at=None):
         """Place the amplifier's distortion partials, copying `src` for the rest.
@@ -3963,11 +4035,19 @@ class Part:
         """
         # A NEW PROGRAM IS A NEW PATCH: its knobs are its own, not the last
         # one's -- on a Messenger, recalling a patch sets every knob.
-        if getattr(self, "patch", None) is not None and (
-                (patch.program, patch.variation) != (self.patch.program, self.patch.variation)):
+        old = getattr(self, "patch", None)
+        if old is not None and (
+                (patch.program, patch.variation) != (old.program, old.variation)):
             self.synth = {}
             self.synth_b = {}
         self.patch = patch
+        # THE SAME ORGAN BUILT AGAIN (a room switched to, a tuner changed: the
+        # patch made anew, the voice the same) KEEPS ITS REGISTRATION -- it
+        # used to fall back to the default, a hand registration lost to a room
+        if (old is not None and patch.organ and getattr(self, "drawn", None) is not None
+                and (patch.program, patch.variation, patch.drums) == (old.program, old.variation, old.drums)
+                and list(patch.rank_names) == list(old.rank_names)):
+            return
         # Which stops are out, per part: two organ layers can differ.
         ds = getattr(patch, "default_stops", 1)
         self.drawn = {r for j, r in enumerate(patch.rank_names) if (ds >> j) & 1} \
@@ -4173,6 +4253,12 @@ class Live:
         self.slab = Slab(capacity)
         self.slab.panel_for = self._moog_panel_for
         self.moog_glide = {}            # part id -> {knob: where it has got to}
+        # LFO 2 (moog.lfo2_mods), each Moog part's: its phase (cycles, free-
+        # running, at the end of the last block), the mod wheel last sent it,
+        # and the pitch ratio its sounding notes were last moved to
+        self.lfo2_ph = {}
+        self.lfo2_w = {}
+        self.lfo2_pr = {}
         self.msg_msb = {}               # (channel, CC) -> a Messenger knob's coarse half
         # A MESSENGER TO SET: the output it is on (None: none), the firmware
         # whose chart it reads (moog.FIRMWARES), and what is on its way to it --
@@ -4388,6 +4474,8 @@ class Live:
         # note to start is the convention everyone uses.
         self.last_on = {}       # channel -> the most recent note-on
         self._glide_from = None # source pitch for the note-on being dispatched
+        self._moog_src = None   # ...and the last key, for a Moog's GLIDE knob
+        self._legato_age = {}   # ...and a mono handoff's contours, for MULTI-TRIG off (_legato_take)
         # CHANNEL MODE. Roland: MONO (126) sets Mode 4 with M = 1 "regardless
         # of the value of mono number"; POLY (127) sets Mode 3. Both are All
         # Sounds Off and All Notes Off first.
@@ -5189,6 +5277,11 @@ class Live:
             except Exception as e:
                 self.errors += 1
                 self.last_error = "moog: %s: %s" % (type(e).__name__, e)
+        try:
+            self._lfo2_tick(n0)
+        except Exception as e:
+            self.errors += 1
+            self.last_error = "lfo2: %s: %s" % (type(e).__name__, e)
         # (and a fine pass's result, which otherwise waited for the next chord
         # to wake the pump: it landed as its own note ended, never heard)
         if self.amp_dirty or self.amp_out is not None or self.amp_fine_results or self.amp_chg \
@@ -5441,6 +5534,9 @@ class Live:
                     roles = {k: [r for r in v if r in self._WHEEL_ZERO_REST] for k, v in roles.items()}
                 amped = [p for p in here if 'drive' in roles[p.pid]]
                 organs = [p for p in here if 'crescendo' in roles[p.pid]]
+                for p in here:
+                    if 'lfo2' in roles[p.pid]:
+                        self.lfo2_w[p.pid] = msg.value / 127.0      # (_lfo2_tick)
                 tremmed = [p for p in here if 'tremolo' in roles[p.pid]]
                 clavs = [p for p in here if 'tone' in roles[p.pid]]
                 detuners = [p for p in here if 'detune' in roles[p.pid]]
@@ -5851,6 +5947,7 @@ class Live:
                 _st = self.mono_stack.setdefault(ch, [])
                 _st[:] = [x for x in _st if x[0] != msg.note] + [(msg.note, msg.velocity)]
                 if _prev is not None and _prev != msg.note:
+                    self._legato_take(ch, _prev)
                     self._mono_cut(ch, _prev, n0, parts)
                     _slur = True        # a handoff is a slur: _MONO_SLUR, offline
                 self.mono_cur[ch] = msg.note
@@ -5864,6 +5961,11 @@ class Live:
             if _psrc is None and self.porta_on.get(ch):
                 _psrc = self.last_on.get(self._lk(ch))
             self._glide_from = _psrc if _psrc != msg.note else None
+            # A MOOG'S GLIDE needs no switch: the lag holds the last key's
+            # voltage, so with its knob up every note glides from the last
+            # one on the channel, detached or not (moog.knob_glide_tau)
+            _ms = self.last_on.get(self._lk(ch))
+            self._moog_src = _ms if _ms != msg.note else None
             self.last_on[self._lk(ch)] = msg.note
             # A MIDI 2.0 Note On may carry its own pitch (Pitch 7.9), which is
             # this note's alone and outranks every other tuning (7.4.15.3).
@@ -5881,7 +5983,8 @@ class Live:
                     # key's -- strikes it in its own template: prepare expands
                     # the layer as a file's note does. Struck here as well,
                     # every layer sounded twice, 6 dB hot)
-            self._glide_from = None
+            self._glide_from = self._moog_src = None
+            self._legato_age = {}
             self._slur = False
         else:
             self.down.discard((ch, msg.note))
@@ -5897,16 +6000,19 @@ class Live:
                     # a trill with one finger held needs it. A convention,
                     # stated as one.
                     _back, _bvel = _st[-1]
+                    self._legato_take(ch, msg.note)
                     self._mono_cut(ch, msg.note, n0, parts)
                     self.mono_cur[ch] = _back
                     self._glide_from = (msg.note if self.porta_on.get(ch)
                                         else None)
+                    self._moog_src = msg.note
                     self.last_on[self._lk(ch)] = _back
                     self._slur = True   # back to a key still held: a slur too
                     for part in parts:
                         if part.matches(self._pc(ch), _back):
                             self._note_on(part, ch, _back, _bvel, n0)
-                    self._glide_from = None
+                    self._glide_from = self._moog_src = None
+                    self._legato_age = {}
                     self._slur = False
                     return
                 self.mono_cur.pop(ch, None)     # last key up: an ordinary release
@@ -6182,6 +6288,14 @@ class Live:
             1.0 if (part.patch.touch_sensitive or _fixed) else (vel / 127.0) ** 2)
         if not part.patch.touch_sensitive:
             scale *= _tf
+        # A MOOG'S A ENV VEL, where the panel sets it: off, the level fixed
+        # (velocity 127's); on, the Messenger's own law (moog.a_vel_gain)
+        if part.patch.touch_sensitive and part.moog() is not None:
+            _pan = self._moog_panel_for(part.pid, ch)
+            if _pan is not None and _pan['a_vel'] >= 0.0:
+                scale = part.gain() * self._chan_gain(ch) / max((tmpl.get("vel", 127) / 127.0) ** 2, 1e-9)
+                if _pan['a_vel'] >= 0.5:
+                    scale *= _MG.a_vel_gain(127 if _fixed else vel)
         self._amp_touch(part)
         if part.organ:
             # A pipe organ has no touch: a key is open or shut, and the wind
@@ -6323,7 +6437,7 @@ class Live:
         # its whole trajectory attached and the kernel renders it. That is also
         # what makes the two renderers agree by construction rather than by
         # calibration: they write the same three floats.
-        if self._glide_from is not None and slots:
+        if slots and (self._glide_from is not None or self._moog_src is not None):
             self._glide(part, ch, note, slots)
         if self._slur and slots:
             self._slur_stamp(part, note, tmpl, ch, n0)
@@ -6380,6 +6494,9 @@ class Live:
         if _mr is not None:
             b = b / self.bend.get(ch, 1.0) * _mr
             self.meend_at[key] = (_mr, tmpl.get("sym"))
+        # ...AND A MOOG'S LFO 2 WHERE IT HAS THE PITCH (_lfo2_tick)
+        if part.moog() is not None:
+            b *= self.lfo2_pr.get(part.pid, 1.0)
         # ...AND A MESSENGER PLAYING THIS NOTE IS PUT ON THE SAME PITCH
         self.messenger_pitch(part, ch, note)
         if str(part.patch.tuner).lower() == 'gm2' and not _pabs:
@@ -6410,6 +6527,28 @@ class Live:
         if self.reg_enabled and _lslots.get('a') and self._reg_voice(part, note):
             self._reg_strike(part, ch, note, n0, tmpl, _lslots['a'])
         if part.moog() is not None and slots:
+            # ITS VELOCITY, for F ENV VEL (moog.mx_row): each of its rows' notes
+            _ix = np.fromiter(slots, np.int64, len(slots))
+            for _r in np.unique(self.slab.a["fx"][_ix]):
+                if _r >= 0:
+                    self.slab.mx_vel[_r] = vel
+                    _pan = self._moog_panel_for(part.pid, ch, self.slab.ft_layer[_r])
+                    if _pan is not None:
+                        # ...AND A LEGATO HANDOFF WITH MULTI-TRIG OFF: its contours
+                        # carry on from the note it took over (_legato_take)
+                        # -- or, MULTI-TRIG on, start again charged from where
+                        # its contours had got to (moog.held_level)
+                        _lg = self._legato_age.get((part.pid, self.slab.ft_layer[_r]))
+                        if _lg is not None:
+                            _sl = self.slab
+                            _t = (float(_sl.mp_a0[_r]) - float(_sl.mp_a0[_lg])) / self.rate + float(_sl.mx_age[_lg])
+                            if not _pan['multitrig']:
+                                _sl.mx_age[_r] = _t
+                                _sl.mx_l0a[_r], _sl.mx_l0f[_r] = _sl.mx_l0a[_lg], _sl.mx_l0f[_lg]
+                            else:
+                                _sl.mx_l0a[_r] = _sl.contour_at(_lg, _t, True)
+                                _sl.mx_l0f[_r] = _sl.contour_at(_lg, _t, False)
+                        self.slab.mx_write(int(_r), _pan)
             for _ly, _ls in _lslots.items():         # each Messenger its own pedal
                 self._mf104(part, ch, note, tmpl, key, _ls, scale, n0, b, _cp, _ly)
         if _efx is not None:
@@ -8096,6 +8235,38 @@ class Live:
                 self.moog_glide.pop(gk, None)
             self._moog_refresh(part, n0)
 
+    def _lfo2_tick(self, n0):
+        """One block of every Moog part's LFO 2 (moog.lfo2_mods), at the
+        block's END: the cutoff on its knob rows (they ramp across the block
+        from the last one's end), the level on its rows for the render
+        (Slab.lfo2_amp_apply: the levels ramp too), the pitch its sounding
+        notes are moved to -- a step each block, as the pitch wheel's."""
+        sl = self.slab
+        fr = self.frames
+        for part in self.parts:
+            if part.moog() is None:
+                continue
+            pid = part.pid
+            pan = self._moog_panel_for(pid, -1)
+            if pan is None:
+                continue
+            x = self.lfo2_ph.get(pid, 0.0) + _MG.knob_lfo2_rate(pan['lfo2_rate']) * fr / self.rate
+            x -= math.floor(x)
+            self.lfo2_ph[pid] = x
+            w = self.lfo2_w.get(pid, 0.0) if _MG.lfo2_on(pan) else 0.0
+            pr, cf, ag = _MG.lfo2_mods(pan, w, x)
+            prev = self.lfo2_pr.get(pid, 1.0)
+            if pr != prev:
+                self.lfo2_pr[pid] = pr
+                sl.retune([s_ for k, v in sl.live.items() if k[0] == pid for s_ in v], n0,
+                          om_scale=pr / prev)
+            for pk, r in sl.kn_of.items():
+                if pk[0] == pid and sl.kn_base[r] is not None and \
+                        (sl.kn_cf[r] != cf or sl.kn_ag[r] != np.float32(ag)):
+                    sl.kn_cf[r] = cf
+                    sl.kn_ag[r] = ag
+                    sl.set_knobs(r, sl.kn_base[r])
+
     def _messenger_cc(self, ch, cc, value, n0=0):
         """A CC on a channel where a part reads the Messenger's chart
         (moog.MESSENGER_CC): turn that part's knob and say so, or leave the
@@ -8116,6 +8287,13 @@ class Live:
         gm = any(p.moog() is None for p in hears)
         # the chart of the firmware the Messenger runs (moog.messenger_chart)
         chart, lsbs = _MG.messenger_chart(self.messenger_firmware)
+        if cc == 73 and cc in chart:
+            # HOLD holds both contours at sustain after the key goes up, and
+            # off lets them go (examples/messenger_perf.py hold): the sustain
+            # pedal, which on a synth holds the gate
+            self._one_core(n0, mido.Message("control_change", channel=ch, control=64,
+                                            value=127 if value >= 64 else 0))
+            return True
         if cc in lsbs:                              # the fine half of a knob
             hi = lsbs[cc]
             msb = self.msg_msb.get((ch, hi))
@@ -8235,6 +8413,12 @@ class Live:
         # with no drive takes it as its expression pedal (wheel_swell).
         if not r and pt.wheel_swell:
             r.append('swell')
+        # ON A MOOG WHOSE LFO 2 GOES SOMEWHERE IT IS LFO 2's DEPTH, as the
+        # Messenger's MOD wheel is (moog.lfo2_mods), in place of the vibrato
+        if not r and part.moog() is not None:
+            _pan = self._moog_panel_for(part.pid, -1)
+            if _pan is not None and _MG.lfo2_on(_pan):
+                r.append('lfo2')
         if not r and not (part.organ and pt.cres_order) and not pt.leslie \
                 and pt.wheel_vibrato:
             r.append('vibrato')
@@ -8429,6 +8613,20 @@ class Live:
                 if part.moog() is not None:
                     self._moog_refresh(part, n0, chans=(ch,))
 
+    def _legato_take(self, ch, note):
+        """A MONO HANDOFF FROM `note`: where each Moog part's contours have got
+        to (its note's onset and age, per layer), for the note taking over --
+        which carries on from there where MULTI-TRIG is off (moog.mx_row)."""
+        sl = self.slab
+        self._legato_age = {}
+        for k, slots in sl.live.items():
+            if k[1] != ch or k[2] != note or not slots:
+                continue
+            for i in slots:
+                r = int(sl.a["fx"][i])
+                if r >= 0:
+                    self._legato_age.setdefault((k[0], sl.ft_layer[r]), r)
+
     def _mono_cut(self, ch, note, n0, parts):
         """Hand a mono voice over: stop this note NOW, pedal or no pedal.
 
@@ -8576,7 +8774,21 @@ class Live:
         two are interchangeable. A voice with no mechanism ignores CC5/65/84
         entirely, exactly as one with no damper ignores CC64.
         """
-        src = self._glide_from + part.transpose
+        # A MOOG WITH ITS GLIDE KNOB UP glides by the knob, from the last key
+        # (moog.knob_glide_tau, measured on Ben's Messenger); at 0 the GM
+        # portamento below, CC65 and CC5, as any synth
+        mtau = 0.0
+        if part.moog() is not None:
+            _pan = self._moog_panel_for(part.pid, ch)
+            mtau = _MG.knob_glide_tau(_pan['glide']) if _pan is not None else 0.0
+        if mtau > 0.0:
+            if self._moog_src is None:
+                return
+            src = self._moog_src + part.transpose
+        elif self._glide_from is None:
+            return
+        else:
+            src = self._glide_from + part.transpose
         tgt = note + part.transpose
         # THE ROUTER, NOT THE PROGRAM. GM 61 Brass Section hands each register
         # to a different body, and two of those bodies are a slide and two are
@@ -8595,7 +8807,8 @@ class Live:
         if reach is not None and abs(tgt - src) > reach + 1e-9:
             return
         g = T.glide_g(F[tgt], F[src])
-        tau = T.glide_tau(self.porta_time.get(ch, 0), F[tgt], F[src], mech)
+        tau = (_MG.glide_kernel_tau(mtau, F[tgt], F[src]) if mtau > 0.0
+               else T.glide_tau(self.porta_time.get(ch, 0), F[tgt], F[src], mech))
         idx = np.fromiter(slots, np.int64, len(slots))
         a = self.slab.a
         a["gb"][idx] = g
@@ -9536,7 +9749,7 @@ class Live:
     # so _reset_controllers cannot recurse.
     _RESET_CC = ((1, 0), (11, 127), (64, 0), (65, 0), (66, 0), (67, 0))
     # ...but the wheel is a route (wheel_roles), and 0 is the rest only of these
-    _WHEEL_ZERO_REST = ('vibrato', 'tremolo', 'mouth', 'crank', 'drone stop')
+    _WHEEL_ZERO_REST = ('vibrato', 'tremolo', 'mouth', 'crank', 'drone stop', 'lfo2')
     _wheel_reset = False
 
     def _reset_controllers(self, n0, ch):
@@ -11210,9 +11423,11 @@ class Live:
             self._send_uniform = (_snd[0] if all(v == _snd[0] for v in _snd)
                                   and n0 >= self.slab.odd_until else None)
             self.renderer.send = _room_on and self._send_uniform is None
+            self.slab.lfo2_amp_apply()
             try:
                 L, R = self.renderer.render(n0, frame_count)
             finally:
+                self.slab.lfo2_amp_restore()
                 self.slab.moog_filter_restore()
             self.slab.shed_tick(n0 + frame_count)
         except Exception as e:

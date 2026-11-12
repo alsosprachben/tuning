@@ -2171,8 +2171,9 @@ void *nv_tmpl_rank(void *t, int ri, long long *n)
 
 // live._glide's coefficients for a press on key tgt from key src: (g, tau,
 // cutoff) at CC5 cc5 -- the class's mechanism, where it reaches -- or 0
-// where it does not glide
-int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out)
+// where it does not glide. moog_tau > 0: a Moog's GLIDE knob's lag (in
+// cents) in place of CC5's time, as the kernel's (moog.glide_kernel_tau)
+int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out, double moog_tau)
 {
     nv::live::Cache *C = (nv::live::Cache *)h;
     if (tgt < 0 || tgt > 127 || program < 0 || program > 127)
@@ -2188,6 +2189,8 @@ int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out
     double v = std::min(127.0, std::max(0.0, (double)cc5)) / 127.0;
     double t1 = k->porta_fast * pow(k->porta_slow / k->porta_fast, v);
     double tau = k->glide_mech == 2 ? std::max(1e-4, t1) : std::max(1e-4, t1 * fabs(1.0 / fs - 1.0 / ft) / k->porta_d_semi);
+    if (moog_tau > 0.0)
+        tau = moog_tau * log(2.0) / log(1.0 + sqrt(ft / fs));
     out[0] = ft / fs - 1.0;
     out[1] = tau;
     out[2] = tau * k->porta_settle;

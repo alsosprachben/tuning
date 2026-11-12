@@ -281,6 +281,37 @@ def ensure_gpu_damp_lib():
     return lib
 
 
+def ensure_moogx_lib():
+    """The kernel built with synth_voice_moogx (-DMOOGX_KERNEL -DDAMP_KERNEL):
+    synth_voice_damp with each Moog row's note row MX read -- its contours'
+    loops, their age, its filter contour's depth (moog.mx_row) -- for the
+    rows whose note has one. A library of its own: the kernel-edits rule."""
+    src = os.path.join(HERE, "synthkernel.c")
+    return _build(src, "libsynthmoogx_%d.so" % SR, ["-DMOOGX_KERNEL", "-DDAMP_KERNEL"], ["synth_voice_moogx"])
+
+
+def ensure_gpu_moogx_lib():
+    """The GPU's block setup with the same (-DVOICE_BLOCK -DDAMP_KERNEL
+    -DMOOGX_KERNEL): a table with such rows sets up through it, MX handed over
+    by voice_moogx_set (and any damper tracks by voice_damp_set) first."""
+    src = os.path.join(HERE, "synthkernel.c")
+    return _build(src, "libsynthgpumoogx_%d.so" % SR, ["-DVOICE_BLOCK", "-DDAMP_KERNEL", "-DMOOGX_KERNEL"],
+                  ["synth_voice", "voice_block", "voice_samples", "voice_sizes", "voice_pack",
+                   "voice_damp_set", "voice_moogx_set"])
+
+
+def moogx_rows(a, i0, i1):
+    """The indices in [i0, i1) of the Moog rows whose note has a row of the
+    kernel's extensions (moog.mx_row); empty: none."""
+    on = a.get('MXON')
+    if on is None or not on.any():
+        return np.zeros(0, np.int64)
+    fx = a['fx'][i0:i1]
+    m = fx >= 0
+    m[m] = on[fx[m]]
+    return np.flatnonzero(m) + i0
+
+
 def _damp_args(a, sl):
     """synth_voice_damp's last three: each row's track ('dk', -1 none) and
     weight ('dg', damper.weight), and the tracks: 'DM' their values
@@ -9583,6 +9614,20 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
     whole table in one call and is unaffected."""
     a=prep; lib=a['lib']; CHUNK=_chunk()
     fp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    # THE MOOG ROWS WHOSE NOTE LOOPS (or carries on, or has its filter
+    # contour scaled: moog.mx_row) render through synth_voice_moogx, the rest
+    # as below, row set by row set; a table with none comes straight past
+    mxr = moogx_rows(a, i0, i1)
+    if len(mxr):
+        rest = np.setdiff1d(np.arange(i0, i1), mxr)
+        dmr = (rest[a['dk'][rest] >= 0] if a.get('DM') is not None else rest[:0])
+        rest = np.setdiff1d(rest, dmr)
+        xr = np.intersect1d(_xdec_rows(a, i0, i1), rest)
+        _synth_rows(a, np.setdiff1d(rest, xr), n0, winlen, L, R, SndL, SndR, None)
+        _synth_rows(a, xr, n0, winlen, L, R, SndL, SndR, ensure_xdec_lib().synth_voice_xdec)
+        _synth_rows(a, dmr, n0, winlen, L, R, SndL, SndR, ensure_damp_lib().synth_voice_damp, damp=True)
+        _synth_rows(a, mxr, n0, winlen, L, R, SndL, SndR, ensure_moogx_lib().synth_voice_moogx, damp=True, mx=True)
+        return
     # ROWS FASTER THAN A BLOCK (_xdec_rows) render through synth_voice_xdec, the
     # rest as they always did; a table with none makes the one call below
     # HALF-PEDALLED ROWS (damper.py) render through synth_voice_damp; the rest
@@ -9618,7 +9663,7 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
                     fp(SndR) if SndL is not None else None)
 
 
-def _synth_rows(a, rows, n0, winlen, L, R, SndL, SndR, fn, damp=False):
+def _synth_rows(a, rows, n0, winlen, L, R, SndL, SndR, fn, damp=False, mx=False):
     """Rows `rows` of the table (an index array) through FN, or through the
     table's own function (synth_voice, or the Leslie's) when FN is None; with
     damp, FN is synth_voice_damp and takes the rows' damper tracks."""
@@ -9635,7 +9680,9 @@ def _synth_rows(a, rows, n0, winlen, L, R, SndL, SndR, fn, damp=False):
                     fp(sl('sw')) if SndL is not None else None,
                     fp(SndL) if SndL is not None else None,
                     fp(SndR) if SndL is not None else None,
-                    *(_damp_args(a, sl) if damp else ()))
+                    *(_damp_args(a, sl) if damp and a.get('DM') is not None else
+                      (None,) * 6 if damp else ()),
+                    *((fp(a['MX']),) if mx else ()))
 
 
 def _voice_args(a, sl, P, lobe=True):

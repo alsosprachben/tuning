@@ -41,7 +41,84 @@
 
 extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
 extern "C" const NoteClass *nv_tcache_note_class(void *h, int program, int note);
-extern "C" int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out);
+extern "C" int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out, double moog_tau);
+
+// numpy.interp at one x (tone.c's np_interp)
+static double sl_interp(double x, const double *xp, const double *fp, int n)
+{
+    if (x < xp[0])
+        return fp[0];
+    if (x > xp[n - 1])
+        return fp[n - 1];
+    int j = 0;
+    while (j + 1 < n && xp[j + 1] <= x)
+        j++;
+    if (j == n - 1 || xp[j] == x)
+        return fp[j];
+    double slope = (fp[j + 1] - fp[j]) / (xp[j + 1] - xp[j]);
+    double r = slope * (x - xp[j]) + fp[j];
+    if (std::isnan(r)) {
+        r = slope * (x - xp[j + 1]) + fp[j + 1];
+        if (std::isnan(r) && fp[j] == fp[j + 1])
+            r = fp[j];
+    }
+    return r;
+}
+
+// moog.knob_glide_tau: GLIDE's lag in cents, seconds (0: none)
+static double moog_glide_tau(double v)
+{
+    static const double CC[9] = {0.0, 16.0, 32.0, 48.0, 64.0, 80.0, 96.0, 112.0, 127.0};
+    static const double TAU[9] = {0.0021, 0.0045, 0.0110, 0.027, 0.062, 0.146, 0.355, 1.02, 5.03};
+    double gv[9], gl[9];
+    for (int i = 0; i < 9; i++) {
+        gv[i] = CC[i] / 127.0;
+        gl[i] = log(TAU[i]);
+    }
+    v = v < 1.0 ? v : 1.0;
+    v = v > 0.0 ? v : 0.0;
+    if (v <= 0.0)
+        return 0.0;
+    return exp(sl_interp(v, gv, gl, 9));
+}
+
+// moog.knob_lfo2_rate: LFO 2 RATE, Hz
+static double moog_lfo2_rate(double v)
+{
+    static const double CC[9] = {0.0, 16.0, 32.0, 48.0, 64.0, 80.0, 96.0, 112.0, 127.0};
+    static const double HZ[9] = {0.023, 0.042, 0.20, 0.643, 1.50, 2.94, 5.08, 8.0, 11.72};
+    double lv[9], ll[9];
+    for (int i = 0; i < 9; i++) {
+        lv[i] = CC[i] / 127.0;
+        ll[i] = log(HZ[i]);
+    }
+    v = v < 1.0 ? v : 1.0;
+    v = v > 0.0 ? v : 0.0;
+    return exp(sl_interp(v, lv, ll, 9));
+}
+
+// moog.lfo2_on / lfo2_mods: whether LFO 2 goes anywhere; at phase x under
+// the wheel w, (the pitch ratio, the cutoff's factor, the level's gain)
+static bool moog_lfo2_on(const double *pn)
+{
+    return pn[NV_MK_LFO2_PITCH] != 0.0 || pn[NV_MK_LFO2_CUT] != 0.0 || pn[NV_MK_LFO2_AMP] != 0.0;
+}
+static void moog_lfo2_mods(const double *pn, double w, double x, double *pr, double *cf, double *ag)
+{
+    x = x - floor(x);                       // (Python's x % 1.0, x >= 0)
+    const double tri = 1.0 - 4.0 * fabs(x - 0.5), d = w * w;
+    *pr = pn[NV_MK_LFO2_PITCH] != 0.0 ? pow(2.0, 684.0 * d * tri / 1200.0) : 1.0;
+    *cf = pn[NV_MK_LFO2_CUT] != 0.0 ? pow(2.0, 4.6 * d * tri) : 1.0;
+    *ag = pn[NV_MK_LFO2_AMP] != 0.0 ? 1.0 - pow(w, 1.55) * (1.0 - tri) * 0.5 : 1.0;
+}
+
+// moog.a_vel_gain: A ENV VEL on, the amplitude at velocity vel re 127's
+static double moog_a_vel_gain(int vel)
+{
+    static const double V[8] = {1.0, 10.0, 25.0, 40.0, 60.0, 80.0, 100.0, 127.0};
+    static const double DB[8] = {-80.0, -44.5, -15.1, -10.7, -6.9, -4.3, -2.2, 0.0};
+    return pow(10.0, sl_interp((double)vel, V, DB, 8) / 20.0);
+}
 extern "C" const OrganSpec *nv_tcache_organ(void *h, int program);
 extern "C" const NoteClass *nv_tcache_class(void *h, int program);
 extern "C" const NoteClass *nv_tcache_key_class(void *h, int program, int key);
@@ -1303,11 +1380,36 @@ struct Slab {
     std::vector<float> mo_uL, mo_uR, mo_w;
     std::vector<double> mo_ph, mo_r;
     std::map<std::tuple<long long, long long, int>, int> kn_of;     // (pid, ch, layer) -> its knob row
+    // ...each row's knobs as its panel has them, and LFO 2 on them (live's
+    // kn_base, kn_cf, kn_ag: the cutoff's factor, the level's gain)
+    std::vector<double> kn_base;
+    // ...and each NOTE's row of the kernel's Moog extensions (live's MX,
+    // mx_on, mx_vel, mx_age: moog.mx_row)
+    static const int MX_W = 6;
+    std::vector<float> MX;
+    std::vector<char> mx_on;
+    std::vector<int> mx_vel;
+    std::vector<double> mx_age, mx_l0a, mx_l0f;
+    std::vector<char> kn_has;
+    std::vector<double> kn_cf;
+    std::vector<float> kn_ag;
+    std::vector<long> l2_s;
+    std::vector<float> l2_aL, l2_aR;
 
     void moog_alloc()
     {
         FT.assign(MOOG_FT_ROWS * FT_W, 0.0f);
         KN.assign(MOOG_KN_ROWS * 2 * KN_W, 0.0f);
+        kn_base.assign(MOOG_KN_ROWS * KN_W, 0.0);
+        MX.assign(MOOG_FT_ROWS * MX_W, 0.0f);
+        mx_on.assign(MOOG_FT_ROWS, 0);
+        mx_vel.assign(MOOG_FT_ROWS, 127);
+        mx_age.assign(MOOG_FT_ROWS, 0.0);
+        mx_l0a.assign(MOOG_FT_ROWS, 0.0);
+        mx_l0f.assign(MOOG_FT_ROWS, 0.0);
+        kn_has.assign(MOOG_KN_ROWS, 0);
+        kn_cf.assign(MOOG_KN_ROWS, 1.0);
+        kn_ag.assign(MOOG_KN_ROWS, 1.0f);
         MPI.assign(MOOG_FT_ROWS * 3, 0);
         MKI.assign(MOOG_FT_ROWS * 7, 0);
         MPC.assign(MOOG_FT_ROWS * MOOG_MP_CAP, 0.0);
@@ -1345,6 +1447,8 @@ struct Slab {
             kn_of.clear();
         int r = (int)kn_of.size();
         kn_of[pk] = r;
+        kn_cf[r] = 1.0;
+        kn_ag[r] = 1.0f;
         if (kn)
             set_knobs(r, kn, false);
         return r;
@@ -1354,11 +1458,105 @@ struct Slab {
     // or both ends
     void set_knobs(int r, const double *kn, bool ramp)
     {
+        double k0[KN_W];
+        std::copy(kn, kn + KN_W, k0);       // (kn may be this row's own base)
+        std::copy(k0, k0 + KN_W, kn_base.begin() + (size_t)r * KN_W);
+        kn_has[r] = 1;
         for (int j = 0; j < KN_W; j++) {
-            KN[(2 * r + 1) * KN_W + j] = (float)kn[j];
+            const float v = j == 0 && kn_cf[r] != 1.0 ? (float)(k0[0] * kn_cf[r]) : (float)k0[j];
+            KN[(2 * r + 1) * KN_W + j] = v;
             if (!ramp)
-                KN[2 * r * KN_W + j] = (float)kn[j];
+                KN[2 * r * KN_W + j] = v;
         }
+    }
+
+    // live.Slab.lfo2_amp_apply: LFO 2's level on the Moog rows of the parts
+    // it swings, for the render only (lfo2_amp_restore after it)
+    void lfo2_amp_apply()
+    {
+        l2_s.clear(); l2_aL.clear(); l2_aR.clear();
+        bool any = false;
+        for (float g : kn_ag)
+            any = any || g != 1.0f;
+        if (!any)
+            return;
+        for (long q = 0; q < cap; q++) {
+            if (!busy[q] || i4[I4_fx][q] < 0)
+                continue;
+            const long kr = (long)FT[(size_t)i4[I4_fx][q] * FT_W + 9];
+            const float g = kn_ag[kr];
+            if (g == 1.0f)
+                continue;
+            l2_s.push_back(q);
+            l2_aL.push_back(f4[F4_aL][q]);
+            l2_aR.push_back(f4[F4_aR][q]);
+            f4[F4_aL][q] *= g;
+            f4[F4_aR][q] *= g;
+        }
+    }
+    void lfo2_amp_restore()
+    {
+        for (size_t i = 0; i < l2_s.size(); i++) {
+            f4[F4_aL][l2_s[i]] = l2_aL[i];
+            f4[F4_aR][l2_s[i]] = l2_aR[i];
+        }
+        l2_s.clear(); l2_aL.clear(); l2_aR.clear();
+    }
+
+    // Slab.mx_write: FT row r's note row of the kernel's Moog extensions
+    // (moog.mx_row) from the panel pn and the note's velocity and age
+    void mx_write(int r, const double *pn)
+    {
+        const double v[MX_W] = {mx_age[r], pn[NV_MK_F_LOOP] != 0.0 ? 1.0 : 0.0, pn[NV_MK_A_LOOP] != 0.0 ? 1.0 : 0.0,
+                                pn[NV_MK_F_VEL] != 0.0 ? pow((double)mx_vel[r] / 127.0, 0.8) - 1.0 : 0.0,
+                                mx_l0a[r], mx_l0f[r]};
+        bool on = false;
+        for (int j = 0; j < MX_W; j++) {
+            MX[(size_t)r * MX_W + j] = (float)v[j];
+            on = on || v[j] != 0.0;
+        }
+        mx_on[r] = on;
+    }
+
+    // moog.held_level: a held contour's level tt s in, as the kernel draws it
+    static double held_level(double tt, double A, double D, double S, double l0, bool loop, double R)
+    {
+        const double T = 1.03, K = 3.5361166995615263, U = 0.055;
+        A = std::max(A, 1e-6);
+        D = std::max(D, 1e-6);
+        R = std::max(R, 1e-6);
+        if (tt < 0.0)
+            return 0.0;
+        if (loop) {
+            const double Td = 3.37 * D * 0.25;
+            const double h = held_level(A + Td, A, D, S, 0.0, false, 0.0);
+            tt = fmod(tt, A + Td + R * 0.25 * log((h + U) / U));
+            if (tt >= A + Td)
+                return std::max(0.0, (h + U) * exp(-(tt - A - Td) / (R * 0.25)) - U);
+            l0 = 0.0;
+        }
+        const double ta = A / K;
+        double A1;
+        if (l0 > 0.0) {
+            A1 = l0 >= 1.0 ? 0.0 : ta * log((T - l0) / (T - 1.0));
+            if (tt < A1)
+                return T - (T - l0) * exp(-tt / ta);
+        } else {
+            A1 = A;
+            if (tt < A)
+                return T * (1.0 - exp(-tt / ta));
+        }
+        return std::max(0.0, S + (1.0 - S) * exp(-(tt - A1) / (D * 0.25)));
+    }
+    // Slab.contour_at: FT row r's note's amp (or filter) contour, held, t s in
+    double contour_at(int r, double t, bool amp) const
+    {
+        const int kr = (int)FT[(size_t)r * FT_W + 9];
+        const int o = amp ? 4 : 1;
+        const double S = (double)KN[(size_t)(2 * kr + 1) * KN_W + (amp ? 4 : 3)];
+        return held_level(t, (double)FT[(size_t)r * FT_W + o], (double)FT[(size_t)r * FT_W + o + 1], S,
+                          amp ? mx_l0a[r] : mx_l0f[r], MX[(size_t)r * MX_W + (amp ? 2 : 1)] != 0.0f,
+                          (double)FT[(size_t)r * FT_W + o + 2]);
     }
 
     // Slab.knobs_advance's knob rows: a block's end the next one's start
@@ -1569,6 +1767,7 @@ struct Slab {
             ft_row(L, (double)row[10], (int)row[9], row[11] > 0.5f, (int)row[12], false, 0.0, nrow);
             for (int j = 0; j < 30; j++)
                 row[j] = nrow[j];
+            mx_write(r, L->pn);
         }
         double span = L->rel_span * rate;
         float re = (float)(span > 1.0 ? span : 1.0);
@@ -1695,6 +1894,10 @@ struct Slab {
         if (sf)
             for (int j = 0; j < SHAPE_W; j++)
                 ms_par[r * SHAPE_W + j] = L->shape_par[j];
+        mx_vel[r] = 127;
+        mx_age[r] = 0.0;
+        mx_l0a[r] = mx_l0f[r] = 0.0;
+        mx_write(r, L->pn);
         for (long s : mine)
             i4[I4_fx][s] = r;
         ft_cnt[r] = (int)mine.size();
@@ -2238,6 +2441,7 @@ struct Part {
     int porta_src[16] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     int last_on[16] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     int glide_from = -1;
+    int moog_src = -1;                      // ...and the last key, for a Moog's GLIDE knob (live._moog_src)
     std::vector<std::pair<int, int>> mono_stack[16];
     int mono_cur[16] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     // THE MOD WHEEL on a honky-tonk (live's 'detune' role): which pre-warmed
@@ -2268,7 +2472,8 @@ struct Part {
         int lo, hi, transpose;
         // ...muted (live's part.muted: it claims no key), or gone (a part
         // taken away: its notes let go, its place kept so no index moves)
-        bool muted = false, gone = false;
+        bool muted = false, gone = false, hidden = false;     // (hidden: the metronome's, no key reaches it)
+        int fixed_touch = -1;                   // FIXED TOUCH (live's part.fixed_touch): -1 the patch's way, 1 on, 0 off
         // A REGISTERED ORGAN (live's part.organ): its table, its stops drawn
         // (a rank each), the crescendo's place (part.cres)
         const OrganSpec *organ = nullptr;
@@ -2305,6 +2510,9 @@ struct Part {
         // a Messenger's CC chart (Part.cc_map)
         std::map<int, double> syn;
         std::shared_ptr<MoogLayer> mb;
+        std::map<int, double> syn_b;            // ...a layered voice's second Messenger's own (live's synth_b)
+        std::shared_ptr<MoogLayer> mb_b;
+        std::map<int, double> syn_kept[2];      // (a session's knobs the engine refused: kept, saved back, not heard)
         bool msgr = false;
     };
     std::vector<Patch> patches;
@@ -3754,8 +3962,8 @@ struct Part {
     bool claims(int i, int ch, int note) const
     {
         const Patch &p = patches[i];
-        return !p.muted && !p.gone && (p.channel < 0 || p.channel == ch) && !((p.excl >> ch) & 1u) && p.lo <= note
-               && note <= p.hi;
+        return !p.muted && !p.gone && !p.hidden && (p.channel < 0 || p.channel == ch) && !((p.excl >> ch) & 1u)
+               && p.lo <= note && note <= p.hi;
     }
 
     // the patch a note goes to: the one a layer's loop is on (force_pi), else
@@ -4099,6 +4307,7 @@ struct Part {
             st.swap(keep);
             int prev = mono_cur[ch];
             if (prev >= 0 && prev != note) {
+                legato_take(ch, prev);
                 mono_cut(ch, prev, n0);
                 slur = true;                    // a handoff is a slur (_MONO_SLUR)
             }
@@ -4111,6 +4320,9 @@ struct Part {
         if (src < 0 && porta_on[ch])
             src = last_on[ch];
         glide_from = src != note ? src : -1;
+        // A MOOG'S GLIDE needs no switch: with its knob up every note glides
+        // from the last one on the channel, detached or not
+        moog_src = last_on[ch] != note ? last_on[ch] : -1;
         last_on[ch] = note;
         std::vector<int> cl = claimers(ch, note);
         if (cl.size() <= 1)
@@ -4120,7 +4332,26 @@ struct Part {
                 Force f(*this, i);
                 cut_on(ch, note, vel, n0, slur);
             }
-        glide_from = -1;
+        glide_from = moog_src = -1;
+        legato_age.clear();
+    }
+
+    // live._legato_take: a mono handoff from `note` -- where each Moog part's
+    // contours have got to (its note's onset and age, per layer), for the note
+    // taking over, which carries on from there where MULTI-TRIG is off
+    std::map<std::pair<long long, int>, int> legato_age;
+    void legato_take(int ch, int note)
+    {
+        legato_age.clear();
+        for (auto &kv : S.live) {
+            if (std::get<1>(kv.first) != ch || std::get<2>(kv.first) != note || kv.second.empty())
+                continue;
+            for (long i : kv.second) {
+                const int r = S.i4[I4_fx][i];
+                if (r >= 0)
+                    legato_age.emplace(std::make_pair((long long)std::get<0>(kv.first), S.ft_layer[r]), r);
+            }
+        }
     }
 
     // the chain channel ch hears now (live._efx_for), NULL where none
@@ -4994,13 +5225,33 @@ struct Part {
             if (skc && skc->siren)          // A SIREN's key: its rotor (live._siren_on)
                 siren_on(ch, note, vel, n0, skc->siren, sn);
         }
+        // FIXED TOUCH (live.Part.touch_fixed): the part's switch, else the
+        // patch's way -- on, a touch-sensitive voice plays at velocity 127's
+        // level (its timbre still the bucket's); off, a voice that has no
+        // touch follows velocity (live's note_touch, its key's level)
+        const Patch &pc = patches[cur];
+        const bool fixt = pc.fixed_touch < 0 ? !pc.touch : pc.fixed_touch != 0;
+        const double tf = (pc.touch || fixt) ? 1.0 : pow(vel / 127.0, 2.0);
         if (patches[cur].organ) {           // a registered organ: its ranks drawn
-            organ_strike(*T, ch, note, vel, n0);
+            organ_strike(*T, ch, note, vel, n0, tf);
             return;
         }
         double scale = pow(10.0, level_db / 20.0) * swell * chan_gain(ch);
         if (patches[cur].touch)             // touch: the press over the template's (a voice without it: its own level)
-            scale *= pow(vel / 127.0, 2.0) / std::max(pow(T->vel / 127.0, 2.0), 1e-9);
+            scale *= pow((fixt ? 127 : vel) / 127.0, 2.0) / std::max(pow(T->vel / 127.0, 2.0), 1e-9);
+        else
+            scale *= tf;
+        if (patches[cur].touch && patches[cur].moog) {
+            // A MOOG'S A ENV VEL, where the panel sets it: off, the level fixed
+            // (velocity 127's); on, the Messenger's own law (moog.a_vel_gain)
+            double pn[NV_MK_N];
+            moog_pn(patches[cur], true, pn);
+            if (pn[NV_MK_A_VEL] >= 0.0) {
+                scale = pow(10.0, level_db / 20.0) * swell * chan_gain(ch) / std::max(pow(T->vel / 127.0, 2.0), 1e-9);
+                if (pn[NV_MK_A_VEL] >= 0.5)
+                    scale *= moog_a_vel_gain(fixt ? 127 : vel);
+            }
+        }
         Key key(pid, ch, note, -1);
         long li = S.live_find(key);
         if (damper_pedal && li >= 0 && !S.live[li].second.empty() && !S.oneshot.count(key)) {
@@ -5072,8 +5323,15 @@ struct Part {
         if (soft[ch] && !slots.empty())
             S.soft_strings(slots, soft_drop, soft_top);
         double gl[3];                       // PORTAMENTO, stamped (live._glide)
-        if (glide_from >= 0 && !slots.empty()
-            && nv_tcache_glide(cache, program, glide_from + transpose, sn, porta_time[ch], gl))
+        double mtau = 0.0;                  // (a Moog with its GLIDE knob up: the knob's, from the last key)
+        if (!slots.empty() && (glide_from >= 0 || moog_src >= 0) && patches[cur].moog) {
+            double pn[NV_MK_N];
+            moog_pn(patches[cur], true, pn);
+            mtau = moog_glide_tau(pn[NV_MK_GLIDE]);
+        }
+        const int gsrc = mtau > 0.0 ? moog_src : glide_from;
+        if (gsrc >= 0 && !slots.empty()
+            && nv_tcache_glide(cache, program, gsrc + transpose, sn, porta_time[ch], gl, mtau))
             for (long q : slots) {
                 S.f4n[0][q] = (float)gl[0];
                 S.f4n[1][q] = (float)gl[1];
@@ -5134,6 +5392,10 @@ struct Part {
                 b = b / bend[ch] * mr;
                 meend_at[key] = std::make_pair(mr, T->sym);
             }
+            if (patches[cur].moog) {        // ...AND A MOOG'S LFO 2 WHERE IT HAS THE PITCH (lfo2_tick)
+                auto lp = lfo2_pr.find(pid);
+                b *= lp != lfo2_pr.end() ? lp->second : 1.0;
+            }
             messenger_pitch(patches[cur], ch, note);     // A MESSENGER PLAYING IT, on the same pitch
             // THE OPEN STRINGS ARE NOT ON THE WHEEL (live._fixed_sym): their
             // rows take the note's tuning but not the pull, now or later
@@ -5176,6 +5438,36 @@ struct Part {
         }
         if (reg_on && cur_reg && reg_note[note] && !lslots[0].empty())
             reg_strike(ch, note, n0, *T, lslots[0]);
+        if (patches[cur].moog && !slots.empty()) {
+            // ITS VELOCITY, for F ENV VEL (moog.mx_row): each of its rows' notes
+            std::set<int> rs;
+            for (long s : slots)
+                if (S.i4[I4_fx][s] >= 0)
+                    rs.insert(S.i4[I4_fx][s]);
+            for (int r : rs) {
+                S.mx_vel[r] = vel;
+                double pn[NV_MK_N];
+                moog_pn(patches[cur], true, pn, S.ft_layer[r]);
+                // ...AND A LEGATO HANDOFF WITH MULTI-TRIG OFF: its contours
+                // carry on from the note it took over (legato_take)
+                // -- or, MULTI-TRIG on, start again charged from where its
+                // contours had got to (held_level)
+                auto lg = legato_age.find(std::make_pair((long long)pid, S.ft_layer[r]));
+                if (lg != legato_age.end()) {
+                    const int ro = lg->second;
+                    const double t = (S.mp_a0[r] - S.mp_a0[ro]) / rate + S.mx_age[ro];
+                    if (pn[NV_MK_MULTITRIG] == 0.0) {
+                        S.mx_age[r] = t;
+                        S.mx_l0a[r] = S.mx_l0a[ro];
+                        S.mx_l0f[r] = S.mx_l0f[ro];
+                    } else {
+                        S.mx_l0a[r] = S.contour_at(ro, t, true);
+                        S.mx_l0f[r] = S.contour_at(ro, t, false);
+                    }
+                }
+                S.mx_write(r, pn);
+            }
+        }
         if (patches[cur].moog && !slots.empty())
             for (int ly = 0; ly < 2; ly++)          // each Messenger its own pedal
                 if (!lslots[ly].empty())
@@ -5562,6 +5854,9 @@ struct Part {
         long long pid = 0;
         int knob = 0;
         double old = 0.0;
+        int layer = 0;                      // (a Moog's knob: 1 its second Messenger, live's 'b')
+        int pi = -1;                        // (3: a knob set once the patches before it are in -- a preset's)
+        double value = 0.0;
     };
     std::vector<Post> posts;
 
@@ -5676,7 +5971,18 @@ struct Part {
         if (w.program != p.program || w.cache != p.cache) {
             p.syn.clear();                      // A NEW PROGRAM IS A NEW PATCH: its knobs its own (Part.set_patch)
             p.mb.reset();
+            p.syn_b.clear();
+            p.mb_b.reset();
+            p.syn_kept[0].clear();
+            p.syn_kept[1].clear();
         }
+        // THE SAME ORGAN BUILT AGAIN (a room switched to, a tuner changed: the
+        // patch made anew, the voice the same -- its organ's tables the same)
+        // KEEPS ITS REGISTRATION (live's set_patch)
+        const OrganSpec *og_new = w.drums ? nullptr : nv_tcache_organ(w.cache, w.program);
+        const bool keep_reg = og_new && og_new == p.organ && w.program == p.program && !p.drums && !w.drums
+                              && (int)p.drawn.size() == og_new->n_rank;
+        std::vector<char> kept = keep_reg ? p.drawn : std::vector<char>();
         p.cache = w.cache;
         p.program = w.program;
         p.drums = w.drums != 0;
@@ -5692,6 +5998,8 @@ struct Part {
         p.drawn.clear();
         if (!p.drums)
             organ_start(p, nv_tcache_organ(p.cache, p.program));
+        if (keep_reg)
+            p.drawn = kept;
         if (w.pi == 0) {
             detune_wheel = w.detune_wheel != 0;
             if (!w.reg_note.empty())
@@ -5756,6 +6064,12 @@ struct Part {
             }
             if (q.kind == 2) {
                 synth_post(q, n0);
+                continue;
+            }
+            if (q.kind == 3) {                  // (a session's or preset's knob, after its swap)
+                if (q.pi >= 0 && q.pi < (int)patches.size() && !set_synth(patches[q.pi], q.knob, q.value, q.layer)
+                    && moog_spec(patches[q.pi], q.layer))
+                    patches[q.pi].syn_kept[q.layer & 1][q.knob] = q.value;     // (refused: kept as written)
                 continue;
             }
             const OrganSpec *og = patches[0].organ;
@@ -6225,7 +6539,7 @@ struct Part {
     // at middle C (_snd_for at 60 - transpose); null if not a Moog
     const MoogLayer *moog_panel(const Patch &p, int ch, MoogLayer &out, int layer = 0) const
     {
-        const MoogLayer *base = layer ? p.moog_b : (p.mb ? p.mb.get() : p.moog);
+        const MoogLayer *base = layer ? (p.mb_b ? p.mb_b.get() : p.moog_b) : (p.mb ? p.mb.get() : p.moog);
         if (!base)
             return nullptr;
         const NoteClass *k = ch >= 0 ? key_class(p, 60) : nullptr;
@@ -6532,9 +6846,9 @@ struct Part {
 
     // live._note_on's organ path: every rank drawn, in the stops' order (a
     // pipe organ has no touch: a key is open or shut)
-    void organ_strike(const nv::live::Template &T, int ch, int note, int vel, long long n0)
+    void organ_strike(const nv::live::Template &T, int ch, int note, int vel, long long n0, double tf = 1.0)
     {
-        note_touch[std::make_pair(ch, note)] = 1.0;
+        note_touch[std::make_pair(ch, note)] = tf;
         const std::vector<char> &dr = patches[cur].drawn;
         for (int ri = 0; ri < (int)dr.size(); ri++)
             if (dr[ri])
@@ -6875,9 +7189,11 @@ struct Part {
                 return;                             // already handed over: nothing sounds for it
             if (!st.empty()) {
                 std::pair<int, int> back = st.back();
+                legato_take(ch, note);
                 mono_cut(ch, note, n0);
                 mono_cur[ch] = back.first;
                 glide_from = porta_on[ch] ? note : -1;
+                moog_src = note;
                 last_on[ch] = back.first;
                 std::vector<int> cl = claimers(ch, back.first);
                 if (cl.size() <= 1)
@@ -6887,7 +7203,8 @@ struct Part {
                         Force f(*this, i);
                         strike(ch, back.first, back.second, n0, true);
                     }
-                glide_from = -1;
+                glide_from = moog_src = -1;
+                legato_age.clear();
                 return;
             }
             mono_cur[ch] = -1;                      // last key up: an ordinary release
@@ -7139,7 +7456,62 @@ struct Part {
         return p.wheel_vib && !(p.amp > 0.0) && !(p.organ && (p.organ->n_order || p.organ->siren_up))
                && !(p.wtrem > 0.0) && !p.clav
                && !p.leslie && !p.wheel_swell && !(k && k->drone_wheel) && !(k && k->flt_set == 2 && k->flt_k == 4)
-               && !(k && k->n_dchoice);
+               && !(k && k->n_dchoice) && !lfo2_role(p);
+    }
+
+    // live.wheel_roles' 'lfo2': a Moog whose LFO 2 goes somewhere, its
+    // wheel LFO 2's depth
+    bool lfo2_role(const Patch &p) const
+    {
+        if (p.drums || !p.moog)
+            return false;
+        double pn[NV_MK_N];
+        moog_pn(p, true, pn);
+        return moog_lfo2_on(pn);
+    }
+
+    // LFO 2 (live's lfo2_ph, lfo2_w, lfo2_pr): each Moog part's phase, the
+    // wheel last sent it, the pitch its sounding notes were last moved to
+    std::map<long long, double> lfo2_ph, lfo2_w, lfo2_pr;
+
+    // live._lfo2_tick: one block of every Moog part's LFO 2 at the block's
+    // end -- the cutoff on its knob rows, the level for the render, the pitch
+    // its sounding notes are moved to
+    void lfo2_tick(long long n0, long frames)
+    {
+        for (const Patch &p : patches) {
+            if (p.drums || !p.moog)
+                continue;
+            const long long id = p.pid;
+            double pn[NV_MK_N];
+            moog_pn(p, true, pn);
+            auto ph = lfo2_ph.find(id);
+            double x = (ph != lfo2_ph.end() ? ph->second : 0.0) + moog_lfo2_rate(pn[NV_MK_LFO2_RATE]) * frames / rate;
+            x -= floor(x);
+            lfo2_ph[id] = x;
+            auto wi = lfo2_w.find(id);
+            const double w = moog_lfo2_on(pn) && wi != lfo2_w.end() ? wi->second : 0.0;
+            double pr, cf, ag;
+            moog_lfo2_mods(pn, w, x, &pr, &cf, &ag);
+            auto pi = lfo2_pr.find(id);
+            const double prev = pi != lfo2_pr.end() ? pi->second : 1.0;
+            if (pr != prev) {
+                lfo2_pr[id] = pr;
+                std::vector<long> sl;
+                for (auto &kv : S.live)
+                    if (std::get<0>(kv.first) == id)
+                        sl.insert(sl.end(), kv.second.begin(), kv.second.end());
+                retune(sl, n0, pr / prev);
+            }
+            for (auto &kk : S.kn_of) {
+                const int r = kk.second;
+                if (std::get<0>(kk.first) != id || !S.kn_has[r] || (S.kn_cf[r] == cf && S.kn_ag[r] == (float)ag))
+                    continue;
+                S.kn_cf[r] = cf;
+                S.kn_ag[r] = (float)ag;
+                S.set_knobs(r, &S.kn_base[(size_t)r * Slab::KN_W], true);
+            }
+        }
     }
 
     // live._snd_vib: (depth to add, rate factor) the part's CC77/76 ask of
@@ -8130,40 +8502,47 @@ struct Part {
                || k == NV_MK_OSC2_LEVEL || k == NV_MK_SUB_LEVEL || k == NV_MK_NOISE_LEVEL
                || k == NV_MK_OSC2_FREQ || k == NV_MK_TUNE || k == NV_MK_MOD_AMOUNT;
     }
-    // part pid -> {knob: where it has got to}, in the order they began (live.moog_glide)
-    std::vector<std::pair<long long, std::map<int, double>>> moog_glide;
+    // (part pid, layer) -> {knob: where it has got to}, in the order they
+    // began (live.moog_glide: (pid, 'b') a layered voice's second Messenger)
+    std::vector<std::pair<std::pair<long long, int>, std::map<int, double>>> moog_glide;
     bool msgr_all = false;                  // --messenger: every part reads the chart
     bool msgr_pre107 = false;               // ...a Messenger on firmware before 1.0.7 (moog.messenger_chart)
     bool msgr_said = false;
     std::map<std::pair<int, int>, int> msg_msb;     // (channel, CC) -> a knob's coarse half
-    // the part's panel (moog.panel_of: its patch's, its own knobs over it),
-    // and where a knob still glides, where it has got to
-    void moog_pn(const Patch &p, bool glide, double *pn) const
+    static const MoogLayer *moog_spec(const Patch &p, int layer) { return layer ? p.moog_b : p.moog; }
+    // the part's panel on a layer (moog.panel_of: its patch's, its own knobs
+    // over it), and where a knob still glides, where it has got to
+    void moog_pn(const Patch &p, bool glide, double *pn, int layer = 0) const
     {
-        memcpy(pn, p.moog->pn, sizeof p.moog->pn);
-        for (auto &kv : p.syn)
+        const MoogLayer *m = moog_spec(p, layer);
+        memcpy(pn, m->pn, sizeof m->pn);
+        for (auto &kv : layer ? p.syn_b : p.syn)
             pn[kv.first] = kv.second;
         if (glide)
             for (auto &g : moog_glide)
-                if (g.first == p.pid)
+                if (g.first == std::make_pair(p.pid, layer))
                     for (auto &kv : g.second)
                         pn[kv.first] = kv.second;
     }
-    // the panel its notes read again (_moog_panel_for's knobs)
+    // the panel its notes read again (_moog_panel_for's knobs), each layer
     void moog_rebuild(Patch &p)
     {
-        bool gl = false;
-        for (auto &g : moog_glide)
-            gl = gl || g.first == p.pid;
-        if (!p.moog || (p.syn.empty() && !gl)) {
-            p.mb.reset();
-            return;
+        for (int layer = 0; layer < 2; layer++) {
+            const MoogLayer *m = moog_spec(p, layer);
+            std::shared_ptr<MoogLayer> &mb = layer ? p.mb_b : p.mb;
+            bool gl = false;
+            for (auto &g : moog_glide)
+                gl = gl || g.first == std::make_pair(p.pid, layer);
+            if (!m || ((layer ? p.syn_b : p.syn).empty() && !gl)) {
+                mb.reset();
+                continue;
+            }
+            double pn[NV_MK_N];
+            moog_pn(p, true, pn, layer);
+            auto b = std::make_shared<MoogLayer>();
+            if (nv_moog_build(pn, m, b.get()) == 0)
+                mb = b;
         }
-        double pn[NV_MK_N];
-        moog_pn(p, true, pn);
-        auto b = std::make_shared<MoogLayer>();
-        if (nv_moog_build(pn, p.moog, b.get()) == 0)
-            p.mb = b;
     }
     Patch *patch_pid(long long id)
     {
@@ -8172,37 +8551,42 @@ struct Part {
                 return &p;
         return nullptr;
     }
-    // live.set_synth (layer A, from the hardware): the part has the new
-    // value at once, so the next press steps from it; after the block's
-    // events (live.post) the notes sounding are told where they glide FROM
-    // and refreshed. Refused here: SYNC (its spectrum), and a turn that
-    // would move a pitch or shape under the MF-104M -- said, and left
-    void set_synth(Patch &p, int knob, double value)
+    // live.set_synth (from the hardware, or the panel; layer 1 a layered
+    // voice's second Messenger, ours alone): the part has the new value at
+    // once, so the next press steps from it; after the block's events
+    // (live.post) the notes sounding are told where they glide FROM and
+    // refreshed. Refused here: SYNC (its spectrum), and a turn that would
+    // move a pitch or shape under the MF-104M -- said, and left
+    bool set_synth(Patch &p, int knob, double value, int layer = 0)
     {
-        if (!p.moog)
-            return;
+        const MoogLayer *m = moog_spec(p, layer);
+        if (!m)
+            return false;
         double pn[NV_MK_N];
-        moog_pn(p, false, pn);
+        moog_pn(p, false, pn, layer);
         const double old = pn[knob];
-        std::map<int, double> was = p.syn;
-        p.syn[knob] = value;
+        std::map<int, double> &syn = layer ? p.syn_b : p.syn;
+        std::map<int, double> was = syn;
+        syn[knob] = value;
         double tr[NV_MK_N];
-        moog_pn(p, true, tr);
+        moog_pn(p, true, tr, layer);
         MoogLayer probe;
-        if (knob == NV_MK_SYNC || nv_moog_build(tr, p.moog, &probe) != 0) {
-            p.syn.swap(was);
+        if (knob == NV_MK_SYNC || nv_moog_build(tr, m, &probe) != 0) {
+            syn.swap(was);
             if (!msgr_said)
                 fprintf(stderr, "nvlive: refused: the Messenger's %s live -- the knob left as it was\n",
                         knob == NV_MK_SYNC ? "SYNC" : "pitch or shape under the MF-104M");
             msgr_said = true;
-            return;
+            return false;
         }
         moog_rebuild(p);
         Post q{2, {}, nullptr};
         q.pid = p.pid;
         q.knob = knob;
         q.old = old;
+        q.layer = layer;
         posts.push_back(std::move(q));
+        return true;
     }
     void synth_post(const Post &q, long long n0)
     {
@@ -8213,10 +8597,13 @@ struct Part {
         for (auto &kv : S.live)
             sounding = sounding || std::get<0>(kv.first) == q.pid;
         if (moog_glides(q.knob) && sounding) {
+            const std::pair<long long, int> gk(q.pid, q.layer);
             auto it = std::find_if(moog_glide.begin(), moog_glide.end(),
-                                   [&](const std::pair<long long, std::map<int, double>> &g) { return g.first == q.pid; });
+                                   [&](const std::pair<std::pair<long long, int>, std::map<int, double>> &g) {
+                                       return g.first == gk;
+                                   });
             if (it == moog_glide.end()) {
-                moog_glide.emplace_back(q.pid, std::map<int, double>());
+                moog_glide.emplace_back(gk, std::map<int, double>());
                 it = moog_glide.end() - 1;
             }
             it->second.emplace(q.knob, q.old);      // (setdefault: the first turn's start)
@@ -8227,19 +8614,21 @@ struct Part {
     // live._moog_tick: one block of every gliding knob
     void moog_tick(long long n0)
     {
-        std::vector<long long> ids;
+        std::vector<std::pair<long long, int>> ids;
         for (auto &g : moog_glide)
             ids.push_back(g.first);
-        for (long long id : ids) {
+        for (const auto &id : ids) {
             auto it = std::find_if(moog_glide.begin(), moog_glide.end(),
-                                   [&](const std::pair<long long, std::map<int, double>> &g) { return g.first == id; });
-            Patch *p = patch_pid(id);
-            if (!p || !p->moog) {
+                                   [&](const std::pair<std::pair<long long, int>, std::map<int, double>> &g) {
+                                       return g.first == id;
+                                   });
+            Patch *p = patch_pid(id.first);
+            if (!p || !moog_spec(*p, id.second)) {
                 moog_glide.erase(it);
                 continue;
             }
             double base[NV_MK_N];
-            moog_pn(*p, false, base);
+            moog_pn(*p, false, base, id.second);
             std::map<int, double> &now = it->second;
             for (auto k = now.begin(); k != now.end();) {
                 double d = base[k->first] - k->second;
@@ -8286,10 +8675,12 @@ struct Part {
             {76, NV_MK_OSC2_OCTAVE, 3}, {78, NV_MK_KB_TRACK, 4}, {79, NV_MK_RES_BASS, 6}, {109, NV_MK_MODE, 5},
             {13, NV_MK_MOD_AMOUNT, 0}, {72, NV_MK_MOD_DEST, 5}, {77, NV_MK_SYNC, 6}, {3, NV_MK_LFO1_RATE, 0},
             {4, NV_MK_LFO1_DEPTH, 0}, {83, NV_MK_LFO1_SHAPE, 5}, {85, NV_MK_LFO1_DEST, 5},
-            {93, NV_MK_LFO1_RESET, 6},
-            {2, -2, 0}, {18, -2, 0}, {20, -2, 0}, {27, -2, 0}, {73, -2, 0}, {80, -2, 0}, {81, -2, 0}, {89, -2, 0},
-            {102, -2, 0}, {107, -2, 0}, {108, -2, 0}, {112, -2, 0}, {113, -2, 0}, {114, -2, 0}, {116, -2, 0},
-            {117, -2, 0}, {118, -2, 0},
+            {93, NV_MK_LFO1_RESET, 6}, {5, NV_MK_GLIDE, 0}, {81, NV_MK_A_VEL, 6},
+            {27, NV_MK_LFO2_RATE, 0}, {116, NV_MK_LFO2_PITCH, 6}, {117, NV_MK_LFO2_CUT, 6},
+            {118, NV_MK_LFO2_AMP, 6}, {112, NV_MK_F_LOOP, 6}, {113, NV_MK_A_LOOP, 6}, {80, NV_MK_F_VEL, 6},
+            {114, NV_MK_MULTITRIG, 6},
+            {2, -2, 0}, {18, -2, 0}, {20, -2, 0}, {73, -2, 0}, {89, -2, 0},
+            {102, -2, 0}, {107, -2, 0}, {108, -2, 0},
         };
         *knob = -1;
         *kind = 0;
@@ -8354,6 +8745,8 @@ struct Part {
             msgr_chart(cc, &k, &kind);
             if (k < 0 || (knob >= 0 && k != knob))
                 continue;
+            if (k == NV_MK_A_VEL && pn[k] < 0.0)
+                continue;                   // (the voice's own touch: the hardware's switch left as it is)
             msgr_put(0xB0 | ch, cc, msgr_cc_value(kind, pn[k], &lo));
             if (lo >= 0)
                 msgr_put(0xB0 | ch, cc + 32, lo);
@@ -8416,6 +8809,12 @@ struct Part {
         }
         if (!hears)
             return false;
+        if (cc == 73) {
+            // HOLD holds both contours at sustain after the key goes up: the
+            // sustain pedal, which on a synth holds the gate
+            control(ch, 64, v >= 64 ? 127 : 0, n0);
+            return true;
+        }
         int knob, kind;
         double val;
         int hi = cc - 32, hk, hkind;
@@ -8649,6 +9048,10 @@ struct Part {
             if (mouth)
                 tone_ctl(ch, true, n0, v);
         }
+        if (cc == 1)                            // LFO 2's depth (live's 'lfo2' role)
+            for (const Patch &p : patches)
+                if ((p.channel < 0 || p.channel == ch) && lfo2_role(p))
+                    lfo2_w[p.pid] = v / 127.0;
         if (cc == 1) {                          // THE MOD WHEEL IS VIBRATO (live's 'vibrato' role)
             bool any = false;
             for (const Patch &p : patches)
@@ -9697,6 +10100,9 @@ struct Part {
     };
     struct GpuSide {
         void *vb = nullptr, *vbd = nullptr, *vds = nullptr, *vs = nullptr, *cl = nullptr;
+        // the Moog extensions' build (gpurender's ensure_gpu_moogx_lib): its
+        // voice_block, voice_damp_set and voice_moogx_set
+        void *vbm = nullptr, *vmd = nullptr, *vmm = nullptr;
         long gpu_min = 1000;
         int nthr = 4;
         Table D, C, SB;
@@ -9708,6 +10114,7 @@ struct Part {
     // the GPU in its turn's tables) and the one started before it finished
     bool pipeline = false;
     int turn = 0;
+    void *smx = nullptr;                // synth_voice_moogx (nv_part_moogx; NULL: none)
     struct GpuPend {
         int kind = 0;                   // 0 none (the first block), 1 done on the CPU, 2 on the GPU
         int slot = 0;
@@ -9778,10 +10185,20 @@ struct Part {
             gnoff[q] = (long)S.i8[1][q];
         }
         void *vb = gp.vb;
-        bool damp = false;
-        for (long q : gidx)
+        bool damp = false, mx = false;
+        for (long q : gidx) {
             damp = damp || S.dk[q] >= 0;
-        if (damp && gp.vbd && gp.vds) {
+            mx = mx || (S.i4[I4_fx][q] >= 0 && S.mx_on[S.i4[I4_fx][q]]);
+        }
+        if (mx && gp.vbm && gp.vmd && gp.vmm) {
+            // ...AND A TABLE WITH MOOG NOTE ROWS through the extensions' build
+            vb = gp.vbm;
+            ((void (*)(const float *))gp.vmm)(S.MX.data());
+            if (damp)
+                ((nv_vdamp_fn)gp.vmd)(S.dk.data(), S.dg.data(), DM.data(), DMO.data(), DMB.data(), DMN.data());
+            else
+                ((nv_vdamp_fn)gp.vmd)(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
+        } else if (damp && gp.vbd && gp.vds) {
             vb = gp.vbd;
             ((nv_vdamp_fn)gp.vds)(S.dk.data(), S.dg.data(), DM.data(), DMO.data(), DMB.data(), DMN.data());
         }
@@ -9830,6 +10247,13 @@ struct Part {
         S.moog_filter_apply();
         tap_block(n0, frames);                  // the insertion effect's copies (live's tap_fill)
         bus_block(n0, frames);                  // ...and a part's own bus (live's _bus_block)
+        // LFO 2's level on the Moog rows, for this render (live's lfo2_amp_apply,
+        // _restore in its finally, before the filter's)
+        struct Lfo2Amp {
+            Slab &S;
+            ~Lfo2Amp() { S.lfo2_amp_restore(); }
+        } lfo2_amp{S};
+        S.lfo2_amp_apply();
         // the Moog's mod rows for this block, and its FM's anchors (Renderer.render's first)
         S.moog_pitch_block(n0, frames, rate, moog_pcells);
         S.moog_shape_block(n0, frames, rate, moog_srows);
@@ -9976,10 +10400,13 @@ struct Part {
         // thick passage a few voices can sit high on the slab: a coupled
         // harpsichord's chord, 16-64 slots near the top, gathered 40,000 deep,
         // ran 10-25 ms a block on the CPU
-        std::vector<long> xr, keep, dm;
+        // THE MOOG ROWS WHOSE NOTE HAS A ROW OF THE EXTENSIONS (synth_partials'
+        // moogx_rows) through synth_voice_moogx, last
+        auto mxq = [&](long q) { return smx && S.i4[I4_fx][q] >= 0 && S.mx_on[S.i4[I4_fx][q]]; };
+        std::vector<long> xr, keep, dm, mxr;
         for (long q = 0; q < hi; q++)
             if (S.busy[q])
-                (S.dk[q] >= 0 && sd ? dm : fast(q) ? xr : keep).push_back(q);
+                (mxq(q) ? mxr : S.dk[q] >= 0 && sd ? dm : fast(q) ? xr : keep).push_back(q);
 #define VOICE_ARGS L, R, (long)n0, frames, (int)blk, 1, (int)n, gd(S.f8[0], 0), gd(S.f8[1], 1), gd(S.f8[2], 2), \
     gf(F4[0]), gf(F4[1]), gf(F4[2]), gl(S.i8[0], 0), gl(S.i8[1], 1), gf(F4[3]), gf(F4[4]), gf(F4[5]), gf(F4[6]), \
     gf(F4[7]), gf(F4[8]), gf(F4[9]), gf(F4[10]), gf(F4[11]), gf(F4[12]), gf(F4[13]), gf(F4[14]), gf(F4[15]), \
@@ -10022,13 +10449,22 @@ struct Part {
                 dkr.resize(n); for (long q = 0; q < n; q++) dkr[q] = S.dk[rows[q]];
                 std::vector<float> &dgr = f[fk++];
                 dgr.resize(n); for (long q = 0; q < n; q++) dgr[q] = S.dg[rows[q]];
+                if (fn == smx)          // synth_voice_moogx: synth_voice_damp's, then the note rows
+                    ((nv_moogx_fn)fn)(VOICE_ARGS, dkr.data(), dgr.data(), DM.data(), DMO.data(), DMB.data(),
+                                      DMN.data(), S.MX.data());
                 // synth_voice_damp: synth_voice's arguments, then the tracks
-                ((nv_damp_fn)fn)(VOICE_ARGS, dkr.data(), dgr.data(), DM.data(), DMO.data(), DMB.data(), DMN.data());
+                else
+                    ((nv_damp_fn)fn)(VOICE_ARGS, dkr.data(), dgr.data(), DM.data(), DMO.data(), DMB.data(), DMN.data());
             } else {
                 ((nv_voice_fn)fn)(VOICE_ARGS);
             }
         };
-        if (!dm.empty()) {
+        if (!mxr.empty()) {
+            call(sv, keep.data(), (long)keep.size(), false, false);
+            call(sx, xr.data(), (long)xr.size(), false, false);
+            call(sd, dm.data(), (long)dm.size(), false, true);
+            call(smx, mxr.data(), (long)mxr.size(), false, true);
+        } else if (!dm.empty()) {
             call(sv, keep.data(), (long)keep.size(), false, false);
             call(sx, xr.data(), (long)xr.size(), false, false);
             call(sd, dm.data(), (long)dm.size(), false, true);
@@ -10041,10 +10477,15 @@ struct Part {
             call(sv, nullptr, hi, true, false);
         }
         if (S.tap_m) {                      // the taps' scratch rows (Slab.tap_fill), after
-            std::vector<long> xr2, keep2, dm2;
+            std::vector<long> xr2, keep2, dm2, mx2;
             for (long q = S.cap; q < S.cap + S.tap_m; q++)
-                (S.dk[q] >= 0 && sd ? dm2 : fast(q) ? xr2 : keep2).push_back(q);
-            if (!dm2.empty()) {
+                (mxq(q) ? mx2 : S.dk[q] >= 0 && sd ? dm2 : fast(q) ? xr2 : keep2).push_back(q);
+            if (!mx2.empty()) {
+                call(sv, keep2.data(), (long)keep2.size(), false, false);
+                call(sx, xr2.data(), (long)xr2.size(), false, false);
+                call(sd, dm2.data(), (long)dm2.size(), false, true);
+                call(smx, mx2.data(), (long)mx2.size(), false, true);
+            } else if (!dm2.empty()) {
                 call(sv, keep2.data(), (long)keep2.size(), false, false);
                 call(sx, xr2.data(), (long)xr2.size(), false, false);
                 call(sd, dm2.data(), (long)dm2.size(), false, true);
@@ -10064,14 +10505,15 @@ struct Part {
                 R = BR.data();
                 SL = SL0 ? BSL.data() : nullptr;
                 SR = SL0 ? BSR.data() : nullptr;
-                std::vector<long> xr3, keep3, dm3;
+                std::vector<long> xr3, keep3, dm3, mx3;
                 const long c1 = S.cap + S.tap_m;
                 for (long q = c1; q < c1 + S.bus_m; q++)
-                    (S.dk[q] >= 0 && sd ? dm3 : fast(q) ? xr3 : keep3).push_back(q);
+                    (mxq(q) ? mx3 : S.dk[q] >= 0 && sd ? dm3 : fast(q) ? xr3 : keep3).push_back(q);
                 call(sv, keep3.data(), (long)keep3.size(), false, false);
                 call(sx, xr3.data(), (long)xr3.size(), false, false);
                 if (!dm3.empty())
                     call(sd, dm3.data(), (long)dm3.size(), false, true);
+                call(smx, mx3.data(), (long)mx3.size(), false, true);
                 L = L0;
                 R = R0;
                 SL = SL0;
@@ -10317,6 +10759,48 @@ struct Part {
         return k;
     }
 
+    // THE METRONOME (live's set_metronome, _metro_tick): Standard's click (33)
+    // on every beat and its bell (34, which strikes the click with it) every
+    // ring beats, from a drum patch of its own that claims no key (hidden),
+    // struck here at each beat's own sample; starting again begins on beat
+    // one, a new tempo keeps the next beat and spaces the rest
+    int metro_pi = -1, metro_ring = 0;
+    double metro_bpm = 0.0, metro_next = 0.0;
+    bool metro_has = false;                     // (metro_next is None: the next block's start, beat one)
+    long metro_beat = 0;
+    void metronome(int pi, double bpm, int ring)
+    {
+        if (pi >= 0)
+            metro_pi = pi;
+        const bool was = metro_bpm > 0.0;
+        metro_ring = std::max(0, ring);
+        metro_bpm = std::max(0.0, bpm);
+        if (metro_bpm > 0.0 && !was) {
+            metro_has = false;
+            metro_beat = 0;
+        }
+    }
+    void metro_tick(long long n0, long long frames)
+    {
+        const double period = rate * 60.0 / metro_bpm;
+        if (!metro_has || metro_next < (double)n0 - period) {
+            metro_next = (double)n0;
+            metro_beat = 0;
+            metro_has = true;
+        }
+        const long long end = n0 + frames;
+        while (metro_next < (double)end) {
+            const long long at = (long long)nearbyint(metro_next);
+            const bool bell = metro_ring > 0 && metro_beat % metro_ring == 0;
+            {
+                Force f(*this, metro_pi);           // (live's _note_on on its own part)
+                cut_on(9, bell ? 34 : 33, 100, at, false);
+            }
+            metro_next += period;
+            metro_beat++;
+        }
+    }
+
     // live.Slab.shed_tick: the shed Moog rows whose fade has run, out of the
     // render (their slots go with their notes, as every shed slot)
     std::vector<std::pair<long long, std::vector<long>>> shed_mo;
@@ -10456,8 +10940,11 @@ struct Part {
             reg_pump(n0);
         if (!tex_gen.empty())
             tex_tick(n0, blk);                  // a held texture's grains (live's _tex_tick)
+        if (metro_bpm > 0.0 && metro_pi >= 0)
+            metro_tick(n0, blk);                // the metronome's beats (live's _metro_tick)
         if (!moog_glide.empty())
             moog_tick(n0);                      // the Moog's knobs gliding (live's _moog_tick)
+        lfo2_tick(n0, blk);                     // each Moog part's LFO 2 (live's _lfo2_tick)
         if (!amp_dirty.empty() || amp_has_out || !amp_fine_results.empty() || amp_async || !amp_chg.empty()
             || !S.rel_log.empty())
             amp_pump(n0);                       // the valve (live's _amp_pump)
@@ -10772,6 +11259,148 @@ void nv_part_toggle_stop(void *h, int rank, long long n0)
     P->posts.push_back(std::move(q));   // (done in the next block, after its events: live.post)
 }
 
+// EACH CHANNEL's STATE a scene keeps (live.scene_from's, read from the
+// engine): out[13 c + 0..7] its CC71-78 offsets (0 none), +8 its bend range
+// (-1 live's), +9 fine (cents), +10 coarse (semitones), +11 its mod range
+// (cents; -1 live's), +12 mono (1). Read on the audio thread (a post)
+void nv_part_chanstate(void *h, double *out)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    for (int c = 0; c < 16; c++) {
+        double *o = out + 13 * c;
+        for (int i = 0; i < 8; i++)
+            o[i] = P->snd_d[c][i];
+        o[8] = P->brange[c];
+        o[9] = P->fine[c];
+        o[10] = P->coarse[c];
+        o[11] = P->modrange[c];
+        o[12] = P->mono[c] ? 1.0 : 0.0;
+    }
+}
+
+// THE METRONOME (live.set_metronome): patch pi its own drum part (claiming no
+// key from now: hidden; -1 the one it has), the tempo (0 stops it), the ring
+void nv_part_metronome(void *h, int pi, double bpm, int ring)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi >= 0 && pi < (int)P->patches.size())
+        P->patches[pi].hidden = true;
+    P->metronome(pi, bpm, ring);
+}
+
+// A MOOG PART's KNOBS (livetui's synth pane), patch pi's on layer (0 A, 1 a
+// layered voice's B): pn[NV_MK_N] its patch's with its own over them, own[k]
+// 1 where it has its own. Its layers (0: not a Moog). The audio thread's
+int nv_part_synth_get(void *h, int pi, int layer, double *pn, char *own)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size() || !P->patches[pi].moog)
+        return 0;
+    const nv::slab::Part::Patch &p = P->patches[pi];
+    const int n = p.moog_b ? 2 : 1;
+    if (layer >= n)
+        layer = 0;
+    P->moog_pn(p, false, pn, layer);
+    const std::map<int, double> &syn = layer ? p.syn_b : p.syn;
+    for (int k = 0; k < NV_MK_N; k++)
+        own[k] = syn.count(k) ? 1 : 0;
+    for (auto &kv : p.syn_kept[layer & 1]) {   // (2: the part's, refused here -- not heard natively)
+        pn[kv.first] = kv.second;
+        own[kv.first] = 2;
+    }
+    return n;
+}
+
+// ...one turned (live.set_synth from the panel: sent to a Messenger too, on
+// layer A), 1 done, 0 refused
+int nv_part_synth_set(void *h, int pi, int layer, int knob, double v)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size() || knob < 0 || knob >= NV_MK_N)
+        return 0;
+    nv::slab::Part::Patch &p = P->patches[pi];
+    if (!P->set_synth(p, knob, v, layer))
+        return 0;
+    p.syn_kept[layer & 1].erase(knob);
+    if (!layer)
+        P->messenger_sync(p, knob);
+    return 1;
+}
+
+// ...one set after what is already queued (a session's or preset's knobs,
+// behind the swap that brings their program in)
+void nv_part_synth_set_later(void *h, int pi, int layer, int knob, double v)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (knob < 0 || knob >= NV_MK_N)
+        return;
+    nv::slab::Part::Post q{3, {}, nullptr};
+    q.pi = pi;
+    q.layer = layer;
+    q.knob = knob;
+    q.value = v;
+    P->posts.push_back(std::move(q));
+}
+
+// ...its whole panel sent to a Messenger (livetui.synth_send): 1 sent, 0 none to set
+int nv_part_synth_send(void *h, int pi)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (!P->msgr_send || pi < 0 || pi >= (int)P->patches.size() || !P->patches[pi].moog)
+        return 0;
+    P->messenger_sync(P->patches[pi]);
+    return 1;
+}
+
+// ...one put back to the patch's (livetui.synth_reset: turned to the patch's
+// value, gliding there, and no longer the part's own)
+void nv_part_synth_forget(void *h, int pi, int layer, int knob)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size() || knob < 0 || knob >= NV_MK_N)
+        return;
+    nv::slab::Part::Patch &p = P->patches[pi];
+    const MoogLayer *m = layer ? p.moog_b : p.moog;
+    if (!m)
+        return;
+    p.syn_kept[layer & 1].erase(knob);
+    if (P->set_synth(p, knob, m->pn[knob], layer)) {
+        (layer ? p.syn_b : p.syn).erase(knob);
+        P->moog_rebuild(p);
+        if (!layer)
+            P->messenger_sync(p, knob);
+    }
+}
+
+// A PATCH's FIXED TOUCH (live's part.fixed_touch: -1 its own way, 1 on, 0
+// off) -- kept across its program changes, as the part's switch is -- and
+// whether its patch has touch of its own (live's patch.touch_sensitive)
+void nv_part_patch_touch(void *h, int pi, int fixed)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi >= 0 && pi < (int)P->patches.size())
+        P->patches[pi].fixed_touch = fixed < 0 ? -1 : fixed != 0;
+}
+int nv_part_patch_touch_sensitive(void *h, int pi)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    return pi >= 0 && pi < (int)P->patches.size() && P->patches[pi].touch ? 1 : 0;
+}
+
+// A CHANNEL's SWITCHES as the engine has them (livetui.switch_on: the lamp
+// says what a CC121 or a reset did too): out[0] sustain, [1] sostenuto,
+// [2] soft, [3] portamento, [4] mono
+void nv_part_switches(void *h, int ch, int *out)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    ch &= 15;
+    out[0] = P->pedal_v[ch] > 0;
+    out[1] = P->sost.count(ch) ? 1 : 0;
+    out[2] = P->soft[ch] ? 1 : 0;
+    out[3] = P->porta_on[ch] ? 1 : 0;
+    out[4] = P->mono[ch] ? 1 : 0;
+}
+
 // THE WHOLE REGISTRATION at once (a session's: want[rank] 1 drawn): one post,
 // so stops set together are not each toggled from the same registration
 void nv_part_set_drawn(void *h, const char *want, int n)
@@ -10784,6 +11413,17 @@ void nv_part_set_drawn(void *h, const char *want, int n)
     for (int ri = 0; ri < p.organ->n_rank && ri < n; ri++)
         if (want[ri])
             q.names.push_back(p.organ->rank[ri].key);
+    P->posts.push_back(std::move(q));   // (done in the next block, after its events: live.post)
+}
+
+// ...BY NAME, for the organ the part will have when it is done (a preset's,
+// sent with its swap: the names matched to that organ's ranks then)
+void nv_part_set_drawn_names(void *h, const char *const *names, int n)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    nv::slab::Part::Post q{0, {}, nullptr};
+    for (int i = 0; i < n; i++)
+        q.names.push_back(names[i]);
     P->posts.push_back(std::move(q));   // (done in the next block, after its events: live.post)
 }
 
@@ -11265,6 +11905,18 @@ void nv_part_dm(void *h, float *out)
 // (vs, the C reference) and voice_sizes (vz); cl an OpenCL GPU (nv_cl_new),
 // NULL to run the samples through voice_samples; a block of gpu_min busy
 // slots or more goes to it, its setup on nthr threads
+// THE MOOG EXTENSIONS' KERNELS (blockrender.ensure_moogx_lib, ensure_gpu_moogx_lib):
+// synth_voice_moogx (smx), and the GPU build's voice_block, voice_damp_set and
+// voice_moogx_set (vbm, vmd, vmm; NULL: none)
+void nv_part_moogx(void *h, void *smx, void *vbm, void *vmd, void *vmm)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    P->smx = smx;
+    P->gp.vbm = vbm;
+    P->gp.vmd = vmd;
+    P->gp.vmm = vmm;
+}
+
 void nv_part_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;

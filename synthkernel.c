@@ -564,6 +564,54 @@ static inline float moog_adsr(float t, float A, float D, float S, float R, float
     if(t>=toff) return fmaxf(0.f, (moog_held(toff,A,D,S)+(float)MS_UNDER)*expf(-(t-toff)/(fmaxf(R,1e-6f)*0.25f))-(float)MS_UNDER);
     return moog_held(t,A,D,S);
 }
+#ifdef MOOGX_KERNEL
+// ONLY IN THE MOOG EXTENSIONS' BUILDS (-DMOOGX_KERNEL): a Moog note's own row
+// MX (MX_W a FT row, moog.MX_*): [0] its contours' age at its onset, s (a
+// legato note carrying on the one it took over: MULTI-TRIG off); [1] F ENV
+// LOOP, [2] A ENV LOOP (nonzero: on); [3] the filter contour's depth, less 1
+// (F ENV VEL); [4] the amp contour's level at its start, [5] the filter
+// contour's (a retrigger -- MULTI-TRIG on -- charges from where the contour
+// it takes over had got to, not from nothing; 0: from nothing). A LOOPING CONTOUR, measured on the Messenger (examples/
+// messenger_perf.py loop, loop2, loopoff): while the key is held it runs its
+// attack, its decay for MX_LOOP_DK of the decay's time constants, its
+// release down to closing, and starts again; let go, it releases from where
+// it is and stops.
+#define MX_W 6
+#define MX_LOOP_DK 3.37f
+// moog_held charged from L0 instead of nothing: the attack reaches 1 sooner
+// (its own law, from L0), then decays as ever
+static inline float moog_held_from(float tt, float A, float D, float S, float L0){
+    if(L0<=0.f) return moog_held(tt,A,D,S);
+    if(tt<0.f) return 0.f;
+    float ta=fmaxf(A,1e-6f)/(float)MS_ATK_K;
+    float A1=L0>=1.f ? 0.f : ta*logf(((float)MS_ATK_T-L0)/((float)MS_ATK_T-1.f));
+    if(tt<A1) return (float)MS_ATK_T-((float)MS_ATK_T-L0)*expf(-tt/ta);
+    return fmaxf(0.f, S+(1.f-S)*expf(-(tt-A1)/(fmaxf(D,1e-6f)*0.25f)));
+}
+static inline float moog_loop_at(float tc, float A, float D, float S, float R){
+    float Td=MX_LOOP_DK*fmaxf(D,1e-6f)*0.25f;
+    if(tc<A+Td) return moog_held(tc,A,D,S);
+    float h=moog_held(A+Td,A,D,S);
+    return fmaxf(0.f,(h+(float)MS_UNDER)*expf(-(tc-A-Td)/(fmaxf(R,1e-6f)*0.25f))-(float)MS_UNDER);
+}
+static inline float moog_cycle(float A, float D, float S, float R){
+    float Td=MX_LOOP_DK*fmaxf(D,1e-6f)*0.25f;
+    float h=moog_held(A+Td,A,D,S);
+    return A+Td+fmaxf(R,1e-6f)*0.25f*logf((h+(float)MS_UNDER)/(float)MS_UNDER);
+}
+static inline float moog_adsr_x(float t, float A, float D, float S, float R, float toff, int loop, float L0){
+    if(!loop){
+        if(L0<=0.f) return moog_adsr(t,A,D,S,R,toff);
+        if(t>=toff) return fmaxf(0.f,(moog_held_from(toff,A,D,S,L0)+(float)MS_UNDER)*expf(-(t-toff)/(fmaxf(R,1e-6f)*0.25f))-(float)MS_UNDER);
+        return moog_held_from(t,A,D,S,L0);
+    }
+    float P=moog_cycle(A,D,S,R);
+    float th=t<toff?t:toff;
+    float e=th<0.f?0.f:moog_loop_at(fmodf(th,P),A,D,S,R);
+    if(t>=toff) return fmaxf(0.f,(e+(float)MS_UNDER)*expf(-(t-toff)/(fmaxf(R,1e-6f)*0.25f))-(float)MS_UNDER);
+    return e;
+}
+#endif
 // the output stage after the ladder and VCA (moog.output_gain): one pole at
 // MS_OUT_HZ, every partial once -- sidebands and the ladder's own sine too
 #define MS_OUT_HZ 12500.f
@@ -1090,6 +1138,46 @@ void synth_voice_damp(
 #endif
 
 
+#ifdef MOOGX_KERNEL
+// ---------------------------------------------------------------------------
+// ONLY IN THE MOOG EXTENSIONS' BUILD (-DMOOGX_KERNEL -DDAMP_KERNEL,
+// libsynthmoogx_<rate>.so): synth_voice_damp with each Moog row's note row
+// MX read (its loops, its contours' age, its filter contour's depth), for the
+// rows whose note has one (blockrender.synth_partials); every other row
+// renders through synth_voice or synth_voice_damp, spelled as they were.
+void synth_voice_moogx(
+    float* outL, float* outR, long n0, long winlen, int BLK, int nblk, int P,
+    const double* omega, const double* ph0L, const double* ph0R,
+    const float* ampL, const float* ampR, const float* nomfreq,
+    const long* non, const long* noff, const float* fadeS, const float* relS, const float* chiffS,
+    const float* logr, const float* logrA, const float* aftL, const float* susL,
+    const float* chVol, const float* chCyc, const float* chRel, const float* susJit, const float* chScale,
+    const float* chBW,
+    const float* tbav, const float* tau, const float* tcut,
+    const float* gbav, const float* gtau, const float* gcut,
+    const float* vdep, const float* vrate, const float* vph, const float* vdl,
+    const float* delL, const float* delR,
+    const int* grow, const int* crow, const float* G, const float* S,
+    const int* brow, const float* BR, const double* BC, const float* BL,
+    const int* fxr, const float* FT, const float* KN, long knk, long kb0,
+    const float* ampLp, const float* ampRp, const int* mkr,
+    const int* MPI, const double* MPC, const float* MPR,
+    const int* MKI, const float* MPK,
+    const double* fmw, const double* fmp, const double* fmpR,
+    float sfloor, float spow, float shmax, float shref, long CHUNK,
+    const float* sendW, float* outSL, float* outSR,
+    const int* drow, const float* dwt, const float* DM, const long* DMO, const long* DMB, const long* DMN,
+    const float* MX)
+{
+#define DAMP_PASS
+#define MOOGX_PASS
+#include "voice_main.inc"
+#undef MOOGX_PASS
+#undef DAMP_PASS
+}
+#endif
+
+
 #ifdef LESLIE_KERNEL
 // ---------------------------------------------------------------------------
 // ONLY IN THE LESLIE'S BUILD (-DLESLIE_KERNEL, libsynthlobe_<rate>.so):
@@ -1164,6 +1252,13 @@ static inline float vd_track(long t, long j)
     return q<0 ? 0.f : vd_DM[vd_DMO[t]+(q<nn?q:nn-1)];
 }
 #endif
+#ifdef MOOGX_KERNEL
+// THE MOOG EXTENSIONS' GPU BUILD (-DVOICE_BLOCK -DDAMP_KERNEL -DMOOGX_KERNEL,
+// libsynthgpumoogx): the Moog note rows MX (synth_voice_moogx's), set before
+// voice_block as the damper's tracks are. NULL: none.
+static const float* vm_MX;
+void voice_moogx_set(const float* MX){ vm_MX=MX; }
+#endif
 int voice_block(long n0, int BLK, int nblk, int P,
     const double* omega, const double* ph0L, const double* ph0R,
     const float* ampL, const float* ampR, const float* nomfreq,
@@ -1223,7 +1318,14 @@ int voice_block(long n0, int BLK, int nblk, int P,
             BLrow=dsc-bb;
         }
 #endif
+#ifdef MOOGX_KERNEL
+        const float* MX=vm_MX;
+#define MOOGX_PASS
+#endif
         #include "voice_block.inc"
+#ifdef MOOGX_KERNEL
+#undef MOOGX_PASS
+#endif
         d->ns=(int)(ns-bn0); d->ne=(int)(ne-bn0);
         d->zLr=zrL; d->zLi=ziL; d->zRr=zrR; d->zRi=ziR; d->winst=winst;
         d->mL0=mL0; d->mL1=mL1; d->mR0=mR0; d->mR1=mR1;
