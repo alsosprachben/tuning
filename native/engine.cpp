@@ -509,6 +509,11 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
                     bdb[q] = w * (std::isnan(K->bn_low[q]) ? K->bn_db[q] : K->bn_low[q]) + (1.0 - w) * K->bn_db[q];
             }
         }
+        if (K->bn_oct != 0.0) {             // (breath_noise_at: across the register, d dB an octave)
+            const double d = K->bn_oct * log(f0 / K->bn_ref) / log(2.0);
+            for (int q = 0; q < K->n_bn; q++)
+                bdb[q] = bdb[q] + d;
+        }
         // (on a slur the player never stopped blowing: the legato attack, breath_noise_slur)
         double bfs = (n->slurred && K->bn_slur && K->legato_set) ? pymin(K->bn_fade_s, K->legato_attack_s)
                                                                  : K->bn_fade_s;
@@ -977,6 +982,13 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         n->key_off = nv::pymin(n->key_off, n->on + K->tape_s);
     if (n->siren_set)                   // A SIREN sounds while its rotor does (_SIREN_AT)
         n->key_off = nv::pymax(n->on + 1e-3, n->siren_end);
+    if (K->osr_n && !K->one_shot)       // A PALM-MUTED OPEN STRING rings on till its string sounds again
+        for (int q = 0; q < K->osr_n; q++)
+            if ((double)n->note == K->osr_open[q]) {
+                n->key_off = nv::pymax(n->key_off, nv_song_string_free(song, n->ch, n->note, n->on, K->osr_open,
+                                                                       K->osr_n, K->osr_cap, 0.004));
+                break;                  // (blockrender.RETRIGGER_FADE)
+            }
     n->off = nv_song_note_off(song, n->ch, n->note, n->on, n->key_off, n->damper_pedal, n->mcut,
                               n->retrigger_fade, band);
     double ck;

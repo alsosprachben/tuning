@@ -188,13 +188,16 @@ class NoiseGate:
         n = len(L)
         if not n:
             return L.astype(np.float32), R.astype(np.float32)
+        # (libm's log10 and pow, element by element: numpy's SIMD differs in
+        # the last bit, and the engine's gate is libm's -- native.xlog10, xpow)
+        import native as _NV
         x = np.maximum(np.abs(L), np.abs(R))
-        ref = self._ref(20.0 * np.log10(np.maximum(x, 1e-12)))
+        ref = self._ref(20.0 * _NV.xlog10(np.maximum(x, 1e-12)))
         g = np.ones(n)
         if self.sus is not None:
             env = np.maximum(self.cmp[0].run(x), self.cmp[1].run(x))
-            over = np.maximum(20.0 * np.log10(np.maximum(env, 1e-12)) - (ref + self.sus), 0.0)
-            g = 10.0 ** (-over * (1.0 - 1.0 / self.ratio) / 20.0) * self.mk
+            over = np.maximum(20.0 * _NV.xlog10(np.maximum(env, 1e-12)) - (ref + self.sus), 0.0)
+            g = _NV.xpow(10.0, -over * (1.0 - 1.0 / self.ratio) / 20.0) * self.mk
         k = np.arange(n)
         if self.keys is not None:
             # ...KEYED: open over each key's span, held past its key-up
@@ -205,7 +208,7 @@ class NoiseGate:
                 op[max(0, k0 - a):max(0, min(n, k1 + self.hold - a))] = True
             tgt = np.where(op, 1.0, self.floor)
         else:
-            det = 20.0 * np.log10(np.maximum(np.maximum(self.det[0].run(x), self.det[1].run(x)), 1e-12))
+            det = 20.0 * _NV.xlog10(np.maximum(np.maximum(self.det[0].run(x), self.det[1].run(x)), 1e-12))
             # ...THE GATE'S STATE: open over the threshold, shut under it
             # less the hysteresis, between them as it was
             s = np.where(det > ref + self.thr, 1, np.where(det < ref + self.thr - self.hyst, 0, -1))

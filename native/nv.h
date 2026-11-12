@@ -1321,6 +1321,8 @@ double nv_song_note_off(void *s, long long ch, int note, double on, double off, 
                         double retrigger_fade, int *band);
 int nv_song_soft_at(void *s, long long ch, double t);
 int nv_song_next_same(void *s, long long ch, int note, double on, double *out);
+double nv_song_string_free(void *s, long long ch, int note, double on, const double *open, int nopen, double cap,
+                           double fade);
 int nv_song_pitch_level(void *s, int index, int effort_tilt, double *out);
 /* ...an 'indian' class's at the secondary tuning (indian 1: FREQ_E's) */
 int nv_song_pitch_level_k(void *s, int index, int effort_tilt, int indian, double *out);
