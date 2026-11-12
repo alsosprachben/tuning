@@ -1380,11 +1380,22 @@ int nv_moog_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, doubl
             }
         }
     }
-    /* moog.unison: the note's voices, seeded on its key -- (ratio, gain,
-       phase in cycles, left, right, has drift, drift depth, rate, phase) */
     static const double UV1[9] = {1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0};
     static _Thread_local double uv[9 * 16];
-    int nu = L->u_n > 1 && L->u_n <= 16 ? L->u_n : 1, umid = 0;
+    int umid = 0;
+    const int nu = nv_moog_unison(L, f0, uv, &umid);
+    return moog_emit(v, t0, L, fx, mre, nimg, nsurf, surf, img, mir, rows, cap, qacc, azimuth, np, po, pk, phf, pa,
+                     pph, 0, nu, nu > 1 ? uv : UV1, umid);
+}
+
+/* moog.unison: a note's voices, seeded on its key f0 -- 9 a voice (ratio,
+ * gain, phase in cycles, left, right, has drift, drift depth, rate, phase)
+ * into uv, *umid the one nearest unison (blockrender's, live's _mid); their
+ * count, 1 for none (uv then untouched) */
+int nv_moog_unison(const MoogLayer *L, double f0, double *uv, int *umid)
+{
+    int nu = L->u_n > 1 && L->u_n <= 16 ? L->u_n : 1;
+    *umid = 0;
     if (nu > 1) {
         PyRandom r;
         pyr_seed(&r, 0x5A75 + (long long)nearbyint(f0 * 100.0));
@@ -1420,11 +1431,10 @@ int nv_moog_tone(const VoiceSnap *v, const ToneIn *t0, const MoogLayer *L, doubl
             w[4] = sin(a) * pow(2.0, 0.5);
         }
         for (int i = 1; i < nu; i++)        /* blockrender's: the voice nearest unison */
-            if (fabs(uv[9 * i] - 1.0) < fabs(uv[9 * umid] - 1.0))
-                umid = i;
+            if (fabs(uv[9 * i] - 1.0) < fabs(uv[9 * *umid] - 1.0))
+                *umid = i;
     }
-    return moog_emit(v, t0, L, fx, mre, nimg, nsurf, surf, img, mir, rows, cap, qacc, azimuth, np, po, pk, phf, pa,
-                     pph, 0, nu, nu > 1 ? uv : UV1, umid);
+    return nu;
 }
 
 /* the partials of a Moog note as blockrender._note_moog emits them: (osc,

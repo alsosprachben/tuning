@@ -1503,6 +1503,52 @@ struct Slab {
         l2_s.clear(); l2_aL.clear(); l2_aR.clear();
     }
 
+    // Slab.unison_voice: ONE VOICE OF A UNISON on these freshly stamped Moog
+    // slots -- its detune (the frequency, anchored at the onset), its phase
+    // (k x its offset on an oscillator's harmonic k), its level and place (into
+    // the panel weights' base too; its place on the direct sound alone), its
+    // drift (the vibrato columns). uv: nv_moog_unison's 9
+    void unison_voice(const std::vector<long> &idx, const double *uv)
+    {
+        const double ratio = uv[0], g = uv[1], uph = uv[2], gl = uv[3], gr = uv[4];
+        if (idx.empty())
+            return;
+        if (ratio != 1.0)
+            for (long s : idx) {
+                double om0 = f8[F8_om][s], om1 = om0 * ratio;
+                double non = (double)i8[0][s] + (double)f4[F4_nfr][s];
+                f8[F8_p0][s] -= (om1 - om0) * (non + (double)f4[F4_delL][s]);
+                f8[F8_p0R][s] -= (om1 - om0) * (non + (double)f4[F4_delR][s]);
+                f8[F8_om][s] = om1;
+            }
+        for (long s : idx) {
+            const int osc = i4[I4_mk][s] / 4096;
+            const bool tone = osc == 1 || osc == 2 || osc == 3;
+            if (uph != 0.0 && tone) {
+                const double dph = 2.0 * M_PI * uph * (double)(i4[I4_mk][s] % 4096);
+                f8[F8_p0][s] += dph;
+                f8[F8_p0R][s] += dph;
+            }
+            const bool dr = f4[F4_rdl][s] == 0.0f;
+            const float fl = (float)(dr ? g * gl : g), fr = (float)(dr ? g * gr : g);
+            mo_uL[s] *= fl; aL0[s] *= fl; f4[F4_aL][s] *= fl; aLp[s] *= fl;
+            mo_uR[s] *= fr; aR0[s] *= fr; f4[F4_aR][s] *= fr; aRp[s] *= fr;
+            if (uv[5] != 0.0 && tone) {
+                f4[F4_vd][s] = (float)uv[6];
+                f4[F4_vr][s] = (float)uv[7];
+                f4[21][s] = (float)uv[8];         // (vp)
+            }
+        }
+    }
+    // Slab.silence_slots: these slots' level zeroed, at their weights' base too
+    void silence_slots(const std::vector<long> &idx)
+    {
+        for (long s : idx) {
+            mo_uL[s] = aL0[s] = f4[F4_aL][s] = aLp[s] = 0.0f;
+            mo_uR[s] = aR0[s] = f4[F4_aR][s] = aRp[s] = 0.0f;
+        }
+    }
+
     // Slab.mx_write: FT row r's note row of the kernel's Moog extensions
     // (moog.mx_row) from the panel pn and the note's velocity and age
     void mx_write(int r, const double *pn)
@@ -5330,6 +5376,42 @@ struct Part {
                     S.moog_stamp(*T, pid, ch, 1, moog_panel(patches[cur], ch, La, 1), rate);
                 } else
                     dropped++;
+            }
+            // THE UNISON (moog.unison: a supersaw): each layer's stamp again for
+            // every voice past the first, under the same key, each its own
+            // detune, phase, level, place and drift (Slab.unison_voice); the
+            // first stamp is the centre voice's (live's _uvs, _mid)
+            double uv[9 * 16];
+            int umid = 0;
+            const int nu = nv_moog_unison(patches[cur].moog, T->ft_f0, uv, &umid);
+            if (nu > 1) {
+                double lo = INFINITY;
+                for (long s : lslots[0])
+                    lo = std::min(lo, (double)S.i8[0][s] - (double)S.f4[F4_rdl][s]);
+                for (int ly = 0; ly < 2; ly++) {
+                    if (ly == 1 && !patches[cur].moog_b)
+                        continue;
+                    S.unison_voice(lslots[ly], uv + 9 * umid);
+                    for (int u = 0; u < nu; u++) {
+                        if (u == umid)
+                            continue;
+                        if (!S.stamp_t(*T, key, (long long)lo, scale, ch, rate, 0.0)) {
+                            dropped++;
+                            continue;
+                        }
+                        S.moog_stamp(*T, pid, ch, ly, moog_panel(patches[cur], ch, La, ly), rate);
+                        std::vector<long> us = S.last_slots;
+                        S.unison_voice(us, uv + 9 * u);
+                        std::vector<long> quiet;
+                        for (long s : us) {
+                            const int o = S.i4[I4_mk][s] / 4096;
+                            if (o == 4 || o == 5)
+                                quiet.push_back(s);
+                        }
+                        S.silence_slots(quiet);
+                        lslots[ly].insert(lslots[ly].end(), us.begin(), us.end());
+                    }
+                }
             }
         }
         if (T->min_hold) {

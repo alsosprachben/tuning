@@ -689,6 +689,9 @@ void nv_moog_tables(const double *t);
 int nv_moog_build(const double *pn, const MoogLayer *base, MoogLayer *out);
 /* the kernel library's moog_coeff_rows, for a synced OSC 2 in nv_moog_build */
 void nv_moog_coeff(void *fn);
+/* moog.unison: a note's voices at key f0 (9 a voice into uv, up to 16; *umid
+   the one nearest unison), their count -- 1 none */
+int nv_moog_unison(const MoogLayer *L, double f0, double *uv, int *umid);
 
 typedef struct {
     int n_layer;                            /* 1, or 2 a layered voice (moog.layers_of) */
