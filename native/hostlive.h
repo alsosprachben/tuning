@@ -13,6 +13,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <cerrno>
 #include <cstring>
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -404,6 +405,137 @@ struct MidiParse {
     }
 };
 
+// THE RAW MIDI DEVICES THERE ARE NOW (live.input_names): (path, name) -- the
+// name ALSA gives /proc/asound/cardC/midiD's first line ("USB Midi")
+inline std::vector<std::pair<std::string, std::string>> midi_devices()
+{
+    std::vector<std::pair<std::string, std::string>> ds;
+    for (int c = 0; c < 32; c++)
+        for (int d = 0; d < 4; d++) {
+            char p[64], q[64];
+            snprintf(p, sizeof p, "/dev/snd/midiC%dD%d", c, d);
+            if (access(p, R_OK) != 0)
+                continue;
+            snprintf(q, sizeof q, "/proc/asound/card%d/midi%d", c, d);
+            std::string nm;
+            if (FILE *f = fopen(q, "r")) {
+                char ln[256];
+                if (fgets(ln, sizeof ln, f))
+                    nm = ln;
+                fclose(f);
+            }
+            while (!nm.empty() && (nm.back() == '\n' || nm.back() == ' '))
+                nm.pop_back();
+            ds.push_back(std::make_pair(std::string(p), nm.empty() ? std::string(p + 9) : nm));
+        }
+    return ds;
+}
+
+// THE INPUTS OPEN (live.midi_inputs: several, merged): the devices wanted
+// (path, name) -- the panel's I changes them, gen counts the changes -- and
+// those the reader has open now
+struct MidiIns {
+    std::mutex mu;
+    std::vector<std::pair<std::string, std::string>> want, open;
+    std::atomic<int> gen{0};
+    std::string err;                            // (the last that would not open, or went away)
+    void set(const std::vector<std::pair<std::string, std::string>> &w)
+    {
+        std::lock_guard<std::mutex> lk(mu);
+        want = w;
+        gen++;
+    }
+};
+
+// ...read on one thread: each wanted device opened (non-blocking), each read
+// in turn through its own parser (running status is a device's own), a
+// device that goes away closed and dropped
+inline void midi_reader_ins(MidiIns *ins, std::mutex *mu, std::vector<Midi> *q)
+{
+    struct In {
+        int fd;
+        std::string name;
+        MidiParse mp;
+    };
+    std::map<std::string, In> open;
+    int seen = -1;
+    uint8_t buf[256];
+    auto publish = [&]() {
+        std::vector<std::pair<std::string, std::string>> o;
+        for (auto &kv : open)
+            o.push_back(std::make_pair(kv.first, kv.second.name));
+        std::lock_guard<std::mutex> lk(ins->mu);
+        ins->open = o;
+    };
+    while (!g_stop) {
+        if (ins->gen.load() != seen) {
+            std::vector<std::pair<std::string, std::string>> w;
+            {
+                std::lock_guard<std::mutex> lk(ins->mu);
+                w = ins->want;
+                seen = ins->gen.load();
+            }
+            for (auto it = open.begin(); it != open.end();) {
+                bool keep = false;
+                for (auto &x : w)
+                    keep = keep || x.first == it->first;
+                if (keep) {
+                    ++it;
+                } else {
+                    ::close(it->second.fd);
+                    it = open.erase(it);
+                }
+            }
+            for (auto &x : w)
+                if (!open.count(x.first)) {
+                    int f = ::open(x.first.c_str(), O_RDONLY | O_NONBLOCK);
+                    if (f >= 0) {
+                        In in;
+                        in.fd = f;
+                        in.name = x.second;
+                        open.emplace(x.first, std::move(in));
+                    } else {
+                        std::lock_guard<std::mutex> lk(ins->mu);
+                        ins->err = x.second + ": " + strerror(errno);
+                    }
+                }
+            publish();
+        }
+        bool any = false;
+        for (auto it = open.begin(); it != open.end();) {
+            ssize_t n = read(it->second.fd, buf, sizeof buf);
+            if (n > 0) {
+                any = true;
+                it->second.mp.feed(buf, (long)n, [&](Midi &&m) {
+                    std::lock_guard<std::mutex> lk(*mu);
+                    q->push_back(std::move(m));
+                });
+                ++it;
+            } else if (n < 0 && errno != EAGAIN && errno != EINTR) {
+                {                                       // (unplugged: gone, and no longer wanted)
+                    std::lock_guard<std::mutex> lk(ins->mu);
+                    ins->err = it->second.name + " went away";
+                    const std::string path = it->first;
+                    ins->want.erase(std::remove_if(ins->want.begin(), ins->want.end(),
+                                                   [&](const std::pair<std::string, std::string> &x) {
+                                                       return x.first == path;
+                                                   }),
+                                    ins->want.end());
+                }
+                ::close(it->second.fd);
+                it = open.erase(it);
+                publish();
+            } else {
+                ++it;
+            }
+        }
+        if (!any)
+            usleep(1000);
+    }
+    for (auto &kv : open)
+        ::close(kv.second.fd);
+}
+
 inline void midi_reader(int fd, std::mutex *mu, std::vector<Midi> *q)
 {
     MidiParse mp;
@@ -648,6 +780,9 @@ struct nv_host {
     float R[4096];
     std::string dev;
     int fd;
+    MidiIns ins;                                // (the inputs open: the panel's I)
+    std::vector<std::pair<std::string, std::string>> in_list;  // (the I list as last drawn: its rows' devices)
+    bool cli_port = false;                      // (--port or --midi named one: the session's not opened over it)
     Alsa A;
     std::string pcmdev;
     unsigned lat;

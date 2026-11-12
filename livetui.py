@@ -497,7 +497,7 @@ STD_NAMES = ("ours", "SC-55", "SC-88", "SC-88Pro", "SC-8850")
 # already use, in any pane, since a bound key fires from every pane. Space is
 # the controls pane's own toggle, so it is not offered.
 HOTKEYS_FREE = (set("cefginoptuvwxyz0[];',./")
-                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLPNREX")))  # N/R: scenes; E: Eastern tuning; X: the EFX
+                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLPNREXI")))  # N/R: scenes; E: Eastern tuning; X: the EFX; I: MIDI inputs
 
 
 # THE STOP KEYS: the digit row, and the same keys shifted. What shift+1 TYPES
@@ -1489,6 +1489,33 @@ class TUI:
             elif what[0] == "ctl":
                 self.pick_efx_ctl(scr, *what[1:])
 
+    def pick_inputs(self, scr):
+        """THE MIDI INPUTS (I): each plugged in, enter turns it on or off --
+        several at once, merged (Live.open_input) -- the list read again each
+        time round, so a device plugged in shows; esc closes."""
+        L = self.live
+        i = 0
+        while True:
+            names = LV.input_names()
+            shown = list(dict.fromkeys(names + list(L.midi_inputs)))
+            items = [("[x] " if n in L.midi_inputs else "[ ] ") + LV.port_key(n)
+                     + ("" if n in names else "   (unplugged)") for n in shown]
+            items.append("rescan")
+            got = self.menu(scr, "MIDI inputs (enter: on / off)", items, min(i, len(items) - 1))
+            if got is None:
+                return
+            i = got
+            if got == len(shown):
+                continue
+            n = shown[got]
+            if n in L.midi_inputs:
+                L.close_input(n)
+                self.say("MIDI in: %s off" % LV.port_key(n))
+            elif L.open_input(n):
+                self.say("MIDI in: %s on" % LV.port_key(n))
+            else:
+                self.say(L.last_error or "could not open %s" % n)
+
     @staticmethod
     def src_label(code):
         return ("off" if not code else "CC%d" % code if code <= 95
@@ -2202,12 +2229,15 @@ class TUI:
         lamp = ("\u25cf " + rt) if rt else ""
         lcol = (C("ok") if rt.startswith("RT") else C("warn") if ("dropped" in rt or "refused" in rt)
                 else C("dim"))
-        pn = self.port_name + ("  " + L.midi2_label if L.midi2_label else "") \
+        pn = (L.input_label() if (L.midi_inputs or not self.port_name) else self.port_name) \
+            + ("  " + L.midi2_label if L.midi2_label else "") \
             + ("  " + L.mpe_label() if L.mpe else "")
         xr = w - len(lamp) - 2
         if lamp:
             self.addstr(scr, 0, xr, lamp, lcol)
-        self.addstr(scr, 0, max(46, xr - len(pn) - 3), pn[:max(0, xr - 49)], C("dim"))
+        _px = max(46, xr - len(pn) - 3)
+        self.addstr(scr, 0, _px, pn[:max(0, xr - 49)], C("dim"))
+        self.hit(0, _px, _px + min(len(pn), max(0, xr - 49)), ("inputs",))      # (a click: the inputs, as I)
 
     def draw_stop_buttons(self, scr, y, x, w, last, p):
         """The registration as buttons (stops_grid) from row y, not past row
@@ -2913,6 +2943,9 @@ class TUI:
             "  s                 SPLIT: halve this part's range into two parts",
             "  d                 remove this part        m   mute / unmute",
             "  1..9, shift+1..9  on an organ part, draw or retire that stop",
+            "  I (or click the   THE MIDI INPUTS: each one plugged in, enter turns it",
+            "   port name)         on or off -- several at once, merged (a keyboard,",
+            "                      a Messenger, a pedal box); r rescans. Kept in the session",
             "  X (or enter on    THE INSERTION EFFECT (the Sound Canvas's EFX):",
             "   the efx column)    this part on or off it, its type (Roland's",
             "                      families, / searches), each parameter -- heard",
@@ -3124,6 +3157,8 @@ class TUI:
             self.pick_eastern(scr)
         elif c == ord("X"):
             self.pick_efx(scr)
+        elif c == ord("I"):
+            self.pick_inputs(scr)
         elif c == ord("P"):
             # panic, the one thing you want when something drones
             self.live.panic()
@@ -3296,7 +3331,9 @@ class TUI:
                 self.bump(m.dy)
             return
         # a press
-        if kind == "pane":
+        if kind == "inputs":
+            self.pick_inputs(scr)
+        elif kind == "pane":
             self.pane = act[1]
         elif kind == "key":
             self.key(scr, act[1])
@@ -3815,9 +3852,10 @@ def signed_bar(v, n):
     return _bar(-d, n, left=True) + "\u2502" + " " * n
 
 
-def run(live, port_name, ump_client=None, start=None):
+def run(live, inputs, ump_client=None, start=None):
     """Open audio and MIDI, then hand the terminal to curses. With no
-    `port_name` the MIDI arrives some other way -- the ALSA MIDI 2.0 client.
+    `inputs` (MIDI input names, opened together: Live.open_input; I picks
+    others) the MIDI arrives some other way -- the ALSA MIDI 2.0 client.
     `start(progress, say, step)`, if given, is the rig's own start (live.main:
     the room, the session, the warming), run as the panel's first build so
     the panel shows at once and the start's progress on it."""
@@ -3832,11 +3870,14 @@ def run(live, port_name, ump_client=None, start=None):
     # ...AND BACK, whatever fails: the stream, the MIDI port and the panel are
     # opened inside the try, so a keyboard unplugged or an audio device that
     # will not open says so on the terminal, not only in the log
-    pa = stream = port = ui = None
+    pa = stream = ui = None
     try:
         pa, stream = LV.open_stream(live, live.rate, live.frames)
-        port = mido.open_input(port_name, callback=live.on_midi) if port_name else None
-        ui = TUI(live, port_name or ("ALSA %s" % ump_client.address if ump_client else "no MIDI"))
+        if isinstance(inputs, str):
+            inputs = [inputs]
+        for n in inputs or ():
+            live.open_input(n)
+        ui = TUI(live, "" if (inputs or not ump_client) else "ALSA %s" % ump_client.address)
         stream.start_stream()
         if start is not None:
             live.starting = True
@@ -3871,11 +3912,10 @@ def run(live, port_name, ump_client=None, start=None):
         sys.stderr.flush()
         os.dup2(_err_fd, 2)
         os.close(_err_fd)
-        if port:
-            port.close()
         if ump_client:
             ump_client.close()
-        LV.save_session(live)             # and once more on the way out
+        LV.save_session(live)             # and once more on the way out (the inputs still open: kept)
+        live.close_inputs()
         s = live.stats()
         sys.stderr.write("  peak %.3f  underruns %d  dropped %d  errors %d  "
                          "stuck %d  miss %d  max render %.2f ms\n"

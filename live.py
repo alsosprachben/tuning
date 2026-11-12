@@ -4363,6 +4363,12 @@ class Live:
         # sent from a thread of its own, never the audio thread's
         self.messenger_out = None
         self.messenger_port = None
+        # THE MIDI INPUTS OPEN (open_input): name -> port, several merged --
+        # the keyboard, a Messenger's knobs, a pedal box -- and the lock that
+        # takes one message at a time through the routes (each port calls
+        # on_midi from its own thread)
+        self.midi_inputs = {}
+        self.midi_in_lock = threading.RLock()
         self.messenger_firmware = "1.0.7+"
         self.messenger_q = None
         self.messenger_bend = 2.0       # the Messenger's pitch-bend range, semitones
@@ -4833,7 +4839,13 @@ class Live:
         The routes run HERE, on the MIDI input thread, before anything is
         queued: a rewrite costs nothing, the audio thread never sees a message
         a route consumed, and every test that drives on_midi drives the routes.
+        ONE MESSAGE AT A TIME: each open input calls this from its own thread
+        (midi_inputs), and the routes keep what they have seen.
         """
+        with self.midi_in_lock:
+            self._on_midi(msg)
+
+    def _on_midi(self, msg):
         if msg.type not in self._ACCEPT:
             return
         if msg.type in ("note_on", "note_off") and self._learn_take(msg):
@@ -5142,6 +5154,37 @@ class Live:
     # stays ours, and our knob laws are still estimates until the hardware is
     # recorded: close, not identical, which is exactly the comparison that
     # calibrates them.
+    def open_input(self, name):
+        """Open the MIDI input `name` beside the others (on_midi, merged).
+        True if it is open; an error leaves it closed and says why."""
+        if name in self.midi_inputs:
+            return True
+        try:
+            self.midi_inputs[name] = mido.open_input(name, callback=self.on_midi)
+        except Exception as e:
+            self.last_error = "MIDI input %s: %s" % (name, e)
+            return False
+        self.dirty = True
+        return True
+
+    def close_input(self, name):
+        """Close one of the MIDI inputs (open_input)."""
+        port = self.midi_inputs.pop(name, None)
+        if port is not None:
+            try:
+                port.close()
+            except Exception:
+                pass
+            self.dirty = True
+
+    def close_inputs(self):
+        for n in list(self.midi_inputs):
+            self.close_input(n)
+
+    def input_label(self):
+        """The inputs open, as the panel's header names them."""
+        return ", ".join(port_key(n) for n in self.midi_inputs) or "no MIDI in"
+
     def open_messenger(self, port, firmware=None):
         """Send to the MIDI output `port` (an open port, or a name to match);
         None closes it. Returns the port's name, or None."""
@@ -11889,6 +11932,9 @@ def preset_from(live):
         # the rig's Messenger: which firmware's chart, and the output it is on
         messenger_firmware=getattr(live, "messenger_firmware", "1.0.7+"),
         messenger_port=getattr(live, "messenger_port", None),
+        # the MIDI inputs open, by name without ALSA's client:port numbers
+        # (port_key: they move from boot to boot)
+        midi_inputs=[port_key(n) for n in getattr(live, "midi_inputs", {})],
         messenger_bend=getattr(live, "messenger_bend", 2.0),
         # the secondary (Eastern) tuning, ragas.py's spec, or None
         eastern=getattr(live, "eastern", None),
@@ -21413,6 +21459,14 @@ def _selftest(only=""):
           and len(_said) == 1 and "nope" in _said[0],
           "  (no --port: %s; a --port matching nothing is said out loud: %r)"
           % (_p0, _said[0] if _said else None))
+    # A SESSION's INPUTS, reopened after a reboot moved ALSA's numbers, and
+    # nvlive's (a raw device's name, "USB Midi") opening the same keyboard
+    _mi = ["Midi Through:Midi Through Port-0 14:0", "USB Midi:USB Midi MIDI 1 24:0"]
+    check("a session's MIDI inputs come back by name, from either rig",
+          port_key("USB Midi:USB Midi MIDI 1 20:0") == "USB Midi:USB Midi MIDI 1"
+          and saved_inputs(["USB Midi:USB Midi MIDI 1"], _mi) == [_mi[1]]
+          and saved_inputs(["USB Midi"], _mi) == [_mi[1]] and saved_inputs(["gone"], _mi) == [],
+          "  (saved by live and by nvlive, both open %s)" % _mi[1])
     _bad = os.path.join(_sd, "bad.json")
     open(_bad, "w").write("{not json")
     _nb = load_session(_bad)
@@ -22234,6 +22288,34 @@ def open_stream(live, rate, frames):
     return pa, stream
 
 
+def port_key(name):
+    """A MIDI input's name without ALSA's client:port numbers ("USB Midi:USB
+    Midi MIDI 1 20:0" -> "USB Midi:USB Midi MIDI 1"): those move from boot
+    to boot, so a session keeps the rest."""
+    return re.sub(r"\s+\d+:\d+$", "", name)
+
+
+def saved_inputs(saved, names):
+    """The inputs in `names` a session's `saved` names: each by its whole
+    name (port_key), else by its device's (before the colon -- what nvlive
+    reads from ALSA's raw devices: "USB Midi"), so either rig's session opens
+    the same keyboard."""
+    saved = list(saved or ())
+    exact = [n for n in names if port_key(n) in saved]
+    if exact:
+        return exact
+    dev = {x.split(":")[0].strip().lower() for x in saved}
+    return [n for n in names if n.split(":")[0].strip().lower() in dev]
+
+
+def input_names():
+    """The MIDI inputs there are now, each once."""
+    try:
+        return list(dict.fromkeys(mido.get_input_names()))
+    except Exception:
+        return []
+
+
 def pick_port(sub, names=None, warn=None):
     """The MIDI input to open: the first whose name contains `sub`, else the
     first that is a real instrument.
@@ -22360,7 +22442,7 @@ def main():
             print(" ", n)
         return
     name, names = pick_port(a.port)
-    if not name:
+    if not name and not a.tui:
         sys.exit("no MIDI inputs found (is the keyboard plugged in?)")
 
     # THE GIL IS THE REAL CONSTRAINT ON BACKGROUND BUILDS. PyAudio's callback is
@@ -22390,6 +22472,13 @@ def main():
     # parts, globals, room, controls, routes and each channel's mix. A named
     # preset asked for on the command line wins over it.
     sess = None if (a.fresh or a.preset) else load_session()
+    # THE INPUTS: --port's, else the session's that are plugged in now, else
+    # pick_port's (the panel's I picks others while it runs)
+    inputs = [name] if name else []
+    if not a.port and sess and sess.get("midi_inputs"):
+        _here = saved_inputs(sess["midi_inputs"], names)
+        if _here:
+            inputs = _here
     pres = None
     if a.preset:
         pres = load_presets().get(a.preset)
@@ -22483,7 +22572,7 @@ def main():
 
     if a.tui:
         import livetui
-        return livetui.run(live, name, uc, start=start)
+        return livetui.run(live, inputs, uc, start=start)
 
     if a.drums:
         sys.stderr.write("  GM percussion at %d Hz, %d-frame blocks\n" % (a.rate, a.frames))
@@ -22492,8 +22581,9 @@ def main():
                          % (a.program, live.parts[0].patch.cls_name, a.rate, a.frames))
 
     pa, stream = open_stream(live, a.rate, a.frames)
-    port = mido.open_input(name, callback=live.on_midi) if name else None
-    sys.stderr.write("  listening on %s -- ctrl-c to stop\n" % (name or uc.address))
+    for _n in inputs:
+        live.open_input(_n)
+    sys.stderr.write("  listening on %s -- ctrl-c to stop\n" % (live.input_label() if inputs else uc.address))
     # SIGTERM as well as ctrl-c, so `timeout 90 live.py` still reports its stats
     # instead of being killed silently.
     stop = threading.Event()
@@ -22527,11 +22617,10 @@ def main():
     finally:
         live.stop_kicker()
         stream.stop_stream(); stream.close(); pa.terminate()
-        if port:
-            port.close()
+        save_session(live)                 # and once more on the way out (the inputs still open)
+        live.close_inputs()
         if uc:
             uc.close()
-        save_session(live)                 # and once more on the way out
         live.renderer.close()
         s = live.stats()
         sys.stderr.write("\n  peak %.3f  underruns %d  dropped %d  errors %d  stuck %d  miss %d\n"

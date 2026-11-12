@@ -165,6 +165,11 @@ struct Host {
     // in use, the voice's, the knob's; 1 a tonewheel organ's), set (<0 the voice's)
     std::function<int(int, double *)> drive_get;
     std::function<void(int, double)> drive_set;
+    // THE MIDI INPUTS (livetui.pick_inputs): each plugged in (its name, open
+    // or not), one turned on or off (what to say), those open as the header names them
+    std::function<std::vector<std::pair<std::string, bool>>()> inputs;
+    std::function<std::string(int)> input_toggle;
+    std::function<std::string()> port_label;
     std::function<void(int, int, int)> synth_forget;
     std::function<int(int)> synth_send;
     std::function<std::string()> messenger_line, messenger_firmware;
@@ -635,7 +640,7 @@ static const char *SCAN_NAMES[7] = {"off", "V1", "V2", "V3", "C1", "C2", "C3"};
 static const int SCAN_STARTS[7] = {0, 18, 37, 55, 73, 91, 110};
 // THE KEYS A CONTROL MAY BE BOUND TO (livetui.HOTKEYS_FREE): what the panel
 // does not use itself, in any pane -- a bound key fires from every pane
-static const char HOTKEYS_FREE[] = "cefginouvwyz[];',./ACGHIJKOQUVWYZ";
+static const char HOTKEYS_FREE[] = "cefginouvwyz[];',./ACGHJKOQUVWYZ";     // (I: the MIDI inputs)
 
 static bool control_switch(int key)
 {
@@ -1067,7 +1072,12 @@ struct Panel {
         snprintf(b, sizeof b, "%.0f kHz · %d frames · %.1f ms", H.rate / 1000.0, H.frames, H.budget_ms);
         std::string lamp = s.rt ? C("ok") + "● RT18" : s.rt_dropped ? C("bad") + "● rt dropped"
                                                                           : C("dim") + "● rt off";
-        line(" " + C("accent") + "\x1b[1m◆ tuning native\x1b[0m  " + C("dim") + b + "   " + H.port + "   " + lamp
+        const std::string pl = H.port_label ? H.port_label() : H.port;
+        {                                       // (a tap on the inputs: I)
+            const int px = 1 + cols("◆ tuning native  ") + cols(b) + 3;
+            hit(nrow, px, px + cols(pl), H_KEY, 'I');
+        }
+        line(" " + C("accent") + "\x1b[1m◆ tuning native\x1b[0m  " + C("dim") + b + "   " + pl + "   " + lamp
              + (H.eastern.empty() ? std::string() : "   " + C("accent2") + "eastern " + H.eastern));
         // THE PARTS (livetui's PARTS pane): a row a part, its columns; the
         // selected cell in the selection's colour, a muted part dim
@@ -1299,6 +1309,7 @@ struct Panel {
             line("   t                 the tuner: every temperament live has; the patches built again in it");
             line("   E                 the EASTERN tuning: a raga system and Sa for every Indian voice");
             line("   x                 the insertion effect: the part on it, its type, parameters, controllers, sends");
+            line("   I                 the MIDI inputs (or tap the port's name): enter turns each on or off -- several, merged");
             line("   P                 panic: every note off, now");
             line("   q                 quit (routes added here are kept beside the export)");
             line("");
@@ -1787,6 +1798,27 @@ struct Panel {
     // (theory, Bel's Todi, the 27 measured from Saraga), a RAGA (its swaras:
     // the meend's detents) and where SA sits -- every part whose voice is an
     // Indian instrument plays it, the rest keep their own tuner
+    // THE MIDI INPUTS (livetui.pick_inputs): each plugged in, enter turns it
+    // on or off -- several at once, merged -- the list read again each time
+    // round (a device plugged in shows); Esc closes
+    void pick_inputs()
+    {
+        int i = 0;
+        for (;;) {
+            const std::vector<std::pair<std::string, bool>> ins = H.inputs();
+            std::vector<std::string> items;
+            for (const auto &x : ins)
+                items.push_back((x.second ? "[x] " : "[ ] ") + x.first);
+            items.push_back("rescan");
+            const int got = menu("MIDI inputs (enter: on / off)", items, std::min(i, (int)items.size() - 1));
+            if (got < 0)
+                return;
+            i = got;
+            if (got < (int)ins.size())
+                say(H.input_toggle(got));
+        }
+    }
+
     void pick_eastern()
     {
         static const char *SW[12] = {"Sa", "re", "Re", "ga", "Ga", "Ma", "Ma'", "Pa", "dha", "Dha", "ni", "Ni"};
@@ -3268,6 +3300,8 @@ struct Panel {
                     pick_eastern();
                 } else if (c == 'x' || c == 'X') {
                     pick_efx();
+                } else if (c == 'I' && H.inputs && H.input_toggle) {
+                    pick_inputs();
                 } else if (c == 'S' || c == 'L' || c == 'N' || c == 'R') {
                     presets_key(c);
                 } else if (c == 'P') {

@@ -365,26 +365,9 @@ int nv_host::run(int argc, char **argv)
     // loopback; a --port that matches nothing says so
     dev = opt(argc, argv, "midi", "");
     std::string port_name;
+    cli_port = !dev.empty() || !opt(argc, argv, "port", "").empty();
     if (dev.empty()) {
-        std::vector<std::pair<std::string, std::string>> ds;    // (path, name)
-        for (int c = 0; c < 8; c++)
-            for (int d = 0; d < 4; d++) {
-                char p[64], q[64];
-                snprintf(p, sizeof p, "/dev/snd/midiC%dD%d", c, d);
-                if (access(p, R_OK) != 0)
-                    continue;
-                snprintf(q, sizeof q, "/proc/asound/card%d/midi%d", c, d);
-                std::string nm;
-                if (FILE *f = fopen(q, "r")) {
-                    char ln[256];
-                    if (fgets(ln, sizeof ln, f))
-                        nm = ln;
-                    fclose(f);
-                }
-                while (!nm.empty() && (nm.back() == '\n' || nm.back() == ' '))
-                    nm.pop_back();
-                ds.push_back(std::make_pair(std::string(p), nm.empty() ? std::string(p + 9) : nm));
-            }
+        const std::vector<std::pair<std::string, std::string>> ds = midi_devices();
         auto lower = [](std::string x) {
             for (char &ch : x)
                 ch = (char)tolower((unsigned char)ch);
@@ -417,10 +400,19 @@ int nv_host::run(int argc, char **argv)
             }
         }
     }
-    fd = dev.empty() ? -1 : ::open(dev.c_str(), O_RDONLY | O_NONBLOCK);
-    if (fd < 0) {
-        fprintf(stderr, "nvlive: no MIDI input (%s); --midi=/dev/snd/midiCxDy\n", dev.c_str());
-        return 1;
+    // (none: the panel's I opens one once it is plugged in; no panel, nothing to play)
+    bool no_panel = !isatty(1);
+    for (int i = 1; i < argc; i++)
+        no_panel = no_panel || !strcmp(argv[i], "--no-panel");
+    if (dev.empty() || access(dev.c_str(), R_OK) != 0) {
+        if (no_panel) {
+            fprintf(stderr, "nvlive: no MIDI input (%s); --midi=/dev/snd/midiCxDy\n", dev.c_str());
+            return 1;
+        }
+        fprintf(stderr, "nvlive: no MIDI input yet -- I on the panel opens one\n");
+        dev.clear();
+    } else {
+        ins.set({std::make_pair(dev, port_name.empty() ? dev : port_name)});
     }
     if (!A.load()) {
         fprintf(stderr, "nvlive: cannot load libasound.so.2\n");
@@ -437,7 +429,7 @@ int nv_host::run(int argc, char **argv)
     }
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
-    reader = std::thread(midi_reader, fd, &mu, &q);
+    reader = std::thread(midi_reader_ins, &ins, &mu, &q);
     // the register's jobs on their own thread, off the audio one (--reg-sync: in step)
     rsync = false; nort = getenv("TUNING_RT") && !strcmp(getenv("TUNING_RT"), "0"); nopanel = !isatty(1);
     for (int i = 1; i < argc; i++) {
@@ -557,7 +549,59 @@ int nv_host::run(int argc, char **argv)
         };
         H.program = program;
         H.program_name = shown_name(shown_program, shown_var);
-        H.port = port_name.empty() ? dev : port_name;     // (its name, as live's header shows the port's)
+        H.port = port_name.empty() ? (dev.empty() ? std::string("no MIDI in") : dev) : port_name;
+        // THE MIDI INPUTS (livetui.pick_inputs): those plugged in, each on or
+        // off -- several at once, merged; the header names those open
+        H.inputs = [&]() {
+            std::vector<std::pair<std::string, bool>> out;
+            std::vector<std::pair<std::string, std::string>> w;
+            {
+                std::lock_guard<std::mutex> lk(ins.mu);
+                w = ins.want;
+            }
+            in_list = midi_devices();
+            for (auto &x : w) {                 // (wanted, gone: shown, to turn off)
+                bool here = false;
+                for (auto &d : in_list)
+                    here = here || d.first == x.first;
+                if (!here)
+                    in_list.push_back(x);
+            }
+            for (auto &d : in_list) {
+                bool on = false;
+                for (auto &x : w)
+                    on = on || x.first == d.first;
+                out.push_back(std::make_pair(d.second + "  (" + d.first.substr(5) + ")", on));
+            }
+            return out;
+        };
+        H.input_toggle = [&](int i) -> std::string {
+            if (i < 0 || i >= (int)in_list.size())
+                return "";
+            std::vector<std::pair<std::string, std::string>> w;
+            {
+                std::lock_guard<std::mutex> lk(ins.mu);
+                w = ins.want;
+            }
+            const auto d = in_list[i];
+            auto it = std::find_if(w.begin(), w.end(), [&](const std::pair<std::string, std::string> &x) {
+                return x.first == d.first;
+            });
+            const bool off = it != w.end();
+            if (off)
+                w.erase(it);
+            else
+                w.push_back(d);
+            ins.set(w);
+            return "MIDI in: " + d.second + (off ? " off" : " on");
+        };
+        H.port_label = [&]() {
+            std::lock_guard<std::mutex> lk(ins.mu);
+            std::string l;
+            for (auto &x : ins.open)
+                l += (l.empty() ? "" : ", ") + x.second;
+            return l.empty() ? std::string("no MIDI in") : l;
+        };
         H.room = E.room.empty() ? "-" : E.room;
         H.reg_modes = rg0->M > 0 && !noreg ? rg0->M : 0;
         H.has_gpu = gval[6] > 0.5;
@@ -842,7 +886,6 @@ int nv_host::run(int argc, char **argv)
     if (recorder.joinable())
         recorder.join();
     A.close(A.pcm);
-    ::close(fd);
     fprintf(stderr, "nvlive: stopped\n");
     return 0;
 }
@@ -1147,6 +1190,28 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
         if (v != gval[9])
             set_global(9, v);
     }
+    // THE MIDI INPUTS (live.saved_inputs): the session's, those plugged in
+    // now -- by device name, before any colon (live's "USB Midi:USB Midi MIDI
+    // 1" is our "USB Midi") -- unless --port or --midi named one
+    if (at_start && !cli_port && (x = session.get("midi_inputs")) && x->is(sess::J::ARR) && !x->a.empty()) {
+        auto devname = [](std::string n) {
+            n = n.substr(0, n.find(':'));
+            while (!n.empty() && n.back() == ' ')
+                n.pop_back();
+            for (char &ch : n)
+                ch = (char)tolower((unsigned char)ch);
+            return n;
+        };
+        std::vector<std::pair<std::string, std::string>> w;
+        for (const auto &d : midi_devices())
+            for (const auto &j : x->a)
+                if (j.is(sess::J::STR) && devname(j.s) == devname(d.second)) {
+                    w.push_back(d);
+                    break;
+                }
+        if (!w.empty())
+            ins.set(w);
+    }
     if ((x = session.get("room")) && x->is(sess::J::STR))
         for (size_t q = 0; q < E.rooms.size(); q++)
             if (E.rooms[q].name == x->s && (int)q != room_idx)
@@ -1338,6 +1403,13 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
     const int rm = room_asked >= 0 ? (int)room_asked : (int)room_idx;    // (one asked for is the room, building or not)
     if (rm >= 0 && rm < (int)E.rooms.size())
         j.o["room"] = sess::str(E.rooms[rm].name);
+    {                                           // the MIDI inputs open (live's midi_inputs), by name
+        sess::J mi = sess::arr();
+        std::lock_guard<std::mutex> lk(ins.mu);
+        for (auto &d : ins.want)
+            mi.a.push_back(sess::str(d.second));
+        j.o["midi_inputs"] = mi;
+    }
     sess::J ra = sess::arr();
     for (const auto &a : routes) {
         sess::J d = route_dict(a);
