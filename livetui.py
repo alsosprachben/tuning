@@ -2265,9 +2265,22 @@ class TUI:
         lay = self.synth_layer(p)
         return MG.panel_of(p.moog(), self.synth_own(p), lay)[knob]
 
+    # AN ORGAN's DRIVE KNOB (Live.set_drive): its valve stage's drive, in the
+    # voice's units (amp_drive: the Rock Organ's 0.92), up to ORGAN_DRIVE_MAX
+    ORGAN_DRIVE_MAX = 3.0
+
+    def organ_part(self):
+        """The selected part, if it is a tonewheel organ (a Leslie's), else None."""
+        p = self.sel()
+        return p if p is not None and not p.drums and p.patch.leslie else None
+
     def synth_bump(self, delta, big=False):
         p = self.synth_part()
         if p is None:
+            o = self.organ_part()
+            if o is not None:
+                v = self.live._drive(o) + delta * (0.25 if big else 0.05)
+                self.live.set_drive(o, round(max(0.0, min(self.ORGAN_DRIVE_MAX, v)), 2))
             return
         knob, kind = SYNTH_KNOBS[self.srow][1], SYNTH_KNOBS[self.srow][3]
         v = self.synth_value(p, knob)
@@ -2284,6 +2297,9 @@ class TUI:
         """Back to what the patch has it at."""
         p = self.synth_part()
         if p is None:
+            o = self.organ_part()
+            if o is not None:
+                self.live.set_drive(o, None)
             return
         knob = SYNTH_KNOBS[self.srow][1]
         lay = self.synth_layer(p)
@@ -2465,6 +2481,16 @@ class TUI:
                         C("dim"))
             self.addstr(scr, y, 20, (meaning or "nothing on this voice")[:max(0, w - 22)],
                         0 if meaning else C("dim"))
+            y += 1
+        # AN ORGAN's DRIVE: its knob (-/+ turn, space: the voice's own)
+        if p.patch.leslie and y < h - 4:
+            dv = L._drive(p)
+            own = p.drive is not None
+            self.addstr(scr, y, 2, "drive", curses.A_REVERSE)
+            self.addstr(scr, y, 8, bar(dv, 0.0, self.ORGAN_DRIVE_MAX, 9), C("green"))
+            self.addstr(scr, y, 20, "%.2f" % dv, curses.A_BOLD | (C("yellow") if own else 0))
+            self.addstr(scr, y, 27, ("the valve before the rotors  (-/+ turn, space: the voice's %.2f)"
+                                     % p.patch.amp_drive)[:max(0, w - 29)], C("dim"))
             y += 1
         rows = self.live.part_controls(p)
         if not rows:

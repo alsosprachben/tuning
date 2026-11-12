@@ -360,13 +360,13 @@ void nv_song_sirens(void *song, const NoteClass *const *K, int nK, double total,
             return vel_of(std::get<2>(a)) < vel_of(std::get<2>(b));   // (then the velocity: the tuples')
         });
         // the air's sources (the Helmholtz siren's): the channel's
-        // aftertouch, the key's, CC2 -- and the crank, CC1
+        // aftertouch, the key's, CC2 -- and the crank, CC20 (tonelib.WHEEL_CC)
         std::vector<std::pair<double, int>> at, pt, c2, c1;
         if (kind == 2) {
             at = press(kc, -1);
             pt = press(kc, std::get<1>(key));
             c2 = cc_ev(kc, 2);
-            c1 = cc_ev(kc, 1);
+            c1 = cc_ev(kc, NV_CC_CRANK);
         }
         double u = 0.0, air = 0.0, tprev = NAN;
         for (size_t j = 0; j < ns.size(); j++) {
@@ -627,10 +627,10 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     if (les && P >= 0 && nv_song_leslie(song, -1, nullptr) > 0) {
         long long c;
         int kind_ = nv_song_leslie(song, 0, &c);
-        int nc = nv_song_ccs(song, c, 1, nullptr, nullptr, 0);
+        int nc = nv_song_ccs(song, c, NV_CC_LESLIE, nullptr, nullptr, 0);
         std::vector<double> ct(nc), req;
         std::vector<int> cv(nc);
-        nv_song_ccs(song, c, 1, ct.data(), cv.data(), nc);
+        nv_song_ccs(song, c, NV_CC_LESLIE, ct.data(), cv.data(), nc);
         if (nc == 0 || ct[0] > 0.0) {
             req.push_back(0.0);
             req.push_back(kind_ == 2 ? les[4] : les[3]);

@@ -340,7 +340,7 @@ def main(argv):
                     msgs.append(M("control_change", channel=ch, control=c, value=rng.randint(0, 127)))
             elif "scan" in opt and rng.random() < 0.3:
                 # the scanner's selector: off, V1-V3, C1-C3
-                msgs.append(M("control_change", channel=ch, control=94,
+                msgs.append(M("control_change", channel=ch, control=81,
                               value=rng.choice((0, 20, 40, 60, 80, 100, 120))))
             elif "cc91" in opt and rng.random() < 0.3:
                 msgs.append(M("control_change", channel=ch, control=91, value=rng.randint(0, 127)))

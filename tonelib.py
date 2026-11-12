@@ -6369,6 +6369,7 @@ class RockOrganProperties(TonewheelProperties):
     """GM 18. Drawbars out at both ends, rotor running fast, amp pushed."""
     default_stops = 0b100000111      # 888 000 008
     leslie = True
+    wheel_swell = True          # the expression pedal on the wheel; the drive the panel's knob
     leslie_fast = True
     # HELD at its level (the mean of C4-G5's first second at velocity 100)
     # through the Leslie's measurement (leslie.py: the cabinet's response, the
@@ -23351,6 +23352,24 @@ def master_volume_gain(v14):
 
 GM_DEFAULT_EXPRESSION = 127     # CC11 does start at full: it is an attenuator
 GM_DEFAULT_PAN = 64             # centre
+
+# THE WHEEL'S JOBS, EACH ON A CC OF ITS OWN (Ben, 2026-11-12): the mod wheel
+# was a route per voice -- swell, drive, crescendo, drones... -- read from
+# CC1 by the file renderer too, so a sequencer's CC1 = 0 housekeeping (and a
+# reset's) silenced an organ or emptied a bagpipe, and a GS file's vibrato
+# gesture on a guitar set its amp for the whole piece. Now CC1 is GM's
+# modulation (vibrato; a Moog's LFO 2, the Messenger's MOD wheel) and each
+# job reads its own controller -- a file's, a keyboard's, a route's; live's
+# wheel is a default route to it (Live.wheel_routes). Chosen from MIDI's own
+# meanings where one fits (CC4 Foot Controller, CC11 Expression, CC12/13
+# Effect Control 1/2, CC70 Sound Variation, CC92 "formerly Tremolo Depth"),
+# else General Purpose (18, 19, 80, 81) or undefined (20); CC16/17 left to
+# GS (the controller matrix's CC1/CC2 numbers, SENSATIO's wah). CC121 resets
+# none of them but CC1 and CC11 (GM 2 3.5.2); a GM System On or GS Reset
+# puts each back to the voice's own (power-on).
+WHEEL_CC = {'vibrato': 1, 'lfo2': 1, 'crescendo': 4, 'swell': 11, 'drive': 12, 'detune': 13,
+            'drones': 18, 'drone stop': 18, 'drone note': 18, 'mouth': 19, 'crank': 20,
+            'tone': 70, 'leslie': 80, 'scanner': 81, 'tremolo': 92}
 
 # CC67 for the note being built, set by the renderer exactly as
 # bagpipe_drones and honky_detune are: a per-note fact that reaches the voice

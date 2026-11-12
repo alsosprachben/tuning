@@ -858,9 +858,9 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
             nv_song_add_leslie(song, ch, k->leslie);
         if (k && k->cab_set)                            // (_CAB_CH: the channel's, set once)
             nv_song_add_cab(song, ch, k);
-        if (k && k->clav_panel) {                       // (_CLAV_CH: the part's first CC1, the rockers swept)
+        if (k && k->clav_panel) {                       // (_CLAV_CH: the part's first CC70, the rockers swept)
             int v;
-            if (nv_song_first_cc(song, part, 1, &v)) {
+            if (nv_song_first_cc(song, part, NV_CC_TONE, &v)) {
                 int set = (int)nearbyint(v / 127.0 * 4.0);      // (round: half to even)
                 if (set != 2)                           // (CLAV_FLAT: all four up, nothing)
                     nv_song_add_clav(song, ch, set);
@@ -871,7 +871,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
         if (k && !k->organ && k->trem_depth > 0.0) {    // (_note_tremolo: the channel's, set once)
             int v;
             double dep = k->trem_intrinsic ? k->trem_depth
-                                           : k->trem_depth * (nv_song_first_cc(song, part, 1, &v) ? v / 127.0 : 0.0);
+                                           : k->trem_depth * (nv_song_first_cc(song, part, NV_CC_TREMOLO, &v) ? v / 127.0 : 0.0);
             if (dep > 0.0) {
                 double cfg[4] = {k->trem_hz, dep, (double)k->trem_stereo, k->trem_scatter};
                 nv_song_add_trem(song, ch, cfg);

@@ -2252,6 +2252,49 @@ void nv_host::part_touch(size_t row, int fixed)
     post([this, pi, fixed](long long) { nv_part_patch_touch(part, pi, fixed); });
 }
 
+// AN ORGAN's DRIVE KNOB (live.set_drive): the host's copy now (a session's),
+// the patch's between two blocks
+void nv_host::part_drive(size_t row, double v)
+{
+    int pi;
+    {
+        std::lock_guard<std::mutex> lk(parts_mu);
+        if (row >= pats.size() || pats[row].gone)
+            return;
+        pats[row].drive = v < 0.0 ? -1.0 : v;
+        pi = pats[row].pi;
+    }
+    post([this, pi, v](long long) { nv_part_drive(part, pi, v); });
+}
+
+// ...and what it is, read between two blocks (nv_part_drive_get's out)
+int nv_host::drive_state(size_t row, double *out)
+{
+    const int pi = part_pi(*this, row);
+    if (pi < 0)
+        return 0;
+    struct Got {
+        double o[3];
+        int r = 0;
+        std::atomic<bool> done{false};
+    };
+    auto got = std::make_shared<Got>();
+    auto take = [this, got, pi](long long) {
+        got->r = nv_part_drive_get(part, pi, got->o);
+        got->done = true;
+    };
+    if (scene_inline)
+        take(0);
+    else
+        post(take);
+    for (int i = 0; i < 200 && !got->done && !g_stop; i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (!got->done)
+        return -1;
+    memcpy(out, got->o, sizeof got->o);
+    return got->r;
+}
+
 // A MESSENGER's CHART read on every part (livetui's M, live's cc_map
 // "messenger": nvlive's for all its parts at once, --messenger's)
 void nv_host::messenger_reading(bool on)
@@ -2381,6 +2424,8 @@ void nv_host::part_added(const PartSpec &sp, void *c)
                                sp.lo, sp.hi, sp.tr);
     nv_part_patch_level(part, pi, sp.level, sp.muted);
     nv_part_patch_touch(part, pi, sp.fixed);
+    if (sp.drive >= 0.0)
+        nv_part_drive(part, pi, sp.drive);
     attach_drone(pi, sp.program, sp.drums, sp.var);
     for (int layer = 0; layer < 2; layer++)    // (its knobs: once the patch is in)
         for (const auto &kv : sp.syn[layer])
@@ -2395,6 +2440,7 @@ void nv_host::part_added(const PartSpec &sp, void *c)
     pa.muted = sp.muted;
     pa.pid = pid;
     pa.fixed = sp.fixed;
+    pa.drive = sp.drive;
     std::lock_guard<std::mutex> lk(parts_mu);
     pats.push_back(pa);                         // (reserved: the builder may be reading the rest)
 }
@@ -2413,6 +2459,7 @@ static nv_host::PartSpec spec_of(const nv_host::PartAt &pa)
     sp.level = pa.level;
     sp.muted = pa.muted;
     sp.fixed = pa.fixed;
+    sp.drive = pa.drive;
     return sp;
 }
 

@@ -760,8 +760,8 @@ struct Song {
             auto it = ch.find(c);
             if (it != ch.end())
                 for (const CC &e : it->second.ccs)
-                    if (e.cc == 1) {
-                        if (bpc->n_dchoice)     // (the wheel chooses the pungi's note: even steps)
+                    if (e.cc == NV_CC_DRONES) {
+                        if (bpc->n_dchoice)     // (CC18 chooses the pungi's note: even steps)
                             dsel = bpc->dchoice[std::min(bpc->n_dchoice - 1, (int)e.v * bpc->n_dchoice / 128)];
                         else                    // (the wheel corks them: even shares)
                             nd = (int)nearbyint(e.v / 127.0 * bpc->n_drone);
@@ -812,7 +812,7 @@ struct Song {
             auto it = ch.find(c);
             if (it != ch.end())
                 for (const CC &e : it->second.ccs)
-                    if (e.cc == 1) {
+                    if (e.cc == NV_CC_DRONES) {
                         stop = std::min(tk->n_dstop - 1, (int)(e.v * tk->n_dstop / 128));
                         break;
                     }
@@ -2182,7 +2182,7 @@ int nv_song_organ_tremolo(void *s)
                 if (x.second >= 0.5)
                     return 1;
         int v;
-        if (o.spec->wheel_trem > 0.0 && nv_song_first_cc(s, o.ch, 1, &v))
+        if (o.spec->wheel_trem > 0.0 && nv_song_first_cc(s, o.ch, NV_CC_TREMOLO, &v))
             return 1;
     }
     return 0;
@@ -2764,7 +2764,7 @@ int nv_song_organ_tremolos(void *s, int which, int *ch, double *cfg, int cap)
             dep = sp->htrem_depth;
         } else {
             int v;
-            if (sp->wheel_trem <= 0.0 || !nv_song_first_cc(s, o.ch, 1, &v))
+            if (sp->wheel_trem <= 0.0 || !nv_song_first_cc(s, o.ch, NV_CC_TREMOLO, &v))
                 continue;
             hz = sp->wtrem_hz;
             dep = sp->wheel_trem * (v / 127.0);

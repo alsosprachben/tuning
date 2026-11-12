@@ -486,9 +486,21 @@ CONTROLS = (
     (10, "pan", "continuous", 64),
     (5, "portamento time", "continuous", 0),
     (93, "chorus", "continuous", 0),
-    # THE HAMMOND'S VIBRATO/CHORUS SELECTOR (scanner.py, CC94): seven
+    # THE HAMMOND'S VIBRATO/CHORUS SELECTOR (scanner.py, CC81): seven
     # positions, stepped -- off, V1-V3, C1-C3 -- on a tonewheel voice
-    (94, "scanner (V/C)", "selector", 0),
+    (81, "scanner (V/C)", "selector", 0),
+    # ...AND THE WHEEL's OTHER JOBS, each on its own CC (T.WHEEL_CC): a pedal
+    # or a knob of its own, as the wheel's route reaches them (the drive's 32
+    # the voice's own: LIVE_DRIVE_RANGE x CC/127)
+    (4, "crescendo", "continuous", 0),
+    (12, "drive", "continuous", 32),
+    (13, "detune", "continuous", 64),
+    (18, "drones", "continuous", 127),
+    (19, "mouth", "continuous", 0),
+    (20, "crank", "continuous", 0),
+    (70, "tone (rockers)", "continuous", 0),
+    (80, "rotor speed", "continuous", 0),
+    (92, "tremolo depth", "continuous", 0),
     (74, "brightness", "continuous", 64),
     (71, "resonance", "continuous", 64),
     (73, "attack", "continuous", 64),
@@ -722,6 +734,14 @@ class Route(object):
 # rotor to three zones upstream.
 LIVE_DRIVE_STEPS = 8
 LIVE_DRIVE_RANGE = 4.0  # wheel fully up = this many times the voice's amp_drive
+
+# A WHEEL JOB's OWN CC (T.WHEEL_CC) -> the jobs on it: CC1 is the wheel's own
+# branch (vibrato, a Moog's LFO 2), CC11 the expression's, CC80 and CC81 the
+# rotor's and the scanner's (not wheel jobs: the half-moon is the pitch wheel's)
+_JOBS_OF_CC = {}
+for _job, _cc in T.WHEEL_CC.items():
+    if _cc not in (1, 11) and _job not in ('leslie', 'scanner'):
+        _JOBS_OF_CC.setdefault(_cc, []).append(_job)
 # THE VALVE IN TWO PASSES: the fast one (tubeamp.LIVE_*: 0.25 s, 150 products)
 # gives a chord its distortion within a few ms; the fine one (the file's: 1 s,
 # 400 products, 2x oversampled) replaces it ~50 ms later. Only the fine one
@@ -3560,11 +3580,11 @@ class Patch:
             # hit alone, the one hit it keeps (B.ROLL_FIRST)
             tr.append(mido.MetaMessage("marker", text=B.ROLL_FIRST, time=0))
         if fast is not None:
-            # CC1 is the half-moon switch on a tonewheel voice; blockrender
-            # reads it through leslie.zone() and gives every partial the
-            # rotor's rate and angle. `fast` is the CC value itself, so the
-            # zone boundaries live in one place.
-            tr.append(mido.Message("control_change", channel=ch, control=1,
+            # CC80 is the rotor's speed on a tonewheel voice (T.WHEEL_CC);
+            # blockrender reads it through leslie.zone() and gives every
+            # partial the rotor's rate and angle. `fast` is the CC value
+            # itself, so the zone boundaries live in one place.
+            tr.append(mido.Message("control_change", channel=ch, control=T.WHEEL_CC['leslie'],
                                    value=int(fast), time=0))
         tr.append(mido.Message("note_on", channel=ch, note=note, velocity=vel, time=0))
         tr.append(mido.Message("note_off", channel=ch, note=note, velocity=0, time=480))
@@ -4077,6 +4097,9 @@ class Part:
         self.cres = 0.0
         self.synth = {}         # a Moog's knobs, over its patch's (moog.PANEL names)
         self.synth_b = {}       # ...and a layered Moog's second Messenger's
+        # AN ORGAN's DRIVE, the panel's knob (Live.set_drive): its valve stage's
+        # drive over the voice's own (amp_drive), None the voice's
+        self.drive = None
         self.cc_map = "gm"      # "messenger": its channel's CCs are a Messenger's chart
         # THE STANDARD ITS PATCH WAS PICKED IN (livetui.patch_tree): "gm", "sc1"-
         # "sc4" (a Sound Canvas level, its map), "mt32". Where the picker opens
@@ -4111,6 +4134,7 @@ class Part:
                 (patch.program, patch.variation) != (old.program, old.variation)):
             self.synth = {}
             self.synth_b = {}
+            self.drive = None
         self.patch = patch
         # THE SAME ORGAN BUILT AGAIN (a room switched to, a tuner changed: the
         # patch made anew, the voice the same) KEEPS ITS REGISTRATION -- it
@@ -4176,6 +4200,8 @@ class Part:
             d["synth_b"] = dict(self.synth_b)
         if self.synth or self.synth_b:
             d["synth_units"] = 6            # the Messenger's measured knobs (moog.py)
+        if self.drive is not None:
+            d["drive"] = float(self.drive)
         if self.cc_map != "gm":
             d["cc_map"] = self.cc_map
         if self.std != "gm":
@@ -4198,6 +4224,7 @@ class Part:
         p.muted = bool(d.get("muted", False))
         p.synth = {k: v for k, v in (d.get("synth") or {}).items() if k in _MG.PANEL}
         p.synth_b = {k: v for k, v in (d.get("synth_b") or {}).items() if k in _MG.PANEL}
+        p.drive = float(d["drive"]) if d.get("drive") is not None else None
         # KNOBS SAVED BEFORE THE MESSENGER WAS MEASURED are in the first model's
         # units; those saved before its contours were (synth_units 2) or its
         # waveshape (3) or LFO 1 (4), or on the firmware before (5: its
@@ -4644,6 +4671,7 @@ class Live:
         self.mod_rate = 0.25    # +25% rate at full wheel
         self.modw = {}          # channel -> wheel position 0..1
         self.wheel_at = {}      # channel -> the mod wheel's last CC1, whatever it means there
+        self.job_at = {}        # (channel, CC) -> a wheel job's last value (T.WHEEL_CC), as its CC or the wheel's route set it
         # Which way the half-moon switch is thrown, per channel. A tonewheel
         # voice has no crescendo pedal -- that is a pipe-organ control -- so on
         # those parts the mod wheel is the rotor instead. The VOICE decides
@@ -5634,104 +5662,37 @@ class Live:
         elif msg.type == "control_change":
             if msg.control == 2:
                 self.cc2[ch] = msg.value / 127.0                 # breath: a siren's air (_siren_block)
-            if msg.control == 94:
-                self.cc94[ch] = msg.value                        # the scanner's selector (_scan_stamp)
+            if msg.control == __import__("scanner").SWITCH_CC:
+                self.cc94[ch] = msg.value                        # the scanner's selector (_scan_stamp; CC81)
                 self.patch_go.set()                              # ...its new position prepared (_scan_prefetch)
+            if msg.control == T.WHEEL_CC['leslie']:
+                # THE ROTOR's SPEED (CC80, T.WHEEL_CC): the file's zones
+                # (leslie.zone), the rotors aimed there as the half-moon aims them
+                import leslie as _LESz
+                _lad = (_LESz.STOP, _LESz.CHORALE, _LESz.TREMOLO)
+                _zt = _LESz.zone(msg.value)
+                if any(self._listens(p, ch) and p.patch.leslie for p in parts):
+                    self.half_moon = _lad.index(_zt)
+                    self.rotor_horn.target = _zt
+                    self.rotor_drum.target = _zt
             if msg.control == 1:
                 self.cc1_count += 1; self.cc1_last = msg.value
-                # THE MOD WHEEL IS A CRESCENDO PEDAL on an organ part and
-                # VIBRATO on everything else, and with layers it can be both at
-                # once -- so each part is asked separately rather than the whole
-                # channel taking one branch.
+                # THE MOD WHEEL IS GM's MODULATION: vibrato, or a Moog's LFO 2
+                # (the Messenger's own MOD wheel). Every other job the wheel
+                # had -- the crescendo, the swell, the amp's drive, the drones
+                # -- is its own CC's (T.WHEEL_CC), the wheel a default ROUTE to
+                # it: each part its own jobs, through the same handling the CC
+                # gets from a file or a keyboard (_wheel_job). A reset's CC1 = 0
+                # is CC1's alone (GM 2 3.5.2): it reaches no other job.
                 self.wheel_at[ch] = msg.value
-                # WHICH IT IS, per part, is wheel_roles: one answer for this
-                # branch and for the panel that shows it.
                 here = [p for p in parts if self._listens(p, ch)]
                 roles = {p.pid: self.wheel_roles(p) for p in here}
-                if self._wheel_reset:
-                    # A RESET's CC1 = 0 (_reset_controllers) is the rest only of
-                    # the roles whose rest IS 0; the others it puts back untouched
-                    roles = {k: [r for r in v if r in self._WHEEL_ZERO_REST] for k, v in roles.items()}
-                amped = [p for p in here if 'drive' in roles[p.pid]]
-                organs = [p for p in here if 'crescendo' in roles[p.pid]]
+                if not self._wheel_reset:
+                    self._wheel_route(ch, here, roles, msg.value, n0)
                 for p in here:
                     if 'lfo2' in roles[p.pid]:
                         self.lfo2_w[p.pid] = msg.value / 127.0      # (_lfo2_tick)
-                tremmed = [p for p in here if 'tremolo' in roles[p.pid]]
-                clavs = [p for p in here if 'tone' in roles[p.pid]]
-                detuners = [p for p in here if 'detune' in roles[p.pid]]
-                dronists = [p for p in here if 'drones' in roles[p.pid]]
-                if any('mouth' in roles[p.pid] for p in here):
-                    self._tone_ctl(ch, 'wheel', n0, msg.value)   # the didgeridoo's vowel
-                for p in [p for p in here if 'drone note' in roles[p.pid]]:
-                    # even steps over the choices, as blockrender reads a
-                    # file's first CC1 -- live, the drone moved as it turns
-                    _ns = len(p.patch.drone_note_choices)
-                    _st = min(_ns - 1, msg.value * _ns // 128)
-                    if self.drone_sel.get(p.pid) != _st:
-                        self.drone_sel[p.pid] = _st
-                        if self._chanting(p, ch):
-                            self._drone_note(p, ch, n0)
-                for p in [p for p in here if 'drone stop' in roles[p.pid]]:
-                    # even shares of the wheel, as blockrender reads a file's
-                    # first CC1 -- live under the wheel, as the bagpipe's corks
-                    _ns = len(p.patch.drone_stops)
-                    self.drone_stop[p.pid] = min(_ns - 1, msg.value * _ns // 128)
                 others = [p for p in here if 'vibrato' in roles[p.pid]]
-                for p in [p for p in here if 'swell' in roles[p.pid]]:
-                    # THE EXPRESSION PEDAL: CC11's squared law on the part, the
-                    # notes sounding rescaled as CC11 rescales them. An
-                    # untouched wheel is the pedal open (Part.swell 1.0). Floored
-                    # at -80 dB: the sounding notes move by ratio, and a ratio
-                    # cannot come back from zero.
-                    sw = max((msg.value / 127.0) ** 2, 1e-4)
-                    was = p.swell
-                    p.swell = sw
-                    if sw != was:
-                        self.slab.channel_gain(self._sounding(ch, pids={p.pid}, tone=p.patch), sw / was)
-                if amped:
-                    # THE WHEEL IS THE GAIN KNOB. On a Leslie it is the swell
-                    # pedal, which sits in FRONT of a fixed-gain amplifier; on
-                    # a guitar it is the amp's own gain. Either way it decides
-                    # where the playing sits on the valve's curve -- and on a
-                    # voice with an `amp_reference` how hard you play decides
-                    # the rest. Gated on HAVING an amplifier, not on having a
-                    # rotor: they were the same thing only because the Hammond
-                    # was the first voice with one.
-                    step = int(round(msg.value / 127.0 * LIVE_DRIVE_STEPS))
-                    for p in amped:
-                        if self.drive_step.get(p.pid) != step:
-                            self.drive_step[p.pid] = step
-                            self.amp_dirty.add(p.pid)
-                for part in detuners:
-                    self.detune_step[part.pid] = min(
-                        DETUNE_STEPS, key=lambda v: abs(v - msg.value))
-                for part in dronists:
-                    # Even quarters over the wheel, as blockrender does, so a
-                    # file and the keyboard cork the same drones at the same
-                    # place. UNLIKE the offline path this is live rather than
-                    # read-once: a piper corks before playing, but a player at
-                    # a keyboard has a wheel in their hand and expects it to
-                    # do something, so the drones come and go under it.
-                    _nd = len(part.patch.drone_ratios)
-                    n = max(0, min(_nd, int(round(msg.value / 127.0 * _nd))))
-                    if self.drone_count.get(part.pid) != n:
-                        self.drone_count[part.pid] = n
-                        if self._chanting(part, ch):
-                            self._drones(part, ch, n0)
-                for part in clavs:
-                    import tonelib as _TLm
-                    step = int(round(msg.value / 127.0 * (len(_TLm.CLAV_TONE) - 1)))
-                    if self.clav_step.get(part.pid) != step:
-                        self.clav_step[part.pid] = step
-                        self.slab.clav_tone(step, self._sounding(ch, pids={part.pid}, tone=part.patch))
-                for part in tremmed:
-                    self.trem_depth[part.pid] = (msg.value / 127.0) * part.patch.tremolo_depth
-                    self.slab.tremolo_arm(self._sounding(ch, pids={part.pid}, tone=part.patch),
-                                          self.trem_depth[part.pid],
-                                          part.patch.tremolo_stereo)
-                for part in organs:
-                    self._crescendo(part, ch, msg.value, n0)
                 if others:
                     # THE MOD WHEEL IS VIBRATO. That is what it is for on a wind
                     # or string patch, and it is the one control every library
@@ -5748,9 +5709,17 @@ class Live:
                     for part in others:
                         self._vib_apply(part, ch, n0)
                 # ...AND THE TONES A PART STILL HOLDS FROM BEFORE A PROGRAM
-                # CHANGE, each the wheel ITS voice has (_tone_wheel)
+                # CHANGE, each its voice's vibrato (_tone_wheel)
                 for p in here:
-                    self._tone_wheel(p, ch, msg.value, n0)
+                    self._tone_wheel(p, ch, msg.value, n0, ('vibrato',))
+            elif msg.control in _JOBS_OF_CC:
+                # A WHEEL JOB's OWN CC (T.WHEEL_CC): each part that has the job
+                # does it -- the crescendo, the drive, the drones -- from a
+                # file, a keyboard, or the wheel's route
+                here = [p for p in parts if self._listens(p, ch)]
+                for job in _JOBS_OF_CC[msg.control]:
+                    ps = [p for p in here if job in self.wheel_roles(p)]
+                    self._wheel_job(job, ch, ps, msg.value, n0, held=here)
             elif msg.control in (7, 11):            # volume and expression
                 # (v7*v11)^2, which is blockrender's law at line 840 -- the
                 # same squared MIDI curve velocity uses, applied to the
@@ -6294,7 +6263,7 @@ class Live:
     def _amp_holds(self, part):
         """A part whose chord changes wait for its valve (LIVE_AMP_HOLD)."""
         return (LIVE_AMP_HOLD and part is not None and not part.drums
-                and (part.patch.amp_drive > 0.0 or self._efx_od(part) is not None))
+                and (self._drive(part) > 0.0 or self._efx_od(part) is not None))
 
     def _note_on(self, part, ch, note, vel, n0):
         if not self._amp_holds(part):
@@ -7432,8 +7401,8 @@ class Live:
             t = n0 / float(self.rate)
             if ch in self.pressure:
                 tf['at'].append((t, int(round(self.pressure[ch] * 127))))
-            if ch in self.wheel_at:
-                tf['wheel'].append((t, int(self.wheel_at[ch])))
+            if (ch, T.WHEEL_CC['mouth']) in self.job_at:      # (the mouth's own CC: T.WHEEL_CC)
+                tf['wheel'].append((t, int(self.job_at[(ch, T.WHEEL_CC['mouth'])])))
             if pt.plunger:
                 tf['flt'] = _EF.plunger(tf['at'])
             elif pt.mouth:
@@ -8510,7 +8479,7 @@ class Live:
                      'vibrato': 'vibrato', 'swell': 'swell pedal',
                      'crank': 'crank: the upper disc turned (at the top the 12-row fundamental cancels)'}
 
-    def _tone_wheel(self, part, ch, v, n0):
+    def _tone_wheel(self, part, ch, v, n0, jobs=('tremolo', 'tone', 'vibrato')):
         """THE MOD WHEEL ON NOTES HELD THROUGH A PROGRAM CHANGE: each old
         tone's own (key_tone) -- a Rhodes chord held under a string patch keeps
         the wheel as its tremolo, the strings take it as their vibrato -- as
@@ -8528,15 +8497,111 @@ class Live:
             if not sl:
                 continue
             roles = self.wheel_roles(_ToneOf(part, tone))
-            if 'tremolo' in roles:
+            if 'tremolo' in roles and 'tremolo' in jobs:
                 self.slab.tremolo_arm(sl, v / 127.0 * tone.tremolo_depth, tone.tremolo_stereo)
-            if 'tone' in roles:
+            if 'tone' in roles and 'tone' in jobs:
                 import tonelib as _TLm
                 self.slab.clav_tone(int(round(v / 127.0 * (len(_TLm.CLAV_TONE) - 1))), sl)
-            if 'vibrato' in roles:
+            if 'vibrato' in roles and 'vibrato' in jobs:
                 w = v / 127.0
                 self.slab.retune(sl, n0, vd=(2.0 ** (self._mod_cents(ch) * w / 1200.0)) - 1.0,
                                  vrs=1.0 + self.mod_rate * w)
+
+    def _wheel_route(self, ch, here, roles, v, n0):
+        """THE WHEEL's DEFAULT ROUTE (T.WHEEL_CC): each part's jobs other than
+        CC1's, done as their own CCs would do them (_wheel_job), the part's
+        alone -- a layer's organ its crescendo, its guitar the drive."""
+        jobs = {}
+        for p in here:
+            for r in roles[p.pid]:
+                if T.WHEEL_CC.get(r, 1) != 1 and not (r == 'drive' and p.patch.leslie):
+                    jobs.setdefault(r, []).append(p)
+        for r, ps in jobs.items():
+            self._wheel_job(r, ch, ps, v, n0, held=ps)
+
+    def _wheel_job(self, job, ch, ps, v, n0, held=()):
+        """One of the wheel's jobs (wheel_roles) at value v on parts ps -- from
+        its own CC (T.WHEEL_CC) or the wheel's route; `held`, the parts whose
+        tones held from before a program change take it too (_tone_wheel)."""
+        self.job_at[(ch, T.WHEEL_CC[job])] = v
+        if job == 'mouth' and ps:
+            self._tone_ctl(ch, 'wheel', n0, v)   # the didgeridoo's vowel
+        elif job == 'drone note':
+            for p in ps:
+                # even steps over the choices, as blockrender reads a file's
+                # first CC18 -- live, the drone moved as it turns
+                _ns = len(p.patch.drone_note_choices)
+                _st = min(_ns - 1, v * _ns // 128)
+                if self.drone_sel.get(p.pid) != _st:
+                    self.drone_sel[p.pid] = _st
+                    if self._chanting(p, ch):
+                        self._drone_note(p, ch, n0)
+        elif job == 'drone stop':
+            for p in ps:
+                # even shares, as blockrender reads a file's first CC18 -- live
+                # under the control, as the bagpipe's corks
+                _ns = len(p.patch.drone_stops)
+                self.drone_stop[p.pid] = min(_ns - 1, v * _ns // 128)
+        elif job == 'swell':
+            for p in ps:
+                # THE EXPRESSION PEDAL: CC11's squared law on the part, the
+                # notes sounding rescaled as CC11 rescales them. An untouched
+                # pedal is open (Part.swell 1.0). Floored at -80 dB: the
+                # sounding notes move by ratio, and a ratio cannot come back
+                # from zero.
+                sw = max((v / 127.0) ** 2, 1e-4)
+                was = p.swell
+                p.swell = sw
+                if sw != was:
+                    self.slab.channel_gain(self._sounding(ch, pids={p.pid}, tone=p.patch), sw / was)
+        elif job == 'drive' and ps:
+            # THE GAIN KNOB: a guitar amp's own gain, a Leslie's preamp (its
+            # CC12 and the panel's knob, not the wheel: the wheel is its swell).
+            # Either way it decides where the playing sits on the valve's
+            # curve -- and on a voice with an `amp_reference` how hard you play
+            # decides the rest. Gated on HAVING an amplifier, not on having a
+            # rotor: they were the same thing only because the Hammond was the
+            # first voice with one.
+            step = int(round(v / 127.0 * LIVE_DRIVE_STEPS))
+            for p in ps:
+                if self.drive_step.get(p.pid) != step:
+                    self.drive_step[p.pid] = step
+                    self.amp_dirty.add(p.pid)
+        elif job == 'detune':
+            for part in ps:
+                self.detune_step[part.pid] = min(DETUNE_STEPS, key=lambda d: abs(d - v))
+        elif job == 'drones':
+            for part in ps:
+                # Even quarters, as blockrender does, so a file and the keyboard
+                # cork the same drones at the same place. UNLIKE the offline
+                # path this is live rather than read-once: a player at a
+                # keyboard expects the control to do something, so the drones
+                # come and go under it.
+                _nd = len(part.patch.drone_ratios)
+                n = max(0, min(_nd, int(round(v / 127.0 * _nd))))
+                if self.drone_count.get(part.pid) != n:
+                    self.drone_count[part.pid] = n
+                    if self._chanting(part, ch):
+                        self._drones(part, ch, n0)
+        elif job == 'tone':
+            import tonelib as _TLm
+            step = int(round(v / 127.0 * (len(_TLm.CLAV_TONE) - 1)))
+            for part in ps:
+                if self.clav_step.get(part.pid) != step:
+                    self.clav_step[part.pid] = step
+                    self.slab.clav_tone(step, self._sounding(ch, pids={part.pid}, tone=part.patch))
+        elif job == 'tremolo':
+            for part in ps:
+                self.trem_depth[part.pid] = (v / 127.0) * part.patch.tremolo_depth
+                self.slab.tremolo_arm(self._sounding(ch, pids={part.pid}, tone=part.patch),
+                                      self.trem_depth[part.pid], part.patch.tremolo_stereo)
+        elif job == 'crescendo':
+            for part in ps:
+                self._crescendo(part, ch, v, n0)
+        # (the crank: the siren reads job_at, _siren_block)
+        if job in ('tremolo', 'tone'):
+            for p in held:
+                self._tone_wheel(p, ch, v, n0, (job,))
 
     def wheel_roles(self, part):
         """What the mod wheel is on this part -- the CC1 branch asks this, and
@@ -8568,7 +8633,7 @@ class Live:
         if pt.siren_upper:
             return ['crank']
         r = []
-        if pt.amp_drive > 0.0:
+        if self._drive(part) > 0.0:
             r.append('drive')
         if part.organ and not pt.leslie and pt.cres_order:
             r.append('crescendo')
@@ -8594,7 +8659,10 @@ class Live:
         # 35 cents, and the vibraphone its pitch wobbling under its motor
         # (Ben: "I don't think that is supposed to happen"). A drawbar organ
         # with no drive takes it as its expression pedal (wheel_swell).
-        if not r and pt.wheel_swell:
+        # ON A TONEWHEEL ORGAN IT IS THE SWELL, its drive or not: the drive is
+        # the panel's knob and CC12's (Part.drive), never the wheel's route
+        # (Ben: "have drive be a default per organ ... then mod can do level")
+        if (not r or pt.leslie) and pt.wheel_swell:
             r.append('swell')
         # ON A MOOG WHOSE LFO 2 GOES SOMEWHERE IT IS LFO 2's DEPTH, as the
         # Messenger's MOD wheel is (moog.lfo2_mods), in place of the vibrato
@@ -8630,9 +8698,8 @@ class Live:
         """CC1 on this part, in words, with any route on it; None if nothing."""
         if part.drums:
             return None
-        r = self.wheel_roles(part)
-        what = ", ".join('swell pedal' if (k == 'drive' and part.patch.leslie)
-                         else self.WHEEL_MEANING[k] for k in r) or None
+        r = [k for k in self.wheel_roles(part) if not (k == 'drive' and part.patch.leslie)]
+        what = ", ".join(self.WHEEL_MEANING[k] for k in r) or None
         return self._with_routes(what, self._routes_from(part, "cc", 1))
 
     def pitch_wheel_meaning(self, part):
@@ -8673,6 +8740,21 @@ class Live:
         sd = self.snd.get(0 if part.channel is None else part.channel) or {}
         return [(name, cc_of[name], m, c / float(max(n, 1)), sd.get(name, 0.0))
                 for name, (c, m) in sorted(got.items(), key=lambda kv: cc_of[kv[0]])]
+
+    def _drive(self, part):
+        """The part's valve drive: the panel's knob (Part.drive), else its voice's."""
+        return part.patch.amp_drive if part.drive is None else part.drive
+
+    def set_drive(self, part, value):
+        """AN ORGAN's DRIVE KNOB (the panel's): its valve stage's drive, None
+        the voice's own. Kept on the part (and so in a preset); the stage is
+        rebuilt at the next block -- an organ with no drive gains one, and
+        CC12 still scales it (LIVE_DRIVE_RANGE)."""
+        part.drive = None if value is None else max(0.0, float(value))
+        def go(n0, part=part):
+            self.amp_dirty.add(part.pid)
+        self.dirty = True
+        self.post(go)
 
     def set_synth(self, part, knob, value, from_hardware=False, layer='a'):
         """Turn one of a Moog part's knobs -- from the TUI, or a Messenger's CC.
@@ -9143,7 +9225,7 @@ class Live:
     def _note_off(self, part, ch, note, n0):
         n0 = n0 + self._amp_ahead(part) + self._amp_held(part.pid, ch, note)
         self._amp_touch(part)
-        if (part.patch.amp_drive > 0.0 or self._efx_od(part) is not None) \
+        if (self._drive(part) > 0.0 or self._efx_od(part) is not None) \
                 and self.key_tone.get((part.pid, ch, note), part.patch) is part.patch:
             # THE PRODUCTS END WITH THEIR CHORD, over the note's own release, as
             # the file's end at their segment's -- the new snapshot (_amp_touch)
@@ -9324,7 +9406,7 @@ class Live:
         whole set -- which is the same rule the offline path states as the
         lifetime of a product being the intersection of its parents'.
         """
-        if part.patch.amp_drive > 0.0 or self._efx_od(part) is not None:
+        if self._drive(part) > 0.0 or self._efx_od(part) is not None:
             self.amp_dirty.add(part.pid)
 
     def _efx_od(self, part):
@@ -9352,7 +9434,7 @@ class Live:
         """The lookahead a part with a valve plays at (LIVE_AMP_LOOKAHEAD)."""
         if not LIVE_AMP_LOOKAHEAD or part.drums:
             return 0
-        if part.patch.amp_drive > 0.0 or self._efx_od(part) is not None:
+        if self._drive(part) > 0.0 or self._efx_od(part) is not None:
             return LIVE_AMP_LOOKAHEAD * self.frames
         return 0
 
@@ -9935,9 +10017,35 @@ class Live:
     # that logic would be wrong within a week. Contains no CC121 and no sysex,
     # so _reset_controllers cannot recurse.
     _RESET_CC = ((1, 0), (11, 127), (64, 0), (65, 0), (66, 0), (67, 0))
-    # ...but the wheel is a route (wheel_roles), and 0 is the rest only of these
-    _WHEEL_ZERO_REST = ('vibrato', 'tremolo', 'mouth', 'crank', 'drone stop', 'lfo2')
+    # (a reset's CC1 = 0 is the wheel's own: its route to the other jobs skips it)
     _wheel_reset = False
+
+    def _jobs_power_on(self, n0, ch):
+        """A GM SYSTEM ON or GS RESET's power-on for the wheel's jobs (their own
+        CCs, T.WHEEL_CC -- CC121 leaves them, GM 2 3.5.2): the swell pedal open
+        (its notes rescaled as the job rescales them), the valve its own drive,
+        the rockers, the detune and the drones the voice's own; the
+        registration left as it is."""
+        for _cc in set(T.WHEEL_CC.values()) - {1, 11}:
+            self.job_at.pop((ch, _cc), None)
+        for p in self.parts:
+            if not self._listens(p, ch):
+                continue
+            roles = self.wheel_roles(p)
+            if 'swell' in roles and p.swell != 1.0:
+                was = p.swell
+                p.swell = 1.0
+                self.slab.channel_gain(self._sounding(ch, pids={p.pid}, tone=p.patch), 1.0 / was)
+            if 'drive' in roles and self.drive_step.pop(p.pid, None) is not None:
+                self.amp_dirty.add(p.pid)
+            if 'tone' in roles:
+                self.clav_step.pop(p.pid, None)
+            if 'detune' in roles:
+                self.detune_step.pop(p.pid, None)
+            if 'drones' in roles and self.drone_count.pop(p.pid, None) is not None and self._chanting(p, ch):
+                self._drones(p, ch, n0)
+            if 'drone note' in roles and self.drone_sel.pop(p.pid, None) is not None and self._chanting(p, ch):
+                self._drone_note(p, ch, n0)
 
     def _reset_controllers(self, n0, ch):
         """CC121. Modulation, expression, pedals, bend, pressure, RPN select.
@@ -9967,28 +10075,6 @@ class Live:
                 self.errors += 1
                 self.last_error = "%s: %s" % (type(e).__name__, e)
         self._wheel_reset = False
-        # ...AND THE WHEEL's OTHER ROLES BACK UNTOUCHED: the swell pedal open
-        # (its notes rescaled as the CC1 branch rescales them), the valve its
-        # own drive, the rockers, the detune and the drones the voice's own;
-        # the registration left as it is
-        for p in self.parts:
-            if not self._listens(p, ch):
-                continue
-            roles = self.wheel_roles(p)
-            if 'swell' in roles and p.swell != 1.0:
-                was = p.swell
-                p.swell = 1.0
-                self.slab.channel_gain(self._sounding(ch, pids={p.pid}, tone=p.patch), 1.0 / was)
-            if 'drive' in roles and self.drive_step.pop(p.pid, None) is not None:
-                self.amp_dirty.add(p.pid)
-            if 'tone' in roles:
-                self.clav_step.pop(p.pid, None)
-            if 'detune' in roles:
-                self.detune_step.pop(p.pid, None)
-            if 'drones' in roles and self.drone_count.pop(p.pid, None) is not None and self._chanting(p, ch):
-                self._drones(p, ch, n0)
-            if 'drone note' in roles and self.drone_sel.pop(p.pid, None) is not None and self._chanting(p, ch):
-                self._drone_note(p, ch, n0)
         try:
             self._one_core(n0, mido.Message("aftertouch", channel=ch, value=0))
         except Exception:
@@ -10137,6 +10223,7 @@ class Live:
         self.mts.reset_selections()
         for ch in _gch:
             self._reset_controllers(n0, ch)
+            self._jobs_power_on(n0, ch)          # (the wheel's jobs: power-on, not CC121's)
             self.vol[ch] = T.GM_DEFAULT_VOLUME
             self.expr[ch] = T.GM_DEFAULT_EXPRESSION
             try:
@@ -10523,8 +10610,8 @@ class Live:
         # waiting for someone to find the mod wheel before it sounds right is
         # not a default. Once the wheel has been moved it owns the setting.
         step = self.drive_step.get(pid)
-        drive = (part.patch.amp_drive if step is None else
-                 part.patch.amp_drive * LIVE_DRIVE_RANGE
+        drive = (self._drive(part) if step is None else
+                 self._drive(part) * LIVE_DRIVE_RANGE
                  * step / float(LIVE_DRIVE_STEPS))
         # THE INSERTION EFFECT's OD (gsefx: Overdrive, Distortion, the guitar
         # multis, the series and parallel OD types): its gain is already in the
@@ -11138,7 +11225,7 @@ class Live:
                   pv=max(vel / 127.0, 1e-3), acc=[0.0] * nrow, frev=f / 12.0, dl=0.0,
                   n_on=n0)
         if nrow == 2:
-            st["dl"] = _SIR.crank_samples(_SIR.crank_angle(self.wheel_at.get(ch, 0)),
+            st["dl"] = _SIR.crank_samples(_SIR.crank_angle(self.job_at.get((ch, T.WHEEL_CC['crank']), 0)),
                                           st["frev"], self.rate)
             st["acc"][1] = st["dl"]
         for r in rows:
@@ -11194,7 +11281,7 @@ class Live:
                 st["acc"][0] += (float(sl.BR[lo, 0]) - 1.0) * frames
                 if len(rows) > 1:
                     up = rows[1]
-                    dl = _SIR.crank_samples(_SIR.crank_angle(self.wheel_at.get(ch, 0)),
+                    dl = _SIR.crank_samples(_SIR.crank_angle(self.job_at.get((ch, T.WHEEL_CC['crank']), 0)),
                                             st["frev"], self.rate)
                     sl.BR[up, 0] = r + (dl - st["dl"]) / frames
                     sl.BC[up, 0] = st["acc"][1]
@@ -12919,7 +13006,7 @@ def selftest_gs(check):
         for _c1 in (0, 127):
             B.render(_bfile([_M("control_change", channel=0, control=0, value=8),
                              _M("program_change", channel=0, program=107),
-                             _M("control_change", channel=0, control=1, value=_c1)]
+                             _M("control_change", channel=0, control=T.WHEEL_CC['drones'], value=_c1)]
                             + _on(0, 67) + _on(0, 69)))
             _tdr.append([(d[1], d[4]) for d in B.LAST_DRONES])
         check("file: the taishogoto's wheel up strikes its drone with each stroke, down not",
@@ -14234,19 +14321,36 @@ def _selftest(only=""):
           abs(_g1 - _g0) < 2.0, "  (held E2 alone %.1f dB; after a B2 tapped at 3 s, %.1f)" % (_g0, _g1))
     _gl.shutdown()
 
-    # ---- the mod wheel is the swell pedal ----------------------------------
+    # ---- the drive knob (CC12) -------------------------------------------
     key = lv._amp_key(pid)
-    lv.on_midi(mido.Message("control_change", channel=0, control=1, value=0))
+    lv.on_midi(mido.Message("control_change", channel=0, control=T.WHEEL_CC['drive'], value=0))
     lv.apply(lv.n); settle()
-    check("wheel down: the stage is clean", not lv.slab.live.get(key))
-    lv.on_midi(mido.Message("control_change", channel=0, control=1, value=127))
+    check("drive down: the stage is clean", not lv.slab.live.get(key))
+    lv.on_midi(mido.Message("control_change", channel=0, control=T.WHEEL_CC['drive'], value=127))
     lv.apply(lv.n)
     drove = settle()
     one = len(lv.slab.live.get(key, []))
     _ampe = lambda: float(sum(float(lv.slab.a["aL"][i]) ** 2 + float(lv.slab.a["aR"][i]) ** 2
                               for i in lv.slab.live.get(key, [])))
     e_one = _ampe()
-    check("wheel up: the stage distorts", drove and one > 0, "  (%d partials)" % one)
+    check("drive up: the stage distorts", drove and one > 0, "  (%d partials)" % one)
+    # THE ORGAN's WHEEL IS ITS SWELL, NOT ITS DRIVE: the drive is CC12's and
+    # the panel's knob (Part.drive); CC121's CC1 = 0 leaves it (GM 2 3.5.2)
+    _dst = lambda: lv.drive_step.get(pid)
+    _ds0 = _dst()
+    lv.on_midi(mido.Message("control_change", channel=0, control=1, value=40)); lv.apply(lv.n)
+    _ds1, _sw1 = _dst(), lv.parts[0].swell
+    lv.on_midi(mido.Message("control_change", channel=0, control=121, value=0)); lv.apply(lv.n)
+    _ds121 = _dst()
+    lv.on_midi(mido.Message("control_change", channel=0, control=1, value=127)); lv.apply(lv.n)
+    lv.set_drive(lv.parts[0], 0.5); lv.apply(lv.n)
+    _kd = (lv._drive(lv.parts[0]), Part.from_dict(lv.parts[0].to_dict()).drive)
+    lv.set_drive(lv.parts[0], None); lv.apply(lv.n); settle()
+    check("an organ's wheel is its swell; its drive CC12's and the knob's, which a preset keeps",
+          _ds1 == _ds0 == LIVE_DRIVE_STEPS and _ds121 == _ds0 and abs(_sw1 - (40 / 127.0) ** 2) < 1e-9
+          and _kd == (0.5, 0.5) and lv._drive(lv.parts[0]) == lv.parts[0].patch.amp_drive,
+          "  (drive step %s; wheel at 40 %s, swell %.3f; after CC121 %s; knob 0.5 -> %s)"
+          % (_ds0, _ds1, _sw1, _ds121, _kd))
     # THE BUG THIS EXISTS FOR. sweep() releases anything whose key is not
     # down, and the amplifier's key carries no note -- so it was released on
     # every block, the instant after it was stamped. Audible as a click each
@@ -15264,7 +15368,7 @@ def _selftest(only=""):
         _m = mido.MidiFile(type=1, ticks_per_beat=480); _t = mido.MidiTrack(); _m.tracks.append(_t)
         _t.append(mido.Message("program_change", channel=0, program=109, time=0))
         if cc1 is not None:
-            _t.append(mido.Message("control_change", channel=0, control=1, value=cc1, time=0))
+            _t.append(mido.Message("control_change", channel=0, control=T.WHEEL_CC['drone stop'], value=cc1, time=0))
         for _n in notes:
             _t.append(mido.Message("note_on", channel=0, note=_n, velocity=100, time=0))
             _t.append(mido.Message("note_off", channel=0, note=_n, velocity=0, time=240))
@@ -21652,7 +21756,7 @@ def _selftest(only=""):
            _M("program_change", channel=0, program=125)]
     _cr = []
     for _w in (0, 127):
-        _x = _sir_file(_hv + [_M("control_change", channel=0, control=1, value=_w),
+        _x = _sir_file(_hv + [_M("control_change", channel=0, control=T.WHEEL_CC['crank'], value=_w),
                               _M("note_on", channel=0, note=60, velocity=127, time=0),
                               _M("note_off", channel=0, note=60, velocity=0, time=2880)], 3.5)
         _f1, _X, _f = _pk(_x, 2.0, 2.9, 150, 600)
@@ -21705,9 +21809,9 @@ def _selftest(only=""):
         return _sir_file([_M("program_change", channel=0, program=16)] + extra
                          + [_M("note_on", channel=0, note=69, velocity=100, time=0),
                             _M("note_off", channel=0, note=69, velocity=0, time=int(secs * 960))], secs + 0.5)
-    _sv3 = _swing(_org([_M("control_change", channel=0, control=94, value=60)]), B.SR)
-    _sof = _swing(_org([_M("control_change", channel=0, control=94, value=0)]), B.SR)
-    check("the scanner's selector (CC94): V3 swings a tonewheel note at the motor's rate, off does not",
+    _sv3 = _swing(_org([_M("control_change", channel=0, control=T.WHEEL_CC['scanner'], value=60)]), B.SR)
+    _sof = _swing(_org([_M("control_change", channel=0, control=T.WHEEL_CC['scanner'], value=0)]), B.SR)
+    check("the scanner's selector (CC81): V3 swings a tonewheel note at the motor's rate, off does not",
           _sv3[0] > 50.0 and abs(_sv3[1] - 6.87) < 0.1 and _sof[0] < 10.0,
           "  (V3 %.0f cents p-p at %.2f Hz; off %.0f cents)" % (_sv3[0], _sv3[1], _sof[0]))
     _f168 = _sir_file([_M("control_change", channel=0, control=0, value=8)]

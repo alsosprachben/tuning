@@ -634,6 +634,8 @@ int nv_host::run(int argc, char **argv)
         H.synth_forget = [&](int i, int lay, int k) { synth_forget((size_t)i, lay, k); };
         H.synth_send = [&](int i) { return synth_send((size_t)i); };
         H.part_touch = [&](int i, bool fx) { part_touch((size_t)i, fx ? 1 : 0); };
+        H.drive_get = [&](int i, double *o) { return drive_state((size_t)i, o); };
+        H.drive_set = [&](int i, double v) { part_drive((size_t)i, v); };
         // THE ON-SCREEN CONTROLS (livetui's): the host's list, sent past the routes
         H.controls = &screen_controls;
         H.control_send = [&](int key, int v, int ch) { control_send(key, v, ch); };
@@ -1196,6 +1198,8 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
             {                                   // its fixed touch (live's part.fixed_touch; absent, the patch's way)
                 const sess::J *ft = pd.get("fixed_touch");
                 sp.fixed = ft && (ft->is(sess::J::BOOL) || ft->is(sess::J::NUM)) ? (ft->d() != 0.0 ? 1 : 0) : -1;
+                const sess::J *dr = pd.get("drive");    // (an organ's drive knob: live's Part.drive; absent, the voice's)
+                sp.drive = dr && dr->is(sess::J::NUM) ? std::max(0.0, dr->d()) : -1.0;
                 const sess::J *cm = pd.get("cc_map");   // (a Messenger read on it: nvlive reads one on every part)
                 if (cm && cm->is(sess::J::STR) && cm->s == "messenger" && !msgr_reads)
                     messenger_reading(true);
@@ -1237,12 +1241,22 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
             if (k == 0) {                       // (at the start its program is the part's already)
                 part_set(0, sp.channel, sp.lo, sp.hi, sp.tr, sp.level, sp.muted);
                 part_touch(0, sp.fixed);
+                if (at_start)                   // (else after the pick's swap, below: a new program clears it)
+                    part_drive(0, sp.drive);
                 if (!at_start) {
                     int code = (sp.drums ? 128 : 0) + sp.program;
                     for (size_t j = 0; j < E.vpv.size() && sp.var && !sp.drums; j++)
                         if (E.vpv[j][0] == sp.program && E.vpv[j][1] == sp.var)
                             code = 256 + (int)j;
                     pick_row(0, code);
+                    if (sp.drive >= 0.0) {      // (its drive knob, behind the swap that brings its program in)
+                        const double dv = sp.drive;
+                        {
+                            std::lock_guard<std::mutex> lk(parts_mu);
+                            pats[0].drive = dv;
+                        }
+                        post([this, dv](long long) { nv_part_drive_later(part, pats[0].pi, dv); });
+                    }
                 }
                 continue;
             }
@@ -1414,6 +1428,10 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
             pd.o["fixed_touch"] = sess::boolean(pa.fixed != 0);
         else
             pd.o.erase("fixed_touch");
+        if (pa.drive >= 0.0)                    // (an organ's drive knob, live's likewise)
+            pd.o["drive"] = sess::real(pa.drive);
+        else
+            pd.o.erase("drive");
         if (msgr_reads && k == 0)               // (a Messenger read: the first part's cc_map, live's per part)
             pd.o["cc_map"] = sess::str("messenger");
         else if (!msgr_reads)

@@ -2634,6 +2634,9 @@ struct Part {
         double wtrem = 0.0, wtrem_hz = 0.0;
         bool wtrem_stereo = false;
         double amp = 0.0;
+        // ...ITS VOICE's, and the panel's drive knob (live's Part.drive: <0 the
+        // voice's); amp is the one in use
+        double amp0 = 0.0, drive = -1.0;
         // ...against a fixed peak (amp_reference by the program's trim, 0 the
         // chord's own), through a pair this unbalanced (amp_imbalance)
         double amp_ref = 0.0, amp_imb = 0.06;
@@ -2724,6 +2727,14 @@ struct Part {
     std::map<int, std::vector<void *>> tone_seg;
     bool at_seen[16] = {}, wheel_seen[16] = {};     // (live's pressure, wheel_at: a channel's, once moved)
     int wheel_v[16] = {};
+    // (channel, CC) -> a wheel job's last value (live's job_at: tonelib.WHEEL_CC),
+    // as its own CC or the wheel's route set it
+    std::map<std::pair<int, int>, int> job_at;
+    int job_get(int ch, int cc) const
+    {
+        auto it = job_at.find(std::make_pair(ch, cc));
+        return it == job_at.end() ? 0 : it->second;
+    }
     // THE CABINET (live's rotor_horn, rotor_drum: LiveRotor): one Leslie in
     // the room, every rotor part turning with it, from chorale; the half-moon's
     // position (STOP, CHORALE, TREMOLO) and each channel's wheel armed
@@ -2783,11 +2794,11 @@ struct Part {
     // live's callback: the rotors a block on, every rotor slot's swing, and
     // its Doppler where the horn's rate has moved
     // THE SCANNER (live._scan_*): its tables (the export's SCAN), each
-    // channel's CC94, the band rows of each (part, position) from the siren
+    // channel's CC81, the band rows of each (part, position) from the siren
     // rows' pool, and each rank's data for a position, worked out at its
     // first press (live prepares it off the audio thread)
     std::vector<double> scan;
-    std::map<int, int> cc94;
+    std::map<int, int> cc_scan;
     std::map<std::tuple<int, int>, std::vector<int>> scan_row;
     std::deque<int> siren_free = [] {
         std::deque<int> d;
@@ -2939,8 +2950,8 @@ struct Part {
     std::pair<int, int> scan_setting(const Patch &p, int ch) const
     {
         int depth = (p.scanner >> 2) & 3, cho = (p.scanner >> 4) & 1;
-        auto it = cc94.find(ch);
-        if ((p.scanner & 2) && it != cc94.end()) {
+        auto it = cc_scan.find(ch);
+        if ((p.scanner & 2) && it != cc_scan.end()) {
             static const int start[7] = {0, 18, 37, 55, 73, 91, 110};
             int pos = 0;
             for (int q = 0; q < 7; q++)
@@ -3884,7 +3895,8 @@ struct Part {
         p.wtrem = og ? og->wheel_trem : (k ? k->trem_depth : 0.0);
         p.wtrem_hz = og ? og->wtrem_hz : (k ? k->trem_hz : 0.0);
         p.wtrem_stereo = og ? og->wtrem_stereo != 0 : (k && k->trem_stereo);
-        p.amp = k ? k->amp_drive : 0.0;
+        p.amp0 = k ? k->amp_drive : 0.0;
+        p.amp = p.drive >= 0.0 ? p.drive : p.amp0;
         p.amp_ref = k && k->amp_reference != 0.0 ? k->amp_reference * nv_tcache_trim(p.cache, p.program) : 0.0;
         p.amp_imb = k ? k->amp_imbalance : 0.06;
         p.cab = k && k->cab_set ? k : nullptr;
@@ -4239,11 +4251,16 @@ struct Part {
     // live._tone_wheel: THE MOD WHEEL ON NOTES HELD THROUGH A PROGRAM CHANGE --
     // each old tone's own tremolo (its voice's wheel role), on its own notes
     long long n0_wheel = 0;                 // (the block's, for tone_wheel's retune)
-    void tone_wheel(int ch, int v)
+    void tone_wheel(int ch, int v, int jobs, bool routed)
     {
         for (size_t pi = 0; pi < patches.size(); pi++) {
             const Patch &p = patches[pi];
             if (!(p.channel < 0 || p.channel == ch))
+                continue;
+            int pj = jobs;
+            if (routed)                             // (the route: a part's held tones take only the jobs its voice has)
+                pj &= (p.wtrem > 0.0 ? 1 : 0) | (p.clav ? 2 : 0);
+            if (!pj)
                 continue;
             std::vector<const void *> olds;
             for (auto &kv : S.live) {
@@ -4267,6 +4284,9 @@ struct Part {
                 // (its wheel a vibrato where nothing else of that voice wants it: live.wheel_roles)
                 bool vib = k && k->wheel_vibrato && !(k->amp_drive > 0.0) && !(og && og->n_order) && !(dep > 0.0)
                            && !clv && !k->leslie && !k->wheel_swell;
+                dep = (pj & 1) ? dep : 0.0;
+                clv = clv && (pj & 2);
+                vib = vib && (pj & 4);
                 if (dep <= 0.0 && !clv && !vib)
                     continue;
                 std::vector<long> sl = sounding_tone(ch, p.pid, tone, true);
@@ -6132,7 +6152,7 @@ struct Part {
     // the patch then in use, a change of program between them its own)
     struct Swap;
     struct Post {
-        int kind;                           // 0 the stops, 1 a patch change, 2 a Moog's knob (set_synth)
+        int kind;                           // 0 the stops, 1 a patch change, 2 a Moog's knob (set_synth), 4 a drive knob
         std::vector<std::string> names;
         std::shared_ptr<Swap> swap;
         long long pid = 0;
@@ -6259,6 +6279,7 @@ struct Part {
             p.mb_b.reset();
             p.syn_kept[0].clear();
             p.syn_kept[1].clear();
+            p.drive = -1.0;                     // (an organ's drive knob too)
         }
         // THE SAME ORGAN BUILT AGAIN (a room switched to, a tuner changed: the
         // patch made anew, the voice the same -- its organ's tables the same)
@@ -6349,6 +6370,15 @@ struct Part {
             }
             if (q.kind == 2) {
                 synth_post(q, n0);
+                continue;
+            }
+            if (q.kind == 4) {                  // (a session's drive knob, after its swap)
+                if (q.pi >= 0 && q.pi < (int)patches.size()) {
+                    Patch &p = patches[q.pi];
+                    p.drive = q.value < 0.0 ? -1.0 : q.value;
+                    p.amp = p.drive >= 0.0 ? p.drive : p.amp0;
+                    amp_dirty.insert(p.pid);
+                }
                 continue;
             }
             if (q.kind == 3) {                  // (a session's or preset's knob, after its swap)
@@ -6642,6 +6672,7 @@ struct Part {
         mts_sel.clear();                        // (the store keeps its tables)
         for (int c = 0; c < 16; c++) {
             reset_controllers(c, n0);
+            jobs_power_on(c, n0);
             vol[c] = 100;
             expr[c] = 127;
             control(c, 10, 64, n0);
@@ -8191,14 +8222,26 @@ struct Part {
             control(ch, cv[0], cv[1], n0);
         }
         wheel_reset = false;
-        // ...AND THE WHEEL's OTHER ROLES BACK UNTOUCHED (live's): the swell open
-        // (its notes rescaled), the valve its own drive, the rockers, the detune
-        // and the drones the voice's own; the registration left as it is
+        aftertouch(ch, 0, n0);
+        rpn_none[ch] = false;
+        rpn_msb[ch] = rpn_lsb[ch] = 127;
+        pw_armed[ch] = true;
+    }
+
+    // live._jobs_power_on: a GM SYSTEM ON or GS RESET's power-on for the
+    // wheel's jobs (their own CCs, tonelib.WHEEL_CC -- CC121 leaves them, GM 2
+    // 3.5.2): the swell open (its notes rescaled), the valve its own drive, the
+    // rockers, the detune and the drones the voice's own; the registration left
+    // as it is
+    void jobs_power_on(int ch, long long n0)
+    {
+        for (auto it = job_at.begin(); it != job_at.end();)
+            it = it->first.first == ch ? job_at.erase(it) : std::next(it);
         if (hammond_on(ch))
             for (const Patch &p : patches) {
                 if (!(p.leslie || p.wheel_swell || p.amp > 0.0) || !(p.channel < 0 || p.channel == ch))
                     continue;
-                if (!(p.amp > 0.0) && p.wheel_swell && swell != 1.0) {
+                if (p.wheel_swell && (!(p.amp > 0.0) || p.leslie) && swell != 1.0) {
                     const double was = swell;
                     swell = 1.0;
                     S.channel_gain(sounding_tone(ch, p.pid, p.cache, false), 1.0 / was);
@@ -8228,10 +8271,6 @@ struct Part {
             if (dnote_class() && drone_sel.erase(pid) && chanting(ch))
                 drone_note(ch, n0);
         }
-        aftertouch(ch, 0, n0);
-        rpn_none[ch] = false;
-        rpn_msb[ch] = rpn_lsb[ch] = 127;
-        pw_armed[ch] = true;
     }
 
     // channel aftertouch: every key sounding on the channel (live's
@@ -8309,7 +8348,7 @@ struct Part {
         st.pv = std::max(vel / 127.0, 1e-3);
         st.frev = f / 12.0;
         if (nrow == 2) {
-            st.dl = siren_crank_samples(siren_crank_angle(wheel_v[ch]), st.frev, rate);
+            st.dl = siren_crank_samples(siren_crank_angle(job_get(ch, NV_CC_CRANK)), st.frev, rate);
             st.acc[1] = st.dl;
         }
         for (int r : st.rows) {
@@ -8392,7 +8431,7 @@ struct Part {
                 st.acc[0] += ((double)BRt[lo] - 1.0) * frames;
                 if (st.rows.size() > 1) {
                     const int up = st.rows[1];
-                    const double dl = siren_crank_samples(siren_crank_angle(wheel_v[ch]), st.frev, rate);
+                    const double dl = siren_crank_samples(siren_crank_angle(job_get(ch, NV_CC_CRANK)), st.frev, rate);
                     BRt[up] = (float)(r + (dl - st.dl) / frames);
                     BCt[up] = st.acc[1];
                     BLt[2 * up] = (float)l0;
@@ -8450,8 +8489,9 @@ struct Part {
             const double t = (double)n0 / rate;     // (the hand and the wheel where they already are)
             if (at_seen[ch])
                 tf.at.push_back(std::make_pair(t, (int)nearbyint(pressure[ch] * 127.0)));
-            if (wheel_seen[ch])
-                tf.wheel.push_back(std::make_pair(t, wheel_v[ch]));
+            auto jm = job_at.find(std::make_pair(ch, (int)NV_CC_MOUTH));     // (the mouth's own CC)
+            if (jm != job_at.end())
+                tf.wheel.push_back(std::make_pair(t, jm->second));
             if (tf.kind == 4)
                 tf.g = nv_npy_new((unsigned long long)(fxc + k->mouth_seed));
             if (k->efx_raw && efx_x) {          // ITS OWN EFFECT: its setting, the part on it, at 0 (tone_events)
@@ -9201,8 +9241,37 @@ struct Part {
     {
         if (messenger_cc(ch, cc, v, n0))
             return;                                 // a Messenger's panel, on a part that reads its chart
-        if (cc == 94) {
-            cc94[ch] = v;                           // the scanner's selector (_scan_stamp)
+        // THE WHEEL's JOBS ON CCs OF THEIR OWN (tonelib.WHEEL_CC): CC1 is GM's
+        // modulation, and the wheel a default ROUTE to each part's other
+        // jobs (live._wheel_route) -- not a reset's CC1 = 0 (GM 2 3.5.2)
+        const bool wr = cc == 1 && !wheel_reset;
+        if (cc == NV_CC_CRANK || cc == NV_CC_MOUTH)
+            job_at[std::make_pair(ch, cc)] = v;     // (their CCs' own: live's job_at)
+        if (wr)
+            for (const Patch &p : patches) {
+                if (!(p.channel < 0 || p.channel == ch))
+                    continue;
+                const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
+                if (p.organ && p.organ->siren_up)
+                    job_at[std::make_pair(ch, (int)NV_CC_CRANK)] = v;     // (the crank, routed)
+                if (k && k->flt_set == 2 && k->flt_k == 4)
+                    job_at[std::make_pair(ch, (int)NV_CC_MOUTH)] = v;     // (the mouth, routed)
+            }
+        if (cc == NV_CC_LESLIE) {
+            // THE ROTOR's SPEED (CC80): the file's zones (leslie.zone), the
+            // rotors aimed there as the half-moon aims them
+            bool les = false;
+            for (const Patch &p : patches)
+                les = les || (p.leslie && (p.channel < 0 || p.channel == ch));
+            if (les) {
+                const double ladder[3] = {0.0, S.les[3], S.les[4]};
+                half_moon = v < 42 ? 0 : v < 85 ? 1 : 2;
+                rotor_horn.target = ladder[half_moon];
+                rotor_drum.target = ladder[half_moon];
+            }
+        }
+        if (cc == NV_CC_SCANNER) {
+            cc_scan[ch] = v;                           // the scanner's selector (_scan_stamp)
             if (scan_async)                         // ...its new position prepared (_scan_prefetch)
                 for (const Patch &p : patches)
                     if (p.scanner && (p.channel < 0 || p.channel == ch)) {
@@ -9338,7 +9407,7 @@ struct Part {
                 mono[ch] = true;
             else if (cc == 127)
                 mono[ch] = false;
-        } else if (cc == 1 && !wheel_reset && hammond_on(ch)) {
+        } else if ((cc == NV_CC_DRIVE || wr) && hammond_on(ch)) {
             // A HAMMOND'S MOD WHEEL, OR AN AMPLIFIED VOICE'S (live's
             // wheel_roles): with a valve, its drive (LIVE_DRIVE_STEPS over
             // the range) -- a guitar amp's own gain knob; else its swell pedal --
@@ -9347,7 +9416,11 @@ struct Part {
             for (const Patch &p : patches) {
                 if (!(p.leslie || p.wheel_swell || p.amp > 0.0) || !(p.channel < 0 || p.channel == ch))
                     continue;
-                if (p.amp > 0.0) {
+                if (cc == NV_CC_DRIVE && !(p.amp > 0.0))
+                    continue;                       // (CC12 the drive's: the swell is the wheel's route alone)
+                // A TONEWHEEL ORGAN's WHEEL IS ITS SWELL, its drive or not: the
+                // drive CC12's and the panel's knob (live's wheel_roles, _wheel_route)
+                if (p.amp > 0.0 && !(cc == 1 && p.leslie && p.wheel_swell)) {
                     int step = (int)nearbyint(v / 127.0 * LIVE_DRIVE_STEPS);
                     auto it = drive_step.find(p.pid);
                     if (it == drive_step.end() || it->second != step) {
@@ -9362,16 +9435,16 @@ struct Part {
                 }
                 break;
             }
-        } else if (cc == 1 && wheel_trem_on(ch)) {
+        } else if ((cc == NV_CC_TREMOLO || wr) && wheel_trem_on(ch)) {
             wheel_tremolo(ch, v);
-        } else if (cc == 1 && !wheel_reset && organ_on(ch)) {
+        } else if ((cc == NV_CC_CRESCENDO || wr) && organ_on(ch)) {
             // AN ORGAN'S MOD WHEEL IS ITS CRESCENDO PEDAL (live's 'crescendo' role)
             // (not the double siren's: its wheel is the crank and nothing else)
             for (size_t pi = 0; pi < patches.size(); pi++)
                 if (patches[pi].organ && patches[pi].organ->n_order && !patches[pi].organ->siren_up
                     && (patches[pi].channel < 0 || patches[pi].channel == ch))
                     crescendo((int)pi, v, n0);
-        } else if (cc == 1 && !wheel_reset && detune_wheel) {
+        } else if ((cc == NV_CC_DETUNE || wr) && detune_wheel) {
             static const int steps[3] = {0, 64, 127};       // live.DETUNE_STEPS: min(), the first of a tie
             int best = steps[0];
             for (int st : steps)
@@ -9381,9 +9454,11 @@ struct Part {
         }
         if (cc == 2)
             cc2v[ch] = v / 127.0;               // breath: a siren's air (siren_block)
-        if (cc == 1) {                          // the wheel's last (live's wheel_at), and THE MOUTH (its 'mouth' role)
+        if (cc == 1) {                          // the wheel's last (live's wheel_at)
             wheel_seen[ch] = true;
             wheel_v[ch] = v;
+        }
+        if (cc == NV_CC_MOUTH || wr) {          // THE MOUTH (its 'mouth' job: CC19, or the wheel's route)
             bool mouth = false;
             for (const Patch &p : patches) {
                 const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
@@ -9410,7 +9485,7 @@ struct Part {
                         vib_apply(p, ch, n0);
             }
         }
-        if (cc == 1 && !wheel_reset)            // THE DRONES ON THE WHEEL (live's dronists), live
+        if (cc == NV_CC_DRONES || wr)           // THE DRONES (live's 'drones' job: CC18, or the wheel's route)
             for (int pi = 0; pi < (int)patches.size(); pi++) {
                 if (!(patches[pi].channel < 0 || patches[pi].channel == ch))
                     continue;
@@ -9427,7 +9502,7 @@ struct Part {
                         drones(ch, n0);
                 }
             }
-        if (cc == 1 && !wheel_reset)            // THE PUNGI's DRONE NOTE ON THE WHEEL (live's 'drone note')
+        if (cc == NV_CC_DRONES || wr)           // THE PUNGI's DRONE NOTE (live's 'drone note': CC18, or the route)
             for (int pi = 0; pi < (int)patches.size(); pi++) {
                 if (!(patches[pi].channel < 0 || patches[pi].channel == ch))
                     continue;
@@ -9443,7 +9518,7 @@ struct Part {
                         drone_note(ch, n0);
                 }
             }
-        if (cc == 1 && !wheel_reset)            // A CLAVINET's TONE ROCKERS (live's 'tone' role)
+        if (cc == NV_CC_TONE || wr)             // A CLAVINET's TONE ROCKERS (live's 'tone' job: CC70, or the route)
             for (const Patch &p : patches) {
                 if (!p.clav || !(p.channel < 0 || p.channel == ch))
                     continue;
@@ -9454,9 +9529,19 @@ struct Part {
                     S.clav_tone(step, sounding_tone(ch, p.pid, p.cache, false));
                 }
             }
-        if (cc == 1 && !key_tone.empty()) {     // ...and the tones held from before a program change
+        if (!key_tone.empty() && (cc == 1 || cc == NV_CC_TREMOLO || cc == NV_CC_TONE)) {
+            // ...and the tones held from before a program change (live's
+            // _tone_wheel): CC1 their vibrato; CC92 and CC70 their tremolo and
+            // rockers -- or the wheel's route, on the parts that have the job
             n0_wheel = n0;
-            tone_wheel(ch, v);
+            if (cc == 1)
+                tone_wheel(ch, v, 4, false);
+            if (cc == NV_CC_TREMOLO)
+                tone_wheel(ch, v, 1, false);
+            if (cc == NV_CC_TONE)
+                tone_wheel(ch, v, 2, false);
+            if (wr)
+                tone_wheel(ch, v, 1 | 2, true);
         }
     }
 
@@ -11748,6 +11833,44 @@ void nv_part_synth_forget(void *h, int pi, int layer, int knob)
         if (!layer)
             P->messenger_sync(p, knob);
     }
+}
+
+// AN ORGAN's DRIVE KNOB (live.set_drive): its valve stage's drive, <0 the
+// voice's own (amp_drive); the stage rebuilt at the next block
+void nv_part_drive(void *h, int pi, double v)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size())
+        return;
+    nv::slab::Part::Patch &p = P->patches[pi];
+    p.drive = v < 0.0 ? -1.0 : v;
+    p.amp = p.drive >= 0.0 ? p.drive : p.amp0;
+    P->amp_dirty.insert(p.pid);
+}
+
+// ...one set after what is already queued (a session's, behind the swap
+// that brings its program in)
+void nv_part_drive_later(void *h, int pi, double v)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    nv::slab::Part::Post q{4, {}, nullptr};
+    q.pi = pi;
+    q.value = v;
+    P->posts.push_back(std::move(q));
+}
+
+// ...and what it is: out[0] the drive in use, [1] the voice's, [2] the
+// knob's (<0 none); 1 for a tonewheel organ's (a Leslie's), 0 else
+int nv_part_drive_get(void *h, int pi, double *out)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size())
+        return 0;
+    const nv::slab::Part::Patch &p = P->patches[pi];
+    out[0] = p.amp;
+    out[1] = p.amp0;
+    out[2] = p.drive;
+    return p.leslie && !p.drums ? 1 : 0;
 }
 
 // A PATCH's FIXED TOUCH (live's part.fixed_touch: -1 its own way, 1 on, 0

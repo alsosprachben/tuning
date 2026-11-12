@@ -1482,7 +1482,7 @@ int main(int argc, char **argv)
     // ...then the chests' wind (_prep_wind_rows: a row a family of each organ channel's ranks)
     const int nw = nv_song_organ_wind_rows(song, (int)gch.size() + nbr_);
     // ...then THE SCANNERS' (_prep_scanner_channels): each channel whose note
-    // has one, as the file's notes come, at its first CC94's position (the
+    // has one, as the file's notes come, at its first CC81's position (the
     // voice's own without one, or without the switch): six band rows each
     std::vector<long long> sch;
     std::vector<int> sdep, scho, srow;
@@ -1498,7 +1498,7 @@ int main(int argc, char **argv)
         if (!k || !k->scanner)
             continue;
         int depth = (k->scanner >> 2) & 3, cho = (k->scanner >> 4) & 1, v;
-        if ((k->scanner & 2) && nv_song_first_cc(song, c, 94, &v)) {
+        if ((k->scanner & 2) && nv_song_first_cc(song, c, NV_CC_SCANNER, &v)) {
             // scanner.setting_from_cc: off, V1-V3, C1-C3 from 0, 18, 37, 55, 73, 91, 110
             static const int start[7] = {0, 18, 37, 55, 73, 91, 110};
             int pos = 0;
@@ -2146,7 +2146,7 @@ int main(int argc, char **argv)
             aref.push_back(ref);
             aimb.push_back(imb);
             int v;
-            if (!rotor && nv_song_first_cc(song, c % 256, 1, &v))     // (the part's: gsefx.part_of)
+            if (!rotor && nv_song_first_cc(song, c % 256, NV_CC_DRIVE, &v))     // (the part's CC12: gsefx.part_of)
                 drv *= 4.0 * v / 127.0;
             ach.push_back(c);
             adr.push_back(drv);
@@ -2603,10 +2603,10 @@ int main(int argc, char **argv)
     for (int k = 0, nl = nv_song_leslie(song, -1, nullptr); k < nl; k++) {
         long long c;
         int kind = nv_song_leslie(song, k, &c);
-        int nc = nv_song_ccs(song, c % 256, 1, nullptr, nullptr, 0);     // (the part's CC1: gsefx.part_of)
+        int nc = nv_song_ccs(song, c % 256, NV_CC_LESLIE, nullptr, nullptr, 0);     // (the part's CC80: gsefx.part_of)
         std::vector<double> ct(nc);
         std::vector<int> cv(nc);
-        nv_song_ccs(song, c % 256, 1, ct.data(), cv.data(), nc);
+        nv_song_ccs(song, c % 256, NV_CC_LESLIE, ct.data(), cv.data(), nc);
         if (E.les.empty()) {
             fprintf(stderr, "nvrender: %s is an export from before the Leslie (native_export.py again)\n", argv[1]);
             return 1;
@@ -3167,7 +3167,7 @@ int main(int argc, char **argv)
                     // channel the seed
                     float *row = FCT.data() + (size_t)frow[q] * fgn;
                     const int nm = k->n_mouth;
-                    int nc = nv_midi_ccs(midi, (int)fpart_[q], 1, nullptr, nullptr, 0);
+                    int nc = nv_midi_ccs(midi, (int)fpart_[q], NV_CC_MOUTH, nullptr, nullptr, 0);
                     if (nc <= 0) {
                         nv_mouth_track((unsigned long long)(fch_[q] + k->mouth_seed), nm, &k->mouth_st[0][0],
                                        k->mouth_cdf, k->mouth_dw, k->mouth_glide, step, fgn, row);
@@ -3175,7 +3175,7 @@ int main(int argc, char **argv)
                     }
                     std::vector<double> tt(nc);
                     std::vector<int> vv(nc);
-                    nv_midi_ccs(midi, (int)fpart_[q], 1, tt.data(), vv.data(), nc);
+                    nv_midi_ccs(midi, (int)fpart_[q], NV_CC_MOUTH, tt.data(), vv.data(), nc);
                     std::vector<std::pair<double, double>> ev;
                     for (int a = 0; a < nc; a++)
                         ev.push_back(std::make_pair(tt[a], (double)vv[a]));

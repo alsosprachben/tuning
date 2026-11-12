@@ -3191,7 +3191,7 @@ def _prep_siren(BCrows, BRrows, _BLrows, _F, _mpe_member, ats, ccs, nblk, notes,
             _at = sorted(ats.get(_c, []))
             _pt = sorted(pts.get((_c, _nt), []))
             _c2 = sorted((_t, _val) for _t, _cc, _val in ccs.get(_c, []) if _cc == 2)
-            _c1 = sorted((_t, _val) for _t, _cc, _val in ccs.get(_c, []) if _cc == 1)
+            _c1 = sorted((_t, _val) for _t, _cc, _val in ccs.get(_c, []) if _cc == T.WHEEL_CC['crank'])
             for _i, (_on, _of, _v, _spc) in enumerate(_ns):
                 if _tprev is not None and _on > _tprev:
                     _rot.coast(_on - _tprev)
@@ -5192,7 +5192,9 @@ def _note_amp_drive(em, props, nt, _AMP_CH, _AMP_IMB, _AMP_LV0, _AMP_REF, _EFXN,
         # edge of breakup and past it, with nothing else changed. It only
         # scales voices that HAVE an amplifier -- setting it does not put
         # one in front of a flute.
-        # CC1 IS THE GAIN KNOB, for a voice that is not a rotor. Live it
+        # CC12 IS THE GAIN KNOB (T.WHEEL_CC: Effect Control 1; it was CC1, a GS
+        # file's vibrato gesture setting a guitar's amp for the piece -- Feena's
+        # distortion guitar clean), for a voice that is not a rotor. Live it
         # already is (see live.py, LIVE_DRIVE_STEPS); offline it was
         # ignored, so a file could not ask for a setting it can ask for
         # live. Same mapping, so a part sounds the same either way:
@@ -5214,7 +5216,7 @@ def _note_amp_drive(em, props, nt, _AMP_CH, _AMP_IMB, _AMP_LV0, _AMP_REF, _EFXN,
         # have.
         _drv = float(props.amp_drive)
         if not getattr(props, 'leslie', False):
-            _c1 = [v for t, cc, v in in_order(ccs.get(_GSX.part_of(em.channel), [])) if cc == 1]
+            _c1 = [v for t, cc, v in in_order(ccs.get(_GSX.part_of(em.channel), [])) if cc == T.WHEEL_CC['drive']]
             if _c1:
                 _drv *= 4.0 * _c1[0] / 127.0
         _AMP_CH[em.channel] = float(os.environ.get('TUNING_AMP_DRIVE', _drv))
@@ -5399,7 +5401,8 @@ def _note_register(em, props, nt, _PEDV_CH, _PED_CH, _REG_CH, _SOST_HELD, _pedal
 def _note_tremolo(em, props, _TREM_CH, ccs):
     """The channel's tremolo (tremolo_depth), set once."""
     if getattr(props, 'tremolo_depth', 0.0) and em.channel not in _TREM_CH:
-        # CC1 IS THE DEPTH KNOB. On a Rhodes suitcase and a Wurlitzer the
+        # CC92 IS THE DEPTH KNOB (T.WHEEL_CC: "Effects 2 Depth, formerly
+        # Tremolo Depth"; it was CC1). On a Rhodes suitcase and a Wurlitzer the
         # modulation depth is the one panel control a player moves while
         # playing, so the wheel is where it belongs -- and these voices ship
         # amp_drive 0, so the CC1-to-drive path above never fires and the
@@ -5407,7 +5410,7 @@ def _note_tremolo(em, props, _TREM_CH, ccs):
         #
         # A file with no CC1 gets no modulation, which is the panel's own
         # default position and what every file in the corpus will see.
-        _c1 = [v for t, cc, v in in_order(ccs.get(_GSX.part_of(em.channel), [])) if cc == 1]
+        _c1 = [v for t, cc, v in in_order(ccs.get(_GSX.part_of(em.channel), [])) if cc == T.WHEEL_CC['tremolo']]
         if getattr(props, 'tremolo_intrinsic', False):
             # AN INTRINSIC TREMOLO IS NOT A WHEEL EFFECT. GM 44 is called
             # Tremolo Strings: the stroke is the patch, so it is on at full
@@ -8042,7 +8045,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                         break
         if _bpc is None or is_drum(next(_e[6] for _e in notes if _e[0] == _c)):
             continue
-        _c1 = [v for t, cc, v in in_order(ccs.get(_c, [])) if cc == 1]
+        _c1 = [v for t, cc, v in in_order(ccs.get(_c, [])) if cc == T.WHEEL_CC['drone note']]
         if getattr(_bpc, 'drone_note_wheel', False):
             if _no_part_drones(path):
                 continue          # live's template: live sounds the drone itself
@@ -8073,7 +8076,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
 
     def _drone_stop(_c, _pc):
         if _c not in _TD_CH:
-            _c1t = [v for t, cc, v in in_order(ccs.get(_c, [])) if cc == 1]
+            _c1t = [v for t, cc, v in in_order(ccs.get(_c, [])) if cc == T.WHEEL_CC['drone stop']]
             _TD_CH[_c] = (min(len(_pc.drone_stops) - 1, int(_c1t[0] * len(_pc.drone_stops) / 128))
                           if _c1t else int(_pc.drone_stop_default))
         return _TD_CH[_c]
@@ -8563,7 +8566,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # clavinet's rockers it cannot be a pass over the finished table at all,
         # because a detune is in the partials' FREQUENCIES.
         if nt.ch not in _DETUNE_CH:
-            _c1d = [v for t, cc, v in in_order(ccs.get(nt.ch, [])) if cc == 1]
+            _c1d = [v for t, cc, v in in_order(ccs.get(nt.ch, [])) if cc == T.WHEEL_CC['detune']]
             _DETUNE_CH[nt.ch] = (_c1d[0] / 64.0) if _c1d else 1.0
         T.honky_detune = _DETUNE_CH[nt.ch] if getattr(nt.pc, 'detune_wheel', False) else 1.0
         # THE DRONES, on the same wheel and by the same rule. A piper corks a
@@ -8588,7 +8591,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # recorded in sources.md, and it was reintroduced within the hour.
         if getattr(nt.pc, 'drone_wheel', False):
             if nt.ch not in _DRONE_CH:
-                _c1d2 = [v for t, cc, v in in_order(ccs.get(nt.ch, [])) if cc == 1]
+                _c1d2 = [v for t, cc, v in in_order(ccs.get(nt.ch, [])) if cc == T.WHEEL_CC['drones']]
                 _DRONE_CH[nt.ch] = (int(round(_c1d2[0] / 127.0 * 3.0)) if _c1d2
                                  # drone_RATIOS, the class's tuple: drone_hz
                                  # became a property (it follows the chanter's
@@ -8980,7 +8983,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # the file moves the mod wheel, set by it ("oo" at 0, "ah" at 127)
             _FILTER_CH[em.channel] = __import__('efxfilter').mouth(
                 props.mouth_states, props.mouth_dwell_s, props.mouth_glide_s, props.mouth_floor, seed=int(em.channel),
-                wheel=[(_t, _v) for _t, _cc, _v in ccs.get(nt.ch, []) if _cc == 1])
+                wheel=[(_t, _v) for _t, _cc, _v in ccs.get(nt.ch, []) if _cc == T.WHEEL_CC['mouth']])
         _note_amp_drive(em, props, nt, _AMP_CH, _AMP_IMB, _AMP_LV0, _AMP_REF, _EFXN, ccs)
         # A VOICE's OWN GATE (noise_gate: a chugging rhythm guitar's, 28.1):
         # its rows alone through efxbus.NoiseGate over the whole file, on the
@@ -9016,7 +9019,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # ONE VALUE FOR THE PIECE, from the channel's first CC1, the same
             # rule the amplifier's drive follows: a player sets the rockers and
             # then plays, where live it is a control being moved.
-            _c1 = [v for t, cc, v in in_order(ccs.get(_GSX.part_of(em.channel), [])) if cc == 1]
+            _c1 = [v for t, cc, v in in_order(ccs.get(_GSX.part_of(em.channel), [])) if cc == T.WHEEL_CC['tone']]
             _set = (int(round(_c1[0] / 127.0 * (len(T.CLAV_TONE) - 1)))
                     if _c1 else T.CLAV_FLAT)
             _set = int(os.environ.get('TUNING_CLAV', _set))
@@ -9064,7 +9067,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # speed -- leslie.Rotor spends real seconds getting between them.
             import leslie as _LES0
             _req = [(t, _LES0.zone(v)) for t, cc, v in in_order(ccs.get(_GSX.part_of(em.channel), []))
-                    if cc == 1]
+                    if cc == T.WHEEL_CC['leslie']]
             if not _req or _req[0][0] > 0.0:
                 _req.insert(0, (0.0, _LES0.TREMOLO
                                 if getattr(props, 'leslie_fast', True)

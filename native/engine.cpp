@@ -1344,7 +1344,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         n.stroke_tilt = pv[0]; n.stroke_mouth = pv[1]; n.stroke_morph = pv[2];
         double det = 1.0;
         int c1;
-        if (k->detune_wheel && nv_song_first_cc(song, ch, 1, &c1))
+        if (k->detune_wheel && nv_song_first_cc(song, ch, NV_CC_DETUNE, &c1))
             det = c1 / 64.0;
         n.detune_lo = k->detune_lo * det; n.detune_hi = k->detune_hi * det;
         memcpy(n.planes, k->room_planes, sizeof n.planes);

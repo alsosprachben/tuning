@@ -897,7 +897,7 @@ typedef struct NoteClass {
     const struct OrganSpec *organ;
     // A HAMMOND'S CABINET AND AMPLIFIER: its rotating speaker (leslie: 0
     // none, 1 starting on chorale, 2 on tremolo -- leslie_fast), its scanner
-    // (0 none, else 1, +2 a selector CC94 sets -- scanner_switch -- +4 x
+    // (0 none, else 1, +2 a selector CC81 sets -- scanner_switch -- +4 x
     // its own depth 1-3, +16 its own on chorus), its valve stage's drive
     // (amp_drive, 0 none) -- against a fixed peak (amp_reference, 0 the
     // segment's own; the channel's fader taken back out), its pair's
@@ -1422,6 +1422,12 @@ void nv_song_moog_add_moving(void *s, long long ch, const double *ft, const Moog
 int nv_song_choke(void *s, long long ch, int note, double on, double *out);
 /* a note's class: K[128 * program + key], a drum set's K[16384 + 128 * program + key] */
 #define NV_K_DRUMS 16384
+
+/* THE WHEEL'S JOBS' OWN CCs (tonelib.WHEEL_CC): CC1 is GM's modulation (a
+   vibrato, a Moog's LFO 2); every other job the mod wheel had reads its own
+   controller, live's wheel a default route to it */
+enum { NV_CC_CRESCENDO = 4, NV_CC_DRIVE = 12, NV_CC_DETUNE = 13, NV_CC_DRONES = 18, NV_CC_MOUTH = 19,
+       NV_CC_CRANK = 20, NV_CC_TONE = 70, NV_CC_LESLIE = 80, NV_CC_SCANNER = 81, NV_CC_TREMOLO = 92 };
 /* ...a variation's (bank select): K[NV_K_VAR + 128 * slot + key] */
 #define NV_K_DRONE (2 * NV_K_DRUMS)
 /* ...a drone's class (a bagpipe's: drone_classes): K[NV_K_DRONE + its index], 256 of them */
