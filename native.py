@@ -1589,7 +1589,13 @@ def moog_spec(cls):
     takes them -- or None where a panel has what the native note has not
     (moog_voice). The waveshapes' coefficients are moog.py's own at 64 (and
     32) harmonics: a harmonic's is the same however many are asked for."""
-    got = _MOOG.get(cls)
+    # (keyed by its panels as well as the class: a class's messenger dict, or
+    # TUNING_MOOG_PANEL, changed while running -- the selftest's checks turn
+    # MoogSawLead's knobs -- is another panel, not the one first worked out)
+    key = (cls, repr(sorted((getattr(cls, 'messenger', None) or {}).items())),
+           repr(sorted((getattr(cls, 'messenger_b', None) or {}).items())),
+           os.environ.get('TUNING_MOOG_PANEL'), os.environ.get('TUNING_MOOG_PANEL_B'))
+    got = _MOOG.get(key)
     if got is None:
         import cmath
         import moog as MG
@@ -1673,7 +1679,7 @@ def moog_spec(cls):
                 L.mf_grid, L.mf_max, L.mf_floor, L.mf_poles = (float(mf104.GRID), float(mf104.MAX_REPEATS),
                                                                float(mf104.REPEAT_FLOOR), float(mf104.FILTER_POLES))
         spec.n_layer = len(lays) if ok else 0
-        got = _MOOG[cls] = spec if ok else False
+        got = _MOOG[key] = spec if ok else False
     return got or None
 
 
@@ -3179,6 +3185,15 @@ def organ(cls):
 
 
 _FAMILIES = {}              # organ_family's name -> its id (OrganSpec.family)
+
+
+def forget():
+    """Every per-class table worked out so far (_CLASS, _NOTE, _ORGAN, _MOOG,
+    _SL_CLS) let go, made again at the next use: for a class whose attributes
+    were changed while running -- the selftest's, which turn a voice's
+    constants and render again. A render's own classes never change under it."""
+    for d in (_CLASS, _NOTE, _ORGAN, _MOOG, _SL_CLS):
+        d.clear()
 
 
 _SL_CLS = {}         # a struck layer's class, by the class it is under (native_export's sl_idx)

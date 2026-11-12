@@ -13846,7 +13846,7 @@ def _selftest(only=""):
     # a synth lead and makes the wheel a tempo control
     was = _T.TrumpetProperties.solo_vibrato_spread
     _T.TrumpetProperties.solo_vibrato_spread = 0.0
-    _T._SOLO_VIBRATO.clear(); _PATCHES.clear()
+    _T._SOLO_VIBRATO.clear(); _PATCHES.clear(); __import__("native").forget()   # (native's tables too)
     lv = Live(program=56, rate=48000, frames=128, verbose=False); lv.warm()
     for nn in (60, 64, 67, 72):
         lv.on_midi(mido.Message("note_on", channel=0, note=nn, velocity=100))
@@ -13856,7 +13856,7 @@ def _selftest(only=""):
           len(np.unique(lv.slab.a["vp"][ix])) == 1 and len(np.unique(lv.slab.a["vr"][ix])) == 1)
     lv.shutdown()
     _T.TrumpetProperties.solo_vibrato_spread = was
-    _T._SOLO_VIBRATO.clear(); _PATCHES.clear()
+    _T._SOLO_VIBRATO.clear(); _PATCHES.clear(); __import__("native").forget()
 
     # ---- vibrato must reach a voice that also SPEAKS ------------------------
     # The kernel's mode-lock transient and its vibrato shared one slot and the
@@ -18908,6 +18908,7 @@ def _selftest(only=""):
     _menv6 = os.environ.get("TUNING_MOOG_PANEL")
     os.environ.pop("TUNING_MOOG_PANEL", None)
     _UC.moog_unison = __import__("sc88_synth").SUPERSAW
+    _PATCHES.clear()                       # (81's patch built with it, not an earlier check's)
     try:
         _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=81)
         _mm.save(_mpath)
@@ -18940,6 +18941,7 @@ def _selftest(only=""):
         _l1 = _BRb.synth_window(_lq1, 0, _lq1["N"])[0].astype(float)
     finally:
         _UC.moog_unison = None
+        _PATCHES.clear()                   # (...nor the checks after it)
         if _menv6 is not None:
             os.environ["TUNING_MOOG_PANEL"] = _menv6
     _la, _lb = _lL[_lon:], _lF[_lon:]
@@ -20150,6 +20152,7 @@ def _selftest(only=""):
     def _keyup_run(click):
         was = _T.ClavinetProperties.release_click_db
         _T.ClavinetProperties.release_click_db = was if click else None
+        _PATCHES.clear(); __import__("native").forget()     # (its patch and native's tables built again)
         lvk = Live(program=7, rate=48000, frames=128, verbose=False); lvk.warm()
         out = []
         def _pk(sec):
@@ -20160,6 +20163,7 @@ def _selftest(only=""):
         lvk.on_midi(mido.Message("note_off", channel=0, note=52, velocity=0)); _pk(0.3)
         lvk.shutdown()
         _T.ClavinetProperties.release_click_db = was
+        _PATCHES.clear(); __import__("native").forget()
         return np.concatenate(out)
     _ka, _kb = _keyup_run(True), _keyup_run(False)
     _kd = _ka - _kb
