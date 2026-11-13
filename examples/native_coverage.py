@@ -123,7 +123,7 @@ TASKS = [
                   "SC-88's hammer-on (hammer_legato: the fretting hand, its strings and guitars)"),
     ("GM1", False, "Files: a sung part's text, vocalise and declared parts (TUNING_LYRIC_LANG, TUNING_VOCALISE, "
                    "TUNING_VOICE_PARTS)"),
-    ("GM1", False, "Files: organs -- two on a channel, an organ beside a variation, swell laws of their own"),
+    ("GM1", False, "Files: two organs with swell laws of their own (nvrender refuses them; an organ beside a variation is done, e6199b7)"),
     ("GM2", True, "Bank select in files (CC0/CC32): GM2's banks (120 drums, 121 melodic) and GS's variations, "
                   "layered ones too (nvrender; nvlive refuses a bank)"),
     ("GM2", True, "Bank select in nvlive: CC0 and CC32 latched until a program change reads them (GS's in a map, "

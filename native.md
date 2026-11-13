@@ -54,7 +54,7 @@ What it needs first, and live's side:
 - [x] Files: the uilleann pipes' cut (cut_semitones: 109.11, Song::gliss -- the flick takes the written note's legato, _CUT_OF) and the pungi's wheel-chosen drone (111.8, Song::drones)
 - [x] Live: the uilleann's cut (Live._cut_on: the flick, its key spared by the sweep) and the pungi's drone (Live._drone_note, its own variation's templates: VDRN) -- their templates without them (NO_CUT, NO_PART_DRONES)
 - [ ] Files: a sung part's text, vocalise and declared parts (TUNING_LYRIC_LANG, TUNING_VOCALISE, TUNING_VOICE_PARTS)
-- [ ] Files: organs -- two on a channel, an organ beside a variation, swell laws of their own
+- [ ] Files: two organs with swell laws of their own (nvrender refuses them; an organ beside a variation is done, e6199b7)
 - [x] The export memory-mapped in the host (MAP_PRIVATE): nvlive's peak 1.26 -> 0.72 GB, its output identical
 - [x] Live: the wheel's jobs on their own CCs (tonelib.WHEEL_CC: crescendo 4, swell 11, drive 12, detune 13, drones 18, mouth 19, crank 20, tone 70, the rotor 80, the scanner 81, tremolo 92), CC1 the vibrato and the wheel a route to each part's other jobs; an organ's wheel its swell, its drive CC12's and the panel's knob (Part.drive: a default per organ, kept in presets and the session) -- files and live native vs Python identical on the wheel's test files, every panel control answered
 - [x] nvlive and livetui: a MIDI input selector (I, or the header): several devices open at once, merged; the session keeps them by device name, shared by both
