@@ -4412,6 +4412,13 @@ class Live:
         self.midi_in_lock = threading.RLock()
         self.messenger_firmware = "1.0.7+"
         self.messenger_q = None
+        # ...FOUND BY ITSELF (messenger_watch): an output named for it is set
+        # when it is plugged in, unless --messenger none (messenger_auto off);
+        # its Device Inquiry reply (messenger_id) says it is one -- NOT which
+        # firmware: Ben's unit, past 1.0.7, answers version 01 00 00 00
+        # (measured 2026-11-13), so the chart stays the session's or the F key's
+        self.messenger_auto = True
+        self.messenger_id = None
         self.messenger_bend = 2.0       # the Messenger's pitch-bend range, semitones
         self.mf104_groups = []          # (note key, its direct slot, [(repeat key, delay)])
         self.messenger_note = {}        # its MIDI channel -> (pid, channel, key) it is playing
@@ -5350,6 +5357,48 @@ class Live:
                     pass
         threading.Thread(target=run, daemon=True, name="messenger-out").start()
         return self.messenger_port
+
+    def messenger_connect(self, name=None):
+        """Set the Messenger on output `name` (else the one find_messenger
+        sees), ask it who it is (probe_messenger), and set its Moog parts.
+        Returns the port's name or None."""
+        name = name or find_messenger()
+        if not name:
+            return None
+        n = self.open_messenger(name)
+        if not n:
+            return None
+        self.messenger_id = probe_messenger(self.messenger_q, n)
+        for p in list(self.parts):
+            try:
+                self.messenger_sync(p)
+            except Exception:
+                pass
+        return n
+
+    def messenger_watch(self, every=2.0):
+        """Set the Messenger when it is plugged in, let it go when it is
+        unplugged -- its own thread, a look at the outputs every `every` s."""
+        def run():
+            while True:
+                time.sleep(every)
+                if not self.messenger_auto:
+                    continue
+                try:
+                    names = mido.get_output_names()
+                except Exception:
+                    continue
+                if self.messenger_port and self.messenger_port not in names:
+                    self.open_messenger(None)
+                    self.messenger_id = None
+                elif not self.messenger_port:
+                    n = next((x for x in names if "messenger" in x.lower()), None)
+                    if n:
+                        try:
+                            self.messenger_connect(n)
+                        except Exception:
+                            pass
+        threading.Thread(target=run, daemon=True, name="messenger-watch").start()
 
     def messenger_pitch(self, part, ch, note):
         """Put the Messenger's note on OUR pitch: a pitch bend from the equal-
@@ -12370,7 +12419,8 @@ def preset_from(live):
         routes=[r.to_dict() for r in getattr(live, "routes", ())],
         # the rig's Messenger: which firmware's chart, and the output it is on
         messenger_firmware=getattr(live, "messenger_firmware", "1.0.7+"),
-        messenger_port=getattr(live, "messenger_port", None),
+        messenger_port=(port_key(live.messenger_port) if getattr(live, "messenger_port", None)
+                        else None if getattr(live, "messenger_auto", True) else "none"),
         # the MIDI inputs open, by name without ALSA's client:port numbers
         # (port_key: they move from boot to boot)
         midi_inputs=[port_key(n) for n in getattr(live, "midi_inputs", {})],
@@ -22737,6 +22787,67 @@ def open_stream(live, rate, frames):
     return pa, stream
 
 
+def find_messenger():
+    """The Moog Messenger's MIDI output, by its name (its USB port: "Messenger
+    ..."), or None."""
+    try:
+        names = mido.get_output_names()
+    except Exception:
+        return None
+    return next((n for n in names if "messenger" in n.lower()), None)
+
+
+def parse_identity(data):
+    """MIDI's Identity Reply (data: F0 and F7 off -- 7E dev 06 02, the maker's
+    ID, family and model (two bytes each, LSB first), the version's four
+    bytes): a dict, or None. The Messenger's (Moog, 04; family 49 -- the 31H
+    its preset dumps carry -- model 153) gives version 01 00 00 00 on a unit
+    past 1.0.7 (measured 2026-11-13): the bytes are kept, never read as the
+    firmware's chart."""
+    d = list(data)
+    if len(d) < 13 or d[0] != 0x7E or d[2] != 0x06 or d[3] != 0x02:
+        return None
+    i = 4
+    if d[i] == 0:
+        maker, i = tuple(d[i:i + 3]), i + 3
+    else:
+        maker, i = (d[i],), i + 1
+    if len(d) < i + 8:
+        return None
+    fam, mod, ver = d[i] | d[i + 1] << 7, d[i + 2] | d[i + 3] << 7, d[i + 4:i + 8]
+    return dict(maker=maker, family=fam, model=mod, raw=" ".join("%02X" % b for b in ver),
+                messenger=maker == (0x04,) and fam == 49 and mod == 153)
+
+
+def probe_messenger(q, name, timeout=0.8):
+    """Ask the Messenger on output `name` who it is -- MIDI's Device Inquiry
+    (F0 7E 7F 06 01 F7; its manual's implementation chart: received) put on
+    its send queue `q` -- and read the reply on its input of the same name.
+    parse_identity's dict, or None (no reply, no input)."""
+    try:
+        key = port_key(name)
+        ins = mido.get_input_names()
+        nm = next((n for n in ins if port_key(n) == key), None) \
+            or next((n for n in ins if "messenger" in n.lower()), None)
+        if nm is None or q is None:
+            return None
+        with mido.open_input(nm) as inp:
+            for _ in inp.iter_pending():
+                pass
+            q.put(mido.Message("sysex", data=[0x7E, 0x7F, 0x06, 0x01]))
+            end = time.monotonic() + timeout
+            while time.monotonic() < end:
+                for m in inp.iter_pending():
+                    if m.type == "sysex":
+                        r = parse_identity(m.data)
+                        if r:
+                            return r
+                time.sleep(0.01)
+    except Exception:
+        return None
+    return None
+
+
 def port_key(name):
     """A MIDI input's name without ALSA's client:port numbers ("USB Midi:USB
     Midi MIDI 1 20:0" -> "USB Midi:USB Midi MIDI 1"): those move from boot
@@ -22966,22 +23077,31 @@ def main():
             live.std_map = B.map_number(a.map)
         # THE MESSENGER TO SET, if one is named -- or the session's, if it is
         # plugged in -- and its Moog parts set to their programs now it is open
+        # (else one plugged in: find_messenger -- 'none' turns that off, and the
+        # session keeps it so; its firmware asked of it, unless one is named)
         _mport = a.messenger or (sess or {}).get("messenger_port")
         if a.messenger_firmware:
             live.messenger_firmware = a.messenger_firmware
         if a.messenger_bend:
             live.messenger_bend = a.messenger_bend
-        if _mport and _mport.lower() != "none":
+        live.messenger_auto = not (_mport and _mport.lower() == "none")
+        if live.messenger_auto:
+            _names = mido.get_output_names()
+            _want = next((n for n in _names if _mport and _mport.lower() in n.lower()), None)
             try:
-                _mn = live.open_messenger(_mport)
+                _mn = live.messenger_connect(_want)
             except Exception:
                 _mn = None
             if _mn:
-                _ms = sum(live.messenger_sync(p) for p in live.parts)
-                say("Messenger on %s (%s chart): %d CCs sent" % (_mn, live.messenger_firmware, _ms))
+                _id = live.messenger_id
+                say("Messenger on %s (%s), %s chart" % (
+                    _mn, "it answered as a Messenger" if _id and _id["messenger"] else
+                    "its identity: %r" % (_id,) if _id else "no identity reply",
+                    live.messenger_firmware))
             elif a.messenger:
                 say("no MIDI output matches %r (outputs: %s)"
-                    % (a.messenger, ", ".join(mido.get_output_names())))
+                    % (a.messenger, ", ".join(_names)))
+        live.messenger_watch()          # (plugged in later, or again: set then)
         live.dirty = False
         step("warming the patches")
         live.warm(progress)

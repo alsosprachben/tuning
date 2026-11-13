@@ -877,24 +877,56 @@ int nv_host::open(int argc, char **argv)
     // (never destroyed: its detached thread waits on mo.cv, and glibc's
     // pthread_cond_destroy at exit would wait for it -- a hang on quitting)
     MsgrOut &mo = *new MsgrOut;
+    msgr = &mo;
     {
+        // ...OR FOUND BY ITSELF (live.messenger_watch): with no --messenger-out
+        // (or =auto), a raw MIDI device named "Moog Messenger" is set when it is
+        // plugged in and let go when it is unplugged; =none (the session's
+        // "none") never. Not under --test: a check never writes to a device
+        bool testing = false;
+        for (int i = 1; i < argc; i++)
+            testing = testing || !strcmp(argv[i], "--test");
         std::string md = opt(argc, argv, "messenger-out", ""), ml = opt(argc, argv, "messenger-log", "");
         double mb = atof(opt(argc, argv, "messenger-bend", "2").c_str());
+        msgr_auto = !testing && ml.empty() && (md.empty() || md == "auto");
         if (!ml.empty())
             mo.log = fopen(ml.c_str(), "w");
-        else if (!md.empty() && md != "none") {
-            mo.fd = ::open(md.c_str(), O_WRONLY);
-            if (mo.fd < 0)
+        else if (!md.empty() && md != "none" && md != "auto") {
+            msgr_connect(md, md);
+            if (mo.fd.load() < 0)
                 fprintf(stderr, "nvlive: no Messenger on %s -- none set\n", md.c_str());
-            else
-                mo.start();
+        } else if (msgr_auto) {
+            std::string pa, nm;
+            if (find_messenger(pa, nm))
+                msgr_connect(pa, nm);
         }
-        if (mo.log || mo.fd >= 0) {
+        if (mo.log || mo.fd.load() >= 0 || msgr_auto) {
             nv_part_messenger(part, MsgrOut::send, &mo, mb);
-            if (mo.fd >= 0)
-                fprintf(stderr, "nvlive: Messenger on %s: its Moog parts set\n", md.c_str());
-            msgr_out = mo.fd >= 0 ? md : "a log";
+            if (mo.fd.load() >= 0)
+                fprintf(stderr, "nvlive: Messenger on %s (%s): its Moog parts set\n", mo.where().c_str(),
+                        mo.ident.empty() ? "no identity reply" : mo.ident.c_str());
+            msgr_out = mo.log ? "a log" : "";
         }
+        if (msgr_auto)
+            std::thread([this, mb] {
+                MsgrOut &o = *msgr;
+                while (!g_stop) {
+                    usleep(2000000);
+                    if (o.fd.load() >= 0) {
+                        std::string pa;
+                        {
+                            std::lock_guard<std::mutex> lk(o.mu);
+                            pa = o.path;
+                        }
+                        if (access(pa.c_str(), F_OK) != 0)
+                            o.drop();               // (unplugged)
+                        continue;
+                    }
+                    std::string pa, nm;
+                    if (find_messenger(pa, nm) && msgr_connect(pa, nm))
+                        post([this, mb](long long) { nv_part_messenger(part, MsgrOut::send, msgr, mb); });
+                }
+            }).detach();
     }
     const char *FN[3] = {"synth_voice", "synth_voice_xdec", "synth_voice_damp"};
     for (int q = 0; q < 3; q++) {
@@ -2165,6 +2197,28 @@ bool nv_host::east_part(int prog, bool drums)
 }
 
 // ---- what the panel and a GUI change (the panel's hooks call these) ----
+// THE MESSENGER SET ON A DEVICE (live.messenger_connect): asked who it is
+// first (probe_messenger: before it is opened to write), then opened
+bool nv_host::msgr_connect(const std::string &path, const std::string &name)
+{
+    MsgrOut &o = *msgr;
+    bool is = false;
+    std::string id = probe_messenger(path, &is);
+    int f = ::open(path.c_str(), O_WRONLY | O_NONBLOCK);
+    if (f < 0)
+        return false;
+    {
+        std::lock_guard<std::mutex> lk(o.mu);
+        o.path = path;
+        o.name = name;
+        o.ident = id.empty() ? "" : is ? "it answered as a Messenger" : id;
+        o.q.clear();
+    }
+    o.fd.store(f);
+    o.start();
+    return true;
+}
+
 void nv_host::post(std::function<void(long long)> f)
 {
     std::lock_guard<std::mutex> lk(pmu);
@@ -2399,8 +2453,8 @@ void nv_host::synth_forget(size_t row, int layer, int knob)
 int nv_host::synth_send(size_t row)
 {
     const int pi = part_pi(*this, row);
-    if (pi < 0)
-        return 0;
+    if (pi < 0 || !msgr || (!msgr->log && msgr->fd.load() < 0))
+        return 0;                               // (none plugged in)
     auto sent = std::make_shared<std::atomic<int>>(-1);
     post([this, pi, sent](long long) { *sent = nv_part_synth_send(part, pi); });
     for (int i = 0; i < 200 && *sent < 0 && !g_stop; i++)

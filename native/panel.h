@@ -2450,8 +2450,9 @@ struct Panel {
         if (kept)
             line("  " + C("bad") + "*" + C("dim") + " the part's, not heard natively (an MF-104M under a moved pitch or shape) -- kept, and saved");
         const std::string ml = H.messenger_line ? H.messenger_line() : "";
-        line("  " + (ml.empty() ? C("dim") + "no Messenger to set (nvlive --messenger-out=/dev/snd/midiCxDy)"
-                                : C("ok") + ml));
+        line("  " + (ml == "-" ? C("dim") + "no Messenger to set: plug one in (or --messenger-out=/dev/snd/midiCxDy)"
+                     : ml.empty() ? C("dim") + "no Messenger to set (--messenger-out=none)"
+                                  : C("ok") + ml));
     }
 
     // the selected knob (livetui's synth_*): its part, layer, index and kind
@@ -2586,7 +2587,7 @@ struct Panel {
                 + std::to_string(n) + (n == 1 ? " knob" : " knobs") + " back to the patch");
         } else if (c == 'T') {                  // the whole panel to the Messenger (livetui.synth_send)
             say(H.synth_send && H.synth_send(r->index) ? "part " + std::to_string(prow + 1) + ": its panel to the Messenger"
-                                                       : "no Messenger to set (nvlive --messenger-out=/dev/snd/midiCxDy)");
+                                                       : "no Messenger to set: plug one in");
         }
     }
 

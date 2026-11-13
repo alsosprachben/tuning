@@ -186,11 +186,15 @@ using namespace nvh;
 // logged with the block it was sent in (g_msgr_blk)
 inline std::atomic<long long> g_msgr_blk{0};
 struct MsgrOut {
-    int fd = -1;
+    std::atomic<int> fd{-1};
     FILE *log = nullptr;
     std::mutex mu;
     std::condition_variable cv;
     std::vector<uint8_t> q;
+    bool started = false;
+    // FOUND BY ITSELF (live.messenger_watch): the device it is on, its name,
+    // what it answered to MIDI's Device Inquiry -- read by the panel's thread
+    std::string path, name, ident;
     static void send(void *ctx, const uint8_t *b, int n)
     {
         MsgrOut *o = (MsgrOut *)ctx;
@@ -201,6 +205,8 @@ struct MsgrOut {
             fprintf(o->log, "\n");
             return;
         }
+        if (o->fd.load() < 0)
+            return;                                 // (none plugged in: nothing kept for it)
         {
             std::lock_guard<std::mutex> lk(o->mu);
             o->q.insert(o->q.end(), b, b + n);
@@ -209,6 +215,9 @@ struct MsgrOut {
     }
     void start()
     {
+        if (started)
+            return;
+        started = true;
         std::thread([this] {
             for (;;) {
                 std::vector<uint8_t> w;
@@ -217,15 +226,36 @@ struct MsgrOut {
                     cv.wait(lk, [this] { return !q.empty(); });
                     w.swap(q);
                 }
+                const int f = fd.load();
                 size_t off = 0;
-                while (off < w.size()) {
-                    ssize_t r = ::write(fd, w.data() + off, w.size() - off);
+                while (f >= 0 && off < w.size()) {
+                    ssize_t r = ::write(f, w.data() + off, w.size() - off);
+                    if (r < 0 && errno != EINTR && errno != EAGAIN) {
+                        drop();                     // (unplugged: let it go; the watcher finds it again)
+                        break;
+                    }
                     if (r <= 0)
                         break;              // (a message lost: never the audio thread's wait)
                     off += (size_t)r;
                 }
             }
         }).detach();
+    }
+    void drop()
+    {
+        const int f = fd.exchange(-1);
+        if (f >= 0)
+            ::close(f);
+        std::lock_guard<std::mutex> lk(mu);
+        q.clear();
+        path.clear();
+        name.clear();
+        ident.clear();
+    }
+    std::string where()
+    {
+        std::lock_guard<std::mutex> lk(mu);
+        return name.empty() ? path : name;
     }
 };
 
@@ -439,6 +469,73 @@ inline std::vector<std::pair<std::string, std::string>> midi_devices()
             ds.push_back(std::make_pair(std::string(p), nm.empty() ? std::string(p + 9) : nm));
         }
     return ds;
+}
+
+// THE MESSENGER, FOUND BY ITS NAME (live.find_messenger): the raw MIDI
+// device ALSA names "Moog Messenger"; false when none is plugged in
+inline bool find_messenger(std::string &path, std::string &name)
+{
+    for (auto &d : midi_devices()) {
+        std::string l = d.second;
+        for (char &c : l)
+            c = (char)tolower((unsigned char)c);
+        if (l.find("messenger") != std::string::npos) {
+            path = d.first;
+            name = d.second;
+            return true;
+        }
+    }
+    return false;
+}
+
+// ...ASKED WHO IT IS (live.probe_messenger): MIDI's Device Inquiry, F0 7E 7F
+// 06 01 F7 (its manual's chart: received), the reply read for 0.8 s. "" no
+// reply (or the device is open as an input already: one reader at a time);
+// else maker/family/model and the version's bytes. A Messenger answers Moog
+// (04), family 49, model 153 -- and version 01 00 00 00 on a unit past
+// 1.0.7 (measured 2026-11-13): never read as the firmware's chart
+inline std::string probe_messenger(const std::string &path, bool *is_messenger)
+{
+    *is_messenger = false;
+    int f = ::open(path.c_str(), O_RDWR | O_NONBLOCK);
+    if (f < 0)
+        return "";
+    const uint8_t rq[6] = {0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7};
+    std::vector<uint8_t> in;
+    uint8_t buf[256];
+    while (read(f, buf, sizeof buf) > 0) {
+    }
+    std::string out;
+    if (::write(f, rq, 6) == 6)
+        for (int t = 0; t < 80 && out.empty(); t++) {
+            usleep(10000);
+            ssize_t n;
+            while ((n = read(f, buf, sizeof buf)) > 0)
+                in.insert(in.end(), buf, buf + n);
+            for (size_t i = 0; i + 4 < in.size() && out.empty(); i++) {
+                if (!(in[i] == 0xF0 && in[i + 1] == 0x7E && in[i + 3] == 0x06 && in[i + 4] == 0x02))
+                    continue;
+                size_t e = i;
+                while (e < in.size() && in[e] != 0xF7)
+                    e++;
+                if (e >= in.size())
+                    break;                          // (the rest still to come)
+                std::vector<uint8_t> d(in.begin() + (long)i + 1, in.begin() + (long)e);
+                size_t j = 4;
+                int mk = d.size() > j ? d[j] : -1;
+                j += mk == 0 ? 3 : 1;
+                if (d.size() < j + 8)
+                    break;
+                int fam = d[j] | d[j + 1] << 7, mod = d[j + 2] | d[j + 3] << 7;
+                char s[96];
+                snprintf(s, sizeof s, "maker %02X, family %d, model %d, version %02X %02X %02X %02X",
+                         mk, fam, mod, d[j + 4], d[j + 5], d[j + 6], d[j + 7]);
+                out = s;
+                *is_messenger = mk == 0x04 && fam == 49 && mod == 153;
+            }
+        }
+    ::close(f);
+    return out;
 }
 
 // THE INPUTS OPEN (live.midi_inputs: several, merged): the devices wanted
@@ -872,8 +969,11 @@ struct nv_host {
     int synth_send(size_t row);
     // THE MESSENGER (live's): one set from the panel (--messenger-out; "" none),
     // its knobs read on every part (--messenger), the chart's firmware
-    std::string msgr_out;
+    std::string msgr_out;                       // (a log's; a device's is msgr->where())
     bool msgr_reads = false, msgr_pre107 = false;
+    MsgrOut *msgr = nullptr;                    // the Messenger's output (found by itself: msgr_auto)
+    bool msgr_auto = false;
+    bool msgr_connect(const std::string &path, const std::string &name);
     std::vector<std::pair<long long, std::string>> room_at;
     bool follow;
     float L[4096];

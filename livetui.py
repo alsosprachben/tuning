@@ -2519,7 +2519,7 @@ class TUI:
             return
         n = self.live.messenger_sync(p)
         self.say(("part %d: %d CCs to the Messenger" % (self.row + 1, n)) if n
-                 else "no Messenger to set (live.py --messenger PORT)")
+                 else "no Messenger to set: plug one in (or live.py --messenger PORT)")
 
     def synth_firmware(self):
         """Which firmware's CC chart the Messenger reads and sends: SUB WAVE
@@ -2601,7 +2601,9 @@ class TUI:
                        % (L.messenger_port, L.messenger_firmware))
                 self.addstr(scr, row, 2, txt[:max(0, w - 4)], C("green"))
             else:
-                self.addstr(scr, row, 2, "no Messenger to set (live.py --messenger PORT)"[:max(0, w - 4)],
+                self.addstr(scr, row, 2, ("no Messenger to set: plug one in (or live.py --messenger PORT)"
+                                          if getattr(L, "messenger_auto", True) else
+                                          "no Messenger to set (--messenger none)")[:max(0, w - 4)],
                             C("dim"))
         return y + half + 2
 

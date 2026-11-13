@@ -780,9 +780,11 @@ int nv_host::run(int argc, char **argv)
             return dl;
         };
         H.messenger_line = [&]() {
-            return msgr_out.empty() ? std::string()
-                                    : "sets the Messenger on " + msgr_out + ", " + (msgr_pre107 ? "pre-1.0.7" : "1.0.7+")
-                                          + " chart  (T: send the panel  F: firmware)";
+            const std::string w = msgr && msgr->fd.load() >= 0 ? msgr->where() : msgr_out;
+            if (w.empty())
+                return std::string(msgr_auto ? "-" : "");      // ("-": none yet, watched for)
+            return "sets the Messenger on " + w + ", " + (msgr_pre107 ? "pre-1.0.7" : "1.0.7+")
+                   + " chart  (T: send the panel  F: firmware)";
         };
         H.messenger_firmware = [&]() {
             msgr_pre107 = !msgr_pre107;
@@ -1218,6 +1220,12 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
             if (v != gval[i])
                 set_global(i, v);
         }
+    if ((x = session.get("messenger_firmware")) && x->is(sess::J::STR)        // THE MESSENGER's CHART (live's)
+        && (x->s == "pre-1.0.7") != msgr_pre107) {
+        msgr_pre107 = x->s == "pre-1.0.7";
+        const double v = msgr_pre107 ? 1.0 : 0.0;
+        post([this, v](long long) { nv_part_set(part, 9, v); });
+    }
     if ((x = session.get("controls")) && x->is(sess::J::ARR)) {        // THE ON-SCREEN CONTROLS (live's)
         screen_controls.clear();
         for (const sess::J &c : x->a) {
@@ -1461,6 +1469,11 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
     const int rm = room_asked >= 0 ? (int)room_asked : (int)room_idx;    // (one asked for is the room, building or not)
     if (rm >= 0 && rm < (int)E.rooms.size())
         j.o["room"] = sess::str(E.rooms[rm].name);
+    j.o["messenger_firmware"] = sess::str(msgr_pre107 ? "pre-1.0.7" : "1.0.7+");
+    {                                           // the Messenger set (live's messenger_port): "none" off
+        const std::string w = msgr && msgr->fd.load() >= 0 ? msgr->where() : "";
+        j.o["messenger_port"] = !w.empty() ? sess::str(w) : msgr_auto || !msgr_out.empty() ? sess::null() : sess::str("none");
+    }
     {                                           // the MIDI inputs open (live's midi_inputs), by name
         sess::J mi = sess::arr();
         std::lock_guard<std::mutex> lk(ins.mu);
@@ -1719,6 +1732,13 @@ int main(int argc, char **argv)
                     if (bk && bk->i())
                         extra.push_back("--bank=" + std::to_string(bk->i()));
                 }
+                // THE MESSENGER turned off ("none"), unless --messenger-out says
+                const sess::J *mp = h->session.get("messenger_port");
+                bool mo_given = false;
+                for (int i = 1; i < argc; i++)
+                    mo_given = mo_given || !strncmp(argv[i], "--messenger-out=", 16);
+                if (mp && mp->is(sess::J::STR) && mp->s == "none" && !mo_given)
+                    extra.push_back("--messenger-out=none");
                 // THE PART's TUNER (live.Part's), unless --tuner says otherwise
                 const sess::J *tn = p0 && p0->is(sess::J::OBJ) ? p0->get("tuner") : nullptr;
                 if (tn && tn->is(sess::J::STR) && !tn->s.empty() && !tuned)
