@@ -43,6 +43,8 @@ int nv_midi_master(void *p);
 int nv_midi_banked(void *p);
 int nv_midi_sysex(void *p, int i, uint8_t *out, int cap);
 void nv_part_sysex(void *h, const uint8_t *d, int n);
+int nv_part_mpe_member(void *h, int ch);
+int nv_part_mpe_zones(void *h);
 int nv_part_take_reset(void *h);
 void nv_part_mts_ref(void *h, int note, double hz);
 void nv_tcache_set_gm2(void *h, int on);

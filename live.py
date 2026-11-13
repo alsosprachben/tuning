@@ -4694,6 +4694,10 @@ class Live:
         # addresses ("use for rhythm part")
         self.dedit = {}
         self.drum_rmap = {}
+        # A GS PART'S OWN NOTE-ON SETTINGS (blockrender.parse_gs_part_state):
+        # channel -> {'vsd', 'vso': velocity sense depth and offset; 'klo',
+        # 'khi': its keyboard range} -- put back by a GS reset or GM System On
+        self.gs_pstate = {}
         # BANK SELECT, latched until the next program change (tonelib's
         # resolve_patch). ch_drums is what each channel's last program change
         # resolved to; channel 10 is drums from power-on. rx_bank is Roland's
@@ -5934,6 +5938,16 @@ class Live:
             return
         ch = msg.channel
         parts = self.parts
+        if msg.type == "note_on" and msg.velocity > 0 and ch in self.gs_pstate:
+            # A GS PART'S KEY RANGE (outside it the part does not sound) and
+            # its VELOCITY SENSE -- depth scales the velocity (64 as is),
+            # offset moves it (64 none): blockrender's at each note-on
+            _gst = self.gs_pstate[ch]
+            if not _gst.get('klo', 0) <= msg.note <= _gst.get('khi', 127):
+                return
+            if _gst.get('vsd', 64) != 64 or _gst.get('vso', 64) != 64:
+                msg = msg.copy(velocity=max(1, min(127, int(round(msg.velocity * _gst.get('vsd', 64) / 64.0
+                                                                  + _gst.get('vso', 64) - 64)))))
         if self.efx_parts and ch in self.efx_parts:
             self._efx_control(n0, msg)
         if msg.type == "pitchwheel":
@@ -10670,6 +10684,11 @@ class Live:
             if self.patch_reqs:
                 self.patch_go.set()
             return
+        _gps = _BRs.parse_gs_part_state(d)
+        if _gps is not None and _gps[1] in ('vsd', 'vso', 'klo', 'khi'):
+            if _gps[0] < 16 and not _g:
+                self.gs_pstate.setdefault(_gps[0], {})[_gps[1]] = _gps[2]
+            return
         _ds = _BRs.parse_gs_drum_setup(d)
         if _ds is not None:
             # A DRUM MAP'S SETTING (blockrender's): every channel of that port
@@ -10706,6 +10725,7 @@ class Live:
         # own drums state goes back to channel 10 alone.
         self.rx_bank = _lvl != 1
         self.dedit.clear()                      # (every drum key as its set has it)
+        self.gs_pstate.clear()                  # (every part's velocity sense and key range as power-on)
         self.drum_rmap.clear()
         self.slab.send = [1.0] * 256           # every channel back to the nominal distance
         self.bank_msb.clear()

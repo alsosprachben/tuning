@@ -1166,7 +1166,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 const int a5 = d[5], a6 = d[6];
                 const bool sys = a5 == 0x01 && a6 >= 0x30 && a6 <= 0x5A;
                 const bool eq = (a5 == 0x02 && a6 <= 3) || ((a5 >> 4) == 4 && a6 == 0x20);
-                const bool rx = (a5 >> 4) == 1 && ((a6 >= 0x02 && a6 <= 0x12) || a6 == 0x14 || a6 == 0x1F || a6 == 0x20);
+                const bool rx = (a5 >> 4) == 1 && ((a6 >= 0x02 && a6 <= 0x12) || a6 == 0x14 || a6 == 0x1F || a6 == 0x20
+                                                   || a6 == 0x1A || a6 == 0x1B || a6 == 0x1D || a6 == 0x1E);
                 const bool mp = a5 == 0x00 && a6 == 0x06;
                 if (sys || eq || rx || mp || d[4] == 0x41) {   // (...and drum setup: live's dedit)
                     P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});

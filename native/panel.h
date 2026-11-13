@@ -113,6 +113,7 @@ struct Host {
     std::function<void()> panic;                                   // every note off, now
     std::function<void(int)> part_solo;                            // a part into the solo or out (live.toggle_solo)
     std::function<void()> gs_reset;                                // a GS Reset, as a sequencer's (live.gs_reset)
+    std::function<int()> mpe_zones;                                // MPE's zones (live.mpe_label): lower | upper << 4
     // EACH CHANNEL's ACTIVITY (live.meter): its last note's level (velocity x
     // CC7 x CC11) and when (steady seconds), for the Sound Canvas's 16 bars
     std::function<std::array<std::pair<double, double>, 16>()> meters;
@@ -1098,7 +1099,13 @@ struct Panel {
         snprintf(b, sizeof b, "%.0f kHz · %d frames · %.1f ms", H.rate / 1000.0, H.frames, H.budget_ms);
         std::string lamp = s.rt ? C("ok") + "● RT18" : s.rt_dropped ? C("bad") + "● rt dropped"
                                                                           : C("dim") + "● rt off";
-        const std::string pl = H.port_label ? H.port_label() : H.port;
+        std::string pl = H.port_label ? H.port_label() : H.port;
+        if (H.mpe_zones) {                      // (live.mpe_label: the zones in force)
+            const int z = H.mpe_zones(), lo = z & 15, up = z >> 4;
+            if (lo || up)
+                pl += "  MPE " + (lo ? "lower " + std::to_string(lo) : std::string())
+                      + (lo && up ? " + " : "") + (up ? "upper " + std::to_string(up) : std::string());
+        }
         {                                       // (a tap on the inputs: I)
             const int px = 1 + cols("◆ tuning native  ") + cols(b) + 3;
             hit(nrow, px, px + cols(pl), H_KEY, 'I');

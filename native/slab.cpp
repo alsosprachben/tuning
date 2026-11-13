@@ -40,6 +40,7 @@
 #include "nv.h"
 #include "pycompat.h"          // a section's entries: random.Random
 #include "gsdisplay.h"         // the Sound Canvas's display
+#include "mpe.h"               // MPE's zones (tonelib.MpeZones)
 
 extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
 extern "C" const NoteClass *nv_tcache_note_class(void *h, int program, int note);
@@ -2548,6 +2549,23 @@ struct Part {
     std::vector<std::vector<uint8_t>> sx;           // the exclusives the events name (type 6)
     std::map<std::pair<int, int>, int> key_vel;     // (ch, note) -> the strike's velocity
     double pressure[16] = {};                       // channel aftertouch, 0..1
+    // MPE (live's mpe, bend_mem, mpe_mgr): the zones; each member's own pitch
+    // ratio (master included); each manager's bend as its zone last took it
+    nv::MpeZones mpe;
+    std::atomic<int> mpe_shown{0};                  // (the panel's: group 0's lower count | upper << 4)
+    std::map<int, double> bend_mem, mpe_mgr;
+    long mpe_ignored = 0;
+    // live._pc: the channel a part is asked about -- a member's its manager's,
+    // so a part on channel 1 plays the whole Lower Zone; live._lk: where
+    // legato and portamento are judged, the zone's
+    int pc(int ch) const
+    {
+        if (!mpe)
+            return ch;
+        const int m = mpe.manager_of(ch);
+        return m < 0 ? ch : m;
+    }
+    int lk(int ch) const { return pc(ch); }
     // THE PITCH WHEEL (live._repitch): each channel's raw wheel and the ratio
     // last applied to its notes; the range, GM's 2 semitones (no RPN 0 here)
     int wheel[16] = {};
@@ -2569,6 +2587,11 @@ struct Part {
     std::map<int, std::map<int, std::map<int, int>>> dedit;
     int chdrums[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0};
     std::map<int, int> drum_rmap;
+    // A GS PART'S OWN NOTE-ON SETTINGS (live's gs_pstate): velocity sense
+    // depth and offset, its keyboard range -- power-on 64, 64, 0, 127
+    int vsd[16] = {64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64};
+    int vso[16] = {64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64};
+    int klo[16] = {}, khi[16] = {127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127};
     static int drum_nrpn(int msb)       // (blockrender.GS_DRUM_NRPN)
     {
         switch (msb) {
@@ -2818,7 +2841,7 @@ struct Part {
     bool leslie_on(int ch) const
     {
         for (const Patch &p : patches)
-            if (p.leslie && (p.channel < 0 || p.channel == ch))
+            if (p.leslie && (p.channel < 0 || p.channel == pc(ch)))
                 return true;
         return false;
     }
@@ -4172,7 +4195,7 @@ struct Part {
     bool claims(int i, int ch, int note) const
     {
         const Patch &p = patches[i];
-        return !p.muted && !p.gone && !p.hidden && (p.channel < 0 || p.channel == ch) && !((p.excl >> ch) & 1u)
+        return !p.muted && !p.gone && !p.hidden && (p.channel < 0 || p.channel == pc(ch)) && !((p.excl >> ch) & 1u)
                && p.lo <= note && note <= p.hi;
     }
 
@@ -4309,7 +4332,7 @@ struct Part {
     {
         for (size_t pi = 0; pi < patches.size(); pi++) {
             const Patch &p = patches[pi];
-            if (!(p.channel < 0 || p.channel == ch))
+            if (!(p.channel < 0 || p.channel == pc(ch)))
                 continue;
             int pj = jobs;
             if (routed)                             // (the route: a part's held tones take only the jobs its voice has)
@@ -4393,7 +4416,7 @@ struct Part {
     // of the held stack
     bool legato_on(int ch, int note, long long n0)
     {
-        auto it = onset_group.find(ch);
+        auto it = onset_group.find(lk(ch));
         if (it != onset_group.end() && (double)(n0 - it->second.on) <= chord_window_s * rate) {
             it->second.keys.insert(std::make_pair(ch, note));     // a chord member: the chord's answer
             return it->second.slur;
@@ -4412,13 +4435,13 @@ struct Part {
         g.on = n0;
         g.keys.insert(std::make_pair(ch, note));
         g.slur = slur;
-        onset_group[ch] = g;
+        onset_group[lk(ch)] = g;
         return slur;
     }
 
     void legato_off(int ch, int note, long long n0)
     {
-        auto it = onset_group.find(ch);
+        auto it = onset_group.find(lk(ch));
         if (it != onset_group.end() && it->second.keys.count(std::make_pair(ch, note))) {
             Group &g = it->second;
             g.off = g.has_off ? std::max(g.off, n0) : n0;
@@ -4622,15 +4645,15 @@ struct Part {
         }
         // WHERE IT GLIDES FROM: a pending CC84, spent, else under CC65 the
         // last note to have started
-        int src = porta_src[ch];
-        porta_src[ch] = -1;
+        int src = porta_src[lk(ch)];
+        porta_src[lk(ch)] = -1;
         if (src < 0 && porta_on[ch])
-            src = last_on[ch];
+            src = last_on[lk(ch)];
         glide_from = src != note ? src : -1;
         // A MOOG'S GLIDE needs no switch: with its knob up every note glides
         // from the last one on the channel, detached or not
-        moog_src = last_on[ch] != note ? last_on[ch] : -1;
-        last_on[ch] = note;
+        moog_src = last_on[lk(ch)] != note ? last_on[lk(ch)] : -1;
+        last_on[lk(ch)] = note;
         std::vector<int> cl = claimers(ch, note);
         if (cl.size() <= 1)
             cut_on(ch, note, vel, n0, slur);
@@ -6012,8 +6035,11 @@ struct Part {
         auto td = trem_depth.find(pid);     // the wheel's tremolo, the wheel already up
         if (td != trem_depth.end() && td->second > 0.0)
             S.tremolo_arm(slots, td->second, patches[cur].wtrem_stereo);
-        if (pressure[ch] != 0.0)
-            press(slots, pressure[ch]);
+        double pr = pressure[ch];
+        if (mpe && mpe.is_member(ch))       // MPE: the louder of its own and its manager's
+            pr = std::max(pr, pressure[mpe.manager_of(ch)]);
+        if (pr != 0.0)
+            press(slots, pr);
         if (drone_class()) {                // THE DRONES: up with the chanter (live._drones)
             drone_quiet.erase(pid);
             drones(ch, n0);
@@ -6446,7 +6472,7 @@ struct Part {
         stopword[ch][cc - 43] = v;
         for (size_t pi = 0; pi < patches.size(); pi++) {
             const OrganSpec *og = patches[pi].organ;
-            if (!og || og->wccs[0] != 43 || !(patches[pi].channel < 0 || patches[pi].channel == ch))
+            if (!og || og->wccs[0] != 43 || !(patches[pi].channel < 0 || patches[pi].channel == pc(ch)))
                 continue;
             long long word = 0;
             for (int i = 0; i < og->n_wccs && i < 3; i++)
@@ -6465,7 +6491,7 @@ struct Part {
     {
         for (size_t pi = 0; pi < patches.size(); pi++) {
             const Patch &p = patches[pi];
-            if (p.wtrem <= 0.0 || !(p.channel < 0 || p.channel == ch))
+            if (p.wtrem <= 0.0 || !(p.channel < 0 || p.channel == pc(ch)))
                 continue;
             double d = (v / 127.0) * p.wtrem;
             trem_depth[patches[pi].pid] = d;
@@ -6853,7 +6879,7 @@ struct Part {
         }
         if (moved)
             for (size_t pi = 0; pi < patches.size(); pi++)
-                if (patches[pi].channel < 0 || patches[pi].channel == ch)
+                if (patches[pi].channel < 0 || patches[pi].channel == pc(ch))
                     amp_touch((int)pi);
     }
 
@@ -6863,7 +6889,7 @@ struct Part {
     {
         for (size_t pi = 0; pi < patches.size(); pi++) {
             const Patch &p = patches[pi];
-            if (!(p.channel < 0 || p.channel == ch) || !nv_tcache_gm2(p.cache))
+            if (!(p.channel < 0 || p.channel == pc(ch)) || !nv_tcache_gm2(p.cache))
                 continue;
             bool moved = false;
             std::set<int> pk;
@@ -6955,6 +6981,14 @@ struct Part {
                 return;
             }
         }
+        // ...A PART's VELOCITY SENSE AND KEY RANGE (40 1p 1A/1B/1D/1E, port A:
+        // blockrender.parse_gs_part_state's)
+        if (d.size() >= 9 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && d[4] == 0x40 && (d[5] >> 4) == 1
+            && (d[6] == 0x1A || d[6] == 0x1B || d[6] == 0x1D || d[6] == 0x1E)) {
+            const int blk = d[5] & 0x0F, c = blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk);
+            (d[6] == 0x1A ? vsd : d[6] == 0x1B ? vso : d[6] == 0x1D ? klo : khi)[c] = d[7];
+            return;
+        }
         // ...AND USE FOR RHYTHM PART (40 1p 15, port A): the map a part plays
         if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && d[4] == 0x40 && (d[5] >> 4) == 1
             && d[6] == 0x15) {
@@ -7024,6 +7058,11 @@ struct Part {
     {
         panic(n0);
         dedit.clear();                          // (every drum key as its set has it)
+        for (int c = 0; c < 16; c++) {          // (every part's velocity sense and key range)
+            vsd[c] = vso[c] = 64;
+            klo[c] = 0;
+            khi[c] = 127;
+        }
         drum_rmap.clear();
         for (int c = 0; c < 16; c++)
             chdrums[c] = c == 9;
@@ -7154,7 +7193,8 @@ struct Part {
         const NoteClass *k = key_class(p, key);
         if (!k || slots.empty())
             return;
-        const double *d = snd_d[ch];
+        double dm[8];
+        const double *d = snd_of(ch, dm);
         auto has = [&](int i) { return ((k->snd_mask >> i) & 1) && d[i] != 0.0; };
         bool any = false;
         for (int i = 0; i < 8; i++)
@@ -7218,9 +7258,11 @@ struct Part {
     // plucked string's (plucked where it was plucked: the next note's)
     void reshape_sound(int ch)
     {
-        const double *d = snd_d[ch];
+        double dm[8];
+        const double *d = snd_of(ch, dm);
+        const bool member = mpe && mpe.is_member(ch);   // (MPE: CC74 stops at Note Off, 2.2.8)
         for (const Patch &p : patches) {
-            if (p.drums || !(p.channel < 0 || p.channel == ch))
+            if (p.drums || !(p.channel < 0 || p.channel == pc(ch)))
                 continue;
             for (auto &kv : S.live) {
                 const Key &kk = kv.first;
@@ -7228,7 +7270,7 @@ struct Part {
                     continue;
                 std::vector<long> idx;
                 for (long s : kv.second)
-                    if (S.i4[I4_fx][s] < 0)
+                    if (S.i4[I4_fx][s] < 0 && (!member || S.i8[1][s] == IDLE))
                         idx.push_back(s);
                 if (idx.empty())
                     continue;
@@ -7270,10 +7312,10 @@ struct Part {
         const NoteClass *k = ch >= 0 ? key_class(p, 60) : nullptr;
         if (!k)
             return base;
-        double d[8];
+        double d[8], dm0[8];
         bool any = false;
         for (int i = 0; i < 8; i++) {
-            d[i] = ((k->snd_mask >> i) & 1) ? snd_d[ch][i] : 0.0;
+            d[i] = ((k->snd_mask >> i) & 1) ? snd_of(ch, dm0)[i] : 0.0;
             any = any || d[i] != 0.0;
         }
         if (!any)
@@ -7358,7 +7400,7 @@ struct Part {
         // knobs do
         if (cc <= 75)
             for (const Patch &p : patches)
-                if (p.moog && !p.drums && (p.channel < 0 || p.channel == ch))
+                if (p.moog && !p.drums && (p.channel < 0 || p.channel == pc(ch)))
                     moog_refresh(p, n0, ch);
     }
 
@@ -7372,7 +7414,7 @@ struct Part {
             // THE VIBRATO's RATE AND DEPTH (live: _vib_apply on each part
             // whose voice answers this one), with the wheel's, written once
             for (const Patch &p : patches)
-                if (!p.drums && (p.channel < 0 || p.channel == ch) && (p.snd >> (cc - 71)) & 1)
+                if (!p.drums && (p.channel < 0 || p.channel == pc(ch)) && (p.snd >> (cc - 71)) & 1)
                     vib_apply(p, ch, n0);
             return;
         }
@@ -7381,7 +7423,7 @@ struct Part {
         for (const Patch &p : patches) {
             // the release on the notes whose key is still down (live's, a
             // voice with no ranks: each key's own grant)
-            if (p.organ || p.drums || !(p.channel < 0 || p.channel == ch))
+            if (p.organ || p.drums || !(p.channel < 0 || p.channel == pc(ch)))
                 continue;
             for (auto &kv : S.live) {
                 if (std::get<0>(kv.first) != p.pid || std::get<1>(kv.first) != ch || kv.second.empty())
@@ -7398,7 +7440,7 @@ struct Part {
         }
         for (size_t pi = 0; pi < patches.size(); pi++) {
             const OrganSpec *og = patches[pi].organ;
-            if (!og || !(patches[pi].channel < 0 || patches[pi].channel == ch))
+            if (!og || !(patches[pi].channel < 0 || patches[pi].channel == pc(ch)))
                 continue;
             float nw = (og->snd_mask & 2) && d != 0.0 ? (float)pow(4.0, d) : 1.0f;
             for (auto &kv : S.live) {
@@ -7417,7 +7459,8 @@ struct Part {
     // live._sound_stamp on a part's slots: the times its channel asks of them
     void sound_stamp(const OrganSpec *og, int ch, const std::vector<long> &sl)
     {
-        const double *d = snd_d[ch];
+        double dm[8];
+        const double *d = snd_of(ch, dm);
         bool at = (og->snd_mask & 1) && d[2] != 0.0, rl = (og->snd_mask & 2) && d[1] != 0.0,
              dc = (og->snd_mask & 4) && d[4] != 0.0;
         if (!(at || rl || dc))
@@ -7453,7 +7496,7 @@ struct Part {
     bool hammond_on(int ch) const
     {
         for (const Patch &p : patches)
-            if ((p.leslie || p.wheel_swell || p.amp > 0.0) && (p.channel < 0 || p.channel == ch))
+            if ((p.leslie || p.wheel_swell || p.amp > 0.0) && (p.channel < 0 || p.channel == pc(ch)))
                 return true;
         return false;
     }
@@ -7462,7 +7505,7 @@ struct Part {
     bool wheel_trem_on(int ch) const
     {
         for (const Patch &p : patches)
-            if (p.wtrem > 0.0 && (p.channel < 0 || p.channel == ch))
+            if (p.wtrem > 0.0 && (p.channel < 0 || p.channel == pc(ch)))
                 return true;
         return false;
     }
@@ -7471,7 +7514,7 @@ struct Part {
     bool organ_on(int ch) const
     {
         for (const Patch &p : patches)
-            if (p.organ && p.organ->n_order && (p.channel < 0 || p.channel == ch))
+            if (p.organ && p.organ->n_order && (p.channel < 0 || p.channel == pc(ch)))
                 return true;
         return false;
     }
@@ -7917,7 +7960,7 @@ struct Part {
                 mono_cur[ch] = back.first;
                 glide_from = porta_on[ch] ? note : -1;
                 moog_src = note;
-                last_on[ch] = back.first;
+                last_on[lk(ch)] = back.first;
                 std::vector<int> cl = claimers(ch, back.first);
                 if (cl.size() <= 1)
                     strike(ch, back.first, back.second, n0, true);     // back to a key still held: a slur too
@@ -8288,7 +8331,238 @@ struct Part {
         retune_v(sl, n0, false, 1.0, true, v, true, (1.0 + mod_rate * w) * rt);
     }
 
-    double range_of(int ch) const { return brange[ch] >= 0.0 ? brange[ch] : bend_range; }
+    double range_of(int ch) const
+    {
+        if (brange[ch] >= 0.0)
+            return brange[ch];
+        if (mpe && mpe.zone_of(ch))         // (MPE: 48 on a member, 2 on a manager -- 2.2.5)
+            return mpe.is_manager(ch) ? (double)nv::MPE_MANAGER_BEND : (double)nv::MPE_MEMBER_BEND;
+        return bend_range;
+    }
+
+    // live._snd_for's MPE: a member's CC74 with its manager's as a BIAS
+    // (Appendix D: tonelib.mpe_timbre), where the manager's is not 0
+    const double *snd_of(int ch, double *tmp) const
+    {
+        if (!(mpe && mpe.is_member(ch)))
+            return snd_d[ch];
+        const double mb = snd_d[mpe.manager_of(ch)][3];
+        if (mb == 0.0)
+            return snd_d[ch];
+        for (int i = 0; i < 8; i++)
+            tmp[i] = snd_d[ch][i];
+        tmp[3] = std::max(-1.0, std::min(1.0, tmp[3] + mb));
+        return tmp;
+    }
+
+    // live._held: only the slots whose key is still down (MPE's per-note
+    // controls stop at Note Off, 2.2.6-2.2.8)
+    std::vector<long> held(const std::vector<long> &sl) const
+    {
+        std::vector<long> out;
+        for (long s : sl)
+            if (S.i8[1][s] == IDLE)
+                out.push_back(s);
+        return out;
+    }
+
+    // live._sounding(ch, pids=...): a channel's slots of these parts
+    std::vector<long> sounding_of(int ch, const std::set<long long> &pids) const
+    {
+        std::vector<long> out;
+        for (auto &kv : S.live)
+            if (std::get<1>(kv.first) == ch && pids.count(std::get<0>(kv.first)))
+                out.insert(out.end(), kv.second.begin(), kv.second.end());
+        return out;
+    }
+
+    // Slab.released_on: the slots of notes released on these channels, still ringing
+    std::vector<long> released_on(const std::vector<int> &chs) const
+    {
+        std::set<long> out;
+        for (auto &r : S.retiring)
+            for (long s : r.first)
+                if (S.busy[s] && std::find(chs.begin(), chs.end(), (int)S.slot_ch[s]) != chs.end())
+                    out.insert(s);
+        return std::vector<long>(out.begin(), out.end());
+    }
+
+    // live._mpe_repitch: a channel of a zone. A MEMBER's ratio moves only its
+    // notes still held (2.2.6); the MANAGER's own notes take its whole ratio,
+    // and its BEND (no master: each member carries that) every note in the
+    // zone, pedalled and releasing ones too (A.4.1); each share against the
+    // last of itself
+    void mpe_repitch(int ch, double ratio, long long n0)
+    {
+        std::set<long long> pids;
+        std::vector<int> here;
+        for (int i = 0; i < (int)patches.size(); i++) {
+            const Patch &p = patches[i];
+            if (!p.muted && !p.gone && (p.channel < 0 || p.channel == pc(ch)) && !p.leslie) {
+                pids.insert(p.pid);
+                here.push_back(i);
+            }
+        }
+        if (mpe.is_member(ch)) {
+            auto bw = bend_mem.find(ch);
+            const double was = bw != bend_mem.end() ? bw->second : 1.0;
+            bend_mem[ch] = ratio;
+            auto mg = mpe_mgr.find(mpe.manager_of(ch));
+            bend[ch] = ratio * (mg != mpe_mgr.end() ? mg->second : 1.0);
+            if (ratio != was) {
+                std::vector<long> sl = held(sounding_of(ch, pids));
+                if (!sl.empty()) {
+                    retune(sl, n0, ratio / was);
+                    for (int i : here)
+                        amp_touch(i);
+                }
+            }
+            return;
+        }
+        const double prev = bend[ch];
+        bend[ch] = ratio;
+        if (ratio != prev)
+            retune(sounding_of(ch, pids), n0, ratio / prev);
+        const double zb = pow(2.0, (range_of(ch) * (double)wheel[ch] / 8192.0 + coarse[ch] + fine[ch] / 100.0) / 12.0);
+        auto zw = mpe_mgr.find(ch);
+        const double was = zw != mpe_mgr.end() ? zw->second : 1.0;
+        mpe_mgr[ch] = zb;
+        bool moved = ratio != prev;
+        const std::vector<int> ms = mpe.members(ch);
+        for (int m : ms) {
+            auto bm = bend_mem.find(m);
+            bend[m] = (bm != bend_mem.end() ? bm->second : bend[m]) * zb;
+            if (zb != was) {
+                std::vector<long> sl = sounding_of(m, pids);
+                if (!sl.empty()) {
+                    retune(sl, n0, zb / was);
+                    moved = true;
+                }
+            }
+        }
+        if (zb != was) {
+            std::vector<long> rel = released_on(ms);
+            if (!rel.empty()) {
+                retune(rel, n0, zb / was);
+                moved = true;
+            }
+        }
+        if (moved)
+            for (int i : here)
+                amp_touch(i);
+    }
+
+    // live._mpe_press: a member's held notes under the louder of its own
+    // pressure and its manager's (Appendix D)
+    void mpe_press(int ch)
+    {
+        const double p = std::max(pressure[ch], pressure[mpe.manager_of(ch)]);
+        std::vector<long> sl = held(pressed(ch, -1));
+        if (!sl.empty())
+            press(sl, p);
+    }
+
+    // live._mpe_mcm: the MPE Configuration Message (2.2.1) -- the zones
+    // rebuilt, each channel whose zone changed cut and reset (2.2.3), the
+    // bend ranges 2 on the manager and 48 on members (2.2.5)
+    void mpe_mcm(int ch, int count, long long n0)
+    {
+        std::set<int> changed;
+        if (!mpe.mcm(ch, count, changed)) {
+            mpe_ignored++;                  // not on a manager channel: invalid
+            return;
+        }
+        {
+            auto lo = mpe.n.find(std::make_pair(0, 0)), up = mpe.n.find(std::make_pair(0, 1));
+            mpe_shown.store((lo != mpe.n.end() ? lo->second : 0) | ((up != mpe.n.end() ? up->second : 0) << 4));
+        }
+        for (int c : changed) {
+            if (c < 0 || c >= 16)
+                continue;
+            static const std::vector<std::vector<uint8_t>> nosx0;
+            core(Ev{2, c, 120, 0}, nosx0, n0);  // (live's _one_core: all sound off, controllers reset)
+            core(Ev{2, c, 121, 0}, nosx0, n0);
+            for (int i = 0; i < 8; i++)
+                snd_d[c][i] = 0.0;
+            bend_mem.erase(c);
+            mpe_mgr.erase(c);
+        }
+        if (mpe.zone_of(ch)) {
+            brange[ch] = nv::MPE_MANAGER_BEND;
+            for (int m : mpe.members(ch))
+                brange[m] = nv::MPE_MEMBER_BEND;
+        }
+        std::set<int> all = changed;
+        for (int m : mpe.members(ch))
+            all.insert(m);
+        all.insert(ch);
+        for (int c : all)
+            if (c >= 0 && c < 16)
+                repitch(c, n0);
+    }
+
+    // live._mpe_route: what a zone does with a channel message before the
+    // channel does; true where it has dealt with it itself
+    bool mpe_route(const Ev &e, long long n0)
+    {
+        const int ch = e.ch;
+        if (ch < 0 || ch >= 16 || !mpe.zone_of(ch))
+            return false;
+        static const std::vector<std::vector<uint8_t>> nosx;
+        if (mpe.is_member(ch)) {
+            if (e.type == 2) {
+                const int c = e.a;
+                if (c == 126 || c == 127) {
+                    // Mode 4 goes to the LOWEST member and means the zone (2.2.4.3)
+                    if (ch == mpe.lowest_member(ch))
+                        for (int m : mpe.members(ch))
+                            core(Ev{2, m, c, e.b}, nosx, n0);
+                    else
+                        mpe_ignored++;
+                    return true;
+                }
+                if (c == 74 || c == 6 || c == 38 || c == 96 || c == 97 || c == 98 || c == 99 || c == 100
+                    || c == 101 || c == 120 || c == 121 || c == 123)
+                    return false;           // per note, the RPNs, the mode messages
+                mpe_ignored++;              // a zone-wide control on a member (2.3.1)
+                return true;
+            }
+            if (e.type == 7) {              // poly pressure prohibited on members (2.2.7)
+                mpe_ignored++;
+                return true;
+            }
+            if (e.type == 3) {
+                pressure[ch] = e.a / 127.0;
+                mpe_press(ch);
+                return true;
+            }
+            return false;
+        }
+        // THE MANAGER
+        if (e.type == 2) {
+            const int c = e.a;
+            if (c == 126 || c == 127) {
+                mpe_ignored++;              // prohibited on the manager (Appendix E)
+                return true;
+            }
+            core(e, nosx, n0);
+            if (c == 74) {
+                for (int m : mpe.members(ch))
+                    reshape_sound(m);       // live._mpe_reshape
+            } else if (!nv::mpe_not_fanned(c)) {
+                for (int m : mpe.members(ch))
+                    core(Ev{2, m, c, e.b}, nosx, n0);
+            }
+            return true;
+        }
+        if (e.type == 3) {
+            core(e, nosx, n0);
+            for (int m : mpe.members(ch))
+                mpe_press(m);
+            return true;
+        }
+        return false;
+    }
 
     // live._repitch: the channel's ratio (tonelib.channel_pitch_ratio: the
     // wheel over its range, the coarse and fine tuning; no master tuning
@@ -8298,12 +8572,16 @@ struct Part {
         double st = range_of(ch) * (double)wheel[ch] / 8192.0 + coarse[ch] + fine[ch] / 100.0 + master_coarse
                     + master_fine / 100.0;
         double ratio = pow(2.0, st / 12.0);
+        if (mpe && mpe.zone_of(ch)) {
+            mpe_repitch(ch, ratio, n0);
+            return;
+        }
         double prev = bend[ch];
         // A MEEND MOVES EACH NOTE BY ITS OWN SWARAS: its parts retuned key by
         // key and kept out of the channel's ratio
         std::set<long long> mee;
         for (const Patch &p : patches)
-            if ((p.channel < 0 || p.channel == ch) && meend_part(p))
+            if ((p.channel < 0 || p.channel == pc(ch)) && meend_part(p))
                 mee.insert(p.pid);
         if (!mee.empty())
             meend_retune(ch, mee, n0);
@@ -8340,14 +8618,14 @@ struct Part {
         // each a sum of multiples of theirs, so one ratio moves them exactly
         std::vector<long> amps;
         for (const Patch &p : patches)
-            if (p.channel < 0 || p.channel == ch) {
+            if (p.channel < 0 || p.channel == pc(ch)) {
                 long li = S.live_find(Key(p.pid, -1, -1, AMPK));
                 if (li >= 0)
                     amps.insert(amps.end(), S.live[li].second.begin(), S.live[li].second.end());
             }
         for (auto &ar : amp_retired)                // ...the old tones' valves too
             for (const Patch &p : patches)
-                if (ar.second.first == p.pid && (p.channel < 0 || p.channel == ch)) {
+                if (ar.second.first == p.pid && (p.channel < 0 || p.channel == pc(ch))) {
                     long li = S.live_find(ar.first);
                     if (li >= 0)
                         amps.insert(amps.end(), S.live[li].second.begin(), S.live[li].second.end());
@@ -8390,10 +8668,21 @@ struct Part {
         if (rpn_none[ch])
             return;                                 // an NRPN (GS's sound ones: not here)
         int m = rpn_msb[ch], l = rpn_lsb[ch];
+        if (m == 0 && l == 6) {                     // THE MPE CONFIGURATION MESSAGE
+            if (cc == 6)                            // (the LSB "has no function", 2.2.1)
+                mpe_mcm(ch, v, n0);
+            return;
+        }
         if (m != 0 || l > 5)
             return;                                 // null, or not one read
         if (l == 0) {
             brange[ch] = cc == 6 ? (double)v : (double)(long)range_of(ch) + v / 100.0;     // rpn_bend_range
+            if (mpe && mpe.is_member(ch))           // one value for every member (2.2.5)
+                for (int m2 : mpe.members(ch))
+                    if (m2 != ch) {
+                        brange[m2] = brange[ch];
+                        repitch(m2, n0);
+                    }
         } else if (l == 1) {
             if (cc == 6)
                 fine_msb[ch] = v;                   // rpn_fine
@@ -8503,7 +8792,7 @@ struct Part {
     void all_sound_off(int ch, long long n0)
     {
         for (size_t pi = 0; pi < patches.size(); pi++)    // (the valve's products: their parents go)
-            if (patches[pi].channel < 0 || patches[pi].channel == ch)
+            if (patches[pi].channel < 0 || patches[pi].channel == pc(ch))
                 amp_touch((int)pi);
         for (auto it = down.begin(); it != down.end();)
             it = it->first == ch ? down.erase(it) : std::next(it);
@@ -8558,7 +8847,7 @@ struct Part {
     void all_notes_off(int ch, long long n0)
     {
         for (size_t pi = 0; pi < patches.size(); pi++)
-            if (patches[pi].channel < 0 || patches[pi].channel == ch)
+            if (patches[pi].channel < 0 || patches[pi].channel == pc(ch))
                 amp_touch((int)pi);
         for (auto it = down.begin(); it != down.end();)
             it = it->first == ch ? down.erase(it) : std::next(it);
@@ -8610,7 +8899,7 @@ struct Part {
             it = it->first.first == ch ? job_at.erase(it) : std::next(it);
         if (hammond_on(ch))
             for (const Patch &p : patches) {
-                if (!(p.leslie || p.wheel_swell || p.amp > 0.0) || !(p.channel < 0 || p.channel == ch))
+                if (!(p.leslie || p.wheel_swell || p.amp > 0.0) || !(p.channel < 0 || p.channel == pc(ch)))
                     continue;
                 if (p.wheel_swell && (!(p.amp > 0.0) || p.leslie) && swell != 1.0) {
                     const double was = swell;
@@ -8620,7 +8909,7 @@ struct Part {
                 break;
             }
         for (const Patch &p : patches) {
-            if (!(p.channel < 0 || p.channel == ch))
+            if (!(p.channel < 0 || p.channel == pc(ch)))
                 continue;
             if (p.amp > 0.0 && drive_step.erase(p.pid))
                 amp_dirty.insert(p.pid);
@@ -8634,7 +8923,7 @@ struct Part {
                     break;
                 }
         for (int pi = 0; pi < (int)patches.size(); pi++) {
-            if (!(patches[pi].channel < 0 || patches[pi].channel == ch))
+            if (!(patches[pi].channel < 0 || patches[pi].channel == pc(ch)))
                 continue;
             Use u(*this, pi);
             if (drone_class() && drone_count.erase(pid) && chanting(ch))
@@ -9554,7 +9843,7 @@ struct Part {
         bool hears = false, gm = false;
         for (size_t i = 0; i < patches.size(); i++) {
             const Patch &p = patches[i];
-            if (!(p.msgr || msgr_all) || !(p.channel < 0 || p.channel == ch))
+            if (!(p.msgr || msgr_all) || !(p.channel < 0 || p.channel == pc(ch)))
                 continue;
             hears = true;
             if (!p.drums && p.moog)
@@ -9620,7 +9909,7 @@ struct Part {
             job_at[std::make_pair(ch, cc)] = v;     // (their CCs' own: live's job_at)
         if (wr)
             for (const Patch &p : patches) {
-                if (!(p.channel < 0 || p.channel == ch))
+                if (!(p.channel < 0 || p.channel == pc(ch)))
                     continue;
                 const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
                 if (p.organ && p.organ->siren_up)
@@ -9633,7 +9922,7 @@ struct Part {
             // rotors aimed there as the half-moon aims them
             bool les = false;
             for (const Patch &p : patches)
-                les = les || (p.leslie && (p.channel < 0 || p.channel == ch));
+                les = les || (p.leslie && (p.channel < 0 || p.channel == pc(ch)));
             if (les) {
                 const double ladder[3] = {0.0, S.les[3], S.les[4]};
                 half_moon = v < 42 ? 0 : v < 85 ? 1 : 2;
@@ -9645,7 +9934,7 @@ struct Part {
             cc_scan[ch] = v;                           // the scanner's selector (_scan_stamp)
             if (scan_async)                         // ...its new position prepared (_scan_prefetch)
                 for (const Patch &p : patches)
-                    if (p.scanner && (p.channel < 0 || p.channel == ch)) {
+                    if (p.scanner && (p.channel < 0 || p.channel == pc(ch))) {
                         std::pair<int, int> st = scan_setting(p, ch);
                         if (st.first) {
                             std::lock_guard<std::mutex> lk(scan_mu);
@@ -9714,7 +10003,7 @@ struct Part {
         } else if (cc == 65) {
             porta_on[ch] = v >= 64;
         } else if (cc == 84) {
-            porta_src[ch] = v;              // the next note-on's source, once
+            porta_src[lk(ch)] = v;          // the next note-on's source, once
         } else if (cc == 66) {
             // SOSTENUTO: a snapshot of the keys down as it goes down; up, the
             // ones it held let go where nothing else holds them
@@ -9793,7 +10082,7 @@ struct Part {
             // CC11's squared law on the part, the notes sounding rescaled,
             // floored at -80 dB
             for (const Patch &p : patches) {
-                if (!(p.leslie || p.wheel_swell || p.amp > 0.0) || !(p.channel < 0 || p.channel == ch))
+                if (!(p.leslie || p.wheel_swell || p.amp > 0.0) || !(p.channel < 0 || p.channel == pc(ch)))
                     continue;
                 if (cc == NV_CC_DRIVE && !(p.amp > 0.0))
                     continue;                       // (CC12 the drive's: the swell is the wheel's route alone)
@@ -9821,7 +10110,7 @@ struct Part {
             // (not the double siren's: its wheel is the crank and nothing else)
             for (size_t pi = 0; pi < patches.size(); pi++)
                 if (patches[pi].organ && patches[pi].organ->n_order && !patches[pi].organ->siren_up
-                    && (patches[pi].channel < 0 || patches[pi].channel == ch))
+                    && (patches[pi].channel < 0 || patches[pi].channel == pc(ch)))
                     crescendo((int)pi, v, n0);
         } else if ((cc == NV_CC_DETUNE || wr) && detune_wheel) {
             static const int steps[3] = {0, 64, 127};       // live.DETUNE_STEPS: min(), the first of a tie
@@ -9841,32 +10130,32 @@ struct Part {
             bool mouth = false;
             for (const Patch &p : patches) {
                 const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
-                mouth = mouth || ((p.channel < 0 || p.channel == ch) && k && k->flt_set == 2 && k->flt_k == 4);
+                mouth = mouth || ((p.channel < 0 || p.channel == pc(ch)) && k && k->flt_set == 2 && k->flt_k == 4);
             }
             if (mouth)
                 tone_ctl(ch, true, n0, v);
         }
         if (cc == 1)                            // LFO 2's depth (live's 'lfo2' role)
             for (const Patch &p : patches)
-                if ((p.channel < 0 || p.channel == ch) && lfo2_role(p))
+                if ((p.channel < 0 || p.channel == pc(ch)) && lfo2_role(p))
                     lfo2_w[p.pid] = v / 127.0;
         if (cc == 1) {                          // THE MOD WHEEL IS VIBRATO (live's 'vibrato' role)
             bool any = false;
             for (const Patch &p : patches)
-                any = any || (vib_role(p) && (p.channel < 0 || p.channel == ch));
+                any = any || (vib_role(p) && (p.channel < 0 || p.channel == pc(ch)));
             if (any) {
                 double w = v / 127.0;
                 double cents = modrange[ch] >= 0.0 ? modrange[ch] : mod_cents;
                 vib_mod[ch] = pow(2.0, cents * w / 1200.0) - 1.0;
                 vib_modw[ch] = w;
                 for (const Patch &p : patches)
-                    if (vib_role(p) && (p.channel < 0 || p.channel == ch))
+                    if (vib_role(p) && (p.channel < 0 || p.channel == pc(ch)))
                         vib_apply(p, ch, n0);
             }
         }
         if (cc == NV_CC_DRONES || wr)           // THE DRONES (live's 'drones' job: CC18, or the wheel's route)
             for (int pi = 0; pi < (int)patches.size(); pi++) {
-                if (!(patches[pi].channel < 0 || patches[pi].channel == ch))
+                if (!(patches[pi].channel < 0 || patches[pi].channel == pc(ch)))
                     continue;
                 Use u(*this, pi);
                 const NoteClass *k = drone_class();
@@ -9883,7 +10172,7 @@ struct Part {
             }
         if (cc == NV_CC_DRONES || wr)           // THE PUNGI's DRONE NOTE (live's 'drone note': CC18, or the route)
             for (int pi = 0; pi < (int)patches.size(); pi++) {
-                if (!(patches[pi].channel < 0 || patches[pi].channel == ch))
+                if (!(patches[pi].channel < 0 || patches[pi].channel == pc(ch)))
                     continue;
                 Use u(*this, pi);
                 const NoteClass *k = dnote_class();
@@ -9899,7 +10188,7 @@ struct Part {
             }
         if (cc == NV_CC_TONE || wr)             // A CLAVINET's TONE ROCKERS (live's 'tone' job: CC70, or the route)
             for (const Patch &p : patches) {
-                if (!p.clav || !(p.channel < 0 || p.channel == ch))
+                if (!p.clav || !(p.channel < 0 || p.channel == pc(ch)))
                     continue;
                 int step = (int)nearbyint(v / 127.0 * 4.0);
                 auto it = clav_step.find(p.pid);
@@ -11729,6 +12018,54 @@ struct Part {
         }
     }
 
+    // ONE EVENT, as live._one_core takes it: the insertion effect's source
+    // first, then the message's own handler (an MPE copy comes through here too)
+    void core(const Ev &e, const std::vector<std::vector<uint8_t>> &sxs, long long n0)
+    {
+        // (a part on the insertion effect: a controller that is one of
+        // its sources -- CC1-95, aftertouch, the bend -- its value, first:
+        // live._efx_control)
+        if (efx && e.type >= 2 && e.type <= 4 && nv_efx_live_on(efx, e.ch)) {
+            if (e.type == 2 && e.a >= 1 && e.a <= 95)
+                nv_efx_live_source(efx, (double)n0 / rate, e.a, e.b);
+            else if (e.type == 3)
+                nv_efx_live_source(efx, (double)n0 / rate, 96, e.a);        // (gsefx.SRC_CAF)
+            else if (e.type == 4)
+                nv_efx_live_source(efx, (double)n0 / rate, 97, (e.a + 8192) >> 7);  // (gsefx.SRC_BEND)
+        }
+        if (e.type == 6) {
+            if (e.a >= 0 && e.a < (int)sxs.size())
+                sysex(sxs[e.a], n0);
+        } else if (e.type == 5) {           // a program change, its channel's drums state resolved (the host's)
+            if (e.ch >= 0 && e.ch < 16) {
+                chdrums[e.ch] = e.b != 0;
+                if (e.b)                    // "When the Drum Set is changed, DRUM SETUP PARAMETER
+                    dedit.erase(e.ch);      // values will all be initialized"
+            }
+        } else if (e.type == 0) {
+            // A GS PART'S KEY RANGE (outside it the part does not sound) and
+            // VELOCITY SENSE (live's _one_core: blockrender's at each note-on)
+            int v = e.b;
+            if (e.ch >= 0 && e.ch < 16 && v > 0) {
+                if (e.a < klo[e.ch] || e.a > khi[e.ch])
+                    return;
+                if (vsd[e.ch] != 64 || vso[e.ch] != 64)
+                    v = std::max(1, std::min(127, (int)nearbyint(v * vsd[e.ch] / 64.0 + vso[e.ch] - 64)));
+            }
+            note_on(e.ch, e.a, v, n0);
+        }
+        else if (e.type == 1)
+            note_off(e.ch, e.a, n0);
+        else if (e.type == 3)
+            aftertouch(e.ch, e.a, n0);
+        else if (e.type == 7)
+            polytouch(e.ch, e.a, e.b);
+        else if (e.type == 4)
+            pitchwheel(e.ch, e.a, n0);
+        else
+            control(e.ch, e.a, e.b, n0);
+    }
+
     void block(long long n0, long long blk)
     {
         cur_blk = blk;
@@ -11743,38 +12080,10 @@ struct Part {
         std::vector<std::vector<uint8_t>> sxs;
         sxs.swap(sx);
         for (const Ev &e : evs) {
-            // (a part on the insertion effect: a controller that is one of
-            // its sources -- CC1-95, aftertouch, the bend -- its value, first:
-            // live._efx_control)
-            if (efx && e.type >= 2 && e.type <= 4 && nv_efx_live_on(efx, e.ch)) {
-                if (e.type == 2 && e.a >= 1 && e.a <= 95)
-                    nv_efx_live_source(efx, (double)n0 / rate, e.a, e.b);
-                else if (e.type == 3)
-                    nv_efx_live_source(efx, (double)n0 / rate, 96, e.a);        // (gsefx.SRC_CAF)
-                else if (e.type == 4)
-                    nv_efx_live_source(efx, (double)n0 / rate, 97, (e.a + 8192) >> 7);  // (gsefx.SRC_BEND)
-            }
-            if (e.type == 6) {
-                if (e.a >= 0 && e.a < (int)sxs.size())
-                    sysex(sxs[e.a], n0);
-            } else if (e.type == 5) {           // a program change, its channel's drums state resolved (the host's)
-                if (e.ch >= 0 && e.ch < 16) {
-                    chdrums[e.ch] = e.b != 0;
-                    if (e.b)                    // "When the Drum Set is changed, DRUM SETUP PARAMETER
-                        dedit.erase(e.ch);      // values will all be initialized"
-                }
-            } else if (e.type == 0)
-                note_on(e.ch, e.a, e.b, n0);
-            else if (e.type == 1)
-                note_off(e.ch, e.a, n0);
-            else if (e.type == 3)
-                aftertouch(e.ch, e.a, n0);
-            else if (e.type == 7)
-                polytouch(e.ch, e.a, e.b);
-            else if (e.type == 4)
-                pitchwheel(e.ch, e.a, n0);
-            else
-                control(e.ch, e.a, e.b, n0);
+            // MPE first (live._one: the zones' routing, then _one_core)
+            if (mpe && e.type != 5 && e.type != 6 && mpe_route(e, n0))
+                continue;
+            core(e, sxs, n0);
         }
         if (!posts.empty())                     // the panel's posts, in their order (live.post's)
             run_posts(n0);
@@ -12659,6 +12968,17 @@ void nv_part_event(void *h, int type, int ch, int a, int b)
 }
 
 // an exclusive (the bytes between F0 and F7), the next of the block's events
+// MPE: the zones the panel shows (live.mpe_label): group 0's Lower Zone's
+// member count | the Upper's << 4
+int nv_part_mpe_zones(void *h) { return ((nv::slab::Part *)h)->mpe_shown.load(); }
+
+// MPE: whether channel ch is a zone's member now (its program change ignored, 2.3.3)
+int nv_part_mpe_member(void *h, int ch)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    return P->mpe && P->mpe.is_member(ch) ? 1 : 0;
+}
+
 void nv_part_sysex(void *h, const uint8_t *d, int n)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;

@@ -1779,6 +1779,8 @@ void nv_host::render_block(long long n0, float *buf, bool step)
             last_ctl_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                               std::chrono::steady_clock::now().time_since_epoch()).count();
         }
+        if (m.type == 5 && m.ch >= 0 && m.ch < 16 && nv_part_mpe_member(part, m.ch))
+            continue;                   // (an MPE member's program change: ignored, 2.3.3 -- live._mpe_route)
         if (m.type == 5) {
             // the channel's drums state as live resolves it (resolve_patch: GM
             // 2's banks under Rx.BANK SELECT, else as it was), to the part
