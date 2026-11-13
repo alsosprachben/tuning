@@ -15,6 +15,8 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <memory>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -52,6 +54,9 @@ void nv_song_siren_up(void *s, long long ch, int note, double on, double row);
 int nv_song_cc_get(void *s, long long ch, int cc, int cap, double *t, int *v);
 int nv_song_press_get(void *s, long long ch, int key, int cap, double *t, int *v);
 void nv_song_kits(void *s, const double *f0, const double *seat);
+int nv_midi_n_dedit(void *p);
+void nv_midi_dedit(void *p, int i, int *iv, double *t);
+void nv_song_dedit(void *s, int n, const int *iv, const double *t);
 void nv_song_chokes(void *s, const unsigned long long *choke);
 void nv_song_strokes(void *s, const int *kind, const double *par);
 void nv_song_chokes_n(void *s, const unsigned long long *choke, int n);
@@ -84,10 +89,27 @@ static void vlq(std::vector<uint8_t> &b, uint32_t v)
 
 // _raw_template's file, as mido saves it (type 1, 480 ticks a beat, one
 // track): end, the track's last delta (a drum's 18 beats: its 8 s ring)
+// A DRUM KEY's OWN PITCH AND PAN as a template axis (live's _drum_axis,
+// ('dr', pitch, pan)): DV_BASE + 256 x (pitch + 64, 128 none) + (pan, 128 none)
+static const int DV_BASE = 1 << 20;
+static inline int drum_axis(int pitch, int pan)     // (INT_MIN: unset)
+{
+    return DV_BASE + 256 * (pitch == INT_MIN ? 128 : std::max(0, std::min(127, pitch + 64)))
+           + (pan == INT_MIN ? 128 : std::max(0, std::min(127, pan)));
+}
+
 static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int fast, uint32_t end = 480,
                                      const OrganSpec *og = nullptr, int bank = 0, int fast_cc = NV_CC_LESLIE,
                                      bool cork = false)
 {
+    // (an edited drum key's: GS's drum NRPNs on the key before it, the file's
+    // own -- live._raw_template's)
+    int dpitch = -1, dpan = -1;
+    if (fast >= DV_BASE) {
+        dpitch = (fast - DV_BASE) / 256;
+        dpan = (fast - DV_BASE) % 256;
+        fast = -1;
+    }
     std::vector<uint8_t> tr;
     auto ev = [&](uint32_t dt, std::initializer_list<uint8_t> bytes) {
         vlq(tr, dt);
@@ -122,6 +144,16 @@ static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int
         ev(0, {(uint8_t)(0xB0 | ch), NV_CC_DRONES, 0});             // the drones corked (live._raw_template)
     if (fast >= 0)          // the template axis's step: the honky-tonk's detune (CC13), else the rotor's (CC80)
         ev(0, {(uint8_t)(0xB0 | ch), (uint8_t)fast_cc, (uint8_t)fast});
+    if (dpitch >= 0 && dpitch < 128) {
+        ev(0, {(uint8_t)(0xB0 | ch), 99, 0x18});
+        ev(0, {(uint8_t)(0xB0 | ch), 98, (uint8_t)note});
+        ev(0, {(uint8_t)(0xB0 | ch), 6, (uint8_t)dpitch});
+    }
+    if (dpan >= 0 && dpan < 128) {
+        ev(0, {(uint8_t)(0xB0 | ch), 99, 0x1C});
+        ev(0, {(uint8_t)(0xB0 | ch), 98, (uint8_t)note});
+        ev(0, {(uint8_t)(0xB0 | ch), 6, (uint8_t)dpan});
+    }
     ev(0, {(uint8_t)(0x90 | ch), (uint8_t)note, (uint8_t)vel});
     ev(480, {(uint8_t)(0x80 | ch), (uint8_t)note, 0});
     ev(end, {0xFF, 0x2F, 0x00});
@@ -546,6 +578,18 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         nv_song_slot_orgs(song, (int)g_slot_organ.size(), g_slot_off.data(), g_slot_og.data());
     }
     nv_midi_song(m, song, trim);
+    if (kit) {
+        // AN EDITED DRUM KEY's: the one-note file's drum NRPNs, the song's
+        // (nvrender's dedit pass) -- its pitch and pan as the file's note has them
+        int nd = nv_midi_n_dedit(m);
+        if (nd) {
+            std::vector<int> div(4 * (size_t)nd);
+            std::vector<double> dt(nd);
+            for (int i = 0; i < nd; i++)
+                nv_midi_dedit(m, i, div.data() + 4 * i, dt.data() + i);
+            nv_song_dedit(song, nd, div.data(), dt.data());
+        }
+    }
     // THE ORGANS ON ITS CHANNEL, its stops all drawn: the key's class's -- or
     // a variation's every organ, a family each (nvrender's ent_organs: the
     // Technorg Hit's drawbar layer is another family than its hit's)
@@ -1408,6 +1452,14 @@ struct Cache {
     double scale, full, residual, beta, ring_floor, ring_max, knee, ln10_20, xdec, SR;
     long long blk;
     std::map<std::tuple<int, int, int>, Template> tm;
+    // AN EDITED DRUM KEY's TEMPLATES (drum_axis), built while playing (the
+    // builder's, nv_tcache_build_var): each kept where it was made (vstore),
+    // found through a map the audio thread reads by an atomic pointer, a
+    // new copy published per build and the old kept till the cache goes
+    typedef std::map<std::tuple<int, int, int>, const Template *> VMap;
+    std::vector<std::unique_ptr<Template>> vstore;
+    std::atomic<const VMap *> vmap{nullptr};
+    std::vector<std::unique_ptr<VMap>> vgrave;
     long nseq = 0;                      // (the templates built so far: each one's seq)
     bool drums = false;                 // a drum part: the program is its set (kit's tables)
     int var = 0;                        // its variation key (live.Patch.variation: map x 128 + bank), 0 none
@@ -2408,6 +2460,37 @@ const void *nv_tmpl_col(void *t, int group, int index)
 extern "C" const nv::live::Template *nv_tcache_lookup(void *h, int note, int bucket, int speed)
 {
     nv::live::Cache *C = (nv::live::Cache *)h;
+    if (speed >= nv::live::DV_BASE) {           // (an edited drum key's: the variants' map)
+        const nv::live::Cache::VMap *vm = C->vmap.load(std::memory_order_acquire);
+        if (!vm)
+            return nullptr;
+        auto vt = vm->find(std::make_tuple(note, bucket, speed));
+        return vt == vm->end() ? nullptr : vt->second;
+    }
     auto it = C->tm.find(std::make_tuple(note, bucket, speed));
     return it == C->tm.end() ? nullptr : &it->second;
+}
+
+// an edited drum key's axis (live._drum_axis): pitch, pan (INT_MIN unset)
+extern "C" int nv_drum_axis(int pitch, int pan) { return nv::live::drum_axis(pitch, pan); }
+
+// AN EDITED DRUM KEY's TEMPLATE, built (one writer: the builder, or in step)
+// and published: 1 built, 0 there already, -1 not built
+extern "C" int nv_tcache_build_var(void *h, int program, int note, int bucket, int nb, int axis)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    auto k = std::make_tuple(note, bucket, axis);
+    const nv::live::Cache::VMap *vm = C->vmap.load(std::memory_order_acquire);
+    if (vm && vm->count(k))
+        return 0;
+    int vel = (int)std::min(127.0, (bucket + 0.5) * 128.0 / nb);    // Patch.bucket_vel
+    std::unique_ptr<nv::live::Template> T(new nv::live::Template);
+    if (!C->build(program, note, vel, axis, *T))
+        return -1;
+    std::unique_ptr<nv::live::Cache::VMap> nm(vm ? new nv::live::Cache::VMap(*vm) : new nv::live::Cache::VMap);
+    (*nm)[k] = T.get();
+    C->vstore.push_back(std::move(T));
+    C->vmap.store(nm.get(), std::memory_order_release);
+    C->vgrave.push_back(std::move(nm));
+    return 1;
 }

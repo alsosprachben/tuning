@@ -1086,13 +1086,13 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             // a part's receive settings (1p 02-12, 14, 1F, 20) and master pan
             // (40 00 06) -- an event of their own for the live part, which the
             // parse below would leave it none of (nvlive --test, nvlive_check)
-            if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && d[4] == 0x40) {
+            if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && (d[4] == 0x40 || d[4] == 0x41)) {
                 const int a5 = d[5], a6 = d[6];
                 const bool sys = a5 == 0x01 && a6 >= 0x30 && a6 <= 0x5A;
                 const bool eq = (a5 == 0x02 && a6 <= 3) || ((a5 >> 4) == 4 && a6 == 0x20);
                 const bool rx = (a5 >> 4) == 1 && ((a6 >= 0x02 && a6 <= 0x12) || a6 == 0x14 || a6 == 0x1F || a6 == 0x20);
                 const bool mp = a5 == 0x00 && a6 == 0x06;
-                if (sys || eq || rx || mp) {
+                if (sys || eq || rx || mp || d[4] == 0x41) {   // (...and drum setup: live's dedit)
                     P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});
                     P.sysex.push_back(d);
                 }

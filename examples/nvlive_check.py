@@ -348,6 +348,7 @@ def main(argv):
         lv.slab.tap_cap = lv.slab.tap_ucap         # (the copies' governor off too: live._callback's
                                                    # cut on a slow block; nvlive cuts none in --test)
         dry.append(np.frombuffer(lv.callback(None, 128, None, 0)[0], np.float32).reshape(-1, 2))
+        patchsync.fill(lv)              # (an edited drum key's templates: nvlive's in step too)
         if progs:
             for _part, _p in patchsync.build(lv):
                 instant_scan(lv, _p)

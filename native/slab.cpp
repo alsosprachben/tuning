@@ -2560,6 +2560,33 @@ struct Part {
     int rpn_msb[16], rpn_lsb[16];
     bool rpn_none[16] = {};
     int nrpn_msb[16], nrpn_lsb[16];             // the NRPN selected (live's nrpn; 127 none)
+    // THE DRUM INSTRUMENTS' OWN SETTINGS (live's dedit: GS drum NRPN 18-1F
+    // rr, drum setup 41 m p rr): channel -> key -> param (DE_*) -> value, put
+    // back by a drum set change, a GS reset or GM System On; each channel's
+    // drums state (live's ch_drums, as the host resolves a program change)
+    // and the drum map its rhythm part plays (drum_rmap)
+    enum { DE_PITCH, DE_LEVEL, DE_PAN, DE_REVERB, DE_CHORUS, DE_DELAY, DE_RXON, DE_RXOFF, DE_GROUP };
+    std::map<int, std::map<int, std::map<int, int>>> dedit;
+    int chdrums[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0};
+    std::map<int, int> drum_rmap;
+    static int drum_nrpn(int msb)       // (blockrender.GS_DRUM_NRPN)
+    {
+        switch (msb) {
+        case 0x18: return DE_PITCH; case 0x1A: return DE_LEVEL; case 0x1C: return DE_PAN;
+        case 0x1D: return DE_REVERB; case 0x1E: return DE_CHORUS; case 0x1F: return DE_DELAY;
+        }
+        return -1;
+    }
+    const std::map<int, int> *drum_edit(int pi, int ch, int note) const
+    {
+        if (pi < 0 || !patches[pi].drums)
+            return nullptr;
+        auto c = dedit.find(ch);
+        if (c == dedit.end())
+            return nullptr;
+        auto k = c->second.find(note);
+        return k == c->second.end() ? nullptr : &k->second;
+    }
     // THE SOUND CONTROLLERS (live's snd): each channel's CC71-78 as its
     // offset d (sound_offset; 0 none), cc - 71 -- read where a part answers
     // them (OrganSpec.snd_mask: the harmonium's attack and release)
@@ -5755,6 +5782,12 @@ struct Part {
 
     void strike_now(int ch, int note, int vel, long long n0, bool slur = false)
     {
+        const std::map<int, int> *dst = 0 <= note && note <= 127 ? drum_edit(patch_for(ch, note), ch, note) : nullptr;
+        if (dst) {
+            auto rx = dst->find(DE_RXON);
+            if (rx != dst->end() && rx->second == 0)
+                return;                     // the kit told not to receive this key (live's _drum_edit)
+        }
         key_vel[std::make_pair(ch, note)] = vel;
         if (note < 0 || note > 127)
             return;
@@ -5768,7 +5801,11 @@ struct Part {
         if (sn < 0 || sn > 127)
             return;
         n0 += amp_ahead();                  // a part with a valve plays its notes late (LIVE_AMP_LOOKAHEAD)
-        const nv::live::Template *T = nv_tcache_lookup(cache, sn, bucket(vel), speed);
+        int axis = speed;                   // (an edited drum key's own pitch or pan: its own template)
+        if (dst && (dst->count(DE_PITCH) || dst->count(DE_PAN)))
+            axis = nv_drum_axis(dst->count(DE_PITCH) ? dst->at(DE_PITCH) : INT_MIN,
+                                dst->count(DE_PAN) ? dst->at(DE_PAN) : INT_MIN);
+        const nv::live::Template *T = nv_tcache_lookup(cache, sn, bucket(vel), axis);
         if (!T)
             return;                         // a miss: live warms it off the audio thread
         amp_touch(cur);                     // (its chord changed: the valve's products are stale)
@@ -5789,6 +5826,11 @@ struct Part {
             return;
         }
         double scale = pow(10.0, level_db / 20.0) * swell * chan_gain(ch);
+        if (dst) {                          // (its level against the preset's 100: the file's law)
+            auto lv = dst->find(DE_LEVEL);
+            if (lv != dst->end())
+                scale *= pow(lv->second / 100.0, 2.0);
+        }
         if (patches[cur].touch)             // touch: the press over the template's (a voice without it: its own level)
             scale *= pow((fixt ? 127 : vel) / 127.0, 2.0) / std::max(pow(T->vel / 127.0, 2.0), 1e-9);
         else
@@ -6897,6 +6939,30 @@ struct Part {
     {
         if (gs_display(d))
             return;
+        // A DRUM MAP'S SETTING (blockrender.parse_gs_drum_setup, port A's):
+        // every drum channel playing the map, as a drum NRPN on each
+        if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && d[4] == 0x41 && (d[5] >> 4) <= 1) {
+            static const int PAR[10] = {-1, -2, DE_LEVEL, DE_GROUP, DE_PAN, DE_REVERB, DE_CHORUS, DE_RXOFF, DE_RXON,
+                                        DE_DELAY};
+            const int pn = d[5] & 0x0F, map = d[5] >> 4, key = d[6], v = d[7];
+            const int par = pn <= 9 ? PAR[pn] : -1;
+            if (par != -1) {
+                for (int c = 0; c < 16; c++) {
+                    auto rm = drum_rmap.find(c);
+                    if (chdrums[c] && (rm == drum_rmap.end() ? 0 : rm->second) == map)
+                        dedit[c][key][par == -2 ? DE_PITCH : par] = par == -2 ? v - key : v;
+                }
+                return;
+            }
+        }
+        // ...AND USE FOR RHYTHM PART (40 1p 15, port A): the map a part plays
+        if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && d[4] == 0x40 && (d[5] >> 4) == 1
+            && d[6] == 0x15) {
+            const int blk = d[5] & 0x0F, c = blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk);
+            chdrums[c] = d[7] != 0;
+            if (d[7])
+                drum_rmap[c] = d[7] - 1;
+        }
         // THE INSERTION EFFECT (gsefx.parse, live._sysex): its type, a
         // parameter, a send, a controller, or a part's assign
         {
@@ -6957,6 +7023,10 @@ struct Part {
     void power_on(long long n0)
     {
         panic(n0);
+        dedit.clear();                          // (every drum key as its set has it)
+        drum_rmap.clear();
+        for (int c = 0; c < 16; c++)
+            chdrums[c] = c == 9;
         if (efx)                                // the insertion effect Thru, every part off it
             nv_efx_live_apply(efx, (double)n0 / rate, 0, 0, 0);
         for (int c = 0; c < 256; c++)
@@ -9684,7 +9754,11 @@ struct Part {
             (cc == 101 ? rpn_msb : rpn_lsb)[ch] = v;
         } else if (cc == 6 || cc == 38) {
             int gs = rpn_none[ch] ? gs_sound_nrpn(nrpn_msb[ch], nrpn_lsb[ch]) : -1;
-            if (gs >= 0) {                          // GS's sound NRPNs: CC71-78's older address
+            const int dp = rpn_none[ch] && nrpn_msb[ch] != 127 ? drum_nrpn(nrpn_msb[ch]) : -1;
+            if (dp >= 0 && cc == 6)                 // a DRUM INSTRUMENT's own: its key the NRPN's LSB
+                dedit[ch][nrpn_lsb[ch]][dp] = dp == DE_PITCH ? v - 64 : v;
+            else if (dp >= 0) {
+            } else if (gs >= 0) {                   // GS's sound NRPNs: CC71-78's older address
                 if (cc == 6)
                     sound_cc(ch, gs, v, n0);
             } else
@@ -11683,6 +11757,12 @@ struct Part {
             if (e.type == 6) {
                 if (e.a >= 0 && e.a < (int)sxs.size())
                     sysex(sxs[e.a], n0);
+            } else if (e.type == 5) {           // a program change, its channel's drums state resolved (the host's)
+                if (e.ch >= 0 && e.ch < 16) {
+                    chdrums[e.ch] = e.b != 0;
+                    if (e.b)                    // "When the Drum Set is changed, DRUM SETUP PARAMETER
+                        dedit.erase(e.ch);      // values will all be initialized"
+                }
             } else if (e.type == 0)
                 note_on(e.ch, e.a, e.b, n0);
             else if (e.type == 1)

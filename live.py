@@ -3619,6 +3619,19 @@ class Patch:
             # A HELD ROLL IS LIVE'S (_roll_tick): the template is its first
             # hit alone, the one hit it keeps (B.ROLL_FIRST)
             tr.append(mido.MetaMessage("marker", text=B.ROLL_FIRST, time=0))
+        if self.drums and isinstance(fast, tuple):
+            # A DRUM KEY's OWN PITCH AND PAN (live's dedit: a file's drum NRPN
+            # or drum setup): the template built with them, as the file's note
+            # is -- GS's drum NRPNs on the key (blockrender reads them as the
+            # file's), pitch 64 + semitones, pan as sent (0 random)
+            for _par, _msb in (('pitch', 0x18), ('pan', 0x1C)):
+                _v = fast[1] if _par == 'pitch' else fast[2]
+                if _v is None:
+                    continue
+                for _c, _x in ((99, _msb), (98, note), (6, (_v + 64) if _par == 'pitch' else _v)):
+                    tr.append(mido.Message("control_change", channel=ch, control=_c,
+                                           value=max(0, min(127, int(_x))), time=0))
+            fast = None
         if fast is not None:
             # THE TEMPLATE AXIS's CC (T.WHEEL_CC): the honky-tonk's detune
             # (CC13, DETUNE_STEPS), else the rotor's speed (CC80, read through
@@ -4666,6 +4679,14 @@ class Live:
         # CC71-78: channel -> {control name: d}, only the ones not at 64.
         self.snd = {}
         self.nrpn = {}          # channel -> the NRPN selected, for GS's sound NRPNs
+        # THE DRUM INSTRUMENTS' OWN SETTINGS (GS drum NRPN 18-1F rr, drum setup
+        # 41 m p rr; blockrender's dedit, read at each drum note's onset):
+        # channel -> key -> {param: value}, pitch in semitones from the key --
+        # put back by a drum set change, a GS reset or GM System On; and the
+        # drum MAP each rhythm part plays (0 MAP1, 1 MAP2), which drum setup
+        # addresses ("use for rhythm part")
+        self.dedit = {}
+        self.drum_rmap = {}
         # BANK SELECT, latched until the next program change (tonelib's
         # resolve_patch). ch_drums is what each channel's last program change
         # resolved to; channel 10 is drums from power-on. rx_bank is Roland's
@@ -6169,7 +6190,15 @@ class Live:
             elif msg.control in (6, 38):            # data entry
                 _gs = (T.GS_SOUND_NRPN.get(self.nrpn.get(ch))
                        if self.rpn.get(ch, (127, 127)) is None else None)
-                if _gs is not None:
+                _dn = self.nrpn.get(ch) if self.rpn.get(ch, (127, 127)) is None else None
+                if _dn is not None and msg.control == 6 and _dn[0] in B.GS_DRUM_NRPN:
+                    # a DRUM INSTRUMENT's own: its key the NRPN's LSB
+                    _par = B.GS_DRUM_NRPN[_dn[0]]
+                    self.dedit.setdefault(ch, {}).setdefault(_dn[1], {})[_par] = (
+                        msg.value - 64 if _par == 'pitch' else msg.value)
+                    if _par in ('pitch', 'pan'):
+                        self._drum_warm(ch, _dn[1])
+                elif _gs is not None:
                     if msg.control == 6:
                         self._sound_cc(ch, _gs, msg.value, n0, parts)
                 else:
@@ -6251,6 +6280,10 @@ class Live:
                 _msb, _map, msg.program,
                 self.ch_drums.get(ch, ch == GM_PERCUSSION_CHANNEL), self.rx_bank)
             self.ch_drums[ch] = _dr
+            if _dr:
+                # "When the Drum Set is changed, DRUM SETUP PARAMETER values
+                # will all be initialized" (VE-GS Pro MIDI Implementation)
+                self.dedit.pop(ch, None)
             _said = self.rx_bank and _msb in (T.GM2_DRUM_BANK, T.GM2_MELODIC_BANK)
             for part in parts:
                 if not self._listens(part, ch):
@@ -6632,7 +6665,41 @@ class Live:
                 e[3] += d
                 e[6] += d
 
+    def _drum_edit(self, part, ch, note):
+        """The file's own settings of this drum key now (blockrender's
+        drum_edit_at at the onset): {} where none, or not a drum part."""
+        if not part.patch.drums:
+            return {}
+        return self.dedit.get(ch, {}).get(note, {})
+
+    @staticmethod
+    def _drum_axis(dst):
+        """An edited drum key's template axis: ('dr', pitch, pan), None each unset."""
+        return ('dr', dst.get('pitch'), dst.get('pan'))
+
+    def _drum_warm(self, ch, key):
+        """Ask the builder for an edited drum key's templates, every bucket,
+        on each drum part listening on ch -- so the strike after the edit finds
+        them (a miss is silence)."""
+        dst = self.dedit.get(ch, {}).get(key, {})
+        if 'pitch' not in dst and 'pan' not in dst:
+            return
+        ax = self._drum_axis(dst)
+        for part in self.parts:
+            if not part.patch.drums or not self._listens(part, ch):
+                continue
+            sn = key + part.transpose
+            if not 0 <= sn <= 127:
+                continue
+            for b in range(part.patch.nbuckets):
+                if (sn, b, ax) not in part.patch.templates:
+                    self.warm_reqs.append((part.patch, sn, b, ax))
+        self.patch_go.set()
+
     def _note_on_now(self, part, ch, note, vel, n0):
+        _dst = self._drum_edit(part, ch, note)
+        if _dst.get('rxon', 1) == 0:
+            return                              # the kit told not to receive this key
         self.key_tone[(part.pid, ch, note)] = part.patch
         self.key_vel[(part.pid, ch, note)] = vel
         snote = note + part.transpose
@@ -6644,6 +6711,8 @@ class Live:
         # simply joins the rotor where it is.
         _axis = (self.detune_step.get(part.pid, part.patch.leslie_default)
                  if part.patch.detune_wheel else part.patch.leslie_default)
+        if 'pitch' in _dst or 'pan' in _dst:   # (a drum key's own pitch or pan: its own template)
+            _axis = self._drum_axis(_dst)
         tmpl = part.patch.get(snote, vel, _axis)
         if tmpl is None:
             # Never build here: that is 1.4-10 ms on the audio thread. Silence,
@@ -6673,6 +6742,8 @@ class Live:
         if _skind:
             self._siren_on(part, ch, note, vel, n0, _skind)
         scale = part.gain() * self._chan_gain(ch)
+        if 'level' in _dst:                     # (its level against the preset's 100: the file's law)
+            scale *= (_dst['level'] / 100.0) ** 2
         _fixed = part.touch_fixed()
         if part.patch.touch_sensitive:
             scale *= (((127.0 if _fixed else vel) / 127.0) ** 2 /
@@ -10554,6 +10625,8 @@ class Live:
                 return
             ch += 16 * _g
             self.ch_drums[ch] = bool(mode)
+            if mode:
+                self.drum_rmap[ch] = mode - 1
             for part in self.parts:
                 if part.channel != ch:
                     continue
@@ -10563,6 +10636,18 @@ class Live:
                 self._ask_patch(part, want)
             if self.patch_reqs:
                 self.patch_go.set()
+            return
+        _ds = _BRs.parse_gs_drum_setup(d)
+        if _ds is not None:
+            # A DRUM MAP'S SETTING (blockrender's): every channel of that port
+            # playing the map, as a drum NRPN on each
+            _dport, _dmap, _dk, _dpar, _dv = _ds
+            if _dport == 0 and not _g:
+                for _dc in range(16):
+                    if self.ch_drums.get(_dc, _dc == GM_PERCUSSION_CHANNEL) and self.drum_rmap.get(_dc, 0) == _dmap:
+                        self.dedit.setdefault(_dc, {}).setdefault(_dk, {})[_dpar] = _dv
+                        if _dpar in ('pitch', 'pan'):
+                            self._drum_warm(_dc, _dk)
             return
         _m = _BRs.parse_master(d)
         if _m is not None:
@@ -10587,6 +10672,8 @@ class Live:
         # whatever it is now -- it is the player's part -- but every channel's
         # own drums state goes back to channel 10 alone.
         self.rx_bank = _lvl != 1
+        self.dedit.clear()                      # (every drum key as its set has it)
+        self.drum_rmap.clear()
         self.slab.send = [1.0] * 256           # every channel back to the nominal distance
         self.bank_msb.clear()
         self.bank_lsb.clear()

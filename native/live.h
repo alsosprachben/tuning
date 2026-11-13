@@ -91,6 +91,8 @@ struct Template {
 }  // namespace nv
 
 extern "C" const nv::live::Template *nv_tcache_lookup(void *cache, int note, int bucket, int speed);
+extern "C" int nv_drum_axis(int pitch, int pan);
+extern "C" int nv_tcache_build_var(void *cache, int program, int note, int bucket, int nb, int axis);
 
 // synthkernel.c's synth_voice (and synth_voice_xdec: the same arguments)
 extern "C" typedef void (*nv_voice_fn)(

@@ -37,3 +37,22 @@ def build(lv):
         patch.warm()
         got.append((part, patch))
     return got
+
+
+def fill(lv):
+    """live's miss builder in step (_fill_misses), for an edited drum key's
+    templates alone (its axis ('dr', pitch, pan): live._drum_warm's) -- nvlive
+    builds those in step after the block too; any other miss stays one."""
+    keep = []
+    while lv.warm_reqs:
+        patch, note, bucket, axis = lv.warm_reqs.popleft()
+        if not (isinstance(axis, tuple) and axis and axis[0] == 'dr'):
+            keep.append((patch, note, bucket, axis))
+            continue
+        if (note, bucket, axis) in patch.templates:
+            continue
+        t = patch._raw_template(note, patch.bucket_vel(bucket), axis)
+        if t is not None:
+            patch.templates[(note, bucket, axis)] = t
+            patch.partials += t["P"]
+    lv.warm_reqs.extend(keep)

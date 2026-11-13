@@ -6,6 +6,7 @@
 #ifndef NV_HOSTLIVE_H
 #define NV_HOSTLIVE_H
 #include <algorithm>
+#include <climits>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -46,6 +47,8 @@ int nv_part_take_reset(void *h);
 void nv_part_mts_ref(void *h, int note, double hz);
 void nv_tcache_set_gm2(void *h, int on);
 void nv_tcache_set_var(void *h, int v);
+int nv_drum_axis(int pitch, int pan);
+int nv_tcache_build_var(void *h, int program, int note, int bucket, int nb, int axis);
 void nv_live_vars(int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2,
                   int nslot, const OrganSpec *const *so, const int *soff, const OrganSpec *const *sog,
                   long long kn);
@@ -777,6 +780,7 @@ struct nv_host {
     std::map<int, int> bmsb;
     std::map<int, int> blsb;
     bool rxbank;
+    int chdr[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0};    // each channel drums (live's ch_drums)
     const char * tmap_;
     std::atomic<int> default_map{0};        // THE STANDARD (live.std_map): the map CC32 0 reads in -- global 13
     std::function<void(int type, int ch, int a, int b)> latch;
@@ -1021,6 +1025,21 @@ struct nv_host {
     std::vector<std::string> notes;
     std::function<void(const std::string &m)> note;
     std::function<void()> builder_loop;
+    // AN EDITED DRUM KEY's TEMPLATES (live._drum_warm): the host's copy of the
+    // drum keys' pitch and pan (the slab keeps the whole of each key's edits),
+    // the NRPN selected per channel, each rhythm part's map; and the builds
+    // asked (the builder's, or in step after the block: drum_build)
+    struct DReq {
+        void *c;
+        int prog, note, axis;
+    };
+    std::vector<DReq> dreq;
+    std::map<int, std::map<int, std::array<int, 2>>> hdedit;
+    int hn_msb[16] = {127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127};
+    int hn_lsb[16] = {127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127};
+    std::map<int, int> hrmap;
+    void drum_set(int ch, int key, int which, int v);
+    void drum_build(std::vector<DReq> &q);
     std::function<void()> audio;
     std::thread player;
     std::thread builder;
