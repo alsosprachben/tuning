@@ -68,7 +68,8 @@ TASKS = [
     ("GM1", True, "Live: check the fiddle, tinkle bell, melodic tom, reverse cymbal and breath noise against live.Live"),
     ("GM1", True, "Live: a drum set identical to live.Live beyond the kick and toms (the Standard set's every key, "
                   "nvlive end to end)"),
-    ("GM1", False, "Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender's reader refuses it"),
+    ("GM1", True, "Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender plays it, its refusal "
+                  "gone (4edbafa)"),
     ("GM1", True, "Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)"),
     ("GM1", True, "Moog: an MF-104M on a note whose pitch or shapes move -- each repeat its own filter row, its "
                   "pitch and shape rows its delay later (_prep_delays' _mf_dup; nv_song_moog_dup); nvrender vs "
@@ -326,12 +327,14 @@ TASKS = [
                      "measured): the system reverb, chorus and delay (macros and parameters), the GS EQ, a GS "
                      "reset's sends, RX CHANNEL, the Rx switches, master pan; a drum key's own settings (GS drum "
                      "NRPNs and drum setup: level, Rx note on, pitch, pan -- fb7b7ca); velocity sense and the "
-                     "keyboard range; USE FOR RHYTHM PART in nvlive (a channel's part a kit, as live's); open: the "
-                     "per-key delay send, the user drum sets live, the controller matrix live, ASSIGN MODE's modes"),
+                     "keyboard range; USE FOR RHYTHM PART in nvlive (a channel's part a kit, as live's); the "
+                     "per-key delay send and the user drum sets (4edbafa); the controller matrix (GS 40 2p, CC1/CC2's "
+                     "numbers, GM2 09: amplitude, pitch, cutoff, LFO rate, and LFO1/LFO2 vibrato and tremolo as a "
+                     "second LFO, as files have them); open: ASSIGN MODE's modes"),
     ("SC-55", False, "Sound Canvas superset, the controllers -- done: the Rx switches live (a message a part "
                      "does not receive dropped, both engines, 00ec34d), the wheel's jobs on CCs of their own; "
-                     "open: the CC1/CC2 controller numbers (stored, not yet read by anything) and the controller "
-                     "matrix live, into the CC-route design (a controller, a destination, a depth)"),
+                     "the controller matrix live, both engines, the CC1/CC2 controller numbers read by it; "
+                     "open: the matrix on the panel, in the CC-route design (a controller, a destination, a depth)"),
     ("SC-8850", False, "Sound Canvas superset, the panel (livetui, then nvlive) -- done: per-part pan, reverb, "
                        "chorus and delay sends as part columns; the system effects page (G: the reverb's type, "
                        "level, time and delay feedback, the chorus's and delay's types and parameters, the EQ -- "

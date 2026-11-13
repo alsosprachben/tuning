@@ -340,7 +340,51 @@ def userdrums():
     return mid
 
 
-MAKERS = {"userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
+def cmx_live():
+    """THE CONTROLLER MATRIX, one held note at a time on a Moog lead (81):
+    plain; the mod wheel into amplitude at -100 %, the wheel at half;
+    channel pressure into pitch +2 semitones, pressed full; CC1's number set
+    to CC20 and CC1 into cutoff +4800 cents, CC20 full; after a GS reset;
+    then the LFOs: pressure into LFO1 pitch (236 cents), pressed full; the mod
+    wheel into LFO1 amplitude at 100 %, the wheel full."""
+    mid, tr = one_track()
+    tr.append(gs([0x40, 0x00, 0x7F], 0x00))
+    tr.append(mido.Message('program_change', channel=0, program=81))
+
+    def note(gap):
+        tr.append(mido.Message('note_on', channel=0, note=57, velocity=100, time=gap))
+        tr.append(mido.Message('note_off', channel=0, note=57, velocity=0, time=600))
+    note(20)
+    tr.append(gs([0x40, 0x21, 0x02], 0x00))
+    tr.append(mido.Message('control_change', channel=0, control=1, value=64, time=120))
+    note(0)
+    tr.append(mido.Message('control_change', channel=0, control=1, value=0, time=120))
+    tr.append(gs([0x40, 0x21, 0x20], 0x42))
+    tr.append(mido.Message('aftertouch', channel=0, value=127))
+    note(0)
+    tr.append(mido.Message('aftertouch', channel=0, value=0, time=120))
+    tr.append(gs([0x40, 0x11, 0x1F], 20))
+    tr.append(gs([0x40, 0x21, 0x41], 0x60))
+    tr.append(mido.Message('control_change', channel=0, control=20, value=127))
+    note(0)
+    tr.append(gs([0x40, 0x00, 0x7F], 0x00))
+    tr[-1].time = 120
+    tr.append(mido.Message('program_change', channel=0, program=81))
+    note(0)
+    tr.append(gs([0x40, 0x21, 0x24], 50))
+    tr[-1].time = 120
+    tr.append(mido.Message('aftertouch', channel=0, value=127))
+    note(0)
+    tr.append(mido.Message('aftertouch', channel=0, value=0, time=120))
+    tr.append(gs([0x40, 0x21, 0x06], 0x7F))
+    tr.append(mido.Message('control_change', channel=0, control=1, value=127))
+    note(0)
+    tr.append(mido.Message('control_change', channel=0, control=1, value=0, time=120))
+    tr.append(mido.Message('note_on', channel=0, note=57, velocity=0, time=960))
+    return mid
+
+
+MAKERS = {"cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
           "mpe_zone": mpe_zone}
 
 

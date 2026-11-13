@@ -1855,8 +1855,10 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                         gs_rx[ch] = v < 16 ? v : 16;
                     else if (a6 == 0x14)
                         gs_assign[ch] = v;
-                    else if (a6 == 0x1F || a6 == 0x20)
+                    else if (a6 == 0x1F || a6 == 0x20) {
                         gs_ccnum[std::make_pair(ch, a6)] = v;
+                        nv_part_sysex(part, m.x.data(), (int)m.x.size());   // (the controller matrix's CC1/CC2: the slab's)
+                    }
                     else if (v)
                         gs_rxsw[ch].erase(a6);
                     else

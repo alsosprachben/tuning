@@ -88,6 +88,9 @@ import tonelib as T
 import gsefx as _GSX
 import gsdisplay as _GSDISP
 import gsrx as _GSRX
+import ctrlmatrix as _CMX
+# the mod wheel's default vibrato into the matrix's (blockrender's _modvib)
+_CMX_MODVIB = os.environ.get('TUNING_MOD_VIBRATO', '0') not in ('0', 'off', '')
 import gsdelay as _GSD
 import register as _RGM     # the free-string register's physics (live: _reg_*)
 import damper as _DMP       # half-pedalling: each key's damper by the pedal's value
@@ -4809,6 +4812,14 @@ class Live:
         # string vibrato actually sits.
         self.mod_rate = 0.25    # +25% rate at full wheel
         self.modw = {}          # channel -> wheel position 0..1
+        # THE CONTROLLER MATRIX (ctrlmatrix: GS 40 2p, GM2 09 0s -- blockrender's
+        # _cmx): a channel's routing, made when a message names it; its sums
+        # now (cmx_now: amp, pitch, cutoff, rate -- blockrender's _CMXEV's);
+        # every CC's last value on each channel, its sources
+        self.cmx = {}
+        self.cmx_now = {}
+        self.cmx_vib = set()            # channels whose matrix vibrato _cmx_tick moves
+        self.ccv = {}
         self.wheel_at = {}      # channel -> the mod wheel's last CC1, whatever it means there
         self.job_at = {}        # (channel, CC) -> a wheel job's last value (T.WHEEL_CC), as its CC or the wheel's route set it
         # Which way the half-moon switch is thrown, per channel. A tonewheel
@@ -5714,6 +5725,12 @@ class Live:
         except Exception as e:
             self.errors += 1
             self.last_error = "lfo2: %s: %s" % (type(e).__name__, e)
+        if self.cmx_vib:
+            try:
+                self._cmx_tick(n0)
+            except Exception as e:
+                self.errors += 1
+                self.last_error = "matrix vibrato: %s: %s" % (type(e).__name__, e)
         # (and a fine pass's result, which otherwise waited for the next chord
         # to wake the pump: it landed as its own note ended, never heard)
         if self.amp_dirty or self.amp_out is not None or self.amp_fine_results or self.amp_chg \
@@ -5989,6 +6006,8 @@ class Live:
             # ratio, and RPN 0 changing the range while the wheel is off centre
             # has to recompute from the wheel itself. See _repitch.
             self.wheel[ch] = msg.pitch
+            if ch in self.cmx:
+                self._cmx_upd(ch, n0, parts)
             if any(p.patch.leslie for p in parts if self._listens(p, ch)):
                 # ON A ROTOR PART THE WHEEL IS THE HALF-MOON, not a bend: see
                 # PW_FIRE. A Hammond has no pitch bend to take away.
@@ -5999,13 +6018,23 @@ class Live:
             self._tone_ctl(ch, 'at', n0, msg.value)        # a plunger's hand
             for slots, tilt in self._press_groups(ch):
                 self.slab.press(slots, self.pressure[ch], self.press_db, tilt)
+            if ch in self.cmx:
+                self._cmx_upd(ch, n0, parts)
         elif msg.type == "polytouch":
             self.ppress[(ch, msg.note)] = msg.value / 127.0      # a siren's air (_siren_block)
+            if ch in self.cmx:
+                self._cmx_upd(ch, n0, parts)
             for slots, tilt in self._press_groups(ch, note=msg.note):
                 self.slab.press(slots, msg.value / 127.0, self.press_db, tilt)
         elif msg.type == "control_change" and self._messenger_cc(ch, msg.control, msg.value, n0):
             pass            # a Messenger's panel, on a part that reads its chart
         elif msg.type == "control_change":
+            self.ccv[(ch, msg.control)] = msg.value             # (the controller matrix's sources)
+            if msg.control == 121:
+                for _rc in [k for k in self.ccv if k[0] == ch and k[1] in (1, 11, 64, 65, 66, 67)]:
+                    self.ccv[_rc] = 127 if _rc[1] == 11 else 0
+            if ch in self.cmx:
+                self._cmx_upd(ch, n0, parts)
             if msg.control == 2:
                 self.cc2[ch] = msg.value / 127.0                 # breath: a siren's air (_siren_block)
             if msg.control == __import__("scanner").SWITCH_CC:
@@ -7038,6 +7067,9 @@ class Live:
         d = self.trem_depth.get(part.pid, 0.0)
         if d > 0.0:
             self.slab.tremolo_arm(slots, d, part.patch.tremolo_stereo)
+        if (self.cmx_now.get(ch, {}).get('tva', 0.0) > 0.0 and not part.drums
+                and not part.patch.stop_tremolo_depth > 0.0):
+            self._cmx_trem(ch, slots)       # (the matrix's tremolo, on a note struck under it)
         pr = self.pressure.get(ch, 0.0)
         if self.mpe and self.mpe.is_member(ch):
             pr = T.mpe_pressure(pr, self.pressure.get(self.mpe.manager_of(ch), 0.0))
@@ -8608,8 +8640,10 @@ class Live:
         100, not 127, which is four decibels of room for a part to be turned
         UP. Both renderers read tonelib's constant so they cannot drift.
         """
-        return ((self.vol.get(ch, T.GM_DEFAULT_VOLUME) / 127.0)
-                * (self.expr.get(ch, T.GM_DEFAULT_EXPRESSION) / 127.0)) ** 2
+        g = ((self.vol.get(ch, T.GM_DEFAULT_VOLUME) / 127.0)
+             * (self.expr.get(ch, T.GM_DEFAULT_EXPRESSION) / 127.0)) ** 2
+        cm = self.cmx_now.get(ch)
+        return g * cm['amp'] if cm and cm['amp'] != 1.0 else g     # (the matrix's amplitude)
 
     CHORUS_SLOT = "chorus"
     CHORUS_MAX = 2              # copies, live: see _chorus
@@ -8763,10 +8797,114 @@ class Live:
             if mb:
                 sd = dict(sd or {})
                 sd['brightness'] = T.mpe_timbre(sd.get('brightness', 0.0), mb)
+        cm = self.cmx_now.get(ch)
+        if cm is not None:
+            # ...and THE CONTROLLER MATRIX's (blockrender's _snd_d): its cutoff
+            # as brightness (9600 cents the full span), its LFO1 rate as the
+            # vibrato's (x 2^d)
+            sd = dict(sd or {})
+            sd['brightness'] = max(-1.0, min(1.0, sd.get('brightness', 0.0) + cm['cutoff'] / 9600.0))
+            sd['vib_rate'] = sd.get('vib_rate', 0.0) + math.log2(max(0.1, 1.0 + cm['rate'] / 5.5))
+            sd = {k: d for k, d in sd.items() if d}
         if not sd or part.drums:
             return {}
         ctl = T.sound_controls_of(part.patch._voice_class(note + part.transpose))
         return {k: d for k, d in sd.items() if k in ctl}
+
+    def _cmx_upd(self, ch, n0, parts=None):
+        """THE CONTROLLER MATRIX's sums on channel ch now (blockrender's
+        _cmx_upd): each destination the sum of its cells' depths times their
+        sources' values -- the mod wheel, the bend (signed), the channel's
+        pressure, its keys' highest, a CC -- and what moved applied to the
+        notes sounding: the amplitude as a fader, the pitch, the cutoff and
+        LFO rate as their sound controls."""
+        m = self.cmx.get(ch)
+        if m is None:
+            return
+        parts = self.parts if parts is None else parts
+
+        def val(src):
+            if src == 'mod':
+                return self.ccv.get((ch, 1), 0) / 127.0
+            if src == 'cat':
+                return self.pressure.get(ch, 0.0)
+            if src == 'bend':
+                return self.wheel.get(ch, 0) / 8192.0
+            if src == 'pat':
+                kp = [v for (c, _n), v in self.ppress.items() if c == ch]
+                return max(kp) if kp else 0.0
+            if isinstance(src, tuple):
+                return self.ccv.get((ch, src[1]), 0) / 127.0
+            return 0.0
+        cl = m.cells()
+
+        def tot(dest, skip=()):
+            return sum(d * val(sr) for (sr, de), d in cl.items() if de == dest and sr not in skip)
+        # (the LFOs' vibrato and tremolo, as blockrender's: the mod wheel's
+        # default vibrato only with TUNING_MOD_VIBRATO -- our voices carry
+        # their players' own; LFO2 as a second depth on the same LFO)
+        nomod = () if _CMX_MODVIB else ('mod',)
+        now = dict(amp=max(0.0, 1.0 + tot('amp')), pitch=tot('pitch', ('bend',)), cutoff=tot('cutoff'),
+                   rate=tot('lfo1_rate'),
+                   vib=max(0.0, tot('lfo1_pitch', nomod) + tot('lfo2_pitch', nomod)),
+                   tva=max(0.0, min(1.0, tot('lfo1_tva') + tot('lfo2_tva'))))
+        was = self.cmx_now.get(ch) or dict(amp=1.0, pitch=0.0, cutoff=0.0, rate=0.0, vib=0.0, tva=0.0)
+        self.cmx_now[ch] = now
+        if now['amp'] != was['amp']:                # (as CC7: the notes sounding moved by the change)
+            g = self._chan_gain(ch)
+            old = self.cgain.get(ch, 1.0)
+            if g != old:
+                self.cgain[ch] = g
+                self.slab.channel_gain(self._sounding(ch), g / max(old, 1e-9))
+        if now['vib'] > 0.0 or was['vib'] > 0.0:
+            self.cmx_vib.add(ch)                    # (_cmx_tick moves it each block, and back once it stops)
+        if now['pitch'] != was['pitch'] or now['vib'] != was['vib']:
+            self._repitch(ch, n0)
+        if now['tva'] != was['tva'] or (now['tva'] > 0.0 and now['rate'] != was['rate']):
+            self._cmx_trem(ch, self._sounding(ch, pids={p.pid for p in self.parts
+                                                        if not p.patch.stop_tremolo_depth > 0.0}))
+        here = [p for p in parts if self._listens(p, ch) and not p.drums]
+        if now['cutoff'] != was['cutoff']:
+            self._reshape_sound(ch, here)
+        if now['rate'] != was['rate']:
+            for part in here:
+                if 'vib_rate' in T.sound_controls_of(part.patch._voice_class(60 + part.transpose)):
+                    self._vib_apply(part, ch, n0)
+        if now['cutoff'] != was['cutoff']:         # (the cutoff a Moog's knob: CC74's, as _sound_cc's)
+            for part in here:
+                if part.moog() is not None:
+                    self._moog_refresh(part, n0, chans=(ch,))
+
+    def _cmx_hz(self, ch):
+        """The matrix's LFO1 rate on channel ch: 5.5 Hz moved by its rate
+        cells (blockrender's TREMOLO_MATRIX_HZ + _cmx_at('rate'))."""
+        cm = self.cmx_now.get(ch)
+        return max(0.5, 5.5 + (cm['rate'] if cm else 0.0))
+
+    def _cmx_trem(self, ch, slots):
+        """THE MATRIX'S TREMOLO (LFO1/LFO2 amplitude depth) on these slots of
+        channel ch: a second LFO beside the wheel's, the Tremolo stop's swing
+        (Slab.stop_tremolo_arm: 1 + depth cos(2 pi hz n / rate), one absolute
+        clock) at the depth in force -- the file's sidebands' (1 + m cos wt).
+        A harmonium's own stop keeps its rows."""
+        cm = self.cmx_now.get(ch)
+        if cm is None or slots is None or not len(slots):
+            return
+        idx = np.asarray(slots, dtype=np.intp)
+        if cm['tva'] <= 0.0:
+            idx = idx[self.slab.tr_on[idx]]
+        if len(idx):
+            self.slab.stop_tremolo_arm(idx, cm['tva'], self._cmx_hz(ch))
+
+    def _cmx_tick(self, n0):
+        """One block of the matrix's vibrato: each channel whose LFO pitch
+        depth is up re-pitched to where the sine has got to (_repitch reads
+        it), and once more as it stops, back to the plain pitch."""
+        for ch in list(self.cmx_vib):
+            cm = self.cmx_now.get(ch)
+            self._repitch(ch, n0)
+            if cm is None or cm['vib'] <= 0.0:
+                self.cmx_vib.discard(ch)
 
     def _sound_stamp(self, part, ch, note, slots):
         """At note-on: the times, the delay, and the brightness/resonance gain.
@@ -10019,6 +10157,13 @@ class Live:
             self._bend_range(ch), self.wheel.get(ch, 0),
             self.coarse.get(ch, 0.0), self.fine.get(ch, 0.0),
             self.master_coarse, self.master_fine)
+        cm = self.cmx_now.get(ch)
+        if cm is not None and cm['pitch']:
+            ratio = ratio * 2.0 ** (cm['pitch'] / 12.0)     # (the controller matrix's pitch, semitones)
+        if cm is not None and cm['vib'] > 0.0:
+            # ...and its vibrato, the sine where the absolute clock is (blockrender's
+            # pitch stream: 2^(pv sin(2 pi hz t) / 1200), a step a block)
+            ratio = ratio * 2.0 ** (cm['vib'] * math.sin(2.0 * math.pi * self._cmx_hz(ch) * n0 / float(self.rate)) / 1200.0)
         if self.mpe and self.mpe.zone_of(ch) is not None:
             self._mpe_repitch(ch, ratio, n0)
             return
@@ -10709,6 +10854,16 @@ class Live:
             self._gs_ddev = None
             self._tap_key = None
             return
+        # THE CONTROLLER MATRIX (ctrlmatrix.parse, blockrender's): a cell, or
+        # CC1/CC2's controller number -- the channel's matrix made, applied,
+        # its sums moved
+        _cm = _CMX.parse(d, lambda b, a: (9 if b == 0 else (b - 1 if b <= 9 else b)) + (16 if a == 0x50 else 0))
+        if _cm is not None:
+            _cc_, _ck, _cp = _cm
+            if _cc_ < 16 and not _g:
+                self.cmx.setdefault(_cc_, _CMX.Matrix()).apply(_ck, _cp)
+                self._cmx_upd(_cc_, n0)
+            return
         if not _g and self._gs_rx_part(n0, d):
             return
         _rv = _BRs.parse_gs_reverb(d)
@@ -10805,6 +10960,9 @@ class Live:
         # own drums state goes back to channel 10 alone.
         self.rx_bank = _lvl != 1
         self.dedit.clear()                      # (every drum key as its set has it)
+        for _mc, _mm in list(self.cmx.items()):  # (the matrices back to a reset's, their sums with them)
+            _mm.reset()
+            self._cmx_upd(_mc, n0)
         self.gs_pstate.clear()                  # (every part's velocity sense and key range as power-on)
         self.drum_rmap.clear()
         self.slab.send = [1.0] * 256           # every channel back to the nominal distance

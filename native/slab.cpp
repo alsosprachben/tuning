@@ -41,6 +41,7 @@
 #include "pycompat.h"          // a section's entries: random.Random
 #include "gsdisplay.h"         // the Sound Canvas's display
 #include "mpe.h"               // MPE's zones (tonelib.MpeZones)
+#include "cmx.h"               // the controller matrix (ctrlmatrix)
 
 extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
 extern "C" const NoteClass *nv_tcache_note_class(void *h, int program, int note);
@@ -2549,6 +2550,14 @@ struct Part {
     std::vector<std::vector<uint8_t>> sx;           // the exclusives the events name (type 6)
     std::map<std::pair<int, int>, int> key_vel;     // (ch, note) -> the strike's velocity
     double pressure[16] = {};                       // channel aftertouch, 0..1
+    // THE CONTROLLER MATRIX (live's cmx, cmx_now, ccv): a channel's routing,
+    // made when a message names it; its sums now (amp, pitch, cutoff, rate);
+    // each CC's last value on each channel (set: sent at all), its sources
+    std::map<int, nv::Cmx> cmx;
+    std::map<int, std::array<double, 6>> cmx_now;     // amp, pitch, cutoff, rate, vib, tva
+    std::set<int> cmx_vib;                            // channels cmx_tick moves (live's)
+    int ccv[16][128] = {};
+    bool ccv_set[16][128] = {};
     // MPE (live's mpe, bend_mem, mpe_mgr): the zones; each member's own pitch
     // ratio (master included); each manager's bend as its zone last took it
     nv::MpeZones mpe;
@@ -4355,7 +4364,127 @@ struct Part {
         return b < nbuckets - 1 ? b : nbuckets - 1;
     }
 
-    double chan_gain(int ch) const { return pow((vol[ch] / 127.0) * (expr[ch] / 127.0), 2.0); }
+    double chan_gain(int ch) const
+    {
+        const double g = pow((vol[ch] / 127.0) * (expr[ch] / 127.0), 2.0);
+        auto c = cmx_now.find(ch);              // (the matrix's amplitude)
+        return c != cmx_now.end() && c->second[0] != 1.0 ? g * c->second[0] : g;
+    }
+
+    // live._cmx_upd: the matrix's sums on channel ch now -- each destination
+    // its cells' depths times their sources' values -- and what moved
+    // applied to the notes sounding: the amplitude as CC7's, the pitch, the
+    // cutoff and LFO rate as their sound controls
+    void cmx_upd(int ch, long long n0)
+    {
+        auto mi = cmx.find(ch);
+        if (mi == cmx.end() || ch < 0 || ch >= 16)
+            return;
+        const auto cl = mi->second.cells();
+        auto val = [&](int src) {
+            if (src == 0)
+                return (ccv_set[ch][1] ? ccv[ch][1] : 0) / 127.0;
+            if (src == 2)
+                return pressure[ch];
+            if (src == 1)
+                return wheel[ch] / 8192.0;
+            if (src == 3) {
+                double mx = -1.0;
+                for (auto &kv : ppress)
+                    if (kv.first.first == ch)
+                        mx = std::max(mx, kv.second);
+                return mx < 0.0 ? 0.0 : mx;
+            }
+            if (src >= 100)
+                return (ccv_set[ch][src - 100] ? ccv[ch][src - 100] : 0) / 127.0;
+            return 0.0;
+        };
+        auto tot = [&](int dest, int skip) {
+            double s_ = 0.0;
+            for (const auto &o : cl)
+                if (o.first.second == dest && o.first.first != skip)
+                    s_ = s_ + o.second * val(o.first.first);
+            return s_;
+        };
+        static const bool modvib = [] {
+            const char *e = getenv("TUNING_MOD_VIBRATO");
+            return e && *e && strcmp(e, "0") && strcmp(e, "off");
+        }();
+        const int nomod = modvib ? -1 : 0;  // (the mod wheel's default vibrato: live's _CMX_MODVIB)
+        const std::array<double, 6> now = {std::max(0.0, 1.0 + tot(2, -1)), tot(0, 1), tot(1, -1), tot(3, -1),
+                                           std::max(0.0, tot(4, nomod) + tot(8, nomod)),
+                                           std::max(0.0, std::min(1.0, tot(6, -1) + tot(10, -1)))};
+        auto wi = cmx_now.find(ch);
+        const std::array<double, 6> was = wi != cmx_now.end() ? wi->second
+                                                              : std::array<double, 6>{1.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+        cmx_now[ch] = now;
+        if (now[0] != was[0]) {
+            const double g = chan_gain(ch), old = cgain_set[ch] ? cgain[ch] : 1.0;
+            if (g != old) {
+                cgain[ch] = g;
+                cgain_set[ch] = true;
+                S.channel_gain(sounding(ch), g / std::max(old, 1e-9));
+            }
+        }
+        if (now[4] > 0.0 || was[4] > 0.0)
+            cmx_vib.insert(ch);             // (cmx_tick moves it each block, and back once it stops)
+        if (now[1] != was[1] || now[4] != was[4])
+            repitch(ch, n0);
+        if (now[5] != was[5] || (now[5] > 0.0 && now[3] != was[3])) {
+            std::vector<long> sl;
+            for (auto &kv : S.live)
+                if (std::get<1>(kv.first) == ch) {
+                    const int pi = patch_of_pid(std::get<0>(kv.first));
+                    if (!(pi >= 0 && stop_trem(patches[pi])))
+                        sl.insert(sl.end(), kv.second.begin(), kv.second.end());
+                }
+            cmx_trem(ch, sl);
+        }
+        if (now[2] != was[2])
+            reshape_sound(ch);
+        if (now[3] != was[3])
+            for (const Patch &p : patches)
+                if (!p.drums && (p.channel < 0 || p.channel == pc(ch)) && ((p.snd >> 5) & 1))
+                    vib_apply(p, ch, n0);
+        if (now[2] != was[2])               // (the cutoff a Moog's knob: CC74's, as sound_cc's)
+            for (const Patch &p : patches)
+                if (p.moog && !p.drums && (p.channel < 0 || p.channel == pc(ch)))
+                    moog_refresh(p, n0, ch);
+    }
+
+    // live._cmx_hz / _cmx_trem / _cmx_tick: the matrix's LFO1 rate, its
+    // tremolo armed on slots (the Tremolo stop's swing at the depth in force;
+    // a harmonium's own stop keeps its rows), its vibrato re-pitched a block
+    double cmx_hz(int ch) const
+    {
+        auto c = cmx_now.find(ch);
+        return std::max(0.5, 5.5 + (c != cmx_now.end() ? c->second[3] : 0.0));
+    }
+    static bool stop_trem(const Patch &p) { return p.organ && p.organ->htrem_depth > 0.0; }
+    void cmx_trem(int ch, const std::vector<long> &slots)
+    {
+        auto c = cmx_now.find(ch);
+        if (c == cmx_now.end() || slots.empty())
+            return;
+        std::vector<long> idx;
+        for (long s : slots)
+            if (c->second[5] > 0.0 || S.tr_on[s])
+                idx.push_back(s);
+        if (!idx.empty())
+            S.stop_tremolo_arm(idx, c->second[5], cmx_hz(ch));
+    }
+    void cmx_tick(long long n0)
+    {
+        for (auto it = cmx_vib.begin(); it != cmx_vib.end();) {
+            const int ch = *it;
+            repitch(ch, n0);
+            auto c = cmx_now.find(ch);
+            if (c == cmx_now.end() || c->second[4] <= 0.0)
+                it = cmx_vib.erase(it);
+            else
+                ++it;
+        }
+    }
 
     bool pedal_holds(int ch, int note) const
     {
@@ -6141,6 +6270,11 @@ struct Part {
         auto td = trem_depth.find(pid);     // the wheel's tremolo, the wheel already up
         if (td != trem_depth.end() && td->second > 0.0)
             S.tremolo_arm(slots, td->second, patches[cur].wtrem_stereo);
+        {
+            auto cm = cmx_now.find(ch);     // the matrix's tremolo, on a note struck under it
+            if (cm != cmx_now.end() && cm->second[5] > 0.0 && !patches[cur].drums && !stop_trem(patches[cur]))
+                cmx_trem(ch, slots);
+        }
         double pr = pressure[ch];
         if (mpe && mpe.is_member(ch))       // MPE: the louder of its own and its manager's
             pr = std::max(pr, pressure[mpe.manager_of(ch)]);
@@ -7096,6 +7230,25 @@ struct Part {
             (d[6] == 0x1A ? vsd : d[6] == 0x1B ? vso : d[6] == 0x1D ? klo : khi)[c] = d[7];
             return;
         }
+        // THE CONTROLLER MATRIX (ctrlmatrix.parse): a cell, CC1/CC2's
+        // number, GM2's cells -- the channel's matrix made, its sums moved
+        {
+            nv::CmxMsg cm;
+            if (nv::cmx_parse(d, cm)) {
+                if (cm.ch >= 0 && cm.ch < 16) {
+                    nv::Cmx &mx = cmx[cm.ch];
+                    if (cm.kind == 1)
+                        mx.set(cm.a, cm.b, cm.dep);
+                    else if (cm.kind == 2)
+                        (cm.a == 4 ? mx.cc1 : mx.cc2) = cm.b;
+                    else
+                        for (auto &c3 : cm.cells)
+                            mx.set(c3.first.first, c3.first.second, c3.second);
+                    cmx_upd(cm.ch, n0);
+                }
+                return;
+            }
+        }
         // ...A USER DRUM SET's KEY (21 dp rr: blockrender.parse_gs_user_drum)
         if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && d[4] == 0x21 && (d[5] >> 4) <= 1
             && (d[5] & 0x0F) >= 1 && (d[5] & 0x0F) <= 0x0C) {
@@ -7171,6 +7324,10 @@ struct Part {
     {
         panic(n0);
         dedit.clear();                          // (every drum key as its set has it)
+        for (auto &kv : cmx) {                  // (the matrices back to a reset's, their sums with them)
+            kv.second.reset();
+            cmx_upd(kv.first, n0);
+        }
         for (int c = 0; c < 16; c++) {          // (every part's velocity sense and key range)
             vsd[c] = vso[c] = 64;
             klo[c] = 0;
@@ -8414,7 +8571,9 @@ struct Part {
         *rt = 1.0;
         if (slots.empty() || p.drums)
             return;
-        double dd = snd_d[ch][6], dr = snd_d[ch][5];
+        double dm_[8];
+        const double *sd_ = snd_of(ch, dm_);
+        double dd = sd_[6], dr = sd_[5];
         if ((p.snd >> 6) & 1 && dd != 0.0) {
             if (dd >= 0.0) {
                 *add = dd * (pow(2.0, 30.0 / 1200.0) - 1.0);
@@ -8457,15 +8616,26 @@ struct Part {
     // (Appendix D: tonelib.mpe_timbre), where the manager's is not 0
     const double *snd_of(int ch, double *tmp) const
     {
-        if (!(mpe && mpe.is_member(ch)))
-            return snd_d[ch];
-        const double mb = snd_d[mpe.manager_of(ch)][3];
-        if (mb == 0.0)
-            return snd_d[ch];
-        for (int i = 0; i < 8; i++)
-            tmp[i] = snd_d[ch][i];
-        tmp[3] = std::max(-1.0, std::min(1.0, tmp[3] + mb));
-        return tmp;
+        const double *d = snd_d[ch];
+        if (mpe && mpe.is_member(ch)) {
+            const double mb = snd_d[mpe.manager_of(ch)][3];
+            if (mb != 0.0) {
+                for (int i = 0; i < 8; i++)
+                    tmp[i] = snd_d[ch][i];
+                tmp[3] = std::max(-1.0, std::min(1.0, tmp[3] + mb));
+                d = tmp;
+            }
+        }
+        auto cm = ch >= 0 && ch < 16 ? cmx_now.find(ch) : cmx_now.end();
+        if (cm != cmx_now.end()) {              // ...and THE CONTROLLER MATRIX's: cutoff, LFO1 rate (live's)
+            if (d != tmp)
+                for (int i = 0; i < 8; i++)
+                    tmp[i] = d[i];
+            tmp[3] = std::max(-1.0, std::min(1.0, tmp[3] + cm->second[2] / 9600.0));
+            tmp[5] = tmp[5] + log2(std::max(0.1, 1.0 + cm->second[3] / 5.5));
+            d = tmp;
+        }
+        return d;
     }
 
     // live._held: only the slots whose key is still down (MPE's per-note
@@ -8685,6 +8855,13 @@ struct Part {
         double st = range_of(ch) * (double)wheel[ch] / 8192.0 + coarse[ch] + fine[ch] / 100.0 + master_coarse
                     + master_fine / 100.0;
         double ratio = pow(2.0, st / 12.0);
+        {
+            auto cm = cmx_now.find(ch);         // (the controller matrix's pitch, semitones)
+            if (cm != cmx_now.end() && cm->second[1] != 0.0)
+                ratio = ratio * pow(2.0, cm->second[1] / 12.0);
+            if (cm != cmx_now.end() && cm->second[4] > 0.0)   // ...and its vibrato, where the clock is
+                ratio = ratio * pow(2.0, cm->second[4] * sin(2.0 * M_PI * cmx_hz(ch) * n0 / rate) / 1200.0);
+        }
         if (mpe && mpe.zone_of(ch)) {
             mpe_repitch(ch, ratio, n0);
             return;
@@ -8751,6 +8928,8 @@ struct Part {
     void pitchwheel(int ch, int v, long long n0)
     {
         wheel[ch] = v;
+        if (cmx.count(ch))
+            cmx_upd(ch, n0);
         if (leslie_on(ch) && !S.les.empty())   // on a rotor part the wheel is the half-moon
             half_moon_step(ch, v);
         repitch(ch, n0);
@@ -9055,14 +9234,18 @@ struct Part {
         at_seen[ch] = true;
         tone_ctl(ch, false, n0, v);
         press(pressed(ch, -1), pressure[ch]);
+        if (cmx.count(ch))
+            cmx_upd(ch, n0);
     }
 
     // a key's polytouch: its slots (live's _press_groups(ch, note)) -- and a
     // siren's air (ppress)
-    void polytouch(int ch, int note, int v)
+    void polytouch(int ch, int note, int v, long long n0 = 0)
     {
         ppress[std::make_pair(ch, note)] = v / 127.0;
         press(pressed(ch, note), v / 127.0);
+        if (cmx.count(ch))
+            cmx_upd(ch, n0);
     }
 
     // the slots a pressure reaches: the channel's (a key's, note >= 0), a
@@ -10014,6 +10197,16 @@ struct Part {
     {
         if (messenger_cc(ch, cc, v, n0))
             return;                                 // a Messenger's panel, on a part that reads its chart
+        if (ch >= 0 && ch < 16 && cc >= 0 && cc < 128) {   // (the controller matrix's sources: live's ccv)
+            ccv[ch][cc] = v;
+            ccv_set[ch][cc] = true;
+            if (cc == 121)
+                for (int r : {1, 11, 64, 65, 66, 67})
+                    if (ccv_set[ch][r])
+                        ccv[ch][r] = r == 11 ? 127 : 0;
+            if (cmx.count(ch))
+                cmx_upd(ch, n0);
+        }
         // THE WHEEL's JOBS ON CCs OF THEIR OWN (tonelib.WHEEL_CC): CC1 is GM's
         // modulation, and the wheel a default ROUTE to each part's other
         // jobs (live._wheel_route) -- not a reset's CC1 = 0 (GM 2 3.5.2)
@@ -12172,7 +12365,7 @@ struct Part {
         else if (e.type == 3)
             aftertouch(e.ch, e.a, n0);
         else if (e.type == 7)
-            polytouch(e.ch, e.a, e.b);
+            polytouch(e.ch, e.a, e.b, n0);
         else if (e.type == 4)
             pitchwheel(e.ch, e.a, n0);
         else
@@ -12214,6 +12407,8 @@ struct Part {
         if (!open_ring.empty())
             open_ring_tick(n0);                 // the open strings' caps (live's _open_ring_tick)
         lfo2_tick(n0, blk);                     // each Moog part's LFO 2 (live's _lfo2_tick)
+        if (!cmx_vib.empty())
+            cmx_tick(n0);                       // the matrix's vibrato (live's _cmx_tick)
         if (!amp_dirty.empty() || amp_has_out || !amp_fine_results.empty() || amp_async || !amp_chg.empty()
             || !S.rel_log.empty())
             amp_pump(n0);                       // the valve (live's _amp_pump)

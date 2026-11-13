@@ -1169,10 +1169,15 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 const bool rx = (a5 >> 4) == 1 && ((a6 >= 0x02 && a6 <= 0x12) || a6 == 0x14 || a6 == 0x1F || a6 == 0x20
                                                    || a6 == 0x1A || a6 == 0x1B || a6 == 0x1D || a6 == 0x1E);
                 const bool mp = a5 == 0x00 && a6 == 0x06;
-                if (sys || eq || rx || mp || d[4] == 0x41 || d[4] == 0x21) {   // (...drum setup, user drum sets: live's)
+                const bool ctl = (a5 >> 4) == 2;           // (...the controller matrix's cells)
+                if (sys || eq || rx || mp || ctl || d[4] == 0x41 || d[4] == 0x21) {   // (...drum setup, user drum sets: live's)
                     P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});
                     P.sysex.push_back(d);
                 }
+            }
+            if (d.size() >= 6 && d[0] == 0x7F && d[2] == 0x09 && d[3] >= 1 && d[3] <= 3) {
+                P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});     // (GM2's controller matrix: live's)
+                P.sysex.push_back(d);
             }
             int lvl = (d.size() >= 4 && d[0] == 0x7E && d[2] == 0x09) ? (d[3] == 0x01 ? 1 : d[3] == 0x03 ? 2 : 0) : 0;
             bool gs = d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12

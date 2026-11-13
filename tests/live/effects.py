@@ -72,6 +72,33 @@ def pitches(x, a, sr=SR, k=3, lo=90.0, hi=480.0):
     return sorted(int(round(69 + 12 * np.log2(f[q] / 440.0))) for q in pk)
 
 
+def pitch_cents(x, a, b, sr=SR, lo=150.0, hi=320.0, n=2048):
+    """The strongest peak in [lo, hi] Hz, window by window from a to b, in
+    cents from its median: a vibrato's swing."""
+    m = np.asarray(x, np.float64)
+    m = m.mean(1) if m.ndim > 1 else m
+    f = np.fft.rfftfreq(32768, 1.0 / sr)
+    idx = np.where((f > lo) & (f < hi))[0]
+    out = []
+    for i in range(int(a * sr), int(b * sr) - n, n // 2):
+        s = np.abs(np.fft.rfft(m[i:i + n] * np.hanning(n), 32768))
+        q = idx[np.argmax(s[idx])]
+        y0, y1, y2 = np.log(s[q - 1:q + 2] + 1e-30)
+        out.append(f[q] + (y0 - y2) / (2.0 * (y0 - 2.0 * y1 + y2)) * (f[1] - f[0]))
+    c = 1200.0 * np.log2(np.asarray(out) / np.median(out))
+    return float(np.percentile(c, 95) - np.percentile(c, 5))
+
+
+def level_swing(x, a, b, sr=SR, n=480):
+    """How far the level moves, 10 ms window by window from a to b: the
+    90th less the 10th percentile, in dB -- a tremolo's swing."""
+    m = np.asarray(x, np.float64)
+    m = m.mean(1) if m.ndim > 1 else m
+    i, j = int(a * sr), int(b * sr)
+    e = [10 * np.log10(np.mean(m[k:k + n] ** 2) + 1e-30) for k in range(i, j - n, n)]
+    return float(np.percentile(e, 90) - np.percentile(e, 10))
+
+
 def echo_rises(x, a, b, sr=SR, w=0.05):
     """The level's rises summed, 50 ms window by window from a to b, in dB:
     each echo's return (a decay alone has none)."""
@@ -242,7 +269,31 @@ def user_drums_live(E, logs):
                  "ILD %+.1f dB" % ild(x, at[2], at[2] + 0.3))
 
 
-ALL = [("rx_file", rx_file), ("user_drums_live", user_drums_live), ("drum_delay_live", drum_delay_live), ("rhythm_live", rhythm_live), ("drums_live", drums_live), ("vsense_live", vsense_live),
+def cmx_live_fx(E, logs):
+    py, nv, last = live_pair(os.path.join(MIDI, "cmx_live.mid"), 7, ["--program=81", "--programs"] + A440, logs,
+                             "cmx")
+    print("  (cmx_live: %s)" % last)
+    seg = [0.021 + 0.75 * k for k in range(7)]      # (each note 0.625 s, 0.125 s apart)
+    for side, x in (("live.Live", py), ("nvlive", nv)):
+        L = [level(x, t + 0.1, t + 0.5) for t in seg]
+        p0, p2 = pitches(x, seg[0] + 0.15, k=1), pitches(x, seg[2] + 0.15, k=1)
+        c0, c3 = centroid(x, seg[0] + 0.15), centroid(x, seg[3] + 0.15)
+        E.expect("%s: mod wheel to amplitude -100 %%, wheel at half: quieter" % side, L[1] < L[0] - 3.0,
+                 "%+.1f dB" % (L[1] - L[0]))
+        E.expect("%s: pressure to pitch +2 st, pressed full: up 2" % side,
+                 bool(p0) and bool(p2) and p2[0] - p0[0] == 2, "%s -> %s" % (p0, p2))
+        E.expect("%s: CC20 (CC1's number) to cutoff: brighter" % side, c3 > 1.2 * c0, "%.0f -> %.0f Hz" % (c0, c3))
+        E.expect("%s: back after a GS reset" % side, abs(L[4] - L[0]) < 1.5, "%+.1f dB" % (L[4] - L[0]))
+        v0, v5 = pitch_cents(x, seg[0] + 0.15, seg[0] + 0.6), pitch_cents(x, seg[5] + 0.15, seg[5] + 0.6)
+        # (+-236 cents: a 472-cent swing; the plain Moog lead's own reads ~40)
+        E.expect("%s: pressure to LFO1 pitch 236 cents: a vibrato" % side, v5 > 350.0 and v0 < 100.0,
+                 "%.0f -> %.0f cents" % (v0, v5))
+        w0, w6 = level_swing(x, seg[0] + 0.15, seg[0] + 0.6), level_swing(x, seg[6] + 0.15, seg[6] + 0.6)
+        E.expect("%s: mod wheel to LFO1 amplitude 100 %%: a tremolo" % side, w6 > 10.0 and w0 < 3.0,
+                 "%.1f -> %.1f dB" % (w0, w6))
+
+
+ALL = [("rx_file", rx_file), ("cmx_live", cmx_live_fx), ("user_drums_live", user_drums_live), ("drum_delay_live", drum_delay_live), ("rhythm_live", rhythm_live), ("drums_live", drums_live), ("vsense_live", vsense_live),
        ("mpe_file", mpe_file), ("mpe_live", mpe_live)]
 
 
