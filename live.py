@@ -3550,10 +3550,10 @@ class Patch:
             for _i, _swc in enumerate(self.stop_word_ccs):
                 tr.append(mido.Message("control_change", channel=ch, control=_swc,
                                        value=(_w >> (7 * _i)) & 0x7F, time=0))
-        if self.drone_wheel and fast is None:
+        if self.drone_wheel:
             # CORK THEM FOR THE BUILD, and say so in the MIDI rather than by
             # setting the module global -- blockrender reads the CHANNEL'S OWN
-            # CC1 and writes `bagpipe_drones` from it on the first note, so a
+            # drones CC (T.WHEEL_CC, CC18) and writes `bagpipe_drones` from it on the first note, so a
             # value set from out here is overwritten before any partial is
             # emitted. (Set it and measure: the template still came out with
             # 110 and 220 Hz partials under a written D5. The selftest caught
@@ -3564,7 +3564,11 @@ class Patch:
             # phrase, so every template would carry three drones and a held
             # line would stack them a set at a time. Live sounds the drones as
             # their own held voices instead; this template is the chanter.
-            fast = 0
+            # (It was CC1 = 0 sent as the rotor's `fast`, until the rotor
+            # moved to CC80 and the drones to CC18: every chanter note came
+            # back carrying a drone under it.)
+            tr.append(mido.Message("control_change", channel=ch, control=T.WHEEL_CC['drones'],
+                                   value=0, time=0))
         if self.drone_note_wheel:
             # THE PUNGI'S DRONE IS LIVE'S OWN VOICE (_drone_note), so the
             # template is the melody pipe alone: blockrender reads this marker
@@ -3580,11 +3584,13 @@ class Patch:
             # hit alone, the one hit it keeps (B.ROLL_FIRST)
             tr.append(mido.MetaMessage("marker", text=B.ROLL_FIRST, time=0))
         if fast is not None:
-            # CC80 is the rotor's speed on a tonewheel voice (T.WHEEL_CC);
-            # blockrender reads it through leslie.zone() and gives every
-            # partial the rotor's rate and angle. `fast` is the CC value
-            # itself, so the zone boundaries live in one place.
-            tr.append(mido.Message("control_change", channel=ch, control=T.WHEEL_CC['leslie'],
+            # THE TEMPLATE AXIS's CC (T.WHEEL_CC): the honky-tonk's detune
+            # (CC13, DETUNE_STEPS), else the rotor's speed (CC80, read through
+            # leslie.zone()). `fast` is the CC value itself. (All of it was
+            # CC1 once; sent as CC80 to the honky-tonk, every position built
+            # the same voice-default spread.)
+            tr.append(mido.Message("control_change", channel=ch,
+                                   control=T.WHEEL_CC['detune' if self.detune_wheel else 'leslie'],
                                    value=int(fast), time=0))
         tr.append(mido.Message("note_on", channel=ch, note=note, velocity=vel, time=0))
         tr.append(mido.Message("note_off", channel=ch, note=note, velocity=0, time=480))
@@ -14392,6 +14398,9 @@ def _selftest(only=""):
     lv.set_drive(lv.parts[0], 0.5); lv.apply(lv.n)
     _kd = (lv._drive(lv.parts[0]), Part.from_dict(lv.parts[0].to_dict()).drive)
     lv.set_drive(lv.parts[0], None); lv.apply(lv.n); settle()
+    # the stage as rebuilt by the knob's round trip: a rebuild's product count
+    # moves with the rotor's moment (102, 101, 106 at three CC12 toggles)
+    kept = len(lv.slab.live.get(key, []))
     check("an organ's wheel is its swell; its drive CC12's and the knob's, which a preset keeps",
           _ds1 == _ds0 == LIVE_DRIVE_STEPS and _ds121 == _ds0 and abs(_sw1 - (40 / 127.0) ** 2) < 1e-9
           and _kd == (0.5, 0.5) and lv._drive(lv.parts[0]) == lv.parts[0].patch.amp_drive,
@@ -14407,8 +14416,8 @@ def _selftest(only=""):
         lv.apply(lv.n); lv.sweep(lv.n); lv.slab.reap(lv.n); lv.n += 128
     held = len(lv.slab.live.get(key, []))
     check("...and survives the sweep, block after block",
-          held == one and lv.stuck == was_stuck,
-          "  (%d of %d partials, %d swept)" % (held, one, lv.stuck - was_stuck))
+          held == kept and lv.stuck == was_stuck,
+          "  (%d of %d partials, %d swept)" % (held, kept, lv.stuck - was_stuck))
     # A PRODUCT NEEDS TWO PARENTS, so a chord must make more of them than a
     # single key -- even though a Hammond key is already several tonewheels.
     for nn in (64, 67, 72):
@@ -20525,6 +20534,13 @@ def _selftest(only=""):
         _answered |= {int(x) for x in _grp.split(",") if x.strip()}
     if "msg.control in T.SOUND_CC" in _src:
         _answered |= set(_T.SOUND_CC)
+    # ...and the named ones: the wheel jobs' own CCs (T.WHEEL_CC, through
+    # _JOBS_OF_CC or by name) and the scanner's selector
+    if "msg.control in _JOBS_OF_CC" in _src:
+        _answered |= set(_JOBS_OF_CC)
+    _answered |= {_T.WHEEL_CC[x] for x in _re.findall(r"msg\.control == T\.WHEEL_CC\['([^']+)'\]", _src)}
+    if 'msg.control == __import__("scanner").SWITCH_CC' in _src:
+        _answered.add(__import__("scanner").SWITCH_CC)
     _dead = [k for k, _l, _kd, _d in CONTROLS if isinstance(k, int) and k not in _answered]
     check("every CC the panel offers is one the engine answers",
           not _dead, "  (dead: %s)" % _dead if _dead else
