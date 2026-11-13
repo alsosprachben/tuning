@@ -1739,6 +1739,18 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                 x++;
                 xn--;
             }
+            if (xn >= 4 && x[0] == 0x41 && x[2] == 0x42 && x[3] == 0x12)
+                nv_part_gs_seen(part);          // (the session speaks GS: live's gs_on)
+            if (xn >= 8 && x[0] == 0x41 && x[2] == 0x42 && x[3] == 0x12 && x[4] == 0x40 && x[5] == 0x01
+                && x[6] >= 0x38 && x[6] <= 0x40) {
+                nv_part_gs_chorus(part, x[6], x[7]);    // (the GS chorus: live's _sysex, and nothing else)
+                continue;
+            }
+            if (xn >= 8 && x[0] == 0x41 && x[2] == 0x42 && x[3] == 0x12 && x[4] == 0x40 && x[5] == 0x01
+                && x[6] >= 0x50 && x[6] <= 0x5A) {
+                nv_part_gs_delay(part, x[6], x[7]);     // (the GS delay: live's _sysex, and nothing else)
+                continue;
+            }
             if (xn >= 8 && x[0] == 0x41 && x[2] == 0x42 && x[3] == 0x12 && x[4] == 0x40 && x[5] == 0x01
                 && (x[6] == 0x30 || x[6] == 0x33 || x[6] == 0x34 || x[6] == 0x35)) {
                 gs_reverb(x[6], x[7]);          // (live's _sysex: blockrender.parse_gs_reverb's, and nothing else)
@@ -1762,10 +1774,12 @@ void nv_host::render_block(long long n0, float *buf, bool step)
             const bool rs = sys_reset(m.x.data(), (int)m.x.size());
             if (rs && (!gs_rev.empty() || room_tl_on || (!user_room.empty() && room_now != user_room)))
                 gs_reverb(-1, 0);               // (the panel's room again: the sequencer's override ends)
-            if (rs) {                           // (and the EQ flat, every part's switch on)
+            if (rs) {                           // (and the EQ flat, every part's switch on; Chorus 3 again)
                 gs_eq.clear();
                 gs_eq_sw.clear();
                 gs_eq_apply();
+                const bool gm1 = xn >= 4 && x[0] == 0x7E && x[2] == 0x09 && x[3] == 0x01;
+                nv_part_gs_chorus_reset(part, gm1);
             }
             if (rs && asks)
                 reset_asked();

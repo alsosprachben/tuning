@@ -4698,6 +4698,19 @@ class Live:
         # on the notes struck after, as the file's (Slab.eq)
         self.gs_eq = {}
         self.gs_eq_sw = {}
+        # ...AND ITS GS CHORUS (40 01 38-40): CC93 through the GS chorus device
+        # (chorus.gs_device) once the session speaks GS (gs_on: any GS message;
+        # a GM 1 System On ends it), as blockrender's for a GS file -- its
+        # voices taps on the channel's set (_cho_taps), its share out of the dry
+        self.gs_on = False
+        self.gs_cho = {}
+        self._gs_cdev = None
+        # ...AND ITS GS DELAY (40 01 50-5A): CC94 (delay_send) into the GS
+        # delay (gsdelay.device), in GS only -- GM 1's CC94 is celeste depth --
+        # its repeats taps on the channel's set (_dly_taps), added to the dry
+        self.delay_send = {}
+        self.gs_dly = {}
+        self._gs_ddev = None
         self.ch_drums = {}
         self.rx_bank = True
         self._rpn_fine_msb = {}
@@ -5930,6 +5943,8 @@ class Live:
                         self.slab.release(k, n0)
                     self.pedalled -= gone
                     self._reg_channel(ch, n0)
+            elif msg.control == 94:                 # the GS delay's send (GS's only: _dly_taps)
+                self.delay_send[ch] = msg.value / 127.0
             elif msg.control == 93:                 # chorus send
                 # A setup for the notes to come, like the soft pedal: a copy of
                 # a note already sounding would have to start in the middle of
@@ -6579,9 +6594,7 @@ class Live:
             if _rs:
                 _cp = part.pan if part.pan is not None else self.cpan.get(ch, T.GM_DEFAULT_PAN)
                 _efx, _ec = self._efx_note(part, ch, note, vel, _rs, _cp, n0)
-                if _efx is not None and self.EFX_TAPS:
-                    self._tap_tables()
-                    self._tap_arm(_ec, _rs)
+                self._taps_note(_efx, _ec, ch, _rs)
             return
         key = (part.pid, ch, note, None)
         # THE SAME STRING STRUCK AGAIN, pedal or no pedal: the last strike on
@@ -6727,8 +6740,8 @@ class Live:
         elif part.patch.drone_note_wheel:
             self.drone_quiet.pop(part.pid, None)
             self._drone_note(part, ch, n0)
-        if self.chorus.get(ch, 0.0) > _CHR.FLOOR:
-            self._chorus(part, ch, note, vel, key, slots, n0)
+        if self.chorus.get(ch, 0.0) > _CHR.FLOOR and not self.gs_on:
+            self._chorus(part, ch, note, vel, key, slots, n0)     # (outside GS: CC93 its own chorus)
         # THE CHANNEL'S TUNING IS PER PITCH CLASS, so it multiplies the
         # channel's single bend ratio rather than joining it. `note` is the
         # written key, which is what the MIDI spec indexes the table by.
@@ -6799,12 +6812,10 @@ class Live:
                         self.slab.mx_write(int(_r), _pan)
             for _ly, _ls in _lslots.items():         # each Messenger its own pedal
                 self._mf104(part, ch, note, tmpl, key, _ls, scale, n0, b, _cp, _ly)
+        if _efx is not None and not self.EFX_TAPS:
+            self._efx_copies(_efx, part, ch, note, tmpl, key, slots, scale, n0, b)
+        self._taps_note(_efx, _ec, ch, slots)
         if _efx is not None:
-            if self.EFX_TAPS:
-                self._tap_tables()
-                self._tap_arm(_ec, slots)
-            else:
-                self._efx_copies(_efx, part, ch, note, tmpl, key, slots, scale, n0, b)
             if _efx.get('par'):
                 self._efx_branch(_efx, part, ch, note, tmpl, key, slots, scale, n0, b, _cp)
 
@@ -7893,6 +7904,100 @@ class Live:
         for r, tau in ((self.rotor_horn, rt['horn_tau']), (self.rotor_drum, rt['drum_tau'])):
             r.up, r.down = (tau if isinstance(tau, tuple) else (tau, tau))   # (spin up, spin down)
 
+    def _cho_dev(self):
+        """The GS chorus device as the session set it (chorus.gs_device)."""
+        if self._gs_cdev is None:
+            self._gs_cdev = _CHR.gs_device(self.gs_cho)
+        return self._gs_cdev
+
+    def _cho_share(self, ch):
+        """Channel ch's GS chorus share: CC93 x the device's level, its power
+        out of the dry (blockrender's: a^2 / (1 + a^2)); 0 outside GS."""
+        if not self.gs_on or not 0 <= ch < 16 or self.chorus.get(ch, 0.0) <= 0.0:
+            return 0.0
+        a = self.chorus[ch] * self._cho_dev()['level']
+        return a * a / (1.0 + a * a)
+
+    def _cho_dry(self, ch):
+        sh = self._cho_share(ch)
+        return (1.0 - sh) ** 0.5 if sh > 0.0 else 1.0
+
+    def _cho_chans(self):
+        """The channels with GS system taps: the chorus's or the delay's."""
+        return ({c for c in range(16) if self._cho_share(c) > 0.0 or self._dly_send(c) > 0.0}
+                if self.gs_on else set())
+
+    def _dly_dev(self):
+        """The GS delay as the session set it (gsdelay.device)."""
+        if self._gs_ddev is None:
+            self._gs_ddev = _GSD.device(self.gs_dly)
+        return self._gs_ddev
+
+    def _dly_send(self, ch):
+        if not self.gs_on or not 0 <= ch < 16:
+            return 0.0
+        return max(0.0, self.delay_send.get(ch, 0.0))
+
+    def _dly_taps(self, ch):
+        """THE GS DELAY's repeats on channel ch, as taps: gsdelay.repeats'
+        law -- the send times its level, each output's tap, its feedback's
+        repeats while over REPEAT_FLOOR (as the insertion delay's taps)."""
+        sd = self._dly_send(ch)
+        if sd <= 0.0:
+            return []
+        dev = self._dly_dev()
+        fb = dev['fb']
+        out = []
+        for tap in dev['taps']:
+            tau, lv, side = tap[0], tap[1], tap[2]
+            for k in range(_GSD.MAX_REPEATS):
+                if k and fb == 0.0:
+                    break
+                g = sd * dev['level'] * lv * (fb ** k if k else 1.0)
+                if abs(g) < _GSD.REPEAT_FLOOR:
+                    break
+                out.append((int(round((tau + k * dev['tc']) * self.rate)), g, dev['lpf'] or 0.0, 1.0, 0.0,
+                            side, None))
+        return out
+
+    def _cho_taps(self, ch):
+        """THE GS CHORUS's voices on channel ch, as taps (_tap_list's tuple):
+        chorus.gs_copies's law -- the share over every pass round the loop,
+        each voice's passes while their gain is over the floor."""
+        sh = self._cho_share(ch)
+        if sh <= 0.0:
+            return []
+        dev = self._cho_dev()
+        fb2 = dev['fb'] ** 2
+        passes = ((1.0 - fb2 ** _CHR.GS_MAX_PASSES) / (1.0 - fb2) if fb2 < 1.0
+                  else float(_CHR.GS_MAX_PASSES))
+        taps = dev.get('taps') or _CHR.GS_TAPS
+        wet = (sh / float(len(taps)) / passes) ** 0.5
+        out = []
+        for tap in taps:
+            side, phase = tap[0], tap[1]
+            extra = tap[2] if len(tap) > 2 else 0.0
+            dfac = tap[3] if len(tap) > 3 else 1.0
+            for k in range(1, _CHR.GS_MAX_PASSES + 1):
+                g = wet * dev['fb'] ** (k - 1)
+                if abs(g) < _CHR.FLOOR * 0.5 or (k > 1 and dev['fb'] == 0.0):
+                    break
+                out.append((int(round((k * dev['tau'] + extra) * self.rate)), g, dev['lpf'] or 0.0, 1.0, 0.0,
+                            side, (min(0.5, k * dev['vd'] * dfac), dev['rate'], phase)))
+        return out
+
+    def _taps_note(self, efx, ec, ch, slots):
+        """A note's copies as taps: its effect channel's set (the insertion
+        effect's, the GS chorus's on it) -- the chorus's share out of the dry
+        first, as the effect's own is (_efx_direct)."""
+        cd = self._cho_dry(ch)
+        if (efx is None or not self.EFX_TAPS) and cd == 1.0 and self._dly_send(ch) <= 0.0:
+            return
+        self._tap_tables()
+        if cd != 1.0:
+            self.slab.channel_gain(slots, cd)
+        self._tap_arm(ec if efx is not None else ch, slots)
+
     def _tap_arm(self, ch, slots):
         """Put these slots on channel ch's tap set, if it has taps."""
         st, sid = self.slab.tap_tab, getattr(self, "_tap_sid", {}).get(ch)
@@ -7949,9 +8054,12 @@ class Live:
     def _tap_tables(self):
         """The tap sets, one a channel, flattened for tap_expand -- rebuilt
         when the effect, its parts or a part's pan has moved."""
-        _pc = sorted({_GSX.part_of(c) for c in set(self.efx_parts) | set(self.tone_fx)})
+        _cc = self._cho_chans()
+        _pc = sorted({_GSX.part_of(c) for c in set(self.efx_parts) | set(self.tone_fx) | _cc})
         key = (self.efx_rev, tuple(sorted(self.efx_parts)),
-               tuple(self.cpan.get(c, T.GM_DEFAULT_PAN) for c in _pc))
+               tuple(self.cpan.get(c, T.GM_DEFAULT_PAN) for c in _pc),
+               self.gs_on, tuple(sorted(self.gs_cho.items())), tuple(sorted(self.gs_dly.items())),
+               tuple((c, self.chorus.get(c), self.delay_send.get(c)) for c in sorted(_cc)))
         if getattr(self, "_tap_key", None) == key:
             return
         self._tap_key = key
@@ -7959,7 +8067,8 @@ class Live:
         if sl.tap_lib is None:
             sl.tap_lib = ensure_tap_lib()
         tab = pan_table()
-        chans = sorted(self._efx_chans())
+        _ech = self._efx_chans()
+        chans = sorted(_ech | _cc)
         NS = max(1, len(chans))
         self._tap_sid = {c: i for i, c in enumerate(chans)}     # a channel's tap set
         ts = np.zeros(NS + 1, np.int32)
@@ -7970,14 +8079,19 @@ class Live:
         for i in range(NS):
             ts[i] = n
             c = chans[i] if i < len(chans) else None
-            ex = self._efx_for(c) if c is not None else None
-            if ex is None:
+            ex = self._efx_for(c) if c is not None and c in _ech else None
+            # (the GS chorus on the part's set: not on a parallel type's branch B)
+            cho = (self._cho_taps(_GSX.part_of(c)) + self._dly_taps(_GSX.part_of(c))
+                   if c is not None and c < _GSX.VIRT else [])
+            if ex is None and not cho:
                 continue
             a0, r0, d0 = tab[max(0, min(127, int(self.cpan.get(_GSX.part_of(c), T.GM_DEFAULT_PAN))))]
             al0[i], ar0[i] = a0, r0
-            if ex.get('cf') is not None and not self._cf_comb(ex):
+            if ex is not None and ex.get('cf') is not None and not self._cf_comb(ex):
                 dry[i] = (1.0 - self._efx_share(ex)) ** 0.5
-            e = ex.get('eq')
+            if cho and self._cho_share(_GSX.part_of(c)) > 0.0:
+                dry[i] = dry[i] * self._cho_dry(_GSX.part_of(c))
+            e = ex.get('eq') if ex is not None else None
             if e is not None:
                 mids = [(e[1] or 0.0, e[2] or 1.0, e[3] or 0.0)] + list(e[7:])
                 eqo[i] = len(eq)
@@ -7987,7 +8101,8 @@ class Live:
                 for mf, q, mg in mids:
                     eq.extend([mf or 0.0, q or 1.0, mg or 0.0])
             # loudest first: a capped block (the governor's) keeps the loudest
-            for D, g, fc, r, hz, side, vib in sorted(self._tap_list(ex), key=lambda x: -abs(x[1])):
+            for D, g, fc, r, hz, side, vib in sorted((self._tap_list(ex) if ex is not None else []) + cho,
+                                                     key=lambda x: -abs(x[1])):
                 a1, r1, d1 = tab[self._side_cc(side)]
                 for k, v in (("D", D), ("g", g), ("fc", fc), ("r", r), ("hz", hz), ("al1", a1),
                              ("ar1", r1), ("dl", (d1 - d0) * self.rate),
@@ -10198,6 +10313,9 @@ class Live:
         _g = getattr(msg, "group", 0) or 0
         _gch = range(16 * _g, 16 * _g + 16)
         d = tuple(msg.data)
+        if len(d) >= 4 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12 and not self.gs_on:
+            self.gs_on = True                   # (the session speaks GS: blockrender.gs_setup's GS?)
+            self._tap_key = None
         # SCALE/OCTAVE TUNING first: same universal id, a different sub-id, and
         # the codec lives in blockrender so the two renderers cannot read the
         # same bytes differently.
@@ -10247,6 +10365,24 @@ class Live:
         # A GS PART PARAMETER (blockrender.parse_gs_part): the MIDI message it
         # is -- part level CC7, pan CC10, the sends, the tone, mono/poly, key
         # shift -- through the same path, now. Port B has no port here.
+        if len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12 and d[4:6] == (0x40, 0x01) \
+                and d[6] in _CHR.GS_PARAM:
+            if d[6] == 0x38:                    # (a macro sets them all: gs_setup's)
+                self.gs_cho = {'macro': int(d[7])}
+            else:
+                self.gs_cho[_CHR.GS_PARAM[d[6]]] = int(d[7])
+            self._gs_cdev = None
+            self._tap_key = None
+            return
+        if len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12 and d[4:6] == (0x40, 0x01) \
+                and d[6] in _GSD.PARAM:
+            if d[6] == 0x50:                    # (a macro sets all ten: gs_setup's)
+                self.gs_dly = {'macro': int(d[7])}
+            else:
+                self.gs_dly[_GSD.PARAM[d[6]]] = int(d[7])
+            self._gs_ddev = None
+            self._tap_key = None
+            return
         _rv = _BRs.parse_gs_reverb(d)
         if _rv is not None:
             self._gs_reverb(*_rv)
@@ -10359,6 +10495,13 @@ class Live:
         self.gs_eq.clear()                      # (and the EQ flat, every part's switch on)
         self.gs_eq_sw.clear()
         self._gs_eq()
+        self.gs_cho = {}                        # (the chorus a reset leaves: Chorus 3)
+        self._gs_cdev = None
+        self.gs_dly = {}                        # (...and the delay: Delay 1)
+        self._gs_ddev = None
+        if _lvl == 1:
+            self.gs_on = False                  # (General MIDI 1: CC93 its own chorus again)
+        self._tap_key = None
         # ...and the insertion effect: "When a GM System On or GS Reset is
         # received, 00 Thru will be selected" (SC-8850 OM), every part off it
         _GSX.apply(self.efx, ('reset',), self.efx_parts)
@@ -11852,6 +11995,10 @@ class Live:
                 self._efx_rotary_sync()
                 self._filter_block(n0, frame_count)
                 self.slab.moog_filter_apply()
+                self._tap_tables()
+                self.slab.bus_chans = self._bus_chans_now()
+                self.slab.tap_fill(n0, frame_count)
+            elif self.gs_on and (self.chorus or self.delay_send):    # (the GS system taps alone: no effect to run)
                 self._tap_tables()
                 self.slab.bus_chans = self._bus_chans_now()
                 self.slab.tap_fill(n0, frame_count)

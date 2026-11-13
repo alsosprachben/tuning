@@ -2697,6 +2697,16 @@ struct Part {
     };
     std::unique_ptr<TapTab> tap_tab;
     std::map<int, int> tap_sid;             // an effect channel's tap set
+    // THE GS CHORUS (live._cho_*): CC93 (chorus_send, 0..1) through the GS
+    // chorus device once the session speaks GS (gs_on), its parameters gs_cho
+    // (40 01 38-40, a macro resetting the rest)
+    std::map<int, double> chorus_send;
+    bool gs_on = false;
+    std::map<std::string, int> gs_cho;
+    // ...AND THE GS DELAY (live._dly_*): CC94 (delay_send) into gsdelay's
+    // device, its parameters gs_dly (40 01 50-5A, a macro resetting the rest)
+    std::map<int, double> delay_send;
+    std::map<std::string, int> gs_dly;
     std::vector<long long> tap_key;
     bool tap_keyed = false;
     std::vector<void *> tap_colp;           // (tap_expand's generic columns: every kernel column it does not name)
@@ -4805,6 +4815,186 @@ struct Part {
         return out;
     }
 
+    // chorus.gs_device: the macro's values (Chorus 3, as a reset leaves it),
+    // then the parameters sent after -- tau, rate, vd, fb, level, lpf (0 none)
+    struct ChoDev {
+        double tau, rate, vd, fb, level, lpf;
+    };
+    ChoDev cho_dev() const
+    {
+        static const int MAC[8][8] = {{64, 0, 0, 112, 3, 5, 0, 0},  {64, 0, 5, 80, 9, 19, 0, 0},
+                                      {64, 0, 8, 80, 3, 19, 0, 0},  {64, 0, 16, 64, 9, 16, 0, 0},
+                                      {64, 0, 64, 127, 2, 24, 0, 0}, {64, 0, 112, 127, 1, 5, 0, 0},
+                                      {64, 0, 0, 127, 0, 127, 0, 0}, {64, 0, 80, 127, 0, 127, 0, 0}};
+        static const char *NAMES[6] = {"level", "pre_lpf", "feedback", "delay", "rate", "depth"};
+        auto mc = gs_cho.find("macro");
+        int m = mc != gs_cho.end() ? mc->second : 2;
+        if (m < 0 || m > 7)
+            m = 2;
+        int p[6];
+        for (int i = 0; i < 6; i++) {
+            auto it = gs_cho.find(NAMES[i]);
+            p[i] = it != gs_cho.end() ? it->second : MAC[m][i];
+        }
+        const double swing = (p[5] + 1) / 3.2 / 1000.0 / 2.0;
+        const double rate = p[4] * 0.122;
+        return ChoDev{p[3] * 0.2 / 1000.0 + swing, rate, 2.0 * M_PI * rate * swing,
+                      std::min(0.99, p[2] * 0.763 / 100.0), p[0] / 127.0,
+                      p[1] ? 12000.0 * pow(2.0, -p[1] / 1.5) : 0.0};
+    }
+    double cho_share(int ch) const
+    {
+        if (!gs_on || ch < 0 || ch >= 16)
+            return 0.0;
+        auto it = chorus_send.find(ch);
+        if (it == chorus_send.end() || !(it->second > 0.0))
+            return 0.0;
+        const double a = it->second * cho_dev().level;
+        return a * a / (1.0 + a * a);
+    }
+    double cho_dry(int ch) const
+    {
+        const double sh = cho_share(ch);
+        return sh > 0.0 ? pow(1.0 - sh, 0.5) : 1.0;
+    }
+    // live._cho_taps: the GS chorus's voices on channel ch (chorus.gs_copies's
+    // law: the system chorus's two outputs, every pass over the floor)
+    std::vector<Tap> cho_taps(int ch) const
+    {
+        std::vector<Tap> out;
+        const double sh = cho_share(ch);
+        if (!(sh > 0.0))
+            return out;
+        const ChoDev d = cho_dev();
+        const double fb2 = pow(d.fb, 2.0);
+        const double passes = fb2 < 1.0 ? (1.0 - pow(fb2, 16.0)) / (1.0 - fb2) : 16.0;   // (GS_MAX_PASSES)
+        const double wet = pow(sh / 2.0 / passes, 0.5);
+        const double side[2][2] = {{0.0, 0.0}, {127.0, M_PI}};     // (chorus.GS_TAPS: 'l' 0, 'r' pi)
+        for (const auto &tv : side)
+            for (int k = 1; k <= 16; k++) {
+                const double g = wet * pow(d.fb, (double)(k - 1));
+                if (fabs(g) < 0.02 * 0.5 || (k > 1 && d.fb == 0.0))      // (chorus.FLOOR)
+                    break;
+                out.push_back(Tap{(long long)nearbyint((k * d.tau + 0.0) * rate), g, d.lpf, 1.0, 0.0, (int)tv[0],
+                                  std::min(0.5, k * d.vd * 1.0), d.rate, tv[1]});
+            }
+        return out;
+    }
+    // gsdelay.time_ms: DELAY TIME CENTER 01-73H -> ms
+    static double dly_time_ms(int v)
+    {
+        v = std::max(1, std::min(0x73, v));
+        static const double T[8][3] = {{0x69, 500.0, 50.0}, {0x5A, 200.0, 20.0}, {0x50, 100.0, 10.0},
+                                       {0x46, 50.0, 5.0},   {0x37, 20.0, 2.0},   {0x2D, 10.0, 1.0},
+                                       {0x23, 5.0, 0.5},    {0x14, 2.0, 0.2}};
+        for (const auto &r : T)
+            if (v >= (int)r[0])
+                return r[1] + (v - (int)r[0]) * r[2];
+        return v * 0.1;
+    }
+    // gsdelay.device: the macro's values (Delay 1), then the parameters sent
+    struct DlyTap {
+        double tau, lv;
+        int cc;
+    };
+    struct DlyDev {
+        double tc, level, fb, lpf;
+        std::vector<DlyTap> taps;
+    };
+    DlyDev dly_dev() const
+    {
+        static const int MAC[10][10] = {
+            {64, 0, 340, 4, 4, 127, 0, 0, 16, 0},     {64, 0, 550, 4, 4, 127, 0, 0, 16, 0},
+            {64, 0, 1000, 4, 4, 127, 0, 0, 8, 0},     {64, 0, 130, 4, 4, 127, 0, 0, 8, 0},
+            {64, 0, 500, 50, 100, 0, 125, 60, 10, 0}, {64, 0, 700, 50, 100, 0, 125, 60, 7, 0},
+            {64, 0, 1000, 50, 100, 0, 120, 64, 9, 0}, {64, 0, 260, 50, 100, 0, 120, 64, 8, 0},
+            {64, 0, 700, 50, 100, 0, 114, 60, -3, 36}, {64, 0, 750, 88, 133, 97, 127, 67, -24, 0}};
+        auto mc = gs_dly.find("macro");
+        int m = mc != gs_dly.end() ? mc->second : 0;
+        if (m < 0 || m > 9)
+            m = 0;
+        const int *M = MAC[m];
+        // gsdelay.macro: time_value (the nearest time, the first of a tie),
+        // ratio_value (int(round(pct x 24 / 100)), 1-120), feedback + 64
+        int tv = 1;
+        double best = 0.0;
+        for (int v = 1; v < 0x74; v++) {
+            const double d = fabs(dly_time_ms(v) - M[2]);
+            if (v == 1 || d < best) {
+                best = d;
+                tv = v;
+            }
+        }
+        auto rv = [](int pct) { return std::max(1, std::min(0x78, (int)nearbyint(pct * 24.0 / 100.0))); };
+        std::map<std::string, int> p{{"level", M[0]}, {"pre_lpf", M[1]}, {"time", tv}, {"ratio_l", rv(M[3])},
+                                     {"ratio_r", rv(M[4])}, {"level_c", M[5]}, {"level_l", M[6]},
+                                     {"level_r", M[7]}, {"feedback", M[8] + 64}, {"to_reverb", M[9]}};
+        for (const auto &kv : gs_dly)
+            if (kv.first != "macro")
+                p[kv.first] = kv.second;
+        DlyDev d;
+        d.tc = dly_time_ms(p["time"]) / 1000.0;
+        const double rr[3] = {1.0, p["ratio_l"] * 100.0 / 24.0 / 100.0, p["ratio_r"] * 100.0 / 24.0 / 100.0};
+        const int lv[3] = {p["level_c"], p["level_l"], p["level_r"]}, cc[3] = {64, 0, 127};
+        for (int q = 0; q < 3; q++)
+            if (lv[q] > 0)
+                d.taps.push_back(DlyTap{d.tc * rr[q], lv[q] / 127.0, cc[q]});
+        d.level = p["level"] / 127.0;
+        d.fb = (p["feedback"] - 64) / 64.0;
+        d.lpf = p["pre_lpf"] ? 12000.0 * pow(2.0, -p["pre_lpf"] / 1.5) : 0.0;
+        return d;
+    }
+    double dly_send(int ch) const
+    {
+        if (!gs_on || ch < 0 || ch >= 16)
+            return 0.0;
+        auto it = delay_send.find(ch);
+        return it != delay_send.end() ? std::max(0.0, it->second) : 0.0;
+    }
+    // live._dly_taps: the GS delay's repeats on channel ch (gsdelay.repeats'
+    // law, partial-independent as the insertion delay's taps)
+    std::vector<Tap> dly_taps(int ch) const
+    {
+        std::vector<Tap> out;
+        const double sd = dly_send(ch);
+        if (!(sd > 0.0))
+            return out;
+        const DlyDev d = dly_dev();
+        const double REPEAT_FLOOR = pow(10.0, -60.0 / 20.0);
+        for (const DlyTap &t : d.taps)
+            for (int k = 0; k < 64; k++) {          // (gsdelay.MAX_REPEATS)
+                if (k && d.fb == 0.0)
+                    break;
+                const double g = sd * d.level * t.lv * (k ? pow(d.fb, (double)k) : 1.0);
+                if (fabs(g) < REPEAT_FLOOR)
+                    break;
+                out.push_back(Tap{(long long)nearbyint((t.tau + k * d.tc) * rate), g, d.lpf, 1.0, 0.0, t.cc,
+                                  -1.0, 0.0, 0.0});
+            }
+        return out;
+    }
+    std::set<int> cho_chans() const
+    {
+        std::set<int> c;
+        if (gs_on)
+            for (int q = 0; q < 16; q++)
+                if (cho_share(q) > 0.0 || dly_send(q) > 0.0)
+                    c.insert(q);
+        return c;
+    }
+    // live._taps_note: a note's copies as taps -- its effect channel's set
+    // (the effect's, the GS chorus's on it), the chorus's share out of the dry
+    void taps_note(bool has_efx, int ec, int ch, const std::vector<long> &slots)
+    {
+        const double cd = cho_dry(ch);
+        if (!has_efx && cd == 1.0 && !(dly_send(ch) > 0.0))
+            return;
+        tap_tables();
+        if (cd != 1.0)
+            S.channel_gain(slots, cd);
+        tap_arm(has_efx ? ec : ch, slots);
+    }
+
     // live._efx_chans, sorted: the module's parts on it and the tones' own
     // effect channels -- and a parallel type's branch B of each (c + VIRT)
     std::vector<int> efx_chans()
@@ -4846,7 +5036,11 @@ struct Part {
     // loudest
     void tap_tables()
     {
-        std::vector<int> chans = efx_chans();
+        const std::vector<int> ech = efx_chans();
+        const std::set<int> cch = cho_chans();
+        std::set<int> all(ech.begin(), ech.end());
+        all.insert(cch.begin(), cch.end());
+        std::vector<int> chans(all.begin(), all.end());
         std::set<int> pcs;
         for (int c : chans)
             pcs.insert(c % TONE_SEG);
@@ -4854,6 +5048,24 @@ struct Part {
         key.insert(key.end(), chans.begin(), chans.end());
         for (int pc : pcs)
             key.push_back(pc < 16 ? cpan[pc] : 64);
+        key.push_back(gs_on);                   // (the GS chorus: its parameters, the sends on it)
+        for (const auto &kv : gs_cho) {
+            key.push_back((long long)std::hash<std::string>()(kv.first));
+            key.push_back(kv.second);
+        }
+        for (const auto &kv : gs_dly) {
+            key.push_back((long long)std::hash<std::string>()(kv.first) ^ 1);
+            key.push_back(kv.second);
+        }
+        for (int c : cch) {
+            key.push_back(c);
+            for (const std::map<int, double> *m : {&chorus_send, &delay_send}) {
+                double v = m->count(c) ? m->at(c) : 0.0;
+                long long bits;
+                memcpy(&bits, &v, sizeof bits);
+                key.push_back(bits);
+            }
+        }
         if (tap_keyed && key == tap_key)
             return;
         tap_keyed = true;
@@ -4874,18 +5086,28 @@ struct Part {
         int n = 0;
         for (int i = 0; i < NS; i++) {
             t->ts[i] = n;
-            const double *fc = i < (int)chans.size() ? efx_for(chans[i]) : nullptr;
-            if (!fc)
+            const bool in_e = i < (int)chans.size() && std::binary_search(ech.begin(), ech.end(), chans[i]);
+            const double *fc = in_e ? efx_for(chans[i]) : nullptr;
+            const int pc = i < (int)chans.size() ? chans[i] % TONE_SEG : 0;
+            // (the GS chorus on the part's set: not on a parallel type's branch B)
+            std::vector<Tap> cho;
+            if (i < (int)chans.size() && chans[i] < VIRT) {
+                cho = cho_taps(pc);
+                std::vector<Tap> dl = dly_taps(pc);
+                cho.insert(cho.end(), dl.begin(), dl.end());
+            }
+            if (!fc && cho.empty())
                 continue;
-            const int pc = chans[i] % TONE_SEG;
             const double *p0 = S.pan_tab[clamp(pc < 16 ? cpan[pc] : 64)];
             t->al0[i] = p0[0];
             t->ar0[i] = p0[1];
-            if (fc[14] != 0.0 && fc[18] == 0.0) {
+            if (fc && fc[14] != 0.0 && fc[18] == 0.0) {
                 const double a = fc[20], sh = fc[21] >= 0.0 ? fc[21] : a * a / (1.0 + a * a);
                 t->dry[i] = pow(1.0 - sh, 0.5);
             }
-            if (fc[6] != 0.0) {
+            if (!cho.empty() && cho_share(pc) > 0.0)
+                t->dry[i] = t->dry[i] * cho_dry(pc);
+            if (fc && fc[6] != 0.0) {
                 // (lo, hi, their corners, then each mid (Hz, Q, dB), "or" as live's)
                 std::vector<std::array<double, 3>> mids{{fc[8], fc[9], fc[10]}};
                 for (int j = 0; j < (int)fc[62]; j++)
@@ -4896,7 +5118,8 @@ struct Part {
                 for (const auto &m : mids)
                     t->eq.insert(t->eq.end(), {m[0] != 0.0 ? m[0] : 0.0, m[1] != 0.0 ? m[1] : 1.0, m[2] != 0.0 ? m[2] : 0.0});
             }
-            std::vector<Tap> taps = tap_list(fc);
+            std::vector<Tap> taps = fc ? tap_list(fc) : std::vector<Tap>();
+            taps.insert(taps.end(), cho.begin(), cho.end());
             std::stable_sort(taps.begin(), taps.end(), [](const Tap &x, const Tap &y) { return -fabs(x.g) < -fabs(y.g); });
             for (const Tap &tp : taps) {
                 const double *p1 = S.pan_tab[clamp(tp.cc)];
@@ -5162,7 +5385,8 @@ struct Part {
     // the tap sets as they stand, then this block's copies
     void tap_block(long long n0, long long frames)
     {
-        if ((efx && nv_efx_live_parts(efx)) || !tone_fx.empty() || S.tap_m) {
+        if ((efx && nv_efx_live_parts(efx)) || !tone_fx.empty() || S.tap_m
+            || (gs_on && (!chorus_send.empty() || !delay_send.empty()))) {
             tap_tables();
             bus_owner(S.bus_chans);
             tap_fill(n0, frames);
@@ -5792,12 +6016,9 @@ struct Part {
             for (int ly = 0; ly < 2; ly++)          // each Messenger its own pedal
                 if (!lslots[ly].empty())
                     mf104(patches[cur], ch, note, *T, key, lslots[ly], scale, n0, bend[ch], ly);
-        if (efx_fc) {                           // ITS COPIES: the slots on the channel's tap set (live._tap_arm)
-            tap_tables();
-            tap_arm(efx_ec, slots);
-            if (efx_fc[208] != 0.0)             // ...and a parallel type's branch B (live._efx_branch)
-                efx_branch(efx_fc, efx_ec, ch, note, *T, key, slots, scale, n0, b_left, cpan[ch]);
-        }
+        taps_note(efx_fc != nullptr, efx_ec, ch, slots);    // ITS COPIES: the channel's tap set (live._taps_note)
+        if (efx_fc && efx_fc[208] != 0.0)       // ...and a parallel type's branch B (live._efx_branch)
+            efx_branch(efx_fc, efx_ec, ch, note, *T, key, slots, scale, n0, b_left, cpan[ch]);
     }
 
     // THE MF-104M, LIVE (live._mf104; mf104.py): a Moog part whose panel has
@@ -7263,10 +7484,8 @@ struct Part {
         }
         if (!rs.empty()) {
             int ec = ch;
-            if (efx_note(ch, note, vel, n0, rs, &ec)) {
-                tap_tables();
-                tap_arm(ec, rs);
-            }
+            const bool he = efx_note(ch, note, vel, n0, rs, &ec);
+            taps_note(he, ec, ch, rs);
         }
     }
 
@@ -9340,6 +9559,10 @@ struct Part {
                         if (reg[i].ch == ch)
                             reg_damper(ch, n0, -1, true);
             }
+        } else if (cc == 94) {
+            delay_send[ch] = v / 127.0;         // (the GS delay's send: live._dly_taps, GS's only)
+        } else if (cc == 93) {
+            chorus_send[ch] = v / 127.0;        // (live's: a setup for the notes to come; the GS chorus's send)
         } else if (cc == 91) {
             // a DISTANCE (live's): CC91 over GM's 40 times the room's nominal
             // one, on the notes sounding too
@@ -12662,6 +12885,41 @@ void nv_part_output(void *h, long long n0, long frames, float *L, float *R, void
 
 // The mod wheel picks a honky-tonk's detune (live's 'detune' role)
 void nv_part_detune_wheel(void *h, int on) { ((nv::slab::Part *)h)->detune_wheel = on != 0; }
+
+// THE GS CHORUS (live._sysex): the session speaks GS (gs_on), a chorus
+// parameter (40 01 38-40: a macro resetting the rest), a reset's (GM 1 On:
+// out of GS; every reset: Chorus 3 again)
+void nv_part_gs_seen(void *h) { ((nv::slab::Part *)h)->gs_on = true; }
+void nv_part_gs_chorus(void *h, int addr, int v)
+{
+    static const char *N[9] = {"macro", "pre_lpf", "level", "feedback", "delay", "rate", "depth", "to_reverb",
+                               "to_delay"};
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (addr < 0x38 || addr > 0x40)
+        return;
+    if (addr == 0x38)
+        P->gs_cho.clear();
+    P->gs_cho[N[addr - 0x38]] = v;
+}
+void nv_part_gs_delay(void *h, int addr, int v)
+{
+    static const char *N[11] = {"macro", "pre_lpf", "time", "ratio_l", "ratio_r", "level_c", "level_l",
+                                "level_r", "level", "feedback", "to_reverb"};
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (addr < 0x50 || addr > 0x5A)
+        return;
+    if (addr == 0x50)
+        P->gs_dly.clear();
+    P->gs_dly[N[addr - 0x50]] = v;
+}
+void nv_part_gs_chorus_reset(void *h, int gm1)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    P->gs_cho.clear();
+    P->gs_dly.clear();
+    if (gm1)
+        P->gs_on = false;
+}
 
 // THE GS EQ onto the slab (live._gs_eq): on, its shelves, the channels off
 void nv_part_gs_eq(void *h, int on, double lo_f, double hi_f, double lo_g, double hi_g, unsigned off)
