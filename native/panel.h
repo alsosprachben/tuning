@@ -170,6 +170,16 @@ struct Host {
     std::function<std::vector<std::pair<std::string, bool>>()> inputs;
     std::function<std::string(int)> input_toggle;
     std::function<std::string()> port_label;
+    // THE SYSTEM EFFECTS (livetui.pick_sysfx, G): each as in effect (live's
+    // sysfx_state) -- a setting sent as a sequencer's GS message (40 hi lo v)
+    struct SysFx {
+        int rev_macro = -1, rev_level = 64, rev_time = 64, rev_fb = -1;   // (macro -1: the panel's room)
+        std::string room;
+        bool gs = false;
+        int cho[7] = {}, dly[11] = {}, eq[4] = {0, 0x40, 0, 0x40};
+    };
+    std::function<SysFx()> sysfx_get;
+    std::function<void(int, int, int)> sysfx_send;
     std::function<void(int, int, int)> synth_forget;
     std::function<int(int)> synth_send;
     std::function<std::string()> messenger_line, messenger_firmware;
@@ -640,7 +650,7 @@ static const char *SCAN_NAMES[7] = {"off", "V1", "V2", "V3", "C1", "C2", "C3"};
 static const int SCAN_STARTS[7] = {0, 18, 37, 55, 73, 91, 110};
 // THE KEYS A CONTROL MAY BE BOUND TO (livetui.HOTKEYS_FREE): what the panel
 // does not use itself, in any pane -- a bound key fires from every pane
-static const char HOTKEYS_FREE[] = "cefginouvwyz[];',./ACGHJKOQUVWYZ";     // (I: the MIDI inputs)
+static const char HOTKEYS_FREE[] = "cefginouvwyz[];',./ACHJKOQUVWYZ";      // (I: the MIDI inputs; G: the system effects)
 
 static bool control_switch(int key)
 {
@@ -1309,6 +1319,8 @@ struct Panel {
             line("   t                 the tuner: every temperament live has; the patches built again in it");
             line("   E                 the EASTERN tuning: a raga system and Sa for every Indian voice");
             line("   x                 the insertion effect: the part on it, its type, parameters, controllers, sends");
+            line("   G                 the system effects: the reverb, chorus and delay the parts share (CC91/93/94)");
+            line("                       and the EQ -- each move a sequencer's GS message, so a GS reset puts them back");
             line("   I                 the MIDI inputs (or tap the port's name): enter turns each on or off -- several, merged");
             line("   P                 panic: every note off, now");
             line("   q                 quit (routes added here are kept beside the export)");
@@ -1804,6 +1816,108 @@ struct Panel {
     // THE MIDI INPUTS (livetui.pick_inputs): each plugged in, enter turns it
     // on or off -- several at once, merged -- the list read again each time
     // round (a device plugged in shows); Esc closes
+    // ---- THE SYSTEM EFFECTS (livetui.pick_sysfx, G) ----
+    static double dly_ms(int v)            // (gsdelay.time_ms)
+    {
+        v = std::max(1, std::min(0x73, v));
+        static const double T[8][3] = {{0x69, 500.0, 50.0}, {0x5A, 200.0, 20.0}, {0x50, 100.0, 10.0},
+                                       {0x46, 50.0, 5.0},   {0x37, 20.0, 2.0},   {0x2D, 10.0, 1.0},
+                                       {0x23, 5.0, 0.5},    {0x14, 2.0, 0.2}};
+        for (const auto &r : T)
+            if (v >= (int)r[0])
+                return r[1] + (v - (int)r[0]) * r[2];
+        return v * 0.1;
+    }
+    void pick_sysfx()
+    {
+        static const char *REV[8] = {"Room 1", "Room 2", "Room 3", "Hall 1", "Hall 2", "Plate", "Delay",
+                                     "Panning Delay"};
+        static const char *ROOM[8] = {"studio", "chamber", "large_chamber", "hall", "grand_hall", "plate", "delay",
+                                      "pan_delay"};
+        static const char *CHO[8] = {"Chorus 1", "Chorus 2", "Chorus 3", "Chorus 4", "Feedback Chorus", "Flanger",
+                                     "Short Delay", "Short Delay (FB)"};
+        static const char *DLY[10] = {"Delay 1", "Delay 2", "Delay 3", "Delay 4", "Pan Delay 1", "Pan Delay 2",
+                                      "Pan Delay 3", "Pan Delay 4", "Delay to Reverb", "Pan Repeat"};
+        struct Row {
+            int hi, lo, v, mn, mx;
+            std::string nm;
+            std::function<std::string(int)> show;
+        };
+        auto num = [](int v) { return std::to_string(v); };
+        auto fmt = [](const char *f, double x) {
+            char b[64];
+            snprintf(b, sizeof b, f, x);
+            return std::string(b);
+        };
+        int i = 0;
+        for (;;) {
+            const Host::SysFx s = H.sysfx_get();
+            std::vector<Row> rows;
+            std::vector<std::string> items;
+            auto head = [&](const std::string &t) {
+                rows.push_back(Row{-1, 0, 0, 0, 0, "", nullptr});
+                items.push_back(t);
+            };
+            auto add = [&](int hi, int lo, const std::string &nm, int v, int mn, int mx,
+                           std::function<std::string(int)> show) {
+                rows.push_back(Row{hi, lo, v, mn, mx, nm, show});
+                char b[160];
+                snprintf(b, sizeof b, "%-11s %s", nm.substr(nm.find(' ') + 1).c_str(), show(v).c_str());
+                items.push_back(b);
+            };
+            head("-- reverb (CC91)" + (s.rev_macro >= 0 ? std::string() : "   the panel's room: " + s.room));
+            {
+                rows.push_back(Row{0x01, 0x30, s.rev_macro >= 0 ? s.rev_macro : 4, 0, 7, "reverb type",
+                                   [](int v) { return std::string(REV[v]) + " (our " + ROOM[v] + ")"; }});
+                items.push_back(std::string("type        ")
+                                + (s.rev_macro >= 0 ? std::string(REV[s.rev_macro]) + "  (our " + s.room + ")"
+                                                    : std::string("-- (the panel's room)")));
+            }
+            add(0x01, 0x33, "reverb level", s.rev_level, 0, 127, num);
+            add(0x01, 0x34, "reverb time", s.rev_time, 0, 127, num);
+            if (s.rev_fb >= 0)
+                add(0x01, 0x35, "reverb feedback", s.rev_fb, 0, 127, num);
+            head(std::string("-- chorus (CC93)") + (s.gs ? "" : "   (GS's once a GS message is heard)"));
+            add(0x01, 0x38, "chorus type", s.cho[0], 0, 7, [](int v) { return std::string(CHO[v]); });
+            add(0x01, 0x39, "chorus pre-LPF", s.cho[1], 0, 7, num);
+            add(0x01, 0x3A, "chorus level", s.cho[2], 0, 127, num);
+            add(0x01, 0x3B, "chorus feedback", s.cho[3], 0, 127, num);
+            add(0x01, 0x3C, "chorus delay", s.cho[4], 0, 127, num);
+            add(0x01, 0x3D, "chorus rate", s.cho[5], 0, 127,
+                [&](int v) { return std::to_string(v) + fmt(" (%.2f Hz)", v * 0.122); });
+            add(0x01, 0x3E, "chorus depth", s.cho[6], 0, 127, num);
+            head(std::string("-- delay (CC94)") + (s.gs ? "" : "   (GS's once a GS message is heard)"));
+            add(0x01, 0x50, "delay type", s.dly[0], 0, 9, [](int v) { return std::string(DLY[v]); });
+            add(0x01, 0x51, "delay pre-LPF", s.dly[1], 0, 7, num);
+            add(0x01, 0x52, "delay time", s.dly[2], 1, 0x73, [&](int v) { return fmt("%g ms", dly_ms(v)); });
+            add(0x01, 0x53, "delay ratio L", s.dly[3], 1, 0x78, [&](int v) { return fmt("%.0f%%", v * 100.0 / 24.0); });
+            add(0x01, 0x54, "delay ratio R", s.dly[4], 1, 0x78, [&](int v) { return fmt("%.0f%%", v * 100.0 / 24.0); });
+            add(0x01, 0x55, "delay level C", s.dly[5], 0, 127, num);
+            add(0x01, 0x56, "delay level L", s.dly[6], 0, 127, num);
+            add(0x01, 0x57, "delay level R", s.dly[7], 0, 127, num);
+            add(0x01, 0x58, "delay level", s.dly[8], 0, 127, num);
+            add(0x01, 0x59, "delay feedback", s.dly[9], 0, 127, [&](int v) { return fmt("%+.0f", (double)(v - 64)); });
+            head("-- EQ (every part on it, unless its switch is off)");
+            add(0x02, 0, "EQ low freq", s.eq[0], 0, 1, [](int v) { return std::string(v ? "400 Hz" : "200 Hz"); });
+            add(0x02, 1, "EQ low gain", s.eq[1], 0x34, 0x4C, [&](int v) { return fmt("%+.0f dB", (double)(v - 0x40)); });
+            add(0x02, 2, "EQ high freq", s.eq[2], 0, 1, [](int v) { return std::string(v ? "6 kHz" : "3 kHz"); });
+            add(0x02, 3, "EQ high gain", s.eq[3], 0x34, 0x4C, [&](int v) { return fmt("%+.0f dB", (double)(v - 0x40)); });
+            const int got = menu("system effects", items, std::min(i, (int)items.size() - 1));
+            if (got < 0)
+                return;
+            i = got;
+            const Row &r = rows[got];
+            if (r.hi < 0)
+                continue;
+            std::vector<int> vals;
+            for (int v = r.mn; v <= r.mx; v++)
+                vals.push_back(v);
+            const int hi = r.hi, lo = r.lo;
+            edit_efx(r.nm, vals, r.show, std::max(r.mn, std::min(r.mx, r.v)),
+                     [&, hi, lo](int v) { H.sysfx_send(hi, lo, v); });
+        }
+    }
+
     void pick_inputs()
     {
         int i = 0;
@@ -3305,6 +3419,8 @@ struct Panel {
                     pick_efx();
                 } else if (c == 'I' && H.inputs && H.input_toggle) {
                     pick_inputs();
+                } else if (c == 'G' && H.sysfx_get && H.sysfx_send) {
+                    pick_sysfx();
                 } else if (c == 'S' || c == 'L' || c == 'N' || c == 'R') {
                     presets_key(c);
                 } else if (c == 'P') {

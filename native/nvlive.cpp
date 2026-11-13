@@ -680,6 +680,32 @@ int nv_host::run(int argc, char **argv)
                 post([&, m](long long) { nv_part_sysex(part, m.data(), (int)m.size()); });
             };
         H.last_ctl = [&]() { return std::make_pair(last_ctl_code.load(), last_ctl_ns.load()); };
+        // THE SYSTEM EFFECTS (G): as in effect, and a setting sent as a
+        // sequencer's GS message, into the block's events (live.inject)
+        H.sysfx_get = [&]() {
+            panel::Host::SysFx s;
+            static const int TIME[8] = {80, 56, 64, 72, 64, 88, 32, 64};
+            auto at = [&](const std::map<int, int> &m, int k, int d) {
+                auto it = m.find(k);
+                return it != m.end() ? it->second : d;
+            };
+            s.rev_macro = at(gs_rev, 0x30, -1);
+            s.rev_level = at(gs_rev, 0x33, 64);
+            s.rev_time = at(gs_rev, 0x34, TIME[s.rev_macro >= 0 && s.rev_macro < 8 ? s.rev_macro : 4]);
+            s.rev_fb = s.rev_macro == 6 || s.rev_macro == 7 ? at(gs_rev, 0x35, s.rev_macro == 6 ? 40 : 32) : -1;
+            s.room = room_now;
+            s.gs = nv_part_gs_fx(part, s.cho, s.dly) != 0;
+            for (int k = 0; k < 4; k++)
+                s.eq[k] = at(gs_eq, k, k % 2 ? 0x40 : 0);
+            return s;
+        };
+        H.sysfx_send = [&](int hi, int lo, int v) {
+            std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, (uint8_t)hi, (uint8_t)lo,
+                                   (uint8_t)std::max(0, std::min(127, v))};
+            x.push_back((uint8_t)((128 - (0x40 + hi + lo + x[7]) % 128) % 128));
+            std::lock_guard<std::mutex> lk(mu);
+            q.push_back(Midi{6, 0, 0, 0, x});
+        };
         if (E.has_prog)
             H.pick = [&](int sp) { pick(sp); };
         H.tuner = tuner_now;

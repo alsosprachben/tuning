@@ -4826,21 +4826,33 @@ struct Part {
                                       {64, 0, 8, 80, 3, 19, 0, 0},  {64, 0, 16, 64, 9, 16, 0, 0},
                                       {64, 0, 64, 127, 2, 24, 0, 0}, {64, 0, 112, 127, 1, 5, 0, 0},
                                       {64, 0, 0, 127, 0, 127, 0, 0}, {64, 0, 80, 127, 0, 127, 0, 0}};
-        static const char *NAMES[6] = {"level", "pre_lpf", "feedback", "delay", "rate", "depth"};
-        auto mc = gs_cho.find("macro");
-        int m = mc != gs_cho.end() ? mc->second : 2;
-        if (m < 0 || m > 7)
-            m = 2;
         int p[6];
-        for (int i = 0; i < 6; i++) {
-            auto it = gs_cho.find(NAMES[i]);
-            p[i] = it != gs_cho.end() ? it->second : MAC[m][i];
-        }
+        cho_params(p, nullptr);
         const double swing = (p[5] + 1) / 3.2 / 1000.0 / 2.0;
         const double rate = p[4] * 0.122;
         return ChoDev{p[3] * 0.2 / 1000.0 + swing, rate, 2.0 * M_PI * rate * swing,
                       std::min(0.99, p[2] * 0.763 / 100.0), p[0] / 127.0,
                       p[1] ? 12000.0 * pow(2.0, -p[1] / 1.5) : 0.0};
+    }
+    // chorus.gs_device's parameters: level, pre_lpf, feedback, delay, rate,
+    // depth -- the macro's (*macro), then what was sent
+    void cho_params(int *p, int *macro) const
+    {
+        static const int MAC[8][8] = {{64, 0, 0, 112, 3, 5, 0, 0},  {64, 0, 5, 80, 9, 19, 0, 0},
+                                      {64, 0, 8, 80, 3, 19, 0, 0},  {64, 0, 16, 64, 9, 16, 0, 0},
+                                      {64, 0, 64, 127, 2, 24, 0, 0}, {64, 0, 112, 127, 1, 5, 0, 0},
+                                      {64, 0, 0, 127, 0, 127, 0, 0}, {64, 0, 80, 127, 0, 127, 0, 0}};
+        static const char *NAMES[6] = {"level", "pre_lpf", "feedback", "delay", "rate", "depth"};
+        auto mc = gs_cho.find("macro");
+        int m = mc != gs_cho.end() ? mc->second : 2;
+        if (m < 0 || m > 7)
+            m = 2;
+        for (int i = 0; i < 6; i++) {
+            auto it = gs_cho.find(NAMES[i]);
+            p[i] = it != gs_cho.end() ? it->second : MAC[m][i];
+        }
+        if (macro)
+            *macro = m;
     }
     double cho_share(int ch) const
     {
@@ -4901,7 +4913,8 @@ struct Part {
         double tc, level, fb, lpf;
         std::vector<DlyTap> taps;
     };
-    DlyDev dly_dev() const
+    // gsdelay.macro's values, then what was sent (the device's and the panel's)
+    std::map<std::string, int> dly_params() const
     {
         static const int MAC[10][10] = {
             {64, 0, 340, 4, 4, 127, 0, 0, 16, 0},     {64, 0, 550, 4, 4, 127, 0, 0, 16, 0},
@@ -4932,6 +4945,12 @@ struct Part {
         for (const auto &kv : gs_dly)
             if (kv.first != "macro")
                 p[kv.first] = kv.second;
+        p["macro"] = m;
+        return p;
+    }
+    DlyDev dly_dev() const
+    {
+        std::map<std::string, int> p = dly_params();
         DlyDev d;
         d.tc = dly_time_ms(p["time"]) / 1000.0;
         const double rr[3] = {1.0, p["ratio_l"] * 100.0 / 24.0 / 100.0, p["ratio_r"] * 100.0 / 24.0 / 100.0};
@@ -12912,11 +12931,36 @@ void nv_part_gs_delay(void *h, int addr, int v)
         P->gs_dly.clear();
     P->gs_dly[N[addr - 0x50]] = v;
 }
+// THE SYSTEM EFFECTS PANEL (live.sysfx_state): the chorus's macro, pre-LPF,
+// level, feedback, delay, rate, depth; the delay's macro, pre-LPF, time,
+// ratio L, R, level C, L, R, level, feedback, to reverb -- each as in effect;
+// whether the session speaks GS
+int nv_part_gs_fx(void *h, int *cho, int *dly)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    int p[6], m = 2;
+    P->cho_params(p, &m);
+    cho[0] = m;
+    cho[1] = p[1];
+    cho[2] = p[0];
+    cho[3] = p[2];
+    cho[4] = p[3];
+    cho[5] = p[4];
+    cho[6] = p[5];
+    std::map<std::string, int> d = P->dly_params();
+    static const char *N[11] = {"macro", "pre_lpf", "time", "ratio_l", "ratio_r", "level_c", "level_l", "level_r",
+                                "level", "feedback", "to_reverb"};
+    for (int i = 0; i < 11; i++)
+        dly[i] = d[N[i]];
+    return P->gs_on ? 1 : 0;
+}
 void nv_part_gs_chorus_reset(void *h, int gm1)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;
     P->gs_cho.clear();
     P->gs_dly.clear();
+    P->chorus_send.clear();                     // (every part's chorus and delay sends 0: power-on's)
+    P->delay_send.clear();
     if (gm1)
         P->gs_on = false;
 }

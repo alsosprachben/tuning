@@ -30,6 +30,9 @@ import moog as MG
 import mf104 as MFD
 import percussion_map as PM
 import gsefx as GSX
+import chorus as CHR
+import gsdelay as GSDL
+import blockrender as B
 import gsdisplay as GSD
 import patch_map as PMAP
 from variation_desc import VARIATION_DESC, CAPITAL_DESC
@@ -497,7 +500,7 @@ STD_NAMES = ("ours", "SC-55", "SC-88", "SC-88Pro", "SC-8850")
 # already use, in any pane, since a bound key fires from every pane. Space is
 # the controls pane's own toggle, so it is not offered.
 HOTKEYS_FREE = (set("cefginoptuvwxyz0[];',./")
-                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLPNREXI")))  # N/R: scenes; E: Eastern tuning; X: the EFX; I: MIDI inputs
+                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLPNREXIG")))  # N/R: scenes; E: Eastern tuning; X: the EFX; I: MIDI inputs; G: GS system effects
 
 
 # THE STOP KEYS: the digit row, and the same keys shifted. What shift+1 TYPES
@@ -1488,6 +1491,104 @@ class TUI:
                 self.edit_efx(scr, name, what)
             elif what[0] == "ctl":
                 self.pick_efx_ctl(scr, *what[1:])
+
+    def pick_sysfx(self, scr):
+        """THE SYSTEM EFFECTS (G): the reverb, the chorus, the delay and the EQ
+        a Sound Canvas shares between its parts -- each value as in effect,
+        each move sent as the GS message a sequencer would send
+        (Live.sysfx_send), so it overrides as one does and a GS reset puts it
+        back. The parts reach them by their sends (CC91, CC93, CC94)."""
+        L = self.live
+        i = 0
+        while True:
+            st = L.sysfx_state()
+            rv, ch, dl, eq = st['rev'], st['cho'], st['dly'], st['eq']
+            rows = [(None, "-- reverb (CC91)%s" % ("" if rv['macro'] is not None else
+                                                  "   the panel's room: %s" % (rv['room'] or "none")))]
+            rows.append((("rev", 0x30, "reverb type", rv['macro'] if rv['macro'] is not None else 4, 0, 7,
+                          lambda v: "%s (our %s)" % (L.GS_REVERB_NAMES[v], B.GS_REVERB_ROOM[v])),
+                         "type        %s" % ("%s  (our %s)" % (L.GS_REVERB_NAMES[rv['macro']], rv['room'])
+                                            if rv['macro'] is not None else "-- (the panel's room)")))
+            rows.append((("rev", 0x33, "reverb level", rv['level'], 0, 127, str), "level       %d" % rv['level']))
+            rows.append((("rev", 0x34, "reverb time", rv['time'], 0, 127, str), "time        %d" % rv['time']))
+            if rv['fb'] is not None:
+                rows.append((("rev", 0x35, "delay feedback", rv['fb'], 0, 127, str), "feedback    %d" % rv['fb']))
+            rows.append((None, "-- chorus (CC93)%s" % ("" if st['gs'] else "   (GS's once a GS message is heard)")))
+            rows.append((("cho", 0x38, "chorus type", ch['macro'], 0, 7, lambda v: CHR.GS_NAMES[v]),
+                         "type        %s" % CHR.GS_NAMES[ch['macro']]))
+            for a, k, nm, show in ((0x39, 'pre_lpf', "pre-LPF", str), (0x3A, 'level', "level", str),
+                                   (0x3B, 'feedback', "feedback", str), (0x3C, 'delay', "delay", str),
+                                   (0x3D, 'rate', "rate", lambda v: "%d (%.2f Hz)" % (v, v * 0.122)),
+                                   (0x3E, 'depth', "depth", str)):
+                rows.append((("cho", a, "chorus " + nm, ch[k], 0, 7 if k == 'pre_lpf' else 127, show),
+                             "%-11s %s" % (nm, show(ch[k]))))
+            rows.append((None, "-- delay (CC94)%s" % ("" if st['gs'] else "   (GS's once a GS message is heard)")))
+            rows.append((("dly", 0x50, "delay type", dl['macro'], 0, 9, lambda v: GSDL.NAMES[v]),
+                         "type        %s" % GSDL.NAMES[dl['macro']]))
+            for a, k, nm, lo, hi, show in ((0x51, 'pre_lpf', "pre-LPF", 0, 7, str),
+                                           (0x52, 'time', "time", 1, 0x73, lambda v: "%g ms" % GSDL.time_ms(v)),
+                                           (0x53, 'ratio_l', "ratio L", 1, 0x78,
+                                            lambda v: "%.0f%%" % (v * 100.0 / 24.0)),
+                                           (0x54, 'ratio_r', "ratio R", 1, 0x78,
+                                            lambda v: "%.0f%%" % (v * 100.0 / 24.0)),
+                                           (0x55, 'level_c', "level C", 0, 127, str),
+                                           (0x56, 'level_l', "level L", 0, 127, str),
+                                           (0x57, 'level_r', "level R", 0, 127, str),
+                                           (0x58, 'level', "level", 0, 127, str),
+                                           (0x59, 'feedback', "feedback", 0, 127, lambda v: "%+d" % (v - 64))):
+                rows.append((("dly", a, "delay " + nm, dl[k], lo, hi, show), "%-11s %s" % (nm, show(dl[k]))))
+            rows.append((None, "-- EQ (every part on it, unless its switch is off)"))
+            for a, nm, lo, hi, show in ((0, "low freq", 0, 1, lambda v: "400 Hz" if v else "200 Hz"),
+                                        (1, "low gain", 0x34, 0x4C, lambda v: "%+d dB" % (v - 0x40)),
+                                        (2, "high freq", 0, 1, lambda v: "6 kHz" if v else "3 kHz"),
+                                        (3, "high gain", 0x34, 0x4C, lambda v: "%+d dB" % (v - 0x40))):
+                rows.append((("eq", a, "EQ " + nm, eq[a], lo, hi, show), "%-11s %s" % (nm, show(eq[a]))))
+            got = self.menu(scr, "system effects", [r[1] for r in rows], i)
+            if got is None:
+                return
+            i = got
+            what = rows[got][0]
+            if what is None:
+                continue
+            kind, a, nm, v0, lo, hi, show = what
+            hi_addr = 0x02 if kind == "eq" else 0x01
+            self.edit_value(scr, nm, v0, lo, hi, show, lambda v, _a=a, _h=hi_addr: L.sysfx_send(_h, _a, v))
+
+    def edit_value(self, scr, nm, v0, lo, hi, show, send):
+        """One value, lo..hi, moved with Left/Right (PgUp/PgDn ten at a time),
+        each move sent as it goes; Enter keeps it, Esc sends v0 back."""
+        v = max(lo, min(hi, int(v0)))
+        scr.keypad(True)
+        while True:
+            h, w = scr.getmaxyx()
+            line = " %s:  %s   (raw %d)   left/right, pgup/pgdn, enter keep, esc back " % (nm, show(v), v)
+            self.addstr(scr, h // 2, max(0, (w - len(line)) // 2), line[:w - 1], curses.A_REVERSE | curses.A_BOLD)
+            scr.refresh()
+            c = self.read(scr)
+            k = v
+            if isinstance(c, Mouse):
+                if c.kind == "wheel":
+                    k = max(lo, min(hi, v + c.dy))
+                elif c.kind == "press":
+                    return
+                c = -1
+            if c in (curses.KEY_RIGHT, ord("l"), ord("+"), ord("=")):
+                k = min(hi, v + 1)
+            elif c in (curses.KEY_LEFT, ord("h"), ord("-")):
+                k = max(lo, v - 1)
+            elif c == curses.KEY_PPAGE:
+                k = min(hi, v + 10)
+            elif c == curses.KEY_NPAGE:
+                k = max(lo, v - 10)
+            elif c in (10, 13, curses.KEY_ENTER):
+                return
+            elif c == 27:
+                if v != v0:
+                    send(v0)
+                return
+            if k != v:
+                v = k
+                send(v)
 
     def pick_inputs(self, scr):
         """THE MIDI INPUTS (I): each plugged in, enter turns it on or off --
@@ -2950,6 +3051,10 @@ class TUI:
             "   the efx column)    this part on or off it, its type (Roland's",
             "                      families, / searches), each parameter -- heard",
             "                      as you move it; esc puts it back",
+            "  G                 THE SYSTEM EFFECTS: the reverb, chorus and delay",
+            "                      the parts share (by CC91, CC93, CC94) and the EQ --",
+            "                      each move sent as a sequencer's GS message, so a",
+            "                      GS reset puts them back",
             "",
             "touch",
             "  fixed: a harpsichord, organ, harmonium or accordion ignores how",
@@ -3157,6 +3262,8 @@ class TUI:
             self.pick_eastern(scr)
         elif c == ord("X"):
             self.pick_efx(scr)
+        elif c == ord("G"):
+            self.pick_sysfx(scr)
         elif c == ord("I"):
             self.pick_inputs(scr)
         elif c == ord("P"):

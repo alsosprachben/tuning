@@ -5070,6 +5070,36 @@ class Live:
         sets is what a recording of the session would hold."""
         self.inject(mido.Message("sysex", data=_GSX.message(ev)))
 
+    # THE SYSTEM EFFECTS PANEL (livetui's G): a setting sent as the GS message
+    # a sequencer's would be (40 01 xx, 40 02 0x) -- one path, so the panel's
+    # move overrides as a sequencer's does and a GS reset puts it back
+    GS_REVERB_NAMES = ("Room 1", "Room 2", "Room 3", "Hall 1", "Hall 2", "Plate", "Delay", "Panning Delay")
+
+    def sysfx_send(self, hi, lo, v):
+        a = [0x40, int(hi), int(lo), max(0, min(127, int(v)))]
+        self.inject(mido.Message("sysex", data=[0x41, 0x10, 0x42, 0x12] + a + [(128 - sum(a) % 128) % 128]))
+
+    def sysfx_state(self):
+        """What the system effects are now, each value as in effect: the
+        reverb's (macro None: the panel's room, no GS reverb), the chorus's
+        and the delay's parameters (their macro's, then what was sent), the
+        EQ's four."""
+        fx = dict(self.gs_rev)
+        m = fx.get('reverb_macro')
+        rev = dict(macro=m, level=fx.get('reverb_level', 64),
+                   time=fx.get('reverb_time', B.GS_REVERB_TIME.get(m if m is not None else 4, 64)),
+                   fb=fx.get('reverb_delay_fb', B.GS_REVERB_DELAY_FB.get(m)) if m in B.GS_REVERB_DELAY_FB else None,
+                   room=self.room_name, user_room=self.user_room)
+        cm = int(self.gs_cho.get('macro', 2))
+        lv, lpf, fb, dl, rt, dp, tr, td = _CHR.GS_MACROS[cm if cm in _CHR.GS_MACROS else 2]
+        cho = dict(macro=cm, pre_lpf=lpf, level=lv, feedback=fb, delay=dl, rate=rt, depth=dp)
+        cho.update({k: v for k, v in self.gs_cho.items() if k in cho})
+        dm = int(self.gs_dly.get('macro', 0))
+        dly = dict(_GSD.macro(dm), macro=dm)
+        dly.update({k: v for k, v in self.gs_dly.items() if k in dly})
+        eq = {k: self.gs_eq.get(k, d) for k, d in ((0, 0), (1, 0x40), (2, 0), (3, 0x40))}
+        return dict(rev=rev, cho=cho, dly=dly, eq=eq, gs=self.gs_on)
+
     def efx_chain(self, ch):
         """The insertion effect's stages for channel ch (gsefx.chain), or None
         when ch is not on it or its type is Thru."""
@@ -10499,6 +10529,10 @@ class Live:
         self._gs_cdev = None
         self.gs_dly = {}                        # (...and the delay: Delay 1)
         self._gs_ddev = None
+        # ...AND EVERY PART's CHORUS AND DELAY SENDS AT 0, as power-on has
+        # them (GS: reverb 40 -- the nominal distance above -- chorus 0, delay 0)
+        self.chorus.clear()
+        self.delay_send.clear()
         if _lvl == 1:
             self.gs_on = False                  # (General MIDI 1: CC93 its own chorus again)
         self._tap_key = None

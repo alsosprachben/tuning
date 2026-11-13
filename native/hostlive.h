@@ -105,6 +105,7 @@ void nv_part_gs_eq(void *h, int on, double lo_f, double hi_f, double lo_g, doubl
 void nv_part_gs_seen(void *h);
 void nv_part_gs_chorus(void *h, int addr, int v);
 void nv_part_gs_delay(void *h, int addr, int v);
+int nv_part_gs_fx(void *h, int *cho, int *dly);
 void nv_part_gs_chorus_reset(void *h, int gm1);
 void nv_part_leslie(void *h, const double *L, int n);
 void nv_part_scan(void *h, const double *X, long n);
