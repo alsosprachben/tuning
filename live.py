@@ -810,7 +810,10 @@ LIVE_AMP_LOOKAHEAD = 3
 LIVE_AMP_HOLD = True
 LIVE_AMP_HOLD_S = 0.060
 
-MELODIC_RANGE = (21, 96)        # a keyboard
+MELODIC_RANGE = (21, 108)       # a keyboard: A0 to the piano's C8
+# (it stopped at 96 once, and the top octave -- which a transposing keyboard
+# reaches, Ben's Messenger among them -- waited for a miss to build it; nvlive
+# never built it at all)
 DRUM_RANGE = (0, 127)           # every note percussion_map has a voice for
 # EVERY KEY A SET MAPS. GS's sets reach past GM's: their own notes below 35
 # (the metronome's click and bell, the scratches, a brush tom's swish) and

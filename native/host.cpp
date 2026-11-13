@@ -720,7 +720,7 @@ int nv_host::open(int argc, char **argv)
     if (!E.les.empty())                         // a rotary voice's templates through its cabinet
         nv_tcache_leslie(cache, E.les.data(), (int)E.les.size());
     int speeds[3] = {pp[3], pp[4], pp[5]};
-    built = drums ? nv_tcache_warm(cache, program, 0, 127, 1, speeds, 1) : nv_tcache_warm(cache, program, 21, 96, pp[1], speeds, pp[2]);
+    built = drums ? nv_tcache_warm(cache, program, 0, 127, 1, speeds, 1) : nv_tcache_warm(cache, program, 21, 108, pp[1], speeds, pp[2]);   // (MELODIC_RANGE: A0 to C8)
     fprintf(stderr, "nvlive: %s %d, %ld templates\n", drums ? "drum set" : "program", program, built);
     // THE SLAB'S SLOTS (--slots: live's capacity, 65536 -- a vibraslap's
     // strike is 16524 rows)
@@ -1193,7 +1193,7 @@ int nv_host::open(int argc, char **argv)
             const int *pq = prec(prog, var);
             int sp[3] = {pq[3], pq[4], pq[5]};
             begin(76L * pq[1] * pq[2]);
-            nv_tcache_warm_p(c, prog & 127, 21, 96, pq[1], sp, pq[2], &bp_done);
+            nv_tcache_warm_p(c, prog & 127, 21, 108, pq[1], sp, pq[2], &bp_done);     // (MELODIC_RANGE)
             retune(prog);
         }
         __atomic_store_n(&bp_total, 0L, __ATOMIC_RELEASE);

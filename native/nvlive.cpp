@@ -11,7 +11,7 @@
 //                       [--rt] [--reg-async] [--async] [--govern] [--paced] [--build-async] [--tuner-at=S:NAME] [--preset-at=S:NAME] [--metronome=BPM[:RING]]
 //
 // EXPORT.nvx is examples/native_export.py --live's. At start the part's
-// templates are built (live.Patch.warm: every key 21-96 at each velocity
+// templates are built (live.Patch.warm: every key 21-108 at each velocity
 // bucket, natively), then live's callback runs block by block, 128 samples
 // at 48 kHz: the block's MIDI applied at its start, the sweep, the reap,
 // the render (native/slab.cpp: bit for bit live.Live's on the CPU), out to

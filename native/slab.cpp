@@ -4069,7 +4069,7 @@ struct Part {
             bool on = S.live_find(key) >= 0;
             if (i < want && !on) {
                 int note = i < k->n_drone ? k->drone_note[i] : (int)nearbyint(69.0 + 12.0 * log2(hz / 440.0));
-                if (note < 21 || note > 96)         // (MELODIC_RANGE)
+                if (note < 21 || note > 108)        // (MELODIC_RANGE)
                     continue;
                 const nv::live::Template *T = nv_tcache_lookup(patches[cur].cache, note, bucket(100), speed);
                 if (!T) {
