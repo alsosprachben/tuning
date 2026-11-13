@@ -262,11 +262,10 @@ TASKS = [
     ("SC-55", True, "Files: a controller matrix that moves (ctrlmatrix): its cutoff and LFO rate in the sound "
                     "controls, its amplitude in the level and fader, its pitch and vibrato on the pitch stream, its "
                     "tremolo's rows; a variation that meends; a layered variation's registered layers"),
-    ("SC-55", False, "Files: GS's other exclusives -- part parameters, TONE MAP-0 and drum setup's levels, pans "
-                     "and sends read; what is left: the USER DRUM SETS (21 dp kk vv: a key another set's, its own "
-                     "pitch, level, pan and receive switch -- user_drum) and drum setup's exclusive group and "
-                     "receive switches. Measured: of 304 files (~/Music, ~/Downloads/midi) the reader refuses one "
-                     "for an exclusive, SENSATIO's mpp2 (its user sets); mpp5's reads"),
+    ("SC-55", False, "Files: GS's other exclusives -- part parameters, TONE MAP-0, drum setup's levels, pans, "
+                     "sends and Rx note on, and the USER DRUM SETS (e6199b7: a key another set's, its own pitch, "
+                     "level, pan and receive switch -- nvrender identical) read; what is left: drum setup's "
+                     "exclusive group and Rx note off, read but used by neither engine (Python's too)"),
     ("SC-55", True, "Melodic SFX (patch_map.melodic_sfx): a kit's sound on a keyboard part, transposed whole "
                     "(transposed_from_hz: _XP), its kit key's strokes (sfx_strokes_of), the weather voices "
                     "(a measured mode set under the noise's roll-off, its breath beside it)"),
@@ -303,23 +302,26 @@ TASKS = [
                      "(another channel's notes: Roland's own layering), its Rx switches (pitch bend, volume, "
                      "program change... off), ASSIGN MODE (a repeated note's retrigger), the CC1/CC2 "
                      "CONTROLLER NUMBERS its matrix reads, MASTER PAN, VOICE RESERVE (accepted: we have more), "
-                     "the display's text and 16x16 dot pages (45 xx) -- these written: read and kept (the "
-                     "reader no longer refuses them), and a render's OUT.display.txt (gsdisplay.timeline; "
-                     "nvrender's the same, line for line)"),
+                     "the display's text and 16x16 dot pages (45 xx) -- read and kept (the reader no longer "
+                     "refuses them), the display written beside a render (OUT.display.txt, nvrender's the same, "
+                     "line for line); open: the file renders honouring RX CHANNEL, the Rx switches, ASSIGN MODE "
+                     "and master pan (live does since 00ec34d)"),
     ("SC-55", False, "Sound Canvas superset, live: what a sequencer sends that live ignores and a file render "
-                     "honours -- the system reverb, chorus and delay (macros and parameters), the GS EQ, "
-                     "drum setup and the user drum sets, the controller matrix (each to verify first)"),
-    ("SC-55", False, "Sound Canvas superset, the controllers: the Rx switches, CC1/CC2 controller numbers and "
-                     "the controller matrix go into the wheel's CC-route design (the wheel's functions on CCs of "
-                     "their own, live's wheel a route to them, a file's CC1 GM's modulation; the insertion "
-                     "effect's control sources the model: a controller, a destination, a depth)"),
-    ("SC-8850", False, "Sound Canvas superset, the panel (livetui, then nvlive): per-part pan, reverb/chorus/"
-                       "delay sends and velocity sense as part columns; a system-effects page (reverb type, "
-                       "time, character, pre-LPF; chorus and delay types and parameters; the master EQ); "
-                       "per-part level meters (the 16 bars); the display (a sequencer's text and dot pages: written, "
-                       "both TUIs' SC display box); "
-                       "the map (SC-55/88/88Pro/8850) in the picker and a GS Reset; solo beside mute; user "
-                       "tones and drum sets edited and stored"),
+                     "honours -- done (both engines, native vs live identical, each message counted and its effect "
+                     "measured): the system reverb, chorus and delay (macros and parameters), the GS EQ, a GS "
+                     "reset's sends, RX CHANNEL, the Rx switches, master pan; open: drum setup and the user drum "
+                     "sets live, the controller matrix live, ASSIGN MODE's modes (stored only)"),
+    ("SC-55", False, "Sound Canvas superset, the controllers -- done: the Rx switches live (a message a part "
+                     "does not receive dropped, both engines, 00ec34d), the wheel's jobs on CCs of their own; "
+                     "open: the CC1/CC2 controller numbers (stored, not yet read by anything) and the controller "
+                     "matrix live, into the CC-route design (a controller, a destination, a depth)"),
+    ("SC-8850", False, "Sound Canvas superset, the panel (livetui, then nvlive) -- done: per-part pan, reverb, "
+                       "chorus and delay sends as part columns; the system effects page (G: the reverb's type, "
+                       "level, time and delay feedback, the chorus's and delay's types and parameters, the EQ -- "
+                       "each move a GS message, so a reset puts it back); the display (both TUIs' SC display box); "
+                       "the map in the picker (the standard); open: velocity sense as a column (the engine first), "
+                       "per-part level meters (the 16 bars), a GS Reset key, solo beside mute, user tones and drum "
+                       "sets edited and stored"),
 ]
 
 # MT-32 and CM-64 between GM 2 and the Sound Canvas, in the hardware's own

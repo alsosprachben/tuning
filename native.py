@@ -3992,13 +3992,22 @@ class Midi(object):
             b = buf.getvalue()
         d = self.d = lib()
         e = ctypes.c_int(0)
-        self.p = d.nv_midi_read(b, len(b), ctypes.byref(e))
+        self._p = d.nv_midi_read(b, len(b), ctypes.byref(e))
         self.error = e.value
 
+    @property
+    def p(self):
+        # (a refused file has no reading: asking it for notes or events would
+        # hand the engine a null pointer and crash the process)
+        if not self._p:
+            raise ValueError("native.Midi: the file was refused (%s)"
+                             % MIDI_REFUSED.get(self.error, self.error))
+        return self._p
+
     def __del__(self):
-        if getattr(self, 'p', None):
-            self.d.nv_midi_free(self.p)
-            self.p = None
+        if getattr(self, '_p', None):
+            self.d.nv_midi_free(self._p)
+            self._p = None
 
     def total(self):
         return self.d.nv_midi_total(self.p)
