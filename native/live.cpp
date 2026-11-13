@@ -79,7 +79,8 @@ static void vlq(std::vector<uint8_t> &b, uint32_t v)
 // _raw_template's file, as mido saves it (type 1, 480 ticks a beat, one
 // track): end, the track's last delta (a drum's 18 beats: its 8 s ring)
 static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int fast, uint32_t end = 480,
-                                     const OrganSpec *og = nullptr, int bank = 0)
+                                     const OrganSpec *og = nullptr, int bank = 0, int fast_cc = NV_CC_LESLIE,
+                                     bool cork = false)
 {
     std::vector<uint8_t> tr;
     auto ev = [&](uint32_t dt, std::initializer_list<uint8_t> bytes) {
@@ -111,8 +112,10 @@ static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int
         for (int i = 0; i < og->n_wccs; i++)
             ev(0, {(uint8_t)(0xB0 | ch), (uint8_t)og->wccs[i], (uint8_t)((w >> (7 * i)) & 0x7F)});
     }
-    if (fast >= 0)
-        ev(0, {(uint8_t)(0xB0 | ch), 1, (uint8_t)fast});            // a wheel's step (the honky-tonk's detune)
+    if (cork)
+        ev(0, {(uint8_t)(0xB0 | ch), NV_CC_DRONES, 0});             // the drones corked (live._raw_template)
+    if (fast >= 0)          // the template axis's step: the honky-tonk's detune (CC13), else the rotor's (CC80)
+        ev(0, {(uint8_t)(0xB0 | ch), (uint8_t)fast_cc, (uint8_t)fast});
     ev(0, {(uint8_t)(0x90 | ch), (uint8_t)note, (uint8_t)vel});
     ev(480, {(uint8_t)(0x80 | ch), (uint8_t)note, 0});
     ev(end, {0xFF, 0x2F, 0x00});
@@ -495,17 +498,17 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     };
     const NoteClass *kc = kat(note);
     const OrganSpec *og = kc ? kc->organ : nullptr;
-    // (a drone-wheel program's: built with its drones CORKED -- live sounds
-    // them as its own held voices, live._raw_template's fast = 0)
+    // (a drone-wheel program's: built with its drones CORKED, CC18 = 0 --
+    // live sounds them as its own held voices, live._raw_template's)
     const NoteClass *pc_ = kat(60);
-    if (pc_ && pc_->drone_wheel && fast < 0)
-        fast = 0;
+    const bool cork = pc_ && pc_->drone_wheel;
+    const int fast_cc = pc_ && pc_->detune_wheel ? NV_CC_DETUNE : NV_CC_LESLIE;
     // (a map's own set, 128 + j: as a file selects it -- CC32 = its map, then
     // its program -- and the reader's kit_in_map plays it; live._raw_template's)
     const int mid = kit && program >= 128 && program - 128 < (int)g_mapk_ids.size() ? g_mapk_ids[program - 128] : -1;
     std::vector<uint8_t> f = mid >= 0 ? nv::live::one_note(mid & 127, note, vel, 9, fast, 480 * 18, nullptr, 128 * (mid >> 7))
                            : kit ? nv::live::one_note(program, note, vel, 9, fast, 480 * 18)
-                                 : nv::live::one_note(program, note, vel, 0, fast, 480, og, ven ? g_tmpl_var : 0);
+                                 : nv::live::one_note(program, note, vel, 0, fast, 480, og, ven ? g_tmpl_var : 0, fast_cc, cork);
     int err = 0;
     void *m = nv_midi_read(f.data(), (long long)f.size(), &err);
     if (!m)
