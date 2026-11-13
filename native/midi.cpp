@@ -34,6 +34,7 @@
 #include <vector>
 
 #include "nv.h"
+#include "gsrx.h"
 
 namespace nv {
 
@@ -43,6 +44,11 @@ struct Msg {
     int meta;                   // a meta event's type
     std::vector<uint8_t> data;  // a meta event's or a sysex's bytes
     int port = 0;               // its track's MIDI port (FF 21), a two-port file's: its channels + 16 x it
+    // THE PARTS' RECEIVE SETTINGS (gsrx.h): 0 every reader's; 1 the message as
+    // sent, the live part's only (it receives it itself: host.cpp's stage);
+    // 2 a part's copy as it receives it, the file render's only
+    int rx = 0;
+    bool direct = false;        // a part's own (a part parameter's, the CM-64 map's): no channel to route
 };
 
 // A GS PART PARAMETER that a MIDI message carries (parse_gs_part): its channel
@@ -806,6 +812,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             for (const auto &x : pm) {
                 Msg y{0, x[0] | pch, x[1], x[2], 0, {}};
                 y.port = pport;
+                y.direct = true;
                 ex.push_back(y);
             }
         }
@@ -825,12 +832,16 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         auto pan = [](int v) { return std::max(0, std::min(127, 128 - v)); };
         std::vector<Msg> ex;
         for (int ch = 0; ch < 16; ch++) {
-            auto cc = [&](int c, int v) { ex.push_back(Msg{0, 0xB0 | ch, c, v, 0, {}}); };
+            auto cc = [&](int c, int v) {
+                ex.push_back(Msg{0, 0xB0 | ch, c, v, 0, {}});
+                ex.back().direct = true;
+            };
             if (ch != 9) {
                 cc(0, PARTS[ch][0]);
                 cc(32, 1);
             }
             ex.push_back(Msg{0, 0xC0 | ch, PARTS[ch][1], 0, 0, {}});
+            ex.back().direct = true;
             cc(7, 100); cc(10, pan(PARTS[ch][2])); cc(91, 64); cc(93, 0);
             cc(101, 0); cc(100, 0); cc(6, 12); cc(38, 0); cc(101, 127); cc(100, 127);
         }
@@ -838,6 +849,59 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             if ((m.status & 0xF0) == 0xB0 && m.d0 == 10)
                 m.d1 = pan(m.d1);
             ex.push_back(m);
+        }
+        msgs.swap(ex);
+    }
+    {
+        // THE PARTS' RECEIVE SETTINGS (blockrender's _stream, gsrx): once a file
+        // sets one, each channel message as the parts take it -- the message
+        // as sent kept for the live part (rx 1), each part's copy for the file
+        // (rx 2, at the same tick); untouched while none is set
+        GsReceive rc(32);
+        std::vector<Msg> ex;
+        ex.reserve(msgs.size());
+        std::vector<std::pair<int, int>> pans, to;
+        bool any = false;
+        for (const Msg &m : msgs) {
+            if (m.status == 0xF0) {
+                const std::vector<uint8_t> &d = m.data;
+                const int k = rc.sysex(d, pans);
+                const bool gm = d.size() >= 4 && d[0] == 0x7E && d[2] == 0x09 && (d[3] == 0x01 || d[3] == 0x03);
+                const bool gsr = d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12
+                                 && ((d[4] == 0x40 && d[5] == 0x00 && d[6] == 0x7F && d[7] == 0x00)
+                                     || (d[4] == 0x00 && d[5] == 0x00 && d[6] == 0x7F));
+                if (k < 0 && (gm || gsr))
+                    rc.reset();
+                any = any || k >= 0;
+                ex.push_back(m);
+                for (const auto &pv : pans) {
+                    Msg y{0, 0xB0 | (pv.first % 16), 10, pv.second, 0, {}};
+                    y.port = pv.first / 16;
+                    y.rx = 2;
+                    ex.push_back(y);
+                }
+                continue;
+            }
+            const int kind = m.status & 0xF0;
+            if (!any || m.status == 0xFF || m.direct || kind < 0x80 || kind > 0xE0 || rc.plain()) {
+                ex.push_back(m);
+                continue;
+            }
+            const int ch = (m.status & 0x0F) + 16 * m.port;
+            rc.route(ch, kind, m.d0, m.d1, to);
+            Msg o = m;
+            o.rx = 1;
+            ex.push_back(o);
+            for (const auto &pv : to) {
+                Msg y = m;
+                y.tick = 0;
+                y.status = kind | (pv.first % 16);
+                y.port = pv.first / 16;
+                if (kind == 0xB0)
+                    y.d1 = pv.second;
+                y.rx = 2;
+                ex.push_back(y);
+            }
         }
         msgs.swap(ex);
     }
@@ -989,6 +1053,27 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         seq++;
         double delta = m.tick > 0 ? m.tick * (tempo * 1e-6 / tpb) : 0.0;
         t += delta;
+        if (m.rx == 1) {                        // (the message as sent: the live part's alone)
+            seq--;
+            const int lk = m.status & 0xF0, lc = (m.status & 0x0F) + 16 * m.port;
+            if (lk == 0xC0)
+                P.events.push_back(LiveEv{t, 5, lc, m.d0, 0});
+            else if (lk == 0xB0)
+                P.events.push_back(LiveEv{t, 2, lc, m.d0, m.d1});
+            else if (lk == 0xE0)
+                P.events.push_back(LiveEv{t, 4, lc, ((m.d1 << 7) | m.d0) - 8192, 0});
+            else if (lk == 0x90 && m.d1 > 0) {
+                seen_note = true;
+                P.events.push_back(LiveEv{t, 0, lc, m.d0, m.d1});
+            } else if (lk == 0x80 || lk == 0x90)
+                P.events.push_back(LiveEv{t, 1, lc, m.d0, 0});
+            else if (lk == 0xD0)
+                P.events.push_back(LiveEv{t, 3, lc, m.d0, 0});
+            else if (lk == 0xA0)
+                P.events.push_back(LiveEv{t, 7, lc, m.d0, m.d1});
+            continue;
+        }
+        const bool live_ev = m.rx != 2;         // (a part's copy: the file render's alone)
         if (m.status == 0xFF) {
             if (m.meta == 0x51 && m.data.size() == 3)
                 tempo = (m.data[0] << 16) | (m.data[1] << 8) | m.data[2];
@@ -1378,13 +1463,15 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 P.chprogs.push_back(std::make_pair(ch, m.d0));  // (a drum set is no organ's program)
                 P.chbsel.push_back(bs);
             }
-            P.events.push_back(LiveEv{t, 5, ch, m.d0, 0});
+            if (live_ev)
+                P.events.push_back(LiveEv{t, 5, ch, m.d0, 0});
         } else if (kind == 0xB0) {
             int cc = m.d0, v = m.d1;
             P.ccs.push_back(CCEv{ch, t, cc, v});
             if (cc >= 1 && cc <= 95)
                 efx_cv(t, ch, cc, v);
-            P.events.push_back(LiveEv{t, 2, ch, cc, v});
+            if (live_ev)
+                P.events.push_back(LiveEv{t, 2, ch, cc, v});
             if (cc >= 71 && cc <= 78)
                 P.snd.push_back(CCEv{ch, t, cc, v});
             if (cc == 0)
@@ -1514,13 +1601,15 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         } else if (kind == 0xE0) {
             P.pws.push_back(PwEv{ch, t, ((m.d1 << 7) | m.d0) - 8192});
             P.pitch.push_back(PitchEv{ch, t, seq, 0, (double)(((m.d1 << 7) | m.d0) - 8192)});
-            P.events.push_back(LiveEv{t, 4, ch, ((m.d1 << 7) | m.d0) - 8192, 0});
+            if (live_ev)
+                P.events.push_back(LiveEv{t, 4, ch, ((m.d1 << 7) | m.d0) - 8192, 0});
             efx_cv(t, ch, 0x61, ((m.d1 << 7) | m.d0) >> 7);
             bend_now[ch] = ((m.d1 << 7) | m.d0) - 8192;
             cmx_upd(t, ch);
         } else if (kind == 0x90 && m.d1 > 0) {
             seen_note = true;
-            P.events.push_back(LiveEv{t, 0, ch, m.d0, m.d1});
+            if (live_ev)
+                P.events.push_back(LiveEv{t, 0, ch, m.d0, m.d1});
             auto &c = ctrl[ch];
             Note n;
             n.ch = ch; n.note = m.d0; n.on = t; n.off = 0.0; n.vel = m.d1;
@@ -1552,7 +1641,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             P.banked |= n.bsel != 0;
             on[std::make_pair(ch, m.d0)].push_back(n);
         } else if (kind == 0x80 || kind == 0x90) {
-            P.events.push_back(LiveEv{t, 1, ch, m.d0, 0});
+            if (live_ev)
+                P.events.push_back(LiveEv{t, 1, ch, m.d0, 0});
             auto &q = on[std::make_pair(ch, m.d0)];
             if (!q.empty()) {
                 Note n = q.front();
@@ -1563,14 +1653,16 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         }
         else if (kind == 0xD0) {
             P.ats.push_back(CCEv{ch, t, -1, m.d0});     // the channel's aftertouch (ats)
-            P.events.push_back(LiveEv{t, 3, ch, m.d0, 0});      // (the live part's too)
+            if (live_ev)
+                P.events.push_back(LiveEv{t, 3, ch, m.d0, 0});      // (the live part's too)
             efx_cv(t, ch, 0x60, m.d0);
             cat_now[ch] = m.d0;
             cmx_upd(t, ch);
         }
         else if (kind == 0xA0) {
             P.pts.push_back(CCEv{ch, t, m.d0, m.d1});   // a key's polytouch (pts)
-            P.events.push_back(LiveEv{t, 7, ch, m.d0, m.d1});   // (the live part's too: a siren's air)
+            if (live_ev)
+                P.events.push_back(LiveEv{t, 7, ch, m.d0, m.d1});   // (the live part's too: a siren's air)
             pat_now[ch][m.d0] = m.d1;
             cmx_upd(t, ch);
         }

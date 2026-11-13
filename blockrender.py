@@ -134,6 +134,7 @@ import mf104 as _MFD
 import gsdelay as _GSD
 import gsefx as _GSX
 import ctrlmatrix as _CMX
+import gsrx as _GSRX
 import damper as _DMP
 
 # Mirrors RAND_GRAN in synthkernel.c: the chiff phase is redrawn at this many
@@ -781,15 +782,44 @@ def parse(path):
     # causes -- are queued here and run at the same instant, through the same
     # code, straight after the message that caused them.
     _inj = []
+    # THE PARTS' RECEIVE SETTINGS (gsrx, live's the same): RX. CHANNEL, the Rx
+    # switches, master pan -- each channel message as the parts take it, a
+    # dropped one's time carried to the next; untouched while none is set
+    def _on_part(m, p, **kw):               # (a message on part p: port B's a _PortMsg)
+        b = m._m if isinstance(m, _PortMsg) else m
+        b = b.copy(channel=p % 16, **kw)
+        return _PortMsg(b, p, m.time) if p >= 16 else b
+
+    def _retime(m, tm):
+        return _PortMsg(m._m, m.channel, tm) if isinstance(m, _PortMsg) else m.copy(time=tm)
+    _rcv = _GSRX.Receive(32, _on_part)
 
     def _stream():
         if CM64:
             for _m in cm64_init():          # (the CM-64 map's parts, before the file: CM64)
                 yield _m, True
+        _carry = 0.0
         for _m in mid:
             if CM64 and _m.type == 'control_change' and _m.control == 10:
                 _m = _m.copy(value=cm64_pan(_m.value))      # (a CM-64's pan, mirrored)
-            yield _m, False
+            if _carry:
+                _m = _retime(_m, _m.time + _carry)
+                _carry = 0.0
+            if _m.type == 'sysex':
+                _pans = _rcv.sysex(_m.data)
+                if _pans is None and (gm_on_level(_m.data) or parse_gs_reset(_m.data)):
+                    _rcv.reset()
+                yield _m, False
+                for _p, _v in _pans or ():
+                    yield _rcv.pan_msg(_p, _v), True
+            elif getattr(_m, 'channel', None) is None or _rcv.plain():
+                yield _m, False
+            else:
+                _ms = _rcv.route(_m)
+                if not _ms:
+                    _carry = _m.time
+                for _i, _mr in enumerate(_ms):
+                    yield (_mr if _i == 0 else _retime(_mr, 0)), False
             while _inj:
                 yield _inj.pop(0), True
     if CM64:

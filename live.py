@@ -86,6 +86,7 @@ import moog as _MG
 import tonelib as T
 import gsefx as _GSX
 import gsdisplay as _GSDISP
+import gsrx as _GSRX
 import gsdelay as _GSD
 import register as _RGM     # the free-string register's physics (live: _reg_*)
 import damper as _DMP       # half-pedalling: each key's damper by the pedal's value
@@ -5093,7 +5094,7 @@ class Live:
     def chan_cc(self, ch, cc):
         ch = 0 if ch is None else ch
         if cc == 10:
-            return int(self.gs_pan_raw.get(ch, self.cpan.get(ch, T.GM_DEFAULT_PAN)))
+            return int(self.gsrx.pan_raw.get(ch, self.cpan.get(ch, T.GM_DEFAULT_PAN)))
         if cc == 91:
             return int(round(self.slab.send[ch] * B.GM_DEFAULT_REVERB)) if ch < len(self.slab.send) else 40
         if cc == 93:
@@ -5757,99 +5758,25 @@ class Live:
             return
         self._one_core(n0, msg)
 
-    # each Rx switch's address (40 1p aa): a message type, or a controller
-    _RX_TYPE = {"pitchwheel": 0x03, "aftertouch": 0x04, "program_change": 0x05, "polytouch": 0x07,
-                "note_on": 0x08, "note_off": 0x08}
-    _RX_CC = {1: 0x0B, 7: 0x0C, 10: 0x0D, 11: 0x0E, 64: 0x0F, 65: 0x10, 66: 0x11, 67: 0x12}
-
+    # THE PARTS' RECEIVE SETTINGS: gsrx.Receive, blockrender.parse's the same
     def _gs_rx_reset(self):
-        self.gs_rx = list(range(16))
-        self.gs_rxsw = {}
-        self.gs_rx_sel = {}
-        self.gs_mpan = 64
-        self.gs_pan_raw = {}
-        self.gs_assign = {}
-        self.gs_ccnum = {}
+        if getattr(self, "gsrx", None) is None:
+            self.gsrx = _GSRX.Receive(16)
+        self.gsrx.reset()
 
     def _gs_rx(self, msg):
-        """A CHANNEL MESSAGE AS THE PARTS RECEIVE IT (GS): to each part whose
-        RX. CHANNEL is its channel, as that part's; dropped where that part's
-        Rx switch for it is off (an RPN's or NRPN's data entry by the last
-        parameter selected); a CC10 offset by master pan."""
-        ch = msg.channel
-        if ch >= 16:
-            return [msg]
-        tg = [p for p in range(16) if self.gs_rx[p] == ch] if self.gs_rx[ch] != ch or any(
-            self.gs_rx[p] != p for p in range(16)) else [ch]
-        out = []
-        for p in tg:
-            m = msg if p == ch else msg.copy(channel=p)
-            if self._rx_drop(p, m):
-                continue
-            if m.type == "control_change" and m.control == 10:
-                self.gs_pan_raw[p] = m.value
-                if self.gs_mpan != 64:
-                    m = m.copy(value=max(0, min(127, m.value + self.gs_mpan - 64)))
-            out.append(m)
-        return out
-
-    def _rx_drop(self, p, m):
-        t = m.type
-        if t == "control_change":
-            c = m.control
-            if c in (101, 100):
-                self.gs_rx_sel[p] = 'rpn'
-            elif c in (99, 98):
-                self.gs_rx_sel[p] = 'nrpn'
-        sw = self.gs_rxsw.get(p)
-        if not sw:
-            return False
-        if t != "control_change":
-            return self._RX_TYPE.get(t) in sw
-        c = m.control
-        if 0x06 in sw:
-            return True
-        if c in (101, 100):
-            return 0x09 in sw
-        if c in (99, 98):
-            return 0x0A in sw
-        if c in (6, 38, 96, 97):
-            sel = self.gs_rx_sel.get(p)
-            return (sel == 'rpn' and 0x09 in sw) or (sel == 'nrpn' and 0x0A in sw)
-        return self._RX_CC.get(c) in sw
+        """A channel message as the parts receive it (gsrx.Receive.route)."""
+        return self.gsrx.route(msg)
 
     def _gs_rx_part(self, n0, d):
         """A part's receive setting (40 1p aa, port A) or master pan (40 00
-        06): True where it was one."""
-        if not (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12 and d[4] == 0x40):
+        06): True where it was one -- at a new master pan, every part's pan
+        sent again by the new offset."""
+        pans = self.gsrx.sysex(d)
+        if pans is None:
             return False
-        if d[5] == 0x00 and d[6] == 0x06:
-            self.gs_mpan = max(1, min(127, int(d[7])))
-            for p in range(16):                 # (every part's pan again, by the new offset)
-                self._one_core(n0, mido.Message("control_change", channel=p, control=10,
-                                                value=max(0, min(127, self.gs_pan_raw.get(p, 64)
-                                                                 + self.gs_mpan - 64))))
-            return True
-        if d[5] >> 4 != 1:
-            return False
-        a = d[6]
-        if not (a == 0x02 or 0x03 <= a <= 0x12 or a in (0x14, 0x1F, 0x20)):
-            return False
-        blk = d[5] & 0x0F
-        ch = 9 if blk == 0 else (blk - 1 if blk <= 9 else blk)
-        v = int(d[7])
-        if a == 0x02:
-            self.gs_rx[ch] = v if v < 16 else 16
-        elif a == 0x14:
-            self.gs_assign[ch] = v
-        elif a in (0x1F, 0x20):
-            self.gs_ccnum[(ch, a)] = v
-        else:
-            sw = self.gs_rxsw.setdefault(ch, set())
-            if v:
-                sw.discard(a)
-            else:
-                sw.add(a)
+        for p, v in pans:
+            self._one_core(n0, self.gsrx.pan_msg(p, v))
         return True
 
     # MPE, what the zone does with a message before the channel does (2.3,
