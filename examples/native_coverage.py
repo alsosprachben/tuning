@@ -96,7 +96,16 @@ TASKS = [
                   "part exclusives as port A reads them, the legato over the merged stream"),
     ("GM1", True, "Files: GS's drum instrument NRPNs (GS_DRUM_NRPN: a key's pitch, level, pan, delay level; "
                   "reset by a GS or GM reset and a drum program change)"),
-    ("GM1", False, "Files: MPE in the reader"),
+    ("GM1", False, "Files: MPE (M1-100-UM, MIDI 1.0) -- the reader's zones (an MCM's resets and bend ranges, a "
+                   "manager's controls copied to its members, a member's zone-wide ones ignored), a member's note "
+                   "its manager's program and fader, its own pitch row (its bend times its manager's: "
+                   "_prep_mpe_pitch) -- written, its checks to come"),
+    ("GM1", False, "Live: MPE in nvlive (live._mpe_route: the zones, the pressure and CC74 a member and its "
+                   "manager combine, a part on the manager's channel playing the zone, legato and portamento by zone)"),
+    ("GM2", False, "Files: MIDI 2.0 (ump.py: a Clip File or raw UMP) -- the reader, per-note pitch (7.9, 7.25), "
+                   "per-note bend and its range, per-note management; native reads Standard MIDI Files only"),
+    ("GM2", False, "Live: MIDI 2.0 in nvlive (live._one_m2: the per-note messages; a MIDI 1.0 keyboard bridged, "
+                   "live --midi2) -- nvlive parses MIDI 1.0 bytes only"),
     ("GM1", True, "Files: a class's own distance and gestures -- reverb_distance, its own chorus pedal "
                   "(chorus_send) and detuned pair (detuned_pair: chorus._pair), falls and rips on the valved "
                   "lattice (fall_cents, rip_cents: Song::gliss)"),

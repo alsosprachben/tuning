@@ -35,6 +35,7 @@
 
 #include "nv.h"
 #include "gsrx.h"
+#include "mpe.h"
 
 namespace nv {
 
@@ -270,6 +271,9 @@ struct PitchEv {
 
 struct Parsed {
     std::vector<LiveEv> events;     // the notes and controllers in message order
+    // MPE's ZONES over time (blockrender's mpe_ev): at each MCM that changed
+    // one, every channel in MPE and its (group, side) -- prepare's _manager
+    std::vector<std::pair<double, std::map<int, std::pair<int, int>>>> mpe;
     // THE SOUND CANVAS'S DISPLAY (gsdisplay): its messages (model 45H) and
     // their times, for the render's text (OUT.display.txt); nothing sounds of them
     struct Disp {
@@ -1049,31 +1053,103 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             mi->second.set(0, 4, 4.0);
             cmx_upd(t, ch);
         }
-    for (const Msg &m : msgs) {
+    // MPE (blockrender's _mpe): the zones in force, and the messages they
+    // imply, read next through the same code (its _inj: a manager's control
+    // copied to its members, a mode message to each member, the resets an
+    // MCM causes), the file's next after them
+    MpeZones mpe;
+    std::vector<Msg> inj;
+    size_t inj_at = 0, mi_at = 0;
+    // (the message as sent, for the live part alone -- it reads MPE and the
+    // receive settings itself: a message the file's reading drops or copies)
+    auto live_only = [&](const Msg &x) {
+        const int lk = x.status & 0xF0, lc = (x.status & 0x0F) + 16 * x.port;
+        if (lk == 0xC0)
+            P.events.push_back(LiveEv{t, 5, lc, x.d0, 0});
+        else if (lk == 0xB0)
+            P.events.push_back(LiveEv{t, 2, lc, x.d0, x.d1});
+        else if (lk == 0xE0)
+            P.events.push_back(LiveEv{t, 4, lc, ((x.d1 << 7) | x.d0) - 8192, 0});
+        else if (lk == 0x90 && x.d1 > 0) {
+            seen_note = true;
+            P.events.push_back(LiveEv{t, 0, lc, x.d0, x.d1});
+        } else if (lk == 0x80 || lk == 0x90)
+            P.events.push_back(LiveEv{t, 1, lc, x.d0, 0});
+        else if (lk == 0xD0)
+            P.events.push_back(LiveEv{t, 3, lc, x.d0, 0});
+        else if (lk == 0xA0)
+            P.events.push_back(LiveEv{t, 7, lc, x.d0, x.d1});
+    };
+    while (true) {
+        Msg m_;
+        bool injected = false;
+        if (inj_at < inj.size()) {
+            m_ = inj[inj_at++];
+            injected = true;
+            if (inj_at == inj.size()) {
+                inj.clear();
+                inj_at = 0;
+            }
+        } else if (mi_at < msgs.size())
+            m_ = msgs[mi_at++];
+        else
+            break;
+        const Msg &m = m_;
         seq++;
         double delta = m.tick > 0 ? m.tick * (tempo * 1e-6 / tpb) : 0.0;
         t += delta;
         if (m.rx == 1) {                        // (the message as sent: the live part's alone)
             seq--;
-            const int lk = m.status & 0xF0, lc = (m.status & 0x0F) + 16 * m.port;
-            if (lk == 0xC0)
-                P.events.push_back(LiveEv{t, 5, lc, m.d0, 0});
-            else if (lk == 0xB0)
-                P.events.push_back(LiveEv{t, 2, lc, m.d0, m.d1});
-            else if (lk == 0xE0)
-                P.events.push_back(LiveEv{t, 4, lc, ((m.d1 << 7) | m.d0) - 8192, 0});
-            else if (lk == 0x90 && m.d1 > 0) {
-                seen_note = true;
-                P.events.push_back(LiveEv{t, 0, lc, m.d0, m.d1});
-            } else if (lk == 0x80 || lk == 0x90)
-                P.events.push_back(LiveEv{t, 1, lc, m.d0, 0});
-            else if (lk == 0xD0)
-                P.events.push_back(LiveEv{t, 3, lc, m.d0, 0});
-            else if (lk == 0xA0)
-                P.events.push_back(LiveEv{t, 7, lc, m.d0, m.d1});
+            live_only(m);
             continue;
         }
-        const bool live_ev = m.rx != 2;         // (a part's copy: the file render's alone)
+        const bool live_ev = m.rx != 2 && !injected;    // (a part's copy, MPE's: the file render's alone)
+        // MPE's ROUTING (blockrender's): on a member, a zone-wide control
+        // ignored (2.3.1), a mode message to every member when it is on the
+        // lowest, program change and poly pressure ignored (2.3.3, 2.2.7); on
+        // the manager, a control change copied to every member but those
+        // _MPE_NOT_FANNED, and CC126/127 ignored
+        if (mpe && !injected && m.status >= 0x80 && m.status < 0xF0) {
+            const int mc = (m.status & 0x0F) + 16 * m.port, mk = m.status & 0xF0;
+            if (mpe.zone_of(mc)) {
+                bool drop = false;
+                if (mpe.is_member(mc)) {
+                    if (mk == 0xB0) {
+                        const int c0 = m.d0;
+                        if (c0 == 126 || c0 == 127) {
+                            if (mc == mpe.lowest_member(mc))
+                                for (int m2 : mpe.members(mc)) {
+                                    Msg y = m;
+                                    y.tick = 0;
+                                    y.status = 0xB0 | (m2 & 15);
+                                    y.port = m2 / 16;
+                                    inj.push_back(y);
+                                }
+                            drop = true;
+                        } else if (!(c0 == 74 || c0 == 6 || c0 == 38 || c0 == 96 || c0 == 97 || c0 == 98 || c0 == 99
+                                     || c0 == 100 || c0 == 101 || c0 == 120 || c0 == 121 || c0 == 123))
+                            drop = true;
+                    } else if (mk == 0xC0 || mk == 0xA0)
+                        drop = true;
+                } else if (mk == 0xB0) {
+                    if (m.d0 == 126 || m.d0 == 127)
+                        drop = true;
+                    else if (!mpe_not_fanned(m.d0))
+                        for (int m2 : mpe.members(mc)) {
+                            Msg y = m;
+                            y.tick = 0;
+                            y.status = 0xB0 | (m2 & 15);
+                            y.port = m2 / 16;
+                            inj.push_back(y);
+                        }
+                }
+                if (drop) {
+                    if (live_ev)
+                        live_only(m);
+                    continue;
+                }
+            }
+        }
         if (m.status == 0xFF) {
             if (m.meta == 0x51 && m.data.size() == 3)
                 tempo = (m.data[0] << 16) | (m.data[1] << 8) | m.data[2];
@@ -1413,6 +1489,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         }
         int ch = (m.status & 0x0F) + 16 * m.port, kind = m.status & 0xF0;
         auto is_drums = [&](int c) {
+            if (mpe && mpe.is_member(c))        // (a member is never a drum channel)
+                return false;
             auto it = drums.find(c);
             return it != drums.end() ? it->second != 0 : (c % 16 == PERCUSSION_CHANNEL);
         };
@@ -1529,14 +1607,40 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                             P.snd.push_back(CCEv{ch, t, g[2], v});
                     continue;
                 }
-                if (it->second == std::make_pair(0, 6))
-                    return -6;          // MPE's configuration
+                if (it->second == std::make_pair(0, 6)) {
+                    // THE MPE CONFIGURATION MESSAGE (2.2.1): the zones; a
+                    // reset on every channel whose zone changed (2.2.3); the
+                    // bend ranges, 2 on the manager and 48 on members (2.2.5)
+                    std::set<int> chg;
+                    if (cc == 6 && mpe.mcm(ch, v, chg)) {
+                        P.mpe.push_back(std::make_pair(t, mpe.channels()));
+                        for (int x : chg) {
+                            Msg y{0, 0xB0 | (x & 15), 121, 0, 0, {}};
+                            inj.push_back(y);
+                        }
+                        if (mpe.zone_of(ch)) {
+                            rrange[ch] = MPE_MANAGER_BEND;
+                            P.pitch.push_back(PitchEv{ch, t, seq, 1, rrange[ch]});
+                            for (int m2 : mpe.members(ch)) {
+                                rrange[m2] = MPE_MEMBER_BEND;
+                                P.pitch.push_back(PitchEv{m2, t, seq, 1, rrange[m2]});
+                            }
+                        }
+                    }
+                    continue;
+                }
                 // DATA ENTRY into the RPN selected (tonelib's rpn_*)
                 std::pair<int, int> sel = it->second;
                 if (sel == std::make_pair(0, 0)) {
                     double cur = getd(rrange, ch, BEND_RANGE_SEMITONES);
                     rrange[ch] = cc == 6 ? (double)v : (double)(long)cur + v / 100.0;
                     P.pitch.push_back(PitchEv{ch, t, seq, 1, rrange[ch]});
+                    if (mpe && mpe.is_member(ch))           // (one range for the zone's members, 2.2.5)
+                        for (int m2 : mpe.members(ch))
+                            if (m2 != ch) {
+                                rrange[m2] = rrange[ch];
+                                P.pitch.push_back(PitchEv{m2, t, seq, 1, rrange[ch]});
+                            }
                 } else if (sel == std::make_pair(0, 1)) {
                     int msb = rfmsb.count(ch) ? rfmsb[ch] : 64;
                     if (cc == 6)
@@ -1635,9 +1739,16 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                     n.v11 = n.v11 * pow(li->second[0], 0.5);
             }
             n.pan = ((c.count(10) ? c[10] : GM_DEFAULT_PAN) - 64) / 63.0;
-            n.prog = prog.count(ch) ? prog[ch] : 0;
-            n.drum = is_drums(ch);
-            n.bsel = n.drum || !bsel.count(ch) ? 0 : bsel[ch];
+            // (a member plays its manager's program: blockrender's _cur_prog)
+            const int pch = mpe && mpe.is_member(ch) ? mpe.manager_of(ch) : ch;
+            n.prog = prog.count(pch) ? prog[pch] : 0;
+            n.drum = is_drums(pch);
+            n.bsel = n.drum || !bsel.count(pch) ? 0 : bsel[pch];
+            if (pch != ch && !n.drum
+                && std::find(P.chprogs.begin(), P.chprogs.end(), std::make_pair(ch, n.prog)) == P.chprogs.end()) {
+                P.chprogs.push_back(std::make_pair(ch, n.prog));
+                P.chbsel.push_back(n.bsel);
+            }
             P.banked |= n.bsel != 0;
             on[std::make_pair(ch, m.d0)].push_back(n);
         } else if (kind == 0x80 || kind == 0x90) {
@@ -1701,6 +1812,29 @@ extern "C" {
 int nv_midi_n_dedit(void *p) { return (int)((nv::Parsed *)p)->dedit.size(); }
 // USER DRUM SET s's key (0 or 1: GS's sets 65 and 66, programs 64 and 65):
 // its parameters by number (iv[1..12]) and a bit a parameter set, 0 none
+// MPE: channel ch's manager at time t (blockrender's _manager over the
+// zones' history, mpe_ev): -1 outside MPE; ch itself where it manages
+int nv_midi_mpe_manager(void *p, int ch, double t)
+{
+    const nv::Parsed &P = *(const nv::Parsed *)p;
+    const std::map<int, std::pair<int, int>> *z = nullptr;
+    for (const auto &e : P.mpe) {
+        if (e.first <= t + 1e-9)
+            z = &e.second;
+        else
+            break;
+    }
+    if (!z)
+        return -1;
+    auto it = z->find(ch);
+    if (it == z->end())
+        return -1;
+    return 16 * it->second.first + (it->second.second == 0 ? 0 : 15);
+}
+
+// whether the file has MPE at all (an MCM that made a zone)
+int nv_midi_has_mpe(void *p) { return ((const nv::Parsed *)p)->mpe.empty() ? 0 : 1; }
+
 int nv_midi_user_drum(void *p, int set, int key, int *iv)
 {
     const auto &u = ((nv::Parsed *)p)->uset;

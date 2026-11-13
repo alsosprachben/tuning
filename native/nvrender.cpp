@@ -123,6 +123,12 @@ long long nv_efx_reverb_ir(double sr, int rtype, double pre_ms, int time, double
 long long nv_efx_gate_ir(double sr, int gtype, double pre_ms, double gate_ms, double *hL, double *hR, long long cap);
 int nv_efx_conv(const double *x, long long nx, const double *h, long long nh, long long k, long long m, double *out);
 void nv_tremolo_brmap(long long ch, int n, const long long *from, const long long *to);
+int nv_midi_mpe_manager(void *p, int ch, double t);
+int nv_midi_has_mpe(void *p);
+void nv_bend_fader_channels(const int *fch, int n);
+int nv_bend_stream(void *midi, int ch, int with_master, double bend_range, double *t, double *r, int cap);
+void nv_bend_rows(const double *t, const double *r, int n, long nblk, int blk, double sr, float *BR, double *BC);
+void nv_song_mpe(void *s, long long ch, int note, double on, double r0, double row, int mgr);
 int nv_meend_note(const double *wt, const int *wp, int nw, double on, double off, double nc, const double *sw,
                   int nsw, double rst, double strength, long nblk, int blk, double sr, double *r0, float *BR,
                   double *BC);
@@ -1448,12 +1454,36 @@ int main(int argc, char **argv)
     }
     for (int c : mch)
         btun[c & 255] = 0.0;
+    // MPE's MEMBER NOTES (_mpe_member): a note on a channel that was a member
+    // of a zone at its onset -- its channel no tuning and no gesture of its
+    // own (each note its own pitch: _MPE_AT, below), the note riding its
+    // manager's fader
+    std::vector<int> fch_note;
+    std::set<int> mpch;
+    if (nv_midi_has_mpe(midi)) {
+        const int nn = nv_midi_n_notes(midi);
+        fch_note.assign(nn, -1);
+        for (int i = 0; i < nn; i++) {
+            int iv[5];
+            double dv[5];
+            nv_midi_note(midi, i, iv, dv);
+            const int mg = nv_midi_mpe_manager(midi, iv[0], dv[0]);
+            if (mg >= 0 && mg != iv[0]) {
+                fch_note[i] = mg;
+                mpch.insert(iv[0]);
+            }
+        }
+    }
+    nv_bend_fader_channels(fch_note.data(), (int)fch_note.size());
+    for (int c : mpch)
+        btun[c & 255] = 0.0;
     // the rows: each channel's gesture first (_prep_bend_rows: brow_of, at
     // br[256 + channel]), then the faders' (_LROW, at br[channel])
     std::vector<int> fch, gch;
     std::vector<double> br(512, -1.0);
     for (int c = 0; c < 256; c++)
-        if (!mch.count(c) && nv_bend_gesture(midi, song, E.k[K_BEND_SEMIS], c, 0, (int)BLK, SR, nullptr, nullptr)) {
+        if (!mch.count(c) && !mpch.count(c)
+            && nv_bend_gesture(midi, song, E.k[K_BEND_SEMIS], c, 0, (int)BLK, SR, nullptr, nullptr)) {
             br[256 + c] = (double)gch.size();
             gch.push_back(c);
         }
@@ -1594,6 +1624,85 @@ int main(int argc, char **argv)
             mrows.push_back(m);
         }
         nv_song_meend(song, c, nt, m.on, r0, row);
+    }
+    // ...and MPE's MEMBER NOTES' PITCH (_prep_mpe_pitch): the member's bend
+    // times its manager's (the manager's without the master's), the value at
+    // Note On into f0, what moves after -- the member's until its Note Off,
+    // the manager's while it sounds -- a row of its own after the meends'
+    struct MpeRow {
+        std::vector<double> t, r;
+        int mgr;
+    };
+    std::vector<MpeRow> prows;
+    const int pbase = mbase + (int)mrows.size();
+    if (!mpch.empty()) {
+        std::map<std::pair<int, int>, std::pair<std::vector<double>, std::vector<double>>> stc;
+        auto stream = [&](int c, int wm) -> const std::pair<std::vector<double>, std::vector<double>> & {
+            auto key = std::make_pair(c, wm);
+            auto it = stc.find(key);
+            if (it != stc.end())
+                return it->second;
+            int n = nv_bend_stream(midi, c, wm, E.k[K_BEND_SEMIS], nullptr, nullptr, 0);
+            std::pair<std::vector<double>, std::vector<double>> v;
+            v.first.resize(n);
+            v.second.resize(n);
+            nv_bend_stream(midi, c, wm, E.k[K_BEND_SEMIS], v.first.data(), v.second.data(), n);
+            return stc[key] = v;
+        };
+        auto val = [](const std::pair<std::vector<double>, std::vector<double>> &st, double tt) {
+            double v = 1.0;
+            for (size_t k = 0; k < st.first.size(); k++) {
+                if (st.first[k] <= tt + 1e-9)
+                    v = st.second[k];
+                else
+                    break;
+            }
+            return v;
+        };
+        for (int i = 0, n = nv_midi_n_notes(midi); i < n; i++) {
+            if (fch_note[i] < 0)
+                continue;
+            int iv[5];
+            double dv[5];
+            nv_midi_note(midi, i, iv, dv);
+            const int c = iv[0], mg = fch_note[i];
+            const double on = dv[0], off = dv[1];
+            const auto &ms = stream(c, 1);
+            const auto &gs = stream(mg, 0);
+            const double r0 = val(ms, on) * val(gs, on);
+            double row = -1.0;
+            bool bendable = !iv[4];
+            if (bendable) {
+                int cq = meend_cls(i, iv);
+                if (cq >= 0)
+                    bendable = ((const NoteClass *)E.classes[cq].data())->bendable != 0;
+            }
+            std::vector<double> mv;
+            for (size_t k = 0; k < ms.first.size(); k++)
+                if (on + 1e-9 < ms.first[k] && ms.first[k] <= off)
+                    mv.push_back(ms.first[k]);
+            for (size_t k = 0; k < gs.first.size(); k++)
+                if (gs.first[k] > on + 1e-9)
+                    mv.push_back(gs.first[k]);
+            std::sort(mv.begin(), mv.end());
+            mv.erase(std::unique(mv.begin(), mv.end()), mv.end());
+            if (bendable && !mv.empty()) {
+                MpeRow pr;
+                pr.mgr = mg;
+                bool any = false;
+                for (double tt : mv) {
+                    const double rr = val(ms, std::min(tt, off)) * val(gs, tt) / r0;
+                    pr.t.push_back(tt);
+                    pr.r.push_back(rr);
+                    any = any || fabs(rr - 1.0) > 1e-9;
+                }
+                if (any) {
+                    row = (double)(pbase + (int)prows.size());
+                    prows.push_back(pr);
+                }
+            }
+            nv_song_mpe(song, c, iv[1], on, r0, row, mg);
+        }
     }
     for (int c = 0; c < 256; c++) {
         double ot[12];                      // THE CHANNEL's SCALE (_prep_octave_tuning, _OTUN)
@@ -1978,7 +2087,7 @@ int main(int argc, char **argv)
     // edge; the note sounding to the rotor's floor or the next press
     typedef NvSirRow SirRow;
     std::vector<SirRow> sir;
-    const int sbase = (int)(gch.size() + nbr_ + nw + nsr + fch.size() + mrows.size());
+    const int sbase = (int)(gch.size() + nbr_ + nw + nsr + fch.size() + mrows.size() + prows.size());
     nv_song_sirens(song, K.data(), (int)K.size(), total, SR, BLK, sbase, &sir);
     // THE MATRIX'S TREMOLO's ROWS (_prep_matrix_tremolo): for each channel
     // whose depth peaks past 0, a row for each row its notes can ride -- its
@@ -2084,7 +2193,8 @@ int main(int argc, char **argv)
             nv_song_alias(song, c, iv[0], dv[0], rws.data(), (int)rws.size());
         }
     }
-    bool rows_ = !fch.empty() || !gch.empty() || nw || nsr || nbr_ || !mrows.empty() || !sir.empty() || !trows.empty()
+    bool rows_ = !fch.empty() || !gch.empty() || nw || nsr || nbr_ || !mrows.empty() || !prows.empty() || !sir.empty()
+                 || !trows.empty()
                  || !arows.empty();
     nv_gsd_place_reset();                       // (blockrender's _GSD_PLACE: the render's)
     StreamScan scan;
@@ -2793,7 +2903,7 @@ int main(int argc, char **argv)
     // the rows (_prep_bend_arrays): a gesture's ratio and phase a block (its
     // channel's fader's level at each edge, where it has one); a fader's
     // ratio 1 and phase 0, its level; no rows, one of ones and no levels
-    size_t ng = gch.size(), nr = std::max<size_t>(ng + nbr_ + nw + nsr + fch.size() + mrows.size() + sir.size()
+    size_t ng = gch.size(), nr = std::max<size_t>(ng + nbr_ + nw + nsr + fch.size() + mrows.size() + prows.size() + sir.size()
                                                   + trows.size() + arows.size(), 1);
     std::vector<float> BRr(nr * nblk, 1.0f), BLr;
     std::vector<double> BCr(nr * nblk, 0.0);
@@ -2868,6 +2978,12 @@ int main(int argc, char **argv)
                 if (sch[q] == fch[r])
                     for (int b = 0; b < 6; b++)
                         std::copy(Lf, Lf + nblk + 1, BLr.data() + (size_t)(srow[q] + b) * (nblk + 1));
+            for (size_t q = 0; q < prows.size(); q++)   // ...and its zone's MPE notes' rows (_own)
+                if (prows[q].mgr == fch[r]) {
+                    float *bl = BLr.data() + ((size_t)pbase + q) * (nblk + 1);
+                    for (long e = 0; e <= nblk; e++)
+                        bl[e] = bl[e] * Lf[e];
+                }
             for (size_t q = 0; q < sir.size(); q++)     // ...and its sirens' levels, under it
                 if (sir[q].ch == fch[r]) {
                     float *bl = BLr.data() + ((size_t)sbase + q) * (nblk + 1);
@@ -2876,6 +2992,9 @@ int main(int argc, char **argv)
                 }
         }
     }
+    for (size_t q = 0; q < prows.size(); q++)      // MPE's notes' rows (after the meends')
+        nv_bend_rows(prows[q].t.data(), prows[q].r.data(), (int)prows[q].t.size(), nblk, (int)BLK, SR,
+                     BRr.data() + ((size_t)pbase + q) * nblk, BCr.data() + ((size_t)pbase + q) * nblk);
     for (size_t q = 0; q < mrows.size(); q++) {    // the meends', last (no fader rides them: _LROW's _own)
         const Meend &m = mrows[q];
         std::vector<double> wt;

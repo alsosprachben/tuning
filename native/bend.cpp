@@ -382,6 +382,12 @@ int nv_bend_gesture(void *midi, void *song, double bend_range, int ch, long nblk
 // organ's, whose CC7 is its swell (NULL none). The reader's notes give the spans
 // (each to its key-up plus fader_tail); the reader's controllers, in time
 // order (in_order), the level; tau the glide
+// EACH NOTE's FADER CHANNEL where it is not its own (MPE: a member's note
+// rides its manager's -- blockrender's _mpe_member in _prep_channel_fader):
+// the reader's note i's, -1 its own
+static std::vector<int> g_fch;
+void nv_bend_fader_channels(const int *fch, int n) { g_fch.assign(fch, fch + n); }
+
 int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr, double tau, double fader_tail,
                   double stamp_s, double stamped_share, int vol0, int expr0, float *L, const unsigned char *swell)
 {
@@ -392,7 +398,8 @@ int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr,
         int iv[5];
         double dv[5];
         nv_midi_note(midi, i, iv, dv);
-        if (iv[0] != ch)
+        const int fc = i < (int)g_fch.size() && g_fch[i] >= 0 ? g_fch[i] : iv[0];
+        if (fc != ch)
             continue;
         // (not an organ's note whose CC7 is its swell: _plain)
         if (!(swell && swell[i]))
@@ -545,6 +552,75 @@ int nv_meend_note(const double *wt, const int *wp, int nw, double on, double off
     if (BR)
         blocks(mv, nblk, blk, sr, BR, BC);
     return 1;
+}
+
+// A CHANNEL's PITCH STREAM as blockrender's _pitch_stream has it: (t, ratio)
+// at each of its wheel, RPN (range, fine, coarse), master (with_master) and
+// GM System On events, in message order -- tonelib.channel_pitch_ratio; no
+// controller matrix (the MPE note's: _prep_mpe_pitch). n written (cap)
+int nv_bend_stream(void *midi, int ch, int with_master, double bend_range, double *t, double *r, int cap)
+{
+    using nv::bend::P;
+    std::vector<P> ev;
+    for (int i = 0, np = nv_midi_n_pitch(midi); i < np; i++) {
+        int iv[2];
+        long seq;
+        double tt, v;
+        nv_midi_pitch(midi, i, iv, &seq, &tt, &v);
+        if (iv[0] == -2) {
+            if (with_master)
+                ev.push_back(P{tt, seq, iv[1], v});
+        } else if (iv[0] < 0)
+            ev.push_back(P{tt, seq, 9, 0.0});
+        else if (iv[0] == ch && iv[1] <= 3)
+            ev.push_back(P{tt, seq, iv[1], v});
+    }
+    std::stable_sort(ev.begin(), ev.end(), [](const P &a, const P &b) {
+        return a.t < b.t || (a.t == b.t && a.seq < b.seq);
+    });
+    double range = bend_range, wheel = 0.0, coarse = 0.0, fine = 0.0, mcoarse = 0.0, mfine = 0.0;
+    bool hr = false, hw = false, hc = false, hf = false, hmc = false, hmf = false;
+    int n = 0;
+    for (const P &e : ev) {
+        if (e.kind == 9) {
+            hr = hw = hc = hf = hmc = hmf = false;
+        } else if (e.kind == 10) {
+            mfine = e.v;
+            hmf = true;
+        } else if (e.kind == 11) {
+            mcoarse = e.v;
+            hmc = true;
+        } else if (e.kind == 0) {
+            wheel = e.v;
+            hw = true;
+        } else if (e.kind == 1) {
+            range = e.v;
+            hr = true;
+        } else if (e.kind == 2) {
+            fine = e.v;
+            hf = true;
+        } else {
+            coarse = e.v;
+            hc = true;
+        }
+        double st = (hr ? range : bend_range) * (hw ? wheel : 0.0) / 8192.0 + (hc ? coarse : 0.0)
+                    + (hf ? fine : 0.0) / 100.0 + (hmc ? mcoarse : 0.0) + (hmf ? mfine : 0.0) / 100.0;
+        if (n < cap) {
+            t[n] = e.t;
+            r[n] = pow(2.0, st / 12.0);
+        }
+        n++;
+    }
+    return n;
+}
+
+// bend_blocks over (t, ratio) events: a row's BR and BC (nblk each)
+void nv_bend_rows(const double *t, const double *r, int n, long nblk, int blk, double sr, float *BR, double *BC)
+{
+    std::vector<std::pair<double, double>> ev;
+    for (int i = 0; i < n; i++)
+        ev.push_back(std::make_pair(t[i], r[i]));
+    blocks(ev, nblk, blk, sr, BR, BC);
 }
 
 }  // extern "C"

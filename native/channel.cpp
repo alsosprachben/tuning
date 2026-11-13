@@ -1671,6 +1671,9 @@ struct Song {
     std::vector<double> freq_e;
     std::map<long long, std::vector<unsigned char>> sym_drv;    // each mix channel's strings' driver (_SYM_CH)
     std::map<NoteKey, std::pair<double, double>> meend;         // _MEEND_AT: (its ratio at Note On, its row or -1)
+    // MPE's MEMBER NOTES (_MPE_AT, _mpe_member): its ratio at Note On, its
+    // row or -1, its manager (whose fader it rides)
+    std::map<NoteKey, std::array<double, 3>> mpe;
     std::map<NoteKey, std::pair<double, double>> siren;         // _SIREN_AT: (its row, its rotor's end)
     std::map<NoteKey, double> siren_up;                         // ...its upper disc's row (the crank's)
     std::map<NoteKey, std::vector<double>> alias;               // _ALIAS_AT: its harmonics' rows (-1 none)
@@ -1761,6 +1764,9 @@ struct Song {
     double pitch(long long c, int note, double on, bool indian = false, double so = 0.0) const
     {
         double f0 = note_table(c, on, indian)[note];
+        auto mp = mpe.find(NoteKey{c, note, on});
+        if (mp != mpe.end())
+            f0 *= mp->second[0];            // this note's own MPE bend at Note On
         auto me = meend.find(NoteKey{c, note, on});
         if (me != meend.end())
             f0 *= me->second.first;         // this note's meend at Note On
@@ -3309,6 +3315,26 @@ void nv_song_meend(void *s, long long ch, int note, double on, double r0, double
     ((nv::Song *)s)->meend[nv::NoteKey{ch, note, on}] = std::make_pair(r0, row);
 }
 
+// MPE: a member's note -- its ratio at Note On, its row (-1 none), its manager
+void nv_song_mpe(void *s, long long ch, int note, double on, double r0, double row, int mgr)
+{
+    ((nv::Song *)s)->mpe[nv::NoteKey{ch, note, on}] = std::array<double, 3>{r0, row, (double)mgr};
+}
+
+// ...note i's: 1 and its row and manager if it is one, else 0
+int nv_song_mpe_of(void *s, int i, double *row, int *mgr)
+{
+    const nv::Song *S = (nv::Song *)s;
+    if (i < 0 || i >= (int)S->notes.size())
+        return 0;
+    auto it = S->mpe.find(nv::NoteKey{S->notes[i].ch, S->notes[i].note, S->notes[i].on});
+    if (it == S->mpe.end())
+        return 0;
+    *row = it->second[1];
+    *mgr = (int)it->second[2];
+    return 1;
+}
+
 int nv_song_meend_row(void *s, int i, double *row)
 {
     const nv::Song *S = (nv::Song *)s;
@@ -3457,8 +3483,11 @@ int nv_song_pitch_level_ks(void *s, int i, int effort_tilt, int indian, double s
         if (S->udst(e, on, dv) & 2)
             cv *= pow(dv[1] / 100.0, 2.0);      // (its level against the preset's 100)
     }
-    if (S->fader.count(ch))
-        cv = 1.0;
+    {                                   // (a member's note: its manager's fader -- _mpe_member)
+        auto mp = S->mpe.find(nv::NoteKey{ch, note, on});
+        if (S->fader.count(mp != S->mpe.end() ? (long long)mp->second[2] : ch))
+            cv = 1.0;
+    }
     out[3] = cv * e.trim;
     double eff = 0.0;
     auto vb = S->vbase.find(ch);

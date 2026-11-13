@@ -1268,6 +1268,16 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         // CC7 its swell (its own rows: registration_blocks), as blockrender's
         // note takes em.fader_row
         n.br = (ch >= 0 && ch < nbr && !(k->organ && k->organ->swells)) ? br[ch] : -1.0;
+        // (an MPE member's note rides its manager's fader: blockrender's _lk)
+        double mpe_row = -1.0;
+        int mpe_mgr = -1;
+        const bool is_mpe = nv_song_mpe_of(song, i, &mpe_row, &mpe_mgr) != 0;
+        if (is_mpe) {
+            n.br = (mpe_mgr >= 0 && mpe_mgr < nbr && !(k->organ && k->organ->swells)) ? br[mpe_mgr] : -1.0;
+            // AN MPE ZONE IS ONE INSTRUMENT: its amplifier, chorus and stem the
+            // manager's channel (blockrender's em.channel = _mmgr)
+            n.channel = (double)mpe_mgr;
+        }
         n.fbr = n.br;                       // (the fader's: the other strings' row, off the wheel)
         n.sym_drv = k->sym_kind == 3 ? nv_song_sym_driver(song, (long long)n.channel, (int)sizeof(VoiceSnap))
                                      : nullptr;
@@ -1295,6 +1305,8 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
                 n.bbr = br[768 + ch];
             }
         }
+        if (is_mpe)
+            n.br = mpe_row >= 0.0 ? mpe_row : n.fbr;   // MPE: the note's own row, or none (the fader's)
         double mrow;
         if (nv_song_meend_row(song, i, &mrow))
             n.br = mrow >= 0.0 ? mrow : n.fbr;  // the meend: the note's own row, or none (the fader's)
@@ -1321,6 +1333,8 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         }
         n.from_song = 1; n.song_index = i;
         n.press = nv_song_pressure(song, ch, iv[0], dv[0], dv[1]);    // (_pressure_of: to its key-up)
+        if (is_mpe)                         // MPE: the louder of its own and its manager's (Appendix D)
+            n.press = std::max(n.press, nv_song_pressure(song, mpe_mgr, -1, dv[0], dv[1]));
         n.dist = song_dist(song, ch, dv[0], n.sr, k);  // its distance: its part's CC91 (_src_dist)
         nv_song_gs_eq_of(song, ch % 256, n.gs_eq);     // the file's GS EQ, its part's (gsefx.part_of)
         {

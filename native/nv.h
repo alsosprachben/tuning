@@ -1349,6 +1349,13 @@ int nv_song_raga_sw(void *s, double *sw);   /* T.raga_spec's swaras' cents (sw[1
    and song note i's row, 1 if it meends */
 void nv_song_meend(void *s, long long ch, int note, double on, double r0, double row);
 int nv_song_meend_row(void *s, int i, double *row);
+void nv_song_mpe(void *s, long long ch, int note, double on, double r0, double row, int mgr);
+int nv_song_mpe_of(void *s, int i, double *row, int *mgr);
+int nv_midi_mpe_manager(void *p, int ch, double t);
+int nv_midi_has_mpe(void *p);
+void nv_bend_fader_channels(const int *fch, int n);
+int nv_bend_stream(void *midi, int ch, int with_master, double bend_range, double *t, double *r, int cap);
+void nv_bend_rows(const double *t, const double *r, int n, long nblk, int blk, double sr, float *BR, double *BC);
 void nv_song_note_table(void *s, long long ch, double t, int indian, double *out);
 /* THE DRIVER OF A CHANNEL's STRINGS (sympathetic._coupling's: _SYM_CH's
    props, its first note's voice): a VoiceSnap's room, once a mix channel,
