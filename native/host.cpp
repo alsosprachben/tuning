@@ -2590,9 +2590,14 @@ int nv_host_block(const nv_host *h) { return (int)h->BLK; }
 
 int nv_host_render(nv_host *h, float *L, float *R, int frames)
 {
+    return nv_host_render_step(h, L, R, frames, 0);
+}
+
+int nv_host_render_step(nv_host *h, float *L, float *R, int frames, int step)
+{
     if (frames != h->BLK)
         return -1;
-    h->render_block(h->play_n0, h->play_buf.data());
+    h->render_block(h->play_n0, h->play_buf.data(), step != 0);
     for (int k = 0; k < frames; k++) {
         L[k] = h->play_buf[2 * k];
         R[k] = h->play_buf[2 * k + 1];

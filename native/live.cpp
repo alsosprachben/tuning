@@ -26,6 +26,12 @@
 #include "pycompat.h"
 #include "live.h"
 
+namespace nv {
+namespace live {
+static int emit_col(const char *n);     // (a row's column by name; below)
+}
+}
+
 extern "C" {
 void *nv_midi_read(const uint8_t *buf, long long len, int *err);
 void nv_midi_free(void *p);
@@ -620,6 +626,21 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
             nv_song_trems(song, vch.data(), vcfg.data(), nv_);
             nv_tremolo_expand(rowsp, &P, dm, nv_, vch.data(), vcfg.data(), nullptr, 0, SR);
         }
+    }
+    // THE VOICE's OWN CHORUS (_prep_chorus: the one-note file sends no CC93,
+    // so a pedal's -- chorus_send, GS's Chorus Gt -- or a detuned pair's, GS's
+    // Detuned EP and Organs), after the tremolos and before the cabinet, as
+    // nvrender's: on the note's mix channel. (Live had them; native's
+    // templates did not -- Detuned EP 1 played as the plain Rhodes.)
+    if (P > 0 && !kit && kc && (kc->cho_send || kc->pair_set)) {
+        long long mc = (long long)(*rowsp)[nv::live::emit_col("mch")];
+        double send = kc->cho_send ? kc->cho_send : 1.0;
+        int nc = kc->cho_send ? kc->n_cho : 2, ck = kc->cho_send ? 0 : 1;
+        double cents[8], gsp[40] = {0};
+        for (int q = 0; q < 8; q++)
+            cents[q] = kc->cho_send ? (q < kc->n_cho ? kc->cho_cents[q] : 0.0)
+                                    : q == 0 ? kc->pair_lo : q == 1 ? kc->pair_hi : 0.0;
+        nv_chorus_expand(rowsp, &P, dm, 1, &mc, &send, &nc, cents, &ck, gsp, SR);
     }
     if (P >= 0)                                 // the speaker cabinet (_prep_cabinet), before any rotor
         nv_cabinet_pass(song, *rowsp, P);

@@ -32,6 +32,10 @@ int nv_host_block(const nv_host *h);        /* frames a render takes */
    patches and room swapped in, the render -- into L, R. 0, or -1 if frames
    is not the block */
 int nv_host_render(nv_host *h, float *L, float *R, int frames);
+/* ...IN STEP (nvlive --test's, the host not started): the programs asked
+   for built after the block, swapped in for the next -- live's builder in
+   step (examples/patchsync.py) */
+int nv_host_render_step(nv_host *h, float *L, float *R, int frames, int step);
 /* MIDI bytes as they came (running status, an exclusive F0 ... F7), from any
    thread: heard at the next block */
 void nv_host_midi(nv_host *h, const uint8_t *msg, int n);

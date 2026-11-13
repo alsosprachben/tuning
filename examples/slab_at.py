@@ -6,7 +6,10 @@ block, and at each block asked for, every slab column the native part can hand
 out (native.Slab.col) compared with live's -- the columns that differ, how
 many slots, the first few slots' values on both sides.
 
-    python3 examples/slab_at.py FILE.mid SECONDS --program=P --at=B[,B,...] [--room=NAME]
+    python3 examples/slab_at.py FILE.mid SECONDS --program=P --at=B[,B,...] [--room=NAME] [--programs]
+
+(--programs: each side follows the file's program changes, as nvlive_check
+--programs has them.)
 
 (The native host in a child process of its own, the slabs saved at those
 blocks; live in this one after it: one engine's memory at a time.)
@@ -33,7 +36,7 @@ def names():
                                    "ls_ph", "ls_aL", "ls_aR"])
 
 
-def child(nvx, mid, prog, at, outdir, bank=None, room_at=None):
+def child(nvx, mid, prog, at, outdir, bank=None, room_at=None, programs=False):
     """the native host: its slab at each block in `at`, to outdir/B.npz"""
     import native as N
     from host_check import encode
@@ -56,10 +59,13 @@ def child(nvx, mid, prog, at, outdir, bank=None, room_at=None):
     err = ci(0)
     m = d.nv_midi_read(raw, len(raw), ctypes.byref(err))
     av = [b"nvlive", nvx.encode(), b"--program=%d" % prog, b"--cpu", b"--no-pipeline", b"--no-register",
-          b"--no-drums", b"--reg-sync", b"--no-governor"] + ([b"--bank=%d" % int(bank)] if bank else [])
+          b"--no-drums", b"--reg-sync", b"--no-governor"] + ([b"--bank=%d" % int(bank)] if bank else []) \
+        + ([b"--programs"] if programs else [])
     h = d.nv_host_open_args(len(av), (cp * len(av))(*av), ctypes.create_string_buffer(256), 256)
     assert h, "the host refused"
-    d.nv_host_start(h)
+    if not programs:
+        d.nv_host_start(h)                  # (followed, its programs are built in step: nvlive --test's)
+    d.nv_host_render_step.argtypes = [vp, vp, vp, ci, ci]
     blk, sr = d.nv_host_block(h), d.nv_host_rate(h)
     S = N.Slab.__new__(N.Slab)
     S.d, S.cap, S.p = d, 65536, d.nv_part_slab(d.nv_host_part(h))
@@ -88,7 +94,7 @@ def child(nvx, mid, prog, at, outdir, bank=None, room_at=None):
                 print("event %d at block %d: iv %s bytes %s" % (e, b, list(iv), by.hex(" ")))
             d.nv_host_midi(h, by, len(by))
             e += 1
-        d.nv_host_render(h, L.ctypes.data, R.ctypes.data, blk)
+        d.nv_host_render_step(h, L.ctypes.data, R.ctypes.data, blk, int(bool(programs)))
         if b in want:
             st = (ci * 64)()
             why = cp()
@@ -117,7 +123,7 @@ def main(argv):
             if ":" in it:
                 ra[int(float(it.split(":")[0]) * 48000) // 128] = it.split(":", 1)[1]
         child(args[0], args[1], int(opt["program"]), [int(x) for x in opt["at"].split(",")], opt["child"],
-              opt.get("bank"), ra)
+              opt.get("bank"), ra, "programs" in opt)
     os.environ["TUNING_NATIVE_TONE"] = "off"
     import mido
     import bitident as BI
@@ -141,7 +147,8 @@ def main(argv):
         r = subprocess.run([sys.executable, os.path.abspath(__file__), nvx, mid, "--child=" + tmp,
                             "--program=%d" % prog, "--at=" + ",".join(map(str, at))]
                            + (["--bank=" + opt["bank"]] if opt.get("bank") else [])
-                           + (["--room-at=" + opt["room-at"]] if opt.get("room-at") else []),
+                           + (["--room-at=" + opt["room-at"]] if opt.get("room-at") else [])
+                           + (["--programs"] if "programs" in opt else []),
                            capture_output=True, text=True)
         if r.returncode:
             print("the native child failed: %s" % r.stderr.strip()[-400:])
@@ -187,12 +194,19 @@ def main(argv):
                     lv.on_midi(M("polytouch", channel=ch, note=a, value=v))
                 elif ty == 6:
                     lv.on_midi(M("sysex", data=list(m.sysex(a))))
-                elif ty != 5:
+                elif ty == 5:
+                    if "programs" in opt:   # (nvlive_check --programs's)
+                        lv.on_midi(M("program_change", channel=ch, program=a))
+                else:
                     lv.on_midi(M("control_change", channel=ch, control=a, value=v))
                 e += 1
             lv.slab.tap_cap = lv.slab.tap_ucap
             lv.callback(None, 128, None, 0)
-            lv.patch_reqs.clear()           # (a reset's program 0: nvlive_check's, without --programs)
+            if "programs" in opt:           # (nvlive_check --programs: the patch posted for the next block)
+                for _part, _p in patchsync.build(lv):
+                    instant_scan(lv, _p)
+            else:
+                lv.patch_reqs.clear()       # (a reset's program 0: nvlive_check's, without --programs)
             if b not in at:
                 continue
             nat = np.load(os.path.join(tmp, "%d.npz" % b))
