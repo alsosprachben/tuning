@@ -101,6 +101,7 @@ void nv_part_press_db(void *h, double db);
 void nv_moog_tables(const double *t);
 void nv_part_messenger(void *h, void (*send)(void *, const uint8_t *, int), void *ctx, double bend);
 void nv_part_detune_wheel(void *h, int on);
+void nv_part_gs_eq(void *h, int on, double lo_f, double hi_f, double lo_g, double hi_g, unsigned off);
 void nv_part_leslie(void *h, const double *L, int n);
 void nv_part_scan(void *h, const double *X, long n);
 void nv_part_scan_async(void *h);
@@ -719,6 +720,9 @@ struct nv_host {
     double gs_want_tl[3] = {1.0, 1.0, -1.0};
     bool gs_want_tl_on = false;
     std::function<void(int kind, int value)> gs_reverb;
+    // ...AND ITS GS EQ (live._gs_eq): 40 02 0x and the parts' switches (4x 4p 20)
+    std::map<int, int> gs_eq, gs_eq_sw;
+    std::function<void()> gs_eq_apply;
     // THE TUNER, switched while playing (livetui's TUNER column): the table
     // made again, every patch let go and the parts' built again in it on the
     // builder (as a room); notes sounding keep the tuning they were struck in

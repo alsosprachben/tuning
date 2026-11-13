@@ -1525,6 +1525,17 @@ int nv_host::open(int argc, char **argv)
                 gs_want_tl[q] = tl[q];
         }
     };
+    gs_eq_apply = [&]() {
+        auto at = [&](int k, int d) { auto it = gs_eq.find(k); return it != gs_eq.end() ? it->second : d; };
+        const bool on = at(1, 0x40) != 0x40 || at(3, 0x40) != 0x40;
+        unsigned off = 0;
+        for (const auto &kv : gs_eq_sw)
+            if (!kv.second && kv.first >= 0 && kv.first < 16)
+                off |= 1u << kv.first;
+        nv_part_gs_eq(part, on, at(0, 0) ? 400.0 : 200.0, at(2, 0) ? 6000.0 : 3000.0,
+                      (double)std::max(-12, std::min(12, at(1, 0x40) - 0x40)),
+                      (double)std::max(-12, std::min(12, at(3, 0x40) - 0x40)), off);
+    };
     tuner_switch = [&](const std::string &name,
                        const std::function<void(size_t, int, bool, int, void *)> &give) -> bool {
         double F[128];
@@ -1733,9 +1744,29 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                 gs_reverb(x[6], x[7]);          // (live's _sysex: blockrender.parse_gs_reverb's, and nothing else)
                 continue;
             }
+            if (xn >= 8 && x[0] == 0x41 && x[2] == 0x42 && x[3] == 0x12) {     // THE GS EQ (parse_gs_eq)
+                if (x[4] == 0x40 && x[5] == 0x02 && x[6] <= 3) {
+                    gs_eq[x[6]] = x[7];
+                    gs_eq_apply();
+                    continue;
+                }
+                if ((x[4] == 0x40 || x[4] == 0x50) && (x[5] >> 4) == 4 && x[6] == 0x20) {
+                    const int blk = x[5] & 0x0F;
+                    const int ch = (blk == 0 ? 9 : blk <= 9 ? blk - 1 : blk) + (x[4] == 0x50 ? 16 : 0);
+                    if (ch < 16)
+                        gs_eq_sw[ch] = x[7] != 0;
+                    gs_eq_apply();
+                    continue;
+                }
+            }
             const bool rs = sys_reset(m.x.data(), (int)m.x.size());
             if (rs && (!gs_rev.empty() || room_tl_on || (!user_room.empty() && room_now != user_room)))
                 gs_reverb(-1, 0);               // (the panel's room again: the sequencer's override ends)
+            if (rs) {                           // (and the EQ flat, every part's switch on)
+                gs_eq.clear();
+                gs_eq_sw.clear();
+                gs_eq_apply();
+            }
             if (rs && asks)
                 reset_asked();
             nv_part_sysex(part, m.x.data(), (int)m.x.size());

@@ -552,6 +552,11 @@ struct Slab {
     long long odd_until = 0;
     float headroom = 1.0f;
     double headroom_d = 1.0;
+    // THE GS EQ (live.Slab.eq): its shelves (lo Hz, hi Hz, lo dB, hi dB) on
+    // the notes stamped while it is on, but on the channels in eq_off
+    bool eq_on = false;
+    double eq_lo_f = 200.0, eq_hi_f = 3000.0, eq_lo_g = 0.0, eq_hi_g = 0.0;
+    unsigned eq_off = 0;
     // A SECTION'S ENTRIES ARE REDRAWN AT EVERY PRESS (live.Slab._rng)
     PyRandom scat_rng;
 
@@ -671,6 +676,17 @@ struct Slab {
             if (headroom_d != 1.0) {
                 f4[F4_aL][s] *= headroom;
                 f4[F4_aR][s] *= headroom;
+            }
+            // the GS EQ (live.Slab.stamp_cols: blockrender.gs_eq_gain at the
+            // row's nominal frequency, the gain in float64, libm's pow)
+            if (eq_on && ch >= 0 && ch < 16 && !((eq_off >> ch) & 1u)) {
+                const double fq = (double)tf4[F4_nf][q];
+                double x = fq / eq_lo_f, y = fq / eq_hi_f;
+                x = x * x;
+                y = y * y;
+                const double g = pow(10.0, (eq_lo_g / (1.0 + x) + eq_hi_g * y / (1.0 + y)) / 20.0);
+                f4[F4_aL][s] = (float)((double)f4[F4_aL][s] * g);
+                f4[F4_aR][s] = (float)((double)f4[F4_aR][s] * g);
             }
             aL0[s] = f4[F4_aL][s];
             aR0[s] = f4[F4_aR][s];
@@ -12646,6 +12662,18 @@ void nv_part_output(void *h, long long n0, long frames, float *L, float *R, void
 
 // The mod wheel picks a honky-tonk's detune (live's 'detune' role)
 void nv_part_detune_wheel(void *h, int on) { ((nv::slab::Part *)h)->detune_wheel = on != 0; }
+
+// THE GS EQ onto the slab (live._gs_eq): on, its shelves, the channels off
+void nv_part_gs_eq(void *h, int on, double lo_f, double hi_f, double lo_g, double hi_g, unsigned off)
+{
+    nv::slab::Slab &S = ((nv::slab::Part *)h)->S;
+    S.eq_on = on != 0;
+    S.eq_lo_f = lo_f;
+    S.eq_hi_f = hi_f;
+    S.eq_lo_g = lo_g;
+    S.eq_hi_g = hi_g;
+    S.eq_off = off;
+}
 
 // Pressure's level at full aftertouch, dB (live.press_db)
 void nv_part_press_db(void *h, double db) { ((nv::slab::Part *)h)->press_db = db; }

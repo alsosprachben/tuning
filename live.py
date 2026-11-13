@@ -1202,6 +1202,10 @@ class Slab:
         # cannot know its own peak in advance, so it needs headroom up front and
         # a limiter behind. Set by Live from --headroom.
         self.headroom = 1.0
+        # the GS EQ's shelves (lo Hz, hi Hz, lo dB, hi dB) or None flat, and
+        # the channels whose part has it switched off (Live._gs_eq)
+        self.eq = None
+        self.eq_off = set()
 
     def leslie_arm(self, slots, az, nf, n=None, horn_rate=None, drum_rate=None, flip=None):
         """Record what the callback needs to swing these partials.
@@ -1708,6 +1712,21 @@ class Slab:
         if self.headroom != 1.0:
             a["aL"][idx] *= self.headroom
             a["aR"][idx] *= self.headroom
+        # THE GS EQ (Live._gs_eq: a sequencer's 40 02 0x, its part's switch
+        # 4x 4p 20), as the file's (blockrender.gs_eq_gain): each partial at
+        # its nominal frequency, its reflections and chorus copies with it --
+        # on the notes struck after it is set, at the gain in float64 (libm's
+        # pow: native's stamp the same)
+        _ech = key[1] if isinstance(key, tuple) and len(key) > 1 and isinstance(key[1], int) else -1
+        if self.eq is not None and 0 <= _ech < 16 and _ech not in self.eq_off:
+            lo_f, hi_f, lo_g, hi_g = self.eq
+            _f = tmpl["nf"][:n].astype(np.float64)
+            _x = (_f / lo_f) ** 2
+            _y = (_f / hi_f) ** 2
+            import native as _NVq
+            _g = _NVq.xpow(10.0, (lo_g / (1.0 + _x) + hi_g * _y / (1.0 + _y)) / 20.0)
+            a["aL"][idx] *= _g
+            a["aR"][idx] *= _g
         self.aL0[idx] = a["aL"][idx]
         self.aR0[idx] = a["aR"][idx]
         self.sg[idx] = 1.0
@@ -4675,6 +4694,10 @@ class Live:
         self.gs_rev = {}
         self.user_room = None
         self.room_tail = None
+        # ...AND ITS GS EQ (40 02 0x; a part's switch, 4x 4p 20): the shelves
+        # on the notes struck after, as the file's (Slab.eq)
+        self.gs_eq = {}
+        self.gs_eq_sw = {}
         self.ch_drums = {}
         self.rx_bank = True
         self._rpn_fine_msb = {}
@@ -10228,6 +10251,14 @@ class Live:
         if _rv is not None:
             self._gs_reverb(*_rv)
             return
+        _eq = _BRs.parse_gs_eq(d)
+        if _eq is not None:
+            if _eq[0] == 'eq':
+                self.gs_eq[_eq[1]] = _eq[2]
+            elif _eq[1] < 16 and not _g:
+                self.gs_eq_sw[_eq[1]] = _eq[2]
+            self._gs_eq()
+            return
         _gp = _BRs.parse_gs_part(d)
         if _gp is not None:
             if _gp[0] < 16 and not _g:
@@ -10325,6 +10356,9 @@ class Live:
         self.cgain.clear()
         if self.gs_rev or self.room_tail is not None or (self.user_room and self.room_name != self.user_room):
             self._gs_reverb(None, None)         # (the panel's room again: the sequencer's override ends)
+        self.gs_eq.clear()                      # (and the EQ flat, every part's switch on)
+        self.gs_eq_sw.clear()
+        self._gs_eq()
         # ...and the insertion effect: "When a GM System On or GS Reset is
         # received, 00 Thru will be selected" (SC-8850 OM), every part off it
         _GSX.apply(self.efx, ('reset',), self.efx_parts)
@@ -10395,6 +10429,18 @@ class Live:
             self.gs_rev = {}
         self.room_reqs.append((name, tail))
         self.patch_go.set()
+
+    def _gs_eq(self):
+        """THE GS EQ onto the slab (Slab.eq): flat where neither shelf moves,
+        as blockrender.prepare leaves it -- else its frequencies (200/400 Hz,
+        3/6 kHz) and gains (-12..+12 dB about 40H), gs_eq_gain's reading."""
+        eq = self.gs_eq
+        if any(eq.get(k, 0x40) != 0x40 for k in (1, 3)):
+            self.slab.eq = (400.0 if eq.get(0, 0) else 200.0, 6000.0 if eq.get(2, 0) else 3000.0,
+                            max(-12, min(12, eq.get(1, 0x40) - 0x40)), max(-12, min(12, eq.get(3, 0x40) - 0x40)))
+        else:
+            self.slab.eq = None
+        self.slab.eq_off = {c for c, on in self.gs_eq_sw.items() if not on}
 
     def _gs_reverb(self, kind, value):
         """A SEQUENCER's GS REVERB (blockrender.parse_gs_reverb): the macro
