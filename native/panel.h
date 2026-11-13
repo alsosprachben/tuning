@@ -179,6 +179,11 @@ struct Host {
         int cho[7] = {}, dly[11] = {}, eq[4] = {0, 0x40, 0, 0x40};
     };
     std::function<SysFx()> sysfx_get;
+    // THE PART COLUMNS (live.chan_cc, chan_cc_send): a channel's CC10 (as sent,
+    // before master pan), CC91, CC93, CC94 -- ch -1 channel 1's -- and a value
+    // sent as a sequencer's CC (ch -1: every channel)
+    std::function<int(int, int)> chan_cc;
+    std::function<void(int, int, int)> chan_cc_send;
     std::function<void(int, int, int)> sysfx_send;
     std::function<void(int, int, int)> synth_forget;
     std::function<int(int)> synth_send;
@@ -376,9 +381,14 @@ static const int NTUNERS = sizeof(TUNERS) / sizeof(TUNERS[0]);
 
 // THE PARTS' COLUMNS (livetui.COLS, COL_W): what can be changed about a part,
 // every one by the same - and +; Enter picks (patch, tuner) or takes a value
-static const char *PCOLS[] = {"patch", "ch", "lo", "hi", "tr", "level", "tuner", "touch", "stops", "efx"};
-static const int PCOL_W[] = {33, 4, 5, 5, 4, 8, 11, 6, 11, 5};
-static const int NPCOLS = 10;
+// (each column's own number, PCOLS'; PORDER the order they stand in: the
+// part's pan and sends after its level, as livetui's)
+static const char *PCOLS[] = {"patch", "ch", "lo", "hi", "tr", "level", "tuner", "touch", "stops", "efx",
+                              "pan", "rev", "cho", "dly"};
+static const int PCOL_W[] = {33, 4, 5, 5, 4, 8, 11, 6, 11, 5, 5, 4, 4, 4};
+static const int NPCOLS = 14;
+static const int PORDER[NPCOLS] = {0, 1, 2, 3, 4, 5, 10, 11, 12, 13, 6, 7, 8, 9};
+static const int PART_CC[4] = {10, 91, 93, 94};     // (pan, rev, cho, dly: live.PART_CCS)
 static const double LEVEL_DB_MIN = -60.0, LEVEL_DB_MAX = 24.0;   // (livetui's)
 
 // ---- THE SYNTH PANE (livetui's SYNTH_KNOBS, synth_fmt) ----
@@ -1097,7 +1107,8 @@ struct Panel {
         rule("PARTS", pane == P_PARTS, std::to_string(prows.size()) + (prows.size() == 1 ? " part" : " parts"), P_PARTS);
         {
             std::string hd = "   #  ";
-            for (int c = 0; c < NPCOLS; c++) {
+            for (int k = 0; k < NPCOLS; k++) {
+                const int c = PORDER[k];
                 std::string t = PCOLS[c];
                 hd += t + std::string(std::max(1, PCOL_W[c] - cols(t)), ' ');
             }
@@ -1111,16 +1122,17 @@ struct Panel {
             row += (here ? C("accent") + "\x1b[1m" : C("dim")) + b + "\x1b[0m  ";
             hit(nrow, 0, 6, H_CELL, (int)i, -1);
             int x = 6;
-            for (int c = 0; c < NPCOLS; c++) {
+            for (int k = 0; k < NPCOLS; k++) {
+                const int c = PORDER[k];
                 std::string t = part_cell(r, c);
                 t = fit(t, PCOL_W[c] - 1);
                 std::string at = r.muted ? C("dim") : c == 0 ? C("accent2") : C("label");
-                if (here && c == pcol)
+                if (here && k == pcol)
                     at = C("sel");
                 else if (here)
                     at += "\x1b[1m";
                 row += at + t + std::string(PCOL_W[c] - cols(t), ' ') + "\x1b[0m";
-                hit(nrow, x, x + PCOL_W[c], H_CELL, (int)i, c);
+                hit(nrow, x, x + PCOL_W[c], H_CELL, (int)i, k);
                 x += PCOL_W[c];
             }
             if (r.muted)
@@ -2628,6 +2640,17 @@ struct Panel {
                 }
             return !on ? "-" : on == n ? "on" : "some";
         }
+        case 10: case 11: case 12: case 13: {   // (the part's channel's CC10, CC91, CC93, CC94)
+            if (!H.chan_cc)
+                return "-";
+            const int v = H.chan_cc(r.channel, PART_CC[c - 10]);
+            if (c > 10)
+                return std::to_string(v);
+            if (v == 64)
+                return "C";
+            snprintf(b, sizeof b, v < 64 ? "L%d" : "R%d", v < 64 ? 64 - v : v - 64);
+            return b;
+        }
         }
         return "";
     }
@@ -2647,8 +2670,16 @@ struct Panel {
         if (prows.empty() || !H.part_set)
             return;
         PartRow r = prows[prow];
-        const int step = delta * (big && pcol >= 2 && pcol <= 4 ? 12 : 1);
-        switch (pcol) {
+        const int ic = PORDER[pcol];
+        const int step = delta * (big && ic >= 2 && ic <= 4 ? 12 : 1);
+        if (ic >= 10) {                         // THE PART'S PAN AND SENDS: its channel's CC, as a sequencer's
+            if (H.chan_cc && H.chan_cc_send) {
+                const int cc = PART_CC[ic - 10];
+                H.chan_cc_send(r.channel, cc, H.chan_cc(r.channel, cc) + delta * (big ? 10 : 1));
+            }
+            return;
+        }
+        switch (ic) {
         case 0: {
             if (!H.pick_part)
                 return;
@@ -2722,7 +2753,14 @@ struct Panel {
             return;
         PartRow r = prows[prow];
         std::string t;
-        switch (pcol) {
+        const int ic = PORDER[pcol];
+        if (ic >= 10) {
+            if (!H.chan_cc_send || !prompt(std::string(PCOLS[ic]) + " (0-127): ", t))
+                return;
+            H.chan_cc_send(r.channel, PART_CC[ic - 10], atoi(t.c_str()));
+            return;
+        }
+        switch (ic) {
         case 0: if (H.pick || H.pick_part) pick_patch(); return;
         case 6: if (H.set_tuner) pick_tuner(); return;
         case 7: part_touch_toggle(r); return;
@@ -2744,14 +2782,14 @@ struct Panel {
             break;
         case 2:
         case 3: {
-            if (!prompt(std::string(pcol == 2 ? "lowest" : "highest") + " key (C1, F#2, or 0-127): ", t))
+            if (!prompt(std::string(ic == 2 ? "lowest" : "highest") + " key (C1, F#2, or 0-127): ", t))
                 return;
             int n = parse_note(t);
             if (n < 0) {
                 say("not a key: " + t);
                 return;
             }
-            if (pcol == 2)
+            if (ic == 2)
                 r.lo = std::min(n, r.hi);
             else
                 r.hi = std::max(n, r.lo);

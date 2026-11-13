@@ -4711,6 +4711,14 @@ class Live:
         self.delay_send = {}
         self.gs_dly = {}
         self._gs_ddev = None
+        # ...AND ITS PARTS' RECEIVE SETTINGS (40 1p 02-12, 14, 1F, 20; master pan
+        # 40 00 06): each part's RX. CHANNEL (16 off) -- a channel's message to
+        # every part listening on it, Roland's own layering -- its Rx switches
+        # (gs_rxsw: the ones off), and master pan an offset on every part's
+        # CC10 (gs_pan_raw what the part was sent). ASSIGN MODE and the CC1/CC2
+        # controller numbers kept (live is one note a key: Single; the numbers
+        # are the controller matrix's). _gs_rx, at the top of _one
+        self._gs_rx_reset()
         self.ch_drums = {}
         self.rx_bank = True
         self._rpn_fine_msb = {}
@@ -5069,6 +5077,30 @@ class Live:
         GS message a file would carry -- one path for both, so what the panel
         sets is what a recording of the session would hold."""
         self.inject(mido.Message("sysex", data=_GSX.message(ev)))
+
+    # THE PART COLUMNS (livetui's pan, rev, cho, dly): a channel's CC10 (as
+    # its part was sent it, before master pan), CC91, CC93 and CC94 as they
+    # stand, and a value sent as a sequencer's CC into the block's events
+    PART_CCS = {"pan": 10, "rev": 91, "cho": 93, "dly": 94}
+
+    def chan_cc(self, ch, cc):
+        ch = 0 if ch is None else ch
+        if cc == 10:
+            return int(self.gs_pan_raw.get(ch, self.cpan.get(ch, T.GM_DEFAULT_PAN)))
+        if cc == 91:
+            return int(round(self.slab.send[ch] * B.GM_DEFAULT_REVERB)) if ch < len(self.slab.send) else 40
+        if cc == 93:
+            return int(round(self.chorus.get(ch, 0.0) * 127.0))
+        if cc == 94:
+            return int(round(self.delay_send.get(ch, 0.0) * 127.0))
+        return 0
+
+    def chan_cc_send(self, ch, cc, v):
+        """CC `cc` = v on channel ch -- every channel where ch is None (a part
+        on all of them)."""
+        v = max(0, min(127, int(v)))
+        for c in (range(16) if ch is None else (ch,)):
+            self.inject(mido.Message("control_change", channel=c, control=cc, value=v))
 
     # THE SYSTEM EFFECTS PANEL (livetui's G): a setting sent as the GS message
     # a sequencer's would be (40 01 xx, 40 02 0x) -- one path, so the panel's
@@ -5665,10 +5697,111 @@ class Live:
             self.metro_beat += 1
 
     def _one(self, n0, msg):
+        if msg.type != "sysex" and getattr(msg, "channel", None) is not None:
+            for m in self._gs_rx(msg):
+                if self.mpe and m.type not in _M2_ONLY and self._mpe_route(n0, m):
+                    continue
+                self._one_core(n0, m)
+            return
         if self.mpe and msg.type not in _M2_ONLY and msg.type != "sysex" \
                 and self._mpe_route(n0, msg):
             return
         self._one_core(n0, msg)
+
+    # each Rx switch's address (40 1p aa): a message type, or a controller
+    _RX_TYPE = {"pitchwheel": 0x03, "aftertouch": 0x04, "program_change": 0x05, "polytouch": 0x07,
+                "note_on": 0x08, "note_off": 0x08}
+    _RX_CC = {1: 0x0B, 7: 0x0C, 10: 0x0D, 11: 0x0E, 64: 0x0F, 65: 0x10, 66: 0x11, 67: 0x12}
+
+    def _gs_rx_reset(self):
+        self.gs_rx = list(range(16))
+        self.gs_rxsw = {}
+        self.gs_rx_sel = {}
+        self.gs_mpan = 64
+        self.gs_pan_raw = {}
+        self.gs_assign = {}
+        self.gs_ccnum = {}
+
+    def _gs_rx(self, msg):
+        """A CHANNEL MESSAGE AS THE PARTS RECEIVE IT (GS): to each part whose
+        RX. CHANNEL is its channel, as that part's; dropped where that part's
+        Rx switch for it is off (an RPN's or NRPN's data entry by the last
+        parameter selected); a CC10 offset by master pan."""
+        ch = msg.channel
+        if ch >= 16:
+            return [msg]
+        tg = [p for p in range(16) if self.gs_rx[p] == ch] if self.gs_rx[ch] != ch or any(
+            self.gs_rx[p] != p for p in range(16)) else [ch]
+        out = []
+        for p in tg:
+            m = msg if p == ch else msg.copy(channel=p)
+            if self._rx_drop(p, m):
+                continue
+            if m.type == "control_change" and m.control == 10:
+                self.gs_pan_raw[p] = m.value
+                if self.gs_mpan != 64:
+                    m = m.copy(value=max(0, min(127, m.value + self.gs_mpan - 64)))
+            out.append(m)
+        return out
+
+    def _rx_drop(self, p, m):
+        t = m.type
+        if t == "control_change":
+            c = m.control
+            if c in (101, 100):
+                self.gs_rx_sel[p] = 'rpn'
+            elif c in (99, 98):
+                self.gs_rx_sel[p] = 'nrpn'
+        sw = self.gs_rxsw.get(p)
+        if not sw:
+            return False
+        if t != "control_change":
+            return self._RX_TYPE.get(t) in sw
+        c = m.control
+        if 0x06 in sw:
+            return True
+        if c in (101, 100):
+            return 0x09 in sw
+        if c in (99, 98):
+            return 0x0A in sw
+        if c in (6, 38, 96, 97):
+            sel = self.gs_rx_sel.get(p)
+            return (sel == 'rpn' and 0x09 in sw) or (sel == 'nrpn' and 0x0A in sw)
+        return self._RX_CC.get(c) in sw
+
+    def _gs_rx_part(self, n0, d):
+        """A part's receive setting (40 1p aa, port A) or master pan (40 00
+        06): True where it was one."""
+        if not (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12 and d[4] == 0x40):
+            return False
+        if d[5] == 0x00 and d[6] == 0x06:
+            self.gs_mpan = max(1, min(127, int(d[7])))
+            for p in range(16):                 # (every part's pan again, by the new offset)
+                self._one_core(n0, mido.Message("control_change", channel=p, control=10,
+                                                value=max(0, min(127, self.gs_pan_raw.get(p, 64)
+                                                                 + self.gs_mpan - 64))))
+            return True
+        if d[5] >> 4 != 1:
+            return False
+        a = d[6]
+        if not (a == 0x02 or 0x03 <= a <= 0x12 or a in (0x14, 0x1F, 0x20)):
+            return False
+        blk = d[5] & 0x0F
+        ch = 9 if blk == 0 else (blk - 1 if blk <= 9 else blk)
+        v = int(d[7])
+        if a == 0x02:
+            self.gs_rx[ch] = v if v < 16 else 16
+        elif a == 0x14:
+            self.gs_assign[ch] = v
+        elif a in (0x1F, 0x20):
+            self.gs_ccnum[(ch, a)] = v
+        else:
+            sw = self.gs_rxsw.setdefault(ch, set())
+            if v:
+                sw.discard(a)
+            else:
+                sw.add(a)
+        return True
 
     # MPE, what the zone does with a message before the channel does (2.3,
     # Appendix E). Returns True when it has dealt with the message itself.
@@ -10413,6 +10546,8 @@ class Live:
             self._gs_ddev = None
             self._tap_key = None
             return
+        if not _g and self._gs_rx_part(n0, d):
+            return
         _rv = _BRs.parse_gs_reverb(d)
         if _rv is not None:
             self._gs_reverb(*_rv)
@@ -10533,6 +10668,7 @@ class Live:
         # them (GS: reverb 40 -- the nominal distance above -- chorus 0, delay 0)
         self.chorus.clear()
         self.delay_send.clear()
+        self._gs_rx_reset()                     # (every part on its own channel, every Rx on, master pan centre)
         if _lvl == 1:
             self.gs_on = False                  # (General MIDI 1: CC93 its own chorus again)
         self._tap_key = None

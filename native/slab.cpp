@@ -3978,6 +3978,7 @@ struct Part {
     static const long long AMPK = 4000;         // the valve's products ((pid, -1, -1, "amp"))
     static const long long KEYUP0 = 5000;       // a jack's key-up click ((pid, ch, note, "keyup:" + rank))
     static const long long DRONEK = 6000;       // a drone's layer ((pid, ch, -1 - i, "drone"))
+    static const long long CHORUSK0 = 7000;     // a CC93 chorus copy's: + its index ((pid, ch, note, "chorus%d"))
     // THE DRONES (live's drone_count, drone_quiet): how many the wheel leaves
     // uncorked (absent: all), and when the chanter went quiet (its channel,
     // the sample, the hold: part_break_s)
@@ -5001,6 +5002,45 @@ struct Part {
                     c.insert(q);
         return c;
     }
+    // live._chorus: CC93's copies of a note at note-on, a few cents away --
+    // its voice's comb (chorus.offsets_for, CHORUS_MAX of it), each a stamp
+    // of the note's template retuned and swept (SWEEP_DEPTH, SWEEP_HZ); the
+    // wet share over the copies, the dry the rest (power held)
+    void chorus_note(int ch, int note, int sn, int vel, const std::vector<long> &slots, long long n0, double send)
+    {
+        if (slots.empty())
+            return;
+        const NoteClass *kc = nv_tcache_class_key(patches[cur].cache, patches[cur].program, sn);
+        if (!kc || kc->n_cho <= 0)
+            return;
+        const int nc = std::min(kc->n_cho, 2);                  // (CHORUS_MAX)
+        const nv::live::Template *T = nv_tcache_lookup(patches[cur].cache, sn, bucket(vel), patches[cur].speed);
+        if (!T)
+            return;
+        static const double SWEEP_HZ[4] = {0.21, 0.29, 0.17, 0.34};
+        const double wet = pow(send / (double)nc, 0.5), dry = pow(1.0 - send, 0.5);
+        const double scale = (pow(vel / 127.0, 2.0) / std::max(pow(T->vel / 127.0, 2.0), 1e-9))
+                             * (pow(10.0, level_db / 20.0) * swell);
+        bool made = false;
+        for (int ci = 0; ci < nc; ci++) {
+            Key ck(pid, ch, note, CHORUSK0 + ci);
+            if (S.live_find(ck) >= 0)
+                continue;
+            if (!S.stamp_t(*T, ck, n0, scale * chan_gain(ch) * wet, ch, rate)) {
+                dropped++;
+                continue;
+            }
+            long li = S.live_find(ck);
+            if (li >= 0 && !S.live[li].second.empty()) {
+                const std::vector<long> csl = S.live[li].second;
+                retune_v(csl, n0, true, pow(2.0, kc->cho_cents[ci] / 1200.0), true, 0.0016, true, SWEEP_HZ[ci % 4]);
+                made = true;
+            }
+        }
+        if (made && dry != 1.0)
+            S.channel_gain(slots, dry);
+    }
+
     // live._taps_note: a note's copies as taps -- its effect channel's set
     // (the effect's, the GS chorus's on it), the chorus's share out of the dry
     void taps_note(bool has_efx, int ec, int ch, const std::vector<long> &slots)
@@ -5938,6 +5978,13 @@ struct Part {
         } else if (dnote_class()) {         // ...the pungi's (live._drone_note)
             drone_quiet.erase(pid);
             drone_note(ch, n0);
+        }
+        // CC93 OUTSIDE GS: the note's own chorus copies (live._chorus) -- in
+        // GS the send is the GS chorus's (its taps: _taps_note)
+        {
+            auto cs93 = chorus_send.find(ch);
+            if (!gs_on && cs93 != chorus_send.end() && cs93->second > 0.02)   // (chorus.FLOOR)
+                chorus_note(ch, note, sn, vel, slots, n0, cs93->second);
         }
         sound_stamp_note(patches[cur], ch, sn, slots);     // the channel's CC71-78 (live._sound_stamp)
         double b_left = 1.0;                // (the bend left to apply: a parallel type's branch B takes it)
@@ -12935,6 +12982,20 @@ void nv_part_gs_delay(void *h, int addr, int v)
 // level, feedback, delay, rate, depth; the delay's macro, pre-LPF, time,
 // ratio L, R, level C, L, R, level, feedback, to reverb -- each as in effect;
 // whether the session speaks GS
+// a channel's CC91, CC93, CC94 as they stand (live.chan_cc), CC10 its pan
+int nv_part_chan_cc(void *h, int ch, int cc)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (ch < 0 || ch >= 16)
+        return 0;
+    if (cc == 10)
+        return P->cpan[ch];
+    if (cc == 91)
+        return (int)nearbyint(P->S.send[ch] * 40.0);
+    const std::map<int, double> &m = cc == 93 ? P->chorus_send : P->delay_send;
+    auto it = m.find(ch);
+    return it != m.end() ? (int)nearbyint(it->second * 127.0) : 0;
+}
 int nv_part_gs_fx(void *h, int *cho, int *dly)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;

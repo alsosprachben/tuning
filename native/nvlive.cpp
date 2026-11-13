@@ -699,6 +699,21 @@ int nv_host::run(int argc, char **argv)
                 s.eq[k] = at(gs_eq, k, k % 2 ? 0x40 : 0);
             return s;
         };
+        H.chan_cc = [&](int ch, int cc) {
+            const int c = ch < 0 ? 0 : ch;
+            if (cc == 10) {                     // (as the part was sent it, before master pan)
+                auto pr = gs_pan_raw.find(c);
+                if (pr != gs_pan_raw.end())
+                    return pr->second;
+            }
+            return nv_part_chan_cc(part, c, cc);
+        };
+        H.chan_cc_send = [&](int ch, int cc, int v) {
+            v = std::max(0, std::min(127, v));
+            std::lock_guard<std::mutex> lk(mu);
+            for (int c = ch < 0 ? 0 : ch; c < (ch < 0 ? 16 : ch + 1); c++)
+                q.push_back(Midi{2, c, cc, v, {}});
+        };
         H.sysfx_send = [&](int hi, int lo, int v) {
             std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, (uint8_t)hi, (uint8_t)lo,
                                    (uint8_t)std::max(0, std::min(127, v))};

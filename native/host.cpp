@@ -1486,6 +1486,7 @@ int nv_host::open(int argc, char **argv)
         return true;
     };
     user_room = room_now;
+    gs_rx_reset();                              // (every part on its own channel: live._gs_rx_reset)
     gs_reverb = [&](int kind, int value) {
         if (E.rooms.empty())
             return;                             // (no room on this rig)
@@ -1706,7 +1707,16 @@ void nv_host::render_block(long long n0, float *buf, bool step)
     if (recording)
         for (const Midi &m : evs)
             rec("e %lld %d %d %d %d", n0, m.type, m.ch, m.a, m.b);
-    for (const Midi &m : evs) {
+    std::vector<Midi> rxo;
+    for (const Midi &m0 : evs) {
+      // A CHANNEL MESSAGE AS THE PARTS RECEIVE IT (live._gs_rx): to each part
+      // listening on its channel, dropped by an Rx switch, a CC10 by master pan
+      rxo.clear();
+      if (m0.type != 6 && m0.ch >= 0 && m0.ch < 16)
+          gs_rx_stage(m0, rxo);
+      else
+          rxo.push_back(m0);
+      for (const Midi &m : rxo) {
         // LEARNING A KEY (live._learn_take): the next press taken, and
         // neither it nor its release plays
         if (learning == 1 && m.type == 0) {
@@ -1741,6 +1751,37 @@ void nv_host::render_block(long long n0, float *buf, bool step)
             }
             if (xn >= 4 && x[0] == 0x41 && x[2] == 0x42 && x[3] == 0x12)
                 nv_part_gs_seen(part);          // (the session speaks GS: live's gs_on)
+            if (xn >= 8 && x[0] == 0x41 && x[2] == 0x42 && x[3] == 0x12 && x[4] == 0x40) {
+                // a part's receive setting or master pan (live._gs_rx_part)
+                if (x[5] == 0x00 && x[6] == 0x06) {
+                    gs_mpan = std::max(1, std::min(127, (int)x[7]));
+                    for (int p = 0; p < 16; p++) {      // (every part's pan again, by the new offset)
+                        auto pr = gs_pan_raw.find(p);
+                        const int v = std::max(0, std::min(127, (pr != gs_pan_raw.end() ? pr->second : 64) + gs_mpan - 64));
+                        latch(2, p, 10, v);
+                        event(2, p, 10, v);
+                    }
+                    continue;
+                }
+                const int a6 = x[6];
+                if ((x[5] >> 4) == 1 && (a6 == 0x02 || (a6 >= 0x03 && a6 <= 0x12) || a6 == 0x14 || a6 == 0x1F
+                                         || a6 == 0x20)) {
+                    const int blk = x[5] & 0x0F;
+                    const int ch = blk == 0 ? 9 : blk <= 9 ? blk - 1 : blk;
+                    const int v = x[7];
+                    if (a6 == 0x02)
+                        gs_rx[ch] = v < 16 ? v : 16;
+                    else if (a6 == 0x14)
+                        gs_assign[ch] = v;
+                    else if (a6 == 0x1F || a6 == 0x20)
+                        gs_ccnum[std::make_pair(ch, a6)] = v;
+                    else if (v)
+                        gs_rxsw[ch].erase(a6);
+                    else
+                        gs_rxsw[ch].insert(a6);
+                    continue;
+                }
+            }
             if (xn >= 8 && x[0] == 0x41 && x[2] == 0x42 && x[3] == 0x12 && x[4] == 0x40 && x[5] == 0x01
                 && x[6] >= 0x38 && x[6] <= 0x40) {
                 nv_part_gs_chorus(part, x[6], x[7]);    // (the GS chorus: live's _sysex, and nothing else)
@@ -1780,6 +1821,7 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                 gs_eq_apply();
                 const bool gm1 = xn >= 4 && x[0] == 0x7E && x[2] == 0x09 && x[3] == 0x01;
                 nv_part_gs_chorus_reset(part, gm1);
+                gs_rx_reset();                  // (every part on its own channel, every Rx on, master pan centre)
             }
             if (rs && asks)
                 reset_asked();
@@ -1788,6 +1830,7 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         }
         latch(m.type, m.ch, m.a, m.b);
         event(m.type, m.ch, m.a, m.b);
+      }
     }
     if (gs_want && !step) {             // (a sequencer's GS reverb, playing: the builder's, as live.set_room)
         {

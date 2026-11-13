@@ -20,6 +20,7 @@
 #include <condition_variable>
 #include <functional>
 #include <map>
+#include <set>
 #include <sched.h>
 #include <spawn.h>
 #include <sys/resource.h>
@@ -106,6 +107,7 @@ void nv_part_gs_seen(void *h);
 void nv_part_gs_chorus(void *h, int addr, int v);
 void nv_part_gs_delay(void *h, int addr, int v);
 int nv_part_gs_fx(void *h, int *cho, int *dly);
+int nv_part_chan_cc(void *h, int ch, int cc);
 void nv_part_gs_chorus_reset(void *h, int gm1);
 void nv_part_leslie(void *h, const double *L, int n);
 void nv_part_scan(void *h, const double *X, long n);
@@ -728,6 +730,76 @@ struct nv_host {
     // ...AND ITS GS EQ (live._gs_eq): 40 02 0x and the parts' switches (4x 4p 20)
     std::map<int, int> gs_eq, gs_eq_sw;
     std::function<void()> gs_eq_apply;
+    // ...AND ITS PARTS' RECEIVE SETTINGS (live._gs_rx): each part's RX.
+    // CHANNEL (16 off), its Rx switches off (gs_rxsw), the RPN or NRPN its
+    // data entry is for (gs_rx_sel: 0 none, 1, 2), master pan and each
+    // part's own CC10; ASSIGN MODE and the CC1/CC2 numbers kept
+    int gs_rx[16];
+    std::map<int, std::set<int>> gs_rxsw;
+    int gs_rx_sel[16];
+    int gs_mpan = 64;
+    std::map<int, int> gs_pan_raw, gs_assign;
+    std::map<std::pair<int, int>, int> gs_ccnum;
+    void gs_rx_reset()
+    {
+        for (int p = 0; p < 16; p++) {
+            gs_rx[p] = p;
+            gs_rx_sel[p] = 0;
+        }
+        gs_rxsw.clear();
+        gs_mpan = 64;
+        gs_pan_raw.clear();
+        gs_assign.clear();
+        gs_ccnum.clear();
+    }
+    bool rx_drop(int p, const Midi &m)
+    {
+        if (m.type == 2) {
+            if (m.a == 101 || m.a == 100)
+                gs_rx_sel[p] = 1;
+            else if (m.a == 99 || m.a == 98)
+                gs_rx_sel[p] = 2;
+        }
+        auto it = gs_rxsw.find(p);
+        if (it == gs_rxsw.end() || it->second.empty())
+            return false;
+        const std::set<int> &sw = it->second;
+        if (m.type != 2) {
+            const int a = m.type == 4 ? 0x03 : m.type == 3 ? 0x04 : m.type == 5 ? 0x05 : m.type == 7 ? 0x07
+                        : (m.type == 0 || m.type == 1) ? 0x08 : -1;
+            return a >= 0 && sw.count(a);
+        }
+        const int c = m.a;
+        if (sw.count(0x06))
+            return true;
+        if (c == 101 || c == 100)
+            return sw.count(0x09) > 0;
+        if (c == 99 || c == 98)
+            return sw.count(0x0A) > 0;
+        if (c == 6 || c == 38 || c == 96 || c == 97)
+            return (gs_rx_sel[p] == 1 && sw.count(0x09)) || (gs_rx_sel[p] == 2 && sw.count(0x0A));
+        const int a = c == 1 ? 0x0B : c == 7 ? 0x0C : c == 10 ? 0x0D : c == 11 ? 0x0E : c == 64 ? 0x0F
+                    : c == 65 ? 0x10 : c == 66 ? 0x11 : c == 67 ? 0x12 : -1;
+        return a >= 0 && sw.count(a);
+    }
+    // a channel message as the parts receive it (live._gs_rx)
+    void gs_rx_stage(const Midi &m, std::vector<Midi> &out)
+    {
+        for (int p = 0; p < 16; p++) {
+            if (gs_rx[p] != m.ch)
+                continue;
+            Midi q = m;
+            q.ch = p;
+            if (rx_drop(p, q))
+                continue;
+            if (q.type == 2 && q.a == 10) {
+                gs_pan_raw[p] = q.b;
+                if (gs_mpan != 64)
+                    q.b = std::max(0, std::min(127, q.b + gs_mpan - 64));
+            }
+            out.push_back(q);
+        }
+    }
     // THE TUNER, switched while playing (livetui's TUNER column): the table
     // made again, every patch let go and the parts' built again in it on the
     // builder (as a room); notes sounding keep the tuning they were struck in

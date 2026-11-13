@@ -440,8 +440,8 @@ class Builder(threading.Thread):
 # two keys (- and +) change every one of them, so there are no per-field modes to
 # remember. PATCH and TUNER are the only columns that cost a build.
 
-COLS = ("patch", "ch", "lo", "hi", "tr", "level", "tuner", "touch", "stops", "efx")
-COL_W = {"patch": 33, "ch": 4, "lo": 5, "hi": 5, "tr": 4, "level": 8,
+COLS = ("patch", "ch", "lo", "hi", "tr", "level", "pan", "rev", "cho", "dly", "tuner", "touch", "stops", "efx")
+COL_W = {"patch": 33, "ch": 4, "lo": 5, "hi": 5, "tr": 4, "level": 8, "pan": 5, "rev": 4, "cho": 4, "dly": 4,
          "tuner": 11, "touch": 6, "stops": 11, "efx": 5}
 
 # Which columns open a picker on enter, and which take a typed value. Every
@@ -937,6 +937,10 @@ class TUI:
             p.level_db = max(LEVEL_DB_MIN,
                              min(LEVEL_DB_MAX,
                                  p.level_db + delta * (3.0 if big else 0.5)))
+        elif col in LV.Live.PART_CCS:
+            # THE PART'S PAN AND SENDS: its channel's CC, as a sequencer sends it
+            cc = LV.Live.PART_CCS[col]
+            self.live.chan_cc_send(p.channel, cc, self.live.chan_cc(p.channel, cc) + delta * (10 if big else 1))
         elif col == "touch":
             self.toggle_touch(p)
         elif col == "stops":
@@ -1264,6 +1268,8 @@ class TUI:
             p.transpose = max(-48, min(48, v))
         elif col == "level":
             p.level_db = max(LEVEL_DB_MIN, min(LEVEL_DB_MAX, v))
+        elif col in LV.Live.PART_CCS:
+            self.live.chan_cc_send(p.channel, LV.Live.PART_CCS[col], v)
 
     def pick_tuner(self, scr):
         p = self.sel()
@@ -2860,6 +2866,11 @@ class TUI:
             return "%+d" % p.transpose
         if c == "level":
             return "%+.1f dB" % p.level_db
+        if c == "pan":
+            v = self.live.chan_cc(p.channel, 10)
+            return "C" if v == 64 else ("L%d" % (64 - v) if v < 64 else "R%d" % (v - 64))
+        if c in ("rev", "cho", "dly"):
+            return str(self.live.chan_cc(p.channel, LV.Live.PART_CCS[c]))
         if c == "tuner":
             # a part sounding the rig's Eastern tuning says so (E sets it)
             if p.tuner != getattr(p, "base_tuner", p.tuner):
@@ -3038,7 +3049,11 @@ class TUI:
             "  - +               change the selected cell   (with shift: coarse)",
             "  enter             acts on the HIGHLIGHTED COLUMN:",
             "                      patch / tuner / stops -> a picker",
-            "                      ch, lo, hi, tr, level -> type a value",
+            "                      ch, lo, hi, tr, level, pan, rev, cho, dly -> type a value",
+            "                      pan / rev / cho / dly: the part's channel's CC10 / CC91 /",
+            "                      CC93 / CC94 (every channel's for a part on all), sent as",
+            "                      a sequencer's -- in GS, rev, cho and dly feed the shared",
+            "                      reverb, chorus and delay (G)",
             "                      touch -> fixed / vel (enter or - +)",
             "  a                 LAYER: duplicate this part over the same keys",
             "  s                 SPLIT: halve this part's range into two parts",
