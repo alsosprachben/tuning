@@ -165,11 +165,25 @@ TASKS = [
                      "blockrender"),
     ("MT-32", True, "nvlive: the MT-32 set as a patch (bank 127): by bank select, and the picker's (its 128 "
                     "tones marked MT-32) -- native vs live identical"),
-    ("CM-64", False, "The CM-32P (the CM-64's PCM half: the U-110's tones on channels 11-16): its 64 tones on bank "
-                     "126 as the Sound Canvas's SC-55 map plays them (each a GS tone, under the CM-32P's name: CM-32P "
-                     "OM pp.7-8, SC-8850 OM p.186); --map cm64 (TUNING_CM64) the CM-64 sound map's parts before a "
-                     "file (SC-88Pro OM p.114), pans mirrored, its exclusives ignored; the pickers' CM-32P -- written, "
-                     "its checks to come"),
+    ("CM-64", True, "The CM-32P (the CM-64's PCM half: the U-110's tones on channels 11-16): its 64 tones on bank "
+                    "126 as the Sound Canvas's SC-55 map plays them (each a GS tone, under the CM-32P's name: CM-32P "
+                    "OM pp.7-8, SC-8850 OM p.186); --map cm64 (TUNING_CM64) the CM-64 sound map's parts before a "
+                    "file (SC-88Pro OM p.114), pans mirrored, its exclusives ignored; the pickers' CM-32P -- nvrender "
+                    "identical on the CM-64 map's file, nvlive identical following a file's CM-32P tones"),
+    ("GM1", True, "Live: the wheel's jobs on their own CCs (tonelib.WHEEL_CC: crescendo 4, swell 11, drive 12, "
+                  "detune 13, drones 18, mouth 19, crank 20, tone 70, the rotor 80, the scanner 81, tremolo 92), "
+                  "CC1 the vibrato and the wheel a route to each part's other jobs; an organ's wheel its swell, its "
+                  "drive CC12's and the panel's knob (Part.drive: a default per organ, kept in presets and the "
+                  "session) -- files and live native vs Python identical on the wheel's test files, every panel "
+                  "control answered"),
+    ("GM1", True, "nvlive and livetui: a MIDI input selector (I, or the header): several devices open at once, "
+                  "merged; the session keeps them by device name, shared by both"),
+    ("GM1", True, "Files: user drum sets (a key the set does not receive skipped), an organ beside a variation on "
+                  "its channel (its registered organ off the shared fader) -- nvrender identical"),
+    ("GM1", True, "Live: a voice's own chorus in native's templates -- the detuned pairs (Detuned EP 1 and 2, the "
+                  "Detuned Organs, Vibraphones, Dual Horns...) and Chorus Gt.'s pedal had played as the plain "
+                  "voice; the honky-tonk's detune and the bagpipe's corked drones in the templates on their own "
+                  "CCs -- native vs live identical"),
     ("CM-64", True, "The CM-32L's sound effects on the rhythm part (keys 76-108) in nvlive -- native vs live "
                     "identical"),
     ("SC-55", True, "Files: a drum set read in a map (kit_in_map) where the map has none of its own"),
