@@ -4143,6 +4143,7 @@ class Part:
         self.level_db = level_db
         self.swell = 1.0        # the mod wheel as an expression pedal (wheel_swell)
         self.muted = False
+        self.soloed_out = False         # another part soloed (Live.solo): silent, not saved
         # FIXED TOUCH, a switch on every part: on, velocity does not set the
         # level; off, it does. None is the patch's own way (touch_fixed): on
         # for a voice whose key only trips a jack or opens a valve, as on the
@@ -4212,7 +4213,7 @@ class Part:
 
     def matches(self, ch, note):
         return ((self.channel is None or self.channel == ch)
-                and self.lo <= note <= self.hi and not self.muted)
+                and self.lo <= note <= self.hi and not self.muted and not self.soloed_out)
 
     def gain(self):
         return 10.0 ** (self.level_db / 20.0) * self.swell
@@ -4586,6 +4587,12 @@ class Live:
         # class says velocity does nothing. A bagpipe with neither touch nor
         # channel volume cannot be played at two levels at all.
         self.vol = {}           # channel -> CC7, 127 until one arrives
+        # EACH CHANNEL's ACTIVITY (the Sound Canvas's 16 bars): its last note's
+        # level -- velocity x CC7 x CC11 -- and when, for the panel's meter
+        self.meter = [(0.0, 0.0)] * 16
+        # THE PARTS SOLOED (the panel's o): their pids; every other part
+        # silent while any is, as a mute -- the session does not keep it
+        self.solo = set()
         self.expr = {}          # channel -> CC11, the swell and the bellows
         self.cgain = {}         # channel -> the gain last applied to its notes
         self.cpan = {}          # channel -> the CC10 last applied to its notes
@@ -4891,6 +4898,7 @@ class Live:
         # order is deliberate: swap first, so nothing new is stamped for a part
         # that is going, then release a block later.
         self.parts = tuple(parts)
+        self._apply_solo()
         for _pid in [q for q in self.patch_want if q not in keep]:
             del self.patch_want[_pid]           # (a part gone: nothing on its way to it)
         self._pin_patches()
@@ -5181,6 +5189,29 @@ class Live:
         """
         with self.lock:
             self.cmds.append(fn)
+
+    def toggle_solo(self, pid):
+        """Solo a part, or take it out of the solo (the panel's o): while any
+        part is soloed the rest are silent, their notes let go."""
+        if pid in self.solo:
+            self.solo.discard(pid)
+        else:
+            self.solo.add(pid)
+        self._apply_solo()
+
+    def _apply_solo(self):
+        self.solo &= {p.pid for p in self.parts}
+        for p in self.parts:
+            out = bool(self.solo) and p.pid not in self.solo
+            if out and not p.soloed_out:
+                self.release_part(p.pid)
+            p.soloed_out = out
+
+    def gs_reset(self):
+        """A GS Reset, as a sequencer sends it (the panel's Z): every part to
+        program 0, the controllers, the system effects and the receive
+        settings back to the module's power-on."""
+        self.inject(mido.Message("sysex", data=[0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41]))
 
     def release_part(self, pid):
         """Let go of everything a part is holding. Muting, from the TUI."""
@@ -6297,6 +6328,8 @@ class Live:
             if self.patch_reqs:
                 self.patch_go.set()
         elif msg.type == "note_on" and msg.velocity > 0:
+            if ch < 16:
+                self.meter[ch] = (msg.velocity / 127.0 * self._chan_gain(ch) ** 0.5, time.monotonic())
             # LEGATO is judged BEFORE this key goes down, against the group of
             # notes this one follows -- see _legato_on.
             _slur = self._legato_on(ch, msg.note, n0)
@@ -11874,7 +11907,8 @@ class Live:
                 st["acc"][row] += (float(sl.BR[row, 0]) - 1.0) * frames
 
     def _listens(self, part, ch):
-        return (part.channel is None or part.channel == self._pc(ch)) and not part.muted
+        return ((part.channel is None or part.channel == self._pc(ch)) and not part.muted
+                and not part.soloed_out)
 
     def _held_any(self):
         """Every key actually down -- from the key state, not from whatever

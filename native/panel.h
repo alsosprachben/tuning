@@ -84,6 +84,7 @@ struct PartRow {
     int channel = -1, lo = 0, hi = 127, tr = 0;
     double level = 0.0;
     bool muted = false;
+    int solo = 0;                       // (live.Live.solo: 0 none, 1 this part soloed, 2 another is)
     bool touch_fixed = true;            // (live.Part.touch_fixed: its switch, else the patch's way)
     std::string name;
 };
@@ -110,6 +111,11 @@ struct Host {
     std::function<void(const std::array<int, 7> &)> add_route;
     std::function<void(int)> del_route;
     std::function<void()> panic;                                   // every note off, now
+    std::function<void(int)> part_solo;                            // a part into the solo or out (live.toggle_solo)
+    std::function<void()> gs_reset;                                // a GS Reset, as a sequencer's (live.gs_reset)
+    // EACH CHANNEL's ACTIVITY (live.meter): its last note's level (velocity x
+    // CC7 x CC11) and when (steady seconds), for the Sound Canvas's 16 bars
+    std::function<std::array<std::pair<double, double>, 16>()> meters;
     // AN ORGAN'S STOPS (live's panel: Patch.stop_rows): its ranks' names, the
     // rows as the panel lays them out (rank indices), which are drawn now,
     // and a stop drawn or put in (posted)
@@ -660,7 +666,7 @@ static const char *SCAN_NAMES[7] = {"off", "V1", "V2", "V3", "C1", "C2", "C3"};
 static const int SCAN_STARTS[7] = {0, 18, 37, 55, 73, 91, 110};
 // THE KEYS A CONTROL MAY BE BOUND TO (livetui.HOTKEYS_FREE): what the panel
 // does not use itself, in any pane -- a bound key fires from every pane
-static const char HOTKEYS_FREE[] = "cefginouvwyz[];',./ACHJKOQUVWYZ";      // (I: the MIDI inputs; G: the system effects)
+static const char HOTKEYS_FREE[] = "cefginuvwyz[];',./ACHJKOQUVWY";      // (I: the MIDI inputs; G: the system effects; o solo, Z GS Reset)
 
 static bool control_switch(int key)
 {
@@ -1126,7 +1132,7 @@ struct Panel {
                 const int c = PORDER[k];
                 std::string t = part_cell(r, c);
                 t = fit(t, PCOL_W[c] - 1);
-                std::string at = r.muted ? C("dim") : c == 0 ? C("accent2") : C("label");
+                std::string at = r.muted || r.solo == 2 ? C("dim") : c == 0 ? C("accent2") : C("label");
                 if (here && k == pcol)
                     at = C("sel");
                 else if (here)
@@ -1137,6 +1143,10 @@ struct Panel {
             }
             if (r.muted)
                 row += C("warn") + "muted";
+            else if (r.solo == 1)
+                row += C("ok") + "\x1b[1msolo";
+            else if (r.solo == 2)
+                row += C("dim") + "(solo)";
             line(row);
         }
         line("   " + C("dim") + "room " + H.room
@@ -1315,7 +1325,7 @@ struct Panel {
             line("   tab / shift-tab   parts -> globals -> controls and routes -> synth");
             line("   up down (k j)     select a part, a global or a route");
             line("   parts: left right a column, - + change it (_ + coarse), enter pick or type a value");
-            line("          a layer (same keys, same channel), s split, d delete, m mute");
+            line("          a layer (same keys, same channel), s split, d delete, m mute, o solo (not saved)");
             line("   globals: left right - +  adjust (_ + by five)");
             line("   S L               a preset saved, loaded (presets.json, live's)");
             line("   synth: up down a knob, - + turn (_ + coarse), space the patch's, 0 zero, D defaults,");
@@ -1335,6 +1345,8 @@ struct Panel {
             line("                       and the EQ -- each move a sequencer's GS message, so a GS reset puts them back");
             line("   I                 the MIDI inputs (or tap the port's name): enter turns each on or off -- several, merged");
             line("   P                 panic: every note off, now");
+            line("   Z, then Z again   a GS Reset, as a sequencer sends it: every part to program 0,");
+            line("                     the controllers, system effects and receive settings to power-on");
             line("   q                 quit (routes added here are kept beside the export)");
             line("");
             line("   the mouse or a touch: tap a pane's title, a global (drag it up or down, or");
@@ -1348,7 +1360,33 @@ struct Panel {
         nlimit = 1 << 30;
         while (nrow < T.h - 5)
             line("");
-        rule("OUTPUT", false);
+        if (H.meters && T.w >= 60) {
+            // EACH CHANNEL's ACTIVITY on the rule (livetui's): the Sound
+            // Canvas's 16 bars, a note's level falling 24 dB a second over 40
+            // dB, four groups of four
+            static const char *SPK[8] = {"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
+            const auto mt = H.meters();
+            const double ts = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+            std::string ml = C("dim") + "── " + "\x1b[0m" + C("label") + "OUTPUT" + "\x1b[0m" + C("dim") + " ──" + "\x1b[0m"
+                             + C("label") + " parts " + "\x1b[0m";
+            int used = 3 + 6 + 3 + 7;
+            for (int ch = 0; ch < 16; ch++) {
+                const double lv = mt[ch].first;
+                const double db = lv > 1e-6 ? 20.0 * log10(lv) - 24.0 * (ts - mt[ch].second) : -99.0;
+                const int k = (int)((db + 40.0) / 40.0 * 8.0);
+                ml += (db > -3.0 ? C("warn") : C("ok")) + (k >= 0 ? SPK[std::min(7, k)] : " ") + "\x1b[0m";
+                used++;
+                if (ch % 4 == 3 && ch < 15) {
+                    ml += " ";
+                    used++;
+                }
+            }
+            std::string bar_;
+            for (int i = 0; i < std::max(2, T.w - used - 2); i++)
+                bar_ += "─";
+            line(ml + C("dim") + " " + bar_);
+        } else
+            rule("OUTPUT", false);
         auto now = std::chrono::steady_clock::now();
         double dt = std::chrono::duration<double>(now - last).count();
         last = now;
@@ -1446,7 +1484,7 @@ struct Panel {
         }
         // THE PANE'S KEYS (livetui.PANE_KEYS): always there, on the last line
         static const char *KP[][2] = {{"tab", "pane"}, {"↑↓", "part"}, {"←→", "column"}, {"-/+", "change"},
-                                      {"⏎", "pick"}, {"a", "layer"}, {"s", "split"}, {"d", "del"}, {"m", "mute"},
+                                      {"⏎", "pick"}, {"a", "layer"}, {"s", "split"}, {"d", "del"}, {"m", "mute"}, {"o", "solo"},
                                       {"S/L", "preset"}, {"N/R", "scene"}, {"?", "help"}, {"q", "quit"}};
         static const char *KS[][2] = {{"tab", "pane"}, {"↑↓", "knob"}, {"-/+", "turn"}, {"space", "patch's"},
                                       {"0", "zero"}, {"D", "defaults"}, {"B", "layer"}, {"M", "Messenger"},
@@ -2836,13 +2874,28 @@ struct Panel {
         }
     }
 
-    // a, s, d, m (livetui's): layer, split, delete, mute
+    // a, s, d, m, o (livetui's): layer, split, delete, mute, solo
+    double zreset_at = -10.0;               // (Z's first press: a GS Reset asked twice)
     void part_key(int c)
     {
         if (prows.empty())
             return;
         const PartRow r = prows[prow];
         std::string why;
+        if (c == 'o' && H.part_solo) {
+            H.part_solo(r.index);
+            if (H.parts)
+                prows = H.parts();
+            int any = 0, me = 0;
+            for (const PartRow &q : prows) {
+                any |= q.solo == 1;
+                if (q.index == r.index)
+                    me = q.solo;
+            }
+            say("part " + std::to_string(prow + 1)
+                + (me == 1 ? " soloed" : any ? " out of the solo" : " -- no solo now"));
+            return;
+        }
         if (c == 'a' && H.part_layer) {
             if (H.part_layer(r.index)) {
                 prow = (int)prows.size();
@@ -3427,7 +3480,7 @@ struct Panel {
                     pcol = std::min(NPCOLS - 1, pcol + 1);
                 } else if (pane == P_PARTS && (c == 10 || c == 13)) {
                     part_enter();
-                } else if (pane == P_PARTS && (c == 'a' || c == 's' || c == 'd' || c == 'm')) {
+                } else if (pane == P_PARTS && (c == 'a' || c == 's' || c == 'd' || c == 'm' || c == 'o')) {
                     part_key(c);
                 } else if (pane == P_SYNTH && (c == ' ' || c == '0' || c == 'D' || c == 'B' || c == 'T' || c == 'F' || c == 'M')) {
                     synth_key(c);
@@ -3465,6 +3518,17 @@ struct Panel {
                 } else if (c == 'P') {
                     H.panic();
                     say("all notes off");
+                } else if (c == 'Z' && H.gs_reset) {      // A GS RESET, asked twice (livetui's Z)
+                    const double now_s = std::chrono::duration<double>(
+                                             std::chrono::steady_clock::now().time_since_epoch()).count();
+                    if (now_s - zreset_at < 3.0) {
+                        zreset_at = -10.0;
+                        H.gs_reset();
+                        say("GS Reset sent: every part to program 0, the module to power-on");
+                    } else {
+                        zreset_at = now_s;
+                        say("Z again for a GS Reset (every part to program 0)");
+                    }
                 } else if (pane == P_ROUTES && c == 'r') {
                     add_route();
                 } else if (pane == P_ROUTES && c == 'd') {

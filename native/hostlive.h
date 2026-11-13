@@ -695,6 +695,7 @@ struct nv_host {
         int lo = 0, hi = 127, tr = 0;
         double level = 0.0;
         bool muted = false, gone = false;
+        bool solo = false;                      // (live.Live.solo: soloed, not saved)
         long long pid = 1;
         int fixed = -1;                         // its fixed touch (live's part.fixed_touch: -1 the patch's way)
         double drive = -1.0;                    // an organ's drive knob (live's Part.drive: <0 the voice's)
@@ -1034,6 +1035,13 @@ struct nv_host {
         int prog, note, axis;
     };
     std::vector<DReq> dreq;
+    // THE SOLO (live.toggle_solo): how many parts are soloed; a part toggled
+    std::atomic<int> solo_n{0};
+    void part_solo(size_t row);
+    // EACH CHANNEL's ACTIVITY (live.meter), and its CC7 and CC11 as heard
+    std::array<std::pair<double, double>, 16> meter{};
+    int hvol[16] = {100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100};
+    int hexpr[16] = {127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127};
     std::map<int, std::map<int, std::array<int, 2>>> hdedit;
     int hn_msb[16] = {127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127};
     int hn_lsb[16] = {127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127};

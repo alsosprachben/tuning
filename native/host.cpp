@@ -1098,6 +1098,10 @@ int nv_host::open(int argc, char **argv)
         }
         hdedit.clear();
         hrmap.clear();
+        for (int c = 0; c < 16; c++) {
+            hvol[c] = 100;
+            hexpr[c] = 127;
+        }
         return true;
     };
     // the entry a variation key selects for a program (live.cpp's var_entry): 0 none
@@ -1894,6 +1898,18 @@ void nv_host::render_block(long long n0, float *buf, bool step)
             nv_part_sysex(part, m.x.data(), (int)m.x.size());
             continue;
         }
+        if (m.ch >= 0 && m.ch < 16) {                  // (each channel's activity: the panel's 16 bars)
+            if (m.type == 2 && m.a == 7)
+                hvol[m.ch] = m.b;
+            else if (m.type == 2 && m.a == 11)
+                hexpr[m.ch] = m.b;
+            else if (m.type == 2 && m.a == 121)
+                hexpr[m.ch] = 127;
+            else if (m.type == 0 && m.b > 0)
+                meter[m.ch] = std::make_pair(m.b / 127.0 * (hvol[m.ch] / 127.0) * (hexpr[m.ch] / 127.0),
+                                             std::chrono::duration<double>(
+                                                 std::chrono::steady_clock::now().time_since_epoch()).count());
+        }
         if (m.type == 2 && m.ch >= 0 && m.ch < 16) {   // (a drum key's pitch or pan: its templates asked)
             if (m.a == 99 || m.a == 98)
                 (m.a == 99 ? hn_msb : hn_lsb)[m.ch] = m.b;
@@ -2678,6 +2694,7 @@ std::vector<panel::PartRow> nv_host::part_rows()
         r.tr = pa.tr;
         r.level = pa.level;
         r.muted = pa.muted;
+        r.solo = pa.solo ? 1 : solo_n.load() > 0 ? 2 : 0;
         r.touch_fixed = pa.fixed < 0 ? !nv_part_patch_touch_sensitive(part, pa.pi) : pa.fixed != 0;
         r.name = pa.drums ? kit_name(r.program) : E.prog[r.program].name;
         for (size_t j = 0; j < E.vpv.size() && r.var; j++)
@@ -2694,6 +2711,7 @@ void nv_host::part_set(size_t row, int channel, int lo, int hi, int tr, double l
 {
     int pi;
     unsigned excl;
+    bool psolo;
     {
         std::lock_guard<std::mutex> lk(parts_mu);
         if (row >= pats.size() || pats[row].gone)
@@ -2706,11 +2724,37 @@ void nv_host::part_set(size_t row, int channel, int lo, int hi, int tr, double l
         pa.level = level;
         pa.muted = muted;
         pi = pa.pi;
+        psolo = pa.solo;
         excl = channel >= 0 ? 0u : pa.excl;
     }
-    post([this, pi, channel, excl, lo, hi, tr, level, muted](long long) {
+    const bool out = muted || (solo_n.load() > 0 && !psolo);           // (a solo elsewhere: silent too)
+    post([this, pi, channel, excl, lo, hi, tr, level, out](long long) {
         nv_part_patch_range(part, pi, channel, excl, lo, hi, tr);
-        nv_part_patch_level(part, pi, level, muted);
+        nv_part_patch_level(part, pi, level, out);
+    });
+}
+
+// A PART INTO THE SOLO, OR OUT (live.toggle_solo): while any part is
+// soloed, every other is silent as a muted one is; the session keeps none
+void nv_host::part_solo(size_t row)
+{
+    std::vector<std::tuple<int, double, bool>> lv;
+    {
+        std::lock_guard<std::mutex> lk(parts_mu);
+        if (row >= pats.size() || pats[row].gone)
+            return;
+        pats[row].solo = !pats[row].solo;
+        int n = 0;
+        for (const PartAt &pa : pats)
+            n += !pa.gone && pa.solo;
+        solo_n.store(n);
+        for (const PartAt &pa : pats)
+            if (!pa.gone)
+                lv.push_back(std::make_tuple(pa.pi, pa.level, pa.muted || (n > 0 && !pa.solo)));
+    }
+    post([this, lv](long long) {
+        for (const auto &x : lv)
+            nv_part_patch_level(part, std::get<0>(x), std::get<1>(x), std::get<2>(x));
     });
 }
 
@@ -2746,7 +2790,7 @@ void nv_host::part_added(const PartSpec &sp, void *c)
     int pi = nv_part_add_patch(part, c, pid, sp.level, pq[1], pq[6], pq[7], pq[8], pq[9], sp.drums, sp.program,
                                sp.drums ? E.kit_choke.data() : nullptr, sp.channel, sp.channel >= 0 ? 0u : sp.excl,
                                sp.lo, sp.hi, sp.tr);
-    nv_part_patch_level(part, pi, sp.level, sp.muted);
+    nv_part_patch_level(part, pi, sp.level, sp.muted || solo_n.load() > 0);    // (a solo elsewhere: silent)
     nv_part_patch_touch(part, pi, sp.fixed);
     if (sp.drive >= 0.0)
         nv_part_drive(part, pi, sp.drive);

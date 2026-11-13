@@ -20,7 +20,7 @@ Nothing here touches tonelib.py. A voice is defined in one place, in code, and a
 preset is data that arranges those voices -- so a sound that only exists because
 the TUI is running is not a sound this project claims to have.
 """
-import curses, locale, threading, collections, time, os, sys
+import curses, locale, threading, collections, time, os, sys, math
 
 import numpy as np
 import mido
@@ -499,8 +499,8 @@ STD_NAMES = ("ours", "SC-55", "SC-88", "SC-88Pro", "SC-8850")
 # THE KEYS A PANEL CONTROL MAY BE BOUND TO: everything the panel does not
 # already use, in any pane, since a bound key fires from every pane. Space is
 # the controls pane's own toggle, so it is not offered.
-HOTKEYS_FREE = (set("cefginoptuvwxyz0[];',./")
-                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLPNREXIG")))  # N/R: scenes; E: Eastern tuning; X: the EFX; I: MIDI inputs; G: GS system effects
+HOTKEYS_FREE = (set("cefginptuvwxyz0[];',./")
+                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLPNREXIGZ")))  # N/R: scenes; E: Eastern tuning; X: the EFX; I: MIDI inputs; G: GS system effects; Z: GS Reset (o: solo)
 
 
 # THE STOP KEYS: the digit row, and the same keys shifted. What shift+1 TYPES
@@ -2259,7 +2259,7 @@ class TUI:
             x = 6
             for ci, c in enumerate(COLS):
                 txt = self.cell(p, c)
-                if p.muted:
+                if p.muted or getattr(p, "soloed_out", False):
                     at = C("dim")
                 elif c == "patch":
                     at = self.hue(p)
@@ -2274,6 +2274,10 @@ class TUI:
                 x += COL_W[c]
             if p.muted:
                 self.addstr(scr, y, x, "muted", C("warn"))
+            elif p.pid in self.live.solo:
+                self.addstr(scr, y, x, "solo", C("ok") | curses.A_BOLD)
+            elif getattr(p, "soloed_out", False):
+                self.addstr(scr, y, x, "(solo)", C("dim"))
             y += 1
             # The full registration goes UNDERNEATH the selected row, not off to
             # the right of it: at x=70 on an 80-column terminal it was clipped
@@ -2677,7 +2681,7 @@ class TUI:
     # THE KEYS, per pane: (key, what it does), drawn as a line of hints
     PANE_KEYS = {
         0: (("tab", "pane"), ("\u2191\u2193", "part"), ("\u2190\u2192", "column"), ("-/+", "change"),
-            ("\u23ce", "pick"), ("a", "layer"), ("s", "split"), ("d", "del"), ("m", "mute"),
+            ("\u23ce", "pick"), ("a", "layer"), ("s", "split"), ("d", "del"), ("m", "mute"), ("o", "solo"),
             ("S/L", "preset"), ("N/R", "scene"), ("?", "help"), ("q", "quit")),
         1: (("tab", "pane"), ("\u2191\u2193", "setting"), ("-/+", "change"), ("_/+", "coarse"),
             ("P", "panic"), ("S/L", "preset"), ("?", "help"), ("q", "quit")),
@@ -2693,7 +2697,7 @@ class TUI:
         "tab": (9,), "\u2191\u2193": (curses.KEY_UP, curses.KEY_DOWN),
         "\u2190\u2192": (curses.KEY_LEFT, curses.KEY_RIGHT), "-/+": (ord("-"), ord("=")),
         "_/+": (ord("_"), ord("+")), "\u23ce": (10,), "a": (ord("a"),), "s": (ord("s"),),
-        "d": (ord("d"),), "m": (ord("m"),), "S/L": (ord("S"), ord("L")),
+        "d": (ord("d"),), "m": (ord("m"),), "o": (ord("o"),), "S/L": (ord("S"), ord("L")),
         "N/R": (ord("N"), ord("R")), "?": (ord("?"),), "P": (ord("P"),), "r": (ord("r"),),
         "space": (ord(" "),), "b": (ord("b"),), "0": (ord("0"),), "D": (ord("D"),),
         "B": (ord("B"),), "M": (ord("M"),), "T": (ord("T"),),
@@ -2708,6 +2712,21 @@ class TUI:
         y = h - 5
         self.rule(scr, y, w, "OUTPUT")
         now = time.monotonic()
+        # EACH CHANNEL's ACTIVITY, the Sound Canvas's 16 bars, on the rule: a
+        # note's velocity x volume x expression, falling 24 dB a second, over
+        # 40 dB -- four groups of four, channel 10 the second group's second
+        if w >= 60:
+            cells = []
+            for ch in range(16):
+                lv, t0 = self.live.meter[ch]
+                db = 20.0 * math.log10(lv) - 24.0 * (now - t0) if lv > 1e-6 else -99.0
+                k = int((db + 40.0) / 40.0 * 8.0)
+                cells.append((SPARK[min(7, k)] if k >= 0 else " ",
+                              C("warn") if db > -3.0 else C("ok")))
+                if ch % 4 == 3 and ch < 15:
+                    cells.append((" ", C("rule")))
+            self.addstr(scr, y, 12, " parts ", C("label"))
+            self.runs(scr, y, 19, cells)
         lr = s.get("last_lr") or (s["last_peak"], s["last_peak"])
         # (laid out by the width: a narrow screen's meters and spark shorter)
         mn = 26 if w >= 118 else 12
@@ -3060,6 +3079,8 @@ class TUI:
             "  a                 LAYER: duplicate this part over the same keys",
             "  s                 SPLIT: halve this part's range into two parts",
             "  d                 remove this part        m   mute / unmute",
+            "  o                 SOLO: this part alone (o again on others adds them);",
+            "                      o on every soloed part ends it. Not saved",
             "  1..9, shift+1..9  on an organ part, draw or retire that stop",
             "  I (or click the   THE MIDI INPUTS: each one plugged in, enter turns it",
             "   port name)         on or off -- several at once, merged (a keyboard,",
@@ -3072,6 +3093,9 @@ class TUI:
             "                      the parts share (by CC91, CC93, CC94) and the EQ --",
             "                      each move sent as a sequencer's GS message, so a",
             "                      GS reset puts them back",
+            "  Z, then Z again   A GS RESET, as a sequencer sends it: every part to",
+            "                      program 0, the controllers, the system effects and",
+            "                      the receive settings to the module's power-on",
             "",
             "touch",
             "  fixed: a harpsichord, organ, harmonium or accordion ignores how",
@@ -3258,6 +3282,22 @@ class TUI:
             self.split_here()
         elif c == ord("d"):
             self.del_part()
+        elif c == ord("o"):
+            p = self.sel()
+            if p is not None:
+                self.live.toggle_solo(p.pid)
+                self.say("part %d %s" % (self.row + 1, "soloed" if p.pid in self.live.solo else
+                                         "out of the solo" if self.live.solo else "-- no solo now"))
+        elif c == ord("Z"):
+            # A GS RESET, asked twice: it puts every part on program 0
+            now = time.monotonic()
+            if now - getattr(self, "_zreset", -10.0) < 3.0:
+                self._zreset = -10.0
+                self.live.gs_reset()
+                self.say("GS Reset sent: every part to program 0, the module to power-on")
+            else:
+                self._zreset = now
+                self.say("Z again for a GS Reset (every part to program 0)")
         elif c == ord("m"):
             p = self.sel()
             if p is not None:

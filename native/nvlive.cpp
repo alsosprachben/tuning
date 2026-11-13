@@ -636,6 +636,13 @@ int nv_host::run(int argc, char **argv)
         };
         H.del_route = [&](int i) { post([&, i](long long) { nv_rt_del(router, i); }); };
         H.panic = [&]() { panic(); };
+        H.part_solo = [&](int i) { part_solo((size_t)i); };
+        H.meters = [&]() { return meter; };
+        H.gs_reset = [&]() {                    // (as a sequencer sends it: through the queue, live.gs_reset)
+            std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41};
+            std::lock_guard<std::mutex> lk(mu);
+            q.push_back(Midi{6, 0, 0, 0, x});
+        };
         // AN ORGAN'S STOPS (live's panel): its ranks, drawn and put in between two blocks
         auto stops_of = [&](int sp) {
             H.stop_names.clear();
