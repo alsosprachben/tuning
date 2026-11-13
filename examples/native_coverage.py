@@ -22,13 +22,15 @@ sys.path.insert(0, HERE)
 # reached, and live's side. (stage, done, text); kept by hand.
 TASKS = [
     ("GM1", True, "Program changes in nvlive: a builder thread, MIDI program change, the panel's picker"),
-    ("GM1", False, "nvlive's panel at livetui's (a switch is not a control: each a panel control and a library "
+    ("GM1", True, "nvlive's panel at livetui's (a switch is not a control: each a panel control and a library "
                    "call) -- done: the patch picker and its variations, globals, routes, stops, the insertion "
                    "effect (x), parts (layers, splits, channel, range, transpose, level, mute, fixed touch), the "
                    "tuner, the synth (Moog, Messenger) pane and M, scenes, presets and the shared session, mod "
                    "rate, the metronome, the standard, the devices (--port), mouse and touch, the Eastern tuning "
                    "(E: system, raga and Sa, the Indian voices' parts built again in it, in presets and the "
-                   "session; native vs live identical switched mid-phrase); open: threads"),
+                   "session; native vs live identical switched mid-phrase); livetui's threads not "
+                   "ported -- nvlive stays one render thread (Ben, 2026-11-13: it would complicate the port and "
+                   "not help)"),
     ("GM2", True, "Restore c2111e6's six tones, lost when be5a996 was committed from an older tree: 12.16 "
                   "Barafon, 12.17 Barafon 2, 12.24 Log drum, 66.8 BreathyTnr., 28.1 MutedDis.Gt, 125.10 Calculating "
                   "-- and with them sympathy per mode (26.8 Pedal Steel, 107.8 Taisho Koto whole). Replayed onto "
@@ -96,10 +98,11 @@ TASKS = [
                   "part exclusives as port A reads them, the legato over the merged stream"),
     ("GM1", True, "Files: GS's drum instrument NRPNs (GS_DRUM_NRPN: a key's pitch, level, pan, delay level; "
                   "reset by a GS or GM reset and a drum program change)"),
-    ("GM1", False, "Files: MPE (M1-100-UM, MIDI 1.0) -- the reader's zones (an MCM's resets and bend ranges, a "
-                   "manager's controls copied to its members, a member's zone-wide ones ignored), a member's note "
-                   "its manager's program and fader, its own pitch row (its bend times its manager's: "
-                   "_prep_mpe_pitch) -- written, its checks to come"),
+    ("GM1", True, "Files: MPE (M1-100-UM, MIDI 1.0) -- the reader's zones (an MCM's resets and bend ranges, a "
+                  "manager's controls copied to its members, a member's zone-wide ones ignored), a member's note "
+                  "its manager's program, fader, pressure (the louder) and mix channel, its own pitch row (its "
+                  "bend times its manager's: _prep_mpe_pitch) -- nvrender identical on mpe_zone and nine "
+                  "variants (tests/live), each effect measured (effects.py mpe_file); the corpus 167/167"),
     ("GM1", False, "Live: MPE in nvlive (live._mpe_route: the zones, the pressure and CC74 a member and its "
                    "manager combine, a part on the manager's channel playing the zone, legato and portamento by zone)"),
     ("GM2", False, "Files: MIDI 2.0 (ump.py: a Clip File or raw UMP) -- the reader, per-note pitch (7.9, 7.25), "
@@ -307,7 +310,10 @@ TASKS = [
     # A SUPERSET OF THE SOUND CANVAS (Ben, 2026-11-09): every GS message an SC-8850 receives doing
     # what Roland's does (or more) in files and live, and every front-panel control a TUI one --
     # Python first (the oracle), then native
-    ("SC-55", False, "Sound Canvas superset, files: the GS messages the reader ignores -- a part's RX. CHANNEL "
+    ("SC-55", False, "Sound Canvas superset, files -- done: RX CHANNEL, the Rx switches and master pan in "
+                     "both file renderers (gsrx: one stage, live's too; 5abc1a0), velocity sense and the "
+                     "keyboard range; open: ASSIGN MODE's modes, the CC1/CC2 controller numbers. Was: "
+                     "the GS messages the reader ignores -- a part's RX. CHANNEL "
                      "(another channel's notes: Roland's own layering), its Rx switches (pitch bend, volume, "
                      "program change... off), ASSIGN MODE (a repeated note's retrigger), the CC1/CC2 "
                      "CONTROLLER NUMBERS its matrix reads, MASTER PAN, VOICE RESERVE (accepted: we have more), "
@@ -318,8 +324,10 @@ TASKS = [
     ("SC-55", False, "Sound Canvas superset, live: what a sequencer sends that live ignores and a file render "
                      "honours -- done (both engines, native vs live identical, each message counted and its effect "
                      "measured): the system reverb, chorus and delay (macros and parameters), the GS EQ, a GS "
-                     "reset's sends, RX CHANNEL, the Rx switches, master pan; open: drum setup and the user drum "
-                     "sets live, the controller matrix live, ASSIGN MODE's modes (stored only)"),
+                     "reset's sends, RX CHANNEL, the Rx switches, master pan; a drum key's own settings (GS drum "
+                     "NRPNs and drum setup: level, Rx note on, pitch, pan -- fb7b7ca); velocity sense and the "
+                     "keyboard range; USE FOR RHYTHM PART in nvlive (a channel's part a kit, as live's); open: the "
+                     "per-key delay send, the user drum sets live, the controller matrix live, ASSIGN MODE's modes"),
     ("SC-55", False, "Sound Canvas superset, the controllers -- done: the Rx switches live (a message a part "
                      "does not receive dropped, both engines, 00ec34d), the wheel's jobs on CCs of their own; "
                      "open: the CC1/CC2 controller numbers (stored, not yet read by anything) and the controller "
@@ -328,9 +336,9 @@ TASKS = [
                        "chorus and delay sends as part columns; the system effects page (G: the reverb's type, "
                        "level, time and delay feedback, the chorus's and delay's types and parameters, the EQ -- "
                        "each move a GS message, so a reset puts it back); the display (both TUIs' SC display box); "
-                       "the map in the picker (the standard); open: velocity sense as a column (the engine first), "
-                       "per-part level meters (the 16 bars), a GS Reset key, solo beside mute, user tones and drum "
-                       "sets edited and stored"),
+                       "the map in the picker (the standard); each part's activity (the 16 bars), solo (o), a GS "
+                       "Reset (Z twice -- 01e2461); velocity sense depth as a part column (vsens); MPE's zones in the "
+                       "header; open: user tones and drum sets edited and stored"),
 ]
 
 # MT-32 and CM-64 between GM 2 and the Sound Canvas, in the hardware's own

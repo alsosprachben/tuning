@@ -1758,10 +1758,6 @@ int main(int argc, char **argv)
         nv_song_get_note(song, i, &c, iv, dv);
         int q = nv_song_kidx(song, i);
         const NoteClass *k = (q >= 0 && q < (int)K.size()) ? K[q] : nullptr;
-        if (k && k->init.kind == 6 && cmx_cut.count(c)) {
-            fprintf(stderr, "nvrender: refused: a Moog's knobs under a controller matrix's moving cutoff\n");
-            return 2;
-        }
         if (k && k->organ && cmx_amp.count(c)) {
             fprintf(stderr, "nvrender: refused: an organ's registration under a controller matrix's amplitude\n");
             return 2;

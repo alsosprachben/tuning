@@ -1935,10 +1935,18 @@ int nv_song_snd_any(void *s, long long ch)
 int nv_song_snd_moves(void *s, long long ch)
 {
     std::set<std::string> ts;           // (round(t, 6): the exact value's decimal, as %.6f is)
-    for (const nv::Song::Snd &e : ((nv::Song *)s)->snd)
+    const nv::Song *g = (nv::Song *)s;
+    for (const nv::Song::Snd &e : g->snd)
         if (e.ch == ch && (e.cc == 71 || e.cc == 74)) {
             char b[64];
             snprintf(b, sizeof b, "%.6f", e.t);
+            ts.insert(b);
+        }
+    auto cm = g->cmx.find(std::make_pair(3, ch));   // ...and the controller matrix's cutoff (_CMXEV['cutoff'])
+    if (cm != g->cmx.end())
+        for (const auto &e : cm->second) {
+            char b[64];
+            snprintf(b, sizeof b, "%.6f", e.first);
             ts.insert(b);
         }
     return ts.size() > 1;
@@ -2019,6 +2027,10 @@ void nv_song_moog_add_moving(void *s, long long ch, const double *ft, const Moog
         for (const nv::Song::Snd &e : g->snd)
             if (e.ch == ch || (own && e.ch == -1 && e.cc == -1))
                 ts.insert(e.t);
+        auto cm = g->cmx.find(std::make_pair(3, ch));   // (the matrix's cutoff moves: _kts's)
+        if (cm != g->cmx.end())
+            for (const auto &e : cm->second)
+                ts.insert(e.first);
         row = (int)g->mkn.size();
         g->mkmove[key] = row;
         std::array<double, 9> k0 = kn_at(0.0);

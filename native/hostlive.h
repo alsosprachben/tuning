@@ -51,6 +51,9 @@ void nv_tcache_set_gm2(void *h, int on);
 void nv_tcache_set_var(void *h, int v);
 int nv_drum_axis(int pitch, int pan);
 int nv_tcache_build_var(void *h, int program, int note, int bucket, int nb, int axis);
+int nv_drum_axis_ud(int pitch, int pan, const int *ud, int uset);
+int nv_tcache_build_var_ud(void *h, int program, int note, int bucket, int nb, int axis, int pitch, int pan,
+                           const int *ud);
 void nv_live_vars(int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2,
                   int nslot, const OrganSpec *const *so, const int *soff, const OrganSpec *const *sog,
                   long long kn);
@@ -1035,7 +1038,14 @@ struct nv_host {
     struct DReq {
         void *c;
         int prog, note, axis;
+        int pitch = INT_MIN, pan = INT_MIN;     // (a user set key's: its spec)
+        int ud[4] = {-1, -1, -1, -1};
+        bool has_ud = false;
     };
+    std::map<std::pair<int, int>, std::map<int, int>> huset;    // the user drum sets (live's uset): the host's copy
+    void drum_warm(int ch, int key, int only_set);
+    bool drum_req(int prog, int ch, int key, int tr, void *c, DReq &rq);
+    std::vector<DReq> dreq_swap;        // a drum set swapped in: its own keys (swap's; moved to dreq)
     std::vector<DReq> dreq;
     // THE SOLO (live.toggle_solo): how many parts are soloed; a part toggled
     std::atomic<int> solo_n{0};

@@ -76,6 +76,7 @@ os.environ.setdefault("OMP_WAIT_POLICY", "passive")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 import math
+from patch_map import program_trim as _PT    # (the renderer's, put back after a template: _build)
 import numpy as np
 import mido
 import blockrender as B
@@ -3624,6 +3625,13 @@ class Patch:
             # or drum setup): the template built with them, as the file's note
             # is -- GS's drum NRPNs on the key (blockrender reads them as the
             # file's), pitch 64 + semitones, pan as sent (0 random)
+            # ...and A USER DRUM SET's KEY: its settings (GS 21 dp rr, as the
+            # file sends them -- blockrender's uset), the source key's sound
+            _UDC = {'note': 0x01, 'pan': 0x04, 'src_set': 0x0B, 'src_note': 0x0C}
+            for _k, _v in (fast[3] or ()) if len(fast) > 3 else ():
+                _a = [0x21, ((int(self.program) - B.USER_DRUM_SETS[0]) << 4) | _UDC[_k], note, int(_v)]
+                tr.append(mido.Message("sysex", data=[0x41, 0x10, 0x42, 0x12] + _a
+                                       + [(128 - sum(_a) % 128) % 128], time=0))
             for _par, _msb in (('pitch', 0x18), ('pan', 0x1C)):
                 _v = fast[1] if _par == 'pitch' else fast[2]
                 if _v is None:
@@ -3689,8 +3697,15 @@ class Patch:
                 # live has its own register (_reg_*), driven by what is
                 # actually free when the note is played
                 B.REGISTER = False
+                # ...and AT A GM FILE's TRIM: a user drum set key's template
+                # carries its GS settings (21 dp rr), which made the one-note
+                # file speak GS and its kit GS_DRUM_TRIM_DB up on every other
+                # key's -- live's level is the session's, never the template's
+                # (nvlive's templates read the fixed trims)
+                B.program_trim = lambda _p, drum=False, gs=False: _PT(_p, drum, False)
                 p = B.prepare(m, self.tuner)
         finally:
+            B.program_trim = _PT
             B.MOOG_NEUTRAL = False
             B.SCANNER_OFF = False
             T.FIXED_TOUCH = False
@@ -4694,6 +4709,10 @@ class Live:
         # addresses ("use for rhythm part")
         self.dedit = {}
         self.drum_rmap = {}
+        # THE USER DRUM SETS (GS 21 dp rr: sets 65 and 66, programs 64/65 --
+        # blockrender's uset): (set 0/1, key) -> {param: value}, each key
+        # another set's key with its own settings; kept through a reset
+        self.uset = {}
         # A GS PART'S OWN NOTE-ON SETTINGS (blockrender.parse_gs_part_state):
         # channel -> {'vsd', 'vso': velocity sense depth and offset; 'klo',
         # 'khi': its keyboard range} -- put back by a GS reset or GM System On
@@ -5135,6 +5154,19 @@ class Live:
         if cc == 94:
             return int(round(self.delay_send.get(ch, 0.0) * 127.0))
         return 0
+
+    def chan_vsense(self, ch):
+        """The part's velocity sense depth (40 1p 1A, 64 as is) -- channel 1's
+        for a part on every channel."""
+        return int(self.gs_pstate.get(0 if ch is None else ch, {}).get('vsd', 64))
+
+    def chan_vsense_send(self, ch, v):
+        """The velocity sense depth set as a sequencer's GS message (every
+        channel's where ch is None) -- a GS reset puts it back."""
+        v = max(0, min(127, int(v)))
+        for c in (range(16) if ch is None else (ch,)):
+            a = [0x40, 0x10 | (0 if c == 9 else c + 1 if c < 9 else c), 0x1A, v]
+            self.inject(mido.Message("sysex", data=[0x41, 0x10, 0x42, 0x12] + a + [(128 - sum(a) % 128) % 128]))
 
     def chan_cc_send(self, ch, cc, v):
         """CC `cc` = v on channel ch -- every channel where ch is None (a part
@@ -6714,29 +6746,51 @@ class Live:
 
     def _drum_edit(self, part, ch, note):
         """The file's own settings of this drum key now (blockrender's
-        drum_edit_at at the onset): {} where none, or not a drum part."""
+        drum_edit_at at the onset): {} where none, or not a drum part. A USER
+        DRUM SET's key (user_drum): its own settings, the file's edits over
+        them (pitch adding, the rest replacing) -- an unset key not received."""
         if not part.patch.drums:
             return {}
-        return self.dedit.get(ch, {}).get(note, {})
+        dst = self.dedit.get(ch, {}).get(note, {})
+        if int(part.patch.program) in B.USER_DRUM_SETS:
+            ud = B.user_drum(self.uset, part.patch.program, note)
+            if ud is None:
+                return {'rxon': 0}              # (the set leaves it unset: the file's drops it)
+            own = dict(ud[2])
+            for k, v in dst.items():
+                own[k] = own.get('pitch', 0) + v if k == 'pitch' else v
+            return own
+        return dst
 
-    @staticmethod
-    def _drum_axis(dst):
-        """An edited drum key's template axis: ('dr', pitch, pan), None each unset."""
-        return ('dr', dst.get('pitch'), dst.get('pan'))
+    # a user set key's settings its template is built with (the rest -- its
+    # level, Rx note on -- at the strike): PLAY NOTE, pan, the source set and key
+    _UD_TMPL = ('note', 'pan', 'src_set', 'src_note')
 
-    def _drum_warm(self, ch, key):
-        """Ask the builder for an edited drum key's templates, every bucket,
-        on each drum part listening on ch -- so the strike after the edit finds
-        them (a miss is silence)."""
-        dst = self.dedit.get(ch, {}).get(key, {})
-        if 'pitch' not in dst and 'pan' not in dst:
-            return
-        ax = self._drum_axis(dst)
-        for part in self.parts:
-            if not part.patch.drums or not self._listens(part, ch):
+    def _drum_axis(self, part, ch, note):
+        """A drum key's own template axis -- ('dr', its NRPN pitch, its NRPN
+        pan, its user set key's settings), None each unset -- or None where it
+        has none of them (the set's own template)."""
+        if not part.patch.drums:
+            return None
+        dst = self.dedit.get(ch, {}).get(note, {})
+        ud = None
+        if int(part.patch.program) in B.USER_DRUM_SETS:
+            u = self.uset.get((int(part.patch.program) - B.USER_DRUM_SETS[0], note)) or {}
+            ud = tuple(sorted((k, v) for k, v in u.items() if k in self._UD_TMPL)) or None
+        if ud is None and 'pitch' not in dst and 'pan' not in dst:
+            return None
+        return ('dr', dst.get('pitch'), dst.get('pan'), ud)
+
+    def _drum_warm(self, ch, key, parts=None):
+        """Ask the builder for a drum key's own templates, every bucket, on
+        each drum part listening on ch (or those given) -- so the strike after
+        the edit finds them (a miss is silence)."""
+        for part in (self.parts if parts is None else parts):
+            if not part.patch.drums or (parts is None and not self._listens(part, ch)):
                 continue
+            ax = self._drum_axis(part, ch, key)
             sn = key + part.transpose
-            if not 0 <= sn <= 127:
+            if ax is None or not 0 <= sn <= 127:
                 continue
             for b in range(part.patch.nbuckets):
                 if (sn, b, ax) not in part.patch.templates:
@@ -6758,8 +6812,9 @@ class Live:
         # simply joins the rotor where it is.
         _axis = (self.detune_step.get(part.pid, part.patch.leslie_default)
                  if part.patch.detune_wheel else part.patch.leslie_default)
-        if 'pitch' in _dst or 'pan' in _dst:   # (a drum key's own pitch or pan: its own template)
-            _axis = self._drum_axis(_dst)
+        _dax = self._drum_axis(part, ch, note)  # (a drum key's own pitch, pan or user set: its own template)
+        if _dax is not None:
+            _axis = _dax
         tmpl = part.patch.get(snote, vel, _axis)
         if tmpl is None:
             # Never build here: that is 1.4-10 ms on the audio thread. Silence,
@@ -7071,7 +7126,7 @@ class Live:
                 self._mf104(part, ch, note, tmpl, key, _ls, scale, n0, b, _cp, _ly)
         if _efx is not None and not self.EFX_TAPS:
             self._efx_copies(_efx, part, ch, note, tmpl, key, slots, scale, n0, b)
-        self._taps_note(_efx, _ec, ch, slots)
+        self._taps_note(_efx, _ec, ch, slots, _dst.get('delay', 127))
         if _efx is not None:
             if _efx.get('par'):
                 self._efx_branch(_efx, part, ch, note, tmpl, key, slots, scale, n0, b, _cp)
@@ -8195,11 +8250,13 @@ class Live:
             return 0.0
         return max(0.0, self.delay_send.get(ch, 0.0))
 
-    def _dly_taps(self, ch):
+    def _dly_taps(self, ch, key_send=127):
         """THE GS DELAY's repeats on channel ch, as taps: gsdelay.repeats'
         law -- the send times its level, each output's tap, its feedback's
-        repeats while over REPEAT_FLOOR (as the insertion delay's taps)."""
-        sd = self._dly_send(ch)
+        repeats while over REPEAT_FLOOR (as the insertion delay's taps). A
+        drum key's own delay send (key_send, its dedit 'delay') scales the
+        channel's, as the file's _gsd_send x delay/127."""
+        sd = self._dly_send(ch) * (key_send / 127.0 if key_send != 127 else 1.0)
         if sd <= 0.0:
             return []
         dev = self._dly_dev()
@@ -8243,21 +8300,25 @@ class Live:
                             side, (min(0.5, k * dev['vd'] * dfac), dev['rate'], phase)))
         return out
 
-    def _taps_note(self, efx, ec, ch, slots):
+    def _taps_note(self, efx, ec, ch, slots, key_dly=127):
         """A note's copies as taps: its effect channel's set (the insertion
         effect's, the GS chorus's on it) -- the chorus's share out of the dry
-        first, as the effect's own is (_efx_direct)."""
+        first, as the effect's own is (_efx_direct). A drum key with its own
+        delay send (key_dly) takes its level's set."""
         cd = self._cho_dry(ch)
         if (efx is None or not self.EFX_TAPS) and cd == 1.0 and self._dly_send(ch) <= 0.0:
             return
         self._tap_tables()
         if cd != 1.0:
             self.slab.channel_gain(slots, cd)
-        self._tap_arm(ec if efx is not None else ch, slots)
+        self._tap_arm(ec if efx is not None else ch, slots, key_dly)
 
-    def _tap_arm(self, ch, slots):
-        """Put these slots on channel ch's tap set, if it has taps."""
+    def _tap_arm(self, ch, slots, key_dly=127):
+        """Put these slots on channel ch's tap set (a drum key's own delay
+        send's, where it has one), if it has taps."""
         st, sid = self.slab.tap_tab, getattr(self, "_tap_sid", {}).get(ch)
+        if key_dly != 127:
+            sid = getattr(self, "_tap_kdl", {}).get((ch, key_dly), sid)
         if st is not None and sid is not None and st["ts"][sid + 1] > st["ts"][sid]:
             _ix = np.fromiter(slots, np.int64, len(slots))
             self.slab.tp[_ix] = sid
@@ -8313,10 +8374,16 @@ class Live:
         when the effect, its parts or a part's pan has moved."""
         _cc = self._cho_chans()
         _pc = sorted({_GSX.part_of(c) for c in set(self.efx_parts) | set(self.tone_fx) | _cc})
+        # A DRUM KEY's OWN DELAY SEND (GS drum NRPN 1F, drum setup's): each
+        # level a drum channel's keys ask, a tap set of its own after the
+        # channels' -- the channel's set with its delay taps scaled
+        _kdl = [(c, dv) for c in sorted(_cc) if c < _GSX.VIRT and self._dly_send(c) > 0.0
+                for dv in sorted({e['delay'] for e in self.dedit.get(c, {}).values()
+                                  if 'delay' in e and e['delay'] != 127})]
         key = (self.efx_rev, tuple(sorted(self.efx_parts)),
                tuple(self.cpan.get(c, T.GM_DEFAULT_PAN) for c in _pc),
                self.gs_on, tuple(sorted(self.gs_cho.items())), tuple(sorted(self.gs_dly.items())),
-               tuple((c, self.chorus.get(c), self.delay_send.get(c)) for c in sorted(_cc)))
+               tuple((c, self.chorus.get(c), self.delay_send.get(c)) for c in sorted(_cc)), tuple(_kdl))
         if getattr(self, "_tap_key", None) == key:
             return
         self._tap_key = key
@@ -8326,8 +8393,10 @@ class Live:
         tab = pan_table()
         _ech = self._efx_chans()
         chans = sorted(_ech | _cc)
-        NS = max(1, len(chans))
+        specs = [(c, 127) for c in chans] + [(c, dv) for c, dv in _kdl if c in chans]
+        NS = max(1, len(specs))
         self._tap_sid = {c: i for i, c in enumerate(chans)}     # a channel's tap set
+        self._tap_kdl = {(c, dv): len(chans) + j for j, (c, dv) in enumerate(specs[len(chans):])}
         ts = np.zeros(NS + 1, np.int32)
         cols = {k: [] for k in ("D", "g", "fc", "r", "hz", "al1", "ar1", "dl", "vd", "vr", "ph")}
         eq, eqo, nmid = [], np.full(NS, -1, np.int32), np.zeros(NS, np.int32)
@@ -8335,10 +8404,10 @@ class Live:
         n = 0
         for i in range(NS):
             ts[i] = n
-            c = chans[i] if i < len(chans) else None
+            c, kdv = specs[i] if i < len(specs) else (None, 127)
             ex = self._efx_for(c) if c is not None and c in _ech else None
             # (the GS chorus on the part's set: not on a parallel type's branch B)
-            cho = (self._cho_taps(_GSX.part_of(c)) + self._dly_taps(_GSX.part_of(c))
+            cho = (self._cho_taps(_GSX.part_of(c)) + self._dly_taps(_GSX.part_of(c), kdv)
                    if c is not None and c < _GSX.VIRT else [])
             if ex is None and not cho:
                 continue
@@ -10684,6 +10753,17 @@ class Live:
             if self.patch_reqs:
                 self.patch_go.set()
             return
+        _udm = _BRs.parse_gs_user_drum(d)
+        if _udm is not None:
+            # A USER DRUM SET's KEY (blockrender's uset): its setting, and its
+            # template asked of each drum part playing that set
+            _us, _uk, _up, _uv = _udm
+            self.uset.setdefault((_us, _uk), {})[_up] = _uv
+            _up_parts = [p for p in self.parts if p.patch.drums
+                         and int(p.patch.program) == _BRs.USER_DRUM_SETS[0] + _us]
+            if _up_parts:
+                self._drum_warm(GM_PERCUSSION_CHANNEL, _uk, _up_parts)
+            return
         _gps = _BRs.parse_gs_part_state(d)
         if _gps is not None and _gps[1] in ('vsd', 'vso', 'klo', 'khi'):
             if _gps[0] < 16 and not _g:
@@ -11101,6 +11181,19 @@ class Live:
             d.pop(part.pid, None)
         self.amp_dirty.discard(part.pid)
         self._amp_touch(part)
+        if patch.drums and patch is not old:
+            # A DRUM SET's OWN KEYS, asked as it comes in: the keys its
+            # channels' drum NRPNs set the pitch or pan of, and a user set's
+            # keys -- whose settings may have come before the program (a miss
+            # is silence, and only the strike would ask)
+            us = int(patch.program) - B.USER_DRUM_SETS[0]
+            for ch in range(16):
+                if not self._listens(part, ch):
+                    continue
+                keys = {k for k, e in self.dedit.get(ch, {}).items() if 'pitch' in e or 'pan' in e}
+                keys |= {k for (s, k) in self.uset if s == us}
+                for k in sorted(keys):
+                    self._drum_warm(ch, k, [part])
 
     def wait_patch(self, timeout=30.0):
         """Block until the builder is idle -- for tests and for the TUI."""

@@ -391,11 +391,14 @@ static const int NTUNERS = sizeof(TUNERS) / sizeof(TUNERS[0]);
 // (each column's own number, PCOLS'; PORDER the order they stand in: the
 // part's pan and sends after its level, as livetui's)
 static const char *PCOLS[] = {"patch", "ch", "lo", "hi", "tr", "level", "tuner", "touch", "stops", "efx",
-                              "pan", "rev", "cho", "dly"};
-static const int PCOL_W[] = {33, 4, 5, 5, 4, 8, 11, 6, 11, 5, 5, 4, 4, 4};
-static const int NPCOLS = 14;
-static const int PORDER[NPCOLS] = {0, 1, 2, 3, 4, 5, 10, 11, 12, 13, 6, 7, 8, 9};
-static const int PART_CC[4] = {10, 91, 93, 94};     // (pan, rev, cho, dly: live.PART_CCS)
+                              "pan", "rev", "cho", "dly", "vsens"};
+static const int PCOL_W[] = {33, 4, 5, 5, 4, 8, 11, 6, 11, 5, 5, 4, 4, 4, 6};
+static const int NPCOLS = 15;
+static const int PORDER[NPCOLS] = {0, 1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 6, 7, 8, 9};
+// (pan, rev, cho, dly: live.PART_CCS; then the velocity sense depth, GS's
+// 40 1p 1A -- no CC carries it: VSENSE_CC, the host's own number for it)
+static const int VSENSE_CC = 1000;
+static const int PART_CC[5] = {10, 91, 93, 94, VSENSE_CC};
 static const double LEVEL_DB_MIN = -60.0, LEVEL_DB_MAX = 24.0;   // (livetui's)
 
 // ---- THE SYNTH PANE (livetui's SYNTH_KNOBS, synth_fmt) ----
@@ -2686,7 +2689,7 @@ struct Panel {
                 }
             return !on ? "-" : on == n ? "on" : "some";
         }
-        case 10: case 11: case 12: case 13: {   // (the part's channel's CC10, CC91, CC93, CC94)
+        case 10: case 11: case 12: case 13: case 14: {  // (the part's channel's CC10, CC91, CC93, CC94; vsense)
             if (!H.chan_cc)
                 return "-";
             const int v = H.chan_cc(r.channel, PART_CC[c - 10]);

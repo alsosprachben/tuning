@@ -719,8 +719,15 @@ int nv_host::run(int argc, char **argv)
         H.chan_cc_send = [&](int ch, int cc, int v) {
             v = std::max(0, std::min(127, v));
             std::lock_guard<std::mutex> lk(mu);
-            for (int c = ch < 0 ? 0 : ch; c < (ch < 0 ? 16 : ch + 1); c++)
-                q.push_back(Midi{2, c, cc, v, {}});
+            for (int c = ch < 0 ? 0 : ch; c < (ch < 0 ? 16 : ch + 1); c++) {
+                if (cc == panel::VSENSE_CC) {   // (velocity sense depth: GS's 40 1x 1A, as a sequencer sends it)
+                    const int blk = c == 9 ? 0 : c < 9 ? c + 1 : c;
+                    std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, (uint8_t)(0x10 | blk), 0x1A, (uint8_t)v};
+                    x.push_back((uint8_t)((128 - (0x40 + x[5] + 0x1A + v) % 128) % 128));
+                    q.push_back(Midi{6, 0, 0, 0, x});
+                } else
+                    q.push_back(Midi{2, c, cc, v, {}});
+            }
         };
         H.sysfx_send = [&](int hi, int lo, int v) {
             std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, (uint8_t)hi, (uint8_t)lo,

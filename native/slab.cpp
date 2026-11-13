@@ -2600,15 +2600,78 @@ struct Part {
         }
         return -1;
     }
-    const std::map<int, int> *drum_edit(int pi, int ch, int note) const
+    // THE USER DRUM SETS (live's uset: GS 21 dp rr, programs 64 and 65):
+    // (set 0/1, key) -> the parameter's code (_GS_USER_DRUM's) -> value
+    std::map<std::pair<int, int>, std::map<int, int>> uset;
+    const std::map<int, int> *dedit_of(int ch, int note) const
     {
-        if (pi < 0 || !patches[pi].drums)
-            return nullptr;
         auto c = dedit.find(ch);
         if (c == dedit.end())
             return nullptr;
         auto k = c->second.find(note);
         return k == c->second.end() ? nullptr : &k->second;
+    }
+    // live._drum_edit: a drum key's own settings now -- a USER SET's key its
+    // own (blockrender.user_drum: level, pan, Rx note on, PLAY NOTE's pitch)
+    // with the file's edits over them (pitch adding, the rest replacing), an
+    // unset key not received; tmp holds a merged one
+    const std::map<int, int> *drum_edit(int pi, int ch, int note, std::map<int, int> &tmp) const
+    {
+        if (pi < 0 || !patches[pi].drums)
+            return nullptr;
+        const std::map<int, int> *de = dedit_of(ch, note);
+        const int prog = patches[pi].program;
+        if (prog != 64 && prog != 65)
+            return de;
+        tmp.clear();
+        auto u = uset.find(std::make_pair(prog - 64, note));
+        if (u == uset.end() || !u->second.count(0x0C)) {
+            tmp[DE_RXON] = 0;
+            return &tmp;
+        }
+        const std::map<int, int> &ud = u->second;
+        if (ud.count(0x02))
+            tmp[DE_LEVEL] = ud.at(0x02);
+        if (ud.count(0x04))
+            tmp[DE_PAN] = ud.at(0x04);
+        if (ud.count(0x08))
+            tmp[DE_RXON] = ud.at(0x08);
+        if (ud.count(0x01))
+            tmp[DE_PITCH] = ud.at(0x01) - ud.at(0x0C);
+        if (de)
+            for (const auto &kv : *de)
+                tmp[kv.first] = kv.first == DE_PITCH ? (tmp.count(DE_PITCH) ? tmp[DE_PITCH] : 0) + kv.second
+                                                     : kv.second;
+        return &tmp;
+    }
+    // live._drum_axis: a drum key's own template -- its NRPN pitch and pan
+    // and its user set key's PLAY NOTE, pan, source set and key -- or speed
+    int drum_axis_of(int pi, int ch, int note, int speed) const
+    {
+        if (pi < 0 || !patches[pi].drums)
+            return speed;
+        const std::map<int, int> *de = dedit_of(ch, note);
+        const int pitch = de && de->count(DE_PITCH) ? de->at(DE_PITCH) : INT_MIN;
+        const int pan = de && de->count(DE_PAN) ? de->at(DE_PAN) : INT_MIN;
+        const int prog = patches[pi].program;
+        if (prog == 64 || prog == 65) {
+            auto u = uset.find(std::make_pair(prog - 64, note));
+            if (u != uset.end()) {
+                static const int CODE[4] = {0x01, 0x04, 0x0B, 0x0C};
+                int ud[4];
+                bool any = false;
+                for (int i = 0; i < 4; i++) {
+                    auto f = u->second.find(CODE[i]);
+                    ud[i] = f != u->second.end() ? f->second : -1;
+                    any = any || ud[i] >= 0;
+                }
+                if (any)
+                    return nv_drum_axis_ud(pitch, pan, ud, prog - 64);
+            }
+        }
+        if (pitch != INT_MIN || pan != INT_MIN)
+            return nv_drum_axis(pitch, pan);
+        return speed;
     }
     // THE SOUND CONTROLLERS (live's snd): each channel's CC71-78 as its
     // offset d (sound_offset; 0 none), cc - 71 -- read where a part answers
@@ -2747,6 +2810,7 @@ struct Part {
     };
     std::unique_ptr<TapTab> tap_tab;
     std::map<int, int> tap_sid;             // an effect channel's tap set
+    std::map<std::pair<int, int>, int> tap_kdl;     // (a drum channel, a key's own delay send): its set
     // THE GS CHORUS (live._cho_*): CC93 (chorus_send, 0..1) through the GS
     // chorus device once the session speaks GS (gs_on), its parameters gs_cho
     // (40 01 38-40, a macro resetting the rest)
@@ -5023,10 +5087,12 @@ struct Part {
     }
     // live._dly_taps: the GS delay's repeats on channel ch (gsdelay.repeats'
     // law, partial-independent as the insertion delay's taps)
-    std::vector<Tap> dly_taps(int ch) const
+    // (key_send: a drum key's own delay send, its dedit's -- the file's
+    // _gsd_send x delay/127)
+    std::vector<Tap> dly_taps(int ch, int key_send = 127) const
     {
         std::vector<Tap> out;
-        const double sd = dly_send(ch);
+        const double sd = dly_send(ch) * (key_send != 127 ? key_send / 127.0 : 1.0);
         if (!(sd > 0.0))
             return out;
         const DlyDev d = dly_dev();
@@ -5093,7 +5159,7 @@ struct Part {
 
     // live._taps_note: a note's copies as taps -- its effect channel's set
     // (the effect's, the GS chorus's on it), the chorus's share out of the dry
-    void taps_note(bool has_efx, int ec, int ch, const std::vector<long> &slots)
+    void taps_note(bool has_efx, int ec, int ch, const std::vector<long> &slots, int key_dly = 127)
     {
         const double cd = cho_dry(ch);
         if (!has_efx && cd == 1.0 && !(dly_send(ch) > 0.0))
@@ -5101,7 +5167,7 @@ struct Part {
         tap_tables();
         if (cd != 1.0)
             S.channel_gain(slots, cd);
-        tap_arm(has_efx ? ec : ch, slots);
+        tap_arm(has_efx ? ec : ch, slots, key_dly);
     }
 
     // live._efx_chans, sorted: the module's parts on it and the tones' own
@@ -5175,15 +5241,46 @@ struct Part {
                 key.push_back(bits);
             }
         }
+        // A DRUM KEY's OWN DELAY SEND (live's _kdl): each level a drum
+        // channel's keys ask, a set of its own after the channels'
+        std::vector<std::pair<int, int>> kdl;
+        for (int c : cch) {
+            if (c >= VIRT || !(dly_send(c) > 0.0))
+                continue;
+            std::set<int> dvs;
+            auto de = dedit.find(c);
+            if (de != dedit.end())
+                for (const auto &kv : de->second) {
+                    auto d = kv.second.find(DE_DELAY);
+                    if (d != kv.second.end() && d->second != 127)
+                        dvs.insert(d->second);
+                }
+            for (int dv : dvs)
+                kdl.push_back(std::make_pair(c, dv));
+        }
+        key.push_back(-7);
+        for (auto &x : kdl) {
+            key.push_back(x.first);
+            key.push_back(x.second);
+        }
         if (tap_keyed && key == tap_key)
             return;
         tap_keyed = true;
         tap_key = key;
         auto clamp = [](int v) { return v < 0 ? 0 : v > 127 ? 127 : v; };
-        const int NS = std::max(1, (int)chans.size());
+        std::vector<std::pair<int, int>> specs;
+        for (int c : chans)
+            specs.push_back(std::make_pair(c, 127));
+        for (auto &x : kdl)
+            if (std::binary_search(chans.begin(), chans.end(), x.first))
+                specs.push_back(x);
+        const int NS = std::max(1, (int)specs.size());
         tap_sid.clear();
         for (size_t i = 0; i < chans.size(); i++)
             tap_sid[chans[i]] = (int)i;
+        tap_kdl.clear();
+        for (size_t i = chans.size(); i < specs.size(); i++)
+            tap_kdl[specs[i]] = (int)i;
         std::unique_ptr<TapTab> t(new TapTab);
         t->ts.assign(NS + 1, 0);
         t->eqo.assign(NS, -1);
@@ -5195,14 +5292,16 @@ struct Part {
         int n = 0;
         for (int i = 0; i < NS; i++) {
             t->ts[i] = n;
-            const bool in_e = i < (int)chans.size() && std::binary_search(ech.begin(), ech.end(), chans[i]);
-            const double *fc = in_e ? efx_for(chans[i]) : nullptr;
-            const int pc = i < (int)chans.size() ? chans[i] % TONE_SEG : 0;
+            const bool has_c = i < (int)specs.size();
+            const int ci = has_c ? specs[i].first : 0, kdv = has_c ? specs[i].second : 127;
+            const bool in_e = has_c && std::binary_search(ech.begin(), ech.end(), ci);
+            const double *fc = in_e ? efx_for(ci) : nullptr;
+            const int pc = has_c ? ci % TONE_SEG : 0;
             // (the GS chorus on the part's set: not on a parallel type's branch B)
             std::vector<Tap> cho;
-            if (i < (int)chans.size() && chans[i] < VIRT) {
+            if (has_c && ci < VIRT) {
                 cho = cho_taps(pc);
-                std::vector<Tap> dl = dly_taps(pc);
+                std::vector<Tap> dl = dly_taps(pc, kdv);
                 cho.insert(cho.end(), dl.begin(), dl.end());
             }
             if (!fc && cho.empty())
@@ -5260,14 +5359,22 @@ struct Part {
     }
 
     // live._tap_arm: these slots on channel ec's tap set, if it has taps
-    void tap_arm(int ec, const std::vector<long> &slots)
+    void tap_arm(int ec, const std::vector<long> &slots, int key_dly = 127)
     {
         auto it = tap_sid.find(ec);
-        if (!tap_tab || it == tap_sid.end() || tap_tab->ts[it->second + 1] <= tap_tab->ts[it->second])
+        if (it == tap_sid.end())
+            return;
+        int sid = it->second;
+        if (key_dly != 127) {                   // (a drum key's own delay send: its level's set)
+            auto kv = tap_kdl.find(std::make_pair(ec, key_dly));
+            if (kv != tap_kdl.end())
+                sid = kv->second;
+        }
+        if (!tap_tab || tap_tab->ts[sid + 1] <= tap_tab->ts[sid])
             return;
         for (long s : slots) {
-            S.tp[s] = it->second;
-            S.tpx[s] = tap_tab->dmax[it->second];
+            S.tp[s] = sid;
+            S.tpx[s] = tap_tab->dmax[sid];
         }
     }
 
@@ -5805,7 +5912,8 @@ struct Part {
 
     void strike_now(int ch, int note, int vel, long long n0, bool slur = false)
     {
-        const std::map<int, int> *dst = 0 <= note && note <= 127 ? drum_edit(patch_for(ch, note), ch, note) : nullptr;
+        std::map<int, int> dsv;
+        const std::map<int, int> *dst = 0 <= note && note <= 127 ? drum_edit(patch_for(ch, note), ch, note, dsv) : nullptr;
         if (dst) {
             auto rx = dst->find(DE_RXON);
             if (rx != dst->end() && rx->second == 0)
@@ -5824,10 +5932,8 @@ struct Part {
         if (sn < 0 || sn > 127)
             return;
         n0 += amp_ahead();                  // a part with a valve plays its notes late (LIVE_AMP_LOOKAHEAD)
-        int axis = speed;                   // (an edited drum key's own pitch or pan: its own template)
-        if (dst && (dst->count(DE_PITCH) || dst->count(DE_PAN)))
-            axis = nv_drum_axis(dst->count(DE_PITCH) ? dst->at(DE_PITCH) : INT_MIN,
-                                dst->count(DE_PAN) ? dst->at(DE_PAN) : INT_MIN);
+        // (a drum key's own pitch, pan or user set key: its own template)
+        const int axis = drum_axis_of(pi, ch, note, speed);
         const nv::live::Template *T = nv_tcache_lookup(cache, sn, bucket(vel), axis);
         if (!T)
             return;                         // a miss: live warms it off the audio thread
@@ -6150,7 +6256,8 @@ struct Part {
             for (int ly = 0; ly < 2; ly++)          // each Messenger its own pedal
                 if (!lslots[ly].empty())
                     mf104(patches[cur], ch, note, *T, key, lslots[ly], scale, n0, bend[ch], ly);
-        taps_note(efx_fc != nullptr, efx_ec, ch, slots);    // ITS COPIES: the channel's tap set (live._taps_note)
+        taps_note(efx_fc != nullptr, efx_ec, ch, slots,    // ITS COPIES: the channel's tap set (live._taps_note)
+                  dst && dst->count(DE_DELAY) ? dst->at(DE_DELAY) : 127);     // (a drum key's own delay send)
         if (efx_fc && efx_fc[208] != 0.0)       // ...and a parallel type's branch B (live._efx_branch)
             efx_branch(efx_fc, efx_ec, ch, note, *T, key, slots, scale, n0, b_left, cpan[ch]);
     }
@@ -6987,6 +7094,12 @@ struct Part {
             && (d[6] == 0x1A || d[6] == 0x1B || d[6] == 0x1D || d[6] == 0x1E)) {
             const int blk = d[5] & 0x0F, c = blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk);
             (d[6] == 0x1A ? vsd : d[6] == 0x1B ? vso : d[6] == 0x1D ? klo : khi)[c] = d[7];
+            return;
+        }
+        // ...A USER DRUM SET's KEY (21 dp rr: blockrender.parse_gs_user_drum)
+        if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && d[4] == 0x21 && (d[5] >> 4) <= 1
+            && (d[5] & 0x0F) >= 1 && (d[5] & 0x0F) <= 0x0C) {
+            uset[std::make_pair(d[5] >> 4, (int)d[6])][d[5] & 0x0F] = d[7];
             return;
         }
         // ...AND USE FOR RHYTHM PART (40 1p 15, port A): the map a part plays
@@ -13390,6 +13503,8 @@ int nv_part_chan_cc(void *h, int ch, int cc)
         return 0;
     if (cc == 10)
         return P->cpan[ch];
+    if (cc == 1000)                             // (the velocity sense depth: panel::VSENSE_CC)
+        return P->vsd[ch];
     if (cc == 91)
         return (int)nearbyint(P->S.send[ch] * 40.0);
     const std::map<int, double> &m = cc == 93 ? P->chorus_send : P->delay_send;

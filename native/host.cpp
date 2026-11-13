@@ -1300,6 +1300,30 @@ int nv_host::open(int argc, char **argv)
         pa.posted = dr ? prog : prog & 127;
         pa.posted_var = var;
         pa.drums = dr;
+        if (dr) {
+            // A DRUM SET's OWN KEYS, asked as it comes in (live's _swap_patch):
+            // its channels' NRPN pitch/pan keys and a user set's keys, whose
+            // settings may have come before the program (moved to dreq where
+            // the builder's lock is held)
+            for (int ch = 0; ch < 16; ch++) {
+                if (pa.channel >= 0 && pa.channel != ch)
+                    continue;
+                std::set<int> keys;
+                auto d = hdedit.find(ch);
+                if (d != hdedit.end())
+                    for (auto &kv : d->second)
+                        keys.insert(kv.first);
+                if (prog == 64 || prog == 65)
+                    for (auto &kv : huset)
+                        if (kv.first.first == prog - 64)
+                            keys.insert(kv.first.second);
+                for (int k : keys) {
+                    DReq rq{nullptr, prog, 0, -1};
+                    if (drum_req(prog, ch, k, pa.tr, c, rq))
+                        dreq_swap.push_back(rq);
+                }
+            }
+        }
         pa.sid = sid;
         if (pa.pi == 0) {
             shown_var = dr ? 0 : var;
@@ -1876,6 +1900,23 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                 chdr[rc] = x[7] != 0;
                 if (x[7])
                     hrmap[rc] = x[7] - 1;
+                // ...AND A PART ON THAT CHANNEL FOLLOWS (live._sysex's): a kit,
+                // or melodic again, its program kept -- an omni part is the
+                // player's own, as at GM 2's bank 120
+                for (size_t i = 0; i < pats.size() && asks; i++) {
+                    const PartAt &pa = pats[i];
+                    if (pa.gone || pa.channel != rc)
+                        continue;
+                    const bool dr = x[7] != 0;
+                    const int pv = dr ? 0 : pa.var;
+                    if (!pa.is(pa.program, dr, pv))
+                        ask(i, pa.program, dr, pv);
+                }
+            }
+            if (xn >= 8 && x[0] == 0x41 && x[2] == 0x42 && x[3] == 0x12 && x[4] == 0x21 && (x[5] >> 4) <= 1
+                && (x[5] & 0x0F) >= 1 && (x[5] & 0x0F) <= 0x0C) {   // (a user drum set's key: its template asked)
+                huset[std::make_pair(x[5] >> 4, (int)x[6])][x[5] & 0x0F] = x[7];
+                drum_warm(9, x[6], x[5] >> 4);
             }
             if (xn >= 8 && x[0] == 0x41 && x[2] == 0x42 && x[3] == 0x12 && x[4] == 0x41 && (x[5] >> 4) <= 1
                 && ((x[5] & 0x0F) == 1 || (x[5] & 0x0F) == 4))   // (drum setup: a key's PLAY NOTE or pan)
@@ -1953,6 +1994,8 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                 std::lock_guard<std::mutex> lk(bmu);
                 dq.swap(dreq);
             }
+            dq.insert(dq.end(), dreq_swap.begin(), dreq_swap.end());
+            dreq_swap.clear();
             drum_build(dq);
         }
         std::vector<PartSpec> adds;     // ...and the parts added (the session's), built and added in step
@@ -1990,6 +2033,11 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                     answered(d.first.i, d.first.prog, d.first.dr, d.first.var);
                 }
                 bdone.clear();
+                if (!dreq_swap.empty()) {               // (a drum set's own keys: to the builder)
+                    dreq.insert(dreq.end(), dreq_swap.begin(), dreq_swap.end());
+                    dreq_swap.clear();
+                    bcv.notify_one();
+                }
                 for (auto &d : add_done)                // (the parts built: added)
                     part_added(d.first, d.second);
                 add_done.clear();
@@ -2303,15 +2351,62 @@ void nv_host::drum_set(int ch, int key, int which, int v)
         return;
     auto &e = hdedit[ch].emplace(key, std::array<int, 2>{INT_MIN, INT_MIN}).first->second;
     e[which] = v;
-    const int axis = nv_drum_axis(e[0], e[1]);
+    drum_warm(ch, key, -1);
+}
+
+// live._drum_warm: a drum key's own template asked of each drum part
+// listening on ch (only_set >= 0: each part playing that user set) -- its
+// NRPN pitch and pan, a user set key's settings with them
+// drum_req: one key's request on drum set prog (c its cache) -- false when
+// the key has nothing of its own there
+bool nv_host::drum_req(int prog, int ch, int key, int tr, void *c, DReq &rq)
+{
+    int pitch = INT_MIN, pan = INT_MIN;
+    {
+        auto d = hdedit.find(ch);
+        if (d != hdedit.end()) {
+            auto k = d->second.find(key);
+            if (k != d->second.end()) {
+                pitch = k->second[0];
+                pan = k->second[1];
+            }
+        }
+    }
+    const int sn = key + tr;
+    if (sn < 0 || sn > 127 || !c)
+        return false;
+    rq = DReq{c, prog, sn, -1};
+    rq.pitch = pitch;
+    rq.pan = pan;
+    if (prog == 64 || prog == 65) {
+        auto u = huset.find(std::make_pair(prog - 64, key));
+        if (u != huset.end()) {
+            static const int CODE[4] = {0x01, 0x04, 0x0B, 0x0C};
+            for (int i = 0; i < 4; i++) {
+                auto f = u->second.find(CODE[i]);
+                rq.ud[i] = f != u->second.end() ? f->second : -1;
+                rq.has_ud = rq.has_ud || rq.ud[i] >= 0;
+            }
+        }
+    }
+    if (rq.has_ud)
+        rq.axis = nv_drum_axis_ud(pitch, pan, rq.ud, prog - 64);
+    else if (pitch != INT_MIN || pan != INT_MIN)
+        rq.axis = nv_drum_axis(pitch, pan);
+    else
+        return false;
+    return true;
+}
+
+void nv_host::drum_warm(int ch, int key, int only_set)
+{
     std::lock_guard<std::mutex> lk(bmu);
     for (const PartAt &pa : pats) {
-        if (pa.gone || !pa.drums || (pa.channel >= 0 && pa.channel != ch))
-            continue;
-        const int sn = key + pa.tr;
-        if (sn < 0 || sn > 127)
+        if (pa.gone || !pa.drums)
             continue;
         const int prog = pa.posted;
+        if (only_set >= 0 ? prog != 64 + only_set : (pa.channel >= 0 && pa.channel != ch))
+            continue;
         const int ck = prog >= 128 ? 256 * (4096 + prog) + 128 : 128 + (prog & 127);
         void *c = nullptr;
         {
@@ -2320,8 +2415,9 @@ void nv_host::drum_set(int ch, int key, int which, int v)
             if (it != caches.end())
                 c = it->second;
         }
-        if (c)
-            dreq.push_back(DReq{c, prog, sn, axis});
+        DReq rq{nullptr, prog, 0, -1};
+        if (drum_req(prog, only_set >= 0 ? 9 : ch, key, pa.tr, c, rq))
+            dreq.push_back(rq);
     }
     bcv.notify_one();
 }
@@ -2329,8 +2425,12 @@ void nv_host::drum_set(int ch, int key, int which, int v)
 // ...built (one bucket: a drum set's), on the builder or in step
 void nv_host::drum_build(std::vector<DReq> &q)
 {
-    for (const DReq &r : q)
-        nv_tcache_build_var(r.c, r.prog, r.note, 0, 1, r.axis);
+    for (const DReq &r : q) {
+        if (r.has_ud)
+            nv_tcache_build_var_ud(r.c, r.prog, r.note, 0, 1, r.axis, r.pitch, r.pan, r.ud);
+        else
+            nv_tcache_build_var(r.c, r.prog, r.note, 0, 1, r.axis);
+    }
     q.clear();
 }
 

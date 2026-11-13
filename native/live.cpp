@@ -46,6 +46,8 @@ void nv_song_free(void *s);
 void nv_song_tuning(void *s, long long ch, double t, const double *freq);
 void nv_song_finish(void *s, double total);
 int nv_song_n_notes(void *s);
+int nv_midi_user_drum(void *p, int set, int key, int *iv);
+void nv_song_user_drum(void *s, int i, int uq, int umask, const int *uv);
 int nv_song_kidx(void *s, int i);
 void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv);
 void nv_song_table(void *s, long long ch, double t, double *out);
@@ -98,6 +100,30 @@ static inline int drum_axis(int pitch, int pan)     // (INT_MIN: unset)
            + (pan == INT_MIN ? 128 : std::max(0, std::min(127, pan)));
 }
 
+// ...AND A USER DRUM SET's KEY (live's ('dr', pitch, pan, its settings)): its
+// PLAY NOTE, pan, source set and key (-1 unset) with the drum NRPN's pitch and
+// pan, hashed into DV2_BASE's range -- the spec itself handed to the build
+// (g_ud: the builder's, one build at a time)
+static const int DV2_BASE = 1 << 28;
+static inline int drum_axis_ud(int pitch, int pan, const int *ud, int uset)
+{
+    unsigned h = 2166136261u;
+    auto mix = [&](int v) {
+        for (int b = 0; b < 4; b++) {
+            h ^= (unsigned)((v >> (8 * b)) & 0xFF);
+            h *= 16777619u;
+        }
+    };
+    mix(pitch);
+    mix(pan);
+    for (int i = 0; i < 4; i++)
+        mix(ud[i]);
+    mix(uset);
+    return DV2_BASE + (int)(h & 0xFFFFFF);
+}
+static thread_local int g_ud_pitch = INT_MIN, g_ud_pan = INT_MIN, g_ud_set = 0;
+static thread_local int g_ud[4] = {-1, -1, -1, -1};     // (note, pan, src_set, src_note)
+
 static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int fast, uint32_t end = 480,
                                      const OrganSpec *og = nullptr, int bank = 0, int fast_cc = NV_CC_LESLIE,
                                      bool cork = false)
@@ -105,7 +131,13 @@ static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int
     // (an edited drum key's: GS's drum NRPNs on the key before it, the file's
     // own -- live._raw_template's)
     int dpitch = -1, dpan = -1;
-    if (fast >= DV_BASE) {
+    bool uds = false;
+    if (fast >= DV2_BASE) {                 // (a user set key's: the spec the build was handed)
+        dpitch = g_ud_pitch == INT_MIN ? 128 : std::max(0, std::min(127, g_ud_pitch + 64));
+        dpan = g_ud_pan == INT_MIN ? 128 : std::max(0, std::min(127, g_ud_pan));
+        uds = true;
+        fast = -1;
+    } else if (fast >= DV_BASE) {
         dpitch = (fast - DV_BASE) / 256;
         dpan = (fast - DV_BASE) % 256;
         fast = -1;
@@ -144,6 +176,16 @@ static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int
         ev(0, {(uint8_t)(0xB0 | ch), NV_CC_DRONES, 0});             // the drones corked (live._raw_template)
     if (fast >= 0)          // the template axis's step: the honky-tonk's detune (CC13), else the rotor's (CC80)
         ev(0, {(uint8_t)(0xB0 | ch), (uint8_t)fast_cc, (uint8_t)fast});
+    if (uds) {                              // GS's user drum DT1s on the key (blockrender's uset)
+        static const int CODE[4] = {0x01, 0x04, 0x0B, 0x0C};
+        for (int i = 0; i < 4; i++) {
+            if (g_ud[i] < 0)
+                continue;
+            const uint8_t a[4] = {0x21, (uint8_t)((g_ud_set << 4) | CODE[i]), (uint8_t)note, (uint8_t)g_ud[i]};
+            const uint8_t cs = (uint8_t)((128 - (a[0] + a[1] + a[2] + a[3]) % 128) % 128);
+            ev(0, {0xF0, 10, 0x41, 0x10, 0x42, 0x12, a[0], a[1], a[2], a[3], cs, 0xF7});
+        }
+    }
     if (dpitch >= 0 && dpitch < 128) {
         ev(0, {(uint8_t)(0xB0 | ch), 99, 0x18});
         ev(0, {(uint8_t)(0xB0 | ch), 98, (uint8_t)note});
@@ -615,6 +657,31 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     }
     if (kit)
         nv_song_strokes(song, kit->skind.data(), kit->spar.data());
+    if (kit && (program == 64 || program == 65)) {
+        // A USER DRUM SET's KEY (nvrender's pass): another set's key -- its
+        // class, pitch and seat -- with its own play note, level, pan and Rx
+        for (int i = 0, nn = nv_song_n_notes(song); i < nn; i++) {
+            long long c_;
+            int iv_[4];
+            double dv_[2];
+            nv_song_get_note(song, i, &c_, iv_, dv_);
+            int u[13] = {0};
+            int mm = iv_[3] && (iv_[2] == 64 || iv_[2] == 65) ? nv_midi_user_drum(m, iv_[2] - 64, iv_[0], u) : 0;
+            if (!((mm >> 12) & 1))
+                continue;
+            const int sset = (mm >> 11) & 1 ? u[11] : 0, snote = u[12];
+            int uv[9] = {0}, um = 0;
+            if ((mm >> 1) & 1)
+                uv[0] = u[1] - snote, um |= 1;
+            if ((mm >> 2) & 1)
+                uv[1] = u[2], um |= 2;
+            if ((mm >> 4) & 1)
+                uv[2] = u[4], um |= 4;
+            if ((mm >> 8) & 1)
+                uv[6] = u[8], um |= 64;
+            nv_song_user_drum(song, i, 128 * sset + snote, um, uv);
+        }
+    }
     else if (stk)                           // (its class's kit key: nvrender's nv_song_strokes_k)
         nv_song_strokes_k(song, K, stk->skind.data(), stk->spar.data());
     double total = nv_midi_total(m);
@@ -2473,6 +2540,26 @@ extern "C" const nv::live::Template *nv_tcache_lookup(void *h, int note, int buc
 
 // an edited drum key's axis (live._drum_axis): pitch, pan (INT_MIN unset)
 extern "C" int nv_drum_axis(int pitch, int pan) { return nv::live::drum_axis(pitch, pan); }
+
+// ...a user set key's (ud: its PLAY NOTE, pan, source set, source key; -1 unset)
+extern "C" int nv_drum_axis_ud(int pitch, int pan, const int *ud, int uset)
+{
+    return nv::live::drum_axis_ud(pitch, pan, ud, uset);
+}
+
+extern "C" int nv_tcache_build_var(void *h, int program, int note, int bucket, int nb, int axis);
+
+// A USER SET KEY's TEMPLATE, built with its spec (nv_tcache_build_var's)
+extern "C" int nv_tcache_build_var_ud(void *h, int program, int note, int bucket, int nb, int axis, int pitch,
+                                      int pan, const int *ud)
+{
+    nv::live::g_ud_pitch = pitch;
+    nv::live::g_ud_pan = pan;
+    nv::live::g_ud_set = program - 64;
+    for (int i = 0; i < 4; i++)
+        nv::live::g_ud[i] = ud[i];
+    return nv_tcache_build_var(h, program, note, bucket, nb, axis);
+}
 
 // AN EDITED DRUM KEY's TEMPLATE, built (one writer: the builder, or in step)
 // and published: 1 built, 0 there already, -1 not built

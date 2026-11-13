@@ -440,8 +440,8 @@ class Builder(threading.Thread):
 # two keys (- and +) change every one of them, so there are no per-field modes to
 # remember. PATCH and TUNER are the only columns that cost a build.
 
-COLS = ("patch", "ch", "lo", "hi", "tr", "level", "pan", "rev", "cho", "dly", "tuner", "touch", "stops", "efx")
-COL_W = {"patch": 33, "ch": 4, "lo": 5, "hi": 5, "tr": 4, "level": 8, "pan": 5, "rev": 4, "cho": 4, "dly": 4,
+COLS = ("patch", "ch", "lo", "hi", "tr", "level", "pan", "rev", "cho", "dly", "vsens", "tuner", "touch", "stops", "efx")
+COL_W = {"patch": 33, "ch": 4, "lo": 5, "hi": 5, "tr": 4, "level": 8, "pan": 5, "rev": 4, "cho": 4, "dly": 4, "vsens": 6,
          "tuner": 11, "touch": 6, "stops": 11, "efx": 5}
 
 # Which columns open a picker on enter, and which take a typed value. Every
@@ -941,6 +941,10 @@ class TUI:
             # THE PART'S PAN AND SENDS: its channel's CC, as a sequencer sends it
             cc = LV.Live.PART_CCS[col]
             self.live.chan_cc_send(p.channel, cc, self.live.chan_cc(p.channel, cc) + delta * (10 if big else 1))
+        elif col == "vsens":
+            # THE PART'S VELOCITY SENSE DEPTH (GS 40 1p 1A: 64 as is, lower
+            # flattens its dynamics, higher steepens them), as a sequencer sends it
+            self.live.chan_vsense_send(p.channel, self.live.chan_vsense(p.channel) + delta * (10 if big else 1))
         elif col == "touch":
             self.toggle_touch(p)
         elif col == "stops":
@@ -1270,6 +1274,8 @@ class TUI:
             p.level_db = max(LEVEL_DB_MIN, min(LEVEL_DB_MAX, v))
         elif col in LV.Live.PART_CCS:
             self.live.chan_cc_send(p.channel, LV.Live.PART_CCS[col], v)
+        elif col == "vsens":
+            self.live.chan_vsense_send(p.channel, v)
 
     def pick_tuner(self, scr):
         p = self.sel()
@@ -2892,6 +2898,8 @@ class TUI:
             return "C" if v == 64 else ("L%d" % (64 - v) if v < 64 else "R%d" % (v - 64))
         if c in ("rev", "cho", "dly"):
             return str(self.live.chan_cc(p.channel, LV.Live.PART_CCS[c]))
+        if c == "vsens":
+            return str(self.live.chan_vsense(p.channel))
         if c == "tuner":
             # a part sounding the rig's Eastern tuning says so (E sets it)
             if p.tuner != getattr(p, "base_tuner", p.tuner):
