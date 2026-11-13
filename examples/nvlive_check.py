@@ -317,6 +317,10 @@ def main(argv):
             lv._room_switch()
             for _part, _p in patchsync.build(lv):
                 instant_scan(lv, _p)
+        elif lv.room_reqs:                  # (a sequencer's GS reverb, heard the block before: nvlive's in step)
+            lv._room_switch()
+            for _part, _p in patchsync.build(lv):
+                instant_scan(lv, _p)
         if b == east_b:
             lv.set_eastern(None if east_spec == "off" else east_spec)
             for _part, _p in patchsync.build(lv):

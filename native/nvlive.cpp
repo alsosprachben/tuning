@@ -204,9 +204,26 @@ int nv_host::run(int argc, char **argv)
                 long long n0 = b * BLK;
                 g_msgr_blk = b;                         // (--messenger-log's block)
                 const std::string *room_want = nullptr;     // (two in a block: the last, as live's queue)
+                const double *room_want_tl = nullptr;
                 for (const auto &ra : room_at)
                     if (ra.first == b)
                         room_want = &ra.second;
+                // ...or a sequencer's GS reverb, heard in the block before
+                // (gs_reverb): switched here, in step, as live's check does
+                std::string gs_room;
+                double gs_tl[3];
+                if (!room_want && gs_want) {
+                    gs_room = gs_want_room;
+                    for (int q = 0; q < 3; q++)
+                        gs_tl[q] = gs_want_tl[q];
+                    room_want = &gs_room;
+                    room_want_tl = gs_want_tl_on ? gs_tl : nullptr;
+                    gs_want = false;
+                } else if (room_want) {         // (a scripted room: the user's, over a sequencer's reverb)
+                    user_room = *room_want;
+                    gs_rev.clear();
+                    gs_want = false;
+                }
                 {                                       // --preset-at=S:NAME: a preset loaded (presets.json beside the session)
                     std::string pa = opt(argc, argv, "preset-at", "");
                     size_t c = pa.find(':');
@@ -246,7 +263,7 @@ int nv_host::run(int argc, char **argv)
                 }
                 if (room_want) {
                     void *room_new = nullptr;
-                    if (room_switch(*room_want, &room_new, [&](size_t i_, int p_, bool d_, int v_, void *c_) {
+                    if (room_switch(*room_want, room_want_tl, &room_new, [&](size_t i_, int p_, bool d_, int v_, void *c_) {
                             swap(i_, p_, d_, v_, c_);
                         })) {
                         step_room = room_new;

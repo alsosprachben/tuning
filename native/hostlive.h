@@ -119,7 +119,9 @@ void nv_part_room_reap(void *h);
 long nv_tcache_room_q(void *h, double *out, long cap);
 long nv_room_tail_ir(const double *sp, const double *bq, int has_bq, int sr, int seed, double **out);
 long nv_room_tail_modes(const double *sp, const double *bq, int has_bq, int sr, double **out, int *nmodes);
-long nv_room_tail_device(const double *sp, const double *dv, const double *bq, int has_bq, int sr, double **out);
+long nv_room_tail_device(const double *sp, const double *dv, const double *bq, int has_bq, int sr, double **out,
+                         double ts, double dfb);
+void nv_room_spec_scale(double *sp, double ts);
 void nv_room_tail_free(double *p);
 void nv_part_post(void *h, double thresh, double bend_range, double mod_cents);
 void nv_part_output(void *h, long long n0, long frames, float *L, float *R, void *sv, void *sx, void *sd,
@@ -698,8 +700,25 @@ struct nv_host {
     std::string room_now;
     std::vector<void *> cache_grave;
     std::function<int(double *bq)> room_band_q;
-    std::function<void *(const Export::RoomData &rd, const double *bq, int has)> room_tail;
-    std::function<bool(const std::string &name, void **tail, const std::function<void(size_t, int, bool, int, void *)> &give)> room_switch;
+    // (tl: a GS reverb's tail -- gain, time scale, delay feedback < 0 none --
+    // NULL the room's plain one: live.room_irs's tail)
+    std::function<void *(const Export::RoomData &rd, const double *bq, int has, const double *tl)> room_tail;
+    std::function<bool(const std::string &name, const double *tl, void **tail,
+                       const std::function<void(size_t, int, bool, int, void *)> &give)> room_switch;
+    // A SEQUENCER's GS REVERB (live._gs_reverb): its macro the room, its level,
+    // time and delay feedback the tail -- over the panel's room (user_room)
+    // until a GS reset, or the panel moved; room_tl the tail in use. A request
+    // from a block's events (gs_want) is the builder's when playing, the next
+    // block's in step (nvlive --test, as live's check does it)
+    std::map<int, int> gs_rev;
+    std::string user_room;
+    double room_tl[3] = {1.0, 1.0, -1.0};
+    bool room_tl_on = false;
+    bool gs_want = false;
+    std::string gs_want_room;
+    double gs_want_tl[3] = {1.0, 1.0, -1.0};
+    bool gs_want_tl_on = false;
+    std::function<void(int kind, int value)> gs_reverb;
     // THE TUNER, switched while playing (livetui's TUNER column): the table
     // made again, every patch let go and the parts' built again in it on the
     // builder (as a room); notes sounding keep the tuning they were struck in
@@ -813,6 +832,8 @@ struct nv_host {
     std::vector<Req> breq;
     std::vector<std::pair<Req, void *>> bdone;
     std::string room_req;
+    double room_req_tl[3] = {1.0, 1.0, -1.0};   // (its tail: a GS reverb's, room_req_tl_on)
+    bool room_req_tl_on = false;
     void * room_ready;
     bool room_ready_go;
     std::atomic<int> room_idx;

@@ -454,8 +454,33 @@ double octave_energy(const std::vector<double> &ir, const double *eb)
 // roomtail.device_ir(kind, the room's build_ir, sr, 1.0, None, 0) as
 // live.room_irs draws it: the plate (kind 1) or the echo (2 'delay', 3
 // 'pan_delay') at the room tail's octave energy; n, -1
+// roomtail.plate_t60: the plate's T60 at f (t500 at 500 Hz, the lows longer
+// at a long setting, the highs held under its own losses), as Python writes it
+static double plate_t60(double f, double t500)
+{
+    auto raw = [&](double ff) {
+        const double low = 1.0 + 0.3 * (t500 / 5.0) * std::max(0.0, log2(500.0 / ff));
+        return 1.0 / (1.0 / (t500 * low) + 1.0 / (1.6 * 10000.0 / ff));
+    };
+    return raw(f) * t500 / raw(500.0);
+}
+
+// A GS REVERB's TIME on a room (live.room_irs, roomtail's T60_SCALE): each
+// octave's T60 scaled, and Schroeder's frequency from the 500 Hz band's
+// again (roomtail.schroeder) -- in place, on the caller's copy of the spec
+extern "C" void nv_room_spec_scale(double *sp, double ts)
+{
+    if (ts == 1.0 || (int)sp[S_N] != S_LEN)
+        return;
+    for (int i = 0; i < 9; i++)
+        sp[S_OCT + 3 * i] = sp[S_OCT + 3 * i] * ts;
+    sp[S_FS] = 2000.0 * sqrt(sp[S_OCT + 3 * 3] / sp[S_VOLUME]);
+}
+
+// (ts: a GS reverb's time scale, the plate's T500 times it; dfb: its delay
+// feedback, < 0 the macro's own -- roomtail.device_ir's tail_time, delay_fb)
 extern "C" long nv_room_tail_device(const double *sp, const double *dv, const double *bq, int has_bq, int sr,
-                                    double **out)
+                                    double **out, double ts, double dfb)
 {
     if ((int)sp[S_N] != S_LEN)
         return -1;
@@ -471,8 +496,19 @@ extern "C" long nv_room_tail_device(const double *sp, const double *dv, const do
         eb = filt(eb + 1, &ns, &sos, &zi);
     }
     std::vector<double> ir;
-    if (kind == 1) {                            // plate_ir(sr, PLATE_T500, 2, 0)
-        const long n = (long)dv[1];
+    // (a time scaled: plate_ir(sr, PLATE_T500 * ts) -- its length and each
+    // band's T60 again, the bands PLATE_OCTAVES' that fit under 0.45 sr)
+    static const double PLATE_OCT[9] = {63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
+    const double t500 = 2.5 * ts;               // (roomtail.PLATE_T500)
+    std::vector<double> kept_f;
+    double tmax = 0.0;
+    for (double f : PLATE_OCT) {
+        tmax = std::max(tmax, plate_t60(f, t500));
+        if (f / sqrt(2.0) < std::min(f * sqrt(2.0), 0.45 * sr))
+            kept_f.push_back(f);
+    }
+    if (kind == 1) {                            // plate_ir(sr, PLATE_T500 * ts, 2, 0)
+        const long n = ts == 1.0 ? (long)dv[1] : (long)((double)sr * std::min(10.0, 1.2 * tmax));
         std::vector<double> t(n), x(n);
         for (long i = 0; i < n; i++)
             t[i] = (double)i / (double)sr;
@@ -480,7 +516,7 @@ extern "C" long nv_room_tail_device(const double *sp, const double *dv, const do
         void *g = nv_npy_new(0 + 140);
         const double *p = pb + 1;
         for (int b = 0; b < (int)pb[0]; b++) {
-            const double t60 = p[0];
+            const double t60 = ts == 1.0 || b >= (int)kept_f.size() ? p[0] : plate_t60(kept_f[b], t500);
             int ns;
             const double *sos, *zi;
             p = filt(p + 1, &ns, &sos, &zi);
@@ -501,7 +537,7 @@ extern "C" long nv_room_tail_device(const double *sp, const double *dv, const do
             ir[2 * i + 1] *= w;
         }
     } else {                                    // echo_ir(sr, fb, pan, 2)
-        const double fb = kind == 2 ? 40.0 : 32.0;
+        const double fb = dfb >= 0.0 ? dfb : kind == 2 ? 40.0 : 32.0;
         const double g = std::min(0.95, std::max(0.0, fb / 127.0));
         const double a = exp(-2.0 * M_PI * 5000.0 / sr);
         const long d = (long)nearbyint(0.100 * sr);

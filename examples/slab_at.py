@@ -180,6 +180,10 @@ def main(argv):
                 lv._room_switch()
                 for _part, _p in patchsync.build(lv):
                     instant_scan(lv, _p)
+            elif lv.room_reqs:                  # (a sequencer's GS reverb: nvlive_check's)
+                lv._room_switch()
+                for _part, _p in patchsync.build(lv):
+                    instant_scan(lv, _p)
             while e < len(evs) and int(evs[e][0] * 48000) // 128 <= b:
                 t, ty, ch, a, v = evs[e]
                 if ty == 0:

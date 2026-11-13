@@ -434,31 +434,44 @@ class RoomTail(object):
             c.close()
 
 
-def room_irs(rate, band_q=None):
+def room_irs(rate, band_q=None, tail=None):
     """The CURRENT room's late tail (tonelib.set_room has already been
     applied) as roomtail.main draws it: (ir, mir), each (n, 2) float32 -- the
     diffuse tail, or a device's (plate, echo) in a GS macro's room, and the
     room's modes (None where it has none worth drawing) -- or None outdoors.
-    native_export.py --live writes them for nvlive."""
+    native_export.py --live writes them for nvlive.
+
+    TAIL: a GS reverb's (level gain, time scale, delay feedback or None) --
+    a sequencer's 40 01 33/34/35 (Live._gs_reverb), drawn as roomtail.main
+    draws a file's from its sidecar: the time its T60_SCALE (the modes' too),
+    a device's own time and feedback, the level the diffuse tail's gain."""
     import roomtail as _RT
     kind = getattr(T.SynthProperties, 'room_tail', 'diffuse')
     if kind == 'none':
         return None
+    gain, tscale, dfb = tail if tail is not None else (1.0, 1.0, None)
     props = T.StoppedPipeProperties(261.6, 0, 1, 1)
-    ir, _bands, _onset = _RT.build_ir(props, rate, channels=2, band_q=band_q)
-    if kind != 'diffuse':
-        ir = _RT.device_ir(kind, ir, rate, 1.0, None, 0)
-        return ir.astype(np.float32), None
-    q_low = band_q.get(_RT.OCTAVES[0], 1.0) if band_q else 1.0
-    mir, nmodes, fs = _RT.modal_ir(props, rate, channels=2, q_low=q_low)
+    was = _RT.T60_SCALE
+    _RT.T60_SCALE = tscale
+    try:
+        ir, _bands, _onset = _RT.build_ir(props, rate, channels=2, band_q=band_q)
+        if kind != 'diffuse':
+            ir = _RT.device_ir(kind, ir, rate, tscale, dfb, 0)
+            return (ir * gain if gain != 1.0 or tscale != 1.0 else ir).astype(np.float32), None
+        q_low = band_q.get(_RT.OCTAVES[0], 1.0) if band_q else 1.0
+        mir, nmodes, fs = _RT.modal_ir(props, rate, channels=2, q_low=q_low)
+    finally:
+        _RT.T60_SCALE = was
+    if gain != 1.0 or tscale != 1.0:
+        ir = ir * gain
     use_modes = bool(nmodes) and fs > 25.0
     return ir.astype(np.float32), (mir.astype(np.float32) if use_modes else None)
 
 
-def build_room_tail(rate, frames, band_q=None):
+def build_room_tail(rate, frames, band_q=None, tail=None):
     """The CURRENT room's tail (room_irs), ready to play. Off the audio
     thread: this takes a second or two."""
-    irs = room_irs(rate, band_q)
+    irs = room_irs(rate, band_q, tail)
     return None if irs is None else RoomTail(irs[0], irs[1], frames)
 
 
@@ -4654,6 +4667,14 @@ class Live:
         self._room_trash = []
         self.room_reqs = collections.deque()
         self.room_ms = 0.0
+        # A SEQUENCER's GS REVERB (40 01 30/33/34/35): its macro the room, its
+        # level, time and delay feedback the tail -- over the panel's room
+        # (user_room) until a GS reset puts that back, or the panel is moved
+        # (Ben: "sequencer overrides until a GS reset"; the panel's own change
+        # is an event too); room_tail the tail's (gain, time, fb)
+        self.gs_rev = {}
+        self.user_room = None
+        self.room_tail = None
         self.ch_drums = {}
         self.rx_bank = True
         self._rpn_fine_msb = {}
@@ -10203,6 +10224,10 @@ class Live:
         # A GS PART PARAMETER (blockrender.parse_gs_part): the MIDI message it
         # is -- part level CC7, pan CC10, the sends, the tone, mono/poly, key
         # shift -- through the same path, now. Port B has no port here.
+        _rv = _BRs.parse_gs_reverb(d)
+        if _rv is not None:
+            self._gs_reverb(*_rv)
+            return
         _gp = _BRs.parse_gs_part(d)
         if _gp is not None:
             if _gp[0] < 16 and not _g:
@@ -10298,6 +10323,8 @@ class Live:
             self.sota.pop(ch, None)
             self._resota(ch, n0)
         self.cgain.clear()
+        if self.gs_rev or self.room_tail is not None or (self.user_room and self.room_name != self.user_room):
+            self._gs_reverb(None, None)         # (the panel's room again: the sequencer's override ends)
         # ...and the insertion effect: "When a GM System On or GS Reset is
         # received, 00 Thru will be selected" (SC-8850 OM), every part off it
         _GSX.apply(self.efx, ('reset',), self.efx_parts)
@@ -10354,22 +10381,62 @@ class Live:
         """At startup, before warm(): the room the templates are built in, and
         its tail. Synchronous -- nothing is playing yet."""
         self._apply_room(name)
+        self.user_room = name
         if name != "dry":
             self.room = build_room_tail(self.rate, self.frames)
 
-    def set_room(self, name):
+    def set_room(self, name, tail=None, _gs=False):
         """While playing: queued for the patch worker, which is the one thread
         that builds templates -- so no template is ever built half in one room
-        and half in the other."""
-        self.room_reqs.append(name)
+        and half in the other. The panel's (and a preset's) choice is the
+        user's room, and takes over from a sequencer's reverb (gs_rev)."""
+        if not _gs:
+            self.user_room = name
+            self.gs_rev = {}
+        self.room_reqs.append((name, tail))
         self.patch_go.set()
 
+    def _gs_reverb(self, kind, value):
+        """A SEQUENCER's GS REVERB (blockrender.parse_gs_reverb): the macro
+        a room (blockrender.GS_REVERB_ROOM, our semantic map), a macro
+        resetting the rest; the level, time and delay feedback the tail as
+        blockrender.prepare reads them for roomtail. kind None (a GS reset):
+        the user's room and its plain tail."""
+        if self.room_name is None:
+            return                                  # (no room on this rig)
+        if kind is None:
+            self.gs_rev = {}
+        elif kind == 'reverb_macro':
+            self.gs_rev = {kind: value}
+        else:
+            self.gs_rev[kind] = value
+        fx = self.gs_rev
+        room = B.GS_REVERB_ROOM.get(fx.get('reverb_macro')) or self.user_room or self.room_name
+        tail = None
+        if fx:
+            gain = fx.get('reverb_level', 64) / 64.0
+            tsc = (2.0 ** ((fx['reverb_time'] - B.GS_REVERB_TIME.get(fx.get('reverb_macro', 4), 64)) / 64.0)
+                   if 'reverb_time' in fx else 1.0)
+            dfb = (fx.get('reverb_delay_fb', B.GS_REVERB_DELAY_FB[fx['reverb_macro']])
+                   if fx.get('reverb_macro') in B.GS_REVERB_DELAY_FB else None)
+            tail = None if (gain, tsc, dfb) == (1.0, 1.0, None) else (gain, tsc, dfb)
+        if room != self.room_name or tail != self.room_tail:
+            self.set_room(room, tail, _gs=True)
+
     def _room_switch(self):
-        name = None
+        req = None
         while self.room_reqs:
-            name = self.room_reqs.popleft()   # only the last one asked for
-        if name is None or name == self.room_name:
+            req = self.room_reqs.popleft()    # only the last one asked for
+        if req is None:
             return
+        name, tail = req if isinstance(req, tuple) else (req, None)
+        if name == self.room_name:
+            if tail != self.room_tail:          # (the same room, a GS reverb's other tail)
+                self.room_tail = tail
+                self._room_install(None if name == "dry"
+                                   else build_room_tail(self.rate, self.frames, self._room_band_q(), tail))
+            return
+        self.room_tail = tail
         self._apply_room(name)
         with _PATCH_LOCK:
             _PATCHES.clear()
@@ -10378,7 +10445,7 @@ class Live:
         for part in self.parts:     # (a program on its way stays the one built)
             self.patch_reqs.append((part.pid, self.patch_want.get(part.pid, part.patch.key)))
         self._room_install(None if name == "dry"
-                           else build_room_tail(self.rate, self.frames, self._room_band_q()))
+                           else build_room_tail(self.rate, self.frames, self._room_band_q(), tail))
 
     def _room_add(self, L, R, n):
         """The late room onto the mix. The send (per-channel CC91) is the

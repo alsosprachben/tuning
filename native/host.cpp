@@ -1398,26 +1398,31 @@ int nv_host::open(int argc, char **argv)
     };
     // its tail (live.room_irs, build_room_tail): the diffuse field and its
     // modes, or a device's; NULL none (dry, outdoors, --dry, no convolver)
-    room_tail = [&](const Export::RoomData &rd, const double *bq, int has) -> void * {
+    room_tail = [&](const Export::RoomData &rd, const double *bq, int has, const double *tl) -> void * {
         if (dry || !rd.reflect || rd.spec.empty() || !(conv_cn && conv_cp && conv_cf))
             return nullptr;
         const int kind = (int)rd.spec[1];
         if (kind < 0)
             return nullptr;
+        // (a GS reverb's time: the spec's T60s scaled, roomtail's T60_SCALE)
+        std::vector<double> sp(rd.spec);
+        if (tl)
+            nv_room_spec_scale(sp.data(), tl[1]);
         double *ir = nullptr, *mir = nullptr;
-        long n = kind == 0 ? nv_room_tail_ir(rd.spec.data(), bq, has, (int)SR, 0, &ir)
-                           : nv_room_tail_device(rd.spec.data(), E.room_dev.data(), bq, has, (int)SR, &ir);
+        long n = kind == 0 ? nv_room_tail_ir(sp.data(), bq, has, (int)SR, 0, &ir)
+                           : nv_room_tail_device(sp.data(), E.room_dev.data(), bq, has, (int)SR, &ir,
+                                                 tl ? tl[1] : 1.0, tl ? tl[2] : -1.0);
         if (n <= 0)
             return nullptr;
         std::vector<float> f(2 * (size_t)n), fm;
         for (long q = 0; q < 2 * n; q++)
-            f[q] = (float)ir[q];
+            f[q] = (float)(tl ? ir[q] * tl[0] : ir[q]);     // (its level: the diffuse tail's gain)
         nv_room_tail_free(ir);
         long m = 0;
         if (kind == 0) {
             int nm = 0;
-            m = nv_room_tail_modes(rd.spec.data(), bq, has, (int)SR, &mir, &nm);
-            if (nm > 0 && rd.spec[6] > 25.0 && m > 0) {         // (use_modes: some, and Schroeder over 25 Hz)
+            m = nv_room_tail_modes(sp.data(), bq, has, (int)SR, &mir, &nm);
+            if (nm > 0 && sp[6] > 25.0 && m > 0) {         // (use_modes: some, and Schroeder over 25 Hz)
                 fm.resize(2 * (size_t)m);
                 for (long q = 0; q < 2 * m; q++)
                     fm[q] = (float)mir[q];
@@ -1431,17 +1436,24 @@ int nv_host::open(int argc, char **argv)
     // the switch: false if the room is not one the export has or the room
     // already; *tail the tail to install (NULL none); each part's new patch
     // handed to give (in step: swap now; playing: the audio thread's)
-    room_switch = [&](const std::string &name, void **tail,
+    room_switch = [&](const std::string &name, const double *tl, void **tail,
                            const std::function<void(size_t, int, bool, int, void *)> &give) -> bool {
         const Export::RoomData *rd = nullptr;
         for (const auto &r : E.rooms)
             if (r.name == name)
                 rd = &r;
-        if (!rd || name == room_now)
+        const bool same_tl = tl ? room_tl_on && tl[0] == room_tl[0] && tl[1] == room_tl[1] && tl[2] == room_tl[2]
+                                : !room_tl_on;
+        if (!rd || (name == room_now && same_tl))
             return false;
         double bq[9];
         int has = room_band_q(bq);
-        *tail = room_tail(*rd, bq, has);
+        room_tl_on = tl != nullptr;
+        for (int q = 0; q < 3; q++)
+            room_tl[q] = tl ? tl[q] : (q == 2 ? -1.0 : 1.0);
+        *tail = room_tail(*rd, bq, has, tl);
+        if (name == room_now)
+            return true;                        // (the same room, a GS reverb's other tail: live's _room_switch)
         if (rd->reflect && E.room_ncls == (int)E.classes.size()) {
             int per = 0;
             for (const auto &rg : E.room_rng)
@@ -1472,6 +1484,46 @@ int nv_host::open(int argc, char **argv)
                 give(i, pa.posted, pa.drums, pa.drums ? 0 : pa.posted_var, c);
         }
         return true;
+    };
+    user_room = room_now;
+    gs_reverb = [&](int kind, int value) {
+        if (E.rooms.empty())
+            return;                             // (no room on this rig)
+        if (kind < 0)
+            gs_rev.clear();
+        else if (kind == 0x30) {                // (a macro resets the rest)
+            gs_rev.clear();
+            gs_rev[kind] = value;
+        } else
+            gs_rev[kind] = value;
+        // blockrender.GS_REVERB_ROOM, GS_REVERB_TIME, GS_REVERB_DELAY_FB
+        static const char *ROOM[8] = {"studio", "chamber", "large_chamber", "hall", "grand_hall", "plate", "delay",
+                                      "pan_delay"};
+        static const int TIME[8] = {80, 56, 64, 72, 64, 88, 32, 64};
+        auto mc = gs_rev.find(0x30);
+        const int macro = mc != gs_rev.end() ? mc->second : -1;
+        std::string room = macro >= 0 && macro < 8 ? ROOM[macro] : !user_room.empty() ? user_room : room_now;
+        double tl[3] = {1.0, 1.0, -1.0};
+        bool on = false;
+        if (!gs_rev.empty()) {
+            auto lv = gs_rev.find(0x33), tm = gs_rev.find(0x34), fb = gs_rev.find(0x35);
+            tl[0] = (lv != gs_rev.end() ? lv->second : 64) / 64.0;
+            tl[1] = tm != gs_rev.end()
+                        ? pow(2.0, (double)(tm->second - (macro >= 0 && macro < 8 ? TIME[macro] : 64)) / 64.0)
+                        : 1.0;
+            if (macro == 6 || macro == 7)
+                tl[2] = fb != gs_rev.end() ? fb->second : (macro == 6 ? 40 : 32);
+            on = !(tl[0] == 1.0 && tl[1] == 1.0 && tl[2] < 0.0);
+        }
+        const bool same_tl = on ? room_tl_on && tl[0] == room_tl[0] && tl[1] == room_tl[1] && tl[2] == room_tl[2]
+                                : !room_tl_on;
+        if (room != room_now || !same_tl) {
+            gs_want = true;
+            gs_want_room = room;
+            gs_want_tl_on = on;
+            for (int q = 0; q < 3; q++)
+                gs_want_tl[q] = tl[q];
+        }
     };
     tuner_switch = [&](const std::string &name,
                        const std::function<void(size_t, int, bool, int, void *)> &give) -> bool {
@@ -1670,13 +1722,38 @@ void nv_host::render_block(long long n0, float *buf, bool step)
             continue;
         }
         if (m.type == 6) {
-            if (sys_reset(m.x.data(), (int)m.x.size()) && asks)
+            const uint8_t *x = m.x.data();
+            int xn = (int)m.x.size();
+            if (xn > 0 && x[0] == 0xF0) {
+                x++;
+                xn--;
+            }
+            if (xn >= 8 && x[0] == 0x41 && x[2] == 0x42 && x[3] == 0x12 && x[4] == 0x40 && x[5] == 0x01
+                && (x[6] == 0x30 || x[6] == 0x33 || x[6] == 0x34 || x[6] == 0x35)) {
+                gs_reverb(x[6], x[7]);          // (live's _sysex: blockrender.parse_gs_reverb's, and nothing else)
+                continue;
+            }
+            const bool rs = sys_reset(m.x.data(), (int)m.x.size());
+            if (rs && (!gs_rev.empty() || room_tl_on || (!user_room.empty() && room_now != user_room)))
+                gs_reverb(-1, 0);               // (the panel's room again: the sequencer's override ends)
+            if (rs && asks)
                 reset_asked();
             nv_part_sysex(part, m.x.data(), (int)m.x.size());
             continue;
         }
         latch(m.type, m.ch, m.a, m.b);
         event(m.type, m.ch, m.a, m.b);
+    }
+    if (gs_want && !step) {             // (a sequencer's GS reverb, playing: the builder's, as live.set_room)
+        {
+            std::lock_guard<std::mutex> lk(bmu);
+            room_req = gs_want_room;
+            room_req_tl_on = gs_want_tl_on;
+            for (int q = 0; q < 3; q++)
+                room_req_tl[q] = gs_want_tl[q];
+        }
+        gs_want = false;
+        bcv.notify_one();
     }
     nv_part_block(part, n0, BLK);
     if (step) {                         // (the tail installed after the block's events, as live's post)
@@ -1824,15 +1901,20 @@ void nv_host::start()
             }
             nv_part_room_reap(part);                    // (an old tail, let go off the audio thread)
             std::string rname;
+            double rtl[3];
+            bool rtl_on;
             {
                 std::lock_guard<std::mutex> lk(bmu);
                 rname.swap(room_req);
+                rtl_on = room_req_tl_on;
+                for (int q = 0; q < 3; q++)
+                    rtl[q] = room_req_tl[q];
             }
             if (!rname.empty()) {                       // A ROOM (live._room_switch, on its patch worker)
                 auto t0 = std::chrono::steady_clock::now();
                 void *tl = nullptr;
                 int nb_ = 0;
-                bool ok = room_switch(rname, &tl, [&](size_t i_, int p_, bool d_, int v_, void *c_) {
+                bool ok = room_switch(rname, rtl_on ? rtl : nullptr, &tl, [&](size_t i_, int p_, bool d_, int v_, void *c_) {
                     std::lock_guard<std::mutex> lk(bmu);
                     bdone.push_back(std::make_pair(Req{i_, p_, d_, v_}, c_));
                     nb_++;
@@ -2061,6 +2143,9 @@ void nv_host::set_global(int i, double v)
         if (k >= 0 && k < (int)E.rooms.size()) {
             std::lock_guard<std::mutex> lk(bmu);
             room_req = E.rooms[k].name;
+            room_req_tl_on = false;             // (the panel's: the user's room, over a sequencer's reverb)
+            user_room = room_req;
+            gs_rev.clear();
             room_asked = k;
         }
         bcv.notify_one();
@@ -2674,6 +2759,9 @@ void nv_host_set_room(nv_host *h, const char *name)
             {
                 std::lock_guard<std::mutex> lk(h->bmu);
                 h->room_req = r.name;
+                h->room_req_tl_on = false;      // (the user's room, over a sequencer's reverb: live.set_room)
+                h->user_room = r.name;
+                h->gs_rev.clear();
             }
             h->bcv.notify_one();
             return;
