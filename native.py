@@ -14,6 +14,7 @@ native/pycompat.h), by tolerance where it cannot.
 TUNING_NATIVE=0: never use it.
 """
 import ctypes
+import toolchain as _TC
 import math
 import os
 import subprocess
@@ -384,7 +385,7 @@ def _build_objects(units):
         o, d, st = (os.path.join(bdir, name + x) for x in ('.o', '.d', '.stamp'))
         pid = '.%d.tmp' % os.getpid()
         try:
-            subprocess.check_call(cmd + ['-c', src, '-o', o + pid, '-MMD', '-MF', d + pid])
+            subprocess.check_call(_TC.cmd(cmd + ['-c', src, '-o', o + pid, '-MMD', '-MF', d + pid]))
             # (the .d names the object it was written as: the stamp reads only its list)
             new = stamp(cmd + ['-c', src], d + pid)
             os.replace(o + pid, o)
@@ -445,7 +446,7 @@ def _load():
                  + [(f[:-4], cxx, nat(f)) for f in ('roomtail.cpp', 'host.cpp', 'livebus.cpp')])
         objs = _build_objects(units)
         try:
-            subprocess.check_call(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl'])
+            subprocess.check_call(_TC.cmd(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl']))
         except BaseException:
             if os.path.exists(tmp):
                 os.remove(tmp)
@@ -4637,9 +4638,9 @@ def build_nvlive():
     if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(hdr), os.path.getmtime(hint), os.path.getmtime(hlive),
                                       os.path.getmtime(so)) > os.path.getmtime(exe):
         tmp = '%s.%d.tmp' % (exe, os.getpid())
-        subprocess.check_call(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin',
+        subprocess.check_call(_TC.cmd(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin',
                                src, '-o', tmp, '-L' + HERE, '-lnative', '-ldl', '-lpthread',
-                               '-Wl,-rpath,$ORIGIN'])
+                               '-Wl,-rpath,$ORIGIN']))
         os.replace(tmp, exe)
     return exe
 
@@ -4653,8 +4654,8 @@ def build_nvrender():
     so = os.path.join(HERE, 'libnative.so')       # (the tuners are in it: native/tuner.cpp)
     if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(so)) > os.path.getmtime(exe):
         tmp = '%s.%d.tmp' % (exe, os.getpid())
-        subprocess.check_call(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin',
-                               src, '-o', tmp, '-L' + HERE, '-lnative', '-ldl', '-Wl,-rpath,$ORIGIN'])
+        subprocess.check_call(_TC.cmd(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin',
+                               src, '-o', tmp, '-L' + HERE, '-lnative', '-ldl', '-Wl,-rpath,$ORIGIN']))
         os.replace(tmp, exe)
     return exe
 

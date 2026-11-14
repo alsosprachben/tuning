@@ -201,6 +201,10 @@ def patch_tree():
     # revised it -- is the set's number in that standard: kit_in_map picks it)
     kits = [dict(label="%3d %s" % (k, PM.drum_set_name(k)), pick=(True, k, 0, None))
             for k in sorted(PM.DRUM_SETS) if k < 128 or k == PM.SC88_TR808_909]
+    # ...and GS's two USER SETS (programs 65, 66), each key set in U
+    kits += [dict(label="%3d User Set %d   (its keys: U)" % (k, k - B.USER_DRUM_SETS[0] + 1), pick=(True, k, 0, None))
+             for k in B.USER_DRUM_SETS]
+    kits.sort(key=lambda d: d["pick"][1])
     return dict(label="patch", kids=[
         dict(label="General MIDI          128 programs", crumb="GM", kids=families("gm", gm)),
         dict(label="Sound Canvas          by level and model", crumb="Sound Canvas",

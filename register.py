@@ -60,6 +60,7 @@ per decay stage, riding the driver's envelope and damper. Direct sound only:
 the register reaches the room through the send and the late tail.
 """
 import ctypes
+import toolchain as _TC
 import math
 import operator
 import os
@@ -416,9 +417,9 @@ def _load_core():
         # order of operations is the source's. The glide's integral is
         # vectorised (#pragma omp simd), its exp/expm1/sin/cos from glibc's
         # vector library, 8 wide where the machine has AVX-512
-        subprocess.check_call(["gcc", "-O3", "-march=native", "-ffp-contract=off", "-fopenmp-simd",
+        subprocess.check_call(_TC.cmd(["gcc", "-O3", "-march=native", "-ffp-contract=off", "-fopenmp-simd",
                                "-fno-math-errno", "-mprefer-vector-width=512", "-shared", "-fPIC",
-                               src, "-o", tmp, "-lmvec", "-lm"])
+                               src, "-o", tmp, "-lmvec", "-lm"]))
         os.replace(tmp, lib)
     dll = ctypes.CDLL(lib)
     P, D = ctypes.c_void_p, ctypes.c_double

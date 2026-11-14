@@ -114,7 +114,7 @@ def main(argv):
     import tonelib as T
     tuner = opt.get("tuner") or ("hybrid" if "live" in opt else "hybrid440")
     freq = B.tuning_table(tuner)
-    classes, idx, cmap = [], {}, []
+    classes, idx, cmap = Lazy(N.note_class), {}, []
     for prog in range(128):
         for key in range(128):
             cls = B.property_class_for_note(prog, key)
@@ -124,7 +124,7 @@ def main(argv):
                 continue
             if cls not in idx:
                 idx[cls] = len(classes)
-                classes.append(bytes(k))
+                classes.append(cls)
             cmap.append(idx[cls])
     # ...and each drum set's keys the engine plays (native.kits), after them
     kcls, kf0, kseat, kchoke, kskind, kspar = N.kits()
@@ -135,7 +135,7 @@ def main(argv):
             continue
         if cls not in idx:
             idx[cls] = len(classes)
-            classes.append(bytes(k))
+            classes.append(cls)
         cmap.append(idx[cls])
     # ...and THE MAPS' OWN DRUM SETS (native.map_kits: SC-88's, SC-88 Pro's),
     # their keys' classes among the rest (MKIT, below)
@@ -148,7 +148,7 @@ def main(argv):
             continue
         if cls not in idx:
             idx[cls] = len(classes)
-            classes.append(bytes(k))
+            classes.append(cls)
         mk_map.append(idx[cls])
     # ...and THE VARIATIONS (bank select: native.variation_tables), each slot's
     # keys after them
@@ -163,7 +163,7 @@ def main(argv):
                 continue
             if cls not in idx:
                 idx[cls] = len(classes)
-                classes.append(bytes(k))
+                classes.append(cls)
             vmap.append(idx[cls])
     vpcls = {}
     for _p, _v, _ls in ventries[1:]:
@@ -175,14 +175,14 @@ def main(argv):
             continue
         if cls not in idx:
             idx[cls] = len(classes)
-            classes.append(bytes(k))
+            classes.append(cls)
         vpcls[(_p, _v)] = idx[cls]
     # ...and THE DRONES' CLASSES (native.DRONES: a bagpipe's)
     for cls in list(N.DRONES):
         k = N.note_class(cls)
         if k is not None and cls not in idx:
             idx[cls] = len(classes)
-            classes.append(bytes(k))
+            classes.append(cls)
     # A STRUCK LAYER's CLASS (an orchestra hit's timpani): among the classes,
     # and its index in the class that strikes it (NoteClass.sl_idx)
     for cls in list(idx):
@@ -191,7 +191,7 @@ def main(argv):
             continue
         if lcls not in idx:
             idx[lcls] = len(classes)
-            classes.append(bytes(N.note_class(lcls)))
+            classes.append(lcls)
         k = N.NoteClass.from_buffer_copy(classes[idx[cls]])
         k.sl_idx = idx[lcls]
         classes[idx[cls]] = bytes(k)
@@ -199,12 +199,12 @@ def main(argv):
     # program's organ (property_class_for_program's: -1 none, -2 an organ the
     # engine does not play)
     ocls = {c: i for c, i in idx.items()}
-    organs, oidx = [], {}
+    organs, oidx = Lazy(N.organ), {}
     cls_organ = [-1] * len(classes)
     for c, i in ocls.items():
         if getattr(c, 'registerable', False) and N.organ(c) is not None:
             oidx[c] = len(organs)
-            organs.append(bytes(N.organ(c)))
+            organs.append(c)
             cls_organ[i] = oidx[c]
     prog_organ = []
     for prog in range(128):
@@ -216,7 +216,7 @@ def main(argv):
         else:
             if pc not in oidx:
                 oidx[pc] = len(organs)
-                organs.append(bytes(N.organ(pc)))
+                organs.append(pc)
             prog_organ.append(oidx[pc])
     # (live's Moogs: knob-neutral templates the slab weighs from the panel,
     # one stamp a layer, a unison's voices each a stamp of its own, an
@@ -691,7 +691,21 @@ def main(argv):
             rng += [(_t0 + getattr(_VS, _f).offset, getattr(_VS, _f).size)
                     for _f in ("room", "ahz", "alpha", "scat", "radiation_distance")]
             ordered = sorted(idx.items(), key=lambda kv: kv[1])
-            rb = struct.pack("<i", len(rng)) + b"".join(struct.pack("<ii", o, z) for o, z in rng)
+            # (written as made, its length filled in after: every class's
+            # ranges in every room held in memory and grown with += took an
+            # 8 GB Mac's live export past its 3.5 GB cap)
+            f.write(b"LROOMS")
+            _at = f.tell()
+            f.write(struct.pack("<q", 0))
+            _n = [0]
+
+            class _Rb(object):
+                def __iadd__(self, b):
+                    f.write(b)
+                    _n[0] += len(b)
+                    return self
+            rb = _Rb()
+            rb += struct.pack("<i", len(rng)) + b"".join(struct.pack("<ii", o, z) for o, z in rng)
             rb += struct.pack("<i", len(classes))
             dsp = _RTL.device_spec(48000)
             rb += struct.pack("<i", len(dsp)) + struct.pack("<%dd" % len(dsp), *dsp)
@@ -710,7 +724,10 @@ def main(argv):
                     rb += b"".join(_kb[o:o + z] for o, z in rng)
             if _was:
                 _T.set_room(_was)
-            f.write(b"LROOMS" + struct.pack("<q", len(rb)) + rb)
+            _end = f.tell()
+            f.seek(_at)
+            f.write(struct.pack("<q", _n[0]))
+            f.seek(_end)
             # LROUTE: the session's routes (live.Route), each as nv_rt_add takes it
             routes = [L.Route.from_dict(r) for r in sess.get("routes", [])]
             f.write(b"LROUTE" + struct.pack("<i", len(routes)))
@@ -773,6 +790,35 @@ def main(argv):
               % (sess.get("room"), sess.get("master_db"), sess.get("headroom_db"), sess.get("press_db"),
                  sess.get("thresh"), len(sess.get("routes", []))))
     return 0
+
+
+class Lazy(object):
+    """The classes (or organs) in their order, each made into its bytes when
+    asked -- native's own cache holds every NoteClass (and OrganSpec) already,
+    so the export keeps the class and not a second copy of its table (on an
+    8 GB Mac a live export went over its 3.5 GB cap holding both: about 780 MB
+    of copies). An entry set to bytes (a struck layer's index written in) is
+    kept as given."""
+
+    def __init__(self, make):
+        self.make, self.items = make, []
+
+    def append(self, x):
+        self.items.append(x)
+
+    def __len__(self):
+        return len(self.items)
+
+    def __getitem__(self, i):
+        x = self.items[i]
+        return x if isinstance(x, bytes) else bytes(self.make(x))
+
+    def __setitem__(self, i, b):
+        self.items[i] = bytes(b)
+
+    def __iter__(self):
+        for i in range(len(self.items)):
+            yield self[i]
 
 
 def write_deps(path):

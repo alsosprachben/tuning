@@ -62,6 +62,7 @@ over octave bands lets a near-silent octave dominate -- the same section reads
 Usage: python3 blockrender.py IN.mid OUT.wav [tuner] [a=432|c=256]
 """
 import sys, os, time, ctypes, subprocess, wave, math, re, cmath
+import toolchain as _TC
 import numpy as np, mido
 import bisect as _bisect
 import mts as _MTS
@@ -242,8 +243,8 @@ def _build(src, name, defs, funcs):
         # built to a temporary name and moved: a live engine and a render
         # starting at once must never load a half-written library
         tmp = "%s.%d.tmp" % (lib, os.getpid())
-        subprocess.check_call(["gcc","-O3","-march=native","-ffast-math","-fopenmp","-shared","-fPIC",
-                               "-DSRATE=%d" % SR] + defs + [src,"-o",tmp,"-lm"])
+        subprocess.check_call(_TC.cmd(["gcc","-O3","-march=native","-ffast-math","-fopenmp","-shared","-fPIC",
+                               "-DSRATE=%d" % SR] + defs + [src,"-o",tmp,"-lm"]))
         os.replace(tmp, lib)
     dll = ctypes.CDLL(lib)
     for f in funcs:

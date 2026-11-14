@@ -2338,8 +2338,9 @@ struct Panel {
             what.push_back(-2);
             if (has) {
                 const int pn = g(0x01, sn);
-                char b[64];
-                snprintf(b, sizeof b, pn == sn ? "" : "  (%+d)", pn - sn);
+                char b[64] = "";
+                if (pn != sn)
+                    snprintf(b, sizeof b, "  (%+d)", pn - sn);
                 items.push_back("play note        " + note_nm(pn) + b);
                 what.push_back(0x01);
                 items.push_back("level            " + (u.count(0x02) ? std::to_string(g(0x02, 0)) : std::string("the set's")));

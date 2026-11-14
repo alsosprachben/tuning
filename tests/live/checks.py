@@ -122,6 +122,7 @@ CHECKS = [
     ("cmx_panel", "../tests/live/cmx_panel_check.py", [], {}),
     ("udrum_panel", "../tests/live/udrum_panel_check.py", [], {}),
     ("user_drums_live", "nvlive_check.py", ["@userdrums.mid", "4", "--drums", "--program=0", "--programs"], {}),
+    ("user_set_part", "nvlive_check.py", ["@userdrums.mid", "4", "--drums", "--program=64"], {}),
     ("drum_delay", "nvlive_check.py", ["@drumdelay.mid", "5", "--drums", "--program=0", "--programs"], {}),
     ("rhythm_part", "nvlive_check.py", ["@rhythmpart.mid", "3", "--beside", "--program=0", "--programs"], {}),
 ]
@@ -155,13 +156,28 @@ def passed(rc, last):
 
 
 def capped(cmd, cap, env):
-    """cmd under systemd-run's memory cap where there is one."""
-    if cap in ("0", "") or not shutil.which("systemd-run"):
+    """cmd under systemd-run's memory cap where there is one; else (macOS)
+    under examples/memcap.py's, the group's footprint watched."""
+    if cap in ("0", ""):
         return cmd
+    if not shutil.which("systemd-run"):
+        mb = float(cap[:-1]) * (1024 if cap[-1] in "Gg" else 1) if cap[-1] in "MmGg" else float(cap) / 1048576.0
+        return [sys.executable, os.path.join(ROOT, "examples", "memcap.py"), "--cap=%g" % mb, "--"] + cmd
     pre = ["systemd-run", "--user", "--scope", "-q", "-p", "MemoryMax=" + cap, "-p", "MemorySwapMax=0"]
     for k, v in env.items():
         pre += ["-E", "%s=%s" % (k, v)]
     return pre + cmd
+
+
+def run_limited(cmd, secs, **kw):
+    """subprocess.run under a time limit: GNU timeout where there is one (as
+    always on Linux), else (macOS) subprocess's own -- 124 when it ran out."""
+    if shutil.which("timeout"):
+        return subprocess.run(["timeout", str(secs)] + cmd, **kw)
+    try:
+        return subprocess.run(cmd, timeout=secs, **kw)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, 124)
 
 
 def main(argv):
@@ -215,8 +231,9 @@ def main(argv):
         log = os.path.join(logs, name + ".log")
         t0 = time.time()
         with open(log, "w") as f:
-            rc = subprocess.run(["timeout", "5400"] + cmd, cwd=ROOT, env=e, stdout=f, stderr=subprocess.STDOUT).returncode
-        last = (open(log).read().strip().splitlines() or [""])[-1]
+            rc = run_limited(cmd, 5400, cwd=ROOT, env=e, stdout=f, stderr=subprocess.STDOUT).returncode
+        lines = [ln for ln in open(log).read().strip().splitlines() if not ln.startswith("memcap:")]
+        last = (lines or [""])[-1]                      # (memcap.py's peak: its own line, after the check's)
         fails += not passed(rc, last)
         record(name, rc, last + "  (%.0f s)" % (time.time() - t0))
     if "effects" in opt and not (only and "effects" not in only):
@@ -245,8 +262,8 @@ def main(argv):
             return 3
         log = os.path.join(logs, "selftest.log")
         cmd = capped([sys.executable, os.path.join(ROOT, "live.py"), "--selftest"], cap, {})
-        rc = subprocess.run(["timeout", "7200"] + cmd, cwd=ROOT, env=env0, stdout=open(log, "w"),
-                            stderr=subprocess.STDOUT).returncode
+        rc = run_limited(cmd, 7200, cwd=ROOT, env=env0, stdout=open(log, "w"),
+                         stderr=subprocess.STDOUT).returncode
         txt = open(log).read()
         record("selftest", rc, "%d ok, %d FAIL" % (txt.count(" ok"), txt.count(" FAIL")))
     print("%d failed" % fails)

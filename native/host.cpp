@@ -921,7 +921,7 @@ int nv_host::open(int argc, char **argv)
                             std::lock_guard<std::mutex> lk(o.mu);
                             pa = o.path;
                         }
-                        if (access(pa.c_str(), F_OK) != 0)
+                        if (!midi_exists(pa))
                             o.drop();               // (unplugged)
                         continue;
                     }
@@ -2395,7 +2395,7 @@ bool nv_host::msgr_connect(const std::string &path, const std::string &name)
     MsgrOut &o = *msgr;
     bool is = false;
     std::string id = probe_messenger(path, &is);
-    int f = ::open(path.c_str(), O_WRONLY | O_NONBLOCK);
+    int f = midi_open(path, O_WRONLY | O_NONBLOCK);
     if (f < 0)
         return false;
     {
@@ -2604,6 +2604,12 @@ void nv_host::patches_init()
         for (int k = 0; k < 128 && !nat; k++)
             nat = E.cmap[(sp >= 128 ? NV_K_DRUMS : 0) + 128 * (sp & 127) + k] >= 0;
         pnative[sp] = nat && (sp >= 128 ? !pnames[sp].empty() : E.part[sp][0] != 0);
+    }
+    // GS's two USER SETS (programs 65, 66: live's patch tree): each key
+    // another set's, as the panel's U sets them -- native where the drums are
+    for (int u = 0; u < 2; u++) {
+        pnames[128 + 64 + u] = "User Set " + std::to_string(u + 1);
+        pnative[128 + 64 + u] = pnative[128];
     }
     vnative.assign(E.vpv.size(), 0);
     for (size_t j = 0; j < E.vpv.size(); j++) {

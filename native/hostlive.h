@@ -25,7 +25,14 @@
 #include <sched.h>
 #include <spawn.h>
 #include <sys/resource.h>
+#ifdef __APPLE__
+#include <mach/mach.h>
+#include <mach/mach_time.h>
+#include <mach/thread_policy.h>
+#include <pthread.h>
+#else
 #include <sys/syscall.h>
+#endif
 #include <sys/wait.h>
 #include <mutex>
 #include <string>
@@ -193,6 +200,37 @@ void nv_part_register(void *h, const StringMode *modes, int M, double kappa, dou
 #include "hostint.h"
 using namespace nvh;
 
+// A RAW MIDI DEVICE opened, closed, there or not: a /dev/snd/midiCxDy file
+// on Linux; on macOS a CoreMIDI source and its destination (macio.h:
+// "coremidi:N", one end of a socket pair), read and written as the file is
+#ifdef __APPLE__
+#include "macio.h"
+#endif
+inline int midi_open(const std::string &path, int flags)
+{
+#ifdef __APPLE__
+    if (!path.compare(0, 9, "coremidi:"))
+        return macio::open(path, flags);
+#endif
+    return ::open(path.c_str(), flags);
+}
+inline int midi_close(int fd)
+{
+#ifdef __APPLE__
+    return macio::close(fd);
+#else
+    return ::close(fd);
+#endif
+}
+inline bool midi_exists(const std::string &path)
+{
+#ifdef __APPLE__
+    if (!path.compare(0, 9, "coremidi:"))
+        return macio::exists(path);
+#endif
+    return access(path.c_str(), R_OK) == 0;
+}
+
 // A MESSENGER's OUTPUT (live.open_messenger): what the audio thread queues,
 // written to the raw MIDI device by a thread of its own -- or, in --test,
 // logged with the block it was sent in (g_msgr_blk)
@@ -257,7 +295,7 @@ struct MsgrOut {
     {
         const int f = fd.exchange(-1);
         if (f >= 0)
-            ::close(f);
+            midi_close(f);
         std::lock_guard<std::mutex> lk(mu);
         q.clear();
         path.clear();
@@ -272,6 +310,32 @@ struct MsgrOut {
 };
 
 // ALSA's PCM, loaded at run time: the five calls a blocking writer needs
+#ifdef __APPLE__
+// (macOS: the same calls over CoreAudio's default output -- macio::Audio)
+struct Alsa {
+    void *pcm = nullptr;
+    macio::Audio au;
+    unsigned frames = 128;                      // (the block: the ring's least, the device buffer's)
+    bool load() { return true; }
+    int open(void **p, const char *, int, int)
+    {
+        *p = &au;
+        return 0;
+    }
+    int set_params(void *, int, int, unsigned, unsigned rate, int, unsigned latency_us)
+    {
+        return au.set_params(rate, latency_us, frames);
+    }
+    long writei(void *, const void *buf, unsigned long n) { return au.writei((const float *)buf, n); }
+    int recover(void *, int, int) { return 0; }
+    int close(void *)
+    {
+        au.close();
+        return 0;
+    }
+    const char *strerror(int e) { return ::strerror(-e); }
+};
+#else
 struct Alsa {
     void *h = nullptr, *pcm = nullptr;
     int (*open)(void **, const char *, int, int);
@@ -295,6 +359,7 @@ struct Alsa {
         return open && set_params && writei && recover && close && strerror;
     }
 };
+#endif
 
 inline std::atomic<bool> g_stop(false);
 extern "C" char **environ;
@@ -324,6 +389,56 @@ inline long long now_ns()
     return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
         .count();
 }
+
+#ifdef __APPLE__
+// macOS: the audio thread on Mach's TIME-CONSTRAINT policy (CoreAudio's own
+// for its I/O threads): each PERIOD it is owed COMPUTATION of CPU, done
+// within CONSTRAINT -- a block's time, most of it (no rtkit, no rlimit: the
+// kernel itself demotes a thread that overruns its claim). Back on the
+// standard policy, as SCHED_OTHER. The guard below is the same.
+inline std::atomic<unsigned> mach_tid(0);
+inline double period_ms = 128.0 / 48000.0 * 1000.0;     // (the block's time: set_period)
+inline void set_period(int frames, double rate) { period_ms = frames / rate * 1000.0; }
+
+inline void demote()
+{
+    if (!promoted.exchange(false))
+        return;
+    thread_standard_policy_data_t sp{};
+    thread_policy_set((thread_act_t)mach_tid.load(), THREAD_STANDARD_POLICY, (thread_policy_t)&sp,
+                      THREAD_STANDARD_POLICY_COUNT);
+    dropped++;
+}
+
+// the calling thread real-time; "" or why not (prio: Linux's; Mach's
+// time-constraint policy has none)
+inline std::string promote(int)
+{
+    mach_tid = (unsigned)pthread_mach_thread_np(pthread_self());
+    mach_timebase_info_data_t tb;
+    mach_timebase_info(&tb);
+    const double ticks_per_ms = 1e6 * tb.denom / tb.numer;
+    thread_time_constraint_policy_data_t pol;
+    pol.period = (uint32_t)(period_ms * ticks_per_ms);
+    pol.computation = (uint32_t)(period_ms * 0.75 * ticks_per_ms);
+    pol.constraint = (uint32_t)(period_ms * ticks_per_ms);
+    pol.preemptible = 1;
+    if (thread_policy_set(mach_thread_self(), THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&pol,
+                          THREAD_TIME_CONSTRAINT_POLICY_COUNT) != KERN_SUCCESS)
+        return "the time-constraint policy refused";
+    promoted = true;
+    std::thread([] {
+        while (!g_stop) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(GUARD_MS));
+            long long b = busy_since.load();
+            if (b && promoted.load() && now_ns() - b > (long long)STUCK_MS * 1000000)
+                demote();
+        }
+    }).detach();
+    return "";
+}
+#else
+inline void set_period(int, double) {}
 
 inline void demote()
 {
@@ -388,6 +503,7 @@ inline std::string promote(int prio)
     }).detach();
     return "";
 }
+#endif
 }  // namespace rt
 inline void on_signal(int) { g_stop = true; }
 
@@ -465,6 +581,9 @@ struct MidiParse {
 // name ALSA gives /proc/asound/cardC/midiD's first line ("USB Midi")
 inline std::vector<std::pair<std::string, std::string>> midi_devices()
 {
+#ifdef __APPLE__
+    return macio::devices();                    // (CoreMIDI's sources, by display name)
+#endif
     std::vector<std::pair<std::string, std::string>> ds;
     for (int c = 0; c < 32; c++)
         for (int d = 0; d < 4; d++) {
@@ -513,7 +632,7 @@ inline bool find_messenger(std::string &path, std::string &name)
 inline std::string probe_messenger(const std::string &path, bool *is_messenger)
 {
     *is_messenger = false;
-    int f = ::open(path.c_str(), O_RDWR | O_NONBLOCK);
+    int f = midi_open(path, O_RDWR | O_NONBLOCK);
     if (f < 0)
         return "";
     const uint8_t rq[6] = {0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7};
@@ -550,7 +669,7 @@ inline std::string probe_messenger(const std::string &path, bool *is_messenger)
                 *is_messenger = mk == 0x04 && fam == 49 && mod == 153;
             }
         }
-    ::close(f);
+    midi_close(f);
     return out;
 }
 
@@ -638,13 +757,13 @@ inline void midi_reader_ins(MidiIns *ins, std::mutex *mu, std::vector<Midi> *q)
                 if (keep) {
                     ++it;
                 } else {
-                    ::close(it->second.fd);
+                    midi_close(it->second.fd);
                     it = open.erase(it);
                 }
             }
             for (auto &x : w)
                 if (!open.count(x.first)) {
-                    int f = ::open(x.first.c_str(), O_RDONLY | O_NONBLOCK);
+                    int f = midi_open(x.first, O_RDONLY | O_NONBLOCK);
                     if (f >= 0) {
                         In in;
                         in.fd = f;
@@ -679,7 +798,7 @@ inline void midi_reader_ins(MidiIns *ins, std::mutex *mu, std::vector<Midi> *q)
                                                    }),
                                     ins->want.end());
                 }
-                ::close(it->second.fd);
+                midi_close(it->second.fd);
                 it = open.erase(it);
                 publish();
             } else {
@@ -690,7 +809,7 @@ inline void midi_reader_ins(MidiIns *ins, std::mutex *mu, std::vector<Midi> *q)
             usleep(1000);
     }
     for (auto &kv : open)
-        ::close(kv.second.fd);
+        midi_close(kv.second.fd);
 }
 
 inline void midi_reader(int fd, std::mutex *mu, std::vector<Midi> *q)

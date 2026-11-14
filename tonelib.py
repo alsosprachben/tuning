@@ -6,6 +6,7 @@ All rights reserved.
 """
 
 import os
+import toolchain as _TC
 import random as _random
 import re as _re
 from math import exp as _exp, log as _log, sin as _sin, cos as _cos, pi as _pi, sqrt as _sqrt
@@ -193,8 +194,8 @@ def _roomcore():
                 lib = os.path.join(here, "libroomcore.so")
                 if not os.path.exists(lib) or os.path.getmtime(src) > os.path.getmtime(lib):
                     tmp = "%s.%d.tmp" % (lib, os.getpid())
-                    subprocess.check_call(["gcc", "-O3", "-march=native", "-ffp-contract=off", "-fno-builtin", "-shared",
-                                           "-fPIC", src, "-o", tmp, "-lm"])
+                    subprocess.check_call(_TC.cmd(["gcc", "-O3", "-march=native", "-ffp-contract=off", "-fno-builtin", "-shared",
+                                           "-fPIC", src, "-o", tmp, "-lm"]))
                     os.replace(tmp, lib)
                 dll = ctypes.CDLL(lib)
                 P, D, I = ctypes.c_void_p, ctypes.c_double, ctypes.c_int

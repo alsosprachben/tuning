@@ -64,6 +64,7 @@ instead of 10.7 ms, which is what keeps a struck attack from smearing.
 Usage:  live.py [--tui] [--program N] [--port SUBSTRING] [--rate HZ] [--frames N]
 """
 import sys, os, time, threading, argparse, collections, signal, itertools
+import toolchain as _TC
 import re
 import tempfile
 import random as _random
@@ -215,7 +216,7 @@ def ensure_tap_lib():
     src, lib = os.path.join(here, "tapkernel.c"), os.path.join(here, "libtapkernel.so")
     if not os.path.exists(lib) or os.path.getmtime(src) > os.path.getmtime(lib):
         tmp = "%s.%d.tmp" % (lib, os.getpid())
-        subprocess.check_call(["gcc", "-O3", "-march=native", "-shared", "-fPIC", src, "-o", tmp, "-lm"])
+        subprocess.check_call(_TC.cmd(["gcc", "-O3", "-march=native", "-shared", "-fPIC", src, "-o", tmp, "-lm"]))
         os.replace(tmp, lib)
     dll = ctypes.CDLL(lib)
     dll.tap_expand.restype = ctypes.c_int
@@ -322,8 +323,8 @@ def _conv_dll():
     src = os.path.join(here, "convolver.c")
     lib = os.path.join(here, "libconvolver.so")
     if (not os.path.exists(lib)) or os.path.getmtime(src) > os.path.getmtime(lib):
-        subprocess.check_call(["gcc", "-O3", "-march=native", "-ffast-math", "-shared",
-                               "-fPIC", src, "-o", lib, "-lm"])
+        subprocess.check_call(_TC.cmd(["gcc", "-O3", "-march=native", "-ffast-math", "-shared",
+                               "-fPIC", src, "-o", lib, "-lm"]))
     d = ctypes.CDLL(lib)
     fp = ctypes.POINTER(ctypes.c_float)
     d.conv_new.restype = ctypes.c_void_p

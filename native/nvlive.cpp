@@ -423,7 +423,7 @@ int nv_host::run(int argc, char **argv)
     bool no_panel = !isatty(1);
     for (int i = 1; i < argc; i++)
         no_panel = no_panel || !strcmp(argv[i], "--no-panel");
-    if (dev.empty() || access(dev.c_str(), R_OK) != 0) {
+    if (dev.empty() || !midi_exists(dev)) {
         if (no_panel) {
             fprintf(stderr, "nvlive: no MIDI input (%s); --midi=/dev/snd/midiCxDy\n", dev.c_str());
             return 1;
@@ -438,6 +438,9 @@ int nv_host::run(int argc, char **argv)
         return 1;
     }
     pcmdev = opt(argc, argv, "device", "default");
+#ifdef __APPLE__
+    A.frames = (unsigned)BLK;                   // (CoreAudio's ring: at least two blocks)
+#endif
     lat = (unsigned)(1000 * atof(opt(argc, argv, "latency-ms", "10").c_str()));
     r = A.open(&A.pcm, pcmdev.c_str(), 0 /* playback */, 0);
     if (r >= 0)
@@ -585,11 +588,20 @@ int nv_host::run(int argc, char **argv)
     audio = [&]() {
         if (!nort) {
             int prio = atoi(opt(argc, argv, "rt-prio", std::to_string(rt::PRIO).c_str()).c_str());
+            rt::set_period((int)BLK, (double)SR);       // (macOS's time-constraint policy: a block's time)
             std::string why = rt::promote(prio);
             rt_on = why.empty();
-            if (nopanel)
-                fprintf(stderr, why.empty() ? "nvlive: real-time, SCHED_RR %d\n" : "nvlive: not real-time (%s)\n",
-                        why.empty() ? prio : 0, why.c_str());
+            if (nopanel) {
+                if (!why.empty())
+                    fprintf(stderr, "nvlive: not real-time (%s)\n", why.c_str());
+#ifdef __APPLE__
+                else
+                    fprintf(stderr, "nvlive: real-time, Mach time-constraint (%.2f ms a block)\n", rt::period_ms);
+#else
+                else
+                    fprintf(stderr, "nvlive: real-time, SCHED_RR %d\n", prio);
+#endif
+            }
         }
         std::vector<float> buf(2 * BLK);
         long long n0 = 0;
