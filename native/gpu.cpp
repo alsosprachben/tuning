@@ -69,9 +69,15 @@ struct Api {
 
     bool load()
     {
+#ifdef __APPLE__
+        // (macOS: the system's OpenCL 1.2, deprecated but there on Apple
+        // silicon -- the step before Metal, which iOS needs)
+        h = dlopen("/System/Library/Frameworks/OpenCL.framework/OpenCL", RTLD_NOW | RTLD_LOCAL);
+#else
         h = dlopen("libOpenCL.so.1", RTLD_NOW | RTLD_LOCAL);
         if (!h)
             h = dlopen("libOpenCL.so", RTLD_NOW | RTLD_LOCAL);
+#endif
         if (!h)
             return false;
         bool ok = true;

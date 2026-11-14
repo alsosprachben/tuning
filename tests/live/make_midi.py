@@ -516,7 +516,27 @@ M2_MAKERS = {"m2_pernote": m2_pernote, "m2_organ": m2_organ}
 # MIDI 1.0 fixtures as MIDI 2.0 (ump.midi1_to_clip): (source, name, raw UMP)
 M2_CONVERTED = (("gsvsense", "m2_gsvsense", False), ("mpe_zone", "m2_mpe_zone_raw", True))
 
-MAKERS = {"assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
+def dense_pedal():
+    """HEAVY PLAYING, for the block budget (CPU against GPU): the sustain pedal
+    down and fast arpeggios over six octaves, 16 notes a second at forte for
+    20 s, the pedal changed every 4 s -- hundreds of strings ringing at once,
+    as Ben's heaviest playing piles them up."""
+    mid, tr = one_track()
+    keys = [n for n in range(28, 101) if n % 12 in (0, 4, 7, 11, 2)]
+    t = 0
+    tr.append(mido.Message('control_change', channel=0, control=64, value=127, time=10))
+    for i in range(320):
+        k = keys[(i * 7) % len(keys)]
+        tr.append(mido.Message('note_on', channel=0, note=k, velocity=96 + (i % 5) * 6, time=0 if i == 0 else 15))
+        tr.append(mido.Message('note_off', channel=0, note=k, velocity=0, time=15))
+        if i % 64 == 63:
+            tr.append(mido.Message('control_change', channel=0, control=64, value=0, time=0))
+            tr.append(mido.Message('control_change', channel=0, control=64, value=127, time=6))
+    tr.append(mido.Message('control_change', channel=0, control=64, value=0, time=480))
+    return mid
+
+
+MAKERS = {"dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
           "mpe_zone": mpe_zone}
 
 
