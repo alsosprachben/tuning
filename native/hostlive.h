@@ -33,6 +33,7 @@
 #include <unistd.h>
 #include <vector>
 
+#include "ump.h"
 #include "panel.h"
 #include "session.h"
 #include "pycompat.h"
@@ -65,6 +66,7 @@ int nv_midi_display_n(void *p);
 const uint8_t *nv_midi_display(void *p, int i, int *n, double *t);
 int nv_midi_n_events(void *p);
 void nv_midi_event(void *p, int i, int *iv, double *t);
+double nv_midi_event_x(void *p, int i);
 void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double *freq, const double *trim,
                     const int *kind, const int *fin, double scale, double full_db_s, double residual, double beta,
                     long long blk, double ring_floor, double ring_max, double knee_db, double ln10_20,
@@ -101,6 +103,7 @@ void *nv_part_new(void *cache, long long pid, double level_db, int nbuckets, int
                 int soft_drop, int soft_top, double rate, double retrigger, long cap, double headroom,
                 const double *pan_tab, double pan_beta);
 void nv_part_event(void *h, int type, int ch, int a, int b);
+void nv_part_event_x(void *h, int type, int ch, int a, int b, double x);
 void nv_part_block(void *h, long long n0, long long blk);
 void nv_part_moog_kernel(void *h, void *pcells, void *srows, void *crows);
 void nv_part_render(void *h, long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
@@ -390,6 +393,10 @@ inline void on_signal(int) { g_stop = true; }
 struct Midi {
     int type, ch, a, b;
     std::vector<uint8_t> x;     // an exclusive's bytes, between F0 and F7 (type 6)
+    // MIDI 2.0's: a Note On's Pitch 7.9 (NAN none), a per-note message's
+    // value (type 8: a the note, b its kind) -- past the routes, as live.on_ump
+    double v = NAN;
+    bool ump = false;           // from a MIDI 2.0 source (--midi2-play, --ump): past the routes and the bridge
 };
 
 // raw MIDI bytes from a device file: running status; note-on at velocity 0 a
@@ -926,7 +933,16 @@ struct nv_host {
     // THE SCENE (live.scene_from): each channel's captured controls as they
     // reached the part (the audio thread's), an event put past the routes
     std::map<std::pair<int, int>, int> chanlatch;
-    void engine_event(int type, int ch, int a, int b);
+    void engine_event(int type, int ch, int a, int b, double v = NAN);
+    void engine_raw(int type, int ch, int a, int b, double v);
+    // MIDI 2.0 (live.midi2, midi2_label): the bridge carrying the keyboard's
+    // MIDI 1.0 into the engine as MIDI 2.0 (--midi2, --midi2-pitch), when it
+    // began holding a data entry; the label the panel shows
+    nv::ump::Bridge m2b;
+    std::chrono::steady_clock::time_point m2_held{};
+    std::string midi2_label;
+    void m2_out(const std::vector<nv::ump::Ev> &out);
+    void m2_hold_mark();
     // THE PARTS (livetui's PARTS pane): read by the panel under parts_mu, changed
     // by posts (between two blocks); a part added built on the builder first
     // (add_req -> add_done), then added between two blocks

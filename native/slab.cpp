@@ -2378,6 +2378,11 @@ struct Ev {
                             // 4 the pitch wheel (a, -8192..8191), 6 an exclusive (a: its bytes' place),
                             // 7 a key's polytouch (a the key, b the value)
     int ch, a, b;
+    // a Note On's MIDI 2.0 Pitch 7.9 (NAN none); type 8, MIDI 2.0's per-note
+    // messages (live._one_m2: a the note, b the kind -- 0 Pitch 7.25, 1 the
+    // per-note bend, 2 its range, 3 per-note management, its reset 16 and
+    // detach 32, 4 one the engine has no use for), its value
+    double x = NAN;
 };
 
 // THE SIREN's ROTOR (siren.py, as live steps it): kind 1 the fire siren's
@@ -2707,6 +2712,15 @@ struct Part {
     std::map<std::pair<int, int>, std::vector<double>> mts_tab;
     std::map<int, std::pair<int, int>> mts_sel;
     std::map<std::tuple<long long, int, int>, double> mts_at;
+    // MIDI 2.0's PER-NOTE PITCH (live's pn725, pnattr, pnbend, pnrange,
+    // pn_at), the spec's precedence (M2-104 7.4.15): a Note On's Pitch 7.9
+    // for that note, else the Pitch 7.25 set for the note number, else the
+    // tuner; the per-note bend offsets whichever it is. pn_at: what each
+    // (part, channel, note) was last put at -- (factor, absolute)
+    std::map<std::pair<int, int>, double> pn725, pnattr, pnbend;
+    std::map<int, double> pnrange;
+    std::map<std::tuple<long long, int, int>, std::pair<double, bool>> pn_at;
+    long long m2_ignored = 0;
     int mts_ref_note = -1;                          // the tuners' reference (--a, --c), -1 none
     double mts_ref_hz = 0.0;
     double vib_mod[16] = {}, vib_modw[16] = {};     // live.mod, live.modw: the wheel's depth, its fraction
@@ -4815,7 +4829,7 @@ struct Part {
         return hit;
     }
 
-    void note_on(int ch, int note, int vel, long long n0)
+    void note_on(int ch, int note, int vel, long long n0, double ap = NAN)
     {
         bool slur = legato_on(ch, note, n0);
         down.insert(std::make_pair(ch, note));
@@ -4847,6 +4861,12 @@ struct Part {
         // from the last one on the channel, detached or not
         moog_src = last_on[lk(ch)] != note ? last_on[lk(ch)] : -1;
         last_on[lk(ch)] = note;
+        // A MIDI 2.0 Note On may carry its own pitch (Pitch 7.9), this note's
+        // alone, outranking every other tuning (7.4.15.3)
+        if (!std::isnan(ap))
+            pnattr[std::make_pair(ch, note)] = ap;
+        else
+            pnattr.erase(std::make_pair(ch, note));
         std::vector<int> cl = claimers(ch, note);
         if (cl.size() <= 1)
             cut_on(ch, note, vel, n0, slur);
@@ -6299,9 +6319,13 @@ struct Part {
         {                                   // a note struck under a bend, or the wheel up, joins them
             double sva, svr;
             snd_vib(patches[cur], ch, slots, &sva, &svr);
-            double b = bend[ch] * (key_ratio(patches[cur], ch, note) * 1.0);   // (the key's tuning: _key_ratio)
+            // the key's tuning (_key_ratio) -- unless MIDI 2.0 gave this note its
+            // own pitch, which replaces it; a per-note bend multiplies either
+            const auto pw = pn_want(patches[cur], ch, note);
+            pn_at[std::make_tuple(pid, ch, note)] = pw;
+            double b = bend[ch] * (pw.second ? pw.first : key_ratio(patches[cur], ch, note) * pw.first);
             double v2 = vib_mod[ch] + sva, r2 = (1.0 + mod_rate * vib_modw[ch]) * svr;
-            if (nv_tcache_gm2(patches[cur].cache))
+            if (nv_tcache_gm2(patches[cur].cache) && !pw.second)
                 mts_at[std::make_tuple(pid, ch, note + transpose)] = mts_ratio(patches[cur], ch, note);
             // ...OR A MEEND'S, for a voice that locks its bend to the tuning's swaras
             double mr;
@@ -7097,6 +7121,94 @@ struct Part {
     // live._key_ratio: everything that tunes one key
     double key_ratio(const Patch &p, int ch, int note) { return sota_ratio(ch, note) * mts_ratio(p, ch, note); }
 
+    // live._pn_want: (factor, absolute) for one written key under MIDI 2.0's
+    // per-note pitch -- absolute where a Pitch 7.9 or 7.25 is in force (the
+    // factor the key's whole tuning: its pitch, 12-TET at A = 440, over the
+    // frequency the template was built at), else a factor on the key's own
+    // tuning; the per-note bend in both
+    std::pair<double, bool> pn_want(const Patch &p, int ch, int note) const
+    {
+        const auto k = std::make_pair(ch, note);
+        auto bi = pnbend.find(k);
+        const double pb = bi == pnbend.end() ? 0.0 : bi->second;
+        auto ri = pnrange.find(ch);
+        const double f = pb != 0.0 ? pow(2.0, pb * (ri == pnrange.end() ? 2.0 : ri->second) / 12.0) : 1.0;
+        auto ai = pnattr.find(k);
+        auto ti = pn725.find(k);
+        if ((ai == pnattr.end() && ti == pn725.end()) || p.drums)
+            return {f, false};
+        const double pp = ai != pnattr.end() ? ai->second : ti->second;
+        const int key = note + p.transpose;
+        const double base = key >= 0 && key < 128 ? nv_tcache_freq(p.cache, key) : 0.0;
+        if (!(base != 0.0))
+            return {f, false};
+        const double hz = 440.0 * pow(2.0, (pp + p.transpose - 69.0) / 12.0);
+        return {hz / base * f, true};
+    }
+    bool pn_abs(long long pid, int ch, int note) const
+    {
+        auto it = pn_at.find(std::make_tuple(pid, ch, note));
+        return it != pn_at.end() && it->second.second;
+    }
+
+    // live._repn: one key's sounding notes onto the per-note pitch now in
+    // force, each against what it was stamped with
+    void repn(int ch, int note, long long n0)
+    {
+        for (size_t pi = 0; pi < patches.size(); pi++) {
+            const Patch &p = patches[pi];
+            if (p.muted || p.gone || !(p.channel < 0 || p.channel == pc(ch)))
+                continue;
+            std::vector<long> sl;
+            for (auto &kv : S.live)
+                if (std::get<0>(kv.first) == p.pid && std::get<1>(kv.first) == ch && std::get<2>(kv.first) == note)
+                    sl.insert(sl.end(), kv.second.begin(), kv.second.end());
+            if (sl.empty())
+                continue;
+            const double kr = key_ratio(p, ch, note);
+            const auto mk = std::make_tuple(p.pid, ch, note);
+            auto oi = pn_at.find(mk);
+            const double of = oi == pn_at.end() ? 1.0 : oi->second.first;
+            const bool oa = oi != pn_at.end() && oi->second.second;
+            const auto nw = pn_want(p, ch, note);
+            const double was = oa ? of : kr * of, want = nw.second ? nw.first : kr * nw.first;
+            pn_at[mk] = nw;
+            if (fabs(want / was - 1.0) > 1e-15) {
+                retune(sl, n0, want / was);
+                amp_touch((int)pi);
+            }
+        }
+    }
+
+    // live._one_m2: what MIDI 2.0 adds and MIDI 1.0 has no message for
+    void m2(const Ev &e, long long n0)
+    {
+        const int ch = e.ch, note = e.a, kind = e.b & 15;
+        const auto k = std::make_pair(ch, note);
+        if (kind == 4) {
+            m2_ignored++;
+        } else if (kind == 0) {                 // Registered Per-Note #3, Pitch 7.25
+            pn725[k] = e.x;
+            repn(ch, note, n0);
+        } else if (kind == 1) {
+            pnbend[k] = e.x;
+            repn(ch, note, n0);
+        } else if (kind == 2) {                 // RPN 0/7
+            pnrange[ch] = e.x;
+            std::set<int> ns;
+            for (auto &kv : pnbend)
+                if (kv.first.first == ch)
+                    ns.insert(kv.first.second);
+            for (int nt : ns)
+                repn(ch, nt, n0);
+        } else if (kind == 3 && (e.b & 16)) {   // a reset; DETACH leaves the notes sounding where they are
+            pn725.erase(k);
+            pnbend.erase(k);
+            if (!(e.b & 32))
+                repn(ch, note, n0);
+        }
+    }
+
     // live._resota: this channel's sounding notes onto its table, each pitch
     // class against the ratio last applied to it
     void resota(int ch, long long n0)
@@ -7111,7 +7223,8 @@ struct Part {
             sota_at[std::make_pair(ch, pc)] = want;
             std::vector<long> sl;
             for (auto &kv : S.live)
-                if (std::get<1>(kv.first) == ch && ((std::get<2>(kv.first) % 12) + 12) % 12 == pc)
+                if (std::get<1>(kv.first) == ch && ((std::get<2>(kv.first) % 12) + 12) % 12 == pc
+                    && !pn_abs(std::get<0>(kv.first), ch, (int)std::get<2>(kv.first)))   // (its own MIDI 2.0 pitch)
                     sl.insert(sl.end(), kv.second.begin(), kv.second.end());
             if (!sl.empty()) {
                 retune(sl, n0, want / was);
@@ -7142,6 +7255,8 @@ struct Part {
                         pk.insert((int)std::get<2>(kv.first) + p.transpose);
             for (int key : pk) {
                 int w = key - p.transpose;
+                if (pn_abs(p.pid, ch, w))
+                    continue;                   // its own MIDI 2.0 pitch outranks MTS
                 double want = mts_ratio(p, ch, w);
                 auto mk = std::make_tuple(p.pid, ch, key);
                 auto it = mts_at.find(mk);
@@ -7874,6 +7989,17 @@ struct Part {
                 for (long s : S.last_slots)
                     S.i4[I4_br][s] = rw;
             }
+        }
+        {
+            // A REGISTERABLE VOICE STILL TAKES A TUNING (live's organ path):
+            // the key's -- or MIDI 2.0's per-note pitch, as the note-on takes it
+            const auto pw = pn_want(patches[cur], ch, note);
+            pn_at[std::make_tuple(pid, ch, note)] = pw;
+            const double sr = pw.second ? pw.first : key_ratio(patches[cur], ch, note) * pw.first;
+            if (nv_tcache_gm2(patches[cur].cache) && !pw.second)
+                mts_at[std::make_tuple(pid, ch, note + transpose)] = mts_ratio(patches[cur], ch, note);
+            if (sr != 1.0)
+                retune(std::vector<long>(S.last_slots), n0, sr);
         }
         if (patches[cur].leslie && !S.les.empty())    // onto the rotors, at their rates now
             S.leslie_arm(S.last_slots, R.f4[24].data(), R.f4[2].data(), R.lflip.empty() ? nullptr : R.lflip.data(),
@@ -10102,7 +10228,10 @@ struct Part {
         const int sn = note + p.transpose;
         if (sn < 0 || sn > 127 || note < 0 || note > 127)
             return;
-        double b = bend[ch] * (key_ratio(p, ch, note) * 1.0);
+        auto pa = pn_at.find(std::make_tuple(p.pid, ch, note));
+        const double pf = pa == pn_at.end() ? 1.0 : pa->second.first;
+        const bool pabs = pa != pn_at.end() && pa->second.second;
+        double b = bend[ch] * (pabs ? pf : key_ratio(p, ch, note) * pf);
         double ours = nv_tcache_freq(p.cache, sn) * b;
         double et = 440.0 * pow(2.0, (note - 69) / 12.0);
         double cents = 1200.0 * log2(ours / et);
@@ -12358,8 +12487,10 @@ struct Part {
                 if (vsd[e.ch] != 64 || vso[e.ch] != 64)
                     v = std::max(1, std::min(127, (int)nearbyint(v * vsd[e.ch] / 64.0 + vso[e.ch] - 64)));
             }
-            note_on(e.ch, e.a, v, n0);
+            note_on(e.ch, e.a, v, n0, e.x);
         }
+        else if (e.type == 8)
+            m2(e, n0);
         else if (e.type == 1)
             note_off(e.ch, e.a, n0);
         else if (e.type == 3)
@@ -12387,7 +12518,7 @@ struct Part {
         sxs.swap(sx);
         for (const Ev &e : evs) {
             // MPE first (live._one: the zones' routing, then _one_core)
-            if (mpe && e.type != 5 && e.type != 6 && mpe_route(e, n0))
+            if (mpe && e.type != 5 && e.type != 6 && e.type != 8 && mpe_route(e, n0))   // (MIDI 2.0's own: not routed)
                 continue;
             core(e, sxs, n0);
         }
@@ -13273,6 +13404,14 @@ long nv_part_reg_dropped(void *h) { return ((nv::slab::Part *)h)->reg_dropped; }
 void nv_part_event(void *h, int type, int ch, int a, int b)
 {
     ((nv::slab::Part *)h)->events.push_back(nv::slab::Ev{type, ch, a, b});
+}
+
+// ...with its value: a Note On's MIDI 2.0 Pitch 7.9, a per-note message's (type 8)
+void nv_part_event_x(void *h, int type, int ch, int a, int b, double x)
+{
+    nv::slab::Ev e{type, ch, a, b};
+    e.x = x;
+    ((nv::slab::Part *)h)->events.push_back(e);
 }
 
 // an exclusive (the bytes between F0 and F7), the next of the block's events

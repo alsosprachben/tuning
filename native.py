@@ -496,6 +496,7 @@ def _load():
             ('nv_midi_n_events', I, [ctypes.c_void_p]),
             ('nv_midi_sysex', I, [ctypes.c_void_p, I, ctypes.c_void_p, I]), ('nv_midi_master', I, [ctypes.c_void_p]),
             ('nv_midi_event', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_midi_event_x', ctypes.c_double, [ctypes.c_void_p, I]),
             ('nv_midi_note', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_cc', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_pw', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
@@ -4062,6 +4063,13 @@ class Midi(object):
             self.d.nv_midi_event(self.p, i, iv, ctypes.byref(t))
             out.append((t.value, iv[0], iv[1], iv[2], iv[3]))
         return out
+
+    def events_x(self):
+        """Each event's MIDI 2.0 value, in events()'s order: a Note On's Pitch
+        7.9 (semitones), a per-note message's (type 8: a the note, b the kind --
+        0 Pitch 7.25, 1 per-note bend, 2 its range, 3 per-note management with
+        its reset 16 and detach 32, 4 ignored); NaN none"""
+        return [self.d.nv_midi_event_x(self.p, i) for i in range(self.d.nv_midi_n_events(self.p))]
 
     def pws(self):
         """{channel: [(t, pitch)]}"""

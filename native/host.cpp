@@ -1773,6 +1773,13 @@ void nv_host::render_block(long long n0, float *buf, bool step)
     if (recording)
         for (const Midi &m : evs)
             rec("e %lld %d %d %d %d", n0, m.type, m.ch, m.a, m.b);
+    if (m2b.on && !m2b.pending.empty() && m2_held != std::chrono::steady_clock::time_point{}
+        && std::chrono::steady_clock::now() - m2_held > std::chrono::microseconds(5000)) {
+        std::vector<nv::ump::Ev> out;           // (a lone data entry held past live's M2_HOLD_S: sent)
+        m2b.flush_all(out);
+        m2_hold_mark();
+        m2_out(out);
+    }
     std::vector<Midi> rxo;
     for (const Midi &m0 : evs) {
       // A CHANNEL MESSAGE AS THE PARTS RECEIVE IT (live._gs_rx): to each part
@@ -1783,6 +1790,15 @@ void nv_host::render_block(long long n0, float *buf, bool step)
       else
           rxo.push_back(m0);
       for (const Midi &m : rxo) {
+        if (m.type == 8 || !std::isnan(m.v)) {  // MIDI 2.0's own (live.on_ump: past the routes, learn, latch)
+            engine_raw(m.type, m.ch, m.a, m.b, m.v);
+            continue;
+        }
+        if (m.ump && m.type != 5 && m.type != 6) {   // (a MIDI 2.0 source's: past the routes and the bridge)
+            latch(m.type, m.ch, m.a, m.b);
+            engine_raw(m.type, m.ch, m.a, m.b, m.v);
+            continue;
+        }
         // LEARNING A KEY (live._learn_take): the next press taken, and
         // neither it nor its release plays
         if (learning == 1 && m.type == 0) {
@@ -1818,7 +1834,13 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                     chdr[m.ch] = 0;
                 if (chdr[m.ch])
                     hdedit.erase(m.ch);
-                nv_part_event(part, 5, m.ch, m.a, chdr[m.ch]);
+                if (m2b.on && !m.ump) {         // (the bridge: a held data entry and the bank select first)
+                    std::vector<nv::ump::Ev> out;
+                    m2b.feed(5, m.ch, m.a, chdr[m.ch], out);
+                    m2_hold_mark();
+                    m2_out(out);
+                } else
+                    nv_part_event(part, 5, m.ch, m.a, chdr[m.ch]);
             }
             if (asks)
                 asked(m.ch, m.a);
@@ -2270,8 +2292,46 @@ void nv_host::start()
 // value latched as it goes (live._see: CAPTURE_CC, what a scene keeps; CC121
 // resets the ones it resets). The audio thread's
 static const int CAPTURE_CC[] = {0, 32, 1, 5, 7, 10, 11, 43, 44, 45, 65, 91, 93};
-void nv_host::engine_event(int type, int ch, int a, int b)
+void nv_host::engine_event(int type, int ch, int a, int b, double v)
 {
+    if (m2b.on && type != 8 && std::isnan(v) && type != 5 && type != 6) {
+        // THE BRIDGE (live._bridge): the keyboard's MIDI 1.0, past its routes,
+        // to the engine as MIDI 2.0 -- what the engine receives of it
+        std::vector<nv::ump::Ev> out;
+        m2b.feed(type, ch, a, b, out);
+        m2_hold_mark();
+        m2_out(out);
+        return;
+    }
+    engine_raw(type, ch, a, b, v);
+}
+
+// the bridge's events to the engine (a program change the host's own, its drums state)
+void nv_host::m2_out(const std::vector<nv::ump::Ev> &out)
+{
+    for (const auto &e : out) {
+        if (e.type == 5)
+            nv_part_event(part, 5, e.ch, e.a, e.ch >= 0 && e.ch < 16 ? chdr[e.ch] : 0);
+        else
+            engine_raw(e.type, e.ch, e.a, e.b, e.v);
+    }
+}
+
+// (when the bridge began holding a data entry: its timeout, live's M2_HOLD_S)
+void nv_host::m2_hold_mark()
+{
+    if (m2b.pending.empty())
+        m2_held = {};
+    else if (m2_held == std::chrono::steady_clock::time_point{})
+        m2_held = std::chrono::steady_clock::now();
+}
+
+void nv_host::engine_raw(int type, int ch, int a, int b, double v)
+{
+    if (type == 8 || !std::isnan(v)) {          // (MIDI 2.0's own: nothing latched)
+        nv_part_event_x(part, type, ch, a, b, v);
+        return;
+    }
     if (type == 2) {
         for (int c : CAPTURE_CC)
             if (a == c)

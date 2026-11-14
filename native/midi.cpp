@@ -264,6 +264,9 @@ struct PwEv {
 struct LiveEv {
     double t;
     int type, ch, a, b;
+    // a Note On's MIDI 2.0 Pitch 7.9 (NAN none); type 8, MIDI 2.0's per-note
+    // messages (a the note, b the kind as the slab's Ev has it), the value
+    double x = NAN;
 };
 
 // THE PITCH STREAM (blockrender.parse's _pwseq, rpns and gmon): what moves a
@@ -1352,6 +1355,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         else if (lk == 0x90 && x.d1 > 0) {
             seen_note = true;
             P.events.push_back(LiveEv{t, 0, lc, x.d0, x.d1});
+            P.events.back().x = x.ap;
         } else if (lk == 0x80 || lk == 0x90)
             P.events.push_back(LiveEv{t, 1, lc, x.d0, 0});
         else if (lk == 0xD0)
@@ -1443,6 +1447,10 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             else if (m.d1 & 16) {               // (a reset: no pitch of its own, no bend)
                 P.pn_p725[k].push_back({t, NAN});
                 P.pn_bend[k].push_back({t, 0.0});
+            }
+            if (live_ev) {                      // (the live part's: live._one_m2)
+                P.events.push_back(LiveEv{t, 8, pc, m.d0, m.meta | (m.d1 & 48)});
+                P.events.back().x = m.fv;
             }
             continue;
         }
@@ -2016,8 +2024,10 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             if (!std::isnan(m.ap))
                 P.pn_attr[std::make_tuple(ch, m.d0, t)] = m.ap;     // (a Note On's own Pitch 7.9)
             seen_note = true;
-            if (live_ev)
+            if (live_ev) {
                 P.events.push_back(LiveEv{t, 0, ch, m.d0, m.d1});
+                P.events.back().x = m.ap;
+            }
             auto &c = ctrl[ch];
             Note n;
             n.ch = ch; n.note = m.d0; n.on = t; n.off = 0.0; n.vel = m.d1;
@@ -2391,6 +2401,9 @@ void nv_midi_event(void *p, int i, int *iv, double *t)
     iv[0] = e.type; iv[1] = e.ch; iv[2] = e.a; iv[3] = e.b;
     *t = e.t;
 }
+
+// ...its value: a Note On's MIDI 2.0 Pitch 7.9, a per-note message's (NAN none)
+double nv_midi_event_x(void *p, int i) { return ((nv::Parsed *)p)->events[i].x; }
 
 // note i: (channel, key, velocity, program, drum) ints; (on, off, v7, v11, pan) doubles
 void nv_midi_note(void *p, int i, int *iv, double *dv)

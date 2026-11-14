@@ -112,8 +112,14 @@ TASKS = [
                    "m2_pernote and converted fixtures (tests/live midi2_files), each effect measured (m2_file); "
                    "open: MIDI 2.0's own resolution (a value MIDI 1.0 has no number for: refused, -9, as the "
                    "demo's 32-bit swell), groups past the second, per-note pitch beside an organ's wind rows"),
-    ("GM2", False, "Live: MIDI 2.0 in nvlive (live._one_m2: the per-note messages; a MIDI 1.0 keyboard bridged, "
-                   "live --midi2) -- nvlive parses MIDI 1.0 bytes only"),
+    ("GM2", False, "Live: MIDI 2.0 in nvlive -- done: the per-note pitch (live._one_m2, _pn_want, _repn: a Note "
+                   "On's Pitch 7.9, Pitch 7.25, per-note bend and range, per-note management; MTS and the scale "
+                   "table yield to it), and a registered voice's key tuning on its ranks (live's organ path, "
+                   "which nvlive lacked); the bridge (--midi2, --midi2-pitch=just:C|et), --midi2-play=FILE, "
+                   "--ump and --ump-from=PORT (an ALSA sequencer MIDI 2.0 port, libasound at run time), the "
+                   "panel's label -- nvlive identical on m2_pernote (tests/live m2_live, each effect measured), "
+                   "native/ump.h against ump.py and alsaump.py (ump_inputs); open: MIDI 2.0's own resolution "
+                   "live (taken at the nearest MIDI 1.0 number), a hardware MIDI 2.0 controller tried"),
     ("GM1", True, "Files: a class's own distance and gestures -- reverb_distance, its own chorus pedal "
                   "(chorus_send) and detuned pair (detuned_pair: chorus._pair), falls and rips on the valved "
                   "lattice (fall_cents, rip_cents: Song::gliss)"),

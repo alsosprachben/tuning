@@ -188,8 +188,18 @@ def main(argv):
     secs = float(args[1]) if len(args) > 1 else 20.0
     tmp = tempfile.mkdtemp(prefix="nvlivecheck")
     atexit.register(shutil.rmtree, tmp, True)       # (an export and WAVs a run: they filled the disk)
-    mid = os.path.join(tmp, "in.mid")
-    BI.excerpt(args[0], secs).save(mid)
+    with open(args[0], "rb") as fh:
+        m2 = fh.read(8) in (b"SMF2CLIP", b"UMPRAW02")
+    if m2:
+        # A MIDI 2.0 FILE (ump.py) whole: mido cannot cut it. Its per-note
+        # messages and a Note On's own pitch reach live as UMP (on_ump), each
+        # packet made again from the native reader's value -- exact, the value
+        # being the packet's own integer over its scale
+        mid = os.path.join(tmp, "in.midi2")
+        shutil.copyfile(args[0], mid)
+    else:
+        mid = os.path.join(tmp, "in.mid")
+        BI.excerpt(args[0], secs).save(mid)
     room = opt.get("room") or "hall"
     nvx = live_export(tmp, room)
     exe = N.build_nvlive()
@@ -307,6 +317,10 @@ def main(argv):
             lv.messenger_sync(_p)
     dry = []
     evs = m.events()
+    import math
+    exs = m.events_x() if m2 else [float("nan")] * len(evs)
+    if m2:
+        import ump as U
     nb = int(total * 48000) // 128
     e = 0
     M = mido.Message
@@ -327,7 +341,22 @@ def main(argv):
                 instant_scan(lv, _p)
         while e < len(evs) and int(evs[e][0] * 48000) // 128 <= b:
             t, ty, ch, a, v = evs[e]
-            if ty == 0:
+            x = exs[e]
+            if ty == 8:                     # MIDI 2.0's per-note messages
+                g, c, k = ch // 16, ch % 16, v & 15
+                if k == 0:
+                    pkt = U.m2_per_note_ctrl(g, c, a, U.RPNC_PITCH, int(round(x * 2 ** 25)))
+                elif k == 1:
+                    pkt = U.m2_per_note_bend(g, c, a, int(round(x * 2 ** 31 + 2 ** 31)))
+                elif k == 2:
+                    pkt = U.m2_rpn(g, c, 0, 7, int(round(x * 2 ** 25)))
+                else:
+                    pkt = U.m2_per_note_mgmt(g, c, a, detach=bool(v & 32), reset=bool(v & 16))
+                lv.on_ump([pkt])
+            elif ty == 0 and not math.isnan(x):     # a Note On with its own Pitch 7.9
+                lv.on_ump([U.m2_note_on(ch // 16, ch % 16, a, U.scale_up(v, 7, 16), attr_type=3,
+                                        attr=int(round(x * 512)))])
+            elif ty == 0:
                 lv.on_midi(M("note_on", channel=ch, note=a, velocity=v))
             elif ty == 1:
                 lv.on_midi(M("note_off", channel=ch, note=a, velocity=0))

@@ -90,6 +90,7 @@
 // The audio runs on its own thread; the panel's changes are done between
 // two blocks.
 
+#include <poll.h>
 #include "hostlive.h"
 
 int nv_host::run(int argc, char **argv)
@@ -283,6 +284,7 @@ int nv_host::run(int argc, char **argv)
                         if ((long long)(et * SR) / BLK > b)
                             break;                      // a later block's
                         Midi ev{iv[0], iv[1], iv[2], iv[3], {}};
+                        ev.v = nv_midi_event_x(m, e);       // (MIDI 2.0's: a Note On's Pitch 7.9, a per-note value)
                         bool keep = true;
                         if (iv[0] == 6) {               // an exclusive: its bytes
                             std::vector<uint8_t> xb(65536);
@@ -457,6 +459,102 @@ int nv_host::run(int argc, char **argv)
     fprintf(stderr, "nvlive: playing (MIDI %s, audio %s, %u us); %s\n", dev.c_str(), pcmdev.c_str(), lat,
             nopanel ? "Ctrl-C to stop" : "the panel (q to stop)");
     start();                                      // the workers and the builder
+    // MIDI 2.0 (live --midi2, --midi2-pitch, --midi2-play, --ump, --ump-from):
+    // the bridge; a Clip File or raw UMP stream played in on a thread of its
+    // own, each packet at its time; a MIDI 2.0 port in the ALSA sequencer,
+    // read on another -- each decoded to the engine's events and queued as
+    // the keyboard's are, past the routes and the bridge (live.on_ump)
+    std::thread m2play, umpthr;
+    nv::ump::AlsaUmp uc;
+    {
+        bool want_bridge = false, want_ump = false;
+        for (int i = 1; i < argc; i++) {
+            want_bridge = want_bridge || !strcmp(argv[i], "--midi2");
+            want_ump = want_ump || !strcmp(argv[i], "--ump");
+        }
+        const std::string spec = opt(argc, argv, "midi2-pitch", "");
+        if (want_bridge || !spec.empty()) {
+            if (!spec.empty() && !m2b.pt.parse(spec)) {
+                fprintf(stderr, "nvlive: --midi2-pitch: 'just:<tonic>' (just:C, just:Eb, ...) or 'et'\n");
+                return 1;
+            }
+            m2b.on = true;
+            midi2_label = "MIDI 2.0 (bridged" + (spec.empty() ? std::string() : ", " + spec) + ")";
+            fprintf(stderr, "nvlive: %s\n", midi2_label.c_str());
+        }
+        auto queue_ump = [this](const std::vector<uint32_t> &pk, std::map<int, std::vector<uint8_t>> &sxb) {
+            std::vector<nv::ump::Ev> evs;
+            nv::ump::decode(pk.data(), sxb, evs, &m2b.ignored);
+            std::lock_guard<std::mutex> lk(mu);
+            for (auto &e : evs) {
+                Midi m{e.type, e.ch, e.a, e.b, e.x};
+                m.v = e.v;
+                m.ump = true;
+                q.push_back(std::move(m));
+            }
+        };
+        const std::string playf = opt(argc, argv, "midi2-play", "");
+        if (!playf.empty()) {
+            std::vector<uint8_t> fb;
+            if (FILE *f = fopen(playf.c_str(), "rb")) {
+                uint8_t chunk[65536];
+                size_t n;
+                while ((n = fread(chunk, 1, sizeof chunk, f)) > 0)
+                    fb.insert(fb.end(), chunk, chunk + n);
+                fclose(f);
+            }
+            std::vector<std::pair<double, std::vector<uint32_t>>> tl;
+            if (!nv::ump::read_timeline(fb, tl)) {
+                fprintf(stderr, "nvlive: --midi2-play: %s is not a MIDI Clip File or raw UMP stream\n", playf.c_str());
+                return 1;
+            }
+            m2play = std::thread([tl, playf, queue_ump]() {
+                std::map<int, std::vector<uint8_t>> sxb;
+                const auto t0 = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+                for (const auto &e : tl) {
+                    const auto at = t0 + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                                             std::chrono::duration<double>(e.first));
+                    while (!g_stop && std::chrono::steady_clock::now() < at)
+                        std::this_thread::sleep_for(std::min<std::chrono::steady_clock::duration>(
+                            at - std::chrono::steady_clock::now(), std::chrono::milliseconds(50)));
+                    if (g_stop)
+                        return;
+                    queue_ump(e.second, sxb);
+                }
+                fprintf(stderr, "nvlive: %s: played %zu UMPs\n", playf.c_str(), tl.size());
+            });
+        }
+        const std::string from = opt(argc, argv, "ump-from", "");
+        if (want_ump || !from.empty()) {
+            if (!uc.open("tuning") || (!from.empty() && !uc.connect_from(from))) {
+                fprintf(stderr, "nvlive: --ump: %s\n", uc.err.c_str());
+                return 1;
+            }
+            if (!from.empty()) {
+                ins.set({});                    // (the keyboard comes through the kernel, not opened as well)
+                midi2_label = "MIDI 2.0 (kernel bridge from " + from + ")";
+            } else if (midi2_label.empty()) {
+                midi2_label = "MIDI 2.0 port " + std::to_string(uc.client) + ":" + std::to_string(uc.port);
+            }
+            fprintf(stderr, "nvlive: ALSA MIDI 2.0 port %d:%d%s\n", uc.client, uc.port,
+                    from.empty() ? "" : (", from " + from).c_str());
+            umpthr = std::thread([this, &uc, queue_ump]() {
+                std::map<int, std::vector<uint8_t>> sxb;
+                std::vector<int> fds = uc.fds();
+                std::vector<pollfd> pf;
+                for (int fd : fds)
+                    pf.push_back(pollfd{fd, POLLIN, 0});
+                while (!g_stop) {
+                    if (poll(pf.data(), pf.size(), 100) <= 0)
+                        continue;
+                    std::vector<std::vector<uint32_t>> got;
+                    uc.read_pending(got);
+                    for (auto &pk : got)
+                        queue_ump(pk, sxb);
+                }
+            });
+        }
+    }
     std::thread recorder;
     std::string recf = opt(argc, argv, "record", "");
     if (!recf.empty()) {
@@ -617,7 +715,9 @@ int nv_host::run(int argc, char **argv)
             std::string l;
             for (auto &x : ins.open)
                 l += (l.empty() ? "" : ", ") + x.second;
-            return l.empty() ? std::string("no MIDI in") : l;
+            if (l.empty())
+                l = midi2_label.empty() ? std::string("no MIDI in") : std::string();
+            return midi2_label.empty() ? l : l + (l.empty() ? "" : "  ") + midi2_label;     // (livetui's midi2_label)
         };
         H.room = E.room.empty() ? "-" : E.room;
         H.reg_modes = rg0->M > 0 && !noreg ? rg0->M : 0;
@@ -960,6 +1060,10 @@ int nv_host::run(int argc, char **argv)
     reader.join();
     if (recorder.joinable())
         recorder.join();
+    if (m2play.joinable())
+        m2play.join();
+    if (umpthr.joinable())
+        umpthr.join();
     A.close(A.pcm);
     fprintf(stderr, "nvlive: stopped\n");
     return 0;

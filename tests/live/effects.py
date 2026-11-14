@@ -263,6 +263,30 @@ def m2_file(E, logs):
              and abs(cents(dr, d_et)) < 10.0, "%+.1f, then %+.1f cents" % (cents(dq, d_et), cents(dr, d_et)))
 
 
+def m2_live(E, logs):
+    """MIDI 2.0's per-note pitch live (m2_pernote.midi2 through nvlive_check:
+    live.Live's on_ump, nvlive's reader), both sides; the after-reset D the
+    check's tuner's (A = 415: a semitone down)."""
+    py, nv, last = live_pair(os.path.join(MIDI, "m2_pernote.midi2"), 14, ["--programs"], logs, "m2")
+    print("  (m2_pernote live: %s)" % last)
+    et = lambda n: 440.0 * 2 ** ((n - 69) / 12.0)
+    for side, x in (("live.Live", py), ("nvlive", nv)):
+        e0, e1 = peak_hz(x, 0.3, 0.95, 315, 340), peak_hz(x, 2.2, 2.95, 315, 340)
+        g0, gj, ej = peak_hz(x, 0.3, 0.95, 380, 405), peak_hz(x, 4.3, 5.9, 380, 405), peak_hz(x, 4.3, 5.9, 315, 340)
+        E.expect("%s: Pitch 7.25's table, then the third settling" % side,
+                 abs(cents(e0, et(64))) < 1.0 and abs(cents(e1, e0) + 13.69) < 1.0,
+                 "%+.2f, %+.2f cents" % (cents(e0, et(64)), cents(e1, e0)))
+        E.expect("%s: Pitch 7.9 on each Note On: the just E and G" % side,
+                 abs(cents(ej, e0) + 13.69) < 1.0 and abs(cents(gj, g0) - 1.955) < 1.0,
+                 "E %+.2f, G %+.2f cents" % (cents(ej, e0), cents(gj, g0)))
+        w = pitch_cents(x, 7.3, 7.95, lo=480, hi=560)
+        E.expect("%s: the flute's per-note bend" % side, w > 70.0, "%.0f cents swing" % w)
+        dq, dr = peak_hz(x, 10.7, 11.45, 280, 310), peak_hz(x, 11.7, 12.45, 260, 310)
+        E.expect("%s: a quarter-tone D, then reset to the tuner's" % side,
+                 abs(cents(dq, et(62)) - 50.0) < 2.0 and abs(cents(dr, et(62)) + 100.0) < 10.0,
+                 "%+.1f, then %+.1f cents" % (cents(dq, et(62)), cents(dr, et(62))))
+
+
 def mpe_live(E, logs):
     py, nv, last = live_pair(os.path.join(MIDI, "mpe_zone.mid"), 4, ["--programs"] + A440, logs, "mpe")
     print("  (mpe_zone live: %s)" % last)
@@ -337,7 +361,7 @@ def cmx_live_fx(E, logs):
 
 
 ALL = [("rx_file", rx_file), ("cmx_live", cmx_live_fx), ("user_drums_live", user_drums_live), ("drum_delay_live", drum_delay_live), ("rhythm_live", rhythm_live), ("drums_live", drums_live), ("vsense_live", vsense_live),
-       ("mpe_file", mpe_file), ("m2_file", m2_file), ("mpe_live", mpe_live)]
+       ("mpe_file", mpe_file), ("m2_file", m2_file), ("m2_live", m2_live), ("mpe_live", mpe_live)]
 
 
 def main(argv):
