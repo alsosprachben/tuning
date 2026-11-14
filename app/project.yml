@@ -1,0 +1,35 @@
+# The app (macOS now, iOS next): XcodeGen makes Tuning.xcodeproj from this --
+#   cd app && xcodegen && xcodebuild -scheme Tuning build
+# The engine is the repo's libnative (native.py builds it: the host library,
+# native/host.h), linked from the repo for now; the export (native_export.py
+# --live) read from ~/nvx/live.nvx until the app carries its own.
+name: Tuning
+options:
+  bundleIdPrefix: org.tuning
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+targets:
+  Tuning:
+    type: application
+    platform: macOS
+    sources: [Tuning]
+    settings:
+      base:
+        PRODUCT_NAME: Tuning
+        PRODUCT_BUNDLE_IDENTIFIER: org.tuning.app
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Tuning
+        SWIFT_OBJC_BRIDGING_HEADER: Tuning/Bridge.h
+        HEADER_SEARCH_PATHS: $(SRCROOT)/../native
+        LIBRARY_SEARCH_PATHS: $(SRCROOT)/..
+        OTHER_LDFLAGS: -lnative
+        LD_RUNPATH_SEARCH_PATHS: $(SRCROOT)/..
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: NO
+        ENABLE_APP_SANDBOX: NO
