@@ -205,6 +205,9 @@ TASKS = [
                   "control answered"),
     ("GM1", True, "nvlive and livetui: a MIDI input selector (I, or the header): several devices open at once, "
                   "merged; the session keeps them by device name, shared by both"),
+    ("GM1", True, "nvlive and live: an input unplugged and plugged in again is opened again, by its name (its "
+                  "device path or ALSA numbers may move) -- nvlive's reader (ce75ae8, tried by Ben with the "
+                  "Messenger), live's input_watch (tests/live input_watch)"),
     ("GM1", True, "Files: user drum sets (a key the set does not receive skipped), an organ beside a variation on "
                   "its channel (its registered organ off the shared fader) -- nvrender identical"),
     ("GM1", True, "Live: a voice's own chorus in native's templates -- the detuned pairs (Detuned EP 1 and 2, the "

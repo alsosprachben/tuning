@@ -4442,6 +4442,7 @@ class Live:
         # takes one message at a time through the routes (each port calls
         # on_midi from its own thread)
         self.midi_inputs = {}
+        self.lost_inputs = {}       # port_key -> the name: unplugged while open, looked for again (input_watch)
         self.midi_in_lock = threading.RLock()
         self.messenger_firmware = "1.0.7+"
         self.messenger_q = None
@@ -5404,6 +5405,7 @@ class Live:
 
     def close_input(self, name):
         """Close one of the MIDI inputs (open_input)."""
+        self.lost_inputs.pop(port_key(name), None)     # (chosen off: none to look for)
         port = self.midi_inputs.pop(name, None)
         if port is not None:
             try:
@@ -5475,6 +5477,49 @@ class Live:
             except Exception:
                 pass
         return n
+
+    def input_watch(self, every=1.0):
+        """AN INPUT PLUGGED IN AGAIN: its own thread, a look at the inputs every
+        `every` s (_input_watch_step) -- as nvlive's reader looks for one."""
+        def run():
+            while True:
+                time.sleep(every)
+                try:
+                    names = mido.get_input_names()
+                except Exception:
+                    continue
+                try:
+                    self._input_watch_step(names)
+                except Exception as e:
+                    self.last_error = "input watch: %s: %s" % (type(e).__name__, e)
+        threading.Thread(target=run, daemon=True, name="input-watch").start()
+
+    def _input_watch_step(self, names):
+        """One look at the inputs present (`names`, mido's): an open input that
+        has gone is closed and remembered by its name without ALSA's numbers
+        (port_key: they may not be its old ones when it is back), and a lost
+        one that is back is opened again. Not the panel's choice: the session
+        keeps it as chosen. Returns (gone, back)."""
+        gone = [n for n in list(self.midi_inputs) if n not in names]
+        for n in gone:
+            port = self.midi_inputs.pop(n, None)
+            if port is not None:
+                try:
+                    port.close()
+                except Exception:
+                    pass
+            self.lost_inputs[port_key(n)] = n
+        back = []
+        for k in list(self.lost_inputs):
+            m = next((x for x in names if port_key(x) == k), None)
+            if m is None:
+                continue
+            was_dirty = self.dirty
+            if self.open_input(m):
+                self.dirty = was_dirty          # (the session's inputs are as they were)
+                del self.lost_inputs[k]
+                back.append(m)
+        return gone, back
 
     def messenger_watch(self, every=2.0):
         """Set the Messenger when it is plugged in, let it go when it is
@@ -23442,6 +23487,7 @@ def main():
                 say("no MIDI output matches %r (outputs: %s)"
                     % (a.messenger, ", ".join(_names)))
         live.messenger_watch()          # (plugged in later, or again: set then)
+        live.input_watch()              # (an input unplugged and plugged in again: opened again)
         live.dirty = False
         step("warming the patches")
         live.warm(progress)

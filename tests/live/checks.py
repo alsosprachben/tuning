@@ -118,6 +118,7 @@ CHECKS = [
     ("m2_live", "nvlive_check.py", ["@m2_pernote.midi2", "14", "--programs"], {}),
     ("assign_live", "nvlive_check.py", ["@assign_mode.mid", "16", "--beside", "--programs"], {}),
     ("ump_inputs", "../tests/live/ump_check.py", [], {}),
+    ("input_watch", "../tests/live/input_watch_check.py", [], {}),
     ("user_drums_live", "nvlive_check.py", ["@userdrums.mid", "4", "--drums", "--program=0", "--programs"], {}),
     ("drum_delay", "nvlive_check.py", ["@drumdelay.mid", "5", "--drums", "--program=0", "--programs"], {}),
     ("rhythm_part", "nvlive_check.py", ["@rhythmpart.mid", "3", "--beside", "--program=0", "--programs"], {}),
