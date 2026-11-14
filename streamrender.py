@@ -313,6 +313,9 @@ class Stream:
         # when the stream decides a window can no longer change
         self.batch = batch or int(os.environ.get('TUNING_STREAM_BATCH', self.BATCH))
         self.row_budget = int(os.environ.get('TUNING_STREAM_ROWS', self.ROW_BUDGET))
+        # ...and on the GPU, a window past it renders in slices of it
+        # (_render_sliced; TUNING_STREAM_SLICE to test the slicing small)
+        self.slice_rows = int(os.environ.get('TUNING_STREAM_SLICE', self.row_budget))
         self.loudest = loudest      # the Leslie's (a scanning run finds it)
         self.scan = scan            # scanning: no render, just the loudest row
         self.scan_max = 0.0
@@ -1038,8 +1041,20 @@ class Stream:
             self._render(wi, h)
             self._render(wi + h, nw - h)
             return
+        # A WINDOW TOO FULL FOR ONE KERNEL CALL, ON THE GPU: its rows in slices
+        # (_render_sliced). Halving the windows stops at one window, and one
+        # window can sound millions of rows -- TOUGI's last section enters at
+        # 5:21 with 2.8M sounding, each copied three times and set up for the
+        # kernel (~2 KB a row), and the render was reaped at its 3.5 GB cap.
+        # The GPU is held to the CPU at 1e-5, not bit for bit, so its slices
+        # may sum; the CPU's own row sets would sum in another order (the
+        # corpus hashes it), so it keeps the one call.
+        big = None
+        if self.gpu is not None and self.stems is None and sum(
+                int(((c['nonL'] < w1) & (c['zend'] > w0)).sum()) for c in self.store) > self.slice_rows:
+            big = self._render_sliced(wi, w0, w1)
         sel = []
-        for c in self.store:
+        for c in (self.store if big is None else ()):
             m = (c['nonL'] < w1) & (c['zend'] > w0)
             if m.any():
                 sel.append({k: v[m] for k, v in c.items()})
@@ -1076,6 +1091,9 @@ class Stream:
             keep.append(c)
         self.store = keep
         n = w1 - w0
+        if big is not None:
+            self._emit(w0, w1, *big)
+            return
         if self.stems is not None:
             return self._render_stems(w0, w1, sel)
         if not sel:
@@ -1120,6 +1138,96 @@ class Stream:
             sL, sR = procs[ch][1].process(bSL, bSR, w0)
             L = L + oL; R = R + oR; SL = SL + sL; SR_ = SR_ + sR
         self._emit(w0, w1, L, R, SL, SR_)
+
+    def _render_sliced(self, wi, w0, w1):
+        """One window's rows on the GPU in slices of slice_rows, in key order:
+        only the keys sorted whole; each slice's columns gathered from the
+        store, set up and rendered, the samples summed -- a part with a bus of
+        its own summed apart and put through its processors once, as _render
+        does. Returns (L, R, SL, SR)."""
+        B = self.B
+        n = w1 - w0
+        src = [(c, np.flatnonzero((c['nonL'] < w1) & (c['zend'] > w0))) for c in self.store]
+        src = [(c, ix) for c, ix in src if len(ix)]
+        lobe = any('lsr' in c for c, _ in src)
+        cols = {}
+        for c, _ in src:
+            for k, v in c.items():
+                cols.setdefault(k, (v.dtype, v.shape[1:]))
+        if lobe:
+            import leslie as LE
+            for k, dt, _v in LE.LOBE_COLS:
+                cols.setdefault(k, (np.dtype(dt), ()))
+            fill = {k: v for k, _dt, v in LE.LOBE_COLS}
+        KW = max(c['key'].shape[1] for c, _ in src)     # (keys of different widths: padded with -1, _cat's)
+        cols['key'] = (cols['key'][0], (KW,))
+        key = np.concatenate([c['key'][ix] if c['key'].shape[1] == KW else
+                              np.pad(c['key'][ix], ((0, 0), (0, KW - c['key'].shape[1])), constant_values=-1)
+                              for c, ix in src])
+        order = np.lexsort(key.T[::-1])
+        del key
+        cid = np.concatenate([np.full(len(ix), j, np.int32) for j, (_c, ix) in enumerate(src)])[order]
+        lix = np.concatenate([ix for _c, ix in src])[order]
+        P = len(order)
+        del order
+        self.peak_live = max(self.peak_live, P)
+        bus = self.ctx['effects'].get('bus')
+        acc = [np.zeros(n, np.float32) for _ in range(4)]
+        bacc = {ch: [np.zeros(n, np.float32) for _ in range(4)] for ch in (bus or {})}
+        for s0 in range(0, P, self.slice_rows):
+            cj, lj = cid[s0:s0 + self.slice_rows], lix[s0:s0 + self.slice_rows]
+            m = len(cj)
+            rows = {}
+            for k, (dt, shp) in cols.items():
+                a = np.empty((m,) + shp, dt)
+                for j, (c, _ix) in enumerate(src):
+                    pos = np.flatnonzero(cj == j)
+                    if not len(pos):
+                        continue
+                    if k == 'key':
+                        a[pos] = -1
+                        a[pos, :c[k].shape[1]] = c[k][lj[pos]]
+                    elif k in c:
+                        a[pos] = c[k][lj[pos]]
+                    else:
+                        a[pos] = fill[k]        # (a chunk finished before the first Leslie row)
+                rows[k] = a
+            ar = np.arange(m)
+            prep = dict(lib=self.ctx['lib'], P=m, N=self.N, nblk=self.ctx['nblk'], sh=self.ctx['sh'],
+                        G=self.ctx['G'], S=self.ctx['S'], BR=self.ctx['BR'], BC=self.ctx['BC'], BL=self.ctx.get('BL'),
+                        **self.ctx['moog_tables']())
+            for k, dt in B.FINAL_DTYPES:
+                prep[k] = np.ascontiguousarray(rows[k].astype(dt))
+            self._lobe_prep(prep, rows, ar)
+            self._filter_prep(prep)
+            self._damp_prep(prep, rows, ar)
+            del rows
+            if not bus:
+                out = self._synth(prep, wi, w0, w1)
+                for q in range(4):
+                    acc[q] += out[q]
+                continue
+            on = B._GSX.bus_mask(prep['mch'], list(bus))
+            out = self._synth(B.prep_rows(prep, ~on), wi, w0, w1)
+            for q in range(4):
+                acc[q] += out[q]
+            for ch in bus:
+                bm = B._GSX.bus_mask(prep['mch'], [ch])
+                if bm.any():
+                    out = self._synth(B.prep_rows(prep, bm), wi, w0, w1)
+                    for q in range(4):
+                        bacc[ch][q] += out[q]
+        L, R, SL, SR_ = acc
+        if bus:
+            import efxbus as EB
+            procs = self.__dict__.setdefault('_busp', {})
+            for ch, spec in bus.items():
+                if ch not in procs:
+                    procs[ch] = (EB.Bus(spec, B.SR, T_master_gain()), EB.Bus(spec, B.SR, T_master_gain()))
+                oL, oR = procs[ch][0].process(bacc[ch][0], bacc[ch][1], w0)
+                sL, sR = procs[ch][1].process(bacc[ch][2], bacc[ch][3], w0)
+                L = L + oL; R = R + oR; SL = SL + sL; SR_ = SR_ + sR
+        return L, R, SL, SR_
 
     def _synth(self, prep, wi, w0, w1):
         """_synth_rows, guarded: A BATCH WITH A NON-FINITE SAMPLE is said
