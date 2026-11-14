@@ -40,6 +40,21 @@ int nv_host_render_step(nv_host *h, float *L, float *R, int frames, int step);
    thread: heard at the next block */
 void nv_host_midi(nv_host *h, const uint8_t *msg, int n);
 
+/* ---- an app's audio callback (AVAudioEngine's source node, an Audio Unit) --
+   ANY NUMBER OF FRAMES: whole blocks rendered as needed, the rest of the last
+   kept for the next call -- the same samples as nv_host_render's blocks, in
+   order, whatever sizes are asked (256, 512, 471 ...). The audio thread's,
+   as nv_host_render (not both on one host) */
+int nv_host_pull(nv_host *h, float *L, float *R, int frames);
+/* ...in step (the host not started), as nv_host_render_step */
+int nv_host_pull_step(nv_host *h, float *L, float *R, int frames, int step);
+/* MIDI stamped with its sample (counted from the first render: CoreMIDI's
+   timestamp turned into the audio's sample time), from any thread: heard at
+   the start of the block that sample falls in -- a callback of many blocks
+   spreads a burst of notes over them as they were played (the next block's,
+   if that one has gone) */
+void nv_host_midi_at(nv_host *h, const uint8_t *msg, int n, long long frame);
+
 typedef struct {
     long long n0, blocks, over, underruns;
     double ms_max, ms_mean, budget_ms;      /* since the last read */

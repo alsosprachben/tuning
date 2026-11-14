@@ -1263,6 +1263,13 @@ struct nv_host {
     std::mutex midi_in_mu;
     long long play_n0 = 0;                  // (nv_host_render's)
     std::vector<float> play_buf;
+    // AN APP's AUDIO CALLBACK (nv_host_pull, nv_host_midi_at): MIDI stamped
+    // with its sample, held until the block it falls in; the last block's
+    // frames not yet handed out (pull_pos of BLK taken)
+    std::mutex timed_mu;
+    std::multimap<long long, Midi> timed;
+    MidiParse timed_parse;
+    int pull_pos = -1;                      // (-1: none rendered yet)
     // (in step, --test's: the room's tail to install after the block, the
     // programs asked for built in step; asks: a program change heard)
     void render_block(long long n0, float *buf, bool step = false);

@@ -121,6 +121,8 @@ CHECKS = [
     ("input_watch", "../tests/live/input_watch_check.py", [], {}),
     ("cmx_panel", "../tests/live/cmx_panel_check.py", [], {}),
     ("udrum_panel", "../tests/live/udrum_panel_check.py", [], {}),
+    ("pull", "../tests/live/pull_check.py", [], {}),
+    ("pull_dense", "../tests/live/pull_check.py", ["@dense_pedal.mid", "12"], {}),
     ("user_drums_live", "nvlive_check.py", ["@userdrums.mid", "4", "--drums", "--program=0", "--programs"], {}),
     ("user_set_part", "nvlive_check.py", ["@userdrums.mid", "4", "--drums", "--program=64"], {}),
     ("drum_delay", "nvlive_check.py", ["@drumdelay.mid", "5", "--drums", "--program=0", "--programs"], {}),

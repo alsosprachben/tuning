@@ -3140,10 +3140,28 @@ int nv_host_render(nv_host *h, float *L, float *R, int frames)
     return nv_host_render_step(h, L, R, frames, 0);
 }
 
+// the stamped MIDI whose sample falls in the block from n0 (nv_host_midi_at),
+// into the queue the block reads -- in their samples' order, a sample's in
+// the order given
+static void timed_due(nv_host *h, long long n0)
+{
+    std::lock_guard<std::mutex> lk(h->timed_mu);
+    if (h->timed.empty())
+        return;
+    auto end = h->timed.lower_bound(n0 + h->BLK);
+    if (end == h->timed.begin())
+        return;
+    std::lock_guard<std::mutex> lq(h->mu);
+    for (auto it = h->timed.begin(); it != end; ++it)
+        h->q.push_back(std::move(it->second));
+    h->timed.erase(h->timed.begin(), end);
+}
+
 int nv_host_render_step(nv_host *h, float *L, float *R, int frames, int step)
 {
     if (frames != h->BLK)
         return -1;
+    timed_due(h, h->play_n0);
     h->render_block(h->play_n0, h->play_buf.data(), step != 0);
     for (int k = 0; k < frames; k++) {
         L[k] = h->play_buf[2 * k];
@@ -3151,6 +3169,45 @@ int nv_host_render_step(nv_host *h, float *L, float *R, int frames, int step)
     }
     h->play_n0 += h->BLK;
     return 0;
+}
+
+// ANY NUMBER OF FRAMES (an app's callback: AVAudioEngine's, an Audio Unit's
+// -- 256, 512, 471 ...): whole blocks rendered as they are needed, the frames
+// of the last one not handed out kept for the next call. The samples are the
+// blocks' own, in order, whatever the sizes asked
+int nv_host_pull_step(nv_host *h, float *L, float *R, int frames, int step)
+{
+    const int B = (int)h->BLK;
+    int done = 0;
+    while (done < frames) {
+        if (h->pull_pos < 0 || h->pull_pos >= B) {
+            timed_due(h, h->play_n0);
+            h->render_block(h->play_n0, h->play_buf.data(), step != 0);
+            h->play_n0 += B;
+            h->pull_pos = 0;
+        }
+        const int k = std::min(B - h->pull_pos, frames - done);
+        const float *src = h->play_buf.data() + 2 * h->pull_pos;
+        for (int i = 0; i < k; i++) {
+            L[done + i] = src[2 * i];
+            R[done + i] = src[2 * i + 1];
+        }
+        h->pull_pos += k;
+        done += k;
+    }
+    return 0;
+}
+
+int nv_host_pull(nv_host *h, float *L, float *R, int frames) { return nv_host_pull_step(h, L, R, frames, 0); }
+
+// MIDI bytes stamped with the sample they belong to (from the start of the
+// render: nv_host_snapshot's n0 counts them): heard at the start of the block
+// that sample falls in -- as nvlive --test places a file's events -- or at
+// the next block if that one is gone
+void nv_host_midi_at(nv_host *h, const uint8_t *msg, int n, long long frame)
+{
+    std::lock_guard<std::mutex> lk(h->timed_mu);
+    h->timed_parse.feed(msg, n, [&](Midi &&m) { h->timed.emplace(frame, std::move(m)); });
 }
 
 void nv_host_midi(nv_host *h, const uint8_t *msg, int n)
