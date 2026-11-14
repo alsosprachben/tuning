@@ -13881,6 +13881,30 @@ int nv_part_chan_cc(void *h, int ch, int cc)
     auto it = m.find(ch);
     return it != m.end() ? (int)nearbyint(it->second * 127.0) : 0;
 }
+// THE CONTROLLER MATRIX of channel ch (live.cmx_state): its cells as set, in
+// order (source: 0-5 GS's rows, 100 + n a GM2 controller; destination;
+// depth), up to max of them, and CC1/CC2's numbers in cc[2] -- the count, or
+// -1 where nothing set the channel's matrix (a reset's). Read between two
+// blocks (the host posts it)
+int nv_part_cmx(void *h, int ch, int *src, int *col, double *dep, int max, int *cc)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    auto it = P->cmx.find(ch);
+    if (it == P->cmx.end())
+        return -1;
+    int n = 0;
+    for (const auto &e : it->second.gs) {
+        if (n >= max)
+            break;
+        src[n] = e.first.first;
+        col[n] = e.first.second;
+        dep[n] = e.second;
+        n++;
+    }
+    cc[0] = it->second.cc1;
+    cc[1] = it->second.cc2;
+    return n;
+}
 int nv_part_gs_fx(void *h, int *cho, int *dly)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;

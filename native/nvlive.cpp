@@ -829,6 +829,22 @@ int nv_host::run(int argc, char **argv)
                     q.push_back(Midi{2, c, cc, v, {}});
             }
         };
+        // THE CONTROLLER MATRIX (C): as in effect, and an exclusive sent as
+        // a sequencer's (live.cmx_send: into the block's events)
+        H.cmx_get = [&](int ch, nv::Cmx &m) { return cmx_read(ch, m); };
+        // THE USER DRUM SETS (U): as set, a setting sent as a sequencer's GS
+        // message, a key struck; the sets and key names from the export
+        panel::dkey_tables(H, E.dkey);
+        H.udrum_get = [&](panel::Host::USets &u) { return udrum_read(u); };
+        H.udrum_send = [&](int us, int key, int code, int v) { udrum_queue(us, key, code, v); };
+        H.strike = [&](int ch, int note, int vel) {
+            std::lock_guard<std::mutex> lk(mu);
+            q.push_back(Midi{vel ? 0 : 1, ch & 15, note & 127, vel, {}});
+        };
+        H.cmx_send = [&](const std::vector<uint8_t> &x) {
+            std::lock_guard<std::mutex> lk(mu);
+            q.push_back(Midi{6, 0, 0, 0, x});
+        };
         H.sysfx_send = [&](int hi, int lo, int v) {
             std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, (uint8_t)hi, (uint8_t)lo,
                                    (uint8_t)std::max(0, std::min(127, v))};
@@ -1161,6 +1177,93 @@ static void rpn_text(std::vector<std::string> &ev, int ch, int lsb, int msb_val,
     ev.push_back(cc_text(ch, 100, 127));
 }
 
+// a channel's controller matrix out of the engine (nv_part_cmx): a reset's
+// where nothing set it; false where the channel has none
+static bool cmx_take(void *part, int ch, nv::Cmx &m)
+{
+    static thread_local int src[512], col[512], cc[2];
+    static thread_local double dep[512];
+    const int n = nv_part_cmx(part, ch, src, col, dep, 512, cc);
+    m = nv::Cmx();
+    if (n < 0)
+        return false;
+    m.gs.clear();
+    for (int i = 0; i < n; i++)
+        m.gs.push_back({{src[i], col[i]}, dep[i]});
+    m.cc1 = cc[0];
+    m.cc2 = cc[1];
+    return true;
+}
+
+static std::string sysex_text(const std::vector<uint8_t> &d)
+{
+    std::string t = "sysex data=(";
+    for (size_t i = 0; i < d.size(); i++)
+        t += (i ? "," : "") + std::to_string(d[i]);
+    return t + ") time=0";
+}
+
+// THE CONTROLLER MATRIX of channel ch as in effect (live.cmx_state), read
+// between two blocks
+bool nv_host::cmx_read(int ch, nv::Cmx &m)
+{
+    struct Got {
+        nv::Cmx m;
+        std::atomic<bool> done{false};
+    };
+    auto got = std::make_shared<Got>();
+    auto take = [this, got, ch](long long) {
+        cmx_take(part, ch, got->m);
+        got->done = true;
+    };
+    if (scene_inline)
+        take(0);
+    else
+        post(take);
+    for (int i = 0; i < 200 && !got->done && !g_stop; i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (!got->done)
+        return false;
+    m = got->m;
+    return true;
+}
+
+// THE USER DRUM SETS as set (live.udrum_state: the host's copy), read
+// between two blocks
+bool nv_host::udrum_read(panel::Host::USets &u)
+{
+    struct Got {
+        panel::Host::USets u;
+        std::atomic<bool> done{false};
+    };
+    auto got = std::make_shared<Got>();
+    auto take = [this, got](long long) {
+        got->u = huset;
+        got->done = true;
+    };
+    if (scene_inline)
+        take(0);
+    else
+        post(take);
+    for (int i = 0; i < 200 && !got->done && !g_stop; i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (!got->done)
+        return false;
+    u = got->u;
+    return true;
+}
+
+// a user drum set's setting as a sequencer sends it (live.udrum_send: GS 21
+// dp rr), into the input -- the host's own path, its template asked
+void nv_host::udrum_queue(int s, int key, int code, int v)
+{
+    const uint8_t a = 0x21, b = (uint8_t)(((s & 1) << 4) | (code & 15)), c = (uint8_t)(key & 127),
+                  d = (uint8_t)std::max(0, std::min(127, v));
+    std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, a, b, c, d, (uint8_t)((128 - (a + b + c + d) % 128) % 128)};
+    std::lock_guard<std::mutex> lk(mu);
+    q.push_back(Midi{6, 0, 0, 0, x});
+}
+
 // THE SCENE NOW (live.scene_from), in mido's text form: the captured
 // controls as they reached the part, then each channel's sound controllers,
 // its tuning RPNs and mono, read from the engine between two blocks -- the
@@ -1171,12 +1274,18 @@ std::vector<std::string> nv_host::scene_now()
     struct Got {
         std::vector<double> st = std::vector<double>(16 * 13, 0.0);
         std::map<std::pair<int, int>, int> latch;
+        std::map<int, nv::Cmx> cmx;
         std::atomic<bool> done{false};
     };
     auto got = std::make_shared<Got>();
     auto take = [this, got](long long) {
         nv_part_chanstate(part, got->st.data());
         got->latch = chanlatch;
+        for (int ch = 0; ch < 16; ch++) {
+            nv::Cmx m;
+            if (cmx_take(part, ch, m))
+                got->cmx[ch] = m;
+        }
         got->done = true;
     };
     if (scene_inline)
@@ -1219,6 +1328,11 @@ std::vector<std::string> nv_host::scene_now()
         if (o[12] != 0.0)
             ev.push_back(cc_text(ch, 126, 1));
     }
+    // THE CONTROLLER MATRIX: each channel's, as the exclusives that set it
+    // from a reset's (ctrlmatrix.scene_messages)
+    for (const auto &kv : got->cmx)
+        for (const auto &d : nv::cmx_scene(kv.first, kv.second))
+            ev.push_back(sysex_text(d));
     scene_cached = ev;
     return ev;
 }
@@ -1230,15 +1344,38 @@ std::vector<std::string> nv_host::scene_now()
 int nv_host::scene_recall(const std::vector<std::string> &events)
 {
     std::vector<std::array<int, 3>> cc;
+    std::vector<std::vector<uint8_t>> sx;       // (the controller matrix's exclusives)
     for (const auto &e : events) {
         int ch, c, v;
         if (sscanf(e.c_str(), "control_change channel=%d control=%d value=%d", &ch, &c, &v) == 3)
             cc.push_back({ch & 15, c, v});
+        else if (!e.compare(0, 12, "sysex data=(")) {
+            std::vector<uint8_t> d;
+            const char *p = e.c_str() + 12;
+            while (*p && *p != ')') {
+                char *end;
+                const long b = strtol(p, &end, 10);
+                if (end == p)
+                    break;
+                d.push_back((uint8_t)std::max(0L, std::min(127L, b)));
+                p = *end == ',' ? end + 1 : end;
+            }
+            sx.push_back(d);
+        }
     }
     const int sp = shown_program;
     const bool cres = sp < 128 && !E.stops[sp].names.empty();
     const int pch = pats[0].channel;
-    post([this, cc, cres, pch](long long) {
+    post([this, cc, cres, pch, sx](long long) {
+        // the scene's exclusives (live.inject's), then a matrix it does not
+        // name back to a reset's (ctrlmatrix.undo_messages)
+        std::vector<std::vector<uint8_t>> undo;
+        for (int ch = 0; ch < 16; ch++) {
+            nv::Cmx m;
+            if (cmx_take(part, ch, m))
+                for (auto &d : nv::cmx_undo(ch, m, sx))
+                    undo.push_back(d);
+        }
         double st[16 * 13];
         nv_part_chanstate(part, st);
         bool want_mono[16] = {};
@@ -1258,8 +1395,12 @@ int nv_host::scene_recall(const std::vector<std::string> &events)
         for (int ch = 0; ch < 16; ch++)
             if (st[13 * ch + 12] != 0.0 && !want_mono[ch])
                 engine_event(2, ch, 127, 0);
+        for (const auto &d : sx)                // (after the controls, as the scene lists them)
+            nv_part_sysex(part, d.data(), (int)d.size());
+        for (const auto &d : undo)
+            nv_part_sysex(part, d.data(), (int)d.size());
     });
-    int n = 0;
+    int n = (int)sx.size();
     for (const auto &m : cc)
         n += !(m[1] == 1 && cres && (pch < 0 || pch == m[0]));
     return n;
@@ -1421,6 +1562,11 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
         for (int ch = 0; ch < 16; ch++)
             send('c', ch, std::find(want.begin(), want.end(), ch) != want.end());
     }
+    // THE USER DRUM SETS (live.udrum_recall): each setting sent again
+    if ((x = session.get("user_drums")) && x->is(sess::J::ARR))
+        for (const sess::J &r : x->a)
+            if (r.is(sess::J::ARR) && r.a.size() == 4)
+                udrum_queue((int)r.a[0].i(), (int)r.a[1].i(), (int)r.a[2].i(), (int)r.a[3].i());
     // THE PARTS (live.Part.to_dict's): the first's place, level and mute on
     // the part; each after it added -- a drum set on channel 10 the drums
     // nvlive keeps beside the part (its own, not live's: never written back)
@@ -1646,6 +1792,22 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
         e.o["ctl"] = ct;
         e.o["parts"] = pa;
         j.o["efx"] = e;
+    }
+    // THE USER DRUM SETS (live.udrum_from): [set, key, code, value], every
+    // setting made
+    {
+        panel::Host::USets u;
+        if (udrum_read(u)) {
+            sess::J ud = sess::arr();
+            for (const auto &kv : u)
+                for (const auto &cv : kv.second) {
+                    sess::J r = sess::arr();
+                    r.a = {sess::integer(kv.first.first), sess::integer(kv.first.second), sess::integer(cv.first),
+                           sess::integer(cv.second)};
+                    ud.a.push_back(r);
+                }
+            j.o["user_drums"] = ud;
+        }
     }
     // THE PARTS (live.Part.to_dict): each one's program, set or variation,
     // its place, level and mute, the first's stops; each one's other keys as

@@ -89,6 +89,7 @@ struct Export {
     std::vector<std::array<int, 2>> vpv;
     std::vector<std::string> vnames;
     std::string efxu;                           // EFXU: the panel's insertion-effect tables (panel::efx_tables)
+    std::string dkey;                           // DKEY: the user drum set editor's sets and key names (panel::dkey_tables)
     std::vector<std::array<int, 10>> vpart;     // VLIV: each one's live record, as part[]'s
     std::vector<std::array<int, 12>> vdrn;      // VDRN: a voice's own drone patch (program, variation, its record)
     std::vector<double> mtab;                   // MTAB: moog.py's tables by knob position (nv_moog_tables)

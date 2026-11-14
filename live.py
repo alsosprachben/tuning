@@ -4820,6 +4820,7 @@ class Live:
         self.cmx = {}
         self.cmx_now = {}
         self.cmx_vib = set()            # channels whose matrix vibrato _cmx_tick moves
+        self.cmx_rev = 0                # (counts the matrix messages applied: the panel waits on it)
         self.ccv = {}
         self.wheel_at = {}      # channel -> the mod wheel's last CC1, whatever it means there
         self.job_at = {}        # (channel, CC) -> a wheel job's last value (T.WHEEL_CC), as its CC or the wheel's route set it
@@ -5194,6 +5195,41 @@ class Live:
 
     def sysfx_send(self, hi, lo, v):
         a = [0x40, int(hi), int(lo), max(0, min(127, int(v)))]
+        self.inject(mido.Message("sysex", data=[0x41, 0x10, 0x42, 0x12] + a + [(128 - sum(a) % 128) % 128]))
+
+    # THE CONTROLLER MATRIX PANEL (livetui's C): a channel's table as in
+    # effect, and a cell or CC1/CC2's number sent as the GS message a
+    # sequencer's would be (40 2p aa vv, 40 1p 1F/20) -- one path, so a GS
+    # reset puts it back and a scene keeps it as those messages
+    def cmx_state(self, ch):
+        """{'gs': {(source, dest): depth}, 'cc_of': {'cc1': n, 'cc2': n}} for
+        channel ch (channel 1's for None) -- a reset's where nothing set it."""
+        m = self.cmx.get(0 if ch is None else ch) or _CMX.Matrix()
+        return dict(gs=dict(m.gs), cc_of=dict(m.cc_of))
+
+    def cmx_send(self, ch, src, dest, v):
+        """Cell (src, dest) at GS byte v on channel ch (every channel's for None)."""
+        for c in (range(16) if ch is None else (ch,)):
+            self.inject(mido.Message("sysex", data=_CMX.cell_message(c, src, dest, v)))
+
+    def cmx_assign_send(self, ch, which, cc):
+        """CC1 ('cc1') or CC2 is controller cc on channel ch (every channel's for None)."""
+        for c in (range(16) if ch is None else (ch,)):
+            self.inject(mido.Message("sysex", data=_CMX.assign_message(c, which, cc)))
+
+    # THE USER DRUM SETS PANEL (livetui's U): GS's two user sets (programs 65
+    # and 66: 64 and 65 here), each key's settings as set, and one sent as the
+    # GS message a sequencer's would be (41 10 42 12 21 dp rr vv) -- a set
+    # persists through a GS reset, as a module's memory does, and a preset
+    # and the session keep it
+    UDRUM_CODES = {'note': 0x01, 'level': 0x02, 'pan': 0x04, 'rxon': 0x08, 'src_set': 0x0B, 'src_note': 0x0C}
+
+    def udrum_state(self, s):
+        """{key: {param: value}} of user set s (0 or 1): what was set."""
+        return {k: dict(v) for (us, k), v in list(self.uset.items()) if us == s}
+
+    def udrum_send(self, s, key, param, v):
+        a = [0x21, (int(s) << 4) | self.UDRUM_CODES[param], int(key) & 127, max(0, min(127, int(v)))]
         self.inject(mido.Message("sysex", data=[0x41, 0x10, 0x42, 0x12] + a + [(128 - sum(a) % 128) % 128]))
 
     def sysfx_state(self):
@@ -10929,6 +10965,7 @@ class Live:
             if _cc_ < 16 and not _g:
                 self.cmx.setdefault(_cc_, _CMX.Matrix()).apply(_ck, _cp)
                 self._cmx_upd(_cc_, n0)
+            self.cmx_rev += 1
             return
         if not _g and self._gs_rx_part(n0, d):
             return
@@ -12815,7 +12852,26 @@ def preset_from(live):
         # THE INSERTION EFFECT (gsefx): its type, parameters, sends, control
         # sources and the parts on it -- pairs, as JSON keys are strings
         efx=efx_from(live),
+        # THE USER DRUM SETS (GS 21 dp rr): [set, key, code, value], every
+        # setting made -- sent again as those messages when loaded
+        user_drums=udrum_from(live),
     )
+
+
+def udrum_from(live):
+    codes = {v: k for k, v in B._GS_USER_DRUM.items()}
+    return sorted([int(s), int(k), int(codes[p]), int(v)] for (s, k), d in getattr(live, "uset", {}).items()
+                  for p, v in d.items() if p in codes)
+
+
+def udrum_recall(live, rows):
+    """The user drum sets as udrum_from saved them, sent as the panel sends
+    them (GS messages): each setting made again. A key the preset does not
+    name keeps what it has -- the sets are the module's memory, which only
+    an exclusive changes."""
+    for s, k, code, v in rows or ():
+        a = [0x21, (int(s) << 4) | int(code), int(k) & 127, max(0, min(127, int(v)))]
+        live.inject(mido.Message("sysex", data=[0x41, 0x10, 0x42, 0x12] + a + [(128 - sum(a) % 128) % 128]))
 
 
 def efx_from(live):
@@ -12888,6 +12944,7 @@ def apply_preset(live, preset, progress=None):
     if preset.get("chanstate"):
         recall_scene(live, preset["chanstate"])
     efx_recall(live, preset.get("efx"))
+    udrum_recall(live, preset.get("user_drums"))
     if preset.get("messenger_firmware") in _MG.FIRMWARES:
         live.messenger_firmware = preset["messenger_firmware"]
     if preset.get("messenger_bend"):
@@ -13003,6 +13060,10 @@ def scene_from(live):
             ev += _rpn_events(ch, 5, msb, lsb if lsb else None)
         if ch in live.mono:
             ev.append(_cc(ch, 126, 1))
+    # THE CONTROLLER MATRIX: each channel's, as the exclusives that set it
+    # from a reset's (ctrlmatrix.scene_messages)
+    for ch in sorted(getattr(live, "cmx", {})):
+        ev += [mido.Message("sysex", data=d) for d in _CMX.scene_messages(ch, live.cmx[ch])]
     return [str(m) for m in ev]
 
 
@@ -13030,6 +13091,11 @@ def recall_scene(live, events):
         live.inject(m)
     for ch in sorted(live.mono - want_mono):
         live.inject(_cc(ch, 127, 0))
+    # ...and a matrix the scene does not name back to a reset's
+    keep = [tuple(m.data) for m in msgs if m.type == "sysex"]
+    for ch in sorted(getattr(live, "cmx", {})):
+        for d in _CMX.undo_messages(ch, live.cmx[ch], keep):
+            live.inject(mido.Message("sysex", data=d))
     return len(msgs)
 
 

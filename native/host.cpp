@@ -234,6 +234,9 @@ bool read_export(const char *path, Export &E)
             } else if (!memcmp(tt, "EFXU", 4)) {
                 E.efxu.resize(tl);
                 ok = fread(&E.efxu[0], 1, tl, f) == (size_t)tl;
+            } else if (!memcmp(tt, "DKEY", 4)) {
+                E.dkey.resize(tl);
+                ok = tl == 0 || fread(&E.dkey[0], 1, tl, f) == (size_t)tl;
             } else if (!memcmp(tt, "MTAB", 4)) {
                 E.mtab.resize(tl / 8);
                 ok = fread(E.mtab.data(), 8, E.mtab.size(), f) == E.mtab.size();

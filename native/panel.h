@@ -47,6 +47,8 @@
 #include <unistd.h>
 #include <vector>
 
+#include "cmx.h"
+
 extern "C" const char *nv_raga_system_name(int i);                  // (tuner.cpp: the Eastern tuning's choices)
 extern "C" const char *nv_raga_name(int i, int *n, const int **idx);
 
@@ -192,6 +194,22 @@ struct Host {
     std::function<int(int, int)> chan_cc;
     std::function<void(int, int, int)> chan_cc_send;
     std::function<void(int, int, int)> sysfx_send;
+    // THE CONTROLLER MATRIX (livetui.pick_cmx, C): channel ch's as in effect
+    // (live.cmx_state: false, not read), and an exclusive that sets it sent as
+    // a sequencer's (live.cmx_send: into the block's events)
+    std::function<bool(int, nv::Cmx &)> cmx_get;
+    std::function<void(const std::vector<uint8_t> &)> cmx_send;
+    // THE USER DRUM SETS (livetui.pick_udrum, U): every key's settings as set
+    // ((set, key) -> GS 21's code -> value; false, not read), one sent as a
+    // sequencer's GS message, and a key struck (channel, note; velocity 0 off)
+    // -- the sets a key may take its sound from and each key's name in them
+    // (the export's DKEY: dkey_tables)
+    using USets = std::map<std::pair<int, int>, std::map<int, int>>;
+    std::function<bool(USets &)> udrum_get;
+    std::function<void(int, int, int, int)> udrum_send;
+    std::function<void(int, int, int)> strike;
+    std::vector<std::pair<int, std::string>> dsets;
+    std::map<std::pair<int, int>, std::string> dkeys;
     std::function<void(int, int, int)> synth_forget;
     std::function<int(int)> synth_send;
     std::function<std::string()> messenger_line, messenger_firmware;
@@ -233,6 +251,32 @@ struct Host {
     std::function<std::pair<int, long long>()> last_ctl;
     int channel = -1;
 };
+
+// the export's DKEY into the host's tables (native_export.py's lines: S set
+// name, K set key name)
+static void dkey_tables(Host &H, const std::string &txt)
+{
+    size_t at = 0;
+    while (at < txt.size()) {
+        size_t nl = txt.find('\n', at);
+        if (nl == std::string::npos)
+            nl = txt.size();
+        std::vector<std::string> f;
+        size_t a = at;
+        while (a <= nl) {
+            size_t t = txt.find('\t', a);
+            if (t == std::string::npos || t > nl)
+                t = nl;
+            f.push_back(txt.substr(a, t - a));
+            a = t + 1;
+        }
+        if (f.size() == 3 && f[0] == "S")
+            H.dsets.push_back({atoi(f[1].c_str()), f[2]});
+        else if (f.size() == 4 && f[0] == "K")
+            H.dkeys[std::make_pair(atoi(f[1].c_str()), atoi(f[2].c_str()))] = f[3];
+        at = nl + 1;
+    }
+}
 
 // the export's EFXU into the host's tables (native_export.py's lines)
 static void efx_tables(Host &H, const std::string &txt)
@@ -670,7 +714,7 @@ static const char *SCAN_NAMES[7] = {"off", "V1", "V2", "V3", "C1", "C2", "C3"};
 static const int SCAN_STARTS[7] = {0, 18, 37, 55, 73, 91, 110};
 // THE KEYS A CONTROL MAY BE BOUND TO (livetui.HOTKEYS_FREE): what the panel
 // does not use itself, in any pane -- a bound key fires from every pane
-static const char HOTKEYS_FREE[] = "cefginuvwyz[];',./ACHJKOQUVWY";      // (I: the MIDI inputs; G: the system effects; o solo, Z GS Reset)
+static const char HOTKEYS_FREE[] = "cefginuvwyz[];',./AHJKOQVWY";        // (I: the MIDI inputs; G: the system effects; C: the controller matrix; U: user drum sets; o solo, Z GS Reset)
 
 static bool control_switch(int key)
 {
@@ -1353,6 +1397,11 @@ struct Panel {
             line("   x                 the insertion effect: the part on it, its type, parameters, controllers, sends");
             line("   G                 the system effects: the reverb, chorus and delay the parts share (CC91/93/94)");
             line("                       and the EQ -- each move a sequencer's GS message, so a GS reset puts them back");
+            line("   C                 the controller matrix of the part's channel: what the mod wheel, bend, the");
+            line("                       aftertouches and CC1/CC2 (learnt or chosen) move -- pitch, cutoff, amplitude,");
+            line("                       the LFOs' rate and depths; each move a GS message, kept in a scene");
+            line("   U                 the user drum sets (GS's programs 65, 66): each key another set's sound -- its");
+            line("                       set and key, play note, level, pan, received; a part plays one as its drum set");
             line("   I                 the MIDI inputs (or tap the port's name): enter turns each on or off -- several, merged");
             line("   P                 panic: every note off, now");
             line("   Z, then Z again   a GS Reset, as a sequencer sends it: every part to program 0,");
@@ -1975,6 +2024,406 @@ struct Panel {
             const int hi = r.hi, lo = r.lo;
             edit_efx(r.nm, vals, r.show, std::max(r.mn, std::min(r.mx, r.v)),
                      [&, hi, lo](int v) { H.sysfx_send(hi, lo, v); });
+        }
+    }
+
+    // ---- THE CONTROLLER MATRIX (livetui.pick_cmx, C) ----
+    static const char *cmx_src_label(int row)
+    {
+        static const char *L[6] = {"mod wheel", "pitch bend", "channel aftertouch", "poly aftertouch",
+                                   "CC1 (assignable)", "CC2 (assignable)"};
+        return L[row];
+    }
+    static const char *cmx_dest_label(int col)
+    {
+        static const char *L[11] = {"pitch", "filter cutoff", "amplitude", "LFO1 rate", "LFO1 pitch depth",
+                                    "LFO1 filter depth", "LFO1 amp depth", "LFO2 rate", "LFO2 pitch depth",
+                                    "LFO2 filter depth", "LFO2 amp depth"};
+        return L[col];
+    }
+    static double cmx_at(const nv::Cmx &m, int row, int col)
+    {
+        const double *d = nv::cmx_find(m, row, col);
+        return d ? *d : nv::cmx_default(row, col);
+    }
+    // the selected part's channel (-1 every one): the first part's with no rows
+    int cmx_channel() const { return !prows.empty() ? prows[prow].channel : H.channel; }
+    void cmx_send_all(int ch, const std::function<std::vector<uint8_t>(int)> &msg)
+    {
+        for (int c = ch < 0 ? 0 : ch; c < (ch < 0 ? 16 : ch + 1); c++)
+            H.cmx_send(msg(c));
+    }
+    void pick_cmx()
+    {
+        const int ch = cmx_channel();
+        const std::string where = ch < 0 ? "all channels" : "channel " + std::to_string(ch + 1);
+        int i = 0;
+        for (;;) {
+            nv::Cmx m;
+            if (!H.cmx_get(ch < 0 ? 0 : ch, m)) {
+                say("the controller matrix could not be read");
+                return;
+            }
+            std::vector<std::string> items;
+            std::vector<int> what;              // (-1 a heading; 4, 5 CC1/CC2's number; 10 + row a source)
+            std::vector<char> head;
+            auto add = [&](const std::string &t, int w) {
+                items.push_back(t);
+                what.push_back(w);
+                head.push_back(w < 0);
+            };
+            add("CC1 is   CC" + std::to_string(m.cc1), 4);
+            add("CC2 is   CC" + std::to_string(m.cc2), 5);
+            add("-- sources (enter: its destinations)", -1);
+            for (int row = 0; row < 6; row++) {
+                std::string lab = row == 4 ? "CC1 = CC" + std::to_string(m.cc1)
+                                  : row == 5 ? "CC2 = CC" + std::to_string(m.cc2) : cmx_src_label(row);
+                std::string sum;
+                for (int col = 0; col < 11; col++) {
+                    const double d = cmx_at(m, row, col);
+                    if (d != 0.0)
+                        sum += (sum.empty() ? "" : ", ") + std::string(cmx_dest_label(col)) + " " + nv::cmx_printed(col, d);
+                }
+                char b[512];
+                snprintf(b, sizeof b, "%-20s %s", lab.c_str(), sum.empty() ? "--" : sum.c_str());
+                add(b, 10 + row);
+            }
+            const auto gm2 = nv::cmx_gm2_cells(m);
+            bool any = false;
+            for (const auto &e : gm2)
+                any = any || e.second != 0.0;
+            if (any) {
+                add("-- set by GM2 messages (a file's; shown, not edited here)", -1);
+                for (const auto &e : gm2)
+                    if (e.second != 0.0) {
+                        char b[160];
+                        snprintf(b, sizeof b, "CC%-17d %s %s", e.first.first - 100, cmx_dest_label(e.first.second),
+                                 nv::cmx_printed(e.first.second, e.second).c_str());
+                        add(b, -1);
+                    }
+            }
+            char t[80];
+            snprintf(t, sizeof t, "controller matrix: part %d (%s)", prows.empty() ? 1 : prow + 1, where.c_str());
+            const int got = menu(t, items, std::min(i, (int)items.size() - 1), head);
+            if (got < 0)
+                return;
+            i = got;
+            if (what[got] < 0)
+                continue;
+            if (what[got] < 10)
+                cmx_assign(ch, what[got], what[got] == 4 ? m.cc1 : m.cc2);
+            else {
+                const int row = what[got] - 10;
+                pick_cmx_source(ch, row, row == 4 ? "CC1 = CC" + std::to_string(m.cc1)
+                                         : row == 5 ? "CC2 = CC" + std::to_string(m.cc2) : cmx_src_label(row));
+            }
+        }
+    }
+    // CC1 or CC2's controller number (which 4 or 5): learnt or chosen, 0-95
+    void cmx_assign(int ch, int which, int cur)
+    {
+        const std::string nm = which == 4 ? "CC1" : "CC2";
+        const int got = menu(nm + " is", {"learn: move a knob or pedal now", "choose its number"}, 0);
+        if (got < 0)
+            return;
+        if (got == 1) {
+            std::vector<int> vals(96);
+            for (int x = 0; x < 96; x++)
+                vals[x] = x;
+            edit_efx(nm + "'s controller", vals, [](int x) { return "CC" + std::to_string(x); }, cur,
+                     [&](int x) { cmx_send_all(ch, [&](int c) { return nv::cmx_assign_message(c, which, x); }); });
+            return;
+        }
+        const long long t0 = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                 std::chrono::steady_clock::now().time_since_epoch()).count();
+        std::string msg = "\x1b[H\x1b[2J " + C("accent") + "move the knob or pedal for " + nm + "\x1b[0m"
+                          + C("dim") + "   (esc: back)\x1b[0m";
+        fwrite(msg.data(), 1, msg.size(), stdout);
+        fflush(stdout);
+        int code = -1;
+        auto until = std::chrono::steady_clock::now() + std::chrono::seconds(8);
+        while (code < 0 && std::chrono::steady_clock::now() < until) {
+            auto lc = H.last_ctl ? H.last_ctl() : std::make_pair(0, 0LL);
+            if (lc.first > 0 && lc.first <= 95 && lc.second > t0)
+                code = lc.first;
+            else if (T.key(50) == 27)
+                return;
+        }
+        if (code < 0) {
+            say("nothing moved");
+            return;
+        }
+        cmx_send_all(ch, [&](int c) { return nv::cmx_assign_message(c, which, code); });
+        say(nm + " is CC" + std::to_string(code));
+    }
+    // one source's eleven destinations, each at its depth; enter moves one
+    void pick_cmx_source(int ch, int row, const std::string &lab)
+    {
+        int i = 0;
+        for (;;) {
+            nv::Cmx m;
+            if (!H.cmx_get(ch < 0 ? 0 : ch, m))
+                return;
+            std::vector<std::string> items;
+            for (int col = 0; col < 11; col++) {
+                char b[120];
+                snprintf(b, sizeof b, "%-18s %s", cmx_dest_label(col), nv::cmx_printed(col, cmx_at(m, row, col)).c_str());
+                items.push_back(b);
+            }
+            const int col = menu("controller matrix: " + lab + " moves", items, i);
+            if (col < 0)
+                return;
+            i = col;
+            std::vector<int> vals;
+            for (int v = col == 0 ? 0x28 : 0; v <= (col == 0 ? 0x58 : 127); v++)
+                vals.push_back(v);
+            edit_efx(lab + " -> " + cmx_dest_label(col), vals,
+                     [col](int v) { return nv::cmx_printed(col, nv::cmx_gs_depth(col, v)); },
+                     nv::cmx_gs_raw(col, cmx_at(m, row, col)),
+                     [&, col](int v) { cmx_send_all(ch, [&](int c) { return nv::cmx_cell_message(c, row, col, v); }); });
+        }
+    }
+
+    // ---- THE USER DRUM SETS (livetui.pick_udrum, U) ----
+    static std::string note_nm(int n)
+    {
+        static const char *N[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+        return std::string(N[n % 12]) + std::to_string(n / 12 - 1);
+    }
+    static std::string pan_label(int v)
+    {
+        return v == 0 ? "random" : v == 64 ? "C" : v < 64 ? "L" + std::to_string(64 - v) : "R" + std::to_string(v - 64);
+    }
+    std::string dset_name(int k) const
+    {
+        for (const auto &d : H.dsets)
+            if (d.first == k)
+                return d.second;
+        return std::to_string(k) + " (Standard)";
+    }
+    std::string dkey_name(int set, int key) const
+    {
+        auto it = H.dkeys.find(std::make_pair(set, key));
+        return it != H.dkeys.end() ? it->second : std::string();
+    }
+    // livetui.udrum_line: a user key's settings in a line
+    std::string udrum_line(const std::map<int, int> &u) const
+    {
+        auto g = [&](int c, int d) {
+            auto it = u.find(c);
+            return it != u.end() ? it->second : d;
+        };
+        if (!u.count(0x0C))
+            return "--";
+        const int ss = g(0x0B, 0), sn = g(0x0C, 0);
+        const std::string kn = dkey_name(ss, sn);
+        std::string out = dset_name(ss) + ": " + (kn.empty() ? "key " + std::to_string(sn) : kn);
+        char b[48];
+        if (u.count(0x01) && g(0x01, sn) != sn) {
+            snprintf(b, sizeof b, "   play %+d", g(0x01, sn) - sn);
+            out += b;
+        }
+        if (u.count(0x02))
+            out += "   level " + std::to_string(g(0x02, 0));
+        if (u.count(0x04))
+            out += "   pan " + pan_label(g(0x04, 64));
+        if (g(0x08, 1) == 0)
+            out += "   (not received)";
+        return out;
+    }
+    int strike_ch = -1, strike_note = -1;
+    void strike_off()
+    {
+        if (strike_note >= 0 && H.strike)
+            H.strike(strike_ch, strike_note, 0);
+        strike_note = -1;
+    }
+    // the key struck on the selected part, if it plays user set s
+    bool udrum_audition(int s, int key)
+    {
+        if (prows.empty() || !H.strike)
+            return false;
+        const PartRow &r = prows[prow];
+        if (!r.drums || r.program != 64 + s)
+            return false;
+        strike_off();
+        strike_ch = r.channel < 0 ? 9 : r.channel;
+        strike_note = key;
+        H.strike(strike_ch, key, 90);
+        return true;
+    }
+    // a setting sent, and waited for until the engine has it
+    void udrum_set(int s, int key, int code, int v)
+    {
+        H.udrum_send(s, key, code, v);
+        for (int i = 0; i < 20; i++) {
+            Host::USets u;
+            if (H.udrum_get(u)) {
+                auto it = u.find(std::make_pair(s, key));
+                if (it != u.end() && it->second.count(code) && it->second.at(code) == v)
+                    return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+    }
+    void pick_udrum()
+    {
+        int i = 0;
+        for (;;) {
+            Host::USets u;
+            if (!H.udrum_get(u)) {
+                say("the user drum sets could not be read");
+                return;
+            }
+            std::vector<std::string> items;
+            for (int s = 0; s < 2; s++) {
+                int n = 0;
+                for (const auto &kv : u)
+                    n += kv.first.first == s && kv.second.count(0x0C);
+                char b[96];
+                snprintf(b, sizeof b, "user set %d  (program %d)   %d keys set", s + 1, 65 + s, n);
+                items.push_back(b);
+            }
+            const int got = menu("user drum sets", items, i);
+            if (got < 0)
+                return;
+            i = got;
+            pick_udrum_set(got);
+        }
+    }
+    void pick_udrum_set(int s)
+    {
+        int i = 36;
+        for (;;) {
+            Host::USets u;
+            if (!H.udrum_get(u))
+                return;
+            std::vector<std::string> items;
+            for (int k = 0; k < 128; k++) {
+                auto it = u.find(std::make_pair(s, k));
+                char b[48];
+                snprintf(b, sizeof b, "%-4s %3d   ", note_nm(k).c_str(), k);
+                items.push_back(b + (it != u.end() ? udrum_line(it->second) : std::string("--")));
+            }
+            char t[64];
+            snprintf(t, sizeof t, "user set %d (program %d): its keys", s + 1, 65 + s);
+            const int got = menu(t, items, i);
+            if (got < 0)
+                return;
+            i = got;
+            pick_udrum_key(s, got);
+        }
+    }
+    void pick_udrum_key(int s, int key)
+    {
+        int i = 0;
+        for (;;) {
+            strike_off();
+            Host::USets us;
+            if (!H.udrum_get(us))
+                return;
+            const std::map<int, int> u = us.count(std::make_pair(s, key)) ? us[std::make_pair(s, key)] : std::map<int, int>();
+            auto g = [&](int c, int d) {
+                auto it = u.find(c);
+                return it != u.end() ? it->second : d;
+            };
+            const int ss = g(0x0B, 0);
+            const bool has = u.count(0x0C) != 0;
+            const int sn = g(0x0C, -1);
+            std::vector<std::string> items;
+            std::vector<int> what;              // (codes; -1 the set, -2 the key, -3 strike)
+            items.push_back("sound from set   " + dset_name(ss));
+            what.push_back(-1);
+            items.push_back("its key          " + (has ? note_nm(sn) + " " + std::to_string(sn) + "  " + dkey_name(ss, sn) : std::string("--")));
+            what.push_back(-2);
+            if (has) {
+                const int pn = g(0x01, sn);
+                char b[64];
+                snprintf(b, sizeof b, pn == sn ? "" : "  (%+d)", pn - sn);
+                items.push_back("play note        " + note_nm(pn) + b);
+                what.push_back(0x01);
+                items.push_back("level            " + (u.count(0x02) ? std::to_string(g(0x02, 0)) : std::string("the set's")));
+                what.push_back(0x02);
+                items.push_back("pan              " + (u.count(0x04) ? pan_label(g(0x04, 64)) : std::string("the set's")));
+                what.push_back(0x04);
+                items.push_back(std::string("receive note on  ") + (g(0x08, 1) == 0 ? "off" : "on"));
+                what.push_back(0x08);
+                items.push_back("strike it        (on the selected part, if it plays this set)");
+                what.push_back(-3);
+            }
+            char t[64];
+            snprintf(t, sizeof t, "user set %d, key %s %d", s + 1, note_nm(key).c_str(), key);
+            const int got = menu(t, items, i);
+            if (got < 0)
+                return;
+            i = got;
+            const int w = what[got];
+            auto keys_of = [&](int set) {
+                std::vector<int> ks;
+                for (int k = 0; k < 128; k++)
+                    if (!dkey_name(set, k).empty())
+                        ks.push_back(k);
+                return ks;
+            };
+            if (w == -1) {
+                std::vector<std::string> it;
+                int j = 0;
+                for (size_t q = 0; q < H.dsets.size(); q++) {
+                    char b[96];
+                    snprintf(b, sizeof b, "%3d %s", H.dsets[q].first, H.dsets[q].second.c_str());
+                    it.push_back(b);
+                    if (H.dsets[q].first == ss)
+                        j = (int)q;
+                }
+                if (it.empty())
+                    continue;
+                const int gs = menu("key " + std::to_string(key) + "'s sound from set", it, j);
+                if (gs < 0)
+                    continue;
+                const int set = H.dsets[gs].first;
+                udrum_set(s, key, 0x0B, set);
+                if (!has) {                     // (a key with no sound yet: the set's own on this key, else its first)
+                    const std::vector<int> ks = keys_of(set);
+                    udrum_set(s, key, 0x0C, std::find(ks.begin(), ks.end(), key) != ks.end() ? key : ks.empty() ? key : ks[0]);
+                }
+                udrum_audition(s, key);
+            } else if (w == -2) {
+                const std::vector<int> ks = keys_of(ss);
+                if (ks.empty()) {
+                    say(dset_name(ss) + " has no keys");
+                    continue;
+                }
+                std::vector<std::string> it;
+                int j = 0;
+                for (size_t q = 0; q < ks.size(); q++) {
+                    char b[96];
+                    snprintf(b, sizeof b, "%-4s %3d  %s", note_nm(ks[q]).c_str(), ks[q], dkey_name(ss, ks[q]).c_str());
+                    it.push_back(b);
+                    if (has ? ks[q] == sn : std::abs(ks[q] - key) < std::abs(ks[j] - key))
+                        j = (int)q;
+                }
+                const int gk = menu("key " + std::to_string(key) + "'s sound: a key of " + dset_name(ss), it, j);
+                if (gk < 0)
+                    continue;
+                if (!u.count(0x0B))
+                    udrum_set(s, key, 0x0B, ss);
+                udrum_set(s, key, 0x0C, ks[gk]);
+                udrum_audition(s, key);
+            } else if (w == 0x08) {
+                udrum_set(s, key, 0x08, g(0x08, 1) == 0 ? 1 : 0);
+            } else if (w == -3) {
+                if (!udrum_audition(s, key))
+                    say("the selected part does not play user set " + std::to_string(s + 1) + ": pick it as its drum set (p)");
+            } else {
+                std::vector<int> vals(128);
+                for (int x = 0; x < 128; x++)
+                    vals[x] = x;
+                const int v0 = g(w, w == 0x01 ? sn : w == 0x02 ? 100 : 64);
+                const std::string nm = "key " + std::to_string(key) + (w == 0x01 ? " play note" : w == 0x02 ? " level" : " pan");
+                edit_efx(nm, vals, [w](int x) { return w == 0x01 ? note_nm(x) : w == 0x04 ? pan_label(x) : std::to_string(x); },
+                         v0, [&, w](int x) { H.udrum_send(s, key, w, x); });
+                udrum_audition(s, key);
+            }
         }
     }
 
@@ -3523,6 +3972,11 @@ struct Panel {
                     pick_inputs();
                 } else if (c == 'G' && H.sysfx_get && H.sysfx_send) {
                     pick_sysfx();
+                } else if (c == 'C' && H.cmx_get && H.cmx_send) {
+                    pick_cmx();
+                } else if (c == 'U' && H.udrum_get && H.udrum_send) {
+                    pick_udrum();
+                    strike_off();
                 } else if (c == 'S' || c == 'L' || c == 'N' || c == 'R') {
                     presets_key(c);
                 } else if (c == 'P') {

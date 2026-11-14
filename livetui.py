@@ -30,6 +30,7 @@ import moog as MG
 import mf104 as MFD
 import percussion_map as PM
 import gsefx as GSX
+import ctrlmatrix as CMX
 import chorus as CHR
 import gsdelay as GSDL
 import blockrender as B
@@ -500,7 +501,7 @@ STD_NAMES = ("ours", "SC-55", "SC-88", "SC-88Pro", "SC-8850")
 # already use, in any pane, since a bound key fires from every pane. Space is
 # the controls pane's own toggle, so it is not offered.
 HOTKEYS_FREE = (set("cefginptuvwxyz0[];',./")
-                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLPNREXIGZ")))  # N/R: scenes; E: Eastern tuning; X: the EFX; I: MIDI inputs; G: GS system effects; Z: GS Reset (o: solo)
+                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLPNREXIGZCU")))  # N/R: scenes; E: Eastern tuning; X: the EFX; I: MIDI inputs; G: GS system effects; Z: GS Reset; C: the controller matrix; U: user drum sets (o: solo)
 
 
 # THE STOP KEYS: the digit row, and the same keys shifted. What shift+1 TYPES
@@ -1565,6 +1566,254 @@ class TUI:
             kind, a, nm, v0, lo, hi, show = what
             hi_addr = 0x02 if kind == "eq" else 0x01
             self.edit_value(scr, nm, v0, lo, hi, show, lambda v, _a=a, _h=hi_addr: L.sysfx_send(_h, _a, v))
+
+    def _cmx_wait(self, rev):
+        """As _efx_wait: the audio thread applies what was sent first."""
+        t0 = time.monotonic()
+        while self.live.cmx_rev == rev and time.monotonic() - t0 < 0.1:
+            time.sleep(0.005)
+
+    def cmx_summary(self, st, src):
+        """A source's cells off zero, in a line: "LFO1 pitch depth 47 cents, ..."."""
+        got = ["%s %s" % (CMX.DEST_LABELS[d], CMX.printed(d, st['gs'].get((src, d), 0.0)))
+               for d in CMX.GS_DESTS if st['gs'].get((src, d), 0.0)]
+        return ", ".join(got) if got else "--"
+
+    def pick_cmx(self, scr):
+        """THE CONTROLLER MATRIX (C): what the mod wheel, the bend, the two
+        aftertouches and two assignable controllers move on the selected
+        part's channel -- pitch, cutoff, amplitude and the two LFOs -- each
+        cell sent as the GS message a sequencer would (40 2p aa vv), so it is
+        heard as it moves, a GS reset puts it back, and a scene keeps it."""
+        p = self.sel()
+        if p is None:
+            return
+        L, ch = self.live, p.channel
+        where = "all channels" if ch is None else "channel %d" % (ch + 1)
+        i = 0
+        while True:
+            st = L.cmx_state(ch)
+            rows, items = [], []
+            for which in ('cc1', 'cc2'):
+                rows.append(("assign", which))
+                items.append("%s is   CC%d" % (which.upper(), st['cc_of'][which]))
+            rows.append(None)
+            items.append("-- sources (enter: its destinations)")
+            for src, lab in CMX.SOURCE_LABELS:
+                if src in ('cc1', 'cc2'):
+                    lab = "%s = CC%d" % (src.upper(), st['cc_of'][src])
+                rows.append(("src", src, lab))
+                items.append("%-20s %s" % (lab, self.cmx_summary(st, src)))
+            gm2 = sorted((k, v) for k, v in st['gs'].items() if isinstance(k[0], tuple) and v)
+            if gm2:
+                rows.append(None)
+                items.append("-- set by GM2 messages (a file's; shown, not edited here)")
+                for (src, dest), dep in gm2:
+                    rows.append(None)
+                    items.append("CC%-17d %s %s" % (src[1], CMX.DEST_LABELS[dest], CMX.printed(dest, dep)))
+            got = self.menu(scr, "controller matrix: part %d (%s)" % (self.row + 1, where), items, i)
+            if got is None:
+                return
+            i = got
+            what = rows[got]
+            if what is None:
+                continue
+            if what[0] == "assign":
+                self.cmx_assign(scr, ch, what[1], st['cc_of'][what[1]])
+            else:
+                self.pick_cmx_source(scr, ch, what[1], what[2])
+
+    def cmx_assign(self, scr, ch, which, cur):
+        """CC1 or CC2's controller number: learnt (move it) or chosen, 0-95."""
+        got = self.menu(scr, "%s is" % which.upper(), ["learn: move a knob or pedal now", "choose its number"], 0)
+        if got is None:
+            return
+        L = self.live
+        if got == 1:
+            rev = L.cmx_rev
+            self.edit_value(scr, "%s's controller" % which.upper(), cur, 0, 95, lambda v: "CC%d" % v,
+                            lambda v: L.cmx_assign_send(ch, which, v))
+            self._cmx_wait(rev)
+            return
+        t0 = time.monotonic()
+        self.say("move the knob or pedal for %s ..." % which.upper(), secs=5.0)
+        code = None
+        scr.timeout(50)
+        try:
+            while time.monotonic() - t0 < 8.0:
+                lc = L.last_ctl
+                if lc is not None and lc[1] > t0 and 0 <= lc[0] <= 95:
+                    code = lc[0]
+                    break
+                if self.read(scr) == 27:
+                    return
+                self.draw(scr)
+        finally:
+            scr.timeout(50)
+        if code is None:
+            self.say("nothing moved")
+            return
+        rev = L.cmx_rev
+        L.cmx_assign_send(ch, which, code)
+        self._cmx_wait(rev)
+        self.say("%s is CC%d" % (which.upper(), code))
+
+    def pick_cmx_source(self, scr, ch, src, lab):
+        """One source's eleven destinations, each at its depth; enter moves
+        one (left/right, pgup/pgdn), heard as it goes, esc puts it back."""
+        L = self.live
+        i = 0
+        while True:
+            st = L.cmx_state(ch)
+            items = ["%-18s %s" % (CMX.DEST_LABELS[d], CMX.printed(d, st['gs'].get((src, d), 0.0)))
+                     for d in CMX.GS_DESTS]
+            got = self.menu(scr, "controller matrix: %s moves" % lab, items, i)
+            if got is None:
+                return
+            i = got
+            d = CMX.GS_DESTS[got]
+            lo, hi = CMX.RAW_RANGE.get(d, (0, 127))
+            rev = L.cmx_rev
+            self.edit_value(scr, "%s -> %s" % (lab, CMX.DEST_LABELS[d]),
+                            CMX.gs_raw(d, st['gs'].get((src, d), 0.0)), lo, hi,
+                            lambda v, _d=d: CMX.printed(_d, CMX.gs_depth(_d, v)),
+                            lambda v, _d=d: L.cmx_send(ch, src, _d, v))
+            self._cmx_wait(rev)
+
+    # ---- THE USER DRUM SETS (U) ----------------------------------------
+    @staticmethod
+    def udrum_sets():
+        """The sets a user key may take its sound from: every built set but
+        the user sets themselves, (program, name)."""
+        return [(k, PM.drum_set_name(k)) for k in sorted(PM.DRUM_SETS)
+                if k < 128 and k not in B.USER_DRUM_SETS]
+
+    def udrum_line(self, u):
+        """A user key's settings in a line: its sound, play note, level, pan."""
+        if 'src_note' not in u:
+            return "--"
+        ss, sn = u.get('src_set', 0), u['src_note']
+        out = "%s: %s" % (PM.drum_set_name(ss), drum_key_name(sn, ss) or "key %d" % sn)
+        if 'note' in u and u['note'] != sn:
+            out += "   play %+d" % (u['note'] - sn)
+        if 'level' in u:
+            out += "   level %d" % u['level']
+        if 'pan' in u:
+            out += "   pan %s" % self.pan_label(u['pan'])
+        if u.get('rxon', 1) == 0:
+            out += "   (not received)"
+        return out
+
+    @staticmethod
+    def pan_label(v):
+        return "random" if v == 0 else "C" if v == 64 else "L%d" % (64 - v) if v < 64 else "R%d" % (v - 64)
+
+    def _udrum_wait(self, s, key, param, v):
+        t0 = time.monotonic()
+        while (self.live.uset.get((s, key)) or {}).get(param) != v and time.monotonic() - t0 < 0.1:
+            time.sleep(0.005)
+
+    def udrum_set_param(self, s, key, param, v):
+        self.live.udrum_send(s, key, param, v)
+        self._udrum_wait(s, key, param, v)
+
+    def pick_udrum(self, scr):
+        """THE USER DRUM SETS (U): GS's two (programs 65 and 66), each key
+        another set's sound -- its set and key, play note, level, pan and
+        whether it is received -- each setting sent as the GS message a
+        sequencer would (21 dp rr), kept in presets and the session. A part
+        plays one by picking it as its drum set (p)."""
+        i = 0
+        while True:
+            items = ["user set %d  (program %d)   %d keys set" % (s + 1, B.USER_DRUM_SETS[s] + 1,
+                                                              sum('src_note' in u for u in self.live.udrum_state(s).values()))
+                     for s in (0, 1)]
+            got = self.menu(scr, "user drum sets", items, i)
+            if got is None:
+                return
+            i = got
+            self.pick_udrum_set(scr, got)
+
+    def pick_udrum_set(self, scr, s):
+        i = 36
+        while True:
+            st = self.live.udrum_state(s)
+            items = ["%-4s %3d   %s" % (note_name(k), k, self.udrum_line(st.get(k, {}))) for k in range(128)]
+            got = self.menu(scr, "user set %d (program %d): its keys" % (s + 1, B.USER_DRUM_SETS[s] + 1), items, i)
+            if got is None:
+                return
+            i = got
+            self.pick_udrum_key(scr, s, got)
+
+    def udrum_audition(self, s, key):
+        """The key struck on the selected part, if it plays this set."""
+        p = self.sel()
+        if p is not None and p.patch.drums and int(p.patch.program) == B.USER_DRUM_SETS[s]:
+            self.note_on(key)
+            return True
+        return False
+
+    def pick_udrum_key(self, scr, s, key):
+        L = self.live
+        i = 0
+        while True:
+            self.note_off()
+            u = L.udrum_state(s).get(key, {})
+            ss, sn = u.get('src_set', 0), u.get('src_note')
+            rows = [("set", "sound from set   %s" % PM.drum_set_name(ss)),
+                    ("key", "its key          %s" % ("--" if sn is None else "%s %d  %s" % (
+                        note_name(sn), sn, drum_key_name(sn, ss) or "")))]
+            if sn is not None:
+                rows += [("note", "play note        %s%s" % (note_name(u.get('note', sn)),
+                                                          "" if u.get('note', sn) == sn else
+                                                          "  (%+d)" % (u.get('note', sn) - sn))),
+                         ("level", "level            %s" % (u['level'] if 'level' in u else "the set's")),
+                         ("pan", "pan              %s" % (self.pan_label(u['pan']) if 'pan' in u else "the set's")),
+                         ("rxon", "receive note on  %s" % ("off" if u.get('rxon', 1) == 0 else "on")),
+                         ("hear", "strike it        (on the selected part, if it plays this set)")]
+            got = self.menu(scr, "user set %d, key %s %d" % (s + 1, note_name(key), key), [r[1] for r in rows], i)
+            if got is None:
+                return
+            i = got
+            what = rows[got][0]
+            if what == "set":
+                sets = self.udrum_sets()
+                j = next((n for n, (k, _nm) in enumerate(sets) if k == ss), 0)
+                g = self.menu(scr, "key %d's sound from set" % key, ["%3d %s" % (k, nm) for k, nm in sets], j)
+                if g is None:
+                    continue
+                self.udrum_set_param(s, key, 'src_set', sets[g][0])
+                if sn is None:                  # (a key with no sound yet: the set's own on this key, else its first)
+                    keys = [k for k in range(128) if drum_key_name(k, sets[g][0])]
+                    self.udrum_set_param(s, key, 'src_note', key if key in keys else (keys[0] if keys else key))
+                self.udrum_audition(s, key)
+            elif what == "key":
+                keys = [k for k in range(128) if drum_key_name(k, ss)]
+                if not keys:
+                    self.say("%s has no keys" % PM.drum_set_name(ss))
+                    continue
+                j = keys.index(sn) if sn in keys else min(range(len(keys)), key=lambda n: abs(keys[n] - key))
+                g = self.menu(scr, "key %d's sound: a key of %s" % (key, PM.drum_set_name(ss)),
+                              ["%-4s %3d  %s" % (note_name(k), k, drum_key_name(k, ss)) for k in keys], j)
+                if g is None:
+                    continue
+                if 'src_set' not in u:
+                    self.udrum_set_param(s, key, 'src_set', ss)
+                self.udrum_set_param(s, key, 'src_note', keys[g])
+                self.udrum_audition(s, key)
+            elif what == "rxon":
+                self.udrum_set_param(s, key, 'rxon', 1 if u.get('rxon', 1) == 0 else 0)
+            elif what == "hear":
+                if not self.udrum_audition(s, key):
+                    self.say("the selected part does not play user set %d: pick it as its drum set (p)" % (s + 1))
+            else:
+                lo, hi = (0, 127)
+                v0 = u.get(what, sn if what == "note" else 100 if what == "level" else 64)
+                show = (note_name if what == "note" else self.pan_label if what == "pan" else str)
+                self.edit_value(scr, "key %d %s" % (key, "play note" if what == "note" else what), v0, lo, hi, show,
+                                lambda v, _w=what: L.udrum_send(s, key, _w, v))
+                self._udrum_wait(s, key, what, (L.uset.get((s, key)) or {}).get(what))
+                self.udrum_audition(s, key)
 
     def edit_value(self, scr, nm, v0, lo, hi, show, send):
         """One value, lo..hi, moved with Left/Right (PgUp/PgDn ten at a time),
@@ -3101,6 +3350,15 @@ class TUI:
             "                      the parts share (by CC91, CC93, CC94) and the EQ --",
             "                      each move sent as a sequencer's GS message, so a",
             "                      GS reset puts them back",
+            "  C                 THE CONTROLLER MATRIX of the part's channel: what the",
+            "                      mod wheel, bend, the aftertouches and two assignable",
+            "                      controllers (CC1, CC2: learnt or chosen) move --",
+            "                      pitch, cutoff, amplitude, the two LFOs' rate and",
+            "                      depths. Each move a GS message; kept in a scene",
+            "  U                 THE USER DRUM SETS (GS's programs 65 and 66): each key",
+            "                      another set's sound -- its set and key, play note,",
+            "                      level, pan, received or not. A part plays one as its",
+            "                      drum set (p). Kept in presets and the session",
             "  Z, then Z again   A GS RESET, as a sequencer sends it: every part to",
             "                      program 0, the controllers, the system effects and",
             "                      the receive settings to the module's power-on",
@@ -3329,6 +3587,10 @@ class TUI:
             self.pick_efx(scr)
         elif c == ord("G"):
             self.pick_sysfx(scr)
+        elif c == ord("C"):
+            self.pick_cmx(scr)
+        elif c == ord("U"):
+            self.pick_udrum(scr)
         elif c == ord("I"):
             self.pick_inputs(scr)
         elif c == ord("P"):

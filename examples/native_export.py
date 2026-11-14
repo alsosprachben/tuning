@@ -557,6 +557,8 @@ def main(argv):
             # effect where none is set (gsefx.in_effect), its raw values and
             # each printed as his panel shows it -- as tab-separated lines
             import gsefx as _GSX
+            import percussion_map as DK_PCM
+            import blockrender as DK_B
             ul = ["T\t%d\t%d\t%d\t%s" % (_n, _k[0], _k[1], _nm) for _n, _k, _nm in _GSX.numbered()]
             ul += ["C\t%d\t%d\t%s" % (_a, _b, _c) for _c, _a, _b in _GSX.CATEGORIES]
             for _n, _k, _nm in _GSX.numbered():
@@ -586,6 +588,21 @@ def main(argv):
                         "\x1f".join(_GSX.printed_value(_nm, _q, x) for x in _vs)))
             ub = "\n".join(ul).encode("utf-8")
             f.write(b"EFXU" + struct.pack("<i", len(ub)) + ub)
+            # DKEY: the panel's user drum set editor (livetui.pick_udrum): each
+            # set a user key may take its sound from, and each key's name in it
+            # (livetui.drum_key_name's), as tab-separated lines
+            dl = []
+            for _k in sorted(DK_PCM.DRUM_SETS):
+                if _k >= 128 or _k in DK_B.USER_DRUM_SETS:
+                    continue
+                dl.append("S\t%d\t%s" % (_k, DK_PCM.drum_set_name(_k)))
+                _kit = DK_PCM.kit_for_program(_k)
+                for _n in range(128):
+                    _got = DK_PCM.percussion_for_note(_n, _kit)
+                    if _got:
+                        dl.append("K\t%d\t%d\t%s" % (_k, _n, _got[0]))
+            db = "\n".join(dl).encode("utf-8")
+            f.write(b"DKEY" + struct.pack("<i", len(db)) + db)
         if "live" in opt:
             import live as L
             tab = L.pan_table()

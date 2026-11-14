@@ -155,6 +155,117 @@ class Matrix(object):
         return out
 
 
+# ---- THE PANEL (livetui's C, nvlive's): the table shown, each cell moved as
+# the GS message a sequencer would send (40 2p aa vv), and kept in a scene as
+# those messages ----------------------------------------------------------
+
+SOURCE_LABELS = (('mod', "mod wheel"), ('bend', "pitch bend"), ('cat', "channel aftertouch"),
+                 ('pat', "poly aftertouch"), ('cc1', "CC1 (assignable)"), ('cc2', "CC2 (assignable)"))
+DEST_LABELS = {'pitch': "pitch", 'cutoff': "filter cutoff", 'amp': "amplitude",
+               'lfo1_rate': "LFO1 rate", 'lfo1_pitch': "LFO1 pitch depth", 'lfo1_tvf': "LFO1 filter depth",
+               'lfo1_tva': "LFO1 amp depth", 'lfo2_rate': "LFO2 rate", 'lfo2_pitch': "LFO2 pitch depth",
+               'lfo2_tvf': "LFO2 filter depth", 'lfo2_tva': "LFO2 amp depth"}
+RAW_RANGE = {'pitch': (0x28, 0x58)}             # (the address map: pitch -24..+24; the rest 0..127)
+
+
+def gs_raw(dest, dep):
+    """The GS byte whose depth is nearest `dep` (gs_depth's inverse; a GM2
+    amplitude lands on GS's nearest)."""
+    lo, hi = RAW_RANGE.get(dest, (0, 127))
+    return min(range(lo, hi + 1), key=lambda v: (abs(gs_depth(dest, v) - dep), abs(v - 0x40)))
+
+
+def printed(dest, dep):
+    """A depth as the panel prints it, in its destination's unit."""
+    if dest == 'pitch':
+        return "%+d semitones" % round(dep) if dep else "0"
+    if dest == 'cutoff' or dest.endswith('_tvf'):
+        return "%+.0f cents" % dep if dest == 'cutoff' and dep else "%.0f cents" % dep
+    if dest == 'amp':
+        return "%+.0f %%" % (dep * 100.0) if dep else "0"
+    if dest.endswith('_rate'):
+        return "%+.1f Hz" % dep if dep else "0"
+    if dest.endswith('_pitch'):
+        return "%.0f cents" % dep
+    return "%.0f %%" % (dep * 100.0)
+
+
+def block_of(ch):
+    """A channel's GS part block nibble (blockrender's part numbering)."""
+    return 0 if ch == 9 else ch + 1 if ch < 9 else ch
+
+
+def _dt1(a):
+    return (0x41, 0x10, 0x42, 0x12) + tuple(a) + ((128 - sum(a) % 128) % 128,)
+
+
+def cell_message(ch, src, dest, v):
+    """GS 40 2p aa vv: channel ch's (source, destination) cell at raw v."""
+    row = next(k for k, s in GS_SOURCES.items() if s == src)
+    return _dt1((0x40, 0x20 | block_of(ch), (row << 4) | GS_DESTS.index(dest), max(0, min(127, int(v)))))
+
+
+def assign_message(ch, which, cc):
+    """GS 40 1p 1F / 20 vv: channel ch's CC1 (or CC2) is controller cc."""
+    return _dt1((0x40, 0x10 | block_of(ch), 0x1F if which == 'cc1' else 0x20, max(0, min(95, int(cc)))))
+
+
+def gm2_raw(dest, dep):
+    return min(range(128), key=lambda v: abs(gm2_depth(dest, v) - dep))
+
+
+def scene_messages(ch, m):
+    """Matrix m as the exclusives that set it from a reset's, in order: CC1
+    and CC2's numbers, every GS cell off its default, GM2's controller cells
+    (a source GS's table has no row for). Empty for a reset's matrix."""
+    out = []
+    for which, d in (('cc1', CC1_DEFAULT), ('cc2', CC2_DEFAULT)):
+        if m.cc_of[which] != d:
+            out.append(assign_message(ch, which, m.cc_of[which]))
+    for row in sorted(GS_SOURCES):
+        src = GS_SOURCES[row]
+        for dest in GS_DESTS:
+            dep = m.gs.get((src, dest), DEFAULTS.get((src, dest), 0.0))
+            if gs_raw(dest, dep) != gs_raw(dest, DEFAULTS.get((src, dest), 0.0)):
+                out.append(cell_message(ch, src, dest, gs_raw(dest, dep)))
+    for (src, dest), dep in sorted(((k, v) for k, v in m.gs.items() if isinstance(k[0], tuple)),
+                                   key=lambda kv: (kv[0][0][1], GS_DESTS.index(kv[0][1]))):
+        if dest in GM2_DESTS and dep:
+            out.append((0x7F, 0x7F, 0x09, 0x03, ch & 15, src[1], GM2_DESTS.index(dest), gm2_raw(dest, dep)))
+    return out
+
+
+def undo_messages(ch, m, keep):
+    """What puts matrix m back to a reset's, but for what the exclusives
+    `keep` set again: a scene recalled over a matrix it does not name."""
+    st, named = Matrix(), set()
+    for d in keep:
+        r = parse(d, lambda b, a: (9 if b == 0 else (b - 1 if b <= 9 else b)) + (16 if a == 0x50 else 0))
+        if r and r[0] == ch:
+            st.apply(r[1], r[2])
+            if r[1] == 'cell':
+                named.add(r[2][:2])
+            elif r[1] == 'cells':
+                named.update(c[:2] for c in r[2])
+    out = []
+    for which, d in (('cc1', CC1_DEFAULT), ('cc2', CC2_DEFAULT)):
+        if m.cc_of[which] != st.cc_of[which] and st.cc_of[which] == d:
+            out.append(assign_message(ch, which, d))
+    # (in scene_messages' order: GS's rows and columns, then GM2's controller
+    # cells by number and destination -- nvlive's cmx_undo the same)
+    for row in sorted(GS_SOURCES):
+        for dest in GS_DESTS:
+            src = GS_SOURCES[row]
+            dflt = DEFAULTS.get((src, dest), 0.0)
+            if (src, dest) in m.gs and (src, dest) not in named and m.gs[(src, dest)] != dflt:
+                out.append(cell_message(ch, src, dest, gs_raw(dest, dflt)))
+    for (src, dest), dep in sorted(((k, v) for k, v in m.gs.items() if isinstance(k[0], tuple)),
+                                   key=lambda kv: (kv[0][0][1], GS_DESTS.index(kv[0][1]))):
+        if (src, dest) not in named and dep and dest in GM2_DESTS:
+            out.append((0x7F, 0x7F, 0x09, 0x03, ch & 15, src[1], GM2_DESTS.index(dest), gm2_raw(dest, 0.0)))
+    return out
+
+
 def selftest():
     import sys
     fails = []
@@ -186,6 +297,36 @@ def selftest():
     r = parse((0x7F, 0x7F, 0x09, 0x03, 0x00, 0x10, 0x00, 0x4C), blk)
     check("GM2 09 03: CC16 -> pitch +12 semitones", r == (0, 'cells', ((('cc', 16), 'pitch', 12.0),)), str(r))
     check("not a matrix message: None", parse((0x41, 0x10, 0x42, 0x12, 0x40, 0x16, 0x19, 0x40), blk) is None)
+    ok = all(gs_raw(d, gs_depth(d, v)) == v for d in GS_DESTS
+             for v in range(*((0x28, 0x59) if d == 'pitch' else (0, 128))))
+    check("gs_raw undoes gs_depth on every byte of every destination", ok)
+    for ch in (0, 9, 12):
+        msg = cell_message(ch, 'cat', 'lfo2_tvf', 99)
+        r = parse(msg, blk)
+        check("cell_message channel %d: parsed back to itself" % (ch + 1),
+              r == (ch, 'cell', ('cat', 'lfo2_tvf', gs_depth('lfo2_tvf', 99))), str(r))
+    m = Matrix()
+    for d in ((0x41, 0x10, 0x42, 0x12, 0x40, 0x23, 0x02, 0x7F, 0), (0x41, 0x10, 0x42, 0x12, 0x40, 0x13, 0x1F, 0x05, 0),
+              (0x41, 0x10, 0x42, 0x12, 0x40, 0x23, 0x04, 0x00, 0), (0x7F, 0x7F, 0x09, 0x03, 0x02, 0x50, 0x01, 0x10)):
+        r = parse(d, blk)
+        m.apply(r[1], r[2])
+    sc = scene_messages(2, m)
+    m2 = Matrix()
+    for d in sc:
+        r = parse(d, blk)
+        m2.apply(r[1], r[2])
+    check("a scene's messages make the same matrix again (%d messages)" % len(sc),
+          m2.cells() == m.cells() and m2.cc_of == m.cc_of, "%s / %s" % (m.cells(), m2.cells()))
+    check("a reset's matrix: no messages", scene_messages(4, Matrix()) == [])
+    un = undo_messages(2, m, sc[:1])
+    m3 = Matrix()
+    for d in sc + un:
+        r = parse(d, blk)
+        m3.apply(r[1], r[2])
+    w = Matrix()
+    w.apply('assign', ('cc1', 5))
+    check("undo_messages: back to a reset's but for what the scene keeps",
+          m3.cells() == w.cells() and m3.cc_of == w.cc_of, "%s" % m3.cells())
     print("\n  %s" % ("all passed" if not fails else "FAILED: %s" % ", ".join(fails)))
     return 1 if fails else 0
 

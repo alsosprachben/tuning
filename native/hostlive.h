@@ -118,6 +118,7 @@ void nv_part_gs_seen(void *h);
 void nv_part_gs_chorus(void *h, int addr, int v);
 void nv_part_gs_delay(void *h, int addr, int v);
 int nv_part_gs_fx(void *h, int *cho, int *dly);
+int nv_part_cmx(void *h, int ch, int *src, int *col, double *dep, int max, int *cc);
 int nv_part_chan_cc(void *h, int ch, int cc);
 void nv_part_gs_chorus_reset(void *h, int gm1);
 void nv_part_leslie(void *h, const double *L, int n);
@@ -1164,6 +1165,9 @@ struct nv_host {
     std::vector<std::string> scene_cached;
     bool scene_inline = false;              // (no blocks to come: --test's end, read here)
     std::vector<std::string> scene_now();
+    bool cmx_read(int ch, nv::Cmx &m);       // (the controller matrix: the panel's C)
+    bool udrum_read(panel::Host::USets &u);  // (the user drum sets: the panel's U, the session)
+    void udrum_queue(int s, int key, int code, int v);
     int scene_recall(const std::vector<std::string> &events);
     std::string presets_path() const, scenes_path() const;
     std::vector<std::string> pending_drawn; // a preset's stops (names), for its organ once it is swapped in
