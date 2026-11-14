@@ -14,7 +14,10 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 
+#include <algorithm>
+#include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -42,7 +45,49 @@ struct MetalGpu {
         Buf tab[3], acc;
         id<MTLCommandBuffer> cb = nil;
         int NG = 0, frames = 0;
+        double t_commit = 0.0;
     } slot[2];
+    // TUNING_METAL_TRACE: each pipelined block's time split -- committed to
+    // the GPU's start (scheduling), the GPU's own run, its end to the wait's
+    // return (waking) -- summarised on stderr when the GPU is let go
+    bool trace = getenv("TUNING_METAL_TRACE") != nullptr;
+    std::vector<double> t_sched, t_run, t_wake, t_total;
+    static double now_s()
+    {
+        return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+    static void stat(const char *what, std::vector<double> v)
+    {
+        if (v.empty())
+            return;
+        std::sort(v.begin(), v.end());
+        double s = 0.0;
+        for (double x : v)
+            s += x;
+        fprintf(stderr, "metal: %-10s %.3f ms mean, %.3f p99, %.3f worst (%zu)\n", what, 1e3 * s / v.size(),
+                1e3 * v[v.size() * 99 / 100], 1e3 * v.back(), v.size());
+    }
+    static MetalGpu *&traced()
+    {
+        static MetalGpu *g = nullptr;
+        return g;
+    }
+    void report()
+    {
+        if (trace && !t_total.empty()) {
+            stat("scheduled", t_sched);
+            stat("GPU run", t_run);
+            stat("woken", t_wake);
+            stat("total", t_total);
+            t_total.clear();
+        }
+    }
+    ~MetalGpu()
+    {
+        report();
+        if (traced() == this)
+            traced() = nullptr;
+    }
 
     bool grow(Buf &b, size_t n)
     {
@@ -78,6 +123,13 @@ struct MetalGpu {
 
     bool open(const char *dir, const int *sizes, std::string &err)
     {
+        if (trace) {                            // (nvlive exits without letting the GPU go: reported at exit)
+            traced() = this;
+            atexit([] {
+                if (traced())
+                    traced()->report();
+            });
+        }
         @autoreleasepool {
             dev = MTLCreateSystemDefaultDevice();
             if (!dev) {
@@ -229,6 +281,7 @@ struct MetalGpu {
             id<MTLCommandBuffer> cb = encode(st.tab, st.acc, nd, n0, frames, send, mg, st.NG);
             if (!cb)
                 return -1;
+            st.t_commit = now_s();
             [cb commit];                            // started now, collect waits
             st.cb = cb;
             st.frames = frames;
@@ -243,6 +296,16 @@ struct MetalGpu {
             return -1;
         [st.cb waitUntilCompleted];
         const bool ok = st.cb.status == MTLCommandBufferStatusCompleted;
+        if (trace && ok) {
+            // (GPUStartTime/GPUEndTime: the host's mach clock in seconds, as
+            // CACurrentMediaTime; kernelStart is the CPU's commit, in the same)
+            const double back = now_s(), gs = st.cb.GPUStartTime, ge = st.cb.GPUEndTime;
+            const double ks = st.cb.kernelStartTime;
+            t_sched.push_back(gs - ks);
+            t_run.push_back(ge - gs);
+            t_total.push_back(back - st.t_commit);
+            t_wake.push_back((back - st.t_commit) - (ge - ks));
+        }
         st.cb = nil;
         if (!ok)
             return -1;
