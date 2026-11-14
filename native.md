@@ -19,12 +19,25 @@ kept by hand in the script's TASKS.
 | SC-88 Pro | 360 of 360 | 0 of 0 |
 | SC-8850 | 460 of 460 | 6 of 6 |
 
+Live (nvlive, from its own patch list):
+
+| stage | tones live | drum sets live | not live |
+|---|---|---|---|
+| GM1 | 128 of 128 (0 by bank select only) | 1 of 1 | -- |
+| GM2 | 128 of 128 (0 by bank select only) | 8 of 8 | -- |
+| MT-32 | 128 of 128 (0 by bank select only) | 1 of 1 | -- |
+| CM-64 | 64 of 64 (0 by bank select only) | 1 of 1 | -- |
+| SC-55 | 13 of 13 (0 by bank select only) | 30 of 30 | -- |
+| SC-88 | 193 of 193 (0 by bank select only) | 2 of 2 | -- |
+| SC-88 Pro | 360 of 360 (0 by bank select only) | 0 of 0 | -- |
+| SC-8850 | 460 of 460 (0 by bank select only) | 6 of 6 | -- |
+
 ## GM1
 
 What it needs first, and live's side:
 
 - [x] Program changes in nvlive: a builder thread, MIDI program change, the panel's picker
-- [ ] nvlive's panel at livetui's (a switch is not a control: each a panel control and a library call) -- done: the patch picker and its variations, globals, routes, stops, the insertion effect (x), parts (layers, splits, channel, range, transpose, level, mute, fixed touch), the tuner, the synth (Moog, Messenger) pane and M, scenes, presets and the shared session, mod rate, the metronome, the standard, the devices (--port), mouse and touch, the Eastern tuning (E: system, raga and Sa, the Indian voices' parts built again in it, in presets and the session; native vs live identical switched mid-phrase); open: threads
+- [x] nvlive's panel at livetui's (a switch is not a control: each a panel control and a library call) -- done: the patch picker and its variations, globals, routes, stops, the insertion effect (x), parts (layers, splits, channel, range, transpose, level, mute, fixed touch), the tuner, the synth (Moog, Messenger) pane and M, scenes, presets and the shared session, mod rate, the metronome, the standard, the devices (--port), mouse and touch, the Eastern tuning (E: system, raga and Sa, the Indian voices' parts built again in it, in presets and the session; native vs live identical switched mid-phrase); livetui's threads not ported -- nvlive stays one render thread (Ben, 2026-11-13: it would complicate the port and not help)
 - [x] Live: the synth variations nvlive greyed as not native -- a Moog's SYNC (13: Sync Bass, P5 Sync Lead, Wire Lead...) and unison (16: JP SuperSaw, Super Poly, the JP-8000 stacks...): moog.weights' synced spectrum the kernel's C, the shape rows' sweep, the lock under a held note; each unison voice a stamp of its own. Native vs live identical on P5 Sync Lead, a lead's SYNC turned live, Sync Bass and JP SuperSaw on the GPU path, Super Poly, JP8000 Clav., DualSyncLead. The page's tone counts are the files'; a live count beside them is to come
 - [x] Live: the Messenger's performance controls, measured on Ben's unit (messenger_perf.py) -- GLIDE (a lag in cents, detached notes too), HOLD, A and F ENV VEL, LFO 2 (rate, pitch, cutoff, amp, the wheel its depth), F and A ENV LOOP, MULTI-TRIG (carry on, or recharge from where it was); the loops, F ENV VEL and the contours' age and start level in a kernel entry of their own (synth_voice_moogx), Python and native alike
 - [x] Live: the room switched while playing (live.set_room): every room in the export (LROOMS), its tail drawn natively at the stage's directivity (native/roomtail.cpp, bit for bit roomtail.py's), the templates built again in it, the tail crossfaded
@@ -33,7 +46,7 @@ What it needs first, and live's side:
 - [x] Live: the Moog Messenger both ways (live._messenger_cc, messenger_sync/_pitch): its chart turns a part's knobs (the panel rebuilt in C from the export's MTAB, the knob's glide; both firmwares), the panel and each note's bend sent back (--messenger-out: the panel heard on the Messenger itself; its notes' bends not yet tried there) -- not SYNC's knob
 - [x] Live: check the fiddle, tinkle bell, melodic tom, reverse cymbal and breath noise against live.Live
 - [x] Live: a drum set identical to live.Live beyond the kick and toms (the Standard set's every key, nvlive end to end)
-- [ ] Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender's reader refuses it
+- [x] Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender plays it, its refusal gone (4edbafa)
 - [x] Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)
 - [x] Moog: an MF-104M on a note whose pitch or shapes move -- each repeat its own filter row, its pitch and shape rows its delay later (_prep_delays' _mf_dup; nv_song_moog_dup); nvrender vs blockrender identical on Heaven II's shape LFO and three tones bent under their echoes (no MF-104M tone moves its pitch rows yet)
 - [x] Files: grains (_note_grains: the ocean drum's beads, rain, a stream, bubbles that glide, clusters) -- GM 122, the SFX sets' grain keys
@@ -48,7 +61,8 @@ What it needs first, and live's side:
 - [x] Live: the bagpipe's drones (live's own held drone voices: drone_wheel, drone_ratios; templates built corked)
 - [x] Files: two-port files (PortedMidi, meta 21) in the reader: channel + 16 x port, port B's part exclusives as port A reads them, the legato over the merged stream
 - [x] Files: GS's drum instrument NRPNs (GS_DRUM_NRPN: a key's pitch, level, pan, delay level; reset by a GS or GM reset and a drum program change)
-- [ ] Files: MPE in the reader
+- [x] Files: MPE (M1-100-UM, MIDI 1.0) -- the reader's zones (an MCM's resets and bend ranges, a manager's controls copied to its members, a member's zone-wide ones ignored), a member's note its manager's program, fader, pressure (the louder) and mix channel, its own pitch row (its bend times its manager's: _prep_mpe_pitch) -- nvrender identical on mpe_zone and nine variants (tests/live), each effect measured (effects.py mpe_file); the corpus 167/167
+- [ ] Live: MPE in nvlive (live._mpe_route: the zones, the pressure and CC74 a member and its manager combine, a part on the manager's channel playing the zone, legato and portamento by zone)
 - [x] Files: a class's own distance and gestures -- reverb_distance, its own chorus pedal (chorus_send) and detuned pair (detuned_pair: chorus._pair), falls and rips on the valved lattice (fall_cents, rip_cents: Song::gliss)
 - [x] Files: tremolo picking (tremolo_pick_hz: 25.18 MandolinTrem, 27.25, 34.4, 115.16, the biwa's): its strokes in Song::gliss, seeded as the Python's
 - [x] Files: the uilleann pipes' cut (cut_semitones: 109.11, Song::gliss -- the flick takes the written note's legato, _CUT_OF) and the pungi's wheel-chosen drone (111.8, Song::drones)
@@ -73,6 +87,8 @@ Drum sets: 1 of 1 with every key native.
 What it needs first, and live's side:
 
 - [x] Restore c2111e6's six tones, lost when be5a996 was committed from an older tree: 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 66.8 BreathyTnr., 28.1 MutedDis.Gt, 125.10 Calculating -- and with them sympathy per mode (26.8 Pedal Steel, 107.8 Taisho Koto whole). Replayed onto today's tree: every stage whole again, each tone Python vs native in files and live, the corpus 167/167
+- [ ] Files: MIDI 2.0 (ump.py: a Clip File or raw UMP) -- done: the reader (both forms, the slots' own seconds, groups 1-2), per-note pitch (Pitch 7.9 on a Note On, 7.25, per-note bend and its range, per-note management's reset; _PN_AT's rows among MPE's) -- nvrender identical on m2_pernote and converted fixtures (tests/live midi2_files), each effect measured (m2_file); open: MIDI 2.0's own resolution (a value MIDI 1.0 has no number for: refused, -9, as the demo's 32-bit swell), groups past the second, per-note pitch beside an organ's wind rows
+- [ ] Live: MIDI 2.0 in nvlive -- done: the per-note pitch (live._one_m2, _pn_want, _repn: a Note On's Pitch 7.9, Pitch 7.25, per-note bend and range, per-note management; MTS and the scale table yield to it), and a registered voice's key tuning on its ranks (live's organ path, which nvlive lacked); the bridge (--midi2, --midi2-pitch=just:C|et), --midi2-play=FILE, --ump and --ump-from=PORT (an ALSA sequencer MIDI 2.0 port, libasound at run time), the panel's label -- nvlive identical on m2_pernote (tests/live m2_live, each effect measured), native/ump.h against ump.py and alsaump.py (ump_inputs); open: MIDI 2.0's own resolution live (taken at the nearest MIDI 1.0 number), a hardware MIDI 2.0 controller tried
 - [x] Registered variations in files (GS's organs, harpsichords and hits, the MT-32 set's): a variation's organ as a program's (Song::porg, nvrender's organ pass, the fader's swell by the note's class); a layered one's organ still Python's
 - [x] Files: layered registered variations (55.2 6th Hit, 6.24 Harpsi.o) -- a layer's organ: its registration the layer class's, its chest's wind the variation's program class's (nvrender vs blockrender identical on both)
 - [x] Files: per-mode sympathetic strings (sympathetic_per_mode: 26.8 Pedal Steel; 107.8 Taisho Koto's, with its drone stops and sweep) -- done with c2111e6's restore
@@ -160,9 +176,9 @@ What it needs first, and live's side:
 - [x] Melodic hits: a hand drum's or a kit's detail on a melodic voice (strike_phase_spread, stroke_scatter, jitter_by_partial, bloom_seconds, played_backwards, strike_noise_layers, one_shot and gate_time off a kit) -- dholak, kelontuk, reversed pieces, cymbal tones -- every tone that needs one native (coverage whole); each detail still gated to the voices that use it
 - [x] Crowds: a few people clapping (strike_flam_people, their palms ringing: strike_flam_people_peak) -- Small Club, the applause wave; GM 2's Electronic and TR-808 sets
 - [x] A recorded flam (strike_flam_record) and a crackle's exponential levels (strike_flam_exp_db, with a gate): phono noise -- every drum set whole
-- [ ] Sound Canvas superset, files: the GS messages the reader ignores -- a part's RX. CHANNEL (another channel's notes: Roland's own layering), its Rx switches (pitch bend, volume, program change... off), ASSIGN MODE (a repeated note's retrigger), the CC1/CC2 CONTROLLER NUMBERS its matrix reads, MASTER PAN, VOICE RESERVE (accepted: we have more), the display's text and 16x16 dot pages (45 xx) -- read and kept (the reader no longer refuses them), the display written beside a render (OUT.display.txt, nvrender's the same, line for line); open: the file renders honouring RX CHANNEL, the Rx switches, ASSIGN MODE and master pan (live does since 00ec34d)
-- [ ] Sound Canvas superset, live: what a sequencer sends that live ignores and a file render honours -- done (both engines, native vs live identical, each message counted and its effect measured): the system reverb, chorus and delay (macros and parameters), the GS EQ, a GS reset's sends, RX CHANNEL, the Rx switches, master pan; open: drum setup and the user drum sets live, the controller matrix live, ASSIGN MODE's modes (stored only)
-- [ ] Sound Canvas superset, the controllers -- done: the Rx switches live (a message a part does not receive dropped, both engines, 00ec34d), the wheel's jobs on CCs of their own; open: the CC1/CC2 controller numbers (stored, not yet read by anything) and the controller matrix live, into the CC-route design (a controller, a destination, a depth)
+- [ ] Sound Canvas superset, files -- done: RX CHANNEL, the Rx switches and master pan in both file renderers (gsrx: one stage, live's too; 5abc1a0), velocity sense and the keyboard range; open: ASSIGN MODE's modes, the CC1/CC2 controller numbers. Was: the GS messages the reader ignores -- a part's RX. CHANNEL (another channel's notes: Roland's own layering), its Rx switches (pitch bend, volume, program change... off), ASSIGN MODE (a repeated note's retrigger), the CC1/CC2 CONTROLLER NUMBERS its matrix reads, MASTER PAN, VOICE RESERVE (accepted: we have more), the display's text and 16x16 dot pages (45 xx) -- read and kept (the reader no longer refuses them), the display written beside a render (OUT.display.txt, nvrender's the same, line for line); open: the file renders honouring RX CHANNEL, the Rx switches, ASSIGN MODE and master pan (live does since 00ec34d)
+- [ ] Sound Canvas superset, live: what a sequencer sends that live ignores and a file render honours -- done (both engines, native vs live identical, each message counted and its effect measured): the system reverb, chorus and delay (macros and parameters), the GS EQ, a GS reset's sends, RX CHANNEL, the Rx switches, master pan; a drum key's own settings (GS drum NRPNs and drum setup: level, Rx note on, pitch, pan -- fb7b7ca); velocity sense and the keyboard range; USE FOR RHYTHM PART in nvlive (a channel's part a kit, as live's); the per-key delay send and the user drum sets (4edbafa); the controller matrix (GS 40 2p, CC1/CC2's numbers, GM2 09: amplitude, pitch, cutoff, LFO rate, and LFO1/LFO2 vibrato and tremolo as a second LFO, as files have them); open: ASSIGN MODE's modes
+- [ ] Sound Canvas superset, the controllers -- done: the Rx switches live (a message a part does not receive dropped, both engines, 00ec34d), the wheel's jobs on CCs of their own; the controller matrix live, both engines, the CC1/CC2 controller numbers read by it; open: the matrix on the panel, in the CC-route design (a controller, a destination, a depth)
 
 Tones: 13 of 13 native (new at this stage).
 
@@ -200,7 +216,7 @@ Drum sets: 0 of 0 with every key native (new at this stage).
 
 What it needs first, and live's side:
 
-- [ ] Sound Canvas superset, the panel (livetui, then nvlive) -- done: per-part pan, reverb, chorus and delay sends as part columns; the system effects page (G: the reverb's type, level, time and delay feedback, the chorus's and delay's types and parameters, the EQ -- each move a GS message, so a reset puts it back); the display (both TUIs' SC display box); the map in the picker (the standard); open: velocity sense as a column (the engine first), per-part level meters (the 16 bars), a GS Reset key, solo beside mute, user tones and drum sets edited and stored
+- [ ] Sound Canvas superset, the panel (livetui, then nvlive) -- done: per-part pan, reverb, chorus and delay sends as part columns; the system effects page (G: the reverb's type, level, time and delay feedback, the chorus's and delay's types and parameters, the EQ -- each move a GS message, so a reset puts it back); the display (both TUIs' SC display box); the map in the picker (the standard); each part's activity (the 16 bars), solo (o), a GS Reset (Z twice -- 01e2461); velocity sense depth as a part column (vsens); MPE's zones in the header; open: user tones and drum sets edited and stored
 
 Tones: 460 of 460 native (new at this stage).
 
