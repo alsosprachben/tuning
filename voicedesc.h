@@ -21,9 +21,21 @@
 #ifndef VOICEDESC_H
 #define VOICEDESC_H
 
-#ifdef __OPENCL_VERSION__
+#if defined(__METAL_VERSION__)
+// (Metal, macOS and iOS: gpukernel.metal -- every pointer its address space,
+// the precise maths, not Metal's default fast approximations)
+typedef ulong u64; typedef int i32; typedef long i64;
+#define VGLOBAL device
+#define VPRIV thread
+#define VCOS metal::precise::cos
+#define VSIN metal::precise::sin
+#define VEXP metal::precise::exp
+#define VFLOOR metal::floor
+static inline u64 v_mulhi(u64 a, u64 b){ return metal::mulhi(a, b); }
+#elif defined(__OPENCL_VERSION__)
 typedef ulong u64; typedef int i32; typedef long i64;
 #define VGLOBAL __global
+#define VPRIV
 #define VCOS cos
 #define VSIN sin
 #define VEXP exp
@@ -34,6 +46,7 @@ static inline u64 v_mulhi(u64 a, u64 b){ return mul_hi(a, b); }
 #include <math.h>
 typedef uint64_t u64; typedef int32_t i32; typedef int64_t i64;
 #define VGLOBAL
+#define VPRIV
 #define VCOS cosf
 #define VSIN sinf
 #define VEXP expf
@@ -145,7 +158,7 @@ static inline float v_noise_phase(u64 seed, u64 ui, float uf){
 // partial d at sample k of the block (absolute sample n), added into o[0..3]:
 // L, R, and the send pair when `send`
 static inline void voice_sample(const VGLOBAL vdesc* d, const VGLOBAL vcell* C, const VGLOBAL vsb* SB,
-                                int k, u64 n, float invb, int mg, float invg, int send, float* o)
+                                int k, u64 n, float invb, int mg, float invg, int send, VPRIV float* o)
 {
     if(d->kind==0 || k<d->ns || k>=d->ne) return;
     // both ears turn at one rate: one sine and cosine for the two, from the

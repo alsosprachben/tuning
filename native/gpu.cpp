@@ -10,6 +10,7 @@
 // are, and made again only when a table moves or grows.
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <dlfcn.h>
@@ -467,12 +468,44 @@ struct Gpu {
 }  // namespace gpu
 }  // namespace nv
 
+// WHICH GPU API (macOS): Metal (native/gpu_metal.mm, gpukernel.metal), the
+// default -- iOS has nothing else -- or OpenCL where TUNING_GPU_API=opencl,
+// the reference it was measured against: on the M3 the two are identical
+// sample for sample, and Metal identical to Python's GPU path (pyopencl).
+// Every call below on the handle it made.
+#ifdef __APPLE__
+extern "C" {
+void *nv_mtl_new(const char *dir, const int *sizes, char *err, int errlen);
+int nv_mtl_samples(void *h, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
+                   long long n0, int frames, int send, int mg, float *out);
+int nv_mtl_launch(void *h, int slot, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
+                  long long n0, int frames, int send, int mg);
+int nv_mtl_collect(void *h, int slot, float *out);
+void nv_mtl_free(void *h);
+int nv_mtl_win(void *h, const void *G, long gn, const void *D, long dn, const void *C, long cn, const void *S, long sn,
+               int ng, int frames, int mg, long long n0, int send, float *res);
+}
+#endif
+namespace {
+struct Handle {
+    bool metal;
+    void *g;
+};
+}
+
 extern "C" {
 
-// The GPU (gpukernel.cl in DIR, voicedesc.h beside it) for descriptors of
-// sizes[3] bytes (voice_sizes), or NULL and why in err
+// The GPU (gpukernel.cl -- or gpukernel.metal -- in DIR, voicedesc.h beside
+// it) for descriptors of sizes[3] bytes (voice_sizes), or NULL and why in err
 void *nv_cl_new(const char *dir, const int *sizes, char *err, int errlen)
 {
+#ifdef __APPLE__
+    const char *api = getenv("TUNING_GPU_API");
+    if (!api || strcmp(api, "opencl")) {
+        void *m = nv_mtl_new(dir, sizes, err, errlen);
+        return m ? new Handle{true, m} : nullptr;
+    }
+#endif
     nv::gpu::Gpu *g = new nv::gpu::Gpu();
     std::string e;
     if (!g->open(dir, sizes, e)) {
@@ -481,29 +514,57 @@ void *nv_cl_new(const char *dir, const int *sizes, char *err, int errlen)
         delete g;
         return nullptr;
     }
-    return g;
+    return new Handle{false, g};
 }
+
+// which API the handle is on: "Metal" or "OpenCL"
+const char *nv_cl_api(void *h) { return h && ((Handle *)h)->metal ? "Metal" : "OpenCL"; }
+
+#ifdef __APPLE__
+#define METAL_OR(call) if (((Handle *)h)->metal) return call
+#else
+#define METAL_OR(call)
+#endif
+#define CLG ((nv::gpu::Gpu *)((Handle *)h)->g)
 
 int nv_cl_samples(void *h, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
                   long long n0, int frames, int send, int mg, float *out)
 {
-    return ((nv::gpu::Gpu *)h)->samples(D, (size_t)dn, C, (size_t)cn, S, (size_t)sn, nd, n0, frames, send, mg, out);
+    METAL_OR(nv_mtl_samples(((Handle *)h)->g, D, dn, C, cn, S, sn, nd, n0, frames, send, mg, out));
+    return CLG->samples(D, (size_t)dn, C, (size_t)cn, S, (size_t)sn, nd, n0, frames, send, mg, out);
 }
 
 int nv_cl_launch(void *h, int slot, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
                  long long n0, int frames, int send, int mg)
 {
-    return ((nv::gpu::Gpu *)h)->launch(slot, D, (size_t)dn, C, (size_t)cn, S, (size_t)sn, nd, n0, frames, send, mg);
+    METAL_OR(nv_mtl_launch(((Handle *)h)->g, slot, D, dn, C, cn, S, sn, nd, n0, frames, send, mg));
+    return CLG->launch(slot, D, (size_t)dn, C, (size_t)cn, S, (size_t)sn, nd, n0, frames, send, mg);
 }
 
-int nv_cl_collect(void *h, int slot, float *out) { return ((nv::gpu::Gpu *)h)->collect(slot, out); }
+int nv_cl_collect(void *h, int slot, float *out)
+{
+    METAL_OR(nv_mtl_collect(((Handle *)h)->g, slot, out));
+    return CLG->collect(slot, out);
+}
 
-void nv_cl_free(void *h) { delete (nv::gpu::Gpu *)h; }
+void nv_cl_free(void *h)
+{
+    if (!h)
+        return;
+#ifdef __APPLE__
+    if (((Handle *)h)->metal)
+        nv_mtl_free(((Handle *)h)->g);
+    else
+#endif
+        delete CLG;
+    delete (Handle *)h;
+}
 
 int nv_cl_win(void *h, const void *G, long gn, const void *D, long dn, const void *C, long cn, const void *S, long sn,
               int ng, int frames, int mg, long long n0, int send, float *res)
 {
-    return ((nv::gpu::Gpu *)h)->win(G, gn, D, dn, C, cn, S, sn, ng, frames, mg, n0, send, res);
+    METAL_OR(nv_mtl_win(((Handle *)h)->g, G, gn, D, dn, C, cn, S, sn, ng, frames, mg, n0, send, res));
+    return CLG->win(G, gn, D, dn, C, cn, S, sn, ng, frames, mg, n0, send, res);
 }
 
 }  // extern "C"

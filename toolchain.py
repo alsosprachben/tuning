@@ -40,7 +40,7 @@ def cmd(c):
         out += ["-L" + os.path.join(OMP, "lib"), "-lomp"]
     if linking:                                     # (nvlive's devices: native/macio.h)
         out += ["-framework", "CoreMIDI", "-framework", "AudioToolbox", "-framework", "CoreAudio",
-                "-framework", "CoreFoundation"]
+                "-framework", "CoreFoundation", "-framework", "Metal", "-framework", "Foundation"]
     if "-shared" in c and "-o" in c:
         # a library's install name is the path it was written to -- here a
         # temporary one, moved after -- so it is named as it will be found:

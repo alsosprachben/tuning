@@ -977,6 +977,10 @@ int nv_host::open(int argc, char **argv)
             pipe = false;
     }
     gopt = opt(argc, argv, "gpu", gopt.c_str());
+    if (gopt == "metal" || gopt == "opencl") {  // (macOS: --gpu=metal, the default, or --gpu=opencl, its reference)
+        setenv("TUNING_GPU_API", gopt.c_str(), 1);
+        gopt = "cl";
+    }
     if (!gopt.empty()) {
         std::string why;
         void *gl = E.gpu ? dlopen(E.gpu_lib.c_str(), RTLD_NOW | RTLD_LOCAL) : nullptr;
@@ -1019,7 +1023,7 @@ int nv_host::open(int argc, char **argv)
                               hm ? dlsym(hm, "voice_damp_set") : nullptr, hm ? dlsym(hm, "voice_moogx_set") : nullptr);
             }
             nv_part_pipeline(part, cl && pipe);
-            fprintf(stderr, "nvlive: the GPU (%s), from %ld busy slots%s\n", cl ? "OpenCL" : "the C reference", gmin,
+            fprintf(stderr, "nvlive: the GPU (%s), from %ld busy slots%s\n", cl ? nv_cl_api(cl) : "the C reference", gmin,
                     cl && pipe ? ", pipelined" : "");
         } else {
             fprintf(stderr, "nvlive: no GPU (%s): the CPU\n", why.c_str());

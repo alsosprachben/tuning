@@ -192,6 +192,7 @@ long nv_part_govern(void *h, double ms, double budget_ms, long long n);
 long nv_part_partials_shed(void *h);
 long nv_part_dropped(void *h);
 void *nv_cl_new(const char *dir, const int *sizes, char *err, int errlen);
+const char *nv_cl_api(void *h);
 void nv_part_register(void *h, const StringMode *modes, int M, double kappa, double knock, double fall, double fl,
                     int top, double beta, int pedals, double rel, double full_db_s, double residual, double ln10_20,
                     long long blk, const int *reg_note);

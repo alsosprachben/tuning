@@ -411,7 +411,7 @@ def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
                                                        'register.cpp', 'prepare.cpp', 'render.cpp',
-                                                       'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp',
+                                                       'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp', 'gpu_metal.mm',
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
                                                        'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'efxrev.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
                                                        'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostint.h', 'hostlive.h', 'host.h', 'livebus.cpp')]
@@ -437,6 +437,9 @@ def _load():
                  + [(f[:-4], cxx, nat(f)) for f in ('livereg.cpp', 'gpu.cpp', 'tuner.cpp', 'bend.cpp', 'leslie.cpp',
                                                     'tubeamp.cpp', 'scanner.cpp', 'reed.cpp', 'epiano.cpp',
                                                     'efxchain.cpp')]
+                 # (macOS: the GPU on Metal too -- gpu.cpp's nv_cl_* call it under TUNING_GPU_API=metal)
+                 + ([('gpu_metal', cxx + ['-x', 'objective-c++', '-fobjc-arc'], nat('gpu_metal.mm'))]
+                    if _TC.DARWIN else [])
                  # live.py's tap kernel (the insertion effect's copies), under ITS
                  # flags (live.ensure_tap_lib's): the same arithmetic
                  + [('tapkernel', ['gcc', '-O3', '-march=native', '-fPIC'], os.path.join(HERE, 'tapkernel.c'))]
