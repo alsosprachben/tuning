@@ -994,6 +994,11 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
     double ck;
     if (nv_song_choke(song, n->ch, n->note, n->on, &ck) && ck < n->off)
         n->off = ck;                        // an exclusive class: a later strike stops it
+    double sg;
+    if (nv_song_single(song, n->ch, n->note, n->on, &sg) && sg < n->off) {
+        n->off = sg;                        // ASSIGN MODE SINGLE: the key struck again cuts it,
+        n->mcut = 1;                        // over the steal-fade (blockrender's _scut)
+    }
     n->has_nx = nv_song_next_same(song, n->ch, n->note, n->on, &n->nx);
     if (!n->has_nx)
         n->nx = 0.0;

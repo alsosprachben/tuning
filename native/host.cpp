@@ -1875,8 +1875,10 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                     const int v = x[7];
                     if (a6 == 0x02)
                         gs_rx[ch] = v < 16 ? v : 16;
-                    else if (a6 == 0x14)
+                    else if (a6 == 0x14) {
                         gs_assign[ch] = v;
+                        nv_part_sysex(part, m.x.data(), (int)m.x.size());   // (ASSIGN MODE: the slab's restrike)
+                    }
                     else if (a6 == 0x1F || a6 == 0x20) {
                         gs_ccnum[std::make_pair(ch, a6)] = v;
                         nv_part_sysex(part, m.x.data(), (int)m.x.size());   // (the controller matrix's CC1/CC2: the slab's)

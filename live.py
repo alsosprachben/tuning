@@ -6946,7 +6946,13 @@ class Live:
         # Its forced register rows (REG_FORCED) go with it: they ride the
         # note's key and were let go only at its note-off, which the pedal
         # holds back, so they stacked the same way.
-        if part.patch.damper_pedal and self.slab.live.get(key) and not self.slab.oneshot.get(key):
+        # ...AND ANY VOICE'S, ONE-SHOTS TOO, UNDER GS's ASSIGN MODE SINGLE
+        # (40 1p 14 = 0: the arranger asked for one voice a key -- blockrender's
+        # _scut); LIMITED- and FULL-MULTI are the instrument's own restrike
+        _single = getattr(self, "gsrx", None) is not None and self.gsrx.assign.get(ch) == 0
+        if self.slab.live.get(key) and (_single or (part.patch.damper_pedal and not self.slab.oneshot.get(key))):
+            if _single:
+                self.slab.oneshot.pop(key, None)
             for _k in (key, (part.pid, ch, note, self.REG_FORCED)):
                 _sl = self.slab.live.get(_k)
                 if not _sl:
@@ -6955,6 +6961,21 @@ class Live:
                 self.slab.a["re"][_ix] = np.minimum(self.slab.a["re"][_ix],
                                                     np.float32(B.RETRIGGER_FADE * self.rate))
                 self.slab.release(_k, n0)
+        if _single:
+            # ...AND WHAT STILL RINGS OF IT, let go: a one-shot's note-off
+            # forgets its key, but its slots keep their owner -- each not yet
+            # in its release stops from where it is over the steal-fade, as
+            # the file renderer cuts it; one already releasing is left (part-way,
+            # a shorter release would jump its level)
+            _kid = self.slab.key_id.get(key)
+            if _kid is not None:
+                _ix = np.flatnonzero(self.slab.busy & (self.slab.owner == _kid))
+                _ix = _ix[self.slab.a["noff"][_ix] > n0]
+                if len(_ix):
+                    self.slab.a["re"][_ix] = np.minimum(self.slab.a["re"][_ix],
+                                                        np.float32(B.RETRIGGER_FADE * self.rate))
+                    self.slab.a["noff"][_ix] = np.minimum(self.slab.a["noff"][_ix],
+                                                          n0 + self.slab.a["rdl"][_ix].astype(np.int64))
         if tmpl.get("roll") is not None:
             # A HELD ROLL: struck as it goes, from the press (_roll_tick)
             import percussion_map as _PMR

@@ -153,7 +153,7 @@ def gsvsense():
     return mid
 
 
-def mpe_zone():
+def mpe_zone(program=48):
     """MPE: a Lower Zone of 7 members (MCM); a chord a note a member, member
     1 gliding up a whole tone and 3 down a semitone, 2 pressed and
     brightened; the manager's volume (fanned), bend (+1 st), CC74 and
@@ -165,7 +165,7 @@ def mpe_zone():
         tr.append(mido.Message('control_change', channel=ch, control=c, value=v, time=t))
     cc(0, 101, 0); cc(0, 100, 6); cc(0, 6, 7); cc(0, 101, 127); cc(0, 100, 127)
     for ch in range(0, 8):
-        tr.append(mido.Message('program_change', channel=ch, program=48))
+        tr.append(mido.Message('program_change', channel=ch, program=program))
     for i, (ch, n) in enumerate(((1, 60), (2, 64), (3, 67))):
         tr.append(mido.Message('note_on', channel=ch, note=n, velocity=90, time=120 if i == 0 else 0))
     for k in range(1, 9):
@@ -385,6 +385,48 @@ def cmx_live():
     return mid
 
 
+def assign_mode():
+    """GS's ASSIGN MODE (40 1p 14), by the arranger's intent: strings on
+    channel 1 struck loud (120), then soft (30) on the same key before the
+    first is let go -- the loud note sounding on under the default; cut by
+    the soft strike under SINGLE; sounding on under FULL-MULTI; a crash
+    cymbal loud then soft on the drum part, at its default and then SINGLE;
+    after a GS reset, the default again. Each segment 2.5 s."""
+    mid, tr = one_track()
+    tr.append(gs([0x40, 0x00, 0x7F], 0x00))
+    tr.append(mido.Message('program_change', channel=0, program=48))
+    gap = [20]
+
+    def strings(at_gap):
+        tr.append(mido.Message('note_on', channel=0, note=60, velocity=120, time=at_gap))
+        tr.append(mido.Message('note_on', channel=0, note=60, velocity=30, time=480))
+        tr.append(mido.Message('note_off', channel=0, note=60, velocity=0, time=960))
+        tr.append(mido.Message('note_off', channel=0, note=60, velocity=0, time=96))
+
+    def crash(at_gap):
+        tr.append(mido.Message('note_on', channel=9, note=49, velocity=127, time=at_gap))
+        tr.append(mido.Message('note_off', channel=9, note=49, velocity=0, time=60))
+        tr.append(mido.Message('note_on', channel=9, note=49, velocity=30, time=240))
+        tr.append(mido.Message('note_off', channel=9, note=49, velocity=0, time=60))
+    strings(20)                                         # 0.02 s: the default
+    tr.append(gs([0x40, 0x11, 0x14], 0))                # channel 1 SINGLE
+    tr[-1].time = 864
+    strings(0)                                          # 2.5 s
+    tr.append(gs([0x40, 0x11, 0x14], 2))                # ...FULL-MULTI
+    tr[-1].time = 864
+    strings(0)                                          # 5.0 s
+    crash(864)                                          # 7.5 s: the drum part at its default
+    tr.append(gs([0x40, 0x10, 0x14], 0))                # the drum part SINGLE
+    tr[-1].time = 2040
+    crash(0)                                            # 10.0 s
+    tr.append(gs([0x40, 0x00, 0x7F], 0x00))             # GS reset: every part's default
+    tr[-1].time = 2040
+    tr.append(mido.Message('program_change', channel=0, program=48))
+    strings(0)                                          # 12.5 s
+    tr.append(mido.Message('note_on', channel=0, note=60, velocity=0, time=1920))
+    return mid
+
+
 def m2_pernote():
     """MIDI 2.0's PER-NOTE PITCH, a Clip File at MIDI 1.0's own values (each
     velocity and controller an exact upscale): a Pitch 7.25 table (every key
@@ -434,11 +476,47 @@ def save_m2(name, ev):
     U.write_clip(os.path.join(MIDI, name + ".midi2"), ev, tpq=960)
 
 
-M2_MAKERS = {"m2_pernote": m2_pernote}
+def m2_organ():
+    """A PIPE ORGAN ON ITS CHEST's WIND (GM 19: the wind rows), its notes with
+    rows of their own riding both (_prep_wind_combos): a Pitch 7.25 table;
+    a C major triad whose third settles to the just 5:4; a top note's own
+    per-note bend; the channel's wheel moving under a held chord."""
+    import math
+    import ump as U
+    Q = 960
+    sec = lambda x: int(round(x * 2 * Q))
+    ev = []
+    add = lambda t, pkt: ev.append((sec(t), pkt))
+    vel = U.scale_up(96, 7, 16)
+    add(0, U.m2_program(0, 0, 19))
+    for n in range(128):
+        add(0, U.m2_per_note_ctrl(0, 0, n, U.RPNC_PITCH, U.semitones_to_q(n, 25)))
+    for n in (60, 64, 67):
+        add(0.02, U.m2_note_on(0, 0, n, vel))
+        add(3.0, U.m2_note_off(0, 0, n, vel))
+    for i in range(17):
+        add(1.0 + i / 16.0, U.m2_per_note_ctrl(0, 0, 64, U.RPNC_PITCH, U.semitones_to_q(64 - 0.1369 * i / 16.0, 25)))
+    add(3.5, U.m2_per_note_ctrl(0, 0, 64, U.RPNC_PITCH, U.semitones_to_q(64, 25)))
+    add(4.0, U.m2_note_on(0, 0, 72, vel))
+    for i in range(64):
+        b = 0.5 * math.sin(2 * math.pi * 5.0 * i / 32.0)
+        add(4.25 + i / 32.0, U.m2_per_note_bend(0, 0, 72, max(0, min(0xFFFFFFFF, int(2 ** 31 + b * 2 ** 31)))))
+    add(6.5, U.m2_note_off(0, 0, 72, vel))
+    for n in (55, 59, 62):
+        add(7.0, U.m2_note_on(0, 0, n, vel))
+        add(9.5, U.m2_note_off(0, 0, n, vel))
+    for i in range(17):
+        add(7.5 + i / 16.0, U.m2_pitch_bend(0, 0, U.scale_up(8192 + 128 * i, 14, 32)))
+    add(10.0, U.m2_pitch_bend(0, 0, U.scale_up(8192, 14, 32)))
+    ev.sort(key=lambda e: e[0])
+    return ev
+
+
+M2_MAKERS = {"m2_pernote": m2_pernote, "m2_organ": m2_organ}
 # MIDI 1.0 fixtures as MIDI 2.0 (ump.midi1_to_clip): (source, name, raw UMP)
 M2_CONVERTED = (("gsvsense", "m2_gsvsense", False), ("mpe_zone", "m2_mpe_zone_raw", True))
 
-MAKERS = {"cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
+MAKERS = {"assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
           "mpe_zone": mpe_zone}
 
 

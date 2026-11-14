@@ -1639,6 +1639,7 @@ int main(int argc, char **argv)
     struct MpeRow {
         std::vector<double> t, r;
         int mgr;
+        int ch = -1;                        // (its note's channel: a chest's wind multiplies it there)
     };
     std::vector<MpeRow> prows;
     const int pbase = mbase + (int)mrows.size();
@@ -1696,6 +1697,7 @@ int main(int argc, char **argv)
             if (bendable && !mv.empty()) {
                 MpeRow pr;
                 pr.mgr = mg;
+                pr.ch = c;
                 bool any = false;
                 for (double tt : mv) {
                     const double rr = val(ms, std::min(tt, off)) * val(gs, tt) / r0;
@@ -1789,10 +1791,6 @@ int main(int argc, char **argv)
             mv.erase(std::unique(mv.begin(), mv.end()), mv.end());
             double row = -1.0;
             if (!mv.empty()) {
-                if (nw) {
-                    fprintf(stderr, "nvrender: refused: MIDI 2.0 per-note pitch beside an organ's wind rows\n");
-                    return 2;
-                }
                 bool bendable = true;
                 const int cq = meend_cls(i, iv);
                 if (cq >= 0)
@@ -1806,6 +1804,7 @@ int main(int argc, char **argv)
                 times.erase(std::unique(times.begin(), times.end()), times.end());
                 MpeRow pr;
                 pr.mgr = !fch_note.empty() && fch_note[i] >= 0 ? fch_note[i] : c;
+                pr.ch = c;
                 for (double tt : times) {
                     pr.t.push_back(tt);
                     pr.r.push_back(step(chev, tt, 1.0) * (hz(tt) * pb(tt) / ref));
@@ -2301,9 +2300,48 @@ int main(int argc, char **argv)
             nv_song_alias(song, c, iv[0], dv[0], rws.data(), (int)rws.size());
         }
     }
+    // A NOTE RIDES ONE BEND ROW (_prep_wind_combos): on a channel whose organ
+    // has wind rows, each row a note can have of its own -- the gesture's, the
+    // breath's, its MPE or per-note pitch row, its meend's -- times each wind
+    // row, a row of their product after the aliasing sweeps' (filled once
+    // every row is, below), the organ's ranks riding it (nv_song_organ_note)
+    struct WCombo {
+        long long base, wind;
+    };
+    std::vector<WCombo> wcrows;
+    const int wcbase = abase + (int)arows.size();
+    if (nw) {
+        std::map<long long, std::vector<long long>> bases;
+        auto add = [&](long long c, long long r) {
+            if (r < 0)
+                return;
+            auto &v = bases[c];
+            if (std::find(v.begin(), v.end(), r) == v.end())
+                v.push_back(r);
+        };
+        for (int c = 0; c < 256; c++) {
+            if (br.size() > (size_t)(256 + c))
+                add(c, (long long)br[256 + c]);
+            if (br.size() > (size_t)(512 + c))
+                add(c, (long long)br[512 + c]);
+        }
+        for (size_t q = 0; q < prows.size(); q++)
+            add(prows[q].ch, pbase + (long long)q);
+        for (size_t q = 0; q < mrows.size(); q++)
+            add(mrows[q].ch, mbase + (long long)q);
+        for (auto &kv : bases) {
+            int ws[64];
+            const int nwr = nv_song_wind_rows_of(song, kv.first, ws, 64);
+            for (long long b : kv.second)
+                for (int k = 0; k < nwr && k < 64; k++) {
+                    nv_song_wind_combo(song, b, ws[k], wcbase + (long long)wcrows.size());
+                    wcrows.push_back(WCombo{b, ws[k]});
+                }
+        }
+    }
     bool rows_ = !fch.empty() || !gch.empty() || nw || nsr || nbr_ || !mrows.empty() || !prows.empty() || !sir.empty()
                  || !trows.empty()
-                 || !arows.empty();
+                 || !arows.empty() || !wcrows.empty();
     nv_gsd_place_reset();                       // (blockrender's _GSD_PLACE: the render's)
     StreamScan scan;
     StreamSinkDesc scan_d{&scan, &StreamScan::note};
@@ -3012,7 +3050,7 @@ int main(int argc, char **argv)
     // channel's fader's level at each edge, where it has one); a fader's
     // ratio 1 and phase 0, its level; no rows, one of ones and no levels
     size_t ng = gch.size(), nr = std::max<size_t>(ng + nbr_ + nw + nsr + fch.size() + mrows.size() + prows.size() + sir.size()
-                                                  + trows.size() + arows.size(), 1);
+                                                  + trows.size() + arows.size() + wcrows.size(), 1);
     std::vector<float> BRr(nr * nblk, 1.0f), BLr;
     std::vector<double> BCr(nr * nblk, 0.0);
     for (size_t r = 0; r < ng; r++)
@@ -3115,6 +3153,28 @@ int main(int argc, char **argv)
         size_t r = (size_t)mbase + q;
         nv_meend_note(wt.data(), wp.data(), (int)wt.size(), m.on, m.off, m.nc, m.sw.data(), (int)m.sw.size(),
                       m.rst, m.st, nblk, (int)BLK, SR, &r0, BRr.data() + r * nblk, BCr.data() + r * nblk);
+    }
+    // ...and THE WIND's PRODUCTS (_prep_wind_combos), every row they read
+    // now filled: the ratio a product in float64 kept as float32, the phase
+    // summed from it (bend_blocks'), the levels' product (float32)
+    for (size_t q = 0; q < wcrows.size(); q++) {
+        const size_t r = (size_t)wcbase + q, b = (size_t)wcrows[q].base, w = (size_t)wcrows[q].wind;
+        float *rr = BRr.data() + r * nblk;
+        double *cc = BCr.data() + r * nblk;
+        const float *rb = BRr.data() + b * nblk, *rw = BRr.data() + w * nblk;
+        for (long k = 0; k < nblk; k++)
+            rr[k] = (float)((double)rb[k] * (double)rw[k]);
+        double acc = 0.0;
+        for (long k = 0; k < nblk; k++) {
+            cc[k] = acc;
+            acc = acc + ((double)rr[k] - 1.0) * (double)BLK;
+        }
+        if (!BLr.empty()) {
+            float *lr = BLr.data() + r * (nblk + 1);
+            const float *lb = BLr.data() + b * (nblk + 1), *lw = BLr.data() + w * (nblk + 1);
+            for (long k = 0; k <= nblk; k++)
+                lr[k] = lb[k] * lw[k];
+        }
     }
     // ...and THE MATRIX'S TREMOLO's (_prep_matrix_tremolo), last: each its
     // parent's ratio and phase, and its level times the depth's curve over

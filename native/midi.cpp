@@ -60,6 +60,7 @@ struct Msg {
     double secs = -1.0;
     double ap = NAN;
     double fv = 0.0;
+    bool single = false;        // a Note On its part takes under GS's ASSIGN MODE SINGLE (the receive pass's)
 };
 
 // A GS PART PARAMETER that a MIDI message carries (parse_gs_part): its channel
@@ -290,6 +291,8 @@ struct Parsed {
     std::map<std::tuple<int, int, double>, double> pn_attr;
     std::map<std::pair<int, int>, std::vector<std::pair<double, double>>> pn_p725, pn_bend;
     std::map<int, std::vector<std::pair<double, double>>> pn_range;
+    // GS's ASSIGN MODE SINGLE (parse's single): each key's onsets struck under it
+    std::map<std::pair<int, int>, std::vector<double>> single;
     // MPE's ZONES over time (blockrender's mpe_ev): at each MCM that changed
     // one, every channel in MPE and its (group, side) -- prepare's _manager
     std::vector<std::pair<double, std::map<int, std::pair<int, int>>>> mpe;
@@ -1169,8 +1172,17 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 continue;
             }
             const int kind = m.status & 0xF0;
+            // (a Note On on a part under ASSIGN MODE SINGLE: marked, parse's single)
+            auto single_on = [&](Msg &x, int part) {
+                if ((x.status & 0xF0) == 0x90 && x.d1 > 0) {
+                    auto a = rc.assign.find(part);
+                    x.single = a != rc.assign.end() && a->second == 0;
+                }
+            };
             if (!any || m.status == 0xFF || m.direct || kind < 0x80 || kind > 0xE0 || rc.plain()) {
                 ex.push_back(m);
+                if (m.status < 0xF0)
+                    single_on(ex.back(), (m.status & 0x0F) + 16 * m.port);
                 continue;
             }
             const int ch = (m.status & 0x0F) + 16 * m.port;
@@ -1186,6 +1198,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 if (kind == 0xB0)
                     y.d1 = pv.second;
                 y.rx = 2;
+                single_on(y, pv.first);
                 ex.push_back(y);
             }
         }
@@ -2043,6 +2056,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                         n.vel = std::max(1, std::min(127, (int)nearbyint(m.d1 * g[0] / 64.0 + g[1] - 64)));
                 }
             }
+            if (m.single)
+                P.single[std::make_pair(ch, m.d0)].push_back(t);    // (ASSIGN MODE SINGLE's strike: parse's single)
             n.v7 = (c.count(7) ? c[7] : GM_DEFAULT_VOLUME) / 127.0;
             n.v11 = (c.count(11) ? c[11] : GM_DEFAULT_EXPRESSION) / 127.0;
             {
@@ -2509,6 +2524,9 @@ void nv_midi_song(void *p, void *song, const double *trim)
         nv_song_snd(song, e.ch, e.t, e.cc, e.v);
     for (const auto &pt : P->parts)
         nv_song_set_part(song, pt.first, pt.second);
+    for (const auto &s : P->single)
+        for (double t : s.second)
+            nv_song_add_single(song, s.first.first, s.first.second, t);
 }
 
 }  // extern "C"

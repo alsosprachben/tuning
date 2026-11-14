@@ -636,6 +636,11 @@ def parse(path):
     # (channel, note, onset); and the timelines of Pitch 7.25, per-note bend
     # and its range. Empty for every MIDI 1.0 file.
     pn = dict(attr={}, p725={}, bend={}, range={})
+    # GS's ASSIGN MODE SINGLE (40 1p 14 = 0, gsrx keeps it): each key's onsets
+    # struck under it -- an earlier note of that key is cut there (prepare's
+    # _scut). LIMITED-MULTI and FULL-MULTI are what the models already do; a
+    # mode a file never sets is the instrument's own restrike
+    single = {}
     ats = {}; pts = {}       # channel pressure, and per-key pressure
     sotas = {}               # channel -> [(t, 12 cents)] from GM2 sysex
     _gsstate = {}            # channel -> a GS part's velocity sense, key range, scale (parse_gs_part_state)
@@ -1165,6 +1170,8 @@ def parse(path):
                                                      + _gst.get('vso', 64) - 64))))
             on.setdefault((msg.channel, msg.note), []).append(
                 (t, _vel, cv(msg.channel), _np))
+            if _rcv.assign.get(msg.channel) == 0:
+                single.setdefault((msg.channel, msg.note), []).append(t)
             if _mpe and _mpe.is_member(msg.channel) and not isinstance(_np, DrumProgram) \
                     and _np not in ch_progs.get(msg.channel, ()):
                 ch_progs.setdefault(msg.channel, []).append(_np)
@@ -1183,7 +1190,7 @@ def parse(path):
             ch_progs.setdefault(_c, []).append(_p)
     return (ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws,
             (ats, pts, sotas, dict(rpns=rpns, master=master, gmon=gmon,
-                                   pwseq=_pwseq, mts=mtsev, snd=sndev, pn=pn,
+                                   pwseq=_pwseq, mts=mtsev, snd=sndev, pn=pn, single=single,
                                    mpe=mpe_ev, dedit=dedit, uset=uset, efx=efxev, cmx=cmx)))
 
 
@@ -7933,6 +7940,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         stroke_tilt) = _prep_strokes(notes, _has_marker(path, ROLL_FIRST))
 
     choke_at = _prep_exclusive_classes(inner_ridge, notes)
+    _SINGLE = _sys.get('single') or {}      # (ASSIGN MODE SINGLE's strikes: parse's single)
 
     _vbase = _prep_effort_baseline(notes)
 
@@ -8021,6 +8029,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _SONG = _NV.Song(ccs, notes, total, freq=FREQ, mts=_MTS_TL, btun=_BTUN, otun=_OTUN,
                                  faders=set(_LROW), trim=lambda _p: program_trim(_p, is_drum(_p), gs=_GS_FILE[0]),
                                  legato=legato, strokes=(stroke_pitch, inner_ridge))
+                for (_c, _k), _ts in _SINGLE.items():
+                    for _t in _ts:
+                        _SONG.add_single(_c, _k, _t)
     if _SONG is not None and rankev_of:
         _organ_rows_check(_SONG, rankev_of, Grows, Srows, sh, wrow_of, BRrows, BCrows, _BLrows, nblk)
     # Occurrence index per (channel, note) in ONSET order -- the same key
@@ -8520,6 +8531,10 @@ def _prepare(path, tuner='hybrid440', sink=None):
         choked = None
         if (nt.ch, nt.note) in choke_at:
             choked = next((t for t in choke_at[(nt.ch, nt.note)] if t > nt.on + 1e-4), None)
+        # ASSIGN MODE SINGLE: the key struck again under it, if it is (parse's single)
+        _scut_t = (next((t for t in _SINGLE[(nt.ch, nt.note)] if t > nt.on + 1e-4), None)
+                   if (nt.ch, nt.note) in _SINGLE else None)
+        _scut = False
         # PERCUSSION (GM channel 10). The note number selects a drum, not a
         # pitch: it takes a fixed base frequency and its own property class, and
         # the tuner never sees it. Without this the whole kit was routed through
@@ -8855,6 +8870,13 @@ def _prepare(path, tuner='hybrid440', sink=None):
                         else None, choked)
         if choked is not None and choked < nt.off:
             nt.off = choked
+        # ...and GS's ASSIGN MODE SINGLE: the arranger asked for one voice a
+        # key, so a key struck again cuts the note still sounding on it, over
+        # the steal-fade -- any voice, a ringing one-shot too (Roland: "voice
+        # assignment when sounds overlap on identical note numbers")
+        if _scut_t is not None and _scut_t < nt.off:
+            nt.off = _scut_t
+            _scut = True
         if props.inharmonicity_dynamic:
             props.inharmonicity_coefficient = props.inharmonicity_coefficient_for_frequency(nt.f0)
         B = props.inharmonicity_coefficient; dur = nt.off-nt.on
@@ -8999,7 +9021,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # hands its voice straight over: the release is the steal-fade and not
         # the instrument's own, which would leave the old pitch sounding under
         # the new one for as long as the instrument rings.
-        if _mcut:
+        if _mcut or _scut:
             nt.rel = min(nt.rel, RETRIGGER_FADE * SR)
         # chiff burst width: short/capped, decoupled from the slow speech fade
         # A CONSONANT IS NOISE FOR ITS WHOLE LENGTH. The 45% cap is right for
@@ -9253,8 +9275,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
         if (_vst0 is not None and em.nsnap is not None and set(_sd) <= _NV_SOUND and _XP == 1.0
                 and (nt.organ or not (_hx or _hperc))):     # (an organ's effect stops are organ.c's)
             _wn = _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, _vst0, _eff,
-                                     _nx, _mcut, _slurred, (nt.ch, nt.note, nt.on) in _SLUR_OUT,
-                                     _SONG if choked is None else None, _off_key,
+                                     _nx, _mcut or _scut, _slurred, (nt.ch, nt.note, nt.on) in _SLUR_OUT,
+                                     _SONG if choked is None and not _scut else None, _off_key,
                                      _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT,
                                                   FREQ_E), _seat, _held, press=_press,
                                      organ=((rankev_of[nt.organ_key], [grow_of[(nt.organ_key, _r[0])] for _r in stops],

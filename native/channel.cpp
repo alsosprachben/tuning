@@ -331,6 +331,9 @@ struct Song {
     // it (_prep_exclusive_classes' choke_at)
     std::vector<unsigned long long> kit_choke;
     std::map<std::pair<long long, int>, std::vector<double>> choke_at;
+    // GS's ASSIGN MODE SINGLE (parse's single): each key's onsets struck under
+    // it, in time order -- an earlier note of the key is cut at the first
+    std::map<std::pair<long long, int>, std::vector<double>> single_at;
     // ITS SLURS: _legato_ticks' (channel, key, k), and from them (finish)
     // each note's -- slurred, and a slur leaving it (_prep_slur_out)
     std::set<std::tuple<long long, int, int>> legato;
@@ -593,6 +596,22 @@ struct Song {
             }
         }
         return r - row0;
+    }
+
+    // A NOTE RIDES ONE BEND ROW (_prep_wind_combos): (its own row, its rank's
+    // wind row) -> the row of their product, where a note with a row of its own
+    // sits on an organ chest
+    std::map<std::pair<long long, long long>, long long> wcombo;
+    // the wind rows of channel ch's organ (organ_wind_rows'), each once
+    std::vector<int> wind_rows_of(long long ch) const
+    {
+        std::vector<int> out;
+        for (const Organ &o : organs)
+            if (o.ch == ch)
+                for (int w : o.wrow)
+                    if (w >= 0 && std::find(out.begin(), out.end(), w) == out.end())
+                        out.push_back(w);
+        return out;
     }
 
     const Organ *organ_of(long long ch, int family) const
@@ -2249,6 +2268,21 @@ int nv_song_n_grows(void *s) { return ((nv::Song *)s)->n_grows; }
 // the wind rows from row0 (_prep_chest_wind's channels, a row a family): how many
 int nv_song_organ_wind_rows(void *s, int row0) { return ((nv::Song *)s)->organ_wind_rows(row0); }
 
+// channel ch's organ's wind rows into out (up to cap): how many
+int nv_song_wind_rows_of(void *s, long long ch, int *out, int cap)
+{
+    const std::vector<int> w = ((nv::Song *)s)->wind_rows_of(ch);
+    for (int i = 0; i < (int)w.size() && i < cap; i++)
+        out[i] = w[i];
+    return (int)w.size();
+}
+
+// (a note's own row, a wind row) -> their product's row (_prep_wind_combos)
+void nv_song_wind_combo(void *s, long long base, long long wind, long long row)
+{
+    ((nv::Song *)s)->wcombo[std::make_pair(base, wind)] = row;
+}
+
 // THE ORGANS' ROWS, the song's length known: each rank's gate and each
 // organ's swell (onepole_blocks of their events, nblk each, in G and S);
 // sh the swell law (_prep_swell_law: the first organ's whose floor is under
@@ -2439,6 +2473,9 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
     if (!o)
         return 0;
     double on = n->on, koff = n->key_off, br = n->br;
+    // (its own row -- per-note pitch, MPE, a meend, the gesture, the breath --
+    // not the fader's: a chest's wind row multiplies it, _prep_wind_combos)
+    const long long bnote = n->br != n->fbr && n->br >= 0.0 ? (long long)n->br : -1;
     for (int ri = 0; ri < o->spec->n_rank; ri++) {
         const auto &ev = o->rank_ev[ri];
         n->rank_gr[ri] = o->g0 + ri;
@@ -2490,8 +2527,14 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
         // (em.bend_row: a rank with pipes and the note in its range takes its
         // wind's row, and every rank after keeps it until the next does)
         const OrganRank &rk = o->spec->rank[ri];
-        if (rk.n_ratio && e.note >= rk.lo && e.note <= rk.hi && o->wrow[ri] >= 0)
+        if (rk.n_ratio && e.note >= rk.lo && e.note <= rk.hi && o->wrow[ri] >= 0) {
             br = (double)o->wrow[ri];
+            if (bnote >= 0) {
+                auto wc = S->wcombo.find(std::make_pair(bnote, (long long)o->wrow[ri]));
+                if (wc != S->wcombo.end())
+                    br = (double)wc->second;
+            }
+        }
         n->rank_br[ri] = br;
     }
     n->organ_cr = o->cr;
@@ -3626,6 +3669,27 @@ void nv_song_chokes_n(void *s, const unsigned long long *choke, int n)
 
 // Where a later strike in its exclusive class stops this note (the first
 // past its onset): 1 and *out, else 0
+// ASSIGN MODE SINGLE: a key's onset struck under it (added in time order)
+void nv_song_add_single(void *s, long long ch, int note, double t)
+{
+    ((nv::Song *)s)->single_at[std::make_pair(ch, note)].push_back(t);
+}
+
+// ...and where the key is next struck under it after this note's onset, 1 if it is
+int nv_song_single(void *s, long long ch, int note, double on, double *out)
+{
+    const nv::Song *S = (const nv::Song *)s;
+    auto it = S->single_at.find(std::make_pair(ch, note));
+    if (it == S->single_at.end())
+        return 0;
+    for (double t : it->second)
+        if (t > on + 1e-4) {
+            *out = t;
+            return 1;
+        }
+    return 0;
+}
+
 int nv_song_choke(void *s, long long ch, int note, double on, double *out)
 {
     const nv::Song *S = (nv::Song *)s;

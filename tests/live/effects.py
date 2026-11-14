@@ -263,6 +263,64 @@ def m2_file(E, logs):
              and abs(cents(dr, d_et)) < 10.0, "%+.1f, then %+.1f cents" % (cents(dq, d_et), cents(dr, d_et)))
 
 
+def m2_organ_file(E, logs):
+    """A note with a row of its own on an organ's chest rides the product of
+    its row and the wind's (_prep_wind_combos): m2_organ.midi2's per-note
+    pitch moving on GM 19 -- nvrender identical (checks.py midi2_files)."""
+    sr, x = render_py(os.path.join(MIDI, "m2_organ.midi2"), os.path.join(logs, "m2_organ.wav"))
+    et = lambda n: 440.0 * 2 ** ((n - 69) / 12.0)
+    e0, e1 = peak_hz(x, 0.3, 0.95, 315, 340, sr), peak_hz(x, 2.2, 2.95, 315, 340, sr)
+    E.expect("file, organ on its wind: the third settles to the just 5:4", abs(cents(e1, e0) + 13.69) < 1.0,
+             "%+.2f cents" % cents(e1, e0))
+    w = pitch_cents(x, 4.4, 6.3, sr, lo=500, hi=545)
+    E.expect("file, organ on its wind: a top note's own per-note bend", w > 120.0, "%.0f cents swing" % w)
+    g0, g1 = peak_hz(x, 7.05, 7.45, 380, 405, sr), peak_hz(x, 8.7, 9.4, 380, 405, sr)
+    E.expect("file, organ on its wind: the wheel moves no pipe", abs(cents(g1, g0)) < 2.0, "%+.1f cents" % cents(g1, g0))
+
+
+ASSIGN_AT = (("the default", 0.7, 1.4), ("SINGLE", 3.2, 3.9), ("FULL-MULTI", 5.7, 6.4),
+             ("the drum part's default", 8.0, 9.0), ("the drum part SINGLE", 10.5, 11.5),
+             ("after a GS reset", 13.2, 13.9))
+
+
+def assign_expect(E, side, x, sr):
+    """assign_mode.mid's levels after each second strike: SINGLE cuts the
+    loud first note (only the soft one sounds on), the others let it ring."""
+    L = [level(x, a, b, sr) for _n, a, b in ASSIGN_AT]
+    E.expect("%s: ASSIGN MODE SINGLE cuts the key's sounding note" % side, L[1] < L[0] - 12.0,
+             "%+.1f dB" % (L[1] - L[0]))
+    E.expect("%s: FULL-MULTI lets it sound on, as the default" % side, abs(L[2] - L[0]) < 3.0,
+             "%+.1f dB" % (L[2] - L[0]))
+    E.expect("%s: the drum part SINGLE cuts a ringing crash" % side, L[4] < L[3] - 12.0, "%+.1f dB" % (L[4] - L[3]))
+    E.expect("%s: a GS reset puts the default back" % side, abs(L[5] - L[0]) < 3.0, "%+.1f dB" % (L[5] - L[0]))
+
+
+def assign_file(E, logs):
+    """GS's ASSIGN MODE in the file render (nvrender identical: assign_files)."""
+    sr, x = render_py(os.path.join(MIDI, "assign_mode.mid"), os.path.join(logs, "assign.wav"))
+    assign_expect(E, "file", x, sr)
+
+
+def assign_live(E, logs):
+    py, nv, last = live_pair(os.path.join(MIDI, "assign_mode.mid"), 16, ["--beside", "--programs"], logs, "assign")
+    print("  (assign_mode: %s)" % last)
+    for side, x in (("live.Live", py), ("nvlive", nv)):
+        assign_expect(E, side, x, SR)
+
+
+def moog_cmx_file(E, logs):
+    """A Moog under GS's controller matrix (moog_cmx.mid: the mod wheel into
+    TVF cutoff, swept up and down across a held saw-lead note) in the file
+    render -- its knobs following the matrix's cutoff; nvrender identical
+    (checks.py moog_cmx)."""
+    sr, x = render_py(os.path.join(MIDI, "moog_cmx.mid"), os.path.join(logs, "moog_cmx.wav"))
+    c = lambda a, b: float(np.mean([centroid(x, t, sr, n=2048) for t in np.arange(a, b, 0.02)]))
+    c0, c1, c2 = c(0.09, 0.17), c(0.45, 0.71), c(1.0, 1.1)
+    E.expect("file: a Moog under the matrix's cutoff brightens with the wheel", c1 > 2.0 * c0,
+             "%.0f -> %.0f Hz" % (c0, c1))
+    E.expect("file: ...and darkens as it comes back", c2 < 0.7 * c1, "%.0f -> %.0f Hz" % (c1, c2))
+
+
 def m2_live(E, logs):
     """MIDI 2.0's per-note pitch live (m2_pernote.midi2 through nvlive_check:
     live.Live's on_ump, nvlive's reader), both sides; the after-reset D the
@@ -361,7 +419,7 @@ def cmx_live_fx(E, logs):
 
 
 ALL = [("rx_file", rx_file), ("cmx_live", cmx_live_fx), ("user_drums_live", user_drums_live), ("drum_delay_live", drum_delay_live), ("rhythm_live", rhythm_live), ("drums_live", drums_live), ("vsense_live", vsense_live),
-       ("mpe_file", mpe_file), ("m2_file", m2_file), ("m2_live", m2_live), ("mpe_live", mpe_live)]
+       ("mpe_file", mpe_file), ("moog_cmx_file", moog_cmx_file), ("assign_file", assign_file), ("assign_live", assign_live), ("m2_file", m2_file), ("m2_organ_file", m2_organ_file), ("m2_live", m2_live), ("mpe_live", mpe_live)]
 
 
 def main(argv):

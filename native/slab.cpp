@@ -2712,6 +2712,8 @@ struct Part {
     std::map<std::pair<int, int>, std::vector<double>> mts_tab;
     std::map<int, std::pair<int, int>> mts_sel;
     std::map<std::tuple<long long, int, int>, double> mts_at;
+    int assign[32] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+                      -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};   // each part's ASSIGN MODE (-1 none set)
     // MIDI 2.0's PER-NOTE PITCH (live's pn725, pnattr, pnbend, pnrange,
     // pn_at), the spec's precedence (M2-104 7.4.15): a Note On's Pitch 7.9
     // for that note, else the Pitch 7.25 set for the note number, else the
@@ -6126,7 +6128,12 @@ struct Part {
         }
         Key key(pid, ch, note, -1);
         long li = S.live_find(key);
-        if (damper_pedal && li >= 0 && !S.live[li].second.empty() && !S.oneshot.count(key)) {
+        // ...and any voice's, a one-shot's too, under GS's ASSIGN MODE SINGLE
+        // (live's _single: one voice a key, as the arranger asked)
+        const bool single = ch >= 0 && ch < 32 && assign[ch] == 0;
+        if (li >= 0 && !S.live[li].second.empty() && (single || (damper_pedal && !S.oneshot.count(key)))) {
+            if (single)
+                S.oneshot.erase(key);
             // a restrike: the string under the hammer stops in a steal-fade,
             // and its forced register rows (REG_FORCED) with it
             float fade = (float)(retrigger * rate);
@@ -6138,6 +6145,23 @@ struct Part {
                     if (fade < S.f4[F4_re][sidx])
                         S.f4[F4_re][sidx] = fade;
                 S.release(k, n0);
+            }
+        }
+        if (single) {
+            // ...and what still rings of it, let go (live's _single): its
+            // slots by owner, each not yet in its release stopping from where
+            // it is over the steal-fade; one already releasing left
+            auto ki = S.key_id.find(key);
+            if (ki != S.key_id.end()) {
+                const float fade = (float)(retrigger * rate);
+                for (size_t s = 0; s < S.owner.size(); s++)
+                    if (S.busy[s] && S.owner[s] == ki->second && S.i8[1][s] > n0) {
+                        if (fade < S.f4[F4_re][s])
+                            S.f4[F4_re][s] = fade;
+                        const long long v = n0 + (long long)S.f4[F4_rdl][s];
+                        if (v < S.i8[1][s])
+                            S.i8[1][s] = v;
+                    }
             }
         }
         if (T->roll_kind) {
@@ -7321,6 +7345,16 @@ struct Part {
     {
         if (gs_display(d))
             return;
+        // A PART's ASSIGN MODE (GS 40 1p 14, gsrx's assign): 0 SINGLE cuts a
+        // key's sounding note when it is struck again (strike's single)
+        if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && (d[4] == 0x40 || d[4] == 0x50)
+            && (d[5] >> 4) == 1 && d[6] == 0x14) {
+            const int blk = d[5] & 0x0F;
+            const int c = (blk == 0 ? 9 : (blk <= 9 ? blk - 1 : blk)) + (d[4] == 0x50 ? 16 : 0);
+            if (c < 32)
+                assign[c] = d[7];
+            return;
+        }
         // A DRUM MAP'S SETTING (blockrender.parse_gs_drum_setup, port A's):
         // every drum channel playing the map, as a drum NRPN on each
         if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && d[4] == 0x41 && (d[5] >> 4) <= 1) {
@@ -7437,6 +7471,8 @@ struct Part {
     bool reset_asked = false;
     void power_on(long long n0)
     {
+        for (int &x : assign)               // (a part's ASSIGN MODE: none set, the instrument's own restrike)
+            x = -1;
         panic(n0);
         dedit.clear();                          // (every drum key as its set has it)
         for (auto &kv : cmx) {                  // (the matrices back to a reset's, their sums with them)

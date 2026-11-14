@@ -69,7 +69,7 @@ TASKS = [
     ("GM1", True, "Live: a drum set identical to live.Live beyond the kick and toms (the Standard set's every key, "
                   "nvlive end to end)"),
     ("GM1", True, "Files: GS's controller-matrix cutoff on a Moog (_CMXEV) -- nvrender plays it, its refusal "
-                  "gone (4edbafa)"),
+                  "gone (4edbafa); the effect measured (effects.py moog_cmx_file: the wheel brightens it and back)"),
     ("GM1", True, "Files: an organ after another tone on its channel (its tremolo keyed by its mix channel)"),
     ("GM1", True, "Moog: an MF-104M on a note whose pitch or shapes move -- each repeat its own filter row, its "
                   "pitch and shape rows its delay later (_prep_delays' _mf_dup; nv_song_moog_dup); nvrender vs "
@@ -111,7 +111,11 @@ TASKS = [
                    "range, per-note management's reset; _PN_AT's rows among MPE's) -- nvrender identical on "
                    "m2_pernote and converted fixtures (tests/live midi2_files), each effect measured (m2_file); "
                    "open: MIDI 2.0's own resolution (a value MIDI 1.0 has no number for: refused, -9, as the "
-                   "demo's 32-bit swell), groups past the second, per-note pitch beside an organ's wind rows"),
+                   "demo's 32-bit swell), groups past the second"),
+    ("GM1", True, "Files: a note with a row of its own on an organ's chest (per-note pitch, MPE, a meend, the "
+                  "gesture, the breath) riding the product of its row and the wind's (_prep_wind_combos) -- "
+                  "nvrender put it on the wind row alone; identical on m2_organ and mpe_organ (tests/live), "
+                  "the effect measured (m2_organ_file)"),
     ("GM2", False, "Live: MIDI 2.0 in nvlive -- done: the per-note pitch (live._one_m2, _pn_want, _repn: a Note "
                    "On's Pitch 7.9, Pitch 7.25, per-note bend and range, per-note management; MTS and the scale "
                    "table yield to it), and a registered voice's key tuning on its ranks (live's organ path, "
@@ -323,7 +327,8 @@ TASKS = [
     # Python first (the oracle), then native
     ("SC-55", False, "Sound Canvas superset, files -- done: RX CHANNEL, the Rx switches and master pan in "
                      "both file renderers (gsrx: one stage, live's too; 5abc1a0), velocity sense and the "
-                     "keyboard range; open: ASSIGN MODE's modes, the CC1/CC2 controller numbers. Was: "
+                     "keyboard range; ASSIGN MODE by the arranger's intent (SINGLE a cut, the MULTIs the models' own); "
+                     "open: the CC1/CC2 controller numbers. Was: "
                      "the GS messages the reader ignores -- a part's RX. CHANNEL "
                      "(another channel's notes: Roland's own layering), its Rx switches (pitch bend, volume, "
                      "program change... off), ASSIGN MODE (a repeated note's retrigger), the CC1/CC2 "
@@ -340,7 +345,9 @@ TASKS = [
                      "keyboard range; USE FOR RHYTHM PART in nvlive (a channel's part a kit, as live's); the "
                      "per-key delay send and the user drum sets (4edbafa); the controller matrix (GS 40 2p, CC1/CC2's "
                      "numbers, GM2 09: amplitude, pitch, cutoff, LFO rate, and LFO1/LFO2 vibrato and tremolo as a "
-                     "second LFO, as files have them); open: ASSIGN MODE's modes"),
+                     "second LFO, as files have them); ASSIGN MODE by the arranger's intent (SINGLE cuts a "
+                     "key's sounding note when it is struck again, any voice; LIMITED- and FULL-MULTI the "
+                     "instruments' own restrike; files and live, both engines)"),
     ("SC-55", False, "Sound Canvas superset, the controllers -- done: the Rx switches live (a message a part "
                      "does not receive dropped, both engines, 00ec34d), the wheel's jobs on CCs of their own; "
                      "the controller matrix live, both engines, the CC1/CC2 controller numbers read by it; "

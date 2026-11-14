@@ -653,6 +653,7 @@ def _load():
             ('nv_song_kits', None, [ctypes.c_void_p, D, D]),
             ('nv_song_chokes', None, [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulonglong)]),
             ('nv_song_choke', I, [ctypes.c_void_p, LL, I, C, D]),
+            ('nv_song_add_single', None, [ctypes.c_void_p, LL, I, C]),
             ('nv_song_legato', None, [ctypes.c_void_p, LL, I, I]),
             ('nv_song_note_stroke', None, [ctypes.c_void_p, I, C, I]),
             ('nv_song_strokes', None, [ctypes.c_void_p, ctypes.POINTER(I), D]),
@@ -3943,6 +3944,10 @@ class Song(object):
         """Where a later strike in its exclusive class stops this note, or None"""
         o = ctypes.c_double(0.0)
         return o.value if self.d.nv_song_choke(self.p, int(ch), int(note), float(on), ctypes.byref(o)) else None
+
+    def add_single(self, ch, note, t):
+        """GS's ASSIGN MODE SINGLE: key `note` of channel ch struck under it at t"""
+        self.d.nv_song_add_single(self.p, int(ch), int(note), float(t))
 
     def next_same(self, ch, note, on):
         o = ctypes.c_double(0.0)
