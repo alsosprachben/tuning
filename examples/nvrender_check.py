@@ -4,7 +4,8 @@
     python3 examples/nvrender_check.py [file.mid ...] [SECONDS] [--from=PATH] [--tuner=NAME [--a=HZ]]
 
 For each file (the corpus by default; the first SECONDS of it, 20 by
-default, cut as bitident cuts, saved as a .mid both sides read): blockrender's
+default, cut as bitident cuts, saved as a .mid both sides read; a MIDI 2.0
+file whole): blockrender's
 CLI on the whole table on the CPU (TUNING_STREAM=0, TUNING_GPU off, the
 register on its C core) writes OUT.wav and OUT.room.json; native/nvrender,
 from an export made once (examples/native_export.py), writes its own. The
@@ -78,8 +79,16 @@ def main(argv):
             refused += not w_.startswith(("identical", "DIFFERS", "nvrender failed"))
             continue
         name = os.path.splitext(os.path.basename(path))[0]
-        mid = os.path.join(tmp, name + ".mid")
-        BI.excerpt(path, seconds).save(mid)
+        with open(path, "rb") as fh:
+            m2 = fh.read(8) in (b"SMF2CLIP", b"UMPRAW02")
+        if m2:
+            # A MIDI 2.0 FILE (ump.py: a Clip File or raw UMP) whole: mido
+            # cannot cut it, and both sides read it as it is
+            mid = os.path.join(tmp, name + ".midi2")
+            shutil.copyfile(path, mid)
+        else:
+            mid = os.path.join(tmp, name + ".mid")
+            BI.excerpt(path, seconds).save(mid)
         nv = os.path.join(tmp, name + ".nv.wav")
         tun = (["--tuner=" + opt["tuner"]] if opt.get("tuner") else []) + (["--a=" + opt["a"]] if opt.get("a") else [])
         r = subprocess.run([exe, nvx, mid, nv] + tun, capture_output=True, text=True)

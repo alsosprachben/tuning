@@ -3971,7 +3971,9 @@ def images(props, sx, sy, sz, cap=64):
 
 
 MIDI_REFUSED = {-1: 'malformed', -2: 'type 2', -3: 'ports', -4: 'an exclusive', -5: 'a bank',
-                -6: 'an NRPN or MPE', -7: 'mono mode'}
+                -6: 'an NRPN or MPE', -7: 'mono mode',
+                -9: "MIDI 2.0 at its own resolution (a value MIDI 1.0 has no number for)",
+                -10: 'MIDI 2.0 groups past the second'}
 
 
 class Midi(object):

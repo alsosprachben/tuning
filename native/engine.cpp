@@ -1305,6 +1305,11 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
                 n.bbr = br[768 + ch];
             }
         }
+        {
+            double pnrow;
+            if (nv_song_pn_row(song, i, &pnrow) && pnrow >= 0.0)
+                n.br = pnrow;               // its own row: MIDI 2.0 per-note pitch that moves
+        }
         if (is_mpe)
             n.br = mpe_row >= 0.0 ? mpe_row : n.fbr;   // MPE: the note's own row, or none (the fader's)
         double mrow;

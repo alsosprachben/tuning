@@ -1351,8 +1351,16 @@ void nv_song_meend(void *s, long long ch, int note, double on, double r0, double
 int nv_song_meend_row(void *s, int i, double *row);
 void nv_song_mpe(void *s, long long ch, int note, double on, double r0, double row, int mgr);
 int nv_song_mpe_of(void *s, int i, double *row, int *mgr);
+void nv_song_pn(void *s, long long ch, int note, double on, double p0, double b0, double row);
+int nv_song_pn_row(void *s, int i, double *row);
+int nv_bend_gesture_ev(void *midi, double bend_range, int ch, long nblk, double *t, double *r, int cap);
 int nv_midi_mpe_manager(void *p, int ch, double t);
 int nv_midi_has_mpe(void *p);
+// MIDI 2.0's per-note pitch (midi.cpp): any; a Note On's Pitch 7.9 (NAN none);
+// a key's Pitch 7.25 (which 0) or bend (1), a channel's bend range (2)
+int nv_midi_has_pn(void *p);
+double nv_midi_pn_attr(void *p, int ch, int note, double on);
+int nv_midi_pn(void *p, int which, int ch, int note, double *t, double *v, int cap);
 void nv_bend_fader_channels(const int *fch, int n);
 int nv_bend_stream(void *midi, int ch, int with_master, double bend_range, double *t, double *r, int cap);
 void nv_bend_rows(const double *t, const double *r, int n, long nblk, int blk, double sr, float *BR, double *BC);

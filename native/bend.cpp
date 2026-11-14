@@ -377,6 +377,36 @@ int nv_bend_gesture(void *midi, void *song, double bend_range, int ch, long nblk
     return 1;
 }
 
+// _BGEST's events for channel ch -- (t, its ratio over the channel's tuning)
+// after its first note -- where its pitch moves, into t and r up to cap; how
+// many (0: it does not move)
+int nv_bend_gesture_ev(void *midi, double bend_range, int ch, long nblk, double *t, double *r, int cap)
+{
+    std::map<int, std::vector<std::pair<double, double>>> st;
+    std::map<long long, double> first_on;
+    streams(midi, bend_range, st, first_on, nblk);
+    auto s = st.find(ch);
+    auto f = first_on.find(ch);
+    if (s == st.end() || f == first_on.end() || s->second.empty())
+        return 0;
+    double tun = tuning_of(s->second, f->second);
+    std::vector<std::pair<double, double>> ev;
+    bool moves = false;
+    for (auto &e : s->second)
+        if (e.first > f->second + 1e-6) {
+            double rr = e.second / tun;
+            ev.push_back(std::make_pair(e.first, rr));
+            moves = moves || fabs(rr - 1.0) > 1e-9;
+        }
+    if (!moves)
+        return 0;
+    for (int i = 0; i < (int)ev.size() && i < cap; i++) {
+        t[i] = ev[i].first;
+        r[i] = ev[i].second;
+    }
+    return (int)ev.size();
+}
+
 // _prep_channel_fader for channel ch: 1 and its level at the nblk + 1 block
 // edges in L if its fader is a row, else 0. swell[i]: the reader's note i an
 // organ's, whose CC7 is its swell (NULL none). The reader's notes give the spans

@@ -19,7 +19,7 @@
 // A file this does not read as parse would -- ports, any other system
 // exclusive (GS parts, drum setup, tuning, the controller matrix), banks,
 // MPE, a type 2 file -- is refused (nv_midi_read returns < 0) and Python
-// reads it.
+// reads it. A MIDI 2.0 file (a Clip File or raw UMP) is read through ump_msgs.
 
 #include <algorithm>
 #include <array>
@@ -30,6 +30,7 @@
 #include <cstring>
 #include <map>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -50,6 +51,15 @@ struct Msg {
     // 2 a part's copy as it receives it, the file render's only
     int rx = 0;
     bool direct = false;        // a part's own (a part parameter's, the CM-64 map's): no channel to route
+    // A MIDI 2.0 FILE's (ump.py): a slot's delta in seconds, as the file has
+    // it (a raw stream's own, a Clip File's from its tempo), < 0 none (ticks
+    // and tempo give it); a Note On's Pitch 7.9 attribute (NAN none); and a
+    // per-note message's value (status 0xF5: meta its kind -- 0 pn_pitch,
+    // 1 pn_bend, 2 pn_bend_range, 3 pn_mgmt -- d0 the note, d1 the channel
+    // with pn_mgmt's reset (16) and detach (32))
+    double secs = -1.0;
+    double ap = NAN;
+    double fv = 0.0;
 };
 
 // A GS PART PARAMETER that a MIDI message carries (parse_gs_part): its channel
@@ -271,6 +281,12 @@ struct PitchEv {
 
 struct Parsed {
     std::vector<LiveEv> events;     // the notes and controllers in message order
+    // MIDI 2.0's PER-NOTE PITCH (parse's pn): a Note On's own Pitch 7.9 by
+    // (channel, note, onset); each key's Pitch 7.25 (NAN: a reset, none) and
+    // per-note bend (-1..1) over time; each channel's per-note bend range
+    std::map<std::tuple<int, int, double>, double> pn_attr;
+    std::map<std::pair<int, int>, std::vector<std::pair<double, double>>> pn_p725, pn_bend;
+    std::map<int, std::vector<std::pair<double, double>>> pn_range;
     // MPE's ZONES over time (blockrender's mpe_ev): at each MCM that changed
     // one, every channel in MPE and its (group, side) -- prepare's _manager
     std::vector<std::pair<double, std::map<int, std::pair<int, int>>>> mpe;
@@ -713,14 +729,277 @@ static bool g_map_kits_set = false;
 static bool g_map_kits_play = false;    // (nv_midi_map_kits_play: the export has their tables)
 static const double BEND_RANGE_SEMITONES = 2.0;     // tonelib's: GM's
 
+// MIDI 2.0 FILES (ump.py): a MIDI Clip File ("SMF2CLIP", M2-116) or the raw
+// UMP stream ("UMPRAW02"), decoded as ump.decode decodes them -- each event
+// a message of the shape a Standard MIDI File's are, in MIDI 1 units, so one
+// parse serves both. ump's exactness rule: a value that IS the upscale of a
+// MIDI 1 value is that integer; any other value is MIDI 2.0's own resolution,
+// which native does not carry yet (-9: the file is the Python's).
+static unsigned long long ump_scale_up(unsigned long long v, int src, int dst)
+{
+    const int shift = dst - src;
+    unsigned long long out = v << shift;
+    if (v <= (1ULL << (src - 1)))
+        return out;
+    const int rb = src - 1;
+    unsigned long long rv = v & ((1ULL << rb) - 1);
+    rv = shift > rb ? rv << (shift - rb) : rv >> (rb - shift);
+    while (rv) {
+        out |= rv;
+        rv >>= rb;
+    }
+    return out;
+}
+// to_m1: x (src bits) in dst-bit units, exactly -- false when it is not an
+// upscale (a value MIDI 1.0 has no number for)
+static bool ump_to_m1(unsigned long long x, int src, int dst, int *v)
+{
+    const unsigned long long q = x >> (src - dst);
+    *v = (int)q;
+    return ump_scale_up(q, dst, src) == x;
+}
+static const int UMP_WORDS[16] = {1, 1, 1, 2, 2, 4, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4};
+
+static int ump_msgs(const uint8_t *buf, long long len, std::vector<Msg> &msgs, int &tpb,
+                    std::vector<std::array<int, 3>> &legato)
+{
+    auto be32 = [&](long long i) {
+        return (uint32_t)buf[i] << 24 | (uint32_t)buf[i + 1] << 16 | (uint32_t)buf[i + 2] << 8 | buf[i + 3];
+    };
+    // the slots: (delta ticks, delta seconds, packets) -- ump.read
+    struct Slot {
+        long long dt;
+        double ds;
+        std::vector<std::vector<uint32_t>> pk;
+    };
+    std::vector<Slot> slots;
+    if (!memcmp(buf, "UMPRAW02", 8)) {
+        if (len < 12)
+            return -1;
+        tpb = (int)be32(8);
+        long long i = 12;
+        while (i < len) {
+            if (len - i < 14)
+                return -1;
+            uint64_t bits = (uint64_t)be32(i) << 32 | be32(i + 4);
+            double ds;
+            memcpy(&ds, &bits, 8);
+            Slot sl{(long long)be32(i + 8), ds, {}};
+            const int n = buf[i + 12] << 8 | buf[i + 13];
+            i += 14;
+            for (int q = 0; q < n; q++) {
+                if (i >= len)
+                    return -1;
+                const int k = buf[i++];
+                if (len - i < 4LL * k)
+                    return -1;
+                std::vector<uint32_t> pk;
+                for (int w = 0; w < k; w++)
+                    pk.push_back(be32(i + 4LL * w));
+                i += 4LL * k;
+                if (!(pk.size() == 1 && pk[0] == 0))      // (a NOOP: time alone)
+                    sl.pk.push_back(pk);
+            }
+            slots.push_back(sl);
+        }
+    } else {
+        tpb = 960;
+        double tempo = 500000.0;
+        bool started = false;
+        Slot *cur = nullptr;
+        const long long nw = (len - 8) / 4;
+        long long w = 0;
+        while (w < nw) {
+            const uint32_t w0 = be32(8 + 4 * w);
+            const int mt = w0 >> 28 & 0xF, k = UMP_WORDS[mt];
+            if (w + k > nw)
+                break;
+            std::vector<uint32_t> pk;
+            for (int q = 0; q < k; q++)
+                pk.push_back(be32(8 + 4 * (w + q)));
+            w += k;
+            if (mt == 0x0) {
+                const int st = w0 >> 20 & 0xF;
+                if (st == 0x3)
+                    tpb = (w0 & 0xFFFF) ? (int)(w0 & 0xFFFF) : tpb;
+                else if (st == 0x4 && started) {
+                    const long long dt = w0 & 0xFFFFF;
+                    slots.push_back(Slot{dt, dt > 0 ? dt * (tempo * 1e-6 / tpb) : 0.0, {}});
+                    cur = &slots.back();
+                }
+                continue;
+            }
+            if (mt == 0xF) {
+                const int st = w0 >> 16 & 0x3FF;
+                if (st == 0x20)
+                    started = true;
+                else if (st == 0x21)
+                    break;
+                continue;
+            }
+            if (mt == 0xD && (w0 >> 8 & 0xFF) == 0 && (w0 & 0xFF) == 0)
+                tempo = pk[1] / 100.0;          // (10 ns units -> microseconds)
+            if (started && cur)
+                cur->pk.push_back(pk);
+        }
+    }
+    // decode: each slot's events, a NOOP where it has none (it carries time);
+    // a multi-packet SysEx reassembled across slots, by group
+    std::map<int, std::vector<uint8_t>> sx;
+    std::vector<long long> abst;                // (each message's absolute tick: the legato pass's)
+    long long tick = 0;
+    for (const Slot &sl : slots) {
+        tick += sl.dt;
+        std::vector<Msg> ev;
+        for (const auto &pk : sl.pk) {
+            const uint32_t w0 = pk[0];
+            const int mt = w0 >> 28 & 0xF, g = w0 >> 24 & 0xF, st = w0 >> 20 & 0xF, c = w0 >> 16 & 0xF;
+            const int b3 = w0 >> 8 & 0x7F, b4 = w0 & 0xFF;
+            auto M = [&](int status, int d0, int d1) {
+                Msg m{0, status | c, d0, d1, 0, {}};
+                m.port = g;
+                return m;
+            };
+            auto noop = [&]() { return Msg{0, 0xFF, 0, 0, 0x7F, {}}; };
+            if ((mt == 0x2 || mt == 0x4) && g > 1)
+                return -10;                     // a third group's channels: past the two ports native has
+            if (mt == 0x2) {
+                const int kind = w0 >> 16 & 0xF0, d2 = w0 & 0x7F;
+                if (kind == 0x90)
+                    ev.push_back(M(d2 ? 0x90 : 0x80, b3, d2));
+                else if (kind == 0x80 || kind == 0xA0 || kind == 0xB0 || kind == 0xE0)
+                    ev.push_back(M(kind, b3, d2));
+                else if (kind == 0xC0 || kind == 0xD0)
+                    ev.push_back(M(kind, b3, 0));
+                continue;
+            }
+            if (mt == 0x3) {
+                const int n = w0 >> 16 & 0xF;
+                uint8_t raw[6] = {(uint8_t)(w0 >> 8), (uint8_t)w0, (uint8_t)(pk[1] >> 24), (uint8_t)(pk[1] >> 16),
+                                  (uint8_t)(pk[1] >> 8), (uint8_t)pk[1]};
+                if (st == 0 || st == 1)
+                    sx[g].clear();
+                auto &b = sx[g];
+                b.insert(b.end(), raw, raw + std::min(n, 6));
+                if (st == 0 || st == 3) {
+                    Msg m{0, 0xF0, 0, 0, 0, b};
+                    m.port = g;
+                    sx.erase(g);
+                    ev.push_back(m);
+                }
+                continue;
+            }
+            if (mt == 0xD && (w0 >> 8 & 0xFF) == 0 && (w0 & 0xFF) == 0) {
+                ev.push_back(noop());           // (set_tempo: the slots' seconds have it)
+                continue;
+            }
+            if (mt != 0x4)
+                continue;
+            const uint32_t d = pk[1];
+            int v;
+            if (st == 0x9) {
+                if (!ump_to_m1(d >> 16, 16, 7, &v))
+                    return -9;
+                Msg m = M(0x90, b3, v >= 1 ? v : 1);
+                if (b4 == 3)
+                    m.ap = (d & 0xFFFF) / 512.0;
+                ev.push_back(m);
+            } else if (st == 0x8) {
+                ump_to_m1(d >> 16, 16, 7, &v);  // (its velocity: read by nothing)
+                ev.push_back(M(0x80, b3, v));
+            } else if (st == 0xA || st == 0xD) {
+                if (!ump_to_m1(d, 32, 7, &v))
+                    return -9;
+                ev.push_back(st == 0xA ? M(0xA0, b3, v) : M(0xD0, v, 0));
+            } else if (st == 0xE) {
+                if (!ump_to_m1(d, 32, 14, &v))
+                    return -9;
+                ev.push_back(M(0xE0, v & 0x7F, v >> 7));
+            } else if (st == 0xB) {
+                static const int IGN[] = {0, 6, 32, 38, 88, 96, 97, 98, 99, 100, 101};
+                if (std::find(std::begin(IGN), std::end(IGN), b3) != std::end(IGN)) {
+                    ev.push_back(noop());       // ("ignored": the MIDI 2.0 Protocol has its own)
+                    continue;
+                }
+                const bool integer = b3 == 5 || b3 == 10 || b3 == 43 || b3 == 44 || b3 == 84 || b3 == 126;
+                if (integer)
+                    v = (int)(d >> 25);
+                else if (!ump_to_m1(d, 32, 7, &v))
+                    return -9;
+                ev.push_back(M(0xB0, b3, v));
+            } else if (st == 0xC) {
+                if (b4 & 1) {
+                    ev.push_back(M(0xB0, 0, d >> 8 & 0x7F));
+                    ev.push_back(M(0xB0, 32, d & 0x7F));
+                }
+                ev.push_back(M(0xC0, d >> 24 & 0x7F, 0));
+            } else if (st == 0x2 || st == 0x3) {
+                if (st == 0x2 && b3 == 0 && (b4 & 0x7F) == 7) {
+                    Msg m{0, 0xF5, 0, c, 2, {}};
+                    m.port = g;
+                    m.fv = d / 33554432.0;      // (Pitch 7.25: semitones)
+                    ev.push_back(m);
+                    continue;
+                }
+                const int v14 = (int)(d >> 18);
+                ev.push_back(M(0xB0, st == 0x2 ? 101 : 99, b3));
+                ev.push_back(M(0xB0, st == 0x2 ? 100 : 98, b4 & 0x7F));
+                ev.push_back(M(0xB0, 6, v14 >> 7));
+                ev.push_back(M(0xB0, 38, v14 & 0x7F));
+            } else if (st == 0x6) {
+                Msg m{0, 0xF5, b3, c, 1, {}};
+                m.port = g;
+                m.fv = ((double)d - 2147483648.0) / 2147483648.0;
+                ev.push_back(m);
+            } else if (st == 0x0 && b4 == 3) {
+                Msg m{0, 0xF5, b3, c, 0, {}};
+                m.port = g;
+                m.fv = d / 33554432.0;
+                ev.push_back(m);
+            } else if (st == 0xF) {
+                Msg m{0, 0xF5, b3, c | (b4 & 1 ? 16 : 0) | (b4 & 2 ? 32 : 0), 3, {}};
+                m.port = g;
+                ev.push_back(m);
+            } else {
+                ev.push_back(noop());           // ("ignored")
+            }
+        }
+        if (ev.empty())
+            ev.push_back(Msg{0, 0xFF, 0, 0, 0x7F, {}});
+        for (size_t k = 0; k < ev.size(); k++) {
+            Msg &m = ev[k];
+            if (k == 0) {                       // (the slot's delta on its first: ump.UmpMidi._events)
+                m.tick = (sl.dt > 0 || sl.ds > 0.0) ? std::max(1LL, sl.dt) : 0;
+                m.secs = sl.ds;
+            }
+            msgs.push_back(m);
+            abst.push_back(tick);
+        }
+    }
+    // the legato pass over its one track, in ticks (_legato_ticks(mid.tracks))
+    std::vector<Msg> at(msgs);
+    for (size_t i = 0; i < at.size(); i++)
+        at[i].tick = abst[i];
+    legato_ticks(at, std::vector<size_t>{0}, tpb, legato);
+    return 0;
+}
+
 // blockrender.parse for a GM file: < 0 where it would take a path this does not have
 static int parse(const uint8_t *buf, long long len, Parsed &P)
 {
+    std::vector<Msg> msgs;
+    int tpb = 0;
+    if (len >= 8 && (!memcmp(buf, "SMF2CLIP", 8) || !memcmp(buf, "UMPRAW02", 8))) {
+        const int e = ump_msgs(buf, len, msgs, tpb, P.legato);     // (a MIDI 2.0 file: ump.UmpMidi)
+        if (e < 0)
+            return e;
+    } else {
     Reader r{buf, buf + len};
     if (len < 14 || memcmp(buf, "MThd", 4))
         return -1;
     long long hsize = ((long long)buf[4] << 24) | (buf[5] << 16) | (buf[6] << 8) | buf[7];
-    int type = (buf[8] << 8) | buf[9], ntr = (buf[10] << 8) | buf[11], tpb = (buf[12] << 8) | buf[13];
+    int type = (buf[8] << 8) | buf[9], ntr = (buf[10] << 8) | buf[11];
+    tpb = (buf[12] << 8) | buf[13];
     if (type == 2 || hsize < 6 || (tpb & 0x8000))
         return -2;
     r.p = buf + 8 + hsize;
@@ -787,7 +1066,6 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     // merge_tracks: a stable sort on absolute tick (tracks in file order),
     // then relative ticks; fix_end_of_track: end-of-track deltas carried on
     std::stable_sort(all.begin(), all.end(), [](const Msg &a, const Msg &b) { return a.tick < b.tick; });
-    std::vector<Msg> msgs;
     long long prev = 0, accum = 0;
     for (Msg &m : all) {
         long long d = m.tick - prev;
@@ -802,6 +1080,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     }
     Msg eot{accum, 0xFF, 0, 0, 0x2F, {}};
     msgs.push_back(eot);
+    }
     {
         // ...EACH GS PART PARAMETER's MESSAGES after it (blockrender's _inj:
         // read next, in order, through the same code)
@@ -1096,7 +1375,9 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             break;
         const Msg &m = m_;
         seq++;
-        double delta = m.tick > 0 ? m.tick * (tempo * 1e-6 / tpb) : 0.0;
+        // (a MIDI 2.0 slot's own seconds where it has them: a copy at the
+        // same tick has tick 0, so it never carries them twice)
+        double delta = m.tick > 0 ? (m.secs >= 0.0 ? m.secs : m.tick * (tempo * 1e-6 / tpb)) : 0.0;
         t += delta;
         if (m.rx == 1) {                        // (the message as sent: the live part's alone)
             seq--;
@@ -1149,6 +1430,21 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                     continue;
                 }
             }
+        }
+        if (m.status == 0xF5) {                 // MIDI 2.0's per-note messages (parse's pn)
+            const int pc = (m.d1 & 15) + 16 * m.port;
+            const auto k = std::make_pair(pc, m.d0);
+            if (m.meta == 0)
+                P.pn_p725[k].push_back({t, m.fv});
+            else if (m.meta == 1)
+                P.pn_bend[k].push_back({t, m.fv});
+            else if (m.meta == 2)
+                P.pn_range[pc].push_back({t, m.fv});
+            else if (m.d1 & 16) {               // (a reset: no pitch of its own, no bend)
+                P.pn_p725[k].push_back({t, NAN});
+                P.pn_bend[k].push_back({t, 0.0});
+            }
+            continue;
         }
         if (m.status == 0xFF) {
             if (m.meta == 0x51 && m.data.size() == 3)
@@ -1717,6 +2013,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             bend_now[ch] = ((m.d1 << 7) | m.d0) - 8192;
             cmx_upd(t, ch);
         } else if (kind == 0x90 && m.d1 > 0) {
+            if (!std::isnan(m.ap))
+                P.pn_attr[std::make_tuple(ch, m.d0, t)] = m.ap;     // (a Note On's own Pitch 7.9)
             seen_note = true;
             if (live_ev)
                 P.events.push_back(LiveEv{t, 0, ch, m.d0, m.d1});
@@ -1903,6 +2201,41 @@ void *nv_midi_read(const uint8_t *buf, long long len, int *err)
 }
 
 void nv_midi_free(void *p) { delete (nv::Parsed *)p; }
+
+// MIDI 2.0's per-note pitch (_prep_per_note_pitch's pn): whether the file
+// has any; a Note On's attribute (NAN none); a key's Pitch 7.25 or bend
+// timeline, or a channel's bend range (key -1), into t/v up to cap (its length)
+int nv_midi_has_pn(void *p)
+{
+    const nv::Parsed *P = (const nv::Parsed *)p;
+    return !P->pn_attr.empty() || !P->pn_p725.empty() || !P->pn_bend.empty();
+}
+double nv_midi_pn_attr(void *p, int ch, int note, double on)
+{
+    const nv::Parsed *P = (const nv::Parsed *)p;
+    auto it = P->pn_attr.find(std::make_tuple(ch, note, on));
+    return it == P->pn_attr.end() ? NAN : it->second;
+}
+int nv_midi_pn(void *p, int which, int ch, int note, double *t, double *v, int cap)
+{
+    const nv::Parsed *P = (const nv::Parsed *)p;
+    const std::vector<std::pair<double, double>> *tl = nullptr;
+    if (which == 2) {
+        auto it = P->pn_range.find(ch);
+        tl = it == P->pn_range.end() ? nullptr : &it->second;
+    } else {
+        const auto &m = which == 0 ? P->pn_p725 : P->pn_bend;
+        auto it = m.find(std::make_pair(ch, note));
+        tl = it == m.end() ? nullptr : &it->second;
+    }
+    if (!tl)
+        return 0;
+    for (int i = 0; i < (int)tl->size() && i < cap; i++) {
+        t[i] = (*tl)[i].first;
+        v[i] = (*tl)[i].second;
+    }
+    return (int)tl->size();
+}
 
 double nv_midi_total(void *p) { return ((nv::Parsed *)p)->total; }
 

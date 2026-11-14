@@ -129,6 +129,13 @@ void nv_bend_fader_channels(const int *fch, int n);
 int nv_bend_stream(void *midi, int ch, int with_master, double bend_range, double *t, double *r, int cap);
 void nv_bend_rows(const double *t, const double *r, int n, long nblk, int blk, double sr, float *BR, double *BC);
 void nv_song_mpe(void *s, long long ch, int note, double on, double r0, double row, int mgr);
+void nv_song_pn(void *s, long long ch, int note, double on, double p0, double b0, double row);
+int nv_song_pn_row(void *s, int i, double *row);
+int nv_bend_gesture_ev(void *midi, double bend_range, int ch, long nblk, double *t, double *r, int cap);
+int nv_midi_has_pn(void *p);
+double nv_midi_pn_attr(void *p, int ch, int note, double on);
+int nv_midi_pn(void *p, int which, int ch, int note, double *t, double *v, int cap);
+void nv_song_note_table(void *s, long long ch, double t, int indian, double *out);
 int nv_meend_note(const double *wt, const int *wp, int nw, double on, double off, double nc, const double *sw,
                   int nsw, double rst, double strength, long nblk, int blk, double sr, double *r0, float *BR,
                   double *BC);
@@ -1702,6 +1709,111 @@ int main(int argc, char **argv)
                 }
             }
             nv_song_mpe(song, c, iv[1], on, r0, row, mg);
+        }
+    }
+    // ...and MIDI 2.0's PER-NOTE PITCH (_prep_per_note_pitch): each note's
+    // absolute pitch (its Note On's Pitch 7.9, else the Pitch 7.25 in force;
+    // none, the tuner's) and per-note bend at onset into f0, and where either
+    // or the bend range moves while it sounds a row of its own -- its
+    // channel's gesture times its own movement, among MPE's (the fader its
+    // channel's, or its zone manager's)
+    if (nv_midi_has_pn(midi)) {
+        typedef std::vector<std::pair<double, double>> TL;
+        auto tl = [&](int which, int c, int note) {
+            TL v;
+            int n = nv_midi_pn(midi, which, c, note, nullptr, nullptr, 0);
+            std::vector<double> t(n), x(n);
+            nv_midi_pn(midi, which, c, note, t.data(), x.data(), n);
+            for (int k = 0; k < n; k++)
+                v.push_back({t[k], x[k]});
+            return v;
+        };
+        // (the render's blocks, prepare's N // BLK + 2: a matrix vibrato's points are a block's)
+        const long nblk = (long)(((long long)(total * SR) + (long long)SR) / (long long)BLK + 2);
+        std::map<int, TL> gest;                 // _BGEST, by channel
+        auto gev = [&](int c) -> const TL & {
+            auto it = gest.find(c);
+            if (it != gest.end())
+                return it->second;
+            int n = nv_bend_gesture_ev(midi, E.k[K_BEND_SEMIS], c, nblk, nullptr, nullptr, 0);
+            std::vector<double> t(n), r(n);
+            nv_bend_gesture_ev(midi, E.k[K_BEND_SEMIS], c, nblk, t.data(), r.data(), n);
+            TL v;
+            for (int k = 0; k < n; k++)
+                v.push_back({t[k], r[k]});
+            return gest[c] = v;
+        };
+        auto step = [](const TL &ev, double tt, double d) {
+            double v = d;
+            for (const auto &e : ev) {
+                if (e.first <= tt + 1e-9)
+                    v = e.second;
+                else
+                    break;
+            }
+            return v;
+        };
+        const TL none;
+        for (int i = 0, n = nv_midi_n_notes(midi); i < n; i++) {
+            int iv[5];
+            double dv[5];
+            nv_midi_note(midi, i, iv, dv);
+            if (iv[4])
+                continue;                       // (a drum's: its set's pitch)
+            const int c = iv[0], note = iv[1];
+            const double on = dv[0], off = dv[1];
+            const double attr = nv_midi_pn_attr(midi, c, note, on);
+            const TL p7 = tl(0, c, note), bd = tl(1, c, note), rg = tl(2, c, -1);
+            if (std::isnan(attr) && p7.empty() && bd.empty())
+                continue;
+            double tab[128], ot[12];
+            nv_song_note_table(song, c, on, 0, tab);
+            const bool has_ot = nv_midi_otun(midi, c, ot) != 0;
+            const double tuned = tab[note] * (has_ot ? pow(2.0, ot[note % 12] / 1200.0) : 1.0);
+            auto absp = [&](double tt) { return !std::isnan(attr) ? attr : step(p7, tt, NAN); };
+            auto hz = [&](double tt) {
+                const double p = absp(tt);
+                return !std::isnan(p) ? 440.0 * pow(2.0, (p - 69.0) / 12.0) : tuned;
+            };
+            auto pb = [&](double tt) {
+                const double b = step(bd, tt, 0.0);
+                return b != 0.0 ? pow(2.0, b * step(rg, tt, 2.0) / 12.0) : 1.0;     // (T.PN_BEND_RANGE)
+            };
+            const double p0 = absp(on), b0 = pb(on);
+            std::vector<double> mv;
+            for (const TL *q : {std::isnan(attr) ? &p7 : &none, &bd, &rg})
+                for (const auto &e : *q)
+                    if (on + 1e-9 < e.first && e.first <= off)
+                        mv.push_back(e.first);
+            std::sort(mv.begin(), mv.end());
+            mv.erase(std::unique(mv.begin(), mv.end()), mv.end());
+            double row = -1.0;
+            if (!mv.empty()) {
+                if (nw) {
+                    fprintf(stderr, "nvrender: refused: MIDI 2.0 per-note pitch beside an organ's wind rows\n");
+                    return 2;
+                }
+                bool bendable = true;
+                const int cq = meend_cls(i, iv);
+                if (cq >= 0)
+                    bendable = ((const NoteClass *)E.classes[cq].data())->bendable != 0;
+                const TL &chev = bendable ? gev(c) : none;
+                const double ref = hz(on) * b0;
+                std::vector<double> times(mv);
+                for (const auto &e : chev)
+                    times.push_back(e.first);
+                std::sort(times.begin(), times.end());
+                times.erase(std::unique(times.begin(), times.end()), times.end());
+                MpeRow pr;
+                pr.mgr = !fch_note.empty() && fch_note[i] >= 0 ? fch_note[i] : c;
+                for (double tt : times) {
+                    pr.t.push_back(tt);
+                    pr.r.push_back(step(chev, tt, 1.0) * (hz(tt) * pb(tt) / ref));
+                }
+                row = (double)(pbase + (int)prows.size());
+                prows.push_back(pr);
+            }
+            nv_song_pn(song, c, note, on, p0, b0, row);
         }
     }
     for (int c = 0; c < 256; c++) {

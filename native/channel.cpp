@@ -1674,6 +1674,9 @@ struct Song {
     // MPE's MEMBER NOTES (_MPE_AT, _mpe_member): its ratio at Note On, its
     // row or -1, its manager (whose fader it rides)
     std::map<NoteKey, std::array<double, 3>> mpe;
+    // MIDI 2.0's PER-NOTE PITCH (_PN_AT): its absolute pitch at Note On in
+    // semitones (NAN none: the tuner's), its per-note bend's ratio, its row or -1
+    std::map<NoteKey, std::array<double, 3>> pn;
     std::map<NoteKey, std::pair<double, double>> siren;         // _SIREN_AT: (its row, its rotor's end)
     std::map<NoteKey, double> siren_up;                         // ...its upper disc's row (the crank's)
     std::map<NoteKey, std::vector<double>> alias;               // _ALIAS_AT: its harmonics' rows (-1 none)
@@ -1763,7 +1766,14 @@ struct Song {
 
     double pitch(long long c, int note, double on, bool indian = false, double so = 0.0) const
     {
-        double f0 = note_table(c, on, indian)[note];
+        // MIDI 2.0's per-note pitch is absolute and outranks the tuner, MTS and
+        // the channel's scale (M2-104 7.4.15); its bend, the static bend and the
+        // channel's tuning still offset it
+        auto pq = pn.find(NoteKey{c, note, on});
+        const bool own = pq != pn.end() && !std::isnan(pq->second[0]);
+        double f0 = own ? 440.0 * pow(2.0, (pq->second[0] - 69.0) / 12.0) : note_table(c, on, indian)[note];
+        if (pq != pn.end())
+            f0 *= pq->second[1];
         auto mp = mpe.find(NoteKey{c, note, on});
         if (mp != mpe.end())
             f0 *= mp->second[0];            // this note's own MPE bend at Note On
@@ -1776,7 +1786,7 @@ struct Song {
         if (b != btun.end() && b->second != 0.0)
             f0 *= b->second;
         auto o = otun.find(c);
-        if (o != otun.end() && !o->second.empty())
+        if (o != otun.end() && !o->second.empty() && !own)
             f0 *= pow(2.0, o->second[note % 12] / 1200.0);
         return f0;
     }
@@ -3334,6 +3344,25 @@ void nv_song_mpe(void *s, long long ch, int note, double on, double r0, double r
 }
 
 // ...note i's: 1 and its row and manager if it is one, else 0
+// MIDI 2.0's per-note pitch (_PN_AT): a note's (absolute semitones or NAN,
+// bend ratio at Note On, row or -1); and note i's row, 1 where it has one
+void nv_song_pn(void *s, long long ch, int note, double on, double p0, double b0, double row)
+{
+    ((nv::Song *)s)->pn[nv::NoteKey{ch, note, on}] = std::array<double, 3>{p0, b0, row};
+}
+
+int nv_song_pn_row(void *s, int i, double *row)
+{
+    const nv::Song *S = (const nv::Song *)s;
+    if (i < 0 || i >= (int)S->notes.size())
+        return 0;
+    auto it = S->pn.find(nv::NoteKey{S->notes[i].ch, S->notes[i].note, S->notes[i].on});
+    if (it == S->pn.end())
+        return 0;
+    *row = it->second[2];
+    return 1;
+}
+
 int nv_song_mpe_of(void *s, int i, double *row, int *mgr)
 {
     const nv::Song *S = (nv::Song *)s;

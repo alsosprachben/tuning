@@ -64,6 +64,7 @@ CHECKS = [
                                             "@cmx_live.mid"],
      {}),
     ("two_organs", "nvrender_check.py", ["@two_organs.mid"], {}),
+    ("midi2_files", "nvrender_check.py", ["@m2_pernote.midi2", "@m2_gsvsense.midi2", "@m2_mpe_zone_raw.midi2"], {}),
     ("moog_cmx", "nvrender_check.py", ["@moog_cmx.mid"], {}),
     ("mpe_files", "nvrender_check.py", ["@mpe_zone.mid", "@mpe/a_plain.mid", "@mpe/b_bends.mid",
                                         "@mpe/c_mvol.mid", "@mpe/d_press.mid", "@mpe/e_mgrbend.mid",

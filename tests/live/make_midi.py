@@ -11,6 +11,7 @@ import sys
 import mido
 
 MIDI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "midi")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))  # (ump)
 
 
 def gs(addr, v):
@@ -384,6 +385,59 @@ def cmx_live():
     return mid
 
 
+def m2_pernote():
+    """MIDI 2.0's PER-NOTE PITCH, a Clip File at MIDI 1.0's own values (each
+    velocity and controller an exact upscale): a Pitch 7.25 table (every key
+    its 12-TET pitch); a piano's C major triad whose third alone settles to
+    the just 5:4 mid-note; the just chord from each Note On's Pitch 7.9; a
+    flute whose per-note bend (range 1 semitone) wobbles under the channel's
+    wheel rising; a quarter-tone D, then reset by per-note management."""
+    import math
+    import ump as U
+    Q = 960                                 # a beat, 0.5 s
+    sec = lambda x: int(round(x * 2 * Q))
+    ev = []
+    add = lambda t, pkt: ev.append((sec(t), pkt))
+    vel = U.scale_up(96, 7, 16)
+    add(0, U.m2_program(0, 0, 0))
+    add(0, U.m2_program(0, 1, 73))
+    add(0, U.m2_cc(0, 0, 7, U.scale_up(100, 7, 32)))
+    for n in range(128):
+        add(0, U.m2_per_note_ctrl(0, 0, n, U.RPNC_PITCH, U.semitones_to_q(n, 25)))
+    for n in (60, 64, 67):                  # the third settles, root and fifth held
+        add(0.02, U.m2_note_on(0, 0, n, vel))
+        add(3.0, U.m2_note_off(0, 0, n, vel))
+    for i in range(17):
+        add(1.0 + i / 16.0, U.m2_per_note_ctrl(0, 0, 64, U.RPNC_PITCH, U.semitones_to_q(64 - 0.1369 * i / 16.0, 25)))
+    add(3.5, U.m2_per_note_ctrl(0, 0, 64, U.RPNC_PITCH, U.semitones_to_q(64, 25)))
+    for n, p in ((60, 60.0), (64, 64 - 0.1369), (67, 67 + 0.01955)):    # the just chord, each its own
+        add(4.0, U.m2_note_on(0, 0, n, vel, attr_type=3, attr=U.semitones_to_q(p, 9)))
+        add(6.0, U.m2_note_off(0, 0, n, vel))
+    add(6.9, U.m2_rpn(0, 1, 0, 7, U.semitones_to_q(1.0, 25)))     # per-note bend range: 1 semitone
+    add(7.0, U.m2_note_on(0, 1, 72, vel))
+    for i in range(96):                     # its own wobble, 5 Hz, half its range
+        b = 0.5 * math.sin(2 * math.pi * 5.0 * i / 32.0)
+        add(7.25 + i / 32.0, U.m2_per_note_bend(0, 1, 72, max(0, min(0xFFFFFFFF, int(2 ** 31 + b * 2 ** 31)))))
+    for i in range(17):                     # ...under the wheel rising a quarter of its way
+        add(8.0 + i / 16.0, U.m2_pitch_bend(0, 1, U.scale_up(8192 + 128 * i, 14, 32)))
+    add(10.0, U.m2_note_off(0, 1, 72, vel))
+    add(10.2, U.m2_per_note_ctrl(0, 0, 62, U.RPNC_PITCH, U.semitones_to_q(62.5, 25)))
+    add(10.5, U.m2_note_on(0, 0, 62, vel))  # a quarter-tone D...
+    add(11.5, U.m2_per_note_mgmt(0, 0, 62, reset=True))     # ...back to the tuner's
+    add(12.5, U.m2_note_off(0, 0, 62, vel))
+    ev.sort(key=lambda e: e[0])
+    return ev
+
+
+def save_m2(name, ev):
+    import ump as U
+    U.write_clip(os.path.join(MIDI, name + ".midi2"), ev, tpq=960)
+
+
+M2_MAKERS = {"m2_pernote": m2_pernote}
+# MIDI 1.0 fixtures as MIDI 2.0 (ump.midi1_to_clip): (source, name, raw UMP)
+M2_CONVERTED = (("gsvsense", "m2_gsvsense", False), ("mpe_zone", "m2_mpe_zone_raw", True))
+
 MAKERS = {"cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
           "mpe_zone": mpe_zone}
 
@@ -394,6 +448,16 @@ def main(argv):
         if not want or name in want:
             fn().save(os.path.join(MIDI, name + ".mid"))
             print(name)
+    for name, fn in M2_MAKERS.items():
+        if not want or name in want:
+            save_m2(name, fn())
+            print(name + ".midi2")
+    for src, name, raw in M2_CONVERTED:
+        if not want or name in want:
+            import ump as U
+            U.midi1_to_clip(mido.MidiFile(os.path.join(MIDI, src + ".mid")), os.path.join(MIDI, name + ".midi2"),
+                            raw=raw)
+            print(name + ".midi2")
     os.makedirs(os.path.join(MIDI, "mpe"), exist_ok=True)
     for name, ex in MPE_VARIANTS.items():
         if not want or name in want or "mpe" in want:

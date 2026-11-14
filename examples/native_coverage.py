@@ -106,8 +106,12 @@ TASKS = [
                   "variants (tests/live), each effect measured (effects.py mpe_file); the corpus 167/167"),
     ("GM1", False, "Live: MPE in nvlive (live._mpe_route: the zones, the pressure and CC74 a member and its "
                    "manager combine, a part on the manager's channel playing the zone, legato and portamento by zone)"),
-    ("GM2", False, "Files: MIDI 2.0 (ump.py: a Clip File or raw UMP) -- the reader, per-note pitch (7.9, 7.25), "
-                   "per-note bend and its range, per-note management; native reads Standard MIDI Files only"),
+    ("GM2", False, "Files: MIDI 2.0 (ump.py: a Clip File or raw UMP) -- done: the reader (both forms, the slots' "
+                   "own seconds, groups 1-2), per-note pitch (Pitch 7.9 on a Note On, 7.25, per-note bend and its "
+                   "range, per-note management's reset; _PN_AT's rows among MPE's) -- nvrender identical on "
+                   "m2_pernote and converted fixtures (tests/live midi2_files), each effect measured (m2_file); "
+                   "open: MIDI 2.0's own resolution (a value MIDI 1.0 has no number for: refused, -9, as the "
+                   "demo's 32-bit swell), groups past the second, per-note pitch beside an organ's wind rows"),
     ("GM2", False, "Live: MIDI 2.0 in nvlive (live._one_m2: the per-note messages; a MIDI 1.0 keyboard bridged, "
                    "live --midi2) -- nvlive parses MIDI 1.0 bytes only"),
     ("GM1", True, "Files: a class's own distance and gestures -- reverb_distance, its own chorus pedal "

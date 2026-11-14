@@ -220,6 +220,49 @@ def mpe_file(E, logs):
     E.expect("file: the manager's volume on its members", d2 < -1.5, "%+.1f dB" % d2)
 
 
+def peak_hz(x, a, b, lo, hi, sr=SR):
+    """The strongest peak in [lo, hi] Hz over a..b, to a fraction of a cent
+    (zero-padded, the peak's parabola on log magnitudes)."""
+    m = np.asarray(x, np.float64)
+    m = m.mean(1) if m.ndim > 1 else m
+    w = m[int(a * sr):int(b * sr)]
+    n = 1 << 20
+    s = np.abs(np.fft.rfft(w * np.hanning(len(w)), n))
+    f = np.fft.rfftfreq(n, 1.0 / sr)
+    idx = np.where((f > lo) & (f < hi))[0]
+    q = idx[np.argmax(s[idx])]
+    y0, y1, y2 = np.log(s[q - 1:q + 2] + 1e-30)
+    return float(f[q] + (y0 - y2) / (2.0 * (y0 - 2.0 * y1 + y2)) * (f[1] - f[0]))
+
+
+def cents(f, ref):
+    return 1200.0 * np.log2(f / ref)
+
+
+def m2_file(E, logs):
+    """MIDI 2.0's per-note pitch (m2_pernote.midi2), in the file render (at
+    its own rate, 44.1 kHz) -- nvrender's is identical to it (checks.py
+    midi2_files)."""
+    sr, x = render_py(os.path.join(MIDI, "m2_pernote.midi2"), os.path.join(logs, "m2.wav"))
+    e_et = 440.0 * 2 ** ((64 - 69) / 12.0)
+    e0, e1 = peak_hz(x, 0.3, 0.95, 315, 340, sr), peak_hz(x, 2.2, 2.95, 315, 340, sr)
+    E.expect("file: Pitch 7.25's table, the E at 12-TET", abs(cents(e0, e_et)) < 1.0, "%+.2f cents" % cents(e0, e_et))
+    E.expect("file: the third alone settles to the just 5:4 (-13.69 cents)", abs(cents(e1, e0) + 13.69) < 1.0,
+             "%+.2f cents" % cents(e1, e0))
+    # (each against the same key in the first chord, at 12-TET: a piano's
+    # unison strings bias a peak's reading a cent or two, key by key)
+    ej, gj = peak_hz(x, 4.3, 5.9, 315, 340, sr), peak_hz(x, 4.3, 5.9, 380, 405, sr)
+    g0 = peak_hz(x, 0.3, 0.95, 380, 405, sr)
+    E.expect("file: Pitch 7.9 on each Note On: the just chord's E and G", abs(cents(ej, e0) + 13.69) < 1.0
+             and abs(cents(gj, g0) - 1.955) < 1.0, "E %+.2f, G %+.2f cents" % (cents(ej, e0), cents(gj, g0)))
+    w = pitch_cents(x, 7.3, 7.95, sr, lo=480, hi=560)
+    E.expect("file: the flute's own per-note bend, half its 1-semitone range", w > 70.0, "%.0f cents swing" % w)
+    d_et = 440.0 * 2 ** ((62 - 69) / 12.0)
+    dq, dr = peak_hz(x, 10.7, 11.45, 280, 310, sr), peak_hz(x, 11.7, 12.45, 280, 310, sr)
+    E.expect("file: a quarter-tone D (Pitch 7.25 62.5), then reset to the tuner's", abs(cents(dq, d_et) - 50.0) < 2.0
+             and abs(cents(dr, d_et)) < 10.0, "%+.1f, then %+.1f cents" % (cents(dq, d_et), cents(dr, d_et)))
+
+
 def mpe_live(E, logs):
     py, nv, last = live_pair(os.path.join(MIDI, "mpe_zone.mid"), 4, ["--programs"] + A440, logs, "mpe")
     print("  (mpe_zone live: %s)" % last)
@@ -294,7 +337,7 @@ def cmx_live_fx(E, logs):
 
 
 ALL = [("rx_file", rx_file), ("cmx_live", cmx_live_fx), ("user_drums_live", user_drums_live), ("drum_delay_live", drum_delay_live), ("rhythm_live", rhythm_live), ("drums_live", drums_live), ("vsense_live", vsense_live),
-       ("mpe_file", mpe_file), ("mpe_live", mpe_live)]
+       ("mpe_file", mpe_file), ("m2_file", m2_file), ("mpe_live", mpe_live)]
 
 
 def main(argv):
