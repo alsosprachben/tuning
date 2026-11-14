@@ -561,10 +561,14 @@ struct MidiIns {
     std::vector<std::pair<std::string, std::string>> want, open;
     std::atomic<int> gen{0};
     std::string err;                            // (the last that would not open, or went away)
+    // ...and those unplugged while wanted (path, name): looked for again,
+    // by name, until each is back -- the path may not be its old one
+    std::vector<std::pair<std::string, std::string>> lost;
     void set(const std::vector<std::pair<std::string, std::string>> &w)
     {
         std::lock_guard<std::mutex> lk(mu);
         want = w;
+        lost.clear();                           // (chosen again: none to look for)
         gen++;
     }
 };
@@ -582,6 +586,12 @@ inline void midi_reader_ins(MidiIns *ins, std::mutex *mu, std::vector<Midi> *q)
     std::map<std::string, In> open;
     int seen = -1;
     uint8_t buf[256];
+    auto last_look = std::chrono::steady_clock::now();
+    auto trim = [](std::string x) {
+        while (!x.empty() && (x.back() == '\n' || x.back() == ' ' || x.back() == '\r'))
+            x.pop_back();
+        return x;
+    };
     auto publish = [&]() {
         std::vector<std::pair<std::string, std::string>> o;
         for (auto &kv : open)
@@ -590,6 +600,29 @@ inline void midi_reader_ins(MidiIns *ins, std::mutex *mu, std::vector<Midi> *q)
         ins->open = o;
     };
     while (!g_stop) {
+        // AN INPUT PLUGGED IN AGAIN (unplugged while wanted): a look at the
+        // devices a second, each lost one opened again where its name is back
+        if (std::chrono::steady_clock::now() - last_look > std::chrono::seconds(1)) {
+            last_look = std::chrono::steady_clock::now();
+            std::vector<std::pair<std::string, std::string>> lost;
+            {
+                std::lock_guard<std::mutex> lk(ins->mu);
+                lost = ins->lost;
+            }
+            if (!lost.empty()) {
+                const auto ds = midi_devices();
+                std::lock_guard<std::mutex> lk(ins->mu);
+                for (const auto &l : lost)
+                    for (const auto &d : ds)
+                        if (trim(d.second) == trim(l.second) || (d.first == l.first && trim(l.second) == l.first)) {
+                            ins->want.push_back(std::make_pair(d.first, l.second));
+                            ins->lost.erase(std::remove(ins->lost.begin(), ins->lost.end(), l), ins->lost.end());
+                            ins->err = trim(l.second) + " back";
+                            ins->gen++;
+                            break;
+                        }
+            }
+        }
         if (ins->gen.load() != seen) {
             std::vector<std::pair<std::string, std::string>> w;
             {
@@ -634,10 +667,11 @@ inline void midi_reader_ins(MidiIns *ins, std::mutex *mu, std::vector<Midi> *q)
                 });
                 ++it;
             } else if (n < 0 && errno != EAGAIN && errno != EINTR) {
-                {                                       // (unplugged: gone, and no longer wanted)
+                {                                       // (unplugged: gone -- looked for again, by name)
                     std::lock_guard<std::mutex> lk(ins->mu);
                     ins->err = it->second.name + " went away";
                     const std::string path = it->first;
+                    ins->lost.push_back(std::make_pair(path, it->second.name));
                     ins->want.erase(std::remove_if(ins->want.begin(), ins->want.end(),
                                                    [&](const std::pair<std::string, std::string> &x) {
                                                        return x.first == path;
