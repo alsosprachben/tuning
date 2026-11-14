@@ -109,6 +109,46 @@ int nv_host_building(nv_host *h);
    what it is ("program 19 Church Organ"; cap bytes of it into name). 1 while
    one builds, 0 none */
 int nv_host_progress(nv_host *h, long *done, long *total, char *name, int cap);
+/* ---- THE PARTS (livetui's PARTS pane; live.Part): each part a row, in order --
+   its patch, channel (-1 every one), keys, transpose, level, mute, solo (0
+   none, 1 this one soloed, 2 another is), fixed touch */
+typedef struct {
+    int row, program, variation, drums;
+    int channel, lo, hi, transpose;
+    double level_db;
+    int muted, solo, touch_fixed;
+    char name[64];
+} nv_host_partinfo;
+/* how many parts; up to cap of them copied into out (NULL: the count) */
+int nv_host_parts(nv_host *h, nv_host_partinfo *out, int cap);
+/* a part's channel, keys, transpose, level and mute (live's cheap edits) */
+void nv_host_part_set(nv_host *h, int row, int channel, int lo, int hi, int transpose, double level_db, int muted);
+/* a part's patch (nv_host_patches' pick), built on the builder */
+void nv_host_part_pick(nv_host *h, int row, int pick);
+/* LAYER (a copy over the same keys), SPLIT (its range halved into two),
+   DELETE: 0, or -1 and why (cap bytes of it) */
+int nv_host_part_layer(nv_host *h, int row);
+int nv_host_part_split(nv_host *h, int row, char *why, int cap);
+int nv_host_part_delete(nv_host *h, int row, char *why, int cap);
+/* solo (again on a soloed part: out of it), fixed touch (1) or velocity (0) */
+void nv_host_part_solo(nv_host *h, int row);
+void nv_host_part_touch(nv_host *h, int row, int fixed);
+
+/* ---- PRESETS AND THE SESSION (live's presets.json and session.json, the
+   same files nvlive and live.py keep -- presets.json beside the session) ----
+   the session's path (none set: no presets) */
+void nv_host_set_session_path(nv_host *h, const char *path);
+/* the presets' names ('\n'-separated, cap bytes of them): the whole length */
+int nv_host_presets(nv_host *h, char *names, int cap);
+/* the whole setup saved under name (live.save_preset), or loaded
+   (live.apply_preset: the parts built again on the builder): 0, or -1; what
+   happened in msg */
+int nv_host_preset_save(nv_host *h, const char *name, char *msg, int cap);
+int nv_host_preset_load(nv_host *h, const char *name, char *msg, int cap);
+/* the session read and applied (an app's start: 0, -1 none), written (its quit) */
+int nv_host_session_load(nv_host *h);
+int nv_host_session_save(nv_host *h);
+
 /* the live part it plays (native.py's nv_part_*: a check reads its slab) */
 void *nv_host_part(nv_host *h);
 

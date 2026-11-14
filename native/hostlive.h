@@ -842,6 +842,10 @@ inline std::string opt(int argc, char **argv, const char *name, const char *def)
 // THE LIVE HOST (host step 2a): main()'s locals its members, its body
 // run() -- behaviour unchanged; the split into open, render and the
 // devices follows
+// a session's route (live.Route.to_dict) as nv_rt_add's seven: false for one
+// nvlive cannot take (native/hostsession.cpp)
+bool route_args(const sess::J &d, std::array<int, 7> &a);
+
 struct nv_host {
     struct PartAt {
         int pi, channel;

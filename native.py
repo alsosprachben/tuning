@@ -414,7 +414,7 @@ def _load():
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp', 'gpu_metal.mm',
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
                                                        'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'efxrev.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
-                                                       'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostint.h', 'hostlive.h', 'host.h', 'livebus.cpp')]
+                                                       'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'hostint.h', 'hostlive.h', 'host.h', 'livebus.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c'), os.path.join(HERE, 'tapkernel.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
@@ -446,7 +446,7 @@ def _load():
                  # roomtail.py's late field (live.room_irs's), drawn natively; the
                  # live host (host.h: nvlive's, as a library); a part's own bus live
                  # (live.LiveBus: efxbus's processors, block by block)
-                 + [(f[:-4], cxx, nat(f)) for f in ('roomtail.cpp', 'host.cpp', 'livebus.cpp')])
+                 + [(f[:-4], cxx, nat(f)) for f in ('roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'livebus.cpp')])
         objs = _build_objects(units)
         try:
             subprocess.check_call(_TC.cmd(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl']))
