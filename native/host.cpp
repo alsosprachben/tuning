@@ -1791,6 +1791,7 @@ void nv_host::render_block(long long n0, float *buf, bool step)
     }
     for (auto &f : todo)
         f(n0);
+    const long long t_ev = rt::now_ns();        // (the onset's split: the queued work, the events, the step)
     std::vector<Midi> evs;
     {
         std::unique_lock<std::mutex> lk(mu, std::defer_lock);
@@ -2029,7 +2030,11 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         gs_want = false;
         bcv.notify_one();
     }
+    const long long t_blk = rt::now_ns();
     nv_part_block(part, n0, BLK);
+    last_split[0] = (t_ev - t0) / 1e6;
+    last_split[1] = (t_blk - t_ev) / 1e6;
+    last_split[2] = (rt::now_ns() - t_blk) / 1e6;
     if (step) {                         // (the tail installed after the block's events, as live's post)
         if (step_room_go)
             nv_part_room_set(part, step_room, BLK);
@@ -2132,6 +2137,8 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         pend_st[1] = st[4];
         pend_st[2] = st[5];
         pend_st[3] = st[6];
+        for (int i = 0; i < 3; i++)
+            pend_split[i] = last_split[i];
     }
     pend_max = std::max(pend_max, ms);
     pend_sum += ms;
@@ -2148,6 +2155,8 @@ void nv_host::render_block(long long n0, float *buf, bool step)
             snap_out = pend_out;
             for (int i = 0; i < 4; i++)
                 snap_st[i] = pend_st[i];
+            for (int i = 0; i < 3; i++)
+                snap_split[i] = pend_split[i];
         }
         snap.ms_max = std::max(snap.ms_max, pend_max);
         snap.ms_sum += pend_sum;
@@ -3286,6 +3295,8 @@ void nv_host_snapshot(nv_host *h, nv_host_snap *s)
     s->max_gpu = h->snap_st[1];
     s->max_gpu_setup_ms = h->snap_st[2];
     s->max_gpu_samples_ms = h->snap_st[3];
+    for (int i = 0; i < 3; i++)
+        s->max_split_ms[i] = h->snap_split[i];
     s->ms_mean = p.ms_n ? p.ms_sum / p.ms_n : 0.0;
     s->budget_ms = h->budget;
     s->peak[0] = p.peak[0];

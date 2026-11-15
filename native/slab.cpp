@@ -599,6 +599,7 @@ struct Slab {
         ls_norm.assign(cap, 1.0f); ls_ph.assign(cap, 0.0f); ls_sep.assign(cap, 0.0f); ls_aL.assign(cap, 0.0f);
         ls_aR.assign(cap, 0.0f);
         busy.assign(cap, 0);
+        mark.assign(cap, 0);
         for (long i = 0; i < cap; i++)
             free.push_back(i);
         for (int c = 0; c < 256; c++)
@@ -748,7 +749,7 @@ struct Slab {
     // onset, its end where it has one, its retiring time; its phases stay
     void retime(const std::vector<long> &idx, long long d)
     {
-        std::set<long> in(idx.begin(), idx.end());
+        marked(idx, 1);
         for (long s : idx) {
             i8[0][s] += d;
             if (i8[1][s] != IDLE)
@@ -756,10 +757,11 @@ struct Slab {
         }
         for (auto &r : retiring)
             for (long s : r.first)
-                if (in.count(s)) {
+                if (mark[s]) {
                     r.second += d;
                     break;
                 }
+        marked(idx, 0);
     }
 
     // stamp_cols with a cached template (its own columns, hrel, dur)
@@ -1325,16 +1327,27 @@ struct Slab {
     // live.Slab.retime_off: a released note's end, d samples later
     void retime_off(const std::vector<long> &idx, long long d)
     {
-        std::set<long> in(idx.begin(), idx.end());
+        marked(idx, 1);
         for (long s : idx)
             if (i8[1][s] != IDLE)
                 i8[1][s] += d;
         for (auto &r : retiring)
             for (long s : r.first)
-                if (in.count(s)) {
+                if (mark[s]) {
                     r.second += d;
                     break;
                 }
+        marked(idx, 0);
+    }
+
+    // SLOTS MARKED, for a membership test over them (mark[s]): a std::set
+    // here was a tree node allocated per slot, thousands at a staccato
+    // chord's release -- on the audio thread. The same answers, no allocation
+    std::vector<char> mark;
+    void marked(const std::vector<long> &idx, char v)
+    {
+        for (long s : idx)
+            mark[s] = v;
     }
 
     // live.Slab._own: the slots idx are key's
@@ -1361,9 +1374,9 @@ struct Slab {
         for (long s : idx)
             if (owner[s] >= 0)
                 ks.push_back(owner[s]);
-        std::set<long> gone(idx.begin(), idx.end());
         for (long s : idx)
             owner[s] = -1;
+        marked(idx, 1);
         std::sort(ks.begin(), ks.end());
         ks.erase(std::unique(ks.begin(), ks.end()), ks.end());
         for (long long k : ks) {
@@ -1373,11 +1386,12 @@ struct Slab {
             std::vector<long> &lst = live[li].second;
             std::vector<long> kept;
             for (long s : lst)
-                if (!gone.count(s))
+                if (!mark[s])
                     kept.push_back(s);
             if (kept.size() != lst.size())
                 lst.swap(kept);
         }
+        marked(idx, 0);
     }
 
     // Slab.reap: slots whose release has rung out, freed

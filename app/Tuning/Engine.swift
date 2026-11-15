@@ -154,7 +154,15 @@ final class Engine: ObservableObject {
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.poll() }
                 // TUNING_TEST_NOTE: a note held from 2 s to 14 s, by itself (a test with no one playing)
                 // (=chord: six notes, closer to playing)
-                if let t = ProcessInfo.processInfo.environment["TUNING_TEST_NOTE"] {
+                // (=stab: a ten-note chord punched staccato, four times a second, 2 s to 14 s)
+                if ProcessInfo.processInfo.environment["TUNING_TEST_NOTE"] == "stab" {
+                    let keys: [UInt8] = [36, 43, 48, 52, 55, 60, 64, 67, 72, 76]
+                    for k in 0..<48 {
+                        let t0 = 2.0 + Double(k) * 0.25
+                        DispatchQueue.main.asyncAfter(deadline: .now() + t0) { keys.forEach { self.midi([0x90, $0, 110], at: 0) } }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + t0 + 0.09) { keys.forEach { self.midi([0x80, $0, 0], at: 0) } }
+                    }
+                } else if let t = ProcessInfo.processInfo.environment["TUNING_TEST_NOTE"] {
                     let keys: [UInt8] = t == "chord" ? [48, 55, 60, 64, 67, 72] : [60]
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { keys.forEach { self.midi([0x90, $0, 100], at: 0) } }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 14) { keys.forEach { self.midi([0x80, $0, 0], at: 0) } }

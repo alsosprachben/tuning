@@ -71,6 +71,8 @@ typedef struct {
                                                queued work, the MIDI, the slab's step), the output */
     double max_busy, max_gpu, max_gpu_setup_ms, max_gpu_samples_ms;  /* ...its busy slots, on the GPU (1),
                                                the GPU's setup and samples times */
+    double max_split_ms[3];                 /* ...before its output: the queued work, the events, the
+                                               engine's step (notes started, ended) */
 } nv_host_snap;
 void nv_host_snapshot(nv_host *h, nv_host_snap *s);
 /* what the builder has to say (a build's time, a refusal), oldest first: its

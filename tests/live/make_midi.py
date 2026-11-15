@@ -536,7 +536,22 @@ def dense_pedal():
     return mid
 
 
-MAKERS = {"dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
+def stab_chords():
+    """THICK STACCATO PUNCHES, for the note-on step's cost: a ten-note chord
+    struck four times a second at forte for 12 s, each held 90 ms -- every
+    stab starting thousands of partials in one block (Ben: "a thick chord a
+    bunch in staccato punches" went over budget in the app)."""
+    mid, tr = one_track()
+    keys = [36, 43, 48, 52, 55, 60, 64, 67, 72, 76]
+    for i in range(48):
+        for j, k in enumerate(keys):
+            tr.append(mido.Message('note_on', channel=0, note=k, velocity=110, time=(10 if i == 0 else 154) if j == 0 else 0))
+        for j, k in enumerate(keys):
+            tr.append(mido.Message('note_off', channel=0, note=k, velocity=0, time=86 if j == 0 else 0))
+    return mid
+
+
+MAKERS = {"stab_chords": stab_chords, "dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
           "mpe_zone": mpe_zone}
 
 
