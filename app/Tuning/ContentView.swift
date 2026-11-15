@@ -95,6 +95,10 @@ struct PartsPane: View {
             if let p = engine.parts.first(where: { $0.row == engine.selectedPart }) {
                 PartEditor(part: p).padding(8)
             }
+            if !engine.stopNames.isEmpty {
+                Divider()
+                StopsPane().padding(8)
+            }
         }
     }
 }
@@ -180,6 +184,55 @@ struct PartEditor: View {
     }
 }
 
+// ---- AN ORGAN's STOPS (the first part's: livetui's stop rows) ----
+
+struct StopsPane: View {
+    @EnvironmentObject var engine: Engine
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Stops").font(.headline)
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(engine.stopRows.enumerated()), id: \.offset) { _, row in
+                        // a row's groups, each its stops side by side
+                        FlowRow(groups: row)
+                    }
+                }
+            }
+            .frame(maxHeight: 220)
+        }
+    }
+}
+
+struct FlowRow: View {
+    @EnvironmentObject var engine: Engine
+    let groups: [[Int]]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(groups.enumerated()), id: \.offset) { _, g in
+                HStack(spacing: 4) {
+                    ForEach(g, id: \.self) { r in
+                        let on = r < engine.drawn.count && engine.drawn[r]
+                        Button(action: { engine.toggleStop(r) }) {
+                            Text(r < engine.stopNames.count ? engine.stopNames[r] : "\(r)")
+                                .font(.caption)
+                                .lineLimit(1)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(RoundedRectangle(cornerRadius: 4)
+                                    .fill(on ? Color.accentColor.opacity(0.85) : Color.gray.opacity(0.18)))
+                                .foregroundStyle(on ? Color.white : Color.primary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ---- PRESETS, INPUTS, OUTPUT ----
 
 struct SidePane: View {
@@ -251,6 +304,10 @@ struct Header: View {
                 .monospacedDigit()
                 .foregroundStyle(meters.load > 0.8 ? .red : .secondary)
                 .help("the block's mean time over its budget")
+            Text(String(format: "slowest %.1f ms  over %lld", meters.slowestMS, meters.over))
+                .monospacedDigit()
+                .foregroundStyle(meters.over > 0 ? .orange : .secondary)
+                .help("the slowest block in the last second, and how many blocks have run past their budget (2.67 ms each) since the start")
             Button("Panic", action: panic)
                 .keyboardShortcut(".", modifiers: .command)
         }

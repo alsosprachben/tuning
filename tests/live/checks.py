@@ -124,6 +124,7 @@ CHECKS = [
     ("pull", "../tests/live/pull_check.py", [], {}),
     ("pull_dense", "../tests/live/pull_check.py", ["@dense_pedal.mid", "12"], {}),
     ("parts_presets", "../tests/live/parts_presets_check.py", [], {}),
+    ("stops", "../tests/live/stops_check.py", [], {}),
     ("user_drums_live", "nvlive_check.py", ["@userdrums.mid", "4", "--drums", "--program=0", "--programs"], {}),
     ("user_set_part", "nvlive_check.py", ["@userdrums.mid", "4", "--drums", "--program=64"], {}),
     ("drum_delay", "nvlive_check.py", ["@drumdelay.mid", "5", "--drums", "--program=0", "--programs"], {}),

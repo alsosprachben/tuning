@@ -47,6 +47,9 @@ final class MidiIn: ObservableObject {
 
     func refresh() {
         sources = Self.list()
+        if ProcessInfo.processInfo.environment["TUNING_DEBUG"] != nil {
+            FileHandle.standardError.write("midi sources: \(sources.map { $0.name }), on: \(on)\n".data(using: .utf8)!)
+        }
         for i in 0..<MIDIGetNumberOfSources() {
             let e = MIDIGetSource(i)
             guard let s = sources.first(where: { src in

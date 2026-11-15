@@ -30,6 +30,8 @@ final class Meters: ObservableObject {
     @Published var peakR: Float = 0
     @Published var load = 0.0                    // the block's mean time over its budget
     @Published var building = ""
+    @Published var over: Int64 = 0               // blocks past their budget since the start
+    @Published var slowestMS = 0.0               // the slowest block in the last second
 }
 
 // one part as the window shows it (host.h's nv_host_partinfo)
@@ -55,10 +57,16 @@ final class Engine: ObservableObject {
     @Published var selectedPart: Int32 = 0
     @Published var presets: [String] = []
     @Published var message = ""
-    @Published var bufferFrames: Int = UserDefaults.standard.object(forKey: "bufferFrames") as? Int ?? 128 {
+    @Published var bufferFrames: Int = UserDefaults.standard.object(forKey: "bufferFrames") as? Int ?? 256 {
         didSet { UserDefaults.standard.set(bufferFrames, forKey: "bufferFrames"); applyBuffer() }
     }
     @Published var latencyMS = 0.0
+    // THE FIRST PART's ORGAN (livetui's stop rows): its ranks' names, the
+    // panel's rows (each a list of groups, each group's ranks), what is drawn
+    @Published var stopNames: [String] = []
+    @Published var stopRows: [[[Int]]] = []
+    @Published var drawn: [Bool] = []
+    private var stopsProgram: Int32 = -2
     // the session (and presets.json beside it): nvlive's on this Mac by
     // default, so the two share presets
     let sessionPath = (UserDefaults.standard.string(forKey: "session") ?? "~/repos/tuning-port/session.json").expandingTildeInPath
@@ -160,6 +168,14 @@ final class Engine: ObservableObject {
         audio.attach(src)
         audio.connect(src, to: audio.mainMixerNode, format: fmt)
         applyBuffer()
+        // the device changed under it (another output chosen, its rate or
+        // buffer): AVAudioEngine has stopped -- the buffer asked again, started
+        NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: audio,
+                                               queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.applyBuffer()
+            if !self.audio.isRunning { try? self.audio.start() }
+        }
         do {
             try audio.start()
             status = "playing"
@@ -172,14 +188,31 @@ final class Engine: ObservableObject {
     // A MIDI message at its CoreMIDI time (0: now), placed a buffer after
     // that moment in the engine's timeline -- each message keeps its distance
     // from the last, however many blocks a buffer holds
+    let debug = ProcessInfo.processInfo.environment["TUNING_DEBUG"] != nil
+
     func midi(_ bytes: [UInt8], at stamp: UInt64) {
-        guard let h = host else { return }
+        guard let h = host else {
+            if debug { FileHandle.standardError.write("midi before the engine opened: \(bytes)\n".data(using: .utf8)!) }
+            return
+        }
         let c = clock.withLock { $0 }
         var frame: Int64 = 0
         if c.hostTime != 0 {
             let now = stamp != 0 ? stamp : mach_absolute_time()
             let dt = (Double(now) - Double(c.hostTime)) / ticksPerSecond
-            frame = c.frame + c.frames + Int64((dt * rate).rounded())
+            // the clock gone stale (no buffer asked for a while: the audio
+            // stopped or stalled) -- the next block, not a place it predicts;
+            // and never more than two buffers ahead, so nothing piles up
+            let stale = (Double(mach_absolute_time()) - Double(c.hostTime)) / ticksPerSecond > 4.0 * Double(c.frames) / rate + 0.05
+            if !stale {
+                frame = min(c.frame + c.frames + Int64((dt * rate).rounded()), c.frame + 3 * c.frames)
+            }
+        }
+        if debug {
+            let line = String(format: "midi %@ at frame %lld (handed out %lld, buffer %lld, stamp %llu, buffer's host time %llu)\n",
+                              bytes.map { String(format: "%02X", $0) }.joined(separator: " "), frame, c.frame, c.frames,
+                              stamp, c.hostTime)
+            FileHandle.standardError.write(line.data(using: .utf8)!)
         }
         bytes.withUnsafeBufferPointer { nv_host_midi_at(h, $0.baseAddress, Int32($0.count), frame) }
     }
@@ -194,8 +227,18 @@ final class Engine: ObservableObject {
     // ---- THE DEVICE's BUFFER: its frames asked of the output (a block's
     // 128 by default: AVAudioEngine's own 512 was ~10 ms more latency), the
     // latency it gives read back ----
+    // (AVAudioEngine stops when its device is reconfigured under it -- a
+    // buffer size set while it ran left it silent, the MIDI meanwhile placed
+    // by a clock gone stale: so it is stopped, set, started again)
     private func applyBuffer() {
         guard let au = audio.outputNode.audioUnit else { return }
+        let was = audio.isRunning
+        if was { audio.stop() }
+        defer {
+            if was {
+                do { try audio.start() } catch { status = "no audio: \(error.localizedDescription)" }
+            }
+        }
         var frames = UInt32(bufferFrames)
         AudioUnitSetProperty(au, kAudioDevicePropertyBufferFrameSize, kAudioUnitScope_Global, 0, &frames,
                              UInt32(MemoryLayout<UInt32>.size))
@@ -218,11 +261,52 @@ final class Engine: ObservableObject {
                     name: withUnsafeBytes(of: p.name) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) })
         }
         if rows != parts { parts = rows }
+        let organ = rows.first.map { $0.drums ? -1 : $0.program } ?? -1
+        if organ != stopsProgram { stopsProgram = organ; readStopLayout(h, organ) }
+        readDrawn(h)
         if selectedPart >= Int32(parts.count) { selectedPart = max(0, Int32(parts.count) - 1) }
         if let sel = parts.first(where: { $0.row == selectedPart }) {
             let id = patches.first { $0.program == sel.program && $0.variation == sel.variation && $0.drums == sel.drums }?.id ?? -1
             if id != current { current = id }
         }
+    }
+
+    private func readStopLayout(_ h: OpaquePointer, _ program: Int32) {
+        guard program >= 0 else { stopNames = []; stopRows = []; drawn = []; return }
+        var buf = [CChar](repeating: 0, count: 16384)
+        let n = nv_host_stop_names(h, program, &buf, 16384)
+        stopNames = n > 0 ? String(cString: buf).split(separator: "\n", omittingEmptySubsequences: false).map(String.init) : []
+        let k = nv_host_stop_rows(h, program, nil, 0)
+        var ints = [Int32](repeating: 0, count: Int(max(k, 0)))
+        if k > 0 { nv_host_stop_rows(h, program, &ints, k) }
+        var rows: [[[Int]]] = [], row: [[Int]] = [], group: [Int] = []
+        for x in ints {
+            if x == -1 {
+                if !group.isEmpty { row.append(group) }
+                if !row.isEmpty { rows.append(row) }
+                row = []; group = []
+            } else if x == -2 {
+                if !group.isEmpty { row.append(group) }
+                group = []
+            } else {
+                group.append(Int(x))
+            }
+        }
+        stopRows = rows
+    }
+
+    private func readDrawn(_ h: OpaquePointer) {
+        guard !stopNames.isEmpty else { if !drawn.isEmpty { drawn = [] }; return }
+        var d = [CChar](repeating: 0, count: stopNames.count)
+        let n = nv_host_drawn(h, &d, Int32(d.count))
+        let now = (0..<stopNames.count).map { $0 < Int(n) && d[$0] != 0 }
+        if now != drawn { drawn = now }
+    }
+
+    func toggleStop(_ rank: Int) {
+        guard let h = host else { return }
+        nv_host_toggle_stop(h, Int32(rank))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.readDrawn(h) }
     }
 
     func setPart(_ p: PartRow, channel: Int32? = nil, lo: Int32? = nil, hi: Int32? = nil, transpose: Int32? = nil,
@@ -298,6 +382,7 @@ final class Engine: ObservableObject {
     }
 
     private var pollTick = 0
+    private var slowest = 0.0
 
     private func poll() {
         guard let h = host else { return }
@@ -306,9 +391,25 @@ final class Engine: ObservableObject {
         var s = nv_host_snap()
         nv_host_snapshot(h, &s)
         let m = meters
+        if debug && pollTick % 10 == 0 {
+            FileHandle.standardError.write(String(format: "out: peak %.4f %.4f, n0 %lld, blocks %ld, load %.2f, framesOut %lld\n",
+                                                  s.peak.0, s.peak.1, s.n0, s.blocks, m.load, framesOut).data(using: .utf8)!)
+            var mb = [CChar](repeating: 0, count: 512)
+            while nv_host_message(h, &mb, 512) > 0 {
+                FileHandle.standardError.write("engine: \(String(cString: mb))\n".data(using: .utf8)!)
+            }
+        }
         m.peakL = max(s.peak.0, m.peakL * 0.7)
         m.peakR = max(s.peak.1, m.peakR * 0.7)
         m.load = s.budget_ms > 0 ? s.ms_mean / s.budget_ms : 0
+        // (blocks past their budget, and the slowest of the last second: a
+        // click matched to a number -- the engine's own, or the machine's load)
+        if m.over != s.over { m.over = s.over }
+        slowest = max(slowest, s.ms_max)
+        if pollTick % 10 == 0 {
+            m.slowestMS = slowest
+            slowest = 0
+        }
         var done = 0, total = 0
         var name = [CChar](repeating: 0, count: 128)
         if nv_host_progress(h, &done, &total, &name, 128) != 0 {

@@ -149,6 +149,17 @@ int nv_host_preset_load(nv_host *h, const char *name, char *msg, int cap);
 int nv_host_session_load(nv_host *h);
 int nv_host_session_save(nv_host *h);
 
+/* ---- AN ORGAN's STOPS (livetui's stop rows: the first part's organ) ----
+   program's ranks: how many (0 not an organ), their names '\n'-separated */
+int nv_host_stop_names(nv_host *h, int program, char *names, int cap);
+/* the panel's rows of them: rank indices, -2 a break within a row (the
+   voice's groups), -1 a row's end -- how many ints (cap of them copied) */
+int nv_host_stop_rows(nv_host *h, int program, int *out, int cap);
+/* each rank drawn (1) or not, now: how many; a rank drawn or retired
+   between two blocks */
+int nv_host_drawn(nv_host *h, char *out, int cap);
+void nv_host_toggle_stop(nv_host *h, int rank);
+
 /* the live part it plays (native.py's nv_part_*: a check reads its slab) */
 void *nv_host_part(nv_host *h);
 

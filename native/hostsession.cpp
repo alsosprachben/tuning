@@ -3,6 +3,7 @@
 // the library has them -- an app (app/, host.h's nv_host_* calls) saves and
 // loads the presets nvlive and live.py do, the same files, the same keys.
 // nvlive, the terminal client, links them from the library as before.
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -1053,6 +1054,48 @@ int nv_host_session_load(nv_host *h)
 int nv_host_session_save(nv_host *h)
 {
     return h->session_path.empty() || !h->session_save(lib_routes(h)) ? -1 : 0;
+}
+
+// AN ORGAN's STOPS (the export's LSTOP: livetui's stop rows)
+int nv_host_stop_names(nv_host *h, int program, char *names, int cap)
+{
+    if (program < 0 || program > 127)
+        return 0;
+    const auto &st = h->E.stops[program];
+    std::string all;
+    for (size_t i = 0; i < st.names.size(); i++)
+        all += (i ? "\n" : "") + st.names[i];
+    copy_out(all, names, cap);
+    return (int)st.names.size();
+}
+
+int nv_host_stop_rows(nv_host *h, int program, int *out, int cap)
+{
+    if (program < 0 || program > 127)
+        return 0;
+    const auto &st = h->E.stops[program];
+    std::vector<int> v;
+    for (size_t r = 0; r < st.rows.size(); r++) {
+        for (size_t i = 0; i < st.rows[r].size(); i++) {
+            if (r < st.breaks.size() && std::find(st.breaks[r].begin(), st.breaks[r].end(), (int)i) != st.breaks[r].end())
+                v.push_back(-2);
+            v.push_back(st.rows[r][i]);
+        }
+        v.push_back(-1);
+    }
+    for (int i = 0; out && i < cap && i < (int)v.size(); i++)
+        out[i] = v[(size_t)i];
+    return (int)v.size();
+}
+
+int nv_host_drawn(nv_host *h, char *out, int cap) { return nv_part_drawn(h->part, out, cap); }
+
+void nv_host_toggle_stop(nv_host *h, int rank)
+{
+    h->post([h, rank](long long n) {
+        h->pending_drawn_prog = -1;             // (a stop drawn by hand: a preset's no longer)
+        nv_part_toggle_stop(h->part, rank, n);
+    });
 }
 
 }  // extern "C"
