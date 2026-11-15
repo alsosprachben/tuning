@@ -752,6 +752,8 @@ final class Engine: ObservableObject {
     }
 
     private var pollTick = 0
+    private var waiting = 0, messageTick = 0
+    private var shownMessage = ""
     private var slowest = 0.0
     private var dbgMax = 0.0, dbgStep = 0.0, dbgOut = 0.0   // (TUNING_DEBUG: the second's slowest block and its split)
     private var dbgBusy = 0.0, dbgGpu = 0.0, dbgSetup = 0.0, dbgSamples = 0.0, dbgUser = 0.0, dbgSys = 0.0
@@ -797,8 +799,15 @@ final class Engine: ObservableObject {
         if nv_host_progress(h, &done, &total, &name, 128) != 0 {
             m.building = "building \(String(cString: name)) \(total > 0 ? 100 * done / total : 0)%"
         } else {
-            m.building = nv_host_building(h) > 0 ? "swapping in" : ""
+            // ("swapping in" only when something has waited three polls: a knob's
+            // read lands within a block, and the Synth tab asks five times a second)
+            waiting = nv_host_building(h) > 0 ? waiting + 1 : 0
+            let b = waiting >= 3 ? "swapping in" : ""
+            if m.building != b { m.building = b }
         }
+        // (a message shown six seconds, then gone)
+        if message != shownMessage { shownMessage = message; messageTick = pollTick }
+        if !message.isEmpty && pollTick - messageTick > 60 { message = ""; shownMessage = "" }
     }
 }
 

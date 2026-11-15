@@ -689,13 +689,14 @@ struct Header: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Text(status).font(.headline)
-            if !meters.building.isEmpty {
-                Text(meters.building).foregroundStyle(.secondary)
-            } else if !message.isEmpty {
-                Text(message).foregroundStyle(.secondary)
-            }
-            Spacer()
+            Text(status).font(.headline).lineLimit(1).fixedSize()
+            // (one line, cut short, taking what room is left: a message's length never moves the layout)
+            Text(!meters.building.isEmpty ? meters.building : message)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(-1)
             Meter(level: meters.peakL)
             Meter(level: meters.peakR)
             // (fixed widths, right-aligned: the figures changing never move the meters)
