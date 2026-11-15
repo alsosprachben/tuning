@@ -126,6 +126,7 @@ void nv_part_gs_chorus(void *h, int addr, int v);
 void nv_part_gs_delay(void *h, int addr, int v);
 int nv_part_gs_fx(void *h, int *cho, int *dly);
 void nv_room_inline(int on);
+void nv_part_gpu_depth(void *h, int depth);
 int nv_part_cmx(void *h, int ch, int *src, int *col, double *dep, int max, int *cc);
 int nv_part_chan_cc(void *h, int ch, int cc);
 void nv_part_gs_chorus_reset(void *h, int gm1);
@@ -1207,6 +1208,12 @@ struct nv_host {
     double worst;
     double budget;
     bool govern;
+    double govern_at = 1.0;                     // (--govern-at: the governor's budget, a fraction of the block's)
+    // (a cold start: nv_host_set_cold_start -- the phrase's shift, its warm-up)
+    int cold_blocks = 0;
+    long long cold_frames = 48000, phrase_shift = 0, last_midi_f = -1;
+    double warm_frac = 0.6;
+    std::atomic<long long> warm_until{-1};
     double master_now;
     std::atomic<bool> rt_on;
     std::mutex bmu;

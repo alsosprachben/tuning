@@ -11734,6 +11734,7 @@ struct Part {
         int nthr = 4;
         Table D, C, SB;
         Table D2, C2, SB2;              // the pipeline's second set (its blocks take turns)
+        Table D3, C3, SB3;              // ...and a third, at depth 2 (an app's)
     } gp;
     // PIPELINED (live.GpuRenderer, TUNING_GPU_PIPELINE): every block a block
     // late, so the CPU builds block n+1's tables while the GPU renders block
@@ -11741,13 +11742,19 @@ struct Part {
     // the GPU in its turn's tables) and the one started before it finished
     bool pipeline = false;
     int turn = 0;
+    // ITS DEPTH (nv_part_gpu_depth): blocks in flight -- 1 (live's, nvlive's:
+    // each block's result a block late), 2 (an app's on macOS: two late, the
+    // GPU given two blocks to answer in -- shared with the window's drawing it
+    // took ~4 ms; the CPU's blocks held as long, so a switch moves nothing)
+    int gpu_depth = 1;
     void *smx = nullptr;                // synth_voice_moogx (nv_part_moogx; NULL: none)
     struct GpuPend {
         int kind = 0;                   // 0 none (the first block), 1 done on the CPU, 2 on the GPU
         int slot = 0;
         bool snd = false;
         std::vector<float> L, R, SL, SR;
-    } gpend;
+    };
+    std::deque<GpuPend> gpend;
     bool on_gpu = false;                // did the last block go to the GPU
     bool gpu_off = false;               // the panel's: the CPU for every block
     bool gpu_failed_said = false;
@@ -11901,14 +11908,15 @@ struct Part {
         bool g = hi >= 0 && gp.vb && !gpu_off && act >= gp.gpu_min && frames == blk && n0 % frames == 0 && !busp;
         if (g) {
             // set up in this turn's tables and launched, not waited for
-            Table &D = turn ? gp.D2 : gp.D, &C = turn ? gp.C2 : gp.C, &SB = turn ? gp.SB2 : gp.SB;
+            Table &D = turn == 2 ? gp.D3 : turn ? gp.D2 : gp.D, &C = turn == 2 ? gp.C3 : turn ? gp.C2 : gp.C,
+                  &SB = turn == 2 ? gp.SB3 : turn ? gp.SB2 : gp.SB;
             long mg = 0;
             long nact = setup_gpu(n0, blk, D, C, SB, cur.snd, mg);
             if (nv_cl_launch(gp.cl, turn, D.p, D.bytes(), C.p, C.bytes(), SB.p, SB.bytes(), (int)nact, n0,
                              (int)frames, cur.snd ? 1 : 0, (int)mg) == 0) {
                 cur.kind = 2;
                 cur.slot = turn;
-                turn ^= 1;
+                turn = (turn + 1) % (gpu_depth + 1);
                 S.levels_advance();         // knobs_advance
                 S.knobs_advance();
             } else {
@@ -11932,8 +11940,13 @@ struct Part {
                        cur.snd ? cur.SR.data() : nullptr, sv, sx, sd, blk, master_gain);
         }
         on_gpu = g;
-        GpuPend prev = std::move(gpend);
-        gpend = std::move(cur);
+        // the one started gpu_depth blocks before it, finished (none yet: silence)
+        gpend.push_back(std::move(cur));
+        GpuPend prev;
+        if ((int)gpend.size() > gpu_depth) {
+            prev = std::move(gpend.front());
+            gpend.pop_front();
+        }
         // ...and the one before it, finished
         for (long k = 0; k < frames; k++) {
             L[k] = R[k] = 0.0f;
@@ -13721,6 +13734,13 @@ void nv_part_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, vo
 // THE PIPELINE (live's TUNING_GPU_PIPELINE): on, every block a block late --
 // the CPU's setup of the next while the GPU renders this one (an OpenCL GPU's)
 void nv_part_pipeline(void *h, int on) { ((nv::slab::Part *)h)->pipeline = on != 0; }
+
+// the pipeline's depth: 1 (live's), 2 (an app's: the GPU two blocks to answer in)
+void nv_part_gpu_depth(void *h, int depth)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    P->gpu_depth = std::max(1, std::min(2, depth));
+}
 
 // The register's jobs on a worker thread of the part's own, off the audio
 // thread (live's worker process): answers placed at the pump after they are

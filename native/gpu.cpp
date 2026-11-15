@@ -129,7 +129,7 @@ struct Gpu {
         std::vector<float> host;
         cl_event ev = nullptr;
         int NG = 0, frames = 0;
-    } slot[2];
+    } slot[3];                              // (three: a pipeline two deep, and the one being set up)
 
     ~Gpu()
     {

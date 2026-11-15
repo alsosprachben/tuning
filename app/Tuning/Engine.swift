@@ -129,8 +129,17 @@ final class Engine: ObservableObject {
             // audio thread itself): its helpers, slow to wake, made 3-10 ms
             // setups; on one, a steady 0.7 ms
             var dflt: [String] = []
-            if !more.contains(where: { $0.hasPrefix("--gpu-min") }) { dflt.append("--gpu-min=4500") }
+            // (2000 since: Ben's playing sat at ~4450 slots, on the CPU 2.4-3.8 ms
+            // a block at the worst; from 2000 on the GPU, steady playing clean)
+            if !more.contains(where: { $0.hasPrefix("--gpu-min") }) { dflt.append("--gpu-min=2000") }
             if !more.contains(where: { $0.hasPrefix("--gpu-threads") }) { dflt.append("--gpu-threads=1") }
+            // TWO GPU BLOCKS IN FLIGHT (+2.7 ms, every note alike): in the app the
+            // GPU took ~4 ms to answer a block; one deep, the audio thread waited
+            if !more.contains(where: { $0.hasPrefix("--gpu-depth") }) { dflt.append("--gpu-depth=2") }
+            // (the governor shedding once blocks pass ~2/3 of their time, not
+            // at the limit: room left for the next burst)
+            // (--govern-at: not by default -- in the app the governor did not shed;
+            // to be looked into)
             let args = ["nvlive", path, "--program=0", "--messenger-out=none"] + dflt + more
             var cargs: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) }
             var err = [CChar](repeating: 0, count: 512)
@@ -144,6 +153,10 @@ final class Engine: ObservableObject {
             nv_host_start(h)
             nv_host_set_realtime(h, 1)            // (the callback never waits on another thread's lock)
             if ProcessInfo.processInfo.environment["TUNING_ROOM_WORKER"] != nil { nv_host_room_inline(h, 0) }   // (a test's)
+            // A COLD START: a phrase after a second's rest one block later, the
+            // core warmed meanwhile (TUNING_COLD=n blocks for a test; 0 off)
+            let cold = Int32(ProcessInfo.processInfo.environment["TUNING_COLD"] ?? "1") ?? 1
+            nv_host_set_cold_start(h, cold, 1.0, 0.6)
             nv_host_set_session_path(h, self.sessionPath)
             let restored = nv_host_session_load(h) == 0
             let items = Engine.readPatches(h)
@@ -167,7 +180,19 @@ final class Engine: ObservableObject {
                 // TUNING_TEST_NOTE: a note held from 2 s to 14 s, by itself (a test with no one playing)
                 // (=chord: six notes, closer to playing)
                 // (=stab: a ten-note chord punched staccato, four times a second, 2 s to 14 s)
-                if ProcessInfo.processInfo.environment["TUNING_TEST_NOTE"] == "stab" {
+                // (=phrases: every 3 s from 2 s, four five-note chords a quarter
+                // second apart, then silence -- each phrase starting cold)
+                if ProcessInfo.processInfo.environment["TUNING_TEST_NOTE"] == "phrases" {
+                    let keys: [UInt8] = [48, 55, 60, 64, 67]
+                    for ph in 0..<4 {
+                        for k in 0..<4 {
+                            let t0 = 2.0 + Double(ph) * 3.0 + Double(k) * 0.25
+                            let ks = keys.map { $0 + UInt8(k * 2) }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + t0) { ks.forEach { self.midi([0x90, $0, 100], at: 0) } }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + t0 + 0.2) { ks.forEach { self.midi([0x80, $0, 0], at: 0) } }
+                        }
+                    }
+                } else if ProcessInfo.processInfo.environment["TUNING_TEST_NOTE"] == "stab" {
                     let keys: [UInt8] = [36, 43, 48, 52, 55, 60, 64, 67, 72, 76]
                     for k in 0..<48 {
                         let t0 = 2.0 + Double(k) * 0.25

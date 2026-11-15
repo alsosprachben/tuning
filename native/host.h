@@ -67,6 +67,13 @@ int nv_host_pull_step(nv_host *h, float *L, float *R, int frames, int step);
    spreads a burst of notes over them as they were played (the next block's,
    if that one has gone) */
 void nv_host_midi_at(nv_host *h, const uint8_t *msg, int n, long long frame);
+/* A COLD START (an app's real time; blocks 0: off, the default): a note-on
+   after cold_seconds with no MIDI begins a phrase whose events (through
+   nv_host_midi_at) all come `blocks` blocks later -- one shift for the whole
+   phrase, so its intervals stay as played -- and while the first note waits,
+   nv_host_pull keeps the thread busy up to warm_fraction of each callback,
+   so the core is up to speed when the note's first block comes */
+void nv_host_set_cold_start(nv_host *h, int blocks, double cold_seconds, double warm_fraction);
 
 typedef struct {
     long long n0, blocks, over, underruns;

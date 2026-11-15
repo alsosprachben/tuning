@@ -46,7 +46,7 @@ struct MetalGpu {
         id<MTLCommandBuffer> cb = nil;
         int NG = 0, frames = 0;
         double t_commit = 0.0;
-    } slot[2];
+    } slot[3];                              // (three: a pipeline two deep, and the one being set up)
     // TUNING_METAL_TRACE: each pipelined block's time split -- committed to
     // the GPU's start (scheduling), the GPU's own run, its end to the wait's
     // return (waking) -- summarised on stderr when the GPU is let go

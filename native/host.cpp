@@ -1051,6 +1051,8 @@ int nv_host::open(int argc, char **argv)
                               hm ? dlsym(hm, "voice_damp_set") : nullptr, hm ? dlsym(hm, "voice_moogx_set") : nullptr);
             }
             nv_part_pipeline(part, cl && pipe);
+            // (--gpu-depth=2: two blocks in flight -- an app's on macOS; 1, live's and nvlive's)
+            nv_part_gpu_depth(part, atoi(opt(argc, argv, "gpu-depth", "1").c_str()));
             fprintf(stderr, "nvlive: the GPU (%s), from %ld busy slots%s\n", cl ? nv_cl_api(cl) : "the C reference", gmin,
                     cl && pipe ? ", pipelined" : "");
         } else {
@@ -1754,6 +1756,10 @@ int nv_host::open(int argc, char **argv)
     underruns = 0; over = 0; blocks = 0;
     worst = 0.0; budget = 1000.0 * BLK / SR;
     govern = true;
+    // (--govern-at=F: the governor's budget a fraction of the block's -- an
+    // app's 0.7: it sheds once blocks run past ~2/3 of their time, leaving
+    // room for the next burst, where at 1 it waited for the limit)
+    govern_at = std::max(0.2, std::min(1.0, atof(opt(argc, argv, "govern-at", "1").c_str())));
     for (int i = 1; i < argc; i++)
         govern = govern && strcmp(argv[i], "--no-governor");
     master_now = master;
@@ -2144,7 +2150,7 @@ void nv_host::render_block(long long n0, float *buf, bool step)
     rt::busy_since = 0;
     double ms = (rt::now_ns() - t0) / 1e6;
     if (govern)
-        nv_part_govern(part, ms, budget, n0 + BLK);
+        nv_part_govern(part, ms, budget * govern_at, n0 + BLK);
     blocks++;
     over += ms > budget;
     worst = ms > worst ? ms : worst;
@@ -3300,6 +3306,7 @@ int nv_host_render_step(nv_host *h, float *L, float *R, int frames, int step)
 int nv_host_pull_step(nv_host *h, float *L, float *R, int frames, int step)
 {
     const int B = (int)h->BLK;
+    const long long t_in = rt::now_ns();
     int done = 0;
     while (done < frames) {
         if (h->pull_pos < 0 || h->pull_pos >= B) {
@@ -3317,7 +3324,29 @@ int nv_host_pull_step(nv_host *h, float *L, float *R, int frames, int step)
         h->pull_pos += k;
         done += k;
     }
+    // A COLD START's WARM-UP (nv_host_set_cold_start): while the phrase's
+    // first note waits its block, the thread kept busy -- this callback's
+    // spare time up to warm_frac of its length -- so the core is up to speed
+    // when the note's first real block comes (a slowed core ran 544 slots in
+    // 4.4 ms after a pause, warm ~0.3: the underrun Ben heard after a rest)
+    if (h->cold_blocks > 0 && h->play_n0 <= h->warm_until.load(std::memory_order_relaxed)) {
+        const long long until = t_in + (long long)(h->warm_frac * 1e9 * frames / h->SR);
+        while (rt::now_ns() < until) {
+        }
+    }
     return 0;
+}
+
+// A COLD START (an app's real time): a note-on after cold_s with no MIDI
+// begins a phrase whose events all come one block (cold_blocks) later -- the
+// same shift for every note of it, so its intervals stay as played (Ben: the
+// differences are heard, not the absolute time) -- and the waiting block
+// warms the core (nv_host_pull_step). The next cold note-on sets it again
+void nv_host_set_cold_start(nv_host *h, int blocks, double cold_seconds, double warm_fraction)
+{
+    h->cold_blocks = std::max(0, std::min(4, blocks));
+    h->cold_frames = (long long)(std::max(0.05, cold_seconds) * h->SR);
+    h->warm_frac = std::max(0.0, std::min(0.9, warm_fraction));
 }
 
 int nv_host_pull(nv_host *h, float *L, float *R, int frames) { return nv_host_pull_step(h, L, R, frames, 0); }
@@ -3328,6 +3357,20 @@ int nv_host_pull(nv_host *h, float *L, float *R, int frames) { return nv_host_pu
 // the next block if that one is gone
 void nv_host_midi_at(nv_host *h, const uint8_t *msg, int n, long long frame)
 {
+    if (h->cold_blocks > 0 && n > 0) {
+        // (a cold start's shift: a phrase's events one block later, the note-on
+        // that begins it after cold_s of no MIDI setting it)
+        const long long f = frame > 0 ? frame : h->play_n0;
+        const long long last = h->last_midi_f;
+        const bool on = n >= 3 && (msg[0] & 0xF0) == 0x90 && msg[2] > 0;
+        if (last < 0 || f - last >= h->cold_frames) {
+            h->phrase_shift = on ? (long long)h->cold_blocks * h->BLK : 0;
+            if (on)
+                h->warm_until.store(f + h->phrase_shift, std::memory_order_relaxed);
+        }
+        h->last_midi_f = f;
+        frame = f + h->phrase_shift;
+    }
     std::lock_guard<std::mutex> lk(h->timed_mu);
     h->timed_parse.feed(msg, n, [&](Midi &&m) { h->timed.emplace(frame, std::move(m)); });
 }
