@@ -1283,4 +1283,61 @@ void nv_host_set_drive(nv_host *h, int row, double v)
     if (row >= 0) h->part_drive((size_t)row, v);
 }
 
+int nv_host_cmx_state(nv_host *h, int channel, nv_host_cmx *out)
+{
+    nv::Cmx m;
+    if (!h->cmx_read(channel < 0 ? 0 : channel, m))
+        return -1;
+    memset(out, 0, sizeof *out);
+    out->cc1 = m.cc1;
+    out->cc2 = m.cc2;
+    for (int r = 0; r < 6; r++)
+        for (int c = 0; c < 11; c++) {
+            const double *d = nv::cmx_find(m, r, c);
+            out->depth[r][c] = d ? *d : nv::cmx_default(r, c);
+        }
+    for (const auto &e : nv::cmx_gm2_cells(m))
+        if (e.second != 0.0 && out->ngm2 < 32) {
+            out->gm2[out->ngm2].cc = e.first.first - 100;
+            out->gm2[out->ngm2].dest = e.first.second;
+            out->gm2[out->ngm2].depth = e.second;
+            out->ngm2++;
+        }
+    return 0;
+}
+
+static void cmx_post(nv_host *h, int channel, const std::function<std::vector<uint8_t>(int)> &msg)
+{
+    std::lock_guard<std::mutex> lk(h->mu);
+    for (int c = channel < 0 ? 0 : channel; c < (channel < 0 ? 16 : channel + 1); c++)
+        h->q.push_back(Midi{6, 0, 0, 0, msg(c)});
+}
+void nv_host_cmx_cell(nv_host *h, int channel, int src, int dest, int raw)
+{
+    if (src < 0 || src > 5 || dest < 0 || dest > 10) return;
+    cmx_post(h, channel, [&](int c) { return nv::cmx_cell_message(c, src, dest, raw); });
+}
+void nv_host_cmx_assign(nv_host *h, int channel, int which, int cc)
+{
+    if (which != 4 && which != 5) return;
+    cmx_post(h, channel, [&](int c) { return nv::cmx_assign_message(c, which, cc); });
+}
+void nv_host_cmx_range(int dest, int *lo, int *hi)
+{
+    *lo = dest == 0 ? 0x28 : 0;
+    *hi = dest == 0 ? 0x58 : 127;
+}
+double nv_host_cmx_depth(int dest, int raw) { return nv::cmx_gs_depth(dest, raw); }
+int nv_host_cmx_raw(int dest, double depth) { return nv::cmx_gs_raw(dest, depth); }
+int nv_host_cmx_printed(int dest, double depth, char *out, int cap) { return copy_out(nv::cmx_printed(dest, depth), out, cap); }
+int nv_host_last_ctl(nv_host *h, long long *when_ns)
+{
+    if (when_ns) *when_ns = h->last_ctl_ns.load();
+    return h->last_ctl_code.load();
+}
+long long nv_host_now_ns(void)
+{
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
 }  // extern "C"

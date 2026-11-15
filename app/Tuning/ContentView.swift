@@ -245,6 +245,7 @@ struct SidePane: View {
                 Text("Tuning").tag(1)
                 Text("Effects").tag(3)
                 Text("Synth").tag(4)
+                Text("Matrix").tag(5)
                 Text("Setup").tag(2)
             }
             .pickerStyle(.segmented)
@@ -255,6 +256,7 @@ struct SidePane: View {
             case 1: TuningPane()
             case 3: EffectsPane()
             case 4: SynthPane()
+            case 5: MatrixPane()
             default: SetupPane()
             }
         }
@@ -654,6 +656,106 @@ struct SynthPane: View {
         .onDisappear { engine.synthShown = false }
         .onChange(of: engine.selectedPart) { _, _ in engine.synthLayer = 0; engine.synthLayers = -1; engine.refreshSynth() }
         .onChange(of: engine.parts) { _, _ in engine.refreshSynth() }
+    }
+}
+
+// ---- THE CONTROLLER MATRIX (livetui's C): the selected part's channel ----
+private let cmxSources = ["Mod wheel", "Pitch bend", "Channel aftertouch", "Poly aftertouch", "CC1", "CC2"]
+private let cmxDests = ["Pitch", "Filter cutoff", "Amplitude", "LFO1 rate", "LFO1 pitch", "LFO1 filter", "LFO1 amp",
+                        "LFO2 rate", "LFO2 pitch", "LFO2 filter", "LFO2 amp"]
+
+struct MatrixPane: View {
+    @EnvironmentObject var engine: Engine
+    @State private var source = 0
+
+    private func printed(_ dest: Int, _ d: Double) -> String {
+        var out = [CChar](repeating: 0, count: 48)
+        nv_host_cmx_printed(Int32(dest), d, &out, 48)
+        return String(cString: out)
+    }
+
+    private func destRow(_ dest: Int) -> some View {
+        var lo: Int32 = 0, hi: Int32 = 127
+        nv_host_cmx_range(Int32(dest), &lo, &hi)
+        let d = engine.cmxDepth(source, dest)
+        let raw = Int(nv_host_cmx_raw(Int32(dest), d))
+        let zero = Int(nv_host_cmx_raw(Int32(dest), 0))
+        return HStack {
+            Text(cmxDests[dest]).frame(width: 84, alignment: .leading)
+            Slider(value: Binding(get: { Double(raw) }, set: { engine.setCmx(source, dest, raw: Int($0.rounded())) }),
+                   in: Double(lo)...Double(hi))
+                .frame(maxWidth: .infinity)
+            Text(printed(dest, d)).monospacedDigit().lineLimit(1).frame(width: 96, alignment: .trailing)
+            Button { engine.setCmx(source, dest, raw: zero) } label: { Image(systemName: "xmark.circle") }
+                .buttonStyle(.borderless)
+                .opacity(raw != zero ? 1 : 0)
+                .disabled(raw == zero)
+                .help("none")
+        }
+        .foregroundStyle(raw != zero ? Color.orange : Color.primary)
+    }
+
+    private func ccRow(_ which: Int32, _ cc: Int32) -> some View {
+        HStack {
+            Text(which == 4 ? "CC1 is" : "CC2 is").frame(width: 84, alignment: .leading)
+            Picker("", selection: Binding(get: { Int(cc) }, set: { engine.assignCmx(which, $0) })) {
+                ForEach(0..<96, id: \.self) { Text("CC\($0)").tag($0) }
+            }
+            .labelsHidden()
+            .frame(width: 100)
+            Spacer(minLength: 0)
+            Button(engine.learning == which ? "Move a control..." : "Learn") {
+                if engine.learning == which { engine.learning = 0 } else { engine.learnCmx(which) }
+            }
+            .help("the next knob or pedal you move becomes it")
+        }
+    }
+
+    var body: some View {
+        let ch = engine.cmxChannel
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Controller matrix: \(ch < 0 ? "every channel" : "channel \(ch + 1)")")
+                    .font(.headline)
+                Text("what each controller moves, for the selected part's channel (a sequencer's GS messages)")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let m = engine.cmx {
+                    Box("Assignable controllers") {
+                        ccRow(4, m.cc1)
+                        ccRow(5, m.cc2)
+                    }
+                    Box(nil) {
+                        Picker("Source", selection: $source) {
+                            ForEach(cmxSources.indices, id: \.self) { i in
+                                let lab = i == 4 ? "CC1 (CC\(m.cc1))" : i == 5 ? "CC2 (CC\(m.cc2))" : cmxSources[i]
+                                let used = (0..<11).contains { engine.cmxDepth(i, $0) != 0 }
+                                Text(used ? lab + "  •" : lab).tag(i)
+                            }
+                        }
+                    }
+                    Box("\(cmxSources[source]) moves") {
+                        ForEach(0..<11, id: \.self) { destRow($0) }
+                    }
+                    if m.ngm2 > 0 {
+                        Box("Set by a file's GM2 messages (shown, not edited)") {
+                            let cells = withUnsafeBytes(of: m.gm2) { Array($0.bindMemory(to: nv_host_cmx_gm2.self).prefix(Int(m.ngm2))) }
+                            ForEach(cells.indices, id: \.self) { i in
+                                Text("CC\(cells[i].cc) -> \(cmxDests[Int(cells[i].dest)]) \(printed(Int(cells[i].dest), cells[i].depth))")
+                                    .font(.caption)
+                            }
+                        }
+                    }
+                } else {
+                    Text("reading...").foregroundStyle(.secondary)
+                }
+            }
+            .padding(12)
+            .frame(width: SynthPane.width, alignment: .leading)
+        }
+        .onAppear { engine.cmxShown = true; engine.refreshCmx() }
+        .onDisappear { engine.cmxShown = false; engine.learning = 0 }
+        .onChange(of: engine.selectedPart) { _, _ in engine.cmx = nil; engine.refreshCmx() }
     }
 }
 

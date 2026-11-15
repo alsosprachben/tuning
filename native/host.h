@@ -268,6 +268,36 @@ void nv_host_set_messenger_pre107(nv_host *h, int on);
 int nv_host_drive(nv_host *h, int row, double *out);
 void nv_host_set_drive(nv_host *h, int row, double v);
 
+/* ---- THE CONTROLLER MATRIX (livetui's C): a channel's sources to destinations ----
+   sources 0 mod wheel, 1 pitch bend, 2 channel aftertouch, 3 poly aftertouch,
+   4 CC1, 5 CC2 (assignable: their numbers cc1, cc2); destinations 0 pitch,
+   1 filter cutoff, 2 amplitude, 3-6 LFO1 rate, pitch, filter, amp depth, 7-10
+   LFO2's. depth[src][dest] in the destination's unit (semitones, cents, a
+   fraction, Hz) as in effect; gm2 the cells a file's GM2 messages set (CC
+   n -> dest), shown, not edited */
+typedef struct { int cc, dest; double depth; } nv_host_cmx_gm2;
+typedef struct {
+    int cc1, cc2;
+    double depth[6][11];
+    int ngm2;
+    nv_host_cmx_gm2 gm2[32];
+} nv_host_cmx;
+int nv_host_cmx_state(nv_host *h, int channel, nv_host_cmx *out);     /* 0; -1 not read */
+/* a cell set to a GS byte (nv_host_cmx_raw's), or CC1/CC2's number (which 4
+   or 5, 0-95), as a sequencer's GS message; channel -1 every channel */
+void nv_host_cmx_cell(nv_host *h, int channel, int src, int dest, int raw);
+void nv_host_cmx_assign(nv_host *h, int channel, int which, int cc);
+/* a destination's GS byte range (lo, hi), a byte's depth, the byte nearest a
+   depth, a depth as printed ("+2 semitones", "47 cents") */
+void nv_host_cmx_range(int dest, int *lo, int *hi);
+double nv_host_cmx_depth(int dest, int raw);
+int nv_host_cmx_raw(int dest, double depth);
+int nv_host_cmx_printed(int dest, double depth, char *out, int cap);
+/* the last controller moved (its number, when: a steady-clock ns; 0 none) --
+   CC1/CC2 learnt from it */
+int nv_host_last_ctl(nv_host *h, long long *when_ns);
+long long nv_host_now_ns(void);
+
 /* the live part it plays (native.py's nv_part_*: a check reads its slab) */
 void *nv_host_part(nv_host *h);
 

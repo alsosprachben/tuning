@@ -106,6 +106,12 @@ final class Engine: ObservableObject {
     @Published var synthPN = [Double](repeating: 0, count: Int(NV_HOST_NKNOBS))
     @Published var synthOwn = [Int8](repeating: 0, count: Int(NV_HOST_NKNOBS))
     @Published var drive: (Int32, Double, Double, Double) = (0, 0, 0, -1)
+    // THE CONTROLLER MATRIX of the selected part's channel (nil: not read)
+    @Published var cmx: nv_host_cmx? = nil
+    @Published var learning: Int32 = 0               // (4 or 5: CC1 or CC2 being learnt)
+    var cmxShown = false
+    private var cmxReading = false
+    private var cmxTurned = Date.distantPast
     @Published var messengerLine = ""
     var synthShown = false                      // (the Synth tab open: its knobs read five times a second)
     private var synthReading = false            // (one read at a time)
@@ -509,6 +515,72 @@ final class Engine: ObservableObject {
         drive.3 = v
     }
 
+    // ---- THE CONTROLLER MATRIX ----
+    var cmxChannel: Int32 { parts.first { $0.row == selectedPart }?.channel ?? 0 }   // (-1 every channel)
+
+    func refreshCmx() {
+        guard let h = host, !cmxReading else { return }
+        cmxReading = true
+        let ch = cmxChannel, asked = Date()
+        DispatchQueue.global(qos: .userInitiated).async {
+            var m = nv_host_cmx()
+            let ok = nv_host_cmx_state(h, ch, &m) == 0
+            DispatchQueue.main.async {
+                self.cmxReading = false
+                guard ok, ch == self.cmxChannel, asked > self.cmxTurned else { return }
+                if var old = self.cmx, memcmp(&old, &m, MemoryLayout<nv_host_cmx>.size) == 0 { return }
+                self.cmx = m
+            }
+        }
+    }
+
+    func cmxDepth(_ src: Int, _ dest: Int) -> Double {
+        guard let m = cmx else { return 0 }
+        return withUnsafeBytes(of: m.depth) { $0.bindMemory(to: Double.self)[src * 11 + dest] }
+    }
+
+    func setCmx(_ src: Int, _ dest: Int, raw: Int) {
+        guard let h = host else { return }
+        nv_host_cmx_cell(h, cmxChannel, Int32(src), Int32(dest), Int32(raw))
+        cmxTurned = Date()
+        if var m = cmx {                          // (shown at once; the read after confirms it)
+            withUnsafeMutableBytes(of: &m.depth) { $0.bindMemory(to: Double.self)[src * 11 + dest] = nv_host_cmx_depth(Int32(dest), Int32(raw)) }
+            cmx = m
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.refreshCmx() }
+    }
+
+    func assignCmx(_ which: Int32, _ cc: Int) {
+        guard let h = host else { return }
+        nv_host_cmx_assign(h, cmxChannel, which, Int32(cc))
+        cmxTurned = Date()
+        if var m = cmx { if which == 4 { m.cc1 = Int32(cc) } else { m.cc2 = Int32(cc) }; cmx = m }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.refreshCmx() }
+    }
+
+    // CC1 or CC2 learnt: the next controller moved (1-95) within eight seconds
+    func learnCmx(_ which: Int32) {
+        guard let h = host else { return }
+        learning = which
+        let t0 = nv_host_now_ns()
+        var tries = 0
+        Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] t in
+            guard let self else { t.invalidate(); return }
+            tries += 1
+            var when: Int64 = 0
+            let code = nv_host_last_ctl(h, &when)
+            if code > 0 && code <= 95 && when > t0 {
+                t.invalidate()
+                self.learning = 0
+                self.assignCmx(which, Int(code))
+                self.message = "\(which == 4 ? "CC1" : "CC2") is CC\(code)"
+            } else if tries > 160 || self.learning != which {
+                t.invalidate()
+                if self.learning == which { self.learning = 0; self.message = "nothing moved" }
+            }
+        }
+    }
+
     // ---- THE EFFECTS ----
     private func readEfxTables(_ h: OpaquePointer) {
         let cap = 1 << 21
@@ -786,7 +858,8 @@ final class Engine: ObservableObject {
         pollTick += 1
         if pollTick % 5 == 0 { refreshParts(); refreshEfx() }
         if pollTick % 10 == 3 { readGlobals() }
-        if synthShown && pollTick % 2 == 0 { refreshSynth() }    // (a Messenger's knobs turned: shown as they land)     // (twice a second: a preset's, a file's)
+        if synthShown && pollTick % 2 == 0 { refreshSynth() }
+        if cmxShown && pollTick % 10 == 5 { refreshCmx() }      // (a file's or a sequencer's messages: shown)    // (a Messenger's knobs turned: shown as they land)     // (twice a second: a preset's, a file's)
         var s = nv_host_snap()
         nv_host_snapshot(h, &s)
         let m = meters
