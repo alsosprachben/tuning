@@ -2269,6 +2269,13 @@ typedef void *(*conv_new_fn)(const float *ir, int len, int B, int M);
 typedef void (*conv_proc_fn)(void *c, const float *x, float *out);
 typedef void (*conv_free_fn)(void *c);
 
+// THE ROOM's BODY ON THE AUDIO THREAD (nv_room_inline: an app's real time):
+// its worker woke slowly from sleep with the machine busy, and the block
+// waited for it -- 11 to 29 ms, a click every few seconds (the M3). Inline
+// it is the same arithmetic in the same order (the body of block n, wanted
+// by block n+1, computed at the end of block n): the output is identical.
+inline std::atomic<bool> g_room_inline{false};
+
 struct Room {
     static const int SEGMENT_BLOCKS = 16;           // live.Convolver.SEGMENT_BLOCKS
     conv_new_fn cnew;
@@ -2359,13 +2366,24 @@ struct Room {
             for (int k = 0; k < B; k++)
                 out[i][k] = tmp[k] + res[i][k];
         }
-        for (int i = 0; i < nconv; i++)
-            memcpy(inp[i].data(), xs[i], sizeof(float) * B);
-        {
-            std::lock_guard<std::mutex> lk(mu);
-            go = true;
+        if (g_room_inline.load(std::memory_order_relaxed)) {
+            // the body here, for the next block (done stays true: no worker job)
+            for (int i = 0; i < nconv; i++)
+                if (body[i])
+                    cproc(body[i], xs[i], res[i].data());
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                done = true;
+            }
+        } else {
+            for (int i = 0; i < nconv; i++)
+                memcpy(inp[i].data(), xs[i], sizeof(float) * B);
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                go = true;
+            }
+            cv.notify_all();
         }
-        cv.notify_all();
         for (int k = 0; k < B; k++) {
             wl[k] = nconv == 4 ? out[0][k] + out[2][k] : out[0][k];
             wr[k] = nconv == 4 ? out[1][k] + out[3][k] : out[1][k];
@@ -13799,6 +13817,8 @@ void *nv_room_new(void *cn, void *cp, void *cf, const float *ir, long n, const f
 {
     return n > 0 ? new nv::slab::Room(cn, cp, cf, ir, n, mir, m, frames) : nullptr;
 }
+
+void nv_room_inline(int on) { nv::slab::g_room_inline = on != 0; }
 
 void nv_part_room_set(void *h, void *room, long long frames)
 {

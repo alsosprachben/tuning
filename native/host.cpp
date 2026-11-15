@@ -2126,6 +2126,12 @@ void nv_host::render_block(long long n0, float *buf, bool step)
     if (ms > pend_max) {
         pend_step = last_step_ms;
         pend_out = last_out_ms;
+        double st[15];
+        nv_part_stats(part, st);
+        pend_st[0] = st[0];
+        pend_st[1] = st[4];
+        pend_st[2] = st[5];
+        pend_st[3] = st[6];
     }
     pend_max = std::max(pend_max, ms);
     pend_sum += ms;
@@ -2140,6 +2146,8 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         if (pend_max > snap.ms_max) {
             snap_step = pend_step;
             snap_out = pend_out;
+            for (int i = 0; i < 4; i++)
+                snap_st[i] = pend_st[i];
         }
         snap.ms_max = std::max(snap.ms_max, pend_max);
         snap.ms_sum += pend_sum;
@@ -3162,7 +3170,11 @@ nv_host *nv_host_open_args(int argc, char **argv, char *err, int errlen)
 
 void nv_host_start(nv_host *h) { h->start(); }
 
-void nv_host_set_realtime(nv_host *h, int on) { h->soft_locks = on != 0; }
+void nv_host_set_realtime(nv_host *h, int on)
+{
+    h->soft_locks = on != 0;
+    nv_room_inline(on);                         // (the room's body on the audio thread: no worker to wake)
+}
 
 void nv_host_close(nv_host *h)
 {
@@ -3270,6 +3282,10 @@ void nv_host_snapshot(nv_host *h, nv_host_snap *s)
     s->ms_max = p.ms_max;
     s->max_step_ms = h->snap_step;
     s->max_out_ms = h->snap_out;
+    s->max_busy = h->snap_st[0];
+    s->max_gpu = h->snap_st[1];
+    s->max_gpu_setup_ms = h->snap_st[2];
+    s->max_gpu_samples_ms = h->snap_st[3];
     s->ms_mean = p.ms_n ? p.ms_sum / p.ms_n : 0.0;
     s->budget_ms = h->budget;
     s->peak[0] = p.peak[0];

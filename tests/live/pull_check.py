@@ -15,8 +15,10 @@ its own (a host holds the export and is not freed), on FILE's first SECONDS:
            rendered block by block
   pull     the same up front, pulled in random sizes from 1 to 4100 frames
   late     (the control) the same pull, every stamp a block late
+  rt       blocks with the real-time mode on (nv_host_set_realtime: an app's
+           -- the room's body convolved on the audio thread, not its worker)
 
-blocks, timed and pull must be the same samples, every one; late must not
+blocks, timed, pull and rt must be the same samples, every one; late must not
 be (the stamps are what places the events), and the file must sound (its
 events delivered: their count and the peak shown). Exits 1 if not.
 """
@@ -45,7 +47,7 @@ def child(nvx, mid, case, secs, outp):
     for f, a in (("nv_host_start", [vp]), ("nv_host_block", [vp]), ("nv_host_rate", [vp]),
                  ("nv_host_midi", [vp, cp, ci]), ("nv_host_render", [vp, vp, vp, ci]),
                  ("nv_host_pull", [vp, vp, vp, ci]),
-                 ("nv_host_midi_at", [vp, cp, ci, ctypes.c_longlong])):
+                 ("nv_host_midi_at", [vp, cp, ci, ctypes.c_longlong]), ("nv_host_set_realtime", [vp, ci])):
         getattr(d, f).argtypes = a
     d.nv_midi_read.restype = vp
     d.nv_midi_read.argtypes = [cp, ctypes.c_longlong, ctypes.POINTER(ci)]
@@ -60,6 +62,8 @@ def child(nvx, mid, case, secs, outp):
     h = d.nv_host_open_args(len(av), (cp * len(av))(*av), ctypes.create_string_buffer(256), 256)
     assert h, "the host refused"
     d.nv_host_start(h)
+    if case == "rt":
+        d.nv_host_set_realtime(h, 1)
     blk, sr = d.nv_host_block(h), d.nv_host_rate(h)
     nblk = int(secs * sr) // blk
     total = nblk * blk
@@ -76,7 +80,7 @@ def child(nvx, mid, case, secs, outp):
         if by and int(t.value * sr) < total:
             evs.append((int(t.value * sr), by))
     out = np.zeros((total, 2), np.float32)
-    if case == "blocks":
+    if case in ("blocks", "rt"):
         L = np.zeros(blk, np.float32)
         R = np.zeros(blk, np.float32)
         e = 0
@@ -126,7 +130,7 @@ def main(argv):
     tmp = tempfile.mkdtemp(prefix="pullcheck")
     nvx = NC.live_export(tmp, "hall")
     got, info = {}, {}
-    for case in ("blocks", "timed", "pull", "late"):
+    for case in ("blocks", "timed", "pull", "late", "rt"):
         outp = os.path.join(tmp, case + ".npy")
         r = subprocess.run([sys.executable, os.path.abspath(__file__), "--child", nvx, mid, case, str(secs), outp],
                            capture_output=True, text=True)
@@ -145,7 +149,7 @@ def main(argv):
     ref = got["blocks"]
     peak = float(np.abs(ref).max())
     check("blocks: the file sounds (%s)" % info["blocks"], peak > 1e-3, "peak %.3g" % peak)
-    for case in ("timed", "pull"):
+    for case in ("timed", "pull", "rt"):
         a = got[case]
         n = int((a != ref).sum())
         check("%s: the same samples as blocks (%s)" % (case, info[case]), n == 0,

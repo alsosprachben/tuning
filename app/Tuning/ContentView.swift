@@ -275,6 +275,7 @@ struct SidePane: View {
                 }
                 Text(String(format: "output latency %.1f ms", engine.latencyMS)).foregroundStyle(.secondary)
                 Toggle("GPU (Metal)", isOn: $engine.gpu)
+                Toggle("Room tail", isOn: $engine.roomTail)
             }
         }
         .formStyle(.grouped)

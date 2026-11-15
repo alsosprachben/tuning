@@ -125,6 +125,7 @@ void nv_part_gs_seen(void *h);
 void nv_part_gs_chorus(void *h, int addr, int v);
 void nv_part_gs_delay(void *h, int addr, int v);
 int nv_part_gs_fx(void *h, int *cho, int *dly);
+void nv_room_inline(int on);
 int nv_part_cmx(void *h, int ch, int *src, int *col, double *dep, int max, int *cc);
 int nv_part_chan_cc(void *h, int ch, int cc);
 void nv_part_gs_chorus_reset(void *h, int gm1);
@@ -1188,6 +1189,7 @@ struct nv_host {
     float pend_pk[2] = {0.0f, 0.0f};
     double pend_step = 0.0, pend_out = 0.0;     // (the slowest block's split, carried)
     double snap_step = 0.0, snap_out = 0.0;     // (...as published: the window's)
+    double pend_st[4] = {0, 0, 0, 0}, snap_st[4] = {0, 0, 0, 0};  // (...its busy slots, GPU, setup, samples)
     std::vector<std::function<void(long long)>> posted;
     panel::Snap snap;
     std::atomic<int> learning;

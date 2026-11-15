@@ -69,6 +69,8 @@ typedef struct {
     long efx_rev;                           /* the insertion effect's revision */
     double max_step_ms, max_out_ms;         /* the slowest block's split: before the output (the
                                                queued work, the MIDI, the slab's step), the output */
+    double max_busy, max_gpu, max_gpu_setup_ms, max_gpu_samples_ms;  /* ...its busy slots, on the GPU (1),
+                                               the GPU's setup and samples times */
 } nv_host_snap;
 void nv_host_snapshot(nv_host *h, nv_host_snap *s);
 /* what the builder has to say (a build's time, a refusal), oldest first: its

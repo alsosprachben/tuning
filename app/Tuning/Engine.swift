@@ -76,6 +76,7 @@ final class Engine: ObservableObject {
     @Published var current: Int32 = -1
     @Published var masterDB = 0.0 { didSet { setGlobal(Int32(NV_G_MASTER_DB), masterDB) } }
     @Published var gpu = true { didSet { setGlobal(Int32(NV_G_GPU), gpu ? 1 : 0) } }
+    @Published var roomTail = true { didSet { setGlobal(Int32(NV_G_ROOM_TAIL), roomTail ? 1 : 0) } }
 
     private var host: OpaquePointer?
     private let audio = AVAudioEngine()
@@ -106,14 +107,21 @@ final class Engine: ObservableObject {
             }
             // (TUNING_ARGS: more of nvlive's options, for a test -- --cpu, --no-register ...)
             let more = (ProcessInfo.processInfo.environment["TUNING_ARGS"] ?? "").split(separator: " ").map(String.init)
-            // THE GPU FROM 1500 BUSY SLOTS (nvlive's 100): in the app the GPU is
+            // THE GPU FROM MANY BUSY SLOTS (nvlive's 100): in the app the GPU is
             // shared with the window's drawing and drops its clock between
             // blocks -- a held organ chord on it ran 2-2.7 ms a block with
             // spikes to 33 ms (a click every few seconds, Ben), on the CPU
             // 0.7-0.9 ms; the dense pedalled file (thousands of slots) still
             // goes to the GPU, where the CPU needs 3.5 ms a block
-            let gmin = more.contains { $0.hasPrefix("--gpu-min") } ? [] : ["--gpu-min=1500"]
-            let args = ["nvlive", path, "--program=0", "--messenger-out=none"] + gmin + more
+            // ...and from 4500 since: a six-note organ chord (3348 slots) on
+            // the CPU 1.3-1.6 ms a block, on the GPU 2-3 ms with spikes to 8;
+            // the CPU near 75% of a block at ~4500. ONE SETUP THREAD (the
+            // audio thread itself): its helpers, slow to wake, made 3-10 ms
+            // setups; on one, a steady 0.7 ms
+            var dflt: [String] = []
+            if !more.contains(where: { $0.hasPrefix("--gpu-min") }) { dflt.append("--gpu-min=4500") }
+            if !more.contains(where: { $0.hasPrefix("--gpu-threads") }) { dflt.append("--gpu-threads=1") }
+            let args = ["nvlive", path, "--program=0", "--messenger-out=none"] + dflt + more
             var cargs: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) }
             var err = [CChar](repeating: 0, count: 512)
             let h = cargs.withUnsafeMutableBufferPointer { nv_host_open_args(Int32(args.count), $0.baseAddress, &err, 512) }
@@ -137,15 +145,19 @@ final class Engine: ObservableObject {
                 self.current = items.first { $0.program == p && $0.variation == v && $0.drums == (d != 0) }?.id ?? -1
                 self.masterDB = nv_host_global(h, Int32(NV_G_MASTER_DB))
                 self.gpu = nv_host_global(h, Int32(NV_G_GPU)) != 0
+                self.roomTail = nv_host_global(h, Int32(NV_G_ROOM_TAIL)) != 0
+                if ProcessInfo.processInfo.environment["TUNING_NO_TAIL"] != nil { self.roomTail = false }   // (a test's)
                 self.startAudio(h)
                 self.refreshParts()
                 self.refreshPresets()
                 if restored { self.message = "the last session restored" }
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.poll() }
                 // TUNING_TEST_NOTE: a note held from 2 s to 14 s, by itself (a test with no one playing)
-                if ProcessInfo.processInfo.environment["TUNING_TEST_NOTE"] != nil {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.midi([0x90, 60, 100], at: 0) }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 14) { self.midi([0x80, 60, 0], at: 0) }
+                // (=chord: six notes, closer to playing)
+                if let t = ProcessInfo.processInfo.environment["TUNING_TEST_NOTE"] {
+                    let keys: [UInt8] = t == "chord" ? [48, 55, 60, 64, 67, 72] : [60]
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { keys.forEach { self.midi([0x90, $0, 100], at: 0) } }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 14) { keys.forEach { self.midi([0x80, $0, 0], at: 0) } }
                 }
                 NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
                                                        queue: .main) { [weak self] _ in self?.saveSession() }
@@ -399,6 +411,7 @@ final class Engine: ObservableObject {
     private var pollTick = 0
     private var slowest = 0.0
     private var dbgMax = 0.0, dbgStep = 0.0, dbgOut = 0.0   // (TUNING_DEBUG: the second's slowest block and its split)
+    private var dbgBusy = 0.0, dbgGpu = 0.0, dbgSetup = 0.0, dbgSamples = 0.0
 
     private func poll() {
         guard let h = host else { return }
@@ -407,10 +420,15 @@ final class Engine: ObservableObject {
         var s = nv_host_snap()
         nv_host_snapshot(h, &s)
         let m = meters
-        if s.ms_max > dbgMax { dbgMax = s.ms_max; dbgStep = s.max_step_ms; dbgOut = s.max_out_ms }
+        if s.ms_max > dbgMax {
+            dbgMax = s.ms_max; dbgStep = s.max_step_ms; dbgOut = s.max_out_ms
+            dbgBusy = s.max_busy; dbgGpu = s.max_gpu; dbgSetup = s.max_gpu_setup_ms; dbgSamples = s.max_gpu_samples_ms
+        }
         if debug && pollTick % 10 == 0 {
-            FileHandle.standardError.write(String(format: "out: peak %.4f, load %.2f, slowest %.2f ms (before the output %.2f, the output %.2f), over %lld\n",
-                                                  s.peak.0, m.load, dbgMax, dbgStep, dbgOut, s.over).data(using: .utf8)!)
+            FileHandle.standardError.write(String(format: "out: peak %.4f, load %.2f, slowest %.2f ms (before the output %.2f, the output %.2f; %.0f busy, %@), over %lld\n",
+                                                  s.peak.0, m.load, dbgMax, dbgStep, dbgOut, dbgBusy,
+                                                  dbgGpu != 0 ? String(format: "GPU setup %.2f samples %.2f", dbgSetup, dbgSamples) : "CPU",
+                                                  s.over).data(using: .utf8)!)
             dbgMax = 0; dbgStep = 0; dbgOut = 0
             var mb = [CChar](repeating: 0, count: 512)
             while nv_host_message(h, &mb, 512) > 0 {
