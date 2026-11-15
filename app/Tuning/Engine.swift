@@ -478,7 +478,7 @@ final class Engine: ObservableObject {
     private var pollTick = 0
     private var slowest = 0.0
     private var dbgMax = 0.0, dbgStep = 0.0, dbgOut = 0.0   // (TUNING_DEBUG: the second's slowest block and its split)
-    private var dbgBusy = 0.0, dbgGpu = 0.0, dbgSetup = 0.0, dbgSamples = 0.0
+    private var dbgBusy = 0.0, dbgGpu = 0.0, dbgSetup = 0.0, dbgSamples = 0.0, dbgUser = 0.0, dbgSys = 0.0
 
     private func poll() {
         guard let h = host else { return }
@@ -490,10 +490,11 @@ final class Engine: ObservableObject {
         if s.ms_max > dbgMax {
             dbgMax = s.ms_max; dbgStep = s.max_step_ms; dbgOut = s.max_out_ms
             dbgBusy = s.max_busy; dbgGpu = s.max_gpu; dbgSetup = s.max_gpu_setup_ms; dbgSamples = s.max_gpu_samples_ms
+            dbgUser = s.max_cpu_user_ms; dbgSys = s.max_cpu_sys_ms
         }
         if debug && pollTick % 10 == 0 {
-            FileHandle.standardError.write(String(format: "out: peak %.4f, load %.2f, slowest %.2f ms (before the output %.2f, the output %.2f; %.0f busy, %@), over %lld\n",
-                                                  s.peak.0, m.load, dbgMax, dbgStep, dbgOut, dbgBusy,
+            FileHandle.standardError.write(String(format: "out: peak %.4f, load %.2f, slowest %.2f ms [cpu user %.2f sys %.2f] (before the output %.2f, the output %.2f; %.0f busy, %@), over %lld\n",
+                                                  s.peak.0, m.load, dbgMax, dbgUser, dbgSys, dbgStep, dbgOut, dbgBusy,
                                                   dbgGpu != 0 ? String(format: "GPU setup %.2f samples %.2f", dbgSetup, dbgSamples) : "CPU",
                                                   s.over).data(using: .utf8)!)
             dbgMax = 0; dbgStep = 0; dbgOut = 0

@@ -81,6 +81,8 @@ typedef struct {
                                                the GPU's setup and samples times */
     double max_split_ms[3];                 /* ...before its output: the queued work, the events, the
                                                engine's step (notes started, ended) */
+    double max_cpu_user_ms, max_cpu_sys_ms; /* ...the CPU time its thread got in it, user and system
+                                               (macOS, real time: much under its wall time -- not running) */
 } nv_host_snap;
 void nv_host_snapshot(nv_host *h, nv_host_snap *s);
 /* what the builder has to say (a build's time, a refusal), oldest first: its

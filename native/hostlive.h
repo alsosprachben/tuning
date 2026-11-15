@@ -1194,6 +1194,7 @@ struct nv_host {
     double snap_step = 0.0, snap_out = 0.0;     // (...as published: the window's)
     double pend_st[4] = {0, 0, 0, 0}, snap_st[4] = {0, 0, 0, 0};  // (...its busy slots, GPU, setup, samples)
     double last_split[3] = {0, 0, 0}, pend_split[3] = {0, 0, 0}, snap_split[3] = {0, 0, 0};  // (queued work, events, step)
+    double pend_cpu[2] = {0, 0}, snap_cpu[2] = {0, 0};  // (the slowest block's thread CPU time: user, system)
     std::vector<std::function<void(long long)>> posted;
     panel::Snap snap;
     std::atomic<int> learning;

@@ -31,6 +31,31 @@
 #include <sys/stat.h>
 #include "hostint.h"
 #include "rtjoin.h"
+#ifdef __APPLE__
+#include <mach/mach.h>
+#endif
+
+// THE THREAD's OWN CPU TIME, user and system, ms (macOS: thread_info): set
+// against a slow block's wall time it says whether the thread was computing
+// slowly (cpu ~ wall: user a slow core, system memory faults) or not
+// running at all (cpu << wall: preempted, demoted)
+static void thread_cpu_ms(double *user, double *sys)
+{
+#ifdef __APPLE__
+    thread_basic_info_data_t info;
+    mach_msg_type_number_t n = THREAD_BASIC_INFO_COUNT;
+    mach_port_t th = mach_thread_self();
+    if (thread_info(th, THREAD_BASIC_INFO, (thread_info_t)&info, &n) == KERN_SUCCESS) {
+        *user = info.user_time.seconds * 1e3 + info.user_time.microseconds * 1e-3;
+        *sys = info.system_time.seconds * 1e3 + info.system_time.microseconds * 1e-3;
+    } else {
+        *user = *sys = 0.0;
+    }
+    mach_port_deallocate(mach_task_self(), th);
+#else
+    *user = *sys = 0.0;
+#endif
+}
 
 namespace nvh {
 
@@ -1780,6 +1805,9 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         wg_seen = nv::rtj::g_gen.load();       // (the GPU setup's team joins the audio workgroup: here, the
         wg_join_fn(nv::rtj::g_wg.load(), gpu_nthr);  //  thread voice_block forks it from)
     }
+    double cu0 = 0.0, cs0 = 0.0;
+    if (soft_locks)
+        thread_cpu_ms(&cu0, &cs0);
     long long t0 = rt::now_ns();
     rt::busy_since = t0;
     // WHAT WAS QUEUED FOR THIS BLOCK (posted work, the MIDI) -- taken under
@@ -2138,6 +2166,12 @@ void nv_host::render_block(long long n0, float *buf, bool step)
     if (ms > pend_max) {
         pend_step = last_step_ms;
         pend_out = last_out_ms;
+        if (soft_locks) {
+            double cu1, cs1;
+            thread_cpu_ms(&cu1, &cs1);
+            pend_cpu[0] = cu1 - cu0;
+            pend_cpu[1] = cs1 - cs0;
+        }
         double st[15];
         nv_part_stats(part, st);
         pend_st[0] = st[0];
@@ -2164,6 +2198,8 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                 snap_st[i] = pend_st[i];
             for (int i = 0; i < 3; i++)
                 snap_split[i] = pend_split[i];
+            snap_cpu[0] = pend_cpu[0];
+            snap_cpu[1] = pend_cpu[1];
         }
         snap.ms_max = std::max(snap.ms_max, pend_max);
         snap.ms_sum += pend_sum;
@@ -3322,6 +3358,8 @@ void nv_host_snapshot(nv_host *h, nv_host_snap *s)
     s->max_gpu_samples_ms = h->snap_st[3];
     for (int i = 0; i < 3; i++)
         s->max_split_ms[i] = h->snap_split[i];
+    s->max_cpu_user_ms = h->snap_cpu[0];
+    s->max_cpu_sys_ms = h->snap_cpu[1];
     s->ms_mean = p.ms_n ? p.ms_sum / p.ms_n : 0.0;
     s->budget_ms = h->budget;
     s->peak[0] = p.peak[0];
