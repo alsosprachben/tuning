@@ -11,6 +11,7 @@ nearest it). Exits 1 if any check fails.
 """
 import ctypes
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -35,7 +36,8 @@ class Cmx(ctypes.Structure):
 def main():
     import nvlive_check as NC
     import native as N
-    nvx = NC.live_export(tempfile.mkdtemp(prefix="cmxhost"), "hall")
+    tmp = tempfile.mkdtemp(prefix="cmxhost")
+    nvx = NC.live_export(tmp, "hall")
     d = N.lib()
     vp, cp, ci, cd = ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_double
     d.nv_host_open_args.restype = vp
@@ -120,6 +122,7 @@ def main():
     check("the byte laws: every byte's depth back to the byte", laws)
     print("controller matrix: %d failed" % bad)
     sys.stdout.flush()
+    shutil.rmtree(tmp, ignore_errors=True)      # (the export, made here without NV_EXPORT_CACHE: 1 GB)
     os._exit(1 if bad else 0)
 
 

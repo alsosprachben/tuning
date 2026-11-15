@@ -1357,4 +1357,29 @@ int nv_host_udrum_state(nv_host *h, int set, int *out)
 }
 void nv_host_udrum_send(nv_host *h, int set, int key, int code, int v) { h->udrum_queue(set, key, code, v); }
 
+int nv_host_chan_cc(nv_host *h, int channel, int cc)
+{
+    const int c = channel < 0 ? 0 : channel & 15;
+    if (cc == 10) {                             // (as the part was sent it, before master pan)
+        auto pr = h->gs_pan_raw.find(c);
+        if (pr != h->gs_pan_raw.end())
+            return pr->second;
+    }
+    return nv_part_chan_cc(h->part, c, cc);
+}
+void nv_host_chan_cc_send(nv_host *h, int channel, int cc, int v)
+{
+    v = std::max(0, std::min(127, v));
+    std::lock_guard<std::mutex> lk(h->mu);
+    for (int c = channel < 0 ? 0 : channel; c < (channel < 0 ? 16 : channel + 1); c++) {
+        if (cc == NV_HOST_VSENSE) {             // (GS's 40 1x 1A, as a sequencer sends it)
+            const int blk = c == 9 ? 0 : c < 9 ? c + 1 : c;
+            std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, (uint8_t)(0x10 | blk), 0x1A, (uint8_t)v};
+            x.push_back((uint8_t)((128 - (0x40 + x[5] + 0x1A + v) % 128) % 128));
+            h->q.push_back(Midi{6, 0, 0, 0, x});
+        } else if (cc >= 0 && cc < 128)
+            h->q.push_back(Midi{2, c, cc, v, {}});
+    }
+}
+
 }  // extern "C"

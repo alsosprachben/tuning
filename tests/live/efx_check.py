@@ -12,6 +12,7 @@ sequencer's GS messages, read back. Exits 1 if any check fails.
 """
 import ctypes
 import os
+import shutil
 import sys
 import tempfile
 
@@ -38,7 +39,8 @@ class Sysfx(ctypes.Structure):
 def main():
     import nvlive_check as NC
     import native as N
-    nvx = NC.live_export(tempfile.mkdtemp(prefix="efx"), "hall")
+    tmp = tempfile.mkdtemp(prefix="efx")
+    nvx = NC.live_export(tmp, "hall")
     d = N.lib()
     vp, cp, ci = ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int
     d.nv_host_open_args.restype = vp
@@ -134,6 +136,7 @@ def main():
           sx.rev_level == 100 and sx.eq[1] == 0x48, "level %d, low gain %d" % (sx.rev_level, sx.eq[1]))
     print("effects: %d failed" % bad)
     sys.stdout.flush()
+    shutil.rmtree(tmp, ignore_errors=True)      # (the export, made here without NV_EXPORT_CACHE: 1 GB)
     os._exit(1 if bad else 0)
 
 

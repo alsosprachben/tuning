@@ -12,6 +12,7 @@ Exits 1 if any check fails.
 import ctypes
 import math
 import os
+import shutil
 import sys
 import tempfile
 
@@ -26,7 +27,8 @@ sys.path.insert(0, os.path.join(ROOT, "examples"))
 def main():
     import nvlive_check as NC
     import native as N
-    nvx = NC.live_export(tempfile.mkdtemp(prefix="tuning"), "hall")
+    tmp = tempfile.mkdtemp(prefix="tuning")
+    nvx = NC.live_export(tmp, "hall")
     d = N.lib()
     vp, cp, ci = ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int
     d.nv_host_open_args.restype = vp
@@ -119,6 +121,7 @@ def main():
     check("...and off", text(d.nv_host_eastern, h) == "")
     print("tuning: %d failed" % bad)
     sys.stdout.flush()
+    shutil.rmtree(tmp, ignore_errors=True)      # (the export, made here without NV_EXPORT_CACHE: 1 GB)
     os._exit(1 if bad else 0)
 
 

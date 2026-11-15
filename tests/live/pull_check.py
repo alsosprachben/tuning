@@ -24,6 +24,7 @@ events delivered: their count and the peak shown). Exits 1 if not.
 """
 import ctypes
 import os
+import shutil
 import random
 import subprocess
 import sys
@@ -136,6 +137,7 @@ def main(argv):
                            capture_output=True, text=True)
         if r.returncode != 0 or not os.path.exists(outp):
             print("  %s: the host failed\n%s" % (case, r.stderr[-1500:]))
+            shutil.rmtree(tmp, ignore_errors=True)
             return 1
         got[case] = np.load(outp)
         info[case] = " ".join(ln for ln in r.stdout.splitlines() if ln.startswith(("EVENTS", "SIZES")))
@@ -157,6 +159,7 @@ def main(argv):
     n = int((got["late"] != ref).sum())
     check("late (the control): every stamp a block late differs", n > 0, "%d of %d differ" % (n, ref.size))
     print("pull: %d failed" % bad)
+    shutil.rmtree(tmp, ignore_errors=True)      # (the export, made here without NV_EXPORT_CACHE: 1 GB)
     return 1 if bad else 0
 
 

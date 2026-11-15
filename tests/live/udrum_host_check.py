@@ -10,6 +10,7 @@ fails.
 """
 import ctypes
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -25,7 +26,8 @@ sys.path.insert(0, os.path.join(ROOT, "examples"))
 def main():
     import nvlive_check as NC
     import native as N
-    nvx = NC.live_export(tempfile.mkdtemp(prefix="udrumhost"), "hall")
+    tmp = tempfile.mkdtemp(prefix="udrumhost")
+    nvx = NC.live_export(tmp, "hall")
     d = N.lib()
     vp, cp, ci = ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int
     d.nv_host_open_args.restype = vp
@@ -110,6 +112,7 @@ def main():
     check("receive note on off: struck silent", state()[36 * 16 + 0x08] == 0 and p3 < 1e-4, "peak %.2g" % p3)
     print("user drum sets: %d failed" % bad)
     sys.stdout.flush()
+    shutil.rmtree(tmp, ignore_errors=True)      # (the export, made here without NV_EXPORT_CACHE: 1 GB)
     os._exit(1 if bad else 0)
 
 

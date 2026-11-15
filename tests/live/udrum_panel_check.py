@@ -23,6 +23,7 @@ Exits 1 if any check fails.
 """
 import json
 import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -150,6 +151,7 @@ def main():
     got2 = nv_session(fp, s2, 1.5)
     check("nvlive: that session loaded (a file with none), saved again: the same", got2 == want, "%s" % got2)
     print("user drum set editor: %d checked, %d failed" % (n, bad))
+    shutil.rmtree(tmp, ignore_errors=True)      # (the export, made here without NV_EXPORT_CACHE: 1 GB)
     return 1 if bad else 0
 
 

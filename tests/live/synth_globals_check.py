@@ -9,12 +9,15 @@ Synth tab and Globals): python3 tests/live/synth_globals_check.py
           words ("Hz"); back to the patch's -- the chord as before
   organ   the host on program 16: an organ, its drive read; set, read back
   globals every global counted; the bend range and the metronome's tempo set,
-          read back
+          read back; a part's reverb send and velocity sense set on every
+          channel, its pan hard left -- read back; panned left then right,
+          the far side quieter each way
 
 Exits 1 if any check fails.
 """
 import ctypes
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -41,7 +44,8 @@ def child(nvx, case):
                  ("nv_host_synth_get", [vp, ci, ci, vp, vp]), ("nv_host_synth_set", [vp, ci, ci, ci, cd]),
                  ("nv_host_synth_forget", [vp, ci, ci, ci]), ("nv_host_synth_fmt", [cp, cd, vp, cp, ci]),
                  ("nv_host_drive", [vp, ci, vp]), ("nv_host_set_drive", [vp, ci, cd]),
-                 ("nv_host_global", [vp, ci]), ("nv_host_set_global", [vp, ci, cd])):
+                 ("nv_host_global", [vp, ci]), ("nv_host_set_global", [vp, ci, cd]),
+                 ("nv_host_chan_cc", [vp, ci, ci]), ("nv_host_chan_cc_send", [vp, ci, ci, ci])):
         getattr(d, f).argtypes = a
     prog = {"synth": 81, "organ": 16, "globals": 0}[case]
     av = [b"nvlive", nvx.encode(), b"--program=%d" % prog, b"--cpu", b"--no-pipeline", b"--no-register",
@@ -149,6 +153,40 @@ def child(nvx, case):
         check("the bend range 12, the metronome 96 bpm: read back",
               d.nv_host_global(h, 3) == 12.0 and d.nv_host_global(h, 10) == 96.0,
               "%.1f st, %.0f bpm" % (d.nv_host_global(h, 3), d.nv_host_global(h, 10)))
+        d.nv_host_set_global(h, 10, 0.0)
+
+        # A PART's PAN AND SENDS: set on every channel, read back; panned hard left, its right side quiet
+        def lr():
+            run(400)
+            d.nv_host_midi(h, bytes([0x90, 60, 100]), 3)
+            l = r = 0.0
+            for i in range(150):
+                run(1)
+                if i >= 40:
+                    l += float((L ** 2).sum())
+                    r += float((R ** 2).sum())
+            d.nv_host_midi(h, bytes([0x80, 60, 0]), 3)
+            return l, r
+        d.nv_host_chan_cc_send(h, -1, 91, 0)
+        run(30)
+        l0, r0 = lr()
+        d.nv_host_chan_cc_send(h, -1, 91, 100)
+        d.nv_host_chan_cc_send(h, -1, 1000, 90)
+        d.nv_host_chan_cc_send(h, 0, 10, 0)
+        run(30)
+        got = [d.nv_host_chan_cc(h, 0, 91), d.nv_host_chan_cc(h, 5, 91), d.nv_host_chan_cc(h, 0, 1000), d.nv_host_chan_cc(h, 0, 10)]
+        check("reverb send 100 and vel sense 90 on every channel, pan 0: read back", got == [100, 100, 90, 0], "%s" % got)
+        d.nv_host_chan_cc_send(h, -1, 91, 0)       # (the pan heard dry: the room's return is both sides)
+        run(30)
+        l1, r1 = lr()
+        d.nv_host_chan_cc_send(h, 0, 10, 127)
+        run(30)
+        l2, r2 = lr()
+        # (the engine's pan is a head's shadow, not a level law: the far ear
+        # loses the highs, so a piano's C4 moves its energy ~20%, each way)
+        check("...pan 0 / 127: the far side quieter, each way (right/left)",
+              r1 / l1 < 0.9 * (r0 / l0) and r2 / l2 > 1.1 * (r0 / l0),
+              "centre %.2f, left %.2f, right %.2f" % (r0 / l0, r1 / l1, r2 / l2))
     sys.stdout.flush()
     os._exit(1 if bad else 0)
 
@@ -157,7 +195,8 @@ def main(argv):
     if argv and argv[0] == "--child":
         return child(argv[1], argv[2])
     import nvlive_check as NC
-    nvx = NC.live_export(tempfile.mkdtemp(prefix="synthglob"), "hall")
+    tmp = tempfile.mkdtemp(prefix="synthglob")
+    nvx = NC.live_export(tmp, "hall")
     bad = 0
     for case in ("synth", "organ", "globals"):
         r = subprocess.run([sys.executable, "-u", os.path.abspath(__file__), "--child", nvx, case],
@@ -168,6 +207,7 @@ def main(argv):
             if "FAILED" not in r.stdout:
                 print("  %s: the host failed\n%s" % (case, r.stderr[-1500:]))
     print("synth and globals: %d failed" % bad)
+    shutil.rmtree(tmp, ignore_errors=True)      # (the export, made here without NV_EXPORT_CACHE: 1 GB)
     return 1 if bad else 0
 
 

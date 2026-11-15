@@ -18,6 +18,7 @@ Exits 1 if any check fails.
 import ctypes
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -144,6 +145,7 @@ def main(argv):
                            capture_output=True, text=True)
         if r.returncode != 0 or not os.path.exists(outp):
             print("  host %s failed\n%s" % (case, r.stderr[-1500:]))
+            shutil.rmtree(tmp, ignore_errors=True)
             return 1
         got[case] = json.load(open(outp))
     bad = 0
@@ -173,6 +175,7 @@ def main(argv):
           pk["ch2 key 72"] > 1e-3 and pk["ch1 key 60"] > 1e-3 and pk["ch2 key 48"] < 1e-5,
           "  ".join("%s %.2g" % kv for kv in pk.items()))
     print("parts and presets: %d failed" % bad)
+    shutil.rmtree(tmp, ignore_errors=True)      # (the export, made here without NV_EXPORT_CACHE: 1 GB)
     return 1 if bad else 0
 
 

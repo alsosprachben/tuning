@@ -298,6 +298,14 @@ int nv_host_cmx_printed(int dest, double depth, char *out, int cap);
 int nv_host_last_ctl(nv_host *h, long long *when_ns);
 long long nv_host_now_ns(void);
 
+/* ---- A PART's PAN AND SENDS (livetui's part columns): its channel's CC10
+   (as the part was sent it), CC91 reverb, CC93 chorus, CC94 delay, and
+   NV_HOST_VSENSE the velocity sense depth (GS 40 1p 1A: no CC carries it);
+   set as a sequencer's message, channel -1 every channel */
+#define NV_HOST_VSENSE 1000
+int nv_host_chan_cc(nv_host *h, int channel, int cc);
+void nv_host_chan_cc_send(nv_host *h, int channel, int cc, int v);
+
 /* ---- THE USER DRUM SETS (livetui's U): GS programs 65, 66 ----
    the sets a key may take its sound from and their keys' names: "S\tset\tname"
    and "K\tset\tkey\tname" lines (the export's DKEY) */

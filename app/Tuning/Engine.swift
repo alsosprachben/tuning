@@ -121,6 +121,11 @@ final class Engine: ObservableObject {
     var udrumShown = false
     private var udrumReading = false
     private var udrumTurned = Date.distantPast
+    // THE SELECTED PART's PAN AND SENDS: its channel's CC10, 91, 93, 94 and
+    // velocity sense (Engine.partCCs' order)
+    static let partCCs: [Int32] = [10, 91, 93, 94, Int32(NV_HOST_VSENSE)]
+    @Published var selCC: [Int] = [64, 40, 0, 0, 64]
+    private var ccTurned = Date.distantPast
     @Published var messengerLine = ""
     var synthShown = false                      // (the Synth tab open: its knobs read five times a second)
     private var synthReading = false            // (one read at a time)
@@ -525,6 +530,13 @@ final class Engine: ObservableObject {
         drive.3 = v
     }
 
+    func setPartCC(_ part: PartRow, _ i: Int, _ v: Int) {
+        guard let h = host else { return }
+        nv_host_chan_cc_send(h, part.channel, Engine.partCCs[i], Int32(v))
+        selCC[i] = v
+        ccTurned = Date()
+    }
+
     // ---- THE USER DRUM SETS ----
     private func readUdrumTables(_ h: OpaquePointer) {
         var buf = [CChar](repeating: 0, count: 1 << 20)
@@ -795,6 +807,10 @@ final class Engine: ObservableObject {
         readDrawn(h)
         if selectedPart >= Int32(parts.count) { selectedPart = max(0, Int32(parts.count) - 1) }
         if let sel = parts.first(where: { $0.row == selectedPart }) {
+            if Date().timeIntervalSince(ccTurned) > 0.3 {
+                let v = Engine.partCCs.map { Int(nv_host_chan_cc(h, sel.channel, $0)) }
+                if v != selCC { selCC = v }
+            }
             let id = patches.first { $0.program == sel.program && $0.variation == sel.variation && $0.drums == sel.drums }?.id ?? -1
             if id != current { current = id }
         }

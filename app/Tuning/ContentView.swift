@@ -180,7 +180,24 @@ struct PartEditor: View {
                     Button(part.solo == 1 ? "Unsolo" : "Solo") { engine.solo(part.row) }
                 }
             }
+            // its channel's pan and sends, as a sequencer's messages
+            ForEach(0..<5, id: \.self) { i in
+                GridRow {
+                    Text(["Pan", "Reverb", "Chorus", "Delay", "Vel sense"][i])
+                    HStack {
+                        Slider(value: Binding(get: { Double(engine.selCC[i]) },
+                                              set: { engine.setPartCC(part, i, Int($0.rounded())) }), in: 0...127)
+                        Text(ccText(i, engine.selCC[i])).monospacedDigit().frame(width: 64, alignment: .trailing)
+                    }
+                    .help(["the channel's CC10", "the channel's send to the reverb (CC91)", "to the chorus (CC93)",
+                           "to the delay (CC94)", "how much velocity changes the level (GS's velocity sense depth; 64 normal)"][i])
+                }
+            }
         }
+    }
+
+    private func ccText(_ i: Int, _ v: Int) -> String {
+        i == 0 ? (v == 64 ? "C" : v < 64 ? "L\(64 - v)" : "R\(v - 64)") : "\(v)"
     }
 }
 
