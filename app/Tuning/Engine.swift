@@ -146,7 +146,7 @@ final class Engine: ObservableObject {
     private var stopsProgram: Int32 = -2
     // the session (and presets.json beside it): nvlive's on this Mac by
     // default, so the two share presets
-    let sessionPath = (UserDefaults.standard.string(forKey: "session") ?? "~/repos/tuning-port/session.json").expandingTildeInPath
+    let sessionPath = Where.session()
     @Published var status = "starting"
     @Published var ready = false
     @Published var patches: [PatchItem] = []
@@ -178,7 +178,7 @@ final class Engine: ObservableObject {
 
     func start() {
         guard host == nil else { return }
-        let path = (UserDefaults.standard.string(forKey: "export") ?? "~/nvx/live.nvx").expandingTildeInPath
+        let path = self.exportPath
         status = "opening \(path)"
         DispatchQueue.global(qos: .userInitiated).async {
             guard FileManager.default.fileExists(atPath: path) else {
@@ -1103,8 +1103,8 @@ final class Engine: ObservableObject {
     @Published var rendering: String? = nil          // (the file being rendered)
     @Published var lastRender: URL? = nil
     private var renderProc: Process? = nil
-    let nvlivePath = (UserDefaults.standard.string(forKey: "nvlive") ?? "~/repos/tuning-port/nvlive").expandingTildeInPath
-    let exportPath = (UserDefaults.standard.string(forKey: "export") ?? "~/nvx/live.nvx").expandingTildeInPath
+    let nvlivePath = Where.helper("nvlive")
+    let exportPath = Where.resource("live.nvx", key: "export", dev: "~/nvx/live.nvx")
 
     func renderFile(_ midi: URL, to out: URL, followPrograms: Bool = true) {
         guard renderProc == nil else { return }
@@ -1160,9 +1160,9 @@ final class Engine: ObservableObject {
     // current tuner and Eastern tuning ----
     @Published var renderStage = ""
     private var renderStopped = false
-    let nvrenderPath = (UserDefaults.standard.string(forKey: "nvrender") ?? "~/repos/tuning-port/nvrender").expandingTildeInPath
-    let nvroomtailPath = (UserDefaults.standard.string(forKey: "nvroomtail") ?? "~/repos/tuning-port/nvroomtail").expandingTildeInPath
-    let fileExportPath = (UserDefaults.standard.string(forKey: "fileExport") ?? "~/nvx/file.nvx").expandingTildeInPath
+    let nvrenderPath = Where.helper("nvrender")
+    let nvroomtailPath = Where.helper("nvroomtail")
+    let fileExportPath = Where.resource("file.nvx", key: "fileExport", dev: "~/nvx/file.nvx")
 
     // one step: its status, whether it was stopped, what it printed (both streams)
     private func runStep(_ exe: String, _ args: [String], done: @escaping (Int32, Bool, String) -> Void) {
@@ -1364,4 +1364,45 @@ final class Engine: ObservableObject {
 
 extension String {
     var expandingTildeInPath: String { (self as NSString).expandingTildeInPath }
+}
+
+// WHERE THE APP's FILES ARE: a setting (UserDefaults) first; then what the
+// app carries (app/bundle.py puts the exports in Resources and the helpers
+// beside the app's executable); else the repo's and ~/nvx's (a build run from
+// Xcode). The session, presets and scenes in Application Support/Tuning --
+// the repo's copied there once, the first time
+enum Where {
+    static let repo = "~/repos/tuning-port".expandingTildeInPath
+
+    static func resource(_ name: String, key: String, dev: String) -> String {
+        if let s = UserDefaults.standard.string(forKey: key) { return s.expandingTildeInPath }
+        if let u = Bundle.main.url(forResource: name, withExtension: nil),
+           FileManager.default.fileExists(atPath: u.path) { return u.path }
+        return dev.expandingTildeInPath
+    }
+
+    static func helper(_ name: String) -> String {
+        if let s = UserDefaults.standard.string(forKey: name) { return s.expandingTildeInPath }
+        if let u = Bundle.main.url(forAuxiliaryExecutable: name),
+           FileManager.default.isExecutableFile(atPath: u.path) { return u.path }
+        return repo + "/" + name
+    }
+
+    static func session() -> String {
+        if let s = UserDefaults.standard.string(forKey: "session") { return s.expandingTildeInPath }
+        let fm = FileManager.default
+        let dir = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Tuning")
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let sess = dir.appendingPathComponent("session.json")
+        if !fm.fileExists(atPath: sess.path) {          // (the first time: the repo's session, presets and scenes)
+            for f in ["session.json", "presets.json", "scenes.json"] {
+                let from = URL(fileURLWithPath: repo).appendingPathComponent(f)
+                let to = dir.appendingPathComponent(f)
+                if fm.fileExists(atPath: from.path) && !fm.fileExists(atPath: to.path) {
+                    try? fm.copyItem(at: from, to: to)
+                }
+            }
+        }
+        return sess.path
+    }
 }

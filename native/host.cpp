@@ -25,6 +25,7 @@
 #include <cstdarg>
 #include <unistd.h>
 #include <vector>
+#include "relocate.h"
 #include "panel.h"
 #include "pycompat.h"
 #include <sys/mman.h>
@@ -509,6 +510,10 @@ int nv_host::open(int argc, char **argv)
         fprintf(stderr, "nvlive: %s is not a live export of this build (native_export.py --live)\n", argv[1]);
         return 1;
     }
+    // (the libraries and kernel sources it records: an app's own copies where it carries them)
+    for (std::string *lp : {&E.libs[0], &E.libs[1], &E.libs[2], &E.gpu_lib, &E.gpu_damp_lib, &E.conv_lib, &E.lobe_lib})
+        *lp = nv_reloc_lib(*lp);
+    E.gpu_dir = nv_reloc_kernels(E.gpu_dir);
     // each class's organ, its table here (the export's pointer was the exporter's)
     for (size_t i = 0; i < E.classes.size(); i++)
         ((NoteClass *)E.classes[i].data())->organ = E.cls_organ[i] >= 0 ? &E.organs[E.cls_organ[i]] : nullptr;

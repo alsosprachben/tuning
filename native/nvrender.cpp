@@ -53,6 +53,7 @@
 
 #include "pycompat.h"
 #include "selfexe.h"
+#include "relocate.h"
 #include "gpufile.h"
 
 struct NvSirRow {                       // (nv_song_sirens: a rotor's row -- nvrender.cpp's twin)
@@ -872,6 +873,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "nvrender: cannot read %s (or it is not this build's)\n", argv[1]);
         return 1;
     }
+    // (the libraries it records: an app's own copies where it carries them)
+    for (std::string *lp : {&E.libs[0], &E.libs[1], &E.libs[2], &E.lobe_lib})
+        *lp = nv_reloc_lib(*lp);
     // the variations' keys after the drum sets' (NV_K_VAR + 128 x slot + key)
     E.dmap.resize(256, -1);                 // (the drones' region, NV_K_DRONE: before the variations)
     E.cmap.insert(E.cmap.end(), E.dmap.begin(), E.dmap.end());
@@ -5009,10 +5013,11 @@ int main(int argc, char **argv)
         // THE GPU (--gpu: streamrender's gpu=, gpurender.FileRenderer a window at a time)
         static GpuFile *gpuf = nullptr;
         if (g_gpu && !gpuf) {
-            std::string dir = nv_self_exe();
-            dir = dir.empty() ? std::string(".") : dir.substr(0, dir.rfind('/'));
+            // (the setup's builds beside libnative, the kernel's sources there or in ../Resources)
+            const char *nd = nv_native_dir();
+            std::string dir = nd && *nd ? std::string(nd) : nv_self_exe().substr(0, nv_self_exe().rfind('/'));
             gpuf = new GpuFile();
-            std::string why = gpuf->open(dir, (int)SR);
+            std::string why = gpuf->open(dir, (int)SR, nv_reloc_kernels(dir));
             if (!why.empty()) {
                 fprintf(stderr, "nvrender: --gpu: %s\n", why.c_str());
                 exit(1);

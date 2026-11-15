@@ -133,7 +133,7 @@ struct GpuFile {
     }
 
     // the GPU (OpenCL, gpukernel.cl in dir) and the setup's builds in dir (SR's): "" or why not
-    std::string open(const std::string &dir, int SR)
+    std::string open(const std::string &dir, int SR, const std::string &kdir = "")
     {
         std::string lib = dir + "/libsynthgpu_" + std::to_string(SR) + ".so";
         std::string dlib = dir + "/libsynthgpudamp_" + std::to_string(SR) + ".so";
@@ -152,7 +152,7 @@ struct GpuFile {
             vds = (gf_vdamp_fn)dlsym(hd, "voice_damp_set");
         }
         char err[512] = {0};
-        cl = nv_cl_new(dir.c_str(), sz, err, sizeof err);
+        cl = nv_cl_new((kdir.empty() ? dir : kdir).c_str(), sz, err, sizeof err);   // (the kernel's sources: kdir)
         if (!cl)
             return std::string("the GPU: ") + err;
         const char *db = getenv("NV_GPU_DESC_MB");

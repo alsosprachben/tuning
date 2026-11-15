@@ -3,6 +3,7 @@
 // the library has them -- an app (app/, host.h's nv_host_* calls) saves and
 // loads the presets nvlive and live.py do, the same files, the same keys.
 // nvlive, the terminal client, links them from the library as before.
+#include <dlfcn.h>
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -1549,6 +1550,23 @@ void nv_host_gs_reset(nv_host *h)
     std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41};
     std::lock_guard<std::mutex> lk(h->mu);
     h->q.push_back(Midi{6, 0, 0, 0, x});
+}
+
+// libnative's own directory (relocate.h): where the library holding this is
+const char *nv_native_dir(void)
+{
+    static std::string dir;
+    static bool done = false;
+    if (!done) {
+        Dl_info di;
+        if (dladdr((const void *)&nv_native_dir, &di) && di.dli_fname) {
+            char real[4096];
+            std::string p = realpath(di.dli_fname, real) ? std::string(real) : std::string(di.dli_fname);
+            dir = p.substr(0, p.rfind('/') == std::string::npos ? 0 : p.rfind('/'));
+        }
+        done = true;
+    }
+    return dir.c_str();
 }
 
 }  // extern "C"

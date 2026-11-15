@@ -414,7 +414,8 @@ def _load():
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp', 'gpu_metal.mm',
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
                                                        'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'efxrev.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
-                                                       'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'hostint.h', 'hostlive.h', 'host.h', 'livebus.cpp')]
+                                                       'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'hostint.h', 'hostlive.h', 'host.h', 'livebus.cpp',
+                                                       'relocate.h', 'selfexe.h')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c'), os.path.join(HERE, 'tapkernel.c')])
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
