@@ -53,10 +53,15 @@ def main():
         bad += not ok
         print("  %-62s %s  %s" % (what, "ok" if ok else "FAILED", detail), flush=True)
 
-    def settle(most=12000):
-        quiet = 0
-        for i in range(most):
+    def settle(seconds=180.0):
+        # rendered until the builder has been idle 100 blocks running -- bounded
+        # by the clock, not a count of blocks: blocks render far faster than
+        # real time, and a tuner rebuilds every patch (on the M3 past 12000)
+        import time
+        quiet, i, t0 = 0, 0, time.monotonic()
+        while time.monotonic() - t0 < seconds:
             d.nv_host_render(h, L.ctypes.data, R.ctypes.data, blk)
+            i += 1
             quiet = 0 if d.nv_host_building(h) else quiet + 1
             if quiet >= 100:
                 return i
