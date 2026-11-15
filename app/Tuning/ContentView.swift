@@ -48,10 +48,10 @@ struct ContentView: View {
                 .frame(minWidth: 300)
                 Divider()
                 SidePane()
-                    .frame(width: 290)
+                    .frame(width: 370)
             }
         }
-        .frame(minWidth: 980, minHeight: 560)
+        .frame(minWidth: 1010, minHeight: 560)
     }
 
     private var partTitle: String {
@@ -535,15 +535,23 @@ struct SynthPane: View {
         return HStack {
             Text(k.label).frame(width: 84, alignment: .leading)
             if !k.steps.isEmpty {
-                Picker("", selection: Binding(get: { k.steps.min { abs($0 - v) < abs($1 - v) } ?? v },
-                                              set: { engine.setKnob(k, $0) })) {
-                    ForEach(k.steps, id: \.self) { x in Text(label(k, x)).tag(x) }
+                // (short words side by side; long ones a menu of one fixed width: no row wider than the pane)
+                let words = k.steps.map { label(k, $0) }
+                let pick = Picker("", selection: Binding(get: { k.steps.min { abs($0 - v) < abs($1 - v) } ?? v },
+                                                         set: { engine.setKnob(k, $0) })) {
+                    ForEach(k.steps.indices, id: \.self) { i in Text(words[i]).tag(k.steps[i]) }
                 }
                 .labelsHidden()
-                .pickerStyle(.segmented)
+                if words.allSatisfy({ $0.count <= 6 }) {
+                    pick.pickerStyle(.segmented).frame(maxWidth: .infinity)
+                } else {
+                    pick.pickerStyle(.menu).frame(width: 190, alignment: .leading)
+                    Spacer(minLength: 0)
+                }
             } else {
                 Slider(value: Binding(get: { v }, set: { engine.setKnob(k, $0) }), in: 0...1)
-                Text(engine.synthText(k)).monospacedDigit().frame(width: 80, alignment: .trailing)
+                    .frame(maxWidth: .infinity)
+                Text(engine.synthText(k)).monospacedDigit().lineLimit(1).frame(width: 76, alignment: .trailing)
             }
             Button { engine.forgetKnob(k) } label: { Image(systemName: "arrow.uturn.backward") }
                 .buttonStyle(.borderless)
@@ -552,6 +560,7 @@ struct SynthPane: View {
                 .help("back to the patch's setting")
         }
         .foregroundStyle(own == 2 ? Color.secondary : own == 1 ? Color.orange : Color.primary)
+        .frame(maxWidth: .infinity)
     }
 
     // a switch's position in the panel's words (the knob's own law, the panel as it stands)
@@ -569,8 +578,9 @@ struct SynthPane: View {
             if engine.synthLayers > 0 {
                 Section {
                     HStack {
-                        Text("Moog Messenger").font(.headline)
+                        Text("Moog Messenger").font(.headline).lineLimit(1)
                         Text(part.map { "part \($0.row + 1), \($0.name)" } ?? "").foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.tail)
                         Spacer()
                         if engine.synthLayers > 1 {
                             Picker("Layer", selection: Binding(get: { engine.synthLayer },
@@ -578,10 +588,10 @@ struct SynthPane: View {
                                 Text("A").tag(Int32(0)); Text("B").tag(Int32(1))
                             }
                             .pickerStyle(.segmented)
-                            .frame(width: 120)
+                            .frame(width: 70)
                         }
-                        Button("All to the patch") { engine.forgetAllKnobs() }
                     }
+                    Button("All knobs back to the patch") { engine.forgetAllKnobs() }
                     if engine.synthOwn.contains(2) {
                         Text("grey: the part's, not heard natively (an MF-104M under a moved pitch or shape): kept, and saved")
                             .font(.caption).foregroundStyle(.secondary)
@@ -632,7 +642,8 @@ struct SynthPane: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear { engine.refreshSynth() }
+        .onAppear { engine.synthShown = true; engine.refreshSynth() }
+        .onDisappear { engine.synthShown = false }
         .onChange(of: engine.selectedPart) { _, _ in engine.synthLayer = 0; engine.synthLayers = -1; engine.refreshSynth() }
         .onChange(of: engine.parts) { _, _ in engine.refreshSynth() }
     }

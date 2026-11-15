@@ -107,6 +107,9 @@ final class Engine: ObservableObject {
     @Published var synthOwn = [Int8](repeating: 0, count: Int(NV_HOST_NKNOBS))
     @Published var drive: (Int32, Double, Double, Double) = (0, 0, 0, -1)
     @Published var messengerLine = ""
+    var synthShown = false                      // (the Synth tab open: its knobs read five times a second)
+    private var synthReading = false            // (one read at a time)
+    private var synthTurned = Date.distantPast  // (a knob turned here: a read posted before it is not shown)
     @Published var messengerReads = false
     @Published var messengerPre107 = false
     @Published var sysfx = nv_host_sysfx_state()
@@ -407,7 +410,9 @@ final class Engine: ObservableObject {
     // the selected part's panel, read between two blocks (off the main thread: it waits for one)
     func refreshSynth() {
         guard let h = host else { return }
-        let row = selectedPart, layer = synthLayer
+        if synthReading { return }
+        synthReading = true
+        let row = selectedPart, layer = synthLayer, asked = Date()
         DispatchQueue.global(qos: .userInitiated).async {
             var pn = [Double](repeating: 0, count: Int(NV_HOST_NKNOBS))
             var own = [CChar](repeating: 0, count: Int(NV_HOST_NKNOBS))
@@ -420,14 +425,21 @@ final class Engine: ObservableObject {
             nv_host_messenger_line(h, &ml, 256)
             let line = String(cString: ml), reads = nv_host_messenger_reads(h) != 0, pre = nv_host_messenger_pre107(h) != 0
             DispatchQueue.main.async {
-                guard row == self.selectedPart else { return }
-                self.synthLayers = n
-                self.synthLayer = lay
-                if n > 0 { self.synthPN = pn; self.synthOwn = own.map { Int8($0) } }
-                self.drive = (dr, dv[0], dv[1], dv[2])
-                self.messengerLine = line
-                self.messengerReads = reads
-                self.messengerPre107 = pre
+                self.synthReading = false
+                guard row == self.selectedPart, layer == self.synthLayer else { return }
+                if n != self.synthLayers { self.synthLayers = n }
+                if lay != self.synthLayer { self.synthLayer = lay }
+                // (only what changed is published -- and not a read asked before a knob turned here)
+                if n > 0 && asked > self.synthTurned {
+                    if pn != self.synthPN { self.synthPN = pn }
+                    let o = own.map { Int8($0) }
+                    if o != self.synthOwn { self.synthOwn = o }
+                }
+                let d = self.drive
+                if asked > self.synthTurned, d.0 != dr || d.1 != dv[0] || d.2 != dv[1] || d.3 != dv[2] { self.drive = (dr, dv[0], dv[1], dv[2]) }
+                if line != self.messengerLine { self.messengerLine = line }
+                if reads != self.messengerReads { self.messengerReads = reads }
+                if pre != self.messengerPre107 { self.messengerPre107 = pre }
             }
         }
     }
@@ -435,6 +447,7 @@ final class Engine: ObservableObject {
     func setKnob(_ k: SynthKnob, _ v: Double) {
         guard let h = host, k.knob >= 0 else { return }
         nv_host_synth_set(h, selectedPart, synthLayer, Int32(k.knob), v)
+        synthTurned = Date()
         synthPN[k.knob] = v                       // (the part has it at once)
         synthOwn[k.knob] = 1
     }
@@ -470,6 +483,7 @@ final class Engine: ObservableObject {
     func setDrive(_ v: Double) {            // (v < 0: the voice's)
         guard let h = host else { return }
         nv_host_set_drive(h, selectedPart, v)
+        synthTurned = Date()
         drive.1 = v < 0 ? drive.2 : v
         drive.3 = v
     }
@@ -746,7 +760,8 @@ final class Engine: ObservableObject {
         guard let h = host else { return }
         pollTick += 1
         if pollTick % 5 == 0 { refreshParts(); refreshEfx() }
-        if pollTick % 10 == 3 { readGlobals() }     // (twice a second: a preset's, a file's)
+        if pollTick % 10 == 3 { readGlobals() }
+        if synthShown && pollTick % 2 == 0 { refreshSynth() }    // (a Messenger's knobs turned: shown as they land)     // (twice a second: a preset's, a file's)
         var s = nv_host_snap()
         nv_host_snapshot(h, &s)
         let m = meters
