@@ -516,7 +516,9 @@ final class Engine: ObservableObject {
         guard let h = host else { return }
         var e = nv_host_efx()
         nv_host_efx_state(h, &e)
-        efx = e
+        // (published only when it changed: a publish redraws every pane)
+        var old = efx
+        if memcmp(&old, &e, MemoryLayout<nv_host_efx>.size) != 0 { efx = e }
     }
 
     func refreshSysfx() {

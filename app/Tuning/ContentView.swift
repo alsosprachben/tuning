@@ -526,6 +526,7 @@ struct GlobalsSection: View {
 struct SynthPane: View {
     @EnvironmentObject var engine: Engine
     @State private var said = ""
+    static let width: CGFloat = 370 - 16         // (the side pane's, less the scroller)
 
     private var part: PartRow? { engine.parts.first { $0.row == engine.selectedPart } }
 
@@ -543,7 +544,8 @@ struct SynthPane: View {
                 }
                 .labelsHidden()
                 if words.allSatisfy({ $0.count <= 6 }) {
-                    pick.pickerStyle(.segmented).frame(maxWidth: .infinity)
+                    pick.pickerStyle(.segmented).frame(width: 190, alignment: .leading)
+                    Spacer(minLength: 0)
                 } else {
                     pick.pickerStyle(.menu).frame(width: 190, alignment: .leading)
                     Spacer(minLength: 0)
@@ -574,9 +576,12 @@ struct SynthPane: View {
 
     var body: some View {
         let sections = engine.synthKnobs.reduce(into: [String]()) { if !$0.contains($1.section) { $0.append($1.section) } }
-        Form {
+        // (a plain column of one fixed width, not a Form: a Form's rows measured
+        // again on every redraw widened the pane and let it back)
+        ScrollView(.vertical) {
+          VStack(alignment: .leading, spacing: 12) {
             if engine.synthLayers > 0 {
-                Section {
+                Box(nil) {
                     HStack {
                         Text("Moog Messenger").font(.headline).lineLimit(1)
                         Text(part.map { "part \($0.row + 1), \($0.name)" } ?? "").foregroundStyle(.secondary)
@@ -598,12 +603,12 @@ struct SynthPane: View {
                     }
                 }
                 ForEach(sections, id: \.self) { sec in
-                    Section(sec) {
+                    Box(sec) {
                         ForEach(engine.synthKnobs.filter { $0.section == sec }, id: \.self) { knobRow($0) }
                     }
                 }
             } else if engine.drive.0 == 1 {
-                Section("Organ") {
+                Box("Organ") {
                     HStack {
                         Text("Drive").frame(width: 84, alignment: .leading)
                         Slider(value: Binding(get: { engine.drive.1 }, set: { engine.setDrive(($0 * 20).rounded() / 20) }), in: 0...3)
@@ -614,15 +619,15 @@ struct SynthPane: View {
                     Text("the valve before the rotors").font(.caption).foregroundStyle(.secondary)
                 }
             } else {
-                Section {
+                Box(nil) {
                     Text(part?.drums == true ? "a drum part: the synth panel is for a melodic part"
                          : engine.synthLayers < 0 ? "reading the part..."
                          : "\(part.map { "part \($0.row + 1), \($0.name)" } ?? "this part") is not a Moog: the synth panel turns a Moog's knobs")
                         .foregroundStyle(.secondary)
                 }
             }
-            Section("Messenger") {
-                Toggle("Every part reads a Messenger's knobs (its CC chart)",
+            Box("Messenger") {
+                Toggle("Every part reads a Messenger's knobs",
                        isOn: Binding(get: { engine.messengerReads }, set: { engine.setMessengerReads($0) }))
                 Picker("Firmware chart", selection: Binding(get: { engine.messengerPre107 }, set: { engine.setMessengerPre107($0) })) {
                     Text("1.0.7 and later").tag(false); Text("before 1.0.7").tag(true)
@@ -631,7 +636,8 @@ struct SynthPane: View {
                     let ml = engine.messengerLine
                     Text(ml == "-" ? "no Messenger to set: plug one in" : ml.isEmpty ? "no Messenger to set" : "sets the Messenger on \(ml)")
                         .foregroundStyle(.secondary)
-                    Spacer()
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
                     if engine.synthLayers > 0 {
                         Button("Send the panel") {
                             said = engine.sendToMessenger() ? "sent" : "no Messenger plugged in"
@@ -640,12 +646,32 @@ struct SynthPane: View {
                     }
                 }
             }
+          }
+          .padding(12)
+          .frame(width: SynthPane.width, alignment: .leading)
         }
-        .formStyle(.grouped)
         .onAppear { engine.synthShown = true; engine.refreshSynth() }
         .onDisappear { engine.synthShown = false }
         .onChange(of: engine.selectedPart) { _, _ in engine.synthLayer = 0; engine.synthLayers = -1; engine.refreshSynth() }
         .onChange(of: engine.parts) { _, _ in engine.refreshSynth() }
+    }
+}
+
+// a titled group of rows in a fixed column (the synth pane's: a Form's
+// section without its measuring)
+struct Box<Content: View>: View {
+    let title: String?
+    @ViewBuilder let content: Content
+    init(_ title: String?, @ViewBuilder content: () -> Content) { self.title = title; self.content = content() }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let t = title { Text(t).font(.subheadline.bold()).foregroundStyle(.secondary) }
+            VStack(alignment: .leading, spacing: 6) { content }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
+        }
     }
 }
 
