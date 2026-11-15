@@ -4663,6 +4663,23 @@ def build_nvrender():
     return exe
 
 
+def build_nvroomtail():
+    """native/nvroomtail (roomtail.py natively: a render's room tail), built
+    beside libnative.so when a source is newer: its path."""
+    lib()
+    src = os.path.join(HERE, 'native', 'nvroomtail.cpp')
+    exe = os.path.join(HERE, 'nvroomtail')
+    so = os.path.join(HERE, 'libnative.so')       # (the tails are in it: native/roomtail.cpp)
+    hdr = os.path.join(HERE, 'native', 'session.h')
+    if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(so),
+                                      os.path.getmtime(hdr)) > os.path.getmtime(exe):
+        tmp = '%s.%d.tmp' % (exe, os.getpid())
+        subprocess.check_call(_TC.cmd(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin',
+                               src, '-o', tmp, '-L' + HERE, '-lnative', '-ldl', '-Wl,-rpath,$ORIGIN']))
+        os.replace(tmp, exe)
+    return exe
+
+
 def template(program, note, vel, tuner='hybrid440'):
     """nv_template: live's template table for a key (live.Voice._raw_template's
     blockrender.prepare of a one-note file, fixed touch, no register), from
