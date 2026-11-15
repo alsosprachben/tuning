@@ -3075,10 +3075,28 @@ struct Part {
     // not ready -- and goes with the next hand-off that gets the lock)
     std::vector<std::tuple<const nv::live::Template *, int, int>> scan_pend;
     std::vector<std::pair<int, int>> scan_pend_pos;
+    // THE BUSY-WORKER TEST (nvlive --test --busy=N): the audio side's lock
+    // taken on one try in N, as if the worker held it the others -- so the
+    // held-over paths run. Each hand-off site's tries and misses counted, and
+    // each worker's jobs made and sent (0 scanner, 1 valve, 2 register): at
+    // the end every job made was sent
+    enum { BS_SCAN, BS_SCANPOS, BS_AMPGET, BS_AMPPUT, BS_REGPUT, BS_REGGET, BS_N };
+    int busy_every = 0;
+    long busy_try[BS_N] = {}, busy_miss[BS_N] = {}, hand_made[3] = {}, hand_sent[3] = {}, scan_ready_n = 0;
+    bool rt_lock(std::unique_lock<std::mutex> &lk, int site)
+    {
+        busy_try[site]++;
+        if ((busy_every > 1 && busy_try[site] % busy_every) || !lk.try_lock()) {
+            busy_miss[site]++;
+            return false;
+        }
+        return true;
+    }
     // (the lock held)
     bool scan_flush_locked()
     {
         bool any = !scan_pend.empty() || !scan_pend_pos.empty();
+        hand_sent[0] += (long)(scan_pend.size() + scan_pend_pos.size());
         for (auto &j : scan_pend)
             scan_jobs.push_front(j);
         scan_pend.clear();
@@ -3090,8 +3108,8 @@ struct Part {
     // (each block, while anything waits)
     void scan_retry()
     {
-        std::unique_lock<std::mutex> lk(scan_mu, std::try_to_lock);
-        if (lk.owns_lock() && scan_flush_locked()) {
+        std::unique_lock<std::mutex> lk(scan_mu, std::defer_lock);
+        if (rt_lock(lk, BS_SCANPOS) && scan_flush_locked()) {
             lk.unlock();
             scan_cv.notify_all();
         }
@@ -3257,20 +3275,24 @@ struct Part {
         const ScanPrep *gp = nullptr;
         if (scan_async) {
             // (off this thread: not ready, the press plays dry and its rank is queued)
-            std::unique_lock<std::mutex> lk(scan_mu, std::try_to_lock);
-            if (!lk.owns_lock()) {
+            std::unique_lock<std::mutex> lk(scan_mu, std::defer_lock);
+            if (!rt_lock(lk, BS_SCAN)) {
                 scan_pend.push_back(std::make_tuple(&R, dep, cho));
+                hand_made[0]++;
                 return;
             }
             bool sent = scan_flush_locked();
             auto it = scan_g.find(gk);
             if (it == scan_g.end()) {
                 scan_jobs.push_front(std::make_tuple(&R, dep, cho));
+                hand_made[0]++;
+                hand_sent[0]++;
                 lk.unlock();
                 scan_cv.notify_all();
                 return;
             }
             gp = &it->second;
+            scan_ready_n++;
             lk.unlock();
             if (sent)
                 scan_cv.notify_all();
@@ -3884,8 +3906,9 @@ struct Part {
     void amp_pump(long long n0)
     {
         std::unique_lock<std::mutex> lk(amp_mu, std::defer_lock);
-        if (amp_async && lk.try_lock()) {   // (the worker's answers so far; busy: next block's)
+        if (amp_async && rt_lock(lk, BS_AMPGET)) {  // (the worker's answers so far; busy: next block's)
             bool sent = !amp_pend.empty();
+            hand_sent[1] += (long)amp_pend.size();
             for (auto &pj : amp_pend) {
                 amp_jobdata[pj.first.jid] = std::move(pj.second);
                 amp_jobs.push_back(pj.first);
@@ -3948,8 +3971,10 @@ struct Part {
                 job.jid = ++amp_jid[apid];
                 amp_busy = true;
                 if (amp_async) {
-                    std::unique_lock<std::mutex> jl(amp_mu, std::try_to_lock);
-                    if (jl.owns_lock()) {
+                    std::unique_lock<std::mutex> jl(amp_mu, std::defer_lock);
+                    hand_made[1]++;
+                    if (rt_lock(jl, BS_AMPPUT)) {
+                        hand_sent[1]++;
                         amp_jobdata[job.jid] = std::move(jd);
                         amp_jobs.push_back(job);
                         jl.unlock();
@@ -10524,12 +10549,14 @@ struct Part {
                     if (p.scanner && (p.channel < 0 || p.channel == pc(ch))) {
                         std::pair<int, int> st = scan_setting(p, ch);
                         if (st.first) {
-                            std::unique_lock<std::mutex> lk(scan_mu, std::try_to_lock);
-                            if (!lk.owns_lock()) {
+                            std::unique_lock<std::mutex> lk(scan_mu, std::defer_lock);
+                            hand_made[0]++;
+                            if (!rt_lock(lk, BS_SCANPOS)) {
                                 scan_pend_pos.push_back(st);
                             } else {
                                 scan_flush_locked();
                                 scan_prefetch_locked(st.first, st.second);
+                                hand_sent[0]++;
                                 lk.unlock();
                                 scan_cv.notify_all();
                             }
@@ -11053,6 +11080,17 @@ struct Part {
 
     ~Part()
     {
+        stop_workers();
+        for (auto &kv : lcs)
+            nv_lreg_free(kv.second);
+    }
+
+    // the valve's, the scanner's and the register's workers stopped and
+    // joined (each finishes the job in hand): before the process exits -- a
+    // worker still preparing when main returned ran on into the teardown
+    // (nvlive --test --async on a scanner organ: a crash after the WAV)
+    void stop_workers()
+    {
         if (amp_thread.joinable()) {
             {
                 std::lock_guard<std::mutex> lk(amp_mu);
@@ -11080,8 +11118,6 @@ struct Part {
             reg_cv.notify_all();
             reg_thread.join();
         }
-        for (auto &kv : lcs)
-            nv_lreg_free(kv.second);
     }
 
     void *lc_of(int ch)
@@ -11183,6 +11219,7 @@ struct Part {
             return;
         }
         reg_unsent.push_back(std::move(j));
+        hand_made[2]++;
         reg_flush();
     }
 
@@ -11191,9 +11228,10 @@ struct Part {
     {
         if (reg_unsent.empty())
             return;
-        std::unique_lock<std::mutex> lk(reg_mu, std::try_to_lock);
-        if (!lk.owns_lock())
+        std::unique_lock<std::mutex> lk(reg_mu, std::defer_lock);
+        if (!rt_lock(lk, BS_REGPUT))
             return;
+        hand_sent[2] += (long)reg_unsent.size();
         for (Job &q : reg_unsent)
             reg_jobs.push_back(std::move(q));
         reg_unsent.clear();
@@ -11238,8 +11276,8 @@ struct Part {
         reg_flush();
         if (reg_ndone.load() == 0)
             return;
-        std::unique_lock<std::mutex> lk(reg_mu, std::try_to_lock);
-        if (!lk.owns_lock())
+        std::unique_lock<std::mutex> lk(reg_mu, std::defer_lock);
+        if (!rt_lock(lk, BS_REGGET))
             return;                             // (next block's)
         for (Reply &r : reg_done)
             reg_out.push_back(std::move(r));
@@ -13853,6 +13891,25 @@ void nv_part_amp_ahead(void *h, int blocks, int hold)
 
 // the scanner's data off the audio thread (nvlive playing: live's builder)
 void nv_part_scan_async(void *h) { ((nv::slab::Part *)h)->start_scan_worker(); }
+void nv_part_stop_workers(void *h) { ((nv::slab::Part *)h)->stop_workers(); }
+// the busy-worker test: N > 1 takes the audio side's locks one try in N
+void nv_part_busy_test(void *h, int n) { ((nv::slab::Part *)h)->busy_every = n; }
+// ...its counts: out[0..5] each site's tries, [6..11] its misses, [12..14]
+// each worker's jobs made, [15..17] sent (0 scanner, 1 valve, 2 register),
+// [18] the scanner's presses that found their rank ready
+void nv_part_busy_stats(void *h, long *out)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    for (int i = 0; i < P->BS_N; i++) {
+        out[i] = P->busy_try[i];
+        out[6 + i] = P->busy_miss[i];
+    }
+    for (int i = 0; i < 3; i++) {
+        out[12 + i] = P->hand_made[i];
+        out[15 + i] = P->hand_sent[i];
+    }
+    out[18] = P->scan_ready_n;
+}
 
 // the Leslie's constants (leslie.cpp's L_*): the part's rotors, on chorale
 void nv_part_leslie(void *h, const double *L, int n)

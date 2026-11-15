@@ -3329,6 +3329,8 @@ void nv_host_close(nv_host *h)
     h->bcv.notify_one();
     if (h->builder.joinable())
         h->builder.join();
+    if (h->part)
+        nv_part_stop_workers(h->part);          // (none left running into the app's exit)
 }
 
 int nv_host_rate(const nv_host *h) { return (int)h->SR; }

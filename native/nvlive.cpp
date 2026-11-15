@@ -8,7 +8,7 @@
 //                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
 //                       [--tuner=NAME [--a=HZ | --c=HZ]] [--eastern=SPEC] [--eastern-at=S:SPEC]
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
-//                       [--rt] [--reg-async] [--async] [--govern] [--paced] [--build-async] [--tuner-at=S:NAME] [--preset-at=S:NAME] [--metronome=BPM[:RING]]
+//                       [--rt] [--reg-async] [--async] [--busy=N] [--govern] [--paced] [--build-async] [--tuner-at=S:NAME] [--preset-at=S:NAME] [--metronome=BPM[:RING]]
 //
 // EXPORT.nvx is examples/native_export.py --live's. At start the part's
 // templates are built (live.Patch.warm: every key 21-108 at each velocity
@@ -162,6 +162,8 @@ int nv_host::run(int argc, char **argv)
                     nv_part_scan_async(part);
                     nv_part_amp_async(part);
                 }
+                if (!strncmp(argv[q], "--busy=", 7))      // the busy-worker test (slab.cpp's rt_lock)
+                    nv_part_busy_test(part, atoi(argv[q] + 7));
                 if (!strcmp(argv[q], "--rt")) {
                     std::string why = rt::promote(rt::PRIO);
                     fprintf(stderr, "nvlive: %s\n", why.empty() ? "real-time, SCHED_RR 18" : ("not real-time: " + why).c_str());
@@ -343,6 +345,15 @@ int nv_host::run(int argc, char **argv)
                 if (tgov)
                     fprintf(stderr, "nvlive:   the governor shed %ld partials\n", nv_part_partials_shed(part));
             }
+            {                                   // the hand-offs' counts (busy: what the busy-worker test made)
+                long bs[19];
+                nv_part_busy_stats(part, bs);
+                fprintf(stderr, "nvlive: hand-offs tried/missed: scanner %ld/%ld, its positions %ld/%ld, valve "
+                        "answers %ld/%ld, valve jobs %ld/%ld, register jobs %ld/%ld, register answers %ld/%ld\n",
+                        bs[0], bs[6], bs[1], bs[7], bs[2], bs[8], bs[3], bs[9], bs[4], bs[10], bs[5], bs[11]);
+                fprintf(stderr, "nvlive: jobs made/sent: scanner %ld/%ld, valve %ld/%ld, register %ld/%ld; "
+                        "scanner presses ready %ld\n", bs[12], bs[15], bs[13], bs[16], bs[14], bs[17], bs[18]);
+            }
             nv_midi_free(m);
             if (session_on) {
                 std::vector<std::array<int, 7>> rs(E.routes.begin(), E.routes.end());
@@ -375,6 +386,7 @@ int nv_host::run(int argc, char **argv)
             fwrite(out.data(), 4, out.size(), wf);
             fclose(wf);
             fprintf(stderr, "nvlive: %lld blocks -> %s\n", nb, argv[i + 2]);
+            nv_part_stop_workers(part);         // (none left running into the exit)
             return 0;
         }
     // LIVE: the keyboard in, ALSA out
