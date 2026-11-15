@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""A self-contained Tuning.app: python3 app/bundle.py [--out=DIR] [--no-exports] [--debug]
+"""A self-contained Clavitone.app: python3 app/bundle.py [--out=DIR] [--no-exports] [--debug]
 
 Built from the repo as it stands (run on the Mac, after native.py has built
 the engine and the exports are made -- ~/nvx/live.nvx, ~/nvx/file.nvx):
 
   the app        xcodebuild's Release build (--debug: Debug), copied to
-                 DIR/Tuning.app (default app/dist)
+                 DIR/Clavitone.app (default app/dist)
   Frameworks     the engine's libraries (libnative and the kernels, every
                  *.so the repo holds) and libomp, each one's links rewritten
                  to @rpath, found beside one another (@loader_path) -- the
@@ -73,13 +73,13 @@ def main(argv):
 
     # THE APP
     print("== xcodebuild %s" % conf, flush=True)
-    r = subprocess.run(["xcodebuild", "-scheme", "Tuning", "-configuration", conf, "-derivedDataPath", "build", "build"],
+    r = subprocess.run(["xcodebuild", "-scheme", "Clavitone", "-configuration", conf, "-derivedDataPath", "build", "build"],
                        cwd=HERE, capture_output=True, text=True)
     if "BUILD SUCCEEDED" not in r.stdout:
         print("\n".join(ln for ln in r.stdout.splitlines() if "error:" in ln)[-2000:] or r.stdout[-2000:])
         return 1
-    src = os.path.join(HERE, "build", "Build", "Products", conf, "Tuning.app")
-    app = os.path.join(out, "Tuning.app")
+    src = os.path.join(HERE, "build", "Build", "Products", conf, "Clavitone.app")
+    app = os.path.join(out, "Clavitone.app")
     os.makedirs(out, exist_ok=True)
     if os.path.exists(app):
         shutil.rmtree(app)
@@ -111,7 +111,7 @@ def main(argv):
     print("   %d libraries%s" % (len(libs), " and libomp" if omp else ""))
 
     # MACOS: the app's executable and the helpers, their libraries in ../Frameworks
-    exe = os.path.join(mac, "Tuning")
+    exe = os.path.join(mac, "Clavitone")
     for p in [exe] + glob.glob(os.path.join(mac, "*.dylib")):
         fix_rpaths(p, ["@executable_path/../Frameworks"])
     for h in HELPERS:

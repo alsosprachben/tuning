@@ -1,9 +1,10 @@
-# The app (macOS now, iOS next): XcodeGen makes Tuning.xcodeproj from this --
-#   cd app && xcodegen && xcodebuild -scheme Tuning build
+# The app (macOS now, iOS next): XcodeGen makes Clavitone.xcodeproj from this --
+#   cd app && xcodegen && xcodebuild -scheme Clavitone build
+# (the app is Clavitone; its sources stay in Tuning/)
 # The engine is the repo's libnative (native.py builds it: the host library,
 # native/host.h), linked from the repo for now; the export (native_export.py
 # --live) read from ~/nvx/live.nvx until the app carries its own.
-name: Tuning
+name: Clavitone
 options:
   bundleIdPrefix: org.tuning
   deploymentTarget:
@@ -14,16 +15,16 @@ settings:
     SWIFT_VERSION: "5.0"
     MACOSX_DEPLOYMENT_TARGET: "15.0"
 targets:
-  Tuning:
+  Clavitone:
     type: application
     platform: macOS
     sources: [Tuning]
     settings:
       base:
-        PRODUCT_NAME: Tuning
+        PRODUCT_NAME: Clavitone
         PRODUCT_BUNDLE_IDENTIFIER: org.tuning.app
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Tuning
+        INFOPLIST_KEY_CFBundleDisplayName: Clavitone
         SWIFT_OBJC_BRIDGING_HEADER: Tuning/Bridge.h
         HEADER_SEARCH_PATHS: $(SRCROOT)/../native
         LIBRARY_SEARCH_PATHS: $(SRCROOT)/..

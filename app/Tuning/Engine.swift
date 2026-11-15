@@ -1369,8 +1369,8 @@ extension String {
 // WHERE THE APP's FILES ARE: a setting (UserDefaults) first; then what the
 // app carries (app/bundle.py puts the exports in Resources and the helpers
 // beside the app's executable); else the repo's and ~/nvx's (a build run from
-// Xcode). The session, presets and scenes in Application Support/Tuning --
-// the repo's copied there once, the first time
+// Xcode). The session, presets and scenes in Application Support/Clavitone --
+// copied there once, the first time (from .../Tuning, the app's old name, else the repo)
 enum Where {
     static let repo = "~/repos/tuning-port".expandingTildeInPath
 
@@ -1391,12 +1391,17 @@ enum Where {
     static func session() -> String {
         if let s = UserDefaults.standard.string(forKey: "session") { return s.expandingTildeInPath }
         let fm = FileManager.default
-        let dir = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Tuning")
+        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let dir = support.appendingPathComponent("Clavitone")
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let sess = dir.appendingPathComponent("session.json")
-        if !fm.fileExists(atPath: sess.path) {          // (the first time: the repo's session, presets and scenes)
+        // (the first time: the app's before it was Clavitone -- Application
+        // Support/Tuning -- else the repo's session, presets and scenes)
+        let before = support.appendingPathComponent("Tuning")
+        let from0 = fm.fileExists(atPath: before.appendingPathComponent("session.json").path) ? before : URL(fileURLWithPath: repo)
+        if !fm.fileExists(atPath: sess.path) {
             for f in ["session.json", "presets.json", "scenes.json"] {
-                let from = URL(fileURLWithPath: repo).appendingPathComponent(f)
+                let from = from0.appendingPathComponent(f)
                 let to = dir.appendingPathComponent(f)
                 if fm.fileExists(atPath: from.path) && !fm.fileExists(atPath: to.path) {
                     try? fm.copyItem(at: from, to: to)

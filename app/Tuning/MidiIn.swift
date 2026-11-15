@@ -26,7 +26,7 @@ final class MidiIn: ObservableObject {
 
     func start() {
         guard client == 0 else { return }
-        MIDIClientCreateWithBlock("Tuning" as CFString, &client) { [weak self] _ in
+        MIDIClientCreateWithBlock("Clavitone" as CFString, &client) { [weak self] _ in
             DispatchQueue.main.async { self?.refresh() }
         }
         MIDIInputPortCreateWithProtocol(client, "in" as CFString, ._1_0, &port) { [weak self] list, _ in
