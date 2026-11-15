@@ -3070,6 +3070,32 @@ struct Part {
     std::mutex scan_mu;
     std::condition_variable scan_cv;
     std::deque<std::tuple<const nv::live::Template *, int, int>> scan_jobs;
+    // (the audio thread never waits on the worker: when the lock is busy, what
+    // it would hand over waits here -- the press plays dry, as when its rank is
+    // not ready -- and goes with the next hand-off that gets the lock)
+    std::vector<std::tuple<const nv::live::Template *, int, int>> scan_pend;
+    std::vector<std::pair<int, int>> scan_pend_pos;
+    // (the lock held)
+    bool scan_flush_locked()
+    {
+        bool any = !scan_pend.empty() || !scan_pend_pos.empty();
+        for (auto &j : scan_pend)
+            scan_jobs.push_front(j);
+        scan_pend.clear();
+        for (auto &q : scan_pend_pos)
+            scan_prefetch_locked(q.first, q.second);
+        scan_pend_pos.clear();
+        return any;
+    }
+    // (each block, while anything waits)
+    void scan_retry()
+    {
+        std::unique_lock<std::mutex> lk(scan_mu, std::try_to_lock);
+        if (lk.owns_lock() && scan_flush_locked()) {
+            lk.unlock();
+            scan_cv.notify_all();
+        }
+    }
 
     ScanPrep make_prep(const nv::live::Template &R, int dep, int cho) const
     {
@@ -3143,6 +3169,8 @@ struct Part {
         if (scan_async || scan.empty())
             return;
         scan_async = true;
+        scan_pend.reserve(256);
+        scan_pend_pos.reserve(64);
         {
             std::lock_guard<std::mutex> lk(scan_mu);
             for (const Patch &p : patches) {        // each voice's own position
@@ -3229,14 +3257,23 @@ struct Part {
         const ScanPrep *gp = nullptr;
         if (scan_async) {
             // (off this thread: not ready, the press plays dry and its rank is queued)
-            std::lock_guard<std::mutex> lk(scan_mu);
+            std::unique_lock<std::mutex> lk(scan_mu, std::try_to_lock);
+            if (!lk.owns_lock()) {
+                scan_pend.push_back(std::make_tuple(&R, dep, cho));
+                return;
+            }
+            bool sent = scan_flush_locked();
             auto it = scan_g.find(gk);
             if (it == scan_g.end()) {
                 scan_jobs.push_front(std::make_tuple(&R, dep, cho));
+                lk.unlock();
                 scan_cv.notify_all();
                 return;
             }
             gp = &it->second;
+            lk.unlock();
+            if (sent)
+                scan_cv.notify_all();
         } else {
             auto it = scan_g.find(gk);
             if (it == scan_g.end())
@@ -3403,6 +3440,9 @@ struct Part {
         double drive = 0.0, ref = 0.0, imb = 0.06;
     };
     std::map<long long, AmpJob> amp_jobdata;    // jid -> its parents
+    // (a job the audio thread could not hand over -- the lock busy -- sent at
+    // the next pump that gets it)
+    std::vector<std::pair<AmpOut, AmpJob>> amp_pend;
     // the fine pass's waiting chords, the newest of each part (live's
     // amp_fine_pending: an older one of the same part is passed over)
     std::map<long long, std::pair<AmpOut, AmpJob>> amp_fine_pending;
@@ -3783,14 +3823,17 @@ struct Part {
                     return;
                 j = amp_jobs.front();
                 amp_jobs.pop_front();
-                jd = amp_jobdata[j.jid];
+                auto jt = amp_jobdata.find(j.jid);
+                if (jt != amp_jobdata.end()) {
+                    jd = std::move(jt->second);
+                    amp_jobdata.erase(jt);
+                }
             }
             AmpOut fast = j;
             amp_pass(jd, rate, false, fast.prod, AMP_THREADS);
             amp_lobes(fast);
             std::lock_guard<std::mutex> lk(amp_mu);
             amp_ready_fast.push_back(fast);
-            amp_jobdata.erase(j.jid);
             amp_fine_pending[j.pid] = std::make_pair(j, jd);
             amp_fine_cv.notify_all();
         }
@@ -3832,6 +3875,7 @@ struct Part {
         if (amp_async)
             return;
         amp_async = true;
+        amp_pend.reserve(8);
         amp_thread = std::thread([this] { amp_worker(); });
         amp_fine_thread = std::thread([this] { amp_fine_worker(); });
     }
@@ -3839,8 +3883,16 @@ struct Part {
     // live._amp_pump
     void amp_pump(long long n0)
     {
-        if (amp_async) {                    // (the worker's answers so far)
-            std::lock_guard<std::mutex> lk(amp_mu);
+        std::unique_lock<std::mutex> lk(amp_mu, std::defer_lock);
+        if (amp_async && lk.try_lock()) {   // (the worker's answers so far; busy: next block's)
+            bool sent = !amp_pend.empty();
+            for (auto &pj : amp_pend) {
+                amp_jobdata[pj.first.jid] = std::move(pj.second);
+                amp_jobs.push_back(pj.first);
+            }
+            amp_pend.clear();
+            if (sent)
+                amp_cv.notify_all();
             while (!amp_ready_fast.empty()) {
                 amp_out = amp_ready_fast.front();       // (the newest stands, as live's one amp_out)
                 amp_ready_fast.pop_front();
@@ -3851,6 +3903,7 @@ struct Part {
                     amp_fine_results.push_back(amp_ready_fine.front());
                 amp_ready_fine.pop_front();
             }
+            lk.unlock();
         }
         amp_released();
         if (amp_has_out) {
@@ -3895,10 +3948,15 @@ struct Part {
                 job.jid = ++amp_jid[apid];
                 amp_busy = true;
                 if (amp_async) {
-                    std::lock_guard<std::mutex> lk(amp_mu);
-                    amp_jobdata[job.jid] = jd;
-                    amp_jobs.push_back(job);
-                    amp_cv.notify_all();
+                    std::unique_lock<std::mutex> jl(amp_mu, std::try_to_lock);
+                    if (jl.owns_lock()) {
+                        amp_jobdata[job.jid] = std::move(jd);
+                        amp_jobs.push_back(job);
+                        jl.unlock();
+                        amp_cv.notify_all();
+                    } else {
+                        amp_pend.emplace_back(job, std::move(jd));
+                    }
                 } else {                    // in step: both passes now, placed at the next pump
                     amp_out = job;
                     amp_pass(jd, rate, false, amp_out.prod);
@@ -10466,9 +10524,15 @@ struct Part {
                     if (p.scanner && (p.channel < 0 || p.channel == pc(ch))) {
                         std::pair<int, int> st = scan_setting(p, ch);
                         if (st.first) {
-                            std::lock_guard<std::mutex> lk(scan_mu);
-                            scan_prefetch_locked(st.first, st.second);
-                            scan_cv.notify_all();
+                            std::unique_lock<std::mutex> lk(scan_mu, std::try_to_lock);
+                            if (!lk.owns_lock()) {
+                                scan_pend_pos.push_back(st);
+                            } else {
+                                scan_flush_locked();
+                                scan_prefetch_locked(st.first, st.second);
+                                lk.unlock();
+                                scan_cv.notify_all();
+                            }
                         }
                         break;
                     }
@@ -10981,6 +11045,9 @@ struct Part {
     std::condition_variable reg_cv;
     std::deque<Job> reg_jobs;
     std::deque<Reply> reg_done;
+    // (jobs the audio thread could not hand over -- the lock busy -- sent, in
+    // order, with the next hand-off that gets it)
+    std::vector<Job> reg_unsent;
     std::atomic<long> reg_ndone{0};
     bool reg_stop = false;
 
@@ -11115,10 +11182,22 @@ struct Part {
             run_job(j, reg_out);
             return;
         }
-        {
-            std::lock_guard<std::mutex> lk(reg_mu);
-            reg_jobs.push_back(std::move(j));
-        }
+        reg_unsent.push_back(std::move(j));
+        reg_flush();
+    }
+
+    // (the waiting jobs onto the worker's queue, if its lock is free)
+    void reg_flush()
+    {
+        if (reg_unsent.empty())
+            return;
+        std::unique_lock<std::mutex> lk(reg_mu, std::try_to_lock);
+        if (!lk.owns_lock())
+            return;
+        for (Job &q : reg_unsent)
+            reg_jobs.push_back(std::move(q));
+        reg_unsent.clear();
+        lk.unlock();
         reg_cv.notify_one();
     }
 
@@ -11147,15 +11226,21 @@ struct Part {
         if (reg_async)
             return;
         reg_async = true;
+        reg_unsent.reserve(64);
         reg_thread = std::thread([this] { reg_worker(); });
     }
 
     // the worker's answers so far, onto reg_out (the audio thread)
     void reg_collect()
     {
-        if (!reg_async || reg_ndone.load() == 0)
+        if (!reg_async)
             return;
-        std::lock_guard<std::mutex> lk(reg_mu);
+        reg_flush();
+        if (reg_ndone.load() == 0)
+            return;
+        std::unique_lock<std::mutex> lk(reg_mu, std::try_to_lock);
+        if (!lk.owns_lock())
+            return;                             // (next block's)
         for (Reply &r : reg_done)
             reg_out.push_back(std::move(r));
         reg_done.clear();
@@ -12651,6 +12736,8 @@ struct Part {
         if (!amp_dirty.empty() || amp_has_out || !amp_fine_results.empty() || amp_async || !amp_chg.empty()
             || !S.rel_log.empty())
             amp_pump(n0);                       // the valve (live's _amp_pump)
+        if (!scan_pend.empty() || !scan_pend_pos.empty())
+            scan_retry();
         std::vector<Key> sw;
         for (auto &kv : S.live) {
             std::pair<int, int> ck((int)std::get<1>(kv.first), (int)std::get<2>(kv.first));
