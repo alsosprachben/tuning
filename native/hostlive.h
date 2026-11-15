@@ -1184,6 +1184,9 @@ struct nv_host {
     // waits on pmu or mu (busy: next block); and the window's figures
     // carried while its lock is busy
     bool soft_locks = false;
+    int gpu_nthr = 4;                           // (--gpu-threads: the GPU setup's team)
+    void (*wg_join_fn)(void *, int) = nullptr;  // (the GPU kernel's voice_wg_join: macOS)
+    unsigned wg_seen = ~0u;
     double pend_max = 0.0, pend_sum = 0.0;
     long pend_n = 0;
     float pend_pk[2] = {0.0f, 0.0f};

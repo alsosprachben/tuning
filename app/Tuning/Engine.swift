@@ -83,6 +83,9 @@ final class Engine: ObservableObject {
     private var source: AVAudioSourceNode?
     private var timer: Timer?
     private var rate = 48000.0
+    // (a latency-critical, user-initiated activity while the app runs: no App
+    // Nap, no timer coalescing -- what audio apps declare)
+    private var activity: NSObjectProtocol?
 
     // THE SAMPLE TIMELINE (nv_host_midi_at's frames): the frames handed out
     // before the latest buffer, that buffer's first sample's host time, and
@@ -133,6 +136,7 @@ final class Engine: ObservableObject {
             }
             nv_host_start(h)
             nv_host_set_realtime(h, 1)            // (the callback never waits on another thread's lock)
+            if ProcessInfo.processInfo.environment["TUNING_ROOM_WORKER"] != nil { nv_host_room_inline(h, 0) }   // (a test's)
             nv_host_set_session_path(h, self.sessionPath)
             let restored = nv_host_session_load(h) == 0
             let items = Engine.readPatches(h)
@@ -210,9 +214,13 @@ final class Engine: ObservableObject {
             guard let self else { return }
             self.applyBuffer()
             if !self.audio.isRunning { try? self.audio.start() }
+            self.joinWorkgroup()
         }
+        activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical],
+                                                         reason: "live audio")
         do {
             try audio.start()
+            joinWorkgroup()
             status = "playing"
             ready = true
         } catch {
@@ -410,6 +418,14 @@ final class Engine: ObservableObject {
 
     func panic() {
         if let h = host { nv_host_panic(h) }
+    }
+
+    // the output's audio workgroup, for the engine's helper threads to join
+    // (Apple's way: they wake promptly on fast cores, counted with the audio)
+    private func joinWorkgroup() {
+        guard let h = host, let au = audio.outputNode.audioUnit else { return }
+        let r = nv_host_join_output_workgroup(h, UnsafeMutableRawPointer(au))
+        if debug { FileHandle.standardError.write("audio workgroup: \(r == 0 ? "joined" : "none")\n".data(using: .utf8)!) }
     }
 
     private func setGlobal(_ which: Int32, _ v: Double) {

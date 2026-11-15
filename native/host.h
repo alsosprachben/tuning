@@ -28,6 +28,14 @@ void nv_host_start(nv_host *h);
    taken the next block (2.7 ms later). Off (the default, and a check's): it
    waits, so the blocks are the same whatever the threads' timing */
 void nv_host_set_realtime(nv_host *h, int on);
+/* the room's body on the audio thread (1: set_realtime's) or its worker (0) */
+void nv_host_room_inline(nv_host *h, int on);
+/* macOS / iOS: the output unit's AUDIO WORKGROUP (CoreAudio's), which the
+   host's helper threads then join -- the room's worker, the GPU setup's
+   team, the free strings', the scanner's, the valve's -- so they wake
+   promptly on fast cores, counted with the audio thread. 0, or -1 none.
+   Again after the output device changes */
+int nv_host_join_output_workgroup(nv_host *h, void *audio_unit);
 /* the builder stopped (the host is not freed: its workers run to the end) */
 void nv_host_close(nv_host *h);
 

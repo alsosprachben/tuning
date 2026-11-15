@@ -41,7 +41,8 @@
 #include "pycompat.h"          // a section's entries: random.Random
 #include "gsdisplay.h"         // the Sound Canvas's display
 #include "mpe.h"               // MPE's zones (tonelib.MpeZones)
-#include "cmx.h"               // the controller matrix (ctrlmatrix)
+#include "cmx.h"
+#include "rtjoin.h"             // (helpers in the audio workgroup: macOS / iOS)               // the controller matrix (ctrlmatrix)
 
 extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
 extern "C" const NoteClass *nv_tcache_note_class(void *h, int program, int note);
@@ -2356,6 +2357,7 @@ struct Room {
             go = false;
             if (stop)
                 return;
+            NV_RT_HELPER();                         // (the audio workgroup's, where there is one)
             lk.unlock();
             for (int i = 0; i < nconv; i++)
                 if (body[i])
@@ -3080,6 +3082,7 @@ struct Part {
     void scan_worker()
     {
         for (;;) {
+            NV_RT_HELPER();
             std::tuple<const nv::live::Template *, int, int> j;
             {
                 std::unique_lock<std::mutex> lk(scan_mu);
@@ -3749,6 +3752,7 @@ struct Part {
     void amp_worker()
     {
         for (;;) {
+            NV_RT_HELPER();
             AmpOut j;
             AmpJob jd;
             {
@@ -3778,6 +3782,7 @@ struct Part {
     void amp_fine_worker()
     {
         for (;;) {
+            NV_RT_HELPER();
             AmpOut j;
             AmpJob jd;
             {
@@ -11103,6 +11108,7 @@ struct Part {
             reg_cv.wait(lk, [&] { return reg_stop || !reg_jobs.empty(); });
             if (reg_stop)
                 return;
+            NV_RT_HELPER();
             Job j = std::move(reg_jobs.front());
             reg_jobs.pop_front();
             lk.unlock();

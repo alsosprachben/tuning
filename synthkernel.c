@@ -1220,6 +1220,28 @@ void synth_voice_lobe(
 // caller of the shared helpers changes gcc's inlining in synth_voice, and the
 // CPU render must stay byte-for-byte what it was.
 #ifdef VOICE_BLOCK
+#ifdef __APPLE__
+/* THE GPU SETUP's TEAM in the audio workgroup (native/rtjoin.h): each of
+   nthr OpenMP threads joins wg (leaving the one it was in) -- run by the
+   host on its audio thread when the workgroup changes, so the team
+   voice_block forks from there is the same threads. macOS / iOS only. */
+#include <os/workgroup.h>
+void voice_wg_join(void *wg, int nthr)
+{
+    #pragma omp parallel num_threads(nthr)
+    {
+        static __thread os_workgroup_t j = 0;
+        static __thread os_workgroup_join_token_s tok;
+        if (j != (os_workgroup_t)wg) {
+            if (j)
+                os_workgroup_leave(j, &tok);
+            j = 0;
+            if (wg && os_workgroup_join((os_workgroup_t)wg, &tok) == 0)
+                j = (os_workgroup_t)wg;
+        }
+    }
+}
+#endif
 #include "voicedesc.h"
 // ---------------------------------------------------------------------------
 // THE BLOCK SETUP ALONE, for a renderer that does the samples elsewhere (the

@@ -30,6 +30,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include "hostint.h"
+#include "rtjoin.h"
 
 namespace nvh {
 
@@ -1009,7 +1010,9 @@ int nv_host::open(int argc, char **argv)
             // off the thread: 489 blocks over 2.67 ms at 1000, none at 100.
             // Each side's own threshold is checked by nvlive_check --gpu-min.
             long gmin = atol(opt(argc, argv, "gpu-min", "100").c_str());
-            nv_part_gpu(part, vb, vbd, vds, vs, vz, cl, gmin, atoi(opt(argc, argv, "gpu-threads", "4").c_str()));
+            gpu_nthr = atoi(opt(argc, argv, "gpu-threads", "4").c_str());
+            nv_part_gpu(part, vb, vbd, vds, vs, vz, cl, gmin, gpu_nthr);
+            wg_join_fn = (void (*)(void *, int))dlsym(gl, "voice_wg_join");     // (macOS: its team in the audio workgroup)
             {                               // (the Moog extensions' build of the setup)
                 std::string gm = beside(E.gpu_damp_lib, "libsynthgpudamp_", "libsynthgpumoogx_");
                 void *hm = gm.empty() ? nullptr : dlopen(gm.c_str(), RTLD_NOW | RTLD_LOCAL);
@@ -1772,6 +1775,10 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                         break;
         if (f)
             f(1);
+    }
+    if (wg_join_fn && gpu_nthr > 1 && wg_seen != nv::rtj::g_gen.load()) {
+        wg_seen = nv::rtj::g_gen.load();       // (the GPU setup's team joins the audio workgroup: here, the
+        wg_join_fn(nv::rtj::g_wg.load(), gpu_nthr);  //  thread voice_block forks it from)
     }
     long long t0 = rt::now_ns();
     rt::busy_since = t0;
@@ -3183,6 +3190,24 @@ void nv_host_set_realtime(nv_host *h, int on)
 {
     h->soft_locks = on != 0;
     nv_room_inline(on);                         // (the room's body on the audio thread: no worker to wake)
+}
+
+void nv_host_room_inline(nv_host *, int on) { nv_room_inline(on); }
+
+int nv_host_join_output_workgroup(nv_host *, void *audio_unit)
+{
+#ifdef __APPLE__
+    os_workgroup_t wg = nullptr;
+    UInt32 size = sizeof wg;
+    if (!audio_unit || AudioUnitGetProperty((AudioUnit)audio_unit, kAudioOutputUnitProperty_OSWorkgroup,
+                                            kAudioUnitScope_Global, 0, &wg, &size) != noErr || !wg)
+        return -1;
+    nv::rtj::set(wg);                           // (kept: the helpers join it at their next pass)
+    return 0;
+#else
+    (void)audio_unit;
+    return -1;
+#endif
 }
 
 void nv_host_close(nv_host *h)
