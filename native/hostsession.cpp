@@ -188,8 +188,7 @@ void nv_host::udrum_queue(int s, int key, int code, int v)
     const uint8_t a = 0x21, b = (uint8_t)(((s & 1) << 4) | (code & 15)), c = (uint8_t)(key & 127),
                   d = (uint8_t)std::max(0, std::min(127, v));
     std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, a, b, c, d, (uint8_t)((128 - (a + b + c + d) % 128) % 128)};
-    std::lock_guard<std::mutex> lk(mu);
-    q.push_back(Midi{6, 0, 0, 0, x});
+    enqueue(Midi{6, 0, 0, 0, x});
 }
 
 // THE SCENE NOW (live.scene_from), in mido's text form: the captured
@@ -1225,8 +1224,7 @@ void nv_host_sysfx_send(nv_host *h, int hi, int lo, int v)
 {
     std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, (uint8_t)hi, (uint8_t)lo, (uint8_t)std::max(0, std::min(127, v))};
     x.push_back((uint8_t)((128 - (0x40 + hi + lo + x[7]) % 128) % 128));
-    std::lock_guard<std::mutex> lk(h->mu);
-    h->q.push_back(Midi{6, 0, 0, 0, x});
+    h->enqueue(Midi{6, 0, 0, 0, x});
 }
 
 int nv_host_synth_knobs(char *out, int cap)
@@ -1309,9 +1307,8 @@ int nv_host_cmx_state(nv_host *h, int channel, nv_host_cmx *out)
 
 static void cmx_post(nv_host *h, int channel, const std::function<std::vector<uint8_t>(int)> &msg)
 {
-    std::lock_guard<std::mutex> lk(h->mu);
     for (int c = channel < 0 ? 0 : channel; c < (channel < 0 ? 16 : channel + 1); c++)
-        h->q.push_back(Midi{6, 0, 0, 0, msg(c)});
+        h->enqueue(Midi{6, 0, 0, 0, msg(c)});
 }
 void nv_host_cmx_cell(nv_host *h, int channel, int src, int dest, int raw)
 {
@@ -1371,15 +1368,14 @@ int nv_host_chan_cc(nv_host *h, int channel, int cc)
 void nv_host_chan_cc_send(nv_host *h, int channel, int cc, int v)
 {
     v = std::max(0, std::min(127, v));
-    std::lock_guard<std::mutex> lk(h->mu);
     for (int c = channel < 0 ? 0 : channel; c < (channel < 0 ? 16 : channel + 1); c++) {
         if (cc == NV_HOST_VSENSE) {             // (GS's 40 1x 1A, as a sequencer sends it)
             const int blk = c == 9 ? 0 : c < 9 ? c + 1 : c;
             std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, (uint8_t)(0x10 | blk), 0x1A, (uint8_t)v};
             x.push_back((uint8_t)((128 - (0x40 + x[5] + 0x1A + v) % 128) % 128));
-            h->q.push_back(Midi{6, 0, 0, 0, x});
+            h->enqueue(Midi{6, 0, 0, 0, x});
         } else if (cc >= 0 && cc < 128)
-            h->q.push_back(Midi{2, c, cc, v, {}});
+            h->enqueue(Midi{2, c, cc, v, {}});
     }
 }
 
@@ -1548,8 +1544,7 @@ int nv_host_scene_recall(nv_host *h, const char *name, char *msg, int cap)
 void nv_host_gs_reset(nv_host *h)
 {
     std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41};
-    std::lock_guard<std::mutex> lk(h->mu);
-    h->q.push_back(Midi{6, 0, 0, 0, x});
+    h->enqueue(Midi{6, 0, 0, 0, x});
 }
 
 // libnative's own directory (relocate.h): where the library holding this is

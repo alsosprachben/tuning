@@ -277,7 +277,6 @@ int nv_host::run(int argc, char **argv)
                 }
                 // the block's events, to the queue the keyboard's go to
                 {
-                    std::lock_guard<std::mutex> lk(mu);
                     while (e < ne) {
                         int iv[4];
                         double et;
@@ -295,7 +294,7 @@ int nv_host::run(int argc, char **argv)
                                 ev.x.assign(xb.begin(), xb.begin() + xn);
                         }
                         if (keep)
-                            q.push_back(std::move(ev));
+                            enqueue(std::move(ev));
                         e++;
                     }
                 }
@@ -452,7 +451,7 @@ int nv_host::run(int argc, char **argv)
     }
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
-    reader = std::thread(midi_reader_ins, &ins, &mu, &q);
+    reader = std::thread(midi_reader_ins, &ins, [this](Midi &&m) { enqueue(std::move(m)); });
     // the register's jobs on their own thread, off the audio one (--reg-sync: in step)
     rsync = false; nort = getenv("TUNING_RT") && !strcmp(getenv("TUNING_RT"), "0"); nopanel = !isatty(1);
     for (int i = 1; i < argc; i++) {
@@ -489,12 +488,11 @@ int nv_host::run(int argc, char **argv)
         auto queue_ump = [this](const std::vector<uint32_t> &pk, std::map<int, std::vector<uint8_t>> &sxb) {
             std::vector<nv::ump::Ev> evs;
             nv::ump::decode(pk.data(), sxb, evs, &m2b.ignored);
-            std::lock_guard<std::mutex> lk(mu);
             for (auto &e : evs) {
                 Midi m{e.type, e.ch, e.a, e.b, e.x};
                 m.v = e.v;
                 m.ump = true;
-                q.push_back(std::move(m));
+                enqueue(std::move(m));
             }
         };
         const std::string playf = opt(argc, argv, "midi2-play", "");
@@ -754,8 +752,7 @@ int nv_host::run(int argc, char **argv)
         H.meters = [&]() { return meter; };
         H.gs_reset = [&]() {                    // (as a sequencer sends it: through the queue, live.gs_reset)
             std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41};
-            std::lock_guard<std::mutex> lk(mu);
-            q.push_back(Midi{6, 0, 0, 0, x});
+            enqueue(Midi{6, 0, 0, 0, x});
         };
         // AN ORGAN'S STOPS (live's panel): its ranks, drawn and put in between two blocks
         auto stops_of = [&](int sp) {
@@ -831,15 +828,14 @@ int nv_host::run(int argc, char **argv)
         };
         H.chan_cc_send = [&](int ch, int cc, int v) {
             v = std::max(0, std::min(127, v));
-            std::lock_guard<std::mutex> lk(mu);
             for (int c = ch < 0 ? 0 : ch; c < (ch < 0 ? 16 : ch + 1); c++) {
                 if (cc == panel::VSENSE_CC) {   // (velocity sense depth: GS's 40 1x 1A, as a sequencer sends it)
                     const int blk = c == 9 ? 0 : c < 9 ? c + 1 : c;
                     std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, (uint8_t)(0x10 | blk), 0x1A, (uint8_t)v};
                     x.push_back((uint8_t)((128 - (0x40 + x[5] + 0x1A + v) % 128) % 128));
-                    q.push_back(Midi{6, 0, 0, 0, x});
+                    enqueue(Midi{6, 0, 0, 0, x});
                 } else
-                    q.push_back(Midi{2, c, cc, v, {}});
+                    enqueue(Midi{2, c, cc, v, {}});
             }
         };
         // THE CONTROLLER MATRIX (C): as in effect, and an exclusive sent as
@@ -851,19 +847,16 @@ int nv_host::run(int argc, char **argv)
         H.udrum_get = [&](panel::Host::USets &u) { return udrum_read(u); };
         H.udrum_send = [&](int us, int key, int code, int v) { udrum_queue(us, key, code, v); };
         H.strike = [&](int ch, int note, int vel) {
-            std::lock_guard<std::mutex> lk(mu);
-            q.push_back(Midi{vel ? 0 : 1, ch & 15, note & 127, vel, {}});
+            enqueue(Midi{vel ? 0 : 1, ch & 15, note & 127, vel, {}});
         };
         H.cmx_send = [&](const std::vector<uint8_t> &x) {
-            std::lock_guard<std::mutex> lk(mu);
-            q.push_back(Midi{6, 0, 0, 0, x});
+            enqueue(Midi{6, 0, 0, 0, x});
         };
         H.sysfx_send = [&](int hi, int lo, int v) {
             std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, (uint8_t)hi, (uint8_t)lo,
                                    (uint8_t)std::max(0, std::min(127, v))};
             x.push_back((uint8_t)((128 - (0x40 + hi + lo + x[7]) % 128) % 128));
-            std::lock_guard<std::mutex> lk(mu);
-            q.push_back(Midi{6, 0, 0, 0, x});
+            enqueue(Midi{6, 0, 0, 0, x});
         };
         if (E.has_prog)
             H.pick = [&](int sp) { pick(sp); };

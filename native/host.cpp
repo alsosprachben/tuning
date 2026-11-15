@@ -1756,6 +1756,14 @@ int nv_host::open(int argc, char **argv)
     // block's counters, the governor, the master (render_block's, live
     // and in step)
     learning = 0;  // 1 armed, 2 got one
+    // (the audio thread's lists, reserved once: lfqueue.h's take never grows them)
+    evs_rt.reserve(1 << 14);
+    tpend.reserve(1 << 14);
+    due_rt.reserve(1 << 14);
+    mstash.reserve(1 << 14);
+    pstash.reserve(1 << 13);
+    rx_store.reserve(64);
+    rxo_p.reserve(64);
     learnt_ch = -1; learnt_note = -1;
     swallow = std::pair<int, int>(-1, -1);  // the learnt key's release (audio thread)
     underruns = 0; over = 0; blocks = 0;
@@ -1829,24 +1837,29 @@ void nv_host::render_block(long long n0, float *buf, bool step)
     // machine busy, however lightly played (Ben, on the M3). Busy: taken
     // next block. (Not in a check's render: there it waits, so the blocks
     // stay the same whatever the threads' timing.)
-    std::vector<std::function<void(long long)>> todo;
+    // (now lock-free: lfqueue.h -- what is in the queues when the block
+    // looks is all taken, whatever the other threads are doing; a post a
+    // post makes runs next block)
     {
-        std::unique_lock<std::mutex> lk(pmu, std::defer_lock);
-        if (soft_locks ? lk.try_lock() : (lk.lock(), true))
-            todo.swap(posted);
+        Post *p;
+        for (size_t n = pq.size_approx(); n > 0 && pq.pop(p); n--) {
+            p->f(n0);
+            posted_n.fetch_sub(1, std::memory_order_relaxed);
+            trash(p);
+        }
     }
-    for (auto &f : todo)
-        f(n0);
     const long long t_ev = rt::now_ns();        // (the onset's split: the queued work, the events, the step)
-    std::vector<Midi> evs;
+    evs_rt.clear();
     {
-        std::unique_lock<std::mutex> lk(mu, std::defer_lock);
-        if (soft_locks ? lk.try_lock() : (lk.lock(), true))
-            evs.swap(q);
+        Midi *m;
+        for (size_t n = mq.size_approx(); n > 0 && mq.pop(m); n--)
+            evs_rt.push_back(m);
     }
+    evs_rt.insert(evs_rt.end(), due_rt.begin(), due_rt.end());     // (the stamped MIDI due in this block: timed_due)
+    due_rt.clear();
     if (recording)
-        for (const Midi &m : evs)
-            rec("e %lld %d %d %d %d", n0, m.type, m.ch, m.a, m.b);
+        for (const Midi *m : evs_rt)
+            rec("e %lld %d %d %d %d", n0, m->type, m->ch, m->a, m->b);
     if (m2b.on && !m2b.pending.empty() && m2_held != std::chrono::steady_clock::time_point{}
         && std::chrono::steady_clock::now() - m2_held > std::chrono::microseconds(5000)) {
         std::vector<nv::ump::Ev> out;           // (a lone data entry held past live's M2_HOLD_S: sent)
@@ -1854,16 +1867,23 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         m2_hold_mark();
         m2_out(out);
     }
-    std::vector<Midi> rxo;
-    for (const Midi &m0 : evs) {
+    for (Midi *mp0 : evs_rt) {
+      const Midi &m0 = *mp0;
       // A CHANNEL MESSAGE AS THE PARTS RECEIVE IT (live._gs_rx): to each part
       // listening on its channel, dropped by an Rx switch, a CC10 by master pan
-      rxo.clear();
-      if (m0.type != 6 && m0.ch >= 0 && m0.ch < 16)
-          gs_rx_stage(m0, rxo);
-      else
-          rxo.push_back(m0);
-      for (const Midi &m : rxo) {
+      // (staged copies of a channel message -- no exclusive's bytes to copy;
+      // anything else as it came)
+      rx_store.clear();
+      rxo_p.clear();
+      if (m0.type != 6 && m0.ch >= 0 && m0.ch < 16) {
+          gs_rx_stage(m0, rx_store);
+          for (const Midi &x : rx_store)
+              rxo_p.push_back(&x);
+      } else {
+          rxo_p.push_back(&m0);
+      }
+      for (const Midi *mpp : rxo_p) {
+        const Midi &m = *mpp;
         if (m.type == 8 || !std::isnan(m.v)) {  // MIDI 2.0's own (live.on_ump: past the routes, learn, latch)
             engine_raw(m.type, m.ch, m.a, m.b, m.v);
             continue;
@@ -2065,16 +2085,21 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         event(m.type, m.ch, m.a, m.b);
       }
     }
-    if (gs_want && !step) {             // (a sequencer's GS reverb, playing: the builder's, as live.set_room)
-        {
-            std::lock_guard<std::mutex> lk(bmu);
+    for (Midi *mp0 : evs_rt)            // (done with: to be freed elsewhere)
+        trash(mp0);
+    evs_rt.clear();
+    if (gs_want && !step) {             // (a sequencer's GS reverb, playing: the builder's, as live.set_room --
+                                        //  never waited for: the builder busy, asked next block)
+        std::unique_lock<std::mutex> lk(bmu, std::try_to_lock);
+        if (lk.owns_lock()) {
             room_req = gs_want_room;
             room_req_tl_on = gs_want_tl_on;
             for (int q = 0; q < 3; q++)
                 room_req_tl[q] = gs_want_tl[q];
+            gs_want = false;
+            lk.unlock();
+            bcv.notify_one();
         }
-        gs_want = false;
-        bcv.notify_one();
     }
     const long long t_blk = rt::now_ns();
     nv_part_block(part, n0, BLK);
@@ -2614,10 +2639,51 @@ void nv_host::drum_build(std::vector<DReq> &q)
     q.clear();
 }
 
+// THE AUDIO THREAD's QUEUES (lfqueue.h): pushed here, on the caller's
+// thread -- allocated here, and what the block is done with freed here too
+void nv_host::reclaim()
+{
+    Midi *m;
+    while (mtrash.pop(m))
+        delete m;
+    Post *p;
+    while (ptrash.pop(p))
+        delete p;
+}
+
+void nv_host::enqueue(Midi &&m)
+{
+    reclaim();
+    Midi *p = new Midi(std::move(m));
+    while (!mq.push(p))                         // (full: 16384 waiting -- the block will take them)
+        std::this_thread::yield();
+}
+
 void nv_host::post(std::function<void(long long)> f)
 {
-    std::lock_guard<std::mutex> lk(pmu);
-    posted.push_back(std::move(f));
+    reclaim();
+    Post *p = new Post{std::move(f)};
+    posted_n.fetch_add(1, std::memory_order_relaxed);
+    while (!pq.push(p))
+        std::this_thread::yield();
+}
+
+// ...and handed back by the audio thread: the trash full (no one pushing for
+// a long while), kept in a stash reserved at the start, handed back later
+void nv_host::trash(Midi *m)
+{
+    while (!mstash.empty() && mtrash.push(mstash.back()))
+        mstash.pop_back();
+    if (!mtrash.push(m))
+        mstash.push_back(m);
+}
+
+void nv_host::trash(Post *p)
+{
+    while (!pstash.empty() && ptrash.push(pstash.back()))
+        pstash.pop_back();
+    if (!ptrash.push(p))
+        pstash.push_back(p);
 }
 
 // the globals where they start (the panel's g: master dB, headroom dB, the
@@ -3202,7 +3268,7 @@ int nv_host::building()
     int n = builder_busy ? 1 : 0;
     {
         std::lock_guard<std::mutex> lk(pmu);
-        n += (int)posted.size();
+        n += posted_n.load(std::memory_order_relaxed);
     }
     std::lock_guard<std::mutex> lk(bmu);
     return n + (int)breq.size() + (int)bdone.size() + (room_req.empty() ? 0 : 1) + (tuner_req.empty() ? 0 : 1)
@@ -3276,18 +3342,23 @@ int nv_host_render(nv_host *h, float *L, float *R, int frames)
 // the stamped MIDI whose sample falls in the block from n0 (nv_host_midi_at),
 // into the queue the block reads -- in their samples' order, a sample's in
 // the order given
+// the stamped MIDI (nv_host_midi_at) due in the block at n0: the queue
+// drained into the audio thread's own list, sorted by sample (one stamped
+// alike after the one before it), and those under the block's end handed to
+// the block (due_rt) -- no lock, no allocation (the lists reserved)
 static void timed_due(nv_host *h, long long n0)
 {
-    std::lock_guard<std::mutex> lk(h->timed_mu);
-    if (h->timed.empty())
-        return;
-    auto end = h->timed.lower_bound(n0 + h->BLK);
-    if (end == h->timed.begin())
-        return;
-    std::lock_guard<std::mutex> lq(h->mu);
-    for (auto it = h->timed.begin(); it != end; ++it)
-        h->q.push_back(std::move(it->second));
-    h->timed.erase(h->timed.begin(), end);
+    Midi *m;
+    while (h->tq.pop(m)) {
+        auto it = std::upper_bound(h->tpend.begin(), h->tpend.end(), m,
+                                   [](const Midi *a, const Midi *b) { return a->at < b->at; });
+        h->tpend.insert(it, m);
+    }
+    size_t k = 0;
+    while (k < h->tpend.size() && h->tpend[k]->at < n0 + h->BLK)
+        h->due_rt.push_back(h->tpend[k++]);
+    if (k)
+        h->tpend.erase(h->tpend.begin(), h->tpend.begin() + (long)k);
 }
 
 int nv_host_render_step(nv_host *h, float *L, float *R, int frames, int step)
@@ -3376,21 +3447,25 @@ void nv_host_midi_at(nv_host *h, const uint8_t *msg, int n, long long frame)
         h->last_midi_f = f;
         frame = f + h->phrase_shift;
     }
-    std::lock_guard<std::mutex> lk(h->timed_mu);
-    h->timed_parse.feed(msg, n, [&](Midi &&m) { h->timed.emplace(frame, std::move(m)); });
+    h->reclaim();
+    std::lock_guard<std::mutex> lk(h->timed_mu);     // (the parse's running status: the stamping threads')
+    h->timed_parse.feed(msg, n, [&](Midi &&m) {
+        Midi *p = new Midi(std::move(m));
+        p->at = frame;
+        while (!h->tq.push(p))
+            std::this_thread::yield();
+    });
 }
 
 void nv_host_midi(nv_host *h, const uint8_t *msg, int n)
 {
-    std::lock_guard<std::mutex> lk(h->midi_in_mu);
-    h->midi_in.feed(msg, n, [&](Midi &&m) {
-        std::lock_guard<std::mutex> lq(h->mu);
-        h->q.push_back(std::move(m));
-    });
+    std::lock_guard<std::mutex> lk(h->midi_in_mu);   // (the parse's running status: the callers')
+    h->midi_in.feed(msg, n, [&](Midi &&m) { h->enqueue(std::move(m)); });
 }
 
 void nv_host_snapshot(nv_host *h, nv_host_snap *s)
 {
+    h->reclaim();                               // (the window's poll: the block's trash freed here too)
     std::lock_guard<std::mutex> lk(h->pmu);
     const panel::Snap &p = h->snap;
     s->n0 = p.n0;

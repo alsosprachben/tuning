@@ -35,6 +35,7 @@
 #endif
 #include <sys/wait.h>
 #include <mutex>
+#include "lfqueue.h"
 #include <string>
 #include <thread>
 #include <unistd.h>
@@ -517,6 +518,7 @@ struct Midi {
     // value (type 8: a the note, b its kind) -- past the routes, as live.on_ump
     double v = NAN;
     bool ump = false;           // from a MIDI 2.0 source (--midi2-play, --ump): past the routes and the bridge
+    long long at = 0;           // (nv_host_midi_at's: the sample it is stamped with)
 };
 
 // raw MIDI bytes from a device file: running status; note-on at velocity 0 a
@@ -699,7 +701,7 @@ struct MidiIns {
 // ...read on one thread: each wanted device opened (non-blocking), each read
 // in turn through its own parser (running status is a device's own), a
 // device that goes away closed and dropped
-inline void midi_reader_ins(MidiIns *ins, std::mutex *mu, std::vector<Midi> *q)
+inline void midi_reader_ins(MidiIns *ins, std::function<void(Midi &&)> push)
 {
     struct In {
         int fd;
@@ -785,8 +787,7 @@ inline void midi_reader_ins(MidiIns *ins, std::mutex *mu, std::vector<Midi> *q)
             if (n > 0) {
                 any = true;
                 it->second.mp.feed(buf, (long)n, [&](Midi &&m) {
-                    std::lock_guard<std::mutex> lk(*mu);
-                    q->push_back(std::move(m));
+                    push(std::move(m));           // (the host's lock-free queue: enqueue)
                 });
                 ++it;
             } else if (n < 0 && errno != EAGAIN && errno != EINTR) {
@@ -1175,7 +1176,26 @@ struct nv_host {
     unsigned lat;
     int r;
     std::mutex mu;
-    std::vector<Midi> q;
+    // THE AUDIO THREAD's INPUTS, LOCK-FREE (lfqueue.h): the MIDI and the posted
+    // work pushed by any thread (enqueue, post: allocated there), popped by the
+    // block without a lock, and handed back through the trash queues to be
+    // freed by whoever pushes next (reclaim) -- never freed on the audio
+    // thread. What the block holds meanwhile is in arrays reserved once
+    // (evs_rt, rx_store, rxo_p; tpend, due_rt the stamped MIDI's, sorted)
+    struct Post {
+        std::function<void(long long)> f;
+    };
+    nv::LfQueue<Midi *> mq{1 << 14}, tq{1 << 14}, mtrash{1 << 16};
+    nv::LfQueue<Post *> pq{1 << 13}, ptrash{1 << 14};
+    std::atomic<int> posted_n{0};
+    std::vector<Midi *> evs_rt, tpend, due_rt, mstash;
+    std::vector<Post *> pstash;
+    std::vector<Midi> rx_store;
+    std::vector<const Midi *> rxo_p;
+    void enqueue(Midi &&m);
+    void reclaim();
+    void trash(Midi *m);
+    void trash(Post *p);
     std::thread reader;
     bool rsync;
     bool nort;
@@ -1196,7 +1216,6 @@ struct nv_host {
     double pend_st[4] = {0, 0, 0, 0}, snap_st[4] = {0, 0, 0, 0};  // (...its busy slots, GPU, setup, samples)
     double last_split[3] = {0, 0, 0}, pend_split[3] = {0, 0, 0}, snap_split[3] = {0, 0, 0};  // (queued work, events, step)
     double pend_cpu[2] = {0, 0}, snap_cpu[2] = {0, 0};  // (the slowest block's thread CPU time: user, system)
-    std::vector<std::function<void(long long)>> posted;
     panel::Snap snap;
     std::atomic<int> learning;
     std::atomic<int> learnt_ch;
@@ -1293,8 +1312,7 @@ struct nv_host {
     // AN APP's AUDIO CALLBACK (nv_host_pull, nv_host_midi_at): MIDI stamped
     // with its sample, held until the block it falls in; the last block's
     // frames not yet handed out (pull_pos of BLK taken)
-    std::mutex timed_mu;
-    std::multimap<long long, Midi> timed;
+    std::mutex timed_mu;                    // (the parse's, on the threads that stamp: never the audio thread's)
     MidiParse timed_parse;
     int pull_pos = -1;                      // (-1: none rendered yet)
     // (in step, --test's: the room's tail to install after the block, the
