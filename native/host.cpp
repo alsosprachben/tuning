@@ -1796,6 +1796,14 @@ void nv_host::rec(const char *fmt, ...)
 // the governor and the panel's snapshot
 void nv_host::render_block(long long n0, float *buf, bool step)
 {
+    // (an allocation watcher preloaded -- tests/live/allocwatch.c, alloc_check.py -- told when
+    // each block starts and ends; none: the lookup finds nothing, and nothing is called)
+    static void (*rt_watch)(int) = (void (*)(int))dlsym(RTLD_DEFAULT, "nv_rt_alloc_watch");
+    struct RtWatch {
+        void (*f)(int);
+        explicit RtWatch(void (*g)(int)) : f(g) { if (f) f(1); }
+        ~RtWatch() { if (f) f(0); }
+    } rt_watch_on(rt_watch);
     // THE KERNEL ON THIS THREAD ALONE: synth_voice's chunks are an OpenMP
     // loop, and a block is one chunk -- nothing to share, but handed to a
     // worker that sleeps (or spins against the GPU's setup threads) it waited
@@ -2272,6 +2280,7 @@ void nv_host::start()
         nv_part_reg_async(part);
     nv_part_scan_async(part);                     // the scanner's data on its own thread, as live's builder
     nv_part_amp_async(part);                      // ...and the valve's passes, as live's workers
+    nv_part_rt_prepare(part, BLK);                // (the block's scratch reserved: none allocated playing)
     // THE BUILDER (live's _patch_worker): the programs asked for, warmed off
     // the audio thread, handed back to be swapped in between two blocks
     // ...a ROOM asked for (the panel's), and the tail its switch drew, for

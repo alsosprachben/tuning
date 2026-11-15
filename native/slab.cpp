@@ -530,7 +530,36 @@ struct Slab {
     std::vector<float> dg;                 // a damped row's weight (damper.weight)
     std::vector<float> aLp, aRp;            // pressure's columns: none on a piano, still the kernel's
     std::vector<char> busy;
-    std::deque<long> free;
+    // THE FREE SLOTS, in order (a queue: taken from the front, given back at
+    // the end): a ring sized once for every slot -- a deque allocated and
+    // freed a chunk each 64 slots given back and taken, on the audio thread
+    struct SlotRing {
+        std::vector<long> buf;
+        size_t head = 0, n = 0, mask = 0;
+        void init(size_t cap)
+        {
+            size_t c = 1;
+            while (c < cap + 1)
+                c <<= 1;
+            buf.assign(c, 0);
+            mask = c - 1;
+            head = n = 0;
+        }
+        size_t size() const { return n; }
+        bool empty() const { return n == 0; }
+        long front() const { return buf[head]; }
+        void pop_front() { head = (head + 1) & mask; n--; }
+        void push_back(long s) { buf[(head + n) & mask] = s; n++; }
+        struct It {
+            const SlotRing *r;
+            size_t i;
+            long operator*() const { return r->buf[(r->head + i) & r->mask]; }
+            It &operator++() { i++; return *this; }
+            bool operator!=(const It &o) const { return i != o.i; }
+        };
+        It begin() const { return It{this, 0}; }
+        It end() const { return It{this, n}; }
+    } free;
     // the keys sounding and their slots, in the order first stamped (a
     // Python dict: a key released and stamped again goes to the end) --
     // the order a pedal's release takes them in, so the free queue's order
@@ -601,6 +630,8 @@ struct Slab {
         ls_aR.assign(cap, 0.0f);
         busy.assign(cap, 0);
         mark.assign(cap, 0);
+        free.init((size_t)cap);
+        spare.reserve(SPARE_MAX);
         for (long i = 0; i < cap; i++)
             free.push_back(i);
         for (int c = 0; c < 256; c++)
@@ -613,6 +644,10 @@ struct Slab {
     // template's columns (n rows), key, n0, vel_scale, hrel, dur, oneshot,
     // the template's send (NAN: none), sof and rof (NULL: none). False if
     // the slab is full.
+    // (stamp's scratch, kept: a press allocates no working lists)
+    std::vector<double> st_offs;
+    std::vector<long> st_idx;
+    std::vector<float> st_vd;
     bool stamp(const double *const *tf8, const float *const *tf4, const long long *const *ti8,
                const int32_t *const *ti4, const float *threl, long n, Key key, long long n0, double vel_scale,
                long long dur, bool one, double tsend, long long ch, const long long *sof = nullptr,
@@ -624,7 +659,8 @@ struct Slab {
         if ((long)free.size() < n)
             return false;
         // each player's entry, drawn for this press (t["pl"]: the row's player)
-        std::vector<double> offs;
+        std::vector<double> &offs = st_offs;
+        offs.clear();
         if (scat != 0.0) {
             int mp = 0;
             for (long q = 0; q < n; q++)
@@ -633,7 +669,8 @@ struct Slab {
             for (int p = 0; p <= mp; p++)
                 offs[p] = pyr_random(&scat_rng) * scat * 0.001 * rate;
         }
-        std::vector<long> idx(n);
+        std::vector<long> &idx = st_idx;
+        idx.resize((size_t)n);
         for (long q = 0; q < n; q++) {
             idx[q] = free.front();
             free.pop_front();
@@ -729,7 +766,8 @@ struct Slab {
             ls_on[s] = 0;                       // (...and off the rotors until armed)
         }
         // the vibrato's scale: vd over its mean (np.mean: float32, pairwise)
-        std::vector<float> vd(n);
+        std::vector<float> &vd = st_vd;
+        vd.resize((size_t)n);
         for (long q = 0; q < n; q++)
             vd[q] = tf4[F4_vd][q];
         float mv = (float)((double)pairwise(vd.data(), n) / (double)n);     // (np.mean: over the count in float64)
@@ -1390,9 +1428,11 @@ struct Slab {
 
     // live.Slab._disown: freed slots out of a key still held, its list's
     // order kept
+    std::vector<long long> disown_ks;           // (disown's scratch, kept)
     void disown(const std::vector<long> &idx)
     {
-        std::vector<long long> ks;
+        std::vector<long long> &ks = disown_ks;
+        ks.clear();
         for (long s : idx)
             if (owner[s] >= 0)
                 ks.push_back(owner[s]);
@@ -1406,12 +1446,7 @@ struct Slab {
             if (li < 0 || live[li].second.empty())
                 continue;
             std::vector<long> &lst = live[li].second;
-            std::vector<long> kept;
-            for (long s : lst)
-                if (!mark[s])
-                    kept.push_back(s);
-            if (kept.size() != lst.size())
-                lst.swap(kept);
+            lst.erase(std::remove_if(lst.begin(), lst.end(), [&](long s) { return mark[s] != 0; }), lst.end());
         }
         marked(idx, 0);
     }
@@ -2210,10 +2245,29 @@ struct Slab {
         }
     }
 
+    // RETIRED LISTS KEPT FOR REUSE: a list reap is done with goes here, its
+    // capacity kept, and the next list retired (the register's strings
+    // fallen under the floor) is drawn from here -- not allocated and freed
+    // each time on the audio thread
+    std::vector<std::vector<long>> spare;
+    static constexpr size_t SPARE_MAX = 4096;
+    std::vector<long> take_list()
+    {
+        if (spare.empty())
+            return std::vector<long>();
+        std::vector<long> v = std::move(spare.back());
+        spare.pop_back();
+        v.clear();
+        return v;
+    }
+    // (reap's scratch, kept: a block allocates nothing here)
+    std::vector<long> reap_freed;
+    std::vector<int> reap_fx;
     void reap(long long n, long long blk)
     {
-        std::vector<std::pair<std::vector<long>, long long>> keep;
-        for (auto &r : retiring) {
+        size_t kept = 0;                        // (those still ringing, moved down in order)
+        for (size_t ri = 0; ri < retiring.size(); ri++) {
+            auto &r = retiring[ri];
             float mx = 0.0f;
             bool first = true;
             for (long s : r.first) {
@@ -2232,7 +2286,8 @@ struct Slab {
                 tail += (double)tx;
             }
             if ((double)n > tail) {
-                std::vector<long> freed;
+                std::vector<long> &freed = reap_freed;
+                freed.clear();
                 for (long s : r.first) {
                     i8[0][s] = IDLE;
                     tp[s] = -1;
@@ -2245,14 +2300,18 @@ struct Slab {
                 if (!freed.empty())
                     disown(freed);
                 // the Moog rows these slots held, returned with the last of them
-                std::map<int, int> cnt;
+                // (each row's count down by its slots, then each row once, in order)
+                std::vector<int> &fx = reap_fx;
+                fx.clear();
                 for (long s : freed)
-                    if (i4[I4_fx][s] >= 0)
-                        cnt[i4[I4_fx][s]]++;
-                if (!cnt.empty()) {
-                    for (auto &c : cnt) {
-                        int q = c.first;
-                        ft_cnt[q] -= c.second;
+                    if (i4[I4_fx][s] >= 0) {
+                        ft_cnt[i4[I4_fx][s]]--;
+                        fx.push_back(i4[I4_fx][s]);
+                    }
+                if (!fx.empty()) {
+                    std::sort(fx.begin(), fx.end());
+                    fx.erase(std::unique(fx.begin(), fx.end()), fx.end());
+                    for (int q : fx) {
                         if (ft_cnt[q] <= 0) {
                             ft_cnt[q] = 0;
                             mp_on[q] = 0;
@@ -2267,10 +2326,14 @@ struct Slab {
                     }
                 }
             } else {
-                keep.push_back(r);
+                if (kept != ri)
+                    std::swap(retiring[kept], r);   // (the reaped ones end up past kept: their lists to spare)
+                kept++;
             }
         }
-        retiring.swap(keep);
+        for (size_t q = kept; q < retiring.size() && spare.size() < SPARE_MAX; q++)
+            spare.push_back(std::move(retiring[q].first));
+        retiring.resize(kept);
     }
 };
 
@@ -3485,6 +3548,7 @@ struct Part {
         long long jid0, sh;
     };
     std::map<long long, std::vector<Chg>> amp_chg;
+    std::vector<Chg> amp_gone;                  // (amp_hold_step's scratch, kept)
     // live.amp_jobT: where each job's products take over (has, at, crossover)
     struct Cross {
         bool has;
@@ -3898,6 +3962,7 @@ struct Part {
             return;
         amp_async = true;
         amp_pend.reserve(8);
+        amp_gone.reserve(256);
         amp_thread = std::thread([this] { amp_worker(); });
         amp_fine_thread = std::thread([this] { amp_fine_worker(); });
     }
@@ -4114,13 +4179,19 @@ struct Part {
             // tone changed): its onset has nothing to wait for; one cut and
             // reaped, gone
             int pi = patch_of_pid(h->first);
-            std::vector<Chg> keep, gone;
-            for (Chg &e : chg) {
+            // (kept ones moved down in place, the gone into amp_gone: no copies, nothing allocated)
+            std::vector<Chg> &gone = amp_gone;
+            gone.clear();
+            size_t w = 0;
+            for (size_t q = 0; q < chg.size(); q++) {
+                Chg &e = chg[q];
+                bool ok = pi >= 0;
                 if (!e.on) {
-                    keep.push_back(e);
+                    if (w != q)
+                        chg[w] = std::move(e);
+                    w++;
                     continue;
                 }
-                bool ok = pi >= 0;
                 for (long s : e.idx)
                     ok = ok && S.busy[s];
                 if (ok) {
@@ -4142,10 +4213,16 @@ struct Part {
                     }
                     ok = in;
                 }
-                (ok ? keep : gone).push_back(e);
+                if (ok) {
+                    if (w != q)
+                        chg[w] = std::move(e);
+                    w++;
+                } else {
+                    gone.push_back(std::move(e));
+                }
             }
+            chg.resize(w);
             amp_play(h->first, gone);
-            chg = keep;
             if (chg.empty()) {
                 h = amp_chg.erase(h);
                 continue;
@@ -11028,7 +11105,7 @@ struct Part {
     std::vector<long> r_cbr;
     double r_cross = 1.0;
     std::vector<int> r_buffs;
-    std::vector<Pend> reg_pend;
+    std::vector<Pend> reg_pend, reg_pend_now;       // (reg_pump takes the one, the other given back: each keeps its capacity)
     struct Reply {
         int kind;                                   // 0 'free', 1 'forced', 2 'forgot'
         int ch, note;
@@ -11304,26 +11381,67 @@ struct Part {
     // _reg_free: the keys whose strings are free on this channel, now (sorted)
     std::vector<int> reg_free(int ch) const
     {
-        std::set<int> keys;
+        std::vector<int> out;
+        reg_free_into(ch, out);
+        return out;
+    }
+    // ...into OUT (cleared; sorted, each key once) -- a key table, no set: the block allocates nothing
+    void reg_free_into(int ch, std::vector<int> &out) const
+    {
+        out.clear();
+        bool keys[128] = {};
         if (r_pedals && pedal_v[ch] > 0) {
-            std::vector<int> held;
+            int nheld = 0;
             for (int k = 21; k < 109; k++)
-                if (nv_damper_contact(pedal_v[ch], k, r_top) < 1.0)
-                    held.push_back(k);
-            if (held.size() == 88)
-                return held;
-            keys.insert(held.begin(), held.end());
+                if (nv_damper_contact(pedal_v[ch], k, r_top) < 1.0) {
+                    keys[k] = true;
+                    nheld++;
+                }
+            if (nheld == 88) {                  // (every string free: those 88, nothing else)
+                for (int k = 21; k < 109; k++)
+                    out.push_back(k);
+                return;
+            }
         }
         for (auto &d : down)
-            if (d.first == ch)
-                keys.insert(d.second);
+            if (d.first == ch && d.second >= 0 && d.second < 128)
+                keys[d.second] = true;
         auto sq = sost.find(ch);
         if (r_pedals && sq != sost.end())
-            keys.insert(sq->second.begin(), sq->second.end());
+            for (int k : sq->second)
+                if (k >= 0 && k < 128)
+                    keys[k] = true;
         for (int k = r_top; k < 109; k++)
-            keys.insert(k);
-        return std::vector<int>(keys.begin(), keys.end());
+            if (k >= 0)
+                keys[k] = true;
+        for (int k = 0; k < 128; k++)
+            if (keys[k])
+                out.push_back(k);
     }
+
+    // (the register's scratch, kept: placing its answers allocates nothing
+    // once they have grown to the largest seen)
+    struct RowTab {
+        std::vector<double> f8[NF8];
+        std::vector<float> f4[NF4];
+        std::vector<long long> i8[NI8];
+        std::vector<int32_t> i4[NI4];
+        std::vector<float> hr;
+        void size(long n, long long n0)
+        {
+            for (auto &v : f8) v.assign((size_t)n, 0.0);
+            for (auto &v : f4) v.assign((size_t)n, 0.0f);
+            for (auto &v : i8) v.assign((size_t)n, n0);
+            for (auto &v : i4) v.assign((size_t)n, 0);
+            hr.assign((size_t)n, 1.0f);
+        }
+    } reg_tab;
+    std::vector<int> reg_fv;
+    std::vector<long> reg_done_m, reg_head_m;
+    std::vector<cplx> reg_head_z;
+    std::vector<long> reg_m2, reg_old, reg_modes, reg_sl, reg_got, reg_csl;
+    std::vector<cplx> reg_z2, reg_zz, reg_F;
+    std::vector<double> reg_lr, reg_wgt, reg_beta;
 
     void reg_strike(int ch, int note, long long n0, const nv::live::Template &T, const std::vector<long> &slots,
                     const std::vector<int> *plucked = nullptr, const std::map<long, long> *slot_choir = nullptr)
@@ -11386,7 +11504,8 @@ struct Part {
     {
         if (modes.empty())
             return;
-        std::vector<long> sl;
+        std::vector<long> &sl = reg_csl;
+        sl.clear();
         for (long m : modes) {
             long s = st.slot_of[m];
             st.slot_of[m] = -1;
@@ -11404,7 +11523,9 @@ struct Part {
                 e.second.insert(e.second.end(), sl.begin(), sl.end());
                 return;
             }
-        reg_retire.push_back(std::make_pair(n0, sl));
+        std::vector<long> v = S.take_list();    // (a list reaped before, its capacity kept)
+        v.assign(sl.begin(), sl.end());
+        reg_retire.emplace_back(n0, std::move(v));
     }
 
     void reg_damper(int ch, long long n0, int released, bool pedal_up)
@@ -11502,7 +11623,9 @@ struct Part {
             }
         }
         // this block's strikes: their stamped direct rows, read now, and the keys free now
-        std::vector<Pend> pend;
+        // (two lists taking turns: each keeps its capacity)
+        std::vector<Pend> &pend = reg_pend_now;
+        pend.clear();
         pend.swap(reg_pend);
         for (const Pend &p : pend) {
             std::vector<long> idx;
@@ -11550,6 +11673,7 @@ struct Part {
             j.keys = reg_free(p.ch);
             send_job(std::move(j));
         }
+        pend.clear();
         reg_collect();
         // what the worker handed back: until a block's worth is placed
         reg_more = false;
@@ -11566,7 +11690,8 @@ struct Part {
                 if (!st.ready)
                     continue;
                 bool on = false;
-                std::vector<long> done;
+                std::vector<long> &done = reg_done_m;
+                done.clear();
                 for (size_t m = 0; m < st.slot_of.size(); m++)
                     if (st.slot_of[m] >= 0) {
                         on = true;
@@ -11585,7 +11710,7 @@ struct Part {
             reg_live = live_;
         }
         for (auto &e : reg_retire)
-            S.retiring.push_back(std::make_pair(e.second, e.first));
+            S.retiring.push_back(std::make_pair(std::move(e.second), e.first));
         reg_retire.clear();
     }
 
@@ -11604,12 +11729,16 @@ struct Part {
         if (job.kind == 0) {
             // ONLY STRINGS STILL FREE NOW
             if (!job.modes.empty()) {
-                std::vector<int> fv = reg_free(job.ch);
-                std::set<int> free(fv.begin(), fv.end());
-                std::vector<long> m2;
-                std::vector<cplx> z2;
+                reg_free_into(job.ch, reg_fv);
+                bool free[128] = {};
+                for (int k : reg_fv)
+                    free[k] = true;
+                std::vector<long> &m2 = reg_m2;
+                std::vector<cplx> &z2 = reg_z2;
+                m2.clear();
+                z2.clear();
                 for (size_t q = 0; q < job.modes.size(); q++)
-                    if (free.count((int)rmodes[job.modes[q]].key)) {
+                    if ((unsigned)rmodes[job.modes[q]].key < 128u && free[(int)rmodes[job.modes[q]].key]) {
                         m2.push_back(job.modes[q]);
                         z2.push_back(job.z[q]);
                     }
@@ -11619,35 +11748,52 @@ struct Part {
             if (job.modes.empty())
                 return;
             long nb = std::max(reg_budget, 1L);
+            // (the modes placed now: the reply's own, or -- a block's worth at
+            // a time, the rest waiting a block -- its head in scratch, the
+            // reply's lists moved on to the rest: nothing copied or allocated)
+            std::vector<long> *jm = &job.modes;
+            std::vector<cplx> *jz = &job.z;
             if ((long)job.modes.size() > nb) {
-                // A BLOCK'S WORTH AT A TIME: the rest waits a block
-                Reply rest = job;
-                rest.modes.assign(job.modes.begin() + nb, job.modes.end());
-                rest.z.assign(job.z.begin() + nb, job.z.end());
+                reg_head_m.assign(job.modes.begin(), job.modes.begin() + nb);
+                reg_head_z.assign(job.z.begin(), job.z.begin() + nb);
+                job.modes.erase(job.modes.begin(), job.modes.begin() + nb);
+                job.z.erase(job.z.begin(), job.z.begin() + nb);
+                Reply rest;
+                rest.kind = job.kind;
+                rest.ch = job.ch;
+                rest.note = job.note;
+                rest.at = job.at;
+                rest.floor = job.floor;
+                rest.modes = std::move(job.modes);
+                rest.z = std::move(job.z);
                 reg_out.push_front(std::move(rest));
-                job.modes.resize(nb);
-                job.z.resize(nb);
+                jm = &reg_head_m;
+                jz = &reg_head_z;
                 reg_more = true;
             }
-            reg_budget -= (long)job.modes.size();
+            reg_budget -= (long)(*jm).size();
             if (reg_budget <= 0)
                 reg_more = true;
-            std::vector<long> old;
-            for (long m : job.modes)
+            std::vector<long> &old = reg_old;
+            old.clear();
+            for (long m : (*jm))
                 if (st.slot_of[m] >= 0)
                     old.push_back(m);
             reg_close(st, old, n0, (double)r_blk);
             // each mode's rate: its own, and the felt's in the band
             double dt = (double)n0 - job.at;
             dt = 0.0 > dt ? 0.0 : dt;                               // Python's max(n0 - at, 0.0)
-            std::vector<long> modes;
-            std::vector<cplx> zz;
-            std::vector<double> lr;
-            for (size_t q = 0; q < job.modes.size(); q++) {
-                long m = job.modes[q];
+            std::vector<long> &modes = reg_modes;
+            std::vector<cplx> &zz = reg_zz;
+            std::vector<double> &lr = reg_lr;
+            modes.clear();
+            zz.clear();
+            lr.clear();
+            for (size_t q = 0; q < (*jm).size(); q++) {
+                long m = (*jm)[q];
                 double l = st.has_krate ? rmodes[m].alpha + st.krate[m] : rmodes[m].alpha;
                 double g = exp(-l * dt / rate);
-                cplx a(job.z[q].real() * g - job.z[q].imag() * 0.0, job.z[q].real() * 0.0 + job.z[q].imag() * g);
+                cplx a((*jz)[q].real() * g - (*jz)[q].imag() * 0.0, (*jz)[q].real() * 0.0 + (*jz)[q].imag() * g);
                 if (hypot(a.real(), a.imag()) >= job.floor) {
                     modes.push_back(m);
                     zz.push_back(a);
@@ -11658,11 +11804,12 @@ struct Part {
             if (!n)
                 return;
             // the rows: the template's first, with the mode's own pitch, level, ears and decay
-            std::vector<std::vector<double>> tf8(NF8, std::vector<double>(n));
-            std::vector<std::vector<float>> tf4(NF4, std::vector<float>(n));
-            std::vector<std::vector<long long>> ti8(NI8, std::vector<long long>(n, n0));
-            std::vector<std::vector<int32_t>> ti4(NI4, std::vector<int32_t>(n));
-            std::vector<float> hr(n, 1.0f);
+            reg_tab.size(n, n0);
+            std::vector<double> *tf8 = reg_tab.f8;
+            std::vector<float> *tf4 = reg_tab.f4;
+            std::vector<long long> *ti8 = reg_tab.i8;
+            std::vector<int32_t> *ti4 = reg_tab.i4;
+            std::vector<float> &hr = reg_tab.hr;
             double hd = S.headroom_d > 1e-12 ? S.headroom_d : 1e-12;
             static const int zero4[] = {7, 8, 9, 10, 13, 12, 14, 15, 16, 18, 19, 24};   // logrA aft sus cv sj crl csc cbw tbav tcut vd az
             for (long q = 0; q < n; q++) {
@@ -11705,7 +11852,8 @@ struct Part {
                 reg_dropped += n;
                 return;
             }
-            std::vector<long> got = S.last_slots;
+            std::vector<long> &got = reg_got;
+            got.assign(S.last_slots.begin(), S.last_slots.end());
             long li = S.live_find(key);
             if (li >= 0)
                 S.live.erase(S.live.begin() + li);         // the register keeps its own slots
@@ -11722,9 +11870,13 @@ struct Part {
         }
         // 'forced': its note still sounding -- and still ITS note
         double win = 0.05 * rate;
-        std::vector<long> sl;
-        std::vector<double> wgt, beta;
-        std::vector<cplx> F;
+        std::vector<long> &sl = reg_sl;
+        std::vector<double> &wgt = reg_wgt, &beta = reg_beta;
+        std::vector<cplx> &F = reg_F;
+        sl.clear();
+        wgt.clear();
+        beta.clear();
+        F.clear();
         for (size_t q = 0; q < job.f_slot.size(); q++) {
             long s = job.f_slot[q];
             double age = (double)(S.i8[0][s]) - job.at;                // float(non - at)
@@ -11742,11 +11894,12 @@ struct Part {
         if (reg_budget <= 0)
             reg_more = true;
         long n = (long)sl.size();
-        std::vector<std::vector<double>> tf8(NF8, std::vector<double>(n));
-        std::vector<std::vector<float>> tf4(NF4, std::vector<float>(n));
-        std::vector<std::vector<long long>> ti8(NI8, std::vector<long long>(n, n0));
-        std::vector<std::vector<int32_t>> ti4(NI4, std::vector<int32_t>(n));
-        std::vector<float> hr(n, 1.0f);
+        reg_tab.size(n, n0);
+        std::vector<double> *tf8 = reg_tab.f8;
+        std::vector<float> *tf4 = reg_tab.f4;
+        std::vector<long long> *ti8 = reg_tab.i8;
+        std::vector<int32_t> *ti4 = reg_tab.i4;
+        std::vector<float> &hr = reg_tab.hr;
         double hd = S.headroom_d > 1e-12 ? S.headroom_d : 1e-12;
         for (long q = 0; q < n; q++) {
             long s = sl[q];
@@ -11877,7 +12030,10 @@ struct Part {
         bool snd = false;
         std::vector<float> L, R, SL, SR;
     };
-    std::deque<GpuPend> gpend;
+    // (in flight: a ring of four -- at most gpu_depth + 1 at once -- each
+    // entry's buffers kept for the next block it holds: none allocated)
+    GpuPend gring[4];
+    int ghead = 0, gcount = 0;
     bool on_gpu = false;                // did the last block go to the GPU
     bool gpu_off = false;               // the panel's: the CPU for every block
     bool gpu_failed_said = false;
@@ -12020,7 +12176,9 @@ struct Part {
             shed_tick(n0 + frames);
             return;
         }
-        GpuPend cur;
+        GpuPend &cur = gring[(ghead + gcount) % 4];
+        cur.kind = 0;
+        cur.slot = 0;
         cur.snd = SL != nullptr;
         long hi = -1, act = 0;
         for (long q = 0; q < S.cap; q++)
@@ -12064,12 +12222,15 @@ struct Part {
         }
         on_gpu = g;
         // the one started gpu_depth blocks before it, finished (none yet: silence)
-        gpend.push_back(std::move(cur));
-        GpuPend prev;
-        if ((int)gpend.size() > gpu_depth) {
-            prev = std::move(gpend.front());
-            gpend.pop_front();
+        gcount++;
+        static const GpuPend none;          // (kind 0: none yet -- silence)
+        const GpuPend *pp = &none;
+        if (gcount > gpu_depth) {
+            pp = &gring[ghead];             // (not reused before the next block)
+            ghead = (ghead + 1) % 4;
+            gcount--;
         }
+        const GpuPend &prev = *pp;
         // ...and the one before it, finished
         for (long k = 0; k < frames; k++) {
             L[k] = R[k] = 0.0f;
@@ -12106,6 +12267,33 @@ struct Part {
         shed_tick(n0 + frames);
     }
 
+    // RENDER_NOW'S SCRATCH, kept from block to block: the busy rows sorted
+    // by kernel, their columns gathered, a bus's buffers -- reserved before
+    // playing (rt_prepare), so a block allocates nothing here
+    struct RnScratch {
+        std::vector<long long> bus_saved;
+        std::vector<long> rows[3][4];               // (the slab's, the taps', the bus's: keep, fast, damp, moogx)
+        std::vector<double> d[6];
+        std::vector<float> f[32];
+        std::vector<long> l[2];
+        std::vector<int> i[6];
+        std::vector<float> BL, BR, BSL, BSR, oL, oR;
+    } rn;
+    void rt_prepare(long frames)
+    {
+        size_t n = (size_t)S.cap + 4096;      // (~20 MB at 65536 slots: every column a block can gather)
+        for (int g = 0; g < 3; g++)             // (the taps' and the bus's rows: a few)
+            for (auto &v : rn.rows[g])
+                v.reserve(g == 0 ? n : 4096);
+        for (auto &v : rn.d) v.reserve(n);
+        for (auto &v : rn.f) v.reserve(n);
+        for (auto &v : rn.l) v.reserve(n);
+        for (auto &v : rn.i) v.reserve(n);
+        rn.bus_saved.reserve(4096);
+        for (auto *v : {&rn.BL, &rn.BR, &rn.BSL, &rn.BSR, &rn.oL, &rn.oR})
+            v->reserve((size_t)std::max(frames, 4096L));
+    }
+
     void render_now(long long n0, long frames, float *L, float *R, float *SL, float *SR, void *sv, void *sx,
                     void *sd, long long blk, double master_gain)
     {
@@ -12139,7 +12327,7 @@ struct Part {
         on_gpu = gp.vb && !gpu_off && act >= gp.gpu_min && frames == blk && n0 % frames == 0 && !busp;
         // A PART'S OWN BUS: its partials rendered apart from their copies in
         // the scratch rows, so the originals sit this block out
-        std::vector<long long> bus_saved;
+        std::vector<long long> &bus_saved = rn.bus_saved;
         if (busp) {
             bus_saved.resize(S.bus_hide.size());
             for (size_t q = 0; q < S.bus_hide.size(); q++) {
@@ -12166,7 +12354,9 @@ struct Part {
         // THE MOOG ROWS WHOSE NOTE HAS A ROW OF THE EXTENSIONS (synth_partials'
         // moogx_rows) through synth_voice_moogx, last
         auto mxq = [&](long q) { return smx && S.i4[I4_fx][q] >= 0 && S.mx_on[S.i4[I4_fx][q]]; };
-        std::vector<long> xr, keep, dm, mxr;
+        std::vector<long> &keep = rn.rows[0][0], &xr = rn.rows[0][1], &dm = rn.rows[0][2], &mxr = rn.rows[0][3];
+        for (auto &v : rn.rows[0])
+            v.clear();
         for (long q = 0; q < hi; q++)
             if (S.busy[q])
                 (mxq(q) ? mxr : S.dk[q] >= 0 && sd ? dm : fast(q) ? xr : keep).push_back(q);
@@ -12182,10 +12372,10 @@ struct Part {
             if (!n)
                 return;
             // columns gathered (a set of rows), or the slab's own (the whole range)
-            std::vector<double> d[6];
-            std::vector<float> f[32];
-            std::vector<long> l[2];
-            std::vector<int> i[6];
+            std::vector<double> *d = rn.d;
+            std::vector<float> *f = rn.f;
+            std::vector<long> *l = rn.l;
+            std::vector<int> *i = rn.i;
             auto gd = [&](const std::vector<double> &c, int k) {
                 if (whole) return c.data();
                 d[k].resize(n); for (long q = 0; q < n; q++) d[k][q] = c[rows[q]]; return (const double *)d[k].data();
@@ -12240,7 +12430,9 @@ struct Part {
             call(sv, nullptr, hi, true, false);
         }
         if (S.tap_m) {                      // the taps' scratch rows (Slab.tap_fill), after
-            std::vector<long> xr2, keep2, dm2, mx2;
+            std::vector<long> &keep2 = rn.rows[1][0], &xr2 = rn.rows[1][1], &dm2 = rn.rows[1][2], &mx2 = rn.rows[1][3];
+            for (auto &v : rn.rows[1])
+                v.clear();
             for (long q = S.cap; q < S.cap + S.tap_m; q++)
                 (mxq(q) ? mx2 : S.dk[q] >= 0 && sd ? dm2 : fast(q) ? xr2 : keep2).push_back(q);
             if (!mx2.empty()) {
@@ -12261,14 +12453,19 @@ struct Part {
             for (size_t q = 0; q < S.bus_hide.size(); q++)
                 S.i8[0][S.bus_hide[q]] = bus_saved[q];
             // the bus rows apart, through the processor, added back
-            std::vector<float> BL(frames, 0.0f), BR(frames, 0.0f), BSL(frames, 0.0f), BSR(frames, 0.0f);
+            std::vector<float> &BL = rn.BL, &BR = rn.BR, &BSL = rn.BSL, &BSR = rn.BSR;
+            for (auto *v : {&BL, &BR, &BSL, &BSR})
+                v->assign((size_t)frames, 0.0f);
             if (S.bus_m) {
                 float *L0 = L, *R0 = R, *SL0 = SL, *SR0 = SR;
                 L = BL.data();
                 R = BR.data();
                 SL = SL0 ? BSL.data() : nullptr;
                 SR = SL0 ? BSR.data() : nullptr;
-                std::vector<long> xr3, keep3, dm3, mx3;
+                std::vector<long> &keep3 = rn.rows[2][0], &xr3 = rn.rows[2][1], &dm3 = rn.rows[2][2],
+                                  &mx3 = rn.rows[2][3];
+                for (auto &v : rn.rows[2])
+                    v.clear();
                 const long c1 = S.cap + S.tap_m;
                 for (long q = c1; q < c1 + S.bus_m; q++)
                     (mxq(q) ? mx3 : S.dk[q] >= 0 && sd ? dm3 : fast(q) ? xr3 : keep3).push_back(q);
@@ -12282,7 +12479,9 @@ struct Part {
                 SL = SL0;
                 SR = SR0;
             }
-            std::vector<float> oL(frames), oR(frames);
+            std::vector<float> &oL = rn.oL, &oR = rn.oR;
+            oL.assign((size_t)frames, 0.0f);
+            oR.assign((size_t)frames, 0.0f);
             nv_livebus_process(busp, BL.data(), BR.data(), master_gain, oL.data(), oR.data());
             for (long k = 0; k < frames; k++) {
                 L[k] = L[k] + oL[k];
@@ -13891,6 +14090,8 @@ void nv_part_amp_ahead(void *h, int blocks, int hold)
 
 // the scanner's data off the audio thread (nvlive playing: live's builder)
 void nv_part_scan_async(void *h) { ((nv::slab::Part *)h)->start_scan_worker(); }
+// render_now's scratch reserved before playing (nv_host::start): a block allocates nothing there
+void nv_part_rt_prepare(void *h, long frames) { ((nv::slab::Part *)h)->rt_prepare(frames); }
 void nv_part_stop_workers(void *h) { ((nv::slab::Part *)h)->stop_workers(); }
 // the busy-worker test: N > 1 takes the audio side's locks one try in N
 void nv_part_busy_test(void *h, int n) { ((nv::slab::Part *)h)->busy_every = n; }

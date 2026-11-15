@@ -161,6 +161,7 @@ int nv_host::run(int argc, char **argv)
                 if (!strcmp(argv[q], "--async")) {         // ...and the scanner's and valve's workers, as played
                     nv_part_scan_async(part);
                     nv_part_amp_async(part);
+                    nv_part_rt_prepare(part, BLK);
                 }
                 if (!strncmp(argv[q], "--busy=", 7))      // the busy-worker test (slab.cpp's rt_lock)
                     nv_part_busy_test(part, atoi(argv[q] + 7));

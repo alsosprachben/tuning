@@ -136,6 +136,7 @@ void nv_part_scan(void *h, const double *X, long n);
 void nv_part_scan_async(void *h);
 void nv_part_busy_test(void *h, int n);
 void nv_part_stop_workers(void *h);
+void nv_part_rt_prepare(void *h, long frames);
 void nv_part_busy_stats(void *h, long *out);
 void nv_part_amp_async(void *h);
 void nv_tcache_leslie(void *h, const double *L, int n);
