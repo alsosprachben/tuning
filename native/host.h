@@ -298,6 +298,17 @@ int nv_host_cmx_printed(int dest, double depth, char *out, int cap);
 int nv_host_last_ctl(nv_host *h, long long *when_ns);
 long long nv_host_now_ns(void);
 
+/* ---- THE USER DRUM SETS (livetui's U): GS programs 65, 66 ----
+   the sets a key may take its sound from and their keys' names: "S\tset\tname"
+   and "K\tset\tkey\tname" lines (the export's DKEY) */
+int nv_host_udrum_tables(nv_host *h, char *out, int cap);
+/* user set `set` (0, 1) as set: out[key * 16 + code] for GS 21's codes (0x01
+   play note, 0x02 level, 0x04 pan, 0x08 receive note on, 0x0B the source
+   set, 0x0C its key), -1 not set; 0, -1 not read */
+int nv_host_udrum_state(nv_host *h, int set, int *out);
+/* one setting, as a sequencer's GS message */
+void nv_host_udrum_send(nv_host *h, int set, int key, int code, int v);
+
 /* the live part it plays (native.py's nv_part_*: a check reads its slab) */
 void *nv_host_part(nv_host *h);
 

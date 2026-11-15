@@ -1340,4 +1340,21 @@ long long nv_host_now_ns(void)
     return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
+int nv_host_udrum_tables(nv_host *h, char *out, int cap) { return copy_out(h->E.dkey, out, cap); }
+int nv_host_udrum_state(nv_host *h, int set, int *out)
+{
+    panel::Host::USets u;
+    if (!h->udrum_read(u))
+        return -1;
+    for (int i = 0; i < 128 * 16; i++)
+        out[i] = -1;
+    for (const auto &kv : u)
+        if (kv.first.first == set && kv.first.second >= 0 && kv.first.second < 128)
+            for (const auto &cv : kv.second)
+                if (cv.first >= 0 && cv.first < 16)
+                    out[kv.first.second * 16 + cv.first] = cv.second;
+    return 0;
+}
+void nv_host_udrum_send(nv_host *h, int set, int key, int code, int v) { h->udrum_queue(set, key, code, v); }
+
 }  // extern "C"

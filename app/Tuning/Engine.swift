@@ -112,6 +112,15 @@ final class Engine: ObservableObject {
     var cmxShown = false
     private var cmxReading = false
     private var cmxTurned = Date.distantPast
+    // THE USER DRUM SETS (GS programs 65, 66): the sets a key takes its sound
+    // from, their keys' names; the set shown, as set (key * 16 + code, -1 not set)
+    var dsets: [(Int, String)] = []
+    var dkeys: [Int: [Int: String]] = [:]
+    @Published var udrumSet = 0
+    @Published var udrum: [Int32]? = nil
+    var udrumShown = false
+    private var udrumReading = false
+    private var udrumTurned = Date.distantPast
     @Published var messengerLine = ""
     var synthShown = false                      // (the Synth tab open: its knobs read five times a second)
     private var synthReading = false            // (one read at a time)
@@ -224,6 +233,7 @@ final class Engine: ObservableObject {
                 self.readEfxTables(h)
                 self.refreshEfx()
                 self.readRooms(h)
+                self.readUdrumTables(h)
                 self.readGlobals()
                 self.messengerReads = nv_host_messenger_reads(h) != 0
                 if let m = self.messengerPending { self.messengerPending = nil; self.messengerPlugged(m) }
@@ -513,6 +523,68 @@ final class Engine: ObservableObject {
         synthTurned = Date()
         drive.1 = v < 0 ? drive.2 : v
         drive.3 = v
+    }
+
+    // ---- THE USER DRUM SETS ----
+    private func readUdrumTables(_ h: OpaquePointer) {
+        var buf = [CChar](repeating: 0, count: 1 << 20)
+        nv_host_udrum_tables(h, &buf, 1 << 20)
+        var sets: [(Int, String)] = [], keys: [Int: [Int: String]] = [:]
+        for line in String(cString: buf).split(separator: "\n") {
+            let f = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            if f.count == 3 && f[0] == "S" { sets.append((Int(f[1]) ?? 0, f[2])) }
+            else if f.count == 4 && f[0] == "K" { keys[Int(f[1]) ?? 0, default: [:]][Int(f[2]) ?? 0] = f[3] }
+        }
+        dsets = sets
+        dkeys = keys
+    }
+
+    func dsetName(_ k: Int) -> String { dsets.first { $0.0 == k }?.1 ?? "\(k) (Standard)" }
+
+    func refreshUdrum() {
+        guard let h = host, !udrumReading else { return }
+        udrumReading = true
+        let set = udrumSet, asked = Date()
+        DispatchQueue.global(qos: .userInitiated).async {
+            var out = [Int32](repeating: -1, count: 128 * 16)
+            let ok = nv_host_udrum_state(h, Int32(set), &out) == 0
+            DispatchQueue.main.async {
+                self.udrumReading = false
+                guard ok, set == self.udrumSet, asked > self.udrumTurned, out != self.udrum else { return }
+                self.udrum = out
+            }
+        }
+    }
+
+    func udrumValue(_ key: Int, _ code: Int) -> Int? {
+        guard let u = udrum, u[key * 16 + code] >= 0 else { return nil }
+        return Int(u[key * 16 + code])
+    }
+
+    func setUdrum(_ key: Int, _ code: Int, _ v: Int) {
+        guard let h = host else { return }
+        nv_host_udrum_send(h, Int32(udrumSet), Int32(key), Int32(code), Int32(v))
+        udrumTurned = Date()
+        udrum?[key * 16 + code] = Int32(v)          // (shown at once; the read after confirms it)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.refreshUdrum() }
+    }
+
+    // the selected part plays user set `set` (its drum set is program 65 or 66)
+    var selectedPlaysUdrum: Bool {
+        guard let p = parts.first(where: { $0.row == selectedPart }) else { return false }
+        return p.drums && Int(p.program) == 64 + udrumSet
+    }
+
+    // a key struck on the selected part (a half-second note)
+    func strikeUdrum(_ key: Int) {
+        guard let h = host, selectedPlaysUdrum, let p = parts.first(where: { $0.row == selectedPart }) else { return }
+        let ch = UInt8(p.channel < 0 ? 9 : p.channel)
+        var on: [UInt8] = [0x90 | ch, UInt8(key), 90]
+        nv_host_midi(h, &on, 3)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            var off: [UInt8] = [0x80 | ch, UInt8(key), 0]
+            nv_host_midi(h, &off, 3)
+        }
     }
 
     // ---- THE CONTROLLER MATRIX ----
@@ -859,7 +931,8 @@ final class Engine: ObservableObject {
         if pollTick % 5 == 0 { refreshParts(); refreshEfx() }
         if pollTick % 10 == 3 { readGlobals() }
         if synthShown && pollTick % 2 == 0 { refreshSynth() }
-        if cmxShown && pollTick % 10 == 5 { refreshCmx() }      // (a file's or a sequencer's messages: shown)    // (a Messenger's knobs turned: shown as they land)     // (twice a second: a preset's, a file's)
+        if cmxShown && pollTick % 10 == 5 { refreshCmx() }
+        if udrumShown && pollTick % 10 == 7 { refreshUdrum() }   // (a file's GS messages: shown)      // (a file's or a sequencer's messages: shown)    // (a Messenger's knobs turned: shown as they land)     // (twice a second: a preset's, a file's)
         var s = nv_host_snap()
         nv_host_snapshot(h, &s)
         let m = meters

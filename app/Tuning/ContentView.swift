@@ -237,7 +237,7 @@ struct FlowRow: View {
 
 struct SidePane: View {
     static let tabs: [(String, Int)] = [("Presets", 0), ("Tuning", 1), ("Effects", 3), ("Synth", 4),
-                                        ("Matrix", 5), ("Setup", 2)]
+                                        ("Matrix", 5), ("Drums", 6), ("Setup", 2)]
     @State private var tab = 0
 
     var body: some View {
@@ -261,6 +261,7 @@ struct SidePane: View {
             case 3: EffectsPane()
             case 4: SynthPane()
             case 5: MatrixPane()
+            case 6: UserDrumsPane()
             default: SetupPane()
             }
         }
@@ -760,6 +761,127 @@ struct MatrixPane: View {
         .onAppear { engine.cmxShown = true; engine.refreshCmx() }
         .onDisappear { engine.cmxShown = false; engine.learning = 0 }
         .onChange(of: engine.selectedPart) { _, _ in engine.cmx = nil; engine.refreshCmx() }
+    }
+}
+
+// ---- THE USER DRUM SETS (livetui's U): GS programs 65, 66, each key another set's sound ----
+private func noteNm(_ n: Int) -> String {
+    ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][n % 12] + "\(n / 12 - 1)"
+}
+private func panLabel(_ v: Int) -> String { v == 0 ? "random" : v == 64 ? "C" : v < 64 ? "L\(64 - v)" : "R\(v - 64)" }
+
+struct UserDrumsPane: View {
+    @EnvironmentObject var engine: Engine
+    @State private var key = 36
+
+    // a key's settings in a line (livetui.udrum_line)
+    private func summary(_ k: Int) -> String {
+        guard let sn = engine.udrumValue(k, 0x0C) else { return "--" }
+        let ss = engine.udrumValue(k, 0x0B) ?? 0
+        var out = engine.dkeys[ss]?[sn] ?? "key \(sn)"
+        if let pn = engine.udrumValue(k, 0x01), pn != sn { out += String(format: "  play %+d", pn - sn) }
+        if engine.udrumValue(k, 0x08) == 0 { out += "  (not received)" }
+        return out
+    }
+
+    private func keysOf(_ set: Int) -> [Int] { (engine.dkeys[set] ?? [:]).keys.sorted() }
+
+    private func editor(_ k: Int) -> some View {
+        let has = engine.udrumValue(k, 0x0C) != nil
+        let ss = engine.udrumValue(k, 0x0B) ?? 0
+        let sn = engine.udrumValue(k, 0x0C) ?? k
+        return Box("Key \(noteNm(k)) \(k)") {
+            Picker("Sound from set", selection: Binding(get: { ss }, set: { set in
+                engine.setUdrum(k, 0x0B, set)
+                if !has {                        // (a key with no sound yet: the set's own on this key, else its first)
+                    let ks = keysOf(set)
+                    engine.setUdrum(k, 0x0C, ks.contains(k) ? k : ks.first ?? k)
+                }
+                engine.strikeUdrum(k)
+            })) {
+                ForEach(engine.dsets, id: \.0) { d in Text("\(d.0) \(d.1)").tag(d.0) }
+            }
+            Picker("Its key", selection: Binding(get: { has ? sn : -1 }, set: { x in
+                if engine.udrumValue(k, 0x0B) == nil { engine.setUdrum(k, 0x0B, ss) }
+                engine.setUdrum(k, 0x0C, x)
+                engine.strikeUdrum(k)
+            })) {
+                if !has { Text("--").tag(-1) }
+                ForEach(keysOf(ss), id: \.self) { x in Text("\(noteNm(x)) \(x)  \(engine.dkeys[ss]?[x] ?? "")").tag(x) }
+            }
+            if has {
+                let pn = engine.udrumValue(k, 0x01) ?? sn
+                Stepper("Play note  \(noteNm(pn))\(pn != sn ? String(format: "  (%+d)", pn - sn) : "")",
+                        value: Binding(get: { pn }, set: { engine.setUdrum(k, 0x01, max(0, min(127, $0))) }), in: 0...127)
+                HStack {
+                    Text("Level").frame(width: 60, alignment: .leading)
+                    Slider(value: Binding(get: { Double(engine.udrumValue(k, 0x02) ?? 100) },
+                                          set: { engine.setUdrum(k, 0x02, Int($0.rounded())) }), in: 0...127)
+                    Text(engine.udrumValue(k, 0x02).map { "\($0)" } ?? "the set's").monospacedDigit()
+                        .frame(width: 70, alignment: .trailing)
+                }
+                HStack {
+                    Text("Pan").frame(width: 60, alignment: .leading)
+                    Slider(value: Binding(get: { Double(engine.udrumValue(k, 0x04) ?? 64) },
+                                          set: { engine.setUdrum(k, 0x04, Int($0.rounded())) }), in: 0...127)
+                    Text(engine.udrumValue(k, 0x04).map(panLabel) ?? "the set's").monospacedDigit()
+                        .frame(width: 70, alignment: .trailing)
+                }
+                Toggle("Receive note on", isOn: Binding(get: { engine.udrumValue(k, 0x08) != 0 },
+                                                        set: { engine.setUdrum(k, 0x08, $0 ? 1 : 0) }))
+                HStack {
+                    Button("Strike it") { engine.strikeUdrum(k) }
+                        .disabled(!engine.selectedPlaysUdrum)
+                    if !engine.selectedPlaysUdrum {
+                        Text("pick user set \(engine.udrumSet + 1) (drum program \(65 + engine.udrumSet)) on the selected part to hear it")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+    }
+
+    var body: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("User drum sets").font(.headline)
+                Text("GS's programs 65 and 66: each key plays any set's sound, with its own note, level and pan")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Picker("", selection: Binding(get: { engine.udrumSet }, set: { engine.udrumSet = $0; engine.udrum = nil; engine.refreshUdrum() })) {
+                    Text("User set 1 (65)").tag(0); Text("User set 2 (66)").tag(1)
+                }
+                .pickerStyle(.segmented).labelsHidden()
+                if engine.udrum != nil {
+                    editor(key)
+                    Box("Keys (\((0..<128).filter { engine.udrumValue($0, 0x0C) != nil }.count) set)") {
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            ForEach(0..<128, id: \.self) { k in
+                                let set = engine.udrumValue(k, 0x0C) != nil
+                                HStack(spacing: 6) {
+                                    Text("\(noteNm(k))").monospacedDigit().frame(width: 34, alignment: .leading)
+                                    Text("\(k)").monospacedDigit().foregroundStyle(.secondary).frame(width: 28, alignment: .trailing)
+                                    Text(summary(k)).lineLimit(1).truncationMode(.tail)
+                                        .foregroundStyle(set ? Color.primary : Color.secondary)
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(.vertical, 2).padding(.horizontal, 4)
+                                .background(RoundedRectangle(cornerRadius: 4).fill(k == key ? Color.accentColor.opacity(0.25) : Color.clear))
+                                .contentShape(Rectangle())
+                                .onTapGesture { key = k }
+                            }
+                        }
+                    }
+                } else {
+                    Text("reading...").foregroundStyle(.secondary)
+                }
+            }
+            .padding(12)
+            .frame(width: SynthPane.width, alignment: .leading)
+        }
+        .onAppear { engine.udrumShown = true; engine.refreshUdrum() }
+        .onDisappear { engine.udrumShown = false }
     }
 }
 
