@@ -315,6 +315,15 @@ int nv_host::run(int argc, char **argv)
                 ms.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
                 out.insert(out.end(), buf.begin(), buf.end());
             }
+            // every block's time and its render's, one line a block, for a
+            // comparison of the worst (NV_BLOCK_TIMES=FILE; examples/blocktimes.py)
+            if (const char *tf = getenv("NV_BLOCK_TIMES")) {
+                if (FILE *f = fopen(tf, "w")) {
+                    for (size_t i = 0; i < ms.size(); i++)
+                        fprintf(f, "%.4f %.4f\n", ms[i], i < msr.size() ? msr[i] : 0.0);
+                    fclose(f);
+                }
+            }
             // the blocks' times against the block's own length
             if (!ms.empty()) {
                 std::vector<double> o = ms;
