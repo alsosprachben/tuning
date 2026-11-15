@@ -7,9 +7,9 @@
 // calloc, realloc and aligned allocation on that thread is counted by its call
 // stack, and blamed on whoever asked: the first frame above the C and C++
 // runtimes -- the engine's own code (libnative, nvlive, the kernels), or a
-// runtime it calls: OpenMP (libgomp's team for the kernel's parallel loop,
-// even of one thread), the GPU's driver (an event a launch, its command
-// buffers). Only the engine's own are its to remove.
+// runtime it calls: OpenMP (libgomp's team for a parallel region, even of
+// one thread: the GPU setup's), the GPU's driver (an event a launch, its
+// command buffers). Only the engine's own are its to remove.
 //
 //   NV_ALLOCWATCH_OUT=FILE     the totals and every stack, most first (stderr if unset)
 //   NV_ALLOCWATCH_BLOCKS=FILE  one line a block: the engine's own allocations in it

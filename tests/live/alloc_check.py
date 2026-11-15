@@ -18,10 +18,11 @@ asked. A chord is held 6 s (under the pedal) on
 
 each on the CPU and, where there is one, the GPU (every block on it:
 --gpu-min=1) -- and from 1.5 s to 5.5 s no block may allocate in the
-engine's own code. A runtime's are left out: OpenMP's (libgomp allocates
-its team for the kernel's parallel loop, even of one thread), the GPU
-driver's (an event each launch). The watcher must see the onset's
-allocations, or it was not attached.
+engine's own code. A runtime's are left out: the GPU driver's (an event
+each launch), the GPU setup's OpenMP team. (The CPU kernel's one-chunk
+block no longer enters OpenMP at all -- voice_main.inc -- where libgomp
+built a team every call, even of one thread.) The watcher must see the
+onset's allocations, or it was not attached.
 
 Linux only (it interposes glibc's malloc): elsewhere it says so and passes.
 Exits 1 if any check fails.
