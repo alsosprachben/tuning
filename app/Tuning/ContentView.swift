@@ -236,8 +236,29 @@ struct FlowRow: View {
 // ---- PRESETS, INPUTS, OUTPUT ----
 
 struct SidePane: View {
+    @State private var tab = 0
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("", selection: $tab) {
+                Text("Presets").tag(0)
+                Text("Tuning").tag(1)
+                Text("Setup").tag(2)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(8)
+            switch tab {
+            case 0: PresetsPane()
+            case 1: TuningPane()
+            default: SetupPane()
+            }
+        }
+    }
+}
+
+struct PresetsPane: View {
     @EnvironmentObject var engine: Engine
-    @EnvironmentObject var midi: MidiIn
     @State private var newName = ""
     @State private var chosen: String? = nil
 
@@ -247,7 +268,7 @@ struct SidePane: View {
                 List(engine.presets, id: \.self, selection: $chosen) { name in
                     Text(name).tag(name)
                 }
-                .frame(minHeight: 120)
+                .frame(minHeight: 180)
                 HStack {
                     Button("Load") { if let c = chosen { engine.loadPreset(c) } }
                         .disabled(chosen == nil)
@@ -259,6 +280,74 @@ struct SidePane: View {
                         .disabled(newName.isEmpty)
                 }
             }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+// ---- TUNING: the rig's tuner, and the Eastern tuning for Indian voices ----
+
+private let saKeys = ["c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"]
+
+struct TuningPane: View {
+    @EnvironmentObject var engine: Engine
+
+    // the Eastern spec "raga:<system>[/<raga>]@<sa>" taken apart and put back
+    private var parts: (system: String, raga: String, sa: String) {
+        guard engine.eastern.hasPrefix("raga:") else { return ("", "", "c#") }
+        var b = String(engine.eastern.dropFirst(5)), sa = "c#"
+        if let at = b.firstIndex(of: "@") {
+            sa = String(b[b.index(after: at)...]).split(separator: ":").first.map(String.init) ?? "c#"
+            b = String(b[..<at])
+        }
+        let sr = b.split(separator: "/", maxSplits: 1).map(String.init)
+        return (sr.first ?? "", sr.count > 1 ? sr[1] : "", sa)
+    }
+
+    private func spec(system: String, raga: String, sa: String) -> String {
+        system.isEmpty ? "" : "raga:\(system)\(raga.isEmpty ? "" : "/" + raga)@\(sa)"
+    }
+
+    var body: some View {
+        Form {
+            Section("Tuner") {
+                Picker("Tuner", selection: Binding(get: { engine.tuner }, set: { engine.setTuner($0) })) {
+                    ForEach(engine.tuners, id: \.name) { t in Text(t.name).tag(t.name) }
+                }
+                if let t = engine.tuners.first(where: { $0.name == engine.tuner }) {
+                    Text(t.note).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Section("Eastern tuning (Indian voices)") {
+                let p = parts
+                Picker("System", selection: Binding(get: { p.system },
+                                                    set: { engine.setEastern(spec(system: $0, raga: p.raga, sa: p.sa)) })) {
+                    Text("off").tag("")
+                    ForEach(engine.ragaSystems, id: \.self) { Text($0).tag($0) }
+                }
+                if !p.system.isEmpty {
+                    Picker("Raga", selection: Binding(get: { p.raga },
+                                                      set: { engine.setEastern(spec(system: p.system, raga: $0, sa: p.sa)) })) {
+                        Text("none").tag("")
+                        ForEach(engine.ragas, id: \.self) { Text($0).tag($0) }
+                    }
+                    Picker("Sa", selection: Binding(get: { p.sa },
+                                                    set: { engine.setEastern(spec(system: p.system, raga: p.raga, sa: $0)) })) {
+                        ForEach(saKeys, id: \.self) { Text($0.uppercased()).tag($0) }
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+struct SetupPane: View {
+    @EnvironmentObject var engine: Engine
+    @EnvironmentObject var midi: MidiIn
+
+    var body: some View {
+        Form {
             Section("MIDI inputs") {
                 if midi.sources.isEmpty {
                     Text("none plugged in").foregroundStyle(.secondary)

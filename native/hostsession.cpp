@@ -1099,3 +1099,44 @@ void nv_host_toggle_stop(nv_host *h, int rank)
 }
 
 }  // extern "C"
+
+// ---- TUNING (the panel's t and E: livetui's tuners, the Eastern tuning) ----
+extern "C" {
+
+int nv_host_tuners(char *out, int cap)
+{
+    std::string all;
+    for (int i = 0; i < panel::NTUNERS; i++)
+        all += std::string(i ? "\n" : "") + panel::TUNERS[i][0] + "\t" + panel::TUNERS[i][1];
+    return copy_out(all, out, cap);
+}
+
+int nv_host_tuner(nv_host *h, char *out, int cap)
+{
+    std::string t;
+    {
+        std::lock_guard<std::mutex> lk(h->bmu);
+        t = !h->tuner_asked.empty() ? h->tuner_asked : h->tuner_now;
+    }
+    return copy_out(t, out, cap);
+}
+
+void nv_host_set_tuner(nv_host *h, const char *name)
+{
+    if (name && *name)
+        h->set_tuner(name);
+}
+
+int nv_host_eastern(nv_host *h, char *out, int cap)
+{
+    std::string e;
+    {
+        std::lock_guard<std::mutex> lk(h->bmu);
+        e = h->east_req_set ? h->east_asked : h->east_now;
+    }
+    return copy_out(e, out, cap);
+}
+
+void nv_host_set_eastern(nv_host *h, const char *spec) { h->set_eastern(spec ? spec : ""); }
+
+}  // extern "C"

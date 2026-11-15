@@ -66,6 +66,13 @@ final class Engine: ObservableObject {
     @Published var stopNames: [String] = []
     @Published var stopRows: [[[Int]]] = []
     @Published var drawn: [Bool] = []
+    // TUNING (livetui's t and E): every tuner and what it is for, the rig's
+    // now; the Eastern tuning's spec ("" off), its systems and ragas
+    @Published var tuners: [(name: String, note: String)] = []
+    @Published var tuner = ""
+    @Published var eastern = ""
+    @Published var ragaSystems: [String] = []
+    @Published var ragas: [String] = []
     private var stopsProgram: Int32 = -2
     // the session (and presets.json beside it): nvlive's on this Mac by
     // default, so the two share presets
@@ -154,6 +161,7 @@ final class Engine: ObservableObject {
                 self.startAudio(h)
                 self.refreshParts()
                 self.refreshPresets()
+                self.readTuning(h)
                 if restored { self.message = "the last session restored" }
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.poll() }
                 // TUNING_TEST_NOTE: a note held from 2 s to 14 s, by itself (a test with no one playing)
@@ -290,6 +298,41 @@ final class Engine: ObservableObject {
         AudioUnitGetProperty(au, kAudioDevicePropertyBufferFrameSize, kAudioUnitScope_Global, 0, &got, &size)
         let device = audio.outputNode.presentationLatency
         latencyMS = 1000.0 * (2.0 * Double(got) / rate + device)
+    }
+
+    // ---- TUNING ----
+    private func readTuning(_ h: OpaquePointer) {
+        var buf = [CChar](repeating: 0, count: 16384)
+        nv_host_tuners(&buf, 16384)
+        tuners = String(cString: buf).split(separator: "\n").map { line in
+            let f = line.split(separator: "\t", maxSplits: 1).map(String.init)
+            return (f[0], f.count > 1 ? f[1] : "")
+        }
+        nv_host_tuner(h, &buf, 16384)
+        tuner = String(cString: buf)
+        nv_host_eastern(h, &buf, 16384)
+        eastern = String(cString: buf)
+        var sys: [String] = [], rg: [String] = []
+        var i: Int32 = 0
+        while let p = nv_raga_system_name(i) { sys.append(String(cString: p)); i += 1 }
+        i = 0
+        while let p = nv_raga_name(i, nil, nil) { rg.append(String(cString: p)); i += 1 }
+        ragaSystems = sys.sorted()
+        ragas = rg.filter { !$0.hasPrefix("saraga_") }.sorted()
+    }
+
+    func setTuner(_ name: String) {
+        guard let h = host, !name.isEmpty else { return }
+        nv_host_set_tuner(h, name)
+        tuner = name
+        message = "tuner: \(name) (the patches built again in it)"
+    }
+
+    func setEastern(_ spec: String) {
+        guard let h = host else { return }
+        nv_host_set_eastern(h, spec)
+        eastern = spec
+        message = spec.isEmpty ? "Eastern tuning off" : "Eastern tuning: \(spec)"
     }
 
     // ---- THE PARTS ----

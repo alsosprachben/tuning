@@ -179,6 +179,19 @@ int nv_host_stop_rows(nv_host *h, int program, int *out, int cap);
 int nv_host_drawn(nv_host *h, char *out, int cap);
 void nv_host_toggle_stop(nv_host *h, int rank);
 
+/* ---- TUNING (livetui's t and E) ----
+   every tuner: "name\twhat it is for" a line; the rig's now (or asked); one
+   asked for (every patch built again in it, on the builder) */
+int nv_host_tuners(char *out, int cap);
+int nv_host_tuner(nv_host *h, char *out, int cap);
+void nv_host_set_tuner(nv_host *h, const char *name);
+/* the EASTERN tuning: a raga spec ("raga:<system>[/<raga>]@<sa>", "" off) for
+   every Indian voice's part; its systems and ragas (NULL past the last) */
+int nv_host_eastern(nv_host *h, char *out, int cap);
+void nv_host_set_eastern(nv_host *h, const char *spec);
+const char *nv_raga_system_name(int i);
+const char *nv_raga_name(int i, int *n, const int **idx);
+
 /* the live part it plays (native.py's nv_part_*: a check reads its slab) */
 void *nv_host_part(nv_host *h);
 
