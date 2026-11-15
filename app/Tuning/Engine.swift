@@ -7,6 +7,7 @@ import AVFoundation
 import AudioToolbox
 import Foundation
 import os
+import UniformTypeIdentifiers
 
 struct PatchItem: Identifiable, Hashable {
     let id: Int32                // what nv_host_pick takes
@@ -1094,6 +1095,77 @@ final class Engine: ObservableObject {
 
     func saveSession() {
         if let h = host { nv_host_session_save(h) }
+    }
+
+    // ---- A FILE RENDERED (nvlive --test: the live engine offline, in a process of
+    // its own -- the parts, tuner, room and effects as set now, the file's program
+    // changes followed; a 48 kHz float WAV) ----
+    @Published var rendering: String? = nil          // (the file being rendered)
+    @Published var lastRender: URL? = nil
+    private var renderProc: Process? = nil
+    let nvlivePath = (UserDefaults.standard.string(forKey: "nvlive") ?? "~/repos/tuning-port/nvlive").expandingTildeInPath
+    let exportPath = (UserDefaults.standard.string(forKey: "export") ?? "~/nvx/live.nvx").expandingTildeInPath
+
+    func renderFile(_ midi: URL, to out: URL, followPrograms: Bool = true) {
+        guard renderProc == nil else { return }
+        saveSession()
+        // (a copy of the session: --test writes its session back at the end)
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("tuning-render-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        let sess = tmp.appendingPathComponent("session.json")
+        try? FileManager.default.copyItem(at: URL(fileURLWithPath: sessionPath), to: sess)
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: nvlivePath)
+        var args = [exportPath, "--test", midi.path, out.path, "--session=" + sess.path, "--cpu"]
+        if followPrograms { args.append("--programs") }
+        p.arguments = args
+        p.qualityOfService = .utility                   // (under the playing engine)
+        let err = Pipe()
+        p.standardError = err
+        p.standardOutput = FileHandle.nullDevice
+        let t0 = Date()
+        p.terminationHandler = { [weak self] proc in
+            let text = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            try? FileManager.default.removeItem(at: tmp)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.renderProc = nil
+                self.rendering = nil
+                if proc.terminationReason == .uncaughtSignal {
+                    self.message = "render stopped"
+                } else if proc.terminationStatus == 0 {
+                    self.lastRender = out
+                    self.message = String(format: "rendered %@ in %.0f s", out.lastPathComponent, Date().timeIntervalSince(t0))
+                } else {
+                    let why = text.split(separator: "\n").last(where: { $0.contains("nvlive") }) ?? "exit \(proc.terminationStatus)"
+                    self.message = "render failed: \(why)"
+                }
+            }
+        }
+        do {
+            try p.run()
+            renderProc = p
+            rendering = midi.lastPathComponent
+            message = "rendering \(midi.lastPathComponent)..."
+        } catch {
+            message = "could not start the renderer (\(nvlivePath)): \(error.localizedDescription)"
+        }
+    }
+
+    func stopRender() { renderProc?.terminate() }
+
+    // asked for the file and where its WAV goes, then rendered
+    func renderFileAsk() {
+        let op = NSOpenPanel()
+        op.allowedContentTypes = [.midi]
+        op.message = "A MIDI file to render with the current setup"
+        guard op.runModal() == .OK, let midi = op.url else { return }
+        let sp = NSSavePanel()
+        sp.allowedContentTypes = [.wav]
+        sp.nameFieldStringValue = midi.deletingPathExtension().lastPathComponent + ".wav"
+        sp.directoryURL = midi.deletingLastPathComponent()
+        guard sp.runModal() == .OK, let out = sp.url else { return }
+        renderFile(midi, to: out)
     }
 
     func panic() {

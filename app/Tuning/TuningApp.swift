@@ -29,5 +29,11 @@ struct TuningApp: App {
                 .environmentObject(app.midi)
         }
         .defaultSize(width: 1080, height: 640)
+        .commands {
+            CommandGroup(after: .newItem) {
+                Button("Render MIDI File...") { app.engine.renderFileAsk() }
+                    .keyboardShortcut("r", modifiers: .command)
+            }
+        }
     }
 }

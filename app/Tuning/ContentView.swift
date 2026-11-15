@@ -1132,13 +1132,32 @@ struct SetupPane: View {
                 Slider(value: $engine.masterDB, in: -40...6) { Text("Master") }
                 Text(String(format: "%+.1f dB", engine.masterDB)).monospacedDigit().foregroundStyle(.secondary)
                 Picker("Buffer", selection: $engine.bufferFrames) {
-                    ForEach([64, 128, 256, 512], id: \.self) { n in Text("\(n) frames").tag(n) }
+                    ForEach([64, 128, 256, 512, 1024], id: \.self) { n in Text("\(n) frames").tag(n) }
                 }
                 Text(String(format: "output latency %.1f ms", engine.latencyMS)).foregroundStyle(.secondary)
                 Toggle("GPU (Metal)", isOn: $engine.gpu)
                 Toggle("Room tail", isOn: $engine.roomTail)
             }
             GlobalsSection()
+            Section("Render a file") {
+                Text("a MIDI file through the live engine as set now (parts, tuner, room, effects; its program changes followed), to a WAV")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    if let f = engine.rendering {
+                        ProgressView().controlSize(.small)
+                        Text("rendering \(f)").lineLimit(1)
+                        Spacer()
+                        Button("Stop") { engine.stopRender() }
+                    } else {
+                        Button("Render MIDI File...") { engine.renderFileAsk() }
+                        Spacer()
+                        if let r = engine.lastRender {
+                            Button("Show \(r.lastPathComponent)") { NSWorkspace.shared.activateFileViewerSelecting([r]) }
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
     }
