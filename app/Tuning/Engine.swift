@@ -219,6 +219,8 @@ final class Engine: ObservableObject {
                 self.refreshEfx()
                 self.readRooms(h)
                 self.readGlobals()
+                self.messengerReads = nv_host_messenger_reads(h) != 0
+                if let m = self.messengerPending { self.messengerPending = nil; self.messengerPlugged(m) }
                 if restored { self.message = "the last session restored" }
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.poll() }
                 // TUNING_TEST_NOTE: a note held from 2 s to 14 s, by itself (a test with no one playing)
@@ -470,8 +472,27 @@ final class Engine: ObservableObject {
 
     func setMessengerReads(_ on: Bool) {
         guard let h = host else { return }
+        messengerAuto = false                    // (by hand, or by messengerPlugged, which sets it again)
         nv_host_set_messenger_reads(h, on ? 1 : 0)
         messengerReads = on
+    }
+
+    // A MESSENGER PLUGGED IN (an input named so, on): every part reads its
+    // knobs; unplugged, General MIDI controllers again -- unless the switch
+    // was set by hand meanwhile. Before the engine opens, kept for it.
+    private var messengerPending: Bool? = nil
+    private var messengerAuto = false
+    func messengerPlugged(_ on: Bool) {
+        guard host != nil else { messengerPending = on; return }
+        if on && !messengerReads {
+            setMessengerReads(true)
+            messengerAuto = true
+            message = "a Moog Messenger: every part reads its knobs"
+        } else if !on && messengerAuto && messengerReads {
+            setMessengerReads(false)
+            messengerAuto = false
+            message = "the Messenger unplugged: General MIDI controllers again"
+        }
     }
 
     func setMessengerPre107(_ on: Bool) {

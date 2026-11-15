@@ -14,6 +14,10 @@ final class MidiIn: ObservableObject {
     @Published var sources: [Source] = []
     @Published var on: Set<String> = []          // by name: kept across unplugging
     var onMessage: (([UInt8], MIDITimeStamp) -> Void)?
+    // A MOOG MESSENGER among the inputs on: told when one comes and goes (its
+    // knobs then read as its panel's, not as General MIDI controllers)
+    var onMessenger: ((Bool) -> Void)?
+    private var messengerIn = false
 
     private var client = MIDIClientRef()
     private var port = MIDIPortRef()
@@ -68,6 +72,11 @@ final class MidiIn: ObservableObject {
         }
         let present = Set(sources.map { $0.id })
         for id in connected.keys where !present.contains(id) { connected[id] = nil }   // (unplugged)
+        let m = sources.contains { on.contains($0.name) && $0.name.localizedCaseInsensitiveContains("messenger") }
+        if m != messengerIn {
+            messengerIn = m
+            onMessenger?(m)
+        }
     }
 
     func toggle(_ s: Source) {

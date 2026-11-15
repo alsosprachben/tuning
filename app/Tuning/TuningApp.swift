@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         engine.start()
         midi.onMessage = { [weak engine] bytes, stamp in engine?.midi(bytes, at: stamp) }
+        midi.onMessenger = { [weak engine] on in engine?.messengerPlugged(on) }
         midi.start()
     }
 
