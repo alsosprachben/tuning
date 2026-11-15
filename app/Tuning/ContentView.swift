@@ -373,7 +373,9 @@ struct TuningPane: View {
 
 // ---- THE EFFECTS: the insertion effect (the Sound Canvas's EFX), the system effects ----
 
-private let reverbNames = ["Room 1", "Room 2", "Room 3", "Hall 1", "Hall 2", "Plate", "Delay", "Panning Delay"]
+// (each the room it plays here: blockrender.GS_REVERB_ROOM)
+private let reverbNames = ["Room 1 (studio)", "Room 2 (chamber)", "Room 3 (large chamber)", "Hall 1 (hall)",
+                           "Hall 2 (grand hall)", "Plate (plate)", "Delay (delay)", "Panning Delay (pan delay)"]
 private let chorusNames = ["Chorus 1", "Chorus 2", "Chorus 3", "Chorus 4", "Feedback Chorus", "Flanger",
                            "Short Delay", "Short Delay (FB)"]
 private let delayNames = ["Delay 1", "Delay 2", "Delay 3", "Delay 4", "Pan Delay 1", "Pan Delay 2", "Pan Delay 3",
