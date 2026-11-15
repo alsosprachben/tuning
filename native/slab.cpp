@@ -638,18 +638,39 @@ struct Slab {
             idx[q] = free.front();
             free.pop_front();
         }
+        // THE TEMPLATE's COLUMNS INTO THE SLOTS, A COLUMN AT A TIME: each
+        // template column read in one sweep, each slab column written in
+        // runs -- a slot at a time it was ~60 arrays touched per partial, and
+        // a thick chord's onset (thousands of partials in one block) ran past
+        // the block on the app's audio thread. The same values to the same
+        // slots: only the order of the writes moved
         for (long q = 0; q < n; q++) {
             long s = idx[q];
             busy[s] = 1;
             dk[s] = -1;
             tp[s] = -1;                         // (a fresh slot carries no taps)
             fx_chs[s] = -1;
-            for (int c = 0; c < NF4; c++)
-                f4[c][s] = tf4[c][q];
-            for (int c = 0; c < NI4; c++)
-                i4[c][s] = ti4[c][q];
-            for (int c = 0; c < NF4N; c++)
-                f4n[c][s] = 0.0f;
+        }
+        const long *ix = idx.data();
+        for (int c = 0; c < NF4; c++) {
+            float *dst = f4[c].data();
+            const float *src = tf4[c];
+            for (long q = 0; q < n; q++)
+                dst[ix[q]] = src[q];
+        }
+        for (int c = 0; c < NI4; c++) {
+            int32_t *dst = i4[c].data();
+            const int32_t *src = ti4[c];
+            for (long q = 0; q < n; q++)
+                dst[ix[q]] = src[q];
+        }
+        for (int c = 0; c < NF4N; c++) {
+            float *dst = f4n[c].data();
+            for (long q = 0; q < n; q++)
+                dst[ix[q]] = 0.0f;
+        }
+        for (long q = 0; q < n; q++) {
+            long s = idx[q];
             i4[I4_gr][s] = -1;
             i4[I4_br][s] = -1;
             i4[I4_cr][s] = 0;
