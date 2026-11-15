@@ -236,20 +236,24 @@ struct FlowRow: View {
 // ---- PRESETS, INPUTS, OUTPUT ----
 
 struct SidePane: View {
+    static let tabs: [(String, Int)] = [("Presets", 0), ("Tuning", 1), ("Effects", 3), ("Synth", 4),
+                                        ("Matrix", 5), ("Setup", 2)]
     @State private var tab = 0
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $tab) {
-                Text("Presets").tag(0)
-                Text("Tuning").tag(1)
-                Text("Effects").tag(3)
-                Text("Synth").tag(4)
-                Text("Matrix").tag(5)
-                Text("Setup").tag(2)
+            // (the tabs in rows of four, each an equal share of the pane: more
+            // tabs make another row, never a line wider than the pane)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 4), spacing: 4) {
+                ForEach(SidePane.tabs, id: \.1) { name, t in
+                    Button { tab = t } label: {
+                        Text(name).lineLimit(1).frame(maxWidth: .infinity).padding(.vertical, 3)
+                    }
+                    .buttonStyle(.plain)
+                    .background(RoundedRectangle(cornerRadius: 5).fill(tab == t ? Color.accentColor : Color.primary.opacity(0.07)))
+                    .foregroundStyle(tab == t ? Color.white : Color.primary)
+                }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .padding(8)
             switch tab {
             case 0: PresetsPane()
