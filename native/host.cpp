@@ -1758,24 +1758,44 @@ void nv_host::render_block(long long n0, float *buf, bool step)
     // (the OpenMP the kernels loaded, found where they put it)
     static thread_local bool omp_one = false;
     if (!omp_one) {
+        // ONE OPENMP THREAD for the block's kernels, whichever OpenMP is in
+        // the process -- libgomp on Linux, libomp on macOS. (Asked of libgomp
+        // by name alone, the Mac's libomp was never found: every block could
+        // wake a team of eight workers, at their own priority, slow from
+        // sleep -- a 5 ms block every few seconds, a click, on the M3)
         omp_one = true;
-        if (void *g = dlopen("libgomp.so.1", RTLD_NOW | RTLD_NOLOAD))
-            if (auto f = (void (*)(int))dlsym(g, "omp_set_num_threads"))
-                f(1);
+        void (*f)(int) = (void (*)(int))dlsym(RTLD_DEFAULT, "omp_set_num_threads");
+        if (!f)
+            for (const char *lib : {"libgomp.so.1", "libomp.dylib", "/opt/homebrew/opt/libomp/lib/libomp.dylib"})
+                if (void *g = dlopen(lib, RTLD_NOW | RTLD_NOLOAD))
+                    if ((f = (void (*)(int))dlsym(g, "omp_set_num_threads")))
+                        break;
+        if (f)
+            f(1);
     }
     long long t0 = rt::now_ns();
     rt::busy_since = t0;
+    // WHAT WAS QUEUED FOR THIS BLOCK (posted work, the MIDI) -- taken under
+    // the locks the other threads write them under. NEVER WAITED FOR where
+    // the host plays in real time (nv_host_set_realtime: an app's audio
+    // callback): a lock held by a thread the system has paused (the
+    // window's, ten times a second) stalled the block -- a click with the
+    // machine busy, however lightly played (Ben, on the M3). Busy: taken
+    // next block. (Not in a check's render: there it waits, so the blocks
+    // stay the same whatever the threads' timing.)
     std::vector<std::function<void(long long)>> todo;
     {
-        std::lock_guard<std::mutex> lk(pmu);
-        todo.swap(posted);
+        std::unique_lock<std::mutex> lk(pmu, std::defer_lock);
+        if (soft_locks ? lk.try_lock() : (lk.lock(), true))
+            todo.swap(posted);
     }
     for (auto &f : todo)
         f(n0);
     std::vector<Midi> evs;
     {
-        std::lock_guard<std::mutex> lk(mu);
-        evs.swap(q);
+        std::unique_lock<std::mutex> lk(mu, std::defer_lock);
+        if (soft_locks ? lk.try_lock() : (lk.lock(), true))
+            evs.swap(q);
     }
     if (recording)
         for (const Midi &m : evs)
@@ -2101,16 +2121,34 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         rec("b %lld %.3f busy %.0f keys %.0f shed %.0f peak %.5f pedal %.0f mono %.0f gpu %.0f", n0, ms, st[0], st[1],
             st[2], pk[0], st[7], st[9], st[4]);
     }
-    {
-        std::lock_guard<std::mutex> lk(pmu);
+    // ...AND WHAT THE WINDOW READS, published under its lock -- not waited
+    // for either: busy, this block's figures carried to the next publish
+    if (ms > pend_max) {
+        pend_step = last_step_ms;
+        pend_out = last_out_ms;
+    }
+    pend_max = std::max(pend_max, ms);
+    pend_sum += ms;
+    pend_n++;
+    pend_pk[0] = std::max(pend_pk[0], pk[0]);
+    pend_pk[1] = std::max(pend_pk[1], pk[1]);
+    std::unique_lock<std::mutex> plk(pmu, std::try_to_lock);
+    if (plk.owns_lock()) {
         snap.n0 = n0;
         snap.blocks = blocks;
         snap.over = over;
-        snap.ms_max = std::max(snap.ms_max, ms);
-        snap.ms_sum += ms;
-        snap.ms_n++;
-        snap.peak[0] = std::max(snap.peak[0], pk[0]);
-        snap.peak[1] = std::max(snap.peak[1], pk[1]);
+        if (pend_max > snap.ms_max) {
+            snap_step = pend_step;
+            snap_out = pend_out;
+        }
+        snap.ms_max = std::max(snap.ms_max, pend_max);
+        snap.ms_sum += pend_sum;
+        snap.ms_n += pend_n;
+        snap.peak[0] = std::max(snap.peak[0], pend_pk[0]);
+        snap.peak[1] = std::max(snap.peak[1], pend_pk[1]);
+        pend_max = pend_sum = 0.0;
+        pend_n = 0;
+        pend_pk[0] = pend_pk[1] = 0.0f;
         if ((blocks & 7) == 0)
             nv_part_stats(part, snap.eng);
         // the insertion effect, when it changed (the panel's)
@@ -3124,6 +3162,8 @@ nv_host *nv_host_open_args(int argc, char **argv, char *err, int errlen)
 
 void nv_host_start(nv_host *h) { h->start(); }
 
+void nv_host_set_realtime(nv_host *h, int on) { h->soft_locks = on != 0; }
+
 void nv_host_close(nv_host *h)
 {
     g_stop = true;
@@ -3228,6 +3268,8 @@ void nv_host_snapshot(nv_host *h, nv_host_snap *s)
     s->over = p.over;
     s->underruns = p.underruns;
     s->ms_max = p.ms_max;
+    s->max_step_ms = h->snap_step;
+    s->max_out_ms = h->snap_out;
     s->ms_mean = p.ms_n ? p.ms_sum / p.ms_n : 0.0;
     s->budget_ms = h->budget;
     s->peak[0] = p.peak[0];
@@ -3239,6 +3281,7 @@ void nv_host_snapshot(nv_host *h, nv_host_snap *s)
     s->on_gpu = (int)p.eng[4];
     s->efx_rev = p.efx_rev;
     h->snap.ms_max = h->snap.ms_sum = 0.0;  // (since the last read, as the panel's take)
+    h->snap_step = h->snap_out = 0.0;
     h->snap.ms_n = 0;
     h->snap.peak[0] = h->snap.peak[1] = 0.0f;
 }

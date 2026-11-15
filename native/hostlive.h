@@ -1179,6 +1179,15 @@ struct nv_host {
     bool nort;
     bool nopanel;
     std::mutex pmu;
+    // REAL TIME (nv_host_set_realtime: an app's callback): the block never
+    // waits on pmu or mu (busy: next block); and the window's figures
+    // carried while its lock is busy
+    bool soft_locks = false;
+    double pend_max = 0.0, pend_sum = 0.0;
+    long pend_n = 0;
+    float pend_pk[2] = {0.0f, 0.0f};
+    double pend_step = 0.0, pend_out = 0.0;     // (the slowest block's split, carried)
+    double snap_step = 0.0, snap_out = 0.0;     // (...as published: the window's)
     std::vector<std::function<void(long long)>> posted;
     panel::Snap snap;
     std::atomic<int> learning;

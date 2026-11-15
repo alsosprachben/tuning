@@ -104,7 +104,16 @@ final class Engine: ObservableObject {
                 DispatchQueue.main.async { self.status = "no export at \(path) (native_export.py --live)" }
                 return
             }
-            let args = ["nvlive", path, "--program=0", "--messenger-out=none"]
+            // (TUNING_ARGS: more of nvlive's options, for a test -- --cpu, --no-register ...)
+            let more = (ProcessInfo.processInfo.environment["TUNING_ARGS"] ?? "").split(separator: " ").map(String.init)
+            // THE GPU FROM 1500 BUSY SLOTS (nvlive's 100): in the app the GPU is
+            // shared with the window's drawing and drops its clock between
+            // blocks -- a held organ chord on it ran 2-2.7 ms a block with
+            // spikes to 33 ms (a click every few seconds, Ben), on the CPU
+            // 0.7-0.9 ms; the dense pedalled file (thousands of slots) still
+            // goes to the GPU, where the CPU needs 3.5 ms a block
+            let gmin = more.contains { $0.hasPrefix("--gpu-min") } ? [] : ["--gpu-min=1500"]
+            let args = ["nvlive", path, "--program=0", "--messenger-out=none"] + gmin + more
             var cargs: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) }
             var err = [CChar](repeating: 0, count: 512)
             let h = cargs.withUnsafeMutableBufferPointer { nv_host_open_args(Int32(args.count), $0.baseAddress, &err, 512) }
@@ -115,6 +124,7 @@ final class Engine: ObservableObject {
                 return
             }
             nv_host_start(h)
+            nv_host_set_realtime(h, 1)            // (the callback never waits on another thread's lock)
             nv_host_set_session_path(h, self.sessionPath)
             let restored = nv_host_session_load(h) == 0
             let items = Engine.readPatches(h)
@@ -132,6 +142,11 @@ final class Engine: ObservableObject {
                 self.refreshPresets()
                 if restored { self.message = "the last session restored" }
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.poll() }
+                // TUNING_TEST_NOTE: a note held from 2 s to 14 s, by itself (a test with no one playing)
+                if ProcessInfo.processInfo.environment["TUNING_TEST_NOTE"] != nil {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.midi([0x90, 60, 100], at: 0) }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 14) { self.midi([0x80, 60, 0], at: 0) }
+                }
                 NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
                                                        queue: .main) { [weak self] _ in self?.saveSession() }
             }
@@ -383,6 +398,7 @@ final class Engine: ObservableObject {
 
     private var pollTick = 0
     private var slowest = 0.0
+    private var dbgMax = 0.0, dbgStep = 0.0, dbgOut = 0.0   // (TUNING_DEBUG: the second's slowest block and its split)
 
     private func poll() {
         guard let h = host else { return }
@@ -391,9 +407,11 @@ final class Engine: ObservableObject {
         var s = nv_host_snap()
         nv_host_snapshot(h, &s)
         let m = meters
+        if s.ms_max > dbgMax { dbgMax = s.ms_max; dbgStep = s.max_step_ms; dbgOut = s.max_out_ms }
         if debug && pollTick % 10 == 0 {
-            FileHandle.standardError.write(String(format: "out: peak %.4f %.4f, n0 %lld, blocks %ld, load %.2f, framesOut %lld\n",
-                                                  s.peak.0, s.peak.1, s.n0, s.blocks, m.load, framesOut).data(using: .utf8)!)
+            FileHandle.standardError.write(String(format: "out: peak %.4f, load %.2f, slowest %.2f ms (before the output %.2f, the output %.2f), over %lld\n",
+                                                  s.peak.0, m.load, dbgMax, dbgStep, dbgOut, s.over).data(using: .utf8)!)
+            dbgMax = 0; dbgStep = 0; dbgOut = 0
             var mb = [CChar](repeating: 0, count: 512)
             while nv_host_message(h, &mb, 512) > 0 {
                 FileHandle.standardError.write("engine: \(String(cString: mb))\n".data(using: .utf8)!)

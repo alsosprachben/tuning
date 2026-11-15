@@ -23,6 +23,11 @@ typedef struct nv_host nv_host;
 nv_host *nv_host_open_args(int argc, char **argv, char *err, int errlen);
 /* the workers and the builder: before the first render */
 void nv_host_start(nv_host *h);
+/* REAL TIME (an app's audio callback, 1): the render never waits on a lock
+   another thread holds -- what was queued for a block whose lock is busy is
+   taken the next block (2.7 ms later). Off (the default, and a check's): it
+   waits, so the blocks are the same whatever the threads' timing */
+void nv_host_set_realtime(nv_host *h, int on);
 /* the builder stopped (the host is not freed: its workers run to the end) */
 void nv_host_close(nv_host *h);
 
@@ -62,6 +67,8 @@ typedef struct {
     double eng[15];                         /* nv_part_stats */
     int rt, rt_dropped, on_gpu;
     long efx_rev;                           /* the insertion effect's revision */
+    double max_step_ms, max_out_ms;         /* the slowest block's split: before the output (the
+                                               queued work, the MIDI, the slab's step), the output */
 } nv_host_snap;
 void nv_host_snapshot(nv_host *h, nv_host_snap *s);
 /* what the builder has to say (a build's time, a refusal), oldest first: its
