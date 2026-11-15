@@ -1152,10 +1152,125 @@ final class Engine: ObservableObject {
         }
     }
 
-    func stopRender() { renderProc?.terminate() }
+    func stopRender() { renderStopped = true; renderProc?.terminate() }
 
-    // asked for the file and where its WAV goes, then rendered
-    func renderFileAsk() {
+    // ---- BEST QUALITY: the file renderer (nvrender, streamed on the GPU, from
+    // the file export that holds every room) and the room's tail (nvroomtail),
+    // each a process of its own; the file's GS room (else the hall), the
+    // current tuner and Eastern tuning ----
+    @Published var renderStage = ""
+    private var renderStopped = false
+    let nvrenderPath = (UserDefaults.standard.string(forKey: "nvrender") ?? "~/repos/tuning-port/nvrender").expandingTildeInPath
+    let nvroomtailPath = (UserDefaults.standard.string(forKey: "nvroomtail") ?? "~/repos/tuning-port/nvroomtail").expandingTildeInPath
+    let fileExportPath = (UserDefaults.standard.string(forKey: "fileExport") ?? "~/nvx/file.nvx").expandingTildeInPath
+
+    // one step: its status, whether it was stopped, what it printed (both streams)
+    private func runStep(_ exe: String, _ args: [String], done: @escaping (Int32, Bool, String) -> Void) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: exe)
+        p.arguments = args
+        p.qualityOfService = .utility
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = pipe
+        var data = Data()
+        let lock = NSLock()
+        pipe.fileHandleForReading.readabilityHandler = { h in   // (read as it comes: a full pipe stalls the step)
+            let d = h.availableData
+            lock.lock(); data.append(d); lock.unlock()
+        }
+        p.terminationHandler = { proc in
+            pipe.fileHandleForReading.readabilityHandler = nil
+            lock.lock()
+            data.append(pipe.fileHandleForReading.readDataToEndOfFile())
+            let text = String(data: data, encoding: .utf8) ?? ""
+            lock.unlock()
+            DispatchQueue.main.async {
+                self.renderProc = nil
+                done(proc.terminationStatus, proc.terminationReason == .uncaughtSignal || self.renderStopped, text)
+            }
+        }
+        do {
+            try p.run()
+            renderProc = p
+        } catch {
+            done(-1, false, "could not start \(exe): \(error.localizedDescription)")
+        }
+    }
+
+    func renderBest(_ midi: URL, to out: URL) {
+        guard renderProc == nil, rendering == nil else { return }
+        renderStopped = false
+        let t0 = Date()
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("tuning-best-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        let dry = tmp.appendingPathComponent(out.deletingPathExtension().lastPathComponent + ".wav")
+        var common = [fileExportPath, midi.path, dry.path]
+        if !tuner.isEmpty { common.append("--tuner=" + tuner) }
+        if !eastern.isEmpty { common.append("--eastern=" + eastern) }
+        rendering = midi.lastPathComponent
+        let finish: (String) -> Void = { msg in
+            try? FileManager.default.removeItem(at: tmp)
+            self.rendering = nil
+            self.renderStage = ""
+            self.message = msg
+        }
+        let lastLine: (String) -> String = { t in
+            t.split(separator: "\n").last(where: { !$0.contains("ld: warning") }).map(String.init) ?? ""
+        }
+        // 3: the room's tail onto the dry render, to where it was asked for
+        let room = {
+            self.renderStage = "adding the room"
+            self.runStep(self.nvroomtailPath, [dry.path, out.path, "--export=" + self.fileExportPath]) { st, stopped, text in
+                if stopped { return finish("render stopped") }
+                guard st == 0 else { return finish("the room failed: " + lastLine(text)) }
+                self.lastRender = out
+                finish(String(format: "rendered %@ (best quality) in %.0f s", out.lastPathComponent, Date().timeIntervalSince(t0)))
+            }
+        }
+        // 2: the file renderer, streamed on the GPU (whole: one that will not stream, asked for)
+        let render = { (stream: Bool) in
+            self.renderStage = stream ? "rendering" : "rendering whole"
+            self.runStep(self.nvrenderPath, common + (stream ? ["--stream", "--gpu"] : [])) { st, stopped, text in
+                if stopped { return finish("render stopped") }
+                guard st == 0 else {
+                    return finish((st == 2 ? "best quality refused: " : "the render failed: ") + lastLine(text))
+                }
+                room()
+            }
+        }
+        // 1: will it stream? (what the stream cannot reproduce yet would go to the whole render)
+        renderStage = "checking"
+        runStep(nvrenderPath, common + ["--stream-why"]) { st, stopped, text in
+            if stopped { return finish("render stopped") }
+            let why = lastLine(text)
+            if st != 0 {
+                let a = NSAlert()
+                a.messageText = "Best quality cannot render \(midi.lastPathComponent)"
+                a.informativeText = why.replacingOccurrences(of: "nvrender: ", with: "") + "\n\nRender it as you hear it instead?"
+                a.addButton(withTitle: "Render as You Hear It")
+                a.addButton(withTitle: "Cancel")
+                finish("")
+                if a.runModal() == .alertFirstButtonReturn { self.renderFile(midi, to: out) }
+                return
+            }
+            if why == "streams" { return render(true) }
+            let a = NSAlert()
+            a.messageText = "\(midi.lastPathComponent) cannot be streamed yet"
+            a.informativeText = "It uses: \(why).\n\nThe whole render holds the entire song in memory, which a long song may not fit in. Render it as you hear it instead?"
+            a.addButton(withTitle: "Render as You Hear It")
+            a.addButton(withTitle: "Render Whole Anyway")
+            a.addButton(withTitle: "Cancel")
+            switch a.runModal() {
+            case .alertFirstButtonReturn: finish(""); self.renderFile(midi, to: out)
+            case .alertSecondButtonReturn: render(false)
+            default: finish("")
+            }
+        }
+    }
+
+    // asked for the file and where its WAV goes, then rendered (best: the file renderer)
+    func renderFileAsk(best: Bool = false) {
         let op = NSOpenPanel()
         op.allowedContentTypes = [.midi]
         op.message = "A MIDI file to render with the current setup"
@@ -1165,7 +1280,7 @@ final class Engine: ObservableObject {
         sp.nameFieldStringValue = midi.deletingPathExtension().lastPathComponent + ".wav"
         sp.directoryURL = midi.deletingLastPathComponent()
         guard sp.runModal() == .OK, let out = sp.url else { return }
-        renderFile(midi, to: out)
+        if best { renderBest(midi, to: out) } else { renderFile(midi, to: out) }
     }
 
     func panic() {

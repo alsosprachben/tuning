@@ -1140,16 +1140,17 @@ struct SetupPane: View {
             }
             GlobalsSection()
             Section("Render a file") {
-                Text("a MIDI file through the live engine as set now (parts, tuner, room, effects; its program changes followed), to a WAV")
+                Text("As you hear it: the live engine as set now (parts, tuner, room, effects). Best quality: the file renderer, streamed on the GPU, then the room's tail -- the file's own GS room, else the hall; the current tuner.")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     if let f = engine.rendering {
                         ProgressView().controlSize(.small)
-                        Text("rendering \(f)").lineLimit(1)
+                        Text(engine.renderStage.isEmpty ? "rendering \(f)" : "\(f): \(engine.renderStage)").lineLimit(1)
                         Spacer()
                         Button("Stop") { engine.stopRender() }
                     } else {
-                        Button("Render MIDI File...") { engine.renderFileAsk() }
+                        Button("As You Hear It...") { engine.renderFileAsk() }
+                        Button("Best Quality...") { engine.renderFileAsk(best: true) }
                         Spacer()
                         if let r = engine.lastRender {
                             Button("Show \(r.lastPathComponent)") { NSWorkspace.shared.activateFileViewerSelecting([r]) }

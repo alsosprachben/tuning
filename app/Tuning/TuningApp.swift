@@ -31,8 +31,10 @@ struct TuningApp: App {
         .defaultSize(width: 1080, height: 640)
         .commands {
             CommandGroup(after: .newItem) {
-                Button("Render MIDI File...") { app.engine.renderFileAsk() }
+                Button("Render MIDI File (As You Hear It)...") { app.engine.renderFileAsk() }
                     .keyboardShortcut("r", modifiers: .command)
+                Button("Render MIDI File (Best Quality)...") { app.engine.renderFileAsk(best: true) }
+                    .keyboardShortcut("r", modifiers: [.command, .shift])
             }
         }
     }
