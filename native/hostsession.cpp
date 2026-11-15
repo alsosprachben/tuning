@@ -1228,4 +1228,59 @@ void nv_host_sysfx_send(nv_host *h, int hi, int lo, int v)
     h->q.push_back(Midi{6, 0, 0, 0, x});
 }
 
+int nv_host_synth_knobs(char *out, int cap)
+{
+    std::string all;
+    for (int i = 0; i < panel::NSYNTH; i++) {
+        const char **k = panel::SYNTH_KNOBS[i];
+        std::string st;
+        for (double v : panel::synth_steps(k[3])) {
+            char b[24];
+            snprintf(b, sizeof b, "%s%g", st.empty() ? "" : ",", v);
+            st += b;
+        }
+        all += std::string(k[0]) + "\t" + std::to_string(panel::mk_index(k[1])) + "\t" + k[2] + "\t" + k[3] + "\t" + st
+               + "\t" + (panel::synth_centred(k[3]) ? "1" : "0") + "\n";
+    }
+    return copy_out(all, out, cap);
+}
+
+int nv_host_synth_get(nv_host *h, int row, int layer, double *pn, char *own)
+{
+    return row < 0 ? 0 : h->synth_state((size_t)row, layer, pn, own);
+}
+void nv_host_synth_set(nv_host *h, int row, int layer, int knob, double v)
+{
+    if (row >= 0 && knob >= 0 && knob < NV_MK_N) h->synth_set((size_t)row, layer, knob, v);
+}
+void nv_host_synth_forget(nv_host *h, int row, int layer, int knob)
+{
+    if (row >= 0 && knob >= 0 && knob < NV_MK_N) h->synth_forget((size_t)row, layer, knob);
+}
+int nv_host_synth_send(nv_host *h, int row) { return row < 0 ? 0 : h->synth_send((size_t)row); }
+int nv_host_synth_fmt(const char *kind, double v, const double *pn, char *out, int cap)
+{
+    return copy_out(panel::synth_fmt(kind, v, pn), out, cap);
+}
+
+int nv_host_messenger_line(nv_host *h, char *out, int cap)
+{
+    const std::string w = h->msgr && h->msgr->fd.load() >= 0 ? h->msgr->where() : h->msgr_out;
+    return copy_out(w.empty() ? std::string(h->msgr_auto ? "-" : "") : w, out, cap);
+}
+int nv_host_messenger_reads(nv_host *h) { return h->msgr_reads ? 1 : 0; }
+void nv_host_set_messenger_reads(nv_host *h, int on) { h->messenger_reading(on != 0); }
+int nv_host_messenger_pre107(nv_host *h) { return h->msgr_pre107 ? 1 : 0; }
+void nv_host_set_messenger_pre107(nv_host *h, int on)
+{
+    h->msgr_pre107 = on != 0;
+    const double v = on ? 1.0 : 0.0;
+    h->post([h, v](long long) { nv_part_set(h->part, 9, v); });
+}
+int nv_host_drive(nv_host *h, int row, double *out) { return row < 0 ? 0 : h->drive_state((size_t)row, out); }
+void nv_host_set_drive(nv_host *h, int row, double v)
+{
+    if (row >= 0) h->part_drive((size_t)row, v);
+}
+
 }  // extern "C"

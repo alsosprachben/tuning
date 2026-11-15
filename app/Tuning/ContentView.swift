@@ -244,6 +244,7 @@ struct SidePane: View {
                 Text("Presets").tag(0)
                 Text("Tuning").tag(1)
                 Text("Effects").tag(3)
+                Text("Synth").tag(4)
                 Text("Setup").tag(2)
             }
             .pickerStyle(.segmented)
@@ -253,6 +254,7 @@ struct SidePane: View {
             case 0: PresetsPane()
             case 1: TuningPane()
             case 3: EffectsPane()
+            case 4: SynthPane()
             default: SetupPane()
             }
         }
@@ -457,6 +459,185 @@ struct EffectsPane: View {
     }
 }
 
+// ---- THE GLOBALS (livetui's GLOBALS pane, the master, GPU and tail above) ----
+private let standardNames = ["ours", "SC-55", "SC-88", "SC-88Pro", "SC-8850"]
+
+struct GlobalsSection: View {
+    @EnvironmentObject var engine: Engine
+
+    private func slider(_ i: Int32, _ name: String, _ lo: Double, _ hi: Double, _ step: Double,
+                        _ fmt: @escaping (Double) -> String, help: String) -> some View {
+        HStack {
+            Text(name).frame(width: 110, alignment: .leading)
+            Slider(value: Binding(get: { engine.g[Int(i)] },
+                                  set: { engine.setG(i, (($0 - lo) / step).rounded() * step + lo) }),
+                   in: lo...hi)
+            Text(fmt(engine.g[Int(i)])).monospacedDigit().frame(width: 74, alignment: .trailing)
+        }
+        .help(help)
+    }
+
+    var body: some View {
+        Section("Globals") {
+            slider(Int32(NV_G_HEADROOM_DB), "Headroom", 0, 24, 0.5, { String(format: "%.1f dB", $0) },
+                   help: "how far under full scale the mix sits before the limiter")
+            slider(Int32(NV_G_LIMITER), "Limiter", 0.1, 1, 0.02, { String(format: "%.2f", $0) },
+                   help: "the limiter's knee")
+            slider(Int32(NV_G_BEND_RANGE), "Bend range", 0, 24, 0.5, { String(format: "%.1f st", $0) },
+                   help: "the pitch wheel's range, in semitones")
+            slider(Int32(NV_G_MOD_CENTS), "Mod depth", 0, 200, 5, { String(format: "%.0f c", $0) },
+                   help: "the mod wheel's vibrato depth at full")
+            slider(Int32(NV_G_MOD_RATE), "Mod rate", 0, 1.5, 0.05, { String(format: "+%.0f%%", $0 * 100) },
+                   help: "the mod wheel's vibrato rate, faster with the wheel")
+            slider(Int32(NV_G_PRESS_DB), "Aftertouch", 0, 24, 0.5, { String(format: "%.1f dB", $0) },
+                   help: "how much louder full aftertouch makes a note")
+            if !engine.rooms.isEmpty {
+                Picker("Room", selection: Binding(get: { Int(engine.g[Int(NV_G_ROOM)]) },
+                                                  set: { engine.setG(Int32(NV_G_ROOM), Double($0)) })) {
+                    ForEach(engine.rooms.indices, id: \.self) { Text(engine.rooms[$0]).tag($0) }
+                }
+                .help("every patch built again in it, the tail crossfaded")
+            }
+            Picker("Standard", selection: Binding(get: { Int(engine.g[Int(NV_G_STANDARD)].rounded()) },
+                                                  set: { engine.setG(Int32(NV_G_STANDARD), Double($0)) })) {
+                ForEach(standardNames.indices, id: \.self) { Text(standardNames[$0]).tag($0) }
+            }
+            .help("which Sound Canvas's banks program changes read")
+        }
+        Section("Metronome") {
+            HStack {
+                Toggle("On", isOn: Binding(get: { engine.g[Int(NV_G_METRONOME)] > 0 },
+                                           set: { engine.setG(Int32(NV_G_METRONOME), $0 ? max(20, engine.g[Int(NV_G_METRONOME)] == 0 ? 100 : engine.g[Int(NV_G_METRONOME)]) : 0) }))
+                Spacer()
+            }
+            if engine.g[Int(NV_G_METRONOME)] > 0 {
+                slider(Int32(NV_G_METRONOME), "Tempo", 20, 300, 1, { String(format: "%.0f bpm", $0) },
+                       help: "beats a minute")
+            }
+            slider(Int32(NV_G_METRO_RING), "Bell", 0, 16, 1, { $0 <= 0 ? "no bell" : String(format: "every %.0f", $0) },
+                   help: "the bell on every n-th beat")
+            slider(Int32(NV_G_METRO_DB), "Level", -40, 12, 0.5, { String(format: "%+.1f dB", $0) },
+                   help: "the metronome's level")
+        }
+    }
+}
+
+// ---- THE SYNTH (livetui's synth pane): a Moog part's knobs, an organ's drive ----
+struct SynthPane: View {
+    @EnvironmentObject var engine: Engine
+    @State private var said = ""
+
+    private var part: PartRow? { engine.parts.first { $0.row == engine.selectedPart } }
+
+    private func knobRow(_ k: SynthKnob) -> some View {
+        let own = k.knob >= 0 ? engine.synthOwn[k.knob] : 0
+        let v = k.knob >= 0 ? engine.synthPN[k.knob] : 0
+        return HStack {
+            Text(k.label).frame(width: 84, alignment: .leading)
+            if !k.steps.isEmpty {
+                Picker("", selection: Binding(get: { k.steps.min { abs($0 - v) < abs($1 - v) } ?? v },
+                                              set: { engine.setKnob(k, $0) })) {
+                    ForEach(k.steps, id: \.self) { x in Text(label(k, x)).tag(x) }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+            } else {
+                Slider(value: Binding(get: { v }, set: { engine.setKnob(k, $0) }), in: 0...1)
+                Text(engine.synthText(k)).monospacedDigit().frame(width: 80, alignment: .trailing)
+            }
+            Button { engine.forgetKnob(k) } label: { Image(systemName: "arrow.uturn.backward") }
+                .buttonStyle(.borderless)
+                .opacity(own != 0 ? 1 : 0)
+                .disabled(own == 0)
+                .help("back to the patch's setting")
+        }
+        .foregroundStyle(own == 2 ? Color.secondary : own == 1 ? Color.orange : Color.primary)
+    }
+
+    // a switch's position in the panel's words (the knob's own law, the panel as it stands)
+    private func label(_ k: SynthKnob, _ x: Double) -> String {
+        var pn = engine.synthPN
+        pn[k.knob] = x
+        var out = [CChar](repeating: 0, count: 64)
+        nv_host_synth_fmt(k.kind, x, pn, &out, 64)
+        return String(cString: out)
+    }
+
+    var body: some View {
+        let sections = engine.synthKnobs.reduce(into: [String]()) { if !$0.contains($1.section) { $0.append($1.section) } }
+        Form {
+            if engine.synthLayers > 0 {
+                Section {
+                    HStack {
+                        Text("Moog Messenger").font(.headline)
+                        Text(part.map { "part \($0.row + 1), \($0.name)" } ?? "").foregroundStyle(.secondary)
+                        Spacer()
+                        if engine.synthLayers > 1 {
+                            Picker("Layer", selection: Binding(get: { engine.synthLayer },
+                                                               set: { engine.synthLayer = $0; engine.refreshSynth() })) {
+                                Text("A").tag(Int32(0)); Text("B").tag(Int32(1))
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 120)
+                        }
+                        Button("All to the patch") { engine.forgetAllKnobs() }
+                    }
+                    if engine.synthOwn.contains(2) {
+                        Text("grey: the part's, not heard natively (an MF-104M under a moved pitch or shape): kept, and saved")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                ForEach(sections, id: \.self) { sec in
+                    Section(sec) {
+                        ForEach(engine.synthKnobs.filter { $0.section == sec }, id: \.self) { knobRow($0) }
+                    }
+                }
+            } else if engine.drive.0 == 1 {
+                Section("Organ") {
+                    HStack {
+                        Text("Drive").frame(width: 84, alignment: .leading)
+                        Slider(value: Binding(get: { engine.drive.1 }, set: { engine.setDrive(($0 * 20).rounded() / 20) }), in: 0...3)
+                        Text(String(format: "%.2f", engine.drive.1)).monospacedDigit().frame(width: 50, alignment: .trailing)
+                        Button("Voice's") { engine.setDrive(-1) }
+                            .help(String(format: "the voice's own: %.2f", engine.drive.2))
+                    }
+                    Text("the valve before the rotors").font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                Section {
+                    Text(part?.drums == true ? "a drum part: the synth panel is for a melodic part"
+                         : engine.synthLayers < 0 ? "reading the part..."
+                         : "\(part.map { "part \($0.row + 1), \($0.name)" } ?? "this part") is not a Moog: the synth panel turns a Moog's knobs")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Section("Messenger") {
+                Toggle("Every part reads a Messenger's knobs (its CC chart)",
+                       isOn: Binding(get: { engine.messengerReads }, set: { engine.setMessengerReads($0) }))
+                Picker("Firmware chart", selection: Binding(get: { engine.messengerPre107 }, set: { engine.setMessengerPre107($0) })) {
+                    Text("1.0.7 and later").tag(false); Text("before 1.0.7").tag(true)
+                }
+                HStack {
+                    let ml = engine.messengerLine
+                    Text(ml == "-" ? "no Messenger to set: plug one in" : ml.isEmpty ? "no Messenger to set" : "sets the Messenger on \(ml)")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if engine.synthLayers > 0 {
+                        Button("Send the panel") {
+                            said = engine.sendToMessenger() ? "sent" : "no Messenger plugged in"
+                        }
+                        if !said.isEmpty { Text(said).font(.caption).foregroundStyle(.secondary) }
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { engine.refreshSynth() }
+        .onChange(of: engine.selectedPart) { _, _ in engine.synthLayer = 0; engine.synthLayers = -1; engine.refreshSynth() }
+        .onChange(of: engine.parts) { _, _ in engine.refreshSynth() }
+    }
+}
+
 struct SetupPane: View {
     @EnvironmentObject var engine: Engine
     @EnvironmentObject var midi: MidiIn
@@ -481,6 +662,7 @@ struct SetupPane: View {
                 Toggle("GPU (Metal)", isOn: $engine.gpu)
                 Toggle("Room tail", isOn: $engine.roomTail)
             }
+            GlobalsSection()
         }
         .formStyle(.grouped)
     }

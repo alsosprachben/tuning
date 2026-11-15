@@ -63,6 +63,12 @@ struct PartRow: Identifiable, Equatable {
     let name: String
 }
 
+// a knob on a Moog part's panel (nv_host_synth_knobs)
+struct SynthKnob: Hashable {
+    let section: String; let knob: Int; let label: String; let kind: String
+    let steps: [Double]; let centred: Bool
+}
+
 final class Engine: ObservableObject {
     let meters = Meters()
     @Published var parts: [PartRow] = []
@@ -90,6 +96,19 @@ final class Engine: ObservableObject {
     @Published var efxFamilies: [EfxFamily] = []
     var efxParams: [String: [EfxParam]] = [:]       // "msb.lsb" -> its parameters
     @Published var efx = nv_host_efx()
+    // THE GLOBALS (host.h's NV_G_*) and the rooms the export has
+    @Published var g = [Double](repeating: 0, count: Int(NV_G_N))
+    @Published var rooms: [String] = []
+    // THE SYNTH: the selected part's Moog panel (its layers: 0 not a Moog, -1 unread), an organ's drive
+    let synthKnobs: [SynthKnob] = Engine.readSynthKnobs()
+    @Published var synthLayers: Int32 = -1
+    @Published var synthLayer: Int32 = 0
+    @Published var synthPN = [Double](repeating: 0, count: Int(NV_HOST_NKNOBS))
+    @Published var synthOwn = [Int8](repeating: 0, count: Int(NV_HOST_NKNOBS))
+    @Published var drive: (Int32, Double, Double, Double) = (0, 0, 0, -1)
+    @Published var messengerLine = ""
+    @Published var messengerReads = false
+    @Published var messengerPre107 = false
     @Published var sysfx = nv_host_sysfx_state()
     private var stopsProgram: Int32 = -2
     // the session (and presets.json beside it): nvlive's on this Mac by
@@ -195,6 +214,8 @@ final class Engine: ObservableObject {
                 self.readTuning(h)
                 self.readEfxTables(h)
                 self.refreshEfx()
+                self.readRooms(h)
+                self.readGlobals()
                 if restored { self.message = "the last session restored" }
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.poll() }
                 // TUNING_TEST_NOTE: a note held from 2 s to 14 s, by itself (a test with no one playing)
@@ -343,6 +364,114 @@ final class Engine: ObservableObject {
         AudioUnitGetProperty(au, kAudioDevicePropertyBufferFrameSize, kAudioUnitScope_Global, 0, &got, &size)
         let device = audio.outputNode.presentationLatency
         latencyMS = 1000.0 * (2.0 * Double(got) / rate + device)
+    }
+
+    // ---- THE GLOBALS ----
+    private func readRooms(_ h: OpaquePointer) {
+        var buf = [CChar](repeating: 0, count: 8192)
+        nv_host_rooms(h, &buf, 8192)
+        rooms = String(cString: buf).split(separator: "\n").map(String.init)
+    }
+
+    func readGlobals() {
+        guard let h = host else { return }
+        let now = (0..<Int(NV_G_N)).map { nv_host_global(h, Int32($0)) }
+        if now != g { g = now }
+    }
+
+    func setG(_ i: Int32, _ v: Double) {
+        guard host != nil else { return }
+        g[Int(i)] = v
+        setGlobal(i, v)
+    }
+
+    // ---- THE SYNTH ----
+    private static func readSynthKnobs() -> [SynthKnob] {
+        var buf = [CChar](repeating: 0, count: 16384)
+        nv_host_synth_knobs(&buf, 16384)
+        return String(cString: buf).split(separator: "\n").compactMap { line in
+            let f = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            guard f.count >= 6 else { return nil }
+            return SynthKnob(section: f[0], knob: Int(f[1]) ?? -1, label: f[2], kind: f[3],
+                             steps: f[4].split(separator: ",").compactMap { Double($0) }, centred: f[5] == "1")
+        }
+    }
+
+    func synthText(_ k: SynthKnob) -> String {
+        guard k.knob >= 0 else { return "-" }
+        var out = [CChar](repeating: 0, count: 64)
+        nv_host_synth_fmt(k.kind, synthPN[k.knob], synthPN, &out, 64)
+        return String(cString: out)
+    }
+
+    // the selected part's panel, read between two blocks (off the main thread: it waits for one)
+    func refreshSynth() {
+        guard let h = host else { return }
+        let row = selectedPart, layer = synthLayer
+        DispatchQueue.global(qos: .userInitiated).async {
+            var pn = [Double](repeating: 0, count: Int(NV_HOST_NKNOBS))
+            var own = [CChar](repeating: 0, count: Int(NV_HOST_NKNOBS))
+            var n = nv_host_synth_get(h, row, layer, &pn, &own)
+            var lay = layer
+            if n > 0 && layer >= n { lay = 0; n = nv_host_synth_get(h, row, 0, &pn, &own) }
+            var dv = [Double](repeating: 0, count: 3)
+            let dr = n > 0 ? 0 : nv_host_drive(h, row, &dv)
+            var ml = [CChar](repeating: 0, count: 256)
+            nv_host_messenger_line(h, &ml, 256)
+            let line = String(cString: ml), reads = nv_host_messenger_reads(h) != 0, pre = nv_host_messenger_pre107(h) != 0
+            DispatchQueue.main.async {
+                guard row == self.selectedPart else { return }
+                self.synthLayers = n
+                self.synthLayer = lay
+                if n > 0 { self.synthPN = pn; self.synthOwn = own.map { Int8($0) } }
+                self.drive = (dr, dv[0], dv[1], dv[2])
+                self.messengerLine = line
+                self.messengerReads = reads
+                self.messengerPre107 = pre
+            }
+        }
+    }
+
+    func setKnob(_ k: SynthKnob, _ v: Double) {
+        guard let h = host, k.knob >= 0 else { return }
+        nv_host_synth_set(h, selectedPart, synthLayer, Int32(k.knob), v)
+        synthPN[k.knob] = v                       // (the part has it at once)
+        synthOwn[k.knob] = 1
+    }
+
+    func forgetKnob(_ k: SynthKnob) {
+        guard let h = host, k.knob >= 0 else { return }
+        nv_host_synth_forget(h, selectedPart, synthLayer, Int32(k.knob))
+        synthOwn[k.knob] = 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.refreshSynth() }
+    }
+
+    func forgetAllKnobs() {
+        for k in synthKnobs where k.knob >= 0 && synthOwn[k.knob] != 0 { forgetKnob(k) }
+    }
+
+    func sendToMessenger() -> Bool {
+        guard let h = host else { return false }
+        return nv_host_synth_send(h, selectedPart) != 0
+    }
+
+    func setMessengerReads(_ on: Bool) {
+        guard let h = host else { return }
+        nv_host_set_messenger_reads(h, on ? 1 : 0)
+        messengerReads = on
+    }
+
+    func setMessengerPre107(_ on: Bool) {
+        guard let h = host else { return }
+        nv_host_set_messenger_pre107(h, on ? 1 : 0)
+        messengerPre107 = on
+    }
+
+    func setDrive(_ v: Double) {            // (v < 0: the voice's)
+        guard let h = host else { return }
+        nv_host_set_drive(h, selectedPart, v)
+        drive.1 = v < 0 ? drive.2 : v
+        drive.3 = v
     }
 
     // ---- THE EFFECTS ----
@@ -616,7 +745,8 @@ final class Engine: ObservableObject {
     private func poll() {
         guard let h = host else { return }
         pollTick += 1
-        if pollTick % 5 == 0 { refreshParts(); refreshEfx() }     // (twice a second: a preset's, a file's)
+        if pollTick % 5 == 0 { refreshParts(); refreshEfx() }
+        if pollTick % 10 == 3 { readGlobals() }     // (twice a second: a preset's, a file's)
         var s = nv_host_snap()
         nv_host_snapshot(h, &s)
         let m = meters

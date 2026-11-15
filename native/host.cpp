@@ -3463,7 +3463,7 @@ void nv_host_set_room(nv_host *h, const char *name)
         }
 }
 
-int nv_host_global_count(void) { return 9; }
+int nv_host_global_count(void) { return NV_G_N; }
 
 void nv_host_set_global(nv_host *h, int which, double v) { h->set_global(which, v); }
 

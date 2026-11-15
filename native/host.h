@@ -107,9 +107,13 @@ void nv_host_set_room(nv_host *h, const char *name);
    0 master dB, 1 headroom dB, 2 the limiter's knee, 3 the wheel's range
    (semitones), 4 the mod wheel's depth (cents), 5 aftertouch dB, 6 the GPU
    (1 on), 7 the room's tail (1 on), 8 the room (nv_host_rooms' index: built
-   on the builder) -- changed between two blocks */
+   on the builder), 9 the mod wheel's rate (+%: 0..1.5), 10 the metronome
+   (bpm, 0 off), 11 its bell (every n beats, 0 none), 12 its level dB, 13 the
+   standard program changes read (0 ours, 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
+   SC-8850) -- changed between two blocks */
 enum { NV_G_MASTER_DB, NV_G_HEADROOM_DB, NV_G_LIMITER, NV_G_BEND_RANGE, NV_G_MOD_CENTS, NV_G_PRESS_DB,
-       NV_G_GPU, NV_G_ROOM_TAIL, NV_G_ROOM, NV_G_N };
+       NV_G_GPU, NV_G_ROOM_TAIL, NV_G_ROOM, NV_G_MOD_RATE, NV_G_METRONOME, NV_G_METRO_RING, NV_G_METRO_DB,
+       NV_G_STANDARD, NV_G_N };
 int nv_host_global_count(void);
 void nv_host_set_global(nv_host *h, int which, double v);
 double nv_host_global(const nv_host *h, int which);
@@ -236,6 +240,33 @@ int nv_host_sysfx(nv_host *h, nv_host_sysfx_state *s);
 /* a setting as a sequencer's GS message: 40 hi lo v (hi 1 the reverb, chorus
    and delay, 2 the EQ) */
 void nv_host_sysfx_send(nv_host *h, int hi, int lo, int v);
+
+/* ---- A MOOG PART's KNOBS (livetui's synth pane) ----
+   the panel's knobs, "section\tknob\tlabel\tkind\tsteps\tcentred" a line (knob
+   the index into pn, NV_MK_*; steps a switch's positions "32,16,8,4", empty
+   a knob 0..1; centred 1 a centre detent) */
+int nv_host_synth_knobs(char *out, int cap);
+#define NV_HOST_NKNOBS 51
+/* part `row`'s knobs on a layer: pn the positions, own 1 turned here, 2 kept
+   but not heard natively, 0 the patch's; returns its layers (0 not a Moog, -1
+   not read yet) */
+int nv_host_synth_get(nv_host *h, int row, int layer, double *pn, char *own);
+void nv_host_synth_set(nv_host *h, int row, int layer, int knob, double v);
+void nv_host_synth_forget(nv_host *h, int row, int layer, int knob);     /* back to the patch's */
+int nv_host_synth_send(nv_host *h, int row);            /* the panel to a Messenger: 0 none plugged in */
+/* a knob's value in the panel's terms ("1.2 kHz", "8'", "saw"): pn the panel */
+int nv_host_synth_fmt(const char *kind, double v, const double *pn, char *out, int cap);
+/* the Messenger: its line ("" none set, "-" watched for), every part reading
+   its chart (CCs as a Messenger's), its firmware's chart (1 pre-1.0.7) */
+int nv_host_messenger_line(nv_host *h, char *out, int cap);
+int nv_host_messenger_reads(nv_host *h);
+void nv_host_set_messenger_reads(nv_host *h, int on);
+int nv_host_messenger_pre107(nv_host *h);
+void nv_host_set_messenger_pre107(nv_host *h, int on);
+/* A TONEWHEEL ORGAN's DRIVE: out [now, the voice's, set (-1 the voice's)];
+   1 an organ, 0 not, -1 unread; set v < 0: the voice's */
+int nv_host_drive(nv_host *h, int row, double *out);
+void nv_host_set_drive(nv_host *h, int row, double v);
 
 /* the live part it plays (native.py's nv_part_*: a check reads its slab) */
 void *nv_host_part(nv_host *h);
