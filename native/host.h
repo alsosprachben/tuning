@@ -201,6 +201,42 @@ void nv_host_set_eastern(nv_host *h, const char *spec);
 const char *nv_raga_system_name(int i);
 const char *nv_raga_name(int i, int *n, const int **idx);
 
+/* ---- THE INSERTION EFFECT (the Sound Canvas's EFX: livetui's x) ----
+   its tables: Roland's numbered types, families, each type's parameters (the
+   export's EFXU lines: "T num msb lsb name", "C first last family",
+   "P msb lsb n name mark read fresh v,v,.. shown\x1fshown..") */
+int nv_host_efx_tables(nv_host *h, char *out, int cap);
+typedef struct {
+    int has, msb, lsb;                      /* its type (0, 0: Thru) */
+    int p[21];                              /* parameters 1-20 as set (-1: the type's own) */
+    int send[3];                            /* to reverb, chorus, delay */
+    int ctl[4];                             /* controller 1 source, depth; controller 2's */
+    int nparts, parts[32];                  /* the channels on it (16-31: port B) */
+    int status;
+    char why[128];                          /* not native live: why */
+} nv_host_efx;
+/* as it stands (0; -1 none yet) */
+int nv_host_efx_state(nv_host *h, nv_host_efx *s);
+/* a setting, as the GS message a sequencer sends (gsefx.message): kind 't'
+   a type (a msb, b lsb), 'p' parameter a = b, 's' address a = b (the sends
+   0x17-0x19, the controllers 0x1B-0x1E), 'c' channel a on (b 1) or off */
+void nv_host_efx_send(nv_host *h, int kind, int a, int b);
+
+/* ---- THE SYSTEM EFFECTS (livetui's G): the reverb, chorus, delay, EQ ---- */
+typedef struct {
+    int rev_macro, rev_level, rev_time, rev_fb;    /* macro -1: the panel's room; fb -1: none */
+    char room[64];
+    int gs;                                 /* GS's chorus and delay (once a GS message is heard) */
+    int cho[7];                             /* type, pre-LPF, level, feedback, delay, rate, depth */
+    int dly[11];                            /* type, pre-LPF, time, ratio L, R, level C, L, R, level,
+                                               feedback, to reverb */
+    int eq[4];                              /* low freq, low gain, high freq, high gain */
+} nv_host_sysfx_state;
+int nv_host_sysfx(nv_host *h, nv_host_sysfx_state *s);
+/* a setting as a sequencer's GS message: 40 hi lo v (hi 1 the reverb, chorus
+   and delay, 2 the EQ) */
+void nv_host_sysfx_send(nv_host *h, int hi, int lo, int v);
+
 /* the live part it plays (native.py's nv_part_*: a check reads its slab) */
 void *nv_host_part(nv_host *h);
 

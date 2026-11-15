@@ -1140,3 +1140,92 @@ int nv_host_eastern(nv_host *h, char *out, int cap)
 void nv_host_set_eastern(nv_host *h, const char *spec) { h->set_eastern(spec ? spec : ""); }
 
 }  // extern "C"
+
+// ---- THE EFFECTS (the panel's x and G: the insertion effect, the system effects) ----
+extern "C" {
+
+int nv_host_efx_tables(nv_host *h, char *out, int cap) { return copy_out(h->E.efxu, out, cap); }
+
+int nv_host_efx_state(nv_host *h, nv_host_efx *s)
+{
+    std::vector<int> o;
+    std::string why;
+    {
+        std::lock_guard<std::mutex> lk(h->pmu);
+        o = h->snap.efx;
+        why = h->snap.efx_why;
+    }
+    panel::EfxView v(o);
+    s->has = v.has;
+    s->msb = v.msb;
+    s->lsb = v.lsb;
+    for (int q = 0; q < 21; q++)
+        s->p[q] = v.p[q];
+    for (int q = 0; q < 3; q++)
+        s->send[q] = v.snd[q];
+    for (int q = 0; q < 4; q++)
+        s->ctl[q] = v.ctl[q];
+    s->nparts = 0;
+    for (int c : v.parts)
+        if (s->nparts < 32)
+            s->parts[s->nparts++] = c;
+    s->status = v.status;
+    snprintf(s->why, sizeof s->why, "%s", why.c_str());
+    return v.has ? 0 : -1;
+}
+
+void nv_host_efx_send(nv_host *h, int kind, int a, int b)
+{
+    const std::vector<uint8_t> m = panel::efx_message((char)kind, a, b);
+    h->post([h, m](long long) { nv_part_sysex(h->part, m.data(), (int)m.size()); });
+}
+
+int nv_host_sysfx(nv_host *h, nv_host_sysfx_state *s)
+{
+    struct Got {
+        std::map<int, int> rev, eq;
+        int cho[7] = {}, dly[11] = {};
+        bool gs = false;
+        std::atomic<bool> done{false};
+    };
+    auto got = std::make_shared<Got>();
+    auto take = [h, got](long long) {
+        got->rev = h->gs_rev;
+        got->eq = h->gs_eq;
+        got->gs = nv_part_gs_fx(h->part, got->cho, got->dly) != 0;
+        got->done = true;
+    };
+    h->post(take);
+    for (int i = 0; i < 200 && !got->done && !g_stop; i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (!got->done)
+        return -1;
+    static const int TIME[8] = {80, 56, 64, 72, 64, 88, 32, 64};
+    auto at = [](const std::map<int, int> &m, int k, int d) {
+        auto it = m.find(k);
+        return it != m.end() ? it->second : d;
+    };
+    s->rev_macro = at(got->rev, 0x30, -1);
+    s->rev_level = at(got->rev, 0x33, 64);
+    s->rev_time = at(got->rev, 0x34, TIME[s->rev_macro >= 0 && s->rev_macro < 8 ? s->rev_macro : 4]);
+    s->rev_fb = s->rev_macro == 6 || s->rev_macro == 7 ? at(got->rev, 0x35, s->rev_macro == 6 ? 40 : 32) : -1;
+    snprintf(s->room, sizeof s->room, "%s", h->room_now.c_str());
+    s->gs = got->gs;
+    for (int k = 0; k < 7; k++)
+        s->cho[k] = got->cho[k];
+    for (int k = 0; k < 11; k++)
+        s->dly[k] = got->dly[k];
+    for (int k = 0; k < 4; k++)
+        s->eq[k] = at(got->eq, k, k % 2 ? 0x40 : 0);
+    return 0;
+}
+
+void nv_host_sysfx_send(nv_host *h, int hi, int lo, int v)
+{
+    std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, (uint8_t)hi, (uint8_t)lo, (uint8_t)std::max(0, std::min(127, v))};
+    x.push_back((uint8_t)((128 - (0x40 + hi + lo + x[7]) % 128) % 128));
+    std::lock_guard<std::mutex> lk(h->mu);
+    h->q.push_back(Midi{6, 0, 0, 0, x});
+}
+
+}  // extern "C"

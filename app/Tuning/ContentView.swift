@@ -243,6 +243,7 @@ struct SidePane: View {
             Picker("", selection: $tab) {
                 Text("Presets").tag(0)
                 Text("Tuning").tag(1)
+                Text("Effects").tag(3)
                 Text("Setup").tag(2)
             }
             .pickerStyle(.segmented)
@@ -251,6 +252,7 @@ struct SidePane: View {
             switch tab {
             case 0: PresetsPane()
             case 1: TuningPane()
+            case 3: EffectsPane()
             default: SetupPane()
             }
         }
@@ -339,6 +341,119 @@ struct TuningPane: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+// ---- THE EFFECTS: the insertion effect (the Sound Canvas's EFX), the system effects ----
+
+private let reverbNames = ["Room 1", "Room 2", "Room 3", "Hall 1", "Hall 2", "Plate", "Delay", "Panning Delay"]
+private let chorusNames = ["Chorus 1", "Chorus 2", "Chorus 3", "Chorus 4", "Feedback Chorus", "Flanger",
+                           "Short Delay", "Short Delay (FB)"]
+private let delayNames = ["Delay 1", "Delay 2", "Delay 3", "Delay 4", "Pan Delay 1", "Pan Delay 2", "Pan Delay 3",
+                          "Pan Delay 4", "Delay to Reverb", "Pan Repeat"]
+
+struct EffectsPane: View {
+    @EnvironmentObject var engine: Engine
+
+    private func ival(_ v: Binding<Int>, _ lo: Int, _ hi: Int, _ label: String) -> some View {
+        HStack {
+            Text(label)
+            Slider(value: Binding(get: { Double(v.wrappedValue) }, set: { v.wrappedValue = Int($0.rounded()) }),
+                   in: Double(lo)...Double(hi))
+            Text("\(v.wrappedValue)").monospacedDigit().frame(width: 34, alignment: .trailing)
+        }
+    }
+
+    var body: some View {
+        let e = engine.efx
+        let key = "\(e.msb).\(e.lsb)"
+        let cur = engine.efxTypes.first { $0.msb == e.msb && $0.lsb == e.lsb }
+        Form {
+            Section("Insertion effect") {
+                Toggle("Selected part on it", isOn: Binding(get: { engine.selectedOnEfx }, set: { engine.setSelectedOnEfx($0) }))
+                Picker("Type", selection: Binding(get: { cur ?? EfxType(num: 0, msb: 0, lsb: 0, name: "Thru") },
+                                                  set: { engine.setEfxType($0) })) {
+                    Text("00 Thru").tag(EfxType(num: 0, msb: 0, lsb: 0, name: "Thru"))
+                    ForEach(engine.efxFamilies, id: \.self) { fam in
+                        Section(fam.name) {
+                            ForEach(engine.efxTypes.filter { $0.num >= fam.first && $0.num <= fam.last }, id: \.self) { t in
+                                Text(String(format: "%02d %@", t.num, t.name)).tag(t)
+                            }
+                        }
+                    }
+                }
+                let why = withUnsafeBytes(of: e.why) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
+                if !why.isEmpty { Text("not played live: \(why)").font(.caption).foregroundStyle(.orange) }
+            }
+            if cur != nil, let ps = engine.efxParams[key] {
+                Section("\(cur!.name): parameters") {
+                    ForEach(ps, id: \.self) { p in
+                        let v = withUnsafeBytes(of: e.p) { $0.bindMemory(to: Int32.self)[p.n] }
+                        let now = v >= 0 ? Int(v) : p.fresh
+                        Picker(p.name + (p.mark == "-" ? "" : "  " + p.mark),
+                               selection: Binding(get: { now }, set: { engine.setEfxParam(p.n, $0) })) {
+                            ForEach(p.vals, id: \.self) { x in Text(p.label(x)).tag(x) }
+                        }
+                    }
+                }
+                Section("Sends from it") {
+                    ForEach([(0x17, "to reverb"), (0x18, "to chorus"), (0x19, "to delay")], id: \.0) { a, nm in
+                        let sv = withUnsafeBytes(of: e.send) { Int($0.bindMemory(to: Int32.self)[a - 0x17]) }
+                        ival(Binding(get: { sv }, set: { engine.setEfxAddress(a, $0) }), 0, 127, nm)
+                    }
+                }
+            }
+            let x = engine.sysfx
+            Section("Reverb (CC91)") {
+                Picker("Type", selection: Binding(get: { Int(x.rev_macro < 0 ? 4 : x.rev_macro) }, set: { engine.setSysfx(1, 0x30, $0) })) {
+                    ForEach(0..<8, id: \.self) { Text(reverbNames[$0]).tag($0) }
+                }
+                if x.rev_macro < 0 {
+                    let room = withUnsafeBytes(of: x.room) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
+                    Text("the panel's room: \(room)").font(.caption).foregroundStyle(.secondary)
+                }
+                ival(Binding(get: { Int(x.rev_level) }, set: { engine.setSysfx(1, 0x33, $0) }), 0, 127, "Level")
+                ival(Binding(get: { Int(x.rev_time) }, set: { engine.setSysfx(1, 0x34, $0) }), 0, 127, "Time")
+                if x.rev_fb >= 0 {
+                    ival(Binding(get: { Int(x.rev_fb) }, set: { engine.setSysfx(1, 0x35, $0) }), 0, 127, "Feedback")
+                }
+            }
+            Section("Chorus (CC93)") {
+                let c = withUnsafeBytes(of: x.cho) { Array($0.bindMemory(to: Int32.self)).map(Int.init) }
+                Picker("Type", selection: Binding(get: { c[0] }, set: { engine.setSysfx(1, 0x38, $0) })) {
+                    ForEach(0..<8, id: \.self) { Text(chorusNames[$0]).tag($0) }
+                }
+                ForEach([(1, 0x39, "Pre-LPF", 7), (2, 0x3A, "Level", 127), (3, 0x3B, "Feedback", 127),
+                         (4, 0x3C, "Delay", 127), (5, 0x3D, "Rate", 127), (6, 0x3E, "Depth", 127)], id: \.0) { i, a, nm, hi in
+                    ival(Binding(get: { c[i] }, set: { engine.setSysfx(1, a, $0) }), 0, hi, nm)
+                }
+            }
+            Section("Delay (CC94)") {
+                let dl = withUnsafeBytes(of: x.dly) { Array($0.bindMemory(to: Int32.self)).map(Int.init) }
+                Picker("Type", selection: Binding(get: { dl[0] }, set: { engine.setSysfx(1, 0x50, $0) })) {
+                    ForEach(0..<10, id: \.self) { Text(delayNames[$0]).tag($0) }
+                }
+                ForEach([(1, 0x51, "Pre-LPF", 0, 7), (2, 0x52, "Time", 1, 0x73), (3, 0x53, "Ratio L", 1, 0x78),
+                         (4, 0x54, "Ratio R", 1, 0x78), (5, 0x55, "Level C", 0, 127), (6, 0x56, "Level L", 0, 127),
+                         (7, 0x57, "Level R", 0, 127), (8, 0x58, "Level", 0, 127), (9, 0x59, "Feedback", 0, 127)],
+                        id: \.0) { i, a, nm, lo, hi in
+                    ival(Binding(get: { dl[i] }, set: { engine.setSysfx(1, a, $0) }), lo, hi, nm)
+                }
+            }
+            Section("EQ") {
+                let q = withUnsafeBytes(of: x.eq) { Array($0.bindMemory(to: Int32.self)).map(Int.init) }
+                Picker("Low", selection: Binding(get: { q[0] }, set: { engine.setSysfx(2, 0, $0) })) {
+                    Text("200 Hz").tag(0); Text("400 Hz").tag(1)
+                }
+                ival(Binding(get: { q[1] - 0x40 }, set: { engine.setSysfx(2, 1, $0 + 0x40) }), -12, 12, "Low gain dB")
+                Picker("High", selection: Binding(get: { q[2] }, set: { engine.setSysfx(2, 2, $0) })) {
+                    Text("3 kHz").tag(0); Text("6 kHz").tag(1)
+                }
+                ival(Binding(get: { q[3] - 0x40 }, set: { engine.setSysfx(2, 3, $0 + 0x40) }), -12, 12, "High gain dB")
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { engine.refreshEfx(); engine.refreshSysfx() }
     }
 }
 

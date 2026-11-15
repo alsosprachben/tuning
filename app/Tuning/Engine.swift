@@ -34,6 +34,18 @@ final class Meters: ObservableObject {
     @Published var slowestMS = 0.0               // the slowest block in the last second
 }
 
+// THE INSERTION EFFECT's TABLES (the export's EFXU): a type, a family, a parameter
+struct EfxType: Hashable { let num: Int; let msb: Int; let lsb: Int; let name: String }
+struct EfxFamily: Hashable { let first: Int; let last: Int; let name: String }
+struct EfxParam: Hashable {
+    let n: Int; let name: String; let mark: String; let fresh: Int
+    let vals: [Int]; let shown: [String]
+    func label(_ v: Int) -> String {
+        if let i = vals.firstIndex(of: v), i < shown.count { return shown[i] }
+        return "\(v)"
+    }
+}
+
 // one part as the window shows it (host.h's nv_host_partinfo)
 struct PartRow: Identifiable, Equatable {
     let row: Int32
@@ -73,6 +85,12 @@ final class Engine: ObservableObject {
     @Published var eastern = ""
     @Published var ragaSystems: [String] = []
     @Published var ragas: [String] = []
+    // THE EFFECTS: the insertion effect's tables and state, the system effects'
+    @Published var efxTypes: [EfxType] = []
+    @Published var efxFamilies: [EfxFamily] = []
+    var efxParams: [String: [EfxParam]] = [:]       // "msb.lsb" -> its parameters
+    @Published var efx = nv_host_efx()
+    @Published var sysfx = nv_host_sysfx_state()
     private var stopsProgram: Int32 = -2
     // the session (and presets.json beside it): nvlive's on this Mac by
     // default, so the two share presets
@@ -175,6 +193,8 @@ final class Engine: ObservableObject {
                 self.refreshParts()
                 self.refreshPresets()
                 self.readTuning(h)
+                self.readEfxTables(h)
+                self.refreshEfx()
                 if restored { self.message = "the last session restored" }
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.poll() }
                 // TUNING_TEST_NOTE: a note held from 2 s to 14 s, by itself (a test with no one playing)
@@ -323,6 +343,94 @@ final class Engine: ObservableObject {
         AudioUnitGetProperty(au, kAudioDevicePropertyBufferFrameSize, kAudioUnitScope_Global, 0, &got, &size)
         let device = audio.outputNode.presentationLatency
         latencyMS = 1000.0 * (2.0 * Double(got) / rate + device)
+    }
+
+    // ---- THE EFFECTS ----
+    private func readEfxTables(_ h: OpaquePointer) {
+        let cap = 1 << 21
+        var buf = [CChar](repeating: 0, count: cap)
+        nv_host_efx_tables(h, &buf, Int32(cap))
+        var types: [EfxType] = [], fams: [EfxFamily] = [], params: [String: [EfxParam]] = [:]
+        for line in String(cString: buf).split(separator: "\n") {
+            let f = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            if f[0] == "T", f.count >= 5 {
+                types.append(EfxType(num: Int(f[1]) ?? 0, msb: Int(f[2]) ?? 0, lsb: Int(f[3]) ?? 0, name: f[4]))
+            } else if f[0] == "C", f.count >= 4 {
+                fams.append(EfxFamily(first: Int(f[1]) ?? 0, last: Int(f[2]) ?? 0, name: f[3]))
+            } else if f[0] == "P", f.count >= 10 {
+                let p = EfxParam(n: Int(f[3]) ?? 0, name: f[4], mark: f[5], fresh: Int(f[7]) ?? 0,
+                                 vals: f[8].split(separator: ",").compactMap { Int($0) },
+                                 shown: f[9].split(separator: "\u{1f}", omittingEmptySubsequences: false).map(String.init))
+                params["\(f[1]).\(f[2])", default: []].append(p)
+            }
+        }
+        efxTypes = types
+        efxFamilies = fams
+        efxParams = params
+    }
+
+    func refreshEfx() {
+        guard let h = host else { return }
+        var e = nv_host_efx()
+        nv_host_efx_state(h, &e)
+        efx = e
+    }
+
+    func refreshSysfx() {
+        guard let h = host else { return }
+        var s = nv_host_sysfx_state()
+        DispatchQueue.global(qos: .userInitiated).async {
+            nv_host_sysfx(h, &s)                  // (read between two blocks: not on the main thread)
+            DispatchQueue.main.async { self.sysfx = s }
+        }
+    }
+
+    // the channels a part listens on (all for -1)
+    private func channels(of part: PartRow?) -> [Int32] {
+        guard let p = part else { return [0] }
+        return p.channel < 0 ? Array(0..<16) : [p.channel]
+    }
+
+    var selectedOnEfx: Bool {
+        let p = parts.first { $0.row == selectedPart }
+        let on = Set(withUnsafeBytes(of: efx.parts) { Array($0.bindMemory(to: Int32.self).prefix(Int(efx.nparts))) })
+        return channels(of: p).allSatisfy { on.contains($0) }
+    }
+
+    func setSelectedOnEfx(_ on: Bool) {
+        guard let h = host else { return }
+        for c in channels(of: parts.first { $0.row == selectedPart }) {
+            nv_host_efx_send(h, Int32(UInt8(ascii: "c")), c, on ? 1 : 0)
+        }
+        afterEfx()
+    }
+
+    func setEfxType(_ t: EfxType) {
+        guard let h = host else { return }
+        nv_host_efx_send(h, Int32(UInt8(ascii: "t")), Int32(t.msb), Int32(t.lsb))
+        afterEfx()
+    }
+
+    func setEfxParam(_ n: Int, _ v: Int) {
+        guard let h = host else { return }
+        nv_host_efx_send(h, Int32(UInt8(ascii: "p")), Int32(n), Int32(v))
+        afterEfx()
+    }
+
+    func setEfxAddress(_ a: Int, _ v: Int) {
+        guard let h = host else { return }
+        nv_host_efx_send(h, Int32(UInt8(ascii: "s")), Int32(a), Int32(v))
+        afterEfx()
+    }
+
+    private func afterEfx() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.refreshEfx() }
+    }
+
+    func setSysfx(_ hi: Int, _ lo: Int, _ v: Int) {
+        guard let h = host else { return }
+        nv_host_sysfx_send(h, Int32(hi), Int32(lo), Int32(v))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.refreshSysfx() }
     }
 
     // ---- TUNING ----
@@ -508,7 +616,7 @@ final class Engine: ObservableObject {
     private func poll() {
         guard let h = host else { return }
         pollTick += 1
-        if pollTick % 5 == 0 { refreshParts() }     // (twice a second: a preset's parts landing)
+        if pollTick % 5 == 0 { refreshParts(); refreshEfx() }     // (twice a second: a preset's, a file's)
         var s = nv_host_snap()
         nv_host_snapshot(h, &s)
         let m = meters
