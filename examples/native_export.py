@@ -681,52 +681,16 @@ def main(argv):
             # (roomtail.tail_spec: what does not depend on the stage) and, where
             # it reflects, every class's ranges in it -- the export's own room
             # last set again, as the rest of the export expects
-            import roomtail as _RTL
-            import tonelib as _T
-            _was = _T.ROOM_NAME[0]
-            _VS = N.VoiceSnap
-            _t0 = N.NoteClass.tmpl.offset
-            rng = [(N.NoteClass.room_planes.offset, N.NoteClass.room_planes.size),
-                   (N.NoteClass.room_order.offset, N.NoteClass.room_order.size)]
-            rng += [(_t0 + getattr(_VS, _f).offset, getattr(_VS, _f).size)
-                    for _f in ("room", "ahz", "alpha", "scat", "radiation_distance")]
-            ordered = sorted(idx.items(), key=lambda kv: kv[1])
             # (written as made, its length filled in after: every class's
             # ranges in every room held in memory and grown with += took an
             # 8 GB Mac's live export past its 3.5 GB cap)
             f.write(b"LROOMS")
             _at = f.tell()
             f.write(struct.pack("<q", 0))
-            _n = [0]
-
-            class _Rb(object):
-                def __iadd__(self, b):
-                    f.write(b)
-                    _n[0] += len(b)
-                    return self
-            rb = _Rb()
-            rb += struct.pack("<i", len(rng)) + b"".join(struct.pack("<ii", o, z) for o, z in rng)
-            rb += struct.pack("<i", len(classes))
-            dsp = _RTL.device_spec(48000)
-            rb += struct.pack("<i", len(dsp)) + struct.pack("<%dd" % len(dsp), *dsp)
-            rb += struct.pack("<i", len(L.ROOM_NAMES))
-            for _rn in L.ROOM_NAMES:
-                _nb = _rn.encode()
-                rb += struct.pack("<i", len(_nb)) + _nb
-                if _rn == "dry":
-                    rb += struct.pack("<ii", 0, 0)
-                    continue
-                _T.set_room(_rn)
-                tsp = _RTL.tail_spec(_T.StoppedPipeProperties(261.6, 0, 1, 1))
-                rb += struct.pack("<ii", 1, len(tsp)) + struct.pack("<%dd" % len(tsp), *tsp)
-                for _cls, _i in ordered:
-                    _kb = bytes(N.note_class(_cls))
-                    rb += b"".join(_kb[o:o + z] for o, z in rng)
-            if _was:
-                _T.set_room(_was)
+            _n = write_rooms(f, classes, idx)
             _end = f.tell()
             f.seek(_at)
-            f.write(struct.pack("<q", _n[0]))
+            f.write(struct.pack("<q", _n))
             f.seek(_end)
             # LROUTE: the session's routes (live.Route), each as nv_rt_add takes it
             routes = [L.Route.from_dict(r) for r in sess.get("routes", [])]
@@ -783,6 +747,13 @@ def main(argv):
             _q3 = T.StoppedPipeProperties(261.63, 0.0, 1.0, 1.0)
             f.write(b"LP3D" + struct.pack("<4d", float(_q3.position_z), float(_q3.listener_distance),
                                            float(_q3.head_radius), float(_q3.sound_speed)))
+        if "live" not in opt:
+            # ROOMS: EVERY ROOM a file may ask for (its GS reverb macro,
+            # TUNING_ROOM) in this one export -- LROOMS' body (each room's
+            # tail spec and every class's room bytes), written last and found
+            # from the end: the body, its length (8 bytes), b"NVROOMS\0"
+            _n = write_rooms(f, classes, idx)
+            f.write(struct.pack("<q", _n) + b"NVROOMS\0")
     print("native export: %d piano class(es), tuner %s, room %s -> %s" % (len(classes), tuner,
                                                                           room.decode() or "-", args[0]))
     if sess:
@@ -790,6 +761,54 @@ def main(argv):
               % (sess.get("room"), sess.get("master_db"), sess.get("headroom_db"), sess.get("press_db"),
                  sess.get("thresh"), len(sess.get("routes", []))))
     return 0
+
+
+def write_rooms(f, classes, idx):
+    """LROOMS' body, written to f as made: the byte ranges of a class record
+    the room sets (its walls and their order; its voice snapshot's room, band
+    corners, absorption, scattering and the listener's distance), the class
+    count, the device tails' filters (roomtail.device_spec), then each of
+    live.ROOM_NAMES -- its name, whether it reflects (dry: off, the classes as
+    they were), its tail's spec (roomtail.tail_spec: what does not depend on
+    the stage) and, where it reflects, every class's ranges in it. The room
+    the export was made in set again after. Its length."""
+    import live as L
+    import native as N
+    import roomtail as _RTL
+    import tonelib as _T
+    _was = _T.ROOM_NAME[0]
+    _VS = N.VoiceSnap
+    _t0 = N.NoteClass.tmpl.offset
+    rng = [(N.NoteClass.room_planes.offset, N.NoteClass.room_planes.size),
+           (N.NoteClass.room_order.offset, N.NoteClass.room_order.size)]
+    rng += [(_t0 + getattr(_VS, _f).offset, getattr(_VS, _f).size)
+            for _f in ("room", "ahz", "alpha", "scat", "radiation_distance")]
+    ordered = sorted(idx.items(), key=lambda kv: kv[1])
+    n = [0]
+
+    def put(b):
+        f.write(b)
+        n[0] += len(b)
+    put(struct.pack("<i", len(rng)) + b"".join(struct.pack("<ii", o, z) for o, z in rng))
+    put(struct.pack("<i", len(classes)))
+    dsp = _RTL.device_spec(48000)
+    put(struct.pack("<i", len(dsp)) + struct.pack("<%dd" % len(dsp), *dsp))
+    put(struct.pack("<i", len(L.ROOM_NAMES)))
+    for _rn in L.ROOM_NAMES:
+        _nb = _rn.encode()
+        put(struct.pack("<i", len(_nb)) + _nb)
+        if _rn == "dry":
+            put(struct.pack("<ii", 0, 0))
+            continue
+        _T.set_room(_rn)
+        tsp = _RTL.tail_spec(_T.StoppedPipeProperties(261.6, 0, 1, 1))
+        put(struct.pack("<ii", 1, len(tsp)) + struct.pack("<%dd" % len(tsp), *tsp))
+        for _cls, _i in ordered:
+            _kb = bytes(N.note_class(_cls))
+            put(b"".join(_kb[o:o + z] for o, z in rng))
+    if _was:
+        _T.set_room(_was)
+    return n[0]
 
 
 class Lazy(object):

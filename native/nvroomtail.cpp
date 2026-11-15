@@ -11,7 +11,8 @@
 // the channels differ, else the sidecar's one value. The room's spec (its
 // T60s, surfaces, the listener) comes from an export's LROOMS section
 // (native_export.py --live: every room live can switch to, roomtail.tail_spec
-// each; and roomtail.device_spec for the plate and delays): --export=PATH,
+// each; and roomtail.device_spec for the plate and delays) -- or a file
+// export's rooms trailer (the same, found from its end): --export=PATH,
 // else $TUNING_ROOM_EXPORT, else ~/nvx/live.nvx.
 //
 // THE IRs are native/roomtail.cpp's -- the very draws live makes (numpy's
@@ -152,6 +153,20 @@ static bool export_rooms(const std::string &path, std::vector<Room> &rooms, std:
     FILE *f = fopen(path.c_str(), "rb");
     if (!f)
         return false;
+    // A FILE EXPORT's rooms: its trailer (the body, its length, b"NVROOMS\0")
+    {
+        char tag[8];
+        long long rl = 0;
+        if (fseeko(f, -16, SEEK_END) == 0 && fread(&rl, 8, 1, f) == 1 && fread(tag, 1, 8, f) == 8
+            && !memcmp(tag, "NVROOMS", 8) && rl > 0 && rl < (1LL << 31) && fseeko(f, -16 - rl, SEEK_END) == 0) {
+            std::vector<uint8_t> rb((size_t)rl);
+            if (fread(rb.data(), 1, rb.size(), f) == rb.size() && parse_rooms(rb.data(), rb.size(), rooms, dev)) {
+                fclose(f);
+                return true;
+            }
+        }
+        fseeko(f, 0, SEEK_SET);
+    }
     const size_t CH = 8u << 20;
     std::vector<uint8_t> buf(CH + 6);
     size_t keep = 0;

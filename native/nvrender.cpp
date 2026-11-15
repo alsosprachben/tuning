@@ -487,6 +487,20 @@ struct Export {
     std::vector<int> kit_skind;
     std::vector<double> kit_spar;
     std::string room, libs[3];
+    // THE ROOMS (the export's trailer, native_export.write_rooms: LROOMS'
+    // body): the byte ranges of a class the room sets, the class count, and
+    // each room's name, whether it reflects, its bytes for every class (in
+    // the map) -- a file's room patched into the classes (use_room)
+    const unsigned char *map = nullptr;
+    long maplen = 0;
+    std::vector<std::pair<int, int>> room_rng;
+    int room_ncls = 0;
+    struct RoomRec {
+        std::string name;
+        bool reflect = true;
+        const unsigned char *fields = nullptr;
+    };
+    std::vector<RoomRec> rooms;
     OrganSpec *organs = nullptr;          // ORGA: the registered organs' tables, mapped as the classes
     std::vector<int> cls_organ, prog_organ;   // each class's organ, each program's (-1 none, -2 not the engine's)
     std::vector<double> les;              // LESL: the rotating speaker's constants
@@ -535,6 +549,10 @@ static bool read_export(const char *path, Export &E)
             ok = m != MAP_FAILED && off + (long)csz * ncls <= len && off % alignof(NoteClass) == 0;
             if (ok)                         // (no readahead: a class's few fields, not the classes around it)
                 madvise(m, (size_t)len, MADV_RANDOM);
+            if (ok) {
+                E.map = (const unsigned char *)m;
+                E.maplen = len;
+            }
             for (int i = 0; ok && i < ncls; i++)
                 E.classes.push_back(ClassRef{(unsigned char *)m + off + (long)csz * i});
             ok = ok && fseek(f, off + (long)csz * ncls, SEEK_SET) == 0;
@@ -692,7 +710,87 @@ static bool read_export(const char *path, Export &E)
         }
     }
     fclose(f);
+    // THE ROOMS, from the end: the body, its length, b"NVROOMS\0" (an export
+    // without them: the one room it was made in)
+    if (ok && E.map && E.maplen >= 16 && !memcmp(E.map + E.maplen - 8, "NVROOMS", 8)) {
+        long long rl = 0;
+        memcpy(&rl, E.map + E.maplen - 16, 8);
+        if (rl > 0 && rl <= E.maplen - 16) {
+            const unsigned char *rb = E.map + E.maplen - 16 - rl;
+            size_t k = 0, len = (size_t)rl;
+            bool g = true;
+            auto i32 = [&]() { int v = 0; if (k + 4 <= len) memcpy(&v, rb + k, 4); else g = false; k += 4; return v; };
+            int nf = i32(), per = 0;
+            std::vector<std::pair<int, int>> rng;
+            for (int q = 0; g && q < nf; q++) {
+                const int o = i32(), z = i32();
+                rng.push_back(std::make_pair(o, z));
+                per += z;
+            }
+            const int ncls = i32();
+            const int nd = i32();
+            k += 8 * (size_t)(nd > 0 ? nd : 0);         // (the device tails' filters: nvroomtail's)
+            const int nr = i32();
+            std::vector<Export::RoomRec> rs;
+            for (int q = 0; g && q < nr; q++) {
+                Export::RoomRec r;
+                const int ln = i32();
+                if (ln < 0 || k + (size_t)ln > len) {
+                    g = false;
+                    break;
+                }
+                r.name.assign((const char *)rb + k, (size_t)ln);
+                k += (size_t)ln;
+                r.reflect = i32() != 0;
+                const int ns = i32();
+                k += 8 * (size_t)(ns > 0 ? ns : 0);     // (its tail's spec: nvroomtail's)
+                if (r.reflect) {
+                    r.fields = rb + k;
+                    k += (size_t)per * (size_t)ncls;
+                }
+                rs.push_back(r);
+            }
+            if (g && k == len && ncls == (int)E.classes.size()) {
+                E.room_rng = rng;
+                E.room_ncls = ncls;
+                E.rooms = rs;
+            } else {
+                fprintf(stderr, "nvrender: the export's rooms are not this build's: its own room only\n");
+            }
+        }
+    }
     return ok;
+}
+
+// A FILE's ROOM (blockrender.prepare: its GS reverb macro, or TUNING_ROOM):
+// the export's own, or another it carries -- every class's room bytes
+// written in (the map is private: the file untouched), its name the
+// sidecar's; false where the export has no such room
+static bool use_room(Export &E, const std::string &name)
+{
+    if (name == E.room)
+        return true;
+    for (const auto &r : E.rooms) {
+        if (r.name != name)
+            continue;
+        if (r.reflect) {
+            int per = 0;
+            for (const auto &rg : E.room_rng)
+                per += rg.second;
+            for (int c = 0; c < E.room_ncls; c++) {
+                unsigned char *dst = (unsigned char *)E.classes[c].data();
+                const unsigned char *src = r.fields + (size_t)per * c;
+                for (const auto &rg : E.room_rng) {
+                    memcpy(dst + rg.first, src, rg.second);
+                    src += rg.second;
+                }
+            }
+        }
+        E.k[K_REFLECT] = r.reflect ? 1.0 : 0.0;
+        E.room = name;
+        return true;
+    }
+    return false;
 }
 
 // Python's repr of a float (json's): the shortest round-trip digits, fixed
@@ -1069,10 +1167,17 @@ int main(int argc, char **argv)
             tim = v;
         if (fx && nv_midi_gs_setup(midi, 0, 0x35, &v))
             dfb = v;
-        if (mac >= 0 && mac <= 7 && E.room != ROOMS[mac]) {
-            fprintf(stderr, "nvrender: refused: the GS reverb's room (%s), the export's %s\n", ROOMS[mac],
-                    E.room.c_str());
-            return 2;
+        // (the room: TUNING_ROOM's, else the macro's, else the export's --
+        // patched in from the export's rooms where it carries them)
+        const std::string want = !fx ? std::string(tr) : mac >= 0 && mac <= 7 ? std::string(ROOMS[mac]) : E.room;
+        if (want != E.room) {
+            const std::string was = E.room;
+            if (!use_room(E, want)) {
+                fprintf(stderr, "nvrender: refused: the %s room (%s), the export's %s\n",
+                        fx ? "GS reverb's" : "TUNING_ROOM", want.c_str(), was.c_str());
+                return 2;
+            }
+            fprintf(stderr, "nvrender: the room %s (the export's %s)\n", want.c_str(), was.c_str());
         }
         gs_tail = "\"tail_gain\": " + pyrepr(lvl / 64.0) + ",\n \"tail_time\": "
                   + pyrepr(tim >= 0 ? pow(2.0, (tim - (mac >= 0 && mac <= 7 ? RTIME[mac] : 64)) / 64.0) : 1.0);
