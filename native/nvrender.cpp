@@ -52,6 +52,7 @@
 #include <vector>
 
 #include "pycompat.h"
+#include "selfexe.h"
 #include "gpufile.h"
 
 struct NvSirRow {                       // (nv_song_sirens: a rotor's row -- nvrender.cpp's twin)
@@ -4397,7 +4398,8 @@ int main(int argc, char **argv)
             if (strcmp(argv[i], "--stream"))
                 av.push_back(argv[i]);
         av.push_back(nullptr);
-        execv("/proc/self/exe", av.data());
+        const std::string self = nv_self_exe();     // (macOS has no /proc)
+        execv(self.empty() ? argv[0] : self.c_str(), av.data());
         fprintf(stderr, "nvrender: --stream: cannot run the whole render\n");
         return 1;
     }
@@ -5007,10 +5009,8 @@ int main(int argc, char **argv)
         // THE GPU (--gpu: streamrender's gpu=, gpurender.FileRenderer a window at a time)
         static GpuFile *gpuf = nullptr;
         if (g_gpu && !gpuf) {
-            char exe[4096];
-            ssize_t ln = readlink("/proc/self/exe", exe, sizeof exe - 1);
-            std::string dir = ln > 0 ? std::string(exe, ln) : std::string(".");
-            dir = dir.substr(0, dir.rfind('/'));
+            std::string dir = nv_self_exe();
+            dir = dir.empty() ? std::string(".") : dir.substr(0, dir.rfind('/'));
             gpuf = new GpuFile();
             std::string why = gpuf->open(dir, (int)SR);
             if (!why.empty()) {

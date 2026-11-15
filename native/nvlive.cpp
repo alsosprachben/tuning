@@ -91,6 +91,7 @@
 // two blocks.
 
 #include <poll.h>
+#include "selfexe.h"
 #include "hostlive.h"
 
 int nv_host::run(int argc, char **argv)
@@ -1118,9 +1119,9 @@ int main(int argc, char **argv)
     }
     if (!test || !sp.empty()) {                 // (--test: only a session named)
         if (sp.empty()) {
-            char exe[4096];
-            ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
-            std::string d = n > 0 ? std::string(exe, (size_t)n) : std::string(".");
+            std::string d = nv_self_exe();          // (macOS has no /proc)
+            if (d.empty())
+                d = ".";
             sp = d.substr(0, d.rfind('/') == std::string::npos ? 0 : d.rfind('/'));
             sp = (sp.empty() ? "." : sp) + "/session.json";
         }
