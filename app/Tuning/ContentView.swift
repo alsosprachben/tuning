@@ -254,7 +254,7 @@ struct FlowRow: View {
 
 struct SidePane: View {
     static let tabs: [(String, Int)] = [("Presets", 0), ("Tuning", 1), ("Effects", 3), ("Synth", 4),
-                                        ("Matrix", 5), ("Drums", 6), ("Setup", 2)]
+                                        ("Matrix", 5), ("Drums", 6), ("Controls", 7), ("Setup", 2)]
     @State private var tab = 0
 
     var body: some View {
@@ -279,6 +279,7 @@ struct SidePane: View {
             case 4: SynthPane()
             case 5: MatrixPane()
             case 6: UserDrumsPane()
+            case 7: ControlsPane()
             default: SetupPane()
             }
         }
@@ -899,6 +900,197 @@ struct UserDrumsPane: View {
         }
         .onAppear { engine.udrumShown = true; engine.refreshUdrum() }
         .onDisappear { engine.udrumShown = false }
+    }
+}
+
+// ---- ON-SCREEN CONTROLS, ROUTES, SCENES, GS RESET (livetui's controls pane) ----
+private let scanNames = ["off", "V1", "V2", "V3", "C1", "C2", "C3"]
+private let scanStarts = [0, 18, 37, 55, 73, 91, 110]
+// livetui.HOTKEYS_FREE (the terminal's own keys left out, so a session works in both)
+private let hotkeysFree = Array("cefginuvwyz[];',./AHJKOQVWY")
+// livetui.add_route's sources: (label, kind, number)
+private let routeSources: [(String, Int32, Int32)] = [
+    ("Mod wheel", 0, 1), ("Pitch wheel, pushed up", 1, 0), ("Pitch wheel, pulled down", 1, 1),
+    ("Pitch wheel, either way", 1, 2), ("Aftertouch", 2, 0), ("Sustain pedal (CC64)", 0, 64),
+    ("Expression pedal (CC11)", 0, 11), ("Another CC", 0, -1), ("A key", 3, -1)]
+
+struct ControlsPane: View {
+    @EnvironmentObject var engine: Engine
+    @State private var addKey: Int32 = 64
+    @State private var addChannel: Int32 = -1
+    @State private var src = 0
+    @State private var srcCC = 2
+    @State private var srcKey = 36
+    @State private var dst: Int32 = 64
+    @State private var latch = false
+    @State private var keep = false
+    @State private var rChannel: Int32 = -1
+    @State private var sceneName = ""
+    @State private var confirmReset = false
+
+    private func channelPicker(_ sel: Binding<Int32>) -> some View {
+        Picker("Channel", selection: sel) {
+            Text("All").tag(Int32(-1))
+            ForEach(0..<16, id: \.self) { c in Text("\(c + 1)").tag(Int32(c)) }
+        }
+    }
+
+    private func controlRow(_ i: Int) -> some View {
+        let c = engine.controls[i]
+        let k = engine.controlKind(c.key)
+        let kind = k?.kind ?? "continuous"
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(k?.label ?? "?").bold()
+                Text(c.channel < 0 ? "all" : "ch\(c.channel + 1)").foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Picker("", selection: Binding(get: { c.hotkey == 0 ? Character(" ") : Character(UnicodeScalar(UInt8(c.hotkey))) },
+                                              set: { engine.setHotkey(i, $0 == " " ? nil : $0) })) {
+                    Text("no key").tag(Character(" "))
+                    ForEach(hotkeysFree, id: \.self) { ch in
+                        let other = engine.controls.enumerated().first { $0.offset != i && $0.element.hotkey == Int32(ch.asciiValue ?? 0) }
+                        Text("key \(String(ch))" + (other != nil ? "  (taken)" : "")).tag(ch)
+                    }
+                }
+                .labelsHidden().frame(width: 96)
+                .help("a key that fires it from anywhere in the window (not while typing)")
+                Button { engine.removeControl(i) } label: { Image(systemName: "trash") }.buttonStyle(.borderless)
+            }
+            switch kind {
+            case "switch":
+                Toggle(c.on != 0 ? "down" : "up", isOn: Binding(get: { c.on != 0 }, set: { engine.setControl(i, $0 ? 127 : 0) }))
+                    .toggleStyle(.switch)
+            case "selector":
+                Picker("", selection: Binding(get: { scanStarts.lastIndex { Int(c.value) >= $0 } ?? 0 },
+                                              set: { engine.setControl(i, scanStarts[$0]) })) {
+                    ForEach(scanNames.indices, id: \.self) { Text(scanNames[$0]).tag($0) }
+                }
+                .pickerStyle(.segmented).labelsHidden()
+            default:
+                let bend = kind == "bend"
+                HStack {
+                    Slider(value: Binding(get: { Double(c.value) }, set: { engine.setControl(i, Int($0.rounded())) }),
+                           in: bend ? -8192...8191 : 0...127)
+                    Text("\(c.value)").monospacedDigit().frame(width: 46, alignment: .trailing)
+                    Button("Reset") { engine.setControl(i, Int(k?.dflt ?? 0)) }
+                        .help("back to \(k?.dflt ?? 0)")
+                }
+            }
+        }
+    }
+
+    var body: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 12) {
+                Box("On-screen controls") {
+                    if engine.controls.isEmpty {
+                        Text("none yet: a pedal, a wheel, any CC or mono, moved from here or a key")
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                    ForEach(engine.controls.indices, id: \.self) { i in
+                        controlRow(i)
+                        Divider()
+                    }
+                    HStack {
+                        Picker("", selection: $addKey) {
+                            ForEach(engine.controlKinds, id: \.self) { k in Text(k.label).tag(k.key) }
+                        }
+                        .labelsHidden()
+                        Picker("", selection: $addChannel) {
+                            Text("All").tag(Int32(-1))
+                            ForEach(0..<16, id: \.self) { c in Text("ch\(c + 1)").tag(Int32(c)) }
+                        }
+                        .labelsHidden().frame(width: 70)
+                        Button("Add") { engine.addControl(addKey, channel: addChannel) }
+                    }
+                    .help("added at its default: nothing is sent until it is moved")
+                }
+                Box("Routes") {
+                    Text("rewrite the keyboard's own controls before the engine sees them")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    if engine.routes.isEmpty {
+                        Text("none: every control means what it says").foregroundStyle(.secondary)
+                    }
+                    ForEach(engine.routes.indices, id: \.self) { i in
+                        HStack {
+                            Text(engine.routeText(engine.routes[i])).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                            Button { engine.removeRoute(i) } label: { Image(systemName: "trash") }.buttonStyle(.borderless)
+                        }
+                    }
+                    Divider()
+                    Picker("From", selection: $src) {
+                        ForEach(routeSources.indices, id: \.self) { Text(routeSources[$0].0).tag($0) }
+                    }
+                    if routeSources[src].2 < 0 && routeSources[src].1 == 0 {
+                        Stepper("CC \(srcCC)", value: $srcCC, in: 0...119)
+                    }
+                    if routeSources[src].1 == 3 {
+                        HStack {
+                            Stepper("Key \(noteNm(srcKey)) (\(srcKey))", value: $srcKey, in: 0...127)
+                            Button(engine.learningKey ? "Press a key..." : "Learn") {
+                                if engine.learningKey { engine.learningKey = false }
+                                else { engine.learnKey { ch, note in srcKey = Int(note); rChannel = ch } }
+                            }
+                        }
+                    }
+                    Picker("To", selection: $dst) {
+                        ForEach(engine.controlKinds, id: \.self) { k in Text(k.label).tag(k.key) }
+                    }
+                    if routeSources[src].1 == 3 && engine.controlKind(dst)?.kind == "switch" {
+                        Picker("The key", selection: $latch) {
+                            Text("Held while down").tag(false); Text("Toggles").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    Picker("The original", selection: $keep) {
+                        Text("Replaced").tag(false); Text("Kept too").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    channelPicker($rChannel)
+                    let s = routeSources[src]
+                    let arg: Int32 = s.2 >= 0 ? s.2 : s.1 == 3 ? Int32(srcKey) : Int32(srcCC)
+                    let selfRoute = (s.1 == 0 && arg == dst) || (s.1 == 1 && dst == -1) || (s.1 == 2 && dst == -2)
+                    Button("Add route") {
+                        engine.addRoute([s.1, arg, dst, keep ? 1 : 0, rChannel, latch && s.1 == 3 ? 1 : 0, 1])
+                    }
+                    .disabled(selfRoute)
+                    .help(selfRoute ? "a control routed to itself does nothing" : "")
+                }
+                Box("Scenes") {
+                    Text("each channel's controls saved, and recalled")
+                        .font(.caption).foregroundStyle(.secondary)
+                    ForEach(engine.scenes, id: \.self) { n in
+                        HStack {
+                            Text(n)
+                            Spacer(minLength: 0)
+                            Button("Recall") { engine.recallScene(n) }
+                        }
+                    }
+                    HStack {
+                        TextField("Scene name", text: $sceneName).textFieldStyle(.roundedBorder)
+                        Button("Save") { engine.saveScene(sceneName); sceneName = "" }.disabled(sceneName.isEmpty)
+                    }
+                }
+                Box("GS Reset") {
+                    HStack {
+                        Text("every part to program 0; controllers, system effects and receive settings to power-on")
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        Button("Reset") { confirmReset = true }
+                    }
+                }
+            }
+            .padding(12)
+            .frame(width: SynthPane.width, alignment: .leading)
+        }
+        .onAppear { engine.controlsShown = true; engine.refreshControls(); engine.refreshRoutes(); engine.refreshScenes() }
+        .onDisappear { engine.controlsShown = false; engine.learningKey = false }
+        .confirmationDialog("Send a GS Reset?", isPresented: $confirmReset) {
+            Button("GS Reset", role: .destructive) { engine.gsReset() }
+        } message: {
+            Text("Every part goes to program 0 and the controllers and effects to power-on, as a sequencer's reset.")
+        }
     }
 }
 

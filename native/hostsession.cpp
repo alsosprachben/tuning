@@ -1382,4 +1382,173 @@ void nv_host_chan_cc_send(nv_host *h, int channel, int cc, int v)
     }
 }
 
+int nv_host_control_kinds(char *out, int cap)
+{
+    std::string all;
+    for (const auto &c : panel::CONTROLS)
+        all += std::to_string(c.first) + "\t" + c.second + "\t" + panel::control_kind(c.first) + "\t"
+               + std::to_string(panel::control_default(c.first)) + "\n";
+    return copy_out(all, out, cap);
+}
+int nv_host_controls(nv_host *h, nv_host_control *out, int cap)
+{
+    const auto &cs = h->screen_controls;
+    for (int i = 0; out && i < cap && i < (int)cs.size(); i++) {
+        const auto &c = cs[(size_t)i];
+        int sw[5] = {0, 0, 0, 0, 0};
+        if (panel::control_switch(c.key))
+            nv_part_switches(h->part, c.channel < 0 ? 0 : c.channel, sw);
+        out[i].key = c.key;
+        out[i].channel = c.channel;
+        out[i].value = c.value;
+        out[i].hotkey = c.hotkey;
+        out[i].on = c.key == 64 ? sw[0] != 0 : c.key == 66 ? sw[1] != 0 : c.key == 67 ? sw[2] != 0
+                  : c.key == 65 ? sw[3] != 0 : c.key == -3 ? sw[4] != 0 : 0;
+    }
+    return (int)cs.size();
+}
+int nv_host_control_add(nv_host *h, int key, int channel)
+{
+    if (!panel::control_label(key))
+        return -1;
+    h->screen_controls.push_back(panel::ScreenControl{key, channel < 0 ? -1 : channel & 15, panel::control_default(key), 0});
+    return (int)h->screen_controls.size() - 1;
+}
+void nv_host_control_remove(nv_host *h, int index)
+{
+    if (index >= 0 && index < (int)h->screen_controls.size())
+        h->screen_controls.erase(h->screen_controls.begin() + index);
+}
+void nv_host_control_set(nv_host *h, int index, int v)
+{
+    if (index < 0 || index >= (int)h->screen_controls.size())
+        return;
+    panel::ScreenControl &c = h->screen_controls[(size_t)index];
+    c.value = panel::control_kind(c.key) == "bend" ? std::max(-8192, std::min(8191, v)) : std::max(0, std::min(127, v));
+    h->control_send(c.key, c.value, c.channel);
+}
+void nv_host_control_hotkey(nv_host *h, int index, int key)
+{
+    if (index < 0 || index >= (int)h->screen_controls.size())
+        return;
+    for (auto &o : h->screen_controls)          // (a key is one control's)
+        if (key && o.hotkey == key)
+            o.hotkey = 0;
+    h->screen_controls[(size_t)index].hotkey = key;
+}
+
+// THE ROUTES: the library's list (the session's or a preset's), the router
+// built again from it -- as a preset's routes replace them (apply_setup)
+static void set_routes(nv_host *h, const std::vector<std::array<int, 7>> &rs)
+{
+    const size_t had = h->E.routes.size() + (h->pks.empty() ? 0 : 1);
+    std::vector<std::array<int, 7>> all = rs;
+    if (!h->pks.empty())
+        all.push_back(h->pedal_route);
+    h->post([h, had, all](long long) {
+        for (size_t q = had; q-- > 0;)
+            nv_rt_del(h->router, (int)q);
+        for (const auto &a : all)
+            nv_rt_add(h->router, a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
+    });
+    h->E.routes = rs;
+    h->routes_replaced = all;
+    h->session_routes = rs;
+    h->session_routes_set = true;
+}
+int nv_host_routes(nv_host *h, int *out7, int cap)
+{
+    const auto &rs = h->E.routes;
+    for (int i = 0; out7 && i < cap && i < (int)rs.size(); i++)
+        for (int k = 0; k < 7; k++)
+            out7[i * 7 + k] = rs[(size_t)i][(size_t)k];
+    return (int)rs.size();
+}
+int nv_host_route_text(const int *r7, char *out, int cap)
+{
+    std::array<int, 7> a;
+    for (int k = 0; k < 7; k++)
+        a[(size_t)k] = r7[k];
+    return copy_out(panel::describe(a), out, cap);
+}
+void nv_host_route_add(nv_host *h, const int *r7)
+{
+    std::vector<std::array<int, 7>> rs = h->E.routes;
+    std::array<int, 7> a;
+    for (int k = 0; k < 7; k++)
+        a[(size_t)k] = r7[k];
+    rs.push_back(a);
+    set_routes(h, rs);
+}
+void nv_host_route_remove(nv_host *h, int index)
+{
+    std::vector<std::array<int, 7>> rs = h->E.routes;
+    if (index < 0 || index >= (int)rs.size())
+        return;
+    rs.erase(rs.begin() + index);
+    set_routes(h, rs);
+}
+void nv_host_learn_key(nv_host *h, int on)
+{
+    h->learnt_ch = -1;
+    h->learnt_note = -1;
+    h->learning = on ? 1 : 0;
+}
+int nv_host_learnt_key(nv_host *h, int *channel, int *note)
+{
+    if (h->learning != 2)
+        return 0;
+    if (channel) *channel = h->learnt_ch;
+    if (note) *note = h->learnt_note;
+    h->learning = 0;
+    return 1;
+}
+
+int nv_host_scenes(nv_host *h, char *names, int cap)
+{
+    std::string all;
+    sess::J d;
+    if (!h->session_path.empty() && sess::load(h->scenes_path(), d))
+        for (const auto &kv : d.o)
+            all += (all.empty() ? "" : "\n") + kv.first;
+    return copy_out(all, names, cap);
+}
+int nv_host_scene_save(nv_host *h, const char *name, char *msg, int cap)
+{
+    if (!name || !*name || h->session_path.empty())
+        return copy_out("no name, or no session path (nv_host_set_session_path)", msg, cap), -1;
+    const std::vector<std::string> ev = h->scene_now();
+    sess::J d;
+    if (!sess::load(h->scenes_path(), d))
+        d = sess::obj();
+    sess::J a = sess::arr();
+    for (const auto &e : ev)
+        a.a.push_back(sess::str(e));
+    d.o[name] = a;
+    if (!sess::save(h->scenes_path(), d))
+        return copy_out("could not write " + h->scenes_path(), msg, cap), -1;
+    copy_out("scene '" + std::string(name) + "': " + std::to_string(ev.size()) + " events", msg, cap);
+    return 0;
+}
+int nv_host_scene_recall(nv_host *h, const char *name, char *msg, int cap)
+{
+    sess::J d;
+    const sess::J *p = name && !h->session_path.empty() && sess::load(h->scenes_path(), d) ? d.get(name) : nullptr;
+    if (!p || !p->is(sess::J::ARR))
+        return copy_out(std::string("no scene '") + (name ? name : "") + "'", msg, cap), -1;
+    std::vector<std::string> ev;
+    for (const auto &e : p->a)
+        if (e.is(sess::J::STR))
+            ev.push_back(e.s);
+    copy_out("scene '" + std::string(name) + "': " + std::to_string(h->scene_recall(ev)) + " events", msg, cap);
+    return 0;
+}
+
+void nv_host_gs_reset(nv_host *h)
+{
+    std::vector<uint8_t> x{0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41};
+    std::lock_guard<std::mutex> lk(h->mu);
+    h->q.push_back(Midi{6, 0, 0, 0, x});
+}
+
 }  // extern "C"

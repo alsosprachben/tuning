@@ -119,6 +119,7 @@ final class Engine: ObservableObject {
     @Published var udrumSet = 0
     @Published var udrum: [Int32]? = nil
     var udrumShown = false
+    var controlsShown = false
     private var udrumReading = false
     private var udrumTurned = Date.distantPast
     // THE SELECTED PART's PAN AND SENDS: its channel's CC10, 91, 93, 94 and
@@ -126,6 +127,14 @@ final class Engine: ObservableObject {
     static let partCCs: [Int32] = [10, 91, 93, 94, Int32(NV_HOST_VSENSE)]
     @Published var selCC: [Int] = [64, 40, 0, 0, 64]
     private var ccTurned = Date.distantPast
+    // ON-SCREEN CONTROLS, ROUTES, SCENES (livetui's controls pane, N/R)
+    struct ControlKind: Hashable { let key: Int32; let label: String; let kind: String; let dflt: Int32 }
+    var controlKinds: [ControlKind] = []
+    @Published var controls: [nv_host_control] = []
+    @Published var routes: [[Int32]] = []
+    @Published var scenes: [String] = []
+    @Published var learningKey = false
+    private var keyMonitor: Any? = nil
     @Published var messengerLine = ""
     var synthShown = false                      // (the Synth tab open: its knobs read five times a second)
     private var synthReading = false            // (one read at a time)
@@ -239,6 +248,10 @@ final class Engine: ObservableObject {
                 self.refreshEfx()
                 self.readRooms(h)
                 self.readUdrumTables(h)
+                self.readControlKinds()
+                self.refreshControls()
+                self.refreshRoutes()
+                self.watchHotkeys()
                 self.readGlobals()
                 self.messengerReads = nv_host_messenger_reads(h) != 0
                 if let m = self.messengerPending { self.messengerPending = nil; self.messengerPlugged(m) }
@@ -535,6 +548,171 @@ final class Engine: ObservableObject {
         nv_host_chan_cc_send(h, part.channel, Engine.partCCs[i], Int32(v))
         selCC[i] = v
         ccTurned = Date()
+    }
+
+    // ---- ON-SCREEN CONTROLS ----
+    private func readControlKinds() {
+        var buf = [CChar](repeating: 0, count: 8192)
+        nv_host_control_kinds(&buf, 8192)
+        controlKinds = String(cString: buf).split(separator: "\n").compactMap { line in
+            let f = line.split(separator: "\t").map(String.init)
+            guard f.count == 4 else { return nil }
+            return ControlKind(key: Int32(f[0]) ?? 0, label: f[1], kind: f[2], dflt: Int32(f[3]) ?? 0)
+        }
+    }
+
+    func controlKind(_ key: Int32) -> ControlKind? { controlKinds.first { $0.key == key } }
+
+    func refreshControls() {
+        guard let h = host else { return }
+        let n = nv_host_controls(h, nil, 0)
+        var a = [nv_host_control](repeating: nv_host_control(), count: Int(max(n, 0)))
+        if n > 0 { nv_host_controls(h, &a, n) }
+        let same = a.count == controls.count && zip(a, controls).allSatisfy {
+            $0.key == $1.key && $0.channel == $1.channel && $0.value == $1.value && $0.hotkey == $1.hotkey && $0.on == $1.on
+        }
+        if !same { controls = a }
+    }
+
+    func addControl(_ key: Int32, channel: Int32) {
+        guard let h = host else { return }
+        nv_host_control_add(h, key, channel)
+        refreshControls()
+    }
+
+    func removeControl(_ i: Int) {
+        guard let h = host else { return }
+        nv_host_control_remove(h, Int32(i))
+        refreshControls()
+    }
+
+    func setControl(_ i: Int, _ v: Int) {
+        guard let h = host else { return }
+        nv_host_control_set(h, Int32(i), Int32(v))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in self?.refreshControls() }
+    }
+
+    func setHotkey(_ i: Int, _ c: Character?) {
+        guard let h = host else { return }
+        nv_host_control_hotkey(h, Int32(i), Int32(c?.asciiValue ?? 0))
+        refreshControls()
+    }
+
+    // livetui.fire: a switch toggles; a continuous control jumps between its default and full travel
+    func fireControl(_ i: Int) {
+        guard i < controls.count, let k = controlKind(controls[i].key) else { return }
+        let c = controls[i]
+        if k.kind == "switch" {
+            setControl(i, c.on != 0 ? 0 : 127)
+            message = "\(k.label) \(c.on != 0 ? "up" : "down")"
+        } else {
+            let top: Int32 = k.kind == "bend" ? 8191 : 127
+            let v = c.value != k.dflt ? k.dflt : top
+            setControl(i, Int(v))
+            message = "\(k.label) \(v)"
+        }
+    }
+
+    // A HOTKEY pressed in the window (not while typing in a field): its control fired
+    func watchHotkeys() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] ev in
+            guard let self, ev.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+                  !(NSApp.keyWindow?.firstResponder is NSText),
+                  let ch = ev.charactersIgnoringModifiers?.first, let code = ch.asciiValue,
+                  let i = self.controls.firstIndex(where: { $0.hotkey == Int32(code) }) else { return ev }
+            self.fireControl(i)
+            return nil
+        }
+    }
+
+    // ---- ROUTES ----
+    func refreshRoutes() {
+        guard let h = host else { return }
+        let n = Int(nv_host_routes(h, nil, 0))
+        var a = [Int32](repeating: 0, count: max(n, 1) * 7)
+        if n > 0 { nv_host_routes(h, &a, Int32(n)) }
+        let rs = (0..<n).map { Array(a[($0 * 7)..<($0 * 7 + 7)]) }
+        if rs != routes { routes = rs }
+    }
+
+    func routeText(_ r: [Int32]) -> String {
+        var out = [CChar](repeating: 0, count: 160)
+        var x = r
+        nv_host_route_text(&x, &out, 160)
+        return String(cString: out)
+    }
+
+    func addRoute(_ r: [Int32]) {
+        guard let h = host else { return }
+        var x = r
+        nv_host_route_add(h, &x)
+        refreshRoutes()
+        message = "route \(routeText(r))"
+    }
+
+    func removeRoute(_ i: Int) {
+        guard let h = host else { return }
+        nv_host_route_remove(h, Int32(i))
+        refreshRoutes()
+    }
+
+    // a key learnt: the next note-on within eight seconds (channel, note)
+    func learnKey(_ done: @escaping (Int32, Int32) -> Void) {
+        guard let h = host else { return }
+        nv_host_learn_key(h, 1)
+        learningKey = true
+        var tries = 0
+        Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] t in
+            guard let self else { t.invalidate(); return }
+            tries += 1
+            var ch: Int32 = -1, note: Int32 = -1
+            if nv_host_learnt_key(h, &ch, &note) != 0 {
+                t.invalidate()
+                self.learningKey = false
+                done(ch, note)
+            } else if tries > 160 || !self.learningKey {
+                t.invalidate()
+                nv_host_learn_key(h, 0)
+                if self.learningKey { self.learningKey = false; self.message = "no key pressed" }
+            }
+        }
+    }
+
+    // ---- SCENES ----
+    func refreshScenes() {
+        guard let h = host else { return }
+        var buf = [CChar](repeating: 0, count: 65536)
+        nv_host_scenes(h, &buf, 65536)
+        let ns = String(cString: buf).split(separator: "\n").map(String.init).sorted {
+            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+        }
+        if ns != scenes { scenes = ns }
+    }
+
+    // (each waits for a block: off the main thread)
+    func saveScene(_ name: String) {
+        guard let h = host, !name.isEmpty else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            var msg = [CChar](repeating: 0, count: 256)
+            nv_host_scene_save(h, name, &msg, 256)
+            DispatchQueue.main.async { self.message = String(cString: msg); self.refreshScenes() }
+        }
+    }
+
+    func recallScene(_ name: String) {
+        guard let h = host else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            var msg = [CChar](repeating: 0, count: 256)
+            nv_host_scene_recall(h, name, &msg, 256)
+            DispatchQueue.main.async { self.message = String(cString: msg) }
+        }
+    }
+
+    func gsReset() {
+        guard let h = host else { return }
+        nv_host_gs_reset(h)
+        message = "GS Reset: every part to program 0, controllers and effects to power-on"
     }
 
     // ---- THE USER DRUM SETS ----
@@ -948,7 +1126,8 @@ final class Engine: ObservableObject {
         if pollTick % 10 == 3 { readGlobals() }
         if synthShown && pollTick % 2 == 0 { refreshSynth() }
         if cmxShown && pollTick % 10 == 5 { refreshCmx() }
-        if udrumShown && pollTick % 10 == 7 { refreshUdrum() }   // (a file's GS messages: shown)      // (a file's or a sequencer's messages: shown)    // (a Messenger's knobs turned: shown as they land)     // (twice a second: a preset's, a file's)
+        if udrumShown && pollTick % 10 == 7 { refreshUdrum() }
+        if controlsShown && pollTick % 2 == 1 { refreshControls() }   // (a pedal's switch as it stands)   // (a file's GS messages: shown)      // (a file's or a sequencer's messages: shown)    // (a Messenger's knobs turned: shown as they land)     // (twice a second: a preset's, a file's)
         var s = nv_host_snap()
         nv_host_snapshot(h, &s)
         let m = meters

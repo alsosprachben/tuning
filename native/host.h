@@ -306,6 +306,45 @@ long long nv_host_now_ns(void);
 int nv_host_chan_cc(nv_host *h, int channel, int cc);
 void nv_host_chan_cc_send(nv_host *h, int channel, int cc, int v);
 
+/* ---- ON-SCREEN CONTROLS (livetui's controls pane; the session's "controls") ----
+   the controls one may add: "key\tlabel\tkind\tdefault" lines (key a CC, -1
+   the pitch wheel, -2 aftertouch, -3 mono; kind switch, selector, bend,
+   pressure or continuous) */
+int nv_host_control_kinds(char *out, int cap);
+typedef struct { int key, channel, value, hotkey, on; } nv_host_control;   /* on: a switch's state now */
+int nv_host_controls(nv_host *h, nv_host_control *out, int cap);          /* how many; up to cap copied */
+/* added (at its default, sending nothing): its index */
+int nv_host_control_add(nv_host *h, int key, int channel);
+void nv_host_control_remove(nv_host *h, int index);
+/* set to v and sent past the routes (every channel, or its own); a bend
+   -8192..8191, the rest 0-127 */
+void nv_host_control_set(nv_host *h, int index, int v);
+void nv_host_control_hotkey(nv_host *h, int index, int key);              /* 0 none */
+
+/* ---- ROUTES (livetui's routes): the keyboard's own controls rewritten before
+   the engine sees them -- each nv_rt_add's seven: source kind (0 a CC, 1 the
+   pitch wheel, 2 aftertouch, 3 a key), its number (the CC; the wheel 0 up, 1
+   down, 2 either; the key), the destination (a control's key), keep the
+   original (1), channel (-1 all), toggle (1, a key to a switch), on (1) */
+int nv_host_routes(nv_host *h, int *out7, int cap);                       /* how many; cap routes copied */
+int nv_host_route_text(const int *r7, char *out, int cap);                /* "key C1 -> sustain  held ..." */
+void nv_host_route_add(nv_host *h, const int *r7);
+void nv_host_route_remove(nv_host *h, int index);
+/* a key learnt (a route from a key): armed, then the next note-on's channel
+   and note (1 got one) */
+void nv_host_learn_key(nv_host *h, int on);
+int nv_host_learnt_key(nv_host *h, int *channel, int *note);
+
+/* ---- SCENES (livetui's N, R: scenes.json beside the session): each
+   channel's controls saved, recalled ---- */
+int nv_host_scenes(nv_host *h, char *names, int cap);                     /* '\n'-separated */
+int nv_host_scene_save(nv_host *h, const char *name, char *msg, int cap);
+int nv_host_scene_recall(nv_host *h, const char *name, char *msg, int cap);
+
+/* a GS Reset, as a sequencer sends it (every part to program 0, controllers,
+   system effects and receive settings to power-on) */
+void nv_host_gs_reset(nv_host *h);
+
 /* ---- THE USER DRUM SETS (livetui's U): GS programs 65, 66 ----
    the sets a key may take its sound from and their keys' names: "S\tset\tname"
    and "K\tset\tkey\tname" lines (the export's DKEY) */

@@ -130,6 +130,7 @@ CHECKS = [
     ("synth_globals", "../tests/live/synth_globals_check.py", [], {}),
     ("cmx_host", "../tests/live/cmx_host_check.py", [], {}),
     ("udrum_host", "../tests/live/udrum_host_check.py", [], {}),
+    ("controls_routes", "../tests/live/controls_routes_check.py", [], {}),
     ("user_drums_live", "nvlive_check.py", ["@userdrums.mid", "4", "--drums", "--program=0", "--programs"], {}),
     ("user_set_part", "nvlive_check.py", ["@userdrums.mid", "4", "--drums", "--program=64"], {}),
     ("drum_delay", "nvlive_check.py", ["@drumdelay.mid", "5", "--drums", "--program=0", "--programs"], {}),
