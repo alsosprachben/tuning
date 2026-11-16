@@ -30,6 +30,7 @@ typedef ulong u64; typedef int i32; typedef long i64;
 #define VCOS metal::precise::cos
 #define VSIN metal::precise::sin
 #define VEXP metal::precise::exp
+#define VLOG metal::precise::log
 #define VFLOOR metal::floor
 static inline u64 v_mulhi(u64 a, u64 b){ return metal::mulhi(a, b); }
 #elif defined(__OPENCL_VERSION__)
@@ -39,6 +40,7 @@ typedef ulong u64; typedef int i32; typedef long i64;
 #define VCOS cos
 #define VSIN sin
 #define VEXP exp
+#define VLOG log
 #define VFLOOR floor
 static inline u64 v_mulhi(u64 a, u64 b){ return mul_hi(a, b); }
 #else
@@ -50,6 +52,7 @@ typedef uint64_t u64; typedef int32_t i32; typedef int64_t i64;
 #define VCOS cosf
 #define VSIN sinf
 #define VEXP expf
+#define VLOG logf
 #define VFLOOR floorf
 static inline u64 v_mulhi(u64 a, u64 b){ return (u64)(((unsigned __int128)a * b) >> 64); }
 #endif
@@ -263,5 +266,47 @@ static inline void voice_sample(const VGLOBAL vdesc* d, const VGLOBAL vcell* C, 
     }
     o[0]+=mL*sL; o[1]+=mR*sR;
     if(send){ o[2]+=mL*sL*d->swp; o[3]+=mR*sR*d->swp; }
+}
+
+// ...AND PAST ITS BLOCK (k from the block's start, at or past blk): the
+// partial ringing on from the state its block was set up in -- a held
+// moment's (rubato: gpukernel's voices with an offset, slab.cpp's extend).
+// Its carrier turns on from its anchor; its level goes on as the block's
+// own line was going, as a decay (the end's level times end/start each
+// block further: a partial's fall is exponential, and never crosses zero);
+// a line that was rising is held at its end; a fast exponential runs on as
+// it was. A partial whose block ended it stays silent; so does a Moog
+// partial (its cells are the block's). Accurate to its block's first
+// order -- what a held moment needs, not what a block does.
+static inline void voice_sample_ext(const VGLOBAL vdesc* d, int k, u64 n, int blk, VPRIV float* o)
+{
+    if(d->kind!=1 || d->ne<blk || k<d->ns) return;
+    float zrL, ziL, zrR, ziR;
+    V_TURN2(zrL, ziL, zrR, ziR, d->zLr, d->zLi, d->zRr, d->zRi, k-d->ns, d->winst);
+    float mL, mR;
+    if(d->xr!=0.f){
+        mL=d->mL0*VEXP(d->xr*((float)k-d->mL1))*d->aL;
+        mR=d->mR0*VEXP(d->xr*((float)k-d->mR1))*d->aR;
+    } else {
+        float t=(float)(k-blk)/(float)blk;
+        mL=(d->mL0>d->mL1 && d->mL1>0.f) ? d->mL1*VEXP(VLOG(d->mL1/d->mL0)*t) : d->mL1;
+        mR=(d->mR0>d->mR1 && d->mR1>0.f) ? d->mR1*VEXP(VLOG(d->mR1/d->mR0)*t) : d->mR1;
+        mL*=d->aL; mR*=d->aR;
+    }
+    float sL=zrL, sR=zrR;
+    if(d->flags & VD_NOISE){
+        u64 ui=n*d->nk_hi+v_mulhi(n, d->nk_lo);
+        float uf=(float)(n*d->nk_lo)*(1.0f/18446744073709551616.0f);
+        float jn=6.2831853f*v_noise_phase(d->nseed, ui, uf), cn=VCOS(jn), sn=VSIN(jn);
+        sL=zrL*cn-ziL*sn; sR=zrR*cn-ziR*sn;
+    }
+    if(d->jfa>0.f){
+        u64 idx=n*d->chk_hi+v_mulhi(n, d->chk_lo);
+        float jit=6.2831853f*v_hash01(idx)*d->cc, cj=VCOS(jit), sj=VSIN(jit);
+        sL+=(zrL*cj-ziL*sj)*d->jfa;
+        sR+=(zrR*cj-ziR*sj)*d->jfa;
+    }
+    if(d->flags & VD_LESLIE){ float g=d->lg[VD_LG-1]; mL*=g; mR*=g; }    // (the lobe held at the block's end)
+    o[0]+=mL*sL; o[1]+=mR*sR;
 }
 #endif

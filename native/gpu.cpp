@@ -14,7 +14,9 @@
 #include <cstdio>
 #include <cstring>
 #include <dlfcn.h>
+#include <atomic>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace nv {
@@ -129,7 +131,19 @@ struct Gpu {
         std::vector<float> host;
         cl_event ev = nullptr;
         int NG = 0, frames = 0;
+        // (its last launch, for extend: its descriptors' start and span)
+        int nd = 0, per = 0, groups = 0, send = 0, mg = 0, span = 0;
+        long long n0 = 0;
+        bool valid = false;
+        std::atomic<int> xbusy{0};          // an extend reading its tables (launch waits)
     } slot[3];                              // (three: a pipeline two deep, and the one being set up)
+    // EXTEND (a held moment's): its own kernel object and queue -- another
+    // thread's, beside the blocks' -- and its own result
+    cl_kernel kx = nullptr;
+    cl_command_queue qx = nullptr;
+    cl_mem xacc = nullptr;
+    size_t xcap = 0;
+    std::vector<float> xres;
 
     ~Gpu()
     {
@@ -154,6 +168,12 @@ struct Gpu {
                 cl.ReleaseMemObject(t.m);
         if (wacc)
             cl.ReleaseMemObject(wacc);
+        if (xacc)
+            cl.ReleaseMemObject(xacc);
+        if (kx)
+            cl.ReleaseKernel(kx);
+        if (qx)
+            cl.ReleaseCommandQueue(qx);
         if (kw)
             cl.ReleaseKernel(kw);
         if (k)
@@ -251,6 +271,14 @@ struct Gpu {
             return false;
         }
         cl.SetKernelArg(k, 10, 4 * LG * LK * sizeof(float), nullptr);     // local: the work-group's sums
+        kx = cl.CreateKernel(prg, "voices", &e);
+        if (e == 0)
+            qx = cl.CreateCommandQueue(ctx, dev, 0, &e);
+        if (e != 0) {
+            err = "no second `voices` (extend)";
+            return false;
+        }
+        cl.SetKernelArg(kx, 10, 4 * LG * LK * sizeof(float), nullptr);
         kw = cl.CreateKernel(prg, "voices_win", &e);
         if (e != 0) {
             err = "no kernel `voices_win`";
@@ -340,9 +368,12 @@ struct Gpu {
     // result read back without waiting (collect waits) -- 0 on success. The
     // kernel's arguments are set at each launch; samples() sets its own again
     int launch(int s, const void *D, size_t dn, const void *C, size_t cn, const void *S, size_t sn, int nd,
-               long long n0, int frames, int send, int mg)
+               long long n0, int frames, int send, int mg, int span)
     {
         Slot &st = slot[s];
+        while (st.xbusy.load(std::memory_order_acquire))
+            std::this_thread::yield();      // (an extend still reading this slot's tables: a fraction of a ms)
+        st.valid = false;
         if (!held(st.tab[0], D, dn) || !held(st.tab[1], C, cn) || !held(st.tab[2], S, sn))
             return -1;
         for (int i = 0; i < 3; i++)
@@ -377,6 +408,10 @@ struct Gpu {
         cl.SetKernelArg(k, 4, sizeof(cl_ulong), &u0);
         cl.SetKernelArg(k, 5, sizeof(int), &send);
         cl.SetKernelArg(k, 9, sizeof(cl_mem), &st.acc);
+        const int zero = 0;
+        cl.SetKernelArg(k, 11, sizeof(int), &frames);
+        cl.SetKernelArg(k, 12, sizeof(int), &zero);
+        (void)span;
         size_t gs[2] = {(size_t)frames, (size_t)groups}, ls[2] = {(size_t)(frames % LK == 0 ? LK : 1), (size_t)LG};
         if (cl.EnqueueNDRangeKernel(q, k, 2, nullptr, gs, ls, 0, nullptr, nullptr) != 0)
             return -1;
@@ -385,6 +420,14 @@ struct Gpu {
         cl.Flush(q);                        // started now, not when it is waited for
         st.NG = NG;
         st.frames = frames;
+        st.nd = nd;
+        st.per = per;
+        st.groups = groups;
+        st.send = send;
+        st.mg = mg;
+        st.span = span;
+        st.n0 = n0;
+        st.valid = true;
         return 0;
     }
 
@@ -404,6 +447,63 @@ struct Gpu {
         for (int c = 0; c < 4; c++)
             for (int j = 0; j < frames; j++) {
                 const float *r = st.host.data() + (size_t)c * NG * frames + j;
+                float v = r[0];
+                for (int g = 1; g < NG; g++)
+                    v += r[(size_t)g * frames];
+                out[c * frames + j] = v;
+            }
+        return 0;
+    }
+
+    // EXTEND: frames [off, off + frames) of slot s's last block (its
+    // descriptors' span permitting) into out[4 * frames], waited for -- on
+    // the extend's own kernel and queue, from another thread than the
+    // blocks'; the slot's launch waits while it reads. 0 on success
+    int extend(int s, int off, int frames, float *out)
+    {
+        Slot &st = slot[s];
+        st.xbusy.store(1, std::memory_order_release);
+        struct Clear {
+            std::atomic<int> &b;
+            ~Clear() { b.store(0, std::memory_order_release); }
+        } clear{st.xbusy};
+        if (!st.valid || off < 0 || frames <= 0)
+            return -1;
+        const int NG = st.groups / LG;
+        size_t need = (size_t)4 * NG * frames;
+        if (xcap < need) {
+            if (xacc)
+                cl.ReleaseMemObject(xacc);
+            xcap = need > 2 * xcap ? need : 2 * xcap;
+            cl_int e = 0;
+            xacc = cl.CreateBuffer(ctx, CL_MEM_WRITE_ONLY, xcap * sizeof(float), nullptr, &e);
+            if (e != 0) {
+                xacc = nullptr;
+                xcap = 0;
+                return -1;
+            }
+            xres.resize(xcap);
+        }
+        cl_ulong u0 = (cl_ulong)st.n0;
+        cl.SetKernelArg(kx, 0, sizeof(int), &st.nd);
+        cl.SetKernelArg(kx, 1, sizeof(int), &st.per);
+        cl.SetKernelArg(kx, 2, sizeof(int), &frames);
+        cl.SetKernelArg(kx, 3, sizeof(int), &st.mg);
+        cl.SetKernelArg(kx, 4, sizeof(cl_ulong), &u0);
+        cl.SetKernelArg(kx, 5, sizeof(int), &st.send);
+        for (int i = 0; i < 3; i++)
+            cl.SetKernelArg(kx, 6 + i, sizeof(cl_mem), &st.tab[i].m);
+        cl.SetKernelArg(kx, 9, sizeof(cl_mem), &xacc);
+        cl.SetKernelArg(kx, 11, sizeof(int), &st.frames);   // (the block: past it, run on)
+        cl.SetKernelArg(kx, 12, sizeof(int), &off);
+        size_t gs[2] = {(size_t)frames, (size_t)st.groups}, ls[2] = {(size_t)(frames % LK == 0 ? LK : 1), (size_t)LG};
+        if (cl.EnqueueNDRangeKernel(qx, kx, 2, nullptr, gs, ls, 0, nullptr, nullptr) != 0)
+            return -1;
+        if (cl.EnqueueReadBuffer(qx, xacc, CL_TRUE, 0, need * sizeof(float), xres.data(), 0, nullptr, nullptr) != 0)
+            return -1;
+        for (int c = 0; c < 4; c++)
+            for (int j = 0; j < frames; j++) {
+                const float *r = xres.data() + (size_t)c * NG * frames + j;
                 float v = r[0];
                 for (int g = 1; g < NG; g++)
                     v += r[(size_t)g * frames];
@@ -448,6 +548,9 @@ struct Gpu {
         cl.SetKernelArg(k, 4, sizeof(cl_ulong), &u0);
         cl.SetKernelArg(k, 5, sizeof(int), &send);
         cl.SetKernelArg(k, 9, sizeof(cl_mem), &acc);
+        const int zero = 0;
+        cl.SetKernelArg(k, 11, sizeof(int), &frames);   // (the span: the block itself)
+        cl.SetKernelArg(k, 12, sizeof(int), &zero);
         size_t gs[2] = {(size_t)frames, (size_t)groups}, ls[2] = {(size_t)(frames % LK == 0 ? LK : 1), (size_t)LG};
         if (cl.EnqueueNDRangeKernel(q, k, 2, nullptr, gs, ls, 0, nullptr, nullptr) != 0)
             return -1;
@@ -479,7 +582,8 @@ void *nv_mtl_new(const char *dir, const int *sizes, char *err, int errlen);
 int nv_mtl_samples(void *h, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
                    long long n0, int frames, int send, int mg, float *out);
 int nv_mtl_launch(void *h, int slot, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
-                  long long n0, int frames, int send, int mg);
+                  long long n0, int frames, int send, int mg, int span);
+int nv_mtl_extend(void *h, int slot, int off, int frames, float *out);
 int nv_mtl_collect(void *h, int slot, float *out);
 void nv_mtl_free(void *h);
 int nv_mtl_win(void *h, const void *G, long gn, const void *D, long dn, const void *C, long cn, const void *S, long sn,
@@ -534,11 +638,30 @@ int nv_cl_samples(void *h, const void *D, long dn, const void *C, long cn, const
     return CLG->samples(D, (size_t)dn, C, (size_t)cn, S, (size_t)sn, nd, n0, frames, send, mg, out);
 }
 
+int nv_cl_launch_span(void *h, int slot, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
+                      long long n0, int frames, int send, int mg, int span);
+
 int nv_cl_launch(void *h, int slot, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
                  long long n0, int frames, int send, int mg)
 {
-    METAL_OR(nv_mtl_launch(((Handle *)h)->g, slot, D, dn, C, cn, S, sn, nd, n0, frames, send, mg));
-    return CLG->launch(slot, D, (size_t)dn, C, (size_t)cn, S, (size_t)sn, nd, n0, frames, send, mg);
+    return nv_cl_launch_span(h, slot, D, dn, C, cn, S, sn, nd, n0, frames, send, mg, frames);
+}
+
+// ...its descriptors set up for `span` samples from n0, the first `frames` rendered
+int nv_cl_launch_span(void *h, int slot, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
+                      long long n0, int frames, int send, int mg, int span)
+{
+    METAL_OR(nv_mtl_launch(((Handle *)h)->g, slot, D, dn, C, cn, S, sn, nd, n0, frames, send, mg, span));
+    return CLG->launch(slot, D, (size_t)dn, C, (size_t)cn, S, (size_t)sn, nd, n0, frames, send, mg, span);
+}
+
+// frames [off, off + frames) of slot's last block (its span permitting) into
+// out[4 * frames], waited for -- from another thread than the blocks' (a held
+// moment's: the partials ringing on); 0 on success
+int nv_cl_extend(void *h, int slot, int off, int frames, float *out)
+{
+    METAL_OR(nv_mtl_extend(((Handle *)h)->g, slot, off, frames, out));
+    return CLG->extend(slot, off, frames, out);
 }
 
 int nv_cl_collect(void *h, int slot, float *out)

@@ -15,11 +15,13 @@
 #import <Metal/Metal.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -27,7 +29,7 @@ namespace {
 struct VArgs {                  // gpukernel.metal's vargs
     int nd, per, frames, mg;
     unsigned long long n0;
-    int send, pad;
+    int send, span, off, pad;
 };
 
 struct Buf {                    // a shared buffer, grown as asked
@@ -46,7 +48,13 @@ struct MetalGpu {
         id<MTLCommandBuffer> cb = nil;
         int NG = 0, frames = 0;
         double t_commit = 0.0;
+        // (its last launch, for extend: its descriptors' start and span)
+        int nd = 0, send = 0, mg = 0, span = 0;
+        long long n0 = 0;
+        bool valid = false;
+        std::atomic<int> xbusy{0};          // an extend reading its tables (launch waits)
     } slot[3];                              // (three: a pipeline two deep, and the one being set up)
+    Buf xacc;                               // (extend's result)
     // TUNING_METAL_TRACE: each pipelined block's time split -- committed to
     // the GPU's start (scheduling), the GPU's own run, its end to the wait's
     // return (waking) -- summarised on stderr when the GPU is let go
@@ -215,14 +223,15 @@ struct MetalGpu {
     }
 
     // the sample pass encoded into cb: tables in t, the result into a
-    id<MTLCommandBuffer> encode(Buf *t, Buf &a, int nd, long long n0, int frames, int send, int mg, int &NG)
+    id<MTLCommandBuffer> encode(Buf *t, Buf &a, int nd, long long n0, int frames, int send, int mg, int &NG,
+                                int span = 0, int off = 0)
     {
         int per, groups;
         groups_of(nd, per, groups);
         NG = groups / LG;
         if (!grow(a, (size_t)4 * NG * frames * sizeof(float)))
             return nil;
-        VArgs A{nd, per, frames, mg, (unsigned long long)n0, send, 0};
+        VArgs A{nd, per, frames, mg, (unsigned long long)n0, send, span > 0 ? span : frames, off, 0};
         id<MTLCommandBuffer> cb = [q commandBuffer];
         id<MTLComputeCommandEncoder> en = [cb computeCommandEncoder];
         [en setComputePipelineState:pv];
@@ -269,22 +278,58 @@ struct MetalGpu {
     }
 
     int launch(int s, const void *D, size_t dn, const void *C, size_t cn, const void *S, size_t sn, int nd,
-               long long n0, int frames, int send, int mg)
+               long long n0, int frames, int send, int mg, int span)
     {
         @autoreleasepool {
             Slot &st = slot[s];
             if (st.cb)
                 [st.cb waitUntilCompleted];         // (its last still running: its tables are about to change)
             st.cb = nil;
+            while (st.xbusy.load(std::memory_order_acquire))
+                std::this_thread::yield();          // (an extend still reading them: a fraction of a ms)
+            st.valid = false;
             if (!put(st.tab[0], D, dn) || !put(st.tab[1], C, cn) || !put(st.tab[2], S, sn))
                 return -1;
-            id<MTLCommandBuffer> cb = encode(st.tab, st.acc, nd, n0, frames, send, mg, st.NG);
+            id<MTLCommandBuffer> cb = encode(st.tab, st.acc, nd, n0, frames, send, mg, st.NG, frames, 0);
             if (!cb)
                 return -1;
             st.t_commit = now_s();
             [cb commit];                            // started now, collect waits
             st.cb = cb;
             st.frames = frames;
+            st.nd = nd;
+            st.send = send;
+            st.mg = mg;
+            st.span = span;
+            st.n0 = n0;
+            st.valid = true;
+            return 0;
+        }
+    }
+
+    // gpu.cpp's extend: frames [off, off + frames) of slot s's last block, from
+    // its own tables (copied at its launch), into out -- waited for, from
+    // another thread (a command queue takes buffers from any); 0 on success
+    int extend(int s, int off, int frames, float *out)
+    {
+        @autoreleasepool {
+            Slot &st = slot[s];
+            st.xbusy.store(1, std::memory_order_release);
+            struct Clear {
+                std::atomic<int> &b;
+                ~Clear() { b.store(0, std::memory_order_release); }
+            } clear{st.xbusy};
+            if (!st.valid || off < 0 || frames <= 0)
+                return -1;
+            int NG = 0;
+            id<MTLCommandBuffer> cb = encode(st.tab, xacc, st.nd, st.n0, frames, st.send, st.mg, NG, st.frames, off);
+            if (!cb)
+                return -1;
+            [cb commit];
+            [cb waitUntilCompleted];
+            if (cb.status != MTLCommandBufferStatusCompleted)
+                return -1;
+            sum_rows((const float *)[xacc.b contents], NG, frames, out);
             return 0;
         }
     }
@@ -326,7 +371,7 @@ struct MetalGpu {
             const size_t need = (size_t)4 * nwg * frames;
             if (!grow(wacc, need * sizeof(float)))
                 return -1;
-            VArgs A{0, 0, frames, mg, (unsigned long long)n0, send, 0};
+            VArgs A{0, 0, frames, mg, (unsigned long long)n0, send, frames, 0, 0};
             id<MTLCommandBuffer> cb = [q commandBuffer];
             id<MTLComputeCommandEncoder> en = [cb computeCommandEncoder];
             [en setComputePipelineState:pw];
@@ -370,9 +415,14 @@ int nv_mtl_samples(void *h, const void *D, long dn, const void *C, long cn, cons
 }
 
 int nv_mtl_launch(void *h, int slot, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
-                  long long n0, int frames, int send, int mg)
+                  long long n0, int frames, int send, int mg, int span)
 {
-    return ((MetalGpu *)h)->launch(slot, D, (size_t)dn, C, (size_t)cn, S, (size_t)sn, nd, n0, frames, send, mg);
+    return ((MetalGpu *)h)->launch(slot, D, (size_t)dn, C, (size_t)cn, S, (size_t)sn, nd, n0, frames, send, mg, span);
+}
+
+int nv_mtl_extend(void *h, int slot, int off, int frames, float *out)
+{
+    return ((MetalGpu *)h)->extend(slot, off, frames, out);
 }
 
 int nv_mtl_collect(void *h, int slot, float *out) { return ((MetalGpu *)h)->collect(slot, out); }

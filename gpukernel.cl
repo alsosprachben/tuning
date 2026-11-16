@@ -10,19 +10,29 @@
 // left: a second kernel to do that was a launch dearer than the sum.
 #include "voicedesc.h"
 
+// THE BLOCK RUN ON: `frames` samples rendered from sample `off` of the block
+// (span: its length) -- normally all of it (off 0, frames = span), and on a
+// held moment those past it, the partials ringing on from the state they
+// were set up in (voice_sample_ext; slab.cpp's extend)
 __kernel void voices(const int nd, const int per, const int frames, const int mg,
                      const ulong n0, const int send,
                      __global const vdesc* D, __global const vcell* C, __global const vsb* SB,
-                     __global float* acc, __local float* red)
+                     __global float* acc, __local float* red, const int span, const int off)
 {
     int k = get_global_id(0), g = get_global_id(1);
     int lk = get_local_id(0), lg = get_local_id(1), LK = get_local_size(0), LG = get_local_size(1);
     int i0 = g*per, i1 = min(nd, i0+per);
-    float invb = 1.f/(float)frames, invg = 1.f/(float)mg;
+    float invb = 1.f/(float)span, invg = 1.f/(float)mg;
     float o[4] = {0.f, 0.f, 0.f, 0.f};
-    if(k < frames)
-        for(int i=i0; i<i1; i++)
-            voice_sample(D+i, C, SB, k, n0+(ulong)k, invb, mg, invg, send, o);
+    int kk = k + off;
+    if(k < frames){
+        if(kk < span)
+            for(int i=i0; i<i1; i++)
+                voice_sample(D+i, C, SB, kk, n0+(ulong)kk, invb, mg, invg, send, o);
+        else
+            for(int i=i0; i<i1; i++)
+                voice_sample_ext(D+i, kk, n0+(ulong)kk, span, o);
+    }
     for(int c=0; c<4; c++) red[(c*LG+lg)*LK+lk] = o[c];
     barrier(CLK_LOCAL_MEM_FENCE);
     if(lg == 0 && k < frames){

@@ -31,6 +31,11 @@ struct RubFill {
     float gain = 1.0f;
     long run = 0;                           // frames of it so far
     float x0L = 0, x0R = 0, dL = 0, dR = 0; // the last frame heard and its slope (the join's line)
+    // (the join's length, and whether its line is flat: a room's replay --
+    // noise-like, its last slope a guess -- joins over longer, from its last
+    // frame held; slab.cpp's extend)
+    int join = JOIN;
+    bool flat = false;
     float fade = 0.99993f;                  // per frame past FADE_AFTER (-3 dB / 10 ms at 48 kHz)
 
     void set_rate(double sr) { fade = (float)std::pow(10.0, -3.0 / 20.0 / (0.010 * sr)); }
@@ -119,8 +124,8 @@ struct RubFill {
             if (hn >= 2) {
                 x0L = hL[(hn - 1) % H];
                 x0R = hR[(hn - 1) % H];
-                dL = x0L - hL[(hn - 2) % H];
-                dR = x0R - hR[(hn - 2) % H];
+                dL = flat ? 0.0f : x0L - hL[(hn - 2) % H];
+                dR = flat ? 0.0f : x0R - hR[(hn - 2) % H];
             }
         }
         for (int i = 0; i < n; i++) {
@@ -133,8 +138,8 @@ struct RubFill {
                 // THE JOIN: the stretch's first frame is not quite the next
                 // after the last heard -- the first JOIN frames cross from
                 // that frame's line into it
-                if (run < JOIN) {
-                    const float w = 0.5f - 0.5f * std::cos(3.14159265f * (run + 0.5f) / JOIN);
+                if (run < join) {
+                    const float w = 0.5f - 0.5f * std::cos(3.14159265f * (run + 0.5f) / join);
                     const float k = (float)(run + 1);
                     L[i] = w * L[i] + (1.0f - w) * (x0L + dL * k) * gain;
                     R[i] = w * R[i] + (1.0f - w) * (x0R + dR * k) * gain;

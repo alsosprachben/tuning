@@ -1058,6 +1058,9 @@ int nv_host::open(int argc, char **argv)
             nv_part_pipeline(part, cl && pipe);
             // (--gpu-depth=2: two blocks in flight -- an app's on macOS; 1, live's and nvlive's)
             nv_part_gpu_depth(part, atoi(opt(argc, argv, "gpu-depth", "1").c_str()));
+            // (--gpu-span=N: a GPU block's descriptors set up for N samples -- a
+            // held moment's partials ringing on; 0, the block's own)
+            nv_part_gpu_span(part, atol(opt(argc, argv, "gpu-span", "0").c_str()));
             fprintf(stderr, "nvlive: the GPU (%s), from %ld busy slots%s\n", cl ? nv_cl_api(cl) : "the C reference", gmin,
                     cl && pipe ? ", pipelined" : "");
         } else {
@@ -3437,18 +3440,22 @@ void nv_host_set_cold_start(nv_host *h, int blocks, double cold_seconds, double 
     h->warm_frac = std::max(0.0, std::min(0.9, warm_fraction));
 }
 
-// ---- RUBATO: borrowed time instead of a click ----
+// ---- RUBATO: borrowed time instead of a click (Ben's) ----
 //
 // A block that runs past its callback's deadline was a click: the device got
-// silence for it. With rubato on, the blocks are rendered on their own thread
-// (in the audio workgroup) and the callback waits for them only until its
-// deadline (rub_frac of its length). On time -- nearly always -- it hands out
-// the same samples as nv_host_pull_step, in the same order. Late, it hands out
-// what is ready and holds the rest (rub_owed: the device now that many frames
-// ahead of the render), and the late block is heard, whole, when it is done:
-// the music borrows the time rather than losing the block. Its MIDI follows
-// (nv_host_midi_at: a device frame heard rub_owed later) -- every event
-// delayed alike, so what is played keeps its shape.
+// silence for it. With rubato on there are two timelines: the LOGICAL -- the
+// music, rendered on its own thread (in the audio workgroup) into a ring and
+// handed out in order -- and the PHYSICAL -- the device's frames. The
+// callback waits for the music only until its deadline (rub_frac of its
+// length); on time -- nearly always -- the two run together and it hands out
+// the same samples as nv_host_pull_step. Late, the physical runs on while the
+// logical waits -- a hold, filled by the waiting moment's partials ringing
+// on from their GPU block (--gpu-span; or the replay of what was just heard)
+// -- and then the logical goes on from where it waited: the late block whole,
+// after the ringing, time bent. The difference is the time borrowed, given
+// back by cuts that let the logical catch up. MIDI comes in physical time
+// and is placed in logical (nv_host_midi_at), every event alike, so what is
+// played keeps its shape.
 
 void nv_host::rub_loop()
 {
@@ -3471,8 +3478,9 @@ void nv_host::rub_loop()
                 render_block(play_n0, play_buf.data(), false);
             }
             if (ev) {
+                // (where its sound comes out: the block set up, plus the pipeline's lag)
                 const unsigned k = rub_evn.load(std::memory_order_relaxed);
-                rub_evr[k % RUB_EVN].store(play_n0, std::memory_order_relaxed);
+                rub_evr[k % RUB_EVN].store(play_n0 + (part ? nv_part_out_lag(part) : 0), std::memory_order_relaxed);
                 rub_evn.store(k + 1, std::memory_order_release);
             }
             if (rub_stall_every > 0 && (play_n0 / BLK) % rub_stall_every == rub_stall_every - 1)
@@ -3501,20 +3509,65 @@ bool nv_host::rub_events_in(long long a, long long b) const
     return n > (unsigned)RUB_EVN;
 }
 
+// A SPLICE MATCHED BY ITS WAVEFORM (WSOLA's): of the starts lo..hi in the
+// ring, the one whose next n frames best match ref's (the normalised
+// correlation of the two ears' sums) -- so a crossfade from ref into it joins
+// two waves in step, where two at different points of a low note's cycle
+// cancelled in part (a dip in the bass, heard as a thud: Ben). Every other
+// start, then its neighbours. -1: no room to look
+extern "C++" {
+template <class At>
+static long long splice_best(const float *rl, const float *rr, int n, At at, long long lo, long long hi)
+{
+    if (hi < lo || n <= 0)
+        return -1;
+    long long best = hi;
+    double bc = -2.0;
+    auto score = [&](long long s) {
+        double c = 0.0, e = 0.0, e0 = 0.0;
+        for (int i = 0; i < n; i++) {
+            const float *q = at(s + i);
+            const double a = (double)rl[i] + rr[i], b = (double)q[0] + q[1];
+            c += a * b;
+            e += b * b;
+            e0 += a * a;
+        }
+        return (e > 1e-20 && e0 > 1e-20) ? c / std::sqrt(e * e0) : -2.0;
+    };
+    for (long long s = hi; s >= lo; s -= 2) {
+        const double c = score(s);
+        if (c > bc) {
+            bc = c;
+            best = s;
+        }
+    }
+    for (long long s = best - 1; s <= best + 1; s += 2)
+        if (s >= lo && s <= hi) {
+            const double c = score(s);
+            if (c > bc) {
+                bc = c;
+                best = s;
+            }
+        }
+    return best;
+}
+}  // extern "C++"
+
 static int nv_host_pull_rubato(nv_host *h, float *L, float *R, int frames)
 {
     const long long t_in = rt::now_ns();
     const long long until = t_in + (long long)(h->rub_frac * 1e9 * frames / h->SR);
-    const long long took = h->rub_took.load(std::memory_order_relaxed);
-    const long long owed = h->rub_owed.load(std::memory_order_relaxed);
-    const int XF = nv::RubFill::XF;
-    // (owed: the render thread asked that much further -- and a callback
-    // more, so the next finds it made and can cut it)
-    const long long want = took + frames + (h->rub_return && owed > 0 ? owed + XF + frames : 0);
+    const int XF = nv::RubFill::XF, LOOK = nv_host::RUB_LOOK, SEEK = nv_host::RUB_SEEK;
+    const long long lg = h->rub_took.load(std::memory_order_relaxed);     // the logical timeline
+    const long long ph = h->rub_phys.load(std::memory_order_relaxed);     // the physical
+    const long long owed = ph - lg;                                       // borrowed
+    // (the render thread asked for this callback's music -- and, while time is
+    // owed, as much past it as a return's cut needs)
+    const long long want = lg + frames + (h->rub_return && owed > 0 ? owed + LOOK + frames : 0);
     if (want > h->rub_want.load(std::memory_order_relaxed))
         h->rub_want.store(want, std::memory_order_release);
     h->rub_go.signal();
-    while (h->rub_made.load(std::memory_order_acquire) < took + frames) {
+    while (h->rub_made.load(std::memory_order_acquire) < lg + frames) {
         const long long left = until - rt::now_ns();
         if (left <= 0)
             break;
@@ -3522,15 +3575,34 @@ static int nv_host_pull_rubato(nv_host *h, float *L, float *R, int frames)
     }
     const long long made = h->rub_made.load(std::memory_order_acquire);
     auto at = [h](long long k) { return h->rub_ring.data() + 2 * (k % h->rub_cap); };
-    // THE TIME RETURNED: what is owed is made, past this callback, and no
-    // event's block falls in it -- the owed frames cut, the stream before the
-    // cut crossing into the stream after it over XF frames
-    if (h->rub_return && owed > 0 && !h->rub_fill.on && made - took >= owed + frames + XF
-        && !h->rub_events_in(took - h->SR / 50, took + owed + XF)) {    // (nor in an attack's first 20 ms)
+    auto copy = [&](long long from, int n, int to) {
+        for (int i = 0; i < n; i++) {
+            const float *s = at(from + i);
+            L[to + i] = s[0];
+            R[to + i] = s[1];
+        }
+    };
+    // 1. THE TIME RETURNED: the logical catches up -- a cut of what is owed
+    // (made, and no event in it nor in an attack's first 20 ms before it),
+    // placed up to SEEK/2 short of it where the waveform after matches the
+    // one it leaves (WSOLA's; what is left returned at the next)
+    // (A CEILING: past RUB_MAX_OWED the time is returned at the next chance
+    // even beside an event -- a note a little early, not latency that grows
+    // while the machine stays behind)
+    const bool over = owed > (long long)(nv_host::RUB_MAX_OWED_S * h->SR);
+    if (h->rub_return && owed > 0 && !h->rub_hold && made - lg >= owed + std::max(frames + XF, LOOK)
+        && (over || !h->rub_events_in(lg - h->SR / 50, lg + owed + XF))) {
+        for (int i = 0; i < LOOK; i++) {
+            const float *q = at(lg + i);
+            h->rub_rl[i] = q[0];
+            h->rub_rr[i] = q[1];
+        }
+        const long long s = splice_best(h->rub_rl, h->rub_rr, LOOK, at, lg + std::max<long long>(XF, owed - SEEK / 2), lg + owed);
+        const long long cut = s >= 0 ? s - lg : owed;
         for (int i = 0; i < frames; i++) {
-            const float *b = at(took + owed + i);
+            const float *b = at(lg + cut + i);
             if (i < XF) {
-                const float *a = at(took + i);
+                const float *a = at(lg + i);
                 const float w = 0.5f - 0.5f * std::cos(3.14159265f * (i + 0.5f) / XF);
                 L[i] = w * b[0] + (1.0f - w) * a[0];
                 R[i] = w * b[1] + (1.0f - w) * a[1];
@@ -3540,31 +3612,80 @@ static int nv_host_pull_rubato(nv_host *h, float *L, float *R, int frames)
             }
         }
         h->rub_fill.heard(L, R, frames);
-        h->rub_took.store(took + owed + frames, std::memory_order_release);
-        h->rub_owed.fetch_sub(owed, std::memory_order_relaxed);
-        h->rub_returned.fetch_add(owed, std::memory_order_relaxed);
+        h->rub_took.store(lg + cut + frames, std::memory_order_release);
+        h->rub_phys.store(ph + frames, std::memory_order_release);
+        h->rub_returned.fetch_add(cut, std::memory_order_relaxed);
         h->rub_returns.fetch_add(1, std::memory_order_relaxed);
         return 0;
     }
-    const int have = (int)std::min<long long>(made - took, frames);
-    for (int i = 0; i < have; i++) {
-        const float *s = at(took + i);
-        L[i] = s[0];
-        R[i] = s[1];
+    long long pos = lg;
+    int have = 0;
+    if (h->rub_hold && made > pos) {
+        // 2. THE HOLD ENDS: the logical goes on from where it waited -- the
+        // late block whole, whatever began in it heard from its start. After
+        // the ringing, at the start at or just before the wait (within SEEK)
+        // whose waveform matches the ringing's next frames, and crossed from
+        // them; after the replay, its own crossing (rubfill.h)
+        if (h->rub_ringing) {
+            const long long s = splice_best(h->rub_xl, h->rub_xr, LOOK, at, std::max(pos - SEEK, made - h->rub_cap + 2 * LOOK),
+                                            std::min(pos, made - LOOK));
+            if (s >= 0) {
+                h->rub_held.fetch_add(pos - s, std::memory_order_relaxed);
+                pos = s;                        // (a little further back: borrowed, as the hold was)
+            }
+            have = (int)std::max<long long>(0, std::min<long long>(made - pos, frames));
+            copy(pos, have, 0);
+            const int m = std::min(have, XF);
+            for (int i = 0; i < m; i++) {
+                const float w = 0.5f - 0.5f * std::cos(3.14159265f * (i + 0.5f) / m);
+                L[i] = w * L[i] + (1.0f - w) * h->rub_xl[i];
+                R[i] = w * R[i] + (1.0f - w) * h->rub_xr[i];
+            }
+            h->rub_fill.heard(L, R, have);
+        } else {
+            have = (int)std::max<long long>(0, std::min<long long>(made - pos, frames));
+            copy(pos, have, 0);
+            h->rub_fill.resume(L, R, have);
+        }
+        h->rub_hold = h->rub_ringing = false;
+    } else {
+        have = (int)std::max<long long>(0, std::min<long long>(made - pos, frames));
+        copy(pos, have, 0);
+        h->rub_fill.resume(L, R, have);         // (heard)
     }
-    h->rub_took.store(took + have, std::memory_order_release);
-    h->rub_fill.resume(L, R, have);             // (the late block crossed in, after a hold; heard)
+    pos += have;
+    h->rub_took.store(pos, std::memory_order_release);
     if (have < frames) {
-        // HELD: the rest of this callback borrowed -- the sound just heard
-        // going on (rubfill.h) until the late block comes
-        h->rub_fill.gen(L + have, R + have, frames - have);
-        if (h->rub_silent)
-            for (int i = have; i < frames; i++)
-                L[i] = R[i] = 0.0f;
-        h->rub_owed.fetch_add(frames - have, std::memory_order_relaxed);
-        h->rub_held.fetch_add(frames - have, std::memory_order_relaxed);
-        h->rub_holds.fetch_add(1, std::memory_order_relaxed);
+        // 3. A HOLD: the physical runs on, the logical waits at pos. Filled by
+        // the music's state there run on -- its GPU block's partials ringing
+        // (nv_part_extend: from pos, as far as the hold has rung) -- or, where
+        // no block reaches, by the replay of what was just heard (rubfill.h)
+        const int n = frames - have;
+        const bool first = !h->rub_hold;
+        if (first) {
+            h->rub_holds.fetch_add(1, std::memory_order_relaxed);
+            h->rub_run = 0;
+            h->rub_ringing = true;
+        }
+        bool rung = false;
+        if (h->rub_ringing && !h->rub_silent && h->part)
+            rung = nv_part_extend(h->part, pos + h->rub_run, n, L + have, R + have, first ? 1 : 0, LOOK, h->rub_xl,
+                                  h->rub_xr) == n;
+        if (rung) {
+            h->rub_fill.heard(L + have, R + have, n);
+            h->rub_ext_n.fetch_add(n, std::memory_order_relaxed);
+        } else {
+            h->rub_ringing = false;             // (from here the replay: it joins what was heard)
+            h->rub_fill.gen(L + have, R + have, n);
+            if (h->rub_silent)
+                for (int i = have; i < frames; i++)
+                    L[i] = R[i] = 0.0f;
+        }
+        h->rub_run += n;
+        h->rub_held.fetch_add(n, std::memory_order_relaxed);
+        h->rub_hold = true;
     }
+    h->rub_phys.store(ph + frames, std::memory_order_release);
     return 0;
 }
 
@@ -3578,10 +3699,11 @@ int nv_host_set_rubato(nv_host *h, int on, double wait_fraction)
         // handed out would be skipped -- turned on before the first callback)
         if (h->play_buf.size() < 2 * (size_t)h->BLK)
             h->play_buf.assign(2 * h->BLK, 0.0f);   // (nvlive --test's host is not opened through nv_host_open_args)
-        h->rub_cap = 64 * h->BLK;
+        h->rub_cap = 512 * h->BLK;          // (1.4 s at 128: room for the most that may be owed, and a cut past it)
         h->rub_ring.assign(2 * h->rub_cap, 0.0f);
         h->rub_made = h->rub_took = h->rub_want = 0;
-        h->rub_owed = 0;
+        h->rub_phys = 0;
+        h->rub_hold = h->rub_ringing = false;
         h->rub_evn = 0;
         h->rub_fill = nv::RubFill();
         h->rub_fill.set_rate(h->SR);
@@ -3602,11 +3724,12 @@ void nv_host_rubato_stats(const nv_host *h, long long *out)
 {
     out[0] = h->rub_holds.load();
     out[1] = h->rub_held.load();
-    out[2] = h->rub_owed.load();
+    out[2] = h->rub_owed_now();
     out[3] = h->rub_made.load();
     out[4] = h->rub_took.load();
     out[5] = h->rub_returns.load();
     out[6] = h->rub_returned.load();
+    out[7] = h->rub_ext_n.load();
 }
 
 void nv_host_set_rubato_return(nv_host *h, int on) { h->rub_return = on != 0; }
@@ -3627,7 +3750,7 @@ void nv_host_midi_at(nv_host *h, const uint8_t *msg, int n, long long frame)
     // (rubato: the device frames ahead of the render by what is borrowed --
     // the event heard that much later, as everything since the hold)
     if (h->rub_on && frame > 0)
-        frame -= h->rub_owed.load(std::memory_order_relaxed);
+        frame -= h->rub_owed_now();
     if (h->cold_blocks > 0 && n > 0) {
         // (a cold start's shift: a phrase's events one block later, the note-on
         // that begins it after cold_s of no MIDI setting it)

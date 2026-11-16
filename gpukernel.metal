@@ -10,7 +10,7 @@ using namespace metal;
 #include "voicedesc.h"
 
 // the scalars, as gpukernel.cl takes them one by one
-struct vargs { int nd, per, frames, mg; ulong n0; int send, pad; };
+struct vargs { int nd, per, frames, mg; ulong n0; int send, span, off, pad; };     // (span, off: gpukernel.cl's)
 
 constant int RED = 4 * 8 * 16;      // (4 channels by LG by LK: the threadgroup's sums)
 
@@ -24,11 +24,17 @@ kernel void voices(constant vargs& A [[buffer(0)]], device const vdesc* D [[buff
     threadgroup float red[RED];
     int k = gid.x, g = gid.y, lk = lid.x, lg = lid.y, LK = lsz.x, LG = lsz.y;
     int i0 = g*A.per, i1 = min(A.nd, i0+A.per);
-    float invb = 1.f/(float)A.frames, invg = 1.f/(float)A.mg;
+    float invb = 1.f/(float)A.span, invg = 1.f/(float)A.mg;
     float o[4] = {0.f, 0.f, 0.f, 0.f};
-    if(k < A.frames)
-        for(int i=i0; i<i1; i++)
-            voice_sample(D+i, C, SB, k, A.n0+(ulong)k, invb, A.mg, invg, A.send, o);
+    int kk = k + A.off;
+    if(k < A.frames){
+        if(kk < A.span)
+            for(int i=i0; i<i1; i++)
+                voice_sample(D+i, C, SB, kk, A.n0+(ulong)kk, invb, A.mg, invg, A.send, o);
+        else
+            for(int i=i0; i<i1; i++)
+                voice_sample_ext(D+i, kk, A.n0+(ulong)kk, A.span, o);       // (gpukernel.cl's)
+    }
     for(int c=0; c<4; c++) red[(c*LG+lg)*LK+lk] = o[c];
     threadgroup_barrier(mem_flags::mem_threadgroup);
     if(lg == 0 && k < A.frames){

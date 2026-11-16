@@ -370,7 +370,7 @@ int nv_host::run(int argc, char **argv)
                         out.push_back(cl[q]);
                         out.push_back(cr[q]);
                     }
-                    long long rs[7];
+                    long long rs[8];
                     nv_host_rubato_stats(this, rs);
                     if (rs[0] > holds_seen) {
                         holds_seen = rs[0];
@@ -384,11 +384,11 @@ int nv_host::run(int argc, char **argv)
                 }
                 nv_host_set_rubato(this, 0, wait);
                 rub_block = nullptr;
-                long long rs[7];
+                long long rs[8];
                 nv_host_rubato_stats(this, rs);
                 fprintf(stderr, "nvlive: rubato: callbacks of %d frames, waiting %.2f; %lld held, %lld frames borrowed, "
-                        "%lld returned in %lld, %lld owed at the end; %lld rendered, %lld handed out\n", cbf, wait, rs[0],
-                        rs[1], rs[6], rs[5], rs[2], rs[3], rs[4]);
+                        "%lld returned in %lld, %lld owed at the end; %lld frames rung on (the GPU's partials); %lld rendered, %lld handed out\n",
+                        cbf, wait, rs[0], rs[1], rs[6], rs[5], rs[2], rs[7], rs[3], rs[4]);
                 out.resize(2 * (size_t)total);
             }
             // every block's time, its render's, and on the GPU its setup's and

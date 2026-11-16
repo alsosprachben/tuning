@@ -130,6 +130,9 @@ void nv_part_gs_delay(void *h, int addr, int v);
 int nv_part_gs_fx(void *h, int *cho, int *dly);
 void nv_room_inline(int on);
 void nv_part_gpu_depth(void *h, int depth);
+void nv_part_gpu_span(void *h, long span);
+long long nv_part_out_lag(void *h);
+int nv_part_extend(void *h, long long pos, int frames, float *L, float *R, int first, int look, float *Lx, float *Rx);
 int nv_part_cmx(void *h, int ch, int *src, int *col, double *dep, int max, int *cc);
 int nv_part_chan_cc(void *h, int ch, int cc);
 void nv_part_gs_chorus_reset(void *h, int gm1);
@@ -1322,9 +1325,8 @@ struct nv_host {
     MidiParse timed_parse;
     int pull_pos = -1;                      // (-1: none rendered yet)
     // RUBATO (nv_host_set_rubato; host.cpp): the blocks rendered on their own
-    // thread into a ring, the callback waiting for them only to a deadline --
-    // what is not ready by then held (rub_owed frames borrowed: the device
-    // ahead of the render by that much), the late block heard when it is done
+    // thread into a ring -- the logical timeline -- the callback (the
+    // physical) waiting for them only to a deadline, holding past it
     bool rub_on = false;
     double rub_frac = 0.75;                 // (of a callback's length: how long it waits)
     std::thread rub_thread;
@@ -1334,7 +1336,17 @@ struct nv_host {
     std::atomic<long long> rub_made{0};     // frames rendered into the ring, ever (the render thread's)
     std::atomic<long long> rub_took{0};     // frames handed out from it (the callback's)
     std::atomic<long long> rub_want{0};     // frames the callback wants made
-    std::atomic<long long> rub_owed{0};     // frames held (borrowed), not yet returned
+    // THE TWO TIMELINES: the logical -- the music, as far as it has been
+    // handed out (rub_took, a frame of the ring) -- and the physical -- the
+    // frames the device has taken (rub_phys). Their difference is the time
+    // borrowed: a hold lets the physical run on while the logical waits, a
+    // return lets the logical catch up. MIDI comes in physical time and is
+    // placed in logical (nv_host_midi_at: less the difference)
+    std::atomic<long long> rub_phys{0};
+    long long rub_owed_now() const { return rub_phys.load(std::memory_order_relaxed) - rub_took.load(std::memory_order_relaxed); }
+    bool rub_hold = false;                  // the last callback ended in a hold (the logical waiting)
+    bool rub_ringing = false;               // ...filled by the partials ringing on (else the replay)
+    long long rub_run = 0;                  // frames the hold has filled so far
     std::atomic<long> rub_holds{0};         // callbacks that held
     std::atomic<long long> rub_held{0};     // frames held, ever
     nv::RtSem rub_go, rub_done;
@@ -1351,6 +1363,14 @@ struct nv_host {
     bool rub_events_in(long long a, long long b) const;     // (a block that took an event overlaps [a, b))
     std::atomic<long> rub_returns{0};
     std::atomic<long long> rub_returned{0};
+    // THE PARTIALS RINGING ON (--gpu-span; nv_part_extend): a hold filled by
+    // the logical moment's GPU block run on (rub_ext_n: frames so, ever)
+    std::atomic<long long> rub_ext_n{0};    // frames played so, ever
+    // (the ringing's next RUB_LOOK frames, made with its last: the crossfade's
+    // source when the late block comes, and the waveform a splice is matched to)
+    enum { RUB_LOOK = 512, RUB_SEEK = 960 };
+    static constexpr double RUB_MAX_OWED_S = 0.1;   // (the most borrowed before a return is made beside an event)
+    float rub_xl[RUB_LOOK], rub_xr[RUB_LOOK], rub_rl[RUB_LOOK], rub_rr[RUB_LOOK];
     // (--test's: each block's own work in place of timed_due + render_block --
     // nvlive's file events and switches; true if it took an event -- and the
     // stalls it injects)

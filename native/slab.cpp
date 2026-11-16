@@ -42,7 +42,8 @@
 #include "gsdisplay.h"         // the Sound Canvas's display
 #include "mpe.h"               // MPE's zones (tonelib.MpeZones)
 #include "cmx.h"
-#include "rtjoin.h"             // (helpers in the audio workgroup: macOS / iOS)               // the controller matrix (ctrlmatrix)
+#include "rtjoin.h"             // (helpers in the audio workgroup: macOS / iOS)
+#include "rubfill.h"            // (the room's part of a held moment)               // the controller matrix (ctrlmatrix)
 
 extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
 extern "C" const NoteClass *nv_tcache_note_class(void *h, int program, int note);
@@ -182,6 +183,9 @@ void nv_lreg_free(void *h);
 int nv_cl_launch(void *h, int slot, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
                  long long n0, int frames, int send, int mg);
 int nv_cl_collect(void *h, int slot, float *out);
+int nv_cl_launch_span(void *h, int slot, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
+                      long long n0, int frames, int send, int mg, int span);
+int nv_cl_extend(void *h, int slot, int off, int frames, float *out);
 int nv_cl_samples(void *h, const void *D, long dn, const void *C, long cn, const void *S, long sn, int nd,
                   long long n0, int frames, int send, int mg, float *out);
 }
@@ -12024,6 +12028,29 @@ struct Part {
     // took ~4 ms; the CPU's blocks held as long, so a switch moves nothing)
     int gpu_depth = 1;
     void *smx = nullptr;                // synth_voice_moogx (nv_part_moogx; NULL: none)
+    // THE REACH (nv_part_gpu_span; 0: none): how far past its start a GPU
+    // block may be run on for a held moment (extend) -- its own descriptors,
+    // the partials ringing on from the state they were set up in
+    // (voicedesc.h's voice_sample_ext). Not a block with a Moog partial:
+    // its cells are the block's
+    long gpu_span = 0;
+    struct SlotRec {                    // each launch slot's block: where its descriptors start, how far they reach
+        std::atomic<long long> n0{0};
+        std::atomic<long> span{0};      // (0: none to extend)
+        std::atomic<int> busy{0};       // an extend reading the slot (its next setup waits)
+    } srec[3];
+    double last_master_gain = 1.0;      // (the render's gain on a GPU block: extend's too)
+    // the room's part of a held moment: its output kept (wet_h, the render
+    // thread's) and replayed (wet_fill, extend's own copy)
+    enum { WETH = nv::RubFill::H };
+    float wet_hL[WETH] = {}, wet_hR[WETH] = {};
+    std::atomic<long long> wet_n{0};
+    nv::RubFill wet_fill, wet_look;
+    std::vector<float> ext_buf;
+    long long ext_n0 = -1;              // (the block a hold rings on from)
+    // the output's lag behind the blocks set up: a pipelined GPU's depth in
+    // blocks (its CPU blocks held as long), else none
+    long long out_lag() const { return (pipeline && gp.cl) ? (long long)gpu_depth * cur_blk : 0; }
     struct GpuPend {
         int kind = 0;                   // 0 none (the first block), 1 done on the CPU, 2 on the GPU
         int slot = 0;
@@ -12073,8 +12100,10 @@ struct Part {
     // the GPU block's setup (voice_block over every busy slot) into the
     // tables D, C, SB, grown as it asks; the busy slots' count, and *mg the
     // Moog's grid. ms_setup its time
-    long setup_gpu(long long n0, long long blk, Table &D, Table &C, Table &SB, bool snd, long &mgo)
+    long setup_gpu(long long n0, long long blk, Table &D, Table &C, Table &SB, bool snd, long &mgo, long span = 0)
     {
+        if (span <= 0)
+            span = blk;
         if (!D.size) {                      // (a second set made as the first: an empty table is no buffer)
             D.make(gp.D.n, gp.D.size);
             C.make(gp.C.n, gp.C.size);
@@ -12089,7 +12118,7 @@ struct Part {
         long nact = (long)gidx.size();
         if (nact > D.n)
             D.make(std::max(nact, 2 * D.n), D.size);
-        long mg = (blk % 128 == 0 && blk / 128 <= 64) ? 128 : blk;     // moog_grid
+        long mg = (span % 128 == 0 && span / 128 <= 64) ? 128 : span;   // moog_grid (of the span: the descriptors')
         long kb0 = (long)(n0 / mg);
         gnon.resize(S.cap + S.tap_m);
         gnoff.resize(S.cap + S.tap_m);
@@ -12120,7 +12149,7 @@ struct Part {
         auto t0 = std::chrono::steady_clock::now();
         while (true) {
             int r = ((nv_vblock_fn)vb)(
-                (long)n0, (int)blk, 1, (int)(S.cap + S.tap_m), S.f8[0].data(), S.f8[1].data(), S.f8[2].data(), F4[0].data(),
+                (long)n0, (int)span, 1, (int)(S.cap + S.tap_m), S.f8[0].data(), S.f8[1].data(), S.f8[2].data(), F4[0].data(),
                 F4[1].data(), F4[2].data(), gnon.data(), gnoff.data(), F4[3].data(), F4[4].data(), F4[5].data(),
                 F4[6].data(), F4[7].data(), F4[8].data(), F4[9].data(), F4[10].data(), F4[11].data(),
                 F4[12].data(), F4[13].data(), F4[14].data(), F4[15].data(), F4[16].data(), F4[17].data(),
@@ -12192,9 +12221,26 @@ struct Part {
             Table &D = turn == 2 ? gp.D3 : turn ? gp.D2 : gp.D, &C = turn == 2 ? gp.C3 : turn ? gp.C2 : gp.C,
                   &SB = turn == 2 ? gp.SB3 : turn ? gp.SB2 : gp.SB;
             long mg = 0;
+            // (how far it may ring on: not with a Moog partial, whose cells are the block's)
+            long span = blk;
+            if (gpu_span > blk) {
+                bool plain = true;
+                for (long q = 0; q < S.cap && plain; q++)
+                    if (S.busy[q] && S.i4[I4_fx][q] >= 0 && S.mx_on[S.i4[I4_fx][q]])
+                        plain = false;
+                if (plain)
+                    span = gpu_span;
+            }
+            SlotRec &sr = srec[turn];
+            sr.span.store(0, std::memory_order_release);
+            while (sr.busy.load(std::memory_order_acquire))
+                std::this_thread::yield();  // (an extend still reading this slot's tables: a fraction of a ms)
             long nact = setup_gpu(n0, blk, D, C, SB, cur.snd, mg);
-            if (nv_cl_launch(gp.cl, turn, D.p, D.bytes(), C.p, C.bytes(), SB.p, SB.bytes(), (int)nact, n0,
-                             (int)frames, cur.snd ? 1 : 0, (int)mg) == 0) {
+            last_master_gain = master_gain;
+            if (nv_cl_launch_span(gp.cl, turn, D.p, D.bytes(), C.p, C.bytes(), SB.p, SB.bytes(), (int)nact, n0,
+                                  (int)frames, cur.snd ? 1 : 0, (int)mg, (int)span) == 0) {
+                sr.n0.store(n0, std::memory_order_relaxed);
+                sr.span.store(span > blk ? span : 0, std::memory_order_release);
                 cur.kind = 2;
                 cur.slot = turn;
                 turn = (turn + 1) % (gpu_depth + 1);
@@ -12290,6 +12336,7 @@ struct Part {
         for (auto &v : rn.l) v.reserve(n);
         for (auto &v : rn.i) v.reserve(n);
         rn.bus_saved.reserve(4096);
+        ext_buf.reserve(4 * 4096);              // (extend's: a callback's frames)
         for (auto *v : {&rn.BL, &rn.BR, &rn.BSL, &rn.BSR, &rn.oL, &rn.oR})
             v->reserve((size_t)std::max(frames, 4096L));
     }
@@ -12656,8 +12703,111 @@ struct Part {
                 R[k] = R[k] + oWR[k];
             }
         }
+        {                                   // (the room's output kept: a held moment replays it -- extend)
+            long long w = wet_n.load(std::memory_order_relaxed);
+            for (long k = 0; k < frames; k++, w++) {
+                wet_hL[w % WETH] = any_room ? oWL[k] : 0.0f;
+                wet_hR[w % WETH] = any_room ? oWR[k] : 0.0f;
+            }
+            wet_n.store(w, std::memory_order_release);
+        }
         limit(L, frames);
         limit(R, frames);
+    }
+
+    // A HELD MOMENT (the host's rubato): frames from `pos` of the output --
+    // the samples the late block would bring -- from the newest launched GPU
+    // block whose descriptors reach them (gpu_span): the partials ringing on,
+    // with the render's gain and the master volume, and the room's output
+    // replayed (rubfill.h; `first`: a hold's start, the replay begun again),
+    // limited as output's. Another thread's than the blocks': only the
+    // slots' records, the GPU's own copies of their tables (the next setup
+    // into a slot waits while one is read), and the room's kept output.
+    // Frames given (0: none reach them -- the caller replays)
+    int extend(long long pos, int frames, float *L, float *R, bool first, int look = 0, float *Lx = nullptr,
+               float *Rx = nullptr)
+    {
+        if (!gp.cl || !pipeline || frames <= 0)
+            return 0;
+        if (!Lx || !Rx)
+            look = 0;
+        const int want = frames;
+        frames += look;                     // (LOOK frames more, into Lx/Rx: the next callback's, should the hold end there)
+        const long long m = pos - out_lag();
+        // ONE BLOCK A HOLD: the newest that reaches the hold's start, kept to
+        // its end -- a newer one set up meanwhile carries a note struck since,
+        // which would appear mid-attack (the host steps back to it instead)
+        int best = -1;
+        long long bn = -1;
+        for (int s = 0; s < 3; s++) {
+            SlotRec &sr = srec[s];
+            sr.busy.store(1, std::memory_order_release);
+            const long sp = sr.span.load(std::memory_order_acquire);
+            const long long n = sr.n0.load(std::memory_order_relaxed);
+            if (sp > 0 && n <= m && m + frames <= n + sp && n > bn && (first || n == ext_n0)) {
+                if (best >= 0)
+                    srec[best].busy.store(0, std::memory_order_release);
+                best = s;
+                bn = n;
+            } else {
+                sr.busy.store(0, std::memory_order_release);
+            }
+        }
+        if (best < 0)
+            return 0;
+        ext_n0 = bn;
+        ext_buf.resize(4 * (size_t)frames);         // (the caller reserves: ext_reserve)
+        const int r = nv_cl_extend(gp.cl, best, (int)(m - bn), frames, ext_buf.data());
+        srec[best].busy.store(0, std::memory_order_release);
+        if (r != 0)
+            return 0;
+        // the room's output replayed: begun again from the kept output at a hold's start
+        if (first) {
+            // (to the sample it continues from, not past it: the room's output
+            // for a block made but not yet heard is already kept)
+            const long long w = std::min(wet_n.load(std::memory_order_acquire), pos);
+            wet_fill = nv::RubFill();
+            wet_fill.set_rate(rate);
+            wet_fill.join = 128;
+            wet_fill.flat = true;
+            const long long n = w < (long long)WETH ? w : (long long)WETH;
+            for (long long k = w - n; k < w; k++) {
+                const float a = wet_hL[k % WETH], b = wet_hR[k % WETH];
+                wet_fill.heard(&a, &b, 1);
+            }
+        }
+        float wl[256], wr[256];
+        const float gn = (float)last_master_gain, mv = (float)mv_now;
+        for (int k0 = 0; k0 < frames; k0 += 256) {
+            const int n = std::min(256, frames - k0);
+            if (k0 + n > want && k0 < want) {       // (the room's replay advanced by the frames played alone)
+                wet_fill.gen(wl, wr, want - k0);
+                wet_look = wet_fill;
+                wet_look.gen(wl + (want - k0), wr + (want - k0), k0 + n - want);
+            } else if (k0 >= want) {
+                if (k0 == want)
+                    wet_look = wet_fill;
+                wet_look.gen(wl, wr, n);
+            } else {
+                wet_fill.gen(wl, wr, n);
+            }
+            for (int k = 0; k < n; k++) {
+                float l = ext_buf[k0 + k] * gn, rr = ext_buf[(size_t)frames + k0 + k] * gn;
+                l = l < -1.0f ? -1.0f : (l > 1.0f ? 1.0f : l);
+                rr = rr < -1.0f ? -1.0f : (rr > 1.0f ? 1.0f : rr);
+                float *ol = k0 + k < want ? L + k0 + k : Lx + (k0 + k - want);
+                float *orr = k0 + k < want ? R + k0 + k : Rx + (k0 + k - want);
+                *ol = l * mv + wl[k];
+                *orr = rr * mv + wr[k];
+            }
+        }
+        limit(L, want);
+        limit(R, want);
+        if (look) {
+            limit(Lx, look);
+            limit(Rx, look);
+        }
+        return want;
     }
 
     // THE BUDGET GOVERNOR (live's callback, after its render; Slab.shed):
@@ -14058,6 +14208,22 @@ void nv_part_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, vo
 // THE PIPELINE (live's TUNING_GPU_PIPELINE): on, every block a block late --
 // the CPU's setup of the next while the GPU renders this one (an OpenCL GPU's)
 void nv_part_pipeline(void *h, int on) { ((nv::slab::Part *)h)->pipeline = on != 0; }
+
+// THE REACH (0: none): how far past its start a GPU block may be run on for a
+// held moment -- its partials ringing on from its own descriptors
+void nv_part_gpu_span(void *h, long span) { ((nv::slab::Part *)h)->gpu_span = span > 0 ? span : 0; }
+
+// A HELD MOMENT: frames from output sample pos, the partials ringing on from
+// the newest GPU block that reaches them, the room replayed (first: a hold's
+// start), and LOOK frames more into Lx/Rx -- from another thread than the
+// blocks'; frames given, 0 none
+int nv_part_extend(void *h, long long pos, int frames, float *L, float *R, int first, int look, float *Lx, float *Rx)
+{
+    return ((nv::slab::Part *)h)->extend(pos, frames, L, R, first != 0, look, Lx, Rx);
+}
+
+// the output's lag behind the block set up (the pipeline's), samples
+long long nv_part_out_lag(void *h) { return ((nv::slab::Part *)h)->out_lag(); }
 
 // the pipeline's depth: 1 (live's), 2 (an app's: the GPU two blocks to answer in)
 void nv_part_gpu_depth(void *h, int depth)

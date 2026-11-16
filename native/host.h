@@ -68,7 +68,8 @@ int nv_host_pull_step(nv_host *h, float *L, float *R, int frames, int step);
    through nv_host_midi_at heard that much later, all alike). Turned on before
    the first callback. stats: [0] callbacks that held, [1] frames held ever,
    [2] frames owed now, [3] frames rendered, [4] frames handed out,
-   [5] returns, [6] frames returned. What is held is the sound just heard
+   [5] returns, [6] frames returned, [7] frames held by the partials ringing on
+   (--gpu-span: nothing borrowed). What is held is the sound just heard
    going on (rubfill.h), crossed into the late block when it comes */
 int nv_host_set_rubato(nv_host *h, int on, double wait_fraction);
 void nv_host_rubato_stats(const nv_host *h, long long *stats);
