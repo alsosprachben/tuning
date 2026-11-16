@@ -33,7 +33,7 @@ kernel void voices(constant vargs& A [[buffer(0)]], device const vdesc* D [[buff
                 voice_sample(D+i, C, SB, kk, A.n0+(ulong)kk, invb, A.mg, invg, A.send, o);
         else
             for(int i=i0; i<i1; i++)
-                voice_sample_ext(D+i, kk, A.n0+(ulong)kk, A.span, o);       // (gpukernel.cl's)
+                voice_sample_ext(D+i, C, SB, kk, A.n0+(ulong)kk, A.span, A.mg, o);       // (gpukernel.cl's)
     }
     for(int c=0; c<4; c++) red[(c*LG+lg)*LK+lk] = o[c];
     threadgroup_barrier(mem_flags::mem_threadgroup);

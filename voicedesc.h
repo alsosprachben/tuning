@@ -275,11 +275,76 @@ static inline void voice_sample(const VGLOBAL vdesc* d, const VGLOBAL vcell* C, 
 // own line was going, as a decay (the end's level times end/start each
 // block further: a partial's fall is exponential, and never crosses zero);
 // a line that was rising is held at its end; a fast exponential runs on as
-// it was. A partial whose block ended it stays silent; so does a Moog
-// partial (its cells are the block's). Accurate to its block's first
-// order -- what a held moment needs, not what a block does.
-static inline void voice_sample_ext(const VGLOBAL vdesc* d, int k, u64 n, int blk, VPRIV float* o)
+// it was. A partial whose block ended it stays silent. A Moog partial rings
+// on from its LAST CELL: its pitch, waveshape and FM as they stood at the
+// block's end (each phasor turned on from its anchor), its level the cell's
+// end level, falling on as the block fell, held if it rose. Accurate to its
+// block's first order -- what a held moment needs, not what a block does.
+static inline void voice_sample_ext(const VGLOBAL vdesc* d, const VGLOBAL vcell* C, const VGLOBAL vsb* SB,
+                                    int k, u64 n, int blk, int mg, VPRIV float* o)
 {
+    if(d->kind==2){
+        if(d->ne<blk || k<d->ns) return;
+        const VGLOBAL vcell* v=C+d->cell+(blk-1)/mg;         // the last cell
+        const VGLOBAL vcell* v0=C+d->cell+d->ns/mg;          // ...and the first the partial sounds in
+        float eL=v->gL1*d->aL, eR=v->gR1*d->aR;              // the level at the block's end
+        float bL=v0->gL0*(d->aLp+(d->aL-d->aLp)*((float)v0->s0/(float)blk));
+        float bR=v0->gR0*(d->aRp+(d->aR-d->aRp)*((float)v0->s0/(float)blk));
+        float t=(float)(k-blk)/(float)(blk-v0->s0 > 0 ? blk-v0->s0 : blk);
+        float mL=(bL>eL && eL>0.f) ? eL*VEXP(VLOG(eL/bL)*t) : eL;
+        float mR=(bR>eR && eR>0.f) ? eR*VEXP(VLOG(eR/bR)*t) : eR;
+        float zrL, ziL, zrR, ziR;
+        int fl=d->flags;
+        if(fl & VD_PM){
+            V_TURN2(zrL, ziL, zrR, ziR, v->zLr, v->zLi, v->zRr, v->zRi, k-v->s0, v->wc);
+        } else {
+            V_TURN2(zrL, ziL, zrR, ziR, d->zLr, d->zLi, d->zRr, d->zRi, k-d->ns, d->winst);
+        }
+        float sL=zrL, sR=zrR;
+        if(fl & VD_NOISE){
+            u64 ui=n*d->nk_hi+v_mulhi(n, d->nk_lo);
+            float uf=(float)(n*d->nk_lo)*(1.0f/18446744073709551616.0f);
+            float jn=6.2831853f*v_noise_phase(d->nseed, ui, uf), cn=VCOS(jn), sn=VSIN(jn);
+            sL=zrL*cn-ziL*sn; sR=zrR*cn-ziR*sn;
+        }
+        float czL=zrL, czR=zrR, sgL=ziL, sgR=ziR;
+        if(fl & VD_FMS){
+            float Fr=0.f, Fi=0.f;
+            for(int i=0;i<v->nsb;i++){
+                const VGLOBAL vsb* q=SB+v->sb+i;
+                float gr=q->g0r+q->dgr, gi=q->g0i+q->dgi, pr, pi;     // (the gains at the cell's end)
+                V_TURN(pr, pi, q->pzr, q->pzi, k-v->s0, q->th);
+                Fr+=gr*pr-gi*pi; Fi+=gr*pi+gi*pr;
+            }
+            czL=zrL*Fr-ziL*Fi; sgL=zrL*Fi+ziL*Fr;
+            czR=zrR*Fr-ziR*Fi; sgR=zrR*Fi+ziR*Fr;
+            sL=czL; sR=czR;
+        } else if(fl & VD_FMO){
+            float z1r, z1i;
+            V_TURN(z1r, z1i, v->z1r, v->z1i, k-v->s0, v->th1);
+            float pr=z1r, pi=z1i, A=0.f;
+            for(int jj=0;jj<8;jj++){
+                A += v->B[2*jj]*pi + v->B[2*jj+1]*pr;
+                float tr=pr*z1r-pi*z1i; pi=pr*z1i+pi*z1r; pr=tr;
+            }
+            float dl=v->fmkI*A, cd=VCOS(dl), sd=VSIN(dl);
+            czL=zrL*cd-ziL*sd; sgL=zrL*sd+ziL*cd;
+            czR=zrR*cd-ziR*sd; sgR=zrR*sd+ziR*cd;
+            sL=czL; sR=czR;
+        }
+        if(fl & VD_SHAPE){
+            sL=v->cRe1*czL-v->cIm1*sgL; sR=v->cRe1*czR-v->cIm1*sgR;
+        }
+        if(d->jfa>0.f){
+            u64 idx=n*d->chk_hi+v_mulhi(n, d->chk_lo);
+            float jit=6.2831853f*v_hash01(idx)*d->cc, cj=VCOS(jit), sj=VSIN(jit);
+            sL+=(zrL*cj-ziL*sj)*d->jfa;
+            sR+=(zrR*cj-ziR*sj)*d->jfa;
+        }
+        if(fl & VD_LESLIE){ float g=d->lg[VD_LG-1]; mL*=g; mR*=g; }
+        o[0]+=mL*sL; o[1]+=mR*sR;
+        return;
+    }
     if(d->kind!=1 || d->ne<blk || k<d->ns) return;
     float zrL, ziL, zrR, ziR;
     V_TURN2(zrL, ziL, zrR, ziR, d->zLr, d->zLi, d->zRr, d->zRi, k-d->ns, d->winst);

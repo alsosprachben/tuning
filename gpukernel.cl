@@ -31,7 +31,7 @@ __kernel void voices(const int nd, const int per, const int frames, const int mg
                 voice_sample(D+i, C, SB, kk, n0+(ulong)kk, invb, mg, invg, send, o);
         else
             for(int i=i0; i<i1; i++)
-                voice_sample_ext(D+i, kk, n0+(ulong)kk, span, o);
+                voice_sample_ext(D+i, C, SB, kk, n0+(ulong)kk, span, mg, o);
     }
     for(int c=0; c<4; c++) red[(c*LG+lg)*LK+lk] = o[c];
     barrier(CLK_LOCAL_MEM_FENCE);

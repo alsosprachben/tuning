@@ -12031,8 +12031,7 @@ struct Part {
     // THE REACH (nv_part_gpu_span; 0: none): how far past its start a GPU
     // block may be run on for a held moment (extend) -- its own descriptors,
     // the partials ringing on from the state they were set up in
-    // (voicedesc.h's voice_sample_ext). Not a block with a Moog partial:
-    // its cells are the block's
+    // (voicedesc.h's voice_sample_ext; a Moog partial from its last cell)
     long gpu_span = 0;
     struct SlotRec {                    // each launch slot's block: where its descriptors start, how far they reach
         std::atomic<long long> n0{0};
@@ -12221,16 +12220,8 @@ struct Part {
             Table &D = turn == 2 ? gp.D3 : turn ? gp.D2 : gp.D, &C = turn == 2 ? gp.C3 : turn ? gp.C2 : gp.C,
                   &SB = turn == 2 ? gp.SB3 : turn ? gp.SB2 : gp.SB;
             long mg = 0;
-            // (how far it may ring on: not with a Moog partial, whose cells are the block's)
-            long span = blk;
-            if (gpu_span > blk) {
-                bool plain = true;
-                for (long q = 0; q < S.cap && plain; q++)
-                    if (S.busy[q] && S.i4[I4_fx][q] >= 0 && S.mx_on[S.i4[I4_fx][q]])
-                        plain = false;
-                if (plain)
-                    span = gpu_span;
-            }
+            // (how far it may ring on: a Moog partial from its last cell)
+            long span = gpu_span > blk ? gpu_span : blk;
             SlotRec &sr = srec[turn];
             sr.span.store(0, std::memory_order_release);
             while (sr.busy.load(std::memory_order_acquire))
