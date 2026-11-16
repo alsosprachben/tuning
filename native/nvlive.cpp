@@ -704,6 +704,43 @@ int nv_host::run(int argc, char **argv)
         }
         std::vector<float> buf(2 * BLK);
         long long n0 = 0;
+        // --rubato[=FRAMES] (Linux live, opt-in): this thread is the device,
+        // FRAMES at a time through the rubato callback (nv_host_pull: the
+        // blocks on the render thread, held past a deadline -- the partials
+        // ringing on with --gpu-span -- time bent and given back), written to
+        // ALSA, whose blocking write is the clock. Without it, as always
+        const std::string rubo = opt(argc, argv, "rubato", "");
+        bool rub_flag = false;
+        for (int q = 1; q < argc; q++)
+            rub_flag = rub_flag || !strcmp(argv[q], "--rubato");
+        if (!rubo.empty() || rub_flag) {
+            const int P = rubo.empty() ? 256 : std::max(16, atoi(rubo.c_str()));
+            rub_rt_prio = nort ? -1 : atoi(opt(argc, argv, "rt-prio", std::to_string(rt::PRIO).c_str()).c_str());
+            nv_host_set_rubato(this, 1, 0.75);
+            fprintf(stderr, "nvlive: rubato, %d frames a callback (%.2f ms)\n", P, 1000.0 * P / SR);
+            std::vector<float> l(P), r(P), out(2 * P);
+            while (!g_stop) {
+                nv_host_pull(this, l.data(), r.data(), P);
+                for (int k = 0; k < P; k++) {
+                    out[2 * k] = l[k];
+                    out[2 * k + 1] = r[k];
+                }
+                long w = A.writei(A.pcm, out.data(), (unsigned long)P);
+                if (w < 0) {
+                    underruns += w == -32;
+                    if (A.recover(A.pcm, (int)w, 1) >= 0)
+                        A.writei(A.pcm, out.data(), (unsigned long)P);
+                    std::lock_guard<std::mutex> lk(pmu);
+                    snap.underruns = underruns;
+                }
+            }
+            nv_host_set_rubato(this, 0, 0.75);
+            long long rs[8];
+            nv_host_rubato_stats(this, rs);
+            fprintf(stderr, "nvlive: rubato: %lld held, %lld frames borrowed, %lld returned in %lld; %lld frames rung on\n",
+                    rs[0], rs[1], rs[6], rs[5], rs[7]);
+            return;
+        }
         while (!g_stop) {
             render_block(n0, buf.data());
             long w = A.writei(A.pcm, buf.data(), (unsigned long)BLK);

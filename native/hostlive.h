@@ -1376,6 +1376,7 @@ struct nv_host {
     // stalls it injects)
     std::function<bool(long long n0, float *buf)> rub_block;
     long rub_stall_every = 0;
+    int rub_rt_prio = -1;                   // (the render thread real-time at this priority: nvlive's live --rubato)
     double rub_stall_ms = 0.0;
     void rub_loop();
     // (in step, --test's: the room's tail to install after the block, the

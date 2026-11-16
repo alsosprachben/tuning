@@ -3459,6 +3459,11 @@ void nv_host_set_cold_start(nv_host *h, int blocks, double cold_seconds, double 
 
 void nv_host::rub_loop()
 {
+    if (rub_rt_prio > 0) {                  // (as the audio thread: the music is made here now)
+        const std::string why = rt::promote(rub_rt_prio);
+        if (!why.empty())
+            fprintf(stderr, "nvlive: the render thread not real-time (%s)\n", why.c_str());
+    }
     while (!rub_stop.load()) {
         rub_go.wait();
         if (rub_stop.load())
