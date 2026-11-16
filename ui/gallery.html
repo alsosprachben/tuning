@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Clavitone · controls</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="kit.css">
+</head>
+<!-- THE CONTROLS ON THE TOUCH SCREEN (step 2): each one to try with fingers.
+     Those marked LIVE turn the selected part's real knobs. -->
+<body class="gallery">
+<header class="g-head">
+  <a class="hb" href="/" data-kit="1">◀ BACK</a>
+  <div class="g-title">CONTROLS <small id="who">connecting…</small></div>
+  <div class="g-help">Drag up or right · rest a second finger off the controls for fine · double-tap: back to the patch · hold: type a value</div>
+</header>
+<main class="g-grid">
+  <section class="g-card"><h2>Filter <small>live</small></h2><div class="g-row" id="filter"></div></section>
+  <section class="g-card"><h2>Oscillators <small>live</small></h2><div class="g-row" id="oscs"></div></section>
+  <section class="g-card"><h2>Switches <small>live</small></h2><div class="g-row" id="switches"></div></section>
+  <section class="g-card"><h2>Part level <small>live</small></h2><div class="g-row" id="faders"></div></section>
+  <section class="g-card g-wide"><h2>Display field and dial <small>not sent: try the feel</small></h2>
+    <div class="g-row"><div class="lcd g-lcd" id="fields"></div><div id="jog"></div></div></section>
+  <section class="g-card g-wide"><h2>What the fingers did</h2><div id="log" class="g-log"></div></section>
+</main>
+<script src="wire.js"></script>
+<script src="kit.js"></script>
+<script src="gallery.js"></script>
+</body>
+</html>

@@ -329,7 +329,22 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             ok = false;
             r.o["error"] = sess::str("no knob " + std::to_string(knob));
         } else if (call == "synth_set") {
-            nv_host_synth_set(h, row, layer, knob, std::max(-1.0, std::min(1.0, arg_d(q, "v", 0.0))));
+            const double v = std::max(-1.0, std::min(1.0, arg_d(q, "v", 0.0)));
+            nv_host_synth_set(h, row, layer, knob, v);
+            // ...and its new value in the panel's words (the set is posted:
+            // the panel as it stood, this knob moved)
+            double pn[NV_MK_N] = {};
+            char own[NV_MK_N] = {};
+            if (nv_host_synth_get(h, row, layer, pn, own) > 0) {
+                pn[knob] = v;
+                for (const Knob &k : knobs())
+                    if (k.knob == knob) {
+                        char b[64] = {};
+                        nv_host_synth_fmt(k.kind.c_str(), v, pn, b, sizeof b);
+                        r.o["text"] = sess::str(b);
+                        break;
+                    }
+            }
         } else {
             nv_host_synth_forget(h, row, layer, knob);
         }

@@ -33,6 +33,7 @@ body { background: #17191c; color: var(--silk); font-family: var(--f-ui); font-s
 .hb { font: 700 12px/1 var(--f-ui); letter-spacing: .08em; color: var(--silk); padding: 16px 6px; border-radius: 7px;
   background: linear-gradient(180deg, #3d434a, #2b2f34); border: 1px solid var(--edge); touch-action: manipulation; }
 .hb:active { background: #23262a; }
+a.hb { text-decoration: none; text-align: center; }
 .hb.panic { color: #f3b0a3; }
 .cols { flex: 1; min-height: 0; display: grid; grid-template-columns: 340px 1fr; gap: 12px; }
 .card { background: linear-gradient(180deg, var(--panel-hi), var(--panel)); border: 1px solid var(--edge); border-radius: 12px;
