@@ -2223,7 +2223,89 @@ void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double 
     return C;
 }
 
-void nv_tcache_free(void *h) { delete (nv::live::Cache *)h; }
+// (NV_CACHE_POISON=1, the checks': a cache let go is poisoned and kept, not
+// freed -- its numbers NaN, its indices wild, its classes gone -- so a part
+// that still reached it would sound NaN or fall over, not read freed memory)
+static void tmpl_poison(nv::live::Template &T)
+{
+    for (auto &v : T.f8) std::fill(v.begin(), v.end(), NAN);
+    for (auto &v : T.f4) std::fill(v.begin(), v.end(), NAN);
+    for (auto &v : T.f4n) std::fill(v.begin(), v.end(), NAN);
+    for (auto &v : T.i8) std::fill(v.begin(), v.end(), 1LL << 40);
+    for (auto &v : T.i4) std::fill(v.begin(), v.end(), 0x3fffffff);
+    std::fill(T.hrel.begin(), T.hrel.end(), NAN);
+    for (auto *vs : {&T.ranks, &T.jacks, &T.rel, &T.gpool, &T.roll_hit})
+        for (auto &s : *vs)
+            tmpl_poison(s);
+}
+
+void nv_tcache_free(void *h)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    if (C && getenv("NV_CACHE_POISON")) {
+        for (auto &kv : C->tm)
+            tmpl_poison(kv.second);
+        for (auto &u : C->vstore)
+            tmpl_poison(*u);
+        std::fill(C->K.begin(), C->K.end(), nullptr);
+        for (double &f : C->freq)
+            f = NAN;
+        return;
+    }
+    delete C;
+}
+
+// A CACHE's SIZE (the host's patch cache: live's LRU counts partials; here
+// the bytes its templates hold), and EVERY TEMPLATE IN IT a part can keep a
+// pointer to (its own, a drum key's edits, their organ ranks: a retired
+// cache's, nv_part_cache_retire) -- into out (cap), how many there are
+static size_t tmpl_bytes(const nv::live::Template &T)
+{
+    size_t b = sizeof T;
+    for (const auto &v : T.f8) b += v.capacity() * sizeof(double);
+    for (const auto &v : T.f4) b += v.capacity() * sizeof(float);
+    for (const auto &v : T.f4n) b += v.capacity() * sizeof(float);
+    for (const auto &v : T.i8) b += v.capacity() * sizeof(long long);
+    for (const auto &v : T.i4) b += v.capacity() * sizeof(int32_t);
+    b += T.hrel.capacity() * sizeof(float) + T.fa_at.capacity();
+    b += (T.rof.capacity() + T.sof.capacity() + T.cof.capacity() + T.gof.capacity()) * sizeof(long long);
+    for (const auto *vs : {&T.ranks, &T.jacks, &T.rel, &T.gpool, &T.roll_hit})
+        for (const auto &s : *vs)
+            b += tmpl_bytes(s);
+    return b;
+}
+
+long long nv_tcache_bytes(void *h)
+{
+    const nv::live::Cache *C = (const nv::live::Cache *)h;
+    size_t b = sizeof *C;
+    for (const auto &kv : C->tm)
+        b += tmpl_bytes(kv.second);
+    for (const auto &u : C->vstore)
+        b += tmpl_bytes(*u);
+    return (long long)b;
+}
+
+long nv_tcache_templates(void *h, const void **out, long cap)
+{
+    const nv::live::Cache *C = (const nv::live::Cache *)h;
+    long n = 0;
+    auto put = [&](const nv::live::Template &T) {
+        if (n < cap)
+            out[n] = &T;
+        n++;
+        for (const auto &R : T.ranks) {
+            if (n < cap)
+                out[n] = &R;
+            n++;
+        }
+    };
+    for (const auto &kv : C->tm)
+        put(kv.second);
+    for (const auto &u : C->vstore)
+        put(*u);
+    return n;
+}
 
 // the Leslie's constants for a rotary voice's templates (the export's LESL)
 void nv_tcache_leslie(void *h, const double *L, int n) { ((nv::live::Cache *)h)->les.assign(L, L + n); }

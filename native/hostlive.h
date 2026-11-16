@@ -155,6 +155,12 @@ void *nv_room_new(void *cn, void *cp, void *cf, const float *ir, long n, const f
 void nv_part_room_set(void *h, void *room, long long frames);
 void nv_part_conv(void *h, void *cn, void *cp, void *cf);
 void nv_part_room_reap(void *h);
+void nv_part_cache_retire(void *h, void *cache, const void *const *ts, long n);
+int nv_part_cache_reap(void *h);
+int nv_part_cache_retiring(void *h);
+void nv_tcache_free(void *h);
+long long nv_tcache_bytes(void *h);
+long nv_tcache_templates(void *h, const void **out, long cap);
 long nv_tcache_room_q(void *h, double *out, long cap);
 long nv_room_tail_ir(const double *sp, const double *bq, int has_bq, int sr, int seed, double **out);
 long nv_room_tail_modes(const double *sp, const double *bq, int has_bq, int sr, double **out, int *nmodes);
@@ -1020,7 +1026,22 @@ struct nv_host {
     std::function<void()> landed;
     std::function<int(std::vector<Req> &rq)> settle;
     std::string room_now;
-    std::vector<void *> cache_grave;
+    // THE PATCH CACHE (live's _PATCHES: an LRU by size, never a patch a part
+    // plays or has asked for): each key's last use, each cache's bytes, the
+    // cap (NV_PATCH_CACHE_MB); what the builder lets go -- the LRU's, and a
+    // room's, tuner's or eastern tuning's old patches -- to the part between
+    // two blocks with its templates (retire_req, under bmu), freed by the
+    // builder once the part reaches it no more (nv_part_cache_reap); the
+    // keys the parts play or want (the audio thread's, under bmu)
+    std::map<int, long long> cache_used;
+    std::map<void *, long long> cache_bytes;
+    long long cache_tick = 0, cache_cap = 256LL << 20;
+    std::vector<std::pair<void *, std::vector<const void *>>> retire_req;
+    std::vector<int> pin_keys;
+    int cache_freed = 0;
+    std::function<void(const std::vector<void *> &)> retire;
+    std::function<void(const std::set<int> &)> cache_trim;
+    std::function<void()> pins_update;
     std::function<int(double *bq)> room_band_q;
     // (tl: a GS reverb's tail -- gain, time scale, delay feedback < 0 none --
     // NULL the room's plain one: live.room_irs's tail)

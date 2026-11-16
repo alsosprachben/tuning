@@ -499,6 +499,16 @@ bool read_export(const char *path, Export &E)
 #include "hostlive.h"
 #include "host.h"
 
+#ifdef __GLIBC__
+#include <malloc.h>
+#endif
+// A PATCH's KEY in caches (build's: a map's own drum set past them all)
+static int cache_key(int prog, bool dr, int var)
+{
+    return dr && prog >= 128 ? 256 * (4096 + prog) + 128 : 256 * var + (dr ? 128 : 0) + (prog & 127);
+}
+
+
 int nv_host::open(int argc, char **argv)
 {
     if (argc < 2) {
@@ -1179,8 +1189,10 @@ int nv_host::open(int argc, char **argv)
         {
             std::lock_guard<std::mutex> lk(cmu);
             auto it = caches.find(key);
-            if (it != caches.end())
+            if (it != caches.end()) {
+                cache_used[key] = ++cache_tick;
                 return it->second;
+            }
         }
         const int *pq = prec(prog, dv);
         if (!pq[0] || var_entry_of(prog & 127, dv) <= 0)
@@ -1199,6 +1211,7 @@ int nv_host::open(int argc, char **argv)
         nv_tcache_warm(c, prog & 127, lo, hi, pq[1], sp, pq[2]);
         std::lock_guard<std::mutex> lk(cmu);
         caches[key] = c;
+        cache_used[key] = ++cache_tick;
         return c;
     };
     // ...given to a part's patch (nvlive's start, swap): its record's buckets and speed
@@ -1224,8 +1237,10 @@ int nv_host::open(int argc, char **argv)
         {
             std::lock_guard<std::mutex> lk(cmu);
             auto it = caches.find(key);
-            if (it != caches.end())
+            if (it != caches.end()) {
+                cache_used[key] = ++cache_tick;
                 return it->second;
+            }
         }
         bool native = false;
         if (mapk) {
@@ -1291,8 +1306,100 @@ int nv_host::open(int argc, char **argv)
         }
         std::lock_guard<std::mutex> lk(cmu);
         caches[key] = c;
+        cache_used[key] = ++cache_tick;
         return c;
     };
+    // PATCHES LET GO (off the audio thread): to the part with their
+    // templates, at the next hand-off (the caller holds neither lock)
+    retire = [&](const std::vector<void *> &cs) {
+        if (cs.empty())
+            return;
+        std::vector<std::pair<void *, std::vector<const void *>>> rs;
+        for (void *c : cs) {
+            std::vector<const void *> ts((size_t)nv_tcache_templates(c, nullptr, 0));
+            nv_tcache_templates(c, ts.data(), (long)ts.size());
+            std::sort(ts.begin(), ts.end());
+            rs.emplace_back(c, std::move(ts));
+        }
+        {
+            std::lock_guard<std::mutex> lk(cmu);
+            for (void *c : cs)
+                cache_bytes.erase(c);
+        }
+        std::lock_guard<std::mutex> lk(bmu);
+        for (auto &r : rs)
+            retire_req.push_back(std::move(r));
+    };
+    // THE LRU (live's patch_for): over the cap, the least recently used
+    // patch no part plays or wants, nor one just built (fresh) or built and
+    // not yet swapped in, is let go -- until under it, or every patch left is
+    // in use (a rig playing sixteen voices keeps all sixteen)
+    cache_trim = [&](const std::set<int> &fresh) {
+        std::set<int> pins(fresh.begin(), fresh.end());
+        std::set<void *> pinc;
+        {
+            std::lock_guard<std::mutex> lk(bmu);
+            pins.insert(pin_keys.begin(), pin_keys.end());
+            for (const auto &d : bdone)
+                pinc.insert(d.second);
+            for (const auto &d : add_done)
+                pinc.insert(d.second);
+        }
+        std::vector<void *> out;
+        {
+            std::lock_guard<std::mutex> lk(cmu);
+            long long tot = 0;
+            for (const auto &kv : caches) {
+                auto b = cache_bytes.find(kv.second);
+                if (b == cache_bytes.end())
+                    b = cache_bytes.emplace(kv.second, nv_tcache_bytes(kv.second)).first;
+                tot += b->second;
+            }
+            while (tot > cache_cap) {
+                int drop = -1;
+                long long oldest = LLONG_MAX;
+                for (const auto &kv : caches) {
+                    if (pins.count(kv.first) || pinc.count(kv.second))
+                        continue;
+                    auto u = cache_used.find(kv.first);
+                    const long long at = u != cache_used.end() ? u->second : 0;
+                    if (at < oldest) {
+                        oldest = at;
+                        drop = kv.first;
+                    }
+                }
+                if (drop < 0)
+                    break;                      // (every patch left is in use)
+                void *c = caches[drop];
+                tot -= cache_bytes[c];
+                caches.erase(drop);
+                cache_used.erase(drop);
+                out.push_back(c);
+            }
+        }
+        retire(out);
+    };
+    // THE KEYS IN USE (on the audio thread, bmu held): each part's patch,
+    // the one it asked for, and a pungi's drone beside each
+    pin_keys.reserve(256);
+    pins_update = [&]() {
+        pin_keys.clear();
+        auto pin = [&](int prog, bool dr, int var) {
+            pin_keys.push_back(cache_key(prog, dr, var));
+            const NoteClass *k = dr ? nullptr : cls60(prog, var);
+            if (k && k->n_dchoice && k->dchoice_var)
+                pin_keys.push_back(256 * k->dchoice_var + (prog & 127));
+        };
+        for (const PartAt &pa : pats) {
+            if (pa.gone)
+                continue;
+            pin(pa.posted, pa.drums, pa.drums ? 0 : pa.posted_var);
+            if (pa.want >= 0)
+                pin(pa.want, pa.want_dr, pa.want_dr ? 0 : pa.want_var);
+        }
+    };
+    if (const char *mb = getenv("NV_PATCH_CACHE_MB"))
+        cache_cap = (long long)atof(mb) * (1LL << 20);
     // swap(): a built program posted to its part (nv_part_swap, done after the
     // next block's events), and its strings where they are another voice's
     // (live._reg_forget: the new voice's bank, or none)
@@ -1580,12 +1687,15 @@ int nv_host::open(int argc, char **argv)
         }
         t.reflect = rd->reflect;
         room_now = name;
+        std::vector<void *> old_;               // (the old patches: let go once nothing plays them)
         {
             std::lock_guard<std::mutex> lk(cmu);
             for (auto &kv : caches)
-                cache_grave.push_back(kv.second);
+                old_.push_back(kv.second);
             caches.clear();
+            cache_used.clear();
         }
+        retire(old_);
         for (size_t i = 0; i < pats.size(); i++) {
             const PartAt &pa = pats[i];
             if (pa.gone)
@@ -1670,12 +1780,15 @@ int nv_host::open(int argc, char **argv)
         psa.assign(128, -1);
         pnsw.assign(128, 0);
         retuned.assign(128, 0);                 // (each program's free strings, at the new pitches)
+        std::vector<void *> old_;               // (the old patches: let go once nothing plays them)
         {
             std::lock_guard<std::mutex> lk(cmu);
             for (auto &kv : caches)
-                cache_grave.push_back(kv.second);
+                old_.push_back(kv.second);
             caches.clear();
+            cache_used.clear();
         }
+        retire(old_);
         {
             std::lock_guard<std::mutex> lk(bmu);
             tuner_now = name;
@@ -1714,14 +1827,19 @@ int nv_host::open(int argc, char **argv)
         psa.assign(128, -1);
         pnsw.assign(128, 0);
         {
-            std::lock_guard<std::mutex> lk(cmu);
-            for (auto it = caches.begin(); it != caches.end();) {
-                if (!(it->first & 128) && indian(it->first & 127)) {
-                    cache_grave.push_back(it->second);
-                    it = caches.erase(it);
-                } else
-                    ++it;
+            std::vector<void *> old_;
+            {
+                std::lock_guard<std::mutex> lk(cmu);
+                for (auto it = caches.begin(); it != caches.end();) {
+                    if (!(it->first & 128) && indian(it->first & 127)) {
+                        old_.push_back(it->second);
+                        cache_used.erase(it->first);
+                        it = caches.erase(it);
+                    } else
+                        ++it;
+                }
             }
+            retire(old_);
         }
         {
             std::lock_guard<std::mutex> lk(bmu);
@@ -2153,6 +2271,13 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         }
         if (!tn.empty())
             tuner_switch(tn, [&](size_t i_, int p_, bool d_, int v_, void *c_) { swap(i_, p_, d_, v_, c_); });
+        {                               // ...and patches let go (a room's, a tuner's), freed once unreached
+            std::lock_guard<std::mutex> lk(bmu);
+            for (auto &r : retire_req)
+                nv_part_cache_retire(part, r.first, r.second.data(), (long)r.second.size());
+            retire_req.clear();
+        }
+        cache_freed += nv_part_cache_reap(part);
     } else {
         // the programs asked for to the builder, and those it has built swapped in
         {
@@ -2182,6 +2307,10 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                 for (auto &d : add_done)                // (the parts built: added)
                     part_added(d.first, d.second);
                 add_done.clear();
+                for (auto &r : retire_req)              // (patches let go: the part frees none it still reaches)
+                    nv_part_cache_retire(part, r.first, r.second.data(), (long)r.second.size());
+                retire_req.clear();
+                pins_update();
             }
         }
     }
@@ -2325,6 +2454,25 @@ void nv_host::start()
                 drum_build(dq);
             }
             nv_part_room_reap(part);                    // (an old tail, let go off the audio thread)
+            if (int fr = nv_part_cache_reap(part)) {    // (old patches nothing plays now)
+                cache_freed += fr;
+#ifdef __GLIBC__
+                malloc_trim(0);                         // (their pages back to the system: else only reused)
+#endif
+                long long held = 0;
+                int nc = 0;
+                {
+                    std::lock_guard<std::mutex> lk(cmu);
+                    for (const auto &kv : caches) {
+                        auto b = cache_bytes.find(kv.second);
+                        held += b != cache_bytes.end() ? b->second : 0;
+                        nc++;
+                    }
+                }
+                note("let go " + std::to_string(fr) + " old patch(es): " + std::to_string(nc) + " kept, "
+                     + std::to_string((int)(held >> 20)) + " MB");
+            }
+            std::set<int> fresh;                        // (the patches this pass builds: not the LRU's)
             std::string rname;
             double rtl[3];
             bool rtl_on;
@@ -2408,6 +2556,7 @@ void nv_host::start()
                 adds.swap(add_req);
             }
             for (const PartSpec &sp : adds) {
+                fresh.insert(cache_key(sp.program, sp.drums, sp.var));
                 void *c = build(sp.program, sp.drums, sp.var);
                 if (!c)
                     note(std::string(sp.drums ? "drum set " : "program ") + std::to_string(sp.program)
@@ -2427,6 +2576,7 @@ void nv_host::start()
                     had = caches.count(256 * (rq[q].dr ? 0 : rq[q].var) + (rq[q].dr ? 128 : 0) + rq[q].prog) > 0;
                 }
                 auto t0 = std::chrono::steady_clock::now();
+                fresh.insert(cache_key(rq[q].prog, rq[q].dr, rq[q].var));
                 void *c = build(rq[q].prog, rq[q].dr, rq[q].var);
                 std::string nm = rq[q].dr ? kit_name(rq[q].prog) : E.prog[rq[q].prog].name;
                 if (!c)
@@ -2439,6 +2589,8 @@ void nv_host::start()
                 std::lock_guard<std::mutex> lk(bmu);
                 bdone.push_back(std::make_pair(rq[q], c));
             }
+            if (!fresh.empty())
+                cache_trim(fresh);
             builder_busy = false;
         }
     };

@@ -465,6 +465,15 @@ int nv_host::run(int argc, char **argv)
                 }
             if (follow)
                 fprintf(stderr, "nvlive: %ld program change(s) followed\n", step_swaps);
+            {                                   // (the patch cache: what was let go and freed, what a part still reaches)
+                int nc;
+                {
+                    std::lock_guard<std::mutex> lk(cmu);
+                    nc = (int)caches.size();
+                }
+                fprintf(stderr, "nvlive: patches: %d kept, %d freed, %d let go and still reached\n", nc,
+                        cache_freed + nv_part_cache_reap(part), nv_part_cache_retiring(part));
+            }
             FILE *wf = fopen(argv[i + 2], "wb");
             if (!wf)
                 return 1;

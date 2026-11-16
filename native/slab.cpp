@@ -127,6 +127,7 @@ static double moog_a_vel_gain(int vel)
 }
 extern "C" const OrganSpec *nv_tcache_organ(void *h, int program);
 extern "C" const NoteClass *nv_tcache_class(void *h, int program);
+extern "C" void nv_tcache_free(void *h);
 extern "C" const NoteClass *nv_tcache_key_class(void *h, int program, int key);
 extern "C" double nv_tcache_trim(void *h, int program);
 extern "C" double nv_cab_gain(const NoteClass *k, double hz);
@@ -3137,6 +3138,7 @@ struct Part {
     std::mutex scan_mu;
     std::condition_variable scan_cv;
     std::deque<std::tuple<const nv::live::Template *, int, int>> scan_jobs;
+    const void *scan_work = nullptr;        // (the rank the worker is preparing now, under scan_mu)
     // (the audio thread never waits on the worker: when the lock is busy, what
     // it would hand over waits here -- the press plays dry, as when its rank is
     // not ready -- and goes with the next hand-off that gets the lock)
@@ -3225,9 +3227,11 @@ struct Part {
                 scan_jobs.pop_front();
                 if (scan_g.count(std::make_tuple((const void *)std::get<0>(j), std::get<1>(j), std::get<2>(j))))
                     continue;
+                scan_work = std::get<0>(j);     // (read unlocked: its cache kept till it is done)
             }
             ScanPrep g = make_prep(*std::get<0>(j), std::get<1>(j), std::get<2>(j));
             std::lock_guard<std::mutex> lk(scan_mu);
+            scan_work = nullptr;
             scan_g[std::make_tuple((const void *)std::get<0>(j), std::get<1>(j), std::get<2>(j))] = std::move(g);
         }
     }
@@ -7237,6 +7241,96 @@ struct Part {
                 continue;
             }
             i++;
+        }
+    }
+
+    // A PATCH LET GO (the host's patch cache: live's LRU, a room's or a
+    // tuner's switch): freed only once nothing here can reach it -- no patch
+    // or drone on it, no swap posted with it, no note sounding that was
+    // struck on it, no held key's key-up rows, jacks, texture or roll from
+    // it, no old valve of it, the scanner not reading it. Then what still
+    // names it (key_tone, tone_prog, tone_seg, scan_g) forgets it, and it
+    // goes to cache_trash for the host's builder to free off this thread
+    struct Retiring {
+        void *c;
+        std::vector<const void *> ts;       // its templates (and their ranks), sorted
+    };
+    std::vector<Retiring> retiring;
+    std::mutex cache_mu;
+    std::vector<void *> cache_trash;
+    long long retire_blocks = 0;
+    static bool owns(const Retiring &r, const void *T)
+    {
+        return std::binary_search(r.ts.begin(), r.ts.end(), T);
+    }
+    // (the scanner's lock held by the caller)
+    bool cache_reached(const Retiring &r) const
+    {
+        const void *c = r.c;
+        if (cache == c)
+            return true;
+        for (const Patch &p : patches)
+            if (p.cache == c || p.dcache == c)
+                return true;
+        for (const Post &q : posts)
+            if (q.kind == 1 && q.swap && q.swap->cache == c)
+                return true;
+        for (const auto &a : amp_retired)
+            if (a.second.second == c)
+                return true;
+        for (const auto &kv : S.live) {
+            const Key &k = kv.first;
+            auto t = key_tone.find(Key(std::get<0>(k), std::get<1>(k), std::get<2>(k), 0));
+            if (t != key_tone.end() && t->second == c)
+                return true;
+        }
+        for (const auto &kv : held_rel)
+            if (owns(r, kv.second.first))
+                return true;
+        for (const auto &kv : held_jacks)
+            if (owns(r, kv.second.first))
+                return true;
+        for (const TexGen &g : tex_gen)
+            if (owns(r, g.T))
+                return true;
+        for (const RollGen &g : roll_gen)
+            if (owns(r, g.T))
+                return true;
+        if (scan_work && owns(r, scan_work))
+            return true;
+        for (const auto &j : scan_jobs)
+            if (owns(r, std::get<0>(j)))
+                return true;
+        for (const auto &j : scan_pend)
+            if (owns(r, std::get<0>(j)))
+                return true;
+        return false;
+    }
+    void cache_retire_check()
+    {
+        if ((retire_blocks++ & 15) != 0)    // (every 16th block: a ring takes seconds to end anyway)
+            return;
+        std::unique_lock<std::mutex> ls(scan_mu, std::try_to_lock);
+        std::unique_lock<std::mutex> lc(cache_mu, std::try_to_lock);
+        if (!ls.owns_lock() || !lc.owns_lock())
+            return;                         // (never wait here: the next try)
+        for (size_t i = 0; i < retiring.size();) {
+            Retiring &r = retiring[i];
+            if (cache_reached(r)) {
+                i++;
+                continue;
+            }
+            for (auto it = key_tone.begin(); it != key_tone.end();)
+                it = it->second == r.c ? key_tone.erase(it) : std::next(it);
+            tone_prog.erase(r.c);
+            for (auto &kv : tone_seg)       // (a tombstone: the others keep their effect channels)
+                for (void *&s : kv.second)
+                    if (s == r.c)
+                        s = nullptr;
+            for (auto it = scan_g.begin(); it != scan_g.end();)
+                it = owns(r, std::get<0>(it->first)) ? scan_g.erase(it) : std::next(it);
+            cache_trash.push_back(r.c);
+            retiring.erase(retiring.begin() + (long)i);
         }
     }
 
@@ -13083,6 +13177,8 @@ struct Part {
             cut_go(n0);                         // the flicks due give way to their notes (live._cut_go)
         if (!amp_retired.empty())
             amp_retire(n0);
+        if (!retiring.empty())
+            cache_retire_check();
         std::vector<Ev> evs;
         evs.swap(events);
         std::vector<std::vector<uint8_t>> sxs;
@@ -14387,6 +14483,41 @@ void nv_part_room_set(void *h, void *room, long long frames)
 {
     ((nv::slab::Part *)h)->room_install((nv::slab::Room *)room, frames);
 }
+
+// A PATCH's CACHE LET GO (on the audio thread, between two blocks: the
+// host's bdone hand-off): ts its templates, n of them (nv_tcache_templates);
+// freed by nv_part_cache_reap once the part reaches it no more
+void nv_part_cache_retire(void *h, void *cache, const void *const *ts, long n)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (!cache)
+        return;
+    for (const auto &r : P->retiring)
+        if (r.c == cache)
+            return;
+    nv::slab::Part::Retiring r;
+    r.c = cache;
+    r.ts.assign(ts, ts + n);
+    std::sort(r.ts.begin(), r.ts.end());
+    P->retiring.push_back(std::move(r));
+}
+
+// ...freed, off the audio thread (the builder's); how many
+int nv_part_cache_reap(void *h)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    std::vector<void *> gone;
+    {
+        std::lock_guard<std::mutex> lk(P->cache_mu);
+        gone.swap(P->cache_trash);
+    }
+    for (void *c : gone)
+        nv_tcache_free(c);
+    return (int)gone.size();
+}
+
+// ...still waiting (the part reaches them), for the panel and the checks
+int nv_part_cache_retiring(void *h) { return (int)((nv::slab::Part *)h)->retiring.size(); }
 
 void nv_part_room_reap(void *h)
 {
