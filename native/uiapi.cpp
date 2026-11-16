@@ -171,7 +171,14 @@ J parts_of(nv_host *h)
         o.o["level_db"] = num(p.level_db);
         o.o["muted"] = sess::boolean(p.muted != 0);
         o.o["solo"] = sess::integer(p.solo);
+        o.o["touch_fixed"] = sess::boolean(p.touch_fixed != 0);
         o.o["name"] = sess::str(p.name);
+        // its channel's pan and sends, as a sequencer set them (an every-channel
+        // part reads the first channel's: a change goes to all of them)
+        o.o["pan"] = sess::integer(nv_host_chan_cc(h, p.channel, 10));
+        o.o["reverb"] = sess::integer(nv_host_chan_cc(h, p.channel, 91));
+        o.o["chorus"] = sess::integer(nv_host_chan_cc(h, p.channel, 93));
+        o.o["delay"] = sess::integer(nv_host_chan_cc(h, p.channel, 94));
         a.a.push_back(o);
     }
     return a;
@@ -235,6 +242,33 @@ J globals_of(nv_host *h)
     return g;
 }
 
+// THE FAVOURITES (the library's stars): favourites.json beside the session,
+// {"favourites": ["d:program.variation", ...]} -- shared by every viewer and the apps
+std::string favourites_path(nv_host *h)
+{
+    const std::string &sp = h->session_path;
+    if (sp.empty())
+        return "";
+    const size_t k = sp.rfind('/');
+    return (k == std::string::npos ? std::string() : sp.substr(0, k + 1)) + "favourites.json";
+}
+
+// what the builder is doing: the display's line while a patch builds
+J build_of(nv_host *h)
+{
+    J b = sess::obj();
+    long done = 0, total = 0;
+    char name[96] = {};
+    const int n = nv_host_building(h);
+    b.o["n"] = sess::integer(n);
+    if (n > 0 && nv_host_progress(h, &done, &total, name, sizeof name)) {
+        b.o["name"] = sess::str(name);
+        b.o["done"] = sess::integer(done);
+        b.o["total"] = sess::integer(total);
+    }
+    return b;
+}
+
 double now_s()
 {
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -244,7 +278,7 @@ double now_s()
 
 struct nv_ui_watch {
     int row = 0, layer = 0;
-    std::string parts_sent, synth_sent;
+    std::string parts_sent, synth_sent, build_sent;
     bool quiet = false;                 // (the last meters sent were silence: none until something sounds)
     long tick = 0;
 };
@@ -321,6 +355,49 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         }
     } else if (call == "part_solo") {
         nv_host_part_solo(h, row);
+    } else if (call == "part_touch") {
+        nv_host_part_touch(h, row, (int)arg_i(q, "fixed", 0));
+    } else if (call == "part_cc") {            // pan (10) and the sends (91 reverb, 93 chorus, 94 delay)
+        const int cc = (int)arg_i(q, "cc", -1);
+        int n = nv_host_parts(h, nullptr, 0);
+        std::vector<nv_host_partinfo> ps((size_t)std::max(0, n));
+        n = nv_host_parts(h, ps.data(), n);
+        if (row < 0 || row >= n || (cc != 10 && cc != 91 && cc != 93 && cc != 94)) {
+            ok = false;
+            r.o["error"] = sess::str("no part " + std::to_string(row) + " or cc " + std::to_string(cc));
+        } else {
+            nv_host_chan_cc_send(h, ps[(size_t)row].channel, cc, (int)arg_i(q, "v", 64));
+        }
+    } else if (call == "part_layer" || call == "part_split" || call == "part_delete") {
+        char why[256] = {};
+        const int rc = call == "part_layer"   ? nv_host_part_layer(h, row)
+                       : call == "part_split" ? nv_host_part_split(h, row, why, sizeof why)
+                                              : nv_host_part_delete(h, row, why, sizeof why);
+        if (rc != 0) {
+            ok = false;
+            r.o["error"] = sess::str(why[0] ? why : "not done");
+        }
+        r.o["parts"] = parts_of(h);
+    } else if (call == "favourites") {
+        J f;
+        const std::string fp = favourites_path(h);
+        const J *l = !fp.empty() && sess::load(fp, f) ? f.get("favourites") : nullptr;
+        r.o["favourites"] = l && l->is(J::ARR) ? *l : sess::arr();
+        r.o["kept"] = sess::boolean(!fp.empty());
+    } else if (call == "favourites_set") {
+        const std::string fp = favourites_path(h);
+        const J *l = q.get("favourites");
+        if (fp.empty() || !l || !l->is(J::ARR)) {
+            ok = false;
+            r.o["error"] = sess::str(fp.empty() ? "no session to keep them beside" : "no list");
+        } else {
+            J f = sess::obj();
+            f.o["favourites"] = *l;
+            if (!sess::save(fp, f)) {
+                ok = false;
+                r.o["error"] = sess::str("could not write " + fp);
+            }
+        }
     } else if (call == "synth") {
         r.o["synth"] = synth_of(h, row, (int)arg_i(q, "layer", w ? w->layer : 0));
     } else if (call == "synth_set" || call == "synth_forget") {
@@ -416,6 +493,15 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
             J pj;
             sess::parse(ps, pj);
             r.o["parts"] = pj;
+            any = true;
+        }
+        std::string bs;
+        put(bs, build_of(h));
+        if (bs != w->build_sent) {
+            w->build_sent = bs;
+            J bj;
+            sess::parse(bs, bj);
+            r.o["build"] = bj;
             any = true;
         }
         J sy = synth_of(h, w->row, w->layer);

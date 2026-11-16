@@ -1,5 +1,7 @@
 __pycache__/
 session.json
+favourites.json
+favourites.json.tmp
 session.json.bad
 session.json.tmp
 .nvbuild/

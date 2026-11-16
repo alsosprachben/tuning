@@ -1,44 +1,59 @@
-// THE TOUCH INTERFACE, step 1: the wire. One WebSocket to nvlive (uiserve.h);
-// each call {call, id, ...} answered by uiapi.cpp; what changed arrives on
-// its own (meters, parts, the selected part's knobs).
+// THE TOUCH INTERFACE: the front panel (the display, its seven fields, the
+// dial, the part keys), the card keys, and the cards -- Parts and Library
+// now; the synth's knobs plain until their card comes.
+//
+// Values the engine pushes (parts, meters, a knob turned on a Messenger)
+// never fight a finger: a control under one ignores them (kit.js), and a
+// value just changed here is laid over what the engine pushes for HOLD_MS,
+// till the engine has caught up -- so every view of it shows the same.
 'use strict';
 
 const $ = id => document.getElementById(id);
-let ws, nextId = 1;
-const waiting = new Map();
-const S = { parts: [], row: 0, layer: 0, knobs: [], synth: null };
+const S = {
+  parts: [], row: 0, layer: 0, knobs: [], synth: null,
+  patches: [], favs: new Set(), favsKept: false, fam: 'all', build: null, picking: null,
+};
+const HOLD_MS = 700;
+const FAMILIES = ['Piano', 'Chromatic Perc.', 'Organ', 'Guitar', 'Bass', 'Strings', 'Ensemble', 'Brass',
+  'Reed', 'Pipe', 'Synth Lead', 'Synth Pad', 'Synth Effects', 'Ethnic', 'Percussive', 'Sound Effects'];
+const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const note = n => NOTES[n % 12] + (Math.floor(n / 12) - 1);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const pad = (n, k) => String(n).padStart(k, '0');
+const signed = v => (v > 0 ? '+' : '') + v;
+const dbText = v => (v > 0 ? '+' : '') + v.toFixed(1);
+const panText = v => (v < 64 ? 'L' + (64 - v) : v > 64 ? 'R' + (v - 64) : 'C');
+const cur = () => S.parts[S.row];
+// a patch's family: GM's sixteen by program, the drum kits, and the MT-32's
+// and CM-32P's own tones (banks 127, 126: under GM's numbers, not its families)
+const BANKS = { 127: ['mt32', 'MT-32'], 126: ['cm32p', 'CM-64 PCM'] };
+const famOf = p => (p.drums ? 'drums' : BANKS[p.variation] ? BANKS[p.variation][0] : String(p.program >> 3));
+const famLabel = p => (p.drums ? 'Drum kits' : BANKS[p.variation] ? BANKS[p.variation][1] : FAMILIES[p.program >> 3]);
+const famName = p => (p.drums ? 'DRUM SET' : famLabel(p).toUpperCase());
 
-function call(name, args = {}) {
-  return new Promise(res => {
-    const id = nextId++;
-    waiting.set(id, res);
-    ws.send(JSON.stringify({ call: name, id, ...args }));
-  });
+// changed here a moment ago ("row:field" -> value, until): laid over the
+// engine's pushes till then
+const mine = new Map();
+function keep(row, args) {
+  const p = S.parts[row], until = performance.now() + HOLD_MS;
+  for (const k in args) { mine.set(row + ':' + k, { v: args[k], until }); if (p) p[k] = args[k]; }
+}
+function overlay(ps) {
+  const now = performance.now();
+  for (const [k, m] of mine) {
+    if (m.until < now) { mine.delete(k); continue; }
+    const [row, f] = k.split(':'), p = ps[+row];
+    if (p) p[f] = m.v;
+  }
 }
 
-function connect() {
-  ws = new WebSocket(`ws://${location.host}/ws`);
-  ws.onopen = async () => {
-    $('gone').hidden = true;
-    const h = await call('hello');
-    S.knobs = h.knobs || [];
-    const p = await call('parts');
-    S.parts = p.parts || [];
-    const s = await call('select', { row: S.row, layer: S.layer });
-    S.synth = s.synth;
-    drawParts(); drawSynth(); drawDisplay();
-  };
-  ws.onmessage = ev => {
-    const m = JSON.parse(ev.data);
-    if (m.id !== undefined && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); return; }
-    if (m.meters) drawMeters(m.meters);
-    if (m.parts) { S.parts = m.parts; drawParts(); drawDisplay(); }
-    if (m.synth && m.synth.row === S.row) { S.synth = m.synth; drawSynth(); }
-  };
-  ws.onclose = () => { $('gone').hidden = false; setTimeout(connect, 1000); };
+// a part's edit, merged with what it has (uiapi's part_set)
+function partSet(row, args) {
+  keep(row, args);
+  return Wire.call('part_set', { row, ...args });
 }
 
-// ---- the display
+// ---------------------------------------------------------------- THE DISPLAY
 const bars = [];
 (function makeBars() {
   for (let ch = 0; ch < 16; ch++) {
@@ -50,15 +65,66 @@ const bars = [];
   }
 })();
 
-function drawDisplay() {
-  const p = S.parts[S.row];
-  $('partno').textContent = p ? String(S.row + 1).padStart(2, '0') : '--';
-  $('patch').textContent = p ? p.name : '';
-  $('family').textContent = p ? (p.drums ? 'DRUM SET ' + p.program : 'PROGRAM ' + String(p.program).padStart(3, '0')) +
-    (p.variation ? '.' + p.variation : '') + (p.channel < 0 ? ' · ALL CH' : ' · CH ' + (p.channel + 1)) : '';
+// the seven fields: [label, lo, hi, text, from the part, to the engine, reset]
+// (LEVEL in half dB: the field steps by one)
+const FIELDS = [
+  ['LEVEL', -60, 20, v => dbText(v / 2), p => Math.round(p.level_db * 2), (r, v) => partSet(r, { level_db: v / 2 }), 0],
+  ['PAN', 0, 127, panText, p => p.pan, (r, v) => cc(r, 10, v), 64],
+  ['REVERB', 0, 127, String, p => p.reverb, (r, v) => cc(r, 91, v), 40],
+  ['CHORUS', 0, 127, String, p => p.chorus, (r, v) => cc(r, 93, v), 0],
+  ['DELAY', 0, 127, String, p => p.delay, (r, v) => cc(r, 94, v), 0],
+  ['KEY', -24, 24, signed, p => p.transpose, (r, v) => partSet(r, { transpose: v }), 0],
+  ['CH', 0, 16, v => (v ? String(v) : 'ALL'), p => p.channel + 1, (r, v) => partSet(r, { channel: v - 1 }), null],
+];
+const CC_KEY = { 10: 'pan', 91: 'reverb', 93: 'chorus', 94: 'delay' };
+function cc(row, n, v) {
+  keep(row, { [CC_KEY[n]]: v });
+  return Wire.call('part_cc', { row, cc: n, v });
 }
 
+const fields = [];
+let selField = null;
+FIELDS.forEach(([label, lo, hi, fmt, from, to, reset]) => {
+  const send = Wire.throttled(v => { to(S.row, v); changed(); });
+  const f = Kit.field($('fields'), {
+    label, lo, hi, value: 0, fmt,
+    travel: Math.max(160, 3 * (hi - lo + 1)),
+    onSelect: c => pickField(c),
+    onChange: v => send(v),
+    onReset: reset === null ? undefined : () => { f.set(reset); to(S.row, reset); changed(); },
+    onInfo: () => Kit.sheet({
+      title: label, text: fmt(f.get()), label: 'Value', value: f.get(), digits: 0, lo, hi,
+      hint: label === 'LEVEL' ? 'In half decibels: 0 is 0 dB, -12 is -6 dB.' : label === 'CH' ? '0 is every channel.' : '',
+      onSet: v => { f.set(Math.round(v)); to(S.row, Math.round(v)); changed(); },
+    }),
+  });
+  f.label = label; f.from = from;
+  fields.push(f);
+});
+function pickField(f) { selField = f; fields.forEach(x => x.select(x === f)); $('jogwho').textContent = f.label; }
+pickField(fields[0]);
+Kit.dial($('jog'), { onStep: d => { if (selField) selField.nudge(d); } });
+
+// a field moved here: the rest of the screen shows it at once
+function changed() { drawDisplay(); drawStrips(); }
+
+function drawDisplay() {
+  const p = cur();
+  $('partno').textContent = p ? pad(S.row + 1, 2) : '--';
+  $('patch').textContent = p ? p.name : '';
+  $('family').textContent = p
+    ? (p.drums ? 'DRUM SET ' + p.program : 'PROGRAM ' + pad(p.program, 3) + (p.variation ? '.' + p.variation : '') + ' · ' + famName(p)) +
+      (p.channel < 0 ? ' · ALL CH' : ' · CH ' + (p.channel + 1))
+    : '';
+  if (p) fields.forEach(f => f.set(f.from(p)));
+  $('mute').classList.toggle('on', !!(p && p.muted));
+  $('solo').classList.toggle('on', !!(p && p.solo === 1));
+  drawHealth();
+}
+
+let lastMeters = null;
 function drawMeters(m) {
+  lastMeters = m;
   m.bars.forEach((db, ch) => {
     const k = Math.round((db + 40) / 40 * 10);
     bars[ch].forEach((s, i) => s.classList.toggle('lit', i < k));
@@ -70,38 +136,317 @@ function drawMeters(m) {
   const cpu = m.budget_ms > 0 ? Math.round(100 * m.ms_mean / m.budget_ms) : 0;
   $('cpu').textContent = `CPU ${cpu}%${m.gpu ? ' GPU' : ''}`;
   $('voices').textContent = `VOICES ${Math.round(m.voices)}`;
-  $('health').textContent = m.underruns ? `UNDERRUNS ${m.underruns}` : m.rt_dropped ? 'RT DROPPED' : '';
+  drawHealth();
+}
+function drawHealth() {
+  const b = S.build, m = lastMeters;
+  let t = '';
+  if (b && b.n > 0) t = 'BUILDING' + (b.total > 0 ? ' ' + Math.round(100 * b.done / b.total) + '%' : '');
+  else if (m && m.underruns) t = `UNDERRUNS ${m.underruns}`;
+  else if (m && m.rt_dropped) t = 'RT DROPPED';
+  $('health').textContent = t;
+  $('health').classList.toggle('busy', !!(b && b.n > 0));
 }
 
-// ---- the parts
-function drawParts() {
-  const el = $('parts'); el.innerHTML = '';
-  S.parts.forEach(p => {
-    const d = document.createElement('div');
-    d.className = 'part' + (p.row === S.row ? ' sel' : '') + (p.muted || p.solo === 2 ? ' dim' : '');
-    const ch = p.channel < 0 ? 'all ch' : 'ch ' + (p.channel + 1);
-    d.innerHTML = `<span class="n">${String(p.row + 1).padStart(2, '0')}</span><div><div>${esc(p.name)}</div>` +
-      `<div class="d">${ch} · ${note(p.lo)}–${note(p.hi)}${p.transpose ? ` · ${p.transpose > 0 ? '+' : ''}${p.transpose}` : ''}` +
-      `${p.level_db ? ` · ${p.level_db > 0 ? '+' : ''}${p.level_db} dB` : ''}</div></div>` +
-      `<span>${p.muted ? 'M' : ''}${p.solo === 1 ? 'S' : ''}</span>`;
-    d.onclick = () => select(p.row);
-    el.appendChild(d);
-  });
-}
-
+// ---------------------------------------------------------------- THE PART KEYS
 async function select(row) {
   if (row < 0 || row >= S.parts.length) return;
   S.row = row; S.layer = 0;
-  drawParts(); drawDisplay();
-  const s = await call('select', { row, layer: 0 });
+  drawDisplay(); drawStrips(); drawKeyboard(); drawTiles(false);
+  const s = await Wire.call('select', { row, layer: 0 });
   S.synth = s.synth; drawSynth();
 }
+Kit.press($('prev'), () => select(S.row - 1));
+Kit.press($('next'), () => select(S.row + 1));
+Kit.press($('mute'), () => { const p = cur(); if (p) { partSet(S.row, { muted: p.muted ? 0 : 1 }); drawDisplay(); drawStrips(); drawKeyboard(); } });
+Kit.press($('solo'), () => soloPart(S.row));
+Kit.press($('panic'), () => Wire.call('panic'));
+async function soloPart(row) {
+  await Wire.call('part_solo', { row });
+  const r = await Wire.call('parts'); if (r.parts) setParts(r.parts);
+}
 
-// ---- the synth knobs, plain for now (the card comes in step 4)
+// ---------------------------------------------------------------- THE CARD KEYS
+const CARDS = [
+  ['parts', 'Parts', true], ['library', 'Library', true], ['synth', 'Synth', true],
+  ['organ', 'Organ'], ['piano', 'Piano'], ['drums', 'Drums'], ['effects', 'Effects'],
+  ['matrix', 'Matrix'], ['tuning', 'Tuning'], ['control', 'Control'], ['scenes', 'Scenes'], ['setup', 'Setup'],
+];
+const LATER = {
+  organ: 'stop tabs by division, drive and the rotor', piano: 'the damper, push to damp and the register',
+  drums: 'a pad for each key of the kit', effects: 'the insertion effect and the reverb, chorus, delay and EQ',
+  matrix: 'what each controller moves', tuning: 'the tuner, pitch standard and the Eastern systems',
+  control: 'on-screen controls, routes and learn', scenes: 'presets, scenes, the GS reset and the metronome',
+  setup: 'MIDI, audio, borrowed time and the globals',
+};
+let card = 'parts';
+try { card = localStorage.getItem('clavitone.card') || 'parts'; } catch (_) {}
+CARDS.forEach(([id, label, ready]) => {
+  const b = document.createElement('button');
+  b.className = 'ck' + (ready ? '' : ' later'); b.dataset.kit = '1'; b.dataset.id = id; b.textContent = label;
+  Kit.press(b, () => showCard(id));
+  $('keys').appendChild(b);
+});
+function showCard(id) {
+  card = id;
+  try { localStorage.setItem('clavitone.card', id); } catch (_) {}
+  const ready = CARDS.find(c => c[0] === id)?.[2];
+  document.querySelectorAll('#keys .ck').forEach(b => b.classList.toggle('on', b.dataset.id === id));
+  document.querySelectorAll('#deck > .card').forEach(c => { c.hidden = c.dataset.card !== (ready ? id : 'later'); });
+  if (!ready) $('later').textContent = `${CARDS.find(c => c[0] === id)[1]}: ${LATER[id]}. This card comes in a later step.`;
+  if (id === 'parts') { drawKeyboard(); drawStrips(); }
+  if (id === 'library') drawTiles(true);
+  if (id === 'synth') drawSynth();
+}
+
+// ---------------------------------------------------------------- PARTS: the keyboard and the parts' ranges
+const KB = { lo: 0, hi: 127, W: 1000, keyH: 56, laneH: 20, drag: null };
+const isBlack = n => [1, 3, 6, 8, 10].includes(n % 12);
+const whiteIdx = n => { let k = 0; for (let i = 0; i < n; i++) if (!isBlack(i)) k++; return k; };
+const NWHITE = whiteIdx(128);
+function keyLeft(n) { const ww = KB.W / NWHITE; return isBlack(n) ? whiteIdx(n) * ww - ww * 0.3 : whiteIdx(n) * ww; }
+function keyRight(n) { const ww = KB.W / NWHITE; return isBlack(n) ? whiteIdx(n) * ww + ww * 0.3 : (whiteIdx(n) + 1) * ww; }
+function keyAt(x) {            // the key under x (viewBox units): nearest centre
+  let best = 0, bd = 1e9;
+  for (let n = 0; n < 128; n++) { const d = Math.abs((keyLeft(n) + keyRight(n)) / 2 - x); if (d < bd) { bd = d; best = n; } }
+  return best;
+}
+function drawKeyboard() {
+  if (card !== 'parts') return;
+  const el = $('kb'), n = S.parts.length;
+  KB.W = Math.max(600, el.clientWidth || 1000);
+  KB.laneH = Math.max(10, Math.min(24, Math.floor(150 / Math.max(1, n))));
+  const H = KB.keyH + 16 + n * KB.laneH + 4;
+  let s = `<svg viewBox="0 0 ${KB.W} ${H}" width="${KB.W}" height="${H}">`;
+  for (let k = 0; k < 128; k++) if (!isBlack(k)) s += `<rect class="wk" x="${keyLeft(k)}" y="0" width="${keyRight(k) - keyLeft(k) - 1}" height="${KB.keyH}"/>`;
+  for (let k = 0; k < 128; k++) if (isBlack(k)) s += `<rect class="bk" x="${keyLeft(k)}" y="0" width="${keyRight(k) - keyLeft(k)}" height="${KB.keyH * 0.62}"/>`;
+  for (let k = 0; k < 128; k += 12) s += `<text class="oct" x="${keyLeft(k) + 3}" y="${KB.keyH + 13}">${note(k)}</text>`;
+  S.parts.forEach((p, i) => {
+    const y = KB.keyH + 16 + i * KB.laneH, x0 = keyLeft(p.lo), x1 = keyRight(p.hi);
+    const cls = 'lane' + (p.row === S.row ? ' sel' : '') + (p.muted || p.solo === 2 ? ' dim' : '');
+    s += `<g class="${cls}" data-row="${p.row}"><rect class="lane-bar" x="${x0}" y="${y + 1}" width="${Math.max(4, x1 - x0)}" height="${KB.laneH - 3}" rx="3"/>`;
+    if (KB.laneH >= 14) s += `<text class="lane-t" x="${x0 + 6}" y="${y + KB.laneH * 0.68}">${pad(p.row + 1, 2)} ${esc(p.name)}  ${note(p.lo)}–${note(p.hi)}</text>`;
+    s += `<rect class="lane-end" x="${x0}" y="${y + 1}" width="5" height="${KB.laneH - 3}"/><rect class="lane-end" x="${x1 - 5}" y="${y + 1}" width="5" height="${KB.laneH - 3}"/></g>`;
+  });
+  el.innerHTML = s + '</svg>';
+}
+// a lane: tap selects its part; a drag near an end moves that end (by key)
+(function laneDrag() {
+  const el = $('kb');
+  el.style.touchAction = 'none';
+  const vx = e => { const r = el.querySelector('svg').getBoundingClientRect(); return (e.clientX - r.left) * KB.W / r.width; };
+  const send = Wire.throttled(({ row, lo, hi }) => partSet(row, { lo, hi }));
+  el.addEventListener('pointerdown', e => {
+    const g = e.target.closest('.lane');
+    if (!g || KB.drag) return;
+    const row = +g.dataset.row, p = S.parts[row], x = vx(e);
+    const pxPerUnit = el.querySelector('svg').getBoundingClientRect().width / KB.W;
+    const near = 28 / pxPerUnit;           // (a fingertip from an end)
+    const dl = Math.abs(x - keyLeft(p.lo)), dr = Math.abs(x - keyRight(p.hi));
+    const end = dl < near && dl <= dr ? 'lo' : dr < near ? 'hi' : null;
+    KB.drag = { id: e.pointerId, row, end, moved: false, x0: e.clientX };
+    el.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  el.addEventListener('pointermove', e => {
+    const d = KB.drag;
+    if (!d || e.pointerId !== d.id || !d.end) return;
+    if (!d.moved && Math.abs(e.clientX - d.x0) < 6) return;
+    d.moved = true;
+    const p = S.parts[d.row], k = keyAt(vx(e));
+    if (d.end === 'lo') p.lo = Math.min(k, p.hi); else p.hi = Math.max(k, p.lo);
+    keep(d.row, { lo: p.lo, hi: p.hi });
+    send({ row: d.row, lo: p.lo, hi: p.hi });
+    drawKeyboard(); bubbleRange(e, p);
+  });
+  const up = e => {
+    const d = KB.drag;
+    if (!d || e.pointerId !== d.id) return;
+    KB.drag = null; $('kbBubble')?.remove();
+    if (!d.moved) select(d.row); else drawStrips();
+  };
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  function bubbleRange(e, p) {
+    let b = $('kbBubble');
+    if (!b) { b = document.createElement('div'); b.id = 'kbBubble'; b.className = 'kit-bubble'; document.body.appendChild(b); }
+    b.textContent = `${note(p.lo)} – ${note(p.hi)}`;
+    b.style.left = Math.max(4, e.clientX - b.offsetWidth / 2) + 'px'; b.style.top = Math.max(4, e.clientY - 90) + 'px';
+  }
+})();
+addEventListener('resize', () => drawKeyboard());
+
+// ---------------------------------------------------------------- PARTS: the channel strips
+let stripSig = '';
+const strips = [];
+function drawStrips() {
+  if (card !== 'parts') return;
+  const sig = S.parts.map(p => p.row).join(',');
+  if (sig !== stripSig) buildStrips(sig);
+  S.parts.forEach((p, i) => {
+    const st = strips[i]; if (!st) return;
+    st.el.classList.toggle('sel', p.row === S.row);
+    st.el.classList.toggle('dim', !!(p.muted || p.solo === 2));
+    st.name.textContent = p.name;
+    st.detail.textContent = `${p.drums ? 'drums' : 'prog ' + pad(p.program, 3) + (p.variation ? '.' + p.variation : '')} · ${note(p.lo)}–${note(p.hi)}`;
+    st.pan.set(p.pan / 127, panText(p.pan), p.pan !== 64);
+    st.level.set(p.level_db, p.level_db !== 0);
+    st.key.set(p.transpose);
+    st.ch.set(p.channel + 1);
+    st.mute.classList.toggle('on', !!p.muted);
+    st.solo.classList.toggle('on', p.solo === 1);
+    st.touch.textContent = p.touch_fixed ? 'FIXED' : 'VEL';
+    st.touch.classList.toggle('on', !!p.touch_fixed);
+  });
+}
+function buildStrips(sig) {
+  stripSig = sig;
+  const box = $('strips'); box.innerHTML = ''; strips.length = 0;
+  S.parts.forEach(p => {
+    const row = p.row;
+    const el = document.createElement('div'); el.className = 'strip';
+    const head = document.createElement('div'); head.className = 'st-head'; head.dataset.kit = '1';
+    head.innerHTML = `<span class="st-n">${pad(row + 1, 2)}</span><span class="st-name"></span><span class="st-d"></span>`;
+    Kit.press(head, () => select(row));
+    el.appendChild(head);
+    // the fader on the left; the pan knob, KEY and CH beside it
+    const body = document.createElement('div'); body.className = 'st-body'; el.appendChild(body);
+    const faders = document.createElement('div'); faders.className = 'st-fader'; body.appendChild(faders);
+    const side = document.createElement('div'); side.className = 'st-side'; body.appendChild(side);
+    const knobs = document.createElement('div'); knobs.className = 'st-knob'; side.appendChild(knobs);
+    const sendPan = Wire.throttled(v => cc(row, 10, v));
+    const pan = Kit.knob(knobs, {
+      label: 'pan', value: 0.5, centred: true, detents: [64 / 127],
+      fmt: v => panText(Math.round(v * 127)),
+      onChange: v => { keep(row, { pan: Math.round(v * 127) }); sendPan(Math.round(v * 127)); if (row === S.row) drawDisplay(); },
+      onReset: () => { cc(row, 10, 64); pan.set(64 / 127, 'C', false); if (row === S.row) drawDisplay(); },
+    });
+    const sendLvl = Wire.throttled(v => partSet(row, { level_db: Math.round(v * 2) / 2 }));
+    const level = Kit.fader(faders, {
+      label: 'level', lo: -30, hi: 10, value: 0, detents: [0], step: 0.5, travel: 220,
+      fmt: v => dbText(v) + ' dB',
+      onChange: v => { keep(row, { level_db: Math.round(v * 2) / 2 }); sendLvl(v); if (row === S.row) drawDisplay(); },
+      onReset: () => { level.set(0, false); partSet(row, { level_db: 0 }); if (row === S.row) drawDisplay(); },
+    });
+    const fl = document.createElement('div'); fl.className = 'st-fields lcd'; side.appendChild(fl);
+    const ms = document.createElement('div'); ms.className = 'st-ms'; el.appendChild(ms);
+    const mute = document.createElement('button'); mute.className = 'hb led'; mute.textContent = 'MUTE'; mute.dataset.kit = '1';
+    Kit.press(mute, () => { const q = S.parts[row]; partSet(row, { muted: q.muted ? 0 : 1 }); drawStrips(); drawDisplay(); drawKeyboard(); });
+    const solo = document.createElement('button'); solo.className = 'hb led'; solo.textContent = 'SOLO'; solo.dataset.kit = '1';
+    Kit.press(solo, () => soloPart(row));
+    ms.append(mute, solo);
+    const sendKey = Wire.throttled(v => partSet(row, { transpose: v }));
+    const key = Kit.field(fl, {
+      label: 'KEY', lo: -24, hi: 24, value: 0, fmt: signed, travel: 200,
+      onChange: v => { keep(row, { transpose: v }); sendKey(v); if (row === S.row) drawDisplay(); },
+      onReset: () => { key.set(0); partSet(row, { transpose: 0 }); if (row === S.row) drawDisplay(); },
+    });
+    const sendCh = Wire.throttled(v => partSet(row, { channel: v - 1 }));
+    const ch = Kit.field(fl, {
+      label: 'CH', lo: 0, hi: 16, value: 0, fmt: v => (v ? String(v) : 'ALL'), travel: 160,
+      onChange: v => { keep(row, { channel: v - 1 }); sendCh(v); if (row === S.row) drawDisplay(); },
+    });
+    const touch = document.createElement('button'); touch.className = 'hb led st-touch'; touch.dataset.kit = '1';
+    Kit.press(touch, () => { const q = S.parts[row]; q.touch_fixed = !q.touch_fixed; Wire.call('part_touch', { row, fixed: q.touch_fixed ? 1 : 0 }); drawStrips(); });
+    ms.appendChild(touch);
+    box.appendChild(el);
+    strips.push({ el, name: head.querySelector('.st-name'), detail: head.querySelector('.st-d'), pan, level, key, ch, mute, solo, touch });
+  });
+}
+async function partAct(name) {
+  const r = await Wire.call(name, { row: S.row });
+  $('partsMsg').textContent = r.ok ? '' : r.error || '';
+  if (r.parts) setParts(r.parts);
+}
+Kit.press($('layer'), () => partAct('part_layer'));
+Kit.press($('split'), () => partAct('part_split'));
+Kit.press($('remove'), () => partAct('part_delete'));
+
+// ---------------------------------------------------------------- THE LIBRARY
+const famList = [['fav', '★ Favourites'], ['all', 'All'], ...FAMILIES.map((f, i) => [String(i), f]), ['drums', 'Drum kits'],
+  ...Object.values(BANKS)];
+famList.forEach(([id, label]) => {
+  const b = document.createElement('button'); b.className = 'fam'; b.dataset.id = id; b.dataset.kit = '1'; b.textContent = label;
+  Kit.press(b, () => { S.fam = id; $('q').value = ''; drawTiles(true); });
+  $('fams').appendChild(b);
+});
+const favKey = p => `${p.drums ? 1 : 0}:${p.program}.${p.variation}`;
+const isCur = (p, q) => q && !!q.drums === !!p.drums && q.program === p.program && (q.drums || q.variation === p.variation);
+function shown() {
+  const words = $('q').value.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length) {
+    return S.patches.filter(p => {
+      const t = `${pad(p.program, 3)} ${p.name} ${famLabel(p)}`.toLowerCase();
+      return words.every(w => t.includes(w));
+    });
+  }
+  if (S.fam === 'all') return S.patches;
+  if (S.fam === 'fav') return S.patches.filter(p => S.favs.has(favKey(p)));
+  return S.patches.filter(p => famOf(p) === S.fam);
+}
+let tilesSig = '';
+function drawTiles(force) {
+  if (card !== 'library') return;
+  const searching = $('q').value.trim() !== '';
+  document.querySelectorAll('#fams .fam').forEach(b => b.classList.toggle('on', !searching && b.dataset.id === S.fam));
+  const list = shown(), p0 = cur();
+  const sig = list.length + '|' + $('q').value + '|' + S.fam + '|' + [...S.favs].join();
+  if (force || sig !== tilesSig) {
+    tilesSig = sig;
+    $('tiles').innerHTML = list.length ? list.map(p =>
+      `<button class="tile" data-kit="1" data-pick="${p.pick}"><span class="pn">${p.drums ? 'KIT ' + p.program : pad(p.program, 3) + (p.variation ? '<i>.' + p.variation + '</i>' : '')}</span>` +
+      `<span class="nm">${esc(p.name)}</span><span class="star${S.favs.has(favKey(p)) ? ' on' : ''}" data-fav="${favKey(p)}">★</span></button>`).join('')
+      : `<p class="empty">${S.fam === 'fav' && !searching ? 'No favourites yet: tap a patch\'s star to keep it here.' : 'Nothing matches.'}</p>`;
+  }
+  const byPick = new Map(S.patches.map(p => [String(p.pick), p]));
+  $('tiles').querySelectorAll('.tile').forEach(t => {
+    const p = byPick.get(t.dataset.pick);
+    t.classList.toggle('cur', isCur(p, p0));
+    t.classList.toggle('pending', S.picking === p.pick);
+  });
+  $('libInfo').textContent = `${list.length} patch${list.length === 1 ? '' : 'es'} · tap to play on part ${pad(S.row + 1, 2)}` +
+    (S.favsKept ? '' : ' · (no session: stars are not kept)');
+}
+Kit.press($('tiles'), async (t, e) => {
+  const star = e.target.closest('.star');
+  if (star) {
+    const k = star.dataset.fav;
+    if (S.favs.has(k)) S.favs.delete(k); else S.favs.add(k);
+    star.classList.toggle('on', S.favs.has(k));
+    Wire.call('favourites_set', { favourites: [...S.favs] });
+    if (S.fam === 'fav') drawTiles(true);
+    return;
+  }
+  S.picking = +t.dataset.pick;
+  drawTiles(false);
+  await Wire.call('part_pick', { row: S.row, pick: S.picking });
+}, '.tile');
+$('q').addEventListener('input', () => drawTiles(true));
+
+// the on-screen keys for the search (a touch screen with no keyboard; on a
+// tablet the system's own comes up instead)
+const ownKeys = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+if (ownKeys) {
+  $('q').setAttribute('inputmode', 'none');
+  const rows = ['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+  $('osk').innerHTML = rows.map(r => `<div>${[...r].map(c => `<button data-k="${c}">${c}</button>`).join('')}</div>`).join('') +
+    '<div><button data-k="clear" class="w">CLEAR</button><button data-k=" " class="space">SPACE</button><button data-k="back" class="w">⌫</button><button data-k="done" class="w">DONE</button></div>';
+  $('osk').querySelectorAll('button').forEach(b => { b.dataset.kit = '1'; });
+  $('osk').addEventListener('pointerdown', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    e.preventDefault();
+    const k = b.dataset.k, q = $('q');
+    if (k === 'done') { $('osk').hidden = true; q.blur(); return; }
+    q.value = k === 'clear' ? '' : k === 'back' ? q.value.slice(0, -1) : q.value + k;
+    drawTiles(true);
+  });
+  $('q').addEventListener('focus', () => { $('osk').hidden = false; });
+}
+
+// ---------------------------------------------------------------- THE SYNTH (plain until its card)
 let dragging = null;
 function drawSynth() {
   const el = $('synth'), sy = S.synth;
-  if (dragging) return;                       // (not under a finger)
+  if (dragging) return;
   el.innerHTML = '';
   $('synthWho').textContent = sy && sy.layers > 0 ? `part ${sy.row + 1}${sy.layers > 1 ? ' · layer ' + 'AB'[sy.layer] : ''}` : '';
   if (!sy || sy.layers <= 0) {
@@ -122,14 +467,14 @@ function drawSynth() {
       k.steps.forEach(st => {
         const b = document.createElement('button');
         b.textContent = st; b.className = Math.abs(st - v) < 1e-6 ? 'on' : '';
-        b.onclick = () => setKnob(k, st);
+        Kit.press(b, () => setKnob(k, st));
         seg.appendChild(b);
       });
       r.appendChild(seg);
     } else {
       const inp = document.createElement('input');
       inp.type = 'range'; inp.min = 0; inp.max = 1; inp.step = 0.001; inp.value = v;
-      inp.oninput = () => setKnob(k, +inp.value, true);
+      inp.oninput = () => setKnob(k, +inp.value);
       inp.onpointerdown = () => { dragging = inp; };
       inp.onpointerup = inp.onpointercancel = () => { dragging = null; refreshSynth(); };
       r.appendChild(inp);
@@ -139,28 +484,48 @@ function drawSynth() {
     box.appendChild(r);
   });
 }
+const sendKnob = Wire.throttled(async ({ k, v }) => {
+  await Wire.call('synth_set', { row: S.row, layer: S.layer, knob: k.knob, v });
+  if (!dragging) refreshSynth();
+});
+const setKnob = (k, v) => sendKnob({ k, v });
+async function forget(k) { await Wire.call('synth_forget', { row: S.row, layer: S.layer, knob: k.knob }); refreshSynth(); }
+async function refreshSynth() { const s = await Wire.call('synth', { row: S.row, layer: S.layer }); S.synth = s.synth; if (card === 'synth') drawSynth(); }
 
-let pend = null;
-function setKnob(k, v, live) {
-  // (a drag sends at most once a frame)
-  pend = { k, v };
-  if (live && setKnob.raf) return;
-  setKnob.raf = requestAnimationFrame(async () => {
-    setKnob.raf = null;
-    const p = pend; pend = null;
-    await call('synth_set', { row: S.row, layer: S.layer, knob: p.k.knob, v: p.v });
-    if (!dragging) refreshSynth();
-  });
+// ---------------------------------------------------------------- THE WIRE
+function setParts(ps) {
+  const before = S.parts.length;
+  overlay(ps);
+  S.parts = ps;
+  if (S.row >= ps.length) S.row = Math.max(0, ps.length - 1);
+  if (S.picking !== null) {           // (the patch asked for is the part's now)
+    const want = S.patches.find(p => p.pick === S.picking);
+    if (!want || isCur(want, cur())) S.picking = null;
+  }
+  drawDisplay(); drawStrips(); drawTiles(false);
+  if (!KB.drag) drawKeyboard();
+  if (ps.length !== before) select(S.row);
 }
-async function forget(k) { await call('synth_forget', { row: S.row, layer: S.layer, knob: k.knob }); refreshSynth(); }
-async function refreshSynth() { const s = await call('synth', { row: S.row, layer: S.layer }); S.synth = s.synth; drawSynth(); }
 
-$('prev').onclick = () => select(S.row - 1);
-$('next').onclick = () => select(S.row + 1);
-$('panic').onclick = () => call('panic');
-
-const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-function note(n) { return NOTES[n % 12] + (Math.floor(n / 12) - 1); }
-function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]); }
-
-connect();
+Wire.connect({
+  async open() {
+    $('gone').hidden = true;
+    const h = await Wire.call('hello');
+    S.knobs = h.knobs || [];
+    const [p, pt, fv] = await Promise.all([Wire.call('parts'), Wire.call('patches'), Wire.call('favourites')]);
+    S.patches = pt.patches || [];
+    S.favs = new Set(fv.favourites || []); S.favsKept = !!fv.kept;
+    S.parts = p.parts || [];
+    if (S.row >= S.parts.length) S.row = 0;
+    stripSig = '';
+    showCard(card);
+    select(S.row);
+  },
+  push(m) {
+    if (m.meters) drawMeters(m.meters);
+    if (m.build) { S.build = m.build; drawHealth(); }
+    if (m.parts) setParts(m.parts);
+    if (m.synth && m.synth.row === S.row) { S.synth = m.synth; if (card === 'synth') drawSynth(); }
+  },
+  down() { $('gone').hidden = false; },
+});

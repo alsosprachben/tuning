@@ -110,6 +110,36 @@ const Kit = (() => {
     return { busy: () => id !== null };
   }
 
+  // ---- A PRESS: a button acts when the finger lifts on it, unmoved -- not
+  // on the browser's click, which a touch screen's tap does not always get
+  // (Chromium dropped one after a drag elsewhere). A click with no finger
+  // before it (a key, a mouse with no pointer events) still acts.
+  // sel: the buttons inside el that act (delegated), fn(button, event)
+  function press(el, fn, sel) {
+    let st = null, fired = 0;
+    const which = e => (sel ? e.target.closest(sel) : el);
+    el.addEventListener('pointerdown', e => {
+      const b = which(e);
+      st = b && el.contains(b) ? { id: e.pointerId, b, x: e.clientX, y: e.clientY } : null;
+    });
+    el.addEventListener('pointerup', e => {
+      if (!st || e.pointerId !== st.id) return;
+      const b = st.b, far = Math.hypot(e.clientX - st.x, e.clientY - st.y) > 14;
+      st = null;
+      const at = document.elementFromPoint(e.clientX, e.clientY);
+      if (far || !at || !b.contains(at)) return;
+      fired = performance.now();
+      fn(b, e);
+    });
+    el.addEventListener('pointercancel', () => { st = null; });
+    el.addEventListener('click', e => {
+      const b = which(e);
+      if (!b || !el.contains(b)) return;
+      if (performance.now() - fired < 1000) return;        // (the press has done it)
+      fn(b, e);
+    });
+  }
+
   function svg(tag, attrs, parent) {
     const n = document.createElementNS(NS, tag);
     for (const k in attrs) n.setAttribute(k, attrs[k]);
@@ -210,7 +240,7 @@ const Kit = (() => {
     const btns = o.options.map((t, i) => {
       const b = document.createElement('button'); b.textContent = t; b.dataset.kit = '1';
       b.style.touchAction = 'manipulation';
-      b.onclick = () => { set(i); if (o.onChange) o.onChange(i); };
+      press(b, () => { set(i); if (o.onChange) o.onChange(i); });
       row.appendChild(b); return b;
     });
     const lab = document.createElement('div'); lab.className = 'kit-label'; lab.textContent = o.label || '';
@@ -229,7 +259,7 @@ const Kit = (() => {
     el.append(b, lab); parent.appendChild(el);
     let on = !!o.value;
     const draw = () => b.classList.toggle('on', on);
-    b.onclick = () => { on = !on; draw(); if (o.onChange) o.onChange(on); };
+    press(b, () => { on = !on; draw(); if (o.onChange) o.onChange(on); });
     draw();
     return { el, set(x) { on = !!x; draw(); } };
   }
@@ -247,6 +277,7 @@ const Kit = (() => {
       lo: o.lo, hi: o.hi, step: 1, axis: 'both', travel: o.travel || 4 * (o.hi - o.lo + 1), get: () => v,
       set(nv) { v = nv; draw(); if (o.onChange) o.onChange(nv); },
       text: () => `${o.label} ${fmt(v)}`, onTap: () => o.onSelect && o.onSelect(ctl), onReset: o.onReset,
+      onInfo: o.onInfo, onEnd: o.onEnd,
     });
     const ctl = {
       el, get: () => v,
@@ -282,25 +313,25 @@ const Kit = (() => {
   }
 
   // ---- THE SHEET (long-press): a control's value to type, and the patch's
-  // opts: { title, text, value (0..1 or lo..hi), lo, hi, onSet(v), onReset }
+  // opts: { title, text, label, value (0..1 or lo..hi), digits, lo, hi, hint, onSet(v), onReset }
   function sheet(o) {
     const back = document.createElement('div'); back.className = 'kit-sheet-back';
     const sh = document.createElement('div'); sh.className = 'kit-sheet';
     const lo = o.lo ?? 0, hi = o.hi ?? 1;
     sh.innerHTML = `<h3>${o.title}</h3><p class="now">${o.text}</p>` +
-      `<label>Position <input type="number" inputmode="decimal" step="any" min="${lo}" max="${hi}" value="${(+o.value).toFixed(3)}"></label>` +
+      `<label>${o.label || 'Position'} <input type="number" inputmode="decimal" step="any" min="${lo}" max="${hi}" value="${o.digits === 0 ? Math.round(+o.value) : (+o.value).toFixed(o.digits ?? 3)}"></label>` +
       `<p class="hint">${o.hint || ''}</p>` +
       `<div class="row">${o.onReset ? '<button class="reset">Back to the patch</button>' : ''}<button class="set">Set</button><button class="close">Close</button></div>`;
     back.appendChild(sh); document.body.appendChild(back);
     const inp = sh.querySelector('input');
     const close = () => back.remove();
-    sh.querySelector('.close').onclick = close;
+    press(sh.querySelector('.close'), close);
     back.addEventListener('pointerdown', e => { if (e.target === back) close(); });
-    sh.querySelector('.set').onclick = () => { const v = parseFloat(inp.value); if (isFinite(v)) o.onSet(Math.max(lo, Math.min(hi, v))); close(); };
-    if (o.onReset) sh.querySelector('.reset').onclick = () => { o.onReset(); close(); };
+    press(sh.querySelector('.set'), () => { const v = parseFloat(inp.value); if (isFinite(v)) o.onSet(Math.max(lo, Math.min(hi, v))); close(); });
+    if (o.onReset) press(sh.querySelector('.reset'), () => { o.onReset(); close(); });
   }
 
-  return { knob, fader, segments, toggle, field, dial, sheet, fine };
+  return { knob, fader, segments, toggle, field, dial, sheet, press, fine };
 })();
 
 // THE WAVES, as the engine makes them (moog.py _osc_parts, _sub_cached): each

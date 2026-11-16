@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Clavitone</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="kit.css">
 </head>
-<!-- THE TOUCH INTERFACE (nvlive --ui): step 1, the wire -- the display, the
-     parts, and the selected part's synth knobs as plain sliders; the cards
-     and their controls come next -->
+<!-- THE TOUCH INTERFACE (nvlive --ui): the front panel along the top -- the
+     display, its seven fields and the dial, the part keys -- then the card
+     keys, and one card below them filling the screen -->
 <body>
 <main id="app">
   <section class="unit">
@@ -18,23 +19,58 @@
         <div class="lcd-name"><small id="family">connecting</small><span id="patch">Clavitone</span></div>
         <div class="lcd-load"><span id="cpu">CPU --</span><br><span id="voices">VOICES --</span><br><span id="health"></span></div>
       </div>
+      <div class="lcd-fields" id="fields"></div>
       <div class="peaks"><div class="peak"><i id="pkL"></i></div><div class="peak"><i id="pkR"></i></div></div>
       <div class="bars" id="bars"></div>
       <div class="bar-n" id="barn"></div>
     </div>
     <div class="btns">
-      <button class="hb" id="prev">◀ PART</button>
-      <button class="hb" id="next">PART ▶</button>
-      <button class="hb panic" id="panic">PANIC</button>
-      <a class="hb" href="gallery.html">CONTROLS TEST</a>
+      <button class="hb" id="prev" data-kit="1">◀ PART</button>
+      <button class="hb" id="next" data-kit="1">PART ▶</button>
+      <button class="hb led" id="mute" data-kit="1">MUTE</button>
+      <button class="hb led" id="solo" data-kit="1">SOLO</button>
+      <button class="hb panic wide" id="panic" data-kit="1">PANIC</button>
     </div>
+    <div class="jogbox"><div id="jog"></div><small id="jogwho">LEVEL</small></div>
   </section>
-  <section class="cols">
-    <div class="card" id="partsCard"><h2>Parts</h2><div id="parts"></div></div>
-    <div class="card" id="synthCard"><h2>Synth <small id="synthWho"></small></h2><div id="synth"></div></div>
+  <nav class="keys" id="keys"></nav>
+  <section class="deck" id="deck">
+    <div class="card" data-card="parts">
+      <div class="card-head">
+        <h2>Parts <small id="partsMsg"></small></h2>
+        <div class="acts">
+          <button class="hb" id="layer" data-kit="1">LAYER</button>
+          <button class="hb" id="split" data-kit="1">SPLIT</button>
+          <button class="hb" id="remove" data-kit="1">REMOVE</button>
+        </div>
+      </div>
+      <div class="kb" id="kb" data-kit="1"></div>
+      <div class="strips" id="strips"></div>
+    </div>
+    <div class="card" data-card="library" hidden>
+      <div class="lib">
+        <nav class="fams" id="fams"></nav>
+        <div class="lib-main">
+          <div class="lib-head">
+            <input id="q" type="search" placeholder="Search patches" autocomplete="off" spellcheck="false">
+            <span id="libInfo"></span>
+          </div>
+          <div class="tiles" id="tiles"></div>
+          <div class="osk" id="osk" hidden></div>
+        </div>
+      </div>
+    </div>
+    <div class="card" data-card="synth" hidden>
+      <div class="card-head"><h2>Synth <small id="synthWho"></small></h2>
+        <div class="acts"><a class="hb" href="gallery.html" data-kit="1">CONTROLS TEST</a></div></div>
+      <div id="synth" class="synth-plain"></div>
+    </div>
+    <div class="card" data-card="later" hidden><p class="later-note" id="later"></p></div>
   </section>
 </main>
 <div id="gone" hidden>The engine stopped. Start nvlive --ui again to come back.</div>
+<script src="wire.js"></script>
+<script src="kit.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
