@@ -450,6 +450,21 @@ inline std::string promote(int)
     }).detach();
     return "";
 }
+
+// another thread on the time-constraint policy beside the guarded one (the Linux one's)
+inline std::string promote_aux(int)
+{
+    mach_timebase_info_data_t tb;
+    mach_timebase_info(&tb);
+    const double ticks_per_ms = 1e6 * tb.denom / tb.numer;
+    thread_time_constraint_policy_data_t pol;
+    pol.period = (uint32_t)(period_ms * ticks_per_ms);
+    pol.computation = (uint32_t)(period_ms * 0.75 * ticks_per_ms);
+    pol.constraint = (uint32_t)(period_ms * ticks_per_ms);
+    pol.preemptible = 1;
+    return thread_policy_set(mach_thread_self(), THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&pol,
+                             THREAD_TIME_CONSTRAINT_POLICY_COUNT) == KERN_SUCCESS ? "" : "the time-constraint policy refused";
+}
 #else
 inline void set_period(int, double) {}
 
@@ -488,6 +503,20 @@ inline std::string rtkit(long pid, long t, int prio)
     int st = 0;
     waitpid(c, &st, 0);
     return WIFEXITED(st) && WEXITSTATUS(st) == 0 ? "" : "rtkit refused";
+}
+
+// ANOTHER THREAD REAL-TIME beside the guarded one (rubato's render thread:
+// it may run long by design -- the callback, guarded, is what must not):
+// SCHED_RR at prio, and not the guard's; "" or why not. It must block at
+// least every RTTIME_SOFT_US of running, or SIGXCPU demotes the guarded
+// thread (rub_loop sleeps a moment when it has run long)
+inline std::string promote_aux(int prio)
+{
+    sched_param p{};
+    p.sched_priority = prio;
+    if (sched_setscheduler(0, SCHED_RR | RESET_ON_FORK, &p) != 0)
+        return rtkit((long)getpid(), (long)syscall(SYS_gettid), prio);
+    return "";
 }
 
 // the calling thread real-time; "" or why not

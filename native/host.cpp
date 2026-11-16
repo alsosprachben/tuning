@@ -1839,7 +1839,8 @@ void nv_host::render_block(long long n0, float *buf, bool step)
     if (soft_locks)
         thread_cpu_ms(&cu0, &cs0);
     long long t0 = rt::now_ns();
-    rt::busy_since = t0;
+    if (!rub_on)                        // (rubato: the callback is the guarded thread, not the blocks')
+        rt::busy_since = t0;
     // WHAT WAS QUEUED FOR THIS BLOCK (posted work, the MIDI) -- taken under
     // the locks the other threads write them under. NEVER WAITED FOR where
     // the host plays in real time (nv_host_set_realtime: an app's audio
@@ -2188,7 +2189,8 @@ void nv_host::render_block(long long n0, float *buf, bool step)
     nv_part_output(part, n0, (long)BLK, L, R, fn[0], fn[1], fn[2], BLK, master_now);
     last_step_ms = (t1 - t0) / 1e6;
     last_out_ms = (rt::now_ns() - t1) / 1e6;
-    rt::busy_since = 0;
+    if (!rub_on)
+        rt::busy_since = 0;
     double ms = (rt::now_ns() - t0) / 1e6;
     if (govern)
         nv_part_govern(part, ms, budget * govern_at, n0 + BLK);
@@ -3459,13 +3461,15 @@ void nv_host_set_cold_start(nv_host *h, int blocks, double cold_seconds, double 
 
 void nv_host::rub_loop()
 {
-    if (rub_rt_prio > 0) {                  // (as the audio thread: the music is made here now)
-        const std::string why = rt::promote(rub_rt_prio);
+    if (rub_rt_prio > 0) {                  // (as the audio thread: the music is made here now -- beside the guard's)
+        const std::string why = rt::promote_aux(rub_rt_prio);
         if (!why.empty())
             fprintf(stderr, "nvlive: the render thread not real-time (%s)\n", why.c_str());
     }
+    long long ran_since = rt::now_ns();     // (its last block on a wait: the kernel's real-time budget counts from it)
     while (!rub_stop.load()) {
         rub_go.wait();
+        ran_since = rt::now_ns();
         if (rub_stop.load())
             break;
         NV_RT_HELPER();                         // (the audio workgroup's, where there is one)
@@ -3495,6 +3499,13 @@ void nv_host::rub_loop()
             play_n0 += BLK;
             rub_made.store(made + BLK, std::memory_order_release);
             rub_done.signal();
+            // (behind for a while -- never waiting -- a moment's sleep: a
+            // real-time thread that runs RTTIME_SOFT_US without blocking is
+            // demoted by the kernel; this one is allowed to be late, not that)
+            if (rub_rt_prio > 0 && rt::now_ns() - ran_since > 50000000LL) {
+                std::this_thread::sleep_for(std::chrono::microseconds(50));
+                ran_since = rt::now_ns();
+            }
         }
     }
 }

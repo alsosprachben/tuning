@@ -719,8 +719,19 @@ int nv_host::run(int argc, char **argv)
             nv_host_set_rubato(this, 1, 0.75);
             fprintf(stderr, "nvlive: rubato, %d frames a callback (%.2f ms)\n", P, 1000.0 * P / SR);
             std::vector<float> l(P), r(P), out(2 * P);
+            {                                       // (--stall=N:MS: late blocks made to order, as --test's)
+                const std::string st = opt(argc, argv, "stall", "");
+                if (!st.empty()) {
+                    rub_stall_every = atol(st.c_str());
+                    const size_t c2 = st.find(':');
+                    rub_stall_ms = c2 == std::string::npos ? 10.0 : atof(st.c_str() + c2 + 1);
+                }
+            }
             while (!g_stop) {
+                // (the guard watches this thread: its pull is bounded by its deadline)
+                rt::busy_since = rt::now_ns();
                 nv_host_pull(this, l.data(), r.data(), P);
+                rt::busy_since = 0;
                 for (int k = 0; k < P; k++) {
                     out[2 * k] = l[k];
                     out[2 * k + 1] = r[k];
