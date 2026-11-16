@@ -13,6 +13,7 @@ const S = {
   parts: [], row: 0, layer: 0, knobs: [], synth: null,
   patches: [], favs: new Set(), favsKept: false, fam: 'all', build: null, picking: null,
   stops: null, organs: [], drawnMine: null,
+  about: null, stopTouched: null,
 };
 const HOLD_MS = 700;
 const FAMILIES = ['Piano', 'Chromatic Perc.', 'Organ', 'Guitar', 'Bass', 'Strings', 'Ensemble', 'Brass',
@@ -135,8 +136,9 @@ function drawMeters(m) {
     $(id).style.width = w + '%'; $(id).classList.toggle('hot', db > -1);
   });
   const cpu = m.budget_ms > 0 ? Math.round(100 * m.ms_mean / m.budget_ms) : 0;
-  $('cpu').textContent = `CPU ${cpu}%${m.gpu ? ' GPU' : ''}`;
-  $('voices').textContent = `VOICES ${Math.round(m.voices)}`;
+  // (fixed widths, the words still while the numbers move: the display is monospaced)
+  $('cpu').textContent = (m.gpu ? 'GPU+CPU' : 'CPU').padEnd(8) + (Math.min(cpu, 999) + '%').padStart(5);
+  $('voices').textContent = 'VOICES'.padEnd(8) + String(Math.min(Math.round(m.voices), 99999)).padStart(5);
   drawHealth();
 }
 function drawHealth() {
@@ -153,7 +155,7 @@ function drawHealth() {
 async function select(row) {
   if (row < 0 || row >= S.parts.length) return;
   S.row = row; S.layer = 0;
-  drawDisplay(); drawStrips(); drawKeyboard(); drawTiles(false);
+  drawDisplay(); drawStrips(); drawKeyboard(); drawTiles(false); drawAbout();
   const s = await Wire.call('select', { row, layer: 0 });
   S.synth = s.synth; drawSynth();
   if (s.stops && s.stops.row === S.row) setStops(s.stops);
@@ -556,14 +558,44 @@ Kit.press($('jamb'), (t) => {
   }
   const d = stopsDrawn().slice(), r = +t.dataset.rank;
   d[r] = d[r] ? 0 : 1;
+  S.stopTouched = { program: st.program, rank: r };
   S.drawnMine = { row: st.row, program: st.program, drawn: d, until: performance.now() + HOLD_MS };
   drawStops();
   Wire.call('stops_set', { row: st.row, drawn: d });
 }, '.tab, .tile');
 function setStops(st) {
   if (st.row !== S.row) return;                    // (the part before: a select crossed it)
+  if (S.stops && (S.stops.row !== st.row || S.stops.program !== st.program)) S.stopTouched = null;
   S.stops = st;
+  drawAbout();
   drawStops();
+}
+
+// ---------------------------------------------------------------- THE NOTES
+// What each program and stop is, and what it was fitted to (about.json:
+// examples/gm_coverage.py --about, the coverage page's own words)
+fetch('about.json').then(r => (r.ok ? r.json() : null)).then(a => { S.about = a; drawAbout(); }).catch(() => {});
+function aboutHtml(title, rn) {
+  if (!rn) return '';
+  const [r, note] = rn, lv = S.about.levels[r] || '';
+  return `<div class="ab-head"><b>${esc(title)}</b><span class="ab-r r${r}">${r} · ${esc(lv)}</span></div><p>${esc(note)}</p>`;
+}
+function patchAbout(p) {
+  if (!S.about || !p || p.drums) return null;
+  return S.about.programs[p.program + '.' + p.variation] || null;
+}
+function drawAbout() {
+  const p = cur();
+  $('libAbout').innerHTML = p && patchAbout(p) ? aboutHtml(p.name, patchAbout(p)) : '';
+  const st = S.stops, el = $('stopAbout');
+  if (!st || st.program < 0 || !S.about) { el.innerHTML = ''; return; }
+  const org = S.about.stops[String(st.program)];
+  const t = S.stopTouched;
+  if (t !== null && t.program === st.program && org && org.stops[st.names[t.rank]])
+    el.innerHTML = aboutHtml(st.names[t.rank], org.stops[st.names[t.rank]]);
+  else
+    el.innerHTML = aboutHtml(st.part, patchAbout(cur() && cur().row === st.row ? cur() : null)) +
+      (org ? `<p class="ab-hint">${esc(org.panel)}: touch a stop for what it is.</p>` : '');
 }
 
 // ---------------------------------------------------------------- THE WIRE
@@ -576,7 +608,7 @@ function setParts(ps) {
     const want = S.patches.find(p => p.pick === S.picking);
     if (!want || isCur(want, cur())) S.picking = null;
   }
-  drawDisplay(); drawStrips(); drawTiles(false);
+  drawDisplay(); drawStrips(); drawTiles(false); drawAbout();
   if (!KB.drag) drawKeyboard();
   if (ps.length !== before) select(S.row);
 }

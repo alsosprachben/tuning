@@ -1371,6 +1371,18 @@ def _mt32_var_rated():
             VAR_RATED[(i, 127)] = (r, "GM %d %s" % (to, names[to]))
 
 
+def _cm32p_var_rated():
+    """BANK 126, the CM-32P set (the CM-64's PCM half): each of its 64 tones
+    the SC-55 map's GS tone the Sound Canvas plays for it (SC-8850 OM p.186),
+    rated as that tone -- read from RATED / VAR_RATED, so they cannot drift."""
+    for i, (nm, (tp, tb)) in enumerate(patch_map.CM32P_SET):
+        k = patch_map.map_bank(tp, tb, 1)
+        r = VAR_RATED[(tp, k)][0] if k and (tp, k) in VAR_RATED else RATED[tp][0]
+        what = patch_map.VARIATION_NAMES.get((tp, k), GM[tp]) if k else GM[tp]
+        VAR_RATED[(i, 126)] = (r, "the CM-32P's %s: the SC-55 map's %d.%d %s, rated as that tone"
+                               % (nm, tp, k or 0, what))
+
+
 # GM 2's settings-and-layers tones (patch_map.SC8850_CHEAP and MAP_TONES' map
 # 3), heard as a group in examples/gm2_tones_demo.py
 _GM2_HEARD_KEYS = [(0, 3 * 128 + 16), (3, 3 * 128 + 8), (16, 3 * 128 + 8), (16, 3 * 128 + 32),
@@ -1589,6 +1601,7 @@ def variations():
         _kit_var_rated()
         _mt32_var_rated()
         _sc88_var_rated()
+        _cm32p_var_rated()
     """[(program, bank, GS name, class or None, rating or None, note)], every
     variation GS names; one not built plays its capital tone."""
     built = set(patch_map.VARIATIONS)
@@ -2157,10 +2170,35 @@ def class_tree_md():
     return "\n".join(L)
 
 
+def about_json(path):
+    """THE NOTES, for the touch interface's library and stops (ui/about.json):
+    each program's and variation's rating and note, by "program.bank", and each
+    organ's stops' by program and rank name -- the same words as this page,
+    so the two cannot drift. Written by --about[=PATH]."""
+    import json
+    progs = {"%d.0" % p: [r, note] for p, (r, note) in RATED.items()}
+    for p, v, name, cls, r, note in variations():
+        if cls:
+            progs["%d.%d" % (p, v)] = [r, note]
+    stop_notes = {}
+    for ps, panel, rows, controls in stops():
+        for p in ps:
+            stop_notes[str(p)] = {"panel": panel, "stops": {n: [r, note] for bit, n, r, note in rows}}
+    doc = {"levels": [LEVEL[k] for k in range(5)], "programs": progs, "stops": stop_notes}
+    with open(path, "w") as f:
+        json.dump(doc, f, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        f.write("\n")
+    print("%s: %d programs and variations, %d organs' stops" % (path, len(progs), len(stop_notes)))
+
+
 def main(argv):
     _gs_sets_rated()            # after VAR_RATED, whose classes it rates by
     _sc88pro_extra_rated()      # ...and Standard's keys that borrow from those sets
     _sc88pro_extra_rated()      # ...and the Standard keys that borrow from those sets
+    for a in argv[1:]:
+        if a == "--about" or a.startswith("--about="):
+            return about_json(a.split("=", 1)[1] if "=" in a else os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui", "about.json"))
     out = argv[1] if len(argv) > 1 else os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'coverage.md')
     fams = dict(FAMILY)
