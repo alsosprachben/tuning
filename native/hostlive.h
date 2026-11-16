@@ -88,9 +88,9 @@ void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigne
 void nv_part_drums(void *h, int program, const unsigned long long *choke);
 void nv_part_program(void *h, int program);
 void nv_part_drone_patch(void *h, int pi, void *cache, int nbuckets, int speed);
-void nv_part_toggle_stop(void *h, int rank, long long n0);
-int nv_part_drawn(void *h, char *out, int cap);
-void nv_part_set_drawn(void *h, const char *want, int n);
+void nv_part_toggle_stop(void *h, int pi, int rank, long long n0);
+int nv_part_drawn(void *h, int pi, char *out, int cap);
+void nv_part_set_drawn(void *h, int pi, const char *want, int n);
 void nv_part_chanstate(void *h, double *out);
 void nv_part_metronome(void *h, int pi, double bpm, int ring);
 int nv_part_synth_get(void *h, int pi, int layer, double *pn, char *own);
@@ -104,7 +104,7 @@ void nv_part_drive_later(void *h, int pi, double v);
 int nv_part_drive_get(void *h, int pi, double *out);
 int nv_part_patch_touch_sensitive(void *h, int pi);
 void nv_part_switches(void *h, int ch, int *out);
-void nv_part_set_drawn_names(void *h, const char *const *names, int n);
+void nv_part_set_drawn_names(void *h, int pi, const char *const *names, int n);
 void nv_part_efx(void *h, const double *X, double SR);
 void nv_part_place3d(void *h, const double *q);
 int nv_part_efx_state(void *h, int *o, int cap, const char **why);
@@ -1180,11 +1180,13 @@ struct nv_host {
         std::map<int, double> syn[2];       // (its knobs, layers A and B: a session's or preset's)
         int fixed = -1;                     // (its fixed touch)
         double drive = -1.0;                // (an organ's drive knob: <0 the voice's)
+        std::vector<std::string> drawn;     // (an organ's stops by name: a session's or preset's; none the voice's)
     };
     std::vector<PartSpec> add_req;
     std::vector<std::pair<PartSpec, void *>> add_done;
     long long next_pid = 10;
     std::vector<panel::PartRow> part_rows();
+    bool drawn_of(int pi, std::vector<char> &out);
     void part_set(size_t row, int channel, int lo, int hi, int tr, double level, bool muted);
     void part_add(const PartSpec &sp);
     void part_added(const PartSpec &sp, void *c);

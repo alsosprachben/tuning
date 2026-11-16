@@ -987,13 +987,13 @@ int nv_host::run(int argc, char **argv)
             H.stop_breaks = E.stops[sp].breaks;
             H.drawn = [&, nr = (int)E.stops[sp].names.size()]() {
                 std::vector<char> d(nr, 0);
-                nv_part_drawn(part, d.data(), nr);
+                nv_part_drawn(part, 0, d.data(), nr);
                 return d;
             };
             H.toggle_stop = [&](int ri) {
                 post([&, ri](long long n) {
                     pending_drawn_prog = -1;            // (a stop drawn by hand: a preset's no longer)
-                    nv_part_toggle_stop(part, ri, n);
+                    nv_part_toggle_stop(part, 0, ri, n);
                 });
             };
         };

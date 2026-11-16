@@ -6,7 +6,10 @@ python3 tests/live/stops_check.py
 The host opened on the church organ (19): its ranks named, the panel's rows
 covering every rank once; a stop not drawn drawn by nv_host_toggle_stop --
 read back drawn, and a held note's level moved by it (a rank more sounding);
-retired again -- read back so, and the level back where it was.
+retired again -- read back so, and the level back where it was. Then a
+second part layered on it (another church organ): its stops its own
+(nv_host_part_set_drawn on it leaves the first's as they were), and with
+the first muted, a stop drawn on the second moves what is heard.
 Exits 1 if any check fails.
 """
 import ctypes
@@ -35,7 +38,10 @@ def main():
     for f, a in (("nv_host_start", [vp]), ("nv_host_block", [vp]), ("nv_host_render", [vp, vp, vp, ci]),
                  ("nv_host_midi", [vp, cp, ci]), ("nv_host_stop_names", [vp, ci, cp, ci]),
                  ("nv_host_stop_rows", [vp, ci, vp, ci]), ("nv_host_drawn", [vp, cp, ci]),
-                 ("nv_host_toggle_stop", [vp, ci])):
+                 ("nv_host_toggle_stop", [vp, ci]), ("nv_host_part_drawn", [vp, ci, cp, ci]),
+                 ("nv_host_part_set_drawn", [vp, ci, cp, ci]), ("nv_host_part_layer", [vp, ci]),
+                 ("nv_host_parts", [vp, vp, ci]),
+                 ("nv_host_part_set", [vp, ci, ci, ci, ci, ci, ctypes.c_double, ci])):
         getattr(d, f).argtypes = a
     av = [b"nvlive", nvx.encode(), b"--program=19", b"--cpu", b"--no-pipeline", b"--no-register",
           b"--no-drums", b"--reg-sync", b"--no-governor", b"--messenger-out=none"]
@@ -106,6 +112,41 @@ def main():
     back = level()
     check("...and the level back where it was", abs(20 * np.log10(back / base)) < 0.1,
           "%+.3f dB" % (20 * np.log10(back / base)))
+
+    # A SECOND PART's ORGAN: its own stops
+    def pdrawn(row):
+        b = ctypes.create_string_buffer(n)
+        k = d.nv_host_part_drawn(h, row, b, n)
+        return [b.raw[i] != 0 for i in range(min(k, n))]
+
+    d.nv_host_part_layer(h, 0)
+    for _ in range(3000):                       # (built on the builder: added between two blocks)
+        run(10)
+        if d.nv_host_parts(h, None, 0) >= 2 and len(pdrawn(1)) == n:
+            break
+    check("a second church organ layered on the first", d.nv_host_parts(h, None, 0) >= 2 and len(pdrawn(1)) == n)
+    first = pdrawn(0)
+    want = [0] * n
+    for x in (sounding or off)[:2]:
+        want[x] = 1
+    d.nv_host_part_set_drawn(h, 1, bytes(want), n)
+    run(4)
+    check("the second's stops set: read back so", pdrawn(1) == [bool(w) for w in want],
+          "%d drawn" % sum(pdrawn(1)))
+    check("...the first's as they were", pdrawn(0) == first)
+    d.nv_host_part_set(h, 0, -1, 0, 127, 0, 0.0, 1)    # (the first muted: the second heard alone)
+    one = [1 if x else 0 for x in first]       # (the first's registration, then that and one more, as above)
+    d.nv_host_part_set_drawn(h, 1, bytes(one), n)
+    run(4)
+    alone = level()
+    want2 = list(one)
+    want2[r] = 1
+    d.nv_host_part_set_drawn(h, 1, bytes(want2), n)
+    run(4)
+    more2 = level()
+    check("a stop drawn on the second moves what is heard", abs(20 * np.log10(more2 / alone)) > 0.3,
+          "%+.2f dB" % (20 * np.log10(more2 / alone)))
+    check("...and the first's still as they were", pdrawn(0) == first)
     print("stops: %d failed" % bad)
     sys.stdout.flush()
     shutil.rmtree(tmp, ignore_errors=True)      # (the export, made here without NV_EXPORT_CACHE: 1 GB)

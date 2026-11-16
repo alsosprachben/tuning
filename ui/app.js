@@ -156,6 +156,7 @@ async function select(row) {
   drawDisplay(); drawStrips(); drawKeyboard(); drawTiles(false);
   const s = await Wire.call('select', { row, layer: 0 });
   S.synth = s.synth; drawSynth();
+  if (s.stops && s.stops.row === S.row) setStops(s.stops);
 }
 Kit.press($('prev'), () => select(S.row - 1));
 Kit.press($('next'), () => select(S.row + 1));
@@ -495,7 +496,7 @@ const setKnob = (k, v) => sendKnob({ k, v });
 async function forget(k) { await Wire.call('synth_forget', { row: S.row, layer: S.layer, knob: k.knob }); refreshSynth(); }
 async function refreshSynth() { const s = await Wire.call('synth', { row: S.row, layer: S.layer }); S.synth = s.synth; if (card === 'synth') drawSynth(); }
 
-// ---------------------------------------------------------------- STOPS: the first part's organ
+// ---------------------------------------------------------------- STOPS: the selected part's organ
 // A stop jamb: the voice's rows as the panel has them (tonelib stop_rows),
 // each row's groups apart, a tab lit when drawn. A tap draws or retires it;
 // the whole registration goes to the engine, so taps faster than a block all
@@ -509,7 +510,8 @@ function stopParts(nm, feet) {          // "principal 16" -> ["Principal", "16�
 }
 function stopsDrawn() {
   const st = S.stops;
-  if (S.drawnMine && S.drawnMine.until > performance.now() && S.drawnMine.program === st.program) return S.drawnMine.drawn;
+  const m = S.drawnMine;
+  if (m && m.until > performance.now() && m.program === st.program && m.row === st.row) return m.drawn;
   S.drawnMine = null;
   return st.drawn;
 }
@@ -518,18 +520,18 @@ function drawStops(force) {
   if (card !== 'stops') return;
   const st = S.stops, el = $('jamb');
   if (!st) { el.innerHTML = '<p class="empty">Reading the organ…</p>'; return; }
-  $('stopsWho').textContent = `part 01 · ${st.part}`;
+  $('stopsWho').textContent = `part ${pad(st.row + 1, 2)} · ${st.part}`;
   if (st.program < 0) {
     stopsSig = '';
     const orgs = S.organs.map(pg => S.patches.find(p => !p.drums && p.program === pg && p.variation === 0)).filter(Boolean);
     $('stopsInfo').textContent = '';
-    el.innerHTML = `<p class="empty">The stops play the first part, and ${esc(st.part || 'it')} has none. Put an organ there:</p>` +
+    el.innerHTML = `<p class="empty">${esc(st.part || 'This part')} has no stops. Put an organ on part ${pad(st.row + 1, 2)}:</p>` +
       `<div class="organs">${orgs.map(p => `<button class="tile" data-kit="1" data-pick="${p.pick}"><span class="pn">${pad(p.program, 3)}</span>` +
         `<span class="nm">${esc(p.name)}</span><span></span></button>`).join('')}</div>`;
     return;
   }
   const drawn = stopsDrawn();
-  const sig = st.program + '|' + st.names.join(',');
+  const sig = st.row + '|' + st.program + '|' + st.names.join(',');
   if (force || sig !== stopsSig) {
     stopsSig = sig;
     const nums = st.names.map(n => (/\s(\S+)$/.exec(n) || [])[1]).filter(t => t && /^\d/.test(t));
@@ -547,18 +549,19 @@ function drawStops(force) {
 Kit.press($('jamb'), (t) => {
   const st = S.stops;
   if (!st) return;
-  if (t.classList.contains('tile')) {             // (an organ onto the first part)
+  if (t.classList.contains('tile')) {             // (an organ onto the part)
     S.picking = +t.dataset.pick;
-    Wire.call('part_pick', { row: 0, pick: S.picking });
+    Wire.call('part_pick', { row: st.row, pick: S.picking });
     return;
   }
   const d = stopsDrawn().slice(), r = +t.dataset.rank;
   d[r] = d[r] ? 0 : 1;
-  S.drawnMine = { program: st.program, drawn: d, until: performance.now() + HOLD_MS };
+  S.drawnMine = { row: st.row, program: st.program, drawn: d, until: performance.now() + HOLD_MS };
   drawStops();
-  Wire.call('stops_set', { drawn: d });
+  Wire.call('stops_set', { row: st.row, drawn: d });
 }, '.tab, .tile');
 function setStops(st) {
+  if (st.row !== S.row) return;                    // (the part before: a select crossed it)
   S.stops = st;
   drawStops();
 }
@@ -583,7 +586,7 @@ Wire.connect({
     $('gone').hidden = true;
     const h = await Wire.call('hello');
     S.knobs = h.knobs || [];
-    const [p, pt, fv, so] = await Promise.all([Wire.call('parts'), Wire.call('patches'), Wire.call('favourites'), Wire.call('stops')]);
+    const [p, pt, fv, so] = await Promise.all([Wire.call('parts'), Wire.call('patches'), Wire.call('favourites'), Wire.call('stops', { row: S.row })]);
     S.stops = so.stops || null; S.organs = so.organs || [];
     S.patches = pt.patches || [];
     S.favs = new Set(fv.favourites || []); S.favsKept = !!fv.kept;

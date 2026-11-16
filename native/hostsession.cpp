@@ -595,6 +595,11 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
             sp.excl = sp.channel < 0 ? pats[0].excl : 0u;
             if (sp.drums)
                 sp.var = 0;
+            if (const sess::J *dn = sp.drums ? nullptr : pd.get("drawn"))     // (its stops: once its organ is in)
+                if (dn->is(sess::J::ARR))
+                    for (const sess::J &n : dn->a)
+                        if (n.is(sess::J::STR))
+                            sp.drawn.push_back(n.s);
             part_add(sp);
         }
     // THE ORGAN's STOPS: drawn as the part's were (parts[0].drawn, by name) --
@@ -609,7 +614,7 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                 for (const sess::J &n : dn->a)
                     want[ri] = want[ri] || (n.is(sess::J::STR) && n.s == names[ri]);
             if (want_p == shown_program)
-                post([this, want](long long) { nv_part_set_drawn(part, want.data(), (int)want.size()); });
+                post([this, want](long long) { nv_part_set_drawn(part, 0, want.data(), (int)want.size()); });
             if (!at_start || want_p != shown_program) {
                 std::vector<std::string> w;
                 for (size_t ri = 0; ri < names.size(); ri++)
@@ -743,6 +748,26 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
     sess::J &parts = j.o["parts"];
     if (!parts.is(sess::J::ARR))
         parts = sess::arr();
+    // AN ORGAN's DRAWN STOPS (live's Part.drawn: its ranks' names, sorted), on
+    // patch pi playing program prog; none an empty list; as written when the
+    // audio does not answer
+    auto put_drawn = [this](sess::J &pd, int pi, int prog) {
+        sess::J dn = sess::arr();
+        if (prog >= 0 && prog < 128 && !E.stops[prog].names.empty()) {
+            const auto &names = E.stops[prog].names;
+            std::vector<char> d;
+            if (!drawn_of(pi, d))
+                return;
+            std::vector<std::string> on;
+            for (size_t ri = 0; ri < names.size() && ri < d.size(); ri++)
+                if (d[ri])
+                    on.push_back(names[ri]);
+            std::sort(on.begin(), on.end());
+            for (auto &n : on)
+                dn.a.push_back(sess::str(n));
+        }
+        pd.o["drawn"] = dn;
+    };
     std::vector<PartAt> rows;
     std::vector<size_t> at;                     // (each one's index: its knobs read by it)
     {
@@ -832,6 +857,8 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
                 anyk = true;
             }
         }
+        if (k > 0)                              // (the first's below: its program as shown)
+            put_drawn(pd, pa.pi, pa.drums ? -1 : pa.program & 127);
         if (anyk)
             pd.o["synth_units"] = sess::integer(6);
         else if (!pd.get("synth") && !pd.get("synth_b"))
@@ -851,20 +878,7 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
         p0.o["bank"] = sess::integer(sv);
     else
         p0.o.erase("bank");
-    sess::J dn = sess::arr();
-    if (sp < 128 && !E.stops[sp].names.empty()) {
-        const auto &names = E.stops[sp].names;
-        std::vector<char> d(names.size(), 0);
-        nv_part_drawn(part, d.data(), (int)names.size());
-        std::vector<std::string> on;
-        for (size_t ri = 0; ri < names.size(); ri++)
-            if (d[ri])
-                on.push_back(names[ri]);
-        std::sort(on.begin(), on.end());
-        for (auto &n : on)
-            dn.a.push_back(sess::str(n));
-    }
-    p0.o["drawn"] = dn;
+    put_drawn(p0, rows.empty() ? 0 : rows[0].pi, sp < 128 ? sp : -1);
     return j;
 }
 
@@ -1088,22 +1102,51 @@ int nv_host_stop_rows(nv_host *h, int program, int *out, int cap)
     return (int)v.size();
 }
 
-int nv_host_drawn(nv_host *h, char *out, int cap) { return nv_part_drawn(h->part, out, cap); }
+// (the patch behind a row, as nv_host_parts lists them: -1 none)
+static int row_pi(nv_host *h, int row)
+{
+    size_t idx;
+    if (!row_index(h, row, idx))
+        return -1;
+    std::lock_guard<std::mutex> lk(h->parts_mu);
+    return idx < h->pats.size() && !h->pats[idx].gone ? h->pats[idx].pi : -1;
+}
+
+int nv_host_drawn(nv_host *h, char *out, int cap) { return nv_host_part_drawn(h, 0, out, cap); }
+
+int nv_host_part_drawn(nv_host *h, int row, char *out, int cap)
+{
+    const int pi = row_pi(h, row);
+    std::vector<char> d;
+    if (pi < 0 || !h->drawn_of(pi, d))
+        return 0;
+    for (int i = 0; out && i < cap && i < (int)d.size(); i++)
+        out[i] = d[(size_t)i];
+    return (int)d.size();
+}
 
 void nv_host_toggle_stop(nv_host *h, int rank)
 {
-    h->post([h, rank](long long n) {
-        h->pending_drawn_prog = -1;             // (a stop drawn by hand: a preset's no longer)
-        nv_part_toggle_stop(h->part, rank, n);
+    const int pi = row_pi(h, 0);
+    if (pi < 0)
+        return;
+    h->post([h, pi, rank](long long n) {
+        if (pi == 0)
+            h->pending_drawn_prog = -1;         // (a stop drawn by hand: a preset's no longer)
+        nv_part_toggle_stop(h->part, pi, rank, n);
     });
 }
 
-void nv_host_set_drawn(nv_host *h, const char *want, int n)
+void nv_host_part_set_drawn(nv_host *h, int row, const char *want, int n)
 {
+    const int pi = row_pi(h, row);
+    if (pi < 0)
+        return;
     std::vector<char> w(want, want + std::max(0, n));
-    h->post([h, w](long long) {
-        h->pending_drawn_prog = -1;
-        nv_part_set_drawn(h->part, w.data(), (int)w.size());
+    h->post([h, pi, w](long long) {
+        if (pi == 0)
+            h->pending_drawn_prog = -1;
+        nv_part_set_drawn(h->part, pi, w.data(), (int)w.size());
     });
 }
 

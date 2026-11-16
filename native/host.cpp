@@ -1445,7 +1445,7 @@ int nv_host::open(int argc, char **argv)
             std::vector<const char *> nm;
             for (const auto &x : pending_drawn)
                 nm.push_back(x.c_str());
-            nv_part_set_drawn_names(part, nm.data(), (int)nm.size());
+            nv_part_set_drawn_names(part, 0, nm.data(), (int)nm.size());
         } else if (pa.pi == 0) {
             pending_drawn_prog = -1;
         }
@@ -3063,6 +3063,37 @@ int nv_host::synth_state(size_t row, int layer, double *pn, char *own)
     return it->second.n;
 }
 
+// AN ORGAN's DRAWN STOPS, patch pi's, read between two blocks (a swap may
+// be replacing them); read here when the audio does not answer (stopped)
+bool nv_host::drawn_of(int pi, std::vector<char> &out)
+{
+    struct Got {
+        std::vector<char> d;
+        int n = 0;
+        std::atomic<bool> done{false};
+    };
+    auto got = std::make_shared<Got>();
+    auto take = [this, got, pi](long long) {
+        got->d.assign(512, 0);
+        got->n = nv_part_drawn(part, pi, got->d.data(), (int)got->d.size());
+        got->done = true;
+    };
+    if (scene_inline)
+        take(0);
+    else
+        post(take);
+    for (int i = 0; i < 200 && !got->done && !g_stop; i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (!got->done) {                           // (no blocks to come -- the way out: read here, as before)
+        std::vector<char> d(512, 0);
+        const int n = nv_part_drawn(part, pi, d.data(), (int)d.size());
+        out.assign(d.begin(), d.begin() + n);
+        return true;
+    }
+    out.assign(got->d.begin(), got->d.begin() + got->n);
+    return true;
+}
+
 static int part_pi(nv_host &h, size_t row)
 {
     std::lock_guard<std::mutex> lk(h.parts_mu);
@@ -3318,6 +3349,13 @@ void nv_host::part_added(const PartSpec &sp, void *c)
     for (int layer = 0; layer < 2; layer++)    // (its knobs: once the patch is in)
         for (const auto &kv : sp.syn[layer])
             nv_part_synth_set_later(part, pi, layer, kv.first, kv.second);
+    if (!sp.drawn.empty() && !sp.drums) {      // (its stops, by name: the organ's own matched in the post)
+        std::vector<const char *> nm;
+        for (const auto &x : sp.drawn)
+            nm.push_back(x.c_str());
+        if (!nm.empty())
+            nv_part_set_drawn_names(part, pi, nm.data(), (int)nm.size());
+    }
     PartAt pa{pi, sp.channel, sp.drums, sp.program, sp.drums ? -1 : E.prog[sp.program & 127].sid, sp.program,
               sp.var, sp.var};
     pa.excl = sp.excl;

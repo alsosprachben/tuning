@@ -7363,7 +7363,10 @@ struct Part {
                     patches[q.pi].syn_kept[q.layer & 1][q.knob] = q.value;     // (refused: kept as written)
                 continue;
             }
-            const OrganSpec *og = patches[0].organ;
+            const int spi = q.pi < 0 ? 0 : q.pi;    // (the part's: the first when none was named)
+            if (spi >= (int)patches.size())
+                continue;
+            const OrganSpec *og = patches[spi].organ;
             if (!og)
                 continue;
             // its names, of this organ's (none: its first in the crescendo, set_stops')
@@ -7372,7 +7375,7 @@ struct Part {
                 for (auto &nm : q.names)
                     if (nm == og->rank[ri].key)
                         want[ri] = 1;
-            set_stops(0, want, n0);
+            set_stops(spi, want, n0);
         }
     }
 
@@ -13508,16 +13511,19 @@ void *nv_part_new(void *cache, long long pid, double level_db, int nbuckets, int
 // AN ORGAN'S STOP drawn or put in (livetui's toggle_stop: live.set_stops
 // with the rank toggled) -- posted: done in the next block after its events,
 // as live runs what its panel posts
-void nv_part_toggle_stop(void *h, int rank, long long n0)
+void nv_part_toggle_stop(void *h, int pi, int rank, long long n0)
 {
     (void)n0;
     nv::slab::Part *P = (nv::slab::Part *)h;
-    nv::slab::Part::Patch &p = P->patches[0];
+    if (pi < 0 || pi >= (int)P->patches.size())
+        return;
+    nv::slab::Part::Patch &p = P->patches[pi];
     if (!p.organ || rank < 0 || rank >= p.organ->n_rank)
         return;
     std::vector<char> want = p.drawn;   // (the registration now, as the panel sees it)
     want[rank] = !want[rank];
     nv::slab::Part::Post q{0, {}, nullptr};
+    q.pi = pi;
     for (int ri = 0; ri < p.organ->n_rank; ri++)
         if (want[ri])
             q.names.push_back(p.organ->rank[ri].key);
@@ -13706,13 +13712,16 @@ void nv_part_switches(void *h, int ch, int *out)
 
 // THE WHOLE REGISTRATION at once (a session's: want[rank] 1 drawn): one post,
 // so stops set together are not each toggled from the same registration
-void nv_part_set_drawn(void *h, const char *want, int n)
+void nv_part_set_drawn(void *h, int pi, const char *want, int n)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;
-    nv::slab::Part::Patch &p = P->patches[0];
+    if (pi < 0 || pi >= (int)P->patches.size())
+        return;
+    nv::slab::Part::Patch &p = P->patches[pi];
     if (!p.organ)
         return;
     nv::slab::Part::Post q{0, {}, nullptr};
+    q.pi = pi;
     for (int ri = 0; ri < p.organ->n_rank && ri < n; ri++)
         if (want[ri])
             q.names.push_back(p.organ->rank[ri].key);
@@ -13721,20 +13730,23 @@ void nv_part_set_drawn(void *h, const char *want, int n)
 
 // ...BY NAME, for the organ the part will have when it is done (a preset's,
 // sent with its swap: the names matched to that organ's ranks then)
-void nv_part_set_drawn_names(void *h, const char *const *names, int n)
+void nv_part_set_drawn_names(void *h, int pi, const char *const *names, int n)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;
     nv::slab::Part::Post q{0, {}, nullptr};
+    q.pi = pi;
     for (int i = 0; i < n; i++)
         q.names.push_back(names[i]);
     P->posts.push_back(std::move(q));   // (done in the next block, after its events: live.post)
 }
 
 // the organ's stops drawn (out[rank] 1), the count; 0 for no organ
-int nv_part_drawn(void *h, char *out, int cap)
+int nv_part_drawn(void *h, int pi, char *out, int cap)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;
-    const nv::slab::Part::Patch &p = P->patches[0];
+    if (pi < 0 || pi >= (int)P->patches.size())
+        return 0;
+    const nv::slab::Part::Patch &p = P->patches[pi];
     if (!p.organ)
         return 0;
     int n = std::min((int)p.drawn.size(), cap);

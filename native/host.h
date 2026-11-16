@@ -203,14 +203,16 @@ int nv_host_stop_names(nv_host *h, int program, char *names, int cap);
 /* the panel's rows of them: rank indices, -2 a break within a row (the
    voice's groups), -1 a row's end -- how many ints (cap of them copied) */
 int nv_host_stop_rows(nv_host *h, int program, int *out, int cap);
-/* each rank drawn (1) or not, now: how many; a rank drawn or retired
-   between two blocks */
+/* each rank drawn (1) or not, now, on the first part's organ: how many; a
+   rank drawn or retired between two blocks */
 int nv_host_drawn(nv_host *h, char *out, int cap);
 void nv_host_toggle_stop(nv_host *h, int rank);
-/* the whole registration at once: want[rank] 1 drawn (none drawn: the first
-   in the crescendo, as live.set_stops) -- a viewer's taps between two blocks
-   all land, where toggles read the drawn as it stood */
-void nv_host_set_drawn(nv_host *h, const char *want, int n);
+/* ...on any part's (row as nv_host_parts lists them; 0 for a part with no
+   organ); and its whole registration at once: want[rank] 1 drawn (none
+   drawn: the first in the crescendo, as live.set_stops) -- a viewer's taps
+   between two blocks all land, where toggles read the drawn as it stood */
+int nv_host_part_drawn(nv_host *h, int row, char *out, int cap);
+void nv_host_part_set_drawn(nv_host *h, int row, const char *want, int n);
 
 /* ---- TUNING (livetui's t and E) ----
    every tuner: "name\twhat it is for" a line; the rig's now (or asked); one

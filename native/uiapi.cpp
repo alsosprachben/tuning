@@ -269,22 +269,24 @@ J build_of(nv_host *h)
     return b;
 }
 
-// THE FIRST PART's ORGAN (the stops act on it: livetui's stop rows): its
-// program, its ranks' names, the panel's rows (each a list of groups, each
-// group's ranks) and what is drawn; program -1 when it is not an organ
-J stops_of(nv_host *h)
+// A PART's ORGAN (livetui's stop rows): its program, its ranks' names, the
+// panel's rows (each a list of groups, each group's ranks) and what is
+// drawn; program -1 when it is not an organ
+J stops_of(nv_host *h, int row)
 {
     J o = sess::obj();
     int n = nv_host_parts(h, nullptr, 0);
     std::vector<nv_host_partinfo> ps((size_t)std::max(0, n));
     n = nv_host_parts(h, ps.data(), n);
-    int prog = n > 0 && !ps[0].drums ? ps[0].program : -1;
+    const bool has = row >= 0 && row < n;
+    int prog = has && !ps[(size_t)row].drums ? ps[(size_t)row].program : -1;
     std::vector<char> nb(16384);
     const int nr = prog >= 0 ? nv_host_stop_names(h, prog, nb.data(), (int)nb.size()) : 0;
     if (nr <= 0)
         prog = -1;
     o.o["program"] = sess::integer(prog);
-    o.o["part"] = sess::str(n > 0 ? ps[0].name : "");
+    o.o["row"] = sess::integer(row);
+    o.o["part"] = sess::str(has ? ps[(size_t)row].name : "");
     J names = sess::arr(), rows = sess::arr(), drawn = sess::arr();
     if (prog >= 0) {
         for (const char *p = nb.data();;) {
@@ -298,23 +300,23 @@ J stops_of(nv_host *h)
         std::vector<int> v((size_t)std::max(0, k));
         if (k > 0)
             nv_host_stop_rows(h, prog, v.data(), k);
-        J row = sess::arr(), grp = sess::arr();
+        J line = sess::arr(), grp = sess::arr();
         for (int x : v) {
             if (x >= 0) {
                 grp.a.push_back(sess::integer(x));
                 continue;
             }
             if (!grp.a.empty())
-                row.a.push_back(grp);
+                line.a.push_back(grp);
             grp = sess::arr();
             if (x == -1) {
-                if (!row.a.empty())
-                    rows.a.push_back(row);
-                row = sess::arr();
+                if (!line.a.empty())
+                    rows.a.push_back(line);
+                line = sess::arr();
             }
         }
         std::vector<char> d((size_t)nr, 0);
-        const int got = nv_host_drawn(h, d.data(), nr);
+        const int got = nv_host_part_drawn(h, row, d.data(), nr);
         for (int i = 0; i < nr; i++)
             drawn.a.push_back(sess::integer(i < got ? d[(size_t)i] : 0));
     }
@@ -324,7 +326,7 @@ J stops_of(nv_host *h)
     return o;
 }
 
-// the programs with stops (to put one on the first part)
+// the programs with stops (to put one on a part)
 J organs_of(nv_host *h)
 {
     J a = sess::arr();
@@ -403,6 +405,9 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             w->synth_sent.clear();
         }
         r.o["synth"] = synth_of(h, row, w ? w->layer : 0);
+        r.o["stops"] = stops_of(h, row);
+        if (w)
+            w->stops_sent.clear();
     } else if (call == "part_pick") {
         nv_host_part_pick(h, row, (int)arg_i(q, "pick", 0));
     } else if (call == "part_set") {
@@ -499,7 +504,7 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             nv_host_set_global(h, i, arg_d(q, "v", 0.0));
         }
     } else if (call == "stops") {
-        r.o["stops"] = stops_of(h);
+        r.o["stops"] = stops_of(h, row);
         r.o["organs"] = organs_of(h);
     } else if (call == "stops_set") {          // the whole registration: drawn[rank] 1
         const J *d = q.get("drawn");
@@ -510,7 +515,7 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             std::vector<char> want;
             for (const J &x : d->a)
                 want.push_back(x.i(0) != 0);
-            nv_host_set_drawn(h, want.data(), (int)want.size());
+            nv_host_part_set_drawn(h, row, want.data(), (int)want.size());
         }
     } else if (call == "panic") {
         nv_host_panic(h);
@@ -583,7 +588,7 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
             r.o["build"] = bj;
             any = true;
         }
-        J st = stops_of(h);
+        J st = stops_of(h, w->row);
         std::string sts;
         put(sts, st);
         if (sts != w->stops_sent) {
