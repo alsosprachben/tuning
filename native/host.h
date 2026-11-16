@@ -67,9 +67,15 @@ int nv_host_pull_step(nv_host *h, float *L, float *R, int frames, int step);
    done, the device that many frames ahead of the render from then on (MIDI
    through nv_host_midi_at heard that much later, all alike). Turned on before
    the first callback. stats: [0] callbacks that held, [1] frames held ever,
-   [2] frames owed now, [3] frames rendered, [4] frames handed out */
+   [2] frames owed now, [3] frames rendered, [4] frames handed out,
+   [5] returns, [6] frames returned. What is held is the sound just heard
+   going on (rubfill.h), crossed into the late block when it comes */
 int nv_host_set_rubato(nv_host *h, int on, double wait_fraction);
 void nv_host_rubato_stats(const nv_host *h, long long *stats);
+/* RETURNING THE TIME (on by default): while frames are owed the render
+   thread renders that far ahead, and they are cut from the stream -- crossed
+   over XF frames -- once no event falls in them; off, they stay owed */
+void nv_host_set_rubato_return(nv_host *h, int on);
 /* MIDI stamped with its sample (counted from the first render: CoreMIDI's
    timestamp turned into the audio's sample time), from any thread: heard at
    the start of the block that sample falls in -- a callback of many blocks

@@ -37,6 +37,7 @@
 #include <mutex>
 #include "lfqueue.h"
 #include "rtsem.h"
+#include "rubfill.h"
 #include <string>
 #include <thread>
 #include <unistd.h>
@@ -1337,9 +1338,23 @@ struct nv_host {
     std::atomic<long> rub_holds{0};         // callbacks that held
     std::atomic<long long> rub_held{0};     // frames held, ever
     nv::RtSem rub_go, rub_done;
+    nv::RubFill rub_fill;                   // the held moment's sound (the callback's)
+    // RETURNING THE TIME: while frames are owed the render thread renders that
+    // much further ahead, and the callback cuts them out of what is made -- a
+    // crossfade between the two real streams -- once no event falls in the
+    // stretch cut (rub_evr: the last blocks that took one, the render thread's)
+    bool rub_return = true;
+    bool rub_silent = false;                // (a test's: holds silent, as a late block was)
+    enum { RUB_EVN = 64 };
+    std::atomic<long long> rub_evr[RUB_EVN];
+    std::atomic<unsigned> rub_evn{0};
+    bool rub_events_in(long long a, long long b) const;     // (a block that took an event overlaps [a, b))
+    std::atomic<long> rub_returns{0};
+    std::atomic<long long> rub_returned{0};
     // (--test's: each block's own work in place of timed_due + render_block --
-    // nvlive's file events and switches; and the stalls it injects)
-    std::function<void(long long n0, float *buf)> rub_block;
+    // nvlive's file events and switches; true if it took an event -- and the
+    // stalls it injects)
+    std::function<bool(long long n0, float *buf)> rub_block;
     long rub_stall_every = 0;
     double rub_stall_ms = 0.0;
     void rub_loop();

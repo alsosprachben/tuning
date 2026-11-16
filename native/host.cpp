@@ -3462,11 +3462,18 @@ void nv_host::rub_loop()
             const long long made = rub_made.load(std::memory_order_relaxed);
             if (made + BLK - rub_took.load(std::memory_order_acquire) > rub_cap)
                 break;                          // (the ring full: never, at a callback's want)
+            bool ev;
             if (rub_block) {
-                rub_block(play_n0, play_buf.data());
+                ev = rub_block(play_n0, play_buf.data());
             } else {
                 timed_due(this, play_n0);
+                ev = !due_rt.empty() || mq.size_approx() > 0;
                 render_block(play_n0, play_buf.data(), false);
+            }
+            if (ev) {
+                const unsigned k = rub_evn.load(std::memory_order_relaxed);
+                rub_evr[k % RUB_EVN].store(play_n0, std::memory_order_relaxed);
+                rub_evn.store(k + 1, std::memory_order_release);
             }
             if (rub_stall_every > 0 && (play_n0 / BLK) % rub_stall_every == rub_stall_every - 1)
                 std::this_thread::sleep_for(std::chrono::nanoseconds((long long)(rub_stall_ms * 1e6)));
@@ -3479,34 +3486,81 @@ void nv_host::rub_loop()
     }
 }
 
+bool nv_host::rub_events_in(long long a, long long b) const
+{
+    // (the newest first: an event block older than a ends the search -- they
+    // are recorded in order; more than RUB_EVN since the oldest kept: say yes)
+    const unsigned n = rub_evn.load(std::memory_order_acquire);
+    for (unsigned j = 0; j < n && j < (unsigned)RUB_EVN; j++) {
+        const long long n0 = rub_evr[(n - 1 - j) % RUB_EVN].load(std::memory_order_relaxed);
+        if (n0 + BLK <= a)
+            return false;
+        if (n0 < b)
+            return true;
+    }
+    return n > (unsigned)RUB_EVN;
+}
+
 static int nv_host_pull_rubato(nv_host *h, float *L, float *R, int frames)
 {
     const long long t_in = rt::now_ns();
     const long long until = t_in + (long long)(h->rub_frac * 1e9 * frames / h->SR);
     const long long took = h->rub_took.load(std::memory_order_relaxed);
-    const long long want = took + frames;
+    const long long owed = h->rub_owed.load(std::memory_order_relaxed);
+    const int XF = nv::RubFill::XF;
+    // (owed: the render thread asked that much further -- and a callback
+    // more, so the next finds it made and can cut it)
+    const long long want = took + frames + (h->rub_return && owed > 0 ? owed + XF + frames : 0);
     if (want > h->rub_want.load(std::memory_order_relaxed))
         h->rub_want.store(want, std::memory_order_release);
     h->rub_go.signal();
-    while (h->rub_made.load(std::memory_order_acquire) < want) {
+    while (h->rub_made.load(std::memory_order_acquire) < took + frames) {
         const long long left = until - rt::now_ns();
         if (left <= 0)
             break;
         h->rub_done.wait_for_ns(left);          // (a block made, or the deadline)
     }
     const long long made = h->rub_made.load(std::memory_order_acquire);
+    auto at = [h](long long k) { return h->rub_ring.data() + 2 * (k % h->rub_cap); };
+    // THE TIME RETURNED: what is owed is made, past this callback, and no
+    // event's block falls in it -- the owed frames cut, the stream before the
+    // cut crossing into the stream after it over XF frames
+    if (h->rub_return && owed > 0 && !h->rub_fill.on && made - took >= owed + frames + XF
+        && !h->rub_events_in(took - h->SR / 50, took + owed + XF)) {    // (nor in an attack's first 20 ms)
+        for (int i = 0; i < frames; i++) {
+            const float *b = at(took + owed + i);
+            if (i < XF) {
+                const float *a = at(took + i);
+                const float w = 0.5f - 0.5f * std::cos(3.14159265f * (i + 0.5f) / XF);
+                L[i] = w * b[0] + (1.0f - w) * a[0];
+                R[i] = w * b[1] + (1.0f - w) * a[1];
+            } else {
+                L[i] = b[0];
+                R[i] = b[1];
+            }
+        }
+        h->rub_fill.heard(L, R, frames);
+        h->rub_took.store(took + owed + frames, std::memory_order_release);
+        h->rub_owed.fetch_sub(owed, std::memory_order_relaxed);
+        h->rub_returned.fetch_add(owed, std::memory_order_relaxed);
+        h->rub_returns.fetch_add(1, std::memory_order_relaxed);
+        return 0;
+    }
     const int have = (int)std::min<long long>(made - took, frames);
     for (int i = 0; i < have; i++) {
-        const float *s = h->rub_ring.data() + 2 * ((took + i) % h->rub_cap);
+        const float *s = at(took + i);
         L[i] = s[0];
         R[i] = s[1];
     }
     h->rub_took.store(took + have, std::memory_order_release);
+    h->rub_fill.resume(L, R, have);             // (the late block crossed in, after a hold; heard)
     if (have < frames) {
-        // HELD: the rest of this callback borrowed (silence for now; the held
-        // moment's sound comes next)
-        for (int i = have; i < frames; i++)
-            L[i] = R[i] = 0.0f;
+        // HELD: the rest of this callback borrowed -- the sound just heard
+        // going on (rubfill.h) until the late block comes
+        h->rub_fill.gen(L + have, R + have, frames - have);
+        if (h->rub_silent)
+            for (int i = have; i < frames; i++)
+                L[i] = R[i] = 0.0f;
         h->rub_owed.fetch_add(frames - have, std::memory_order_relaxed);
         h->rub_held.fetch_add(frames - have, std::memory_order_relaxed);
         h->rub_holds.fetch_add(1, std::memory_order_relaxed);
@@ -3527,6 +3581,10 @@ int nv_host_set_rubato(nv_host *h, int on, double wait_fraction)
         h->rub_cap = 64 * h->BLK;
         h->rub_ring.assign(2 * h->rub_cap, 0.0f);
         h->rub_made = h->rub_took = h->rub_want = 0;
+        h->rub_owed = 0;
+        h->rub_evn = 0;
+        h->rub_fill = nv::RubFill();
+        h->rub_fill.set_rate(h->SR);
         h->rub_stop = false;
         h->rub_on = true;
         h->rub_thread = std::thread([h] { h->rub_loop(); });
@@ -3547,7 +3605,11 @@ void nv_host_rubato_stats(const nv_host *h, long long *out)
     out[2] = h->rub_owed.load();
     out[3] = h->rub_made.load();
     out[4] = h->rub_took.load();
+    out[5] = h->rub_returns.load();
+    out[6] = h->rub_returned.load();
 }
+
+void nv_host_set_rubato_return(nv_host *h, int on) { h->rub_return = on != 0; }
 
 int nv_host_pull(nv_host *h, float *L, float *R, int frames)
 {

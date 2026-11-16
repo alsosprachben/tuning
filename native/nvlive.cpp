@@ -338,12 +338,24 @@ int nv_host::run(int argc, char **argv)
                     const size_t c2 = st.find(':');
                     rub_stall_ms = c2 == std::string::npos ? 10.0 : atof(st.c_str() + c2 + 1);
                 }
-                rub_block = [&](long long n0_, float *bufp) { one_block(n0_ / BLK, bufp); };
+                rub_block = [&](long long n0_, float *bufp) {
+                    const int e0 = e;
+                    one_block(n0_ / BLK, bufp);
+                    return e != e0;                 // (it took the file's events)
+                };
+                {
+                    bool keep = false;
+                    for (int q = 1; q < argc; q++)
+                        keep = keep || !strcmp(argv[q], "--rubato-keep");
+                    nv_host_set_rubato_return(this, !keep);
+                    for (int q = 1; q < argc; q++)
+                        rub_silent = rub_silent || !strcmp(argv[q], "--rubato-silent");
+                }
                 nv_host_set_rubato(this, 1, wait);
                 std::vector<float> cl(cbf), cr(cbf);
                 const long long total = nb * BLK;
                 long long dev = 0;
-                long holds_seen = 0;
+                long holds_seen = 0, returns_seen = 0;
                 for (long long k = 0; dev < total; k++) {
                     if (paced)
                         std::this_thread::sleep_until(tstart + std::chrono::nanoseconds((long long)((double)dev * 1e9 / SR)));
@@ -352,20 +364,25 @@ int nv_host::run(int argc, char **argv)
                         out.push_back(cl[q]);
                         out.push_back(cr[q]);
                     }
-                    long long rs[5];
+                    long long rs[7];
                     nv_host_rubato_stats(this, rs);
                     if (rs[0] > holds_seen) {
                         holds_seen = rs[0];
                         fprintf(stderr, "nvlive: rubato held at device frame %lld (owed %lld frames)\n", dev, rs[2]);
                     }
+                    if (rs[5] > returns_seen) {
+                        returns_seen = rs[5];
+                        fprintf(stderr, "nvlive: rubato returned at device frame %lld (owed %lld frames)\n", dev, rs[2]);
+                    }
                     dev += cbf;
                 }
                 nv_host_set_rubato(this, 0, wait);
                 rub_block = nullptr;
-                long long rs[5];
+                long long rs[7];
                 nv_host_rubato_stats(this, rs);
                 fprintf(stderr, "nvlive: rubato: callbacks of %d frames, waiting %.2f; %lld held, %lld frames borrowed, "
-                        "%lld rendered, %lld handed out\n", cbf, wait, rs[0], rs[1], rs[3], rs[4]);
+                        "%lld returned in %lld, %lld owed at the end; %lld rendered, %lld handed out\n", cbf, wait, rs[0],
+                        rs[1], rs[6], rs[5], rs[2], rs[3], rs[4]);
                 out.resize(2 * (size_t)total);
             }
             // every block's time and its render's, one line a block, for a
