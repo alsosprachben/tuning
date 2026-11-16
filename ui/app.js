@@ -1,6 +1,6 @@
 // THE TOUCH INTERFACE: the front panel (the display, its seven fields, the
 // dial, the part keys), the card keys, and the cards -- Parts and Library
-// now; the synth's knobs plain until their card comes.
+// and Stops now; the synth's knobs plain until their card comes.
 //
 // Values the engine pushes (parts, meters, a knob turned on a Messenger)
 // never fight a finger: a control under one ignores them (kit.js), and a
@@ -12,6 +12,7 @@ const $ = id => document.getElementById(id);
 const S = {
   parts: [], row: 0, layer: 0, knobs: [], synth: null,
   patches: [], favs: new Set(), favsKept: false, fam: 'all', build: null, picking: null,
+  stops: null, organs: [], drawnMine: null,
 };
 const HOLD_MS = 700;
 const FAMILIES = ['Piano', 'Chromatic Perc.', 'Organ', 'Guitar', 'Bass', 'Strings', 'Ensemble', 'Brass',
@@ -169,11 +170,11 @@ async function soloPart(row) {
 // ---------------------------------------------------------------- THE CARD KEYS
 const CARDS = [
   ['parts', 'Parts', true], ['library', 'Library', true], ['synth', 'Synth', true],
-  ['organ', 'Organ'], ['piano', 'Piano'], ['drums', 'Drums'], ['effects', 'Effects'],
+  ['stops', 'Stops', true], ['piano', 'Piano'], ['drums', 'Drums'], ['effects', 'Effects'],
   ['matrix', 'Matrix'], ['tuning', 'Tuning'], ['control', 'Control'], ['scenes', 'Scenes'], ['setup', 'Setup'],
 ];
 const LATER = {
-  organ: 'stop tabs by division, drive and the rotor', piano: 'the damper, push to damp and the register',
+  piano: 'the damper, push to damp and the register',
   drums: 'a pad for each key of the kit', effects: 'the insertion effect and the reverb, chorus, delay and EQ',
   matrix: 'what each controller moves', tuning: 'the tuner, pitch standard and the Eastern systems',
   control: 'on-screen controls, routes and learn', scenes: 'presets, scenes, the GS reset and the metronome',
@@ -181,6 +182,7 @@ const LATER = {
 };
 let card = 'parts';
 try { card = localStorage.getItem('clavitone.card') || 'parts'; } catch (_) {}
+if (card === 'organ') card = 'stops';
 CARDS.forEach(([id, label, ready]) => {
   const b = document.createElement('button');
   b.className = 'ck' + (ready ? '' : ' later'); b.dataset.kit = '1'; b.dataset.id = id; b.textContent = label;
@@ -197,6 +199,7 @@ function showCard(id) {
   if (id === 'parts') { drawKeyboard(); drawStrips(); }
   if (id === 'library') drawTiles(true);
   if (id === 'synth') drawSynth();
+  if (id === 'stops') drawStops();
 }
 
 // ---------------------------------------------------------------- PARTS: the keyboard and the parts' ranges
@@ -492,6 +495,74 @@ const setKnob = (k, v) => sendKnob({ k, v });
 async function forget(k) { await Wire.call('synth_forget', { row: S.row, layer: S.layer, knob: k.knob }); refreshSynth(); }
 async function refreshSynth() { const s = await Wire.call('synth', { row: S.row, layer: S.layer }); S.synth = s.synth; if (card === 'synth') drawSynth(); }
 
+// ---------------------------------------------------------------- STOPS: the first part's organ
+// A stop jamb: the voice's rows as the panel has them (tonelib stop_rows),
+// each row's groups apart, a tab lit when drawn. A tap draws or retires it;
+// the whole registration goes to the engine, so taps faster than a block all
+// land. What a file or a preset draws comes back by the poll.
+const FEET = new Set(['32', '16', '10-2/3', '8', '5-1/3', '4', '2-2/3', '2', '1-3/5', '1-1/3', '1']);
+function stopParts(nm, feet) {          // "principal 16" -> ["Principal", "16′"]; "mixture III" -> ["Mixture", "III"]
+  const m = /^(.*?)\s+(\d+(?:-\d+\/\d+)?|[IVX]+)$/.exec(nm);
+  const cap = t => t.replace(/(^|\s)\S/g, c => c.toUpperCase());
+  if (!m) return [cap(nm), ''];
+  return [cap(m[1]), m[2] + (feet && FEET.has(m[2]) ? '′' : '')];
+}
+function stopsDrawn() {
+  const st = S.stops;
+  if (S.drawnMine && S.drawnMine.until > performance.now() && S.drawnMine.program === st.program) return S.drawnMine.drawn;
+  S.drawnMine = null;
+  return st.drawn;
+}
+let stopsSig = '';
+function drawStops(force) {
+  if (card !== 'stops') return;
+  const st = S.stops, el = $('jamb');
+  if (!st) { el.innerHTML = '<p class="empty">Reading the organ…</p>'; return; }
+  $('stopsWho').textContent = `part 01 · ${st.part}`;
+  if (st.program < 0) {
+    stopsSig = '';
+    const orgs = S.organs.map(pg => S.patches.find(p => !p.drums && p.program === pg && p.variation === 0)).filter(Boolean);
+    $('stopsInfo').textContent = '';
+    el.innerHTML = `<p class="empty">The stops play the first part, and ${esc(st.part || 'it')} has none. Put an organ there:</p>` +
+      `<div class="organs">${orgs.map(p => `<button class="tile" data-kit="1" data-pick="${p.pick}"><span class="pn">${pad(p.program, 3)}</span>` +
+        `<span class="nm">${esc(p.name)}</span><span></span></button>`).join('')}</div>`;
+    return;
+  }
+  const drawn = stopsDrawn();
+  const sig = st.program + '|' + st.names.join(',');
+  if (force || sig !== stopsSig) {
+    stopsSig = sig;
+    const nums = st.names.map(n => (/\s(\S+)$/.exec(n) || [])[1]).filter(t => t && /^\d/.test(t));
+    const feet = nums.length > 0 && nums.every(t => FEET.has(t));
+    el.innerHTML = st.rows.map(row => `<div class="jrow">${row.map(g => `<div class="jgrp">${g.map(r => {
+      const [a, b] = stopParts(st.names[r] || String(r), feet);
+      const f = b.endsWith('′') ? `${esc(b.slice(0, -1))}<i>′</i>` : esc(b);
+      return `<button class="tab" data-kit="1" data-rank="${r}"><span class="tn">${esc(a)}</span><span class="tf">${f}</span></button>`;
+    }).join('')}</div>`).join('')}</div>`).join('');
+  }
+  el.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', !!drawn[+b.dataset.rank]));
+  const k = drawn.filter(Boolean).length;
+  $('stopsInfo').textContent = `${k} of ${st.names.length} drawn`;
+}
+Kit.press($('jamb'), (t) => {
+  const st = S.stops;
+  if (!st) return;
+  if (t.classList.contains('tile')) {             // (an organ onto the first part)
+    S.picking = +t.dataset.pick;
+    Wire.call('part_pick', { row: 0, pick: S.picking });
+    return;
+  }
+  const d = stopsDrawn().slice(), r = +t.dataset.rank;
+  d[r] = d[r] ? 0 : 1;
+  S.drawnMine = { program: st.program, drawn: d, until: performance.now() + HOLD_MS };
+  drawStops();
+  Wire.call('stops_set', { drawn: d });
+}, '.tab, .tile');
+function setStops(st) {
+  S.stops = st;
+  drawStops();
+}
+
 // ---------------------------------------------------------------- THE WIRE
 function setParts(ps) {
   const before = S.parts.length;
@@ -512,7 +583,8 @@ Wire.connect({
     $('gone').hidden = true;
     const h = await Wire.call('hello');
     S.knobs = h.knobs || [];
-    const [p, pt, fv] = await Promise.all([Wire.call('parts'), Wire.call('patches'), Wire.call('favourites')]);
+    const [p, pt, fv, so] = await Promise.all([Wire.call('parts'), Wire.call('patches'), Wire.call('favourites'), Wire.call('stops')]);
+    S.stops = so.stops || null; S.organs = so.organs || [];
     S.patches = pt.patches || [];
     S.favs = new Set(fv.favourites || []); S.favsKept = !!fv.kept;
     S.parts = p.parts || [];
@@ -525,6 +597,7 @@ Wire.connect({
     if (m.meters) drawMeters(m.meters);
     if (m.build) { S.build = m.build; drawHealth(); }
     if (m.parts) setParts(m.parts);
+    if (m.stops) setStops(m.stops);
     if (m.synth && m.synth.row === S.row) { S.synth = m.synth; if (card === 'synth') drawSynth(); }
   },
   down() { $('gone').hidden = false; },

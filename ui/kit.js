@@ -116,22 +116,25 @@ const Kit = (() => {
   // before it (a key, a mouse with no pointer events) still acts.
   // sel: the buttons inside el that act (delegated), fn(button, event)
   function press(el, fn, sel) {
-    let st = null, fired = 0;
+    const downs = new Map();        // (each finger's: two hands drawing two stops at once)
+    let fired = 0;
     const which = e => (sel ? e.target.closest(sel) : el);
     el.addEventListener('pointerdown', e => {
       const b = which(e);
-      st = b && el.contains(b) ? { id: e.pointerId, b, x: e.clientX, y: e.clientY } : null;
+      if (b && el.contains(b)) downs.set(e.pointerId, { b, x: e.clientX, y: e.clientY });
+      else downs.delete(e.pointerId);
     });
     el.addEventListener('pointerup', e => {
-      if (!st || e.pointerId !== st.id) return;
+      const st = downs.get(e.pointerId);
+      if (!st) return;
+      downs.delete(e.pointerId);
       const b = st.b, far = Math.hypot(e.clientX - st.x, e.clientY - st.y) > 14;
-      st = null;
       const at = document.elementFromPoint(e.clientX, e.clientY);
       if (far || !at || !b.contains(at)) return;
       fired = performance.now();
       fn(b, e);
     });
-    el.addEventListener('pointercancel', () => { st = null; });
+    el.addEventListener('pointercancel', e => { downs.delete(e.pointerId); });
     el.addEventListener('click', e => {
       const b = which(e);
       if (!b || !el.contains(b)) return;

@@ -1098,6 +1098,15 @@ void nv_host_toggle_stop(nv_host *h, int rank)
     });
 }
 
+void nv_host_set_drawn(nv_host *h, const char *want, int n)
+{
+    std::vector<char> w(want, want + std::max(0, n));
+    h->post([h, w](long long) {
+        h->pending_drawn_prog = -1;
+        nv_part_set_drawn(h->part, w.data(), (int)w.size());
+    });
+}
+
 }  // extern "C"
 
 // ---- TUNING (the panel's t and E: livetui's tuners, the Eastern tuning) ----

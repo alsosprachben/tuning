@@ -152,5 +152,24 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
   touch-action: manipulation; }
 .seg button.on { background: var(--silk); color: var(--panel); }
 
+/* Stops: a jamb of tabs, a row each as the voice lays them out, its groups apart */
+#stopsInfo { color: var(--silk-dim); font-size: 14px; }
+.jamb { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 4px 0; }
+.jrow { display: flex; flex-wrap: wrap; gap: 14px 26px; padding: 12px 14px; background: #1f2225; border: 1px solid var(--edge); border-radius: 10px; }
+.jgrp { display: flex; flex-wrap: wrap; gap: 10px; }
+.jgrp + .jgrp { padding-left: 26px; border-left: 1px solid #3a3f45; }
+.tab { width: 150px; height: 104px; display: flex; flex-direction: column; justify-content: space-between; align-items: center;
+  padding: 12px 8px 8px; border-radius: 9px 9px 14px 14px; border: 1px solid var(--edge); touch-action: manipulation;
+  background: linear-gradient(180deg, #3d434a, #2b2f34); color: var(--silk); box-shadow: 0 4px 0 #15171a;
+  transform: translateY(-2px); transition: transform 60ms, box-shadow 60ms, background 60ms; }
+.tab .tn { font-size: 15px; font-weight: 600; line-height: 1.15; text-align: center; }
+.tab .tf { font: 34px/1 var(--f-lcd); color: var(--silk-dim); min-height: 1em; }
+.tab.on { background: radial-gradient(120% 120% at 50% 20%, #ffd27a, var(--lcd)); color: var(--lcd-bg);
+  box-shadow: 0 1px 0 #15171a, 0 0 16px rgba(240,177,58,.35); transform: translateY(2px); }
+.tab .tf i { font: 600 22px/1 var(--f-ui); font-style: normal; vertical-align: top; margin-left: 1px; }
+.tab.on .tf { color: var(--lcd-bg); }
+@media (prefers-reduced-motion: reduce) { .tab { transition: none; } }
+.organs { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 6px; margin-top: 10px; }
+
 [hidden] { display: none !important; }
 #gone { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(10,10,12,.86); font-size: 22px; color: var(--lcd); }

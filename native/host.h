@@ -207,6 +207,10 @@ int nv_host_stop_rows(nv_host *h, int program, int *out, int cap);
    between two blocks */
 int nv_host_drawn(nv_host *h, char *out, int cap);
 void nv_host_toggle_stop(nv_host *h, int rank);
+/* the whole registration at once: want[rank] 1 drawn (none drawn: the first
+   in the crescendo, as live.set_stops) -- a viewer's taps between two blocks
+   all land, where toggles read the drawn as it stood */
+void nv_host_set_drawn(nv_host *h, const char *want, int n);
 
 /* ---- TUNING (livetui's t and E) ----
    every tuner: "name\twhat it is for" a line; the rig's now (or asked); one

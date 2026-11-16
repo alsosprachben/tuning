@@ -269,6 +269,71 @@ J build_of(nv_host *h)
     return b;
 }
 
+// THE FIRST PART's ORGAN (the stops act on it: livetui's stop rows): its
+// program, its ranks' names, the panel's rows (each a list of groups, each
+// group's ranks) and what is drawn; program -1 when it is not an organ
+J stops_of(nv_host *h)
+{
+    J o = sess::obj();
+    int n = nv_host_parts(h, nullptr, 0);
+    std::vector<nv_host_partinfo> ps((size_t)std::max(0, n));
+    n = nv_host_parts(h, ps.data(), n);
+    int prog = n > 0 && !ps[0].drums ? ps[0].program : -1;
+    std::vector<char> nb(16384);
+    const int nr = prog >= 0 ? nv_host_stop_names(h, prog, nb.data(), (int)nb.size()) : 0;
+    if (nr <= 0)
+        prog = -1;
+    o.o["program"] = sess::integer(prog);
+    o.o["part"] = sess::str(n > 0 ? ps[0].name : "");
+    J names = sess::arr(), rows = sess::arr(), drawn = sess::arr();
+    if (prog >= 0) {
+        for (const char *p = nb.data();;) {
+            const char *e = strchr(p, '\n');
+            names.a.push_back(sess::str(std::string(p, e ? (size_t)(e - p) : strlen(p))));
+            if (!e)
+                break;
+            p = e + 1;
+        }
+        const int k = nv_host_stop_rows(h, prog, nullptr, 0);
+        std::vector<int> v((size_t)std::max(0, k));
+        if (k > 0)
+            nv_host_stop_rows(h, prog, v.data(), k);
+        J row = sess::arr(), grp = sess::arr();
+        for (int x : v) {
+            if (x >= 0) {
+                grp.a.push_back(sess::integer(x));
+                continue;
+            }
+            if (!grp.a.empty())
+                row.a.push_back(grp);
+            grp = sess::arr();
+            if (x == -1) {
+                if (!row.a.empty())
+                    rows.a.push_back(row);
+                row = sess::arr();
+            }
+        }
+        std::vector<char> d((size_t)nr, 0);
+        const int got = nv_host_drawn(h, d.data(), nr);
+        for (int i = 0; i < nr; i++)
+            drawn.a.push_back(sess::integer(i < got ? d[(size_t)i] : 0));
+    }
+    o.o["names"] = names;
+    o.o["rows"] = rows;
+    o.o["drawn"] = drawn;
+    return o;
+}
+
+// the programs with stops (to put one on the first part)
+J organs_of(nv_host *h)
+{
+    J a = sess::arr();
+    for (int pg = 0; pg < 128; pg++)
+        if (nv_host_stop_names(h, pg, nullptr, 0) > 0)
+            a.a.push_back(sess::integer(pg));
+    return a;
+}
+
 double now_s()
 {
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -278,7 +343,7 @@ double now_s()
 
 struct nv_ui_watch {
     int row = 0, layer = 0;
-    std::string parts_sent, synth_sent, build_sent;
+    std::string parts_sent, synth_sent, build_sent, stops_sent;
     bool quiet = false;                 // (the last meters sent were silence: none until something sounds)
     long tick = 0;
 };
@@ -433,6 +498,20 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         } else {
             nv_host_set_global(h, i, arg_d(q, "v", 0.0));
         }
+    } else if (call == "stops") {
+        r.o["stops"] = stops_of(h);
+        r.o["organs"] = organs_of(h);
+    } else if (call == "stops_set") {          // the whole registration: drawn[rank] 1
+        const J *d = q.get("drawn");
+        if (!d || !d->is(J::ARR)) {
+            ok = false;
+            r.o["error"] = sess::str("no drawn list");
+        } else {
+            std::vector<char> want;
+            for (const J &x : d->a)
+                want.push_back(x.i(0) != 0);
+            nv_host_set_drawn(h, want.data(), (int)want.size());
+        }
     } else if (call == "panic") {
         nv_host_panic(h);
     } else {
@@ -502,6 +581,14 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
             J bj;
             sess::parse(bs, bj);
             r.o["build"] = bj;
+            any = true;
+        }
+        J st = stops_of(h);
+        std::string sts;
+        put(sts, st);
+        if (sts != w->stops_sent) {
+            w->stops_sent = sts;
+            r.o["stops"] = st;
             any = true;
         }
         J sy = synth_of(h, w->row, w->layer);
