@@ -7,6 +7,7 @@
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
 //                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
 //                       [--tuner=NAME [--a=HZ | --c=HZ]] [--eastern=SPEC] [--eastern-at=S:SPEC]
+//                       [--ui[=PORT] [--ui-no-browser]]   (the touch interface: ui/, in Chromium, full screen)
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
 //                       [--rt] [--reg-async] [--async] [--busy=N] [--govern] [--paced] [--build-async] [--tuner-at=S:NAME] [--preset-at=S:NAME] [--metronome=BPM[:RING]]
 //
@@ -94,6 +95,9 @@
 #include "selfexe.h"
 #include "hostlive.h"
 #include "host.h"
+#include "uiserve.h"
+#include <spawn.h>
+#include <sys/stat.h>
 
 int nv_host::run(int argc, char **argv)
 {
@@ -775,9 +779,68 @@ int nv_host::run(int argc, char **argv)
         }
     };
     player = std::thread(audio);
+    // THE TOUCH INTERFACE (--ui[=PORT], 8710 by default): ui/ beside nvlive,
+    // served on 127.0.0.1 (uiserve.h, uiapi.cpp) and shown in Chromium, full
+    // screen in its own profile (--ui-no-browser: served only)
+    int ui_port = 0;
+    bool ui_browser = true;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--ui"))
+            ui_port = 8710;
+        else if (!strncmp(argv[i], "--ui=", 5))
+            ui_port = atoi(argv[i] + 5);
+        ui_browser = ui_browser && strcmp(argv[i], "--ui-no-browser") != 0;
+    }
+    std::atomic<bool> ui_stop{false};
+    std::thread ui_thr;
+    pid_t ui_pid = -1;
+    uiserve::Server ui_srv;
+    auto start_ui = [&]() {
+        if (ui_port <= 0)
+            return;
+        std::string d = nv_self_exe();
+        d = d.substr(0, d.rfind('/') == std::string::npos ? 0 : d.rfind('/'));
+        ui_srv.h = this;
+        ui_srv.root = (d.empty() ? std::string(".") : d) + "/ui";
+        if (!ui_srv.listen_on(ui_port)) {
+            fprintf(stderr, "nvlive: --ui: port %d is taken\n", ui_port);
+            return;
+        }
+        ui_thr = std::thread([&]() { ui_srv.run(ui_stop); });
+        const std::string url = "http://127.0.0.1:" + std::to_string(ui_port) + "/";
+        fprintf(stderr, "nvlive: the touch interface at %s\n", url.c_str());
+        if (!ui_browser)
+            return;
+        // (the snap's Chromium writes only under ~/snap/chromium)
+        const char *home = getenv("HOME");
+        std::string prof = std::string(home ? home : "/tmp");
+        struct stat st;
+        prof += stat((prof + "/snap/chromium").c_str(), &st) == 0 ? "/snap/chromium/common/clavitone-ui"
+                                                                   : "/.cache/clavitone-ui";
+        std::vector<std::string> av = {"chromium", "--app=" + url, "--start-fullscreen", "--user-data-dir=" + prof,
+                                       "--no-first-run", "--no-default-browser-check", "--disable-features=Translate",
+                                       "--ozone-platform-hint=auto"};
+        std::vector<char *> ap;
+        for (auto &x : av)
+            ap.push_back(&x[0]);
+        ap.push_back(nullptr);
+        posix_spawn_file_actions_t fa;
+        posix_spawn_file_actions_init(&fa);
+        posix_spawn_file_actions_addopen(&fa, 1, "/dev/null", O_WRONLY, 0);
+        posix_spawn_file_actions_addopen(&fa, 2, "/dev/null", O_WRONLY, 0);
+        extern char **environ;
+        if (posix_spawnp(&ui_pid, "chromium", &fa, nullptr, ap.data(), environ) != 0) {
+            ui_pid = -1;
+            fprintf(stderr, "nvlive: --ui: no chromium to show it; open %s\n", url.c_str());
+        }
+        posix_spawn_file_actions_destroy(&fa);
+    };
     if (nopanel) {
         globals_init();
         session_apply();
+        if (ui_port > 0)
+            patches_init();                     // (the interface's library)
+        start_ui();
         while (!g_stop)
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         std::vector<std::array<int, 7>> rs;
@@ -791,6 +854,7 @@ int nv_host::run(int argc, char **argv)
         globals_init();
         session_apply();
         patches_init();
+        start_ui();
         H.take = [&]() {
             std::lock_guard<std::mutex> lk(pmu);
             panel::Snap s = snap;
@@ -1218,6 +1282,12 @@ int nv_host::run(int argc, char **argv)
         }
     }
     g_stop = true;
+    if (ui_thr.joinable()) {
+        ui_stop = true;
+        ui_thr.join();
+    }
+    if (ui_pid > 0)
+        kill(ui_pid, SIGTERM);                  // (the window this run opened)
     player.join();
     bcv.notify_all();
     builder.join();

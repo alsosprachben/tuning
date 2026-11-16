@@ -414,7 +414,7 @@ def _load():
                                                        'live.cpp', 'slab.cpp', 'live.h', 'livereg.cpp', 'gpu.cpp', 'gpu_metal.mm',
                                                        'tuner.cpp', 'tunertables.h', 'bend.cpp', 'organ.c',
                                                        'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'efxrev.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
-                                                       'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'hostint.h', 'hostlive.h', 'host.h', 'livebus.cpp',
+                                                       'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'uiapi.cpp', 'session.h', 'hostint.h', 'hostlive.h', 'host.h', 'livebus.cpp',
                                                        'relocate.h', 'selfexe.h', 'lfqueue.h', 'rtjoin.h', 'rtsem.h', 'rubfill.h')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c'), os.path.join(HERE, 'tapkernel.c')])
     so = os.path.join(HERE, 'libnative.so')
@@ -447,7 +447,7 @@ def _load():
                  # roomtail.py's late field (live.room_irs's), drawn natively; the
                  # live host (host.h: nvlive's, as a library); a part's own bus live
                  # (live.LiveBus: efxbus's processors, block by block)
-                 + [(f[:-4], cxx, nat(f)) for f in ('roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'livebus.cpp')])
+                 + [(f[:-4], cxx, nat(f)) for f in ('roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'uiapi.cpp', 'livebus.cpp')])
         objs = _build_objects(units)
         try:
             subprocess.check_call(_TC.cmd(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl']))
@@ -4639,7 +4639,9 @@ def build_nvlive():
     hdr = os.path.join(HERE, 'native', 'panel.h')
     hint = os.path.join(HERE, 'native', 'hostint.h')
     hlive = os.path.join(HERE, 'native', 'hostlive.h')
+    uis = os.path.join(HERE, 'native', 'uiserve.h')
     if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(hdr), os.path.getmtime(hint), os.path.getmtime(hlive),
+                                      os.path.getmtime(uis),
                                       os.path.getmtime(so)) > os.path.getmtime(exe):
         tmp = '%s.%d.tmp' % (exe, os.getpid())
         subprocess.check_call(_TC.cmd(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin',

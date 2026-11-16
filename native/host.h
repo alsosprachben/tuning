@@ -375,6 +375,19 @@ void nv_host_udrum_send(nv_host *h, int set, int key, int code, int v);
 /* the live part it plays (native.py's nv_part_*: a check reads its slab) */
 void *nv_host_part(nv_host *h);
 
+/* ---- THE TOUCH INTERFACE (uiapi.cpp; ui/) ----
+   One viewer's watch (its selected part, what it was last sent); a request
+   as JSON ({"call": ..., "id": ...}), its answer as JSON; and what changed
+   since the viewer last asked (NULL: nothing) -- the meters while anything
+   sounds, the parts and its part's knobs when they move. The strings are
+   the caller's to free (nv_ui_free). Never on the audio thread. */
+typedef struct nv_ui_watch nv_ui_watch;
+nv_ui_watch *nv_ui_watch_new(void);
+void nv_ui_watch_free(nv_ui_watch *w);
+char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *request);
+char *nv_ui_poll(nv_host *h, nv_ui_watch *w);
+void nv_ui_free(char *s);
+
 #ifdef __cplusplus
 }
 #endif

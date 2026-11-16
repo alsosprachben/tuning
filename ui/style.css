@@ -1,0 +1,60 @@
+/* the hardware look (the plan's): a dark panel, an amber dot-matrix display */
+:root {
+  --panel: #23262a; --panel-hi: #2e3237; --edge: #121417; --silk: #c9cdc8; --silk-dim: #8a918b;
+  --lcd: #f0b13a; --lcd-bg: #2a1d06; --lcd-dim: #6b4c14; --own: #f08a3c; --bad: #e0533c;
+  --f-ui: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --f-lcd: "VT323", "DejaVu Sans Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: #17191c; color: var(--silk); font-family: var(--f-ui); font-size: 15px;
+  -webkit-user-select: none; user-select: none; overflow: hidden; }
+#app { height: 100%; display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+.unit { display: grid; grid-template-columns: 1fr 180px; gap: 12px;
+  background: linear-gradient(180deg, var(--panel-hi), var(--panel)); border: 1px solid var(--edge); border-radius: 12px; padding: 12px; }
+.lcd { background: radial-gradient(120% 140% at 30% 20%, #34240a, var(--lcd-bg)); border: 2px solid #0b0c0d; border-radius: 6px;
+  padding: 10px 14px; font-family: var(--f-lcd); color: var(--lcd); text-shadow: 0 0 6px rgba(240,177,58,.35); }
+.lcd-top { display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: end; }
+.lcd-part { font-size: 46px; line-height: .9; }
+.lcd small { display: block; font-size: 18px; opacity: .7; }
+.lcd-name { font-size: 38px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lcd-load { font-size: 19px; text-align: right; line-height: 1.1; }
+.peaks { display: grid; gap: 3px; margin-top: 8px; }
+.peak { height: 6px; background: rgba(240,177,58,.12); border-radius: 2px; overflow: hidden; }
+.peak i { display: block; height: 100%; width: 0; background: var(--lcd); }
+.peak i.hot { background: var(--bad); }
+.bars { display: grid; grid-template-columns: repeat(16, 1fr); gap: 4px; margin-top: 8px; height: 64px; align-items: end; }
+.bar { display: flex; flex-direction: column-reverse; gap: 2px; height: 100%; }
+.bar i { display: block; flex: 1; background: var(--lcd); opacity: .13; border-radius: 1px; }
+.bar i.lit { opacity: 1; }
+.bar-n { display: grid; grid-template-columns: repeat(16, 1fr); gap: 4px; font-size: 16px; text-align: center; opacity: .7; }
+.btns { display: grid; gap: 8px; align-content: start; }
+.hb { font: 700 12px/1 var(--f-ui); letter-spacing: .08em; color: var(--silk); padding: 16px 6px; border-radius: 7px;
+  background: linear-gradient(180deg, #3d434a, #2b2f34); border: 1px solid var(--edge); touch-action: manipulation; }
+.hb:active { background: #23262a; }
+.hb.panic { color: #f3b0a3; }
+.cols { flex: 1; min-height: 0; display: grid; grid-template-columns: 340px 1fr; gap: 12px; }
+.card { background: linear-gradient(180deg, var(--panel-hi), var(--panel)); border: 1px solid var(--edge); border-radius: 12px;
+  padding: 12px; overflow: auto; min-height: 0; }
+.card h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; }
+.card h2 small { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--silk-dim); margin-left: 8px; }
+.part { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; align-items: center; padding: 10px 8px; border-radius: 7px;
+  touch-action: manipulation; }
+.part.sel { background: rgba(240,177,58,.14); }
+.part .n { font-family: var(--f-lcd); font-size: 22px; color: var(--lcd); }
+.part .d { font-size: 12px; color: var(--silk-dim); }
+.part.dim { opacity: .5; }
+.sec { margin-bottom: 14px; }
+.sec h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .14em; color: var(--silk-dim); text-transform: uppercase; }
+.row { display: grid; grid-template-columns: 110px 1fr 100px; gap: 10px; align-items: center; min-height: 40px; }
+.row.own .v { color: var(--own); }
+.row input[type=range] { width: 100%; height: 36px; accent-color: var(--lcd); touch-action: none; }
+.row .v { font-family: var(--f-lcd); font-size: 20px; text-align: right; color: var(--lcd); }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.seg button { font: 12px var(--f-ui); padding: 9px 10px; border-radius: 5px; border: 1px solid var(--edge); background: #2b2f34; color: var(--silk-dim);
+  touch-action: manipulation; }
+.seg button.on { background: var(--silk); color: var(--panel); }
+.empty { color: var(--silk-dim); }
+[hidden] { display: none !important; }
+#gone { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(10,10,12,.86); font-size: 22px; color: var(--lcd); }

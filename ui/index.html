@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Clavitone</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<!-- THE TOUCH INTERFACE (nvlive --ui): step 1, the wire -- the display, the
+     parts, and the selected part's synth knobs as plain sliders; the cards
+     and their controls come next -->
+<body>
+<main id="app">
+  <section class="unit">
+    <div class="lcd" id="lcd">
+      <div class="lcd-top">
+        <div class="lcd-part"><small>PART</small><span id="partno">--</span></div>
+        <div class="lcd-name"><small id="family">connecting</small><span id="patch">Clavitone</span></div>
+        <div class="lcd-load"><span id="cpu">CPU --</span><br><span id="voices">VOICES --</span><br><span id="health"></span></div>
+      </div>
+      <div class="peaks"><div class="peak"><i id="pkL"></i></div><div class="peak"><i id="pkR"></i></div></div>
+      <div class="bars" id="bars"></div>
+      <div class="bar-n" id="barn"></div>
+    </div>
+    <div class="btns">
+      <button class="hb" id="prev">◀ PART</button>
+      <button class="hb" id="next">PART ▶</button>
+      <button class="hb panic" id="panic">PANIC</button>
+    </div>
+  </section>
+  <section class="cols">
+    <div class="card" id="partsCard"><h2>Parts</h2><div id="parts"></div></div>
+    <div class="card" id="synthCard"><h2>Synth <small id="synthWho"></small></h2><div id="synth"></div></div>
+  </section>
+</main>
+<div id="gone" hidden>The engine stopped. Start nvlive --ui again to come back.</div>
+<script src="app.js"></script>
+</body>
+</html>
