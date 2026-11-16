@@ -63,8 +63,12 @@
     </div>
     <div class="card" data-card="synth" hidden>
       <div class="card-head"><h2>Synth <small id="synthWho"></small></h2>
-        <div class="acts"><a class="hb" href="gallery.html" data-kit="1">CONTROLS TEST</a></div></div>
-      <div id="synth" class="synth-plain"></div>
+        <div class="acts" id="synthActs">
+          <div class="kit-seg" id="synthLayer"><button data-kit="1">LAYER A</button><button data-kit="1">LAYER B</button></div>
+          <button class="hb" id="synthBack" data-kit="1">AS THE PATCH</button>
+          <a class="hb" href="gallery.html" data-kit="1">CONTROLS TEST</a></div></div>
+      <p class="empty" id="synthEmpty" hidden></p>
+      <div id="synth" class="synth"></div>
     </div>
     <div class="card" data-card="stops" hidden>
       <div class="card-head"><h2>Stops <small id="stopsWho"></small></h2><span id="stopsInfo"></span></div>

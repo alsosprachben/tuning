@@ -143,18 +143,37 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .osk button.w { flex-basis: 120px; font: 700 13px var(--f-ui); letter-spacing: .08em; }
 .osk button.space { flex-basis: 360px; font: 700 13px var(--f-ui); letter-spacing: .08em; }
 
-/* Synth (plain, until its card) */
-.synth-plain { columns: 3 420px; column-gap: 24px; }
-.sec { margin-bottom: 14px; break-inside: avoid; }
-.sec h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .14em; color: var(--silk-dim); text-transform: uppercase; }
-.row { display: grid; grid-template-columns: 110px 1fr 100px; gap: 10px; align-items: center; min-height: 40px; }
-.row.own .v { color: var(--own); }
-.row input[type=range] { width: 100%; height: 36px; accent-color: var(--lcd); touch-action: none; }
-.row .v { font-family: var(--f-lcd); font-size: 14px; text-align: right; color: var(--lcd); }
-.seg { display: flex; flex-wrap: wrap; gap: 4px; }
-.seg button { font: 12px var(--f-ui); padding: 9px 10px; border-radius: 5px; border: 1px solid var(--edge); background: #2b2f34; color: var(--silk-dim);
-  touch-action: manipulation; }
-.seg button.on { background: var(--silk); color: var(--panel); }
+/* Synth: the panel's columns as the sound flows, each a box of its groups */
+.synth { flex: 1; min-height: 0; display: flex; gap: 8px; overflow: auto; align-items: stretch; padding-bottom: 4px; }
+.sy-col { flex: none; display: flex; flex-direction: column; gap: 6px; background: #1f2225; border: 1px solid var(--edge);
+  border-radius: 10px; padding: 8px 10px 10px; }
+.sy-col h3 { margin: 0; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--silk); }
+.sy-grp h4 { margin: 2px 0 0; font: 600 10.5px var(--f-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--silk-dim);
+  border-top: 1px solid #33383e; padding-top: 5px; }
+.sy-body { display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: flex-start; }
+.sy-sw { display: flex; }
+.synth .kit-knob { width: 100px; padding: 2px 0; }
+.synth .kit-knob.wave { width: 104px; }
+.synth .kit-knob.big { width: 116px; }
+.synth .kit-dial { width: 60px; height: 60px; }
+.synth .kit-knob.big .kit-dial { width: 92px; height: 92px; }
+.synth .kit-switch { padding: 2px 0; gap: 4px; }
+.sy-col[data-col="Oscillators"] { width: 372px; }
+.sy-col[data-col="Mixer"] .sy-body { flex-direction: column; }
+.sy-col[data-col="Filter"] { width: 244px; }
+.sy-col[data-col="Envelopes"] { display: grid; grid-template-columns: 206px 206px; grid-template-rows: auto 1fr; column-gap: 8px; align-content: start; }
+.sy-col[data-col="Envelopes"] h3 { grid-column: 1 / -1; }
+.sy-col[data-col="Modulation"] { width: 396px; }
+.sy-col[data-col="Delay"] { width: 234px; }
+/* a switch of many or long words: a stack */
+.kit-switch.v .kit-seg { flex-direction: column; }
+.kit-switch.v .kit-seg button { border-right: 0; border-bottom: 1px solid #121417; padding: 7px 10px; min-width: 0; text-align: left; }
+.kit-switch.v .kit-seg button:last-child { border-bottom: 0; }
+.kit-switch.own .kit-label { color: var(--own); }
+.kit-switch.own .kit-seg button.on { background: var(--own); color: var(--lcd-bg); }
+.kit-switch.own .kit-toggle.on::after { background: var(--own); box-shadow: 0 0 8px var(--own); }
+#synthLayer button { padding: 13px 14px; font: 700 12px var(--f-ui); letter-spacing: .08em; }
+#synthBack:disabled { opacity: .45; }
 
 /* Stops: a jamb of tabs, a row each as the voice lays them out, its groups apart */
 #stopsInfo { color: var(--silk-dim); font-size: 14px; }

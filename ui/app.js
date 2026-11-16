@@ -1,6 +1,6 @@
 // THE TOUCH INTERFACE: the front panel (the display, its seven fields, the
 // dial, the part keys), the card keys, and the cards -- Parts and Library
-// and Stops now; the synth's knobs plain until their card comes.
+// Synth and Stops now.
 //
 // Values the engine pushes (parts, meters, a knob turned on a Messenger)
 // never fight a finger: a control under one ignores them (kit.js), and a
@@ -448,55 +448,118 @@ if (ownKeys) {
   $('q').addEventListener('focus', () => { $('osk').hidden = false; });
 }
 
-// ---------------------------------------------------------------- THE SYNTH (plain until its card)
-let dragging = null;
-function drawSynth() {
-  const el = $('synth'), sy = S.synth;
-  if (dragging) return;
-  el.innerHTML = '';
-  $('synthWho').textContent = sy && sy.layers > 0 ? `part ${sy.row + 1}${sy.layers > 1 ? ' · layer ' + 'AB'[sy.layer] : ''}` : '';
-  if (!sy || sy.layers <= 0) {
-    el.innerHTML = `<p class="empty">${sy && sy.layers < 0 ? 'Reading the part…' : 'This part is not a synth: its knobs appear here when it is.'}</p>`;
+// ---------------------------------------------------------------- THE SYNTH CARD
+// The selected part's Moog panel, laid out as any analog synth reads, the
+// sound flowing left to right: the oscillators, the mixer, the filter, the
+// two envelopes, the modulation, the delay. Built from the engine's knob
+// table (nv_host_synth_knobs: each knob's column, group, generic label and a
+// switch's words), so nothing here names a knob but the layout hints below.
+// Orange is changed from the patch: double-tap a control to put it back.
+const SY = { sig: '', ctl: {} };
+// (a switch's look: a vertical stack where its words are long or many)
+const vertical = k => k.steps.length > 2 || k.words.some(w => w.length > 6);
+const isToggle = k => k.steps.length === 2 && k.words.join() === 'off,on';
+function synthCtl(parent, k, i) {
+  const send = Wire.throttled(async v => {
+    const r = await Wire.call('synth_set', { row: S.row, layer: S.layer, knob: k.knob, v });
+    if (r.text !== undefined && SY.ctl[i] && SY.ctl[i].text) SY.ctl[i].text(r.text);
+  });
+  const forget = async () => { await Wire.call('synth_forget', { row: S.row, layer: S.layer, knob: k.knob }); refreshSynth(); };
+  if (k.steps.length) {
+    const box = document.createElement('div'); box.className = 'sy-sw';
+    parent.appendChild(box);
+    if (isToggle(k)) {
+      const c = Kit.toggle(box, { label: k.generic, value: false, onChange: on => { send(on ? k.steps[1] : k.steps[0]); markOwn(i); } });
+      SY.ctl[i] = { set: (v, t, own) => { c.set(v !== 0); c.el.classList.toggle('own', own); }, el: c.el };
+    } else {
+      const c = Kit.segments(box, { label: k.generic, options: k.words, value: 0,
+        onChange: x => { send(k.steps[x]); markOwn(i); } });
+      if (vertical(k)) c.el.classList.add('v');
+      SY.ctl[i] = { set: (v, t, own) => { const j = k.steps.findIndex(st => Math.abs(st - v) < 1e-6); if (j >= 0) c.set(j); c.el.classList.toggle('own', own); }, el: c.el };
+    }
+    // (double-tap the label: back to the patch's)
+    let last = 0;
+    SY.ctl[i].el.querySelector('.kit-label').addEventListener('pointerup', () => { const t = performance.now(); if (t - last < 350) forget(); last = t; });
     return;
   }
-  let sec = null, box;
-  S.knobs.forEach((k, i) => {
-    if (k.section !== sec) {
-      sec = k.section; box = document.createElement('div'); box.className = 'sec';
-      box.innerHTML = `<h3>${esc(sec)}</h3>`; el.appendChild(box);
+  const wave = k.kind === 'wave' ? 'osc' : k.kind === 'subwave' ? 'sub' : null;
+  let text = '';
+  const c = Kit.knob(parent, {
+    label: k.generic, value: 0, centred: k.centred,
+    detents: wave === 'osc' ? [Wave.TRI, Wave.SAW, Wave.SQUARE] : wave === 'sub' ? [Wave.SUB_SQUARE] : k.centred ? [0.5] : [],
+    scope: wave, size: k.kind === 'hz' ? 'big' : undefined,
+    fmt: () => text,                              // (the engine's words: each set answers with them)
+    onChange: v => send(v),
+    onReset: forget,
+    onInfo: () => Kit.sheet({
+      title: `${k.group} ${k.generic}`, text, value: c.get(),
+      hint: `The knob's position, 0 to 1${k.centred ? ' (0.5 the centre)' : ''}. The Messenger calls it ${k.section} ${k.label}.`,
+      onSet: async v => { const r = await Wire.call('synth_set', { row: S.row, layer: S.layer, knob: k.knob, v }); c.set(v, r.text, true); },
+      onReset: forget,
+    }),
+  });
+  SY.ctl[i] = {
+    set: (v, t, own) => { text = t; c.set(v, t, own); },
+    text: t => { text = t; c.el.querySelector('.kit-value').textContent = t; },
+    el: c.el,
+  };
+}
+function markOwn(i) { const c = SY.ctl[i]; if (c) c.el.classList.add('own'); }
+function buildSynth() {
+  const el = $('synth');
+  el.innerHTML = ''; SY.ctl = {};
+  const cols = new Map();
+  // (in the card's order: its columns as the sound flows, each group's knobs as a player reads them)
+  const order = S.knobs.map((k, i) => i).filter(i => S.knobs[i].column).sort((a, b) => S.knobs[a].at - S.knobs[b].at);
+  order.forEach(i => {
+    const k = S.knobs[i];
+    if (!cols.has(k.column)) {
+      const c = document.createElement('section'); c.className = 'sy-col'; c.dataset.col = k.column;
+      c.innerHTML = `<h3>${esc(k.column)}</h3>`;
+      el.appendChild(c); cols.set(k.column, { el: c, groups: new Map() });
     }
-    const v = sy.pn[k.knob], own = sy.own[k.knob];
-    const r = document.createElement('div'); r.className = 'row' + (own ? ' own' : '');
-    r.innerHTML = `<span>${esc(k.label)}</span>`;
-    if (k.steps.length) {
-      const seg = document.createElement('div'); seg.className = 'seg';
-      k.steps.forEach(st => {
-        const b = document.createElement('button');
-        b.textContent = st; b.className = Math.abs(st - v) < 1e-6 ? 'on' : '';
-        Kit.press(b, () => setKnob(k, st));
-        seg.appendChild(b);
-      });
-      r.appendChild(seg);
-    } else {
-      const inp = document.createElement('input');
-      inp.type = 'range'; inp.min = 0; inp.max = 1; inp.step = 0.001; inp.value = v;
-      inp.oninput = () => setKnob(k, +inp.value);
-      inp.onpointerdown = () => { dragging = inp; };
-      inp.onpointerup = inp.onpointercancel = () => { dragging = null; refreshSynth(); };
-      r.appendChild(inp);
+    const col = cols.get(k.column);
+    if (!col.groups.has(k.group)) {
+      const g = document.createElement('div'); g.className = 'sy-grp'; g.dataset.grp = k.group;
+      g.innerHTML = k.group !== k.column ? `<h4>${esc(k.group)}</h4><div class="sy-body"></div>` : '<div class="sy-body"></div>';
+      col.el.appendChild(g); col.groups.set(k.group, g.querySelector('.sy-body'));
     }
-    const t = document.createElement('span'); t.className = 'v'; t.textContent = sy.text[i]; r.appendChild(t);
-    r.ondblclick = () => forget(k);
-    box.appendChild(r);
+    synthCtl(col.groups.get(k.group), k, i);
   });
 }
-const sendKnob = Wire.throttled(async ({ k, v }) => {
-  await Wire.call('synth_set', { row: S.row, layer: S.layer, knob: k.knob, v });
-  if (!dragging) refreshSynth();
+function drawSynth() {
+  const sy = S.synth, has = sy && sy.layers > 0;
+  $('synthWho').textContent = has ? `part ${pad(sy.row + 1, 2)} · ${cur() ? cur().name : ''}` : '';
+  $('synthEmpty').hidden = has;
+  $('synth').hidden = !has;
+  $('synthActs').hidden = !has;
+  if (!has) {
+    $('synthEmpty').textContent = sy && sy.layers < 0 ? 'Reading the part…' :
+      `${cur() ? cur().name : 'This part'} is not a synth. The synth programs (Synth Lead, Synth Pad, the synth basses, brass and strings) bring their knobs here.`;
+    return;
+  }
+  const sig = S.knobs.length + '|' + (S.knobs[0] && S.knobs[0].column);
+  if (sig !== SY.sig) { SY.sig = sig; buildSynth(); }
+  S.knobs.forEach((k, i) => { const c = SY.ctl[i]; if (c) c.set(sy.pn[k.knob], sy.text[i], !!sy.own[k.knob]); });
+  const n = S.knobs.filter(k => sy.own[k.knob]).length;
+  $('synthBack').textContent = n ? `${n} CHANGED · BACK TO THE PATCH` : 'AS THE PATCH';
+  $('synthBack').disabled = !n;
+  const lay = $('synthLayer');
+  lay.hidden = sy.layers < 2;
+  lay.querySelectorAll('button').forEach((b, j) => b.classList.toggle('on', j === S.layer));
+}
+async function refreshSynth() { const s = await Wire.call('synth', { row: S.row, layer: S.layer }); if (s.synth && s.synth.row === S.row) { S.synth = s.synth; if (card === 'synth') drawSynth(); } }
+Kit.press($('synthBack'), async () => {
+  const sy = S.synth;
+  if (!sy) return;
+  for (const k of S.knobs) if (sy.own[k.knob]) await Wire.call('synth_forget', { row: S.row, layer: S.layer, knob: k.knob });
+  refreshSynth();
 });
-const setKnob = (k, v) => sendKnob({ k, v });
-async function forget(k) { await Wire.call('synth_forget', { row: S.row, layer: S.layer, knob: k.knob }); refreshSynth(); }
-async function refreshSynth() { const s = await Wire.call('synth', { row: S.row, layer: S.layer }); S.synth = s.synth; if (card === 'synth') drawSynth(); }
+$('synthLayer').querySelectorAll('button').forEach((b, j) => Kit.press(b, async () => {
+  S.layer = j;
+  const s = await Wire.call('select', { row: S.row, layer: j });
+  S.synth = s.synth; drawSynth();
+}));
 
 // ---------------------------------------------------------------- STOPS: the selected part's organ
 // A stop jamb: the voice's rows as the panel has them (tonelib stop_rows),
@@ -633,7 +696,7 @@ Wire.connect({
     if (m.build) { S.build = m.build; drawHealth(); }
     if (m.parts) setParts(m.parts);
     if (m.stops) setStops(m.stops);
-    if (m.synth && m.synth.row === S.row) { S.synth = m.synth; if (card === 'synth') drawSynth(); }
+    if (m.synth && m.synth.row === S.row && m.synth.layer === S.layer) { S.synth = m.synth; if (card === 'synth') drawSynth(); }
   },
   down() { $('gone').hidden = false; },
 });

@@ -12,6 +12,7 @@
 // Messenger's knob turned, a program change from a file).
 //
 // Never on the audio thread: the host's calls post their work to it.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -92,6 +93,9 @@ struct Knob {
     int knob;
     std::vector<double> steps;
     bool centred;
+    std::string column, group, generic;     // (the touch card's: panel.h SYNTH_CARD)
+    std::vector<std::string> words;         // (a switch's, a step each)
+    int at = -1;                            // (its place on the card)
 };
 const std::vector<Knob> &knobs()
 {
@@ -121,6 +125,26 @@ const std::vector<Knob> &knobs()
                     k.steps.push_back(atof(f[4].substr(s, t - s).c_str()));
                 }
                 k.centred = f[5] == "1";
+                if (f.size() >= 10) {
+                    k.column = f[6];
+                    k.group = f[7];
+                    k.generic = f[8];
+                    for (size_t s = 0, t; !f[9].empty() && s <= f[9].size(); s = t + 1) {
+                        t = f[9].find(',', s);
+                        if (t == std::string::npos)
+                            t = f[9].size();
+                        k.words.push_back(f[9].substr(s, t - s));
+                    }
+                    if (f.size() >= 11)
+                        k.at = atoi(f[10].c_str());
+                }
+                // a switch without its own words: each step in the knob's
+                double pn[NV_MK_N] = {};
+                for (size_t i = k.words.size(); i < k.steps.size(); i++) {
+                    char b[64] = {};
+                    nv_host_synth_fmt(k.kind.c_str(), k.steps[i], pn, b, sizeof b);
+                    k.words.push_back(b);
+                }
                 out.push_back(k);
             }
             if (!e)
@@ -146,6 +170,14 @@ J knob_table()
             st.a.push_back(num(v));
         o.o["steps"] = st;
         o.o["centred"] = sess::boolean(k.centred);
+        o.o["column"] = sess::str(k.column);
+        o.o["group"] = sess::str(k.group);
+        o.o["generic"] = sess::str(k.generic.empty() ? k.label : k.generic);
+        J wd = sess::arr();
+        for (const auto &x : k.words)
+            wd.a.push_back(sess::str(x));
+        o.o["words"] = wd;
+        o.o["at"] = sess::integer(k.at);
         a.a.push_back(o);
     }
     return a;
@@ -476,7 +508,15 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             ok = false;
             r.o["error"] = sess::str("no knob " + std::to_string(knob));
         } else if (call == "synth_set") {
-            const double v = std::max(-1.0, std::min(1.0, arg_d(q, "v", 0.0)));
+            // (a knob 0..1 -- -1 kept for the amp velocity's "voice"; a switch
+            // one of its steps: the octave's feet, a mode's index)
+            double v = arg_d(q, "v", 0.0), lo = -1.0, hi = 1.0;
+            for (const Knob &k : knobs())
+                if (k.knob == knob && !k.steps.empty()) {
+                    lo = *std::min_element(k.steps.begin(), k.steps.end());
+                    hi = *std::max_element(k.steps.begin(), k.steps.end());
+                }
+            v = std::max(lo, std::min(hi, v));
             nv_host_synth_set(h, row, layer, knob, v);
             // ...and its new value in the panel's words (the set is posted:
             // the panel as it stood, this knob moved)

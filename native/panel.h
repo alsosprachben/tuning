@@ -491,6 +491,76 @@ static const char *SYNTH_KNOBS[][4] = {
     {"MF-104", "mf104_amount", "lfo amount", "mfoct"}};
 static const int NSYNTH = sizeof(SYNTH_KNOBS) / sizeof(SYNTH_KNOBS[0]);
 
+// THE TOUCH INTERFACE's SYNTH CARD (ui/): each knob's column, its group, the
+// generic label a player knows from any synth (the Moog-only names kept for
+// the TUI above), and a switch's short words, one per step ("" the knob's
+// own words). The columns run as the sound flows: the oscillators, the
+// mixer, the filter, the two envelopes, the modulation, the delay.
+static const char *SYNTH_CARD[][5] = {
+    {"osc1_octave", "Oscillators", "Osc 1", "Octave", "32',16',8',4'"},
+    {"osc1_wave", "Oscillators", "Osc 1", "Wave", ""},
+    {"osc2_octave", "Oscillators", "Osc 2", "Octave", "32',16',8',4'"},
+    {"osc2_wave", "Oscillators", "Osc 2", "Wave", ""},
+    {"osc2_freq", "Oscillators", "Osc 2", "Freq", ""},
+    {"sync", "Oscillators", "Osc 2", "Sync 1>2", ""},
+    {"sub_wave", "Oscillators", "Sub", "Sub wave", ""},
+    {"tune", "Oscillators", "Sub", "Tune", ""},
+    {"glide", "Oscillators", "Sub", "Glide", ""},
+    {"osc1_level", "Mixer", "Mixer", "Osc 1", ""},
+    {"osc2_level", "Mixer", "Mixer", "Osc 2", ""},
+    {"sub_level", "Mixer", "Mixer", "Sub", ""},
+    {"noise_level", "Mixer", "Mixer", "Noise", ""},
+    {"cutoff", "Filter", "Filter", "Cutoff", ""},
+    {"resonance", "Filter", "Filter", "Resonance", ""},
+    {"eg_amount", "Filter", "Filter", "Env amount", ""},
+    {"kb_track", "Filter", "Filter", "Key track", "off,1:1"},
+    {"mode", "Filter", "Filter", "Mode", "LP 24,LP 12,BP,HP"},
+    {"res_bass", "Filter", "Filter", "Bass keep", ""},
+    {"f_attack", "Envelopes", "Filter env", "Attack", ""},
+    {"f_decay", "Envelopes", "Filter env", "Decay", ""},
+    {"f_sustain", "Envelopes", "Filter env", "Sustain", ""},
+    {"f_release", "Envelopes", "Filter env", "Release", ""},
+    {"f_loop", "Envelopes", "Filter env", "Loop", ""},
+    {"f_vel", "Envelopes", "Filter env", "Velocity", ""},
+    {"a_attack", "Envelopes", "Amp env", "Attack", ""},
+    {"a_decay", "Envelopes", "Amp env", "Decay", ""},
+    {"a_sustain", "Envelopes", "Amp env", "Sustain", ""},
+    {"a_release", "Envelopes", "Amp env", "Release", ""},
+    {"a_vel", "Envelopes", "Amp env", "Velocity", "voice,off,on"},
+    {"a_loop", "Envelopes", "Amp env", "Loop", ""},
+    {"multitrig", "Envelopes", "Amp env", "Multi-trig", ""},
+    {"lfo1_rate", "Modulation", "LFO 1", "Rate", ""},
+    {"lfo1_shape", "Modulation", "LFO 1", "Shape", "tri,saw,ramp,square"},
+    {"lfo1_depth", "Modulation", "LFO 1", "Depth", ""},
+    {"lfo1_dest", "Modulation", "LFO 1", "To", "cutoff,osc 2 freq,osc 1 wave,sub wave"},
+    {"lfo1_reset", "Modulation", "LFO 1", "Key reset", ""},
+    {"lfo2_rate", "Modulation", "LFO 2", "Rate", ""},
+    {"lfo2_pitch", "Modulation", "LFO 2", "Pitch", ""},
+    {"lfo2_cut", "Modulation", "LFO 2", "Cutoff", ""},
+    {"lfo2_amp", "Modulation", "LFO 2", "Amp", ""},
+    {"mod_amount", "Modulation", "Mod", "Amount", ""},
+    {"mod_dest", "Modulation", "Mod", "To", "osc 1>2 FM,env>osc 2 freq,env>osc 2 wave,env>sub wave"},
+    {"mf104_on", "Delay", "Delay", "On", ""},
+    {"mf104_time", "Delay", "Delay", "Time", ""},
+    {"mf104_range", "Delay", "Delay", "Range", "short,long"},
+    {"mf104_feedback", "Delay", "Delay", "Feedback", ""},
+    {"mf104_mix", "Delay", "Delay", "Mix", ""},
+    {"mf104_rate", "Delay", "Delay", "LFO rate", ""},
+    {"mf104_amount", "Delay", "Delay", "LFO amount", ""}};
+static const int NSYNTH_CARD = sizeof(SYNTH_CARD) / sizeof(SYNTH_CARD[0]);
+// a knob's card row (by its name): NULL none; at its place in the card's order
+static const char *const *synth_card(const char *name, int *at = nullptr)
+{
+    for (int i = 0; i < NSYNTH_CARD; i++)
+        if (!strcmp(SYNTH_CARD[i][0], name)) {
+            if (at)
+                *at = i;
+            return SYNTH_CARD[i];
+        }
+    return nullptr;
+}
+
+
 // livetui.SYNTH_STEPS: a switch's positions (empty: a knob, 0..1)
 static std::vector<double> synth_steps(const std::string &kind)
 {

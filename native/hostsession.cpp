@@ -1290,8 +1290,12 @@ int nv_host_synth_knobs(char *out, int cap)
             snprintf(b, sizeof b, "%s%g", st.empty() ? "" : ",", v);
             st += b;
         }
+        // (then the touch card's: its column, group, generic label, a switch's words -- panel::SYNTH_CARD)
+        int at = -1;
+        const char *const *c = panel::synth_card(k[1], &at);
         all += std::string(k[0]) + "\t" + std::to_string(panel::mk_index(k[1])) + "\t" + k[2] + "\t" + k[3] + "\t" + st
-               + "\t" + (panel::synth_centred(k[3]) ? "1" : "0") + "\n";
+               + "\t" + (panel::synth_centred(k[3]) ? "1" : "0") + "\t" + (c ? c[1] : "") + "\t" + (c ? c[2] : k[0])
+               + "\t" + (c ? c[3] : k[2]) + "\t" + (c ? c[4] : "") + "\t" + std::to_string(at) + "\n";
     }
     return copy_out(all, out, cap);
 }

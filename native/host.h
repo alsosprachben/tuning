@@ -264,9 +264,11 @@ int nv_host_sysfx(nv_host *h, nv_host_sysfx_state *s);
 void nv_host_sysfx_send(nv_host *h, int hi, int lo, int v);
 
 /* ---- A MOOG PART's KNOBS (livetui's synth pane) ----
-   the panel's knobs, "section\tknob\tlabel\tkind\tsteps\tcentred" a line (knob
-   the index into pn, NV_MK_*; steps a switch's positions "32,16,8,4", empty
-   a knob 0..1; centred 1 a centre detent) */
+   the panel's knobs, "section\tknob\tlabel\tkind\tsteps\tcentred\tcolumn\tgroup\t
+   generic\twords\tat" a line (knob the index into pn, NV_MK_*; steps a switch's
+   positions "32,16,8,4", empty a knob 0..1; centred 1 a centre detent; then
+   the touch card's column, group, generic label, a switch's short words
+   (comma-separated) and the knob's place in the card -- panel.h SYNTH_CARD) */
 int nv_host_synth_knobs(char *out, int cap);
 #define NV_HOST_NKNOBS 51
 /* part `row`'s knobs on a layer: pn the positions, own 1 turned here, 2 kept
