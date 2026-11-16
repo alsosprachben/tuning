@@ -202,6 +202,7 @@ int nv_host::run(int argc, char **argv)
             std::vector<double> ms, msr, mss, msg;      // each block's events, step and render, ms; its render;
                                                         // a GPU block's setup and samples
             std::vector<double> mstep, mcpu;            // the step (events, register, dampers); a CPU block's render
+            std::vector<double> bset, bsam;             // (each block's GPU setup and wait for its samples, 0 on the CPU: NV_BLOCK_TIMES)
             int e = 0;
             // ONE BLOCK: its events and switches, then its render -- the plain
             // loop's below, or with --rubato the render thread's
@@ -312,6 +313,11 @@ int nv_host::run(int argc, char **argv)
                     nv_part_gpu_ms(part, g2);
                     mss.push_back(g2[0]);
                     msg.push_back(g2[1]);
+                    bset.push_back(g2[0]);
+                    bsam.push_back(g2[1]);
+                } else {
+                    bset.push_back(0.0);
+                    bsam.push_back(0.0);
                 }
                 ms.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
             };
@@ -385,12 +391,14 @@ int nv_host::run(int argc, char **argv)
                         rs[1], rs[6], rs[5], rs[2], rs[3], rs[4]);
                 out.resize(2 * (size_t)total);
             }
-            // every block's time and its render's, one line a block, for a
-            // comparison of the worst (NV_BLOCK_TIMES=FILE; examples/blocktimes.py)
+            // every block's time, its render's, and on the GPU its setup's and
+            // its wait for the samples, one line a block, for a comparison of
+            // the worst (NV_BLOCK_TIMES=FILE; examples/blocktimes.py)
             if (const char *tf = getenv("NV_BLOCK_TIMES")) {
                 if (FILE *f = fopen(tf, "w")) {
                     for (size_t i = 0; i < ms.size(); i++)
-                        fprintf(f, "%.4f %.4f\n", ms[i], i < msr.size() ? msr[i] : 0.0);
+                        fprintf(f, "%.4f %.4f %.4f %.4f\n", ms[i], i < msr.size() ? msr[i] : 0.0, i < bset.size() ? bset[i] : 0.0,
+                                i < bsam.size() ? bsam[i] : 0.0);
                     fclose(f);
                 }
             }
