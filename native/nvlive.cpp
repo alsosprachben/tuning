@@ -93,6 +93,7 @@
 #include <poll.h>
 #include "selfexe.h"
 #include "hostlive.h"
+#include "host.h"
 
 int nv_host::run(int argc, char **argv)
 {
@@ -202,9 +203,9 @@ int nv_host::run(int argc, char **argv)
                                                         // a GPU block's setup and samples
             std::vector<double> mstep, mcpu;            // the step (events, register, dampers); a CPU block's render
             int e = 0;
-            for (long long b = 0; b < nb; b++) {
-                if (paced)
-                    std::this_thread::sleep_until(tstart + std::chrono::nanoseconds((long long)((double)(b * BLK) * 1e9 / SR)));
+            // ONE BLOCK: its events and switches, then its render -- the plain
+            // loop's below, or with --rubato the render thread's
+            auto one_block = [&](long long b, float *bufp) {
                 auto t0 = std::chrono::steady_clock::now();
                 long long n0 = b * BLK;
                 g_msgr_blk = b;                         // (--messenger-log's block)
@@ -301,7 +302,7 @@ int nv_host::run(int argc, char **argv)
                         e++;
                     }
                 }
-                render_block(n0, buf.data(), !basync);
+                render_block(n0, bufp, !basync);
                 msr.push_back(last_out_ms);
                 mstep.push_back(last_step_ms);
                 if (!nv_part_on_gpu(part))
@@ -313,7 +314,59 @@ int nv_host::run(int argc, char **argv)
                     msg.push_back(g2[1]);
                 }
                 ms.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
-                out.insert(out.end(), buf.begin(), buf.end());
+            };
+            // --rubato=FRAMES[:WAIT] (best --paced): an app's callback of FRAMES
+            // pulling through nv_host_pull with rubato on -- the blocks on the
+            // render thread, the callback waiting WAIT of its length (0.75)
+            // before it holds; --stall=EVERY:MS sleeps the render thread MS
+            // after every EVERY-th block (a late block, made to order)
+            const std::string rubo = opt(argc, argv, "rubato", "");
+            if (rubo.empty()) {
+                for (long long b = 0; b < nb; b++) {
+                    if (paced)
+                        std::this_thread::sleep_until(tstart + std::chrono::nanoseconds((long long)((double)(b * BLK) * 1e9 / SR)));
+                    one_block(b, buf.data());
+                    out.insert(out.end(), buf.begin(), buf.end());
+                }
+            } else {
+                const int cbf = std::max(1, atoi(rubo.c_str()));
+                const size_t c = rubo.find(':');
+                const double wait = c == std::string::npos ? 0.75 : atof(rubo.c_str() + c + 1);
+                const std::string st = opt(argc, argv, "stall", "");
+                if (!st.empty()) {
+                    rub_stall_every = atol(st.c_str());
+                    const size_t c2 = st.find(':');
+                    rub_stall_ms = c2 == std::string::npos ? 10.0 : atof(st.c_str() + c2 + 1);
+                }
+                rub_block = [&](long long n0_, float *bufp) { one_block(n0_ / BLK, bufp); };
+                nv_host_set_rubato(this, 1, wait);
+                std::vector<float> cl(cbf), cr(cbf);
+                const long long total = nb * BLK;
+                long long dev = 0;
+                long holds_seen = 0;
+                for (long long k = 0; dev < total; k++) {
+                    if (paced)
+                        std::this_thread::sleep_until(tstart + std::chrono::nanoseconds((long long)((double)dev * 1e9 / SR)));
+                    nv_host_pull(this, cl.data(), cr.data(), cbf);
+                    for (int q = 0; q < cbf; q++) {
+                        out.push_back(cl[q]);
+                        out.push_back(cr[q]);
+                    }
+                    long long rs[5];
+                    nv_host_rubato_stats(this, rs);
+                    if (rs[0] > holds_seen) {
+                        holds_seen = rs[0];
+                        fprintf(stderr, "nvlive: rubato held at device frame %lld (owed %lld frames)\n", dev, rs[2]);
+                    }
+                    dev += cbf;
+                }
+                nv_host_set_rubato(this, 0, wait);
+                rub_block = nullptr;
+                long long rs[5];
+                nv_host_rubato_stats(this, rs);
+                fprintf(stderr, "nvlive: rubato: callbacks of %d frames, waiting %.2f; %lld held, %lld frames borrowed, "
+                        "%lld rendered, %lld handed out\n", cbf, wait, rs[0], rs[1], rs[3], rs[4]);
+                out.resize(2 * (size_t)total);
             }
             // every block's time and its render's, one line a block, for a
             // comparison of the worst (NV_BLOCK_TIMES=FILE; examples/blocktimes.py)

@@ -36,6 +36,7 @@
 #include <sys/wait.h>
 #include <mutex>
 #include "lfqueue.h"
+#include "rtsem.h"
 #include <string>
 #include <thread>
 #include <unistd.h>
@@ -1319,6 +1320,29 @@ struct nv_host {
     std::mutex timed_mu;                    // (the parse's, on the threads that stamp: never the audio thread's)
     MidiParse timed_parse;
     int pull_pos = -1;                      // (-1: none rendered yet)
+    // RUBATO (nv_host_set_rubato; host.cpp): the blocks rendered on their own
+    // thread into a ring, the callback waiting for them only to a deadline --
+    // what is not ready by then held (rub_owed frames borrowed: the device
+    // ahead of the render by that much), the late block heard when it is done
+    bool rub_on = false;
+    double rub_frac = 0.75;                 // (of a callback's length: how long it waits)
+    std::thread rub_thread;
+    std::atomic<bool> rub_stop{false};
+    std::vector<float> rub_ring;            // interleaved stereo, rub_cap frames
+    long long rub_cap = 0;
+    std::atomic<long long> rub_made{0};     // frames rendered into the ring, ever (the render thread's)
+    std::atomic<long long> rub_took{0};     // frames handed out from it (the callback's)
+    std::atomic<long long> rub_want{0};     // frames the callback wants made
+    std::atomic<long long> rub_owed{0};     // frames held (borrowed), not yet returned
+    std::atomic<long> rub_holds{0};         // callbacks that held
+    std::atomic<long long> rub_held{0};     // frames held, ever
+    nv::RtSem rub_go, rub_done;
+    // (--test's: each block's own work in place of timed_due + render_block --
+    // nvlive's file events and switches; and the stalls it injects)
+    std::function<void(long long n0, float *buf)> rub_block;
+    long rub_stall_every = 0;
+    double rub_stall_ms = 0.0;
+    void rub_loop();
     // (in step, --test's: the room's tail to install after the block, the
     // programs asked for built in step; asks: a program change heard)
     void render_block(long long n0, float *buf, bool step = false);

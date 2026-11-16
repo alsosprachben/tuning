@@ -3338,6 +3338,7 @@ void nv_host_close(nv_host *h)
     h->bcv.notify_one();
     if (h->builder.joinable())
         h->builder.join();
+    nv_host_set_rubato(h, 0, h->rub_frac);   // (its render thread stopped first: it renders through the part)
     if (h->part)
         nv_part_stop_workers(h->part);          // (none left running into the app's exit)
 }
@@ -3436,7 +3437,124 @@ void nv_host_set_cold_start(nv_host *h, int blocks, double cold_seconds, double 
     h->warm_frac = std::max(0.0, std::min(0.9, warm_fraction));
 }
 
-int nv_host_pull(nv_host *h, float *L, float *R, int frames) { return nv_host_pull_step(h, L, R, frames, 0); }
+// ---- RUBATO: borrowed time instead of a click ----
+//
+// A block that runs past its callback's deadline was a click: the device got
+// silence for it. With rubato on, the blocks are rendered on their own thread
+// (in the audio workgroup) and the callback waits for them only until its
+// deadline (rub_frac of its length). On time -- nearly always -- it hands out
+// the same samples as nv_host_pull_step, in the same order. Late, it hands out
+// what is ready and holds the rest (rub_owed: the device now that many frames
+// ahead of the render), and the late block is heard, whole, when it is done:
+// the music borrows the time rather than losing the block. Its MIDI follows
+// (nv_host_midi_at: a device frame heard rub_owed later) -- every event
+// delayed alike, so what is played keeps its shape.
+
+void nv_host::rub_loop()
+{
+    while (!rub_stop.load()) {
+        rub_go.wait();
+        if (rub_stop.load())
+            break;
+        NV_RT_HELPER();                         // (the audio workgroup's, where there is one)
+        while (rub_made.load(std::memory_order_relaxed) < rub_want.load(std::memory_order_acquire)
+               && !rub_stop.load(std::memory_order_relaxed)) {
+            const long long made = rub_made.load(std::memory_order_relaxed);
+            if (made + BLK - rub_took.load(std::memory_order_acquire) > rub_cap)
+                break;                          // (the ring full: never, at a callback's want)
+            if (rub_block) {
+                rub_block(play_n0, play_buf.data());
+            } else {
+                timed_due(this, play_n0);
+                render_block(play_n0, play_buf.data(), false);
+            }
+            if (rub_stall_every > 0 && (play_n0 / BLK) % rub_stall_every == rub_stall_every - 1)
+                std::this_thread::sleep_for(std::chrono::nanoseconds((long long)(rub_stall_ms * 1e6)));
+            float *dst = rub_ring.data() + 2 * (made % rub_cap);
+            std::memcpy(dst, play_buf.data(), sizeof(float) * 2 * BLK);   // (rub_cap a multiple of BLK)
+            play_n0 += BLK;
+            rub_made.store(made + BLK, std::memory_order_release);
+            rub_done.signal();
+        }
+    }
+}
+
+static int nv_host_pull_rubato(nv_host *h, float *L, float *R, int frames)
+{
+    const long long t_in = rt::now_ns();
+    const long long until = t_in + (long long)(h->rub_frac * 1e9 * frames / h->SR);
+    const long long took = h->rub_took.load(std::memory_order_relaxed);
+    const long long want = took + frames;
+    if (want > h->rub_want.load(std::memory_order_relaxed))
+        h->rub_want.store(want, std::memory_order_release);
+    h->rub_go.signal();
+    while (h->rub_made.load(std::memory_order_acquire) < want) {
+        const long long left = until - rt::now_ns();
+        if (left <= 0)
+            break;
+        h->rub_done.wait_for_ns(left);          // (a block made, or the deadline)
+    }
+    const long long made = h->rub_made.load(std::memory_order_acquire);
+    const int have = (int)std::min<long long>(made - took, frames);
+    for (int i = 0; i < have; i++) {
+        const float *s = h->rub_ring.data() + 2 * ((took + i) % h->rub_cap);
+        L[i] = s[0];
+        R[i] = s[1];
+    }
+    h->rub_took.store(took + have, std::memory_order_release);
+    if (have < frames) {
+        // HELD: the rest of this callback borrowed (silence for now; the held
+        // moment's sound comes next)
+        for (int i = have; i < frames; i++)
+            L[i] = R[i] = 0.0f;
+        h->rub_owed.fetch_add(frames - have, std::memory_order_relaxed);
+        h->rub_held.fetch_add(frames - have, std::memory_order_relaxed);
+        h->rub_holds.fetch_add(1, std::memory_order_relaxed);
+    }
+    return 0;
+}
+
+int nv_host_set_rubato(nv_host *h, int on, double wait_fraction)
+{
+    h->rub_frac = std::max(0.05, std::min(1000.0, wait_fraction));   // (over 1: longer than the callback -- a test's)
+    if (!on == !h->rub_on)
+        return 0;
+    if (on) {
+        // (from where the plain pull left off: its last block's frames not yet
+        // handed out would be skipped -- turned on before the first callback)
+        if (h->play_buf.size() < 2 * (size_t)h->BLK)
+            h->play_buf.assign(2 * h->BLK, 0.0f);   // (nvlive --test's host is not opened through nv_host_open_args)
+        h->rub_cap = 64 * h->BLK;
+        h->rub_ring.assign(2 * h->rub_cap, 0.0f);
+        h->rub_made = h->rub_took = h->rub_want = 0;
+        h->rub_stop = false;
+        h->rub_on = true;
+        h->rub_thread = std::thread([h] { h->rub_loop(); });
+    } else {
+        h->rub_stop = true;
+        h->rub_go.signal();
+        if (h->rub_thread.joinable())
+            h->rub_thread.join();
+        h->rub_on = false;
+    }
+    return 0;
+}
+
+void nv_host_rubato_stats(const nv_host *h, long long *out)
+{
+    out[0] = h->rub_holds.load();
+    out[1] = h->rub_held.load();
+    out[2] = h->rub_owed.load();
+    out[3] = h->rub_made.load();
+    out[4] = h->rub_took.load();
+}
+
+int nv_host_pull(nv_host *h, float *L, float *R, int frames)
+{
+    if (h->rub_on)
+        return nv_host_pull_rubato(h, L, R, frames);
+    return nv_host_pull_step(h, L, R, frames, 0);
+}
 
 // MIDI bytes stamped with the sample they belong to (from the start of the
 // render: nv_host_snapshot's n0 counts them): heard at the start of the block
@@ -3444,6 +3562,10 @@ int nv_host_pull(nv_host *h, float *L, float *R, int frames) { return nv_host_pu
 // the next block if that one is gone
 void nv_host_midi_at(nv_host *h, const uint8_t *msg, int n, long long frame)
 {
+    // (rubato: the device frames ahead of the render by what is borrowed --
+    // the event heard that much later, as everything since the hold)
+    if (h->rub_on && frame > 0)
+        frame -= h->rub_owed.load(std::memory_order_relaxed);
     if (h->cold_blocks > 0 && n > 0) {
         // (a cold start's shift: a phrase's events one block later, the note-on
         // that begins it after cold_s of no MIDI setting it)

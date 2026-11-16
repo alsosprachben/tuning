@@ -61,6 +61,15 @@ void nv_host_midi(nv_host *h, const uint8_t *msg, int n);
 int nv_host_pull(nv_host *h, float *L, float *R, int frames);
 /* ...in step (the host not started), as nv_host_render_step */
 int nv_host_pull_step(nv_host *h, float *L, float *R, int frames, int step);
+/* RUBATO (off by default): the blocks rendered on their own thread, the
+   callback (nv_host_pull) waiting for them at most wait_fraction of its own
+   length -- what is not ready then is held (silence, for now) and heard when
+   done, the device that many frames ahead of the render from then on (MIDI
+   through nv_host_midi_at heard that much later, all alike). Turned on before
+   the first callback. stats: [0] callbacks that held, [1] frames held ever,
+   [2] frames owed now, [3] frames rendered, [4] frames handed out */
+int nv_host_set_rubato(nv_host *h, int on, double wait_fraction);
+void nv_host_rubato_stats(const nv_host *h, long long *stats);
 /* MIDI stamped with its sample (counted from the first render: CoreMIDI's
    timestamp turned into the audio's sample time), from any thread: heard at
    the start of the block that sample falls in -- a callback of many blocks
