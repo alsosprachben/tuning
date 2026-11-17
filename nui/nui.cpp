@@ -310,7 +310,11 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_Window *win = SDL_CreateWindow("Clavitone", 1920, 1080,
+    // (the window's size: NUI_SIZE=WxH, for the layouts of other screens -- the iPad mini's 1133x744)
+    int ww = 1920, wh = 1080;
+    if (const char *sz = getenv("NUI_SIZE"))
+        sscanf(sz, "%dx%d", &ww, &wh);
+    SDL_Window *win = SDL_CreateWindow("Clavitone", ww, wh,
                                        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
                                            (windowed ? 0 : SDL_WINDOW_FULLSCREEN));
     if (!win) {
