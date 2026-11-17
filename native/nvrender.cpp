@@ -1,6 +1,13 @@
 // nvrender.cpp -- the native renderer: a General MIDI piano file to the dry
 // WAV and room sidecar blockrender writes, with no Python at runtime.
 //
+// IN THE LIBRARY (libnative: nv_render_main, the program's whole; the
+// nvrender program is its two-line main, nvrender_main.cpp): iOS runs no
+// helper programs, so the Files card's best-quality render calls it on a
+// thread of its own process -- its settings that thread's (nvenv.h), its
+// output's last line kept (nv_render_last), a stop asked between windows
+// (nv_render_stop), its GPU context its own, every exit a return.
+//
 //     nvrender EXPORT.nvx IN.mid OUT.wav [--tuner=NAME [--a=HZ | --c=HZ]]
 //
 // --tuner: any of midilib's tuners, computed here (native/tuner.cpp) in place
@@ -55,6 +62,10 @@
 #include "selfexe.h"
 #include "relocate.h"
 #include "gpufile.h"
+#include "nvenv.h"
+#include <atomic>
+#include <cstdarg>
+#include <memory>
 
 struct NvSirRow {                       // (nv_song_sirens: a rotor's row -- nvrender.cpp's twin)
     long long ch;
@@ -63,6 +74,67 @@ struct NvSirRow {                       // (nv_song_sirens: a rotor's row -- nvr
 };
 void nv_song_sirens(void *song, const NoteClass *const *K, int nK, double total, double SR, long long BLK, int sbase,
                     std::vector<NvSirRow> *sirp);
+
+namespace nvrender {
+
+// EVERY EXIT A RETURN: an exit(N) in the program is this, thrown to nv_render_main
+struct Exit {
+    int code;
+};
+[[noreturn]] static void quit(int code) { throw Exit{code}; }
+
+// THE STOP (nv_render_stop): asked from another thread, looked at between windows
+static std::atomic<bool> g_stop_req{false};
+static void stop_point()
+{
+    if (g_stop_req.load(std::memory_order_relaxed))
+        throw Exit{-2};
+}
+
+// ITS OUTPUT: written as before, its last line kept for the window (nv_render_last)
+static thread_local std::string t_last;
+static void keep_last(const char *b)
+{
+    std::string cur(b);
+    size_t e = cur.find_last_not_of("\r\n");
+    if (e == std::string::npos)
+        return;
+    cur.resize(e + 1);
+    const size_t a = cur.find_last_of("\r\n");
+    t_last = a == std::string::npos ? cur : cur.substr(a + 1);
+}
+static int out_vf(FILE *f, const char *fmt, va_list ap)
+{
+    char b[8192];
+    va_list cp;
+    va_copy(cp, ap);
+    const int n = vsnprintf(b, sizeof b, fmt, cp);
+    va_end(cp);
+    if (n >= (int)sizeof b)                     // (longer than the buffer: as it is, untracked)
+        return vfprintf(f, fmt, ap);
+    fputs(b, f);
+    if (f == stdout || f == stderr)
+        keep_last(b);
+    return n;
+}
+static int out_printf(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    const int n = out_vf(stdout, fmt, ap);
+    va_end(ap);
+    return n;
+}
+static int out_fprintf(FILE *f, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    const int n = out_vf(f, fmt, ap);
+    va_end(ap);
+    return n;
+}
+#define printf out_printf
+#define fprintf out_fprintf
 
 extern "C" {
 void *nv_midi_read(const uint8_t *buf, long long len, int *err);
@@ -480,6 +552,15 @@ struct ClassRef {
 };
 
 struct Export {
+    // (the classes' map, let go with the export: a render in the app is one of many)
+    Export() = default;
+    Export(const Export &) = delete;
+    Export &operator=(const Export &) = delete;
+    ~Export()
+    {
+        if (map)
+            munmap((void *)map, (size_t)maplen);
+    }
     std::vector<double> k, freq, trim;
     std::vector<ClassRef> classes;
     std::vector<int> cmap, kind, fin;     // cmap: the programs' keys, then the drum sets'
@@ -862,7 +943,7 @@ static bool write_wav(const char *path, const float *L, const float *R, long n, 
     return true;
 }
 
-int main(int argc, char **argv)
+static int run(int argc, char **argv)
 {
     if (argc < 4) {
         fprintf(stderr, "usage: nvrender EXPORT.nvx IN.mid OUT.wav [--tuner=NAME [--a=HZ | --c=HZ]]\n");
@@ -893,7 +974,7 @@ int main(int argc, char **argv)
                  ? (const NoteClass *)E.classes[nc->sl_idx].data() : nullptr;
     }
     // THE TUNER, if named: its table in place of the export's
-    std::string tname, ra, rc, east = getenv("TUNING_EASTERN") ? getenv("TUNING_EASTERN") : "";
+    std::string tname, ra, rc, east = nv_env("TUNING_EASTERN") ? nv_env("TUNING_EASTERN") : "";
     long win = 0;                           // --window=W: the table rendered W samples at a time
     for (int i = 4; i < argc; i++) {
         if (!strncmp(argv[i], "--tuner=", 8))
@@ -1004,15 +1085,15 @@ int main(int argc, char **argv)
             return 2;
         }
         const NoteClass *nc = (const NoteClass *)E.classes[cq].data();
-        if (getenv("TUNING_AMP_DRIVE") && nc->amp_drive != 0.0) {
+        if (nv_env("TUNING_AMP_DRIVE") && nc->amp_drive != 0.0) {
             fprintf(stderr, "nvrender: refused: TUNING_AMP_DRIVE (Python's audition)\n");
             return 2;
         }
-        if (nc->init.vbody && (getenv("TUNING_LYRIC_LANG") || getenv("TUNING_VOCALISE") || getenv("TUNING_VOICE_PARTS"))) {
+        if (nc->init.vbody && (nv_env("TUNING_LYRIC_LANG") || nv_env("TUNING_VOCALISE") || nv_env("TUNING_VOICE_PARTS"))) {
             fprintf(stderr, "nvrender: refused: a sung part's text or declared parts (Python's)\n");
             return 2;
         }
-        if (getenv("TUNING_CLAV") && nc->clav_panel) {
+        if (nv_env("TUNING_CLAV") && nc->clav_panel) {
             fprintf(stderr, "nvrender: refused: TUNING_CLAV (Python's audition)\n");
             return 2;
         }
@@ -1065,7 +1146,7 @@ int main(int argc, char **argv)
     double gs_dly[24] = {};
     bool gs_dly_on = false;
     {
-        const char *ge = getenv("TUNING_GS_DELAY");
+        const char *ge = nv_env("TUNING_GS_DELAY");
         if (nv_midi_gs(midi) && !(ge && (!*ge || !strcmp(ge, "0") || !strcmp(ge, "off")))
             && E.k.size() >= K_GSPLACE + 13) {
             // gsdelay.MACROS: level, pre-LPF, time (ms), ratio L, R (%), level C, L, R, feedback, to reverb
@@ -1129,7 +1210,7 @@ int main(int argc, char **argv)
     // tau, rate, vd, fb, lpf (0 none), level; [0] -1 not a GS file's
     double gs_cho[6] = {-1.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     {
-        const char *ge = getenv("TUNING_GS_CHORUS");
+        const char *ge = nv_env("TUNING_GS_CHORUS");
         if (nv_midi_gs(midi) && !(ge && (!*ge || !strcmp(ge, "0") || !strcmp(ge, "off")))) {
             // chorus.GS_MACROS: level, pre-LPF, feedback, delay, rate, depth
             static const int MAC[8][6] = {{64, 0, 0, 112, 3, 5}, {64, 0, 5, 80, 9, 19}, {64, 0, 8, 80, 3, 19},
@@ -1161,7 +1242,7 @@ int main(int argc, char **argv)
         static const char *ROOMS[8] = {"studio", "chamber", "large_chamber", "hall", "grand_hall", "plate",
                                        "delay", "pan_delay"};
         static const int RTIME[8] = {80, 56, 64, 72, 64, 88, 32, 64};
-        const char *tr = getenv("TUNING_ROOM");
+        const char *tr = nv_env("TUNING_ROOM");
         bool fx = !(tr && *tr);
         int mac = -1, lvl = 64, tim = -1, dfb = -1, v;
         if (fx && nv_midi_gs_setup(midi, 0, 0x30, &v))
@@ -2029,7 +2110,7 @@ int main(int argc, char **argv)
     };
     std::vector<FxEv> fx_ev;
     {
-        const char *ge = getenv("TUNING_GS_EFX");
+        const char *ge = nv_env("TUNING_GS_EFX");
         bool off = ge && (!*ge || !strcmp(ge, "0") || !strcmp(ge, "off"));
         bool parts = false;
         for (int i = 0, n = off ? 0 : nv_midi_n_efx(midi); i < n; i++) {
@@ -2052,7 +2133,7 @@ int main(int argc, char **argv)
         for (const FxEv &e : fx_ev)
             ts.insert(e.t);
         fx_ts.assign(ts.begin(), ts.end());
-        const char *cb = getenv("TUNING_CABINET");
+        const char *cb = nv_env("TUNING_CABINET");
         for (int w = 0; w < 2 && !fx_ev.empty() && !(cb && !strcmp(cb, "0")); w++) {
             const double *C = E.k.data() + K_EFX + 132 + NV_EFX_NAT * (size_t)E.k[K_EFX + 131] + 30 + 33 * w;
             fx_cabbuf[w].assign(sizeof(NoteClass), 0);
@@ -3320,7 +3401,7 @@ int main(int argc, char **argv)
         for (long e = 0; e <= nblk; e++)
             BLr[r * (nblk + 1) + e] = (p >= 0 ? BLr[p * (nblk + 1) + e] : 1.0f) * cur[e];
     }
-    if (const char *dp_ = getenv("TUNING_NVRENDER_DUMP")) {
+    if (const char *dp_ = nv_env("TUNING_NVRENDER_DUMP")) {
         // (a debugging dump: the table as prepared, the gates, swells and bend rows)
         auto put = [&](const char *ext, const void *p, size_t n) {
             FILE *df = fopen((std::string(dp_) + ext).c_str(), "wb");
@@ -4317,6 +4398,7 @@ int main(int argc, char **argv)
             const long W = (win + CH - 1) / CH * CH;
             std::vector<long long> live;
             for (long w0 = 0; w0 < N; w0 += W) {
+                stop_point();
                 const long wn = std::min(W, N - w0);
                 live.clear();
                 for (long long r = 0; r < P; r++)
@@ -4892,12 +4974,12 @@ int main(int argc, char **argv)
             }
         };
         const long CH = (long)E.k[K_CHUNK];
-        const char *srows = getenv("TUNING_STREAM_ROWS");
+        const char *srows = nv_env("TUNING_STREAM_ROWS");
         const long long row_budget = srows && atoll(srows) > 0 ? atoll(srows) : 300000;
         // THE BATCH (streamrender.BATCH, TUNING_STREAM_BATCH): 8 kernel chunks a
         // render; any size renders the same samples on the CPU, a smaller one
         // holds fewer notes' rows at once
-        const char *swin = getenv("TUNING_STREAM_BATCH");
+        const char *swin = nv_env("TUNING_STREAM_BATCH");
         const long W = (swin && atol(swin) > 0 ? atol(swin) : 8) * CH;
         long w0 = 0;
         Pass ps;
@@ -5011,16 +5093,19 @@ int main(int argc, char **argv)
             return b;
         };
         // THE GPU (--gpu: streamrender's gpu=, gpurender.FileRenderer a window at a time)
-        static GpuFile *gpuf = nullptr;
-        if (g_gpu && !gpuf) {
+        // (this render's own context, freed at its end: a render in the app is one of many)
+        std::unique_ptr<GpuFile> gpuf_own;
+        GpuFile *gpuf = nullptr;
+        if (g_gpu) {
             // (the setup's builds beside libnative, the kernel's sources there or in ../Resources)
             const char *nd = nv_native_dir();
             std::string dir = nd && *nd ? std::string(nd) : nv_self_exe().substr(0, nv_self_exe().rfind('/'));
-            gpuf = new GpuFile();
+            gpuf_own.reset(new GpuFile());
+            gpuf = gpuf_own.get();
             std::string why = gpuf->open(dir, (int)SR, nv_reloc_kernels(dir));
             if (!why.empty()) {
                 fprintf(stderr, "nvrender: --gpu: %s\n", why.c_str());
-                exit(1);
+                quit(1);
             }
             gpuf->bend_levels(BLr.empty() ? nullptr : BLr.data(), (long)nr, (long)nblk + 1);
         }
@@ -5032,7 +5117,7 @@ int main(int argc, char **argv)
         for (int q = 0; q < nset; q++)
             if (!bset[q].wf) {
                 fprintf(stderr, "nvrender: cannot write %s\n", q ? spath : opath);
-                exit(1);
+                quit(1);
             }
         // a set's output at [s0, s0 + n): its place, held; and out once final
         auto out_at = [&](BusSet &b, long long s0, long long n_) {
@@ -5171,6 +5256,7 @@ int main(int argc, char **argv)
         };
         ps.render_to = [&](long long T) {
             while (!spans.empty() || (w0 < N && (w0 + W <= T || T >= N))) {
+                stop_point();
                 if (spans.empty())
                     plan(w0 / CH, W / CH);
                 long wn = spans.back().second;      // (w0, its start)
@@ -5348,7 +5434,7 @@ int main(int argc, char **argv)
                                 if (buses[q].part ? m % 256 == buses[q].ch : buses[q].ch == m) {
                                     if (wb[r]) {
                                         fprintf(stderr, "nvrender: refused: a row on two buses (a part's and its tone's)\n");
-                                        exit(2);
+                                        quit(2);
                                     }
                                     wb[r] = (unsigned char)(q + 1);
                                 }
@@ -5422,7 +5508,7 @@ int main(int argc, char **argv)
                                          ps.ntr ? ps.DMB.data() : nullptr, ps.ntr ? ps.DMN.data() : nullptr, SR,
                                          o4.data()) != 0) {
                             fprintf(stderr, "nvrender: --gpu: the GPU failed at %.3f s\n", w0 / SR);
-                            exit(1);
+                            quit(1);
                         }
                     };
                     if (buses.empty()) {
@@ -5442,7 +5528,7 @@ int main(int argc, char **argv)
                                 if (buses[q].part ? m % 256 == buses[q].ch : buses[q].ch == m) {
                                     if (wb[r]) {
                                         fprintf(stderr, "nvrender: refused: a row on two buses (a part's and its tone's)\n");
-                                        exit(2);
+                                        quit(2);
                                     }
                                     wb[r] = (unsigned char)(q + 1);
                                 }
@@ -5782,3 +5868,31 @@ int main(int argc, char **argv)
     nv_midi_free(midi);
     return 0;
 }
+
+#undef printf
+#undef fprintf
+}  // namespace nvrender
+
+// THE PROGRAM's WHOLE, as a library call (its arguments as the command line's,
+// argv[0] its name): its exit code; -2 stopped (nv_render_stop)
+extern "C" int nv_render_main(int argc, char **argv)
+{
+    using namespace nvrender;
+    // (its state from the start, as a new process's)
+    g_rowB = 8 * NCOLS;
+    std::fill(g_pk, g_pk + NCOLS, 0);
+    std::fill(g_po, g_po + NCOLS, 0);
+    g_stream = g_stream_why_only = g_gpu = false;
+    g_stop_req.store(false);
+    t_last.clear();
+    try {
+        return run(argc, argv);
+    } catch (const Exit &e) {
+        return e.code;
+    }
+}
+
+// a stop asked of the render running (another thread's): it returns -2 at its next window
+extern "C" void nv_render_stop(void) { nvrender::g_stop_req.store(true); }
+// the last line it wrote (this thread's render: valid until its next)
+extern "C" const char *nv_render_last(void) { return nvrender::t_last.c_str(); }

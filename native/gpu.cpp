@@ -18,6 +18,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "nvenv.h"
 
 namespace nv {
 namespace gpu {
@@ -604,7 +605,7 @@ extern "C" {
 void *nv_cl_new(const char *dir, const int *sizes, char *err, int errlen)
 {
 #ifdef __APPLE__
-    const char *api = getenv("TUNING_GPU_API");
+    const char *api = nv_env("TUNING_GPU_API");
     if (!api || strcmp(api, "opencl")) {
         void *m = nv_mtl_new(dir, sizes, err, errlen);
         return m ? new Handle{true, m} : nullptr;

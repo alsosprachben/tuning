@@ -40,6 +40,7 @@
 #include "filecheck.h"
 #include "partmux.h"
 #include "mt32.h"
+#include "nvenv.h"
 
 namespace nv {
 
@@ -1019,7 +1020,7 @@ static int ump_msgs(const uint8_t *buf, long long len, std::vector<Msg> &msgs, i
 // not a file, and read plainly (nv_midi_read_plain): under TUNING_MT32 the
 // unit has no part on channel 1, and every template came out silent
 static thread_local bool t_plain = false;
-static const char *mode_env(const char *k) { return t_plain ? nullptr : getenv(k); }
+static const char *mode_env(const char *k) { return t_plain ? nullptr : nv_env(k); }
 
 // blockrender.parse for a GM file: < 0 where it would take a path this does not have
 static int parse(const uint8_t *buf, long long len, Parsed &P)
@@ -1345,7 +1346,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     std::map<int, std::map<int, int>> ctrl;     // channel -> control -> value
     std::map<int, int> prog, bmsb, blsb, drums, bsel;
     // the map CC32 0 reads its bank in (blockrender.DEFAULT_MAP: TUNING_MAP)
-    const char *tmap = getenv("TUNING_MAP");
+    const char *tmap = nv_env("TUNING_MAP");
     const int default_map = tmap && *tmap ? atoi(tmap) : 0;
     bool rxbank = true;
     std::map<std::pair<int, int>, std::vector<Note>> on;
@@ -1399,7 +1400,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     std::map<int, std::array<double, 7>> cmx_last;
     std::map<int, int> cat_now, bend_now;
     std::map<int, std::map<int, int>> pat_now;
-    const char *mve = getenv("TUNING_MOD_VIBRATO");
+    const char *mve = nv_env("TUNING_MOD_VIBRATO");
     const bool modvib = mve && *mve && strcmp(mve, "0") && strcmp(mve, "off");
     auto cmx_upd = [&](double t, int ch) {
         auto mi = cmx.find(ch);
@@ -2363,6 +2364,22 @@ void *nv_midi_read(const uint8_t *buf, long long len, int *err)
 }
 
 void nv_midi_free(void *p) { delete (nv::Parsed *)p; }
+
+// THE ENGINE's SETTINGS (nvenv.h): this thread's overrides, then the environment
+static thread_local std::vector<std::pair<std::string, std::pair<bool, std::string>>> t_env;
+const char *nv_env(const char *name)
+{
+    for (const auto &kv : t_env)
+        if (kv.first == name)
+            return kv.second.first ? kv.second.second.c_str() : nullptr;
+    return getenv(name);
+}
+void nv_env_set(const char *const *names, const char *const *values, int n)
+{
+    t_env.clear();
+    for (int i = 0; i < n; i++)
+        t_env.push_back({names[i], {values[i] != nullptr, values[i] ? values[i] : ""}});
+}
 
 // THE ENGINE's OWN READ (a template's one note): the file modes left out (mode_env)
 void *nv_midi_read_plain(const uint8_t *buf, long long len, int *err)

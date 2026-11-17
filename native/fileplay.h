@@ -41,6 +41,10 @@ int nv_midi_n_findings(void *p);
 const char *nv_midi_finding(void *p, int i);
 int nv_midi_muxed(void *p);
 int nv_roomtail_main(int argc, char **argv);    // (the room's tail, in this process: nvroomtail.cpp)
+int nv_render_main(int argc, char **argv);      // (the file renderer, in this process: nvrender.cpp)
+void nv_render_stop(void);
+const char *nv_render_last(void);
+void nv_env_set(const char *const *names, const char *const *values, int n);
 const char *nv_midi_mux_line(void *p, int i);
 const char *nv_midi_mt32_line(void *p, int i);
 }
@@ -649,8 +653,43 @@ struct Render {
         const pid_t p = pid;
         if (p > 0)
             kill(-p, SIGTERM);
+        if (inproc_on)
+            nv_render_stop();
         if (th.joinable())
             th.join();
+    }
+
+    // THE FILE RENDERER IN THIS PROCESS (nvrender.cpp's nv_render_main: iOS
+    // runs no helper programs): ARGS as its command line, ENV (NAME=VALUE) its
+    // settings -- this thread's own (nv_env_set), not the process's, which the
+    // live engine reads beside it. Its exit code (-2 stopped); its last line kept
+    std::atomic<bool> inproc_on{false};
+    int inproc(const std::vector<std::string> &args, const std::vector<std::string> &env)
+    {
+        std::vector<std::string> names, values;
+        for (const auto &kv : env) {
+            const size_t e = kv.find('=');
+            names.push_back(kv.substr(0, e));
+            values.push_back(e == std::string::npos ? "" : kv.substr(e + 1));
+        }
+        std::vector<const char *> np, vp;
+        for (size_t i = 0; i < names.size(); i++) {
+            np.push_back(names[i].c_str());
+            vp.push_back(values[i].c_str());
+        }
+        nv_env_set(np.data(), vp.data(), (int)np.size());
+        std::vector<std::string> a(args);
+        std::vector<char *> av;
+        for (auto &x : a)
+            av.push_back(&x[0]);
+        av.push_back(nullptr);
+        inproc_on = true;
+        const int r = stopped ? -2 : nv_render_main((int)a.size(), av.data());
+        inproc_on = false;
+        nv_env_set(nullptr, nullptr, 0);
+        std::lock_guard<std::mutex> lk(mu);
+        last = nv_render_last();
+        return r;
     }
 
     void finish(const std::string &m)
@@ -768,7 +807,7 @@ struct Render {
                 return finish("no file export: start nvlive with --file-export=PATH (native_export.py's, not --live)");
             }
             const std::string dry = tmp + "/dry.wav";
-            std::vector<std::string> common = {exe + "nvrender", file_export, in, dry};
+            std::vector<std::string> common = {"nvrender", file_export, in, dry};     // (in this process: inproc)
             if (!tuner.empty())
                 common.push_back("--tuner=" + tuner);
             if (!east.empty())
@@ -777,7 +816,7 @@ struct Render {
                 say("checking it streams");
                 auto a = common;
                 a.push_back("--stream-why");
-                const int r = step(a, env);
+                const int r = inproc(a, env);
                 std::string why;
                 {
                     std::lock_guard<std::mutex> lk(mu);
@@ -805,7 +844,7 @@ struct Render {
                 a.push_back("--stream");
                 a.push_back("--gpu");
             }
-            int r = step(a, env);
+            int r = inproc(a, env);
             if (r != 0) {
                 std::string l;
                 {

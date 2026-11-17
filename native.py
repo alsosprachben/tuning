@@ -416,7 +416,7 @@ def _load():
                                                        'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'efxrev.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
                                                        'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'uiapi.cpp', 'session.h', 'hostint.h', 'hostlive.h', 'host.h', 'livebus.cpp',
                                                        'relocate.h', 'selfexe.h', 'lfqueue.h', 'rtjoin.h', 'rtsem.h', 'rubfill.h',
-                                                       'nvroomtail.cpp')]
+                                                       'nvroomtail.cpp', 'nvrender.cpp')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c'), os.path.join(HERE, 'tapkernel.c')])
     # ...and EVERY header and include in native/: a header a unit includes
     # (fileplay.h, mt32.h, partmux.h...) is a source too -- left off this
@@ -455,7 +455,7 @@ def _load():
                  # live host (host.h: nvlive's, as a library); a part's own bus live
                  # (live.LiveBus: efxbus's processors, block by block)
                  + [(f[:-4], cxx, nat(f)) for f in ('roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'uiapi.cpp', 'livebus.cpp',
-                                                    'nvroomtail.cpp')])
+                                                    'nvroomtail.cpp', 'nvrender.cpp')])
         objs = _build_objects(units)
         try:
             subprocess.check_call(_TC.cmd(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl']))
@@ -4721,7 +4721,7 @@ def build_nvrender():
     """native/nvrender (the standalone renderer), built beside libnative.so
     when a source is newer: its path."""
     lib()
-    src = os.path.join(HERE, 'native', 'nvrender.cpp')
+    src = os.path.join(HERE, 'native', 'nvrender_main.cpp')       # (its whole is in the library: nv_render_main)
     exe = os.path.join(HERE, 'nvrender')
     so = os.path.join(HERE, 'libnative.so')       # (the tuners are in it: native/tuner.cpp)
     if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(so)) > os.path.getmtime(exe):

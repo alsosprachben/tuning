@@ -29,6 +29,7 @@
 
 #include "nv.h"
 #include "pycompat.h"          // a flam's random.Random
+#include "nvenv.h"
 
 namespace nv {
 
@@ -1177,7 +1178,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
     // latest first), the strokes with a shape of their own (by key and onset,
     // as stroke_pitch and stroke_tilt key them), and what each key's strike
     // leaves the next (_FOLD_STORE)
-    const char *fev = getenv("TUNING_FOLD");
+    const char *fev = nv_env("TUNING_FOLD");
     const bool fold_on = !(fev && (!strcmp(fev, "0") || !strcmp(fev, "off") || !*fev));
     std::vector<double> next_same(nn, NAN);
     std::set<std::pair<int, double>> shaped;

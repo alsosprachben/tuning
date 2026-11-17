@@ -47,6 +47,7 @@
 #include <vector>
 
 #include "session.h"
+#include "nvenv.h"
 
 extern "C" {
 int nv_pocket_rfft(const double *x, int n, double *out);
@@ -470,7 +471,7 @@ static int run(int argc, char **argv)
     }
     const int seed = atoi(opt(argc, argv, "seed", "0").c_str());
     const char *home = getenv("HOME");
-    const char *envx = getenv("TUNING_ROOM_EXPORT");
+    const char *envx = nv_env("TUNING_ROOM_EXPORT");
     const std::string xp = opt(argc, argv, "export", envx ? envx : std::string(home ? home : ".") + "/nvx/live.nvx");
 
     std::string why;
@@ -488,7 +489,7 @@ static int run(int argc, char **argv)
     const std::string base = inp.substr(0, inp.rfind('.') == std::string::npos ? inp.size() : inp.rfind('.'));
 
     // THE SIDECAR: the render's room, its directivity, its GS reverb, its send
-    const char *troom = getenv("TUNING_ROOM");
+    const char *troom = nv_env("TUNING_ROOM");
     std::string room = troom && *troom ? troom : "hall";
     double tail_gain = 1.0, tail_time = 1.0, delay_fb = -1.0, side_send = NAN;
     double bq[9];

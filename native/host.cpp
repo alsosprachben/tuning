@@ -1,5 +1,6 @@
 // host.cpp -- the native live host in libnative (host.h): today the
 // export's reader, moved from nvlive.cpp whole; nvlive's main() follows.
+#include "nvenv.h"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -1123,7 +1124,7 @@ int nv_host::open(int argc, char **argv)
     // a program change reads them, Rx.BANK SELECT (off after GM 1's System
     // On), the map CC32 0 reads in (blockrender.DEFAULT_MAP: TUNING_MAP)
     rxbank = true;
-    tmap_ = getenv("TUNING_MAP");
+    tmap_ = nv_env("TUNING_MAP");
     default_map = tmap_ && *tmap_ ? atoi(tmap_) : 0;
     latch = [&](int type, int ch, int a, int b) {
         if (type == 2 && a == 0)

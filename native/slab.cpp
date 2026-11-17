@@ -44,6 +44,7 @@
 #include "cmx.h"
 #include "rtjoin.h"             // (helpers in the audio workgroup: macOS / iOS)
 #include "rubfill.h"            // (the room's part of a held moment)               // the controller matrix (ctrlmatrix)
+#include "nvenv.h"
 
 extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
 extern "C" const NoteClass *nv_tcache_note_class(void *h, int program, int note);
@@ -3648,7 +3649,7 @@ struct Part {
         const int w = (int)which - 1;
         if (w < 0 || w > 1 || !efx_x)
             return nullptr;
-        const char *cb = getenv("TUNING_CABINET");
+        const char *cb = nv_env("TUNING_CABINET");
         if (cb && !strcmp(cb, "0"))
             return nullptr;
         if (!fx_cab_k[w]) {
@@ -4655,7 +4656,7 @@ struct Part {
             return s_;
         };
         static const bool modvib = [] {
-            const char *e = getenv("TUNING_MOD_VIBRATO");
+            const char *e = nv_env("TUNING_MOD_VIBRATO");
             return e && *e && strcmp(e, "0") && strcmp(e, "off");
         }();
         const int nomod = modvib ? -1 : 0;  // (the mod wheel's default vibrato: live's _CMX_MODVIB)

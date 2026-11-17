@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "pycompat.h"
+#include "nvenv.h"
 
 extern "C" {
 // registercore.c, linked in as its own object (register._load_core's flags) (complex arrays as double pairs)
@@ -1140,7 +1141,7 @@ struct RegFeed {
         scale = scale_; blk = blk_; with_register = with_register_;
         sr = tmpl->sr; total = nv_song_total(song); LN10_20 = log(10.0) / 20.0;
         nn = nv_song_n_notes(song);
-        const char *incv = getenv("TUNING_NV_REG_INC");
+        const char *incv = nv_env("TUNING_NV_REG_INC");
         inc = incv && *incv && strcmp(incv, "0") != 0;
     }
     void reset()
@@ -1465,7 +1466,7 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
     PyRandom rs0 = *rs;
     double q0[18], az0 = *azimuth;
     memcpy(q0, qacc, sizeof q0);
-    const char *rpn = getenv("TUNING_NV_ROWS_PER_NOTE");
+    const char *rpn = nv_env("TUNING_NV_ROWS_PER_NOTE");
     long long cap = (rpn && atoll(rpn) > 0 ? atoll(rpn) : ROWS_PER_NOTE) * (long long)(nn > 0 ? nn : 1);
     g_cap0 = cap;
     g_need = 0;
@@ -1473,7 +1474,7 @@ long long nv_play_full(void *song, const NoteClass *const *K, const NoteIn *tmpl
     int got;
     // TUNING_NV_SINK_TEST=1: the notes through the sink, the store one note's
     // (ROWS_PER_NOTE x 64 to begin), the table rebuilt from what it was handed
-    const char *stv = getenv("TUNING_NV_SINK_TEST");
+    const char *stv = nv_env("TUNING_NV_SINK_TEST");
     bool sink_test = stv && *stv && strcmp(stv, "0") != 0;
     if (sink_test) {
         cap = (rpn && atoll(rpn) > 0 ? atoll(rpn) : ROWS_PER_NOTE) * 64LL;
