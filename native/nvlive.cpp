@@ -99,7 +99,8 @@
 #include "host.h"
 #include "uiserve.h"
 #ifdef NV_NATIVE_UI
-extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed);   // (nui/nui.cpp: the native interface)
+extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*stopped)(void));   // (nui/nui.cpp)
+static int nui_stopped(void) { return g_stop ? 1 : 0; }    // (Ctrl-C, the engine's end: the window closes)
 #endif
 #include <spawn.h>
 #include <sys/stat.h>
@@ -934,7 +935,8 @@ int nv_host::run(int argc, char **argv)
             });
             std::string d = nv_self_exe();
             d = d.substr(0, d.rfind('/') == std::string::npos ? 0 : d.rfind('/'));
-            const int r = nui_run(this, ((d.empty() ? std::string(".") : d) + "/ui/fonts").c_str(), app_windowed ? 1 : 0);
+            const int r = nui_run(this, ((d.empty() ? std::string(".") : d) + "/ui/fonts").c_str(), app_windowed ? 1 : 0,
+                                  nui_stopped);
             if (r == 0)
                 fprintf(stderr, "nvlive: the window closed\n");
             g_stop = true;
