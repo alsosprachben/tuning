@@ -84,6 +84,7 @@ struct App {
     std::string card = "parts";
     std::string last_meters;
     bool quit = false;
+    double quit_armed = -10.0;           // (QUIT's first tap: a second within 3 s quits)
 };
 
 // THE ENGINE's CALLS (uiapi's): a request, its answer
@@ -304,6 +305,15 @@ static void draw_keys(App &a)
     }
     if (button(a, "panic", X, Y + 116, 246, 48, "PANIC"))
         call(a, "{\"call\":\"panic\"}");
+    // QUIT (the web's Setup card's, here until that card is): two taps within 3 s
+    const double now = ImGui::GetTime();
+    const bool armed = now - a.quit_armed < 3.0;
+    if (button(a, "quit", X, Y + 174, 246, 48, armed ? "TAP AGAIN TO QUIT" : "QUIT CLAVITONE", armed)) {
+        if (armed)
+            a.quit = true;
+        else
+            a.quit_armed = now;
+    }
 }
 
 // THE CARD TABS, and the card (each built from the web's in turn)
