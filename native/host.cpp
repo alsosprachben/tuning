@@ -3725,6 +3725,8 @@ extern "C++" {
 template <class At>
 static long long splice_best(const float *rl, const float *rr, int n, At at, long long lo, long long hi)
 {
+    if (lo < 0)                                 // (nothing before the music's start: a hold ending in its first moments)
+        lo = 0;
     if (hi < lo || n <= 0)
         return -1;
     long long best = hi;
@@ -3833,7 +3835,7 @@ static int nv_host_pull_rubato(nv_host *h, float *L, float *R, int frames)
         // whose waveform matches the ringing's next frames, and crossed from
         // them; after the replay, its own crossing (rubfill.h)
         if (h->rub_ringing) {
-            const long long s = splice_best(h->rub_xl, h->rub_xr, LOOK, at, std::max(pos - SEEK, made - h->rub_cap + 2 * LOOK),
+            const long long s = splice_best(h->rub_xl, h->rub_xr, LOOK, at, std::max({pos - SEEK, made - h->rub_cap + 2 * LOOK, 0LL}),
                                             std::min(pos, made - LOOK));
             if (s >= 0) {
                 h->rub_held.fetch_add(pos - s, std::memory_order_relaxed);
