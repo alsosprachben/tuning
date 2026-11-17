@@ -117,6 +117,11 @@ struct State {
     std::thread th;
     std::atomic<bool> busy{false};
     int std_map = 0;                    // (the player's standard, put back at the end)
+    ~State()
+    {                                   // (a program ending with a change under way: let it finish, not abort)
+        if (th.joinable())
+            th.join();
+    }
 };
 static State g;
 
@@ -170,12 +175,15 @@ static void begin(nv_host *h, const std::string &eff)
         g.unit.reset(new mt32::Unit<LMsg>(eff == "cm64u"));
 }
 
-// ONE MESSAGE FROM OUTSIDE, as the module in force reads it (the input's thread)
-static void feed(nv_host *h, Midi &&m)
+// ONE MESSAGE FROM OUTSIDE, as the module in force reads it (the input's
+// thread): what it becomes, to OUT (the engine's queue, or the timed queue at
+// the message's frame)
+template <class Out>
+static void feed_to(nv_host *h, Midi &&m, Out &&out)
 {
     std::lock_guard<std::mutex> lk(g.mu);
     if (g.eff == "leaving") {
-        h->enqueue(std::move(m));
+        out(std::move(m));
         return;
     }
     // AUTO: the stream's own word switches it, as a module's reset does
@@ -199,7 +207,7 @@ static void feed(nv_host *h, Midi &&m)
             return;
         if (m.type == 2 && m.a == 10)
             m.b = mirror(m.b);
-        h->enqueue(std::move(m));
+        out(std::move(m));
         return;
     }
     if ((e == "mt32" || e == "cm64u") && g.unit) {
@@ -208,19 +216,27 @@ static void feed(nv_host *h, Midi &&m)
         LMsg in;
         if (!to_msg(m, in))
             return;
-        std::vector<LMsg> out;
-        g.unit->feed(in, out);
-        for (const LMsg &o : out) {
+        std::vector<LMsg> heard;
+        g.unit->feed(in, heard);
+        for (const LMsg &o : heard) {
             Midi mm;
             if (!to_midi(o, mm))
                 continue;
             if (mm.type == 2 && mm.a == 10)
                 mm.b = mirror(mm.b);    // (its pans the unit's: mirrored, as the CM-64 map's)
-            h->enqueue(std::move(mm));
+            out(std::move(mm));
         }
         return;
     }
-    h->enqueue(std::move(m));
+    out(std::move(m));
+}
+static void feed(nv_host *h, Midi &&m)
+{
+    feed_to(h, std::move(m), [h](Midi &&x) { h->enqueue(std::move(x)); });
+}
+static void feed_at(nv_host *h, Midi &&m, long long frame)
+{
+    feed_to(h, std::move(m), [h, frame](Midi &&x) { h->push_timed(std::move(x), frame); });
 }
 
 static void say(const std::string &s)
@@ -316,6 +332,7 @@ static bool set(nv_host *h, const std::string &mode, std::string &why)
             g.eff = "";
         }
         h->module_feed = feed;
+        h->module_feed_at = feed_at;
         h->module_on.store(true, std::memory_order_release);
     }
     g.busy = true;

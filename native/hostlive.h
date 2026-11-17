@@ -1263,6 +1263,10 @@ struct nv_host {
     // session keeps the setup it set aside (module_saved), not the module's
     std::atomic<bool> module_on{false};
     void (*module_feed)(nv_host *, Midi &&) = nullptr;
+    // ...and MIDI stamped with its frame (nv_host_midi_at: the apps'): the
+    // module's messages for it heard at that frame too
+    void (*module_feed_at)(nv_host *, Midi &&, long long) = nullptr;
+    void push_timed(Midi &&m, long long frame);
     std::mutex module_mu;
     sess::J module_saved;
     void input(Midi &&m)

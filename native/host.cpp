@@ -3987,11 +3987,20 @@ void nv_host_midi_at(nv_host *h, const uint8_t *msg, int n, long long frame)
     h->reclaim();
     std::lock_guard<std::mutex> lk(h->timed_mu);     // (the parse's running status: the stamping threads')
     h->timed_parse.feed(msg, n, [&](Midi &&m) {
-        Midi *p = new Midi(std::move(m));
-        p->at = frame;
-        while (!h->tq.push(p))
-            std::this_thread::yield();
+        if (h->module_on.load(std::memory_order_acquire) && h->module_feed_at)
+            h->module_feed_at(h, std::move(m), frame);      // (the module mode's reading of it, at its frame)
+        else
+            h->push_timed(std::move(m), frame);
     });
+}
+
+// a message heard at the start of the block FRAME falls in (nv_host_midi_at's)
+void nv_host::push_timed(Midi &&m, long long frame)
+{
+    Midi *p = new Midi(std::move(m));
+    p->at = frame;
+    while (!tq.push(p))
+        std::this_thread::yield();
 }
 
 void nv_host_midi(nv_host *h, const uint8_t *msg, int n)
