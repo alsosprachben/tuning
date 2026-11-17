@@ -37,6 +37,7 @@
 #include "synth.h"
 #include "stops.h"
 #include "piano.h"
+#include "drums.h"
 
 namespace nui {
 
@@ -91,6 +92,7 @@ static void draw(App &a)
     button(a, "help", X + nc * (w + gap), Y, 56, 46, "?");
     rect(a, 14, 338, 1892, 728, PANEL, 10.0f);
     piano_card(a, a.card == "piano");   // (the engine pushes the pedals only while it is open)
+    drums_card(a, a.card == "drums");   // (...and the kit and its hits)
     if (a.card == "parts") {
         draw_parts(a);
     } else if (a.card == "library") {
@@ -101,6 +103,8 @@ static void draw(App &a)
         draw_stops(a);
     } else if (a.card == "piano") {
         draw_piano(a);
+    } else if (a.card == "drums") {
+        draw_drums(a);
     } else {
         std::string title;
         for (int i = 0; i < nc; i++)
@@ -143,6 +147,14 @@ static bool poll(App &a)
             g_syn.text.clear();
             changed = true;
         }
+    }
+    if (const J *x = m.get("drums")) {
+        drums_take(a, *x);
+        changed = true;
+    }
+    if (const J *x = m.get("hits")) {      // (the pads lit as they are played)
+        drums_hits(*x);
+        changed = true;
     }
     if (const J *x = m.get("piano")) {
         piano_take(a, *x);
