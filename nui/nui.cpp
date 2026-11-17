@@ -35,6 +35,7 @@
 #include "parts.h"
 #include "library.h"
 #include "synth.h"
+#include "stops.h"
 
 namespace nui {
 
@@ -94,6 +95,8 @@ static void draw(App &a)
         draw_library(a);
     } else if (a.card == "synth") {
         draw_synth(a);
+    } else if (a.card == "stops") {
+        draw_stops(a);
     } else {
         std::string title;
         for (int i = 0; i < nc; i++)
@@ -136,6 +139,10 @@ static bool poll(App &a)
             g_syn.text.clear();
             changed = true;
         }
+    }
+    if (const J *x = m.get("stops")) {     // (the part's registration: a file's, a preset's, a new organ)
+        stops_take(*x, a);
+        changed = true;
     }
     if (const J *x = m.get("parts")) {
         a.parts = *x;
