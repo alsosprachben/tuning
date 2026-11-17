@@ -179,7 +179,7 @@ async function soloPart(row) {
 const CARDS = [
   ['parts', 'Parts', true], ['library', 'Library', true], ['synth', 'Synth', true],
   ['stops', 'Stops', true], ['piano', 'Piano', true], ['drums', 'Drums', true], ['effects', 'Effects', true],
-  ['matrix', 'Matrix', true], ['tuning', 'Tuning', true], ['control', 'Control', true], ['scenes', 'Scenes', true], ['setup', 'Setup'],
+  ['matrix', 'Matrix', true], ['tuning', 'Tuning', true], ['control', 'Control', true], ['scenes', 'Scenes', true], ['setup', 'Setup', true],
 ];
 const LATER = {
   setup: 'MIDI, audio, borrowed time and the globals',
@@ -206,6 +206,7 @@ function showCard(id) {
   if (id === 'stops') drawStops();
   Wire.call('piano', { open: id === 'piano' ? 1 : 0 }).then(r => { if (r.piano) setPiano(r.piano); });
   Wire.call('drums', { open: id === 'drums' ? 1 : 0, sets: DR.sets ? 0 : 1 }).then(r => { if (r.drums) setDrums(r.drums); });
+  Wire.call('setup', { open: id === 'setup' ? 1 : 0 }).then(r => { if (r.setup) setSetup(r.setup); });
   Wire.call('scenes', { open: id === 'scenes' ? 1 : 0 }).then(r => { if (r.scenes) setScenes(r.scenes); });
   Wire.call('control', { open: id === 'control' ? 1 : 0, kinds: CT.kinds ? 0 : 1 }).then(r => { if (r.control) setControl(r.control); });
   Wire.call('tuning', { open: id === 'tuning' ? 1 : 0, lists: TN.lists ? 0 : 1 }).then(r => { if (r.tuning) setTuning(r.tuning); });
@@ -1428,6 +1429,58 @@ function drawMetro() {
   MT.ring.set(Math.round(m[1])); MT.db.set(Math.round(m[2]));
 }
 
+// ---------------------------------------------------------------- THE SETUP CARD
+// The MIDI inputs (each plugged-in device on or off), the Messenger, the
+// globals every part plays through (nv_host_set_global: livetui's GLOBALS),
+// the room, how program changes are read, and rubato's borrowed time.
+const SU = { s: null, built: false, ctl: {} };
+const GLOB = [   // [index, label, lo, hi, step, format]
+  [0, 'Master', -60, 0, 0.5, v => v.toFixed(1) + ' dB'], [1, 'Headroom', 0, 24, 0.5, v => v.toFixed(1) + ' dB'],
+  [2, 'Limiter knee', 0.1, 1, 0.02, v => v.toFixed(2)], [3, 'Bend range', 0, 24, 0.5, v => v.toFixed(1) + ' st'],
+  [4, 'Mod depth', 0, 200, 5, v => v.toFixed(0) + ' c'], [9, 'Mod rate', 0, 1.5, 0.05, v => '+' + (v * 100).toFixed(0) + '%'],
+  [5, 'Aftertouch', 0, 24, 0.5, v => v.toFixed(1) + ' dB'],
+];
+const STDS = ['ours', 'SC-55', 'SC-88', 'SC-88Pro', 'SC-8850'];
+function setSetup(x) { SU.s = x; if (card === 'setup') drawSetup(); }
+function drawSetup() {
+  const x = SU.s; if (!x) return;
+  const g = x.globals;
+  $('suInfo').textContent = `${x.rate} Hz · ${x.block} frames a block (${(1000 * x.block / x.rate).toFixed(2)} ms)`;
+  $('suIns').innerHTML = (x.inputs.length ? x.inputs.map(d => `<button class="su-in${d.on ? ' on' : ''}" data-kit="1" data-path="${esc(d.path)}">` +
+    `<b>${esc(d.name)}</b><span>${esc(d.path.replace('/dev/snd/', ''))} · ${d.on ? (d.open ? 'reading' : 'wanted, not open') : 'off'}</span></button>`).join('')
+    : '<p class="pn-note">No MIDI devices plugged in.</p>') + (x.input_err ? `<p class="pn-note">${esc(x.input_err)}</p>` : '');
+  $('suMsgr').textContent = x.messenger.line ? (x.messenger.line === '-' ? 'Looked for when the program is a Messenger patch.' : 'On ' + x.messenger.line + '.') : 'None set.';
+  $('suMsgrOpts').innerHTML = `<button class="tns${x.messenger.reads ? ' on' : ''}" data-kit="1" data-m="reads">READ ITS KNOBS</button>` +
+    `<button class="tns${x.messenger.pre107 ? ' on' : ''}" data-kit="1" data-m="pre107">FIRMWARE BEFORE 1.0.7</button>`;
+  if (!SU.built) {
+    SU.built = true;
+    const el = $('suKnobs'); el.innerHTML = '';
+    for (const [i, label, lo, hi, step, f] of GLOB) {
+      const n = Math.round((hi - lo) / step), vals = range(0, n);
+      SU.ctl[i] = listKnob(el, { label, vals, shown: vals.map(k => f(lo + k * step)), value: 0,
+        onSet: k => { fxMine('g' + i, k); Wire.call('global_set', { i, v: +(lo + k * step).toFixed(4) }); } });
+      SU.ctl[i].map = v => Math.round((v - lo) / step);
+    }
+  }
+  for (const [i] of GLOB) SU.ctl[i].set(fxVal('g' + i, SU.ctl[i].map(g[i])));
+  $('suSw').innerHTML = `<button class="tns${g[6] > 0.5 ? ' on' : ''}" data-kit="1" data-g="6">THE GPU</button>` +
+    `<button class="tns${g[7] > 0.5 ? ' on' : ''}" data-kit="1" data-g="7">THE ROOM'S TAIL</button>`;
+  $('suRooms').innerHTML = (S.rooms || []).map((r, i) => `<button class="tns${r === x.room ? ' on' : ''}" data-kit="1" data-room="${i}">${esc(r)}</button>`).join('');
+  $('suStd').innerHTML = STDS.map((n, i) => `<button class="tns${Math.round(g[13]) === i ? ' on' : ''}" data-kit="1" data-std="${i}">${n}</button>`).join('');
+  const r = x.rubato, ms = f => (1000 * f / x.rate).toFixed(1) + ' ms';
+  $('suRub').innerHTML = x.rubato_on ? [
+    ['Callbacks that waited', r[0]], ['Time held, ever', ms(r[1])], ['Owed now', ms(r[2])],
+    ['Time returned', ms(r[6]) + ` (${r[5]} cuts)`], ['Held by the partials ringing on', ms(r[7])]]
+    .map(([k, v]) => `<div class="su-r"><span>${k}</span><b>${v}</b></div>`).join('') +
+    '<p class="pn-note">When a block is late, the sound already playing is held on and the time is borrowed; it is given back where no note falls.</p>'
+    : '<p class="pn-note">Rubato is off: start nvlive with --rubato to let a late block borrow time instead of dropping out.</p>';
+}
+Kit.press($('suIns'), b => { Wire.call('input_set', { path: b.dataset.path, on: b.classList.contains('on') ? 0 : 1 }); b.classList.toggle('on'); }, '.su-in');
+Kit.press($('suMsgrOpts'), b => { const k = b.dataset.m; Wire.call('messenger_set', { [k]: b.classList.contains('on') ? 0 : 1 }); b.classList.toggle('on'); }, '.tns');
+Kit.press($('suSw'), b => { Wire.call('global_set', { i: +b.dataset.g, v: b.classList.contains('on') ? 0 : 1 }); b.classList.toggle('on'); }, '.tns');
+Kit.press($('suRooms'), b => { Wire.call('global_set', { i: 8, v: +b.dataset.room }); $('suRooms').querySelectorAll('.tns').forEach(q => q.classList.toggle('on', q === b)); }, '.tns');
+Kit.press($('suStd'), b => { Wire.call('global_set', { i: 13, v: +b.dataset.std }); $('suStd').querySelectorAll('.tns').forEach(q => q.classList.toggle('on', q === b)); }, '.tns');
+
 // ---------------------------------------------------------------- THE NOTES
 // What each program and stop is, and what it was fitted to (about.json:
 // examples/gm_coverage.py --about, the coverage page's own words)
@@ -1476,6 +1529,7 @@ Wire.connect({
     $('gone').hidden = true;
     const h = await Wire.call('hello');
     S.knobs = h.knobs || [];
+    S.rooms = h.rooms || [];
     const [p, pt, fv, so] = await Promise.all([Wire.call('parts'), Wire.call('patches'), Wire.call('favourites'), Wire.call('stops', { row: S.row })]);
     S.stops = so.stops || null; S.organs = so.organs || [];
     S.patches = pt.patches || [];
@@ -1499,6 +1553,7 @@ Wire.connect({
     if (m.tuning) setTuning(m.tuning);
     if (m.control) setControl(m.control);
     if (m.scenes) setScenes(m.scenes);
+    if (m.setup) setSetup(m.setup);
     if (m.synth && m.synth.row === S.row && (m.synth.layer === S.layer || m.synth.layers <= S.layer)) { S.layer = m.synth.layer; S.synth = m.synth; if (card === 'synth') drawSynth(); }
   },
   down() { $('gone').hidden = false; },

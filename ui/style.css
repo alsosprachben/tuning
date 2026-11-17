@@ -414,3 +414,18 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .name-sheet { width: min(1000px, 96vw); }
 .name-val { font: 28px var(--f-lcd); color: var(--lcd); background: var(--lcd-bg); border-radius: 6px; padding: 10px 14px; min-height: 52px; white-space: pre; }
 .name-sheet .set:disabled { opacity: .4; }
+
+/* ---- the setup card: MIDI in and the Messenger, the globals, borrowed time */
+.su { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1.2fr 420px; grid-template-rows: minmax(0, 1fr); gap: 8px; }
+.su h3 { margin: 0; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--silk); }
+.su h3 small { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--silk-dim); margin-left: 8px; font-size: 12px; }
+.su h4 { margin: 4px 0 0; font: 700 10px var(--f-ui); letter-spacing: .14em; text-transform: uppercase; color: var(--silk-dim); }
+.su-in { text-align: left; padding: 10px 12px; background: #262a2e; color: var(--silk); border: 1px solid var(--edge); border-radius: 8px; display: flex; flex-direction: column; gap: 3px; }
+.su-in b { font: 400 21px var(--f-lcd); color: var(--silk-dim); }
+.su-in span { font-size: 12px; color: var(--silk-dim); }
+.su-in.on { border-color: var(--lcd); }
+.su-in.on b { color: var(--lcd); }
+.su .fx-knobs { flex: none; }
+.su-rub { display: flex; flex-direction: column; gap: 6px; }
+.su-r { display: flex; justify-content: space-between; border-bottom: 1px solid #2c3035; padding: 6px 0; font-size: 14px; }
+.su-r b { font: 400 21px var(--f-lcd); color: var(--lcd); }

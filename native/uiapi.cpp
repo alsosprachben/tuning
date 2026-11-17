@@ -840,6 +840,60 @@ bool forget_named(const std::string &path, const std::string &name)
     return sess::save(path, d);
 }
 
+// THE SETUP CARD's: the MIDI inputs (each device plugged in, or wanted and
+// gone; on: wanted; open: reading), the Messenger, the globals, the rooms,
+// rubato's figures (callbacks that held, frames owed now, time returned)
+J globals_of(nv_host *h);
+J setup_of(nv_host *h)
+{
+    J o = sess::obj();
+    std::vector<std::pair<std::string, std::string>> want, open;
+    std::string err;
+    {
+        std::lock_guard<std::mutex> lk(h->ins.mu);
+        want = h->ins.want;
+        open = h->ins.open;
+        err = h->ins.err;
+    }
+    std::vector<std::pair<std::string, std::string>> ds = midi_devices();
+    for (const auto &x : want)
+        if (std::none_of(ds.begin(), ds.end(), [&](const std::pair<std::string, std::string> &d) { return d.first == x.first; }))
+            ds.push_back(x);
+    J ins = sess::arr();
+    for (const auto &d : ds) {
+        J e = sess::obj();
+        e.o["path"] = sess::str(d.first);
+        std::string nm = d.second;
+        while (!nm.empty() && (nm.back() == '\n' || nm.back() == ' '))
+            nm.pop_back();
+        e.o["name"] = sess::str(nm);
+        e.o["on"] = sess::boolean(std::any_of(want.begin(), want.end(), [&](const std::pair<std::string, std::string> &x) { return x.first == d.first; }));
+        e.o["open"] = sess::boolean(std::any_of(open.begin(), open.end(), [&](const std::pair<std::string, std::string> &x) { return x.first == d.first; }));
+        ins.a.push_back(e);
+    }
+    o.o["inputs"] = ins;
+    o.o["input_err"] = sess::str(err);
+    char ml[256] = {};
+    nv_host_messenger_line(h, ml, sizeof ml);
+    J m = sess::obj();
+    m.o["line"] = sess::str(ml);
+    m.o["reads"] = sess::boolean(nv_host_messenger_reads(h) != 0);
+    m.o["pre107"] = sess::boolean(nv_host_messenger_pre107(h) != 0);
+    o.o["messenger"] = m;
+    o.o["globals"] = globals_of(h);
+    o.o["room"] = sess::str(nv_host_room(h));
+    long long st[8] = {};
+    nv_host_rubato_stats(h, st);
+    J rb = sess::arr();
+    for (long long v : st)
+        rb.a.push_back(sess::integer((long)v));
+    o.o["rubato"] = rb;
+    o.o["rubato_on"] = sess::boolean(h->rub_on);
+    o.o["rate"] = sess::integer(nv_host_rate(h));
+    o.o["block"] = sess::integer(nv_host_block(h));
+    return o;
+}
+
 // a part's knobs on a layer: positions, whose they are, and each in its own words
 J synth_of(nv_host *h, int row, int layer)
 {
@@ -990,6 +1044,8 @@ struct nv_ui_watch {
     bool tuning = false;                // (its tuning card is open)
     bool control = false;               // (its control card is open)
     bool scenes = false;                // (its scenes card is open)
+    bool setup = false;                 // (its setup card is open)
+    std::string setup_sent;
     std::string scenes_sent;
     std::string control_sent;
     int route_learn = 0;                // (a route's source being learnt: 1 a key, 2 a CC -- since then)
@@ -1417,6 +1473,42 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         r.o["scenes"] = scenes_of(h);
     } else if (call == "gs_reset") {
         nv_host_gs_reset(h);
+    } else if (call == "setup") {              // the card opened (or shut: open false)
+        if (w) {
+            w->setup = arg_i(q, "open", 1) != 0;
+            w->setup_sent.clear();
+        }
+        r.o["setup"] = setup_of(h);
+    } else if (call == "input_set") {          // path, on: a MIDI input read or not (several at once, merged)
+        const J *pj = q.get("path");
+        const std::string path = pj && pj->is(J::STR) ? pj->s : "";
+        const bool on = arg_i(q, "on", 1) != 0;
+        std::vector<std::pair<std::string, std::string>> want;
+        {
+            std::lock_guard<std::mutex> lk(h->ins.mu);
+            want = h->ins.want;
+        }
+        auto it = std::find_if(want.begin(), want.end(), [&](const std::pair<std::string, std::string> &x) { return x.first == path; });
+        if (!on && it != want.end()) {
+            want.erase(it);
+            h->ins.set(want);
+        } else if (on && it == want.end()) {
+            for (const auto &d : midi_devices())
+                if (d.first == path) {
+                    want.push_back(d);
+                    h->ins.set(want);
+                    break;
+                }
+        }
+        if (w)
+            w->setup_sent.clear();
+    } else if (call == "messenger_set") {      // reads, pre107: 0/1 (either)
+        if (q.get("reads"))
+            nv_host_set_messenger_reads(h, (int)arg_i(q, "reads", 0));
+        if (q.get("pre107"))
+            nv_host_set_messenger_pre107(h, (int)arg_i(q, "pre107", 0));
+        if (w)
+            w->setup_sent.clear();
     } else if (call == "panic") {
         nv_host_panic(h);
     } else {
@@ -1548,6 +1640,16 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
                 r.o["drums"] = dj;
                 any = true;
             }
+        }
+    }
+    if (w->setup && w->tick % 15 == 7) {      // (twice a second: an input plugged in, the time borrowed)
+        J sj = setup_of(h);
+        std::string ss;
+        put(ss, sj);
+        if (ss != w->setup_sent) {
+            w->setup_sent = ss;
+            r.o["setup"] = sj;
+            any = true;
         }
     }
     if (w->scenes && w->tick % 30 == 5) {     // (the files, once a second: another app may save)
