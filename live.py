@@ -4616,6 +4616,14 @@ class Live:
         self.expr = {}          # channel -> CC11, the swell and the bellows
         self.cgain = {}         # channel -> the gain last applied to its notes
         self.cpan = {}          # channel -> the CC10 last applied to its notes
+        # THE STAMPED CHANNELS (native's Part::stamped): channels whose parts
+        # are stamped per note (mt32mux's, the reader's TUNING_PARTS) -- there
+        # CC7, CC11 and pan set the next note's and leave the notes sounding
+        # as struck, the file render's onset rule (no fader row on a stamped
+        # channel: blockrender's _prep_channel_fader), so one part's stamp is
+        # not another's fader. Set by whoever plays the file (nvlive_check:
+        # the reader's rule, native.Midi.stamped)
+        self.stamped = set()
         self.wheel = {}         # channel -> raw pitchwheel, -8192..8191
         self.brange = {}        # channel -> RPN 0, semitones; absent = bend_range
         self.coarse = {}        # channel -> RPN 2, semitones
@@ -6197,7 +6205,8 @@ class Live:
                     # CC11 IS the swell box and the only expression there is.
                     # A note stamped at this setting comes out identical
                     # either way.
-                    self.slab.channel_gain(self._sounding(ch), g / max(was, 1e-9))
+                    if ch not in self.stamped:
+                        self.slab.channel_gain(self._sounding(ch), g / max(was, 1e-9))
                 if msg.control == 11 and self.xnote:
                     # THE HARMONIUM'S EXPRESSION: its bellows brighten as well
                     # as swell, on the notes stamped with the stop drawn. The
@@ -6267,8 +6276,9 @@ class Live:
                     # ...but not a part with its own pan pot (Part.pan)
                     _own = {p.pid for p in self.parts if p.pan is not None}
                     _pids = None if not _own else {p.pid for p in self.parts if p.pan is None}
-                    self.slab.repan(self._sounding(ch, pids=_pids), msg.value, was,
-                                    self.rate, itd=False)
+                    if ch not in self.stamped:
+                        self.slab.repan(self._sounding(ch, pids=_pids), msg.value, was,
+                                        self.rate, itd=False)
             elif msg.control == 64:                 # sustain pedal
                 downp = msg.value >= 64
                 was_v = self.pedal_v.get(ch, 0)

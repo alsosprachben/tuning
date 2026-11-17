@@ -157,6 +157,9 @@ int nv_host::run(int argc, char **argv)
                 fprintf(stderr, "nvlive: refused: %s selects a bank (only with --programs)\n", argv[i + 1]);
                 return 2;
             }
+            // ...ITS STAMPED CHANNELS (a muxed file's, mt32mux or the reader's
+            // TUNING_PARTS): the onset rule kept there, as the file render keeps it
+            nv_part_stamped(part, getenv("NV_NO_STAMPED") ? 0u : nv_midi_stamped(m, E.k[K_STAMP_S], E.k[K_STAMPED_SHARE]));
             int ne = nv_midi_n_events(m);
             double secs = atof(opt(argc, argv, "seconds", "0").c_str());
             if (secs <= 0)

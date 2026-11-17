@@ -2598,6 +2598,12 @@ struct Part {
     bool soft[16];
     double cgain[16];
     bool cgain_set[16];
+    // THE STAMPED CHANNELS (nv_part_stamped, live.stamped): a bit per channel
+    // whose parts are stamped per note (mt32mux's, the reader's partmux):
+    // there CC7, CC11 and pan set the next note's, and leave the notes
+    // sounding as they were struck -- the file render's onset rule (no fader
+    // row on a stamped channel), so one part's stamp is not another's fader
+    std::atomic<unsigned> stamped{0};
     std::set<std::pair<int, int>> down, pedalled;
     // A PALM-MUTED OPEN STRING RINGING ON past its key (live's open_ring):
     // (part id, channel, key) -> (its string, the sample it stops at the latest)
@@ -10748,7 +10754,8 @@ struct Part {
             if (g != was) {
                 cgain[ch] = g;
                 cgain_set[ch] = true;
-                S.channel_gain(sounding(ch), g / std::max(was, 1e-9));
+                if (!(stamped.load(std::memory_order_relaxed) >> ch & 1u))
+                    S.channel_gain(sounding(ch), g / std::max(was, 1e-9));
             }
             if (cc == 11 && !xnote.empty())         // a harmonium's bellows: its Expression
                 harmonium_bellows(ch, v);
@@ -10758,7 +10765,8 @@ struct Part {
             int was = cpan[ch];
             if (v != was) {
                 cpan[ch] = v;
-                S.repan(sounding(ch), v, was, rate, false);
+                if (!(stamped.load(std::memory_order_relaxed) >> ch & 1u))
+                    S.repan(sounding(ch), v, was, rate, false);
             }
         } else if (cc == 64) {
             int was_v = pedal_v[ch];
@@ -14341,6 +14349,9 @@ void nv_part_gpu_depth(void *h, int depth)
 // thread (live's worker process): answers placed at the pump after they are
 // ready, not in step -- for playing, not for the checks
 void nv_part_reg_async(void *h) { ((nv::slab::Part *)h)->start_reg_worker(); }
+
+// THE STAMPED CHANNELS (Part::stamped): a bit per channel 0-15
+void nv_part_stamped(void *h, unsigned mask) { ((nv::slab::Part *)h)->stamped.store(mask); }
 
 // Slab.shed: the highest frac of the partials sounding at n end over 5 ms; how many
 // the scanner's constants and circuit tables (scanner.cpp's: the export's SCAN)

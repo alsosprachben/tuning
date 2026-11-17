@@ -150,6 +150,10 @@ void nv_host_pick(nv_host *h, int pick);
 void nv_host_patch_now(const nv_host *h, int *program, int *variation, int *drums);
 /* every note off, now (the panel's panic) */
 void nv_host_panic(nv_host *h);
+/* THE STAMPED CHANNELS: a bit per channel whose parts are stamped per note
+   (a muxed file's): CC7, CC11 and pan there set the next note's only */
+void nv_host_stamped(nv_host *h, unsigned mask);
+unsigned nv_host_stamp_rule(nv_host *h, void *midi);
 /* how much is still to land -- programs and a room asked for, building,
    built and not yet swapped in: a GUI's spinner (0 settled) */
 int nv_host_building(nv_host *h);

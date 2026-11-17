@@ -52,6 +52,8 @@ extern "C" {
 void *nv_midi_read(const uint8_t *buf, long long len, int *err);
 int nv_midi_master(void *p);
 int nv_midi_banked(void *p);
+unsigned nv_midi_stamped(void *p, double stamp_s, double share);
+void nv_part_stamped(void *h, unsigned mask);
 int nv_midi_sysex(void *p, int i, uint8_t *out, int cap);
 void nv_part_sysex(void *h, const uint8_t *d, int n);
 int nv_part_mpe_member(void *h, int ch);

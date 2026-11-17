@@ -47,7 +47,10 @@ namespace fileplay {
 
 using J = sess::J;
 
-static const char *MODES[] = {"auto", "gm", "ours", "sc55", "sc88", "sc88pro", "sc8850", "cm64"};
+static const char *MODES[] = {"auto", "gm", "ours", "sc55", "sc88", "sc88pro", "sc8850", "cm64", "names"};
+// THE MT-32's VELOCITY (the reader's TUNING_MT32_VEL): its 3/4 v + 32, in the
+// CM-64 map and orchestra by names; off, the file's velocities as written
+static std::atomic<bool> mt32_vel{true};
 static int map_of(const std::string &mode)      // (a Sound Canvas map's number; -1 none)
 {
     for (int i = 2; i <= 6; i++)
@@ -138,6 +141,10 @@ static void *read_mode(const std::vector<uint8_t> &b, const std::string &mode, i
         setenv("TUNING_GM", "1", 1);
     if (mode == "cm64")
         setenv("TUNING_CM64", "1", 1);
+    if (mode == "names")                // (orchestra by track names: mt32mux's, partmux.h)
+        setenv("TUNING_PARTS", "names", 1);
+    if (!mt32_vel)
+        setenv("TUNING_MT32_VEL", "0", 1);
     if (mode == "look") {               // (inspect's: an MT-32 exclusive counted, not refused; the file check)
         setenv("TUNING_MT32_SEEN", "1", 1);
         setenv("TUNING_CHECK", "1", 1);
@@ -145,6 +152,8 @@ static void *read_mode(const std::vector<uint8_t> &b, const std::string &mode, i
     void *m = nv_midi_read(b.data(), (long long)b.size(), err);
     unsetenv("TUNING_GM");
     unsetenv("TUNING_CM64");
+    unsetenv("TUNING_PARTS");
+    unsetenv("TUNING_MT32_VEL");
     unsetenv("TUNING_MT32_SEEN");
     unsetenv("TUNING_CHECK");
     return m;
@@ -371,13 +380,14 @@ struct Player {
             }
             evs.push_back({t, std::move(ev)});
         }
+        const unsigned stm = nv_host_stamp_rule(h, m);     // (its stamped channels: a muxed file's)
         nv_midi_free(m);
         busy = true;
         pos = 0.0;
-        th = std::thread([this, h, md, evs = std::move(evs)]() mutable { run(h, md, evs); });
+        th = std::thread([this, h, md, stm, evs = std::move(evs)]() mutable { run(h, md, stm, evs); });
     }
 
-    void run(nv_host *h, const std::string &md, std::vector<std::pair<double, Midi>> &evs)
+    void run(nv_host *h, const std::string &md, unsigned stm, std::vector<std::pair<double, Midi>> &evs)
     {
         // 1: THE PARTS, one per channel
         say("setting up the parts");
@@ -445,6 +455,10 @@ struct Player {
             std::this_thread::sleep_for(std::chrono::milliseconds(150));
         }
         say("playing");
+        // ITS STAMPED CHANNELS: a part's CC7, CC11 and pan stamped before
+        // each of its notes set that note's, not the other parts' sounding
+        // on the channel (the file render's onset rule), until it stops
+        nv_host_stamped(h, stm);
         const auto t0 = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
         for (auto &e : evs) {
             if (stop || g_stop)
@@ -476,6 +490,7 @@ struct Player {
         }
         if (saved_map >= 0)
             nv_host_set_global(h, 13, saved_map);
+        nv_host_stamped(h, 0);
         {
             std::lock_guard<std::mutex> lk(mu);
             stage = stop ? "stopped" : "played to the end";
@@ -642,6 +657,10 @@ struct Render {
             env.push_back("TUNING_GM=1");
         if (md == "cm64")
             env.push_back("TUNING_CM64=1");
+        if (md == "names")
+            env.push_back("TUNING_PARTS=names");
+        if (!mt32_vel)
+            env.push_back("TUNING_MT32_VEL=0");
         std::string exe = nv_self_exe();
         exe = exe.substr(0, exe.rfind('/') + 1);
         std::string tuner, east;

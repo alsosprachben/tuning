@@ -502,6 +502,9 @@ def _load():
             ('nv_midi_mt32', I, [ctypes.c_void_p]), ('nv_midi_track_name', ctypes.c_char_p, [ctypes.c_void_p, I]),
             ('nv_midi_n_findings', I, [ctypes.c_void_p]), ('nv_midi_finding', ctypes.c_char_p, [ctypes.c_void_p, I]),
             ('nv_midi_muxed', I, [ctypes.c_void_p]),
+            ('nv_midi_mux_line', ctypes.c_char_p, [ctypes.c_void_p, I]),
+            ('nv_midi_stamped', ctypes.c_uint, [ctypes.c_void_p, C, C]),
+            ('nv_midi_mux_overlaps', LL, [ctypes.c_void_p, I]),
             ('nv_midi_sysex', I, [ctypes.c_void_p, I, ctypes.c_void_p, I]), ('nv_midi_master', I, [ctypes.c_void_p]),
             ('nv_midi_event', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_event_x', ctypes.c_double, [ctypes.c_void_p, I]),
@@ -4044,6 +4047,22 @@ class Midi(object):
         """Every note stamped with its own program (mt32check._multiplexed), None unchecked"""
         v = self.d.nv_midi_muxed(self.p)
         return None if v < 0 else bool(v)
+
+    def stamped(self, stamp_s=0.005, share=0.9):
+        """The stamped channels (blockrender's STAMP_S, STAMPED_SHARE rule): a set"""
+        m = self.d.nv_midi_stamped(self.p, stamp_s, share)
+        return {c for c in range(16) if m >> c & 1}
+
+    def mux_report(self):
+        """Orchestra by track names (TUNING_PARTS=names, partmux.h): its line
+        per part, and the same-pitch overlaps (every part sharing, as assigned)"""
+        out = []
+        while True:
+            ln = self.d.nv_midi_mux_line(self.p, len(out))
+            if ln is None:
+                break
+            out.append(ln.decode('latin-1'))
+        return out, self.d.nv_midi_mux_overlaps(self.p, 0), self.d.nv_midi_mux_overlaps(self.p, 1)
 
     def track_names(self):
         """Each track's first name ('' none)"""

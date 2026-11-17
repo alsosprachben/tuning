@@ -272,6 +272,8 @@ def main(argv):
             parts.append(L.Part(dp, channel=0, lo=0, hi=split - 1, transpose=stp))
         lv.set_parts(parts)
     lv.slab.shed = lambda n, frac: 0
+    import blockrender as _B
+    lv.stamped = set() if os.environ.get("NV_NO_STAMPED") else m.stamped(_B.STAMP_S, _B.STAMPED_SHARE)    # (its stamped channels, as nvlive --test's; NV_NO_STAMPED none)
     if "gpu" in opt:
         send = lv.renderer.send
         lv.renderer = L.GpuRenderer(lv.slab, 128, 1, backend=opt["gpu"] or "cl", gpu_min=gmin)

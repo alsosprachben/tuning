@@ -3509,6 +3509,10 @@ nv_host *nv_host_open_args(int argc, char **argv, char *err, int errlen)
 
 void nv_host_start(nv_host *h) { h->start(); }
 
+void nv_host_stamped(nv_host *h, unsigned mask) { nv_part_stamped(h->part, mask); }
+// (a file's stamped channels by the export's rule: STAMP_S, STAMPED_SHARE)
+unsigned nv_host_stamp_rule(nv_host *h, void *midi) { return nv_midi_stamped(midi, h->E.k[K_STAMP_S], h->E.k[K_STAMPED_SHARE]); }
+
 void nv_host_set_realtime(nv_host *h, int on)
 {
     h->soft_locks = on != 0;

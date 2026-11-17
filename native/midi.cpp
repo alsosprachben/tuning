@@ -38,6 +38,7 @@
 #include "gsrx.h"
 #include "mpe.h"
 #include "filecheck.h"
+#include "partmux.h"
 
 namespace nv {
 
@@ -324,6 +325,11 @@ struct Parsed {
     // and whether every note is stamped with its own program (a muxed file)
     std::vector<std::string> findings;
     int muxed = -1;
+    // ORCHESTRA BY TRACK NAMES (partmux.h, TUNING_PARTS=names: mt32mux's):
+    // a line per part (its channel, name, program, notes, compass), and the
+    // same-pitch overlaps if every part shared a channel, and as assigned
+    std::vector<std::string> mux_report;
+    long long mux_before = -1, mux_left = -1;
     // THE GS SETUP by the first note (gs_setup), a reset back to none: the
     // reverb's, chorus's and delay's parameters (40 01 xx: address -> value,
     // a macro the rest gone), the EQ's (40 02 0-3), each part's EQ switch
@@ -1049,6 +1055,39 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         filecheck::Result fr = filecheck::check(tr, tpb);
         P.findings = fr.findings;
         P.muxed = fr.muxed;
+    }
+    // ORCHESTRA BY TRACK NAMES (TUNING_PARTS=names): the file read as
+    // mt32mux would have written it -- a meta track, a track per part, each
+    // note stamped with its part's program and controllers; the MT-32's
+    // velocity unless TUNING_MT32_VEL=0 (mt32mux's --velocity=none)
+    if (const char *pe = getenv("TUNING_PARTS"); pe && !strcmp(pe, "names")) {
+        std::vector<std::vector<const Msg *>> tr(starts.size());
+        for (size_t ti = 0; ti < starts.size(); ti++) {
+            const size_t b = ti + 1 < starts.size() ? starts[ti + 1] : all.size();
+            for (size_t i = starts[ti]; i < b; i++)
+                tr[ti].push_back(&all[i]);
+        }
+        const char *mve = getenv("TUNING_MT32_VEL");
+        partmux::Result mr;
+        std::vector<std::vector<Msg>> out = partmux::mux(tr, !(mve && !strcmp(mve, "0")), mr);
+        std::vector<Msg> na;
+        starts.clear();
+        P.track_names.clear();
+        for (size_t ti = 0; ti < out.size(); ti++) {
+            starts.push_back(na.size());
+            std::string nm;
+            for (Msg &m : out[ti]) {
+                m.trk = (int)ti;
+                if (nm.empty() && m.status == 0xFF && m.meta == 0x03)
+                    nm.assign(m.data.begin(), m.data.end());
+                na.push_back(m);
+            }
+            P.track_names.push_back(nm);
+        }
+        all.swap(na);
+        P.mux_report = mr.report;
+        P.mux_before = mr.before;
+        P.mux_left = mr.left;
     }
     // A TWO-PORT FILE (PortedMidi): each track's messages its port's, a
     // part's exclusive at port B as port A would read it (40 / 50 swapped)
@@ -2302,6 +2341,52 @@ const char *nv_midi_finding(void *p, int i)
     return i >= 0 && i < (int)v.size() ? v[(size_t)i].c_str() : nullptr;
 }
 int nv_midi_muxed(void *p) { return ((nv::Parsed *)p)->muxed; }
+
+// ORCHESTRA BY TRACK NAMES (TUNING_PARTS=names): its line per part (nullptr
+// past the last), and the same-pitch overlaps if every part shared a
+// channel / as assigned (-1 not muxed)
+// THE STAMPED CHANNELS (blockrender's _prep_channel_fader rule, nv_bend_fader's):
+// a channel where at least share of its notes have a CC7 at most stamp_s
+// before them carries parts stamped per note (mt32mux's, partmux's) -- its
+// CC7 a snapshot for the next note, not a fader. A bit per channel 0-15,
+// for live to keep the onset rule there (nv_part_stamped)
+unsigned nv_midi_stamped(void *p, double stamp_s, double share)
+{
+    const nv::Parsed *P = (nv::Parsed *)p;
+    std::vector<double> ons[16], t7[16];
+    for (const auto &n : P->notes)
+        if (n.ch >= 0 && n.ch < 16)
+            ons[n.ch].push_back(n.on);
+    for (const auto &e : P->ccs)
+        if (e.cc == 7 && e.ch >= 0 && e.ch < 16)
+            t7[e.ch].push_back(e.t);
+    unsigned mask = 0;
+    for (int c = 0; c < 16; c++) {
+        if (ons[c].empty() || t7[c].empty())
+            continue;
+        std::sort(ons[c].begin(), ons[c].end());
+        std::sort(t7[c].begin(), t7[c].end());
+        long hit = 0;
+        for (double o : ons[c]) {
+            long k = (long)(std::upper_bound(t7[c].begin(), t7[c].end(), o + 1e-9) - t7[c].begin()) - 1;
+            hit += k >= 0 && (o - t7[c][std::max(k, 0L)]) <= stamp_s;
+        }
+        if ((double)hit / (double)ons[c].size() >= share)
+            mask |= 1u << c;
+    }
+    return mask;
+}
+
+const char *nv_midi_mux_line(void *p, int i)
+{
+    const auto &v = ((nv::Parsed *)p)->mux_report;
+    return i >= 0 && i < (int)v.size() ? v[(size_t)i].c_str() : nullptr;
+}
+long long nv_midi_mux_overlaps(void *p, int as_assigned)
+{
+    const nv::Parsed *P = (nv::Parsed *)p;
+    return as_assigned ? P->mux_left : P->mux_before;
+}
 const char *nv_midi_track_name(void *p, int i)
 {
     const auto &v = ((nv::Parsed *)p)->track_names;
