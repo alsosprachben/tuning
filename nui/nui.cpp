@@ -36,6 +36,7 @@
 #include "library.h"
 #include "synth.h"
 #include "stops.h"
+#include "piano.h"
 
 namespace nui {
 
@@ -89,6 +90,7 @@ static void draw(App &a)
             a.card = CARDS[i][0];
     button(a, "help", X + nc * (w + gap), Y, 56, 46, "?");
     rect(a, 14, 338, 1892, 728, PANEL, 10.0f);
+    piano_card(a, a.card == "piano");   // (the engine pushes the pedals only while it is open)
     if (a.card == "parts") {
         draw_parts(a);
     } else if (a.card == "library") {
@@ -97,6 +99,8 @@ static void draw(App &a)
         draw_synth(a);
     } else if (a.card == "stops") {
         draw_stops(a);
+    } else if (a.card == "piano") {
+        draw_piano(a);
     } else {
         std::string title;
         for (int i = 0; i < nc; i++)
@@ -139,6 +143,10 @@ static bool poll(App &a)
             g_syn.text.clear();
             changed = true;
         }
+    }
+    if (const J *x = m.get("piano")) {
+        piano_take(a, *x);
+        changed = true;
     }
     if (const J *x = m.get("stops")) {     // (the part's registration: a file's, a preset's, a new organ)
         stops_take(*x, a);
@@ -332,6 +340,10 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
             dirty = true;
         } else if (pending_up && --pending_up == 0) {
             io.AddMouseButtonEvent(0, false);
+            dirty = true;
+        }
+        if (a.animate) {
+            a.animate = false;
             dirty = true;
         }
         if (dirty)

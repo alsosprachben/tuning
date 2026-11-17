@@ -46,6 +46,7 @@ struct App {
     std::string card = "parts", msg;
     std::string last_meters;
     bool quit = false;
+    bool animate = false;               // (a card asks for another frame: a blink, a send still due)
     double quit_armed = -10.0;          // (QUIT's first tap: a second within 3 s quits)
     Kit K;
     Dial jog;
