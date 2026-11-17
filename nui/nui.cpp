@@ -33,6 +33,7 @@
 #include "bdf.h"
 #include "panel.h"
 #include "parts.h"
+#include "library.h"
 
 namespace nui {
 
@@ -88,6 +89,8 @@ static void draw(App &a)
     rect(a, 14, 338, 1892, 728, PANEL, 10.0f);
     if (a.card == "parts") {
         draw_parts(a);
+    } else if (a.card == "library") {
+        draw_library(a);
     } else {
         std::string title;
         for (int i = 0; i < nc; i++)
@@ -227,6 +230,7 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
     }
     App a;
     a.h = h;
+    a.ui_dir = std::string(fonts_dir).substr(0, std::string(fonts_dir).rfind('/'));
     a.w = nv_ui_watch_new();
     a.font = bdf_add(io.Fonts, &c7, "code7", false);
     if (load("code7w.bdf", c7w))

@@ -37,6 +37,7 @@ struct App {
     nv_host *h = nullptr;
     nv_ui_watch *w = nullptr;
     ImFont *font = nullptr, *bold = nullptr;
+    std::string ui_dir;                 // (ui/: the fonts, about.json)
     float k = 1.0f;                     // design units (1920x1080) to pixels
     ImVec2 org{0, 0};
     J parts, meters, build;
