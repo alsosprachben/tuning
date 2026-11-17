@@ -38,6 +38,7 @@
 #include "stops.h"
 #include "piano.h"
 #include "drums.h"
+#include "effects.h"
 
 namespace nui {
 
@@ -93,6 +94,7 @@ static void draw(App &a)
     rect(a, 14, 338, 1892, 728, PANEL, 10.0f);
     piano_card(a, a.card == "piano");   // (the engine pushes the pedals only while it is open)
     drums_card(a, a.card == "drums");   // (...and the kit and its hits)
+    effects_card(a, a.card == "effects");
     if (a.card == "parts") {
         draw_parts(a);
     } else if (a.card == "library") {
@@ -105,6 +107,8 @@ static void draw(App &a)
         draw_piano(a);
     } else if (a.card == "drums") {
         draw_drums(a);
+    } else if (a.card == "effects") {
+        draw_effects(a);
     } else {
         std::string title;
         for (int i = 0; i < nc; i++)
@@ -147,6 +151,10 @@ static bool poll(App &a)
             g_syn.text.clear();
             changed = true;
         }
+    }
+    if (const J *x = m.get("effects")) {
+        g_fx.e = *x;
+        changed = true;
     }
     if (const J *x = m.get("drums")) {
         drums_take(a, *x);
