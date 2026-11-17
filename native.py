@@ -417,6 +417,12 @@ def _load():
                                                        'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'uiapi.cpp', 'session.h', 'hostint.h', 'hostlive.h', 'host.h', 'livebus.cpp',
                                                        'relocate.h', 'selfexe.h', 'lfqueue.h', 'rtjoin.h', 'rtsem.h', 'rubfill.h')]
             + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c'), os.path.join(HERE, 'tapkernel.c')])
+    # ...and EVERY header and include in native/: a header a unit includes
+    # (fileplay.h, mt32.h, partmux.h...) is a source too -- left off this
+    # list, a change to it alone rebuilt nothing (the objects' own stamps
+    # below would have, had the build been started)
+    import glob as _glob
+    srcs += [p for pat in ('*.h', '*.inc') for p in _glob.glob(os.path.join(HERE, 'native', pat))]
     so = os.path.join(HERE, 'libnative.so')
     if not os.path.exists(so) or max(os.path.getmtime(s) for s in srcs) > os.path.getmtime(so):
         tmp = '%s.%d.tmp' % (so, os.getpid())

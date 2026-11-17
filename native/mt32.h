@@ -175,6 +175,7 @@ static std::vector<MsgT> apply(const std::vector<MsgT> &in, bool cm64, int &n_ex
     std::fill(sent_bend, sent_bend + 9, 12);
     std::fill(sent_rev, sent_rev + 9, 1);
     std::map<int, long> dropped;        // channel -> notes no part received
+    std::set<std::pair<int, int>> held; // (our channel, key) sounding: a moved part's let go by name
     long rhythm_out = 0;
     auto emit = [&](int ch, int st, int a, int b) { out.push_back(MsgT{now, st | ch, a, b, 0, {}}); };
     auto ex = [&](std::vector<uint8_t> d) { out.push_back(MsgT{now, 0xF0, 0, 0, 0, d}); };
@@ -260,6 +261,16 @@ static std::vector<MsgT> apply(const std::vector<MsgT> &in, bool cm64, int &n_ex
                     const int p = (int)off - 0x0D;
                     if (S.chan[p] != std::min(v, 16)) {
                         if (S.chan[p] < 16) {          // (the part's notes let go, its controllers reset)
+                            // (each held note let go by its own note-off: the
+                            // file reader pairs notes by their offs, not by
+                            // All Notes Off, and its off would never come now)
+                            for (auto it = held.begin(); it != held.end();)
+                                if (it->first == outch(p)) {
+                                    emit(it->first, 0x80, it->second, 0);
+                                    it = held.erase(it);
+                                } else {
+                                    ++it;
+                                }
                             emit(outch(p), 0xB0, 121, 0);
                             emit(outch(p), 0xB0, 123, 0);
                         }
@@ -449,6 +460,10 @@ static std::vector<MsgT> apply(const std::vector<MsgT> &in, bool cm64, int &n_ex
                 rhythm_out += kind == 0x90 && m.d1;
                 continue;
             }
+            if (kind == 0x90 && m.d1)
+                held.insert({oc, m.d0});
+            else
+                held.erase({oc, m.d0});
             out.push_back(m);
         } else if (kind == 0xB0) {
             int cc = m.d0;
