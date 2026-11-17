@@ -5,3 +5,4 @@ favourites.json.tmp
 session.json.bad
 session.json.tmp
 .nvbuild/
+third_party/
