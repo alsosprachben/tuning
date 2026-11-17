@@ -147,7 +147,7 @@ function drawHealth() {
   if (b && b.n > 0) t = 'BUILDING' + (b.total > 0 ? ' ' + Math.round(100 * b.done / b.total) + '%' : '');
   else if (m && m.underruns) t = `UNDERRUNS ${m.underruns}`;
   else if (m && m.rt_dropped) t = 'RT DROPPED';
-  $('health').textContent = t;
+  $('health').textContent = t || '\u00a0';     // (its line kept, empty: nothing above it moves)
   $('health').classList.toggle('busy', !!(b && b.n > 0));
 }
 

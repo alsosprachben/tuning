@@ -950,7 +950,15 @@ J build_of(nv_host *h)
     J b = sess::obj();
     long done = 0, total = 0;
     char name[96] = {};
-    const int n = nv_host_building(h);
+    // (the builder's own work only: nv_host_building also counts what is
+    // posted to the audio thread -- the cards' reads between two blocks --
+    // which made the display say BUILDING for a moment every few seconds)
+    int n = h->builder_busy ? 1 : 0;
+    {
+        std::lock_guard<std::mutex> lk(h->bmu);
+        n += (int)h->breq.size() + (int)h->bdone.size() + (h->room_req.empty() ? 0 : 1) + (h->tuner_req.empty() ? 0 : 1)
+             + (h->east_req_set ? 1 : 0) + (int)h->add_req.size() + (int)h->add_done.size();
+    }
     b.o["n"] = sess::integer(n);
     if (n > 0 && nv_host_progress(h, &done, &total, name, sizeof name)) {
         b.o["name"] = sess::str(name);
