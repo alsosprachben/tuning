@@ -61,6 +61,7 @@ struct Msg {
     double ap = NAN;
     double fv = 0.0;
     bool single = false;        // a Note On its part takes under GS's ASSIGN MODE SINGLE (the receive pass's)
+    int trk = -1;               // its track in the file (an SMF's; -1 a MIDI 2.0 file's, or the reader's own)
 };
 
 // A GS PART PARAMETER that a MIDI message carries (parse_gs_part): its channel
@@ -312,6 +313,12 @@ struct Parsed {
     std::vector<std::pair<int, int>> progs;     // (channel, program) changes, for the caller
     double total = 0.0;
     int gs = 0;                 // a Roland GS exclusive before the first note (gs_setup: the file speaks GS)
+    // THE MT-32 FAMILY's exclusives (model 16H) the reader passed over
+    // (TUNING_CM64, TUNING_MT32_SEEN), and each track's first name: what
+    // the Files card reads a file's kind from (an MT-32 file: its exclusives,
+    // or mt32check's tell, a 'Master Parameters' track)
+    int mt32 = 0;
+    std::vector<std::string> track_names;
     // THE GS SETUP by the first note (gs_setup), a reset back to none: the
     // reverb's, chorus's and delay's parameters (40 01 xx: address -> value,
     // a macro the rest gone), the EQ's (40 02 0-3), each part's EQ switch
@@ -1017,6 +1024,13 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         starts.push_back(all.size());
         if (!read_track(r, all))
             return -1;
+        std::string nm;
+        for (size_t k = starts.back(); k < all.size(); k++) {
+            all[k].trk = i;
+            if (nm.empty() && all[k].status == 0xFF && all[k].meta == 0x03)
+                nm.assign(all[k].data.begin(), all[k].data.end());
+        }
+        P.track_names.push_back(nm);
     }
     // A TWO-PORT FILE (PortedMidi): each track's messages its port's, a
     // part's exclusive at port B as port A would read it (40 / 50 swapped)
@@ -1120,6 +1134,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     // CM-64's, mirrored (cm64_pan); its own exclusives change nothing, below
     const char *cm64e = getenv("TUNING_CM64");
     const bool cm64 = cm64e && !strcmp(cm64e, "1");
+    const char *mt32e = getenv("TUNING_MT32_SEEN");     // (the Files card's look at a file: counted, not refused)
+    const bool mt32seen = cm64 || (mt32e && !strcmp(mt32e, "1"));
     if (cm64) {
         static const int PARTS[16][3] = {{127, 0, 64}, {127, 68, 54}, {127, 48, 54}, {127, 95, 54}, {127, 78, 54},
                                          {127, 41, 18}, {127, 3, 91}, {127, 110, 1}, {127, 122, 127}, {0, 127, 64},
@@ -1780,8 +1796,10 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                     continue;
                 }
             }
-            if (cm64 && d.size() >= 3 && d[0] == 0x41 && d[2] == 0x16)
-                continue;               // (the CM-64's own -- the MT-32 family's, 16H: changes nothing, as on a Sound Canvas)
+            if (mt32seen && d.size() >= 3 && d[0] == 0x41 && d[2] == 0x16) {
+                P.mt32++;
+                continue;
+            }               // (the CM-64's own -- the MT-32 family's, 16H: changes nothing, as on a Sound Canvas)
             if (!(lvl || gs))
                 return -4;              // any other exclusive: not a GM file's
             if (gs && !seen_note) {     // (a GS reset: the setup back to none)
@@ -2233,6 +2251,15 @@ void *nv_midi_read(const uint8_t *buf, long long len, int *err)
 }
 
 void nv_midi_free(void *p) { delete (nv::Parsed *)p; }
+
+// THE MT-32 exclusives passed over (Parsed::mt32), and each track's first
+// name (nullptr past the last track)
+int nv_midi_mt32(void *p) { return ((nv::Parsed *)p)->mt32; }
+const char *nv_midi_track_name(void *p, int i)
+{
+    const auto &v = ((nv::Parsed *)p)->track_names;
+    return i >= 0 && i < (int)v.size() ? v[(size_t)i].c_str() : nullptr;
+}
 
 // MIDI 2.0's per-note pitch (_prep_per_note_pitch's pn): whether the file
 // has any; a Note On's attribute (NAN none); a key's Pitch 7.25 or bend

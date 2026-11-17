@@ -35,6 +35,8 @@
 extern "C" {
 void nv_midi_free(void *p);
 double nv_midi_total(void *p);
+int nv_midi_mt32(void *p);
+const char *nv_midi_track_name(void *p, int i);
 }
 extern char **environ;
 
@@ -133,9 +135,12 @@ static void *read_mode(const std::vector<uint8_t> &b, const std::string &mode, i
         setenv("TUNING_GM", "1", 1);
     if (mode == "cm64")
         setenv("TUNING_CM64", "1", 1);
+    if (mode == "look")                 // (inspect's: an MT-32 exclusive counted, not refused)
+        setenv("TUNING_MT32_SEEN", "1", 1);
     void *m = nv_midi_read(b.data(), (long long)b.size(), err);
     unsetenv("TUNING_GM");
     unsetenv("TUNING_CM64");
+    unsetenv("TUNING_MT32_SEEN");
     return m;
 }
 
@@ -158,7 +163,7 @@ static Info inspect(const std::string &path)
         return I;
     }
     int err = 0;
-    void *m = read_mode(b, "", &err);
+    void *m = read_mode(b, "look", &err);
     if (!m) {
         I.err = "the reader refused it (" + std::to_string(err) + ")";
         return I;
@@ -188,10 +193,20 @@ static Info inspect(const std::string &path)
                 gsr = true;
             if (n >= 4 && d[0] == 0x7E && d[2] == 0x09 && (d[3] == 0x01 || d[3] == 0x03))
                 gm = true;
-            if (n >= 4 && d[0] == 0x41 && d[2] == 0x16)
-                mt = true;
         }
     }
+    // AN MT-32 FILE: its own exclusives (the reader passed them over), or
+    // mt32check's tell, a track named 'Master Parameters' (the sequencer's
+    // MT-32 setup track; a file with no exclusives of its own)
+    const int nmt = nv_midi_mt32(m);
+    bool master = false;
+    for (int i = 0; const char *nm = nv_midi_track_name(m, i); i++) {
+        std::string low(nm);
+        for (char &c : low)
+            c = (char)tolower((unsigned char)c);
+        master = master || low.rfind("master parameters", 0) == 0;
+    }
+    mt = nmt > 0 || master;
     nv_midi_free(m);
     for (int c = 0; c < 16; c++)
         if (used[(size_t)c])
@@ -202,7 +217,7 @@ static Info inspect(const std::string &path)
         I.why = "it sends a GS Reset";
     } else if (mt) {
         I.detected = "cm64";
-        I.why = "it sends MT-32 messages";
+        I.why = nmt > 0 ? "it sends MT-32 messages" : "its 'Master Parameters' track: an MT-32 sequencer's";
     } else if (gm) {
         I.detected = "gm";
         I.why = "it sends GM System On";

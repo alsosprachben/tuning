@@ -499,6 +499,7 @@ def _load():
             ('nv_midi_n_notes', I, [ctypes.c_void_p]), ('nv_midi_n_ccs', I, [ctypes.c_void_p]),
             ('nv_midi_n_pws', I, [ctypes.c_void_p]), ('nv_midi_gs', I, [ctypes.c_void_p]),
             ('nv_midi_n_events', I, [ctypes.c_void_p]),
+            ('nv_midi_mt32', I, [ctypes.c_void_p]), ('nv_midi_track_name', ctypes.c_char_p, [ctypes.c_void_p, I]),
             ('nv_midi_sysex', I, [ctypes.c_void_p, I, ctypes.c_void_p, I]), ('nv_midi_master', I, [ctypes.c_void_p]),
             ('nv_midi_event', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_event_x', ctypes.c_double, [ctypes.c_void_p, I]),
@@ -4024,6 +4025,19 @@ class Midi(object):
 
     def total(self):
         return self.d.nv_midi_total(self.p)
+
+    def mt32(self):
+        """The MT-32 family's exclusives the reader passed over (TUNING_CM64, TUNING_MT32_SEEN)"""
+        return self.d.nv_midi_mt32(self.p)
+
+    def track_names(self):
+        """Each track's first name ('' none)"""
+        out = []
+        while True:
+            n = self.d.nv_midi_track_name(self.p, len(out))
+            if n is None:
+                return out
+            out.append(n.decode('latin-1'))
 
     def banked(self):
         """True where a program change selects a bank (or a note is on one):
