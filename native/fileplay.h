@@ -40,6 +40,7 @@ const char *nv_midi_track_name(void *p, int i);
 int nv_midi_n_findings(void *p);
 const char *nv_midi_finding(void *p, int i);
 int nv_midi_muxed(void *p);
+int nv_roomtail_main(int argc, char **argv);    // (the room's tail, in this process: nvroomtail.cpp)
 const char *nv_midi_mux_line(void *p, int i);
 const char *nv_midi_mt32_line(void *p, int i);
 }
@@ -817,14 +818,17 @@ struct Render {
                                                                : "the render failed: " + l);
             }
             say("adding the room");
-            r = step({exe + "nvroomtail", dry, o, "--export=" + file_export}, env);
-            std::string l;
+            // (in this process, not a helper program: iOS runs none -- nvroomtail's whole is the library's)
             {
-                std::lock_guard<std::mutex> lk(mu);
-                l = last;
+                std::vector<std::string> a = {"nvroomtail", dry, o, "--export=" + file_export};
+                std::vector<char *> av;
+                for (auto &x : a)
+                    av.push_back(&x[0]);
+                av.push_back(nullptr);
+                r = stopped ? -2 : nv_roomtail_main((int)a.size(), av.data());
             }
             clean();
-            finish(r == -2 ? "render stopped" : r == 0 ? "rendered" : "the room failed: " + l);
+            finish(r == -2 ? "render stopped" : r == 0 ? "rendered" : "the room failed (" + std::to_string(r) + ")");
         });
     }
 };

@@ -25,6 +25,11 @@
 // whole file). Its peak over full scale: the file written again, scaled as
 // roomtail scales it (a second pass).
 //
+// IN THE LIBRARY (libnative: nv_roomtail_main, the program's whole; the
+// nvroomtail program is its two-line main, nvroomtail_main.cpp): iOS runs no
+// helper programs, so the Files card's best-quality render calls it in its
+// own process -- everything it opens or draws freed on every way out.
+//
 // Exit 2 (refused): a device tail (plate, delays) at a rate other than the
 // export's 48 kHz (its filters are drawn there), a --q other than 2.0,
 // anything but stereo.
@@ -53,6 +58,8 @@ long nv_room_tail_device(const double *sp, const double *dv, const double *bq, i
 void nv_room_spec_scale(double *sp, double ts);
 void nv_room_tail_free(double *p);
 }
+
+namespace nvroomtail {
 
 static const double OCTAVES[9] = {63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0};
 
@@ -288,6 +295,11 @@ struct Wav {
 // ---- THE OUTPUT (roomtail.write_wav: clipped, 32-bit over full scale) ----
 struct Out {
     FILE *f = nullptr;
+    ~Out()
+    {
+        if (f)
+            fclose(f);
+    }
     long frames = 0;
     int ch = 2, sr = 48000;
     std::vector<int32_t> buf;
@@ -425,7 +437,19 @@ static std::string opt(int argc, char **argv, const char *name, const std::strin
     return dflt;
 }
 
-int main(int argc, char **argv)
+// (the room's IRs, freed on every way out)
+struct IrGuard {
+    double *ir = nullptr, *mir = nullptr;
+    ~IrGuard()
+    {
+        if (ir)
+            nv_room_tail_free(ir);
+        if (mir)
+            nv_room_tail_free(mir);
+    }
+};
+
+static int run(int argc, char **argv)
 {
     std::vector<std::string> pos;
     bool no_modes = false;
@@ -545,7 +569,8 @@ int main(int argc, char **argv)
     // THE IRs (live.room_irs's composition: roomtail.main's)
     std::vector<double> sp(rd->spec);
     nv_room_spec_scale(sp.data(), tail_time);
-    double *ir = nullptr, *mir = nullptr;
+    IrGuard irs;
+    double *&ir = irs.ir, *&mir = irs.mir;
     long n = kind == 0 ? nv_room_tail_ir(sp.data(), bq, has_bq, sr, seed, &ir)
                        : nv_room_tail_device(sp.data(), dev.data(), bq, has_bq, sr, &ir, tail_time, delay_fb);
     if (n <= 0) {
@@ -669,9 +694,11 @@ int main(int argc, char **argv)
                    -20 * log10(peak), 20 * log10(peak));
         }
     }
-    nv_room_tail_free(ir);
-    if (mir)
-        nv_room_tail_free(mir);
     printf("   written\n");
     return 0;
 }
+
+}  // namespace nvroomtail
+
+// THE PROGRAM's WHOLE, as a library call (its arguments as the command line's, argv[0] its name)
+extern "C" int nv_roomtail_main(int argc, char **argv) { return nvroomtail::run(argc, argv); }
