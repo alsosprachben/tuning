@@ -71,7 +71,7 @@ def main():
     evs, notes, rep, _ = read([on(0, 60), on(1, 60), on(9, 36), on(9, 100)])
     chans = sorted({n[0] for n in notes})
     check("channel 1 silent, channel 2 part 1, 10 rhythm", chans == [1, 9], "notes on %s" % chans)
-    check("...reported", any("channel 1: no part" in r for r in rep), rep)
+    check("...reported", any("channel 1: no MT-32 part" in r for r in rep), rep)
     check("rhythm key 100 dropped on an MT-32 (24-87)", not any(n[1] == 100 for n in notes))
     evs, notes, rep, _ = read([on(9, 100)], "cm64")
     check("...kept on a CM-64 (24-108)", any(n[1] == 100 for n in notes))

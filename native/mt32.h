@@ -81,6 +81,13 @@ static const char *const SET[128] = {
 // Rain, Elec Piano 1, Bottle Blow, Orche Hit: Init CM-64's parts 2-9)
 static const int POWER_ON[8] = {68, 48, 95, 78, 41, 3, 110, 122};
 
+// a timbre's name as shown (its 10 characters' padding off)
+static std::string shown(const std::string &s)
+{
+    const size_t b = s.find_last_not_of(' ');
+    return b == std::string::npos ? std::string() : s.substr(0, b + 1);
+}
+
 static std::string norm(const std::string &s)
 {
     std::string o;
@@ -201,9 +208,9 @@ static std::vector<MsgT> apply(const std::vector<MsgT> &in, bool cm64, int &n_ex
             by_name(nm, bank, prog, how);
             if (bank < 0)
                 R.say("part " + std::to_string(p + 1) + ": custom timbre i" + std::to_string((d[1] & 63) + 1)
-                      + (nm.empty() ? "" : " '" + nm + "'") + " matched no voice: kept the part's tone");
+                      + (nm.empty() ? "" : " '" + shown(nm) + "'") + " matched no voice: kept the part's tone");
             else
-                R.say("part " + std::to_string(p + 1) + ": custom timbre '" + nm + "' -> " + how);
+                R.say("part " + std::to_string(p + 1) + ": custom timbre '" + shown(nm) + "' -> " + how);
         } else {
             R.say("part " + std::to_string(p + 1) + ": a rhythm timbre as its patch: not followed");
         }
@@ -355,9 +362,9 @@ static std::vector<MsgT> apply(const std::vector<MsgT> &in, bool cm64, int &n_ex
                 emit(outch(p), 0xB0, 0, bank);
                 emit(outch(p), 0xB0, 32, 1);
                 emit(outch(p), 0xC0, prog, 0);
-                R.say("part " + std::to_string(p + 1) + ": its own timbre '" + S.ttemp[p] + "' -> " + how);
+                R.say("part " + std::to_string(p + 1) + ": its own timbre '" + shown(S.ttemp[p]) + "' -> " + how);
             } else {
-                R.say("part " + std::to_string(p + 1) + ": its own timbre '" + S.ttemp[p] + "' matched no voice: kept its tone");
+                R.say("part " + std::to_string(p + 1) + ": its own timbre '" + shown(S.ttemp[p]) + "' matched no voice: kept its tone");
             }
         }
         for (int p : parts_lvl)
@@ -486,9 +493,9 @@ static std::vector<MsgT> apply(const std::vector<MsgT> &in, bool cm64, int &n_ex
     }
     for (const auto &kv : dropped)
         R.say(std::to_string(kv.second) + " notes on channel " + std::to_string(kv.first + 1)
-              + ": no part of the unit receives it");
+              + ": no MT-32 part listens there");
     if (rhythm_out)
-        R.say(std::to_string(rhythm_out) + " rhythm notes outside the unit's keys (24-" + std::to_string(rhythm_hi)
+        R.say(std::to_string(rhythm_out) + " rhythm notes outside the MT-32's drum keys (24-" + std::to_string(rhythm_hi)
               + "): not played");
     return out;
 }

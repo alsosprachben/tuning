@@ -1545,9 +1545,9 @@ Kit.press($('suStd'), b => { Wire.call('global_set', { i: 13, v: +b.dataset.std 
 // in the mode chosen (what the file says, GM, a Sound Canvas map, MT-32)
 const FL = { dir: null, list: null, sel: null, info: null, mode: 'auto', f: null, ask: null };
 const FL_MODES = [['auto', 'AUTO'], ['gm', 'GM'], ['ours', 'GS: OURS'], ['sc55', 'GS: SC-55'], ['sc88', 'GS: SC-88'],
-  ['sc88pro', 'GS: SC-88PRO'], ['sc8850', 'GS: SC-8850'], ['cm64', 'MT-32: SOUND CANVAS'], ['mt32', 'MT-32: THE UNIT'],
-  ['cm64u', 'CM-64: THE UNIT'], ['names', 'ORCHESTRA BY NAMES']];
-const FL_SAY = { gs: 'GS', gm: 'GM', cm64: 'MT-32 (as a Sound Canvas plays it)', mt32: 'MT-32 (the unit itself)', names: 'an orchestra by track names' };
+  ['sc88pro', 'GS: SC-88PRO'], ['sc8850', 'GS: SC-8850'], ['cm64', 'GS: INIT CM-64'], ['mt32', 'MT-32'],
+  ['cm64u', 'CM-64'], ['names', 'ORCHESTRA BY NAMES']];
+const FL_SAY = { gs: 'GS', gm: 'GM', cm64: 'GS (Init CM-64: an MT-32 file on a Sound Canvas)', mt32: 'MT-32', names: 'an orchestra by track names' };
 // (the check's and the mux's lines count channels from 0, as mt32check and
 // mt32mux print them: shown from 1, as everywhere else here)
 const flCh = x => x.replace(/\bch(\d+)\b/g, (m, n) => `channel ${+n + 1}`).replace(/ {2,}/g, ' ');

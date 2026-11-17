@@ -268,7 +268,7 @@ static Info inspect(const std::string &path, const std::string &mode = "")
         I.why = "it sends a GS Reset";
     } else if (mt && nmt > 0) {
         I.detected = "mt32";            // (its own exclusives: written for the unit, which reads them)
-        I.why = "it sends MT-32 messages, which the unit itself reads";
+        I.why = "it sends MT-32 messages, which a real MT-32 reads";
     } else if (mt) {
         I.detected = "cm64";
         I.why = "its 'Master Parameters' track: an MT-32 sequencer's";
