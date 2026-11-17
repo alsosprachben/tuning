@@ -84,7 +84,11 @@ inline bool bdf_parse(const std::string &text, Bdf &out)
     return !out.g.empty();
 }
 
-// (the whole-number scale for a size: 7 px 1, 14 px 2 ...)
+// (the whole-number scale for a size in device pixels: 7 px 1, 14 px 2 ...;
+// ImGui asks in points at the screen's density -- its framebuffer scale, 2 on
+// a Retina screen -- so the bitmap is baked in device pixels and its metrics
+// handed back in points)
+inline float bdf_density(const ImFontBaked *baked) { return baked->RasterizerDensity > 0 ? baked->RasterizerDensity : 1.0f; }
 inline int bdf_scale(const Bdf &b, float size)
 {
     const int cell = b.ascent + b.descent;
@@ -113,9 +117,10 @@ inline bool bdf_baked_init(ImFontAtlas *, ImFontConfig *src, ImFontBaked *baked,
 {
     const Bdf *b = (const Bdf *)src->FontLoaderData;
     if (!src->MergeMode) {
-        const int s = bdf_scale(*b, baked->Size);
-        baked->Ascent = (float)(b->ascent * s);
-        baked->Descent = (float)(-b->descent * s);
+        const float d = bdf_density(baked);
+        const int s = bdf_scale(*b, baked->Size * d);
+        baked->Ascent = (float)(b->ascent * s) / d;
+        baked->Descent = (float)(-b->descent * s) / d;
     }
     return true;
 }
@@ -126,12 +131,13 @@ inline bool bdf_load_glyph(ImFontAtlas *atlas, ImFontConfig *src, ImFontBaked *b
     if (glyph_index <= 0 || glyph_index > (int)b->g.size())
         return false;
     const BdfGlyph &g = b->g[(size_t)glyph_index - 1];
-    const int s = bdf_scale(*b, baked->Size);
+    const float d = bdf_density(baked);
+    const int s = bdf_scale(*b, baked->Size * d);
     if (out_advance_x) {
-        *out_advance_x = (float)(g.dw * s);
+        *out_advance_x = (float)(g.dw * s) / d;
         return true;
     }
-    out_glyph->AdvanceX = (float)(g.dw * s);
+    out_glyph->AdvanceX = (float)(g.dw * s) / d;
     if (g.w <= 0 || g.h <= 0)
         return true;
     const int w = g.w * s, h = g.h * s;
@@ -146,11 +152,11 @@ inline bool bdf_load_glyph(ImFontAtlas *atlas, ImFontConfig *src, ImFontBaked *b
                 for (int dy = 0; dy < s; dy++)
                     memset(&px[(size_t)(y * s + dy) * w + (size_t)x * s], 255, (size_t)s);
     // (the line's top 0, its baseline at the ascent; BDF's yo the glyph's bottom from the baseline)
-    const float top = (float)(b->ascent * s) - (float)((g.yo + g.h) * s);
-    out_glyph->X0 = (float)(g.xo * s);
+    const float top = ((float)(b->ascent * s) - (float)((g.yo + g.h) * s)) / d;
+    out_glyph->X0 = (float)(g.xo * s) / d;
     out_glyph->Y0 = top;
-    out_glyph->X1 = out_glyph->X0 + (float)w;
-    out_glyph->Y1 = top + (float)h;
+    out_glyph->X1 = out_glyph->X0 + (float)w / d;
+    out_glyph->Y1 = top + (float)h / d;
     out_glyph->Visible = true;
     out_glyph->PackId = id;
     ImFontAtlasBakedSetFontGlyphBitmap(atlas, baked, src, out_glyph, r, px.data(), ImTextureFormat_Alpha8, w);

@@ -157,10 +157,13 @@ inline ImVec2 P(const App &a, float x, float y)
 {
     return ImVec2(std::floor(a.org.x + x * a.k), std::floor(a.org.y + y * a.k));
 }
-inline float px(const App &a, float size)           // (code7's sizes: whole multiples of its 7 pixels)
+inline float px(const App &a, float size)           // (code7's sizes: whole multiples of its 7 device pixels)
 {
-    const float p = size * a.k;
-    return std::max(7.0f, 7.0f * std::floor(p / 7.0f + 0.5f));
+    // (in points for ImGui; snapped where the screen's pixels are: 7, 14, 21 ... device px,
+    // so 3.5, 7, 10.5 ... points on a 2x Retina screen)
+    const float fb = std::max(1.0f, ImGui::GetIO().DisplayFramebufferScale.x);
+    const float p = size * a.k * fb;
+    return std::max(7.0f, 7.0f * std::floor(p / 7.0f + 0.5f)) / fb;
 }
 inline ImDrawList *dl() { return ImGui::GetWindowDrawList(); }
 inline void text(App &a, ImFont *f, float size, float x, float y, ImU32 col, const std::string &s)
