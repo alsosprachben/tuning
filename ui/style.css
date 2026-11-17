@@ -471,10 +471,32 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .lcd-name > .qh { position: absolute; top: 0; right: 0; margin: 0; border-color: var(--lcd-dim); color: var(--lcd); }
 .jogbox > .qh { margin: 0; }
 .ck.ck-help { font-size: 18px; letter-spacing: 0; }
-.kit-sheet.help-sheet { width: min(760px, 94vw); max-height: 86vh; display: flex; flex-direction: column; gap: 10px; }
-.help-sheet .hs-intro { margin: 0; font-size: 14px; color: var(--silk); line-height: 1.45; }
-.help-sheet .hs-body { overflow: auto; min-height: 0; padding-right: 6px; }
-.help-sheet h4 { margin: 14px 0 6px; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--lcd); }
-.help-sheet dl { display: grid; grid-template-columns: minmax(150px, max-content) 1fr; gap: 7px 16px; margin: 0; }
-.help-sheet dt { font: 700 13px var(--f-ui); color: var(--silk); }
-.help-sheet dd { margin: 0; font-size: 13.5px; line-height: 1.4; color: var(--silk-dim); }
+.hv-back { place-items: stretch; padding: 3vh 3vw; }
+.hv { box-sizing: border-box; width: 100%; background: var(--panel); border: 1px solid #121417; border-radius: 14px; padding: 14px 16px; color: var(--silk);
+  display: flex; flex-direction: column; gap: 12px; min-height: 0; height: 94vh; }
+.hv-top { display: flex; gap: 10px; align-items: center; }
+.hv-name { font: 700 13px var(--f-ui); letter-spacing: .16em; color: var(--silk); margin-right: 8px; }
+.hv-top .hb { padding: 12px 16px; }
+.hv-top .hb:disabled { opacity: .4; }
+.hv-q { flex: 1; font: 21px var(--f-lcd); padding: 8px 12px; border-radius: 7px; border: 1px solid var(--edge); background: #15171a; color: var(--lcd); }
+.hv-main { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px 1fr; gap: 16px; }
+.hv-nav { overflow: auto; display: flex; flex-direction: column; gap: 2px; padding-right: 6px; }
+.hv-nav h4, .hv-page h4 { margin: 12px 0 4px; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--lcd); }
+.hv-t { text-align: left; font: 600 14px var(--f-ui); color: var(--silk); background: transparent; border: 0; border-radius: 6px; padding: 9px 10px;
+  display: flex; flex-direction: column; gap: 2px; touch-action: manipulation; }
+.hv-t.sub { padding-left: 24px; font-weight: 500; color: var(--silk-dim); }
+.hv-t small { font: 12px var(--f-ui); color: var(--silk-dim); }
+.hv-t.on { background: var(--silk); color: var(--panel); }
+.hv-t.on small { color: var(--panel); }
+.hv-page { overflow: auto; padding: 4px 14px 16px; background: #1f2225; border: 1px solid var(--edge); border-radius: 10px; }
+.hv-page h2 { margin: 2px 0 8px; font: 700 22px var(--f-ui); color: var(--silk); }
+.hv-crumb { margin-top: 10px; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--silk-dim); }
+.hv-page .hs-intro { margin: 0 0 8px; font-size: 15px; line-height: 1.5; max-width: 80ch; }
+.hv-page dl { display: grid; grid-template-columns: minmax(170px, max-content) 1fr; gap: 8px 18px; margin: 0; max-width: 110ch; }
+.hv-page dt { font: 700 14px var(--f-ui); color: var(--silk); }
+.hv-page dd { margin: 0; font-size: 14.5px; line-height: 1.45; color: var(--silk-dim); }
+.hv-steps { margin: 6px 0 4px; padding-left: 24px; display: grid; gap: 8px; font-size: 15px; line-height: 1.45; max-width: 80ch; }
+.hv-see { display: flex; flex-wrap: wrap; gap: 6px; }
+.hv-go { margin-top: 18px; }
+.hv-go .hb { padding: 14px 18px; }
+.hv-osk { flex: none; }

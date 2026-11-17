@@ -1,9 +1,12 @@
-// THE HELP: a ? beside every card's name and every titled region (any
-// element with data-help="key"), and the HELP key after the card keys. A tap
-// opens a sheet: what the region is for, then each button and control by the
-// words printed on it, and what it does.
+// THE HELP SYSTEM: a ? beside every card's name and every titled region (any
+// element with data-help="key"), and the ? key after the card keys, each
+// opening the help viewer at its topic: the contents and a search on the
+// left, the topic on the right -- each button and control by the words
+// printed on it and what it does, the guides step by step, links to the
+// topics near it, and the card it describes to go to.
 //
-// HELP[key] = { title, intro, terms: [[term, meaning] | 'a subheading', ...] }
+// HELP[key] = { title, intro, terms: [[term, meaning] | 'a subheading', ...],
+//               steps: [...] (a guide), see: [keys] }
 'use strict';
 
 const HELP = {
@@ -553,36 +556,254 @@ const HELP = {
   },
 };
 
+// THE GUIDES: a task from start to finish, step by step
+Object.assign(HELP, {
+  'how:layer': {
+    title: 'Play two sounds at once',
+    intro: 'Layer a second part on the same keys, such as strings under a piano.',
+    steps: [
+      'Open the Parts card and select the part to layer on.',
+      'Tap LAYER. A copy of the part is added with the same keys and channel.',
+      'Select the new part: tap its name in its strip, or PART ▶.',
+      'Open the Library and tap the second sound.',
+      'Balance the two with each strip\'s level fader.',
+    ],
+    see: ['parts', 'library', 'how:split'],
+  },
+  'how:split': {
+    title: 'Split the keyboard',
+    intro: 'A different sound under each hand, such as a bass on the left and a piano on the right.',
+    steps: [
+      'Open the Parts card and select the part to split.',
+      'Tap SPLIT. Its keys are cut at the middle; the upper half becomes a new part.',
+      'Select the new part and choose its sound in the Library.',
+      'To move the split point, drag the ends of the two parts\' bars under the keyboard.',
+    ],
+    see: ['parts', 'how:layer'],
+  },
+  'how:keyboard': {
+    title: 'Play from a keyboard',
+    intro: 'Choose which MIDI devices are read.',
+    steps: [
+      'Plug the keyboard in.',
+      'Open the Setup card. It is listed under MIDI in.',
+      'Tap it until it says "reading". Several can be on at once.',
+    ],
+    see: ['su:midi'],
+  },
+  'how:pedal': {
+    title: 'Use a key as the sustain pedal',
+    intro: 'For a keyboard with no pedal: one key held down lifts the dampers.',
+    steps: [
+      'Open the Piano card.',
+      'Tap LEARN A KEY, then press the key to use (a low one you will not play).',
+      'Hold the key: the dampers lift and notes ring on. Press into it harder to bring the dampers down again (half pedal).',
+      'To play it as a note again, tap REMOVE beside it.',
+    ],
+    see: ['piano:key', 'piano:pedals', 'ct:new'],
+  },
+  'how:organ': {
+    title: 'Register the organ',
+    intro: 'Choose an organ\'s stops or drawbars.',
+    steps: [
+      'Put an organ on a part: the Library\'s Organ family, or the organs the Stops card offers when the part is not one.',
+      'Open the Stops card and tap stops to draw them. Start with one and add.',
+      'On a tonewheel organ, the Drive knob below sets the overdrive, and the mod wheel is the swell pedal.',
+    ],
+    see: ['stops', 'drive'],
+  },
+  'how:save': {
+    title: 'Save a setup and bring it back',
+    intro: 'A preset keeps the whole setup: the parts, their sounds, the routes, the tuning and the effects.',
+    steps: [
+      'Open the Scenes card.',
+      'Tap SAVE THIS SETUP AS…, type a name on the screen\'s keys, and tap Save.',
+      'Later, tap the preset in the list and tap LOAD.',
+      'To keep only the levels, pans, sends and pedals, use SAVE THE CONTROLS AS… (a scene) instead.',
+    ],
+    see: ['sc:presets', 'sc:scenes'],
+  },
+  'how:tuning': {
+    title: 'Change the tuning',
+    intro: 'Every part plays in the chosen tuning.',
+    steps: [
+      'Open the Tuning card.',
+      'Tap a tuning. The display shows BUILDING while the sounds are made again in it.',
+      'Play when BUILDING has gone. Notes already sounding keep the old tuning.',
+    ],
+    see: ['tuning', 'tn:shape', 'tn:east'],
+  },
+  'how:stuck': {
+    title: 'A note will not stop',
+    intro: 'A note can hang if its key-up was lost, for example when a cable is pulled mid-note.',
+    steps: [
+      'Tap PANIC on the front panel. Every sounding note is let go, as if its key were lifted.',
+      'If a sustain is stuck down instead, check the Piano card\'s pedals: tap UP.',
+    ],
+    see: ['panel', 'piano:pedals'],
+  },
+  'how:breakup': {
+    title: 'The sound breaks up or clicks',
+    intro: 'The engine has a fixed time for each block of sound; when a block is late, the sound drops out.',
+    steps: [
+      'Watch CPU on the display. Near 100%, the engine is out of time.',
+      'UNDERRUNS counts the dropouts.',
+      'Turn THE GPU on (Setup card) to let the graphics chip help.',
+      'Fewer parts, or fewer notes held under the sustain pedal, take less time.',
+      'Started with --rubato, a late block borrows time instead of dropping out (Setup card, Borrowed time).',
+    ],
+    see: ['display', 'su:sound', 'su:rubato'],
+  },
+  'how:quit': {
+    title: 'Quit',
+    intro: 'The session is saved as you go, and once more as the engine stops.',
+    steps: [
+      'Open the Setup card and tap QUIT CLAVITONE twice within 3 seconds.',
+      'Or close the window (Ctrl+W), or press Ctrl-C in the terminal.',
+    ],
+    see: ['setup'],
+  },
+});
+
+// THE CONTENTS: the topics in order, under their headings
+const HELP_TOC = [
+  ['Start here', ['basics']],
+  ['How to…', ['how:keyboard', 'how:layer', 'how:split', 'how:pedal', 'how:organ', 'how:save', 'how:tuning', 'how:stuck', 'how:breakup', 'how:quit']],
+  ['Front panel', ['display', 'panel']],
+  ['Parts', ['parts']],
+  ['Library', ['library']],
+  ['Synth', ['synth', 'synth:LFO 1', 'synth:Left hand', 'synth:Oscillators', 'synth:Mixer', 'synth:Filter', 'synth:Envelopes', 'synth:Delay']],
+  ['Stops', ['stops', 'drive']],
+  ['Piano', ['piano', 'piano:pedals', 'piano:dampers', 'piano:key']],
+  ['Drums', ['drums', 'drums:user']],
+  ['Effects', ['effects', 'fx:ins', 'fx:sends', 'fx:rev', 'fx:cho', 'fx:dly', 'fx:eq']],
+  ['Matrix', ['matrix']],
+  ['Tuning', ['tuning', 'tn:shape', 'tn:east']],
+  ['Control', ['control', 'ct:strip', 'ct:routes', 'ct:new']],
+  ['Scenes', ['scenes', 'sc:presets', 'sc:scenes', 'sc:metro', 'sc:gs']],
+  ['Setup', ['setup', 'su:midi', 'su:msgr', 'su:sound', 'su:rubato']],
+];
+
+// THE VIEWER: the contents (or what a search found) on the left, the topic on
+// the right; BACK through the topics read, a card's topic able to show that card
 const Help = (() => {
-  function open(key) {
+  const CARD_OF = { synth: 'synth', drive: 'stops', stops: 'stops', piano: 'piano', drums: 'drums', fx: 'effects', effects: 'effects',
+    matrix: 'matrix', tn: 'tuning', tuning: 'tuning', ct: 'control', control: 'control', sc: 'scenes', scenes: 'scenes',
+    su: 'setup', setup: 'setup', parts: 'parts', library: 'library' };
+  const cardOf = key => CARD_OF[key.split(':')[0]] || null;
+  const groupOf = key => HELP_TOC.find(g => g[1].includes(key));
+  const textOf = key => {
     const h = HELP[key];
-    if (!h) return;
-    const back = document.createElement('div'); back.className = 'kit-sheet-back';
-    const sh = document.createElement('div'); sh.className = 'kit-sheet help-sheet';
+    return [h.title, h.intro, ...(h.steps || []), ...(h.terms || []).flat()].join(' ').toLowerCase();
+  };
+  let el = null, cur = null, hist = [], q = '';
+
+  function build() {
+    el = document.createElement('div'); el.className = 'kit-sheet-back hv-back'; el.hidden = true;
+    el.innerHTML = '<div class="hv"><div class="hv-top"><b class="hv-name">HELP</b>' +
+      '<button class="hb hv-backb" data-kit="1">◀ BACK</button>' +
+      '<input class="hv-q" type="search" placeholder="Search help" autocomplete="off" spellcheck="false">' +
+      '<button class="hb hv-close" data-kit="1">CLOSE</button></div>' +
+      '<div class="hv-main"><nav class="hv-nav"></nav><article class="hv-page"></article></div>' +
+      '<div class="osk hv-osk" hidden></div></div>';
+    document.body.appendChild(el);
+    const $q = el.querySelector('.hv-q'), osk = el.querySelector('.hv-osk');
+    Kit.press(el.querySelector('.hv-close'), close);
+    Kit.press(el.querySelector('.hv-backb'), () => { if (hist.length) show(hist.pop(), false); });
+    el.addEventListener('pointerdown', e => { if (e.target === el) close(); });
+    // the contents, a search's results, a topic's links: each a topic
+    // (a tap, not the end of a scroll: the finger kept still)
+    let down = null;
+    el.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY }; }, true);
+    el.addEventListener('pointerup', e => {
+      if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 10) return;
+      const t = e.target.closest('[data-topic]');
+      if (t && el.contains(t)) show(t.dataset.topic, true);
+      const g = e.target.closest('[data-card]');
+      if (g && el.contains(g)) { close(); showCard(g.dataset.card); }
+    });
+    // the search, on the screen's own keys where the system has none
+    if (typeof ownKeys !== 'undefined' && ownKeys) {
+      $q.setAttribute('inputmode', 'none');
+      const rows = ['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+      osk.innerHTML = rows.map(r => `<div>${[...r].map(c => `<button data-k="${c}">${c}</button>`).join('')}</div>`).join('') +
+        '<div><button data-k="clear" class="w">CLEAR</button><button data-k=" " class="space">SPACE</button><button data-k="back" class="w">⌫</button><button data-k="done" class="w">DONE</button></div>';
+      osk.querySelectorAll('button').forEach(b => { b.dataset.kit = '1'; });
+      osk.addEventListener('pointerdown', e => {
+        const b = e.target.closest('button'); if (!b) return;
+        e.preventDefault();
+        const k = b.dataset.k;
+        if (k === 'done') { osk.hidden = true; $q.blur(); return; }
+        $q.value = k === 'clear' ? '' : k === 'back' ? $q.value.slice(0, -1) : $q.value + k;
+        search($q.value);
+      });
+      $q.addEventListener('focus', () => { osk.hidden = false; });
+      el.addEventListener('pointerdown', e => { if (!osk.hidden && !e.target.closest('.hv-osk, .hv-q')) { osk.hidden = true; $q.blur(); } }, true);
+    }
+    $q.addEventListener('input', () => search($q.value));
+  }
+
+  function nav() {
+    const n = el.querySelector('.hv-nav');
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length) {
+      const hits = HELP_TOC.flatMap(g => g[1]).filter(k => HELP[k] && words.every(w => textOf(k).includes(w)));
+      n.innerHTML = `<h4>${hits.length} found</h4>` + hits.map(k => {
+        const h = HELP[k], term = (h.terms || []).find(t => typeof t !== 'string' && words.some(w => (t[0] + ' ' + t[1]).toLowerCase().includes(w)));
+        return `<button class="hv-t${k === cur ? ' on' : ''}" data-kit="1" data-topic="${esc(k)}">${esc(h.title)}` +
+          `<small>${esc(groupOf(k)[0])}${term && term[0] ? ' · ' + esc(term[0]) : ''}</small></button>`;
+      }).join('') + (hits.length ? '' : '<p class="pn-note">Nothing matches. Try one word, such as "pedal" or "reverb".</p>');
+      return;
+    }
+    n.innerHTML = HELP_TOC.map(([g, ks]) => `<h4>${esc(g)}</h4>` + ks.filter(k => HELP[k]).map(k =>
+      `<button class="hv-t${k === cur ? ' on' : ''}${k.includes(':') && !k.startsWith('how:') ? ' sub' : ''}" data-kit="1" data-topic="${esc(k)}">${esc(HELP[k].title)}</button>`).join('')).join('');
+    const on = n.querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+  }
+
+  function page() {
+    const h = HELP[cur], g = groupOf(cur), card = cardOf(cur);
     let body = '', inList = false;
-    const close = () => (inList ? '</dl>' : '');
-    for (const t of h.terms) {
-      if (typeof t === 'string') { body += close() + `<h4>${esc(t)}</h4>`; inList = false; continue; }
+    for (const t of h.terms || []) {
+      if (typeof t === 'string') { body += (inList ? '</dl>' : '') + `<h4>${esc(t)}</h4>`; inList = false; continue; }
       if (!inList) { body += '<dl>'; inList = true; }
       body += `<dt>${esc(t[0])}</dt><dd>${esc(t[1])}</dd>`;
     }
-    body += close();
-    sh.innerHTML = `<h3>${esc(h.title)}</h3>${h.intro ? `<p class="hs-intro">${esc(h.intro)}</p>` : ''}<div class="hs-body">${body}</div>` +
-      '<div class="row"><button class="close">Close</button></div>';
-    back.appendChild(sh); document.body.appendChild(back);
-    const shut = () => back.remove();
-    Kit.press(sh.querySelector('.close'), shut);
-    back.addEventListener('pointerdown', e => { if (e.target === back) shut(); });
+    if (inList) body += '</dl>';
+    // see also: the guide's own list, else the rest of its group and the guides that name it
+    const see = h.see || [...(g ? g[1] : []), ...Object.keys(HELP).filter(k => (HELP[k].see || []).includes(cur))];
+    const links = [...new Set(see)].filter(k => k !== cur && HELP[k]);
+    el.querySelector('.hv-page').innerHTML =
+      `<div class="hv-crumb">${g ? esc(g[0]) : ''}</div><h2>${esc(h.title)}</h2>` +
+      (h.intro ? `<p class="hs-intro">${esc(h.intro)}</p>` : '') +
+      (h.steps ? `<ol class="hv-steps">${h.steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>` : '') + body +
+      (links.length ? `<h4>See also</h4><div class="hv-see">${links.map(k => `<button class="tns" data-kit="1" data-topic="${esc(k)}">${esc(HELP[k].title)}</button>`).join('')}</div>` : '') +
+      (card ? `<div class="hv-go"><button class="hb" data-kit="1" data-card="${card}">SHOW THE ${esc(card.toUpperCase())} CARD</button></div>` : '');
+    el.querySelector('.hv-page').scrollTop = 0;
+    el.querySelector('.hv-backb').disabled = !hist.length;
   }
-  // a ? on every [data-help] not yet given one: inside a heading after its
-  // words, otherwise as the element's last child
+
+  function show(key, push) {
+    if (!HELP[key]) return;
+    if (push && cur && cur !== key) hist.push(cur);
+    cur = key; page(); nav();
+  }
+  function search(s) { q = s; nav(); }
+  function open(key) {
+    if (!el) build();
+    hist = []; cur = null;
+    el.hidden = false;
+    show(key || 'basics', false);
+  }
+  function close() { if (el) { el.hidden = true; const o = el.querySelector('.hv-osk'); o.hidden = true; } }
+
+  // a ? on every [data-help] not yet given one, as the element's last child
   function scan() {
-    document.querySelectorAll('[data-help]').forEach(el => {
-      if (el.querySelector(':scope > .qh')) return;
+    document.querySelectorAll('[data-help]').forEach(x => {
+      if (x.querySelector(':scope > .qh')) return;
       const b = document.createElement('button');
       b.className = 'qh'; b.dataset.kit = '1'; b.textContent = '?'; b.setAttribute('aria-label', 'Help');
-      el.appendChild(b);
-      Kit.press(b, () => open(el.dataset.help));
+      x.appendChild(b);
+      Kit.press(b, () => open(x.dataset.help));
     });
   }
   let queued = false;
@@ -592,5 +813,5 @@ const Help = (() => {
     requestAnimationFrame(() => { queued = false; scan(); });
   }).observe(document.body, { childList: true, subtree: true });
   scan();
-  return { open, scan };
+  return { open, close, scan };
 })();
