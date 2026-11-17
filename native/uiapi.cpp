@@ -652,6 +652,75 @@ static int part_channel(nv_host *h, int row)
     return row >= 0 && row < n ? ps[(size_t)row].channel : -2;
 }
 
+// A TUNER's SHAPE (nv_tuning_table): A4's Hz, and each key's cents from
+// equal temperament on that A (0 where the tuner has no frequency: a key out
+// of its table) -- the card draws an octave's temperament and the stretch
+J tuning_shape(const std::string &name)
+{
+    static std::map<std::string, J> made;
+    auto it = made.find(name);
+    if (it != made.end())
+        return it->second;
+    double hz[128];
+    int have[128];
+    J o = sess::obj();
+    if (nv_tuning_table(name.c_str(), -1, 0.0, hz, have) == 0 && have[69] && hz[69] > 0.0) {
+        o.o["a4"] = num(std::round(hz[69] * 100.0) / 100.0);
+        J c = sess::arr();
+        for (int n = 0; n < 128; n++) {
+            const double et = hz[69] * std::pow(2.0, (n - 69) / 12.0);
+            c.a.push_back(have[n] && hz[n] > 0.0 ? num(std::round(1200.0 * std::log2(hz[n] / et) * 10.0) / 10.0) : sess::null());
+        }
+        o.o["cents"] = c;
+    }
+    made[name] = o;
+    return o;
+}
+
+// THE TUNING CARD's: the tuner asked for and the one playing (they differ
+// while the builder makes the patches again in it), its shape, the Eastern
+// spec; the tuners, the raga systems and ragas once (lists: the first answer's)
+J tuning_of(nv_host *h, bool lists)
+{
+    J o = sess::obj();
+    std::string asked, now;
+    {
+        std::lock_guard<std::mutex> lk(h->bmu);
+        asked = !h->tuner_asked.empty() ? h->tuner_asked : h->tuner_now;
+        now = h->tuner_now;
+    }
+    o.o["tuner"] = sess::str(asked);
+    o.o["now"] = sess::str(now);
+    o.o["shape"] = tuning_shape(asked);
+    char e[256] = {};
+    nv_host_eastern(h, e, sizeof e);
+    o.o["eastern"] = sess::str(e);
+    if (lists) {
+        std::vector<char> b(16384);
+        nv_host_tuners(b.data(), (int)b.size());
+        J ts = sess::arr();
+        for (const std::string &line : split(std::string(b.data()), '\n')) {
+            const std::vector<std::string> f = split(line, '\t');
+            if (f[0].empty())
+                continue;
+            J t = sess::arr();
+            t.a.push_back(sess::str(f[0]));
+            t.a.push_back(sess::str(f.size() > 1 ? f[1] : ""));
+            ts.a.push_back(t);
+        }
+        o.o["tuners"] = ts;
+        J sy = sess::arr(), rg = sess::arr();
+        for (int i = 0; const char *p = nv_raga_system_name(i); i++)
+            sy.a.push_back(sess::str(p));
+        for (int i = 0; const char *p = nv_raga_name(i, nullptr, nullptr); i++)
+            if (strncmp(p, "saraga_", 7) != 0)
+                rg.a.push_back(sess::str(p));
+        o.o["systems"] = sy;
+        o.o["ragas"] = rg;
+    }
+    return o;
+}
+
 // a part's knobs on a layer: positions, whose they are, and each in its own words
 J synth_of(nv_host *h, int row, int layer)
 {
@@ -799,6 +868,8 @@ struct nv_ui_watch {
     bool drums = false;                 // (its drums card is open: the kit, and the keys struck)
     bool effects = false;               // (its effects card is open)
     bool matrix = false;                // (its matrix card is open)
+    bool tuning = false;                // (its tuning card is open)
+    std::string tuning_sent;
     std::string matrix_sent;
     int cmx_learn = 0;                  // (CC1 (4) or CC2 (5) learnt from the next controller moved, since then)
     long long cmx_learn_t = 0;
@@ -1117,6 +1188,26 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         }
         if (w)
             w->matrix_sent.clear();
+    } else if (call == "tuning") {             // the card opened (or shut: open false); lists: 1 for the tuners and ragas
+        if (w) {
+            w->tuning = arg_i(q, "open", 1) != 0;
+            w->tuning_sent.clear();
+        }
+        r.o["tuning"] = tuning_of(h, arg_i(q, "lists", 0) != 0);
+    } else if (call == "tuner_set" || call == "eastern_set") {     // name (a tuner) / spec ("" off)
+        const J *v = q.get(call == "tuner_set" ? "name" : "spec");
+        const std::string t = v && v->is(J::STR) ? v->s : "";
+        if (call == "tuner_set" && t.empty()) {
+            ok = false;
+            r.o["error"] = sess::str("no tuner");
+        } else if (call == "tuner_set") {
+            nv_host_set_tuner(h, t.c_str());
+        } else {
+            nv_host_set_eastern(h, t.c_str());
+        }
+        if (w)
+            w->tuning_sent.clear();
+        r.o["tuning"] = tuning_of(h, false);
     } else if (call == "panic") {
         nv_host_panic(h);
     } else {
@@ -1248,6 +1339,16 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
                 r.o["drums"] = dj;
                 any = true;
             }
+        }
+    }
+    if (w->tuning && w->tick % 6 == 4) {       // (the tuner built: asked and playing the same)
+        J tj = tuning_of(h, false);
+        std::string ts;
+        put(ts, tj);
+        if (ts != w->tuning_sent) {
+            w->tuning_sent = ts;
+            r.o["tuning"] = tj;
+            any = true;
         }
     }
     if (w->matrix && w->tick % 6 == 2) {

@@ -178,10 +178,9 @@ async function soloPart(row) {
 const CARDS = [
   ['parts', 'Parts', true], ['library', 'Library', true], ['synth', 'Synth', true],
   ['stops', 'Stops', true], ['piano', 'Piano', true], ['drums', 'Drums', true], ['effects', 'Effects', true],
-  ['matrix', 'Matrix', true], ['tuning', 'Tuning'], ['control', 'Control'], ['scenes', 'Scenes'], ['setup', 'Setup'],
+  ['matrix', 'Matrix', true], ['tuning', 'Tuning', true], ['control', 'Control'], ['scenes', 'Scenes'], ['setup', 'Setup'],
 ];
 const LATER = {
-  tuning: 'the tuner, pitch standard and the Eastern systems',
   control: 'on-screen controls, routes and learn', scenes: 'presets, scenes, the GS reset and the metronome',
   setup: 'MIDI, audio, borrowed time and the globals',
 };
@@ -207,6 +206,7 @@ function showCard(id) {
   if (id === 'stops') drawStops();
   Wire.call('piano', { open: id === 'piano' ? 1 : 0 }).then(r => { if (r.piano) setPiano(r.piano); });
   Wire.call('drums', { open: id === 'drums' ? 1 : 0, sets: DR.sets ? 0 : 1 }).then(r => { if (r.drums) setDrums(r.drums); });
+  Wire.call('tuning', { open: id === 'tuning' ? 1 : 0, lists: TN.lists ? 0 : 1 }).then(r => { if (r.tuning) setTuning(r.tuning); });
   Wire.call('matrix', { open: id === 'matrix' ? 1 : 0, tables: MX.t ? 0 : 1 }).then(r => { if (r.tables) MX.t = r.tables; if (r.matrix) setMatrix(r.matrix); });
   Wire.call('effects', { open: id === 'effects' ? 1 : 0, tables: FX.t ? 0 : 1 }).then(r => { if (r.tables) FX.t = r.tables; if (r.effects) setEffects(r.effects); });
 }
@@ -1075,6 +1075,123 @@ Kit.press($('mx'), c => {           // (CC1/CC2's number, typed)
     onSet: async v => { await Wire.call('cmx_assign', { which, cc: Math.round(v) }); const r = await Wire.call('matrix'); if (r.matrix) setMatrix(r.matrix); } });
 }, '.mx-cc');
 
+// ---------------------------------------------------------------- THE TUNING CARD
+// The rig's tuner (every part: the patches built again in it), grouped by
+// what it is for; its shape drawn -- an octave's notes in cents from equal
+// temperament, and how far each key strays across the keyboard (stretch);
+// the Eastern tuning the Indian voices play (a raga system, a raga, Sa).
+const TN = { t: null, lists: null, east: null };
+const TN_GROUPS = [
+  ['Concert pitch, A=440', ['hybrid440', 'hybridmeanpiano', 'stretchedhelmholtz', 'even', 'gm2']],
+  ['Baroque pitch, A=415', ['hybrid', 'stretch', 'werckmeister', 'sankey', 'meantone']],
+  ['Pure octaves: pipes', ['hybridharm', 'hybridharm440', 'hybridmean']],
+];
+const SA_KEYS = ['c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 'b'];
+function eastParts(e) {        // "raga:<system>[/<raga>]@<sa>" taken apart
+  if (!e || !e.startsWith('raga:')) return { system: '', raga: '', sa: 'c#' };
+  let b = e.slice(5), sa = 'c#';
+  const at = b.indexOf('@'); if (at >= 0) { sa = b.slice(at + 1).split(':')[0] || 'c#'; b = b.slice(0, at); }
+  const [system, raga] = b.split('/');
+  return { system: system || '', raga: raga || '', sa };
+}
+const eastSpec = p => (p.system ? `raga:${p.system}${p.raga ? '/' + p.raga : ''}@${p.sa}` : '');
+function setTuning(t) {
+  if (t.tuners) TN.lists = { tuners: t.tuners, systems: t.systems, ragas: t.ragas };
+  TN.t = t;
+  if (TN.east && TN.east.until < performance.now()) TN.east = null;
+  if (card === 'tuning') drawTuning();
+}
+function drawTuning() {
+  const t = TN.t, L = TN.lists;
+  if (!t || !L) return;
+  const building = t.tuner !== t.now;
+  $('tnInfo').textContent = building ? `building the patches in ${t.tuner}…` : `playing ${t.now}`;
+  const sig = t.tuner + '|' + t.now;
+  if (sig !== TN.sig) {
+    TN.sig = sig;
+    const named = new Set(TN_GROUPS.flatMap(g => g[1]));
+    const groups = TN_GROUPS.map(([g, ns]) => [g, ns.map(n => L.tuners.find(x => x[0] === n)).filter(Boolean)]);
+    groups.push(['Indian, every part', L.tuners.filter(x => x[0].startsWith('raga:'))]);
+    groups.push(['Other systems', L.tuners.filter(x => !named.has(x[0]) && !x[0].startsWith('raga:'))]);
+    $('tnList').innerHTML = groups.filter(g => g[1].length).map(([g, ts]) => `<section><h3>${g}</h3><div class="tn-grid">` +
+      ts.map(([n, d]) => `<button class="tnt${n === t.tuner ? (building ? ' pending' : ' cur') : ''}" data-kit="1" data-name="${esc(n)}">` +
+        `<b>${esc(n)}</b><span>${esc(d)}</span></button>`).join('') + '</div></section>').join('');
+  }
+  $('tnName').textContent = t.tuner + (t.shape.a4 ? ` · A4 = ${t.shape.a4} Hz` : '');
+  drawShape(t.shape);
+  drawEast();
+}
+Kit.press($('tnList'), async b => {
+  $('tnList').querySelectorAll('.tnt').forEach(q => q.classList.toggle('pending', q === b));
+  const r = await Wire.call('tuner_set', { name: b.dataset.name });
+  if (r.tuning) setTuning(r.tuning);
+}, '.tnt');
+function drawShape(sh) {
+  const el = $('tnShape');
+  if (!sh || !sh.cents) { el.innerHTML = '<text x="300" y="150" class="tn-l" text-anchor="middle">this tuner has no fixed table (it follows the file or the music)</text>'; return; }
+  const c = sh.cents;
+  // an octave (C4-B4): bars from equal temperament, ±30 cents
+  const W = 600, top = 26, h1 = 110, mid1 = top + h1 / 2, sc1 = (h1 / 2) / 30, bw = W / 12;
+  let g = `<text x="0" y="14" class="tn-h">C4 to B4, cents from equal temperament</text>` +
+    `<line x1="0" x2="${W}" y1="${mid1}" y2="${mid1}" class="tn-ax"/>`;
+  for (let i = 0; i < 12; i++) {
+    const v = c[60 + i], x = i * bw;
+    const nm = NOTE_NAMES[i];
+    if (v !== null) {
+      const hh = Math.max(-h1 / 2, Math.min(h1 / 2, v * sc1));
+      g += `<rect x="${(x + bw * 0.2).toFixed(1)}" width="${(bw * 0.6).toFixed(1)}" y="${(hh > 0 ? mid1 - hh : mid1).toFixed(1)}" height="${Math.max(1, Math.abs(hh)).toFixed(1)}" class="tn-bar"/>` +
+        `<text x="${(x + bw / 2).toFixed(1)}" y="${(hh > 0 ? mid1 - hh - 4 : mid1 - hh + 12).toFixed(1)}" class="tn-v">${v > 0 ? '+' : ''}${v.toFixed(Math.abs(v) < 10 ? 1 : 0)}</text>`;
+    }
+    g += `<text x="${(x + bw / 2).toFixed(1)}" y="${top + h1 + 14}" class="tn-l">${nm}</text>`;
+  }
+  // the keyboard A0-C8: each key's cents (the stretch), ±40 cents
+  const top2 = 182, h2 = 100, mid2 = top2 + h2 / 2, sc2 = (h2 / 2) / 40;
+  g += `<text x="0" y="${top2 - 8}" class="tn-h">A0 to C8: each octave's stretch from 2:1, in cents</text><line x1="0" x2="${W}" y1="${mid2}" y2="${mid2}" class="tn-ax"/>`;
+  let d = '';
+  for (let n = 21; n <= 108; n++) {
+    const b = c[60 + n % 12];                     // (the octave's own temperament taken out: the stretch alone)
+    const v = c[n] === null || b === null ? null : c[n] - b; if (v === null) continue;
+    const x = (n - 21) / 87 * W, y = mid2 - Math.max(-h2 / 2, Math.min(h2 / 2, v * sc2));
+    d += (d ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1);
+    if (n % 12 === 0) g += `<text x="${x.toFixed(1)}" y="${top2 + h2 + 14}" class="tn-l">C${n / 12 - 1}</text>`;
+  }
+  g += `<path d="${d}" class="tn-line"/>` +
+    `<text x="${W}" y="${top2 + 10}" class="tn-l" text-anchor="end">+40</text><text x="${W}" y="${top2 + h2}" class="tn-l" text-anchor="end">−40</text>`;
+  el.innerHTML = g;
+}
+function drawEast() {
+  const L = TN.lists, p = TN.east ? TN.east.p : eastParts(TN.t.eastern);
+  const esig = eastSpec(p) + '|' + !!TN.measured;
+  if (esig === TN.esig) return;
+  TN.esig = esig;
+  const measured = p.system.startsWith('saraga_') || TN.measured;
+  $('tnSys').innerHTML = `<button class="tns${!p.system && !TN.measured ? ' on' : ''}" data-kit="1" data-sys="">Off</button>` +
+    L.systems.filter(x => !x.startsWith('saraga_')).map(x => `<button class="tns${x === p.system ? ' on' : ''}" data-kit="1" data-sys="${esc(x)}">${esc(x)}</button>`).join('') +
+    `<button class="tns${measured ? ' on' : ''}" data-kit="1" data-measured="1">measured ragas…</button>`;
+  $('tnRagas').innerHTML = measured
+    ? L.systems.filter(x => x.startsWith('saraga_')).map(x => `<button class="tns${x === p.system ? ' on' : ''}" data-kit="1" data-sys="${esc(x)}">${esc(x.slice(7).replace(/_/g, ' '))}</button>`).join('')
+    : p.system ? `<button class="tns${!p.raga ? ' on' : ''}" data-kit="1" data-raga="">No raga</button>` +
+      L.ragas.map(x => `<button class="tns${x === p.raga ? ' on' : ''}" data-kit="1" data-raga="${esc(x)}">${esc(x)}</button>`).join('') : '';
+  $('tnSa').innerHTML = p.system ? '<b>Sa</b>' + SA_KEYS.map(k => `<button class="tns${k === p.sa ? ' on' : ''}" data-kit="1" data-sa="${k}">${k.toUpperCase()}</button>`).join('') : '';
+  $('tnEast').textContent = p.system ? `The Indian instruments' parts play ${p.system.startsWith('saraga_') ? 'raga ' + p.system.slice(7).replace(/_/g, ' ') + ' as measured (Saraga)' : p.system}${p.raga ? ', raga ' + p.raga : ''}, Sa on ${p.sa.toUpperCase()} (unless the tuner above is itself Indian).`
+    : 'Off: the Indian instruments play the tuner above.';
+  const on = $('tnRagas').querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+}
+Kit.press($('tnList').parentNode.querySelector('.tn-east'), async b => {
+  const p = Object.assign({}, TN.east ? TN.east.p : eastParts(TN.t.eastern));
+  if (b.dataset.measured) { TN.measured = true; TN.esig = ''; drawEast(); return; }
+  if (b.dataset.sys !== undefined) {
+    p.system = b.dataset.sys; TN.measured = false;
+    if (!p.system || p.system.startsWith('saraga_')) p.raga = '';
+  }
+  if (b.dataset.raga !== undefined) p.raga = b.dataset.raga;
+  if (b.dataset.sa !== undefined) p.sa = b.dataset.sa;
+  TN.east = { p, until: performance.now() + 1500 };
+  drawEast();
+  const r = await Wire.call('eastern_set', { spec: eastSpec(p) });
+  if (r.tuning) setTuning(r.tuning);
+}, '.tns');
+
 // ---------------------------------------------------------------- THE NOTES
 // What each program and stop is, and what it was fitted to (about.json:
 // examples/gm_coverage.py --about, the coverage page's own words)
@@ -1143,6 +1260,7 @@ Wire.connect({
     if (m.hits) lightPads(m.hits);
     if (m.effects) setEffects(m.effects);
     if (m.matrix) setMatrix(m.matrix);
+    if (m.tuning) setTuning(m.tuning);
     if (m.synth && m.synth.row === S.row && (m.synth.layer === S.layer || m.synth.layers <= S.layer)) { S.layer = m.synth.layer; S.synth = m.synth; if (card === 'synth') drawSynth(); }
   },
   down() { $('gone').hidden = false; },
