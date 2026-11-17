@@ -446,6 +446,11 @@ if (ownKeys) {
     drawTiles(true);
   });
   $('q').addEventListener('focus', () => { $('osk').hidden = false; });
+  // (a touch anywhere else puts the keys away: a tile, a family, another card)
+  document.addEventListener('pointerdown', e => {
+    if ($('osk').hidden || e.target.closest('#osk, #q')) return;
+    $('osk').hidden = true; $('q').blur();
+  }, true);
 }
 
 // ---------------------------------------------------------------- THE SYNTH CARD
