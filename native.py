@@ -504,6 +504,7 @@ def _load():
             ('nv_midi_muxed', I, [ctypes.c_void_p]),
             ('nv_midi_mux_line', ctypes.c_char_p, [ctypes.c_void_p, I]),
             ('nv_midi_stamped', ctypes.c_uint, [ctypes.c_void_p, C, C]),
+            ('nv_midi_mt32_line', ctypes.c_char_p, [ctypes.c_void_p, I]),
             ('nv_midi_mux_overlaps', LL, [ctypes.c_void_p, I]),
             ('nv_midi_sysex', I, [ctypes.c_void_p, I, ctypes.c_void_p, I]), ('nv_midi_master', I, [ctypes.c_void_p]),
             ('nv_midi_event', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
@@ -4047,6 +4048,15 @@ class Midi(object):
         """Every note stamped with its own program (mt32check._multiplexed), None unchecked"""
         v = self.d.nv_midi_muxed(self.p)
         return None if v < 0 else bool(v)
+
+    def mt32_report(self):
+        """A real MT-32 / CM-64's report (TUNING_MT32=mt32|cm64, mt32.h): lines"""
+        out = []
+        while True:
+            ln = self.d.nv_midi_mt32_line(self.p, len(out))
+            if ln is None:
+                return out
+            out.append(ln.decode('latin-1'))
 
     def stamped(self, stamp_s=0.005, share=0.9):
         """The stamped channels (blockrender's STAMP_S, STAMPED_SHARE rule): a set"""

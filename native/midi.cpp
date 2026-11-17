@@ -39,6 +39,7 @@
 #include "mpe.h"
 #include "filecheck.h"
 #include "partmux.h"
+#include "mt32.h"
 
 namespace nv {
 
@@ -329,6 +330,9 @@ struct Parsed {
     // a line per part (its channel, name, program, notes, compass), and the
     // same-pitch overlaps if every part shared a channel, and as assigned
     std::vector<std::string> mux_report;
+    // A REAL MT-32 / CM-64 (mt32.h, TUNING_MT32=mt32|cm64): what it did with
+    // the file's exclusives and channels, a line each
+    std::vector<std::string> mt32_report;
     long long mux_before = -1, mux_left = -1;
     // THE GS SETUP by the first note (gs_setup), a reset back to none: the
     // reverb's, chorus's and delay's parameters (40 01 xx: address -> value,
@@ -1158,6 +1162,33 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     Msg eot{accum, 0xFF, 0, 0, 0x2F, {}};
     msgs.push_back(eot);
     }
+    // A REAL MT-32 / CM-64 (TUNING_MT32=mt32 or cm64; mt32.h): the file as
+    // the unit hears it -- its exclusives, channels and patches said as our
+    // messages, before the Init CM-64 pass below (which it implies)
+    const char *mt32re = getenv("TUNING_MT32");
+    const bool mt32real = mt32re && (!strcmp(mt32re, "mt32") || !strcmp(mt32re, "cm64"));
+    if (mt32real) {
+        std::vector<Msg> ab;
+        ab.reserve(msgs.size());
+        long long at = 0;
+        for (const Msg &m : msgs) {
+            at += m.tick;
+            ab.push_back(m);
+            ab.back().tick = at;
+        }
+        mt32::Report rr;
+        int nex = 0;
+        std::vector<Msg> o = mt32::apply(ab, !strcmp(mt32re, "cm64"), nex, rr);
+        P.mt32 += nex;
+        P.mt32_report = rr.lines;
+        long long prev = 0;
+        for (Msg &m : o) {
+            const long long t = m.tick;
+            m.tick = t - prev;
+            prev = t;
+        }
+        msgs.swap(o);
+    }
     {
         // ...EACH GS PART PARAMETER's MESSAGES after it (blockrender's _inj:
         // read next, in order, through the same code)
@@ -1190,7 +1221,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     // map, program, level, pan, sends and bend range 12), and every pan a
     // CM-64's, mirrored (cm64_pan); its own exclusives change nothing, below
     const char *cm64e = getenv("TUNING_CM64");
-    const bool cm64 = cm64e && !strcmp(cm64e, "1");
+    const bool cm64 = (cm64e && !strcmp(cm64e, "1")) || mt32real;
     const char *mt32e = getenv("TUNING_MT32_SEEN");     // (the Files card's look at a file: counted, not refused)
     const bool mt32seen = cm64 || (mt32e && !strcmp(mt32e, "1"));
     if (cm64) {
@@ -2375,6 +2406,13 @@ unsigned nv_midi_stamped(void *p, double stamp_s, double share)
             mask |= 1u << c;
     }
     return mask;
+}
+
+// A REAL MT-32 / CM-64's report (TUNING_MT32): a line each, nullptr past the last
+const char *nv_midi_mt32_line(void *p, int i)
+{
+    const auto &v = ((nv::Parsed *)p)->mt32_report;
+    return i >= 0 && i < (int)v.size() ? v[(size_t)i].c_str() : nullptr;
 }
 
 const char *nv_midi_mux_line(void *p, int i)
