@@ -40,6 +40,7 @@
 #include "drums.h"
 #include "effects.h"
 #include "matrix.h"
+#include "tuning.h"
 
 namespace nui {
 
@@ -97,6 +98,7 @@ static void draw(App &a)
     drums_card(a, a.card == "drums");   // (...and the kit and its hits)
     effects_card(a, a.card == "effects");
     matrix_card(a, a.card == "matrix");
+    tuning_card(a, a.card == "tuning");
     if (a.card == "parts") {
         draw_parts(a);
     } else if (a.card == "library") {
@@ -113,6 +115,8 @@ static void draw(App &a)
         draw_effects(a);
     } else if (a.card == "matrix") {
         draw_matrix(a);
+    } else if (a.card == "tuning") {
+        draw_tuning(a);
     } else {
         std::string title;
         for (int i = 0; i < nc; i++)
@@ -155,6 +159,10 @@ static bool poll(App &a)
             g_syn.text.clear();
             changed = true;
         }
+    }
+    if (m.get("tuning")) {
+        tn_take(m);
+        changed = true;
     }
     if (m.get("matrix")) {
         mx_take(a, m);
