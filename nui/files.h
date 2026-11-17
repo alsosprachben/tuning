@@ -242,8 +242,11 @@ inline void draw_files(App &a)
             F.mode = FL_MODES[(size_t)h].first;
             fl_report(a);
         }
+        // (the MT-32's velocity acts only in the MT-32's modes -- AUTO's when it finds an MT-32 file: shown there alone)
+        const std::string em_ = fl_eff();
+        const bool mt = em_ == "cm64" || em_ == "mt32" || em_ == "cm64u" || em_ == "names";
         const bool vel = !F.f.get("mt32_vel") || flag(&F.f, "mt32_vel");
-        const int hv = flow_buttons(a, "flvel", FX + 12, y, FW - 24, {std::string("MT-32 VELOCITY ") + (vel ? "ON" : "OFF")}, {vel});
+        const int hv = mt ? flow_buttons(a, "flvel", FX + 12, y, FW - 24, {std::string("MT-32 VELOCITY ") + (vel ? "ON" : "OFF")}, {vel}) : -1;
         if (hv == 0)
             fl_take(call(a, std::string("{\"call\":\"file_opts\",\"mt32_vel\":") + (vel ? "0" : "1") + "}"));
     }

@@ -1631,6 +1631,8 @@ function drawFiles() {
     `<details class="fl-det"${FL.repOpen !== false ? ' open' : ''}><summary>${FL_REPORTS[em]}${FL.rep.length ? '' : ': nothing to report'}</summary><ul>` +
       FL.rep.map(x => `<li>${esc(flCh(x))}</li>`).join('') + '</ul></details>' : '');
   const velOn = !f || f.mt32_vel !== false;
+  // (it acts only in the MT-32's modes -- AUTO's when it finds an MT-32 file: shown there alone)
+  $('flVel').parentNode.hidden = !['cm64', 'mt32', 'cm64u', 'names'].includes(flEff());
   $('flVel').classList.toggle('on', velOn);
   $('flVel').textContent = 'MT-32 VELOCITY ' + (velOn ? 'ON' : 'OFF');
   const ok = !!(i && i.ok);

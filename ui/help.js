@@ -615,7 +615,7 @@ Object.assign(HELP, {
   },
   'fl:vel': {
     title: 'MT-32 velocity',
-    intro: 'An MT-32 spans about 30 dB from its softest note to its loudest; our instruments span far more. Files written for one come out far too dynamic unless their velocities are compressed to match.',
+    intro: 'An MT-32 spans about 30 dB from its softest note to its loudest; our instruments span far more. Files written for one come out far too dynamic unless their velocities are compressed to match. The switch shows only in the MT-32\'s modes (AUTO\'s when it finds an MT-32 file); a GS or GM file always plays its velocities as written.',
     terms: [
       ['ON', 'In GS: INIT CM-64, MT-32, CM-64 and ORCHESTRA BY NAMES, each velocity v plays as 3/4 v + 32 (set as each part\'s velocity sense, so the Parts card shows it). Leave it on for MT-32 files.'],
       ['OFF', 'The file\'s velocities as written.'],
