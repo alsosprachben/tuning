@@ -1107,6 +1107,13 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
         }
         msgs.swap(ex);
     }
+    // GM MODE (TUNING_GM=1: the Files card's): GM System On before the file's
+    // first message -- bank select off, every channel at power-on, as a GM
+    // module plays a file
+    if (const char *gme = getenv("TUNING_GM"); gme && !strcmp(gme, "1")) {
+        Msg y{0, 0xF0, 0, 0, 0, {0x7E, 0x7F, 0x09, 0x01}};
+        msgs.insert(msgs.begin(), y);
+    }
     // THE CM-64 SOUND MAP (blockrender.CM64, TUNING_CM64=1): "Init CM-64"'s
     // messages before the file's (cm64_init: each part's bank, its SC-55
     // map, program, level, pan, sends and bend range 12), and every pan a

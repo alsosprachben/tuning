@@ -9,6 +9,7 @@
 //                       [--tuner=NAME [--a=HZ | --c=HZ]] [--eastern=SPEC] [--eastern-at=S:SPEC]
 //                       [--ui[=PORT] [--ui-no-browser]]   (the touch interface: ui/, in Chromium, full screen,
 //                                                          in place of the panel; closing its window stops nvlive)
+//                       [--file-export=PATH]   (the Files card's best-quality renders: native_export.py's file export)
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
 //                       [--rt] [--reg-async] [--async] [--busy=N] [--govern] [--paced] [--build-async] [--tuner-at=S:NAME] [--preset-at=S:NAME] [--metronome=BPM[:RING]]
 //
@@ -100,6 +101,7 @@
 #include <spawn.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <dirent.h>
 
 int nv_host::run(int argc, char **argv)
 {
@@ -821,6 +823,35 @@ int nv_host::run(int argc, char **argv)
         d = d.substr(0, d.rfind('/') == std::string::npos ? 0 : d.rfind('/'));
         ui_srv.h = this;
         ui_srv.root = (d.empty() ? std::string(".") : d) + "/ui";
+        // THE FILES CARD: the file export for best-quality renders
+        // (--file-export=PATH; else the newest file-*.nvx beside this export)
+        // and the folder renders go to (~/Music/renders)
+        {
+            std::string fx = opt(argc, argv, "file-export", "");
+            if (fx.empty()) {
+                const std::string ex = argv[1], edir = ex.rfind('/') == std::string::npos ? "." : ex.substr(0, ex.rfind('/'));
+                time_t best = 0;
+                if (DIR *dd = opendir(edir.c_str())) {
+                    while (dirent *e = readdir(dd)) {
+                        const std::string n = e->d_name;
+                        if (n.rfind("file-", 0) != 0 || n.size() < 9 || n.compare(n.size() - 4, 4, ".nvx") != 0)
+                            continue;
+                        struct stat fs;
+                        if (stat((edir + "/" + n).c_str(), &fs) == 0 && fs.st_mtime > best) {
+                            best = fs.st_mtime;
+                            fx = edir + "/" + n;
+                        }
+                    }
+                    closedir(dd);
+                }
+            }
+            const char *hm = getenv("HOME");
+            const std::string rd = std::string(hm ? hm : "/tmp") + "/Music/renders";
+            nv_ui_files_config(fx.c_str(), rd.c_str());
+            ui_srv.renders = rd;
+            fprintf(stderr, "nvlive: files: renders to %s%s\n", rd.c_str(),
+                    fx.empty() ? " (no file export: best quality off)" : ("; best quality from " + fx).c_str());
+        }
         if (!ui_srv.listen_on(ui_port)) {
             fprintf(stderr, "nvlive: --ui: port %d is taken\n", ui_port);
             return;
@@ -1328,6 +1359,7 @@ int nv_host::run(int argc, char **argv)
         }
     }
     g_stop = true;
+    nv_ui_files_shutdown(this);                 // (the Files card's player and render)
     if (ui_thr.joinable()) {
         ui_stop = true;
         ui_thr.join();

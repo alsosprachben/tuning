@@ -57,7 +57,7 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .jogbox small { font: 14px var(--f-lcd); color: var(--lcd); letter-spacing: .06em; }
 
 /* ---- the card keys */
-.keys { display: grid; grid-template-columns: repeat(12, 1fr) 48px; gap: 6px; }
+.keys { display: grid; grid-template-columns: repeat(13, 1fr) 48px; gap: 6px; }
 .ck { font: 700 12px/1 var(--f-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--silk-dim); padding: 15px 4px;
   border-radius: 7px; background: #2b2f34; border: 1px solid var(--edge); touch-action: manipulation; }
 .ck.on { background: var(--silk); color: var(--panel); }
@@ -500,3 +500,27 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .hv-go { margin-top: 18px; }
 .hv-go .hb { padding: 14px 18px; }
 .hv-osk { flex: none; }
+
+/* Files: the folders, the file, its mode, playing it, rendering it */
+.fl { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(320px, 0.8fr) 1.4fr; gap: 10px; }
+.fl-browse { display: flex; flex-direction: column; min-height: 0; }
+.fl-path { display: flex; gap: 8px; align-items: center; margin: 6px 0 8px; }
+.fl-path .hb { padding: 10px 12px; }
+.fl-path .hb:disabled { opacity: .4; }
+.fl-path span { font-size: 13px; color: var(--silk-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.fl-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 3px; }
+.fl-e { text-align: left; background: #2a2e32; border: 1px solid var(--edge); border-radius: 6px; padding: 10px 12px; color: var(--silk); font: 500 14px var(--f-ui); touch-action: manipulation; }
+.fl-e.d { color: var(--lcd); }
+.fl-e.on { background: var(--silk); color: var(--panel); }
+.fl-e b { font-weight: inherit; overflow-wrap: anywhere; }
+.fl-file { overflow: auto; }
+.fl-file h4 { margin: 14px 0 6px; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--silk); }
+.fl-modes .tns { padding: 10px 12px; font-size: 12.5px; }
+.fl-play { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fl-play .hb { padding: 14px 16px; }
+.fl-play .hb:disabled { opacity: .4; }
+.fl-bar { flex: 1; min-width: 160px; height: 10px; background: #15171a; border: 1px solid var(--edge); border-radius: 5px; overflow: hidden; }
+.fl-bar i { display: block; height: 100%; width: 0; background: var(--lcd); }
+.fl-time { font: 21px var(--f-lcd); color: var(--lcd); min-width: 120px; }
+#flOut audio { width: 100%; margin-top: 4px; }
+.fl-warn { margin-top: 18px; }

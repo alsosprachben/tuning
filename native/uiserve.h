@@ -129,6 +129,7 @@ struct Client {
 struct Server {
     nv_host *h = nullptr;
     std::string root;               // ui/'s directory
+    std::string renders;            // the Files card's renders, served under /renders/
     int port = 0, lfd = -1;
     std::vector<Client> cs;
 
@@ -166,6 +167,7 @@ struct Server {
         if (ends(".ttf")) return "font/ttf";
         if (ends(".json")) return "application/json";
         if (ends(".png")) return "image/png";
+        if (ends(".wav")) return "audio/wav";
         return "application/octet-stream";
     }
 
@@ -248,7 +250,8 @@ struct Server {
             return false;
         }
         std::string body;
-        if (FILE *f = fopen((root + path).c_str(), "rb")) {
+        const bool rend = path.rfind("/renders/", 0) == 0 && !renders.empty();
+        if (FILE *f = fopen(rend ? (renders + path.substr(8)).c_str() : (root + path).c_str(), "rb")) {
             char b[65536];
             size_t n;
             while ((n = fread(b, 1, sizeof b, f)) > 0)

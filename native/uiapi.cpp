@@ -1051,6 +1051,33 @@ double now_s()
 
 }  // namespace
 
+#include "fileplay.h"
+
+// THE FILES CARD (fileplay.h): one player and one render for the engine;
+// the file export and the renders' folder nvlive names (nv_ui_files_config)
+static fileplay::Player g_player;
+static fileplay::Render g_render;
+static std::string g_file_export, g_renders_dir;
+extern "C" void nv_ui_files_config(const char *file_export, const char *renders)
+{
+    g_file_export = file_export ? file_export : "";
+    g_renders_dir = renders ? renders : "";
+}
+extern "C" void nv_ui_files_shutdown(nv_host *h)
+{
+    g_player.halt(h);
+    g_render.halt();
+}
+static J files_state()
+{
+    J o = sess::obj();
+    o.o["player"] = g_player.state();
+    o.o["render"] = g_render.state();
+    o.o["renders"] = sess::str(g_renders_dir);
+    o.o["file_export"] = sess::boolean(!g_file_export.empty());
+    return o;
+}
+
 struct nv_ui_watch {
     int row = 0, layer = 0;
     std::string parts_sent, synth_sent, build_sent, stops_sent, piano_sent;
@@ -1062,6 +1089,8 @@ struct nv_ui_watch {
     bool control = false;               // (its control card is open)
     bool scenes = false;                // (its scenes card is open)
     bool setup = false;                 // (its setup card is open)
+    bool files = false;                 // (its files card is open)
+    std::string files_sent;
     std::string setup_sent;
     std::string scenes_sent;
     std::string control_sent;
@@ -1527,6 +1556,45 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             nv_host_set_messenger_pre107(h, (int)arg_i(q, "pre107", 0));
         if (w)
             w->setup_sent.clear();
+    } else if (call == "files") {              // the card opened (or shut); dir: a folder listed
+        if (w) {
+            w->files = arg_i(q, "open", 1) != 0;
+            w->files_sent.clear();
+        }
+        const J *dj = q.get("dir");
+        if (dj && dj->is(J::STR))
+            r.o["list"] = fileplay::list_dir(dj->s);
+        r.o["files"] = files_state();
+    } else if (call == "file_info") {          // path: its length, channels, the mode it asks for
+        const J *pj = q.get("path");
+        fileplay::Info I = fileplay::inspect(pj && pj->is(J::STR) ? pj->s : "");
+        J o = sess::obj(), ch = sess::arr();
+        o.o["ok"] = sess::boolean(I.ok);
+        o.o["err"] = sess::str(I.err);
+        o.o["total"] = sess::real(I.total);
+        for (int c : I.chans)
+            ch.a.push_back(sess::integer(c));
+        o.o["channels"] = ch;
+        o.o["programs"] = sess::integer(I.programs);
+        o.o["detected"] = sess::str(I.detected);
+        o.o["why"] = sess::str(I.why);
+        r.o["info"] = o;
+    } else if (call == "file_play") {          // path, mode: played live, the parts its own
+        const J *pj = q.get("path"), *mj = q.get("mode");
+        g_player.play(h, pj && pj->is(J::STR) ? pj->s : "", mj && mj->is(J::STR) ? mj->s : "auto");
+        r.o["files"] = files_state();
+    } else if (call == "file_stop") {
+        g_player.halt(h);
+        r.o["files"] = files_state();
+    } else if (call == "file_render") {        // path, mode, kind (heard | best), whole: rendered offline
+        const J *pj = q.get("path"), *mj = q.get("mode"), *kj = q.get("kind");
+        g_render.start(h, pj && pj->is(J::STR) ? pj->s : "", mj && mj->is(J::STR) ? mj->s : "auto",
+                       kj && kj->is(J::STR) && kj->s == "best" ? "best" : "heard", arg_i(q, "whole", 0) != 0,
+                       g_renders_dir.empty() ? fileplay::home() + "/Music/renders" : g_renders_dir, g_file_export);
+        r.o["files"] = files_state();
+    } else if (call == "file_render_stop") {
+        g_render.halt();
+        r.o["files"] = files_state();
     } else if (call == "panic") {
         nv_host_panic(h);
     } else if (call == "drive_set") {          // (an organ's drive, 0..3; <0 the voice's again)
@@ -1676,6 +1744,16 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
         if (ss != w->setup_sent) {
             w->setup_sent = ss;
             r.o["setup"] = sj;
+            any = true;
+        }
+    }
+    if (w->files && w->tick % 6 == 3) {        // (five times a second: the position, a render's stage)
+        J fj = files_state();
+        std::string fs;
+        put(fs, fj);
+        if (fs != w->files_sent) {
+            w->files_sent = fs;
+            r.o["files"] = fj;
             any = true;
         }
     }

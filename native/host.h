@@ -398,6 +398,11 @@ void nv_ui_free(char *s);
 /* the interface's QUIT (call "quit"): set by a host that may be quit from
    it (nvlive); unset, the call is refused */
 extern void (*nv_ui_quit)(void);
+/* the Files card's: the file export best-quality renders use (nvrender's,
+   not --live) and the folder renders go to; at the end, its player and
+   render stopped */
+void nv_ui_files_config(const char *file_export, const char *renders);
+void nv_ui_files_shutdown(nv_host *h);
 
 #ifdef __cplusplus
 }

@@ -187,7 +187,7 @@ async function soloPart(row) {
 const CARDS = [
   ['parts', 'Parts', true], ['library', 'Library', true], ['synth', 'Synth', true],
   ['stops', 'Stops', true], ['piano', 'Piano', true], ['drums', 'Drums', true], ['effects', 'Effects', true],
-  ['matrix', 'Matrix', true], ['tuning', 'Tuning', true], ['control', 'Control', true], ['scenes', 'Scenes', true], ['setup', 'Setup', true],
+  ['matrix', 'Matrix', true], ['tuning', 'Tuning', true], ['control', 'Control', true], ['scenes', 'Scenes', true], ['files', 'Files', true], ['setup', 'Setup', true],
 ];
 const LATER = {
   setup: 'MIDI, audio, borrowed time and the globals',
@@ -221,6 +221,7 @@ function showCard(id) {
   Wire.call('piano', { open: id === 'piano' ? 1 : 0 }).then(r => { if (r.piano) setPiano(r.piano); });
   Wire.call('drums', { open: id === 'drums' ? 1 : 0, sets: DR.sets ? 0 : 1 }).then(r => { if (r.drums) setDrums(r.drums); });
   Wire.call('setup', { open: id === 'setup' ? 1 : 0 }).then(r => { if (r.setup) setSetup(r.setup); });
+  Wire.call('files', id === 'files' ? { open: 1, dir: FL.dir || flSavedDir() } : { open: 0 }).then(r => { if (r.list) setFileList(r.list); if (r.files) setFiles(r.files); });
   Wire.call('scenes', { open: id === 'scenes' ? 1 : 0 }).then(r => { if (r.scenes) setScenes(r.scenes); });
   Wire.call('control', { open: id === 'control' ? 1 : 0, kinds: CT.kinds ? 0 : 1 }).then(r => { if (r.control) setControl(r.control); });
   Wire.call('tuning', { open: id === 'tuning' ? 1 : 0, lists: TN.lists ? 0 : 1 }).then(r => { if (r.tuning) setTuning(r.tuning); });
@@ -1537,6 +1538,90 @@ Kit.press($('suSw'), b => { Wire.call('global_set', { i: +b.dataset.g, v: b.clas
 Kit.press($('suRooms'), b => { Wire.call('global_set', { i: 8, v: +b.dataset.room }); $('suRooms').querySelectorAll('.tns').forEach(q => q.classList.toggle('on', q === b)); }, '.tns');
 Kit.press($('suStd'), b => { Wire.call('global_set', { i: 13, v: +b.dataset.std }); $('suStd').querySelectorAll('.tns').forEach(q => q.classList.toggle('on', q === b)); }, '.tns');
 
+// ---------------------------------------------------------------- THE FILES CARD
+// A MIDI file on this machine: played live (the parts its own, one per
+// channel), or rendered offline -- as heard (the live engine) or at best
+// quality (the file renderer, streamed on the GPU, then the room's tail) --
+// in the mode chosen (what the file says, GM, a Sound Canvas map, MT-32)
+const FL = { dir: null, list: null, sel: null, info: null, mode: 'auto', f: null, ask: null };
+const FL_MODES = [['auto', 'AUTO'], ['gm', 'GM'], ['ours', 'GS: OURS'], ['sc55', 'GS: SC-55'], ['sc88', 'GS: SC-88'],
+  ['sc88pro', 'GS: SC-88PRO'], ['sc8850', 'GS: SC-8850'], ['cm64', 'MT-32 / CM-64']];
+const FL_SAY = { gs: 'GS', gm: 'GM', cm64: 'MT-32 / CM-64' };
+function flSavedDir() { try { return localStorage.getItem('clavitone.dir') || ''; } catch (_) { return ''; } }
+const mmss = s => `${Math.floor(s / 60)}:${pad(Math.floor(s % 60), 2)}`;
+function setFileList(l) {
+  FL.list = l; FL.dir = l.dir;
+  try { localStorage.setItem('clavitone.dir', l.dir); } catch (_) {}
+  if (card === 'files') drawFileList();
+}
+function drawFileList() {
+  const l = FL.list; if (!l) return;
+  $('flDir').textContent = l.dir.startsWith(l.home) ? '~' + l.dir.slice(l.home.length) : l.dir;
+  $('flUp').disabled = !l.parent;
+  $('flList').innerHTML = l.entries.length ? l.entries.map(e => {
+    const p = l.dir + '/' + e.name;
+    return `<button class="fl-e${e.dir ? ' d' : ''}${p === FL.sel ? ' on' : ''}" data-kit="1" data-name="${esc(e.name)}" data-dir="${e.dir ? 1 : 0}">` +
+      `<b>${e.dir ? '▸ ' : ''}${esc(e.name)}</b></button>`;
+  }).join('') : '<p class="pn-note">No folders or MIDI files here.</p>';
+}
+async function flGo(dir) { const r = await Wire.call('files', { open: 1, dir }); if (r.list) setFileList(r.list); if (r.files) setFiles(r.files); }
+Kit.press($('flUp'), () => { if (FL.list && FL.list.parent) flGo(FL.list.parent); });
+Kit.press($('flHome'), () => flGo(FL.list ? FL.list.home + '/Music' : ''));
+Kit.press($('flList'), async b => {
+  const p = FL.dir + '/' + b.dataset.name;
+  if (b.dataset.dir === '1') { flGo(p); return; }
+  FL.sel = p; FL.info = null; FL.ask = null; drawFileList(); drawFiles();
+  const r = await Wire.call('file_info', { path: p });
+  if (FL.sel === p) { FL.info = r.info; drawFiles(); }
+}, '.fl-e');
+function setFiles(f) { FL.f = f; if (card === 'files') drawFiles(); }
+function drawFiles() {
+  const f = FL.f, i = FL.info, p = f && f.player, r = f && f.render;
+  $('flName').textContent = FL.sel ? FL.sel.slice(FL.sel.lastIndexOf('/') + 1) : '';
+  $('flAbout').textContent = !FL.sel ? 'Choose a MIDI file on the left.' : !i ? 'Reading it…' : !i.ok ? `It cannot be read: ${i.err}.` :
+    `${mmss(i.total)} long · ${i.channels.length} channel${i.channels.length === 1 ? '' : 's'} (${i.channels.map(c => c + 1).join(', ')}) · ${i.programs} program change${i.programs === 1 ? '' : 's'}. ` +
+    `It reads as ${FL_SAY[i.detected] || i.detected}: ${i.why}.`;
+  $('flModes').innerHTML = FL_MODES.map(([k, t]) => `<button class="tns${FL.mode === k ? ' on' : ''}" data-kit="1" data-mode="${k}">` +
+    `${t}${k === 'auto' && i && i.ok ? ': ' + (FL_SAY[i.detected] || i.detected) : ''}</button>`).join('');
+  const ok = !!(i && i.ok);
+  const playing = !!(p && p.busy);
+  $('flPlay').disabled = !ok || playing;
+  $('flStop').disabled = !playing;
+  $('flWho').textContent = playing ? `playing ${p.name}` : '';
+  const pos = p ? p.pos : 0, tot = p && p.total ? p.total : (i ? i.total : 0);
+  $('flBarI').style.width = (playing && tot ? Math.min(100, 100 * pos / tot) : 0) + '%';
+  $('flTime').textContent = playing ? `${mmss(pos)} / ${mmss(tot)}` : '';
+  $('flStage').textContent = p ? (p.msg || (playing ? `${p.stage} (${p.mode === 'gs' ? 'GS, the Setup card\'s standard' : (FL_MODES.find(m => m[0] === p.mode) || [0, p.mode])[1]})` : p.stage ? `${p.name}: ${p.stage}.` : '')) : '';
+  const rendering = !!(r && r.busy);
+  $('flHeard').disabled = !ok || rendering;
+  $('flBest').disabled = !ok || rendering || !(f && f.file_export);
+  $('flRStop').disabled = !rendering;
+  $('flRStage').textContent = !r ? '' : rendering ? `${r.name}: ${r.stage}… ${mmss(r.secs)}${r.last ? ' · ' + r.last : ''}` :
+    r.msg ? `${r.name}: ${r.msg}${r.msg === 'rendered' ? ' in ' + mmss(r.secs) : ''}.` : (f && !f.file_export ? 'Best quality needs nvlive started with --file-export.' : '');
+  $('flAsk').innerHTML = r && !rendering && r.ask ? `<p class="pn-note">${r.ask === 'refused' ? 'Best quality cannot render it' : 'It cannot be streamed yet'}: ${esc(r.ask_why)}.` +
+    (r.ask === 'whole' ? ' The whole render holds the entire song in memory, which a long song may not fit in.' : '') + '</p><div class="tn-row">' +
+    (r.ask === 'whole' ? '<button class="hb" data-kit="1" data-ask="whole">RENDER WHOLE ANYWAY</button>' : '') +
+    '<button class="hb" data-kit="1" data-ask="heard">RENDER AS HEARD INSTEAD</button></div>' : '';
+  const done = r && !rendering && r.msg === 'rendered' && r.out;
+  const src = done ? '/renders/' + encodeURIComponent(r.out.slice(r.out.lastIndexOf('/') + 1)) + '?t=' + r.secs : '';
+  if (FL.outSrc !== src) {
+    FL.outSrc = src;
+    $('flOut').innerHTML = done ? `<p class="pn-note">Saved to ${esc(r.out)}</p><audio controls preload="none" src="${src}"></audio>` : '';
+  }
+}
+Kit.press($('flModes'), b => { FL.mode = b.dataset.mode; drawFiles(); }, '.tns');
+Kit.press($('flPlay'), async () => { if (!FL.sel) return; const r = await Wire.call('file_play', { path: FL.sel, mode: FL.mode }); if (r.files) setFiles(r.files); });
+Kit.press($('flStop'), async () => { const r = await Wire.call('file_stop'); if (r.files) setFiles(r.files); });
+async function flRender(kind, whole) {
+  if (!FL.sel) return;
+  const r = await Wire.call('file_render', { path: FL.sel, mode: FL.mode, kind, whole: whole ? 1 : 0 });
+  if (r.files) setFiles(r.files);
+}
+Kit.press($('flHeard'), () => flRender('heard', false));
+Kit.press($('flBest'), () => flRender('best', false));
+Kit.press($('flRStop'), async () => { const r = await Wire.call('file_render_stop'); if (r.files) setFiles(r.files); });
+Kit.press($('flAsk'), b => flRender(b.dataset.ask === 'whole' ? 'best' : 'heard', b.dataset.ask === 'whole'), '.hb');
+
 // ---------------------------------------------------------------- THE NOTES
 // What each program and stop is, and what it was fitted to (about.json:
 // examples/gm_coverage.py --about, the coverage page's own words)
@@ -1610,6 +1695,7 @@ Wire.connect({
     if (m.control) setControl(m.control);
     if (m.scenes) setScenes(m.scenes);
     if (m.setup) setSetup(m.setup);
+    if (m.files) setFiles(m.files);
     if (m.synth && m.synth.row === S.row && (m.synth.layer === S.layer || m.synth.layers <= S.layer)) { S.layer = m.synth.layer; S.synth = m.synth; if (card === 'synth') drawSynth(); }
   },
   down() { $('gone').hidden = false; },

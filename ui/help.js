@@ -33,6 +33,7 @@ const HELP = {
       ['TUNING', 'The tuning every part plays in, and the Indian voices\' raga tuning.'],
       ['CONTROL', 'Controls on the screen for what the keyboard lacks, and routes that rewrite the keyboard\'s own.'],
       ['SCENES', 'Presets and scenes to save and bring back; the metronome; GS reset.'],
+      ['FILES', 'MIDI files on this machine: play one live, or render it to a WAV.'],
       ['SETUP', 'MIDI inputs, the Messenger, the sound settings for every part, the room, and quitting.'],
     ],
   },
@@ -556,8 +557,76 @@ const HELP = {
   },
 };
 
+// THE FILES CARD
+Object.assign(HELP, {
+  files: {
+    title: 'Files',
+    intro: 'A MIDI file on this machine, played live through the engine or rendered offline to a WAV.',
+    terms: [
+      ['Folders', 'Find the file.'],
+      ['The file', 'What it is, the mode to read it in, and playing or rendering it.'],
+    ],
+  },
+  'fl:browse': {
+    title: 'Folders',
+    intro: 'The folders and MIDI files (.mid, .midi, .kar) on this machine. It opens where you were last.',
+    terms: [
+      ['▲ UP', 'The folder above.'],
+      ['MUSIC', 'Your Music folder.'],
+      ['▸ A folder', 'Opens it.'],
+      ['A file', 'Chooses it: what it is shows on the right.'],
+    ],
+  },
+  'fl:file': {
+    title: 'The file',
+    intro: 'Its length, the channels it plays, how many program changes it makes, and the mode it asks for.',
+    terms: [],
+  },
+  'fl:mode': {
+    title: 'Mode',
+    intro: 'Which module the file was written for. It decides what its program and bank numbers mean, so the same file can sound quite different.',
+    terms: [
+      ['AUTO', 'What the file says: a GS Reset reads it as GS, GM System On as GM, MT-32 messages as MT-32. A file that says nothing plays as GS in the Setup card\'s standard. The button shows what it found.'],
+      ['GM', 'A General MIDI module: bank selects are ignored, every program plays its plain sound.'],
+      ['GS: OURS', 'Sound Canvas files, bank numbers in our own library\'s numbering.'],
+      ['GS: SC-55 … SC-8850', 'Sound Canvas files, bank numbers as that module laid them out (a file that names its own map with CC32 keeps it).'],
+      ['MT-32 / CM-64', 'Files for the MT-32 or CM-64: parts 1 to 9 the MT-32\'s sounds, 10 its drums, 11 to 16 the CM-32P\'s, every pan mirrored. The file\'s own MT-32 messages (custom sounds) are not followed, as on a Sound Canvas.'],
+    ],
+  },
+  'fl:play': {
+    title: 'Play live',
+    intro: 'The file plays through the engine in real time, as a sequencer drives a Sound Canvas.',
+    terms: [
+      ['PLAY LIVE', 'Takes the parts over: one part per channel (16), every key, channel 10 the drums. Then it builds the sounds the file asks for, so its notes do not fall on a build, sends a reset, and plays.'],
+      ['STOP', 'Stops it: the notes let go, every pedal up. The parts stay as the file left them; load a preset (Scenes card) to have yours back.'],
+      ['The bar', 'How far through the file it is.'],
+    ],
+  },
+  'fl:render': {
+    title: 'Render offline',
+    intro: 'The file rendered to a WAV in ~/Music/renders, named after it, which then plays here.',
+    terms: [
+      ['RENDER AS HEARD', 'The live engine renders it, on the CPU: your tuning, room and effects, the parts as PLAY LIVE sets them. Saved as NAME.heard.wav.'],
+      ['RENDER BEST QUALITY', 'The file renderer, streamed on the GPU, then the room\'s tail: the full renderer, not the live engine\'s shortcuts. Saved as NAME.best.wav. It checks first: what it cannot render yet, it says, and offers the as-heard render instead.'],
+      ['STOP THE RENDER', 'Stops it.'],
+      ['While playing', 'A render shares the processors with the engine you are playing, so it can cause dropouts. One that would need more memory than is free beside the engine is stopped rather than slowing the machine down.'],
+    ],
+  },
+});
+
 // THE GUIDES: a task from start to finish, step by step
 Object.assign(HELP, {
+  'how:file': {
+    title: 'Play or render a MIDI file',
+    intro: 'Hear a file through the engine, or make a WAV of it.',
+    steps: [
+      'Open the Files card and find the file in the folders on the left.',
+      'Tap it. The right side says how long it is and which mode it asks for.',
+      'Leave the mode on AUTO, or choose the module it was written for.',
+      'PLAY LIVE plays it now (the parts become the file\'s), or RENDER AS HEARD / RENDER BEST QUALITY make a WAV.',
+    ],
+    see: ['fl:mode', 'fl:play', 'fl:render'],
+  },
   'how:layer': {
     title: 'Play two sounds at once',
     intro: 'Layer a second part on the same keys, such as strings under a piano.',
@@ -668,7 +737,7 @@ Object.assign(HELP, {
 // THE CONTENTS: the topics in order, under their headings
 const HELP_TOC = [
   ['Start here', ['basics']],
-  ['How to…', ['how:keyboard', 'how:layer', 'how:split', 'how:pedal', 'how:organ', 'how:save', 'how:tuning', 'how:stuck', 'how:breakup', 'how:quit']],
+  ['How to…', ['how:keyboard', 'how:file', 'how:layer', 'how:split', 'how:pedal', 'how:organ', 'how:save', 'how:tuning', 'how:stuck', 'how:breakup', 'how:quit']],
   ['Front panel', ['display', 'panel']],
   ['Parts', ['parts']],
   ['Library', ['library']],
@@ -681,6 +750,7 @@ const HELP_TOC = [
   ['Tuning', ['tuning', 'tn:shape', 'tn:east']],
   ['Control', ['control', 'ct:strip', 'ct:routes', 'ct:new']],
   ['Scenes', ['scenes', 'sc:presets', 'sc:scenes', 'sc:metro', 'sc:gs']],
+  ['Files', ['files', 'fl:browse', 'fl:file', 'fl:mode', 'fl:play', 'fl:render']],
   ['Setup', ['setup', 'su:midi', 'su:msgr', 'su:sound', 'su:rubato']],
 ];
 
@@ -689,7 +759,7 @@ const HELP_TOC = [
 const Help = (() => {
   const CARD_OF = { synth: 'synth', drive: 'stops', stops: 'stops', piano: 'piano', drums: 'drums', fx: 'effects', effects: 'effects',
     matrix: 'matrix', tn: 'tuning', tuning: 'tuning', ct: 'control', control: 'control', sc: 'scenes', scenes: 'scenes',
-    su: 'setup', setup: 'setup', parts: 'parts', library: 'library' };
+    su: 'setup', setup: 'setup', parts: 'parts', library: 'library', fl: 'files', files: 'files' };
   const cardOf = key => CARD_OF[key.split(':')[0]] || null;
   const groupOf = key => HELP_TOC.find(g => g[1].includes(key));
   const textOf = key => {
