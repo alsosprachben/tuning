@@ -1525,10 +1525,20 @@ def cm64_pan(v):
     return max(0, min(127, 128 - int(v)))
 
 
+# ...AND THE MT-32's VELOCITY (TUNING_MT32_VEL=0 off): an MT-32 spans about
+# 30 dB over its velocities, our GM law 84, so v -> 3/4 v + 32 (mt32mux's
+# 'scummvm', Ben's on Jupiter) -- exactly a GS part's VELOCITY SENSE depth 48
+# / offset 96 (v*48/64 + 96-64), so set as that: a part parameter, the
+# reader's and live's own law. Roland's Init CM-64 leaves it 64/64; its
+# manual only says the velocity response differs "slightly" from the CM-64's
+CM64_VELOCITY = os.environ.get('TUNING_MT32_VEL', '') != '0'
+
+
 def cm64_init():
     """The messages "Init CM-64" amounts to, every part's: its bank (CC0, the
     SC-55 map's CC32 1), program, pan (a CM-64's, mirrored as the file's
-    are), level 100, reverb 64, chorus 0, bend range 12 (RPN 0, then null)."""
+    are), level 100, reverb 64, chorus 0, bend range 12 (RPN 0, then null),
+    and the MT-32's velocity as each part's velocity sense (CM64_VELOCITY)."""
     out = []
     for ch, (bank, prog, pan) in enumerate(CM64_PARTS):
         cc = lambda c, v: mido.Message('control_change', channel=ch, control=c, value=v, time=0)
@@ -1537,6 +1547,11 @@ def cm64_init():
         out += [mido.Message('program_change', channel=ch, program=prog, time=0),
                 cc(7, 100), cc(10, cm64_pan(pan)), cc(91, 64), cc(93, 0),
                 cc(101, 0), cc(100, 0), cc(6, 12), cc(38, 0), cc(101, 127), cc(100, 127)]
+        if CM64_VELOCITY:
+            blk = 0 if ch == 9 else ch + 1 if ch < 9 else ch
+            for ad, v in ((0x1A, 48), (0x1B, 96)):
+                cs = (128 - (0x40 + (0x10 | blk) + ad + v) % 128) % 128
+                out.append(mido.Message('sysex', data=[0x41, 0x10, 0x42, 0x12, 0x40, 0x10 | blk, ad, v, cs], time=0))
     return out
 
 

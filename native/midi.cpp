@@ -1142,6 +1142,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                                          {126, 27, 64}, {126, 29, 81}, {126, 0, 64}, {126, 37, 99}, {126, 13, 27},
                                          {126, 46, 45}};
         auto pan = [](int v) { return std::max(0, std::min(127, 128 - v)); };
+        const char *mve = getenv("TUNING_MT32_VEL");
+        const bool cm64_vel = !(mve && !strcmp(mve, "0"));
         std::vector<Msg> ex;
         for (int ch = 0; ch < 16; ch++) {
             auto cc = [&](int c, int v) {
@@ -1156,6 +1158,19 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             ex.back().direct = true;
             cc(7, 100); cc(10, pan(PARTS[ch][2])); cc(91, 64); cc(93, 0);
             cc(101, 0); cc(100, 0); cc(6, 12); cc(38, 0); cc(101, 127); cc(100, 127);
+            // THE MT-32's VELOCITY (cm64_velocity, TUNING_MT32_VEL=0 off): an
+            // MT-32 spans about 30 dB over its velocities, our GM law 84, so
+            // v -> 3/4 v + 32 (mt32mux's 'scummvm', Ben's on Jupiter) -- which
+            // is a GS part's own VELOCITY SENSE, depth 48 / offset 96
+            // (v*48/64 + 96-64): set as one, a part parameter like any other
+            if (cm64_vel) {
+                const int blk = ch == 9 ? 0 : ch < 9 ? ch + 1 : ch;
+                for (const int ad : {0x1A, 0x1B}) {
+                    const int v = ad == 0x1A ? 48 : 96;
+                    const int cs = (128 - (0x40 + (0x10 | blk) + ad + v) % 128) % 128;
+                    ex.push_back(Msg{0, 0xF0, 0, 0, 0, {0x41, 0x10, 0x42, 0x12, 0x40, (uint8_t)(0x10 | blk), (uint8_t)ad, (uint8_t)v, (uint8_t)cs}});
+                }
+            }
         }
         for (Msg m : msgs) {
             if ((m.status & 0xF0) == 0xB0 && m.d0 == 10)
