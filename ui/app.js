@@ -583,6 +583,33 @@ function drawSynth() {
   lay.hidden = sy.layers < 2;
   lay.querySelectorAll('button').forEach((b, j) => b.classList.toggle('on', j === S.layer));
 }
+// A TONEWHEEL ORGAN's DRIVE (the wheel is its swell): the valve before the
+// rotors, 0 to 3; double-tap or the button for the voice's own again
+const OG = { knob: null, back: null, row: -1 };
+const DRIVE_MAX = 3;
+function drawDrive(st) {
+  const [now, voice, mine] = st.drive;
+  if (!OG.knob) {
+    const el = $('organDrive');
+    el.innerHTML = '<section class="og-box"><h3>Drive</h3><div class="og-knob"></div>' +
+      '<p class="pn-note">The valve before the rotors: clean at 0, a growl as it turns up. The mod wheel is the swell.</p>' +
+      '<button class="hb" data-kit="1">AS THE VOICE</button></section>';
+    const send = Wire.throttled(v => Wire.call('drive_set', { row: S.row, v }));
+    const back = () => { fxMine('drive', -1); Wire.call('drive_set', { row: S.row, v: -1 }); };
+    OG.knob = Kit.knob(el.querySelector('.og-knob'), { label: 'Drive', value: 0, size: 'big',
+      fmt: v => (v * DRIVE_MAX).toFixed(2),
+      onChange: v => { const d = Math.round(v * DRIVE_MAX * 100) / 100; fxMine('drive', d); send(d); },
+      onReset: back });
+    OG.back = el.querySelector('button');
+    Kit.press(OG.back, back);
+  }
+  const held = fxVal('drive', null);
+  const v = held === null ? now : held < 0 ? voice : held;
+  const own = held === null ? mine >= 0 : held >= 0;
+  OG.knob.set(v / DRIVE_MAX, v.toFixed(2), own);
+  OG.back.textContent = own ? `BACK TO THE VOICE'S ${voice.toFixed(2)}` : `AS THE VOICE (${voice.toFixed(2)})`;
+  OG.back.disabled = !own;
+}
 async function refreshSynth() { const s = await Wire.call('synth', { row: S.row, layer: S.layer }); if (s.synth && s.synth.row === S.row) { S.synth = s.synth; if (card === 'synth') drawSynth(); } }
 Kit.press($('synthBack'), async () => {
   const sy = S.synth;
@@ -621,6 +648,8 @@ function drawStops(force) {
   const st = S.stops, el = $('jamb');
   if (!st) { el.innerHTML = '<p class="empty">Reading the organ…</p>'; return; }
   $('stopsWho').textContent = `part ${pad(st.row + 1, 2)} · ${st.part}`;
+  $('organDrive').hidden = !(st.program >= 0 && st.drive);
+  if (st.program >= 0 && st.drive) drawDrive(st);
   if (st.program < 0) {
     stopsSig = '';
     const orgs = S.organs.map(pg => S.patches.find(p => !p.drums && p.program === pg && p.variation === 0)).filter(Boolean);

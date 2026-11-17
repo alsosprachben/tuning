@@ -1018,6 +1018,15 @@ J stops_of(nv_host *h, int row)
         const int got = nv_host_part_drawn(h, row, d.data(), nr);
         for (int i = 0; i < nr; i++)
             drawn.a.push_back(sess::integer(i < got ? d[(size_t)i] : 0));
+        // A TONEWHEEL ORGAN: its drive knob (the panel's, livetui.organ_part):
+        // in use, the voice's own, the knob's (<0: none, the voice's)
+        double od[3] = {};
+        if (nv_host_drive(h, row, od) == 1) {
+            J dv = sess::arr();
+            for (double x : od)
+                dv.a.push_back(num(x));
+            o.o["drive"] = dv;
+        }
     }
     o.o["names"] = names;
     o.o["rows"] = rows;
@@ -1520,6 +1529,10 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             w->setup_sent.clear();
     } else if (call == "panic") {
         nv_host_panic(h);
+    } else if (call == "drive_set") {          // (an organ's drive, 0..3; <0 the voice's again)
+        nv_host_set_drive(h, row, std::min(3.0, arg_d(q, "v", -1.0)));
+        if (w)
+            w->stops_sent.clear();
     } else if (call == "quit") {               // (nvlive only: its hook)
         if (nv_ui_quit)
             nv_ui_quit();
