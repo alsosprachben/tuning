@@ -1012,6 +1012,15 @@ static int ump_msgs(const uint8_t *buf, long long len, std::vector<Msg> &msgs, i
     return 0;
 }
 
+// THE FILE MODES (TUNING_GM, TUNING_CM64, TUNING_MT32, TUNING_PARTS, TUNING_MT32_VEL,
+// the Files card's look: TUNING_CHECK, TUNING_MT32_SEEN) are a FILE's: how a
+// file played or rendered is read. The engine's own one-note reads -- a
+// template built by playing one note through this reader (live.cpp) -- are
+// not a file, and read plainly (nv_midi_read_plain): under TUNING_MT32 the
+// unit has no part on channel 1, and every template came out silent
+static thread_local bool t_plain = false;
+static const char *mode_env(const char *k) { return t_plain ? nullptr : getenv(k); }
+
 // blockrender.parse for a GM file: < 0 where it would take a path this does not have
 static int parse(const uint8_t *buf, long long len, Parsed &P)
 {
@@ -1049,7 +1058,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     }
     // THE FILE CHECK (TUNING_CHECK=1, the Files card's look): mt32check's
     // audit, over the tracks as mido gives them
-    if (const char *ce = getenv("TUNING_CHECK"); ce && !strcmp(ce, "1")) {
+    if (const char *ce = mode_env("TUNING_CHECK"); ce && !strcmp(ce, "1")) {
         std::vector<std::vector<const Msg *>> tr(starts.size());
         for (size_t ti = 0; ti < starts.size(); ti++) {
             const size_t b = ti + 1 < starts.size() ? starts[ti + 1] : all.size();
@@ -1064,14 +1073,14 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     // mt32mux would have written it -- a meta track, a track per part, each
     // note stamped with its part's program and controllers; the MT-32's
     // velocity unless TUNING_MT32_VEL=0 (mt32mux's --velocity=none)
-    if (const char *pe = getenv("TUNING_PARTS"); pe && !strcmp(pe, "names")) {
+    if (const char *pe = mode_env("TUNING_PARTS"); pe && !strcmp(pe, "names")) {
         std::vector<std::vector<const Msg *>> tr(starts.size());
         for (size_t ti = 0; ti < starts.size(); ti++) {
             const size_t b = ti + 1 < starts.size() ? starts[ti + 1] : all.size();
             for (size_t i = starts[ti]; i < b; i++)
                 tr[ti].push_back(&all[i]);
         }
-        const char *mve = getenv("TUNING_MT32_VEL");
+        const char *mve = mode_env("TUNING_MT32_VEL");
         partmux::Result mr;
         std::vector<std::vector<Msg>> out = partmux::mux(tr, !(mve && !strcmp(mve, "0")), mr);
         std::vector<Msg> na;
@@ -1165,7 +1174,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     // A REAL MT-32 / CM-64 (TUNING_MT32=mt32 or cm64; mt32.h): the file as
     // the unit hears it -- its exclusives, channels and patches said as our
     // messages, before the Init CM-64 pass below (which it implies)
-    const char *mt32re = getenv("TUNING_MT32");
+    const char *mt32re = mode_env("TUNING_MT32");
     const bool mt32real = mt32re && (!strcmp(mt32re, "mt32") || !strcmp(mt32re, "cm64"));
     if (mt32real) {
         std::vector<Msg> ab;
@@ -1212,7 +1221,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     // GM MODE (TUNING_GM=1: the Files card's): GM System On before the file's
     // first message -- bank select off, every channel at power-on, as a GM
     // module plays a file
-    if (const char *gme = getenv("TUNING_GM"); gme && !strcmp(gme, "1")) {
+    if (const char *gme = mode_env("TUNING_GM"); gme && !strcmp(gme, "1")) {
         Msg y{0, 0xF0, 0, 0, 0, {0x7E, 0x7F, 0x09, 0x01}};
         msgs.insert(msgs.begin(), y);
     }
@@ -1220,9 +1229,9 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     // messages before the file's (cm64_init: each part's bank, its SC-55
     // map, program, level, pan, sends and bend range 12), and every pan a
     // CM-64's, mirrored (cm64_pan); its own exclusives change nothing, below
-    const char *cm64e = getenv("TUNING_CM64");
+    const char *cm64e = mode_env("TUNING_CM64");
     const bool cm64 = (cm64e && !strcmp(cm64e, "1")) || mt32real;
-    const char *mt32e = getenv("TUNING_MT32_SEEN");     // (the Files card's look at a file: counted, not refused)
+    const char *mt32e = mode_env("TUNING_MT32_SEEN");     // (the Files card's look at a file: counted, not refused)
     const bool mt32seen = cm64 || (mt32e && !strcmp(mt32e, "1"));
     if (cm64) {
         static const int PARTS[16][3] = {{127, 0, 64}, {127, 68, 54}, {127, 48, 54}, {127, 95, 54}, {127, 78, 54},
@@ -1230,7 +1239,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                                          {126, 27, 64}, {126, 29, 81}, {126, 0, 64}, {126, 37, 99}, {126, 13, 27},
                                          {126, 46, 45}};
         auto pan = [](int v) { return std::max(0, std::min(127, 128 - v)); };
-        const char *mve = getenv("TUNING_MT32_VEL");
+        const char *mve = mode_env("TUNING_MT32_VEL");
         const bool cm64_vel = !(mve && !strcmp(mve, "0"));
         std::vector<Msg> ex;
         for (int ch = 0; ch < 16; ch++) {
@@ -2354,6 +2363,15 @@ void *nv_midi_read(const uint8_t *buf, long long len, int *err)
 }
 
 void nv_midi_free(void *p) { delete (nv::Parsed *)p; }
+
+// THE ENGINE's OWN READ (a template's one note): the file modes left out (mode_env)
+void *nv_midi_read_plain(const uint8_t *buf, long long len, int *err)
+{
+    nv::t_plain = true;
+    void *m = nv_midi_read(buf, len, err);
+    nv::t_plain = false;
+    return m;
+}
 
 // THE MT-32 exclusives passed over (Parsed::mt32), and each track's first
 // name (nullptr past the last track)

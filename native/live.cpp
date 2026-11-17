@@ -36,6 +36,7 @@ static int emit_col(const char *n);     // (a row's column by name; below)
 
 extern "C" {
 void *nv_midi_read(const uint8_t *buf, long long len, int *err);
+void *nv_midi_read_plain(const uint8_t *buf, long long len, int *err);  // (the file modes left out: midi.cpp)
 void nv_midi_free(void *p);
 double nv_midi_total(void *p);
 void nv_midi_song(void *p, void *song, const double *trim);
@@ -590,7 +591,7 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
                            : kit ? nv::live::one_note(program, note, vel, 9, fast, 480 * 18)
                                  : nv::live::one_note(program, note, vel, 0, fast, 480, og, ven ? g_tmpl_var : 0, fast_cc, cork);
     int err = 0;
-    void *m = nv_midi_read(f.data(), (long long)f.size(), &err);
+    void *m = nv_midi_read_plain(f.data(), (long long)f.size(), &err);
     if (!m)
         return -1000000001LL;
     void *song = nv_song_new();
