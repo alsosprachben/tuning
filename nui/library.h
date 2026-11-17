@@ -157,33 +157,36 @@ inline std::vector<std::string> wrap(App &a, ImFont *f, float size, const std::s
 }
 
 // THE ON-SCREEN KEYS (the web's osk): true when DONE
-inline bool lib_keys(App &a, float x, float y, float w)
+// THE SCREEN's OWN KEYS typing into q (a name's: with - and _); true on DONE
+inline bool osk(App &a, std::string &q, float x, float y, float w, bool name = false, const char *done = "DONE")
 {
-    LibUi &L = g_lib;
     static const char *ROWS[4] = {"1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm"};
+    static const char *NROWS[4] = {"1234567890", "qwertyuiop", "asdfghjkl-", "zxcvbnm_"};
+    const char *const *rows = name ? NROWS : ROWS;
     const float kh = 50, gap = 6, kw = (w - gap * 9) / 10;
     rect(a, x - 10, y - 10, w + 20, 5 * (kh + gap) + 14, IM_COL32(0x17, 0x19, 0x1c, 255), 10);
     for (int r = 0; r < 4; r++) {
-        const int n = (int)strlen(ROWS[r]);
+        const int n = (int)strlen(rows[r]);
         const float rx = x + (w - (n * kw + (n - 1) * gap)) / 2;
         for (int i = 0; i < n; i++) {
-            const std::string k(1, ROWS[r][i]), id = "osk" + k;
-            if (button(a, id.c_str(), rx + i * (kw + gap), y + r * (kh + gap), kw, kh, k, false, true, 21))
-                L.q += k;
+            const std::string k(1, rows[r][i]), id = "osk" + k;
+            if (button(a, id.c_str(), rx + i * (kw + gap), y + r * (kh + gap), kw, kh, k, false, true, 21) && q.size() < 40)
+                q += k;
         }
     }
     const float ry = y + 4 * (kh + gap), bw = (w - 3 * gap) / 6;
     if (button(a, "oskclear", x, ry, bw, kh, "CLEAR"))
-        L.q.clear();
+        q.clear();
     if (button(a, "oskspace", x + bw + gap, ry, bw * 3 - gap, kh, "SPACE"))
-        L.q += " ";
-    if (button(a, "oskback", x + 4 * bw + gap, ry, bw - gap, kh, "\xe2\x8c\xab") && !L.q.empty()) {
-        L.q.pop_back();
-        while (!L.q.empty() && ((unsigned char)L.q.back() & 0xC0) == 0x80)
-            L.q.pop_back();
+        q += " ";
+    if (button(a, "oskback", x + 4 * bw + gap, ry, bw - gap, kh, "\xe2\x86\x90") && !q.empty()) {
+        q.pop_back();
+        while (!q.empty() && ((unsigned char)q.back() & 0xC0) == 0x80)
+            q.pop_back();
     }
-    return button(a, "oskdone", x + 5 * bw + 2 * gap, ry, bw - gap, kh, "DONE");
+    return button(a, "oskdone", x + 5 * bw + 2 * gap, ry, bw - gap, kh, done);
 }
+inline bool lib_keys(App &a, float x, float y, float w) { return osk(a, g_lib.q, x, y, w); }
 
 inline void draw_library(App &a)
 {

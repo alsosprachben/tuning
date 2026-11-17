@@ -42,6 +42,7 @@
 #include "matrix.h"
 #include "tuning.h"
 #include "control.h"
+#include "scenes.h"
 
 namespace nui {
 
@@ -101,6 +102,7 @@ static void draw(App &a)
     matrix_card(a, a.card == "matrix");
     tuning_card(a, a.card == "tuning");
     control_card(a, a.card == "control");
+    scenes_card(a, a.card == "scenes");
     if (a.card == "parts") {
         draw_parts(a);
     } else if (a.card == "library") {
@@ -121,6 +123,8 @@ static void draw(App &a)
         draw_tuning(a);
     } else if (a.card == "control") {
         draw_control(a);
+    } else if (a.card == "scenes") {
+        draw_scenes(a);
     } else {
         std::string title;
         for (int i = 0; i < nc; i++)
@@ -163,6 +167,10 @@ static bool poll(App &a)
             g_syn.text.clear();
             changed = true;
         }
+    }
+    if (m.get("scenes")) {
+        sc_take(m);
+        changed = true;
     }
     if (m.get("control")) {
         ct_take(m);
