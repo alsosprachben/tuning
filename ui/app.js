@@ -631,7 +631,7 @@ function drawStops(force) {
     el.innerHTML = st.rows.map(row => `<div class="jrow">${row.map(g => `<div class="jgrp">${g.map(r => {
       const [a, b] = stopParts(st.names[r] || String(r), feet);
       const f = b.endsWith('′') ? `${esc(b.slice(0, -1))}<i>′</i>` : esc(b);
-      return `<button class="tab" data-kit="1" data-rank="${r}"><span class="tn">${esc(a)}</span><span class="tf">${f}</span></button>`;
+      return `<button class="tab" data-kit="1" data-rank="${r}"><span class="tnm">${esc(a)}</span><span class="tf">${f}</span></button>`;
     }).join('')}</div>`).join('')}</div>`).join('');
   }
   el.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', !!drawn[+b.dataset.rank]));
@@ -818,7 +818,7 @@ function drawDrums() {
     const order = ['Kicks', 'Snares', 'Toms', 'Hi-hats', 'Cymbals', 'Percussion', 'Sounds', 'Not set'];
     el.innerHTML = order.filter(g => groups.has(g)).map(g => `<section class="pgrp"><h3>${g}</h3><div class="pgrid">` +
       groups.get(g).map(k => `<button class="pad${user && !k[1] ? ' unset' : ''}" data-key="${k[0]}"><i></i>` +
-        `<span class="pk">${noteName(k[0])} <small>${k[0]}</small></span><span class="pnm">${esc(k[1] || '—')}</span></button>`).join('') +
+        `<span class="pdk">${noteName(k[0])} <small>${k[0]}</small></span><span class="pnm">${esc(k[1] || '—')}</span></button>`).join('') +
       '</div></section>').join('');
   }
   el.querySelectorAll('.pad').forEach(b => b.classList.toggle('sel', +b.dataset.key === DR.sel));
