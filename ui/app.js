@@ -1603,7 +1603,7 @@ function drawFileList() {
 }
 async function flGo(dir) { const r = await Wire.call('files', { open: 1, dir }); if (r.list) setFileList(r.list); if (r.files) setFiles(r.files); }
 Kit.press($('flUp'), () => { if (FL.list && FL.list.parent) flGo(FL.list.parent); });
-Kit.press($('flHome'), () => flGo(FL.list ? FL.list.home + '/Music' : ''));
+Kit.press($('flHome'), () => flGo(FL.list ? FL.list.music || FL.list.home + '/Music' : ''));
 Kit.press($('flList'), async b => {
   const p = FL.dir + '/' + b.dataset.name;
   if (b.dataset.dir === '1') { flGo(p); return; }

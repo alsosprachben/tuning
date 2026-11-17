@@ -1064,6 +1064,11 @@ extern "C" void nv_ui_files_config(const char *file_export, const char *renders)
     g_file_export = file_export ? file_export : "";
     g_renders_dir = renders ? renders : "";
 }
+extern "C" void nv_ui_files_dirs(const char *music, const char *tmp)
+{
+    fileplay::g_music_root = music ? music : "";
+    fileplay::g_tmp_root = tmp ? tmp : "";
+}
 extern "C" void nv_ui_files_shutdown(nv_host *h)
 {
     g_player.halt(h);
@@ -1630,7 +1635,7 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         const J *pj = q.get("path"), *mj = q.get("mode"), *kj = q.get("kind");
         g_render.start(h, pj && pj->is(J::STR) ? pj->s : "", mj && mj->is(J::STR) ? mj->s : "auto",
                        kj && kj->is(J::STR) && kj->s == "best" ? "best" : "heard", arg_i(q, "whole", 0) != 0,
-                       g_renders_dir.empty() ? fileplay::home() + "/Music/renders" : g_renders_dir, g_file_export);
+                       g_renders_dir.empty() ? fileplay::music_root() + "/renders" : g_renders_dir, g_file_export);
         r.o["files"] = files_state();
     } else if (call == "file_render_stop") {
         g_render.halt();

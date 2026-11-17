@@ -69,6 +69,35 @@ static int map_of(const std::string &mode)      // (a Sound Canvas map's number;
     return -1;
 }
 
+// THE FOLDERS (nv_ui_files_dirs, the app's: an iOS app's Documents and
+// tmp; here ~/Music and $TMPDIR or /tmp): where the browser starts and the
+// renders go, and where a render's working files are kept
+static std::string g_music_root, g_tmp_root;
+static std::string home();
+static bool is_dir(const std::string &p);
+static std::string music_root()
+{
+    if (!g_music_root.empty())
+        return g_music_root;
+    return is_dir(home() + "/Music") ? home() + "/Music" : home();
+}
+static std::string tmp_root()
+{
+    if (!g_tmp_root.empty())
+        return g_tmp_root;
+    const char *t = getenv("TMPDIR");
+    return t && *t ? t : "/tmp";
+}
+// (no helper programs where the system runs none: iOS)
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+static const bool HELPERS = false;
+#else
+static const bool HELPERS = true;
+#endif
+
 static std::string home()
 {
     const char *h = getenv("HOME");
@@ -99,7 +128,7 @@ static bool slurp(const std::string &path, std::vector<uint8_t> &b)
 static J list_dir(std::string dir)
 {
     if (dir.empty() || !is_dir(dir))
-        dir = is_dir(home() + "/Music") ? home() + "/Music" : home();
+        dir = music_root();
     while (dir.size() > 1 && dir.back() == '/')
         dir.pop_back();
     J o = sess::obj(), ents = sess::arr();
@@ -138,6 +167,7 @@ static J list_dir(std::string dir)
     const size_t sl = dir.rfind('/');
     o.o["parent"] = sess::str(sl == std::string::npos || dir == "/" ? "" : sl == 0 ? "/" : dir.substr(0, sl));
     o.o["home"] = sess::str(home());
+    o.o["music"] = sess::str(music_root());
     o.o["entries"] = ents;
     return o;
 }
@@ -599,8 +629,10 @@ struct Render {
             ep.push_back(&s[0]);
         ep.push_back(nullptr);
         int fds[2];
-        if (pipe2(fds, O_CLOEXEC) != 0)
+        if (pipe(fds) != 0)                     // (pipe2 is Linux's: closed on exec by hand, as everywhere)
             return -1;
+        fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+        fcntl(fds[1], F_SETFD, FD_CLOEXEC);
         posix_spawn_file_actions_t fa;
         posix_spawn_file_actions_init(&fa);
         posix_spawn_file_actions_adddup2(&fa, fds[1], 1);
@@ -766,9 +798,9 @@ struct Render {
         busy = true;
         stopped = false;
         th = std::thread([=]() {
-            char tmpl[] = "/tmp/clavitone-render-XXXXXX";
-            const char *td = mkdtemp(tmpl);
-            const std::string tmp = td ? td : "/tmp";
+            std::string tpl = tmp_root() + "/clavitone-render-XXXXXX";
+            const char *td = mkdtemp(&tpl[0]);
+            const std::string tmp = td ? td : tmp_root();
             auto clean = [&]() {
                 if (!td)
                     return;
@@ -784,6 +816,10 @@ struct Render {
             {
                 std::lock_guard<std::mutex> lk(mu);
                 o = out;
+            }
+            if (k == "heard" && !HELPERS) {     // (the live engine offline: a second one, not on this system yet)
+                clean();
+                return finish("rendering as heard is not on this device yet: use best quality");
             }
             if (k == "heard") {
                 const std::string sp = tmp + "/session.json";

@@ -406,6 +406,10 @@ extern void (*nv_ui_quit)(void);
    not --live) and the folder renders go to; at the end, its player and
    render stopped */
 void nv_ui_files_config(const char *file_export, const char *renders);
+/* the app's folders: where MIDI files are browsed from and renders go (an iOS
+   app's Documents), and a render's working files (its tmp); NULL the defaults
+   (~/Music, $TMPDIR or /tmp) */
+void nv_ui_files_dirs(const char *music, const char *tmp);
 void nv_ui_files_shutdown(nv_host *h);
 
 #ifdef __cplusplus
