@@ -1300,19 +1300,27 @@ int nv_host_synth_knobs(char *out, int cap)
     return copy_out(all, out, cap);
 }
 
+// (a row is a shown part: its place in pats skips the removed ones -- row_index)
 int nv_host_synth_get(nv_host *h, int row, int layer, double *pn, char *own)
 {
-    return row < 0 ? 0 : h->synth_state((size_t)row, layer, pn, own);
+    size_t i;
+    return row_index(h, row, i) ? h->synth_state(i, layer, pn, own) : 0;
 }
 void nv_host_synth_set(nv_host *h, int row, int layer, int knob, double v)
 {
-    if (row >= 0 && knob >= 0 && knob < NV_MK_N) h->synth_set((size_t)row, layer, knob, v);
+    size_t i;
+    if (knob >= 0 && knob < NV_MK_N && row_index(h, row, i)) h->synth_set(i, layer, knob, v);
 }
 void nv_host_synth_forget(nv_host *h, int row, int layer, int knob)
 {
-    if (row >= 0 && knob >= 0 && knob < NV_MK_N) h->synth_forget((size_t)row, layer, knob);
+    size_t i;
+    if (knob >= 0 && knob < NV_MK_N && row_index(h, row, i)) h->synth_forget(i, layer, knob);
 }
-int nv_host_synth_send(nv_host *h, int row) { return row < 0 ? 0 : h->synth_send((size_t)row); }
+int nv_host_synth_send(nv_host *h, int row)
+{
+    size_t i;
+    return row_index(h, row, i) ? h->synth_send(i) : 0;
+}
 int nv_host_synth_fmt(const char *kind, double v, const double *pn, char *out, int cap)
 {
     return copy_out(panel::synth_fmt(kind, v, pn), out, cap);
@@ -1332,10 +1340,15 @@ void nv_host_set_messenger_pre107(nv_host *h, int on)
     const double v = on ? 1.0 : 0.0;
     h->post([h, v](long long) { nv_part_set(h->part, 9, v); });
 }
-int nv_host_drive(nv_host *h, int row, double *out) { return row < 0 ? 0 : h->drive_state((size_t)row, out); }
+int nv_host_drive(nv_host *h, int row, double *out)
+{
+    size_t i;
+    return row_index(h, row, i) ? h->drive_state(i, out) : 0;
+}
 void nv_host_set_drive(nv_host *h, int row, double v)
 {
-    if (row >= 0) h->part_drive((size_t)row, v);
+    size_t i;
+    if (row_index(h, row, i)) h->part_drive(i, v);
 }
 
 int nv_host_cmx_state(nv_host *h, int channel, nv_host_cmx *out)

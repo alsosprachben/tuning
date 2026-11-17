@@ -244,6 +244,8 @@ J synth_of(nv_host *h, int row, int layer)
     char own[NV_MK_N] = {};
     J o = sess::obj();
     int layers = nv_host_synth_get(h, row, layer, pn, own);
+    if (layers > 0 && layer >= layers)
+        layer = 0;                  // (a one-layer patch picked while on B: what was read is A)
     o.o["row"] = sess::integer(row);
     o.o["layer"] = sess::integer(layer);
     o.o["layers"] = sess::integer(layers);
@@ -637,6 +639,7 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
             any = true;
         }
         J sy = synth_of(h, w->row, w->layer);
+        w->layer = (int)sy.o["layer"].d();      // (back on A once the patch has no B)
         std::string ss;
         put(ss, sy);
         if (ss != w->synth_sent) {

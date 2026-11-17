@@ -696,7 +696,7 @@ Wire.connect({
     if (m.build) { S.build = m.build; drawHealth(); }
     if (m.parts) setParts(m.parts);
     if (m.stops) setStops(m.stops);
-    if (m.synth && m.synth.row === S.row && m.synth.layer === S.layer) { S.synth = m.synth; if (card === 'synth') drawSynth(); }
+    if (m.synth && m.synth.row === S.row && (m.synth.layer === S.layer || m.synth.layers <= S.layer)) { S.layer = m.synth.layer; S.synth = m.synth; if (card === 'synth') drawSynth(); }
   },
   down() { $('gone').hidden = false; },
 });
