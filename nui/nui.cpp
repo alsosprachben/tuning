@@ -44,6 +44,7 @@
 #include "control.h"
 #include "scenes.h"
 #include "files.h"
+#include "setup.h"
 
 namespace nui {
 
@@ -105,6 +106,7 @@ static void draw(App &a)
     control_card(a, a.card == "control");
     scenes_card(a, a.card == "scenes");
     files_card(a, a.card == "files");
+    setup_card(a, a.card == "setup");
     if (a.card == "parts") {
         draw_parts(a);
     } else if (a.card == "library") {
@@ -129,6 +131,8 @@ static void draw(App &a)
         draw_scenes(a);
     } else if (a.card == "files") {
         draw_files(a);
+    } else if (a.card == "setup") {
+        draw_setup(a);
     } else {
         std::string title;
         for (int i = 0; i < nc; i++)
@@ -171,6 +175,10 @@ static bool poll(App &a)
             g_syn.text.clear();
             changed = true;
         }
+    }
+    if (m.get("setup") || m.get("module")) {
+        su_take(m);
+        changed = true;
     }
     if (m.get("files") || m.get("list")) {
         fl_take(m);
