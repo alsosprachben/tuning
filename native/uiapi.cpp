@@ -28,6 +28,7 @@
 #include "host.h"
 #include "nv.h"
 #include "session.h"
+#include "cmx.h"
 
 namespace {
 
@@ -568,6 +569,89 @@ J effects_of(nv_host *h)
     return o;
 }
 
+// THE CONTROLLER MATRIX's TABLES, once: each destination's GS byte range, the
+// byte of no effect, and each byte's depth as printed
+const J &cmx_tables()
+{
+    static J t;
+    static bool made = false;
+    if (made)
+        return t;
+    made = true;
+    t = sess::arr();
+    for (int d = 0; d < 11; d++) {
+        int lo = 0, hi = 127;
+        nv_host_cmx_range(d, &lo, &hi);
+        J e = sess::obj();
+        e.o["lo"] = sess::integer(lo);
+        e.o["hi"] = sess::integer(hi);
+        e.o["zero"] = sess::integer(nv_host_cmx_raw(d, 0.0));
+        J sh = sess::arr();
+        for (int r = lo; r <= hi; r++) {
+            char b[48] = {};
+            nv_host_cmx_printed(d, nv_host_cmx_depth(d, r), b, sizeof b);
+            sh.a.push_back(sess::str(b));
+        }
+        e.o["shown"] = sh;
+        t.a.push_back(e);
+    }
+    return t;
+}
+
+// THE MATRIX CARD's: the part's channel's matrix (an every-channel part's
+// first channel: a change goes to all), each cell's GS byte and its
+// power-on byte, CC1/CC2's numbers, and the cells a file's GM2 messages set
+J cmx_of(nv_host *h, int row, int learning)
+{
+    J o = sess::obj();
+    int n = nv_host_parts(h, nullptr, 0);
+    std::vector<nv_host_partinfo> ps((size_t)std::max(0, n));
+    n = nv_host_parts(h, ps.data(), n);
+    const bool has = row >= 0 && row < n;
+    const int ch = has ? ps[(size_t)row].channel : 0;
+    o.o["row"] = sess::integer(row);
+    o.o["part"] = sess::str(has ? ps[(size_t)row].name : "");
+    o.o["channel"] = sess::integer(ch);
+    o.o["learning"] = sess::integer(learning);
+    nv_host_cmx m{};
+    if (!has || nv_host_cmx_state(h, ch, &m) != 0)
+        return o;
+    o.o["cc1"] = sess::integer(m.cc1);
+    o.o["cc2"] = sess::integer(m.cc2);
+    J raw = sess::arr(), def = sess::arr();
+    for (int r = 0; r < 6; r++) {
+        J a = sess::arr(), b = sess::arr();
+        for (int d = 0; d < 11; d++) {
+            a.a.push_back(sess::integer(nv_host_cmx_raw(d, m.depth[r][d])));
+            b.a.push_back(sess::integer(nv_host_cmx_raw(d, nv::cmx_default(r, d))));
+        }
+        raw.a.push_back(a);
+        def.a.push_back(b);
+    }
+    o.o["raw"] = raw;
+    o.o["def"] = def;
+    J g = sess::arr();
+    for (int k = 0; k < m.ngm2 && k < 32; k++) {
+        char b[48] = {};
+        nv_host_cmx_printed(m.gm2[k].dest, m.gm2[k].depth, b, sizeof b);
+        J e = sess::arr();
+        e.a.push_back(sess::integer(m.gm2[k].cc));
+        e.a.push_back(sess::integer(m.gm2[k].dest));
+        e.a.push_back(sess::str(b));
+        g.a.push_back(e);
+    }
+    o.o["gm2"] = g;
+    return o;
+}
+
+static int part_channel(nv_host *h, int row)
+{
+    int n = nv_host_parts(h, nullptr, 0);
+    std::vector<nv_host_partinfo> ps((size_t)std::max(0, n));
+    n = nv_host_parts(h, ps.data(), n);
+    return row >= 0 && row < n ? ps[(size_t)row].channel : -2;
+}
+
 // a part's knobs on a layer: positions, whose they are, and each in its own words
 J synth_of(nv_host *h, int row, int layer)
 {
@@ -714,6 +798,10 @@ struct nv_ui_watch {
     bool piano = false;                 // (its piano card is open: its pedals read each poll)
     bool drums = false;                 // (its drums card is open: the kit, and the keys struck)
     bool effects = false;               // (its effects card is open)
+    bool matrix = false;                // (its matrix card is open)
+    std::string matrix_sent;
+    int cmx_learn = 0;                  // (CC1 (4) or CC2 (5) learnt from the next controller moved, since then)
+    long long cmx_learn_t = 0;
     std::string effects_sent;
     std::string drums_sent;
     int hit_ch = -1;                    // (the channel whose keys it watches, and their counts as last sent)
@@ -991,6 +1079,44 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         }
         if (w)
             w->effects_sent.clear();
+    } else if (call == "matrix") {             // the card opened (or shut: open false); tables: 1 for the printed depths
+        if (w) {
+            w->matrix = arg_i(q, "open", 1) != 0;
+            w->matrix_sent.clear();
+            if (!w->matrix)
+                w->cmx_learn = 0;
+        }
+        r.o["matrix"] = cmx_of(h, row, w ? w->cmx_learn : 0);
+        if (arg_i(q, "tables", 0))
+            r.o["tables"] = cmx_tables();
+    } else if (call == "cmx_set" || call == "cmx_assign" || call == "cmx_learn") {
+        const int ch = part_channel(h, row);
+        if (ch < -1) {
+            ok = false;
+            r.o["error"] = sess::str("no part " + std::to_string(row));
+        } else if (call == "cmx_set") {        // src 0-5, dest 0-10, raw (a GS byte)
+            const int src = (int)arg_i(q, "src", -1), dest = (int)arg_i(q, "dest", -1);
+            if (src < 0 || src > 5 || dest < 0 || dest > 10) {
+                ok = false;
+                r.o["error"] = sess::str("no cell");
+            } else {
+                nv_host_cmx_cell(h, ch, src, dest, (int)arg_i(q, "raw", 0));
+            }
+        } else if (call == "cmx_assign") {     // which 4 (CC1) or 5 (CC2) is cc 0-95
+            const int which = (int)arg_i(q, "which", 0), cc = (int)arg_i(q, "cc", -1);
+            if ((which != 4 && which != 5) || cc < 0 || cc > 95) {
+                ok = false;
+                r.o["error"] = sess::str("no assignable controller");
+            } else {
+                nv_host_cmx_assign(h, ch, which, cc);
+            }
+        } else if (w) {                        // which 4 or 5 learnt (0 stops)
+            const int which = (int)arg_i(q, "which", 0);
+            w->cmx_learn = which == 4 || which == 5 ? which : 0;
+            w->cmx_learn_t = nv_host_now_ns();
+        }
+        if (w)
+            w->matrix_sent.clear();
     } else if (call == "panic") {
         nv_host_panic(h);
     } else {
@@ -1122,6 +1248,28 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
                 r.o["drums"] = dj;
                 any = true;
             }
+        }
+    }
+    if (w->matrix && w->tick % 6 == 2) {
+        if (w->cmx_learn) {                     // (the next controller moved, 1-95, within eight seconds)
+            long long when = 0;
+            const int code = nv_host_last_ctl(h, &when);
+            if (code > 0 && code <= 95 && when > w->cmx_learn_t) {
+                const int ch = part_channel(h, w->row);
+                if (ch >= -1)
+                    nv_host_cmx_assign(h, ch, w->cmx_learn, code);
+                w->cmx_learn = 0;
+            } else if (nv_host_now_ns() - w->cmx_learn_t > 8000000000LL) {
+                w->cmx_learn = 0;
+            }
+        }
+        J mj = cmx_of(h, w->row, w->cmx_learn);
+        std::string ms;
+        put(ms, mj);
+        if (ms != w->matrix_sent) {
+            w->matrix_sent = ms;
+            r.o["matrix"] = mj;
+            any = true;
         }
     }
     if (w->effects && w->tick % 6 == 1) {      // (a file's or the keyboard's changes)

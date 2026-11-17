@@ -161,6 +161,7 @@ async function select(row) {
   if (s.stops && s.stops.row === S.row) setStops(s.stops);
   if (card === 'piano') { const r = await Wire.call('piano'); if (r.piano) setPiano(r.piano); }
   if (card === 'effects') drawEffects();
+  if (card === 'matrix') { const r = await Wire.call('matrix'); if (r.matrix) setMatrix(r.matrix); }
   if (card === 'drums') { DR.sel = null; const r = await Wire.call('drums'); if (r.drums) setDrums(r.drums); }
 }
 Kit.press($('prev'), () => select(S.row - 1));
@@ -177,10 +178,10 @@ async function soloPart(row) {
 const CARDS = [
   ['parts', 'Parts', true], ['library', 'Library', true], ['synth', 'Synth', true],
   ['stops', 'Stops', true], ['piano', 'Piano', true], ['drums', 'Drums', true], ['effects', 'Effects', true],
-  ['matrix', 'Matrix'], ['tuning', 'Tuning'], ['control', 'Control'], ['scenes', 'Scenes'], ['setup', 'Setup'],
+  ['matrix', 'Matrix', true], ['tuning', 'Tuning'], ['control', 'Control'], ['scenes', 'Scenes'], ['setup', 'Setup'],
 ];
 const LATER = {
-  matrix: 'what each controller moves', tuning: 'the tuner, pitch standard and the Eastern systems',
+  tuning: 'the tuner, pitch standard and the Eastern systems',
   control: 'on-screen controls, routes and learn', scenes: 'presets, scenes, the GS reset and the metronome',
   setup: 'MIDI, audio, borrowed time and the globals',
 };
@@ -206,6 +207,7 @@ function showCard(id) {
   if (id === 'stops') drawStops();
   Wire.call('piano', { open: id === 'piano' ? 1 : 0 }).then(r => { if (r.piano) setPiano(r.piano); });
   Wire.call('drums', { open: id === 'drums' ? 1 : 0, sets: DR.sets ? 0 : 1 }).then(r => { if (r.drums) setDrums(r.drums); });
+  Wire.call('matrix', { open: id === 'matrix' ? 1 : 0, tables: MX.t ? 0 : 1 }).then(r => { if (r.tables) MX.t = r.tables; if (r.matrix) setMatrix(r.matrix); });
   Wire.call('effects', { open: id === 'effects' ? 1 : 0, tables: FX.t ? 0 : 1 }).then(r => { if (r.tables) FX.t = r.tables; if (r.effects) setEffects(r.effects); });
 }
 
@@ -883,14 +885,14 @@ function listKnob(parent, o) {
   const say = i => (o.shown ? o.shown[i] : String(o.vals[i]));
   let last = -1;
   const k = Kit.knob(parent, {
-    label: o.label, value: n > 1 ? idx(o.value) / (n - 1) : 0, centred: o.centred,
+    label: o.label, value: n > 1 ? idx(o.value) / (n - 1) : 0, centred: o.centred, onReset: o.onReset,
     fmt: x => say(Math.round(x * (n - 1))),
     onChange: x => { const i = Math.round(x * (n - 1)); if (i !== last) { last = i; o.onSet(o.vals[i]); } },
     onInfo: () => Kit.sheet({ title: o.label, text: say(idx(o.value)), label: 'Value', value: o.vals[idx(o.value)], digits: 0,
       lo: o.vals[0], hi: o.vals[n - 1], hint: o.hint || '', onSet: v => { const j = o.vals.reduce((b, x, q) => Math.abs(x - v) < Math.abs(o.vals[b] - v) ? q : b, 0); o.onSet(o.vals[j]); } }),
   });
   k.el.addEventListener('pointerdown', () => { if (o.onTouch) o.onTouch(); });
-  return { el: k.el, set: v => { const i = idx(v); k.set(n > 1 ? i / (n - 1) : 0, say(i)); } };
+  return { el: k.el, set: (v, own) => { const i = idx(v); k.set(n > 1 ? i / (n - 1) : 0, say(i), own); } };
 }
 // what this screen just set stands until the engine has it (a poll in between reads the old)
 function fxMine(key, v) { FX.mine[key] = { v, until: performance.now() + HOLD_MS }; }
@@ -1012,6 +1014,67 @@ function drawFxAbout(of) {
   } else el.innerHTML = aboutHtml(FX_NOTE[w].replace(' (system)', ''), a.effects[FX_NOTE[w]]);
 }
 
+// ---------------------------------------------------------------- THE MATRIX CARD
+// What each controller moves on the selected part's channel (GS's controller
+// matrix, 40 2x): the six sources down the side, the eleven destinations
+// across, a knob in each cell in the destination's own unit. Changed from
+// power-on: lit. Double-tap a cell: back to power-on.
+const MX = { t: null, m: null, sig: '', ctl: {} };
+const MX_SRC = ['Mod wheel', 'Pitch bend', 'Channel aftertouch', 'Poly aftertouch', 'CC1', 'CC2'];
+const MX_DEST = [['', 'Pitch'], ['', 'Cutoff'], ['', 'Amplitude'], ['LFO 1', 'Rate'], ['LFO 1', 'Pitch'], ['LFO 1', 'Filter'], ['LFO 1', 'Amp'],
+  ['LFO 2', 'Rate'], ['LFO 2', 'Pitch'], ['LFO 2', 'Filter'], ['LFO 2', 'Amp']];
+function setMatrix(m) { if (m.row !== S.row) return; MX.m = m; if (card === 'matrix') drawMatrix(); }
+function drawMatrix() {
+  const m = MX.m, t = MX.t, el = $('mx');
+  if (!m || !t) return;
+  $('mxWho').textContent = `part ${pad(m.row + 1, 2)} · ${m.part}`;
+  $('mxInfo').textContent = m.channel < 0 ? 'every channel' : `channel ${m.channel + 1}`;
+  if (!m.raw) { el.innerHTML = '<p class="empty">Reading the matrix…</p>'; MX.sig = ''; return; }
+  if (MX.sig !== 'grid') {
+    MX.sig = 'grid'; MX.ctl = {};
+    el.innerHTML = `<div class="mx-h"></div>` + MX_DEST.map(([g, d], j) => `<div class="mx-h${j === 3 || j === 7 ? ' grp' : ''}"><small>${g}</small>${d}</div>`).join('') +
+      MX_SRC.map((s, i) => `<div class="mx-src" data-src="${i}"><b>${s}</b>${i >= 4 ? `<span class="mx-cc"></span><button class="hb mx-learn" data-kit="1" data-which="${i}">LEARN</button>` : ''}</div>` +
+        MX_DEST.map((_, j) => `<div class="mx-cell${j === 3 || j === 7 ? ' grp' : ''}" data-c="${i}.${j}"></div>`).join('')).join('');
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 11; j++) {
+      const d = t[j];
+      MX.ctl[i + '.' + j] = listKnob(el.querySelector(`[data-c="${i}.${j}"]`), {
+        label: '', vals: range(d.lo, d.hi), shown: d.shown, value: d.zero, centred: Math.abs((d.zero - d.lo) / (d.hi - d.lo) - 0.5) < 0.05,
+        onSet: v => { fxMine('mx' + i + '.' + j, v); Wire.call('cmx_set', { src: i, dest: j, raw: v }); },
+        onReset: () => { const v = MX.m.def[i][j]; fxMine('mx' + i + '.' + j, v); MX.ctl[i + '.' + j].set(v, false); Wire.call('cmx_set', { src: i, dest: j, raw: v }); },
+      });
+    }
+  }
+  for (let i = 0; i < 6; i++) {
+    let used = false;
+    for (let j = 0; j < 11; j++) {
+      const v = fxVal('mx' + i + '.' + j, m.raw[i][j]), own = v !== m.def[i][j];
+      MX.ctl[i + '.' + j].set(v, own);
+      used = used || v !== t[j].zero;
+    }
+    el.querySelector(`.mx-src[data-src="${i}"]`).classList.toggle('used', used);
+  }
+  el.querySelectorAll('.mx-cc').forEach((c, k) => { c.textContent = 'is CC' + (k ? m.cc2 : m.cc1); });
+  el.querySelectorAll('.mx-learn').forEach(b => {
+    const on = m.learning === +b.dataset.which;
+    b.textContent = on ? 'MOVE A CONTROL…' : 'LEARN'; b.classList.toggle('blink', on);
+  });
+  $('mxGm2').textContent = m.gm2.length ? 'Set by a file\'s GM2 messages (shown, not changed here): ' +
+    m.gm2.map(([cc, d, txt]) => `CC${cc} → ${MX_DEST[d].join(' ').trim()} ${txt}`).join(' · ') : '';
+  const a = S.about, k = a && a.effects && Object.keys(a.effects).find(x => x.startsWith('Controller matrix'));
+  $('mxAbout').innerHTML = k ? aboutHtml('Controller matrix', a.effects[k]) : '';
+}
+Kit.press($('mx'), async b => {
+  const which = +b.dataset.which, on = MX.m && MX.m.learning === which;
+  await Wire.call('cmx_learn', { which: on ? 0 : which });
+  const r = await Wire.call('matrix'); if (r.matrix) setMatrix(r.matrix);
+}, '.mx-learn');
+Kit.press($('mx'), c => {           // (CC1/CC2's number, typed)
+  const which = c.closest('.mx-src').dataset.src === '4' ? 4 : 5, m = MX.m;
+  Kit.sheet({ title: (which === 4 ? 'CC1' : 'CC2') + ': which controller', text: 'CC' + (which === 4 ? m.cc1 : m.cc2), label: 'Controller number',
+    value: which === 4 ? m.cc1 : m.cc2, digits: 0, lo: 0, hi: 95, hint: 'Or LEARN: move the knob or pedal you want.',
+    onSet: async v => { await Wire.call('cmx_assign', { which, cc: Math.round(v) }); const r = await Wire.call('matrix'); if (r.matrix) setMatrix(r.matrix); } });
+}, '.mx-cc');
+
 // ---------------------------------------------------------------- THE NOTES
 // What each program and stop is, and what it was fitted to (about.json:
 // examples/gm_coverage.py --about, the coverage page's own words)
@@ -1079,6 +1142,7 @@ Wire.connect({
     if (m.drums) setDrums(m.drums);
     if (m.hits) lightPads(m.hits);
     if (m.effects) setEffects(m.effects);
+    if (m.matrix) setMatrix(m.matrix);
     if (m.synth && m.synth.row === S.row && (m.synth.layer === S.layer || m.synth.layers <= S.layer)) { S.layer = m.synth.layer; S.synth = m.synth; if (card === 'synth') drawSynth(); }
   },
   down() { $('gone').hidden = false; },

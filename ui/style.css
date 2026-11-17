@@ -307,3 +307,27 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .fx-knobs.sm .kit-knob { width: 70px; }
 .fx-knobs.sm .kit-dial { width: 42px; height: 42px; }
 .fx-room:empty { display: none; }
+
+/* ---- the matrix card: sources down the side, destinations across, a knob in each cell */
+.mx { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: 210px repeat(11, 1fr); gap: 3px;
+  align-content: start; background: #1f2225; border: 1px solid var(--edge); border-radius: 9px; padding: 8px; }
+.mx-h { font: 700 11px var(--f-ui); letter-spacing: .1em; text-transform: uppercase; text-align: center; color: var(--silk); align-self: end; padding-bottom: 4px; }
+.mx-h small { display: block; font-size: 10px; color: var(--silk-dim); min-height: 13px; }
+.mx-h.grp, .mx-cell.grp { border-left: 1px solid #3a3f45; }
+.mx-src { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 8px; border-top: 1px solid #2c3035; }
+.mx-src b { font-size: 14px; color: var(--silk-dim); }
+.mx-src.used b { color: var(--lcd); }
+.mx-cc { font: 14px var(--f-lcd); color: var(--lcd); padding: 4px 0; }
+.mx-learn { padding: 9px 6px; font-size: 11px; }
+.mx-learn.blink { color: var(--lcd); animation: blink 0.8s steps(2) infinite; }
+.mx-cell { display: flex; justify-content: center; border-top: 1px solid #2c3035; }
+.mx-cell .kit-knob { width: 100%; padding: 4px 0 2px; }
+.mx-cell .kit-dial { width: 44px; height: 44px; }
+.mx-cell .kit-label { display: none; }
+.mx-cell .kit-value { font-size: 14px; white-space: nowrap; }
+#mxGm2:empty { display: none; }
+.mx-src { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.mx-src b { flex-basis: 100%; }
+.mx-cell .kit-dial { width: 38px; height: 38px; }
+.mx-cell .kit-knob { padding: 2px 0 0; gap: 0; }
+.mx-learn { padding: 7px 8px; }
