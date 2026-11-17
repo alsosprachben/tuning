@@ -524,3 +524,9 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .fl-time { font: 21px var(--f-lcd); color: var(--lcd); min-width: 120px; }
 #flOut audio { width: 100%; margin-top: 4px; }
 .fl-warn { margin-top: 18px; }
+.fl-opts { margin-top: 6px; }
+.fl-sug { color: var(--own); }
+.fl-det { margin: 6px 0 10px; font-size: 13px; }
+.fl-det summary { cursor: pointer; padding: 6px 0; }
+.fl-det ul { margin: 4px 0 0 18px; padding: 0; }
+.fl-det li { margin: 3px 0; overflow-wrap: anywhere; }

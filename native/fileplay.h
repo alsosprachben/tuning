@@ -40,6 +40,8 @@ const char *nv_midi_track_name(void *p, int i);
 int nv_midi_n_findings(void *p);
 const char *nv_midi_finding(void *p, int i);
 int nv_midi_muxed(void *p);
+const char *nv_midi_mux_line(void *p, int i);
+const char *nv_midi_mt32_line(void *p, int i);
 }
 extern char **environ;
 
@@ -47,7 +49,10 @@ namespace fileplay {
 
 using J = sess::J;
 
-static const char *MODES[] = {"auto", "gm", "ours", "sc55", "sc88", "sc88pro", "sc8850", "cm64", "names"};
+static const char *MODES[] = {"auto", "gm", "ours", "sc55", "sc88", "sc88pro", "sc8850", "cm64", "names", "mt32", "cm64u"};
+// (the MT-32 family's: cm64 a Sound Canvas's Init CM-64; mt32 / cm64u the unit
+// itself, its exclusives and channels -- mt32.h; all read in the SC-55 map)
+static bool mt32_family(const std::string &m) { return m == "cm64" || m == "mt32" || m == "cm64u"; }
 // THE MT-32's VELOCITY (the reader's TUNING_MT32_VEL): its 3/4 v + 32, in the
 // CM-64 map and orchestra by names; off, the file's velocities as written
 static std::atomic<bool> mt32_vel{true};
@@ -143,6 +148,8 @@ static void *read_mode(const std::vector<uint8_t> &b, const std::string &mode, i
         setenv("TUNING_CM64", "1", 1);
     if (mode == "names")                // (orchestra by track names: mt32mux's, partmux.h)
         setenv("TUNING_PARTS", "names", 1);
+    if (mode == "mt32" || mode == "cm64u")      // (the unit itself: mt32.h)
+        setenv("TUNING_MT32", mode == "mt32" ? "mt32" : "cm64", 1);
     if (!mt32_vel)
         setenv("TUNING_MT32_VEL", "0", 1);
     if (mode == "look") {               // (inspect's: an MT-32 exclusive counted, not refused; the file check)
@@ -153,6 +160,7 @@ static void *read_mode(const std::vector<uint8_t> &b, const std::string &mode, i
     unsetenv("TUNING_GM");
     unsetenv("TUNING_CM64");
     unsetenv("TUNING_PARTS");
+    unsetenv("TUNING_MT32");
     unsetenv("TUNING_MT32_VEL");
     unsetenv("TUNING_MT32_SEEN");
     unsetenv("TUNING_CHECK");
@@ -170,8 +178,10 @@ struct Info {
     int programs = 0, sysex = 0;
     std::vector<std::string> findings;  // the file check's (filecheck.h: mt32check's)
     bool muxed = false;                 // every note stamped with its own program
+    std::string suggest, suggest_why;   // a mode worth trying (orchestra by names)
+    std::vector<std::string> report;    // what a mode did with it (inspect's mode: the mux's, the unit's)
 };
-static Info inspect(const std::string &path)
+static Info inspect(const std::string &path, const std::string &mode = "")
 {
     Info I;
     std::vector<uint8_t> b;
@@ -224,10 +234,31 @@ static Info inspect(const std::string &path)
         master = master || low.rfind("master parameters", 0) == 0;
     }
     mt = nmt > 0 || master;
-    for (int i = 0; const char *f = nv_midi_finding(m, i); i++)
+    int fights = 0, named = 0;
+    for (int i = 0; const char *f = nv_midi_finding(m, i); i++) {
         I.findings.push_back(f);
+        fights += strstr(f, "tracks write controllers") != nullptr || strstr(f, "carries named instrument") != nullptr;
+    }
+    for (int i = 0; const char *nm = nv_midi_track_name(m, i); i++)
+        named += nm[0] != 0;
     I.muxed = nv_midi_muxed(m) == 1;
     nv_midi_free(m);
+    // ORCHESTRA BY NAMES worth trying: named parts sharing channels (the
+    // check's controller fights, a named part on the drum channel), or more
+    // named tracks than channels -- an MT-32 era orchestral file's shape
+    if (!I.muxed && (fights > 0 || named > 16) && named >= 4) {
+        I.suggest = "names";
+        I.suggest_why = fights ? "its named parts share channels" : "it names more parts than there are channels";
+    }
+    // ...and what the mode asked for would do with it (the mux's parts, the unit's report)
+    if (mode == "names" || mode == "mt32" || mode == "cm64u") {
+        int e2 = 0;
+        if (void *q = read_mode(b, mode, &e2)) {
+            for (int i = 0; const char *l = mode == "names" ? nv_midi_mux_line(q, i) : nv_midi_mt32_line(q, i); i++)
+                I.report.push_back(l);
+            nv_midi_free(q);
+        }
+    }
     for (int c = 0; c < 16; c++)
         if (used[(size_t)c])
             I.chans.push_back(c);
@@ -235,9 +266,12 @@ static Info inspect(const std::string &path)
     if (gsr) {
         I.detected = "gs";
         I.why = "it sends a GS Reset";
+    } else if (mt && nmt > 0) {
+        I.detected = "mt32";            // (its own exclusives: written for the unit, which reads them)
+        I.why = "it sends MT-32 messages, which the unit itself reads";
     } else if (mt) {
         I.detected = "cm64";
-        I.why = nmt > 0 ? "it sends MT-32 messages" : "its 'Master Parameters' track: an MT-32 sequencer's";
+        I.why = "its 'Master Parameters' track: an MT-32 sequencer's";
     } else if (gm) {
         I.detected = "gm";
         I.why = "it sends GM System On";
@@ -398,7 +432,7 @@ struct Player {
         }
         wait_built(h, stop, 120.0);
         // 2: THE MAP its banks are read in (live's standard), put back at the end
-        const int mp = md == "cm64" ? 1 : map_of(md);
+        const int mp = mt32_family(md) ? 1 : map_of(md);
         saved_map = -1;
         if (mp >= 0) {
             saved_map = (int)lround(nv_host_global(h, 13));
@@ -651,7 +685,7 @@ struct Render {
                 c = '_';
         mkdir(dir.c_str(), 0755);
         // what it is read in: the map, as the live standard or the reader's TUNING_*
-        const int mp = md == "cm64" ? 1 : map_of(md) >= 0 ? map_of(md) : (int)lround(nv_host_global(h, 13));
+        const int mp = mt32_family(md) ? 1 : map_of(md) >= 0 ? map_of(md) : (int)lround(nv_host_global(h, 13));
         std::vector<std::string> env = {"TUNING_MAP=" + std::to_string(mp)};
         if (md == "gm")
             env.push_back("TUNING_GM=1");
@@ -659,6 +693,8 @@ struct Render {
             env.push_back("TUNING_CM64=1");
         if (md == "names")
             env.push_back("TUNING_PARTS=names");
+        if (md == "mt32" || md == "cm64u")
+            env.push_back(std::string("TUNING_MT32=") + (md == "mt32" ? "mt32" : "cm64"));
         if (!mt32_vel)
             env.push_back("TUNING_MT32_VEL=0");
         std::string exe = nv_self_exe();

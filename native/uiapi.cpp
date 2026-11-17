@@ -1075,6 +1075,7 @@ static J files_state()
     o.o["render"] = g_render.state();
     o.o["renders"] = sess::str(g_renders_dir);
     o.o["file_export"] = sess::boolean(!g_file_export.empty());
+    o.o["mt32_vel"] = sess::boolean(fileplay::mt32_vel);
     return o;
 }
 
@@ -1567,7 +1568,8 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         r.o["files"] = files_state();
     } else if (call == "file_info") {          // path: its length, channels, the mode it asks for
         const J *pj = q.get("path");
-        fileplay::Info I = fileplay::inspect(pj && pj->is(J::STR) ? pj->s : "");
+        const J *mj = q.get("mode");
+        fileplay::Info I = fileplay::inspect(pj && pj->is(J::STR) ? pj->s : "", mj && mj->is(J::STR) ? mj->s : "");
         J o = sess::obj(), ch = sess::arr();
         o.o["ok"] = sess::boolean(I.ok);
         o.o["err"] = sess::str(I.err);
@@ -1583,7 +1585,17 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             fd.a.push_back(sess::str(f));
         o.o["findings"] = fd;
         o.o["muxed"] = sess::boolean(I.muxed);
+        o.o["suggest"] = sess::str(I.suggest);
+        o.o["suggest_why"] = sess::str(I.suggest_why);
+        J rp = sess::arr();
+        for (const auto &l : I.report)
+            rp.a.push_back(sess::str(l));
+        o.o["report"] = rp;
         r.o["info"] = o;
+    } else if (call == "file_opts") {          // mt32_vel: the MT-32's velocity on (1) or off (0)
+        if (q.get("mt32_vel"))
+            fileplay::mt32_vel = arg_i(q, "mt32_vel", 1) != 0;
+        r.o["files"] = files_state();
     } else if (call == "file_play") {          // path, mode: played live, the parts its own
         const J *pj = q.get("path"), *mj = q.get("mode");
         g_player.play(h, pj && pj->is(J::STR) ? pj->s : "", mj && mj->is(J::STR) ? mj->s : "auto");

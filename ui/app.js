@@ -1545,8 +1545,22 @@ Kit.press($('suStd'), b => { Wire.call('global_set', { i: 13, v: +b.dataset.std 
 // in the mode chosen (what the file says, GM, a Sound Canvas map, MT-32)
 const FL = { dir: null, list: null, sel: null, info: null, mode: 'auto', f: null, ask: null };
 const FL_MODES = [['auto', 'AUTO'], ['gm', 'GM'], ['ours', 'GS: OURS'], ['sc55', 'GS: SC-55'], ['sc88', 'GS: SC-88'],
-  ['sc88pro', 'GS: SC-88PRO'], ['sc8850', 'GS: SC-8850'], ['cm64', 'MT-32 / CM-64']];
-const FL_SAY = { gs: 'GS', gm: 'GM', cm64: 'MT-32 / CM-64' };
+  ['sc88pro', 'GS: SC-88PRO'], ['sc8850', 'GS: SC-8850'], ['cm64', 'MT-32: SOUND CANVAS'], ['mt32', 'MT-32: THE UNIT'],
+  ['cm64u', 'CM-64: THE UNIT'], ['names', 'ORCHESTRA BY NAMES']];
+const FL_SAY = { gs: 'GS', gm: 'GM', cm64: 'MT-32 (as a Sound Canvas plays it)', mt32: 'MT-32 (the unit itself)', names: 'an orchestra by track names' };
+// (the check's and the mux's lines count channels from 0, as mt32check and
+// mt32mux print them: shown from 1, as everywhere else here)
+const flCh = x => x.replace(/\bch(\d+)\b/g, (m, n) => `channel ${+n + 1}`).replace(/ {2,}/g, ' ');
+const FL_REPORTS = { names: 'Its parts, by their names', mt32: 'What the MT-32 does with it', cm64u: 'What the CM-64 does with it' };
+// (the mode a file plays in: AUTO's is what it found)
+const flEff = () => (FL.mode === 'auto' && FL.info && FL.info.ok ? FL.info.detected : FL.mode);
+async function flReport() {
+  const p = FL.sel, md = flEff();
+  if (!p || !FL_REPORTS[md] || (FL.repFor === p + '|' + md)) { drawFiles(); return; }
+  const r = await Wire.call('file_info', { path: p, mode: md });
+  if (FL.sel === p && r.info) { FL.rep = r.info.report || []; FL.repFor = p + '|' + md; }
+  drawFiles();
+}
 function flSavedDir() { try { return localStorage.getItem('clavitone.dir') || ''; } catch (_) { return ''; } }
 const mmss = s => `${Math.floor(s / 60)}:${pad(Math.floor(s % 60), 2)}`;
 function setFileList(l) {
@@ -1572,7 +1586,7 @@ Kit.press($('flList'), async b => {
   if (b.dataset.dir === '1') { flGo(p); return; }
   FL.sel = p; FL.info = null; FL.ask = null; drawFileList(); drawFiles();
   const r = await Wire.call('file_info', { path: p });
-  if (FL.sel === p) { FL.info = r.info; drawFiles(); }
+  if (FL.sel === p) { FL.info = r.info; drawFiles(); flReport(); }
 }, '.fl-e');
 function setFiles(f) { FL.f = f; if (card === 'files') drawFiles(); }
 function drawFiles() {
@@ -1582,7 +1596,20 @@ function drawFiles() {
     `${mmss(i.total)} long · ${i.channels.length} channel${i.channels.length === 1 ? '' : 's'} (${i.channels.map(c => c + 1).join(', ')}) · ${i.programs} program change${i.programs === 1 ? '' : 's'}. ` +
     `It reads as ${FL_SAY[i.detected] || i.detected}: ${i.why}.`;
   $('flModes').innerHTML = FL_MODES.map(([k, t]) => `<button class="tns${FL.mode === k ? ' on' : ''}" data-kit="1" data-mode="${k}">` +
-    `${t}${k === 'auto' && i && i.ok ? ': ' + (FL_SAY[i.detected] || i.detected) : ''}</button>`).join('');
+    `${t}${k === 'auto' && i && i.ok ? ': ' + (FL_MODES.find(m => m[0] === i.detected) || [0, 'GS'])[1] : ''}</button>`).join('');
+  // THE FILE CHECK's findings, and a mode worth trying
+  const fd = i && i.ok ? i.findings || [] : [];
+  flSet('flFind', (i && i.ok && i.suggest && flEff() !== i.suggest ?
+    `<p class="pn-note fl-sug">Worth trying ${esc((FL_MODES.find(m => m[0] === i.suggest) || [0, i.suggest])[1])}: ${esc(i.suggest_why)}.</p>` : '') +
+    (fd.length ? `<details class="fl-det"${FL.findOpen ? ' open' : ''}><summary>The file check: ${fd.length} thing${fd.length === 1 ? '' : 's'} to know</summary><ul>` +
+      fd.map(x => `<li>${esc(flCh(x))}</li>`).join('') + '</ul></details>' : ''));
+  const em = flEff();
+  flSet('flRep', FL_REPORTS[em] && FL.repFor === FL.sel + '|' + em ?
+    `<details class="fl-det"${FL.repOpen !== false ? ' open' : ''}><summary>${FL_REPORTS[em]}${FL.rep.length ? '' : ': nothing to report'}</summary><ul>` +
+      FL.rep.map(x => `<li>${esc(flCh(x))}</li>`).join('') + '</ul></details>' : '');
+  const velOn = !f || f.mt32_vel !== false;
+  $('flVel').classList.toggle('on', velOn);
+  $('flVel').textContent = 'MT-32 VELOCITY ' + (velOn ? 'ON' : 'OFF');
   const ok = !!(i && i.ok);
   const playing = !!(p && p.busy);
   $('flPlay').disabled = !ok || playing;
@@ -1609,7 +1636,16 @@ function drawFiles() {
     $('flOut').innerHTML = done ? `<p class="pn-note">Saved to ${esc(r.out)}</p><audio controls preload="none" src="${src}"></audio>` : '';
   }
 }
-Kit.press($('flModes'), b => { FL.mode = b.dataset.mode; drawFiles(); }, '.tns');
+Kit.press($('flModes'), b => { FL.mode = b.dataset.mode; flReport(); }, '.tns');
+// (the lists: drawn again only when they change, and each keeps open or shut as you left it)
+function flSet(id, html) { if (FL['html_' + id] !== html) { FL['html_' + id] = html; $(id).innerHTML = html; } }
+$('flFind').addEventListener('toggle', e => { FL.findOpen = e.target.open; }, true);
+$('flRep').addEventListener('toggle', e => { FL.repOpen = e.target.open; }, true);
+Kit.press($('flVel'), async () => {
+  const on = !(FL.f && FL.f.mt32_vel === false);
+  const r = await Wire.call('file_opts', { mt32_vel: on ? 0 : 1 });
+  if (r.files) setFiles(r.files);
+});
 Kit.press($('flPlay'), async () => { if (!FL.sel) return; const r = await Wire.call('file_play', { path: FL.sel, mode: FL.mode }); if (r.files) setFiles(r.files); });
 Kit.press($('flStop'), async () => { const r = await Wire.call('file_stop'); if (r.files) setFiles(r.files); });
 async function flRender(kind, whole) {

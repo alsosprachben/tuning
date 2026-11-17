@@ -580,7 +580,10 @@ Object.assign(HELP, {
   'fl:file': {
     title: 'The file',
     intro: 'Its length, the channels it plays, how many program changes it makes, and the mode it asks for.',
-    terms: [],
+    terms: [
+      ['The file check', 'Problems in the file that would sound like a wrong instrument: two programs at the start where only the last counts, two instruments on one channel, a pitched part on the drum channel, two tracks fighting over one channel\'s volume, a volume so low it is silence, notes out of the instrument\'s range. Tap to open the list.'],
+      ['Worth trying', 'A mode that suits the file better than the one chosen, and why.'],
+    ],
   },
   'fl:mode': {
     title: 'Mode',
@@ -590,7 +593,18 @@ Object.assign(HELP, {
       ['GM', 'A General MIDI module: bank selects are ignored, every program plays its plain sound.'],
       ['GS: OURS', 'Sound Canvas files, bank numbers in our own library\'s numbering.'],
       ['GS: SC-55 … SC-8850', 'Sound Canvas files, bank numbers as that module laid them out (a file that names its own map with CC32 keeps it).'],
-      ['MT-32 / CM-64', 'Files for the MT-32 or CM-64: parts 1 to 9 the MT-32\'s sounds, 10 its drums, 11 to 16 the CM-32P\'s, every pan mirrored. The file\'s own MT-32 messages (custom sounds) are not followed, as on a Sound Canvas.'],
+      ['MT-32: SOUND CANVAS', 'Files for the MT-32 or CM-64, as a Sound Canvas plays them (its Init CM-64): parts 1 to 9 the MT-32\'s sounds, 10 its drums, 11 to 16 the CM-32P\'s, every pan mirrored. The file\'s own MT-32 messages are ignored, as a Sound Canvas ignores them, and channel 1 plays a piano.'],
+      ['MT-32: THE UNIT', 'As the MT-32 itself plays the file: its parts on channels 2 to 9 and the drums on 10 (channel 1 and 11 to 16 silent unless the file moves them), and the file\'s MT-32 messages followed: which sound each program number selects, key shift, fine tune, bend range, each part\'s level and pan, the drums\' levels and pans, master volume and tune, the reverb. A custom sound the file builds plays as our voice nearest its name. What it cannot follow is listed under the modes. AUTO chooses this for a file that sends MT-32 messages.'],
+      ['CM-64: THE UNIT', 'The same as the MT-32, with the CM-64\'s CM-32P parts on channels 11 to 16 and its sound effects on drum keys 76 to 108.'],
+      ['ORCHESTRA BY NAMES', 'For an orchestral file of the MT-32 years that names its parts on its tracks (Flutes, Horns, Timpani…): each part plays the instrument its name says, whatever program number it sends, and parts that shared a channel get one each, or share one only where they never play the same note at once. Suggested above the modes when a file looks like one. The parts it found are listed under the modes.'],
+    ],
+  },
+  'fl:vel': {
+    title: 'MT-32 velocity',
+    intro: 'An MT-32 spans about 30 dB from its softest note to its loudest; our instruments span far more. Files written for one come out far too dynamic unless their velocities are compressed to match.',
+    terms: [
+      ['ON', 'In the MT-32 modes and ORCHESTRA BY NAMES, each velocity v plays as 3/4 v + 32 (set as each part\'s velocity sense, so the Parts card shows it). Leave it on for MT-32 files.'],
+      ['OFF', 'The file\'s velocities as written.'],
     ],
   },
   'fl:play': {
@@ -750,7 +764,7 @@ const HELP_TOC = [
   ['Tuning', ['tuning', 'tn:shape', 'tn:east']],
   ['Control', ['control', 'ct:strip', 'ct:routes', 'ct:new']],
   ['Scenes', ['scenes', 'sc:presets', 'sc:scenes', 'sc:metro', 'sc:gs']],
-  ['Files', ['files', 'fl:browse', 'fl:file', 'fl:mode', 'fl:play', 'fl:render']],
+  ['Files', ['files', 'fl:browse', 'fl:file', 'fl:mode', 'fl:vel', 'fl:play', 'fl:render']],
   ['Setup', ['setup', 'su:midi', 'su:msgr', 'su:sound', 'su:rubato']],
 ];
 
