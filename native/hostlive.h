@@ -1257,6 +1257,21 @@ struct nv_host {
     std::vector<Midi> rx_store;
     std::vector<const Midi *> rxo_p;
     void enqueue(Midi &&m);
+    // MIDI FROM OUTSIDE (the inputs, the app's nv_host_midi): to the engine,
+    // or through the MODULE MODE first when one is on (uiapi's module.h: the
+    // input read as a GM / GS / MT-32 module reads it). While one is on, the
+    // session keeps the setup it set aside (module_saved), not the module's
+    std::atomic<bool> module_on{false};
+    void (*module_feed)(nv_host *, Midi &&) = nullptr;
+    std::mutex module_mu;
+    sess::J module_saved;
+    void input(Midi &&m)
+    {
+        if (module_on.load(std::memory_order_acquire) && module_feed)
+            module_feed(this, std::move(m));
+        else
+            enqueue(std::move(m));
+    }
     void reclaim();
     void trash(Midi *m);
     void trash(Post *p);

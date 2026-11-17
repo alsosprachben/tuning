@@ -3996,7 +3996,7 @@ void nv_host_midi_at(nv_host *h, const uint8_t *msg, int n, long long frame)
 void nv_host_midi(nv_host *h, const uint8_t *msg, int n)
 {
     std::lock_guard<std::mutex> lk(h->midi_in_mu);   // (the parse's running status: the callers')
-    h->midi_in.feed(msg, n, [&](Midi &&m) { h->enqueue(std::move(m)); });
+    h->midi_in.feed(msg, n, [&](Midi &&m) { h->input(std::move(m)); });
 }
 
 void nv_host_snapshot(nv_host *h, nv_host_snap *s)

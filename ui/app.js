@@ -1523,6 +1523,7 @@ function drawSetup() {
   $('suSw').innerHTML = `<button class="tns${g[6] > 0.5 ? ' on' : ''}" data-kit="1" data-g="6">THE GPU</button>` +
     `<button class="tns${g[7] > 0.5 ? ' on' : ''}" data-kit="1" data-g="7">THE ROOM'S TAIL</button>`;
   $('suRooms').innerHTML = (S.rooms || []).map((r, i) => `<button class="tns${r === x.room ? ' on' : ''}" data-kit="1" data-room="${i}">${esc(r)}</button>`).join('');
+  drawModule();
   $('suStd').innerHTML = STDS.map((n, i) => `<button class="tns${Math.round(g[13]) === i ? ' on' : ''}" data-kit="1" data-std="${i}">${n}</button>`).join('');
   const r = x.rubato, ms = f => (1000 * f / x.rate).toFixed(1) + ' ms';
   $('suRub').innerHTML = x.rubato_on ? [
@@ -1536,6 +1537,28 @@ Kit.press($('suIns'), b => { Wire.call('input_set', { path: b.dataset.path, on: 
 Kit.press($('suMsgrOpts'), b => { const k = b.dataset.m; Wire.call('messenger_set', { [k]: b.classList.contains('on') ? 0 : 1 }); b.classList.toggle('on'); }, '.tns');
 Kit.press($('suSw'), b => { Wire.call('global_set', { i: +b.dataset.g, v: b.classList.contains('on') ? 0 : 1 }); b.classList.toggle('on'); }, '.tns');
 Kit.press($('suRooms'), b => { Wire.call('global_set', { i: 8, v: +b.dataset.room }); $('suRooms').querySelectorAll('.tns').forEach(q => q.classList.toggle('on', q === b)); }, '.tns');
+// THE MODULE MODE (module.h): the MIDI input read as a sound module reads it
+// -- your parts set aside and put back -- in the Files card's modes, AUTO
+// switching on what the input sends
+const SU_MODS = [['off', 'OFF: MY PARTS'], ['auto', 'AUTO'], ['gm', 'GM'], ['ours', 'GS: OURS'], ['sc55', 'GS: SC-55'],
+  ['sc88', 'GS: SC-88'], ['sc88pro', 'GS: SC-88PRO'], ['sc8850', 'GS: SC-8850'], ['cm64', 'GS: INIT CM-64'], ['mt32', 'MT-32'],
+  ['cm64u', 'CM-64']];
+const SU_EFF = { gs: 'GS', gm: 'GM', ours: 'GS: OURS', sc55: 'GS: SC-55', sc88: 'GS: SC-88', sc88pro: 'GS: SC-88PRO',
+  sc8850: 'GS: SC-8850', cm64: 'GS: INIT CM-64', mt32: 'MT-32', cm64u: 'CM-64', leaving: 'leaving' };
+function setModule(m) { SU.mod = m; if (card === 'setup') drawModule(); }
+function drawModule() {
+  const m = SU.mod || { mode: 'off', eff: '', busy: false, stage: '', report: [] };
+  $('suMod').innerHTML = SU_MODS.map(([k, t]) => `<button class="tns${m.mode === k ? ' on' : ''}" data-kit="1" data-mod="${k}"${m.busy ? ' disabled' : ''}>` +
+    `${t}${k === 'auto' && m.mode === 'auto' && m.eff ? ': ' + (SU_EFF[m.eff] || m.eff) : ''}</button>`).join('');
+  $('suModStage').textContent = m.mode === 'off' ? 'Off: the input plays your own parts.' :
+    (m.stage ? m.stage[0].toUpperCase() + m.stage.slice(1) + '. ' : '') + 'Sixteen parts, one per channel; OFF puts your parts back.';
+  $('suModRep').innerHTML = m.report && m.report.length ? '<details class="fl-det" open><summary>What the MT-32 did with the input</summary><ul>' +
+    m.report.map(x => `<li>${esc(x)}</li>`).join('') + '</ul></details>' : '';
+}
+Kit.press($('suMod'), async b => {
+  const r = await Wire.call('module', { mode: b.dataset.mod });
+  if (r.module) setModule(r.module);
+}, '.tns');
 Kit.press($('suStd'), b => { Wire.call('global_set', { i: 13, v: +b.dataset.std }); $('suStd').querySelectorAll('.tns').forEach(q => q.classList.toggle('on', q === b)); }, '.tns');
 
 // ---------------------------------------------------------------- THE FILES CARD
@@ -1732,6 +1755,7 @@ Wire.connect({
     if (m.scenes) setScenes(m.scenes);
     if (m.setup) setSetup(m.setup);
     if (m.files) setFiles(m.files);
+    if (m.module) setModule(m.module);
     if (m.synth && m.synth.row === S.row && (m.synth.layer === S.layer || m.synth.layers <= S.layer)) { S.layer = m.synth.layer; S.synth = m.synth; if (card === 'synth') drawSynth(); }
   },
   down() { $('gone').hidden = false; },

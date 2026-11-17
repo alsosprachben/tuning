@@ -579,7 +579,7 @@ int nv_host::run(int argc, char **argv)
     }
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
-    reader = std::thread(midi_reader_ins, &ins, [this](Midi &&m) { enqueue(std::move(m)); });
+    reader = std::thread(midi_reader_ins, &ins, [this](Midi &&m) { input(std::move(m)); });
     // the register's jobs on their own thread, off the audio one (--reg-sync: in step)
     rsync = false; nort = getenv("TUNING_RT") && !strcmp(getenv("TUNING_RT"), "0"); nopanel = !isatty(1);
     for (int i = 1; i < argc; i++) {

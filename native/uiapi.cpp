@@ -1052,6 +1052,7 @@ double now_s()
 }  // namespace
 
 #include "fileplay.h"
+#include "module.h"
 
 // THE FILES CARD (fileplay.h): one player and one render for the engine;
 // the file export and the renders' folder nvlive names (nv_ui_files_config)
@@ -1067,6 +1068,7 @@ extern "C" void nv_ui_files_shutdown(nv_host *h)
 {
     g_player.halt(h);
     g_render.halt();
+    module::shutdown();
 }
 static J files_state()
 {
@@ -1092,6 +1094,7 @@ struct nv_ui_watch {
     bool setup = false;                 // (its setup card is open)
     bool files = false;                 // (its files card is open)
     std::string files_sent;
+    std::string module_sent;            // (the module mode's state, as last sent)
     std::string setup_sent;
     std::string scenes_sent;
     std::string control_sent;
@@ -1596,7 +1599,27 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         if (q.get("mt32_vel"))
             fileplay::mt32_vel = arg_i(q, "mt32_vel", 1) != 0;
         r.o["files"] = files_state();
+    } else if (call == "input_bytes") {        // bytes: MIDI as if from an input device (through the module mode; tests)
+        static MidiParse in_parse;
+        static std::mutex in_mu;
+        const J *bj = q.get("bytes");
+        std::vector<uint8_t> b;
+        if (bj && bj->is(J::ARR))
+            for (const J &v : bj->a)
+                if (v.is(J::NUM))
+                    b.push_back((uint8_t)((int)v.d() & 255));
+        std::lock_guard<std::mutex> lk(in_mu);
+        in_parse.feed(b.data(), (long)b.size(), [&](Midi &&m) { h->input(std::move(m)); });
+    } else if (call == "module") {             // mode: the MIDI input read as that module ("off": the player's parts)
+        const J *mj = q.get("mode");
+        std::string why;
+        if (mj && mj->is(J::STR) && !module::set(h, mj->s, why)) {
+            r.o["ok"] = sess::boolean(false);
+            r.o["error"] = sess::str(why);
+        }
+        r.o["module"] = module::state();
     } else if (call == "file_play") {          // path, mode: played live, the parts its own
+        module::off_now(h);                     // (the module mode let go first: the file's parts are its own)
         const J *pj = q.get("path"), *mj = q.get("mode");
         g_player.play(h, pj && pj->is(J::STR) ? pj->s : "", mj && mj->is(J::STR) ? mj->s : "auto");
         r.o["files"] = files_state();
@@ -1771,6 +1794,16 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
         if (fs != w->files_sent) {
             w->files_sent = fs;
             r.o["files"] = fj;
+            any = true;
+        }
+    }
+    if (w->tick % 6 == 1) {                   // (the module mode, five times a second: AUTO's switch, its stage)
+        J mj = module::state();
+        std::string ms;
+        put(ms, mj);
+        if (ms != w->module_sent) {
+            w->module_sent = ms;
+            r.o["module"] = mj;
             any = true;
         }
     }

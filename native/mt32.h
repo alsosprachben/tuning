@@ -166,37 +166,50 @@ struct Report {
     }
 };
 
-// One file's messages (absolute ticks) through the unit: returns them as
-// it would hear them, our channels and our messages
+// THE UNIT, a message at a time (feed, in order; finish at the end): a
+// file's messages (absolute ticks) or live input as it comes -- each one
+// heard as the unit hears it, said as our messages into OUT. No look-ahead:
+// the same state machine serves the file reader (apply) and live input
+// (the module mode)
 template <class MsgT>
-static std::vector<MsgT> apply(const std::vector<MsgT> &in, bool cm64, int &n_excl, Report &R)
-{
+struct Unit {
     State S;
-    S.reset();
-    std::vector<MsgT> out;
+    bool cm64 = false;
+    int n_excl = 0;
+    Report R;
+    std::vector<MsgT> *out = nullptr;
     long long now = 0;
     // per part, what was last sent (so a patch re-selected sends only what moved)
     int sent_ks[9], sent_ft[9], sent_bend[9], sent_rev[9];
-    std::fill(sent_ks, sent_ks + 9, 24);
-    std::fill(sent_ft, sent_ft + 9, 50);
-    std::fill(sent_bend, sent_bend + 9, 12);
-    std::fill(sent_rev, sent_rev + 9, 1);
     std::map<int, long> dropped;        // channel -> notes no part received
     std::set<std::pair<int, int>> held; // (our channel, key) sounding: a moved part's let go by name
     long rhythm_out = 0;
-    auto emit = [&](int ch, int st, int a, int b) { out.push_back(MsgT{now, st | ch, a, b, 0, {}}); };
-    auto ex = [&](std::vector<uint8_t> d) { out.push_back(MsgT{now, 0xF0, 0, 0, 0, d}); };
-    auto gs = [&](int a1, int a2, int a3, int v) {
+    int rhythm_hi = 87;
+    explicit Unit(bool cm) : cm64(cm)
+    {
+        S.reset();
+        std::fill(sent_ks, sent_ks + 9, 24);
+        std::fill(sent_ft, sent_ft + 9, 50);
+        std::fill(sent_bend, sent_bend + 9, 12);
+        std::fill(sent_rev, sent_rev + 9, 1);
+        rhythm_hi = cm64 ? 108 : 87;
+    }
+    void emit(int ch, int st, int a, int b) { out->push_back(MsgT{now, st | ch, a, b, 0, {}}); }
+    void ex(std::vector<uint8_t> d) { out->push_back(MsgT{now, 0xF0, 0, 0, 0, d}); }
+    void gs(int a1, int a2, int a3, int v)
+    {
         const int cs = (128 - (a1 + a2 + a3 + v) % 128) % 128;
         ex({0x41, 0x10, 0x42, 0x12, (uint8_t)a1, (uint8_t)a2, (uint8_t)a3, (uint8_t)v, (uint8_t)cs});
-    };
-    auto outch = [](int p) { return p < 8 ? p + 1 : 9; };
-    auto rpn = [&](int ch, int lsb, int msb, int l) {
+    }
+    static int outch(int p) { return p < 8 ? p + 1 : 9; }
+    void rpn(int ch, int lsb, int msb, int l)
+    {
         emit(ch, 0xB0, 101, 0); emit(ch, 0xB0, 100, lsb); emit(ch, 0xB0, 6, msb); emit(ch, 0xB0, 38, l);
         emit(ch, 0xB0, 101, 127); emit(ch, 0xB0, 100, 127);
-    };
+    }
     // A PATCH on part p (group, number, key shift, fine tune, bend, assign, reverb)
-    auto patch = [&](int p, const uint8_t *d, const std::string &why) {
+    void patch(int p, const uint8_t *d, const std::string &why)
+    {
         const int ch = outch(p);
         int bank = -1, prog = 0;
         std::string how;
@@ -239,17 +252,18 @@ static std::vector<MsgT> apply(const std::vector<MsgT> &in, bool cm64, int &n_ex
             sent_rev[p] = rev;
         }
         (void)why;
-    };
-    auto part_of = [&](int c) {
+    }
+    int part_of(int c) const
+    {
         for (int p = 0; p < 9; p++)
             if (S.chan[p] == c)
                 return p;
         return -1;
-    };
-    const int rhythm_hi = cm64 ? 108 : 87;
+    }
 
     // a DT1's bytes landing in the unit's memory, then what they set
-    auto dt1 = [&](const std::vector<uint8_t> &d) {
+    void dt1(const std::vector<uint8_t> &d)
+    {
         const int dev = d[1];
         const long a0 = ((long)d[4] << 14) | (d[5] << 7) | d[6];
         const size_t nb = d.size() - 8;         // (address, data, checksum)
@@ -416,13 +430,16 @@ static std::vector<MsgT> apply(const std::vector<MsgT> &in, bool cm64, int &n_ex
             if (S.sys[2] >= 0)
                 gs(0x40, 0x01, 0x34, (int)lround(std::min(7, S.sys[2]) * 127.0 / 7.0));
         }
-    };
+    }
 
-    for (const MsgT &m0 : in) {
+    // ONE MESSAGE heard (its tick its time): what it becomes, into o
+    void feed(const MsgT &m0, std::vector<MsgT> &o)
+    {
+        out = &o;
         now = m0.tick;
         if (m0.status == 0xFF) {
-            out.push_back(m0);
-            continue;
+            out->push_back(m0);
+            return;
         }
         if (m0.status == 0xF0) {
             const auto &d = m0.data;
@@ -433,26 +450,26 @@ static std::vector<MsgT> apply(const std::vector<MsgT> &in, bool cm64, int &n_ex
                     R.say("CM-32P exclusives (the PCM parts' settings): not followed");
                 else if (d.size() >= 9 && d[3] == 0x12)
                     dt1(d);
-                continue;
+                return;
             }
             if (d.size() >= 3 && d[0] == 0x41 && d[2] == 0x14) {
                 n_excl++;
                 R.say("D-50 exclusives: not followed");
-                continue;
+                return;
             }
-            out.push_back(m0);
-            continue;
+            out->push_back(m0);
+            return;
         }
         const int c = m0.status & 0x0F, kind = m0.status & 0xF0;
         int p = part_of(c);
         if (p < 0) {
             if (cm64 && c >= 10) {              // (a CM-64's CM-32P part, as it comes)
-                out.push_back(m0);
-                continue;
+                out->push_back(m0);
+                return;
             }
             if (kind == 0x90 && m0.d1)
                 dropped[c]++;
-            continue;
+            return;
         }
         MsgT m = m0;
         const int oc = outch(p);
@@ -465,38 +482,57 @@ static std::vector<MsgT> apply(const std::vector<MsgT> &in, bool cm64, int &n_ex
                     m.d0 -= 12;
             } else if (m.d0 < 24 || m.d0 > rhythm_hi) {
                 rhythm_out += kind == 0x90 && m.d1;
-                continue;
+                return;
             }
             if (kind == 0x90 && m.d1)
                 held.insert({oc, m.d0});
             else
                 held.erase({oc, m.d0});
-            out.push_back(m);
+            out->push_back(m);
         } else if (kind == 0xB0) {
             int cc = m.d0;
             if (cc >= 124)
                 cc = 123;
             static const std::set<int> RX = {1, 6, 7, 10, 11, 38, 64, 100, 101, 121, 123};
             if (!RX.count(cc) || (p == 8 && cc == 10))
-                continue;
+                return;
             m.d0 = cc;
-            out.push_back(m);
+            out->push_back(m);
         } else if (kind == 0xC0) {
             if (p == 8)
-                continue;
+                return;
             std::copy(S.pmem[m.d0 & 127], S.pmem[m.d0 & 127] + 7, S.ptemp[p]);
             patch(p, S.ptemp[p], "program change");
         } else if (kind == 0xE0) {
-            out.push_back(m);
+            out->push_back(m);
         }
         // (0xA0, 0xD0: aftertouch, not received)
     }
-    for (const auto &kv : dropped)
-        R.say(std::to_string(kv.second) + " notes on channel " + std::to_string(kv.first + 1)
-              + ": no MT-32 part listens there");
-    if (rhythm_out)
-        R.say(std::to_string(rhythm_out) + " rhythm notes outside the MT-32's drum keys (24-" + std::to_string(rhythm_hi)
-              + "): not played");
+
+    // AT THE END: what was dropped, into the report
+    void finish()
+    {
+        for (const auto &kv : dropped)
+            R.say(std::to_string(kv.second) + " notes on channel " + std::to_string(kv.first + 1)
+                  + ": no MT-32 part listens there");
+        if (rhythm_out)
+            R.say(std::to_string(rhythm_out) + " rhythm notes outside the MT-32's drum keys (24-" + std::to_string(rhythm_hi)
+                  + "): not played");
+    }
+};
+
+// One file's messages (absolute ticks) through the unit: returns them as
+// it would hear them, our channels and our messages
+template <class MsgT>
+static std::vector<MsgT> apply(const std::vector<MsgT> &in, bool cm64, int &n_excl, Report &R)
+{
+    Unit<MsgT> u(cm64);
+    std::vector<MsgT> out;
+    for (const MsgT &m : in)
+        u.feed(m, out);
+    u.finish();
+    n_excl += u.n_excl;
+    R = u.R;
     return out;
 }
 

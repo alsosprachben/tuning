@@ -518,6 +518,20 @@ const HELP = {
       ['off', 'Not read.'],
     ],
   },
+  'su:module': {
+    title: 'Play as a module',
+    intro: 'For a sequencer or a DAW playing whole songs into Clavitone over MIDI, as into a Sound Canvas or an MT-32: each of the 16 channels its own part, and the input read as that module reads it. Your own parts are set aside meanwhile, and the session keeps them; OFF puts them back exactly.',
+    terms: [
+      ['OFF: MY PARTS', 'The input plays your own parts, as always.'],
+      ['AUTO', 'Starts as GS and follows what the input sends: a GS Reset plays it as GS, GM System On as GM, MT-32 messages as an MT-32. The button shows what it is playing as.'],
+      ['GM', 'A General MIDI module: bank selects ignored.'],
+      ['GS: OURS … GS: SC-8850', 'A Sound Canvas, bank numbers in that map.'],
+      ['GS: INIT CM-64', 'A Sound Canvas after its Init CM-64: the MT-32\'s sounds on parts 1 to 9, its drums on 10, the CM-32P\'s on 11 to 16, pans mirrored; the input\'s MT-32 messages ignored.'],
+      ['MT-32', 'A real MT-32: parts on channels 2 to 9 and drums on 10, the input\'s MT-32 messages followed (which sound each program is, custom sounds by name, levels, pans, reverb). What it did with them is listed below the buttons.'],
+      ['CM-64', 'The same, with the CM-32P\'s parts on 11 to 16.'],
+      ['MT-32 velocity', 'The Files card\'s MT-32 VELOCITY switch applies here too.'],
+    ],
+  },
   'su:msgr': {
     title: 'The Messenger',
     intro: 'The Moog Messenger, when one is plugged in.',
@@ -765,7 +779,7 @@ const HELP_TOC = [
   ['Control', ['control', 'ct:strip', 'ct:routes', 'ct:new']],
   ['Scenes', ['scenes', 'sc:presets', 'sc:scenes', 'sc:metro', 'sc:gs']],
   ['Files', ['files', 'fl:browse', 'fl:file', 'fl:mode', 'fl:vel', 'fl:play', 'fl:render']],
-  ['Setup', ['setup', 'su:midi', 'su:msgr', 'su:sound', 'su:rubato']],
+  ['Setup', ['setup', 'su:midi', 'su:module', 'su:msgr', 'su:sound', 'su:rubato']],
 ];
 
 // THE VIEWER: the contents (or what a search found) on the left, the topic on

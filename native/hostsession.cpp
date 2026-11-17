@@ -879,6 +879,20 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
     else
         p0.o.erase("bank");
     put_drawn(p0, rows.empty() ? 0 : rows[0].pi, sp < 128 ? sp : -1);
+    // A MODULE MODE ON (module.h): what it changes -- the parts, the
+    // standard, each channel's mix, the insertion effect, the user drum sets,
+    // the room (a sequencer's GS reverb sets it) -- are the module's, not the player's: the setup it set aside is what
+    // the session keeps, and what leaving it puts back
+    if (module_on.load(std::memory_order_acquire)) {
+        std::lock_guard<std::mutex> lk(module_mu);
+        if (module_saved.is(sess::J::OBJ))
+            for (const char *k : {"parts", "std_map", "chanstate", "efx", "user_drums", "room"}) {
+                if (const sess::J *v = module_saved.get(k))
+                    j.o[k] = *v;
+                else
+                    j.o.erase(k);
+            }
+    }
     return j;
 }
 
