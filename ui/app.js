@@ -161,6 +161,7 @@ async function select(row) {
   if (s.stops && s.stops.row === S.row) setStops(s.stops);
   if (card === 'piano') { const r = await Wire.call('piano'); if (r.piano) setPiano(r.piano); }
   if (card === 'effects') drawEffects();
+  if (card === 'control') drawControl();
   if (card === 'matrix') { const r = await Wire.call('matrix'); if (r.matrix) setMatrix(r.matrix); }
   if (card === 'drums') { DR.sel = null; const r = await Wire.call('drums'); if (r.drums) setDrums(r.drums); }
 }
@@ -178,10 +179,10 @@ async function soloPart(row) {
 const CARDS = [
   ['parts', 'Parts', true], ['library', 'Library', true], ['synth', 'Synth', true],
   ['stops', 'Stops', true], ['piano', 'Piano', true], ['drums', 'Drums', true], ['effects', 'Effects', true],
-  ['matrix', 'Matrix', true], ['tuning', 'Tuning', true], ['control', 'Control'], ['scenes', 'Scenes'], ['setup', 'Setup'],
+  ['matrix', 'Matrix', true], ['tuning', 'Tuning', true], ['control', 'Control', true], ['scenes', 'Scenes'], ['setup', 'Setup'],
 ];
 const LATER = {
-  control: 'on-screen controls, routes and learn', scenes: 'presets, scenes, the GS reset and the metronome',
+  scenes: 'presets, scenes, the GS reset and the metronome',
   setup: 'MIDI, audio, borrowed time and the globals',
 };
 let card = 'parts';
@@ -206,6 +207,7 @@ function showCard(id) {
   if (id === 'stops') drawStops();
   Wire.call('piano', { open: id === 'piano' ? 1 : 0 }).then(r => { if (r.piano) setPiano(r.piano); });
   Wire.call('drums', { open: id === 'drums' ? 1 : 0, sets: DR.sets ? 0 : 1 }).then(r => { if (r.drums) setDrums(r.drums); });
+  Wire.call('control', { open: id === 'control' ? 1 : 0, kinds: CT.kinds ? 0 : 1 }).then(r => { if (r.control) setControl(r.control); });
   Wire.call('tuning', { open: id === 'tuning' ? 1 : 0, lists: TN.lists ? 0 : 1 }).then(r => { if (r.tuning) setTuning(r.tuning); });
   Wire.call('matrix', { open: id === 'matrix' ? 1 : 0, tables: MX.t ? 0 : 1 }).then(r => { if (r.tables) MX.t = r.tables; if (r.matrix) setMatrix(r.matrix); });
   Wire.call('effects', { open: id === 'effects' ? 1 : 0, tables: FX.t ? 0 : 1 }).then(r => { if (r.tables) FX.t = r.tables; if (r.effects) setEffects(r.effects); });
@@ -1082,7 +1084,7 @@ Kit.press($('mx'), c => {           // (CC1/CC2's number, typed)
 // the Eastern tuning the Indian voices play (a raga system, a raga, Sa).
 const TN = { t: null, lists: null, east: null };
 const TN_GROUPS = [
-  ['Concert pitch, A=440', ['hybrid440', 'hybridmeanpiano', 'stretchedhelmholtz', 'even', 'gm2']],
+  ['Concert pitch, A=440', ['gm2', 'hybrid440', 'hybridmeanpiano', 'stretchedhelmholtz', 'even']],
   ['Baroque pitch, A=415', ['hybrid', 'stretch', 'werckmeister', 'sankey', 'meantone']],
   ['Pure octaves: pipes', ['hybridharm', 'hybridharm440', 'hybridmean']],
 ];
@@ -1192,6 +1194,145 @@ Kit.press($('tnList').parentNode.querySelector('.tn-east'), async b => {
   if (r.tuning) setTuning(r.tuning);
 }, '.tns');
 
+// ---------------------------------------------------------------- THE CONTROL CARD
+// The on-screen controls (a pedal or wheel the keyboard lacks): each sent
+// straight to the engine on its channel, a switch latching (press down, press
+// up), the pitch wheel and aftertouch springing back when let go. And the
+// routes: the keyboard's own controls rewritten -- a key as the sustain, a
+// CC onto another, the wheel's half onto a switch -- with learn for the source.
+const CT = { c: null, kinds: null, ctl: {}, sig: null, adding: false, nw: { src: -1, arg: -1, dst: null, keep: 0, ch: -1, latch: 0, press: 1 } };
+const SCAN = [['off', 0], ['V1', 18], ['V2', 37], ['V3', 55], ['C1', 73], ['C2', 91], ['C3', 110]];
+const ctKind = key => (CT.kinds || []).find(k => k[0] === key) || [key, 'CC' + key, 'continuous', 0];
+function setControl(c) {
+  if (c.kinds) CT.kinds = c.kinds;
+  CT.c = c;
+  if (card === 'control') drawControl();
+}
+let ctT = {};
+function ctSend(i, v) {                  // (a drag's values at most 30 a second; the last always goes)
+  const t = ctT[i] || (ctT[i] = { tm: 0, want: null });
+  t.want = v;
+  if (t.tm) return;
+  const go = () => { t.tm = 0; if (t.want === null) return; const x = t.want; t.want = null; Wire.call('control_set', { i, v: x }); t.tm = setTimeout(go, 33); };
+  go();
+}
+function drawControl() {
+  const c = CT.c;
+  if (!c || !CT.kinds) return;
+  const p = cur();
+  $('ctWho').textContent = p ? `part ${pad(S.row + 1, 2)} · ${p.name}` : '';
+  $('ctInfo').textContent = `${c.controls.length} control${c.controls.length === 1 ? '' : 's'} · ${c.routes.length} route${c.routes.length === 1 ? '' : 's'}`;
+  const sig = c.controls.map(x => x.key + ':' + x.channel).join(',');
+  if (sig !== CT.sig) {
+    CT.sig = sig; CT.ctl = {};
+    const el = $('ctStrip'); el.innerHTML = '';
+    for (const x of c.controls) {
+      const [, label, kind] = ctKind(x.key);
+      const box = document.createElement('div'); box.className = 'ct-c';
+      box.innerHTML = `<div class="ct-body"></div><span class="ct-ch">${x.channel < 0 ? 'every channel' : 'channel ' + (x.channel + 1)}</span>` +
+        `<button class="hb ct-rm" data-kit="1" data-i="${x.i}">REMOVE</button>`;
+      el.appendChild(box);
+      const body = box.querySelector('.ct-body');
+      if (kind === 'switch') {
+        const b = document.createElement('button'); b.className = 'pd-btn ct-sw'; b.dataset.kit = '1';
+        body.append(b); const l = document.createElement('b'); l.textContent = label.toUpperCase(); body.append(l);
+        Kit.press(b, () => { const on = !b.classList.contains('on'); b.classList.toggle('on', on); CT.mine = { i: x.i, on, until: performance.now() + HOLD_MS }; Wire.call('control_set', { i: x.i, v: on ? 127 : 0 }); });
+        CT.ctl[x.i] = { set: (v, on) => b.classList.toggle('on', on) };
+      } else if (kind === 'selector') {
+        const sg = Kit.segments(body, { label: label.toUpperCase(), options: SCAN.map(q => q[0]), value: 0, onChange: j => Wire.call('control_set', { i: x.i, v: SCAN[j][1] }) });
+        sg.el.classList.add('v');
+        CT.ctl[x.i] = { set: v => { let j = 0; SCAN.forEach((q, k) => { if (v >= q[1]) j = k; }); sg.set(j); } };
+      } else {
+        const bend = kind === 'bend', spring = bend || kind === 'pressure';
+        const lo = bend ? -8192 : 0, hi = bend ? 8191 : 127;
+        const f = Kit.fader(body, { label: label.toUpperCase(), value: x.value, lo, hi, step: 1, travel: 300, detents: bend ? [0] : [],
+          fmt: v => (bend ? (v > 0 ? '+' : '') + Math.round(v) : String(Math.round(v))),
+          onChange: v => ctSend(x.i, Math.round(v)),
+          onEnd: spring ? () => { f.set(0, false); ctSend(x.i, 0); } : undefined });
+        CT.ctl[x.i] = { set: v => f.set(v, false) };
+      }
+    }
+    const add = document.createElement('button'); add.className = 'ct-plus'; add.dataset.kit = '1'; add.textContent = '+ ADD A CONTROL';
+    el.appendChild(add);
+    Kit.press(add, () => { CT.adding = !CT.adding; drawAdd(); });
+  }
+  for (const x of c.controls) {
+    const k = CT.ctl[x.i]; if (!k) continue;
+    const m = CT.mine; let on = x.on;
+    if (m && m.i === x.i && m.until > performance.now()) on = m.on;
+    k.set(x.value, on);
+  }
+  drawAdd(); drawRoutes();
+}
+Kit.press($('ctStrip'), async b => { await Wire.call('control_remove', { i: +b.dataset.i }); CT.sig = null; const r = await Wire.call('control'); if (r.control) setControl(r.control); }, '.ct-rm');
+function drawAdd() {
+  const el = $('ctAdd');
+  el.hidden = !CT.adding;
+  if (!CT.adding) return;
+  const p = cur(), ch = p && p.channel >= 0 ? p.channel : -1;
+  const have = new Set(CT.c.controls.map(x => x.key + ':' + x.channel));
+  el.innerHTML = `<p class="pn-note">Add a control on ${ch < 0 ? 'every channel' : 'channel ' + (ch + 1) + ' (part ' + pad(S.row + 1, 2) + "'s)"}:</p><div class="ct-kinds">` +
+    CT.kinds.map(([key, label, kind]) => `<button class="tns${have.has(key + ':' + ch) ? ' on' : ''}" data-kit="1" data-key="${key}" data-ch="${ch}">${esc(label)}<small>${kind}</small></button>`).join('') + '</div>';
+}
+Kit.press($('ctAdd'), async b => {
+  await Wire.call('control_add', { key: +b.dataset.key, channel: +b.dataset.ch });
+  CT.adding = false; CT.sig = null;
+  const r = await Wire.call('control'); if (r.control) setControl(r.control);
+}, '.tns');
+// THE ROUTES, and a new one: its source (learnt or chosen), destination, how
+const KEYN = n => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 1);
+function drawRoutes() {
+  const c = CT.c, nw = CT.nw;
+  $('ctRoutes').innerHTML = c.routes.length ? c.routes.map(r => `<div class="rt"><span>${esc(r.text)}</span>` +
+    `<button class="hb rt-rm" data-kit="1" data-i="${r.i}">REMOVE</button></div>`).join('') : '<p class="pn-note">No routes: the keyboard\'s controls reach the engine as they are.</p>';
+  if (c.learnt && c.learnt[0] && CT.waiting) {
+    CT.waiting = 0;
+    nw.src = c.learnt[0] === 1 ? 3 : 0; nw.arg = c.learnt[1];
+  }
+  const learning = c.learning || 0;
+  const srcName = nw.src === 3 ? (nw.arg >= 0 ? 'key ' + KEYN(nw.arg) : 'a key') : nw.src === 0 ? (nw.arg >= 0 ? 'CC' + nw.arg : 'a controller')
+    : nw.src === 1 ? ['the pitch wheel up', 'the pitch wheel down', 'the pitch wheel, either way'][Math.max(0, nw.arg)] : nw.src === 2 ? 'aftertouch' : '—';
+  const dst = nw.dst === null ? null : ctKind(nw.dst);
+  const sw = dst && dst[2] === 'switch';
+  const p = cur(), pch = p && p.channel >= 0 ? p.channel : -1;
+  const ready = nw.src >= 0 && (nw.src === 1 || nw.src === 2 || nw.arg >= 0) && nw.dst !== null;
+  $('ctNew').innerHTML = `<h4>A new route</h4>` +
+    `<div class="tn-row"><b>FROM</b>` +
+    `<button class="tns${learning === 1 ? ' on blink' : nw.src === 3 ? ' on' : ''}" data-kit="1" data-learn="1">${learning === 1 ? 'PRESS A KEY…' : 'A KEY (LEARN)'}</button>` +
+    `<button class="tns${learning === 2 ? ' on blink' : nw.src === 0 ? ' on' : ''}" data-kit="1" data-learn="2">${learning === 2 ? 'MOVE A CONTROL…' : 'A CONTROLLER (LEARN)'}</button>` +
+    ['UP', 'DOWN', 'EITHER'].map((t, j) => `<button class="tns${nw.src === 1 && nw.arg === j ? ' on' : ''}" data-kit="1" data-wheel="${j}">WHEEL ${t}</button>`).join('') +
+    `<button class="tns${nw.src === 2 ? ' on' : ''}" data-kit="1" data-press="1">AFTERTOUCH</button></div>` +
+    `<div class="tn-row"><b>TO</b></div><div class="ct-kinds sm">` + CT.kinds.filter(k => k[0] >= 0 || k[0] === -3).map(([key, label]) =>
+      `<button class="tns${nw.dst === key ? ' on' : ''}" data-kit="1" data-dst="${key}">${esc(label)}</button>`).join('') + '</div>' +
+    `<div class="tn-row"><b>HOW</b>` +
+    `<button class="tns${nw.keep ? ' on' : ''}" data-kit="1" data-opt="keep">KEEP THE ORIGINAL TOO</button>` +
+    (sw ? `<button class="tns${nw.latch ? ' on' : ''}" data-kit="1" data-opt="latch">LATCH (PRESS ON, PRESS OFF)</button>` : '') +
+    (nw.src === 3 && nw.dst === 64 ? `<button class="tns${nw.press ? ' on' : ''}" data-kit="1" data-opt="press">PUSH INTO IT TO DAMP</button>` : '') +
+    `<button class="tns${nw.ch < 0 ? ' on' : ''}" data-kit="1" data-chan="-1">EVERY CHANNEL</button>` +
+    (pch >= 0 ? `<button class="tns${nw.ch === pch ? ' on' : ''}" data-kit="1" data-chan="${pch}">CHANNEL ${pch + 1}</button>` : '') + '</div>' +
+    `<div class="tn-row"><span class="rt-say">${esc(srcName)} → ${dst ? esc(dst[1]) : '…'}</span>` +
+    `<button class="hb rt-add" data-kit="1"${ready ? '' : ' disabled'}>ADD THE ROUTE</button></div>`;
+}
+Kit.press($('ctRoutes'), async b => { await Wire.call('route_remove', { i: +b.dataset.i }); const r = await Wire.call('control'); if (r.control) setControl(r.control); }, '.rt-rm');
+Kit.press($('ctNew'), async b => {
+  const nw = CT.nw, d = b.dataset;
+  if (d.learn) { const k = +d.learn; const on = (CT.c.learning || 0) !== k; CT.waiting = on ? k : 0; await Wire.call('route_learn', { kind: on ? k : 0 }); CT.c.learning = on ? k : 0; CT.c.learnt = [0, -1]; }
+  else if (d.wheel !== undefined) { nw.src = 1; nw.arg = +d.wheel; }
+  else if (d.press) { nw.src = 2; nw.arg = 0; }
+  else if (d.dst !== undefined) nw.dst = +d.dst;
+  else if (d.opt) nw[d.opt] = nw[d.opt] ? 0 : 1;
+  else if (d.chan !== undefined) nw.ch = +d.chan;
+  else if (b.classList.contains('rt-add')) {
+    const sw = ctKind(nw.dst)[2] === 'switch';
+    const r7 = [nw.src, nw.src === 2 ? 0 : nw.arg, nw.dst, nw.keep, nw.ch, sw ? nw.latch : 0, nw.src === 3 && nw.dst === 64 ? nw.press : 0];
+    await Wire.call('route_add', { r: r7 });
+    CT.nw = { src: -1, arg: -1, dst: null, keep: 0, ch: -1, latch: 0, press: 1 };
+    const r = await Wire.call('control'); if (r.control) setControl(r.control);
+    return;
+  }
+  drawRoutes();
+}, '.tns, .rt-add');
+
 // ---------------------------------------------------------------- THE NOTES
 // What each program and stop is, and what it was fitted to (about.json:
 // examples/gm_coverage.py --about, the coverage page's own words)
@@ -1261,6 +1402,7 @@ Wire.connect({
     if (m.effects) setEffects(m.effects);
     if (m.matrix) setMatrix(m.matrix);
     if (m.tuning) setTuning(m.tuning);
+    if (m.control) setControl(m.control);
     if (m.synth && m.synth.row === S.row && (m.synth.layer === S.layer || m.synth.layers <= S.layer)) { S.layer = m.synth.layer; S.synth = m.synth; if (card === 'synth') drawSynth(); }
   },
   down() { $('gone').hidden = false; },

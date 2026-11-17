@@ -721,6 +721,69 @@ J tuning_of(nv_host *h, bool lists)
     return o;
 }
 
+// THE CONTROL CARD's: the on-screen controls (each its key: a CC, -1 the
+// pitch wheel, -2 aftertouch, -3 mono; its kind, channel -1 every one, value,
+// a switch's state in the engine), the routes (each nv_rt_add's seven and its
+// words), and what a learn caught (learnt: [kind 1 a key / 2 a CC, number])
+J control_of(nv_host *h, bool kinds, const int learnt[2])
+{
+    J o = sess::obj();
+    if (kinds) {
+        std::vector<char> b(8192);
+        nv_host_control_kinds(b.data(), (int)b.size());
+        J ks = sess::arr();
+        for (const std::string &line : split(std::string(b.data()), '\n')) {
+            const std::vector<std::string> f = split(line, '\t');
+            if (f.size() < 4)
+                continue;
+            J k = sess::arr();
+            k.a.push_back(sess::integer(atoi(f[0].c_str())));
+            k.a.push_back(sess::str(f[1]));
+            k.a.push_back(sess::str(f[2]));
+            k.a.push_back(sess::integer(atoi(f[3].c_str())));
+            ks.a.push_back(k);
+        }
+        o.o["kinds"] = ks;
+    }
+    const int n = nv_host_controls(h, nullptr, 0);
+    std::vector<nv_host_control> cs((size_t)std::max(0, n));
+    nv_host_controls(h, cs.data(), n);
+    J ca = sess::arr();
+    for (int i = 0; i < n; i++) {
+        J c = sess::obj();
+        c.o["i"] = sess::integer(i);
+        c.o["key"] = sess::integer(cs[(size_t)i].key);
+        c.o["channel"] = sess::integer(cs[(size_t)i].channel);
+        c.o["value"] = sess::integer(cs[(size_t)i].value);
+        c.o["on"] = sess::boolean(cs[(size_t)i].on != 0);
+        ca.a.push_back(c);
+    }
+    o.o["controls"] = ca;
+    const int nr = nv_host_routes(h, nullptr, 0);
+    std::vector<int> rs((size_t)std::max(0, nr) * 7);
+    nv_host_routes(h, rs.data(), nr);
+    J ra = sess::arr();
+    for (int i = 0; i < nr; i++) {
+        const int *r = &rs[(size_t)i * 7];
+        J e = sess::obj();
+        J a = sess::arr();
+        for (int k = 0; k < 7; k++)
+            a.a.push_back(sess::integer(r[k]));
+        char t[160] = {};
+        nv_host_route_text(r, t, sizeof t);
+        e.o["i"] = sess::integer(i);
+        e.o["r"] = a;
+        e.o["text"] = sess::str(t);
+        ra.a.push_back(e);
+    }
+    o.o["routes"] = ra;
+    J l = sess::arr();
+    l.a.push_back(sess::integer(learnt[0]));
+    l.a.push_back(sess::integer(learnt[1]));
+    o.o["learnt"] = l;
+    return o;
+}
+
 // a part's knobs on a layer: positions, whose they are, and each in its own words
 J synth_of(nv_host *h, int row, int layer)
 {
@@ -869,6 +932,11 @@ struct nv_ui_watch {
     bool effects = false;               // (its effects card is open)
     bool matrix = false;                // (its matrix card is open)
     bool tuning = false;                // (its tuning card is open)
+    bool control = false;               // (its control card is open)
+    std::string control_sent;
+    int route_learn = 0;                // (a route's source being learnt: 1 a key, 2 a CC -- since then)
+    long long route_learn_t = 0;
+    int learnt[2] = {0, -1};            // (what it caught: kind, number)
     std::string tuning_sent;
     std::string matrix_sent;
     int cmx_learn = 0;                  // (CC1 (4) or CC2 (5) learnt from the next controller moved, since then)
@@ -1208,6 +1276,55 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         if (w)
             w->tuning_sent.clear();
         r.o["tuning"] = tuning_of(h, false);
+    } else if (call == "control") {            // the card opened (or shut: open false); kinds: 1 for the controls one may add
+        if (w) {
+            w->control = arg_i(q, "open", 1) != 0;
+            w->control_sent.clear();
+        }
+        const int none[2] = {0, -1};
+        r.o["control"] = control_of(h, arg_i(q, "kinds", 0) != 0, w ? w->learnt : none);
+    } else if (call == "control_add") {        // key, channel (-1 every one)
+        const int i = nv_host_control_add(h, (int)arg_i(q, "key", 0), (int)arg_i(q, "channel", -1));
+        if (i < 0) {
+            ok = false;
+            r.o["error"] = sess::str("no such control");
+        }
+        r.o["i"] = sess::integer(i);
+        if (w)
+            w->control_sent.clear();
+    } else if (call == "control_remove") {
+        nv_host_control_remove(h, (int)arg_i(q, "i", -1));
+        if (w)
+            w->control_sent.clear();
+    } else if (call == "control_set") {        // i, v (a bend -8192..8191, the rest 0-127): sent past the routes
+        nv_host_control_set(h, (int)arg_i(q, "i", -1), (int)arg_i(q, "v", 0));
+    } else if (call == "route_add") {          // r: nv_rt_add's seven
+        const J *a = q.get("r");
+        if (!a || !a->is(J::ARR) || a->a.size() != 7) {
+            ok = false;
+            r.o["error"] = sess::str("a route is seven numbers");
+        } else {
+            int r7[7];
+            for (int k = 0; k < 7; k++)
+                r7[k] = (int)a->a[(size_t)k].i(0);
+            nv_host_route_add(h, r7);
+        }
+        if (w)
+            w->control_sent.clear();
+    } else if (call == "route_remove") {
+        nv_host_route_remove(h, (int)arg_i(q, "i", -1));
+        if (w)
+            w->control_sent.clear();
+    } else if (call == "route_learn") {        // kind 1 the next key pressed, 2 the next controller moved; 0 stops
+        const int kind = (int)arg_i(q, "kind", 0);
+        if (w) {
+            w->route_learn = kind == 1 || kind == 2 ? kind : 0;
+            w->route_learn_t = nv_host_now_ns();
+            w->learnt[0] = 0;
+            w->learnt[1] = -1;
+            w->control_sent.clear();
+        }
+        nv_host_learn_key(h, kind == 1 ? 1 : 0);
     } else if (call == "panic") {
         nv_host_panic(h);
     } else {
@@ -1339,6 +1456,38 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
                 r.o["drums"] = dj;
                 any = true;
             }
+        }
+    }
+    if (w->control && w->tick % 3 == 0) {      // (a switch's state, a learn caught)
+        if (w->route_learn == 1) {
+            int lch = -1, lnote = -1;
+            if (nv_host_learnt_key(h, &lch, &lnote)) {
+                w->learnt[0] = 1;
+                w->learnt[1] = lnote;
+                w->route_learn = 0;
+            }
+        } else if (w->route_learn == 2) {
+            long long when = 0;
+            const int code = nv_host_last_ctl(h, &when);
+            if (code >= 0 && code < 128 && when > w->route_learn_t) {
+                w->learnt[0] = 2;
+                w->learnt[1] = code;
+                w->route_learn = 0;
+            }
+        }
+        if (w->route_learn && nv_host_now_ns() - w->route_learn_t > 10000000000LL) {
+            if (w->route_learn == 1)
+                nv_host_learn_key(h, 0);
+            w->route_learn = 0;
+        }
+        J cj = control_of(h, false, w->learnt);
+        cj.o["learning"] = sess::integer(w->route_learn);
+        std::string cs;
+        put(cs, cj);
+        if (cs != w->control_sent) {
+            w->control_sent = cs;
+            r.o["control"] = cj;
+            any = true;
         }
     }
     if (w->tuning && w->tick % 6 == 4) {       // (the tuner built: asked and playing the same)
