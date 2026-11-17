@@ -154,10 +154,13 @@ def main(argv):
             print("the native child failed: %s" % r.stderr.strip()[-400:])
             return 1
         print(r.stdout.strip())
-        vparts = ([L.Part(L.patch_for(prog, False, "hybrid", variation=int(opt["bank"])))]
+        # (live's default tuner, as the native child starts in: gm2 since 0c0ac19)
+        import inspect as _inspect
+        _tuner = _inspect.signature(L.Live).parameters["tuner"].default
+        vparts = ([L.Part(L.patch_for(prog, False, _tuner, variation=int(opt["bank"])))]
                   if opt.get("bank") else None)
         lv = L.Live(program=prog, rate=48000, frames=128, capacity=65536, verbose=False, threads=1, gpu=False,
-                    tuner="hybrid", drums=False, eastern=None, parts=vparts)
+                    tuner=_tuner, drums=False, eastern=None, parts=vparts)
         lv.enable_room(room)
         lv.parts[0].patch.warm()
         instant_scan(lv, lv.parts[0].patch)

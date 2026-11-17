@@ -245,10 +245,15 @@ def main(argv):
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
     # live.Live, fed the same events on the same blocks
     # (--bank=V: the part a variation, live.Patch's: map x 128 + bank)
-    vparts = ([L.Part(L.patch_for(prog, False, opt.get("tuner") or "hybrid", variation=int(opt["bank"])))]
+    # THE TUNER: --tuner's on both sides, else LIVE's DEFAULT -- live.Live's
+    # (gm2 since 0c0ac19), which nvlive starts in too; a fixed "hybrid" here
+    # made every run without --tuner differ from the first note
+    import inspect as _inspect
+    live_tuner = opt.get("tuner") or _inspect.signature(L.Live).parameters["tuner"].default
+    vparts = ([L.Part(L.patch_for(prog, False, live_tuner, variation=int(opt["bank"])))]
               if opt.get("bank") else None)
     lv = L.Live(program=prog, rate=48000, frames=128, capacity=slots, verbose=False, threads=1, gpu=False,
-                tuner=opt.get("tuner") or "hybrid", drums=drums, eastern=opt.get("eastern") or None, parts=vparts)
+                tuner=live_tuner, drums=drums, eastern=opt.get("eastern") or None, parts=vparts)
     lv.enable_room(room)
     lv.parts[0].patch.warm()
     from livepart_check import instant_scan
@@ -259,11 +264,11 @@ def main(argv):
         lv.parts[0].fixed_touch = opt["fixed-touch"] == "1"
     if opt.get("metronome"):                    # --metronome=BPM[:RING]: live's, from its first block (nvlive --metronome)
         _mb, _, _mr = opt["metronome"].partition(":")
-        lv.set_metronome(float(_mb), int(_mr or 0), L.Live.build_metro_part(opt.get("tuner") or "hybrid"))
+        lv.set_metronome(float(_mb), int(_mr or 0), L.Live.build_metro_part(live_tuner))
     if beside or split:
         # the piano on channel 1 (keys from the split), the drum set beside it
         pp = lv.parts[0].patch
-        dp = L.Patch(0, True, opt.get("tuner") or "hybrid", 0)
+        dp = L.Patch(0, True, live_tuner, 0)
         dp.warm()
         parts = [L.Part(pp, channel=0 if beside else None, lo=split)]
         if beside:
