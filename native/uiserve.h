@@ -134,7 +134,7 @@ struct Server {
 
     bool listen_on(int p)
     {
-        lfd = ::socket(AF_INET, SOCK_STREAM, 0);
+        lfd = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);   // (not handed to the browser it opens: a window left from a crash kept the port)
         if (lfd < 0)
             return false;
         int one = 1;
@@ -324,7 +324,7 @@ struct Server {
                 0, std::chrono::duration_cast<std::chrono::milliseconds>(next - std::chrono::steady_clock::now()).count());
             int n = ::poll(pf.data(), pf.size(), std::min(wait, 100));
             if (n > 0 && (pf[0].revents & POLLIN)) {
-                int fd = ::accept(lfd, nullptr, nullptr);
+                int fd = ::accept4(lfd, nullptr, nullptr, SOCK_CLOEXEC);
                 if (fd >= 0) {
                     Client c;
                     c.fd = fd;
