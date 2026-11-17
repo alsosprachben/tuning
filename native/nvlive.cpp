@@ -98,6 +98,9 @@
 #include "hostlive.h"
 #include "host.h"
 #include "uiserve.h"
+#ifdef NV_NATIVE_UI
+extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed);   // (nui/nui.cpp: the native interface)
+#endif
 #include <spawn.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -585,7 +588,8 @@ int nv_host::run(int argc, char **argv)
     for (int i = 1; i < argc; i++) {
         rsync = rsync || !strcmp(argv[i], "--reg-sync");
         nort = nort || !strcmp(argv[i], "--no-rt");
-        nopanel = nopanel || !strcmp(argv[i], "--no-panel") || !strcmp(argv[i], "--ui") || !strncmp(argv[i], "--ui=", 5);
+        nopanel = nopanel || !strcmp(argv[i], "--no-panel") || !strcmp(argv[i], "--ui") || !strncmp(argv[i], "--ui=", 5)
+                  || !strcmp(argv[i], "--app") || !strcmp(argv[i], "--app-windowed");
     }
     fprintf(stderr, "nvlive: playing (MIDI %s, audio %s, %u us); %s\n", dev.c_str(), pcmdev.c_str(), lat,
             nopanel ? "Ctrl-C to stop" : "the panel (q to stop)");
@@ -808,6 +812,13 @@ int nv_host::run(int argc, char **argv)
     // screen in its own profile (--ui-no-browser: served only)
     int ui_port = 0;
     bool ui_browser = true;
+    // THE NATIVE INTERFACE (--app, --app-windowed: nui/nui.cpp, drawn here on
+    // the GPU, in this process -- no server, no browser)
+    bool app_mode = false, app_windowed = false;
+    for (int i = 1; i < argc; i++) {
+        app_windowed = app_windowed || !strcmp(argv[i], "--app-windowed");
+        app_mode = app_mode || !strcmp(argv[i], "--app") || !strcmp(argv[i], "--app-windowed");
+    }
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--ui"))
             ui_port = 8710;
@@ -820,7 +831,7 @@ int nv_host::run(int argc, char **argv)
     pid_t ui_pid = -1;
     uiserve::Server ui_srv;
     auto start_ui = [&]() {
-        if (ui_port <= 0)
+        if (ui_port <= 0 && !app_mode)
             return;
         std::string d = nv_self_exe();
         d = d.substr(0, d.rfind('/') == std::string::npos ? 0 : d.rfind('/'));
@@ -855,6 +866,8 @@ int nv_host::run(int argc, char **argv)
             fprintf(stderr, "nvlive: files: renders to %s%s\n", rd.c_str(),
                     fx.empty() ? " (no file export: best quality off)" : ("; best quality from " + fx).c_str());
         }
+        if (ui_port <= 0)
+            return;                             // (the native interface: no server)
         if (!ui_srv.listen_on(ui_port)) {
             fprintf(stderr, "nvlive: --ui: port %d is taken\n", ui_port);
             return;
@@ -891,7 +904,7 @@ int nv_host::run(int argc, char **argv)
     if (nopanel) {
         globals_init();
         session_apply();
-        if (ui_port > 0)
+        if (ui_port > 0 || app_mode)
             patches_init();                     // (the interface's library)
         start_ui();
         // (the routes in force, --pedal-key's own not among them)
@@ -907,6 +920,30 @@ int nv_host::run(int argc, char **argv)
             }
             return rs;
         };
+        std::thread app_saver;
+        if (app_mode) {
+#ifdef NV_NATIVE_UI
+            // the session saved every 2 s beside the window, which runs on this thread to its close
+            nv_ui_quit = []() { g_stop = true; };
+            app_saver = std::thread([&]() {
+                for (int n = 0; !g_stop; n++) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    if (n % 20 == 19)
+                        session_save(routes_now());
+                }
+            });
+            std::string d = nv_self_exe();
+            d = d.substr(0, d.rfind('/') == std::string::npos ? 0 : d.rfind('/'));
+            const int r = nui_run(this, ((d.empty() ? std::string(".") : d) + "/ui/fonts").c_str(), app_windowed ? 1 : 0);
+            if (r == 0)
+                fprintf(stderr, "nvlive: the window closed\n");
+            g_stop = true;
+            app_saver.join();
+#else
+            fprintf(stderr, "nvlive: --app: built without the native interface (examples/third_party.py, then build again)\n");
+            g_stop = true;
+#endif
+        }
         // THE SESSION, saved every 2 s while the interface is up (as the
         // panel does); the window closed, or the interface's QUIT: stopped
         const auto t_ui = std::chrono::steady_clock::now();

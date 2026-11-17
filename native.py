@@ -4706,13 +4706,28 @@ def build_nvlive():
     hint = os.path.join(HERE, 'native', 'hostint.h')
     hlive = os.path.join(HERE, 'native', 'hostlive.h')
     uis = os.path.join(HERE, 'native', 'uiserve.h')
-    if not os.path.exists(exe) or max(os.path.getmtime(src), os.path.getmtime(hdr), os.path.getmtime(hint), os.path.getmtime(hlive),
-                                      os.path.getmtime(uis),
-                                      os.path.getmtime(so)) > os.path.getmtime(exe):
+    # THE NATIVE INTERFACE (nui/, --app): built in when its libraries are
+    # (examples/third_party.py): SDL3 static, Dear ImGui's sources, ours
+    nui_objs, nui_flags, nui_libs = [], [], []
+    tp = os.path.join(HERE, 'third_party')
+    sdl = os.path.join(tp, 'sdl3-linux')
+    imgui = os.path.join(tp, 'imgui-1.93.0')
+    if os.path.exists(os.path.join(sdl, 'lib', 'libSDL3.a')) and os.path.isdir(imgui):
+        inc = ['-I' + os.path.join(sdl, 'include'), '-I' + imgui, '-I' + os.path.join(HERE, 'nui')]
+        ucx = ['g++', '-std=c++17', '-O2'] + inc
+        nui_objs = _build_objects([('nui_' + os.path.basename(f)[:-4], ucx, f) for f in (
+            os.path.join(imgui, 'imgui.cpp'), os.path.join(imgui, 'imgui_draw.cpp'), os.path.join(imgui, 'imgui_tables.cpp'),
+            os.path.join(imgui, 'imgui_widgets.cpp'), os.path.join(imgui, 'backends', 'imgui_impl_sdl3.cpp'),
+            os.path.join(imgui, 'backends', 'imgui_impl_opengl3.cpp'), os.path.join(HERE, 'nui', 'nui.cpp'))])
+        nui_flags = ['-DNV_NATIVE_UI']
+        nui_libs = [os.path.join(sdl, 'lib', 'libSDL3.a')]
+    newest = max([os.path.getmtime(x) for x in (src, hdr, hint, hlive, uis, so)] + [os.path.getmtime(o) for o in nui_objs])
+    if not os.path.exists(exe) or newest > os.path.getmtime(exe):
         tmp = '%s.%d.tmp' % (exe, os.getpid())
-        subprocess.check_call(_TC.cmd(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin',
-                               src, '-o', tmp, '-L' + HERE, '-lnative', '-ldl', '-lpthread',
-                               '-Wl,-rpath,$ORIGIN']))
+        subprocess.check_call(_TC.cmd(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin']
+                                      + nui_flags + [src] + nui_objs + nui_libs
+                                      + ['-o', tmp, '-L' + HERE, '-lnative', '-ldl', '-lpthread', '-lm',
+                                         '-Wl,-rpath,$ORIGIN']))
         os.replace(tmp, exe)
     return exe
 
