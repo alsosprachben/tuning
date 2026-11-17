@@ -2184,11 +2184,17 @@ def about_json(path):
     for ps, panel, rows, controls in stops():
         for p in ps:
             stop_notes[str(p)] = {"panel": panel, "stops": {n: [r, note] for bit, n, r, note in rows}}
-    doc = {"levels": [LEVEL[k] for k in range(5)], "programs": progs, "stops": stop_notes}
+    # ...and each drum's: Standard's keys (PERC_RATED), a set's own over them
+    # (KIT_RATED; a set in KIT_ONLY plays nothing on the keys it lacks)
+    import percussion_map as PM
+    perc = {str(k): [r, note] for k, (r, note) in PERC_RATED.items()}
+    kits = {str(k): {str(n): [r, note] for n, (r, note) in ks.items()} for k, ks in KIT_RATED.items() if k < 128}
+    doc = {"levels": [LEVEL[k] for k in range(5)], "programs": progs, "stops": stop_notes, "perc": perc,
+           "kits": kits, "kit_only": sorted(k for k in getattr(PM, "KIT_ONLY", ()) if k < 128)}
     with open(path, "w") as f:
         json.dump(doc, f, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         f.write("\n")
-    print("%s: %d programs and variations, %d organs' stops" % (path, len(progs), len(stop_notes)))
+    print("%s: %d programs and variations, %d organs' stops, %d drum sets" % (path, len(progs), len(stop_notes), len(kits)))
 
 
 def main(argv):

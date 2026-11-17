@@ -243,3 +243,38 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .pk .hb { padding: 12px 10px; }
 #pedalLearn { padding: 18px 10px; }
 #pedalLearn.blink { color: var(--lcd); animation: blink 0.8s steps(2) infinite; }
+
+/* ---- the drums card: the kits down the side, the pads by kind, a user key's sound */
+.drums { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px 1fr 400px; gap: 8px; }
+.kits { overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 4px; }
+.kit { display: grid; grid-template-columns: 44px 1fr; align-items: center; text-align: left; min-height: 46px; padding: 0 8px;
+  background: #1f2225; color: var(--silk); border: 1px solid var(--edge); border-radius: 7px; font-size: 14px; }
+.kit .pn { font: 21px var(--f-lcd); color: var(--lcd); }
+.kit.cur { background: var(--lcd); border-color: var(--lcd); color: var(--lcd-bg); }
+.kit.cur .pn { color: var(--lcd-bg); }
+.kit.pending { box-shadow: inset 0 0 0 2px var(--lcd); animation: blink 0.8s steps(2) infinite; }
+.pads { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; min-height: 0; padding-right: 4px; }
+.pgrp h3, .dr-side h3 { margin: 0 0 6px; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--silk); }
+.dr-side h3 small { font-weight: 400; letter-spacing: 0; color: var(--lcd); margin-left: 6px; }
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+.pad { position: relative; height: 84px; border-radius: 9px; border: 1px solid #0b0c0d; overflow: hidden; touch-action: none;
+  background: linear-gradient(180deg, #3a3f45, #25292d); color: var(--silk); text-align: left; padding: 8px 9px;
+  display: flex; flex-direction: column; justify-content: space-between; }
+.pad i { position: absolute; inset: 0; background: radial-gradient(120% 100% at 50% 30%, var(--lcd), rgba(240,177,58,0)); opacity: 0; pointer-events: none; }
+.pad i.go { animation: padflash .45s ease-out forwards; }
+@keyframes padflash { from { } to { opacity: 0; } }
+.pad .pk { position: relative; font: 14px var(--f-lcd); color: var(--lcd); }
+.pad .pk small { font-size: 14px; opacity: .55; }
+.pad .pnm { position: relative; font-size: 13px; line-height: 1.2; }
+.pad.sel { border-color: var(--lcd); box-shadow: inset 0 0 0 1px var(--lcd); }
+.pad.unset { opacity: .5; }
+.dr-side { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+#ukey { display: flex; flex-direction: column; gap: 6px; min-height: 0; flex: 1; }
+#ukey:empty { flex: 0; }
+.uk-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; min-height: 0; flex: 1; }
+.uk-list { overflow-y: auto; display: flex; flex-direction: column; gap: 3px; min-height: 0; max-height: 420px; }
+.uk { text-align: left; padding: 9px 8px; background: #1f2225; color: var(--silk); border: 1px solid var(--edge); border-radius: 6px; font-size: 13px; }
+.uk b { font: 400 14px var(--f-lcd); color: var(--lcd); margin-right: 4px; }
+.uk.on { background: var(--lcd); color: var(--lcd-bg); }
+.uk.on b { color: var(--lcd-bg); }
+.dr-side .about { flex: none; }

@@ -2192,6 +2192,10 @@ void nv_host::render_block(long long n0, float *buf, bool step)
             continue;
         }
         if (m.ch >= 0 && m.ch < 16) {                  // (each channel's activity: the panel's 16 bars)
+            if (m.type == 0 && m.b > 0) {               // (...and its keys': the drum pads)
+                key_vel[(size_t)m.ch][(size_t)(m.a & 127)] = (unsigned char)m.b;
+                key_hits[(size_t)m.ch][(size_t)(m.a & 127)].fetch_add(1, std::memory_order_relaxed);
+            }
             if (m.type == 2 && m.a == 7)
                 hvol[m.ch] = m.b;
             else if (m.type == 2 && m.a == 11)
@@ -2992,6 +2996,8 @@ std::string nv_host::kit_name(int prog) const
         const size_t j = (size_t)(prog - 128);
         return j < E.mk_names.size() && !E.mk_names[j].empty() ? E.mk_names[j] : "drum set";
     }
+    if (prog == 64 || prog == 65)               // (GS's user sets: built from other sets' keys)
+        return prog == 64 ? "User Set 1" : "User Set 2";
     return prog >= 0 && E.prog[prog].kit.size() ? E.prog[prog].kit : "drum set";
 }
 

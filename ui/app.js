@@ -160,6 +160,7 @@ async function select(row) {
   S.synth = s.synth; drawSynth();
   if (s.stops && s.stops.row === S.row) setStops(s.stops);
   if (card === 'piano') { const r = await Wire.call('piano'); if (r.piano) setPiano(r.piano); }
+  if (card === 'drums') { DR.sel = null; const r = await Wire.call('drums'); if (r.drums) setDrums(r.drums); }
 }
 Kit.press($('prev'), () => select(S.row - 1));
 Kit.press($('next'), () => select(S.row + 1));
@@ -174,11 +175,11 @@ async function soloPart(row) {
 // ---------------------------------------------------------------- THE CARD KEYS
 const CARDS = [
   ['parts', 'Parts', true], ['library', 'Library', true], ['synth', 'Synth', true],
-  ['stops', 'Stops', true], ['piano', 'Piano', true], ['drums', 'Drums'], ['effects', 'Effects'],
+  ['stops', 'Stops', true], ['piano', 'Piano', true], ['drums', 'Drums', true], ['effects', 'Effects'],
   ['matrix', 'Matrix'], ['tuning', 'Tuning'], ['control', 'Control'], ['scenes', 'Scenes'], ['setup', 'Setup'],
 ];
 const LATER = {
-  drums: 'a pad for each key of the kit', effects: 'the insertion effect and the reverb, chorus, delay and EQ',
+  effects: 'the insertion effect and the reverb, chorus, delay and EQ',
   matrix: 'what each controller moves', tuning: 'the tuner, pitch standard and the Eastern systems',
   control: 'on-screen controls, routes and learn', scenes: 'presets, scenes, the GS reset and the metronome',
   setup: 'MIDI, audio, borrowed time and the globals',
@@ -204,6 +205,7 @@ function showCard(id) {
   if (id === 'synth') drawSynth();
   if (id === 'stops') drawStops();
   Wire.call('piano', { open: id === 'piano' ? 1 : 0 }).then(r => { if (r.piano) setPiano(r.piano); });
+  Wire.call('drums', { open: id === 'drums' ? 1 : 0, sets: DR.sets ? 0 : 1 }).then(r => { if (r.drums) setDrums(r.drums); });
 }
 
 // ---------------------------------------------------------------- PARTS: the keyboard and the parts' ranges
@@ -736,6 +738,134 @@ function drawDampers() {
   $('dampBand').textContent = `Where the dampers leave the strings, by the pedal's value: ${band}. The bass dampers are heavier and leave later.`;
 }
 
+// ---------------------------------------------------------------- THE DRUMS CARD
+// The selected part's kit as pads, by kind; a pad struck harder the higher
+// it is touched, lit as the keyboard or a file plays it. The kits down the
+// side. A user set (GS's two): each key takes its sound from a key of any set.
+const DR = { d: null, sets: null, sel: null, sig: '', touched: null };
+const DRUM_KINDS = [
+  ['Kicks', /kick|bass drum|\bbd\b/i], ['Snares', /snare|rim|stick|clap|snap|brush/i], ['Toms', /\btom/i],
+  ['Hi-hats', /hat\b|hi-?hat|\bhh\b/i], ['Cymbals', /cymbal|crash|ride|splash|china|chinese/i],
+];
+const kindOf = nm => (DRUM_KINDS.find(([, re]) => re.test(nm)) || ['Percussion'])[0];
+function setDrums(d) {
+  if (d.row !== S.row) return;
+  if (d.sets) DR.sets = d.sets;
+  if (DR.d && (DR.d.kit !== d.kit)) { DR.sel = null; DR.touched = null; DR.browse = undefined; }
+  DR.d = d;
+  if (card === 'drums') drawDrums();
+}
+function drumNote(kit, key) {
+  const a = S.about;
+  if (!a || !a.perc) return null;
+  const own = a.kits[String(kit)];
+  if (own && own[key]) return own[key];
+  if (own && (a.kit_only || []).includes(kit)) return null;
+  return a.perc[key] || null;
+}
+function drawDrums() {
+  const d = DR.d;
+  if (!d) return;
+  const kits = S.patches.filter(p => p.drums);
+  $('drumsWho').textContent = `part ${pad(d.row + 1, 2)} · ${d.part}`;
+  const nk = d.keys.filter(k => d.user === undefined || k[1]).length;
+  $('drumsInfo').textContent = d.drums ? `${nk} key${nk === 1 ? '' : 's'} · channel ${d.channel < 0 ? 10 : d.channel + 1}` : '';
+  const ksig = kits.length + '|' + d.kit;
+  if (ksig !== DR.ksig) {
+    DR.ksig = ksig;
+    $('kits').innerHTML = kits.map(p => `<button class="kit${p.program === d.kit ? ' cur' : ''}" data-kit="1" data-pick="${p.pick}">` +
+      `<span class="pn">${p.program}</span><span class="nm">${esc(p.name)}</span></button>`).join('');
+    const c = $('kits').querySelector('.cur'); if (c) c.scrollIntoView({ block: 'nearest' });
+  }
+  const el = $('pads');
+  if (!d.drums) {
+    DR.sig = '';
+    el.innerHTML = `<p class="empty">${esc(d.part || 'This part')} is not a drum set. Pick a kit for part ${pad(d.row + 1, 2)} from the list.</p>`;
+    drawUkey(); drawDrumAbout();
+    return;
+  }
+  const user = d.user !== undefined;
+  const keys = user ? d.keys.filter(k => k[0] >= 27 && k[0] <= 87 || k[1]) : d.keys;
+  const sig = d.kit + '|' + keys.map(k => k[0] + ':' + k[1]).join(',');
+  if (sig !== DR.sig) {
+    DR.sig = sig;
+    const sfx = /sfx|sound|effect/i.test(d.part);
+    const groups = new Map();
+    for (const k of keys) {
+      const g = user && !k[1] ? 'Not set' : sfx ? 'Sounds' : kindOf(k[1]);
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(k);
+    }
+    const order = ['Kicks', 'Snares', 'Toms', 'Hi-hats', 'Cymbals', 'Percussion', 'Sounds', 'Not set'];
+    el.innerHTML = order.filter(g => groups.has(g)).map(g => `<section class="pgrp"><h3>${g}</h3><div class="pgrid">` +
+      groups.get(g).map(k => `<button class="pad${user && !k[1] ? ' unset' : ''}" data-key="${k[0]}"><i></i>` +
+        `<span class="pk">${noteName(k[0])} <small>${k[0]}</small></span><span class="pnm">${esc(k[1] || '—')}</span></button>`).join('') +
+      '</div></section>').join('');
+  }
+  el.querySelectorAll('.pad').forEach(b => b.classList.toggle('sel', +b.dataset.key === DR.sel));
+  drawUkey(); drawDrumAbout();
+}
+// a pad: down strikes (harder nearer its top), up releases; several fingers at once
+const padDown = new Map();
+$('pads').addEventListener('pointerdown', e => {
+  const b = e.target.closest('.pad'); if (!b || !DR.d) return;
+  e.preventDefault();
+  const r = b.getBoundingClientRect(), key = +b.dataset.key;
+  const v = Math.max(20, Math.min(127, Math.round(127 - 100 * (e.clientY - r.top) / r.height)));
+  padDown.set(e.pointerId, key);
+  Wire.call('drum_hit', { row: DR.d.row, key, v });
+  if (DR.sel !== key) DR.browse = undefined;
+  DR.sel = key; DR.touched = key;
+  $('pads').querySelectorAll('.pad').forEach(p => p.classList.toggle('sel', p === b));
+  drawUkey(); drawDrumAbout();
+});
+const padUp = e => { const k = padDown.get(e.pointerId); if (k === undefined) return; padDown.delete(e.pointerId); if (DR.d) Wire.call('drum_hit', { row: DR.d.row, key: k, v: 0 }); };
+document.addEventListener('pointerup', padUp, true);
+document.addEventListener('pointercancel', padUp, true);
+function lightPads(hits) {
+  if (card !== 'drums') return;
+  for (const [k, v] of hits) {
+    const b = $('pads').querySelector(`.pad[data-key="${k}"] i`); if (!b) continue;
+    b.style.opacity = (0.35 + 0.65 * v / 127).toFixed(2);
+    b.classList.remove('go'); void b.offsetWidth; b.classList.add('go');
+  }
+}
+Kit.press($('kits'), t => { S.picking = +t.dataset.pick; Wire.call('part_pick', { row: S.row, pick: S.picking }); t.classList.add('pending'); }, '.kit');
+function drawDrumAbout() {
+  const d = DR.d, el = $('drumAbout');
+  if (!d || !d.drums || !S.about) { el.innerHTML = ''; return; }
+  const k = DR.touched;
+  if (k === null) { el.innerHTML = `<p class="ab-hint">Touch a pad for what it is and what it was fitted to.</p>`; return; }
+  const e = d.keys.find(x => x[0] === k);
+  let kit = d.kit, key = k;
+  if (d.user !== undefined) { if (!e || e[3] < 0) { el.innerHTML = ''; return; } kit = e[2]; key = e[3]; }
+  const rn = drumNote(kit, key);
+  el.innerHTML = rn ? aboutHtml(`${noteName(k)} ${e ? e[1] : ''}`, rn) : `<p class="ab-hint">${esc(e ? e[1] : '')}: no notes for this one.</p>`;
+}
+// A USER SET's key: the set its sound comes from, then that set's key
+function drawUkey() {
+  const d = DR.d, el = $('ukey');
+  if (!d || d.user === undefined || DR.sel === null || !DR.sets) { el.innerHTML = d && d.user !== undefined ? '<p class="pn-note">A user set: touch a pad to choose its sound.</p>' : ''; return; }
+  const e = d.keys.find(x => x[0] === DR.sel) || [DR.sel, '', -1, -1];
+  const ss = e[3] >= 0 ? e[2] : -1;
+  const set = DR.sets.find(x => x[0] === (DR.browse ?? ss)) || null;
+  el.innerHTML = `<h3>Key ${noteName(DR.sel)} <small>${DR.sel}</small></h3>` +
+    `<p class="pn-note">${e[3] >= 0 ? `Plays ${esc(e[1])} from ${esc((DR.sets.find(x => x[0] === ss) || [0, 'set ' + ss])[1])}.` : 'No sound yet.'}</p>` +
+    `<div class="uk-cols"><div class="uk-list" id="ukSets">${DR.sets.map(x => `<button class="uk${x[0] === (set ? set[0] : ss) ? ' on' : ''}" data-kit="1" data-set="${x[0]}">${esc(x[1])}</button>`).join('')}</div>` +
+    `<div class="uk-list" id="ukKeys">${set ? set[2].map(([k, nm]) => `<button class="uk${set[0] === ss && k === e[3] ? ' on' : ''}" data-kit="1" data-k="${k}">` +
+      `<b>${noteName(k)}</b> ${esc(nm)}</button>`).join('') : '<p class="pn-note">Choose a set.</p>'}</div></div>`;
+  for (const q of ['#ukSets .on', '#ukKeys .on']) { const on = el.querySelector(q); if (on) on.scrollIntoView({ block: 'nearest' }); }
+}
+Kit.press($('ukey'), async t => {
+  const d = DR.d; if (!d || DR.sel === null) return;
+  if (t.dataset.set !== undefined) { DR.browse = +t.dataset.set; drawUkey(); return; }
+  const set = DR.browse ?? (d.keys.find(x => x[0] === DR.sel) || [])[2];
+  await Wire.call('udrum_set', { set: d.user, key: DR.sel, code: 0x0B, v: set });
+  await Wire.call('udrum_set', { set: d.user, key: DR.sel, code: 0x0C, v: +t.dataset.k });
+  Wire.call('drum_hit', { row: d.row, key: DR.sel, v: 100 }); setTimeout(() => Wire.call('drum_hit', { row: d.row, key: DR.sel, v: 0 }), 300);
+  const r = await Wire.call('drums'); if (r.drums) setDrums(r.drums);
+}, '.uk');
+
 // ---------------------------------------------------------------- THE NOTES
 // What each program and stop is, and what it was fitted to (about.json:
 // examples/gm_coverage.py --about, the coverage page's own words)
@@ -800,6 +930,8 @@ Wire.connect({
     if (m.parts) setParts(m.parts);
     if (m.stops) setStops(m.stops);
     if (m.piano) setPiano(m.piano);
+    if (m.drums) setDrums(m.drums);
+    if (m.hits) lightPads(m.hits);
     if (m.synth && m.synth.row === S.row && (m.synth.layer === S.layer || m.synth.layers <= S.layer)) { S.layer = m.synth.layer; S.synth = m.synth; if (card === 'synth') drawSynth(); }
   },
   down() { $('gone').hidden = false; },

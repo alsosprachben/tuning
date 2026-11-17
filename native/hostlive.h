@@ -1331,6 +1331,10 @@ struct nv_host {
     void part_solo(size_t row);
     // EACH CHANNEL's ACTIVITY (live.meter), and its CC7 and CC11 as heard
     std::array<std::pair<double, double>, 16> meter{};
+    // each channel's keys struck, a count each and the last velocity (the
+    // touch interface's drum pads light from them)
+    std::array<std::array<std::atomic<unsigned>, 128>, 16> key_hits{};
+    std::array<std::array<unsigned char, 128>, 16> key_vel{};
     int hvol[16] = {100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100};
     int hexpr[16] = {127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127};
     std::map<int, std::map<int, std::array<int, 2>>> hdedit;

@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <chrono>
+#include <map>
 #include <memory>
 #include <string>
 #include <thread>
@@ -342,6 +343,117 @@ J piano_of(nv_host *h, int row, int learning)
     return o;
 }
 
+// THE DRUM SETS' KEYS (the export's DKEY: "S\tset\tname", "K\tset\tkey\tname"),
+// read once: each set's name, and each key's name in it
+struct DKeys {
+    std::vector<std::pair<int, std::string>> sets;
+    std::map<std::pair<int, int>, std::string> keys;
+};
+const DKeys &dkeys(nv_host *h)
+{
+    static DKeys d;
+    static bool read = false;
+    if (read)
+        return d;
+    read = true;
+    const int n = nv_host_udrum_tables(h, nullptr, 0);
+    std::vector<char> b((size_t)std::max(0, n) + 1);
+    nv_host_udrum_tables(h, b.data(), (int)b.size());
+    for (const char *p = b.data(); *p;) {
+        const char *e = strchr(p, '\n');
+        const std::string line(p, e ? (size_t)(e - p) : strlen(p));
+        std::vector<std::string> f;
+        for (size_t a = 0;;) {
+            const size_t t = line.find('\t', a);
+            f.push_back(line.substr(a, t == std::string::npos ? std::string::npos : t - a));
+            if (t == std::string::npos)
+                break;
+            a = t + 1;
+        }
+        if (f.size() >= 3 && f[0] == "S")
+            d.sets.emplace_back(atoi(f[1].c_str()), f[2]);
+        else if (f.size() >= 4 && f[0] == "K")
+            d.keys[std::make_pair(atoi(f[1].c_str()), atoi(f[2].c_str()))] = f[3];
+        if (!e)
+            break;
+        p = e + 1;
+    }
+    return d;
+}
+
+// THE DRUMS CARD's: the part's kit and its keys by name (a user set's, 64 and
+// 65: each key's source set and key, level, pan, received -- -1 not set); the
+// sets a user key may take its sound from, once (sets: the first answer's)
+J drums_of(nv_host *h, int row, bool with_sets)
+{
+    J o = sess::obj();
+    int n = nv_host_parts(h, nullptr, 0);
+    std::vector<nv_host_partinfo> ps((size_t)std::max(0, n));
+    n = nv_host_parts(h, ps.data(), n);
+    const bool has = row >= 0 && row < n;
+    const DKeys &dk = dkeys(h);
+    o.o["row"] = sess::integer(row);
+    o.o["part"] = sess::str(has ? ps[(size_t)row].name : "");
+    const bool drums = has && ps[(size_t)row].drums;
+    o.o["drums"] = sess::boolean(drums);
+    const int kit = drums ? ps[(size_t)row].program : -1;
+    o.o["kit"] = sess::integer(kit);
+    o.o["channel"] = sess::integer(has ? ps[(size_t)row].channel : 9);
+    J keys = sess::arr();
+    if (kit == 64 || kit == 65) {               // (a user set: GS 21's settings)
+        std::vector<int> st(128 * 16, -1);
+        const bool got = nv_host_udrum_state(h, kit - 64, st.data()) == 0;
+        o.o["user"] = sess::integer(kit - 64);
+        o.o["read"] = sess::boolean(got);
+        for (int k = 0; k < 128; k++) {
+            const int *u = &st[(size_t)k * 16];
+            J e = sess::arr();
+            e.a.push_back(sess::integer(k));
+            const int ss = u[0x0B] >= 0 ? u[0x0B] : 0, sk = u[0x0C];
+            auto it = sk >= 0 ? dk.keys.find(std::make_pair(ss, sk)) : dk.keys.end();
+            e.a.push_back(sess::str(it != dk.keys.end() ? it->second : ""));
+            for (int c : {0x0B, 0x0C, 0x02, 0x04, 0x08, 0x01})
+                e.a.push_back(sess::integer(c == 0x0B && sk >= 0 ? ss : u[c]));
+            keys.a.push_back(e);
+        }
+    } else if (kit >= 0) {
+        for (int k = 0; k < 128; k++) {
+            auto it = dk.keys.find(std::make_pair(kit, k));
+            if (it == dk.keys.end())
+                it = dk.keys.find(std::make_pair(0, k));    // (a set the export has no keys for: Standard's)
+            if (it == dk.keys.end())
+                continue;
+            J e = sess::arr();
+            e.a.push_back(sess::integer(k));
+            e.a.push_back(sess::str(it->second));
+            keys.a.push_back(e);
+        }
+    }
+    o.o["keys"] = keys;
+    if (with_sets) {
+        J sets = sess::arr();
+        for (const auto &x : dk.sets) {
+            J e = sess::arr();
+            e.a.push_back(sess::integer(x.first));
+            e.a.push_back(sess::str(x.second));
+            J ks = sess::arr();
+            for (int k = 0; k < 128; k++) {
+                auto it = dk.keys.find(std::make_pair(x.first, k));
+                if (it == dk.keys.end())
+                    continue;
+                J kk = sess::arr();
+                kk.a.push_back(sess::integer(k));
+                kk.a.push_back(sess::str(it->second));
+                ks.a.push_back(kk);
+            }
+            e.a.push_back(ks);
+            sets.a.push_back(e);
+        }
+        o.o["sets"] = sets;
+    }
+    return o;
+}
+
 // a part's knobs on a layer: positions, whose they are, and each in its own words
 J synth_of(nv_host *h, int row, int layer)
 {
@@ -486,6 +598,10 @@ struct nv_ui_watch {
     int row = 0, layer = 0;
     std::string parts_sent, synth_sent, build_sent, stops_sent, piano_sent;
     bool piano = false;                 // (its piano card is open: its pedals read each poll)
+    bool drums = false;                 // (its drums card is open: the kit, and the keys struck)
+    std::string drums_sent;
+    int hit_ch = -1;                    // (the channel whose keys it watches, and their counts as last sent)
+    unsigned hit_n[128] = {};
     int learning = 0;                   // (a key being learnt as the sustain pedal)
     bool quiet = false;                 // (the last meters sent were silence: none until something sounds)
     long tick = 0;
@@ -701,6 +817,35 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         }
         if (w)
             w->piano_sent.clear();
+    } else if (call == "drums") {              // the card opened (or shut: open false); sets: 1 for the user sets' sources
+        if (w) {
+            w->drums = arg_i(q, "open", 1) != 0;
+            w->drums_sent.clear();
+        }
+        r.o["drums"] = drums_of(h, row, arg_i(q, "sets", 0) != 0);
+    } else if (call == "drum_hit") {           // a pad: key, v (0 its release) on the part's channel
+        int n = nv_host_parts(h, nullptr, 0);
+        std::vector<nv_host_partinfo> ps((size_t)std::max(0, n));
+        n = nv_host_parts(h, ps.data(), n);
+        const int key = (int)arg_i(q, "key", -1), v = std::max(0, std::min(127, (int)arg_i(q, "v", 0)));
+        if (row < 0 || row >= n || key < 0 || key > 127) {
+            ok = false;
+            r.o["error"] = sess::str("no part " + std::to_string(row) + " or key " + std::to_string(key));
+        } else {
+            const int ch = ps[(size_t)row].channel < 0 ? 9 : ps[(size_t)row].channel;
+            const uint8_t m[3] = {(uint8_t)((v ? 0x90 : 0x80) | ch), (uint8_t)key, (uint8_t)(v ? v : 64)};
+            nv_host_midi(h, m, 3);
+        }
+    } else if (call == "udrum_set") {          // a user set's key: code (GS 21's: 0x0B its source set, 0x0C its key...), v
+        const int set = (int)arg_i(q, "set", -1), key = (int)arg_i(q, "key", -1), code = (int)arg_i(q, "code", -1);
+        if ((set != 0 && set != 1) || key < 0 || key > 127 || code < 0 || code > 15) {
+            ok = false;
+            r.o["error"] = sess::str("no user set key");
+        } else {
+            nv_host_udrum_send(h, set, key, code, (int)arg_i(q, "v", 0));
+        }
+        if (w)
+            w->drums_sent.clear();
     } else if (call == "panic") {
         nv_host_panic(h);
     } else {
@@ -796,6 +941,42 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
             w->synth_sent = ss;
             r.o["synth"] = sy;
             any = true;
+        }
+    }
+    if (w->drums) {                             // (the keys struck on the part's channel since the last poll)
+        int ch = 9;
+        {
+            int n = nv_host_parts(h, nullptr, 0);
+            std::vector<nv_host_partinfo> ps((size_t)std::max(0, n));
+            n = nv_host_parts(h, ps.data(), n);
+            if (w->row >= 0 && w->row < n && ps[(size_t)w->row].channel >= 0)
+                ch = ps[(size_t)w->row].channel;
+        }
+        J hits = sess::arr();
+        for (int k = 0; k < 128; k++) {
+            const unsigned c = h->key_hits[(size_t)ch][(size_t)k].load(std::memory_order_relaxed);
+            if (ch == w->hit_ch && c != w->hit_n[k]) {
+                J e = sess::arr();
+                e.a.push_back(sess::integer(k));
+                e.a.push_back(sess::integer(h->key_vel[(size_t)ch][(size_t)k]));
+                hits.a.push_back(e);
+            }
+            w->hit_n[k] = c;
+        }
+        w->hit_ch = ch;
+        if (!hits.a.empty()) {
+            r.o["hits"] = hits;
+            any = true;
+        }
+        if (w->tick % 6 == 3) {
+            J dj = drums_of(h, w->row, false);
+            std::string ds;
+            put(ds, dj);
+            if (ds != w->drums_sent) {
+                w->drums_sent = ds;
+                r.o["drums"] = dj;
+                any = true;
+            }
         }
     }
     if (w->piano && w->tick % 2 == 0) {        // (the pedals at 15 a second, while the card is open)
