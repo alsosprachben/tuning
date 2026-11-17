@@ -57,7 +57,7 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .jogbox small { font: 14px var(--f-lcd); color: var(--lcd); letter-spacing: .06em; }
 
 /* ---- the card keys */
-.keys { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; }
+.keys { display: grid; grid-template-columns: repeat(12, 1fr) 48px; gap: 6px; }
 .ck { font: 700 12px/1 var(--f-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--silk-dim); padding: 15px 4px;
   border-radius: 7px; background: #2b2f34; border: 1px solid var(--edge); touch-action: manipulation; }
 .ck.on { background: var(--silk); color: var(--panel); }
@@ -461,3 +461,20 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .og-box h3 { margin: 0; grid-column: 1 / span 2; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--silk); }
 .og-box .og-knob { grid-row: 2 / span 2; }
 .og-box .pn-note { margin: 0; }
+
+/* THE HELP: a ? beside a card's name or a region's title, and its sheet */
+.qh { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-left: 8px; padding: 0; vertical-align: middle;
+  border-radius: 50%; border: 1.5px solid var(--silk-dim); background: transparent; color: var(--silk-dim);
+  font: 700 13px/1 var(--f-ui); letter-spacing: 0; text-transform: none; cursor: pointer; flex: none; }
+.qh:active { border-color: var(--lcd); color: var(--lcd); }
+.lcd-name { position: relative; }
+.lcd-name > .qh { position: absolute; top: 0; right: 0; margin: 0; border-color: var(--lcd-dim); color: var(--lcd); }
+.jogbox > .qh { margin: 0; }
+.ck.ck-help { font-size: 18px; letter-spacing: 0; }
+.kit-sheet.help-sheet { width: min(760px, 94vw); max-height: 86vh; display: flex; flex-direction: column; gap: 10px; }
+.help-sheet .hs-intro { margin: 0; font-size: 14px; color: var(--silk); line-height: 1.45; }
+.help-sheet .hs-body { overflow: auto; min-height: 0; padding-right: 6px; }
+.help-sheet h4 { margin: 14px 0 6px; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--lcd); }
+.help-sheet dl { display: grid; grid-template-columns: minmax(150px, max-content) 1fr; gap: 7px 16px; margin: 0; }
+.help-sheet dt { font: 700 13px var(--f-ui); color: var(--silk); }
+.help-sheet dd { margin: 0; font-size: 13.5px; line-height: 1.4; color: var(--silk-dim); }

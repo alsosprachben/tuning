@@ -16,7 +16,7 @@
     <div class="lcd" id="lcd">
       <div class="lcd-top">
         <div class="lcd-part"><small>PART</small><span id="partno">--</span></div>
-        <div class="lcd-name"><small id="family">connecting</small><span id="patch">Clavitone</span></div>
+        <div class="lcd-name" data-help="display"><small id="family">connecting</small><span id="patch">Clavitone</span></div>
         <div class="lcd-load"><span id="cpu">CPU --</span><br><span id="voices">VOICES --</span><br><span id="health"></span></div>
       </div>
       <div class="lcd-fields" id="fields"></div>
@@ -31,13 +31,13 @@
       <button class="hb led" id="solo" data-kit="1">SOLO</button>
       <button class="hb panic wide" id="panic" data-kit="1">PANIC</button>
     </div>
-    <div class="jogbox"><div id="jog"></div><small id="jogwho">LEVEL</small></div>
+    <div class="jogbox" data-help="panel"><div id="jog"></div><small id="jogwho">LEVEL</small></div>
   </section>
   <nav class="keys" id="keys"></nav>
   <section class="deck" id="deck">
     <div class="card" data-card="parts">
       <div class="card-head">
-        <h2>Parts <small id="partsMsg"></small></h2>
+        <h2 data-help="parts">Parts <small id="partsMsg"></small></h2>
         <div class="acts">
           <button class="hb" id="layer" data-kit="1">LAYER</button>
           <button class="hb" id="split" data-kit="1">SPLIT</button>
@@ -53,7 +53,7 @@
         <div class="lib-main">
           <div class="lib-head">
             <input id="q" type="search" placeholder="Search patches" autocomplete="off" spellcheck="false">
-            <span id="libInfo"></span>
+            <span id="libInfo"></span><span class="qh-slot" data-help="library"></span>
           </div>
           <div class="tiles" id="tiles"></div>
           <div class="about" id="libAbout"></div>
@@ -62,7 +62,7 @@
       </div>
     </div>
     <div class="card" data-card="synth" hidden>
-      <div class="card-head"><h2>Synth <small id="synthWho"></small></h2>
+      <div class="card-head"><h2 data-help="synth">Synth <small id="synthWho"></small></h2>
         <div class="acts" id="synthActs">
           <div class="kit-seg" id="synthLayer"><button data-kit="1">LAYER A</button><button data-kit="1">LAYER B</button></div>
           <button class="hb" id="synthBack" data-kit="1">AS THE PATCH</button>
@@ -71,25 +71,25 @@
       <div id="synth" class="synth"></div>
     </div>
     <div class="card" data-card="stops" hidden>
-      <div class="card-head"><h2>Stops <small id="stopsWho"></small></h2><span id="stopsInfo"></span></div>
+      <div class="card-head"><h2 data-help="stops">Stops <small id="stopsWho"></small></h2><span id="stopsInfo"></span></div>
       <div id="jamb" class="jamb"></div>
       <div class="og-panel" id="organDrive" hidden></div>
       <div class="about" id="stopAbout"></div>
     </div>
     <div class="card" data-card="piano" hidden>
-      <div class="card-head"><h2>Piano <small id="pianoWho"></small></h2><span id="pianoInfo"></span></div>
+      <div class="card-head"><h2 data-help="piano">Piano <small id="pianoWho"></small></h2><span id="pianoInfo"></span></div>
       <div class="piano" id="piano">
-        <section class="pn-col pn-pedals"><h3>Pedals</h3>
+        <section class="pn-col pn-pedals"><h3 data-help="piano:pedals">Pedals</h3>
           <div class="lyre">
             <div class="pedal"><button class="pd-btn" id="pdSoft" data-kit="1"></button><b>SOFT</b><small>una corda</small></div>
             <div class="pedal"><button class="pd-btn" id="pdSost" data-kit="1"></button><b>SOSTENUTO</b><small>holds the keys down as it goes down</small></div>
             <div class="pedal pd-sus"><div id="pdSus"></div>
               <div class="pd-quick"><button class="hb" data-v="127" data-kit="1">DOWN</button><button class="hb" data-v="64" data-kit="1">HALF</button><button class="hb" data-v="0" data-kit="1">UP</button></div></div>
           </div></section>
-        <section class="pn-col pn-dampers"><h3>Dampers <small id="dampSay"></small></h3>
+        <section class="pn-col pn-dampers"><h3 data-help="piano:dampers">Dampers <small id="dampSay"></small></h3>
           <svg id="damp" viewBox="0 0 880 330"></svg>
           <p class="pn-note" id="dampBand"></p></section>
-        <section class="pn-col pn-key"><h3>Pedal key</h3>
+        <section class="pn-col pn-key"><h3 data-help="piano:key">Pedal key</h3>
           <p class="pn-note">A key held as the sustain pedal: held, the dampers lift; push into it and they come down to the strings.</p>
           <div id="pedalKeys"></div>
           <button class="hb" id="pedalLearn" data-kit="1">LEARN A KEY</button>
@@ -98,7 +98,7 @@
       <div class="about" id="pianoAbout"></div>
     </div>
     <div class="card" data-card="drums" hidden>
-      <div class="card-head"><h2>Drums <small id="drumsWho"></small></h2><span id="drumsInfo"></span></div>
+      <div class="card-head"><h2 data-help="drums">Drums <small id="drumsWho"></small></h2><span id="drumsInfo"></span></div>
       <div class="drums">
         <nav class="kits" id="kits"></nav>
         <div class="pads" id="pads"></div>
@@ -109,35 +109,35 @@
       </div>
     </div>
     <div class="card" data-card="effects" hidden>
-      <div class="card-head"><h2>Effects <small id="fxWho"></small></h2><span id="fxInfo"></span></div>
+      <div class="card-head"><h2 data-help="effects">Effects <small id="fxWho"></small></h2><span id="fxInfo"></span></div>
       <div class="fx">
         <section class="fx-ins">
-          <div class="fx-top"><h3>Insertion effect</h3><span class="fx-name" id="fxName"></span>
+          <div class="fx-top"><h3 data-help="fx:ins">Insertion effect</h3><span class="fx-name" id="fxName"></span>
             <button class="hb led" id="fxOn" data-kit="1">THIS PART ON IT</button></div>
           <p class="pn-note" id="fxParts"></p>
           <nav class="fx-fams" id="fxFams"></nav>
           <div class="fx-types" id="fxTypes"></div>
           <div class="fx-knobs" id="fxParams"></div>
-          <div class="fx-sends"><h4>Sends from it</h4><div class="fx-knobs" id="fxSends"></div></div>
+          <div class="fx-sends"><h4 data-help="fx:sends">Sends from it</h4><div class="fx-knobs" id="fxSends"></div></div>
         </section>
         <section class="fx-sys" id="fxSys"></section>
       </div>
       <div class="about" id="fxAbout"></div>
     </div>
     <div class="card" data-card="matrix" hidden>
-      <div class="card-head"><h2>Matrix <small id="mxWho"></small></h2><span id="mxInfo"></span></div>
+      <div class="card-head"><h2 data-help="matrix">Matrix <small id="mxWho"></small></h2><span id="mxInfo"></span></div>
       <div class="mx" id="mx"></div>
       <p class="pn-note" id="mxGm2"></p>
       <div class="about" id="mxAbout"></div>
     </div>
     <div class="card" data-card="tuning" hidden>
-      <div class="card-head"><h2>Tuning <small>every part</small></h2><span id="tnInfo"></span></div>
+      <div class="card-head"><h2 data-help="tuning">Tuning <small>every part</small></h2><span id="tnInfo"></span></div>
       <div class="tn">
         <div class="tn-list" id="tnList"></div>
         <section class="tn-side">
-          <div class="tn-box"><h3>The tuning <small id="tnName"></small></h3>
+          <div class="tn-box"><h3 data-help="tn:shape">The tuning <small id="tnName"></small></h3>
             <svg id="tnShape" viewBox="0 0 600 300"></svg></div>
-          <div class="tn-box tn-east"><h3>Eastern tuning <small>the Indian voices' parts</small></h3>
+          <div class="tn-box tn-east"><h3 data-help="tn:east">Eastern tuning <small>the Indian voices' parts</small></h3>
             <div class="tn-row" id="tnSys"></div>
             <div class="tn-ragas" id="tnRagas"></div>
             <div class="tn-row" id="tnSa"></div>
@@ -146,46 +146,46 @@
       </div>
     </div>
     <div class="card" data-card="control" hidden>
-      <div class="card-head"><h2>Control <small id="ctWho"></small></h2><span id="ctInfo"></span></div>
+      <div class="card-head"><h2 data-help="control">Control <small id="ctWho"></small></h2><span id="ctInfo"></span></div>
       <div class="ct">
-        <section class="ct-box"><h3>On-screen controls <small>sent straight to the engine</small></h3>
+        <section class="ct-box"><h3 data-help="ct:strip">On-screen controls <small>sent straight to the engine</small></h3>
           <div class="ct-strip" id="ctStrip"></div>
           <div class="ct-add" id="ctAdd" hidden></div></section>
-        <section class="ct-box"><h3>Routes <small>the keyboard's own controls, rewritten before the engine hears them</small></h3>
+        <section class="ct-box"><h3 data-help="ct:routes">Routes <small>the keyboard's own controls, rewritten before the engine hears them</small></h3>
           <div class="ct-routes" id="ctRoutes"></div>
           <div class="ct-new" id="ctNew"></div></section>
       </div>
     </div>
     <div class="card" data-card="scenes" hidden>
-      <div class="card-head"><h2>Scenes <small id="scWho"></small></h2><span id="scInfo"></span></div>
+      <div class="card-head"><h2 data-help="scenes">Scenes <small id="scWho"></small></h2><span id="scInfo"></span></div>
       <div class="sc">
-        <section class="ct-box"><h3>Presets <small>the whole setup: parts, routes, tuning, effects</small></h3>
+        <section class="ct-box"><h3 data-help="sc:presets">Presets <small>the whole setup: parts, routes, tuning, effects</small></h3>
           <div class="sc-list" id="scPresets"></div>
           <div class="sc-acts"><button class="hb" id="presetSave" data-kit="1">SAVE THIS SETUP AS…</button></div></section>
-        <section class="ct-box"><h3>Scenes <small>each channel's controls: levels, pans, sends, pedals</small></h3>
+        <section class="ct-box"><h3 data-help="sc:scenes">Scenes <small>each channel's controls: levels, pans, sends, pedals</small></h3>
           <div class="sc-list" id="scScenes"></div>
           <div class="sc-acts"><button class="hb" id="sceneSave" data-kit="1">SAVE THE CONTROLS AS…</button></div></section>
-        <section class="ct-box sc-side"><h3>Metronome</h3>
+        <section class="ct-box sc-side"><h3 data-help="sc:metro">Metronome</h3>
           <div class="sc-metro" id="scMetro"></div>
-          <h3>GS reset</h3>
+          <h3 data-help="sc:gs">GS reset</h3>
           <p class="pn-note">Every part back to program 1, the controllers, effects and receive settings to power-on, as a sequencer's GS Reset.</p>
           <button class="hb" id="gsReset" data-kit="1">GS RESET</button></section>
       </div>
     </div>
     <div class="card" data-card="setup" hidden>
-      <div class="card-head"><h2>Setup</h2><span id="suInfo"></span>
+      <div class="card-head"><h2 data-help="setup">Setup</h2><span id="suInfo"></span>
         <div class="acts"><button class="hb" id="quit" data-kit="1">QUIT CLAVITONE</button></div></div>
       <div class="su">
-        <section class="ct-box"><h3>MIDI in <small>several at once, merged; kept in the session</small></h3>
+        <section class="ct-box"><h3 data-help="su:midi">MIDI in <small>several at once, merged; kept in the session</small></h3>
           <div class="sc-list" id="suIns"></div>
-          <h3>The Messenger</h3><p class="pn-note" id="suMsgr"></p>
+          <h3 data-help="su:msgr">The Messenger</h3><p class="pn-note" id="suMsgr"></p>
           <div class="tn-row" id="suMsgrOpts"></div></section>
-        <section class="ct-box"><h3>Sound <small>every part</small></h3>
+        <section class="ct-box"><h3 data-help="su:sound">Sound <small>every part</small></h3>
           <div class="fx-knobs" id="suKnobs"></div>
           <div class="tn-row" id="suSw"></div>
           <h4>The room</h4><div class="tn-row" id="suRooms"></div>
           <h4>Program changes read as</h4><div class="tn-row" id="suStd"></div></section>
-        <section class="ct-box"><h3>Borrowed time <small>rubato</small></h3>
+        <section class="ct-box"><h3 data-help="su:rubato">Borrowed time <small>rubato</small></h3>
           <div class="su-rub" id="suRub"></div></section>
       </div>
     </div>
@@ -196,5 +196,6 @@
 <script src="wire.js"></script>
 <script src="kit.js"></script>
 <script src="app.js"></script>
+<script src="help.js"></script>
 </body>
 </html>

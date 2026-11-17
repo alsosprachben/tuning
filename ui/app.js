@@ -201,6 +201,12 @@ CARDS.forEach(([id, label, ready]) => {
   Kit.press(b, () => showCard(id));
   $('keys').appendChild(b);
 });
+{ // (the HELP key: the gestures and the cards)
+  const b = document.createElement('button');
+  b.className = 'ck ck-help'; b.dataset.kit = '1'; b.textContent = '?'; b.setAttribute('aria-label', 'Help');
+  Kit.press(b, () => Help.open('basics'));
+  $('keys').appendChild(b);
+}
 function showCard(id) {
   card = id;
   try { localStorage.setItem('clavitone.card', id); } catch (_) {}
@@ -541,7 +547,7 @@ function buildSynth() {
     const k = S.knobs[i];
     if (!cols.has(k.column)) {
       const c = document.createElement('section'); c.className = 'sy-col'; c.dataset.col = k.column;
-      c.innerHTML = `<h3>${esc(k.column)}</h3><div class="sy-grid"></div>`;
+      c.innerHTML = `<h3 data-help="synth:${esc(k.column)}">${esc(k.column)}</h3><div class="sy-grid"></div>`;
       const host = SY_STACK[k.column] && cols.get(SY_STACK[k.column]);
       if (host) { host.el.classList.add('stacked'); host.el.appendChild(c); c.classList.add('sub'); } else el.appendChild(c);
       const grid = c.querySelector('.sy-grid');
@@ -591,7 +597,7 @@ function drawDrive(st) {
   const [now, voice, mine] = st.drive;
   if (!OG.knob) {
     const el = $('organDrive');
-    el.innerHTML = '<section class="og-box"><h3>Drive</h3><div class="og-knob"></div>' +
+    el.innerHTML = '<section class="og-box"><h3 data-help="drive">Drive</h3><div class="og-knob"></div>' +
       '<p class="pn-note">The valve before the rotors: clean at 0, a growl as it turns up. The mod wheel is the swell.</p>' +
       '<button class="hb" data-kit="1">AS THE VOICE</button></section>';
     const send = Wire.throttled(v => Wire.call('drive_set', { row: S.row, v }));
@@ -905,7 +911,7 @@ function drawUkey() {
   const e = d.keys.find(x => x[0] === DR.sel) || [DR.sel, '', -1, -1];
   const ss = e[3] >= 0 ? e[2] : -1;
   const set = DR.sets.find(x => x[0] === (DR.browse ?? ss)) || null;
-  el.innerHTML = `<h3>Key ${noteName(DR.sel)} <small>${DR.sel}</small></h3>` +
+  el.innerHTML = `<h3 data-help="drums:user">Key ${noteName(DR.sel)} <small>${DR.sel}</small></h3>` +
     `<p class="pn-note">${e[3] >= 0 ? `Plays ${esc(e[1])} from ${esc((DR.sets.find(x => x[0] === ss) || [0, 'set ' + ss])[1])}.` : 'No sound yet.'}</p>` +
     `<div class="uk-cols"><div class="uk-list" id="ukSets">${DR.sets.map(x => `<button class="uk${x[0] === (set ? set[0] : ss) ? ' on' : ''}" data-kit="1" data-set="${x[0]}">${esc(x[1])}</button>`).join('')}</div>` +
     `<div class="uk-list" id="ukKeys">${set ? set[2].map(([k, nm]) => `<button class="uk${set[0] === ss && k === e[3] ? ' on' : ''}" data-kit="1" data-k="${k}">` +
@@ -1025,10 +1031,10 @@ function drawSys() {
   const sig = boxes.map(b => b.id + b.knobs.length).join('|');
   if (sig !== FX.ssig) {
     FX.ssig = sig;
-    el.innerHTML = boxes.map(b => `<div class="fx-box" data-box="${b.id}"><h3>${b.name} <small>${b.cc}</small></h3>` +
+    el.innerHTML = boxes.map(b => `<div class="fx-box" data-box="${b.id}"><h3 data-help="fx:${b.id}">${b.name} <small>${b.cc}</small></h3>` +
       `<div class="fx-st">${b.types.map((n, i) => `<button class="fxs" data-kit="1" data-lo="${b.lo}" data-v="${i}" data-box="${b.id}">${n}</button>`).join('')}</div>` +
       `<p class="pn-note fx-room"></p><div class="fx-knobs sm"></div></div>`).join('') +
-      `<div class="fx-box" data-box="eq"><h3>EQ <small>the whole mix</small></h3><div class="fx-knobs sm"></div></div>`;
+      `<div class="fx-box" data-box="eq"><h3 data-help="fx:eq">EQ <small>the whole mix</small></h3><div class="fx-knobs sm"></div></div>`;
     for (const b of boxes) {
       const kb = el.querySelector(`[data-box="${b.id}"] .fx-knobs`);
       for (const [nm, lo, , a, z] of b.knobs)
@@ -1347,7 +1353,7 @@ function drawRoutes() {
   const sw = dst && dst[2] === 'switch';
   const p = cur(), pch = p && p.channel >= 0 ? p.channel : -1;
   const ready = nw.src >= 0 && (nw.src === 1 || nw.src === 2 || nw.arg >= 0) && nw.dst !== null;
-  $('ctNew').innerHTML = `<h4>A new route</h4>` +
+  $('ctNew').innerHTML = `<h4 data-help="ct:new">A new route</h4>` +
     `<div class="tn-row"><b>FROM</b>` +
     `<button class="tns${learning === 1 ? ' on blink' : nw.src === 3 ? ' on' : ''}" data-kit="1" data-learn="1">${learning === 1 ? 'PRESS A KEY…' : 'A KEY (LEARN)'}</button>` +
     `<button class="tns${learning === 2 ? ' on blink' : nw.src === 0 ? ' on' : ''}" data-kit="1" data-learn="2">${learning === 2 ? 'MOVE A CONTROL…' : 'A CONTROLLER (LEARN)'}</button>` +
