@@ -105,7 +105,7 @@ inline void sys_send(App &a, int hi, int lo, int v, const std::string &key)
 // Returns the flags; *picked the value moved to (else unchanged)
 inline int list_knob(App &a, const std::string &id, float cx, float cy, float size, const std::vector<int> &vals,
                      const std::vector<std::string> &shown, int value, const std::string &label, bool centred, float lw,
-                     int &picked)
+                     int &picked, bool own = false)
 {
     const int n = (int)vals.size();
     int idx = 0;
@@ -114,7 +114,7 @@ inline int list_knob(App &a, const std::string &id, float cx, float cy, float si
             idx = i;
     float v01 = n > 1 ? (float)idx / (n - 1) : 0;
     const std::string say = idx < (int)shown.size() ? shown[(size_t)idx] : std::to_string(n ? vals[(size_t)idx] : 0);
-    const int f = knob(a, id.c_str(), cx, cy, size, v01, label, say, centred, centred ? std::vector<float>{0.5f} : std::vector<float>{}, lw);
+    const int f = knob(a, id.c_str(), cx, cy, size, v01, label, say, centred, centred ? std::vector<float>{0.5f} : std::vector<float>{}, lw, own);
     picked = value;
     if ((f & K_CHANGED) && n > 1) {
         const int i = (int)std::lround(v01 * (n - 1));

@@ -64,7 +64,7 @@ inline int knob(App &a, const char *id, float cx, float cy, float size, float &v
     d->AddCircleFilled(c, r * 0.64f * a.k, IM_COL32(0x15, 0x17, 0x1a, 255), 40);
     d->AddCircleFilled(c, r * 0.52f * a.k, CAP, 40);
     d->AddLine(c, pt(r * 0.48f, av), SILK, 2.5f * a.k);
-    const auto ls = label_lines(a, a.bold, 14, label, label_w);
+    const auto ls = label.empty() ? std::vector<std::string>{} : label_lines(a, a.bold, 14, label, label_w);
     for (size_t i = 0; i < ls.size(); i++)
         text_c(a, a.bold, 14, cx, cy + r + 4 + i * 16, SILK_DIM, ls[i]);
     text_c(a, a.font, 14, cx, cy + r + 4 + ls.size() * 16, (f & K_ACTIVE) || own ? OWN : LCD, value);
