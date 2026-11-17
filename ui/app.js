@@ -399,7 +399,7 @@ function drawTiles(force) {
   if (force || sig !== tilesSig) {
     tilesSig = sig;
     $('tiles').innerHTML = list.length ? list.map(p =>
-      `<button class="tile" data-kit="1" data-pick="${p.pick}"><span class="pn">${p.drums ? 'KIT ' + p.program : pad(p.program, 3) + (p.variation ? '<i>.' + p.variation + '</i>' : '')}</span>` +
+      `<button class="tile" data-kit="1" data-pick="${p.pick}"><span class="pn">${p.drums ? '<i>KIT </i>' + p.program : pad(p.program, 3) + (p.variation ? '<i>.' + p.variation + '</i>' : '')}</span>` +
       `<span class="nm">${esc(p.name)}</span><span class="star${S.favs.has(favKey(p)) ? ' on' : ''}" data-fav="${favKey(p)}">★</span></button>`).join('')
       : `<p class="empty">${S.fam === 'fav' && !searching ? 'No favourites yet: tap a patch\'s star to keep it here.' : 'Nothing matches.'}</p>`;
   }

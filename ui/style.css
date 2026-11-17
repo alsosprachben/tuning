@@ -126,9 +126,9 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 #libInfo { color: var(--silk-dim); font-size: 14px; }
 .tiles { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 6px; align-content: start; padding-right: 4px; }
-.tile { display: grid; grid-template-columns: 74px 1fr 44px; align-items: center; text-align: left; min-height: 54px; padding: 0 0 0 10px;
+.tile { display: grid; grid-template-columns: 108px 1fr 44px; align-items: center; text-align: left; min-height: 54px; padding: 0 0 0 10px;
   border-radius: 7px; background: #2b2f34; border: 1px solid var(--edge); color: var(--silk); touch-action: manipulation; }
-.tile .pn { font: 21px var(--f-lcd); color: var(--lcd); }
+.tile .pn { font: 21px var(--f-lcd); color: var(--lcd); white-space: nowrap; }   /* (the widest: 127.127, KIT 127) */
 .tile .pn i { font-style: normal; font-size: 14px; opacity: .8; }
 .tile .nm { font-size: 15px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile .star { font-size: 22px; color: #4c5259; text-align: center; align-self: stretch; display: grid; place-items: center; }
