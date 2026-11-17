@@ -454,6 +454,120 @@ J drums_of(nv_host *h, int row, bool with_sets)
     return o;
 }
 
+// THE INSERTION EFFECT's TABLES (the export's EFXU: "T num msb lsb name",
+// "C first last family", "P msb lsb n name mark read fresh v,v,.. shown\x1fshown..")
+// as JSON, read once: types [num, msb, lsb, name], families [first, last,
+// name], params {"msb.lsb": [[n, name, mark, fresh, [v..], [shown..]]]}
+std::vector<std::string> split(const std::string &t, char c)
+{
+    std::vector<std::string> f;
+    for (size_t a = 0;;) {
+        const size_t b = t.find(c, a);
+        f.push_back(t.substr(a, b == std::string::npos ? std::string::npos : b - a));
+        if (b == std::string::npos)
+            break;
+        a = b + 1;
+    }
+    return f;
+}
+const J &efx_tables(nv_host *h)
+{
+    static J t;
+    static bool read = false;
+    if (read)
+        return t;
+    read = true;
+    const int n = nv_host_efx_tables(h, nullptr, 0);
+    std::vector<char> b((size_t)std::max(0, n) + 1);
+    nv_host_efx_tables(h, b.data(), (int)b.size());
+    J types = sess::arr(), fams = sess::arr(), params = sess::obj();
+    for (const std::string &line : split(std::string(b.data()), '\n')) {
+        const std::vector<std::string> f = split(line, '\t');
+        if (f[0] == "T" && f.size() >= 5) {
+            J e = sess::arr();
+            for (int k = 1; k <= 3; k++)
+                e.a.push_back(sess::integer(atoi(f[(size_t)k].c_str())));
+            e.a.push_back(sess::str(f[4]));
+            types.a.push_back(e);
+        } else if (f[0] == "C" && f.size() >= 4) {
+            J e = sess::arr();
+            e.a.push_back(sess::integer(atoi(f[1].c_str())));
+            e.a.push_back(sess::integer(atoi(f[2].c_str())));
+            e.a.push_back(sess::str(f[3]));
+            fams.a.push_back(e);
+        } else if (f[0] == "P" && f.size() >= 10) {
+            J e = sess::arr();
+            e.a.push_back(sess::integer(atoi(f[3].c_str())));
+            e.a.push_back(sess::str(f[4]));
+            e.a.push_back(sess::str(f[5]));
+            e.a.push_back(sess::integer(atoi(f[7].c_str())));
+            J vs = sess::arr(), sh = sess::arr();
+            for (const std::string &x : split(f[8], ','))
+                if (!x.empty())
+                    vs.a.push_back(sess::integer(atoi(x.c_str())));
+            for (const std::string &x : split(f[9], '\x1f'))
+                sh.a.push_back(sess::str(x));
+            e.a.push_back(vs);
+            e.a.push_back(sh);
+            const std::string key = f[1] + "." + f[2];
+            if (!params.get(key))
+                params.o[key] = sess::arr();
+            params.o[key].a.push_back(e);
+        }
+    }
+    t = sess::obj();
+    t.o["types"] = types;
+    t.o["families"] = fams;
+    t.o["params"] = params;
+    return t;
+}
+
+// THE EFFECTS CARD's: the insertion effect as it stands (its type, parameters
+// -1 the type's own, sends, the channels on it, why it is not played live)
+// and the system effects (the reverb, chorus, delay and EQ)
+J effects_of(nv_host *h)
+{
+    J o = sess::obj();
+    nv_host_efx e{};
+    const bool has = nv_host_efx_state(h, &e) == 0;
+    J x = sess::obj();
+    x.o["has"] = sess::boolean(has);
+    x.o["msb"] = sess::integer(e.msb);
+    x.o["lsb"] = sess::integer(e.lsb);
+    J p = sess::arr(), sd = sess::arr(), pt = sess::arr();
+    for (int k = 0; k < 21; k++)
+        p.a.push_back(sess::integer(e.p[k]));
+    for (int k = 0; k < 3; k++)
+        sd.a.push_back(sess::integer(e.send[k]));
+    for (int k = 0; k < e.nparts && k < 32; k++)
+        pt.a.push_back(sess::integer(e.parts[k]));
+    x.o["p"] = p;
+    x.o["send"] = sd;
+    x.o["parts"] = pt;
+    x.o["why"] = sess::str(e.why);
+    o.o["efx"] = x;
+    nv_host_sysfx_state ss{};
+    if (nv_host_sysfx(h, &ss) == 0) {
+        J y = sess::obj();
+        y.o["rev"] = sess::arr();
+        for (int v : {ss.rev_macro, ss.rev_level, ss.rev_time, ss.rev_fb})
+            y.o["rev"].a.push_back(sess::integer(v));
+        y.o["room"] = sess::str(ss.room);
+        y.o["gs"] = sess::boolean(ss.gs != 0);
+        y.o["cho"] = sess::arr();
+        for (int k = 0; k < 7; k++)
+            y.o["cho"].a.push_back(sess::integer(ss.cho[k]));
+        y.o["dly"] = sess::arr();
+        for (int k = 0; k < 11; k++)
+            y.o["dly"].a.push_back(sess::integer(ss.dly[k]));
+        y.o["eq"] = sess::arr();
+        for (int k = 0; k < 4; k++)
+            y.o["eq"].a.push_back(sess::integer(ss.eq[k]));
+        o.o["sys"] = y;
+    }
+    return o;
+}
+
 // a part's knobs on a layer: positions, whose they are, and each in its own words
 J synth_of(nv_host *h, int row, int layer)
 {
@@ -599,6 +713,8 @@ struct nv_ui_watch {
     std::string parts_sent, synth_sent, build_sent, stops_sent, piano_sent;
     bool piano = false;                 // (its piano card is open: its pedals read each poll)
     bool drums = false;                 // (its drums card is open: the kit, and the keys struck)
+    bool effects = false;               // (its effects card is open)
+    std::string effects_sent;
     std::string drums_sent;
     int hit_ch = -1;                    // (the channel whose keys it watches, and their counts as last sent)
     unsigned hit_n[128] = {};
@@ -846,6 +962,35 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         }
         if (w)
             w->drums_sent.clear();
+    } else if (call == "effects") {            // the card opened (or shut: open false); tables: 1 for the EFX's types
+        if (w) {
+            w->effects = arg_i(q, "open", 1) != 0;
+            w->effects_sent.clear();
+        }
+        r.o["effects"] = effects_of(h);
+        if (arg_i(q, "tables", 0))
+            r.o["tables"] = efx_tables(h);
+    } else if (call == "efx_send") {           // kind t (a msb, b lsb), p (a = b), s (address a = b), c (channel a on: b)
+        const J *k = q.get("kind");
+        const std::string kind = k && k->is(J::STR) ? k->s : "";
+        if (kind.size() != 1 || std::string("tpsc").find(kind[0]) == std::string::npos) {
+            ok = false;
+            r.o["error"] = sess::str("no kind '" + kind + "'");
+        } else {
+            nv_host_efx_send(h, kind[0], (int)arg_i(q, "a", 0), (int)arg_i(q, "b", 0));
+        }
+        if (w)
+            w->effects_sent.clear();
+    } else if (call == "sysfx_send") {         // 40 hi lo v (hi 1 the reverb, chorus and delay; 2 the EQ)
+        const int hi = (int)arg_i(q, "hi", -1), lo = (int)arg_i(q, "lo", -1);
+        if ((hi != 1 && hi != 2) || lo < 0 || lo > 127) {
+            ok = false;
+            r.o["error"] = sess::str("no system effect address");
+        } else {
+            nv_host_sysfx_send(h, hi, lo, (int)arg_i(q, "v", 0));
+        }
+        if (w)
+            w->effects_sent.clear();
     } else if (call == "panic") {
         nv_host_panic(h);
     } else {
@@ -977,6 +1122,16 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
                 r.o["drums"] = dj;
                 any = true;
             }
+        }
+    }
+    if (w->effects && w->tick % 6 == 1) {      // (a file's or the keyboard's changes)
+        J ej = effects_of(h);
+        std::string es;
+        put(es, ej);
+        if (es != w->effects_sent) {
+            w->effects_sent = es;
+            r.o["effects"] = ej;
+            any = true;
         }
     }
     if (w->piano && w->tick % 2 == 0) {        // (the pedals at 15 a second, while the card is open)

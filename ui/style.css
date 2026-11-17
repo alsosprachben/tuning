@@ -278,3 +278,32 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .uk.on { background: var(--lcd); color: var(--lcd-bg); }
 .uk.on b { color: var(--lcd-bg); }
 .dr-side .about { flex: none; }
+
+/* ---- the effects card: the insertion effect (types by family, its knobs, its sends), the system effects */
+.fx { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 940px; gap: 8px; }
+.fx-ins, .fx-box { display: flex; flex-direction: column; gap: 6px; background: #1f2225; border: 1px solid var(--edge); border-radius: 9px; padding: 10px 12px; min-height: 0; }
+.fx h3 { margin: 0; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--silk); }
+.fx h3 small { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--silk-dim); margin-left: 6px; }
+.fx h4 { margin: 0 0 2px; font: 700 10px var(--f-ui); letter-spacing: .14em; text-transform: uppercase; color: var(--silk-dim); }
+.fx-top { display: flex; align-items: center; gap: 14px; }
+.fx-name { flex: 1; font: 21px var(--f-lcd); color: var(--lcd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-top .hb { padding: 10px 12px; }
+.fx-fams { display: flex; flex-wrap: wrap; gap: 4px; }
+.fx-fams .fam { padding: 8px 10px; font-size: 12px; }
+.fx-types { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px; max-height: 128px; overflow-y: auto; flex: none; }
+.fxt, .fxs { text-align: left; padding: 8px 8px; background: #2a2e32; color: var(--silk); border: 1px solid var(--edge); border-radius: 6px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fxt b { font: 400 14px var(--f-lcd); color: var(--lcd); margin-right: 3px; }
+.fxt.cur, .fxs.on { background: var(--lcd); color: var(--lcd-bg); border-color: var(--lcd); }
+.fxt.cur b { color: var(--lcd-bg); }
+.fx-knobs { display: flex; flex-wrap: wrap; gap: 0 2px; align-content: flex-start; }
+.fx-knobs .kit-knob { width: 92px; padding: 2px 0; }
+.fx-knobs .kit-dial { width: 52px; height: 52px; }
+.fx-knobs .kit-label { font-size: 11px; text-align: center; line-height: 1.15; }
+.fx-ins .fx-knobs:not(.sm) { flex: 1; min-height: 0; overflow-y: auto; }
+.fx-sends .fx-knobs { flex: none; }
+.fx-sys { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; gap: 8px; min-height: 0; overflow-y: auto; }
+.fx-st { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+.fxs { padding: 6px 5px; font-size: 11px; text-align: center; }
+.fx-knobs.sm .kit-knob { width: 70px; }
+.fx-knobs.sm .kit-dial { width: 42px; height: 42px; }
+.fx-room:empty { display: none; }

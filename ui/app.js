@@ -160,6 +160,7 @@ async function select(row) {
   S.synth = s.synth; drawSynth();
   if (s.stops && s.stops.row === S.row) setStops(s.stops);
   if (card === 'piano') { const r = await Wire.call('piano'); if (r.piano) setPiano(r.piano); }
+  if (card === 'effects') drawEffects();
   if (card === 'drums') { DR.sel = null; const r = await Wire.call('drums'); if (r.drums) setDrums(r.drums); }
 }
 Kit.press($('prev'), () => select(S.row - 1));
@@ -175,11 +176,10 @@ async function soloPart(row) {
 // ---------------------------------------------------------------- THE CARD KEYS
 const CARDS = [
   ['parts', 'Parts', true], ['library', 'Library', true], ['synth', 'Synth', true],
-  ['stops', 'Stops', true], ['piano', 'Piano', true], ['drums', 'Drums', true], ['effects', 'Effects'],
+  ['stops', 'Stops', true], ['piano', 'Piano', true], ['drums', 'Drums', true], ['effects', 'Effects', true],
   ['matrix', 'Matrix'], ['tuning', 'Tuning'], ['control', 'Control'], ['scenes', 'Scenes'], ['setup', 'Setup'],
 ];
 const LATER = {
-  effects: 'the insertion effect and the reverb, chorus, delay and EQ',
   matrix: 'what each controller moves', tuning: 'the tuner, pitch standard and the Eastern systems',
   control: 'on-screen controls, routes and learn', scenes: 'presets, scenes, the GS reset and the metronome',
   setup: 'MIDI, audio, borrowed time and the globals',
@@ -206,6 +206,7 @@ function showCard(id) {
   if (id === 'stops') drawStops();
   Wire.call('piano', { open: id === 'piano' ? 1 : 0 }).then(r => { if (r.piano) setPiano(r.piano); });
   Wire.call('drums', { open: id === 'drums' ? 1 : 0, sets: DR.sets ? 0 : 1 }).then(r => { if (r.drums) setDrums(r.drums); });
+  Wire.call('effects', { open: id === 'effects' ? 1 : 0, tables: FX.t ? 0 : 1 }).then(r => { if (r.tables) FX.t = r.tables; if (r.effects) setEffects(r.effects); });
 }
 
 // ---------------------------------------------------------------- PARTS: the keyboard and the parts' ranges
@@ -866,6 +867,151 @@ Kit.press($('ukey'), async t => {
   const r = await Wire.call('drums'); if (r.drums) setDrums(r.drums);
 }, '.uk');
 
+// ---------------------------------------------------------------- THE EFFECTS CARD
+// The insertion effect (the Sound Canvas's EFX: one for the parts put on it):
+// its type by family, its parameters as knobs in Roland's own printed values,
+// its sends; and the system effects every part sends to (CC91, 93, 94) and
+// the EQ. What a file sets comes back by the poll.
+const FX = { t: null, e: null, sig: '', ctl: {}, fam: null, about: null, mine: {} };
+const REVERBS = ['Room 1', 'Room 2', 'Room 3', 'Hall 1', 'Hall 2', 'Plate', 'Delay', 'Pan Delay'];
+const CHORUSES = ['Chorus 1', 'Chorus 2', 'Chorus 3', 'Chorus 4', 'FB Chorus', 'Flanger', 'Short Delay', 'Short Delay FB'];
+const DELAYS = ['Delay 1', 'Delay 2', 'Delay 3', 'Delay 4', 'Pan Delay 1', 'Pan Delay 2', 'Pan Delay 3', 'Pan Delay 4', 'Delay to Rev', 'Pan Repeat'];
+const range = (lo, hi) => Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+// a knob over a list of values (each its own words): stepped by the list
+function listKnob(parent, o) {
+  const n = o.vals.length, idx = v => Math.max(0, o.vals.indexOf(v));
+  const say = i => (o.shown ? o.shown[i] : String(o.vals[i]));
+  let last = -1;
+  const k = Kit.knob(parent, {
+    label: o.label, value: n > 1 ? idx(o.value) / (n - 1) : 0, centred: o.centred,
+    fmt: x => say(Math.round(x * (n - 1))),
+    onChange: x => { const i = Math.round(x * (n - 1)); if (i !== last) { last = i; o.onSet(o.vals[i]); } },
+    onInfo: () => Kit.sheet({ title: o.label, text: say(idx(o.value)), label: 'Value', value: o.vals[idx(o.value)], digits: 0,
+      lo: o.vals[0], hi: o.vals[n - 1], hint: o.hint || '', onSet: v => { const j = o.vals.reduce((b, x, q) => Math.abs(x - v) < Math.abs(o.vals[b] - v) ? q : b, 0); o.onSet(o.vals[j]); } }),
+  });
+  k.el.addEventListener('pointerdown', () => { if (o.onTouch) o.onTouch(); });
+  return { el: k.el, set: v => { const i = idx(v); k.set(n > 1 ? i / (n - 1) : 0, say(i)); } };
+}
+// what this screen just set stands until the engine has it (a poll in between reads the old)
+function fxMine(key, v) { FX.mine[key] = { v, until: performance.now() + HOLD_MS }; }
+function fxVal(key, v) { const m = FX.mine[key]; if (m && m.until > performance.now()) return m.v; delete FX.mine[key]; return v; }
+function efxSend(kind, a, b, key) { if (key) fxMine(key, b); Wire.call('efx_send', { kind, a, b }); }
+function sysSend(hi, lo, v, key) { fxMine(key, v); Wire.call('sysfx_send', { hi, lo, v }); }
+function setEffects(e) { FX.e = e; if (card === 'effects') drawEffects(); }
+function partChannels() { const p = cur(); return !p ? [0] : p.channel < 0 ? range(0, 15) : [p.channel]; }
+function drawEffects() {
+  const e = FX.e, t = FX.t;
+  if (!e || !t) return;
+  const x = e.efx, p = cur();
+  $('fxWho').textContent = p ? `part ${pad(S.row + 1, 2)} · ${p.name}` : '';
+  const key = x.msb + '.' + x.lsb;
+  const type = t.types.find(y => y[1] === x.msb && y[2] === x.lsb);
+  const on = partChannels().every(c => x.parts.includes(c));
+  $('fxOn').classList.toggle('on', on);
+  $('fxName').textContent = type ? `${pad(type[0], 2)} ${type[3]}` : '00 Thru';
+  const chans = x.parts.filter(c => c < 16).map(c => c + 1);
+  $('fxParts').textContent = (chans.length ? `On it: channel${chans.length > 1 ? 's' : ''} ${chans.join(', ')}.` : 'No part is on it yet.') +
+    (x.why ? ` Not played live: ${x.why}.` : '');
+  // the families, then the family's types
+  if (FX.fam === null) FX.fam = type ? t.families.findIndex(f => type[0] >= f[0] && type[0] <= f[1]) : 0;
+  const fsig = FX.fam + '|' + key;
+  if (fsig !== FX.fsig) {
+    FX.fsig = fsig;
+    $('fxFams').innerHTML = t.families.map((f, i) => `<button class="fam${i === FX.fam ? ' on' : ''}" data-kit="1" data-i="${i}">${esc(f[2])}</button>`).join('');
+    const f = t.families[Math.max(0, FX.fam)];
+    $('fxTypes').innerHTML = `<button class="fxt${!type ? ' cur' : ''}" data-kit="1" data-msb="0" data-lsb="0"><b>00</b> Thru</button>` +
+      t.types.filter(y => f && y[0] >= f[0] && y[0] <= f[1]).map(y =>
+        `<button class="fxt${type === y ? ' cur' : ''}" data-kit="1" data-msb="${y[1]}" data-lsb="${y[2]}"><b>${pad(y[0], 2)}</b> ${esc(y[3])}</button>`).join('');
+  }
+  // its parameters (built again for another type)
+  const ps = t.params[key] || [];
+  if (key !== FX.sig) {
+    FX.sig = key; FX.ctl = {};
+    const el = $('fxParams'); el.innerHTML = ps.length ? '' : '<p class="pn-note">Thru: the parts on it play dry. Choose a type.</p>';
+    for (const [n, name, mark, fresh, vals, shown] of ps)
+      FX.ctl['p' + n] = listKnob(el, { label: name + (mark && mark !== '-' ? ' ' + mark : ''), vals, shown, value: fresh,
+        onSet: v => efxSend('p', n, v, 'p' + n), onTouch: () => drawFxAbout('efx') });
+    const sd = $('fxSends'); sd.innerHTML = '';
+    ['Reverb', 'Chorus', 'Delay'].forEach((nm, i) => {
+      FX.ctl['s' + i] = listKnob(sd, { label: 'to ' + nm, vals: range(0, 127), value: 0, onSet: v => efxSend('s', 0x17 + i, v, 's' + i) });
+    });
+  }
+  for (const [n, , , fresh] of ps) if (FX.ctl['p' + n]) FX.ctl['p' + n].set(fxVal('p' + n, x.p[n] >= 0 ? x.p[n] : fresh));
+  for (let i = 0; i < 3; i++) if (FX.ctl['s' + i]) FX.ctl['s' + i].set(fxVal('s' + i, x.send[i]));
+  drawSys();
+  drawFxAbout();
+}
+Kit.press($('fxOn'), () => {
+  const on = !$('fxOn').classList.contains('on');
+  for (const c of partChannels()) Wire.call('efx_send', { kind: 'c', a: c, b: on ? 1 : 0 });
+  $('fxOn').classList.toggle('on', on);
+});
+Kit.press($('fxFams'), b => { FX.fam = +b.dataset.i; FX.fsig = ''; drawEffects(); }, '.fam');
+Kit.press($('fxTypes'), b => {
+  Wire.call('efx_send', { kind: 't', a: +b.dataset.msb, b: +b.dataset.lsb });
+  $('fxTypes').querySelectorAll('.fxt').forEach(q => q.classList.toggle('cur', q === b));
+  FX.aboutOf = 'efx';
+}, '.fxt');
+// the system effects: each a box, its type and its knobs (GS 40 01 3x/5x, 40 02 0x)
+function drawSys() {
+  const y = FX.e.sys, el = $('fxSys');
+  if (!y) { el.innerHTML = '<p class="pn-note">Reading the system effects…</p>'; FX.ssig = ''; return; }
+  const boxes = [
+    { id: 'rev', name: 'Reverb', cc: 'CC91', types: REVERBS, type: y.rev[0], lo: 0x30,
+      knobs: [['Level', 0x33, y.rev[1], 0, 127], ['Time', 0x34, y.rev[2], 0, 127]].concat(y.rev[3] >= 0 ? [['Feedback', 0x35, y.rev[3], 0, 127]] : []) },
+    { id: 'cho', name: 'Chorus', cc: 'CC93', types: CHORUSES, type: y.cho[0], lo: 0x38,
+      knobs: [['Pre-LPF', 0x39, y.cho[1], 0, 7], ['Level', 0x3A, y.cho[2], 0, 127], ['Feedback', 0x3B, y.cho[3], 0, 127],
+        ['Delay', 0x3C, y.cho[4], 0, 127], ['Rate', 0x3D, y.cho[5], 0, 127], ['Depth', 0x3E, y.cho[6], 0, 127]] },
+    { id: 'dly', name: 'Delay', cc: 'CC94', types: DELAYS, type: y.dly[0], lo: 0x50,
+      knobs: [['Pre-LPF', 0x51, y.dly[1], 0, 7], ['Time', 0x52, y.dly[2], 1, 0x73], ['Ratio L', 0x53, y.dly[3], 1, 0x78],
+        ['Ratio R', 0x54, y.dly[4], 1, 0x78], ['Level C', 0x55, y.dly[5], 0, 127], ['Level L', 0x56, y.dly[6], 0, 127],
+        ['Level R', 0x57, y.dly[7], 0, 127], ['Level', 0x58, y.dly[8], 0, 127], ['Feedback', 0x59, y.dly[9], 0, 127]] },
+  ];
+  const sig = boxes.map(b => b.id + b.knobs.length).join('|');
+  if (sig !== FX.ssig) {
+    FX.ssig = sig;
+    el.innerHTML = boxes.map(b => `<div class="fx-box" data-box="${b.id}"><h3>${b.name} <small>${b.cc}</small></h3>` +
+      `<div class="fx-st">${b.types.map((n, i) => `<button class="fxs" data-kit="1" data-lo="${b.lo}" data-v="${i}" data-box="${b.id}">${n}</button>`).join('')}</div>` +
+      `<p class="pn-note fx-room"></p><div class="fx-knobs sm"></div></div>`).join('') +
+      `<div class="fx-box" data-box="eq"><h3>EQ <small>the whole mix</small></h3><div class="fx-knobs sm"></div></div>`;
+    for (const b of boxes) {
+      const kb = el.querySelector(`[data-box="${b.id}"] .fx-knobs`);
+      for (const [nm, lo, , a, z] of b.knobs)
+        FX.ctl[b.id + lo] = listKnob(kb, { label: nm, vals: range(a, z), value: a, onSet: v => sysSend(1, lo, v, b.id + lo), onTouch: () => drawFxAbout(b.id) });
+    }
+    const eq = el.querySelector('[data-box="eq"] .fx-knobs');
+    const gains = range(0x34, 0x4C), gsh = gains.map(g => (g - 0x40 > 0 ? '+' : '') + (g - 0x40) + ' dB');
+    FX.ctl.eq0 = listKnob(eq, { label: 'Low', vals: [0, 1], shown: ['200 Hz', '400 Hz'], value: 0, onSet: v => sysSend(2, 0, v, 'eq0'), onTouch: () => drawFxAbout('eq') });
+    FX.ctl.eq1 = listKnob(eq, { label: 'Low gain', vals: gains, shown: gsh, value: 0x40, centred: true, onSet: v => sysSend(2, 1, v, 'eq1'), onTouch: () => drawFxAbout('eq') });
+    FX.ctl.eq2 = listKnob(eq, { label: 'High', vals: [0, 1], shown: ['3 kHz', '6 kHz'], value: 0, onSet: v => sysSend(2, 2, v, 'eq2'), onTouch: () => drawFxAbout('eq') });
+    FX.ctl.eq3 = listKnob(eq, { label: 'High gain', vals: gains, shown: gsh, value: 0x40, centred: true, onSet: v => sysSend(2, 3, v, 'eq3'), onTouch: () => drawFxAbout('eq') });
+  }
+  for (const b of boxes) {
+    const t = fxVal(b.id + 'type', b.type);
+    el.querySelectorAll(`.fxs[data-box="${b.id}"]`).forEach(q => q.classList.toggle('on', +q.dataset.v === t));
+    for (const [, lo, v] of b.knobs) FX.ctl[b.id + lo].set(fxVal(b.id + lo, v));
+  }
+  el.querySelector('[data-box="rev"] .fx-room').textContent = y.rev[0] < 0 ? `No GS reverb set: the room is the panel's, ${y.room}.` : '';
+  for (let k = 0; k < 4; k++) FX.ctl['eq' + k].set(fxVal('eq' + k, y.eq[k]));
+}
+Kit.press($('fxSys'), b => {
+  sysSend(1, +b.dataset.lo, +b.dataset.v, b.dataset.box + 'type');
+  $('fxSys').querySelectorAll(`.fxs[data-box="${b.dataset.box}"]`).forEach(q => q.classList.toggle('on', q === b));
+  drawFxAbout(b.dataset.box);
+}, '.fxs');
+const FX_NOTE = { rev: 'Reverb (system)', cho: 'Chorus (system)', dly: 'Delay (system)', eq: 'EQ (system)' };
+function drawFxAbout(of) {
+  if (of) FX.aboutOf = of;
+  const a = S.about, el = $('fxAbout');
+  if (!a || !a.efx || !FX.e || !FX.t) { el.innerHTML = ''; return; }
+  const w = FX.aboutOf || 'efx';
+  if (w === 'efx') {
+    const x = FX.e.efx, type = FX.t.types.find(y => y[1] === x.msb && y[2] === x.lsb);
+    el.innerHTML = type ? (a.efx[type[3]] ? aboutHtml(type[3], a.efx[type[3]]) : `<p class="ab-hint">${esc(type[3])}: no notes yet.</p>`)
+      : '<p class="ab-hint">Touch a knob or a type for what it is.</p>';
+  } else el.innerHTML = aboutHtml(FX_NOTE[w].replace(' (system)', ''), a.effects[FX_NOTE[w]]);
+}
+
 // ---------------------------------------------------------------- THE NOTES
 // What each program and stop is, and what it was fitted to (about.json:
 // examples/gm_coverage.py --about, the coverage page's own words)
@@ -932,6 +1078,7 @@ Wire.connect({
     if (m.piano) setPiano(m.piano);
     if (m.drums) setDrums(m.drums);
     if (m.hits) lightPads(m.hits);
+    if (m.effects) setEffects(m.effects);
     if (m.synth && m.synth.row === S.row && (m.synth.layer === S.layer || m.synth.layers <= S.layer)) { S.layer = m.synth.layer; S.synth = m.synth; if (card === 'synth') drawSynth(); }
   },
   down() { $('gone').hidden = false; },
