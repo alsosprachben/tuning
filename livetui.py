@@ -322,7 +322,7 @@ def gm_label_short(p, width, v=0):
     return "%s (%s)" % (base, MODELLED[p])
 
 # Every tuner in midilib.tuner_registry. This list was hand-kept and had drifted
-# four entries short of the registry -- hybrid440, the general default, among
+# four entries short of the registry -- hybrid440 (the files' default) among
 # them -- so it is now the registry, in the order the picker wants.
 TUNERS = ["hybrid440", "hybrid", "hybridharm", "hybridharm440", "hybridmean", "hybridmeanpiano", "stretchedhelmholtz", "gm2", "even",
           "stretch", "werckmeister", "sankey", "meantone", "just", "pyth",
@@ -336,14 +336,14 @@ TUNERS = ["hybrid440", "hybrid", "hybridharm", "hybridharm440", "hybridmean", "h
 # what it is called. These are the working notes from midilib/tunelib, not a
 # claim about historical practice.
 TUNER_NOTE = {
-    "hybrid440":  "A=440, the default: the hybrid temperament at concert pitch",
+    "hybrid440":  "A=440: the hybrid temperament at concert pitch",
     "hybrid":     "A=415, the same temperament at baroque pitch",
     "hybridharm": "pure 2:1 octaves -- right for mode-locked pipes",
     "hybridharm440": "pure 2:1 octaves at concert pitch",
     "hybridmean": "the hybrid's chains bridged by a mean third: no wolf, pure octaves",
     "hybridmeanpiano": "hybridmean on a Steinway's stretched octaves, A=440",
     "stretchedhelmholtz": "two pure-fifth chains joined by inharmonic octaves, A=440",
-    "gm2":        "a GM 2 device: equal A=440, and the FILE owns the tuning (MTS)",
+    "gm2":        "the default: a GM 2 device, equal A=440, and the FILE owns the tuning (MTS)",
     "werckmeister": "Werckmeister III, from Sankey's published cents, A=415",
     "sankey":     "Sankey's consonance-found Scarlatti tuning, A=415",
     "even":       "equal temperament, A=440",

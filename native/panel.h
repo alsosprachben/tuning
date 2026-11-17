@@ -400,14 +400,14 @@ static int global_pos(int i)
 
 // THE TUNERS (livetui.TUNERS, TUNER_NOTE): the name, what it is for
 static const char *TUNERS[][2] = {
-    {"hybrid440", "A=440, the default: the hybrid temperament at concert pitch"},
+    {"hybrid440", "A=440: the hybrid temperament at concert pitch"},
     {"hybrid", "A=415, the same temperament at baroque pitch"},
     {"hybridharm", "pure 2:1 octaves -- right for mode-locked pipes"},
     {"hybridharm440", "pure 2:1 octaves at concert pitch"},
     {"hybridmean", "the hybrid's chains bridged by a mean third: no wolf, pure octaves"},
     {"hybridmeanpiano", "hybridmean on a Steinway's stretched octaves, A=440"},
     {"stretchedhelmholtz", "two pure-fifth chains joined by inharmonic octaves, A=440"},
-    {"gm2", "a GM 2 device: equal A=440, and the FILE owns the tuning (MTS)"},
+    {"gm2", "the default: a GM 2 device, equal A=440, and the FILE owns the tuning (MTS)"},
     {"even", "equal temperament, A=440"},
     {"stretch", "pure fifths, the comma taken into stretched octaves, A=415"},
     {"werckmeister", "Werckmeister III, from Sankey's published cents, A=415"},

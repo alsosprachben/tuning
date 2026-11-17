@@ -4826,7 +4826,7 @@ class TemplateCache(object):
     every wheel step, built once (warm) and looked up (get) -- its
     templates as live's dicts."""
 
-    def __init__(self, program, tuner='hybrid', drums=False):
+    def __init__(self, program, tuner='gm2', drums=False):
         import math
         import blockrender as BR
         import damper as DM

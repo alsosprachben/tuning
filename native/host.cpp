@@ -577,7 +577,7 @@ int nv_host::open(int argc, char **argv)
         }
     }
     // THE TUNER (native/tuner.cpp): --tuner=NAME in place of the export's (its
-    // --tuner, else live's hybrid) -- any of midilib's, `hybrid@D:466`,
+    // --tuner, else live's gm2) -- any of midilib's, `hybrid@D:466`,
     // `raga:todi@c#` -- at --a=HZ or --c=HZ (tunelib.set_reference); the
     // free strings' bank built again at it (nv_strings, as live_bank does)
     tname = opt(argc, argv, "tuner", "");
@@ -648,7 +648,7 @@ int nv_host::open(int argc, char **argv)
         }
         return ptab[p].data();
     };
-    tuner_now = tname.empty() ? "hybrid" : tname;   // (the export's: live's hybrid, unless --tuner)
+    tuner_now = tname.empty() ? "gm2" : tname;      // (the export's: live's gm2, unless --tuner)
     tl_ = tname;
     for (char &ch_ : tl_)
         ch_ = (char)tolower((unsigned char)ch_);

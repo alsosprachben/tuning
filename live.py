@@ -4406,7 +4406,7 @@ def _omp_one_thread():
 
 class Live:
     def __init__(self, program=56, rate=48000, frames=128, capacity=65536,
-                 tuner="hybrid", verbose=True, drums=False, headroom_db=4.0,
+                 tuner="gm2", verbose=True, drums=False, headroom_db=4.0,
                  parts=None, threads=1, gpu=False, eastern=None):
         if _REAP is not None:
             _reap_lives()
@@ -23395,7 +23395,7 @@ def main():
     ap.add_argument("--rate", type=int, default=48000)
     ap.add_argument("--frames", type=int, default=128,
                 help="audio block; also becomes the kernel control block (see docstring)")
-    ap.add_argument("--tuner", default="hybrid")
+    ap.add_argument("--tuner", default="gm2")
     ap.add_argument("--eastern", default=None,
                     help="a secondary tuning for the Indian instruments, e.g. raga:bel_todi/todi@c# (ragas.py)")
     ap.add_argument("--drums", action="store_true", help="GM percussion: notes are drums, not pitches")

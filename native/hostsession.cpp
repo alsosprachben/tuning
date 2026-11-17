@@ -783,7 +783,7 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
         sess::J &pd = parts.a[k];
         if (!pd.is(sess::J::OBJ)) {
             pd = sess::obj();
-            pd.o["tuner"] = sess::str("hybrid");
+            pd.o["tuner"] = sess::str("gm2");
             pd.o["drawn"] = sess::arr();
         }
         const PartAt &pa = rows[k];

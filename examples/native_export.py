@@ -112,7 +112,7 @@ def main(argv):
     import patch_map as PM
     import percussion_map as PCM
     import tonelib as T
-    tuner = opt.get("tuner") or ("hybrid" if "live" in opt else "hybrid440")
+    tuner = opt.get("tuner") or ("gm2" if "live" in opt else "hybrid440")   # (live: GM2, the rig's default -- equal at A=440, a file's MTS its own)
     freq = B.tuning_table(tuner)
     classes, idx, cmap = Lazy(N.note_class), {}, []
     for prog in range(128):
