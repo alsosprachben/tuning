@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdio>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -51,6 +52,16 @@ struct App {
     double quit_armed = -10.0;          // (QUIT's first tap: a second within 3 s quits)
     Kit K;
     Dial jog;
+    // A CONTROL's SHEET (a long-press): its value typed; SET leaves the value
+    // for the control to take on its next frame (sheet_set), as a drag would
+    struct Sheet {
+        bool open = false, can_reset = true;
+        std::string key, title, now, label, hint, typed;
+        double lo = 0, hi = 1;
+        int digits = 3;
+    } sheet;
+    std::map<std::string, double> sheet_set;
+    std::set<std::string> sheet_reset;
     // AN EDIT HELD a moment over what the engine pushes (the web's keep/overlay):
     // "row:field" -> (value, until)
     std::map<std::string, std::pair<double, double>> hold;
@@ -224,6 +235,39 @@ inline bool button(App &a, const char *id, float x, float y, float w, float h, c
     frame(a, x, y, w, h, EDGE, 8.0f, 1.0f);
     text_c(a, a.bold, size, x + w / 2, y + (h - size) / 2, on ? PANEL : enabled ? SILK : SILK_DIM, label);
     return hit;
+}
+
+// a control's sheet opened: its value in its own units, lo..hi
+inline void open_sheet(App &a, const std::string &key, const std::string &title, const std::string &now, double value,
+                       double lo, double hi, int digits, const std::string &label, const std::string &hint, bool can_reset = true)
+{
+    App::Sheet &s = a.sheet;
+    s.open = true;
+    s.key = key;
+    s.title = title;
+    s.now = now;
+    s.lo = lo;
+    s.hi = hi;
+    s.digits = digits;
+    s.label = label;
+    s.hint = hint;
+    s.can_reset = can_reset;
+    char b[48];
+    snprintf(b, sizeof b, "%.*f", digits, value);
+    s.typed = b;
+}
+// ...and what it left for the control: true (v set) if SET, flags K_RESET if BACK
+inline int take_sheet(App &a, const std::string &key, double &v)
+{
+    int f = 0;
+    if (auto it = a.sheet_set.find(key); it != a.sheet_set.end()) {
+        v = it->second;
+        a.sheet_set.erase(it);
+        f |= K_CHANGED;
+    }
+    if (a.sheet_reset.erase(key))
+        f |= K_RESET;
+    return f;
 }
 
 // A HEADING (a card's name, a region's) and its ? opening the help at key:

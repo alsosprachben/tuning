@@ -114,13 +114,29 @@ inline int list_knob(App &a, const std::string &id, float cx, float cy, float si
             idx = i;
     float v01 = n > 1 ? (float)idx / (n - 1) : 0;
     const std::string say = idx < (int)shown.size() ? shown[(size_t)idx] : std::to_string(n ? vals[(size_t)idx] : 0);
-    const int f = knob(a, id.c_str(), cx, cy, size, v01, label, say, centred, centred ? std::vector<float>{0.5f} : std::vector<float>{}, lw, own);
+    int f = knob(a, id.c_str(), cx, cy, size, v01, label, say, centred, centred ? std::vector<float>{0.5f} : std::vector<float>{}, lw, own,
+                 false);
     picked = value;
     if ((f & K_CHANGED) && n > 1) {
         const int i = (int)std::lround(v01 * (n - 1));
         picked = vals[(size_t)std::max(0, std::min(n - 1, i))];
     }
-    return f;
+    // (a long-press: the value as its list numbers it, typed; the nearest taken)
+    const std::string sk = id + "#list";
+    if ((f & K_LONG) && n)
+        open_sheet(a, sk, label.empty() ? std::string("Value") : label, say, vals[(size_t)idx], vals.front(), vals.back(), 0, "Value",
+                   shown.empty() ? "" : "The number the module stores for it; the nearest one is taken.");
+    double t;
+    const int sf = take_sheet(a, sk, t);
+    if ((sf & K_CHANGED) && n) {
+        size_t best = 0;
+        for (size_t i = 0; i < vals.size(); i++)
+            if (std::fabs(vals[i] - t) < std::fabs(vals[best] - t))
+                best = i;
+        picked = vals[best];
+        f |= K_CHANGED;
+    }
+    return f | (sf & K_RESET);
 }
 inline std::vector<int> irange(int lo, int hi)
 {

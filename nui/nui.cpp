@@ -46,6 +46,7 @@
 #include "files.h"
 #include "setup.h"
 #include "help.h"
+#include "sheet.h"
 
 namespace nui {
 
@@ -91,6 +92,13 @@ static void draw(App &a)
     dl()->AddCallback(ImGui::GetPlatformIO().DrawCallback_SetSamplerNearest, nullptr);
     if (!a.help.empty() && a.help[0] == '@')        // (a ? touched: the viewer opened at its topic)
         help_open(a, a.help.substr(1));
+    if (a.sheet.open) {                 // A CONTROL's SHEET, over everything while it is open
+        draw_sheet(a);
+        ImGui::End();
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar(2);
+        return;
+    }
     if (!a.help.empty()) {              // THE HELP, over everything while it is open
         draw_help(a);
         ImGui::End();
@@ -260,7 +268,12 @@ static std::vector<Step> load_script(const char *path)
             s >> st.x >> st.y;
         else if (st.op == "drag")             // (drag X0 Y0 X1 Y1 MS: a finger down, moved there, up)
             s >> st.x >> st.y >> st.x1 >> st.y1 >> st.ms;
-        else if (st.op == "fingers")          // (fingers N: N fingers resting -- fine mode at 2)
+        else if (st.op == "press") {          // (press X Y MS: a finger held still there, then up -- a long-press)
+            s >> st.x >> st.y >> st.ms;
+            st.op = "drag";
+            st.x1 = st.x;
+            st.y1 = st.y;
+        } else if (st.op == "fingers")          // (fingers N: N fingers resting -- fine mode at 2)
             s >> st.ms;
         else if (st.op == "shot")
             s >> st.arg;
@@ -425,6 +438,8 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
             a.animate = false;
             dirty = true;
         }
+        if (a.K.active && !a.K.moved && !a.K.long_fired)
+            dirty = true;               // (a press held still: timed for its long-press)
         if (dirty)
             settle = 3;
         if (settle <= 0)

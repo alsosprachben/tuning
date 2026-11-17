@@ -28,14 +28,21 @@ inline void bubble(App &a, const std::string &s)
 // the gesture's flags; v01 moved by the finger
 inline int knob(App &a, const char *id, float cx, float cy, float size, float &v01, const std::string &label,
                 const std::string &value, bool centred = false, const std::vector<float> &detents = {}, float label_w = 0,
-                bool own = false)
+                bool own = false, bool sheet = true)
 {
     const float r = size / 2;
     Range g;
     g.lo = 0;
     g.hi = 1;
     g.detents = detents;
-    const int f = gesture(a.K, id, P(a, cx - r, cy - r), P(a, cx + r, cy + r + 34), v01, g);
+    int f = gesture(a.K, id, P(a, cx - r, cy - r), P(a, cx + r, cy + r + 34), v01, g);
+    if (sheet && (f & K_LONG))
+        open_sheet(a, id, label, value, v01, 0, 1, 3, "Position", centred ? "The knob's position, 0 to 1 (0.5 the centre)." : "The knob's position, 0 to 1.");
+    {
+        double t = v01;
+        f |= take_sheet(a, id, t);
+        v01 = (float)t;
+    }
     const float A0 = -135, A1 = 135, deg = 3.14159265f / 180.0f;
     auto pt = [&](float rr, float d) {
         const float t = (d - 90) * deg;
@@ -83,7 +90,14 @@ inline int fader(App &a, const char *id, float cx, float y, float h, float &v, f
     g.step = step;
     g.travel = h * 1.2f;
     g.detents = detents;
-    const int f = gesture(a.K, id, P(a, cx - 30, y), P(a, cx + 30, y + h), v, g, 1);
+    int f = gesture(a.K, id, P(a, cx - 30, y), P(a, cx + 30, y + h), v, g, 1);
+    if (f & K_LONG)
+        open_sheet(a, id, label, value, v, lo, hi, step >= 1 ? 0 : step >= 0.1f ? 1 : 2, "Value", "");
+    {
+        double t = v;
+        f |= take_sheet(a, id, t);
+        v = std::max(lo, std::min(hi, (float)t));
+    }
     rect(a, cx - 4, y, 8, h, IM_COL32(0x15, 0x17, 0x1a, 255), 4);
     for (float t : detents) {
         const float ty = y + h - (t - lo) / (hi - lo) * h;
@@ -110,7 +124,14 @@ inline int lcd_field(App &a, const char *id, float x, float y, float w, float h,
     g.hi = hi;
     g.step = 1;
     g.travel = std::max(160.0f, 3.0f * (hi - lo + 1));
-    const int f = gesture(a.K, id, P(a, x, y), P(a, x + w, y + h), v, g);
+    int f = gesture(a.K, id, P(a, x, y), P(a, x + w, y + h), v, g);
+    if (f & K_LONG)
+        open_sheet(a, id, label, value, v, lo, hi, 0, "Value", "");
+    {
+        double t = v;
+        f |= take_sheet(a, id, t);
+        v = std::max(lo, std::min(hi, (float)std::round(t)));
+    }
     rect(a, x, y, w, h, sel ? LCD : IM_COL32(0x33, 0x24, 0x08, 255), 3.0f);
     frame(a, x, y, w, h, f & K_ACTIVE ? OWN : LCD_DIM, 3.0f, 1.0f);
     text(a, a.font, 14, x + 10, y + 6, sel ? LCD_BG : LCD, label);

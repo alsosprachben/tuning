@@ -5,6 +5,7 @@
 //   fine        a second finger resting anywhere: ten times finer
 //   detent      a named position (a centre, 0 dB) holds for DETENT px
 //   double-tap  back to the default (the reset)
+//   long-press  held still LONG_S: the control's sheet, its value to type
 //
 // Each draws itself from a value it is given; what the finger does comes
 // back as flags, so values pushed by the engine never fight a finger (the
@@ -23,9 +24,9 @@
 namespace nui {
 
 static const float TRAVEL = 220.0f, FINE = 10.0f, DETENT = 14.0f, SLOP = 6.0f;
-static const double TAP_S = 0.30;
+static const double TAP_S = 0.30, LONG_S = 0.55;
 
-enum { K_CHANGED = 1, K_TAP = 2, K_RESET = 4, K_ENDED = 8, K_ACTIVE = 16 };
+enum { K_CHANGED = 1, K_TAP = 2, K_RESET = 4, K_ENDED = 8, K_ACTIVE = 16, K_LONG = 32 };
 
 struct Range {
     float lo = 0, hi = 1, step = 0, travel = TRAVEL;
@@ -37,7 +38,8 @@ struct Kit {
     ImGuiID active = 0;
     ImVec2 p0{0, 0};
     float base = 0, k = 1.0f;
-    bool moved = false, was_fine = false;
+    bool moved = false, was_fine = false, long_fired = false;
+    double t0 = 0;
     int fingers = 0;                    // (fingers down now, from SDL's touch events)
     std::map<ImGuiID, double> last_tap;
     std::string bubble;
@@ -80,12 +82,18 @@ inline int gesture(Kit &K, const char *id, ImVec2 a, ImVec2 b, float &v, const R
         K.base = v;
         K.moved = false;
         K.was_fine = K.fine();
+        K.t0 = ImGui::GetTime();
+        K.long_fired = false;
     }
     if (ImGui::IsItemActive() && K.active == me) {
         out |= K_ACTIVE;
         const float dx = (m.x - K.p0.x) / K.k, dy = (K.p0.y - m.y) / K.k;
-        if (!K.moved && std::hypot(dx, dy) * K.k >= SLOP)
+        if (!K.moved && !K.long_fired && std::hypot(dx, dy) * K.k >= SLOP)
             K.moved = true;
+        if (!K.moved && !K.long_fired && ImGui::GetTime() - K.t0 >= LONG_S) {   // (held still: the sheet)
+            K.long_fired = true;
+            out |= K_LONG;
+        }
         if (K.moved) {
             const bool f = K.fine();
             if (f != K.was_fine) {              // (fine on or off mid-drag: from here, no jump)
@@ -105,7 +113,7 @@ inline int gesture(Kit &K, const char *id, ImVec2 a, ImVec2 b, float &v, const R
     }
     if (ImGui::IsItemDeactivated() && K.active == me) {
         out |= K_ENDED;
-        if (!K.moved) {
+        if (!K.moved && !K.long_fired) {
             const double now = ImGui::GetTime();
             auto it = K.last_tap.find(me);
             if (it != K.last_tap.end() && now - it->second < TAP_S) {
