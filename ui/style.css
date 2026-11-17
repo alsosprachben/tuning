@@ -392,3 +392,25 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .rt-add { padding: 12px 14px; }
 .rt-add:disabled { opacity: .4; }
 .tns.blink { animation: blink 0.8s steps(2) infinite; }
+
+/* ---- the scenes card: presets, scenes, the metronome, the GS reset; a name typed */
+.sc { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr 380px; grid-template-rows: minmax(0, 1fr); gap: 8px; }
+.sc h3 { margin: 0; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--silk); }
+.sc h3 small { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--silk-dim); margin-left: 8px; font-size: 12px; }
+.sc-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+.sc-item { padding: 10px 12px; background: #262a2e; border: 1px solid var(--edge); border-radius: 8px; display: flex; flex-direction: column; gap: 3px; }
+.sc-item b { font: 400 21px var(--f-lcd); color: var(--lcd); }
+.sc-item span { font-size: 13px; color: var(--silk-dim); }
+.sc-item.on { border-color: var(--lcd); box-shadow: inset 0 0 0 1px var(--lcd); }
+.sc-do { display: flex; gap: 6px; margin-top: 6px; }
+.sc-do .hb, .sc-acts .hb { padding: 13px 14px; }
+.sc-acts { display: flex; gap: 6px; }
+.sc-side { gap: 10px; }
+.sc-metro { display: flex; align-items: flex-start; gap: 4px; flex-wrap: wrap; }
+.sc-metro .kit-knob { width: 84px; }
+.sc-metro .kit-dial { width: 52px; height: 52px; }
+#gsReset { padding: 18px 10px; color: #f3b0a3; }
+#gsReset.blink { animation: blink 0.8s steps(2) infinite; }
+.name-sheet { width: min(1000px, 96vw); }
+.name-val { font: 28px var(--f-lcd); color: var(--lcd); background: var(--lcd-bg); border-radius: 6px; padding: 10px 14px; min-height: 52px; white-space: pre; }
+.name-sheet .set:disabled { opacity: .4; }

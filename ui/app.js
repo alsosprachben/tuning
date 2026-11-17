@@ -179,10 +179,9 @@ async function soloPart(row) {
 const CARDS = [
   ['parts', 'Parts', true], ['library', 'Library', true], ['synth', 'Synth', true],
   ['stops', 'Stops', true], ['piano', 'Piano', true], ['drums', 'Drums', true], ['effects', 'Effects', true],
-  ['matrix', 'Matrix', true], ['tuning', 'Tuning', true], ['control', 'Control', true], ['scenes', 'Scenes'], ['setup', 'Setup'],
+  ['matrix', 'Matrix', true], ['tuning', 'Tuning', true], ['control', 'Control', true], ['scenes', 'Scenes', true], ['setup', 'Setup'],
 ];
 const LATER = {
-  scenes: 'presets, scenes, the GS reset and the metronome',
   setup: 'MIDI, audio, borrowed time and the globals',
 };
 let card = 'parts';
@@ -207,6 +206,7 @@ function showCard(id) {
   if (id === 'stops') drawStops();
   Wire.call('piano', { open: id === 'piano' ? 1 : 0 }).then(r => { if (r.piano) setPiano(r.piano); });
   Wire.call('drums', { open: id === 'drums' ? 1 : 0, sets: DR.sets ? 0 : 1 }).then(r => { if (r.drums) setDrums(r.drums); });
+  Wire.call('scenes', { open: id === 'scenes' ? 1 : 0 }).then(r => { if (r.scenes) setScenes(r.scenes); });
   Wire.call('control', { open: id === 'control' ? 1 : 0, kinds: CT.kinds ? 0 : 1 }).then(r => { if (r.control) setControl(r.control); });
   Wire.call('tuning', { open: id === 'tuning' ? 1 : 0, lists: TN.lists ? 0 : 1 }).then(r => { if (r.tuning) setTuning(r.tuning); });
   Wire.call('matrix', { open: id === 'matrix' ? 1 : 0, tables: MX.t ? 0 : 1 }).then(r => { if (r.tables) MX.t = r.tables; if (r.matrix) setMatrix(r.matrix); });
@@ -1333,6 +1333,101 @@ Kit.press($('ctNew'), async b => {
   drawRoutes();
 }, '.tns, .rt-add');
 
+// ---------------------------------------------------------------- A NAME, typed on the screen's own keys
+function nameSheet(title, value, onSet) {
+  const back = document.createElement('div'); back.className = 'kit-sheet-back';
+  const sh = document.createElement('div'); sh.className = 'kit-sheet name-sheet';
+  const rows = ['1234567890', 'qwertyuiop', 'asdfghjkl-', 'zxcvbnm_'];
+  sh.innerHTML = `<h3>${esc(title)}</h3><div class="name-val"></div><div class="osk">` +
+    rows.map(r => `<div>${[...r].map(c => `<button data-k="${c}">${c}</button>`).join('')}</div>`).join('') +
+    '<div><button data-k="clear" class="w">CLEAR</button><button data-k=" " class="space">SPACE</button><button data-k="back" class="w">⌫</button></div></div>' +
+    '<div class="row"><button class="close">Cancel</button><button class="set">Save</button></div>';
+  back.appendChild(sh); document.body.appendChild(back);
+  let v = value || '';
+  const show = () => { sh.querySelector('.name-val').textContent = v || ' '; sh.querySelector('.set').disabled = !v.trim(); };
+  show();
+  sh.querySelector('.osk').addEventListener('pointerdown', e => {
+    const b = e.target.closest('button'); if (!b) return; e.preventDefault();
+    const k = b.dataset.k;
+    v = k === 'clear' ? '' : k === 'back' ? v.slice(0, -1) : (v + k).slice(0, 40);
+    show();
+  });
+  const close = () => back.remove();
+  Kit.press(sh.querySelector('.close'), close);
+  Kit.press(sh.querySelector('.set'), () => { if (v.trim()) { close(); onSet(v.trim()); } });
+}
+
+// ---------------------------------------------------------------- THE SCENES CARD
+// The presets (the whole setup) and the scenes (each channel's controls),
+// kept beside the session and shared with live.py and the apps: a tap
+// chooses one, LOAD or RECALL brings it, DELETE takes it out. The
+// metronome, and the GS reset.
+const SC = { s: null, sel: { preset: null, scene: null }, msg: '', resetArm: 0 };
+function setScenes(x) { SC.s = x; if (card === 'scenes') drawScenes(); }
+function partsSay(ps) {
+  return ps.map(([pg, v, dr]) => {
+    const p = S.patches.find(q => !!q.drums === dr && q.program === pg && (dr || q.variation === v));
+    return p ? p.name : (dr ? 'kit ' + pg : 'program ' + pg);
+  }).join(' + ');
+}
+function drawScenes() {
+  const x = SC.s; if (!x) return;
+  $('scInfo').textContent = SC.msg || (x.kept ? '' : 'No session file: presets and scenes cannot be kept.');
+  const sp = SC.sel.preset, ss = SC.sel.scene;
+  $('scPresets').innerHTML = x.presets.length ? x.presets.map(p => `<div class="sc-item${p.name === sp ? ' on' : ''}" data-kind="preset" data-name="${esc(p.name)}" data-kit="1">` +
+    `<b>${esc(p.name)}</b><span>${esc(partsSay(p.parts))}${p.tuner ? ' · ' + esc(p.tuner) : ''}</span>` +
+    (p.name === sp ? `<div class="sc-do"><button class="hb" data-do="preset_load" data-kit="1">LOAD</button><button class="hb" data-do="preset_save" data-kit="1">SAVE OVER</button><button class="hb" data-do="preset_delete" data-kit="1">DELETE</button></div>` : '') +
+    '</div>').join('') : '<p class="pn-note">No presets yet.</p>';
+  $('scScenes').innerHTML = x.scenes.length ? x.scenes.map(c => `<div class="sc-item${c.name === ss ? ' on' : ''}" data-kind="scene" data-name="${esc(c.name)}" data-kit="1">` +
+    `<b>${esc(c.name)}</b><span>${c.n} setting${c.n === 1 ? '' : 's'}</span>` +
+    (c.name === ss ? `<div class="sc-do"><button class="hb" data-do="scene_recall" data-kit="1">RECALL</button><button class="hb" data-do="scene_save" data-kit="1">SAVE OVER</button><button class="hb" data-do="scene_delete" data-kit="1">DELETE</button></div>` : '') +
+    '</div>').join('') : '<p class="pn-note">No scenes yet.</p>';
+  drawMetro();
+}
+async function scDo(call, name) {
+  const r = await Wire.call(call, { name });
+  SC.msg = r.msg || ''; if (call.endsWith('_delete')) SC.sel = { preset: null, scene: null };
+  if (r.scenes) setScenes(r.scenes); else drawScenes();
+  clearTimeout(SC.msgT); SC.msgT = setTimeout(() => { SC.msg = ''; drawScenes(); }, 4000);
+}
+for (const id of ['scPresets', 'scScenes']) {
+  Kit.press($(id), (t, e) => {
+    const b = e.target.closest('[data-do]');
+    if (b) { scDo(b.dataset.do, t.dataset.name); return; }
+    SC.sel[t.dataset.kind] = SC.sel[t.dataset.kind] === t.dataset.name ? null : t.dataset.name;
+    drawScenes();
+  }, '.sc-item');
+}
+Kit.press($('presetSave'), () => nameSheet('Save this setup as', '', n => scDo('preset_save', n)));
+Kit.press($('sceneSave'), () => nameSheet('Save the controls as', '', n => scDo('scene_save', n)));
+Kit.press($('gsReset'), () => {
+  const b = $('gsReset');
+  if (SC.resetArm > performance.now()) { SC.resetArm = 0; b.textContent = 'GS RESET'; b.classList.remove('blink'); Wire.call('gs_reset'); SC.msg = 'GS reset sent'; drawScenes(); return; }
+  SC.resetArm = performance.now() + 3000; b.textContent = 'TAP AGAIN TO RESET'; b.classList.add('blink');
+  setTimeout(() => { if (SC.resetArm && SC.resetArm <= performance.now()) { SC.resetArm = 0; b.textContent = 'GS RESET'; b.classList.remove('blink'); } }, 3100);
+});
+// THE METRONOME: the globals 10 (bpm, 0 off), 11 (its bell every n beats), 12 (its level)
+const MT = { built: false };
+function drawMetro() {
+  const m = SC.s.metro, el = $('scMetro');
+  if (!MT.built) {
+    MT.built = true; el.innerHTML = '';
+    MT.on = Kit.toggle(el, { label: 'ON', value: m[0] > 0, onChange: on => {
+      let last = 100; try { last = +localStorage.getItem('clavitone.bpm') || 100; } catch (_) {}
+      Wire.call('global_set', { i: 10, v: on ? last : 0 });
+    } });
+    MT.bpm = listKnob(el, { label: 'Tempo', vals: range(30, 300), value: m[0] > 0 ? m[0] : 100, onSet: v => {
+      try { localStorage.setItem('clavitone.bpm', v); } catch (_) {}
+      if (SC.s.metro[0] > 0) Wire.call('global_set', { i: 10, v });
+    } });
+    MT.ring = listKnob(el, { label: 'Bell every', vals: range(0, 16), shown: range(0, 16).map(n => (n ? n + ' beats' : 'none')), value: m[1], onSet: v => Wire.call('global_set', { i: 11, v }) });
+    MT.db = listKnob(el, { label: 'Level', vals: range(-40, 12), shown: range(-40, 12).map(n => (n > 0 ? '+' : '') + n + ' dB'), value: Math.round(m[2]), onSet: v => Wire.call('global_set', { i: 12, v }) });
+  }
+  MT.on.set(m[0] > 0);
+  if (m[0] > 0) MT.bpm.set(Math.round(m[0]));
+  MT.ring.set(Math.round(m[1])); MT.db.set(Math.round(m[2]));
+}
+
 // ---------------------------------------------------------------- THE NOTES
 // What each program and stop is, and what it was fitted to (about.json:
 // examples/gm_coverage.py --about, the coverage page's own words)
@@ -1403,6 +1498,7 @@ Wire.connect({
     if (m.matrix) setMatrix(m.matrix);
     if (m.tuning) setTuning(m.tuning);
     if (m.control) setControl(m.control);
+    if (m.scenes) setScenes(m.scenes);
     if (m.synth && m.synth.row === S.row && (m.synth.layer === S.layer || m.synth.layers <= S.layer)) { S.layer = m.synth.layer; S.synth = m.synth; if (card === 'synth') drawSynth(); }
   },
   down() { $('gone').hidden = false; },

@@ -784,6 +784,62 @@ J control_of(nv_host *h, bool kinds, const int learnt[2])
     return o;
 }
 
+// THE SCENES CARD's: the presets (each its parts: program, variation, drums,
+// and its tuner) and the scenes (each how many settings), from the files
+// beside the session; and the metronome's globals
+J scenes_of(nv_host *h)
+{
+    J o = sess::obj();
+    J pa = sess::arr(), sa = sess::arr();
+    sess::J d;
+    if (!h->session_path.empty() && sess::load(h->presets_path(), d) && d.is(J::OBJ))
+        for (const auto &kv : d.o) {
+            J e = sess::obj();
+            e.o["name"] = sess::str(kv.first);
+            J parts = sess::arr();
+            const J *ps = kv.second.get("parts");
+            if (ps && ps->is(J::ARR))
+                for (const J &x : ps->a) {
+                    J q = sess::arr();
+                    const J *pg = x.get("program"), *dr = x.get("drums"), *va = x.get("variation");
+                    q.a.push_back(sess::integer(pg ? pg->i(0) : 0));
+                    q.a.push_back(sess::integer(va ? va->i(0) : 0));
+                    q.a.push_back(sess::boolean(dr && dr->is(J::BOOL) && dr->b));
+                    parts.a.push_back(q);
+                }
+            e.o["parts"] = parts;
+            const J *t = ps && ps->is(J::ARR) && !ps->a.empty() ? ps->a[0].get("tuner") : nullptr;
+            e.o["tuner"] = sess::str(t && t->is(J::STR) ? t->s : "");
+            pa.a.push_back(e);
+        }
+    sess::J sc;
+    if (!h->session_path.empty() && sess::load(h->scenes_path(), sc) && sc.is(J::OBJ))
+        for (const auto &kv : sc.o) {
+            J e = sess::obj();
+            e.o["name"] = sess::str(kv.first);
+            e.o["n"] = sess::integer(kv.second.is(J::ARR) ? (long)kv.second.a.size() : 0);
+            sa.a.push_back(e);
+        }
+    o.o["presets"] = pa;
+    o.o["scenes"] = sa;
+    o.o["kept"] = sess::boolean(!h->session_path.empty());
+    J m = sess::arr();
+    for (int g : {NV_G_METRONOME, NV_G_METRO_RING, NV_G_METRO_DB})
+        m.a.push_back(num(nv_host_global(h, g)));
+    o.o["metro"] = m;
+    return o;
+}
+
+// ...one taken out of presets.json or scenes.json
+bool forget_named(const std::string &path, const std::string &name)
+{
+    sess::J d;
+    if (!sess::load(path, d) || !d.is(J::OBJ) || !d.o.count(name))
+        return false;
+    d.o.erase(name);
+    return sess::save(path, d);
+}
+
 // a part's knobs on a layer: positions, whose they are, and each in its own words
 J synth_of(nv_host *h, int row, int layer)
 {
@@ -933,6 +989,8 @@ struct nv_ui_watch {
     bool matrix = false;                // (its matrix card is open)
     bool tuning = false;                // (its tuning card is open)
     bool control = false;               // (its control card is open)
+    bool scenes = false;                // (its scenes card is open)
+    std::string scenes_sent;
     std::string control_sent;
     int route_learn = 0;                // (a route's source being learnt: 1 a key, 2 a CC -- since then)
     long long route_learn_t = 0;
@@ -1325,6 +1383,40 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             w->control_sent.clear();
         }
         nv_host_learn_key(h, kind == 1 ? 1 : 0);
+    } else if (call == "scenes") {             // the card opened (or shut: open false)
+        if (w) {
+            w->scenes = arg_i(q, "open", 1) != 0;
+            w->scenes_sent.clear();
+        }
+        r.o["scenes"] = scenes_of(h);
+    } else if (call == "preset_save" || call == "preset_load" || call == "preset_delete" || call == "scene_save"
+               || call == "scene_recall" || call == "scene_delete") {     // name
+        const J *nm = q.get("name");
+        const std::string name = nm && nm->is(J::STR) ? nm->s : "";
+        char msg[256] = {};
+        int rc = -1;
+        if (name.empty() || h->session_path.empty()) {
+            snprintf(msg, sizeof msg, "%s", name.empty() ? "no name" : "no session: nothing is kept");
+        } else if (call == "preset_save") {
+            rc = nv_host_preset_save(h, name.c_str(), msg, sizeof msg);
+        } else if (call == "preset_load") {
+            rc = nv_host_preset_load(h, name.c_str(), msg, sizeof msg);
+        } else if (call == "scene_save") {
+            rc = nv_host_scene_save(h, name.c_str(), msg, sizeof msg);
+        } else if (call == "scene_recall") {
+            rc = nv_host_scene_recall(h, name.c_str(), msg, sizeof msg);
+        } else {
+            const bool pre = call == "preset_delete";
+            rc = forget_named(pre ? h->presets_path() : h->scenes_path(), name) ? 0 : -1;
+            snprintf(msg, sizeof msg, rc ? "could not take '%s' out" : "'%s' taken out", name.c_str());
+        }
+        ok = rc == 0;
+        r.o["msg"] = sess::str(msg);
+        if (w)
+            w->scenes_sent.clear();
+        r.o["scenes"] = scenes_of(h);
+    } else if (call == "gs_reset") {
+        nv_host_gs_reset(h);
     } else if (call == "panic") {
         nv_host_panic(h);
     } else {
@@ -1456,6 +1548,16 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
                 r.o["drums"] = dj;
                 any = true;
             }
+        }
+    }
+    if (w->scenes && w->tick % 30 == 5) {     // (the files, once a second: another app may save)
+        J sj = scenes_of(h);
+        std::string ss;
+        put(ss, sj);
+        if (ss != w->scenes_sent) {
+            w->scenes_sent = ss;
+            r.o["scenes"] = sj;
+            any = true;
         }
     }
     if (w->control && w->tick % 3 == 0) {      // (a switch's state, a learn caught)
