@@ -158,13 +158,7 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .synth .kit-dial { width: 60px; height: 60px; }
 .synth .kit-knob.big .kit-dial { width: 92px; height: 92px; }
 .synth .kit-switch { padding: 2px 0; gap: 4px; }
-.sy-col[data-col="Oscillators"] { width: 372px; }
-.sy-col[data-col="Mixer"] .sy-body { flex-direction: column; }
-.sy-col[data-col="Filter"] { width: 244px; }
-.sy-col[data-col="Envelopes"] { display: grid; grid-template-columns: 206px 206px; grid-template-rows: auto 1fr; column-gap: 8px; align-content: start; }
-.sy-col[data-col="Envelopes"] h3 { grid-column: 1 / -1; }
-.sy-col[data-col="Modulation"] { width: 396px; }
-.sy-col[data-col="Delay"] { width: 234px; }
+
 /* a switch of many or long words: a stack */
 .kit-switch.v .kit-seg { flex-direction: column; }
 .kit-switch.v .kit-seg button { border-right: 0; border-bottom: 1px solid #121417; padding: 7px 10px; min-width: 0; text-align: left; }
@@ -429,3 +423,33 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .su-rub { display: flex; flex-direction: column; gap: 6px; }
 .su-r { display: flex; justify-content: space-between; border-bottom: 1px solid #2c3035; padding: 6px 0; font-size: 14px; }
 .su-r b { font: 400 21px var(--f-lcd); color: var(--lcd); }
+
+/* the synth card as the Messenger's panel: each section a grid of its controls' places */
+.synth { justify-content: space-between; }
+.sy-col.stacked { gap: 10px; }
+.sy-col.sub { background: none; border: none; padding: 0; border-top: 1px solid #3a3f45; padding-top: 8px; border-radius: 0; }
+.sy-grid { display: grid; grid-auto-columns: max-content; gap: 4px 4px; align-items: start; justify-items: center; }
+.sy-cell { display: flex; justify-content: center; }
+.sy-row { align-self: center; justify-self: start; font: 600 10.5px var(--f-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--silk-dim); width: 72px; line-height: 1.3; }
+.sy-row.n { font: 400 28px var(--f-lcd); color: var(--silk-dim); width: 22px; text-align: center; }
+.synth .kit-knob { width: 92px; }
+.synth .kit-knob.wave { width: 100px; }
+.synth .kit-dial { width: 54px; height: 54px; }
+.synth .kit-knob.big .kit-dial { width: 104px; height: 104px; }
+.sy-col[data-col="Filter"] .kit-knob.big { width: 128px; align-self: center; }
+.sy-col[data-col="Filter"] .sy-cell:has(.big) { align-self: center; }
+.synth { justify-content: flex-start; gap: 6px; }
+.sy-col { padding: 8px 8px; }
+.synth .kit-switch.v .kit-seg button { padding: 0 8px; height: 26px; min-height: 0; font-size: 11px; }
+.synth .kit-knob { width: 84px; }
+.synth .kit-knob.wave { width: 96px; }
+.synth .kit-dial { width: 50px; height: 50px; }
+.synth .kit-knob.big .kit-dial { width: 96px; height: 96px; }
+.sy-col[data-col="Filter"] .kit-knob.big { width: 116px; }
+.sy-row { width: 64px; }
+.synth .kit-toggle { width: 56px; height: 32px; }
+.synth .kit-toggle::after { width: 22px; height: 22px; }
+.synth .kit-toggle.on::after { left: 29px; }
+.sy-col[data-col="LFO 1"] .kit-knob { width: 100px; }
+.sy-col[data-col="Delay"] .kit-knob { width: 76px; }
+.synth { gap: 5px; }

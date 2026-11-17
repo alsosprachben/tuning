@@ -463,11 +463,11 @@ if (ownKeys) {
 }
 
 // ---------------------------------------------------------------- THE SYNTH CARD
-// The selected part's Moog panel, laid out as any analog synth reads, the
-// sound flowing left to right: the oscillators, the mixer, the filter, the
-// two envelopes, the modulation, the delay. Built from the engine's knob
-// table (nv_host_synth_knobs: each knob's column, group, generic label and a
-// switch's words), so nothing here names a knob but the layout hints below.
+// The selected part's Moog panel, laid out as the Messenger's own front
+// panel (LFO 1 and the left-hand controller, the oscillators, the mixer, the
+// filter, the envelopes), then our MF-104 delay. Built from the engine's knob
+// table (nv_host_synth_knobs: each knob's section, its place there, the
+// panel's name and a switch's words -- panel.h SYNTH_CARD).
 // Orange is changed from the patch: double-tap a control to put it back.
 const SY = { sig: '', ctl: {} };
 // (a switch's look: a vertical stack where its words are long or many)
@@ -519,26 +519,39 @@ function synthCtl(parent, k, i) {
   };
 }
 function markOwn(i) { const c = SY.ctl[i]; if (c) c.el.classList.add('own'); }
+// (the sections as the Messenger's panel has them: the left-hand controller
+// under LFO 1; each control at its place, "row.col[.rows]"; a row's name
+// where the panel prints one)
+const SY_STACK = { 'Left hand': 'LFO 1' };
+const SY_ROWS = { Envelopes: { 1: 'Filter envelope', 2: 'Amplifier envelope' }, Oscillators: { 1: '1', 2: '2' } };
 function buildSynth() {
   const el = $('synth');
   el.innerHTML = ''; SY.ctl = {};
   const cols = new Map();
-  // (in the card's order: its columns as the sound flows, each group's knobs as a player reads them)
   const order = S.knobs.map((k, i) => i).filter(i => S.knobs[i].column).sort((a, b) => S.knobs[a].at - S.knobs[b].at);
   order.forEach(i => {
     const k = S.knobs[i];
     if (!cols.has(k.column)) {
       const c = document.createElement('section'); c.className = 'sy-col'; c.dataset.col = k.column;
-      c.innerHTML = `<h3>${esc(k.column)}</h3>`;
-      el.appendChild(c); cols.set(k.column, { el: c, groups: new Map() });
+      c.innerHTML = `<h3>${esc(k.column)}</h3><div class="sy-grid"></div>`;
+      const host = SY_STACK[k.column] && cols.get(SY_STACK[k.column]);
+      if (host) { host.el.classList.add('stacked'); host.el.appendChild(c); c.classList.add('sub'); } else el.appendChild(c);
+      const grid = c.querySelector('.sy-grid');
+      for (const [r, t] of Object.entries(SY_ROWS[k.column] || {})) {
+        const l = document.createElement('div'); l.className = 'sy-row' + (t.length < 3 ? ' n' : ''); l.textContent = t;
+        l.style.gridRow = r; l.style.gridColumn = k.column === 'Oscillators' ? '1' : '1';
+        grid.appendChild(l);
+      }
+      cols.set(k.column, { el: c, grid });
     }
     const col = cols.get(k.column);
-    if (!col.groups.has(k.group)) {
-      const g = document.createElement('div'); g.className = 'sy-grp'; g.dataset.grp = k.group;
-      g.innerHTML = k.group !== k.column ? `<h4>${esc(k.group)}</h4><div class="sy-body"></div>` : '<div class="sy-body"></div>';
-      col.el.appendChild(g); col.groups.set(k.group, g.querySelector('.sy-body'));
-    }
-    synthCtl(col.groups.get(k.group), k, i);
+    const cell = document.createElement('div'); cell.className = 'sy-cell';
+    const [r, c, rs] = String(k.group).split('.').map(Number);
+    cell.style.gridRow = rs ? `${r} / span ${rs}` : String(r || 1);
+    // (the oscillators' row numbers take a column of their own before the octave switches)
+    cell.style.gridColumn = String((c || 1) + (k.column === 'Oscillators' ? 1 : 0));
+    col.grid.appendChild(cell);
+    synthCtl(cell, k, i);
   });
 }
 function drawSynth() {
