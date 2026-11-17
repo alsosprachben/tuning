@@ -170,6 +170,14 @@ Kit.press($('next'), () => select(S.row + 1));
 Kit.press($('mute'), () => { const p = cur(); if (p) { partSet(S.row, { muted: p.muted ? 0 : 1 }); drawDisplay(); drawStrips(); drawKeyboard(); } });
 Kit.press($('solo'), () => soloPart(S.row));
 Kit.press($('panic'), () => Wire.call('panic'));
+// QUIT (the Setup card's): a second tap within 3 s stops the engine, which
+// closes this window
+let quitArmed = 0;
+Kit.press($('quit'), () => {
+  if (Date.now() - quitArmed < 3000) { Wire.call('quit'); return; }
+  quitArmed = Date.now(); $('quit').textContent = 'TAP AGAIN TO QUIT';
+  setTimeout(() => { if (Date.now() - quitArmed >= 3000) $('quit').textContent = 'QUIT CLAVITONE'; }, 3100);
+});
 async function soloPart(row) {
   await Wire.call('part_solo', { row });
   const r = await Wire.call('parts'); if (r.parts) setParts(r.parts);

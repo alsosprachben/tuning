@@ -395,6 +395,9 @@ void nv_ui_watch_free(nv_ui_watch *w);
 char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *request);
 char *nv_ui_poll(nv_host *h, nv_ui_watch *w);
 void nv_ui_free(char *s);
+/* the interface's QUIT (call "quit"): set by a host that may be quit from
+   it (nvlive); unset, the call is refused */
+extern void (*nv_ui_quit)(void);
 
 #ifdef __cplusplus
 }

@@ -7,7 +7,8 @@
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
 //                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
 //                       [--tuner=NAME [--a=HZ | --c=HZ]] [--eastern=SPEC] [--eastern-at=S:SPEC]
-//                       [--ui[=PORT] [--ui-no-browser]]   (the touch interface: ui/, in Chromium, full screen)
+//                       [--ui[=PORT] [--ui-no-browser]]   (the touch interface: ui/, in Chromium, full screen,
+//                                                          in place of the panel; closing its window stops nvlive)
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
 //                       [--rt] [--reg-async] [--async] [--busy=N] [--govern] [--paced] [--build-async] [--tuner-at=S:NAME] [--preset-at=S:NAME] [--metronome=BPM[:RING]]
 //
@@ -98,6 +99,7 @@
 #include "uiserve.h"
 #include <spawn.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 int nv_host::run(int argc, char **argv)
 {
@@ -533,16 +535,24 @@ int nv_host::run(int argc, char **argv)
         }
     }
     // (none: the panel's I opens one once it is plugged in; no panel, nothing to play)
-    bool no_panel = !isatty(1);
-    for (int i = 1; i < argc; i++)
+    // (--ui: the touch interface instead of the panel; its Setup card opens
+    // an input once one is plugged in)
+    bool no_panel = !isatty(1), with_ui = false;
+    for (int i = 1; i < argc; i++) {
         no_panel = no_panel || !strcmp(argv[i], "--no-panel");
+        with_ui = with_ui || !strcmp(argv[i], "--ui") || !strncmp(argv[i], "--ui=", 5);
+    }
     if (dev.empty() || !midi_exists(dev)) {
-        if (no_panel) {
+        if (with_ui) {
+            fprintf(stderr, "nvlive: no MIDI input yet -- the Setup card opens one\n");
+            dev.clear();
+        } else if (no_panel) {
             fprintf(stderr, "nvlive: no MIDI input (%s); --midi=/dev/snd/midiCxDy\n", dev.c_str());
             return 1;
+        } else {
+            fprintf(stderr, "nvlive: no MIDI input yet -- I on the panel opens one\n");
+            dev.clear();
         }
-        fprintf(stderr, "nvlive: no MIDI input yet -- I on the panel opens one\n");
-        dev.clear();
     } else {
         ins.set({std::make_pair(dev, port_name.empty() ? dev : port_name)});
     }
@@ -570,7 +580,7 @@ int nv_host::run(int argc, char **argv)
     for (int i = 1; i < argc; i++) {
         rsync = rsync || !strcmp(argv[i], "--reg-sync");
         nort = nort || !strcmp(argv[i], "--no-rt");
-        nopanel = nopanel || !strcmp(argv[i], "--no-panel");
+        nopanel = nopanel || !strcmp(argv[i], "--no-panel") || !strcmp(argv[i], "--ui") || !strncmp(argv[i], "--ui=", 5);
     }
     fprintf(stderr, "nvlive: playing (MIDI %s, audio %s, %u us); %s\n", dev.c_str(), pcmdev.c_str(), lat,
             nopanel ? "Ctrl-C to stop" : "the panel (q to stop)");
@@ -850,12 +860,39 @@ int nv_host::run(int argc, char **argv)
         if (ui_port > 0)
             patches_init();                     // (the interface's library)
         start_ui();
-        while (!g_stop)
+        // (the routes in force, --pedal-key's own not among them)
+        auto routes_now = [&]() {
+            std::vector<std::array<int, 7>> rs;
+            bool skipped = pks.empty();
+            for (auto &a : E.routes) {
+                if (!skipped && a == pedal_route) {
+                    skipped = true;
+                    continue;
+                }
+                rs.push_back(a);
+            }
+            return rs;
+        };
+        // THE SESSION, saved every 2 s while the interface is up (as the
+        // panel does); the window closed, or the interface's QUIT: stopped
+        const auto t_ui = std::chrono::steady_clock::now();
+        nv_ui_quit = []() { g_stop = true; };
+        for (int n = 0; !g_stop; n++) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        std::vector<std::array<int, 7>> rs;
-        for (auto &a : E.routes)
-            rs.push_back(a);
-        session_save(rs);
+            if (ui_port > 0 && n % 20 == 19)
+                session_save(routes_now());
+            int st;
+            if (ui_pid > 0 && waitpid(ui_pid, &st, WNOHANG) == ui_pid) {
+                ui_pid = -1;
+                // (gone at once: an open window of that profile took it over)
+                if (std::chrono::steady_clock::now() - t_ui > std::chrono::seconds(5)) {
+                    fprintf(stderr, "nvlive: the window closed\n");
+                    g_stop = true;
+                }
+            }
+        }
+        nv_ui_quit = nullptr;
+        session_save(routes_now());
     } else {
         // THE PANEL, on this thread
         panel::Host H;

@@ -1075,6 +1075,7 @@ struct nv_ui_watch {
 extern "C" nv_ui_watch *nv_ui_watch_new(void) { return new nv_ui_watch(); }
 extern "C" void nv_ui_watch_free(nv_ui_watch *w) { delete w; }
 extern "C" void nv_ui_free(char *s) { free(s); }
+extern "C" { void (*nv_ui_quit)(void) = nullptr; }
 
 static char *out_of(const J &j)
 {
@@ -1519,6 +1520,11 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             w->setup_sent.clear();
     } else if (call == "panic") {
         nv_host_panic(h);
+    } else if (call == "quit") {               // (nvlive only: its hook)
+        if (nv_ui_quit)
+            nv_ui_quit();
+        else
+            ok = false;
     } else {
         ok = false;
         r.o["error"] = sess::str("no call '" + call + "'");
