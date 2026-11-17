@@ -71,6 +71,10 @@ inline std::string jnum(double v)
     snprintf(b, sizeof b, "%.10g", v);
     return b;
 }
+inline std::string jstr(const std::string &s)       // (a string as JSON)
+{
+    return sess::dump(sess::str(s));
+}
 // (a call's answer may carry the parts: taken)
 inline void take_parts(App &a, const J &r)
 {

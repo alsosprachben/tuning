@@ -43,6 +43,7 @@
 #include "tuning.h"
 #include "control.h"
 #include "scenes.h"
+#include "files.h"
 
 namespace nui {
 
@@ -103,6 +104,7 @@ static void draw(App &a)
     tuning_card(a, a.card == "tuning");
     control_card(a, a.card == "control");
     scenes_card(a, a.card == "scenes");
+    files_card(a, a.card == "files");
     if (a.card == "parts") {
         draw_parts(a);
     } else if (a.card == "library") {
@@ -125,6 +127,8 @@ static void draw(App &a)
         draw_control(a);
     } else if (a.card == "scenes") {
         draw_scenes(a);
+    } else if (a.card == "files") {
+        draw_files(a);
     } else {
         std::string title;
         for (int i = 0; i < nc; i++)
@@ -167,6 +171,10 @@ static bool poll(App &a)
             g_syn.text.clear();
             changed = true;
         }
+    }
+    if (m.get("files") || m.get("list")) {
+        fl_take(m);
+        changed = true;
     }
     if (m.get("scenes")) {
         sc_take(m);

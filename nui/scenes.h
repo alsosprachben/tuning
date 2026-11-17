@@ -37,10 +37,6 @@ inline void scenes_card(App &a, bool open)
     C.open = open;
     sc_take(call(a, std::string("{\"call\":\"scenes\",\"open\":") + (open ? "1" : "0") + "}"));
 }
-inline std::string jstr(const std::string &s)       // (a string as JSON)
-{
-    return sess::dump(sess::str(s));
-}
 inline void sc_do(App &a, const std::string &c, const std::string &name)
 {
     ScenesUi &C = g_sc;
