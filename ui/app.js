@@ -159,6 +159,7 @@ async function select(row) {
   const s = await Wire.call('select', { row, layer: 0 });
   S.synth = s.synth; drawSynth();
   if (s.stops && s.stops.row === S.row) setStops(s.stops);
+  if (card === 'piano') { const r = await Wire.call('piano'); if (r.piano) setPiano(r.piano); }
 }
 Kit.press($('prev'), () => select(S.row - 1));
 Kit.press($('next'), () => select(S.row + 1));
@@ -173,11 +174,10 @@ async function soloPart(row) {
 // ---------------------------------------------------------------- THE CARD KEYS
 const CARDS = [
   ['parts', 'Parts', true], ['library', 'Library', true], ['synth', 'Synth', true],
-  ['stops', 'Stops', true], ['piano', 'Piano'], ['drums', 'Drums'], ['effects', 'Effects'],
+  ['stops', 'Stops', true], ['piano', 'Piano', true], ['drums', 'Drums'], ['effects', 'Effects'],
   ['matrix', 'Matrix'], ['tuning', 'Tuning'], ['control', 'Control'], ['scenes', 'Scenes'], ['setup', 'Setup'],
 ];
 const LATER = {
-  piano: 'the damper, push to damp and the register',
   drums: 'a pad for each key of the kit', effects: 'the insertion effect and the reverb, chorus, delay and EQ',
   matrix: 'what each controller moves', tuning: 'the tuner, pitch standard and the Eastern systems',
   control: 'on-screen controls, routes and learn', scenes: 'presets, scenes, the GS reset and the metronome',
@@ -203,6 +203,7 @@ function showCard(id) {
   if (id === 'library') drawTiles(true);
   if (id === 'synth') drawSynth();
   if (id === 'stops') drawStops();
+  Wire.call('piano', { open: id === 'piano' ? 1 : 0 }).then(r => { if (r.piano) setPiano(r.piano); });
 }
 
 // ---------------------------------------------------------------- PARTS: the keyboard and the parts' ranges
@@ -639,6 +640,102 @@ function setStops(st) {
   drawStops();
 }
 
+// ---------------------------------------------------------------- THE PIANO CARD
+// The selected part's pedals as the engine has them (a file's, the
+// keyboard's, these), each damper's rest on its strings at the sustain's
+// value (a half pedal: the bass's heavier dampers still touching), and the
+// key held as the pedal (pushed into: the dampers lowered)
+const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+const noteName = n => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 1);
+const PN = { sus: null, mine: null };
+function pedalSay(v) { return v <= 0 ? 'UP' : v >= 127 ? 'DOWN' : 'HALF ' + v; }
+PN.sus = Kit.fader($('pdSus'), {
+  label: 'SUSTAIN', value: 0, lo: 0, hi: 127, step: 1, travel: 300, fmt: x => pedalSay(Math.round(x)),
+  onChange: v => sendPedal(64, Math.round(v)),
+});
+let pedalT = 0, pedalWant = null;
+function sendPedal(cc, v) {               // (a drag's values at most 30 a second; the last always goes)
+  PN.mine = { cc, v, until: performance.now() + HOLD_MS };
+  if (S.piano && cc === 64) { S.piano.sustain = v; drawDampers(); }
+  pedalWant = { cc, v };
+  if (pedalT) return;
+  const go = () => { pedalT = 0; if (!pedalWant) return; const w = pedalWant; pedalWant = null; Wire.call('pedal_set', { row: S.row, cc: w.cc, v: w.v }); pedalT = setTimeout(go, 33); };
+  go();
+}
+Kit.press($('pdSoft'), () => { const on = !(S.piano && S.piano.soft); if (S.piano) S.piano.soft = on; sendPedal(67, on ? 127 : 0); drawPiano(); });
+Kit.press($('pdSost'), () => { const on = !(S.piano && S.piano.sostenuto); if (S.piano) S.piano.sostenuto = on; sendPedal(66, on ? 127 : 0); drawPiano(); });
+document.querySelectorAll('.pd-quick button').forEach(b => Kit.press(b, () => { const v = +b.dataset.v; PN.sus.set(v); sendPedal(64, v); drawPiano(); }));
+Kit.press($('pedalLearn'), async () => {
+  const on = !(S.piano && S.piano.learning);
+  await Wire.call('pedal_key_learn', { on: on ? 1 : 0 });
+  if (S.piano) { S.piano.learning = on; drawPiano(); }
+});
+Kit.press($('pedalKeys'), async t => {
+  const r = await Wire.call('pedal_key_remove', { i: +t.dataset.i });
+  if (!r.ok) return;
+  const p = await Wire.call('piano'); if (p.piano) setPiano(p.piano);
+}, '.pk-rm');
+function setPiano(pn) {
+  if (pn.row !== S.row) return;
+  const m = PN.mine;                       // (what this screen just sent stands until the engine has it)
+  if (m && m.until > performance.now()) {
+    if (m.cc === 64) pn.sustain = m.v; else if (m.cc === 66) pn.sostenuto = m.v > 0; else pn.soft = m.v > 0;
+  } else PN.mine = null;
+  S.piano = pn;
+  if (card === 'piano') drawPiano();
+}
+function drawPiano() {
+  const pn = S.piano;
+  if (!pn) return;
+  $('pianoWho').textContent = `part ${pad(pn.row + 1, 2)} · ${pn.part}`;
+  $('pianoInfo').textContent = pn.channel < 0 ? 'pedals on every channel' : `pedals on channel ${pn.channel + 1}`;
+  $('pdSoft').classList.toggle('on', pn.soft);
+  $('pdSost').classList.toggle('on', pn.sostenuto);
+  PN.sus.set(pn.sustain);
+  document.querySelectorAll('.pd-quick button').forEach(b => {
+    const v = +b.dataset.v;
+    b.classList.toggle('on', v === 64 ? pn.sustain > 0 && pn.sustain < 127 : pn.sustain === v);
+  });
+  drawDampers();
+  const keys = pn.keys.map(k => `<div class="pk"><span class="pk-n">${noteName(k.key)}</span><span class="pk-t">${k.press ? 'held: dampers up · pushed into: down' : 'held: dampers up'}` +
+    `${k.channel >= 0 ? ' · channel ' + (k.channel + 1) : ''}</span><button class="hb pk-rm" data-i="${k.i}" data-kit="1">REMOVE</button></div>`);
+  if (pn.fixed_key >= 0)
+    keys.push(`<div class="pk"><span class="pk-n">${noteName(pn.fixed_key)}</span><span class="pk-t">held: dampers up · pushed into: down (set when nvlive started)</span></div>`);
+  $('pedalKeys').innerHTML = keys.length ? keys.join('') : '<p class="pn-note">No key is the pedal yet.</p>';
+  $('pedalLearn').textContent = pn.learning ? 'PRESS THE KEY NOW… (TAP TO STOP)' : 'LEARN A KEY';
+  $('pedalLearn').classList.toggle('blink', pn.learning);
+  $('pianoStrings').textContent = pn.strings
+    ? 'Sympathetic strings: on. The first part\'s undamped strings ring with what is played.'
+    : 'Sympathetic strings: off (nvlive was started without them).';
+  drawAbout();
+}
+function drawDampers() {
+  const pn = S.piano;
+  if (!pn) return;
+  const W = 880, n = pn.contact.length, kw = W / 52;     // (52 white keys, A0 to C8)
+  let wi = 0, felts = '', keysW = '', keysB = '';
+  const lift = 110, strY = 190, kbY = 230;
+  for (let i = 0; i < n; i++) {
+    const note = 21 + i, black = isBlack(note);
+    const x = black ? wi * kw - kw * 0.32 : wi * kw;
+    const w = black ? kw * 0.64 : kw;
+    const c = pn.contact[i], y = strY - 40 - (1 - c) * lift;
+    felts += `<rect class="felt${c > 0.98 ? ' on' : c > 0.02 ? ' part' : ''}" x="${(x + w * 0.18).toFixed(1)}" y="${y.toFixed(1)}" width="${(w * 0.64).toFixed(1)}" height="40" rx="2"/>`;
+    if (black) keysB += `<rect class="kb-b" x="${x.toFixed(1)}" y="${kbY}" width="${w.toFixed(1)}" height="58"/>`;
+    else {
+      keysW += `<rect class="kb-w" x="${x.toFixed(1)}" y="${kbY}" width="${(w - 1).toFixed(1)}" height="96"/>`;
+      if (note % 12 === 0) keysW += `<text class="kb-l" x="${(x + w / 2).toFixed(1)}" y="${kbY + 88}">C${note / 12 - 1}</text>`;
+      wi++;
+    }
+  }
+  $('damp').innerHTML = `<line class="string" x1="0" y1="${strY}" x2="${W}" y2="${strY}"/>${felts}${keysW}${keysB}`;
+  const on = pn.contact.filter(c => c > 0.98).length, off = pn.contact.filter(c => c < 0.02).length;
+  $('dampSay').textContent = off === n ? 'all lifted: every string rings' : on === n ? 'all on the strings'
+    : `${n - on - off} resting lightly, ${on} on the strings, ${off} lifted`;
+  const band = pn.band.map(([k, lo, hi]) => `${noteName(k)} ${lo}–${hi}`).join(' · ');
+  $('dampBand').textContent = `Where the dampers leave the strings, by the pedal's value: ${band}. The bass dampers are heavier and leave later.`;
+}
+
 // ---------------------------------------------------------------- THE NOTES
 // What each program and stop is, and what it was fitted to (about.json:
 // examples/gm_coverage.py --about, the coverage page's own words)
@@ -655,6 +752,7 @@ function patchAbout(p) {
 function drawAbout() {
   const p = cur();
   $('libAbout').innerHTML = p && patchAbout(p) ? aboutHtml(p.name, patchAbout(p)) : '';
+  $('pianoAbout').innerHTML = p && patchAbout(p) ? aboutHtml(p.name, patchAbout(p)) : '';
   const st = S.stops, el = $('stopAbout');
   if (!st || st.program < 0 || !S.about) { el.innerHTML = ''; return; }
   const org = S.about.stops[String(st.program)];
@@ -701,6 +799,7 @@ Wire.connect({
     if (m.build) { S.build = m.build; drawHealth(); }
     if (m.parts) setParts(m.parts);
     if (m.stops) setStops(m.stops);
+    if (m.piano) setPiano(m.piano);
     if (m.synth && m.synth.row === S.row && (m.synth.layer === S.layer || m.synth.layers <= S.layer)) { S.layer = m.synth.layer; S.synth = m.synth; if (card === 'synth') drawSynth(); }
   },
   down() { $('gone').hidden = false; },

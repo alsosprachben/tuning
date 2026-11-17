@@ -208,3 +208,38 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 
 [hidden] { display: none !important; }
 #gone { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(10,10,12,.86); font-size: 22px; color: var(--lcd); }
+
+/* ---- the piano card: the pedals, the dampers on their strings, the pedal key */
+.piano { flex: 1; min-height: 0; display: grid; grid-template-columns: 430px 1fr 400px; gap: 8px; }
+.pn-col { display: flex; flex-direction: column; gap: 10px; background: #1f2225; border: 1px solid var(--edge); border-radius: 9px; padding: 10px 12px; min-height: 0; }
+.pn-col h3 { margin: 0; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--silk); }
+.pn-col h3 small { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--lcd); margin-left: 10px; font-size: 13px; }
+.pn-note { margin: 0; font-size: 13px; line-height: 1.4; color: var(--silk-dim); }
+.lyre { flex: 1; display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 10px; align-items: end; }
+.pedal { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.pedal b { font: 700 11px var(--f-ui); letter-spacing: .12em; }
+.pedal small { font-size: 12px; color: var(--silk-dim); min-height: 3em; }
+.pd-btn { width: 84px; height: 150px; border-radius: 10px 10px 34px 34px; border: 1px solid #0b0c0d;
+  background: linear-gradient(180deg, #5b5446, #3b372f); box-shadow: inset 0 2px 0 rgba(255,255,255,.12), 0 6px 0 #0b0c0d; transition: transform .06s; }
+.pd-btn.on { transform: translateY(6px); box-shadow: inset 0 2px 0 rgba(255,255,255,.12), 0 0 0 #0b0c0d, 0 0 14px rgba(240,177,58,.55);
+  background: linear-gradient(180deg, #8d7440, #5c4a26); }
+.pd-sus { gap: 8px; }
+.pd-sus .kit-fader { width: 120px; }
+.pd-sus .kit-slot { height: 300px; }
+.pd-quick { display: flex; gap: 4px; }
+.pd-quick .hb { padding: 12px 8px; font-size: 11px; }
+.pd-quick .hb.on { background: var(--silk); color: var(--panel); }
+.pn-dampers svg { flex: 1; width: 100%; min-height: 0; }
+#damp .string { stroke: #8a8f94; stroke-width: 2; }
+#damp .felt { fill: #3d3a33; stroke: #0b0c0d; transition: y .08s; }
+#damp .felt.part { fill: var(--lcd-dim); }
+#damp .felt.on { fill: var(--lcd); }
+#damp .kb-w { fill: #d8d6cf; }
+#damp .kb-b { fill: #15171a; }
+#damp .kb-l { font: 10px var(--f-ui); fill: #4a4f55; text-anchor: middle; }
+.pk { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid #2c3035; }
+.pk-n { font: 21px var(--f-lcd); color: var(--lcd); }
+.pk-t { font-size: 13px; color: var(--silk); }
+.pk .hb { padding: 12px 10px; }
+#pedalLearn { padding: 18px 10px; }
+#pedalLearn.blink { color: var(--lcd); animation: blink 0.8s steps(2) infinite; }

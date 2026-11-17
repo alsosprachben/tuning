@@ -13699,6 +13699,12 @@ int nv_part_patch_touch_sensitive(void *h, int pi)
 // A CHANNEL's SWITCHES as the engine has them (livetui.switch_on: the lamp
 // says what a CC121 or a reset did too): out[0] sustain, [1] sostenuto,
 // [2] soft, [3] portamento, [4] mono
+// ...and its sustain pedal's value (0-127: a half pedal between)
+int nv_part_pedal(void *h, int ch)
+{
+    return ((nv::slab::Part *)h)->pedal_v[ch & 15];
+}
+
 void nv_part_switches(void *h, int ch, int *out)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;

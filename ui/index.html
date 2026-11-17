@@ -75,6 +75,27 @@
       <div id="jamb" class="jamb"></div>
       <div class="about" id="stopAbout"></div>
     </div>
+    <div class="card" data-card="piano" hidden>
+      <div class="card-head"><h2>Piano <small id="pianoWho"></small></h2><span id="pianoInfo"></span></div>
+      <div class="piano" id="piano">
+        <section class="pn-col pn-pedals"><h3>Pedals</h3>
+          <div class="lyre">
+            <div class="pedal"><button class="pd-btn" id="pdSoft" data-kit="1"></button><b>SOFT</b><small>una corda</small></div>
+            <div class="pedal"><button class="pd-btn" id="pdSost" data-kit="1"></button><b>SOSTENUTO</b><small>holds the keys down as it goes down</small></div>
+            <div class="pedal pd-sus"><div id="pdSus"></div>
+              <div class="pd-quick"><button class="hb" data-v="127" data-kit="1">DOWN</button><button class="hb" data-v="64" data-kit="1">HALF</button><button class="hb" data-v="0" data-kit="1">UP</button></div></div>
+          </div></section>
+        <section class="pn-col pn-dampers"><h3>Dampers <small id="dampSay"></small></h3>
+          <svg id="damp" viewBox="0 0 880 330"></svg>
+          <p class="pn-note" id="dampBand"></p></section>
+        <section class="pn-col pn-key"><h3>Pedal key</h3>
+          <p class="pn-note">A key held as the sustain pedal: held, the dampers lift; push into it and they come down to the strings.</p>
+          <div id="pedalKeys"></div>
+          <button class="hb" id="pedalLearn" data-kit="1">LEARN A KEY</button>
+          <p class="pn-note" id="pianoStrings"></p></section>
+      </div>
+      <div class="about" id="pianoAbout"></div>
+    </div>
     <div class="card" data-card="later" hidden><p class="later-note" id="later"></p></div>
   </section>
 </main>

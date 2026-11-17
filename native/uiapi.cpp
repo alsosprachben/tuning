@@ -18,7 +18,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <chrono>
+#include <memory>
 #include <string>
+#include <thread>
+#include <atomic>
 #include <vector>
 #include "hostlive.h"
 #include "host.h"
@@ -237,6 +240,108 @@ J patches_of(nv_host *h)
     return a;
 }
 
+// A PART's PEDALS, read between two blocks (the sostenuto's keys are the
+// audio thread's): {sustain 0-127, sostenuto, soft}; false when the audio
+// did not answer
+bool pedals_of(nv_host *h, int channel, int out[3])
+{
+    struct Got {
+        int v[3] = {0, 0, 0};
+        std::atomic<bool> done{false};
+    };
+    auto got = std::make_shared<Got>();
+    void *part = h->part;
+    const int ch = channel < 0 ? 0 : channel & 15;
+    auto take = [got, part, ch](long long) {
+        int sw[5] = {};
+        nv_part_switches(part, ch, sw);
+        got->v[0] = nv_part_pedal(part, ch);
+        got->v[1] = sw[1];
+        got->v[2] = sw[2];
+        got->done = true;
+    };
+    if (h->scene_inline)
+        take(0);
+    else
+        h->post(take);
+    for (int i = 0; i < 100 && !got->done; i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (!got->done)
+        return false;
+    for (int k = 0; k < 3; k++)
+        out[k] = got->v[k];
+    return true;
+}
+
+// THE PIANO CARD's: the part's pedals (its channel's; an every-channel part
+// the first's), how far each key's damper rests at the sustain's value (A0
+// to C8: 1 on the string, 0 lifted -- the bass's bite later), the keys held
+// as the sustain pedal (routes from a key to CC64; pushed into, the dampers
+// lowered), and whether the sympathetic strings ring (the first part's)
+J piano_of(nv_host *h, int row, int learning)
+{
+    J o = sess::obj();
+    int n = nv_host_parts(h, nullptr, 0);
+    std::vector<nv_host_partinfo> ps((size_t)std::max(0, n));
+    n = nv_host_parts(h, ps.data(), n);
+    const bool has = row >= 0 && row < n;
+    o.o["row"] = sess::integer(row);
+    o.o["part"] = sess::str(has ? ps[(size_t)row].name : "");
+    o.o["drums"] = sess::boolean(has && ps[(size_t)row].drums);
+    o.o["program"] = sess::integer(has ? ps[(size_t)row].program : -1);
+    o.o["variation"] = sess::integer(has ? ps[(size_t)row].variation : 0);
+    const int ch = has ? ps[(size_t)row].channel : 0;
+    o.o["channel"] = sess::integer(ch);
+    int pv[3] = {0, 0, 0};
+    o.o["read"] = sess::boolean(has && pedals_of(h, ch, pv));
+    o.o["sustain"] = sess::integer(pv[0]);
+    o.o["sostenuto"] = sess::boolean(pv[1] != 0);
+    o.o["soft"] = sess::boolean(pv[2] != 0);
+    J c = sess::arr();
+    for (int key = 21; key <= 108; key++)
+        c.a.push_back(num(std::round(nv_damper_contact(pv[0], key, 128) * 100.0) / 100.0));
+    o.o["contact"] = c;
+    J band = sess::arr();                       // (where the dampers leave the strings: A0's, C4's, C8's)
+    for (int key : {21, 60, 108}) {
+        int lo = 127, hi = 0;
+        for (int v = 0; v < 128; v++) {
+            const double x = nv_damper_contact(v, key, 128);
+            if (x < 0.999 && v < lo) lo = v;
+            if (x > 0.001) hi = v;
+        }
+        J b = sess::arr();
+        b.a.push_back(sess::integer(key));
+        b.a.push_back(sess::integer(lo));
+        b.a.push_back(sess::integer(hi));
+        band.a.push_back(b);
+    }
+    o.o["band"] = band;
+    const int nr = nv_host_routes(h, nullptr, 0);
+    std::vector<int> rs((size_t)std::max(0, nr) * 7);
+    nv_host_routes(h, rs.data(), nr);
+    J keys = sess::arr();
+    for (int i = 0; i < nr; i++) {
+        const int *r = &rs[(size_t)i * 7];
+        if (r[0] != 3 || r[2] != 64)
+            continue;
+        J k = sess::obj();
+        k.o["i"] = sess::integer(i);
+        k.o["key"] = sess::integer(r[1]);
+        k.o["channel"] = sess::integer(r[4]);
+        k.o["latch"] = sess::boolean(r[5] != 0);
+        k.o["press"] = sess::boolean(r[6] != 0);
+        char t[160] = {};
+        nv_host_route_text(r, t, sizeof t);
+        k.o["text"] = sess::str(t);
+        keys.a.push_back(k);
+    }
+    o.o["keys"] = keys;
+    o.o["fixed_key"] = sess::integer(h->pks.empty() ? -1 : atoi(h->pks.c_str()));   // (--pedal-key's: not the session's)
+    o.o["learning"] = sess::boolean(learning != 0);
+    o.o["strings"] = sess::boolean(h->reg_on);
+    return o;
+}
+
 // a part's knobs on a layer: positions, whose they are, and each in its own words
 J synth_of(nv_host *h, int row, int layer)
 {
@@ -379,7 +484,9 @@ double now_s()
 
 struct nv_ui_watch {
     int row = 0, layer = 0;
-    std::string parts_sent, synth_sent, build_sent, stops_sent;
+    std::string parts_sent, synth_sent, build_sent, stops_sent, piano_sent;
+    bool piano = false;                 // (its piano card is open: its pedals read each poll)
+    int learning = 0;                   // (a key being learnt as the sustain pedal)
     bool quiet = false;                 // (the last meters sent were silence: none until something sounds)
     long tick = 0;
 };
@@ -559,6 +666,41 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
                 want.push_back(x.i(0) != 0);
             nv_host_part_set_drawn(h, row, want.data(), (int)want.size());
         }
+    } else if (call == "piano") {              // the card opened (or shut: open false)
+        if (w) {
+            w->piano = arg_i(q, "open", 1) != 0;
+            w->piano_sent.clear();
+        }
+        r.o["piano"] = piano_of(h, row, w ? w->learning : 0);
+    } else if (call == "pedal_set") {          // the part's sustain (64), sostenuto (66), soft (67)
+        const int cc = (int)arg_i(q, "cc", -1);
+        int n = nv_host_parts(h, nullptr, 0);
+        std::vector<nv_host_partinfo> ps((size_t)std::max(0, n));
+        n = nv_host_parts(h, ps.data(), n);
+        if (row < 0 || row >= n || (cc != 64 && cc != 66 && cc != 67)) {
+            ok = false;
+            r.o["error"] = sess::str("no part " + std::to_string(row) + " or cc " + std::to_string(cc));
+        } else {
+            nv_host_chan_cc_send(h, ps[(size_t)row].channel, cc, (int)arg_i(q, "v", 0));
+        }
+    } else if (call == "pedal_key_learn") {    // the next key pressed becomes the sustain pedal
+        const int on = (int)arg_i(q, "on", 1);
+        nv_host_learn_key(h, on);
+        if (w)
+            w->learning = on;
+    } else if (call == "pedal_key_remove") {
+        const int i = (int)arg_i(q, "i", -1);
+        const int nr = nv_host_routes(h, nullptr, 0);
+        std::vector<int> rs((size_t)std::max(0, nr) * 7);
+        nv_host_routes(h, rs.data(), nr);
+        if (i < 0 || i >= nr || rs[(size_t)i * 7] != 3 || rs[(size_t)i * 7 + 2] != 64) {
+            ok = false;
+            r.o["error"] = sess::str("no pedal key " + std::to_string(i));
+        } else {
+            nv_host_route_remove(h, i);
+        }
+        if (w)
+            w->piano_sent.clear();
     } else if (call == "panic") {
         nv_host_panic(h);
     } else {
@@ -638,6 +780,14 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
             r.o["stops"] = st;
             any = true;
         }
+        if (w->learning) {                      // (a key learnt: the pedal, pushed into to damp -- --pedal-key's)
+            int lch = -1, lnote = -1;
+            if (nv_host_learnt_key(h, &lch, &lnote)) {
+                const int r7[7] = {3, lnote, 64, 0, -1, 0, 1};
+                nv_host_route_add(h, r7);
+                w->learning = 0;
+            }
+        }
         J sy = synth_of(h, w->row, w->layer);
         w->layer = (int)sy.o["layer"].d();      // (back on A once the patch has no B)
         std::string ss;
@@ -645,6 +795,16 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
         if (ss != w->synth_sent) {
             w->synth_sent = ss;
             r.o["synth"] = sy;
+            any = true;
+        }
+    }
+    if (w->piano && w->tick % 2 == 0) {        // (the pedals at 15 a second, while the card is open)
+        J pj = piano_of(h, w->row, w->learning);
+        std::string pst;
+        put(pst, pj);
+        if (pst != w->piano_sent) {
+            w->piano_sent = pst;
+            r.o["piano"] = pj;
             any = true;
         }
     }

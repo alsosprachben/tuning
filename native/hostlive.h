@@ -104,6 +104,7 @@ void nv_part_drive_later(void *h, int pi, double v);
 int nv_part_drive_get(void *h, int pi, double *out);
 int nv_part_patch_touch_sensitive(void *h, int pi);
 void nv_part_switches(void *h, int ch, int *out);
+int nv_part_pedal(void *h, int ch);
 void nv_part_set_drawn_names(void *h, int pi, const char *const *names, int n);
 void nv_part_efx(void *h, const double *X, double SR);
 void nv_part_place3d(void *h, const double *q);
