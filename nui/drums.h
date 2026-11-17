@@ -174,11 +174,11 @@ inline void draw_drums(App &a)
             drums_take(a, *x);
     }
     const float X0 = 34, X1 = 1886, Y0 = 394, Y1 = 1056;
-    text(a, a.bold, 14, X0, 356, SILK, "DRUMS");
+    const float TX = heading(a, X0, 356, "DRUMS", "drums");
     if (!D.d.is(J::OBJ))
         return;
     const std::string part_name = str(&D.d, "part");
-    text(a, a.font, 14, X0 + 76, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + part_name);
+    text(a, a.font, 14, TX, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + part_name);
     const bool drums = flag(&D.d, "drums"), user = D.d.get("user") != nullptr;
     const int kit = (int)num(&D.d, "kit", -1);
     if (drums) {
@@ -367,8 +367,8 @@ inline void draw_drums(App &a)
                 if ((int)x.a[0].d() == ss)
                     ssname = x.a[1].s;
             }
-            text(a, a.bold, 14, SX + 12, Y0 + 10, SILK, "KEY " + note_name_sharp(D.sel));
-            text(a, a.font, 14, SX + 100, Y0 + 10, LCD, std::to_string(D.sel));
+            const float kx = heading(a, SX + 12, Y0 + 10, "KEY " + note_name_sharp(D.sel), "drums:user");
+            text(a, a.font, 14, kx, Y0 + 10, LCD, std::to_string(D.sel));
             text(a, a.font, 14, SX + 12, Y0 + 32, SILK_DIM,
                  fit(a, a.font, 14, e.skey >= 0 ? "Plays " + e.name + " from " + ssname + "." : "No sound yet.", SW - 24));
             const float ly = Y0 + 58, lh = 360 - 66, cw = (SW - 32) / 2;

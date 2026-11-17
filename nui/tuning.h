@@ -158,8 +158,7 @@ inline void draw_tuning(App &a)
     if (!T.t.is(J::OBJ))
         tn_take(call(a, "{\"call\":\"tuning\",\"open\":1,\"lists\":1}"));
     const float X0 = 34, X1 = 1886, Y0 = 394, Y1 = 1056;
-    text(a, a.bold, 14, X0, 356, SILK, "TUNING");
-    text(a, a.font, 14, X0 + 90, 357, OWN, "every part");
+    text(a, a.font, 14, heading(a, X0, 356, "TUNING", "tuning"), 357, OWN, "every part");
     if (!T.t.is(J::OBJ) || !T.lists)
         return;
     const std::string tuner = str(&T.t, "tuner"), now = str(&T.t, "now");
@@ -247,10 +246,10 @@ inline void draw_tuning(App &a)
     const float SX = X0 + LW + 12, SW = X1 - SX, SH = 330;
     rect(a, SX, Y0, SW, SH, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
     frame(a, SX, Y0, SW, SH, EDGE, 9, 1);
-    text(a, a.bold, 14, SX + 12, Y0 + 10, SILK, "THE TUNING");
+    const float tsx = heading(a, SX + 12, Y0 + 10, "THE TUNING", "tn:shape");
     const J *shape = T.t.get("shape");
     const double a4 = num(shape, "a4");
-    text(a, a.font, 14, SX + 24 + text_w(a, a.bold, 14, "THE TUNING"), Y0 + 11, LCD, tuner + (a4 > 0 ? " \xc2\xb7 A4 = " + jnum(a4) + " Hz" : ""));
+    text(a, a.font, 14, tsx, Y0 + 11, LCD, tuner + (a4 > 0 ? " \xc2\xb7 A4 = " + jnum(a4) + " Hz" : ""));
     const J *cents = shape ? shape->get("cents") : nullptr;
     auto cv = [&](int n, double &v) {
         if (!cents || !cents->is(J::ARR) || n >= (int)cents->a.size() || !cents->a[(size_t)n].is(J::NUM))
@@ -300,8 +299,7 @@ inline void draw_tuning(App &a)
     const float EY = Y0 + SH + 10;
     rect(a, SX, EY, SW, Y1 - EY, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
     frame(a, SX, EY, SW, Y1 - EY, EDGE, 9, 1);
-    text(a, a.bold, 14, SX + 12, EY + 10, SILK, "EASTERN TUNING");
-    text(a, a.font, 14, SX + 24 + text_w(a, a.bold, 14, "EASTERN TUNING"), EY + 11, LCD, "the Indian voices' parts");
+    text(a, a.font, 14, heading(a, SX + 12, EY + 10, "EASTERN TUNING", "tn:east"), EY + 11, LCD, "the Indian voices' parts");
     if (!T.east_mine.empty() && ImGui::GetTime() > T.east_until)
         T.east_mine.clear();
     East p = east_parts(T.east_mine.empty() ? str(&T.t, "eastern") : T.east_mine);

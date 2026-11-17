@@ -49,13 +49,13 @@ inline void draw_setup(App &a)
         setup_card(a, true);
     }
     const float X0 = 34, X1 = 1886, Y0 = 394, Y1 = 1056;
-    text(a, a.bold, 14, X0, 356, SILK, "SETUP");
+    const float TX = heading(a, X0, 356, "SETUP", "setup");
     if (!U.s.is(J::OBJ))
         return;
     const double rate = num(&U.s, "rate"), block = num(&U.s, "block");
     char inf[96];
     snprintf(inf, sizeof inf, "%.0f Hz \xc2\xb7 %.0f frames a block (%.2f ms)", rate, block, rate > 0 ? 1000 * block / rate : 0.0);
-    text(a, a.font, 14, X0 + 90, 357, SILK_DIM, inf);
+    text(a, a.font, 14, TX, 357, SILK_DIM, inf);
     // QUIT (a second tap within 3 s, as the panel's)
     const double now = ImGui::GetTime();
     const bool armed = now - a.quit_armed < 3.0;
@@ -86,14 +86,14 @@ inline void draw_setup(App &a)
         rect(a, b.first, Y0, b.second, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
         frame(a, b.first, Y0, b.second, Y1 - Y0, EDGE, 9, 1);
     }
-    auto head = [&](float x, float &y, const char *h, const char *sub) {
-        text(a, a.bold, 14, x + 12, y, SILK, h);
+    auto head = [&](float x, float &y, const char *h, const char *sub, const char *key) {
+        const float hx = heading(a, x + 12, y, h, key);
         if (sub)
-            text(a, a.font, 14, x + 24 + text_w(a, a.bold, 14, h), y + 1, LCD, sub);
+            text(a, a.font, 14, hx, y + 1, LCD, sub);
         y += 26;
     };
     float y = Y0 + 10;
-    head(AX, y, "MIDI IN", "several at once, merged; kept in the session");
+    head(AX, y, "MIDI IN", "several at once, merged; kept in the session", "su:midi");
     const J *ins = U.s.get("inputs");
     if (!ins || !ins->is(J::ARR) || ins->a.empty()) {
         text(a, a.font, 14, AX + 12, y, SILK_DIM, "No MIDI devices plugged in.");
@@ -123,7 +123,7 @@ inline void draw_setup(App &a)
         y += 22;
     }
     y += 10;
-    head(AX, y, "PLAY AS A MODULE", "a sequencer or DAW sending whole songs");
+    head(AX, y, "PLAY AS A MODULE", "a sequencer or DAW sending whole songs", "su:module");
     {
         static const std::vector<std::pair<std::string, std::string>> MODS = {
             {"off", "OFF: MY PARTS"}, {"auto", "AUTO"}, {"gm", "GM"}, {"ours", "GS: OURS"}, {"sc55", "GS: SC-55"}, {"sc88", "GS: SC-88"},
@@ -160,7 +160,7 @@ inline void draw_setup(App &a)
         }
     }
     y += 10;
-    head(AX, y, "THE MESSENGER", nullptr);
+    head(AX, y, "THE MESSENGER", nullptr, "su:msgr");
     {
         const J *m = U.s.get("messenger");
         const std::string line = str(m, "line");
@@ -179,7 +179,7 @@ inline void draw_setup(App &a)
 
     // SOUND: the globals every part plays through
     y = Y0 + 10;
-    head(BX, y, "SOUND", "every part");
+    head(BX, y, "SOUND", "every part", "su:sound");
     struct Gl {
         int i;
         const char *label;
@@ -256,7 +256,7 @@ inline void draw_setup(App &a)
 
     // BORROWED TIME (rubato)
     y = Y0 + 10;
-    head(CX, y, "BORROWED TIME", "rubato");
+    head(CX, y, "BORROWED TIME", "rubato", "su:rubato");
     const J *r = U.s.get("rubato");
     auto rv = [&](size_t i) { return r && r->is(J::ARR) && i < r->a.size() ? r->a[i].d() : 0.0; };
     auto ms = [&](double f) {

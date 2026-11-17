@@ -65,10 +65,10 @@ inline void draw_matrix(App &a)
     if ((int)num(&M.m, "row", -1) != a.row)
         mx_take(a, call(a, "{\"call\":\"matrix\"}"));
     const float X0 = 34, X1 = 1886, Y0 = 394;
-    text(a, a.bold, 14, X0, 356, SILK, "MATRIX");
+    const float TX = heading(a, X0, 356, "MATRIX", "matrix");
     if (!M.m.is(J::OBJ) || M.t.size() < 11)
         return;
-    text(a, a.font, 14, X0 + 90, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(&M.m, "part"));
+    text(a, a.font, 14, TX, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(&M.m, "part"));
     const int ch = (int)num(&M.m, "channel", -1);
     const std::string info = ch < 0 ? "every channel" : "channel " + std::to_string(ch + 1);
     text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), 357, SILK_DIM, info);

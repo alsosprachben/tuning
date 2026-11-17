@@ -200,7 +200,7 @@ inline void draw_synth(App &a)
         syn_refresh(a);
     const J *p = part(a, a.row);
     const int layers = (int)num(&Y.synth, "layers");
-    text(a, a.bold, 14, 34, 356, SILK, "SYNTH");
+    const float TX = heading(a, 34, 356, "SYNTH", "synth");
     if (layers <= 0) {
         text(a, a.font, 21, 34, 400, SILK_DIM,
              layers < 0 ? std::string("Reading the part\xe2\x80\xa6")
@@ -209,7 +209,7 @@ inline void draw_synth(App &a)
              "The synth programs (Synth Lead, Synth Pad, the synth basses, brass and strings) bring their knobs here.");
         return;
     }
-    text(a, a.font, 14, 110, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + (p ? str(p, "name") : ""));
+    text(a, a.font, 14, TX, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + (p ? str(p, "name") : ""));
     // the head: back to the patch (how many changed), the layers
     int changed = 0;
     for (const Knob &k : Y.knobs)
@@ -264,7 +264,7 @@ inline void draw_synth(App &a)
             std::string up = sec.first;
             for (char &ch : up)
                 ch = (char)toupper((unsigned char)ch);
-            text(a, a.bold, 14, cx0 + 12, sy0 + 10, SILK, up);
+            heading(a, cx0 + 12, sy0 + 10, up, "synth:" + sec.first);
             // its grid: rows and columns from the controls' places
             int nr = 1, nc = 1;
             for (const Knob &k : Y.knobs)

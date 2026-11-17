@@ -44,6 +44,7 @@ struct App {
     int row = 0;
     int field = 0;                      // (the display's field the jog dial turns)
     std::string card = "parts", msg;
+    std::string help;                   // (the help viewer's topic while it is open)
     std::string last_meters;
     bool quit = false;
     bool animate = false;               // (a card asks for another frame: a blink, a send still due)
@@ -223,6 +224,23 @@ inline bool button(App &a, const char *id, float x, float y, float w, float h, c
     frame(a, x, y, w, h, EDGE, 8.0f, 1.0f);
     text_c(a, a.bold, size, x + w / 2, y + (h - size) / 2, on ? PANEL : enabled ? SILK : SILK_DIM, label);
     return hit;
+}
+
+// A HEADING (a card's name, a region's) and its ? opening the help at key:
+// where the words after it may start
+inline float heading(App &a, float x, float y, const std::string &t, const std::string &key)
+{
+    text(a, a.bold, 14, x, y, SILK, t);
+    const float qx = x + text_w(a, a.bold, 14, t) + 8, r = 10;
+    ImGui::SetCursorScreenPos(P(a, qx - 6, y - 8));
+    ImGui::PushID(("q" + key).c_str());
+    if (ImGui::InvisibleButton("q", ImVec2((2 * r + 12) * a.k, (2 * r + 12) * a.k)))
+        a.help = "@" + key;             // (opened by the frame: help_open)
+    const bool held = ImGui::IsItemActive();
+    ImGui::PopID();
+    dl()->AddCircle(P(a, qx + r, y + 7), r * a.k, held ? LCD : SILK_DIM, 20, 1.5f * a.k);
+    text_c(a, a.bold, 14, qx + r, y, held ? LCD : SILK_DIM, "?");
+    return qx + 2 * r + 12;
 }
 
 // ---- the formats (ui/app.js's)

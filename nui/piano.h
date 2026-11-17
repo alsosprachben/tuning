@@ -109,24 +109,24 @@ inline void draw_piano(App &a)
     }
     pedal_flush(a);
     const float X0 = 34, X1 = 1886;
-    text(a, a.bold, 14, X0, 356, SILK, "PIANO");
+    const float TX = heading(a, X0, 356, "PIANO", "piano");
     if (!N.pn.is(J::OBJ))
         return;
-    text(a, a.font, 14, X0 + 76, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(&N.pn, "part"));
+    text(a, a.font, 14, TX, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(&N.pn, "part"));
     const int ch = (int)num(&N.pn, "channel", -1);
     const std::string info = ch < 0 ? "pedals on every channel" : "pedals on channel " + std::to_string(ch + 1);
     text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), 357, SILK_DIM, info);
 
     const float aboutH = 140, Y0 = 394, Y1 = 1056 - aboutH - 10;
     const float c1 = 430, c3 = 400, gap = 8, c2 = X1 - X0 - c1 - c3 - 2 * gap;
-    auto col = [&](float x, float w, const char *title) {
+    auto col = [&](float x, float w, const char *title, const char *key) {
         rect(a, x, Y0, w, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
         frame(a, x, Y0, w, Y1 - Y0, EDGE, 9, 1);
-        text(a, a.bold, 14, x + 12, Y0 + 10, SILK, title);
+        return heading(a, x + 12, Y0 + 10, title, key);
     };
 
     // THE PEDALS: soft and sostenuto; the sustain a fader with its quick values
-    col(X0, c1, "PEDALS");
+    col(X0, c1, "PEDALS", "piano:pedals");
     const bool soft = flag(&N.pn, "soft"), sost = flag(&N.pn, "sostenuto");
     const float py = Y1 - 290;
     if (pedal_btn(a, "pdsoft", X0 + 76, py, soft, "SOFT", "una corda"))
@@ -153,7 +153,7 @@ inline void draw_piano(App &a)
 
     // THE DAMPERS: each one's rest on its strings, over the keyboard (88 keys, A0 to C8)
     const float dx = X0 + c1 + gap;
-    col(dx, c2, "DAMPERS");
+    const float dsx = col(dx, c2, "DAMPERS", "piano:dampers");
     const J *ct = N.pn.get("contact");
     const int n = ct && ct->is(J::ARR) ? (int)ct->a.size() : 0;
     int on_ = 0, off_ = 0;
@@ -164,7 +164,7 @@ inline void draw_piano(App &a)
     }
     const std::string say = n && off_ == n ? "all lifted: every string rings" : on_ == n ? "all on the strings"
         : std::to_string(n - on_ - off_) + " resting lightly, " + std::to_string(on_) + " on the strings, " + std::to_string(off_) + " lifted";
-    text(a, a.font, 14, dx + 110, Y0 + 11, LCD, say);
+    text(a, a.font, 14, dsx, Y0 + 11, LCD, say);
     {
         const float W = c2 - 24, sx = dx + 12, s = W / 880.0f, top = Y0 + 50;
         const float kw = W / 52, lift = 110 * s, strY = top + 190 * s, kbY = top + 230 * s;
@@ -211,7 +211,7 @@ inline void draw_piano(App &a)
 
     // THE PEDAL KEY: keys held as the sustain pedal
     const float kx = X1 - c3;
-    col(kx, c3, "PEDAL KEY");
+    col(kx, c3, "PEDAL KEY", "piano:key");
     float ky = Y0 + 36;
     for (const auto &l : wrap(a, a.font, 14, "A key held as the sustain pedal: held, the dampers lift; push into it and they come down to the strings.", c3 - 24)) {
         text(a, a.font, 14, kx + 12, ky, SILK_DIM, l);

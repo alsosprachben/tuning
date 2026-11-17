@@ -108,7 +108,7 @@ inline void draw_scenes(App &a)
     if (!C.s.is(J::OBJ))
         sc_take(call(a, "{\"call\":\"scenes\",\"open\":1}"));
     const float X0 = 34, X1 = 1886, Y0 = 394, Y1 = 1056;
-    text(a, a.bold, 14, X0, 356, SILK, "SCENES");
+    heading(a, X0, 356, "SCENES", "scenes");
     if (!C.s.is(J::OBJ))
         return;
     if (ImGui::GetTime() > C.msg_until)
@@ -162,8 +162,7 @@ inline void draw_scenes(App &a)
     const float PW = 720, SW = 600, gap = 10, SX = X0 + PW + gap, MX = SX + SW + gap, MW = X1 - MX;
     rect(a, X0, Y0, PW, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
     frame(a, X0, Y0, PW, Y1 - Y0, EDGE, 9, 1);
-    text(a, a.bold, 14, X0 + 12, Y0 + 10, SILK, "PRESETS");
-    text(a, a.font, 14, X0 + 24 + text_w(a, a.bold, 14, "PRESETS"), Y0 + 11, LCD, "the whole setup: parts, routes, tuning, effects");
+    text(a, a.font, 14, heading(a, X0 + 12, Y0 + 10, "PRESETS", "sc:presets"), Y0 + 11, LCD, "the whole setup: parts, routes, tuning, effects");
     auto parts_say = [&](const J &p) {
         std::string s;
         if (const J *ps = p.get("parts"); ps && ps->is(J::ARR))
@@ -191,8 +190,7 @@ inline void draw_scenes(App &a)
     // THE SCENES: each channel's controls
     rect(a, SX, Y0, SW, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
     frame(a, SX, Y0, SW, Y1 - Y0, EDGE, 9, 1);
-    text(a, a.bold, 14, SX + 12, Y0 + 10, SILK, "SCENES");
-    text(a, a.font, 14, SX + 24 + text_w(a, a.bold, 14, "SCENES"), Y0 + 11, LCD, fit(a, a.font, 14, "each channel's controls: levels, pans, sends, pedals", SW - 120));
+    text(a, a.font, 14, heading(a, SX + 12, Y0 + 10, "SCENES", "sc:scenes"), Y0 + 11, LCD, fit(a, a.font, 14, "each channel's controls: levels, pans, sends, pedals", SW - 120));
     sc_list(a, "scs", SX + 12, Y0 + 40, SW - 24, Y1 - Y0 - 110, C.s.get("scenes"), C.sel_scene, C.scroll_s,
             [](const J &c) {
                 const int n = (int)num(&c, "n");
@@ -207,7 +205,7 @@ inline void draw_scenes(App &a)
     // THE METRONOME: the globals 10 (bpm, 0 off), 11 (its bell every n beats), 12 (its level)
     rect(a, MX, Y0, MW, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
     frame(a, MX, Y0, MW, Y1 - Y0, EDGE, 9, 1);
-    text(a, a.bold, 14, MX + 12, Y0 + 10, SILK, "METRONOME");
+    heading(a, MX + 12, Y0 + 10, "METRONOME", "sc:metro");
     const J *m = C.s.get("metro");
     auto mv = [&](size_t i) { return m && m->is(J::ARR) && i < m->a.size() ? m->a[i].d() : 0.0; };
     const int bpm = (int)std::lround(mv(0));
@@ -253,7 +251,7 @@ inline void draw_scenes(App &a)
     // THE GS RESET: a second tap within 3 s sends it
     float gy = Y0 + 220;
     rect(a, MX + 12, gy - 12, MW - 24, 1, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
-    text(a, a.bold, 14, MX + 12, gy, SILK, "GS RESET");
+    heading(a, MX + 12, gy, "GS RESET", "sc:gs");
     gy += 24;
     for (const auto &l : wrap(a, a.font, 14, "Every part back to program 1, the controllers, effects and receive settings to power-on, as a sequencer's GS Reset.", MW - 24)) {
         text(a, a.font, 14, MX + 12, gy, SILK_DIM, l);

@@ -17,6 +17,7 @@ import ctypes
 import toolchain as _TC
 import math
 import os
+import shutil
 import subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -4720,6 +4721,10 @@ def build_nvlive():
             os.path.join(imgui, 'imgui_widgets.cpp'), os.path.join(imgui, 'backends', 'imgui_impl_sdl3.cpp'),
             os.path.join(imgui, 'backends', 'imgui_impl_opengl3.cpp'), os.path.join(HERE, 'nui', 'nui.cpp'))])
         nui_flags = ['-DNV_NATIVE_UI']
+        # (its help: ui/help.js's topics as ui/help.json, made again when help.js is newer and node is here)
+        hjs, hjson = os.path.join(HERE, 'ui', 'help.js'), os.path.join(HERE, 'ui', 'help.json')
+        if shutil.which('node') and (not os.path.exists(hjson) or os.path.getmtime(hjs) > os.path.getmtime(hjson)):
+            subprocess.run(['node', os.path.join(HERE, 'examples', 'help_json.js'), os.path.join(HERE, 'ui')], check=True)
         nui_libs = [os.path.join(sdl, 'lib', 'libSDL3.a')]
     newest = max([os.path.getmtime(x) for x in (src, hdr, hint, hlive, uis, so)] + [os.path.getmtime(o) for o in nui_objs])
     if not os.path.exists(exe) or newest > os.path.getmtime(exe):

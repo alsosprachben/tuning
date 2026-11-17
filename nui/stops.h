@@ -89,10 +89,10 @@ inline void draw_stops(App &a)
         T.for_row = a.row;
     }
     const float X0 = 34, X1 = 1886;
-    text(a, a.bold, 14, X0, 356, SILK, "STOPS");
+    const float TX = heading(a, X0, 356, "STOPS", "stops");
     const int prog = (int)num(&T.st, "program", -1);
     const std::string part_name = str(&T.st, "part");
-    text(a, a.font, 14, X0 + 76, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + part_name);
+    text(a, a.font, 14, TX, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + part_name);
 
     // NO ORGAN: the organs, a tap puts one on the part
     if (prog < 0) {
@@ -208,7 +208,7 @@ inline void draw_stops(App &a)
         const float dx = X1 - 350, dy = JY0, dw = 350, dh = JY1 - JY0;
         rect(a, dx, dy, dw, dh, IM_COL32(0x1f, 0x22, 0x26, 255), 10);
         frame(a, dx, dy, dw, dh, EDGE, 10, 1);
-        text(a, a.bold, 14, dx + 14, dy + 12, SILK, "DRIVE");
+        heading(a, dx + 14, dy + 12, "DRIVE", "drive");
         const double now = drive->a[0].d(), voice = drive->a[1].d(), mine = drive->a[2].d();
         auto it = a.hold.find("drive");
         const bool held = it != a.hold.end() && ImGui::GetTime() < it->second.second;

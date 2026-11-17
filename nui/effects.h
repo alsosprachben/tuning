@@ -156,10 +156,10 @@ inline void draw_effects(App &a)
     if (!L.loaded)
         lib_load(a);
     const float X0 = 34, X1 = 1886, Y0 = 394;
-    text(a, a.bold, 14, X0, 356, SILK, "EFFECTS");
+    const float TX = heading(a, X0, 356, "EFFECTS", "effects");
     const J *p = part(a, a.row);
     if (p)
-        text(a, a.font, 14, X0 + 100, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(p, "name"));
+        text(a, a.font, 14, TX, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(p, "name"));
     const J *x = F.e.get("efx"), *y = F.e.get("sys");
     if (!x || !F.tables)
         return;
@@ -175,8 +175,8 @@ inline void draw_effects(App &a)
     for (const FxType &t : F.types)
         if (t.msb == msb && t.lsb == lsb)
             type = &t;
-    text(a, a.bold, 14, IX + 12, Y0 + 12, SILK, "INSERTION EFFECT");
-    text(a, a.font, 21, IX + 24 + text_w(a, a.bold, 14, "INSERTION EFFECT"), Y0 + 8, LCD, type ? pad2(type->num) + " " + type->name : "00 Thru");
+    const float ix = heading(a, IX + 12, Y0 + 12, "INSERTION EFFECT", "fx:ins");
+    text(a, a.font, 21, ix, Y0 + 8, LCD, type ? pad2(type->num) + " " + type->name : "00 Thru");
     // this part on it (every channel the part plays)
     std::vector<int> chans;
     const int pch = p ? (int)num(p, "channel", -1) : 0;
@@ -279,7 +279,7 @@ inline void draw_effects(App &a)
         }
         const float sx = IX + IW - 12 - SW_;
         rect(a, sx, ky0 - 4, 1, kh, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
-        text_c(a, a.bold, 14, sx + SW_ / 2, ky0 - 2, SILK_DIM, "SENDS");
+        heading(a, sx + SW_ / 2 - 40, ky0 - 2, "SENDS", "fx:sends");
         static const char *SN[3] = {"Reverb", "Chorus", "Delay"};   // (under SENDS: to each)
         const J *sd = x->get("send");
         const float sh = (kh - 20) / 3;
@@ -332,8 +332,7 @@ inline void draw_effects(App &a)
             rect(a, bx, by, BW, BH, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
             frame(a, bx, by, BW, BH, EDGE, 9, 1);
             if (bi == 3) {   // THE EQ, of the whole mix
-                text(a, a.bold, 14, bx + 12, by + 10, SILK, "EQ");
-                text(a, a.font, 14, bx + 50, by + 11, LCD, "the whole mix");
+                text(a, a.font, 14, heading(a, bx + 12, by + 10, "EQ", "fx:eq"), by + 11, LCD, "the whole mix");
                 std::vector<std::string> gsh;
                 for (int g = 0x34; g <= 0x4C; g++)
                     gsh.push_back((g - 0x40 > 0 ? "+" : "") + std::to_string(g - 0x40) + " dB");
@@ -360,8 +359,7 @@ inline void draw_effects(App &a)
                 continue;
             }
             const Box &b = boxes[(size_t)bi];
-            text(a, a.bold, 14, bx + 12, by + 10, SILK, b.name);
-            text(a, a.font, 14, bx + 12 + text_w(a, a.bold, 14, b.name) + 10, by + 11, LCD, b.cc);
+            text(a, a.font, 14, heading(a, bx + 12, by + 10, b.name, std::string("fx:") + b.id), by + 11, LCD, b.cc);
             const int tv = fx_val(a, std::string(b.id) + "type", b.type);
             const int tcols = bi == 0 ? 4 : 3;     // (the chorus's and delay's names are longer)
             const int th = choice_grid(a, std::string("st") + b.id, bx + 12, by + 34, BW - 24, tcols, 26, *b.types, tv);

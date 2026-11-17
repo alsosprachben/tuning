@@ -247,6 +247,7 @@ inline void draw_library(App &a)
     snprintf(info, sizeof info, "%d patch%s \xc2\xb7 tap to play on part %02d%s", (int)list.size(),
              list.size() == 1 ? "" : "es", a.row + 1, L.favs_kept ? "" : " \xc2\xb7 (no session: stars are not kept)");
     text(a, a.font, 14, MX + 576, 366, SILK_DIM, info);
+    heading(a, MX + 576 + text_w(a, a.font, 14, info) + 4, 366, "", "library");   // (the card's ?)
 
     // THE NOTES on the part's patch (about.json: its rating, what it was fitted to)
     const float aboutH = 150, TY = 410, TB = (L.typing ? 1056 - 5 * 56 - 24 : 1056 - aboutH - 10);

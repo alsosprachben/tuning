@@ -89,10 +89,10 @@ inline void draw_control(App &a)
         ct_take(call(a, "{\"call\":\"control\",\"open\":1,\"kinds\":1}"));
     ct_flush(a);
     const float X0 = 34, X1 = 1886, Y0 = 394, Y1 = 1056;
-    text(a, a.bold, 14, X0, 356, SILK, "CONTROL");
+    const float TX = heading(a, X0, 356, "CONTROL", "control");
     const J *p = part(a, a.row);
     if (p)
-        text(a, a.font, 14, X0 + 100, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(p, "name"));
+        text(a, a.font, 14, TX, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(p, "name"));
     const J *ctls = C.c.get("controls"), *routes = C.c.get("routes");
     const int nc = ctls && ctls->is(J::ARR) ? (int)ctls->a.size() : 0, nr = routes && routes->is(J::ARR) ? (int)routes->a.size() : 0;
     const std::string info = std::to_string(nc) + " control" + (nc == 1 ? "" : "s") + " \xc2\xb7 " + std::to_string(nr) + " route" + (nr == 1 ? "" : "s");
@@ -103,8 +103,7 @@ inline void draw_control(App &a)
     const float LW = 900;
     rect(a, X0, Y0, LW, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
     frame(a, X0, Y0, LW, Y1 - Y0, EDGE, 9, 1);
-    text(a, a.bold, 14, X0 + 12, Y0 + 10, SILK, "ON-SCREEN CONTROLS");
-    text(a, a.font, 14, X0 + 24 + text_w(a, a.bold, 14, "ON-SCREEN CONTROLS"), Y0 + 11, LCD, "sent straight to the engine");
+    text(a, a.font, 14, heading(a, X0 + 12, Y0 + 10, "ON-SCREEN CONTROLS", "ct:strip"), Y0 + 11, LCD, "sent straight to the engine");
     const float cw = 136, cy0 = Y0 + 40, ch_ = C.adding ? 300 : Y1 - Y0 - 52;
     float x = X0 + 12;
     static const int SCAN_V[7] = {0, 18, 37, 55, 73, 91, 110};
@@ -191,8 +190,7 @@ inline void draw_control(App &a)
     const float RX = X0 + LW + 10, RW = X1 - RX;
     rect(a, RX, Y0, RW, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
     frame(a, RX, Y0, RW, Y1 - Y0, EDGE, 9, 1);
-    text(a, a.bold, 14, RX + 12, Y0 + 10, SILK, "ROUTES");
-    text(a, a.font, 14, RX + 24 + text_w(a, a.bold, 14, "ROUTES"), Y0 + 11, LCD, "the keyboard's controls, rewritten first");
+    text(a, a.font, 14, heading(a, RX + 12, Y0 + 10, "ROUTES", "ct:routes"), Y0 + 11, LCD, "the keyboard's controls, rewritten first");
     float ry = Y0 + 40;
     if (!nr) {
         text(a, a.font, 14, RX + 12, ry, SILK_DIM, "No routes: the keyboard's controls reach the engine as they are.");
@@ -213,7 +211,7 @@ inline void draw_control(App &a)
     ry += 10;
     rect(a, RX + 12, ry, RW - 24, 1, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
     ry += 10;
-    text(a, a.bold, 14, RX + 12, ry, SILK, "A NEW ROUTE");
+    heading(a, RX + 12, ry, "A NEW ROUTE", "ct:new");
     ry += 26;
     const int learning = (int)num(&C.c, "learning");
     const bool blink = std::fmod(ImGui::GetTime(), 0.8) < 0.4;

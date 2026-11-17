@@ -45,6 +45,7 @@
 #include "scenes.h"
 #include "files.h"
 #include "setup.h"
+#include "help.h"
 
 namespace nui {
 
@@ -88,6 +89,15 @@ static void draw(App &a)
                                             ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollWithMouse);
     // (the bitmap font's pixels sampled as pixels)
     dl()->AddCallback(ImGui::GetPlatformIO().DrawCallback_SetSamplerNearest, nullptr);
+    if (!a.help.empty() && a.help[0] == '@')        // (a ? touched: the viewer opened at its topic)
+        help_open(a, a.help.substr(1));
+    if (!a.help.empty()) {              // THE HELP, over everything while it is open
+        draw_help(a);
+        ImGui::End();
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar(2);
+        return;
+    }
     draw_display(a);
     draw_keys(a);
     // THE CARD TABS, and the card (each built from the web's in turn)
@@ -96,7 +106,8 @@ static void draw(App &a)
     for (int i = 0; i < nc; i++)
         if (button(a, CARDS[i][0], X + i * (w + gap), Y, w, 46, CARDS[i][1], a.card == CARDS[i][0]))
             a.card = CARDS[i][0];
-    button(a, "help", X + nc * (w + gap), Y, 56, 46, "?");
+    if (button(a, "help", X + nc * (w + gap), Y, 56, 46, "?"))
+        help_open(a, "basics");
     rect(a, 14, 338, 1892, 728, PANEL, 10.0f);
     piano_card(a, a.card == "piano");   // (the engine pushes the pedals only while it is open)
     drums_card(a, a.card == "drums");   // (...and the kit and its hits)

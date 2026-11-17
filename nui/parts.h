@@ -57,9 +57,9 @@ inline void draw_parts(App &a)
     const int n = nparts(a);
     const float X0 = 34, X1 = 1886;
     // THE HEAD: the card's name, its message, LAYER, SPLIT, REMOVE
-    text(a, a.bold, 14, X0, 356, SILK, "PARTS");
+    const float TX = heading(a, X0, 356, "PARTS", "parts");
     if (!a.msg.empty())
-        text(a, a.font, 14, X0 + 90, 356, BAD, fit(a, a.font, 14, a.msg, 1200));
+        text(a, a.font, 14, TX, 356, BAD, fit(a, a.font, 14, a.msg, 1200));
     auto act = [&](const char *name) {
         J r = call(a, std::string("{\"call\":\"") + name + "\",\"row\":" + std::to_string(a.row) + "}");
         const J *ok = r.get("ok");

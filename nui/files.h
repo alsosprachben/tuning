@@ -131,17 +131,17 @@ inline void draw_files(App &a)
         fl_go(a, F.dir.empty() && d0 ? d0 : F.dir);
     }
     const float X0 = 34, X1 = 1886, Y0 = 394, Y1 = 1056;
-    text(a, a.bold, 14, X0, 356, SILK, "FILES");
+    const float TX = heading(a, X0, 356, "FILES", "files");
     const J *pl = F.f.get("player"), *rd = F.f.get("render");
     const bool playing = flag(pl, "busy"), rendering = flag(rd, "busy");
     if (playing)
-        text(a, a.font, 14, X0 + 80, 357, OWN, "playing " + str(pl, "name"));
+        text(a, a.font, 14, TX, 357, OWN, "playing " + str(pl, "name"));
 
     // THE FOLDERS
     const float BW = 560;
     rect(a, X0, Y0, BW, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
     frame(a, X0, Y0, BW, Y1 - Y0, EDGE, 9, 1);
-    text(a, a.bold, 14, X0 + 12, Y0 + 10, SILK, "FOLDERS");
+    heading(a, X0 + 12, Y0 + 10, "FOLDERS", "fl:browse");
     const std::string parent = str(&F.list, "parent"), home = str(&F.list, "home");
     if (button(a, "flup", X0 + 12, Y0 + 34, 90, 36, "\xe2\x96\xb2 UP", false, !parent.empty()) && !parent.empty())
         fl_go(a, parent);
@@ -188,9 +188,9 @@ inline void draw_files(App &a)
     const float FX = X0 + BW + 10, FW = 740, PX = FX + FW + 10, PW = X1 - PX;
     rect(a, FX, Y0, X1 - FX, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
     frame(a, FX, Y0, X1 - FX, Y1 - Y0, EDGE, 9, 1);
-    text(a, a.bold, 14, FX + 12, Y0 + 10, SILK, "THE FILE");
+    const float fx_ = heading(a, FX + 12, Y0 + 10, "THE FILE", "fl:file");
     if (!F.sel.empty())
-        text(a, a.font, 14, FX + 24 + text_w(a, a.bold, 14, "THE FILE"), Y0 + 11, LCD,
+        text(a, a.font, 14, fx_, Y0 + 11, LCD,
              fit(a, a.font, 14, F.sel.substr(F.sel.rfind('/') + 1), FW - 140));
     const bool ok = flag(&F.info, "ok");
     std::string about;
@@ -228,7 +228,7 @@ inline void draw_files(App &a)
             y += 18;
         }
     y += 8;
-    text(a, a.bold, 14, FX + 12, y, SILK, "MODE");
+    heading(a, FX + 12, y, "MODE", "fl:mode");
     y += 22;
     {
         std::vector<std::string> w;
@@ -282,7 +282,7 @@ inline void draw_files(App &a)
     // PLAY LIVE
     rect(a, PX - 6, Y0 + 12, 1, Y1 - Y0 - 24, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
     float py = Y0 + 10;
-    text(a, a.bold, 14, PX + 8, py, SILK, "PLAY LIVE");
+    heading(a, PX + 8, py, "PLAY LIVE", "fl:play");
     py += 26;
     if (button(a, "flplay", PX + 8, py, 160, 44, "PLAY LIVE", false, ok && !playing) && ok && !playing)
         fl_take(call(a, "{\"call\":\"file_play\",\"path\":" + jstr(F.sel) + ",\"mode\":" + jstr(F.mode) + "}"));
@@ -316,7 +316,7 @@ inline void draw_files(App &a)
 
     // RENDER OFFLINE
     py += 16;
-    text(a, a.bold, 14, PX + 8, py, SILK, "RENDER OFFLINE");
+    heading(a, PX + 8, py, "RENDER OFFLINE", "fl:render");
     py += 26;
     const bool fx_ok = flag(&F.f, "file_export");
     auto render = [&](const char *kind, bool whole) {
