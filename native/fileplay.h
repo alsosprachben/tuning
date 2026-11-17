@@ -37,6 +37,9 @@ void nv_midi_free(void *p);
 double nv_midi_total(void *p);
 int nv_midi_mt32(void *p);
 const char *nv_midi_track_name(void *p, int i);
+int nv_midi_n_findings(void *p);
+const char *nv_midi_finding(void *p, int i);
+int nv_midi_muxed(void *p);
 }
 extern char **environ;
 
@@ -135,12 +138,15 @@ static void *read_mode(const std::vector<uint8_t> &b, const std::string &mode, i
         setenv("TUNING_GM", "1", 1);
     if (mode == "cm64")
         setenv("TUNING_CM64", "1", 1);
-    if (mode == "look")                 // (inspect's: an MT-32 exclusive counted, not refused)
+    if (mode == "look") {               // (inspect's: an MT-32 exclusive counted, not refused; the file check)
         setenv("TUNING_MT32_SEEN", "1", 1);
+        setenv("TUNING_CHECK", "1", 1);
+    }
     void *m = nv_midi_read(b.data(), (long long)b.size(), err);
     unsetenv("TUNING_GM");
     unsetenv("TUNING_CM64");
     unsetenv("TUNING_MT32_SEEN");
+    unsetenv("TUNING_CHECK");
     return m;
 }
 
@@ -153,6 +159,8 @@ struct Info {
     double total = 0.0;
     std::vector<int> chans;
     int programs = 0, sysex = 0;
+    std::vector<std::string> findings;  // the file check's (filecheck.h: mt32check's)
+    bool muxed = false;                 // every note stamped with its own program
 };
 static Info inspect(const std::string &path)
 {
@@ -207,6 +215,9 @@ static Info inspect(const std::string &path)
         master = master || low.rfind("master parameters", 0) == 0;
     }
     mt = nmt > 0 || master;
+    for (int i = 0; const char *f = nv_midi_finding(m, i); i++)
+        I.findings.push_back(f);
+    I.muxed = nv_midi_muxed(m) == 1;
     nv_midi_free(m);
     for (int c = 0; c < 16; c++)
         if (used[(size_t)c])

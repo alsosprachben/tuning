@@ -500,6 +500,8 @@ def _load():
             ('nv_midi_n_pws', I, [ctypes.c_void_p]), ('nv_midi_gs', I, [ctypes.c_void_p]),
             ('nv_midi_n_events', I, [ctypes.c_void_p]),
             ('nv_midi_mt32', I, [ctypes.c_void_p]), ('nv_midi_track_name', ctypes.c_char_p, [ctypes.c_void_p, I]),
+            ('nv_midi_n_findings', I, [ctypes.c_void_p]), ('nv_midi_finding', ctypes.c_char_p, [ctypes.c_void_p, I]),
+            ('nv_midi_muxed', I, [ctypes.c_void_p]),
             ('nv_midi_sysex', I, [ctypes.c_void_p, I, ctypes.c_void_p, I]), ('nv_midi_master', I, [ctypes.c_void_p]),
             ('nv_midi_event', None, [ctypes.c_void_p, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_midi_event_x', ctypes.c_double, [ctypes.c_void_p, I]),
@@ -4029,6 +4031,19 @@ class Midi(object):
     def mt32(self):
         """The MT-32 family's exclusives the reader passed over (TUNING_CM64, TUNING_MT32_SEEN)"""
         return self.d.nv_midi_mt32(self.p)
+
+    def findings(self):
+        """The file check's findings (filecheck.h, mt32check's), read with
+        TUNING_CHECK=1; None if the file was not checked"""
+        n = self.d.nv_midi_n_findings(self.p)
+        if n < 0:
+            return None
+        return [self.d.nv_midi_finding(self.p, i).decode('latin-1') for i in range(n)]
+
+    def muxed(self):
+        """Every note stamped with its own program (mt32check._multiplexed), None unchecked"""
+        v = self.d.nv_midi_muxed(self.p)
+        return None if v < 0 else bool(v)
 
     def track_names(self):
         """Each track's first name ('' none)"""

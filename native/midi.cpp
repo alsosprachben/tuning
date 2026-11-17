@@ -37,6 +37,7 @@
 #include "nv.h"
 #include "gsrx.h"
 #include "mpe.h"
+#include "filecheck.h"
 
 namespace nv {
 
@@ -319,6 +320,10 @@ struct Parsed {
     // or mt32check's tell, a 'Master Parameters' track)
     int mt32 = 0;
     std::vector<std::string> track_names;
+    // THE FILE CHECK's findings (filecheck.h, TUNING_CHECK=1: mt32check's),
+    // and whether every note is stamped with its own program (a muxed file)
+    std::vector<std::string> findings;
+    int muxed = -1;
     // THE GS SETUP by the first note (gs_setup), a reset back to none: the
     // reverb's, chorus's and delay's parameters (40 01 xx: address -> value,
     // a macro the rest gone), the EQ's (40 02 0-3), each part's EQ switch
@@ -1031,6 +1036,19 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 nm.assign(all[k].data.begin(), all[k].data.end());
         }
         P.track_names.push_back(nm);
+    }
+    // THE FILE CHECK (TUNING_CHECK=1, the Files card's look): mt32check's
+    // audit, over the tracks as mido gives them
+    if (const char *ce = getenv("TUNING_CHECK"); ce && !strcmp(ce, "1")) {
+        std::vector<std::vector<const Msg *>> tr(starts.size());
+        for (size_t ti = 0; ti < starts.size(); ti++) {
+            const size_t b = ti + 1 < starts.size() ? starts[ti + 1] : all.size();
+            for (size_t i = starts[ti]; i < b; i++)
+                tr[ti].push_back(&all[i]);
+        }
+        filecheck::Result fr = filecheck::check(tr, tpb);
+        P.findings = fr.findings;
+        P.muxed = fr.muxed;
     }
     // A TWO-PORT FILE (PortedMidi): each track's messages its port's, a
     // part's exclusive at port B as port A would read it (40 / 50 swapped)
@@ -2270,6 +2288,20 @@ void nv_midi_free(void *p) { delete (nv::Parsed *)p; }
 // THE MT-32 exclusives passed over (Parsed::mt32), and each track's first
 // name (nullptr past the last track)
 int nv_midi_mt32(void *p) { return ((nv::Parsed *)p)->mt32; }
+
+// THE FILE CHECK's findings (TUNING_CHECK=1): how many (-1 not checked), each
+// one's text (nullptr past the last); whether the file is muxed (-1 not checked)
+int nv_midi_n_findings(void *p)
+{
+    const nv::Parsed *P = (nv::Parsed *)p;
+    return P->muxed < 0 ? -1 : (int)P->findings.size();
+}
+const char *nv_midi_finding(void *p, int i)
+{
+    const auto &v = ((nv::Parsed *)p)->findings;
+    return i >= 0 && i < (int)v.size() ? v[(size_t)i].c_str() : nullptr;
+}
+int nv_midi_muxed(void *p) { return ((nv::Parsed *)p)->muxed; }
 const char *nv_midi_track_name(void *p, int i)
 {
     const auto &v = ((nv::Parsed *)p)->track_names;

@@ -1578,6 +1578,11 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         o.o["programs"] = sess::integer(I.programs);
         o.o["detected"] = sess::str(I.detected);
         o.o["why"] = sess::str(I.why);
+        J fd = sess::arr();
+        for (const auto &f : I.findings)
+            fd.a.push_back(sess::str(f));
+        o.o["findings"] = fd;
+        o.o["muxed"] = sess::boolean(I.muxed);
         r.o["info"] = o;
     } else if (call == "file_play") {          // path, mode: played live, the parts its own
         const J *pj = q.get("path"), *mj = q.get("mode");
