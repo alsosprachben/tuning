@@ -34,6 +34,7 @@
 #include "panel.h"
 #include "parts.h"
 #include "library.h"
+#include "synth.h"
 
 namespace nui {
 
@@ -91,6 +92,8 @@ static void draw(App &a)
         draw_parts(a);
     } else if (a.card == "library") {
         draw_library(a);
+    } else if (a.card == "synth") {
+        draw_synth(a);
     } else {
         std::string title;
         for (int i = 0; i < nc; i++)
@@ -125,6 +128,14 @@ static bool poll(App &a)
     if (const J *x = m.get("build")) {
         a.build = *x;
         changed = true;
+    }
+    if (const J *x = m.get("synth")) {     // (the part's synth as the engine has it: the Messenger's knobs, a preset)
+        if ((int)num(x, "row", -1) == a.row && (int)num(x, "layer") == g_syn.layer) {
+            g_syn.synth = *x;
+            g_syn.for_row = a.row;
+            g_syn.text.clear();
+            changed = true;
+        }
     }
     if (const J *x = m.get("parts")) {
         a.parts = *x;

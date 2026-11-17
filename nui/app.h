@@ -180,6 +180,31 @@ inline void frame(App &a, float x, float y, float w, float h, ImU32 col, float r
     dl()->AddRect(P(a, x, y), P(a, x + w, y + h), col, r * a.k, 0, t * a.k);
 }
 
+// A LABEL's LINES: wrapped at its spaces where wider than w (at most two)
+inline std::vector<std::string> label_lines(App &a, ImFont *f, float size, const std::string &s, float w)
+{
+    if (w <= 0 || text_w(a, f, size, s) <= w || s.find(' ') == std::string::npos)
+        return {s};
+    // (the split nearest the middle that fits, else the middle's)
+    size_t best = std::string::npos;
+    float bestd = 1e9f;
+    for (size_t i = 0; i < s.size(); i++)
+        if (s[i] == ' ') {
+            const float d = std::fabs((float)i - s.size() / 2.0f);
+            if (d < bestd) {
+                bestd = d;
+                best = i;
+            }
+        }
+    return {s.substr(0, best), s.substr(best + 1)};
+}
+inline void label_c(App &a, ImFont *f, float size, float cx, float y, ImU32 col, const std::string &s, float w)
+{
+    const auto ls = label_lines(a, f, size, s, w);
+    for (size_t i = 0; i < ls.size(); i++)
+        text_c(a, f, size, cx, y + i * (size + 2), col, ls[i]);
+}
+
 // A BUTTON (the web's .hb): acts on release over it, as the touch kit's
 inline bool button(App &a, const char *id, float x, float y, float w, float h, const std::string &label, bool on = false,
                    bool enabled = true, float size = 14)

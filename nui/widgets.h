@@ -27,7 +27,8 @@ inline void bubble(App &a, const std::string &s)
 // A KNOB: v01 its position (0..1); size its diameter (design px). Returns
 // the gesture's flags; v01 moved by the finger
 inline int knob(App &a, const char *id, float cx, float cy, float size, float &v01, const std::string &label,
-                const std::string &value, bool centred = false, const std::vector<float> &detents = {})
+                const std::string &value, bool centred = false, const std::vector<float> &detents = {}, float label_w = 0,
+                bool own = false)
 {
     const float r = size / 2;
     Range g;
@@ -63,8 +64,10 @@ inline int knob(App &a, const char *id, float cx, float cy, float size, float &v
     d->AddCircleFilled(c, r * 0.64f * a.k, IM_COL32(0x15, 0x17, 0x1a, 255), 40);
     d->AddCircleFilled(c, r * 0.52f * a.k, CAP, 40);
     d->AddLine(c, pt(r * 0.48f, av), SILK, 2.5f * a.k);
-    text_c(a, a.bold, 14, cx, cy + r + 4, SILK_DIM, label);
-    text_c(a, a.font, 14, cx, cy + r + 20, f & K_ACTIVE ? OWN : LCD, value);
+    const auto ls = label_lines(a, a.bold, 14, label, label_w);
+    for (size_t i = 0; i < ls.size(); i++)
+        text_c(a, a.bold, 14, cx, cy + r + 4 + i * 16, SILK_DIM, ls[i]);
+    text_c(a, a.font, 14, cx, cy + r + 4 + ls.size() * 16, (f & K_ACTIVE) || own ? OWN : LCD, value);
     if (f & K_ACTIVE)
         bubble(a, label + " " + value);
     return f;
