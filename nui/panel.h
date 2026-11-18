@@ -104,7 +104,7 @@ inline void draw_display(App &a)
         const float fx = X + 14 + i * (fw + 8), fy = Y + 80;
         float v = (float)field_get(a, i);
         const int f = lcd_field(a, FIELDS[i].label, fx, fy, fw, 52, v, (float)FIELDS[i].lo, (float)FIELDS[i].hi,
-                                FIELDS[i].label, field_text(i, (int)v), a.field == i);
+                                FIELDS[i].label, field_text(i, (int)v), a.field == i, 21, i == 0 ? 0.5f : 1.0f);
         if (f & (K_TAP | K_ACTIVE))
             a.field = i;
         if (f & K_CHANGED)
@@ -213,7 +213,7 @@ inline void draw_display_tab(App &a)
         const float fx = X + 8 + i * (fw + 5), fy = Y + 50;
         float v = (float)field_get(a, i);
         const int f = lcd_field(a, FIELDS[i].label, fx, fy, fw, 46, v, (float)FIELDS[i].lo, (float)FIELDS[i].hi,
-                                FIELDS[i].label, field_text(i, (int)v), a.field == i);
+                                FIELDS[i].label, field_text(i, (int)v), a.field == i, 21, i == 0 ? 0.5f : 1.0f);
         if (f & (K_TAP | K_ACTIVE))
             a.field = i;
         if (f & K_CHANGED)

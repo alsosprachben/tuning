@@ -120,7 +120,7 @@ inline int fader(App &a, const char *id, float cx, float y, float h, float &v, f
 // A DISPLAY FIELD (the LCD's): its label and value; selected, lit. v moves
 // by a drag over [lo, hi] in steps of 1 (travel: max(160, 3 per step))
 inline int lcd_field(App &a, const char *id, float x, float y, float w, float h, float &v, float lo, float hi,
-                     const std::string &label, const std::string &value, bool sel, float big = 21)
+                     const std::string &label, const std::string &value, bool sel, float big = 21, float unit = 1)
 {
     Range g;
     g.lo = lo;
@@ -128,12 +128,17 @@ inline int lcd_field(App &a, const char *id, float x, float y, float w, float h,
     g.step = 1;
     g.travel = std::max(160.0f, 3.0f * (hi - lo + 1));
     int f = gesture(a.K, id, P(a, x, y), P(a, x + w, y + h), v, g);
+    // (its sheet in the field's own unit: the LEVEL's steps are half dB)
     if (f & K_LONG)
-        open_sheet(a, id, label, value, v, lo, hi, 0, "Value", "");
+        open_sheet(a, id, label, value, v * unit, lo * unit, hi * unit, unit < 1 ? 1 : 0, "Value", "");
     {
-        double t = v;
-        f |= take_sheet(a, id, t);
-        v = std::max(lo, std::min(hi, (float)std::round(t)));
+        double t = v * unit;
+        if (take_sheet(a, id, t) & K_CHANGED) {
+            v = std::max(lo, std::min(hi, (float)std::round(t / unit)));
+            f |= K_CHANGED;
+        }
+        if (a.sheet_reset.erase(id))
+            f |= K_RESET;
     }
     rect(a, x, y, w, h, sel ? LCD : IM_COL32(0x33, 0x24, 0x08, 255), 3.0f);
     frame(a, x, y, w, h, f & K_ACTIVE ? OWN : LCD_DIM, 3.0f, 1.0f);

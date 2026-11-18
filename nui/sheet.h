@@ -11,8 +11,8 @@ namespace nui {
 inline void draw_sheet(App &a)
 {
     App::Sheet &s = a.sheet;
-    rect(a, 0, 0, 1920, 1080, IM_COL32(0x0c, 0x0d, 0x0f, 235), 0);
-    const float W = 620, H = 720, x = (1920 - W) / 2, y = (1080 - H) / 2;
+    rect(a, 0, 0, a.W, a.H, IM_COL32(0x0c, 0x0d, 0x0f, 235), 0);
+    const float W = 620, H = 720, x = (a.W - W) / 2, y = (a.H - H) / 2;   // (the canvas's own: the laptop's, the iPad's)
     rect(a, x, y, W, H, PANEL, 12);
     frame(a, x, y, W, H, LCD_DIM, 12, 1.5f);
     text(a, a.bold, 14, x + 24, y + 22, SILK, s.title);
@@ -56,21 +56,21 @@ inline void draw_sheet(App &a)
             }
         }
     const float sx = kx + 3 * (kw + g) + 12, sw = x + W - 24 - sx;
-    if (button(a, "skback", sx, ky, sw, kh, "\xe2\x86\x90") && !s.typed.empty())
+    if (button(a, "skback", sx, ky, sw, kh, "\xe2\x86\x90", false, true, a.tab ? 21 : 14) && !s.typed.empty())
         s.typed.pop_back();
-    if (button(a, "skclear", sx, ky + kh + g, sw, kh, "CLEAR"))
+    if (button(a, "skclear", sx, ky + kh + g, sw, kh, "CLEAR", false, true, a.tab ? 21 : 14))
         s.typed.clear();
     const float by = y + H - 24 - 50;
-    if (s.can_reset && button(a, "skreset", x + 24, by, 230, 50, "BACK TO THE PATCH")) {
+    if (s.can_reset && button(a, "skreset", x + 24, by, 230, 50, "BACK TO THE PATCH", false, true, a.tab ? 21 : 14)) {
         a.sheet_reset.insert(s.key);
         s.open = false;
         return;
     }
-    if (button(a, "skclose", x + W - 24 - 2 * 140 - 10, by, 140, 50, "CLOSE")) {
+    if (button(a, "skclose", x + W - 24 - 2 * 140 - 10, by, 140, 50, "CLOSE", false, true, a.tab ? 21 : 14)) {
         s.open = false;
         return;
     }
-    set = button(a, "skset", x + W - 24 - 140, by, 140, 50, "SET", true) || set;
+    set = button(a, "skset", x + W - 24 - 140, by, 140, 50, "SET", true, true, a.tab ? 21 : 14) || set;
     if (set) {
         char *end = nullptr;
         const double v = strtod(s.typed.c_str(), &end);

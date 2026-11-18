@@ -101,11 +101,13 @@ inline void draw_help(App &a)
         help_load(a);
     if (H.cur.empty())
         H.cur = "basics";
-    rect(a, 0, 0, 1920, 1080, IM_COL32(0x12, 0x14, 0x17, 255), 0);
-    rect(a, 14, 14, 1892, 1052, PANEL, 10);
+    // (the canvas's own size: the laptop's, the iPad's)
+    const float R = a.W - 34, B = a.H - 34;
+    rect(a, 0, 0, a.W, a.H, IM_COL32(0x12, 0x14, 0x17, 255), 0);
+    rect(a, 14, 14, a.W - 28, a.H - 28, PANEL, 10);
     // THE TOP: its name, BACK, the search, CLOSE
     text(a, a.bold, 14, 34, 40, LCD, "HELP");
-    if (button(a, "hvback", 110, 28, 130, 42, "\xe2\x97\x80 BACK", false, !H.hist.empty()) && !H.hist.empty()) {
+    if (button(a, "hvback", 110, 28, 130, a.tab ? 44 : 42, "\xe2\x97\x80 BACK", false, !H.hist.empty(), a.tab ? 21 : 14) && !H.hist.empty()) {
         H.cur = H.hist.back();
         H.hist.pop_back();
         H.scroll_page = 0;
@@ -132,14 +134,14 @@ inline void draw_help(App &a)
         else
             a.help.clear();
     }
-    if (button(a, "hvclose", 1886 - 150, 28, 150, 42, "CLOSE")) {
+    if (button(a, "hvclose", R - 150, 28, 150, a.tab ? 44 : 42, "CLOSE", false, true, a.tab ? 21 : 14)) {
         a.help.clear();
         H.typing = false;
         return;
     }
 
     // THE CONTENTS (or what a search found), on the left
-    const float NX = 34, NY = 86, NW = 440, NH = 1046 - NY - (H.typing ? 5 * 56 + 10 : 0);
+    const float NX = 34, NY = 86, NW = a.tab ? 300 : 440, NH = B + 2 - NY - (H.typing ? 5 * 56 + 10 : 0);
     struct Row {
         std::string key, title, sub;
         bool head = false, indent = false;
@@ -213,14 +215,14 @@ inline void draw_help(App &a)
             text(a, a.font, 14, x + 10, y + 27, on ? LCD_BG : SILK_DIM, fit(a, a.font, 14, r.sub, NW - 40));
     }
     dl()->PopClipRect();
-    if (H.typing && osk(a, H.q, NX + 10, 1046 - 5 * 56 + 6, NW - 20))
+    if (H.typing && osk(a, H.q, NX + 10, B + 2 - 5 * 56 + 6, a.tab ? 560 : NW - 20))
         H.typing = false;
 
     // THE TOPIC, on the right: laid out, then touched, then drawn
     const J *h = topic(H.cur);
     if (!h)
         return;
-    const float PX = NX + NW + 20, PY = 86, PW = 1886 - PX, PH = 1046 - PY, TW = PW - 40;
+    const float PX = NX + NW + 20, PY = 86, PW = R - PX, PH = B + 2 - PY, TW = PW - 40;
     struct Op {
         int kind;                       // 0 text, 1 a link (a topic), 2 the card's button
         ImFont *f;
