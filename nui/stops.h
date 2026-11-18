@@ -88,22 +88,23 @@ inline void draw_stops(App &a)
             T.organs = *o;
         T.for_row = a.row;
     }
-    const float X0 = 34, X1 = 1886;
-    const float TX = heading(a, X0, 356, "STOPS", "stops");
+    const bool IP = a.tab;              // (the iPad's: its card from y 210 to 734)
+    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, HY = IP ? 224 : 356, Y0_ = IP ? 260 : 394, Y1_ = IP ? 728 : 1056;
+    const float TX = heading(a, X0, HY, "STOPS", "stops");
     const int prog = (int)num(&T.st, "program", -1);
     const std::string part_name = str(&T.st, "part");
-    text(a, a.font, 14, TX, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + part_name);
+    text(a, a.font, 14, TX, HY + 1, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + part_name);
 
     // NO ORGAN: the organs, a tap puts one on the part
     if (prog < 0) {
-        text(a, a.font, 21, X0, 400, SILK_DIM, (part_name.empty() ? std::string("This part") : part_name) +
+        text(a, a.font, 21, X0, Y0_ + 6, SILK_DIM, (part_name.empty() ? std::string("This part") : part_name) +
                                                     " has no stops. Put an organ on part " + pad2(a.row + 1) + ":");
         int i = 0;
         if (T.organs.is(J::ARR))
             for (const J &pg : T.organs.a)
                 for (const Patch &p : L.patches)
                     if (!p.drums && p.variation == 0 && p.program == (int)pg.d()) {
-                        const float x = X0 + (i % 4) * 300, y = 450 + (i / 4) * 64;
+                        const float x = X0 + (i % (IP ? 3 : 4)) * 300, y = Y0_ + 56 + (i / (IP ? 3 : 4)) * 64;
                         const std::string id = "org" + std::to_string(p.pick);
                         ImGui::SetCursorScreenPos(P(a, x, y));
                         const bool hit = ImGui::InvisibleButton(id.c_str(), ImVec2(290 * a.k, 54 * a.k));
@@ -111,8 +112,9 @@ inline void draw_stops(App &a)
                         frame(a, x, y, 290, 54, EDGE, 8, 1);
                         char pn[8];
                         snprintf(pn, sizeof pn, "%03d", p.program);
-                        text(a, a.font, 21, x + 10, y + 16, LCD, pn);
-                        text(a, a.font, 14, x + 72, y + 20, SILK, fit(a, a.font, 14, p.name, 210));
+                        text(a, a.font, 21, x + 10, y + (54 - a.lh(21)) / 2, LCD, pn);
+                        const float nx = 22 + text_w(a, a.font, 21, pn);
+                        text(a, a.font, 14, x + nx, y + (54 - a.lh(14)) / 2, SILK, fit(a, a.font, 14, p.name, 280 - nx));
                         if (hit) {
                             call(a, "{\"call\":\"part_pick\",\"row\":" + std::to_string(a.row) + ",\"pick\":" +
                                         std::to_string(p.pick) + "}");
@@ -147,15 +149,28 @@ inline void draw_stops(App &a)
     for (int d : drawn)
         k += d;
     const std::string info = std::to_string(k) + " of " + std::to_string(names.size()) + " drawn";
-    text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), 357, SILK_DIM, info);
+    text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), HY + 1, SILK_DIM, info);
 
     const J *drive = T.st.get("drive");
     const bool has_drive = drive && drive->is(J::ARR) && drive->a.size() >= 3;
-    const float aboutH = 140, JX1 = has_drive ? X1 - 364 : X1, JY0 = 394, JY1 = 1056 - aboutH - 14;
+    const float aboutH = IP ? 84 : 140, DW = IP ? 220 : 350, JX1 = has_drive ? X1 - DW - 14 : X1, JY0 = Y0_, JY1 = Y1_ - aboutH - (IP ? 8 : 14);
+    const float LH = a.lh(14) + (IP ? 3 : 4);
     const J *rows = T.st.get("rows");
     const int nrows = rows && rows->is(J::ARR) ? (int)rows->a.size() : 0;
-    const float rgap = 12, rh = nrows ? std::min(140.0f, (JY1 - JY0 - rgap * (nrows - 1)) / nrows) : 0;
-    const float th = rh - 24, tw = 150, tg = 10, gg = 26;
+    const float rgap = a.tab ? 8 : 12, rh = nrows ? std::min(140.0f, (JY1 - JY0 - rgap * (nrows - 1)) / nrows) : 0;
+    // (the tabs as wide as the widest row lets them, 150 the most)
+    const float tg = IP ? 6 : 10, gg = IP ? 16 : 26, rp = IP ? 8 : 12;
+    float tw = 150;
+    for (int ri = 0; ri < nrows; ri++) {
+        const J &row = rows->a[(size_t)ri];
+        int nt = 0;
+        const int ng = (int)row.a.size();
+        for (const J &g : row.a)
+            nt += (int)g.a.size();
+        if (nt)
+            tw = std::min(tw, (JX1 - X0 - 2 * 14 - (ng - 1) * gg - (nt - ng) * tg) / nt);
+    }
+    const float th = rh - 2 * rp;
     for (int ri = 0; ri < nrows; ri++) {
         const J &row = rows->a[(size_t)ri];
         const float y = JY0 + ri * (rh + rgap);
@@ -164,13 +179,13 @@ inline void draw_stops(App &a)
         float x = X0 + 14;
         for (size_t gi = 0; gi < row.a.size(); gi++) {
             if (gi) {
-                rect(a, x + gg / 2, y + 12, 1, rh - 24, IM_COL32(0x3a, 0x3f, 0x45, 255), 0);
+                rect(a, x + gg / 2, y + rp, 1, rh - 2 * rp, IM_COL32(0x3a, 0x3f, 0x45, 255), 0);
                 x += gg;
             }
             for (const J &rv : row.a[gi].a) {
                 const int r = (int)rv.d();
                 const bool on = r >= 0 && r < (int)drawn.size() && drawn[(size_t)r];
-                const float ty = y + 12;
+                const float ty = y + rp;
                 const std::string id = "tab" + std::to_string(r);
                 ImGui::SetCursorScreenPos(P(a, x, ty));
                 const bool hit = ImGui::InvisibleButton(id.c_str(), ImVec2(tw * a.k, th * a.k));
@@ -180,10 +195,10 @@ inline void draw_stops(App &a)
                 const auto np = stop_parts(r < (int)names.size() ? names[(size_t)r] : std::to_string(r), feet);
                 const auto ls = label_lines(a, a.bold, 14, np.first, tw - 14);
                 for (size_t li = 0; li < ls.size(); li++)
-                    text_c(a, a.bold, 14, x + tw / 2, ty + 10 + li * 17, on ? LCD_BG : SILK, fit(a, a.bold, 14, ls[li], tw - 10));
+                    text_c(a, a.bold, 14, x + tw / 2, ty + (IP ? 6 : 10) + li * LH, on ? LCD_BG : SILK, fit(a, a.bold, 14, ls[li], tw - 10));
                 if (!np.second.empty()) {   // (the footage; a drawbar's alone, big where it fits, centred)
                     const float fs = np.first.empty() && text_w(a, a.font, 35, np.second) <= tw - 14 ? 35 : 21;
-                    text_c(a, a.font, fs, x + tw / 2, np.first.empty() ? ty + (th - fs) / 2 : ty + th - 31,
+                    text_c(a, a.font, fs, x + tw / 2, np.first.empty() ? ty + (th - a.lh(fs)) / 2 : ty + th - a.lh(21) - (IP ? 6 : 10),
                            on ? LCD_BG : SILK_DIM, np.second);
                 }
                 if (hit && r >= 0 && r < (int)drawn.size()) {
@@ -205,7 +220,7 @@ inline void draw_stops(App &a)
 
     // A TONEWHEEL ORGAN's DRIVE (the wheel is its swell): the valve before the rotors, 0 to 3
     if (has_drive) {
-        const float dx = X1 - 350, dy = JY0, dw = 350, dh = JY1 - JY0;
+        const float dx = X1 - DW, dy = JY0, dw = DW, dh = JY1 - JY0;
         rect(a, dx, dy, dw, dh, IM_COL32(0x1f, 0x22, 0x26, 255), 10);
         frame(a, dx, dy, dw, dh, EDGE, 10, 1);
         heading(a, dx + 14, dy + 12, "DRIVE", "drive");
@@ -217,7 +232,7 @@ inline void draw_stops(App &a)
         float v01 = (float)(v / 3.0);
         char vt[16];
         snprintf(vt, sizeof vt, "%.2f", v);
-        const int f = knob(a, "drive", dx + dw / 2, dy + 110, 110, v01, "DRIVE", vt, false, {}, 0, own);
+        const int f = knob(a, "drive", dx + dw / 2, dy + (IP ? 80 : 110), IP ? 72 : 110, v01, "DRIVE", vt, false, {}, 0, own);
         if (f & K_CHANGED) {
             const double d = std::round(v01 * 3.0 * 100) / 100;
             a.hold["drive"] = {d, ImGui::GetTime() + 0.6};
@@ -231,15 +246,15 @@ inline void draw_stops(App &a)
             back();
         const auto note = wrap(a, a.font, 14, "The valve before the rotors: clean at 0, a growl as it turns up. The mod wheel is the swell.", dw - 28);
         for (size_t i = 0; i < note.size(); i++)
-            text(a, a.font, 14, dx + 14, dy + 220 + i * 18, SILK_DIM, note[i]);
+            text(a, a.font, 14, dx + 14, dy + (IP ? 150 : 220) + i * LH, SILK_DIM, note[i]);
         char bt[48];
         snprintf(bt, sizeof bt, own ? "BACK TO THE VOICE'S %.2f" : "AS THE VOICE (%.2f)", voice);
-        if (button(a, "driveback", dx + 14, dy + dh - 52, dw - 28, 38, bt, false, own))
+        if (button(a, "driveback", dx + 10, dy + dh - (IP ? 54 : 52), dw - 20, IP ? 44 : 38, bt, false, own))
             back();
     }
 
     // WHAT IT IS: the stop last touched, else the organ's patch and a hint
-    const float ay = 1056 - aboutH, aw = X1 - X0;
+    const float ay = Y1_ - aboutH, aw = X1 - X0;
     rect(a, X0, ay, aw, aboutH, IM_COL32(0x1f, 0x22, 0x26, 255), 8);
     const J *org = nullptr;
     if (const J *ss = L.about.get("stops"))
@@ -258,23 +273,23 @@ inline void draw_stops(App &a)
         if (org)
             hint = str(org, "panel") + ": touch a stop for what it is.";
     }
-    text(a, a.bold, 14, X0 + 12, ay + 10, SILK, fit(a, a.bold, 14, title, aw - 420));
+    text(a, a.bold, 14, X0 + 12, ay + (IP ? 6 : 10), SILK, fit(a, a.bold, 14, title, aw - 420));
     int lines_from = 0;
     if (e && e->is(J::ARR) && e->a.size() >= 2) {
         const int r = (int)e->a[0].d();
         const J *lv = L.about.get("levels");
         const std::string rt = std::to_string(r) + " \xc2\xb7 " +
                                (lv && lv->is(J::ARR) && r >= 0 && r < (int)lv->a.size() && lv->a[(size_t)r].is(J::STR) ? lv->a[(size_t)r].s : "");
-        text(a, a.font, 14, X1 - 12 - text_w(a, a.font, 14, rt), ay + 10, LCD, rt);
+        text(a, a.font, 14, X1 - 12 - text_w(a, a.font, 14, rt), ay + (IP ? 6 : 10), LCD, rt);
         body = e->a[1].is(J::STR) ? e->a[1].s : "";
     }
     auto lines = wrap(a, a.font, 14, body, aw - 24);
     const size_t maxl = hint.empty() ? 5 : 4;
     for (size_t i = 0; i < lines.size() && i < maxl; i++, lines_from++)
-        text(a, a.font, 14, X0 + 12, ay + 32 + i * 18, SILK_DIM,
+        text(a, a.font, 14, X0 + 12, ay + (IP ? 10 : 14) + (i + 1) * LH, SILK_DIM,
              i + 1 == maxl && lines.size() > maxl ? fit(a, a.font, 14, lines[i] + " \xe2\x80\xa6", aw - 24) : lines[i]);
     if (!hint.empty())
-        text(a, a.font, 14, X0 + 12, ay + 32 + lines_from * 18, LCD_DIM, fit(a, a.font, 14, hint, aw - 24));
+        text(a, a.font, 14, X0 + 12, ay + (IP ? 10 : 14) + (lines_from + 1) * LH, LCD_DIM, fit(a, a.font, 14, hint, aw - 24));
 }
 
 }  // namespace nui
