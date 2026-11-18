@@ -109,8 +109,9 @@ inline int fader(App &a, const char *id, float cx, float y, float h, float &v, f
     rect(a, cx - 24, cy - 14, 48, 28, f & K_ACTIVE ? PANEL_HI : CAP, 4);
     frame(a, cx - 24, cy - 14, 48, 28, EDGE, 4, 1);
     rect(a, cx - 18, cy - 1, 36, 2, f & K_ACTIVE ? OWN : LCD, 0);
-    text_c(a, a.font, 14, cx, y + h + 10, f & K_ACTIVE ? OWN : LCD, value);
-    text_c(a, a.bold, 14, cx, y + h + 12 + a.lh(14), SILK_DIM, label);
+    // (below the cap's reach: at the bottom it hangs 14 past the slot)
+    text_c(a, a.font, 14, cx, y + h + 17, f & K_ACTIVE ? OWN : LCD, value);
+    text_c(a, a.bold, 14, cx, y + h + 19 + a.lh(14), SILK_DIM, label);
     if (f & K_ACTIVE)
         bubble(a, label + " " + value);
     return f;

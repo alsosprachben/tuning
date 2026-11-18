@@ -82,17 +82,18 @@ inline std::string note_name_sharp(int n)
 // A PEDAL: a tall cap, lit and lowered when down
 inline bool pedal_btn(App &a, const char *id, float cx, float y, bool on, const char *name, const char *note)
 {
-    const float w = 84, h = 150, x = cx - w / 2, dy = on ? 6 : 0;
+    const float w = a.tab ? 64 : 84, h = a.tab ? 110 : 150, x = cx - w / 2, dy = on ? (a.tab ? 4 : 6) : 0;
     ImGui::SetCursorScreenPos(P(a, x, y));
     const bool hit = ImGui::InvisibleButton(id, ImVec2(w * a.k, h * a.k));
     const ImU32 c = on ? LCD : ImGui::IsItemActive() ? PANEL_HI : CAP;
     dl()->AddRectFilled(P(a, x, y + dy), P(a, x + w, y + h + dy), c, 30 * a.k, ImDrawFlags_RoundCornersBottom);
     dl()->AddRectFilled(P(a, x, y + dy), P(a, x + w, y + 20 + dy), c, 10 * a.k, ImDrawFlags_RoundCornersTop);
     frame(a, x, y + dy, w, h, EDGE, 10, 1);
-    text_c(a, a.bold, 14, cx, y + h + 16, on ? LCD : SILK, name);
-    const auto ls = wrap(a, a.font, 14, note, 124);
+    const float LH = a.lh(14) + 3;
+    text_c(a, a.bold, 14, cx, y + h + (a.tab ? 10 : 16), on ? LCD : SILK, name);
+    const auto ls = wrap(a, a.font, 14, note, a.tab ? 84 : 124);
     for (size_t i = 0; i < ls.size(); i++)
-        text_c(a, a.font, 14, cx, y + h + 36 + i * 17, SILK_DIM, ls[i]);
+        text_c(a, a.font, 14, cx, y + h + (a.tab ? 12 : 20) + (i + 1) * LH, SILK_DIM, ls[i]);
     return hit;
 }
 
@@ -108,17 +109,18 @@ inline void draw_piano(App &a)
             piano_take(a, *p);
     }
     pedal_flush(a);
-    const float X0 = 34, X1 = 1886;
-    const float TX = heading(a, X0, 356, "PIANO", "piano");
+    const bool IP = a.tab;              // (the iPad's: its card from y 210 to 734)
+    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, HY = IP ? 224 : 356, LH = a.lh(14) + (IP ? 3 : 4);
+    const float TX = heading(a, X0, HY, "PIANO", "piano");
     if (!N.pn.is(J::OBJ))
         return;
-    text(a, a.font, 14, TX, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(&N.pn, "part"));
+    text(a, a.font, 14, TX, HY + 1, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(&N.pn, "part"));
     const int ch = (int)num(&N.pn, "channel", -1);
     const std::string info = ch < 0 ? "pedals on every channel" : "pedals on channel " + std::to_string(ch + 1);
-    text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), 357, SILK_DIM, info);
+    text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), HY + 1, SILK_DIM, info);
 
-    const float aboutH = 140, Y0 = 394, Y1 = 1056 - aboutH - 10;
-    const float c1 = 430, c3 = 400, gap = 8, c2 = X1 - X0 - c1 - c3 - 2 * gap;
+    const float aboutH = IP ? 76 : 140, Y0 = IP ? 260 : 394, Y1 = (IP ? 728 : 1056) - aboutH - (IP ? 8 : 10);
+    const float c1 = IP ? 300 : 430, c3 = IP ? 280 : 400, gap = IP ? 6 : 8, c2 = X1 - X0 - c1 - c3 - 2 * gap;
     auto col = [&](float x, float w, const char *title, const char *key) {
         rect(a, x, Y0, w, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
         frame(a, x, Y0, w, Y1 - Y0, EDGE, 9, 1);
@@ -128,13 +130,13 @@ inline void draw_piano(App &a)
     // THE PEDALS: soft and sostenuto; the sustain a fader with its quick values
     col(X0, c1, "PEDALS", "piano:pedals");
     const bool soft = flag(&N.pn, "soft"), sost = flag(&N.pn, "sostenuto");
-    const float py = Y1 - 290;
-    if (pedal_btn(a, "pdsoft", X0 + 76, py, soft, "SOFT", "una corda"))
+    const float py = IP ? Y1 - 200 : Y1 - 290;
+    if (pedal_btn(a, "pdsoft", X0 + (IP ? 52 : 76), py, soft, "SOFT", "una corda"))
         pedal(a, 67, soft ? 0 : 127);
-    if (pedal_btn(a, "pdsost", X0 + 206, py, sost, "SOSTENUTO", "holds the keys down as it goes down"))
+    if (pedal_btn(a, "pdsost", X0 + (IP ? 146 : 206), py, sost, "SOSTENUTO", "holds the keys down as it goes down"))
         pedal(a, 66, sost ? 0 : 127);
     float sus = (float)num(&N.pn, "sustain");
-    const float fx = X0 + 350, fy0 = Y0 + 50, fh = Y1 - Y0 - 270;
+    const float fx = X0 + (IP ? 246 : 350), fy0 = Y0 + (IP ? 44 : 50), fh = Y1 - Y0 - (IP ? 258 : 270);   // (its value and name clear of DOWN)
     {
         const int f = fader(a, "pdsus", fx, fy0, fh, sus, 0, 127, 1, {64}, "SUSTAIN", pedal_say((int)std::lround(sus)));
         if (f & K_CHANGED)
@@ -147,7 +149,8 @@ inline void draw_piano(App &a)
     for (int i = 0; i < 3; i++) {
         const bool on = Q[i].v == 64 ? si > 0 && si < 127 : si == Q[i].v;
         const std::string id = std::string("pq") + Q[i].n;
-        if (button(a, id.c_str(), fx - 50, Y1 - 150 + i * 46, 100, 38, Q[i].n, on))
+        if (button(a, id.c_str(), fx - (IP ? 46 : 50), Y1 - (IP ? 150 : 150) + i * (IP ? 48 : 46), IP ? 92 : 100, IP ? 44 : 38, Q[i].n, on, true,
+                   IP ? 21 : 14))
             pedal(a, 64, Q[i].v);
     }
 
@@ -166,7 +169,7 @@ inline void draw_piano(App &a)
         : std::to_string(n - on_ - off_) + " resting lightly, " + std::to_string(on_) + " on the strings, " + std::to_string(off_) + " lifted";
     text(a, a.font, 14, dsx, Y0 + 11, LCD, say);
     {
-        const float W = c2 - 24, sx = dx + 12, s = W / 880.0f, top = Y0 + 50;
+        const float W = c2 - 24, sx = dx + 12, s = W / 880.0f, top = Y0 + (IP ? 40 : 50);
         const float kw = W / 52, lift = 110 * s, strY = top + 190 * s, kbY = top + 230 * s;
         dl()->AddLine(P(a, sx, strY), P(a, sx + W, strY), SILK_DIM, 1.5f * a.k);
         int wi = 0;
@@ -193,7 +196,7 @@ inline void draw_piano(App &a)
         for (int i = 0; i < n; i++)
             if (!is_black(21 + i)) {
                 if ((21 + i) % 12 == 0)
-                    text_c(a, a.font, 14, sx + wi * kw + kw / 2, kbY + 96 * s + 4, SILK_DIM, "C" + std::to_string((21 + i) / 12 - 1));
+                    text_c(a, a.font, 14, sx + wi * kw + kw / 2, kbY + 96 * s + 3, SILK_DIM, "C" + std::to_string((21 + i) / 12 - 1));
                 wi++;
             }
         // where the dampers leave the strings, by the pedal's value
@@ -206,16 +209,16 @@ inline void draw_piano(App &a)
         const auto ls = wrap(a, a.font, 14, "Where the dampers leave the strings, by the pedal's value: " + band +
                                                  ". The bass dampers are heavier and leave later.", W);
         for (size_t i = 0; i < ls.size(); i++)
-            text(a, a.font, 14, sx, kbY + 96 * s + 34 + i * 18, SILK_DIM, ls[i]);
+            text(a, a.font, 14, sx, kbY + 96 * s + (IP ? 14 : 16) + (i + 1) * LH, SILK_DIM, ls[i]);
     }
 
     // THE PEDAL KEY: keys held as the sustain pedal
     const float kx = X1 - c3;
     col(kx, c3, "PEDAL KEY", "piano:key");
-    float ky = Y0 + 36;
+    float ky = Y0 + (IP ? 32 : 36);
     for (const auto &l : wrap(a, a.font, 14, "A key held as the sustain pedal: held, the dampers lift; push into it and they come down to the strings.", c3 - 24)) {
         text(a, a.font, 14, kx + 12, ky, SILK_DIM, l);
-        ky += 18;
+        ky += LH;
     }
     ky += 10;
     int nk = 0;
@@ -229,7 +232,7 @@ inline void draw_piano(App &a)
                 t += " \xc2\xb7 ch " + std::to_string(kc + 1);
             text(a, a.font, 14, kx + 70, ky + 12, SILK_DIM, fit(a, a.font, 14, t, c3 - 190));
             const std::string id = "pkrm" + std::to_string((int)num(&k, "i"));
-            if (button(a, id.c_str(), X1 - 110, ky + 2, 98, 34, "REMOVE")) {
+            if (button(a, id.c_str(), X1 - 110, ky, 98, IP ? 44 : 34, "REMOVE")) {
                 J r = call(a, "{\"call\":\"pedal_key_remove\",\"i\":" + std::to_string((int)num(&k, "i")) + "}");
                 if (flag(&r, "ok")) {
                     J p = call(a, "{\"call\":\"piano\"}");
@@ -252,37 +255,37 @@ inline void draw_piano(App &a)
     }
     const bool learning = flag(&N.pn, "learning");
     const bool blink = learning && std::fmod(ImGui::GetTime(), 1.0) < 0.5;
-    if (button(a, "pklearn", kx + 12, ky + 6, c3 - 24, 40, learning ? "PRESS THE KEY NOW\xe2\x80\xa6 (TAP TO STOP)" : "LEARN A KEY", blink)) {
+    if (button(a, "pklearn", kx + 12, ky + 6, c3 - 24, IP ? 44 : 40, learning ? "PRESS THE KEY NOW\xe2\x80\xa6 (TAP TO STOP)" : "LEARN A KEY", blink)) {
         call(a, std::string("{\"call\":\"pedal_key_learn\",\"on\":") + (learning ? "0" : "1") + "}");
         N.pn.o["learning"] = sess::boolean(!learning);
     }
     if (learning || N.want_cc >= 0)
         a.animate = true;               // (the blink; a pedal's last value still to go)
-    ky += 66;
+    ky += IP ? 62 : 66;
     for (const auto &l : wrap(a, a.font, 14, flag(&N.pn, "strings")
                                                  ? "Sympathetic strings: on. The first part's undamped strings ring with what is played."
                                                  : "Sympathetic strings: off (nvlive was started without them).", c3 - 24)) {
         text(a, a.font, 14, kx + 12, ky, SILK_DIM, l);
-        ky += 18;
+        ky += LH;
     }
 
     // WHAT IT IS: the part's patch
-    const float ay = 1056 - aboutH, aw = X1 - X0;
+    const float ay = (IP ? 728 : 1056) - aboutH, aw = X1 - X0;
     rect(a, X0, ay, aw, aboutH, IM_COL32(0x1f, 0x22, 0x26, 255), 8);
     const J *p = part(a, a.row);
     const J *e = nullptr;
     if (const J *pr = L.about.get("programs"); pr && p && !flag(p, "drums"))
         e = pr->get((std::to_string((int)num(p, "program")) + "." + std::to_string((int)num(p, "variation"))).c_str());
     if (e && e->is(J::ARR) && e->a.size() >= 2) {
-        text(a, a.bold, 14, X0 + 12, ay + 10, SILK, fit(a, a.bold, 14, str(p, "name"), aw - 420));
+        text(a, a.bold, 14, X0 + 12, ay + (IP ? 6 : 10), SILK, fit(a, a.bold, 14, str(p, "name"), aw - 420));
         const int r = (int)e->a[0].d();
         const J *lv = L.about.get("levels");
         const std::string rt = std::to_string(r) + " \xc2\xb7 " +
                                (lv && lv->is(J::ARR) && r >= 0 && r < (int)lv->a.size() && lv->a[(size_t)r].is(J::STR) ? lv->a[(size_t)r].s : "");
-        text(a, a.font, 14, X1 - 12 - text_w(a, a.font, 14, rt), ay + 10, LCD, rt);
+        text(a, a.font, 14, X1 - 12 - text_w(a, a.font, 14, rt), ay + (IP ? 6 : 10), LCD, rt);
         const auto lines = wrap(a, a.font, 14, e->a[1].is(J::STR) ? e->a[1].s : "", aw - 24);
         for (size_t i = 0; i < lines.size() && i < 5; i++)
-            text(a, a.font, 14, X0 + 12, ay + 32 + i * 18, SILK_DIM,
+            text(a, a.font, 14, X0 + 12, ay + (IP ? 10 : 14) + (i + 1) * LH, SILK_DIM,
                  i == 4 && lines.size() > 5 ? fit(a, a.font, 14, lines[i] + " \xe2\x80\xa6", aw - 24) : lines[i]);
     }
 }
