@@ -168,7 +168,7 @@ inline int segments(App &a, const std::string &id, float cx, float cy, const std
         maxw = std::max(maxw, text_w(a, a.font, 14, w));
     // (a row too wide for its cell stacks)
     vert = vert || (lw > 0 && std::max(40.0f, maxw + 16) * words.size() > lw);
-    const float bw = std::max(vert ? 54.0f : 40.0f, maxw + 16), bh = vert ? 23 : 38;
+    const float bw = std::max(vert ? 54.0f : 40.0f, maxw + 16), bh = vert ? (a.tab ? 30 : 23) : (a.tab ? 44 : 38);   // (the iPad's taller: fingers)
     const int n = (int)words.size();
     const float W = vert ? bw : bw * n, H = vert ? bh * n : bh, y0 = cy - H / 2;
     // (kept within its section; a stack wider than its cell clear of the one before)
@@ -200,22 +200,35 @@ inline void draw_synth(App &a)
         syn_refresh(a);
     const J *p = part(a, a.row);
     const int layers = (int)num(&Y.synth, "layers");
-    const float TX = heading(a, 34, 356, "SYNTH", "synth");
+    const bool T = a.tab;               // (the iPad's: its card from y 210 to 734, two pages)
+    const float HX = T ? 22 : 34, HY = T ? 224 : 356, BY = T ? 216 : 346, BH = T ? 44 : 38, HX1 = T ? 1105 : 1886;
+    const float TX = heading(a, HX, HY, "SYNTH", "synth");
     if (layers <= 0) {
-        text(a, a.font, 21, 34, 400, SILK_DIM,
+        text(a, a.font, 21, HX, T ? 270 : 400, SILK_DIM,
              layers < 0 ? std::string("Reading the part\xe2\x80\xa6")
                         : (p ? str(p, "name") : std::string("This part")) + " is not a synth.");
-        text(a, a.font, 14, 34, 432, SILK_DIM,
+        text(a, a.font, 14, HX, T ? 300 : 432, SILK_DIM,
              "The synth programs (Synth Lead, Synth Pad, the synth basses, brass and strings) bring their knobs here.");
         return;
     }
-    text(a, a.font, 14, TX, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + (p ? str(p, "name") : ""));
+    text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, "part " + pad2(a.row + 1) + " \xc2\xb7 " + (p ? str(p, "name") : ""), T ? 200 : 900));
+    // (the iPad's two pages: the sound's sources and shaping; its movement and time)
+    static int page = 0;
+    if (T)
+        for (int pg = 0; pg < 2; pg++) {
+            const std::string id = "sypage" + std::to_string(pg);
+            if (button(a, id.c_str(), 300 + pg * 214, BY, 208, BH, pg ? "LFO \xc2\xb7 ENV \xc2\xb7 DELAY" : "OSC \xc2\xb7 MIX \xc2\xb7 FILTER",
+                       page == pg, true, 21))
+                page = pg;
+        }
     // the head: back to the patch (how many changed), the layers
     int changed = 0;
     for (const Knob &k : Y.knobs)
         changed += syn_own(k);
-    if (button(a, "synback", 1886 - 420, 346, 420, 38,
-               changed ? std::to_string(changed) + " CHANGED \xc2\xb7 BACK TO THE PATCH" : "AS THE PATCH", false, changed > 0)) {
+    const float bbw = T ? (layers >= 2 ? 200 : 360) : 420;
+    if (button(a, "synback", HX1 - bbw, BY, bbw, BH,
+               changed ? std::to_string(changed) + (T && layers >= 2 ? " CHANGED \xc2\xb7 BACK" : " CHANGED \xc2\xb7 BACK TO THE PATCH")
+                       : "AS THE PATCH", false, changed > 0, T ? 21 : 14)) {
         for (const Knob &k : Y.knobs)
             if (syn_own(k))
                 call(a, "{\"call\":\"synth_forget\",\"row\":" + std::to_string(a.row) + ",\"layer\":" +
@@ -225,7 +238,8 @@ inline void draw_synth(App &a)
     if (layers >= 2)
         for (int l = 0; l < 2; l++) {
             const std::string id = "layer" + std::to_string(l);
-            if (button(a, id.c_str(), 1886 - 420 - 260 + l * 124, 346, 120, 38, l ? "LAYER B" : "LAYER A", Y.layer == l)) {
+            if (button(a, id.c_str(), HX1 - bbw - (T ? 176 : 260) + l * (T ? 86 : 124), BY, T ? 82 : 120, BH, l ? "LAYER B" : "LAYER A",
+                       Y.layer == l, true, T ? 14 : 14)) {
                 Y.layer = l;
                 take_parts(a, call(a, "{\"call\":\"select\",\"row\":" + std::to_string(a.row) + ",\"layer\":" + std::to_string(l) + "}"));
                 syn_refresh(a);
@@ -241,18 +255,28 @@ inline void draw_synth(App &a)
     // (in proportion to the controls side by side in each: a row's number a half)
     static const Col COLS[] = {{"LFO 1", 2.6f, 0}, {"Oscillators", 5.6f, 1}, {"Mixer", 1.8f, 0},
                                {"Filter", 2.4f, 0}, {"Envelopes", 5.2f, 1}, {"Delay", 2.2f, 0}};
+    // (the iPad's pages: the left hand a column of its own, LFO 1 the full height for its stacks)
+    static const Col PAGES[2][4] = {{{"Oscillators", 5.6f, 1}, {"Mixer", 1.8f, 0}, {"Filter", 2.4f, 0}, {nullptr, 0, 0}},
+                                    {{"LFO 1", 2.2f, 0}, {"Left hand", 2.3f, 0}, {"Envelopes", 4.4f, 1}, {"Delay", 1.8f, 0}}};
+    std::vector<Col> cols;
+    if (T) {
+        for (const Col &c : PAGES[page])
+            if (c.name)
+                cols.push_back(c);
+    } else
+        cols.assign(std::begin(COLS), std::end(COLS));
     float tot = 0;
-    for (const Col &c : COLS)
+    for (const Col &c : cols)
         tot += c.weight;
-    const float X0 = 26, X1 = 1894, gap = 8, top = 394, bottom = 1056;
-    const float avail = X1 - X0 - gap * 5;
+    const float X0 = T ? 18 : 26, X1 = T ? 1115 : 1894, gap = T ? 6 : 8, top = T ? 266 : 394, bottom = T ? 728 : 1056;
+    const float avail = X1 - X0 - gap * (cols.size() - 1);
     float cx0 = X0;
-    for (const Col &col : COLS) {
+    for (const Col &col : cols) {
         const float cw = avail * col.weight / tot;
         rect(a, cx0, top, cw, bottom - top, IM_COL32(0x1f, 0x22, 0x26, 255), 8);
         // a column's sections: itself, and what stacks under it (the left hand under LFO 1)
         std::vector<std::pair<std::string, std::pair<float, float>>> secs;   // (name, (y0, y1))
-        if (std::string(col.name) == "LFO 1") {
+        if (std::string(col.name) == "LFO 1" && !T) {
             secs.push_back({"LFO 1", {top, top + 0.62f * (bottom - top)}});
             secs.push_back({"Left hand", {top + 0.62f * (bottom - top), bottom}});
         } else
@@ -338,7 +362,7 @@ inline void draw_synth(App &a)
                     det = {(float)W_SUB_SQUARE};
                 else if (k.centred)
                     det = {0.5f};
-                const float size = big ? std::min(110.0f, cellw * 0.8f) : std::min(56.0f, cellw * 0.6f);
+                const float size = std::max(a.tab ? 44.0f : 0.0f, big ? std::min(110.0f, cellw * 0.8f) : std::min(56.0f, cellw * 0.6f));   // (44 points the least on the iPad)
                 float ky = ccy - (big ? 20 : 14);
                 if (wave) {
                     const float sw = std::min(96.0f, cellw - 10);
