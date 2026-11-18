@@ -48,20 +48,36 @@ inline void draw_setup(App &a)
         U.open = false;
         setup_card(a, true);
     }
-    const float X0 = 34, X1 = 1886, Y0 = 394, Y1 = 1056;
-    const float TX = heading(a, X0, 356, "SETUP", "setup");
+    // (the iPad's: its card from y 210 to 734, two pages -- the input; the sound)
+    const bool IP = a.tab;
+    static int page = 0;
+    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = IP ? 728 : 1056, HY = IP ? 224 : 356;
+    const float LH = a.lh(14) + (IP ? 3 : 4);
+    const float TX = heading(a, X0, HY, "SETUP", "setup");
+    if (IP)
+        for (int pg = 0; pg < 2; pg++) {
+            const std::string id = "supage" + std::to_string(pg);
+            if (button(a, id.c_str(), 300 + pg * 196, 216, 190, 44, pg ? "SOUND" : "INPUT", page == pg, true, 21))
+                page = pg;
+        }
     if (!U.s.is(J::OBJ))
         return;
     const double rate = num(&U.s, "rate"), block = num(&U.s, "block");
     char inf[96];
     snprintf(inf, sizeof inf, "%.0f Hz \xc2\xb7 %.0f frames a block (%.2f ms)", rate, block, rate > 0 ? 1000 * block / rate : 0.0);
-    text(a, a.font, 14, TX, 357, SILK_DIM, inf);
+    if (IP) {                           // (shorter, between the pages and QUIT)
+        char sh[48];
+        snprintf(sh, sizeof sh, "%.0f Hz \xc2\xb7 %.0f frames", rate, block);
+        text(a, a.font, 14, 700, HY + 1, SILK_DIM, sh);
+    } else
+        text(a, a.font, 14, TX, HY + 1, SILK_DIM, inf);
     // QUIT (a second tap within 3 s, as the panel's)
     const double now = ImGui::GetTime();
     const bool armed = now - a.quit_armed < 3.0;
     if (armed)
         a.animate = true;
-    if (button(a, "suquit", X1 - 250, 346, 250, 38, armed ? "TAP AGAIN TO QUIT" : "QUIT CLAVITONE", armed)) {
+    if (button(a, "suquit", X1 - 250, IP ? 216 : 346, 250, IP ? 44 : 38, armed ? "TAP AGAIN TO QUIT" : "QUIT CLAVITONE", armed, true,
+               IP ? 21 : 14)) {
         if (armed)
             a.quit = true;
         else
@@ -81,8 +97,12 @@ inline void draw_setup(App &a)
     };
 
     // MIDI IN, PLAY AS A MODULE, THE MESSENGER
-    const float AW = 760, BW = 640, gap = 10, AX = X0, BX = AX + AW + gap, CX = BX + BW + gap, CW = X1 - CX;
+    const float AW = IP ? X1 - X0 : 760, BW = IP ? 690 : 640, gap = IP ? 6 : 10, AX = X0, BX = IP ? X0 : AX + AW + gap,
+                CX = BX + BW + gap, CW = X1 - CX;
+    const bool show_in = !IP || page == 0, show_snd = !IP || page == 1;
     for (const auto &b : {std::pair<float, float>{AX, AW}, {BX, BW}, {CX, CW}}) {
+        if ((b.first == AX && b.second == AW && !show_in) || (!(b.first == AX && b.second == AW) && !show_snd))
+            continue;
         rect(a, b.first, Y0, b.second, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
         frame(a, b.first, Y0, b.second, Y1 - Y0, EDGE, 9, 1);
     }
@@ -93,6 +113,7 @@ inline void draw_setup(App &a)
         y += 26;
     };
     float y = Y0 + 10;
+    if (show_in) {
     head(AX, y, "MIDI IN", "several at once, merged; kept in the session", "su:midi");
     const J *ins = U.s.get("inputs");
     if (!ins || !ins->is(J::ARR) || ins->a.empty()) {
@@ -111,11 +132,11 @@ inline void draw_setup(App &a)
             }
             rect(a, AX + 12, y, AW - 24, 50, on ? IM_COL32(0x33, 0x2a, 0x16, 255) : IM_COL32(0x26, 0x2a, 0x2e, 255), 7);
             frame(a, AX + 12, y, AW - 24, 50, on ? LCD : EDGE, 7, on ? 1.5f : 1);
-            text(a, a.font, 14, AX + 24, y + 8, on ? LCD : SILK, str(&d, "name"));
+            text(a, a.font, 14, AX + 24, y + (IP ? 7 : 8), on ? LCD : SILK, str(&d, "name"));
             std::string p = path;
             if (p.rfind("/dev/snd/", 0) == 0)
                 p = p.substr(9);
-            text(a, a.font, 14, AX + 24, y + 27, SILK_DIM, p + " \xc2\xb7 " + (on ? (flag(&d, "open") ? "reading" : "wanted, not open") : "off"));
+            text(a, a.font, 14, AX + 24, y + (IP ? 11 : 12) + LH, SILK_DIM, p + " \xc2\xb7 " + (on ? (flag(&d, "open") ? "reading" : "wanted, not open") : "off"));
             y += 56;
         }
     if (!str(&U.s, "input_err").empty()) {
@@ -149,7 +170,7 @@ inline void draw_setup(App &a)
                                              "Sixteen parts, one per channel; OFF puts your parts back.";
         for (const auto &l : wrap(a, a.font, 14, st, AW - 24)) {
             text(a, a.font, 14, AX + 12, y, SILK_DIM, l);
-            y += 18;
+            y += LH;
         }
         if (const J *rep = U.mod.get("report"); rep && rep->is(J::ARR) && !rep->a.empty()) {
             text(a, a.bold, 14, AX + 12, y + 4, SILK, "What the MT-32 did with the input");
@@ -177,7 +198,10 @@ inline void draw_setup(App &a)
         }
     }
 
+    }
     // SOUND: the globals every part plays through
+    if (!show_snd)
+        return;
     y = Y0 + 10;
     head(BX, y, "SOUND", "every part", "su:sound");
     struct Gl {
@@ -189,7 +213,8 @@ inline void draw_setup(App &a)
     static const Gl GLOB[7] = {{0, "Master", -60, 0, 0.5, 0},   {1, "Headroom", 0, 24, 0.5, 0}, {2, "Limiter knee", 0.1, 1, 0.02, 1},
                                {3, "Bend range", 0, 24, 0.5, 2}, {4, "Mod depth", 0, 200, 5, 3}, {9, "Mod rate", 0, 1.5, 0.05, 4},
                                {5, "Aftertouch", 0, 24, 0.5, 0}};
-    const float kcw = (BW - 24) / 4;
+    const int NK = IP ? 7 : 4;          // (the iPad's seven to a row)
+    const float kcw = (BW - 24) / NK;
     for (int k = 0; k < 7; k++) {
         const Gl &q = GLOB[k];
         const int n = (int)std::lround((q.hi - q.lo) / q.step);
@@ -212,14 +237,14 @@ inline void draw_setup(App &a)
         }
         const int cur = fx_val(a, "g" + std::to_string(q.i), (int)std::lround((gv((size_t)q.i) - q.lo) / q.step));
         int picked;
-        list_knob(a, "sug" + std::to_string(q.i), BX + 12 + (k % 4 + 0.5f) * kcw, y + 34 + (k / 4) * 112, 50, vals, shown, cur,
+        list_knob(a, "sug" + std::to_string(q.i), BX + 12 + (k % NK + 0.5f) * kcw, y + 34 + (k / NK) * 112, IP ? 48 : 50, vals, shown, cur,
                   q.label, false, kcw - 6, picked);
         if (picked != cur) {
             fx_mine(a, "g" + std::to_string(q.i), picked);
             call(a, "{\"call\":\"global_set\",\"i\":" + std::to_string(q.i) + ",\"v\":" + jnum(std::round((q.lo + picked * q.step) * 1e4) / 1e4) + "}");
         }
     }
-    y += 240;
+    y += IP ? 116 : 240;
     {
         const bool gpu = gv(6) > 0.5, tail = gv(7) > 0.5;
         const int h = flow_buttons(a, "susw", BX + 12, y, BW - 24, {"THE GPU", "THE ROOM'S TAIL"}, {gpu, tail});
@@ -230,12 +255,12 @@ inline void draw_setup(App &a)
     }
     y += 6;
     text(a, a.bold, 14, BX + 12, y, SILK, "THE ROOM");
-    y += 24;
+    y += IP ? 18 : 24;
     {
         std::vector<bool> lit;
         for (const auto &r : U.rooms)
             lit.push_back(r == str(&U.s, "room"));
-        const int h = flow_buttons(a, "suroom", BX + 12, y, BW - 24, U.rooms, lit);
+        const int h = flow_buttons(a, "suroom", BX + 12, y, BW - 24, U.rooms, lit, 30, IP ? 14 : 0);
         if (h >= 0) {
             gset(8, h);
             U.s.o["room"] = sess::str(U.rooms[(size_t)h]);
@@ -243,7 +268,7 @@ inline void draw_setup(App &a)
     }
     y += 6;
     text(a, a.bold, 14, BX + 12, y, SILK, "PROGRAM CHANGES READ AS");
-    y += 24;
+    y += IP ? 18 : 24;
     {
         static const std::vector<std::string> STDS = {"ours", "SC-55", "SC-88", "SC-88Pro", "SC-8850"};
         std::vector<bool> lit;
@@ -274,7 +299,7 @@ inline void draw_setup(App &a)
         for (const auto &row : rows) {
             text(a, a.font, 14, CX + 12, y, SILK_DIM, fit(a, a.font, 14, row.first, CW - 150));
             text(a, a.font, 14, CX + CW - 12 - text_w(a, a.font, 14, row.second), y, LCD, row.second);
-            y += 24;
+            y += IP ? LH + 6 : 24;
         }
         y += 8;
         note = "When a block is late, the sound already playing is held on and the time is borrowed; it is given back where no note falls.";
@@ -282,7 +307,7 @@ inline void draw_setup(App &a)
         note = "Rubato is off: start nvlive with --rubato to let a late block borrow time instead of dropping out.";
     for (const auto &l : wrap(a, a.font, 14, note, CW - 24)) {
         text(a, a.font, 14, CX + 12, y, SILK_DIM, l);
-        y += 18;
+        y += LH;
     }
 }
 
