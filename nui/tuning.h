@@ -103,8 +103,11 @@ inline int flow_buttons(App &a, const std::string &id, float x, float &y, float 
 {
     float cx = x;
     int hit = -1;
+    if (a.tab)                          // (fingers: 44 points the least each way, the words 3x)
+        bh = std::max(bh, 44.0f);
+    const float ws = a.tab ? 21 : 14;
     for (size_t i = 0; i < words.size(); i++) {
-        const float bw = text_w(a, a.font, 14, words[i]) + 18;
+        const float bw = std::max(a.tab ? 44.0f : 0.0f, text_w(a, a.font, ws, words[i]) + 18);
         if (cx > x && cx + bw > x + w) {
             cx = x;
             y += bh + 5;
@@ -116,7 +119,7 @@ inline int flow_buttons(App &a, const std::string &id, float x, float &y, float 
         const bool on = i < lit.size() && lit[i];
         rect(a, cx, y, bw, bh, on ? LCD : ImGui::IsItemActive() ? PANEL_HI : IM_COL32(0x2a, 0x2e, 0x32, 255), 5);
         frame(a, cx, y, bw, bh, on ? LCD : EDGE, 5, 1);
-        text(a, a.font, 14, cx + 9, y + (bh - 14) / 2, on ? LCD_BG : SILK, words[i]);
+        text_c(a, a.font, ws, cx + bw / 2, y + (bh - a.lh(ws)) / 2, on ? LCD_BG : SILK, words[i]);
         cx += bw + 5;
     }
     y += bh + 8;
@@ -157,8 +160,18 @@ inline void draw_tuning(App &a)
     TuningUi &T = g_tn;
     if (!T.t.is(J::OBJ))
         tn_take(call(a, "{\"call\":\"tuning\",\"open\":1,\"lists\":1}"));
-    const float X0 = 34, X1 = 1886, Y0 = 394, Y1 = 1056;
-    text(a, a.font, 14, heading(a, X0, 356, "TUNING", "tuning"), 357, OWN, "every part");
+    // (the iPad's: its card from y 210 to 734, two pages -- the tuners and their shape; the Eastern tuning)
+    const bool IP = a.tab;
+    static int page = 0;
+    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = IP ? 728 : 1056, HY = IP ? 224 : 356;
+    const float LH = a.lh(14) + (IP ? 3 : 4);
+    text(a, a.font, 14, heading(a, X0, HY, "TUNING", "tuning"), HY + 1, OWN, "every part");
+    if (IP)
+        for (int pg = 0; pg < 2; pg++) {
+            const std::string id = "tnpage" + std::to_string(pg);
+            if (button(a, id.c_str(), 300 + pg * 196, 216, 190, 44, pg ? "EASTERN" : "TUNERS", page == pg, true, 21))
+                page = pg;
+        }
     if (!T.t.is(J::OBJ) || !T.lists)
         return;
     const std::string tuner = str(&T.t, "tuner"), now = str(&T.t, "now");
@@ -166,7 +179,8 @@ inline void draw_tuning(App &a)
         T.pending.clear();
     const bool building = tuner != now;
     const std::string info = building ? "building the patches in " + tuner + "\xe2\x80\xa6" : "playing " + now;
-    text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), 357, building ? OWN : SILK_DIM, info);
+    const std::string info_ = fit(a, a.font, 14, info, IP ? 300 : 900);
+    text(a, a.font, 14, X1 - text_w(a, a.font, 14, info_), HY + 1, building ? OWN : SILK_DIM, info_);
     if (building)
         a.animate = true;
 
@@ -195,7 +209,7 @@ inline void draw_tuning(App &a)
             other.push_back(&t);
     groups.push_back({"Indian, every part", raga});
     groups.push_back({"Other systems", other});
-    const float LW = 1070, cols = 3, gap = 8, tw = (LW - 10 - gap * (cols - 1)) / cols, th = 64, hh = 30;
+    const float LW = IP ? 600 : 1070, cols = IP ? 2 : 3, gap = 8, tw = (LW - 10 - gap * (cols - 1)) / cols, th = 64, hh = 30;
     // (the layout, then the touch, then the drawing)
     struct Tile {
         const std::pair<std::string, std::string> *t;
@@ -214,6 +228,7 @@ inline void draw_tuning(App &a)
         cy += ((g.second.size() + (int)cols - 1) / (int)cols) * (th + gap) + 6;
     }
     ImVec2 tap;
+    if (!IP || page == 0) {
     if (scroll_area(a, "tnlist", X0, Y0, LW, Y1 - Y0, cy, T.scroll, tap))
         for (const Tile &t : tiles)
             if (tap.x >= t.x && tap.x < t.x + tw && tap.y >= t.y && tap.y < t.y + th) {
@@ -234,16 +249,18 @@ inline void draw_tuning(App &a)
         const bool cur = t.t->first == tuner && !building, pend = t.t->first == tuner && building || t.t->first == T.pending;
         rect(a, x, y, tw, th, cur ? LCD : IM_COL32(0x1f, 0x22, 0x26, 255), 8);
         frame(a, x, y, tw, th, pend ? LCD : EDGE, 8, pend ? 2.0f : 1.0f);
-        text(a, a.font, 14, x + 10, y + 8, cur ? LCD_BG : LCD, fit(a, a.font, 14, t.t->first, tw - 20));
+        text(a, a.font, 14, x + 10, y + (IP ? 6 : 8), cur ? LCD_BG : LCD, fit(a, a.font, 14, t.t->first, tw - 20));
         const auto ls = wrap(a, a.font, 14, t.t->second, tw - 20);
         for (size_t i = 0; i < ls.size() && i < 2; i++)
-            text(a, a.font, 14, x + 10, y + 27 + i * 16, cur ? LCD_BG : SILK_DIM,
+            text(a, a.font, 14, x + 10, y + (IP ? 9 : 11) + (i + 1) * LH, cur ? LCD_BG : SILK_DIM,
                  i == 1 && ls.size() > 2 ? fit(a, a.font, 14, ls[i] + "\xe2\x80\xa6", tw - 20) : ls[i]);
     }
     dl()->PopClipRect();
 
     // THE SHAPE: an octave in cents from equal temperament; each octave's stretch across the keyboard
-    const float SX = X0 + LW + 12, SW = X1 - SX, SH = 330;
+    }
+    const float SX = X0 + LW + 12, SW = X1 - SX, SH = IP ? Y1 - Y0 : 330;
+    if (!IP || page == 0) {
     rect(a, SX, Y0, SW, SH, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
     frame(a, SX, Y0, SW, SH, EDGE, 9, 1);
     const float tsx = heading(a, SX + 12, Y0 + 10, "THE TUNING", "tn:shape");
@@ -273,7 +290,7 @@ inline void draw_tuning(App &a)
                 rect(a, x + bw * 0.2f, hh_ > 0 ? mid - hh_ : mid, bw * 0.6f, std::max(1.0f, std::fabs(hh_)), LCD, 0);
                 char b[16];
                 snprintf(b, sizeof b, std::fabs(v) < 10 ? "%+.1f" : "%+.0f", v);
-                text_c(a, a.font, 14, x + bw / 2, hh_ > 0 ? mid - hh_ - 17 : mid - hh_ + 3, SILK, b);
+                text_c(a, a.font, 14, x + bw / 2, hh_ > 0 ? mid - hh_ - a.lh(14) - 3 : mid - hh_ + 3, SILK, b);
             }
             text_c(a, a.font, 14, x + bw / 2, top + h1 + 4, SILK_DIM, NN[i]);
         }
@@ -296,10 +313,14 @@ inline void draw_tuning(App &a)
     }
 
     // THE EASTERN TUNING the Indian voices' parts play
-    const float EY = Y0 + SH + 10;
-    rect(a, SX, EY, SW, Y1 - EY, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-    frame(a, SX, EY, SW, Y1 - EY, EDGE, 9, 1);
-    text(a, a.font, 14, heading(a, SX + 12, EY + 10, "EASTERN TUNING", "tn:east"), EY + 11, LCD, "the Indian voices' parts");
+    }
+    if (IP && page == 0)
+        return;
+    // (the iPad's Eastern tuning a page across the card)
+    const float EX = IP ? X0 : SX, EW = IP ? X1 - X0 : SW, EY = IP ? Y0 : Y0 + SH + 10;
+    rect(a, EX, EY, EW, Y1 - EY, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
+    frame(a, EX, EY, EW, Y1 - EY, EDGE, 9, 1);
+    text(a, a.font, 14, heading(a, EX + 12, EY + 10, "EASTERN TUNING", "tn:east"), EY + 11, LCD, "the Indian voices' parts");
     if (!T.east_mine.empty() && ImGui::GetTime() > T.east_until)
         T.east_mine.clear();
     East p = east_parts(T.east_mine.empty() ? str(&T.t, "eastern") : T.east_mine);
@@ -318,7 +339,7 @@ inline void draw_tuning(App &a)
             }
         w.push_back("measured ragas\xe2\x80\xa6");
         lit.push_back(measured);
-        const int h = flow_buttons(a, "tnsys", SX + 12, ey, SW - 24, w, lit);
+        const int h = flow_buttons(a, "tnsys", EX + 12, ey, EW - 24, w, lit);
         if (h == 0) {
             p.system.clear();
             p.raga.clear();
@@ -343,7 +364,7 @@ inline void draw_tuning(App &a)
                 sys.push_back(s);
                 lit.push_back(s == p.system);
             }
-        const int h = flow_buttons(a, "tnmeas", SX + 12, ey, SW - 24, w, lit, 26);
+        const int h = flow_buttons(a, "tnmeas", EX + 12, ey, EW - 24, w, lit, 26);
         if (h >= 0) {
             p.system = sys[(size_t)h];
             p.raga.clear();
@@ -356,7 +377,7 @@ inline void draw_tuning(App &a)
             w.push_back(r);
             lit.push_back(r == p.raga);
         }
-        const int h = flow_buttons(a, "tnraga", SX + 12, ey, SW - 24, w, lit, 26);
+        const int h = flow_buttons(a, "tnraga", EX + 12, ey, EW - 24, w, lit, 26);
         if (h >= 0) {
             p.raga = h ? T.ragas[(size_t)h - 1] : "";
             changed = true;
@@ -372,8 +393,8 @@ inline void draw_tuning(App &a)
             w.push_back(u);
             lit.push_back(k == p.sa);
         }
-        text(a, a.bold, 14, SX + 12, ey + 8, SILK, "SA");
-        const int h = flow_buttons(a, "tnsa", SX + 50, ey, SW - 62, w, lit, 30);
+        text(a, a.bold, 14, EX + 12, ey + ((IP ? 44 : 30) - a.lh(14)) / 2, SILK, "SA");
+        const int h = flow_buttons(a, "tnsa", EX + 50, ey, EW - 62, w, lit, 30);
         if (h >= 0) {
             p.sa = SA[(size_t)h];
             changed = true;
@@ -395,9 +416,9 @@ inline void draw_tuning(App &a)
         say = "The Indian instruments' parts play " + sys + (p.raga.empty() ? "" : ", raga " + p.raga) + ", Sa on " + sa_up +
               " (unless the tuner above is itself Indian).";
     }
-    for (const auto &l : wrap(a, a.font, 14, say, SW - 24)) {
-        text(a, a.font, 14, SX + 12, ey, SILK_DIM, l);
-        ey += 18;
+    for (const auto &l : wrap(a, a.font, 14, say, EW - 24)) {
+        text(a, a.font, 14, EX + 12, ey, SILK_DIM, l);
+        ey += LH;
     }
     if (changed) {
         T.east_mine = east_spec(p);
