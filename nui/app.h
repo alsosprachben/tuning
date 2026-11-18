@@ -37,7 +37,7 @@ static const ImU32 PANEL = IM_COL32(0x23, 0x26, 0x2a, 255), PANEL_HI = IM_COL32(
 struct App {
     nv_host *h = nullptr;
     nv_ui_watch *w = nullptr;
-    ImFont *font = nullptr, *bold = nullptr;
+    ImFont *font = nullptr, *bold = nullptr, *lcd = nullptr;     // (lcd: code7 dotted, the display's)
     std::string ui_dir;                 // (ui/: the fonts, about.json)
     float k = 1.0f;                     // design units to pixels
     ImVec2 org{0, 0};

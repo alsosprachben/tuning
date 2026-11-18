@@ -140,10 +140,14 @@ inline int lcd_field(App &a, const char *id, float x, float y, float w, float h,
         if (a.sheet_reset.erase(id))
             f |= K_RESET;
     }
-    rect(a, x, y, w, h, sel ? LCD : IM_COL32(0x33, 0x24, 0x08, 255), 3.0f);
-    frame(a, x, y, w, h, f & K_ACTIVE ? OWN : LCD_DIM, 3.0f, 1.0f);
-    text(a, a.font, 14, x + 10 * a.ts + 2, y + 6 * a.ts, sel ? LCD_BG : LCD, label);
-    text(a, a.font, big, x + 10 * a.ts + 2, y + h - a.lh(big) - 7 * a.ts, sel ? LCD_BG : LCD, value);
+    // (on the display's glass: lit, a block of light glowing at its edges; else its outline, faint)
+    if (sel)
+        rect(a, x - 2, y - 2, w + 4, h + 4, IM_COL32(0xf0, 0xb1, 0x3a, 0x30), 5.0f);
+    rect(a, x, y, w, h, sel ? LCD : IM_COL32(0x33, 0x24, 0x08, 0xb0), 3.0f);
+    frame(a, x, y, w, h, f & K_ACTIVE ? OWN : sel ? LCD : IM_COL32(0x6b, 0x4c, 0x14, 0xa0), 3.0f, 1.0f);
+    ImFont *lf = a.lcd ? a.lcd : a.font;
+    text(a, lf, 14, x + 10 * a.ts + 2, y + 6 * a.ts, sel ? LCD_BG : LCD, label);
+    text(a, lf, big, x + 10 * a.ts + 2, y + h - a.lh(big) - 7 * a.ts, sel ? LCD_BG : LCD, value);
     if (f & K_ACTIVE)
         bubble(a, label + " " + value);
     return f;

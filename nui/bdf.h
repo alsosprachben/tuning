@@ -17,6 +17,8 @@
 
 namespace nui {
 
+static const unsigned BDF_DOTS = 1;       // (ImFontConfig::FontLoaderFlags: the dotted font)
+
 struct BdfGlyph {
     int w = 0, h = 0, xo = 0, yo = 0, dw = 0;
     std::vector<uint32_t> rows;         // (MSB first: bit 31 the leftmost pixel)
@@ -146,11 +148,20 @@ inline bool bdf_load_glyph(ImFontAtlas *atlas, ImFontConfig *src, ImFontBaked *b
         return false;
     ImTextureRect *r = ImFontAtlasPackGetRect(atlas, id);
     std::vector<unsigned char> px((size_t)w * h, 0);
+    // DOTTED (BDF_DOTS: the display's font): from 4 device pixels a font
+    // pixel, each a dot -- a device pixel's gap right and below, from 5 its
+    // corners softened -- as a dot-matrix display's are
+    const bool dots = (src->FontLoaderFlags & BDF_DOTS) && s >= 4;
+    const int ds = dots ? s - 1 : s;
     for (int y = 0; y < g.h && y < (int)g.rows.size(); y++)
         for (int x = 0; x < g.w; x++)
             if (g.rows[(size_t)y] >> (31 - x) & 1u)
-                for (int dy = 0; dy < s; dy++)
-                    memset(&px[(size_t)(y * s + dy) * w + (size_t)x * s], 255, (size_t)s);
+                for (int dy = 0; dy < ds; dy++) {
+                    unsigned char *row = &px[(size_t)(y * s + dy) * w + (size_t)x * s];
+                    memset(row, 255, (size_t)ds);
+                    if (dots && s >= 5 && (dy == 0 || dy == ds - 1))
+                        row[0] = row[ds - 1] = 150;
+                }
     // (the line's top 0, its baseline at the ascent; BDF's yo the glyph's bottom from the baseline)
     const float top = ((float)(b->ascent * s) - (float)((g.yo + g.h) * s)) / d;
     out_glyph->X0 = (float)(g.xo * s) / d;
@@ -177,9 +188,10 @@ inline const ImFontLoader *bdf_loader()
 }
 
 // a font from a parsed BDF (merge: its glyphs added to the font before it)
-inline ImFont *bdf_add(ImFontAtlas *atlas, Bdf *b, const char *name, bool merge)
+inline ImFont *bdf_add(ImFontAtlas *atlas, Bdf *b, const char *name, bool merge, unsigned flags = 0)
 {
     ImFontConfig cfg;
+    cfg.FontLoaderFlags = flags;
     cfg.FontLoader = bdf_loader();
     cfg.FontData = b;
     cfg.FontDataSize = 1;

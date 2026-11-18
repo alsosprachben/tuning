@@ -381,6 +381,9 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
     a.font = bdf_add(io.Fonts, &c7, "code7", false);
     if (load("code7w.bdf", c7w))
         bdf_add(io.Fonts, &c7w, "code7w", true);
+    a.lcd = bdf_add(io.Fonts, &c7, "code7dots", false, BDF_DOTS);     // (the display's: its pixels dots)
+    if (c7w.g.size())
+        bdf_add(io.Fonts, &c7w, "code7wdots", true, BDF_DOTS);
     a.bold = bdf_add(io.Fonts, &c7sc, "code7sc", false);
     if (c7w.g.size())
         bdf_add(io.Fonts, &c7w, "code7w", true);
