@@ -970,6 +970,7 @@ J build_of(nv_host *h)
     b.o["late"] = sess::integer(h->late_n.load(std::memory_order_relaxed));
     b.o["stand"] = sess::integer(h->stand_n.load(std::memory_order_relaxed));
     b.o["held"] = sess::integer(h->held_n.load(std::memory_order_relaxed));
+    b.o["lost"] = sess::integer(h->lost_n.load(std::memory_order_relaxed));
     if (h->fill_n.load(std::memory_order_relaxed) > 0) {
         std::lock_guard<std::mutex> lk(h->bmu);
         if (!h->fill_name.empty())

@@ -838,6 +838,7 @@ int nv_host::open(int argc, char **argv)
     // strike is 16524 rows)
     slots = atol(opt(argc, argv, "slots", "65536").c_str());
     miss_swap.reserve(256);
+    gval[14] = 20.0;                            // (a held note's stand-in after 20 ms: the Setup card's, the session's)
     part = nv_part_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], slots, E.headroom, E.pan.data(), E.beta);
     if (!E.les.empty())                         // the room's Leslie: its rotors, on chorale
         nv_part_leslie(part, E.les.data(), (int)E.les.size());
@@ -2509,8 +2510,9 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         const int na = nv_part_asks(part, ac, ap, ad, an, ab, ax, 256);
         for (int q = 0; q < na && miss_swap.size() < 256; q++)
             miss_swap.push_back(MissReq{ac[q], ap[q], ad[q], an[q], ab[q], ax[q]});
-        long lc[3];
+        long lc[4];
         nv_part_late_counts(part, lc);
+        lost_n.store(lc[3], std::memory_order_relaxed);
         late_n.store(lc[0], std::memory_order_relaxed);
         stand_n.store(lc[1], std::memory_order_relaxed);
         held_n.store(lc[2], std::memory_order_relaxed);
@@ -3371,8 +3373,14 @@ void nv_host::globals_init()
 
 void nv_host::set_global(int i, double v)
 {
-    if (i < 0 || i > 13)
+    if (i < 0 || i >= NV_G_N)
         return;
+    if (i == NV_G_STAND_IN) {                   // A HELD NOTE's STAND-IN after this many ms (0: none, it waits)
+        gval[i] = std::max(0.0, std::min(200.0, v));
+        const double ms = gval[i];
+        post([this, ms](long long) { nv_part_stand_in(part, ms); });
+        return;
+    }
     if (i == 13) {                              // THE STANDARD (live.std_map): read at the next program change
         gval[i] = std::max(0.0, std::min(4.0, std::round(v)));
         default_map = (int)gval[i];
@@ -4587,7 +4595,7 @@ void nv_host_set_global(nv_host *h, int which, double v) { h->set_global(which, 
 
 double nv_host_global(const nv_host *h, int which)
 {
-    if (which < 0 || which > 13)
+    if (which < 0 || which >= NV_G_N)
         return 0.0;
     return which == 8 ? (double)h->room_idx : h->gval[which];
 }

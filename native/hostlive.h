@@ -68,6 +68,7 @@ int nv_tcache_add(void *h, int program, int note, int bucket, int speed, long lo
 int nv_tcache_slots(void *h, int *nb, int *sp);
 int nv_tcache_has(void *h, int note, int bucket, int speed);
 void nv_part_late(void *h, int on);
+void nv_part_stand_in(void *h, double ms);
 int nv_part_asks(void *h, void **cache, int *prog, int *drums, int *note, int *bucket, int *axis, int cap);
 void nv_part_late_counts(void *h, long *out);
 int nv_drum_axis(int pitch, int pan);
@@ -1242,7 +1243,7 @@ struct nv_host {
     std::vector<MissReq> miss_req;              // (bmu)
     std::deque<Fill> fills;                     // (the builder's)
     std::set<std::pair<void *, int>> unfilled;  // (the builder's: octaves the budget stopped, said once)
-    std::atomic<long> late_n{0}, stand_n{0}, held_n{0}, fill_n{0};
+    std::atomic<long> late_n{0}, stand_n{0}, held_n{0}, fill_n{0}, lost_n{0};
     std::string fill_name;                      // (bmu: the octave filling, for the display)
     void on_demand(std::vector<MissReq> &q);
     bool fill_step();                           // (one key of the next octave: false none left)
@@ -1614,7 +1615,7 @@ struct nv_host {
     void start();                           // the workers and the builder, for playing
     // what the panel and a GUI change, between two blocks (live.post)
     void post(std::function<void(long long)> f);
-    double gval[14] = {};                   // the globals as they stand (livetui.GLOBALS: the panel's g; 9 mod
+    double gval[15] = {};                   // the globals as they stand (livetui.GLOBALS: the panel's g; 9 mod
                                             // rate, 10-12 the metronome: bpm, ring, level; 13 the standard)
     std::atomic<int> metro_pi{-1};          // the metronome's patch (-1 not built)
     bool metro_building = false;

@@ -129,7 +129,7 @@ void nv_host_set_room(nv_host *h, const char *name);
    SC-8850) -- changed between two blocks */
 enum { NV_G_MASTER_DB, NV_G_HEADROOM_DB, NV_G_LIMITER, NV_G_BEND_RANGE, NV_G_MOD_CENTS, NV_G_PRESS_DB,
        NV_G_GPU, NV_G_ROOM_TAIL, NV_G_ROOM, NV_G_MOD_RATE, NV_G_METRONOME, NV_G_METRO_RING, NV_G_METRO_DB,
-       NV_G_STANDARD, NV_G_N };
+       NV_G_STANDARD, NV_G_STAND_IN, NV_G_N };
 int nv_host_global_count(void);
 void nv_host_set_global(nv_host *h, int which, double v);
 double nv_host_global(const nv_host *h, int which);

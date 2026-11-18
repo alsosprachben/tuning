@@ -206,14 +206,14 @@ inline void draw_setup(App &a)
         int i;
         const char *label;
         double lo, hi, step;
-        int fmt;                        // (0 dB, 1 plain, 2 st, 3 cents, 4 percent)
+        int fmt;                        // (0 dB, 1 plain, 2 st, 3 cents, 4 percent, 5 ms with 0 off)
     };
-    static const Gl GLOB[7] = {{0, "Master", -60, 0, 0.5, 0},   {1, "Headroom", 0, 24, 0.5, 0}, {2, "Limiter knee", 0.1, 1, 0.02, 1},
+    static const Gl GLOB[8] = {{0, "Master", -60, 0, 0.5, 0},   {1, "Headroom", 0, 24, 0.5, 0}, {2, "Limiter knee", 0.1, 1, 0.02, 1},
                                {3, "Bend range", 0, 24, 0.5, 2}, {4, "Mod depth", 0, 200, 5, 3}, {9, "Mod rate", 0, 1.5, 0.05, 4},
-                               {5, "Aftertouch", 0, 24, 0.5, 0}};
-    const int NK = IP ? 7 : 4;          // (the iPad's seven to a row)
+                               {5, "Aftertouch", 0, 24, 0.5, 0}, {14, "Stand-in", 0, 100, 5, 5}};
+    const int NK = IP ? 8 : 4;          // (the iPad's eight to a row)
     const float kcw = (BW - 24) / NK;
-    for (int k = 0; k < 7; k++) {
+    for (int k = 0; k < 8; k++) {
         const Gl &q = GLOB[k];
         const int n = (int)std::lround((q.hi - q.lo) / q.step);
         std::vector<int> vals = irange(0, n);
@@ -229,6 +229,8 @@ inline void draw_setup(App &a)
                 snprintf(b, sizeof b, "%.1f st", v);
             else if (q.fmt == 3)
                 snprintf(b, sizeof b, "%.0f c", v);
+            else if (q.fmt == 5)
+                snprintf(b, sizeof b, v > 0 ? "%.0f ms" : "OFF", v);
             else
                 snprintf(b, sizeof b, "+%.0f%%", v * 100);
             shown.push_back(b);

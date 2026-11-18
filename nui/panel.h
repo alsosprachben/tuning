@@ -89,15 +89,20 @@ inline void meter_seg(App &a, float x, float y, float w, float h, bool lit)
     }
 }
 
-// THE DISPLAY's HEALTH LINE (the web's #health): a stand-in note (a key
+// THE DISPLAY's HEALTH LINE (the web's #health): a held note that never
+// sounded (MISSED), a stand-in note (a key
 // whose template was not built yet, played on its neighbour's, retuned)
 // in red for 4 s, a note played late for 2 s, else a build, an octave
 // filling as played, underruns; warn: red
 inline std::string health_line(App &a, const J *m, bool &warn)
 {
     const double now = ImGui::GetTime();
-    const long lt = (long)num(&a.build, "late"), st = (long)num(&a.build, "stand");
-    if (a.seen_stand >= 0 && st > a.seen_stand) {
+    const long lt = (long)num(&a.build, "late"), st = (long)num(&a.build, "stand"), ls = (long)num(&a.build, "lost");
+    if (a.seen_lost >= 0 && ls > a.seen_lost) {     // (a held note that never sounded: worst first)
+        a.warn = ls - a.seen_lost > 1 ? "MISSED x" + std::to_string(ls - a.seen_lost) : "MISSED NOTE";
+        a.warn_red = true;
+        a.warn_until = now + 4.0;
+    } else if (a.seen_stand >= 0 && st > a.seen_stand) {
         a.warn = st - a.seen_stand > 1 ? "STAND-IN x" + std::to_string(st - a.seen_stand) : "STAND-IN";
         a.warn_red = true;
         a.warn_until = now + 4.0;
@@ -108,6 +113,7 @@ inline std::string health_line(App &a, const J *m, bool &warn)
     }
     a.seen_late = lt;
     a.seen_stand = st;
+    a.seen_lost = ls;
     warn = false;
     if (now < a.warn_until) {
         warn = a.warn_red;

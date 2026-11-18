@@ -552,6 +552,7 @@ const HELP = {
       ['Mod depth', 'How deep the mod wheel\'s vibrato is at full wheel, in cents.'],
       ['Mod rate', 'How much faster the vibrato goes at full wheel.'],
       ['Aftertouch', 'How much louder (and brighter) a held note gets as you press into it, at full pressure.'],
+      ['Stand-in', "A note whose sound is not built yet waits while it is built, usually a few milliseconds. Past this time it plays the nearest built key's sound, tuned to its own pitch, and the display shows STAND-IN in red. OFF: it always waits for its own."],
       ['THE GPU', 'On: the graphics chip helps render the sound, for more voices.'],
       ['THE ROOM\'S TAIL', 'On: the room\'s reverb tail.'],
       ['The room', 'The room the instruments play in, when a file or the Effects card has not set a GS reverb.'],

@@ -4386,7 +4386,9 @@ struct Part {
         long long t0;
         bool slur, off;
     };
-    static constexpr double STAND_IN_S = 0.020, LOST_S = 2.0;
+    static constexpr double LOST_S = 2.0;
+    double stand_in_s = 0.020;                  // (the Setup card's: 0 no stand-in, the note waits for its own)
+    long lost = 0;                              // (held notes never sounded: let go first, or LOST_S passed)
     bool late_on = false;
     std::vector<Ask> asks;                      // (the audio thread's; the host takes them after the block)
     std::vector<Held> waiting;
@@ -4411,9 +4413,21 @@ struct Part {
         hs.swap(waiting);
         for (const Held &h : hs) {
             const double waited = (double)(n0 - h.t0) / rate;
+            // (a key let go while it waited: struck only within the stand-in's
+            //  time, else it is gone -- a stray blip long after is no note)
+            const double off_by = (stand_in_s > 0.0 ? stand_in_s : 0.020) + (double)cur_blk / rate;
+            if (h.off && waited > off_by) {
+                misses++;
+                lost++;
+                static const bool say_ = getenv("NV_MISS_TRACE") != nullptr;
+                if (say_)
+                    fprintf(stderr, "nvlive: held: channel %d note %d let go unsounded after %.1f ms\n", h.ch, h.note,
+                            waited * 1000.0);
+                continue;
+            }
             const long m0 = misses;
             stand_key = -1;
-            hold_mode = waited >= STAND_IN_S ? 2 : 1;
+            hold_mode = stand_in_s > 0.0 && waited >= stand_in_s ? 2 : 1;
             std::vector<long> got;
             std::vector<long> *outer = S.collect;
             S.collect = &got;
@@ -4424,8 +4438,10 @@ struct Part {
                 misses = m0;
                 if (waited < LOST_S)
                     waiting.push_back(h);
-                else
+                else {
                     misses++;
+                    lost++;
+                }
                 continue;
             }
             const bool stood = stand_key >= 0;
@@ -14690,6 +14706,7 @@ long nv_part_misses(void *h) { return ((nv::slab::Part *)h)->misses; }
 // templates asked taken (after the block, on the audio thread: into out,
 // cap; how many), and its counts (late, stand-ins, held now)
 void nv_part_late(void *h, int on) { ((nv::slab::Part *)h)->late_on = on != 0; }
+void nv_part_stand_in(void *h, double ms) { ((nv::slab::Part *)h)->stand_in_s = std::max(0.0, ms) / 1000.0; }
 int nv_part_asks(void *h, void **cache, int *prog, int *drums, int *note, int *bucket, int *axis, int cap)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;
@@ -14714,6 +14731,7 @@ void nv_part_late_counts(void *h, long *out)
     out[0] = P->late;
     out[1] = P->standins;
     out[2] = (long)P->waiting.size();
+    out[3] = P->lost;
 }
 
 void nv_part_room_reap(void *h)

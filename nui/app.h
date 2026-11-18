@@ -54,7 +54,7 @@ struct App {
     std::string last_meters;
     // (the display's warning of a note played late or by a stand-in: the
     // counts seen, the line and until when it shows)
-    long seen_late = -1, seen_stand = -1;
+    long seen_late = -1, seen_stand = -1, seen_lost = -1;
     std::string warn;
     bool warn_red = false;
     double warn_until = 0.0;

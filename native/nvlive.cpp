@@ -522,9 +522,10 @@ int nv_host::run(int argc, char **argv)
                         cache_freed + nv_part_cache_reap(part), nv_part_cache_retiring(part));
                 fprintf(stderr, "nvlive: %ld note(s) asked of a template not built\n", nv_part_misses(part));
                 {
-                    long lc[3];
+                    long lc[4];
                     nv_part_late_counts(part, lc);
-                    fprintf(stderr, "nvlive: %ld note(s) struck late, %ld on a stand-in, %ld still held\n", lc[0], lc[1], lc[2]);
+                    fprintf(stderr, "nvlive: %ld note(s) struck late, %ld on a stand-in, %ld still held, %ld never sounded\n",
+                            lc[0], lc[1], lc[2], lc[3]);
                 }
             }
             FILE *wf = fopen(argv[i + 2], "wb");
