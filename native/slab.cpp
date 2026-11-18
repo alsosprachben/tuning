@@ -44,6 +44,7 @@
 #include "cmx.h"
 #include "rtjoin.h"             // (helpers in the audio workgroup: macOS / iOS)
 #include "team.h"               // (the GPU setup's team: the engine's own threads)
+#include "kernels.h"            // (the kernels, linked in)
 #include "rubfill.h"            // (the room's part of a held moment)               // the controller matrix (ctrlmatrix)
 #include "nvenv.h"
 
@@ -14328,7 +14329,7 @@ void nv_part_moogx(void *h, void *smx, void *vbm, void *vmd, void *vmm)
     P->gp.vbm = vbm;
     P->gp.vmd = vmd;
     P->gp.vmm = vmm;
-    P->gp.tsm = nv::sym_beside(vbm, "voice_team_set");
+    P->gp.tsm = nv::klib_beside(vbm, "voice_team_set");
 }
 
 void nv_part_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr)
@@ -14336,8 +14337,8 @@ void nv_part_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, vo
     nv::slab::Part *P = (nv::slab::Part *)h;
     auto &g = P->gp;
     g.vb = vb; g.vbd = vbd; g.vds = vds; g.vs = vs; g.cl = cl; g.gpu_min = gpu_min; g.nthr = nthr;
-    g.ts = nv::sym_beside(vb, "voice_team_set");
-    g.tsd = nv::sym_beside(vbd, "voice_team_set");
+    g.ts = nv::klib_beside(vb, "voice_team_set");
+    g.tsd = nv::klib_beside(vbd, "voice_team_set");
     int sz[3];
     ((nv_vsizes_fn)vz)(sz);
     g.D.make(1024, sz[0]);

@@ -408,6 +408,31 @@ def _build_objects(units):
                 f.result()
     return [os.path.join(bdir, n + '.o') for n, c, s in units]
 
+# THE VOICE KERNELS, LINKED IN (native/kernels.h: iOS loads no code of its
+# own): every build blockrender makes as a library -- a variant (its -D flags)
+# at a rate -- and live's convolver, compiled into libnative under their
+# flags (blockrender._build's, live._conv_dll's) but without OpenMP (the
+# engine's own threads, native/team.h), their names prefixed (kprefix.h). A
+# variant or rate added here goes in kernels.cpp's table too.
+KRATES = (44100, 48000)
+KVARIANTS = (('synth', []), ('synthxdec', ['-DXDEC_KERNEL']), ('synthdamp', ['-DDAMP_KERNEL']),
+             ('synthmoogx', ['-DMOOGX_KERNEL', '-DDAMP_KERNEL']), ('synthlobe', ['-DLESLIE_KERNEL']),
+             ('synthgpu', ['-DVOICE_BLOCK']), ('synthgpudamp', ['-DVOICE_BLOCK', '-DDAMP_KERNEL']),
+             ('synthgpumoogx', ['-DVOICE_BLOCK', '-DDAMP_KERNEL', '-DMOOGX_KERNEL']))
+# (blockrender.KERNEL_PARTS, without importing blockrender)
+_BR_KERNEL_PARTS = ("synthkernel.c", "voice_main.inc", "voice_chunk.inc", "voice_partial.inc", "voice_block.inc",
+                    "voice_items.inc", "voice_moog.inc", "voice_cell.inc", "voice_noise.inc", "voicedesc.h")
+
+
+def _kernel_units(nat):
+    pre = ['-include', nat('kprefix.h')]
+    return ([('k_%s_%d' % (v, r), ['gcc', '-O3', '-march=native', '-ffast-math', '-fPIC', '-DSRATE=%d' % r] + d
+              + pre + ['-DNVK_TAG=%s_%d' % (v, r)], os.path.join(HERE, 'synthkernel.c'))
+             for r in KRATES for v, d in KVARIANTS]
+            + [('k_convolver', ['gcc', '-O3', '-march=native', '-ffast-math', '-fPIC'] + pre + ['-DNVK_TAG=convolver'],
+                os.path.join(HERE, 'convolver.c'))])
+
+
 def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
@@ -417,8 +442,9 @@ def _load():
                                                        'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'efxrev.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
                                                        'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'uiapi.cpp', 'session.h', 'hostint.h', 'hostlive.h', 'host.h', 'livebus.cpp',
                                                        'relocate.h', 'selfexe.h', 'lfqueue.h', 'rtjoin.h', 'rtsem.h', 'rubfill.h',
-                                                       'nvroomtail.cpp', 'nvrender.cpp')]
-            + [os.path.join(HERE, 'roomcore.c'), os.path.join(HERE, 'registercore.c'), os.path.join(HERE, 'tapkernel.c')])
+                                                       'nvroomtail.cpp', 'nvrender.cpp', 'kernels.cpp')]
+            + [os.path.join(HERE, f) for f in ('roomcore.c', 'registercore.c', 'tapkernel.c', 'convolver.c')
+               + _BR_KERNEL_PARTS])
     # ...and EVERY header and include in native/: a header a unit includes
     # (fileplay.h, mt32.h, partmux.h...) is a source too -- left off this
     # list, a change to it alone rebuilt nothing (the objects' own stamps
@@ -456,7 +482,8 @@ def _load():
                  # live host (host.h: nvlive's, as a library); a part's own bus live
                  # (live.LiveBus: efxbus's processors, block by block)
                  + [(f[:-4], cxx, nat(f)) for f in ('roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'uiapi.cpp', 'livebus.cpp',
-                                                    'nvroomtail.cpp', 'nvrender.cpp')])
+                                                    'nvroomtail.cpp', 'nvrender.cpp', 'kernels.cpp')]
+                 + _kernel_units(nat))
         objs = _build_objects(units)
         try:
             subprocess.check_call(_TC.cmd(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl']))

@@ -499,6 +499,7 @@ bool read_export(const char *path, Export &E)
 // ---- the live host (host step 2e: moved from nvlive.cpp whole) ----
 #include "hostlive.h"
 #include "host.h"
+#include "kernels.h"             // (the kernels, linked in: no dlopen of our own)
 
 #ifdef __GLIBC__
 #include <malloc.h>
@@ -854,10 +855,10 @@ int nv_host::open(int argc, char **argv)
         dry = dry || !strcmp(argv[i], "--dry");
     conv_cn = nullptr; conv_cp = nullptr; conv_cf = nullptr;  // (live's convolver: a room switched to's too)
     if (E.has_room && !E.conv_lib.empty()) {
-        void *ch = dlopen(E.conv_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
-        conv_cn = ch ? dlsym(ch, "conv_new") : nullptr;
-        conv_cp = ch ? dlsym(ch, "conv_process") : nullptr;
-        conv_cf = ch ? dlsym(ch, "conv_free") : nullptr;
+        void *ch = nv::klib_open(E.conv_lib);
+        conv_cn = ch ? nv::klib_sym(ch, "conv_new") : nullptr;
+        conv_cp = ch ? nv::klib_sym(ch, "conv_process") : nullptr;
+        conv_cf = ch ? nv::klib_sym(ch, "conv_free") : nullptr;
     }
     nv_part_conv(part, conv_cn, conv_cp, conv_cf);   // (a bus's reverb: live's Convolver)
     if (!dry && E.has_room && !E.ir.empty()) {
@@ -975,15 +976,15 @@ int nv_host::open(int argc, char **argv)
     }
     const char *FN[3] = {"synth_voice", "synth_voice_xdec", "synth_voice_damp"};
     for (int q = 0; q < 3; q++) {
-        void *h = dlopen(E.libs[q].c_str(), RTLD_NOW | RTLD_LOCAL);
-        fn[q] = h ? dlsym(h, FN[q]) : nullptr;
+        void *h = nv::klib_open(E.libs[q]);
+        fn[q] = h ? nv::klib_sym(h, FN[q]) : nullptr;
         if (!fn[q]) {
             fprintf(stderr, "nvlive: no %s in %s\n", FN[q], E.libs[q].c_str());
             return 1;
         }
         if (q == 0)                         // (the Moog's mod rows: the kernel library's own)
-            nv_part_moog_kernel(part, dlsym(h, "moog_pitch_cells"), dlsym(h, "moog_shape_rows"),
-                                dlsym(h, "moog_coeff_rows"));
+            nv_part_moog_kernel(part, nv::klib_sym(h, "moog_pitch_cells"), nv::klib_sym(h, "moog_shape_rows"),
+                                nv::klib_sym(h, "moog_coeff_rows"));
     }
     // THE MOOG EXTENSIONS' KERNELS (a note's loops, its contours' age, its
     // filter contour's depth: blockrender.ensure_moogx_lib, which the export
@@ -994,8 +995,8 @@ int nv_host::open(int argc, char **argv)
     };
     {
         std::string ml = beside(E.libs[2], "libsynthdamp_", "libsynthmoogx_");
-        void *h = ml.empty() ? nullptr : dlopen(ml.c_str(), RTLD_NOW | RTLD_LOCAL);
-        void *smx = h ? dlsym(h, "synth_voice_moogx") : nullptr;
+        void *h = ml.empty() ? nullptr : nv::klib_open(ml);
+        void *smx = h ? nv::klib_sym(h, "synth_voice_moogx") : nullptr;
         if (!smx)
             fprintf(stderr, "nvlive: no synth_voice_moogx in %s: a Moog's loops do not loop\n", ml.c_str());
         nv_part_moogx(part, smx, nullptr, nullptr, nullptr);
@@ -1025,11 +1026,11 @@ int nv_host::open(int argc, char **argv)
     }
     if (!gopt.empty()) {
         std::string why;
-        void *gl = E.gpu ? dlopen(E.gpu_lib.c_str(), RTLD_NOW | RTLD_LOCAL) : nullptr;
-        void *gd = E.gpu ? dlopen(E.gpu_damp_lib.c_str(), RTLD_NOW | RTLD_LOCAL) : nullptr;
-        void *vb = gl ? dlsym(gl, "voice_block") : nullptr, *vs = gl ? dlsym(gl, "voice_samples") : nullptr;
-        void *vz = gl ? dlsym(gl, "voice_sizes") : nullptr;
-        void *vbd = gd ? dlsym(gd, "voice_block") : nullptr, *vds = gd ? dlsym(gd, "voice_damp_set") : nullptr;
+        void *gl = E.gpu ? nv::klib_open(E.gpu_lib) : nullptr;
+        void *gd = E.gpu ? nv::klib_open(E.gpu_damp_lib) : nullptr;
+        void *vb = gl ? nv::klib_sym(gl, "voice_block") : nullptr, *vs = gl ? nv::klib_sym(gl, "voice_samples") : nullptr;
+        void *vz = gl ? nv::klib_sym(gl, "voice_sizes") : nullptr;
+        void *vbd = gd ? nv::klib_sym(gd, "voice_block") : nullptr, *vds = gd ? nv::klib_sym(gd, "voice_damp_set") : nullptr;
         void *cl = nullptr;
         if (!E.gpu)
             why = "the export has no GPU section (native_export.py --live again)";
@@ -1055,15 +1056,15 @@ int nv_host::open(int argc, char **argv)
             nv_part_gpu(part, vb, vbd, vds, vs, vz, cl, gmin, gpu_nthr);
             {                               // (the Moog extensions' build of the setup)
                 std::string gm = beside(E.gpu_damp_lib, "libsynthgpudamp_", "libsynthgpumoogx_");
-                void *hm = gm.empty() ? nullptr : dlopen(gm.c_str(), RTLD_NOW | RTLD_LOCAL);
+                void *hm = gm.empty() ? nullptr : nv::klib_open(gm);
                 void *smx = nullptr;
                 {
                     std::string ml = beside(E.libs[2], "libsynthdamp_", "libsynthmoogx_");
-                    void *h = ml.empty() ? nullptr : dlopen(ml.c_str(), RTLD_NOW | RTLD_LOCAL);
-                    smx = h ? dlsym(h, "synth_voice_moogx") : nullptr;
+                    void *h = ml.empty() ? nullptr : nv::klib_open(ml);
+                    smx = h ? nv::klib_sym(h, "synth_voice_moogx") : nullptr;
                 }
-                nv_part_moogx(part, smx, hm ? dlsym(hm, "voice_block") : nullptr,
-                              hm ? dlsym(hm, "voice_damp_set") : nullptr, hm ? dlsym(hm, "voice_moogx_set") : nullptr);
+                nv_part_moogx(part, smx, hm ? nv::klib_sym(hm, "voice_block") : nullptr,
+                              hm ? nv::klib_sym(hm, "voice_damp_set") : nullptr, hm ? nv::klib_sym(hm, "voice_moogx_set") : nullptr);
             }
             nv_part_pipeline(part, cl && pipe);
             // (--gpu-depth=2: two blocks in flight -- an app's on macOS; 1, live's and nvlive's)

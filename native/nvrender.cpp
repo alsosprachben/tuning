@@ -51,6 +51,7 @@
 #include <dlfcn.h>
 #include <functional>
 #include <map>
+#include "kernels.h"             // (the kernels, linked in: no dlopen of our own)
 #include "gsdisplay.h"
 #include <unistd.h>
 #include <set>
@@ -3217,8 +3218,8 @@ static int run(int argc, char **argv)
     void *fn[3];
     const char *FN[3] = {"synth_voice", "synth_voice_xdec", "synth_voice_damp"};
     for (int q = 0; q < 3; q++) {
-        void *h = dlopen(E.libs[q].c_str(), RTLD_NOW | RTLD_LOCAL);
-        fn[q] = h ? dlsym(h, FN[q]) : nullptr;
+        void *h = nv::klib_open(E.libs[q]);
+        fn[q] = h ? nv::klib_sym(h, FN[q]) : nullptr;
         if (!fn[q]) {
             fprintf(stderr, "nvrender: no %s in %s\n", FN[q], E.libs[q].c_str());
             return 1;
@@ -3429,8 +3430,8 @@ static int run(int argc, char **argv)
         LANG.resize((size_t)2 * lch.size() * lgn);
         nv_leslie_angles_gs((int)lch.size(), lnreq.data(), lreq.data(), N, SR, (int)BLK, LES, LANG.data(),
                             lgs.data());
-        void *h = dlopen(E.lobe_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
-        slo = h ? dlsym(h, "synth_voice_lobe") : nullptr;
+        void *h = nv::klib_open(E.lobe_lib);
+        slo = h ? nv::klib_sym(h, "synth_voice_lobe") : nullptr;
         if (!slo) {
             fprintf(stderr, "nvrender: no synth_voice_lobe in %s\n", E.lobe_lib.c_str());
             return 1;
@@ -3818,8 +3819,8 @@ static int run(int argc, char **argv)
                 }
                 LANG.assign(1, 0.0f);
                 lgn = 1;
-                void *h = dlopen(E.lobe_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
-                slo = h ? dlsym(h, "synth_voice_lobe") : nullptr;
+                void *h = nv::klib_open(E.lobe_lib);
+                slo = h ? nv::klib_sym(h, "synth_voice_lobe") : nullptr;
                 if (!slo) {
                     fprintf(stderr, "nvrender: no synth_voice_lobe in %s\n", E.lobe_lib.c_str());
                     return 1;
@@ -3854,12 +3855,12 @@ static int run(int argc, char **argv)
         mc.KN = KN.data();
         // ...ITS MOD SECTION's rows (moog.pitch_rows, shape_rows), one a filter
         // row, through the kernel library's own (synthkernel.c), where any moves
-        void *kh = dlopen(E.libs[0].c_str(), RTLD_NOW | RTLD_LOCAL);
+        void *kh = nv::klib_open(E.libs[0]);
         auto pcells = (void (*)(int, const double *, const double *, const double *, const double *, double, int,
-                                double *, double *))(kh ? dlsym(kh, "moog_pitch_cells") : nullptr);
+                                double *, double *))(kh ? nv::klib_sym(kh, "moog_pitch_cells") : nullptr);
         auto srows = (void (*)(int, const double *, const double *, const double *, const long *, const int *, int,
                                double, int, const long *, const int *, const int *, float *))(
-            kh ? dlsym(kh, "moog_shape_rows") : nullptr);
+            kh ? nv::klib_sym(kh, "moog_shape_rows") : nullptr);
         bool mpon = false, mkon = false;
         for (int r = 0; r < nft; r++) {
             int fl = (int)FT[30 * r + 12];

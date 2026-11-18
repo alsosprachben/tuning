@@ -15,7 +15,6 @@
 
 #include <atomic>
 #include <chrono>
-#include <dlfcn.h>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -134,22 +133,7 @@ inline Team &file_team()
     return t;
 }
 
-// a kernel library's other function, found beside one of its functions (the
-// GPU builds' voice_team_set, beside their voice_block); NULL if none
-inline void *sym_beside(void *fn, const char *name)
-{
-    Dl_info i;
-    if (!fn || !dladdr(fn, &i) || !i.dli_fname)
-        return nullptr;
-    void *h = dlopen(i.dli_fname, RTLD_NOW | RTLD_NOLOAD);
-    if (!h)
-        return nullptr;
-    void *s = dlsym(h, name);
-    dlclose(h);
-    return s;
-}
-
-// VOICE_BLOCK ON A TEAM (synthkernel.c's voice_team_set): call(nthr) is the
+// VOICE_BLOCK ON A TEAM (synthkernel.c's voice_team_set, kernels.h's klib_beside): call(nthr) is the
 // voice_block call; with the library's set function, every member runs it
 // with the team's shared counts and counts[0..1] are set from them after;
 // without one (an older build), the one call with nthr OpenMP threads.

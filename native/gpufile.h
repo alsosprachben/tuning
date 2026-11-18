@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "team.h"            // (the descriptors on the engine's own threads)
+#include "kernels.h"            // (the kernels, linked in)
 
 extern "C" {
 void *nv_cl_new(const char *dir, const int *sizes, char *err, int errlen);
@@ -140,21 +141,21 @@ struct GpuFile {
     {
         std::string lib = dir + "/libsynthgpu_" + std::to_string(SR) + ".so";
         std::string dlib = dir + "/libsynthgpudamp_" + std::to_string(SR) + ".so";
-        void *h = dlopen(lib.c_str(), RTLD_NOW | RTLD_LOCAL);
+        void *h = nv::klib_open(lib);
         if (!h)
             return "no " + lib + " (blockrender.ensure_gpu_lib builds it)";
-        vb = (gf_vblock_fn)dlsym(h, "voice_block");
-        vts = dlsym(h, "voice_team_set");
-        vpack = (gf_vpack_fn)dlsym(h, "voice_pack");
-        gf_vsizes_fn vz = (gf_vsizes_fn)dlsym(h, "voice_sizes");
+        vb = (gf_vblock_fn)nv::klib_sym(h, "voice_block");
+        vts = nv::klib_sym(h, "voice_team_set");
+        vpack = (gf_vpack_fn)nv::klib_sym(h, "voice_pack");
+        gf_vsizes_fn vz = (gf_vsizes_fn)nv::klib_sym(h, "voice_sizes");
         if (!vb || !vpack || !vz)
             return "no voice_block / voice_pack / voice_sizes in " + lib;
         vz(sz);
-        void *hd = dlopen(dlib.c_str(), RTLD_NOW | RTLD_LOCAL);
+        void *hd = nv::klib_open(dlib);
         if (hd) {
-            vbd = (gf_vblock_fn)dlsym(hd, "voice_block");
-            vds = (gf_vdamp_fn)dlsym(hd, "voice_damp_set");
-            vtsd = dlsym(hd, "voice_team_set");
+            vbd = (gf_vblock_fn)nv::klib_sym(hd, "voice_block");
+            vds = (gf_vdamp_fn)nv::klib_sym(hd, "voice_damp_set");
+            vtsd = nv::klib_sym(hd, "voice_team_set");
         }
         char err[512] = {0};
         cl = nv_cl_new((kdir.empty() ? dir : kdir).c_str(), sz, err, sizeof err);   // (the kernel's sources: kdir)
