@@ -3,6 +3,8 @@
 // (from the top when centred), a fader's slot and cap, an LCD field.
 #pragma once
 
+#include <functional>
+
 #include "app.h"
 
 namespace nui {
@@ -139,6 +141,56 @@ inline int lcd_field(App &a, const char *id, float x, float y, float w, float h,
     if (f & K_ACTIVE)
         bubble(a, label + " " + value);
     return f;
+}
+
+// A SCROLLING LIST: rows of h; a drag scrolls, a still tap picks (its index), the wheel too
+inline int scroll_list(App &a, const std::string &id, float x, float y, float w, float hgt, int n, float rh, float &scroll,
+                       const std::function<void(int, float)> &row)
+{
+    struct T {
+        bool down = false, moved = false;
+        float y0 = 0, s0 = 0;
+    };
+    static std::map<std::string, T> ts;
+    T &t = ts[id];
+    const float content = n * rh;
+    scroll = std::max(0.0f, std::min(scroll, std::max(0.0f, content - hgt)));
+    ImGui::SetCursorScreenPos(P(a, x, y));
+    ImGui::InvisibleButton(id.c_str(), ImVec2(w * a.k, hgt * a.k));
+    const float my = (ImGui::GetIO().MousePos.y - a.org.y) / a.k;
+    if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0)
+        scroll -= ImGui::GetIO().MouseWheel * 3 * rh;
+    if (ImGui::IsItemActivated()) {
+        t.down = true;
+        t.moved = false;
+        t.y0 = my;
+        t.s0 = scroll;
+    }
+    if (ImGui::IsItemActive() && t.down) {
+        if (!t.moved && std::fabs(my - t.y0) * a.k > SLOP)
+            t.moved = true;
+        if (t.moved)
+            scroll = std::max(0.0f, std::min(t.s0 - (my - t.y0), std::max(0.0f, content - hgt)));
+    }
+    int tap = -1;
+    if (ImGui::IsItemDeactivated() && t.down) {
+        t.down = false;
+        if (!t.moved) {
+            const int i = (int)std::floor((t.y0 - y + scroll) / rh);
+            if (i >= 0 && i < n)
+                tap = i;
+        }
+    }
+    dl()->PushClipRect(P(a, x, y), P(a, x + w, y + hgt), true);
+    const int i0 = std::max(0, (int)(scroll / rh)), i1 = std::min(n, (int)((scroll + hgt) / rh) + 1);
+    for (int i = i0; i < i1; i++)
+        row(i, y + i * rh - scroll);
+    dl()->PopClipRect();
+    if (content > hgt) {
+        const float bh = std::max(30.0f, hgt * hgt / content), by = y + (hgt - bh) * scroll / (content - hgt);
+        rect(a, x + w - 4, by, 3, bh, SILK_DIM, 1);
+    }
+    return tap;
 }
 
 }  // namespace nui

@@ -174,17 +174,17 @@ inline bool osk(App &a, std::string &q, float x, float y, float w, bool name = f
                 q += k;
         }
     }
-    const float ry = y + 4 * (kh + gap), bw = (w - 3 * gap) / 6;
-    if (button(a, "oskclear", x, ry, bw, kh, "CLEAR"))
+    const float ry = y + 4 * (kh + gap), bw = (w - 3 * gap) / 6, ws = a.tab ? 21 : 14;   // (the word keys 3x on the iPad, as its letters)
+    if (button(a, "oskclear", x, ry, bw, kh, "CLEAR", false, true, ws))
         q.clear();
-    if (button(a, "oskspace", x + bw + gap, ry, bw * 3 - gap, kh, "SPACE"))
+    if (button(a, "oskspace", x + bw + gap, ry, bw * 3 - gap, kh, "SPACE", false, true, ws))
         q += " ";
-    if (button(a, "oskback", x + 4 * bw + gap, ry, bw - gap, kh, "\xe2\x86\x90") && !q.empty()) {
+    if (button(a, "oskback", x + 4 * bw + gap, ry, bw - gap, kh, "\xe2\x86\x90", false, true, ws) && !q.empty()) {
         q.pop_back();
         while (!q.empty() && ((unsigned char)q.back() & 0xC0) == 0x80)
             q.pop_back();
     }
-    return button(a, "oskdone", x + 5 * bw + 2 * gap, ry, bw - gap, kh, done);
+    return button(a, "oskdone", x + 5 * bw + 2 * gap, ry, bw - gap, kh, done, false, true, ws);
 }
 inline bool lib_keys(App &a, float x, float y, float w) { return osk(a, g_lib.q, x, y, w); }
 
@@ -204,25 +204,44 @@ inline void draw_library(App &a)
     fams.push_back({"drums", "Drum kits"});
     fams.push_back({"mt32", "MT-32"});
     fams.push_back({"cm32p", "CM-64 PCM"});
-    const float FX = 34, FY = 356, fw = 196, fh = 44, fg = 6;
+    const bool T = a.tab;               // (the iPad's: its card from y 210 to 734)
+    const float FX = T ? 20 : 34, FY = T ? 218 : 356, fw = T ? 196 : 196, fh = 44, fg = 6, Y1 = T ? 728 : 1056;
     const bool searching = !L.q.empty();
-    for (size_t i = 0; i < fams.size(); i++) {
-        const float x = FX + (i % 2) * (fw + fg), y = FY + (i / 2) * (fh + fg);
-        const std::string id = "fam" + fams[i].id;
-        if (button(a, id.c_str(), x, y, fw, fh, fams[i].label, !searching && L.fam == fams[i].id)) {
-            L.fam = fams[i].id;
+    float MX;
+    if (T) {                            // (the families a column that scrolls, 44-point rows)
+        static float fam_scroll = 0;
+        const int tap = scroll_list(a, "fams", FX, FY, fw + 8, Y1 - FY, (int)fams.size(), fh + 4, fam_scroll, [&](int i, float y) {
+            const bool on = !searching && L.fam == fams[(size_t)i].id;
+            rect(a, FX, y, fw, fh, on ? LCD : BTN, 6);
+            frame(a, FX, y, fw, fh, EDGE, 6, 1);
+            text(a, a.bold, 21, FX + 10, y + (fh - a.lh(21)) / 2, on ? PANEL : SILK, fit(a, a.bold, 21, fams[(size_t)i].label, fw - 20));
+        });
+        if (tap >= 0) {
+            L.fam = fams[(size_t)tap].id;
             L.q.clear();
             L.scroll = 0;
         }
+        MX = FX + fw + 20;
+    } else {
+        for (size_t i = 0; i < fams.size(); i++) {
+            const float x = FX + (i % 2) * (fw + fg), y = FY + (i / 2) * (fh + fg);
+            const std::string id = "fam" + fams[i].id;
+            if (button(a, id.c_str(), x, y, fw, fh, fams[i].label, !searching && L.fam == fams[i].id)) {
+                L.fam = fams[i].id;
+                L.q.clear();
+                L.scroll = 0;
+            }
+        }
+        MX = FX + 2 * fw + fg + 24;
     }
     // THE SEARCH and the count
-    const float MX = FX + 2 * fw + fg + 24, MW = 1886 - MX;
-    rect(a, MX, 350, 560, 46, LCD_BG, 4);
-    frame(a, MX, 350, 560, 46, L.typing ? LCD : LCD_DIM, 4, 1.5f);
-    text(a, a.font, 21, MX + 12, 362, L.q.empty() ? LCD_DIM : LCD,
+    const float MW = (T ? 1105 : 1886) - MX, SY = T ? 216 : 350, SH = T ? 44 : 46, SW = T ? 330 : 560;
+    rect(a, MX, SY, SW, SH, LCD_BG, 4);
+    frame(a, MX, SY, SW, SH, L.typing ? LCD : LCD_DIM, 4, 1.5f);
+    text(a, a.font, 21, MX + 12, SY + (SH - a.lh(21)) / 2, L.q.empty() ? LCD_DIM : LCD,
          L.q.empty() ? std::string("Search patches") : L.q + (L.typing ? "_" : ""));
-    ImGui::SetCursorScreenPos(P(a, MX, 350));
-    if (ImGui::InvisibleButton("search", ImVec2(560 * a.k, 46 * a.k)))
+    ImGui::SetCursorScreenPos(P(a, MX, SY));
+    if (ImGui::InvisibleButton("search", ImVec2(SW * a.k, SH * a.k)))
         L.typing = true;
     if (L.typing) {                     // (a keyboard's typing too, while the keys are up)
         ImGuiIO &io = ImGui::GetIO();
@@ -246,11 +265,14 @@ inline void draw_library(App &a)
     char info[160];
     snprintf(info, sizeof info, "%d patch%s \xc2\xb7 tap to play on part %02d%s", (int)list.size(),
              list.size() == 1 ? "" : "es", a.row + 1, L.favs_kept ? "" : " \xc2\xb7 (no session: stars are not kept)");
-    text(a, a.font, 14, MX + 576, 366, SILK_DIM, info);
-    heading(a, MX + 576 + text_w(a, a.font, 14, info) + 4, 366, "", "library");   // (the card's ?)
+    const std::string info_ = fit(a, a.font, 14, info, MW - SW - 60);
+    text(a, a.font, 14, MX + SW + 16, SY + 16, SILK_DIM, info_);
+    heading(a, MX + SW + 16 + text_w(a, a.font, 14, info_) + 4, SY + 16, "", "library");   // (the card's ?)
 
     // THE NOTES on the part's patch (about.json: its rating, what it was fitted to)
-    const float aboutH = 150, TY = 410, TB = (L.typing ? 1056 - 5 * 56 - 24 : 1056 - aboutH - 10);
+    const float aboutH = T ? 86 : 150, TY = T ? 270 : 410, TB = (L.typing ? Y1 - 5 * 56 - 24 : Y1 - aboutH - 10);
+    const float LH = a.lh(14) + (T ? 3 : 4);       // (a line of notes)
+    const size_t ML = T ? 4 : 6;
     if (!L.typing && cur && !flag(cur, "drums")) {
         const std::string key = std::to_string((int)num(cur, "program")) + "." + std::to_string((int)num(cur, "variation"));
         const J *pr = L.about.get("programs");
@@ -260,20 +282,20 @@ inline void draw_library(App &a)
             const J *lv = L.about.get("levels");
             const std::string lvl = lv && lv->is(J::ARR) && r >= 0 && r < (int)lv->a.size() && lv->a[(size_t)r].is(J::STR)
                                         ? lv->a[(size_t)r].s : "";
-            const float ay = 1056 - aboutH;
+            const float ay = Y1 - aboutH;
             rect(a, MX, ay, MW, aboutH, IM_COL32(0x1f, 0x22, 0x26, 255), 8);
-            text(a, a.bold, 14, MX + 12, ay + 10, SILK, fit(a, a.bold, 14, str(cur, "name"), MW - 400));
+            text(a, a.bold, 14, MX + 12, ay + 8, SILK, fit(a, a.bold, 14, str(cur, "name"), MW - 400));
             const std::string rt = std::to_string(r) + " \xc2\xb7 " + lvl;
-            text(a, a.font, 14, MX + MW - 12 - text_w(a, a.font, 14, rt), ay + 10, LCD, rt);
+            text(a, a.font, 14, MX + MW - 12 - text_w(a, a.font, 14, rt), ay + 8, LCD, rt);
             const auto lines = wrap(a, a.font, 14, e->a[1].is(J::STR) ? e->a[1].s : "", MW - 24);
-            for (size_t i = 0; i < lines.size() && i < 6; i++)
-                text(a, a.font, 14, MX + 12, ay + 32 + i * 18, SILK_DIM,
-                     i == 5 && lines.size() > 6 ? fit(a, a.font, 14, lines[i] + " \xe2\x80\xa6", MW - 24) : lines[i]);
+            for (size_t i = 0; i < lines.size() && i < ML; i++)
+                text(a, a.font, 14, MX + 12, ay + 12 + LH * (i + 1), SILK_DIM,
+                     i + 1 == ML && lines.size() > ML ? fit(a, a.font, 14, lines[i] + " \xe2\x80\xa6", MW - 24) : lines[i]);
         }
     }
 
     // THE TILES: a grid that scrolls under a finger
-    const float tw_min = 280, th = 54, gap = 8;
+    const float tw_min = T ? 200 : 280, th = T ? 48 : 54, gap = T ? 6 : 8, star = T ? 44 : 52;
     const int cols = std::max(1, (int)((MW + gap) / (tw_min + gap)));
     const float tw = (MW - gap * (cols - 1)) / cols;
     const int rows = ((int)list.size() + cols - 1) / cols;
@@ -306,7 +328,7 @@ inline void draw_library(App &a)
             const int c = (int)((L.p0.x - MX) / (tw + gap)), r = (int)((L.p0.y - TY + L.scroll) / (th + gap));
             if (c >= 0 && c < cols && r >= 0 && r * cols + c < (int)list.size()) {
                 tap_i = r * cols + c;
-                tap_star = L.p0.x > MX + c * (tw + gap) + tw - 52;
+                tap_star = L.p0.x > MX + c * (tw + gap) + tw - star;
             }
         }
     }
@@ -328,23 +350,25 @@ inline void draw_library(App &a)
             frame(a, x, y, tw, th, L.picking == p.pick ? OWN : EDGE, 8, L.picking == p.pick ? 2.5f : 1.0f);
             // (the number: a kit's, or the program's with its variation smaller, as the web's <i>)
             const ImU32 nc = isc ? LCD_BG : LCD;
-            float name_x = 112;
+            const float h21 = a.lh(21), h14 = a.lh(14);
+            float name_x = T ? 10 + text_w(a, a.font, 21, "000") + 8 : 112;
             if (p.drums) {
-                text(a, a.font, 14, x + 10, y + (th - 14) / 2, nc, "KIT");
-                text(a, a.font, 21, x + 40, y + (th - 21) / 2, nc, std::to_string(p.program));
+                text(a, a.font, 14, x + 10, y + (th - h14) / 2, nc, "KIT");
+                text(a, a.font, 21, x + 14 + text_w(a, a.font, 14, "KIT"), y + (th - h21) / 2, nc, std::to_string(p.program));
+                name_x = std::max(name_x, 18 + text_w(a, a.font, 14, "KIT") + text_w(a, a.font, 21, std::to_string(p.program)));
             } else {
                 char pn[8];
                 snprintf(pn, sizeof pn, "%03d", p.program);
-                text(a, a.font, 21, x + 10, y + (th - 21) / 2, nc, pn);
+                text(a, a.font, 21, x + 10, y + (th - h21) / 2, nc, pn);
                 if (p.variation) {
                     const std::string vs = "." + std::to_string(p.variation);
-                    text(a, a.font, 14, x + 10 + text_w(a, a.font, 21, pn), y + (th - 21) / 2 + 7, nc, vs);
-                    name_x = std::max(name_x, 10 + text_w(a, a.font, 21, pn) + text_w(a, a.font, 14, vs) + 10);
+                    text(a, a.font, 14, x + 10 + text_w(a, a.font, 21, pn), y + (th - h21) / 2 + (h21 - h14), nc, vs);
+                    name_x = std::max(name_x, 10 + text_w(a, a.font, 21, pn) + text_w(a, a.font, 14, vs) + 8);
                 }
             }
-            text(a, a.font, 14, x + name_x, y + (th - 14) / 2, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, tw - name_x - 56));
-            text(a, a.font, 21, x + tw - 38, y + (th - 21) / 2, fav ? (isc ? LCD_BG : LCD) : (isc ? LCD_DIM : SILK_DIM),
-                 "\xe2\x98\x85");
+            text(a, a.font, 14, x + name_x, y + (th - h14) / 2, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, tw - name_x - star - 4));
+            text(a, a.font, 21, x + tw - star + (star - text_w(a, a.font, 21, "\xe2\x98\x85")) / 2, y + (th - h21) / 2,
+                 fav ? (isc ? LCD_BG : LCD) : (isc ? LCD_DIM : SILK_DIM), "\xe2\x98\x85");
         }
     if (list.empty())
         text(a, a.font, 21, MX, TY + 10, SILK_DIM,
@@ -375,7 +399,7 @@ inline void draw_library(App &a)
         }
     }
     // THE KEYS, while searching
-    if (L.typing && lib_keys(a, MX, 1056 - 5 * 56 + 6, MW))
+    if (L.typing && lib_keys(a, MX, Y1 - 5 * 56 + 6, MW))
         L.typing = false;
 }
 
