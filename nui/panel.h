@@ -237,7 +237,7 @@ inline void draw_keys_tab(App &a)
 {
     const J *p = part(a, a.row);
     const int n = nparts(a);
-    const float X = 816, Y = 10, bw = 100, bh = 44, g = 4;
+    const float X = 814, Y = 10, bw = 98, bh = 44, g = 4;
     if (button(a, "prev", X, Y, bw, bh, "\xe2\x97\x80 PART", false, a.row > 0, 21))
         select(a, a.row - 1);
     if (button(a, "next", X + bw + g, Y, bw, bh, "PART \xe2\x96\xb6", false, a.row + 1 < n, 21))
@@ -260,7 +260,7 @@ inline void draw_keys_tab(App &a)
             a.quit_armed = now;
     }
     // THE JOG DIAL
-    const float cx = 1123 - 60, cy = 66, r = 54;
+    const float cx = 1123 - 50, cy = 64, r = 48;   // (clear of the keys: they end at 1014)
     const int steps = dial(a.K, a.jog, "jog", P(a, cx, cy), r * a.k);
     if (steps && p)
         field_set(a, a.field, field_get(a, a.field) + steps);
