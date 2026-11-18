@@ -164,6 +164,17 @@ int nv_host::run(int argc, char **argv)
             // ...ITS STAMPED CHANNELS (a muxed file's, mt32mux or the reader's
             // TUNING_PARTS): the onset rule kept there, as the file render keeps it
             nv_part_stamped(part, getenv("NV_NO_STAMPED") ? 0u : nv_midi_stamped(m, E.k[K_STAMP_S], E.k[K_STAMPED_SHARE]));
+            // --file-octaves (with --programs): only the octaves the file's notes
+            // use built, as the Files card's PLAY LIVE builds them (A5)
+            for (int q = 1; q < argc; q++)
+                if (!strcmp(argv[q], "--file-octaves")) {
+                    unsigned om[256];
+                    bool merged = false;            // (the melodic part on every channel: one program for all)
+                    for (const auto &pa : pats)
+                        merged = merged || (!pa.gone && !pa.drums && pa.channel < 0);
+                    file_octave_masks(m, om, merged);
+                    file_octaves(om);
+                }
             int ne = nv_midi_n_events(m);
             double secs = atof(opt(argc, argv, "seconds", "0").c_str());
             if (secs <= 0)
@@ -481,9 +492,23 @@ int nv_host::run(int argc, char **argv)
                 {
                     std::lock_guard<std::mutex> lk(cmu);
                     nc = (int)caches.size();
+                    if (getenv("NV_PATCH_SIZES")) {         // (each patch's bytes: examples/mem_measure.py)
+                        double tot = 0;
+                        for (const auto &kv : caches) {
+                            const double mb = nv_tcache_bytes(kv.second) / 1048576.0;
+                            long nt = 0;
+                            long long rows = 0;
+                            nv_tcache_shape(kv.second, &nt, &rows);
+                            tot += mb;
+                            fprintf(stderr, "nvlive: patch %d (%s%d var %d): %.1f MB, %ld templates, %lld rows\n", kv.first,
+                                    kv.first & 128 ? "drums " : "program ", kv.first & 127, kv.first >> 8, mb, nt, rows);
+                        }
+                        fprintf(stderr, "nvlive: patches %.1f MB in all\n", tot);
+                    }
                 }
                 fprintf(stderr, "nvlive: patches: %d kept, %d freed, %d let go and still reached\n", nc,
                         cache_freed + nv_part_cache_reap(part), nv_part_cache_retiring(part));
+                fprintf(stderr, "nvlive: %ld note(s) asked of a template not built\n", nv_part_misses(part));
             }
             FILE *wf = fopen(argv[i + 2], "wb");
             if (!wf)

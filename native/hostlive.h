@@ -85,6 +85,8 @@ void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double 
                     double xdec_nepers, double SR);
 long nv_tcache_warm(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp);
 long nv_tcache_warm_p(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp, long *done);
+long nv_tcache_warm_b(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp, long *done,
+                      unsigned oct, long long limit, long long *bytes);
 void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigned long long *choke,
                     const int *skind, const double *spar, double oneshot_floor_db);
 void nv_part_drums(void *h, int program, const unsigned long long *choke);
@@ -161,8 +163,10 @@ void nv_part_room_reap(void *h);
 void nv_part_cache_retire(void *h, void *cache, const void *const *ts, long n);
 int nv_part_cache_reap(void *h);
 int nv_part_cache_retiring(void *h);
+long nv_part_misses(void *h);
 void nv_tcache_free(void *h);
 long long nv_tcache_bytes(void *h);
+void nv_tcache_shape(void *h, long *ntmpl, long long *rows);
 long nv_tcache_templates(void *h, const void **out, long cap);
 long nv_tcache_room_q(void *h, double *out, long cap);
 long nv_room_tail_ir(const double *sp, const double *bq, int has_bq, int sr, int seed, double **out);
@@ -571,6 +575,103 @@ struct Midi {
 // raw MIDI bytes from a device file: running status; note-on at velocity 0 a
 // note-off; channel aftertouch type 3, a key's polytouch 7; an exclusive (F0 .. F7) type 6, its
 // bytes; realtime and the other system messages skipped
+// A FILE's OCTAVES (A5: playing a file, only the octaves its notes use are
+// built -- nv_host::file_octaves): each program's mask of octaves (note /
+// 12) from the notes each channel plays under it, a GS Reset or GM System On
+// putting every channel back to program 0; the drum sets' one mask, every
+// drum channel's notes (10 of each port, and a part GS sets to a drum map),
+// for every set. Widened by the furthest any key shift in the file goes
+// (GS master and part key shift, RPN coarse tuning). out[0..127] the
+// programs', out[128..255] the drum sets'; 0: not in the file (every
+// octave built, as for a program the file never asks for).
+// merged: one melodic part listening on every channel (nvlive --test's, a
+// keyboard's ALL CH) -- a program change on any channel its program, as
+// nv_host::asked has it; else a part a channel (the Files card's)
+inline void file_octave_masks(void *m, unsigned *out, bool merged = false)
+{
+    for (int i = 0; i < 256; i++)
+        out[i] = 0;
+    int prog[64] = {}, prev[64], rpn_m[64], rpn_l[64];
+    double pc_t[64];
+    bool drum[64] = {};
+    for (int c = 0; c < 64; c++) {
+        drum[c] = c % 16 == 9;
+        rpn_m[c] = rpn_l[c] = 127;
+        prev[c] = 0;
+        pc_t[c] = -1e9;
+    }
+    std::vector<std::pair<int, int>> notes;     // (channel's program or -1 drums, note)
+    int shift = 0;
+    std::vector<uint8_t> x(4096);
+    const int ne = nv_midi_n_events(m);
+    for (int i = 0; i < ne; i++) {
+        int iv[4];
+        double t;
+        nv_midi_event(m, i, iv, &t);
+        // (the channel as the engine hears it: a two-port file's port B on
+        // port A's channels, as live merges them -- the two-port gap)
+        const int type = iv[0], ch = iv[1] & 15;
+        if (type == 6) {
+            const int n = nv_midi_sysex(m, iv[2], x.data(), (int)x.size());
+            if (n >= 8 && x[0] == 0x41 && x[2] == 0x42 && x[3] == 0x12) {
+                const int a0 = x[4], a1 = x[5], a2 = x[6], v = x[7];
+                if (a0 == 0x40 && a1 == 0x00 && a2 == 0x7F) {           // (GS Reset)
+                    for (int c = 0; c < 64; c++) {
+                        prev[c] = prog[c];
+                        pc_t[c] = t;
+                        prog[c] = 0;
+                        drum[c] = c % 16 == 9;
+                    }
+                } else if (a0 == 0x40 && (a1 & 0xF0) == 0x10 && a2 == 0x15) {   // (a part's rhythm mode)
+                    const int b = a1 & 15, c = b == 0 ? 9 : b <= 9 ? b - 1 : b;
+                    drum[c] = v != 0;
+                } else if (a0 == 0x40 && ((a1 & 0xF0) == 0x10 && a2 == 0x16 || a1 == 0x00 && a2 == 0x05)) {
+                    shift = std::max(shift, std::abs(v - 0x40));         // (a key shift)
+                }
+            } else if (n >= 4 && x[0] == 0x7E && x[2] == 0x09 && x[3] == 0x01) {   // (GM System On)
+                for (int c = 0; c < 64; c++) {
+                    prev[c] = prog[c];
+                    pc_t[c] = t;
+                    prog[c] = 0;
+                    drum[c] = c % 16 == 9;
+                }
+            }
+        } else if (type == 5) {
+            // (a change heard from the next block -- a note at its moment plays
+            // the program before: within half a second, both have its octave)
+            const int pc = merged ? 0 : ch;
+            prev[pc] = prog[pc];
+            pc_t[pc] = t;
+            prog[pc] = iv[2] & 127;
+        } else if (type == 2) {
+            if (iv[2] == 101)
+                rpn_m[ch] = iv[3];
+            else if (iv[2] == 100)
+                rpn_l[ch] = iv[3];
+            else if (iv[2] == 6 && rpn_m[ch] == 0 && rpn_l[ch] == 2)
+                shift = std::max(shift, std::abs(iv[3] - 64));          // (RPN coarse tuning)
+        } else if (type == 0 && iv[3] > 0) {         // (the reader's: 0 a note-on, 1 a note-off)
+            const int pc = merged ? 0 : ch;
+            notes.push_back({drum[ch] ? -1 : prog[pc], iv[2] & 127});
+            if (!drum[ch] && t - pc_t[pc] < 0.5 && prev[pc] != prog[pc])
+                notes.push_back({prev[pc], iv[2] & 127});
+        }
+    }
+    shift = std::min(shift, 48);
+    unsigned drums = 0;
+    for (const auto &pn : notes) {
+        unsigned m_ = 0;
+        for (int k = std::max(0, pn.second - shift); k <= std::min(127, pn.second + shift); k += 1)
+            m_ |= 1u << (k / 12);
+        if (pn.first < 0)
+            drums |= m_;
+        else
+            out[pn.first] |= m_;
+    }
+    for (int i = 128; i < 256; i++)
+        out[i] = drums;
+}
+
 struct MidiParse {
     int status = 0, need = 0, got = 0;
     uint8_t d[2];
@@ -1039,6 +1140,37 @@ struct nv_host {
     std::map<int, long long> cache_used;
     std::map<void *, long long> cache_bytes;
     long long cache_tick = 0, cache_cap = 256LL << 20;
+    // THE PATCHES' BUDGET (A5: iOS ends an app over its memory): the bytes
+    // every patch held may take, 0 none (--patch-budget-mb, NV_PATCH_BUDGET_MB;
+    // the iPad's from its free memory). A build that would pass it stops
+    // where it is and is let go: the part plays on as it was (refused, its
+    // note why). Patches no part plays are kept while they fit, the least
+    // recently used let go first to make room.
+    long long patch_budget = 0;
+    long long trim_to = -1;                     // (cache_trim's cap for one call; -1 its own)
+    std::map<int, long long> built_bytes;       // (each patch's size when last built: the room to make for it)
+    std::string refused;                        // (the builder's: why its last build was refused)
+    // A FILE's OCTAVES (A5: playing a file, only the octaves its notes use are
+    // built): each program's (0..127) and drum set's (128..255) mask of
+    // octaves (note / 12), 0 not in the file -- every one built; set while a
+    // file plays (fileplay), the patches so built finished when it stops
+    std::mutex oct_mu;
+    bool oct_on = false;
+    unsigned oct_mask[256] = {};
+    std::set<int> partial;                      // (cmu: the patches built for a file's octaves)
+    bool fill_req = false;                      // (bmu: finish them -- the file stopped)
+    void file_octaves(const unsigned *m256)
+    {
+        std::lock_guard<std::mutex> lk(oct_mu);
+        oct_on = m256 != nullptr;
+        for (int i = 0; i < 256; i++)
+            oct_mask[i] = m256 ? m256[i] : 0u;
+        if (!m256) {
+            std::lock_guard<std::mutex> lb(bmu);
+            fill_req = true;
+            bcv.notify_all();
+        }
+    }
     std::vector<std::pair<void *, std::vector<const void *>>> retire_req;
     std::vector<int> pin_keys;
     int cache_freed = 0;

@@ -1,3 +1,4 @@
+#include <functional>
 #include <climits>
 // live.cpp -- the native engine's LIVE side. First piece: a key's TEMPLATE.
 //
@@ -210,10 +211,22 @@ static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int
 // THE DRUM SETS, as a drum part's templates read them (native.kits): each
 // drum program's key's pitch, seat, exclusive class (two words) and
 // gesture (a kind, NV_SPAR numbers)
+// ...SHARED, not copied: views of the export's tables (the host's, read once
+// and never moved), which outlive every cache -- each drum patch held its own
+// copy of every set's, 19 MB a patch (A5: a 28-part file held hundreds of MB)
+template <class T> struct View {
+    const T *p = nullptr;
+    size_t n = 0;
+    const T *data() const { return p; }
+    size_t size() const { return n; }
+    bool empty() const { return n == 0; }
+    const T &operator[](size_t i) const { return p[i]; }
+    void assign(const T *a, const T *b) { p = a; n = (size_t)(b - a); }
+};
 struct Kits {
-    std::vector<double> f0, seat, spar;
-    std::vector<unsigned long long> choke;
-    std::vector<int> skind;
+    View<double> f0, seat, spar;
+    View<unsigned long long> choke;
+    View<int> skind;
 };
 
 }  // namespace live
@@ -2276,6 +2289,27 @@ static size_t tmpl_bytes(const nv::live::Template &T)
     return b;
 }
 
+// (a cache's shape, for the memory report: its templates and their rows, ranks' and stores' included)
+void nv_tcache_shape(void *h, long *ntmpl, long long *rows)
+{
+    const nv::live::Cache *C = (const nv::live::Cache *)h;
+    long n = 0;
+    long long r = 0;
+    std::function<void(const nv::live::Template &)> add = [&](const nv::live::Template &T) {
+        n++;
+        r += T.P;
+        for (const auto *vs : {&T.ranks, &T.jacks, &T.rel, &T.gpool, &T.roll_hit})
+            for (const auto &s : *vs)
+                add(s);
+    };
+    for (const auto &kv : C->tm)
+        add(kv.second);
+    for (const auto &u : C->vstore)
+        add(*u);
+    *ntmpl = n;
+    *rows = r;
+}
+
 long long nv_tcache_bytes(void *h)
 {
     const nv::live::Cache *C = (const nv::live::Cache *)h;
@@ -2314,6 +2348,7 @@ void nv_tcache_leslie(void *h, const double *L, int n) { ((nv::live::Cache *)h)-
 // A DRUM PART'S CACHE: its program the drum set, its keys built on GM's
 // percussion channel from the sets' tables (native.kits: f0, seat, choke,
 // skind, spar), live's ONESHOT_FLOOR_DB
+// (the tables are the caller's, outliving the cache: the export's)
 void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigned long long *choke,
                     const int *skind, const double *spar, double oneshot_floor_db)
 {
@@ -2375,6 +2410,49 @@ long nv_tcache_warm_p(void *h, int program, int lo, int hi, int nb, const int *s
                     n++;
                 }
             }
+    return n;
+}
+
+// ...ON A BUDGET, and only the octaves asked for (A5): oct a mask of the
+// octaves (note / 12) to build, 0 every one -- a file's (its notes'
+// octaves: the rest never asked); limit > 0 the bytes its templates may
+// take (*bytes, as it goes): past it, -1 at once, the cache as it stands
+// for the caller to free (a program refused, not half there). The same
+// templates in the same order as nv_tcache_warm_p's, those built.
+long nv_tcache_warm_b(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp, long *done,
+                      unsigned oct, long long limit, long long *bytes)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    long n = 0;
+    long long b = 0;
+    for (int note = lo; note <= hi; note++) {
+        const bool want = !oct || (oct >> (note / 12) & 1u);
+        for (int bk = 0; bk < nb; bk++)
+            for (int q = 0; q < nsp; q++) {
+                if (done)
+                    __atomic_fetch_add(done, 1L, __ATOMIC_RELAXED);
+                if (!want)
+                    continue;
+                auto k = std::make_tuple(note, bk, speeds[q]);
+                if (C->tm.count(k))
+                    continue;
+                int vel = (int)std::min(127.0, (bk + 0.5) * 128.0 / nb);    // Patch.bucket_vel
+                nv::live::Template T;
+                if (C->build(program, note, vel, speeds[q], T)) {
+                    const long long tb = (long long)tmpl_bytes(T);
+                    if (limit > 0 && b + tb > limit) {      // (refused before it is kept: never past the limit)
+                        if (bytes)
+                            *bytes = b + tb;
+                        return -1;
+                    }
+                    b += tb;
+                    C->tm[k] = std::move(T);
+                    n++;
+                }
+            }
+    }
+    if (bytes)
+        *bytes = b;
     return n;
 }
 

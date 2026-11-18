@@ -450,10 +450,24 @@ struct Player {
             evs.push_back({t, std::move(ev)});
         }
         const unsigned stm = nv_host_stamp_rule(h, m);     // (its stamped channels: a muxed file's)
+        // ITS OCTAVES (A5): only those its notes use built, while it plays --
+        // not where its programs are read another way (the MT-32 family's
+        // tones, an orchestra by its tracks' names): there, every octave
+        std::vector<unsigned> om;
+        if (!mt32_family(md) && md != "names") {
+            om.resize(256);
+            file_octave_masks(m, om.data());
+        }
         nv_midi_free(m);
         busy = true;
         pos = 0.0;
-        th = std::thread([this, h, md, stm, evs = std::move(evs)]() mutable { run(h, md, stm, evs); });
+        th = std::thread([this, h, md, stm, om, evs = std::move(evs)]() mutable {
+            if (!om.empty())
+                h->file_octaves(om.data());
+            run(h, md, stm, evs);
+            if (!om.empty())
+                h->file_octaves(nullptr);       // (its patches finished whole: live play after it)
+        });
     }
 
     void run(nv_host *h, const std::string &md, unsigned stm, std::vector<std::pair<double, Midi>> &evs)

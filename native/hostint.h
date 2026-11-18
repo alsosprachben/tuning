@@ -57,12 +57,13 @@ struct Export {
         std::string name;
         bool reflect = true;
         std::vector<double> spec;
-        std::vector<uint8_t> fields;
+        const uint8_t *fields = nullptr;  // (in the map, or in rooms_buf: every class's ranges)
     };
     std::vector<std::pair<int, int>> room_rng;
     int room_ncls = 0;
     std::vector<double> room_dev;
     std::vector<RoomData> rooms;
+    std::vector<uint8_t> rooms_buf;      // (LROOMS read here only when the export is not mapped)
     std::vector<double> k, freq, trim, pan;
     std::vector<Mapped> classes;          // (each in the map, csz bytes)
     std::vector<int> cmap, kind, fin;     // cmap: the programs' keys, then the drum sets'

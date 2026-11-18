@@ -360,11 +360,29 @@ bool read_export(const char *path, Export &E)
                 bool got6 = ok && fread(r6, 1, 6, f) == 6;
                 if (got6 && !memcmp(r6, "LROOMS", 6)) {
                     long long rl = 0;
-                    std::vector<uint8_t> rb;
+                    // (the block where it lies in the map -- the rooms' class ranges,
+                    // 65 MB, read in place -- else read into E.rooms_buf)
+                    struct RB {
+                        const uint8_t *p = nullptr;
+                        size_t n = 0;
+                        size_t size() const { return n; }
+                        const uint8_t &operator[](size_t i) const { return p[i]; }
+                        bool empty() const { return n == 0; }
+                    } rb;
                     if (fread(&rl, 8, 1, f) == 1 && rl > 0) {
-                        rb.resize((size_t)rl);
-                        if (fread(rb.data(), 1, rb.size(), f) != rb.size())
-                            rb.clear();
+                        const long at0 = ftell(f);
+                        if (const unsigned char *m = in_map(at0, (size_t)rl)) {
+                            rb.p = m;
+                            rb.n = (size_t)rl;
+                            if (fseek(f, rl, SEEK_CUR) != 0)
+                                rb.n = 0;
+                        } else {
+                            E.rooms_buf.resize((size_t)rl);
+                            if (fread(E.rooms_buf.data(), 1, E.rooms_buf.size(), f) == E.rooms_buf.size()) {
+                                rb.p = E.rooms_buf.data();
+                                rb.n = E.rooms_buf.size();
+                            }
+                        }
                     }
                     size_t at = 0;
                     auto i32 = [&]() { int v = 0; if (at + 4 <= rb.size()) memcpy(&v, &rb[at], 4); at += 4; return v; };
@@ -396,7 +414,7 @@ bool read_export(const char *path, Export &E)
                             if (rd.reflect) {
                                 size_t nb = (size_t)per * E.room_ncls;
                                 if (at + nb <= rb.size())
-                                    rd.fields.assign(rb.begin() + at, rb.begin() + at + nb);
+                                    rd.fields = rb.p + at;
                                 at += nb;
                             }
                             E.rooms.push_back(std::move(rd));
@@ -526,13 +544,19 @@ int nv_host::open(int argc, char **argv)
     for (std::string *lp : {&E.libs[0], &E.libs[1], &E.libs[2], &E.gpu_lib, &E.gpu_damp_lib, &E.conv_lib, &E.lobe_lib})
         *lp = nv_reloc_lib(*lp);
     E.gpu_dir = nv_reloc_kernels(E.gpu_dir);
-    // each class's organ, its table here (the export's pointer was the exporter's)
-    for (size_t i = 0; i < E.classes.size(); i++)
-        ((NoteClass *)E.classes[i].data())->organ = E.cls_organ[i] >= 0 ? &E.organs[E.cls_organ[i]] : nullptr;
-    for (size_t i = 0; i < E.classes.size(); i++) {     // a struck layer's class (sl_idx)
+    // each class's organ, its table here (the export's pointer was the exporter's),
+    // and a struck layer's class (sl_idx) -- WRITTEN ONLY WHERE IT CHANGES: the
+    // classes lie in the mapped export, and a page written is the process's own
+    // from then on (copy on write: iOS counts it); most classes have neither
+    for (size_t i = 0; i < E.classes.size(); i++) {
         NoteClass *nc = (NoteClass *)E.classes[i].data();
-        nc->sl = nc->sl_on && nc->sl_idx >= 0 && nc->sl_idx < (int)E.classes.size()
-                 ? (const NoteClass *)E.classes[nc->sl_idx].data() : nullptr;
+        const OrganSpec *org = E.cls_organ[i] >= 0 ? &E.organs[E.cls_organ[i]] : nullptr;
+        if (nc->organ != org)
+            nc->organ = org;
+        const NoteClass *sl = nc->sl_on && nc->sl_idx >= 0 && nc->sl_idx < (int)E.classes.size()
+                              ? (const NoteClass *)E.classes[nc->sl_idx].data() : nullptr;
+        if (nc->sl != sl)
+            nc->sl = sl;
     }
     SR = E.k[K_SR];
     BLK = (long long)E.k[K_BLK];
@@ -1270,6 +1294,52 @@ int nv_host::open(int argc, char **argv)
         raga_for(c, prog, dr);
         if (var)
             nv_tcache_set_var(c, var);
+        // ITS ROOM (A5): with a budget, the patches no part plays let go first;
+        // the bytes left are this one's to take
+        long long limit = 0;
+        if (patch_budget > 0) {
+            // (the least recently used let go, as far as this one took when last built)
+            long long want_ = 0;
+            {
+                std::lock_guard<std::mutex> lk(cmu);
+                auto wb = built_bytes.find(key);
+                want_ = wb != built_bytes.end() ? wb->second : 0;
+            }
+            trim_to = std::max(0LL, patch_budget - want_);
+            cache_trim({});
+            trim_to = -1;
+            long long held_ = 0;
+            {
+                std::lock_guard<std::mutex> lk(cmu);
+                for (const auto &kv : caches) {
+                    auto b = cache_bytes.find(kv.second);
+                    if (b == cache_bytes.end())
+                        b = cache_bytes.emplace(kv.second, nv_tcache_bytes(kv.second)).first;
+                    held_ += b->second;
+                }
+            }
+            limit = std::max(1LL, patch_budget - held_);
+        }
+        // ...and A FILE's OCTAVES, while one plays (0: every octave)
+        unsigned oct = 0;
+        {
+            std::lock_guard<std::mutex> lk(oct_mu);
+            if (oct_on)
+                oct = oct_mask[(dr ? 128 : 0) + (prog & 127)];
+        }
+        if (getenv("NV_PATCH_SIZES"))
+            fprintf(stderr, "nvlive: building %s %d var %d: octaves %03x%s\n", dr ? "drum set" : "program", prog & 127, var, oct,
+                    oct_on ? "" : " (no file)");
+        long long got = 0;
+        auto refuse = [&]() -> void * {
+            nv_tcache_free(c);
+            char b_[160];
+            snprintf(b_, sizeof b_, "needs more than the %.0f MB left of the patches' %.0f MB: the part plays on as it was",
+                     limit / 1048576.0, patch_budget / 1048576.0);
+            refused = std::string(dr ? "drum set " : "program ") + std::to_string(prog & 127) + " " + b_;
+            __atomic_store_n(&bp_total, 0L, __ATOMIC_RELEASE);
+            return nullptr;
+        };
         // (its progress, for the panel: every key, bucket and speed it warms)
         auto begin = [&](long total) {
             std::lock_guard<std::mutex> lk(bmu);
@@ -1283,7 +1353,8 @@ int nv_host::open(int argc, char **argv)
                            E.kit_spar.data(), 100.0);
             int nsp[1] = {-1};
             begin(128);
-            nv_tcache_warm_p(c, prog, 0, 127, 1, nsp, 1, &bp_done);
+            if (nv_tcache_warm_b(c, prog, 0, 127, 1, nsp, 1, &bp_done, oct, limit, &got) < 0)
+                return refuse();
         } else {
             if (!E.les.empty())
                 nv_tcache_leslie(c, E.les.data(), (int)E.les.size());
@@ -1296,7 +1367,8 @@ int nv_host::open(int argc, char **argv)
             const int *pq = prec(prog, var);
             int sp[3] = {pq[3], pq[4], pq[5]};
             begin(76L * pq[1] * pq[2]);
-            nv_tcache_warm_p(c, prog & 127, 21, 108, pq[1], sp, pq[2], &bp_done);     // (MELODIC_RANGE)
+            if (nv_tcache_warm_b(c, prog & 127, 21, 108, pq[1], sp, pq[2], &bp_done, oct, limit, &got) < 0)     // (MELODIC_RANGE)
+                return refuse();
             retune(prog);
         }
         __atomic_store_n(&bp_total, 0L, __ATOMIC_RELEASE);
@@ -1308,6 +1380,10 @@ int nv_host::open(int argc, char **argv)
         std::lock_guard<std::mutex> lk(cmu);
         caches[key] = c;
         cache_used[key] = ++cache_tick;
+        if (oct)
+            partial.insert(key);
+        else
+            built_bytes[key] = got;
         return c;
     };
     // PATCHES LET GO (off the audio thread): to the part with their
@@ -1352,11 +1428,16 @@ int nv_host::open(int argc, char **argv)
             long long tot = 0;
             for (const auto &kv : caches) {
                 auto b = cache_bytes.find(kv.second);
-                if (b == cache_bytes.end())
+                if (b == cache_bytes.end()) {
                     b = cache_bytes.emplace(kv.second, nv_tcache_bytes(kv.second)).first;
+                    static const bool say = getenv("NV_PATCH_SIZES") != nullptr;     // (each patch's size, once: mem_measure)
+                    if (say)
+                        fprintf(stderr, "nvlive: patch key %d: %.1f MB\n", kv.first, b->second / 1048576.0);
+                }
                 tot += b->second;
             }
-            while (tot > cache_cap) {
+            const long long cap = trim_to >= 0 ? trim_to : patch_budget > 0 ? std::min(cache_cap, patch_budget) : cache_cap;
+            while (tot > cap) {
                 int drop = -1;
                 long long oldest = LLONG_MAX;
                 for (const auto &kv : caches) {
@@ -1401,6 +1482,13 @@ int nv_host::open(int argc, char **argv)
     };
     if (const char *mb = getenv("NV_PATCH_CACHE_MB"))
         cache_cap = (long long)atof(mb) * (1LL << 20);
+    // THE PATCHES' BUDGET (A5): --patch-budget-mb=N, NV_PATCH_BUDGET_MB (0: none)
+    {
+        std::string pb = opt(argc, argv, "patch-budget-mb", getenv("NV_PATCH_BUDGET_MB") ? getenv("NV_PATCH_BUDGET_MB") : "0");
+        patch_budget = (long long)(atof(pb.c_str()) * 1048576.0);
+        if (patch_budget > 0)
+            fprintf(stderr, "nvlive: the patches' budget, %.0f MB\n", patch_budget / 1048576.0);
+    }
     // swap(): a built program posted to its part (nv_part_swap, done after the
     // next block's events), and its strings where they are another voice's
     // (live._reg_forget: the new voice's bank, or none)
@@ -1679,7 +1767,7 @@ int nv_host::open(int argc, char **argv)
                 per += rg.second;
             for (int c = 0; c < E.room_ncls; c++) {
                 uint8_t *dst = E.classes[c].data();
-                const uint8_t *src = rd->fields.data() + (size_t)per * c;
+                const uint8_t *src = rd->fields + (size_t)per * c;
                 for (const auto &rg : E.room_rng) {
                     memcpy(dst + rg.first, src, rg.second);
                     src += rg.second;
@@ -2422,7 +2510,7 @@ void nv_host::start()
                 std::unique_lock<std::mutex> lk(bmu);
                 bcv.wait_for(lk, std::chrono::milliseconds(100),
                              [&] { return !breq.empty() || !room_req.empty() || !tuner_req.empty() || east_req_set
-                                          || !add_req.empty() || !dreq.empty() || g_stop; });
+                                          || !add_req.empty() || !dreq.empty() || fill_req || g_stop; });
                 rq.swap(breq);
                 builder_busy = !rq.empty() || !room_req.empty() || !tuner_req.empty() || east_req_set || !add_req.empty();
             }
@@ -2487,6 +2575,48 @@ void nv_host::start()
                                               std::chrono::steady_clock::now() - t0).count()) + " ms");
                 }
             }
+            bool fill = false;                          // A FILE STOPPED (A5): its octaves' patches finished
+            {
+                std::lock_guard<std::mutex> lk(bmu);
+                fill = fill_req;
+                fill_req = false;
+            }
+            if (fill) {
+                std::set<int> keys;
+                std::vector<void *> old_;
+                {
+                    std::lock_guard<std::mutex> lk(cmu);
+                    keys.swap(partial);
+                    for (int k_ : keys) {
+                        auto it = caches.find(k_);
+                        if (it != caches.end()) {
+                            old_.push_back(it->second);
+                            caches.erase(it);
+                            cache_used.erase(k_);
+                        }
+                    }
+                }
+                retire(old_);                           // (let go once nothing plays them)
+                int nb_ = 0;
+                for (size_t i = 0; i < pats.size(); i++) {
+                    const PartAt &pa = pats[i];
+                    const int v_ = pa.drums ? 0 : pa.posted_var;
+                    if (pa.gone || !keys.count(cache_key(pa.posted, pa.drums, v_)))
+                        continue;
+                    refused.clear();
+                    void *c = build(pa.posted, pa.drums, v_);
+                    if (!c) {
+                        if (!refused.empty())
+                            note(refused);
+                        continue;
+                    }
+                    std::lock_guard<std::mutex> lk(bmu);
+                    bdone.push_back(std::make_pair(Req{i, pa.posted, pa.drums, v_}, c));
+                    nb_++;
+                }
+                if (nb_)
+                    note("the file's patches finished: " + std::to_string(nb_) + " built whole");
+            }
             std::string tn;                             // A TUNER (livetui's TUNER column), after a room
             {
                 std::lock_guard<std::mutex> lk(bmu);
@@ -2538,9 +2668,10 @@ void nv_host::start()
             }
             for (const PartSpec &sp : adds) {
                 fresh.insert(cache_key(sp.program, sp.drums, sp.var));
+                refused.clear();
                 void *c = build(sp.program, sp.drums, sp.var);
                 if (!c)
-                    note(std::string(sp.drums ? "drum set " : "program ") + std::to_string(sp.program)
+                    note(!refused.empty() ? refused : std::string(sp.drums ? "drum set " : "program ") + std::to_string(sp.program)
                          + " is not native here: no part added");
                 std::lock_guard<std::mutex> lk(bmu);
                 add_done.push_back(std::make_pair(sp, c));
@@ -2558,11 +2689,13 @@ void nv_host::start()
                 }
                 auto t0 = std::chrono::steady_clock::now();
                 fresh.insert(cache_key(rq[q].prog, rq[q].dr, rq[q].var));
+                refused.clear();
                 void *c = build(rq[q].prog, rq[q].dr, rq[q].var);
                 std::string nm = rq[q].dr ? kit_name(rq[q].prog) : E.prog[rq[q].prog].name;
                 if (!c)
-                    note((rq[q].dr ? "drum set " : "program ") + std::to_string(rq[q].prog) + " (" + nm
-                         + ") is not native here: the part plays on");
+                    note(!refused.empty() ? refused
+                                          : (rq[q].dr ? "drum set " : "program ") + std::to_string(rq[q].prog) + " (" + nm
+                                                + ") is not native here: the part plays on");
                 else if (!had)
                     note("built " + std::to_string(rq[q].prog) + " " + nm + " in "
                          + std::to_string((int)std::chrono::duration<double, std::milli>(

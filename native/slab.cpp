@@ -6335,8 +6335,14 @@ struct Part {
         // (a drum key's own pitch, pan or user set key: its own template)
         const int axis = drum_axis_of(pi, ch, note, speed);
         const nv::live::Template *T = nv_tcache_lookup(cache, sn, bucket(vel), axis);
-        if (!T)
-            return;                         // a miss: live warms it off the audio thread
+        if (!T) {                           // a miss: live warms it off the audio thread
+            misses++;
+            static const bool say = getenv("NV_MISS_TRACE") != nullptr;
+            if (say)
+                fprintf(stderr, "nvlive: miss: channel %d note %d (key %d), program %d%s at sample %lld\n", ch, note, sn,
+                        patches[cur].program, patches[cur].drums ? " (drums)" : "", (long long)n0);
+            return;
+        }
         amp_touch(cur);                     // (its chord changed: the valve's products are stale)
         {
             const NoteClass *skc = nv_tcache_key_class(patches[cur].cache, patches[cur].program, sn);
@@ -14575,6 +14581,8 @@ int nv_part_cache_reap(void *h)
 
 // ...still waiting (the part reaches them), for the panel and the checks
 int nv_part_cache_retiring(void *h) { return (int)((nv::slab::Part *)h)->retiring.size(); }
+// (notes asked of a template not built: live.misses -- a file's octaves' check)
+long nv_part_misses(void *h) { return ((nv::slab::Part *)h)->misses; }
 
 void nv_part_room_reap(void *h)
 {
