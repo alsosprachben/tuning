@@ -407,6 +407,11 @@ def main(argv):
         os.makedirs(opt["keep"], exist_ok=True)
         np.save(os.path.join(opt["keep"], "py.npy"), py)
         np.save(os.path.join(opt["keep"], "nv.npy"), nv)
+    if lv.cb_exceptions:
+        # (live's callback answers an error with a silent block and plays on --
+        # here that is the failure itself, not a difference to count)
+        print("live's callback raised %d times; the last: %s" % (lv.cb_exceptions, lv.last_error))
+        return 1
     d = np.flatnonzero(np.any(py != nv, 1))
     # (its peak: two silences are identical too)
     print("%s (%g s, program %d%s, %s): %d blocks, peak %.3g, %s" % (

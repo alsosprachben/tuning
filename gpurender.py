@@ -236,6 +236,8 @@ class Gpu:
         self.k.set_arg(1, np.int32(per))
         self.k.set_arg(4, np.uint64(n0))
         self.k.set_arg(5, np.int32(1 if send else 0))
+        self.k.set_arg(11, np.int32(frames))       # (the span: the block itself -- a held moment's is
+        self.k.set_arg(12, np.int32(0))            #  native's, rubato; from its first sample: gpu.cpp's)
         lk = self.LK if frames % self.LK == 0 else 1
         cl.enqueue_nd_range_kernel(self.q, self.k, (frames, groups), (lk, self.LG))
         cl.enqueue_copy(self.q, self.res, self.acc)        # blocking: the block is done
@@ -282,6 +284,8 @@ class Gpu:
         k.set_arg(1, np.int32(per))
         k.set_arg(4, np.uint64(n0))
         k.set_arg(5, np.int32(1 if send else 0))
+        k.set_arg(11, np.int32(frames))            # (the span and the offset, as samples() sets them)
+        k.set_arg(12, np.int32(0))
         lk = self.LK if frames % self.LK == 0 else 1
         cl.enqueue_nd_range_kernel(self.q, k, (frames, groups), (lk, self.LG))
         ev = cl.enqueue_copy(self.q, res, st["acc"], is_blocking=False)
