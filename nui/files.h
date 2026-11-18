@@ -130,22 +130,34 @@ inline void draw_files(App &a)
         const char *d0 = getenv("NUI_DIR");
         fl_go(a, F.dir.empty() && d0 ? d0 : F.dir);
     }
-    const float X0 = 34, X1 = 1886, Y0 = 394, Y1 = 1056;
-    const float TX = heading(a, X0, 356, "FILES", "files");
+    // (the iPad's: its card from y 210 to 734, two pages -- choosing the file; playing and rendering it)
+    const bool IP = a.tab;
+    static int page = 0;
+    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = IP ? 728 : 1056, HY = IP ? 224 : 356;
+    const float LH = a.lh(14) + (IP ? 3 : 4), B21 = IP ? 21 : 14, BB = IP ? 44 : 34;
+    const float TX = heading(a, X0, HY, "FILES", "files");
+    if (IP)
+        for (int pg = 0; pg < 2; pg++) {
+            const std::string id = "flpage" + std::to_string(pg);
+            if (button(a, id.c_str(), 300 + pg * 196, 216, 190, 44, pg ? "PLAY" : "CHOOSE", page == pg, true, 21))
+                page = pg;
+        }
+    const bool ok = flag(&F.info, "ok");
     const J *pl = F.f.get("player"), *rd = F.f.get("render");
     const bool playing = flag(pl, "busy"), rendering = flag(rd, "busy");
     if (playing)
-        text(a, a.font, 14, TX, 357, OWN, "playing " + str(pl, "name"));
+        text(a, a.font, 14, IP ? 700 : TX, HY + 1, OWN, fit(a, a.font, 14, "playing " + str(pl, "name"), IP ? 400 : 900));
 
     // THE FOLDERS
-    const float BW = 560;
+    const float BW = IP ? 360 : 560, FR = IP ? 48 : 36, FB = IP ? 44 : 32;
+    if (!IP || page == 0) {
     rect(a, X0, Y0, BW, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
     frame(a, X0, Y0, BW, Y1 - Y0, EDGE, 9, 1);
     heading(a, X0 + 12, Y0 + 10, "FOLDERS", "fl:browse");
     const std::string parent = str(&F.list, "parent"), home = str(&F.list, "home");
-    if (button(a, "flup", X0 + 12, Y0 + 34, 90, 36, "\xe2\x96\xb2 UP", false, !parent.empty()) && !parent.empty())
+    if (button(a, "flup", X0 + 12, Y0 + 34, 90, IP ? 44 : 36, "\xe2\x96\xb2 UP", false, !parent.empty(), B21) && !parent.empty())
         fl_go(a, parent);
-    if (button(a, "flhome", X0 + 108, Y0 + 34, 100, 36, "MUSIC")) {
+    if (button(a, "flhome", X0 + 108, Y0 + 34, 100, IP ? 44 : 36, "MUSIC", false, true, B21)) {
         const std::string m = str(&F.list, "music");
         fl_go(a, m.empty() ? home + "/Music" : m);
     }
@@ -155,16 +167,16 @@ inline void draw_files(App &a)
     // (a long path: its end)
     while (d.size() > 3 && text_w(a, a.font, 14, d) > BW - 240)
         d = "\xe2\x80\xa6" + d.substr(d[0] == '\xe2' ? 4 : 1);
-    text(a, a.font, 14, X0 + 220, Y0 + 45, LCD, d);
+    text(a, a.font, 14, X0 + 220, Y0 + 34 + ((IP ? 44 : 36) - a.lh(14)) / 2, LCD, d);
     const J *es = F.list.get("entries");
     const int ne = es && es->is(J::ARR) ? (int)es->a.size() : 0;
-    const int tap = scroll_list(a, "flentries", X0 + 12, Y0 + 80, BW - 24, Y1 - Y0 - 92, ne, 36, F.scroll, [&](int i, float y) {
+    const int tap = scroll_list(a, "flentries", X0 + 12, Y0 + (IP ? 88 : 80), BW - 24, Y1 - Y0 - (IP ? 100 : 92), ne, FR, F.scroll, [&](int i, float y) {
         const J &e = es->a[(size_t)i];
         const bool dir = flag(&e, "dir");
         const std::string p = F.dir + "/" + str(&e, "name");
         const bool on = p == F.sel;
-        rect(a, X0 + 12, y, BW - 32, 32, on ? LCD : IM_COL32(0x26, 0x2a, 0x2e, 255), 5);
-        text(a, a.font, 14, X0 + 22, y + 9, on ? LCD_BG : dir ? LCD : SILK,
+        rect(a, X0 + 12, y, BW - 32, FB, on ? LCD : IM_COL32(0x26, 0x2a, 0x2e, 255), 5);
+        text(a, a.font, 14, X0 + 22, y + (FB - a.lh(14)) / 2, on ? LCD_BG : dir ? LCD : SILK,
              fit(a, a.font, 14, (dir ? "\xe2\x96\xb8 " : "") + str(&e, "name"), BW - 56));
     });
     if (!ne)
@@ -184,15 +196,16 @@ inline void draw_files(App &a)
         }
     }
 
+    }
     // THE FILE: what it is, the check, the mode
-    const float FX = X0 + BW + 10, FW = 740, PX = FX + FW + 10, PW = X1 - PX;
+    const float FX = X0 + BW + 10, FW = IP ? X1 - FX : 740, PX = IP ? X0 : FX + FW + 10, PW = X1 - PX;
+    if (!IP || page == 0) {
     rect(a, FX, Y0, X1 - FX, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
     frame(a, FX, Y0, X1 - FX, Y1 - Y0, EDGE, 9, 1);
     const float fx_ = heading(a, FX + 12, Y0 + 10, "THE FILE", "fl:file");
     if (!F.sel.empty())
         text(a, a.font, 14, fx_, Y0 + 11, LCD,
              fit(a, a.font, 14, F.sel.substr(F.sel.rfind('/') + 1), FW - 140));
-    const bool ok = flag(&F.info, "ok");
     std::string about;
     if (F.sel.empty())
         about = "Choose a MIDI file on the left.";
@@ -219,13 +232,13 @@ inline void draw_files(App &a)
     float y = Y0 + 36;
     for (const auto &l : wrap(a, a.font, 14, about, FW - 24)) {
         text(a, a.font, 14, FX + 12, y, SILK_DIM, l);
-        y += 18;
+        y += LH;
     }
     const std::string sug = str(&F.info, "suggest");
     if (ok && !sug.empty() && fl_eff() != sug)
         for (const auto &l : wrap(a, a.font, 14, "Worth trying " + fl_mode_label(sug) + ": " + str(&F.info, "suggest_why") + ".", FW - 24)) {
             text(a, a.font, 14, FX + 12, y, OWN, l);
-            y += 18;
+            y += LH;
         }
     y += 8;
     heading(a, FX + 12, y, "MODE", "fl:mode");
@@ -261,7 +274,7 @@ inline void draw_files(App &a)
     if (nf) {
         const std::string t = std::string(F.find_open ? "\xe2\x96\xbe " : "\xe2\x96\xb8 ") + "The file check: " + std::to_string(nf) +
                               " thing" + (nf == 1 ? "" : "s") + " to know";
-        if (button(a, "flfind", FX + 12, y, FW - 24, 34, t))
+        if (button(a, "flfind", FX + 12, y, FW - 24, BB, t))
             F.find_open = !F.find_open;
         y += 40;
         if (F.find_open) {
@@ -272,21 +285,33 @@ inline void draw_files(App &a)
     if (has_rep) {
         const int nr = F.rep.is(J::ARR) ? (int)F.rep.a.size() : 0;
         const std::string t = std::string(F.rep_open ? "\xe2\x96\xbe " : "\xe2\x96\xb8 ") + rt + (nr ? "" : ": nothing to report");
-        if (button(a, "flrep", FX + 12, y, FW - 24, 34, t))
+        if (button(a, "flrep", FX + 12, y, FW - 24, BB, t))
             F.rep_open = !F.rep_open;
         y += 40;
         if (F.rep_open && nr)
             lines_box(a, "flrepbox", FX + 12, y, FW - 24, bh - 8, F.rep, F.scroll_rep);
     }
 
-    // PLAY LIVE
-    rect(a, PX - 6, Y0 + 12, 1, Y1 - Y0 - 24, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
+    }
+    // PLAY LIVE (the iPad's a page of its own, the file named at its top)
+    if (IP && page == 0)
+        return;
+    if (IP) {
+        rect(a, X0, Y0, X1 - X0, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
+        frame(a, X0, Y0, X1 - X0, Y1 - Y0, EDGE, 9, 1);
+    } else
+        rect(a, PX - 6, Y0 + 12, 1, Y1 - Y0 - 24, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
     float py = Y0 + 10;
+    if (IP) {
+        text(a, a.font, 21, PX + 8, py, LCD, F.sel.empty() ? std::string("No file chosen: choose one on the CHOOSE page.")
+                                                         : fit(a, a.font, 21, F.sel.substr(F.sel.rfind('/') + 1), PW - 24));
+        py += a.lh(21) + 14;
+    }
     heading(a, PX + 8, py, "PLAY LIVE", "fl:play");
     py += 26;
-    if (button(a, "flplay", PX + 8, py, 160, 44, "PLAY LIVE", false, ok && !playing) && ok && !playing)
+    if (button(a, "flplay", PX + 8, py, 160, 44, "PLAY LIVE", false, ok && !playing, B21) && ok && !playing)
         fl_take(call(a, "{\"call\":\"file_play\",\"path\":" + jstr(F.sel) + ",\"mode\":" + jstr(F.mode) + "}"));
-    if (button(a, "flstop", PX + 176, py, 110, 44, "STOP", false, playing) && playing)
+    if (button(a, "flstop", PX + 176, py, 110, 44, "STOP", false, playing, B21) && playing)
         fl_take(call(a, "{\"call\":\"file_stop\"}"));
     {
         const double pos = num(pl, "pos"), tot = num(pl, "total") > 0 ? num(pl, "total") : num(&F.info, "total");
@@ -308,7 +333,7 @@ inline void draw_files(App &a)
         }
         for (const auto &l : wrap(a, a.font, 14, st, PW - 24)) {
             text(a, a.font, 14, PX + 8, py, SILK_DIM, l);
-            py += 18;
+            py += LH;
         }
     }
     if (playing || rendering)
@@ -324,11 +349,11 @@ inline void draw_files(App &a)
                             "\",\"whole\":" + (whole ? "1" : "0") + "}"));
     };
     const float rbw = (PW - 24 - 16) / 3;
-    if (button(a, "flheard", PX + 8, py, rbw, 44, "AS HEARD", false, ok && !rendering) && ok && !rendering)
+    if (button(a, "flheard", PX + 8, py, rbw, 44, "AS HEARD", false, ok && !rendering, B21) && ok && !rendering)
         render("heard", false);
-    if (button(a, "flbest", PX + 16 + rbw, py, rbw, 44, "BEST QUALITY", false, ok && !rendering && fx_ok) && ok && !rendering && fx_ok)
+    if (button(a, "flbest", PX + 16 + rbw, py, rbw, 44, "BEST QUALITY", false, ok && !rendering && fx_ok, B21) && ok && !rendering && fx_ok)
         render("best", false);
-    if (button(a, "flrstop", PX + 24 + 2 * rbw, py, rbw, 44, "STOP RENDER", false, rendering) && rendering)
+    if (button(a, "flrstop", PX + 24 + 2 * rbw, py, rbw, 44, "STOP RENDER", false, rendering, B21) && rendering)
         fl_take(call(a, "{\"call\":\"file_render_stop\"}"));
     py += 56;
     {
@@ -341,7 +366,7 @@ inline void draw_files(App &a)
         }
         for (const auto &l : wrap(a, a.font, 14, st, PW - 24)) {
             text(a, a.font, 14, PX + 8, py, SILK_DIM, l);
-            py += 18;
+            py += LH;
         }
         // (a best render that cannot stream: ask)
         const std::string ask = str(rd, "ask");
@@ -351,15 +376,15 @@ inline void draw_files(App &a)
                             (ask == "whole" ? " The whole render holds the entire song in memory, which a long song may not fit in." : "");
             for (const auto &l : wrap(a, a.font, 14, q, PW - 24)) {
                 text(a, a.font, 14, PX + 8, py, OWN, l);
-                py += 18;
+                py += LH;
             }
             float bx = PX + 8;
             if (ask == "whole") {
-                if (button(a, "flwhole", bx, py + 4, 260, 40, "RENDER WHOLE ANYWAY"))
+                if (button(a, "flwhole", bx, py + 4, IP ? 330 : 260, IP ? 44 : 40, "RENDER WHOLE ANYWAY", false, true, B21))
                     render("best", true);
-                bx += 268;
+                bx += IP ? 338 : 268;
             }
-            if (button(a, "flinstead", bx, py + 4, 300, 40, "RENDER AS HEARD INSTEAD"))
+            if (button(a, "flinstead", bx, py + 4, IP ? 380 : 300, IP ? 44 : 40, "RENDER AS HEARD INSTEAD", false, true, B21))
                 render("heard", false);
             py += 52;
         }
@@ -368,15 +393,15 @@ inline void draw_files(App &a)
             py += 6;
             for (const auto &l : wrap(a, a.font, 14, "Saved to " + out, PW - 24)) {
                 text(a, a.font, 14, PX + 8, py, LCD, l);
-                py += 18;
+                py += LH;
             }
         }
     }
     const auto warn = wrap(a, a.font, 14, "Rendering while you play can cause dropouts, since both use the processors; a render that needs more memory than is free beside the engine is stopped.", PW - 24);
-    float wy = Y1 - 12 - warn.size() * 18;
+    float wy = Y1 - 12 - warn.size() * LH;
     for (const auto &l : warn) {
         text(a, a.font, 14, PX + 8, wy, LCD_DIM, l);
-        wy += 18;
+        wy += LH;
     }
 }
 
