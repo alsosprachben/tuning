@@ -265,6 +265,27 @@ inline void chip(App &a, float x, float y, float w, float h, bool on, bool held 
         key_cap(a, x, y, w, h, held, true);
 }
 
+// A LATCHING ROW: a long key that stays in when chosen (a list's item:
+// a scene, a MIDI input) -- in, its edge lit amber
+inline void latch(App &a, float x, float y, float w, float h, bool on)
+{
+    key_cap(a, x, y, w, h, on, true);
+    if (on)
+        dl()->AddRect(P(a, x, y + cap_sink(h)), P(a, x + w, y + h), alpha(LCD, 0.9f), cap_r(h) * a.k, 0, 1.5f * a.k);
+}
+// A SMALL DISPLAY (a typed value, a search, a name): a window sunk in the
+// plate, its dark amber floor; draw its text, then glass() over it
+inline void lcd_window(App &a, float x, float y, float w, float h, bool lit = false)
+{
+    well(a, x, y, w, h, 4, IM_COL32(0x0b, 0x0c, 0x0e, 255));
+    ImDrawList *d = dl();
+    const int i0 = d->VtxBuffer.Size;
+    d->AddRectFilled(P(a, x + 1, y + 1), P(a, x + w - 1, y + h - 1), IM_COL32(255, 255, 255, 255), 3 * a.k);
+    shade_v(d, i0, P(a, 0, y).y, P(a, 0, y + h).y, IM_COL32(0x2e, 0x20, 0x07, 255), IM_COL32(0x1d, 0x14, 0x04, 255));
+    if (lit)
+        d->AddRect(P(a, x + 1, y + 1), P(a, x + w - 1, y + h - 1), alpha(LCD, 0.6f), 3 * a.k, 0, 1.0f * a.k);
+}
+
 // ---- A MODULE: a raised plate of its own (a card's body) -- its shadow on
 // the chassis, brushed, its top edge lit and its bottom dark
 inline void module(App &a, float x, float y, float w, float h, float r)

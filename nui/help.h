@@ -104,7 +104,8 @@ inline void draw_help(App &a)
     // (the canvas's own size: the laptop's, the iPad's)
     const float R = a.W - 34, B = a.H - 34;
     rect(a, 0, 0, a.W, a.H, IM_COL32(0x12, 0x14, 0x17, 255), 0);
-    rect(a, 14, 14, a.W - 28, a.H - 28, PANEL, 10);
+    look::grain(a, 0, 0, a.W, a.H, 0.02f, 0.05f);
+    look::module(a, 14, 14, a.W - 28, a.H - 28, 10);
     // THE TOP: its name, BACK, the search, CLOSE
     text(a, a.bold, 14, 34, 40, LCD, "HELP");
     if (button(a, "hvback", 110, 28, 130, a.tab ? 44 : 42, "\xe2\x97\x80 BACK", false, !H.hist.empty(), a.tab ? 21 : 14) && !H.hist.empty()) {
@@ -112,9 +113,9 @@ inline void draw_help(App &a)
         H.hist.pop_back();
         H.scroll_page = 0;
     }
-    rect(a, 256, 28, 520, 42, LCD_BG, 4);
-    frame(a, 256, 28, 520, 42, H.typing ? LCD : LCD_DIM, 4, 1.5f);
-    text(a, a.font, 21, 268, 38, H.q.empty() ? LCD_DIM : LCD, H.q.empty() ? std::string("Search help") : H.q + (H.typing ? "_" : ""));
+    look::lcd_window(a, 256, 28, 520, 42, H.typing);
+    look::lcd_text(a, 21, 268, 38, H.q.empty() ? LCD_DIM : LCD, H.q.empty() ? std::string("Search help") : H.q + (H.typing ? "_" : ""), !H.q.empty());
+    look::glass(a, 256, 28, 520, 42);
     ImGui::SetCursorScreenPos(P(a, 256, 28));
     if (ImGui::InvisibleButton("hvsearch", ImVec2(520 * a.k, 42 * a.k)))
         H.typing = true;
@@ -338,8 +339,7 @@ inline void draw_help(App &a)
         if (yy > PY + PH || yy + 40 < PY)
             continue;
         if (o.kind) {
-            rect(a, x, yy, o.w, o.h, o.kind == 2 ? BTN : IM_COL32(0x2a, 0x2e, 0x32, 255), o.kind == 2 ? 8 : 5);
-            frame(a, x, yy, o.w, o.h, EDGE, o.kind == 2 ? 8 : 5, 1);
+            look::key_cap(a, x, yy, o.w, o.h, false, true);
             if (o.kind == 2)
                 text_c(a, o.f, o.size, x + o.w / 2, yy + (o.h - o.size) / 2, SILK, o.s);
             else

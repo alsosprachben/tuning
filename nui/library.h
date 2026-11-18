@@ -235,10 +235,10 @@ inline void draw_library(App &a)
     }
     // THE SEARCH and the count
     const float MW = (T ? 1105 : 1886) - MX, SY = T ? 216 : 350, SH = T ? 44 : 46, SW = T ? 330 : 560;
-    rect(a, MX, SY, SW, SH, LCD_BG, 4);
-    frame(a, MX, SY, SW, SH, L.typing ? LCD : LCD_DIM, 4, 1.5f);
-    text(a, a.font, 21, MX + 12, SY + (SH - a.lh(21)) / 2, L.q.empty() ? LCD_DIM : LCD,
-         L.q.empty() ? std::string("Search patches") : L.q + (L.typing ? "_" : ""));
+    look::lcd_window(a, MX, SY, SW, SH, L.typing);
+    look::lcd_text(a, 21, MX + 12, SY + (SH - a.lh(21)) / 2, L.q.empty() ? LCD_DIM : LCD,
+                   L.q.empty() ? std::string("Search patches") : L.q + (L.typing ? "_" : ""), !L.q.empty());
+    look::glass(a, MX, SY, SW, SH);
     ImGui::SetCursorScreenPos(P(a, MX, SY));
     if (ImGui::InvisibleButton("search", ImVec2(SW * a.k, SH * a.k)))
         L.typing = true;

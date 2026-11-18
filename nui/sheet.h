@@ -13,14 +13,13 @@ inline void draw_sheet(App &a)
     App::Sheet &s = a.sheet;
     rect(a, 0, 0, a.W, a.H, IM_COL32(0x0c, 0x0d, 0x0f, 235), 0);
     const float W = 620, H = 720, x = (a.W - W) / 2, y = (a.H - H) / 2;   // (the canvas's own: the laptop's, the iPad's)
-    rect(a, x, y, W, H, PANEL, 12);
-    frame(a, x, y, W, H, LCD_DIM, 12, 1.5f);
+    look::module(a, x, y, W, H, 12);
     text(a, a.bold, 14, x + 24, y + 22, SILK, s.title);
-    text(a, a.font, 21, x + 24, y + 46, LCD, fit(a, a.font, 21, s.now, W - 48));
+    look::lcd_text(a, 21, x + 24, y + 46, LCD, fit(a, a.font, 21, s.now, W - 48));
     text(a, a.font, 14, x + 24, y + 86, SILK_DIM, s.label);
-    rect(a, x + 24, y + 106, W - 48, 60, LCD_BG, 4);
-    frame(a, x + 24, y + 106, W - 48, 60, LCD, 4, 1.5f);
-    text(a, a.font, 35, x + 40, y + 118, LCD, s.typed + "_");
+    look::lcd_window(a, x + 24, y + 106, W - 48, 60, true);
+    look::lcd_text(a, 35, x + 40, y + 118, LCD, s.typed + "_");
+    look::glass(a, x + 24, y + 106, W - 48, 60);
     float hy = y + 176;
     char range[64];
     snprintf(range, sizeof range, "%.*f to %.*f", s.digits, s.lo, s.digits, s.hi);

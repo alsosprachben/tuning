@@ -73,8 +73,7 @@ inline void sc_list(App &a, const char *id, float x, float y, float w, float h, 
         const std::string nm = str(&it, "name");
         const bool on = nm == sel;
         const float iy = y + ys[(size_t)i] - scroll, th = ih + (on ? oh : 0);
-        rect(a, x, iy, w - 8, th, on ? IM_COL32(0x33, 0x2a, 0x16, 255) : IM_COL32(0x26, 0x2a, 0x2e, 255), 7);
-        frame(a, x, iy, w - 8, th, on ? LCD : EDGE, 7, on ? 1.5f : 1);
+        look::latch(a, x, iy, w - 8, th, on);
         text(a, a.font, 21, x + 12, iy + (a.tab ? 7 : 8), LCD, fit(a, a.font, 21, nm, w - 32));
         text(a, a.font, 14, x + 12, iy + (a.tab ? 13 : 16) + a.lh(21), SILK_DIM, fit(a, a.font, 14, say(it), w - 32));
         if (on) {
@@ -82,8 +81,7 @@ inline void sc_list(App &a, const char *id, float x, float y, float w, float h, 
             for (size_t k = 0; k < acts.size(); k++) {
                 const float bx = x + 12 + k * (bw + 8), by = iy + ih;
                 const float bs = a.tab ? 21 : 14;
-                rect(a, bx, by, bw, ab, BTN, 7);
-                frame(a, bx, by, bw, ab, EDGE, 7, 1);
+                look::key_cap(a, bx, by, bw, ab, false, true);
                 text_c(a, a.bold, bs, bx + bw / 2, by + (ab - a.lh(bs)) / 2, SILK, acts[k].first);
                 if (tapped && tap.x >= bx - x && tap.x < bx - x + bw && tap.y >= ys[(size_t)i] + ih && tap.y < ys[(size_t)i] + ih + ab) {
                     dl()->PopClipRect();
@@ -124,13 +122,12 @@ inline void draw_scenes(App &a)
     // A NAME, typed on the screen's own keys (or a keyboard's)
     if (!C.naming.empty()) {
         const float W = IP ? 760 : 900, x = ((IP ? 1133 : 1920) - W) / 2;
-        look::tray(a, x - 20, Y0, W + 40, Y1 - Y0, 10);
-        frame(a, x - 20, Y0, W + 40, Y1 - Y0, LCD_DIM, 10, 1.5f);
+        look::module(a, x - 20, Y0, W + 40, Y1 - Y0, 10);
         const float NY = Y0 + (IP ? 30 : 44), NH = IP ? 48 : 56;
         text(a, a.bold, 14, x, Y0 + (IP ? 10 : 16), SILK, C.naming == "preset_save" ? "SAVE THIS SETUP AS" : "SAVE THE CONTROLS AS");
-        rect(a, x, NY, W, NH, LCD_BG, 4);
-        frame(a, x, NY, W, NH, LCD, 4, 1.5f);
-        text(a, a.font, 28, x + 14, NY + (NH - a.lh(28)) / 2, LCD, C.name + "_");
+        look::lcd_window(a, x, NY, W, NH, true);
+        look::lcd_text(a, 28, x + 14, NY + (NH - a.lh(28)) / 2, LCD, C.name + "_");
+        look::glass(a, x, NY, W, NH);
         ImGuiIO &io = ImGui::GetIO();
         for (int i = 0; i < io.InputQueueCharacters.Size; i++) {
             const ImWchar c = io.InputQueueCharacters[i];
