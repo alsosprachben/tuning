@@ -43,6 +43,7 @@
 #include "mpe.h"               // MPE's zones (tonelib.MpeZones)
 #include "cmx.h"
 #include "rtjoin.h"             // (helpers in the audio workgroup: macOS / iOS)
+#include "team.h"               // (the GPU setup's team: the engine's own threads)
 #include "rubfill.h"            // (the room's part of a held moment)               // the controller matrix (ctrlmatrix)
 #include "nvenv.h"
 
@@ -12132,6 +12133,11 @@ struct Part {
         void *vbm = nullptr, *vmd = nullptr, *vmm = nullptr;
         long gpu_min = 1000;
         int nthr = 4;
+        // ...each build's voice_team_set (team.h's vblock_team), and the team:
+        // nthr members, made on the audio thread at its first block (its
+        // priority, as OpenMP's team had), spinning 0.3 ms between blocks
+        void *ts = nullptr, *tsd = nullptr, *tsm = nullptr;
+        std::unique_ptr<nv::Team> team;
         Table D, C, SB;
         Table D2, C2, SB2;              // the pipeline's second set (its blocks take turns)
         Table D3, C3, SB3;              // ...and a third, at depth 2 (an app's)
@@ -12266,8 +12272,11 @@ struct Part {
         const std::vector<float> *F4 = S.f4.data(), *F4N = S.f4n.data();
         int counts[2] = {0, 0};
         auto t0 = std::chrono::steady_clock::now();
+        void *tset = vb == gp.vbm ? gp.tsm : vb == gp.vbd ? gp.tsd : gp.ts;
+        if (tset && !gp.team)
+            gp.team.reset(new nv::Team(gp.nthr, 300000, true));
         while (true) {
-            int r = ((nv_vblock_fn)vb)(
+            int r = nv::vblock_team(gp.team.get(), tset, gp.nthr, counts, [&](int nthr) { return ((nv_vblock_fn)vb)(
                 (long)n0, (int)span, 1, (int)(S.cap + S.tap_m), S.f8[0].data(), S.f8[1].data(), S.f8[2].data(), F4[0].data(),
                 F4[1].data(), F4[2].data(), gnon.data(), gnoff.data(), F4[3].data(), F4[4].data(), F4[5].data(),
                 F4[6].data(), F4[7].data(), F4[8].data(), F4[9].data(), F4[10].data(), F4[11].data(),
@@ -12279,7 +12288,7 @@ struct Part {
                 MKI.data(), MPK.data(), S.f8[3].data(), S.f8[4].data(), S.f8[5].data(), sh[0], sh[1], sh[2], sh[3],
                 nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, nullptr, nullptr,
                 nullptr, nullptr, 0, S.sw.data(), snd ? 1 : 0, gidx.data(), (int)nact, D.p, C.p,
-                (int)C.n, SB.p, (int)SB.n, gp.nthr, counts, 1);
+                (int)C.n, SB.p, (int)SB.n, nthr, counts, 1); });
             if (r == 0)
                 break;
             if (counts[0] > C.n)
@@ -14319,6 +14328,7 @@ void nv_part_moogx(void *h, void *smx, void *vbm, void *vmd, void *vmm)
     P->gp.vbm = vbm;
     P->gp.vmd = vmd;
     P->gp.vmm = vmm;
+    P->gp.tsm = nv::sym_beside(vbm, "voice_team_set");
 }
 
 void nv_part_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr)
@@ -14326,6 +14336,8 @@ void nv_part_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, vo
     nv::slab::Part *P = (nv::slab::Part *)h;
     auto &g = P->gp;
     g.vb = vb; g.vbd = vbd; g.vds = vds; g.vs = vs; g.cl = cl; g.gpu_min = gpu_min; g.nthr = nthr;
+    g.ts = nv::sym_beside(vb, "voice_team_set");
+    g.tsd = nv::sym_beside(vbd, "voice_team_set");
     int sz[3];
     ((nv_vsizes_fn)vz)(sz);
     g.D.make(1024, sz[0]);

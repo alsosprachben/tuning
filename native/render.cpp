@@ -15,9 +15,12 @@
 // through synth_voice_lobe (-DLESLIE_KERNEL), as synth_partials sends them.
 // No consonant bursts, no master volume curve, no bus, Moog or filter rows.
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <vector>
+
+#include "team.h"
 
 // THE MOOG's columns of a table with one (nv.h's MoogCols, as nvrender passes it)
 typedef struct {
@@ -261,6 +264,24 @@ int nv_render_win(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long 
     }
     if (has_dm && damped.empty())
         has_dm = false;
+    // THE WINDOW's CHUNKS ON THE FILE TEAM (team.h; OpenMP's place): one
+    // kernel call a chunk, each writing only its own samples. A chunk starts at
+    // n0 + c * CHUNK as the kernel's own loop has it, so the output is the
+    // same however many threads took part (a live block: one chunk, here)
+    auto chunked = [&](auto &&k) {
+        const long nch = (wn + CHUNK - 1) / CHUNK;
+        if (nch <= 1) {
+            k(L, R, n0, wn);
+            return;
+        }
+        std::atomic<long> next{0};
+        nv::file_team().run([&](int) {
+            for (long c; (c = next.fetch_add(1)) < nch;) {
+                const long cs = c * CHUNK;
+                k(L + cs, R + cs, n0 + cs, std::min(CHUNK, wn - cs));
+            }
+        });
+    };
     auto call = [&](voice_fn fn, damp_fn dfn, const std::vector<long long> &rows, bool damp) {
         if (rows.empty())
             return;
@@ -302,6 +323,7 @@ int nv_render_win(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long 
                 for (int q = 0; q < 4; q++)
                     g.lob[q][k] = lob[q][rows[k]];
             }
+            chunked([&](float *L, float *R, long n0, long wn) {
             ((lobe_fn)slo)(L, R, n0, wn, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR),
                            F(F_nf), g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA),
                            F(F_aft), F(F_sus), F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav),
@@ -313,7 +335,9 @@ int nv_render_win(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long 
                            FCT ? gfs.data() : nullptr, FCT ? gft.data() : nullptr, FCT ? gfp[0].data() : nullptr,
                            FCT ? gfp[1].data() : nullptr, FCT ? gfp[2].data() : nullptr, FCT, FCT ? fgn : 0, CHUNK,
                            nullptr, nullptr, nullptr);
+            });
         } else if (!damp)
+            chunked([&](float *L, float *R, long n0, long wn) {
             fn(L, R, n0, wn, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR), F(F_nf),
                g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA), F(F_aft), F(F_sus),
                F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav), F(F_tau), F(F_tcut), F(F_gb),
@@ -321,7 +345,9 @@ int nv_render_win(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long 
                g.i[I_cr].data(), G, S, g.i[I_br].data(), BR, BC, BL, mfx, mFT, mKN, mknk, mkb0, nullptr,
                nullptr, mmk, mMPI, mMPC, mMPR, mMKI, mMPK, mw, mp, mpR, sh[0], sh[1],
                sh[2], sh[3], CHUNK, nullptr, nullptr, nullptr);
+            });
         else
+            chunked([&](float *L, float *R, long n0, long wn) {
             dfn(L, R, n0, wn, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL), F(F_aR), F(F_nf),
                 g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr), F(F_logrA), F(F_aft), F(F_sus),
                 F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw), F(F_tbav), F(F_tau), F(F_tcut), F(F_gb),
@@ -330,6 +356,7 @@ int nv_render_win(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long 
                 nullptr, mmk, mMPI, mMPC, mMPR, mMKI, mMPK, mw, mp, mpR, sh[0],
                 sh[1], sh[2], sh[3], CHUNK, nullptr, nullptr, nullptr, g.i[I_dk].data(), F(F_dg), DM, DMO, DMB,
                 DMN);
+            });
     };
     if (has_dm) {
         call((voice_fn)sv, nullptr, plain, false);

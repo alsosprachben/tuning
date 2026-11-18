@@ -1053,7 +1053,6 @@ int nv_host::open(int argc, char **argv)
             long gmin = atol(opt(argc, argv, "gpu-min", "100").c_str());
             gpu_nthr = atoi(opt(argc, argv, "gpu-threads", "4").c_str());
             nv_part_gpu(part, vb, vbd, vds, vs, vz, cl, gmin, gpu_nthr);
-            wg_join_fn = (void (*)(void *, int))dlsym(gl, "voice_wg_join");     // (macOS: its team in the audio workgroup)
             {                               // (the Moog extensions' build of the setup)
                 std::string gm = beside(E.gpu_damp_lib, "libsynthgpudamp_", "libsynthgpumoogx_");
                 void *hm = gm.empty() ? nullptr : dlopen(gm.c_str(), RTLD_NOW | RTLD_LOCAL);
@@ -1926,34 +1925,10 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         explicit RtWatch(void (*g)(int)) : f(g) { if (f) f(1); }
         ~RtWatch() { if (f) f(0); }
     } rt_watch_on(rt_watch);
-    // THE KERNEL ON THIS THREAD ALONE: synth_voice's chunks are an OpenMP
-    // loop, and a block is one chunk -- nothing to share, but handed to a
-    // worker that sleeps (or spins against the GPU's setup threads) it waited
-    // milliseconds: a coupled harpsichord's chord, on the CPU below the GPU's
-    // threshold, ran 10-25 ms a block. Each chunk writes its own samples, so
-    // one thread renders the same bits. Set once, on the thread that renders
-    // (the OpenMP the kernels loaded, found where they put it)
-    static thread_local bool omp_one = false;
-    if (!omp_one) {
-        // ONE OPENMP THREAD for the block's kernels, whichever OpenMP is in
-        // the process -- libgomp on Linux, libomp on macOS. (Asked of libgomp
-        // by name alone, the Mac's libomp was never found: every block could
-        // wake a team of eight workers, at their own priority, slow from
-        // sleep -- a 5 ms block every few seconds, a click, on the M3)
-        omp_one = true;
-        void (*f)(int) = (void (*)(int))dlsym(RTLD_DEFAULT, "omp_set_num_threads");
-        if (!f)
-            for (const char *lib : {"libgomp.so.1", "libomp.dylib", "/opt/homebrew/opt/libomp/lib/libomp.dylib"})
-                if (void *g = dlopen(lib, RTLD_NOW | RTLD_NOLOAD))
-                    if ((f = (void (*)(int))dlsym(g, "omp_set_num_threads")))
-                        break;
-        if (f)
-            f(1);
-    }
-    if (wg_join_fn && gpu_nthr > 1 && wg_seen != nv::rtj::g_gen.load()) {
-        wg_seen = nv::rtj::g_gen.load();       // (the GPU setup's team joins the audio workgroup: here, the
-        wg_join_fn(nv::rtj::g_wg.load(), gpu_nthr);  //  thread voice_block forks it from)
-    }
+    // (No OpenMP here: a block is one kernel chunk, on this thread -- handed
+    // to a worker that slept, a coupled harpsichord's chord ran 10-25 ms a
+    // block -- and the GPU setup's team is the engine's own, team.h, its
+    // members in the audio workgroup themselves.)
     double cu0 = 0.0, cs0 = 0.0;
     if (soft_locks)
         thread_cpu_ms(&cu0, &cs0);

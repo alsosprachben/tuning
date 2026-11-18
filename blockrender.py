@@ -232,7 +232,7 @@ def ensure_lib():
 
 
 # synth_voice's source is synthkernel.c AND the fragments it includes
-KERNEL_PARTS = ("synthkernel.c", "voice_main.inc", "voice_chunk.inc", "voice_partial.inc", "voice_block.inc", "voice_moog.inc",
+KERNEL_PARTS = ("synthkernel.c", "voice_main.inc", "voice_chunk.inc", "voice_partial.inc", "voice_block.inc", "voice_items.inc", "voice_moog.inc",
                 "voice_cell.inc", "voice_noise.inc", "voicedesc.h")
 
 

@@ -20,6 +20,8 @@
 #include <thread>
 #include <vector>
 
+#include "team.h"            // (the descriptors on the engine's own threads)
+
 extern "C" {
 void *nv_cl_new(const char *dir, const int *sizes, char *err, int errlen);
 void nv_cl_free(void *h);
@@ -91,6 +93,7 @@ struct GpuFile {
     long long DESC_BUDGET = 384LL << 20;
     void *cl = nullptr;
     gf_vblock_fn vb = nullptr, vbd = nullptr;
+    void *vts = nullptr, *vtsd = nullptr;   // (their voice_team_set: team.h's vblock_team)
     gf_vdamp_fn vds = nullptr;
     gf_vpack_fn vpack = nullptr;
     int sz[3] = {0, 0, 0};                  // vdesc, vcell, vsb
@@ -141,6 +144,7 @@ struct GpuFile {
         if (!h)
             return "no " + lib + " (blockrender.ensure_gpu_lib builds it)";
         vb = (gf_vblock_fn)dlsym(h, "voice_block");
+        vts = dlsym(h, "voice_team_set");
         vpack = (gf_vpack_fn)dlsym(h, "voice_pack");
         gf_vsizes_fn vz = (gf_vsizes_fn)dlsym(h, "voice_sizes");
         if (!vb || !vpack || !vz)
@@ -150,6 +154,7 @@ struct GpuFile {
         if (hd) {
             vbd = (gf_vblock_fn)dlsym(hd, "voice_block");
             vds = (gf_vdamp_fn)dlsym(hd, "voice_damp_set");
+            vtsd = dlsym(hd, "voice_team_set");
         }
         char err[512] = {0};
         cl = nv_cl_new((kdir.empty() ? dir : kdir).c_str(), sz, err, sizeof err);   // (the kernel's sources: kdir)
@@ -284,7 +289,7 @@ struct GpuFile {
                 fn = vbd;
             }
             for (;;) {
-                int r = fn((long)w0, BLK, nblk, (int)t.P, t.d[0], t.d[1], t.d[2], t.f[F_aL], t.f[F_aR], t.f[F_nf],
+                int r = nv::vblock_team(&nv::file_team(), fn == vb ? vts : vtsd, nthr, counts, [&](int nthr) { return fn((long)w0, BLK, nblk, (int)t.P, t.d[0], t.d[1], t.d[2], t.f[F_aL], t.f[F_aR], t.f[F_nf],
                            t.l[0], t.l[1], t.f[F_fa], t.f[F_re], t.f[F_ch], t.f[F_logr], t.f[F_logrA], t.f[F_aft],
                            t.f[F_sus], t.f[F_cv], t.f[F_cc], t.f[F_crl], t.f[F_sj], t.f[F_csc], t.f[F_cbw],
                            t.f[F_tbav], t.f[F_tau], t.f[F_tcut], t.f[F_gb], t.f[F_gt], t.f[F_gc], t.f[F_vd],
@@ -298,7 +303,7 @@ struct GpuFile {
                            FCT ? t.fsr : nullptr, FCT ? t.fty : nullptr, FCT ? t.fp[0] : nullptr,
                            FCT ? t.fp[1] : nullptr, FCT ? t.fp[2] : nullptr, FCT, FCT ? fgn : 0,
                            sendW ? sendW : &zero_, sendW ? 1 : 0,
-                           active.data(), (int)nact, D.p, C.p, (int)C.n, SB.p, (int)SB.n, nthr, counts, (int)nbk);
+                           active.data(), (int)nact, D.p, C.p, (int)C.n, SB.p, (int)SB.n, nthr, counts, (int)nbk); });
                 if (r == 0)
                     break;
                 if (counts[0] > C.n)
