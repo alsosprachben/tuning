@@ -364,7 +364,10 @@ def _build_objects(units):
                 text = f.read().replace('\\\n', ' ')
         except OSError:
             return None
-        h = hashlib.sha256('\0'.join(cmd).encode())
+        # (the command AS RUN: the toolchain's, its CPU target in place of
+        # -march=native -- stamped as written, an object built before the
+        # target was fixed passed as current, AVX-512 and all)
+        h = hashlib.sha256('\0'.join(_TC.cmd(list(cmd))).encode())
         for path in text.split(':', 1)[1].split() if ':' in text else ():
             try:
                 with open(path, 'rb') as f:
