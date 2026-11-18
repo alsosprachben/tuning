@@ -99,13 +99,14 @@ inline bool scroll_area(App &a, const char *id, float x, float y, float w, float
 
 // WORDS AS BUTTONS flowing along rows: the one hit (else -1); y advanced past them
 inline int flow_buttons(App &a, const std::string &id, float x, float &y, float w, const std::vector<std::string> &words,
-                        const std::vector<bool> &lit, float bh = 30)
+                        const std::vector<bool> &lit, float bh = 30, float ws = 0)
 {
     float cx = x;
     int hit = -1;
-    if (a.tab)                          // (fingers: 44 points the least each way, the words 3x)
+    if (a.tab)                          // (fingers: 44 points the least each way, the words 3x unless asked)
         bh = std::max(bh, 44.0f);
-    const float ws = a.tab ? 21 : 14;
+    if (ws <= 0)
+        ws = a.tab ? 21 : 14;
     for (size_t i = 0; i < words.size(); i++) {
         const float bw = std::max(a.tab ? 44.0f : 0.0f, text_w(a, a.font, ws, words[i]) + 18);
         if (cx > x && cx + bw > x + w) {
