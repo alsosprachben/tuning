@@ -171,28 +171,43 @@ inline void draw_effects(App &a)
     LibUi &L = g_lib;
     if (!L.loaded)
         lib_load(a);
-    const float X0 = 34, X1 = 1886, Y0 = 394;
-    const float TX = heading(a, X0, 356, "EFFECTS", "effects");
+    // (the iPad's: its card from y 210 to 734, three pages -- the insertion's type, its parameters, the system effects)
+    const bool IP = a.tab;
+    static int page = 0;
+    const bool show_type = !IP || page == 0, show_par = !IP || page == 1, show_sys = !IP || page == 2;
+    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, HY = IP ? 224 : 356, Y1 = IP ? 728 : 1056;
+    const float GH = IP ? 44 : 28, GR = GH + 4, LH = a.lh(14) + (IP ? 3 : 4);    // (a choice's height, its row)
+    const float TX = heading(a, X0, HY, "EFFECTS", "effects");
     const J *p = part(a, a.row);
     if (p)
-        text(a, a.font, 14, TX, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(p, "name"));
+        text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(p, "name"), IP ? 160 : 900));
+    if (IP)
+        for (int pg = 0; pg < 3; pg++) {
+            static const char *PN[3] = {"TYPE", "PARAMETERS", "SYSTEM"};
+            const std::string id = "fxpage" + std::to_string(pg);
+            if (button(a, id.c_str(), 340 + pg * 196, 216, 190, 44, PN[pg], page == pg, true, 21))
+                page = pg;
+        }
     const J *x = F.e.get("efx"), *y = F.e.get("sys");
     if (!x || !F.tables)
         return;
-    const float aboutH = 104, YB = 1056 - aboutH - 8;
+    const float aboutH = IP ? 72 : 104, YB = IP ? (page == 0 ? Y1 - aboutH - 8 : Y1) : Y1 - aboutH - 8;
 
     // THE INSERTION EFFECT
-    const float IW = 780, IX = X0;
+    const float IW = IP ? X1 - X0 : 780, IX = X0;
+    if (show_type || show_par) {
     rect(a, IX, Y0, IW, YB - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
     frame(a, IX, Y0, IW, YB - Y0, EDGE, 9, 1);
+    }
     const int msb = (int)num(x, "msb"), lsb = (int)num(x, "lsb");
     const std::string key = std::to_string(msb) + "." + std::to_string(lsb);
     const FxType *type = nullptr;
     for (const FxType &t : F.types)
         if (t.msb == msb && t.lsb == lsb)
             type = &t;
+    if (show_type || show_par) {
     const float ix = heading(a, IX + 12, Y0 + 12, "INSERTION EFFECT", "fx:ins");
-    text(a, a.font, 21, ix, Y0 + 8, LCD, type ? pad2(type->num) + " " + type->name : "00 Thru");
+    text(a, a.font, 21, ix, Y0 + (IP ? 10 : 8), LCD, type ? pad2(type->num) + " " + type->name : "00 Thru");
     // this part on it (every channel the part plays)
     std::vector<int> chans;
     const int pch = p ? (int)num(p, "channel", -1) : 0;
@@ -207,7 +222,7 @@ inline void draw_effects(App &a)
     bool on = true;
     for (int c : chans)
         on = on && std::find(on_it.begin(), on_it.end(), c) != on_it.end();
-    if (button(a, "fxon", IX + IW - 222, Y0 + 6, 210, 34, "THIS PART ON IT", on)) {
+    if (button(a, "fxon", IX + IW - 222, Y0 + 6, 210, IP ? 44 : 34, "THIS PART ON IT", on, true, IP ? 21 : 14)) {
         for (int c : chans)
             efx_send(a, "c", c, on ? 0 : 1);
         std::vector<int> nv;
@@ -230,7 +245,8 @@ inline void draw_effects(App &a)
     std::string pt = pl.empty() ? "No part is on it yet." : "On it: channel" + std::string(pl.find(',') != std::string::npos ? "s " : " ") + pl + ".";
     if (!str(x, "why").empty())
         pt += " Not played live: " + str(x, "why") + ".";
-    text(a, a.font, 14, IX + 12, Y0 + 46, SILK_DIM, fit(a, a.font, 14, pt, IW - 24));
+    text(a, a.font, 14, IX + 12, Y0 + (IP ? 32 : 46), SILK_DIM, fit(a, a.font, 14, pt, IW - (IP ? 260 : 24)));
+    }
     // the families, then the family's types
     if (F.fam < 0) {
         F.fam = 0;
@@ -242,8 +258,9 @@ inline void draw_effects(App &a)
     std::vector<std::string> fn;
     for (const auto &f : F.fams)
         fn.push_back(f.second);
-    const float fy = Y0 + 72;
-    const int hf = choice_grid(a, "fxfam", IX + 12, fy, IW - 24, 4, 28, fn, F.fam);
+    const float fy = Y0 + (IP ? 60 : 72);
+    const int fcols = IP ? 6 : 4;
+    const int hf = show_type ? choice_grid(a, "fxfam", IX + 12, fy, IW - 24, fcols, GH, fn, F.fam) : -1;
     if (hf >= 0)
         F.fam = hf;
     std::vector<const FxType *> shown;
@@ -256,8 +273,8 @@ inline void draw_effects(App &a)
             shown.push_back(&t);
             tn.push_back(pad2(t.num) + " " + t.name);
         }
-    const float ty = fy + 3 * 32 + 10;
-    const int ht = choice_grid(a, "fxtype", IX + 12, ty, IW - 24, 4, 28, tn, lit);
+    const float ty = fy + ((int)fn.size() + fcols - 1) / fcols * GR + (IP ? 8 : 10);
+    const int ht = show_type ? choice_grid(a, "fxtype", IX + 12, ty, IW - 24, 4, GH, tn, lit) : -1;
     if (ht == 0)
         efx_send(a, "t", 0, 0);
     else if (ht > 0)
@@ -268,16 +285,18 @@ inline void draw_effects(App &a)
         F.e.o["efx"].o["lsb"] = sess::integer(ht ? shown[(size_t)ht - 1]->lsb : 0);
     }
     // its parameters, and its sends (a column at the right)
-    const float ky0 = ty + 4 * 32 + 14, kh = YB - ky0 - 8;
-    rect(a, IX + 12, ky0 - 8, IW - 24, 1, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
+    const float ky0 = IP ? Y0 + 64 : ty + 4 * 32 + 14, kh = YB - ky0 - 8;
     const auto pit = F.params.find(key);
-    const float SW_ = 112, PW = IW - 24 - SW_;
-    if (pit == F.params.end() || pit->second.empty()) {
+    const float SW_ = IP ? 140 : 112, PW = IW - 24 - SW_;
+    if (!show_par) {
+    } else if (pit == F.params.end() || pit->second.empty()) {
+        rect(a, IX + 12, ky0 - 8, IW - 24, 1, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
         text(a, a.font, 14, IX + 12, ky0 + 6, SILK_DIM, "Thru: the parts on it play dry. Choose a type.");
     } else {
+        rect(a, IX + 12, ky0 - 8, IW - 24, 1, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
         const auto &ps = pit->second;
         const int cols = 7, rows = std::max(1, ((int)ps.size() + cols - 1) / cols);
-        const float cw = PW / cols, ch = std::min(110.0f, kh / rows);
+        const float cw = PW / cols, ch = std::min(IP ? 120.0f : 110.0f, kh / rows);
         const J *pv_ = x->get("p");
         for (size_t i = 0; i < ps.size(); i++) {
             const FxParam &q = ps[i];
@@ -285,7 +304,7 @@ inline void draw_effects(App &a)
             const int v = fx_val(a, "p" + std::to_string(q.n), ev >= 0 ? ev : q.fresh);
             const float cx = IX + 12 + (i % cols + 0.5f) * cw, cy = ky0 + (i / cols) * ch + 26;
             int picked;
-            const int f = list_knob(a, "fxp" + std::to_string(q.n), cx, cy, 40, q.vals, q.shown, v, q.name, false, cw - 6, picked);
+            const int f = list_knob(a, "fxp" + std::to_string(q.n), cx, cy, IP ? 48 : 40, q.vals, q.shown, v, q.name, false, cw - 6, picked);
             if (f & K_ACTIVE)
                 F.about_of = "efx";
             if (picked != v)
@@ -303,14 +322,14 @@ inline void draw_effects(App &a)
             const int ev = sd && sd->is(J::ARR) && i < (int)sd->a.size() ? (int)sd->a[(size_t)i].d() : 0;
             const int v = fx_val(a, "s" + std::to_string(i), ev);
             int picked;
-            list_knob(a, "fxs" + std::to_string(i), sx + SW_ / 2, ky0 + 20 + i * sh + 22, 36, irange(0, 127), {}, v, SN[i], false, SW_ - 6, picked);
+            list_knob(a, "fxs" + std::to_string(i), sx + SW_ / 2, ky0 + 20 + i * sh + 22, IP ? 44 : 36, irange(0, 127), {}, v, SN[i], false, SW_ - 6, picked);
             if (picked != v)
                 efx_send(a, "s", 0x17 + i, picked, "s" + std::to_string(i));
         }
     }
 
     // THE SYSTEM EFFECTS: reverb, chorus, delay, EQ (GS 40 01 3x/5x, 40 02 0x), two by two
-    if (y) {
+    if (y && show_sys) {
         static const std::vector<std::string> REV = {"Room 1", "Room 2", "Room 3", "Hall 1", "Hall 2", "Plate", "Delay", "Pan Delay"};
         static const std::vector<std::string> CHO = {"Chorus 1", "Chorus 2", "Chorus 3", "Chorus 4", "FB Chorus", "Flanger", "Short Delay", "Short Delay FB"};
         static const std::vector<std::string> DLY = {"Delay 1", "Delay 2", "Delay 3", "Delay 4", "Pan Delay 1", "Pan Delay 2", "Pan Delay 3", "Pan Delay 4", "Delay to Rev", "Pan Repeat"};
@@ -341,7 +360,7 @@ inline void draw_effects(App &a)
         if (at("rev", 3) >= 0)
             boxes[0].knobs.push_back({"Feedback", 0x35, at("rev", 3), 0, 127});
         // (the top row shorter: the reverb's and chorus's knobs one row each; the delay's two)
-        const float SX0 = IX + IW + 8, BW = (X1 - SX0 - 8) / 2, BH1 = 228;
+        const float SX0 = IP ? X0 : IX + IW + 8, BW = (X1 - SX0 - 8) / 2, BH1 = IP ? 238 : 228;
         for (int bi = 0; bi < 4; bi++) {
             const float bx = SX0 + (bi % 2) * (BW + 8), by = bi < 2 ? Y0 : Y0 + BH1 + 8,
                         BH = bi < 2 ? BH1 : YB - by;
@@ -365,7 +384,7 @@ inline void draw_effects(App &a)
                 for (int k = 0; k < 4; k++) {
                     const int v = fx_val(a, "eq" + std::to_string(k), at("eq", (size_t)k));
                     int picked;
-                    const int f = list_knob(a, "eq" + std::to_string(k), bx + 12 + (k + 0.5f) * cw, by + 90, 52, EQ[k].vals,
+                    const int f = list_knob(a, "eq" + std::to_string(k), bx + 12 + (k + 0.5f) * cw, by + (IP ? 80 : 90), 52, EQ[k].vals,
                                             EQ[k].shown, v, EQ[k].name, EQ[k].centred, cw - 6, picked);
                     if (f & K_ACTIVE)
                         F.about_of = "eq";
@@ -377,28 +396,28 @@ inline void draw_effects(App &a)
             const Box &b = boxes[(size_t)bi];
             text(a, a.font, 14, heading(a, bx + 12, by + 10, b.name, std::string("fx:") + b.id), by + 11, LCD, b.cc);
             const int tv = fx_val(a, std::string(b.id) + "type", b.type);
-            const int tcols = bi == 0 ? 4 : 3;     // (the chorus's and delay's names are longer)
-            const int th = choice_grid(a, std::string("st") + b.id, bx + 12, by + 34, BW - 24, tcols, 26, *b.types, tv);
+            const int tcols = IP ? (bi == 2 ? 5 : 4) : bi == 0 ? 4 : 3;     // (the chorus's and delay's names are longer)
+            const int th = choice_grid(a, std::string("st") + b.id, bx + 12, by + 34, BW - 24, tcols, IP ? GH : 26, *b.types, tv);
             if (th >= 0) {
                 sys_send(a, 1, b.lo, th, std::string(b.id) + "type");
                 F.about_of = b.id;
             }
             const int trows = ((int)b.types->size() + tcols - 1) / tcols;
-            float ky = by + 34 + trows * 30 + 6;
+            float ky = by + 34 + trows * (IP ? GR : 30) + 6;
             if (bi == 0 && b.type < 0) {
                 for (const auto &l : wrap(a, a.font, 14, "No GS reverb set: the room is the panel's, " + str(y, "room") + ".", BW - 24)) {
                     text(a, a.font, 14, bx + 12, ky, SILK_DIM, l);
-                    ky += 18;
+                    ky += LH;
                 }
             }
-            const int cols = bi == 1 ? 6 : 5, rows = ((int)b.knobs.size() + cols - 1) / cols;
+            const int cols = IP && bi == 2 ? 9 : bi == 1 ? 6 : 5, rows = ((int)b.knobs.size() + cols - 1) / cols;
             const float cw = (BW - 24) / cols, chh = (by + BH - ky) / std::max(1, rows);
             for (size_t k = 0; k < b.knobs.size(); k++) {
                 const Kn &kn = b.knobs[k];
                 const std::string kid = std::string(b.id) + std::to_string(kn.lo);
                 const int v = fx_val(a, kid, kn.v);
                 int picked;
-                const int f = list_knob(a, kid, bx + 12 + (k % cols + 0.5f) * cw, ky + (k / cols) * chh + 22, 36,
+                const int f = list_knob(a, kid, bx + 12 + (k % cols + 0.5f) * cw, ky + (k / cols) * chh + (IP ? 24 : 22), IP ? 44 : 36,
                                         irange(kn.a, kn.z), {}, v, kn.name, false, cw - 6, picked);
                 if (f & K_ACTIVE)
                     F.about_of = b.id;
@@ -408,8 +427,10 @@ inline void draw_effects(App &a)
         }
     }
 
-    // WHAT IT IS: the insertion type's notes, or the system effect touched
-    const float ay = 1056 - aboutH, aw = X1 - X0;
+    // WHAT IT IS: the insertion type's notes, or the system effect touched (on the iPad, with the type)
+    if (!show_type)
+        return;
+    const float ay = Y1 - aboutH, aw = X1 - X0;
     rect(a, X0, ay, aw, aboutH, IM_COL32(0x1f, 0x22, 0x26, 255), 8);
     std::string title;
     const J *e = nullptr;
@@ -435,16 +456,16 @@ inline void draw_effects(App &a)
         if (const J *ef = L.about.get("effects"))
             e = ef->get(nn.second);
     }
-    text(a, a.bold, 14, X0 + 12, ay + 10, SILK, title);
+    text(a, a.bold, 14, X0 + 12, ay + (IP ? 6 : 10), SILK, title);
     if (e && e->is(J::ARR) && e->a.size() >= 2) {
         const int r = (int)e->a[0].d();
         const J *lv = L.about.get("levels");
         const std::string rt = std::to_string(r) + " \xc2\xb7 " +
                                (lv && lv->is(J::ARR) && r >= 0 && r < (int)lv->a.size() && lv->a[(size_t)r].is(J::STR) ? lv->a[(size_t)r].s : "");
-        text(a, a.font, 14, X1 - 12 - text_w(a, a.font, 14, rt), ay + 10, LCD, rt);
+        text(a, a.font, 14, X1 - 12 - text_w(a, a.font, 14, rt), ay + (IP ? 6 : 10), LCD, rt);
         const auto lines = wrap(a, a.font, 14, e->a[1].is(J::STR) ? e->a[1].s : "", aw - 24);
         for (size_t i = 0; i < lines.size() && i < 4; i++)
-            text(a, a.font, 14, X0 + 12, ay + 32 + i * 18, SILK_DIM,
+            text(a, a.font, 14, X0 + 12, ay + (IP ? 10 : 14) + (i + 1) * LH, SILK_DIM,
                  i == 3 && lines.size() > 4 ? fit(a, a.font, 14, lines[i] + " \xe2\x80\xa6", aw - 24) : lines[i]);
     }
 }
