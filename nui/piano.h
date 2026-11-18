@@ -85,10 +85,25 @@ inline bool pedal_btn(App &a, const char *id, float cx, float y, bool on, const 
     const float w = a.tab ? 64 : 84, h = a.tab ? 110 : 150, x = cx - w / 2, dy = on ? (a.tab ? 4 : 6) : 0;
     ImGui::SetCursorScreenPos(P(a, x, y));
     const bool hit = ImGui::InvisibleButton(id, ImVec2(w * a.k, h * a.k));
-    const ImU32 c = on ? LCD : ImGui::IsItemActive() ? PANEL_HI : CAP;
-    dl()->AddRectFilled(P(a, x, y + dy), P(a, x + w, y + h + dy), c, 30 * a.k, ImDrawFlags_RoundCornersBottom);
-    dl()->AddRectFilled(P(a, x, y + dy), P(a, x + w, y + 20 + dy), c, 10 * a.k, ImDrawFlags_RoundCornersTop);
-    frame(a, x, y + dy, w, h, EDGE, 10, 1);
+    // (a pedal of turned metal, convex across: lit along its crown, darker to
+    // its sides and toward the floor; down, it sinks and its shadow goes;
+    // on, its metal warm with the light)
+    ImDrawList *d = dl();
+    const bool held = ImGui::IsItemActive();
+    if (!on)
+        look::shadow(a, x, y, w, h, 12, 6, 5, 0.6f);
+    const int i0 = d->VtxBuffer.Size;
+    d->AddRectFilled(P(a, x, y + dy), P(a, x + w, y + h + dy), IM_COL32(255, 255, 255, 255), 30 * a.k, ImDrawFlags_RoundCornersBottom);
+    d->AddRectFilled(P(a, x, y + dy), P(a, x + w, y + 20 + dy), IM_COL32(255, 255, 255, 255), 10 * a.k, ImDrawFlags_RoundCornersTop);
+    const ImU32 lo = on ? IM_COL32(0x8a, 0x5e, 0x14, 255) : IM_COL32(0x3a, 0x3e, 0x43, 255),
+                hi = on ? IM_COL32(0xf0, 0xb1, 0x3a, 255) : held ? IM_COL32(0x60, 0x65, 0x6b, 255) : IM_COL32(0x7a, 0x7f, 0x86, 255);
+    look::shade_v(d, i0, P(a, 0, y + dy).y, P(a, 0, y + h + dy).y, hi, lo);
+    // its crown: a band of light along it, a little left of the middle, fading toward the floor
+    const float cx0 = x + w * 0.42f, iy0 = y + dy + 6, iy1 = y + h + dy - 16;
+    const ImU32 c0 = look::grey(1, 0.0f), c1 = look::grey(1, on ? 0.30f : 0.38f), c2 = look::grey(1, on ? 0.10f : 0.12f);
+    d->AddRectFilledMultiColor(P(a, x + 5, iy0), P(a, cx0, iy1), c0, c1, c2, c0);
+    d->AddRectFilledMultiColor(P(a, cx0, iy0), P(a, x + w - 5, iy1), c1, c0, c0, c2);
+    d->AddRect(P(a, x, y + dy), P(a, x + w, y + h + dy), look::grey(0, 0.7f), 12 * a.k, 0, 1.0f * a.k);
     const float LH = a.lh(14) + 3;
     text_c(a, a.bold, 14, cx, y + h + (a.tab ? 10 : 16), on ? LCD : SILK, name);
     const auto ls = wrap(a, a.font, 14, note, a.tab ? 84 : 124);
@@ -122,8 +137,7 @@ inline void draw_piano(App &a)
     const float aboutH = IP ? 76 : 140, Y0 = IP ? 260 : 394, Y1 = (IP ? 728 : 1056) - aboutH - (IP ? 8 : 10);
     const float c1 = IP ? 300 : 430, c3 = IP ? 280 : 400, gap = IP ? 6 : 8, c2 = X1 - X0 - c1 - c3 - 2 * gap;
     auto col = [&](float x, float w, const char *title, const char *key) {
-        rect(a, x, Y0, w, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-        frame(a, x, Y0, w, Y1 - Y0, EDGE, 9, 1);
+        look::tray(a, x, Y0, w, Y1 - Y0, 9);
         return heading(a, x + 12, Y0 + 10, title, key);
     };
 
@@ -186,12 +200,13 @@ inline void draw_piano(App &a)
             if (blk)
                 blacks.push_back({x, w});
             else {
-                rect(a, sx + x, kbY, w - 1, 96 * s, KEY_W, 1.5f);
+                look::white_key(a, sx + x, kbY, w - 1, 96 * s);
                 wi++;
             }
         }
         for (auto &b : blacks)
-            rect(a, sx + b.first, kbY, b.second, 58 * s, KEY_B, 1.5f);
+            look::black_key(a, sx + b.first, kbY, b.second, 58 * s);
+        look::keybed(a, sx, kbY, wi * kw);
         wi = 0;
         for (int i = 0; i < n; i++)
             if (!is_black(21 + i)) {
@@ -271,7 +286,7 @@ inline void draw_piano(App &a)
 
     // WHAT IT IS: the part's patch
     const float ay = (IP ? 728 : 1056) - aboutH, aw = X1 - X0;
-    rect(a, X0, ay, aw, aboutH, IM_COL32(0x1f, 0x22, 0x26, 255), 8);
+    look::tray(a, X0, ay, aw, aboutH, 8);
     const J *p = part(a, a.row);
     const J *e = nullptr;
     if (const J *pr = L.about.get("programs"); pr && p && !flag(p, "drums"))

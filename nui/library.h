@@ -212,8 +212,7 @@ inline void draw_library(App &a)
         static float fam_scroll = 0;
         const int tap = scroll_list(a, "fams", FX, FY, fw + 8, Y1 - FY, (int)fams.size(), fh + 4, fam_scroll, [&](int i, float y) {
             const bool on = !searching && L.fam == fams[(size_t)i].id;
-            rect(a, FX, y, fw, fh, on ? LCD : BTN, 6);
-            frame(a, FX, y, fw, fh, EDGE, 6, 1);
+            look::chip(a, FX, y, fw, fh, on);
             text(a, a.bold, 21, FX + 10, y + (fh - a.lh(21)) / 2, on ? PANEL : SILK, fit(a, a.bold, 21, fams[(size_t)i].label, fw - 20));
         });
         if (tap >= 0) {
@@ -283,7 +282,7 @@ inline void draw_library(App &a)
             const std::string lvl = lv && lv->is(J::ARR) && r >= 0 && r < (int)lv->a.size() && lv->a[(size_t)r].is(J::STR)
                                         ? lv->a[(size_t)r].s : "";
             const float ay = Y1 - aboutH;
-            rect(a, MX, ay, MW, aboutH, IM_COL32(0x1f, 0x22, 0x26, 255), 8);
+            look::tray(a, MX, ay, MW, aboutH, 8);
             text(a, a.bold, 14, MX + 12, ay + 8, SILK, fit(a, a.bold, 14, str(cur, "name"), MW - 400));
             const std::string rt = std::to_string(r) + " \xc2\xb7 " + lvl;
             text(a, a.font, 14, MX + MW - 12 - text_w(a, a.font, 14, rt), ay + 8, LCD, rt);
@@ -346,8 +345,9 @@ inline void draw_library(App &a)
             const bool isc = is_cur(p, cur), fav = L.favs.count(fav_key(p)) > 0;
             if (isc && L.picking == p.pick)
                 L.picking = -1;
-            rect(a, x, y, tw, th, isc ? LCD : BTN, 8);
-            frame(a, x, y, tw, th, L.picking == p.pick ? OWN : EDGE, 8, L.picking == p.pick ? 2.5f : 1.0f);
+            look::chip(a, x, y, tw, th, isc);
+            if (L.picking == p.pick)
+                frame(a, x, y, tw, th, OWN, 8, 2.5f);
             // (the number: a kit's, or the program's with its variation smaller, as the web's <i>)
             const ImU32 nc = isc ? LCD_BG : LCD;
             const float h21 = a.lh(21), h14 = a.lh(14);

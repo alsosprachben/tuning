@@ -118,8 +118,7 @@ inline int flow_buttons(App &a, const std::string &id, float x, float &y, float 
         if (ImGui::InvisibleButton(bid.c_str(), ImVec2(bw * a.k, bh * a.k)))
             hit = (int)i;
         const bool on = i < lit.size() && lit[i];
-        rect(a, cx, y, bw, bh, on ? LCD : ImGui::IsItemActive() ? PANEL_HI : IM_COL32(0x2a, 0x2e, 0x32, 255), 5);
-        frame(a, cx, y, bw, bh, on ? LCD : EDGE, 5, 1);
+        look::chip(a, cx, y, bw, bh, on, ImGui::IsItemActive());
         text_c(a, a.font, ws, cx + bw / 2, y + (bh - a.lh(ws)) / 2, on ? LCD_BG : SILK, words[i]);
         cx += bw + 5;
     }
@@ -248,8 +247,9 @@ inline void draw_tuning(App &a)
         if (y + th < Y0 || y > Y1)
             continue;
         const bool cur = t.t->first == tuner && !building, pend = t.t->first == tuner && building || t.t->first == T.pending;
-        rect(a, x, y, tw, th, cur ? LCD : IM_COL32(0x1f, 0x22, 0x26, 255), 8);
-        frame(a, x, y, tw, th, pend ? LCD : EDGE, 8, pend ? 2.0f : 1.0f);
+        look::chip(a, x, y, tw, th, cur);
+        if (pend)
+            frame(a, x, y, tw, th, LCD, 8, 2.0f);
         text(a, a.font, 14, x + 10, y + (IP ? 6 : 8), cur ? LCD_BG : LCD, fit(a, a.font, 14, t.t->first, tw - 20));
         const auto ls = wrap(a, a.font, 14, t.t->second, tw - 20);
         for (size_t i = 0; i < ls.size() && i < 2; i++)
@@ -262,8 +262,7 @@ inline void draw_tuning(App &a)
     }
     const float SX = X0 + LW + 12, SW = X1 - SX, SH = IP ? Y1 - Y0 : 330;
     if (!IP || page == 0) {
-    rect(a, SX, Y0, SW, SH, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-    frame(a, SX, Y0, SW, SH, EDGE, 9, 1);
+    look::tray(a, SX, Y0, SW, SH, 9);
     const float tsx = heading(a, SX + 12, Y0 + 10, "THE TUNING", "tn:shape");
     const J *shape = T.t.get("shape");
     const double a4 = num(shape, "a4");
@@ -319,8 +318,7 @@ inline void draw_tuning(App &a)
         return;
     // (the iPad's Eastern tuning a page across the card)
     const float EX = IP ? X0 : SX, EW = IP ? X1 - X0 : SW, EY = IP ? Y0 : Y0 + SH + 10;
-    rect(a, EX, EY, EW, Y1 - EY, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-    frame(a, EX, EY, EW, Y1 - EY, EDGE, 9, 1);
+    look::tray(a, EX, EY, EW, Y1 - EY, 9);
     text(a, a.font, 14, heading(a, EX + 12, EY + 10, "EASTERN TUNING", "tn:east"), EY + 11, LCD, "the Indian voices' parts");
     if (!T.east_mine.empty() && ImGui::GetTime() > T.east_until)
         T.east_mine.clear();

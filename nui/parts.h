@@ -84,10 +84,11 @@ inline void draw_parts(App &a)
     const float ky = T ? 270 : 396, kh = T ? 40 : 56;
     for (int k = 0; k < 128; k++)
         if (!is_black(k))
-            rect(a, kb.left(k), ky, kb.ww() - 1, kh, KEY_W, 1.5f);
+            look::white_key(a, kb.left(k), ky, kb.ww() - 1, kh);
     for (int k = 0; k < 128; k++)
         if (is_black(k))
-            rect(a, kb.left(k), ky, kb.right(k) - kb.left(k), kh * 0.62f, KEY_B, 1.5f);
+            look::black_key(a, kb.left(k), ky, kb.right(k) - kb.left(k), kh * 0.62f);
+    look::keybed(a, X0, ky, X1 - X0);
     for (int k = 0; k < 128; k += 12)
         text(a, a.font, 14, kb.left(k) + 3, ky + kh + 3, SILK_DIM, note_name(k));
     // THE LANES: a part each over its keys (taller for few parts)
@@ -160,8 +161,9 @@ inline void draw_parts(App &a)
         const J *p = part(a, i);
         const float x = X0 + i * (sw + gap), cx = x + sw / 2;
         const bool sel = i == a.row, dim = pv(a, i, "muted") != 0 || num(p, "solo") == 2;
-        rect(a, x, sy, sw, sh, sel ? IM_COL32(0x2b, 0x2f, 0x34, 255) : IM_COL32(0x1f, 0x22, 0x26, 255), 8);
-        frame(a, x, sy, sw, sh, sel ? LCD : EDGE, 8, sel ? 2.0f : 1.0f);
+        look::tray(a, x, sy, sw, sh, 8);
+        if (sel)
+            frame(a, x, sy, sw, sh, LCD, 8, 2.0f);
         // the head: a tap selects
         ImGui::SetCursorScreenPos(P(a, x, sy));
         ImGui::PushID(100 + i);
@@ -252,8 +254,9 @@ inline void draw_strips_tab(App &a, float X0, float X1, float sy, float Y1)
         const J *p = part(a, i);
         const float x = X0 + (i - U.first) * (sw + gap), cx = x + sw / 2;
         const bool sel = i == a.row, dim = pv(a, i, "muted") != 0 || num(p, "solo") == 2;
-        rect(a, x, sy, sw, sh, sel ? IM_COL32(0x2b, 0x2f, 0x34, 255) : IM_COL32(0x1f, 0x22, 0x26, 255), 6);
-        frame(a, x, sy, sw, sh, sel ? LCD : EDGE, 6, sel ? 2.0f : 1.0f);
+        look::tray(a, x, sy, sw, sh, 6);
+        if (sel)
+            frame(a, x, sy, sw, sh, LCD, 6, 2.0f);
         ImGui::SetCursorScreenPos(P(a, x, sy));
         ImGui::PushID(100 + i);
         if (ImGui::InvisibleButton("head", ImVec2(sw * a.k, 44 * a.k)))

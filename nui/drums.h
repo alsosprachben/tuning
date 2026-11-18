@@ -154,7 +154,7 @@ inline void draw_drums(App &a)
             const Patch &p = *kits[(size_t)i];
             const bool cur = p.program == kit && drums;
             const bool pend = L.picking == p.pick;
-            rect(a, X0, y, KW - 8, KB, cur ? LCD : IM_COL32(0x1f, 0x22, 0x26, 255), 6);
+            look::chip(a, X0, y, KW - 8, KB, cur);
             if (pend)
                 frame(a, X0, y, KW - 8, KB, LCD, 6, 1.5f);
             const float ty = y + (KB - a.lh(14)) / 2, nx = IP ? 36 : 50;
@@ -265,7 +265,10 @@ inline void draw_drums(App &a)
             D.down_key = -1;
         }
         const bool unset = user && k.name.empty(), sel = D.sel == k.key;
-        rect(a, x, y, pw, ph, unset ? IM_COL32(0x1f, 0x22, 0x26, 255) : CAP, 9);
+        if (unset)
+            look::tray(a, x, y, pw, ph, 9);
+        else
+            look::key_cap(a, x, y, pw, ph, false, true);
         // (lit as it is played: fading over 0.45 s, brighter for a harder hit)
         auto f = D.flash.find(k.key);
         if (f != D.flash.end()) {
@@ -302,7 +305,7 @@ inline void draw_drums(App &a)
     float sy = Y0;
     if (user) {
         const float UH = IP ? 270 : 360;   // (the user set's panel)
-        rect(a, SX, Y0, SW, UH, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
+        look::tray(a, SX, Y0, SW, UH, 9);
         if (D.sel < 0 || !D.sets.is(J::ARR)) {
             text(a, a.font, 14, SX + 12, Y0 + 12, SILK_DIM, "A user set: touch a pad to choose its sound.");
         } else {
@@ -330,7 +333,7 @@ inline void draw_drums(App &a)
             const int ts = scroll_list(a, "uksets", SX + 12, ly, cw, lh, ns, LR, D.list_scroll["uksets"], [&](int i, float y) {
                 const J &x = D.sets.a[(size_t)i];
                 const bool on = (int)x.a[0].d() == bs;
-                rect(a, SX + 12, y, cw - 8, LB, on ? LCD : BTN, 4);
+                look::chip(a, SX + 12, y, cw - 8, LB, on);
                 text(a, a.font, 14, SX + 18, y + (LB - a.lh(14)) / 2, on ? LCD_BG : SILK, fit(a, a.font, 14, x.a[1].s, cw - 20));
             });
             if (ts >= 0)
@@ -340,7 +343,7 @@ inline void draw_drums(App &a)
                 const int tk = scroll_list(a, "ukkeys", SX + 20 + cw, ly, cw, lh, (int)sk.a.size(), LR, D.list_scroll["ukkeys"], [&](int i, float y) {
                     const J &x = sk.a[(size_t)i];
                     const bool on = (int)set->a[0].d() == ss && (int)x.a[0].d() == e.skey;
-                    rect(a, SX + 20 + cw, y, cw - 8, LB, on ? LCD : BTN, 4);
+                    look::chip(a, SX + 20 + cw, y, cw - 8, LB, on);
                     const std::string nn = note_name_sharp((int)x.a[0].d());
                     text(a, a.bold, 14, SX + 26 + cw, y + (LB - a.lh(14)) / 2, on ? LCD_BG : SILK, nn);
                     text(a, a.font, 14, SX + 34 + cw + text_w(a, a.bold, 14, nn), y + (LB - a.lh(14)) / 2, on ? LCD_BG : SILK_DIM,
@@ -363,7 +366,7 @@ inline void draw_drums(App &a)
         }
         sy = Y0 + UH + 8;
     }
-    rect(a, SX, sy, SW, Y1 - sy, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
+    look::tray(a, SX, sy, SW, Y1 - sy, 9);
     if (D.touched < 0) {
         const auto ls = wrap(a, a.font, 14, "Touch a pad for what it is and what it was fitted to.", SW - 24);
         for (size_t i = 0; i < ls.size(); i++)

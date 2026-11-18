@@ -189,25 +189,47 @@ inline void led(App &a, float cx, float cy, float w, float h, bool on, ImU32 col
         shade_v(d, i0, y0, y1, IM_COL32(0x22, 0x18, 0x08, 255), IM_COL32(0x40, 0x2e, 0x10, 255));     // (a dark lens: lit below)
     d->AddRect(P(a, cx - w / 2, cy - h / 2), P(a, cx + w / 2, cy + h / 2), grey(0, 0.6f), h / 2 * a.k, 0, 1.0f * a.k);
 }
+// (a cap's measures by its height: a small chip's shadow and skirt are small)
+inline float cap_r(float h) { return std::min(7.0f, std::max(3.0f, h * 0.18f)); }
+inline float cap_sink(float h) { return h >= 30 ? 2.0f : 1.0f; }
 inline void key_cap(App &a, float x, float y, float w, float h, bool held, bool enabled)
 {
     ImDrawList *d = dl();
-    const float r = 7, sink = held ? 2.0f : 0.0f;
+    const float r = cap_r(h), sink = held ? cap_sink(h) : 0.0f, sk = h >= 30 ? 3.0f : 2.0f;
+    const float sp = std::min(6.0f, h * 0.16f);
     if (!held)
-        shadow(a, x, y, w, h, r, 6, 3, 0.55f);
+        shadow(a, x, y, w, h, r, sp, sp * 0.5f, 0.55f);
     else
-        shadow(a, x, y, w, h, r, 2, 1, 0.5f);
+        shadow(a, x, y, w, h, r, sp * 0.35f, 0.5f, 0.5f);
     y += sink;
     // (its sides: the cap's skirt, darker, showing below the face)
     d->AddRectFilled(P(a, x, y + 2), P(a, x + w, y + h), IM_COL32(0x16, 0x18, 0x1b, 255), r * a.k);
     const int i0 = d->VtxBuffer.Size;
-    d->AddRectFilled(P(a, x, y), P(a, x + w, y + h - 3), IM_COL32(255, 255, 255, 255), r * a.k);
+    d->AddRectFilled(P(a, x, y), P(a, x + w, y + h - sk), IM_COL32(255, 255, 255, 255), r * a.k);
     const ImU32 top = held ? IM_COL32(0x33, 0x37, 0x3c, 255) : IM_COL32(0x45, 0x4a, 0x51, 255),
                 bot = held ? IM_COL32(0x29, 0x2c, 0x30, 255) : IM_COL32(0x2c, 0x30, 0x35, 255);
-    shade_v(d, i0, P(a, 0, y).y, P(a, 0, y + h - 3).y, enabled ? top : mix(top, bot, 0.6f), bot);
+    shade_v(d, i0, P(a, 0, y).y, P(a, 0, y + h - sk).y, enabled ? top : mix(top, bot, 0.6f), bot);
     // its face's top edge catching the light
     d->AddLine(P(a, x + r * 0.8f, y + 1), P(a, x + w - r * 0.8f, y + 1), grey(1, held ? 0.06f : 0.16f), 1.2f * a.k);
     d->AddRect(P(a, x, y), P(a, x + w, y + h), grey(0, 0.75f), r * a.k, 0, 1.0f * a.k);
+}
+// A LIT CAP: a translucent amber cap with its light behind it (a button that
+// is on); glowing on the plate around it
+inline void lit_cap(App &a, float x, float y, float w, float h, bool held, ImU32 col = LCD)
+{
+    ImDrawList *d = dl();
+    const float r = cap_r(h), sink = held ? cap_sink(h) : 0.0f, sk = h >= 30 ? 3.0f : 2.0f;
+    for (int i = 4; i >= 1; i--)        // (its glow)
+        d->AddRectFilled(P(a, x - i * 1.6f, y - i * 1.6f), P(a, x + w + i * 1.6f, y + h + i * 1.6f), alpha(col, 0.06f),
+                         (r + i * 1.6f) * a.k);
+    y += sink;
+    d->AddRectFilled(P(a, x, y + 2), P(a, x + w, y + h), mix(col, IM_COL32(0, 0, 0, 255), 0.45f), r * a.k);
+    const int i0 = d->VtxBuffer.Size;
+    d->AddRectFilled(P(a, x, y), P(a, x + w, y + h - sk), IM_COL32(255, 255, 255, 255), r * a.k);
+    shade_v(d, i0, P(a, 0, y).y, P(a, 0, y + h - sk).y, mix(col, IM_COL32(255, 255, 255, 255), held ? 0.15f : 0.35f),
+            mix(col, IM_COL32(0, 0, 0, 255), 0.08f));
+    d->AddLine(P(a, x + r * 0.8f, y + 1), P(a, x + w - r * 0.8f, y + 1), grey(1, 0.35f), 1.2f * a.k);
+    d->AddRect(P(a, x, y), P(a, x + w, y + h), mix(col, IM_COL32(0, 0, 0, 255), 0.6f), r * a.k, 0, 1.0f * a.k);
 }
 // the front panel's key: acts on release over it; on lights its LED (led: it has one)
 inline bool key(App &a, const char *id, float x, float y, float w, float h, const std::string &label, bool on = false,
@@ -232,6 +254,165 @@ inline bool key(App &a, const char *id, float x, float y, float w, float h, cons
         text_c(a, a.bold, size, x + w / 2, y + sink + (h - lh) / 2, enabled ? SILK : SILK_DIM, label);
     }
     return hit;
+}
+
+// A CHIP: a small key, lit when on (the cards' choice rows and tiles)
+inline void chip(App &a, float x, float y, float w, float h, bool on, bool held = false)
+{
+    if (on)
+        lit_cap(a, x, y, w, h, held);
+    else
+        key_cap(a, x, y, w, h, held, true);
+}
+
+// ---- A MODULE: a raised plate of its own (a card's body) -- its shadow on
+// the chassis, brushed, its top edge lit and its bottom dark
+inline void module(App &a, float x, float y, float w, float h, float r)
+{
+    ImDrawList *d = dl();
+    shadow(a, x, y, w, h, r, 8, 3, 0.6f);
+    const int i0 = d->VtxBuffer.Size;
+    d->AddRectFilled(P(a, x, y), P(a, x + w, y + h), IM_COL32(255, 255, 255, 255), r * a.k);
+    shade_v(d, i0, P(a, 0, y).y, P(a, 0, y + h).y, IM_COL32(0x2b, 0x2f, 0x34, 255), IM_COL32(0x22, 0x25, 0x29, 255));
+    grain(a, x + r * 0.3f, y + r * 0.3f, w - r * 0.6f, h - r * 0.6f, 0.03f, 0.05f);
+    d->AddLine(P(a, x + r, y + 1), P(a, x + w - r, y + 1), grey(1, 0.10f), 1.2f * a.k);
+    d->AddRect(P(a, x, y), P(a, x + w, y + h), grey(0, 0.7f), r * a.k, 0, 1.0f * a.k);
+}
+// ---- A TRAY: a pocket milled into a module (a card's region): its floor a
+// shade darker, shadowed inside its top edge, its bottom lip lit
+inline void tray(App &a, float x, float y, float w, float h, float r)
+{
+    ImDrawList *d = dl();
+    const int i0 = d->VtxBuffer.Size;
+    d->AddRectFilled(P(a, x, y), P(a, x + w, y + h), IM_COL32(255, 255, 255, 255), r * a.k);
+    shade_v(d, i0, P(a, 0, y).y, P(a, 0, y + h).y, IM_COL32(0x1a, 0x1d, 0x20, 255), IM_COL32(0x20, 0x23, 0x27, 255));
+    const ImVec2 p0 = P(a, x, y), p1 = P(a, x + w, y + h);
+    d->PushClipRect(p0, p1, true);
+    for (int i = 0; i < 5; i++) {
+        const float e = (float)i;
+        d->AddRect(P(a, x - 5 + e, y - 5 + e + 2.5f), P(a, x + w + 5 - e, y + h + 5 - e + 2.5f), grey(0, 0.09f),
+                   (r + 5 - e) * a.k, 0, 1.4f * a.k);
+    }
+    d->PopClipRect();
+    d->AddLine(P(a, x + r, y + h + 0.5f), P(a, x + w - r, y + h + 0.5f), grey(1, 0.08f), 1.0f * a.k);
+    d->AddRect(P(a, x, y), P(a, x + w, y + h), grey(0, 0.5f), r * a.k, 0, 1.0f * a.k);
+}
+
+// ---- A SMALL KNOB's CAP: turned aluminium like the dial's, a dark skirt, an
+// engraved pointer at deg (0 straight up, clockwise)
+inline void knob_cap(App &a, float cx, float cy, float r, float deg_ptr)
+{
+    ImDrawList *d = dl();
+    const ImVec2 c = P(a, cx, cy);
+    const float R = r * a.k, deg = 3.14159265f / 180.0f;
+    for (int i = 4; i >= 1; i--)
+        d->AddCircleFilled(ImVec2(c.x + 1 * a.k, c.y + 2.5f * a.k), R + i * 0.9f * a.k, grey(0, 0.07f), 48);
+    {
+        const int i0 = d->VtxBuffer.Size;
+        d->AddCircleFilled(c, R, IM_COL32(255, 255, 255, 255), 64);
+        shade(d, i0, [&](ImVec2 p) {
+            const float lit = 0.5f - 0.5f * (p.y - c.y) / R;
+            return mix(IM_COL32(0x0e, 0x0f, 0x11, 255), IM_COL32(0x3c, 0x40, 0x46, 255), lit);
+        });
+    }
+    const float Rf = R * 0.78f;
+    {
+        const int i0 = d->VtxBuffer.Size;
+        d->AddCircleFilled(c, Rf, IM_COL32(255, 255, 255, 255), 64);
+        const float L = -115 * deg;
+        shade(d, i0, [&](ImVec2 p) {
+            const float dx = p.x - c.x, dy = p.y - c.y;
+            if (dx * dx + dy * dy < 0.0004f * Rf * Rf)
+                return grey(0.60f);
+            const float t = std::atan2(dy, dx) - L;
+            return grey(0.58f + 0.19f * std::cos(2 * t) + 0.05f * std::cos(4 * t) + 0.04f * std::cos(t));
+        });
+    }
+    d->AddCircle(c, Rf, grey(0, 0.45f), 64, 1.0f * a.k);
+    const float t = (deg_ptr - 90) * deg;
+    d->AddLine(ImVec2(c.x + std::cos(t) * Rf * 0.25f, c.y + std::sin(t) * Rf * 0.25f),
+               ImVec2(c.x + std::cos(t) * Rf * 0.92f, c.y + std::sin(t) * Rf * 0.92f), grey(0.08f), std::max(1.5f, 2.2f * a.k));
+}
+
+// ---- A FADER: its slot cut through the plate, its cap ridged for the finger
+inline void fader_slot(App &a, float cx, float y, float h)
+{
+    ImDrawList *d = dl();
+    d->AddRectFilled(P(a, cx - 4, y), P(a, cx + 4, y + h), IM_COL32(0x08, 0x09, 0x0a, 255), 4 * a.k);
+    d->AddRectFilled(P(a, cx - 4, y), P(a, cx + 4, y + 4), grey(0, 0.6f), 4 * a.k);
+    d->AddLine(P(a, cx - 3, y + h + 0.5f), P(a, cx + 3, y + h + 0.5f), grey(1, 0.10f), 1.0f * a.k);
+}
+inline void fader_cap(App &a, float cx, float cy, bool active, ImU32 line)
+{
+    ImDrawList *d = dl();
+    const float x = cx - 24, y = cy - 14, w = 48, h = 28;
+    shadow(a, x, y, w, h, 4, 5, 3, 0.6f);
+    const int i0 = d->VtxBuffer.Size;
+    d->AddRectFilled(P(a, x, y), P(a, x + w, y + h), IM_COL32(255, 255, 255, 255), 4 * a.k);
+    // (its face bowed for the finger: lit above the middle, shadowed below)
+    shade(d, i0, [&](ImVec2 p) {
+        const float v = (p.y - P(a, 0, y).y) / (h * a.k);
+        return mix(active ? IM_COL32(0x40, 0x45, 0x4b, 255) : IM_COL32(0x4c, 0x52, 0x59, 255), IM_COL32(0x22, 0x25, 0x29, 255),
+                   std::fabs(v - 0.35f) * 1.6f);
+    });
+    for (int i = -2; i <= 2; i++) {     // (its ridges)
+        if (i == 0)
+            continue;
+        const float ry = cy + i * 5.0f;
+        d->AddLine(P(a, x + 5, ry), P(a, x + w - 5, ry), grey(0, 0.45f), 1.0f * a.k);
+        d->AddLine(P(a, x + 5, ry + 1), P(a, x + w - 5, ry + 1), grey(1, 0.08f), 1.0f * a.k);
+    }
+    d->AddRectFilled(P(a, cx - 18, cy - 1), P(a, cx + 18, cy + 1), line);
+    d->AddRect(P(a, x, y), P(a, x + w, y + h), grey(0, 0.75f), 4 * a.k, 0, 1.0f * a.k);
+}
+
+// ---- PIANO KEYS: ivory-white with a front lip, black keys standing up from
+// them, their front slope catching the light; the fallboard's shadow over the
+// tops of all (keybed: once, over the whole row, after the keys)
+inline void white_key(App &a, float x, float y, float w, float h, ImU32 base = KEY_W)
+{
+    ImDrawList *d = dl();
+    const int i0 = d->VtxBuffer.Size;
+    d->AddRectFilled(P(a, x, y), P(a, x + w, y + h), IM_COL32(255, 255, 255, 255), 1.5f * a.k);
+    shade_v(d, i0, P(a, 0, y).y, P(a, 0, y + h).y, mix(base, IM_COL32(0x9a, 0x9c, 0x96, 255), 0.25f),
+            mix(base, IM_COL32(255, 255, 255, 255), 0.25f));
+    const float lip = std::max(2.0f, h * 0.06f);
+    d->AddRectFilled(P(a, x, y + h - lip), P(a, x + w, y + h), mix(base, IM_COL32(0x60, 0x62, 0x5e, 255), 0.45f), 1.5f * a.k);
+}
+inline void black_key(App &a, float x, float y, float w, float h, ImU32 base = KEY_B)
+{
+    ImDrawList *d = dl();
+    shadow(a, x, y, w, h, 1.5f, 2.5f, 2.0f, 0.5f);
+    d->AddRectFilled(P(a, x, y), P(a, x + w, y + h), base, 1.5f * a.k);
+    const float slope = std::max(3.0f, h * 0.13f), side = std::max(1.0f, w * 0.12f);
+    // (its top face, lit above; its front slope, lighter)
+    const int i0 = d->VtxBuffer.Size;
+    d->AddRectFilled(P(a, x + side, y), P(a, x + w - side, y + h - slope), IM_COL32(255, 255, 255, 255), 1.0f * a.k);
+    shade_v(d, i0, P(a, 0, y).y, P(a, 0, y + h - slope).y, mix(base, IM_COL32(0, 0, 0, 255), 0.4f),
+            mix(base, IM_COL32(0x60, 0x64, 0x6a, 255), 0.35f));
+    d->AddRectFilled(P(a, x + side, y + h - slope), P(a, x + w - side, y + h - 1), mix(base, IM_COL32(0x80, 0x84, 0x8a, 255), 0.45f),
+                     1.0f * a.k);
+}
+inline void keybed(App &a, float x, float y, float w)
+{
+    dl()->AddRectFilledMultiColor(P(a, x, y), P(a, x + w, y + 7), grey(0, 0.55f), grey(0, 0.55f), grey(0, 0), grey(0, 0));
+}
+
+// ---- A SLIDE SWITCH: its track cut into the plate (lit inside when on), a turned thumb
+inline void switch_(App &a, float cx, float cy, bool on)
+{
+    ImDrawList *d = dl();
+    const float x = cx - 28, y = cy - 13, w = 56, h = 26;
+    d->AddRectFilled(P(a, x, y), P(a, x + w, y + h), on ? mix(LCD, IM_COL32(0, 0, 0, 255), 0.15f) : IM_COL32(0x0a, 0x0b, 0x0c, 255),
+                     h / 2 * a.k);
+    if (on)
+        for (int i = 3; i >= 1; i--)
+            d->AddRectFilled(P(a, x - i * 1.5f, y - i * 1.5f), P(a, x + w + i * 1.5f, y + h + i * 1.5f), alpha(LCD, 0.06f),
+                             (h / 2 + i * 1.5f) * a.k);
+    d->AddRectFilledMultiColor(P(a, x + h / 2, y), P(a, x + w - h / 2, y + 5), grey(0, 0.5f), grey(0, 0.5f), grey(0, 0), grey(0, 0));
+    d->AddRect(P(a, x, y), P(a, x + w, y + h), grey(0, 0.7f), h / 2 * a.k, 0, 1.0f * a.k);
+    d->AddLine(P(a, x + h / 2, y + h + 0.5f), P(a, x + w - h / 2, y + h + 0.5f), grey(1, 0.10f), 1.0f * a.k);
+    knob_cap(a, on ? cx + 14 : cx - 14, cy, 11.5f, on ? 90.0f : -90.0f);
 }
 
 // ---- THE DIAL: a machined aluminium cap -- turned, so its sheen is a cone

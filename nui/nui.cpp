@@ -124,7 +124,7 @@ static void draw(App &a)
                 a.card = CARDS[i][0];
         if (button(a, "help", X + nc * (w + gap), Y, 44, 44, "?", false, true, 21))
             help_open(a, "basics");
-        rect(a, 10, 210, 1113, 524, PANEL, 6.0f);
+        look::module(a, 10, 210, 1113, 524, 6.0f);
     } else {
         draw_display(a);
         draw_keys(a);
@@ -135,7 +135,7 @@ static void draw(App &a)
                 a.card = CARDS[i][0];
         if (button(a, "help", X + nc * (w + gap), Y, 56, 46, "?"))
             help_open(a, "basics");
-        rect(a, 14, 338, 1892, 728, PANEL, 10.0f);
+        look::module(a, 14, 338, 1892, 728, 10.0f);
     }
     piano_card(a, a.card == "piano");   // (the engine pushes the pedals only while it is open)
     drums_card(a, a.card == "drums");   // (...and the kit and its hits)

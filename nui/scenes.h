@@ -124,7 +124,7 @@ inline void draw_scenes(App &a)
     // A NAME, typed on the screen's own keys (or a keyboard's)
     if (!C.naming.empty()) {
         const float W = IP ? 760 : 900, x = ((IP ? 1133 : 1920) - W) / 2;
-        rect(a, x - 20, Y0, W + 40, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 10);
+        look::tray(a, x - 20, Y0, W + 40, Y1 - Y0, 10);
         frame(a, x - 20, Y0, W + 40, Y1 - Y0, LCD_DIM, 10, 1.5f);
         const float NY = Y0 + (IP ? 30 : 44), NH = IP ? 48 : 56;
         text(a, a.bold, 14, x, Y0 + (IP ? 10 : 16), SILK, C.naming == "preset_save" ? "SAVE THIS SETUP AS" : "SAVE THE CONTROLS AS");
@@ -165,8 +165,7 @@ inline void draw_scenes(App &a)
 
     // THE PRESETS: the whole setup
     const float PW = IP ? 440 : 720, SW = IP ? 340 : 600, gap = IP ? 6 : 10, SX = X0 + PW + gap, MX = SX + SW + gap, MW = X1 - MX;
-    rect(a, X0, Y0, PW, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-    frame(a, X0, Y0, PW, Y1 - Y0, EDGE, 9, 1);
+    look::tray(a, X0, Y0, PW, Y1 - Y0, 9);
     text(a, a.font, 14, heading(a, X0 + 12, Y0 + 10, "PRESETS", "sc:presets"), Y0 + 11, LCD,
          fit(a, a.font, 14, "the whole setup: parts, routes, tuning, effects", PW - 130));
     auto parts_say = [&](const J &p) {
@@ -194,8 +193,7 @@ inline void draw_scenes(App &a)
     }
 
     // THE SCENES: each channel's controls
-    rect(a, SX, Y0, SW, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-    frame(a, SX, Y0, SW, Y1 - Y0, EDGE, 9, 1);
+    look::tray(a, SX, Y0, SW, Y1 - Y0, 9);
     text(a, a.font, 14, heading(a, SX + 12, Y0 + 10, "SCENES", "sc:scenes"), Y0 + 11, LCD, fit(a, a.font, 14, "each channel's controls: levels, pans, sends, pedals", SW - 120));
     sc_list(a, "scs", SX + 12, Y0 + 40, SW - 24, Y1 - Y0 - (IP ? 104 : 110), C.s.get("scenes"), C.sel_scene, C.scroll_s,
             [](const J &c) {
@@ -210,8 +208,7 @@ inline void draw_scenes(App &a)
     }
 
     // THE METRONOME: the globals 10 (bpm, 0 off), 11 (its bell every n beats), 12 (its level)
-    rect(a, MX, Y0, MW, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-    frame(a, MX, Y0, MW, Y1 - Y0, EDGE, 9, 1);
+    look::tray(a, MX, Y0, MW, Y1 - Y0, 9);
     heading(a, MX + 12, Y0 + 10, "METRONOME", "sc:metro");
     const J *m = C.s.get("metro");
     auto mv = [&](size_t i) { return m && m->is(J::ARR) && i < m->a.size() ? m->a[i].d() : 0.0; };
@@ -227,8 +224,7 @@ inline void draw_scenes(App &a)
     {
         const float cw = (MW - 24) / 4, ky = Y0 + (IP ? 80 : 90);
         const bool on = bpm > 0;
-        rect(a, MX + 12 + cw / 2 - 28, ky - 15, 56, 30, on ? LCD : IM_COL32(0x15, 0x17, 0x1a, 255), 15);
-        dl()->AddCircleFilled(P(a, on ? MX + 12 + cw / 2 + 13 : MX + 12 + cw / 2 - 13, ky), 11 * a.k, on ? LCD_BG : CAP, 24);
+        look::switch_(a, MX + 12 + cw / 2, ky, on);
         ImGui::SetCursorScreenPos(P(a, MX + 12, ky - 30));
         if (ImGui::InvisibleButton("metroon", ImVec2(cw * a.k, 60 * a.k)))
             gset(10, on ? 0 : C.last_bpm);

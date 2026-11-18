@@ -231,7 +231,13 @@ inline void label_c(App &a, ImFont *f, float size, float cx, float y, ImU32 col,
         text_c(a, f, size, cx, y + i * (size + 2), col, ls[i]);
 }
 
-// A BUTTON (the web's .hb): acts on release over it, as the touch kit's
+}  // namespace nui
+// (the hardware's look: after the primitives above, which it draws with; every
+// file includes app.h first, so this is where look.h is first read)
+#include "look.h"
+namespace nui {
+
+// A BUTTON (the web's .hb): a key cap, lit when on; acts on release over it, as the touch kit's
 inline bool button(App &a, const char *id, float x, float y, float w, float h, const std::string &label, bool on = false,
                    bool enabled = true, float size = 14)
 {
@@ -240,9 +246,13 @@ inline bool button(App &a, const char *id, float x, float y, float w, float h, c
     const bool hit = ImGui::InvisibleButton("b", ImVec2(w * a.k, h * a.k)) && enabled;
     const bool held = ImGui::IsItemActive();
     ImGui::PopID();
-    rect(a, x, y, w, h, on ? LCD : held ? PANEL_HI : BTN, 8.0f);
-    frame(a, x, y, w, h, EDGE, 8.0f, 1.0f);
-    text_c(a, a.bold, size, x + w / 2, y + (h - a.lh(size)) / 2, on ? PANEL : enabled ? SILK : SILK_DIM, label);
+    const bool press = held && enabled;
+    if (on)
+        look::lit_cap(a, x, y, w, h, press);
+    else
+        look::key_cap(a, x, y, w, h, press, enabled);
+    const float ty = y + (press ? look::cap_sink(h) : 0.0f) + (h - a.lh(size)) / 2 - 1;
+    text_c(a, a.bold, size, x + w / 2, ty, on ? IM_COL32(0x26, 0x18, 0x02, 255) : enabled ? SILK : SILK_DIM, label);
     return hit;
 }
 

@@ -111,8 +111,7 @@ inline void draw_control(App &a)
     // THE ON-SCREEN CONTROLS
     const float LW = IP ? X1 - X0 : 900;
     if (!IP || page == 0) {
-    rect(a, X0, Y0, LW, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-    frame(a, X0, Y0, LW, Y1 - Y0, EDGE, 9, 1);
+    look::tray(a, X0, Y0, LW, Y1 - Y0, 9);
     text(a, a.font, 14, heading(a, X0 + 12, Y0 + 10, "ON-SCREEN CONTROLS", "ct:strip"), Y0 + 11, LCD, "sent straight to the engine");
     const float cw = IP ? 124 : 136, cy0 = Y0 + 40, ch_ = C.adding ? (IP ? 214 : 300) : Y1 - Y0 - 52;
     float x = X0 + 12;
@@ -202,8 +201,7 @@ inline void draw_control(App &a)
     if (IP && page == 0)
         return;
     const float RX = IP ? X0 : X0 + LW + 10, RW = X1 - RX, RB = IP ? 44 : 32, LB = IP ? 44 : 30;
-    rect(a, RX, Y0, RW, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-    frame(a, RX, Y0, RW, Y1 - Y0, EDGE, 9, 1);
+    look::tray(a, RX, Y0, RW, Y1 - Y0, 9);
     text(a, a.font, 14, heading(a, RX + 12, Y0 + 10, "ROUTES", "ct:routes"), Y0 + 11, LCD, "the keyboard's controls, rewritten first");
     float ry = Y0 + 40;
     if (!nr) {

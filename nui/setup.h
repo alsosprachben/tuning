@@ -103,8 +103,7 @@ inline void draw_setup(App &a)
     for (const auto &b : {std::pair<float, float>{AX, AW}, {BX, BW}, {CX, CW}}) {
         if ((b.first == AX && b.second == AW && !show_in) || (!(b.first == AX && b.second == AW) && !show_snd))
             continue;
-        rect(a, b.first, Y0, b.second, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-        frame(a, b.first, Y0, b.second, Y1 - Y0, EDGE, 9, 1);
+        look::tray(a, b.first, Y0, b.second, Y1 - Y0, 9);
     }
     auto head = [&](float x, float &y, const char *h, const char *sub, const char *key) {
         const float hx = heading(a, x + 12, y, h, key);

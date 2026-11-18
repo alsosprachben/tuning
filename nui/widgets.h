@@ -64,15 +64,15 @@ inline int knob(App &a, const char *id, float cx, float cy, float size, float &v
         const int n = std::max(2, (int)(seg * (hi - lo) / (A1 - A0)));
         for (int i = 0; i <= n; i++)
             d->PathLineTo(pt(r * 0.86f, lo + (hi - lo) * i / n));
+        d->PathStroke(look::alpha(f & K_ACTIVE ? OWN : LCD, 0.22f), 0, 8.0f * a.k);      // (its glow)
+        for (int i = 0; i <= n; i++)
+            d->PathLineTo(pt(r * 0.86f, lo + (hi - lo) * i / n));
         d->PathStroke(f & K_ACTIVE ? OWN : LCD, 0, 4.0f * a.k);
     }
     for (float t : detents)
         d->AddLine(pt(r * 0.95f, A0 + (A1 - A0) * t), pt(r * 1.02f, A0 + (A1 - A0) * t), SILK_DIM, 1.5f * a.k);
     // the cap and its pointer
-    const ImVec2 c = P(a, cx, cy);
-    d->AddCircleFilled(c, r * 0.64f * a.k, IM_COL32(0x15, 0x17, 0x1a, 255), 40);
-    d->AddCircleFilled(c, r * 0.52f * a.k, CAP, 40);
-    d->AddLine(c, pt(r * 0.48f, av), SILK, 2.5f * a.k);
+    look::knob_cap(a, cx, cy, r * 0.64f, av);
     const auto ls = label.empty() ? std::vector<std::string>{} : label_lines(a, a.bold, 14, label, label_w);
     for (size_t i = 0; i < ls.size(); i++)
         text_c(a, a.bold, 14, cx, cy + r + 4 + i * (a.lh(14) + 2), SILK_DIM, ls[i]);
@@ -100,15 +100,13 @@ inline int fader(App &a, const char *id, float cx, float y, float h, float &v, f
         f |= take_sheet(a, id, t);
         v = std::max(lo, std::min(hi, (float)t));
     }
-    rect(a, cx - 4, y, 8, h, IM_COL32(0x15, 0x17, 0x1a, 255), 4);
-    for (float t : detents) {
+    for (float t : detents) {           // (the detents' marks, printed beside the slot)
         const float ty = y + h - (t - lo) / (hi - lo) * h;
         rect(a, cx - 16, ty - 1, 32, 2, SILK_DIM, 0);
     }
+    look::fader_slot(a, cx, y, h);
     const float cy = y + h - (v - lo) / (hi - lo) * h;
-    rect(a, cx - 24, cy - 14, 48, 28, f & K_ACTIVE ? PANEL_HI : CAP, 4);
-    frame(a, cx - 24, cy - 14, 48, 28, EDGE, 4, 1);
-    rect(a, cx - 18, cy - 1, 36, 2, f & K_ACTIVE ? OWN : LCD, 0);
+    look::fader_cap(a, cx, cy, f & K_ACTIVE, f & K_ACTIVE ? OWN : LCD);
     // (below the cap's reach: at the bottom it hangs 14 past the slot)
     text_c(a, a.font, 14, cx, y + h + 17, f & K_ACTIVE ? OWN : LCD, value);
     text_c(a, a.bold, 14, cx, y + h + 19 + a.lh(14), SILK_DIM, label);

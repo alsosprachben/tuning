@@ -158,8 +158,7 @@ inline int choice_grid(App &a, const std::string &id, float x, float y, float w,
         if (ImGui::InvisibleButton(bid.c_str(), ImVec2(bw * a.k, bh * a.k)))
             hit = (int)i;
         const bool on = (int)i == lit;
-        rect(a, bx, by, bw, bh, on ? LCD : ImGui::IsItemActive() ? PANEL_HI : IM_COL32(0x2a, 0x2e, 0x32, 255), 5);
-        frame(a, bx, by, bw, bh, on ? LCD : EDGE, 5, 1);
+        look::chip(a, bx, by, bw, bh, on, ImGui::IsItemActive());
         text(a, a.font, 14, bx + 7, by + (bh - 14) / 2, on ? LCD_BG : SILK, fit(a, a.font, 14, names[i], bw - 12));
     }
     return hit;
@@ -196,8 +195,7 @@ inline void draw_effects(App &a)
     // THE INSERTION EFFECT
     const float IW = IP ? X1 - X0 : 780, IX = X0;
     if (show_type || show_par) {
-    rect(a, IX, Y0, IW, YB - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-    frame(a, IX, Y0, IW, YB - Y0, EDGE, 9, 1);
+    look::tray(a, IX, Y0, IW, YB - Y0, 9);
     }
     const int msb = (int)num(x, "msb"), lsb = (int)num(x, "lsb");
     const std::string key = std::to_string(msb) + "." + std::to_string(lsb);
@@ -364,8 +362,7 @@ inline void draw_effects(App &a)
         for (int bi = 0; bi < 4; bi++) {
             const float bx = SX0 + (bi % 2) * (BW + 8), by = bi < 2 ? Y0 : Y0 + BH1 + 8,
                         BH = bi < 2 ? BH1 : YB - by;
-            rect(a, bx, by, BW, BH, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-            frame(a, bx, by, BW, BH, EDGE, 9, 1);
+            look::tray(a, bx, by, BW, BH, 9);
             if (bi == 3) {   // THE EQ, of the whole mix
                 text(a, a.font, 14, heading(a, bx + 12, by + 10, "EQ", "fx:eq"), by + 11, LCD, "the whole mix");
                 std::vector<std::string> gsh;
@@ -431,7 +428,7 @@ inline void draw_effects(App &a)
     if (!show_type)
         return;
     const float ay = Y1 - aboutH, aw = X1 - X0;
-    rect(a, X0, ay, aw, aboutH, IM_COL32(0x1f, 0x22, 0x26, 255), 8);
+    look::tray(a, X0, ay, aw, aboutH, 8);
     std::string title;
     const J *e = nullptr;
     if (F.about_of == "efx") {

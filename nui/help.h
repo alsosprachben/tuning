@@ -209,7 +209,7 @@ inline void draw_help(App &a)
         }
         const bool on = r.key == H.cur;
         const float x = NX + (r.indent ? 18 : 0), h = r.sub.empty() ? 32 : 48;
-        rect(a, x, y, NW - 10 - (x - NX), h, on ? LCD : IM_COL32(0x26, 0x2a, 0x2e, 255), 5);
+        look::chip(a, x, y, NW - 10 - (x - NX), h, on);
         text(a, a.font, 14, x + 10, y + 9, on ? LCD_BG : SILK, fit(a, a.font, 14, r.title, NW - 40));
         if (!r.sub.empty())
             text(a, a.font, 14, x + 10, y + 27, on ? LCD_BG : SILK_DIM, fit(a, a.font, 14, r.sub, NW - 40));

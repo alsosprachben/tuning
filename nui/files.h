@@ -151,8 +151,7 @@ inline void draw_files(App &a)
     // THE FOLDERS
     const float BW = IP ? 360 : 560, FR = IP ? 48 : 36, FB = IP ? 44 : 32;
     if (!IP || page == 0) {
-    rect(a, X0, Y0, BW, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-    frame(a, X0, Y0, BW, Y1 - Y0, EDGE, 9, 1);
+    look::tray(a, X0, Y0, BW, Y1 - Y0, 9);
     heading(a, X0 + 12, Y0 + 10, "FOLDERS", "fl:browse");
     const std::string parent = str(&F.list, "parent"), home = str(&F.list, "home");
     if (button(a, "flup", X0 + 12, Y0 + 34, 90, IP ? 44 : 36, "\xe2\x96\xb2 UP", false, !parent.empty(), B21) && !parent.empty())
@@ -175,7 +174,7 @@ inline void draw_files(App &a)
         const bool dir = flag(&e, "dir");
         const std::string p = F.dir + "/" + str(&e, "name");
         const bool on = p == F.sel;
-        rect(a, X0 + 12, y, BW - 32, FB, on ? LCD : IM_COL32(0x26, 0x2a, 0x2e, 255), 5);
+        look::chip(a, X0 + 12, y, BW - 32, FB, on);
         text(a, a.font, 14, X0 + 22, y + (FB - a.lh(14)) / 2, on ? LCD_BG : dir ? LCD : SILK,
              fit(a, a.font, 14, (dir ? "\xe2\x96\xb8 " : "") + str(&e, "name"), BW - 56));
     });
@@ -200,8 +199,7 @@ inline void draw_files(App &a)
     // THE FILE: what it is, the check, the mode
     const float FX = X0 + BW + 10, FW = IP ? X1 - FX : 740, PX = IP ? X0 : FX + FW + 10, PW = X1 - PX;
     if (!IP || page == 0) {
-    rect(a, FX, Y0, X1 - FX, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-    frame(a, FX, Y0, X1 - FX, Y1 - Y0, EDGE, 9, 1);
+    look::tray(a, FX, Y0, X1 - FX, Y1 - Y0, 9);
     const float fx_ = heading(a, FX + 12, Y0 + 10, "THE FILE", "fl:file");
     if (!F.sel.empty())
         text(a, a.font, 14, fx_, Y0 + 11, LCD,
@@ -297,8 +295,7 @@ inline void draw_files(App &a)
     if (IP && page == 0)
         return;
     if (IP) {
-        rect(a, X0, Y0, X1 - X0, Y1 - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
-        frame(a, X0, Y0, X1 - X0, Y1 - Y0, EDGE, 9, 1);
+        look::tray(a, X0, Y0, X1 - X0, Y1 - Y0, 9);
     } else
         rect(a, PX - 6, Y0 + 12, 1, Y1 - Y0 - 24, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
     float py = Y0 + 10;

@@ -82,7 +82,7 @@ inline void draw_matrix(App &a)
     static const char *DN[11] = {"Pitch", "Cutoff", "Amplitude", "Rate", "Pitch", "Filter", "Amp", "Rate", "Pitch", "Filter", "Amp"};
     const float aboutH = IP ? 0 : 100, SW = IP ? 156 : 230, gy = Y0 + (IP ? 30 : 40), YB = (IP ? 728 : 1056) - aboutH - (IP ? 20 : 34);
     const float cw = (X1 - X0 - SW) / 11, rh = (YB - gy) / 6;
-    rect(a, X0, Y0, X1 - X0, YB - Y0, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
+    look::tray(a, X0, Y0, X1 - X0, YB - Y0, 9);
     // the destinations across (the LFOs' groups apart)
     for (int j = 0; j < 11; j++) {
         const float cx = X0 + SW + (j + 0.5f) * cw;
@@ -162,7 +162,7 @@ inline void draw_matrix(App &a)
     if (IP)
         return;
     const float ay = 1056 - aboutH, aw = X1 - X0;
-    rect(a, X0, ay, aw, aboutH, IM_COL32(0x1f, 0x22, 0x26, 255), 8);
+    look::tray(a, X0, ay, aw, aboutH, 8);
     if (const J *ef = L.about.get("effects"); ef && ef->is(J::OBJ))
         for (const auto &kv : ef->o)
             if (kv.first.rfind("Controller matrix", 0) == 0 && kv.second.is(J::ARR) && kv.second.a.size() >= 2) {

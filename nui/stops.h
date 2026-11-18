@@ -174,8 +174,7 @@ inline void draw_stops(App &a)
     for (int ri = 0; ri < nrows; ri++) {
         const J &row = rows->a[(size_t)ri];
         const float y = JY0 + ri * (rh + rgap);
-        rect(a, X0, y, JX1 - X0, rh, IM_COL32(0x1f, 0x22, 0x26, 255), 10);
-        frame(a, X0, y, JX1 - X0, rh, EDGE, 10, 1);
+        look::tray(a, X0, y, JX1 - X0, rh, 10);
         float x = X0 + 14;
         for (size_t gi = 0; gi < row.a.size(); gi++) {
             if (gi) {
@@ -190,8 +189,7 @@ inline void draw_stops(App &a)
                 ImGui::SetCursorScreenPos(P(a, x, ty));
                 const bool hit = ImGui::InvisibleButton(id.c_str(), ImVec2(tw * a.k, th * a.k));
                 const bool held = ImGui::IsItemActive();
-                rect(a, x, ty, tw, th, on ? LCD : held ? PANEL_HI : CAP, 8);
-                frame(a, x, ty, tw, th, on ? IM_COL32(0xff, 0xd2, 0x7a, 255) : EDGE, 8, 1);
+                look::chip(a, x, ty, tw, th, on, held);
                 const auto np = stop_parts(r < (int)names.size() ? names[(size_t)r] : std::to_string(r), feet);
                 const auto ls = label_lines(a, a.bold, 14, np.first, tw - 14);
                 for (size_t li = 0; li < ls.size(); li++)
@@ -221,8 +219,7 @@ inline void draw_stops(App &a)
     // A TONEWHEEL ORGAN's DRIVE (the wheel is its swell): the valve before the rotors, 0 to 3
     if (has_drive) {
         const float dx = X1 - DW, dy = JY0, dw = DW, dh = JY1 - JY0;
-        rect(a, dx, dy, dw, dh, IM_COL32(0x1f, 0x22, 0x26, 255), 10);
-        frame(a, dx, dy, dw, dh, EDGE, 10, 1);
+        look::tray(a, dx, dy, dw, dh, 10);
         heading(a, dx + 14, dy + 12, "DRIVE", "drive");
         const double now = drive->a[0].d(), voice = drive->a[1].d(), mine = drive->a[2].d();
         auto it = a.hold.find("drive");
@@ -255,7 +252,7 @@ inline void draw_stops(App &a)
 
     // WHAT IT IS: the stop last touched, else the organ's patch and a hint
     const float ay = Y1_ - aboutH, aw = X1 - X0;
-    rect(a, X0, ay, aw, aboutH, IM_COL32(0x1f, 0x22, 0x26, 255), 8);
+    look::tray(a, X0, ay, aw, aboutH, 8);
     const J *org = nullptr;
     if (const J *ss = L.about.get("stops"))
         org = ss->get(std::to_string(prog).c_str());

@@ -151,8 +151,7 @@ inline int toggle(App &a, const char *id, float cx, float cy, bool on, const std
 {
     float dummy = 0;
     const int f = gesture(a.K, id, P(a, cx - 32, cy - 18), P(a, cx + 32, cy + 34), dummy, Range());
-    rect(a, cx - 28, cy - 15, 56, 30, on ? LCD : IM_COL32(0x15, 0x17, 0x1a, 255), 15);
-    dl()->AddCircleFilled(P(a, on ? cx + 13 : cx - 13, cy), 11 * a.k, on ? LCD_BG : CAP, 24);
+    look::switch_(a, cx, cy, on);
     label_c(a, a.bold, 14, cx, cy + 20, own ? OWN : SILK_DIM, label, lw);
     return f;
 }
@@ -273,7 +272,7 @@ inline void draw_synth(App &a)
     float cx0 = X0;
     for (const Col &col : cols) {
         const float cw = avail * col.weight / tot;
-        rect(a, cx0, top, cw, bottom - top, IM_COL32(0x1f, 0x22, 0x26, 255), 8);
+        look::tray(a, cx0, top, cw, bottom - top, 8);
         // a column's sections: itself, and what stacks under it (the left hand under LFO 1)
         std::vector<std::pair<std::string, std::pair<float, float>>> secs;   // (name, (y0, y1))
         if (std::string(col.name) == "LFO 1" && !T) {
