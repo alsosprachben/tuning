@@ -965,6 +965,16 @@ J build_of(nv_host *h)
         b.o["done"] = sess::integer(done);
         b.o["total"] = sess::integer(total);
     }
+    // A5's ON DEMAND: notes struck late on their own template, on a
+    // neighbour's (a stand-in), held now; the octave filling
+    b.o["late"] = sess::integer(h->late_n.load(std::memory_order_relaxed));
+    b.o["stand"] = sess::integer(h->stand_n.load(std::memory_order_relaxed));
+    b.o["held"] = sess::integer(h->held_n.load(std::memory_order_relaxed));
+    if (h->fill_n.load(std::memory_order_relaxed) > 0) {
+        std::lock_guard<std::mutex> lk(h->bmu);
+        if (!h->fill_name.empty())
+            b.o["fill"] = sess::str(h->fill_name);
+    }
     return b;
 }
 

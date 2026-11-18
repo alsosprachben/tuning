@@ -52,6 +52,12 @@ struct App {
     std::string card = "parts", msg;
     std::string help;                   // (the help viewer's topic while it is open)
     std::string last_meters;
+    // (the display's warning of a note played late or by a stand-in: the
+    // counts seen, the line and until when it shows)
+    long seen_late = -1, seen_stand = -1;
+    std::string warn;
+    bool warn_red = false;
+    double warn_until = 0.0;
     bool quit = false;
     bool animate = false;               // (a card asks for another frame: a blink, a send still due)
     double quit_armed = -10.0;          // (QUIT's first tap: a second within 3 s quits)

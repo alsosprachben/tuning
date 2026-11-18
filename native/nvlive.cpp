@@ -173,6 +173,20 @@ int nv_host::run(int argc, char **argv)
                         merged = merged || (!pa.gone && !pa.drums && pa.channel < 0);
                     file_octaves(m, merged);
                 }
+            // --late: a note with no template held for it and struck when built
+            // (live's A5 on demand, here in step: a block late); --octaves=HEX
+            // every patch built in those octaves only (bit n: keys 12n..12n+11),
+            // to make such notes
+            for (int q = 1; q < argc; q++) {
+                if (!strcmp(argv[q], "--late"))
+                    late_test = true;
+                if (!strncmp(argv[q], "--octaves=", 10)) {
+                    std::lock_guard<std::mutex> lk(oct_mu);
+                    oct_on = true;
+                    oct_rooms.clear();
+                    oct_any.fill((unsigned)strtoul(argv[q] + 10, nullptr, 16));
+                }
+            }
             int ne = nv_midi_n_events(m);
             double secs = atof(opt(argc, argv, "seconds", "0").c_str());
             if (secs <= 0)
@@ -507,6 +521,11 @@ int nv_host::run(int argc, char **argv)
                 fprintf(stderr, "nvlive: patches: %d kept, %d freed, %d let go and still reached\n", nc,
                         cache_freed + nv_part_cache_reap(part), nv_part_cache_retiring(part));
                 fprintf(stderr, "nvlive: %ld note(s) asked of a template not built\n", nv_part_misses(part));
+                {
+                    long lc[3];
+                    nv_part_late_counts(part, lc);
+                    fprintf(stderr, "nvlive: %ld note(s) struck late, %ld on a stand-in, %ld still held\n", lc[0], lc[1], lc[2]);
+                }
             }
             FILE *wf = fopen(argv[i + 2], "wb");
             if (!wf)

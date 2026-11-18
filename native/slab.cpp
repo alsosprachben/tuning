@@ -4370,6 +4370,86 @@ struct Part {
     };
     std::map<long long, DroneQuiet> drone_quiet;
     long misses = 0;                            // templates not warmed when asked (live.misses)
+    // A NOTE THAT FOUND NO TEMPLATE, HELD (A5's on demand; late_on, the
+    // host's): its template asked of the builder (asks, taken after the
+    // block), the note struck at the first block it is there -- late, by a
+    // block or two. Not there by STAND_IN_S, a melodic note plays the nearest
+    // key's template retuned to its own pitch (a stand-in) while it waits no
+    // longer; a drum key (its neighbour another instrument) only waits, till
+    // LOST_S, and is let go uncounted as sounded (misses)
+    struct Ask {
+        void *cache;
+        int program, drums, note, bucket, axis;
+    };
+    struct Held {
+        int ch, note, vel;
+        long long t0;
+        bool slur, off;
+    };
+    static constexpr double STAND_IN_S = 0.020, LOST_S = 2.0;
+    bool late_on = false;
+    std::vector<Ask> asks;                      // (the audio thread's; the host takes them after the block)
+    std::vector<Held> waiting;
+    long late = 0, standins = 0;                // notes struck late on their own template, on a neighbour's
+    int hold_mode = 0;                          // (in a held note's retry: 1 no ask, 2 a stand-in allowed)
+    int stand_key = -1;                         // (the stand-in's key, struck: -1 none)
+    // (a note's template asked, once a block: the builder dedupes the rest)
+    void ask(void *c, int program, int drums, int sn, int bk, int axis)
+    {
+        for (const Ask &a : asks)
+            if (a.cache == c && a.note == sn && a.bucket == bk && a.axis == axis)
+                return;
+        if (asks.size() < 256)
+            asks.push_back(Ask{c, program, drums, sn, bk, axis});
+    }
+    // the held notes, tried at the block's start (before its events)
+    void held_tick(long long n0)
+    {
+        if (waiting.empty())
+            return;
+        std::vector<Held> hs;
+        hs.swap(waiting);
+        for (const Held &h : hs) {
+            const double waited = (double)(n0 - h.t0) / rate;
+            const long m0 = misses;
+            stand_key = -1;
+            hold_mode = waited >= STAND_IN_S ? 2 : 1;
+            std::vector<long> got;
+            std::vector<long> *outer = S.collect;
+            S.collect = &got;
+            strike(h.ch, h.note, h.vel, n0, h.slur);
+            S.collect = outer;
+            hold_mode = 0;
+            if (misses > m0) {                  // (still none: held again, or let go)
+                misses = m0;
+                if (waited < LOST_S)
+                    waiting.push_back(h);
+                else
+                    misses++;
+                continue;
+            }
+            const bool stood = stand_key >= 0;
+            if (stood) {                        // (a neighbour's template: to this key's pitch)
+                int pi = patch_for(h.ch, h.note);
+                void *c = pi >= 0 ? patches[pi].cache : nullptr;
+                const int sn = h.note + transpose;
+                const double fs = c ? nv_tcache_freq(c, stand_key) : 0.0, ft = c ? nv_tcache_freq(c, sn) : 0.0;
+                if (fs > 0.0 && ft > 0.0)
+                    retune_v(got, n0, true, ft / fs, false, 0.0, false, 0.0);
+                standins++;
+                stand_key = -1;
+            } else if (!got.empty())
+                late++;
+            static const bool say = getenv("NV_MISS_TRACE") != nullptr;
+            if (say)
+                fprintf(stderr, "nvlive: held: channel %d note %d struck %.1f ms late%s\n", h.ch, h.note, waited * 1000.0,
+                        got.empty() ? " (nothing sounded)" : stood ? " on a stand-in" : "");
+            if (outer)
+                outer->insert(outer->end(), got.begin(), got.end());
+            if (h.off)
+                note_off(h.ch, h.note, n0);
+        }
+    }
 
     const NoteClass *drone_class() const
     {
@@ -6296,9 +6376,12 @@ struct Part {
         long long apid = patches[pi].pid;
         amp_shifted.erase(std::make_tuple(apid, ch, note));
         std::vector<long> got;
+        std::vector<long> *outer = S.collect;
         S.collect = &got;
         strike_now(ch, note, vel, n0, slur);
-        S.collect = nullptr;
+        S.collect = outer;
+        if (outer)
+            outer->insert(outer->end(), got.begin(), got.end());
         bool moog = false;                  // (a Moog's rows keep onsets of their own: never held)
         for (long s : got)
             moog = moog || S.i4[I4_fx][s] >= 0;
@@ -6335,8 +6418,24 @@ struct Part {
         // (a drum key's own pitch, pan or user set key: its own template)
         const int axis = drum_axis_of(pi, ch, note, speed);
         const nv::live::Template *T = nv_tcache_lookup(cache, sn, bucket(vel), axis);
+        if (!T && hold_mode == 2 && !patches[cur].drums && axis < (1 << 20))
+            for (int d = 1; d <= 24 && !T; d++)         // (a stand-in: the nearest key built, below first)
+                for (int k : {sn - d, sn + d})
+                    if (!T && k >= 0 && k <= 127 && (T = nv_tcache_lookup(cache, k, bucket(vel), axis)))
+                        stand_key = k;
+        if (!T && late_on && hold_mode == 0 && axis < (1 << 20) && waiting.size() < 64) {
+                                            // (held: its template asked, the note struck when it lands --
+                                            //  a miss only if it never does)
+            ask(cache, patches[cur].program, patches[cur].drums, sn, bucket(vel), axis);
+            waiting.push_back(Held{ch, note, vel, n0, slur, false});
+            return;
+        }
         if (!T) {                           // a miss: live warms it off the audio thread
             misses++;
+            if (hold_mode == 1 && axis < (1 << 20))
+                ask(cache, patches[cur].program, patches[cur].drums, sn, bucket(vel), axis);
+            if (hold_mode)
+                return;
             static const bool say = getenv("NV_MISS_TRACE") != nullptr;
             if (say)
                 fprintf(stderr, "nvlive: miss: channel %d note %d (key %d), program %d%s at sample %lld\n", ch, note, sn,
@@ -8722,6 +8821,9 @@ struct Part {
     // gone on already; then, as ever, the damper or the release
     void note_off(int ch, int note, long long n0)
     {
+        for (Held &h : waiting)                    // (a held note let go before it sounded: struck, then let go)
+            if (h.ch == ch && h.note == note)
+                h.off = true;
         down.erase(std::make_pair(ch, note));
         legato_off(ch, note, n0);
         if (mono[ch]) {
@@ -13221,6 +13323,7 @@ struct Part {
             amp_retire(n0);
         if (!retiring.empty())
             cache_retire_check();
+        held_tick(n0);                          // (the notes held for their templates: struck if built)
         std::vector<Ev> evs;
         evs.swap(events);
         std::vector<std::vector<uint8_t>> sxs;
@@ -14583,6 +14686,35 @@ int nv_part_cache_reap(void *h)
 int nv_part_cache_retiring(void *h) { return (int)((nv::slab::Part *)h)->retiring.size(); }
 // (notes asked of a template not built: live.misses -- a file's octaves' check)
 long nv_part_misses(void *h) { return ((nv::slab::Part *)h)->misses; }
+// A5's ON DEMAND: a note that finds no template held for it (on), the
+// templates asked taken (after the block, on the audio thread: into out,
+// cap; how many), and its counts (late, stand-ins, held now)
+void nv_part_late(void *h, int on) { ((nv::slab::Part *)h)->late_on = on != 0; }
+int nv_part_asks(void *h, void **cache, int *prog, int *drums, int *note, int *bucket, int *axis, int cap)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    int n = 0;
+    for (const auto &a : P->asks) {
+        if (n >= cap)
+            break;
+        cache[n] = a.cache;
+        prog[n] = a.program;
+        drums[n] = a.drums;
+        note[n] = a.note;
+        bucket[n] = a.bucket;
+        axis[n] = a.axis;
+        n++;
+    }
+    P->asks.clear();
+    return n;
+}
+void nv_part_late_counts(void *h, long *out)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    out[0] = P->late;
+    out[1] = P->standins;
+    out[2] = (long)P->waiting.size();
+}
 
 void nv_part_room_reap(void *h)
 {

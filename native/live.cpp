@@ -18,6 +18,7 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -1542,6 +1543,70 @@ struct Cache {
     std::atomic<const VMap *> vmap{nullptr};
     std::vector<std::unique_ptr<VMap>> vgrave;
     long nseq = 0;                      // (the templates built so far: each one's seq)
+    // TEMPLATES ADDED WHILE IT PLAYS (on demand: a note that found none, then
+    // its octave): the audio thread finds every template through `slot`, an
+    // atomic pointer per (key, bucket, speed) set once the template is
+    // whole, and never reads tm; tm is written under tmu (a std::map's
+    // nodes stay put, so a slot's pointer holds). The shape is the first
+    // warm's (its buckets and wheel steps); a second of another shape turns
+    // the slots off (s_nb < 0: tm read as before, nothing added)
+    std::mutex tmu;
+    int s_nb = 0, s_nsp = 0, s_sp[8] = {0};
+    std::unique_ptr<std::atomic<const Template *>[]> slot;
+    // (the slot of (note, bucket, speed): -1 none)
+    long slot_of(int note, int bucket, int speed) const
+    {
+        if (s_nb <= 0 || note < 0 || note > 127 || bucket < 0 || bucket >= s_nb)
+            return -1;
+        for (int q = 0; q < s_nsp; q++)
+            if (s_sp[q] == speed)
+                return ((long)note * s_nb + bucket) * s_nsp + q;
+        return -1;
+    }
+    // (a warm's shape: the slots made at the first, every template there so far in them)
+    void shape(int nb, const int *speeds, int nsp)
+    {
+        if (s_nb < 0)
+            return;
+        if (s_nb > 0) {
+            bool same = nb == s_nb && nsp == s_nsp;
+            for (int q = 0; same && q < nsp; q++)
+                same = speeds[q] == s_sp[q];
+            if (!same)
+                s_nb = -1;
+            return;
+        }
+        if (nb <= 0 || nsp <= 0 || nsp > 8) {
+            s_nb = -1;
+            return;
+        }
+        s_nb = nb;
+        s_nsp = nsp;
+        for (int q = 0; q < nsp; q++)
+            s_sp[q] = speeds[q];
+        const long n = 128L * nb * nsp;
+        slot.reset(new std::atomic<const Template *>[n]);
+        for (long i = 0; i < n; i++)
+            slot[i].store(nullptr, std::memory_order_relaxed);
+        for (auto &kv : tm) {
+            long ix = slot_of(std::get<0>(kv.first), std::get<1>(kv.first), std::get<2>(kv.first));
+            if (ix >= 0)
+                slot[ix].store(&kv.second, std::memory_order_release);
+        }
+    }
+    // (a template kept: into tm, then its slot)
+    const Template *keep(const std::tuple<int, int, int> &k, Template &&T)
+    {
+        Template *p;
+        {
+            std::lock_guard<std::mutex> lk(tmu);
+            p = &(tm[k] = std::move(T));
+        }
+        long ix = slot_of(std::get<0>(k), std::get<1>(k), std::get<2>(k));
+        if (ix >= 0)
+            slot[ix].store(p, std::memory_order_release);
+        return p;
+    }
     bool drums = false;                 // a drum part: the program is its set (kit's tables)
     int var = 0;                        // its variation key (live.Patch.variation: map x 128 + bank), 0 none
 
@@ -2302,6 +2367,7 @@ void nv_tcache_shape(void *h, long *ntmpl, long long *rows)
             for (const auto &s : *vs)
                 add(s);
     };
+    std::lock_guard<std::mutex> lk(const_cast<nv::live::Cache *>(C)->tmu);
     for (const auto &kv : C->tm)
         add(kv.second);
     for (const auto &u : C->vstore)
@@ -2314,6 +2380,7 @@ long long nv_tcache_bytes(void *h)
 {
     const nv::live::Cache *C = (const nv::live::Cache *)h;
     size_t b = sizeof *C;
+    std::lock_guard<std::mutex> lk(const_cast<nv::live::Cache *>(C)->tmu);
     for (const auto &kv : C->tm)
         b += tmpl_bytes(kv.second);
     for (const auto &u : C->vstore)
@@ -2335,6 +2402,7 @@ long nv_tcache_templates(void *h, const void **out, long cap)
             n++;
         }
     };
+    std::lock_guard<std::mutex> lk(const_cast<nv::live::Cache *>(C)->tmu);
     for (const auto &kv : C->tm)
         put(kv.second);
     for (const auto &u : C->vstore)
@@ -2395,6 +2463,7 @@ long nv_tcache_warm_p(void *h, int program, int lo, int hi, int nb, const int *s
 {
     nv::live::Cache *C = (nv::live::Cache *)h;
     long n = 0;
+    C->shape(nb, speeds, nsp);
     for (int note = lo; note <= hi; note++)
         for (int b = 0; b < nb; b++)
             for (int q = 0; q < nsp; q++) {
@@ -2406,7 +2475,7 @@ long nv_tcache_warm_p(void *h, int program, int lo, int hi, int nb, const int *s
                 int vel = (int)std::min(127.0, (b + 0.5) * 128.0 / nb);    // Patch.bucket_vel
                 nv::live::Template T;
                 if (C->build(program, note, vel, speeds[q], T)) {
-                    C->tm[k] = std::move(T);
+                    C->keep(k, std::move(T));
                     n++;
                 }
             }
@@ -2425,6 +2494,7 @@ long nv_tcache_warm_b(void *h, int program, int lo, int hi, int nb, const int *s
     nv::live::Cache *C = (nv::live::Cache *)h;
     long n = 0;
     long long b = 0;
+    C->shape(nb, speeds, nsp);
     for (int note = lo; note <= hi; note++) {
         const bool want = !oct || (oct >> (note / 12) & 1u);
         for (int bk = 0; bk < nb; bk++)
@@ -2446,7 +2516,7 @@ long nv_tcache_warm_b(void *h, int program, int lo, int hi, int nb, const int *s
                         return -1;
                     }
                     b += tb;
-                    C->tm[k] = std::move(T);
+                    C->keep(k, std::move(T));
                     n++;
                 }
             }
@@ -2555,6 +2625,7 @@ const OrganSpec *nv_tcache_organ(void *h, int program)
 const nv::live::Template *nv_tcache_at(void *h, long i, long *n)
 {
     nv::live::Cache *C = (nv::live::Cache *)h;
+    std::lock_guard<std::mutex> lk(C->tmu);
     if (n)
         *n = (long)C->tm.size();
     if (i < 0 || i >= (long)C->tm.size())
@@ -2601,6 +2672,7 @@ const NoteClass *nv_tcache_class(void *h, int program)
 
 // A CACHE's VARIATION (live.Patch.variation), before its templates are warmed
 void nv_tcache_set_var(void *h, int v) { ((nv::live::Cache *)h)->var = v; }
+int nv_tcache_var(void *h) { return ((nv::live::Cache *)h)->var; }
 
 // BANK SELECT's tables for live's templates (the export's VARS: as nv_song_vars
 // takes them, each entry's trim live's -- a file that is not GS's), each slot's
@@ -2695,8 +2767,53 @@ extern "C" const nv::live::Template *nv_tcache_lookup(void *h, int note, int buc
         auto vt = vm->find(std::make_tuple(note, bucket, speed));
         return vt == vm->end() ? nullptr : vt->second;
     }
+    if (C->s_nb > 0) {                          // (the slots: what a builder adds, safely)
+        long ix = C->slot_of(note, bucket, speed);
+        return ix < 0 ? nullptr : C->slot[ix].load(std::memory_order_acquire);
+    }
     auto it = C->tm.find(std::make_tuple(note, bucket, speed));
     return it == C->tm.end() ? nullptr : &it->second;
+}
+
+// A TEMPLATE ADDED WHILE THE CACHE PLAYS (A5's on demand: the note that
+// found none, then its octave), built at its bucket's velocity: 1 built, 0
+// there already, -1 not (no slots, or none to build); *bytes its size
+extern "C" int nv_tcache_add(void *h, int program, int note, int bucket, int speed, long long *bytes)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    if (bytes)
+        *bytes = 0;
+    const long ix = C->slot_of(note, bucket, speed);
+    if (ix < 0)
+        return -1;
+    if (C->slot[ix].load(std::memory_order_acquire))
+        return 0;
+    int vel = (int)std::min(127.0, (bucket + 0.5) * 128.0 / C->s_nb);     // Patch.bucket_vel
+    nv::live::Template T;
+    if (!C->build(program, note, vel, speed, T))
+        return -1;
+    if (bytes)
+        *bytes = (long long)tmpl_bytes(T);
+    C->keep(std::make_tuple(note, bucket, speed), std::move(T));
+    return 1;
+}
+
+// (a template there: 1, else 0)
+extern "C" int nv_tcache_has(void *h, int note, int bucket, int speed)
+{
+    return nv_tcache_lookup(h, note, bucket, speed) != nullptr;
+}
+
+// ...its shape (buckets, wheel steps into sp[8]): 0 none (no slots)
+extern "C" int nv_tcache_slots(void *h, int *nb, int *sp)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    if (C->s_nb <= 0)
+        return 0;
+    *nb = C->s_nb;
+    for (int q = 0; q < C->s_nsp; q++)
+        sp[q] = C->s_sp[q];
+    return C->s_nsp;
 }
 
 // an edited drum key's axis (live._drum_axis): pitch, pan (INT_MIN unset)

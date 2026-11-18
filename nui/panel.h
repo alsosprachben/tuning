@@ -89,6 +89,46 @@ inline void meter_seg(App &a, float x, float y, float w, float h, bool lit)
     }
 }
 
+// THE DISPLAY's HEALTH LINE (the web's #health): a stand-in note (a key
+// whose template was not built yet, played on its neighbour's, retuned)
+// in red for 4 s, a note played late for 2 s, else a build, an octave
+// filling as played, underruns; warn: red
+inline std::string health_line(App &a, const J *m, bool &warn)
+{
+    const double now = ImGui::GetTime();
+    const long lt = (long)num(&a.build, "late"), st = (long)num(&a.build, "stand");
+    if (a.seen_stand >= 0 && st > a.seen_stand) {
+        a.warn = st - a.seen_stand > 1 ? "STAND-IN x" + std::to_string(st - a.seen_stand) : "STAND-IN";
+        a.warn_red = true;
+        a.warn_until = now + 4.0;
+    } else if (a.seen_late >= 0 && lt > a.seen_late && (now >= a.warn_until || !a.warn_red)) {
+        a.warn = lt - a.seen_late > 1 ? "LATE x" + std::to_string(lt - a.seen_late) : "LATE NOTE";
+        a.warn_red = false;
+        a.warn_until = now + 2.0;
+    }
+    a.seen_late = lt;
+    a.seen_stand = st;
+    warn = false;
+    if (now < a.warn_until) {
+        warn = a.warn_red;
+        return a.warn;
+    }
+    if (num(&a.build, "n") > 0) {
+        const double tot = num(&a.build, "total"), done = num(&a.build, "done");
+        return tot > 0 ? "BUILDING " + std::to_string((int)std::lround(100 * done / tot)) + "%" : "BUILDING";
+    }
+    const std::string fill = str(&a.build, "fill");
+    if (!fill.empty())
+        return "FILL " + fill;
+    warn = true;
+    if (num(m, "underruns") > 0)
+        return "UNDERRUNS " + std::to_string((int)num(m, "underruns"));
+    if (flag(m, "rt_dropped"))
+        return "RT DROPPED";
+    warn = false;
+    return "";
+}
+
 inline void draw_display(App &a)
 {
     const float X = 26, Y = 22, W = 1424, H = 232;
@@ -120,15 +160,9 @@ inline void draw_display(App &a)
     look::lcd_text(a, 14, X + W - 170, Y + 14, LCD, b);
     snprintf(b, sizeof b, "%-8s%5d", "VOICES", (int)std::min(99999.0, num(m, "voices")));
     look::lcd_text(a, 14, X + W - 170, Y + 30, LCD, b);
-    std::string health;
-    if (num(&a.build, "n") > 0) {
-        const double tot = num(&a.build, "total"), done = num(&a.build, "done");
-        health = tot > 0 ? "BUILDING " + std::to_string((int)std::lround(100 * done / tot)) + "%" : "BUILDING";
-    } else if (num(m, "underruns") > 0)
-        health = "UNDERRUNS " + std::to_string((int)num(m, "underruns"));
-    else if (flag(m, "rt_dropped"))
-        health = "RT DROPPED";
-    look::lcd_text(a, 14, X + W - 170, Y + 46, health.rfind("BUILDING", 0) == 0 ? LCD : BAD, health);
+    bool warn = false;
+    const std::string health = health_line(a, m, warn);
+    look::lcd_text(a, 14, X + W - 170, Y + 46, warn ? BAD : LCD, fit(a, a.lcd, 14, health, 160));
     // the seven fields
     const float fw = (W - 28 - 6 * 8) / 7.0f;
     for (int i = 0; i < 7 && p; i++) {
@@ -225,15 +259,9 @@ inline void draw_display_tab(App &a)
     look::lcd_text(a, 14, X + W - 96, Y + 6, LCD, b);
     snprintf(b, sizeof b, "%-8s%5d", "VOICES", (int)std::min(99999.0, num(m, "voices")));
     look::lcd_text(a, 14, X + W - 96, Y + 16, LCD, b);
-    std::string health;
-    if (num(&a.build, "n") > 0) {
-        const double tot = num(&a.build, "total"), done = num(&a.build, "done");
-        health = tot > 0 ? "BUILDING " + std::to_string((int)std::lround(100 * done / tot)) + "%" : "BUILDING";
-    } else if (num(m, "underruns") > 0)
-        health = "UNDERRUNS " + std::to_string((int)num(m, "underruns"));
-    else if (flag(m, "rt_dropped"))
-        health = "RT DROPPED";
-    look::lcd_text(a, 14, X + W - 96, Y + 26, health.rfind("BUILDING", 0) == 0 ? LCD : BAD, health);
+    bool warn = false;
+    const std::string health = health_line(a, m, warn);
+    look::lcd_text(a, 14, X + W - 96, Y + 26, warn ? BAD : LCD, fit(a, a.lcd, 14, health, 90));
     // the seven fields: 44 points tall, their values 3x
     const float fw = (W - 16 - 6 * 5) / 7.0f;
     for (int i = 0; i < 7 && p; i++) {

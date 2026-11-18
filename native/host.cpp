@@ -543,8 +543,8 @@ void nv_host::file_report()
             n++;
         }
     }
-    fprintf(stderr, "nvlive: the file: %ld note(s) asked of a template not built; %d patch(es), %.1f MB\n",
-            nv_part_misses(part), n, mb);
+    fprintf(stderr, "nvlive: the file: %ld note(s) asked of a template not built, %ld struck late, %ld on a stand-in; "
+            "%d patch(es), %.1f MB\n", nv_part_misses(part), late_n.load(), stand_n.load(), n, mb);
 }
 
 // A FILE's NOTES SCANNED (A5): each room's masks, by the room's key; the
@@ -837,6 +837,7 @@ int nv_host::open(int argc, char **argv)
     // THE SLAB'S SLOTS (--slots: live's capacity, 65536 -- a vibraslap's
     // strike is 16524 rows)
     slots = atol(opt(argc, argv, "slots", "65536").c_str());
+    miss_swap.reserve(256);
     part = nv_part_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], slots, E.headroom, E.pan.data(), E.beta);
     if (!E.les.empty())                         // the room's Leslie: its rotors, on chorale
         nv_part_leslie(part, E.les.data(), (int)E.les.size());
@@ -1376,6 +1377,36 @@ int nv_host::open(int argc, char **argv)
             fprintf(stderr, "nvlive: building %s %d var %d in room key %d: octaves %03x%s\n", dr ? "drum set" : "program",
                     prog & 127, var, key_room, oct & 0xFFFu, oct == OCT_NONE ? " (none)" : oct_on ? "" : " (no file)");
         long long got = 0;
+        bool thin = false;                      // (over the budget: its middle octaves only, the rest on demand)
+        const auto t_build = std::chrono::steady_clock::now();
+        // ...THE WARM: whole, or a file's octaves; under a budget, the middle
+        // octaves out as far as they fit (none fits: refused)
+        auto warm = [&](int p_, int lo, int hi, int nb, const int *sp, int nsp) -> bool {
+            if (limit <= 0 || oct)
+                return nv_tcache_warm_b(c, p_, lo, hi, nb, sp, nsp, &bp_done, oct, limit, &got) >= 0;
+            static const int ORD[11] = {4, 5, 3, 6, 2, 7, 1, 8, 0, 9, 10};
+            const long step_ = (long)(hi - lo + 1) * nb * nsp / 11;
+            for (int o : ORD) {
+                const long long left = limit - got;
+                long long g = 0;
+                if (left <= 0) {
+                    thin = true;
+                    break;
+                }
+                const long r = nv_tcache_warm_b(c, p_, lo, hi, nb, sp, nsp, nullptr, 1u << o, left, &g);
+                __atomic_fetch_add(&bp_done, step_, __ATOMIC_RELAXED);
+                if (r < 0) {
+                    thin = true;
+                    got = nv_tcache_bytes(c);      // (what that octave kept of itself too)
+                    break;
+                }
+                got += g;
+            }
+            long nt = 0;
+            long long rows_ = 0;
+            nv_tcache_shape(c, &nt, &rows_);
+            return !thin || nt > 0;
+        };
         auto refuse = [&]() -> void * {
             nv_tcache_free(c);
             char b_[160];
@@ -1398,7 +1429,7 @@ int nv_host::open(int argc, char **argv)
                            E.kit_spar.data(), 100.0);
             int nsp[1] = {-1};
             begin(128);
-            if (nv_tcache_warm_b(c, prog, 0, 127, 1, nsp, 1, &bp_done, oct, limit, &got) < 0)
+            if (!warm(prog, 0, 127, 1, nsp, 1))
                 return refuse();
         } else {
             if (!E.les.empty())
@@ -1412,20 +1443,31 @@ int nv_host::open(int argc, char **argv)
             const int *pq = prec(prog, var);
             int sp[3] = {pq[3], pq[4], pq[5]};
             begin(76L * pq[1] * pq[2]);
-            if (nv_tcache_warm_b(c, prog & 127, 21, 108, pq[1], sp, pq[2], &bp_done, oct, limit, &got) < 0)     // (MELODIC_RANGE)
+            if (!warm(prog & 127, 21, 108, pq[1], sp, pq[2]))     // (MELODIC_RANGE)
                 return refuse();
             retune(prog);
         }
         __atomic_store_n(&bp_total, 0L, __ATOMIC_RELEASE);
+        if (getenv("NV_PATCH_SIZES"))
+            fprintf(stderr, "nvlive: built %s %d var %d: %.1f MB in %.0f ms\n", dr ? "drum set" : "program", prog & 127, var,
+                    got / 1048576.0,
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_build).count());
         if (!dr) {                              // A PUNGI's DRONE: its own patch, beside (Patch.warm's)
             const NoteClass *k60 = cls60(prog, var);
             if (k60 && k60->n_dchoice && k60->dchoice_var)
                 build_drone(prog, k60);
         }
+        if (thin) {
+            char b_[200];
+            snprintf(b_, sizeof b_, "%s: more than the %.0f MB left of the patches' %.0f MB -- its middle octaves "
+                     "built (%.0f MB), the rest as they are played", tone_name(prog, dr, var).c_str(),
+                     limit / 1048576.0, patch_budget / 1048576.0, got / 1048576.0);
+            tell(b_);
+        }
         std::lock_guard<std::mutex> lk(cmu);
         caches[key] = c;
         cache_used[key] = ++cache_tick;
-        if (oct)
+        if (oct || thin)
             partial.insert(key);
         else
             built_bytes[key] = got;
@@ -2459,7 +2501,20 @@ void nv_host::render_block(long long n0, float *buf, bool step)
         }
     }
     const long long t_blk = rt::now_ns();
+    nv_part_late(part, !step || late_test);    // (a note with no template held for it: live's, --late's)
     nv_part_block(part, n0, BLK);
+    {                                   // (the templates its held notes asked: to the builder, below)
+        void *ac[256];
+        int ap[256], ad[256], an[256], ab[256], ax[256];
+        const int na = nv_part_asks(part, ac, ap, ad, an, ab, ax, 256);
+        for (int q = 0; q < na && miss_swap.size() < 256; q++)
+            miss_swap.push_back(MissReq{ac[q], ap[q], ad[q], an[q], ab[q], ax[q]});
+        long lc[3];
+        nv_part_late_counts(part, lc);
+        late_n.store(lc[0], std::memory_order_relaxed);
+        stand_n.store(lc[1], std::memory_order_relaxed);
+        held_n.store(lc[2], std::memory_order_relaxed);
+    }
     last_split[0] = (t_ev - t0) / 1e6;
     last_split[1] = (t_blk - t_ev) / 1e6;
     last_split[2] = (rt::now_ns() - t_blk) / 1e6;
@@ -2474,6 +2529,11 @@ void nv_host::render_block(long long n0, float *buf, bool step)
     landed();
     if (step) {
         step_swaps += settle(reqs);     // (live's builder in step: for the next block)
+        if (!miss_swap.empty() || !fills.empty()) {     // (a held note's template, and its octaves, in step)
+            on_demand(miss_swap);
+            while (fill_step()) {
+            }
+        }
         {                               // ...and an edited drum key's templates (patchsync.fill's)
             std::vector<DReq> dq;
             {
@@ -2526,6 +2586,11 @@ void nv_host::render_block(long long n0, float *buf, bool step)
                     answered(d.first.i, d.first.prog, d.first.dr, d.first.var);
                 }
                 bdone.clear();
+                if (!miss_swap.empty()) {               // (a held note's template: to the builder)
+                    miss_req.insert(miss_req.end(), miss_swap.begin(), miss_swap.end());
+                    miss_swap.clear();
+                    bcv.notify_one();
+                }
                 if (!dreq_swap.empty()) {               // (a drum set's own keys: to the builder)
                     dreq.insert(dreq.end(), dreq_swap.begin(), dreq_swap.end());
                     dreq_swap.clear();
@@ -2668,10 +2733,20 @@ void nv_host::start()
                 std::unique_lock<std::mutex> lk(bmu);
                 bcv.wait_for(lk, std::chrono::milliseconds(100),
                              [&] { return !breq.empty() || !room_req.empty() || !tuner_req.empty() || east_req_set
-                                          || !add_req.empty() || !dreq.empty() || fill_req || prebuild_req || g_stop; });
+                                          || !add_req.empty() || !dreq.empty() || fill_req || prebuild_req || g_stop
+                                          || !miss_req.empty() || !fills.empty(); });
                 rq.swap(breq);
                 builder_busy = !rq.empty() || !room_req.empty() || !tuner_req.empty() || east_req_set || !add_req.empty()
                                || prebuild_req || fill_req;
+            }
+            {                                           // A HELD NOTE's TEMPLATE (A5's on demand), first
+                std::vector<MissReq> mq;
+                {
+                    std::lock_guard<std::mutex> lk(bmu);
+                    mq.swap(miss_req);
+                }
+                if (!mq.empty())
+                    on_demand(mq);
             }
             {                                           // AN EDITED DRUM KEY's TEMPLATES (live._fill_misses)
                 std::vector<DReq> dq;
@@ -2735,48 +2810,6 @@ void nv_host::start()
                          + std::to_string((int)std::chrono::duration<double, std::milli>(
                                               std::chrono::steady_clock::now() - t0).count()) + " ms");
                 }
-            }
-            bool fill = false;                          // A FILE STOPPED (A5): its octaves' patches finished
-            {
-                std::lock_guard<std::mutex> lk(bmu);
-                fill = fill_req;
-                fill_req = false;
-            }
-            if (fill) {
-                std::set<int> keys;
-                std::vector<void *> old_;
-                {
-                    std::lock_guard<std::mutex> lk(cmu);
-                    keys.swap(partial);
-                    for (int k_ : keys) {
-                        auto it = caches.find(k_);
-                        if (it != caches.end()) {
-                            old_.push_back(it->second);
-                            caches.erase(it);
-                            cache_used.erase(k_);
-                        }
-                    }
-                }
-                retire(old_);                           // (let go once nothing plays them)
-                int nb_ = 0;
-                for (size_t i = 0; i < pats.size(); i++) {
-                    const PartAt &pa = pats[i];
-                    const int v_ = pa.drums ? 0 : pa.posted_var;
-                    if (pa.gone || !keys.count(ckey(pa.posted, pa.drums, v_)))
-                        continue;
-                    refused.clear();
-                    void *c = build(pa.posted, pa.drums, v_);
-                    if (!c) {
-                        if (!refused.empty())
-                            note(refused);
-                        continue;
-                    }
-                    std::lock_guard<std::mutex> lk(bmu);
-                    bdone.push_back(std::make_pair(Req{i, pa.posted, pa.drums, v_}, c));
-                    nb_++;
-                }
-                if (nb_)
-                    note("the file's patches finished: " + std::to_string(nb_) + " built whole");
             }
             bool pre = false;                           // A FILE's OTHER ROOMS (A5): its patches built there ahead
             {
@@ -2880,6 +2913,8 @@ void nv_host::start()
             }
             if (!fresh.empty())
                 cache_trim(fresh);
+            if (!fills.empty())                         // (an octave on demand: a key of it, then the asks again)
+                fill_step();
             builder_busy = false;
         }
     };
@@ -3092,6 +3127,178 @@ void nv_host::drum_build(std::vector<DReq> &q)
             nv_tcache_build_var(r.c, r.prog, r.note, 0, 1, r.axis);
     }
     q.clear();
+}
+
+// a builder's note: the panel's (playing), stderr's (in step: no panel)
+void nv_host::tell(const std::string &m)
+{
+    static const bool say = getenv("NV_MISS_TRACE") != nullptr;
+    if (note)
+        note(m);
+    if (!note || say)
+        fprintf(stderr, "nvlive: %s\n", m.c_str());
+}
+
+// a tone's name: a variation's own, a drum set's, else the program's
+std::string nv_host::tone_name(int prog, bool dr, int var) const
+{
+    if (dr)
+        return kit_name(prog);
+    for (size_t j = 0; j < E.vpv.size() && var; j++)
+        if (E.vpv[j][0] == (prog & 127) && E.vpv[j][1] == var)
+            return E.vnames[j];
+    return E.prog[prog & 127].name;
+}
+
+// (a patch still in the cache: not let go since the note asked)
+bool nv_host::cache_alive(void *c)
+{
+    std::lock_guard<std::mutex> lk(cmu);
+    for (const auto &kv : caches)
+        if (kv.second == c)
+            return true;
+    return false;
+}
+
+// A5's ON DEMAND, on the builder (in step after the block): each held
+// note's template built first, then its octave queued (the front of the
+// fills), unless the octave is there already or on its way
+void nv_host::on_demand(std::vector<MissReq> &q)
+{
+    for (const MissReq &r : q) {
+        if (!cache_alive(r.c))
+            continue;
+        long long b = 0;
+        if (nv_tcache_add(r.c, r.prog, r.note, r.bucket, r.axis, &b) > 0) {
+            std::lock_guard<std::mutex> lk(cmu);
+            auto cb = cache_bytes.find(r.c);
+            if (cb != cache_bytes.end())
+                cb->second += b;
+        }
+        const int o = r.note / 12;
+        bool queued = false;
+        for (const Fill &f : fills)
+            queued = queued || (f.c == r.c && f.oct == o);
+        if (!queued)
+            fills.push_front(Fill{r.c, r.prog, r.drums, o, -1, true, 0, std::chrono::steady_clock::now()});
+    }
+    q.clear();
+    fill_n.store((long)fills.size(), std::memory_order_relaxed);
+}
+
+// ...ONE KEY of the front octave (every bucket and wheel step), within the
+// budget; its octave done, the two either side queued behind (the played
+// one's only). False: nothing left to fill
+bool nv_host::fill_step()
+{
+    while (!fills.empty()) {
+        Fill &f = fills.front();
+        int nb = 0, sp[8];
+        const int nsp = cache_alive(f.c) ? nv_tcache_slots(f.c, &nb, sp) : 0;
+        const int lo = std::max(f.oct * 12, f.drums ? 0 : 21), hi = std::min(f.oct * 12 + 11, f.drums ? 127 : 108);
+        if (nsp <= 0 || lo > hi) {
+            fills.pop_front();
+            continue;
+        }
+        if (f.next < 0) {                       // (begun: an octave already whole is passed over)
+            bool whole = true;
+            for (int k = lo; k <= hi && whole; k++)
+                for (int b = 0; b < nb && whole; b++)
+                    for (int s = 0; s < nsp && whole; s++)
+                        whole = nv_tcache_has(f.c, k, b, sp[s]) != 0;
+            if (whole) {
+                fills.pop_front();
+                continue;
+            }
+            f.next = 0;                         // (the template's index in the octave: key x bucket x step)
+            f.t0 = std::chrono::steady_clock::now();
+            std::lock_guard<std::mutex> lk(bmu);
+            fill_name = "OCT " + std::to_string(f.oct);     // (the display's: FILL OCT 5; the tone in the note)
+        }
+        if (patch_budget > 0) {                 // (the budget: the unused patches let go first, else stop here)
+            long long held_ = 0;
+            {
+                std::lock_guard<std::mutex> lk(cmu);
+                for (const auto &kv : caches) {
+                    auto b = cache_bytes.find(kv.second);
+                    if (b == cache_bytes.end())
+                        b = cache_bytes.emplace(kv.second, nv_tcache_bytes(kv.second)).first;
+                    held_ += b->second;
+                }
+            }
+            if (held_ >= patch_budget) {
+                trim_to = patch_budget / 2 > 0 ? patch_budget - patch_budget / 16 : 0;
+                cache_trim({});
+                trim_to = -1;
+                if (!cache_alive(f.c)) {
+                    fills.pop_front();
+                    continue;
+                }
+                held_ = 0;
+                std::lock_guard<std::mutex> lk(cmu);
+                for (const auto &kv : caches) {
+                    auto b = cache_bytes.find(kv.second);
+                    held_ += b != cache_bytes.end() ? b->second : 0;
+                }
+            }
+            if (held_ >= patch_budget) {
+                if (unfilled.insert(std::make_pair(f.c, f.oct)).second)     // (said once an octave)
+                    tell(tone_name(f.prog, f.drums != 0, nv_tcache_var(f.c)) + ": octave " + std::to_string(f.oct)
+                     + " left unfilled, the patches' " + std::to_string((int)(patch_budget >> 20))
+                     + " MB full: its notes build one at a time");
+                fills.pop_front();
+                continue;
+            }
+        }
+        // (templates for ~5 ms, then back for the asks: a key of a big
+        //  tone is 60 ms, too long for a held note to wait behind)
+        long long kb = 0;
+        const auto ts = std::chrono::steady_clock::now();
+        const int per = nb * nsp;
+        bool more = true;
+        while (more) {
+            const int k = f.next / per, r = f.next % per;
+            long long t = 0;
+            if (nv_tcache_add(f.c, f.prog, lo + k, r / nsp, sp[r % nsp], &t) > 0)
+                kb += t;
+            f.next++;
+            more = lo + f.next / per <= hi;
+            if (std::chrono::steady_clock::now() - ts > std::chrono::milliseconds(5))
+                break;
+        }
+        f.bytes += kb;
+        {
+            std::lock_guard<std::mutex> lk(cmu);
+            auto cb = cache_bytes.find(f.c);
+            if (cb != cache_bytes.end())
+                cb->second += kb;
+        }
+        if (more)
+            return true;
+        const Fill done = f;                    // (the octave whole)
+        fills.pop_front();
+        tell(tone_name(done.prog, done.drums != 0, nv_tcache_var(done.c)) + ": octave " + std::to_string(done.oct)
+             + " built as played (" + std::to_string((int)std::lround(done.bytes / 1048576.0)) + " MB in "
+             + std::to_string((int)std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - done.t0)
+                                  .count())
+             + " ms)");
+        if (done.first)
+            for (int o : {done.oct - 1, done.oct + 1})
+                if (o >= 0 && o <= 10)
+                    fills.push_back(Fill{done.c, done.prog, done.drums, o, -1, false, 0, std::chrono::steady_clock::now()});
+        fill_n.store((long)fills.size(), std::memory_order_relaxed);
+        if (fills.empty()) {
+            std::lock_guard<std::mutex> lk(bmu);
+            fill_name.clear();
+        }
+        return !fills.empty();
+    }
+    fill_n.store(0, std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> lk(bmu);
+        fill_name.clear();
+    }
+    return false;
 }
 
 // THE AUDIO THREAD's QUEUES (lfqueue.h): pushed here, on the caller's
@@ -3767,7 +3974,7 @@ int nv_host::building()
     }
     std::lock_guard<std::mutex> lk(bmu);
     return n + (int)breq.size() + (int)bdone.size() + (room_req.empty() ? 0 : 1) + (tuner_req.empty() ? 0 : 1)
-           + (prebuild_req ? 1 : 0) + (fill_req ? 1 : 0)
+           + (prebuild_req ? 1 : 0) + (fill_req ? 1 : 0) + (int)miss_req.size() + (int)fill_n.load()
            + (east_req_set ? 1 : 0) + (int)add_req.size() + (int)add_done.size();
 }
 

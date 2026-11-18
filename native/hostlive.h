@@ -10,6 +10,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <cmath>
 #include <csignal>
 #include <cstdio>
@@ -62,6 +63,13 @@ int nv_part_take_reset(void *h);
 void nv_part_mts_ref(void *h, int note, double hz);
 void nv_tcache_set_gm2(void *h, int on);
 void nv_tcache_set_var(void *h, int v);
+int nv_tcache_var(void *h);
+int nv_tcache_add(void *h, int program, int note, int bucket, int speed, long long *bytes);
+int nv_tcache_slots(void *h, int *nb, int *sp);
+int nv_tcache_has(void *h, int note, int bucket, int speed);
+void nv_part_late(void *h, int on);
+int nv_part_asks(void *h, void **cache, int *prog, int *drums, int *note, int *bucket, int *axis, int cap);
+void nv_part_late_counts(void *h, long *out);
 int nv_drum_axis(int pitch, int pan);
 int nv_tcache_build_var(void *h, int program, int note, int bucket, int nb, int axis);
 int nv_drum_axis_ud(int pitch, int pan, const int *ud, int uset);
@@ -1211,7 +1219,36 @@ struct nv_host {
     std::map<int, std::array<unsigned, 256>> oct_rooms;  // (key_room -> masks)
     std::array<unsigned, 256> oct_any{};        // (every room's: a room the file did not name)
     std::set<int> partial;                      // (cmu: the patches built for a file's octaves)
-    bool fill_req = false;                      // (bmu: finish them -- the file stopped)
+    bool fill_req = false;                      // (bmu: unused -- a file's patches now fill on demand)
+    // A5's ON DEMAND: a note that found no template is held by the part
+    // (nv_part_late), its template asked; the builder builds that one first,
+    // then the rest of its octave, then the octaves either side -- a key at a
+    // time, the next ask between. In step (--test --late) all of it after the
+    // block. A patch's octaves are kept within the patch budget: one over it
+    // is built from the middle octaves out, as far as it fits
+    struct MissReq {
+        void *c;
+        int prog, drums, note, bucket, axis;
+    };
+    struct Fill {
+        void *c;
+        int prog, drums, oct, next;             // (next: the template to build, key x bucket x step; -1 not begun)
+        bool first;                             // (the played octave: its neighbours queued when done)
+        long long bytes;
+        std::chrono::steady_clock::time_point t0;
+    };
+    bool late_test = false;                     // (--late: held notes in --test too)
+    std::vector<MissReq> miss_swap;             // (the audio thread's, to the builder)
+    std::vector<MissReq> miss_req;              // (bmu)
+    std::deque<Fill> fills;                     // (the builder's)
+    std::set<std::pair<void *, int>> unfilled;  // (the builder's: octaves the budget stopped, said once)
+    std::atomic<long> late_n{0}, stand_n{0}, held_n{0}, fill_n{0};
+    std::string fill_name;                      // (bmu: the octave filling, for the display)
+    void on_demand(std::vector<MissReq> &q);
+    bool fill_step();                           // (one key of the next octave: false none left)
+    bool cache_alive(void *c);
+    std::string tone_name(int prog, bool dr, int var) const;
+    void tell(const std::string &m);
     bool prebuild_req = false;                  // (bmu: build them in the file's other rooms)
     // THE ROOM PATCHES ARE KEYED IN: 1 + its index in E.rooms (0: none) --
     // a patch's key holds it past bit 22, so a room's patches and another's
@@ -1233,10 +1270,7 @@ struct nv_host {
             std::lock_guard<std::mutex> lk(oct_mu);
             oct_on = false;
             oct_rooms.clear();
-        }
-        std::lock_guard<std::mutex> lb(bmu);
-        fill_req = true;
-        bcv.notify_all();
+        }                                       // (its patches kept as they are: the rest on demand)
     }
     void file_rooms_prebuild()
     {
