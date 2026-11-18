@@ -78,9 +78,17 @@ static Gl gl;
 static void draw(App &a)
 {
     const ImGuiIO &io = ImGui::GetIO();
-    a.k = std::min(io.DisplaySize.x / 1920.0f, io.DisplaySize.y / 1080.0f);
+    // THE LAYOUT: the iPad's where the screen is its shape (narrower than 16:10.5) or NUI_LAYOUT=ipad says so
+    {
+        const char *lay = getenv("NUI_LAYOUT");
+        a.tab = lay ? !strcmp(lay, "ipad") : io.DisplaySize.x / std::max(1.0f, io.DisplaySize.y) < 1.65f;
+        a.W = a.tab ? 1133.0f : 1920.0f;
+        a.H = a.tab ? 744.0f : 1080.0f;
+        a.ts = a.tab ? 0.5f : 1.0f;
+    }
+    a.k = std::min(io.DisplaySize.x / a.W, io.DisplaySize.y / a.H);
     a.K.k = a.k;
-    a.org = ImVec2(std::floor((io.DisplaySize.x - 1920 * a.k) / 2), std::floor((io.DisplaySize.y - 1080 * a.k) / 2));
+    a.org = ImVec2(std::floor((io.DisplaySize.x - a.W * a.k) / 2), std::floor((io.DisplaySize.y - a.H * a.k) / 2));
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(io.DisplaySize);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
@@ -106,17 +114,29 @@ static void draw(App &a)
         ImGui::PopStyleVar(2);
         return;
     }
-    draw_display(a);
-    draw_keys(a);
-    // THE CARD TABS, and the card (each built from the web's in turn)
     const int nc = (int)(sizeof CARDS / sizeof CARDS[0]);
-    const float X = 14, Y = 276, gap = 8, w = (1892 - gap * nc - 56) / nc;
-    for (int i = 0; i < nc; i++)
-        if (button(a, CARDS[i][0], X + i * (w + gap), Y, w, 46, CARDS[i][1], a.card == CARDS[i][0]))
-            a.card = CARDS[i][0];
-    if (button(a, "help", X + nc * (w + gap), Y, 56, 46, "?"))
-        help_open(a, "basics");
-    rect(a, 14, 338, 1892, 728, PANEL, 10.0f);
+    if (a.tab) {                        // THE iPad's: the panel shorter, the tabs 44 points tall, the card below
+        draw_display_tab(a);
+        draw_keys_tab(a);
+        const float X = 10, Y = 160, gap = 4, w = (1113 - gap * nc - 44) / nc;
+        for (int i = 0; i < nc; i++)
+            if (button(a, CARDS[i][0], X + i * (w + gap), Y, w, 44, CARDS[i][1], a.card == CARDS[i][0], true, 21))
+                a.card = CARDS[i][0];
+        if (button(a, "help", X + nc * (w + gap), Y, 44, 44, "?", false, true, 21))
+            help_open(a, "basics");
+        rect(a, 10, 210, 1113, 524, PANEL, 6.0f);
+    } else {
+        draw_display(a);
+        draw_keys(a);
+        // THE CARD TABS, and the card (each built from the web's in turn)
+        const float X = 14, Y = 276, gap = 8, w = (1892 - gap * nc - 56) / nc;
+        for (int i = 0; i < nc; i++)
+            if (button(a, CARDS[i][0], X + i * (w + gap), Y, w, 46, CARDS[i][1], a.card == CARDS[i][0]))
+                a.card = CARDS[i][0];
+        if (button(a, "help", X + nc * (w + gap), Y, 56, 46, "?"))
+            help_open(a, "basics");
+        rect(a, 14, 338, 1892, 728, PANEL, 10.0f);
+    }
     piano_card(a, a.card == "piano");   // (the engine pushes the pedals only while it is open)
     drums_card(a, a.card == "drums");   // (...and the kit and its hits)
     effects_card(a, a.card == "effects");
@@ -126,7 +146,11 @@ static void draw(App &a)
     scenes_card(a, a.card == "scenes");
     files_card(a, a.card == "files");
     setup_card(a, a.card == "setup");
-    if (a.card == "parts") {
+    // (on the iPad, a card not yet laid out for it says so)
+    static const std::set<std::string> TAB_READY = {"parts"};
+    if (a.tab && !TAB_READY.count(a.card)) {
+        text(a, a.font, 21, 24, 226, SILK_DIM, "This card's iPad layout is still to come; the laptop's has it.");
+    } else if (a.card == "parts") {
         draw_parts(a);
     } else if (a.card == "library") {
         draw_library(a);

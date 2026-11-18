@@ -73,8 +73,8 @@ inline int knob(App &a, const char *id, float cx, float cy, float size, float &v
     d->AddLine(c, pt(r * 0.48f, av), SILK, 2.5f * a.k);
     const auto ls = label.empty() ? std::vector<std::string>{} : label_lines(a, a.bold, 14, label, label_w);
     for (size_t i = 0; i < ls.size(); i++)
-        text_c(a, a.bold, 14, cx, cy + r + 4 + i * 16, SILK_DIM, ls[i]);
-    text_c(a, a.font, 14, cx, cy + r + 4 + ls.size() * 16, (f & K_ACTIVE) || own ? OWN : LCD, value);
+        text_c(a, a.bold, 14, cx, cy + r + 4 + i * (a.lh(14) + 2), SILK_DIM, ls[i]);
+    text_c(a, a.font, 14, cx, cy + r + 4 + ls.size() * (a.lh(14) + 2), (f & K_ACTIVE) || own ? OWN : LCD, value);
     if (f & K_ACTIVE)
         bubble(a, label + " " + value);
     return f;
@@ -108,7 +108,7 @@ inline int fader(App &a, const char *id, float cx, float y, float h, float &v, f
     frame(a, cx - 24, cy - 14, 48, 28, EDGE, 4, 1);
     rect(a, cx - 18, cy - 1, 36, 2, f & K_ACTIVE ? OWN : LCD, 0);
     text_c(a, a.font, 14, cx, y + h + 10, f & K_ACTIVE ? OWN : LCD, value);
-    text_c(a, a.bold, 14, cx, y + h + 26, SILK_DIM, label);
+    text_c(a, a.bold, 14, cx, y + h + 12 + a.lh(14), SILK_DIM, label);
     if (f & K_ACTIVE)
         bubble(a, label + " " + value);
     return f;
@@ -134,8 +134,8 @@ inline int lcd_field(App &a, const char *id, float x, float y, float w, float h,
     }
     rect(a, x, y, w, h, sel ? LCD : IM_COL32(0x33, 0x24, 0x08, 255), 3.0f);
     frame(a, x, y, w, h, f & K_ACTIVE ? OWN : LCD_DIM, 3.0f, 1.0f);
-    text(a, a.font, 14, x + 10, y + 6, sel ? LCD_BG : LCD, label);
-    text(a, a.font, big, x + 10, y + h - big - 7, sel ? LCD_BG : LCD, value);
+    text(a, a.font, 14, x + 10 * a.ts + 2, y + 6 * a.ts, sel ? LCD_BG : LCD, label);
+    text(a, a.font, big, x + 10 * a.ts + 2, y + h - a.lh(big) - 7 * a.ts, sel ? LCD_BG : LCD, value);
     if (f & K_ACTIVE)
         bubble(a, label + " " + value);
     return f;

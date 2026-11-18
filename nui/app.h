@@ -39,8 +39,13 @@ struct App {
     nv_ui_watch *w = nullptr;
     ImFont *font = nullptr, *bold = nullptr;
     std::string ui_dir;                 // (ui/: the fonts, about.json)
-    float k = 1.0f;                     // design units (1920x1080) to pixels
+    float k = 1.0f;                     // design units to pixels
     ImVec2 org{0, 0};
+    // THE LAYOUT: the laptop's (a 1920x1080 canvas) or the iPad's (tab: 1133x744
+    // points, its text half the design sizes -- 2x, 3x code7 on its 2x screen)
+    bool tab = false;
+    float W = 1920, H = 1080, ts = 1.0f;
+    float lh(float size) const;         // (a line of text at size: its height in design units)
     J parts, meters, build;
     int row = 0;
     int field = 0;                      // (the display's field the jog dial turns)
@@ -162,10 +167,11 @@ inline float px(const App &a, float size)           // (code7's sizes: whole mul
     // (in points for ImGui; snapped where the screen's pixels are: 7, 14, 21 ... device px,
     // so 3.5, 7, 10.5 ... points on a 2x Retina screen)
     const float fb = std::max(1.0f, ImGui::GetIO().DisplayFramebufferScale.x);
-    const float p = size * a.k * fb;
+    const float p = size * a.ts * a.k * fb;
     return std::max(7.0f, 7.0f * std::floor(p / 7.0f + 0.5f)) / fb;
 }
 inline ImDrawList *dl() { return ImGui::GetWindowDrawList(); }
+inline float App::lh(float size) const { return px(*this, size) / k; }
 inline void text(App &a, ImFont *f, float size, float x, float y, ImU32 col, const std::string &s)
 {
     dl()->AddText(f, px(a, size), P(a, x, y), col, s.c_str());
@@ -236,7 +242,7 @@ inline bool button(App &a, const char *id, float x, float y, float w, float h, c
     ImGui::PopID();
     rect(a, x, y, w, h, on ? LCD : held ? PANEL_HI : BTN, 8.0f);
     frame(a, x, y, w, h, EDGE, 8.0f, 1.0f);
-    text_c(a, a.bold, size, x + w / 2, y + (h - size) / 2, on ? PANEL : enabled ? SILK : SILK_DIM, label);
+    text_c(a, a.bold, size, x + w / 2, y + (h - a.lh(size)) / 2, on ? PANEL : enabled ? SILK : SILK_DIM, label);
     return hit;
 }
 
