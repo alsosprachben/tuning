@@ -231,6 +231,13 @@ static double npsum(const double *a, long n)
 namespace nv {
 namespace slab {
 
+// EVERY CHANNEL's STATE: a two-port file's port B is channels 16-31 (the
+// reader's ch + 16 * port), a MIDI 2.0 input's groups up to 255 -- so a
+// part's per-channel arrays hold them all, as live's dictionaries do. (Sized
+// 16, a port-B controller wrote past them: SENSATIO's NRPN select overwrote
+// the drum edits' map, and the next block crashed in tap_tables.)
+static const int NV_NCH = 256;
+
 static const long long IDLE = 1LL << 62;        // live.IDLE
 
 // live's column groups, in live.py's order
@@ -2595,10 +2602,10 @@ struct Part {
     long long pid;
     double level_db = 0.0, swell = 1.0, rate, retrigger;
     int nbuckets, speed, damper_pedal, soft_drop, soft_top;
-    int vol[16], expr[16], cpan[16], pedal_v[16];
-    bool soft[16];
-    double cgain[16];
-    bool cgain_set[16];
+    int vol[NV_NCH], expr[NV_NCH], cpan[NV_NCH], pedal_v[NV_NCH];
+    bool soft[NV_NCH];
+    double cgain[NV_NCH];
+    bool cgain_set[NV_NCH];
     // THE STAMPED CHANNELS (nv_part_stamped, live.stamped): a bit per channel
     // whose parts are stamped per note (mt32mux's, the reader's partmux):
     // there CC7, CC11 and pan set the next note's, and leave the notes
@@ -2684,15 +2691,15 @@ struct Part {
     std::vector<Ev> events;
     std::vector<std::vector<uint8_t>> sx;           // the exclusives the events name (type 6)
     std::map<std::pair<int, int>, int> key_vel;     // (ch, note) -> the strike's velocity
-    double pressure[16] = {};                       // channel aftertouch, 0..1
+    double pressure[NV_NCH] = {};                       // channel aftertouch, 0..1
     // THE CONTROLLER MATRIX (live's cmx, cmx_now, ccv): a channel's routing,
     // made when a message names it; its sums now (amp, pitch, cutoff, rate);
     // each CC's last value on each channel (set: sent at all), its sources
     std::map<int, nv::Cmx> cmx;
     std::map<int, std::array<double, 6>> cmx_now;     // amp, pitch, cutoff, rate, vib, tva
     std::set<int> cmx_vib;                            // channels cmx_tick moves (live's)
-    int ccv[16][128] = {};
-    bool ccv_set[16][128] = {};
+    int ccv[NV_NCH][128] = {};
+    bool ccv_set[NV_NCH][128] = {};
     // MPE (live's mpe, bend_mem, mpe_mgr): the zones; each member's own pitch
     // ratio (master included); each manager's bend as its zone last took it
     nv::MpeZones mpe;
@@ -2712,16 +2719,16 @@ struct Part {
     int lk(int ch) const { return pc(ch); }
     // THE PITCH WHEEL (live._repitch): each channel's raw wheel and the ratio
     // last applied to its notes; the range, GM's 2 semitones (no RPN 0 here)
-    int wheel[16] = {};
-    double bend[16] = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
+    int wheel[NV_NCH] = {};
+    double bend[NV_NCH];
     double bend_range = 2.0;                        // live.bend_range, the session's
     // THE RPNs (live's _rpn_data, _rpn_step; tonelib's arithmetic): the one
     // selected (an NRPN selected: none), and what the channel's are set to --
     // its bend range (-1: live's bend_range), fine and coarse tuning, the
     // fine tuning's last MSB, the mod wheel's range (cents; -1: live's)
-    int rpn_msb[16], rpn_lsb[16];
-    bool rpn_none[16] = {};
-    int nrpn_msb[16], nrpn_lsb[16];             // the NRPN selected (live's nrpn; 127 none)
+    int rpn_msb[NV_NCH], rpn_lsb[NV_NCH];
+    bool rpn_none[NV_NCH] = {};
+    int nrpn_msb[NV_NCH], nrpn_lsb[NV_NCH];             // the NRPN selected (live's nrpn; 127 none)
     // THE DRUM INSTRUMENTS' OWN SETTINGS (live's dedit: GS drum NRPN 18-1F
     // rr, drum setup 41 m p rr): channel -> key -> param (DE_*) -> value, put
     // back by a drum set change, a GS reset or GM System On; each channel's
@@ -2729,13 +2736,13 @@ struct Part {
     // and the drum map its rhythm part plays (drum_rmap)
     enum { DE_PITCH, DE_LEVEL, DE_PAN, DE_REVERB, DE_CHORUS, DE_DELAY, DE_RXON, DE_RXOFF, DE_GROUP };
     std::map<int, std::map<int, std::map<int, int>>> dedit;
-    int chdrums[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0};
+    int chdrums[NV_NCH] = {};
     std::map<int, int> drum_rmap;
     // A GS PART'S OWN NOTE-ON SETTINGS (live's gs_pstate): velocity sense
     // depth and offset, its keyboard range -- power-on 64, 64, 0, 127
-    int vsd[16] = {64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64};
-    int vso[16] = {64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64};
-    int klo[16] = {}, khi[16] = {127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127};
+    int vsd[NV_NCH];
+    int vso[NV_NCH];
+    int klo[NV_NCH] = {}, khi[NV_NCH];
     static int drum_nrpn(int msb)       // (blockrender.GS_DRUM_NRPN)
     {
         switch (msb) {
@@ -2820,9 +2827,9 @@ struct Part {
     // THE SOUND CONTROLLERS (live's snd): each channel's CC71-78 as its
     // offset d (sound_offset; 0 none), cc - 71 -- read where a part answers
     // them (OrganSpec.snd_mask: the harmonium's attack and release)
-    double snd_d[16][8] = {};
-    double brange[16], fine[16] = {}, coarse[16] = {}, modrange[16];
-    int fine_msb[16];
+    double snd_d[NV_NCH][8] = {};
+    double brange[NV_NCH], fine[NV_NCH] = {}, coarse[NV_NCH] = {}, modrange[NV_NCH];
+    int fine_msb[NV_NCH];
     double mod_cents = 35.0;                        // live.mod_cents (the session's)
     double mod_rate = 0.25;                         // live.mod_rate: the wheel's +25% rate at full
     std::map<Key, std::vector<char>> sym_at;        // live.sym_at: a note's fixed open strings' rows, off the wheel
@@ -2855,23 +2862,23 @@ struct Part {
     long long m2_ignored = 0;
     int mts_ref_note = -1;                          // the tuners' reference (--a, --c), -1 none
     double mts_ref_hz = 0.0;
-    double vib_mod[16] = {}, vib_modw[16] = {};     // live.mod, live.modw: the wheel's depth, its fraction
+    double vib_mod[NV_NCH] = {}, vib_modw[NV_NCH] = {};     // live.mod, live.modw: the wheel's depth, its fraction
     // SOSTENUTO (CC66): the keys down when it went down, held (live.sost)
     std::map<int, std::set<int>> sost;
     // MONO MODE (CC126; live.mono): one voice a channel -- its held keys in
     // press order (note, velocity) and the one sounding (-1 none)
-    bool mono[16] = {};
+    bool mono[NV_NCH] = {};
     // PORTAMENTO (live's porta_on, porta_time, porta_src, last_on): CC65,
     // CC5, a pending CC84's source key (-1 none), the channel's last note-on;
     // and where the press being struck glides from (_glide_from, -1 none)
-    bool porta_on[16] = {};
-    int porta_time[16] = {};
-    int porta_src[16] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
-    int last_on[16] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+    bool porta_on[NV_NCH] = {};
+    int porta_time[NV_NCH] = {};
+    int porta_src[NV_NCH];
+    int last_on[NV_NCH];
     int glide_from = -1;
     int moog_src = -1;                      // ...and the last key, for a Moog's GLIDE knob (live._moog_src)
-    std::vector<std::pair<int, int>> mono_stack[16];
-    int mono_cur[16] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+    std::vector<std::pair<int, int>> mono_stack[NV_NCH];
+    int mono_cur[NV_NCH];
     // THE MOD WHEEL on a honky-tonk (live's 'detune' role): which pre-warmed
     // detune new notes take, the nearest of DETUNE_STEPS (a piano's wheel
     // does nothing else: a hammered string takes no vibrato)
@@ -3020,8 +3027,8 @@ struct Part {
     };
     std::map<int, ToneFx> tone_fx;
     std::map<int, std::vector<void *>> tone_seg;
-    bool at_seen[16] = {}, wheel_seen[16] = {};     // (live's pressure, wheel_at: a channel's, once moved)
-    int wheel_v[16] = {};
+    bool at_seen[NV_NCH] = {}, wheel_seen[NV_NCH] = {};     // (live's pressure, wheel_at: a channel's, once moved)
+    int wheel_v[NV_NCH] = {};
     // (channel, CC) -> a wheel job's last value (live's job_at: tonelib.WHEEL_CC),
     // as its own CC or the wheel's route set it
     std::map<std::pair<int, int>, int> job_at;
@@ -3118,7 +3125,7 @@ struct Part {
     std::map<SKey, std::pair<SirenRot, long long>> siren_mem;
     std::vector<std::pair<long long, std::vector<int>>> siren_retire;
     std::map<std::pair<int, int>, double> ppress;
-    double cc2v[16] = {};
+    double cc2v[NV_NCH] = {};
     std::vector<std::pair<SKey, SirenSt>>::iterator siren_find(const SKey &k)
     {
         return std::find_if(siren_st.begin(), siren_st.end(), [&](const std::pair<SKey, SirenSt> &x) {
@@ -4594,17 +4601,24 @@ struct Part {
             free_tracks.push_back(t);
             DMO[t] = 2 * t;
         }
-        for (int c = 0; c < 16; c++) {
+        // (EVERY CHANNEL's, a second port's and a MIDI 2.0 group's too: NV_NCH,
+        // as live's dictionaries take any channel)
+        for (int c = 0; c < NV_NCH; c++) {
             rpn_msb[c] = rpn_lsb[c] = 127;
             brange[c] = modrange[c] = -1.0;
             fine_msb[c] = 64;
         }
-        for (int c = 0; c < 16; c++) {
+        for (int c = 0; c < NV_NCH; c++) {
             vol[c] = 100; expr[c] = 127; cpan[c] = 64; pedal_v[c] = 0;     // GM's power-on
             soft[c] = false; cgain[c] = 1.0; cgain_set[c] = false;
             stopword[c][0] = stopword[c][1] = stopword[c][2] = -1;
             nrpn_msb[c] = nrpn_lsb[c] = 127;
+            bend[c] = 1.0;
+            vsd[c] = vso[c] = 64;
+            khi[c] = 127;
+            porta_src[c] = last_on[c] = mono_cur[c] = -1;
         }
+        chdrums[9] = 1;                         // (GM's drum channel: port A's 10th alone, as live's ch_drums)
     }
 
     int bucket(int vel) const
@@ -6892,7 +6906,7 @@ struct Part {
     // stamped at (xnote), each channel's stop word as sent (CC43-45; -1 not
     // yet), each part's wheel tremolo depth (trem_depth)
     std::map<Key, double> xnote;
-    int stopword[16][3];
+    int stopword[NV_NCH][3];
     std::map<long long, double> trem_depth;
 
     // live._h8: a key's 8-foot pitch against its template's lowest partial
@@ -13325,7 +13339,7 @@ struct Route {
     int src, arg, dst;          // arg: the CC, the key, or the wheel's half (0 up, 1 down, 2 both)
     bool keep = false, latch = false, press = true;
     int channel = -1;           // -1 every channel
-    bool down[16] = {}, held[16] = {};
+    bool down[NV_NCH] = {}, held[NV_NCH] = {};      // (every input channel: a MIDI 2.0 group's too)
     std::map<int, int> prior;   // channel -> the value before the key went down
 
     static bool is_on(const Msg &m) { return m.type == 0 && m.b > 0; }
