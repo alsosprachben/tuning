@@ -301,6 +301,8 @@ static std::vector<Step> load_script(const char *path)
             s >> st.ms;
         else if (st.op == "shot")
             s >> st.arg;
+        else if (st.op == "call")             // (call JSON: an API call, as a card makes it -- the rest of the line)
+            std::getline(s >> std::ws, st.arg);
         if (!st.op.empty() && st.op[0] != '#')
             out.push_back(st);
     }
@@ -458,6 +460,9 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
             } else if (st.op == "shot") {
                 shot_path = st.arg;
                 shot_in = 3;
+            } else if (st.op == "call") {
+                const J r = call(a, st.arg);
+                fprintf(stderr, "nui: call %s -> %s\n", st.arg.c_str(), sess::dump(r).substr(0, 300).c_str());
             } else if (st.op == "quit")
                 a.quit = true;
             dirty = true;

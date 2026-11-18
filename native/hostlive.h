@@ -576,31 +576,44 @@ struct Midi {
 // note-off; channel aftertouch type 3, a key's polytouch 7; an exclusive (F0 .. F7) type 6, its
 // bytes; realtime and the other system messages skipped
 // A FILE's OCTAVES (A5: playing a file, only the octaves its notes use are
-// built -- nv_host::file_octaves): each program's mask of octaves (note /
-// 12) from the notes each channel plays under it, a GS Reset or GM System On
-// putting every channel back to program 0; the drum sets' one mask, every
-// drum channel's notes (10 of each port, and a part GS sets to a drum map),
-// for every set. Widened by the furthest any key shift in the file goes
-// (GS master and part key shift, RPN coarse tuning). out[0..127] the
-// programs', out[128..255] the drum sets'; 0: not in the file (every
-// octave built, as for a program the file never asks for).
+// built -- nv_host::file_octaves), BY ROOM: for each room the file plays
+// in (its GS reverb macro, 40 01 30: 0..7; -1 the room it starts in, and
+// after a GS Reset), each program's mask of octaves (note / 12) from the
+// notes each channel plays under it there; the drum sets' one mask from
+// every drum channel's notes (10, and a part GS sets to a drum map). A GS
+// Reset or GM System On puts every channel back to program 0. Widened by
+// the furthest any key shift in the file goes (GS master and part key
+// shift, RPN coarse tuning); a note within half a second of a program
+// change, or of a room change, counted for both (a change is heard from
+// the next block). A program the file selects but never plays: OCT_NONE
+// (nothing built); one it never selects: 0 (every octave, as for a
+// program the file never asks for). out[0..127] the programs',
+// out[128..255] the drum sets'.
 // merged: one melodic part listening on every channel (nvlive --test's, a
 // keyboard's ALL CH) -- a program change on any channel its program, as
 // nv_host::asked has it; else a part a channel (the Files card's)
-inline void file_octave_masks(void *m, unsigned *out, bool merged = false)
+static const unsigned OCT_NONE = 0x80000000u;   // (an octave no key is in: no template built)
+static const char *const GS_ROOM[8] = {"studio", "chamber", "large_chamber", "hall", "grand_hall", "plate", "delay",
+                                       "pan_delay"};   // (blockrender.GS_REVERB_ROOM: the reverb macro's room)
+inline void file_octave_masks(void *m, std::map<int, std::array<unsigned, 256>> &rooms, bool merged = false)
 {
-    for (int i = 0; i < 256; i++)
-        out[i] = 0;
+    rooms.clear();
     int prog[64] = {}, prev[64], rpn_m[64], rpn_l[64];
     double pc_t[64];
-    bool drum[64] = {};
+    bool drum[64] = {}, asked[256] = {};
     for (int c = 0; c < 64; c++) {
         drum[c] = c % 16 == 9;
         rpn_m[c] = rpn_l[c] = 127;
         prev[c] = 0;
         pc_t[c] = -1e9;
     }
-    std::vector<std::pair<int, int>> notes;     // (channel's program or -1 drums, note)
+    asked[0] = true;                            // (every part starts on program 0)
+    int macro = -1, prev_macro = -1;
+    double mac_t = -1e9;
+    struct Note {
+        int prog, note, room;                   // (prog -1: a drum note)
+    };
+    std::vector<Note> notes;
     int shift = 0;
     std::vector<uint8_t> x(4096);
     const int ne = nv_midi_n_events(m);
@@ -608,20 +621,28 @@ inline void file_octave_masks(void *m, unsigned *out, bool merged = false)
         int iv[4];
         double t;
         nv_midi_event(m, i, iv, &t);
-        // (the channel as the engine hears it: a two-port file's port B on
-        // port A's channels, as live merges them -- the two-port gap)
-        const int type = iv[0], ch = iv[1] & 15;
+        // (the channel as the engine hears it -- the two-port gap: port B's
+        // notes reach the part on port A's channel (ch & 15), its program
+        // changes only a part listening everywhere (merged), as asked() has it)
+        const int type = iv[0], raw = iv[1], ch = iv[1] & 15;
         if (type == 6) {
             const int n = nv_midi_sysex(m, iv[2], x.data(), (int)x.size());
             if (n >= 8 && x[0] == 0x41 && x[2] == 0x42 && x[3] == 0x12) {
                 const int a0 = x[4], a1 = x[5], a2 = x[6], v = x[7];
-                if (a0 == 0x40 && a1 == 0x00 && a2 == 0x7F) {           // (GS Reset)
+                if (a0 == 0x40 && a1 == 0x00 && a2 == 0x7F) {           // (GS Reset: and the reverb's)
                     for (int c = 0; c < 64; c++) {
                         prev[c] = prog[c];
                         pc_t[c] = t;
                         prog[c] = 0;
                         drum[c] = c % 16 == 9;
                     }
+                    prev_macro = macro;
+                    mac_t = t;
+                    macro = -1;
+                } else if (a0 == 0x40 && a1 == 0x01 && a2 == 0x30) {    // (the reverb macro: its room)
+                    prev_macro = macro;
+                    mac_t = t;
+                    macro = v < 8 ? v : -1;
                 } else if (a0 == 0x40 && (a1 & 0xF0) == 0x10 && a2 == 0x15) {   // (a part's rhythm mode)
                     const int b = a1 & 15, c = b == 0 ? 9 : b <= 9 ? b - 1 : b;
                     drum[c] = v != 0;
@@ -637,12 +658,17 @@ inline void file_octave_masks(void *m, unsigned *out, bool merged = false)
                 }
             }
         } else if (type == 5) {
+            if (!merged && raw >= 16)
+                continue;                       // (port B's: no part on its channel hears it)
             // (a change heard from the next block -- a note at its moment plays
             // the program before: within half a second, both have its octave)
             const int pc = merged ? 0 : ch;
             prev[pc] = prog[pc];
             pc_t[pc] = t;
             prog[pc] = iv[2] & 127;
+            asked[(drum[ch] ? 128 : 0) + prog[pc]] = true;
+            if (merged)
+                asked[prog[pc]] = true;
         } else if (type == 2) {
             if (iv[2] == 101)
                 rpn_m[ch] = iv[3];
@@ -651,25 +677,49 @@ inline void file_octave_masks(void *m, unsigned *out, bool merged = false)
             else if (iv[2] == 6 && rpn_m[ch] == 0 && rpn_l[ch] == 2)
                 shift = std::max(shift, std::abs(iv[3] - 64));          // (RPN coarse tuning)
         } else if (type == 0 && iv[3] > 0) {         // (the reader's: 0 a note-on, 1 a note-off)
-            const int pc = merged ? 0 : ch;
-            notes.push_back({drum[ch] ? -1 : prog[pc], iv[2] & 127});
-            if (!drum[ch] && t - pc_t[pc] < 0.5 && prev[pc] != prog[pc])
-                notes.push_back({prev[pc], iv[2] & 127});
+            const int pc = merged ? 0 : ch, nt = iv[2] & 127;
+            const bool near_pc = !drum[ch] && t - pc_t[pc] < 0.5 && prev[pc] != prog[pc];
+            for (int r : {macro, t - mac_t < 0.5 && prev_macro != macro ? prev_macro : -2}) {
+                if (r == -2)
+                    continue;
+                notes.push_back({drum[ch] ? -1 : prog[pc], nt, r});
+                if (near_pc)
+                    notes.push_back({prev[pc], nt, r});
+            }
         }
     }
     shift = std::min(shift, 48);
-    unsigned drums = 0;
+    std::map<int, unsigned> drums;              // (each room's)
     for (const auto &pn : notes) {
         unsigned m_ = 0;
-        for (int k = std::max(0, pn.second - shift); k <= std::min(127, pn.second + shift); k += 1)
+        for (int k = std::max(0, pn.note - shift); k <= std::min(127, pn.note + shift); k++)
             m_ |= 1u << (k / 12);
-        if (pn.first < 0)
-            drums |= m_;
+        auto &o = rooms[pn.room];
+        if (pn.prog < 0)
+            drums[pn.room] |= m_;
         else
-            out[pn.first] |= m_;
+            o[(size_t)pn.prog] |= m_;
     }
-    for (int i = 128; i < 256; i++)
-        out[i] = drums;
+    // (a drum set the file selects plays its drum channels' notes; every set, as the sets share keys)
+    for (auto &kv : rooms)
+        for (int i = 128; i < 256; i++)
+            kv.second[(size_t)i] = drums[kv.first];
+    // (selected, never played: nothing; in another room only: nothing here)
+    std::array<unsigned, 256> any{};
+    for (auto &kv : rooms)
+        for (int i = 0; i < 256; i++)
+            any[(size_t)i] |= kv.second[(size_t)i];
+    for (auto &kv : rooms)
+        for (int i = 0; i < 256; i++)
+            if (!kv.second[(size_t)i] && (any[(size_t)i] || asked[i]))
+                kv.second[(size_t)i] = OCT_NONE;
+    if (rooms.empty()) {                        // (a file with no notes)
+        std::array<unsigned, 256> z{};
+        for (int i = 0; i < 256; i++)
+            if (asked[i])
+                z[(size_t)i] = OCT_NONE;
+        rooms[-1] = z;
+    }
 }
 
 struct MidiParse {
@@ -1154,23 +1204,48 @@ struct nv_host {
     // built): each program's (0..127) and drum set's (128..255) mask of
     // octaves (note / 12), 0 not in the file -- every one built; set while a
     // file plays (fileplay), the patches so built finished when it stops
+    // ...BY ROOM (each room the file plays in: its patches built there ahead,
+    // key_room's; a room switch then a swap, at its block)
     std::mutex oct_mu;
     bool oct_on = false;
-    unsigned oct_mask[256] = {};
+    std::map<int, std::array<unsigned, 256>> oct_rooms;  // (key_room -> masks)
+    std::array<unsigned, 256> oct_any{};        // (every room's: a room the file did not name)
     std::set<int> partial;                      // (cmu: the patches built for a file's octaves)
     bool fill_req = false;                      // (bmu: finish them -- the file stopped)
-    void file_octaves(const unsigned *m256)
+    bool prebuild_req = false;                  // (bmu: build them in the file's other rooms)
+    // THE ROOM PATCHES ARE KEYED IN: 1 + its index in E.rooms (0: none) --
+    // a patch's key holds it past bit 22, so a room's patches and another's
+    // are told apart (a file's built ahead in each)
+    int key_room = 0;
+    int ckey(int prog, bool dr, int var) const
     {
-        std::lock_guard<std::mutex> lk(oct_mu);
-        oct_on = m256 != nullptr;
-        for (int i = 0; i < 256; i++)
-            oct_mask[i] = m256 ? m256[i] : 0u;
-        if (!m256) {
-            std::lock_guard<std::mutex> lb(bmu);
-            fill_req = true;
-            bcv.notify_all();
-        }
+        const int k = dr && prog >= 128 ? 256 * (4096 + prog) + 128 : 256 * var + (dr ? 128 : 0) + (prog & 127);
+        return k + (key_room << 22);
     }
+    int room_key_of(const std::string &name) const;
+    // a file's notes scanned (fileplay, --test --file-octaves): only their
+    // octaves built while it plays, in each room it plays in; nullptr: it
+    // stopped -- its patches built whole for what follows
+    void file_octaves(void *m, bool merged);
+    void file_octaves_off()
+    {
+        {
+            std::lock_guard<std::mutex> lk(oct_mu);
+            oct_on = false;
+            oct_rooms.clear();
+        }
+        std::lock_guard<std::mutex> lb(bmu);
+        fill_req = true;
+        bcv.notify_all();
+    }
+    void file_rooms_prebuild()
+    {
+        std::lock_guard<std::mutex> lb(bmu);
+        prebuild_req = true;
+        bcv.notify_all();
+    }
+    void file_report();                         // (stderr: notes missed, the patches' MB -- a file played's)
+    bool room_async = false;                    // (room_switch from the builder: old patches freed as it goes)
     std::vector<std::pair<void *, std::vector<const void *>>> retire_req;
     std::vector<int> pin_keys;
     int cache_freed = 0;
@@ -1183,6 +1258,8 @@ struct nv_host {
     std::function<void *(const Export::RoomData &rd, const double *bq, int has, const double *tl)> room_tail;
     std::function<bool(const std::string &name, const double *tl, void **tail,
                        const std::function<void(size_t, int, bool, int, void *)> &give)> room_switch;
+    std::function<void(const Export::RoomData *)> room_fields;
+    std::function<int()> prebuild_rooms;
     // A SEQUENCER's GS REVERB (live._gs_reverb): its macro the room, its level,
     // time and delay feedback the tail -- over the panel's room (user_room)
     // until a GS reset, or the panel moved; room_tl the tail in use. A request

@@ -168,12 +168,10 @@ int nv_host::run(int argc, char **argv)
             // use built, as the Files card's PLAY LIVE builds them (A5)
             for (int q = 1; q < argc; q++)
                 if (!strcmp(argv[q], "--file-octaves")) {
-                    unsigned om[256];
                     bool merged = false;            // (the melodic part on every channel: one program for all)
                     for (const auto &pa : pats)
                         merged = merged || (!pa.gone && !pa.drums && pa.channel < 0);
-                    file_octave_masks(m, om, merged);
-                    file_octaves(om);
+                    file_octaves(m, merged);
                 }
             int ne = nv_midi_n_events(m);
             double secs = atof(opt(argc, argv, "seconds", "0").c_str());

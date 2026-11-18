@@ -453,20 +453,16 @@ struct Player {
         // ITS OCTAVES (A5): only those its notes use built, while it plays --
         // not where its programs are read another way (the MT-32 family's
         // tones, an orchestra by its tracks' names): there, every octave
-        std::vector<unsigned> om;
-        if (!mt32_family(md) && md != "names") {
-            om.resize(256);
-            file_octave_masks(m, om.data());
-        }
+        const bool octs = !mt32_family(md) && md != "names";
+        if (octs)
+            h->file_octaves(m, false);          // (a part a channel: file_parts)
         nv_midi_free(m);
         busy = true;
         pos = 0.0;
-        th = std::thread([this, h, md, stm, om, evs = std::move(evs)]() mutable {
-            if (!om.empty())
-                h->file_octaves(om.data());
+        th = std::thread([this, h, md, stm, octs, evs = std::move(evs)]() mutable {
             run(h, md, stm, evs);
-            if (!om.empty())
-                h->file_octaves(nullptr);       // (its patches finished whole: live play after it)
+            if (octs)
+                h->file_octaves_off();          // (its patches finished whole: live play after it)
         });
     }
 
@@ -527,6 +523,13 @@ struct Player {
             say("building the file's sounds: " + std::to_string(done) + " of " + std::to_string(nprog));
             wait_built(h, stop, 180.0);
         }
+        // 3b: ...AND IN EACH OTHER ROOM IT PLAYS IN (its reverb changes), built
+        // ahead: a change of room then a swap at its block, not a rebuild
+        if (!stop && !g_stop) {
+            say("building the file's sounds in its other rooms");
+            h->file_rooms_prebuild();
+            wait_built(h, stop, 300.0);
+        }
         // 4: A RESET (the file's own mode follows at its start), then its events
         if (!stop && !g_stop) {
             if (md != "gm") {
@@ -565,6 +568,7 @@ struct Player {
             pos = std::min(total, std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
         }
         // STOPPED: the notes let go, every channel's pedals up and wheel centred
+        h->file_report();                       // (its notes missed, its patches' size: the A5 checks)
         h->panic();
         for (int c = 0; c < 16; c++) {
             for (int cc : {64, 66, 67})
