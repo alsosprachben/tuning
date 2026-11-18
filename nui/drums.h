@@ -123,12 +123,14 @@ inline void draw_drums(App &a)
         if (const J *x = r.get("drums"))
             drums_take(a, *x);
     }
-    const float X0 = 34, X1 = 1886, Y0 = 394, Y1 = 1056;
-    const float TX = heading(a, X0, 356, "DRUMS", "drums");
+    const bool IP = a.tab;              // (the iPad's: its card from y 210 to 734)
+    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 260 : 394, Y1 = IP ? 728 : 1056, HY = IP ? 224 : 356;
+    const float LH = a.lh(14) + (IP ? 3 : 4);
+    const float TX = heading(a, X0, HY, "DRUMS", "drums");
     if (!D.d.is(J::OBJ))
         return;
     const std::string part_name = str(&D.d, "part");
-    text(a, a.font, 14, TX, 357, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + part_name);
+    text(a, a.font, 14, TX, HY + 1, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + part_name);
     const bool drums = flag(&D.d, "drums"), user = D.d.get("user") != nullptr;
     const int kit = (int)num(&D.d, "kit", -1);
     if (drums) {
@@ -138,7 +140,7 @@ inline void draw_drums(App &a)
         const int ch = (int)num(&D.d, "channel", -1);
         const std::string info = std::to_string(nk) + " key" + (nk == 1 ? "" : "s") + " \xc2\xb7 channel " +
                                  std::to_string(ch < 0 ? 10 : ch + 1);
-        text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), 357, SILK_DIM, info);
+        text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), HY + 1, SILK_DIM, info);
     }
 
     // THE KITS down the side: a tap puts one on the part
@@ -146,17 +148,18 @@ inline void draw_drums(App &a)
     for (const Patch &p : L.patches)
         if (p.drums)
             kits.push_back(&p);
-    const float KW = 250;
+    const float KW = IP ? 190 : 250, KR = IP ? 48 : 40, KB = IP ? 44 : 36;   // (a kit's row; its button)
     {
-        const int tap = scroll_list(a, "kits", X0, Y0, KW, Y1 - Y0, (int)kits.size(), 40, D.list_scroll["kits"], [&](int i, float y) {
+        const int tap = scroll_list(a, "kits", X0, Y0, KW, Y1 - Y0, (int)kits.size(), KR, D.list_scroll["kits"], [&](int i, float y) {
             const Patch &p = *kits[(size_t)i];
             const bool cur = p.program == kit && drums;
             const bool pend = L.picking == p.pick;
-            rect(a, X0, y, KW - 8, 36, cur ? LCD : IM_COL32(0x1f, 0x22, 0x26, 255), 6);
+            rect(a, X0, y, KW - 8, KB, cur ? LCD : IM_COL32(0x1f, 0x22, 0x26, 255), 6);
             if (pend)
-                frame(a, X0, y, KW - 8, 36, LCD, 6, 1.5f);
-            text(a, a.font, 14, X0 + 8, y + 11, cur ? LCD_BG : LCD, std::to_string(p.program));
-            text(a, a.font, 14, X0 + 50, y + 11, cur ? LCD_BG : SILK, fit(a, a.font, 14, p.name, KW - 66));
+                frame(a, X0, y, KW - 8, KB, LCD, 6, 1.5f);
+            const float ty = y + (KB - a.lh(14)) / 2, nx = IP ? 36 : 50;
+            text(a, a.font, 14, X0 + 8, ty, cur ? LCD_BG : LCD, std::to_string(p.program));
+            text(a, a.font, 14, X0 + nx, ty, cur ? LCD_BG : SILK, fit(a, a.font, 14, p.name, KW - nx - 16));
         });
         if (tap >= 0) {
             L.picking = kits[(size_t)tap]->pick;
@@ -168,12 +171,12 @@ inline void draw_drums(App &a)
                     L.picking = -1;
     }
 
-    const float SW = 400, PX0 = X0 + KW + 8, PX1 = X1 - SW - 8, SX = X1 - SW;
+    const float SW = IP ? 280 : 400, PX0 = X0 + KW + 8, PX1 = X1 - SW - 8, SX = X1 - SW;
     if (!drums) {
         const auto ls = wrap(a, a.font, 21, (part_name.empty() ? std::string("This part") : part_name) +
                                                 " is not a drum set. Pick a kit for part " + pad2(a.row + 1) + " from the list.", PX1 - PX0 - 20);
         for (size_t i = 0; i < ls.size(); i++)
-            text(a, a.font, 21, PX0 + 10, Y0 + 10 + i * 28, SILK_DIM, ls[i]);
+            text(a, a.font, 21, PX0 + 10, Y0 + 10 + i * (a.lh(21) + 6), SILK_DIM, ls[i]);
         return;
     }
 
@@ -187,7 +190,7 @@ inline void draw_drums(App &a)
     std::map<std::string, std::vector<const DrumKey *>> groups;
     for (const DrumKey *k : shown)
         groups[user && k->name.empty() ? "Not set" : sfx ? "Sounds" : drum_kind(k->name)].push_back(k);
-    const float pw_min = 112, ph = 62, pg = 6, hh = 24;
+    const float pw_min = IP ? 96 : 112, ph = IP ? 56 : 62, pg = IP ? 5 : 6, hh = IP ? 18 : 24;
     const float PW = PX1 - PX0 - 10;
     const int cols = std::max(1, (int)((PW + pg) / (pw_min + pg)));
     const float pw = (PW - pg * (cols - 1)) / cols;
@@ -275,11 +278,11 @@ inline void draw_drums(App &a)
         }
         frame(a, x, y, pw, ph, sel ? LCD : EDGE, 9, sel ? 2.0f : 1.0f);
         const std::string kn = note_name_sharp(k.key);
-        text(a, a.font, 14, x + 8, y + 7, LCD, kn);
-        text(a, a.font, 14, x + 14 + text_w(a, a.font, 14, kn), y + 7, LCD_DIM, std::to_string(k.key));
+        text(a, a.font, 14, x + 8, y + (IP ? 5 : 7), LCD, kn);
+        text(a, a.font, 14, x + 14 + text_w(a, a.font, 14, kn), y + (IP ? 5 : 7), LCD_DIM, std::to_string(k.key));
         const auto ls = label_lines(a, a.font, 14, k.name.empty() ? "\xe2\x80\x94" : k.name, pw - 14);
         for (size_t i = 0; i < ls.size(); i++)
-            text(a, a.font, 14, x + 8, y + 26 + i * 16, unset ? SILK_DIM : SILK, fit(a, a.font, 14, ls[i], pw - 14));
+            text(a, a.font, 14, x + 8, y + (IP ? 8 : 10) + (i + 1) * LH, unset ? SILK_DIM : SILK, fit(a, a.font, 14, ls[i], pw - 14));
     }
     dl()->PopClipRect();
     if (content > view) {
@@ -298,7 +301,8 @@ inline void draw_drums(App &a)
     // THE SIDE: a user set's key (its sound from a key of any set); what the pad is
     float sy = Y0;
     if (user) {
-        rect(a, SX, Y0, SW, 360, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
+        const float UH = IP ? 270 : 360;   // (the user set's panel)
+        rect(a, SX, Y0, SW, UH, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
         if (D.sel < 0 || !D.sets.is(J::ARR)) {
             text(a, a.font, 14, SX + 12, Y0 + 12, SILK_DIM, "A user set: touch a pad to choose its sound.");
         } else {
@@ -319,27 +323,27 @@ inline void draw_drums(App &a)
             }
             const float kx = heading(a, SX + 12, Y0 + 10, "KEY " + note_name_sharp(D.sel), "drums:user");
             text(a, a.font, 14, kx, Y0 + 10, LCD, std::to_string(D.sel));
-            text(a, a.font, 14, SX + 12, Y0 + 32, SILK_DIM,
+            text(a, a.font, 14, SX + 12, Y0 + 14 + LH, SILK_DIM,
                  fit(a, a.font, 14, e.skey >= 0 ? "Plays " + e.name + " from " + ssname + "." : "No sound yet.", SW - 24));
-            const float ly = Y0 + 58, lh = 360 - 66, cw = (SW - 32) / 2;
+            const float ly = Y0 + 20 + 2 * LH, lh = UH - (ly - Y0) - 8, cw = (SW - 32) / 2, LR = IP ? 48 : 30, LB = IP ? 44 : 27;
             const int ns = (int)D.sets.a.size();
-            const int ts = scroll_list(a, "uksets", SX + 12, ly, cw, lh, ns, 30, D.list_scroll["uksets"], [&](int i, float y) {
+            const int ts = scroll_list(a, "uksets", SX + 12, ly, cw, lh, ns, LR, D.list_scroll["uksets"], [&](int i, float y) {
                 const J &x = D.sets.a[(size_t)i];
                 const bool on = (int)x.a[0].d() == bs;
-                rect(a, SX + 12, y, cw - 8, 27, on ? LCD : BTN, 4);
-                text(a, a.font, 14, SX + 18, y + 6, on ? LCD_BG : SILK, fit(a, a.font, 14, x.a[1].s, cw - 20));
+                rect(a, SX + 12, y, cw - 8, LB, on ? LCD : BTN, 4);
+                text(a, a.font, 14, SX + 18, y + (LB - a.lh(14)) / 2, on ? LCD_BG : SILK, fit(a, a.font, 14, x.a[1].s, cw - 20));
             });
             if (ts >= 0)
                 D.browse = (int)D.sets.a[(size_t)ts].a[0].d();
             if (set) {
                 const J &sk = set->a[2];
-                const int tk = scroll_list(a, "ukkeys", SX + 20 + cw, ly, cw, lh, (int)sk.a.size(), 30, D.list_scroll["ukkeys"], [&](int i, float y) {
+                const int tk = scroll_list(a, "ukkeys", SX + 20 + cw, ly, cw, lh, (int)sk.a.size(), LR, D.list_scroll["ukkeys"], [&](int i, float y) {
                     const J &x = sk.a[(size_t)i];
                     const bool on = (int)set->a[0].d() == ss && (int)x.a[0].d() == e.skey;
-                    rect(a, SX + 20 + cw, y, cw - 8, 27, on ? LCD : BTN, 4);
+                    rect(a, SX + 20 + cw, y, cw - 8, LB, on ? LCD : BTN, 4);
                     const std::string nn = note_name_sharp((int)x.a[0].d());
-                    text(a, a.bold, 14, SX + 26 + cw, y + 6, on ? LCD_BG : SILK, nn);
-                    text(a, a.font, 14, SX + 34 + cw + text_w(a, a.bold, 14, nn), y + 6, on ? LCD_BG : SILK_DIM,
+                    text(a, a.bold, 14, SX + 26 + cw, y + (LB - a.lh(14)) / 2, on ? LCD_BG : SILK, nn);
+                    text(a, a.font, 14, SX + 34 + cw + text_w(a, a.bold, 14, nn), y + (LB - a.lh(14)) / 2, on ? LCD_BG : SILK_DIM,
                          fit(a, a.font, 14, x.a[1].s, cw - 34 - text_w(a, a.bold, 14, nn)));
                 });
                 if (tk >= 0) {
@@ -357,13 +361,13 @@ inline void draw_drums(App &a)
             } else
                 text(a, a.font, 14, SX + 20 + cw, ly + 6, SILK_DIM, "Choose a set.");
         }
-        sy = Y0 + 368;
+        sy = Y0 + UH + 8;
     }
     rect(a, SX, sy, SW, Y1 - sy, IM_COL32(0x1f, 0x22, 0x26, 255), 9);
     if (D.touched < 0) {
         const auto ls = wrap(a, a.font, 14, "Touch a pad for what it is and what it was fitted to.", SW - 24);
         for (size_t i = 0; i < ls.size(); i++)
-            text(a, a.font, 14, SX + 12, sy + 12 + i * 18, LCD_DIM, ls[i]);
+            text(a, a.font, 14, SX + 12, sy + 12 + i * LH, LCD_DIM, ls[i]);
         return;
     }
     DrumKey e;
@@ -381,7 +385,7 @@ inline void draw_drums(App &a)
     const J *rn = drum_note(about, nkit, nkey);
     text(a, a.bold, 14, SX + 12, sy + 10, SILK, fit(a, a.bold, 14, note_name_sharp(D.touched) + " " + e.name, SW - 24));
     if (!rn || !rn->is(J::ARR) || rn->a.size() < 2) {
-        text(a, a.font, 14, SX + 12, sy + 32, LCD_DIM, "No notes for this one.");
+        text(a, a.font, 14, SX + 12, sy + 14 + LH, LCD_DIM, "No notes for this one.");
         return;
     }
     const int rt = (int)rn->a[0].d();
@@ -389,12 +393,12 @@ inline void draw_drums(App &a)
     const auto rl = wrap(a, a.font, 14, std::to_string(rt) + " \xc2\xb7 " +
          (lv && lv->is(J::ARR) && rt >= 0 && rt < (int)lv->a.size() && lv->a[(size_t)rt].is(J::STR) ? lv->a[(size_t)rt].s : ""), SW - 24);
     for (size_t i = 0; i < rl.size(); i++)
-        text(a, a.font, 14, SX + 12, sy + 30 + i * 18, LCD, rl[i]);
-    const float by = sy + 36 + rl.size() * 18;
+        text(a, a.font, 14, SX + 12, sy + 14 + (i + 1) * LH, LCD, rl[i]);
+    const float by = sy + 20 + (rl.size() + 1) * LH;
     const auto ls = wrap(a, a.font, 14, rn->a[1].is(J::STR) ? rn->a[1].s : "", SW - 24);
-    const size_t maxl = (size_t)std::max(1.0f, (Y1 - by - 8) / 18);
+    const size_t maxl = (size_t)std::max(1.0f, (Y1 - by - 8) / LH);
     for (size_t i = 0; i < ls.size() && i < maxl; i++)
-        text(a, a.font, 14, SX + 12, by + i * 18, SILK_DIM,
+        text(a, a.font, 14, SX + 12, by + i * LH, SILK_DIM,
              i + 1 == maxl && ls.size() > maxl ? fit(a, a.font, 14, ls[i] + " \xe2\x80\xa6", SW - 24) : ls[i]);
 }
 
