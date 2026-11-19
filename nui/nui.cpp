@@ -76,12 +76,19 @@ static void draw(App &a)
         a.ts = a.tab ? 0.5f : 1.0f;
     }
     a.k = std::min(ds.x / a.W, ds.y / a.H);
-    if (getenv("NUI_DEBUG_SCALE")) {        // (once: the sizes as this screen has them)
-        static bool said = false;
-        if (!said) {
-            said = true;
-            fprintf(stderr, "nui: display %.1fx%.1f, framebuffer scale %.2f, k %.3f, px(14) %.2f px(21) %.2f\n",
-                    io.DisplaySize.x, io.DisplaySize.y, io.DisplayFramebufferScale.x, a.k, px(a, 14), px(a, 21));
+    {                                       // (the sizes as this screen has them: each change said -- NUI_DEBUG_SCALE, or iOS's log)
+        static float said_w = 0, said_h = 0;
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+        const bool say = true;
+#else
+        const bool say = getenv("NUI_DEBUG_SCALE") != nullptr;
+#endif
+        if (say && (io.DisplaySize.x != said_w || io.DisplaySize.y != said_h)) {
+            said_w = io.DisplaySize.x;
+            said_h = io.DisplaySize.y;
+            fprintf(stderr, "nui: display %.1fx%.1f, safe %.0f,%.0f %.0fx%.0f, framebuffer scale %.2f, k %.3f, px(14) %.2f\n",
+                    io.DisplaySize.x, io.DisplaySize.y, a.safe_x, a.safe_y, a.safe_w, a.safe_h,
+                    io.DisplayFramebufferScale.x, a.k, px(a, 14));
         }
     }
     a.K.k = a.k;

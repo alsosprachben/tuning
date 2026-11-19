@@ -40,36 +40,29 @@ int main(int argc, char *argv[])
     // controller that prefers it locked (prefersInterfaceOrientationLocked,
     // new in 26: SDL's controller is given it here, before its window is made)
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
-    // ...locked only once landscape: the lock holds the orientation the scene
-    // is in, so the scene is first asked for landscape (its geometry, when its
-    // window appears) and the lock preferred from then on
-    if (Class vc = NSClassFromString(@"SDL_uikitviewcontroller")) {
-        class_replaceMethod(vc, @selector(prefersInterfaceOrientationLocked),
-                            imp_implementationWithBlock(^BOOL(id me) {
-                                UIWindowScene *sc = ((UIViewController *)me).view.window.windowScene;
-                                return sc && UIInterfaceOrientationIsLandscape(sc.effectiveGeometry.interfaceOrientation);
-                            }),
-                            "B@:");
+    // ...supported: landscape alone (SDL's controller; iPadOS turns it so at
+    // launch, and between its two landscapes) -- with sizes logged once the
+    // window is up (the scene's, the window's, the view's: a mismatch shows)
+    if (Class vc = NSClassFromString(@"SDL_uikitviewcontroller"))
         class_replaceMethod(vc, @selector(supportedInterfaceOrientations),
                             imp_implementationWithBlock(^NSUInteger(id) { return UIInterfaceOrientationMaskLandscape; }),
                             "Q@:");
-    }
     [[NSNotificationCenter defaultCenter]
         addObserverForName:UIWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue]
                 usingBlock:^(NSNotification *n) {
                     UIWindow *w = (UIWindow *)n.object;
-                    UIWindowScene *sc = w.windowScene;
-                    if (!sc)
-                        return;
-                    UIWindowSceneGeometryPreferencesIOS *gp =
-                        [[UIWindowSceneGeometryPreferencesIOS alloc] initWithInterfaceOrientations:UIInterfaceOrientationMaskLandscape];
-                    fprintf(stderr, "clavitone: window key; orientation %d, asking for landscape\n",
-                            (int)sc.effectiveGeometry.interfaceOrientation);
-                    [sc requestGeometryUpdateWithPreferences:gp
-                                                errorHandler:^(NSError *e) {
-                                                    fprintf(stderr, "clavitone: landscape refused: %s\n",
-                                                            e.localizedDescription.UTF8String);
-                                                }];
+                    for (double t : {0.5, 2.5})
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(t * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                            UIWindowScene *sc = w.windowScene;
+                            fprintf(stderr, "clavitone: at %.1f s scene %d %.0fx%.0f, window %.0fx%.0f, view %.0fx%.0f, screen %.0fx%.0f\n",
+                                    t, (int)sc.effectiveGeometry.interfaceOrientation,
+                                    sc.effectiveGeometry.coordinateSpace.bounds.size.width,
+                                    sc.effectiveGeometry.coordinateSpace.bounds.size.height, w.bounds.size.width,
+                                    w.bounds.size.height, w.rootViewController.view.bounds.size.width,
+                                    w.rootViewController.view.bounds.size.height, sc.screen.bounds.size.width,
+                                    sc.screen.bounds.size.height);
+                        });
+                }];
                     UIViewController *rc = w.rootViewController;
                     [rc setNeedsUpdateOfSupportedInterfaceOrientations];
                     // (the lock once the turn is made: asked again after it)
